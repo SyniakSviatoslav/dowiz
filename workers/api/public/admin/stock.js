@@ -15,7 +15,7 @@ const FULL_AT_LOW_MULTIPLE = 4;
 /// The movements an owner can make by hand.
 const MOVES = [['received', 'received', 'download'], ['wasted', 'wasted', 'trash'], ['stocktake', 'counted', 'check']];
 /// The reasons a kitchen writes off stock, as the hub's vocabulary spells them.
-const WASTE_REASONS = ['spoiled', 'dropped', 'unsold'];
+const WASTE_REASONS = ['spoiled', 'dropped', 'unsold', 'returned', 'staff_meal'];
 
 let stock = null;
 

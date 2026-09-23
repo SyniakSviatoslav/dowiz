@@ -2210,9 +2210,10 @@ pub struct StockMoveIn {
     /// For a stocktake: what was actually counted.
     #[serde(default)]
     pub observed: Option<i64>,
-    /// For waste: spoiled, dropped or unsold.
+    /// For waste: one of `WasteReason::allowed_words()`. Required.
     #[serde(default)]
     pub reason: Option<String>,
+    // NO `by`: the signer is the authenticated owner, never a body field.
 }
 
 /// `POST /api/owner/stock/{kind}` — received, wasted or counted.
@@ -2223,7 +2224,7 @@ pub struct StockMoveIn {
 /// immediately.
 pub async fn stock_move(
     State(st): State<Shared>,
-    _who: OwnerCaller,
+    who: OwnerCaller,
     AxPath(kind): AxPath<String>,
     Json(body): Json<StockMoveIn>,
 ) -> Result<Json<Value>, HubHttpError> {
@@ -2237,20 +2238,34 @@ pub async fn stock_move(
         return Err(HubHttpError::NotFound("ingredient"));
     }
 
+    // THE SIGNER IS WHO AUTHENTICATED. There is no field a caller could use
+    // to put a write-off or a count on somebody else's name.
+    let by = who.0.person.id.clone();
+
     let ev = match kind.as_str() {
         "received" => StockEvent::Received {
             item,
             qty: body.qty.ok_or_else(|| HubHttpError::Invalid("how much?".into()))?,
         },
-        "wasted" => StockEvent::Wasted {
-            item,
-            qty: body.qty.ok_or_else(|| HubHttpError::Invalid("how much?".into()))?,
-            reason: body
+        "wasted" => {
+            // Reason is required; do not default to Spoiled.
+            let reason = body
                 .reason
                 .as_deref()
                 .and_then(WasteReason::from_str)
-                .unwrap_or(WasteReason::Spoiled),
-        },
+                .ok_or_else(|| {
+                    HubHttpError::Invalid(format!(
+                        "a write-off says why: one of {}",
+                        WasteReason::allowed_words()
+                    ))
+                })?;
+            StockEvent::Wasted {
+                item,
+                qty: body.qty.ok_or_else(|| HubHttpError::Invalid("how much?".into()))?,
+                reason,
+                by,
+            }
+        }
         "stocktake" => StockEvent::Stocktake {
             item,
             observed: body
@@ -2259,6 +2274,7 @@ pub async fn stock_move(
             // The id ties a count to the person and moment that made it, so a
             // basis reset is attributable rather than anonymous.
             stocktake_id: format!("st_{}", now_ms()),
+            by,
         },
         other => return Err(HubHttpError::Invalid(format!("no such movement: {other}"))),
     };

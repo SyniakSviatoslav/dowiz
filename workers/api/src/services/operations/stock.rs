@@ -8,7 +8,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::{owner_and_venue};
+use crate::auth::Cap;
+use crate::owner::owner_and_venue;
+use dowiz_hub::stock::{StockEvent, WasteReason};
 
 //
 // §4's deterministic ledger, reachable at last. A stock level is a FOLD over
@@ -99,9 +101,72 @@ struct StockMoveIn {
     /// For a stocktake: what was actually counted.
     #[serde(default)]
     observed: Option<i64>,
-    /// For waste: spoiled, dropped or unsold.
+    /// For waste: one of `WasteReason::allowed_words()`. Required.
     #[serde(default)]
     reason: Option<String>,
+    // NO `by`. THE SIGNER IS WHO AUTHENTICATED, never a field the caller
+    // fills in: a body that could name its signer is a write-off anybody can
+    // put on somebody else. `deny_unknown_fields` turns a `by` into a 400.
+}
+
+/// The event a movement is, signed by `by` -- the AUTHENTICATED principal.
+///
+/// PURE, so the refusals are tested without a Worker. A waste reason outside
+/// the closed set, or none, is a 400 naming the allowed words: never a
+/// default, or the report says the kitchen spoils everything (§2.1).
+fn movement(kind: &str, body: StockMoveIn, by: &str, now_ms: i64) -> std::result::Result<StockEvent, (u16, String)> {
+    let item = body.item.trim().to_string();
+    if item.is_empty() {
+        return Err((400, "which ingredient?".into()));
+    }
+    let by = by.to_string();
+    match kind {
+        "received" => body.qty.map(|qty| StockEvent::Received { item, qty }).ok_or((400, "how much?".into())),
+        "wasted" => {
+            let qty = body.qty.ok_or((400, "how much?".to_string()))?;
+            let reason = match body.reason.as_deref().map(str::trim) {
+                None | Some("") => {
+                    return Err((400, format!("a write-off says why: one of {}", WasteReason::allowed_words())))
+                }
+                Some(r) => WasteReason::from_str(r).ok_or_else(|| {
+                    (400, format!("{r:?} is not a waste reason: one of {}", WasteReason::allowed_words()))
+                })?,
+            };
+            Ok(StockEvent::Wasted { item, qty, reason, by })
+        }
+        "stocktake" => body
+            .observed
+            .map(|observed| StockEvent::Stocktake { item, observed, stocktake_id: format!("st_{now_ms}"), by })
+            .ok_or((400, "what was counted?".into())),
+        other => Err((400, format!("no such movement: {other}"))),
+    }
+}
+
+/// Who may record a movement, and at which venue: `(signer, venue)`.
+///
+/// A WRITE-OFF IS A STAFF ACT (§2.1): the owner, or a member of staff holding
+/// `open_till` -- the drawer's holder is who bins the stock at midnight. Their
+/// person id is the signer. A delivery received and a count stay the owner's.
+async fn signer_for(req: &Request, ctx: &RouteContext<crate::Req>, kind: &str) -> std::result::Result<(String, String), Response> {
+    if kind != "wasted" {
+        return owner_and_venue(req, ctx).await;
+    }
+    waste_signer(req, ctx).await
+}
+
+/// A write-off's signer: staff holding `OpenTill` (or the owner, through
+/// `staff_at`'s fallback) at the ONE venue this request names -- `?location_id=`,
+/// else the token's claim or the Host -- and that same venue is the one acted on.
+async fn waste_signer(req: &Request, ctx: &RouteContext<crate::Req>) -> std::result::Result<(String, String), Response> {
+    let venue = match crate::owner::location_of(req) {
+        Some(v) => v,
+        None => crate::hubstore::Place::of_any(req, ctx)
+            .await
+            .map_err(|e| Response::error(format!("which venue? {e}"), 400).unwrap())?
+            .venue,
+    };
+    let (by, _caps) = crate::courier::staff_at(req, ctx, &venue, Cap::OpenTill).await?;
+    Ok((by, venue))
 }
 
 /// `POST /api/owner/stock/:kind` — received, wasted or counted.
@@ -110,55 +175,26 @@ struct StockMoveIn {
 /// order lifecycle and are deliberately unreachable here: a hand-written
 /// reservation has no order to settle it and would strand immediately.
 pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    use dowiz_hub::stock::{StockEvent, WasteReason};
-
     let body: StockMoveIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let loc = match owner_and_venue(&req, &ctx).await {
-        Ok((_, l)) => l,
+    let Some(kind) = ctx.param("kind").cloned() else {
+        return Response::error("which movement?", 400);
+    };
+    let (by, loc) = match signer_for(&req, &ctx, &kind).await {
+        Ok(v) => v,
         Err(r) => return Ok(r),
     };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
-    let Some(kind) = ctx.param("kind").cloned() else {
-        return Response::error("which movement?", 400);
+    let ev = match movement(&kind, body, &by, ctx.data.now_ms) {
+        Ok(ev) => ev,
+        Err((status, said)) => return Response::error(said, status),
     };
-    let item = body.item.trim().to_string();
-    if item.is_empty() {
-        return Response::error("which ingredient?", 400);
-    }
-    if crate::hubstore::load_catalog(&place).await?.catalog.supply(&item).is_none() {
+    if crate::hubstore::load_catalog(&place).await?.catalog.supply(ev.item()).is_none() {
         return Response::error("not found", 404);
     }
-    let ev = match kind.as_str() {
-        "received" => match body.qty {
-            Some(qty) => StockEvent::Received { item, qty },
-            None => return Response::error("how much?", 400),
-        },
-        "wasted" => match body.qty {
-            Some(qty) => StockEvent::Wasted {
-                item,
-                qty,
-                reason: body
-                    .reason
-                    .as_deref()
-                    .and_then(WasteReason::from_str)
-                    .unwrap_or(WasteReason::Spoiled),
-            },
-            None => return Response::error("how much?", 400),
-        },
-        "stocktake" => match body.observed {
-            Some(observed) => StockEvent::Stocktake {
-                item,
-                observed,
-                stocktake_id: format!("st_{}", ctx.data.now_ms),
-            },
-            None => return Response::error("what was counted?", 400),
-        },
-        other => return Response::error(format!("no such movement: {other}"), 400),
-    };
     let outcome = crate::hubstore::with_stock(&place, move |log| {
         log.append(&ev).map_err(|e| Error::RustError(e.to_string()))
     })
@@ -169,3 +205,6 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
         Err(e) => Response::error(e.to_string(), 409),
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -31,6 +31,10 @@ pub enum WasteReason {
     Dropped,
     /// Made and not sold.
     Unsold,
+    /// Food back from a delivery refused at the door (P1-4).
+    Returned,
+    /// Eaten by the staff, or given as a sample.
+    StaffMeal,
 }
 
 impl WasteReason {
@@ -39,6 +43,8 @@ impl WasteReason {
             WasteReason::Spoiled => "spoiled",
             WasteReason::Dropped => "dropped",
             WasteReason::Unsold => "unsold",
+            WasteReason::Returned => "returned",
+            WasteReason::StaffMeal => "staff_meal",
         }
     }
     pub fn from_str(s: &str) -> Option<Self> {
@@ -46,12 +52,35 @@ impl WasteReason {
             "spoiled" => Some(WasteReason::Spoiled),
             "dropped" => Some(WasteReason::Dropped),
             "unsold" => Some(WasteReason::Unsold),
+            "returned" => Some(WasteReason::Returned),
+            "staff_meal" => Some(WasteReason::StaffMeal),
             _ => None,
         }
     }
+
+    /// The whole closed set, in wire words -- what a refusal names.
+    pub const ALL: [WasteReason; 5] = [
+        WasteReason::Spoiled,
+        WasteReason::Dropped,
+        WasteReason::Unsold,
+        WasteReason::Returned,
+        WasteReason::StaffMeal,
+    ];
+
+    /// "spoiled, dropped, unsold, returned, staff_meal", for a 400's text.
+    pub fn allowed_words() -> String {
+        Self::ALL.iter().map(|r| r.as_str()).collect::<Vec<_>>().join(", ")
+    }
 }
 
-/// §4.1's event family, unchanged.
+/// §4.1's event family, plus the signer on the two a PERSON causes.
+///
+/// `by` IS THE SIGNER'S PERSON ID, AND `""` MEANS "RECORDED BEFORE SIGNERS".
+/// Every `Wasted` and `Stocktake` written before 2026-09-23 has no `by` on the
+/// wire; it decodes as `""` and FOLDS EXACTLY AS IT ALWAYS DID -- a venue's
+/// shelf is the fold of its whole history, so a fold that refused the old
+/// records would refuse every order the venue takes afterwards. The signer is
+/// required of NEW writes only, at the write door ([`StockLog::append`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StockEvent {
     /// restock: on_hand += qty
@@ -63,9 +92,35 @@ pub enum StockEvent {
     /// cancel or reject before prep: reserved -= qty
     Released { item: String, qty: Qty, order_id: String },
     /// spoilage or a dropped tray: on_hand -= qty
-    Wasted { item: String, qty: Qty, reason: WasteReason },
+    Wasted { item: String, qty: Qty, reason: WasteReason, by: String },
     /// a human counted: on_hand := observed, and the conservation basis resets
-    Stocktake { item: String, observed: Qty, stocktake_id: String },
+    Stocktake { item: String, observed: Qty, stocktake_id: String, by: String },
+    /// A DISH ALREADY SERVED, recorded after the fact (an ebills till import,
+    /// BLUEPRINT-EBILLS §6.4): on_hand -= qty, and it MAY GO NEGATIVE.
+    ///
+    /// Never refused for the shelf, unlike every other subtraction here. The
+    /// food has left the kitchen; refusing the record would make the ledger
+    /// claim a portion is on the shelf that a guest has eaten. A negative
+    /// level IS the report -- the next `Reserved` sees nothing available (the
+    /// automated 86 still holds), and the owner's view shows the shortfall
+    /// until a delivery or a count settles it. Holds no reservation.
+    Served { item: String, qty: Qty, order_id: String },
+    /// FOOD BACK FROM A DOOR (P1-4, BLUEPRINT-OPERATIONAL-BLIND-SPOTS §2.4),
+    /// one per line the order `Consumed`, written once per order by the
+    /// owner's choice -- never inferred.
+    ///
+    /// `resell`: on_hand += qty. The dish goes back on the shelf, and the next
+    /// order's `Consumed` takes it again.
+    /// Otherwise it is WASTE and on_hand DOES NOT MOVE: `Consumed` already took
+    /// these ingredients at PREPARING. §2.4 names a `Wasted` per line here;
+    /// that subtracts on_hand a second time for the same food, and is refused
+    /// outright whenever the unreserved shelf is short of the order's BOM.
+    /// This record is what the waste report counts instead.
+    ///
+    /// `by` is the courier who brought it back; `chosen_by` the person who
+    /// decided. It carries its order, so "was this order's choice made" is a
+    /// question the stock log answers alone.
+    Returned { item: String, qty: Qty, order_id: String, resell: bool, by: String, chosen_by: String },
 }
 
 impl StockEvent {
@@ -76,7 +131,9 @@ impl StockEvent {
             | StockEvent::Consumed { item, .. }
             | StockEvent::Released { item, .. }
             | StockEvent::Wasted { item, .. }
-            | StockEvent::Stocktake { item, .. } => item,
+            | StockEvent::Stocktake { item, .. }
+            | StockEvent::Served { item, .. }
+            | StockEvent::Returned { item, .. } => item,
         }
     }
 
@@ -84,7 +141,9 @@ impl StockEvent {
         match self {
             StockEvent::Reserved { order_id, .. }
             | StockEvent::Consumed { order_id, .. }
-            | StockEvent::Released { order_id, .. } => Some(order_id),
+            | StockEvent::Released { order_id, .. }
+            | StockEvent::Served { order_id, .. }
+            | StockEvent::Returned { order_id, .. } => Some(order_id),
             _ => None,
         }
     }
@@ -103,6 +162,9 @@ pub enum StockError {
     Linkage(String),
     /// The record on disk is not one this can read.
     Malformed,
+    /// A NEW `Wasted` or `Stocktake` with nobody's name on it. Refused at the
+    /// write door only; an old unsigned record still folds.
+    Unsigned,
 }
 
 impl std::fmt::Display for StockError {
@@ -115,6 +177,7 @@ impl std::fmt::Display for StockError {
             StockError::Overflow => write!(f, "the arithmetic overflowed"),
             StockError::Linkage(m) => write!(f, "{m}"),
             StockError::Malformed => write!(f, "unreadable stock record"),
+            StockError::Unsigned => write!(f, "a write-off or a count names who made it"),
         }
     }
 }
@@ -192,7 +255,9 @@ impl StockLedger {
                     | StockEvent::Reserved { qty, .. }
                     | StockEvent::Consumed { qty, .. }
                     | StockEvent::Released { qty, .. }
-                    | StockEvent::Wasted { qty, .. } => *qty,
+                    | StockEvent::Wasted { qty, .. }
+                    | StockEvent::Served { qty, .. }
+                    | StockEvent::Returned { qty, .. } => *qty,
                     StockEvent::Stocktake { .. } => unreachable!(),
                 };
                 if q <= 0 {
@@ -203,7 +268,7 @@ impl StockLedger {
 
         let lvl = self.level(ev.item());
         match ev {
-            StockEvent::Received { qty, .. } => {
+            StockEvent::Received { qty, .. } | StockEvent::Returned { qty, resell: true, .. } => {
                 lvl.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
             }
             StockEvent::Reserved { item, qty, .. } => {
@@ -273,6 +338,14 @@ impl StockLedger {
                     )));
                 }
             }
+            // §6.4: what was served is recorded, whatever the shelf says. Only
+            // the arithmetic can refuse it.
+            StockEvent::Served { qty, .. } => {
+                lvl.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
+            }
+            // Waste of food `Consumed` already took: the shelf does not move,
+            // so there is nothing for it to refuse.
+            StockEvent::Returned { resell: false, .. } => {}
         }
         Ok(())
     }
@@ -336,6 +409,16 @@ impl StockLedger {
                 let l = self.level_mut(item);
                 l.on_hand = *observed;
             }
+            StockEvent::Served { item, qty, .. } => {
+                let l = self.level_mut(item);
+                l.on_hand = l.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
+            }
+            StockEvent::Returned { item, qty, resell, .. } => {
+                if *resell {
+                    let l = self.level_mut(item);
+                    l.on_hand = l.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
+                }
+            }
         }
         Ok(())
     }
@@ -365,6 +448,31 @@ impl StockLedger {
     }
 }
 
+/// THE SIGNER RULE, for a NEW event: a write-off or a count names a person.
+///
+/// Deliberately NOT in `decide`, which `fold` runs over the whole history: an
+/// unsigned record written before signers existed must keep folding, or the
+/// venue's shelf -- and every order that reserves against it -- stops.
+pub fn signed(ev: &StockEvent) -> Result<(), StockError> {
+    match ev {
+        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } if by.trim().is_empty() => {
+            Err(StockError::Unsigned)
+        }
+        StockEvent::Returned { chosen_by, .. } if chosen_by.trim().is_empty() => Err(StockError::Unsigned),
+        _ => Ok(()),
+    }
+}
+
+/// The signer of an event, or `None` for one no person signs (the order
+/// lifecycle's) and for a write-off recorded before signers existed.
+pub fn signer(ev: &StockEvent) -> Option<&str> {
+    match ev {
+        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } if !by.is_empty() => Some(by),
+        StockEvent::Returned { chosen_by, .. } if !chosen_by.is_empty() => Some(chosen_by),
+        _ => None,
+    }
+}
+
 // ── serialisation, so the log survives a restart ────────────────────────────
 
 pub fn encode(ev: &StockEvent) -> String {
@@ -387,15 +495,30 @@ pub fn encode(ev: &StockEvent) -> String {
             esc(item),
             esc(order_id)
         ),
-        StockEvent::Wasted { item, qty, reason } => format!(
-            r#"{{"k":"wasted","item":"{}","qty":{qty},"reason":"{}"}}"#,
+        StockEvent::Wasted { item, qty, reason, by } => format!(
+            r#"{{"k":"wasted","item":"{}","qty":{qty},"reason":"{}","by":"{}"}}"#,
             esc(item),
-            reason.as_str()
+            reason.as_str(),
+            esc(by)
         ),
-        StockEvent::Stocktake { item, observed, stocktake_id } => format!(
-            r#"{{"k":"stocktake","item":"{}","observed":{observed},"id":"{}"}}"#,
+        StockEvent::Stocktake { item, observed, stocktake_id, by } => format!(
+            r#"{{"k":"stocktake","item":"{}","observed":{observed},"id":"{}","by":"{}"}}"#,
             esc(item),
-            esc(stocktake_id)
+            esc(stocktake_id),
+            esc(by)
+        ),
+        StockEvent::Served { item, qty, order_id } => format!(
+            r#"{{"k":"served","item":"{}","qty":{qty},"order":"{}"}}"#,
+            esc(item),
+            esc(order_id)
+        ),
+        StockEvent::Returned { item, qty, order_id, resell, by, chosen_by } => format!(
+            r#"{{"k":"returned","item":"{}","qty":{qty},"order":"{}","resell":{},"by":"{}","chosen_by":"{}"}}"#,
+            esc(item),
+            esc(order_id),
+            i64::from(*resell),
+            esc(by),
+            esc(chosen_by)
         ),
     }
 }
@@ -423,11 +546,28 @@ pub fn decode(rec: &str) -> Option<StockEvent> {
             item,
             qty: int_field(rec, "qty")?,
             reason: WasteReason::from_str(&str_field(rec, "reason")?)?,
+            // Absent on every record written before 2026-09-23: "" = unsigned.
+            by: str_field(rec, "by").unwrap_or_default(),
         }),
         "stocktake" => Some(StockEvent::Stocktake {
             item,
             observed: int_field(rec, "observed")?,
             stocktake_id: str_field(rec, "id")?,
+            // Absent on every record written before 2026-09-23: "" = unsigned.
+            by: str_field(rec, "by").unwrap_or_default(),
+        }),
+        "served" => Some(StockEvent::Served {
+            item,
+            qty: int_field(rec, "qty")?,
+            order_id: str_field(rec, "order")?,
+        }),
+        "returned" => Some(StockEvent::Returned {
+            item,
+            qty: int_field(rec, "qty")?,
+            order_id: str_field(rec, "order")?,
+            resell: match int_field(rec, "resell")? { 0 => false, 1 => true, _ => return None },
+            by: str_field(rec, "by")?,
+            chosen_by: str_field(rec, "chosen_by")?,
         }),
         _ => None,
     }
@@ -494,15 +634,15 @@ mod tests {
     fn nothing_can_drive_a_level_negative() {
         let led = StockLedger::fold(&[recv("rice", 10)]).unwrap();
         assert!(led.decide(&StockEvent::Wasted {
-            item: "rice".into(), qty: 11, reason: WasteReason::Spoiled
+            item: "rice".into(), qty: 11, reason: WasteReason::Spoiled, by: "mgr1".into()
         }).is_err());
         // And waste cannot eat a reservation: that portion is owed to somebody.
         let led = StockLedger::fold(&[recv("rice", 10), res("rice", 8, "ord_1")]).unwrap();
         assert!(led.decide(&StockEvent::Wasted {
-            item: "rice".into(), qty: 3, reason: WasteReason::Dropped
+            item: "rice".into(), qty: 3, reason: WasteReason::Dropped, by: "mgr1".into()
         }).is_err(), "only 2 are unspoken for");
         assert!(led.decide(&StockEvent::Wasted {
-            item: "rice".into(), qty: 2, reason: WasteReason::Dropped
+            item: "rice".into(), qty: 2, reason: WasteReason::Dropped, by: "mgr1".into()
         }).is_ok());
     }
 
@@ -515,10 +655,10 @@ mod tests {
         }
         // An observed count of zero is legitimate: a shelf can be empty.
         assert!(led.decide(&StockEvent::Stocktake {
-            item: "x".into(), observed: 0, stocktake_id: "s1".into()
+            item: "x".into(), observed: 0, stocktake_id: "s1".into(), by: "mgr1".into()
         }).is_ok());
         assert!(led.decide(&StockEvent::Stocktake {
-            item: "x".into(), observed: -1, stocktake_id: "s1".into()
+            item: "x".into(), observed: -1, stocktake_id: "s1".into(), by: "mgr1".into()
         }).is_err());
     }
 
@@ -562,7 +702,7 @@ mod tests {
             recv("tuna", 50),
             res("tuna", 10, "o1"),
             // Somebody counted and there are only 30.
-            StockEvent::Stocktake { item: "tuna".into(), observed: 30, stocktake_id: "s1".into() },
+            StockEvent::Stocktake { item: "tuna".into(), observed: 30, stocktake_id: "s1".into(), by: "mgr1".into() },
         ])
         .unwrap();
         assert_eq!(led.level("tuna"), StockLevel { on_hand: 30, reserved: 10 });
@@ -577,10 +717,10 @@ mod tests {
     fn a_count_below_what_is_reserved_is_refused() {
         let led = StockLedger::fold(&[recv("tuna", 50), res("tuna", 20, "o1")]).unwrap();
         assert!(led.decide(&StockEvent::Stocktake {
-            item: "tuna".into(), observed: 5, stocktake_id: "s1".into()
+            item: "tuna".into(), observed: 5, stocktake_id: "s1".into(), by: "mgr1".into()
         }).is_err());
         assert!(led.decide(&StockEvent::Stocktake {
-            item: "tuna".into(), observed: 20, stocktake_id: "s1".into()
+            item: "tuna".into(), observed: 20, stocktake_id: "s1".into(), by: "mgr1".into()
         }).is_ok());
     }
 
@@ -609,8 +749,8 @@ mod tests {
             res("salmon", 5, "ord_1"),
             con("salmon", 5, "ord_1"),
             rel("rice", 2, "ord_2"),
-            StockEvent::Wasted { item: "rice".into(), qty: 1, reason: WasteReason::Spoiled },
-            StockEvent::Stocktake { item: "nori".into(), observed: 42, stocktake_id: "s1".into() },
+            StockEvent::Wasted { item: "rice".into(), qty: 1, reason: WasteReason::Spoiled, by: "mgr1".into() },
+            StockEvent::Stocktake { item: "nori".into(), observed: 42, stocktake_id: "s1".into(), by: "mgr1".into() },
         ];
         for ev in &evs {
             assert_eq!(decode(&encode(ev)).as_ref(), Some(ev), "{ev:?}");
@@ -737,7 +877,12 @@ impl StockLog {
     /// tamper-evident: editing any event changes every content id after it,
     /// which is I4's other half.
     fn write(&mut self, ev: &StockEvent) -> Result<(), StockError> {
-        let payload = encode(ev).into_bytes();
+        self.write_payload(encode(ev).into_bytes())
+    }
+
+    /// The record itself. Split from `write` so a test can lay down bytes in
+    /// an OLDER encoding and prove the fold still reads them.
+    fn write_payload(&mut self, payload: Vec<u8>) -> Result<(), StockError> {
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
         // CHAINED, which is what the comment above has always claimed: the id
         // commits to the previous record, so editing an event breaks every id
@@ -821,7 +966,11 @@ impl StockLog {
     /// refuses -- the fail-closed gate §4 specifies. An event that would break
     /// an invariant never reaches the log, so a replay of the log can never
     /// reconstruct an impossible state.
+    ///
+    /// A new write-off or count must be SIGNED ([`signed`]); the history it is
+    /// decided against need not be.
     pub fn append(&mut self, ev: &StockEvent) -> Result<(), StockError> {
+        signed(ev)?;
         self.ledger()?.decide(ev)?;
         self.write(ev)
     }
@@ -836,6 +985,9 @@ impl StockLog {
         // Decided against a ledger that accumulates the batch, so two lines of
         // one order competing for the same ingredient are caught here rather
         // than by the second one failing after the first was written.
+        for ev in evs {
+            signed(ev)?;
+        }
         let mut trial = self.ledger()?;
         for ev in evs {
             trial.apply(ev)?;
@@ -845,6 +997,49 @@ impl StockLog {
         }
         Ok(())
     }
+}
+
+/// The signer rule and the pre-signer records (A11, 2026-09-23).
+#[cfg(test)]
+#[path = "stock/tests.rs"]
+mod signer_tests;
+
+/// §6.4: a served dish is recorded even past an empty shelf, and a log
+/// written before `served` existed folds exactly as it did.
+#[cfg(test)]
+#[path = "stock/served_tests.rs"]
+mod served_tests;
+
+/// P1-4: food back from a door, resold or wasted, and old logs unchanged.
+#[cfg(test)]
+#[path = "stock/returned_tests.rs"]
+mod returned_tests;
+
+/// The owner's choice on a door-refused order, already made? Any `Returned`
+/// for it says yes. And what the kitchen took for it: Σ `Consumed` per item,
+/// in first-seen order -- the lines a `Returned` is written against.
+pub fn returned_lines(log: &StockLog, order_id: &str) -> (bool, Vec<(String, Qty)>) {
+    let mut chosen = false;
+    let mut lines: Vec<(String, Qty)> = Vec::new();
+    for ev in log.events() {
+        match &ev {
+            StockEvent::Returned { order_id: o, .. } if o == order_id => chosen = true,
+            StockEvent::Consumed { item, qty, order_id: o } if o == order_id => {
+                match lines.iter_mut().find(|(i, _)| i == item) {
+                    Some(l) => l.1 += qty,
+                    None => lines.push((item.clone(), *qty)),
+                }
+            }
+            _ => {}
+        }
+    }
+    (chosen, lines)
+}
+
+/// The shortfalls: every item whose level a served dish drove below zero.
+/// Sorted, like `items`, so two folds report the same list.
+pub fn short(ledger: &StockLedger) -> Vec<(String, Qty)> {
+    ledger.items().into_iter().filter(|(_, l)| l.on_hand < 0).map(|(i, l)| (i, l.on_hand)).collect()
 }
 
 #[cfg(test)]
