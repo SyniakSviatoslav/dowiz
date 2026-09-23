@@ -166,6 +166,8 @@ pub fn decide(
         Err(e) => return Err(Refused::Untaxed(e.clone())),
     }
 
+    // G4: an order whose source is not in the set is never logged.
+    crate::services::ordering::channel::of(&envelope).map_err(|u| Refused::Append(u.to_string()))?;
     let stored = serde_json::to_string(&envelope).unwrap_or_else(|_| input.envelope.clone());
     hub.append(dowiz_hub::EventKind::Placed, &input.order_id, &stored, input.seq, [0u8; 32])
         .map_err(|e| Refused::Append(format!("hub append failed: {e:?}")))?;

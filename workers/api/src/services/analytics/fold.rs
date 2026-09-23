@@ -44,6 +44,10 @@ pub struct Report {
     /// `pickup`: an owner deciding whether to keep paying couriers needs to see
     /// the room and the counter apart.
     pub dine_in: i64,
+    /// Orders by where they came from (`services::ordering::channel`). A word
+    /// outside the closed set is counted under "unknown", never filed under
+    /// the storefront: an unrecognised source must not look first-party.
+    pub by_channel: std::collections::BTreeMap<String, i64>,
     pub by_day: Vec<Day>,
     pub by_hour: [i64; 24],
     pub top_products: Vec<Dish>,
@@ -100,6 +104,7 @@ pub fn fold(orders: &[Value], zone: Zone, starts: &[i64], now: i64) -> Report {
     let mut products: Vec<Dish> = Vec::new();
     let (mut count, mut revenue, mut rejected) = (0i64, 0i64, 0i64);
     let (mut delivery, mut pickup, mut dine_in) = (0i64, 0i64, 0i64);
+    let mut by_channel = std::collections::BTreeMap::<String, i64>::new();
 
     for o in orders {
         let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
@@ -131,6 +136,8 @@ pub fn fold(orders: &[Value], zone: Zone, starts: &[i64], now: i64) -> Report {
         // that was not the word "pickup" counted as a delivery, so a room full
         // of table orders would have read as a delivery business on the
         // owner's own analytics pane.
+        let source = crate::services::ordering::channel::of(o).map_or("unknown", |c| c);
+        *by_channel.entry(source.to_string()).or_default() += 1;
         match crate::services::ordering::fulfilment::of(o) {
             "delivery" => delivery += 1,
             "dine_in" => dine_in += 1,
@@ -185,6 +192,7 @@ pub fn fold(orders: &[Value], zone: Zone, starts: &[i64], now: i64) -> Report {
         delivery,
         pickup,
         dine_in,
+        by_channel,
         by_day,
         by_hour,
         top_products: products,

@@ -94,6 +94,10 @@ jobs:
       # A marketing send needs a `Consented`, which only the consent fold makes.
       - name: nobody is messaged without consent
         run: sh tools/gates/consent.sh
+      # An order's source is a closed set that one function writes (G4); the
+      # proof runs first so a gate that cannot fire is caught before it passes.
+      - name: an order's channel is a member of the set
+        run: sh tools/gates/channel-closed.prove.sh && sh tools/gates/channel-closed.sh
       # THE DEPENDENCY POLICY GATE THAT RAN NOWHERE. `deny.toml` bans yanked
       # crates, wildcards and disallowed licences, and `CLAUDE.md` described a
       # `.husky/pre-commit` hook that runs it -- there is no `.husky/`

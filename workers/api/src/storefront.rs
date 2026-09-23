@@ -985,12 +985,16 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         return Response::error("no platform CSPRNG for order id", 500);
     };
 
+    // WHERE THIS ORDER CAME FROM, decided by the principal this handler has
+    // already verified -- a staff-signed round is `console`, a guest is
+    // `storefront` -- and never by the body (`channel.rs`, G4).
+    let source = crate::services::ordering::channel::for_placement(staffed.is_some());
     let order_json = match json_api::place_order_at(
         id.clone(),
         None,
         &serde_json::to_string(&lines).unwrap_or_else(|_| "[]".into()),
         created_at_ms,
-        Some("storefront".into()),
+        Some(source.into()),
     ) {
         Ok(j) => j,
         Err(e) => return Response::error(e, 400),
@@ -1188,6 +1192,12 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         .iter()
         .filter_map(|it| Some((loaded.catalog.product(&it.product_id)?, it.quantity)))
         .collect();
+    // THE ONE WRITE OF THE SOURCE before the only `Placed` append: whatever
+    // the envelope carried is overwritten, and a word outside the set is
+    // refused here rather than stored (G4 (b)).
+    if let Err(e) = crate::services::ordering::channel::stamp(&mut envelope, source) {
+        return Response::error(e.to_string(), 500);
+    }
     let input = crate::command::place::PlaceIn {
         order_id: id.clone(),
         envelope: serde_json::to_string(&envelope).unwrap_or_else(|_| order_json.clone()),

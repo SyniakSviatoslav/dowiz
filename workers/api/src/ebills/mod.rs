@@ -35,6 +35,7 @@ mod time;
 mod wire;
 
 use serde_json::{json, Value};
+use crate::services::ordering::channel;
 use time::epoch_ms;
 use wire::*;
 
@@ -257,10 +258,14 @@ fn to_order(s: &Sale, location_id: &str) -> Result<Value, MapError> {
         (Kind::Course, Some(u)) => json!({ "kind": "dine_in", "table": u.identifier, "fee": 0 }),
         _ => json!({ "kind": "pickup", "code": "", "fee": 0 }),
     };
+    // THE SOURCE AND ITS TRUST FROM ONE PLACE (`channel.rs`, G4): the till
+    // priced this sale, so the order says so -- `price_trusted` is the
+    // profile's `priced_by_us`, not a second hand-typed `false`.
+    let trusted = channel::profile(channel::EBILLS).is_some_and(|p| p.priced_by_us);
     Ok(json!({
-        "id": format!("ebills:{}", s.uuid), "status": "PICKED_UP", "channel": "ebills",
+        "id": format!("ebills:{}", s.uuid), "status": "PICKED_UP", "channel": channel::EBILLS,
         "customer_id": null, "items": items, "subtotal": subtotal, "total": total,
-        "delivery_fee": 0, "tip": 0, "created_at_ms": created_at_ms, "price_trusted": false,
+        "delivery_fee": 0, "tip": 0, "created_at_ms": created_at_ms, "price_trusted": trusted,
         "location_id": location_id, "contact": { "name": "", "phone": "" },
         "fulfilment": fulfilment, "payment": pay, "external": external(s),
     }))

@@ -261,3 +261,22 @@ fn an_empty_window_still_has_its_days() {
     assert_eq!(r.by_hour, [0i64; 24]);
     assert_eq!(r.average_order, 0);
 }
+
+/// BY CHANNEL (TAX item 6's CHECK): an order from before the field counts as
+/// the storefront, an imported till sale as ebills — and a word outside the
+/// closed set as "unknown", never folded into the storefront's number.
+#[test]
+fn orders_are_counted_by_channel_and_an_unknown_one_is_not_the_storefront() {
+    let z = tirane();
+    let starts = day_starts(z, NOON, 7);
+    let mut ebills = order(NOON - 1000, 900, 0, "DELIVERED", "pickup");
+    ebills["channel"] = json!("ebills");
+    let mut fax = order(NOON - 2000, 900, 0, "DELIVERED", "pickup");
+    fax["channel"] = json!("fax");
+    let os = [order(NOON - 3000, 900, 0, "DELIVERED", "delivery"), ebills, fax];
+    let r = fold(&os, z, &starts, NOON);
+    assert_eq!(r.by_channel.get("storefront"), Some(&1));
+    assert_eq!(r.by_channel.get("ebills"), Some(&1));
+    assert_eq!(r.by_channel.get("unknown"), Some(&1));
+    assert_eq!(r.by_channel.values().sum::<i64>(), r.orders, "every order is in exactly one channel");
+}

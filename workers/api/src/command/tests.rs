@@ -440,3 +440,26 @@ mod taxing {
         assert_eq!(merged["tax"], o["tax"], "the block must ride through the transition");
     }
 }
+
+/// G4 (TAX §5): an order whose channel is not in the closed set is never
+/// logged — and the twin: a member of the set, or no channel at all (orders
+/// that predate the field read as the storefront), is placed.
+#[test]
+fn an_order_from_an_unknown_channel_is_never_logged() {
+    let with = |c: serde_json::Value| {
+        let mut i = input(None);
+        let mut e: serde_json::Value = serde_json::from_str(&i.envelope).unwrap();
+        if !c.is_null() { e["channel"] = c; }
+        i.envelope = e.to_string();
+        i
+    };
+    let (mut hub, mut stock) = images();
+    let before = hub.to_bytes();
+    let r = decide(&mut hub, &mut stock, &[], &Ok(None), &with(serde_json::json!("fax")));
+    assert!(matches!(r, Err(Refused::Append(_))), "an unknown source is refused");
+    assert_eq!(hub.to_bytes(), before, "and nothing reached the log");
+    for c in [serde_json::json!("storefront"), serde_json::json!("console"), serde_json::Value::Null] {
+        let (mut hub, mut stock) = images();
+        decide(&mut hub, &mut stock, &[], &Ok(None), &with(c.clone())).unwrap_or_else(|e| panic!("{c}: {e:?}"));
+    }
+}
