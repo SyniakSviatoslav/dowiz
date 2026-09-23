@@ -94,13 +94,13 @@ function retryAfterOf(res){
   return Number.isFinite(s) && s >= 0 ? Math.min(s, 120) * 1000 : 1000;
 }
 
-function open(){
+function open(name = DB_NAME){
   return new Promise((resolve, reject) => {
     let req;
     // `indexedDB` itself THROWS on access in a blocked-cookies third-party
     // context rather than being undefined, so the guard has to be a try, not
     // an `in` check.
-    try { req = indexedDB.open(DB_NAME, DB_VERSION); }
+    try { req = indexedDB.open(name, DB_VERSION); }
     catch (e) { reject(e); return; }
     req.onupgradeneeded = () => {
       const db = req.result;
@@ -142,7 +142,10 @@ const asPromise = req => new Promise((resolve, reject) => {
 /// tap under the token that has since expired. It may return `null` to mean
 /// "there is no session right now", which pauses the drain rather than burning
 /// the entry's tries against a 401.
-export function createOutbox({ authorize = () => ({}), onChange = () => {}, onSent = () => {}, onDropped = () => {}, fetchImpl, now = () => Date.now() } = {}){
+// `name`: ONE QUEUE PER APP. The courier and the room run on the same origin;
+// sharing one database would let one app's drain replay the other's taps under
+// its own token, and one app's sign-out would clear the other's queue.
+export function createOutbox({ name = DB_NAME, authorize = () => ({}), onChange = () => {}, onSent = () => {}, onDropped = () => {}, fetchImpl, now = () => Date.now() } = {}){
   const doFetch = fetchImpl || ((...a) => fetch(...a));
   let dbp = null;
   let draining = false;
@@ -154,7 +157,7 @@ export function createOutbox({ authorize = () => ({}), onChange = () => {}, onSe
   let timer = null;
   let stopped = false;
 
-  const db = () => (dbp ||= open().catch(e => { dbp = null; throw e; }));
+  const db = () => (dbp ||= open(name).catch(e => { dbp = null; throw e; }));
 
   async function all(){
     const d = await db();

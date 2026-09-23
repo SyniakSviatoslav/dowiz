@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d2826">
+<title>dowiz · room</title>
+<link rel="stylesheet" href="/lib/tokens.css">
+<link rel="stylesheet" href="/lib/components.css">
+<link rel="stylesheet" href="/room/room.css">
+</head>
+<body>
+<header class="hud">
+  <span class="tag warn" id="syncTag"><span class="dot" aria-hidden="true"></span><span id="syncText" data-t="offline"></span></span>
+  <span class="sp"></span>
+  <span class="tag warn" id="outboxTag" role="status" aria-live="polite" hidden><span id="outboxText"></span></span>
+  <button class="icon-btn" id="langBtn" type="button" data-t-attr="aria-label:language title:language">SQ</button>
+  <button class="icon-btn" id="themeBtn" type="button" data-t-attr="aria-label:theme title:theme">&#9680;</button>
+</header>
+<main id="app"></main>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+<script type="module" src="/room/app.js"></script>
+</body>
+</html>

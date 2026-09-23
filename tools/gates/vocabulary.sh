@@ -44,7 +44,8 @@ for s in $statuses; do
   done
   for f in workers/api/public/admin/admin.css \
            workers/api/public/platform/platform.css \
-           workers/api/public/courier/courier.css; do
+           workers/api/public/courier/courier.css \
+           workers/api/public/room/room.css; do
     grep -q -- "--st-$s:" "$f" || { echo "vocabulary: $s has no colour in $f"; missing=$((missing + 1)); }
   done
 done
