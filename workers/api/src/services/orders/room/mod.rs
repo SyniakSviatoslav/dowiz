@@ -8,6 +8,7 @@
 pub mod handlers;
 pub mod pay;
 pub mod placer;
+pub mod till;
 
 #[cfg(test)]
 mod tests;

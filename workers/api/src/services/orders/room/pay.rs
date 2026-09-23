@@ -16,9 +16,17 @@ struct PayBody {
     till_id: Option<String>,
     #[serde(default)]
     covers: Option<Vec<String>>,
+    /// The currency handed over; absent is the order's (P3-2).
+    #[serde(default)]
+    currency: Option<String>,
+    /// Required for a foreign currency: order minor units per payment minor
+    /// unit × 1 000 000 (`command::pay::fx`).
+    #[serde(default)]
+    rate_ppm: Option<i64>,
 }
 
-/// `POST /api/staff/orders/:id/pay` — `{location_id, amount, method, till_id?, covers?}`.
+/// `POST /api/staff/orders/:id/pay` — `{location_id, amount, method, till_id?, covers?, currency?, rate_ppm?}`.
+/// Cash is refused with no till open (409 "open the till first").
 pub async fn pay(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let raw = req.text().await.unwrap_or_default();
     let body: PayBody = match serde_json::from_str(&raw) {
@@ -54,6 +62,8 @@ pub async fn pay(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
         by,
         till_id: body.till_id,
         covers: body.covers,
+        currency: body.currency,
+        rate_ppm: body.rate_ppm,
         now_ms: ctx.data.now_ms,
     };
     let out: PayOut = match crate::command::send(&place, "room/pay", &input).await {

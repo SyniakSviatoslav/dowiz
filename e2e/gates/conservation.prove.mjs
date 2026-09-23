@@ -25,6 +25,38 @@ const NIGHT = 26 * 3600e3;
 const hex = (c) => c.repeat(64);
 
 const ok = { images: {}, orders: 6, events: 6, quarantined: [] };
+
+// ── law 10's fixtures ──
+const T = 1790000000000;
+const period = (over) => ({
+  till_id: 'main', opened_at: T, opened_by: 'p1', closed_at: T + 100, closed_by: 'p1', counted_at: T + 90,
+  ...over,
+});
+const tillHealth = (over = {}) => ({
+  open: false,
+  outside: [],
+  periods: [period({
+    float: { ALL: 10000, EUR: 5000 },
+    cash_paid: { ALL: 1500, EUR: 2000 },
+    pay_in: { ALL: 4500 },
+    pay_out: { EUR: 1000 },
+    counted: { ALL: 15900, EUR: 6000 },
+    over_short: { ALL: -100, EUR: 0 },
+    ...over,
+  })],
+});
+// Orders carry no tax block and a total their lines make, so laws 3 and 9
+// stay quiet and only law 10 is under test.
+const cashOrder = (id, at, amount, extra = {}) => ({
+  id, total: 5000, items: [{ price: 5000, quantity: 1 }],
+  payments: [{ method: 'cash', amount, at, ...extra }],
+});
+const tillOrders = () => [
+  cashOrder('r1', T + 10, 1500),
+  cashOrder('r2', T + 20, 2000, { currency: 'EUR', rate_ppm: 975000, amount_in_order_currency: 1950 }),
+  { id: 'r5', total: 5000, items: [{ price: 5000, quantity: 1 }], payments: [{ method: 'card', amount: 900, at: T + 40 }] },
+];
+
 const witnessed = (over) => ({
   configured: true,
   witness: { atMs: Date.now() - NIGHT, records: 6, archived: 0, total: 6, tip: 'aa', found: [], ...over },
@@ -310,6 +342,73 @@ const CASES = {
       items: [{ price: 750, quantity: 1 }],
       // no tax block
     }],
+    red: false,
+  },
+
+  // ── LAW 10: THE TILL, PER CURRENCY ──
+  //
+  // One period opened at T with a lek and a euro float; two cash payments in
+  // it (1500 lek, €20.00 = 2000 cents at a rate -- the drawer counts the euro,
+  // not the lek it was worth), a 4500-lek courier hand-in, a €10 pay-out.
+  //   ALL: 10000 + 1500 + 4500        = 16000, counted 15900 -> -100
+  //   EUR:  5000 + 2000        - 1000 =  6000, counted  6000 ->    0
+  'a balanced till in two currencies': {
+    health: { ...ok, till: tillHealth() },
+    backup: witnessed(),
+    orders: tillOrders(),
+    red: false,
+  },
+  'a balanced till in one currency': {
+    health: { ...ok, till: { open: false, outside: [], periods: [period({
+      float: { ALL: 10000 }, cash_paid: { ALL: 1500 }, pay_in: {}, pay_out: {},
+      counted: { ALL: 11500 }, over_short: { ALL: 0 } })] } },
+    backup: witnessed(),
+    orders: [cashOrder('r1', T + 10, 1500)],
+    red: false,
+  },
+  // OFF BY 100 IN ONE CURRENCY: the euro pile's recorded over/short says 0
+  // and the parts say -100. The lek pile balances; the gate names the euro.
+  'a till off by 100 in one currency': {
+    health: { ...ok, till: tillHealth({ counted: { ALL: 15900, EUR: 5900 } }) },
+    backup: witnessed(),
+    orders: tillOrders(),
+    red: 'EUR: counted 5900 - (float 5000 + cash 2000 + in 0 - out 1000 = 6000) is -100, recorded over/short 0',
+  },
+  // A CASH PAYMENT THE TILL NEVER FOLDED: the orders hold a third cash
+  // payment inside the period that the till's cash_paid does not include.
+  'a cash payment missing from the till': {
+    health: { ...ok, till: tillHealth() },
+    backup: witnessed(),
+    orders: [...tillOrders(), cashOrder('r3', T + 30, 700)],
+    red: 'the orders hold 2200 cash, the till folded 1500',
+  },
+  'cash taken with no till open': {
+    health: { ...ok, till: tillHealth() },
+    backup: witnessed(),
+    orders: [...tillOrders(), cashOrder('r4', T - 5000, 700)],
+    red: 'r4: 700 ALL cash at',
+  },
+  // AN OPEN DRAWER IS STILL TAKING MONEY: its numbers are not balanced yet,
+  // however they look.
+  'an open till is not balanced yet': {
+    health: { ...ok, till: { open: true, outside: [], periods: [period({
+      closed_at: null, counted: { ALL: 1 }, over_short: null })] } },
+    backup: witnessed(),
+    orders: tillOrders(),
+    red: false,
+  },
+  'a till that could not fold': {
+    health: { ...ok, till: { error: '500: the till log does not fold: till record 3: unknown kind till.bribe' } },
+    backup: witnessed(),
+    orders: tillOrders(),
+    red: 'the till could not be folded',
+  },
+  // ABSENT IS NOT ZERO: a Worker without the till block has not measured it,
+  // and must not call every cash payment "outside".
+  'a worker without the till field': {
+    health: ok,
+    backup: witnessed(),
+    orders: tillOrders(),
     red: false,
   },
 };

@@ -12,7 +12,7 @@
 // `StockLedger::stranded()` is a conservation report. What was missing was
 // anything that ran them as a gate.
 //
-// NINE LAWS, each over the live platform:
+// TEN LAWS, each over the live platform:
 //   1. every order's folded status equals the status it is served with
 //   2. no order is stranded: nothing is held by an order that has ended
 //   3. the money on an order is its lines plus fees minus its discount
@@ -24,6 +24,10 @@
 //      stock ledger holds nothing for an order the log says has ended
 //   9. the tax block conserves money: groups sum, discounts allocate exactly,
 //      bases and totals add up, and stamps are re-derivable from their parts
+//  10. the till adds up: per currency, every closed drawer's recorded
+//      over/short is its count minus float + cash paid + pay-in - pay-out;
+//      the cash the ORDERS hold equals the cash the till folded; and no cash
+//      was taken with no till open
 //
 // It takes an owner token per venue and reads only. Exit 1 on any breach, with
 // the order named -- a gate whose failure cannot be chased is a dashboard.
@@ -319,6 +323,63 @@ for (const host of HOSTS) {
       }
       if (recomputed !== (tax_block.fee.tax ?? 0)) {
         note(venue, 'tax', `${o.id}: fee at ${fee_rate} ppm, base ${fee_base}: recomputed tax ${recomputed}, but stored tax is ${tax_block.fee.tax}`);
+      }
+    }
+  }
+
+  // ── 10. the till adds up, per currency ──────────────────────────────────
+  //
+  // BLUEPRINT-POS-THE-ROOM §2.5 / G2, with P3-2's currencies. The drawer is
+  // one pile per currency -- lek and euro are two piles, never one number --
+  // and for every CLOSED period, in every currency it names:
+  //
+  //   counted - (float + cash_paid + pay_in - pay_out) == over_short (recorded)
+  //
+  // `over_short` is what the close RECORDED; the parts are what the object
+  // folds NOW. So a cash payment that appears or vanishes after the close is a
+  // breach, not a quietly different number.
+  //
+  // AND THE ORDERS ARE ASKED THEMSELVES. `cash_paid` is the object's fold; the
+  // gate re-sums every cash payment in the order list whose time falls in the
+  // period, in the currency it was PAID in, and the two must agree. A cash
+  // payment the till did not fold, or one outside every period, is named.
+  //
+  // An OPEN period is not balanced -- the drawer is still taking money -- and
+  // ABSENT IS NOT ZERO: a Worker without `till` has not been measured, and
+  // with no periods at all every cash payment would read as "outside".
+  const till = health?.till;
+  // A till that could not fold is said out loud, as law 8's rebuild is: an
+  // error answered as "no periods" would read as a balanced venue.
+  if (till?.error) note(venue, 'till', `the till could not be folded: ${till.error}`);
+  if (till && Array.isArray(till.periods)) {
+    const cashIn = [];
+    for (const o of list) {
+      for (const p of o.payments || []) {
+        if (p.method === 'cash') cashIn.push({ id: o.id, at: p.at ?? 0, cur: p.currency || o.currency || 'ALL', n: p.amount ?? 0 });
+      }
+    }
+    const within = (per, at) => at >= per.opened_at && (per.closed_at == null || at <= per.closed_at);
+    const val = (m, c) => (m && m[c]) || 0;
+    for (const per of till.periods) {
+      if (per.closed_at == null) continue;
+      const mine = {};
+      for (const c of cashIn) if (within(per, c.at)) mine[c.cur] = (mine[c.cur] || 0) + c.n;
+      const curs = new Set([per.float, per.cash_paid, per.pay_in, per.pay_out, per.counted, per.over_short, mine]
+        .flatMap((m) => Object.keys(m || {})));
+      for (const cur of curs) {
+        const exp = val(per.float, cur) + val(per.cash_paid, cur) + val(per.pay_in, cur) - val(per.pay_out, cur);
+        const said = val(per.over_short, cur);
+        if (val(per.counted, cur) - exp !== said) {
+          note(venue, 'till', `${per.till_id} opened ${per.opened_at} ${cur}: counted ${val(per.counted, cur)} - (float ${val(per.float, cur)} + cash ${val(per.cash_paid, cur)} + in ${val(per.pay_in, cur)} - out ${val(per.pay_out, cur)} = ${exp}) is ${val(per.counted, cur) - exp}, recorded over/short ${said}`);
+        }
+        if (val(mine, cur) !== val(per.cash_paid, cur)) {
+          note(venue, 'till', `${per.till_id} opened ${per.opened_at} ${cur}: the orders hold ${val(mine, cur)} cash, the till folded ${val(per.cash_paid, cur)}`);
+        }
+      }
+    }
+    for (const c of cashIn) {
+      if (!till.periods.some((per) => within(per, c.at))) {
+        note(venue, 'till', `${c.id}: ${c.n} ${c.cur} cash at ${c.at} with no till open`);
       }
     }
   }

@@ -1,14 +1,25 @@
-//! TAKE A PAYMENT: one `Paid` event with an amount, method, signer, and till.
+//! TAKE A PAYMENT: one `Paid` event with an amount, a method, a currency, a
+//! signer, and — for cash — the till it went into.
 //!
 //! A check (sitting) can receive multiple payments until its total is covered.
-//! Each payment is one `Paid` event on its order; the sitting's bill is the sum
-//! of all order totals (minus voids), and the check closes when Σ payments ==
-//! the bill. The payment split works by the room calling `pay` N times with N
+//! Each payment is one `Paid` event on its order; the check closes when Σ
+//! payments == the bill. The split is the room calling `pay` N times with N
 //! amounts, and the object refusing if the sum would exceed the bill (G5).
 //!
-//! THE CONFIRMED FRAME (BLUEPRINT-POS-THE-ROOM §4.5 (2)). An order whose bill
-//! is settled carries `payment_status: "paid"` and cannot be amended — taking
-//! money off it is a refund (not this command).
+//! CURRENCY (BLUEPRINT-OPERATIONAL-BLIND-SPOTS P3-2): the invoice stays in the
+//! ORDER's currency; a payment may be in another, with its integer rate stated
+//! (the unit is defined in `fx`). Σ ≤ total and "paid" are in the order's
+//! currency (`amount_in_order_currency`); the drawer counts the note in the
+//! currency it was handed over in (`command::till`).
+//!
+//! CASH NEEDS AN OPEN TILL (BLUEPRINT-POS-THE-ROOM §2.5): "a cash `Paid`
+//! outside any open till is a breach" — refused here, and law 10 names any
+//! that got in before this refusal existed. The object stamps the open till's
+//! id on the payment; the client does not get to choose a drawer.
+//!
+//! THE CONFIRMED FRAME (§4.5 (2)). An order whose bill is settled carries
+//! `payment_status: "paid"` and cannot be amended — taking money off it is a
+//! refund (not this command).
 
 use super::amend::next_seq;
 use super::Refused;
@@ -16,21 +27,42 @@ use crate::hubdo::OrderView;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+pub mod fx;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PayIn {
     pub order_id: String,
     pub location_id: String,
-    /// The amount in minor units (cents, etc.). Must be >= 1.
+    /// Minor units OF THE CURRENCY PAID IN. At least 1.
     pub amount: i64,
-    /// The payment method: a closed set.
+    /// The payment method: a closed set (`validate_method`).
     pub method: String,
     /// The signer. Mandatory, and never waived.
     pub by: String,
-    /// Which till the cash went into (if method is cash). Optional.
+    /// The till the client believes is open. Checked, never trusted: if it
+    /// names another till than the open one the payment is refused.
+    #[serde(default)]
     pub till_id: Option<String>,
     /// Advisory: which orders this payment covers, for the UI. Not checked.
+    #[serde(default)]
     pub covers: Option<Vec<String>>,
+    /// `dowiz_core::money::Currency` code handed over. Absent → the order's.
+    #[serde(default)]
+    pub currency: Option<String>,
+    /// Required when `currency` is not the order's; refused when it is. The
+    /// unit is in `fx`'s header: order minor units per payment minor unit × 1e6.
+    #[serde(default)]
+    pub rate_ppm: Option<i64>,
     pub now_ms: i64,
+}
+
+/// What the object knows that the payment needs and the request cannot say.
+#[derive(Debug, Clone, Copy)]
+pub struct Room<'a> {
+    /// The till open right now, if any (`command::till`'s fold).
+    pub open_till: Option<&'a str>,
+    /// The venue's currency: an order that does not name its own is in this.
+    pub venue_currency: &'a str,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,113 +80,103 @@ fn refuses_payment(status: &str) -> bool {
     matches!(status, "CANCELLED" | "REJECTED" | "REFUNDING" | "COMPENSATED_REFUND")
 }
 
-/// The closed set of payment methods. A method name entered by the waiter or
-/// printed by the POS, so it is a word, not free text.
+/// The closed set of payment methods. EXACT, not trimmed: " cash" passing
+/// here and failing the `== "cash"` till rule below would be cash with no
+/// drawer.
 pub fn validate_method(method: &str) -> bool {
-    matches!(
-        method.trim(),
-        "cash" | "card" | "cheque" | "transfer" | "gift_card" | "other"
-    )
+    matches!(method, "cash" | "card" | "cheque" | "transfer" | "gift_card" | "other")
 }
 
-/// Fold all payments received so far (including this one). Returns their sum.
-fn fold_payments(order: &Value, new_amount: i64) -> Result<i64, Refused> {
-    let payments = order
-        .get("payments")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let mut total = new_amount;
-    for p in &payments {
-        let amt = p.get("amount").and_then(Value::as_i64).unwrap_or(0);
-        total = total.checked_add(amt).ok_or_else(|| Refused::Invalid("payment sum overflows".into()))?;
+/// What one recorded payment took off the bill, in the order's currency. A
+/// payment recorded before payments carried a currency is in the order's.
+pub fn settles(p: &Value) -> i64 {
+    p.get("amount_in_order_currency").or_else(|| p.get("amount")).and_then(Value::as_i64).unwrap_or(0)
+}
+
+/// Σ of the payments already on the order plus this one, in the order's currency.
+fn paid_with(order: &Value, this: i64) -> Result<i64, Refused> {
+    let mut sum = this;
+    for p in order.get("payments").and_then(Value::as_array).into_iter().flatten() {
+        sum = sum.checked_add(settles(p)).ok_or_else(|| Refused::Invalid("payment sum overflows".into()))?;
     }
-    Ok(total)
+    Ok(sum)
 }
 
-/// THE WHOLE PAYMENT, over the order image already in memory.
+/// THE WHOLE PAYMENT, over the order image already in memory. Nothing is
+/// written unless every rule passed; the one write is the last statement.
 pub fn decide(
     hub: &mut dowiz_hub::Hub,
     current: Option<&OrderView>,
     input: &PayIn,
+    room: &Room,
 ) -> Result<(Value, String, u64), Refused> {
     let Some(current) = current else { return Err(Refused::NotFound) };
-
-    // Rule a: no signer
     if input.by.trim().is_empty() {
         return Err(Refused::Invalid("a payment names who took it".into()));
     }
-
-    // Rule b: amount < 1
     if input.amount < 1 {
         return Err(Refused::Invalid("a payment is at least 1 minor unit".into()));
     }
-
-    // Parse the current order JSON
-    let mut order: Value = serde_json::from_str(&current.order_json)
-        .map_err(|e| Refused::Append(format!("order json unreadable: {e}")))?;
-
-    // Rule d: another venue's order
-    if order.get("location_id").and_then(Value::as_str) != Some(&input.location_id) {
-        return Err(Refused::NotFound);
-    }
-
-    let status = order.get("status").and_then(Value::as_str).unwrap_or("");
-    if refuses_payment(status) {
-        return Err(Refused::Conflict(format!("this round is {status}; it takes no payment")));
-    }
-
-    // Get the order's total
-    let total = order.get("total").and_then(Value::as_i64).unwrap_or(0);
-
-    // Rule c: Σ of all payments > total
-    let paid_so_far = fold_payments(&order, input.amount)?;
-    if paid_so_far > total {
-        return Err(Refused::Conflict(format!(
-            "payment sum {paid_so_far} exceeds the total {total}"
-        )));
-    }
-
-    // Validate the method
     if !validate_method(&input.method) {
         return Err(Refused::Invalid(format!("method {}: not recognized", input.method)));
     }
+    let before: Value = serde_json::from_str(&current.order_json)
+        .map_err(|e| Refused::Append(format!("order json unreadable: {e}")))?;
+    if before.get("location_id").and_then(Value::as_str) != Some(input.location_id.as_str()) {
+        return Err(Refused::NotFound);
+    }
+    let status = before.get("status").and_then(Value::as_str).unwrap_or("");
+    if refuses_payment(status) {
+        return Err(Refused::Conflict(format!("this round is {status}; it takes no payment")));
+    }
+    let till = if input.method == "cash" {
+        let Some(open) = room.open_till else {
+            return Err(Refused::Conflict("open the till first: cash goes into a drawer".into()));
+        };
+        if let Some(asked) = input.till_id.as_deref().filter(|t| *t != open) {
+            return Err(Refused::Conflict(format!("till {asked} is not open; {open} is")));
+        }
+        Some(open)
+    } else {
+        None
+    };
 
-    // Rule f (law 3): a payment never changes subtotal, discount or total —
-    // only `payments` and `payment_status` are written below, and the test
-    // `payment_never_changes_the_round_money_fields` holds it.
-    // Append the payment to the payments array
-    let mut payments = order
-        .get("payments")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    payments.push(json!({
+    let order_currency = before.get("currency").and_then(Value::as_str).unwrap_or(room.venue_currency);
+    let settled = fx::settle(order_currency, input.currency.as_deref(), input.rate_ppm, input.amount)?;
+    let total = before.get("total").and_then(Value::as_i64).unwrap_or(0);
+    let paid = paid_with(&before, settled.in_order_currency)?;
+    if paid > total {
+        return Err(Refused::Conflict(format!("payment sum {paid} exceeds the total {total}")));
+    }
+
+    // LAW 3: a payment never changes subtotal, discount or total — only
+    // `payments` and `payment_status` are written below.
+    let mut payment = json!({
         "by": input.by,
         "amount": input.amount,
         "method": input.method,
+        "currency": settled.currency.code(),
         "at": input.now_ms,
-        "till_id": input.till_id,
-    }));
+    });
+    if let Some(t) = till {
+        payment["till_id"] = json!(t);
+    }
+    if let Some(rate) = settled.rate_ppm {
+        payment["rate_ppm"] = json!(rate);
+        payment["amount_in_order_currency"] = json!(settled.in_order_currency);
+    }
+    let mut order = before.clone();
+    let mut payments = before.get("payments").and_then(Value::as_array).cloned().unwrap_or_default();
+    payments.push(payment);
     order["payments"] = Value::Array(payments);
-
-    // Rule e: when Σ payments == total, mark as paid
-    if paid_so_far == total {
+    if paid == total {
         order["payment_status"] = json!("paid");
     }
 
-    // Create the delta: only the payments array (and possibly payment_status) changed
-    let body = crate::fold::delta(
-        &serde_json::from_str::<Value>(&current.order_json)
-            .unwrap_or(json!({})),
-        &order,
-    )
-    .to_string();
-
+    let body = crate::fold::delta(&before, &order).to_string();
     let seq = next_seq(current.seq, input.now_ms);
     hub.append(dowiz_hub::EventKind::Paid, &input.order_id, &body, seq, [0u8; 32])
         .map_err(|e| Refused::Append(format!("hub append failed: {e:?}")))?;
-
     Ok((order, body, seq))
 }
 

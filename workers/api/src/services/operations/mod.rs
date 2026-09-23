@@ -91,6 +91,17 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         Err(e) => json!({ "intact": false, "error": e.to_string() }),
     };
 
+    // ── LAW 10: THE TILL ADDS UP, PER CURRENCY ──
+    // Reported, never repaired. A till that cannot fold is said out loud:
+    // law 10 treats `till.error` as a breach, never as "no periods".
+    let till = match crate::services::orders::room::till::report(&place, &loc).await {
+        Ok(r) => match serde_json::to_value(r) {
+            Ok(v) => v,
+            Err(e) => json!({ "error": e.to_string() }),
+        },
+        Err((status, said)) => json!({ "error": format!("{status}: {said}") }),
+    };
+
     // ── WHAT THE KITCHEN IS STILL OWED ──
     //
     // DEPTH AND AGE, because the same count means two different things: two
@@ -111,6 +122,15 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     // `crate::quarantine`: a non-zero count is a failing gate, not a warning.
     let quarantined = crate::quarantine::seen(&hub.hub, audit.quarantined);
 
+    // TOMBSTONES AND DECLARATIONS (§3.3, §6 item 3 CHECK). `redacted` counts
+    // the HOT log only; `declared` is every `Forgotten` declaration, which also
+    // names what an erasure redacted in the archives. So the two agree for a
+    // venue whose forgotten customers are all in the hot log, and differ by the
+    // archived tombstones otherwise -- the equality across hot + archives is
+    // the conservation audit's law, not this route's (reading every archive on
+    // every health poll is the cost `hubstore::archive_seal` exists to avoid).
+    let chain = hub.hub.chain_check();
+
     Response::from_json(&json!({
         "venue": loc,
         "images": images,
@@ -122,9 +142,12 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         "orders": hub.hub.len(),
         "events": hub.hub.events().len(),
         "quarantined": quarantined,
+        "redacted": chain.redacted,
+        "declared": hub.hub.declared(),
         "errors": audit.errors,
         "rails": rails,
         "rebuild": rebuilt,
+        "till": till,
         "outbox": outbox,
     }))
 }

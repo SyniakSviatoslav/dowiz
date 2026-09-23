@@ -52,6 +52,9 @@ const LOG_IMAGE: &str = "log";
 /// The room's commands (amend, pay, transfer, the till), in their own file.
 mod room;
 
+/// The forget command: redact a customer and append a declaration, in one turn.
+pub mod forget;
+
 /// The catalogue image, which holds the venue's own record as well as its
 /// dishes. Named here because `/fold/venue` reads it and nothing else does.
 const CATALOG_IMAGE: &str = "catalog";
@@ -1271,6 +1274,15 @@ impl DurableObject for HubImages {
                 (Method::Post, "room") => {
                     let cmd = seg.next().unwrap_or("").to_string();
                     self.room(&cmd, req).await
+                }
+                // FORGET A CUSTOMER: `/fold/forget`
+                (Method::Post, "forget") => {
+                    let mut req = req;
+                    let input: forget::ForgetIn = req.json().await?;
+                    match self.forget(input).await? {
+                        Ok(out) => Response::from_json(&out),
+                        Err(r) => Response::error(r.message().to_string(), r.status()),
+                    }
                 }
                 (Method::Post, "place") => {
                     let mut req = req;

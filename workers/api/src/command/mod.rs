@@ -43,6 +43,7 @@ pub mod pay;
 pub mod place;
 pub mod room_rules;
 pub mod sitting;
+pub mod till;
 
 #[cfg(test)]
 mod tests;
