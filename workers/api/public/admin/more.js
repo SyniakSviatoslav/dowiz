@@ -6,14 +6,14 @@
 
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, busy, confirm, switchEl, store, day, ago, clock, hydrate } from '/admin/core.js';
 import { retranslate, lang, LANGS } from '/admin/i18n.js';
-import { loadVenue, rerender } from '/admin/app.js';
+import { loadVenue, loadStaff, rerender } from '/admin/app.js';
 import { openCard, cardLine } from '/admin/customers.js';
 
 /// The rows, in groups, with the sheet each opens.
 const GROUPS = [
   ['inbox', [['inbox', 'message-2', openInbox]]],
   ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['social', 'sparkles', openSocial]]],
-  ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers]]],
+  ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers], ['staff', 'apron', openStaff]]],
   ['settings',  [['integrations', 'check', openIntegrations], ['preview', 'eye', openPreview], ['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['payments', 'coin-hole', openPayments],
                  ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['mcp', 'cube-3d-sphere', openMcp], ['cloud', 'cloud-upload', openCloud], ['branding', 'fan', openBranding],
                  ['features', 'tools-kitchen-2', openFeatures], ['assistant', 'sparkles', openAssistant], ['apiKeys', 'key', openKeys], ['activation', 'check', openActivation], ['health', 'cube-3d-sphere', openHealth]]],
@@ -43,6 +43,14 @@ export async function render(host){
 const head = (eyebrow, title) => `<p class="eyebrow" data-t="${eyebrow}"></p><h2 data-t="${title}"></h2>`;
 const fail = e => toast(String(e.message || e));
 const paint = () => { retranslate($('#sheetIn')); hydrate($('#sheetIn')); };
+
+// ── staff ───────────────────────────────────────────────────────────────────
+async function openStaff(){
+  const { render } = await import('/admin/staff.js');
+  sheet(`<div id="staffIn"></div>`, { name: 'staff' });
+  await loadStaff();
+  await render($('#staffIn'));
+}
 
 // ── marketing ───────────────────────────────────────────────────────────────
 async function openPromos(){

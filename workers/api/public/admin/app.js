@@ -215,6 +215,7 @@ export async function loadVenue(){
   } catch {}
 }
 export async function loadCouriers(){ try { S.couriers = (await api('/owner/couriers')).couriers || []; } catch {} }
+export async function loadStaff(){ try { S.staff = (await api('/owner/staff')).staff || []; } catch {} }
 
 function ring(){
   try {

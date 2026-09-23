@@ -85,9 +85,12 @@ export const T = {
     // stock
     supplies:'Furnizimet', ingredient:'Përbërësi', level:'Sasia', unit:'Njësia', low:'Pak', out:'Mbaroi', received:'U mor', wasted:'U hodh', counted:'U numërua',
     move:'Lëvizje', addSupply:'Shto furnizim', minLevel:'Minimumi', noStock:'Magazina s’është modeluar ende', stockHint:'Shtoni përbërësit që ndiqni; porosia refuzohet vetë kur mbaron diçka.',
+    // staff
+    tabStaff:'Personali', staffHint:'Kush punon: kuzhina, kamarier, kasir-menaxher. Ftoni me kod.', staff:'Personali', role:'Roli', kitchen:'Kuzhinë', waiter:'Kamarier', counterManager:'Kasir-menaxher', 'role-kitchen':'Kuzhinë', 'role-waiter':'Kamarier', 'role-counter-manager':'Kasir-menaxher',
+    inviteStaff:'Fto punonjës', deactivateStaff:'Çaktivizo punonjësin', noStaff:'Ende asnjë punonjës',
     // couriers
     invite:'Fto korrier', inviteHint:'Kodi vlen 7 ditë; korrieri e shkruan në aplikacionin e vet.', phone:'Telefoni', inviteCode:'Kodi', onShift:'Në turn', offShift:'Jashtë turnit',
-    activeC:'Aktiv', deactivate:'Çaktivizo', activate:'Aktivizo', noCouriers:'Ende asnjë korrier', deliveries:'Dorëzime', lastSeen:'Parë së fundi', uninvite:'Anulo ftesën',
+    activeC:'Aktiv', deactivate:'Çaktivizo', activate:'Aktivizo', noCouriers:'Ende asnjë korrier', deliveries:'Dorëzime', lastSeen:'Parë së fundi', uninvite:'Anulo ftesën', noStaff:'Ende asnjë punonjës',
     // more
     marketing:'Marketing', promos:'Kodet e zbritjes', posts:'Postimet', analytics:'Analitika', customers:'Klientët', settings:'Cilësimet', health:'Gjendja e sistemit',
     notifications:'Njoftimet', channels:'Kanalet e porosive', integrations:'Integrimet', branding:'Marka', hours:'Orari', timezone:'Zona kohore', timezoneHint:'Ndryshimi i orës në verë zbatohet vetë — nuk ka asgjë për të ndryshuar dy herë në vit.', deliveryTerms:'Dërgesa', payments:'Pagesat',
@@ -185,8 +188,10 @@ export const T = {
     unavailableNote:'Why unavailable', putOnSale:'Put on sale', takeOff:'Take off sale', importMenu:'Import menu', sold:'sold', undeclared:'undeclared',
     supplies:'Supplies', ingredient:'Ingredient', level:'Level', unit:'Unit', low:'Low', out:'Out', received:'Received', wasted:'Wasted', counted:'Counted',
     move:'Movement', addSupply:'Add supply', minLevel:'Minimum', noStock:'Stock is not modelled yet', stockHint:'Add the ingredients you track; an order is refused by itself when something runs out.',
+    tabStaff:'Staff', staffHint:'Who works: kitchen, waiter, counter-manager. Invite by code.', staff:'Staff', role:'Role', kitchen:'Kitchen', waiter:'Waiter', counterManager:'Counter manager', 'role-kitchen':'Kitchen', 'role-waiter':'Waiter', 'role-counter-manager':'Counter manager',
+    inviteStaff:'Invite staff member', deactivateStaff:'Deactivate staff member', noStaff:'No staff yet',
     invite:'Invite courier', inviteHint:'The code is valid for 7 days; the courier types it in their app.', phone:'Phone', inviteCode:'Code', onShift:'On shift', offShift:'Off shift',
-    activeC:'Active', deactivate:'Deactivate', activate:'Activate', noCouriers:'No couriers yet', deliveries:'Deliveries', lastSeen:'Last seen', uninvite:'Cancel invite',
+    activeC:'Active', deactivate:'Deactivate', activate:'Activate', noCouriers:'No couriers yet', noStaff:'No staff yet', deliveries:'Deliveries', lastSeen:'Last seen', uninvite:'Cancel invite',
     marketing:'Marketing', promos:'Promo codes', posts:'Posts', analytics:'Analytics', customers:'Customers', settings:'Settings', health:'System health',
     notifications:'Notifications', channels:'Order channels', integrations:'Integrations', branding:'Brand', hours:'Hours', timezone:'Time zone', timezoneHint:'The summer change is applied automatically; there is nothing to set twice a year.', deliveryTerms:'Delivery', payments:'Payments',
     features:'Features', apiKeys:'API keys', backup:'Backup', activation:'Activation', venue:'Venue',
@@ -298,6 +303,8 @@ export const T = {
     orders7:'Замовлень', revenue7:'Виручка', avgCheck:'Середній чек', topDishes:'Найпопулярніші', byHour:'За годинами', byDay:'За днями',
     hubOk:'Хаб у нормі', latency:'Затримка', images:'Образи', lastBackup:'Остання копія', download:'Завантажити',
     loadFail:'Не завантажилось', sessionOver:'Сесія завершилась', required:'Обов’язково',
+    tabStaff:'Персонал', staffHint:'Хто працює: кухня, офіціант, касир-менеджер. Запрошуйте кодом.', staff:'Персонал', role:'Роль', kitchen:'Кухня', waiter:'Офіціант', counterManager:'Касир-менеджер', 'role-kitchen':'Кухня', 'role-waiter':'Офіціант', 'role-counter-manager':'Касир-менеджер',
+    inviteStaff:'Запросити працівника', deactivateStaff:'Деактивувати працівника', noStaff:'Персоналу ще немає',
   },
 };
 
