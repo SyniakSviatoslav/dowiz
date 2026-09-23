@@ -58,13 +58,21 @@ pub async fn customers(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // `owner_beside` runs them together. Measured against this very handler
     // before it was converted: 293 ms of server time against the dashboard's
     // 235 for the same 655 KB, on the same deployment at the same minute.
-    let (_, loc, (listed, loaded_cat)) = match crate::owner::owner_beside(
+    let (_, loc, (listed, loaded_cat, people, consent)) = match crate::owner::owner_beside(
         &req,
         &ctx,
         &place,
-        futures_util::future::try_join(
+        futures_util::future::try_join4(
             crate::hubstore::orders(&place),
             crate::hubstore::load_catalog(&place),
+            // THE CARD, joined on by key (§3.1). Read beside the other two,
+            // so the row gaining its note costs no extra round trip in series.
+            crate::hubstore::load_table(
+                &place,
+                crate::hubstore::IMAGE_PEOPLE,
+                crate::hubstore::PEOPLE_BYTES,
+            ),
+            crate::hubstore::load_log(&place, crate::services::customers::consent_log::IMAGE_CONSENT),
         ),
     )
     .await
@@ -90,10 +98,14 @@ pub async fn customers(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         roll::Sort::of(sort.as_deref()),
     );
     let cat = loaded_cat.catalog;
+    let acts = consent.log.entries();
+    use dowiz_hub::consent::{state as consented, CHANNEL_WHATSAPP, PURPOSE_MARKETING};
     Response::from_json(&json!({
-        "customers": rows.iter().map(|r| json!({
-            "key": r.key, "name": r.name, "phone": r.phone,
-            "orders": r.orders, "spent": r.spent, "lastAt": r.last_at })).collect::<Vec<_>>(),
+        "customers": rows.iter().map(|r| crate::services::customers::view::row_json(
+            r,
+            people.table.get(crate::services::customers::record::KIND, &r.key).as_deref(),
+            consented(&acts, &r.key, PURPOSE_MARKETING, CHANNEL_WHATSAPP).is_some(),
+        )).collect::<Vec<_>>(),
         "currency": currency_of(&cat),
     }))
 }

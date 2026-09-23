@@ -125,6 +125,13 @@ pub struct PlaceIn {
     /// own list; the address never comes from the browser.
     #[serde(default)]
     pub crypto_symbol: Option<String>,
+    /// The checkout's UNTICKED offers box, present only when ticked (§3.2).
+    #[serde(default)]
+    pub consent: Option<crate::services::customers::consent_log::ConsentIn>,
+    /// THE CHECK A WAITER'S ROUND JOINS. Only read when a room token placed it
+    /// (`services::orders::room::placer`); a guest's basket cannot name one.
+    #[serde(default)]
+    pub sitting_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -806,6 +813,13 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     if loc.delivery_paused == 1 || loc.status == "closed" {
         return Response::error("venue is closed", 409);
     }
+    // THE ROOM: a round placed by a waiter carries its signer and its sitting.
+    let staffed = match crate::services::orders::room::placer::placer(
+        &req, &ctx, &loc.id, &body.fulfilment.kind, body.sitting_id.as_deref(),
+    ).await {
+        Ok(s) => s,
+        Err(r) => return Ok(r),
+    };
 
     // ── re-derive every price from the catalogue ──
     // The rule does not change with the store: whatever unit_price the browser
@@ -870,7 +884,9 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             })
         })
         .collect();
-    if subtotal < loc.min_order {
+    // A MINIMUM IS THE PRICE OF A TRIP, and a round at a table has none: a
+    // waiter ringing up one coffee is not a basket below the minimum.
+    if subtotal < loc.min_order && staffed.is_none() {
         return Response::error("below minimum order", 409);
     }
 
@@ -882,6 +898,53 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         loc.free_delivery_threshold,
         loc.delivery_fee,
     );
+
+    // ── THE CARD'S ALLERGENS, AGAINST WHAT EACH DISH DECLARES (§3.1) ──
+    //
+    // A REFUSAL, before the order exists and before the retry guard records
+    // an answer: see `services::customers::allergy` for why it is not a
+    // warning. Only a customer who gave a number has a card to read.
+    if !phone.is_empty() {
+        let dishes: Vec<(String, String)> = body
+            .items
+            .iter()
+            .filter_map(|it| {
+                let json = loaded.catalog.product(&it.product_id)?;
+                Some((names.get(&it.product_id).cloned().unwrap_or_else(|| it.product_id.clone()), json))
+            })
+            .collect();
+        let key = crate::services::customers::handlers::customer_key(
+            &crate::services::customers::handlers::signing_secret(&ctx.env),
+            phone,
+        );
+        if let Err(why) =
+            crate::services::customers::at_placement::allergy_check(&place, &key, &dishes).await?
+        {
+            return Response::error(why, 409);
+        }
+    }
+
+    // ── THE OFFERS BOX (§3.2) ──
+    //
+    // Read into an act BEFORE the order exists, so a tick the hub cannot prove
+    // is refused by name rather than filed or dropped. Filed after the order,
+    // below, once it has an id to name as `via`.
+    let consent_act = {
+        let key = (!phone.is_empty()).then(|| {
+            crate::services::customers::handlers::customer_key(
+                &crate::services::customers::handlers::signing_secret(&ctx.env),
+                phone,
+            )
+        });
+        match crate::services::customers::consent_log::at_placement(
+            body.consent.as_ref(),
+            key.as_deref(),
+            ctx.data.now_ms,
+        ) {
+            Ok(a) => a,
+            Err(why) => return Response::error(why, 400),
+        }
+    };
 
     // ── IS THIS A RETRY? ──
     //
@@ -895,7 +958,11 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     let created_at_ms = ctx.data.now_ms;
     // The principal is the CONTACT this basket names, so one person's retry
     // cannot replay into another's order even under a guessed key.
-    let idem_who = crate::auth::sha256_hex(phone);
+    // A WAITER'S ROUND is keyed to the waiter: rounds carry no guest's phone.
+    let idem_who = match &staffed {
+        Some(s) => s.by.clone(),
+        None => crate::auth::sha256_hex(phone),
+    };
     // THE TWENTY LINES THAT WERE HERE ARE NOW `idempotency::guard`, because
     // there are four of these now and the one that spells the four cases wrong
     // is the one that answers a replay with a marker instead of the first
@@ -953,6 +1020,11 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             };
             if let Some(n) = names.get(&pid) {
                 line["name"] = json!(n);
+            }
+            // The dish's own tax rate rides on the line, like its name; the
+            // venue default is stamped by the object (`tax_block::stamp`).
+            if let Some(r) = basket.lines.iter().find(|l| l.product_id == pid).and_then(|l| l.vat_ppm) {
+                line["vat_ppm"] = json!(r.0);
             }
         }
     }
@@ -1026,6 +1098,10 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         })),
         "fee": fee
     });
+    if let Some(s) = &staffed {
+        envelope["placed_by"] = json!(s.by);
+        envelope["sitting_id"] = json!(s.sitting_id);
+    }
     let payment_kind = body.payment.clone().unwrap_or_else(|| "cash".into());
     if !PAYMENT_KINDS.contains(&payment_kind.as_str()) {
         return Response::error("unknown payment method", 400);
@@ -1168,63 +1244,24 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         .and_then(|v| v.get("total").and_then(Value::as_i64))
         .unwrap_or(total);
 
-    // The customer row is keyed by a HASH of the phone, never the phone itself,
-    // so the table can be joined without holding the number in the clear.
-    //
-    // NO PHONE MEANS NO CUSTOMER ROW, and that is not a shortcut. The key is
-    // `(location_id, phone_hash)`, and the hash of the empty string is a
-    // CONSTANT: writing it would file every customer who declined to give a
-    // number into ONE row per venue, each order overwriting the last one's
-    // name. The order itself is complete without it — it carries its own
-    // contact envelope — so the registry simply does not gain a row.
+    // NO PHONE MEANS NO CUSTOMER CARD: the hash of the empty string is a
+    // constant, and writing it would file every customer who declined to give
+    // a number into ONE card per venue. The card holds no name and no hash of
+    // the number (§3.1) -- see `services::customers::at_placement`.
     if !phone.is_empty() {
-    let cust_id = crate::edge_id().unwrap_or_else(|| format!("cust_{created_at_ms}"));
-    // THE PHONE HASH IS THE KEY. The table had a surrogate id and a UNIQUE on
-    // `(location_id, phone_hash)`; the venue is the image, so what is left of
-    // that constraint is the hash, and it is the record's id. The upsert's
-    // `COALESCE(excluded.name, customers.name)` is kept: a later order with no
-    // name must not erase the name an earlier one gave.
-    let who = phone_hash.clone();
-    let legacy = legacy_hash.clone();
-    let given = body.contact.name.clone().unwrap_or_default();
-    let _ = crate::hubstore::with_table(
-        &place,
-        crate::hubstore::IMAGE_PEOPLE,
-        crate::hubstore::PEOPLE_BYTES,
-        move |t| {
-            let existing = t
-                .get("cust", &who)
-                .and_then(|j| serde_json::from_str::<Value>(&j).ok());
-            let name = if given.trim().is_empty() {
-                existing
-                    .as_ref()
-                    .and_then(|e| e.get("name").and_then(Value::as_str))
-                    .unwrap_or("")
-                    .to_string()
-            } else {
-                given.clone()
-            };
-            let created = existing
-                .as_ref()
-                .and_then(|e| e.get("created_at_ms").and_then(Value::as_i64))
-                .unwrap_or(created_at_ms);
-            let rec = json!({
-                "id": cust_id, "phone_hash": who, "name": name, "created_at_ms": created,
-            })
-            .to_string();
-            t.put("cust", &who, &rec, &[], &[])
-                .map_err(|e| Error::RustError(format!("customer: {e}")))?;
-            // AND THE ENUMERABLE ROW GOES. Rewriting the key without removing
-            // the old one leaves the number recoverable from a row nothing
-            // reads, which is the worst of both. `remove` answering false is
-            // the ordinary case — most customers have no legacy row.
-            if legacy != who {
-                t.remove("cust", &legacy);
-            }
-            Ok(())
-        },
-    )
-    .await;
+        crate::services::customers::at_placement::remember(
+            &place,
+            &phone_hash,
+            &legacy_hash,
+            created_at_ms,
+        )
+        .await;
+    }
+    // ONE `c` RECORD WHEN THE BOX WAS TICKED, NONE WHEN IT WAS NOT. After the
+    // order and unable to fail it; a failure is recorded by `file`.
+    if let Some(mut act) = consent_act {
+        act.via = id.clone();
+        let _ = crate::services::customers::consent_log::file(&place, &act).await;
     }
 
     // ── THE CUSTOMER'S KEY TO THEIR OWN ORDER ──

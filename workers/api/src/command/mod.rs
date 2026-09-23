@@ -37,8 +37,11 @@ use worker::wasm_bindgen::JsValue;
 use worker::*;
 
 pub mod advance;
+pub mod amend;
 pub mod assign;
 pub mod place;
+pub mod room_rules;
+pub mod sitting;
 
 #[cfg(test)]
 mod tests;
@@ -66,21 +69,34 @@ pub enum Refused {
     /// an illegal FSM edge, a second courier, a status that cannot be handed
     /// out. The kernel's own words where it has them.
     Conflict(String),
+    /// The request itself is not one this command can take: a room event with
+    /// no signer, a reason outside the closed set, a quantity that is not one.
+    /// A 400, because retrying the same bytes will never succeed.
+    Invalid(String),
+    /// G2 (TAX): this venue has a tax rate and this order cannot carry its
+    /// `tax` block. Never placed untaxed; the reason is named. 500: the
+    /// platform's fault, not the customer's basket.
+    Untaxed(String),
 }
 
 impl Refused {
     pub fn status(&self) -> u16 {
         match self {
-            Refused::Promo(_) => 400,
+            Refused::Promo(_) | Refused::Invalid(_) => 400,
             Refused::NotFound => 404,
             Refused::Stock(_) | Refused::Conflict(_) => 409,
-            Refused::Append(_) => 500,
+            Refused::Append(_) | Refused::Untaxed(_) => 500,
         }
     }
 
     pub fn message(&self) -> &str {
         match self {
-            Refused::Stock(m) | Refused::Promo(m) | Refused::Append(m) | Refused::Conflict(m) => m,
+            Refused::Stock(m)
+            | Refused::Promo(m)
+            | Refused::Append(m)
+            | Refused::Conflict(m)
+            | Refused::Invalid(m)
+            | Refused::Untaxed(m) => m,
             Refused::NotFound => "order not found",
         }
     }

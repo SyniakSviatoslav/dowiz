@@ -36,6 +36,10 @@ pub struct Line {
     /// Base price plus the chosen options' delta, floored at zero: a negative
     /// option delta must never make a line pay the customer.
     pub unit_price: i64,
+    /// The dish's OWN tax rate, when its record carries `vat_ppm`. `None` is
+    /// "use the venue's default", resolved where the settings are
+    /// (`tax_cfg::rate_for`, inside the object) — never a zero.
+    pub vat_ppm: Option<dowiz_core::tax::RatePpm>,
 }
 
 /// A whole basket, priced.
@@ -133,6 +137,10 @@ pub fn price_basket<'a>(
         let chosen = dowiz_hub::modifiers::price(&groups, w.modifier_ids).map_err(|e| {
             Refusal::Options { product_id: w.product_id.to_string(), why: e.to_string() }
         })?;
+        let vat_ppm = own_rate(&p).map_err(|why| Refusal::Unreadable {
+            product_id: w.product_id.to_string(),
+            why,
+        })?;
         let unit_price = (price + chosen.delta).max(0);
         subtotal += unit_price * w.quantity;
         lines.push(Line {
@@ -145,7 +153,23 @@ pub fn price_basket<'a>(
             modifier_ids: w.modifier_ids.to_vec(),
             quantity: w.quantity,
             unit_price,
+            vat_ppm,
         });
     }
     Ok(Basket { lines, subtotal })
+}
+
+/// The record's own `vat_ppm`: absent is `None`; anything but an integer in
+/// `0..=1000000` is REFUSED, because a rate the catalogue wrote and this cannot
+/// read must not quietly become "use the default".
+pub(super) fn own_rate(p: &Value) -> Result<Option<dowiz_core::tax::RatePpm>, String> {
+    match p.get("vat_ppm") {
+        None | Some(Value::Null) => Ok(None),
+        Some(v) => match v.as_u64() {
+            Some(n) => dowiz_core::tax::RatePpm::parse(&n.to_string())
+                .map(Some)
+                .map_err(|e| format!("vat_ppm: {e}")),
+            None => Err(format!("vat_ppm: {v} is not an integer in parts per million")),
+        },
+    }
 }

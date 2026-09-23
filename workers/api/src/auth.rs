@@ -374,6 +374,33 @@ pub fn staff_caps(minted: &str, roster_role: &str) -> std::result::Result<Caps, 
         .ok_or(AuthError::Revoked("staff token grants no capability the roster still holds"))
 }
 
+/// May this principal do what `need` names, at this venue? The room's door.
+///
+/// PURE, so the refusal is proved without an `Env`. A member of staff is asked
+/// for the capability; an OWNER of the venue holds every capability, because
+/// an owner who works the floor signs with the same set (`Preset::Owner`).
+/// Anyone else is refused by role. A principal of another venue is a 404,
+/// never a 403 — a 403 would confirm the venue exists.
+///
+/// Returns who is signing, which every room event writes as `by`.
+pub fn room_admits(
+    p: &Principal,
+    venue: &str,
+    need: Cap,
+) -> std::result::Result<(String, Caps), (u16, &'static str)> {
+    if !belongs_to(p, venue) {
+        return Err((404, "not found"));
+    }
+    match p {
+        Principal::Staff { person_id, caps, .. } if caps.allows(need) => {
+            Ok((person_id.clone(), *caps))
+        }
+        Principal::Staff { .. } => Err((403, "this needs a capability your role does not hold")),
+        Principal::Owner { user_id, .. } => Ok((user_id.clone(), Caps::of(&Cap::ALL))),
+        _ => Err((403, "forbidden role")),
+    }
+}
+
 /// Does this principal belong to this venue?
 ///
 /// THE CLAIM DECIDES, not a membership table. An owner's token carries the hub
@@ -555,11 +582,24 @@ pub async fn authenticate_token(
         Claims::Staff { sub, active_location_id, jti, caps, .. } => {
             // Authority re-derived, as for an owner: the membership row at THIS
             // venue, read now, names the preset; the token can only lose rights.
-            let t = crate::identity_store::identity(env)
-                .await
-                .map_err(|e| AuthError::Db(e.to_string()))?;
+            //
+            // AND THE SESSION ROW, as a courier's is read: the owner can end
+            // one device's session before its token expires, which a
+            // membership (every device at once) cannot say. Two images, read
+            // together, because they are two facts with different lifetimes.
+            let (ident, sess) = futures_util::future::join(
+                crate::identity_store::identity(env),
+                crate::identity_store::sessions(env),
+            )
+            .await;
+            let t = ident.map_err(|e| AuthError::Db(e.to_string()))?;
+            let sess = sess.map_err(|e| AuthError::Db(e.to_string()))?;
             let m = crate::identity_store::membership(&t, &active_location_id, &sub)
                 .ok_or(AuthError::Revoked("staff membership is gone or suspended"))?;
+            use crate::services::identity::staff_rules as sr;
+            let row = crate::identity_store::rec(&sess, sr::K_SSESSION, &jti);
+            sr::session_verdict(row.as_ref(), &sub, &active_location_id, now_ms)
+                .map_err(AuthError::Revoked)?;
             let caps = staff_caps(&caps, &crate::identity_store::s_of(&m, "role"))?;
             Ok(Principal::Staff { person_id: sub, active_location_id, session_id: jti, caps })
         }

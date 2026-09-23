@@ -7,6 +7,7 @@
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, busy, confirm, switchEl, store, day, ago, clock, hydrate } from '/admin/core.js';
 import { retranslate, lang, LANGS } from '/admin/i18n.js';
 import { loadVenue, rerender } from '/admin/app.js';
+import { openCard, cardLine } from '/admin/customers.js';
 
 /// The rows, in groups, with the sheet each opens.
 const GROUPS = [
@@ -162,7 +163,7 @@ async function openCustomers(sort = CUSTOMER_SORTS[0]){
   for (const b of $$('[data-sort]', $('#sheetIn'))) b.onclick = () => openCustomers(b.dataset.sort);
   let d; try { d = await api(`/owner/customers?sort=${sort}`); } catch (e) { return fail(e); }
   const list = d.customers || [];
-  $('#cuBody').innerHTML = list.length ? `<div class="rows">${list.map(c => `<button type="button" class="rowc" data-key="${esc(c.key)}">${icon('user')}<span class="t"><b>${esc(c.name || c.phone || c.key)}</b><small class="mono">${esc(c.phone || '')} · ${c.orders} · ${money(c.spent || 0)}</small></span>${c.lastAt ? `<small class="muted">${esc(day(c.lastAt))}</small>` : ''}${icon('chevron-right', 'chev')}</button>`).join('')}</div>` : `<div class="empty">${icon('user')}<b data-t="none"></b></div>`;
+  $('#cuBody').innerHTML = list.length ? `<div class="rows">${list.map(c => `<button type="button" class="rowc" data-key="${esc(c.key)}">${icon('user')}<span class="t"><b>${esc(c.name || c.phone || c.key)}</b><small class="mono">${esc(c.phone || '')} · ${c.orders} · ${money(c.spent || 0)}</small>${cardLine(c) ? `<small>${esc(cardLine(c))}</small>` : ''}</span>${c.lastAt ? `<small class="muted">${esc(day(c.lastAt))}</small>` : ''}${icon('chevron-right', 'chev')}</button>`).join('')}</div>` : `<div class="empty">${icon('user')}<b data-t="none"></b></div>`;
   paint();
   for (const b of $$('[data-key]', $('#cuBody'))) b.onclick = () => openReveal(b.dataset.key, list.find(c => c.key === b.dataset.key));
   $('#cuCsv').onclick = () => {
@@ -177,7 +178,8 @@ async function openReveal(key, c){
   sheet(`${head('customers', 'reveal')}<p class="muted small" data-t="revealHint"></p>
     <div class="fact">${icon('user')}<span class="v">${esc(c?.name || key)}<br><small class="mono">${esc(c?.phone || '')}</small></span></div>
     <label for="rv-reason" data-t="revealReason"></label><input id="rv-reason" autocomplete="off">
-    <div class="btn-row"><button class="btn" id="rvGo">${icon('eye')}<span data-t="reveal"></span></button></div><div id="rvOut"></div>`, { name: 'reveal' });
+    <div class="btn-row"><button class="btn" id="rvGo">${icon('eye')}<span data-t="reveal"></span></button><button class="btn ghost" id="rvCard">${icon('user')}<span data-t="card"></span></button></div><div id="rvOut"></div>`, { name: 'reveal' });
+  $('#rvCard').onclick = () => openCard(c || { key }, rec => openReveal(key, { ...c, ...{ note: rec.note, tags: rec.tags, allergens: rec.allergens, lang: rec.lang, usualTable: rec.usual_table, birthdayMd: rec.birthday_md } }));
   $('#rvGo').onclick = async () => {
     const reason = $('#rv-reason').value.trim(); if (reason.length < REVEAL_REASON_MIN) return toast(t('required'));
     try {

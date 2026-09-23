@@ -88,8 +88,10 @@ for f in sorted(glob.glob(os.path.join(ROOT, 'workers/api/src/**/*.rs'), recursi
             i += 1
         body = src[b:i]
         # A body that HOLDS a `Consented` has the proof in its hand. Nothing
-        # else can produce one, so naming the type is not a claim.
-        if 'Consented' in body:
+        # else can produce one, so naming the type is not a claim. THE
+        # SIGNATURE COUNTS: `fn send(c: &Consented, ..)` is G1's own shape,
+        # and reading only the braces refused it (found by consent.prove.sh).
+        if 'Consented' in src[m.start():i]:
             continue
         for s in SEND.finditer(body):
             # The declaration of a send is not a send.

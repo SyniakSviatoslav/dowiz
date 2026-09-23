@@ -9,6 +9,8 @@ pub mod promo_fields;
 pub mod promotions;
 pub mod pricing;
 pub mod rates;
+pub mod tax_block;
+pub mod tax_cfg;
 
 #[cfg(test)]
 mod tests;

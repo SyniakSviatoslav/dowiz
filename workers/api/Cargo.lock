@@ -141,6 +141,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "base64",
+ "dowiz-core",
  "dowiz-hub",
  "dowiz-kernel",
  "futures-util",

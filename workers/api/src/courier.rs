@@ -37,6 +37,38 @@ async fn courier_at(
     }
 }
 
+/// The room's door, beside the courier's: who is signing, and with what.
+///
+/// A STAFF TOKEN is authenticated in full — signature, the session row, the
+/// live membership word — and then asked `room_admits` for the capability.
+/// ANY OTHER TOKEN is handed to `owner::owner_at`, unchanged, so an owner's
+/// console and an owner's API key keep exactly the path they had: a route that
+/// moves from `owner_at` to this one loses nothing an owner could do, and gains
+/// a member of staff who holds `need`.
+///
+/// Returns the signer's id and capabilities. The id is what every room event
+/// records as `by`.
+pub(crate) async fn staff_at(
+    req: &Request,
+    ctx: &RouteContext<crate::Req>,
+    venue: &str,
+    need: auth::Cap,
+) -> std::result::Result<(String, auth::Caps), Response> {
+    let is_staff = auth::bearer(req)
+        .ok()
+        .and_then(|raw| auth::verify(&ctx.env, &raw, ctx.data.now_ms).ok())
+        .is_some_and(|c| matches!(c, auth::Claims::Staff { .. }));
+    if !is_staff {
+        let who = crate::owner::owner_at(req, ctx, venue).await?;
+        return Ok((who, auth::Caps::of(&auth::Cap::ALL)));
+    }
+    let p = match auth::authenticate(req, &ctx.env, ctx.data.now_ms).await {
+        Ok(p) => p,
+        Err(e) => return Err(e.into_response().unwrap()),
+    };
+    auth::room_admits(&p, venue, need).map_err(|(s, m)| Response::error(m, s).unwrap())
+}
+
 /// `GET /api/courier/tasks` — what is mine, and what is up for grabs.
 pub async fn tasks(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;

@@ -198,3 +198,117 @@ fn an_empty_basket_is_priced_at_zero() {
     assert_eq!(b.subtotal, 0);
     assert!(b.lines.is_empty());
 }
+
+// ── tax configuration (BLUEPRINT-TAX-PRICE-CHANNEL §6 items 2-3) ──
+
+mod tax_cfg {
+    use crate::services::ordering::tax_cfg::*;
+    use dowiz_core::tax::RatePpm;
+
+    fn settings(pairs: &[(&str, &str)]) -> impl Fn(&str) -> String {
+        let m: std::collections::BTreeMap<String, String> =
+            pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        move |k: &str| {
+            m.get(k).cloned().unwrap_or_else(|| {
+                dowiz_hub::settings::KNOWN
+                    .iter()
+                    .find(|d| d.key == k)
+                    .map(|d| d.default.to_string())
+                    .unwrap_or_default()
+            })
+        }
+    }
+
+    #[test]
+    fn a_float_rate_is_refused_at_the_settings_parser_and_an_integer_is_not() {
+        assert!(validate("tax.default_ppm", "200000").is_ok());
+        assert!(validate("tax.default_ppm", "").is_ok(), "empty clears the setting");
+        for bad in ["0.20", "20%", "-1", "2000000", " 200000"] {
+            let e = validate("tax.default_ppm", bad).expect_err(bad);
+            assert!(e.contains("rate"), "{bad}: {e}");
+        }
+        assert!(validate("tax.delivery_fee_ppm", "0.2").is_err());
+        assert!(validate("tax.prices_include", "true").is_ok());
+        assert!(validate("tax.prices_include", "yes").is_err(), "true or false, nothing looser");
+        assert!(validate("tax.schedule", r#"[{"since_ms":1,"ppm":70000}]"#).is_ok());
+        assert!(validate("tax.schedule", r#"[{"since_ms":1,"ppm":0.07}]"#).is_err());
+        assert!(validate("ai.model", "0.20").is_ok(), "not a tax key: not this parser's business");
+    }
+
+    #[test]
+    fn a_venue_with_no_rate_is_not_configured_and_says_so() {
+        assert_eq!(resolve(settings(&[]), 0), Ok(None));
+    }
+
+    #[test]
+    fn the_default_the_flag_and_the_fee_rate_resolve() {
+        let s = settings(&[("tax.default_ppm", "200000")]);
+        assert_eq!(
+            resolve(&s, 0),
+            Ok(Some(VenueTax { default: RatePpm(200_000), inclusive: true, fee: RatePpm(200_000) }))
+        );
+        let s = settings(&[
+            ("tax.default_ppm", "88750"),
+            ("tax.prices_include", "false"),
+            ("tax.delivery_fee_ppm", "0"),
+        ]);
+        assert_eq!(
+            resolve(&s, 0),
+            Ok(Some(VenueTax { default: RatePpm(88_750), inclusive: false, fee: RatePpm(0) }))
+        );
+    }
+
+    #[test]
+    fn a_scheduled_change_takes_effect_at_its_millisecond() {
+        let s = settings(&[
+            ("tax.default_ppm", "190000"),
+            ("tax.schedule", r#"[{"since_ms":1767225600000,"ppm":70000}]"#),
+        ]);
+        let before = resolve(&s, 1_767_225_599_999).unwrap().unwrap();
+        let after = resolve(&s, 1_767_225_600_000).unwrap().unwrap();
+        assert_eq!(before.default, RatePpm(190_000));
+        assert_eq!(after.default, RatePpm(70_000));
+        assert_eq!(after.fee, RatePpm(70_000), "an unset fee rate follows the rate in force");
+    }
+
+    #[test]
+    fn a_corrupt_stored_value_is_loud_not_a_zero() {
+        let e = resolve(settings(&[("tax.default_ppm", "0.2")]), 0).expect_err("refused");
+        assert!(e.contains("tax.default_ppm"), "{e}");
+    }
+
+    // Item 3: a line with its own rate, a line falling back, and a venue with
+    // no rate producing `None` with no refusal at this layer.
+    #[test]
+    fn a_lines_own_rate_wins_else_the_venue_default_else_none() {
+        let v = VenueTax { default: RatePpm(200_000), inclusive: true, fee: RatePpm(200_000) };
+        assert_eq!(rate_for(Some(RatePpm(60_000)), Some(&v)), Some(RatePpm(60_000)));
+        assert_eq!(rate_for(None, Some(&v)), Some(RatePpm(200_000)));
+        assert_eq!(rate_for(None, None), None);
+        // A product rate at a venue with no rate is NOT half a tax block.
+        assert_eq!(rate_for(Some(RatePpm(60_000)), None), None);
+    }
+}
+
+// Item 3: the product's own `vat_ppm` travels on the line; absent is `None`
+// (the venue default is applied where the settings are, in the object).
+#[test]
+fn a_products_own_rate_is_copied_onto_its_line_and_absent_is_none() {
+    let m = menu(&[
+        ("water", json!({ "name": "Water", "price": 150, "available": true, "vat_ppm": 60000 })),
+        ("roll", dish("Roll", 900)),
+    ]);
+    let b = price_basket(&m, [want("water", &[], 2), want("roll", &[], 1)]).unwrap();
+    assert_eq!(b.lines[0].vat_ppm, Some(dowiz_core::tax::RatePpm(60_000)));
+    assert_eq!(b.lines[1].vat_ppm, None);
+}
+
+#[test]
+fn a_rate_on_the_record_that_is_not_integer_ppm_is_refused_not_ignored() {
+    for bad in [json!(0.06), json!("60000"), json!(-1), json!(2_000_000)] {
+        let m = menu(&[("w", json!({ "name": "W", "price": 150, "available": true, "vat_ppm": bad }))]);
+        let r = price_basket(&m, [want("w", &[], 1)]).expect_err("a bad rate must not price");
+        assert_eq!(r.status(), 500, "the catalogue wrote it; the platform's fault: {r:?}");
+        assert!(r.text().contains("vat_ppm"), "{}", r.text());
+    }
+}

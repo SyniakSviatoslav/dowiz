@@ -189,9 +189,12 @@ fn the_record_never_holds_what_the_fold_already_knows() {
     for banned in ["orders", "spent", "last_at", "name", "phone", "balance", "stamps", "tier", "score"] {
         assert!(!keys.contains(&banned), "{banned} is a fold or a rating, not a record: {keys:?}");
     }
-    // The three the placement path owns survive an owner's edit.
-    assert_eq!(field(&out, "id").unwrap(), "cust_1");
-    assert_eq!(field(&out, "phone_hash").unwrap(), "k1");
+    // THE ID IS THE TABLE'S KEY, NOT A FIELD. `id` and `phone_hash` were the
+    // placement's copies of the handle (the second an UNKEYED sha256 of the
+    // number); the record is filed under `customer_key`, so neither survives
+    // an edit, and `created_at_ms` is the one placement field kept.
+    assert!(field(&out, "id").is_none(), "the id is the key it is filed under");
+    assert!(field(&out, "phone_hash").is_none(), "an enumerable hash of the number is not kept");
     assert_eq!(field(&out, "created_at_ms").unwrap(), 10, "not reset by an edit");
     assert_eq!(field(&out, "updated_at_ms").unwrap(), 99, "the request's clock, not a handler's");
 }
@@ -312,4 +315,208 @@ fn the_usual_table_is_a_label_not_a_paragraph() {
     assert!(merge("{}", &c, 1).is_ok());
     c.usual_table = Some("x".repeat(17));
     assert!(merge("{}", &c, 1).is_err());
+}
+
+// ── item 1: the record is READ — at placement, on the row, and re-keyed ──────
+
+use super::record::{rekey, touch, KIND};
+
+/// THE PLACEMENT WRITES THE CARD'S BIRTH AND NOTHING ELSE. The row it replaced
+/// held `{id, phone_hash, name}`: a name is a fold over the orders, and the
+/// `phone_hash` was the unkeyed sha256 that enumerates in seconds.
+#[test]
+fn a_placement_touches_the_record_without_writing_a_name_or_a_hash() {
+    let first = touch(None, 50).expect("a new customer gains a record");
+    assert_eq!(field(&first, "created_at_ms").unwrap(), 50);
+    for banned in ["name", "phone", "phone_hash", "id", "orders", "spent"] {
+        assert!(field(&first, banned).is_none(), "{banned} in {first}");
+    }
+    // A RETURNING customer's card is not rewritten: an order is not an edit.
+    assert!(touch(Some(&first), 99).is_none(), "nothing to write on a second order");
+    // A LEGACY row written by the old placement is cleaned on the next order.
+    let old = r#"{"id":"cust_1","phone_hash":"k","name":"Arben","created_at_ms":7,"note":"ginger"}"#;
+    let cleaned = touch(Some(old), 99).expect("the legacy fields go");
+    assert!(field(&cleaned, "name").is_none() && field(&cleaned, "phone_hash").is_none());
+    assert_eq!(field(&cleaned, "created_at_ms").unwrap(), 7, "the birth is kept");
+    assert_eq!(field(&cleaned, "note").unwrap(), "ginger", "the owner's card is kept");
+}
+
+/// §6 item 1's CHECK: "the old sha256 id is gone from every record after the
+/// rebuild". The old rows were filed under `sha256_hex(raw phone)`; the phones
+/// are in the order log, so each old id maps to its `customer_key` exactly,
+/// and one no order explains is an enumerable hash nothing can re-key — it
+/// goes.
+#[test]
+fn the_rekey_leaves_no_sha256_id_behind() {
+    use dowiz_hub::table::Table;
+    let mut t = Table::create(256 * 1024).unwrap();
+    let sha_a = "a".repeat(64);
+    let sha_orphan = "b".repeat(64);
+    t.put(KIND, &sha_a, r#"{"id":"c1","phone_hash":"x","name":"A","created_at_ms":5}"#, &[], &[]).unwrap();
+    t.put(KIND, &sha_orphan, r#"{"name":"Nobody","created_at_ms":6}"#, &[], &[]).unwrap();
+    // The new key already exists with an owner's note and a LATER birth.
+    t.put(KIND, "0123456789abcdef", r#"{"created_at_ms":9,"note":"ginger"}"#, &[], &[]).unwrap();
+
+    let moved = rekey(&mut t, &[(sha_a.clone(), "0123456789abcdef".into())]);
+    assert_eq!(moved, 2, "one re-keyed, one orphan removed");
+    let ids: Vec<String> = t.all(KIND).into_iter().map(|(id, _)| id).collect();
+    assert_eq!(ids, vec!["0123456789abcdef".to_string()]);
+    for (_, json) in t.all(KIND) {
+        assert!(field(&json, "name").is_none() && field(&json, "phone_hash").is_none(), "{json}");
+        assert_eq!(field(&json, "created_at_ms").unwrap(), 5, "the EARLIER birth wins");
+        assert_eq!(field(&json, "note").unwrap(), "ginger", "the owner's card survives");
+    }
+    // ONE-SHOT AND IDEMPOTENT: a second run finds nothing to do.
+    assert_eq!(rekey(&mut t, &[(sha_a, "0123456789abcdef".into())]), 0);
+}
+
+/// §6 item 1's CHECK: "one that a record's note appears on the row". The row
+/// is the fold's; the record is joined on by key, and a customer with no card
+/// is a row with no card fields rather than a row with empty ones.
+#[test]
+fn a_records_note_appears_on_the_row() {
+    use super::view::row_json;
+    let r = Row { key: "k1".into(), name: "A***".into(), phone: "+35•••67".into(), orders: 2, spent: 900, last_at: 5 };
+    let rec = r#"{"note":"extra ginger","tags":["regular"],"allergens":["fish"],"lang":"sq","usual_table":"7","birthday_md":"05-02","created_at_ms":1}"#;
+    let v = row_json(&r, Some(rec), true);
+    assert_eq!(v["offersWhatsapp"], true, "the consent fold's answer is on the row");
+    assert_eq!(v["note"], "extra ginger");
+    assert_eq!(v["tags"], serde_json::json!(["regular"]));
+    assert_eq!(v["allergens"], serde_json::json!(["fish"]));
+    assert_eq!(v["lang"], "sq");
+    assert_eq!(v["usualTable"], "7");
+    assert_eq!(v["birthdayMd"], "05-02");
+    // THE FOLD'S FIELDS ARE UNCHANGED — the route's output is a superset.
+    assert_eq!(v["key"], "k1");
+    assert_eq!(v["orders"], 2);
+    assert_eq!(v["spent"], 900);
+    assert_eq!(v["lastAt"], 5);
+    let bare = row_json(&r, None, false);
+    assert_eq!(bare["offersWhatsapp"], false);
+    assert!(bare.get("note").is_none(), "no card, no card fields: {bare}");
+    assert_eq!(bare["name"], "A***");
+}
+
+// ── the allergen check at placement ─────────────────────────────────────────
+
+use super::allergy::refuse;
+
+fn dish(name: &str, json: &str) -> (String, String) {
+    (name.to_string(), json.to_string())
+}
+
+/// THE ONE FIELD THAT PREVENTS HARM, used where it can. A customer whose card
+/// says fish, ordering a dish declared to contain fish, is REFUSED with the
+/// dish and the allergen named — the refusal the kitchen would give at the
+/// counter, given before the order exists.
+#[test]
+fn a_dish_containing_a_recorded_allergen_is_refused_by_name() {
+    let person = vec!["fish".to_string(), "milk".to_string()];
+    let err = refuse(&person, &[dish("Miso", r#"{"allergens":["soy"]}"#), dish("Sake Maki", r#"{"allergens":["fish","sesame"]}"#)])
+        .expect_err("fish is on the card and in the dish");
+    assert!(err.contains("Sake Maki") && err.contains("fish"), "{err}");
+    assert!(!err.contains("Miso"), "only the dish that hurts is named: {err}");
+}
+
+/// UNDECLARED IS NOT SAFE (`allergens.rs`): nobody has said, which to a person
+/// with a recorded allergy is not a claim the dish is free of it.
+#[test]
+fn an_undeclared_dish_is_refused_to_a_person_with_a_recorded_allergy() {
+    let person = vec!["crustaceans".to_string()];
+    let err = refuse(&person, &[dish("Special", r#"{"name":"Special"}"#)]).expect_err("undeclared");
+    assert!(err.contains("Special"), "{err}");
+    // A declared "none" and a disjoint declaration pass.
+    assert!(refuse(&person, &[dish("Rice", r#"{"allergens":[]}"#), dish("Miso", r#"{"allergens":["soy"]}"#)]).is_ok());
+}
+
+/// NO CARD, NO CHECK. A customer with no recorded allergens orders as before,
+/// undeclared dishes included — the check exists for the people it protects.
+#[test]
+fn a_person_with_no_recorded_allergens_is_never_refused() {
+    assert!(refuse(&[], &[dish("Special", r#"{"name":"Special"}"#), dish("Sake", r#"{"allergens":["fish"]}"#)]).is_ok());
+}
+
+// ── item 2: the checkout box, as the placement reads it ─────────────────────
+
+use super::consent_log::{at_placement, ConsentIn};
+use dowiz_hub::consent::{wording_id, Method, State as CState};
+
+fn ticked(wording: &str) -> ConsentIn {
+    serde_json::from_value(serde_json::json!({ "marketing_whatsapp": true, "wording": wording })).unwrap()
+}
+
+/// §6 item 2's CHECK, the placement half: ONE act when the box is ticked, and
+/// the act names the sentence in the language that was shown.
+#[test]
+fn a_ticked_box_is_one_act_naming_the_sentence_shown() {
+    let c = ticked(&wording_id("uk"));
+    let a = at_placement(Some(&c), Some("0123456789abcdef"), 77).unwrap().expect("ticked");
+    assert_eq!(a.state, CState::Given);
+    assert_eq!(a.method, Method::CheckoutBox);
+    assert_eq!(a.wording_id, wording_id("uk"));
+    assert_eq!(a.key, "0123456789abcdef");
+    assert_eq!(a.channel, "whatsapp");
+    assert_eq!(a.at_ms, 77, "the request's clock");
+}
+
+/// RECITAL 32: placing the order is not consent, and neither is an unticked
+/// box or a body that says nothing. None of them writes anything.
+#[test]
+fn an_unticked_box_or_no_box_writes_nothing() {
+    assert!(at_placement(None, Some("0123456789abcdef"), 1).unwrap().is_none());
+    let off: ConsentIn = serde_json::from_value(
+        serde_json::json!({ "marketing_whatsapp": false, "wording": wording_id("en") })).unwrap();
+    assert!(at_placement(Some(&off), Some("0123456789abcdef"), 1).unwrap().is_none());
+}
+
+/// A TICK THE HUB CANNOT PROVE IS REFUSED BY NAME, not filed and not dropped:
+/// no number means nobody to consent; an unknown sentence means no proof of
+/// what they read.
+#[test]
+fn a_tick_without_a_number_or_with_an_unknown_sentence_is_refused() {
+    let err = at_placement(Some(&ticked(&wording_id("en"))), None, 1).expect_err("no phone");
+    assert!(err.contains("phone"), "{err}");
+    let err = at_placement(Some(&ticked("deadbeefdeadbeef")), Some("0123456789abcdef"), 1)
+        .expect_err("unknown sentence");
+    assert!(err.contains("sentence") || err.contains("wording"), "{err}");
+    // AND THE BODY IS A CLOSED SHAPE: a pre-ticked flag smuggled in under
+    // another name is a 400, not a silently accepted field.
+    assert!(serde_json::from_value::<ConsentIn>(
+        serde_json::json!({ "marketing_whatsapp": true, "wording": "x", "sms": true })).is_err());
+}
+
+// ── item 2: the owner's act — the withdrawal route ──────────────────────────
+
+use super::consent_log::{owner_act, OwnerActIn};
+
+fn owner_in(v: serde_json::Value) -> OwnerActIn {
+    serde_json::from_value(v).unwrap()
+}
+
+/// ART. 7(3): WITHDRAWAL AS EASY AS GIVING. The owner files a STOP they were
+/// told at the counter with nothing but the state -- no sentence, no evidence.
+#[test]
+fn an_owner_files_a_withdrawal_with_nothing_but_the_state() {
+    let a = owner_act("0123456789abcdef", &owner_in(serde_json::json!({ "state": "withdrawn" })), "own_1", 9)
+        .expect("a withdrawal needs nothing else");
+    assert_eq!(a.state, CState::Withdrawn);
+    assert_eq!(a.method, Method::OwnerEntered);
+    assert_eq!(a.via, "own_1", "who filed it");
+    assert_eq!(a.at_ms, 9);
+}
+
+/// AN UNEVIDENCED VERBAL CONSENT IS A CLAIM (§4). A grant typed in by the owner
+/// names what they saw and which sentence the person was shown, or it is 400.
+#[test]
+fn an_owner_grant_needs_evidence_and_the_sentence_shown() {
+    let no_ev = owner_in(serde_json::json!({ "state": "given", "lang": "sq" }));
+    assert!(owner_act("0123456789abcdef", &no_ev, "own_1", 9).unwrap_err().contains("evidence"));
+    let no_lang = owner_in(serde_json::json!({ "state": "given", "evidence": "signed paper form #12" }));
+    assert!(owner_act("0123456789abcdef", &no_lang, "own_1", 9).is_err());
+    let ok = owner_in(serde_json::json!({ "state": "given", "lang": "en", "evidence": "signed paper form #12" }));
+    let a = owner_act("0123456789abcdef", &ok, "own_1", 9).expect("evidenced");
+    assert_eq!(a.wording_id, wording_id("en"));
+    assert_eq!(a.evidence, "signed paper form #12");
+    let bad = owner_in(serde_json::json!({ "state": "maybe" }));
+    assert!(owner_act("0123456789abcdef", &bad, "own_1", 9).is_err());
 }

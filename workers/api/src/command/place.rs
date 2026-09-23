@@ -113,6 +113,7 @@ pub fn decide(
     hub: &mut dowiz_hub::Hub,
     stock: &mut dowiz_hub::stock::StockLog,
     listed: &[crate::hubdo::OrderView],
+    venue_tax: &Result<Option<crate::services::ordering::tax_cfg::VenueTax>, String>,
     input: &PlaceIn,
 ) -> Result<String, Refused> {
     // ── INGREDIENTS, ALL OR NOTHING ──
@@ -147,6 +148,22 @@ pub fn decide(
         envelope["discount"] = serde_json::json!(cut);
         envelope["promo"] = serde_json::json!({ "code": code, "discount": cut });
         envelope["total"] = serde_json::json!(input.subtotal - cut + input.fee + input.tip);
+    }
+
+    // ── THE TAX, ONCE, AFTER THE CUT (G2) ──
+    //
+    // Here and nowhere else, because this is where the discount is known: the
+    // taxable base is what the customer pays for. A venue with no rate places
+    // untaxed (the transition rule); a venue WITH one never logs an order it
+    // could not tax — `Untaxed` names why.
+    match venue_tax {
+        Ok(None) => {}
+        Ok(Some(v)) => {
+            let cut = envelope.get("discount").and_then(serde_json::Value::as_i64).unwrap_or(0);
+            crate::services::ordering::tax_block::stamp(&mut envelope, v, input.fee, input.tip, cut)
+                .map_err(Refused::Untaxed)?;
+        }
+        Err(e) => return Err(Refused::Untaxed(e.clone())),
     }
 
     let stored = serde_json::to_string(&envelope).unwrap_or_else(|_| input.envelope.clone());

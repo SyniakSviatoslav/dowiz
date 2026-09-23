@@ -65,7 +65,7 @@ fn the_total_that_is_stored_is_the_total_after_the_discount() {
         "code": "SAVE", "kind": "percent", "value": 10, "active": true
     })
     .to_string();
-    let stored = decide(&mut hub, &mut stock, &[], &input(Some(&raw)))
+    let stored = decide(&mut hub, &mut stock, &[], &Ok(None), &input(Some(&raw)))
         .expect("a live code must redeem");
     let v: serde_json::Value = serde_json::from_str(&stored).expect("json");
     assert_eq!(v["discount"], 250, "10% of 2500");
@@ -96,7 +96,7 @@ fn a_refused_promo_leaves_the_stock_image_untouched() {
     .to_string();
     let mut i = input(Some(&raw));
     i.bom_lines = vec![(dish("salmon", 40), 2)];
-    let out = decide(&mut hub, &mut stock, &[], &i);
+    let out = decide(&mut hub, &mut stock, &[], &Ok(None), &i);
     assert!(matches!(out, Err(Refused::Promo(_))), "an inactive code must be refused: {out:?}");
     assert_eq!(hub.len(), 0, "no order may be logged by a refused placement");
     // The reservations WERE appended to the in-memory log before the promo
@@ -122,7 +122,7 @@ fn the_two_refusals_do_not_answer_with_the_same_status() {
 #[test]
 fn a_venue_with_no_recipes_places_the_order_anyway() {
     let (mut hub, mut stock) = images();
-    let stored = decide(&mut hub, &mut stock, &[], &input(None)).expect("no bom, no refusal");
+    let stored = decide(&mut hub, &mut stock, &[], &Ok(None), &input(None)).expect("no bom, no refusal");
     assert_eq!(hub.len(), 1, "the order is logged");
     assert_eq!(stock.len(), 0, "and nothing is reserved");
     let v: serde_json::Value = serde_json::from_str(&stored).expect("json");
@@ -146,7 +146,7 @@ fn a_short_ingredient_refuses_every_line_of_the_basket() {
     // Eighty grams wanted against forty received. ONE short supply, so the
     // message this asserts on can only be about that one.
     i.bom_lines = vec![(dish("salmon", 40), 2)];
-    let out = decide(&mut hub, &mut stock, &[], &i);
+    let out = decide(&mut hub, &mut stock, &[], &Ok(None), &i);
     let Err(Refused::Stock(msg)) = &out else {
         panic!("a short ingredient must refuse: {out:?}");
     };
@@ -163,12 +163,12 @@ fn a_short_ingredient_refuses_every_line_of_the_basket() {
 #[test]
 fn what_the_kitchen_is_told_does_not_change_what_is_stored() {
     let (mut hub_a, mut stock_a) = images();
-    let quiet = decide(&mut hub_a, &mut stock_a, &[], &input(None)).expect("no promo");
+    let quiet = decide(&mut hub_a, &mut stock_a, &[], &Ok(None), &input(None)).expect("no promo");
 
     let (mut hub_b, mut stock_b) = images();
     let mut with_bell = input(None);
     with_bell.notify_text = Some("New order: 1x Futomaki, 3000".into());
-    let loud = decide(&mut hub_b, &mut stock_b, &[], &with_bell).expect("no promo");
+    let loud = decide(&mut hub_b, &mut stock_b, &[], &Ok(None), &with_bell).expect("no promo");
 
     assert_eq!(quiet, loud, "the stored envelope must not depend on the message");
     assert_eq!(hub_a.len(), hub_b.len());
@@ -329,5 +329,114 @@ mod assigning {
         assert!(!HANDABLE.contains(&"REFUNDING"), "active, and not a courier's job");
         assert!(!HANDABLE.contains(&"PENDING"), "an unaccepted order has no courier");
         assert!(!HANDABLE.contains(&"DELIVERED"));
+    }
+}
+
+// ── TAX (BLUEPRINT-TAX-PRICE-CHANNEL §6 item 4, gate G2) ────────────────────
+
+mod taxing {
+    use super::images;
+    use crate::command::place::{decide, PlaceIn};
+    use crate::command::Refused;
+    use crate::services::ordering::tax_cfg::VenueTax;
+    use dowiz_core::tax::RatePpm;
+    use serde_json::{json, Value};
+
+    const V20: VenueTax =
+        VenueTax { default: RatePpm(200_000), inclusive: true, fee: RatePpm(200_000) };
+
+    /// Three coffees at 250 and a 300 fee: blueprint §3.2 example 2's basket.
+    fn input(items: Value, promo: Option<&str>) -> PlaceIn {
+        PlaceIn {
+            order_id: "o1".into(),
+            envelope: json!({
+                "order_id": "o1", "status": "PENDING", "items": items,
+                "subtotal": 750, "delivery_fee": 300, "tip": 0, "total": 1050,
+            })
+            .to_string(),
+            seq: 1,
+            bom_lines: Vec::new(),
+            promo: promo.map(str::to_string),
+            promo_code: Some("SAVE".into()),
+            subtotal: 750,
+            fee: 300,
+            tip: 0,
+            now_ms: 1_700_000_000_000,
+            notify_text: None,
+        }
+    }
+
+    fn coffees() -> Value {
+        json!([{ "product_id": "coffee", "quantity": 3, "unit_price": 250 }])
+    }
+
+    fn ten_percent() -> String {
+        json!({ "code": "SAVE", "kind": "percent", "value": 10, "active": true }).to_string()
+    }
+
+    #[test]
+    fn the_stored_base_is_the_subtotal_after_the_cut() {
+        let (mut hub, mut stock) = images();
+        let raw = ten_percent();
+        let stored = decide(&mut hub, &mut stock, &[], &Ok(Some(V20)), &input(coffees(), Some(&raw)))
+            .expect("placed");
+        let v: Value = serde_json::from_str(&stored).unwrap();
+        assert_eq!(v["discount"], 75);
+        assert_eq!(v["tax"]["groups"][0]["base"], 750 - 75, "subtotal - cut");
+        assert_eq!(v["tax"]["groups"][0]["tax"], 112);
+        assert_eq!(v["tax"]["total"], 112 + 50, "and the fee's 50");
+        assert_eq!(v["total"], 975);
+        assert_eq!(v["items"][0]["vat_ppm"], 200000);
+    }
+
+    /// G2, RED side: a venue WITH a rate cannot place an order it cannot tax.
+    #[test]
+    fn g2_an_untaxable_order_at_a_taxed_venue_is_refused_untaxed() {
+        let (mut hub, mut stock) = images();
+        let unreadable = json!([{ "product_id": "coffee", "quantity": 3 }]);
+        let out = decide(&mut hub, &mut stock, &[], &Ok(Some(V20)), &input(unreadable, None));
+        assert!(matches!(out, Err(Refused::Untaxed(_))), "{out:?}");
+        assert_eq!(out.unwrap_err().status(), 500);
+        assert_eq!(hub.len(), 0, "nothing logged");
+        // A settings image this cannot read is the same refusal, and loud.
+        let out = decide(&mut hub, &mut stock, &[], &Err("tax.default_ppm: bad".into()), &input(coffees(), None));
+        assert!(matches!(&out, Err(Refused::Untaxed(m)) if m.contains("tax.default_ppm")), "{out:?}");
+    }
+
+    /// G2, GREEN side: the same order at a venue with NO rate is placed with
+    /// no block (the transition rule), and a taxable one at a taxed venue is
+    /// placed with one.
+    #[test]
+    fn g2_no_rate_places_without_a_block_and_a_rate_places_with_one() {
+        let (mut hub, mut stock) = images();
+        let unreadable = json!([{ "product_id": "coffee", "quantity": 3 }]);
+        let stored = decide(&mut hub, &mut stock, &[], &Ok(None), &input(unreadable, None)).expect("untaxed venue");
+        assert!(serde_json::from_str::<Value>(&stored).unwrap().get("tax").is_none());
+        let (mut hub, mut stock) = images();
+        let stored = decide(&mut hub, &mut stock, &[], &Ok(Some(V20)), &input(coffees(), None)).expect("taxed");
+        assert_eq!(serde_json::from_str::<Value>(&stored).unwrap()["tax"]["total"], 125 + 50);
+    }
+
+    /// THE HUB_OWNED TRAP (§1.8): the first "confirm" must not delete the
+    /// figures a receipt is issued from.
+    #[test]
+    fn the_tax_block_survives_confirmed() {
+        let (mut hub, mut stock) = images();
+        let placed = decide(&mut hub, &mut stock, &[], &Ok(Some(V20)), &input(coffees(), None)).expect("placed");
+        let mut o: Value = serde_json::from_str(&placed).unwrap();
+        o["id"] = json!("o1");
+        o["location_id"] = json!("v1");
+        o["created_at_ms"] = json!(1_700_000_000_000i64);
+        let a = crate::command::advance::AdvanceIn {
+            order_id: "o1".into(),
+            location_id: "v1".into(),
+            next: "CONFIRMED".into(),
+            reason: None,
+            now_ms: 1_700_000_100_000,
+        };
+        let merged = crate::command::advance::decide(&mut hub, &mut stock, Some(&o.to_string()), &a)
+            .expect("confirm");
+        assert_eq!(merged["status"], "CONFIRMED");
+        assert_eq!(merged["tax"], o["tax"], "the block must ride through the transition");
     }
 }

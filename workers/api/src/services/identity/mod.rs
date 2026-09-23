@@ -4,3 +4,6 @@
 //! the part a venue manages for itself.
 
 pub mod keys;
+pub mod staff;
+pub mod staff_admin;
+pub mod staff_rules;

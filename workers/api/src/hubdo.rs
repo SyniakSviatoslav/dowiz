@@ -49,6 +49,9 @@ const CHUNK: usize = 96 * 1024;
 /// error.
 const LOG_IMAGE: &str = "log";
 
+/// The room's commands (amend, pay, transfer, the till), in their own file.
+mod room;
+
 /// The catalogue image, which holds the venue's own record as well as its
 /// dishes. Named here because `/fold/venue` reads it and nothing else does.
 const CATALOG_IMAGE: &str = "catalog";
@@ -647,7 +650,16 @@ impl HubImages {
         };
         let reserved_before = stock.len();
 
-        let stored = match crate::command::place::decide(&mut hub, &mut stock, &listed, &input) {
+        // THE VENUE'S TAX, from the settings image THIS object holds, at the
+        // request's one clock. G2: a venue with a rate never logs an untaxed order.
+        let venue_tax = match self.image(crate::hubstore::IMAGE_SETTINGS).await? {
+            Some((_, b)) => match dowiz_hub::settings::Settings::load(&b) {
+                Ok(s) => crate::services::ordering::tax_cfg::resolve(|k| s.known(k), input.now_ms),
+                Err(_) => Err("tax: the settings image is unreadable".into()),
+            },
+            None => Ok(None),
+        };
+        let stored = match crate::command::place::decide(&mut hub, &mut stock, &listed, &venue_tax, &input) {
             Ok(v) => v,
             // NOTHING HAS BEEN WRITTEN. Both images go out of scope here.
             Err(r) => return Ok(Err(r)),
@@ -1255,6 +1267,11 @@ impl DurableObject for HubImages {
                 // this route takes no `x-generation`: there is no read-modify-
                 // write over a hop to guard, because the read and the write are
                 // two statements inside the same turn.
+                // THE ROOM (`hubdo/room.rs`): `/fold/room/<command>`.
+                (Method::Post, "room") => {
+                    let cmd = seg.next().unwrap_or("").to_string();
+                    self.room(&cmd, req).await
+                }
                 (Method::Post, "place") => {
                     let mut req = req;
                     let input: crate::command::place::PlaceIn = req.json().await?;

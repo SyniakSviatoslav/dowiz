@@ -21,6 +21,7 @@ import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses } from '/st
 import { totalsBlock, refreshTotals, refreshBar } from '/store/cart.js';
 import { quoteEta } from '/store/eta.js';
 import { seaCalm, seaEvent } from '/store/sea.js';
+import { consentMarkup, wireConsent, consentBody } from '/store/consent.js';
 
 /// The tip choices, in minor units of the venue's currency; the first is "no tip".
 const TIPS = [0, 100, 200, 500];
@@ -166,6 +167,7 @@ export function openCheckout(){
     <input id="f-name" autocomplete="name" value="${esc(safeGet('dw_name') || '')}">
     <label for="f-phone"><span data-t="phone"></span> <span class="opt" data-t="optional"></span></label>
     <input id="f-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+355…" value="${esc(safeGet('dw_phone') || '')}">
+    ${consentMarkup()}
 
     <h3 class="fsec" data-t="pay"></h3>
     ${railMarkup()}
@@ -201,6 +203,7 @@ export function openCheckout(){
     wallet = b.dataset.wallet;
   };
   $('#place').onclick = () => place(pay, wallet);
+  wireConsent();
 
   const etaLine = async () => {
     const collecting = state.how === 'pickup' && L?.pickup;
@@ -353,7 +356,7 @@ async function place(pay, wallet){
       body: JSON.stringify({ items, contact: { name, phone },
         fulfilment: collecting ? { kind: 'pickup', note: note || null }
                                : { kind: 'delivery', address: { line: addr, note: note || null, parts, ...geo } },
-        payment: pay, locale: lang,
+        payment: pay, locale: lang, ...consentBody(phone),
         ...(pay === 'crypto' && wallet ? { crypto_symbol: wallet } : {}),
         ...(state.promo ? { promo: state.promo.code } : {}),
         ...(state.tip && !collecting ? { tip: state.tip } : {}),

@@ -54,12 +54,14 @@ export function replace(venue, orders, generation){
 }
 
 /// The event kinds that describe an ORDER, as `EventKind::is_order` names them:
-/// Placed(1), Advanced(2), Paid(3), Noted(5). Revealed(4) is an audit record
+/// Placed(1), Advanced(2), Paid(3), Noted(5), Amended(7) — a round whose lines or
+/// money changed in the room. `tools/gates/event-kinds.sh` holds this copy to
+/// `is_order`, so the next kind cannot be added on one side only. Revealed(4) is an audit record
 /// under a subject that is not an order id, and Checkpoint(6) is a mark in the
 /// log. Both must be ignored here, exactly as the server's folds ignore them —
 /// a reveal folded as an order puts a row with a reader's name and no items in
 /// a kitchen's queue, and it survives reloads.
-const ORDER_KINDS = new Set([1, 2, 3, 5]);
+const ORDER_KINDS = new Set([1, 2, 3, 5, 7]);
 
 /// Apply what changed since. Returns the new copy, or `null` when the changes
 /// cannot be applied on top of what is held -- a gap, a different venue -- in

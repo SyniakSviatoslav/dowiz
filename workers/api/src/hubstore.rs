@@ -1362,8 +1362,8 @@ pub const HUB_OWNED: &[&str] = &[
     "assigned_at_ms",
     "accepted_at_ms",
     "total",
-    // When each status was entered: the live estimate measures from these.
-    "at",
+    "at", // when each status was entered: the live estimate measures from these
+    "tax", // stamped at placement (TAX blueprint §1.8); a confirm must not erase it
 ];
 
 /// Copy `HUB_OWNED` from the order as it was onto the order the kernel returned.

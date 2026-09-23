@@ -44,9 +44,82 @@ pub const TAGS: [&str; 8] = [
     "event",
 ];
 
-/// The fields a record may hold. Everything else in the stored JSON is dropped
-/// on write except the three the placement path owns.
-const OWNED_BY_PLACEMENT: [&str; 3] = ["id", "phone_hash", "created_at_ms"];
+/// The record kind in the venue's `people` image. The ID IS `customer_key`,
+/// so the record carries no copy of its own handle.
+pub const KIND: &str = "cust";
+
+/// The one field the placement path owns. `id`, `phone_hash` and `name` were
+/// written here until item 1 of the blueprint: the id is the table key, the
+/// hash was an UNKEYED sha256 of the number, and the name is a fold.
+const OWNED_BY_PLACEMENT: [&str; 1] = ["created_at_ms"];
+
+/// Every field a record may hold — G2's allow-list (`tools/gates/record.sh`).
+pub const FIELDS: [&str; 8] = [
+    "note", "tags", "allergens", "usual_table", "lang", "birthday_md", "created_at_ms", "updated_at_ms",
+];
+
+/// Keep only the allowed fields of a stored record.
+fn allowed(existing: &str) -> Map<String, Value> {
+    let old: Map<String, Value> = serde_json::from_str::<Value>(existing)
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    old.into_iter().filter(|(k, _)| FIELDS.contains(&k.as_str())).collect()
+}
+
+/// What a PLACEMENT writes: the card's birth, and nothing about the order.
+///
+/// `None` means there is nothing to write -- a returning customer's clean card
+/// is not rewritten by an order. A legacy card (one holding `name` or the old
+/// hash) comes back cleaned, keeping its birth and the owner's fields.
+pub fn touch(existing: Option<&str>, now_ms: i64) -> Option<String> {
+    let Some(old) = existing else {
+        let mut m = Map::new();
+        m.insert("created_at_ms".into(), Value::from(now_ms));
+        return Some(Value::Object(m).to_string());
+    };
+    let before: Value = serde_json::from_str(old).unwrap_or(Value::Null);
+    let mut kept = allowed(old);
+    if !kept.contains_key("created_at_ms") {
+        kept.insert("created_at_ms".into(), Value::from(now_ms));
+    }
+    let after = Value::Object(kept);
+    (after != before).then(|| after.to_string())
+}
+
+/// The ONE-SHOT RE-KEY (§3.1): records filed under `sha256_hex(raw phone)`
+/// move to `customer_key`. `pairs` is `(legacy id, key)` for every phone in
+/// the order log -- the only place the number still is. A legacy-shaped id
+/// (64 hex) that no order explains cannot be re-keyed and is REMOVED: it is an
+/// enumerable hash of a number, holding nothing but a name the record may not
+/// hold. Every surviving record is cleaned to `FIELDS`. Returns how many
+/// records moved or went; a second run returns 0.
+pub fn rekey(t: &mut dowiz_hub::table::Table, pairs: &[(String, String)]) -> usize {
+    let mut changed = 0;
+    for (id, json) in t.all(KIND) {
+        let legacy = id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit());
+        if legacy {
+            if let Some((_, key)) = pairs.iter().find(|(l, _)| *l == id) {
+                let mut into = t.get(KIND, key).map(|j| allowed(&j)).unwrap_or_default();
+                let born = allowed(&json).get("created_at_ms").and_then(Value::as_i64);
+                let have = into.get("created_at_ms").and_then(Value::as_i64);
+                if let Some(b) = born {
+                    into.insert("created_at_ms".into(), Value::from(have.map_or(b, |h| h.min(b))));
+                }
+                let _ = t.put(KIND, key, &Value::Object(into).to_string(), &[], &[]);
+            }
+            t.remove(KIND, &id);
+            changed += 1;
+        } else {
+            let clean = Value::Object(allowed(&json));
+            if serde_json::from_str::<Value>(&json).ok().as_ref() != Some(&clean) {
+                let _ = t.put(KIND, &id, &clean.to_string(), &[], &[]);
+                changed += 1;
+            }
+        }
+    }
+    changed
+}
 
 fn closed_list(what: &str, got: &[String], allowed: &[&str]) -> Result<Vec<String>, String> {
     let mut out: Vec<String> = Vec::new();
@@ -99,12 +172,9 @@ fn set_list(out: &mut Map<String, Value>, k: &str, v: Vec<String>) {
 /// Every refusal is an `Err` with the reason; the handler answers it 400 and
 /// nothing is written.
 pub fn merge(existing: &str, card: &Card, now_ms: i64) -> Result<String, String> {
-    let old: Map<String, Value> = serde_json::from_str::<Value>(existing)
-        .ok()
-        .and_then(|v| v.as_object().cloned())
-        .unwrap_or_default();
+    let old = allowed(existing);
     let mut out = Map::new();
-    for k in OWNED_BY_PLACEMENT.iter().chain(["note", "tags", "allergens", "usual_table", "lang", "birthday_md"].iter()) {
+    for k in OWNED_BY_PLACEMENT.iter().chain(FIELDS[..6].iter()) {
         if let Some(v) = old.get(*k) {
             out.insert((*k).into(), v.clone());
         }

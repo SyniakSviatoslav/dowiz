@@ -26,6 +26,10 @@ dowiz-kernel = { path = "../../kernel", features = ["json-api"] }
 # The hub: one tenant's order log over a bebop store. Pure logic, no I/O -- this
 # crate supplies the bytes and persists them.
 dowiz-hub = { path = "../../crates/dowiz-hub" }
+# The SAME crate the kernel links (no new crate in the graph): named directly so
+# the money law (`tax::RatePpm`, `tax::summarise`) is reachable without the
+# kernel facade re-exporting it. BLUEPRINT-TAX-PRICE-CHANNEL §3.2.
+dowiz-core = { path = "../../crates/dowiz-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Auth primitives, all wasm32-clean and pure Rust -- no WebCrypto plumbing and no

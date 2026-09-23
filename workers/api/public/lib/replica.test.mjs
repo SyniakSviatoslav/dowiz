@@ -143,4 +143,16 @@ test('a copy knows how old it is', () => {
   assert.equal(isStale(null), true, 'no copy is as stale as it gets');
 });
 
+// ITEM 2 (BLUEPRINT-POS-THE-ROOM): an `Amended` (kind 7) is an order event. A
+// waiter's amendment must reach every console's copy, or the kitchen reads a
+// round with the lines it had before.
+test('an amendment (kind 7) folds into the order it names', () => {
+  const current = { venue: 'v', generation: 1, at: 0, orders: [{ id: 'r1', status: 'PENDING', total: 1500, items: [{ product_id: 'maki', quantity: 2 }] }] };
+  const amended = { generation: 2, kind: 7, order_id: 'r1',
+    payload: JSON.stringify({ _d: true, total: 2100, items: [{ product_id: 'maki', quantity: 3 }] }) };
+  const next = apply(current, [amended], 2);
+  assert.equal(next.orders[0].total, 2100);
+  assert.equal(next.orders[0].items[0].quantity, 3);
+});
+
 console.log(`replica: ${run} tests ok`);

@@ -524,8 +524,11 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
     // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
     // see `Place::of_authorised`.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    let who = match owner_at(&req, &ctx, &body.location_id).await {
-        Ok(user_id) => user_id,
+    // THE KITCHEN MOVES ROUNDS TOO. An owner's token takes exactly the path it
+    // took before (`staff_at` hands it to `owner_at`); a member of staff is let
+    // through only with `advance`, the capability the Kitchen preset carries.
+    let who = match crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Advance).await {
+        Ok((user_id, _)) => user_id,
         Err(r) => return Ok(r),
     };
     // ONE CLOCK READ FOR THE WHOLE REQUEST: the idempotency window and the

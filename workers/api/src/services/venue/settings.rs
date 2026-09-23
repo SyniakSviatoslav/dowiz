@@ -71,6 +71,10 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
             return Response::error("the endpoint must be https from a Worker", 400);
         }
     }
+    // A tax rate is an INTEGER in ppm; `0.20` is refused here, with a reason.
+    if let Err(why) = crate::services::ordering::tax_cfg::validate(&body.key, &body.value) {
+        return Response::error(why, 400);
+    }
     let (key, value) = (body.key.clone(), body.value.clone());
     crate::hubstore::with_settings(&place, move |s| {
         s.set(&key, &value);
