@@ -94,16 +94,16 @@ if ! diff -u "$COMMITTED" "$TMP" > "$ERR" 2>&1; then
   exit 1
 fi
 
-# The currency list, out of the generated file and out of the hand-owned
-# decimals table, both as sorted words.
+# The currency list, out of the generated file and out of the generated
+# decimals table, both as sorted words. Both are now generated, so they must match.
 gen_cur=$(sed -n '/^export const CURRENCIES = \[$/,/^\];$/p' "$COMMITTED" \
   | tr -d " '" | tr ',' '\n' | grep -E '^[A-Z]+$' | sort)
-dec_cur=$(sed -n 's/^export const DECIMALS = {\(.*\)};$/\1/p' "$MONEY" \
-  | tr -d ' ' | tr ',' '\n' | cut -d: -f1 | grep -E '^[A-Z]+$' | sort)
+dec_cur=$(sed -n '/^export const DECIMALS = {$/,/^};$/p' "$COMMITTED" \
+  | tr -d " " | tr ',' '\n' | cut -d: -f1 | grep -E '^[A-Z]+$' | sort)
 if [ "$gen_cur" != "$dec_cur" ]; then
-  echo "vocab: REFUSED — the kernel's currencies and $MONEY's DECIMALS disagree."
-  echo "vocab:   kernel: $(printf '%s ' $gen_cur)"
-  echo "vocab:   money.js DECIMALS: $(printf '%s ' $dec_cur)"
+  echo "vocab: REFUSED — the kernel's currencies and generated DECIMALS disagree."
+  echo "vocab:   CURRENCIES: $(printf '%s ' $gen_cur)"
+  echo "vocab:   DECIMALS: $(printf '%s ' $dec_cur)"
   echo "vocab: a currency with no decimals renders through Intl's guess of two,"
   echo "vocab: which is how 1500 lek was drawn as \$15.00."
   exit 1

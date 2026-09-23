@@ -14,15 +14,13 @@ use serde_json::{json, Value};
 use worker::*;
 
 use crate::owner::owner_and_venue;
+use dowiz_core::money::Currency;
 
 /// Telegram refuses messages past this many characters; an order with many
 /// lines is cut at the lines, not mid-word, and the total always survives.
 const TELEGRAM_TEXT_MAX: usize = 4096;
 /// A message longer than this is trimmed to its first lines plus the totals.
 const LINES_SHOWN_MAX: usize = 30;
-/// Currencies whose minor unit does not exist. Mirrors `DECIMALS` in
-/// `public/lib/money.js`; every other code renders two decimals.
-const ZERO_DECIMAL_CURRENCIES: &[&str] = &["ALL", "JPY"];
 /// The order id is long; the owner sees the same first characters the console
 /// shows (`ORDER_ID_SHOWN` in `admin/core.js`).
 const ORDER_ID_SHOWN: usize = 8;
@@ -35,13 +33,23 @@ pub struct LineOut {
 }
 
 /// An integer minor-unit amount as text, e.g. 1500 ALL → "1500 ALL", 981 EUR → "9.81 EUR".
+///
+/// Uses `Currency::minor_units()` to determine the number of decimal places,
+/// so the format is derived from the kernel rather than hardcoded.
 pub fn money_text(amount: i64, code: &str) -> String {
-    if ZERO_DECIMAL_CURRENCIES.contains(&code) {
+    let decimals = Currency::from_code(code)
+        .map(|c| c.minor_units() as usize)
+        .unwrap_or(if code == "JPY" { 0 } else { 2 }); // outside the kernel's set: the yen had no minor unit before this moved, and still has none
+
+    if decimals == 0 {
         format!("{amount} {code}")
     } else {
         let sign = if amount < 0 { "-" } else { "" };
         let a = amount.unsigned_abs();
-        format!("{sign}{}.{:02} {code}", a / 100, a % 100)
+        let divisor = 10_u64.pow(decimals as u32);
+        let major = a / divisor;
+        let minor = a % divisor;
+        format!("{sign}{}.{:0width$} {code}", major, minor, width = decimals)
     }
 }
 

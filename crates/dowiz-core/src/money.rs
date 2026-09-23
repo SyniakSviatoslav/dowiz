@@ -41,6 +41,10 @@ pub enum Currency {
 }
 
 impl Currency {
+    /// Every currency the product renders, in one place: the rates endpoint and
+    /// `tools/gen-vocab` walk this, so a fourth currency is added here or nowhere.
+    pub const EVERY: [Currency; 3] = [Currency::All, Currency::Eur, Currency::Usd];
+
     pub fn code(self) -> &'static str {
         match self {
             Currency::All => "ALL",
@@ -54,6 +58,17 @@ impl Currency {
             "EUR" => Some(Currency::Eur),
             "USD" => Some(Currency::Usd),
             _ => None,
+        }
+    }
+    /// Minor units (decimal places) for this currency.
+    ///
+    /// Returns how many decimal places the minor unit represents.
+    /// ALL (Albanian lek) has 0 decimal places; EUR and USD have 2.
+    pub fn minor_units(self) -> u32 {
+        match self {
+            Currency::All => 0,
+            Currency::Eur => 2,
+            Currency::Usd => 2,
         }
     }
 }

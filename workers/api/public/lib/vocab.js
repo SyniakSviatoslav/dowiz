@@ -11,7 +11,8 @@
 // SOURCES, by name, so a reviewer can go and read them:
 //   crates/dowiz-core/src/order_machine.rs — OrderStatus, is_terminal,
 //     took_money, is_active, assert_transition, FSM_GOLDEN_SIGNATURE
-//   crates/dowiz-core/src/money.rs — Currency, MONEY_SCALE_MICRO
+//   crates/dowiz-core/src/money.rs — Currency, MONEY_SCALE_MICRO, minor_units
+//   crates/dowiz-core/src/fulfilment.rs — KINDS, ALL
 //
 // THE DEFECT THIS CLOSES. `OrderStatus` has twelve members. The owner console
 // held `DEAD = new Set(['REJECTED', 'CANCELLED'])`, the storefront's sea held
@@ -82,14 +83,23 @@ export const NEXT = {
   COMPENSATED_REFUND: [],
 };
 
+/// Every way an order can reach its customer, from `dowiz-core::fulfilment`.
+export const KINDS = [
+  'delivery', 'pickup', 'dine_in',
+];
+
 /// Every code `money::Currency::from_code` accepts, found by exhaustion
-/// over [A-Z]{1,4} rather than retyped. MINOR UNITS ARE NOT HERE: the
-/// kernel has no minor-unit authority to read (`Currency` carries only a
-/// code), so `lib/money.js` still owns `DECIMALS` and `tools/gates/vocab.sh`
-/// checks that it covers exactly this list.
+/// over [A-Z]{1,4} rather than retyped.
 export const CURRENCIES = [
   'ALL', 'EUR', 'USD',
 ];
+
+/// Minor units (decimal places) per currency, from `Currency::minor_units`.
+export const DECIMALS = {
+  ALL: 0,
+  EUR: 2,
+  USD: 2,
+};
 
 /// `money::MONEY_SCALE_MICRO` — the one scale the rate endpoint, the Worker
 /// and `lib/money.js` all divide by. Parts per million of the target

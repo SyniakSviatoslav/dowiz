@@ -19,6 +19,7 @@ use dowiz_core::order_machine::{
     assert_transition, fsm_graph_report, topological_order, verify_fsm_signature, OrderStatus,
     FSM_GOLDEN_SIGNATURE,
 };
+use dowiz_core::fulfilment;
 
 /// The emitted vocabulary, as strings, in the kernel's own declaration order.
 pub struct Vocabulary {
@@ -31,6 +32,8 @@ pub struct Vocabulary {
     pub edges: usize,
     pub currencies: Vec<&'static str>,
     pub money_scale_micro: i128,
+    pub fulfilment_kinds: Vec<&'static str>,
+    pub minor_units: Vec<(String, u32)>,
 }
 
 /// The twelve lifecycle states as real `OrderStatus` values.
@@ -106,6 +109,16 @@ pub fn read_kernel() -> Result<Vocabulary, String> {
         ));
     }
 
+    let currencies = currency_codes()?;
+
+    // Read minor units for each currency
+    let mut minor_units = Vec::new();
+    for code in &currencies {
+        if let Some(currency) = Currency::from_code(code) {
+            minor_units.push((code.to_string(), currency.minor_units()));
+        }
+    }
+
     Ok(Vocabulary {
         statuses: states.iter().map(name).collect(),
         terminal: pick(&|s| s.is_terminal()),
@@ -115,8 +128,10 @@ pub fn read_kernel() -> Result<Vocabulary, String> {
         scaffold: pick(&|s| is_scaffold(*s, &states)),
         next,
         edges,
-        currencies: currency_codes()?,
+        currencies,
         money_scale_micro: MONEY_SCALE_MICRO,
+        fulfilment_kinds: fulfilment::KINDS.to_vec(),
+        minor_units,
     })
 }
 

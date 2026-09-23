@@ -110,14 +110,28 @@ pub fn render(v: &Vocabulary) -> String {
     s.push_str("};\n\n");
 
     s.push_str(&array(
+        "KINDS",
+        "/// Every way an order can reach its customer, from `dowiz-core::fulfilment`.\n",
+        &v.fulfilment_kinds,
+    ));
+
+    s.push_str(&array(
         "CURRENCIES",
         "/// Every code `money::Currency::from_code` accepts, found by exhaustion\n\
-         /// over [A-Z]{1,4} rather than retyped. MINOR UNITS ARE NOT HERE: the\n\
-         /// kernel has no minor-unit authority to read (`Currency` carries only a\n\
-         /// code), so `lib/money.js` still owns `DECIMALS` and `tools/gates/vocab.sh`\n\
-         /// checks that it covers exactly this list.\n",
+         /// over [A-Z]{1,4} rather than retyped.\n",
         &v.currencies,
     ));
+
+    // Render the DECIMALS object (minor units per currency)
+    s.push_str(
+        "/// Minor units (decimal places) per currency, from `Currency::minor_units`.\n\
+         export const DECIMALS = {\n"
+    );
+    for (code, units) in &v.minor_units {
+        s.push_str(&format!("  {code}: {},\n", units));
+    }
+    s.push_str("};\n\n");
+
     s.push_str(&format!(
         "/// `money::MONEY_SCALE_MICRO` — the one scale the rate endpoint, the Worker\n\
          /// and `lib/money.js` all divide by. Parts per million of the target\n\
@@ -144,7 +158,8 @@ const HEADER: &str = "\
 // SOURCES, by name, so a reviewer can go and read them:
 //   crates/dowiz-core/src/order_machine.rs — OrderStatus, is_terminal,
 //     took_money, is_active, assert_transition, FSM_GOLDEN_SIGNATURE
-//   crates/dowiz-core/src/money.rs — Currency, MONEY_SCALE_MICRO
+//   crates/dowiz-core/src/money.rs — Currency, MONEY_SCALE_MICRO, minor_units
+//   crates/dowiz-core/src/fulfilment.rs — KINDS, ALL
 //
 // THE DEFECT THIS CLOSES. `OrderStatus` has twelve members. The owner console
 // held `DEAD = new Set(['REJECTED', 'CANCELLED'])`, the storefront's sea held

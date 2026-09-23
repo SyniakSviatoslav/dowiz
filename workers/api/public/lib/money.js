@@ -15,12 +15,8 @@
 // a price, offered because a visitor paying in euros wants to know roughly what
 // they are spending — never a second ledger. Every surface that shows a
 // converted figure must also say what will actually be charged.
-/// Minor units per major unit. Lek has none; the euro and the dollar have two.
-export const DECIMALS = { ALL: 0, EUR: 2, USD: 2 };
-/// The currencies this product renders. Adding one means adding its decimals
-/// above and its name to the rates endpoint's short list — deliberately both,
-/// so a currency cannot be half-supported.
-export const CURRENCIES = ['ALL', 'EUR', 'USD'];
+import { CURRENCIES, DECIMALS } from './vocab.js';
+export { CURRENCIES, DECIMALS };
 export function decimalsOf(code) {
     return DECIMALS[code] ?? 2;
 }

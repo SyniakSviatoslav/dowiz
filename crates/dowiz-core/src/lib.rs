@@ -285,6 +285,7 @@ pub mod breaker;
 pub mod autonomic_pmu;
 pub mod temporal_tmr;
 pub mod catalog;
+pub mod fulfilment;
 pub mod domain;
 pub mod simd;
 pub mod physics;

@@ -8,18 +8,15 @@
 /// 'pickup'`, so an order placed at a table showed a bicycle, said "delivery",
 /// and exported an empty address column in the owner's own CSV.
 ///
-/// IT IS NOT GENERATED, AND THAT IS A GAP WITH A NAME ON IT. `lib/vocab.js` is
-/// emitted from the kernel by `tools/gen-vocab` precisely so a status list
-/// cannot be retyped; the fulfilment kinds live in the WORKER, not the kernel,
-/// so there is nothing for that generator to read yet. Until `KINDS` moves into
-/// `dowiz-core`, this file is a hand copy of three strings — one hand copy
-/// instead of the five that were here, with the price of it written down.
+/// NOW GENERATED. `lib/vocab.js` is emitted from the kernel by `tools/gen-vocab`
+/// and includes KINDS, which is generated from `dowiz-core::fulfilment` and
+/// cannot be retyped.
 ///
 /// ASKED AS "DOES IT LEAVE THE BUILDING", never as "is it a pickup": an
 /// allow-list means the FOURTH kind is refused a courier and a travel time by
 /// default rather than inheriting them.
 
-export const KINDS = ['delivery', 'pickup', 'dine_in'];
+import { KINDS } from './vocab.js';
 
 /// The kind an order carries. Absent means `delivery`, and so does a word this
 /// build does not know — the same compatibility rule the server applies, for

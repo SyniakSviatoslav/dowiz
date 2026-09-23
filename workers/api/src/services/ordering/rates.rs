@@ -6,6 +6,16 @@
 
 use serde_json::{json, Value};
 use worker::*;
+use dowiz_core::money::Currency;
+
+/// Build a decimals map from the supported currencies.
+fn decimals_map() -> serde_json::Map<String, Value> {
+    let mut map = serde_json::Map::new();
+    for c in Currency::EVERY {
+        map.insert(c.code().to_string(), json!(c.minor_units()));
+    }
+    map
+}
 
 /// `GET /api/public/rates` — what one unit of the venue's currency is worth.
 ///
@@ -51,12 +61,15 @@ pub async fn rates(req: Request, _ctx: RouteContext<crate::Req>) -> Result<Respo
     }
 
     let identity = |stale: bool| {
-        json!({
+        let mut resp = json!({
             "base": base,
             "ppm": { base.clone(): 1_000_000 },
-            "decimals": { "ALL": 0, "EUR": 2, "USD": 2 },
             "stale": stale,
-        })
+        });
+        if let Some(map) = resp.as_object_mut() {
+            map.insert("decimals".to_string(), Value::Object(decimals_map()));
+        }
+        resp
     };
 
     let fetched = Fetch::Url(
@@ -88,13 +101,16 @@ pub async fn rates(req: Request, _ctx: RouteContext<crate::Req>) -> Result<Respo
                 }
             }
             if !ppm.is_empty() {
-                out = json!({
+                let mut resp = json!({
                     "base": base,
                     "ppm": ppm,
-                    "decimals": { "ALL": 0, "EUR": 2, "USD": 2 },
                     "asOf": v.get("time_last_update_utc").cloned().unwrap_or(Value::Null),
                     "stale": false,
                 });
+                if let Some(map) = resp.as_object_mut() {
+                    map.insert("decimals".to_string(), Value::Object(decimals_map()));
+                }
+                out = resp;
             }
         }
     }

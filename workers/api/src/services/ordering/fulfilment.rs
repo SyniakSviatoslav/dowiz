@@ -36,7 +36,9 @@
 /// basket sent with `kind: "banana"` was accepted, charged the full delivery
 /// fee, and given no address to deliver to — because the address check fires
 /// only on the exact word `"delivery"`.
-pub const KINDS: [&str; 3] = ["delivery", "pickup", "dine_in"];
+/// The list itself is the kernel's (`dowiz_core::fulfilment`), the one
+/// `tools/gen-vocab` emits for the browsers — so this side cannot drift either.
+pub use dowiz_core::fulfilment::KINDS;
 
 pub fn known(kind: &str) -> bool {
     KINDS.contains(&kind)
