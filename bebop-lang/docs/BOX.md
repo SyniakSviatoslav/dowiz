@@ -87,6 +87,21 @@ consequences worth knowing:
   correct outcome -- taking the measurement anyway would produce a number that looks like a
   result and is not one. Wait for the box, or say the row is unmeasured.
 
+## Gap found 2026-09-23: cargo's own parallelism crosses 32 with no help
+
+The 10:27 session death that day had ONE job running, no lanes, slot free: a plain `cargo test`
+over `dowiz-core`, `dowiz-hub`, `workers/api`, `native-spa-server`. Cargo defaults `jobs` to
+`nproc` (7 here), and rustdoc compiles doctests `RUST_TEST_THREADS` at a time, each as
+`rustc -> cc -> ld.lld`. Measured peak live processes on the `dowiz-core` doctests: **21 at 2,
+25 at 3** — about 4 per extra job, so the default 7 lands near 41. `/tmp` still held the
+`rustdoctest*` dirs from the moment of death. `slot.sh` cannot help: it serialises jobs, not what
+happens inside one.
+
+Fixed box-wide in `~/.cargo/config.toml` (outside every repo, so it covers all of them):
+`[build] jobs = 2` and `[env] RUST_TEST_THREADS = "2"`. Verified it applies with no env vars set
+(same peak 21). Anything that raises cargo parallelism on this box (`-j`, `CARGO_BUILD_JOBS`,
+`--test-threads`) re-opens the gap.
+
 ## Escape hatches
 
 `SERIAL=0` (parallel battery), `SLOTS=3` (the old three lanes) and `PHANTOM_CAP=<n>` all still
