@@ -6,6 +6,7 @@
 //! waiter reads (`sitting`), and the handlers that sequence the two.
 
 pub mod handlers;
+pub mod pay;
 pub mod placer;
 
 #[cfg(test)]

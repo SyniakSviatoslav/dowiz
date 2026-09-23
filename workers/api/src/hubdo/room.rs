@@ -27,6 +27,7 @@ impl HubImages {
     pub(super) async fn room(&self, what: &str, mut req: Request) -> Result<Response> {
         match what {
             "amend" => reply(self.amend(req.json().await?).await?),
+            "pay" => reply(self.pay(req.json().await?).await?),
             _ => Response::error("no such room command", 404),
         }
     }
@@ -95,5 +96,25 @@ impl HubImages {
         };
         self.broadcast(dowiz_hub::EventKind::Amended as u8, &input.order_id, &body, next);
         Ok(Ok(crate::command::amend::AmendOut { merged: round.to_string(), seq, generation: next }))
+    }
+
+    /// TAKE A PAYMENT: one `Paid` event, the broadcast, in one turn.
+    async fn pay(
+        &self,
+        input: crate::command::pay::PayIn,
+    ) -> Result<std::result::Result<crate::command::pay::PayOut, Refused>> {
+        let (log_gen, listed) = self.orders_view().await?;
+        let current: Option<OrderView> = listed.into_iter().find(|o| o.order_id == input.order_id);
+        let (_, mut hub) = self.log_hub().await?;
+        let (round, body, seq) = match crate::command::pay::decide(&mut hub, current.as_ref(), &input) {
+            Ok(v) => v,
+            Err(r) => return Ok(Err(r)),
+        };
+        let next = match self.write_both("a payment", log_gen, &hub, None).await? {
+            Ok(n) => n,
+            Err(r) => return Ok(Err(r)),
+        };
+        self.broadcast(dowiz_hub::EventKind::Paid as u8, &input.order_id, &body, next);
+        Ok(Ok(crate::command::pay::PayOut { merged: round.to_string(), seq, generation: next }))
     }
 }

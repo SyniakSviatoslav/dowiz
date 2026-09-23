@@ -306,6 +306,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/staff/:id", services::identity::staff_admin::set_staff)
         .get_async("/api/staff/room", services::orders::room::handlers::room_view)
         .post_async("/api/staff/orders/:id/amend", services::orders::room::handlers::amend)
+        .post_async("/api/staff/orders/:id/pay", services::orders::room::pay::pay)
         // ── owner ──
         .get_async("/api/owner/orders", owner::orders)
         .post_async("/api/owner/orders/:id/action", owner::order_action)

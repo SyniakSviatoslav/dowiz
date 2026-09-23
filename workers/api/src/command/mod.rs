@@ -39,6 +39,7 @@ use worker::*;
 pub mod advance;
 pub mod amend;
 pub mod assign;
+pub mod pay;
 pub mod place;
 pub mod room_rules;
 pub mod sitting;
