@@ -130,6 +130,188 @@ const CASES = {
   // ABSENT IS NOT INTACT, but it is not a breach either: a deployment older
   // than this field has not been measured. Same rule as `events` above.
   'a worker without the rebuild field': { health: ok, backup: witnessed(), red: false },
+
+  // ── LAW 9: TAX CONSERVATION ──
+  //
+  // The tax block must satisfy four equations: (a) group taxes sum to total,
+  // (b) allocated discounts sum to the order discount, (c) bases and totals
+  // add up correctly for the venue's inclusive flag, (d) the stored tax can
+  // be recomputed from base and rate.
+  //
+  // A healthy tax block: one group at 20% inclusive, base 750, tax 112, fee
+  // at same rate (base 300, tax 50), tip 100, no discount allocated.
+  // Expected total (inclusive): 750 + 300 + 100 = 1150.
+  'a valid tax block (inclusive, one group, with fee and tip)': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{
+      id: 'ord_tax_ok',
+      total: 1150,
+      tip: 100,
+      delivery_fee: 300,
+      discount: 0,
+      items: [{ price: 750, quantity: 1 }],
+      tax: {
+        inclusive: true,
+        groups: [{ rate_ppm: 200000, base: 750, tax: 125, lines: 1 }],
+        fee: { rate_ppm: 200000, base: 300, tax: 50 },
+        total: 175,
+        discount_allocated: [],
+      },
+    }],
+    red: false,
+  },
+
+  // THE KERNEL'S ROUNDING, on the one kind of input where half-up has two
+  // readings: an odd denominator (1e6 + 200001). eqc_gen's
+  // apply_tax_inclusive_int gives tax 80001 on 480001; Math.round(b/2) gave
+  // 80000 and would have called this correct receipt a breach.
+  'a valid tax block (inclusive, odd rate: the kernel rounds b/2 down)': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{
+      id: 'ord_tax_odd', total: 480001, tip: 0, delivery_fee: 0, discount: 0,
+      items: [{ price: 480001, quantity: 1 }],
+      tax: {
+        inclusive: true,
+        groups: [{ rate_ppm: 200001, base: 480001, tax: 80001, lines: 1 }],
+        fee: null, total: 80001, discount_allocated: [],
+      },
+    }],
+    red: false,
+  },
+
+  // (a) GROUP TAXES DO NOT SUM TO TOTAL
+  'tax block: group taxes do not sum to total': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{
+      id: 'ord_tax_a',
+      total: 1150,
+      tip: 100,
+      delivery_fee: 300,
+      discount: 0,
+      items: [{ price: 750, quantity: 1 }],
+      tax: {
+        inclusive: true,
+        groups: [{ rate_ppm: 200000, base: 750, tax: 125, lines: 1 }],
+        fee: { rate_ppm: 200000, base: 300, tax: 50 },
+        total: 200, // WRONG: should be 125 + 50 = 175
+        discount_allocated: [],
+      },
+    }],
+    red: 'sum to 175, but tax.total is 200',
+  },
+
+  // (b) ALLOCATED DISCOUNTS DO NOT SUM TO ORDER DISCOUNT
+  'tax block: allocated discounts do not sum to order discount': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{
+      id: 'ord_tax_b',
+      total: 1075,
+      tip: 100,
+      delivery_fee: 300,
+      discount: 75,
+      items: [{ price: 750, quantity: 1 }],
+      tax: {
+        inclusive: true,
+        groups: [{ rate_ppm: 200000, base: 675, tax: 112, lines: 1 }],
+        fee: { rate_ppm: 200000, base: 300, tax: 50 },
+        total: 162,
+        discount_allocated: [50], // WRONG: should be [75]
+      },
+    }],
+    red: 'allocated discounts sum to 50, but order discount is 75',
+  },
+
+  // (c) BASES AND TOTALS DO NOT ADD UP (INCLUSIVE)
+  'tax block: bases do not sum to total (inclusive venue)': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{
+      id: 'ord_tax_c',
+      total: 9999, // WRONG: should be 750 + 300 + 100 = 1150
+      tip: 100,
+      delivery_fee: 300,
+      discount: 0,
+      items: [{ price: 750, quantity: 1 }],
+      tax: {
+        inclusive: true,
+        groups: [{ rate_ppm: 200000, base: 750, tax: 125, lines: 1 }],
+        fee: { rate_ppm: 200000, base: 300, tax: 50 },
+        total: 175,
+        discount_allocated: [],
+      },
+    }],
+    red: 'bases and tax expected total 1150, but order total is 9999',
+  },
+
+  // (d) STORED TAX DOES NOT MATCH RECOMPUTED TAX
+  'tax block: stored tax does not match recomputed tax': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{
+      id: 'ord_tax_d',
+      total: 1150,
+      tip: 100,
+      delivery_fee: 300,
+      discount: 0,
+      items: [{ price: 750, quantity: 1 }],
+      tax: {
+        inclusive: true,
+        groups: [{ rate_ppm: 200000, base: 750, tax: 999, lines: 1 }], // WRONG tax
+        fee: { rate_ppm: 200000, base: 300, tax: 50 },
+        total: 1049, // Also wrong total as a result
+        discount_allocated: [],
+      },
+    }],
+    red: 'recomputed tax 125, but stored tax is 999',
+  },
+
+  // GREEN: inclusive venue with two rate groups and discount
+  'a valid tax block (multiple groups with discount)': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{
+      id: 'ord_tax_multi',
+      total: 1100, // 450 (base group 20%) + 225 (base group 10%) + 300 (fee) + 125 (tip) = 1100
+      tip: 125,
+      delivery_fee: 300,
+      discount: 75,
+      items: [
+        { price: 500, quantity: 1 }, // 20% group
+        { price: 250, quantity: 1 }, // 10% group
+      ],
+      tax: {
+        inclusive: true,
+        groups: [
+          { rate_ppm: 100000, base: 225, tax: 20, lines: 1 }, // 250 - 25 discount = 225, 10% tax = 20
+          { rate_ppm: 200000, base: 450, tax: 75, lines: 1 }, // 500 - 50 discount = 450, 20% tax = 75
+        ],
+        fee: { rate_ppm: 200000, base: 300, tax: 50 },
+        total: 145, // 20 + 75 + 50
+        discount_allocated: [50, 25], // allocated across two groups
+      },
+    }],
+    red: false,
+  },
+
+  // GREEN: no tax block (order placed before tax was configured)
+  'an order without a tax block': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{
+      id: 'ord_no_tax',
+      total: 1150,
+      tip: 100,
+      delivery_fee: 300,
+      discount: 0,
+      items: [{ price: 750, quantity: 1 }],
+      // no tax block
+    }],
+    red: false,
+  },
 };
 
 const RUNNER = `

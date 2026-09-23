@@ -12,7 +12,7 @@
 // `StockLedger::stranded()` is a conservation report. What was missing was
 // anything that ran them as a gate.
 //
-// EIGHT LAWS, each over the live platform:
+// NINE LAWS, each over the live platform:
 //   1. every order's folded status equals the status it is served with
 //   2. no order is stranded: nothing is held by an order that has ended
 //   3. the money on an order is its lines plus fees minus its discount
@@ -22,6 +22,8 @@
 //   7. the nightly witness is not contradicted, and it is still being taken
 //   8. every projection rebuilds from the log to what is being served, and the
 //      stock ledger holds nothing for an order the log says has ended
+//   9. the tax block conserves money: groups sum, discounts allocate exactly,
+//      bases and totals add up, and stamps are re-derivable from their parts
 //
 // It takes an owner token per venue and reads only. Exit 1 on any breach, with
 // the order named -- a gate whose failure cannot be chased is a dashboard.
@@ -229,6 +231,96 @@ for (const host of HOSTS) {
     // `unheld` is NOT a breach. A venue that models no recipes reserves
     // nothing, which is both live venues today; reporting it would make the
     // gate red for the normal state of the product.
+  }
+
+  // ── 9. the tax block conserves money ─────────────────────────────────────
+  //
+  // Every order placed at a venue with tax configured carries a tax block.
+  // BLUEPRINT-TAX-PRICE-CHANNEL §3.4 defines the block and its constraints:
+  // (a) Σ groups.tax == tax.total
+  // (b) Σ discount_allocated == the order's discount
+  // (c) for inclusive: Σ groups.base + fee.base + tip == total
+  //     for exclusive: Σ groups.base + fee.base + tax.total + tip == total
+  // (d) tax_of(base, rate_ppm, inclusive) recomputed from the stored values
+  //     equals the stored tax (the stamp is re-derivable per §2.6)
+  //
+  // The rounding is the kernel's own (`crates/dowiz-core/src/eqc_gen.rs`,
+  // apply_tax_*_int): half-up with an INTEGER b/2. Math.round(b/2) differs on
+  // an odd denominator (base 480001 at 200001 ppm: 80001 vs 80000), which is
+  // why the prove script carries that case.
+  // ABSENT IS NOT A BREACH.
+  for (const o of list) {
+    if (!o.tax) continue; // no tax block to check
+    const tax_block = o.tax;
+
+    // (a) sum of group taxes must equal tax.total
+    const group_taxes = (tax_block.groups || []).reduce((s, g) => s + (g.tax ?? 0), 0);
+    const fee_tax = tax_block.fee?.tax ?? 0;
+    const total_tax = group_taxes + fee_tax;
+    if (total_tax !== tax_block.total) {
+      note(venue, 'tax', `${o.id}: group and fee taxes sum to ${total_tax}, but tax.total is ${tax_block.total}`);
+    }
+
+    // (b) sum of allocated discounts must equal the order's discount
+    const discount_allocated = (tax_block.discount_allocated || []).reduce((s, d) => s + d, 0);
+    const order_discount = o.discount ?? o.promo_discount ?? 0;
+    if (discount_allocated !== order_discount) {
+      note(venue, 'tax', `${o.id}: allocated discounts sum to ${discount_allocated}, but order discount is ${order_discount}`);
+    }
+
+    // (c) base amounts and totals must add up correctly
+    const group_bases = (tax_block.groups || []).reduce((s, g) => s + (g.base ?? 0), 0);
+    const fee_base = tax_block.fee?.base ?? 0;
+    const tip = o.tip ?? 0;
+    const expected_total = tax_block.inclusive
+      ? group_bases + fee_base + tip
+      : group_bases + fee_base + total_tax + tip;
+    if (o.total != null && o.total !== expected_total) {
+      note(venue, 'tax', `${o.id}: bases and tax expected total ${expected_total}, but order total is ${o.total}`);
+    }
+
+    // (d) tax_of(base, rate_ppm, inclusive) for each group
+    // Use integer rounding: for exclusive: floor((base * rate_ppm + 5e5) / 1e6)
+    //                      for inclusive: floor((base * 1e6 + (1e6 + rate_ppm)/2) / (1e6 + rate_ppm))
+    for (const g of tax_block.groups || []) {
+      const base = g.base ?? 0;
+      const rate = g.rate_ppm ?? 0;
+      let recomputed;
+      if (tax_block.inclusive) {
+        // Inclusive: net = floor((gross * 1e6 + (1e6 + rate)/2) / (1e6 + rate))
+        //            tax = gross - net
+        const numerator = BigInt(base) * BigInt(1e6) + (BigInt(1e6) + BigInt(rate)) / 2n;
+        const denominator = BigInt(1e6) + BigInt(rate);
+        const net = numerator / denominator;
+        recomputed = Number(BigInt(base) - net);
+      } else {
+        // Exclusive: tax = floor((base * rate + 5e5) / 1e6)
+        const numerator = BigInt(base) * BigInt(rate) + BigInt(5e5);
+        recomputed = Number(numerator / BigInt(1e6));
+      }
+      if (recomputed !== (g.tax ?? 0)) {
+        note(venue, 'tax', `${o.id}: group at ${rate} ppm, base ${base}: recomputed tax ${recomputed}, but stored tax is ${g.tax}`);
+      }
+    }
+
+    // Fee tax check (same as group tax)
+    if (tax_block.fee) {
+      const fee_base = tax_block.fee.base ?? 0;
+      const fee_rate = tax_block.fee.rate_ppm ?? 0;
+      let recomputed;
+      if (tax_block.inclusive) {
+        const numerator = BigInt(fee_base) * BigInt(1e6) + (BigInt(1e6) + BigInt(fee_rate)) / 2n;
+        const denominator = BigInt(1e6) + BigInt(fee_rate);
+        const net = numerator / denominator;
+        recomputed = Number(BigInt(fee_base) - net);
+      } else {
+        const numerator = BigInt(fee_base) * BigInt(fee_rate) + BigInt(5e5);
+        recomputed = Number(numerator / BigInt(1e6));
+      }
+      if (recomputed !== (tax_block.fee.tax ?? 0)) {
+        note(venue, 'tax', `${o.id}: fee at ${fee_rate} ppm, base ${fee_base}: recomputed tax ${recomputed}, but stored tax is ${tax_block.fee.tax}`);
+      }
+    }
   }
 
   console.log(`${venue}: ${list.length} orders, ${ENDED.size} terminal states known, ${Object.keys(health?.images || {}).length} images gauged, ${q.length} quarantined, witness ${w ? (w.found?.length ? 'CONTRADICTED' : `${w.total} records`) : 'not taken yet'}`);
