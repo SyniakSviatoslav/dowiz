@@ -5,6 +5,7 @@ import * as Money from '../lib/money.js';
 import {
   parseCaps, actionsFor, canTill, reasonWord, parseMinor, minorToInput, ratePpm, convertPpm,
   maxAmountFor, owed, sittingDue, money, slugOfHost, ageOf, METHODS, REASONS,
+  canTransfer, transferTargets, transferBody, canMoveSitting, refusalKey,
 } from './logic.js';
 import { renderTill, visible } from './till-view.js';
 
@@ -161,4 +162,57 @@ test('where: the venue is the host\'s first label, ?s= wins, workers.dev names n
   assert.equal(slugOfHost('dowiz-api.x.workers.dev', ''), null);
   assert.deepEqual(ageOf(59_000), { n: 59, unit: 's' });
   assert.deepEqual(ageOf(125_000), { n: 2, unit: 'm' });
+});
+
+// ── moving lines and tables ─────────────────────────────────────────────────
+const lined = (id, status, n, extra = {}) => round(status, { id, seq: 10, items: Array.from({ length: n }, (_, i) => ({ product_id: 'p' + i, quantity: 1, unit_price: 100 })), ...extra });
+
+test('transfer: only before the kitchen, unpaid, and only for take_orders', () => {
+  assert.equal(canTransfer(WAITER, lined('a', 'CONFIRMED', 2)), true, 'the positive twin');
+  assert.equal(canTransfer(WAITER, lined('a', 'PREPARING', 2)), false, 'the kitchen has it');
+  assert.equal(canTransfer(COUNTER, lined('a', 'READY', 2)), false, 'void does not make it legal');
+  assert.equal(canTransfer(WAITER, lined('a', 'PENDING', 2, { payment_status: 'paid' })), false, 'paid');
+  assert.equal(canTransfer(KITCHEN, lined('a', 'PENDING', 2)), false, 'no take_orders');
+});
+
+test('transfer: targets are every other movable round, across sittings', () => {
+  const sittings = [
+    { sitting_id: 's1', rounds: [lined('a', 'PENDING', 2), lined('b', 'CONFIRMED', 1), lined('c', 'PREPARING', 1)] },
+    { sitting_id: 's2', rounds: [lined('d', 'PENDING', 1), lined('e', 'PENDING', 1, { payment_status: 'paid' })] },
+  ];
+  assert.deepEqual(transferTargets(WAITER, sittings, 'a').map(x => x.round.id), ['b', 'd']);
+  assert.deepEqual(transferTargets(KITCHEN, sittings, 'a'), []);
+});
+
+test('transfer: the body carries both versions and the sorted, unique lines', () => {
+  const from = lined('a', 'PENDING', 3, { seq: 11 }), to = lined('b', 'PENDING', 1, { seq: 22 });
+  assert.deepEqual(transferBody('v1', from, to, [2, '0', 2]),
+    { location_id: 'v1', to_order_id: 'b', from_base_seq: 11, to_base_seq: 22, lines: [0, 2] });
+});
+
+test('transfer: refused before sending -- no target, no lines, itself, every line, out of range', () => {
+  const from = lined('a', 'PENDING', 2), to = lined('b', 'PENDING', 1);
+  assert.deepEqual(transferBody('v1', from, null, [0]), { error: 'pickRound' });
+  assert.deepEqual(transferBody('v1', from, from, [0]), { error: 'pickRound' });
+  assert.deepEqual(transferBody('v1', from, to, []), { error: 'pickLines' });
+  assert.deepEqual(transferBody('v1', from, to, [5, -1]), { error: 'pickLines' });
+  assert.deepEqual(transferBody('v1', from, to, [0, 1]), { error: 'notAllLines' });
+  assert.equal(transferBody('v1', from, to, [1]).lines[0], 1, 'the positive twin');
+});
+
+test('move sitting: a live round and nothing paid-but-unserved', () => {
+  assert.equal(canMoveSitting(WAITER, { rounds: [lined('a', 'PREPARING', 1)] }), true, 'the positive twin');
+  assert.equal(canMoveSitting(WAITER, { rounds: [lined('a', 'READY', 1, { payment_status: 'paid' })] }), false);
+  assert.equal(canMoveSitting(WAITER, { rounds: [lined('a', 'DELIVERED', 1)] }), false, 'nothing left in the room');
+  assert.equal(canMoveSitting(KITCHEN, { rounds: [lined('a', 'PENDING', 1)] }), false);
+});
+
+test('refusals: the server\'s fixed phrases map to the waiter\'s words; anything else is shown as said', () => {
+  assert.equal(refusalKey(409, 'this order changed while you were editing it'), 'changedReload');
+  assert.equal(refusalKey(409, 'the kitchen has the destination round: nothing moves between rounds after that'), 'kitchenHasIt');
+  assert.equal(refusalKey(409, 'this round is paid; taking money off it now is a refund'), 'roundPaid');
+  assert.equal(refusalKey(409, 'round o1 is paid and not yet served; move the table once it is'), 'roundPaid');
+  assert.equal(refusalKey(400, 'no open round of this sitting is anywhere but table 7'), 'alreadyThere');
+  assert.equal(refusalKey(404, 'order not found'), 'notHere');
+  assert.equal(refusalKey(500, 'hub append failed'), null);
 });

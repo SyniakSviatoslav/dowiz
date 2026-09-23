@@ -7,7 +7,7 @@
 // typed amount is here, and is string arithmetic on the currency's decimals
 // (`DECIMALS`, generated from the kernel) -- never a float, never a `/ 100`.
 import * as Money from '../lib/money.js';
-import { DECIMALS } from '../lib/vocab.js';
+import { DECIMALS, REFUSED } from '../lib/vocab.js';
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -28,8 +28,10 @@ export function stageOf(status) {
   return 'over';
 }
 
-/// `command::pay::refuses_payment`.
-const NO_PAYMENT = new Set(['CANCELLED', 'REJECTED', 'REFUNDING', 'COMPENSATED_REFUND']);
+/// `command::pay::refuses_payment`: the kernel's REFUSED set (money not kept)
+/// plus REFUNDING (money on its way back). Built from `/lib/vocab.js` so the
+/// `vocab` gate's rule holds: no hand copy of the status set.
+const NO_PAYMENT = new Set([...REFUSED, 'REFUNDING']);
 
 /// WHAT THIS PERSON IS SHOWN for one round. The server refuses the same things
 /// (`command::amend::apply`, `pay::decide`); hiding them is so a waiter is not
@@ -173,8 +175,7 @@ export function owed(round) {
 }
 
 /// `took_money`'s complement, for the bill: a refused round is not owed.
-const UNBILLED = new Set(['REJECTED', 'CANCELLED', 'COMPENSATED_REFUND']);
-export const sittingDue = s => (s?.rounds || []).filter(r => !UNBILLED.has(r.status)).reduce((a, r) => a + owed(r), 0);
+export const sittingDue = s => (s?.rounds || []).filter(r => !REFUSED.has(r.status)).reduce((a, r) => a + owed(r), 0);
 
 // ── where, and how old ──────────────────────────────────────────────────────
 
@@ -194,4 +195,59 @@ export function ageOf(ms) {
   if (s < 60) return { n: s, unit: 's' };
   if (s < 3600) return { n: Math.floor(s / 60), unit: 'm' };
   return { n: Math.floor(s / 3600), unit: 'h' };
+}
+
+// ── moving lines and tables (BLUEPRINT-POS-THE-ROOM §2.9) ───────────────────
+
+/// `command::transfer::apply`: a round gives or takes lines only BEFORE the
+/// kitchen, unpaid, and by someone who takes orders. There is no capability
+/// that makes it legal after the pass (the server says why in its header).
+export function canTransfer(caps, round) {
+  return caps.has('take_orders') && stageOf(round?.status) === 'before' && round?.payment_status !== 'paid';
+}
+
+/// Every OTHER round in the room that may receive lines: any sitting, so a
+/// guest who joins another table takes their dishes with them.
+export function transferTargets(caps, sittings, fromId) {
+  const out = [];
+  for (const s of sittings || []) for (const r of s.rounds || []) {
+    if (r.id !== fromId && canTransfer(caps, r)) out.push({ sitting: s, round: r });
+  }
+  return out;
+}
+
+/// The body `POST /staff/orders/:id/transfer` takes, or `{error}` naming the
+/// i18n key of why it would be refused. Lines are indices into the source's
+/// items AS THIS SCREEN SHOWED THEM; both versions travel so a stale screen
+/// is refused rather than moving the wrong dish.
+export function transferBody(loc, from, to, lines) {
+  const n = Array.isArray(from?.items) ? from.items.length : 0;
+  const picked = [...new Set((lines || []).map(Number))].filter(i => Number.isInteger(i) && i >= 0 && i < n).sort((a, b) => a - b);
+  if (!to || to.id === from?.id) return { error: 'pickRound' };
+  if (!picked.length) return { error: 'pickLines' };
+  // A round with no lines left is a cancellation, not a move (room_rules).
+  if (picked.length === n) return { error: 'notAllLines' };
+  return { location_id: loc, to_order_id: to.id, from_base_seq: from.seq, to_base_seq: to.seq, lines: picked };
+}
+
+/// May this sitting be moved to another table? Every round still in the room
+/// goes; a PAID one not yet served blocks it (`transfer::sitting`).
+export function canMoveSitting(caps, sitting) {
+  if (!caps.has('take_orders')) return false;
+  const live = (sitting?.rounds || []).filter(r => stageOf(r.status) !== 'over');
+  return live.length > 0 && !live.some(r => r.payment_status === 'paid');
+}
+
+/// The server's refusal, as the i18n key that says it in the waiter's
+/// language, or null to show its own words. Matched on the server's fixed
+/// phrases (`transfer.rs`, `room_rules.rs`, `transfer/sitting.rs`).
+export function refusalKey(status, message) {
+  const m = String(message || '');
+  if (status === 409 && m.includes('changed while you were editing')) return 'changedReload';
+  if (status === 409 && m.includes('the kitchen has the')) return 'kitchenHasIt';
+  if (status === 409 && (m.includes('is paid') || m.includes('has been paid'))) return 'roundPaid';
+  if (status === 400 && m.includes('is anywhere but table')) return 'alreadyThere';
+  if (status === 409 && m.includes('no lines left')) return 'notAllLines';
+  if (status === 404) return 'notHere';
+  return null;
 }

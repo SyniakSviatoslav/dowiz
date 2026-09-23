@@ -9,12 +9,13 @@
 // READS SAY THEIR AGE. The room is read every 20 s while the screen is
 // visible; the last answer is kept and, when the network is gone, drawn with
 // how old it is -- never presented as now.
-import { esc, money, parseCaps, canTill, sittingDue, slugOfHost, ageOf } from './logic.js';
+import { esc, money, parseCaps, canTill, sittingDue, slugOfHost, ageOf, canMoveSitting } from './logic.js';
 import { api, write, session, lastRoom, OUT, hooks } from './net.js';
 import { t, lang, statusWord, intlLocale, nextLang, retranslate } from './i18n.js';
 import { renderRound, bindRound, amend } from './sheet.js';
 import { loadMenu, renderAdd, bindAdd } from './menu.js';
 import { renderPay, bindPay } from './pay.js';
+import { renderTransfer, bindTransfer, renderMoveSitting, bindMoveSitting } from './transfer.js';
 import { renderTillScreen, bindTill, lastTill, keep as keepTill } from './till.js';
 import { visible } from './till-view.js';
 import { safeGet, safeSet } from '../store/storage.js';
@@ -36,6 +37,7 @@ const c = {
   render: () => render(), reload: () => loadRoom(), toast,
   remember: ({ currency }) => { if (currency) safeSet('dw_room_currency', currency); },
   tableOf: r => r?.fulfilment?.table || sitting()?.table || '',
+  sitting: () => sitting(),
 };
 
 const sitting = () => S.sittings.find(s => s.sitting_id === S.sittingId) || null;
@@ -154,7 +156,8 @@ function renderSitting(s) {
     <h2>${esc(t('table'))} ${esc(s.table || '—')}</h2>
     <ul class="tables">${(s.rounds || []).map((r, i) => `<li><button class="card" data-act="round" data-id="${esc(r.id)}">
       <span class="tbl">#${i + 1}</span><span class="status st-${esc(r.status)}">${esc(statusWord(r.status))}</span>
-      <span class="due">${money(r.total || 0, S.currency, loc)}</span></button></li>`).join('')}</ul>`;
+      <span class="due">${money(r.total || 0, S.currency, loc)}</span></button></li>`).join('')}</ul>
+    ${canMoveSitting(S.caps, s) ? `<div class="acts"><button class="btn" data-act="moveSit">${esc(t('moveSitting'))}</button></div>` : ''}`;
 }
 
 function render() {
@@ -164,11 +167,13 @@ function render() {
   hud();
   const r = round(), s = sitting();
   if (!session.get()) S.view = 'login';
-  else if (['round', 'add', 'pay'].includes(S.view) && !r) S.view = s ? 'sitting' : 'room';
-  else if (S.view === 'sitting' && !s) S.view = 'room';
+  else if (['round', 'add', 'pay', 'transfer'].includes(S.view) && !r) S.view = s ? 'sitting' : 'room';
+  else if (['sitting', 'moveSit'].includes(S.view) && !s) S.view = 'room';
   if (S.view === 'round') { root.innerHTML = renderRound(c, r); return bindRound(c, root, r); }
   if (S.view === 'add') { root.innerHTML = renderAdd(c); return bindAdd(c, root, r, amend); }
   if (S.view === 'pay') { root.innerHTML = renderPay(c, r); return bindPay(c, root, r); }
+  if (S.view === 'transfer') { root.innerHTML = renderTransfer(c, r); return bindTransfer(c, root, r); }
+  if (S.view === 'moveSit') { root.innerHTML = renderMoveSitting(c, s); return bindMoveSitting(c, root, s); }
   if (S.view === 'till' && canTill(S.caps)) { root.innerHTML = renderTillScreen(c); return bindTill(c, root); }
   if (S.view === 'login') { root.innerHTML = renderLogin(); }
   else if (S.view === 'sitting') root.innerHTML = renderSitting(s);
@@ -190,6 +195,7 @@ function render() {
       return render();
     }
     if (act === 'round') { S.roundId = id; S.view = 'round'; return render(); }
+    if (act === 'moveSit') { S.roundId = null; S.view = 'moveSit'; return render(); }
   };
 }
 

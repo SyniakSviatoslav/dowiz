@@ -78,6 +78,10 @@ ul{list-style:none;margin:0;padding:0}
 .line-main .name{flex:1;min-width:0;overflow-wrap:anywhere}
 .line-main .qty{font-weight:700;min-width:2.5ch}
 .line-acts{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-2)}
+/* a line picked to move to another round (transfer.js) */
+.line.pick{display:flex;gap:var(--space-2);align-items:baseline;width:100%;min-height:var(--tap);padding:var(--space-3);border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface);color:var(--ink);font:inherit;text-align:start;cursor:pointer}
+.line.pick .name{flex:1;min-width:0;overflow-wrap:anywhere}
+.line.pick.on{border-color:var(--accent-edge);box-shadow:inset 0 0 0 2px var(--accent-edge)}
 .ask{margin-top:var(--space-2);padding:var(--space-3);border:1px solid var(--accent-edge);border-radius:var(--radius-md);background:var(--bg)}
 .ask p{margin:0 0 var(--space-2);font-weight:600}
 .chips{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2)}

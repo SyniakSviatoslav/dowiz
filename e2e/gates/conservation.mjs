@@ -12,7 +12,7 @@
 // `StockLedger::stranded()` is a conservation report. What was missing was
 // anything that ran them as a gate.
 //
-// TEN LAWS, each over the live platform:
+// ELEVEN LAWS, each over the live platform:
 //   1. every order's folded status equals the status it is served with
 //   2. no order is stranded: nothing is held by an order that has ended
 //   3. the money on an order is its lines plus fees minus its discount
@@ -28,6 +28,9 @@
 //      over/short is its count minus float + cash paid + pay-in - pay-out;
 //      the cash the ORDERS hold equals the cash the till folded; and no cash
 //      was taken with no till open
+//  11. a transfer between rounds is two halves of one move: for every
+//      transfer id, exactly one round gave and one took, each names the
+//      other, and they agree on the amount and the comp that moved (G4)
 //
 // It takes an owner token per venue and reads only. Exit 1 on any breach, with
 // the order named -- a gate whose failure cannot be chased is a dashboard.
@@ -66,8 +69,13 @@ for (const host of HOSTS) {
   // INTEGER MINOR UNITS THROUGHOUT. A float here would make the gate itself a
   // source of false alarms, which is how a conservation check gets switched off.
   for (const o of list) {
+    // A LINE'S PRICE IS `unit_price` -- the name `pricing::Line` and the kernel
+    // write. This law read only `price`, which no order line carries, so
+    // `lines` was 0 on every order and the `lines > 0` guard skipped them all:
+    // measured 2026-09-23, law 3 checked 0 of 108 live orders. Read with
+    // `unit_price`, all 108 are checked and all 108 add up.
     const lines = (o.items || []).reduce(
-      (n, i) => n + (i.total ?? ((i.price ?? 0) * (i.quantity ?? 1))), 0);
+      (n, i) => n + (i.total ?? ((i.unit_price ?? i.price ?? 0) * (i.quantity ?? 1))), 0);
     const fee = o.delivery_fee ?? 0;
     const discount = o.discount ?? o.promo_discount ?? 0;
     // THE TIP WAS MISSING FROM THIS LAW AND IT IS PART OF THE TOTAL.
@@ -381,6 +389,39 @@ for (const host of HOSTS) {
       if (!till.periods.some((per) => within(per, c.at))) {
         note(venue, 'till', `${c.id}: ${c.n} ${c.cur} cash at ${c.at} with no till open`);
       }
+    }
+  }
+
+  // ── 11. a transfer is two halves of one move (G4) ─────────────────────
+  //
+  // BLUEPRINT-POS-THE-ROOM §2.9. `command::transfer` writes one `Amended` on
+  // each round in ONE object turn, each carrying `amended[].transfer = {id,
+  // dir, other, amount, comp}`. The native tests prove the command conserves;
+  // this proves the LOG still does: a half with no partner is money that left
+  // one check and arrived on none (or arrived from nowhere). Law 3 then holds
+  // each round's own total to its lines. No transfers at all is green.
+  const halves = new Map();
+  for (const o of list) {
+    for (const a of Array.isArray(o.amended) ? o.amended : []) {
+      const t = a && a.transfer;
+      if (!t || !t.id) continue;
+      if (!halves.has(t.id)) halves.set(t.id, []);
+      halves.get(t.id).push({ order: o.id, ...t });
+    }
+  }
+  for (const [id, hs] of halves) {
+    const gave = hs.filter((h) => h.dir === 'out');
+    const took = hs.filter((h) => h.dir === 'in');
+    if (hs.length !== 2 || gave.length !== 1 || took.length !== 1) {
+      note(venue, 'transfer', `${id}: ${gave.length} round(s) gave and ${took.length} took (${hs.map((h) => h.order).join(', ')}) -- a move is exactly one of each`);
+      continue;
+    }
+    const [a, b] = [gave[0], took[0]];
+    if (a.other !== b.order || b.other !== a.order) {
+      note(venue, 'transfer', `${id}: ${a.order} says it gave to ${a.other}, ${b.order} says it took from ${b.other}`);
+    }
+    if (a.amount !== b.amount || (a.comp ?? 0) !== (b.comp ?? 0)) {
+      note(venue, 'transfer', `${id}: ${a.order} gave ${a.amount} (comp ${a.comp ?? 0}), ${b.order} took ${b.amount} (comp ${b.comp ?? 0})`);
     }
   }
 

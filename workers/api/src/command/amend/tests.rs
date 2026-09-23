@@ -200,3 +200,19 @@ fn a_round_moves_table_while_it_cooks() {
     assert_eq!(r["total"], json!(1500), "a move is not a price change");
     assert!(!restock);
 }
+
+/// AN AMENDMENT NEVER TAKES A ROUND BELOW WHAT WAS PAID ON IT: the difference
+/// would be money owed back, a refund. What was paid is the round's recorded
+/// `payments` — nothing writes an order-level `paid`, and the guard that read
+/// one never fired. The twin removes a line and stays above the payment.
+#[test]
+fn an_amendment_below_what_was_paid_is_refused() {
+    let mut part = round("CONFIRMED");
+    part["payments"] = json!([{"amount": 1300, "method": "cash"}]);
+    let mut i = input(vec![Op::Remove { line: 0 }]);
+    i.reason = Some("guest_changed".into());
+    assert!(matches!(apply(&view(&part), &i), Err(Refused::Conflict(m)) if m.contains("paid")));
+    part["payments"] = json!([{"amount": 300, "method": "cash"}]);
+    let (r, _) = apply(&view(&part), &i).expect("300 paid, 300 left");
+    assert_eq!(r["total"], json!(300));
+}

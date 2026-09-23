@@ -13,7 +13,7 @@
 // The list is the module graph of `/room/app.js`, every static import
 // reachable from it (relative imports resolve to these same URLs).
 
-const SHELL_CACHE = 'dowiz-room-shell-2026-09-23b';
+const SHELL_CACHE = 'dowiz-room-shell-2026-09-23c';
 const SHELL = [
   '/room/',
   '/room/app.js',
@@ -23,6 +23,7 @@ const SHELL = [
   '/room/sheet.js',
   '/room/menu.js',
   '/room/pay.js',
+  '/room/transfer.js',
   '/room/till.js',
   '/room/till-view.js',
   '/room/room.css',

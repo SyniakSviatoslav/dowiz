@@ -9,7 +9,7 @@
 //
 // What is hidden is what `actionsFor` says the caps do not allow; the server
 // still refuses it (`may_void`, the stage rule), and its words are shown.
-import { esc, money, actionsFor, owed, REASONS, reasonWord } from './logic.js';
+import { esc, money, actionsFor, owed, REASONS, reasonWord, canTransfer, transferTargets, canMoveSitting } from './logic.js';
 
 const CHANGED = 'changed while you were editing';
 
@@ -49,6 +49,8 @@ export function renderRound(c, round) {
     <div class="acts">
       ${can.add ? `<button class="cta" data-act="add">${esc(t('addItem'))}</button>` : ''}
       ${can.pay ? `<button class="cta" data-act="pay">${esc(t('take'))}</button>` : ''}
+      ${items.length > 1 && canTransfer(S.caps, round) && transferTargets(S.caps, S.sittings, round.id).length ? `<button class="btn" data-act="transfer">${esc(t('moveLines'))}</button>` : ''}
+      ${c.sitting() && canMoveSitting(S.caps, c.sitting()) ? `<button class="btn" data-act="moveSit">${esc(t('moveSitting'))}</button>` : ''}
     </div>
     ${can.table ? `<form class="row-form" data-form="table"><label>${esc(t('moveTable'))}
       <input name="table" required maxlength="24" autocomplete="off" inputmode="text"></label>
@@ -110,6 +112,8 @@ export function bindRound(c, root, round) {
     if (act === 'back') { S.view = 'room'; S.ask = null; return c.render(); }
     if (act === 'add') { S.view = 'add'; S.basket = {}; return c.render(); }
     if (act === 'pay') { S.view = 'pay'; S.payNote = null; return c.render(); }
+    if (act === 'transfer') { S.view = 'transfer'; S.moveForm = null; return c.render(); }
+    if (act === 'moveSit') { S.view = 'moveSit'; return c.render(); }
     if (act === 'qty') { b.disabled = true; await amend(c, round, [{ op: 'set_qty', line, qty: Number(b.dataset.q) }]); return c.render(); }
     if (act === 'ask') { S.ask = { op: b.dataset.op, line, kind: null }; return c.render(); }
     if (act === 'unask') { S.ask = null; return c.render(); }

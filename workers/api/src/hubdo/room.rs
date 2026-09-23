@@ -32,6 +32,8 @@ impl HubImages {
         match what {
             "amend" => reply(self.amend(req.json().await?).await?),
             "pay" => reply(self.pay(req.json().await?).await?),
+            "transfer" => reply(self.transfer(req.json().await?).await?),
+            "move_sitting" => reply(self.move_sitting(req.json().await?).await?),
             // THE TILL (`room/till.rs`). One segment each: `/fold/room/till_open`.
             "till_open" => reply(self.till(Cmd::Open(req.json().await?)).await?),
             "till_pay_in" => reply(self.till(Cmd::PayIn(req.json().await?)).await?),
@@ -141,4 +143,62 @@ impl HubImages {
         Ok(Ok(crate::command::pay::PayOut { merged: round.to_string(), seq, generation: next }))
     }
 
+    /// TRANSFER LINES BETWEEN ROUNDS (§2.9): both rounds' deltas, the shelf
+    /// following the lines, and both broadcasts, in one turn.
+    async fn transfer(
+        &self,
+        input: crate::command::transfer::TransferIn,
+    ) -> Result<std::result::Result<crate::command::transfer::TransferOut, Refused>> {
+        let (log_gen, listed) = self.orders_view().await?;
+        let from = listed.iter().find(|o| o.order_id == input.from_order_id);
+        let to = listed.iter().find(|o| o.order_id == input.to_order_id);
+        let (_, mut hub) = self.log_hub().await?;
+        let (stock_gen, mut stock) = self.stock_log().await?;
+        let before = stock.len();
+        let d = match crate::command::transfer::decide(&mut hub, &mut stock, from, to, &input) {
+            Ok(v) => v,
+            Err(r) => return Ok(Err(r)),
+        };
+        let moved = (stock.len() != before).then_some((stock_gen, &stock));
+        let next = match self.write_both("a transfer", log_gen, &hub, moved).await? {
+            Ok(n) => n,
+            Err(r) => return Ok(Err(r)),
+        };
+        self.broadcast(dowiz_hub::EventKind::Amended as u8, &input.from_order_id, &d.from_body, next);
+        self.broadcast(dowiz_hub::EventKind::Amended as u8, &input.to_order_id, &d.to_body, next);
+        Ok(Ok(crate::command::transfer::TransferOut {
+            from_merged: d.moved.from.to_string(),
+            from_seq: d.from_seq,
+            to_merged: d.moved.to.to_string(),
+            to_seq: d.to_seq,
+            generation: next,
+        }))
+    }
+
+    /// MOVE A SITTING TO ANOTHER TABLE (§2.9): one `Amended` per round still
+    /// in the room, one write, one broadcast each. The shelf is not read.
+    async fn move_sitting(
+        &self,
+        input: crate::command::transfer::sitting::MoveIn,
+    ) -> Result<std::result::Result<crate::command::transfer::sitting::MoveOut, Refused>> {
+        let (log_gen, listed) = self.orders_view().await?;
+        let (_, mut hub) = self.log_hub().await?;
+        let moved = match crate::command::transfer::sitting::decide(&mut hub, &listed, &input) {
+            Ok(v) => v,
+            Err(r) => return Ok(Err(r)),
+        };
+        let next = match self.write_both("a table move", log_gen, &hub, None).await? {
+            Ok(n) => n,
+            Err(r) => return Ok(Err(r)),
+        };
+        for m in &moved {
+            self.broadcast(dowiz_hub::EventKind::Amended as u8, &m.order_id, &m.body, next);
+        }
+        Ok(Ok(crate::command::transfer::sitting::MoveOut {
+            sitting_id: input.sitting_id,
+            table: input.table.trim().to_string(),
+            moved: moved.into_iter().map(|m| (m.order_id, m.seq)).collect(),
+            generation: next,
+        }))
+    }
 }

@@ -57,6 +57,18 @@ const tillOrders = () => [
   { id: 'r5', total: 5000, items: [{ price: 5000, quantity: 1 }], payments: [{ method: 'card', amount: 900, at: T + 40 }] },
 ];
 
+// ── law 11's fixtures: r1 gave its comped maki to r2 ──
+const xfer = (inOver = {}) => {
+  const t = { id: 'x1', lines: 1, amount: 1200, comp: 1200 };
+  return [
+    { id: 'r1', total: 300, discount: 0, items: [{ unit_price: 300, quantity: 1 }],
+      amended: [{ by: 'p1', transfer: { ...t, dir: 'out', other: 'r2' } }] },
+    { id: 'r2', total: 1500, discount: 1200,
+      items: [{ unit_price: 1500, quantity: 1 }, { unit_price: 600, quantity: 2, comped: true }],
+      amended: [{ by: 'p1', transfer: { ...t, dir: 'in', other: 'r1', ...inOver } }] },
+  ];
+};
+
 const witnessed = (over) => ({
   configured: true,
   witness: { atMs: Date.now() - NIGHT, records: 6, archived: 0, total: 6, tip: 'aa', found: [], ...over },
@@ -131,6 +143,44 @@ const CASES = {
     orders: [{ id: 'ord_d', total: 1500, tip: 300, delivery_fee: 200, discount: 300,
                items: [{ price: 650, quantity: 2 }] }],
     red: false,
+  },
+
+  // A ROOM ROUND'S LINES ARE `unit_price` -- the only name a live order line
+  // carries. Before this case the law skipped every live order (lines = 0).
+  'a unit_price order adds up': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{ id: 'ord_u', total: 1100, tip: 100, discount: 200,
+               items: [{ unit_price: 600, quantity: 2 }] }],
+    red: false,
+  },
+  'a unit_price order that does not add up': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{ id: 'ord_v', total: 1300, tip: 100, discount: 200,
+               items: [{ unit_price: 600, quantity: 2 }] }],
+    red: 'ord_v: total 1300',
+  },
+
+  // ── LAW 11: A TRANSFER IS TWO HALVES ──
+  //
+  // The real shape `command::transfer` writes: the comped maki (1200) left r1
+  // for r2 and took its 1200 discount along. Each round adds up on its own
+  // (law 3), so only law 11 is under test.
+  'a transfer whose halves agree': {
+    health: ok, backup: witnessed(), orders: xfer(), red: false,
+  },
+  'a transfer with no receiving half': {
+    health: ok, backup: witnessed(), orders: [xfer()[0]],
+    red: 'x1: 1 round(s) gave and 0 took',
+  },
+  'a transfer whose halves disagree on the money': {
+    health: ok, backup: witnessed(), orders: xfer({ amount: 600 }),
+    red: 'r1 gave 1200 (comp 1200), r2 took 600',
+  },
+  'a transfer whose halves name other rounds': {
+    health: ok, backup: witnessed(), orders: xfer({ other: 'r9' }),
+    red: 'r2 says it took from r9',
   },
 
   // ── LAW 8 ──

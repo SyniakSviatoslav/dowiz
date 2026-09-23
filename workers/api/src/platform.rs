@@ -200,6 +200,7 @@ pub async fn hubs(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
                 "url": format!("https://{}.{}/", r.slug, platform),
                 "console": format!("https://{}.{}/admin/", r.slug, platform),
                 "courier": format!("https://{}.{}/courier/", r.slug, platform),
+                "room": format!("https://{}.{}/room/", r.slug, platform),
             })
         })
         .collect();
@@ -431,6 +432,7 @@ pub async fn create_hub(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
         "url": format!("https://{slug}.{platform}/"),
         "console": format!("https://{slug}.{platform}/admin/"),
         "courier": format!("https://{slug}.{platform}/courier/"),
+        "room": format!("https://{slug}.{platform}/room/"),
     }))
 }
 

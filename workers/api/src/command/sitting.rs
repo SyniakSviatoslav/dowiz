@@ -54,9 +54,18 @@ pub fn bill(rounds: &[Round<'_>]) -> i64 {
     rounds.iter().filter(|r| r.billed()).map(|r| r.int("total")).sum()
 }
 
+/// What has been paid against ONE round: Σ its recorded `payments`, each in
+/// the order's currency (`pay::settles`). NOTHING WRITES AN ORDER-LEVEL
+/// `paid` — `command::pay` only appends to `payments[]` — and reading one made
+/// every live sitting read 0 paid: a paid-up table never left the room, and
+/// the reprice guard "paid > total" never fired.
+pub fn paid_of(order: &Value) -> i64 {
+    order.get("payments").and_then(Value::as_array).into_iter().flatten().map(super::pay::settles).sum()
+}
+
 /// Σ what has been paid against those rounds.
 pub fn paid(rounds: &[Round<'_>]) -> i64 {
-    rounds.iter().filter(|r| r.billed()).map(|r| r.int("paid")).sum()
+    rounds.iter().filter(|r| r.billed()).map(|r| paid_of(&r.order)).sum()
 }
 
 /// Is this sitting still at its table? A round still cooking, or a bill not
@@ -81,7 +90,8 @@ pub fn card(sitting_id: &str, rounds: &[Round<'_>]) -> Value {
             "id": r.view.order_id, "seq": r.view.seq, "status": r.status(),
             "items": r.order.get("items"), "subtotal": r.int("subtotal"),
             "discount": r.int("discount"), "tip": r.int("tip"), "total": r.int("total"),
-            "paid": r.int("paid"), "payment_status": r.order.get("payment_status"),
+            "paid": paid_of(&r.order), "payments": r.order.get("payments"),
+            "payment_status": r.order.get("payment_status"),
             "placed_by": r.order.get("placed_by"), "amended": r.order.get("amended"),
             "adjustments": r.order.get("adjustments"), "created_at_ms": r.int("created_at_ms"),
         })).collect::<Vec<_>>(),

@@ -130,7 +130,7 @@ pub fn reprice(order: &mut Value, items: Vec<Value>, discount: i64) -> Result<()
     let fee = order.get("delivery_fee").and_then(Value::as_i64).unwrap_or(0);
     let tip = order.get("tip").and_then(Value::as_i64).unwrap_or(0);
     let total = subtotal - discount + fee + tip;
-    let paid = order.get("paid").and_then(Value::as_i64).unwrap_or(0);
+    let paid = super::sitting::paid_of(order);
     if paid > total {
         return Err(Refused::Conflict(format!("{paid} has been paid and the round would cost {total}")));
     }
