@@ -1305,75 +1305,9 @@ pub fn orders_state(hub: &Hub) -> Vec<dowiz_hub::Event> {
 // that use them, not in the storage module -- which is also how this file gave
 // back the two lines the clock injection added to its signatures.
 
-/// Every field the HUB owns, carried across a kernel transition.
-///
-/// THE KERNEL RETURNS ITS OWN ORDER and knows nothing about delivery, contact,
-/// discounts, tips or timestamps, so anything not on this list is ERASED by the
-/// next status change.
-///
-/// It lives here because there were THREE copies of it -- one in the owner's
-/// action, one in the courier's, one implied by the storefront -- and they had
-/// drifted. The courier's copy had eight fields and was missing
-/// `created_at_ms`, which made every delivery invisible to the earnings fold
-/// (its "today" filter compares against a timestamp that had become zero), and
-/// missing `tip`, which quietly deleted the courier's own money on pickup.
-///
-/// A rule with three copies is three rules. This is the one.
-pub const HUB_OWNED: &[&str] = &[
-    "location_id",
-    "contact",
-    "fulfilment",
-    "payment",
-    "payment_status",
-    // THE PAYMENT'S OWN RECORD, which used to be erased by the first status
-    // change. Every transition stores `delta(old, merged)` where `merged` is
-    // the kernel's order plus exactly these keys, and `fold::delta` records a
-    // key missing from `merged` as a DELETION. `payment_status` was carried
-    // and its evidence was not: the webhook writes the intent id, the amount
-    // it actually received and the event fingerprint, and one click on
-    // "confirm" deleted all three. A crypto order likewise forgot which of the
-    // venue's wallets it was to be paid into. stripe.rs calls that difference
-    // "the thing someone will need later", and it was gone before anyone
-    // could need it.
-    "payment_intent",
-    "amount_received",
-    "stripe_event",
-    "crypto",
-    // THE LINES THEMSELVES, because the kernel re-emits them with four fields
-    // and `delta` deletes whatever it leaves out. A dish's NAME is written onto
-    // the line at placement so a receipt stays true after the dish is renamed
-    // or deleted; without this it would survive exactly as long as the order
-    // sat at PENDING and vanish on the first confirm. The kernel does not
-    // change `items` on a status transition — every transition it accepts is
-    // about status — so carrying the stored lines forward is the same data,
-    // with the part the hub owns still on it.
-    "items",
-    "delivery_fee",
-    "courier_id",
-    "created_at_ms",
-    "rejection_reason",
-    "cash_collected",
-    "courier_note",
-    "scheduled_for_ms",
-    "tip",
-    "discount",
-    "promo",
-    "feedback",
-    "assigned_at_ms",
-    "accepted_at_ms",
-    "total",
-    "at", // when each status was entered: the live estimate measures from these
-    "tax", // stamped at placement (TAX blueprint §1.8); a confirm must not erase it
-];
-
-/// Copy `HUB_OWNED` from the order as it was onto the order the kernel returned.
-pub fn carry_over(old: &serde_json::Value, updated: &mut serde_json::Value) {
-    for k in HUB_OWNED {
-        if let Some(v) = old.get(*k) {
-            updated[*k] = v.clone();
-        }
-    }
-}
+/// `HUB_OWNED` and `carry_over` live in `hubstore/carry.rs`.
+mod carry;
+pub use carry::carry_over;
 
 // `with_hub` WAS HERE, AND ITS ONE REMAINING CALLER WAS PLACEMENT.
 //
