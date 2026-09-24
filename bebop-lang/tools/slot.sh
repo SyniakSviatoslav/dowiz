@@ -70,7 +70,7 @@ LABEL=${1:?usage: tools/slot.sh <label> <command ...>}; shift
 # times out on a fifo nobody writes to. A waiting lane now costs ONE blocked process.
 procn() { set -- /proc/[0-9]*; PROCN=$#; }          # no fork; also does not count itself
 [ -p "$LOCKDIR/tick" ] || mkfifo "$LOCKDIR/tick" 2>/dev/null   # one fork, once per box, ever
-exec 7<>"$LOCKDIR/tick" 2>/dev/null || true          # O_RDWR on a fifo: read blocks, never EOFs
+{ exec 7<>"$LOCKDIR/tick"; } 2>/dev/null || true   # O_RDWR on a fifo: read blocks, never EOFs. The braces matter: a bare `exec ... 2>/dev/null` makes the 2>/dev/null PERMANENT and every compile error became a silent rc=101 (found by lanes L62c/L63c, 2026-09-24)
 nap() { read -t "$1" -u 7 _ 2>/dev/null || :; }      # no fork
 SECONDS=0; procn
 while [ "$PROCN" -gt "$PHANTOM_CAP" ]; do
