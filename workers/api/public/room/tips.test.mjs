@@ -11,8 +11,17 @@ const CLOSE = { kind: 'till.closed', open: false, opened_at: 1000, closed_at: 90
 test('tips: the period is the drawer\'s -- opening to close, or to now while open', () => {
   assert.equal(tipsQuery(CLOSE, 'v 1'), '/staff/till/tips?location_id=v%201&from_ms=1000&to_ms=9000');
   assert.equal(tipsQuery(OPEN, 'v1'), '/staff/till/tips?location_id=v1&from_ms=1000', 'open: the server reads to now');
-  assert.equal(tipsQuery(null, 'v1'), null, 'a phone that does not know the till asks nothing');
-  assert.equal(tipsQuery({ kind: 'till.counted', open: true }, 'v1'), null, 'no start, no period');
+});
+
+test('tips: with no till known, the phone still asks -- for the venue\'s day', () => {
+  assert.equal(tipsQuery(null, 'v1'), '/staff/till/tips?location_id=v1', 'a card-only day: no drawer, still tips');
+  assert.equal(tipsQuery({ kind: 'till.counted', open: true }, 'v1'), '/staff/till/tips?location_id=v1', 'no start: the server\'s day');
+  assert.equal(tipsQuery(null, ''), null, 'no venue, nothing to ask');
+});
+
+test('tips: the day\'s answer says it is the day, a drawer\'s says the drawer', () => {
+  assert.ok(renderTips({ day: true, tips: [] }, T, 'en').includes('[tipsHintDay]'));
+  assert.ok(renderTips({ tips: [] }, T, 'en').includes('[tipsHint]'));
 });
 
 test('tips: each person\'s amount in its own currency, by name when the server knows it', () => {

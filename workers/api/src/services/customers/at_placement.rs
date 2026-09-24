@@ -21,6 +21,10 @@ pub async fn allergy_check(
     phone: &str,
     dishes: &[(String, String)],
 ) -> Result<std::result::Result<(), String>> {
+    // No phone, no card: the empty key is every phone-less guest at once.
+    if !super::roll::names_a_person(phone) {
+        return Ok(Ok(()));
+    }
     let key = super::handlers::customer_key(secret, phone);
     let pending = super::identity::alias_at_placement(secret, phone);
     let people = crate::hubstore::load_table(place, IMAGE_PEOPLE, PEOPLE_BYTES).await?;

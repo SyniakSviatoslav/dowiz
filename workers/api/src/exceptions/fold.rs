@@ -111,7 +111,10 @@ pub fn order_rows(events: &[dowiz_hub::Event], late_ms: i64) -> Vec<Row> {
             }
         }
         if let Some(r) = o.get("refund").filter(|r| r.get("by").is_some()) {
-            out.push(row(n(r, "at"), REFUND, o, id, s(r, "reason"), n(r, "owed"), s(r, "by").unwrap_or_default()));
+            // `owed` is in the currency the refund RECORDED (the order's, or the venue's).
+            let mut row = row(n(r, "at"), REFUND, o, id, s(r, "reason"), n(r, "owed"), s(r, "by").unwrap_or_default());
+            row.currency = s(r, "currency").or(row.currency);
+            out.push(row);
         }
     }
     out

@@ -10,6 +10,7 @@
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, ago, clock, day,
          busy, confirm, ORDER_ID_SHOWN } from '/admin/core.js';
 import { st, payName, intlLocale } from '/admin/i18n.js';
+import { paidWith, paidIcon } from '/lib/paid-with.js';
 // ONE ANSWER TO "WHERE IS THIS GOING", shared with the storefront and matching
 // the server's. `isPickup` below was the fifth copy of a question that has
 // three answers, and it called a table order a delivery.
@@ -127,7 +128,7 @@ function row(o){
     <span class="meta">
       ${platformOf(o) ? `<span class="chan" data-chan="${esc(o.channel)}">${icon('shopping-bag')}${esc(platformOf(o))}</span>` : ''}
       <span>${(b => `${icon(b.icon)}<span data-t="${b.key}"></span>${b.table ? ' ' + esc(b.table) : ''}`)(badgeOf(o))}</span>
-      <span>${icon(o.payment === 'cash' ? 'cash' : o.payment === 'crypto' ? 'currency-bitcoin' : 'credit-card')}${esc(payName(o.payment))}</span>
+      ${paidWith(o).length ? `<span>${icon(paidIcon(paidWith(o)))}${esc(paidWith(o).map(payName).join(' + '))}</span>` : ''}
       ${o.eta?.range ? `<span class="live">${icon('clock')}<b>${esc(o.eta.range)}</b> ${t('etaMin')}</span>` : ''}
       ${o.courier_id ? `<span>${icon('bike')}${esc(courierName(o.courier_id))}</span>` : ''}
       ${seenAt(o) ? `<span>${icon('eye')}<span data-t="seenAt"></span> ${esc(clock(seenAt(o)))}</span>` : ''}
@@ -248,7 +249,7 @@ function orderText(o){
   const lines = (o.items || []).map(i => `${i.quantity}× ${i.name || i.product_id}`).join('\n');
   const addr = o.fulfilment?.address;
   const parts = addr?.parts ? Object.entries(addr.parts).filter(([k, v]) => k !== 'private' && v).map(([k, v]) => `${t(k)}: ${v}`).join(', ') : '';
-  return `#${o.id.slice(0, ORDER_ID_SHOWN)} · ${st(o.status)}\n${o.contact?.name || ''} ${o.contact?.phone || ''}\n${isPickup(o) ? t('pickup') : (addr?.line || '')}${parts ? '\n' + parts : ''}\n${lines}\n${t('total')}: ${money(o.total ?? 0)} · ${payName(o.payment)}${o.fulfilment?.note || addr?.note ? '\n' + t('note') + ': ' + (o.fulfilment?.note || addr?.note) : ''}`;
+  return `#${o.id.slice(0, ORDER_ID_SHOWN)} · ${st(o.status)}\n${o.contact?.name || ''} ${o.contact?.phone || ''}\n${isPickup(o) ? t('pickup') : (addr?.line || '')}${parts ? '\n' + parts : ''}\n${lines}\n${t('total')}: ${money(o.total ?? 0)} · ${paidWith(o).map(payName).join(' + ')}${o.fulfilment?.note || addr?.note ? '\n' + t('note') + ': ' + (o.fulfilment?.note || addr?.note) : ''}`;
 }
 
 export function openOrder(id){
@@ -267,7 +268,7 @@ export function openOrder(id){
       ${Object.keys(parts).length ? `<br><small class="muted">${['street', 'house', 'apartment', 'entrance', 'floor'].filter(k => parts[k]).map(k => `${esc(t(k))}: ${esc(parts[k])}`).join(' · ')}${parts.private ? ` · ${esc(t('privateHouse'))}` : ''}</small>` : ''}
       ${addr?.lat_udeg ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${addr.lat_udeg / 1e6},${addr.lon_udeg / 1e6}" target="_blank" rel="noopener">${esc(t('onMap') === 'onMap' ? 'Google Maps' : t('onMap'))}</a>` : ''}`}</span></div>
     ${(o.fulfilment?.note || addr?.note) ? `<div class="fact">${icon('note')}<span class="v"><span class="k" data-t="note"></span>${esc(o.fulfilment?.note || addr?.note)}</span></div>` : ''}
-    <div class="fact">${icon(o.payment === 'cash' ? 'cash' : 'credit-card')}<span class="v"><span class="k" data-t="payment"></span>${esc(payName(o.payment))}${o.tip ? ` · ${t('tip')} ${money(o.tip)}` : ''}${o.crypto?.wallet ? ` · ${esc(o.crypto.wallet.symbol)}` : ''}</span></div>
+    <div class="fact">${icon(paidIcon(paidWith(o)))}<span class="v"><span class="k" data-t="payment"></span>${esc(paidWith(o).map(payName).join(' + ') || '—')}${o.tip ? ` · ${t('tip')} ${money(o.tip)}` : ''}${o.crypto?.wallet ? ` · ${esc(o.crypto.wallet.symbol)}` : ''}</span></div>
     ${o.courier_id ? `<div class="fact">${icon('bike')}<span class="v"><span class="k" data-t="courier"></span>${esc(courierName(o.courier_id))}</span></div>` : ''}
     <p class="eyebrow mt-3" data-t="items"></p>
     ${(o.items || []).map(it => `<div class="line"><span class="q">${it.quantity}×</span><span class="n">${esc(it.name || it.product_id)}${it.modifier_ids?.length ? `<small>${esc(it.modifier_ids.join(', '))}</small>` : ''}</span>${moneyEl((it.unit_price ?? 0) * (it.quantity || 1))}</div>`).join('')}

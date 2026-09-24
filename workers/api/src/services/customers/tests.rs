@@ -119,8 +119,8 @@ fn an_order_with_no_phone_is_skipped_and_never_becomes_one_fictitious_customer()
 #[test]
 fn every_sort_breaks_its_ties_on_who_was_here_last() {
     let os = [
-        order("old", "O", 10, 1000, 0, "DELIVERED"),
-        order("new", "N", 99, 1000, 0, "DELIVERED"),
+        order("111", "O", 10, 1000, 0, "DELIVERED"),
+        order("222", "N", 99, 1000, 0, "DELIVERED"),
     ];
     for sort in [Sort::Spent, Sort::Orders] {
         let r = rolled(&os, sort);
@@ -133,10 +133,10 @@ fn every_sort_breaks_its_ties_on_who_was_here_last() {
 #[test]
 fn spent_and_orders_are_two_different_orderings() {
     let os = [
-        order("big", "B", 10, 9000, 0, "DELIVERED"),
-        order("often", "F", 20, 100, 0, "DELIVERED"),
-        order("often", "F", 30, 100, 0, "DELIVERED"),
-        order("often", "F", 40, 100, 0, "DELIVERED"),
+        order("333", "B", 10, 9000, 0, "DELIVERED"),
+        order("444", "F", 20, 100, 0, "DELIVERED"),
+        order("444", "F", 30, 100, 0, "DELIVERED"),
+        order("444", "F", 40, 100, 0, "DELIVERED"),
     ];
     assert_eq!(rolled(&os, Sort::Spent)[0].name, "B");
     assert_eq!(rolled(&os, Sort::Orders)[0].name, "F");

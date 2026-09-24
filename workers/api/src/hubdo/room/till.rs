@@ -43,7 +43,7 @@ impl HubImages {
 
     /// The venue's currency, from its own record. No record yet is lek, as
     /// `services::venue::currency_of` says; an UNREADABLE record is an error.
-    pub(super) async fn venue_currency(&self) -> Result<String> {
+    pub(in crate::hubdo) async fn venue_currency(&self) -> Result<String> {
         match self.image(CATALOG_IMAGE).await? {
             None => Ok("ALL".into()),
             Some((_, bytes)) => {

@@ -3,7 +3,7 @@
 // `POST /api/staff/till/{open,count,close,pay_in,pay_out}` (till.rs).
 //
 // The tips beside it are READ (`GET /api/staff/till/tips`, the period of
-// the drawer this phone knows). There is no till READ route, so this screen shows the last answer THIS
+// the drawer this phone knows, else the venue's day -- shown with or without a till). There is no till READ route, so this screen shows the last answer THIS
 // phone received, stored only as `visible()` -- the projection that cannot
 // carry `expected` before a close. Opening on a second phone shows
 // "not known here" until that phone does something to the drawer.

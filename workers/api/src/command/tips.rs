@@ -14,7 +14,16 @@
 //! THE PERIOD is the payment's `at`, both ends included, as the till's
 //! `within` does. PER CURRENCY: an order in euros and one in lek are never
 //! summed into one number.
+//!
+//! A REFUNDED TIP IS NOT EARNED. A refund hands back what was taken, and
+//! `pay::settles` counts the tip in what was taken, so the tip goes back with
+//! the rest. The rule is the takings' own (`status::took_money`): an order
+//! that is REJECTED, CANCELLED or COMPENSATED_REFUND carries no tip for
+//! anyone; a REFUNDING order still counts, as its money still does, until the
+//! money is handed back. So the CHECK reads: Σ over people == Σ `tip` over the
+//! period's rounds that took money.
 
+use crate::services::orders::status::took_money;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -33,6 +42,9 @@ pub struct PersonTip {
 pub fn tips_by_person(orders: &[Value], venue_currency: &str, from_ms: i64, to_ms: i64) -> Result<Vec<PersonTip>, String> {
     let mut sums: BTreeMap<(String, String), i64> = BTreeMap::new();
     for o in orders {
+        if !took_money(o.get("status").and_then(Value::as_str).unwrap_or("")) {
+            continue;
+        }
         let currency = o.get("currency").and_then(Value::as_str).unwrap_or(venue_currency);
         for p in o.get("payments").and_then(Value::as_array).into_iter().flatten() {
             let tip = p.get("tip").and_then(Value::as_i64).unwrap_or(0);

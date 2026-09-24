@@ -114,3 +114,64 @@ fn an_overflowing_sum_is_refused_not_wrapped() {
     assert!(tips_by_person(&[big(T0), big(T0 + 1)], "ALL", T0, T0 + 10).is_err());
     assert!(tips_by_person(&[big(T0)], "ALL", T0, T0 + 10).is_ok(), "one alone is fine");
 }
+
+/// Refund `order` through the REAL `refund::decide`: start, then (if `complete`)
+/// the money handed back. Returns the order as the refund left it.
+fn refund(order: &Value, complete: bool, at: i64) -> Value {
+    use crate::command::refund::{decide as refund_decide, RefundIn};
+    let mut hub = dowiz_hub::Hub::create_sized(64 * 1024).unwrap();
+    let mut shelf = dowiz_hub::stock::StockLog::create_sized(64 * 1024).unwrap();
+    let id = order["id"].as_str().unwrap().to_string();
+    let step = |o: &Value, complete: bool, hub: &mut dowiz_hub::Hub, shelf: &mut dowiz_hub::stock::StockLog| {
+        let view = OrderView { order_id: id.clone(), kind: 3, seq: (at - 1) as u64, order_json: o.to_string() };
+        let input = RefundIn {
+            order_id: id.clone(), location_id: "v1".into(), by: "owner".into(),
+            reason: "customer_request".into(), complete, now_ms: at, at_door: false, note: None,
+        };
+        refund_decide(hub, shelf, Some(&view), &input, "ALL").expect("the refund lands").0
+    };
+    let started = step(order, false, &mut hub, &mut shelf);
+    if complete { step(&started, true, &mut hub, &mut shelf) } else { started }
+}
+
+fn confirmed(id: &str, total: i64) -> Value {
+    let mut r = round(id, total, None);
+    r["status"] = json!("CONFIRMED");
+    r
+}
+
+/// A FULL REFUND TAKES THE TIP BACK. The round was paid with a tip by the
+/// real `pay::decide`, then refunded to COMPENSATED_REFUND by the real
+/// `refund::decide` (which leaves `tip` on the order, law 3): nobody earned it.
+/// Its twin: the other round, paid the same way and not refunded, still counts.
+#[test]
+fn a_refunded_rounds_tip_is_not_earned() {
+    let kept = pay(&confirmed("r1", 1000), 1000, 100, "ana", T0 + 1);
+    let paid = pay(&confirmed("r2", 1000), 1000, 150, "ana", T0 + 2);
+    let gone = refund(&paid, true, T0 + 3);
+    assert_eq!(gone["status"], json!("COMPENSATED_REFUND"));
+    assert_eq!(gone["tip"], json!(150), "the refund does not rewrite the tip (law 3)");
+    assert!(gone["refund"]["owed"].as_i64().unwrap() >= 1150, "the tip is in what was handed back");
+    let t = tips_by_person(&[kept, gone], "ALL", T0, T0 + 10).unwrap();
+    assert_eq!(t, vec![PersonTip { by: "ana".into(), currency: "ALL".into(), amount: 100 }]);
+}
+
+/// A refund STARTED but not handed back still counts, as the takings do.
+#[test]
+fn a_refund_in_flight_still_counts_its_tip() {
+    let paid = pay(&confirmed("r1", 1000), 1000, 150, "ana", T0 + 1);
+    let flying = refund(&paid, false, T0 + 2);
+    assert_eq!(flying["status"], json!("REFUNDING"));
+    let t = tips_by_person(&[flying], "ALL", T0, T0 + 10).unwrap();
+    assert_eq!(t, vec![PersonTip { by: "ana".into(), currency: "ALL".into(), amount: 150 }]);
+}
+
+/// Rejected and cancelled rounds carry no tip for anyone either.
+#[test]
+fn a_rejected_or_cancelled_rounds_tip_is_not_earned() {
+    for st in ["REJECTED", "CANCELLED"] {
+        let mut o = pay(&confirmed("r1", 1000), 1000, 150, "ana", T0 + 1);
+        o["status"] = json!(st);
+        assert!(tips_by_person(&[o], "ALL", T0, T0 + 10).unwrap().is_empty(), "{st}");
+    }
+}

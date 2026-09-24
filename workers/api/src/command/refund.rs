@@ -186,14 +186,30 @@ fn note(order: &mut Value, path: &[&str], value: Value) -> String {
     crate::fold::delta(&before, order).to_string()
 }
 
+/// THE CURRENCY `owed` IS IN: the order's. An order that names none is the
+/// venue's, as `pay::decide` reads it (a room round or a storefront order
+/// carries no top-level `currency`). Never empty: the record's currency is
+/// what the exceptions view groups a refund under.
+pub fn currency_of(order: &Value, venue_currency: &str) -> String {
+    order
+        .get("currency")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|c| !c.is_empty())
+        .unwrap_or(venue_currency)
+        .to_string()
+}
+
 /// THE WHOLE REFUND, over two images already in memory. Both are mutated in
 /// place and written by the caller only if this returns `Ok`; every refusal
-/// comes before the first append.
+/// comes before the first append. `venue_currency` is the venue's own, read
+/// by the object from its record, for an order that names no currency.
 pub fn decide(
     hub: &mut dowiz_hub::Hub,
     stock: &mut dowiz_hub::stock::StockLog,
     current: Option<&OrderView>,
     input: &RefundIn,
+    venue_currency: &str,
 ) -> Result<(Value, Vec<Written>), Refused> {
     let Some(current) = current else { return Err(Refused::NotFound) };
     let old: Value = serde_json::from_str(&current.order_json)
@@ -235,9 +251,13 @@ pub fn decide(
         }
         events.push((EventKind::Advanced, step(&mut order, OrderStatus::Refunding, input.now_ms)?));
         let (owed, taken) = money_taken(&old)?;
+        let currency = currency_of(&old, venue_currency);
+        if currency.is_empty() {
+            return Err(Refused::Invalid("the venue names no currency to refund in".into()));
+        }
         events.push((EventKind::Noted, note(&mut order, &["refund"], json!({
             "reason": reason.word(), "by": input.by, "at": input.now_ms, "from": status,
-            "owed": owed, "money_taken": taken, "currency": old.get("currency"),
+            "owed": owed, "money_taken": taken, "currency": currency,
         }))));
         if let Some(n) = said {
             events.push((EventKind::Noted, note_of(&mut order, n)));

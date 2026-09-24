@@ -55,12 +55,16 @@ export function renderTill(ans, t, locale, timeOf = ms => new Date(ms).toLocaleT
 }
 
 /// THE TIP RECORD beside the Z report (`GET /api/staff/till/tips`): which
-/// period to ask about, from the drawer's own answer. PURE. The period's
-/// opening to its close, or to now while it is open; nothing without a start.
+/// period to ask about. PURE. The drawer's opening to its close (or to now
+/// while it is open) when this phone knows the drawer; otherwise NO START,
+/// which the server reads as the venue's day so far -- a card-only day opens
+/// no till, and its tips are still somebody's (live walk 2026-09-24).
 export function tipsQuery(ans, loc) {
+  if (!loc) return null;
+  const base = `/staff/till/tips?location_id=${encodeURIComponent(loc)}`;
   const v = visible(ans);
-  if (!v || !v.opened_at) return null;
-  let q = `/staff/till/tips?location_id=${encodeURIComponent(loc)}&from_ms=${v.opened_at}`;
+  if (!v || !v.opened_at) return base;
+  let q = `${base}&from_ms=${v.opened_at}`;
   if (v.kind === CLOSED && v.closed_at) q += `&to_ms=${v.closed_at}`;
   return q;
 }
@@ -70,7 +74,7 @@ export function tipsQuery(ans, loc) {
 export function renderTips(res, t, locale) {
   const rows = (res && Array.isArray(res.tips) ? res.tips : []).filter(r => r && r.amount > 0);
   const names = (res && res.names) || {};
-  const head = `<h3>${esc(t('tipsTitle'))}</h3><p class="muted">${esc(t('tipsHint'))}</p>`;
+  const head = `<h3>${esc(t('tipsTitle'))}</h3><p class="muted">${esc(t(res && res.day ? 'tipsHintDay' : 'tipsHint'))}</p>`;
   if (!rows.length) return `${head}<p class="muted">${esc(t('tipsNone'))}</p>`;
   const body = rows.map(r => `<tr><th scope="row">${esc(names[r.by] || r.by || '-')}</th><td>${money(r.amount, r.currency, locale)}</td></tr>`).join('');
   return `${head}<table class="z tips"><tbody>${body}</tbody></table>`;

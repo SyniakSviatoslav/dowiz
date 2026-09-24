@@ -106,12 +106,24 @@ fn every_verb_has_its_own_idempotency_route() {
 }
 
 #[test]
-fn a_tips_period_needs_a_start_and_an_open_till_ends_now() {
-    assert_eq!(tips_period(Some("100"), Some("200"), T0), Ok((100, 200)));
-    assert_eq!(tips_period(Some("100"), None, T0), Ok((100, T0)), "an open till reads up to now");
-    assert!(tips_period(None, Some("200"), T0).is_err(), "no start, no period");
-    assert!(tips_period(Some("x"), None, T0).is_err());
-    assert!(tips_period(Some("100"), Some("y"), T0).is_err());
-    assert!(tips_period(Some("300"), Some("200"), T0).is_err(), "ends before it starts");
-    assert_eq!(tips_period(Some("200"), Some("200"), T0), Ok((200, 200)), "an instant is a period");
+fn a_tips_period_is_the_drawers_and_an_open_till_ends_now() {
+    const DAY: i64 = 50;
+    assert_eq!(tips_period(Some("100"), Some("200"), T0, DAY), Ok((100, 200)));
+    assert_eq!(tips_period(Some("100"), None, T0, DAY), Ok((100, T0)), "an open till reads up to now");
+    assert!(tips_period(Some("x"), None, T0, DAY).is_err());
+    assert!(tips_period(Some("100"), Some("y"), T0, DAY).is_err());
+    assert!(tips_period(Some("300"), Some("200"), T0, DAY).is_err(), "ends before it starts");
+    assert_eq!(tips_period(Some("200"), Some("200"), T0, DAY), Ok((200, 200)), "an instant is a period");
+}
+
+/// NO TILL, STILL TIPS (live walk 2026-09-24): a card-only day opens no drawer,
+/// and the phone that asks names no start. The period is then the venue's day
+/// so far -- never a refusal, which left the day's tips unreachable.
+#[test]
+fn with_no_drawer_the_tips_period_is_the_venues_day() {
+    let today = dowiz_hub::tz::start_of_local_day_ms(dowiz_hub::tz::from_settings(Some("Europe/Tirane"), None), T0);
+    assert!(today <= T0 && T0 - today < 25 * 3_600_000);
+    assert_eq!(tips_period(None, None, T0, today), Ok((today, T0)));
+    assert_eq!(tips_period(None, Some("200"), T0, 100), Ok((100, 200)));
+    assert!(tips_period(None, Some("50"), T0, 100).is_err(), "still: ends before it starts");
 }

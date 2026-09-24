@@ -52,7 +52,7 @@ fn folded(h: &dowiz_hub::Hub) -> Value {
 fn refused(o: &Value, i: &RefundIn) -> Refused {
     let (mut h, mut s) = (hub_with(o), shelf());
     let (hb, sb) = (h.to_bytes(), s.to_bytes());
-    let r = decide(&mut h, &mut s, Some(&view(o)), i).unwrap_err();
+    let r = decide(&mut h, &mut s, Some(&view(o)), i, "ALL").unwrap_err();
     assert_eq!(h.to_bytes(), hb, "the log moved on a refusal");
     assert_eq!(s.to_bytes(), sb, "the shelf moved on a refusal");
     r
@@ -66,7 +66,7 @@ fn a_confirmed_order_with_no_money_ends_compensated_and_releases_its_hold() {
     let o = order("CONFIRMED");
     let (mut h, mut s) = (hub_with(&o), shelf());
     assert_eq!(s.ledger().unwrap().level("rice").reserved, 200);
-    let (m, w) = decide(&mut h, &mut s, Some(&view(&o)), &input("venue_cancelled")).expect("lands");
+    let (m, w) = decide(&mut h, &mut s, Some(&view(&o)), &input("venue_cancelled"), "ALL").expect("lands");
     let kinds: Vec<EventKind> = w.iter().map(|e| e.0).collect();
     assert_eq!(kinds, vec![EventKind::Advanced, EventKind::Noted, EventKind::Advanced]);
     assert!(w[0].2 > SEQ && w[1].2 > w[0].2 && w[2].2 > w[1].2, "seqs strictly increase: {w:?}");
@@ -92,7 +92,7 @@ fn a_refund_after_the_kitchen_took_it_leaves_the_shelf() {
     let o = order("PREPARING");
     let (mut h, mut s) = (hub_with(&o), shelf());
     let before = s.to_bytes();
-    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &input("customer_request")).expect("lands");
+    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &input("customer_request"), "ALL").expect("lands");
     assert_eq!(m["status"], json!("COMPENSATED_REFUND"));
     assert_eq!(s.to_bytes(), before, "the kitchen had it: nothing released");
 }
@@ -107,7 +107,7 @@ fn refused_at_door_with_cash_records_the_amount_and_waits_for_the_handback() {
     o["at"]["PREPARING"] = json!(6);
     let (mut h, mut s) = (hub_with(&o), shelf());
     let shelf_before = s.to_bytes();
-    let (m, w) = decide(&mut h, &mut s, Some(&view(&o)), &input("refused_at_door")).expect("lands");
+    let (m, w) = decide(&mut h, &mut s, Some(&view(&o)), &input("refused_at_door"), "ALL").expect("lands");
     assert_eq!(s.to_bytes(), shelf_before, "cooked at PREPARING: the shelf is the owner's call");
     assert_eq!(m["status"], json!("REFUNDING"));
     assert_eq!(w.len(), 2);
@@ -119,7 +119,7 @@ fn refused_at_door_with_cash_records_the_amount_and_waits_for_the_handback() {
     c.complete = true;
     c.by = "p2".into();
     let v = OrderView { order_id: "o1".into(), kind: 1, seq: w[1].2, order_json: m.to_string() };
-    let (done, w2) = decide(&mut h, &mut s, Some(&v), &c).expect("completes");
+    let (done, w2) = decide(&mut h, &mut s, Some(&v), &c, "ALL").expect("completes");
     assert_eq!(done["status"], json!("COMPENSATED_REFUND"));
     assert_eq!(done["refund"]["returned"]["by"], json!("p2"));
     assert_eq!(done["refund"]["owed"], json!(1200), "the first record survives");
@@ -134,7 +134,7 @@ fn refused_at_door_with_cash_records_the_amount_and_waits_for_the_handback() {
 fn an_uncooked_order_on_the_road_releases_its_hold() {
     let o = order("IN_DELIVERY");
     let (mut h, mut s) = (hub_with(&o), shelf());
-    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &input("refused_at_door")).expect("lands");
+    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &input("refused_at_door"), "ALL").expect("lands");
     assert_eq!(m["status"], json!("COMPENSATED_REFUND"), "cash order, nothing collected: nothing owed");
     let led = s.ledger().unwrap();
     assert_eq!(led.level("rice").reserved, 0);
@@ -150,7 +150,7 @@ fn a_ready_order_refunds_and_nothing_is_stranded() {
     let led = s.ledger().unwrap();
     s.append_all(&dowiz_hub::stock::settle(&led, "o1", true)).unwrap();
     let mut h = hub_with(&o);
-    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &input("customer_request")).expect("lands");
+    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &input("customer_request"), "ALL").expect("lands");
     assert_eq!(m["status"], json!("COMPENSATED_REFUND"));
     assert!(s.ledger().unwrap().stranded().is_empty());
 }
@@ -162,7 +162,7 @@ fn seqs_rise_past_the_order_even_when_the_clock_is_behind() {
     let (mut h, mut s) = (hub_with(&o), shelf());
     let mut i = input("venue_cancelled");
     i.now_ms = 5;
-    let (_, w) = decide(&mut h, &mut s, Some(&view(&o)), &i).expect("lands");
+    let (_, w) = decide(&mut h, &mut s, Some(&view(&o)), &i, "ALL").expect("lands");
     assert_eq!(w.iter().map(|e| e.2).collect::<Vec<_>>(), vec![SEQ + 1, SEQ + 2, SEQ + 3]);
 }
 
@@ -216,7 +216,7 @@ fn another_venues_order_is_not_found() {
     i.location_id = "v2".into();
     assert_eq!(refused(&order("CONFIRMED"), &i), Refused::NotFound);
     let (mut h, mut s) = (hub_with(&order("CONFIRMED")), shelf());
-    assert_eq!(decide(&mut h, &mut s, None, &input("venue_cancelled")).unwrap_err(), Refused::NotFound);
+    assert_eq!(decide(&mut h, &mut s, None, &input("venue_cancelled"), "ALL").unwrap_err(), Refused::NotFound);
 }
 
 // ── the courier's tap: `at_door` (§2.4) ──
@@ -229,14 +229,14 @@ fn at_door() -> RefundIn {
 fn the_couriers_tap_ends_a_cash_run_with_zero_collected() {
     let o = order("IN_DELIVERY");
     let (mut h, mut s) = (hub_with(&o), shelf());
-    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &at_door()).expect("lands");
+    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &at_door(), "ALL").expect("lands");
     assert_eq!(m["status"], json!("COMPENSATED_REFUND"), "nothing taken: nothing owed");
     assert_eq!(m["cash_collected"], json!(0));
     assert_eq!((m["refund"]["by"].clone(), m["refund"]["reason"].clone()), (json!("courier-7"), json!("refused_at_door")));
     assert_eq!(folded(&h), m, "the log says what the answer says");
     // Twin: the owner's refund of the same order records no cash of its own.
     let (mut h2, mut s2) = (hub_with(&o), shelf());
-    let (m2, _) = decide(&mut h2, &mut s2, Some(&view(&o)), &input("refused_at_door")).expect("lands");
+    let (m2, _) = decide(&mut h2, &mut s2, Some(&view(&o)), &input("refused_at_door"), "ALL").expect("lands");
     assert!(m2.get("cash_collected").is_none());
 }
 
@@ -246,7 +246,7 @@ fn the_couriers_tap_on_a_paid_card_order_waits_for_the_handback() {
     o["payment"] = json!("card");
     o["amount_received"] = json!(1200);
     let (mut h, mut s) = (hub_with(&o), shelf());
-    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &at_door()).expect("lands");
+    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &at_door(), "ALL").expect("lands");
     assert_eq!(m["status"], json!("REFUNDING"));
     assert_eq!((m["refund"]["owed"].clone(), m["cash_collected"].clone()), (json!(1200), json!(0)));
 }
@@ -260,7 +260,7 @@ fn the_couriers_tap_is_only_at_the_door() {
     // Twin: the owner may still refund a READY order.
     let o = order("READY");
     let (mut h, mut s) = (hub_with(&o), shelf());
-    assert!(decide(&mut h, &mut s, Some(&view(&o)), &input("venue_cancelled")).is_ok());
+    assert!(decide(&mut h, &mut s, Some(&view(&o)), &input("venue_cancelled"), "ALL").is_ok());
 }
 
 #[test]
@@ -279,13 +279,13 @@ fn a_note_is_carried_into_the_refund_record() {
     let o = order("IN_DELIVERY");
     let (mut h, mut s) = (hub_with(&o), shelf());
     let i = RefundIn { note: Some("  nobody opened  ".into()), ..at_door() };
-    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &i).expect("lands");
+    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &i, "ALL").expect("lands");
     assert_eq!(m["refund"]["note"], json!("nobody opened"));
     assert_eq!(folded(&h), m);
     // Twin: no note, or a blank one, writes no key.
     for n in [None, Some("   ".to_string())] {
         let (mut h, mut s) = (hub_with(&o), shelf());
-        let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &RefundIn { note: n, ..at_door() }).expect("lands");
+        let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &RefundIn { note: n, ..at_door() }, "ALL").expect("lands");
         assert!(m["refund"].get("note").is_none());
     }
 }
@@ -297,5 +297,44 @@ fn a_note_past_the_bound_is_refused_and_one_at_it_lands() {
     assert!(matches!(refused(&o, &long), Refused::Invalid(_)));
     let (mut h, mut s) = (hub_with(&o), shelf());
     let edge = RefundIn { note: Some("\u{0161}".repeat(NOTE_MAX_CHARS)), ..at_door() };
-    assert!(decide(&mut h, &mut s, Some(&view(&o)), &edge).is_ok(), "characters, not bytes");
+    assert!(decide(&mut h, &mut s, Some(&view(&o)), &edge, "ALL").is_ok(), "characters, not bytes");
+}
+
+// ── the currency the refund is recorded in ──
+
+/// A ROUND AS THE ROOM PLACES IT (no top-level `currency`), paid by the REAL
+/// `pay::decide` on the same log, then refunded: the record names the venue's
+/// currency, never null, and the exceptions view groups it there, not under "".
+#[test]
+fn a_paid_round_with_no_currency_is_refunded_in_the_venues() {
+    use crate::command::pay::{decide as pay, PayIn, Room};
+    let placed = order("CONFIRMED");
+    assert!(placed.get("currency").is_none(), "the room writes no currency on a round");
+    let (mut h, mut s) = (hub_with(&placed), shelf());
+    let take = PayIn {
+        order_id: "o1".into(), location_id: "v1".into(), amount: 1200, method: "card".into(), by: "p1".into(),
+        till_id: None, covers: None, currency: None, rate_ppm: None, tip: Some(100), wallet: None, now_ms: NOW - 10,
+    };
+    let (paid, _, pseq) = pay(&mut h, Some(&view(&placed)), &take, &Room { open_till: None, venue_currency: "ALL" }).expect("paid");
+    let v = OrderView { order_id: "o1".into(), kind: 3, seq: pseq, order_json: paid.to_string() };
+    let (m, _) = decide(&mut h, &mut s, Some(&v), &input("customer_request"), "ALL").expect("lands");
+    assert_eq!(m["refund"]["currency"], json!("ALL"), "never null");
+    assert_eq!(m["refund"]["owed"], json!(1300), "the bill and the tip");
+    assert_eq!(folded(&h)["refund"]["currency"], json!("ALL"), "the log holds it, not only the answer");
+    let rows = crate::exceptions::fold::order_rows(&h.events_oldest_first(), i64::MAX);
+    let refunds: Vec<_> = rows.iter().filter(|r| r.kind == crate::exceptions::fold::REFUND).collect();
+    assert_eq!(refunds.len(), 1);
+    assert_eq!(refunds[0].currency.as_deref(), Some("ALL"));
+}
+
+/// Its twin: an order that names its own currency is refunded in that one,
+/// whatever the venue's is.
+#[test]
+fn an_order_that_names_its_currency_is_refunded_in_it() {
+    let mut o = order("CONFIRMED");
+    o["currency"] = json!("EUR");
+    let (mut h, mut s) = (hub_with(&o), shelf());
+    let (m, _) = decide(&mut h, &mut s, Some(&view(&o)), &input("venue_cancelled"), "ALL").expect("lands");
+    assert_eq!(m["refund"]["currency"], json!("EUR"));
+    assert_eq!(currency_of(&json!({"currency": " "}), "ALL"), "ALL", "a blank name is no name");
 }

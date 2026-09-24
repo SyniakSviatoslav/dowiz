@@ -17,3 +17,8 @@ test('open: the placement is dine_in at the table, intents only, never a price',
   assert.deepEqual(b.items, [{ product_id: 'p1', quantity: 2, modifier_ids: [] }]);
   assert.equal(JSON.stringify(b).includes('price'), false);
 });
+
+test('open: a round is placed with no payment method -- it is chosen at pay time', () => {
+  const b = placeBody('3', [{ op: 'add', product_id: 'p1', quantity: 1, modifier_ids: [] }]);
+  assert.equal('payment' in b, false, JSON.stringify(b));
+});

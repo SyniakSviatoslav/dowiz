@@ -18,12 +18,14 @@ export function tableOk(s) {
 }
 
 /// The placement body: intents only, never a price (`handlers.rs` re-prices).
+/// NO PAYMENT METHOD: a round is paid at the table, later, maybe by several
+/// people in several ways; the method is each payment's (`/lib/paid-with.js`),
+/// never a guess stamped at placement.
 export function placeBody(table, ops) {
   return {
     items: ops.map(o => ({ product_id: o.product_id, quantity: o.quantity, modifier_ids: [] })),
     contact: { name: '', phone: '' },
     fulfilment: { kind: 'dine_in', table: String(table).trim() },
-    payment: 'cash',
   };
 }
 

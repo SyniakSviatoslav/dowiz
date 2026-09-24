@@ -23,7 +23,7 @@ fn by_of(t: &Table, from: &str) -> String {
 fn only_an_owner_links_and_an_owner_does() {
     let staff = Claims::Staff { sub: "s".into(), active_location_id: "v".into(), jti: "j".into(), caps: "void".into(), iat: 0, exp: 1 };
     let courier = Claims::Courier { sub: "c".into(), active_location_id: "v".into(), jti: "j".into(), iat: 0, exp: 1 };
-    let customer = Claims::Customer { sub: "u".into(), order_id: "o".into(), location_id: "v".into(), iat: 0, exp: 1 };
+    let customer = Claims::Customer { sub: "u".into(), order_id: "o".into(), location_id: "v".into(), sitting_id: None, iat: 0, exp: 1 };
     for c in [&staff, &courier, &customer] {
         assert!(!may_link(c), "{c:?} must be refused");
     }

@@ -14,8 +14,9 @@ impl HubImages {
         let current: Option<OrderView> = listed.into_iter().find(|o| o.order_id == input.order_id);
         let (_, mut hub) = self.log_hub().await?;
         let (stock_gen, mut stock) = self.stock_log().await?;
+        let venue_currency = self.venue_currency().await?;
         let before = stock.len();
-        let (merged, written) = match crate::command::refund::decide(&mut hub, &mut stock, current.as_ref(), &input) {
+        let (merged, written) = match crate::command::refund::decide(&mut hub, &mut stock, current.as_ref(), &input, &venue_currency) {
             Ok(v) => v,
             // NOTHING HAS BEEN WRITTEN.
             Err(r) => return Ok(Err(r)),

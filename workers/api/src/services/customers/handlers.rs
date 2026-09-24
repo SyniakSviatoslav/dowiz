@@ -157,6 +157,7 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<crate::Req>) ->
     let mut found: Option<(String, String, Vec<Value>)> = None;
     for o in orders_of(listed, &loc) {
         let Some(phone) = o.get("contact").and_then(|c| c.get("phone")).and_then(Value::as_str)
+            .filter(|p| super::roll::names_a_person(p))
         else {
             continue;
         };

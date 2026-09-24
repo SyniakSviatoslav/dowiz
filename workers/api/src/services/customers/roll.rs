@@ -52,6 +52,17 @@ fn spent_on(o: &Value) -> i64 {
     )
 }
 
+/// DOES THIS PHONE NAME A PERSON? Only if it carries a digit once the `00`
+/// access prefix is gone. A room round is placed with `contact.phone: ""`
+/// (the table is not a customer), and `customer_key` of no digits is ONE
+/// constant key per venue: every phone-less round would be one "—" customer
+/// with every table's orders and spend. The customer paths (this fold, the
+/// reveal, the allergy card) all ask this one question first.
+pub fn names_a_person(phone: &str) -> bool {
+    let digits: String = phone.chars().filter(char::is_ascii_digit).collect();
+    !digits.strip_prefix("00").unwrap_or(&digits).is_empty()
+}
+
 /// Fold this venue's orders into one row per person.
 ///
 /// `key_of` turns a phone number into the handle; it is passed in because it
@@ -76,7 +87,8 @@ pub fn roll(
     let mut rows: Vec<Row> = Vec::new();
     for o in orders {
         let contact = o.get("contact");
-        let Some(phone) = contact.and_then(|c| c.get("phone")).and_then(Value::as_str) else {
+        let Some(phone) = contact.and_then(|c| c.get("phone")).and_then(Value::as_str).filter(|p| names_a_person(p))
+        else {
             continue;
         };
         let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
@@ -118,3 +130,6 @@ pub fn roll(
     }
     rows
 }
+
+#[cfg(test)]
+mod tests;
