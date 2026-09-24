@@ -541,7 +541,8 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
     // the schedule has never left the Worker.
     location["hours"] = raw.get("hours").cloned().unwrap_or(Value::Null);
     location["pickup"] = json!(raw.get("pickup").and_then(Value::as_bool).unwrap_or(false));
-    location["hasDeliveryZones"] = json!(raw.get("delivery_zones").is_some());
+    location["hasDeliveryZones"] = json!(crate::services::venue::activation::has_delivery_zones(&raw));
+    location["deliveryZones"] = crate::services::venue::activation::delivery_zones(&raw);
     location["nextOpen"] = next_open
         .map(|(d, m)| json!({ "weekday": d, "minute": m }))
         .unwrap_or(Value::Null);
@@ -1002,7 +1003,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     };
 
     let Some(id) = crate::edge_id() else {
-        return Response::error("no platform CSPRNG for order id", 500);
+        return idem.refused(&place, 500, "no platform CSPRNG for order id").await;
     };
 
     // WHERE THIS ORDER CAME FROM, decided by the principal this handler has
@@ -1017,7 +1018,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         Some(source.into()),
     ) {
         Ok(j) => j,
-        Err(e) => return Response::error(e, 400),
+        Err(e) => return idem.refused(&place, 400, &e).await,
     };
 
     // The kernel owns items and subtotal. Delivery, contact and fulfilment are
@@ -1035,8 +1036,12 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // on purpose: the catalogue is not versioned per order, so resolving the
     // name later would rename a dish on orders placed before the rename and
     // lose it entirely on one that has been deleted.
-    let mut envelope: Value = serde_json::from_str(&order_json)
-        .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
+    let envelope: Result<Value> = serde_json::from_str(&order_json)
+        .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")));
+    let mut envelope = match envelope {
+        Ok(v) => v,
+        Err(e) => return idem.answered(&place, Err(e)).await,
+    };
     if let Some(items) = envelope.get_mut("items").and_then(Value::as_array_mut) {
         for line in items.iter_mut() {
             let Some(pid) = line.get("product_id").and_then(Value::as_str).map(str::to_string) else {
@@ -1065,9 +1070,9 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // card rail.
     let tip = match body.tip.unwrap_or(0) {
         0 => 0,
-        t if t < 0 => return Response::error("a tip cannot be negative", 400),
+        t if t < 0 => return idem.refused(&place, 400, "a tip cannot be negative").await,
         t if t > subtotal.max(10_000) => {
-            return Response::error("that tip is larger than the order", 400)
+            return idem.refused(&place, 400, "that tip is larger than the order").await
         }
         t => t,
     };
@@ -1098,7 +1103,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             Some(raw) if dowiz_hub::promo::Promo::parse(&raw).is_some() => {
                 (Some(code), Some(raw))
             }
-            _ => return Response::error(dowiz_hub::promo::Refusal::Unknown.as_str(), 400),
+            _ => return idem.refused(&place, 400, dowiz_hub::promo::Refusal::Unknown.as_str()).await,
         },
     };
 
@@ -1150,7 +1155,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         envelope["sitting_id"] = json!(g.sitting_id);
     }
     if !payment_kind.is_empty() && !PAYMENT_KINDS.contains(&payment_kind.as_str()) {
-        return Response::error("unknown payment method", 400);
+        return idem.refused(&place, 400, "unknown payment method").await;
     }
     // A rail the venue does not have is refused BEFORE the order exists, so a
     // crypto order at a venue with no wallet never sits in the queue waiting
@@ -1160,10 +1165,10 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     let stripe_on = ctx.env.secret("STRIPE_PUBLISHABLE_KEY").is_ok();
     match payment_kind.as_str() {
         "crypto" if wallets.is_empty() => {
-            return Response::error("this venue does not take crypto", 409)
+            return idem.refused(&place, 409, "this venue does not take crypto").await
         }
         "card" | "apple_pay" | "google_pay" if !stripe_on => {
-            return Response::error("card payments are not configured", 409)
+            return idem.refused(&place, 409, "card payments are not configured").await
         }
         _ => {}
     }
@@ -1240,7 +1245,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // the envelope carried is overwritten, and a word outside the set is
     // refused here rather than stored (G4 (b)).
     if let Err(e) = crate::services::ordering::channel::stamp(&mut envelope, source) {
-        return Response::error(e.to_string(), 500);
+        return idem.refused(&place, 500, &e.to_string()).await;
     }
     // THE STAMP CARD (C5): only a customer who gave a number has one, and a
     // waiter's round names no customer. The object spends a full card.
@@ -1284,7 +1289,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         // ingredient so they can change one line; a 400 says what is wrong with
         // the code. Collapsing both into "something went wrong" sends them
         // hunting through a basket.
-        Err((status, said)) => return Response::error(said, status),
+        Err((status, said)) => return idem.refused(&place, status, &said).await,
     };
     let stored = placed.stored;
 
