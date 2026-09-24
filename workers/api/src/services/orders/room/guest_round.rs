@@ -88,29 +88,34 @@ pub async fn confirm(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
         Ok(g) => g,
         Err(r) => return Ok(r),
     };
-    let Some(order_json) = crate::hubstore::order(&place, &id).await? else {
-        return Response::error("not found", 404);
-    };
-    let order: Value = serde_json::from_str(&order_json).unwrap_or(json!({}));
-    let next = match answer(&order, &body.location_id, &body.action) {
-        Ok(n) => n,
-        Err(r) => return Response::error(r.message().to_string(), r.status()),
-    };
-    let input = crate::command::advance::AdvanceIn {
-        order_id: id.clone(),
-        location_id: body.location_id.clone(),
-        next: next.to_string(),
-        reason: Some(format!("guest round, answered by {by}")),
-        now_ms: ctx.data.now_ms,
-    };
-    let out: crate::command::advance::AdvanceOut = match crate::command::send(&place, "advance", &input).await {
-        Ok(v) => v,
-        Err((status, said)) => return Response::error(said, status),
-    };
-    idem.done(&place, 200, &out.merged).await;
-    let mut res = Response::ok(out.merged)?;
-    res.headers_mut().set("content-type", "application/json; charset=utf-8")?;
-    Ok(res)
+    // G1 / D1: every exit below is an ANSWER, recorded (or, for a 5xx or an
+    // internal error, released) by `answered` -- never a claim left standing.
+    let res: Result<Response> = async {
+        let Some(order_json) = crate::hubstore::order(&place, &id).await? else {
+            return Response::error("not found", 404);
+        };
+        let order: Value = serde_json::from_str(&order_json).unwrap_or(json!({}));
+        let next = match answer(&order, &body.location_id, &body.action) {
+            Ok(n) => n,
+            Err(r) => return Response::error(r.message().to_string(), r.status()),
+        };
+        let input = crate::command::advance::AdvanceIn {
+            order_id: id.clone(),
+            location_id: body.location_id.clone(),
+            next: next.to_string(),
+            reason: Some(format!("guest round, answered by {by}")),
+            now_ms: ctx.data.now_ms,
+        };
+        let out: crate::command::advance::AdvanceOut = match crate::command::send(&place, "advance", &input).await {
+            Ok(v) => v,
+            Err((status, said)) => return Response::error(said, status),
+        };
+        let mut res = Response::ok(out.merged)?;
+        res.headers_mut().set("content-type", "application/json; charset=utf-8")?;
+        Ok(res)
+    }
+    .await;
+    idem.answered(&place, res).await
 }
 
 /// `GET /api/order/:id/sitting`

@@ -96,16 +96,26 @@ pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
     // No Authorization is a guest. A token that is sent must be good and must
     // be this venue's: a stale one is refused, not quietly downgraded.
     let has_bearer = req.headers().get("authorization").ok().flatten().is_some();
-    let side = if has_bearer {
+    let who = if has_bearer {
         match crate::auth::principal_at(&req, &ctx.env, &place.venue, now).await {
-            Ok(crate::auth::Principal::Owner { .. } | crate::auth::Principal::Staff { .. }) => Side::Venue,
-            Ok(crate::auth::Principal::Courier { .. }) => return Response::error("forbidden role", 403),
-            Ok(crate::auth::Principal::Customer { .. }) => Side::Guest,
+            Ok(p) => Some(p),
             Err(r) => return Ok(r),
         }
     } else {
-        Side::Guest
+        None
     };
+    let side = match &who {
+        None | Some(crate::auth::Principal::Customer { .. }) => Side::Guest,
+        Some(crate::auth::Principal::Owner { .. }) => Side::Venue,
+        // D40 (G6): staff book for the venue with the floor's capability.
+        Some(p @ crate::auth::Principal::Staff { .. }) => match guest::side_of(p, "") {
+            Ok(side) => side,
+            Err((code, why)) => return Response::error(why, code),
+        },
+        Some(crate::auth::Principal::Courier { .. }) => return Response::error("forbidden role", 403),
+    };
+    // D40 (G6): the booking's user is the token's, never the body's.
+    let user_id = guest::booking_user(who.as_ref(), body.user_id.as_deref());
 
     // ── WHAT A GUEST MUST GIVE ──
     let secret = crate::services::customers::handlers::signing_secret(&ctx.env);
@@ -139,9 +149,9 @@ pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
 
     // A REFUSAL IS AN ANSWER TOO, and is recorded as one: an unrecorded claim
     // answers a same-key retry "still running" (`idempotency::begin`). A 500
-    // is NOT recorded -- replaying a failure would make it permanent -- so its
-    // claim stays open until the keep window; the storefront mints a fresh
-    // key per tap, and the reservation id (from `requestId`) still dedupes.
+    // is NOT recorded -- replaying a failure would make it permanent -- and
+    // `Guard::answered` gives its claim back (G1), so the retry runs again;
+    // the reservation id (from `requestId`) still dedupes.
     let answer: Result<(u16, String)> = async {
         let id = format!("rsv_{:016x}", id64(&format!("{}:{}", place.venue, body.request_id)));
         let t = load_bookings(&place).await?;
@@ -166,6 +176,18 @@ pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
         if let Err(e) = reservation::validate_request(&request, &BookingPolicy::default_policy(), now_min(now)) {
             return Ok((422, e.message()));
         }
+        // ── THE VENUE'S HOURS AND THE GRID, for a guest (audit D29) ──
+        // The storefront offers only these times; a direct POST is held to the
+        // same rule. The venue's own booking (a call at the console) is not:
+        // the owner may seat a party at any minute they choose.
+        if side == Side::Guest {
+            let rec = crate::hubstore::venue_record(&place).await?;
+            let sched = super::hours::schedule_of(rec.as_ref().and_then(|r| r.get("hours")));
+            let zone = crate::hubstore::zone_of(rec.as_ref());
+            if let Some(why) = super::hours::slot_verdict(&sched, zone, body.slot_min) {
+                return Ok((422, why));
+            }
+        }
 
         // ── AND THE FLOOR IS THE SECOND ──
         let table = match (body.zone_id.as_deref().map(str::trim), body.table_n) {
@@ -187,7 +209,7 @@ pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
             name,
             phone,
             phone_key,
-            user_id: body.user_id.as_deref().map(str::trim).filter(|u| !u.is_empty()).map(str::to_string),
+            user_id: user_id.clone(),
             table: table.clone(),
             side,
             now_ms: now,
@@ -218,15 +240,13 @@ pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
         Ok((200, out.to_string()))
     }
     .await;
-    let (code, text) = answer?;
-    if code == 200 {
-        idem.done(&place, code, &text).await;
-        let mut res = Response::ok(text)?;
-        res.headers_mut().set("content-type", "application/json")?;
-        return Ok(res);
-    }
-    if code != 500 {
-        idem.done(&place, code, &json!({ "error": text }).to_string()).await;
-    }
-    Response::error(text, code)
+    let res = match answer {
+        Ok((200, text)) => Response::ok(text).and_then(|mut r| {
+            r.headers_mut().set("content-type", "application/json")?;
+            Ok(r)
+        }),
+        Ok((code, text)) => Response::error(text, code),
+        Err(e) => Err(e),
+    };
+    idem.answered(&place, res).await
 }

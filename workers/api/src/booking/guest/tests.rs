@@ -48,8 +48,35 @@ fn the_bookings_own_token_is_the_guest() {
 #[test]
 fn the_owner_and_staff_are_the_venue_and_a_courier_is_neither() {
     assert_eq!(side_of(&owner(), "rsv_x"), Ok(Side::Venue));
-    assert_eq!(side_of(&staff(), "rsv_x"), Ok(Side::Venue));
+    let floor = Principal::Staff {
+        person_id: "p1".into(), active_location_id: "v1".into(), session_id: "s1".into(),
+        caps: Caps::of(&[crate::auth::Cap::TakeOrders]),
+    };
+    assert_eq!(side_of(&floor, "rsv_x"), Ok(Side::Venue));
     assert_eq!(side_of(&courier(), "rsv_x"), Err((403, "forbidden role")));
+}
+
+/// D40 (G6): staff with no floor capability (the kitchen's `advance` only)
+/// neither move a booking nor read the guest's phone on it.
+#[test]
+fn staff_without_the_floor_capability_are_not_the_venue() {
+    assert_eq!(side_of(&staff(), "rsv_x"), Err((403, "no capability for the venue's bookings")));
+    let kitchen = Principal::Staff {
+        person_id: "k1".into(), active_location_id: "v1".into(), session_id: "s1".into(),
+        caps: Caps::of(&[crate::auth::Cap::Advance]),
+    };
+    assert_eq!(side_of(&kitchen, "rsv_x").map_err(|e| e.0), Err(403));
+}
+
+/// D40 (G6): a booking is filed under the token's customer, never under a
+/// `userId` the body chose; without a token it is filed under nobody.
+#[test]
+fn a_bookings_user_comes_from_the_token_not_the_body() {
+    assert_eq!(booking_user(None, Some("someone-else")), None);
+    assert_eq!(booking_user(Some(&staff()), Some("someone-else")), None);
+    assert_eq!(booking_user(Some(&customer("c9")), Some("someone-else")), Some("c9".into()));
+    // The twin: the owner, taking a booking for a customer, may name one.
+    assert_eq!(booking_user(Some(&owner()), Some(" u7 ")), Some("u7".into()));
 }
 
 /// THE ACTOR COMES FROM THE PRINCIPAL. `create` wrote `CUSTOMER` for the owner.
@@ -127,4 +154,14 @@ fn two_spellings_of_one_phone_are_one_key() {
 fn a_visitors_phone_still_has_a_key_and_a_short_one_has_none() {
     assert!(phone_key(b"s", "+39 333 123 4567").is_some());
     assert_eq!(phone_key(b"s", "1234"), None);
+}
+
+/// P5 (audit D38): the booking's key IS the person key the wallet and the
+/// customer alias use -- one function, not a copy that could drift.
+#[test]
+fn the_booking_key_is_the_one_person_key() {
+    use crate::services::customers::identity::person_key;
+    for s in ["+355 69 123 4567", "069 123 4567", "00355691234567", "+39 333 123 4567"] {
+        assert_eq!(phone_key(b"k", s), Some(person_key(b"k", s)), "{s:?}");
+    }
 }

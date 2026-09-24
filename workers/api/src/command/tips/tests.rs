@@ -41,6 +41,7 @@ fn pay(order: &Value, amount: i64, tip: i64, by: &str, at: i64) -> Value {
         rate_ppm: None,
         tip: (tip > 0).then_some(tip),
         wallet: None,
+        base_seq: None,
         now_ms: at,
     };
     decide(&mut hub, Some(&view), &input, &ROOM).expect("the payment lands").0

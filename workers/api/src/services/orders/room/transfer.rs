@@ -45,7 +45,10 @@ pub async fn transfer(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
         Ok(g) => g,
         Err(r) => return Ok(r),
     };
-    let loaded = crate::hubstore::load_catalog(&place).await?;
+    let loaded = match crate::hubstore::load_catalog(&place).await {
+        Ok(l) => l,
+        Err(e) => return idem.answered(&place, Err(e)).await,
+    };
     let input = TransferIn {
         from_order_id: from_id,
         to_order_id: body.to_order_id,
@@ -59,7 +62,7 @@ pub async fn transfer(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
     };
     let out: TransferOut = match crate::command::send(&place, "room/transfer", &input).await {
         Ok(v) => v,
-        Err((status, said)) => return Response::error(said, status),
+        Err((status, said)) => return idem.refused(&place, status, &said).await,
     };
     let answer = json!({
         "from": { "order": serde_json::from_str::<Value>(&out.from_merged).unwrap_or(Value::Null), "seq": out.from_seq },
@@ -103,7 +106,7 @@ pub async fn move_sitting(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
     let input = MoveIn { sitting_id, location_id: body.location_id, table: body.table, by, now_ms: ctx.data.now_ms };
     let out: MoveOut = match crate::command::send(&place, "room/move_sitting", &input).await {
         Ok(v) => v,
-        Err((status, said)) => return Response::error(said, status),
+        Err((status, said)) => return idem.refused(&place, status, &said).await,
     };
     let answer = json!({ "sitting_id": out.sitting_id, "table": out.table, "moved": out.moved });
     idem.done(&place, 200, &answer.to_string()).await;

@@ -155,3 +155,70 @@ fn a_zone_without_a_name_or_a_duplicate_zone_is_refused() {
     ];
     assert!(checked_plan(&twice).unwrap_err().contains("two zones share"));
 }
+
+// ── G16: the save refuses to strand a live booking (audit D27) ──────────────
+
+use super::plan_orphans;
+use super::super::guest::Side;
+use super::super::store::{write_new, NewBooking};
+use dowiz_hub::table::Table as Image;
+
+const SLOT: i64 = 29_000_000;
+
+/// The fixture plan's terrace with one live booking: Ana, a party of 4, at
+/// table 1 for `SLOT`.
+fn booked(party: i64) -> Image {
+    let mut t = Image::create(256 * 1024).unwrap();
+    let b = NewBooking {
+        id: "rsv_ana".into(), venue: "v1".into(), party, slot_min: SLOT, occasion: String::new(),
+        name: "Ana".into(), phone: "069 123 4567".into(), phone_key: Some("k1".into()), user_id: None,
+        table: Some(("terasa".into(), 1)), side: Side::Guest, now_ms: (SLOT - 600) * 60_000,
+    };
+    assert_eq!(write_new(&mut t, &b, &plan(), SLOT - 600).unwrap(), Ok(("REQUESTED".into(), true)));
+    t
+}
+
+fn plan_of(zones: serde_json::Value) -> Plan {
+    from_json(&json!({ "zones": zones }).to_string()).expect("the test plan must read")
+}
+
+/// THE DEFECT: renumbering the held table stored the plan and left the hold
+/// pointing at table 1, which no longer existed. Now refused, by booking.
+#[test]
+fn a_plan_that_renumbers_a_held_table_is_refused_naming_the_booking() {
+    let t = booked(4);
+    let renumbered = plan_of(json!([{ "id": "terasa", "name": "T", "tables": [table(7, 4), table(2, 2)] }]));
+    let why = plan_orphans(&renumbered, &t, SLOT - 600).expect("a hold on a vanished table must refuse");
+    assert!(why.contains("rsv_ana") && why.contains("Ana") && why.contains("table 1"), "{why}");
+    // Dropping the zone is the same stranding.
+    let other = plan_of(json!([{ "id": "salla", "name": "S", "tables": [table(1, 6)] }]));
+    assert!(plan_orphans(&other, &t, SLOT - 600).unwrap().contains("zone \"terasa\""));
+    // And so is switching the plan off with a hold live.
+    assert!(plan_orphans(&Plan::default(), &t, SLOT - 600).is_some());
+}
+
+/// Seats cut below the booked party: refused, naming the party and the seats.
+#[test]
+fn a_plan_that_seats_fewer_than_the_booked_party_is_refused() {
+    let t = booked(4);
+    let cut = plan_of(json!([{ "id": "terasa", "name": "T", "tables": [table(1, 2), table(2, 2)] }]));
+    let why = plan_orphans(&cut, &t, SLOT - 600).expect("four guests at a two-top must refuse");
+    assert!(why.contains("party of 4") && why.contains("seats 2"), "{why}");
+}
+
+/// THE POSITIVE TWINS: moving the held table, adding tables, or any change
+/// once the sitting has ended, is allowed.
+#[test]
+fn a_plan_that_keeps_every_live_hold_is_accepted() {
+    let t = booked(4);
+    let moved = plan_of(json!([
+        { "id": "terasa", "name": "Terrace", "tables": [
+            { "n": 1, "x": 300, "y": 200, "w": 50, "h": 50, "seats": 6 }, table(2, 2), table(3, 2)] },
+        { "id": "salla", "name": "S", "tables": [table(1, 6)] }]));
+    assert_eq!(plan_orphans(&moved, &t, SLOT - 600), None);
+    assert_eq!(plan_orphans(&plan(), &t, SLOT - 600), None, "the unchanged plan");
+    // After the sitting the hold is history, and the table may go.
+    assert_eq!(plan_orphans(&Plan::default(), &t, SLOT + DWELL_MIN), None);
+    // An empty floor refuses nothing.
+    assert_eq!(plan_orphans(&Plan::default(), &Image::create(256 * 1024).unwrap(), SLOT), None);
+}

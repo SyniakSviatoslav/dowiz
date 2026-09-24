@@ -27,6 +27,11 @@ pub struct Period {
     /// are now, so a cash payment that appears or vanishes after the close
     /// is a breach rather than a silently different number.
     pub over_short: Option<Money>,
+    /// D31 (G5): the last pay-in or pay-out of this period. With the cash
+    /// payments' own instants it says whether the drawer moved after the
+    /// last count, which a close must not be taken against.
+    #[serde(default)]
+    pub moved_at: Option<i64>,
 }
 
 /// One cash payment, as the order log holds it, in the currency it was PAID in.
@@ -93,6 +98,7 @@ pub fn periods(entries: &[Entry]) -> Result<Vec<Period>, String> {
                 closed_at: None,
                 closed_by: None,
                 over_short: None,
+                moved_at: None,
             });
             continue;
         }
@@ -105,6 +111,7 @@ pub fn periods(entries: &[Entry]) -> Result<Vec<Period>, String> {
                 let cur = v.get("currency").and_then(Value::as_str).ok_or("pay record without a currency")?;
                 let n = v.get("amount").and_then(Value::as_i64).ok_or("pay record without an amount")?;
                 add(if k == PAY_IN { &mut p.pay_in } else { &mut p.pay_out }, cur, n)?;
+                p.moved_at = Some(p.moved_at.map_or(at, |m| m.max(at)));
             }
             k if k == COUNTED => {
                 p.counted = Some(money(&v, "observed")?);
@@ -123,6 +130,12 @@ pub fn periods(entries: &[Entry]) -> Result<Vec<Period>, String> {
 
 /// Every cash payment on this venue's orders. A payment with no `currency`
 /// was taken before payments carried one, in the venue's currency.
+///
+/// D12 (G5): A REFUND HANDED BACK LEAVES THE DRAWER. When a refund is
+/// completed (`refund.returned.at`), each cash payment of the round comes out
+/// again, NEGATIVE, in the pile it went in (EUR handed over is EUR handed
+/// back), at the instant it was handed back. Money still owed back
+/// (REFUNDING) is still in the drawer and still expected.
 pub fn cash_payments(orders: &[Value], location_id: &str, venue_currency: &str) -> Vec<CashIn> {
     let mut out = Vec::new();
     for o in orders {
@@ -130,16 +143,21 @@ pub fn cash_payments(orders: &[Value], location_id: &str, venue_currency: &str) 
             continue;
         }
         let id = o.get("id").and_then(Value::as_str).unwrap_or("");
+        let back = o.pointer("/refund/returned/at").and_then(Value::as_i64);
         for p in o.get("payments").and_then(Value::as_array).into_iter().flatten() {
             if p.get("method").and_then(Value::as_str) != Some("cash") {
                 continue;
             }
-            out.push(CashIn {
+            let c = CashIn {
                 order_id: id.to_string(),
                 at: p.get("at").and_then(Value::as_i64).unwrap_or(0),
                 currency: p.get("currency").and_then(Value::as_str).unwrap_or(venue_currency).to_string(),
                 amount: p.get("amount").and_then(Value::as_i64).unwrap_or(0),
-            });
+            };
+            if let Some(at) = back {
+                out.push(CashIn { at, amount: c.amount.saturating_neg(), ..c.clone() });
+            }
+            out.push(c);
         }
     }
     out.sort_by_key(|c| c.at);
@@ -193,6 +211,7 @@ pub fn report(periods: &[Period], cash: &[CashIn]) -> Result<Report, Refused> {
     for p in periods {
         rows.push(PeriodReport { period: p.clone(), cash_paid: cash_paid(p, cash)?, expected: expected(p, cash)? });
     }
-    let outside = cash.iter().filter(|c| !periods.iter().any(|p| within(p, c.at))).cloned().collect();
+    // Only money TAKEN outside a till is law 10's breach; a hand-back is not.
+    let outside = cash.iter().filter(|c| c.amount > 0 && !periods.iter().any(|p| within(p, c.at))).cloned().collect();
     Ok(Report { open: periods.last().is_some_and(|p| p.closed_at.is_none()), periods: rows, outside })
 }

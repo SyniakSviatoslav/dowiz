@@ -116,6 +116,48 @@ pub(super) fn checked_plan(zones: &[serde_json::Value]) -> std::result::Result<(
     Ok((parsed.zones.len(), parsed.zones.iter().map(|z| z.tables.len()).sum()))
 }
 
+/// Would storing `plan` strand a live booking? `None` is no.
+///
+/// A HOLD IS KEYED BY ZONE AND NUMBER (`table_key`), so a plan that renumbers
+/// table 4 to 7, drops a zone or cuts a four-top to two seats leaves every
+/// live hold pointing at furniture that is gone: the room draws no hold, and a
+/// guest can book the "new" table 4 at the same slot (audit D27). Live is a
+/// status that holds a table, for a sitting that has not ended at `now_min`.
+/// THE REFUSAL NAMES THE BOOKING, so the owner knows which one to move first.
+pub(super) fn plan_orphans(plan: &floor::Plan, t: &dowiz_hub::table::Table, now_min: i64) -> Option<String> {
+    let mut held = held_tables(t);
+    held.sort_by_key(|h| h.slot_min);
+    for h in held.iter().filter(|h| h.slot_min + floor::DWELL_MIN > now_min) {
+        let rec = t
+            .get(super::K_RSV, &h.reservation)
+            .and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok());
+        let party = rec.as_ref().and_then(|r| r.get("party")).and_then(serde_json::Value::as_i64).unwrap_or(1);
+        let who = rec
+            .as_ref()
+            .and_then(|r| r.get("contact_name"))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        let (zone, n, id, slot) = (&h.zone, h.n, &h.reservation, h.slot_min);
+        match plan.find(zone, n) {
+            None => {
+                return Some(format!(
+                    "booking {id} ({who}, party of {party}) holds table {n} in zone {zone:?} at minute \
+                     {slot}, and this plan has no such table; move or cancel that booking first"
+                ))
+            }
+            Some(tb) if !tb.seats_party(party) => {
+                return Some(format!(
+                    "booking {id} ({who}) is a party of {party} at table {n} in zone {zone:?} at minute \
+                     {slot}, and this plan seats {} there; move that booking first",
+                    tb.seats
+                ))
+            }
+            Some(_) => {}
+        }
+    }
+    None
+}
+
 #[derive(Deserialize)]
 struct PlanIn {
     /// The zones as the owner drew them. An EMPTY list removes the plan, which
@@ -139,6 +181,15 @@ pub async fn set_plan(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
         Ok(n) => n,
         Err(why) => return Response::error(why, 400),
     };
+    // THE LIVE BOOKINGS ARE READ BEFORE THE PLAN IS WRITTEN (audit D27). Two
+    // images, so not one turn: a booking landing between this read and the
+    // write is checked against the OLD plan by `table_verdict`, and the next
+    // save sees it -- the window is one request wide, not for ever.
+    let parsed = floor::from_json(&json!({ "zones": body.zones }).to_string()).unwrap_or_default();
+    let t = load_bookings(&place).await?;
+    if let Some(why) = plan_orphans(&parsed, &t, now_min(ctx.data.now_ms)) {
+        return Response::error(why, 409);
+    }
     let stored = body.zones.clone();
     crate::hubstore::with_catalog(&place, move |cat| {
         let raw = cat.location().ok_or_else(|| Error::RustError("no venue".into()))?;

@@ -31,7 +31,7 @@ fn paid(id: &str, amount: i64, at: i64, ledger: &[String]) -> (Value, String, St
     let v = OrderView { order_id: id.into(), kind: 3, seq: 1, order_json: o.to_string() };
     let input = PayIn {
         order_id: id.into(), location_id: "v1".into(), amount, method: "wallet".into(), by: "p1".into(),
-        till_id: None, covers: None, currency: None, rate_ppm: None, tip: None, wallet: Some("u1".into()), now_ms: at,
+        till_id: None, covers: None, currency: None, rate_ppm: None, tip: None, wallet: Some("u1".into()), base_seq: None, now_ms: at,
     };
     let (order, _, _, d) = pay(&mut h, Some(&v), &input, &OPEN, ledger).expect("covered");
     let d = d.expect("a wallet leg");

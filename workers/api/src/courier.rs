@@ -400,105 +400,102 @@ pub async fn accept(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         Ok(g) => g,
         Err(r) => return Ok(r),
     };
-    let Some((_, v)) = load_order(&place, &id, &loc).await? else {
-        return Response::error("not found", 404);
-    };
-    // ── AN ORDER HAS TO BE READY TO BE TAKEN ──
-    //
-    // There was no status check at all here: `load_order` compares the venue
-    // and nothing else, and accepting is a `Noted` event, so the kernel's FSM
-    // is never consulted either. A courier could therefore claim ANY order at
-    // the venue in ANY state, and three things followed from it.
-    //
-    // Accept a PENDING order the owner then rejects, and the assignment row
-    // keeps `delivered_at_ms IS NULL` for ever -- so `shift(open: false)`
-    // refuses and that courier can never close a shift again. Accept anything,
-    // and the owner's `assign_courier` answers 409 "already has a courier", so
-    // a courier can pre-empt the dispatcher. Accept a CONFIRMED order and
-    // `pickup` is legal straight to IN_DELIVERY, walking the food past the
-    // kitchen: PREPARING is never entered, so the ingredients it reserved are
-    // never consumed and the hold is stranded for good.
-    //
-    // READY is what the pool offers and CONFIRMED is what an owner assigns
-    // ahead of the kitchen, so those two are the whole legitimate set.
-    let status = v.get("status").and_then(Value::as_str).unwrap_or("");
-    if !matches!(status, "READY" | "CONFIRMED") {
-        return Response::error(format!("this order is {status}, not ready to be taken"), 409);
-    }
-
-    let cash_due = if v.get("payment").and_then(|p| p.as_str()) == Some("cash") {
-        v.get("total").and_then(|t| t.as_i64()).unwrap_or(0)
-    } else {
-        0
-    };
-
-    // THE RACE IS SETTLED BY THE OBJECT, not by a primary key. Two couriers
-    // tapping at once are two calls to one Durable Object, which runs them one
-    // after the other; the first finds no assignment and writes one, the second
-    // finds it and is told plainly. That is the same guarantee the UNIQUE
-    // constraint gave, arriving as a property of where the bytes live.
-    let (oid, cid) = (id.clone(), courier_id.clone());
-    let taken = with_ops(&place, move |t| {
-        if asg_of(t, &oid).is_some() {
-            return Ok(false);
-        }
-        let rec = json!({
-            "order_id": oid, "courier_id": cid, "assigned_at_ms": now,
-            "cash_due": cash_due, "picked_up_at_ms": Value::Null,
-            "delivered_at_ms": Value::Null, "cash_collected": Value::Null,
+    // G1 / D1: every exit below is an ANSWER, recorded (or, for a 5xx or an
+    // internal error, released) by `answered` -- never a claim left standing.
+    let res: Result<Response> = async {
+        let Some((_, v)) = load_order(&place, &id, &loc).await? else {
+            return Response::error("not found", 404);
+        };
+        // ── AN ORDER HAS TO BE READY TO BE TAKEN ──
+        //
+        // There was no status check at all here: `load_order` compares the venue
+        // and nothing else, and accepting is a `Noted` event, so the kernel's FSM
+        // is never consulted either. A courier could therefore claim ANY order at
+        // the venue in ANY state, and three things followed from it.
+        //
+        // Accept a PENDING order the owner then rejects, and the assignment row
+        // keeps `delivered_at_ms IS NULL` for ever -- so `shift(open: false)`
+        // refuses and that courier can never close a shift again. Accept anything,
+        // and the owner's `assign_courier` answers 409 "already has a courier", so
+        // a courier can pre-empt the dispatcher. Accept a CONFIRMED order and
+        // `pickup` is legal straight to IN_DELIVERY, walking the food past the
+        // kitchen: PREPARING is never entered, so the ingredients it reserved are
+        // never consumed and the hold is stranded for good.
+        //
+        // READY is what the pool offers and CONFIRMED is what an owner assigns
+        // ahead of the kitchen, so those two are the whole legitimate set --
+        // plus PREPARING for an order the owner already handed to THIS courier,
+        // which `run::claim` decides against the assignment row it holds.
+        let status = v.get("status").and_then(Value::as_str).unwrap_or("").to_string();
+    
+        let cash_due = if v.get("payment").and_then(|p| p.as_str()) == Some("cash") {
+            v.get("total").and_then(|t| t.as_i64()).unwrap_or(0)
+        } else {
+            0
+        };
+    
+        // THE RACE IS SETTLED BY THE OBJECT, not by a primary key. Two couriers
+        // tapping at once are two calls to one Durable Object, which runs them one
+        // after the other; the first finds no assignment and writes one, the second
+        // finds it and is told plainly. That is the same guarantee the UNIQUE
+        // constraint gave, arriving as a property of where the bytes live.
+        let (oid, cid, st) = (id.clone(), courier_id.clone(), status.clone());
+        let taken = with_ops(&place, move |t| {
+            run::claim(t, &oid, &cid, &st, now, cash_due).map_err(Error::RustError)
         })
-        .to_string();
-        t.put(K_ASG, &oid, &rec, &[], &[])
-            .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
-        Ok(true)
-    })
-    .await?;
-    if !taken {
-        return Response::error("another courier took this order", 409);
+        .await?;
+        match taken {
+            run::Take::Taken => {}
+            run::Take::Held => return Response::error("another courier took this order", 409),
+            run::Take::NotReady => {
+                return Response::error(format!("this order is {status}, not ready to be taken"), 409)
+            }
+        }
+    
+        // ── THE ORDER CARRIES ITS COURIER ──
+        //
+        // The row above settles the race; this is what every screen actually reads.
+        // The courier's tasks, wallet and history all fold from the ORDER LOG, and
+        // so does the owner's queue -- so a courier recorded only in a side table
+        // is a courier none of them can see. Measured: a delivered order came back
+        // with `courier_id: null`, its courier's wallet showed zero deliveries and
+        // their history was empty, while the assignment row said otherwise.
+        //
+        // The INSERT is the authority on who won; this write only repeats its
+        // answer where the rest of the system looks.
+        let oid = id.clone();
+        let who = courier_id.clone();
+        let claimed = crate::hubstore::append_for(&place, &oid.clone(), now, move |current| {
+            let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
+            let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+            let mut o = old.clone();
+            o["courier_id"] = json!(who);
+            // Taking it ends any offer window: from here it is theirs until it is
+            // delivered or the owner moves it.
+            o["accepted_at_ms"] = json!(now);
+            let body = crate::fold::delta(&old, &o).to_string();
+            // `Noted`, not `Advanced`: taking an order is not a transition the
+            // order machine decided, and writing it as one would put an edge in
+            // the log that does not exist.
+            Ok(Some((dowiz_hub::EventKind::Noted, body, json!(true))))
+        })
+        .await;
+        if let Err(e) = claimed {
+            // LOUD. The assignment row stands, so the order is not lost -- but the
+            // courier's screens will not show it, and that is worth knowing.
+            crate::loud!(
+                &place.ns,
+                Some(&place.venue),
+                "courier.claim",
+                "{courier_id} took {id} and the log did not record it: {e}"
+            );
+        }
+    
+        let out = json!({ "ok": true, "orderId": id, "cashDue": cash_due });
+        Response::from_json(&out)
     }
-
-    // ── THE ORDER CARRIES ITS COURIER ──
-    //
-    // The row above settles the race; this is what every screen actually reads.
-    // The courier's tasks, wallet and history all fold from the ORDER LOG, and
-    // so does the owner's queue -- so a courier recorded only in a side table
-    // is a courier none of them can see. Measured: a delivered order came back
-    // with `courier_id: null`, its courier's wallet showed zero deliveries and
-    // their history was empty, while the assignment row said otherwise.
-    //
-    // The INSERT is the authority on who won; this write only repeats its
-    // answer where the rest of the system looks.
-    let oid = id.clone();
-    let who = courier_id.clone();
-    let claimed = crate::hubstore::append_for(&place, &oid.clone(), now, move |current| {
-        let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
-        let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-        let mut o = old.clone();
-        o["courier_id"] = json!(who);
-        // Taking it ends any offer window: from here it is theirs until it is
-        // delivered or the owner moves it.
-        o["accepted_at_ms"] = json!(now);
-        let body = crate::fold::delta(&old, &o).to_string();
-        // `Noted`, not `Advanced`: taking an order is not a transition the
-        // order machine decided, and writing it as one would put an edge in
-        // the log that does not exist.
-        Ok(Some((dowiz_hub::EventKind::Noted, body, json!(true))))
-    })
     .await;
-    if let Err(e) = claimed {
-        // LOUD. The assignment row stands, so the order is not lost -- but the
-        // courier's screens will not show it, and that is worth knowing.
-        crate::loud!(
-            &place.ns,
-            Some(&place.venue),
-            "courier.claim",
-            "{courier_id} took {id} and the log did not record it: {e}"
-        );
-    }
-
-    let out = json!({ "ok": true, "orderId": id, "cashDue": cash_due });
-    idem.done(&place, 200, &out.to_string()).await;
-    Response::from_json(&out)
+    idem.answered(&place, res).await
 }
 
 /// `POST /api/courier/orders/:id/pickup` — READY → IN_DELIVERY
@@ -530,29 +527,34 @@ pub async fn pickup(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         Ok(g) => g,
         Err(r) => return Ok(r),
     };
-    let t = ops(&place).await?;
-    if asg_of(&t, &id).map(|a| field_str(&a, "courier_id")) != Some(courier_id.clone()) {
-        return Response::error("not your delivery", 403);
-    }
-    if load_order(&place, &id, &loc).await?.is_none() {
-        return Response::error("not found", 404);
-    }
-    let merged = match write_status(&place, &id, "IN_DELIVERY", now).await {
-        Ok(v) => v,
-        Err(e) => return Response::error(e.to_string(), 409),
-    };
-    let oid = id.clone();
-    with_ops(&place, move |t| {
-        if let Some(mut a) = asg_of(t, &oid) {
-            a["picked_up_at_ms"] = json!(now);
-            t.put(K_ASG, &oid, &a.to_string(), &[], &[])
-                .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
+    // G1 / D1: every exit below is an ANSWER, recorded (or, for a 5xx or an
+    // internal error, released) by `answered` -- never a claim left standing.
+    let res: Result<Response> = async {
+        let t = ops(&place).await?;
+        if asg_of(&t, &id).map(|a| field_str(&a, "courier_id")) != Some(courier_id.clone()) {
+            return Response::error("not your delivery", 403);
         }
-        Ok(())
-    })
-    .await?;
-    idem.done(&place, 200, &merged.to_string()).await;
-    Response::from_json(&merged)
+        if load_order(&place, &id, &loc).await?.is_none() {
+            return Response::error("not found", 404);
+        }
+        let merged = match write_status(&place, &id, "IN_DELIVERY", now).await {
+            Ok(v) => v,
+            Err(e) => return Response::error(e.to_string(), 409),
+        };
+        let oid = id.clone();
+        with_ops(&place, move |t| {
+            if let Some(mut a) = asg_of(t, &oid) {
+                a["picked_up_at_ms"] = json!(now);
+                t.put(K_ASG, &oid, &a.to_string(), &[], &[])
+                    .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
+            }
+            Ok(())
+        })
+        .await?;
+        Response::from_json(&merged)
+    }
+    .await;
+    idem.answered(&place, res).await
 }
 
 /// `POST /api/courier/orders/:id/deliver` — `{cash_collected?}`
@@ -595,64 +597,69 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
         Ok(g) => g,
         Err(r) => return Ok(r),
     };
-
-    let t = ops(&place).await?;
-    let a = asg_of(&t, &id).filter(|a| {
-        field_str(a, "courier_id") == courier_id
-            && a.get("delivered_at_ms").map_or(true, |x| x.is_null())
-    });
-    let Some(a) = a else {
-        return Response::error("not your delivery", 403);
-    };
-    let cash_due = field_i64(&a, "cash_due");
-    let collected = body.cash_collected.unwrap_or(cash_due);
-    if collected < 0 {
-        return Response::error("cash cannot be negative", 400);
-    }
-    // A short handover is RECORDED, never silently rounded. The difference is
-    // what a settlement dispute is later resolved from.
-    let short = cash_due - collected;
-
-    if load_order(&place, &id, &loc).await?.is_none() {
-        return Response::error("not found", 404);
-    }
-    // THE CASH GOES ON THE ORDER, not only into a shifts table. The courier's
-    // wallet folds `cash_collected` from the orders themselves -- the same
-    // reason the takings and the promo count do -- so a number kept only in a
-    // side table is a number that screen will never show. It read zero for
-    // every delivery until now.
-    let merged = match write_status_with(&place, &id, "DELIVERED", collected, now).await {
-        Ok(v) => v,
-        Err(e) => return Response::error(e.to_string(), 409),
-    };
-    // THE ASSIGNMENT AND THE SHIFT IN ONE WRITE. They were two UPDATEs, and
-    // half of that is a delivery recorded against nobody's shift -- the
-    // courier's own count and cash silently short by one run.
-    let (oid, cid) = (id.clone(), courier_id.clone());
-    with_ops(&place, move |t| {
-        if let Some(mut a) = asg_of(t, &oid) {
-            a["delivered_at_ms"] = json!(now);
-            a["cash_collected"] = json!(collected);
-            t.put(K_ASG, &oid, &a.to_string(), &[], &[])
-                .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
+    // G1 / D1: every exit below is an ANSWER, recorded (or, for a 5xx or an
+    // internal error, released) by `answered` -- never a claim left standing.
+    let res: Result<Response> = async {
+    
+        let t = ops(&place).await?;
+        let a = asg_of(&t, &id).filter(|a| {
+            field_str(a, "courier_id") == courier_id
+                && a.get("delivered_at_ms").map_or(true, |x| x.is_null())
+        });
+        let Some(a) = a else {
+            return Response::error("not your delivery", 403);
+        };
+        let cash_due = field_i64(&a, "cash_due");
+        let collected = body.cash_collected.unwrap_or(cash_due);
+        if collected < 0 {
+            return Response::error("cash cannot be negative", 400);
         }
-        if let Some(mut s) = t
-            .get(K_SHIFT, &cid)
-            .and_then(|j| serde_json::from_str::<Value>(&j).ok())
-            .filter(|s| s.get("ended_at_ms").map_or(true, |v| v.is_null()))
-        {
-            s["deliveries"] = json!(field_i64(&s, "deliveries") + 1);
-            s["cash_collected"] = json!(field_i64(&s, "cash_collected") + collected);
-            t.put(K_SHIFT, &cid, &s.to_string(), &[], &[])
-                .map_err(|e| Error::RustError(format!("shift: {e}")))?;
+        // A short handover is RECORDED, never silently rounded. The difference is
+        // what a settlement dispute is later resolved from.
+        let short = cash_due - collected;
+    
+        if load_order(&place, &id, &loc).await?.is_none() {
+            return Response::error("not found", 404);
         }
-        Ok(())
-    })
-    .await?;
-    let out =
-        json!({ "order": merged, "cashDue": cash_due, "cashCollected": collected, "short": short });
-    idem.done(&place, 200, &out.to_string()).await;
-    Response::from_json(&out)
+        // THE CASH GOES ON THE ORDER, not only into a shifts table. The courier's
+        // wallet folds `cash_collected` from the orders themselves -- the same
+        // reason the takings and the promo count do -- so a number kept only in a
+        // side table is a number that screen will never show. It read zero for
+        // every delivery until now.
+        let merged = match write_status_with(&place, &id, "DELIVERED", collected, now).await {
+            Ok(v) => v,
+            Err(e) => return Response::error(e.to_string(), 409),
+        };
+        // THE ASSIGNMENT AND THE SHIFT IN ONE WRITE. They were two UPDATEs, and
+        // half of that is a delivery recorded against nobody's shift -- the
+        // courier's own count and cash silently short by one run.
+        let (oid, cid) = (id.clone(), courier_id.clone());
+        with_ops(&place, move |t| {
+            if let Some(mut a) = asg_of(t, &oid) {
+                a["delivered_at_ms"] = json!(now);
+                a["cash_collected"] = json!(collected);
+                t.put(K_ASG, &oid, &a.to_string(), &[], &[])
+                    .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
+            }
+            if let Some(mut s) = t
+                .get(K_SHIFT, &cid)
+                .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+                .filter(|s| s.get("ended_at_ms").map_or(true, |v| v.is_null()))
+            {
+                s["deliveries"] = json!(field_i64(&s, "deliveries") + 1);
+                s["cash_collected"] = json!(field_i64(&s, "cash_collected") + collected);
+                t.put(K_SHIFT, &cid, &s.to_string(), &[], &[])
+                    .map_err(|e| Error::RustError(format!("shift: {e}")))?;
+            }
+            Ok(())
+        })
+        .await?;
+        let out =
+            json!({ "order": merged, "cashDue": cash_due, "cashCollected": collected, "short": short });
+        Response::from_json(&out)
+    }
+    .await;
+    idem.answered(&place, res).await
 }
 
 /// `POST /api/courier/position` — `{lat, lon, accuracy_m?, speed_mps?, order_id?}`

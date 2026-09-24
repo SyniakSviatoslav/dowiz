@@ -23,6 +23,9 @@ use worker::*;
 
 use dowiz_kernel::thread::{self, Body, Message, Party, Thread};
 
+/// Who may read or speak in a thread (D18).
+pub mod party;
+
 
 #[derive(Deserialize)]
 struct MessageRow {
@@ -118,10 +121,13 @@ pub async fn messages(req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
     // AUTHENTICATED, AND TO THIS VENUE. A thread holds what a customer and a
     // venue said to each other; the id was the only thing standing in front
     // of it.
-    if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await
-    {
-        return Ok(r);
+    let p = match crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await {
+        Ok(p) => p,
+        Err(r) => return Ok(r),
+    };
+    // AND TO THIS THREAD (D18, G6): `party::thread_party`.
+    if let Err((code, why)) = party::thread_party(&p, &id, false) {
+        return Response::error(why, code);
     }
     let rows = load(&place, &id).await?;
 
@@ -204,16 +210,13 @@ pub async fn send(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
     // string the caller chose, so anyone with a thread id could post as the
     // venue -- or as the customer -- and the message would look exactly like
     // the real one. The body's `from` is now ignored; a role decides.
+    // AND A CUSTOMER ONLY IN ITS OWN ORDER'S THREAD (D18, G6); staff and a
+    // courier do not speak here (`party::thread_party`).
     let from = match crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await {
-        Ok(crate::auth::Principal::Owner { .. }) => Party::Venue,
-        Ok(crate::auth::Principal::Customer { .. }) => Party::Customer,
-        Ok(crate::auth::Principal::Courier { .. }) => {
-            return Response::error("a courier does not speak in this thread", 403)
-        }
-        // Deny by default: no staff capability names speaking for the venue.
-        Ok(crate::auth::Principal::Staff { .. }) => {
-            return Response::error("staff do not speak in this thread", 403)
-        }
+        Ok(p) => match party::thread_party(&p, &thread_id, true) {
+            Ok(side) => side,
+            Err((code, why)) => return Response::error(why, code),
+        },
         Err(r) => return Ok(r),
     };
     let _ = &b.from;

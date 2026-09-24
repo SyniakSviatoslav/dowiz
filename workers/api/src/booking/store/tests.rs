@@ -188,3 +188,30 @@ fn the_days_list_is_the_days_with_the_venues_moves() {
     assert_eq!(rows[0]["tableN"], 1);
     assert_eq!(rows[0]["next"], json!(["CONFIRMED", "DECLINED", "CANCELLED_BY_VENUE"]));
 }
+
+// ── the free-cancel window, wired (audit D29) ───────────────────────────────
+
+/// A guest cancelling inside the venue's free window (120 minutes before the
+/// sitting) is marked late on the event, the record and the console's row;
+/// ten hours ahead is not. Neither is refused: late is a fact, not a penalty.
+#[test]
+fn a_guest_cancel_inside_the_free_window_is_marked_late() {
+    let mut t = Table::create(CEIL).unwrap();
+    book(&mut t, &guest("rsv_early", "k1", None)).unwrap();
+    book(&mut t, &guest("rsv_late", "k2", None)).unwrap();
+    write_transition(&mut t, "rsv_early", CancelledByGuest, Side::Guest, "g", "", NOW * 60_000).unwrap().unwrap();
+    write_transition(&mut t, "rsv_late", CancelledByGuest, Side::Guest, "g", "", (SLOT - 30) * 60_000)
+        .unwrap()
+        .unwrap();
+    let last = |id: &str| events_of(&t, id).last().map(|e| e.seq).unwrap();
+    let ev = |id: &str| -> Value {
+        serde_json::from_str(&t.get(K_EV, &ev_key(id, last(id))).unwrap()).unwrap()
+    };
+    assert_eq!(ev("rsv_early")["late"], json!(false), "ten hours ahead is free");
+    assert_eq!(ev("rsv_late")["late"], json!(true), "thirty minutes ahead is late");
+    let rows = day_rows(&t, SLOT - 60, SLOT + 60);
+    let row = |id: &str| rows.iter().find(|r| r["id"] == id).cloned().unwrap();
+    assert_eq!(row("rsv_late")["lateCancel"], json!(true));
+    assert_eq!(row("rsv_early")["lateCancel"], json!(false));
+    assert_eq!(row("rsv_late")["status"], "CANCELLED_BY_GUEST", "late is not refused");
+}

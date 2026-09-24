@@ -71,6 +71,13 @@ pub struct PayIn {
     /// (`pay::wallet`), and a balance short of the amount is a refusal.
     #[serde(default)]
     pub wallet: Option<String>,
+    /// D7 (G4): the round's `seq` as the screen that took this payment saw
+    /// it, as an amendment quotes it. A payment quoting a version the round
+    /// has moved past -- a second waiter's split, an offline re-tap under a
+    /// fresh key -- is refused, so the same 700 is not taken twice. Absent is
+    /// a client older than this rule and is not checked.
+    #[serde(default)]
+    pub base_seq: Option<u64>,
     pub now_ms: i64,
 }
 
@@ -90,6 +97,10 @@ pub struct PayOut {
     pub seq: u64,
     pub generation: i64,
 }
+
+/// Who a guest's round names as its signer (`placer::GUEST` in the Worker):
+/// not a person -- the round is born PENDING and a member of staff confirms it.
+pub const GUEST: &str = "guest";
 
 /// A round in one of these was never owed, or its money is already going back:
 /// taking a payment on it would record money the venue must then return.
@@ -156,6 +167,21 @@ pub fn decide(
     let status = before.get("status").and_then(Value::as_str).unwrap_or("");
     if refuses_payment(status) {
         return Err(Refused::Conflict(format!("this round is {status}; it takes no payment")));
+    }
+    // D4 / D9 (G4): A GUEST'S ROUND NOBODY HAS CONFIRMED is not yet the venue's
+    // order. Paid now and rejected next, the money had no way back: refund
+    // refuses PENDING, and REJECTED -> REFUNDING is no edge. A waiter's own
+    // PENDING round (pay-first at the bar) is the venue's already and pays.
+    if status == "PENDING" && before.get("placed_by").and_then(Value::as_str) == Some(GUEST) {
+        return Err(Refused::Conflict("a guest's round is confirmed before it is paid: confirm it first".into()));
+    }
+    // D7 (G4): the payment quotes the version of the round its screen showed.
+    // The words are the amendment's, so the room app says "reload" for both.
+    if let Some(seen) = input.base_seq.filter(|s| *s != current.seq) {
+        return Err(Refused::Conflict(format!(
+            "this round changed while you were editing it (you saw {seen}, it is at {}): look again before taking money",
+            current.seq
+        )));
     }
     let till = if input.method == "cash" {
         let Some(open) = room.open_till else {

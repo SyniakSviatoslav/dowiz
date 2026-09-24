@@ -261,6 +261,32 @@ mod advancing {
         assert_eq!(hub.len(), 1, "one Advanced event");
     }
 
+    /// D4 (G4): a round the room took money on cannot be REJECTED or
+    /// CANCELLED -- both drop it from the bill and the takings with the cash
+    /// already in the drawer and no record it is owed back. The way out is the
+    /// refund, which needs the round confirmed first.
+    #[test]
+    fn a_round_with_room_payments_is_not_rejected_or_cancelled() {
+        for next in ["REJECTED", "CANCELLED"] {
+            let (mut hub, mut stock) = images();
+            let mut o: serde_json::Value = serde_json::from_str(&order("PENDING", "sushi-durres")).unwrap();
+            o["payments"] = json!([{"by": "p1", "amount": 900, "method": "cash", "at": 1}]);
+            let out = decide(&mut hub, &mut stock, Some(&o.to_string()), &input(next));
+            assert!(matches!(&out, Err(Refused::Conflict(m)) if m.contains("has been paid") && m.contains("refund")), "{next}: {out:?}");
+            assert_eq!((hub.len(), stock.len()), (0, 0), "{next}: nothing written");
+        }
+    }
+
+    /// The twin: the same round, paid nothing (or an empty list), is rejected.
+    #[test]
+    fn an_unpaid_round_is_still_rejected() {
+        let (mut hub, mut stock) = images();
+        let mut o: serde_json::Value = serde_json::from_str(&order("PENDING", "sushi-durres")).unwrap();
+        o["payments"] = json!([]);
+        let merged = decide(&mut hub, &mut stock, Some(&o.to_string()), &input("REJECTED")).expect("unpaid");
+        assert_eq!(merged["status"], "REJECTED");
+    }
+
     /// THE HUB-OWNED FIELDS SURVIVE THE TRANSITION. The kernel owns items,
     /// status and money; the address, the contact and the payment ride
     /// alongside, and an address lost on a status change is a failure that

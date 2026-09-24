@@ -141,6 +141,12 @@ pub fn reprice(order: &mut Value, items: Vec<Value>, discount: i64) -> Result<()
     order["subtotal"] = json!(subtotal);
     order["discount"] = json!(discount);
     order["total"] = json!(total);
+    // D8 (G4): amended down to exactly what was paid, the round IS paid. Only
+    // `pay` used to write "paid", so this round stayed owed-nothing-but-unpaid
+    // for ever: every further payment "exceeds the total".
+    if paid > 0 && paid == total {
+        order["payment_status"] = json!("paid");
+    }
     Ok(())
 }
 

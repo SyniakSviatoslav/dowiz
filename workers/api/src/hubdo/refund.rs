@@ -29,11 +29,46 @@ impl HubImages {
         for (kind, body, _) in &written {
             self.broadcast(*kind as u8, &input.order_id, body, next);
         }
+        // D12 (G5): THE WALLET'S SHARE GOES BACK when the refund is completed.
+        // The log first, then the ledger, for `write_both`'s reason (as `pay`
+        // writes its leg). A lost reversal is named on the console; nothing
+        // re-attempts it yet (OPEN in G5's verdict).
+        if input.complete {
+            self.hand_back_wallets(&merged, &input).await?;
+        }
         // THE EXCEPTION ALERT (P1-5): a refund is an exception row; the
         // alert is evidence about it and never fails the refund.
         self.exceptions_after(&input.location_id, input.now_ms).await;
         let seq = written.last().map_or(0, |w| w.2);
         Ok(Ok(RefundOut { merged: merged.to_string(), seq, generation: next }))
+    }
+
+    /// Append the REFUND records for every wallet payment on the round
+    /// (`command::refund::wallet::reversals`). Never fails the refund.
+    async fn hand_back_wallets(&self, order: &serde_json::Value, input: &RefundIn) -> Result<()> {
+        if !order.get("payments").and_then(serde_json::Value::as_array).into_iter().flatten()
+            .any(|p| p.get("method").and_then(serde_json::Value::as_str) == Some("wallet"))
+        {
+            return Ok(());
+        }
+        let (gen, mut log) = self.ledger_log().await?;
+        let mut rows: Vec<String> = log.about(crate::wallet::K_TX, None, usize::MAX).into_iter().map(|e| e.json).collect();
+        rows.reverse();
+        let back = match crate::command::refund::wallet::reversals(order, &input.location_id, &rows, input.now_ms) {
+            Ok(b) => b,
+            Err(r) => {
+                console_error!("wallet: order {} was refunded and its wallet was NOT credited ({})", input.order_id, r.message());
+                return Ok(());
+            }
+        };
+        if back.is_empty() {
+            return Ok(());
+        }
+        let appended = back.iter().all(|d| log.append(crate::wallet::K_TX, &d.tx_id, &d.record).is_ok());
+        if !appended || self.put_image(crate::wallet::IMAGE_LEDGER, gen, &log.to_bytes()).await?.is_none() {
+            console_error!("wallet: order {} was refunded and its wallet credit was NOT written", input.order_id);
+        }
+        Ok(())
     }
 
     /// THE FOOD THAT CAME BACK: one choice per order, written to the stock log

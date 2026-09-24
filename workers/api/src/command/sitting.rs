@@ -30,9 +30,13 @@ impl Round<'_> {
         self.order.get("status").and_then(Value::as_str).unwrap_or("")
     }
     /// Does this round's money count toward the bill? A rejected or cancelled
-    /// round took no money, and a guest is not asked to pay for it.
+    /// round took no money, and a guest is not asked to pay for it. Nor for a
+    /// guest's QR round nobody has confirmed (D9): the code on the table never
+    /// expires, and `pay` refuses that round until a waiter confirms it.
     pub fn billed(&self) -> bool {
-        took_money(self.status())
+        let waiting = self.status() == "PENDING"
+            && self.order.get("placed_by").and_then(Value::as_str) == Some(dowiz_hub::room::pay::GUEST);
+        took_money(self.status()) && !waiting
     }
 }
 

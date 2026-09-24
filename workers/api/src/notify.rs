@@ -122,8 +122,8 @@ pub fn order_text(envelope: &Value, lines: &[LineOut], currency: &str, venue: &s
     let tip = envelope.get("tip").and_then(Value::as_i64).unwrap_or(0);
 
     let mut out = format!("🍣 {venue} — #{id}\n");
-    if !name.is_empty() || !phone.is_empty() {
-        out.push_str(&format!("👤 {name} {phone}\n"));
+    if let Some(who) = ticket_contact(&name, &phone, kind) {
+        out.push_str(&format!("👤 {who}\n"));
     }
     // THE KITCHEN'S FIRST LINE IS WHERE IT GOES, and a table order says which
     // table: a ticket reading "🛵 delivery" for somebody sitting in the room
@@ -169,6 +169,33 @@ pub fn order_text(envelope: &Value, lines: &[LineOut], currency: &str, venue: &s
     }
     out.push_str(&format!("💰 {} · {payment}", money_text(total, currency)));
     out
+}
+
+/// THE PERSON ON A TICKET, MINIMISED (P11, GDPR Art. 5(1)(c)). A ticket goes
+/// to the venue's Telegram chat, which keeps it on Telegram's servers for as
+/// long as the chat lives -- no erasure reaches it -- so it carries only what
+/// the kitchen and the pass need:
+///
+/// - the NAME the order is called out by: the first name and the initial of
+///   the last ("Arben H."), never the whole of what was typed;
+/// - the PHONE only for a delivery, where the courier or the kitchen may have
+///   to ring the door. A pickup is collected at the counter by the name, and a
+///   table order is at a table; neither needs a number in a chat log.
+///
+/// `None` when nothing is left to print.
+pub fn ticket_contact(name: &str, phone: &str, kind: &str) -> Option<String> {
+    let words: Vec<&str> = name.split_whitespace().collect();
+    let short = match words.as_slice() {
+        [] => String::new(),
+        [one] => one.to_string(),
+        [first, .., last] => {
+            let initial: String = last.chars().take(1).collect();
+            format!("{first} {initial}.")
+        }
+    };
+    let phone = if kind == "delivery" { phone.trim() } else { "" };
+    let out = format!("{short} {phone}").trim().to_string();
+    (!out.is_empty()).then_some(out)
 }
 
 // `order_placed` WAS HERE, and its going unused is the proof rather than a
@@ -228,52 +255,4 @@ pub async fn test(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn lek_has_no_minor_unit_and_euro_has_two() {
-        assert_eq!(money_text(1500, "ALL"), "1500 ALL");
-        assert_eq!(money_text(981, "EUR"), "9.81 EUR");
-        assert_eq!(money_text(-5, "EUR"), "-0.05 EUR");
-    }
-
-    #[test]
-    fn order_text_carries_the_total_and_every_line() {
-        let env = json!({ "id": "abcdefghijkl", "contact": { "name": "Ana", "phone": "+355" },
-            "fulfilment": { "kind": "delivery", "address": { "line": "Rruga 1" } },
-            "payment": "cash", "total": 1800, "delivery_fee": 300 });
-        let lines = [LineOut { name: "Sake".into(), quantity: 2, unit_price: 750 }];
-        let t = order_text(&env, &lines, "ALL", "Dubin & Sushi");
-        assert!(t.contains("#abcdefgh"));
-        assert!(t.contains("2 × Sake — 1500 ALL"));
-        assert!(t.contains("delivery 300 ALL"));
-        assert!(t.ends_with("1800 ALL · cash"));
-    }
-
-    /// THE KITCHEN'S FIRST LINE IS WHERE IT GOES, and this is the one that
-    /// used to be wrong for a whole kind. The branch was `if kind == "pickup"
-    /// { 🥡 } else { 🛵 }`, so an order placed at a table printed "delivery"
-    /// and sent somebody looking for an address that does not exist.
-    #[test]
-    fn a_table_order_says_which_table_and_never_says_delivery() {
-        let env = json!({ "id": "abcdefghijkl", "contact": { "name": "Ana", "phone": "+355" },
-            "fulfilment": { "kind": "dine_in", "table": "7" },
-            "payment": "cash", "total": 1500 });
-        let lines = [LineOut { name: "Sake".into(), quantity: 2, unit_price: 750 }];
-        let t = order_text(&env, &lines, "ALL", "Dubin & Sushi");
-        assert!(t.contains("table 7"), "the ticket must name the table: {t}");
-        assert!(!t.contains("delivery"), "and must not call it a delivery: {t}");
-    }
-
-    /// A pickup is still a pickup. Asserted beside the above because the fix
-    /// for one kind is exactly how the other two get broken.
-    #[test]
-    fn a_pickup_is_unchanged_by_the_third_kind_arriving() {
-        let env = json!({ "id": "abcdefghijkl", "contact": { "name": "Ana", "phone": "+355" },
-            "fulfilment": { "kind": "pickup" }, "payment": "cash", "total": 1500 });
-        let t = order_text(&env, &[], "ALL", "Dubin & Sushi");
-        assert!(t.contains("pickup"), "{t}");
-        assert!(!t.contains("table"), "{t}");
-    }
-}
+mod tests;

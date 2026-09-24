@@ -120,6 +120,86 @@ fn graph_facts(
 
 
 
+/// EVERYTHING THE OWNER'S ASSISTANT IS SHOWN, as one value: what is sent to
+/// the model is exactly this, so a test of this is a test of the payload.
+///
+/// THE FACTS ARE COMPUTED HERE and handed over. The model is told plainly that
+/// they are the truth and it is not; a model that invented a number would have
+/// an owner phoning a customer about an order that does not exist.
+pub fn owner_facts(
+    hub: &dowiz_hub::Hub,
+    cat: &dowiz_hub::catalog::Catalog,
+    labels: &std::collections::HashMap<String, String>,
+    loc: &str,
+    question: &str,
+    now: i64,
+) -> Value {
+    let listed: Vec<crate::hubdo::OrderView> =
+        crate::hubstore::orders_state(hub).into_iter().map(crate::hubdo::OrderView::of_event).collect();
+    let mut live: Vec<Value> = orders_of(listed, loc)
+        .into_iter()
+        .filter(|o| crate::services::customers::forget::LIVE.contains(&o.get("status").and_then(Value::as_str).unwrap_or("")))
+        .map(|o| owner_order_fact(&o, now))
+        .collect();
+    live.sort_by_key(|o| -o["waiting_minutes"].as_i64().unwrap_or(0));
+    let off: Vec<Value> = cat
+        .products()
+        .into_iter()
+        .filter_map(|(_, j)| {
+            let v: Value = serde_json::from_str(&j).ok()?;
+            if v.get("available").and_then(Value::as_bool).unwrap_or(true) {
+                return None;
+            }
+            Some(json!({ "name": v.get("name").cloned().unwrap_or(Value::Null),
+                         "why": v.get("unavailableNote").cloned().unwrap_or(Value::Null) }))
+        })
+        .collect();
+    // Everything else the hub knows that bears on what was asked.
+    let knows = graph_facts(hub, cat, labels, question, 12);
+    json!({ "now_ms": now, "live_orders": live, "off_the_menu": off, "hub_knows": knows })
+}
+
+/// ONE LIVE ORDER AS THE OWNER'S ASSISTANT SEES IT (P11, GDPR Art. 5(1)(c)).
+///
+/// The facts go to whatever model the venue configured (`ai.endpoint`), which
+/// is a processor the customer was never told about. So the order is there --
+/// its id, status, money, age, kind, courier and lines, which is what "what is
+/// late" and "who is carrying what" are answered from -- and the PERSON is
+/// not: no `contact` (name, phone) and no `address` (a home is a person). An
+/// owner who needs to ring somebody opens the order on their own screen.
+pub fn owner_order_fact(o: &Value, now: i64) -> Value {
+    let created = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(now);
+    let field = |k: &str| o.get(k).cloned().unwrap_or(Value::Null);
+    json!({
+        "id": field("id"),
+        "status": field("status"),
+        "total": field("total"),
+        "waiting_minutes": (now - created) / 60_000,
+        "fulfilment": o.get("fulfilment").and_then(|f| f.get("kind")).cloned().unwrap_or(Value::Null),
+        "courier_id": field("courier_id"),
+        "items": field("items"),
+    })
+}
+
+/// ONE ORDER OF THE COURIER'S OWN RUN, for the courier's assistant (P11). The
+/// courier is going to the door, so the address LINE stays -- it is the one
+/// thing "which do I take first" needs -- but not its parts, coordinates or
+/// note, and never the customer's name or phone: the courier app has those,
+/// and the model does not need them to plan a route.
+pub fn courier_run_fact(o: &Value, now: i64) -> Value {
+    let created = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(now);
+    let field = |k: &str| o.get(k).cloned().unwrap_or(Value::Null);
+    let line = o.pointer("/fulfilment/address/line").cloned().unwrap_or(Value::Null);
+    json!({
+        "id": field("id"),
+        "status": field("status"),
+        "total": field("total"),
+        "payment": field("payment"),
+        "waiting_minutes": (now - created) / 60_000,
+        "address": line,
+    })
+}
+
 /// `GET /api/owner/graph?q=` — what the hub knows, directly.
 ///
 /// THE SAME RETRIEVAL THE ASSISTANT USES, exposed on its own. An answer a model
@@ -172,57 +252,9 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
             Err(r) => return Ok(r),
         };
     let now = ctx.data.now_ms;
-    // THE FACTS ARE COMPUTED HERE and handed over. The model is told plainly
-    // that they are the truth and it is not; a model that invented a number
-    // would have an owner phoning a customer about an order that does not exist.
-    let listed: Vec<crate::hubdo::OrderView> = crate::hubstore::orders_state(&loaded.hub)
-        .into_iter()
-        .map(crate::hubdo::OrderView::of_event)
-        .collect();
-    let mut live: Vec<Value> = orders_of(listed, &loc)
-        .into_iter()
-        .filter(|o| {
-            matches!(
-                o.get("status").and_then(Value::as_str),
-                Some("PENDING" | "CONFIRMED" | "PREPARING" | "READY" | "IN_DELIVERY")
-            )
-        })
-        .map(|o| {
-            let created = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(now);
-            json!({
-                "id": o.get("id").cloned().unwrap_or(Value::Null),
-                "status": o.get("status").cloned().unwrap_or(Value::Null),
-                "total": o.get("total").cloned().unwrap_or(Value::Null),
-                "waiting_minutes": (now - created) / 60_000,
-                "fulfilment": o.get("fulfilment").and_then(|f| f.get("kind")).cloned()
-                    .unwrap_or(Value::Null),
-                "courier_id": o.get("courier_id").cloned().unwrap_or(Value::Null),
-                "contact": o.get("contact").cloned().unwrap_or(Value::Null),
-                "address": o.get("fulfilment").and_then(|f| f.get("address")).cloned()
-                    .unwrap_or(Value::Null),
-                "items": o.get("items").cloned().unwrap_or(Value::Null),
-            })
-        })
-        .collect();
-    live.sort_by_key(|o| -o["waiting_minutes"].as_i64().unwrap_or(0));
     let cat = crate::hubstore::load_catalog(&place).await?.catalog;
-    let off: Vec<Value> = cat
-        .products()
-        .into_iter()
-        .filter_map(|(_, j)| {
-            let v: Value = serde_json::from_str(&j).ok()?;
-            if v.get("available").and_then(Value::as_bool).unwrap_or(true) {
-                return None;
-            }
-            Some(json!({ "name": v.get("name").cloned().unwrap_or(Value::Null),
-                         "why": v.get("unavailableNote").cloned().unwrap_or(Value::Null) }))
-        })
-        .collect();
-    // Everything else the hub knows that bears on what was asked.
     let labels = shelf_labels(&place).await;
-    let knows = graph_facts(&loaded.hub, &cat, &labels, &body.question, 12);
-    let facts =
-        json!({ "now_ms": now, "live_orders": live, "off_the_menu": off, "hub_knows": knows });
+    let facts = owner_facts(&loaded.hub, &cat, &labels, &loc, &body.question, now);
     crate::assist::ask(&place, crate::assist::SYSTEM_OWNER, facts, &body.question).await
 }
 
@@ -252,20 +284,11 @@ pub async fn courier_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> 
                 Some("DELIVERED" | "CANCELLED" | "REJECTED")
             )
         })
-        .map(|o| {
-            let created = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(now);
-            json!({
-                "id": o.get("id").cloned().unwrap_or(Value::Null),
-                "status": o.get("status").cloned().unwrap_or(Value::Null),
-                "total": o.get("total").cloned().unwrap_or(Value::Null),
-                "payment": o.get("payment").cloned().unwrap_or(Value::Null),
-                "waiting_minutes": (now - created) / 60_000,
-                "address": o.get("fulfilment").and_then(|f| f.get("address")).cloned()
-                    .unwrap_or(Value::Null),
-                "contact": o.get("contact").cloned().unwrap_or(Value::Null),
-            })
-        })
+        .map(|o| courier_run_fact(&o, now))
         .collect();
     let facts = json!({ "now_ms": now, "my_runs": mine });
     crate::assist::ask(&place, crate::assist::SYSTEM_COURIER, facts, &body.question).await
 }
+
+#[cfg(test)]
+mod tests;

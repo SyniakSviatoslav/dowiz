@@ -51,8 +51,26 @@ pub fn side_of(p: &Principal, reservation_id: &str) -> Result<Side, (u16, &'stat
     match p {
         Principal::Customer { order_id, .. } if order_id == reservation_id => Ok(Side::Guest),
         Principal::Customer { .. } => Err((404, "not found")),
-        Principal::Owner { .. } | Principal::Staff { .. } => Ok(Side::Venue),
+        Principal::Owner { .. } => Ok(Side::Venue),
+        // D40 (G6): staff move and read a booking -- the guest's phone with it
+        // -- with the floor's capability, not merely for being staff.
+        Principal::Staff { caps, .. } if caps.allows(crate::auth::Cap::TakeOrders) => Ok(Side::Venue),
+        Principal::Staff { .. } => Err((403, "no capability for the venue's bookings")),
         Principal::Courier { .. } => Err((403, "forbidden role")),
+    }
+}
+
+/// D40 (G6): WHO A BOOKING IS FILED UNDER comes from the token, never the
+/// body. `userId` was the client's to choose and was stored, so a guest could
+/// file a booking under somebody else's cap -- or dodge their own with a fresh
+/// id per tap. A customer token names its customer; the owner may name one,
+/// as they may name a wallet (`wallet::wallet_who`); anyone else files none.
+pub fn booking_user(p: Option<&Principal>, typed: Option<&str>) -> Option<String> {
+    let typed = typed.map(str::trim).filter(|u| !u.is_empty());
+    match p {
+        Some(Principal::Customer { customer_id, .. }) => Some(customer_id.clone()),
+        Some(Principal::Owner { .. }) => typed.map(str::to_string),
+        _ => None,
     }
 }
 
@@ -90,13 +108,12 @@ pub fn moves(side: Side, from: ReservationStatus) -> Vec<ReservationStatus> {
 /// is the SAME key the customer list uses, so a booking and an order by one
 /// person name one customer.
 pub fn phone_key(secret: &[u8], phone: &str) -> Option<String> {
-    use crate::services::customers::{handlers::customer_key, identity};
     let digits = phone.chars().filter(char::is_ascii_digit).count();
     if digits < PHONE_MIN_DIGITS {
         return None;
     }
-    let canonical = identity::canonical_digits(phone, identity::VENUE_DIAL);
-    Some(customer_key(secret, canonical.as_deref().unwrap_or(phone)))
+    // THE ONE CANONICALISER (audit D38), not a second copy of it here.
+    Some(crate::services::customers::identity::person_key(secret, phone))
 }
 
 /// What a guest must give: a name, and a phone the venue can call. Answers the

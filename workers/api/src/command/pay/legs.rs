@@ -132,7 +132,7 @@ pub fn repair(orders: &[Value], ledger: &[String], venue: &str, venue_currency: 
         let input = PayIn {
             order_id: leg.order_id.clone(), location_id: venue.to_string(), amount: leg.amount,
             method: "wallet".into(), by: "repair".into(), till_id: None, covers: None, currency: None,
-            rate_ppm: None, tip: None, wallet: Some(leg.wallet.clone()), now_ms: leg.at,
+            rate_ppm: None, tip: None, wallet: Some(leg.wallet.clone()), base_seq: None, now_ms: leg.at,
         };
         match debit(&journal, &input, &leg.currency) {
             Ok(d) => {

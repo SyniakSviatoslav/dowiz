@@ -159,6 +159,23 @@ fn rotation_treats_sealed_and_plain_copies_alike() {
     assert!(dropped.contains(&object_key(&s3(), "v", now - 40 * DAY, true, false)), "old plain kept");
     assert!(dropped.contains(&object_key(&s3(), "v", now - 13 * DAY, true, true)), "sealed extra in a week kept");
     assert!(!dropped.iter().any(|k| k.contains(".witness.")), "a witness was dropped");
-    // 7 daily + 4 weekly survive, whatever their kind.
-    assert_eq!(keys.len() - 1 - dropped.len(), 11);
+    // 7 daily + 2 weekly survive, whatever their kind.
+    assert_eq!(keys.len() - 1 - dropped.len(), 9);
+}
+
+/// P3's CHECK. Sixty nightly stamps, one a day at the cron's hour: nothing
+/// the rotation keeps is 21 days old or older, so the forget answer's "within
+/// 22 days" is true of every copy the bucket still holds (a copy made the
+/// night before an erasure is at most 21 days old when it goes).
+#[test]
+fn sixty_nights_keep_nothing_older_than_twenty_one_days() {
+    const DAY: i64 = 86_400_000;
+    let now = 1_800_000_000_000;
+    let keys: Vec<String> = (0..60).map(|d| object_key(&s3(), "v", now - d * DAY, true, false)).collect();
+    let dropped = keys_to_drop(&keys, now);
+    let kept: Vec<i64> = (0..60).filter(|d| !dropped.contains(&keys[*d as usize])).collect();
+    assert!(kept.iter().all(|d| *d < 21), "kept days {kept:?}");
+    assert_eq!(super::super::KEEP_WEEKLY_MS, 21 * DAY);
+    // Still a useful set: a week of dailies and two weeklies.
+    assert_eq!(kept.len(), 9, "kept days {kept:?}");
 }

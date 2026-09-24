@@ -79,7 +79,7 @@ pub async fn placer(
 
 /// Who a guest's round names as its signer. Not a person: the round is born
 /// PENDING and a member of staff confirms it (`guest_confirm`).
-pub const GUEST: &str = "guest";
+pub const GUEST: &str = dowiz_hub::room::pay::GUEST;
 
 /// A round a guest placed from a table's code.
 #[derive(Debug, Clone, PartialEq, Eq)]

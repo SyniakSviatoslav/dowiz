@@ -1035,8 +1035,16 @@ pub async fn import_menu(
                 &p.id,
                 &json!({
                     "id": p.id, "categoryId": p.category_id, "name": p.name,
-                    "description": p.description, "price": p.price,
-                    "available": p.available, "sortOrder": p.sort_order,
+                    // A column the file lacks is `None` (audit D5): keep the
+                    // stored value; a new dish gets the old defaults.
+                    "description": p.description.clone().map(Value::from)
+                        .or_else(|| existing.as_ref().and_then(|v| v.get("description").cloned()))
+                        .unwrap_or_else(|| json!("")),
+                    "price": p.price,
+                    "available": p.available.map(Value::from)
+                        .or_else(|| existing.as_ref().and_then(|v| v.get("available").cloned()))
+                        .unwrap_or(json!(true)),
+                    "sortOrder": p.sort_order,
                     "imageUrl": image, "sizeCm": size, "modifierGroups": mods,
                     "allergens": allergens
                 })

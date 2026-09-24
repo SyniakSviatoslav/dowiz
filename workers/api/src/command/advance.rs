@@ -87,6 +87,18 @@ pub fn decide(
     if old.get("location_id").and_then(Value::as_str) != Some(input.location_id.as_str()) {
         return Err(Refused::NotFound);
     }
+    // D4 (G4): MONEY THE ROOM TOOK DOES NOT VANISH WITH THE ROUND. REJECTED and
+    // CANCELLED drop a round from the bill and the takings; with a payment on
+    // it the cash stays in the drawer and nothing says it is owed back. The
+    // one exit that records money going back is the refund, past PENDING.
+    if matches!(input.next.as_str(), "REJECTED" | "CANCELLED") {
+        let paid = super::sitting::paid_of(&old);
+        if paid > 0 {
+            return Err(Refused::Conflict(format!(
+                "{paid} has been paid on this round: confirm it, then refund it, so the money is recorded going back"
+            )));
+        }
+    }
 
     // The kernel decides. An illegal edge is its refusal, not ours.
     let updated = dowiz_kernel::json_api::apply_event_logic(current, &input.next)

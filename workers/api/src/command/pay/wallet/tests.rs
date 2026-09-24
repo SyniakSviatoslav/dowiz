@@ -27,7 +27,7 @@ fn input(amount: i64, method: &str, at: i64) -> PayIn {
     PayIn {
         order_id: "r1".into(), location_id: "v1".into(), amount, method: method.into(), by: "p1".into(),
         till_id: None, covers: None, currency: None, rate_ppm: None, tip: None,
-        wallet: (method == "wallet").then(|| "u1".to_string()), now_ms: at,
+        wallet: (method == "wallet").then(|| "u1".to_string()), base_seq: None, now_ms: at,
     }
 }
 

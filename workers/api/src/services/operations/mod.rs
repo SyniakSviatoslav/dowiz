@@ -284,7 +284,8 @@ pub async fn restore(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     match crate::hubstore::import(&place, &bundle).await {
-        Ok(written) => Response::from_json(&json!({ "restored": written })),
+        // P3: the register's erasures are applied again before "restored".
+        Ok(written) => crate::services::customers::forget::run::after_restore(&ctx, &place, &loc, written).await,
         // The refusals here are all the caller's to fix -- a damaged file, a
         // venue that is not empty -- so they are 409, with the reason said.
         Err(e) => Response::error(format!("{e}"), 409),

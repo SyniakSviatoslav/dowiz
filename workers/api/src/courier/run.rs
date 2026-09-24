@@ -81,5 +81,64 @@ pub(crate) fn still_carried(rows: &[(String, String)], over: &[String]) -> Vec<V
         .collect()
 }
 
+/// What `claim` found.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Take {
+    /// The order is this courier's after the call.
+    Taken,
+    /// Another courier holds it.
+    Held,
+    /// Nobody may take it in this status (the `accept` handler's 409).
+    NotReady,
+}
+
+/// TAKE AN ORDER: write this courier's assignment row, or say why not.
+///
+/// THE DEFECT (2026-09-24). This refused whenever ANY row existed -- including
+/// the one the owner's `assign_courier` wrote naming this very courier -- so a
+/// courier could never accept an order handed to them: 409 "another courier
+/// took this order", about themselves. A row naming THIS courier is theirs
+/// already, and accepting it again changes nothing (the row, its cash and its
+/// pickup stamp stay as written). A row naming anyone else still refuses.
+///
+/// STATUS. From the pool only READY and CONFIRMED may be taken (see the
+/// handler). An order the owner already handed to THIS courier may also be
+/// PREPARING -- `command::assign::HANDABLE` allows it -- and accepting it
+/// pre-empts nobody and skips no kitchen step (PREPARING has no edge to
+/// IN_DELIVERY; `pickup` waits for READY).
+pub(crate) fn claim(
+    t: &mut dowiz_hub::table::Table,
+    order_id: &str,
+    courier_id: &str,
+    status: &str,
+    now: i64,
+    cash_due: i64,
+) -> Result<Take, String> {
+    if let Some(j) = t.get(super::K_ASG, order_id) {
+        let holder = serde_json::from_str::<Value>(&j)
+            .ok()
+            .and_then(|v| v.get("courier_id").and_then(Value::as_str).map(str::to_owned));
+        if holder.as_deref() != Some(courier_id) {
+            return Ok(Take::Held);
+        }
+        return Ok(if matches!(status, "READY" | "CONFIRMED" | "PREPARING") {
+            Take::Taken
+        } else {
+            Take::NotReady
+        });
+    }
+    if !matches!(status, "READY" | "CONFIRMED") {
+        return Ok(Take::NotReady);
+    }
+    let rec = serde_json::json!({
+        "order_id": order_id, "courier_id": courier_id, "assigned_at_ms": now,
+        "cash_due": cash_due, "picked_up_at_ms": Value::Null,
+        "delivered_at_ms": Value::Null, "cash_collected": Value::Null,
+    })
+    .to_string();
+    t.put(super::K_ASG, order_id, &rec, &[], &[]).map_err(|e| format!("assignment: {e}"))?;
+    Ok(Take::Taken)
+}
+
 #[cfg(test)]
 mod tests;

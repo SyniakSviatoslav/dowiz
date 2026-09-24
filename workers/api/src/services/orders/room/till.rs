@@ -136,7 +136,7 @@ async fn run(mut req: Request, ctx: RouteContext<crate::Req>, verb: Verb) -> Res
     };
     let out = match send(&place, &cmd).await {
         Ok(v) => v,
-        Err((status, said)) => return Response::error(said, status),
+        Err((status, said)) => return idem.refused(&place, status, &said).await,
     };
     let shown = answer(&out);
     idem.done(&place, 200, &shown.to_string()).await;

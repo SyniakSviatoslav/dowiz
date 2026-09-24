@@ -113,14 +113,17 @@ pub async fn amend(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         Ok(g) => g,
         Err(r) => return Ok(r),
     };
-    let loaded = crate::hubstore::load_catalog(&place).await?;
+    let loaded = match crate::hubstore::load_catalog(&place).await {
+        Ok(l) => l,
+        Err(e) => return idem.answered(&place, Err(e)).await,
+    };
     let mut ops = Vec::with_capacity(body.ops.len());
     for w in body.ops {
         ops.push(match w {
             WireOp::Add { product_id, modifier_ids, quantity } => {
                 match priced_line(&loaded.catalog, &product_id, &modifier_ids, quantity) {
                     Ok(line) => Op::Add { line },
-                    Err((s, m)) => return Response::error(m, s),
+                    Err((s, m)) => return idem.refused(&place, s, &m).await,
                 }
             }
             WireOp::Remove { line } => Op::Remove { line },
@@ -142,7 +145,7 @@ pub async fn amend(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     };
     let out: AmendOut = match crate::command::send(&place, "room/amend", &input).await {
         Ok(v) => v,
-        Err((status, said)) => return Response::error(said, status),
+        Err((status, said)) => return idem.refused(&place, status, &said).await,
     };
     let answer = json!({ "order": serde_json::from_str::<Value>(&out.merged).unwrap_or(Value::Null), "seq": out.seq });
     idem.done(&place, 200, &answer.to_string()).await;

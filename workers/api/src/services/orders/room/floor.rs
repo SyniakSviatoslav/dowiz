@@ -137,32 +137,37 @@ pub async fn post_cleared(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
         Ok(g) => g,
         Err(r) => return Ok(r),
     };
-    let orders = listed(&place, &loc).await?;
-    let (round_id, needed) = match floor::clear_target(&orders, &sitting_id) {
-        Ok(v) => v,
-        Err(r) => return Response::error(r.message().to_string(), r.status()),
-    };
-    if needed {
-        let (at, who, venue) = (ctx.data.now_ms, by.clone(), loc.clone());
-        let wrote = crate::hubstore::append_for(&place, &round_id, at, move |current| {
-            let current = current.ok_or_else(|| Error::RustError("no such order".into()))?;
-            let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-            if old.get("location_id").and_then(Value::as_str) != Some(venue.as_str()) {
-                return Err(Error::RustError("no such order".into()));
+    // G1 / D1: every exit below is an ANSWER, recorded (or, for a 5xx or an
+    // internal error, released) by `answered` -- never a claim left standing.
+    let res: Result<Response> = async {
+        let orders = listed(&place, &loc).await?;
+        let (round_id, needed) = match floor::clear_target(&orders, &sitting_id) {
+            Ok(v) => v,
+            Err(r) => return Response::error(r.message().to_string(), r.status()),
+        };
+        if needed {
+            let (at, who, venue) = (ctx.data.now_ms, by.clone(), loc.clone());
+            let wrote = crate::hubstore::append_for(&place, &round_id, at, move |current| {
+                let current = current.ok_or_else(|| Error::RustError("no such order".into()))?;
+                let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+                if old.get("location_id").and_then(Value::as_str) != Some(venue.as_str()) {
+                    return Err(Error::RustError("no such order".into()));
+                }
+                let new = floor::mark(&old, &who, at).map_err(|r| Error::RustError(r.message().to_string()))?;
+                Ok(Some((dowiz_hub::EventKind::Noted, crate::fold::delta(&old, &new).to_string(), json!(true))))
+            })
+            .await;
+            match wrote {
+                Ok(_) => {}
+                Err(e) if e.to_string().contains("no such order") => return Response::error("not found", 404),
+                Err(e) => return Err(e),
             }
-            let new = floor::mark(&old, &who, at).map_err(|r| Error::RustError(r.message().to_string()))?;
-            Ok(Some((dowiz_hub::EventKind::Noted, crate::fold::delta(&old, &new).to_string(), json!(true))))
-        })
-        .await;
-        match wrote {
-            Ok(_) => {}
-            Err(e) if e.to_string().contains("no such order") => return Response::error("not found", 404),
-            Err(e) => return Err(e),
         }
+        let answer = json!({ "sitting_id": sitting_id, "round_id": round_id, "state": "free", "fresh": needed });
+        Response::from_json(&answer)
     }
-    let answer = json!({ "sitting_id": sitting_id, "round_id": round_id, "state": "free", "fresh": needed });
-    idem.done(&place, 200, &answer.to_string()).await;
-    Response::from_json(&answer)
+    .await;
+    idem.answered(&place, res).await
 }
 
 #[cfg(test)]

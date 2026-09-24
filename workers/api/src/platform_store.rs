@@ -49,6 +49,11 @@ pub const COURIERS: &str = "couriers";
 /// find the current state of a few hundred addresses would be work done to
 /// reach a shape a keyed set already has.
 pub const WAITLIST: &str = "waitlist";
+/// THE ERASURE REGISTER (P3): one pseudonymous record per forgotten person
+/// per venue, replayed after a restore so a backup cannot bring them back.
+/// Its OWN image and not a kind in `registry`: the registry answers "which
+/// venue is this host" in one read and must not grow with people.
+pub const ERASURES: &str = "erasures";
 
 /// The refusal point for each image, which is the only honest denominator for a
 /// compacted image's usage -- see `bebop-ceiling-not-capacity`, where a healthy
@@ -62,6 +67,8 @@ pub const IDENTITY_BYTES: usize = 2 * 1024 * 1024;
 pub const SESSIONS_BYTES: usize = 4 * 1024 * 1024;
 pub const COURIERS_BYTES: usize = 1024 * 1024;
 pub const WAITLIST_BYTES: usize = 1024 * 1024;
+/// ~200 bytes a person plus 40 an order: thousands of erasures before it binds.
+pub const ERASURES_BYTES: usize = 2 * 1024 * 1024;
 
 /// Platform-level failures. An append log, because that is what a failure
 /// record is: it arrives, it is read back newest first, and it is pruned.
@@ -77,6 +84,7 @@ pub fn ceiling(image: &str) -> usize {
         SESSIONS => SESSIONS_BYTES,
         COURIERS => COURIERS_BYTES,
         WAITLIST => WAITLIST_BYTES,
+        ERASURES => ERASURES_BYTES,
         // An unknown image is a programming error, not a runtime condition. A
         // generous default here would let a typo create a second image that
         // silently shadows the one that was meant.

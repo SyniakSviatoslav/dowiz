@@ -40,6 +40,8 @@ pub const IMAGE_IDEMPOTENCY: &str = "idem";
 pub const IDEMPOTENCY_BYTES: usize = 4 * 1024 * 1024;
 const KIND: &str = "k";
 
+pub mod verdict;
+
 /// How long a key is honoured. Long enough for a phone to retry after a tunnel,
 /// short enough that the image stays small; swept nightly.
 pub const KEEP_MS: i64 = 24 * 60 * 60 * 1000;
@@ -53,8 +55,9 @@ pub enum Decision {
     NoKey,
     /// This call owns the key. Run, then call `finish`.
     Proceed { key: String },
-    /// The first call already answered. This IS that answer.
-    Replay { status: u16, body: String },
+    /// The first call already answered -- a refusal included (G1). This IS
+    /// that answer, with the content type it was given.
+    Replay { status: u16, body: String, ctype: String },
     /// Same key, different body — or the first call is still running.
     Refuse(Response),
 }
@@ -96,77 +99,38 @@ pub async fn begin(
     let key = scope(&raw, &place.venue, principal, route);
     let print = fingerprint(body);
 
-    // ONE TURN decides between the three answers, because the object runs its
-    // calls one after another: claiming the key and finding it claimed cannot
-    // interleave, which is the whole reason rule 4 is enforceable at all.
+    // ONE TURN decides between the answers (`verdict::claim`), because the
+    // object runs its calls one after another: claiming the key and finding it
+    // claimed cannot interleave, which is the whole reason rule 4 is
+    // enforceable at all.
     let (k, p) = (key.clone(), print.clone());
     let found = crate::hubstore::with_table(
         place,
         IMAGE_IDEMPOTENCY,
         IDEMPOTENCY_BYTES,
-        move |t| {
-            let existing = t
-                .get(KIND, &k)
-                .and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok());
-            match existing {
-                Some(r) => Ok(Some(r)),
-                None => {
-                    // Claimed, with no answer yet. A retry arriving now sees
-                    // `done: false` and is told to wait rather than run.
-                    let rec = serde_json::json!({
-                        "print": p, "at_ms": now_ms, "done": false,
-                        "status": 0, "body": "",
-                    })
-                    .to_string();
-                    t.put(KIND, &k, &rec, &[], &[])
-                        .map_err(|e| Error::RustError(format!("idempotency: {e}")))?;
-                    Ok(None)
-                }
-            }
-        },
+        move |t| verdict::claim(t, &k, &p, now_ms),
     )
     .await;
 
-    let existing = match found {
-        Ok(v) => v,
+    match found {
         // RULE 5: fail open. The call proceeds unrecorded rather than being
         // refused by the layer that exists to protect it.
         Err(e) => {
             console_error!("idempotency unavailable for {route}: {e}");
-            return Decision::NoKey;
+            Decision::NoKey
         }
-    };
-
-    let Some(r) = existing else {
-        return Decision::Proceed { key };
-    };
-
-    let s = |k: &str| r.get(k).and_then(serde_json::Value::as_str).unwrap_or("").to_string();
-    if s("print") != print {
-        return Decision::Refuse(
-            Response::error(
-                "this Idempotency-Key was used with a different request body",
-                409,
-            )
-            .unwrap(),
-        );
-    }
-    if r.get("done").and_then(serde_json::Value::as_bool) != Some(true) {
-        // Still running. A stale claim is treated as abandoned after the
-        // keep window, so a Worker cut off mid-call does not wedge a key for
-        // a day.
-        let at = r.get("at_ms").and_then(serde_json::Value::as_i64).unwrap_or(0);
-        if now_ms - at < KEEP_MS {
-            let mut res = Response::error("a request with this key is still running", 409)
-                .unwrap();
+        Ok(verdict::Seen::Claimed) => Decision::Proceed { key },
+        Ok(verdict::Seen::Mismatch) => Decision::Refuse(
+            Response::error("this Idempotency-Key was used with a different request body", 409).unwrap(),
+        ),
+        Ok(verdict::Seen::Running) => {
+            // Still running, inside its lease (`verdict::LEASE_MS`). A claim
+            // older than that was abandoned and `claim` re-claimed it.
+            let mut res = Response::error("a request with this key is still running", 409).unwrap();
             let _ = res.headers_mut().set("retry-after", &RETRY_AFTER_S.to_string());
-            return Decision::Refuse(res);
+            Decision::Refuse(res)
         }
-        return Decision::Proceed { key };
-    }
-    Decision::Replay {
-        status: r.get("status").and_then(serde_json::Value::as_i64).unwrap_or(200) as u16,
-        body: s("body"),
+        Ok(verdict::Seen::Answered { status, body, ctype }) => Decision::Replay { status, body, ctype },
     }
 }
 
@@ -203,14 +167,14 @@ pub async fn guard(
         Decision::NoKey => Ok(Guard { key: None, print, at_ms: now_ms }),
         Decision::Proceed { key } => Ok(Guard { key: Some(key), print, at_ms: now_ms }),
         Decision::Refuse(r) => Err(r),
-        Decision::Replay { status, body } => {
+        Decision::Replay { status, body, ctype } => {
             // THE FIRST CALL'S WHOLE ANSWER, not a marker. On a courier's
             // `deliver` it carries the cash shortfall; a 204 here would lose it
             // on exactly the retry this exists to serve.
             let mut res = Response::ok(body)
                 .unwrap_or_else(|_| Response::empty().unwrap())
                 .with_status(status);
-            let _ = res.headers_mut().set("content-type", "application/json");
+            let _ = res.headers_mut().set("content-type", &ctype);
             let _ = res.headers_mut().set("idempotent-replay", "true");
             Err(res)
         }
@@ -218,35 +182,20 @@ pub async fn guard(
 }
 
 impl Guard {
-    /// Record what this call answered. Does nothing when there was no key.
+    /// Record a SUCCESS this call answered. Does nothing when there was no key.
+    /// A refusal goes through `refused`, anything else through `answered`
+    /// (`verdict.rs`): an exit that records nothing wedges the key (D1).
+    ///
+    /// NEVER FAILS THE CALLER. The answer is already correct; losing the record
+    /// means a retry runs again, which is the behaviour without this module at all.
     pub async fn done(self, place: &Place, status: u16, body: &str) {
-        if let Some(key) = self.key {
-            finish(place, &key, status, body, &self.print, self.at_ms).await;
-        }
+        let Some(key) = self.key else { return };
+        let (b, p, at) = (body.to_string(), self.print, self.at_ms);
+        let _ = crate::hubstore::with_table(place, IMAGE_IDEMPOTENCY, IDEMPOTENCY_BYTES, move |t| {
+            verdict::record(t, &key, &p, at, status, &b, "application/json")
+        })
+        .await;
     }
-}
-
-/// Record what the first call answered, so a retry can be given the same thing.
-///
-/// NEVER FAILS THE CALLER. The answer is already correct; losing the record
-/// means a retry runs again, which is the behaviour without this module at all.
-pub async fn finish(place: &Place, key: &str, status: u16, body: &str, print: &str, now_ms: i64) {
-    let (k, b, p) = (key.to_string(), body.to_string(), print.to_string());
-    let _ = crate::hubstore::with_table(
-        place,
-        IMAGE_IDEMPOTENCY,
-        IDEMPOTENCY_BYTES,
-        move |t| {
-            let rec = serde_json::json!({
-                "print": p, "at_ms": now_ms, "done": true,
-                "status": status, "body": b,
-            })
-            .to_string();
-            t.put(KIND, &k, &rec, &[], &[])
-                .map_err(|e| Error::RustError(format!("idempotency: {e}")))
-        },
-    )
-    .await;
 }
 
 /// Drop keys past the window. Called by the nightly job, per venue.

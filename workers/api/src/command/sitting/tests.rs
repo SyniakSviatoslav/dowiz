@@ -81,3 +81,18 @@ fn a_sitting_paid_in_full_through_its_payments_leaves_the_room() {
     assert_eq!(paid(&rs), 1000);
     assert!(open(&rs), "900 still due keeps the table");
 }
+
+/// D9 (G4): a guest's QR round nobody has confirmed is not on the bill -- the
+/// same rule the waiter's `sittingDue` draws (`room/logic.js`). The twins: the
+/// same round confirmed, and a waiter's own PENDING round, are billed.
+#[test]
+fn an_unconfirmed_guest_round_is_not_on_the_bill() {
+    let qr = |status: &str, by: &str| {
+        view("q", json!({"id": "q", "sitting_id": "s1", "status": status, "total": 4200, "payments": [],
+                         "placed_by": by, "created_at_ms": 2}))
+    };
+    let mine = r("a", "s1", "READY", 1500, 0, 1);
+    assert_eq!(bill(&rounds(&[mine.clone(), qr("PENDING", "guest")], "s1")), 1500);
+    assert_eq!(bill(&rounds(&[mine.clone(), qr("CONFIRMED", "guest")], "s1")), 5700);
+    assert_eq!(bill(&rounds(&[mine, qr("PENDING", "p1")], "s1")), 5700);
+}

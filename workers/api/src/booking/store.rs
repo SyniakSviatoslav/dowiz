@@ -11,7 +11,7 @@
 
 use dowiz_hub::table::Table;
 use dowiz_hub::tables as floor;
-use dowiz_kernel::reservation::{assert_transition, ReservationStatus};
+use dowiz_kernel::reservation::{assert_transition, cancellation_is_free, BookingPolicy, ReservationStatus};
 use serde_json::{json, Value};
 
 use super::floor::{held_tables, table_key, table_verdict};
@@ -171,14 +171,27 @@ pub(super) fn write_transition(
         return Ok(Err((409, e.message())));
     }
     let seq = events.iter().map(|e| e.seq).max().unwrap_or(0) + 1;
+    // A GUEST'S LATE CANCEL IS A FACT ON THE BOOKING, never a mark on the
+    // guest: the kernel's free window (`cancellation_is_free`, which had no
+    // caller) decides it, and the console shows it (audit D29).
+    let late = to == ReservationStatus::CancelledByGuest
+        && !cancellation_is_free(
+            r.get("slot_min").and_then(Value::as_i64).unwrap_or(0),
+            &BookingPolicy::default_policy(),
+            now_ms.div_euclid(60_000),
+        )
+        .unwrap_or(true);
     let ev = json!({
         "to_status": to.as_str(), "seq": seq, "actor": side.actor(), "by": by,
-        "reason": reason, "at_ms": now_ms,
+        "reason": reason, "at_ms": now_ms, "late": late,
     });
     t.put(K_EV, &ev_key(id, seq), &ev.to_string(), &[], &[])
         .map_err(|x| format!("booking event: {x}"))?;
     r["status"] = json!(to.as_str());
     r["updated_at_ms"] = json!(now_ms);
+    if late {
+        r["late_cancel"] = json!(true);
+    }
     let index = index_of(id, &r);
     t.put(K_RSV, id, &r.to_string(), &index, &[]).map_err(|x| format!("booking: {x}"))?;
     Ok(Ok(seq))
@@ -204,7 +217,7 @@ pub(super) fn day_rows(t: &Table, from_min: i64, to_min: i64) -> Vec<Value> {
                 "id": id, "slotMin": s("slot_min"), "party": s("party"),
                 "name": s("contact_name"), "phone": s("contact_phone"),
                 "occasion": s("occasion"), "zoneId": s("zone_id"), "tableN": s("table_n"),
-                "createdAtMs": s("created_at_ms"),
+                "createdAtMs": s("created_at_ms"), "lateCancel": r.get("late_cancel").is_some(),
                 "status": folded.as_ref().map(|x| x.as_str().to_string())
                     .unwrap_or_else(|why| format!("UNREADABLE: {why}")),
                 "next": folded.map(|x| moves(Side::Venue, x).iter().map(|m| m.as_str()).collect::<Vec<_>>())

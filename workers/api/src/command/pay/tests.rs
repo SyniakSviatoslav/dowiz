@@ -3,6 +3,11 @@
 //! Plus the two rules this file gained: cash needs an open till, and a
 //! payment in another currency states its rate (P3-2).
 
+/// P1: money conservation over random histories of one round (G4, G5).
+/// Test code, so it lives under `tests/` where the shipping-code gates
+/// (`channel-closed`) do not count its `Placed` append as a shipping site.
+mod conservation;
+
 use super::*;
 
 const NOW: i64 = 1_790_000_000_000;
@@ -39,6 +44,7 @@ fn input(amount: i64, method: &str) -> PayIn {
         rate_ppm: None,
         tip: None,
         wallet: None,
+        base_seq: None,
         now_ms: NOW,
     }
 }

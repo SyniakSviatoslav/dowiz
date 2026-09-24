@@ -96,3 +96,46 @@ fn two_offline_tablets_selling_the_last_cake_replay_to_one_sale() {
     let h = Hub::load(&log1).unwrap();
     assert_eq!(h.events().iter().filter(|e| e.kind == EventKind::Amended).count(), 1, "one sale on the log");
 }
+
+/// D8 (G4): a 1200 round with 1000 paid, a line voided so it costs 1000.
+/// It IS paid; before the fix `payment_status` stayed null, the pay screen
+/// showed 0 owed, and any further payment was refused ("exceeds the total").
+#[test]
+fn an_amend_down_to_exactly_the_amount_paid_stamps_the_round_paid() {
+    let mut h = Hub::create_sized(64 * 1024).unwrap();
+    let r = json!({"id": "r1", "status": "CONFIRMED", "location_id": "v1", "tip": 0, "delivery_fee": 0,
+                   "items": [{"product_id": "a", "quantity": 1, "unit_price": 1000},
+                             {"product_id": "b", "quantity": 1, "unit_price": 200}],
+                   "subtotal": 1200, "discount": 0, "total": 1200,
+                   "payments": [{"by": "p1", "amount": 1000, "method": "card", "at": 1}]});
+    h.append(EventKind::Placed, "r1", &r.to_string(), 100, [0; 32]).unwrap();
+    let mut s = StockLog::create_sized(64 * 1024).unwrap();
+    let cur = crate::room::view::current(&h, "r1").unwrap();
+    let void = AmendIn {
+        order_id: "r1".into(), location_id: "v1".into(), base_seq: cur.seq, ops: vec![Op::Remove { line: 1 }],
+        by: "p1".into(), reason: Some("mistake".into()), may_void: false, boms: vec![], now_ms: NOW,
+    };
+    let (o, body, _) = decide(&mut h, &mut s, Some(&cur), &void).expect("the void lands");
+    assert_eq!((o["total"].clone(), crate::room::pay::paid_of(&o)), (json!(1000), 1000));
+    assert_eq!(o["payment_status"], json!("paid"), "{body}");
+}
+
+/// The twin: voided down to MORE than was paid, the round is still owed.
+#[test]
+fn an_amend_that_still_leaves_money_owed_does_not_stamp_paid() {
+    let mut h = Hub::create_sized(64 * 1024).unwrap();
+    let r = json!({"id": "r1", "status": "CONFIRMED", "location_id": "v1", "tip": 0, "delivery_fee": 0,
+                   "items": [{"product_id": "a", "quantity": 1, "unit_price": 1000},
+                             {"product_id": "b", "quantity": 1, "unit_price": 200}],
+                   "subtotal": 1200, "discount": 0, "total": 1200,
+                   "payments": [{"by": "p1", "amount": 500, "method": "card", "at": 1}]});
+    h.append(EventKind::Placed, "r1", &r.to_string(), 100, [0; 32]).unwrap();
+    let mut s = StockLog::create_sized(64 * 1024).unwrap();
+    let cur = crate::room::view::current(&h, "r1").unwrap();
+    let void = AmendIn {
+        order_id: "r1".into(), location_id: "v1".into(), base_seq: cur.seq, ops: vec![Op::Remove { line: 1 }],
+        by: "p1".into(), reason: Some("mistake".into()), may_void: false, boms: vec![], now_ms: NOW,
+    };
+    let (o, _, _) = decide(&mut h, &mut s, Some(&cur), &void).expect("the void lands");
+    assert!(o.get("payment_status").map_or(true, Value::is_null), "{o}");
+}

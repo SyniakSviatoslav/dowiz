@@ -245,3 +245,59 @@ fn the_report_serialises_the_keys_law_10_reads() {
     assert_eq!(p["cash_paid"], serde_json::json!({"EUR": 2000}));
     assert_eq!(p["over_short"], serde_json::json!({"ALL": 0, "EUR": 0}));
 }
+
+/// D31 (G5): THE Z REPORT CLOSES AGAINST A STALE COUNT. The count was taken at
+/// +20, a 1 500 sale went into the drawer at +25, and the close at +30 used
+/// the +20 count against `expected` up to +30: a false 1 500 shortfall.
+#[test]
+fn a_close_after_cash_moved_since_the_count_is_refused() {
+    let paid = [cash("r1", T0 + 25, "ALL", 1_500)];
+    let (_, said) = run(&[open(&[("ALL", 1_000)], T0), count(&[("ALL", 1_000)], T0 + 20), close(T0 + 30)], &paid);
+    assert!(matches!(last(&said), Err(Refused::Conflict(m)) if m.contains("count")), "{said:?}");
+    // A pay-out after the count is cash moving too.
+    let (_, said) = run(
+        &[open(&[("ALL", 1_000)], T0), count(&[("ALL", 1_000)], T0 + 20), mv(false, "ALL", 100, T0 + 25), close(T0 + 30)],
+        &[],
+    );
+    assert!(matches!(last(&said), Err(Refused::Conflict(_))), "{said:?}");
+}
+
+/// The twin: count again after the sale and the close lands, even. A sale
+/// AFTER the close's own instant is not in this period and does not block it.
+#[test]
+fn a_close_after_a_fresh_count_lands() {
+    let paid = [cash("r1", T0 + 25, "ALL", 1_500), cash("r9", T0 + 99, "ALL", 7)];
+    let (log, said) = run(
+        &[open(&[("ALL", 1_000)], T0), count(&[("ALL", 1_000)], T0 + 20), count(&[("ALL", 2_500)], T0 + 26), close(T0 + 30)],
+        &paid,
+    );
+    assert!(said.iter().all(Result::is_ok), "{said:?}");
+    assert_eq!(periods(&log).unwrap()[0].over_short, Some(money(&[("ALL", 0)])));
+}
+
+/// D12 (G5): cash handed back on a completed refund leaves the drawer, per
+/// currency pile, at the instant it was handed back. Before, the drawer
+/// "expected" the refunded 2 000 EUR and closed short by exactly that.
+#[test]
+fn cash_handed_back_on_a_refund_leaves_expected_in_its_own_pile() {
+    let orders = [serde_json::json!({"id": "r1", "location_id": "v1", "status": "COMPENSATED_REFUND",
+        "payments": [
+            {"method": "cash", "amount": 2000, "currency": "EUR", "amount_in_order_currency": 1950, "at": T0 + 5},
+            {"method": "card", "amount": 500, "at": T0 + 5},
+        ],
+        "refund": {"owed": 2450, "returned": {"by": "p1", "at": T0 + 15}}})];
+    let c = cash_payments(&orders, "v1", "ALL");
+    assert_eq!(c, vec![cash("r1", T0 + 5, "EUR", 2000), cash("r1", T0 + 15, "EUR", -2000)]);
+    let (log, said) = run(&[open(&[("ALL", 100)], T0), count(&[("ALL", 100)], T0 + 20), close(T0 + 30)], &c);
+    assert!(said.iter().all(Result::is_ok), "{said:?}");
+    assert_eq!(periods(&log).unwrap()[0].over_short, Some(money(&[("ALL", 0), ("EUR", 0)])));
+}
+
+/// The twin: a refund not yet handed back (REFUNDING, no `returned`) is still
+/// in the drawer, and the till expects it.
+#[test]
+fn cash_not_yet_handed_back_is_still_expected() {
+    let orders = [serde_json::json!({"id": "r1", "location_id": "v1", "status": "REFUNDING",
+        "payments": [{"method": "cash", "amount": 700, "at": T0 + 5}], "refund": {"owed": 700}})];
+    assert_eq!(cash_payments(&orders, "v1", "ALL"), vec![cash("r1", T0 + 5, "ALL", 700)]);
+}

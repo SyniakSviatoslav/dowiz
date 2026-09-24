@@ -362,7 +362,7 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
 /// `customer_key` is the venue's own non-reversible handle for it — the same
 /// one the customer list and the reveal audit use, so a wallet and a customer
 /// row are the same person.
-async fn own_wallet_key(
+pub(crate) async fn own_wallet_key(
     p: &crate::auth::Principal,
     place: &crate::hubstore::Place,
     env: &Env,
@@ -374,7 +374,9 @@ async fn own_wallet_key(
     if phone.trim().is_empty() {
         return Ok(None);
     }
-    Ok(Some(crate::services::customers::handlers::customer_key(
+    // THE PERSON KEY (audit D38), the one the booking uses and the customer
+    // row resolves to: `069 …` and `+355 69 …` are one wallet, not two.
+    Ok(Some(crate::services::customers::identity::person_key(
         &crate::services::customers::handlers::signing_secret(env),
         phone,
     )))

@@ -313,7 +313,7 @@ fn a_paid_round_with_no_currency_is_refunded_in_the_venues() {
     let (mut h, mut s) = (hub_with(&placed), shelf());
     let take = PayIn {
         order_id: "o1".into(), location_id: "v1".into(), amount: 1200, method: "card".into(), by: "p1".into(),
-        till_id: None, covers: None, currency: None, rate_ppm: None, tip: Some(100), wallet: None, now_ms: NOW - 10,
+        till_id: None, covers: None, currency: None, rate_ppm: None, tip: Some(100), wallet: None, base_seq: None, now_ms: NOW - 10,
     };
     let (paid, _, pseq) = pay(&mut h, Some(&view(&placed)), &take, &Room { open_till: None, venue_currency: "ALL" }).expect("paid");
     let v = OrderView { order_id: "o1".into(), kind: 3, seq: pseq, order_json: paid.to_string() };

@@ -260,11 +260,20 @@ pub fn stamp_of_key(key: &str) -> Option<i64> {
 }
 
 /// How long every copy is kept, and how far back one copy a week is kept.
+///
+/// THREE WEEKS, NOT FIVE (P3 of `BLUEPRINT-GDPR-AND-MCP-2026-09-24` §4.3). The
+/// forget answer tells the venue its backup copies of an erased person expire;
+/// Albania's Law 124/2024 Art. 15(2) gives an erasure 30 days. At 35 days the
+/// newest copy holding the person outlived that by five days, so the sentence
+/// was false. At 21 days the last copy made before an erasure is gone within
+/// 21 days of it (the nightly copy of the erasure's own night already lacks
+/// them), inside the 30 with a week of slack for a request that arrives late
+/// in its own window. It costs two of the four weekly copies.
 pub const KEEP_ALL_MS: i64 = 7 * 24 * 60 * 60 * 1000;
-pub const KEEP_WEEKLY_MS: i64 = 35 * 24 * 60 * 60 * 1000;
+pub const KEEP_WEEKLY_MS: i64 = 21 * 24 * 60 * 60 * 1000;
 
 /// Which of these keys the rotation drops: everything but the last seven days
-/// and the NEWEST copy in each of the four weeks before that. Older than five
+/// and the NEWEST copy in each of the two weeks before that. Older than three
 /// weeks goes, and a key whose name this module did not write stays.
 ///
 /// PURE, so the policy is testable without a bucket. The nightly cron is the
@@ -284,7 +293,7 @@ pub fn keys_to_drop(keys: &[String], now_ms: i64) -> Vec<String> {
             continue; // every copy of the last seven days
         }
         if age >= KEEP_WEEKLY_MS {
-            drop.push(key.clone()); // older than five weeks
+            drop.push(key.clone()); // older than three weeks
             continue;
         }
         let week = age / KEEP_ALL_MS;
@@ -831,9 +840,9 @@ mod tests {
     }
 
     /// The policy: every copy of the last seven days, then the newest copy of
-    /// each of the four weeks before that, then nothing.
+    /// each of the two weeks before that, then nothing (P3: 21 days).
     #[test]
-    fn rotation_keeps_seven_days_then_one_a_week_for_four_weeks() {
+    fn rotation_keeps_seven_days_then_one_a_week_for_two_weeks() {
         const DAY: i64 = 24 * 60 * 60 * 1000;
         let now = 1_800_000_000_000;
         let s3 = S3 {
@@ -850,15 +859,16 @@ mod tests {
         let dropped = keys_to_drop(&keys, now);
         let kept: Vec<&String> = keys.iter().filter(|k| !dropped.contains(k)).collect();
 
-        // Seven daily (days 0..6) + one for each of weeks 1, 2, 3 and 4.
-        assert_eq!(kept.len(), 11, "kept {:?}", kept);
+        // Seven daily (days 0..6) + one for each of weeks 1 and 2.
+        assert_eq!(kept.len(), 9, "kept {:?}", kept);
         for d in 0..7 {
             assert!(kept.contains(&&object_key(&s3, "v", now - d * DAY, true, false)), "day {d} must stay");
         }
         // The newest copy of the week is the one kept: day 7, not day 13.
         assert!(kept.contains(&&object_key(&s3, "v", now - 7 * DAY, true, false)));
         assert!(dropped.contains(&object_key(&s3, "v", now - 13 * DAY, true, false)));
-        // Nothing older than five weeks survives.
+        // Nothing older than three weeks survives.
+        assert!(dropped.contains(&object_key(&s3, "v", now - 21 * DAY, true, false)));
         assert!(dropped.contains(&object_key(&s3, "v", now - 36 * DAY, true, false)));
         assert!(dropped.contains(&object_key(&s3, "v", now - 364 * DAY, true, false)));
     }

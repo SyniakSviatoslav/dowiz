@@ -61,7 +61,7 @@ pub async fn refund(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
     };
     let out: RefundOut = match crate::command::send(&place, "refund", &input).await {
         Ok(v) => v,
-        Err((status, said)) => return Response::error(said, status),
+        Err((status, said)) => return idem.refused(&place, status, &said).await,
     };
     let answer = json!({ "order": serde_json::from_str::<Value>(&out.merged).unwrap_or(Value::Null), "seq": out.seq });
     idem.done(&place, 200, &answer.to_string()).await;
@@ -107,7 +107,7 @@ pub async fn returned(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
     let input = ReturnedIn { order_id: id, location_id: body.location_id, by, choice: body.choice, now_ms: ctx.data.now_ms };
     let out: ReturnedOut = match crate::command::send(&place, "returned", &input).await {
         Ok(v) => v,
-        Err((status, said)) => return Response::error(said, status),
+        Err((status, said)) => return idem.refused(&place, status, &said).await,
     };
     let answer = serde_json::to_value(&out).unwrap_or(Value::Null);
     idem.done(&place, 200, &answer.to_string()).await;

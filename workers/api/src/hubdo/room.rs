@@ -57,7 +57,7 @@ impl HubImages {
     }
 
     /// The wallet ledger's log (`wallet::IMAGE_LEDGER`), and its generation.
-    async fn ledger_log(&self) -> Result<(i64, dowiz_hub::logimage::LogImage)> {
+    pub(super) async fn ledger_log(&self) -> Result<(i64, dowiz_hub::logimage::LogImage)> {
         Ok(match self.image(crate::wallet::IMAGE_LEDGER).await? {
             Some((meta, bytes)) => (
                 meta.generation,

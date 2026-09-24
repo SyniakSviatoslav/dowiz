@@ -29,9 +29,19 @@ struct PayBody {
     /// `method: "wallet"`: the wallet paying (`command::pay::wallet`).
     #[serde(default)]
     wallet: Option<String>,
+    /// D13 (G6): the paying customer's own token, shown from their phone.
+    /// Staff spend only the wallet it names (`whose::payer`).
+    #[serde(default)]
+    wallet_token: Option<String>,
+    /// D7 (G4): the round's `seq` on the screen that took the payment.
+    #[serde(default)]
+    base_seq: Option<u64>,
 }
 
-/// `POST /api/staff/orders/:id/pay` — `{location_id, amount, method, till_id?, covers?, currency?, rate_ppm?, tip?, wallet?}`.
+/// Whose wallet a payment spends (D13).
+mod whose;
+
+/// `POST /api/staff/orders/:id/pay` — `{location_id, amount, method, till_id?, covers?, currency?, rate_ppm?, tip?, wallet?, wallet_token?, base_seq?}`.
 /// Cash is refused with no till open (409 "open the till first").
 pub async fn pay(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let raw = req.text().await.unwrap_or_default();
@@ -47,6 +57,20 @@ pub async fn pay(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
         Err(r) => return Ok(r),
     };
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
+    // D13 (G6): WHOSE WALLET. Decided before the key is claimed.
+    let wallet = if body.method == "wallet" {
+        let is_owner = !crate::auth::bearer(&req)
+            .ok()
+            .and_then(|raw| crate::auth::verify(&ctx.env, &raw, ctx.data.now_ms).ok())
+            .is_some_and(|c| matches!(c, crate::auth::Claims::Staff { .. }));
+        let shown = whose::presented(&ctx.env, &place, body.wallet_token.as_deref(), ctx.data.now_ms).await?;
+        match whose::payer(is_owner, body.wallet.as_deref(), shown.as_deref()) {
+            Ok(key) => Some(key),
+            Err((code, why)) => return Response::error(why, code),
+        }
+    } else {
+        body.wallet
+    };
     let idem = match crate::idempotency::guard(
         &place,
         req.headers().get("idempotency-key").ok().flatten(),
@@ -71,12 +95,13 @@ pub async fn pay(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
         currency: body.currency,
         rate_ppm: body.rate_ppm,
         tip: body.tip,
-        wallet: body.wallet,
+        wallet,
+        base_seq: body.base_seq,
         now_ms: ctx.data.now_ms,
     };
     let out: PayOut = match crate::command::send(&place, "room/pay", &input).await {
         Ok(v) => v,
-        Err((status, said)) => return Response::error(said, status),
+        Err((status, said)) => return idem.refused(&place, status, &said).await,
     };
     let answer = json!({ "order": serde_json::from_str::<Value>(&out.merged).unwrap_or(Value::Null), "seq": out.seq });
     idem.done(&place, 200, &answer.to_string()).await;

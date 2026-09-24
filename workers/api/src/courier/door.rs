@@ -46,26 +46,31 @@ pub async fn refused(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
         Ok(g) => g,
         Err(r) => return Ok(r),
     };
-    // ONLY THE COURIER CARRYING IT. The same answer `deliver` gives.
-    if !run::may_refuse(&ops(&place).await?.all(K_ASG), &courier_id, &id) {
-        return Response::error("not your delivery", 403);
+    // G1 / D1: every exit below is an ANSWER, recorded (or, for a 5xx or an
+    // internal error, released) by `answered` -- never a claim left standing.
+    let res: Result<Response> = async {
+        // ONLY THE COURIER CARRYING IT. The same answer `deliver` gives.
+        if !run::may_refuse(&ops(&place).await?.all(K_ASG), &courier_id, &id) {
+            return Response::error("not your delivery", 403);
+        }
+        let input = RefundIn {
+            order_id: id,
+            location_id: loc,
+            by: courier_id,
+            reason: "refused_at_door".into(),
+            complete: false,
+            now_ms: now,
+            at_door: true,
+            // `{note?}`: what the courier saw. An unreadable body is no note.
+            note: serde_json::from_str::<Value>(&raw).ok().and_then(|b| b.get("note").and_then(Value::as_str).map(String::from)),
+        };
+        let out: RefundOut = match crate::command::send(&place, "refund", &input).await {
+            Ok(v) => v,
+            Err((status, said)) => return Response::error(said, status),
+        };
+        let answer = json!({ "order": serde_json::from_str::<Value>(&out.merged).unwrap_or(Value::Null), "seq": out.seq });
+        Response::from_json(&answer)
     }
-    let input = RefundIn {
-        order_id: id,
-        location_id: loc,
-        by: courier_id,
-        reason: "refused_at_door".into(),
-        complete: false,
-        now_ms: now,
-        at_door: true,
-        // `{note?}`: what the courier saw. An unreadable body is no note.
-        note: serde_json::from_str::<Value>(&raw).ok().and_then(|b| b.get("note").and_then(Value::as_str).map(String::from)),
-    };
-    let out: RefundOut = match crate::command::send(&place, "refund", &input).await {
-        Ok(v) => v,
-        Err((status, said)) => return Response::error(said, status),
-    };
-    let answer = json!({ "order": serde_json::from_str::<Value>(&out.merged).unwrap_or(Value::Null), "seq": out.seq });
-    idem.done(&place, 200, &answer.to_string()).await;
-    Response::from_json(&answer)
+    .await;
+    idem.answered(&place, res).await
 }

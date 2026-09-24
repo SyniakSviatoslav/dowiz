@@ -12,24 +12,15 @@ use serde_json::{json, Value};
 use worker::*;
 
 use crate::owner::owner_at;
+use crate::services::catalogue::import::bump_menu_version;
 
 /// Ids are slugs of the name, like the importer's; a clash gets a numeric tail.
 const ID_MAX: usize = 64;
 const NAME_MAX: usize = 120;
 /// How many `-2`, `-3`… tails are tried before giving up on a name.
 const ID_TAIL_TRIES: i64 = 99;
-/// A new record sorts after everything in its category.
-const SORT_STEP: i64 = 10;
-
-fn bump_menu_version(cat: &mut dowiz_hub::catalog::Catalog) {
-    if let Some(lj) = cat.location() {
-        if let Ok(mut l) = serde_json::from_str::<Value>(&lj) {
-            let v = l.get("menu_version").and_then(|x| x.as_i64()).unwrap_or(1);
-            l["menu_version"] = json!(v + 1);
-            cat.set_location(&serde_json::to_string(&l).unwrap_or(lj));
-        }
-    }
-}
+const SORT_STEP: i64 = 10; // a new record sorts after everything in its category
+const UNDECLARED_409: &str = "declare this dish's allergens before putting it on sale; add it, then declare them";
 
 /// A free id for a name: its slug, or the slug with the first free tail.
 fn free_id(taken: impl Fn(&str) -> bool, name: &str, wanted: Option<&str>) -> Option<String> {
@@ -84,6 +75,7 @@ pub async fn create_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         return Response::error("price must be >= 0", 400);
     }
     let category = body.category_id.trim().to_string();
+    let gate = crate::services::catalogue::import::allergen_gate(&place).await;
     let made = crate::hubstore::with_catalog(&place, move |cat| {
         let cats = cat.categories();
         if !cats.iter().any(|(id, _)| *id == category) {
@@ -100,12 +92,16 @@ pub async fn create_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
             .filter_map(|p| p.get("sortOrder").and_then(Value::as_i64))
             .max()
             .unwrap_or(0);
-        let rec = json!({
+        let mut rec = json!({
             "id": id, "categoryId": category, "name": name,
             "description": body.description.clone().unwrap_or_default(),
             "price": body.price, "available": body.available.unwrap_or(true),
             "sortOrder": last_sort + SORT_STEP,
         });
+        // AUDIT D17: held until declared in the dish sheet; ASKING for it on sale is refused.
+        if gate && crate::services::catalogue::import::hold_undeclared(&mut rec) && body.available == Some(true) {
+            return Err(Error::RustError("undeclared".into()));
+        }
         cat.set_product(&id, &rec.to_string());
         bump_menu_version(cat);
         Ok(rec)
@@ -115,6 +111,7 @@ pub async fn create_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         Ok(rec) => Response::from_json(&rec),
         Err(e) if e.to_string().contains("unknown category") => Response::error("unknown category", 400),
         Err(e) if e.to_string().contains("no id") => Response::error("no id could be made from that name", 400),
+        Err(e) if e.to_string().contains("undeclared") => Response::error(UNDECLARED_409, 409),
         Err(e) => Err(e),
     }
 }

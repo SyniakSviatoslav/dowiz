@@ -216,6 +216,13 @@ pub fn decide(periods: &[Period], cash: &[CashIn], cmd: &Cmd) -> Result<(&'stati
             };
             let mut shut = p.clone();
             shut.closed_at = Some(i.now_ms);
+            // D31 (G5): THE COUNT MUST BE AT OR AFTER THE LAST CASH EVENT. A
+            // sale after the count, closed against it, is a false shortfall.
+            let at = p.counted_at.unwrap_or(p.opened_at);
+            let moved = cash.iter().filter(|c| fold::within(&shut, c.at)).map(|c| c.at).chain(p.moved_at).max();
+            if let Some(m) = moved.filter(|m| *m > at) {
+                return Err(Refused::Conflict(format!("cash moved at {m}, after the last count at {at}: count the drawer again before closing")));
+            }
             let exp = expected(&shut, cash)?;
             let over_short = fold::over_short(counted, &exp)?;
             Ok((

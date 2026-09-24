@@ -60,10 +60,11 @@ pub fn address(phone: &str) -> String {
 
 /// The recipients of `seg`, one per PERSON.
 ///
-/// THE WITNESS IS LOOKED FOR ACROSS THE PERSON'S KEYS: the row's own, then
-/// every spelling linked into it (`members`). Consent filed under either
-/// spelling is the person's consent -- and the message goes to the spelling
-/// that gave it, the number they said yes on.
+/// THE WITNESS IS LOOKED FOR ACROSS THE PERSON'S KEYS: the row's own and
+/// every spelling linked into it (`members`), and the NEWEST act among them
+/// decides (`consent_log::circle_state`). Consent filed under either spelling
+/// is the person's consent -- and the message goes to the spelling that gave
+/// it, the number they said yes on.
 pub fn recipients(
     orders: &[Value],
     key_of: impl Fn(&str) -> String,
@@ -80,7 +81,10 @@ pub fn recipients(
     for row in &rows {
         let mut keys = vec![row.key.clone()];
         keys.extend(members(&row.key));
-        let witness = keys.iter().find_map(|k| consent::state(acts, k, PURPOSE_MARKETING, CHANNEL));
+        // WITNESSED ON THE CIRCLE (D26): the newest act on any of the
+        // person's keys decides, so a withdrawal under one spelling beats an
+        // older yes under another.
+        let witness = crate::services::customers::consent_log::circle_state(acts, &keys, PURPOSE_MARKETING, CHANNEL);
         let cards: Vec<String> = keys.iter().filter_map(|k| card(k)).collect();
         let rec = Record::of_cards(cards.iter().map(String::as_str));
         let given = ConsentState { given: witness.is_some() };

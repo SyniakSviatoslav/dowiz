@@ -57,7 +57,7 @@ pub async fn kitchen_ack(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
     };
     let out: crate::command::kitchen_ack::KitchenAckOut = match crate::command::send(&place, "kitchen_ack", &input).await {
         Ok(v) => v,
-        Err((status, said)) => return Response::error(said, status),
+        Err((status, said)) => return idem.refused(&place, status, &said).await,
     };
     let answer = json!({
         "order": serde_json::from_str::<Value>(&out.merged).unwrap_or(Value::Null),

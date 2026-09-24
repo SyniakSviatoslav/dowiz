@@ -292,8 +292,9 @@ pub fn decide(
     Ok((order, written))
 }
 
-/// The owner's choice for the food a refused delivery brought back.
+/// The food a refused delivery brought back; the wallet's share (D12).
 pub mod returned;
+pub mod wallet;
 
 #[cfg(test)]
 mod tests;

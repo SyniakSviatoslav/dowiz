@@ -55,6 +55,7 @@ mod fold;
 mod live;
 mod exceptions;
 mod fiscal;
+mod privacy;
 
 use worker::wasm_bindgen::{JsCast, JsValue};
 use worker::*;
@@ -251,6 +252,9 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         // ── public storefront ──
         .get_async("/api/public/locations/:slug/menu", storefront::menu)
         .get_async("/manifest.webmanifest", storefront::manifest)
+        // P8/P9: the venue's privacy notice (venue from the Host) and the DPA text.
+        .get_async("/privacy", privacy::notice::serve)
+        .get_async("/dpa", privacy::dpa::page)
         .post_async("/api/public/locations/:slug/orders", storefront::place)
         // ── reservations: the transport for `dowiz_kernel::reservation` ──
         .get_async("/api/public/locations/:slug/reservations", booking::list)
@@ -381,6 +385,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/customers/reveals", services::customers::handlers::reveals)
         .put_async("/api/owner/customers/:key/record", services::customers::record_routes::put_record)
         .post_async("/api/owner/customers/rekey", services::customers::record_routes::rekey)
+        .post_async("/api/owner/customers/reforget", services::customers::forget::run::reforget)
         .post_async("/api/owner/customers/:key/consent", services::customers::consent_routes::owner_act)
         .post_async("/api/owner/customers/:key/link", services::customers::alias_routes::link)
         .post_async("/api/owner/customers/:key/unlink", services::customers::alias_routes::unlink)
@@ -407,6 +412,8 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/webhooks/meta", channels::webhook_verify)
         .post_async("/api/webhooks/meta", channels::webhook)
         .get_async("/api/owner/integrations", integrations::status)
+        .get_async("/api/owner/dpa", privacy::dpa::read)
+        .post_async("/api/owner/dpa/accept", privacy::dpa::accept)
         .post_async("/api/owner/integrations/check", integrations::check)
         .get_async("/api/owner/ebills", ebills::routes::status)
         .post_async("/api/owner/ebills/config", ebills::routes::config)

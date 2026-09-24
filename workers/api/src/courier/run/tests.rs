@@ -161,3 +161,58 @@ fn only_the_assigned_courier_may_tap_refused() {
     assert!(!may_refuse(&rows, "c1", "o2"), "already delivered");
     assert!(!may_refuse(&rows, "c1", "o9"), "no assignment");
 }
+
+// ── claim: accepting an order ──────────────────────────────────────────────
+
+fn ops_table() -> dowiz_hub::table::Table {
+    dowiz_hub::table::Table::create(1 << 16).unwrap()
+}
+
+fn holder(t: &dowiz_hub::table::Table, order: &str) -> (String, i64, Value) {
+    let v: Value = serde_json::from_str(&t.get(super::super::K_ASG, order).unwrap()).unwrap();
+    let who = v["courier_id"].as_str().unwrap().to_string();
+    (who, v["assigned_at_ms"].as_i64().unwrap(), v["picked_up_at_ms"].clone())
+}
+
+#[test]
+fn a_courier_accepts_an_order_the_owner_assigned_to_them() {
+    let mut t = ops_table();
+    // The owner's assign_courier wrote the row naming c1 at t=10.
+    assert_eq!(claim(&mut t, "o1", "c1", "READY", 10, 1500), Ok(Take::Taken));
+    // c1 taps Accept on the offer: theirs already, so it is taken -- and the
+    // row is left exactly as the owner wrote it (not re-stamped).
+    assert_eq!(claim(&mut t, "o1", "c1", "READY", 99, 0), Ok(Take::Taken));
+    assert_eq!(holder(&t, "o1"), ("c1".to_string(), 10, Value::Null));
+    let v: Value = serde_json::from_str(&t.get(super::super::K_ASG, "o1").unwrap()).unwrap();
+    assert_eq!(v["cash_due"], json!(1500));
+    // The owner may hand over a PREPARING order (HANDABLE); its courier may
+    // accept it while the kitchen finishes.
+    assert_eq!(claim(&mut t, "o1", "c1", "PREPARING", 100, 0), Ok(Take::Taken));
+}
+
+#[test]
+fn an_order_held_by_another_courier_is_refused_and_a_free_one_is_taken() {
+    let mut t = ops_table();
+    assert_eq!(claim(&mut t, "o1", "c1", "READY", 10, 0), Ok(Take::Taken));
+    // Refusal: c2 may not take c1's order, and the row still names c1.
+    assert_eq!(claim(&mut t, "o1", "c2", "READY", 11, 0), Ok(Take::Held));
+    assert_eq!(holder(&t, "o1").0, "c1");
+    // Positive twin: a free order is taken by whoever asks first.
+    assert_eq!(claim(&mut t, "o2", "c2", "READY", 12, 0), Ok(Take::Taken));
+    assert_eq!(holder(&t, "o2"), ("c2".to_string(), 12, Value::Null));
+}
+
+#[test]
+fn only_a_ready_or_confirmed_order_is_taken_from_the_pool() {
+    let mut t = ops_table();
+    // Refusals: nothing written, so the owner can still dispatch it.
+    for s in ["PENDING", "PREPARING", "DELIVERED", ""] {
+        assert_eq!(claim(&mut t, "o1", "c1", s, 10, 0), Ok(Take::NotReady), "{s}");
+        assert!(t.get(super::super::K_ASG, "o1").is_none(), "{s} wrote a row");
+    }
+    // Even my own assignment is not re-taken once the order has ended.
+    assert_eq!(claim(&mut t, "o2", "c1", "CONFIRMED", 10, 0), Ok(Take::Taken));
+    assert_eq!(claim(&mut t, "o2", "c1", "DELIVERED", 11, 0), Ok(Take::NotReady));
+    // Positive twin.
+    assert_eq!(claim(&mut t, "o3", "c1", "CONFIRMED", 10, 0), Ok(Take::Taken));
+}

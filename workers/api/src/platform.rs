@@ -253,6 +253,10 @@ pub struct NewHub {
     pub phone: String,
     #[serde(default)]
     pub owner: Option<NewOwner>,
+    /// The data processing agreement's version, as accepted by the click at
+    /// creation (`privacy::dpa`). Absent or stale -> 400.
+    #[serde(default)]
+    pub dpa: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -290,6 +294,11 @@ pub async fn create_hub(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
     if name.is_empty() {
         return Response::error("a venue needs a name", 400);
     }
+    // NO HUB WITHOUT THE AGREEMENT (P9): dowiz processes the venue's customer
+    // data only under a written contract (Law 124/2024 Art. 26(3)).
+    if let Err(why) = crate::privacy::dpa::check(body.dpa.as_deref()) {
+        return Response::error(why, 400);
+    }
 
     // FREE BEFORE WRITTEN. The column is UNIQUE, so a race still ends in a
     // constraint error rather than a duplicate; this exists to answer the
@@ -305,15 +314,17 @@ pub async fn create_hub(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
     // by an INSERT is a check that can be stale by the time it is acted on; the
     // uniqueness is a key here, and the object runs the two in one go.
     let (i2, s2, n2, ph2) = (id.clone(), slug.clone(), name.clone(), body.phone.trim().to_string());
+    let dpa_by = format!("platform:{admin}");
     let taken = crate::identity_store::with_registry(&ctx.env, move |t| {
         if t.lookup(&crate::identity_store::loc_by_slug(&s2)).is_some() {
             return Ok(true);
         }
-        let rec = serde_json::json!({
+        let mut rec = serde_json::json!({
             "id": i2, "slug": s2, "name": n2, "phone": ph2,
             "status": "closed", "created_at_ms": now, "updated_at_ms": now,
-        })
-        .to_string();
+        });
+        crate::privacy::dpa::stamp(&mut rec, now, &dpa_by);
+        let rec = rec.to_string();
         t.put(
             crate::identity_store::K_LOC,
             &i2,
