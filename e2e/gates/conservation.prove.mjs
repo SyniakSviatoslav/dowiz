@@ -84,6 +84,23 @@ const leg = (over = {}) => ({
   ...over,
 });
 
+// ── law N's fixtures: f1 took money after the venue began fiscalising ──
+const HOUR = 3600e3;
+const FISCAL_SINCE = T;
+const fiscalOrder = (id, over = {}) => ({
+  id, status: 'DELIVERED', created_at_ms: T + 10, total: 1200,
+  items: [{ unit_price: 600, quantity: 2 }], ...over,
+});
+const fiscalOrders = () => [fiscalOrder('f1')];
+const queuedDoc = (order, issued) => ({
+  order_id: order, uuid: `0198aa00-0000-8000-8000-0000000000${order}`,
+  issued_at: issued, deadline: issued + 48 * HOUR,
+});
+const fiscalHealth = (waiting) => ({
+  configured: true, since_ms: FISCAL_SINCE, sender: 'not_configured',
+  backlog: waiting.length, waiting, overdue: [],
+});
+
 const witnessed = (over) => ({
   configured: true,
   witness: { atMs: Date.now() - NIGHT, records: 6, archived: 0, total: 6, tip: 'aa', found: [], ...over },
@@ -496,6 +513,46 @@ const CASES = {
     orders: tillOrders(),
     red: false,
   },
+  // LAW N (BLIND-SPOTS §2.8): a fiscalising venue's order that took money
+  // has its codes or a document inside its 48 h. The queue's shape is
+  // `fiscal::wire::health_json`'s, pinned by
+  // `wire::tests::health_of_a_configured_venue_names_backlog_deadline_and_the_overdue_order`.
+  'law N: an unsent document 49 h old': {
+    health: { ...ok, fiscal: fiscalHealth([queuedDoc('f1', Date.now() - 49 * HOUR)]) },
+    backup: witnessed(), orders: fiscalOrders(),
+    red: 'f1: document 0198aa00-0000-8000-8000-0000000000f1 issued',
+  },
+  'law N: a document 47 h old, and one registered': {
+    health: { ...ok, fiscal: fiscalHealth([queuedDoc('f1', Date.now() - 47 * HOUR)]) },
+    backup: witnessed(),
+    orders: [...fiscalOrders(), fiscalOrder('f2', { fiscal: { iic: 'IIC1', fic: 'FIC1' } })],
+    red: false,
+  },
+  'law N: an order that took money with no document at all': {
+    health: { ...ok, fiscal: fiscalHealth([]) },
+    backup: witnessed(), orders: fiscalOrders(),
+    red: 'f1: took money at',
+  },
+  'law N: not owed -- refused, before since, or from the platform': {
+    health: { ...ok, fiscal: fiscalHealth([]) },
+    backup: witnessed(),
+    orders: [
+      fiscalOrder('f3', { status: 'REJECTED' }),
+      fiscalOrder('f4', { created_at_ms: FISCAL_SINCE - 1 }),
+      fiscalOrder('f5', { external: { fic: 'FIC-EBILLS' } }),
+    ],
+    red: false,
+  },
+  'law N: a venue that does not fiscalise is n/a, not red': {
+    health: { ...ok, fiscal: { configured: false, said: 'fiscal.since_ms is empty' } },
+    backup: witnessed(), orders: fiscalOrders(),
+    red: false, says: 'law N fiscal: n/a (fiscalisation not configured)',
+  },
+  'law N: a since the server could not read is red': {
+    health: { ...ok, fiscal: { configured: false, error: 'fiscal.since_ms is "2026-10-01": it must be epoch milliseconds' } },
+    backup: witnessed(), orders: fiscalOrders(),
+    red: 'health.fiscal cannot be trusted',
+  },
 };
 
 const RUNNER = `
@@ -530,6 +587,9 @@ for (const [name, c] of Object.entries(CASES)) {
   let verdict = red === want ? 'ok' : `WRONG COLOUR (exit ${r.status})`;
   if (verdict === 'ok' && want && !out.includes(c.red)) {
     verdict = `red, but did not say "${c.red}"`;
+  }
+  if (verdict === 'ok' && c.says && !out.includes(c.says)) {
+    verdict = `did not say "${c.says}"`;
   }
   if (verdict !== 'ok') {
     failed += 1;

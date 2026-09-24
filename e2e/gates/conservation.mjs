@@ -12,7 +12,7 @@
 // `StockLedger::stranded()` is a conservation report. What was missing was
 // anything that ran them as a gate.
 //
-// TWELVE LAWS, each over the live platform:
+// THIRTEEN LAWS, each over the live platform:
 //   1. every order's folded status equals the status it is served with
 //   2. no order is stranded: nothing is held by an order that has ended
 //   3. the money on an order is its lines plus fees minus its discount
@@ -34,6 +34,9 @@
 //  12. every wallet payment has exactly one ledger leg -- the tx id derived
 //      from (venue, order, payment instant), debiting that wallet by that
 //      amount in that currency -- and every ledger spend has its payment
+//   N. at a venue that fiscalises, every order that took money has its
+//      fiscal codes or a queued document still inside its 48 h (n/a, and
+//      printed as such, where fiscalisation is not configured)
 //
 // It takes an owner token per venue and reads only. Exit 1 on any breach, with
 // the order named -- a gate whose failure cannot be chased is a dashboard.
@@ -468,6 +471,65 @@ for (const host of HOSTS) {
       if (!owed.has(s.id)) note(venue, 'wallet', `${s.id}: a wallet debit (memo ${s.memo}) with no wallet payment`);
     }
   }
+
+  // ── N. every order that took money owes a fiscal document, within 48 h ──
+  //
+  // BLUEPRINT-OPERATIONAL-BLIND-SPOTS §2.8, Law 87/2019 art. 29 p.2. At a
+  // venue with fiscalisation configured (`fiscal.since_ms`, served back as
+  // `health.fiscal.since_ms`), every order placed at or after that instant
+  // whose status took money has a `Noted{fiscal}` (the codes, folded onto the
+  // order as `fiscal.fic`) OR a queued document whose deadline is in the
+  // future. A document past its deadline is a breach naming the order; so is
+  // an order with neither.
+  //
+  // THE DEADLINE IS RECOMPUTED HERE from the issue instant, never taken from
+  // the server's `deadline`: a server that stamped a wrong one would otherwise
+  // be audited by its own arithmetic. The two must also agree.
+  //
+  // NOT OWED, by the same fields `fiscal::document` refuses on (TAX §3.7
+  // rules 2-4): a status that took no money (the kernel's `took_money` is
+  // "everything but these three"), an order that came FROM the platform
+  // (`external.fic`), an untrusted price.
+  //
+  // NOT CONFIGURED IS "n/a", printed -- neither a pass nor a fail. A value the
+  // server could not read as an instant IS a breach: the owner believes they
+  // are covered. ABSENT (a Worker older than `health.fiscal`) is "not measured".
+  const FISCAL_DEADLINE_MS = 48 * 3600 * 1000;
+  const NO_MONEY = new Set(['REJECTED', 'CANCELLED', 'COMPENSATED_REFUND']);
+  const fiscal = health?.fiscal;
+  let lawN = 'not measured (no health.fiscal)';
+  if (fiscal?.error) {
+    note(venue, 'fiscal', `health.fiscal cannot be trusted: ${fiscal.error}`);
+    lawN = 'error';
+  } else if (fiscal && fiscal.configured === false) {
+    lawN = 'n/a (fiscalisation not configured)';
+  } else if (fiscal?.configured === true) {
+    const nowMs = Date.now();
+    const since = fiscal.since_ms ?? 0;
+    const queued = new Map((fiscal.waiting || []).map((w) => [w.order_id, w]));
+    let owed = 0;
+    for (const o of list) {
+      if (NO_MONEY.has(o.status)) continue;
+      if ((o.created_at_ms ?? 0) < since) continue;
+      if (o.external?.fic || o.price_trusted === false) continue;
+      owed += 1;
+      if (o.fiscal?.fic) continue;
+      const w = queued.get(o.id);
+      if (!w) {
+        note(venue, 'fiscal', `${o.id}: took money at ${o.created_at_ms} (fiscalising since ${since}) and has neither Noted{fiscal} nor a queued document`);
+        continue;
+      }
+      const deadline = w.issued_at + FISCAL_DEADLINE_MS;
+      if (w.deadline !== deadline) {
+        note(venue, 'fiscal', `${o.id}: document ${w.uuid} issued ${w.issued_at} says deadline ${w.deadline}, 48 h is ${deadline}`);
+      }
+      if (deadline <= nowMs) {
+        note(venue, 'fiscal', `${o.id}: document ${w.uuid} issued ${w.issued_at} passed its 48 h deadline ${deadline} unsent`);
+      }
+    }
+    lawN = `${owed} owed, ${fiscal.backlog ?? queued.size} queued`;
+  }
+  console.log(`${venue}: law N fiscal: ${lawN}`);
 
   console.log(`${venue}: ${list.length} orders, ${ENDED.size} terminal states known, ${Object.keys(health?.images || {}).length} images gauged, ${q.length} quarantined, witness ${w ? (w.found?.length ? 'CONTRADICTED' : `${w.total} records`) : 'not taken yet'}`);
 }

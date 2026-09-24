@@ -149,6 +149,11 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     // THE TILL LINK (ebills.al): last poll, last error, unmatched codes.
     let ebills = crate::ebills::routes::health(&place).await;
 
+    // ── LAW N: THE FISCAL QUEUE AND ITS 48 H (BLIND-SPOTS §2.8) ──
+    // `{configured:false}` when `fiscal.since_ms` is empty; the image is read
+    // (never written) only for a venue that fiscalises. See `fiscal::wire`.
+    let fiscal = crate::fiscal::rail::health(&place, settings.as_ref().ok().map(|s| &s.settings), ctx.data.now_ms).await;
+
     Response::from_json(&json!({
         "venue": loc,
         "images": images,
@@ -170,6 +175,7 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         "backupSeal": crate::cloud::seal::describe(&crate::cloud::seal::state(&ctx.env)),
         "kitchen": kitchen,
         "ebills": ebills,
+        "fiscal": fiscal,
     }))
 }
 
