@@ -28,6 +28,9 @@ impl HubImages {
         for (kind, body, _) in &written {
             self.broadcast(*kind as u8, &input.order_id, body, next);
         }
+        // THE EXCEPTION ALERT (P1-5): a refund is an exception row; the
+        // alert is evidence about it and never fails the refund.
+        self.exceptions_after(&input.location_id, input.now_ms).await;
         let seq = written.last().map_or(0, |w| w.2);
         Ok(Ok(RefundOut { merged: merged.to_string(), seq, generation: next }))
     }

@@ -83,6 +83,19 @@ pub const KNOWN: &[Known] = &[
                Send the bot any message first, then use the test button.",
         default: "",
     },
+    Known {
+        key: "alerts.exceptions.threshold",
+        label: "Exception alert after",
+        hint: "How many voids after the kitchen, comps, refunds, pay-outs (each kind counted apart) \
+               in one till period before your Telegram chat is told. 0 = off.",
+        default: "3",
+    },
+    Known {
+        key: "alerts.exceptions.late_min",
+        label: "Late amendment after (minutes)",
+        hint: "A change to a round this long after it was placed is listed as an exception.",
+        default: "30",
+    },
     // ── WhatsApp, through Meta's Cloud API ──
     //
     // The venue's own WhatsApp Business number. A permanent System User token

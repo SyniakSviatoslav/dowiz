@@ -73,11 +73,15 @@ impl HubImages {
     /// ONE TILL COMMAND: decide, append, write the till image, answer with the
     /// period as it now is. The Worker decides what of it a person may see.
     pub(super) async fn till(&self, cmd: Cmd) -> Result<std::result::Result<TillOut, Refused>> {
-        let loc = match &cmd {
-            Cmd::Open(i) => i.location_id.clone(),
-            Cmd::PayIn(i) | Cmd::PayOut(i) => i.location_id.clone(),
-            Cmd::Count(i) => i.location_id.clone(),
-            Cmd::Close(i) => i.location_id.clone(),
+        // The command's own clock (the Worker read it once, `now_ms`), and
+        // whether it can write an exception row (a pay-out; a close that
+        // records over/short) — P1-5's alert runs after those two only.
+        let (loc, now_ms, exception) = match &cmd {
+            Cmd::Open(i) => (i.location_id.clone(), i.now_ms, false),
+            Cmd::PayIn(i) => (i.location_id.clone(), i.now_ms, false),
+            Cmd::PayOut(i) => (i.location_id.clone(), i.now_ms, true),
+            Cmd::Count(i) => (i.location_id.clone(), i.now_ms, false),
+            Cmd::Close(i) => (i.location_id.clone(), i.now_ms, true),
         };
         let (gen, mut log, periods) = match self.till_state().await? {
             Ok(v) => v,
@@ -94,6 +98,11 @@ impl HubImages {
         let Some(next) = self.put_image(IMAGE_TILL, gen, &log.to_bytes()).await? else {
             return Ok(Err(Refused::Append(format!("the till generation moved during {kind}"))));
         };
+        // THE EXCEPTION ALERT (P1-5), after the record landed; it never
+        // fails the command (`hubdo/exceptions.rs`).
+        if exception {
+            self.exceptions_after(&loc, now_ms).await;
+        }
         let now = match till::periods(&log.entries()) {
             Ok(p) => p,
             Err(e) => return Ok(Err(Refused::Append(format!("the till log does not fold after {kind}: {e}")))),
