@@ -28,6 +28,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 pub mod fx;
+pub mod legs;
+pub mod tender;
+pub mod wallet;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PayIn {
@@ -53,6 +56,20 @@ pub struct PayIn {
     /// unit is in `fx`'s header: order minor units per payment minor unit × 1e6.
     #[serde(default)]
     pub rate_ppm: Option<i64>,
+    /// A TIP taken with this payment, in the ORDER's minor units (§2.3,
+    /// OPERATIONAL-BLIND-SPOTS P1-3). It raises the round's `tip` and `total`
+    /// by itself in the same `Paid`, so law 3 (`total = lines + fee + tip -
+    /// discount`) still holds and the sum rule is checked against the NEW
+    /// total: "keep the change" is `amount = owed, tip = the change`. The tip
+    /// is not the venue's money and not the drawer's: the payment's `amount`
+    /// is the bill's share only, so the till's expected cash never includes it.
+    #[serde(default)]
+    pub tip: Option<i64>,
+    /// `method: "wallet"` only: the wallet paying, as the wallet routes name
+    /// it (`wallet.rs`). Its debit leg is written in the same turn
+    /// (`pay::wallet`), and a balance short of the amount is a refusal.
+    #[serde(default)]
+    pub wallet: Option<String>,
     pub now_ms: i64,
 }
 
@@ -84,13 +101,17 @@ fn refuses_payment(status: &str) -> bool {
 /// here and failing the `== "cash"` till rule below would be cash with no
 /// drawer.
 pub fn validate_method(method: &str) -> bool {
-    matches!(method, "cash" | "card" | "cheque" | "transfer" | "gift_card" | "other")
+    matches!(method, "cash" | "card" | "cheque" | "transfer" | "gift_card" | "wallet" | "other")
 }
 
 /// What one recorded payment took off the bill, in the order's currency. A
 /// payment recorded before payments carried a currency is in the order's.
+///
+/// A TIP SETTLES TOO: it raised the total by itself, so it is paid by the
+/// payment that carried it (`PayIn::tip`).
 pub fn settles(p: &Value) -> i64 {
-    p.get("amount_in_order_currency").or_else(|| p.get("amount")).and_then(Value::as_i64).unwrap_or(0)
+    let bill = p.get("amount_in_order_currency").or_else(|| p.get("amount")).and_then(Value::as_i64).unwrap_or(0);
+    bill.saturating_add(p.get("tip").and_then(Value::as_i64).unwrap_or(0))
 }
 
 /// Σ of the payments already on the order plus this one, in the order's currency.
@@ -141,16 +162,30 @@ pub fn decide(
         None
     };
 
+    let tip = input.tip.unwrap_or(0);
+    if tip < 0 {
+        return Err(Refused::Invalid("a tip is not negative".into()));
+    }
+    if (input.method == "wallet") != input.wallet.as_deref().is_some_and(|w| !w.trim().is_empty()) {
+        return Err(Refused::Invalid("a wallet payment names its wallet, and only a wallet payment does".into()));
+    }
+    // A WALLET PAYS THE BILL'S SHARE ONLY. Its leg debits `amount`; a tip on
+    // it would settle money no leg took from anyone (law 12 compares the leg
+    // to `amount`, not to `settles`). The guest tips in cash or on the card.
+    if input.method == "wallet" && tip > 0 {
+        return Err(Refused::Invalid("a wallet pays the bill only: take the tip in cash or on the card".into()));
+    }
     let order_currency = before.get("currency").and_then(Value::as_str).unwrap_or(room.venue_currency);
     let settled = fx::settle(order_currency, input.currency.as_deref(), input.rate_ppm, input.amount)?;
-    let total = before.get("total").and_then(Value::as_i64).unwrap_or(0);
-    let paid = paid_with(&before, settled.in_order_currency)?;
+    let old_total = before.get("total").and_then(Value::as_i64).unwrap_or(0);
+    let total = old_total.checked_add(tip).ok_or_else(|| Refused::Invalid("the tip overflows the total".into()))?;
+    let paid = paid_with(&before, settled.in_order_currency.saturating_add(tip))?;
     if paid > total {
         return Err(Refused::Conflict(format!("payment sum {paid} exceeds the total {total}")));
     }
 
-    // LAW 3: a payment never changes subtotal, discount or total — only
-    // `payments` and `payment_status` are written below.
+    // LAW 3: a payment never changes subtotal or discount; a TIP raises `tip`
+    // and `total` by the same amount, the one term law 3 lets it move.
     let mut payment = json!({
         "by": input.by,
         "amount": input.amount,
@@ -165,7 +200,16 @@ pub fn decide(
         payment["rate_ppm"] = json!(rate);
         payment["amount_in_order_currency"] = json!(settled.in_order_currency);
     }
+    if let Some(w) = input.wallet.as_deref().filter(|_| input.method == "wallet") {
+        payment["wallet"] = json!(w.trim());
+    }
     let mut order = before.clone();
+    if tip > 0 {
+        payment["tip"] = json!(tip);
+        let old_tip = before.get("tip").and_then(Value::as_i64).unwrap_or(0);
+        order["tip"] = json!(old_tip.saturating_add(tip));
+        order["total"] = json!(total);
+    }
     let mut payments = before.get("payments").and_then(Value::as_array).cloned().unwrap_or_default();
     payments.push(payment);
     order["payments"] = Value::Array(payments);

@@ -56,6 +56,17 @@ impl HubImages {
         })
     }
 
+    /// The wallet ledger's log (`wallet::IMAGE_LEDGER`), and its generation.
+    async fn ledger_log(&self) -> Result<(i64, dowiz_hub::logimage::LogImage)> {
+        Ok(match self.image(crate::wallet::IMAGE_LEDGER).await? {
+            Some((meta, bytes)) => (
+                meta.generation,
+                dowiz_hub::logimage::LogImage::load(&bytes).map_err(|_| Error::RustError("ledger image is unreadable".into()))?,
+            ),
+            None => (0, dowiz_hub::logimage::LogImage::create().map_err(|_| Error::RustError("cannot create ledger image".into()))?),
+        })
+    }
+
     /// The stock ledger's log, and the generation it was read at.
     pub(super) async fn stock_log(&self) -> Result<(i64, dowiz_hub::stock::StockLog)> {
         Ok(match self.image(crate::hubstore::IMAGE_STOCK).await? {
@@ -131,16 +142,69 @@ impl HubImages {
         };
         let venue_currency = self.venue_currency().await?;
         let room = crate::command::pay::Room { open_till: open.as_deref(), venue_currency: &venue_currency };
-        let (round, body, seq) = match crate::command::pay::decide(&mut hub, current.as_ref(), &input, &room) {
-            Ok(v) => v,
-            Err(r) => return Ok(Err(r)),
-        };
+        // A WALLET TENDER reads the ledger image in the same turn and refuses a
+        // debit its balance does not cover (`command::pay::wallet`).
+        let ledger = if input.method == "wallet" { Some(self.ledger_log().await?) } else { None };
+        let rows: Vec<String> = ledger.as_ref().map_or_else(Vec::new, |(_, log)| {
+            let mut es = log.about(crate::wallet::K_TX, None, usize::MAX);
+            es.reverse();
+            es.into_iter().map(|e| e.json).collect()
+        });
+        let (round, body, seq, debit) =
+            match crate::command::pay::wallet::pay(&mut hub, current.as_ref(), &input, &room, &rows) {
+                Ok(v) => v,
+                Err(r) => return Ok(Err(r)),
+            };
         let next = match self.write_both("a payment", log_gen, &hub, None).await? {
             Ok(n) => n,
             Err(r) => return Ok(Err(r)),
         };
+        // THE LOG FIRST, then the wallet's leg, for `write_both`'s reason; a
+        // lost leg is a `Paid` naming a wallet with no debit, which the ledger
+        // statement and this console line both show.
+        if let (Some(d), Some((gen, mut log))) = (debit, ledger) {
+            let wrote = match log.append(crate::wallet::K_TX, &d.tx_id, &d.record) {
+                Ok(()) => self.put_image(crate::wallet::IMAGE_LEDGER, gen, &log.to_bytes()).await?.is_some(),
+                Err(_) => false,
+            };
+            if !wrote {
+                self.retry_leg(&round, &input, &venue_currency, &d.tx_id).await?;
+            }
+        }
         self.broadcast(dowiz_hub::EventKind::Paid as u8, &input.order_id, &body, next);
         Ok(Ok(crate::command::pay::PayOut { merged: round.to_string(), seq, generation: next }))
+    }
+
+    /// A WALLET LEG THAT LOST ITS WRITE (the ledger moved between our read
+    /// and our put: a top-up, or an owner's repair). The `Paid` is already on
+    /// the log, so the leg is decided ONCE MORE against the ledger as it is
+    /// now, by law 12's own repair (`command::pay::legs::repair`): the id is
+    /// derived, so a leg someone else already wrote is found and nothing is
+    /// written; a leg the wallet no longer covers is refused, never posted.
+    /// Only a retry that fails, or a refusal, is left for the owner's audit
+    /// (`GET /api/owner/wallet/legs`), with the console line naming it.
+    async fn retry_leg(&self, round: &serde_json::Value, input: &crate::command::pay::PayIn, currency: &str, tx_id: &str) -> Result<()> {
+        let (gen, mut log) = self.ledger_log().await?;
+        let mut rows: Vec<String> = log.about(crate::wallet::K_TX, None, usize::MAX).into_iter().map(|e| e.json).collect();
+        rows.reverse();
+        let plan = match crate::command::pay::legs::repair(std::slice::from_ref(round), &rows, &input.location_id, currency) {
+            Ok(p) => p,
+            Err(r) => {
+                console_error!("wallet: order {} was paid and its debit {tx_id} was NOT written ({})", input.order_id, r.message());
+                return Ok(());
+            }
+        };
+        for (leg, why) in &plan.refused {
+            console_error!("wallet: order {} was paid and its debit {} is REFUSED on retry: {why}", leg.order_id, leg.tx_id);
+        }
+        if plan.write.is_empty() {
+            return Ok(());
+        }
+        let appended = plan.write.iter().all(|d| log.append(crate::wallet::K_TX, &d.tx_id, &d.record).is_ok());
+        if !appended || self.put_image(crate::wallet::IMAGE_LEDGER, gen, &log.to_bytes()).await?.is_none() {
+            console_error!("wallet: order {} was paid and its debit {tx_id} was NOT written after one retry", input.order_id);
+        }
+        Ok(())
     }
 
     /// TRANSFER LINES BETWEEN ROUNDS (§2.9): both rounds' deltas, the shelf

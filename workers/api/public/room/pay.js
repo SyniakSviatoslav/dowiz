@@ -9,14 +9,14 @@
 //
 // A SPLIT is several payments: the screen stays open after one, with what is
 // still owed as the next default, until the server says "paid".
-import { esc, money, METHODS, TILL_CURRENCIES, owed, parseMinor, minorToInput, ratePpm, convertPpm, maxAmountFor, quoteOf, settles } from './logic.js';
+import { esc, money, METHODS, TILL_CURRENCIES, owed, parseMinor, minorToInput, ratePpm, convertPpm, maxAmountFor, quoteOf, settles, tipMinor, walletOk, walletTipOk } from './logic.js';
 import { pick } from './sheet.js';
 
 /// The form's working state, per round, so a redraw keeps what was typed.
 function form(c, round) {
   const S = c.S;
   if (!S.payForm || S.payForm.id !== round.id) {
-    S.payForm = { id: round.id, currency: S.currency, method: 'cash', amount: minorToInput(owed(round), S.currency), rate: '' };
+    S.payForm = { id: round.id, currency: S.currency, method: 'cash', amount: minorToInput(owed(round), S.currency), rate: '', tip: '', wallet: '' };
   }
   return S.payForm;
 }
@@ -48,6 +48,10 @@ export function renderPay(c, round) {
         <input name="rate" data-in="rate" inputmode="decimal" autocomplete="off" value="${esc(f.rate)}" required> ${esc(quote)}</span></label>` : ''}
       <label>${esc(t('amount'))} (${esc(f.currency)})
         <input name="amount" data-in="amount" inputmode="decimal" autocomplete="off" value="${esc(f.amount)}" required></label>
+      <label>${esc(t('tip'))} (${esc(order)})
+        <input name="tip" data-in="tip" inputmode="decimal" autocomplete="off" value="${esc(f.tip)}" placeholder="0"></label>
+      ${f.method === 'wallet' ? `<label>${esc(t('walletId'))}
+        <input name="wallet" data-in="wallet" autocomplete="off" value="${esc(f.wallet)}" required></label>` : ''}
       ${foreign ? `<p class="muted">${preview != null ? `≈ ${money(preview, order, loc)} ${esc(t('offTheBill'))}` : esc(t('rateNeeded'))}
         ${ppm ? `<button type="button" class="btn" data-act="fill">${esc(t('fillOwed'))}</button>` : ''}</p>` : ''}
       <button class="cta" type="submit">${esc(t('takeN').replace('{a}', amt ? money(amt, f.currency, loc) : '—'))}</button>
@@ -87,7 +91,15 @@ export function bindPay(c, root, round) {
     const f = form(c, round), order = S.currency;
     const amount = parseMinor(f.amount, f.currency);
     if (!amount || amount < 1) return c.toast(t('badAmount'));
+    const tip = tipMinor(f.tip, order);
+    if (tip == null) return c.toast(t('badTip'));
+    if (!walletOk(f.method, f.wallet)) return c.toast(t('needWallet'));
+    if (!walletTipOk(f.method, tip)) return c.toast(t('walletNoTip'));
     const body = { location_id: S.loc, amount, method: f.method };
+    // THE TIP is in the bill's currency and raises the round's total by
+    // itself (command/pay.rs `PayIn::tip`); `amount` stays the bill's share.
+    if (tip > 0) body.tip = tip;
+    if (f.method === 'wallet') body.wallet = f.wallet.trim();
     if (f.currency !== order) {
       const ppm = ratePpm(f.rate, order, f.currency);
       if (!ppm) return c.toast(t('badRate'));

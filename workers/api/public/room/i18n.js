@@ -41,6 +41,7 @@ export const T = {
     kitchenHasIt: 'Kuzhina e ka tashmë këtë raund; artikujt nuk lëvizin më.', roundPaid: 'Ky raund është paguar; nuk ndryshohet.',
     alreadyThere: 'Tavolina është tashmë aty.', notHere: 'Kjo porosi nuk gjendet më; salla u ringarkua.', moved: 'U kalua',
     moveSitting: 'Kalo tavolinën', moveSittingHint: 'Të gjitha raundet që janë ende në sallë kalojnë në tavolinën e re.',
+    tip: 'Bakshish', walletId: 'Portofoli (ID-ja e klientit)', badTip: 'Bakshishi nuk lexohet.', needWallet: 'Shkruani portofolin që paguan.', method_wallet: 'Portofol', walletNoTip: 'Portofoli paguan vetëm faturën; bakshishi merret me para ose kartë.',
     language: 'Gjuha', theme: 'Tema',
   },
   en: {
@@ -78,6 +79,7 @@ export const T = {
     kitchenHasIt: 'The kitchen already has this round; its lines no longer move.', roundPaid: 'This round is paid; it cannot be changed.',
     alreadyThere: 'The table is already there.', notHere: 'This order is no longer here; the room was reloaded.', moved: 'Moved',
     moveSitting: 'Move the table', moveSittingHint: 'Every round still in the room moves to the new table.',
+    tip: 'Tip', walletId: 'Wallet (the guest\'s id)', badTip: 'That tip does not read.', needWallet: 'Name the wallet that pays.', method_wallet: 'Wallet', walletNoTip: 'A wallet pays the bill only; take the tip in cash or on the card.',
     language: 'Language', theme: 'Theme',
   },
   uk: {
@@ -115,6 +117,7 @@ export const T = {
     kitchenHasIt: 'Кухня вже має цей раунд; позиції більше не переносяться.', roundPaid: 'Цей раунд сплачено; його не змінити.',
     alreadyThere: 'Стіл уже там.', notHere: 'Цього замовлення вже немає; зал оновлено.', moved: 'Перенесено',
     moveSitting: 'Пересадити стіл', moveSittingHint: 'Усі раунди, що ще в залі, переходять за новий стіл.',
+    tip: 'Чайові', walletId: 'Гаманець (ID гостя)', badTip: 'Чайові не прочитати.', needWallet: 'Вкажіть гаманець, що платить.', method_wallet: 'Гаманець', walletNoTip: 'Гаманець сплачує лише рахунок; чайові готівкою або карткою.',
     language: 'Мова', theme: 'Тема',
   },
 };

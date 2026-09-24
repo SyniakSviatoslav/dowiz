@@ -6,6 +6,7 @@ import {
   parseCaps, actionsFor, canTill, reasonWord, parseMinor, minorToInput, ratePpm, convertPpm,
   maxAmountFor, owed, sittingDue, money, slugOfHost, ageOf, METHODS, REASONS,
   canTransfer, transferTargets, transferBody, canMoveSitting, refusalKey,
+  settles, keepTheChange, tipMinor, walletOk, walletTipOk,
 } from './logic.js';
 import { renderTill, visible } from './till-view.js';
 
@@ -53,7 +54,7 @@ test('reasons: the closed set passes, other carries bounded text, anything else 
   assert.equal(reasonWord('other', 'x'.repeat(141)), null);
   assert.equal(reasonWord('other', 'x'.repeat(140)), 'other:' + 'x'.repeat(140));
   assert.equal(reasonWord('burnt'), null);
-  assert.deepEqual(METHODS, ['cash', 'card', 'cheque', 'transfer', 'gift_card', 'other']);
+  assert.deepEqual(METHODS, ['cash', 'card', 'cheque', 'transfer', 'gift_card', 'wallet', 'other']);
 });
 
 // fx.rs's own worked examples are the fixtures: 1 EUR = 97.50 ALL.
@@ -215,4 +216,40 @@ test('refusals: the server\'s fixed phrases map to the waiter\'s words; anything
   assert.equal(refusalKey(400, 'no open round of this sitting is anywhere but table 7'), 'alreadyThere');
   assert.equal(refusalKey(404, 'order not found'), 'notHere');
   assert.equal(refusalKey(500, 'hub append failed'), null);
+});
+
+// ── a tip at payment (§2.3) ─────────────────────────────────────────────────
+test('tip: a payment settles its bill share plus its tip, and owed follows', () => {
+  assert.equal(settles({ amount: 1500, tip: 200 }), 1700);
+  assert.equal(settles({ amount: 1500 }), 1500, 'the twin: no tip');
+  assert.equal(settles({ amount: 20, amount_in_order_currency: 1950, tip: 50 }), 2000);
+  // The server raised the total by the tip, so the round is square.
+  assert.equal(owed({ total: 1700, payments: [{ amount: 1500, tip: 200 }] }), 0);
+});
+
+test('tip: keep the change is amount = owed, tip = the rest; short is refused', () => {
+  assert.deepEqual(keepTheChange(2000, 1800), { amount: 1800, tip: 200 });
+  assert.deepEqual(keepTheChange(1800, 1800), { amount: 1800, tip: 0 });
+  assert.equal(keepTheChange(1799, 1800), null, 'short of the bill is not a tip');
+  assert.equal(keepTheChange(2000, 0), null, 'nothing owed');
+});
+
+test('tip: the field reads as minor units; empty is none; junk is refused', () => {
+  assert.equal(tipMinor('', 'ALL'), 0);
+  assert.equal(tipMinor('200', 'ALL'), 200);
+  assert.equal(tipMinor('2.50', 'EUR'), 250);
+  assert.equal(tipMinor('-5', 'ALL'), null);
+  assert.equal(tipMinor('abc', 'ALL'), null);
+});
+
+test('wallet: a wallet payment names its wallet and nothing else needs one', () => {
+  assert.equal(walletOk('wallet', ''), false);
+  assert.equal(walletOk('wallet', ' u1 '), true);
+  assert.equal(walletOk('card', ''), true);
+});
+
+test('wallet: a wallet pays the bill only; a tip rides on any other method', () => {
+  assert.equal(walletTipOk('wallet', 100), false);
+  assert.equal(walletTipOk('wallet', 0), true, 'the twin: no tip');
+  assert.equal(walletTipOk('card', 100), true);
 });

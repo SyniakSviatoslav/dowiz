@@ -70,7 +70,7 @@ export function reasonWord(kind, text) {
 }
 
 /// `command::pay::validate_method`, exact.
-export const METHODS = ['cash', 'card', 'cheque', 'transfer', 'gift_card', 'other'];
+export const METHODS = ['cash', 'card', 'cheque', 'transfer', 'gift_card', 'wallet', 'other'];
 
 /// The two piles a Durrës drawer holds.
 export const TILL_CURRENCIES = ['ALL', 'EUR'];
@@ -162,8 +162,34 @@ export function maxAmountFor(owedMinor, ppm) {
 
 // ── what is still owed ──────────────────────────────────────────────────────
 
-/// `command::pay::settles`: what one recorded payment took off the bill.
-export const settles = p => Number(p?.amount_in_order_currency ?? p?.amount ?? 0) || 0;
+/// `command::pay::settles`: what one recorded payment took off the bill --
+/// its bill share plus the TIP it carried, which raised the total by itself.
+export const settles = p => (Number(p?.amount_in_order_currency ?? p?.amount ?? 0) || 0) + (Number(p?.tip ?? 0) || 0);
+
+// ── a tip at payment (OPERATIONAL-BLIND-SPOTS §2.3) ─────────────────────────
+
+/// "KEEP THE CHANGE": the guest hands `handed` for `owedMinor` (both in the
+/// bill's currency). The payment is the owed share, the rest is the tip --
+/// the server raises the round's tip and total by it in the same `Paid`.
+/// Null when the hand-over does not cover what is owed.
+export function keepTheChange(handed, owedMinor) {
+  if (!Number.isSafeInteger(handed) || !(owedMinor > 0) || handed < owedMinor) return null;
+  return { amount: owedMinor, tip: handed - owedMinor };
+}
+
+/// The tip field, parsed: '' is no tip (0), anything else must read as
+/// minor units of the bill's currency. Null = refuse before sending.
+export function tipMinor(text, code) {
+  if (String(text ?? '').trim() === '') return 0;
+  return parseMinor(text, code);
+}
+
+/// A wallet payment names its wallet (`PayIn.wallet`), and only it does.
+export const walletOk = (method, wallet) => method !== 'wallet' || String(wallet || '').trim().length > 0;
+
+/// A wallet pays the bill's share only (`command::pay::decide`): its leg
+/// debits `amount`, so a tip on it would settle money nobody paid.
+export const walletTipOk = (method, tip) => method !== 'wallet' || !(tip > 0);
 
 /// What a round still owes, in its order's currency. The payments list when
 /// the round carries one (a pay answer's `order` does); the card's `paid`

@@ -37,6 +37,8 @@ fn input(amount: i64, method: &str) -> PayIn {
         covers: None,
         currency: None,
         rate_ppm: None,
+        tip: None,
+        wallet: None,
         now_ms: NOW,
     }
 }
@@ -235,4 +237,62 @@ fn an_order_in_euro_takes_a_euro_payment_with_no_rate() {
     assert!(pay(&mut hub(), &o, &input(1500, "cash"), &OPEN).is_ok(), "no currency named is the order's: EUR");
     let lek = PayIn { currency: Some("ALL".into()), ..input(1500, "cash") };
     assert!(matches!(pay(&mut hub(), &o, &lek, &OPEN), Err(Refused::Invalid(_))), "lek on a euro bill states a rate");
+}
+
+// ── §2.3 (P1-3): a tip taken at payment ─────────────────────────────────────
+
+/// "KEEP THE CHANGE": 1500 owed, the guest hands 1700. `amount` is the bill's
+/// share, `tip` the change; the round's tip and total rise together (law 3)
+/// and the round is paid against the NEW total.
+#[test]
+fn a_tip_raises_tip_and_total_together_and_settles_the_round() {
+    let mut h = hub();
+    let i = PayIn { tip: Some(200), ..input(1500, "card") };
+    let (order, body, _) = pay(&mut h, &round("READY", 1500), &i, &OPEN).expect("lands");
+    assert_eq!((order["tip"].clone(), order["total"].clone()), (json!(200), json!(1700)));
+    assert_eq!(order["subtotal"], json!(1500), "the lines do not move");
+    assert_eq!(order["payments"][0]["amount"], json!(1500), "the drawer/bill share excludes the tip");
+    assert_eq!(order["payments"][0]["tip"], json!(200));
+    assert_eq!(order["payment_status"], json!("paid"));
+    assert_eq!(settles(&order["payments"][0]), 1700, "a tip settles the total it raised");
+    // Law 3 holds because the two terms move together: Δtotal == Δtip.
+    assert_eq!(order["total"].as_i64().unwrap() - 1500, order["tip"].as_i64().unwrap() - 0);
+    assert!(body.contains("\"tip\":200"));
+}
+
+/// Twins: a negative tip is refused and writes nothing; a tip on a payment
+/// that would pay past the new total is still over-payment.
+#[test]
+fn a_negative_tip_or_an_overpaying_tip_is_refused_and_writes_nothing() {
+    let mut h = hub();
+    let before = h.to_bytes();
+    let neg = PayIn { tip: Some(-1), ..input(600, "card") };
+    assert!(matches!(pay(&mut h, &round("READY", 1500), &neg, &OPEN), Err(Refused::Invalid(_))));
+    let over = PayIn { tip: Some(100), ..input(1600, "card") };
+    assert!(matches!(pay(&mut h, &round("READY", 1500), &over, &OPEN), Err(Refused::Conflict(_))));
+    assert_eq!(h.to_bytes(), before, "nothing written on refusal");
+    let ok = PayIn { tip: Some(100), ..input(1500, "card") };
+    assert!(pay(&mut h, &round("READY", 1500), &ok, &OPEN).is_ok(), "the positive twin");
+}
+
+/// No tip is exactly the old payment: total and tip untouched, no `tip` key.
+#[test]
+fn no_tip_leaves_the_total_alone() {
+    let mut h = hub();
+    let (order, _, _) = pay(&mut h, &round("READY", 1500), &input(1500, "card"), &OPEN).unwrap();
+    assert_eq!((order["tip"].clone(), order["total"].clone()), (json!(0), json!(1500)));
+    assert_eq!(order["payments"][0].get("tip"), None);
+}
+
+/// A wallet payment names its wallet, and only a wallet payment does.
+#[test]
+fn only_a_wallet_payment_names_a_wallet() {
+    let mut h = hub();
+    let bare = input(600, "wallet");
+    assert!(matches!(pay(&mut h, &round("READY", 1500), &bare, &OPEN), Err(Refused::Invalid(_))));
+    let card = PayIn { wallet: Some("u1".into()), ..input(600, "card") };
+    assert!(matches!(pay(&mut h, &round("READY", 1500), &card, &OPEN), Err(Refused::Invalid(_))));
+    let named = PayIn { wallet: Some("u1".into()), ..input(600, "wallet") };
+    let (order, _, _) = pay(&mut h, &round("READY", 1500), &named, &OPEN).expect("the twin");
+    assert_eq!(order["payments"][0]["wallet"], json!("u1"));
 }

@@ -12,7 +12,7 @@
 // `StockLedger::stranded()` is a conservation report. What was missing was
 // anything that ran them as a gate.
 //
-// ELEVEN LAWS, each over the live platform:
+// TWELVE LAWS, each over the live platform:
 //   1. every order's folded status equals the status it is served with
 //   2. no order is stranded: nothing is held by an order that has ended
 //   3. the money on an order is its lines plus fees minus its discount
@@ -31,6 +31,9 @@
 //  11. a transfer between rounds is two halves of one move: for every
 //      transfer id, exactly one round gave and one took, each names the
 //      other, and they agree on the amount and the comp that moved (G4)
+//  12. every wallet payment has exactly one ledger leg -- the tx id derived
+//      from (venue, order, payment instant), debiting that wallet by that
+//      amount in that currency -- and every ledger spend has its payment
 //
 // It takes an owner token per venue and reads only. Exit 1 on any breach, with
 // the order named -- a gate whose failure cannot be chased is a dashboard.
@@ -422,6 +425,47 @@ for (const host of HOSTS) {
     }
     if (a.amount !== b.amount || (a.comp ?? 0) !== (b.comp ?? 0)) {
       note(venue, 'transfer', `${id}: ${a.order} gave ${a.amount} (comp ${a.comp ?? 0}), ${b.order} took ${b.amount} (comp ${b.comp ?? 0})`);
+    }
+  }
+
+  // ── 12. every wallet payment has its leg, and every leg its payment ────
+  //
+  // A wallet `Paid` is two writes in one object turn: the order log, then the
+  // `ledger` image (`command::pay::wallet`). A lost second write is a guest
+  // who ate on a wallet never charged; a spend with no payment is a guest
+  // charged for nothing. The leg's id is DERIVED from the payment alone --
+  // "tx_" + FNV-1a-64(`${venue}:pay:${order}:${at}`) as 16 hex digits
+  // (`wallet::tx_id_of`) -- so the gate recomputes it here from the order it
+  // was handed and compares against the ledger's raw spends, never against the
+  // server's own audit. `POST /api/owner/wallet/legs/repair` rewrites a lost
+  // leg (dry run by default). ABSENT IS NOT ZERO: a Worker without the route
+  // has not been measured, and is skipped rather than read as "no spends".
+  const legsRead = (await j(host, `/api/owner/wallet/legs?location_id=${venue}`, { headers: auth })).body;
+  const spends = Array.isArray(legsRead?.spends) ? legsRead.spends : null;
+  if (spends) {
+    const fnv = (str) => {
+      let h = 0xcbf29ce484222325n;
+      for (const b of new TextEncoder().encode(str)) { h ^= BigInt(b); h = (h * 0x100000001b3n) & 0xffffffffffffffffn; }
+      return h;
+    };
+    const txId = (order, at) => 'tx_' + fnv(`${venue}:pay:${order}:${at}`).toString(16).padStart(16, '0');
+    const owed = new Set();
+    for (const o of list) {
+      for (const p of o.payments || []) {
+        if (p.method !== 'wallet') continue;
+        const id = txId(o.id, p.at ?? 0);
+        owed.add(id);
+        const legs = spends.filter((s) => s.id === id);
+        if (legs.length === 0) { note(venue, 'wallet', `${o.id}: wallet payment ${p.amount} at ${p.at} has no ledger leg ${id}`); continue; }
+        if (legs.length > 1) { note(venue, 'wallet', `${o.id}: wallet payment at ${p.at} has ${legs.length} ledger legs ${id}`); continue; }
+        const account = `wallet:${fnv(String(p.wallet || '').trim())}`;
+        const cur = p.currency || o.currency || 'ALL';
+        const hit = (legs[0].postings || []).some((x) => x.account === account && x.minor === -(p.amount ?? 0) && x.currency === cur);
+        if (!hit) note(venue, 'wallet', `${o.id}: leg ${id} does not debit wallet ${p.wallet} by ${p.amount} ${cur}`);
+      }
+    }
+    for (const s of spends) {
+      if (!owed.has(s.id)) note(venue, 'wallet', `${s.id}: a wallet debit (memo ${s.memo}) with no wallet payment`);
     }
   }
 

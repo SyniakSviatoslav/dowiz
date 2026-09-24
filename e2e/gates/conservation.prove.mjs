@@ -69,6 +69,21 @@ const xfer = (inOver = {}) => {
   ];
 };
 
+// ── law 12's fixtures: r1 paid 500 from wallet u1 at T ──
+// The id and the account are the Rust side's, pinned by
+// `command::pay::legs::tests::the_derived_ids_are_the_ones_the_gate_recomputes`.
+const LEG_ID = 'tx_2e8dcd2f92ca8acb';
+const U1 = 'wallet:631765120777144307';
+const walletOrders = () => [{
+  id: 'r1', total: 500, items: [{ unit_price: 500, quantity: 1 }], currency: 'ALL',
+  payments: [{ method: 'wallet', wallet: 'u1', amount: 500, currency: 'ALL', at: T }],
+}];
+const leg = (over = {}) => ({
+  id: LEG_ID, kind: 'SPEND', memo: 'r1', at_ms: T,
+  postings: [{ account: U1, minor: -500, currency: 'ALL' }, { account: 'venue:1', minor: 500, currency: 'ALL' }],
+  ...over,
+});
+
 const witnessed = (over) => ({
   configured: true,
   witness: { atMs: Date.now() - NIGHT, records: 6, archived: 0, total: 6, tip: 'aa', found: [], ...over },
@@ -438,6 +453,26 @@ const CASES = {
     orders: [...tillOrders(), cashOrder('r4', T - 5000, 700)],
     red: 'r4: 700 ALL cash at',
   },
+  // LAW 12: the wallet's leg and the payment agree, both ways.
+  'a wallet payment with its leg': {
+    health: ok, backup: witnessed(), orders: walletOrders(), legs: { spends: [leg()] }, red: false,
+  },
+  'a wallet payment whose leg was lost': {
+    health: ok, backup: witnessed(), orders: walletOrders(), legs: { spends: [] },
+    red: 'has no ledger leg tx_2e8dcd2f92ca8acb',
+  },
+  'a wallet debit with no payment': {
+    health: ok, backup: witnessed(), orders: [], legs: { spends: [leg()] },
+    red: 'a wallet debit (memo r1) with no wallet payment',
+  },
+  'a wallet leg for the wrong amount': {
+    health: ok, backup: witnessed(), orders: walletOrders(),
+    legs: { spends: [leg({ postings: [{ account: U1, minor: -499, currency: 'ALL' }] })] },
+    red: 'does not debit wallet u1 by 500 ALL',
+  },
+  'a worker without the wallet-legs route': {
+    health: ok, backup: witnessed(), orders: walletOrders(), red: false,
+  },
   // AN OPEN DRAWER IS STILL TAKING MONEY: its numbers are not balanced yet,
   // however they look.
   'an open till is not balanced yet': {
@@ -470,6 +505,7 @@ globalThis.fetch = async (url) => {
     : url.includes('/api/owner/health') ? HEALTH
     : url.includes('/api/owner/backup/cloud') ? BACKUP
     : url.includes('/api/owner/orders') ? ORDERS
+    : url.includes('/api/owner/wallet/legs') ? LEGS
     : {};
   return { status: 200, text: async () => JSON.stringify(body) };
 };
@@ -481,6 +517,7 @@ for (const [name, c] of Object.entries(CASES)) {
   const script = RUNNER
     .replace('HEALTH', JSON.stringify(c.health))
     .replace('ORDERS', JSON.stringify(c.orders || []))
+    .replace('LEGS', JSON.stringify(c.legs || {}))
     .replace('BACKUP', JSON.stringify(c.backup))
     .replace('GATE', JSON.stringify(GATE));
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {

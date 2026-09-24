@@ -72,7 +72,7 @@ fn parse_kind(s: &str) -> Option<TxKind> {
     }
 }
 
-fn kind_str(k: TxKind) -> &'static str {
+pub(crate) fn kind_str(k: TxKind) -> &'static str {
     match k {
         TxKind::TopUp => "TOP_UP",
         TxKind::Spend => "SPEND",
@@ -82,7 +82,7 @@ fn kind_str(k: TxKind) -> &'static str {
     }
 }
 
-fn id64(s: &str) -> u64 {
+pub(crate) fn id64(s: &str) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in s.as_bytes() {
         h ^= *b as u64;
@@ -100,7 +100,7 @@ fn id64(s: &str) -> u64 {
 /// rather than a change to the original — which is the whole point of
 /// double-entry and was already how `money.rs` nets a refund to zero.
 pub const IMAGE_LEDGER: &str = "ledger";
-const K_TX: &str = "tx";
+pub(crate) const K_TX: &str = "tx";
 
 async fn load_journal(
     place: &crate::hubstore::Place,
@@ -113,17 +113,25 @@ async fn load_journal(
         usize::MAX,
     );
     entries.reverse();
-    let txs: Vec<TxRow> = entries
+    let rows: Vec<String> = entries.into_iter().map(|e| e.json).collect();
+    Ok(journal_from(&rows))
+}
+
+/// The journal from its records, OLDEST FIRST. Pure, so the object's `pay`
+/// (a wallet tender, `command::pay::wallet`) replays exactly what this module
+/// does, from the same bytes, rather than a second reading of the format.
+pub(crate) fn journal_from(rows: &[String]) -> std::result::Result<Journal, String> {
+    let txs: Vec<TxRow> = rows
         .iter()
-        .filter_map(|e| serde_json::from_str::<TxRow>(&e.json).ok())
+        .filter_map(|j| serde_json::from_str::<TxRow>(j).ok())
         .collect();
     // A TRANSACTION CARRIES ITS OWN POSTINGS. They were a second table joined
     // on `tx_id`, written in the same batch — and a batch that half-applies is
     // a transaction with no legs, which is an UNBALANCED journal. Double-entry
     // depends on the two never being separable, so here they are one record.
-    let postings: Vec<PostingRow> = entries
+    let postings: Vec<PostingRow> = rows
         .iter()
-        .filter_map(|e| serde_json::from_str::<serde_json::Value>(&e.json).ok())
+        .filter_map(|j| serde_json::from_str::<serde_json::Value>(j).ok())
         .flat_map(|v| {
             let tx_id = v.get("id").and_then(serde_json::Value::as_str).unwrap_or("").to_string();
             v.get("postings")
@@ -146,15 +154,15 @@ async fn load_journal(
     let mut journal = Journal::new();
     for t in &txs {
         let Some(kind) = parse_kind(&t.kind) else {
-            return Ok(Err(format!("unknown transaction kind {:?}", t.kind)));
+            return Err(format!("unknown transaction kind {:?}", t.kind));
         };
         let mut legs = Vec::new();
         for p in postings.iter().filter(|p| p.tx_id == t.id) {
             let Some(account) = parse_account(&p.account) else {
-                return Ok(Err(format!("unknown account {:?}", p.account)));
+                return Err(format!("unknown account {:?}", p.account));
             };
             let Some(currency) = Currency::from_code(&p.currency) else {
-                return Ok(Err(format!("unknown currency {:?}", p.currency)));
+                return Err(format!("unknown currency {:?}", p.currency));
             };
             legs.push(Posting {
                 account,
@@ -170,10 +178,10 @@ async fn load_journal(
         };
         match ledger_account::post(journal, tx) {
             Ok(next) => journal = next,
-            Err(e) => return Ok(Err(e)),
+            Err(e) => return Err(e),
         }
     }
-    Ok(Ok(journal))
+    Ok(journal)
 }
 
 /// `GET /api/public/locations/:slug/wallet?user=<id>`

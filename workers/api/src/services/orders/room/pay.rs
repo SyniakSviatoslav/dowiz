@@ -23,9 +23,15 @@ struct PayBody {
     /// unit × 1 000 000 (`command::pay::fx`).
     #[serde(default)]
     rate_ppm: Option<i64>,
+    /// A tip in the order's minor units, taken with this payment (§2.3).
+    #[serde(default)]
+    tip: Option<i64>,
+    /// `method: "wallet"`: the wallet paying (`command::pay::wallet`).
+    #[serde(default)]
+    wallet: Option<String>,
 }
 
-/// `POST /api/staff/orders/:id/pay` — `{location_id, amount, method, till_id?, covers?, currency?, rate_ppm?}`.
+/// `POST /api/staff/orders/:id/pay` — `{location_id, amount, method, till_id?, covers?, currency?, rate_ppm?, tip?, wallet?}`.
 /// Cash is refused with no till open (409 "open the till first").
 pub async fn pay(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let raw = req.text().await.unwrap_or_default();
@@ -64,6 +70,8 @@ pub async fn pay(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
         covers: body.covers,
         currency: body.currency,
         rate_ppm: body.rate_ppm,
+        tip: body.tip,
+        wallet: body.wallet,
         now_ms: ctx.data.now_ms,
     };
     let out: PayOut = match crate::command::send(&place, "room/pay", &input).await {
