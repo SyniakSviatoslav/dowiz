@@ -22,6 +22,11 @@ use crate::services::orders::status::took_money;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Line {
     pub name: String,
+    /// The catalogue product the line sold: the key of the eBills crosswalk
+    /// (`ebills_body.rs`). `None` on a document queued before it was kept,
+    /// and such a line is refused by name, never sent as free text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub product_id: Option<String>,
     pub qty: i64,
     pub unit_as_priced: i64,
     pub gross: i64,
@@ -100,6 +105,13 @@ pub fn document(order: &Value, venue_currency: &str, now_ms: i64) -> Result<Docu
     if let Some(fic) = order.get("external").and_then(|e| e.get("fic")).filter(|f| !f.is_null()) {
         return Err(Refusal::AlreadyFiscalised { by: fic.as_str().unwrap_or("external.fic").to_string() });
     }
+    // 2b. An order IMPORTED from the till (channel `ebills`, `external.source`
+    // ebills) was fiscalised by the till, with or without a `fic` in hand.
+    let from_till = text(order, "channel") == Some(crate::services::ordering::channel::EBILLS)
+        || order.get("external").and_then(|e| text(e, "source")) == Some("ebills");
+    if from_till {
+        return Err(Refusal::AlreadyFiscalised { by: "ebills".into() });
+    }
     // 3. Never charged, never invoiced.
     if order.get("price_trusted").and_then(Value::as_bool) == Some(false) {
         return Err(Refusal::Untrusted);
@@ -130,7 +142,8 @@ pub fn document(order: &Value, venue_currency: &str, now_ms: i64) -> Result<Docu
         };
         let gross = qty.checked_mul(unit).ok_or_else(|| Refusal::Lines(format!("line {i} overflows")))?;
         let name = text(it, "name").or_else(|| text(it, "product_id")).unwrap_or("?").to_string();
-        lines.push(Line { name, qty, unit_as_priced: unit, gross, rate_ppm: rate });
+        let product_id = text(it, "product_id").map(str::to_string);
+        lines.push(Line { name, product_id, qty, unit_as_priced: unit, gross, rate_ppm: rate });
     }
 
     let group = |g: &Value| Group {

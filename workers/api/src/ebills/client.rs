@@ -9,10 +9,15 @@
 //! * [`Path`] is the whole list. There is no variant that names any other
 //!   path, and no constructor takes a string, so a caller cannot spell
 //!   `close-shift` or `sale-pays` or a `/api/sales/*` sub-path at all.
-//! * [`Wire`] has two constructors and private fields: `Wire::get(&Path)`,
-//!   which never carries a body, and `Wire::login`, the ONE `POST` -- to
-//!   `/api/authentication`, with the credentials as its body. There is no
-//!   method anywhere that sends a body to anything else.
+//! * [`Wire`] has three constructors and private fields: `Wire::get(&Path)`,
+//!   which never carries a body; `Wire::login`, a `POST` to
+//!   `/api/authentication` with the credentials as its body; and
+//!   `Wire::create_sale` (2026-09-24, L70), a `POST` to EXACTLY `/api/sales`
+//!   with no query, built only by the fiscal sender (`fiscal/ebills_fire.rs`).
+//!   Each create is a fiscal act at the tax authority. There is no method
+//!   anywhere that sends a body to anything else: `sales-cancel`,
+//!   `refiscalize`, `sales-pay`, `close-shift` and every sub-path of
+//!   `/api/sales` stay unnameable (EBILLS-WRITE-PATH §6).
 //! * [`allowed`] re-checks the final URL against the same list, and the
 //!   executor refuses to send a `Wire` it rejects: two locks, one per layer.
 
@@ -89,7 +94,10 @@ pub(crate) fn allowed(url: &str, post: bool) -> bool {
         return false;
     }
     if post {
-        return path == "/api/authentication";
+        // THE CREATE TAKES NO QUERY (EBILLS-WRITE-PATH §1.1): `currentPosId`
+        // belongs to update/print, and a query would be a door to a path
+        // this list never saw.
+        return path == "/api/authentication" || (path == "/api/sales" && !rest.contains('?'));
     }
     match path {
         "/" | "/api/account" | "/api/sales" | "/api/sale-units-tables" | "/api/item-in-sales" => true,
@@ -194,6 +202,29 @@ impl Wire {
         ];
         let url = format!("{ORIGIN}/api/authentication");
         Some(Wire { verb: Verb::Post, url, headers, body: Some(body) })
+    }
+
+    /// THE FISCAL CREATE (EBILLS-WRITE-PATH §1.1-1.2): `POST /api/sales`,
+    /// JSON, the CSRF pair as the login carries it (the SPA's Angular adds it
+    /// to every non-GET; an absolute URL must add it itself). `None` without
+    /// a live session, the XSRF cookie or the tenant: a create is never sent
+    /// on a guess. The caller is `fiscal::ebills_fire` and nothing else.
+    pub(crate) fn create_sale(body: &str, s: &Session) -> Option<Wire> {
+        let xsrf = s.cookie("XSRF-TOKEN")?.to_string();
+        let tenant = s.tenant.clone().filter(|t| !t.is_empty())?;
+        if !s.live() || body.is_empty() {
+            return None;
+        }
+        let headers = vec![
+            ("user-agent".to_string(), USER_AGENT.to_string()),
+            ("accept".to_string(), "application/json, text/plain, */*".to_string()),
+            ("content-type".to_string(), "application/json".to_string()),
+            ("x-xsrf-token".to_string(), xsrf),
+            ("x-tenant-identifier".to_string(), tenant),
+            ("cookie".to_string(), s.cookie_header()),
+        ];
+        let url = format!("{ORIGIN}/api/sales");
+        Some(Wire { verb: Verb::Post, url, headers, body: Some(body.to_string()) })
     }
 
     pub(crate) fn verb(&self) -> Verb {

@@ -83,6 +83,12 @@ pub fn drain(entries: &[Entry], sender: &dyn FiscalSender, now_ms: i64) -> Drain
                 out.held += 1;
                 continue;
             }
+            // Stays queued, untouched, and SAID: never resent automatically.
+            SendResult::Held(why) => {
+                out.exceptions.push(Row { kind: "fiscal.held", ..row(e, now_ms, why) });
+                out.held += 1;
+                continue;
+            }
         };
         out.verdicts.push((e.id.clone(), verdict));
     }

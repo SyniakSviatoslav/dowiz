@@ -31,7 +31,7 @@ fn a_taxed_order_becomes_a_document_read_from_its_stamped_block() {
     assert_eq!(d.groups, vec![Group { rate_ppm: 200_000, lines: 1, base: 750, tax: 125 }]);
     assert_eq!(d.fee, Some(Group { rate_ppm: 200_000, lines: 0, base: 300, tax: 50 }));
     assert_eq!((d.total_base, d.total_tax, d.total), (1050, 175, 1050));
-    assert_eq!(d.lines[0], Line { name: "Kafe".into(), qty: 3, unit_as_priced: 250, gross: 750, rate_ppm: 200_000 });
+    assert_eq!(d.lines[0], Line { name: "Kafe".into(), product_id: Some("coffee".into()), qty: 3, unit_as_priced: 250, gross: 750, rate_ppm: 200_000 });
     assert_eq!(d.kind, Kind::Cash);
     assert_eq!(d.payments, vec![Payment { method: "cash".into(), amount: 1050, currency: "ALL".into(), rate_ppm: None }]);
     assert!(d.inclusive);
@@ -144,4 +144,18 @@ fn the_corrective_negates_every_amount_and_names_the_original() {
     assert_eq!(c.lines[0].gross, -750);
     assert_eq!(c.payments[0].amount, -1050);
     assert_eq!(corrective(&d, NOW + 2).uuid, c.uuid, "a re-derived corrective is the same one");
+}
+
+/// RULE 2b (L70): an order imported from the till is never queued, WITH OR
+/// WITHOUT a `fic` in hand -- the channel or the source says it came from
+/// ebills. Twin: the same order from the storefront is owed a document.
+#[test]
+fn rule_2b_an_order_imported_from_the_till_is_never_a_document() {
+    let mut o = taxed();
+    o["channel"] = json!("ebills");
+    assert_eq!(document(&o, "ALL", NOW), Err(Refusal::AlreadyFiscalised { by: "ebills".into() }));
+    let mut o = taxed();
+    o["external"] = json!({ "source": "ebills", "fic": null });
+    assert_eq!(document(&o, "ALL", NOW), Err(Refusal::AlreadyFiscalised { by: "ebills".into() }));
+    assert!(document(&taxed(), "ALL", NOW).is_ok(), "the storefront's twin is owed one");
 }

@@ -39,10 +39,10 @@
 
 pub(crate) mod cmd;
 pub(crate) mod client;
-mod fetch;
+pub(crate) mod fetch;
 pub(crate) mod glue;
 pub(crate) mod import;
-mod judge;
+pub(crate) mod judge;
 #[cfg(test)]
 mod live;
 pub(crate) mod map;
@@ -130,6 +130,31 @@ pub(crate) fn parse_items(body: &str) -> Result<Vec<(String, String, i64)>, Stri
         .into_iter()
         .filter_map(|r| Some((r.item_code.filter(|c| !c.is_empty())?, r.item, lek(r.price, "price").ok()?)))
         .collect())
+}
+
+/// THE MARKER dowiz's fiscal sender writes into a created sale's `notes`.
+pub(crate) const OURS: &str = "dowiz:";
+
+/// A sale dowiz itself created (`fiscal::ebills_fire`): its order is already
+/// in the log, so importing it back would be a second order and a second
+/// draw on the shelf. The poller passes over it.
+pub(crate) fn ours(s: &Sale) -> bool {
+    s.notes.as_deref().is_some_and(|n| n.starts_with(OURS))
+}
+
+/// The till's menu rows WITH their id and the whole row as served, for the
+/// fiscal create (EBILLS-WRITE-PATH §1.4.1: the SPA echoes the row). A row
+/// with no code or no id cannot be named in a create and is left out.
+pub(crate) fn parse_item_rows(body: &str) -> Result<Vec<(String, i64, serde_json::Value)>, String> {
+    let raw: Vec<serde_json::Value> = serde_json::from_str(body).map_err(|e| format!("ebills items: {e}"))?;
+    let mut out = Vec::with_capacity(raw.len());
+    for v in raw {
+        let row: ItemInSale = serde_json::from_value(v.clone()).map_err(|e| format!("ebills item row: {e}"))?;
+        if let (Some(code), Some(id)) = (row.item_code.filter(|c| !c.is_empty()), row.id) {
+            out.push((code, id, v));
+        }
+    }
+    Ok(out)
 }
 
 pub(crate) fn classify(s: &Sale) -> Result<Kind, MapError> {

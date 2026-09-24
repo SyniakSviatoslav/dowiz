@@ -1,6 +1,6 @@
 //! THE ONLY NETWORK IN THE TILL LINK. It sends a [`Wire`] -- and a `Wire`
-//! can only be an allow-listed read or the login (`client.rs`) -- and reads
-//! the answer into an [`Answer`] for `judge.rs` to rule on.
+//! can only be an allow-listed read, the login, or the fiscal create
+//! (`client.rs`) -- and reads the answer into an [`Answer`] for `judge.rs`.
 //!
 //! No clock is read here and nothing is logged: a list response embeds the
 //! business's signing certificate (§1.7), so a body is parsed and dropped,
@@ -102,5 +102,41 @@ impl Client {
                 Err(f) => return Err(f),
             }
         }
+    }
+}
+
+impl Client {
+    /// THE FISCAL CREATE (`fiscal::ebills_fire`, card L70). A missing session
+    /// is established first; a create answered 401/403 -- refused before any
+    /// sale existed (EBILLS-WRITE-PATH §1.2) -- is sent again ONCE after a
+    /// fresh login. Any other answer, and every failure after the request
+    /// left, is returned as it is: a retry here could be a second invoice.
+    pub(crate) async fn create(&mut self, body: &str) -> std::result::Result<Answer, Fail> {
+        if !self.session.live() {
+            self.relogged = true;
+            self.login().await?;
+        }
+        loop {
+            let w = Wire::create_sale(body, &self.session).ok_or_else(|| Fail::Auth("no session to send a sale with".into()))?;
+            let a = send(&w).await?;
+            if self.session.absorb(&a.set_cookies) {
+                self.changed = true;
+            }
+            if matches!(a.status, 401 | 403) && !self.relogged {
+                self.relogged = true;
+                self.login().await?;
+                continue;
+            }
+            return Ok(a);
+        }
+    }
+}
+
+impl crate::fiscal::ebills_fire::Transport for Client {
+    async fn read(&mut self, p: &Path) -> std::result::Result<String, Fail> {
+        Client::read(self, p).await
+    }
+    async fn create(&mut self, body: &str) -> std::result::Result<Answer, Fail> {
+        Client::create(self, body).await
     }
 }

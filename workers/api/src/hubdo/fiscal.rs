@@ -8,7 +8,11 @@
 //! queue does NOT fail the order -- it is in the log and the money is taken --
 //! it is loud, and conservation law N names the order until it is fixed.
 //!
-//! NOTHING IS SENT FROM HERE OR ANYWHERE (HARD LIMIT, `fiscal/sender.rs`).
+//! NOTHING IS SENT FROM HERE: sending is the armed venue's cron firing
+//! (`fiscal/rail.rs`), whose object half is `fiscal/send.rs`.
+
+/// The eBills sender's commands (`/fold/ebills/fiscal_*`, card L70).
+mod send;
 
 use super::HubImages;
 use crate::fiscal::queue::KIND;

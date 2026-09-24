@@ -528,3 +528,31 @@ fn a_reserved_table_is_not_occupied() {
     let body = json!([{"id": 3, "identifier": "3", "type": "TABLE", "status": "RESERVED", "pointOfSaleId": 1, "orderTotal": null}]).to_string();
     assert!(!parse_tables(&body).unwrap()[0].occupied());
 }
+
+/// DOWIZ'S OWN FISCAL SALE is recognised by its `notes` marker, so the
+/// poller never imports it back as a second order (L70). Twin: the till's
+/// own sale -- `notes: null` -- is not ours.
+#[test]
+fn a_sale_dowiz_created_is_ours_and_the_tills_is_not() {
+    let till: Sale = serde_json::from_value(course()).expect("the measured course parses");
+    assert!(!ours(&till), "notes null: the till's sale");
+    let mut v = course();
+    v["notes"] = json!("dowiz:ord_42");
+    let mine: Sale = serde_json::from_value(v).unwrap();
+    assert!(ours(&mine));
+    let mut other = course();
+    other["notes"] = json!("table by the window, dowiz:ord_42");
+    assert!(!ours(&serde_json::from_value::<Sale>(other).unwrap()), "only a note that STARTS with the marker");
+}
+
+/// The item rows keep their id and the whole row (the create echoes it).
+#[test]
+fn item_rows_carry_the_id_and_the_row_as_served() {
+    let body = r#"[{"id":23,"itemCode":"16","item":"Coca Cola","price":200.0,"vat":"VAT_20","unit":{"id":1839}},
+                   {"id":24,"itemCode":"","item":"no code","price":1.0},{"itemCode":"17","item":"no id","price":1.0}]"#;
+    let rows = parse_item_rows(body).expect("parses");
+    assert_eq!(rows.len(), 1, "no code or no id cannot be named in a create");
+    assert_eq!((rows[0].0.as_str(), rows[0].1), ("16", 23));
+    assert_eq!(rows[0].2["unit"]["id"], json!(1839), "the row passes through whole");
+    assert_eq!(parse_items(body).unwrap().len(), 2, "the importer's read is unchanged: code + whole price");
+}

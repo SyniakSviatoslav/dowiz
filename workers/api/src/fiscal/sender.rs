@@ -1,11 +1,11 @@
 //! How a fiscal document would reach the tax authority — and, today, how it
 //! does NOT.
 //!
-//! HARD LIMIT (L65 card, operator): NOTHING is sent to ebills.al or any tax
-//! endpoint. The one production implementation is `NotConfigured`, which
-//! refuses every send without touching the network; there is no HTTP code in
-//! this module at all. The operator turns the real push on later by adding an
-//! adapter (the ebills lane's scope, TAX §3.7), not by editing this file.
+//! `NotConfigured` refuses every send without touching the network; there is
+//! no HTTP code in this module at all. The one real sender is the eBills
+//! adapter (`ebills_sender.rs`, L70, operator-authorised 2026-09-24): a venue
+//! sends only when its owner ARMED it (`ebills_arm.rs`), and its answers are
+//! replayed through this trait so the queue's drain is the one that rules.
 //!
 //! `Mock` exists only under `cfg(test)`. It models the one property the
 //! platform promises and the queue relies on: the `uuid` is the idempotency
@@ -36,6 +36,12 @@ pub enum SendResult {
     /// No sender is configured. NOT a failure of the document: the entry stays
     /// where it is, untouched, and the 48 h clock is what reports it (law N).
     NotConfigured,
+    /// NOT SENT AGAIN, AND NOT GONE (the eBills sender, L70): a sale that
+    /// exists at the platform unfiscalised, a create the platform refused, a
+    /// dish with no till item, an unanswered send that could not be
+    /// reconciled. The entry stays queued, untouched -- law N keeps naming the
+    /// order -- and the reason is an exception row, never an automatic resend.
+    Held(String),
 }
 
 pub trait FiscalSender {

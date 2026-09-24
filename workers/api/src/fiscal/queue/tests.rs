@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::fiscal::document::document;
-use crate::fiscal::sender::{Mock, NotConfigured};
+use crate::fiscal::sender::{Codes, Mock, NotConfigured};
 use crate::services::ordering::tax_block::stamp;
 use crate::services::ordering::tax_cfg::VenueTax;
 use dowiz_core::tax::RatePpm;
@@ -153,4 +153,27 @@ fn an_unreadable_entry_is_an_exception_not_a_silent_drop() {
     let out = drain(&[e], &Mock::new(), T + 1);
     assert_eq!(out.exceptions.len(), 1);
     assert!(matches!(out.verdicts[0].1, Verdict::Abandon { .. }));
+}
+
+/// HELD (L70): the entry stays queued and untouched -- no verdict, no
+/// corrective -- and the reason is an exception row. Twin: the entry behind
+/// it in the same pass is still sent (non-head-blocking).
+#[test]
+fn a_held_document_stays_queued_with_an_exception_row_and_does_not_block_the_next() {
+    struct HoldFirst(String);
+    impl FiscalSender for HoldFirst {
+        fn send(&self, doc: &Document) -> SendResult {
+            if doc.order_id == self.0 {
+                return SendResult::Held("\"Kafe\" has no eBills item".into());
+            }
+            SendResult::Sent(Codes { iic: "I".into(), fic: "F".into(), inv_ord_num: "1".into() })
+        }
+    }
+    let (a, b) = (doc("o1", T), doc("o2", T + 1));
+    let d = drain(&[entry(&a), entry(&b)], &HoldFirst("o1".into()), T + 10);
+    assert_eq!(d.held, 1);
+    assert_eq!(d.verdicts, vec![(uuid_text(&b.uuid), Verdict::Sent)], "o1 has no verdict: it stays exactly as queued");
+    assert!(d.corrective.is_empty(), "a held document is not a refusal: no corrective");
+    assert_eq!((d.exceptions[0].kind, d.exceptions[0].order_id.as_deref()), ("fiscal.held", Some("o1")));
+    assert_eq!(d.sent.len(), 1);
 }

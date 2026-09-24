@@ -125,3 +125,71 @@ pub(crate) fn logged_in(a: &Answer, mut s: Session) -> Result<Session, Fail> {
     s.tenant = Some(t);
     Ok(s)
 }
+
+/// WHAT A CREATE ANSWERED (EBILLS-WRITE-PATH §2.1). A `200` is a sale that
+/// EXISTS, fiscalised or not; only a refusal before the controller (401, a
+/// 4xx) is "no sale". Anything that does not show which is `Unknown`, and an
+/// unknown is reconciled by a read before any retry (§3 (c)).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Created {
+    /// `logCis[0].status` SUCCESS: the tax authority's codes are in hand.
+    Fiscalised { sale_id: i64, iic: String, fic: String, inv_ord_num: String },
+    /// The sale exists and was NOT fiscalised (`ERROR`, `WEBSERVICEERROR`,
+    /// `PENDING`): numbered, listed, and never to be sent again (§7.1 9).
+    Unfiscalised { sale_id: i64, fault: String },
+    /// Refused before a sale existed: the status and its key.
+    Refused(u16, String),
+    /// The session or the CSRF pair: nothing was created (§1.2).
+    Auth(String),
+    /// Whether a sale exists is not known: a 5xx, a redirect, a body that
+    /// is not the sale.
+    Unknown(String),
+}
+
+/// A create's answer, ruled.
+pub(crate) fn created(a: &Answer) -> Created {
+    let ct = a.content_type.to_ascii_lowercase();
+    match a.status {
+        200..=299 if ct.contains("json") && !ct.contains("problem+json") => match serde_json::from_str(&a.body) {
+            Ok(v) => sale_state(&v),
+            Err(_) => Created::Unknown(format!("{} answered a body that is not JSON", a.status)),
+        },
+        200..=299 => Created::Unknown(format!("{} answered {ct}, not the sale", a.status)),
+        300..=399 => Created::Unknown(format!("redirected ({})", a.status)),
+        401 | 403 => Created::Auth(format!("{} {}", a.status, key_of(&a.body))),
+        400..=499 => Created::Refused(a.status, key_of(&a.body)),
+        s => Created::Unknown(format!("{s} {}", key_of(&a.body))),
+    }
+}
+
+/// A sale entity (the create's answer, or `/api/sales/{id}`'s `sale`), ruled
+/// by its fiscalisation log. The fault is cut to 200 characters: the log
+/// embeds the sale, and nothing of it is kept beyond the tax authority's words.
+pub(crate) fn sale_state(v: &serde_json::Value) -> Created {
+    let Some(sale_id) = v.get("id").and_then(serde_json::Value::as_i64) else {
+        return Created::Unknown("the answer carries no sale id".into());
+    };
+    let text = |x: Option<&serde_json::Value>| x.and_then(|s| s.as_str()).map(str::to_string);
+    let log = v.get("logCis").and_then(|l| l.get(0));
+    let status = text(log.and_then(|l| l.get("status")));
+    let fic = text(log.and_then(|l| l.get("fic"))).or_else(|| text(v.get("fic"))).filter(|f| !f.is_empty());
+    let fiscal = text(v.get("fiscalSatus")).unwrap_or_default();
+    let ok = status.as_deref() == Some("SUCCESS") || (log.is_none() && fiscal == "FINISHED");
+    match (ok, fic) {
+        (true, Some(fic)) => Created::Fiscalised {
+            sale_id,
+            iic: text(log.and_then(|l| l.get("iic"))).unwrap_or_default(),
+            fic,
+            inv_ord_num: v.get("invOrdNum").map(|n| n.to_string().trim_matches('"').to_string()).unwrap_or_default(),
+        },
+        _ => {
+            let fault = text(log.and_then(|l| l.get("faultStringMsg")))
+                .or_else(|| text(log.and_then(|l| l.get("faultString"))))
+                .unwrap_or_else(|| format!("{} {fiscal}", status.unwrap_or_else(|| "no fiscalisation log".into())));
+            Created::Unfiscalised { sale_id, fault: fault.chars().take(200).collect() }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

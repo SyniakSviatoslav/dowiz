@@ -15,7 +15,8 @@
 //! it and refuse a ticket. A full fiscal image refuses a document, loudly, and
 //! law N names the order; the kitchen never notices.
 //!
-//! NOTHING HERE SENDS. See `sender.rs`: the HARD LIMIT stands.
+//! NOTHING HERE SENDS. The one sender is the armed venue's eBills firing
+//! (`ebills_arm.rs`, `rail.rs`).
 
 use serde_json::{json, Value};
 
@@ -107,7 +108,8 @@ pub fn health_json(cfg: &Config, entries: Result<&[Entry], String>, now_ms: i64)
                 json!({
                     "configured": true,
                     "since_ms": since,
-                    // HARD LIMIT: the only production sender refuses every send.
+                    // Until the owner ARMS the eBills sender (`rail::health`
+                    // says "ebills" then), nothing sends.
                     "sender": "not_configured",
                     "backlog": h.backlog,
                     "oldest_issued_at": h.oldest_issued_at,

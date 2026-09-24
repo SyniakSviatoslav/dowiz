@@ -50,6 +50,11 @@ pub(crate) struct Sale {
     pub(crate) log_cis: Option<Vec<LogCis>>,
     pub(crate) point_of_sale: Option<Ref>,
     pub(crate) extra_user: Option<Ref>,
+    /// Free text the server keeps. A sale dowiz's fiscal sender created
+    /// carries `dowiz:<order id>` here (EBILLS-WRITE-PATH §3 (b)); the poller
+    /// never imports such a sale back as a second order (`super::ours`).
+    #[serde(default)]
+    pub(crate) notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -163,6 +168,11 @@ impl TableState {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ItemInSale {
+    /// The row's id: what a create's `saleRecords[].itemInSale` names
+    /// (EBILLS-WRITE-PATH §1.4.1). `Option`: the READ side never needed it,
+    /// and a row without one is still a crosswalk code for the importer.
+    #[serde(default)]
+    pub(crate) id: Option<i64>,
     pub(crate) item_code: Option<String>,
     pub(crate) item: String,
     pub(crate) price: f64,

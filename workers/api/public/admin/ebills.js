@@ -39,6 +39,7 @@ export async function open(){
       ${(st.pending || []).length ? row('clock-hour-4', 'eb_pending', st.pending.map(b => `${esc(t('table'))} ${esc(b.table)} · ${esc(money(b.total))}`).join(' / ')) : ''}
       ${(st.short || []).length ? row('alert-circle', 'eb_short', st.short.map(([i, n]) => `${esc(i)} ${esc(n)}`).join(' · ')) : ''}
       ${(st.refused || []).length ? row('x', 'eb_refused', st.refused.slice(-5).map(r => `#${esc(r.sale_id)} ${esc(r.why)}`).join(' / ')) : ''}
+      <div class="rowc">${icon('receipt')}<span class="t"><b data-t="fx_title"></b><small data-t="fx_openHint"></small></span><button class="btn ghost" id="ebFiscal"><span data-t="fx_open"></span></button></div>
     </div>
     <section class="group mt-3"><p class="eyebrow" data-t="eb_unmatched"></p><p class="muted small" data-t="eb_unmatchedHint"></p>
       <div class="rows">${(d.unmatched || []).map(u => `<div class="rowc" data-code="${esc(u.code)}">${icon('plug-connected-x')}<span class="t"><b>${esc(u.name)}</b><small class="mono">${esc(u.code)} · ${esc(money(u.price))}</small>
@@ -60,6 +61,8 @@ export async function open(){
 }
 
 function wire(){
+  // FISCAL SENDING (card L70) has its own sheet: arming it is a legal act.
+  $('#ebFiscal').onclick = async () => (await import('/admin/fiscal.js')).open();
   for (const b of $$('.eb-map', $('#ebBody'))) b.onclick = async () => {
     const r = b.closest('[data-code]'); const pid = $('.eb-pick', r).value;
     if (!pid) return toast(t('eb_pick'));

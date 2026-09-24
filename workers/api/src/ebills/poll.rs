@@ -81,6 +81,9 @@ async fn retry(c: &mut Client, pos: i64, venue: &str, ids: &[i64], input: &mut I
             Err(Fail::NotFound) => continue,
             other => parse_detail(&other?).map_err(Fail::Shape)?,
         };
+        if super::ours(&sale) {
+            continue;
+        }
         let taken = match classify(&sale) {
             Ok(Kind::Bill) => to_paid(&sale).map(|paid| Mapped::Bill { sale_id: id, paid }).ok(),
             _ => to_order(&sale, venue).map(|envelope| Mapped::Order { sale_id: id, envelope }).ok(),
@@ -187,6 +190,11 @@ async fn walk(c: &mut Client, plan: &Plan, venue: &str, input: &mut ImportIn, no
                         Ok(s) => s,
                         Err(e) => break Err(Fail::Shape(e)),
                     };
+                    // DOWIZ'S OWN FISCAL SALE: its order is in the log already.
+                    if super::ours(&sale) {
+                        w.done();
+                        continue;
+                    }
                     // BEFORE THE FIRST WINDOW: a course is a lead, a bill is
                     // passed over -- its courses are further back still.
                     let mapped = match (classify(&sale), w.is_lead(id)) {
