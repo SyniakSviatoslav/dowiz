@@ -139,6 +139,22 @@ pub async fn whatsapp_text(wa: &WhatsApp, to: &str, text: &str) -> std::result::
     Ok(v["messages"][0]["id"].as_str().unwrap_or("").to_string())
 }
 
+/// PURE. The Cloud API body of a TEMPLATE message -- the only kind WhatsApp
+/// delivers outside the 24-hour window. `template` is the `template` member
+/// (`services::campaigns::template::object`). Shape: Meta's example at
+/// https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/overview
+pub fn template_body(to: &str, template: &Value) -> Value {
+    json!({ "messaging_product": "whatsapp", "recipient_type": "individual", "to": to,
+            "type": "template", "template": template })
+}
+
+/// A business-initiated WhatsApp message (a campaign). Every caller must hold
+/// a `Consented` (`tools/gates/consent.sh` counts this door).
+pub async fn whatsapp_template(wa: &WhatsApp, to: &str, template: &Value) -> std::result::Result<String, String> {
+    let v = graph_post(&wa.token, &format!("{}/messages", wa.phone_id), template_body(to, template)).await?;
+    Ok(v["messages"][0]["id"].as_str().unwrap_or("").to_string())
+}
+
 pub async fn instagram_text(ig: &Instagram, to: &str, text: &str) -> std::result::Result<String, String> {
     let v = graph_post(
         &ig.token,
@@ -403,7 +419,13 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     let body: Value = serde_json::from_slice(&raw).unwrap_or(Value::Null);
     let mut stored = 0usize;
     for m in inbound_of(&body, ctx.data.now_ms) {
-        match store(&place, "in", &m).await {
+        let landed = store(&place, "in", &m).await;
+        // A "STOP" WITHDRAWS (§3.2), even when the inbox write failed; a
+        // re-delivery (`Ok(false)`) was heard the first time.
+        if !matches!(landed, Ok(false)) {
+            crate::services::campaigns::stop::heard(&place, &ctx.env, m.channel.as_str(), &m.peer, &m.text, &m.external_id, m.at_ms).await;
+        }
+        match landed {
             Ok(true) => {
                 stored += 1;
                 let chat = settings.known("notify.telegram.chat");

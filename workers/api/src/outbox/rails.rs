@@ -47,7 +47,12 @@ pub async fn drain(
     let (mut sent, mut kept) = (0usize, 0usize);
     let mut abandoned: Vec<String> = Vec::new();
     let mut verdicts: Vec<(String, Verdict)> = Vec::new();
-    for e in due(&entries, now_ms) {
+    let due_now = due(&entries, now_ms);
+    // CAMPAIGNS RE-ASK THE CONSENT FOLD HERE (G4): read once, only when one
+    // is due; `None` = unreadable, and campaign entries wait.
+    let acts = crate::services::campaigns::rail::acts_if_due(place, &due_now).await;
+    let mut withdrawn: Vec<String> = Vec::new();
+    for e in due_now {
         let ok = match e.kind.as_str() {
             // THE PRINTER PULLS ITS OWN (`print_rail.rs`, LAST-MILE §3.1):
             // the cron never sends a ticket and never abandons one -- the
@@ -66,6 +71,20 @@ pub async fn drain(
                 Some(cfg) => crate::channels::whatsapp_text(cfg, &e.to, &e.text).await.is_ok(),
                 None => continue,
             },
+            crate::services::campaigns::send::OUTBOX_KIND => {
+                let Some(acts) = acts.as_deref() else { continue };
+                match (crate::services::campaigns::send::gate(e, acts), &wa) {
+                    // WITHDRAWN SINCE IT WAS QUEUED: removed, never sent, and
+                    // filed as `gone` so the report can say so.
+                    (None, _) => {
+                        withdrawn.push(e.id.clone());
+                        verdicts.push((e.id.clone(), Verdict::Abandon { after: 0 }));
+                        continue;
+                    }
+                    (Some(who), Some(cfg)) => crate::services::campaigns::rail::deliver(cfg, &who, e).await,
+                    (Some(_), None) => continue,
+                }
+            }
             // AN UNKNOWN KIND IS ABANDONED, NOT GUESSED AT. Guessing means
             // sending a stranger something; the record names it on the way out.
             other => {
@@ -117,6 +136,7 @@ pub async fn drain(
         Ok(())
     })
     .await?;
+    crate::services::campaigns::rail::record_gone(place, &verdicts, &withdrawn, now_ms).await;
     Ok((sent, kept, abandoned))
 }
 

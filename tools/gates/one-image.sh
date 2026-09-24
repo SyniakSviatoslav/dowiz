@@ -26,7 +26,8 @@
 #
 # HOW THIS COUNTS. Brace-matched function bodies, not lines. It counts the
 # DISTINCT image families a body writes -- `with_catalog`, `with_stock`,
-# `with_hub`/`append_for`, `with_settings`, `with_table`/`hubstore::save` -- and
+# `with_hub`/`append_for`, `with_settings`, `with_table`/`hubstore::save`, and
+# each image `with_log` names (counted since 2026-09-24) -- and
 # reports a body that writes more than one. Reads are not counted: reading two
 # images to answer a question is a round trip, not a transaction.
 #
@@ -62,7 +63,26 @@ for f in sorted(glob.glob('workers/api/src/**/*.rs', recursive=True)):
             elif src[i] == '}': depth -= 1
             i += 1
         body = src[b:i]
-        touched = sorted(k for k, doors in FAMILIES.items() if any(d in body for d in doors))
+        touched = {k for k, doors in FAMILIES.items() if any(d in body for d in doors)}
+        # `with_log(place, IMAGE, ..)` WRITES the named append-only image
+        # (inbox, consent, campaign, ...). It was invisible here until
+        # 2026-09-24: a body writing the outbox table and the campaign log was
+        # counted as one image. Each named log is its own family, keyed by the
+        # image argument as written.
+        for w in re.finditer(r'\bwith_log\s*\(', body):
+            args, depth, start, j = [], 1, w.end(), w.end()
+            while j < len(body) and depth > 0:
+                c = body[j]
+                if c in '([{': depth += 1
+                elif c in ')]}':
+                    depth -= 1
+                    if depth == 0: args.append(body[start:j])
+                elif c == ',' and depth == 1:
+                    args.append(body[start:j]); start = j + 1
+                j += 1
+            if len(args) >= 2:
+                touched.add('log:' + args[1].strip().split('::')[-1])
+        touched = sorted(touched)
         if len(touched) > 1:
             hits.append(f + '::' + m.group(1) + '  writes ' + '+'.join(touched))
 print(len(hits))

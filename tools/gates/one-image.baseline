@@ -1,1 +1,8 @@
-bodies=0
+# 2026-09-24 (L69b): with_log became visible to this gate, and the one body it
+# found is campaigns::handlers::send_now (outbox table + campaign log). It is
+# coordinated, not hoped: write 1 puts each entry WITH a mark in one table
+# write, write 2 files the history, and a retry after a failure between them
+# queues nobody twice (send::tests::a_retry_after_a_failure_between_the_writes_
+# queues_nobody_twice, red when the mark check is removed). Lower to 0 when the
+# send becomes an object command.
+bodies=1

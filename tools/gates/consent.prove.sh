@@ -46,5 +46,15 @@ RS
 rc=$(run); echo "prove: the same send holding a Consented -> rc=$rc (want 0)"
 [ "$rc" -eq 0 ] || { cat "$SCRATCH/out"; fail=1; }
 
+copy
+cat >> "$SCRATCH/r/workers/api/src/channels.rs" <<'RS'
+
+async fn blast_template(wa: &WhatsApp, to: &str) {
+    let _ = whatsapp_template(wa, to, &serde_json::Value::Null).await;
+}
+RS
+rc=$(run); echo "prove: un-consented TEMPLATE send -> rc=$rc (want 1): $(sed -n 2p "$SCRATCH/out")"
+[ "$rc" -eq 1 ] || fail=1
+
 [ $fail -eq 0 ] && echo "consent.prove: the gate fires in both directions" || echo "consent.prove: FAILED"
 exit $fail
