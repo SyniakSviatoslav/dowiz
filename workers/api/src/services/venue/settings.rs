@@ -75,6 +75,10 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
     if let Err(why) = crate::services::ordering::tax_cfg::validate(&body.key, &body.value) {
         return Response::error(why, 400);
     }
+    // The stamp card's three keys: 0/1, 2..=20, a reward above 0 (C5).
+    if let Err(why) = crate::services::loyalty::stamps::validate(&body.key, &body.value) {
+        return Response::error(why, 400);
+    }
     let (key, value) = (body.key.clone(), body.value.clone());
     crate::hubstore::with_settings(&place, move |s| {
         s.set(&key, &value);

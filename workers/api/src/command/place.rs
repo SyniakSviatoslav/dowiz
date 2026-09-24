@@ -85,6 +85,11 @@ pub struct PlaceIn {
     /// minutes later and must not re-read a catalogue that has changed, or a
     /// kitchen is told about a dish at the wrong price.
     pub notify_text: Option<String>,
+    /// THE STAMP CARD (C5): the venue's card and the spellings that are this
+    /// person, resolved by the Worker (`services::loyalty::handlers`). `None`:
+    /// no card, no phone, or a basket from somewhere the card does not run.
+    #[serde(default)]
+    pub stamps: Option<crate::services::loyalty::stamps::StampIn>,
 }
 
 /// What the object answers with.
@@ -148,6 +153,15 @@ pub fn decide(
         envelope["discount"] = serde_json::json!(cut);
         envelope["promo"] = serde_json::json!({ "code": code, "discount": cut });
         envelope["total"] = serde_json::json!(input.subtotal - cut + input.fee + input.tip);
+    }
+    // ── A FULL STAMP CARD, SPENT IN THE SAME TURN AS THE APPEND (C5) ──
+    //
+    // Counted over `listed` -- the log this turn appends to -- so of two
+    // placements racing for one card the second is priced without it.
+    if let Some(s) = &input.stamps {
+        crate::services::loyalty::stamps::apply(
+            &mut envelope, listed, s, input.subtotal, input.fee, input.tip, input.now_ms,
+        );
     }
 
     // ── THE TAX, ONCE, AFTER THE CUT (G2) ──
