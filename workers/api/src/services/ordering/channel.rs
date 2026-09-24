@@ -26,10 +26,15 @@ pub const INSTAGRAM: &str = "instagram";
 /// A sale imported from the venue's fiscal platform (`ebills::to_order`).
 pub const EBILLS: &str = "ebills";
 
-/// Every source an order can have. A marketplace (Wolt, Glovo, Baboon —
-/// OPERATIONAL-BLIND-SPOTS P2-3) is added HERE, by the commit that integrates
-/// it, with a `Profile` that states the two facts §2.8 could not determine.
-pub const ALL: [&str; 5] = [STOREFRONT, CONSOLE, WHATSAPP, INSTAGRAM, EBILLS];
+/// Marketplaces (OPERATIONAL-BLIND-SPOTS §2.9, P2-3). Entered by staff from the
+/// platform's own tablet (`command::aggregator`) until a partner API exists;
+/// no adapter speaks to any of them yet.
+pub const WOLT: &str = "wolt";
+pub const GLOVO: &str = "glovo";
+pub const BABOON: &str = "baboon";
+
+/// Every source an order can have.
+pub const ALL: [&str; 8] = [STOREFRONT, CONSOLE, WHATSAPP, INSTAGRAM, EBILLS, WOLT, GLOVO, BABOON];
 
 pub fn known(c: &str) -> bool {
     ALL.contains(&c)
@@ -63,7 +68,14 @@ pub struct Profile {
     /// The venue holds the customer's contact, not a platform that masks it.
     pub owns_customer: bool,
     /// Commission owed to the source, parts per million (22 % = 220_000).
+    /// NEVER netted out of an order's `total`: the total is what the customer
+    /// was charged (conservation law 3), and a commission is a cost the
+    /// venue settles with the platform.
     pub commission_ppm: u32,
+    /// The venue's own couriers carry it when it leaves the building. `false`:
+    /// the platform's courier collects it at the counter, so it is entered as a
+    /// PICKUP and never reaches this venue's courier pool.
+    pub delivered_by_us: bool,
 }
 
 const OURS: Profile = Profile {
@@ -72,6 +84,28 @@ const OURS: Profile = Profile {
     fiscalised_by_us: true,
     owns_customer: true,
     commission_ppm: 0,
+    delivered_by_us: true,
+};
+
+/// A MARKETPLACE, as far as it is known without a merchant agreement.
+///
+/// * `priced_by_us: false` — the platform priced it; dowiz keeps what the
+///   customer paid (`price_trusted: false`), never recomputes it.
+/// * `owns_customer: false` — the platform masks the contact.
+/// * `delivered_by_us: false` — the platform's courier collects it.
+/// * `fiscalised_by_us: true` — A HYPOTHESIS (TAX §2.8, "not determined"):
+///   the venue, as the seller, issues the fiscal invoice unless the platform
+///   acts as principal. dowiz fiscalises nothing today, so nothing reads it yet;
+///   the merchant agreement decides it.
+/// * `commission_ppm: 0` — NOT KNOWN, not "none": 22-35 % are vendor-blog
+///   hypotheses and no contract has been read. Nothing computes with it.
+const MARKETPLACE: Profile = Profile {
+    first_party: false,
+    priced_by_us: false,
+    fiscalised_by_us: true,
+    owns_customer: false,
+    commission_ppm: 0,
+    delivered_by_us: false,
 };
 
 /// The profile of a MEMBER; `None` for anything else. There is no default
@@ -82,8 +116,23 @@ pub fn profile(c: &str) -> Option<Profile> {
         // The venue's OWN till, so first-party and the venue's guest, no
         // commission — but priced by the till and already fiscalised by it.
         EBILLS => Some(Profile { priced_by_us: false, fiscalised_by_us: false, ..OURS }),
+        WOLT | GLOVO | BABOON => Some(MARKETPLACE),
         _ => None,
     }
+}
+
+/// Is this a marketplace's word — somebody else's customer, priced and
+/// delivered by them?
+pub fn marketplace(c: &str) -> bool {
+    marketplace_word(c).is_some()
+}
+
+/// THE SET'S OWN WORD for a marketplace a member of staff picked, or `None`.
+/// The aggregator form is the one route whose body names a source, so what it
+/// stamps is never the body's string: it is this constant, and only a
+/// marketplace's -- a body that says `console` or `storefront` gets `None`.
+pub fn marketplace_word(c: &str) -> Option<&'static str> {
+    [WOLT, GLOVO, BABOON].into_iter().find(|m| *m == c).filter(|m| profile(m).is_some_and(|p| !p.first_party))
 }
 
 /// Who is placing this order, as the handler has already VERIFIED it: a room

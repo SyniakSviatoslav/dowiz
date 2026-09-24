@@ -96,6 +96,9 @@ pub const HUB_OWNED: &[&str] = &[
     "external",
     // Who priced it. The kernel reads orders as untrusted and never emits it.
     "price_trusted",
+    // Who typed in an aggregator order off the platform's tablet
+    // (services/orders/aggregator.rs, §2.9): the signer of a Placed no guest made.
+    "entered_by",
     // NOT CARRIED, on purpose: `eta` is computed at READ time (`live_eta.rs`)
     // and a carried one would be a stale estimate written into the log; `id`,
     // `customer_id`, `status`, `subtotal` (recomputed from `items`),

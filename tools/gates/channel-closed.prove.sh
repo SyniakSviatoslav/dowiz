@@ -1,11 +1,11 @@
 #!/bin/sh
 # G4's proof: a gate is triggered before it is trusted. Runs `channel-closed.sh`
 # against scratch copies of the Worker -- the clean tree and a tests-only
-# unknown word (both must pass: THE GREEN CASES ARE HALF THE PROOF), then four
+# unknown word (both must pass: THE GREEN CASES ARE HALF THE PROOF), then five
 # deliberate defects (each must refuse): `"channel": "fax"` in a handler, the
 # ebills mapper's hand copy of `"ebills"` come back, the storefront's
-# `channel::stamp` call removed, and a second `Placed` append site.
-# Exit 0 only when all six answer as they should.
+# and the aggregator form's `channel::stamp` calls removed, and a second `Placed` append site.
+# Exit 0 only when all seven answer as they should.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
@@ -47,12 +47,16 @@ printf '%s\n' 'pub fn scratch_handler() -> serde_json::Value { serde_json::json!
 run 1 "\"channel\": \"fax\" in a scratch handler"
 
 copy
-edit "$W/ebills/mod.rs" '"channel": channel::EBILLS' '"channel": "ebills"'
+edit "$W/ebills/map.rs" '"channel": channel::EBILLS' '"channel": "ebills"'
 run 1 "the ebills mapper's hand copy come back"
 
 copy
 edit "$W/storefront.rs" 'channel::stamp(&mut envelope, source)' 'channel::of(&envelope).map(|_| ())'
 run 1 "the storefront's stamp removed"
+
+copy
+edit "$W/services/orders/aggregator.rs" 'channel::stamp(&mut env, source)' 'channel::of(&env).map(|_| ())'
+run 1 "the aggregator form's stamp removed"
 
 copy
 printf '%s\n' 'pub fn second(h: &mut dowiz_hub::Hub) { let _ = h.append(dowiz_hub::EventKind::Placed, "o", "{}", 1, [0u8; 32]); }' \

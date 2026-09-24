@@ -10,7 +10,7 @@ fn a_source_nobody_has_heard_of_is_not_a_source() {
     for c in ALL {
         assert!(known(c), "{c} is a member");
     }
-    for c in ["web", "app", "fax", "wolt", "glovo", "STOREFRONT", ""] {
+    for c in ["web", "app", "fax", "Wolt", "uber_eats", "bolt_food", "STOREFRONT", ""] {
         assert!(!known(c), "{c} is not a member");
     }
 }
@@ -18,8 +18,8 @@ fn a_source_nobody_has_heard_of_is_not_a_source() {
 /// THE WORDS ARE THE BLUEPRINT'S, IN ITS ORDER (§3.6). A rename here is a
 /// migration of every stored order, not an edit.
 #[test]
-fn the_set_is_the_five_words_of_the_blueprint() {
-    assert_eq!(ALL, ["storefront", "console", "whatsapp", "instagram", "ebills"]);
+fn the_set_is_the_blueprints_words_plus_the_three_marketplaces_of_2_9() {
+    assert_eq!(ALL, ["storefront", "console", "whatsapp", "instagram", "ebills", "wolt", "glovo", "baboon"]);
 }
 
 /// AN ORDER FROM BEFORE THE FIELD IS A STOREFRONT ORDER — absent and the
@@ -55,7 +55,7 @@ fn only_a_member_has_a_profile() {
     for c in ALL {
         assert!(profile(c).is_some(), "{c}");
     }
-    assert_eq!(profile("wolt"), None);
+    assert_eq!(profile("uber_eats"), None);
     assert_eq!(profile("banana"), None);
 }
 
@@ -110,4 +110,33 @@ fn stamp_refuses_a_word_outside_the_set() {
     assert_eq!(stamp(&mut env, "fax"), Err(Unknown("fax".into())));
     assert_eq!(env["channel"], json!("storefront"), "untouched on refusal");
     assert!(stamp(&mut json!([1, 2]), STOREFRONT).is_err(), "not an object");
+}
+
+/// §2.9: a marketplace is somebody else's customer, priced and carried by them.
+#[test]
+fn a_marketplace_is_priced_and_delivered_by_the_platform() {
+    for c in [WOLT, GLOVO, BABOON] {
+        let p = profile(c).expect("a member");
+        assert!(marketplace(c));
+        assert!(!p.first_party && !p.priced_by_us && !p.owns_customer && !p.delivered_by_us, "{c}");
+    }
+    // Twin: no first-party source and not the venue's own till is a marketplace.
+    for c in [STOREFRONT, CONSOLE, WHATSAPP, INSTAGRAM, EBILLS] {
+        assert!(!marketplace(c), "{c}");
+        assert!(profile(c).unwrap().delivered_by_us);
+    }
+    assert!(!marketplace("uber_eats"), "not a member, not a marketplace");
+}
+
+/// The aggregator form's body picks a platform; what is stamped is the SET's
+/// word, and only a marketplace's. Every first-party word, a case variant and
+/// a stranger get nothing.
+#[test]
+fn a_body_can_name_only_a_marketplace_and_gets_the_sets_word() {
+    assert_eq!(marketplace_word("wolt"), Some(WOLT));
+    assert_eq!(marketplace_word("glovo"), Some(GLOVO));
+    assert_eq!(marketplace_word("baboon"), Some(BABOON));
+    for c in [STOREFRONT, CONSOLE, WHATSAPP, INSTAGRAM, EBILLS, "Wolt", "wolt ", "uber_eats", ""] {
+        assert_eq!(marketplace_word(c), None, "{c:?}");
+    }
 }

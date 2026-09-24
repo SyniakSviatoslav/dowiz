@@ -54,6 +54,7 @@ fn written() -> Vec<(&'static str, &'static str, Value)> {
         ("currency", "ebills/map.rs", json!("ALL")),
         ("external", "ebills/map.rs", json!({"source": "ebills", "sale_id": 9, "uuid": "u-1"})),
         ("price_trusted", "ebills/map.rs", json!(true)),
+        ("entered_by", "services/orders/aggregator.rs", json!("p_ana")),
         // ── hub-owned: delivery and notes ──
         ("courier_id", "command/assign.rs / courier.rs", json!("k1")),
         ("assigned_at_ms", "command/assign.rs", json!(5)),
