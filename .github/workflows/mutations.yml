@@ -1,0 +1,27 @@
+name: Mutations
+
+# cargo-mutants over kernel files: every surviving mutant is a line no test can tell apart from a
+# wrong one. Weekly and on demand, not per push: a run takes most of its time budget.
+#
+# The file list was pruned on 2026-09-24: `eigen.rs`, `numerical_guard.rs` and `delta.rs` no longer
+# exist under kernel/src/, and a --file that names nothing mutates nothing (a job that cannot fail).
+# The gates' own mutation proofs (tools/gates/*.prove.sh) run on every push in ci.yml's `gates`.
+
+on:
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kernel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: '1.96.1' }
+      - run: cargo install --locked cargo-mutants
+      - run: cd kernel && cargo mutants --in-package dowiz-kernel --file src/trinary.rs --file src/pid.rs --timeout 30

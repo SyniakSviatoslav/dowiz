@@ -1,0 +1,15 @@
+# clippy for every crate in this tree (no workspace; clippy finds this file by walking up).
+#
+# NOT A GATE YET. Measured on HEAD 5abeb0ac (2026-09-24): `cd crates/dowiz-hub && cargo clippy
+# --all-targets` exits 101 on one deny-by-default lint in a test assertion
+# (`src/promo.rs:285`, clippy::absurd_extreme_comparisons: `d <= i64::MAX` is always true),
+# with ~110 warnings (unused imports, needless parentheses). CI therefore does not run clippy;
+# docs/code-quality.md, "Lints", has the plan to make it one.
+#
+# What IS configured is the one house rule clippy can see and the shell gates cannot see inside
+# the pure crates: the wall clock is read at the entry point and passed down as data
+# (tools/gates/clock.sh holds the Worker; this names the std spelling everywhere else).
+# `Instant::now` is not listed: measuring elapsed time is an instrument, not a decision.
+disallowed-methods = [
+    { path = "std::time::SystemTime::now", reason = "read the clock once at the entry point and pass `now_ms` down (docs/code-quality.md, 'No clock reads outside the entry')" },
+]

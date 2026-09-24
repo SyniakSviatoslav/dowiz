@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/SyniakSviatoslav/dowiz/security/advisories/new
+    about: Never open a public issue for a vulnerability. See SECURITY.md.
+  - name: Documentation and role guides
+    url: https://github.com/SyniakSviatoslav/dowiz/blob/main/docs/wiki/Home.md
+    about: How each role uses dowiz, the glossary, FAQ and troubleshooting.

@@ -1,0 +1,31 @@
+name: Feature request
+description: Something a venue, guest, courier or staff member needs and cannot do yet.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check docs/design/ROADMAP-2026-09-22.md first: the item may be planned, or decided against
+        with a condition for reopening it. Proposals that rate, rank or tier a person are out of
+        scope (DECISIONS.md, "Trust is a signed capability, never a score").
+  - type: dropdown
+    id: role
+    attributes:
+      label: Who needs it
+      options: [Guest, Owner, Waiter or counter manager, Kitchen, Courier, Platform operator, Developer]
+    validations: { required: true }
+  - type: textarea
+    id: problem
+    attributes:
+      label: The situation today
+      description: What the person is trying to do, and what stops them.
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would solve it
+  - type: textarea
+    id: check
+    attributes:
+      label: How we would know it works
+      description: The test, gate or live read-back that would prove it.

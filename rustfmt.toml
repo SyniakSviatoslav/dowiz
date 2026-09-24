@@ -1,0 +1,23 @@
+# rustfmt for every crate in this tree (there is no workspace; rustfmt finds this file by walking
+# up from each crate). It pins rustfmt's defaults explicitly, so a toolchain bump cannot move them.
+#
+# NOT A GATE YET, and why. No product crate is fmt-clean on HEAD (5abeb0ac, 2026-09-24). Measured
+# with `cargo fmt --check`, counting "Diff in" hunks, defaults vs `use_small_heuristics = "Max"`:
+#
+#   crate                 defaults   "Max"
+#   crates/bebop-store          67      22
+#   crates/bebop-wasm           26      19
+#   crates/dowiz-core        2,144   3,052
+#   crates/dowiz-hub           681     268
+#   workers/api              2,222   1,303
+#   kernel                     365     531
+#
+# Re-checked with defaults on the 2026-09-24 evening working tree (lanes in flight): bebop-store 67,
+# bebop-wasm 26, dowiz-core 2,144 unchanged; dowiz-hub 695 and workers/api 2,383 grew with new code.
+#
+# Neither setting is clean anywhere, and "Max" makes the kernel worse, so the defaults stay and
+# CI does not run `cargo fmt --check`. Turning it on is one mechanical commit per crate
+# (`cargo fmt` then the crate's tests), done while no lane has that crate open.
+# docs/code-quality.md, "Formatting", tracks this.
+edition = "2021"
+max_width = 100

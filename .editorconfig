@@ -1,0 +1,51 @@
+# https://editorconfig.org -- the conventions the tree already follows, written down.
+# Line endings are also pinned by .gitattributes (`* text=auto eol=lf`).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Rust: rustfmt's default indent, 100 columns (rustfmt.toml).
+[*.rs]
+indent_size = 4
+max_line_length = 100
+
+# Python gates and oracles (tools/gates/unreached.py, scripts/design_gate.py).
+[*.py]
+indent_size = 4
+
+# bebop sources follow their own compiler's layout.
+[*.bp]
+indent_size = 4
+
+# Browser code: two spaces. Quotes in JS strings are ASCII ' or " only -- a typographic
+# quote is a syntax error that takes down a whole surface (docs/code-quality.md).
+[*.{js,mjs,ts,css,html,json,webmanifest}]
+indent_size = 2
+
+[*.{yml,yaml,toml}]
+indent_size = 2
+
+[*.{sh,bash}]
+indent_size = 2
+
+# Markdown uses two trailing spaces as a hard line break in a few older documents.
+[*.md]
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab
+
+# Byte-exact fixtures and vendored vectors: never touched by an editor.
+[{**/fixtures/**,**/kat/**,**/vendor/**}]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+indent_style = unset
+indent_size = unset

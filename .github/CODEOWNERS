@@ -1,0 +1,12 @@
+# Every path is reviewed by the project owner. Red-line paths are listed explicitly so that a
+# future second owner line cannot silently cover them.
+*                                         @SyniakSviatoslav
+
+/crates/dowiz-core/src/money.rs           @SyniakSviatoslav
+/crates/dowiz-core/src/order_machine.rs   @SyniakSviatoslav
+/crates/dowiz-core/src/pq/                @SyniakSviatoslav
+/workers/api/src/auth.rs                  @SyniakSviatoslav
+/workers/api/src/fiscal/                  @SyniakSviatoslav
+/workers/api/wrangler.toml                @SyniakSviatoslav
+/tools/gates/                             @SyniakSviatoslav
+/.github/                                 @SyniakSviatoslav

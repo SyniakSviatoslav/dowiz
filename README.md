@@ -1,311 +1,438 @@
 # dowiz
 
-**One system for a restaurant: ordering, the dining room, delivery, the till.**
-Decentralised and local-first, with one self-contained **bebop** image store per venue and a
-deterministic Rust kernel that decides every order and every amount.
+[![CI](https://github.com/SyniakSviatoslav/dowiz/actions/workflows/ci.yml/badge.svg)](https://github.com/SyniakSviatoslav/dowiz/actions/workflows/ci.yml)
+[![Production health](https://github.com/SyniakSviatoslav/dowiz/actions/workflows/health-cron.yml/badge.svg)](https://github.com/SyniakSviatoslav/dowiz/actions/workflows/health-cron.yml)
+[![Key flows](https://github.com/SyniakSviatoslav/dowiz/actions/workflows/key-flows.yml/badge.svg)](https://github.com/SyniakSviatoslav/dowiz/actions/workflows/key-flows.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-**Early access — launching across Albania; first venue live in Durrës.** Hosted at `dowiz.org`
-with a subdomain per venue. Open source under AGPL-3.0 (`LICENSE`; trademark and DCO terms in
-`TRADEMARK.md` and `DCO`).
+**One system for a restaurant: ordering, the dining room, delivery and the till.**
+Each venue gets its own app on its own subdomain, its own store of records, and a deterministic
+Rust kernel that decides every order and every amount in integers.
 
-dowiz gives a venue its own app on its own domain — menu, checkout, live courier on the map — plus
-the room (tables, bookings, staff, amend, pay), a courier app that works underground, integer-exact
-money and VAT, a consent-first customer record, and an owner console. Every venue's data lives in
-its own append-only, content-chained store; no shared database, no SQL, no server that everything
-stops without.
+- **Shqip:** dowiz është një sistem për restorantin: porositë, salla, dorëzimi dhe arka, në domenin
+  e vetë lokalit. Udhëzuesi për çdo rol është në [`docs/wiki/`](docs/wiki/Home.md) (anglisht).
+- **Українською:** dowiz — одна система для закладу: замовлення, зал, доставка й каса, на власному
+  піддомені закладу. Посібники за ролями — у [`docs/wiki/`](docs/wiki/Home.md) (англійською).
 
-## Why dowiz
+<!-- media: 20-second screen recording of a guest ordering on a phone, from menu to live tracking (video lane fills this) -->
 
-- **Against the aggregators.** Four of them compete in Albania — Wolt, Glovo, Bolt Food, Baboon —
-  each taking a percentage of every order and owning the customer. dowiz is priced on `dowiz.org`
-  at $50 a month per venue with no percentage of the bill and no delivery tariff; the venue keeps
-  its domain, its brand and its customers.
-- **Beside the fiscal POS, not instead of it.** Albanian fiscalisation (Law 87/2019) is
-  certification-gated and 53 producers hold the certificate; dowiz does not, so today it runs the
-  room, the ordering, the stock and the customers next to the venue's certified fiscal app, and
-  reads that app's sales into one hub (`workers/api/src/ebills/`). Law 79/2025 makes card terminals
-  mandatory for every business by 31 December 2026, so every venue is getting a second screen.
-- **The market is mass, not a dozen.** About 34,000 accommodation and food businesses in Albania
-  (an estimate: 14.3 % of 237,881 active legal units), and 12.5 million foreign arrivals in 2025.
-  Sources and the country-by-country sequence (Albania → Kosovo → Montenegro → Serbia) are in
-  `docs/design/BLUEPRINT-PLATFORM-TOP-TIER-2026-09-23.md` §6.
-- **Built to be trusted.** Nobody is scored or ranked; money never touches a float; every rule that
-  matters is a gate in CI, and the register is audited nightly by nine conservation laws.
+Live today: **Dubin & Sushi, Durrës** at `sushi-durres.dowiz.org` (the same venue also answers at
+`dubin-sushi.dowiz.org`), with 165 dishes in Albanian, English and Ukrainian, delivery, pickup and
+dine-in. The platform's landing page and waiting list are at `dowiz.org`. Open source under
+AGPL-3.0; trademark terms in [`TRADEMARK.md`](TRADEMARK.md), contribution terms in [`DCO`](DCO).
 
-## Traction, exactly
+---
 
-- **One live venue:** Dubin & Sushi, Durrës — `sushi-durres.dowiz.org` (the same restaurant also
-  answers at `dubin-sushi.dowiz.org`). 165 dishes in three languages, delivery, pickup and dine-in,
-  a courier on shift, cash payments; card payments switch on when the venue supplies its Stripe keys.
-- **Waitlist open** at `dowiz.org`: "leave the venue's email and we will write when the next hub
-  opens." No newsletters.
-- Live platform last deployed 2026-09-22 and verified by reading it back; the conservation audit
-  runs against the real venue.
+## Contents
 
-## What it does today
+- [What dowiz is](#what-dowiz-is)
+- [The four apps and who uses them](#the-four-apps-and-who-uses-them)
+- [Features by role](#features-by-role)
+- [Architecture](#architecture)
+- [Repository layout](#repository-layout)
+- [Quick start](#quick-start)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Security and privacy](#security-and-privacy)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
 
-Describes the tree at commit `53bd9573` (2026-09-23). Work in flight is under **Status**.
+---
 
-**Ordering and storefront** (`workers/api/public/store/`) — menu, basket, checkout, live tracking
-with a map and a kernel-computed ETA in integer minutes (`workers/api/src/eta.rs`); sq / en / uk;
-an installable PWA whose service worker caches the shell only. Delivery, pickup and dine-in as a
-closed set of fulfilment kinds; one pricer for preview and checkout; a twelve-status order FSM where
-`decide → Event`, `state = fold(events)`, and an illegal transition is an error
-(`crates/dowiz-core/src/order_machine.rs`). Live updates over one WebSocket per client, polling as
-the fallback (`workers/api/src/live.rs`).
+## What dowiz is
 
-**The room** (`workers/api/src/command/`, `crates/dowiz-hub/src/tables.rs`) — tables as data
-(zones, seats, availability per time slot with a 90-minute dwell, double-booking refused) and
-bookings from the storefront (`workers/api/src/booking.rs`). A dine-in order is placed at a table;
-the sitting is a projection of its rounds, never a second record (`command/sitting.rs`). Amend in
-intent form — add, remove, re-count, comp — versioned by `base_seq` so two tablets commute and a
-stale edit is refused (`command/amend.rs`). Pay: one signed `Paid` event per payment, split across
-as many payments as the bill takes, over-payment refused, a settled bill no longer amendable
-(`command/pay.rs`). Staff as a fourth principal beside owner, courier and customer, carrying a
-closed set of signed capabilities — `Advance`, `TakeOrders`, `TakePayment`, `Void`, `OpenTill` —
-with presets Owner / Kitchen / Counter-Manager / Waiter (`crates/dowiz-hub/src/caps.rs`); the
-console invites, re-roles and suspends staff.
+A venue's ordering, room and delivery on one Cloudflare Worker, with **one Durable Object per
+venue** holding that venue's records as **bebop images**: append-only, content-chained, pointer-free
+files that the Rust side, a wasm32 module and an independent Python oracle all read the same way.
+There is no shared database and no SQL (`tools/gates/no-sql.sh` holds that at zero).
 
-**Delivery** (`workers/api/public/courier/`) — one job on screen, cash handover, voice prompts.
-Taps made without signal queue in IndexedDB and replay with an `Idempotency-Key`; the server answers
-a replay with the first call's result (`workers/api/public/lib/outbox.js`,
-`workers/api/src/idempotency/`). Reopening the app underground still shows the job. A courier's
-login is scoped to the host's venue.
+Design commitments, each held by code or a gate rather than by a paragraph:
 
-**Money and tax** (`crates/dowiz-core/src/money.rs`, `crates/dowiz-core/src/tax.rs`) — integer
-minor units only: currency-typed, overflow-checked `i64`/`i128`; ALL, EUR and USD with their minor
-units from the kernel. VAT per line as an integer rate in parts per million (`RatePpm`), inclusive
-or exclusive with the rounded quantity named, a dated rate schedule so an old receipt shows its own
-rate, the tax block computed once at placement; the arithmetic is generated from the equation by
-`tools/eqc-rs` and pinned by test to the hand-written law. Card payments through Stripe
-PaymentIntents — card data goes browser-to-Stripe and no type in the Worker can hold a PAN
-(`workers/api/src/stripe.rs`).
+| Commitment | What it means here | Held by |
+|---|---|---|
+| One venue, one store | every request resolves its venue once, from the Host header; each venue's images live in its own object | `tools/gates/one-venue.sh`, `tools/gates/one-image.sh`, `tools/gates/no-sql.sh` |
+| Money is integers | minor units in `i64`/`i128`, currency-typed, overflow-checked; VAT as parts per million | `crates/dowiz-core/src/money.rs`, `tools/gates/float-money.sh` |
+| An order is a state machine | `decide -> Event`, `state = fold(events)`; an illegal transition is an error | `crates/dowiz-core/src/order_machine.rs` |
+| The clock is read once | the Worker reads the time at the entry point and passes it down | `tools/gates/clock.sh` |
+| Offline taps are safe to replay | a courier's queued tap carries an `Idempotency-Key`; the server answers a replay with the first answer | `workers/api/src/idempotency/`, `tools/gates/idempotent.sh` |
+| Nobody is scored | no rating, ranking or tier of a courier, customer or staff member | `tools/gates/no-scoring.sh`; routing enums have no `Ord` |
+| Marketing needs consent | a send needs a `Consented` value that only the consent fold can produce | `tools/gates/consent.sh` |
 
-**Customers** (`crates/dowiz-hub/src/consent.rs`, `crates/dowiz-hub/src/forget.rs`) — consent as
-an append-only log of who, when, by which channel and which wording; withdrawal is a new record; a
-marketing send needs a `Consented` value only the consent fold can produce. Right to be forgotten
-in place: personal fields emptied while the record keeps its id and `prev`, so the chain and last
-night's witness still verify, declared by a `Forgotten` event. The customer card holds only what a
-fold cannot derive; every look at a customer's contact details is itself a logged event.
+dowiz runs **beside** a venue's certified fiscal till, not instead of it: it imports the till's
+sales from ebills.al into the same order log (read direction only, see
+[eBills](#ebills-import-direction-only)). dowiz is not a certified fiscal device.
 
-**Owner console** (`workers/api/public/admin/`) — orders, menu and media, couriers, customers,
-staff, stock and recipes, analytics in the venue's timezone; three languages. Integrations, each
-with a "prove it" check (`workers/api/src/integrations.rs`): a venue-owned Telegram bot for the
-kitchen bell, WhatsApp and Instagram through one Meta webhook, a nightly copy to a bucket the venue
-owns (any S3-compatible store), and the hub as an MCP server at `/api/mcp` so an agent can do
-exactly what the console can. `GET /api/owner/health` reads image gauges against their real
-ceilings; backups carry a manifest with each image's SHA-256.
+## The four apps and who uses them
+
+All four are vanilla-JS progressive web apps served from `workers/api/public/` by the same Worker,
+on the venue's own host. Status words and currencies are generated from the kernel by
+`tools/gen-vocab`, never retyped (`tools/gates/vocab.sh`).
+
+| App | Path | Who | Source |
+|---|---|---|---|
+| Storefront | `/` | guests | `workers/api/public/store/` |
+| Owner console | `/admin/` | the owner | `workers/api/public/admin/` |
+| Room app | `/room/` | waiters, counter managers, kitchen staff | `workers/api/public/room/` |
+| Courier app | `/courier/` | couriers | `workers/api/public/courier/` |
+
+The platform landing page and hub creation live at `dowiz.org` (`workers/api/public/platform/`).
+Staff permissions are a closed set of signed capabilities (`Advance`, `TakeOrders`, `TakePayment`,
+`Void`, `OpenTill`) with four presets: Owner, Kitchen, Counter-Manager, Waiter
+(`crates/dowiz-hub/src/caps.rs`).
+
+<!-- media: four phone screenshots side by side, one per app (video lane fills this) -->
+
+## Features by role
+
+Only what is in the tree today. Work in progress is under [Roadmap](#roadmap).
+
+### Guest (storefront)
+
+- Menu, search, basket and checkout in Albanian, English and Ukrainian; installable as a PWA.
+- Delivery, pickup or dine-in, a closed set of fulfilment kinds priced by one pricer for the preview
+  and the checkout.
+- Live tracking with a map and a waiting time the kernel computes in whole minutes from the venue's
+  own kitchen profile and queue (`workers/api/src/eta.rs`).
+- Book a table without an account; the booking has a share link a second phone can open and cancel
+  (`workers/api/src/booking/`).
+- Order from the table through a signed per-table QR link; the round joins the table's open bill
+  and waits for staff to confirm it.
+- Consent to marketing is asked for, recorded with its wording, and can be withdrawn.
+- Card payments go browser-to-Stripe when the venue has set its Stripe keys; no type in the Worker
+  can hold a card number (`workers/api/src/stripe.rs`).
+
+### Owner (console)
+
+- **Orders:** accept, reject, advance, assign a courier, refund an order past `PENDING`, and each
+  order's kitchen-ticket state; an aggregator order (Wolt, Glovo, Baboon) can be entered by hand and
+  is placed once.
+- **Menu:** dishes, categories, photos, per-language names, menu import, allergens and modifiers.
+- **Stock:** supplies, recipes, CSV import with a dry run, write-offs that name who signed them, a
+  waste report, and a dish's cost as a weighted average of purchases. (The ledger is built and
+  tested; it stays switched off on a venue until the venue enters recipes and supplies.)
+- **Couriers and staff:** invite, activate, suspend, change a staff member's role.
+- **Room:** bookings (confirm, decline, book by phone), a floor-plan editor, table QR codes.
+- **Customers:** a record card that holds only what a fold cannot derive, an append-only consent
+  log, "forget this person" in place, and linking two phone spellings of one person without merging
+  them. Every look at a contact detail is itself logged.
+- **Marketing:** promotions, a stamp card (off by default), approved WhatsApp template campaigns to
+  consented customers only, and posts.
+- **Reports:** analytics in the venue's own time zone, an exceptions report of voids, refunds and
+  till gaps with a signer on every row, and `/api/owner/health` with image gauges against their real
+  ceilings and the outbox depth.
+- **Integrations**, each with a "prove it" check (`workers/api/src/integrations.rs`): a venue-owned
+  Telegram bot for the kitchen bell, WhatsApp and Instagram through one Meta webhook, a nightly copy
+  to an S3-compatible bucket the venue owns, the venue's own AI endpoint for the assistant, a
+  kitchen printer that pulls its own tickets, eBills import, and the hub as an MCP server at
+  `/api/mcp` so an agent can do what the console does.
+
+### Waiter, counter manager, kitchen (room app)
+
+- Claim an invite, sign in, see the floor with each table's state (free, booked, ordering, waiting
+  for food, paying, to clear; derived by a fold).
+- Open a table, add rounds, amend in intent form (add, remove, re-count, comp); a stale edit from a
+  second tablet is refused rather than overwriting.
+- Confirm rounds that guests placed from the table QR.
+- Pay: split a bill across as many payments as it takes, in EUR or ALL, with a tip; over-payment is
+  refused and a settled bill can no longer be amended.
+- Move lines between rounds, move a sitting to another table, mark a table cleared. (Refunds are
+  taken from the owner console.)
+- The till: open, blind count, close, pay in, pay out, per currency; tips per person.
+- Kitchen staff (Kitchen preset) mark a round seen (`/api/staff/orders/:id/kitchen-ack`) and
+  advance it to ready, through the same routes the console's buttons call. There is no separate
+  kitchen display yet; tickets reach the kitchen through the Telegram bell and the printer rail.
+
+### Courier (courier app)
+
+- One job on screen at a time: take the offer, pick up, deliver with a cash handover, or record
+  "refused at the door", which ends the order through a refund.
+- Taps made without signal wait in IndexedDB and replay with an `Idempotency-Key`
+  (`workers/api/public/lib/outbox.js`); reopening the app underground still shows the job.
+- Shift on and off, earnings and history. A courier's login is scoped to the host's venue.
 
 ## Architecture
 
+Deeper diagrams and the reasoning behind them: [`docs/architecture.md`](docs/architecture.md).
+
+### System context
+
+```mermaid
+flowchart LR
+  guest([Guest phone]) -->|HTTPS, venue.dowiz.org| W
+  owner([Owner console]) --> W
+  staff([Room app: waiter, kitchen, counter]) --> W
+  courier([Courier app]) --> W
+  agent([MCP client]) -->|/api/mcp| W
+
+  subgraph CF[Cloudflare]
+    W[Worker workers/api<br/>Rust compiled to wasm32]
+    DO[(Durable Object HubImages<br/>one per venue)]
+    KV[(KV MEDIA<br/>dish photos by SHA-256)]
+    W <--> DO
+    W --> KV
+  end
+
+  W -->|cards| Stripe[Stripe]
+  W -->|kitchen bell| TG[Telegram bot of the venue]
+  W -->|messages, campaigns| Meta[Meta: WhatsApp, Instagram]
+  W -->|nightly copy| S3[(Venue-owned S3 bucket)]
+  EB[ebills.al fiscal platform] -->|sales, read only| W
 ```
-browsers (store / admin / courier / kit / platform — vanilla JS PWAs; vocabulary generated from the kernel)
-        │  HTTPS, one venue per Host header
-        ▼
-Cloudflare Worker  workers/api  (Rust → wasm32)
-        │  one Durable Object per venue: class HubImages, id = venue id
-        ▼
-Durable Object  workers/api/src/hubdo.rs — the venue's bebop images in memory, single writer,
-        │  96 KiB chunks, meta written last: log · catalog · settings · posts · stock · people · consent · bookings · ledger · …
-        ▼
-crates/dowiz-hub    pure folds over the images: order log, tables, caps, consent, forget, stock
-crates/dowiz-core   the kernel: order FSM, money, tax, PQ primitives   (kernel/ is its std facade)
-crates/bebop-store  the image format, zero dependencies   ·   crates/bebop-wasm  the same reader in wasm32
-bebop-lang/         the language, its self-hosting compiler, and the store format's origin
+
+### Worker, Durable Object, bebop images
+
+One object per venue (`id_from_name(location_id)`, `workers/api/src/hubstore.rs`) is the single writer for that venue. A command such as
+placing an order runs in one object turn: the event is appended to the log image and any message it
+owes is written to the outbox image in the same turn, or nothing is written.
+
+```mermaid
+sequenceDiagram
+  participant P as Phone
+  participant W as Worker (router)
+  participant D as HubImages object (venue)
+  participant I as bebop images
+  P->>W: POST /api/public/locations/:slug/orders
+  W->>W: resolve venue from Host, read clock once, price with the kernel
+  W->>D: place(command, now_ms)
+  D->>I: append Placed to log, write bell to outbox (one turn)
+  D-->>W: order id, status PENDING
+  W-->>P: order id + the guest's bearer key
+  Note over W,D: every minute the cron drains the outbox and polls eBills
 ```
 
-`tools/native-spa-server` is a second, native implementation of the owner / courier / storefront
-routes for a venue running on its own machine; CI tests it. The mesh transport (`bebop2/`,
-`mesh-adapter/`) is not part of the live product.
+The images a venue owns include `log`, `catalog`, `settings`, `posts`, `stock`, `people`,
+`consent`, `bookings`, `ledger`, `till`, `outbox`, `idem`, `inbox`, `threads`, `campaign`,
+`rails`, `audit`, `i18n` and `ops` (constants `IMAGE_*` under `workers/api/src/`). The format:
+`crates/bebop-store` (Rust, zero dependencies), `crates/bebop-wasm` (the same reader in wasm32),
+and `bebop-lang/` (the language the format came from).
 
-**Design invariants** (`DECISIONS.md` D0, in priority order) and what holds each today:
+### Order lifecycle (the kernel's state machine)
 
-| Invariant | Here it means | Held by |
-|---|---|---|
-| decentralised | one object and one image set per venue; no shared database, no SQL | gates `no-sql`, `one-venue`, `one-image` |
-| local-first | the kernel is pure (no clock, RNG, network or float on the decision path) so any node replays the same fold; offline writes queue and replay | gates `clock`, `idempotent`; CI job `offline-writes` |
-| post-quantum | ML-DSA-65 and a hybrid KEM exist in the kernel; not on the live wire (see Security) | principle |
-| crypto | content-chained records, a nightly witness of every log's tip, fixed-algorithm tokens | tests; no gate |
-| mesh | store-and-forward transport designed in `bebop2/`; not wired into the product | principle |
-| reliability over latency | a refusing FSM, append-only logs that grow rather than refuse, replays answered idempotently | gate `idempotent`; conservation laws |
+Transcribed from `allowed_next` in `crates/dowiz-core/src/order_machine.rs`.
 
-Two product red lines sit beside them: money is integer (`float-money`), and trust is a signed
-capability, never a score — no rating, ranking or tier of any participant (`no-scoring`; the routing
-and capability enums deliberately omit `Ord`).
+```mermaid
+stateDiagram-v2
+  [*] --> PENDING
+  PENDING --> CONFIRMED
+  PENDING --> REJECTED
+  PENDING --> CANCELLED
+  CONFIRMED --> PREPARING
+  CONFIRMED --> IN_DELIVERY
+  CONFIRMED --> REFUNDING
+  PREPARING --> READY
+  PREPARING --> REFUNDING
+  READY --> IN_DELIVERY
+  READY --> PICKED_UP
+  READY --> REFUNDING
+  IN_DELIVERY --> DELIVERED
+  IN_DELIVERY --> REFUNDING
+  REFUNDING --> COMPENSATED_REFUND
+  DELIVERED --> [*]
+  PICKED_UP --> [*]
+  REJECTED --> [*]
+  CANCELLED --> [*]
+  COMPENSATED_REFUND --> [*]
+```
 
-## bebop: the engine, and what it buys this product
+`SCHEDULED` exists as a status but is scaffold-only: every transition into or out of it is refused.
 
-bebop is the repository's own language and storage format (`bebop-lang/`). The product uses the
-**format**; the language runs beside it, not inside the Worker.
+### Booking lifecycle
 
-**The language.** Small and integer-only, compiled straight to AArch64 machine words by
-`bebop.bin`, which is itself written in bebop (`bebop-lang/bebop.bp`) and loaded by a 1.5 KB
-assembly seed (`bebop-lang/seed/seed.S`); no C in the toolchain, no dependency outside the tree.
-The compiler compiles itself to a byte-exact fixpoint (gen3 == gen4, re-checked on every codegen
-commit — `bebop-lang/ROADMAP.md`, TG-DONE row 2). Correctness rests on oracles, not on itself: 125
-golden gates in `bebop-lang/bench/vs_rust/std_golden.sh` (counted 2026-09-23), each with an
-independent Python oracle under `bebop-lang/bench/oracles/`, construct-parity freezes, and a
-generator-vs-oracle fuzzer judged by `bebop-lang/tools/bpref.py`.
+Transcribed from `allowed_next` in `crates/dowiz-core/src/reservation.rs`.
 
-**The format** (`bebop-lang/selfhost/prelude/store.bp`; Rust side `crates/bebop-store`):
-- **Pointer-free, self-describing.** Two CRC-checked superblocks (a reader takes the newest valid
-  one, or nothing); an append-only arena of objects whose header carries layout digest, length,
-  payload CRC and generation; every reference is an object-relative offset. Nothing in the file is
-  an address, so the same bytes are read by bebop, Rust, the wasm32 module and a Python oracle.
-- **Four readers that must agree, on every push.** CI job `bebop-wasm` runs
-  `crates/bebop-wasm/gate.sh`: `bebop.bin`, the native crate, the wasm32 module under Node and
-  `oracle.py` fold one fixture to one root; `--prove` flips a bit and the number moves; a cut image
-  must be refused by all four. The second reader found a real defect on day one — a truncated
-  image read in Rust as the previous generation (`3dbccd22`). The wasm32 reader is 30,863 bytes, a
-  ratchet (`crates/bebop-wasm/bytes.baseline`).
-- **An event log with O(1) append.** One object per event, root relinked, no rewrite of the world
-  (`crates/bebop-store/src/evlog.rs`); v2 packs eight payload bytes per cell — measured 345 → 54
-  cells for a 330-byte event. Errors, messages, bookings and postings use the same shape.
-- **Tables without a query planner.** Bounded sets (people, dishes, keys) live in a sorted
-  key/value image where every access path is a key written on purpose and each record owns its
-  index keys, so record and index change in one operation (`crates/dowiz-hub/src/table.rs`). A key
-  is venue-scoped by construction — the image *is* the venue — which closed the "wrong venue by
-  default row" class of defect.
-- **Content-chained, witnessed, erasable.** Every order-log id commits to the id before it;
-  `Hub::chain_check` classifies each record as chained, legacy, redacted or broken. The tip is
-  written nightly to a different object and to the venue's off-site copy, so a truncation — which a
-  chain cannot see — contradicts something (`workers/api/src/witness/`). A person can be forgotten
-  in place without moving the tip.
-- **Every number in an image is a claim.** Lengths, counts and offsets are bounded against the
-  bytes present; a slice that does not fit is refused, never truncated; a log whose root claims more
-  records than its chain delivers is `Truncated`.
+```mermaid
+stateDiagram-v2
+  [*] --> REQUESTED
+  REQUESTED --> CONFIRMED
+  REQUESTED --> DECLINED
+  REQUESTED --> CANCELLED_BY_GUEST
+  REQUESTED --> CANCELLED_BY_VENUE
+  CONFIRMED --> SEATED
+  CONFIRMED --> CANCELLED_BY_GUEST
+  CONFIRMED --> CANCELLED_BY_VENUE
+  CONFIRMED --> NO_SHOW
+  SEATED --> COMPLETED
+  COMPLETED --> [*]
+  DECLINED --> [*]
+  CANCELLED_BY_GUEST --> [*]
+  CANCELLED_BY_VENUE --> [*]
+  NO_SHOW --> [*]
+```
 
-**What it replaced, and what it costs.** The D1/SQL layer was removed on 2026-09-22 (`cf834d24`):
-0 prepared statements, 0 bindings, 0 migration files, held by `tools/gates/no-sql.sh`. One venue
-costs $5.93 a month all-in on Cloudflare (the account's Workers subscription plus the domain), a
-marginal delivery about $0.0006 — measured 2026-09-20,
-`docs/design/BLUEPRINT-HUB-COST-AND-ORDER-LOG-2026-09-20.md`.
+### The outbox and the rails
 
-**Limits, stated.** One writer per venue by design (the Durable Object); a second writer that
-cannot share the object — an offline till — is the condition under which CRDTs get re-examined.
-Append logs double when full; compacted key/value images (catalogue, settings, posts) have a real
-ceiling of 1 MiB. Reading one order walks the chain, O(n) in the log, and the whole image is loaded
-per request; the live audit reports the venue at 619 log cells per order against a budget of 120,
-unresolved. `bebop.bin` is AArch64-only, so on x86 CI that reader prints NOT MEASURED and the gate
-relies on the other three. No bebop code executes in the product: `bebop.bp` has no wasm backend,
-and the format is the boundary (`docs/design/BLUEPRINT-BEBOP-IN-WASM-2026-09-23.md`).
+A message owed to a third party is written, never awaited inline (`workers/api/src/outbox.rs`,
+`workers/api/src/outbox/rails.rs`). The minute cron drains it with backoff (10 s, 30 s, 2 min,
+5 min, then 10 min) and abandons an entry after six tries, loudly: the depth and the oldest entry
+show on the owner's health pane. Stripe, the venue's AI endpoint and Meta sit behind a circuit
+breaker kept in the venue's object (`workers/api/src/rail.rs`).
 
-## Security
+```mermaid
+flowchart LR
+  T[Object turn: event + outbox entry] --> Q[(outbox image)]
+  C[cron, every minute] --> Q
+  Q -->|telegram| TG[Venue Telegram bot]
+  Q -->|whatsapp| WA[Meta WhatsApp]
+  Q -->|campaign, consent re-checked| WA
+  Q -->|print| PR[Kitchen printer polls /api/print/poll]
+  Q -->|unknown kind| AB[abandoned and reported]
+```
 
-- **Post-quantum primitives, precisely.** `crates/dowiz-core/src/pq/` holds a from-scratch
-  ML-DSA-65 (FIPS 204) verified byte-exact against the vendored NIST ACVP vectors (`pq/kat/acvp/`,
-  one `#[test]` per vector), X25519 KAT-gated against RFC 7748, a hybrid X25519 + ML-KEM-768 KEM
-  that refuses a classical-only fallback, and AES-256-GCM envelopes. The ML-KEM-768 module states
-  in its own header that its ACVP gate is deferred and it is **not FIPS-203-conformant**. All of it
-  sits behind the kernel's off-by-default `pq` feature; the live hub's tokens are HMAC-SHA256 with
-  the algorithm fixed in code (`crates/dowiz-hub/src/token.rs`, `workers/api/src/auth.rs`).
-- **Capabilities, not scores.** No participant is rated, ranked or tiered;
-  `tools/gates/no-scoring.sh` refuses the vocabulary and the enums are not orderable. Red-line
-  capabilities deny by default (`crates/dowiz-core/src/ports/agent/scope.rs`).
-- **Tenant isolation.** The venue is decided once per request from the Host header;
-  `tools/gates/one-venue.sh` refuses a handler that authorises one venue and acts on another.
-- **No unauthenticated write route** after the 2026-09-21 red-team pass (`docs/red-team/`); the
-  post-deploy smoke test no longer places an order for that reason.
+### eBills: import direction only
 
-## Correctness: verified, not claimed
+```mermaid
+flowchart LR
+  E[ebills.al: the venue's certified till] -->|poll every minute, allow-listed fetch| P[ebills::poll]
+  P --> M[map: whole-lek amounts only, unknown words refused]
+  M --> O[venue object: check and append in one turn]
+  O --> L[(order log + stock)]
+  X[fiscal sender: built, SEND_ENABLED = false] -. switched off .-> E
+```
 
-Every gate is a ratchet that may only fall, and each was made to fire in both directions before it
-was committed. Run: `for g in tools/gates/*.sh; do sh $g; done; python3 tools/gates/unreached.py`
-
-| Gate (`tools/gates/`) | Holds |
-|---|---|
-| `no-sql` | SQL and the D1 binding cannot come back |
-| `clock` | the Worker reads the time in one place; handlers take the instant |
-| `one-image` / `one-venue` | one image written per transaction; one venue per request |
-| `vocab` / `vocabulary` | the browsers' status and currency lists are generated by `tools/gen-vocab`, never retyped |
-| `idempotent` | every route a phone can replay names the server guard |
-| `paths` | `CLAUDE.md`, `AGENTS.md`, `DECISIONS.md`, `CONTEXT-INDEX.md` cite only files that exist |
-| `unreached` | nothing public that no shipping code calls |
-| `file-size` | no serving file over 300 lines without a split (`tests.rs` exempt) |
-| `float-money` / `no-scoring` / `consent` / `record` / `tap-size` / `event-kinds` | the red lines above, 44 px controls, one event-kind set in Rust and JS |
-
-**Conservation laws** — `e2e/gates/conservation.mjs`, read-only against the live venue with an
-owner token; its proof `conservation.prove.mjs` runs in CI against a stub. 1 folded status equals
-served status · 2 nothing is held by an ended order · 3 an order's money is lines plus fees minus
-discount · 4 every delivered order's cash is accounted to a courier · 5 image gauges read under
-their ceiling · 6 nothing is quarantined and the log's claim equals served plus withheld · 7 the
-nightly witness is not contradicted and is still being taken · 8 every projection rebuilds from
-the log to what is served · 9 the tax block conserves money and every stamp re-derives.
-
-CI (`.github/workflows/ci.yml`): per-crate tests for `kernel`, `engine`, `apps/courier`,
-`crates/bebop-store`, `crates/dowiz-core`, `crates/dowiz-hub`, `workers/api`,
-`tools/native-spa-server`, `tools/gen-vocab`; the gates above except `record` and `event-kinds`;
-`cargo deny`; the conservation proof; kernel mutation and fuzz jobs; the `bebop-wasm` four-reader
-gate; and `offline-writes`, which drives the courier's outbox and cold start in a real browser.
-Test counts on 2026-09-22: `workers/api` 221, `dowiz-hub` 317, `dowiz-core` 3,647,
-`native-spa-server` 166.
+The sender that would issue invoices exists in `workers/api/src/fiscal/` but
+`SEND_ENABLED = false` in `workers/api/src/fiscal/mod.rs`: the cron returns early and the arm route
+answers 409. dowiz does not fiscalise sales.
 
 ## Repository layout
 
+There is no cargo workspace: each crate is standalone and is entered with `cd`.
+
 | Path | What it is |
 |---|---|
-| `workers/api/` | the Cloudflare Worker (Rust), its Durable Object, and `public/` — the five browser surfaces |
-| `crates/dowiz-core/` | the kernel: order FSM, money, tax, PQ primitives, ports |
-| `crates/dowiz-hub/` | one venue's images as pure logic: order log, tables, caps, consent, forget, stock, table |
-| `crates/bebop-store/`, `crates/bebop-wasm/` | the bebop image format in Rust (zero dependencies) and its wasm32 reader with the four-reader gate |
-| `kernel/` | `dowiz-kernel`, the std facade over `dowiz-core`; benches, fuzz targets, examples |
-| `bebop-lang/` | the bebop language: compiler, seed, standard modules, oracles, benchmarks |
-| `tools/` | `gates/`, `gen-vocab/`, `native-spa-server/`, `eqc-rs/`, `platform/attach-host.sh` |
-| `e2e/` | live gates, kit regression, journeys, chaos and visual suites |
-| `engine/`, `apps/courier/` | a dependency-free field-UI render engine and a wgpu courier surface; tested in CI, not in the live product |
-| `bebop2/`, `mesh-adapter/` | the mesh delivery protocol and its kernel adapter; designed, not deployed |
-| `docs/design/` | roadmap and blueprints; `docs/adr/` decisions; `docs/red-team/` findings |
-| `scripts/` | `verify-hub.sh`, `verify-kernel-engine.sh`, `build-kernel-wasm.sh`, older tooling |
+| `workers/api/` | the Cloudflare Worker (Rust), its Durable Object (`hubdo.rs`), and `public/`, the browser apps |
+| `crates/dowiz-core/` | the kernel: order and booking state machines, money, tax, PQ primitives, ports |
+| `crates/dowiz-hub/` | one venue's images as pure logic: order log, tables, capabilities, consent, forget, stock, room deciders |
+| `crates/bebop-store/`, `crates/bebop-wasm/` | the bebop image format in Rust and its wasm32 reader with the four-reader gate |
+| `kernel/` | `dowiz-kernel`, the std facade over `dowiz-core`, with benches and examples |
+| `bebop-lang/` | the bebop language: self-hosting compiler, seed, standard modules, oracles |
+| `tools/gates/` | the code-quality gates and their mutation proofs; `run-all.sh` runs them all |
+| `tools/gen-vocab/`, `tools/native-spa-server/`, `tools/eqc-rs/` | vocabulary generator, native twin server, equation compiler |
+| `tools/live-checks/` | read-only production probes (`health.sh`) |
+| `e2e/` | live audits (`gates/`), browser regression (`kit-regression/`), per-role live walks (`walk/`) |
+| `engine/`, `apps/courier/`, `bebop2/`, `mesh-adapter/` | render engine, native courier surface, mesh protocol: tested, not part of the live product |
+| `docs/` | [documentation index](docs/README.md), design blueprints, runbooks, [wiki pages](docs/wiki/Home.md) |
 
-## Build, test, deploy
+## Quick start
 
-There is **no cargo workspace**. Enter each crate: `cargo -p` or `--manifest-path` from the root
-resolves the wrong graph and can pass as exit 0 (the false-green trap, `CLAUDE.md`).
+Requirements: Rust via rustup (the repo pins 1.96.1 in `rust-toolchain.toml`; the wasm32 target is
+needed for the Worker), Node 22, Python 3.
 
 ```sh
-bash scripts/verify-hub.sh              # the crates the live product is made of (CI's `hub` job)
-cd crates/bebop-store && cargo test     # or one at a time: dowiz-core, dowiz-hub, workers/api
-cd kernel && cargo test --lib
+git clone https://github.com/SyniakSviatoslav/dowiz.git && cd dowiz
 
-for g in tools/gates/*.sh; do sh "$g"; done; python3 tools/gates/unreached.py
-sh crates/bebop-wasm/gate.sh            # needs the pinned toolchain with wasm32 (rust-toolchain.toml)
-node e2e/gates/conservation.prove.mjs   # the audit's own alarm, against a stub
+# The crates the live product is made of (what CI's hub job runs)
+bash scripts/verify-hub.sh
 
-node --test workers/api/public/lib/*.test.mjs
-cd e2e/kit-regression && npm test       # Playwright; outbox.mjs and courier-cold.mjs are the CI pair
+# One crate at a time: never `cargo -p` from the root (there is no workspace)
+cd crates/dowiz-hub && cargo test && cd -
 
-cd workers/api && npx wrangler deploy   # config workers/api/wrangler.toml; build = worker-build --release
-bash workers/api/scripts/smoke.sh https://<slug>.dowiz.org
-bash tools/platform/attach-host.sh <slug>   # after POST /api/platform/hubs, or the host never resolves
+# Every gate, one table of exit codes
+sh tools/gates/run-all.sh
+
+# Browser-side unit tests
+node --test $(find workers/api/public -name '*.test.mjs' | sort)
+
+# Run the Worker locally (needs worker-build on PATH; not exercised by CI)
+cd workers/api && npx --yes wrangler@4 dev
 ```
 
-## Status and roadmap
+Environment notes for the Android development box (process cap, `slot.sh`) are in
+[`docs/operations.md`](docs/operations.md#the-development-box).
 
-Start at `docs/design/ROADMAP-2026-09-22.md` — what is true with the command that reproduces each
-number, what is in flight, what is decided against — then the 2026-09-23 blueprints
-`BLUEPRINT-OPERATIONAL-BLIND-SPOTS-2026-09-23.md` and `BLUEPRINT-PLATFORM-TOP-TIER-2026-09-23.md`.
+## Testing
 
-- **In flight, not at HEAD:** a refund route, the till as a shift with an X/Z report, table
-  transfer, FX at the till, `channel` on an order as a closed set with its gate, a waste /
-  write-off event with a person and a reason, and a waiter/till PWA.
-- **Fiscalisation (Albania, Law 87/2019):** `workers/api/src/ebills/` maps ebills.al sales into the
-  hub's envelope and is tested; the integration is **read-only** and dowiz is **not a certified
-  fiscal device**. Issuing invoices is designed (`BLUEPRINT-EBILLS-INTEGRATION-2026-09-22.md`), not
-  built; certification is triggered by paying venues asking for one screen, not by a date.
-- **Market sequence:** Albania first, beside the fiscal POS; then Kosovo (same language, a 2026
-  software-fiscalisation rule-set), Montenegro, Serbia; North Macedonia only after a printer bridge.
-- **Post-quantum on the wire:** the primitives exist; ML-KEM's ACVP gate and PQ identity in the
-  hub's tokens are open.
-- **Stock ledger:** proven end to end, switched off on the live venue (0 recipes, 0 supplies).
-- **Open findings** (`ROADMAP-2026-09-22.md` §6): log cost per order above budget; no end-to-end
-  order yet placed through the new command path on the live platform.
-- **Decided against, with a re-entry condition:** CRDTs for money and orders, a general effect
-  system, an in-process event bus.
+Full guide: [`docs/testing.md`](docs/testing.md).
 
-## Further reading
+| Layer | Command | What it proves |
+|---|---|---|
+| Kernel and hub | `cd crates/dowiz-core && cargo test` (also `dowiz-hub`, `bebop-store`, `workers/api`) | the state machines, money, tax, image format, every route handler's pure half |
+| Room deciders in wasm | `cd crates/bebop-wasm && cargo test --features decide` | amend and pay run byte-identically in the browser and the server |
+| Four readers | `sh crates/bebop-wasm/gate.sh` | native, wasm32, Python (and bebop on AArch64) read one image to one number |
+| Browser units | `node --test` over `workers/api/public/**/*.test.mjs` | money formatting, booking time, floor plan, replica fold, UI components |
+| Gates | `sh tools/gates/run-all.sh` | each code-quality rule, each proved able to fire first |
+| Conservation laws | `node e2e/gates/conservation.prove.mjs` (stub); `conservation.mjs` against a live venue with an owner token | thirteen laws (1 to 12, and N for fiscal codes): the register adds up |
+| Real browser | `node e2e/kit-regression/outbox.mjs`, `courier-cold.mjs` | the courier's offline queue and cold start, served from disk |
+| Live walks | `e2e/walk/*.mjs` against a QA host | each role through the real UI, every step read back through the API |
 
-`CLAUDE.md` (build model, kernel authority), `DECISIONS.md` (red-line rulings), `MANIFESTO.md`
-(the thesis); `docs/design/BLUEPRINT-POS-THE-ROOM-2026-09-22.md`,
-`BLUEPRINT-TAX-PRICE-CHANNEL-2026-09-22.md`, `BLUEPRINT-CRM-CONSENT-LOYALTY-2026-09-22.md`,
-`BLUEPRINT-NO-SQL-BEBOP-EVERYWHERE-2026-09-21.md`, `BLUEPRINT-STACK-AND-DEPENDENCIES-2026-09-22.md`,
-`BLUEPRINT-BEBOP-LANGUAGE-DEPTH-2026-09-23.md`; `bebop-lang/README.md`.
+Static count of `#[test]` functions on 2026-09-24 (`grep -rE '#\[(tokio::)?test\]'`):
+`dowiz-core` 3,658, `workers/api` 843, `kernel` 472, `dowiz-hub` 461, `native-spa-server` 92,
+`bebop-store` 35.
+
+## Deployment
+
+One Worker serves every venue and the platform: `workers/api/wrangler.toml` (Durable Object class
+`HubImages`, KV `MEDIA`, two crons: `17 3 * * *` for the nightly copy and witness, `* * * * *` for
+the outbox, eBills poll and fiscal sweep). Deploy with a token that has Workers Scripts write:
+
+```sh
+cd workers/api
+export PATH="$HOME/.cargo/bin:$PATH"          # wrangler runs `worker-build --release` through /bin/sh
+npx --yes wrangler@4 deploy
+bash scripts/smoke.sh https://<slug>.dowiz.org  # read-only post-deploy smoke
+```
+
+A new venue is two steps: `POST /api/platform/hubs`, then `bash tools/platform/attach-host.sh <slug>`
+until the wildcard route is restored. Production is probed every 15 minutes by
+[`health-cron.yml`](.github/workflows/health-cron.yml). Runbooks: [`docs/operations.md`](docs/operations.md).
+
+## Security and privacy
+
+- **Tenant isolation.** The venue is decided once per request from the Host header, and each
+  venue's records live in its own object; `tools/gates/one-venue.sh` refuses a handler that
+  authorises one venue and acts on another.
+- **Write routes.** The 2026-09-21 red-team pass deleted two unauthenticated write routes and closed
+  three route families (commit `727bc591`); the principal-binding gaps still open are listed in the
+  2026-09-24 audit (Wave G, row G6). An order
+  id alone is not a key: `GET /api/order/:id` without the guest's token answers 401 or 404.
+- **Tokens** are HMAC-SHA256 with the algorithm fixed in code (`crates/dowiz-hub/src/token.rs`,
+  `workers/api/src/auth.rs`).
+- **Signatures.** `crates/dowiz-core/src/pq/` holds an ML-DSA-65 (FIPS 204) implementation verified
+  byte-exact against the vendored NIST ACVP vectors. It is behind the kernel's off-by-default `pq`
+  feature and is not on the live request path.
+- **Off-site copies.** The nightly copy to the venue's bucket carries a manifest with each image's
+  SHA-256. A sealing path for those copies exists in `workers/api/src/cloud/seal.rs` and is switched
+  off: it seals nothing until the operator sets `BACKUP_SEAL_PK`. dowiz makes no claim of
+  post-quantum encryption.
+- **Personal data.** Consent is an append-only log (who, when, which channel, which wording);
+  withdrawal is a new record. A person can be forgotten in place: personal fields emptied, the record
+  keeps its id so the chain still verifies, and a `Forgotten` event declares it. No participant is
+  rated, ranked or tiered.
+- **Reporting a vulnerability:** see [`SECURITY.md`](SECURITY.md).
+
+## Roadmap
+
+The current entry point is [`docs/design/ROADMAP-2026-09-22.md`](docs/design/ROADMAP-2026-09-22.md);
+the latest defect audit is
+[`docs/design/AUDIT-BUGS-BLINDSPOTS-TESTS-2026-09-24.md`](docs/design/AUDIT-BUGS-BLINDSPOTS-TESTS-2026-09-24.md)
+(40 defects, 11 proved by running them, and the fix list "Wave G"). Planned, not built:
+
+- **Wave G:** the audit's fixes, each landing with the gate that guards it (refusals recorded for
+  idempotent replays, the courier shell offline, venue-day time handling for bookings, refunds that
+  reverse wallet spends and the till).
+- **Wave F, launch gaps:** supplier invoices as one receipt, Wolt webhook intake, a QA venue for
+  walks and soaks, splitting the largest files below the 300-line rule, per-venue alarms instead of
+  one fan-out cron, the wildcard route, and a load soak
+  ([`BLUEPRINT-LAUNCH-GAPS-2026-09-24.md`](docs/design/BLUEPRINT-LAUNCH-GAPS-2026-09-24.md)).
+- **Wave P, privacy and agents:** a personal-data registry in code with a gate, erasure across every
+  store and backup, a 30-day request intake, retention jobs, a privacy notice per venue, and an
+  OAuth-protected MCP surface for every role
+  ([`BLUEPRINT-GDPR-AND-MCP-2026-09-24.md`](docs/design/BLUEPRINT-GDPR-AND-MCP-2026-09-24.md)).
+- **Sealed off-site copies switched on** (operator step: generate the key off-platform, set
+  `BACKUP_SEAL_PK`).
+- **A kitchen display** for the Kitchen preset.
+- **Fiscal send** stays off until the operator decides otherwise.
+
+Decided against, with the condition that would reopen each: CRDTs for money and orders (reopen for a
+second writer that cannot share the object, such as an offline till), a general effect system, and
+an in-process event bus. Reasons in the roadmap, section 4.
+
+## Contributing
+
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/code-quality.md`](docs/code-quality.md). In
+short: sign off every commit (DCO), keep files under 300 lines with tests beside the code, give every
+refusal test a positive twin, prove a new gate can fire before trusting it, and keep money in
+integers. Be kind: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
+Further reading: [`CLAUDE.md`](CLAUDE.md) (build model and kernel authority),
+[`DECISIONS.md`](DECISIONS.md) (red-line rulings), [`MANIFESTO.md`](MANIFESTO.md) (the thesis),
+[`CHANGELOG.md`](CHANGELOG.md), [`bebop-lang/README.md`](bebop-lang/README.md).

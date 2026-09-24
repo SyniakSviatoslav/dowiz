@@ -1,0 +1,38 @@
+name: Release
+
+# PUSHING A TAG PUBLISHES THE RELEASE. The box can push tags (a deploy key) but holds no GitHub
+# token, so the release is created here with the workflow's own GITHUB_TOKEN. The notes are the
+# committed file docs/releases/<tag>.md; a tag without one fails loudly instead of publishing an
+# empty release.
+#
+#   git tag -a v2026.09.0 -m "dowiz v2026.09.0" && git push origin v2026.09.0
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: the notes exist for this tag
+        run: |
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ ! -s "$notes" ]; then
+            echo "::error::no release notes at $notes; write them, commit, and move the tag"
+            exit 1
+          fi
+      - name: create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "dowiz $GITHUB_REF_NAME" \
+            --notes-file "docs/releases/${GITHUB_REF_NAME}.md" \
+            --verify-tag

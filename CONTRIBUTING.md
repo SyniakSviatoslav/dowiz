@@ -1,63 +1,76 @@
-# Contributing to dowiz / DeliveryOS
+# Contributing to dowiz
 
-Thank you for your interest in contributing. This project is licensed under the
-**GNU Affero General Public License v3.0 (AGPLv3)** with the **Developer Certificate
-of Origin (DCO)**. By contributing you agree to the DCO (see the root `DCO` file).
+Thank you for helping. dowiz is licensed under the **GNU Affero General Public License v3.0**
+(`LICENSE`) and contributions are accepted under the **Developer Certificate of Origin**
+(`DCO`). Be kind and specific: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) applies everywhere.
 
-## Sign your commits (DCO)
+## Sign off every commit (DCO)
 
-Every commit MUST include a `Signed-off-by` trailer certifying the DCO 1.1 terms:
-
-    git commit -s -m "feat: short description"
-
-If you forget, amend and re-sign:
-
-    git commit --amend -s
-
-CI rejects commits without a valid `Signed-off-by`.
-
-## Development setup
-
-dowiz has two main parts:
-
-### Web PWA (JS, no build step)
-```bash
-cd web
-# Serve locally (any static file server)
-python3 -m http.server 8080
-# Or: npx serve .
+```sh
+git commit -s -m "courier: the app reopens underground"
+git commit --amend -s     # if you forgot
 ```
-- Single-file app: `web/src/app.js`
-- Styles: `web/src/styles/` (tokens.css, base.css, animations.css)
-- Kernel bridge: `web/src/lib/kernel/kernel_client.mjs`
-- Telemetry: `web/src/lib/telemetry/`
-- No bundler, no npm install needed
-- Open http://localhost:8080 in browser
 
-### Kernel (Rust → WASM)
-```bash
-cd kernel
-cargo test
-cargo fmt --check && cargo clippy
+A pull request whose commits lack a `Signed-off-by` line is not merged.
+
+## Set up
+
+Requirements: Rust through rustup (the repo pins 1.96.1 in `rust-toolchain.toml`; add the
+`wasm32-unknown-unknown` target for the Worker), Node 22, Python 3.
+
+**There is no cargo workspace.** Enter each crate:
+
+```sh
+cd crates/dowiz-hub && cargo test        # never `cargo -p dowiz-hub` from the root
+bash scripts/verify-hub.sh               # the four product crates and two ratchets
+node --test $(find workers/api/public -name '*.test.mjs' | sort)
+sh tools/gates/run-all.sh                # every gate, one table of exit codes
 ```
-- Source of truth for geo/spectral/FSM math
-- Zero-dependency wasm boundary
 
-### Pre-submit checklist
-- `node --check web/src/app.js` (JS syntax)
-- `cd kernel && cargo test` (kernel green)
-- `bash scripts/verify-kernel-engine.sh` (full gate)
+The browser apps in `workers/api/public/` are plain ES modules with no build step. Serve them with
+the Worker (`cd workers/api && npx --yes wrangler@4 dev`) or, for pure modules, test them with
+`node --test`.
 
-## Local-first / offline-first principle
+More: [`docs/testing.md`](docs/testing.md), [`docs/architecture.md`](docs/architecture.md).
 
-Contributions must not introduce mandatory network, vendor, or cloud dependencies
-for core functionality. Prefer the standard library and offline algorithms.
+## The rules a change must keep
+
+The full list, each with the gate that enforces it, is [`docs/code-quality.md`](docs/code-quality.md).
+The ones most often missed:
+
+1. **Evidence, not claims.** A fix comes with a test that was RED on the unfixed tree. Quote the
+   exact `test result:` line and exit code in the pull request.
+2. **Tests beside the code** in `foo/tests.rs`, calling the real function. Every refusal test has a
+   positive twin.
+3. **Files under 300 lines** (`tools/gates/file-size.sh`, a ratchet that may only fall).
+4. **Money is integer minor units.** No `f64` near money; rates are parts per million.
+5. **The clock is read once**, at the entry point, and passed down as `now_ms`.
+6. **One venue per request, one image per handler.**
+7. **Closed vocabularies stay closed.** Statuses and currencies come from the kernel through
+   `tools/gen-vocab`; an order's channel and fulfilment kind are closed sets.
+8. **Every UI string in sq, en and uk**, with ASCII quotes in JavaScript strings.
+9. **Nobody is scored.** No rating, ranking or tier of a courier, customer or staff member.
+10. **A new gate proves it can fire** with a `.prove.sh` before it is trusted, and anything broken on
+    purpose to prove it is restored in the same change.
+
+Heavy or external dependencies go behind an off-by-default Cargo feature, with a short comparison of
+alternatives in the change (see `CLAUDE.md`, "Feature discipline").
+
+## Pull requests
+
+- One concern per pull request; the template asks for the evidence and for what you could not verify.
+- Keep commit subjects in the house style: `area: what changed, in plain words`
+  (see `git log --oneline`).
+- CI must be green: `.github/workflows/ci.yml` runs the product crates, every gate, the browser
+  module tests, the wasm32 build and the offline-courier browser test.
+- Documentation that cites a path must cite one that exists (`tools/gates/paths.sh` checks the
+  core documents).
+
+## Security
+
+Never open a public issue for a vulnerability; see [`SECURITY.md`](SECURITY.md).
 
 ## Trademark
 
-"dowiz" / "DeliveryOS" are trademarks of the project owner (see `NOTICE`). Code
-contributions do not grant trademark rights. See `TRADEMARK.md` for usage policy.
-
-## Reporting security issues
-
-Do not open public issues for security vulnerabilities. Contact the owner privately.
+"dowiz" is a trademark of the project owner (see `NOTICE` and `TRADEMARK.md`). Contributing code
+does not grant trademark rights.

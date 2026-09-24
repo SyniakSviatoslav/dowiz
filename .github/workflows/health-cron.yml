@@ -1,0 +1,76 @@
+name: Production health
+
+# EVERY 15 MINUTES, READ-ONLY. tools/live-checks/health.sh probes each live venue and the platform:
+# the Worker answers, the storefront is served WITH its CSP header, the menu has dishes, the kernel
+# prices a wait from the venue's own profile, an order id alone is refused, the four app shells and
+# the manifest are served. It logs in nowhere, places nothing, and needs no secret. The one POST is
+# the ETA quote, which computes and stores nothing (workers/api/src/eta.rs::quote).
+#
+# A FAILURE IS LOUD: the job goes red with the failing rows in the log and the step summary, and --
+# when the repo has a TELEGRAM_BOT_TOKEN secret -- one message to the ops chat. Without that secret
+# the red run and GitHub's own failure e-mail are the alert.
+#
+# Replaces heartbeat-monitor.yml, which probed a Cloudflare tunnel to a box the product no longer
+# runs on (it answered 530 on 2026-09-24).
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      venues:
+        description: 'Space-separated venue slugs (default: sushi-durres dubin-sushi)'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: health-cron
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/live-checks
+      - name: probe production
+        id: probe
+        env:
+          HEALTH_VENUES: ${{ github.event.inputs.venues || vars.HEALTH_VENUES || 'sushi-durres dubin-sushi' }}
+        run: |
+          set +e
+          bash tools/live-checks/health.sh > health.txt 2>&1
+          rc=$?
+          cat health.txt
+          {
+            echo '### Production health'
+            echo
+            echo '```'
+            cat health.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          grep '^FAIL' health.txt | head -12 > failing.txt
+          exit $rc
+
+      - name: tell the ops chat
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ vars.OPS_TELEGRAM_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::warning::production health FAILED; no TELEGRAM_BOT_TOKEN secret or OPS_TELEGRAM_CHAT_ID variable, so the red run is the only alert"
+            exit 0
+          fi
+          text="dowiz production health FAILED
+          $(cat failing.txt 2>/dev/null)
+          $RUN_URL"
+          resp=$(curl -sS --max-time 15 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=${text}")
+          echo "$resp" | grep -q '"ok":true' || { echo "::error::Telegram alert was not delivered: $resp"; exit 1; }

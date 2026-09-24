@@ -1,0 +1,23 @@
+# Repository topics for github.com/SyniakSviatoslav/dowiz (Settings -> About -> Topics).
+# The box has no GitHub token and its deploy key cannot set topics, so the owner sets these by hand.
+# GitHub allows at most 20 topics: lowercase, digits and hyphens, 50 characters each.
+restaurant
+restaurant-management
+food-delivery
+online-ordering
+point-of-sale
+table-booking
+progressive-web-app
+cloudflare-workers
+durable-objects
+rust
+webassembly
+event-sourcing
+state-machine
+multi-tenant
+offline-first
+idempotency
+mcp-server
+albania
+agpl-3
+vanilla-js

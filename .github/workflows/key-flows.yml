@@ -1,0 +1,134 @@
+name: Key flows
+
+# THE PER-ROLE LIVE WALKS (e2e/walk/), DAILY, AGAINST A QA HOST ONLY.
+#
+# The walks WRITE: they place TEST orders, book tables, invite TEST staff, take payments and refund
+# what they placed. So they run only when the repository names a QA host in the WALK_HOST secret,
+# and never against a live restaurant: the known venue hosts are refused below even if configured.
+# Without WALK_HOST the run SKIPS with a notice rather than passing in silence.
+#
+# Secrets (repository settings -> Secrets and variables -> Actions):
+#   WALK_HOST              e.g. https://qa-durres.dowiz.org      (required; enables the run)
+#   WALK_LOC               the QA venue's slug, e.g. qa-durres   (defaults to the host's first label)
+#   WALK_OWNER_EMAIL       the QA venue owner's login
+#   WALK_OWNER_PASSWORD
+#   WALK_COURIER_PHONE     a QA courier on that venue (courier phase only)
+#   WALK_COURIER_PASSWORD
+#
+# WHY A CONTAINER. e2e/walk/_lib.mjs refuses to launch a browser when /proc lists more than 26
+# processes (the development box's phantom-process cap) and reads its credentials from
+# /root/.dowiz_owner. Inside the Playwright image the job has its own PID namespace and runs as
+# root, so both hold unchanged.
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: key-flows
+  cancel-in-progress: false
+
+jobs:
+  configured:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        env:
+          WALK_HOST: ${{ secrets.WALK_HOST }}
+        run: |
+          if [ -z "$WALK_HOST" ]; then
+            echo "::notice title=Key flows skipped::No WALK_HOST secret is set. The walks write TEST orders, so they run only against a QA host; set WALK_HOST and the WALK_* credentials to enable them."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$WALK_HOST" in
+            *sushi-durres.dowiz.org*|*dubin-sushi.dowiz.org*|https://dowiz.org|https://dowiz.org/)
+              echo "::error title=Refused::WALK_HOST points at a live venue or the platform. The walks write; use a QA venue."
+              exit 1 ;;
+          esac
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+  walk:
+    needs: configured
+    if: needs.configured.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+    env:
+      HOST: ${{ secrets.WALK_HOST }}
+      OUT: ${{ github.workspace }}/walk-out
+    steps:
+      - uses: actions/checkout@v4
+      - name: install the playwright library (the browsers are in the image)
+        run: npm install --no-save --no-package-lock playwright@1.63.0
+      - name: credentials file
+        env:
+          WALK_LOC: ${{ secrets.WALK_LOC }}
+          OWNER_EMAIL: ${{ secrets.WALK_OWNER_EMAIL }}
+          OWNER_PASSWORD: ${{ secrets.WALK_OWNER_PASSWORD }}
+          QA_COURIER_PHONE: ${{ secrets.WALK_COURIER_PHONE }}
+          QA_COURIER_PASSWORD: ${{ secrets.WALK_COURIER_PASSWORD }}
+        run: |
+          umask 077
+          {
+            echo "export OWNER_EMAIL='$OWNER_EMAIL'"
+            echo "export OWNER_PASSWORD='$OWNER_PASSWORD'"
+            echo "export QA_COURIER_PHONE='$QA_COURIER_PHONE'"
+            echo "export QA_COURIER_PASSWORD='$QA_COURIER_PASSWORD'"
+          } > /root/.dowiz_owner
+          loc="$WALK_LOC"
+          [ -n "$loc" ] || loc=$(echo "$HOST" | sed -E 's#^https?://##; s#\..*##')
+          echo "LOC=$loc" >> "$GITHUB_ENV"
+          mkdir -p "$OUT"
+      # The phases in dependency order (each script's header says what it needs from the one
+      # before). A failing phase does not stop the rest; `cleanup` always runs; the job fails when
+      # any phase reported a FAIL.
+      - name: walk every role
+        working-directory: e2e/walk
+        shell: bash
+        run: |
+          set +e
+          fails=0
+          phase() {
+            echo "::group::$*"
+            timeout 600 node "$@"; rc=$?
+            echo "::endgroup::"
+            echo "| \`$*\` | $rc |" >> "$OUT/table.md"
+            [ $rc -eq 0 ] || fails=$((fails + 1))
+          }
+          echo "| phase | FAILs (exit code) |" > "$OUT/table.md"
+          echo "|---|---|" >> "$OUT/table.md"
+          phase guest.mjs browse
+          phase owner.mjs setup
+          phase guest.mjs orders
+          phase guest.mjs book
+          phase owner.mjs bookings
+          phase owner.mjs orders
+          phase waiter.mjs claim
+          phase guest.mjs qr
+          phase waiter.mjs confirm
+          phase kitchen.mjs claim
+          phase kitchen.mjs cook
+          phase waiter.mjs pay
+          phase courier.mjs
+          phase owner.mjs refunds
+          phase owner.mjs panes
+          phase guest.mjs bookcancel
+          phase owner.mjs cleanup
+          { echo '### Key flows'; echo; cat "$OUT/table.md"; } >> "$GITHUB_STEP_SUMMARY"
+          echo "phases with FAILs: $fails"
+          [ $fails -eq 0 ]
+      - name: keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: walk-logs
+          path: walk-out/
+          retention-days: 14

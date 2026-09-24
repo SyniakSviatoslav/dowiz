@@ -1,0 +1,51 @@
+name: Bug report
+description: Something in a dowiz app or route does not do what it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. A security problem does NOT belong here: see SECURITY.md for the private channel.
+        Please do not paste customer names, phone numbers, addresses, tokens or passwords.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      options:
+        - Storefront (guest)
+        - Owner console (/admin/)
+        - Room app (/room/)
+        - Courier app (/courier/)
+        - Platform (dowiz.org)
+        - API / Worker
+        - Kernel or hub crate
+        - Tooling, gates or CI
+    validations: { required: true }
+  - type: input
+    id: host
+    attributes:
+      label: Host and page
+      placeholder: https://<venue>.dowiz.org/admin/ -> Orders
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened
+    validations: { required: true }
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: The response status and body, a console error, a screenshot, or the failing test and its exact output. A 200 alone is not evidence that something works.
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      placeholder: Android 14, Chrome 131

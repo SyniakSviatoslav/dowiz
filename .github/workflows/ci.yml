@@ -1,171 +1,172 @@
 name: CI
-on: [push, pull_request]
+
+# WHAT A GREEN BADGE HERE MEANS: every crate the live product is made of passed its own suite, every
+# gate in tools/gates/ exited 0 after its proof showed it can fire, the browser modules passed their
+# node tests, the Worker compiled for wasm32 with the pinned toolchain, and the courier's offline
+# queue worked in a real browser. docs/testing.md maps each job to what it proves.
+#
+# There is NO cargo workspace: each crate is entered with `cd`. `cargo -p` or `--manifest-path`
+# from the root resolves the wrong target graph and can pass as exit 0 (CLAUDE.md, "Build model").
+# The toolchain is pinned by rust-toolchain.toml (1.96.1); rustup applies it in every crate dir.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: '1.96.1'
 
 jobs:
-  test:
+  # THE CRATES THE LIVE PRODUCT IS MADE OF. Until 2026-09-21 nothing ran the order log, the storage
+  # format or a single Worker route; scripts/verify-hub.sh is the same list for a laptop.
+  product:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cd kernel && cargo test --lib
-      - run: cd engine && cargo test --lib
-      - run: cd apps/courier && cargo test
-
-  # THE CRATES THE LIVE PRODUCT IS MADE OF. `test` above runs the kernel, the
-  # engine and the courier app; until this job existed nothing ran the order
-  # log, the storage format, the tables that replaced D1, or a single Worker
-  # route. Four hundred and fifty tests, no gate. Mirrors scripts/verify-hub.sh.
-  hub:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      # No workspace: each crate is standalone and is entered on purpose.
-      - run: cd crates/bebop-store && cargo test
-      - run: cd crates/dowiz-core && cargo test
-      - run: cd crates/dowiz-hub && cargo test
-      - run: cd workers/api && cargo test
-      # A second implementation of the same owner/courier/storefront routes as the
-      # Worker, native-spa-server re-implements the surfaces in Rust for venues that
-      # want to run on their own machine. It was never tested by CI, so two of its
-      # AI assistant configuration tests had been failing on developer boxes with
-      # nothing reporting it. This runs those tests so regressions are caught.
-      - run: cd tools/native-spa-server && cargo test
-      # The generator for the browsers' status/currency vocabulary. It LINKS
-      # dowiz-core and calls it -- no regex over order_machine.rs -- and
-      # cross-checks its own derivation against FSM_GOLDEN_SIGNATURE, so a
-      # kernel change that moves the FSM fails here before it reaches the gate.
-      - run: cd tools/gen-vocab && cargo test
-      - name: the SQL ratchet (may only fall)
-        run: sh tools/gates/no-sql.sh
-      - name: the file-size ratchet (may only fall)
-        run: sh tools/gates/file-size.sh
-      - name: one venue per request (may only fall)
-        run: sh tools/gates/one-venue.sh
-      # THREE GATES EXISTED AND NONE OF THEM RAN. `one-image.sh` and
-      # `vocabulary.sh` were written, proved to fire, committed -- and never
-      # added here, so each was an instrument reporting to nobody. That is the
-      # failure this repo keeps a catalogue of, and it had happened twice in the
-      # same week. `clock.sh` joins them in the same commit rather than later.
-      - name: one image per transaction (may only fall)
-        run: sh tools/gates/one-image.sh
-      - name: the clock is read in one place (may only fall)
-        run: sh tools/gates/clock.sh
-      - name: the clients speak the kernel's vocabulary
-        run: sh tools/gates/vocabulary.sh
-      # P4's expensive half. `vocabulary.sh` above refuses a status with no word
-      # and no colour; this one refuses a committed vocab.js that is not what
-      # the kernel emits, and a hand copy of the status set coming back. It
-      # compiles Rust, so it is the slowest gate here by two orders of
-      # magnitude -- CI only, never a pre-commit hook.
-      - name: the client vocabulary is generated, not retyped
-        run: sh tools/gates/vocab.sh
-      # Prose is never executed, which is how CLAUDE.md spent an unknown length
-      # of time telling every reader the FSM was at `kernel/src/order_machine.rs`
-      # -- a file that has never existed. This executes the documents' own
-      # citations.
-      - name: the documents cite files that exist
-        run: sh tools/gates/paths.sh
-      # The two halves of the offline queue are written in different languages
-      # in different files by different people. This pairs them: a route the
-      # phone can replay must name `idempotency::guard` on the server.
-      - name: every route a phone can replay is idempotent
-        run: sh tools/gates/idempotent.sh
-      # A capability that exists, compiles and is TESTED, and no live path
-      # reaches. `StockLedger::stranded()` was in that state from the day it
-      # was written; so was `worker_errors`, which never received a row. A
-      # green suite is not evidence that anything is switched on.
-      - name: nothing was built that nothing calls
-        run: python3 tools/gates/unreached.py
-      # Trust is a signed capability, never a score (DECISIONS.md OD-8).
-      # CLAUDE.md said a CI job named `no-courier-scoring` enforced this. It
-      # never existed -- the red line rested on one type-system property and a
-      # paragraph. This is that job.
-      - name: nobody is scored
-        run: sh tools/gates/no-scoring.sh
-      # `--tap: 44px` is declared in `lib/tokens.css` and ignored by eight
-      # controls. The person tapping them is a waiter holding plates or a
-      # courier in the rain; a miss is a wrong order, not an annoyance.
-      - name: a control a thumb can hit
-        run: sh tools/gates/tap-size.sh
-      # money.rs:1 says zero floats, ever; this counts the ones left.
-      - name: money is not a float
-        run: sh tools/gates/float-money.sh
-      # A marketing send needs a `Consented`, which only the consent fold makes.
-      - name: nobody is messaged without consent
-        run: sh tools/gates/consent.sh
-      # An order's source is a closed set that one function writes (G4); the
-      # proof runs first so a gate that cannot fire is caught before it passes.
-      - name: an order's channel is a member of the set
-        run: sh tools/gates/channel-closed.prove.sh && sh tools/gates/channel-closed.sh
-      # THE DEPENDENCY POLICY GATE THAT RAN NOWHERE. `deny.toml` bans yanked
-      # crates, wildcards and disallowed licences, and `CLAUDE.md` described a
-      # `.husky/pre-commit` hook that runs it -- there is no `.husky/`
-      # directory in this tree and no CI step either, so the file was a policy
-      # nothing applied. A config is not a gate.
-      - name: the dependency policy actually runs
-        run: |
-          cargo install --locked cargo-deny || cargo install cargo-deny
-          cargo deny --manifest-path crates/dowiz-core/Cargo.toml check
-      # The conservation audit itself needs live venues and an owner token, so
-      # it cannot run here. Its PROOF can: the gate is run against a stubbed
-      # platform and each law is checked for going red when it should and
-      # green when it should not. A gate whose alarm has never been heard is
-      # the failure this repo keeps a catalogue of.
-      - name: the conservation gate fires as described
-        run: node e2e/gates/conservation.prove.mjs
-
-  mutations:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-mutants
-      - run: cd kernel && cargo mutants --in-package dowiz-kernel --file src/trinary.rs --file src/eigen.rs --file src/pid.rs --file src/numerical_guard.rs --file src/delta.rs --timeout 30
-
-  fuzz:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
-      - run: cargo install cargo-fuzz
-      - run: cd kernel && for target in fuzz_trinary fuzz_eigen fuzz_sanitize; do timeout 60 cargo fuzz run $target -- -max_total_time=30; done
-
-  # THE ONLY `e2e/kit-regression` GATE THAT CAN RUN IN CI. Every other one in
-  # that directory points at the live venue; this one serves
-  # `workers/api/public/` from disk over loopback and answers `/api/` from a
-  # counting stub. It MUST stay that way: half of what it proves is a refusal
-  # being REPLAYED, and proving that against a real restaurant would be the bug.
-  # THE FORMAT, READ FOUR WAYS (docs/design/BLUEPRINT-BEBOP-IN-WASM-2026-09-23.md).
-  # One bebop KV image; the native reader, the wasm32 module under node and an
-  # independent Python reader must agree, and a cut image must be refused by
-  # all of them. bebop.bin is AArch64-only, so here it prints NOT MEASURED and
-  # the gate needs the other three. The module's size is a ratchet.
-  bebop-wasm:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
-        with: { toolchain: '1.96.1', targets: wasm32-unknown-unknown }
+        with: { toolchain: '${{ env.RUST_TOOLCHAIN }}' }
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/bebop-store
+            crates/dowiz-core
+            crates/dowiz-hub
+            crates/bebop-wasm
+            workers/api
+            tools/native-spa-server
+            tools/gen-vocab
+      - name: bebop-store (the image format)
+        run: cd crates/bebop-store && cargo test
+      - name: dowiz-core (the kernel)
+        run: cd crates/dowiz-core && cargo test
+      - name: dowiz-hub (one venue's images as pure logic)
+        run: cd crates/dowiz-hub && cargo test
+      # The room's amend and pay deciders built into the wasm32 module: the browser and the
+      # server must produce the same bytes (D7 phase 1).
+      - name: bebop-wasm with the room deciders
+        run: cd crates/bebop-wasm && cargo test --features decide
+      - name: workers/api (every route's pure half)
+        run: cd workers/api && cargo test
+      # The native twin of the owner/courier/storefront routes. Never tested before 2026-09-21,
+      # so two of its tests had been failing on developer boxes with nothing reporting it.
+      - name: native-spa-server
+        run: cd tools/native-spa-server && cargo test
+      # Links dowiz-core and cross-checks FSM_GOLDEN_SIGNATURE, so a kernel change that moves the
+      # FSM fails here before it reaches a browser.
+      - name: gen-vocab
+        run: cd tools/gen-vocab && cargo test
+
+  # EVERY GATE, ONE TABLE. run-all.sh discovers tools/gates/*.sh by glob, so a gate added to that
+  # directory runs here without editing this file -- three gates once sat committed and ran
+  # nowhere. Each *.prove.sh runs before its gate. --cargo adds vocab.sh (compiles gen-vocab) and
+  # the bebop-wasm four-reader gate (bebop.bin is AArch64-only: NOT MEASURED here, and said so).
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: '${{ env.RUST_TOOLCHAIN }}', targets: wasm32-unknown-unknown }
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: sh crates/bebop-wasm/gate.sh
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            tools/gen-vocab
+            crates/bebop-wasm
+      # vocab.sh runs `cargo run --offline`; a cold runner has nothing to be offline with.
+      - name: fetch gen-vocab's dependencies
+        run: cd tools/gen-vocab && cargo fetch
+      - name: every gate, with its proof
+        run: sh tools/gates/run-all.sh --cargo
 
-  offline-writes:
+  browser-units:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # NOT `fetch-depth: 1`. The RED half serves the courier surface as it was
-      # BEFORE the outbox, out of the commit that last shipped it, and clicks
-      # the real button on it. With no history there is no RED half.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: node --test over every browser module test
+        run: node --test $(find workers/api/public -name '*.test.mjs' | sort)
+
+  # THE WORKER, COMPILED FOR WHAT IT RUNS ON. The distro rustc on the dev box cannot build wasm32;
+  # the pinned upstream toolchain can. A native `cargo test` does not prove the wasm32 build links.
+  wasm32:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: '${{ env.RUST_TOOLCHAIN }}', targets: wasm32-unknown-unknown }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: workers/api }
+      - name: workers/api for wasm32-unknown-unknown
+        run: cd workers/api && cargo build --release --target wasm32-unknown-unknown
+
+  # THE COURIER'S OFFLINE QUEUE, IN A REAL BROWSER. Served from disk over loopback with a counting
+  # stub for /api/: half of what it proves is a refusal being REPLAYED, and proving that against a
+  # real restaurant would be the bug. `playwright` is the one library it needs (no @playwright/test).
+  offline-writes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # NOT fetch-depth 1: the RED half serves the courier app as it was BEFORE the outbox, out of
+      # the commit that last shipped it, and clicks the real button on it.
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: npm ci --ignore-scripts && npx playwright install --with-deps chromium
-      - run: node e2e/kit-regression/outbox.mjs
-      # Same shape, the other half of D2: the courier reopens the app underground.
-      - run: node e2e/kit-regression/courier-cold.mjs
+      # There is no root package.json; the library is installed where node's resolution finds it
+      # from e2e/, pinned to the version the tree was written against.
+      - name: install playwright
+        run: |
+          npm install --no-save --no-package-lock playwright@1.63.0
+          npx playwright install --with-deps chromium
+      - name: the outbox replays a queued tap once
+        run: node e2e/kit-regression/outbox.mjs
+      - name: the courier app reopens with no network
+        run: node e2e/kit-regression/courier-cold.mjs
+
+  # deny.toml bans yanked crates, wildcards and disallowed licences. A config is not a gate; this is.
+  supply-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: '${{ env.RUST_TOOLCHAIN }}' }
+      - name: install cargo-deny
+        run: cargo install --locked cargo-deny
+      - name: cargo deny check (dowiz-core)
+        run: cargo deny --manifest-path crates/dowiz-core/Cargo.toml check
+
+  # Tested, not served to a venue: the std facade, the render engine, the native courier surface.
+  legacy-crates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: '${{ env.RUST_TOOLCHAIN }}' }
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            kernel
+            engine
+            apps/courier
+      - run: cd kernel && cargo test --lib
+      - run: cd engine && cargo test --lib
+      - run: cd apps/courier && cargo test
