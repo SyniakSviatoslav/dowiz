@@ -569,7 +569,7 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
         // is terminal, and the ingredients were already consumed at PREPARING.
         "collected" => "PICKED_UP",
         "cancel" => "CANCELLED",
-        other => return Response::error(format!("unknown action: {other}"), 400),
+        other => return idem.refused(&place, 400, &format!("unknown action: {other}")).await,
     };
 
     // ── THE TRANSITION AND THE SHELF, IN ONE OBJECT TURN ──
@@ -597,10 +597,15 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
     let advanced: crate::command::advance::AdvanceOut =
         match crate::command::send(&place, "advance", &input).await {
             Ok(v) => v,
-            Err((status, said)) => return Response::error(said, status),
+            Err((status, said)) => return idem.refused(&place, status, &said).await,
         };
-    let merged: Value = serde_json::from_str(&advanced.merged)
-        .map_err(|e| Error::RustError(format!("hub answered unreadable json: {e}")))?;
+    let merged: Value = match serde_json::from_str(&advanced.merged) {
+        Ok(v) => v,
+        Err(e) => {
+            let e = Error::RustError(format!("hub answered unreadable json: {e}"));
+            return idem.answered(&place, Err(e)).await;
+        }
+    };
 
     idem.done(&place, 200, &merged.to_string()).await;
     Response::from_json(&merged)
@@ -900,7 +905,7 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         }
         crate::bell_route::edit_station(&mut p, station);
         // ── THE RECIPE, AND WHAT FOLLOWS FROM IT ──
-        // Each line is snapshotted from the supply as it is now; the dish's
+        // Each line is scaled from the supply as it is now and stored as {supply, qty}; the dish's
         // nutrition, ingredient list, weight and cost are summed from the
         // lines. A value the owner typed in the same request wins over the
         // sum, and stays marked as theirs.

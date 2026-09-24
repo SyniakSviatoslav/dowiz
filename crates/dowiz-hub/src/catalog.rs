@@ -17,6 +17,22 @@ use bebop_store::Store;
 
 use crate::HubError;
 
+pub mod bom;
+
+/// How large an image `projected` may build to measure a catalogue that does
+/// NOT fit: four ceilings, so an import that would overflow is reported with
+/// its number (up to 4000 per mille) instead of only "no".
+const PROJECTION_BYTES: usize = 4 * DEFAULT_CATALOG_BYTES;
+
+/// What saving the catalogue now would spend, and whether it can be saved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Projection {
+    /// Against the real ceiling, so `used_per_mille` passes 1000 when it overflows.
+    pub usage: crate::Usage,
+    /// `to_bytes` would succeed.
+    pub fits: bool,
+}
+
 /// 1 MiB is generous for a menu: fifty products of JSON is tens of kilobytes.
 pub const DEFAULT_CATALOG_BYTES: usize = 1024 * 1024;
 
@@ -84,6 +100,20 @@ impl Catalog {
     /// reads).
     pub fn to_bytes(&mut self) -> Result<Vec<u8>, HubError> {
         Ok(self.kv.compacted_bytes_fit(DEFAULT_CATALOG_BYTES)?)
+    }
+
+    /// What [`Self::to_bytes`] would spend, measured by compacting a copy, and
+    /// whether it would succeed. Writes nothing: a DRY RUN asks this before an
+    /// import, so "it would not fit" is said before Apply, not after it.
+    /// Beyond four ceilings the answer is the store's own `ArenaFull` error.
+    pub fn projected(&self) -> Result<Projection, HubError> {
+        let ceiling = crate::ceiling_cells(DEFAULT_CATALOG_BYTES);
+        let (bytes, fits) = match self.kv.compacted_bytes(DEFAULT_CATALOG_BYTES) {
+            Ok(b) => (b, true),
+            Err(e) if crate::e_is_full(&e) => (self.kv.compacted_bytes(PROJECTION_BYTES)?, false),
+            Err(e) => return Err(e.into()),
+        };
+        Ok(Projection { usage: crate::usage_of(&Store::from_bytes(&bytes), ceiling), fits })
     }
 
     /// A fingerprint of the whole catalogue. Two hubs holding the same menu
@@ -189,80 +219,4 @@ impl Catalog {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_catalogue_round_trips_through_bytes() {
-        let mut c = Catalog::create().unwrap();
-        c.set_location(r#"{"name":"Dubin & Sushi","currency":"ALL"}"#);
-        c.set_category("cat_chef", r#"{"name":"Chef's Picks"}"#);
-        c.set_product("p1", r#"{"name":"Sake Futomaki","price":900}"#);
-        c.set_product("p2", r#"{"name":"Ebi Futomaki","price":850}"#);
-        let bytes = c.to_bytes().unwrap();
-
-        let back = Catalog::load(&bytes).unwrap();
-        assert!(back.location().unwrap().contains("Dubin"));
-        assert_eq!(back.products().len(), 2);
-        assert_eq!(back.categories().len(), 1);
-        assert!(back.product("p1").unwrap().contains("900"));
-    }
-
-    #[test]
-    fn products_and_categories_do_not_leak_into_each_other() {
-        let mut c = Catalog::create().unwrap();
-        c.set_product("x", "{}");
-        c.set_category("x", "{}");
-        let bytes = c.to_bytes().unwrap();
-        let back = Catalog::load(&bytes).unwrap();
-        // Same id, different namespaces: a prefix collision here would show one
-        // as the other.
-        assert_eq!(back.products().len(), 1);
-        assert_eq!(back.categories().len(), 1);
-        assert_eq!(back.products()[0].0, "x");
-        assert_eq!(back.categories()[0].0, "x");
-    }
-
-    /// The root is a fingerprint of the CONTENT, so an identical menu on two
-    /// hubs is checkably identical and a changed price is checkably different.
-    #[test]
-    fn the_root_follows_the_content() {
-        let mut a = Catalog::create().unwrap();
-        a.set_product("p1", r#"{"price":900}"#);
-        let _ = a.to_bytes().unwrap();
-
-        let mut b = Catalog::create().unwrap();
-        b.set_product("p1", r#"{"price":900}"#);
-        let _ = b.to_bytes().unwrap();
-        assert_eq!(a.root(), b.root(), "same menu, same root");
-
-        b.set_product("p1", r#"{"price":950}"#);
-        let _ = b.to_bytes().unwrap();
-        assert_ne!(a.root(), b.root(), "one changed price must change the root");
-    }
-
-    /// A deleted promo must be gone from the IMAGE, not just from the in-memory
-    /// entries. The commit rewrites all four arrays, so a delete that only
-    /// dropped the entry would still be readable after a reload.
-    #[test]
-    fn a_deleted_promo_does_not_come_back_after_a_reload() {
-        let mut c = Catalog::create().unwrap();
-        c.set_promo("SAVE10", r#"{"code":"SAVE10","kind":"percent","value":10}"#);
-        c.set_promo("WELCOME", r#"{"code":"WELCOME","kind":"fixed","value":300}"#);
-        let _ = c.to_bytes().unwrap();
-
-        assert!(c.remove_promo("SAVE10"));
-        assert!(!c.remove_promo("SAVE10"), "removing it twice is not a second delete");
-        let bytes = c.to_bytes().unwrap();
-
-        let back = Catalog::load(&bytes).unwrap();
-        assert_eq!(back.promos().len(), 1);
-        assert!(back.promo("SAVE10").is_none(), "the deleted code is readable after reload");
-        assert!(back.promo("WELCOME").is_some());
-    }
-
-    #[test]
-    fn load_refuses_a_non_store() {
-        assert!(matches!(Catalog::load(&[0u8; 4096]), Err(HubError::NotAHub)));
-    }
-}
+mod tests;

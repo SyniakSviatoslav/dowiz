@@ -72,12 +72,39 @@ pub async fn set_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
     let rec = crate::hubstore::with_catalog(&place, move |cat| {
         let existing: Value =
             cat.supply(&id).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
+        if let Some(why) = unit_change(&body, &existing) {
+            return Err(Error::RustError(format!("unit-change: {why}")));
+        }
         let rec = record(&id, &body, &existing);
         cat.set_supply(&id, &rec.to_string());
         Ok(rec)
     })
-    .await?;
-    Response::from_json(&rec)
+    .await;
+    match rec {
+        Ok(rec) => Response::from_json(&rec),
+        Err(e) => match e.to_string().split_once("unit-change: ") {
+            Some((_, why)) => Response::error(why.to_string(), 409),
+            None => Err(e),
+        },
+    }
+}
+
+/// Why this write would change what the supply is COUNTED in, or `None`. PURE.
+///
+/// The CSV importer refuses exactly this (`import::recipes::supplies`), and the
+/// console form did not (audit D35): `g` -> `unit` re-reads every stock count,
+/// every recipe line and every snapshot in the new unit -- 500 g of salmon
+/// becomes 500 salmon. A new supply, or one with no unit yet, may take any.
+pub(crate) fn unit_change(body: &SupplyIn, existing: &Value) -> Option<String> {
+    let was = existing.get("unit").and_then(Value::as_str).filter(|u| !u.is_empty())?;
+    let now = body.unit.as_deref().map(str::trim).filter(|u| !u.is_empty())?;
+    (was != now).then(|| {
+        format!(
+            "{} is counted in {was}; changing it to {now} would change what every stock count and \
+             recipe line means. Add a new ingredient in {now} instead",
+            body.id.trim()
+        )
+    })
 }
 
 /// Why this supply cannot be written, or its trimmed id. PURE.
@@ -112,10 +139,16 @@ pub(crate) fn check(body: &SupplyIn) -> std::result::Result<String, String> {
 
 /// The stored record: each field the body's value, else what was there, else
 /// the default. PURE.
+///
+/// A field with no value is LEFT OUT, not stored as `null` (2026-09-24): every
+/// reader takes an absent key as null (`Value::get`, the console's `!= null`),
+/// and the catalogue image spends a cell per byte: leaving them out took
+/// dubin-sushi's modelled menu with 75 supplies and 73 recipes from 855 to
+/// 832 per mille of its ceiling.
 pub(crate) fn record(id: &str, body: &SupplyIn, existing: &Value) -> Value {
     let keep = |key: &str, given: Option<Value>, default: Value| given.or_else(|| existing.get(key).cloned()).unwrap_or(default);
     let opt = |key: &str, given: Option<Value>| given.or_else(|| existing.get(key).cloned()).unwrap_or(Value::Null);
-    json!({
+    let mut rec = json!({
         "id": id,
         "name": keep("name", body.name.clone().map(Value::String), json!(id)),
         "unit": keep("unit", body.unit.clone().map(Value::String), json!("g")),
@@ -133,7 +166,11 @@ pub(crate) fn record(id: &str, body: &SupplyIn, existing: &Value) -> Value {
         // Saving through the editor is an act of keeping: a retired supply
         // written again comes back to the list unless the body says otherwise.
         "active": json!(body.active.unwrap_or(true)),
-    })
+    });
+    if let Some(m) = rec.as_object_mut() {
+        m.retain(|_, v| !v.is_null());
+    }
+    rec
 }
 
 /// `POST /api/owner/supplies/:id/retire` — off the list, ledger kept. A dish

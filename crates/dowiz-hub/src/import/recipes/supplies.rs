@@ -144,6 +144,23 @@ pub(super) fn read(text: &str, opts: &Opts, draft: &mut RecipeDraft) -> bool {
                 }
             },
         };
+        let weight_per_unit = match (sheet.get(cells, "weight_per_unit"), unit.0) {
+            ("", _) => None,
+            (raw, num::Base::Unit) => match grams(raw) {
+                Ok(g) => Some(g),
+                Err(why) => {
+                    w.push(format!("ingredients row {row} ({name}): weight per unit {raw:?} {why}; left as it was"));
+                    None
+                }
+            },
+            (raw, base) => {
+                w.push(format!(
+                    "ingredients row {row} ({name}): weight per unit {raw:?} is for pieces; this supply is counted in {}, so a line's weight is its quantity; left out",
+                    base.as_str()
+                ));
+                None
+            }
+        };
         let supplier = Some(sheet.get(cells, "supplier").to_string()).filter(|s| !s.is_empty());
         draft.supplies.push(DraftSupply {
             id,
@@ -157,10 +174,23 @@ pub(super) fn read(text: &str, opts: &Opts, draft: &mut RecipeDraft) -> bool {
             fat,
             carbs,
             low_at,
+            weight_per_unit,
             supplier,
         });
     }
     true
+}
+
+/// "12", "12 g", "0,012 kg" as grams. A weight in ml or pieces is refused.
+fn grams(raw: &str) -> Result<f64, String> {
+    let (n, word) = num::split_unit(raw);
+    let per = match word.map(num::unit_of) {
+        None => 1,
+        Some(Some((num::Base::G, per))) => per,
+        Some(_) => return Err("is not in g or kg".into()),
+    };
+    let d = num::parse_decimal(n)?;
+    Ok(d.mant as f64 * per as f64 / 10f64.powi(d.scale as i32))
 }
 
 fn cost_of(raw: &str, scale: CostScale, currency: &str, unit: (num::Base, i128)) -> Result<i64, String> {

@@ -58,8 +58,10 @@ async fn bulk(mut req: Request, ctx: RouteContext<crate::Req>, kind: Kind) -> Re
         return Response::error("the file is larger than a spreadsheet of supplies or recipes", 413);
     }
     // Everything the draft is judged against is read SERVER-SIDE, now.
-    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
-    let (draft, preview) = read(&cat, &text, kind, scale, ctx.data.now_ms);
+    let mut cat = crate::hubstore::load_catalog(&place).await?.catalog;
+    let (mut draft, preview) = read(&cat, &text, kind, scale, ctx.data.now_ms);
+    let room = projected(&mut cat, &draft, kind, retire);
+    let no_room = room::refusal(&room, &mut draft.warnings);
     let mut summary = json!({
         "applied": apply,
         "supplies": draft.supplies.len(),
@@ -70,6 +72,7 @@ async fn bulk(mut req: Request, ctx: RouteContext<crate::Req>, kind: Kind) -> Re
         "flattened": draft.flattened,
         "warnings": draft.warnings,
         "rows": preview,
+        "catalogue": room,
     });
     if !apply {
         return Response::from_json(&summary);
@@ -78,6 +81,11 @@ async fn bulk(mut req: Request, ctx: RouteContext<crate::Req>, kind: Kind) -> Re
     // separator or a missing header, not an intent.
     if draft.supplies.is_empty() && draft.recipes.is_empty() {
         return Response::error(format!("nothing to import: {}", draft.warnings.join("; ")), 400);
+    }
+    // The dry run's answer, given again BEFORE the write rather than as a
+    // failed save after it.
+    if let Some(why) = no_room {
+        return Response::error(why, 413);
     }
     let written = crate::hubstore::with_catalog(&place, move |cat| {
         let n = match kind {
@@ -161,17 +169,26 @@ pub async fn owner_products(req: Request, ctx: RouteContext<crate::Req>) -> Resu
             Err(r) => return Ok(r),
         };
     let want = req.url()?.query_pairs().find(|(k, _)| k == "id").map(|(_, v)| v.to_string());
-    let products: Vec<Value> = cat
-        .catalog
-        .products()
-        .into_iter()
-        .filter(|(id, _)| want.as_ref().is_none_or(|w| w == id))
-        .filter_map(|(_, j)| serde_json::from_str(&j).ok())
-        .collect();
+    let products = owner_view(&cat.catalog, want.as_deref());
     let mut res = Response::from_json(&json!({ "products": products }))?;
     // Costs and recipes are the venue's; nothing between here and the owner keeps a copy.
     res.headers_mut().set("cache-control", "private, no-store")?;
     Ok(res)
+}
+
+/// The dishes as the owner reads them, `want` alone if given. PURE. A recipe
+/// is stored lean (`{supply, qty}`); each line is read with its supply's name
+/// and numbers as they are now.
+pub(crate) fn owner_view(cat: &Catalog, want: Option<&str>) -> Vec<Value> {
+    cat.products()
+        .into_iter()
+        .filter(|(id, _)| want.is_none_or(|w| w == id))
+        .filter_map(|(_, j)| serde_json::from_str(&j).ok())
+        .map(|mut p: Value| {
+            crate::recipe::hydrate(&mut p, |s| cat.supply(s));
+            p
+        })
+        .collect()
 }
 
 /// A draft supply as the console's own body. `None` keeps what is stored.
@@ -188,6 +205,7 @@ pub(crate) fn supply_in(d: &DraftSupply) -> SupplyIn {
         fat_per100: d.fat,
         carbs_per100: d.carbs,
         cost_per_basis: d.cost_per_basis,
+        weight_per_unit: d.weight_per_unit,
         supplier: d.supplier.clone(),
         ..SupplyIn::default()
     }
@@ -195,7 +213,7 @@ pub(crate) fn supply_in(d: &DraftSupply) -> SupplyIn {
 
 fn supply_row(s: &DraftSupply, new: bool) -> Value {
     json!({ "id": s.id, "name": s.name, "unit": s.unit, "kind": s.kind, "costPerBasis": s.cost_per_basis,
-            "kcalPer100": s.kcal, "lowAt": s.low_at, "supplier": s.supplier, "new": new })
+            "kcalPer100": s.kcal, "weightPerUnit": s.weight_per_unit, "lowAt": s.low_at, "supplier": s.supplier, "new": new })
 }
 
 fn lines_of(r: &DraftRecipe) -> Vec<BomLineIn> {
@@ -207,7 +225,9 @@ fn recipe_row(cat: &Catalog, r: &DraftRecipe) -> Value {
     let before: Value = cat.product(&r.product_id).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
     let mut after = before.clone();
     let shown = |p: &Value| json!({ "lines": p["bom"].as_array().map_or(0, Vec::len), "kcal": p["nutrition"]["kcal"], "weightG": p["weightG"], "cost": p["cost"] });
-    let err = set_bom(&mut after, &lines_of(r), |s| cat.supply(s), Typed::default()).err();
+    // As Apply writes it: what the owner typed on the dish stays theirs.
+    let err = set_bom(&mut after, &lines_of(r), |s| cat.supply(s), Typed::from_record(&before)).err();
+    crate::recipe::hydrate(&mut after, |s| cat.supply(s));
     json!({ "productId": r.product_id, "dish": before.get("name").cloned().unwrap_or(json!(r.dish)),
             "bom": after["bom"], "before": shown(&before), "after": shown(&after),
             "complete": after["nutritionComplete"], "error": err })
@@ -244,7 +264,9 @@ pub(crate) fn apply_recipes(cat: &mut Catalog, draft: &RecipeDraft) -> std::resu
     for r in &draft.recipes {
         let Some(pj) = cat.product(&r.product_id) else { continue };
         let mut p: Value = serde_json::from_str(&pj).map_err(|e| format!("{}: unreadable: {e}", r.product_id))?;
-        set_bom(&mut p, &lines_of(r), |s| cat.supply(s), Typed::default()).map_err(|e| format!("{}: {e}", r.dish))?;
+        // What the owner typed on this dish stays theirs (audit D19).
+        let typed = Typed::from_record(&p);
+        set_bom(&mut p, &lines_of(r), |s| cat.supply(s), typed).map_err(|e| format!("{}: {e}", r.dish))?;
         cat.set_product(&r.product_id, &p.to_string());
         n += 1;
     }
@@ -253,6 +275,9 @@ pub(crate) fn apply_recipes(cat: &mut Catalog, draft: &RecipeDraft) -> std::resu
     }
     Ok(n)
 }
+
+pub(crate) mod room;
+pub(crate) use room::projected;
 
 #[cfg(test)]
 mod tests;

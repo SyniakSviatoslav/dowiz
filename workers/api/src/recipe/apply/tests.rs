@@ -67,3 +67,50 @@ fn no_lines_clears_the_recipe_and_a_repeat_is_dropped() {
     assert!(set_bom(&mut p, &[], supply, Typed::default()).unwrap().is_none());
     assert_eq!((p["bom"].clone(), p["cost"].clone()), (Value::Null, Value::Null));
 }
+
+// ── G11: recipe <-> published values (audit D19, D40) ───────────────────────
+
+/// D19: the bulk import writes with `Typed::from_record`, so a kcal, a weight
+/// and an ingredient list the owner typed survive a recipe re-import. With
+/// `Typed::default()` -- what bulk.rs passed -- all three were overwritten.
+#[test]
+fn a_reimported_recipe_keeps_what_the_owner_typed() {
+    let mut p = dish();
+    let typed = Typed { nutrition: true, weight: true, ingredients: true };
+    p["ingredients"] = json!(["salmon", "love"]);
+    set_bom(&mut p, &[line("salmon", 35)], supply, typed).unwrap();
+    let marks = Typed::from_record(&p);
+    assert!(marks.nutrition && marks.weight && marks.ingredients, "the record remembers who typed what");
+    let kept = Typed::from_record(&p);
+    set_bom(&mut p, &[line("rice", 90), line("salmon", 35)], supply, kept).unwrap();
+    assert_eq!((p["nutrition"]["kcal"].clone(), p["weightG"].clone()), (json!(1), json!(999)));
+    assert_eq!(p["ingredients"], json!(["salmon", "love"]));
+    assert_eq!(p["cost"], json!(34 + 84), "the cost still follows the new lines");
+    // TWIN: a dish whose values came from the recipe re-derives them.
+    let mut q = dish();
+    set_bom(&mut q, &[line("salmon", 35)], supply, Typed::default()).unwrap();
+    let kept = Typed::from_record(&q);
+    set_bom(&mut q, &[line("rice", 90), line("salmon", 35)], supply, kept).unwrap();
+    assert_eq!((q["nutrition"]["kcal"].clone(), q["weightG"].clone()), (json!(190), json!(125)));
+    assert_eq!(q["ingredients"], json!(["Rice", "Salmon"]));
+}
+
+/// D40: clearing a recipe clears what it derived -- the storefront was left
+/// publishing kcal and ingredients for a recipe that no longer existed -- and
+/// keeps what the owner typed.
+#[test]
+fn clearing_a_recipe_clears_only_what_it_derived() {
+    let mut p = dish();
+    set_bom(&mut p, &[line("rice", 90), line("salmon", 35)], supply, Typed::default()).unwrap();
+    set_bom(&mut p, &[], supply, Typed::default()).unwrap();
+    for k in ["nutrition", "weightG", "ingredients", "bom", "cost", "nutritionComplete"] {
+        assert_eq!(p[k], Value::Null, "{k} followed the recipe out");
+    }
+    // TWIN: typed values stay.
+    let mut q = dish();
+    q["ingredients"] = json!(["salmon"]);
+    set_bom(&mut q, &[line("salmon", 35)], supply, Typed { nutrition: true, weight: true, ingredients: true }).unwrap();
+    set_bom(&mut q, &[], supply, Typed::default()).unwrap();
+    assert_eq!((q["nutrition"]["kcal"].clone(), q["weightG"].clone()), (json!(1), json!(999)));
+    assert_eq!(q["ingredients"], json!(["salmon"]));
+}

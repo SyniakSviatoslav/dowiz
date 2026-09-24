@@ -78,6 +78,9 @@ pub struct DraftSupply {
     pub carbs: Option<f64>,
     /// The reorder threshold, in the base unit; `None` keeps what it was.
     pub low_at: Option<i64>,
+    /// Grams per piece, for a supply counted in pieces: what makes a dish's
+    /// weight follow from a line of `unit`s. `None` keeps what it was.
+    pub weight_per_unit: Option<f64>,
     /// Who the kitchen buys it from, as the file writes it.
     pub supplier: Option<String>,
 }
@@ -152,6 +155,8 @@ pub(super) fn column(name: &str) -> Option<&'static str> {
         "per" | "për" | "cost per" | "price per" | "за" => "per",
         "supplier" | "furnitori" | "furnizuesi" | "постачальник" | "поставщик" => "supplier",
         "low_at" | "low at" | "low" | "min" | "minimum" | "minimumi" | "мінімум" | "минимум" => "low_at",
+        "weight_per_unit" | "weight per unit" | "weightperunit" | "unit weight" | "weight" | "pesha"
+        | "pesha për copë" | "вага" | "вага одиниці" | "вес" => "weight_per_unit",
         "currency" | "monedha" | "валюта" => "currency",
         "category" | "kategoria" | "категорія" | "категория" => "category",
         "kind" | "type" | "lloji" | "тип" | "вид" => "kind",
@@ -217,7 +222,7 @@ impl RecipeDraft {
             .iter()
             .map(|s| {
                 format!(
-                    r#"{{"id":"{}","name":"{}","unit":"{}","kind":{},"category":"{}","costPerBasis":{},"kcalPer100":{},"proteinPer100":{},"fatPer100":{},"carbsPer100":{},"lowAt":{},"supplier":{}}}"#,
+                    r#"{{"id":"{}","name":"{}","unit":"{}","kind":{},"category":"{}","costPerBasis":{},"kcalPer100":{},"proteinPer100":{},"fatPer100":{},"carbsPer100":{},"lowAt":{},"weightPerUnit":{},"supplier":{}}}"#,
                     esc(&s.id),
                     esc(&s.name),
                     s.unit,
@@ -229,6 +234,7 @@ impl RecipeDraft {
                     opt_f(s.fat),
                     opt_f(s.carbs),
                     opt_i(s.low_at),
+                    opt_f(s.weight_per_unit),
                     s.supplier.as_ref().map_or("null".into(), |k| format!("\"{}\"", esc(k)))
                 )
             })

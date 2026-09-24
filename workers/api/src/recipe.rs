@@ -4,19 +4,25 @@
 //! item with a kind (food, condiment, packaging, utensil), a free-text
 //! category, a base unit (g, ml, unit), nutrition per 100 of that unit and a
 //! reorder threshold. A dish's RECIPE is a list of `{supply, qty}` lines, one
-//! portion's worth, each carrying a snapshot of the supply's numbers scaled to
-//! that quantity, so the dish reads the same even after the supply changes.
+//! portion's worth, STORED AS JUST THAT (`dowiz_hub::catalog::bom`). A line
+//! used to carry a snapshot of its supply's numbers too; that cost ~159 bytes
+//! a line and made a 73-recipe menu too large for its catalogue, and nothing
+//! read it: the ledger reads `supply` + `qty`, a sale's cost is stamped from
+//! the ledger's purchases, and the console re-scaled every line from today's
+//! supplies. Names and numbers are now derived on read
+//! ([`lines_of_stored`]); a snapshot line stored before still reads.
 //! Two things the old service never had and the operator asked for: a COST
 //! per supply and a WEIGHT per piece, so a dish's food cost and weight follow
 //! from its components too.
 //!
 //! The hub's stock ledger reads only `bom[].supply` and `bom[].qty`
-//! (`dowiz_hub::stock::bom_of`); every other key on a line is ours.
+//! (`dowiz_hub::stock::bom_of`).
 //!
 //! Taste is authored per dish, never derived: five axes, three levels, an
 //! absent axis is "not declared" (the old contract, `attributes.taste`).
 
 use serde::Deserialize;
+use dowiz_hub::stock::BomLine;
 use serde_json::{json, Value};
 
 pub mod apply;
@@ -55,7 +61,8 @@ pub struct BomLineIn {
     pub qty: i64,
 }
 
-/// One line as stored: the ledger's two keys, then the snapshot.
+/// One line as the dish is derived from it: the ledger's two keys, then its
+/// supply's name and numbers scaled to `qty`. Stored as the first two only.
 #[derive(Debug, Default, Clone)]
 pub struct Line {
     pub supply: String,
@@ -150,8 +157,16 @@ pub fn derive(lines: &[Line]) -> Derived {
     }
 }
 
-/// The stored `bom` array: the ledger's keys first, then the snapshot.
+/// The stored `bom` array: `{supply, qty}` per line, written by the hub's
+/// writer so the ledger's reader and it are one pair.
 pub fn bom_json(lines: &[Line]) -> Value {
+    let lean: Vec<BomLine> = lines.iter().map(|l| BomLine { supply: l.supply.clone(), qty: l.qty }).collect();
+    serde_json::from_str(&dowiz_hub::catalog::bom::to_json(&lean)).expect("the hub's bom writer writes JSON")
+}
+
+/// The lines as the OWNER reads them -- the console's dish sheet and the
+/// import preview: each with its supply's name and numbers. Never stored.
+pub fn bom_view(lines: &[Line]) -> Value {
     json!(lines
         .iter()
         .map(|l| json!({
@@ -161,6 +176,53 @@ pub fn bom_json(lines: &[Line]) -> Value {
             "cost": l.cost, "weightG": l.weight_g.map(|x| x.round()),
         }))
         .collect::<Vec<_>>())
+}
+
+/// A STORED `bom` as lines, each scaled from its supply AS IT IS NOW.
+///
+/// Reads both forms: the lean `{supply, qty}` and the snapshot lines stored
+/// before 2026-09-24, which stay live on a venue until the dish is saved
+/// again. A line whose supply the catalogue no longer holds keeps what its
+/// own snapshot says, else just its id. A line without a supply id or an
+/// integer qty is not a line (the ledger skips it too).
+pub fn lines_of_stored(bom: &Value, supply: impl Fn(&str) -> Option<String>) -> Vec<Line> {
+    let mut out = Vec::new();
+    for l in bom.as_array().map(Vec::as_slice).unwrap_or_default() {
+        let (Some(id), Some(qty)) = (l.get("supply").and_then(Value::as_str), l.get("qty").and_then(Value::as_i64)) else {
+            continue;
+        };
+        out.push(match supply(id).and_then(|j| serde_json::from_str::<Value>(&j).ok()) {
+            Some(sv) => line_of(id, qty, &sv),
+            None => snapshot_of(id, qty, l),
+        });
+    }
+    out
+}
+
+/// What a line's own snapshot says, for a supply that is gone.
+fn snapshot_of(id: &str, qty: i64, l: &Value) -> Line {
+    let text = |k: &str, d: &str| l.get(k).and_then(Value::as_str).unwrap_or(d).to_string();
+    Line {
+        supply: id.to_string(),
+        qty,
+        name: text("name", id),
+        unit: text("unit", "g"),
+        kind: text("kind", KINDS[0]),
+        kcal: num(l, "kcal"),
+        protein: num(l, "protein"),
+        fat: num(l, "fat"),
+        carbs: num(l, "carbs"),
+        cost: l.get("cost").and_then(Value::as_i64),
+        weight_g: num(l, "weightG"),
+    }
+}
+
+/// A stored dish as the owner reads it: its `bom`, if it has one, in the
+/// display form ([`bom_view`] of [`lines_of_stored`]).
+pub fn hydrate(p: &mut Value, supply: impl Fn(&str) -> Option<String>) {
+    if p.get("bom").is_some_and(Value::is_array) {
+        p["bom"] = bom_view(&lines_of_stored(&p["bom"], supply));
+    }
 }
 
 /// A taste map is five known axes at levels 1…3; anything else is refused.
@@ -182,63 +244,4 @@ pub fn validate_taste(m: &serde_json::Map<String, Value>) -> Result<serde_json::
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn salmon() -> Value {
-        json!({ "name": "Salmon", "unit": "g", "kind": "food_ingredient", "kcalPer100": 208, "proteinPer100": 20.4, "fatPer100": 13.4, "carbsPer100": 0, "costPerBasis": 1800 })
-    }
-    fn box_() -> Value {
-        json!({ "name": "Box", "unit": "unit", "kind": "packaging", "costPerBasis": 40, "weightPerUnit": 12 })
-    }
-
-    #[test]
-    fn a_line_scales_per_hundred_and_per_piece() {
-        let s = line_of("salmon", 40, &salmon());
-        assert_eq!(s.kcal.map(|x| x.round()), Some(83.0));
-        assert_eq!(s.cost, Some(720));
-        assert_eq!(s.weight_g, Some(40.0));
-        let b = line_of("box", 2, &box_());
-        assert_eq!(b.kcal, None);
-        assert_eq!(b.cost, Some(80));
-        assert_eq!(b.weight_g, Some(24.0));
-    }
-
-    #[test]
-    fn the_dish_sums_food_only_and_costs_everything() {
-        let lines = vec![line_of("salmon", 40, &salmon()), line_of("box", 1, &box_())];
-        let d = derive(&lines);
-        assert_eq!(d.kcal, 83);
-        assert_eq!(d.protein, 8);
-        assert!(d.nutrition_complete);
-        assert_eq!(d.cost, Some(760));
-        assert_eq!(d.weight_g, Some(40));
-        assert_eq!(d.ingredients, vec!["Salmon".to_string()]);
-    }
-
-    #[test]
-    fn a_food_line_without_kcal_makes_the_sum_incomplete() {
-        let rice = json!({ "name": "Rice", "unit": "g", "kind": "food_ingredient" });
-        let d = derive(&[line_of("salmon", 40, &salmon()), line_of("rice", 90, &rice)]);
-        assert!(!d.nutrition_complete);
-        assert_eq!(d.cost, None);
-        assert_eq!(d.weight_g, Some(130));
-    }
-
-    #[test]
-    fn bom_json_keeps_the_ledgers_keys_first() {
-        let v = bom_json(&[line_of("salmon", 40, &salmon())]);
-        let lines = dowiz_hub::stock::bom_of(&json!({ "bom": v }).to_string());
-        assert_eq!(lines.len(), 1);
-        assert_eq!(lines[0].supply, "salmon");
-        assert_eq!(lines[0].qty, 40);
-    }
-
-    #[test]
-    fn taste_is_five_axes_at_three_levels() {
-        let ok = validate_taste(&serde_json::from_value(json!({ "spicy": 3, "sweet": 0 })).unwrap()).unwrap();
-        assert_eq!(ok.len(), 1);
-        assert!(validate_taste(&serde_json::from_value(json!({ "umami": 2 })).unwrap()).is_err());
-        assert!(validate_taste(&serde_json::from_value(json!({ "spicy": 5 })).unwrap()).is_err());
-    }
-}
+mod tests;

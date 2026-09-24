@@ -244,3 +244,21 @@ fn a_supply_whose_unit_changes_is_refused() {
     assert!(d.warnings.iter().any(|w| w.contains("Nori") && w.contains("change meaning")), "{:?}", d.warnings);
     assert_eq!(d.without_recipe, vec!["rolls-salmon-roll".to_string()]);
 }
+
+/// A supply counted in pieces may say what one piece weighs, so a dish's
+/// weight follows from a line of boxes too. It is grams (or kg), for pieces
+/// only; anything else is a warning naming the row, and nothing is guessed.
+#[test]
+fn a_weight_per_unit_column_is_read_for_pieces() {
+    let ing = "name,unit,weight per unit\nBox,pcs,12\nLid,pcs,0.25 kg\nSalmon,kg,40\nCup,pcs,2 ml\nBag,pcs,abc\nFork,pcs,\n";
+    let d = run(ing, "");
+    let w = |id: &str| d.supplies.iter().find(|s| s.id == id).unwrap().weight_per_unit;
+    assert_eq!((w("box"), w("lid"), w("fork")), (Some(12.0), Some(250.0), None));
+    assert_eq!((w("salmon"), w("cup"), w("bag")), (None, None, None));
+    let said = |needle: &str| d.warnings.iter().any(|x| x.contains(needle));
+    assert!(said("row 4 (Salmon): weight per unit \"40\" is for pieces"), "{:?}", d.warnings);
+    assert!(said("row 5 (Cup): weight per unit \"2 ml\" is not in g or kg"), "{:?}", d.warnings);
+    assert!(said("row 6 (Bag): weight per unit \"abc\""), "{:?}", d.warnings);
+    assert_eq!(d.warnings.len(), 3, "{:?}", d.warnings);
+    assert!(d.as_json().contains(r#""id":"box","name":"Box","unit":"unit","kind":null,"category":"","costPerBasis":null,"kcalPer100":null,"proteinPer100":null,"fatPer100":null,"carbsPer100":null,"lowAt":null,"weightPerUnit":12,"supplier":null"#), "{}", d.as_json());
+}

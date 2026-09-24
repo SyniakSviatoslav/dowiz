@@ -31,7 +31,7 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
     };
     let (apply, retire) = (flag("apply"), flag("retire"));
     let text = req.text().await?;
-    let draft = dowiz_hub::import::from_csv(&text);
+    let mut draft = dowiz_hub::import::from_csv(&text);
 
     let cat = crate::hubstore::load_catalog(&place).await?.catalog;
     let existing: Vec<(String, String)> = cat
@@ -42,6 +42,19 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
             Some((id, v.get("name")?.as_str()?.to_string()))
         })
         .collect();
+    // ONE DISH, ONE ID, BEFORE ANYTHING IS COMPARED (audit D6): a dish the
+    // console made is found by its name, so the file updates it rather than
+    // adding a twin -- and `retire` does not stop the original.
+    let owned: Vec<(String, String, String)> = cat
+        .products()
+        .into_iter()
+        .filter_map(|(id, j)| {
+            let v: Value = serde_json::from_str(&j).ok()?;
+            let c = v.get("categoryId").and_then(Value::as_str).unwrap_or("").to_string();
+            Some((id, v.get("name")?.as_str()?.to_string(), c))
+        })
+        .collect();
+    resolve_ids(&mut draft, &owned);
     // What is on the menu now but not in the file. Reported either way, so the
     // owner sees the consequence before choosing to act on it.
     let missing: Vec<Value> = existing
@@ -76,17 +89,30 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
         .iter()
         .filter_map(|m| m.get("id").and_then(Value::as_str).map(String::from))
         .collect();
-    crate::hubstore::with_catalog(&place, move |cat| {
-        for c in &draft.categories {
+    let gate = allergen_gate(&place).await;
+    let held = crate::hubstore::with_catalog(&place, move |cat| {
+        let mut held: Vec<String> = Vec::new();
+        let mut used: Vec<String> = Vec::new();
+        for p in &draft.products {
+            // An existing dish keeps what the file has no column for (`imported_product`).
+            let old = cat.product(&p.id).and_then(|j| serde_json::from_str::<Value>(&j).ok());
+            let mut rec = imported_product(p, old.as_ref(), draft.category_column);
+            // THE ALLERGEN GATE HOLDS ON IMPORT TOO (audit D17), and follows the feature.
+            if gate && hold_on_import(&mut rec, old.is_none(), p.available) {
+                held.push(p.id.clone());
+            }
+            if let Some(c) = rec.get("categoryId").and_then(Value::as_str) {
+                used.push(c.to_string());
+            }
+            cat.set_product(&p.id, &rec.to_string());
+        }
+        // Only the categories a dish now sits in: a file with no category
+        // column must not add an empty "Menu" to the storefront.
+        for c in draft.categories.iter().filter(|c| used.contains(&c.id)) {
             cat.set_category(
                 &c.id,
                 &json!({ "id": c.id, "name": c.name, "sortOrder": c.sort_order }).to_string(),
             );
-        }
-        for p in &draft.products {
-            // An existing dish keeps what the file has no column for (`imported_product`).
-            let old = cat.product(&p.id).and_then(|j| serde_json::from_str::<Value>(&j).ok());
-            cat.set_product(&p.id, &imported_product(p, old.as_ref()).to_string());
         }
         if retire {
             for id in &missing_ids {
@@ -98,10 +124,93 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
             }
         }
         bump_menu_version(cat);
-        Ok(())
+        Ok(held)
     })
     .await?;
+    summary["heldForAllergens"] = json!(held);
     Response::from_json(&summary)
+}
+
+/// Is the allergen publish gate on for this venue? THE GATE FOLLOWS THE
+/// FEATURE (`owner::update_product`): a venue that switched the filter off is
+/// not asked to declare what it no longer shows. Unreadable settings keep it on.
+pub(crate) async fn allergen_gate(place: &crate::hubstore::Place) -> bool {
+    match crate::hubstore::load_settings(place).await {
+        Ok(l) => dowiz_hub::features::is_on(&l.settings, "feature.allergen_filter"),
+        Err(_) => true,
+    }
+}
+
+/// The note a dish is held with until its allergens are declared.
+pub(crate) const UNDECLARED_NOTE: &str = "declare this dish's allergens before it goes on sale";
+
+/// Hold an undeclared dish off sale. `true` when it was held. PURE.
+///
+/// THE GATE LIVED ONLY IN `update_product` (audit D17): "Add dish" and the
+/// importer both wrote `available: true` with no allergens, and the dish was
+/// on sale undeclared -- a guest with an allergy cannot tell "checked and
+/// clear" from "nobody filled this in". Held, not refused: the dish exists,
+/// the owner declares and switches it on from the dish sheet.
+pub(crate) fn hold_undeclared(rec: &mut Value) -> bool {
+    let on_sale = rec.get("available").and_then(Value::as_bool).unwrap_or(false);
+    if !on_sale || dowiz_hub::allergens::read(&rec.to_string()).is_declared() {
+        return false;
+    }
+    rec["available"] = json!(false);
+    rec["unavailableNote"] = json!(UNDECLARED_NOTE);
+    true
+}
+
+/// The import's half of the gate. `true` when the dish was held. PURE.
+///
+/// ONLY WHAT THE FILE PUTS ON SALE: a new dish (which lands on sale) or a row
+/// whose Available column says yes. A price sheet with no Available column
+/// asks nothing about sale, so an undeclared dish already on sale is left as
+/// the owner has it -- stopping it would be the "import that looked like it
+/// only touched prices" stopping a menu (F1), the gate's own failure mode.
+pub(crate) fn hold_on_import(rec: &mut Value, fresh: bool, asked: Option<bool>) -> bool {
+    (fresh || asked == Some(true)) && hold_undeclared(rec)
+}
+
+/// Point each row at the dish it already is. PURE.
+///
+/// The console names a dish `slug(name)` ("sake-nigiri"), the importer
+/// `category-slug(name)` ("sushi-sake-nigiri"), so a re-import used to ADD a
+/// second dish -- and with `retire`, stop the original, the one carrying the
+/// recipe, the photo and the allergens (audit D6). A row whose id is not in
+/// the catalogue takes the id of the one existing dish of the same name
+/// (preferring the row's own category when the file has one). Two candidates
+/// are ambiguous: the row keeps its id and the owner is told why.
+pub fn resolve_ids(draft: &mut dowiz_hub::import::MenuDraft, existing: &[(String, String, String)]) {
+    use dowiz_hub::import::slug;
+    let mut claimed: Vec<String> = draft.products.iter().map(|p| p.id.clone()).collect();
+    for i in 0..draft.products.len() {
+        let p = &draft.products[i];
+        if existing.iter().any(|(id, _, _)| *id == p.id) {
+            continue;
+        }
+        let key = slug(&p.name);
+        let named: Vec<&(String, String, String)> = existing
+            .iter()
+            .filter(|(id, n, _)| slug(n) == key && !claimed.contains(id))
+            .collect();
+        let in_cat: Vec<&&(String, String, String)> =
+            named.iter().filter(|(_, _, c)| draft.category_column && *c == p.category_id).collect();
+        let pick = match (in_cat.as_slice(), named.as_slice()) {
+            ([one], _) => Some(one.0.clone()),
+            (_, [one]) => Some(one.0.clone()),
+            (_, []) => None,
+            _ => {
+                let w = format!("{:?} matches {} dishes by name; add an id column to say which", p.name, named.len());
+                draft.warnings.push(w);
+                None
+            }
+        };
+        if let Some(id) = pick {
+            claimed.push(id.clone());
+            draft.products[i].id = id;
+        }
+    }
 }
 
 /// Any catalogue write moves the menu version, which is how a client notices
@@ -125,7 +234,7 @@ pub(crate) fn bump_menu_version(cat: &mut dowiz_hub::catalog::Catalog) {
 /// list would make every declared dish undeclared, the publish gate would then
 /// refuse to keep them on sale, and a venue would find its whole menu stopped
 /// by an import that looked like it only touched prices.
-pub fn imported_product(p: &dowiz_hub::import::DraftProduct, old: Option<&Value>) -> Value {
+pub fn imported_product(p: &dowiz_hub::import::DraftProduct, old: Option<&Value>, category_column: bool) -> Value {
     // EVERY KEY, NOT A LIST OF THEM (F1, 2026-09-24). This kept eight named
     // keys and dropped the rest -- so a re-imported price list erased every
     // dish's RECIPE (`bom`), and with it what the stock ledger reserves, plus
@@ -138,16 +247,32 @@ pub fn imported_product(p: &dowiz_hub::import::DraftProduct, old: Option<&Value>
             "station": null, "modifierGroups": null, "allergens": null
         }),
     };
-    for (k, v) in [
-        ("id", json!(p.id)), ("categoryId", json!(p.category_id)), ("name", json!(p.name)),
-        ("description", json!(p.description)), ("price", json!(p.price)),
-        ("available", json!(p.available)), ("sortOrder", json!(p.sort_order)),
-    ] {
+    for (k, v) in [("id", json!(p.id)), ("name", json!(p.name)), ("price", json!(p.price))] {
         rec[k] = v;
     }
-    // A reason for being off sale does not outlive the file saying it is on.
-    if p.available {
-        rec["unavailableNote"] = Value::Null;
+    // ONLY THE FILE'S OWN COLUMNS OVERWRITE (audit D5). A column the file does
+    // not have is `None` and keeps what is stored; a NEW dish gets the
+    // defaults a fresh row always had.
+    let fresh = old.is_none();
+    if category_column || fresh {
+        rec["categoryId"] = json!(p.category_id);
+        rec["sortOrder"] = json!(p.sort_order);
+    }
+    match &p.description {
+        Some(d) => rec["description"] = json!(d),
+        None if fresh => rec["description"] = json!(""),
+        None => {}
+    }
+    match p.available {
+        Some(a) => {
+            rec["available"] = json!(a);
+            // A reason for being off sale does not outlive the file saying it is on.
+            if a {
+                rec["unavailableNote"] = Value::Null;
+            }
+        }
+        None if fresh => rec["available"] = json!(true),
+        None => {}
     }
     rec
 }

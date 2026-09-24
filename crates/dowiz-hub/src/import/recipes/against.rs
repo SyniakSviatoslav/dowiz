@@ -29,6 +29,7 @@ impl DraftSupply {
             fat: None,
             carbs: None,
             low_at: None,
+            weight_per_unit: None,
             supplier: None,
         })
     }

@@ -26,10 +26,16 @@ pub struct DraftProduct {
     pub id: String,
     pub category_id: String,
     pub name: String,
-    pub description: String,
+    /// `None` WHEN THE FILE HAS NO DESCRIPTION COLUMN, which is not the same
+    /// as an empty cell: a two-column `name,price` sheet says nothing about
+    /// descriptions, and reading that as `""` blanked every dish's text on a
+    /// price update (audit D5). The writer keeps the stored value on `None`.
+    pub description: Option<String>,
     /// Integer minor units. See [`parse_price`].
     pub price: i64,
-    pub available: bool,
+    /// `None` when the file has no Available column: a price sheet does not
+    /// put a dish stopped for "keg empty" back on sale (audit D5).
+    pub available: Option<bool>,
     pub sort_order: i64,
 }
 
@@ -49,6 +55,10 @@ pub struct MenuDraft {
     /// the owner rather than logged: a row silently missing from their menu is
     /// a dish they cannot sell and will not find out about until a customer asks.
     pub warnings: Vec<String>,
+    /// Did the file HAVE a category column? Without one every row lands in
+    /// "Menu", and a writer that believed it would move every existing dish
+    /// out of its own category on a price update (audit D5).
+    pub category_column: bool,
 }
 
 impl MenuDraft {
@@ -70,13 +80,13 @@ impl MenuDraft {
             .iter()
             .map(|p| {
                 format!(
-                    r#"{{"id":"{}","categoryId":"{}","name":"{}","description":"{}","price":{},"available":{},"sortOrder":{}}}"#,
+                    r#"{{"id":"{}","categoryId":"{}","name":"{}","description":{},"price":{},"available":{},"sortOrder":{}}}"#,
                     esc(&p.id),
                     esc(&p.category_id),
                     esc(&p.name),
-                    esc(&p.description),
+                    p.description.as_deref().map_or("null".to_string(), |d| format!("\"{}\"", esc(d))),
                     p.price,
-                    p.available,
+                    p.available.map_or("null".to_string(), |a| a.to_string()),
                     p.sort_order
                 )
             })
@@ -259,6 +269,7 @@ pub fn from_csv(text: &str) -> MenuDraft {
     };
     let (i_cat, i_desc, i_avail, i_id) =
         (idx("category"), idx("description"), idx("available"), idx("id"));
+    draft.category_column = i_cat.is_some();
 
     let mut seen_categories: Vec<String> = Vec::new();
     // Row 1 is the header, so data starts at 2 -- the number the owner sees in
@@ -309,9 +320,9 @@ pub fn from_csv(text: &str) -> MenuDraft {
             id,
             category_id: cat_id,
             name: name.to_string(),
-            description: cell(i_desc).trim().to_string(),
+            description: i_desc.map(|_| cell(i_desc).trim().to_string()),
             price,
-            available: i_avail.map_or(true, |_| truthy(cell(i_avail))),
+            available: i_avail.map(|_| truthy(cell(i_avail))),
             sort_order: n_in_cat,
         });
     }
@@ -404,14 +415,32 @@ mod tests {
         assert_eq!(d.products.len(), 3);
         assert_eq!(d.products[0].id, "rolls-sake-futomaki");
         assert_eq!(d.products[0].price, 900);
-        assert_eq!(d.products[0].description, "salmon and rice");
-        assert!(d.products[0].available);
-        assert!(!d.products[2].available, "\"no\" must mean unavailable");
+        assert_eq!(d.products[0].description.as_deref(), Some("salmon and rice"));
+        assert_eq!(d.products[0].available, Some(true));
+        assert_eq!(d.products[2].available, Some(false), "\"no\" must mean unavailable");
+        assert_eq!(d.products[2].description.as_deref(), Some(""), "an EMPTY cell is an empty text");
         assert_eq!(d.products[2].category_id, "drinks");
         // Sort order restarts per category, so each category reads top to bottom.
         assert_eq!(d.products[0].sort_order, 0);
         assert_eq!(d.products[1].sort_order, 1);
         assert_eq!(d.products[2].sort_order, 0);
+    }
+
+    /// AUDIT D5: a two-column price sheet says nothing about descriptions or
+    /// availability. Both come back `None` ("keep what is stored"), never `""`
+    /// and `true` -- which blanked every description and put every stopped
+    /// dish back on sale. The draft's JSON says `null`, not a value.
+    #[test]
+    fn absent_columns_are_none_not_a_blank_and_on_sale() {
+        let d = from_csv("name,price\nSake Nigiri,900\n");
+        assert!(d.warnings.is_empty(), "{:?}", d.warnings);
+        assert_eq!((d.products[0].description.clone(), d.products[0].available), (None, None));
+        assert!(!d.category_column, "and no category column is said, not assumed");
+        assert!(d.as_json().contains(r#""description":null,"price":900,"available":null"#), "{}", d.as_json());
+        // TWIN: present columns are values, and the JSON carries them.
+        let d = from_csv("name,price,description,available\nSake Nigiri,900,fish,no\n");
+        assert_eq!((d.products[0].description.as_deref(), d.products[0].available), (Some("fish"), Some(false)));
+        assert!(d.as_json().contains(r#""description":"fish","price":900,"available":false"#), "{}", d.as_json());
     }
 
     /// Excel in a comma-decimal locale writes semicolons. Assuming commas would
@@ -444,7 +473,7 @@ mod tests {
         let d = from_csv(csv);
         assert_eq!(d.products.len(), 1, "{:?}", d.warnings);
         assert_eq!(d.products[0].name, "Futomaki, large");
-        assert_eq!(d.products[0].description, "rice, nori, salmon");
+        assert_eq!(d.products[0].description.as_deref(), Some("rice, nori, salmon"));
     }
 
     #[test]
