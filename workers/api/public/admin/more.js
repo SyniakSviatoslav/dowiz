@@ -14,7 +14,7 @@ const GROUPS = [
   ['inbox', [['inbox', 'message-2', openInbox]]],
   ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['social', 'sparkles', openSocial]]],
   ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers], ['staff', 'apron', openStaff], ['exceptions', 'alert-triangle', openExceptions]]],
-  ['settings',  [['integrations', 'check', openIntegrations], ['ebills', 'receipt', openEbills], ['preview', 'eye', openPreview], ['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['payments', 'coin-hole', openPayments],
+  ['settings',  [['integrations', 'check', openIntegrations], ['ebills', 'receipt', openEbills], ['printer', 'receipt', openPrinter], ['preview', 'eye', openPreview], ['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['payments', 'coin-hole', openPayments],
                  ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['mcp', 'cube-3d-sphere', openMcp], ['cloud', 'cloud-upload', openCloud], ['branding', 'fan', openBranding],
                  ['features', 'tools-kitchen-2', openFeatures], ['assistant', 'sparkles', openAssistant], ['apiKeys', 'key', openKeys], ['activation', 'check', openActivation], ['health', 'cube-3d-sphere', openHealth]]],
 ];
@@ -49,6 +49,9 @@ async function openEbills(){ (await import('/admin/ebills.js')).open(); }
 
 // ── exceptions: voids, comps, refunds, pay-outs, never a score ─────────────────
 async function openExceptions(){ (await import('/admin/exceptions.js')).open(); }
+
+// ── the kitchen printer (print.kitchen): the setting had no control ─────────
+async function openPrinter(){ (await import('/admin/printer.js')).open(); }
 
 // ── staff ───────────────────────────────────────────────────────────────────
 async function openStaff(){

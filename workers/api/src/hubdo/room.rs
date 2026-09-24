@@ -119,6 +119,11 @@ impl HubImages {
             Err(r) => return Ok(Err(r)),
         };
         self.broadcast(dowiz_hub::EventKind::Amended as u8, &input.order_id, &body, next);
+        // THE EXCEPTION ALERT (P1-5): a void after the kitchen, a comp and a
+        // late amendment are all AMENDMENTS, and until 2026-09-24 only the
+        // refund and the till asked -- so the three kinds the alert exists
+        // for never reached the owner's chat. Never fails the amendment.
+        self.exceptions_after(&input.location_id, input.now_ms).await;
         Ok(Ok(crate::command::amend::AmendOut { merged: round.to_string(), seq, generation: next }))
     }
 
@@ -172,6 +177,9 @@ impl HubImages {
             }
         }
         self.broadcast(dowiz_hub::EventKind::Paid as u8, &input.order_id, &body, next);
+        // A payment can be an exception row (cash outside a till) or a
+        // wallet-leg finding (law 12, told on first sight): same hook.
+        self.exceptions_after(&input.location_id, input.now_ms).await;
         Ok(Ok(crate::command::pay::PayOut { merged: round.to_string(), seq, generation: next }))
     }
 

@@ -15,6 +15,7 @@ import { t, lang, statusWord, intlLocale, nextLang, retranslate } from './i18n.j
 import { renderRound, bindRound, amend } from './sheet.js';
 import { loadMenu, renderAdd, bindAdd } from './menu.js';
 import { renderPay, bindPay } from './pay.js';
+import { renderOpen, bindOpen } from './open.js';
 import { renderTransfer, bindTransfer, renderMoveSitting, bindMoveSitting } from './transfer.js';
 import { renderTillScreen, bindTill, lastTill, keep as keepTill } from './till.js';
 import { visible } from './till-view.js';
@@ -142,6 +143,7 @@ function renderRoom() {
       <span class="due">${esc(t('due'))} ${money(due, S.currency, loc)}</span></button></li>`;
   }).join('');
   return `<div class="bar"><span class="chip">${esc(t(S.role || 'waiter'))}</span><span class="sp"></span>
+      ${S.caps.has('take_orders') ? `<button class="btn" data-act="open">${esc(t('openTable'))}</button>` : ''}
       ${canTill(S.caps) ? `<button class="btn" data-act="till">${esc(t('till'))}</button>` : ''}
       <button class="btn" data-act="refresh">${esc(t('refresh'))}</button></div>
     <h2>${esc(t('room'))}</h2>
@@ -174,6 +176,7 @@ function render() {
   if (S.view === 'pay') { root.innerHTML = renderPay(c, r); return bindPay(c, root, r); }
   if (S.view === 'transfer') { root.innerHTML = renderTransfer(c, r); return bindTransfer(c, root, r); }
   if (S.view === 'moveSit') { root.innerHTML = renderMoveSitting(c, s); return bindMoveSitting(c, root, s); }
+  if (S.view === 'open' && S.caps.has('take_orders')) { root.innerHTML = renderOpen(c); return bindOpen(c, root, () => { S.view = 'room'; render(); }); }
   if (S.view === 'till' && canTill(S.caps)) { root.innerHTML = renderTillScreen(c); return bindTill(c, root); }
   if (S.view === 'login') { root.innerHTML = renderLogin(); }
   else if (S.view === 'sitting') root.innerHTML = renderSitting(s);
@@ -187,6 +190,7 @@ function render() {
     if (act === 'refresh') return loadRoom();
     if (act === 'signout') return signedOut();
     if (act === 'till') { S.view = 'till'; return render(); }
+    if (act === 'open') { S.view = 'open'; S.basket = {}; return render(); }
     if (act === 'back') { S.view = 'room'; return render(); }
     if (act === 'sit') {
       S.sittingId = id;

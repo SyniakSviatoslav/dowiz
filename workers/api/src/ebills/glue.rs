@@ -30,6 +30,16 @@ pub(crate) fn plan_for(t: &Table, loc: &Value, now_ms: i64) -> Result<Plan, Refu
 /// `config`: saving clears a halt and the backoff; a new user, password or
 /// point of sale forgets the session. `password: None` keeps the stored one.
 pub(crate) fn apply_config(t: &mut Table, input: ConfigIn) -> Result<Value, Refused> {
+    // DISCONNECT: switched off with no user is the owner forgetting the link --
+    // the stored password and the session go, the crosswalk and the counters
+    // stay. Until 2026-09-24 there was no way to remove a password once saved.
+    if !input.enabled && input.user.trim().is_empty() {
+        let mut st: State = state::get(t, K_STATE, ONE).map_err(io)?.unwrap_or_default();
+        (st.halted, st.failures, st.last_error, st.session) = (false, 0, None, None);
+        t.remove(K_CONFIG, ONE);
+        state::put(t, K_STATE, ONE, &st).map_err(io)?;
+        return Ok(json!({ "ok": true, "usable": false, "cleared": true }));
+    }
     if input.pos_id < 1 || input.user.trim().is_empty() || input.user.len() > 200 {
         return Err(Refused::Invalid("a point of sale id (1 or more) and a user name".into()));
     }

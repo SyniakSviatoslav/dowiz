@@ -20,6 +20,9 @@ import { liveOrders, loadOrders, rerender } from '/admin/app.js';
 // `new Set(['REJECTED', 'CANCELLED'])` here, and the same set again in the
 // storefront, the sea and the kit -- all four short by `COMPENSATED_REFUND`.
 import { REFUSED as DEAD } from '/lib/vocab.js';
+import { openRefund, moneyBack, REFUNDABLE } from '/admin/refund.js';
+/// After a refund step: the list, then the order's own sheet again.
+async function reload(id){ await loadOrders(); await rerender(); openOrder(id); }
 
 /// The happy path as a stepper. NOT generated: the FSM's longest path from
 /// PENDING ties between DELIVERED and COMPENSATED_REFUND, so there is nothing
@@ -287,12 +290,15 @@ export function openOrder(id){
       ${o.contact?.phone ? `<a class="btn ghost" href="tel:${esc(o.contact.phone)}">${icon('phone')}<span data-t="call"></span></a>` : ''}
       <button class="btn ghost" id="oCopy">${icon('copy')}<span data-t="print"></span></button>
       ${o.status === 'PENDING' ? `<button class="btn danger" data-act="reject" data-o="${esc(o.id)}">${icon('x')}<span data-t="reject"></span></button>`
-        : !dead && o.status !== 'DELIVERED' ? `<button class="btn danger" data-act="cancel" data-o="${esc(o.id)}">${icon('x')}<span data-t="cancelOrder"></span></button>` : ''}
+        : REFUNDABLE.has(o.status) ? `<button class="btn danger" data-refund="${esc(o.id)}">${icon('receipt')}<span data-t="refund"></span></button>`
+        : o.status === 'REFUNDING' ? `<button class="btn" data-moneyback="${esc(o.id)}">${icon('check')}<span data-t="moneyBack"></span></button>` : ''}
     </div>`, { name: 'order' });
   $('#sheetIn').onclick = e => {
     const act = e.target.closest('[data-act]'); if (act) return doAction(act.dataset.o, act.dataset.act, act);
     const asg = e.target.closest('[data-assign]'); if (asg) return openAssign(asg.dataset.assign);
     const ret = e.target.closest('[data-ret]'); if (ret) return chooseFoodBack(ret.dataset.o, ret.dataset.ret, ret);
+    const rf = e.target.closest('[data-refund]'); if (rf) return openRefund(rf.dataset.refund, () => reload(rf.dataset.refund));
+    const mb = e.target.closest('[data-moneyback]'); if (mb) return moneyBack(mb.dataset.moneyback, mb, () => reload(mb.dataset.moneyback));
   };
   $('#oCopy').onclick = async () => { try { await navigator.clipboard.writeText(orderText(o)); toast(t('copied')); } catch { toast(orderText(o)); } };
 }

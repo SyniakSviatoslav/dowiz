@@ -28,7 +28,10 @@ fn built(e: &Entry) -> Result<(String, Value, i64), Refused> {
 #[test]
 fn a_wolt_order_is_the_platforms_priced_confirmed_pickup() {
     let (id, o, sub) = built(&entry(1600)).expect("adds up");
-    assert_eq!(id, "wolt:W-8841");
+    assert_eq!(id, "wolt-W-8841");
+    // PATH-SAFE AS IT STANDS: nothing `encodeURIComponent` would rewrite,
+    // because the router does not decode what it rewrote (the 404 of 2026-09-24).
+    assert!(id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'), "{id}");
     assert_eq!(sub, 1750);
     assert_eq!((o["status"].clone(), o["total"].clone(), o["discount"].clone()), (json!("CONFIRMED"), json!(1600), json!(150)));
     assert_eq!(o["price_trusted"], json!(false));
@@ -64,7 +67,7 @@ fn only_a_marketplace_with_a_plain_id_is_entered_here() {
     for x in ["", "  ", "a b", "x/y", &"9".repeat(EXTERNAL_MAX + 1)] {
         assert!(matches!(order_id(channel::GLOVO, x), Err(Refused::Invalid(_))), "{x:?}");
     }
-    assert_eq!(order_id(channel::BABOON, " B_7-x ").unwrap(), "baboon:B_7-x");
+    assert_eq!(order_id(channel::BABOON, " B_7-x ").unwrap(), "baboon-B_7-x");
     assert_eq!(order_id(channel::GLOVO, &"9".repeat(EXTERNAL_MAX)).unwrap().len(), 6 + EXTERNAL_MAX);
 }
 
@@ -82,10 +85,10 @@ fn a_line_must_be_a_line() {
 
 #[test]
 fn entering_it_twice_finds_the_first() {
-    let listed = vec![OrderView { order_id: "wolt:W-8841".into(), kind: 1, seq: 1, order_json: "{}".into() }];
-    assert!(existing(&listed, "wolt:W-8841").is_some());
-    assert!(existing(&listed, "wolt:W-8842").is_none(), "twin: another platform order is new");
-    assert!(existing(&listed, "glovo:W-8841").is_none(), "the same number on another platform is another order");
+    let listed = vec![OrderView { order_id: "wolt-W-8841".into(), kind: 1, seq: 1, order_json: "{}".into() }];
+    assert!(existing(&listed, "wolt-W-8841").is_some());
+    assert!(existing(&listed, "wolt-W-8842").is_none(), "twin: another platform order is new");
+    assert!(existing(&listed, "glovo-W-8841").is_none(), "the same number on another platform is another order");
 }
 
 fn shelf(rice: i64) -> StockLog {
@@ -97,7 +100,7 @@ fn shelf(rice: i64) -> StockLog {
 fn place_in(o: &Value, sub: i64) -> PlaceIn {
     let maki = json!({ "id": "maki", "bom": [{ "supply": "rice", "qty": 100 }] }).to_string();
     PlaceIn {
-        order_id: "wolt:W-8841".into(), envelope: o.to_string(), seq: NOW as u64,
+        order_id: "wolt-W-8841".into(), envelope: o.to_string(), seq: NOW as u64,
         bom_lines: vec![(maki, 2)], promo: None, promo_code: None,
         subtotal: sub, fee: 0, tip: 0, now_ms: NOW, notify_text: None,
     }
@@ -162,7 +165,7 @@ fn an_entry_that_names_a_first_party_source_builds_nothing() {
         let mut e = entry(1600);
         e.channel = c.into();
         let (id, o, _) = built(&e).expect(c);
-        assert_eq!((id, o["channel"].clone()), (format!("{c}:W-8841"), json!(c)));
+        assert_eq!((id, o["channel"].clone()), (format!("{c}-W-8841"), json!(c)));
     }
 }
 

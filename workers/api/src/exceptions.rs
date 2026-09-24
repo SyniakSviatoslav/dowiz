@@ -106,10 +106,40 @@ pub async fn exceptions(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
         Ok(mut v) => {
             v["venue"] = json!(loc);
             v["threshold"] = json!(alert::threshold(settings.get(alert::THRESHOLD_KEY).as_deref()));
+            // WHERE THE ALERT GOES: without a chat it goes nowhere, and the
+            // pane says so instead of promising a message nobody will get.
+            v["alertChat"] = json!(!settings.known("notify.telegram.chat").trim().is_empty());
+            v["names"] = names(&ctx.env, &loc, &v["rows"]).await?;
             Response::from_json(&v)
         }
         Err(e) => Response::error(e, 500),
     }
+}
+
+/// THE SIGNER'S NAME for each `by` on the rows: the report promised "the
+/// name of who did it" and printed a user id. Only a MEMBER of this venue is
+/// named -- a user id that is not one stays an id, never another venue's name.
+async fn names(env: &Env, venue: &str, rows: &serde_json::Value) -> Result<serde_json::Value> {
+    let mut ids: Vec<&str> = rows.as_array().map_or_else(Vec::new, |r| r.iter().filter_map(|x| x["by"].as_str()).collect());
+    ids.sort_unstable();
+    ids.dedup();
+    let mut out = serde_json::Map::new();
+    if ids.is_empty() {
+        return Ok(serde_json::Value::Object(out));
+    }
+    let t = crate::identity_store::identity(env).await?;
+    for id in ids {
+        if crate::identity_store::membership(&t, venue, id).is_none() {
+            continue;
+        }
+        let name = crate::identity_store::rec(&t, crate::identity_store::K_USER, id)
+            .map(|u| crate::identity_store::s_of(&u, "display_name"))
+            .unwrap_or_default();
+        if !name.trim().is_empty() {
+            out.insert(id.to_string(), json!(name));
+        }
+    }
+    Ok(serde_json::Value::Object(out))
 }
 
 #[cfg(test)]

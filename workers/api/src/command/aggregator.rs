@@ -11,7 +11,7 @@
 //! appends `Placed`.
 //!
 //! WHAT IS DECIDED HERE:
-//! - the order id is `<channel>:<external id>`, so the platform's id IS the
+//! - the order id is `<channel>-<external id>` (URL-safe as it stands), so the platform's id IS the
 //!   idempotency key: entering it twice returns the first order, never a
 //!   second one (`existing`, checked in the object's turn);
 //! - the money is the platform's: line prices as charged, the platform's
@@ -75,7 +75,12 @@ pub fn order_id(ch: &str, external_id: &str) -> Result<String, Refused> {
             "the platform's order id is 1-{EXTERNAL_MAX} letters, digits, '-' or '_'"
         )));
     }
-    Ok(format!("{ch}:{x}"))
+    // A DASH, NOT A COLON: the id travels in every order URL the console and
+    // the room build (`/owner/orders/<id>/action`, `/staff/orders/<id>/refund`),
+    // and `encodeURIComponent` turns ':' into `%3A`, which the router hands to
+    // the handler undecoded -- every action on a Wolt order answered 404
+    // (2026-09-24). A channel word has no dash, so `<channel>-` stays a prefix.
+    Ok(format!("{ch}-{x}"))
 }
 
 /// Already entered? The first order is the answer to the second entry.

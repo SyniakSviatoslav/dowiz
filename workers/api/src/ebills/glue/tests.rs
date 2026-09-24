@@ -133,3 +133,23 @@ fn a_refusal_is_named_once_and_leaves_when_the_sale_is_taken() {
     let s = record_import(&mut t, &taken, &empty, None).unwrap();
     assert_eq!(s.refused.iter().map(|n| n.sale_id).collect::<Vec<_>>(), vec![8, 8], "sale 7 is no longer refused");
 }
+
+/// DISCONNECT: off and no user forgets the password and the session; the
+/// status then says `secret_set: false` and the plan is idle. Its twin: off
+/// WITH a user keeps the credentials (a pause, not a disconnect).
+#[test]
+fn off_with_no_user_forgets_the_link_and_off_with_a_user_only_pauses() {
+    let mut t = table();
+    apply_config(&mut t, cfg_in("u", Some("p"))).unwrap();
+    let paused = ConfigIn { enabled: false, ..cfg_in("u", None) };
+    apply_config(&mut t, paused).unwrap();
+    let kept: Config = state::get(&t, K_CONFIG, ONE).unwrap().unwrap();
+    assert!(!kept.enabled && kept.secret == "p", "a pause keeps the password");
+    let gone = ConfigIn { enabled: false, pos_id: 0, user: "".into(), password: None };
+    assert_eq!(apply_config(&mut t, gone).unwrap()["cleared"], json!(true));
+    assert!(state::get::<Config>(&t, K_CONFIG, ONE).unwrap().is_none(), "the password is gone");
+    assert!(st(&t).session.is_none());
+    let v = crate::ebills::status::view(&t, &[], serde_json::Value::Null).unwrap();
+    assert_eq!(v["config"]["secret_set"], json!(false));
+    assert_eq!(v["config"]["enabled"], json!(false));
+}

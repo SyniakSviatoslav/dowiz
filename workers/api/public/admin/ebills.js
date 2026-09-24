@@ -53,7 +53,8 @@ export async function open(){
         <div><label for="eb-pos" data-t="eb_pos"></label><input id="eb-pos" inputmode="numeric" value="${esc(cfg.pos_id || 1)}"></div></div>
       <label for="eb-pass" data-t="eb_password"></label><input id="eb-pass" type="password" autocomplete="new-password" placeholder="${cfg.secret_set ? esc(t('eb_passwordSet')) : ''}">
       <p class="muted small" data-t="eb_roleHint"></p>
-      <div class="btn-row"><button class="btn" id="ebSave">${icon('check')}<span data-t="save"></span></button></div></section>`;
+      <div class="btn-row"><button class="btn" id="ebSave">${icon('check')}<span data-t="save"></span></button>
+        ${cfg.user || cfg.secret_set ? `<button class="btn ghost danger" id="ebForget">${icon('x')}<span data-t="eb_forget"></span></button>` : ''}</div></section>`;
   sheet(head + `<div id="ebBody">${body}</div>`, { name: 'ebills', keepScroll: true });
   wire();
 }
@@ -74,5 +75,10 @@ function wire(){
     const pass = $('#eb-pass').value;
     if (pass) body.password = pass;
     try { await busy($('#ebSave'), () => post('/owner/ebills/config' + q(), body)); toast(t('saved')); open(); } catch (e) { fail(e); }
+  };
+  // DISCONNECT (`glue::apply_config`): off with no user forgets the password.
+  const forget = $('#ebForget');
+  if (forget) forget.onclick = async () => {
+    try { await busy(forget, () => post('/owner/ebills/config' + q(), { enabled: false, pos_id: 0, user: '' })); toast(t('eb_forgotten')); open(); } catch (e) { fail(e); }
   };
 }
