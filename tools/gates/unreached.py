@@ -40,7 +40,7 @@ Run: `python3 tools/gates/unreached.py`. Exit 1 when the count rises above
 `tools/gates/unreached.baseline`.
 """
 import re, subprocess, collections, os
-os.chdir('/root/dowiz')
+os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # its OWN repo: a hard-coded /root/dowiz made every worktree run measure the main tree (2026-09-24)
 # WHERE CAPABILITIES ARE DECLARED, and WHERE ANY CONSUMER COULD CALL THEM.
 # The second list must be complete or the catalogue is a fiction: `dowiz-hub`
 # has TWO consumers, and leaving the twin server out would accuse the whole
