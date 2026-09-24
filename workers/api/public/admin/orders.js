@@ -57,6 +57,30 @@ const acked = new Set();
 const seenAt = o => o.kitchen?.seen?.at;
 const needsSeen = o => OWED_SEEN.has(o.status) && !seenAt(o) && !acked.has(o.id);
 
+/// THE KITCHEN TICKET'S STATE (LAST-MILE §3.1 step 3): printed and failed are
+/// records ON THE ORDER (`kitchen.printed`, `kitchen.print_failed`); queued
+/// and printing are the outbox's, read from `/owner/print/jobs` at most every
+/// `JOBS_MS`. No state = no printer configured, and nothing is drawn.
+const JOBS_MS = 15000;
+const jobs = { at: 0, byOrder: new Map() };
+const printState = o => o.kitchen?.printed?.at ? 'printed' : o.kitchen?.print_failed?.at ? 'failed' : jobs.byOrder.get(o.id)?.state || null;
+async function loadJobs(){
+  if (Date.now() - jobs.at < JOBS_MS) return;
+  jobs.at = Date.now();
+  try {
+    const d = await api('/owner/print/jobs');
+    const next = new Map((d?.jobs || []).map(j => [j.orderId, j]));
+    const changed = next.size !== jobs.byOrder.size || [...next].some(([k, v]) => jobs.byOrder.get(k)?.state !== v.state);
+    jobs.byOrder = next;
+    if (changed) await rerender();
+  } catch { /* a console without the rail yet: printed/failed still come from the orders */ }
+}
+
+/// §2.9: an order a marketplace took names THE PLATFORM and ITS number --
+/// what the platform's courier says at the counter. Proper nouns, not i18n.
+const PLATFORM = { wolt: 'Wolt', glovo: 'Glovo', baboon: 'Baboon' };
+const platformOf = o => PLATFORM[o.channel] ? `${PLATFORM[o.channel]}${o.external?.order_id ? ' ' + o.external.order_id : ''}` : '';
+
 const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 function matching(){
   const all = view.mode === 'history' ? S.orders.filter(o => !liveOrders().includes(o)) : liveOrders();
@@ -94,15 +118,17 @@ function row(o){
   const fresh = S.fresh.has(o.id) ? 'fresh' : '';
   return `<article class="orow ${fresh}" data-st="${esc(o.status)}" data-st-var="${esc(o.status)}" data-o="${esc(o.id)}">
     <span class="st"><i class="dot"></i><span data-t-st="${esc(o.status)}"></span></span>
-    <span class="who">${esc(o.contact?.name || o.contact?.phone || '#' + o.id.slice(0, ORDER_ID_SHOWN))}</span>
+    <span class="who">${esc(o.contact?.name || o.contact?.phone || platformOf(o) || '#' + o.id.slice(0, ORDER_ID_SHOWN))}</span>
     <span class="amt">${moneyEl(o.total ?? 0)}</span>
     <span class="num">${o.contact?.name || o.contact?.phone ? '#' + esc(o.id.slice(0, ORDER_ID_SHOWN)) : ''}</span>
     <span class="meta">
+      ${platformOf(o) ? `<span class="chan" data-chan="${esc(o.channel)}">${icon('shopping-bag')}${esc(platformOf(o))}</span>` : ''}
       <span>${(b => `${icon(b.icon)}<span data-t="${b.key}"></span>${b.table ? ' ' + esc(b.table) : ''}`)(badgeOf(o))}</span>
       <span>${icon(o.payment === 'cash' ? 'cash' : o.payment === 'crypto' ? 'currency-bitcoin' : 'credit-card')}${esc(payName(o.payment))}</span>
       ${o.eta?.range ? `<span class="live">${icon('clock')}<b>${esc(o.eta.range)}</b> ${t('etaMin')}</span>` : ''}
       ${o.courier_id ? `<span>${icon('bike')}${esc(courierName(o.courier_id))}</span>` : ''}
       ${seenAt(o) ? `<span>${icon('eye')}<span data-t="seenAt"></span> ${esc(clock(seenAt(o)))}</span>` : ''}
+      ${printState(o) ? `<span class="${printState(o) === 'failed' ? 'warn' : ''}">${icon(printState(o) === 'failed' ? 'alert-triangle' : 'receipt')}<span data-t="print_${printState(o)}"></span>${printState(o) === 'printed' ? ' ' + esc(clock(o.kitchen.printed.at)) : ''}</span>` : ''}
     </span>
     <span class="age">${esc(ago(o.created_at_ms || Date.now()))}</span>
     <span class="items">${line}</span>
@@ -137,12 +163,15 @@ export async function render(host){
     ${S.phase === 'ready' && !list.length ? `<div class="empty">${icon('scroll')}<b data-t="${view.mode === 'live' ? 'noLive' : 'noOrders'}"></b></div>` : ''}
     <div class="orders" id="olist">${list.map(row).join('')}</div>
     <div class="btn-row compact">${view.mode === 'history' && all.length > list.length ? `<button type="button" class="act" id="oMore">${icon('chevron-down')}<span data-t="more"></span> · ${all.length - list.length}</button>` : ''}
+      <button type="button" class="act" id="oAgg">${icon('plus')}<span data-t="aggTitle"></span></button>
       ${list.length ? `<button type="button" class="act" id="oCsv">${icon('download')}<span data-t="exportCsv"></span></button>` : ''}</div>`;
   S.fresh.clear();
+  loadJobs();
   host.onclick = async e => {
     const mode = e.target.closest('[data-mode]'); if (mode) { view.mode = mode.dataset.mode; view.pages = 1; return rerender(); }
     if (e.target.closest('#oMore')) { view.pages += 1; return rerender(); }
     if (e.target.closest('#oCsv')) return exportCsv();
+    if (e.target.closest('#oAgg')) return import('/admin/aggregator.js').then(m => m.openAggregator());
     const seen = e.target.closest('[data-seen]'); if (seen) { e.stopPropagation(); return markSeen(seen.dataset.seen, seen); }
     const act = e.target.closest('[data-act]'); if (act) { e.stopPropagation(); return doAction(act.dataset.o, act.dataset.act, act); }
     const asg = e.target.closest('[data-assign]'); if (asg) { e.stopPropagation(); return openAssign(asg.dataset.assign); }

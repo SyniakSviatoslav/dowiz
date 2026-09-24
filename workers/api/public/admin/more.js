@@ -13,8 +13,8 @@ import { openCard, cardLine } from '/admin/customers.js';
 const GROUPS = [
   ['inbox', [['inbox', 'message-2', openInbox]]],
   ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['social', 'sparkles', openSocial]]],
-  ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers], ['staff', 'apron', openStaff]]],
-  ['settings',  [['integrations', 'check', openIntegrations], ['preview', 'eye', openPreview], ['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['payments', 'coin-hole', openPayments],
+  ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers], ['staff', 'apron', openStaff], ['exceptions', 'alert-triangle', openExceptions]]],
+  ['settings',  [['integrations', 'check', openIntegrations], ['ebills', 'receipt', openEbills], ['preview', 'eye', openPreview], ['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['payments', 'coin-hole', openPayments],
                  ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['mcp', 'cube-3d-sphere', openMcp], ['cloud', 'cloud-upload', openCloud], ['branding', 'fan', openBranding],
                  ['features', 'tools-kitchen-2', openFeatures], ['assistant', 'sparkles', openAssistant], ['apiKeys', 'key', openKeys], ['activation', 'check', openActivation], ['health', 'cube-3d-sphere', openHealth]]],
 ];
@@ -43,6 +43,12 @@ export async function render(host){
 const head = (eyebrow, title) => `<p class="eyebrow" data-t="${eyebrow}"></p><h2 data-t="${title}"></h2>`;
 const fail = e => toast(String(e.message || e));
 const paint = () => { retranslate($('#sheetIn')); hydrate($('#sheetIn')); };
+
+// ── the till link (ebills.al) ───────────────────────────────────────────────
+async function openEbills(){ (await import('/admin/ebills.js')).open(); }
+
+// ── exceptions: voids, comps, refunds, pay-outs, never a score ─────────────────
+async function openExceptions(){ (await import('/admin/exceptions.js')).open(); }
 
 // ── staff ───────────────────────────────────────────────────────────────────
 async function openStaff(){

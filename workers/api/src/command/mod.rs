@@ -37,6 +37,7 @@ use worker::wasm_bindgen::JsValue;
 use worker::*;
 
 pub mod advance;
+pub mod aggregator;
 pub mod amend;
 pub mod assign;
 pub mod kitchen_ack;

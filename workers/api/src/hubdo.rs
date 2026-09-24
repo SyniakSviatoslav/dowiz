@@ -57,13 +57,17 @@ pub mod forget;
 
 /// The refund command: move an order to REFUNDING and settle the shelf.
 pub mod refund;
+mod aggregator;
 
+/// The till link (ebills.al): import, crosswalk, floor, poller state.
+mod ebills;
 
 /// The kitchen's "seen" ack: one `Noted`, the broadcast (A13, §2.6).
 mod kitchen_ack;
 
 /// The kitchen print rail: poll, job, ack (LAST-MILE §3.1).
 mod print;
+mod exceptions; // the exception alert (P1-5), `hubdo/exceptions.rs`
 
 /// The catalogue image, which holds the venue's own record as well as its
 /// dishes. Named here because `/fold/venue` reads it and nothing else does.
@@ -1298,11 +1302,22 @@ impl DurableObject for HubImages {
                         Err(r) => Response::error(r.message().to_string(), r.status()),
                     }
                 }
+                // THE TILL LINK (`hubdo/ebills.rs`): `/fold/ebills/<command>`.
+                (Method::Post, "ebills") => self.ebills(seg.next().unwrap_or(""), req).await,
                 // REFUND AN ORDER: `/fold/refund`
                 (Method::Post, "refund") => {
                     let mut req = req;
                     let input: crate::command::refund::RefundIn = req.json().await?;
                     match self.refund(input).await? {
+                        Ok(out) => Response::from_json(&out),
+                        Err(r) => Response::error(r.message().to_string(), r.status()),
+                    }
+                }
+                // AN AGGREGATOR ORDER ENTERED BY HAND: `/fold/aggregator`
+                (Method::Post, "aggregator") => {
+                    let mut req = req;
+                    let input: crate::command::place::PlaceIn = req.json().await?;
+                    match self.aggregator(input).await? {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
                     }

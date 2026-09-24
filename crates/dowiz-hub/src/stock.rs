@@ -121,6 +121,11 @@ pub enum StockEvent {
     /// decided. It carries its order, so "was this order's choice made" is a
     /// question the stock log answers alone.
     Returned { item: String, qty: Qty, order_id: String, resell: bool, by: String, chosen_by: String },
+    /// A `Served` draw REVERSED: the till voided the sale (`changedStatus:
+    /// CANCELLED`, BLUEPRINT-EBILLS §6.6). on_hand += qty. Refused unless the
+    /// order has at least `qty` of `item` served and not yet reversed -- a
+    /// void puts back only what its sale took, and never twice.
+    Unserved { item: String, qty: Qty, order_id: String },
 }
 
 impl StockEvent {
@@ -133,7 +138,8 @@ impl StockEvent {
             | StockEvent::Wasted { item, .. }
             | StockEvent::Stocktake { item, .. }
             | StockEvent::Served { item, .. }
-            | StockEvent::Returned { item, .. } => item,
+            | StockEvent::Returned { item, .. }
+            | StockEvent::Unserved { item, .. } => item,
         }
     }
 
@@ -143,7 +149,8 @@ impl StockEvent {
             | StockEvent::Consumed { order_id, .. }
             | StockEvent::Released { order_id, .. }
             | StockEvent::Served { order_id, .. }
-            | StockEvent::Returned { order_id, .. } => Some(order_id),
+            | StockEvent::Returned { order_id, .. }
+            | StockEvent::Unserved { order_id, .. } => Some(order_id),
             _ => None,
         }
     }
@@ -203,6 +210,9 @@ pub struct StockLedger {
     levels: Vec<(String, StockLevel)>,
     /// Open reservations, for I3. `(order_id, item)` -> qty.
     open: Vec<((String, String), Qty)>,
+    /// Served and not reversed, `(order_id, item)` -> qty: what a void may
+    /// put back. Empty for every log written before `served` existed.
+    served: Vec<((String, String), Qty)>,
 }
 
 impl StockLedger {
@@ -257,7 +267,8 @@ impl StockLedger {
                     | StockEvent::Released { qty, .. }
                     | StockEvent::Wasted { qty, .. }
                     | StockEvent::Served { qty, .. }
-                    | StockEvent::Returned { qty, .. } => *qty,
+                    | StockEvent::Returned { qty, .. }
+                    | StockEvent::Unserved { qty, .. } => *qty,
                     StockEvent::Stocktake { .. } => unreachable!(),
                 };
                 if q <= 0 {
@@ -343,11 +354,33 @@ impl StockLedger {
             StockEvent::Served { qty, .. } => {
                 lvl.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
             }
+            StockEvent::Unserved { item, qty, order_id } => {
+                let had = self.served_qty(order_id, item);
+                if *qty > had {
+                    return Err(StockError::Linkage(format!(
+                        "{order_id} has {had} of {item} served, cannot put back {qty}"
+                    )));
+                }
+                lvl.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
+            }
             // Waste of food `Consumed` already took: the shelf does not move,
             // so there is nothing for it to refuse.
             StockEvent::Returned { resell: false, .. } => {}
         }
         Ok(())
+    }
+
+    fn served_qty(&self, order_id: &str, item: &str) -> Qty {
+        self.served.iter().find(|((o, i), _)| o == order_id && i == item).map(|(_, q)| *q).unwrap_or(0)
+    }
+
+    /// What an order has served and not had reversed, `(item, qty)`, sorted:
+    /// exactly the `Unserved` a void of it emits.
+    pub fn served_of(&self, order_id: &str) -> Vec<(String, Qty)> {
+        let mut out: Vec<(String, Qty)> =
+            self.served.iter().filter(|((o, _), _)| o == order_id).map(|((_, i), q)| (i.clone(), *q)).collect();
+        out.sort();
+        out
     }
 
     fn held(&self, order_id: &str, item: &str) -> Qty {
@@ -409,9 +442,24 @@ impl StockLedger {
                 let l = self.level_mut(item);
                 l.on_hand = *observed;
             }
-            StockEvent::Served { item, qty, .. } => {
+            StockEvent::Served { item, qty, order_id } => {
                 let l = self.level_mut(item);
                 l.on_hand = l.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
+                let key = (order_id.clone(), item.clone());
+                match self.served.iter().position(|(k, _)| *k == key) {
+                    Some(p) => self.served[p].1 = self.served[p].1.saturating_add(*qty),
+                    None => self.served.push((key, *qty)),
+                }
+            }
+            StockEvent::Unserved { item, qty, order_id } => {
+                let l = self.level_mut(item);
+                l.on_hand = l.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
+                if let Some(p) = self.served.iter().position(|((o, i), _)| o == order_id && i == item) {
+                    self.served[p].1 -= qty;
+                    if self.served[p].1 <= 0 {
+                        self.served.remove(p);
+                    }
+                }
             }
             StockEvent::Returned { item, qty, resell, .. } => {
                 if *resell {
@@ -512,6 +560,11 @@ pub fn encode(ev: &StockEvent) -> String {
             esc(item),
             esc(order_id)
         ),
+        StockEvent::Unserved { item, qty, order_id } => format!(
+            r#"{{"k":"unserved","item":"{}","qty":{qty},"order":"{}"}}"#,
+            esc(item),
+            esc(order_id)
+        ),
         StockEvent::Returned { item, qty, order_id, resell, by, chosen_by } => format!(
             r#"{{"k":"returned","item":"{}","qty":{qty},"order":"{}","resell":{},"by":"{}","chosen_by":"{}"}}"#,
             esc(item),
@@ -557,6 +610,11 @@ pub fn decode(rec: &str) -> Option<StockEvent> {
             by: str_field(rec, "by").unwrap_or_default(),
         }),
         "served" => Some(StockEvent::Served {
+            item,
+            qty: int_field(rec, "qty")?,
+            order_id: str_field(rec, "order")?,
+        }),
+        "unserved" => Some(StockEvent::Unserved {
             item,
             qty: int_field(rec, "qty")?,
             order_id: str_field(rec, "order")?,
@@ -1355,3 +1413,6 @@ mod bom_tests {
         }
     }
 }
+
+/// Cost that follows purchases (§2.10): priced receipts on this log, WAC fold.
+pub mod cost;

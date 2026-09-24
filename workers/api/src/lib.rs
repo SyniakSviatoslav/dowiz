@@ -40,6 +40,7 @@ mod channels;
 mod cloud;
 mod mcp;
 mod integrations;
+mod ebills;
 mod catalog_edit;
 mod rebuild;
 mod recipe;
@@ -51,6 +52,7 @@ mod gauges;
 mod quarantine;
 mod fold;
 mod live;
+mod exceptions;
 
 use worker::wasm_bindgen::{JsCast, JsValue};
 use worker::*;
@@ -312,6 +314,10 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/print/poll", services::orders::print::poll)
         .get_async("/api/print/job/:token", services::orders::print::job)
         .delete_async("/api/print/job/:token", services::orders::print::ack)
+        .get_async("/api/owner/print/jobs", services::orders::print::jobs)
+        .get_async("/api/owner/wallet/legs", services::orders::legs::audit)
+        .post_async("/api/owner/wallet/legs/repair", services::orders::legs::repair)
+        .post_async("/api/staff/orders/aggregator", services::orders::aggregator::enter)
         .post_async("/api/staff/orders/:id/refund", services::orders::refund::refund)
         .post_async("/api/staff/orders/:id/returned", services::orders::refund::returned)
         .post_async("/api/staff/orders/:id/transfer", services::orders::room::transfer::transfer)
@@ -337,6 +343,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/i18n", owner::write_translations)
         // ── ported from the native adapter, on the SAME dowiz-hub logic ──
         .get_async("/api/owner/analytics", services::analytics::analytics)
+        .get_async("/api/owner/exceptions", exceptions::exceptions)
         .get_async("/api/owner/promotions", services::ordering::promotions::promotions)
         .post_async("/api/owner/promotions", services::ordering::promotions::set_promotion)
         .post_async("/api/owner/promotions/:code/delete", services::ordering::promotions::delete_promotion)
@@ -371,6 +378,9 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/webhooks/meta", channels::webhook)
         .get_async("/api/owner/integrations", integrations::status)
         .post_async("/api/owner/integrations/check", integrations::check)
+        .get_async("/api/owner/ebills", ebills::routes::status)
+        .post_async("/api/owner/ebills/config", ebills::routes::config)
+        .post_async("/api/owner/ebills/map", ebills::routes::map)
         .get_async("/api/mcp", mcp::describe)
         .post_async("/api/mcp", mcp::rpc)
         .post_async("/api/owner/menu/import", services::catalogue::import::import_menu)
@@ -512,5 +522,6 @@ pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
         cloud::nightly(&env, now_ms).await;
     } else {
         outbox::sweep(&env, now_ms).await;
+        ebills::poll::sweep(&env, now_ms).await;
     }
 }
