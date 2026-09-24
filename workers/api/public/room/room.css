@@ -126,3 +126,18 @@ input[type="radio"],input[type="checkbox"]{width:22px;min-height:22px;height:22p
 .toast{position:fixed;left:var(--space-4);right:var(--space-4);bottom:max(var(--space-4),env(safe-area-inset-bottom));z-index:var(--z-toast);max-width:560px;margin:0 auto;padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);background:var(--ink);color:var(--bg);font-weight:600}
 @media (prefers-reduced-motion:no-preference){.toast:not([hidden]){animation:rise .2s var(--ease-snap)}}
 @keyframes rise{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
+
+/* ── floor view (floor.js): one colour per state, as classes -- the CSP drops style= ── */
+.fs-free{--fs:var(--st-DELIVERED)}.fs-booked{--fs:var(--st-SCHEDULED)}.fs-ordering{--fs:var(--st-CONFIRMED)}
+.fs-waiting{--fs:var(--st-PREPARING)}.fs-paying{--fs:var(--st-READY)}.fs-dirty{--fs:var(--st-COMPENSATED_REFUND)}
+.floor-zone h3{margin-top:var(--space-3)}
+.floor-plan{display:block;width:100%;max-width:560px;height:auto;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface)}
+.ft rect,.ft ellipse{fill:var(--fs);fill-opacity:.85;stroke:var(--ink);stroke-width:1.5}
+.ft text{fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:3px;font:700 14px system-ui,sans-serif;pointer-events:none}
+.ft.fs-dirty rect,.ft.fs-dirty ellipse{stroke-dasharray:5 3}
+.ft.tap{cursor:pointer}
+.ft.tap:focus-visible{outline:none}.ft.tap:focus-visible rect,.ft.tap:focus-visible ellipse,.ft.picked rect,.ft.picked ellipse{stroke:var(--focus);stroke-width:4}
+.swatch{display:inline-block;width:14px;height:14px;border-radius:3px;background:var(--fs);flex:none}
+.floor-legend{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-4);margin-bottom:var(--space-6)}
+.floor-legend li{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm)}
+.floor-clear{margin:var(--space-4) 0}

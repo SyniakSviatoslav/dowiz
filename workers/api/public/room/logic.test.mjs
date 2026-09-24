@@ -7,8 +7,10 @@ import {
   maxAmountFor, owed, sittingDue, money, slugOfHost, ageOf, METHODS, REASONS,
   canTransfer, transferTargets, transferBody, canMoveSitting, refusalKey,
   settles, keepTheChange, tipMinor, walletOk, walletTipOk,
+  canClear, FLOOR_STATES,
 } from './logic.js';
 import { renderTill, visible } from './till-view.js';
+import { renderFloor, clearedPath, floorPath } from './floor.js';
 
 // The canonical spellings `open_session` signs (caps.rs Display, Cap::ALL order).
 const WAITER = parseCaps('take_orders,take_payment');
@@ -252,4 +254,66 @@ test('wallet: a wallet pays the bill only; a tip rides on any other method', () 
   assert.equal(walletTipOk('wallet', 100), false);
   assert.equal(walletTipOk('wallet', 0), true, 'the twin: no tip');
   assert.equal(walletTipOk('card', 100), true);
+});
+
+test('floor: staff with take_orders can clear only a dirty table', () => {
+  const staff = parseCaps('take_orders');
+  assert.equal(canClear(staff, 'free'), false);
+  assert.equal(canClear(staff, 'booked'), false);
+  assert.equal(canClear(staff, 'ordering'), false);
+  assert.equal(canClear(staff, 'waiting'), false);
+  assert.equal(canClear(staff, 'paying'), false);
+  assert.equal(canClear(staff, 'dirty'), true, 'the positive twin');
+  // Without the cap, cannot clear anything.
+  const guest = parseCaps('');
+  assert.equal(canClear(guest, 'dirty'), false);
+});
+
+test('floor: the six states are the server\'s six, in the same words', async () => {
+  const { readFileSync } = await import('node:fs');
+  const rs = readFileSync(new URL('../../src/command/floor.rs', import.meta.url), 'utf8');
+  const words = [...rs.matchAll(/FloorState::\w+ => "(\w+)"/g)].map(m => m[1]);
+  assert.deepEqual(words, FLOOR_STATES);
+});
+
+const FT = k => '[' + k + ']';
+const FL = {
+  planW: 390, planH: 446, location_id: 'v',
+  zones: [{ id: 'salla', name: 'Salla <1>', tables: [
+    { n: 1, x: 50, y: 50, w: 40, h: 40, shape: 'rect', state: 'free', sitting_id: null },
+    { n: 2, x: 150, y: 50, w: 40, h: 40, shape: 'circle', state: 'paying', sitting_id: 's2' },
+    { n: 3, x: 250, y: 50, w: 40, h: 40, shape: 'rect', state: 'dirty', sitting_id: 's3' },
+    { n: 4, x: 350, y: 50, w: 40, h: 40, shape: 'rect', state: 'NOT_A_STATE', sitting_id: null },
+  ] }],
+  unplaced: [{ table: 'bar', sitting_id: 's9', state: 'dirty' }],
+};
+
+test('floor: every table is drawn in its state; only a dirty one is a button', () => {
+  const html = renderFloor(FL, FT, parseCaps('take_orders'));
+  assert.match(html, /class="ft fs-free" role="img"/);
+  assert.match(html, /class="ft fs-paying" role="img"[^>]*><title>\[floor_table\] 2: \[floor_state_paying\]<\/title><ellipse/);
+  assert.match(html, /class="ft fs-dirty tap" role="button" tabindex="0" data-act="pickTable" data-id="s3"/);
+  assert.equal((html.match(/data-act="pickTable"/g) || []).length, 2, 'table 3 and the unplaced bar');
+  assert.match(html, /fs-free" role="img" aria-label="\[floor_table\] 4/, 'an unknown state is drawn free');
+  assert.match(html, /Salla &lt;1&gt;/, 'the venue\'s own zone name is escaped');
+  assert.doesNotMatch(html, /style=/, 'the CSP drops style attributes');
+  assert.doesNotMatch(html, /tableCleared/, 'nothing picked: no clear button');
+  for (const s of FLOOR_STATES) assert.match(html, new RegExp(`<li class="fs-${s}">`), s + ' in the legend');
+});
+
+test('floor: a picked dirty table gets the one "cleared" button; nothing else does', () => {
+  const caps = parseCaps('take_orders');
+  assert.match(renderFloor(FL, FT, caps, 's3'), /data-act="tableCleared" data-id="s3"/);
+  assert.match(renderFloor(FL, FT, caps, 's9'), /data-act="tableCleared" data-id="s9"/, 'an unplaced dirty sitting too');
+  assert.doesNotMatch(renderFloor(FL, FT, caps, 's2'), /tableCleared/, 'the twin: a paying table is not cleared');
+  const kitchen = parseCaps('advance');
+  const k = renderFloor(FL, FT, kitchen, 's3');
+  assert.doesNotMatch(k, /data-act="pickTable"|tableCleared/, 'no take_orders: nothing to tap');
+});
+
+test('floor: loading, an empty plan, and the two paths', () => {
+  assert.match(renderFloor(null, FT, parseCaps('')), /\[loading\]/);
+  assert.match(renderFloor({ zones: [], unplaced: [] }, FT, parseCaps('')), /\[floor_noPlan\]/);
+  assert.equal(floorPath('a b'), '/staff/floor?location_id=a%20b');
+  assert.equal(clearedPath('s/1'), '/staff/floor/s%2F1/cleared');
 });

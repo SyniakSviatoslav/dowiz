@@ -277,3 +277,13 @@ export function refusalKey(status, message) {
   if (status === 404) return 'notHere';
   return null;
 }
+
+// ── floor states ────────────────────────────────────────────────────────────
+
+/// The six states `GET /api/staff/floor` answers (`command::floor::FloorState`),
+/// in the legend's order. Anything else the server sends is drawn as free.
+export const FLOOR_STATES = ['free', 'booked', 'ordering', 'waiting', 'paying', 'dirty'];
+
+/// May this signer tap a table to clear it? The cap is TakeOrders, the one the
+/// route checks; only a dirty table is cleared. The server decides again.
+export const canClear = (caps, state) => caps.has('take_orders') && state === 'dirty';
