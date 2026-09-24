@@ -97,7 +97,8 @@ fn stock_row(ev: &StockEvent) -> Option<WasteRow> {
         | StockEvent::Consumed { .. }
         | StockEvent::Released { .. }
         | StockEvent::Stocktake { .. }
-        | StockEvent::Served { .. } => None,
+        | StockEvent::Served { .. }
+        | StockEvent::Unserved { .. } => None,
     }
 }
 

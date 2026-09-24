@@ -19,6 +19,11 @@ is, in this platform, a `GET` that *performs* the shift close. It was called onc
 It is the single most important operational fact in this document: **on ebills.al, the HTTP verb does not tell
 you whether a request writes.**
 
+> **UPDATED 2026-09-23 — READ §8 FIRST.** The integration is wired (§8.1). A read-only run against the
+> live platform on 2026-09-23 contradicted this document in five places; §8.2 lists each one with the
+> evidence, and the code follows the evidence, not the text below. The sections below are kept as the
+> 2026-09-22 record and are marked where §8.2 overrides them.
+
 ---
 
 ## 0. Verdict, in six lines
@@ -347,9 +352,9 @@ contact{name,phone}, fulfilment{kind,note,table,address,fee}, payment, crypto?`)
 | `uuid` | `id` = `"ebills:" + uuid` | the idempotency key; a second arrival is the same `id`. **The hub does not refuse a second `Placed` for a known id** (`Hub::holds`, `lib.rs:711`, is about record content ids; `history(order_id)` would simply show two) — the guard is the poller's, and it must run INSIDE the object as a `command` so that "is it held? then append" is one turn (§6.1) |
 | `id`, `invOrdNum`, `fic`, `logCis[0].iic`, `pointOfSale.id` | **missing** → `external{source:"ebills", sale_id, inv_ord_num, fic, iic, pos_id}` | §3.2 (1) |
 | `timestamp` (UTC ISO) | `created_at_ms` | parsed without a clock; the poller's own time never enters the record |
-| `status:CLOSED` ∧ `fiscalSatus:FINISHED` ∧ `draft:0` ∧ `logCis[].status:SUCCESS` | `status: "PICKED_UP"` | the only terminal that `took_money()` and has no courier leg (`order_machine.rs:14-31,96-103`); a course is placed, made and served before ebills ever shows it — dowiz sees history, not a live ticket (§6.3). Anything else → **refused**, not `PENDING` |
+| `status:CLOSED` ∧ `fiscalSatus:FINISHED` ∧ `draft:0` ∧ `logCis[].status:SUCCESS` (**§8.2 (1): also `OPENED` for a course at an open table**) | `status: "PICKED_UP"` | the only terminal that `took_money()` and has no courier leg (`order_machine.rs:14-31,96-103`); a course is placed, made and served before ebills ever shows it — dowiz sees history, not a live ticket (§6.3). Anything else → **refused**, not `PENDING` |
 | `saleUnit.identifier` | `fulfilment.kind:"dine_in"`, `fulfilment.table` | `fulfilment::needs("dine_in") == Needs::Table` (`services/ordering/fulfilment.rs:59`) |
-| `saleUnitOrder.id` | `external.sale_unit_order_id` | groups the courses of one sitting |
+| `saleUnitOrder.id` | `external.sale_unit_order_id` | ~~groups the courses of one sitting~~ **not shown to group a sitting (§8.2 (2))** |
 | `paymentMethod` | `payment` | `CASH→"cash"`, `CARD|CARD_ON_POS|POK_CARD→"card"`; the other twelve → **refused** (`PAYMENT_KINDS` = `cash, card, apple_pay, google_pay, crypto`, `storefront.rs:649`) |
 | `totalValue` (f64) | `total`, `subtotal` | whole lek or refused; `delivery_fee:0`, `tip:0` |
 | `currency.currencyCode` | the location's `currency` | must be `ALL` or refused; `currencyRate` must be `1.0` |
@@ -358,7 +363,7 @@ contact{name,phone}, fulfilment{kind,note,table,address,fee}, payment, crypto?`)
 | `saleRecords[].amount` (f64) | `items[].quantity` | whole or refused (ebills sells by weight elsewhere; this venue does not) |
 | `saleRecords[].price` (f64) | `items[].unit_price` | whole lek or refused; `price * amount − discount == totalValue` checked per line, `Σ == totalValue` checked per sale |
 | `saleRecords[].vat` (`VAT_20`) | **missing** → `items[].vat_rate_pct: 20` | §3.2 (3) |
-| `saleRecords[].discount`, `discountReduceBase` | **missing** on the line; today it can only be folded into `unit_price` | §3.2 (3) |
+| `saleRecords[].discount`, `discountReduceBase` | `items[].discount_pct` — **a PERCENT, already inside `price` (§8.2 (3))** | §3.2 (3) |
 | `modifier_ids` | `[]` | ebills has no modifiers; `isMixProduct` is a different thing (a bundle) |
 | `client` (walk-in) | `contact{name:"",phone:""}`, `customer_id:null` | never copy a named client's `name/nipt/address` (§6.8) |
 | `extraUser.id` | **missing** → `external.operator_id` (the id, never the code) | who rang it up |
@@ -568,3 +573,70 @@ all four files → exit 0. The commands and their output are in the lane's repor
   and the tenant identifier learned at login stored in the venue's `settings` image, not as a secret.
 - `.github/workflows/ci.yml`: nothing until wired; the module's tests run under the existing `workers/api`
   cargo-test job once `mod ebills;` lands.
+
+---
+
+## 8. 2026-09-23: wired, and what the live platform corrected
+
+### 8.1 Status (2026-09-23)
+
+**Wired, not yet deployed at the time of writing.** Everything below is in `workers/api/src/ebills/`
+unless another path is given; every claim has a native test beside it.
+
+| Piece | Where | What it does |
+|---|---|---|
+| The allow-list as a type | `client.rs`, `judge.rs`, `fetch.rs` | `Path` names the six reads of §4 and nothing else; `Wire` has two constructors (`get`, the one `login` POST); `allowed()` re-checks every URL and `fetch.rs` sends nothing it rejects. Every refusal shape (401/403/problem+json/redirect/HTML/MFA/tenants/shift) is a named failure, never "no sales". |
+| The mapper | `map.rs`, `mod.rs`, `wire.rs` | §3.1, corrected by §8.2. Law 3 holds by construction (checked with `e2e/gates/conservation.mjs` over 35 real imported orders: `CONSERVATION HOLDS`). |
+| The import, one object turn | `import.rs` (+ `import/join.rs`, `import/bill.rs`), `glue.rs`, `hubdo/ebills.rs` | §6.1: unknown uuid → `Placed` (PICKED_UP); changed total/logCis → `Noted` (money untouched); unchanged → nothing (bytes equal). A bill → `Paid` on its courses (a `bill{}` block, never `payments[]`, so law 10 is untouched); bills wait up to 2 days for their courses, then are refused by name. |
+| Stock (§6.4) | `crates/dowiz-hub/src/stock.rs` | `StockEvent::Served` (never refused for the shelf; may go negative, `stock::short` names it) and `Unserved` (a void puts back exactly what its sale served, never twice). Old logs fold unchanged (tested with old-format bytes). |
+| The crosswalk | `state.rs`, `status.rs`, `routes.rs`, `public/admin/ebills.js` | ebills `itemCode` → dowiz `product_id`, set only by the owner (`POST /api/owner/ebills/map`); suggestions by normalised name + price agreement. Unmatched lines stay `ebills:<code>` and draw no stock. |
+| The poller | `poll.rs`, `walk.rs`, `lib.rs` `scheduled` | On the existing minute cron. Floor every 60 s while open (own `floor` image, rewritten only on change); sales every 5 min open / 30 closed / at once on backlog; ≤ 20 details per firing plus 5 probes past the newest id; the daily 7-day re-read; the re-check pass over closed courses (10 ids a firing); a first run reads 40 ids back as LEADS. Failures: venue error log, `last_error`, backoff 1→60 min, a halt on MFA / several tenants. |
+| Credentials | the venue's own `ebills` image | Per venue, not a Worker secret: one Worker serves every venue, and an `EBILLS_PASSWORD` secret would tie the platform to one till. Written by the owner's route, answered nowhere. |
+| Owner surface | `GET /api/owner/ebills`, the console's "Till (ebills)" pane, `/api/owner/health` → `ebills` | Link state and last error, unmatched codes with suggestions, mappings, the floor, and the settings. |
+
+**Live, read-only proof (2026-09-23):** login + 43 allow-listed GETs. 32 listed rows (22 bills), 35
+course details, 1 gap (404); 35 placed, 24 courses paid, 18 of 22 bills joined; the same day imported
+twice placed and paid nothing and left the bytes equal. The till's menu: 200 items; against the dowiz
+catalogue 150 match exactly by name and price, 10 fuzzily, 40 not at all.
+
+### 8.2 Five corrections from the live platform
+
+1. **A course at an OPEN table is listed and is `OPENED`, not hidden and not `CLOSED`.** §1.6 said the
+   list hides courses; on 2026-09-23 the list returned 10 rows `summaryInvoice:false, status:"OPENED"`
+   with a `saleUnitOrder`, all fiscalised (`FINISHED`, `logCis SUCCESS`). They turn `CLOSED` once the
+   bill is issued (their details did). The mapper accepts `OPENED` for a course only; a counter sale
+   that says `OPENED` is still refused.
+2. **`saleUnitOrder` is `{id}` in the list (no `status`), and it is NOT shown to group a sitting.**
+   The details inspected each carried a distinct id (8690 → 5668; at table 10, the course 8717 → 5685
+   and its void 8718 → 5686), and the list omits `status`, which parsing had required. The bill→courses
+   join therefore does not rely on it: all unbilled courses at the table when they sum to the bill,
+   else the newest run that does, else the oldest (`import/join.rs`).
+3. **A line's `discount` is a PERCENT and `price` is already discounted.** Every discounted line on the
+   day was `price 0.0, discount 100.0, totalValue 0.0` (a dish given free, `discountReduceBase:true`).
+   The first mapper subtracted it as lek and refused all of them. Now the percent is kept as
+   `discount_pct`, `price × amount == totalValue` is checked, and a partial discount whose `price` is a
+   list price does not add up and is refused, never guessed.
+4. **A cancellation was observed (§5.3, §6.6).** Sale 8718: `changedStatus:"CANCELLED"`, every line
+   negative (`amount -1`, `totalValue -4600`), `modified` = the sale it reverses (8717, with its
+   `uuid`). Table 10's bill for that sitting was 0 (+4600 −4600). It is imported as its own negative
+   order carrying `void_of`; the voided order gets a `Noted` `ebills_voided_by`; the shelf gets back
+   exactly what the voided sale served (`Unserved`); the bill of 0 pays both.
+5. **The catalogue escapes `&`** (`J&amp;B` in the public menu, `J&B` on the till): name matching decodes
+   it before comparing.
+
+Also measured: a sale id that does not exist answers `404 application/problem+json` (so a gap is
+recorded, not retried); the first run's 4 unjoined bills were exactly those whose courses were rung up
+before the first window — which is why a first run now reads 40 ids back as leads (placed only when a
+window bill claims them, never otherwise).
+
+### 8.3 Still open
+
+- Courses before the first window that no window bill claims are not imported (by design: they belong
+  to days before the link existed).
+- The `Paid` join is a heuristic by table and time (§5.2); two sittings at one table whose totals are
+  equal and billed in one poll could be paid in the wrong order of sitting — the totals are right either
+  way.
+- The poller's user should hold the narrowest role that reads `/api/sales`; per the SPA bundle the sale
+  list needs `ROLE_ADMIN` or `ROLE_SALE` (§6.9), so `ROLE_REPORT` alone may be refused — test it with the
+  allow-listed reads first.
+

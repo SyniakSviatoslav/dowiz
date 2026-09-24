@@ -2,8 +2,10 @@
 //! §1.6), with every identifier synthetic: the field NAMES and TYPES are the
 //! platform's, the values are not anyone's.
 
+use super::map::*;
+use super::time::epoch_ms;
 use super::*;
-use serde_json::json;
+use serde_json::{json, Value};
 
 const UUID_COURSE: &str = "00000000-0000-4000-8000-000000008602";
 const UUID_BILL: &str = "00000000-0000-4000-8000-000000008601";
@@ -106,7 +108,7 @@ fn the_detail_wrapper_yields_the_inner_sale() {
         "the platform spells it fiscalSatus; we do not"
     );
     assert_eq!(
-        s.sale_unit_order.as_ref().map(|o| o.status.as_str()),
+        s.sale_unit_order.as_ref().and_then(|o| o.status.as_deref()),
         Some("COMPLETED")
     );
     assert_eq!(s.log_cis.as_ref().map(Vec::len), Some(1));
@@ -273,14 +275,15 @@ fn a_course_becomes_a_served_dine_in_order() {
         items[0],
         json!({
             "product_id": "ebills:56", "name": "korca", "quantity": 2, "unit_price": 250,
-            "modifier_ids": [], "vat_rate_pct": 20, "discount": 0
+            "modifier_ids": [], "vat_rate_pct": 20, "discount_pct": 0
         })
     );
     assert_eq!(
         o["external"],
         json!({
             "source": "ebills", "sale_id": 8602, "inv_ord_num": 8598, "uuid": UUID_COURSE,
-            "fic": FIC, "iic": IIC, "pos_id": 1, "sale_unit_order_id": 5614, "operator_id": 1
+            "fic": FIC, "iic": IIC, "pos_id": 1, "sale_unit_order_id": 5614, "operator_id": 1,
+            "log_cis_len": 1, "sale_unit_kind": "TABLE"
         })
     );
     let text = o.to_string();
@@ -360,16 +363,25 @@ fn refusals_name_the_reason() {
         })
     );
 
-    let discounted = course_with(|v| {
-        v["saleRecords"][0]["discount"] = json!(50.0);
-        v["saleRecords"][0]["totalValue"] = json!(450.0);
-        v["totalValue"] = json!(450.0);
+    // THE MEASURED DISCOUNT (2026-09-23): `price` is already discounted and
+    // `discount` is a percent -- a free dish is `0.0 / 100.0 / 0.0`.
+    let free = course_with(|v| {
+        v["saleRecords"][0]["price"] = json!(0.0);
+        v["saleRecords"][0]["discount"] = json!(100.0);
+        v["saleRecords"][0]["totalValue"] = json!(0.0);
+        v["totalValue"] = json!(0.0);
     });
-    let o = to_order(&discounted, "l").unwrap();
-    assert_eq!(
-        (o["items"][0]["discount"].as_i64(), o["total"].as_i64()),
-        (Some(50), Some(450))
-    );
+    let o = to_order(&free, "l").unwrap();
+    assert_eq!((o["items"][0]["discount_pct"].as_i64(), o["total"].as_i64(), o["discount"].as_i64()), (Some(100), Some(0), Some(0)));
+    // A partial discount on a LIST price would not add up: refused, not guessed.
+    let partial = course_with(|v| {
+        v["saleRecords"][0]["discount"] = json!(50.0);
+        v["saleRecords"][0]["totalValue"] = json!(250.0);
+        v["totalValue"] = json!(250.0);
+    });
+    assert_eq!(to_order(&partial, "l"), Err(MapError::LineMismatch { line: 0, expected: 500, got: 250 }));
+    let over = course_with(|v| v["saleRecords"][0]["discount"] = json!(150.0));
+    assert!(matches!(to_order(&over, "l"), Err(MapError::NotWhole { field: "discount", .. })));
 
     let total_off = course_with(|v| v["totalValue"] = json!(600.0));
     assert_eq!(
@@ -394,6 +406,17 @@ fn refusals_name_the_reason() {
         to_order(&open, "l"),
         Err(MapError::NotFinished { .. })
     ));
+    // MEASURED: a course at a table still open is `OPENED`, fiscalised, and
+    // listed. Taken -- a counter sale that says `OPENED` is not.
+    let opened = course_with(|v| v["status"] = json!("OPENED"));
+    assert!(to_order(&opened, "l").is_ok());
+    let open_counter = course_with(|v| {
+        v["status"] = json!("OPENED");
+        v["saleUnitOrder"] = Value::Null;
+    });
+    assert!(matches!(to_order(&open_counter, "l"), Err(MapError::NotFinished { .. })));
+    let changed = course_with(|v| v["changedStatus"] = json!("MODIFIED"));
+    assert!(matches!(to_order(&changed, "l"), Err(MapError::NotFinished { .. })));
 
     let failed = course_with(|v| v["logCis"][0]["status"] = json!("ERROR"));
     assert_eq!(to_order(&failed, "l"), Err(MapError::NotFiscalised));
@@ -434,6 +457,37 @@ fn refusals_name_the_reason() {
         to_order(&zero_qty, "l"),
         Err(MapError::Negative { field: "amount" })
     );
+}
+
+/// A VOID, AS MEASURED (sale 8718 -> 8717): `changedStatus: CANCELLED`,
+/// negative lines, and `modified` naming the sale it reverses. Mapped to its
+/// own negative order that names what it voids; only a void may be negative.
+#[test]
+fn a_void_is_a_negative_order_that_names_what_it_voids() {
+    let void = course_with(|v| {
+        v["changedStatus"] = json!("CANCELLED");
+        v["modified"] = json!({ "id": 8601, "uuid": UUID_BILL, "totalValue": 500.0 });
+        v["saleRecords"][0]["amount"] = json!(-2.0);
+        v["saleRecords"][0]["totalValue"] = json!(-500.0);
+        v["totalValue"] = json!(-500.0);
+    });
+    let o = to_order(&void, "l").unwrap();
+    assert_eq!((o["total"].as_i64(), o["items"][0]["quantity"].as_i64()), (Some(-500), Some(-2)));
+    assert_eq!(o["void_of"], json!(format!("ebills:{UUID_BILL}")));
+    assert_eq!(o["external"]["void_of_sale_id"], json!(8601));
+    let orphan = course_with(|v| {
+        v["changedStatus"] = json!("CANCELLED");
+        v["saleRecords"][0]["amount"] = json!(-2.0);
+        v["saleRecords"][0]["totalValue"] = json!(-500.0);
+        v["totalValue"] = json!(-500.0);
+    });
+    assert!(matches!(to_order(&orphan, "l"), Err(MapError::NotFinished { .. })), "a void must name its sale");
+    let negative = course_with(|v| {
+        v["saleRecords"][0]["amount"] = json!(-2.0);
+        v["saleRecords"][0]["totalValue"] = json!(-500.0);
+        v["totalValue"] = json!(-500.0);
+    });
+    assert_eq!(to_order(&negative, "l"), Err(MapError::Negative { field: "amount" }), "only a void is negative");
 }
 
 #[test]

@@ -90,3 +90,28 @@ fn a_log_written_before_served_existed_folds_unchanged() {
     let back = StockLog::load(&grown.to_bytes_trimmed()).unwrap();
     assert_eq!(back.ledger().unwrap().level("salmon"), StockLevel { on_hand: 435, reserved: 20 });
 }
+
+fn unserved(item: &str, qty: Qty, order: &str) -> StockEvent {
+    StockEvent::Unserved { item: item.into(), qty, order_id: order.into() }
+}
+
+/// A VOID PUTS BACK exactly what its sale served -- once. A second reversal,
+/// a larger one, or one for an order that served nothing is refused.
+#[test]
+fn a_void_puts_back_what_was_served_and_never_twice() {
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    log.append(&StockEvent::Received { item: "salmon".into(), qty: 100 }).unwrap();
+    log.append(&served("salmon", 80, "ebills:a")).unwrap();
+    let led = log.ledger().unwrap();
+    assert_eq!(led.served_of("ebills:a"), vec![("salmon".to_string(), 80)]);
+    assert!(matches!(led.decide(&unserved("salmon", 81, "ebills:a")), Err(StockError::Linkage(_))), "more than served");
+    assert!(matches!(led.decide(&unserved("salmon", 1, "ebills:b")), Err(StockError::Linkage(_))), "nothing served");
+    log.append(&unserved("salmon", 80, "ebills:a")).expect("its own draw goes back");
+    let led = log.ledger().unwrap();
+    assert_eq!(led.level("salmon").on_hand, 100);
+    assert!(led.served_of("ebills:a").is_empty());
+    assert!(log.append(&unserved("salmon", 80, "ebills:a")).is_err(), "never twice");
+    assert_eq!(decode(&encode(&unserved("x", 2, "o"))), Some(unserved("x", 2, "o")));
+    let back = StockLog::load(&log.to_bytes_trimmed()).unwrap();
+    assert_eq!(back.ledger().unwrap().level("salmon").on_hand, 100, "survives the image");
+}

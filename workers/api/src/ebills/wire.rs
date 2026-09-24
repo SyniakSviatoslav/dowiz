@@ -29,6 +29,12 @@ pub(crate) struct Sale {
     #[serde(rename = "fiscalSatus")]
     pub(crate) fiscal_status: String,
     pub(crate) draft: i64,
+    /// `null`, or `CANCELLED` on the negative sale that voids another
+    /// (`modified`); the only two values ever observed.
+    #[serde(default)]
+    pub(crate) changed_status: Option<String>,
+    #[serde(default)]
+    pub(crate) modified: Option<Modified>,
     pub(crate) summary_invoice: bool,
     pub(crate) payment_method: String,
     pub(crate) total_value: f64,
@@ -63,10 +69,23 @@ pub(crate) struct SaleUnit {
 }
 
 /// Present on a COURSE, `null` on a bill and on a counter sale (§1.6).
+/// MEASURED 2026-09-23: the LIST carries only `{id}`; the detail adds
+/// `status` (`OPENED` while the table is open, `COMPLETED` once billed). The
+/// details inspected each had their own id: nothing shows it groups a sitting.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct SaleUnitOrder {
     pub(crate) id: i64,
-    pub(crate) status: String,
+    #[serde(default)]
+    pub(crate) status: Option<String>,
+}
+
+/// The sale a cancellation reverses: `modified` on the negative sale that
+/// `changedStatus: "CANCELLED"` names (measured 2026-09-23, sale 8718 ->
+/// 8717). Only the identity is read.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct Modified {
+    pub(crate) id: i64,
+    pub(crate) uuid: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -137,4 +156,14 @@ impl TableState {
     pub(super) fn occupied(&self) -> bool {
         self.status == "OCCUPIED"
     }
+}
+
+/// One row of the till's menu, `GET /api/item-in-sales` (§1.3): the code the
+/// crosswalk is keyed by, the name and the price the owner maps against.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ItemInSale {
+    pub(crate) item_code: Option<String>,
+    pub(crate) item: String,
+    pub(crate) price: f64,
 }

@@ -146,6 +146,9 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     // every health poll is the cost `hubstore::archive_seal` exists to avoid).
     let chain = hub.hub.chain_check();
 
+    // THE TILL LINK (ebills.al): last poll, last error, unmatched codes.
+    let ebills = crate::ebills::routes::health(&place).await;
+
     Response::from_json(&json!({
         "venue": loc,
         "images": images,
@@ -166,6 +169,7 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         "outbox": outbox,
         "backupSeal": crate::cloud::seal::describe(&crate::cloud::seal::state(&ctx.env)),
         "kitchen": kitchen,
+        "ebills": ebills,
     }))
 }
 

@@ -38,3 +38,19 @@ pub(super) fn epoch_ms(ts: &str) -> Result<i64, MapError> {
     let days = era * 146_097 + doe - 719_468;
     Ok(((days * 86_400 + h * 3_600 + mi * 60 + s) * 1_000) + ms)
 }
+
+/// The civil date `YYYY-MM-DD` of a millisecond instant ALREADY SHIFTED to
+/// the venue's wall clock (`dowiz_hub::tz::local_ms`). The inverse of the day
+/// arithmetic above, Hinnant's `civil_from_days`; no clock, no crate.
+pub(crate) fn day_of(local_ms: i64) -> String {
+    let z = local_ms.div_euclid(86_400_000) + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
+}
