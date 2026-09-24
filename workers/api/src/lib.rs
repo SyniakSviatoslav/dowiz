@@ -285,6 +285,12 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         // sits next to in the catalogue. Refused on write when it does not
         // parse back, naming the zone, the table and the rule.
         .post_async("/api/owner/floorplan", booking::set_plan)
+        // The console's floor editor opens the plan as stored.
+        .get_async("/api/owner/floorplan", booking::get_plan)
+        // The console's Bookings: the day's list, and the venue's moves on
+        // one (confirm, decline, seat, no-show, cancel -- all FSM events).
+        .get_async("/api/owner/reservations", booking::venue_day)
+        .post_async("/api/owner/reservations/:id/action", booking::venue_action)
         .post_async("/api/owner/branding/extract", services::venue::brand_extract::extract_branding)
         .post_async("/api/order/:id/feedback", services::orders::feedback::feedback)
         // ── accounts ──
@@ -332,6 +338,13 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/staff/till/tips", services::orders::room::till::tips)
         .get_async("/api/staff/floor", services::orders::room::floor::get)
         .post_async("/api/staff/floor/:sitting/cleared", services::orders::room::floor::post_cleared)
+        // A9: a table's QR code, a guest's round answered by the room, and the
+        // guest's read-only view of the table's bill.
+        .get_async("/api/owner/tables/qr", services::orders::room::table_qr::list)
+        .get_async("/api/owner/tables/:zone/:n/qr.svg", services::orders::room::table_qr::one)
+        .post_async("/api/staff/orders/:id/guest", services::orders::room::guest_round::confirm)
+        .get_async("/api/order/:id/sitting", services::orders::room::guest_round::sitting_bill)
+        .get_async("/api/order/:id/stamps", services::loyalty::handlers::order_stamps)
         // ── owner ──
         .get_async("/api/owner/orders", owner::orders)
         .post_async("/api/owner/orders/:id/action", owner::order_action)
@@ -356,6 +369,12 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/branding", services::venue::brand::branding)
         .post_async("/api/owner/branding", services::venue::brand::set_branding)
         .post_async("/api/owner/branding/preset", services::venue::brand::set_preset)
+        // C6 campaigns: segment, preview the count, queue through the outbox.
+        .get_async("/api/owner/campaigns", services::campaigns::handlers::list)
+        .post_async("/api/owner/campaigns", services::campaigns::handlers::define)
+        .get_async("/api/owner/campaigns/:id", services::campaigns::handlers::report)
+        .post_async("/api/owner/campaigns/:id/preview", services::campaigns::handlers::preview)
+        .post_async("/api/owner/campaigns/:id/send", services::campaigns::handlers::send_now)
         .get_async("/api/owner/customers", services::customers::handlers::customers)
         .post_async("/api/owner/customers/:key/reveal", services::customers::handlers::reveal_customer)
         .post_async("/api/owner/customers/:key/forget", services::customers::forget::forget_customer)
@@ -371,6 +390,10 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/stock/waste", services::operations::waste::waste_report)
         .post_async("/api/owner/supplies", services::operations::supplies::set_supply)
         .post_async("/api/owner/supplies/:id/retire", services::operations::supplies::retire_supply)
+        // F1: supplies and recipes in bulk, dry run first; the dishes as stored.
+        .post_async("/api/owner/supplies/import", services::catalogue::import::bulk::import_supplies)
+        .post_async("/api/owner/recipes/import", services::catalogue::import::bulk::import_recipes)
+        .get_async("/api/owner/products", services::catalogue::import::bulk::owner_products)
         .get_async("/api/owner/features", services::venue::settings::features)
         .post_async("/api/owner/features", services::venue::settings::set_feature)
         .get_async("/api/owner/settings", services::venue::settings::settings)
@@ -388,6 +411,9 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/ebills", ebills::routes::status)
         .post_async("/api/owner/ebills/config", ebills::routes::config)
         .post_async("/api/owner/ebills/map", ebills::routes::map)
+        .get_async("/api/owner/fiscal", fiscal::routes::status)
+        .post_async("/api/owner/fiscal/ebills", fiscal::routes::set)
+        .get_async("/api/owner/orders/:id/receipt", fiscal::routes::receipt)
         .get_async("/api/mcp", mcp::describe)
         .post_async("/api/mcp", mcp::rpc)
         .post_async("/api/owner/menu/import", services::catalogue::import::import_menu)
@@ -530,5 +556,8 @@ pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     } else {
         outbox::sweep(&env, now_ms).await;
         ebills::poll::sweep(&env, now_ms).await;
+        // AFTER the poll, never beside it: one session per venue per minute.
+        // Sends nothing for a venue its owner has not armed (card L70).
+        fiscal::rail::sweep(&env, now_ms).await;
     }
 }

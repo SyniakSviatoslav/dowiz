@@ -22,6 +22,7 @@ import { totalsBlock, refreshTotals, refreshBar } from '/store/cart.js';
 import { quoteEta } from '/store/eta.js';
 import { seaCalm, seaEvent } from '/store/sea.js';
 import { consentMarkup, wireConsent, consentBody } from '/store/consent.js';
+import { TABLE, tableBanner, tableBody } from '/store/table.js';
 
 /// The tip choices, in minor units of the venue's currency; the first is "no tip".
 const TIPS = [0, 100, 200, 500];
@@ -116,7 +117,8 @@ function fillFromLine(line){
 }
 
 function railMarkup(){
-  const list = rails();
+  // A round at the table is paid at the table: cash on the bill, taken by the room.
+  const list = TABLE ? rails().filter(([kind]) => kind === 'cash') : rails();
   const syms = wallets().map(w => w.symbol).join(' · ');
   return `<div class="pays" role="radiogroup" id="pays">
     ${list.map(([kind, ic, label, note], i) => `<button type="button" class="pay" role="radio" aria-checked="${i === 0}" data-pay="${kind}">
@@ -129,22 +131,23 @@ function railMarkup(){
 
 export function openCheckout(){
   const s = subtotal(), L = state.loc;
-  if (L?.minOrder && s < L.minOrder) return toast(`${t('min')}: ${money(L.minOrder)}`);
+  if (!TABLE && L?.minOrder && s < L.minOrder) return toast(`${t('min')}: ${money(L.minOrder)}`);
   seaCalm(true);
   whenSheetCloses(() => seaCalm(false));
   const pickup = state.how === 'pickup' && L?.pickup;
   sheet(`
     <p class="eyebrow" data-t="checkout"></p>
     <h2 data-t="summary"></h2>
+    ${tableBanner()}
     <p class="geo" id="ckEta" hidden></p>
 
-    ${L?.pickup ? `<h3 class="fsec" data-t="how"></h3>
+    ${L?.pickup && !TABLE ? `<h3 class="fsec" data-t="how"></h3>
     <div class="seg" role="radiogroup" data-t-attr="aria-label:how">
       <button type="button" class="seg-b ${!pickup ? 'on' : ''}" data-how="delivery" aria-pressed="${!pickup}">${icon('bike')}<span data-t="toDoor"></span></button>
       <button type="button" class="seg-b ${pickup ? 'on' : ''}" data-how="pickup" aria-pressed="${pickup}">${icon('walk')}<span data-t="toPickup"></span></button>
     </div>` : ''}
 
-    <div id="addrBox" ${pickup ? 'hidden' : ''}>
+    <div id="addrBox" ${pickup || TABLE ? 'hidden' : ''}>
       <h3 class="fsec" data-t="address"></h3>
       ${savedAddressMarkup()}
       <button type="button" class="btn btn-ghost mb-2" id="pinGo">${icon('navigation')}<span data-t="pickOnMap"></span></button>
@@ -155,12 +158,14 @@ export function openCheckout(){
     </div>
     <p class="geo ok" id="pickupLine" ${pickup && L?.address ? '' : 'hidden'}>${icon('map-pin')}<span><span data-t="pickupAt"></span>: ${esc(L?.address || '')}</span></p>
 
+    <div id="whenBox" ${TABLE ? 'hidden' : ''}>
     <h3 class="fsec" data-t="when"></h3>
     <div class="seg" role="radiogroup">
       <button type="button" class="seg-b on" data-when="asap" aria-pressed="true">${icon('clock')}<span data-t="asap"></span></button>
       <button type="button" class="seg-b" data-when="later" aria-pressed="false">${icon('history')}<span data-t="later"></span></button>
     </div>
     <input type="datetime-local" id="f-when" hidden>
+    </div>
 
     <h3 class="fsec" data-t="contact"></h3>
     <label for="f-name" data-t="name"></label>
@@ -173,9 +178,9 @@ export function openCheckout(){
     ${railMarkup()}
 
     <h3 class="fsec" data-t="extras"></h3>
-    <label for="f-note" id="noteLabel" data-t="${pickup ? 'kitchenNote' : 'note'}"></label>
+    <label for="f-note" id="noteLabel" data-t="${pickup || TABLE ? 'kitchenNote' : 'note'}"></label>
     <input id="f-note">
-    ${on('tips') ? `<div id="tipBox" ${pickup ? 'hidden' : ''}><label data-t="tip"></label>
+    ${on('tips') ? `<div id="tipBox" ${pickup || TABLE ? 'hidden' : ''}><label data-t="tip"></label>
     <div class="seg" role="radiogroup" data-t-attr="aria-label:tip">
       ${TIPS.map(v => `<button type="button" class="seg-b ${state.tip === v ? 'on' : ''}" data-tip="${v}" aria-pressed="${state.tip === v}">${v ? moneyEl(v) : `<span data-t="tipNo"></span>`}</button>`).join('')}
     </div></div>` : ''}
@@ -207,7 +212,7 @@ export function openCheckout(){
 
   const etaLine = async () => {
     const collecting = state.how === 'pickup' && L?.pickup;
-    const e = await quoteEta({ pickup: collecting });
+    const e = await quoteEta({ pickup: collecting || !!TABLE });   // a table has no road
     const el = $('#ckEta'); if (!el || $('#sheet').dataset.name !== 'checkout') return;
     el.hidden = !e;
     if (e) el.innerHTML = `${icon('clock')} ${esc(t(collecting ? 'ready' : 'etaRange'))}: <b>${esc(e.text)} ${esc(t('etaMin'))}</b>`;
@@ -340,12 +345,12 @@ async function place(pay, wallet){
   const errs = [];
   if (phone && phone.replace(/\D/g, '').length < PHONE_MIN_DIGITS) errs.push(t('badPhone'));
   const collecting = state.how === 'pickup' && state.loc?.pickup;
-  if (!collecting && !addr) errs.push(t('address') + ': ' + t('required'));
+  if (!collecting && !TABLE && !addr) errs.push(t('address') + ': ' + t('required'));
   $('#f-err').innerHTML = errs.map(e => `<div class="err">${esc(e)}</div>`).join('');
   if (errs.length) { $('#f-err').scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
 
   safeSet('dw_name', name); safeSet('dw_phone', phone); safeSet('dw_addr', addr); safeSet(ADDR_KEY, JSON.stringify(parts));
-  if (!collecting) rememberAddress({ line: addr, lat: state.pin?.lat ?? null, lng: state.pin?.lng ?? null });
+  if (!collecting && !TABLE) rememberAddress({ line: addr, lat: state.pin?.lat ?? null, lng: state.pin?.lng ?? null });
   state.placing = true; $('#place').disabled = true; $('#place').textContent = t('ordering');
   const geo = state.pin ? { lat_udeg: Math.round(state.pin.lat * 1e6), lon_udeg: Math.round(state.pin.lng * 1e6) } : (state.geo || {});
   const eta = state.lastEta;
@@ -359,7 +364,8 @@ async function place(pay, wallet){
         payment: pay, locale: lang, ...consentBody(phone),
         ...(pay === 'crypto' && wallet ? { crypto_symbol: wallet } : {}),
         ...(state.promo ? { promo: state.promo.code } : {}),
-        ...(state.tip && !collecting ? { tip: state.tip } : {}),
+        ...(state.tip && !collecting && !TABLE ? { tip: state.tip } : {}),
+        ...(TABLE ? tableBody(note) : {}),
         ...(scheduledAt() ? { scheduled_for_ms: scheduledAt() } : {}) })
     });
     const d = await r.json();

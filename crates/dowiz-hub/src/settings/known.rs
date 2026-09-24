@@ -247,6 +247,30 @@ pub const KNOWN: &[Known] = &[
         hint: "A name for the kitchen's printer (e.g. kitchen). When set, every order is also queued as a ticket the printer fetches: set the printer's server URL to /api/print/poll and its user name or password to a venue API key made for it.",
         default: "",
     },
+    // ── the stamp card (BLUEPRINT-CRM-CONSENT-LOYALTY §3.5; workers/api/src/services/loyalty) ──
+    //
+    // OFF BY DEFAULT. The count is a fold over the orders, never a stored
+    // number; `services::loyalty::stamps::validate` refuses anything else.
+    Known {
+        key: "loyalty.stamps.enabled",
+        label: "Stamp card",
+        hint: "0 or 1. When 1, every delivered or collected order, and every paid table, is a stamp; \
+               a full card takes the reward off the next order. Shown only on the customer's own order page.",
+        default: "0",
+    },
+    Known {
+        key: "loyalty.stamps.n",
+        label: "Stamps for a full card",
+        hint: "A whole number from 2 to 20.",
+        default: "10",
+    },
+    Known {
+        key: "loyalty.stamps.reward_minor",
+        label: "Stamp card reward",
+        hint: "Taken off the next order, in the same whole minor units as a dish price. More than 0; \
+               empty means no card runs.",
+        default: "",
+    },
     // ── fiscalisation (BLUEPRINT-OPERATIONAL-BLIND-SPOTS §2.8; workers/api/src/fiscal/wire.rs) ──
     Known {
         key: "fiscal.since_ms",

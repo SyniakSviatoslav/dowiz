@@ -9,6 +9,7 @@ import { state, cartLines, cartCount, subtotal, deliveryFee, lineUnit, lineNames
 import { t, retranslate } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, toast, fallbackArt, paintFallbacks } from '/store/ui.js';
 import { quoteEta } from '/store/eta.js';
+import { TABLE, tableBanner } from '/store/table.js';
 
 export function refreshBar(){
   const n = cartCount();
@@ -37,15 +38,15 @@ export function bounceBar(){
 export function totalsBlock(){
   const s = subtotal(), d = deliveryFee(), L = state.loc;
   const collecting = state.how === 'pickup' && L?.pickup;
-  const below = L?.minOrder && s < L.minOrder;
+  const below = !TABLE && L?.minOrder && s < L.minOrder;   // a round at a table has no minimum
   const cut = state.promo ? state.promo.discount : 0;
-  const tip = collecting ? 0 : (state.tip || 0);
+  const tip = collecting || TABLE ? 0 : (state.tip || 0);
   const grand = s - cut + d + tip;
   const exact = exactCharge(grand);
   return `<div class="totals" id="totalsBox">
     <div class="row"><span data-t="subtotal"></span>${moneyEl(s)}</div>
     ${cut ? `<div class="row cut"><span><span data-t="discount"></span> · ${esc(state.promo.code)}</span><span>−${moneyEl(cut)}</span></div>` : ''}
-    ${collecting ? `<div class="row"><span data-t="pickup"></span><span data-t="free"></span></div>`
+    ${TABLE ? '' : collecting ? `<div class="row"><span data-t="pickup"></span><span data-t="free"></span></div>`
                  : `<div class="row"><span data-t="delivery"></span>${d ? moneyEl(d) : `<span data-t="free"></span>`}</div>`}
     ${tip ? `<div class="row"><span data-t="tip"></span>${moneyEl(tip)}</div>` : ''}
     <div class="row grand"><span data-t="total"></span>${moneyEl(grand)}</div>
@@ -66,6 +67,7 @@ export function openCart(){
   sheet(`
     <p class="eyebrow" data-t="yourOrder"></p>
     <h2 data-t="cart"></h2>
+    ${tableBanner()}
     <div class="clines">${lines.map(l => `<div class="cline">
       <span class="cthumb">${l.p.imageUrl ? `<img src="${esc(l.p.imageUrl)}" alt="" loading="lazy" data-fb="${esc(l.p.name)}">` : fallbackArt(l.p.name)}</span>
       <span class="cmain"><b>${esc(l.p.name)}</b>

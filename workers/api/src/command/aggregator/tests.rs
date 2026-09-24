@@ -102,7 +102,7 @@ fn place_in(o: &Value, sub: i64) -> PlaceIn {
     PlaceIn {
         order_id: "wolt-W-8841".into(), envelope: o.to_string(), seq: NOW as u64,
         bom_lines: vec![(maki, 2)], promo: None, promo_code: None,
-        subtotal: sub, fee: 0, tip: 0, now_ms: NOW, notify_text: None,
+        subtotal: sub, fee: 0, tip: 0, now_ms: NOW, notify_text: None, stamps: None,
     }
 }
 

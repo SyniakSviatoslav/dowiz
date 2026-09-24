@@ -21,11 +21,13 @@
 //! claim worth re-reading whenever one of its files grows.
 
 pub mod analytics;
+pub mod campaigns;
 pub mod catalogue;
 pub mod courier;
 pub mod customers;
 pub mod engagement;
 pub mod identity;
+pub mod loyalty;
 pub mod ordering;
 pub mod operations;
 pub mod orders;

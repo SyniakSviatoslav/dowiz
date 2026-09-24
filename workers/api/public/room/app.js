@@ -21,6 +21,7 @@ import { renderTillScreen, bindTill, lastTill, keep as keepTill } from './till.j
 import { visible } from './till-view.js';
 import { renderFloor, bindFloor, loadFloor } from './floor.js';
 import { safeGet, safeSet } from '../store/storage.js';
+import { sittingHasGuest } from './guest.js';
 
 const $ = s => document.querySelector(s);
 const POLL_MS = 20000;
@@ -140,7 +141,7 @@ function renderRoom() {
     const st = (s.rounds || []).map(r => `<span class="status st-${esc(r.status)}">${esc(statusWord(r.status))}</span>`).join('');
     return `<li><button class="card" data-act="sit" data-id="${esc(s.sitting_id)}">
       <span class="tbl">${esc(t('table'))} ${esc(s.table || '—')}</span>
-      <span class="meta">${n} ${esc(t('rounds'))} ${st}</span>
+      <span class="meta">${n} ${esc(t('rounds'))} ${st}${sittingHasGuest(s) ? ` <span class="tag warn">${esc(t('guestWaiting'))}</span>` : ''}</span>
       <span class="due">${esc(t('due'))} ${money(due, S.currency, loc)}</span></button></li>`;
   }).join('');
   return `<div class="bar"><span class="chip">${esc(t(S.role || 'waiter'))}</span><span class="sp"></span>

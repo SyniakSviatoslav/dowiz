@@ -132,6 +132,11 @@ pub struct PlaceIn {
     /// (`services::orders::room::placer`); a guest's basket cannot name one.
     #[serde(default)]
     pub sitting_id: Option<String>,
+    /// THE TABLE'S CODE, `?t=` off the QR on the table (A9, `table_link`). A
+    /// guest's round is placed to the table the SIGNATURE names, never to one
+    /// the basket typed.
+    #[serde(default)]
+    pub table_link: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -794,7 +799,8 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             return Response::error("delivery address required", 400)
         }
         Needs::Table
-            if body.fulfilment.table.as_deref().map_or(true, |t| t.trim().is_empty()) =>
+            if body.fulfilment.table.as_deref().map_or(true, |t| t.trim().is_empty())
+                && body.table_link.is_none() =>
         {
             return Response::error("a table is required for an order in the venue", 400)
         }
@@ -822,6 +828,21 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         Ok(s) => s,
         Err(r) => return Ok(r),
     };
+    // A GUEST AT A TABLE (A9): the signed code decides the table and the
+    // sitting; a raw `sitting_id` from a guest is refused (`placer::guest`).
+    let guest = match &staffed {
+        Some(_) => None,
+        None => match crate::services::orders::room::placer::guest(
+            &ctx, &place, &loc.id, &loc_json, &body.fulfilment.kind,
+            body.table_link.as_deref(), body.sitting_id.as_deref(),
+        ).await {
+            Ok(g) => g,
+            Err(r) => return Ok(r),
+        },
+    };
+    if guest.is_some() && body.payment.as_deref().is_some_and(|p| p != "cash") {
+        return Response::error("a round ordered at the table is paid at the table", 400);
+    }
 
     // ── re-derive every price from the catalogue ──
     // The rule does not change with the store: whatever unit_price the browser
@@ -888,7 +909,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         .collect();
     // A MINIMUM IS THE PRICE OF A TRIP, and a round at a table has none: a
     // waiter ringing up one coffee is not a basket below the minimum.
-    if subtotal < loc.min_order && staffed.is_none() {
+    if subtotal < loc.min_order && staffed.is_none() && guest.is_none() {
         return Response::error("below minimum order", 409);
     }
 
@@ -1110,8 +1131,25 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         envelope["placed_by"] = json!(s.by);
         envelope["sitting_id"] = json!(s.sitting_id);
     }
-    let payment_kind = body.payment.clone().unwrap_or_else(|| "cash".into());
-    if !PAYMENT_KINDS.contains(&payment_kind.as_str()) {
+    // A TABLE ROUND IS PAID AT PAY TIME, not placed with a method: a waiter's
+    // round carries one only if the waiter sent one, a guest's never does
+    // (it is settled at the table). Stamping "cash" here made every card-paid
+    // round read "cash in hand" in the console (live walk, 2026-09-24).
+    let at_table = staffed.is_some() || guest.is_some();
+    let payment_kind = if guest.is_some() {
+        String::new()
+    } else {
+        body.payment.clone().unwrap_or_else(|| if at_table { String::new() } else { "cash".into() })
+    };
+    // A GUEST'S ROUND: born PENDING (the kernel's first state) for the room to
+    // confirm, UNPAID — the table's bill is settled at the table — and at the
+    // table the signed code names, whatever the basket typed.
+    if let Some(g) = &guest {
+        envelope["fulfilment"]["table"] = json!(g.table);
+        envelope["placed_by"] = json!(crate::services::orders::room::placer::GUEST);
+        envelope["sitting_id"] = json!(g.sitting_id);
+    }
+    if !payment_kind.is_empty() && !PAYMENT_KINDS.contains(&payment_kind.as_str()) {
         return Response::error("unknown payment method", 400);
     }
     // A rail the venue does not have is refused BEFORE the order exists, so a
@@ -1129,7 +1167,9 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         }
         _ => {}
     }
-    envelope["payment"] = json!(payment_kind);
+    if !payment_kind.is_empty() {
+        envelope["payment"] = json!(payment_kind);
+    }
     // Which wallet the customer chose to pay into, when there is a choice. The
     // symbol is enough: the address is looked up from the venue's own list, so
     // nothing a browser sent can redirect the money.
@@ -1202,6 +1242,13 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     if let Err(e) = crate::services::ordering::channel::stamp(&mut envelope, source) {
         return Response::error(e.to_string(), 500);
     }
+    // THE STAMP CARD (C5): only a customer who gave a number has one, and a
+    // waiter's round names no customer. The object spends a full card.
+    let stamps = if phone.is_empty() || staffed.is_some() {
+        None
+    } else {
+        crate::services::loyalty::handlers::at_placement(&place, &secret, &loc.id, &body.contact.phone).await
+    };
     let input = crate::command::place::PlaceIn {
         order_id: id.clone(),
         envelope: serde_json::to_string(&envelope).unwrap_or_else(|_| order_json.clone()),
@@ -1228,6 +1275,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             &loc.currency_code,
             &loc.name,
         )),
+        stamps,
     };
     let placed: crate::command::place::PlaceOut =
         match crate::command::send(&place, "place", &input).await {
@@ -1302,6 +1350,8 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             sub: id.clone(),
             order_id: id.clone(),
             location_id: loc.id.clone(),
+            // A guest at a table reads the table's whole bill with this.
+            sitting_id: guest.as_ref().map(|g| g.sitting_id.clone()),
             iat: now,
             exp: now + auth::CUSTOMER_TTL_MS,
         },

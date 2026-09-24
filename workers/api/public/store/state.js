@@ -105,7 +105,7 @@ export const cartCount = () => cartLines().reduce((s, l) => s + l.q, 0);
 export const subtotal = () => cartLines().reduce((s, l) => s + lineUnit(l.p, l.m) * l.q, 0);
 export function deliveryFee(){
   const L = state.loc; if (!L) return 0;
-  if (state.how === 'pickup') return 0;
+  if (state.how === 'pickup' || state.how === 'table') return 0;   // no trip (A9)
   if (L.freeDeliveryThreshold != null && subtotal() >= L.freeDeliveryThreshold) return 0;
   return L.deliveryFee || 0;
 }

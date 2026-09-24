@@ -6,9 +6,12 @@
 //! waiter reads (`sitting`), and the handlers that sequence the two.
 
 pub mod floor;
+pub mod guest_round;
 pub mod handlers;
 pub mod pay;
 pub mod placer;
+pub mod table_link;
+pub mod table_qr;
 pub mod till;
 pub mod transfer;
 

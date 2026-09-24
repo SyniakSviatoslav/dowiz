@@ -21,6 +21,8 @@ import { t, lang } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses, stars } from '/store/ui.js';
 import { openOcean, phaseOf, seaRest } from '/store/sea.js';
 import * as trackMap from '/store/track-map.js';
+import { billMarkup, mountBill } from '/store/table.js';
+import { stampsMarkup, mountStamps } from '/store/stamps.js';
 // Generated from the kernel's `OrderStatus::took_money` -- see `/lib/vocab.js`.
 // The hand copy this replaces was `new Set(['REJECTED', 'CANCELLED'])`, missing
 // the state a refund ends in.
@@ -234,6 +236,8 @@ export function openTracking(order){
       <div class="tsheet-in">
         ${episodeMarkup(order, eta)}
         ${trackMap.markup(order)}
+        ${billMarkup(order)}
+        ${stampsMarkup(order)}
         ${goodReviews().length ? `<section class="credits-wrap"><p class="eyebrow" data-t="whatTheySay"></p><div class="credits" id="credits"></div></section>` : ''}
         <div class="ep-more">
           ${cryptoBlock(order)}
@@ -254,6 +258,8 @@ export function openTracking(order){
   startReel($('#credits'));
   bindSay(order);
   bindCopy();
+  mountBill(order, tokenFor(order.id));
+  mountStamps(order, tokenFor(order.id));
   $('#closeTrack').onclick = closeSheet;
   clearTimeout(openTracking._t);
   // THE HUB TELLS US, and the poll is what catches what the socket missed.

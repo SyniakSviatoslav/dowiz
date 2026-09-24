@@ -33,6 +33,7 @@ fn input(promo: Option<&str>) -> PlaceIn {
         // `decide` never looks at it: the bell is queued by the OBJECT after
         // the log write, not by the rule. Asserted below rather than assumed.
         notify_text: None,
+        stamps: None,
     }
 }
 
@@ -363,6 +364,7 @@ mod taxing {
             tip: 0,
             now_ms: 1_700_000_000_000,
             notify_text: None,
+            stamps: None,
         }
     }
 
