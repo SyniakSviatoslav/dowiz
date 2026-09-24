@@ -52,7 +52,8 @@ pub enum ReservationStatus {
     Declined,
     /// The guest cancelled. Terminal.
     CancelledByGuest,
-    /// The venue cancelled a booking it had confirmed. Terminal.
+    /// The venue cancelled a booking -- one it had confirmed, or a request it
+    /// can no longer honour. Terminal.
     CancelledByVenue,
     /// The slot passed with nobody seated. Terminal.
     NoShow,
@@ -117,8 +118,9 @@ impl ReservationStatus {
     }
 
     /// True once the venue has committed a table. Past this line a cancellation
-    /// costs the venue a seating, which is why `CancelledByVenue` and `NoShow`
-    /// only exist on this side of it.
+    /// costs the venue a seating, which is why `NoShow` only exists on this
+    /// side of it. (`CancelledByVenue` is reachable from a request too: the
+    /// venue withdrawing what it never promised costs nobody a seating.)
     pub fn is_committed(&self) -> bool {
         matches!(self, Self::Confirmed | Self::Seated)
     }
@@ -128,8 +130,14 @@ impl ReservationStatus {
 pub fn allowed_next(from: ReservationStatus) -> &'static [ReservationStatus] {
     use ReservationStatus::*;
     match from {
-        // Before a table is held, either side may walk away.
-        Requested => &[Confirmed, Declined, CancelledByGuest],
+        // Before a table is held, either side may walk away. The venue has
+        // TWO ways to: `Declined` answers the request ("we cannot take it"),
+        // `CancelledByVenue` withdraws an unanswered one the venue can no
+        // longer honour (a closure, a private event) -- the owner console's
+        // one "cancel" button means the same thing on every live booking,
+        // and a 409 on the booking the venue has not yet answered was a
+        // refusal nobody could explain to the guest.
+        Requested => &[Confirmed, Declined, CancelledByGuest, CancelledByVenue],
         // A held table can be taken up, released by either side, or missed.
         Confirmed => &[Seated, CancelledByGuest, CancelledByVenue, NoShow],
         // Once the party is at the table the only way out is through.
@@ -180,7 +188,7 @@ const fn build_adjacency() -> [u8; 8] {
 const fn allowed_next_const(from: ReservationStatus) -> &'static [ReservationStatus] {
     use ReservationStatus::*;
     match from {
-        Requested => &[Confirmed, Declined, CancelledByGuest],
+        Requested => &[Confirmed, Declined, CancelledByGuest, CancelledByVenue],
         Confirmed => &[Seated, CancelledByGuest, CancelledByVenue, NoShow],
         Seated => &[Completed],
         Completed | Declined | CancelledByGuest | CancelledByVenue | NoShow => &[],
@@ -539,6 +547,29 @@ mod tests {
             assert_transition(Confirmed, Confirmed),
             Err(ReservationError::SameStatus(Confirmed))
         );
+    }
+
+    /// THE VENUE MAY WITHDRAW A REQUEST IT HAS NOT ANSWERED. Removing
+    /// `CancelledByVenue` from `Requested`'s row turns this red; the twin
+    /// below keeps the rest of the row honest.
+    #[test]
+    fn the_venue_may_cancel_a_request() {
+        assert_eq!(assert_transition(Requested, CancelledByVenue), Ok(()));
+        assert_eq!(fold_transitions(Requested, &[CancelledByVenue]), Ok(CancelledByVenue));
+    }
+
+    /// ...but a cancelled request stays cancelled, and a guest's cancel is
+    /// still the guest's word, not the venue's.
+    #[test]
+    fn a_venue_cancelled_request_is_terminal() {
+        for to in [Confirmed, Seated, Declined, CancelledByGuest, NoShow] {
+            assert_eq!(
+                assert_transition(CancelledByVenue, to),
+                Err(ReservationError::Illegal(CancelledByVenue, to))
+            );
+        }
+        // A request still cannot be marked a no-show: nothing was promised.
+        assert!(assert_transition(Requested, NoShow).is_err());
     }
 
     #[test]

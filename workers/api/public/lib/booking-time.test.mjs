@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import {
-  midnightMs, slotOf, weekdayOf, minuteNow, timesOn, DAY_MIN,
+  midnightMs, slotOf, weekdayOf, minuteNow, timesOn, DAY_MIN, offsetMinutes,
 } from './booking-time.js';
 
 let run = 0;
@@ -77,6 +77,17 @@ test('two services on one day come back as one ordered strip, without repeats', 
   assert.equal(new Set(t).size, t.length);
   assert.ok(t.includes(720) && t.includes(1080) && !t.includes(900),
     'noon and six are offered, three o\'clock is inside the lunch last sitting');
+});
+
+test('the offset is the zone\'s at that instant, not a summer constant', () => {
+  // Europe/Tirane: CEST (+120) until the last Sunday of October 2026, CET (+60) after.
+  assert.equal(offsetMinutes('Europe/Tirane', Date.parse('2026-09-24T12:00:00Z')), 120);
+  assert.equal(offsetMinutes('Europe/Tirane', Date.parse('2026-10-26T12:00:00Z')), 60,
+    'the defect: +120 all year books every winter slot an hour late');
+  assert.equal(offsetMinutes('UTC', Date.parse('2026-01-01T00:00:00Z')), 0);
+  const err = console.error; console.error = () => {};
+  try { assert.equal(offsetMinutes('Not/AZone', 0, 60), 60, 'an unknown name falls back, loudly'); }
+  finally { console.error = err; }
 });
 
 console.log(`booking-time: ${run} tests, all green`);

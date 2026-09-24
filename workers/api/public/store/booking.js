@@ -34,8 +34,16 @@ import { $, $$, esc, icon, sheet, sheetName, toast } from '/store/ui.js';
 // THE SLOT ARITHMETIC IS NOT IN THIS FILE. It reads no clock, so it can be
 // examined at a chosen instant -- `lib/booking-time.test.mjs` runs it in node
 // with no browser, which is the only way any of it was ever going to be tested.
-import { midnightMs, slotOf as slotAt, weekdayOf as weekdayAt, minuteNow, timesOn as timesIn }
+import { midnightMs, slotOf as slotAt, weekdayOf as weekdayAt, minuteNow, timesOn as timesIn, offsetMinutes }
   from '/lib/booking-time.js';
+// A GUEST BOOKS WITHOUT AN ACCOUNT, the way a guest orders: a name and a
+// phone, and the booking comes back with a token for that one booking. The
+// rules that are not visual are in `lib/booking-guest.js` (node-tested); the
+// guest's own list, the link and the cancel are `booking-mine.js`.
+import { safeGet, safeSet } from '/store/storage.js';
+import { guestErrors, bookingBody, refusalText } from '/lib/booking-guest.js';
+import { keepBooking, myBookings, openMine, takeLinkFromHash } from '/store/booking-mine.js';
+import '/store/booking-words.js';
 
 /// How far ahead the day strip runs. The kernel's horizon is sixty days; two
 /// weeks is what a phone strip can hold without becoming a date picker.
@@ -58,12 +66,15 @@ const DAY_NAMES = {
 // NOT -- a guest watching their chosen table disappear while the request is in
 // flight has no idea whether they booked it.
 const ui = { party: 2, day: 0, minute: null, zone: 0, pick: null, plan: null,
-             busy: false, sending: false, err: null, refocus: false };
+             busy: false, sending: false, err: null, refocus: false,
+             name: safeGet('dw_name') || '', phone: safeGet('dw_phone') || '' };
 
 // ── time, in the venue's own day ────────────────────────────────────────────
 
-const tzOffset = () =>
-  Number.isFinite(state.loc?.tzOffsetMinutes) ? state.loc.tzOffsetMinutes : 120;
+/// FROM THE VENUE'S ZONE NAME. This read `state.loc.tzOffsetMinutes`, a field
+/// the hub never sends, so every slot was computed at +120 -- right until the
+/// last Sunday of October, an hour wrong after it.
+const tzOffset = () => offsetMinutes(state.loc?.tz || 'Europe/Tirane', now());
 
 /// `Date.now()` IS READ HERE AND NOWHERE BELOW IT. Every rule takes the
 /// instant, so the screen is the only thing in this flow that touches a clock.
@@ -182,9 +193,11 @@ function head() {
   // time strip under a chosen date reads as a broken page.
   const days = Array.from({ length: DAYS_AHEAD }, (_, n) => n).filter(n => timesOn(n).length);
   const times = timesOn(ui.day);
+  const mine = myBookings().length;
   return `
   <p class="eyebrow" data-t="bkRoom"></p>
   <h2 data-t="bkTitle"></h2>
+  ${mine ? `<button type="button" class="btn ghost" id="bkMine">${icon('clock')}<span data-t="bkMine"></span> (${mine})</button>` : ''}
   <p class="bk-hint" data-t="bkHint"></p>
 
   <p class="bk-lbl" data-t="bkGuests"></p>
@@ -218,9 +231,11 @@ function body() {
     <span class="muted small">${esc(ui.err)}</span>
     <button type="button" class="btn" id="bkRetry" data-t="retry"></button></div>`;
   const zones = ui.plan?.zones || [];
-  if (!zones.length || !zones.some(z => z.tables.length))
-    return `<div class="empty bk-empty">${icon('building', 'ico-lg')}<b data-t="bkNoPlan"></b>
-      ${state.loc?.phone ? `<a class="btn" href="tel:${esc(state.loc.phone)}" data-t="callUs"></a>` : ''}</div>`;
+  // NO PLAN IS NOT NO BOOKING. A venue that has not drawn its room still
+  // takes a party and a time; it seats them where there is room.
+  if (!hasTables())
+    return `<div class="empty bk-empty">${icon('building', 'ico-lg')}<b data-t="bkNoPlanBook"></b>
+      ${state.loc?.phone ? `<a class="btn ghost" href="tel:${esc(state.loc.phone)}" data-t="callUs"></a>` : ''}</div>${contact()}`;
   return `
   <div class="bk-tabs" role="tablist" aria-label="${esc(t('bkRoom'))}">
     ${zones.map((z, i) => `<button type="button" role="tab" class="bk-tab" data-zone="${i}"
@@ -236,21 +251,36 @@ function body() {
          does not fit in three languages, so it is said once here instead, and
          in full in every table's aria-label. -->
     <span><b class="bk-key">4</b><span data-t="bkSeats"></span></span>
-  </div>`;
+  </div>${contact()}`;
 }
+
+const hasTables = () => (ui.plan?.zones || []).some(z => z.tables.length);
+
+/// Who the booking is under. Kept in `ui` as it is typed, because every chip
+/// press redraws the whole sheet, and remembered with the checkout's keys so
+/// a guest who ordered once does not type it twice.
+const contact = () => `
+  <label for="bk-name" data-t="bkName"></label>
+  <input id="bk-name" autocomplete="name" maxlength="80" value="${esc(ui.name)}">
+  <label for="bk-phone" data-t="bkPhone"></label>
+  <input id="bk-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+355..." value="${esc(ui.phone)}">`;
 
 function foot() {
   const tb = tableOf(ui.pick);
-  const ready = ui.minute !== null && !!tb;
+  // A TABLE IS OPTIONAL: without one the venue seats the party where it likes.
+  const ready = ui.minute !== null && !!ui.plan && !ui.busy;
   const when = ui.minute === null ? '' :
     `${(DAY_NAMES[lang] || DAY_NAMES.en)[weekdayOf(ui.day)]} ${hhmm(ui.minute)}`;
-  const line = ready
-    ? `<span data-t="bkChosen"></span>: <b>${esc(zoneAt()?.name || '')} · ${esc(t('bkTable'))} ${tb.n}</b>
+  const zoneName = (ui.plan?.zones || []).find(z => z.id === ui.pick?.zone)?.name || '';
+  const line = tb && ui.minute !== null
+    ? `<span data-t="bkChosen"></span>: <b>${esc(zoneName)} · ${esc(t('bkTable'))} ${tb.n}</b>
        · ${tb.seats} <span data-t="bkSeats"></span> · ${esc(when)}`
-    : `<span data-t="${ui.minute === null ? 'bkPickTime' : 'bkNone'}"></span>`;
+    : ui.minute === null ? `<span data-t="bkPickTime"></span>`
+    : `<span data-t="bkAnyTable"></span> · ${esc(when)}`;
+  const cta = ui.sending ? 'bkSending' : tb ? 'bkCta' : 'bkCtaAny';
   return `<div class="bk-foot"><p class="bk-pick">${line}</p>
     <button type="button" class="btn bk-cta" id="bkGo"${ready && !ui.sending ? '' : ' disabled'}
-      data-t="${ui.sending ? 'bkSending' : 'bkCta'}"></button></div>`;
+      data-t="${cta}"></button></div>`;
 }
 
 function draw() {
@@ -283,6 +313,9 @@ function bind() {
     g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
   }
   const go = $('#bkGo', root); if (go) go.onclick = commit;
+  const nm = $('#bk-name', root); if (nm) nm.oninput = () => { ui.name = nm.value; };
+  const ph = $('#bk-phone', root); if (ph) ph.oninput = () => { ui.phone = ph.value; };
+  const mine = $('#bkMine', root); if (mine) mine.onclick = () => openMine();
   // A REDRAW MUST NOT DROP THE KEYBOARD. The whole sheet is rewritten on every
   // change, the way the prototype re-renders, so the table the finger or the
   // Enter key just chose is given the focus back -- otherwise tabbing through
@@ -297,33 +330,42 @@ function bind() {
 
 async function commit() {
   const tb = tableOf(ui.pick);
-  if (ui.minute === null || !tb || ui.sending) return;
+  if (ui.minute === null || ui.sending) return;
+  const errs = guestErrors(ui);
+  if (errs.length) { toast(errs.map(k => t(k)).join('. ')); $(errs[0] === 'bkNeedPhone' ? '#bk-phone' : '#bk-name')?.focus(); return; }
   ui.sending = true; draw();
-  const body = {
-    party: ui.party,
-    slotMin: slotOf(ui.day, ui.minute),
-    zoneId: ui.pick.zone,
-    tableN: ui.pick.n,
+  const slotMin = slotOf(ui.day, ui.minute);
+  const body = bookingBody({
+    party: ui.party, slotMin, pick: tb ? ui.pick : null, name: ui.name, phone: ui.phone,
     // The caller's own key: a retried request must not book a second table.
-    requestId: `bk_${slotOf(ui.day, ui.minute)}_${ui.pick.zone}_${ui.pick.n}_${Math.random().toString(36).slice(2, 10)}`,
-  };
+    rid: `bk_${slotMin}_${tb ? `${ui.pick.zone}_${ui.pick.n}` : 'any'}_${Math.random().toString(36).slice(2, 10)}`,
+  });
   try {
     const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}/reservations`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': body.requestId },
+      body: JSON.stringify(body),
     });
     const text = await r.text();
-    if (r.ok) { toast(t('bkSent')); ui.pick = null; await loadPlan(); return; }
+    if (r.ok) {
+      const d = JSON.parse(text);
+      safeSet('dw_name', ui.name.trim()); safeSet('dw_phone', ui.phone.trim());
+      if (d.access_token) keepBooking({ id: d.id, t: d.access_token, slotMin, party: ui.party });
+      toast(t('bkSent'));
+      ui.pick = null; ui.sending = false;
+      await openMine(d.id);
+      return;
+    }
     // THE REFUSAL IS THE VENUE'S SENTENCE, shown as it arrived. The hub names
     // the table it refused; replacing that with "booking failed" is how a
     // guest ends up retrying the one table they cannot have.
-    if (r.status === 401 || r.status === 403) toast(t('bkSignIn'));
-    else toast(text ? `${t('bkFail')}: ${text.slice(0, 160)}` : t('bkFail'));
+    const why = refusalText(text);
+    toast(why ? `${t('bkFail')}: ${why.slice(0, 160)}` : t('bkFail'));
     // The floor moved under us if somebody else took it: ask again.
     if (r.status === 409) await loadPlan();
   } catch {
     toast(t('bkFail'));
   } finally {
-    ui.sending = false; draw();
+    if (ui.sending) { ui.sending = false; draw(); }
   }
 }
 
@@ -341,3 +383,7 @@ export function openBooking() {
 // this page honest in all three languages without it knowing about app.js.
 new MutationObserver(() => { if (sheetName() === 'book') { draw(); retranslate($('#sheetIn')); } })
   .observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
+
+// A BOOKING LINK opened on this phone (`#rsv=<id>&t=<token>`) is kept and
+// shown. After the first paint, so the menu behind the sheet is there.
+setTimeout(takeLinkFromHash, 0);

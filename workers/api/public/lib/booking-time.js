@@ -77,3 +77,24 @@ export function timesOn(windows, nowMinute = -1, step = SLOT_STEP_MIN, last = LA
   // same time twice.
   return [...new Set(out)].sort((a, b) => a - b);
 }
+
+/// The venue's UTC offset in minutes at an instant, from its zone NAME (the
+/// menu's `location.tz`, e.g. `Europe/Tirane`). The hub sends a name and no
+/// offset, so a caller that read `tzOffsetMinutes` read nothing and fell back
+/// to +120 all year -- an hour wrong from the last Sunday of October. The
+/// browser's own zone database answers; a name it does not know answers
+/// `fallback`, loudly in the console.
+export function offsetMinutes(tzName, atMs, fallback = 60) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tzName, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(new Date(atMs));
+    const v = k => Number(parts.find(p => p.type === k)?.value);
+    const asUtc = Date.UTC(v('year'), v('month') - 1, v('day'), v('hour') % 24, v('minute'), v('second'));
+    return Math.round((asUtc - Math.floor(atMs / 1000) * 1000) / 60_000);
+  } catch {
+    console.error(`booking-time: unknown time zone ${JSON.stringify(tzName)}; using UTC+${fallback / 60}`);
+    return fallback;
+  }
+}

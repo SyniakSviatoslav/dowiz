@@ -1,0 +1,36 @@
+/* The console's Bookings and floor editor. Loaded once by admin/bookings.js
+   or admin/floorplan.js (the CSP allows no inline style). Every colour is a
+   token the console already paints with. */
+
+.rs-days{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:var(--space-3)}
+.rs-days .chip{flex:none;display:flex;flex-direction:column;align-items:center;min-width:52px;line-height:1.2}
+.rs-days .chip i{font-style:normal;font-size:var(--text-xs);color:var(--brand-text-muted)}
+.rs-list{display:grid;gap:var(--space-2)}
+.rs-row{display:grid;gap:6px;padding:10px 14px;border:1px solid var(--glass-border);border-radius:var(--radius-card);background:var(--glass)}
+.rs-row.off{opacity:.62}
+.rs-top{display:flex;align-items:center;gap:var(--space-3)}
+.rs-time{font-family:var(--font-mono);font-weight:var(--weight-semibold);font-size:var(--text-lg);min-width:56px}
+.rs-who{flex:1;min-width:0}
+.rs-who b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rs-who small{display:block;color:var(--brand-text-muted);font-size:var(--text-xs)}
+.rs-pill{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:var(--radius-full);border:1px solid var(--glass-border);color:var(--brand-text-muted);white-space:nowrap}
+.rs-pill.REQUESTED{color:var(--st-PENDING);border-color:color-mix(in srgb,var(--st-PENDING) 40%,transparent)}
+.rs-pill.CONFIRMED,.rs-pill.SEATED{color:var(--st-DELIVERED);border-color:color-mix(in srgb,var(--st-DELIVERED) 40%,transparent)}
+.rs-pill.DECLINED,.rs-pill.CANCELLED_BY_VENUE,.rs-pill.NO_SHOW{color:var(--st-REJECTED);border-color:color-mix(in srgb,var(--st-REJECTED) 40%,transparent)}
+.rs-acts{display:flex;flex-wrap:wrap;gap:6px}
+.rs-acts .btn{min-height:36px;padding:6px 12px;font-size:var(--text-sm)}
+.rs-count{color:var(--brand-text-muted);font-size:var(--text-sm);margin:0 0 var(--space-2)}
+
+/* The floor editor: a grid the tables snap to, no canvas library. */
+.fp-plan{display:block;width:100%;max-width:420px;margin:var(--space-2) auto;touch-action:none;
+  border:1px solid var(--glass-border);border-radius:var(--radius-card);background:var(--brand-surface-raised)}
+.fp-plan:focus-visible{outline:2px solid var(--brand-primary);outline-offset:2px}
+.fp-grid{stroke:var(--glass-border);stroke-width:.5}
+.fp-t .fp-top{fill:var(--brand-surface);stroke:var(--brand-text-muted);stroke-width:1.5;cursor:grab}
+.fp-t.sel .fp-top{stroke:var(--brand-primary);stroke-width:3}
+.fp-t text{fill:var(--brand-text);font-family:var(--font-mono);font-size:13px;pointer-events:none}
+.fp-t text.fp-s{font-size:10px;fill:var(--brand-text-muted)}
+.fp-pad{display:grid;grid-template-columns:repeat(3,44px);gap:4px;justify-content:center;margin:var(--space-2) 0}
+.fp-pad .btn{min-height:40px;padding:0}
+.fp-fields{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.fp-issues{color:var(--st-REJECTED);font-size:var(--text-sm);margin:var(--space-2) 0}
