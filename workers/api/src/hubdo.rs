@@ -171,34 +171,9 @@ pub struct Fix {
     pub at_ms: i64,
 }
 
-/// One order as a projection carries it: the fold, and the two facts about the
-/// event that produced it.
-///
-/// This is what crosses the Worker↔object hop instead of the image. A console
-/// poll used to ship the whole log -- every order the venue has ever taken --
-/// so that the Worker could throw away all but the last day of it.
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct OrderView {
-    pub order_id: String,
-    /// `dowiz_hub::EventKind` as its byte, because the enum is not serialisable
-    /// and the number is what the log itself stores.
-    pub kind: u8,
-    pub seq: u64,
-    /// The FOLDED order, as JSON text. Text rather than a `Value` because every
-    /// consumer parses it themselves and re-serialising it here would be a
-    /// second encoding of the same bytes.
-    pub order_json: String,
-}
-
-impl OrderView {
-    pub(crate) fn of_event(e: dowiz_hub::Event) -> Self {
-        Self::of(e)
-    }
-
-    fn of(e: dowiz_hub::Event) -> Self {
-        OrderView { order_id: e.order_id, kind: e.kind as u8, seq: e.seq, order_json: e.order_json }
-    }
-}
+/// One order as a projection carries it. MOVED to `dowiz_hub::room::view` (D7 phase 1),
+/// so the room's deciders read the same type in the Worker and in wasm.
+pub use dowiz_hub::room::view::OrderView;
 
 /// What an append asks for. The kernel has already decided; this is the record.
 #[derive(serde::Deserialize)]

@@ -54,61 +54,10 @@ pub mod transfer;
 #[cfg(test)]
 mod tests;
 
-/// Why a command was refused, and with what status.
-///
-/// THE STATUS IS PART OF THE REFUSAL because these are not the same
-/// conversation. A short ingredient is a 409 that names the ingredient, so the
-/// customer can change one line; a refused promo code is a 400 about what they
-/// typed; an order this venue does not have is a 404 and must not leak that it
-/// exists elsewhere. Collapsing them into one code would tell a customer their
-/// basket was the problem when their coupon was.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Refused {
-    /// An ingredient is short. Carries the ledger's own words, which name it.
-    Stock(String),
-    /// The code exists and cannot be redeemed: expired, spent, under the floor.
-    Promo(String),
-    /// The log would not take the event.
-    Append(String),
-    /// No such order in THIS venue's log. Deliberately indistinguishable from
-    /// an order that belongs to another venue — see `assign::decide`.
-    NotFound,
-    /// The order is real and this is not something that can be done to it now:
-    /// an illegal FSM edge, a second courier, a status that cannot be handed
-    /// out. The kernel's own words where it has them.
-    Conflict(String),
-    /// The request itself is not one this command can take: a room event with
-    /// no signer, a reason outside the closed set, a quantity that is not one.
-    /// A 400, because retrying the same bytes will never succeed.
-    Invalid(String),
-    /// G2 (TAX): this venue has a tax rate and this order cannot carry its
-    /// `tax` block. Never placed untaxed; the reason is named. 500: the
-    /// platform's fault, not the customer's basket.
-    Untaxed(String),
-}
-
-impl Refused {
-    pub fn status(&self) -> u16 {
-        match self {
-            Refused::Promo(_) | Refused::Invalid(_) => 400,
-            Refused::NotFound => 404,
-            Refused::Stock(_) | Refused::Conflict(_) => 409,
-            Refused::Append(_) | Refused::Untaxed(_) => 500,
-        }
-    }
-
-    pub fn message(&self) -> &str {
-        match self {
-            Refused::Stock(m)
-            | Refused::Promo(m)
-            | Refused::Append(m)
-            | Refused::Conflict(m)
-            | Refused::Invalid(m)
-            | Refused::Untaxed(m) => m,
-            Refused::NotFound => "order not found",
-        }
-    }
-}
+/// Why a command was refused, and with what status: `dowiz_hub::room::Refused`.
+/// MOVED to the hub (D7 phase 1) so the room's deciders, which moved there
+/// too, refuse in the one type every command here already speaks.
+pub use dowiz_hub::room::Refused;
 
 /// Send a command to the venue's object and read its answer.
 ///

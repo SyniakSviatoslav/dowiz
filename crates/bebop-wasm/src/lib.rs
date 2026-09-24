@@ -23,6 +23,10 @@
 //! `Truncated`, exactly as `dowiz_hub::Hub::load` refuses it.
 
 pub mod abi;
+#[cfg(feature = "decide")]
+pub mod decide;
+#[cfg(feature = "decide")]
+pub mod decide_abi;
 
 use bebop_store::evlog::EvLog;
 use bebop_store::kv::{Kv, FNV_OFFSET, FNV_PRIME};

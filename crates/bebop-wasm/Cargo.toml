@@ -33,6 +33,16 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 bebop-store = { path = "../bebop-store" }
+# THE ROOM'S DECIDERS (D7 phase 1), behind `decide` and OFF by default, so the
+# reader above stays the few KB `bytes.baseline` ratchets. With it the module
+# exports `bw_amend` / `bw_pay`: the same `dowiz_hub::room` code the Worker's
+# object runs, over the same images (`src/decide.rs`).
+dowiz-hub = { path = "../dowiz-hub", optional = true }
+serde_json = { version = "1", optional = true }
+
+[features]
+default = []
+decide = ["dep:dowiz-hub", "dep:serde_json"]
 
 # The Worker's own profile (workers/api/Cargo.toml) minus `strip = false`,
 # which only wasm-bindgen's catch wrappers need. `panic = "abort"` because a

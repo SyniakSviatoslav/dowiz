@@ -1,0 +1,1 @@
+{"_d":true,"payments":[{"amount":200,"at":1,"by":"p2","currency":"ALL","method":"card"},{"amount":1000,"amount_in_order_currency":975,"at":1790000000000,"by":"p1","currency":"EUR","method":"cash","rate_ppm":975000,"till_id":"main","tip":100}],"tip":100,"total":1600}

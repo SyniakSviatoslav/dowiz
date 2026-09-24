@@ -359,6 +359,9 @@ name = "dowiz-hub"
 version = "0.1.0"
 dependencies = [
  "bebop-store",
+ "dowiz-core",
+ "serde",
+ "serde_json",
  "sha2",
 ]
 

@@ -41,6 +41,7 @@ pub mod post;
 pub mod promo;
 pub mod redact;
 pub mod roster;
+pub mod room;
 pub mod settings;
 pub mod stock;
 pub mod subs;

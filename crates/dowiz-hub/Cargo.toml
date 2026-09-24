@@ -17,3 +17,12 @@ bebop-store = { path = "../bebop-store" }
 # zero-dep allowlist and that gate may only shrink. See that module's header
 # for what the choice costs.
 sha2 = "0.10"
+# THE ROOM'S DECIDERS (`src/room`, D7 phase 1): amend and pay moved here from
+# the Worker so a wasm32 host runs the same code. Neither crate is new to the
+# build that links this one -- the Worker already had all three -- and
+# `dowiz-core` has zero dependencies of its own (its `money::Currency` is the
+# one currency table `room::pay::fx` resolves against). serde_json because an
+# order envelope is untrusted text and `minijson` is never pointed at that.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dowiz-core = { path = "../dowiz-core" }
