@@ -10,6 +10,7 @@
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, busy, switchEl, store, retranslate, confirm } from '/admin/core.js';
 import { lang, LANGS } from '/admin/i18n.js';
 import { loadVenue, rerender } from '/admin/app.js';
+import { openBulk } from '/admin/bulk.js';
 
 /// The tags the storefront knows how to filter and draw.
 const TAGS = ['popular', 'salmon', 'tuna', 'shrimp', 'vegetarian', 'hot'];
@@ -48,7 +49,7 @@ export async function render(host){
   const q = norm(view.q).trim();
   host.innerHTML = `
     <div class="screen-h"><div><p class="eyebrow" data-t="tabMenu"></p><h1>${esc(S.venue?.name || '')}</h1></div>
-      <div class="btn-row compact"><button type="button" class="act" id="mCats">${icon('adjustments')}<span data-t="categories"></span></button><button type="button" class="act" id="mImport">${icon('download')}</button><button type="button" class="act pri" id="mNew">${icon('plus')}<span data-t="addDish"></span></button></div></div>
+      <div class="btn-row compact"><button type="button" class="act" id="mCats">${icon('adjustments')}<span data-t="categories"></span></button><button type="button" class="act" id="mImport">${icon('download')}</button><button type="button" class="act" id="mRecipes" aria-label="${esc(t('importRecipes'))}">${icon('tools-kitchen-2')}</button><button type="button" class="act pri" id="mNew">${icon('plus')}<span data-t="addDish"></span></button></div></div>
     <p class="screen-hint" data-t="menuHint"></p>
     <label class="srch">${icon('search')}<input id="mq" type="search" value="${esc(view.q)}" data-t-attr="placeholder:search"></label>
     <div class="chips filters">
@@ -79,6 +80,7 @@ export async function render(host){
   };
   const mq = $('#mq', host); mq.oninput = () => { view.q = mq.value; rerender().then(() => $('#mq')?.focus()); };
   $('#mImport', host).onclick = openImport;
+  $('#mRecipes', host).onclick = () => openBulk('recipes', async () => { await loadVenue(); rerender(); });
 }
 
 /// The plate's diameter, for the storefront's "see it on the table" view.
@@ -201,7 +203,9 @@ export function openDish(id){
       nutrition: Object.keys(nutrition).length ? nutrition : null,
       weight_g: num($('#d-weight').value),
       ...(num($('#d-size').value) != null ? { size_cm: num($('#d-size').value) } : {}),
-      bom: recipeDraft.map(l => ({ supply: l.supply, qty: l.qty })),
+      // Only a recipe READ from the owner route is sent back: an unread one is
+      // not an empty one, and sending [] would clear it.
+      ...(recipeKnown === id ? { bom: recipeDraft.map(l => ({ supply: l.supply, qty: l.qty })) } : {}),
       taste: tasteDraft,
       translations,
     });
@@ -255,6 +259,8 @@ async function openCategories(){
 // ── the recipe: one portion's components, and what they add up to ────────────
 /// The recipe being edited; lines carry the supply's snapshot for the sums.
 let recipeDraft = [];
+/// The dish whose stored recipe was read (`GET /owner/products?id=`); null until then.
+let recipeKnown = null;
 let supplyBook = null;
 const TASTE_AXES = ['spicy', 'sweet', 'salty', 'sour', 'richness'];
 const TASTE_ICONS = { spicy: 'pepper', sweet: 'candy', salty: 'salt', sour: 'lemon-2', richness: 'flame' };
@@ -282,7 +288,7 @@ function derived(lines){
     weightG: food.length && food.every(l => l.weightG != null) ? Math.round(food.reduce((a, l) => a + l.weightG, 0)) : null };
 }
 function recipeMarkup(p){
-  recipeDraft = (p.bom || []).map(l => ({ ...l }));
+  recipeDraft = (p.bom || []).map(l => ({ ...l })); recipeKnown = null;
   return `<p class="eyebrow mt-3" data-t="recipe"></p><p class="muted small" data-t="recipeHint"></p>
     <div id="rcLines"></div>
     <details class="fold" id="rcPick"><summary>${icon('plus')} <span data-t="addSupplyToRecipe"></span></summary>
@@ -314,8 +320,16 @@ function drawRecipe(p){
   for (const b of $$('[data-rx]', host)) b.onclick = () => setQty(+b.dataset.rx, 0);
   for (const inp of $$('[data-rq]', host)) inp.onchange = () => { const q = Math.round(num(inp.value) ?? 0); setQty(+inp.dataset.rq, q); };
 }
+/// The dish's recipe AS STORED: the public menu the console loads never carries it.
+async function storedBom(id){
+  const r = await api(`/owner/products?id=${encodeURIComponent(id)}`);
+  const p = (r?.products || []).find(x => x.id === id);
+  if (!p) throw new Error('unknown product');
+  return p.bom || [];
+}
 async function bindRecipe(p){
   const book = await supplies();
+  try { recipeDraft = (await storedBom(p.id)).map(l => ({ ...l })); recipeKnown = p.id; } catch { recipeKnown = null; }
   // Lines loaded from the dish are re-scaled from today's supply numbers, as the hub does on save.
   recipeDraft = recipeDraft.map(l => { const sup = book.find(s => s.id === l.supply); return sup ? lineOf(sup, l.qty) : l; });
   drawRecipe(p);

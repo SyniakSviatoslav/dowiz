@@ -19,6 +19,7 @@
 //! (`stock::bom_of`); a dish with half a `bom` reserves the wrong amounts
 //! under a ledger that looks correct, which is worse than no ledger.
 
+mod against;
 mod cards;
 mod flatten;
 mod num;
@@ -26,6 +27,7 @@ mod supplies;
 #[cfg(test)]
 mod tests;
 
+pub use against::recipes_against;
 pub use num::CostScale;
 
 use crate::minijson::esc;
@@ -74,6 +76,10 @@ pub struct DraftSupply {
     pub protein: Option<f64>,
     pub fat: Option<f64>,
     pub carbs: Option<f64>,
+    /// The reorder threshold, in the base unit; `None` keeps what it was.
+    pub low_at: Option<i64>,
+    /// Who the kitchen buys it from, as the file writes it.
+    pub supplier: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,20 +141,24 @@ pub fn from_csv(ingredients: &str, recipes: &str, opts: &Opts) -> RecipeDraft {
 pub(super) fn column(name: &str) -> Option<&'static str> {
     let n = name.trim().trim_start_matches('\u{feff}').to_lowercase();
     Some(match n.as_str() {
-        "id" | "code" | "kod" | "код" | "артикул" => "id",
+        "id" | "code" | "kod" | "kodi" | "код" | "артикул" => "id",
         "name" | "ingredient_name" | "emri" | "назва" | "название" => "name",
         "ingredient" | "supply" | "ingredient name" | "përbërës" | "perberes" | "інгредієнт"
         | "ингредиент" => "ingredient",
-        "dish" | "product" | "product_name" | "pjata" | "страва" | "блюдо" => "dish",
-        "unit" | "njësia" | "njesia" | "од" | "одиниця" | "ед" | "единица" => "unit",
-        "cost" | "kosto" | "собівартість" | "себестоимость" => "cost",
+        "dish" | "product" | "product_name" | "pjata" | "produkti" | "страва" | "блюдо" => "dish",
+        "unit" | "njësia" | "njesia" | "njësi" | "njesi" | "од" | "од." | "одиниця" | "ед" | "единица" => "unit",
+        "cost" | "kosto" | "kostoja" | "price" | "çmimi" | "cmimi" | "собівартість" | "ціна" | "себестоимость"
+        | "цена" => "cost",
+        "per" | "për" | "cost per" | "price per" | "за" => "per",
+        "supplier" | "furnitori" | "furnizuesi" | "постачальник" | "поставщик" => "supplier",
+        "low_at" | "low at" | "low" | "min" | "minimum" | "minimumi" | "мінімум" | "минимум" => "low_at",
         "currency" | "monedha" | "валюта" => "currency",
         "category" | "kategoria" | "категорія" | "категория" => "category",
-        "kind" | "type" | "lloji" | "тип" => "kind",
-        "kcal" | "kcal/100" | "калорії" | "калории" => "kcal",
-        "protein" | "proteina" | "білки" | "белки" => "protein",
-        "fat" | "yndyra" | "жири" | "жиры" => "fat",
-        "carbs" | "karbohidrate" | "вуглеводи" | "углеводы" => "carbs",
+        "kind" | "type" | "lloji" | "тип" | "вид" => "kind",
+        "kcal" | "kcal/100" | "kalori" | "kalorite" | "калорії" | "ккал" | "калории" => "kcal",
+        "protein" | "proteina" | "proteinat" | "білки" | "белки" => "protein",
+        "fat" | "yndyra" | "yndyrna" | "жири" | "жиры" => "fat",
+        "carbs" | "karbohidrate" | "karbohidratet" | "вуглеводи" | "углеводы" => "carbs",
         "qty" | "quantity" | "sasia" | "кількість" | "количество" => "qty",
         "gross" | "brutto" | "брутто" | "amountin" => "gross",
         "net" | "netto" | "нетто" | "amountmiddle" => "net",
@@ -207,7 +217,7 @@ impl RecipeDraft {
             .iter()
             .map(|s| {
                 format!(
-                    r#"{{"id":"{}","name":"{}","unit":"{}","kind":{},"category":"{}","costPerBasis":{},"kcalPer100":{},"proteinPer100":{},"fatPer100":{},"carbsPer100":{}}}"#,
+                    r#"{{"id":"{}","name":"{}","unit":"{}","kind":{},"category":"{}","costPerBasis":{},"kcalPer100":{},"proteinPer100":{},"fatPer100":{},"carbsPer100":{},"lowAt":{},"supplier":{}}}"#,
                     esc(&s.id),
                     esc(&s.name),
                     s.unit,
@@ -217,7 +227,9 @@ impl RecipeDraft {
                     opt_f(s.kcal),
                     opt_f(s.protein),
                     opt_f(s.fat),
-                    opt_f(s.carbs)
+                    opt_f(s.carbs),
+                    opt_i(s.low_at),
+                    s.supplier.as_ref().map_or("null".into(), |k| format!("\"{}\"", esc(k)))
                 )
             })
             .collect();

@@ -9,6 +9,7 @@
 import { $, $$, esc, icon, t, api, post, withLoc, toast, sheet, closeSheet, busy, money, switchEl, confirm, retranslate, hydrate } from '/admin/core.js';
 import { lang } from '/admin/i18n.js';
 import { rerender } from '/admin/app.js';
+import { openBulk } from '/admin/bulk.js';
 
 /// The bar reads full at this many times the low mark.
 const FULL_AT_LOW_MULTIPLE = 4;
@@ -30,7 +31,7 @@ const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Dia
 
 export async function render(host){
   host.innerHTML = `<div class="screen-h"><div><p class="eyebrow" data-t="tabStock"></p><h1 data-t="supplies"></h1></div>
-    <button type="button" class="act pri" id="addSupply">${icon('plus')}<span data-t="addSupply"></span></button></div>
+    <div class="btn-row compact"><button type="button" class="act" id="importSupplies" aria-label="${esc(t('importSupplies'))}">${icon('download')}</button><button type="button" class="act pri" id="addSupply">${icon('plus')}<span data-t="addSupply"></span></button></div></div>
     <p class="screen-hint" data-t="stockScreenHint"></p>
     <label class="srch">${icon('search')}<input id="sq" type="search" value="${esc(view.q)}" data-t-attr="placeholder:search"></label>
     <div class="chips filters"><button type="button" class="chip ${view.kind === 'all' ? 'on' : ''}" data-k="all"><span data-t="all"></span></button>
@@ -38,6 +39,7 @@ export async function render(host){
       <select class="chip sortsel" id="sSort">${['name', 'category', 'low'].map(k => `<option value="${k}" ${view.sort === k ? 'selected' : ''}>${esc(t('ssort_' + k))}</option>`).join('')}</select></div>
     <div id="stockList"><div class="skel skel-row"></div><div class="skel skel-row"></div></div>`;
   $('#addSupply', host).onclick = () => openSupply(null);
+  $('#importSupplies', host).onclick = () => openBulk('supplies', rerender);
   $('#sSort', host).onchange = e => { view.sort = e.target.value; rerender(); };
   $('#sq', host).oninput = e => { view.q = e.target.value; drawList(host); };
   try { stock = await api('/owner/stock'); } catch (e) { $('#stockList', host).innerHTML = `<div class="empty">${icon('alert-triangle')}<b>${esc(t('loadFail'))}</b><span class="muted small">${esc(e.message || e)}</span></div>`; return; }

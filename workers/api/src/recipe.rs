@@ -19,6 +19,8 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+pub mod apply;
+
 /// The four kinds of supply. The first two are food and carry nutrition.
 pub const KINDS: &[&str] = &["food_ingredient", "condiment", "packaging", "utensil"];
 /// The base units a supply is counted in.

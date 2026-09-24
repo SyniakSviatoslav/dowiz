@@ -45,3 +45,27 @@ fn a_new_or_kitchen_dish_is_the_kitchens() {
     let old = json!({"id": "drinks-beer", "station": "kitchen"});
     assert_eq!(station_after_import(Some(&old)), (json!("kitchen"), Station::Kitchen));
 }
+
+/// F1: a re-imported price list must not erase the dish's RECIPE. It used to:
+/// `imported_product` kept eight named keys and `bom` was not one of them, so
+/// every recipe -- and every reservation the stock ledger makes from it --
+/// vanished the day the owner re-uploaded a menu to change a price.
+#[test]
+fn a_reimported_dish_keeps_its_recipe_and_what_follows_from_it() {
+    let old = json!({"id": "drinks-beer", "name": "Beer", "price": 250,
+        "bom": [{"supply": "beer-keg", "qty": 500}], "weightG": 500, "cost": 120,
+        "nutrition": {"kcal": 215}, "ingredients": ["beer"], "taste": {"sweet": 1},
+        "unavailableNote": "keg empty", "available": false});
+    let rec = imported_product(&draft(), Some(&old));
+    assert_eq!(rec["bom"], old["bom"]);
+    let reserved = dowiz_hub::stock::bom_of(&rec.to_string());
+    assert_eq!(reserved.len(), 1, "the ledger still reserves the keg");
+    for k in ["weightG", "cost", "nutrition", "ingredients", "taste"] {
+        assert_eq!(rec[k], old[k], "{k}");
+    }
+    // The file's own columns still win, and "on sale" clears the old reason.
+    assert_eq!((rec["price"].clone(), rec["available"].clone()), (json!(300), json!(true)));
+    assert_eq!(rec["unavailableNote"], Value::Null);
+    // TWIN: a new dish has no recipe to keep.
+    assert_eq!(imported_product(&draft(), None)["bom"], Value::Null);
+}

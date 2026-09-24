@@ -110,9 +110,18 @@ pub(super) fn read(text: &str, opts: &Opts, draft: &mut RecipeDraft) -> bool {
                 }
             },
         };
-        let cost = match (opts.cost_scale, num::split_unit(sheet.get(cells, "cost")).0) {
-            (_, "") | (None, _) => None,
-            (Some(scale), raw) => match cost_of(raw, scale, opts.currency, unit) {
+        // The cost is for ONE of the row's unit, unless a `per` cell says how
+        // much it is for ("1 kg", "100 g", "12"): an amount in the same base.
+        let per = match per_of(sheet.get(cells, "per"), unit) {
+            Ok(p) => p,
+            Err(why) => {
+                draft.warnings.push(format!("ingredients row {row} ({name}): per {why}; the cost is left out"));
+                None
+            }
+        };
+        let cost = match (opts.cost_scale, num::split_unit(sheet.get(cells, "cost")).0, per) {
+            (_, "", _) | (None, _, _) | (_, _, None) => None,
+            (Some(scale), raw, Some(per)) => match cost_of(raw, scale, opts.currency, per) {
                 Ok(c) => Some(c),
                 Err(why) => {
                     draft.warnings.push(format!("ingredients row {row} ({name}): cost {raw:?} {why}; left out"));
@@ -125,6 +134,17 @@ pub(super) fn read(text: &str, opts: &Opts, draft: &mut RecipeDraft) -> bool {
         let protein = nutrition(&sheet, cells, "protein", row, w);
         let fat = nutrition(&sheet, cells, "fat", row, w);
         let carbs = nutrition(&sheet, cells, "carbs", row, w);
+        let low_at = match sheet.get(cells, "low_at") {
+            "" => None,
+            raw => match amount_in(raw, unit, true) {
+                Ok(v) => Some(v),
+                Err(why) => {
+                    w.push(format!("ingredients row {row} ({name}): low_at {raw:?} {why}; left as it was"));
+                    None
+                }
+            },
+        };
+        let supplier = Some(sheet.get(cells, "supplier").to_string()).filter(|s| !s.is_empty());
         draft.supplies.push(DraftSupply {
             id,
             name: name.to_string(),
@@ -136,6 +156,8 @@ pub(super) fn read(text: &str, opts: &Opts, draft: &mut RecipeDraft) -> bool {
             protein,
             fat,
             carbs,
+            low_at,
+            supplier,
         });
     }
     true
@@ -144,4 +166,32 @@ pub(super) fn read(text: &str, opts: &Opts, draft: &mut RecipeDraft) -> bool {
 fn cost_of(raw: &str, scale: CostScale, currency: &str, unit: (num::Base, i128)) -> Result<i64, String> {
     let d = num::parse_decimal(raw)?;
     num::cost_per_basis(d, scale, currency, unit)
+}
+
+/// A `per` cell as how many base units the cost is for. Empty is one of the
+/// row's own unit (`1 kg` for a row in kg), which is what the column always meant.
+fn per_of(raw: &str, unit: (num::Base, i128)) -> Result<Option<(num::Base, i128)>, String> {
+    if raw.trim().is_empty() {
+        return Ok(Some(unit));
+    }
+    Ok(Some((unit.0, i128::from(amount_in(raw, unit, false)?))))
+}
+
+/// "2 kg" / "500" as a whole number of the row's BASE unit. A bare number is in
+/// the row's own unit; a word must count in the same base. A fraction of a
+/// gram is refused, not rounded -- the same rule as a recipe line.
+fn amount_in(raw: &str, unit: (num::Base, i128), zero_ok: bool) -> Result<i64, String> {
+    let (n, word) = num::split_unit(raw);
+    let (base, per) = match word {
+        None => unit,
+        Some(w) => num::unit_of(w).ok_or_else(|| format!("unit {w:?} is not g, kg, ml, l or pieces"))?,
+    };
+    if base != unit.0 {
+        return Err(format!("is in {}, this supply is counted in {}", base.as_str(), unit.0.as_str()));
+    }
+    let r = num::Rat::of(num::parse_decimal(n)?, per);
+    if zero_ok && r.num == 0 {
+        return Ok(0);
+    }
+    r.whole(base, i64::MAX)
 }

@@ -904,44 +904,14 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         // nutrition, ingredient list, weight and cost are summed from the
         // lines. A value the owner typed in the same request wins over the
         // sum, and stays marked as theirs.
+        // ONE PATH with the bulk import: `recipe::apply::set_bom`.
         if let Some(lines) = &bom {
-            let mut snap = Vec::with_capacity(lines.len());
-            for l in lines {
-                let Some(sj) = cat.supply(&l.supply) else {
-                    return Err(Error::RustError(format!("unknown supply {}", l.supply)));
-                };
-                let sv: Value = serde_json::from_str(&sj).unwrap_or(json!({}));
-                if snap.iter().any(|x: &crate::recipe::Line| x.supply == l.supply) {
-                    continue; // one line per supply, as the old editor enforced
-                }
-                snap.push(crate::recipe::line_of(&l.supply, l.qty, &sv));
-            }
-            if snap.is_empty() {
-                p["bom"] = Value::Null;
-                p["nutritionDerived"] = Value::Null;
-                p["cost"] = Value::Null;
-            } else {
-                let d = crate::recipe::derive(&snap);
-                p["bom"] = crate::recipe::bom_json(&snap);
-                if nutrition.is_none() && d.nutrition_complete {
-                    p["nutrition"] = json!({ "kcal": d.kcal, "protein": d.protein, "fat": d.fat, "carbs": d.carbs, "approx": false });
-                    p["nutritionDerived"] = json!(true);
-                } else if nutrition.is_some() {
-                    p["nutritionDerived"] = json!(false);
-                }
-                if weight_g.is_none() {
-                    if let Some(w) = d.weight_g {
-                        p["weightG"] = json!(w);
-                    }
-                }
-                // The console always sends the ingredients box, empty or not;
-                // an empty box beside a recipe means "use the recipe's names".
-                if ingredients.as_ref().is_none_or(|l| l.is_empty()) && !d.ingredients.is_empty() {
-                    p["ingredients"] = json!(d.ingredients);
-                }
-                p["cost"] = d.cost.map(|c| json!(c)).unwrap_or(Value::Null);
-                p["nutritionComplete"] = json!(d.nutrition_complete);
-            }
+            let typed = crate::recipe::apply::Typed {
+                nutrition: nutrition.is_some(),
+                weight: weight_g.is_some(),
+                ingredients: ingredients.as_ref().is_some_and(|l| !l.is_empty()),
+            };
+            crate::recipe::apply::set_bom(&mut p, lines, |s| cat.supply(s), typed).map_err(Error::RustError)?;
         }
         if let Some(list) = &allergens {
             p["allergens"] = json!(list);

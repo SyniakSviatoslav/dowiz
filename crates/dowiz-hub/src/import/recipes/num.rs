@@ -14,10 +14,9 @@ pub struct Dec {
     pub scale: u32,
 }
 
-/// Read a non-negative decimal. `.` is always a decimal point; `,` is one too
-/// (Excel in a decimal-comma locale), EXCEPT where it is ambiguous: a comma
-/// followed by exactly three digits after a non-zero whole part ("1,500") is
-/// a thousands group or a decimal, and choosing is a guess, so it is refused.
+/// Read a non-negative decimal: "1200", "1 200", "1.200,00" and "1,200.00"
+/// are the same number; "18,5" and "18.5" are the same number; "1,500" and
+/// "1.500" are refused (see [`grouped`]).
 pub fn parse_decimal(raw: &str) -> Result<Dec, String> {
     let t: String = raw
         .trim()
@@ -30,21 +29,7 @@ pub fn parse_decimal(raw: &str) -> Result<Dec, String> {
     if t.starts_with('-') {
         return Err(format!("{raw:?} is negative"));
     }
-    let seps: Vec<(usize, char)> = t.char_indices().filter(|(_, c)| *c == '.' || *c == ',').collect();
-    if seps.len() > 1 {
-        return Err(format!("{raw:?} has more than one separator; write the number plainly"));
-    }
-    let (int, frac, comma) = match seps.first() {
-        Some(&(i, c)) => (&t[..i], &t[i + 1..], c == ','),
-        None => (&t[..], "", false),
-    };
-    let digits_only = |s: &str| s.chars().all(|c| c.is_ascii_digit());
-    if !digits_only(int) || !digits_only(frac) || (int.is_empty() && frac.is_empty()) {
-        return Err(format!("{raw:?} is not a number"));
-    }
-    if comma && frac.len() == 3 && !int.trim_start_matches('0').is_empty() {
-        return Err(format!("{raw:?} could be a thousand times this or that; write it without the comma"));
-    }
+    let (int, frac) = grouped(&t, raw)?;
     let frac = frac.trim_end_matches('0');
     let all = format!("{int}{frac}");
     if all.len() > 30 {
@@ -52,6 +37,50 @@ pub fn parse_decimal(raw: &str) -> Result<Dec, String> {
     }
     let mant = if all.is_empty() { 0 } else { all.parse::<i128>().map_err(|_| format!("{raw:?} is not a number"))? };
     Ok(Dec { mant, scale: frac.len() as u32 })
+}
+
+/// The whole part and the fraction of a number as a spreadsheet writes it.
+///
+/// ONE SEPARATOR: `.` or `,` is a decimal point, EXCEPT exactly three digits
+/// after a non-zero whole part ("1,500", "1.200"): in an Albanian or Ukrainian
+/// file that is a thousand, in an English one it is not, and choosing is a
+/// guess -- refused. TWO KINDS of separator ("1.200,00", "1,200.00") are not a
+/// guess: the last one is the decimal point and the other groups thousands.
+/// One kind written more than once ("1.200.000") only groups. Every group
+/// after the first is exactly three digits, or the number is refused.
+fn grouped(t: &str, raw: &str) -> Result<(String, String), String> {
+    let digits_only = |s: &str| s.chars().all(|c| c.is_ascii_digit());
+    let not_a_number = || format!("{raw:?} is not a number");
+    let seps: Vec<(usize, char)> = t.char_indices().filter(|(_, c)| *c == '.' || *c == ',').collect();
+    let (whole, frac) = match seps.as_slice() {
+        [] => (t, ""),
+        [(i, _)] => {
+            let (int, frac) = (&t[..*i], &t[i + 1..]);
+            if frac.len() == 3 && digits_only(frac) && !int.trim_start_matches('0').is_empty() {
+                return Err(format!("{raw:?} could be a thousand times this or that; write it without the separator"));
+            }
+            (int, frac)
+        }
+        many => {
+            let group = many[0].1;
+            let last = many[many.len() - 1];
+            if many[..many.len() - 1].iter().any(|s| s.1 != group) {
+                return Err(format!("{raw:?} mixes its separators; write the number plainly"));
+            }
+            if last.1 == group { (t, "") } else { (&t[..last.0], &t[last.0 + 1..]) }
+        }
+    };
+    let groups: Vec<&str> = if seps.len() > 1 { whole.split(['.', ',']).collect() } else { vec![whole] };
+    let bad_group = groups.len() > 1
+        && (groups[0].is_empty() || groups[0].len() > 3 || groups[1..].iter().any(|g| g.len() != 3));
+    if bad_group {
+        return Err(format!("{raw:?} groups its thousands wrongly; write the number plainly"));
+    }
+    let int: String = groups.concat();
+    if !digits_only(&int) || !digits_only(frac) || (int.is_empty() && frac.is_empty()) {
+        return Err(not_a_number());
+    }
+    Ok((int, frac.to_string()))
 }
 
 /// The three base units a supply is counted in (`recipe::UNITS` in the Worker).

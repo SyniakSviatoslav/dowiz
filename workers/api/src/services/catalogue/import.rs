@@ -97,19 +97,23 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
                 cat.set_product(id, &v.to_string());
             }
         }
-        // Any catalogue write moves the menu version, which is how a client
-        // notices its cart went stale.
-        if let Some(lj) = cat.location() {
-            if let Ok(mut l) = serde_json::from_str::<Value>(&lj) {
-                let v = l.get("menu_version").and_then(|x| x.as_i64()).unwrap_or(1);
-                l["menu_version"] = json!(v + 1);
-                cat.set_location(&serde_json::to_string(&l).unwrap_or(lj));
-            }
-        }
+        bump_menu_version(cat);
         Ok(())
     })
     .await?;
     Response::from_json(&summary)
+}
+
+/// Any catalogue write moves the menu version, which is how a client notices
+/// its cart went stale.
+pub(crate) fn bump_menu_version(cat: &mut dowiz_hub::catalog::Catalog) {
+    if let Some(lj) = cat.location() {
+        if let Ok(mut l) = serde_json::from_str::<Value>(&lj) {
+            let v = l.get("menu_version").and_then(|x| x.as_i64()).unwrap_or(1);
+            l["menu_version"] = json!(v + 1);
+            cat.set_location(&serde_json::to_string(&l).unwrap_or(lj));
+        }
+    }
 }
 
 /// The record an imported row becomes. PURE.
@@ -122,17 +126,33 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
 /// refuse to keep them on sale, and a venue would find its whole menu stopped
 /// by an import that looked like it only touched prices.
 pub fn imported_product(p: &dowiz_hub::import::DraftProduct, old: Option<&Value>) -> Value {
-    let keep = |k: &str| old.and_then(|v| v.get(k).cloned()).unwrap_or(Value::Null);
-    json!({
-        "id": p.id, "categoryId": p.category_id, "name": p.name,
-        "description": p.description, "price": p.price,
-        "available": p.available, "sortOrder": p.sort_order,
-        "imageUrl": keep("imageUrl"), "imageUrlSmall": keep("imageUrlSmall"),
-        "sizeCm": keep("sizeCm"),
-        "station": keep("station"),
-        "modifierGroups": keep("modifierGroups"), "allergens": keep("allergens")
-    })
+    // EVERY KEY, NOT A LIST OF THEM (F1, 2026-09-24). This kept eight named
+    // keys and dropped the rest -- so a re-imported price list erased every
+    // dish's RECIPE (`bom`), and with it what the stock ledger reserves, plus
+    // weight, nutrition, ingredients, taste, tags and cooking time. The old
+    // record is the base now and only the file's own columns overwrite it.
+    let mut rec = match old {
+        Some(Value::Object(m)) => Value::Object(m.clone()),
+        _ => json!({
+            "imageUrl": null, "imageUrlSmall": null, "sizeCm": null,
+            "station": null, "modifierGroups": null, "allergens": null
+        }),
+    };
+    for (k, v) in [
+        ("id", json!(p.id)), ("categoryId", json!(p.category_id)), ("name", json!(p.name)),
+        ("description", json!(p.description)), ("price", json!(p.price)),
+        ("available", json!(p.available)), ("sortOrder", json!(p.sort_order)),
+    ] {
+        rec[k] = v;
+    }
+    // A reason for being off sale does not outlive the file saying it is on.
+    if p.available {
+        rec["unavailableNote"] = Value::Null;
+    }
+    rec
 }
+
+pub mod bulk;
 
 #[cfg(test)]
 mod tests;
