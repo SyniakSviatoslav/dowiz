@@ -1,0 +1,232 @@
+# Lesson O13 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O13
+role: owner
+module: customers
+order: 21
+covers: [customers]
+title:
+  sq: "Klientët pa spiunim"
+  en: "Customers without spying"
+  uk: "Клієнти без стеження"
+goal:
+  sq: "Zbuloni një kontakt me arsye dhe gjejeni në regjistër."
+  en: "Reveal one contact with a reason and find it in the log."
+  uk: "Розкрити один контакт із причиною й знайти це в журналі."
+steps:
+  - key: 1
+    anchor: more.tile.customers
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.customers"]'
+    title:
+      sq: "Klientët"
+      en: "Customers"
+      uk: "Клієнти"
+    caption:
+      sq: "Kartat e klientëve, me telefon dhe email të maskuar."
+      en: "Customer cards, with phone and email masked."
+      uk: "Картки клієнтів із прихованими телефоном та email."
+  - key: 2
+    anchor: customers.sort
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="customers.sort"]'
+    title:
+      sq: "Renditja"
+      en: "Sort"
+      uk: "Сортування"
+    caption:
+      sq: "Sipas porosisë së fundit ose numrit të porosive."
+      en: "By last order or number of orders."
+      uk: "За останнім замовленням чи кількістю замовлень."
+  - key: 3
+    anchor: customers.csv
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="customers.csv"]'
+    title:
+      sq: "Eksporto"
+      en: "Export"
+      uk: "Експорт"
+    caption:
+      sq: "Një skedar pa kontaktet e fshehura."
+      en: "A file without the hidden contacts."
+      uk: "Файл без прихованих контактів."
+  - key: 4
+    anchor: customers.row
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="customers.row"]'
+    title:
+      sq: "Një klient"
+      en: "A customer"
+      uk: "Клієнт"
+    caption:
+      sq: "Porositë, shpeshtësia dhe etiketat — pa kontaktin."
+      en: "Orders, frequency and tags — without the contact."
+      uk: "Замовлення, частота й мітки — без контакту."
+  - key: 5
+    anchor: customers.card
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="customers.card"]'
+    title:
+      sq: "Karta"
+      en: "The card"
+      uk: "Картка"
+    caption:
+      sq: "Ajo që lokali di për këtë klient."
+      en: "What the venue knows about this customer."
+      uk: "Що заклад знає про цього клієнта."
+  - key: 6
+    anchor: customers.note
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="customers.note"]'
+      value: "Pa qepë"
+    title:
+      sq: "Shënim"
+      en: "Note"
+      uk: "Примітка"
+    caption:
+      sq: "P.sh. «pa qepë». Klienti mund ta kërkojë."
+      en: "For example “no onion”. The customer can ask to see it."
+      uk: "Наприклад, «без цибулі». Клієнт може попросити її показати."
+  - key: 7
+    anchor: customers.table
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="customers.table"]'
+      value: "7"
+    title:
+      sq: "Tavolina e zakonshme"
+      en: "Usual table"
+      uk: "Звичний стіл"
+    caption:
+      sq: "Ku i pëlqen të ulet."
+      en: "Where they like to sit."
+      uk: "Де клієнт любить сидіти."
+  - key: 8
+    anchor: customers.lang
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="customers.lang"]'
+    title:
+      sq: "Gjuha"
+      en: "Language"
+      uk: "Мова"
+    caption:
+      sq: "Në cilën gjuhë i shkruani."
+      en: "Which language to write in."
+      uk: "Якою мовою писати."
+  - key: 9
+    anchor: customers.birthday
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="customers.birthday"]'
+      value: "03-14"
+    title:
+      sq: "Ditëlindja"
+      en: "Birthday"
+      uk: "День народження"
+    caption:
+      sq: "Vetëm nëse klienti e dha vetë."
+      en: "Only if the customer gave it."
+      uk: "Лише якщо клієнт сам її вказав."
+  - key: 10
+    anchor: customers.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="customers.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Ruhet në kartë."
+      en: "Saved on the card."
+      uk: "Збережено в картці."
+  - key: 11
+    anchor: customers.reveal
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="customers.reveal"]'
+    title:
+      sq: "Zbulo"
+      en: "Reveal"
+      uk: "Розкрити"
+    caption:
+      sq: "Kontakti shfaqet vetëm me një arsye të shkruar, një herë."
+      en: "The contact is shown only with a written reason, once."
+      uk: "Контакт показується лише з письмовою причиною, один раз."
+  - key: 12
+    anchor: customers.revealReason
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="customers.revealReason"]'
+      value: "Porosia u harrua në lokal"
+    title:
+      sq: "Arsyeja"
+      en: "The reason"
+      uk: "Причина"
+    caption:
+      sq: "P.sh. «porosia e harruar në lokal»."
+      en: "For example “order left at the venue”."
+      uk: "Наприклад, «замовлення забули в закладі»."
+  - key: 13
+    anchor: customers.revealLog
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="customers.revealLog"]'
+    title:
+      sq: "Regjistri"
+      en: "The log"
+      uk: "Журнал"
+    caption:
+      sq: "Çdo zbulim mbetet këtu."
+      en: "Every reveal stays here."
+      uk: "Кожне розкриття лишається тут."
+  - key: 14
+    anchor: customers.revealRow
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="customers.revealRow"]'
+    title:
+      sq: "Një zbulim"
+      en: "One reveal"
+      uk: "Одне розкриття"
+    caption:
+      sq: "Kush, kur dhe pse."
+      en: "Who, when and why."
+      uk: "Хто, коли й чому."

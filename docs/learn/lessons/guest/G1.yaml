@@ -1,0 +1,244 @@
+# Lesson G1 (guest). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: G1
+role: guest
+module: menu
+order: 1
+covers: []
+title:
+  sq: "Gjeni pjatën tuaj"
+  en: "Find your dish"
+  uk: "Знайдіть свою страву"
+goal:
+  sq: "Kërkoni, filtroni dhe renditni menunë në gjuhën dhe monedhën tuaj."
+  en: "Search, filter and sort the menu in your own language and currency."
+  uk: "Шукати, фільтрувати й сортувати меню своєю мовою та у своїй валюті."
+steps:
+  - key: 1
+    anchor: nav.menu
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.menu"]'
+    title:
+      sq: "Menuja"
+      en: "Menu"
+      uk: "Меню"
+    caption:
+      sq: "Skeda e parë: gjithë menuja e lokalit."
+      en: "The first tab: the venue’s whole menu."
+      uk: "Перша вкладка: усе меню закладу."
+  - key: 2
+    anchor: nav.info
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.info"]'
+    title:
+      sq: "Rreth lokalit"
+      en: "About the venue"
+      uk: "Про заклад"
+    caption:
+      sq: "Adresa, orari dhe telefoni."
+      en: "Address, hours and phone."
+      uk: "Адреса, години роботи й телефон."
+  - key: 3
+    anchor: top.lang
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="top.lang"]'
+    title:
+      sq: "Gjuha"
+      en: "Language"
+      uk: "Мова"
+    caption:
+      sq: "Shqip, anglisht ose ukrainisht."
+      en: "Albanian, English or Ukrainian."
+      uk: "Албанська, англійська чи українська."
+  - key: 4
+    anchor: lang.choice
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="lang.choice"]'
+    title:
+      sq: "Zgjidhni gjuhën"
+      en: "Choose the language"
+      uk: "Оберіть мову"
+    caption:
+      sq: "Menuja dhe butonat ndryshojnë menjëherë."
+      en: "The menu and the buttons change at once."
+      uk: "Меню й кнопки змінюються одразу."
+  - key: 5
+    anchor: top.currency
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="top.currency"]'
+    title:
+      sq: "Monedha"
+      en: "Currency"
+      uk: "Валюта"
+    caption:
+      sq: "Çmimet shfaqen edhe në monedhën tuaj; paguani në monedhën e lokalit."
+      en: "Prices are also shown in your currency; you pay in the venue’s."
+      uk: "Ціни показано й у вашій валюті; платите ви у валюті закладу."
+  - key: 6
+    anchor: currency.choice
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="currency.choice"]'
+    title:
+      sq: "Zgjidhni monedhën"
+      en: "Choose the currency"
+      uk: "Оберіть валюту"
+    caption:
+      sq: "Një prekje, dhe të gjitha çmimet rillogariten."
+      en: "One tap, and every price is recalculated."
+      uk: "Один дотик — і всі ціни перераховано."
+  - key: 7
+    anchor: nav.search
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.search"]'
+    title:
+      sq: "Kërkimi"
+      en: "Search"
+      uk: "Пошук"
+    caption:
+      sq: "Skeda e kërkimit."
+      en: "The search tab."
+      uk: "Вкладка пошуку."
+  - key: 8
+    anchor: menu.search
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="menu.search"]'
+      value: "salmon"
+    title:
+      sq: "Kërkoni"
+      en: "Search"
+      uk: "Пошук"
+    caption:
+      sq: "Shkruani emrin ose një përbërës."
+      en: "Type a name or an ingredient."
+      uk: "Введіть назву або інгредієнт."
+  - key: 9
+    anchor: menu.voice
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.voice"]'
+    title:
+      sq: "Me zë"
+      en: "By voice"
+      uk: "Голосом"
+    caption:
+      sq: "Thoni çfarë kërkoni në vend që ta shkruani."
+      en: "Say what you are looking for instead of typing it."
+      uk: "Скажіть, що шукаєте, замість того щоб писати."
+  - key: 10
+    anchor: voice.add
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="voice.add"]'
+    title:
+      sq: "Shtoje"
+      en: "Add it"
+      uk: "Додати"
+    caption:
+      sq: "Nëse dëgjoi mirë, shtojeni në shportë."
+      en: "If it heard right, add it to the basket."
+      uk: "Якщо почуто правильно, додайте в кошик."
+  - key: 11
+    anchor: voice.again
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="voice.again"]'
+    title:
+      sq: "Jo ky"
+      en: "Not this"
+      uk: "Не це"
+    caption:
+      sq: "Provoni sërish me zë."
+      en: "Try again by voice."
+      uk: "Спробуйте ще раз голосом."
+  - key: 12
+    anchor: menu.category
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.category"]'
+    title:
+      sq: "Kategoritë"
+      en: "Categories"
+      uk: "Категорії"
+    caption:
+      sq: "Kaloni direkt te sushi, supat ose pijet."
+      en: "Jump straight to sushi, soups or drinks."
+      uk: "Переходьте одразу до суші, супів чи напоїв."
+  - key: 13
+    anchor: menu.filter
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.filter"]'
+    title:
+      sq: "Filtri"
+      en: "Filter"
+      uk: "Фільтр"
+    caption:
+      sq: "Pa alergjenët që nuk i hani, ose sipas shijes."
+      en: "Without the allergens you avoid, or by taste."
+      uk: "Без алергенів, яких ви уникаєте, або за смаком."
+  - key: 14
+    anchor: menu.sort
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.sort"]'
+    title:
+      sq: "Renditja"
+      en: "Sort"
+      uk: "Сортування"
+    caption:
+      sq: "Sipas çmimit, kalorive ose si i vendosi lokali."
+      en: "By price, calories or the venue’s own order."
+      uk: "За ціною, калоріями або в порядку закладу."
+  - key: 15
+    anchor: menu.sortChoice
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.sortChoice"]'
+    title:
+      sq: "Zgjidhni renditjen"
+      en: "Choose the order"
+      uk: "Оберіть порядок"
+    caption:
+      sq: "Menuja rirenditet menjëherë."
+      en: "The menu reorders at once."
+      uk: "Меню одразу перевпорядковується."

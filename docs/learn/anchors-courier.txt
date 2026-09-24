@@ -1,0 +1,40 @@
+# Learning anchors in the courier app (/courier/), 2026-09-24.
+# One `data-tour` id per line: "<module>.<control> <file>:<line>" (the line that
+# writes it). docs/design/BLUEPRINT-LEARNING-VIDEOS-WIKI-2026-09-24.md §4.3 / §5.1.
+# Lessons (docs/learn/lessons/courier/): C1 hud.shift hud.sheet hud.mic help.open |
+# C2 shift.open pick.* offer.* | C3 run.eta run.address run.maps run.call run.picked |
+# C4 run.slide cash.* run.refused refused.* | C5 hud.outbox hud.sheet hud.shift hud.gps |
+# C6 hud.mic voice.yes ask.* panel.* shift.end.
+# Every id is a LITERAL string in its file (never built from parts), so grep
+# finds it. courier/learn.test.mjs fails when a listed id or its line moves, or
+# when the tree gains an id this list does not carry; it prints which one.
+help.open workers/api/public/courier/app.js:1087
+hud.shift workers/api/public/courier/index.html:48
+hud.gps workers/api/public/courier/index.html:50
+hud.outbox workers/api/public/courier/index.html:56
+hud.mic workers/api/public/courier/index.html:62
+voice.yes workers/api/public/courier/index.html:72
+hud.sheet workers/api/public/courier/index.html:75
+shift.open workers/api/public/courier/screens.js:60
+shift.end workers/api/public/courier/screens.js:63
+panel.learn workers/api/public/courier/screens.js:66
+ask.box workers/api/public/courier/screens.js:72
+ask.go workers/api/public/courier/screens.js:73
+panel.earnings workers/api/public/courier/screens.js:76
+panel.history workers/api/public/courier/screens.js:77
+pick.row workers/api/public/courier/screens.js:86
+pick.take workers/api/public/courier/screens.js:92
+run.eta workers/api/public/courier/screens.js:102
+run.address workers/api/public/courier/screens.js:103
+run.slide workers/api/public/courier/screens.js:120
+run.picked workers/api/public/courier/screens.js:125
+run.maps workers/api/public/courier/screens.js:130
+run.call workers/api/public/courier/screens.js:131
+run.refused workers/api/public/courier/screens.js:133
+cash.got workers/api/public/courier/screens.js:138
+cash.confirm workers/api/public/courier/screens.js:139
+refused.note workers/api/public/courier/screens.js:147
+refused.submit workers/api/public/courier/screens.js:148
+offer.card workers/api/public/courier/screens.js:158
+offer.clock workers/api/public/courier/screens.js:163
+offer.take workers/api/public/courier/screens.js:164

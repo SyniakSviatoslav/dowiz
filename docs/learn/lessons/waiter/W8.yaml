@@ -1,0 +1,169 @@
+# Lesson W8 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: W8
+role: waiter
+module: transfer
+order: 8
+covers: [transfer, moveSit]
+title:
+  sq: "Zhvendosni një raund ose një tavolinë"
+  en: "Move a round or a sitting"
+  uk: "Перенесіть раунд або стіл"
+goal:
+  sq: "Zhvendosni një raund në një tavolinë tjetër."
+  en: "Move a round to another table."
+  uk: "Перенести раунд на інший стіл."
+steps:
+  - key: 1
+    anchor: round.transfer
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="round.transfer"]'
+    title:
+      sq: "Kaloni artikuj"
+      en: "Transfer items"
+      uk: "Перенести позиції"
+    caption:
+      sq: "Kur një mysafir ndërron tavolinë, artikujt e tij shkojnë me të."
+      en: "When a guest changes tables, their items go with them."
+      uk: "Коли гість пересідає, його позиції переходять разом із ним."
+  - key: 2
+    anchor: transfer.line
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="transfer.line"]'
+    title:
+      sq: "Zgjidhni rreshtat"
+      en: "Choose the lines"
+      uk: "Оберіть рядки"
+    caption:
+      sq: "Shënoni çfarë kalon."
+      en: "Mark what moves."
+      uk: "Позначте, що переноситься."
+  - key: 3
+    anchor: transfer.target
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="transfer.target"]'
+    title:
+      sq: "Tavolina e re"
+      en: "The new table"
+      uk: "Новий стіл"
+    caption:
+      sq: "Zgjidhni ku shkojnë."
+      en: "Choose where they go."
+      uk: "Оберіть, куди вони йдуть."
+  - key: 4
+    anchor: transfer.send
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="transfer.send"]'
+    title:
+      sq: "Kaloni"
+      en: "Transfer"
+      uk: "Перенести"
+    caption:
+      sq: "Shumat e të dyja tavolinave rillogariten menjëherë."
+      en: "Both tables’ totals are recalculated at once."
+      uk: "Суми обох столів перераховуються одразу."
+  - key: 5
+    anchor: round.tableField
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="round.tableField"]'
+      value: "7"
+    title:
+      sq: "Numri i tavolinës"
+      en: "The table number"
+      uk: "Номер столу"
+    caption:
+      sq: "Për të zhvendosur gjithë raundin, shkruani numrin e tavolinës së re…"
+      en: "To move the whole round, type the new table’s number…"
+      uk: "Щоб перенести весь раунд, введіть номер нового столу…"
+  - key: 6
+    anchor: round.tableMove
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="round.tableMove"]'
+    title:
+      sq: "Zhvendos"
+      en: "Move"
+      uk: "Перенести"
+    caption:
+      sq: "…dhe shtypni «Zhvendos»."
+      en: "…and press “Move”."
+      uk: "…і натисніть «Перенести»."
+  - key: 7
+    anchor: round.moveSitting
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="round.moveSitting"]'
+    title:
+      sq: "Gjithë tavolina"
+      en: "The whole sitting"
+      uk: "Увесь стіл"
+    caption:
+      sq: "Kur gjithë grupi ndërron vend, zhvendosni tavolinën me të gjitha raundet."
+      en: "When the whole party moves, move the sitting with all its rounds."
+      uk: "Коли пересідає вся компанія, перенесіть стіл з усіма раундами."
+  - key: 8
+    anchor: sitting.move
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="sitting.move"]'
+    title:
+      sq: "Nga tavolina"
+      en: "From the table"
+      uk: "Зі столу"
+    caption:
+      sq: "E njëjta gjë, direkt nga karta e tavolinës."
+      en: "The same, straight from the table’s card."
+      uk: "Те саме — прямо з картки столу."
+  - key: 9
+    anchor: move.table
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="move.table"]'
+    title:
+      sq: "Ku"
+      en: "Where to"
+      uk: "Куди"
+    caption:
+      sq: "Zgjidhni tavolinën e lirë."
+      en: "Choose the free table."
+      uk: "Оберіть вільний стіл."
+  - key: 10
+    anchor: move.submit
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="move.submit"]'
+    title:
+      sq: "Zhvendosni"
+      en: "Move"
+      uk: "Перенести"
+    caption:
+      sq: "Tavolina e vjetër lirohet; asgjë nuk humbet."
+      en: "The old table is freed; nothing is lost."
+      uk: "Старий стіл звільняється; нічого не губиться."

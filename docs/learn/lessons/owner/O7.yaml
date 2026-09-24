@@ -1,0 +1,185 @@
+# Lesson O7 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O7
+role: owner
+module: staff
+order: 14
+covers: [staff]
+title:
+  sq: "Stafi dhe të drejtat e tij"
+  en: "Staff and their rights"
+  uk: "Персонал і його права"
+goal:
+  sq: "Ftoni një kamarier dhe shpjegoni tre rolet."
+  en: "Invite a waiter and explain the three roles."
+  uk: "Запросити офіціанта й пояснити три ролі."
+steps:
+  - key: 1
+    anchor: more.tile.staff
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.staff"]'
+    title:
+      sq: "Stafi"
+      en: "Staff"
+      uk: "Персонал"
+    caption:
+      sq: "Nga «Më shumë», te stafi."
+      en: "From “More”, open staff."
+      uk: "З розділу «Більше» відкрийте персонал."
+  - key: 2
+    anchor: staff.list
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="staff.list"]'
+    title:
+      sq: "Lista"
+      en: "The list"
+      uk: "Список"
+    caption:
+      sq: "Kush punon në sallë dhe në kuzhinë."
+      en: "Who works in the room and the kitchen."
+      uk: "Хто працює в залі й на кухні."
+  - key: 3
+    anchor: staff.invite
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="staff.invite"]'
+    title:
+      sq: "Ftesë"
+      en: "Invite"
+      uk: "Запросити"
+    caption:
+      sq: "Një kod ftese për telefonin e tij."
+      en: "An invite code for their phone."
+      uk: "Код запрошення для їхнього телефона."
+  - key: 4
+    anchor: staff.inviteName
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="staff.inviteName"]'
+      value: "Elira"
+    title:
+      sq: "Emri"
+      en: "Name"
+      uk: "Ім’я"
+    caption:
+      sq: "Emri i personit."
+      en: "The person’s name."
+      uk: "Ім’я людини."
+  - key: 5
+    anchor: staff.inviteEmail
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="staff.inviteEmail"]'
+      value: "elira@example.com"
+    title:
+      sq: "Email-i"
+      en: "Email"
+      uk: "Email"
+    caption:
+      sq: "Me këtë email do të hyjë."
+      en: "The email they will sign in with."
+      uk: "Email, з яким людина входитиме."
+  - key: 6
+    anchor: staff.inviteRole
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="staff.inviteRole"]'
+    title:
+      sq: "Roli"
+      en: "The role"
+      uk: "Роль"
+    caption:
+      sq: "Kamarier: porosi dhe pagesa. Menaxher: edhe arka dhe anulimet. Kuzhina: vetëm porositë."
+      en: "Waiter: orders and payments. Manager: also the till and voids. Kitchen: orders only."
+      uk: "Офіціант: замовлення й оплата. Менеджер: ще й каса та анулювання. Кухня: лише замовлення."
+  - key: 7
+    anchor: staff.inviteSend
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="staff.inviteSend"]'
+    title:
+      sq: "Dërgo"
+      en: "Send"
+      uk: "Надіслати"
+    caption:
+      sq: "Ftesa dërgohet."
+      en: "The invite is sent."
+      uk: "Запрошення надіслано."
+  - key: 8
+    anchor: staff.inviteCopy
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="staff.inviteCopy"]'
+    title:
+      sq: "Kopjo"
+      en: "Copy"
+      uk: "Копіювати"
+    caption:
+      sq: "Ose kopjoni kodin."
+      en: "Or copy the code."
+      uk: "Або скопіюйте код."
+  - key: 9
+    anchor: staff.card
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="staff.card"]'
+    title:
+      sq: "Karta"
+      en: "The card"
+      uk: "Картка"
+    caption:
+      sq: "Një person dhe të drejtat e tij."
+      en: "One person and their rights."
+      uk: "Одна людина та її права."
+  - key: 10
+    anchor: staff.role
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="staff.role"]'
+    title:
+      sq: "Ndryshoni rolin"
+      en: "Change the role"
+      uk: "Змініть роль"
+    caption:
+      sq: "Të drejtat ndryshojnë në hyrjen e tij të radhës."
+      en: "The rights change at their next sign-in."
+      uk: "Права зміняться під час наступного входу."
+  - key: 11
+    anchor: staff.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="staff.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Ruhet me emrin tuaj."
+      en: "Saved under your name."
+      uk: "Зберігається з вашим ім’ям."

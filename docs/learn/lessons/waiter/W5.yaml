@@ -1,0 +1,215 @@
+# Lesson W5 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: W5
+role: waiter
+module: round
+order: 5
+covers: [round, add]
+title:
+  sq: "Merrni një raund"
+  en: "Take a round"
+  uk: "Прийміть раунд"
+goal:
+  sq: "Dërgoni një raund me tre artikuj dhe jepni një falas me arsye."
+  en: "Send a round of three and comp one item with a reason."
+  uk: "Надіслати раунд із трьох позицій і зробити одну безкоштовною з причиною."
+steps:
+  - key: 1
+    anchor: round.add
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="round.add"]'
+    title:
+      sq: "Shtoni pjata"
+      en: "Add dishes"
+      uk: "Додайте страви"
+    caption:
+      sq: "Nga raundi hapni menunë për të shtuar artikuj."
+      en: "From the round, open the menu to add items."
+      uk: "З раунду відкрийте меню, щоб додати позиції."
+  - key: 2
+    anchor: menu.search
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="menu.search"]'
+      value: "sal"
+    title:
+      sq: "Kërkoni"
+      en: "Search"
+      uk: "Пошук"
+    caption:
+      sq: "Shkruani dy-tre shkronja të emrit. Pjatat që s’janë në shitje shfaqen gri."
+      en: "Type two or three letters of the name. Dishes not on sale are shown greyed out."
+      uk: "Введіть дві-три літери назви. Страви, яких немає в продажу, сірі."
+  - key: 3
+    anchor: menu.dish
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.dish"]'
+    title:
+      sq: "Shtoni"
+      en: "Add"
+      uk: "Додайте"
+    caption:
+      sq: "Çdo prekje shton një copë."
+      en: "Each tap adds one."
+      uk: "Кожен дотик додає одну порцію."
+  - key: 4
+    anchor: menu.less
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.less"]'
+    title:
+      sq: "Një më pak"
+      en: "One fewer"
+      uk: "На одну менше"
+    caption:
+      sq: "Gabuat? Hiqni një copë para se ta dërgoni."
+      en: "A mistake? Remove one before you send."
+      uk: "Помилилися? Приберіть одну до надсилання."
+  - key: 5
+    anchor: menu.send
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="menu.send"]'
+    title:
+      sq: "Dërgojeni në kuzhinë"
+      en: "Send to the kitchen"
+      uk: "Надішліть на кухню"
+    caption:
+      sq: "Raundi shkon në kuzhinë. Nëse dikush tjetër e ndryshoi ndërkohë, shihni «ndryshoi ndërkohë — u rifreskua» dhe kontrolloni sërish."
+      en: "The round goes to the kitchen. If someone else changed it meanwhile, you see “changed meanwhile — reloaded” and check again."
+      uk: "Раунд іде на кухню. Якщо хтось інший тим часом його змінив, ви побачите «змінено тим часом — оновлено» і перевірите ще раз."
+  - key: 6
+    anchor: round.line
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="round.line"]'
+    title:
+      sq: "Një rresht"
+      en: "A line"
+      uk: "Рядок"
+    caption:
+      sq: "Çdo artikull i raundit, me sasinë dhe çmimin."
+      en: "Every item of the round, with its quantity and price."
+      uk: "Кожна позиція раунду з кількістю та ціною."
+  - key: 7
+    anchor: round.more
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="round.more"]'
+    title:
+      sq: "Një më shumë"
+      en: "One more"
+      uk: "Ще одну"
+    caption:
+      sq: "Shtoni edhe një copë të të njëjtit artikull."
+      en: "Add one more of the same item."
+      uk: "Додайте ще одну таку саму позицію."
+  - key: 8
+    anchor: round.less
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="round.less"]'
+    title:
+      sq: "Një më pak"
+      en: "One fewer"
+      uk: "На одну менше"
+    caption:
+      sq: "Hiqni një copë nga një raund i dërguar — kërkon arsye."
+      en: "Remove one from a sent round — it asks for a reason."
+      uk: "Приберіть одну з надісланого раунду — потрібна причина."
+  - key: 9
+    anchor: round.remove
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="round.remove"]'
+    title:
+      sq: "Hiqni"
+      en: "Remove"
+      uk: "Прибрати"
+    caption:
+      sq: "Heq gjithë rreshtin. Mbetet në raport me arsyen dhe emrin tuaj."
+      en: "Removes the whole line. It stays in the report with the reason and your name."
+      uk: "Прибирає весь рядок. У звіті лишається з причиною та вашим ім’ям."
+  - key: 10
+    anchor: round.comp
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="round.comp"]'
+    title:
+      sq: "Falas"
+      en: "Comp"
+      uk: "Безкоштовно"
+    caption:
+      sq: "Artikulli mbetet në raund, por nuk paguhet. Përdoreni kur lokali dhuron diçka."
+      en: "The item stays in the round but is not charged. Use it when the venue gives something away."
+      uk: "Позиція лишається в раунді, але не оплачується. Для випадків, коли заклад щось дарує."
+  - key: 11
+    anchor: round.reason
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="round.reason"]'
+    title:
+      sq: "Arsyeja"
+      en: "The reason"
+      uk: "Причина"
+    caption:
+      sq: "Zgjidhni një arsye të gatshme…"
+      en: "Choose a ready reason…"
+      uk: "Оберіть готову причину…"
+  - key: 12
+    anchor: round.reasonText
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="round.reasonText"]'
+      value: "Mysafiri priti shumë"
+    title:
+      sq: "…ose shkruani një"
+      en: "…or write one"
+      uk: "…або напишіть свою"
+    caption:
+      sq: "Pronari i sheh të gjitha në raportin e përjashtimeve. Pa arsye, veprimi nuk kryhet."
+      en: "The owner sees every one in the exceptions report. With no reason, nothing happens."
+      uk: "Власник бачить кожну у звіті винятків. Без причини дія не виконується."
+  - key: 13
+    anchor: round.sums
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="round.sums"]'
+    title:
+      sq: "Shumat"
+      en: "The totals"
+      uk: "Суми"
+    caption:
+      sq: "Totali, falas dhe sa mbetet për t’u paguar — gjithmonë të sakta pas çdo ndryshimi."
+      en: "The total, what was comped and what is still due — always right after every change."
+      uk: "Разом, безкоштовне й скільки ще до сплати — завжди точно після кожної зміни."

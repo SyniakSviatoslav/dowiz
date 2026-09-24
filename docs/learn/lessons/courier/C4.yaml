@@ -1,0 +1,110 @@
+# Lesson C4 (courier). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: C4
+role: courier
+module: door
+order: 4
+covers: [cash, refused]
+title:
+  sq: "Te dera"
+  en: "At the door"
+  uk: "Біля дверей"
+goal:
+  sq: "Dorëzoni me para në dorë, shënoni mungesën nëse ka, ose regjistroni një refuzim."
+  en: "Deliver with cash, record a shortfall if there is one, or record a refusal."
+  uk: "Доставити з готівкою, записати нестачу, якщо вона є, або зафіксувати відмову."
+steps:
+  - key: 1
+    anchor: run.slide
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="run.slide"]'
+    title:
+      sq: "U dorëzua"
+      en: "Delivered"
+      uk: "Доставлено"
+    caption:
+      sq: "Rrëshqitni butonin deri në fund — ose shtypeni — kur porosia është në duart e klientit. Rrëshqitja pengon një prekje të rastësishme."
+      en: "Slide the button all the way — or press it — once the order is in the customer’s hands. The slide stops an accidental tap."
+      uk: "Протягніть кнопку до кінця — або натисніть — коли замовлення в руках клієнта. Протягування захищає від випадкового дотику."
+  - key: 2
+    anchor: cash.got
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="cash.got"]'
+      value: "1500"
+    title:
+      sq: "Sa para morët"
+      en: "How much cash"
+      uk: "Скільки готівки"
+    caption:
+      sq: "Për pagesë me para, shkruani shumën që morët në të vërtetë. Fusha vjen e mbushur me shumën e porosisë."
+      en: "For a cash order, type the amount you actually received. The field starts filled with the order total."
+      uk: "Для оплати готівкою введіть суму, яку ви справді отримали. Поле вже заповнене сумою замовлення."
+  - key: 3
+    anchor: cash.confirm
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="cash.confirm"]'
+    title:
+      sq: "Konfirmoni"
+      en: "Confirm"
+      uk: "Підтвердіть"
+    caption:
+      sq: "Nëse morët më pak, mungesa regjistrohet me emrin tuaj dhe lokali e sheh. Asgjë nuk fshihet."
+      en: "If you received less, the shortfall is recorded under your name and the venue sees it. Nothing is hidden."
+      uk: "Якщо ви отримали менше, нестача записується на ваше ім’я, і заклад її бачить. Нічого не приховується."
+  - key: 4
+    anchor: run.refused
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="run.refused"]'
+    title:
+      sq: "Refuzuar te dera"
+      en: "Refused at the door"
+      uk: "Відмова біля дверей"
+    caption:
+      sq: "Nëse klienti nuk e pranon porosinë ose askush nuk hap, përdorni këtë — jo «U dorëzua»."
+      en: "If the customer will not take the order, or nobody opens, use this — not “Delivered”."
+      uk: "Якщо клієнт не приймає замовлення або ніхто не відчиняє, скористайтеся цим — а не «Доставлено»."
+  - key: 5
+    anchor: refused.note
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="refused.note"]'
+      value: "Askush nuk hapi derën"
+    title:
+      sq: "Një shënim"
+      en: "A note"
+      uk: "Примітка"
+    caption:
+      sq: "Shkruani shkurt çfarë ndodhi. Nuk është e detyrueshme, por e ndihmon lokalin."
+      en: "Write briefly what happened. It is optional, but it helps the venue."
+      uk: "Коротко напишіть, що сталося. Це не обов’язково, але допомагає закладу."
+  - key: 6
+    anchor: refused.submit
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="refused.submit"]'
+    title:
+      sq: "Regjistroni refuzimin"
+      en: "Record the refusal"
+      uk: "Зафіксуйте відмову"
+    caption:
+      sq: "Porosia mbyllet si e refuzuar dhe nuk llogaritet asnjë para. Kthejeni ushqimin në lokal."
+      en: "The order closes as refused and no cash is counted. Take the food back to the venue."
+      uk: "Замовлення закривається як відмова, готівка не рахується. Поверніть їжу до закладу."

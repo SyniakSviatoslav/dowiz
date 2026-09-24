@@ -1,0 +1,199 @@
+# Lesson O4c (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O4c
+role: owner
+module: menu
+order: 9
+covers: []
+title:
+  sq: "Receta dhe shija e një pjate"
+  en: "A dish’s recipe and taste profile"
+  uk: "Рецепт і смак страви"
+goal:
+  sq: "Lidhni një recetë dhe vendosni pesë boshtet e shijes."
+  en: "Attach a recipe and set the five taste axes."
+  uk: "Прив’язати рецепт і задати п’ять осей смаку."
+steps:
+  - key: 1
+    anchor: recipe.kind
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="recipe.kind"]'
+    title:
+      sq: "Lloji"
+      en: "The kind"
+      uk: "Тип"
+    caption:
+      sq: "Pjatë me recetë, apo artikull i gatshëm si një pije."
+      en: "A dish with a recipe, or a ready item such as a drink."
+      uk: "Страва з рецептом чи готовий товар, як-от напій."
+  - key: 2
+    anchor: recipe.pick
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="recipe.pick"]'
+    title:
+      sq: "Furnizimi"
+      en: "A supply"
+      uk: "Запас"
+    caption:
+      sq: "Zgjidhni nga furnizimet tuaja."
+      en: "Pick from your supplies."
+      uk: "Оберіть зі своїх запасів."
+  - key: 3
+    anchor: recipe.addLine
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="recipe.addLine"]'
+    title:
+      sq: "Shto rresht"
+      en: "Add a line"
+      uk: "Додати рядок"
+    caption:
+      sq: "Një rresht për çdo përbërës."
+      en: "One line per ingredient."
+      uk: "Один рядок на інгредієнт."
+  - key: 4
+    anchor: recipe.qty
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="recipe.qty"]'
+      value: "120"
+    title:
+      sq: "Sasia"
+      en: "The quantity"
+      uk: "Кількість"
+    caption:
+      sq: "Në njësinë e furnizimit. Kaloritë, pesha dhe kostoja llogariten nga kjo."
+      en: "In the supply’s unit. Calories, weight and cost are worked out from it."
+      uk: "В одиницях запасу. З цього рахуються калорії, вага й собівартість."
+  - key: 5
+    anchor: recipe.more
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="recipe.more"]'
+    title:
+      sq: "Më shumë"
+      en: "More"
+      uk: "Більше"
+    caption:
+      sq: "Rrit sasinë me një hap."
+      en: "Raises the quantity by one step."
+      uk: "Збільшує кількість на крок."
+  - key: 6
+    anchor: recipe.less
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="recipe.less"]'
+    title:
+      sq: "Më pak"
+      en: "Less"
+      uk: "Менше"
+    caption:
+      sq: "E ul me një hap."
+      en: "Lowers it by one step."
+      uk: "Зменшує на крок."
+  - key: 7
+    anchor: recipe.removeLine
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="recipe.removeLine"]'
+    title:
+      sq: "Hiq rreshtin"
+      en: "Remove the line"
+      uk: "Прибрати рядок"
+    caption:
+      sq: "Kur një përbërës nuk hyn më."
+      en: "When an ingredient no longer goes in."
+      uk: "Коли інгредієнт більше не входить."
+  - key: 8
+    anchor: taste.spicy
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="taste.spicy"]'
+    title:
+      sq: "Pikant"
+      en: "Spicy"
+      uk: "Гостре"
+    caption:
+      sq: "Pesë boshte shije; klienti zgjedh sipas tyre."
+      en: "Five taste axes; customers choose by them."
+      uk: "П’ять осей смаку; клієнти обирають за ними."
+  - key: 9
+    anchor: taste.sweet
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="taste.sweet"]'
+    title:
+      sq: "I ëmbël"
+      en: "Sweet"
+      uk: "Солодке"
+    caption:
+      sq: "Sa i ëmbël."
+      en: "How sweet."
+      uk: "Наскільки солодке."
+  - key: 10
+    anchor: taste.salty
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="taste.salty"]'
+    title:
+      sq: "I kripur"
+      en: "Salty"
+      uk: "Солоне"
+    caption:
+      sq: "Sa i kripur."
+      en: "How salty."
+      uk: "Наскільки солоне."
+  - key: 11
+    anchor: taste.sour
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="taste.sour"]'
+    title:
+      sq: "I thartë"
+      en: "Sour"
+      uk: "Кисле"
+    caption:
+      sq: "Sa i thartë."
+      en: "How sour."
+      uk: "Наскільки кисле."
+  - key: 12
+    anchor: taste.richness
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="taste.richness"]'
+    title:
+      sq: "I rëndë"
+      en: "Rich"
+      uk: "Ситне"
+    caption:
+      sq: "Sa i yndyrshëm dhe i ngopshëm."
+      en: "How rich and filling."
+      uk: "Наскільки жирне й ситне."

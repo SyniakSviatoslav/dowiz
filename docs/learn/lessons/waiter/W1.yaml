@@ -1,0 +1,171 @@
+# Lesson W1 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: W1
+role: waiter
+module: login
+order: 1
+covers: [login]
+title:
+  sq: "Hyrja e parë"
+  en: "Your first sign-in"
+  uk: "Перший вхід"
+goal:
+  sq: "Hyni me kodin e ftesës dhe lexoni kokën e ekranit: gjuha, tema, lidhja dhe të padërguarat."
+  en: "Sign in with the invite code and read the header: language, theme, connection and unsent actions."
+  uk: "Увійти з кодом запрошення й прочитати шапку: мова, тема, зв’язок і ненадіслане."
+steps:
+  - key: 1
+    anchor: login.email
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="login.email"]'
+      value: "kamarier@example.com"
+    title:
+      sq: "Email-i juaj"
+      en: "Your email"
+      uk: "Ваш email"
+    caption:
+      sq: "Shkruani email-in me të cilin ju ftoi lokali."
+      en: "Type the email the venue invited you with."
+      uk: "Введіть email, на який вас запросив заклад."
+  - key: 2
+    anchor: login.claimToggle
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="login.claimToggle"]'
+    title:
+      sq: "Kam një kod ftese"
+      en: "I have an invite code"
+      uk: "У мене є код запрошення"
+    caption:
+      sq: "Herën e parë keni vetëm kodin nga pronari. Prekni këtu që të shfaqet fusha e kodit."
+      en: "The first time, you only have the code from the owner. Tap here to show the code field."
+      uk: "Першого разу у вас є лише код від власника. Торкніться тут, щоб з’явилося поле для коду."
+  - key: 3
+    anchor: login.code
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="login.code"]'
+      value: "ABCD-1234"
+    title:
+      sq: "Kodi i ftesës"
+      en: "The invite code"
+      uk: "Код запрошення"
+    caption:
+      sq: "Kodi vlen një herë dhe për pak ditë. Pasi e përdorni, hyni vetëm me fjalëkalim."
+      en: "The code works once and for a few days. After you use it, you sign in with your password only."
+      uk: "Код діє один раз і кілька днів. Після цього ви входите лише з паролем."
+  - key: 4
+    anchor: login.password
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="login.password"]'
+      value: "••••••••"
+    title:
+      sq: "Fjalëkalimi"
+      en: "The password"
+      uk: "Пароль"
+    caption:
+      sq: "Me kod: zgjidhni një fjalëkalim të ri, të paktën 8 shenja. Lokali nuk e sheh kurrë."
+      en: "With a code: choose a new password, at least 8 characters. The venue never sees it."
+      uk: "З кодом: оберіть новий пароль, щонайменше 8 символів. Заклад його ніколи не бачить."
+  - key: 5
+    anchor: login.submit
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="login.submit"]'
+    title:
+      sq: "Hyni"
+      en: "Sign in"
+      uk: "Увійти"
+    caption:
+      sq: "Pas hyrjes shihni sallën e lokalit tuaj."
+      en: "After signing in you see your venue’s room."
+      uk: "Після входу ви бачите зал свого закладу."
+  - key: 6
+    anchor: hud.lang
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="hud.lang"]'
+    title:
+      sq: "Gjuha"
+      en: "Language"
+      uk: "Мова"
+    caption:
+      sq: "Shqip, anglisht ose ukrainisht — çdo prekje kalon te tjetra. Porositë dhe emrat e pjatave nuk ndryshojnë."
+      en: "Albanian, English or Ukrainian — each tap moves to the next. Orders and dish names stay as they are."
+      uk: "Албанська, англійська чи українська — кожен дотик перемикає на наступну. Замовлення й назви страв не змінюються."
+  - key: 7
+    anchor: hud.theme
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="hud.theme"]'
+    title:
+      sq: "Tema"
+      en: "Theme"
+      uk: "Тема"
+    caption:
+      sq: "E ndritshme, e errët ose si telefoni. Në sallë të errët, tema e errët lodh më pak sytë."
+      en: "Light, dark or as the phone. In a dim room, the dark theme is easier on the eyes."
+      uk: "Світла, темна або як у телефоні. У темному залі темна тема менше втомлює очі."
+  - key: 8
+    anchor: hud.learn
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="hud.learn"]'
+    title:
+      sq: "Mësimet"
+      en: "Lessons"
+      uk: "Уроки"
+    caption:
+      sq: "Çdo mësim i sallës, me videon e vet. Hapeni kur të doni."
+      en: "Every room lesson, each with its video. Open them any time."
+      uk: "Усі уроки залу, кожен зі своїм відео. Відкривайте будь-коли."
+  - key: 9
+    anchor: hud.sync
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="hud.sync"]'
+    title:
+      sq: "Lidhja"
+      en: "Connection"
+      uk: "Зв’язок"
+    caption:
+      sq: "Tregon nëse jeni live apo sa kohë më parë erdhën të dhënat e fundit."
+      en: "Shows whether you are live, or how long ago the last data arrived."
+      uk: "Показує, чи ви на зв’язку, або як давно прийшли останні дані."
+  - key: 10
+    anchor: hud.outbox
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="hud.outbox"]'
+    title:
+      sq: "Të padërguara"
+      en: "Unsent"
+      uk: "Не надіслано"
+    caption:
+      sq: "Pa rrjet, porositë e marra ruhen në telefon dhe dërgohen vetë kur kthehet lidhja. Numri tregon sa janë në pritje."
+      en: "Without network, the orders you take are kept on the phone and sent by themselves when the connection returns. The number shows how many are waiting."
+      uk: "Без мережі прийняті замовлення зберігаються в телефоні й надсилаються самі, щойно з’явиться зв’язок. Число показує, скільки їх чекає."

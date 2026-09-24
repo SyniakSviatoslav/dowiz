@@ -1,0 +1,170 @@
+# Lesson O16a (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O16a
+role: owner
+module: venue
+order: 27
+covers: [more, learn]
+title:
+  sq: "Dita e parë: hyrja dhe preferencat"
+  en: "First day: sign-in and preferences"
+  uk: "Перший день: вхід і налаштування"
+goal:
+  sq: "Hyni, zgjidhni gjuhën dhe monedhën tuaj dhe gjeni mësimet."
+  en: "Sign in, choose your language and currency, and find the lessons."
+  uk: "Увійти, обрати свою мову й валюту та знайти уроки."
+steps:
+  - key: 1
+    anchor: login.email
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="login.email"]'
+      value: "pronari@example.com"
+    title:
+      sq: "Email-i"
+      en: "Email"
+      uk: "Email"
+    caption:
+      sq: "Email-i i pronarit."
+      en: "The owner’s email."
+      uk: "Email власника."
+  - key: 2
+    anchor: login.password
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="login.password"]'
+      value: "••••••••"
+    title:
+      sq: "Fjalëkalimi"
+      en: "Password"
+      uk: "Пароль"
+    caption:
+      sq: "Fjalëkalimi juaj."
+      en: "Your password."
+      uk: "Ваш пароль."
+  - key: 3
+    anchor: login.lang
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="login.lang"]'
+    title:
+      sq: "Gjuha"
+      en: "Language"
+      uk: "Мова"
+    caption:
+      sq: "Shqip, anglisht ose ukrainisht."
+      en: "Albanian, English or Ukrainian."
+      uk: "Албанська, англійська чи українська."
+  - key: 4
+    anchor: login.go
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="login.go"]'
+    title:
+      sq: "Hyni"
+      en: "Sign in"
+      uk: "Увійти"
+    caption:
+      sq: "Konsola hapet te porositë."
+      en: "The console opens on orders."
+      uk: "Консоль відкривається на замовленнях."
+  - key: 5
+    anchor: nav.more
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.more"]'
+    title:
+      sq: "Më shumë"
+      en: "More"
+      uk: "Більше"
+    caption:
+      sq: "Të gjitha cilësimet, në grupe."
+      en: "Every setting, in groups."
+      uk: "Усі налаштування, за групами."
+  - key: 6
+    anchor: more.tile.learn
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.learn"]'
+    title:
+      sq: "Mësimet"
+      en: "Lessons"
+      uk: "Уроки"
+    caption:
+      sq: "Mësimet e konsolës, me videon e secilit. Hapini kur të doni."
+      en: "The console’s lessons, each with its video. Open them any time."
+      uk: "Уроки консолі, кожен зі своїм відео. Відкривайте будь-коли."
+  - key: 7
+    anchor: header.prefs
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="header.prefs"]'
+    title:
+      sq: "Preferencat"
+      en: "Preferences"
+      uk: "Налаштування"
+    caption:
+      sq: "Gjuha dhe monedha e shfaqjes, vetëm për ju."
+      en: "Language and display currency, just for you."
+      uk: "Мова й валюта відображення — лише для вас."
+  - key: 8
+    anchor: prefs.lang
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="prefs.lang"]'
+    title:
+      sq: "Gjuha"
+      en: "Language"
+      uk: "Мова"
+    caption:
+      sq: "Ndryshon vetëm konsolën tuaj."
+      en: "Changes only your console."
+      uk: "Змінює лише вашу консоль."
+  - key: 9
+    anchor: prefs.currency
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="prefs.currency"]'
+    title:
+      sq: "Monedha"
+      en: "Currency"
+      uk: "Валюта"
+    caption:
+      sq: "Shumat shfaqen në këtë monedhë; llogaritë mbeten në lekë."
+      en: "Amounts are shown in this currency; the books stay in lek."
+      uk: "Суми показано в цій валюті; облік лишається в леках."
+  - key: 10
+    anchor: header.logout
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="header.logout"]'
+    title:
+      sq: "Dilni"
+      en: "Sign out"
+      uk: "Вийти"
+    caption:
+      sq: "Në një kompjuter të përbashkët, dilni gjithmonë."
+      en: "On a shared computer, always sign out."
+      uk: "На спільному комп’ютері завжди виходьте."

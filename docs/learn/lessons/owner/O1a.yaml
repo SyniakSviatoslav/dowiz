@@ -1,0 +1,214 @@
+# Lesson O1a (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O1a
+role: owner
+module: orders
+order: 1
+covers: [orders]
+title:
+  sq: "Lexoni tabelën e porosive"
+  en: "Read the order board"
+  uk: "Читайте дошку замовлень"
+goal:
+  sq: "Dini çfarë do të thotë çdo gjendje dhe cila porosi ka nevojë për ju."
+  en: "Say what each status means and which order needs a hand."
+  uk: "Знати, що означає кожен статус і якому замовленню потрібна увага."
+steps:
+  - key: 1
+    anchor: nav.orders
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.orders"]'
+    title:
+      sq: "Porositë"
+      en: "Orders"
+      uk: "Замовлення"
+    caption:
+      sq: "Skeda e parë: çdo porosi e gjallë e lokalit, nga uebi, tavolinat dhe platformat."
+      en: "The first tab: every live order of the venue, from the web, the tables and the platforms."
+      uk: "Перша вкладка: кожне живе замовлення закладу — з сайту, зі столів і з платформ."
+  - key: 2
+    anchor: orders.stats
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="orders.stats"]'
+    title:
+      sq: "Shifrat e ditës"
+      en: "Today in numbers"
+      uk: "День у цифрах"
+    caption:
+      sq: "Sa porosi, sa para dhe sa presin tani — me një shikim."
+      en: "How many orders, how much money and how many are waiting now — at a glance."
+      uk: "Скільки замовлень, скільки грошей і скільки чекає зараз — з першого погляду."
+  - key: 3
+    anchor: orders.mode
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="orders.mode"]'
+    title:
+      sq: "Tani ose historia"
+      en: "Live or history"
+      uk: "Зараз чи історія"
+    caption:
+      sq: "Porositë e hapura, ose ato që u mbyllën."
+      en: "The open orders, or the ones already closed."
+      uk: "Відкриті замовлення або вже закриті."
+  - key: 4
+    anchor: orders.search
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="orders.search"]'
+      value: "Tregtare"
+    title:
+      sq: "Kërkoni"
+      en: "Search"
+      uk: "Пошук"
+    caption:
+      sq: "Me numër, telefon ose rrugë."
+      en: "By number, phone or street."
+      uk: "За номером, телефоном чи вулицею."
+  - key: 5
+    anchor: orders.board
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="orders.board"]'
+    title:
+      sq: "Tabela"
+      en: "The board"
+      uk: "Дошка"
+    caption:
+      sq: "Kolonat ndjekin rrugën e porosisë: NË PRITJE → KONFIRMUAR → PO PËRGATITET → GATI → NË DËRGESË."
+      en: "The columns follow an order’s path: PENDING → CONFIRMED → PREPARING → READY → IN DELIVERY."
+      uk: "Колонки йдуть шляхом замовлення: ОЧІКУЄ → ПІДТВЕРДЖЕНО → ГОТУЄТЬСЯ → ГОТОВО → У ДОСТАВЦІ."
+  - key: 6
+    anchor: orders.row
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="orders.row"]'
+    title:
+      sq: "Një porosi"
+      en: "An order"
+      uk: "Замовлення"
+    caption:
+      sq: "Numri, artikujt, shuma dhe sa kohë ka që pret. Prekeni për detajet."
+      en: "Its number, items, total and how long it has waited. Tap it for the detail."
+      uk: "Номер, позиції, сума й скільки воно чекає. Торкніться — відкриються деталі."
+  - key: 7
+    anchor: orders.status
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="orders.status"]'
+    title:
+      sq: "Gjendja"
+      en: "The status"
+      uk: "Статус"
+    caption:
+      sq: "E njëjta fjalë që sheh klienti dhe korrieri."
+      en: "The same word the customer and the courier see."
+      uk: "Те саме слово, що бачать клієнт і кур’єр."
+  - key: 8
+    anchor: orders.seen
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="orders.seen"]'
+    title:
+      sq: "E pashë"
+      en: "Seen"
+      uk: "Побачив"
+    caption:
+      sq: "Ndal ziljen për një porosi që e keni parë, pa e lëvizur."
+      en: "Stops the bell for an order you have seen, without moving it."
+      uk: "Зупиняє дзвінок для замовлення, яке ви побачили, не змінюючи його."
+  - key: 9
+    anchor: orders.more
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="orders.more"]'
+    title:
+      sq: "Më shumë"
+      en: "More"
+      uk: "Ще"
+    caption:
+      sq: "Në histori, ngarkon porositë më të vjetra."
+      en: "In the history, loads older orders."
+      uk: "В історії підвантажує старіші замовлення."
+  - key: 10
+    anchor: header.state
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="header.state"]'
+    title:
+      sq: "Gjendja e lokalit"
+      en: "The venue’s state"
+      uk: "Стан закладу"
+    caption:
+      sq: "Klientët e shohin menjëherë në faqe."
+      en: "Customers see it on the site at once."
+      uk: "Клієнти одразу бачать це на сайті."
+  - key: 11
+    anchor: state.open
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="state.open"]'
+    title:
+      sq: "I hapur"
+      en: "Open"
+      uk: "Відкрито"
+    caption:
+      sq: "Porositë vijnë normalisht."
+      en: "Orders come in as normal."
+      uk: "Замовлення надходять як завжди."
+  - key: 12
+    anchor: state.busy
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="state.busy"]'
+    title:
+      sq: "I zënë"
+      en: "Busy"
+      uk: "Зайнято"
+    caption:
+      sq: "Klienti paralajmërohet për pritje më të gjatë."
+      en: "Customers are warned of a longer wait."
+      uk: "Клієнтів попереджають про довше очікування."
+  - key: 13
+    anchor: state.closed
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="state.closed"]'
+    title:
+      sq: "I mbyllur"
+      en: "Closed"
+      uk: "Зачинено"
+    caption:
+      sq: "Faqja nuk pranon porosi të reja."
+      en: "The site accepts no new orders."
+      uk: "Сайт не приймає нових замовлень."

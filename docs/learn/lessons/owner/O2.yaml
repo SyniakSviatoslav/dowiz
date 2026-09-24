@@ -1,0 +1,156 @@
+# Lesson O2 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O2
+role: owner
+module: aggregator
+order: 4
+covers: []
+title:
+  sq: "Hidhni me dorë një porosi Wolt ose Glovo"
+  en: "Enter a Wolt or Glovo order by hand"
+  uk: "Внесіть замовлення Wolt або Glovo вручну"
+goal:
+  sq: "Futni një porosi nga jashtë që «përputhet», që stoku dhe shifrat të mbeten të plota."
+  en: "Enter an outside order that “adds up”, so stock and numbers stay whole."
+  uk: "Внести зовнішнє замовлення, яке «сходиться», щоб запаси й цифри були повними."
+steps:
+  - key: 1
+    anchor: orders.platformOrder
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="orders.platformOrder"]'
+    title:
+      sq: "Porosi platforme"
+      en: "Platform order"
+      uk: "Замовлення платформи"
+    caption:
+      sq: "Porositë e Wolt ose Glovo nuk vijnë vetë. Hidhini këtu."
+      en: "Wolt or Glovo orders do not arrive by themselves. Enter them here."
+      uk: "Замовлення Wolt чи Glovo не надходять самі. Вносьте їх тут."
+  - key: 2
+    anchor: agg.platform
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="agg.platform"]'
+    title:
+      sq: "Platforma"
+      en: "The platform"
+      uk: "Платформа"
+    caption:
+      sq: "Nga cila platformë erdhi."
+      en: "Which platform it came from."
+      uk: "З якої платформи воно прийшло."
+  - key: 3
+    anchor: agg.number
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="agg.number"]'
+      value: "W-4821"
+    title:
+      sq: "Numri"
+      en: "The number"
+      uk: "Номер"
+    caption:
+      sq: "Numri i porosisë në platformë, që ta gjeni më vonë."
+      en: "The platform’s order number, so you can find it later."
+      uk: "Номер замовлення на платформі, щоб знайти його пізніше."
+  - key: 4
+    anchor: agg.dish
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="agg.dish"]'
+    title:
+      sq: "Pjata"
+      en: "A dish"
+      uk: "Страва"
+    caption:
+      sq: "Nga menuja juaj, jo tekst i lirë — kështu zbritet stoku."
+      en: "From your own menu, not free text — that is how stock comes off."
+      uk: "Зі свого меню, а не вільним текстом — так списуються запаси."
+  - key: 5
+    anchor: agg.addLine
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="agg.addLine"]'
+    title:
+      sq: "Një rresht më shumë"
+      en: "Another line"
+      uk: "Ще рядок"
+    caption:
+      sq: "Për çdo pjatë tjetër."
+      en: "For every other dish."
+      uk: "Для кожної іншої страви."
+  - key: 6
+    anchor: agg.discount
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="agg.discount"]'
+      value: "200"
+    title:
+      sq: "Zbritja"
+      en: "The discount"
+      uk: "Знижка"
+    caption:
+      sq: "Zbritja që dha platforma, nëse ka."
+      en: "The discount the platform gave, if any."
+      uk: "Знижка платформи, якщо була."
+  - key: 7
+    anchor: agg.total
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="agg.total"]'
+      value: "2400"
+    title:
+      sq: "Totali"
+      en: "The total"
+      uk: "Сума"
+    caption:
+      sq: "Totali nga fatura e platformës."
+      en: "The total from the platform’s receipt."
+      uk: "Сума з чека платформи."
+  - key: 8
+    anchor: agg.check
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="agg.check"]'
+    title:
+      sq: "A përputhet?"
+      en: "Does it add up?"
+      uk: "Чи сходиться?"
+    caption:
+      sq: "Artikujt minus zbritja duhet të bëjnë totalin; përndryshe tregohet diferenca."
+      en: "The items less the discount must make the total; otherwise the difference is shown."
+      uk: "Позиції мінус знижка мають дати суму; інакше показано різницю."
+  - key: 9
+    anchor: agg.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="agg.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Porosia hyn në tabelë si çdo tjetër."
+      en: "The order joins the board like any other."
+      uk: "Замовлення з’являється на дошці, як будь-яке інше."

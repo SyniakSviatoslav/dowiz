@@ -1,0 +1,78 @@
+# Lesson O1c (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O1c
+role: owner
+module: orders
+order: 3
+covers: []
+title:
+  sq: "Ushqim i kthyer dhe eksporti CSV"
+  en: "Food back and CSV export"
+  uk: "Повернення їжі та експорт CSV"
+goal:
+  sq: "Vendosni çfarë bëhet me një porosi të kthyer dhe eksportoni një ditë."
+  en: "Decide what happens to an order that came back, and export a day."
+  uk: "Вирішити, що робити з поверненим замовленням, і експортувати день."
+steps:
+  - key: 1
+    anchor: order.copy
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="order.copy"]'
+    title:
+      sq: "Printo"
+      en: "Print"
+      uk: "Друк"
+    caption:
+      sq: "Një kopje e fletës së porosisë për kuzhinën."
+      en: "A copy of the order ticket for the kitchen."
+      uk: "Копія чека замовлення для кухні."
+  - key: 2
+    anchor: order.resell
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="order.resell"]'
+    title:
+      sq: "Rishite"
+      en: "Resell"
+      uk: "Перепродати"
+    caption:
+      sq: "Ushqimi u kthye i paprekur: kthehet në stok dhe mund të shitet sërish."
+      en: "The food came back untouched: it returns to stock and can be sold again."
+      uk: "Їжу повернули неторканою: вона повертається до запасів і її можна продати знову."
+  - key: 3
+    anchor: order.waste
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="order.waste"]'
+    title:
+      sq: "Hidhe"
+      en: "Waste it"
+      uk: "Списати"
+    caption:
+      sq: "Nuk shitet dot më: regjistrohet si humbje."
+      en: "It cannot be sold any more: it is recorded as waste."
+      uk: "Продати вже не можна: записується як списання."
+  - key: 4
+    anchor: orders.csv
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="orders.csv"]'
+    title:
+      sq: "Eksporto CSV"
+      en: "Export CSV"
+      uk: "Експорт CSV"
+    caption:
+      sq: "Porositë si skedar, për kontabilistin."
+      en: "The orders as a file, for the accountant."
+      uk: "Замовлення файлом — для бухгалтера."

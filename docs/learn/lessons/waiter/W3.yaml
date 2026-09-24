@@ -1,0 +1,48 @@
+# Lesson W3 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: W3
+role: waiter
+module: open
+order: 3
+covers: [open]
+title:
+  sq: "Hapni një tavolinë"
+  en: "Open a table"
+  uk: "Відкрийте стіл"
+goal:
+  sq: "Hapni tavolinën 4 për dy veta."
+  en: "Open table 4 for two."
+  uk: "Відкрити стіл 4 на двох."
+steps:
+  - key: 1
+    anchor: room.open
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="room.open"]'
+    title:
+      sq: "Tavolinë e re"
+      en: "New table"
+      uk: "Новий стіл"
+    caption:
+      sq: "Kur ulen mysafirët, filloni këtu."
+      en: "When guests sit down, start here."
+      uk: "Коли гості сідають, почніть тут."
+  - key: 2
+    anchor: open.table
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="open.table"]'
+    title:
+      sq: "Zgjidhni tavolinën"
+      en: "Choose the table"
+      uk: "Оберіть стіл"
+    caption:
+      sq: "Prekni numrin e tavolinës. Një tavolinë e zënë nuk mund të hapet dy herë."
+      en: "Tap the table’s number. A table already in use cannot be opened twice."
+      uk: "Торкніться номера столу. Зайнятий стіл не можна відкрити вдруге."

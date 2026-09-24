@@ -1,0 +1,48 @@
+# Lesson W10 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: W10
+role: waiter
+module: z
+order: 10
+covers: []
+title:
+  sq: "Raporti Z dhe bakshishet"
+  en: "The Z report and the tips"
+  uk: "Z-звіт і чайові"
+goal:
+  sq: "Lexoni raportin Z të djeshëm dhe kush mori cilin bakshish."
+  en: "Read yesterday’s Z report and who got which tip."
+  uk: "Прочитати вчорашній Z-звіт і хто отримав які чайові."
+steps:
+  - key: 1
+    anchor: till.z
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="till.z"]'
+    title:
+      sq: "Raporti Z"
+      en: "The Z report"
+      uk: "Z-звіт"
+    caption:
+      sq: "Shitjet sipas mënyrës dhe monedhës, falas, anulimet dhe diferenca e arkës për një ditë të mbyllur."
+      en: "Sales by method and currency, comps, voids and the till difference for a closed day."
+      uk: "Продажі за способом і валютою, безкоштовне, анулювання й різниця каси за закритий день."
+  - key: 2
+    anchor: till.tips
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="till.tips"]'
+    title:
+      sq: "Bakshishet"
+      en: "The tips"
+      uk: "Чайові"
+    caption:
+      sq: "Bakshishet sipas personit që i mori — jo një shumë e përbashkët."
+      en: "Tips by the person who took them — not one shared sum."
+      uk: "Чайові за людиною, яка їх отримала, — а не одна спільна сума."

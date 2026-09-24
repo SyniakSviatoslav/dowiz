@@ -1,0 +1,216 @@
+# Lesson O5a (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O5a
+role: owner
+module: stock
+order: 10
+covers: [stock]
+title:
+  sq: "Tre lëvizjet e stokut"
+  en: "The three stock movements"
+  uk: "Три рухи запасів"
+goal:
+  sq: "Regjistroni një furnizim, një humbje dhe një numërim."
+  en: "Book a delivery, a waste and a count."
+  uk: "Записати надходження, списання й перерахунок."
+steps:
+  - key: 1
+    anchor: nav.stock
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.stock"]'
+    title:
+      sq: "Stoku"
+      en: "Stock"
+      uk: "Запаси"
+    caption:
+      sq: "Çdo furnizim, sa ka dhe sa është rezervuar nga porositë e hapura."
+      en: "Every supply, what is there and what open orders have reserved."
+      uk: "Кожен запас: скільки є і скільки зарезервовано відкритими замовленнями."
+  - key: 2
+    anchor: stock.search
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="stock.search"]'
+      value: "salmon"
+    title:
+      sq: "Kërkoni"
+      en: "Search"
+      uk: "Пошук"
+    caption:
+      sq: "Gjeni një furnizim me emër."
+      en: "Find a supply by name."
+      uk: "Знайдіть запас за назвою."
+  - key: 3
+    anchor: stock.filter
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.filter"]'
+    title:
+      sq: "Filtri"
+      en: "Filter"
+      uk: "Фільтр"
+    caption:
+      sq: "Vetëm ato që po mbarojnë, ose sipas kategorisë."
+      en: "Only what is running low, or by category."
+      uk: "Лише те, що закінчується, або за категорією."
+  - key: 4
+    anchor: stock.sort
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.sort"]'
+    title:
+      sq: "Renditja"
+      en: "Sort"
+      uk: "Сортування"
+    caption:
+      sq: "Sipas emrit ose sasisë."
+      en: "By name or quantity."
+      uk: "За назвою чи кількістю."
+  - key: 5
+    anchor: stock.supply
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.supply"]'
+    title:
+      sq: "Një furnizim"
+      en: "A supply"
+      uk: "Запас"
+    caption:
+      sq: "Prekeni për të regjistruar një lëvizje."
+      en: "Tap it to book a movement."
+      uk: "Торкніться, щоб записати рух."
+  - key: 6
+    anchor: stock.received
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.received"]'
+    title:
+      sq: "Erdhi"
+      en: "Came in"
+      uk: "Надійшло"
+    caption:
+      sq: "Një dërgesë nga furnitori."
+      en: "A delivery from the supplier."
+      uk: "Поставка від постачальника."
+  - key: 7
+    anchor: stock.wasted
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.wasted"]'
+    title:
+      sq: "U hodh"
+      en: "Thrown away"
+      uk: "Списано"
+    caption:
+      sq: "Ajo që u prish ose ra."
+      en: "What spoiled or was dropped."
+      uk: "Те, що зіпсувалося чи впало."
+  - key: 8
+    anchor: stock.stocktake
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.stocktake"]'
+    title:
+      sq: "U numërua"
+      en: "Counted"
+      uk: "Пораховано"
+    caption:
+      sq: "Numërimi i vërtetë zëvendëson shifrën e llogaritur."
+      en: "A real count replaces the worked-out figure."
+      uk: "Реальний перерахунок замінює розрахункову цифру."
+  - key: 9
+    anchor: move.qty
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="move.qty"]'
+      value: "2000"
+    title:
+      sq: "Sasia"
+      en: "The quantity"
+      uk: "Кількість"
+    caption:
+      sq: "Sa, në njësinë e furnizimit."
+      en: "How much, in the supply’s unit."
+      uk: "Скільки, в одиницях запасу."
+  - key: 10
+    anchor: move.wasteReason
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="move.wasteReason"]'
+    title:
+      sq: "Pse u hodh"
+      en: "Why it was wasted"
+      uk: "Чому списано"
+    caption:
+      sq: "U prish, ra, s’u shit, u kthye, ushqim stafi."
+      en: "Spoiled, dropped, unsold, returned, staff meal."
+      uk: "Зіпсувалося, впало, не продалося, повернули, їжа персоналу."
+  - key: 11
+    anchor: move.reason
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="move.reason"]'
+      value: "Furnitori Hoxha"
+    title:
+      sq: "Shënim"
+      en: "A note"
+      uk: "Примітка"
+    caption:
+      sq: "Disa fjalë, nëse duhen."
+      en: "A few words, if needed."
+      uk: "Кілька слів, якщо треба."
+  - key: 12
+    anchor: move.edit
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="move.edit"]'
+    title:
+      sq: "Ndrysho furnizimin"
+      en: "Edit the supply"
+      uk: "Змінити запас"
+    caption:
+      sq: "Nga këtu hapni kartën e furnizimit."
+      en: "From here, open the supply’s card."
+      uk: "Звідси відкривається картка запасу."
+  - key: 13
+    anchor: move.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="move.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Sasia ndryshon menjëherë dhe lëvizja mbetet në histori."
+      en: "The quantity changes at once and the movement stays in the history."
+      uk: "Кількість змінюється одразу, а рух лишається в історії."

@@ -1,0 +1,78 @@
+# Lesson O4b (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O4b
+role: owner
+module: menu
+order: 8
+covers: []
+title:
+  sq: "Importoni menunë nga CSV"
+  en: "Import the menu from CSV"
+  uk: "Імпортуйте меню з CSV"
+goal:
+  sq: "Importoni një CSV dhe lexoni provën e parë."
+  en: "Import a CSV and read its dry run."
+  uk: "Імпортувати CSV і прочитати пробний прогін."
+steps:
+  - key: 1
+    anchor: menu.import
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.import"]'
+    title:
+      sq: "Importo"
+      en: "Import"
+      uk: "Імпорт"
+    caption:
+      sq: "Gjithë menuja nga një skedar CSV."
+      en: "The whole menu from one CSV file."
+      uk: "Усе меню з одного файлу CSV."
+  - key: 2
+    anchor: import.file
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="import.file"]'
+    title:
+      sq: "Skedari"
+      en: "The file"
+      uk: "Файл"
+    caption:
+      sq: "Zgjidhni skedarin."
+      en: "Choose the file."
+      uk: "Оберіть файл."
+  - key: 3
+    anchor: import.dryRun
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="import.dryRun"]'
+    title:
+      sq: "Provë"
+      en: "Dry run"
+      uk: "Пробний прогін"
+    caption:
+      sq: "Çfarë shtohet, ndryshon dhe hiqet — pa ndryshuar asgjë."
+      en: "What is added, changed and retired — without changing anything."
+      uk: "Що додається, змінюється і знімається — без жодних змін."
+  - key: 4
+    anchor: import.apply
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="import.apply"]'
+    title:
+      sq: "Zbato"
+      en: "Apply"
+      uk: "Застосувати"
+    caption:
+      sq: "Vetëm pasi e lexuat provën. Pjatat që mungojnë hiqen nga shitja, nuk fshihen."
+      en: "Only after reading the dry run. Missing dishes are taken off sale, not deleted."
+      uk: "Лише після пробного прогону. Відсутні страви знімаються з продажу, а не видаляються."

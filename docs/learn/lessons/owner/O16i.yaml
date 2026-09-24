@@ -1,0 +1,171 @@
+# Lesson O16i (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O16i
+role: owner
+module: venue
+order: 28
+covers: [venue, hours, deliveryArea]
+title:
+  sq: "Dita e parë: lokali dhe orari"
+  en: "First day: the venue and its hours"
+  uk: "Перший день: заклад і години роботи"
+goal:
+  sq: "Plotësoni emrin, telefonin, adresën dhe orarin e lokalit."
+  en: "Fill in the venue’s name, phone, address and hours."
+  uk: "Заповнити назву, телефон, адресу й години роботи закладу."
+steps:
+  - key: 1
+    anchor: more.tile.venue
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.venue"]'
+    title:
+      sq: "Lokali"
+      en: "Venue"
+      uk: "Заклад"
+    caption:
+      sq: "Kush jeni dhe ku."
+      en: "Who you are and where."
+      uk: "Хто ви і де."
+  - key: 2
+    anchor: venue.name
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="venue.name"]'
+      value: "Dubin & Sushi"
+    title:
+      sq: "Emri"
+      en: "Name"
+      uk: "Назва"
+    caption:
+      sq: "Emri në faqe dhe në fatura."
+      en: "The name on the site and the receipts."
+      uk: "Назва на сайті й у чеках."
+  - key: 3
+    anchor: venue.phone
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="venue.phone"]'
+      value: "+355 69 000 0000"
+    title:
+      sq: "Telefoni"
+      en: "Phone"
+      uk: "Телефон"
+    caption:
+      sq: "Numri që shohin klientët dhe korrierët."
+      en: "The number customers and couriers see."
+      uk: "Номер, який бачать клієнти й кур’єри."
+  - key: 4
+    anchor: venue.address
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="venue.address"]'
+      value: "Rruga Tregtare 1, Durrës"
+    title:
+      sq: "Adresa"
+      en: "Address"
+      uk: "Адреса"
+    caption:
+      sq: "Nga ku niset çdo dërgesë."
+      en: "Where every delivery starts from."
+      uk: "Звідки починається кожна доставка."
+  - key: 5
+    anchor: more.tile.hours
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.hours"]'
+    title:
+      sq: "Orari"
+      en: "Hours"
+      uk: "Години роботи"
+    caption:
+      sq: "Kur pranoni porosi."
+      en: "When you take orders."
+      uk: "Коли ви приймаєте замовлення."
+  - key: 6
+    anchor: hours.timezone
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="hours.timezone"]'
+    title:
+      sq: "Zona kohore"
+      en: "Time zone"
+      uk: "Часовий пояс"
+    caption:
+      sq: "Ora e lokalit, me ndërrimin verë-dimër."
+      en: "The venue’s local time, with summer time."
+      uk: "Місцевий час закладу з переходом на літній час."
+  - key: 7
+    anchor: hours.day
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="hours.day"]'
+    title:
+      sq: "Dita"
+      en: "The day"
+      uk: "День"
+    caption:
+      sq: "Çdo ditë ka orarin e vet."
+      en: "Each day has its own hours."
+      uk: "Кожен день має свої години."
+  - key: 8
+    anchor: hours.open
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="hours.open"]'
+    title:
+      sq: "Hapet"
+      en: "Opens"
+      uk: "Відкривається"
+    caption:
+      sq: "Ora e hapjes."
+      en: "The opening time."
+      uk: "Час відкриття."
+  - key: 9
+    anchor: hours.close
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="hours.close"]'
+    title:
+      sq: "Mbyllet"
+      en: "Closes"
+      uk: "Зачиняється"
+    caption:
+      sq: "Ora e mbylljes; pas saj faqja nuk merr porosi."
+      en: "The closing time; after it the site takes no orders."
+      uk: "Час закриття; після нього сайт не приймає замовлень."
+  - key: 10
+    anchor: more.tile.deliveryArea
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.deliveryArea"]'
+    title:
+      sq: "Zona e dorëzimit"
+      en: "Delivery area"
+      uk: "Зона доставки"
+    caption:
+      sq: "Rrethi ku dërgoni: qendra dhe rrezja në km. Pa zonë, faqja pranon çdo adresë."
+      en: "The circle you deliver to: a centre and a radius in km. With no area, the site accepts any address."
+      uk: "Коло, куди ви доставляєте: центр і радіус у км. Без зони сайт приймає будь-яку адресу."

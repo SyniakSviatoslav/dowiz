@@ -1,0 +1,204 @@
+# Lesson O14a (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O14a
+role: owner
+module: promos
+order: 23
+covers: [promos]
+title:
+  sq: "Kodet promocionale"
+  en: "Promo codes"
+  uk: "Промокоди"
+goal:
+  sq: "Krijoni një kod të planifikuar."
+  en: "Create a scheduled code."
+  uk: "Створити запланований код."
+steps:
+  - key: 1
+    anchor: more.tile.promos
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.promos"]'
+    title:
+      sq: "Promocionet"
+      en: "Promos"
+      uk: "Промоакції"
+    caption:
+      sq: "Kodet që klientët shkruajnë kur porosisin."
+      en: "The codes customers type when they order."
+      uk: "Коди, які клієнти вводять під час замовлення."
+  - key: 2
+    anchor: promos.row
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="promos.row"]'
+    title:
+      sq: "Një kod"
+      en: "A code"
+      uk: "Код"
+    caption:
+      sq: "Aktiv, i planifikuar, i skaduar ose i mbaruar."
+      en: "Active, scheduled, expired or used up."
+      uk: "Активний, запланований, прострочений чи вичерпаний."
+  - key: 3
+    anchor: promos.new
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="promos.new"]'
+    title:
+      sq: "Kod i ri"
+      en: "New code"
+      uk: "Новий код"
+    caption:
+      sq: "Krijoni një kod."
+      en: "Create a code."
+      uk: "Створіть код."
+  - key: 4
+    anchor: promos.code
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="promos.code"]'
+      value: "VERA10"
+    title:
+      sq: "Kodi"
+      en: "The code"
+      uk: "Код"
+    caption:
+      sq: "Fjala që shkruan klienti."
+      en: "The word the customer types."
+      uk: "Слово, яке вводить клієнт."
+  - key: 5
+    anchor: promos.kind
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="promos.kind"]'
+    title:
+      sq: "Lloji"
+      en: "The kind"
+      uk: "Тип"
+    caption:
+      sq: "Përqindje ose shumë fikse."
+      en: "Percent or a fixed amount."
+      uk: "Відсоток чи фіксована сума."
+  - key: 6
+    anchor: promos.value
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="promos.value"]'
+      value: "10"
+    title:
+      sq: "Vlera"
+      en: "The value"
+      uk: "Значення"
+    caption:
+      sq: "Sa zbritet."
+      en: "How much comes off."
+      uk: "Скільки знімається."
+  - key: 7
+    anchor: promos.minOrder
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="promos.minOrder"]'
+      value: "1500"
+    title:
+      sq: "Porosia minimale"
+      en: "Minimum order"
+      uk: "Мінімальне замовлення"
+    caption:
+      sq: "Kodi vlen vetëm mbi këtë shumë."
+      en: "The code works only above this amount."
+      uk: "Код діє лише понад цю суму."
+  - key: 8
+    anchor: promos.from
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="promos.from"]'
+      value: "2026-10-01"
+    title:
+      sq: "Nga"
+      en: "From"
+      uk: "З"
+    caption:
+      sq: "Një datë në të ardhmen e bën «të planifikuar»; hapet vetë."
+      en: "A future date makes it “scheduled”; it opens by itself."
+      uk: "Майбутня дата робить його «запланованим»; він відкривається сам."
+  - key: 9
+    anchor: promos.until
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="promos.until"]'
+      value: "2026-10-31"
+    title:
+      sq: "Deri"
+      en: "Until"
+      uk: "До"
+    caption:
+      sq: "Mbaron në mesnatë të asaj dite."
+      en: "It ends at midnight of that day."
+      uk: "Діє до опівночі цього дня."
+  - key: 10
+    anchor: promos.maxUses
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="promos.maxUses"]'
+      value: "100"
+    title:
+      sq: "Sa herë"
+      en: "Max uses"
+      uk: "Скільки разів"
+    caption:
+      sq: "Pas kaq përdorimesh kodi mbaron."
+      en: "After this many uses the code is used up."
+      uk: "Після стількох використань код вичерпано."
+  - key: 11
+    anchor: promos.flip
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="promos.flip"]'
+    title:
+      sq: "Aktiv / joaktiv"
+      en: "On / off"
+      uk: "Увімк. / вимк."
+    caption:
+      sq: "Ndaleni pa e fshirë."
+      en: "Stop it without deleting it."
+      uk: "Зупиніть, не видаляючи."
+  - key: 12
+    anchor: promos.delete
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="promos.delete"]'
+    title:
+      sq: "Fshije"
+      en: "Delete"
+      uk: "Видалити"
+    caption:
+      sq: "Fshirja nuk kthehet — ndalimi zakonisht mjafton."
+      en: "Deleting cannot be undone — stopping is usually enough."
+      uk: "Видалення не скасувати — зазвичай досить зупинити."

@@ -1,0 +1,291 @@
+# Lesson O16e (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O16e
+role: owner
+module: activation
+order: 29
+covers: [deliveryTerms, payments, activation, dpa]
+title:
+  sq: "Dita e parë: dërgesa, pagesat, aktivizimi"
+  en: "First day: delivery, payments, activation"
+  uk: "Перший день: доставка, оплата, активація"
+goal:
+  sq: "Kaloni çdo kontroll aktivizimi."
+  en: "Pass every activation check."
+  uk: "Пройти кожну перевірку активації."
+steps:
+  - key: 1
+    anchor: more.tile.deliveryTerms
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.deliveryTerms"]'
+    title:
+      sq: "Dërgesa"
+      en: "Delivery"
+      uk: "Доставка"
+    caption:
+      sq: "Çmimi dhe kushtet e dërgesës."
+      en: "The delivery price and terms."
+      uk: "Ціна й умови доставки."
+  - key: 2
+    anchor: delivery.fee
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="delivery.fee"]'
+      value: "150"
+    title:
+      sq: "Tarifa"
+      en: "The fee"
+      uk: "Плата"
+    caption:
+      sq: "Sa paguan klienti për dërgesën."
+      en: "What the customer pays for delivery."
+      uk: "Скільки клієнт платить за доставку."
+  - key: 3
+    anchor: delivery.minOrder
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="delivery.minOrder"]'
+      value: "800"
+    title:
+      sq: "Minimumi"
+      en: "Minimum"
+      uk: "Мінімум"
+    caption:
+      sq: "Porosia më e vogël që dërgoni."
+      en: "The smallest order you deliver."
+      uk: "Найменше замовлення, яке ви доставляєте."
+  - key: 4
+    anchor: delivery.freeOver
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="delivery.freeOver"]'
+      value: "3000"
+    title:
+      sq: "Falas mbi"
+      en: "Free over"
+      uk: "Безкоштовно від"
+    caption:
+      sq: "Mbi këtë shumë, dërgesa është falas."
+      en: "Above this amount, delivery is free."
+      uk: "Понад цю суму доставка безкоштовна."
+  - key: 5
+    anchor: more.tile.payments
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.payments"]'
+    title:
+      sq: "Pagesat"
+      en: "Payments"
+      uk: "Оплата"
+    caption:
+      sq: "Si paguajnë klientët."
+      en: "How customers pay."
+      uk: "Як платять клієнти."
+  - key: 6
+    anchor: payments.cash
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="payments.cash"]'
+    title:
+      sq: "Para në dorë"
+      en: "Cash"
+      uk: "Готівка"
+    caption:
+      sq: "Pagesë te dera ose në lokal."
+      en: "Paid at the door or at the venue."
+      uk: "Оплата біля дверей чи в закладі."
+  - key: 7
+    anchor: payments.stripe
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="payments.stripe"]'
+    title:
+      sq: "Kartë online"
+      en: "Card online"
+      uk: "Картка онлайн"
+    caption:
+      sq: "Kërkon llogarinë tuaj të pagesave."
+      en: "Needs your own payments account."
+      uk: "Потрібен ваш власний платіжний акаунт."
+  - key: 8
+    anchor: payments.addWallet
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="payments.addWallet"]'
+    title:
+      sq: "Portofol"
+      en: "Wallet"
+      uk: "Гаманець"
+    caption:
+      sq: "Shtoni një adresë portofoli kripto."
+      en: "Add a crypto wallet address."
+      uk: "Додайте адресу криптогаманця."
+  - key: 9
+    anchor: payments.network
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="payments.network"]'
+    title:
+      sq: "Rrjeti"
+      en: "Network"
+      uk: "Мережа"
+    caption:
+      sq: "Rrjeti i portofolit, p.sh. TRC20."
+      en: "The wallet’s network, for example TRC20."
+      uk: "Мережа гаманця, наприклад TRC20."
+  - key: 10
+    anchor: more.tile.dpa
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.dpa"]'
+    title:
+      sq: "Marrëveshja e të dhënave"
+      en: "Data agreement"
+      uk: "Угода про дані"
+    caption:
+      sq: "Si i përpunon dowiz të dhënat e klientëve tuaj."
+      en: "How dowiz processes your customers’ data."
+      uk: "Як dowiz обробляє дані ваших клієнтів."
+  - key: 11
+    anchor: dpa.state
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="dpa.state"]'
+    title:
+      sq: "Gjendja"
+      en: "State"
+      uk: "Стан"
+    caption:
+      sq: "E pranuar apo jo, dhe kur."
+      en: "Accepted or not, and when."
+      uk: "Прийнято чи ні, і коли."
+  - key: 12
+    anchor: dpa.read
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="dpa.read"]'
+    title:
+      sq: "Lexojeni"
+      en: "Read it"
+      uk: "Прочитайте"
+    caption:
+      sq: "Teksti i plotë."
+      en: "The full text."
+      uk: "Повний текст."
+  - key: 13
+    anchor: dpa.agree
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="dpa.agree"]'
+    title:
+      sq: "Pajtohem"
+      en: "I agree"
+      uk: "Погоджуюся"
+    caption:
+      sq: "Konfirmoni që e lexuat."
+      en: "Confirm you have read it."
+      uk: "Підтвердіть, що прочитали."
+  - key: 14
+    anchor: dpa.accept
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="dpa.accept"]'
+    title:
+      sq: "Prano"
+      en: "Accept"
+      uk: "Прийняти"
+    caption:
+      sq: "Pranohet për lokalin, me emrin tuaj dhe datën."
+      en: "Accepted for the venue, with your name and the date."
+      uk: "Прийнято за заклад з вашим ім’ям і датою."
+  - key: 15
+    anchor: more.tile.activation
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.activation"]'
+    title:
+      sq: "Aktivizimi"
+      en: "Activation"
+      uk: "Активація"
+    caption:
+      sq: "Lista e kontrolleve para se lokali të hapet."
+      en: "The checklist before the venue goes live."
+      uk: "Список перевірок перед запуском закладу."
+  - key: 16
+    anchor: activation.menu
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="activation.menu"]'
+    title:
+      sq: "Menuja"
+      en: "Menu"
+      uk: "Меню"
+    caption:
+      sq: "Të paktën një pjatë në shitje."
+      en: "At least one dish on sale."
+      uk: "Щонайменше одна страва в продажу."
+  - key: 17
+    anchor: activation.notifications
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="activation.notifications"]'
+    title:
+      sq: "Zilja"
+      en: "The bell"
+      uk: "Дзвінок"
+    caption:
+      sq: "Një bisedë Telegram ku bie çdo porosi."
+      en: "A Telegram chat where every order rings."
+      uk: "Чат Telegram, куди дзвонить кожне замовлення."
+  - key: 18
+    anchor: activation.fulfilment
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="activation.fulfilment"]'
+    title:
+      sq: "Dorëzimi"
+      en: "Fulfilment"
+      uk: "Виконання"
+    caption:
+      sq: "Telefoni i lokalit dhe dërgesa ose marrja në lokal. Kur gjithçka është e gjelbër, jeni gati."
+      en: "The venue phone, and delivery or pickup. When everything is green, you are ready."
+      uk: "Телефон закладу й доставка чи самовивіз. Коли все зелене — ви готові."

@@ -1,0 +1,214 @@
+# Lesson O1b (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O1b
+role: owner
+module: orders
+order: 2
+covers: []
+title:
+  sq: "Lëvizni një porosi"
+  en: "Move an order"
+  uk: "Рухайте замовлення"
+goal:
+  sq: "Çoni një porosi të re deri te GATI dhe jepjani një korrieri."
+  en: "Take a fresh order to READY and hand it to a courier."
+  uk: "Довести нове замовлення до ГОТОВО й передати кур’єру."
+steps:
+  - key: 1
+    anchor: orders.next
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="orders.next"]'
+    title:
+      sq: "Hapi tjetër"
+      en: "Next step"
+      uk: "Наступний крок"
+    caption:
+      sq: "Një buton, një hap: prano, konfirmo, gati. Klienti e sheh çdo hap."
+      en: "One button, one step: accept, confirm, ready. The customer sees every step."
+      uk: "Одна кнопка — один крок: прийняти, підтвердити, готово. Клієнт бачить кожен крок."
+  - key: 2
+    anchor: orders.assign
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="orders.assign"]'
+    title:
+      sq: "Caktoni"
+      en: "Assign"
+      uk: "Призначити"
+    caption:
+      sq: "Kur porosia është gati, zgjidhni kush e çon."
+      en: "When the order is ready, choose who takes it."
+      uk: "Коли замовлення готове, оберіть, хто його повезе."
+  - key: 3
+    anchor: orders.assignCourier
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="orders.assignCourier"]'
+    title:
+      sq: "Korrieri"
+      en: "The courier"
+      uk: "Кур’єр"
+    caption:
+      sq: "Vetëm korrierët në turn. Ai merr një ofertë me orë; nëse s’përgjigjet, porosia lirohet për të tjerët."
+      en: "Only couriers on shift. They get an offer with a clock; if they do not answer, it is free for others."
+      uk: "Лише кур’єри на зміні. Кур’єр отримує пропозицію з годинником; якщо не відповість, вона стає доступною іншим."
+  - key: 4
+    anchor: orders.reject
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="orders.reject"]'
+    title:
+      sq: "Refuzoni"
+      en: "Reject"
+      uk: "Відхиліть"
+    caption:
+      sq: "Kur s’mund ta bëni, refuzojeni me arsye."
+      en: "When you cannot make it, reject it with a reason."
+      uk: "Коли не можете виконати, відхиліть із причиною."
+  - key: 5
+    anchor: confirm.reason
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="confirm.reason"]'
+      value: "Mbaroi peshku"
+    title:
+      sq: "Arsyeja"
+      en: "The reason"
+      uk: "Причина"
+    caption:
+      sq: "Klienti e sheh — p.sh. «mbaroi peshku»."
+      en: "The customer sees it — for example “out of fish”."
+      uk: "Клієнт її бачить — наприклад, «закінчилася риба»."
+  - key: 6
+    anchor: confirm.no
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="confirm.no"]'
+    title:
+      sq: "Anuloni"
+      en: "Cancel"
+      uk: "Скасувати"
+    caption:
+      sq: "Ndryshuat mendje? Asgjë nuk ndodh."
+      en: "Changed your mind? Nothing happens."
+      uk: "Передумали? Нічого не відбувається."
+  - key: 7
+    anchor: confirm.yes
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="confirm.yes"]'
+    title:
+      sq: "Konfirmoni"
+      en: "Confirm"
+      uk: "Підтвердіть"
+    caption:
+      sq: "Porosia refuzohet dhe stoku i rezervuar kthehet."
+      en: "The order is rejected and the reserved stock comes back."
+      uk: "Замовлення відхилено, а зарезервований запас повертається."
+  - key: 8
+    anchor: order.sheet
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="order.sheet"]'
+    title:
+      sq: "Detajet"
+      en: "The detail"
+      uk: "Деталі"
+    caption:
+      sq: "Artikujt, adresa, pagesa dhe historia, në një fletë."
+      en: "Items, address, payment and history, on one sheet."
+      uk: "Позиції, адреса, оплата й історія — на одному аркуші."
+  - key: 9
+    anchor: order.steps
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="order.steps"]'
+    title:
+      sq: "Ku është"
+      en: "Where it is"
+      uk: "Де воно"
+    caption:
+      sq: "Pikat tregojnë hapat e kaluar dhe hapin e tanishëm."
+      en: "The dots show the steps done and the current one."
+      uk: "Крапки показують пройдені кроки й поточний."
+  - key: 10
+    anchor: order.next
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="order.next"]'
+    title:
+      sq: "Hapi tjetër"
+      en: "Next step"
+      uk: "Наступний крок"
+    caption:
+      sq: "I njëjti hap edhe nga detajet."
+      en: "The same step, from the detail."
+      uk: "Той самий крок — з деталей."
+  - key: 11
+    anchor: order.assign
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="order.assign"]'
+    title:
+      sq: "Caktoni nga detajet"
+      en: "Assign from the detail"
+      uk: "Призначте з деталей"
+    caption:
+      sq: "Ose zgjidhni korrierin këtu."
+      en: "Or choose the courier here."
+      uk: "Або оберіть кур’єра тут."
+  - key: 12
+    anchor: order.call
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="order.call"]'
+    title:
+      sq: "Telefononi"
+      en: "Call"
+      uk: "Зателефонуйте"
+    caption:
+      sq: "Thërrisni klientin kur diçka mungon."
+      en: "Call the customer when something is missing."
+      uk: "Зателефонуйте клієнту, коли чогось бракує."
+  - key: 13
+    anchor: order.reject
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="order.reject"]'
+    title:
+      sq: "Refuzoni nga detajet"
+      en: "Reject from the detail"
+      uk: "Відхиліть з деталей"
+    caption:
+      sq: "E njëjta pyetje për arsyen."
+      en: "The same question about the reason."
+      uk: "Те саме питання про причину."

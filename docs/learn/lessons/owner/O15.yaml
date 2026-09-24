@@ -1,0 +1,80 @@
+# Lesson O15 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O15
+role: owner
+module: stamps
+order: 26
+covers: [features]
+title:
+  sq: "Karta me vula"
+  en: "The stamp card"
+  uk: "Картка з печатками"
+goal:
+  sq: "Aktivizojeni me 8 vula."
+  en: "Switch it on with 8 stamps."
+  uk: "Увімкнути з 8 печатками."
+steps:
+  - key: 1
+    anchor: more.tile.features
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.features"]'
+    title:
+      sq: "Funksionet"
+      en: "Features"
+      uk: "Функції"
+    caption:
+      sq: "Karta me vula është këtu, me funksionet e tjera të faqes."
+      en: "The stamp card lives here, with the site’s other features."
+      uk: "Картка з печатками тут, разом з іншими функціями сайту."
+  - key: 2
+    anchor: stamps.count
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="stamps.count"]'
+      value: "8"
+    title:
+      sq: "Sa vula"
+      en: "How many stamps"
+      uk: "Скільки печаток"
+    caption:
+      sq: "P.sh. 8 porosi për një dhuratë."
+      en: "For example 8 orders for a reward."
+      uk: "Наприклад, 8 замовлень за винагороду."
+  - key: 3
+    anchor: stamps.reward
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="stamps.reward"]'
+      value: "Një sushi falas"
+    title:
+      sq: "Dhurata"
+      en: "The reward"
+      uk: "Винагорода"
+    caption:
+      sq: "Çfarë merr klienti — e sheh në faqen e tij."
+      en: "What the customer gets — they see it on their page."
+      uk: "Що отримує клієнт — він бачить це на своїй сторінці."
+  - key: 4
+    anchor: stamps.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="stamps.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Karta del në faqe."
+      en: "The card appears on the site."
+      uk: "Картка з’являється на сайті."

@@ -1,0 +1,217 @@
+# Lesson W9 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: W9
+role: waiter
+module: till
+order: 9
+covers: [till]
+title:
+  sq: "Hapni dhe mbyllni arkën"
+  en: "Open and close the till"
+  uk: "Відкрийте й закрийте касу"
+goal:
+  sq: "Hapni me fond dhe mbyllni me numërim."
+  en: "Open with a float, close with a count."
+  uk: "Відкрити з розмінною сумою, закрити з перерахунком."
+steps:
+  - key: 1
+    anchor: room.till
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="room.till"]'
+    title:
+      sq: "Arka"
+      en: "The till"
+      uk: "Каса"
+    caption:
+      sq: "Vetëm kush ka të drejtë arke e sheh këtë buton."
+      en: "Only someone with till rights sees this button."
+      uk: "Цю кнопку бачить лише той, хто має право на касу."
+  - key: 2
+    anchor: till.state
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="till.state"]'
+    title:
+      sq: "Gjendja"
+      en: "The state"
+      uk: "Стан"
+    caption:
+      sq: "E hapur apo e mbyllur, sa pritet në arkë dhe sa hyri sot."
+      en: "Open or closed, what is expected in the drawer and what came in today."
+      uk: "Відкрита чи закрита, скільки має бути в касі і скільки надійшло сьогодні."
+  - key: 3
+    anchor: till.open
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="till.open"]'
+    title:
+      sq: "Hapja"
+      en: "Opening"
+      uk: "Відкриття"
+    caption:
+      sq: "Në fillim të ditës hapni arkën."
+      en: "At the start of the day, open the till."
+      uk: "На початку дня відкрийте касу."
+  - key: 4
+    anchor: till.float
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="till.float"]'
+      value: "5000"
+    title:
+      sq: "Fondi"
+      en: "The float"
+      uk: "Розмінна сума"
+    caption:
+      sq: "Shkruani paratë e vogla që vendosni në arkë, për çdo monedhë."
+      en: "Type the change you put in the drawer, per currency."
+      uk: "Введіть дрібні гроші, які кладете в касу, для кожної валюти."
+  - key: 5
+    anchor: till.move
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="till.move"]'
+    title:
+      sq: "Hyrje dhe dalje"
+      en: "Pay in and out"
+      uk: "Внесення й видача"
+    caption:
+      sq: "Para që hyjnë ose dalin pa shitje — p.sh. blerje buke."
+      en: "Money that goes in or out without a sale — buying bread, for example."
+      uk: "Гроші, що надходять або видаються без продажу — наприклад, на хліб."
+  - key: 6
+    anchor: till.direction
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="till.direction"]'
+    title:
+      sq: "Hyrje apo dalje"
+      en: "In or out"
+      uk: "Внесення чи видача"
+    caption:
+      sq: "Zgjidhni drejtimin."
+      en: "Choose the direction."
+      uk: "Оберіть напрямок."
+  - key: 7
+    anchor: till.currency
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="till.currency"]'
+    title:
+      sq: "Monedha"
+      en: "The currency"
+      uk: "Валюта"
+    caption:
+      sq: "Në cilën monedhë."
+      en: "In which currency."
+      uk: "У якій валюті."
+  - key: 8
+    anchor: till.amount
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="till.amount"]'
+      value: "800"
+    title:
+      sq: "Shuma"
+      en: "The amount"
+      uk: "Сума"
+    caption:
+      sq: "Sa."
+      en: "How much."
+      uk: "Скільки."
+  - key: 9
+    anchor: till.reason
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="till.reason"]'
+      value: "Bukë"
+    title:
+      sq: "Arsyeja"
+      en: "The reason"
+      uk: "Причина"
+    caption:
+      sq: "Çdo lëvizje ka arsye — pa të nuk ruhet."
+      en: "Every movement has a reason — without one it is not saved."
+      uk: "Кожен рух має причину — без неї не зберігається."
+  - key: 10
+    anchor: till.count
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="till.count"]'
+    title:
+      sq: "Numërimi"
+      en: "The count"
+      uk: "Перерахунок"
+    caption:
+      sq: "Në fund numëroni paratë në arkë."
+      en: "At the end, count the money in the drawer."
+      uk: "Наприкінці перерахуйте гроші в касі."
+  - key: 11
+    anchor: till.counted
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="till.counted"]'
+      value: "23400"
+    title:
+      sq: "Sa numëruat"
+      en: "What you counted"
+      uk: "Скільки нараховано"
+    caption:
+      sq: "Shkruani sa ka realisht. Diferenca — tepricë ose mungesë — shfaqet menjëherë."
+      en: "Type what is really there. The difference — over or short — shows at once."
+      uk: "Введіть, скільки є насправді. Різниця — надлишок чи нестача — видно одразу."
+  - key: 12
+    anchor: till.closeSure
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="till.closeSure"]'
+    title:
+      sq: "Jam i sigurt"
+      en: "I am sure"
+      uk: "Я впевнений"
+    caption:
+      sq: "Mbyllja nuk kthehet pas. Konfirmoni që numërimi është i fundit."
+      en: "Closing cannot be undone. Confirm the count is the final one."
+      uk: "Закриття не можна скасувати. Підтвердіть, що перерахунок остаточний."
+  - key: 13
+    anchor: till.close
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="till.close"]'
+    title:
+      sq: "Mbyllni arkën"
+      en: "Close the till"
+      uk: "Закрийте касу"
+    caption:
+      sq: "Dita mbyllet dhe krijohet raporti Z."
+      en: "The day closes and the Z report is made."
+      uk: "День закривається, і формується Z-звіт."

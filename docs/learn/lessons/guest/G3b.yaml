@@ -1,0 +1,94 @@
+# Lesson G3b (guest). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: G3b
+role: guest
+module: checkout
+order: 4
+covers: []
+title:
+  sq: "Paguani dhe porositni"
+  en: "Pay and place the order"
+  uk: "Оплатіть і оформіть"
+goal:
+  sq: "Zgjidhni pagesën, një bakshish ose kod, dhe dërgoni porosinë."
+  en: "Choose the payment, a tip or a code, and place the order."
+  uk: "Обрати оплату, чайові чи код і оформити замовлення."
+steps:
+  - key: 1
+    anchor: checkout.payMethod
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="checkout.payMethod"]'
+    title:
+      sq: "Mënyra e pagesës"
+      en: "Payment method"
+      uk: "Спосіб оплати"
+    caption:
+      sq: "Para në dorë, kartë ose portofol — aq sa pranon lokali."
+      en: "Cash, card or wallet — whatever the venue accepts."
+      uk: "Готівка, картка чи гаманець — те, що приймає заклад."
+  - key: 2
+    anchor: checkout.tip
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="checkout.tip"]'
+    title:
+      sq: "Bakshishi"
+      en: "Tip"
+      uk: "Чайові"
+    caption:
+      sq: "Nëse doni, një bakshish për korrierin."
+      en: "If you like, a tip for the courier."
+      uk: "Якщо хочете, чайові для кур’єра."
+  - key: 3
+    anchor: checkout.promo
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="checkout.promo"]'
+      value: "VERA10"
+    title:
+      sq: "Kodi promocional"
+      en: "Promo code"
+      uk: "Промокод"
+    caption:
+      sq: "Nëse keni një kod, shkruajeni këtu."
+      en: "If you have a code, type it here."
+      uk: "Якщо маєте код, введіть його тут."
+  - key: 4
+    anchor: checkout.place
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="checkout.place"]'
+    title:
+      sq: "Dërgo porosinë"
+      en: "Place the order"
+      uk: "Оформити замовлення"
+    caption:
+      sq: "Kontrolloni totalin dhe dërgojeni."
+      en: "Check the total and send it."
+      uk: "Перевірте суму й надішліть."
+  - key: 5
+    anchor: checkout.pay
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="checkout.pay"]'
+    title:
+      sq: "Paguani"
+      en: "Pay"
+      uk: "Оплатіть"
+    caption:
+      sq: "Me kartë online, ose paguani me para në dorë te dera. Lokali e merr porosinë menjëherë."
+      en: "By card online, or pay cash at the door. The venue gets the order at once."
+      uk: "Карткою онлайн або готівкою біля дверей. Заклад одразу отримує замовлення."

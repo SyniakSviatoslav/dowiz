@@ -1,0 +1,202 @@
+# Lesson O4d (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O4d
+role: owner
+module: menu
+order: 7
+covers: []
+title:
+  sq: "Ndryshoni një pjatë"
+  en: "Edit a dish"
+  uk: "Змініть страву"
+goal:
+  sq: "Vendosni foto, çmim, stacion dhe përkthime, ose hiqeni nga shitja."
+  en: "Set a photo, price, station and translations, or take it off sale."
+  uk: "Додати фото, ціну, станцію й переклади або зняти з продажу."
+steps:
+  - key: 1
+    anchor: menu.dish
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.dish"]'
+    title:
+      sq: "Një pjatë"
+      en: "A dish"
+      uk: "Страва"
+    caption:
+      sq: "Prekni pjatën për ta ndryshuar."
+      en: "Tap the dish to edit it."
+      uk: "Торкніться страви, щоб її змінити."
+  - key: 2
+    anchor: dish.price
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="dish.price"]'
+      value: "1200"
+    title:
+      sq: "Çmimi"
+      en: "The price"
+      uk: "Ціна"
+    caption:
+      sq: "Çmimi i ri vlen për porositë e reja."
+      en: "The new price applies to new orders."
+      uk: "Нова ціна діє для нових замовлень."
+  - key: 3
+    anchor: dish.photo
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="dish.photo"]'
+    title:
+      sq: "Foto"
+      en: "Photo"
+      uk: "Фото"
+    caption:
+      sq: "Fotoja që sheh klienti."
+      en: "The photo the customer sees."
+      uk: "Фото, яке бачить клієнт."
+  - key: 4
+    anchor: dish.photoFile
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="dish.photoFile"]'
+    title:
+      sq: "Ngarko foto"
+      en: "Upload a photo"
+      uk: "Завантажити фото"
+    caption:
+      sq: "Zvogëlohet dhe pastrohet nga të dhënat e vendndodhjes para ngarkimit."
+      en: "It is shrunk and stripped of location data before it uploads."
+      uk: "Зменшується й очищається від даних про місце перед завантаженням."
+  - key: 5
+    anchor: dish.photoClear
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="dish.photoClear"]'
+    title:
+      sq: "Hiq foton"
+      en: "Remove the photo"
+      uk: "Прибрати фото"
+    caption:
+      sq: "Pjata mbetet pa foto."
+      en: "The dish stays without a photo."
+      uk: "Страва лишається без фото."
+  - key: 6
+    anchor: dish.offNote
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="dish.offNote"]'
+      value: "Nesër"
+    title:
+      sq: "Pse s’ka"
+      en: "Why it is off"
+      uk: "Чому немає"
+    caption:
+      sq: "Kur e hiqni nga shitja, një fjalë për klientin — p.sh. «nesër»."
+      en: "When it is off sale, a word for the customer — for example “tomorrow”."
+      uk: "Коли страву знято з продажу — слово для клієнта, наприклад «завтра»."
+  - key: 7
+    anchor: dish.station
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="dish.station"]'
+    title:
+      sq: "Stacioni"
+      en: "The station"
+      uk: "Станція"
+    caption:
+      sq: "Kuzhina apo bari — ku printohet fleta."
+      en: "Kitchen or bar — where its ticket prints."
+      uk: "Кухня чи бар — де друкується чек."
+  - key: 8
+    anchor: dish.tag
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="dish.tag"]'
+    title:
+      sq: "Etiketat"
+      en: "Tags"
+      uk: "Мітки"
+    caption:
+      sq: "Vegjetariane, pikante… klienti filtron me to."
+      en: "Vegetarian, spicy… customers filter by them."
+      uk: "Вегетаріанське, гостре… клієнти фільтрують за ними."
+  - key: 9
+    anchor: dish.ingredients
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="dish.ingredients"]'
+      value: "salmon, oriz, nori"
+    title:
+      sq: "Përbërësit"
+      en: "Ingredients"
+      uk: "Склад"
+    caption:
+      sq: "Përbërësit dhe alergjenët që sheh klienti."
+      en: "The ingredients and allergens the customer sees."
+      uk: "Склад і алергени, які бачить клієнт."
+  - key: 10
+    anchor: dish.translation
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="dish.translation"]'
+      value: "Salmon roll"
+    title:
+      sq: "Përkthimet"
+      en: "Translations"
+      uk: "Переклади"
+    caption:
+      sq: "Emri dhe përshkrimi në anglisht dhe ukrainisht."
+      en: "The name and description in English and Ukrainian."
+      uk: "Назва й опис англійською та українською."
+  - key: 11
+    anchor: dish.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="dish.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Ndryshimet dalin menjëherë në faqe."
+      en: "The changes are on the site at once."
+      uk: "Зміни одразу з’являються на сайті."
+  - key: 12
+    anchor: dish.delete
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="dish.delete"]'
+    title:
+      sq: "Fshije"
+      en: "Delete"
+      uk: "Видалити"
+    caption:
+      sq: "Fshirja nuk kthehet. Heqja nga shitja zakonisht mjafton."
+      en: "Deleting cannot be undone. Taking it off sale is usually enough."
+      uk: "Видалення не скасувати. Зазвичай досить зняти з продажу."

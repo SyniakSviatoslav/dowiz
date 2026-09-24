@@ -1,0 +1,93 @@
+# Lesson O5b (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O5b
+role: owner
+module: stock
+order: 12
+covers: []
+title:
+  sq: "Furnizimet dhe recetat në masë"
+  en: "Supplies and recipes in bulk"
+  uk: "Запаси й рецепти масово"
+goal:
+  sq: "Importoni të dy skedarët CSV: së pari prova, pastaj zbatimi."
+  en: "Import both CSV files: dry run first, then apply."
+  uk: "Імпортувати обидва CSV: спершу пробний прогін, потім застосування."
+steps:
+  - key: 1
+    anchor: stock.import
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.import"]'
+    title:
+      sq: "Furnizimet nga CSV"
+      en: "Supplies from CSV"
+      uk: "Запаси з CSV"
+    caption:
+      sq: "Gjithë furnizimet nga një skedar."
+      en: "All supplies from one file."
+      uk: "Усі запаси з одного файлу."
+  - key: 2
+    anchor: menu.importRecipes
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.importRecipes"]'
+    title:
+      sq: "Recetat nga CSV"
+      en: "Recipes from CSV"
+      uk: "Рецепти з CSV"
+    caption:
+      sq: "Nga menuja: recetat e gjithë pjatave nga një skedar."
+      en: "From the menu: every dish’s recipe from one file."
+      uk: "З меню: рецепти всіх страв з одного файлу."
+  - key: 3
+    anchor: bulk.file
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="bulk.file"]'
+    title:
+      sq: "Skedari"
+      en: "The file"
+      uk: "Файл"
+    caption:
+      sq: "Zgjidhni skedarin."
+      en: "Choose the file."
+      uk: "Оберіть файл."
+  - key: 4
+    anchor: bulk.dryRun
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="bulk.dryRun"]'
+    title:
+      sq: "Provë"
+      en: "Dry run"
+      uk: "Пробний прогін"
+    caption:
+      sq: "Tregon çdo rresht që nuk gjen furnizimin ose pjatën e vet."
+      en: "Shows every line that cannot find its supply or its dish."
+      uk: "Показує кожен рядок, що не знаходить свого запасу чи страви."
+  - key: 5
+    anchor: bulk.apply
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="bulk.apply"]'
+    title:
+      sq: "Zbato"
+      en: "Apply"
+      uk: "Застосувати"
+    caption:
+      sq: "Pas provës, zbatojeni."
+      en: "After the dry run, apply it."
+      uk: "Після пробного прогону застосуйте."

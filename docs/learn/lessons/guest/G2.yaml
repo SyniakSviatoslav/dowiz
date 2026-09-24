@@ -1,0 +1,153 @@
+# Lesson G2 (guest). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: G2
+role: guest
+module: basket
+order: 2
+covers: []
+title:
+  sq: "Mbushni shportën"
+  en: "Fill the basket"
+  uk: "Наповніть кошик"
+goal:
+  sq: "Hapni një pjatë, zgjidhni sasinë dhe shtojeni në shportë."
+  en: "Open a dish, choose the quantity and add it to the basket."
+  uk: "Відкрити страву, обрати кількість і додати в кошик."
+steps:
+  - key: 1
+    anchor: menu.quickAdd
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.quickAdd"]'
+    title:
+      sq: "Shtim i shpejtë"
+      en: "Quick add"
+      uk: "Швидко додати"
+    caption:
+      sq: "«+» në kartë e shton pjatën pa e hapur."
+      en: "The “+” on a card adds the dish without opening it."
+      uk: "«+» на картці додає страву, не відкриваючи її."
+  - key: 2
+    anchor: menu.dish
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.dish"]'
+    title:
+      sq: "Hapni një pjatë"
+      en: "Open a dish"
+      uk: "Відкрийте страву"
+    caption:
+      sq: "Foto, përbërës, alergjenë dhe kalori."
+      en: "Photo, ingredients, allergens and calories."
+      uk: "Фото, склад, алергени й калорії."
+  - key: 3
+    anchor: dish.onTable
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="dish.onTable"]'
+    title:
+      sq: "Në tavolinë"
+      en: "On your table"
+      uk: "На вашому столі"
+    caption:
+      sq: "Aty ku telefoni e lejon, shihni pjatën në madhësi reale mbi tavolinën tuaj."
+      en: "Where the phone allows it, see the dish life-size on your own table."
+      uk: "Де телефон дозволяє, побачте страву в справжньому розмірі на своєму столі."
+  - key: 4
+    anchor: dish.qty
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="dish.qty"]'
+    title:
+      sq: "Sasia"
+      en: "Quantity"
+      uk: "Кількість"
+    caption:
+      sq: "Sa copë."
+      en: "How many."
+      uk: "Скільки порцій."
+  - key: 5
+    anchor: dish.add
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="dish.add"]'
+    title:
+      sq: "Shto në shportë"
+      en: "Add to basket"
+      uk: "Додати в кошик"
+    caption:
+      sq: "Çmimi në buton është për sasinë e zgjedhur."
+      en: "The price on the button is for the chosen quantity."
+      uk: "Ціна на кнопці — за обрану кількість."
+  - key: 6
+    anchor: dish.back
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="dish.back"]'
+    title:
+      sq: "Prapa"
+      en: "Back"
+      uk: "Назад"
+    caption:
+      sq: "Kthehuni te menuja."
+      en: "Back to the menu."
+      uk: "Назад до меню."
+  - key: 7
+    anchor: cart.open
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="cart.open"]'
+    title:
+      sq: "Shporta"
+      en: "The basket"
+      uk: "Кошик"
+    caption:
+      sq: "Shihni çfarë zgjodhët dhe totalin."
+      en: "See what you chose and the total."
+      uk: "Перегляньте обране й загальну суму."
+  - key: 8
+    anchor: nav.cart
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.cart"]'
+    title:
+      sq: "Skeda e shportës"
+      en: "The basket tab"
+      uk: "Вкладка кошика"
+    caption:
+      sq: "E njëjta shportë, nga shiriti poshtë."
+      en: "The same basket, from the bar at the bottom."
+      uk: "Той самий кошик — з панелі внизу."
+  - key: 9
+    anchor: cart.qty
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="cart.qty"]'
+    title:
+      sq: "Ndryshoni sasinë"
+      en: "Change a quantity"
+      uk: "Змініть кількість"
+    caption:
+      sq: "Më shumë, më pak, ose hiqeni."
+      en: "More, fewer, or remove it."
+      uk: "Більше, менше або приберіть."

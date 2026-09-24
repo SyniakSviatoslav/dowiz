@@ -77,7 +77,7 @@ function box(el, left, top, width, height){
 ///   tour   -- ordered list of keys, or { key, ...overrides } objects; an
 ///             override may carry `at` (a wider anchor than the hint's) and
 ///             `before` (a function that brings the element on screen)
-///   mount  -- the help entry: { into, before, className, text, when }
+///   mount  -- the help entry: { into, before, className, text, when, tour }
 ///   toast  -- the surface's own toast(message)
 ///   onEnd  -- called with 'done' | 'paused' when the tour closes
 /// The guide's own words. A caller passes its language's; these are the defaults.
@@ -121,7 +121,11 @@ export function createGuide({ key, help = {}, tour = [], mount = null, toast = (
     const s = steps[i];
     try { await s.before?.(); } catch {}
     const target = s.at ? q(s.at) : null;
-    if (s.at && !shown(target)) return show(i + dir, dir);
+    // `soft`: a lesson step explains a control that may be on another screen
+    // (the cash field exists only at the door). It is shown in the middle
+    // instead of skipped, so a lesson opened while standing still is read
+    // through rather than finishing at once with nothing seen.
+    if (s.at && !shown(target) && !s.soft) return show(i + dir, dir);
     cur = i; open = true;
     write({ state: 'open', step: i });
     renderCard(s, i);
@@ -228,6 +232,7 @@ export function createGuide({ key, help = {}, tour = [], mount = null, toast = (
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'gd-help' + (mount.className ? ` ${mount.className}` : '');
+    if (mount.tour) b.dataset.tour = mount.tour;   // the learning anchor (`data-tour`)
     b.setAttribute('aria-label', W.help); b.title = W.help;
     b.innerHTML = ICON('help-circle');
     if (mount.text) { const s = document.createElement('span'); s.textContent = mount.text; b.appendChild(s); }
@@ -363,6 +368,10 @@ export function createGuide({ key, help = {}, tour = [], mount = null, toast = (
     schedule(true);
   }
 
-  return { init, autoStart, start, mountHints, mountHelp,
+  /// Open the tour at the step whose key is `name` (a lesson deep link names a
+  /// step, not an index); an unknown name opens at step 0.
+  const startAt = name => start(Math.max(0, steps.findIndex(s => s.key === name)));
+
+  return { init, autoStart, start, startAt, mountHints, mountHelp,
            pause: () => end('paused'), get open(){ return open; } };
 }

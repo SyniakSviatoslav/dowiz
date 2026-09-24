@@ -1,0 +1,259 @@
+# Lesson O16f (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O16f
+role: owner
+module: notifications
+order: 30
+covers: [notifications, printer]
+title:
+  sq: "Zilja e kuzhinës dhe printeri"
+  en: "The kitchen bell and the printer"
+  uk: "Дзвінок кухні та принтер"
+goal:
+  sq: "Lidhni Telegram-in dhe provoni ziljen; lidhni printerin."
+  en: "Connect Telegram and test the bell; connect the printer."
+  uk: "Підключити Telegram і перевірити дзвінок; підключити принтер."
+steps:
+  - key: 1
+    anchor: more.tile.notifications
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.notifications"]'
+    title:
+      sq: "Zilja"
+      en: "The bell"
+      uk: "Дзвінок"
+    caption:
+      sq: "Ku bie njoftimi për çdo porosi të re."
+      en: "Where each new order rings."
+      uk: "Куди дзвонить кожне нове замовлення."
+  - key: 2
+    anchor: notify.telegramState
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="notify.telegramState"]'
+    title:
+      sq: "Telegram"
+      en: "Telegram"
+      uk: "Telegram"
+    caption:
+      sq: "A është lidhur boti i lokalit."
+      en: "Whether the venue’s own bot is connected."
+      uk: "Чи підключено власного бота закладу."
+  - key: 3
+    anchor: notify.tgToken
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="notify.tgToken"]'
+    title:
+      sq: "Çelësi i botit"
+      en: "Bot token"
+      uk: "Токен бота"
+    caption:
+      sq: "Nga boti juaj; mbetet i fshehur."
+      en: "From your own bot; it stays hidden."
+      uk: "Від вашого бота; лишається прихованим."
+  - key: 4
+    anchor: notify.tgChat
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="notify.tgChat"]'
+    title:
+      sq: "Biseda"
+      en: "The chat"
+      uk: "Чат"
+    caption:
+      sq: "Biseda e kuzhinës."
+      en: "The kitchen’s chat."
+      uk: "Чат кухні."
+  - key: 5
+    anchor: notify.test
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="notify.test"]'
+    title:
+      sq: "Provë"
+      en: "Test"
+      uk: "Перевірка"
+    caption:
+      sq: "Dërgon një njoftim prove — duhet të bjerë në kuzhinë."
+      en: "Sends a test notice — it should ring in the kitchen."
+      uk: "Надсилає тестове сповіщення — воно має задзвонити на кухні."
+  - key: 6
+    anchor: notify.whatsappState
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="notify.whatsappState"]'
+    title:
+      sq: "WhatsApp"
+      en: "WhatsApp"
+      uk: "WhatsApp"
+    caption:
+      sq: "Ose përmes WhatsApp-it të biznesit."
+      en: "Or through WhatsApp Business."
+      uk: "Або через WhatsApp Business."
+  - key: 7
+    anchor: notify.waToken
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="notify.waToken"]'
+    title:
+      sq: "Çelësi"
+      en: "Token"
+      uk: "Токен"
+    caption:
+      sq: "Mbetet i fshehur."
+      en: "It stays hidden."
+      uk: "Лишається прихованим."
+  - key: 8
+    anchor: notify.waPhone
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="notify.waPhone"]'
+    title:
+      sq: "Numri i biznesit"
+      en: "Business number"
+      uk: "Бізнес-номер"
+    caption:
+      sq: "Numri nga i cili dërgohet."
+      en: "The number it sends from."
+      uk: "Номер, з якого надсилається."
+  - key: 9
+    anchor: notify.waTo
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="notify.waTo"]'
+    title:
+      sq: "Kujt"
+      en: "To"
+      uk: "Кому"
+    caption:
+      sq: "Numri që merr njoftimin."
+      en: "The number that gets the notice."
+      uk: "Номер, що отримує сповіщення."
+  - key: 10
+    anchor: more.tile.printer
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.printer"]'
+    title:
+      sq: "Printeri"
+      en: "Printer"
+      uk: "Принтер"
+    caption:
+      sq: "Fleta e kuzhinës për çdo porosi."
+      en: "The kitchen ticket for every order."
+      uk: "Кухонний чек для кожного замовлення."
+  - key: 11
+    anchor: printer.state
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="printer.state"]'
+    title:
+      sq: "Gjendja"
+      en: "State"
+      uk: "Стан"
+    caption:
+      sq: "Kur printoi për herë të fundit."
+      en: "When it last printed."
+      uk: "Коли друкував востаннє."
+  - key: 12
+    anchor: printer.name
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="printer.name"]'
+      value: "Kuzhina"
+    title:
+      sq: "Emri"
+      en: "Name"
+      uk: "Назва"
+    caption:
+      sq: "P.sh. «kuzhina»."
+      en: "For example “kitchen”."
+      uk: "Наприклад, «кухня»."
+  - key: 13
+    anchor: printer.url
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="printer.url"]'
+    title:
+      sq: "Adresa"
+      en: "Address"
+      uk: "Адреса"
+    caption:
+      sq: "Ku dëgjon printeri."
+      en: "Where the printer listens."
+      uk: "Де слухає принтер."
+  - key: 14
+    anchor: printer.key
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="printer.key"]'
+    title:
+      sq: "Çelësi"
+      en: "Key"
+      uk: "Ключ"
+    caption:
+      sq: "Mbetet i fshehur."
+      en: "It stays hidden."
+      uk: "Лишається прихованим."
+  - key: 15
+    anchor: printer.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="printer.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Porositë e reja printohen."
+      en: "New orders print."
+      uk: "Нові замовлення друкуються."
+  - key: 16
+    anchor: printer.jobs
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="printer.jobs"]'
+    title:
+      sq: "Punët"
+      en: "Jobs"
+      uk: "Завдання"
+    caption:
+      sq: "Fletët e fundit dhe nëse dolën."
+      en: "The latest tickets and whether they came out."
+      uk: "Останні чеки й чи вони вийшли."

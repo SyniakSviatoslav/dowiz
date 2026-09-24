@@ -1,0 +1,169 @@
+# Lesson O14c (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O14c
+role: owner
+module: posts
+order: 25
+covers: [posts, social]
+title:
+  sq: "Postimet dhe rrjetet"
+  en: "Posts and social"
+  uk: "Дописи й соцмережі"
+goal:
+  sq: "Miratoni ose refuzoni një draft postimi."
+  en: "Approve or reject a post draft."
+  uk: "Схвалити або відхилити чернетку допису."
+steps:
+  - key: 1
+    anchor: more.tile.posts
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.posts"]'
+    title:
+      sq: "Postimet"
+      en: "Posts"
+      uk: "Дописи"
+    caption:
+      sq: "Drafte postimesh për rrjetet sociale."
+      en: "Post drafts for social media."
+      uk: "Чернетки дописів для соцмереж."
+  - key: 2
+    anchor: posts.draft
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="posts.draft"]'
+    title:
+      sq: "Draft i ri"
+      en: "New draft"
+      uk: "Нова чернетка"
+    caption:
+      sq: "Shkruani një postim ose kërkojeni nga asistenti."
+      en: "Write a post, or ask the assistant for one."
+      uk: "Напишіть допис або попросіть асистента."
+  - key: 3
+    anchor: posts.row
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="posts.row"]'
+    title:
+      sq: "Një draft"
+      en: "A draft"
+      uk: "Чернетка"
+    caption:
+      sq: "Asgjë nuk publikohet pa miratimin tuaj."
+      en: "Nothing is published without your approval."
+      uk: "Нічого не публікується без вашого схвалення."
+  - key: 4
+    anchor: posts.text
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="posts.text"]'
+      value: "Sot: supë miso me 450 lekë."
+    title:
+      sq: "Teksti"
+      en: "The text"
+      uk: "Текст"
+    caption:
+      sq: "Ndryshojeni si të doni."
+      en: "Change it as you like."
+      uk: "Змінюйте як хочете."
+  - key: 5
+    anchor: posts.approve
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="posts.approve"]'
+    title:
+      sq: "Mirato"
+      en: "Approve"
+      uk: "Схвалити"
+    caption:
+      sq: "Postimi publikohet."
+      en: "The post is published."
+      uk: "Допис опубліковано."
+  - key: 6
+    anchor: posts.reject
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="posts.reject"]'
+    title:
+      sq: "Refuzo"
+      en: "Reject"
+      uk: "Відхилити"
+    caption:
+      sq: "Drafti hiqet."
+      en: "The draft is dropped."
+      uk: "Чернетку прибрано."
+  - key: 7
+    anchor: more.tile.social
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.social"]'
+    title:
+      sq: "Rrjetet"
+      en: "Social"
+      uk: "Соцмережі"
+    caption:
+      sq: "Llogaritë e lidhura të lokalit."
+      en: "The venue’s linked accounts."
+      uk: "Підключені акаунти закладу."
+  - key: 8
+    anchor: social.channel
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="social.channel"]'
+    title:
+      sq: "Kanali"
+      en: "The channel"
+      uk: "Канал"
+    caption:
+      sq: "Ku publikohet."
+      en: "Where it is published."
+      uk: "Де публікується."
+  - key: 9
+    anchor: social.igUser
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="social.igUser"]'
+    title:
+      sq: "Llogaria Instagram"
+      en: "Instagram account"
+      uk: "Акаунт Instagram"
+    caption:
+      sq: "Llogaria e biznesit."
+      en: "The business account."
+      uk: "Бізнес-акаунт."
+  - key: 10
+    anchor: social.igToken
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="social.igToken"]'
+    title:
+      sq: "Çelësi"
+      en: "The token"
+      uk: "Токен"
+    caption:
+      sq: "Mbetet i fshehur; nuk shfaqet në video."
+      en: "It stays hidden; it never shows in a video."
+      uk: "Лишається прихованим; не показується у відео."

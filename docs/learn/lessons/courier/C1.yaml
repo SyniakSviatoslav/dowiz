@@ -1,0 +1,91 @@
+# Lesson C1 (courier). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: C1
+role: courier
+module: shift
+order: 1
+covers: [login, claim, loading, failed, offShift]
+title:
+  sq: "Turni i parë"
+  en: "First shift"
+  uk: "Перша зміна"
+goal:
+  sq: "Dini ku janë turni, ekrani i punës, mikrofoni dhe ndihma."
+  en: "Know where the shift, the job screen, the microphone and help are."
+  uk: "Знати, де зміна, екран роботи, мікрофон і довідка."
+steps:
+  - key: welcome
+    anchor: none
+    writes: no
+    action:
+      do: wait
+    title:
+      sq: "Ky është aplikacioni juaj i korrierit"
+      en: "This is your courier app"
+      uk: "Це ваш застосунок кур’єра"
+    caption:
+      sq: "Një ekran — një punë. Tre hapa të shkurtër tregojnë çfarë është ku. Mund ta kapërceni ose ta mbaroni më vonë."
+      en: "One screen — one job. Three short steps show what is where. You can skip or finish later."
+      uk: "Один екран — одна справа. Три короткі кроки покажуть, що тут до чого. Можна пропустити або завершити пізніше."
+  - key: shift
+    anchor: hud.shift
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="hud.shift"]'
+    title:
+      sq: "Turni"
+      en: "Shift"
+      uk: "Зміна"
+    caption:
+      sq: "Derisa turni s’është hapur, porositë nuk vijnë. Në turn këtu shihni dorëzimet dhe paratë e mbledhura."
+      en: "Until a shift is open, no orders come in. On shift, this shows deliveries and cash collected."
+      uk: "Поки зміну не відкрито, замовлення не надходять. На зміні тут видно кількість доставок і зібрану готівку."
+  - key: sheet
+    anchor: hud.sheet
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="hud.sheet"]'
+    title:
+      sq: "Një punë në ekran"
+      en: "One job on screen"
+      uk: "Одна справа на екрані"
+    caption:
+      sq: "Porositë e gatshme shfaqen këtu. Zgjidhni një, shtypni «Merr» — dhe ekrani ju çon hap pas hapi deri te «U dorëzua»."
+      en: "Ready orders appear here. Pick one, press “Take” — and the screen leads step by step to “Delivered”."
+      uk: "Готові замовлення з’являються тут. Оберіть одне, натисніть «Взяти» — і далі екран веде крок за кроком до «Доставлено»."
+  - key: mic
+    anchor: hud.mic
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="hud.mic"]'
+    title:
+      sq: "Me zë"
+      en: "By voice"
+      uk: "Голосом"
+    caption:
+      sq: "Thoni «e mora», «u dorëzua» ose «ku është tjetra». Aplikacioni përsërit çfarë dëgjoi dhe kërkon konfirmim."
+      en: "Say “picked up”, “delivered” or “where next”. The app repeats what it heard and asks you to confirm."
+      uk: "Скажіть «взяв», «доставив» або «де наступне». Застосунок повторить, що почув, і попросить підтвердити."
+  - key: help
+    anchor: help.open
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="help.open"]'
+    title:
+      sq: "Ndihma"
+      en: "Help"
+      uk: "Довідка"
+    caption:
+      sq: "Ky buton përsërit turin. Ekziston vetëm kur qëndroni, jo në rrugë."
+      en: "This button repeats the tour. It is here only while you stand still, not on a run."
+      uk: "Ця кнопка повторить тур. Вона є лише тоді, коли ви стоїте, не на маршруті."

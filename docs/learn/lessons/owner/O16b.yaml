@@ -1,0 +1,213 @@
+# Lesson O16b (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O16b
+role: owner
+module: branding
+order: 31
+covers: [branding, preview]
+title:
+  sq: "Marka dhe pamja"
+  en: "Branding and preview"
+  uk: "Бренд і перегляд"
+goal:
+  sq: "Ndryshoni ngjyrën kryesore dhe shihni faqen."
+  en: "Change the main colour and see the storefront."
+  uk: "Змінити основний колір і побачити вітрину."
+steps:
+  - key: 1
+    anchor: more.tile.branding
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.branding"]'
+    title:
+      sq: "Marka"
+      en: "Branding"
+      uk: "Бренд"
+    caption:
+      sq: "Pamja e faqes suaj."
+      en: "The look of your site."
+      uk: "Вигляд вашого сайту."
+  - key: 2
+    anchor: branding.primary
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="branding.primary"]'
+    title:
+      sq: "Ngjyra kryesore"
+      en: "Main colour"
+      uk: "Основний колір"
+    caption:
+      sq: "Kontrasti kontrollohet vetë kundrejt letrës."
+      en: "The contrast is checked against the paper for you."
+      uk: "Контраст перевіряється з фоном автоматично."
+  - key: 3
+    anchor: branding.paper
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="branding.paper"]'
+    title:
+      sq: "Letra"
+      en: "Paper"
+      uk: "Фон"
+    caption:
+      sq: "Ngjyra e sfondit."
+      en: "The background colour."
+      uk: "Колір фону."
+  - key: 4
+    anchor: branding.typePair
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="branding.typePair"]'
+    title:
+      sq: "Shkronjat"
+      en: "Type"
+      uk: "Шрифти"
+    caption:
+      sq: "Një çift shkronjash për titujt dhe tekstin."
+      en: "A pair of faces for headings and text."
+      uk: "Пара шрифтів для заголовків і тексту."
+  - key: 5
+    anchor: branding.logo
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="branding.logo"]'
+    title:
+      sq: "Logoja"
+      en: "Logo"
+      uk: "Логотип"
+    caption:
+      sq: "Ngarkoni logon."
+      en: "Upload your logo."
+      uk: "Завантажте логотип."
+  - key: 6
+    anchor: branding.seal
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="branding.seal"]'
+    title:
+      sq: "Vula"
+      en: "Seal"
+      uk: "Печатка"
+    caption:
+      sq: "Shenja e vogël e lokalit."
+      en: "The venue’s small mark."
+      uk: "Маленький знак закладу."
+  - key: 7
+    anchor: branding.motif
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="branding.motif"]'
+    title:
+      sq: "Motivi"
+      en: "Motif"
+      uk: "Мотив"
+    caption:
+      sq: "Një motiv i lehtë në sfond."
+      en: "A light pattern in the background."
+      uk: "Легкий візерунок на фоні."
+  - key: 8
+    anchor: branding.warm
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="branding.warm"]'
+    title:
+      sq: "I ngrohtë"
+      en: "Warm"
+      uk: "Теплий"
+    caption:
+      sq: "Një palë ngjyrash e gatshme."
+      en: "A ready colour pair."
+      uk: "Готова пара кольорів."
+  - key: 9
+    anchor: branding.sage
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="branding.sage"]'
+    title:
+      sq: "Sherebelë"
+      en: "Sage"
+      uk: "Шавлія"
+    caption:
+      sq: "Një tjetër."
+      en: "Another one."
+      uk: "Ще одна."
+  - key: 10
+    anchor: branding.preview
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="branding.preview"]'
+    title:
+      sq: "Si duket"
+      en: "How it looks"
+      uk: "Як виглядає"
+    caption:
+      sq: "Pamja e ndryshimit para se ta ruani."
+      en: "The change before you save it."
+      uk: "Зміна до збереження."
+  - key: 11
+    anchor: more.tile.preview
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.preview"]'
+    title:
+      sq: "Pamja"
+      en: "Preview"
+      uk: "Перегляд"
+    caption:
+      sq: "Faqja ashtu siç e sheh klienti."
+      en: "The site as the customer sees it."
+      uk: "Сайт таким, яким його бачить клієнт."
+  - key: 12
+    anchor: preview.reload
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="preview.reload"]'
+    title:
+      sq: "Rifresko"
+      en: "Reload"
+      uk: "Оновити"
+    caption:
+      sq: "Pas një ndryshimi."
+      en: "After a change."
+      uk: "Після зміни."
+  - key: 13
+    anchor: preview.open
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="preview.open"]'
+    title:
+      sq: "Hape"
+      en: "Open it"
+      uk: "Відкрити"
+    caption:
+      sq: "Në një skedë të re."
+      en: "In a new tab."
+      uk: "У новій вкладці."

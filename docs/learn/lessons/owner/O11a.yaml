@@ -1,0 +1,213 @@
+# Lesson O11a (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O11a
+role: owner
+module: ebills
+order: 18
+covers: [ebills]
+title:
+  sq: "Lexoni arkën fiskale"
+  en: "Read the till"
+  uk: "Читайте фіскальну касу"
+goal:
+  sq: "Lidhni arkën dhe çiftoni kodet e saj me pjatat."
+  en: "Connect the till and map its codes to dishes."
+  uk: "Підключити касу й зіставити її коди зі стравами."
+steps:
+  - key: 1
+    anchor: more.tile.ebills
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.ebills"]'
+    title:
+      sq: "eBills"
+      en: "eBills"
+      uk: "eBills"
+    caption:
+      sq: "Lidhja me arkën tuaj fiskale."
+      en: "The link to your fiscal till."
+      uk: "Зв’язок із вашою фіскальною касою."
+  - key: 2
+    anchor: ebills.status
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ebills.status"]'
+    title:
+      sq: "Gjendja"
+      en: "Status"
+      uk: "Стан"
+    caption:
+      sq: "A lexohet arka dhe kur u lexua për herë të fundit."
+      en: "Whether the till is being read, and when it last was."
+      uk: "Чи читається каса і коли востаннє."
+  - key: 3
+    anchor: ebills.user
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ebills.user"]'
+    title:
+      sq: "Përdoruesi"
+      en: "User"
+      uk: "Користувач"
+    caption:
+      sq: "Përdoruesi i arkës."
+      en: "The till’s user."
+      uk: "Користувач каси."
+  - key: 4
+    anchor: ebills.password
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ebills.password"]'
+    title:
+      sq: "Fjalëkalimi"
+      en: "Password"
+      uk: "Пароль"
+    caption:
+      sq: "Shfaqet i fshehur dhe nuk del kurrë në video."
+      en: "Shown masked, and never in a video."
+      uk: "Показано прихованим і ніколи не потрапляє у відео."
+  - key: 5
+    anchor: ebills.pos
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ebills.pos"]'
+    title:
+      sq: "Arka nr."
+      en: "Till no."
+      uk: "Каса №"
+    caption:
+      sq: "Nëse keni më shumë se një arkë."
+      en: "If you have more than one till."
+      uk: "Якщо у вас більше однієї каси."
+  - key: 6
+    anchor: ebills.save
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ebills.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Pas ruajtjes arka lexohet vetë."
+      en: "Once saved, the till is read by itself."
+      uk: "Після збереження каса читається сама."
+  - key: 7
+    anchor: ebills.unmatched
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ebills.unmatched"]'
+    title:
+      sq: "Pa çift"
+      en: "Unmatched"
+      uk: "Без пари"
+    caption:
+      sq: "Kodet e arkës që ende s’kanë pjatë."
+      en: "Till codes that have no dish yet."
+      uk: "Коди каси, які ще не мають страви."
+  - key: 8
+    anchor: ebills.pick
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="ebills.pick"]'
+    title:
+      sq: "Zgjidhni pjatën"
+      en: "Pick the dish"
+      uk: "Оберіть страву"
+    caption:
+      sq: "Aplikacioni sugjeron një pjatë; kontrollojeni."
+      en: "The app suggests a dish; check it."
+      uk: "Застосунок пропонує страву; перевірте її."
+  - key: 9
+    anchor: ebills.map
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="ebills.map"]'
+    title:
+      sq: "Çifto"
+      en: "Map"
+      uk: "Зіставити"
+    caption:
+      sq: "Tani shitjet e arkës zbresin stokun e kësaj pjate."
+      en: "Now the till’s sales take this dish’s stock off."
+      uk: "Тепер продажі з каси списують запаси цієї страви."
+  - key: 10
+    anchor: ebills.mapped
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ebills.mapped"]'
+    title:
+      sq: "Të çiftuara"
+      en: "Mapped"
+      uk: "Зіставлені"
+    caption:
+      sq: "Kodet që tashmë kanë pjatë."
+      en: "Codes that already have a dish."
+      uk: "Коди, які вже мають страву."
+  - key: 11
+    anchor: ebills.clear
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ebills.clear"]'
+    title:
+      sq: "Hiq çiftin"
+      en: "Clear the mapping"
+      uk: "Прибрати зіставлення"
+    caption:
+      sq: "Kur keni zgjedhur gabim."
+      en: "When you chose wrong."
+      uk: "Коли ви помилилися."
+  - key: 12
+    anchor: ebills.floor
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ebills.floor"]'
+    title:
+      sq: "Salla nga arka"
+      en: "The room from the till"
+      uk: "Зал з каси"
+    caption:
+      sq: "Tavolinat e hapura sipas arkës, me sa mbetet pa paguar."
+      en: "The open tables according to the till, with what is unpaid."
+      uk: "Відкриті столи за даними каси з неоплаченою сумою."
+  - key: 13
+    anchor: ebills.forget
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ebills.forget"]'
+    title:
+      sq: "Harroje"
+      en: "Forget"
+      uk: "Забути"
+    caption:
+      sq: "Fshin kredencialet nga lokali."
+      en: "Deletes the credentials from the venue."
+      uk: "Видаляє облікові дані із закладу."

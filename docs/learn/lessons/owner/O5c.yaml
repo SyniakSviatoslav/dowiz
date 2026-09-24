@@ -1,0 +1,188 @@
+# Lesson O5c (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O5c
+role: owner
+module: stock
+order: 11
+covers: []
+title:
+  sq: "Një furnizim i ri"
+  en: "A new supply"
+  uk: "Новий запас"
+goal:
+  sq: "Shtoni një furnizim me njësi, kosto dhe nivel minimal."
+  en: "Add a supply with its unit, cost and low level."
+  uk: "Додати запас з одиницею, собівартістю й мінімальним рівнем."
+steps:
+  - key: 1
+    anchor: stock.addSupply
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.addSupply"]'
+    title:
+      sq: "Furnizim i ri"
+      en: "New supply"
+      uk: "Новий запас"
+    caption:
+      sq: "Çdo përbërës që blini."
+      en: "Every ingredient you buy."
+      uk: "Кожен інгредієнт, який ви купуєте."
+  - key: 2
+    anchor: supply.name
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="supply.name"]'
+      value: "Salmon"
+    title:
+      sq: "Emri"
+      en: "The name"
+      uk: "Назва"
+    caption:
+      sq: "Si e quani në kuzhinë."
+      en: "What the kitchen calls it."
+      uk: "Як його називають на кухні."
+  - key: 3
+    anchor: supply.id
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="supply.id"]'
+      value: "salmon"
+    title:
+      sq: "Kodi"
+      en: "The code"
+      uk: "Код"
+    caption:
+      sq: "Një fjalë e shkurtër pa hapësira; recetat dhe skedarët CSV e përdorin. Nuk ndryshon më pas."
+      en: "A short word with no spaces; recipes and CSV files use it. It cannot change later."
+      uk: "Коротке слово без пробілів; його використовують рецепти й CSV. Потім не змінюється."
+  - key: 4
+    anchor: supply.kind
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="supply.kind"]'
+    title:
+      sq: "Lloji"
+      en: "The kind"
+      uk: "Тип"
+    caption:
+      sq: "Përbërës apo artikull i gatshëm."
+      en: "Ingredient or ready item."
+      uk: "Інгредієнт чи готовий товар."
+  - key: 5
+    anchor: supply.category
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="supply.category"]'
+    title:
+      sq: "Kategoria"
+      en: "The category"
+      uk: "Категорія"
+    caption:
+      sq: "Peshk, perime, pije…"
+      en: "Fish, vegetables, drinks…"
+      uk: "Риба, овочі, напої…"
+  - key: 6
+    anchor: supply.unit
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="supply.unit"]'
+    title:
+      sq: "Njësia"
+      en: "The unit"
+      uk: "Одиниця"
+    caption:
+      sq: "Gram, mililitër ose copë."
+      en: "Gram, millilitre or piece."
+      uk: "Грам, мілілітр чи штука."
+  - key: 7
+    anchor: supply.kcal
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="supply.kcal"]'
+      value: "208"
+    title:
+      sq: "Kaloritë"
+      en: "Calories"
+      uk: "Калорії"
+    caption:
+      sq: "Për 100 njësi; kaloritë e pjatave llogariten nga kjo."
+      en: "Per 100 units; dish calories are worked out from it."
+      uk: "На 100 одиниць; з цього рахуються калорії страв."
+  - key: 8
+    anchor: supply.cost
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="supply.cost"]'
+      value: "2500"
+    title:
+      sq: "Kostoja"
+      en: "The cost"
+      uk: "Собівартість"
+    caption:
+      sq: "Sa ju kushton; kostoja e pjatës del prej saj."
+      en: "What it costs you; the dish cost comes from it."
+      uk: "Скільки коштує вам; з цього виходить собівартість страви."
+  - key: 9
+    anchor: supply.low
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="supply.low"]'
+      value: "1000"
+    title:
+      sq: "Niveli minimal"
+      en: "Low level"
+      uk: "Мінімальний рівень"
+    caption:
+      sq: "Nën këtë sasi, furnizimi shfaqet si «po mbaron»."
+      en: "Below this, the supply shows as “running low”."
+      uk: "Нижче цього запас позначено як «закінчується»."
+  - key: 10
+    anchor: supply.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="supply.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Furnizimi është gati për receta."
+      en: "The supply is ready for recipes."
+      uk: "Запас готовий для рецептів."
+  - key: 11
+    anchor: supply.retire
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="supply.retire"]'
+    title:
+      sq: "Tërhiqe"
+      en: "Retire"
+      uk: "Вивести"
+    caption:
+      sq: "Kur nuk e blini më; historia mbetet."
+      en: "When you stop buying it; the history stays."
+      uk: "Коли ви більше не купуєте; історія лишається."

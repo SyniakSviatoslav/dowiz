@@ -1,0 +1,108 @@
+# Lesson C2 (courier). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: C2
+role: courier
+module: offer
+order: 2
+covers: [waiting, pickList, offer]
+title:
+  sq: "Merrni një porosi"
+  en: "Take an order"
+  uk: "Візьміть замовлення"
+goal:
+  sq: "Hapni turnin dhe merrni një porosi të gatshme, edhe kur koha e ofertës ka kaluar."
+  en: "Open the shift and take a ready order, even after the offer time has run out."
+  uk: "Відкрити зміну й узяти готове замовлення — навіть коли час пропозиції минув."
+steps:
+  - key: 1
+    anchor: shift.open
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="shift.open"]'
+    title:
+      sq: "Hapni turnin"
+      en: "Start the shift"
+      uk: "Відкрийте зміну"
+    caption:
+      sq: "Pa turn të hapur nuk vjen asnjë porosi. Një prekje këtu dhe lokali e di që jeni gati."
+      en: "With no shift open, no order comes to you. One tap here and the venue knows you are ready."
+      uk: "Без відкритої зміни замовлення не надходять. Один дотик — і заклад знає, що ви готові."
+  - key: 2
+    anchor: pick.row
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="pick.row"]'
+    title:
+      sq: "Zgjidhni një porosi"
+      en: "Pick an order"
+      uk: "Оберіть замовлення"
+    caption:
+      sq: "Çdo rresht është një porosi e gatshme: numri, adresa dhe shuma. Prekja e zgjedh, por ende nuk e merr."
+      en: "Each row is a ready order: its number, the address and the amount. A tap selects it; it does not take it yet."
+      uk: "Кожен рядок — готове замовлення: номер, адреса й сума. Дотик обирає його, але ще не бере."
+  - key: 3
+    anchor: pick.take
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="pick.take"]'
+    title:
+      sq: "Merr"
+      en: "Take"
+      uk: "Взяти"
+    caption:
+      sq: "Vetëm ky buton e merr porosinë e zgjedhur. Pas tij porosia është e juaja dhe të tjerët nuk e shohin më."
+      en: "Only this button takes the chosen order. After it, the order is yours and the others no longer see it."
+      uk: "Лише ця кнопка бере обране замовлення. Після неї воно ваше, і інші кур’єри його більше не бачать."
+  - key: 4
+    anchor: offer.card
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="offer.card"]'
+    title:
+      sq: "Një ofertë për ju"
+      en: "An offer for you"
+      uk: "Пропозиція для вас"
+    caption:
+      sq: "Kur lokali jua cakton një porosi, ajo vjen si kartë: numri, shuma dhe adresa, vetëm për ju."
+      en: "When the venue assigns you an order, it arrives as a card: number, amount and address, for you alone."
+      uk: "Коли заклад призначає вам замовлення, воно приходить карткою: номер, сума й адреса — лише для вас."
+  - key: 5
+    anchor: offer.clock
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="offer.clock"]'
+    title:
+      sq: "Koha e ofertës"
+      en: "The offer clock"
+      uk: "Час пропозиції"
+    caption:
+      sq: "Ora tregon sa kohë e mban lokali për ju. Kur kalon, porosia lirohet për të tjerët — por nëse askush s’e ka marrë, ende mund ta merrni."
+      en: "The clock shows how long the venue holds it for you. When it runs out the order is free for others — but if nobody has taken it, you can still take it."
+      uk: "Годинник показує, скільки заклад тримає замовлення для вас. Коли час мине, воно відкрите для інших — але якщо його ніхто не взяв, ви ще можете його взяти."
+  - key: 6
+    anchor: offer.take
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="offer.take"]'
+    title:
+      sq: "Pranoni ofertën"
+      en: "Accept the offer"
+      uk: "Прийміть пропозицію"
+    caption:
+      sq: "«Merr» e bën porosinë tuajën. Ekrani kalon menjëherë te marrja në lokal."
+      en: "“Take” makes the order yours. The screen moves straight to the pickup at the venue."
+      uk: "«Взяти» робить замовлення вашим. Екран одразу переходить до отримання в закладі."

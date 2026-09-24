@@ -1,0 +1,93 @@
+# Lesson W2 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: W2
+role: waiter
+module: room
+order: 2
+covers: [room, sitting]
+title:
+  sq: "Salla"
+  en: "The room"
+  uk: "Зал"
+goal:
+  sq: "Gjeni tavolinën me raundin më të vjetër të papaguar."
+  en: "Find the table with the oldest unpaid round."
+  uk: "Знайти стіл із найстаршим неоплаченим раундом."
+steps:
+  - key: 1
+    anchor: room.table
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="room.table"]'
+    title:
+      sq: "Tavolinat e hapura"
+      en: "Open tables"
+      uk: "Відкриті столи"
+    caption:
+      sq: "Çdo kartë është një tavolinë e hapur: raundet, sa duhet paguar dhe sa kohë ka që pret."
+      en: "Each card is an open table: its rounds, what is due and how long it has been waiting."
+      uk: "Кожна картка — відкритий стіл: раунди, скільки до сплати і як довго він чекає."
+  - key: 2
+    anchor: sitting.round
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="sitting.round"]'
+    title:
+      sq: "Raundet e tavolinës"
+      en: "The table’s rounds"
+      uk: "Раунди столу"
+    caption:
+      sq: "Brenda tavolinës, çdo raund është një porosi e dërguar në kuzhinë. Prekeni për ta hapur."
+      en: "Inside a table, each round is one order sent to the kitchen. Tap it to open it."
+      uk: "Усередині столу кожен раунд — одне замовлення, надіслане на кухню. Торкніться, щоб відкрити."
+  - key: 3
+    anchor: room.role
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="room.role"]'
+    title:
+      sq: "Roli juaj"
+      en: "Your role"
+      uk: "Ваша роль"
+    caption:
+      sq: "Tregon çfarë ju lejon lokali: të merrni porosi, pagesa, anulime, arkën. Butonat që nuk ju takojnë nuk shfaqen."
+      en: "Shows what the venue lets you do: take orders, payments, voids, the till. Buttons you are not allowed do not appear."
+      uk: "Показує, що вам дозволяє заклад: приймати замовлення, оплату, анулювання, касу. Кнопок, які вам не дозволені, немає."
+  - key: 4
+    anchor: room.refresh
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="room.refresh"]'
+    title:
+      sq: "Rifreskoni"
+      en: "Refresh"
+      uk: "Оновіть"
+    caption:
+      sq: "Salla rifreskohet vetë. Ky buton e bën menjëherë, p.sh. pasi rikthehet lidhja."
+      en: "The room refreshes by itself. This button does it now, for example when the connection is back."
+      uk: "Зал оновлюється сам. Ця кнопка робить це одразу, наприклад, коли повернувся зв’язок."
+  - key: 5
+    anchor: room.signout
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="room.signout"]'
+    title:
+      sq: "Dilni"
+      en: "Sign out"
+      uk: "Вийти"
+    caption:
+      sq: "Në fund të turnit dilni, sidomos në një telefon të përbashkët."
+      en: "Sign out at the end of your shift, especially on a shared phone."
+      uk: "Наприкінці зміни виходьте, особливо на спільному телефоні."

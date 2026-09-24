@@ -1,0 +1,78 @@
+# Lesson O10 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O10
+role: owner
+module: tableQr
+order: 17
+covers: [tableQr]
+title:
+  sq: "Kodet e tavolinave"
+  en: "Table codes"
+  uk: "Коди столів"
+goal:
+  sq: "Printoni fletën e kodeve."
+  en: "Print the sheet of codes."
+  uk: "Роздрукувати аркуш із кодами."
+steps:
+  - key: 1
+    anchor: more.tile.tableQr
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.tableQr"]'
+    title:
+      sq: "Kodet QR"
+      en: "QR codes"
+      uk: "QR-коди"
+    caption:
+      sq: "Një kod për çdo tavolinë. Mysafiri e skanon, sheh menunë dhe porosit — kamarieri konfirmon."
+      en: "One code per table. The guest scans it, sees the menu and orders — the waiter confirms."
+      uk: "Один код на стіл. Гість сканує, бачить меню й замовляє — офіціант підтверджує."
+  - key: 2
+    anchor: tableqr.grid
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="tableqr.grid"]'
+    title:
+      sq: "Kodet"
+      en: "The codes"
+      uk: "Коди"
+    caption:
+      sq: "Çdo tavolinë e planit ka kodin e vet."
+      en: "Every table on the plan has its own code."
+      uk: "Кожен стіл на плані має свій код."
+  - key: 3
+    anchor: tableqr.print
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="tableqr.print"]'
+    title:
+      sq: "Printo"
+      en: "Print"
+      uk: "Друк"
+    caption:
+      sq: "Një fletë me të gjitha kodet."
+      en: "One sheet with every code."
+      uk: "Один аркуш з усіма кодами."
+  - key: 4
+    anchor: tableqr.download
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="tableqr.download"]'
+    title:
+      sq: "Shkarko"
+      en: "Download"
+      uk: "Завантажити"
+    caption:
+      sq: "Kodet si skedarë, për një printer tjetër."
+      en: "The codes as files, for another printer."
+      uk: "Коди файлами — для іншого принтера."

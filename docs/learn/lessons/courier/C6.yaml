@@ -1,0 +1,139 @@
+# Lesson C6 (courier). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: C6
+role: courier
+module: voice
+order: 6
+covers: [panel, panelLoading, panelError, earnings, history]
+title:
+  sq: "Duart të lira, dhe shifrat tuaja"
+  en: "Hands free, and your numbers"
+  uk: "Руки вільні, і ваші цифри"
+goal:
+  sq: "Përdorni zërin, bëni një pyetje dhe lexoni fitimet e sotme, 7 dhe 30 ditëve."
+  en: "Use your voice, ask one question and read today’s, 7-day and 30-day numbers."
+  uk: "Користуватися голосом, поставити запитання й прочитати цифри за сьогодні, 7 і 30 днів."
+steps:
+  - key: 1
+    anchor: hud.mic
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="hud.mic"]'
+    title:
+      sq: "Flisni"
+      en: "Speak"
+      uk: "Говоріть"
+    caption:
+      sq: "Prekni mikrofonin dhe thoni «e mora» ose «u dorëzua». Duart mbeten në timon."
+      en: "Tap the microphone and say “picked up” or “delivered”. Your hands stay on the handlebars."
+      uk: "Торкніться мікрофона й скажіть «взяв» або «доставив». Руки лишаються на кермі."
+  - key: 2
+    anchor: voice.yes
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="voice.yes"]'
+    title:
+      sq: "Konfirmoni me zë"
+      en: "Confirm what was heard"
+      uk: "Підтвердіть почуте"
+    caption:
+      sq: "Aplikacioni shkruan çfarë dëgjoi dhe pyet. Asgjë nuk ndodh pa «Po»."
+      en: "The app shows what it heard and asks. Nothing happens without “Yes”."
+      uk: "Застосунок показує, що почув, і питає. Без «Так» нічого не відбувається."
+  - key: 3
+    anchor: ask.box
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="ask.box"]'
+      value: "Sa dorëzime bëra sot?"
+    title:
+      sq: "Pyetni"
+      en: "Ask"
+      uk: "Запитайте"
+    caption:
+      sq: "Pyetje vetëm për turnet dhe porositë tuaja: sa bëtë sot, çfarë ndodhi dje."
+      en: "Questions about your own shifts and orders only: how many today, what happened yesterday."
+      uk: "Запитання лише про ваші зміни й замовлення: скільки сьогодні, що було вчора."
+  - key: 4
+    anchor: ask.go
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="ask.go"]'
+    title:
+      sq: "Dërgo"
+      en: "Send"
+      uk: "Надіслати"
+    caption:
+      sq: "Përgjigjja shfaqet poshtë fushës."
+      en: "The answer appears under the field."
+      uk: "Відповідь з’явиться під полем."
+  - key: 5
+    anchor: panel.earnings
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="panel.earnings"]'
+    title:
+      sq: "Turnet e mia"
+      en: "My shifts"
+      uk: "Мої зміни"
+    caption:
+      sq: "Paratë në dorë, dhe për sot, 7 e 30 ditë: dorëzime, para të mbledhura, bakshishe. Paratë janë të lokalit, bakshishet tuajat."
+      en: "Cash in hand, and for today, 7 and 30 days: deliveries, cash collected, tips. The cash is the venue’s, the tips are yours."
+      uk: "Готівка на руках, а також за сьогодні, 7 і 30 днів: доставки, зібрана готівка, чайові. Готівка — закладу, чайові — ваші."
+  - key: 6
+    anchor: panel.history
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="panel.history"]'
+    title:
+      sq: "Historia"
+      en: "History"
+      uk: "Історія"
+    caption:
+      sq: "Dorëzimet e mbyllura, me rrugën, orën dhe shumën."
+      en: "Finished deliveries, with the street, the time and the amount."
+      uk: "Завершені доставки з вулицею, часом і сумою."
+  - key: 7
+    anchor: panel.learn
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="panel.learn"]'
+    title:
+      sq: "Mësimet"
+      en: "Lessons"
+      uk: "Уроки"
+    caption:
+      sq: "Të gjitha mësimet janë këtu, me videon për secilin. Hapen vetëm kur qëndroni."
+      en: "All the lessons are here, each with its video. They open only while you stand still."
+      uk: "Усі уроки тут, до кожного — відео. Вони відкриваються, лише коли ви стоїте."
+  - key: 8
+    anchor: shift.end
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="shift.end"]'
+    title:
+      sq: "Mbyllni turnin"
+      en: "End the shift"
+      uk: "Закрийте зміну"
+    caption:
+      sq: "Në fund të ditës mbyllni turnin: porositë nuk ju vijnë më dhe paratë në dorë ia jepni lokalit."
+      en: "At the end of the day, end the shift: no more orders come to you, and you hand the cash to the venue."
+      uk: "Наприкінці дня закрийте зміну: замовлення більше не надходять, а готівку ви передаєте закладу."

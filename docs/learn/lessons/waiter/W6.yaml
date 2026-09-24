@@ -1,0 +1,48 @@
+# Lesson W6 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: W6
+role: waiter
+module: guest
+order: 6
+covers: []
+title:
+  sq: "Porositë nga kodi QR i tavolinës"
+  en: "Orders from the table’s QR"
+  uk: "Замовлення з QR-коду столу"
+goal:
+  sq: "Konfirmoni një porosi nga tavolina dhe refuzoni një tjetër."
+  en: "Confirm one order from a table and reject another."
+  uk: "Підтвердити одне замовлення зі столу й відхилити інше."
+steps:
+  - key: 1
+    anchor: guest.confirm
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="guest.confirm"]'
+    title:
+      sq: "Konfirmoni"
+      en: "Confirm"
+      uk: "Підтвердіть"
+    caption:
+      sq: "Mysafiri porositi nga telefoni i tij. Kontrolloni tavolinën dhe konfirmoni — vetëm atëherë shkon në kuzhinë."
+      en: "The guest ordered from their own phone. Check the table and confirm — only then does it go to the kitchen."
+      uk: "Гість замовив зі свого телефона. Перевірте стіл і підтвердіть — лише тоді замовлення йде на кухню."
+  - key: 2
+    anchor: guest.reject
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="guest.reject"]'
+    title:
+      sq: "Refuzoni"
+      en: "Reject"
+      uk: "Відхиліть"
+    caption:
+      sq: "Nëse porosia s’është e vërtetë ose tavolina gaboi, refuzojeni. Mysafiri e sheh në telefon."
+      en: "If the order is not real or the table is wrong, reject it. The guest sees it on their phone."
+      uk: "Якщо замовлення несправжнє або стіл не той, відхиліть його. Гість побачить це на телефоні."

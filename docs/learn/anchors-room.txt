@@ -1,0 +1,83 @@
+# Learning anchors in the waiter / till app (/room/), 2026-09-24.
+# One `data-tour` id per line: "<module>.<control> <file>:<line>" (the line that
+# writes it). docs/design/BLUEPRINT-LEARNING-VIDEOS-WIKI-2026-09-24.md §4.2 / §5.1.
+# Lessons: W1 hud.* login.* | W2 room.* sitting.* | W3 open.* menu.* | W4 floor.*
+# W5 round.* menu.* | W6 guest.* | W7 pay.* round.pay | W8 transfer.* move.*
+# round.transfer round.moveSitting sitting.move | W9 till.* | W10 till.z till.tips.
+# Every id is a LITERAL string in its file (never built from parts), so grep
+# finds it. room/views.test.mjs fails when a listed id or its line moves, or
+# when the tree gains an id this list does not carry; it prints which one.
+hud.sync workers/api/public/room/index.html:20
+hud.outbox workers/api/public/room/index.html:24
+hud.lang workers/api/public/room/index.html:25
+hud.theme workers/api/public/room/index.html:26
+hud.learn workers/api/public/room/index.html:27
+login.email workers/api/public/room/screens.js:24
+login.code workers/api/public/room/screens.js:25
+login.password workers/api/public/room/screens.js:27
+login.submit workers/api/public/room/screens.js:28
+login.claimToggle workers/api/public/room/screens.js:29
+nav.back workers/api/public/room/floor.js:46
+room.table workers/api/public/room/screens.js:42
+room.role workers/api/public/room/screens.js:54
+room.open workers/api/public/room/screens.js:55
+room.till workers/api/public/room/screens.js:56
+room.floor workers/api/public/room/screens.js:57
+room.refresh workers/api/public/room/screens.js:58
+room.signout workers/api/public/room/screens.js:61
+sitting.round workers/api/public/room/screens.js:71
+sitting.move workers/api/public/room/screens.js:75
+open.table workers/api/public/room/open.js:35
+menu.dish workers/api/public/room/menu.js:38
+menu.less workers/api/public/room/menu.js:39
+menu.search workers/api/public/room/menu.js:66
+menu.send workers/api/public/room/menu.js:68
+floor.table workers/api/public/room/floor.js:37
+floor.refresh workers/api/public/room/floor.js:47
+floor.unplaced workers/api/public/room/floor.js:60
+floor.clear workers/api/public/room/floor.js:71
+floor.legend workers/api/public/room/floor.js:72
+round.less workers/api/public/room/sheet.js:21
+round.more workers/api/public/room/sheet.js:22
+round.remove workers/api/public/room/sheet.js:23
+round.comp workers/api/public/room/sheet.js:24
+round.line workers/api/public/room/sheet.js:40
+round.sums workers/api/public/room/sheet.js:50
+round.add workers/api/public/room/sheet.js:58
+round.pay workers/api/public/room/sheet.js:59
+round.transfer workers/api/public/room/sheet.js:60
+round.moveSitting workers/api/public/room/sheet.js:61
+round.tableField workers/api/public/room/sheet.js:64
+round.tableMove workers/api/public/room/sheet.js:65
+round.reason workers/api/public/room/sheet.js:71
+round.reasonText workers/api/public/room/sheet.js:74
+guest.confirm workers/api/public/room/guest.js:26
+guest.reject workers/api/public/room/guest.js:27
+pay.owed workers/api/public/room/pay.js:44
+pay.currency workers/api/public/room/pay.js:51
+pay.method workers/api/public/room/pay.js:52
+pay.rate workers/api/public/room/pay.js:53
+pay.amount workers/api/public/room/pay.js:54
+pay.tip workers/api/public/room/pay.js:55
+pay.wallet workers/api/public/room/pay.js:57
+pay.fill workers/api/public/room/pay.js:59
+pay.submit workers/api/public/room/pay.js:61
+transfer.line workers/api/public/room/transfer.js:29
+transfer.target workers/api/public/room/transfer.js:32
+transfer.send workers/api/public/room/transfer.js:40
+move.table workers/api/public/room/transfer.js:74
+move.submit workers/api/public/room/transfer.js:75
+till.z workers/api/public/room/till-view.js:47
+till.state workers/api/public/room/till.js:44
+till.tips workers/api/public/room/till.js:45
+till.open workers/api/public/room/till.js:46
+till.float workers/api/public/room/till.js:46
+till.move workers/api/public/room/till.js:48
+till.direction workers/api/public/room/till.js:50
+till.currency workers/api/public/room/till.js:52
+till.amount workers/api/public/room/till.js:53
+till.reason workers/api/public/room/till.js:54
+till.count workers/api/public/room/till.js:56
+till.counted workers/api/public/room/till.js:56
+till.close workers/api/public/room/till.js:58
+till.closeSure workers/api/public/room/till.js:59

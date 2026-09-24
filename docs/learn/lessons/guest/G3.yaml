@@ -1,0 +1,232 @@
+# Lesson G3 (guest). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: G3
+role: guest
+module: checkout
+order: 3
+covers: []
+title:
+  sq: "Ku dhe kur"
+  en: "Where and when"
+  uk: "Куди й коли"
+goal:
+  sq: "Zgjidhni dërgesë ose marrje, adresën dhe orën."
+  en: "Choose delivery or pickup, the address and the time."
+  uk: "Обрати доставку чи самовивіз, адресу й час."
+steps:
+  - key: 1
+    anchor: checkout.open
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="checkout.open"]'
+    title:
+      sq: "Vazhdo"
+      en: "Continue"
+      uk: "Далі"
+    caption:
+      sq: "Te adresa dhe pagesa."
+      en: "On to the address and payment."
+      uk: "До адреси й оплати."
+  - key: 2
+    anchor: checkout.delivery
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="checkout.delivery"]'
+    title:
+      sq: "Dërgesë"
+      en: "Delivery"
+      uk: "Доставка"
+    caption:
+      sq: "Korrieri e sjell te dera juaj…"
+      en: "A courier brings it to your door…"
+      uk: "Кур’єр привезе до ваших дверей…"
+  - key: 3
+    anchor: checkout.pickup
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="checkout.pickup"]'
+    title:
+      sq: "Marrje në lokal"
+      en: "Pickup"
+      uk: "Самовивіз"
+    caption:
+      sq: "…ose e merrni vetë në lokal."
+      en: "…or you collect it at the venue."
+      uk: "…або ви забираєте самі в закладі."
+  - key: 4
+    anchor: checkout.savedAddress
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="checkout.savedAddress"]'
+    title:
+      sq: "Adresa e ruajtur"
+      en: "A saved address"
+      uk: "Збережена адреса"
+    caption:
+      sq: "Adresat e mëparshme ruhen vetëm në këtë telefon."
+      en: "Earlier addresses are kept on this phone only."
+      uk: "Попередні адреси зберігаються лише на цьому телефоні."
+  - key: 5
+    anchor: checkout.street
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="checkout.street"]'
+      value: "Rruga Tregtare 5"
+    title:
+      sq: "Rruga"
+      en: "Street"
+      uk: "Вулиця"
+    caption:
+      sq: "Rruga dhe numri."
+      en: "The street and number."
+      uk: "Вулиця й номер."
+  - key: 6
+    anchor: checkout.map
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="checkout.map"]'
+    title:
+      sq: "Në hartë"
+      en: "On the map"
+      uk: "На мапі"
+    caption:
+      sq: "Vendosni pikën saktë, që korrieri ta gjejë derën."
+      en: "Drop the pin exactly, so the courier finds the door."
+      uk: "Поставте точку точно, щоб кур’єр знайшов двері."
+  - key: 7
+    anchor: map.myLocation
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="map.myLocation"]'
+    title:
+      sq: "Vendndodhja ime"
+      en: "My location"
+      uk: "Моє місце"
+    caption:
+      sq: "Telefoni e gjen vetë — vetëm nëse e lejoni."
+      en: "The phone finds it — only if you allow it."
+      uk: "Телефон знаходить сам — лише якщо ви дозволите."
+  - key: 8
+    anchor: map.confirm
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="map.confirm"]'
+    title:
+      sq: "Konfirmo pikën"
+      en: "Confirm the pin"
+      uk: "Підтвердіть точку"
+    caption:
+      sq: "Kjo pikë shkon te korrieri."
+      en: "This pin goes to the courier."
+      uk: "Ця точка йде кур’єру."
+  - key: 9
+    anchor: checkout.area
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="checkout.area"]'
+    title:
+      sq: "Zona"
+      en: "The area"
+      uk: "Зона"
+    caption:
+      sq: "Kontrolloni nëse lokali dërgon deri te ju."
+      en: "Check that the venue delivers to you."
+      uk: "Перевірте, чи заклад доставляє до вас."
+  - key: 10
+    anchor: checkout.note
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="checkout.note"]'
+      value: "Kati 2, zilja Hoxha"
+    title:
+      sq: "Shënim"
+      en: "Note"
+      uk: "Примітка"
+    caption:
+      sq: "Kati, zilja, hyrja — për korrierin."
+      en: "Floor, bell, entrance — for the courier."
+      uk: "Поверх, дзвінок, під’їзд — для кур’єра."
+  - key: 11
+    anchor: checkout.name
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="checkout.name"]'
+      value: "Ana"
+    title:
+      sq: "Emri"
+      en: "Name"
+      uk: "Ім’я"
+    caption:
+      sq: "Si t’ju thërrasë korrieri."
+      en: "What the courier should call you."
+      uk: "Як кур’єру до вас звертатися."
+  - key: 12
+    anchor: checkout.phone
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="checkout.phone"]'
+      value: "+355 69 000 0000"
+    title:
+      sq: "Telefoni"
+      en: "Phone"
+      uk: "Телефон"
+    caption:
+      sq: "Vetëm për këtë porosi; korrieri e sheh vetëm gjatë dërgesës."
+      en: "For this order only; the courier sees it only during the delivery."
+      uk: "Лише для цього замовлення; кур’єр бачить його тільки під час доставки."
+  - key: 13
+    anchor: checkout.asap
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="checkout.asap"]'
+    title:
+      sq: "Sa më shpejt"
+      en: "As soon as possible"
+      uk: "Якнайшвидше"
+    caption:
+      sq: "Përgatitet menjëherë…"
+      en: "Prepared right away…"
+      uk: "Готується одразу…"
+  - key: 14
+    anchor: checkout.later
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="checkout.later"]'
+    title:
+      sq: "Më vonë"
+      en: "Later"
+      uk: "Пізніше"
+    caption:
+      sq: "…ose në një orë që zgjidhni."
+      en: "…or at a time you choose."
+      uk: "…або на обраний вами час."

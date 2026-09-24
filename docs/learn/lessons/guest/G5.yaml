@@ -1,0 +1,200 @@
+# Lesson G5 (guest). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: G5
+role: guest
+module: book
+order: 6
+covers: []
+title:
+  sq: "Rezervoni një tavolinë"
+  en: "Book a table"
+  uk: "Забронюйте стіл"
+goal:
+  sq: "Rezervoni një tavolinë për një ditë, orë dhe numër personash."
+  en: "Book a table for a day, a time and a party size."
+  uk: "Забронювати стіл на день, час і кількість гостей."
+steps:
+  - key: 1
+    anchor: nav.book
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.book"]'
+    title:
+      sq: "Rezervo"
+      en: "Book"
+      uk: "Бронювання"
+    caption:
+      sq: "Skeda e rezervimeve."
+      en: "The booking tab."
+      uk: "Вкладка бронювання."
+  - key: 2
+    anchor: booking.day
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="booking.day"]'
+    title:
+      sq: "Dita"
+      en: "The day"
+      uk: "День"
+    caption:
+      sq: "Zgjidhni ditën."
+      en: "Choose the day."
+      uk: "Оберіть день."
+  - key: 3
+    anchor: booking.zone
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="booking.zone"]'
+    title:
+      sq: "Zona"
+      en: "The area"
+      uk: "Зона"
+    caption:
+      sq: "Brenda, tarracë ose bar — nëse lokali i ka."
+      en: "Inside, terrace or bar — if the venue has them."
+      uk: "Усередині, тераса чи бар — якщо вони є в закладі."
+  - key: 4
+    anchor: booking.time
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="booking.time"]'
+    title:
+      sq: "Ora"
+      en: "The time"
+      uk: "Час"
+    caption:
+      sq: "Vetëm orët kur ka vend."
+      en: "Only the times with room."
+      uk: "Лише час, коли є місця."
+  - key: 5
+    anchor: booking.table
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="booking.table"]'
+    title:
+      sq: "Tavolina"
+      en: "The table"
+      uk: "Стіл"
+    caption:
+      sq: "Nëse lokali e lejon, zgjidhni tavolinën në plan."
+      en: "If the venue allows it, pick the table on the plan."
+      uk: "Якщо заклад дозволяє, оберіть стіл на плані."
+  - key: 6
+    anchor: booking.party
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="booking.party"]'
+    title:
+      sq: "Sa veta"
+      en: "How many"
+      uk: "Скільки гостей"
+    caption:
+      sq: "Numri i personave."
+      en: "The number of people."
+      uk: "Кількість людей."
+  - key: 7
+    anchor: booking.name
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="booking.name"]'
+      value: "Ana"
+    title:
+      sq: "Emri"
+      en: "Name"
+      uk: "Ім’я"
+    caption:
+      sq: "Me këtë emër ju pret lokali."
+      en: "The name the venue expects you under."
+      uk: "Ім’я, на яке вас чекає заклад."
+  - key: 8
+    anchor: booking.phone
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="booking.phone"]'
+      value: "+355 69 000 0000"
+    title:
+      sq: "Telefoni"
+      en: "Phone"
+      uk: "Телефон"
+    caption:
+      sq: "Që lokali t’ju konfirmojë ose t’ju njoftojë."
+      en: "So the venue can confirm or let you know."
+      uk: "Щоб заклад міг підтвердити або повідомити вас."
+  - key: 9
+    anchor: booking.submit
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="booking.submit"]'
+    title:
+      sq: "Rezervo"
+      en: "Book"
+      uk: "Забронювати"
+    caption:
+      sq: "Rezervimi pret konfirmimin e lokalit."
+      en: "The booking waits for the venue’s confirmation."
+      uk: "Бронювання чекає підтвердження закладу."
+  - key: 10
+    anchor: booking.mine
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="booking.mine"]'
+    title:
+      sq: "Rezervimet tuaja"
+      en: "Your bookings"
+      uk: "Ваші бронювання"
+    caption:
+      sq: "Këtu shihni kur konfirmohet."
+      en: "Here you see when it is confirmed."
+      uk: "Тут видно, коли його підтвердять."
+  - key: 11
+    anchor: booking.share
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="booking.share"]'
+    title:
+      sq: "Ndaje"
+      en: "Share"
+      uk: "Поділитися"
+    caption:
+      sq: "Dërgojani shoqërisë."
+      en: "Send it to your party."
+      uk: "Надішліть своїй компанії."
+  - key: 12
+    anchor: booking.cancel
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="booking.cancel"]'
+    title:
+      sq: "Anulo"
+      en: "Cancel"
+      uk: "Скасувати"
+    caption:
+      sq: "Nëse nuk vini dot, anulojeni që tavolina të lirohet."
+      en: "If you cannot come, cancel so the table is freed."
+      uk: "Якщо не зможете прийти, скасуйте, щоб стіл звільнився."

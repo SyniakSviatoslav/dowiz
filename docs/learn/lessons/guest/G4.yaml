@@ -1,0 +1,139 @@
+# Lesson G4 (guest). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: G4
+role: guest
+module: track
+order: 5
+covers: []
+title:
+  sq: "Ndiqni porosinë"
+  en: "Track the order"
+  uk: "Відстежуйте замовлення"
+goal:
+  sq: "Dini ku është porosia dhe kur arrin."
+  en: "Know where the order is and when it arrives."
+  uk: "Знати, де замовлення і коли воно прибуде."
+steps:
+  - key: 1
+    anchor: nav.orders
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.orders"]'
+    title:
+      sq: "Porositë"
+      en: "Orders"
+      uk: "Замовлення"
+    caption:
+      sq: "Skeda e porosive tuaja."
+      en: "The tab with your orders."
+      uk: "Вкладка з вашими замовленнями."
+  - key: 2
+    anchor: orders.row
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="orders.row"]'
+    title:
+      sq: "Porositë tuaja"
+      en: "Your orders"
+      uk: "Ваші замовлення"
+    caption:
+      sq: "Porositë e bëra nga ky telefon; prekni njërën për ta ndjekur."
+      en: "Orders placed from this phone; tap one to follow it."
+      uk: "Замовлення з цього телефона; торкніться одного, щоб стежити."
+  - key: 3
+    anchor: track.status
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="track.status"]'
+    title:
+      sq: "Gjendja"
+      en: "The status"
+      uk: "Статус"
+    caption:
+      sq: "Pranuar, po përgatitet, gati, në rrugë, dorëzuar."
+      en: "Accepted, preparing, ready, on the way, delivered."
+      uk: "Прийнято, готується, готово, в дорозі, доставлено."
+  - key: 4
+    anchor: track.eta
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="track.eta"]'
+    title:
+      sq: "Koha e mbërritjes"
+      en: "Arrival time"
+      uk: "Час прибуття"
+    caption:
+      sq: "E njëjta kohë që sheh korrieri, e rifreskuar gjatë rrugës."
+      en: "The same time the courier sees, updated on the way."
+      uk: "Той самий час, що бачить кур’єр, оновлюється дорогою."
+  - key: 5
+    anchor: track.map
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="track.map"]'
+    title:
+      sq: "Harta"
+      en: "The map"
+      uk: "Мапа"
+    caption:
+      sq: "Ku është korrieri tani."
+      en: "Where the courier is now."
+      uk: "Де зараз кур’єр."
+  - key: 6
+    anchor: track.feedback
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="track.feedback"]'
+      value: "Shumë e shijshme, faleminderit!"
+    title:
+      sq: "Si shkoi?"
+      en: "How was it?"
+      uk: "Як усе пройшло?"
+    caption:
+      sq: "Pas dorëzimit, disa fjalë për lokalin."
+      en: "After delivery, a few words for the venue."
+      uk: "Після доставки — кілька слів для закладу."
+  - key: 7
+    anchor: track.feedbackSend
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="track.feedbackSend"]'
+    title:
+      sq: "Dërgo"
+      en: "Send"
+      uk: "Надіслати"
+    caption:
+      sq: "Lokali e lexon."
+      en: "The venue reads it."
+      uk: "Заклад це прочитає."
+  - key: 8
+    anchor: track.done
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="track.done"]'
+    title:
+      sq: "Mbyll"
+      en: "Done"
+      uk: "Готово"
+    caption:
+      sq: "Mbyll ndjekjen."
+      en: "Closes the tracking."
+      uk: "Закриває відстеження."

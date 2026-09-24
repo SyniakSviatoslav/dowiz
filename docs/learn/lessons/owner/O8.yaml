@@ -1,0 +1,218 @@
+# Lesson O8 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O8
+role: owner
+module: bookings
+order: 15
+covers: [bookings]
+title:
+  sq: "Rezervimet"
+  en: "Reservations"
+  uk: "Бронювання"
+goal:
+  sq: "Merrni një rezervim me telefon dhe konfirmoni një nga uebi."
+  en: "Take a booking by phone and confirm one from the web."
+  uk: "Прийняти бронювання телефоном і підтвердити одне з сайту."
+steps:
+  - key: 1
+    anchor: more.tile.bookings
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.bookings"]'
+    title:
+      sq: "Rezervimet"
+      en: "Bookings"
+      uk: "Бронювання"
+    caption:
+      sq: "Nga «Më shumë»."
+      en: "From “More”."
+      uk: "З розділу «Більше»."
+  - key: 2
+    anchor: bookings.day
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="bookings.day"]'
+    title:
+      sq: "Dita"
+      en: "The day"
+      uk: "День"
+    caption:
+      sq: "Zgjidhni ditën."
+      en: "Choose the day."
+      uk: "Оберіть день."
+  - key: 3
+    anchor: bookings.list
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="bookings.list"]'
+    title:
+      sq: "Lista"
+      en: "The list"
+      uk: "Список"
+    caption:
+      sq: "Rezervimet e ditës sipas orës."
+      en: "The day’s bookings by time."
+      uk: "Бронювання дня за часом."
+  - key: 4
+    anchor: bookings.row
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="bookings.row"]'
+    title:
+      sq: "Një rezervim"
+      en: "A booking"
+      uk: "Бронювання"
+    caption:
+      sq: "Ora, emri, sa veta, tavolina dhe gjendja."
+      en: "The time, name, party, table and status."
+      uk: "Час, ім’я, кількість гостей, стіл і статус."
+  - key: 5
+    anchor: bookings.confirm
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="bookings.confirm"]'
+    title:
+      sq: "Konfirmo"
+      en: "Confirm"
+      uk: "Підтвердити"
+    caption:
+      sq: "Klienti merr konfirmimin."
+      en: "The customer gets the confirmation."
+      uk: "Клієнт отримує підтвердження."
+  - key: 6
+    anchor: bookings.decline
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="bookings.decline"]'
+    title:
+      sq: "Refuzo"
+      en: "Decline"
+      uk: "Відхилити"
+    caption:
+      sq: "Kur s’ka vend."
+      en: "When there is no room."
+      uk: "Коли немає місць."
+  - key: 7
+    anchor: bookings.new
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="bookings.new"]'
+    title:
+      sq: "Rezervim me telefon"
+      en: "Booking by phone"
+      uk: "Бронювання телефоном"
+    caption:
+      sq: "Kur klienti telefonon, shkruajeni këtu që salla ta dijë."
+      en: "When a customer calls, write it here so the room knows."
+      uk: "Коли клієнт телефонує, запишіть тут, щоб зал знав."
+  - key: 8
+    anchor: bookings.name
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="bookings.name"]'
+      value: "Ana"
+    title:
+      sq: "Emri"
+      en: "Name"
+      uk: "Ім’я"
+    caption:
+      sq: "Me cilin emër."
+      en: "Under which name."
+      uk: "На яке ім’я."
+  - key: 9
+    anchor: bookings.phone
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="bookings.phone"]'
+      value: "+355 69 000 0000"
+    title:
+      sq: "Telefoni"
+      en: "Phone"
+      uk: "Телефон"
+    caption:
+      sq: "Për ta njoftuar."
+      en: "To reach them."
+      uk: "Щоб зв’язатися."
+  - key: 10
+    anchor: bookings.party
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="bookings.party"]'
+      value: "4"
+    title:
+      sq: "Sa veta"
+      en: "Party size"
+      uk: "Скільки гостей"
+    caption:
+      sq: "Numri i personave."
+      en: "The number of people."
+      uk: "Кількість людей."
+  - key: 11
+    anchor: bookings.time
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="bookings.time"]'
+      value: "20:00"
+    title:
+      sq: "Ora"
+      en: "The time"
+      uk: "Час"
+    caption:
+      sq: "Ora e mbërritjes."
+      en: "The arrival time."
+      uk: "Час прибуття."
+  - key: 12
+    anchor: bookings.table
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="bookings.table"]'
+      value: "7"
+    title:
+      sq: "Tavolina"
+      en: "The table"
+      uk: "Стіл"
+    caption:
+      sq: "Nëse e dini tashmë."
+      en: "If you already know it."
+      uk: "Якщо вже знаєте."
+  - key: 13
+    anchor: bookings.book
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="bookings.book"]'
+    title:
+      sq: "Rezervo"
+      en: "Book"
+      uk: "Забронювати"
+    caption:
+      sq: "Kamarieri e sheh tavolinën si të rezervuar."
+      en: "The waiter sees the table as booked."
+      uk: "Офіціант бачить стіл заброньованим."

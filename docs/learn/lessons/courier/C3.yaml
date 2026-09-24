@@ -1,0 +1,93 @@
+# Lesson C3 (courier). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: C3
+role: courier
+module: run
+order: 3
+covers: [orderHead, active]
+title:
+  sq: "Rruga"
+  en: "The run"
+  uk: "Маршрут"
+goal:
+  sq: "Merrni porosinë në lokal dhe arrini te dera me adresën, hartën dhe telefonin."
+  en: "Pick the order up at the venue and reach the door with the address, the map and the phone."
+  uk: "Забрати замовлення в закладі й дістатися дверей з адресою, мапою й телефоном."
+steps:
+  - key: 1
+    anchor: run.eta
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="run.eta"]'
+    title:
+      sq: "Koha deri te dera"
+      en: "Time to the door"
+      uk: "Час до дверей"
+    caption:
+      sq: "Kjo është koha që sheh edhe klienti. Llogaritet nga pozicioni juaj dhe rifreskohet gjatë rrugës."
+      en: "This is the time the customer sees too. It is worked out from where you are and updates on the way."
+      uk: "Цей час бачить і клієнт. Він рахується від того, де ви, і оновлюється дорогою."
+  - key: 2
+    anchor: run.address
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="run.address"]'
+    title:
+      sq: "Adresa"
+      en: "The address"
+      uk: "Адреса"
+    caption:
+      sq: "Rruga dhe shënimi i klientit — kati, zilja, hyrja. Lexojeni para se të niseni."
+      en: "The street and the customer’s note — floor, bell, entrance. Read it before you set off."
+      uk: "Вулиця й примітка клієнта — поверх, дзвінок, під’їзд. Прочитайте її, перш ніж вирушати."
+  - key: 3
+    anchor: run.maps
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="run.maps"]'
+    title:
+      sq: "Në hartë"
+      en: "In maps"
+      uk: "На мапі"
+    caption:
+      sq: "Hap adresën në hartë për navigim. Aplikacioni mbetet i hapur dhe ju pret kur ktheheni."
+      en: "Opens the address in a map for directions. The app stays open and waits for you when you come back."
+      uk: "Відкриває адресу на мапі для навігації. Застосунок лишається відкритим і чекає, коли ви повернетеся."
+  - key: 4
+    anchor: run.call
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="run.call"]'
+    title:
+      sq: "Telefononi klientin"
+      en: "Call the customer"
+      uk: "Зателефонуйте клієнту"
+    caption:
+      sq: "Nëse s’e gjeni hyrjen, një prekje e thërret klientin. Numri shfaqet vetëm gjatë dorëzimit."
+      en: "If you cannot find the entrance, one tap calls the customer. The number is shown only during the delivery."
+      uk: "Якщо не можете знайти вхід, один дотик — і ви телефонуєте клієнту. Номер видно лише під час доставки."
+  - key: 5
+    anchor: run.picked
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="run.picked"]'
+    title:
+      sq: "E mora"
+      en: "Picked up"
+      uk: "Забрав"
+    caption:
+      sq: "Shtypeni kur porosia është në dorën tuaj. Klienti sheh «Në rrugë» dhe koha fillon të numërohet."
+      en: "Press it when the order is in your hands. The customer sees “On the way” and the countdown starts."
+      uk: "Натисніть, коли замовлення у вас у руках. Клієнт бачить «В дорозі», і починається відлік."

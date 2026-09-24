@@ -1,0 +1,123 @@
+# Lesson W4 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: W4
+role: waiter
+module: floor
+order: 4
+covers: [floor]
+title:
+  sq: "Plani i sallës"
+  en: "The floor"
+  uk: "План залу"
+goal:
+  sq: "Uleni një tavolinë të rezervuar dhe pastroni një të paguar."
+  en: "Seat a booked table and clear a paid one."
+  uk: "Посадити гостей за заброньований стіл і прибрати оплачений."
+steps:
+  - key: 1
+    anchor: room.floor
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="room.floor"]'
+    title:
+      sq: "Plani"
+      en: "The floor"
+      uk: "План"
+    caption:
+      sq: "Salla si vizatim: çdo tavolinë në vendin e saj, me ngjyrën e gjendjes."
+      en: "The room as a drawing: each table in its place, coloured by its state."
+      uk: "Зал як креслення: кожен стіл на своєму місці, кольором позначено стан."
+  - key: 2
+    anchor: floor.legend
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="floor.legend"]'
+    title:
+      sq: "Ngjyrat"
+      en: "The colours"
+      uk: "Кольори"
+    caption:
+      sq: "E lirë, e rezervuar, po porosit, po pret, po paguan, për t’u pastruar — legjenda i shpjegon të gjitha."
+      en: "Free, booked, ordering, waiting, paying, to be cleared — the legend explains each one."
+      uk: "Вільний, заброньований, замовляє, чекає, платить, прибрати — легенда пояснює кожен."
+  - key: 3
+    anchor: floor.table
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="floor.table"]'
+    title:
+      sq: "Prekni tavolinën"
+      en: "Tap a table"
+      uk: "Торкніться столу"
+    caption:
+      sq: "Një tavolinë e rezervuar hapet për mysafirët e saj; një e hapur ju çon te raundet."
+      en: "A booked table opens for its guests; an open one takes you to its rounds."
+      uk: "Заброньований стіл відкривається для його гостей; відкритий — веде до раундів."
+  - key: 4
+    anchor: floor.unplaced
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="floor.unplaced"]'
+    title:
+      sq: "Pa vend në plan"
+      en: "Not on the plan"
+      uk: "Не на плані"
+    caption:
+      sq: "Tavolinat që pronari ende s’i ka vendosur në plan shfaqen këtu si listë."
+      en: "Tables the owner has not placed on the plan yet appear here as a list."
+      uk: "Столи, які власник ще не розмістив на плані, показані тут списком."
+  - key: 5
+    anchor: floor.clear
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="floor.clear"]'
+    title:
+      sq: "Pastruar"
+      en: "Cleared"
+      uk: "Прибрано"
+    caption:
+      sq: "Pas pagesës tavolina mbetet «për t’u pastruar». Shënojeni kur është gati për mysafirët e rinj."
+      en: "After payment a table stays “to be cleared”. Mark it once it is ready for new guests."
+      uk: "Після оплати стіл лишається «прибрати». Позначте, щойно він готовий для нових гостей."
+  - key: 6
+    anchor: floor.refresh
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="floor.refresh"]'
+    title:
+      sq: "Rifreskoni planin"
+      en: "Refresh the floor"
+      uk: "Оновіть план"
+    caption:
+      sq: "Plani rifreskohet vetë; ky buton e bën menjëherë."
+      en: "The floor refreshes by itself; this button does it now."
+      uk: "План оновлюється сам; ця кнопка робить це одразу."
+  - key: 7
+    anchor: nav.back
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.back"]'
+    title:
+      sq: "Prapa"
+      en: "Back"
+      uk: "Назад"
+    caption:
+      sq: "Kthehuni te salla."
+      en: "Go back to the room."
+      uk: "Поверніться до залу."

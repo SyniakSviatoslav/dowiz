@@ -1,0 +1,200 @@
+# Lesson O12 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O12
+role: owner
+module: exceptions
+order: 20
+covers: [exceptions, analytics]
+title:
+  sq: "Anulime, falas, kthime — dhe shifrat"
+  en: "Voids, comps, refunds — and the numbers"
+  uk: "Анулювання, безкоштовне, повернення — і цифри"
+goal:
+  sq: "Lexoni një javë përjashtimesh dhe shitjesh."
+  en: "Read a week of exceptions and sales."
+  uk: "Прочитати тиждень винятків і продажів."
+steps:
+  - key: 1
+    anchor: more.tile.exceptions
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.exceptions"]'
+    title:
+      sq: "Përjashtimet"
+      en: "Exceptions"
+      uk: "Винятки"
+    caption:
+      sq: "Çdo anulim, falas, kthim dhe dalje parash, me emrin dhe arsyen."
+      en: "Every void, comp, refund and pay-out, with the name and the reason."
+      uk: "Кожне анулювання, безкоштовне, повернення й видача — з ім’ям і причиною."
+  - key: 2
+    anchor: exceptions.period
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="exceptions.period"]'
+    title:
+      sq: "Periudha"
+      en: "The period"
+      uk: "Період"
+    caption:
+      sq: "Sot, 7 ose 30 ditë."
+      en: "Today, 7 or 30 days."
+      uk: "Сьогодні, 7 або 30 днів."
+  - key: 3
+    anchor: exceptions.groups
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="exceptions.groups"]'
+    title:
+      sq: "Sipas llojit"
+      en: "By kind"
+      uk: "За видом"
+    caption:
+      sq: "Shuma për çdo lloj. Nuk është pikë për askënd — është një listë për t’u lexuar."
+      en: "A sum per kind. It is not a score for anyone — it is a list to read."
+      uk: "Сума за кожним видом. Це не рейтинг для когось — це список для читання."
+  - key: 4
+    anchor: exceptions.rows
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="exceptions.rows"]'
+    title:
+      sq: "Një nga një"
+      en: "One by one"
+      uk: "По одному"
+    caption:
+      sq: "Kush, kur, sa dhe pse."
+      en: "Who, when, how much and why."
+      uk: "Хто, коли, скільки й чому."
+  - key: 5
+    anchor: exceptions.threshold
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="exceptions.threshold"]'
+      value: "2000"
+    title:
+      sq: "Pragu"
+      en: "The threshold"
+      uk: "Поріг"
+    caption:
+      sq: "Mbi këtë shumë, një përjashtim ju njofton."
+      en: "Above this amount, an exception notifies you."
+      uk: "Понад цю суму виняток вас сповіщає."
+  - key: 6
+    anchor: exceptions.late
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="exceptions.late"]'
+      value: "45"
+    title:
+      sq: "Vonesa"
+      en: "Late after"
+      uk: "Запізнення"
+    caption:
+      sq: "Pas sa minutash një porosi quhet e vonuar."
+      en: "After how many minutes an order counts as late."
+      uk: "Через скільки хвилин замовлення вважається запізнілим."
+  - key: 7
+    anchor: exceptions.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="exceptions.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Pragjet ruhen për lokalin."
+      en: "The thresholds are saved for the venue."
+      uk: "Пороги збережено для закладу."
+  - key: 8
+    anchor: exceptions.legs
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="exceptions.legs"]'
+    title:
+      sq: "Llogaritë"
+      en: "The ledger"
+      uk: "Рахунки"
+    caption:
+      sq: "Çdo kthim duhet të ketë dy anët e veta në libër."
+      en: "Every refund must have both its sides in the books."
+      uk: "Кожне повернення має мати обидві сторони в обліку."
+  - key: 9
+    anchor: exceptions.legsCheck
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="exceptions.legsCheck"]'
+    title:
+      sq: "Kontrollo"
+      en: "Check"
+      uk: "Перевірити"
+    caption:
+      sq: "Gjen kthimet që i mungon njëra anë."
+      en: "Finds refunds missing one side."
+      uk: "Знаходить повернення, яким бракує однієї сторони."
+  - key: 10
+    anchor: exceptions.legsApply
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="exceptions.legsApply"]'
+    title:
+      sq: "Plotëso"
+      en: "Complete"
+      uk: "Доповнити"
+    caption:
+      sq: "Shton anët që mungojnë."
+      en: "Adds the missing sides."
+      uk: "Додає відсутні сторони."
+  - key: 11
+    anchor: more.tile.analytics
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.analytics"]'
+    title:
+      sq: "Analitika"
+      en: "Analytics"
+      uk: "Аналітика"
+    caption:
+      sq: "Shifrat e shitjeve, pa asnjë të dhënë personale."
+      en: "Sales numbers, with no personal data."
+      uk: "Цифри продажів без жодних персональних даних."
+  - key: 12
+    anchor: analytics.window
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="analytics.window"]'
+    title:
+      sq: "Periudha"
+      en: "The period"
+      uk: "Період"
+    caption:
+      sq: "7 ose 30 ditë."
+      en: "7 or 30 days."
+      uk: "7 або 30 днів."

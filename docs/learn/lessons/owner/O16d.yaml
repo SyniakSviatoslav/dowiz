@@ -1,0 +1,170 @@
+# Lesson O16d (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O16d
+role: owner
+module: inbox
+order: 34
+covers: [inbox, assistant]
+title:
+  sq: "Kutia hyrëse dhe asistenti"
+  en: "Inbox and the assistant"
+  uk: "Вхідні та асистент"
+goal:
+  sq: "Përgjigjuni një mesazhi WhatsApp dhe bëjini asistentit një pyetje."
+  en: "Answer a WhatsApp message and ask the assistant one question."
+  uk: "Відповісти на повідомлення WhatsApp і поставити асистенту одне запитання."
+steps:
+  - key: 1
+    anchor: more.tile.inbox
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.inbox"]'
+    title:
+      sq: "Kutia hyrëse"
+      en: "Inbox"
+      uk: "Вхідні"
+    caption:
+      sq: "Mesazhet nga WhatsApp dhe Instagram, në një vend."
+      en: "Messages from WhatsApp and Instagram, in one place."
+      uk: "Повідомлення з WhatsApp та Instagram в одному місці."
+  - key: 2
+    anchor: inbox.thread
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="inbox.thread"]'
+    title:
+      sq: "Një bisedë"
+      en: "A thread"
+      uk: "Розмова"
+    caption:
+      sq: "Mesazhet e një klienti."
+      en: "One customer’s messages."
+      uk: "Повідомлення одного клієнта."
+  - key: 3
+    anchor: inbox.reply
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="inbox.reply"]'
+      value: "Faleminderit! Po, jemi hapur deri në 23:00."
+    title:
+      sq: "Përgjigjuni"
+      en: "Reply"
+      uk: "Відповісти"
+    caption:
+      sq: "Përgjigjja shkon në të njëjtin kanal."
+      en: "The reply goes back on the same channel."
+      uk: "Відповідь іде тим самим каналом."
+  - key: 4
+    anchor: inbox.send
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="inbox.send"]'
+    title:
+      sq: "Dërgo"
+      en: "Send"
+      uk: "Надіслати"
+    caption:
+      sq: "Klienti e merr menjëherë."
+      en: "The customer gets it at once."
+      uk: "Клієнт отримує одразу."
+  - key: 5
+    anchor: more.tile.assistant
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.assistant"]'
+    title:
+      sq: "Asistenti"
+      en: "Assistant"
+      uk: "Асистент"
+    caption:
+      sq: "Pyetni për lokalin tuaj: shitjet e javës, pjatat më të shitura."
+      en: "Ask about your venue: the week’s sales, the best-selling dishes."
+      uk: "Запитайте про свій заклад: продажі за тиждень, найпопулярніші страви."
+  - key: 6
+    anchor: assistant.endpoint
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="assistant.endpoint"]'
+    title:
+      sq: "Modeli juaj"
+      en: "Your model"
+      uk: "Ваша модель"
+    caption:
+      sq: "Mund të lidhni modelin tuaj."
+      en: "You can connect your own model."
+      uk: "Можна підключити свою модель."
+  - key: 7
+    anchor: assistant.model
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="assistant.model"]'
+    title:
+      sq: "Modeli"
+      en: "Model"
+      uk: "Модель"
+    caption:
+      sq: "Emri i modelit."
+      en: "The model’s name."
+      uk: "Назва моделі."
+  - key: 8
+    anchor: assistant.token
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="assistant.token"]'
+    title:
+      sq: "Çelësi"
+      en: "Token"
+      uk: "Токен"
+    caption:
+      sq: "Mbetet i fshehur."
+      en: "It stays hidden."
+      uk: "Лишається прихованим."
+  - key: 9
+    anchor: assistant.save
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="assistant.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Ruan lidhjen."
+      en: "Saves the connection."
+      uk: "Зберігає підключення."
+  - key: 10
+    anchor: assistant.question
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="assistant.question"]'
+      value: "Cila pjatë u shit më shumë këtë javë?"
+    title:
+      sq: "Një pyetje"
+      en: "One question"
+      uk: "Одне запитання"
+    caption:
+      sq: "Asistenti lexon vetëm të dhënat e lokalit tuaj."
+      en: "The assistant reads only your venue’s data."
+      uk: "Асистент читає лише дані вашого закладу."

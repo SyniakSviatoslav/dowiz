@@ -1,0 +1,170 @@
+# Lesson O6 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O6
+role: owner
+module: couriers
+order: 13
+covers: [couriers]
+title:
+  sq: "Punësoni dhe menaxhoni korrierët"
+  en: "Hire and manage couriers"
+  uk: "Наймайте й керуйте кур’єрами"
+goal:
+  sq: "Ftoni një korrier dhe lexoni kartën e tij."
+  en: "Invite a courier and read their card."
+  uk: "Запросити кур’єра й прочитати його картку."
+steps:
+  - key: 1
+    anchor: nav.couriers
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.couriers"]'
+    title:
+      sq: "Korrierët"
+      en: "Couriers"
+      uk: "Кур’єри"
+    caption:
+      sq: "Kush punon për lokalin tuaj."
+      en: "Who works for your venue."
+      uk: "Хто працює на ваш заклад."
+  - key: 2
+    anchor: couriers.list
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="couriers.list"]'
+    title:
+      sq: "Lista"
+      en: "The list"
+      uk: "Список"
+    caption:
+      sq: "Kush është në turn, kush në rrugë dhe sa para mban secili."
+      en: "Who is on shift, who is on the road and how much cash each one holds."
+      uk: "Хто на зміні, хто в дорозі і скільки готівки в кожного."
+  - key: 3
+    anchor: couriers.shift
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="couriers.shift"]'
+    title:
+      sq: "Në turn"
+      en: "On shift"
+      uk: "На зміні"
+    caption:
+      sq: "Vetëm korrierët në turn marrin porosi."
+      en: "Only couriers on shift get orders."
+      uk: "Замовлення отримують лише кур’єри на зміні."
+  - key: 4
+    anchor: couriers.invite
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="couriers.invite"]'
+    title:
+      sq: "Ftesë"
+      en: "Invite"
+      uk: "Запросити"
+    caption:
+      sq: "Një kod që vlen një javë dhe punon një herë."
+      en: "A code that lasts a week and works once."
+      uk: "Код, що діє тиждень і спрацьовує один раз."
+  - key: 5
+    anchor: couriers.inviteName
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="couriers.inviteName"]'
+      value: "Arben"
+    title:
+      sq: "Emri"
+      en: "Name"
+      uk: "Ім’я"
+    caption:
+      sq: "Emri i korrierit."
+      en: "The courier’s name."
+      uk: "Ім’я кур’єра."
+  - key: 6
+    anchor: couriers.invitePhone
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="couriers.invitePhone"]'
+      value: "+355 69 000 0000"
+    title:
+      sq: "Telefoni"
+      en: "Phone"
+      uk: "Телефон"
+    caption:
+      sq: "Numri ku i vjen ftesa."
+      en: "The number the invite goes to."
+      uk: "Номер, на який прийде запрошення."
+  - key: 7
+    anchor: couriers.inviteSend
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="couriers.inviteSend"]'
+    title:
+      sq: "Dërgo"
+      en: "Send"
+      uk: "Надіслати"
+    caption:
+      sq: "Ftesa dërgohet; kodi shfaqet edhe këtu."
+      en: "The invite is sent; the code also shows here."
+      uk: "Запрошення надіслано; код також видно тут."
+  - key: 8
+    anchor: couriers.inviteCopy
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="couriers.inviteCopy"]'
+    title:
+      sq: "Kopjo"
+      en: "Copy"
+      uk: "Копіювати"
+    caption:
+      sq: "Ose kopjojeni dhe dërgojeni vetë."
+      en: "Or copy it and send it yourself."
+      uk: "Або скопіюйте й надішліть самі."
+  - key: 9
+    anchor: couriers.card
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="couriers.card"]'
+    title:
+      sq: "Karta"
+      en: "The card"
+      uk: "Картка"
+    caption:
+      sq: "Dorëzimet, paratë në dorë dhe mungesat e korrierit."
+      en: "The courier’s deliveries, cash in hand and shortfalls."
+      uk: "Доставки кур’єра, готівка на руках і нестачі."
+  - key: 10
+    anchor: couriers.uninvite
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="couriers.uninvite"]'
+    title:
+      sq: "Çaktivizo"
+      en: "Deactivate"
+      uk: "Деактивувати"
+    caption:
+      sq: "Kur dikush largohet: nuk hyn më, historia mbetet."
+      en: "When someone leaves: they can no longer sign in, the history stays."
+      uk: "Коли хтось іде: він більше не може увійти, історія лишається."

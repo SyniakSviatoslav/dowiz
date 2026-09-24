@@ -1,0 +1,289 @@
+# Lesson O16h (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O16h
+role: owner
+module: cloud
+order: 33
+covers: [cloud, mcp, apiKeys]
+title:
+  sq: "Kopja e natës, agjentët, çelësat API"
+  en: "Nightly copy, agents, API keys"
+  uk: "Нічна копія, агенти, ключі API"
+goal:
+  sq: "Lidhni kovën tuaj për kopjen e natës dhe krijoni një çelës API."
+  en: "Connect your bucket for the nightly copy and create an API key."
+  uk: "Підключити своє сховище для нічної копії й створити ключ API."
+steps:
+  - key: 1
+    anchor: more.tile.cloud
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.cloud"]'
+    title:
+      sq: "Kopja e natës"
+      en: "Nightly copy"
+      uk: "Нічна копія"
+    caption:
+      sq: "Çdo natë një kopje e të dhënave shkon në kovën tuaj."
+      en: "Every night a copy of the data goes to your own bucket."
+      uk: "Щоночі копія даних іде до вашого сховища."
+  - key: 2
+    anchor: cloud.endpoint
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="cloud.endpoint"]'
+    title:
+      sq: "Adresa"
+      en: "Endpoint"
+      uk: "Адреса"
+    caption:
+      sq: "Adresa e shërbimit S3."
+      en: "The S3 service address."
+      uk: "Адреса сервісу S3."
+  - key: 3
+    anchor: cloud.region
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="cloud.region"]'
+    title:
+      sq: "Rajoni"
+      en: "Region"
+      uk: "Регіон"
+    caption:
+      sq: "Rajoni i kovës."
+      en: "The bucket’s region."
+      uk: "Регіон сховища."
+  - key: 4
+    anchor: cloud.bucket
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="cloud.bucket"]'
+    title:
+      sq: "Kova"
+      en: "Bucket"
+      uk: "Сховище"
+    caption:
+      sq: "Emri i kovës."
+      en: "The bucket’s name."
+      uk: "Назва сховища."
+  - key: 5
+    anchor: cloud.key
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="cloud.key"]'
+    title:
+      sq: "Çelësi"
+      en: "Key"
+      uk: "Ключ"
+    caption:
+      sq: "Çelësi i hyrjes."
+      en: "The access key."
+      uk: "Ключ доступу."
+  - key: 6
+    anchor: cloud.secret
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="cloud.secret"]'
+    title:
+      sq: "Sekreti"
+      en: "Secret"
+      uk: "Секрет"
+    caption:
+      sq: "Mbetet i fshehur."
+      en: "It stays hidden."
+      uk: "Лишається прихованим."
+  - key: 7
+    anchor: cloud.prefix
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="cloud.prefix"]'
+    title:
+      sq: "Dosja"
+      en: "Prefix"
+      uk: "Префікс"
+    caption:
+      sq: "Ku në kovë."
+      en: "Where in the bucket."
+      uk: "Де в сховищі."
+  - key: 8
+    anchor: cloud.push
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="cloud.push"]'
+    title:
+      sq: "Dërgo tani"
+      en: "Push now"
+      uk: "Надіслати зараз"
+    caption:
+      sq: "Një kopje tani, pa pritur natën."
+      en: "A copy now, without waiting for the night."
+      uk: "Копія зараз, не чекаючи ночі."
+  - key: 9
+    anchor: cloud.last
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="cloud.last"]'
+    title:
+      sq: "E fundit"
+      en: "Last copy"
+      uk: "Остання копія"
+    caption:
+      sq: "Kur shkoi kopja e fundit."
+      en: "When the last copy went."
+      uk: "Коли пішла остання копія."
+  - key: 10
+    anchor: more.tile.mcp
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.mcp"]'
+    title:
+      sq: "Agjentët"
+      en: "Agents"
+      uk: "Агенти"
+    caption:
+      sq: "Lejoni një asistent AI të lexojë lokalin tuaj."
+      en: "Let an AI assistant read your venue."
+      uk: "Дозвольте AI-асистенту читати ваш заклад."
+  - key: 11
+    anchor: channels.mcp
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="channels.mcp"]'
+    title:
+      sq: "Adresa e agjentit"
+      en: "Agent address"
+      uk: "Адреса агента"
+    caption:
+      sq: "Adresa që i jepni asistentit."
+      en: "The address you give the assistant."
+      uk: "Адреса, яку ви даєте асистенту."
+  - key: 12
+    anchor: mcp.copy
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="mcp.copy"]'
+    title:
+      sq: "Kopjo"
+      en: "Copy"
+      uk: "Копіювати"
+    caption:
+      sq: "Kopjon adresën."
+      en: "Copies the address."
+      uk: "Копіює адресу."
+  - key: 13
+    anchor: mcp.keys
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="mcp.keys"]'
+    title:
+      sq: "Çelësat"
+      en: "Keys"
+      uk: "Ключі"
+    caption:
+      sq: "Asistenti ka nevojë për një çelës API."
+      en: "The assistant needs an API key."
+      uk: "Асистенту потрібен ключ API."
+  - key: 14
+    anchor: more.tile.apiKeys
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.apiKeys"]'
+    title:
+      sq: "Çelësat API"
+      en: "API keys"
+      uk: "Ключі API"
+    caption:
+      sq: "Çelësa për programe të tjera."
+      en: "Keys for other programs."
+      uk: "Ключі для інших програм."
+  - key: 15
+    anchor: channels.api
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="channels.api"]'
+    title:
+      sq: "API"
+      en: "API"
+      uk: "API"
+    caption:
+      sq: "E njëjta faqe, nga kanalet."
+      en: "The same page, from channels."
+      uk: "Та сама сторінка — з каналів."
+  - key: 16
+    anchor: keys.label
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="keys.label"]'
+      value: "Kontabiliteti"
+    title:
+      sq: "Emri i çelësit"
+      en: "Key label"
+      uk: "Назва ключа"
+    caption:
+      sq: "Për çfarë shërben."
+      en: "What it is for."
+      uk: "Для чого він."
+  - key: 17
+    anchor: keys.row
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="keys.row"]'
+    title:
+      sq: "Një çelës"
+      en: "A key"
+      uk: "Ключ"
+    caption:
+      sq: "Shihet vetëm një herë, kur krijohet."
+      en: "It is shown only once, when it is created."
+      uk: "Його видно лише раз — під час створення."
+  - key: 18
+    anchor: keys.revoke
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="keys.revoke"]'
+    title:
+      sq: "Revoko"
+      en: "Revoke"
+      uk: "Відкликати"
+    caption:
+      sq: "Çelësi ndalon së punuari menjëherë."
+      en: "The key stops working at once."
+      uk: "Ключ одразу перестає працювати."

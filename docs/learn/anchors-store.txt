@@ -1,0 +1,71 @@
+# Learning anchors in the guest storefront (/store/, served at /), 2026-09-24.
+# One `data-tour` id per line: "<module>.<control> <file>:<line>" (the line that
+# writes it). docs/design/BLUEPRINT-LEARNING-VIDEOS-WIKI-2026-09-24.md §5.1.
+# A guest track: menu.category menu.dish menu.quickAdd -> dish.* (dish.add) ->
+# cart.open cart.qty checkout.open -> checkout.* ; booking.* ; nav.* top.*.
+# Every id is a LITERAL string in its file (never built from parts), so grep
+# finds it. store/parts.test.mjs fails when a listed id or its line moves, or
+# when the tree gains an id this list does not carry; it prints which one.
+top.lang workers/api/public/store/index.html:55
+top.currency workers/api/public/store/index.html:57
+nav.menu workers/api/public/store/nav.js:44
+nav.search workers/api/public/store/nav.js:44
+nav.book workers/api/public/store/nav.js:44
+nav.cart workers/api/public/store/nav.js:44
+nav.orders workers/api/public/store/nav.js:44
+nav.info workers/api/public/store/nav.js:44
+menu.dish workers/api/public/store/menu.js:105
+menu.quickAdd workers/api/public/store/menu.js:120
+menu.category workers/api/public/store/menu.js:126
+menu.search workers/api/public/store/menu.js:140
+menu.voice workers/api/public/store/menu.js:143
+menu.sort workers/api/public/store/menu.js:144
+menu.filter workers/api/public/store/menu.js:146
+menu.sortChoice workers/api/public/store/menu.js:302
+dish.back workers/api/public/store/dish.js:99
+dish.onTable workers/api/public/store/dish.js:111
+dish.qty workers/api/public/store/dish.js:115
+dish.add workers/api/public/store/dish.js:116
+cart.qty workers/api/public/store/cart.js:77
+cart.open workers/api/public/store/index.html:72
+checkout.open workers/api/public/store/cart.js:80
+checkout.savedAddress workers/api/public/store/checkout.js:79
+checkout.street workers/api/public/store/checkout.js:98
+checkout.payMethod workers/api/public/store/checkout.js:129
+checkout.delivery workers/api/public/store/checkout.js:151
+checkout.pickup workers/api/public/store/checkout.js:152
+checkout.map workers/api/public/store/checkout.js:158
+checkout.area workers/api/public/store/checkout.js:161
+checkout.asap workers/api/public/store/checkout.js:169
+checkout.later workers/api/public/store/checkout.js:170
+checkout.name workers/api/public/store/checkout.js:176
+checkout.phone workers/api/public/store/checkout.js:177
+checkout.note workers/api/public/store/checkout.js:184
+checkout.tip workers/api/public/store/checkout.js:187
+checkout.promo workers/api/public/store/checkout.js:192
+checkout.place workers/api/public/store/checkout.js:198
+checkout.pay workers/api/public/store/checkout.js:406
+map.myLocation workers/api/public/store/address.js:151
+map.confirm workers/api/public/store/address.js:154
+booking.share workers/api/public/store/booking-mine.js:55
+booking.cancel workers/api/public/store/booking-mine.js:56
+booking.table workers/api/public/store/booking.js:170
+booking.mine workers/api/public/store/booking.js:204
+booking.party workers/api/public/store/booking.js:210
+booking.day workers/api/public/store/booking.js:219
+booking.time workers/api/public/store/booking.js:226
+booking.zone workers/api/public/store/booking.js:244
+booking.name workers/api/public/store/booking.js:266
+booking.phone workers/api/public/store/booking.js:267
+booking.submit workers/api/public/store/booking.js:284
+lang.choice workers/api/public/store/nav.js:100
+currency.choice workers/api/public/store/nav.js:115
+orders.row workers/api/public/store/nav.js:139
+track.map workers/api/public/store/track-map.js:59
+track.feedback workers/api/public/store/track.js:64
+track.feedbackSend workers/api/public/store/track.js:66
+track.status workers/api/public/store/track.js:163
+track.eta workers/api/public/store/track.js:170
+track.done workers/api/public/store/track.js:246
+voice.add workers/api/public/store/voice-order.js:90
+voice.again workers/api/public/store/voice-order.js:91

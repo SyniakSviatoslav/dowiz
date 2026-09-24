@@ -1,0 +1,216 @@
+# Lesson O9 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O9
+role: owner
+module: floorPlan
+order: 16
+covers: [floorPlan]
+title:
+  sq: "Vizatoni sallën"
+  en: "Draw the floor"
+  uk: "Накресліть зал"
+goal:
+  sq: "Vizatoni katër tavolina dhe ruajini."
+  en: "Draw four tables and save."
+  uk: "Накреслити чотири столи й зберегти."
+steps:
+  - key: 1
+    anchor: more.tile.floorPlan
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.floorPlan"]'
+    title:
+      sq: "Plani i sallës"
+      en: "Floor plan"
+      uk: "План залу"
+    caption:
+      sq: "Plani që sheh kamarieri dhe ku lidhen kodet QR të tavolinave."
+      en: "The plan the waiter sees, and where the table QR codes belong."
+      uk: "План, який бачить офіціант, і до якого прив’язані QR-коди столів."
+  - key: 2
+    anchor: floor.zones
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="floor.zones"]'
+    title:
+      sq: "Zonat"
+      en: "Areas"
+      uk: "Зони"
+    caption:
+      sq: "Salla, tarraca, bari — secila me planin e vet."
+      en: "Room, terrace, bar — each with its own plan."
+      uk: "Зал, тераса, бар — кожна зі своїм планом."
+  - key: 3
+    anchor: floor.addZone
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="floor.addZone"]'
+    title:
+      sq: "Zonë e re"
+      en: "New area"
+      uk: "Нова зона"
+    caption:
+      sq: "Shtoni një zonë."
+      en: "Add an area."
+      uk: "Додайте зону."
+  - key: 4
+    anchor: floor.zoneName
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="floor.zoneName"]'
+      value: "Tarraca"
+    title:
+      sq: "Emri i zonës"
+      en: "Area name"
+      uk: "Назва зони"
+    caption:
+      sq: "Si e quani."
+      en: "What you call it."
+      uk: "Як ви її називаєте."
+  - key: 5
+    anchor: floor.deleteZone
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="floor.deleteZone"]'
+    title:
+      sq: "Fshije zonën"
+      en: "Delete the area"
+      uk: "Видалити зону"
+    caption:
+      sq: "Vetëm një zonë pa tavolina."
+      en: "Only an area with no tables."
+      uk: "Лише зону без столів."
+  - key: 6
+    anchor: floor.plan
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="floor.plan"]'
+    title:
+      sq: "Plani"
+      en: "The plan"
+      uk: "План"
+    caption:
+      sq: "Tavolinat ku janë në të vërtetë."
+      en: "The tables where they really are."
+      uk: "Столи там, де вони насправді."
+  - key: 7
+    anchor: floor.addTable
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="floor.addTable"]'
+    title:
+      sq: "Tavolinë e re"
+      en: "New table"
+      uk: "Новий стіл"
+    caption:
+      sq: "Shtoni një tavolinë."
+      en: "Add a table."
+      uk: "Додайте стіл."
+  - key: 8
+    anchor: floor.number
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="floor.number"]'
+      value: "4"
+    title:
+      sq: "Numri"
+      en: "The number"
+      uk: "Номер"
+    caption:
+      sq: "Numri që shohin kamarierët dhe kodi QR."
+      en: "The number the waiters and the QR code use."
+      uk: "Номер, який бачать офіціанти й QR-код."
+  - key: 9
+    anchor: floor.seats
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="floor.seats"]'
+      value: "4"
+    title:
+      sq: "Vendet"
+      en: "Seats"
+      uk: "Місця"
+    caption:
+      sq: "Sa veta ulen."
+      en: "How many can sit."
+      uk: "Скільки людей сідає."
+  - key: 10
+    anchor: floor.shape
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="floor.shape"]'
+    title:
+      sq: "Forma"
+      en: "Shape"
+      uk: "Форма"
+    caption:
+      sq: "Katrore ose e rrumbullakët."
+      en: "Square or round."
+      uk: "Прямокутний чи круглий."
+  - key: 11
+    anchor: floor.nudge
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="floor.nudge"]'
+    title:
+      sq: "Lëvizni"
+      en: "Move it"
+      uk: "Пересуньте"
+    caption:
+      sq: "Shigjetat e lëvizin me hapa të vegjël."
+      en: "The arrows move it in small steps."
+      uk: "Стрілки пересувають його малими кроками."
+  - key: 12
+    anchor: floor.deleteTable
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="floor.deleteTable"]'
+    title:
+      sq: "Fshije tavolinën"
+      en: "Delete the table"
+      uk: "Видалити стіл"
+    caption:
+      sq: "Kur tavolina nuk ekziston më."
+      en: "When the table no longer exists."
+      uk: "Коли стола більше немає."
+  - key: 13
+    anchor: floor.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="floor.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Kamarierët e shohin planin e ri menjëherë."
+      en: "Waiters see the new plan at once."
+      uk: "Офіціанти одразу бачать новий план."

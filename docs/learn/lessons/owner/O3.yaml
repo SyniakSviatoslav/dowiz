@@ -1,0 +1,94 @@
+# Lesson O3 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O3
+role: owner
+module: refund
+order: 5
+covers: []
+title:
+  sq: "Kthimi i parave"
+  en: "Money back"
+  uk: "Повернення коштів"
+goal:
+  sq: "Ktheni paratë për një porosi me marrje në lokal dhe shpjegoni pse një dërgesë ende nuk mundet."
+  en: "Refund a pickup order and explain why a delivery cannot be refunded yet."
+  uk: "Повернути кошти за замовлення із самовивозом і пояснити, чому доставку поки не можна."
+steps:
+  - key: 1
+    anchor: order.refund
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="order.refund"]'
+    title:
+      sq: "Kthe paratë"
+      en: "Refund"
+      uk: "Повернути кошти"
+    caption:
+      sq: "Nga detajet e porosisë. Sot kthimi punon për porositë me marrje në lokal; për dërgesat do të vijë më vonë."
+      en: "From the order’s detail. Today refunds work for pickup orders; deliveries come later."
+      uk: "З деталей замовлення. Зараз повернення працює для самовивозу; для доставок — згодом."
+  - key: 2
+    anchor: order.moneyBack
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="order.moneyBack"]'
+    title:
+      sq: "Çfarë u kthye"
+      en: "What was paid back"
+      uk: "Що повернуто"
+    caption:
+      sq: "Kthimet e mëparshme të kësaj porosie."
+      en: "Earlier refunds on this order."
+      uk: "Попередні повернення за цим замовленням."
+  - key: 3
+    anchor: refund.reason
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="refund.reason"]'
+    title:
+      sq: "Arsyeja"
+      en: "The reason"
+      uk: "Причина"
+    caption:
+      sq: "Zgjidhni pse — shkon në raportin e përjashtimeve."
+      en: "Choose why — it goes into the exceptions report."
+      uk: "Оберіть чому — це потрапляє у звіт винятків."
+  - key: 4
+    anchor: refund.note
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="refund.note"]'
+      value: "Pjata e gabuar"
+    title:
+      sq: "Shënim"
+      en: "A note"
+      uk: "Примітка"
+    caption:
+      sq: "Disa fjalë më shumë, nëse duhen."
+      en: "A few more words, if needed."
+      uk: "Кілька слів більше, якщо треба."
+  - key: 5
+    anchor: refund.go
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="refund.go"]'
+    title:
+      sq: "Konfirmoni"
+      en: "Confirm"
+      uk: "Підтвердіть"
+    caption:
+      sq: "Kthimi regjistrohet me emrin tuaj dhe orën."
+      en: "The refund is recorded with your name and the time."
+      uk: "Повернення записується з вашим ім’ям і часом."

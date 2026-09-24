@@ -1,0 +1,277 @@
+# Lesson O14b (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O14b
+role: owner
+module: campaigns
+order: 24
+covers: [campaigns]
+title:
+  sq: "Fushatat"
+  en: "Campaigns"
+  uk: "Кампанії"
+goal:
+  sq: "Shikoni paraprakisht një fushatë para se të dërgohet."
+  en: "Preview a campaign before anything is sent."
+  uk: "Переглянути кампанію до надсилання."
+steps:
+  - key: 1
+    anchor: more.tile.campaigns
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.campaigns"]'
+    title:
+      sq: "Fushatat"
+      en: "Campaigns"
+      uk: "Кампанії"
+    caption:
+      sq: "Mesazhe vetëm për klientët që kanë dhënë pëlqimin."
+      en: "Messages only to customers who have given consent."
+      uk: "Повідомлення лише клієнтам, які дали згоду."
+  - key: 2
+    anchor: campaigns.row
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="campaigns.row"]'
+    title:
+      sq: "Një fushatë"
+      en: "A campaign"
+      uk: "Кампанія"
+    caption:
+      sq: "Emri, kujt i shkon dhe kur u dërgua."
+      en: "Its name, who it goes to and when it was sent."
+      uk: "Назва, кому йде і коли надіслано."
+  - key: 3
+    anchor: campaigns.new
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="campaigns.new"]'
+    title:
+      sq: "Fushatë e re"
+      en: "New campaign"
+      uk: "Нова кампанія"
+    caption:
+      sq: "Filloni një fushatë."
+      en: "Start a campaign."
+      uk: "Почніть кампанію."
+  - key: 4
+    anchor: campaigns.name
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="campaigns.name"]'
+      value: "Vjeshta"
+    title:
+      sq: "Emri"
+      en: "The name"
+      uk: "Назва"
+    caption:
+      sq: "Vetëm për ju."
+      en: "For you only."
+      uk: "Лише для вас."
+  - key: 5
+    anchor: campaigns.text
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="campaigns.text"]'
+      value: "Supë e ngrohtë për ditët e ftohta."
+    title:
+      sq: "Teksti"
+      en: "The text"
+      uk: "Текст"
+    caption:
+      sq: "Çfarë lexon klienti."
+      en: "What the customer reads."
+      uk: "Що читає клієнт."
+  - key: 6
+    anchor: campaigns.segment
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="campaigns.segment"]'
+    title:
+      sq: "Kujt"
+      en: "To whom"
+      uk: "Кому"
+    caption:
+      sq: "Të gjithë me pëlqim, ata që s’kanë porositur prej kohësh, ose sipas etiketës."
+      en: "Everyone with consent, those who have not ordered in a while, or by tag."
+      uk: "Усім зі згодою, тим, хто давно не замовляв, або за міткою."
+  - key: 7
+    anchor: campaigns.days
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="campaigns.days"]'
+      value: "30"
+    title:
+      sq: "Prej sa ditësh"
+      en: "For how many days"
+      uk: "Скільки днів"
+    caption:
+      sq: "Pa porosi prej kaq ditësh."
+      en: "No order for this many days."
+      uk: "Без замовлень стільки днів."
+  - key: 8
+    anchor: campaigns.tag
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="campaigns.tag"]'
+    title:
+      sq: "Etiketa"
+      en: "The tag"
+      uk: "Мітка"
+    caption:
+      sq: "P.sh. «drekë zyre»."
+      en: "For example “office lunch”."
+      uk: "Наприклад, «офісний обід»."
+  - key: 9
+    anchor: campaigns.template
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="campaigns.template"]'
+    title:
+      sq: "Shablloni"
+      en: "The template"
+      uk: "Шаблон"
+    caption:
+      sq: "WhatsApp kërkon një shabllon të miratuar."
+      en: "WhatsApp requires an approved template."
+      uk: "WhatsApp вимагає схваленого шаблону."
+  - key: 10
+    anchor: campaigns.templateLang
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="campaigns.templateLang"]'
+    title:
+      sq: "Gjuha e shabllonit"
+      en: "Template language"
+      uk: "Мова шаблону"
+    caption:
+      sq: "Gjuha në të cilën u miratua."
+      en: "The language it was approved in."
+      uk: "Мова, якою його схвалено."
+  - key: 11
+    anchor: campaigns.templateParams
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="campaigns.templateParams"]'
+      value: "Supë miso"
+    title:
+      sq: "Fushat e shabllonit"
+      en: "Template fields"
+      uk: "Поля шаблону"
+    caption:
+      sq: "Fjalët që mbushin vendet bosh."
+      en: "The words that fill its blanks."
+      uk: "Слова, що заповнюють пропуски."
+  - key: 12
+    anchor: campaigns.promo
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="campaigns.promo"]'
+    title:
+      sq: "Kodi"
+      en: "The code"
+      uk: "Код"
+    caption:
+      sq: "Bashkëngjitni një kod promocional, nëse doni."
+      en: "Attach a promo code, if you like."
+      uk: "Додайте промокод, якщо хочете."
+  - key: 13
+    anchor: campaigns.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="campaigns.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Ruhet si draft; asgjë nuk dërgohet."
+      en: "Saved as a draft; nothing is sent."
+      uk: "Збережено як чернетку; нічого не надіслано."
+  - key: 14
+    anchor: campaigns.edit
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="campaigns.edit"]'
+    title:
+      sq: "Ndrysho"
+      en: "Edit"
+      uk: "Змінити"
+    caption:
+      sq: "Një draft ndryshohet sa herë të doni."
+      en: "A draft can be edited as often as you like."
+      uk: "Чернетку можна змінювати скільки завгодно."
+  - key: 15
+    anchor: campaigns.preview
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="campaigns.preview"]'
+    title:
+      sq: "Shiko"
+      en: "Preview"
+      uk: "Перегляд"
+    caption:
+      sq: "Si duket dhe sa veta e marrin."
+      en: "What it looks like and how many get it."
+      uk: "Як виглядає і скільки людей отримає."
+  - key: 16
+    anchor: campaigns.count
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="campaigns.count"]'
+    title:
+      sq: "Sa veta"
+      en: "How many"
+      uk: "Скільки людей"
+    caption:
+      sq: "Vetëm ata me pëlqim; ata që e morën tashmë numërohen veç."
+      en: "Only those with consent; those who already got it are counted apart."
+      uk: "Лише ті, хто дав згоду; ті, хто вже отримав, рахуються окремо."
+  - key: 17
+    anchor: campaigns.send
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="campaigns.send"]'
+    title:
+      sq: "Dërgo"
+      en: "Send"
+      uk: "Надіслати"
+    caption:
+      sq: "Dërgimi nuk kthehet pas."
+      en: "Sending cannot be undone."
+      uk: "Надсилання не скасувати."

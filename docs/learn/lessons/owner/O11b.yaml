@@ -1,0 +1,183 @@
+# Lesson O11b (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O11b
+role: owner
+module: fiscal
+order: 19
+covers: []
+title:
+  sq: "Dërgimi fiskal"
+  en: "Fiscal sending"
+  uk: "Фіскальне надсилання"
+goal:
+  sq: "Shpjegoni pasojën para se ta aktivizoni."
+  en: "Explain the consequence before arming it."
+  uk: "Пояснити наслідки до ввімкнення."
+steps:
+  - key: 1
+    anchor: ebills.fiscal
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="ebills.fiscal"]'
+    title:
+      sq: "Fiskalizimi"
+      en: "Fiscal"
+      uk: "Фіскалізація"
+    caption:
+      sq: "Nga faqja eBills."
+      en: "From the eBills page."
+      uk: "Зі сторінки eBills."
+  - key: 2
+    anchor: fiscal.state
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="fiscal.state"]'
+    title:
+      sq: "Gjendja"
+      en: "State"
+      uk: "Стан"
+    caption:
+      sq: "Joaktiv, apo aktiv. Pasi aktivizohet, çdo faturë është dokument ligjor."
+      en: "Off, or armed. Once armed, every receipt is a legal document."
+      uk: "Вимкнено чи ввімкнено. Після ввімкнення кожен чек — юридичний документ."
+  - key: 3
+    anchor: fiscal.waiting
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="fiscal.waiting"]'
+    title:
+      sq: "Në pritje"
+      en: "Waiting"
+      uk: "Очікують"
+    caption:
+      sq: "Faturat që ende s’janë dërguar."
+      en: "Receipts not yet sent."
+      uk: "Чеки, ще не надіслані."
+  - key: 4
+    anchor: fiscal.stage
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="fiscal.stage"]'
+    title:
+      sq: "Një faturë"
+      en: "A receipt"
+      uk: "Чек"
+    caption:
+      sq: "Porosia dhe hapi ku ndodhet; e kuqja do të thotë vonesë."
+      en: "The order and the stage it is at; red means late."
+      uk: "Замовлення та етап, на якому воно; червоне — запізнення."
+  - key: 5
+    anchor: fiscal.receipt
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="fiscal.receipt"]'
+    title:
+      sq: "Shiko faturën"
+      en: "See the receipt"
+      uk: "Переглянути чек"
+    caption:
+      sq: "Fatura ashtu siç shkon."
+      en: "The receipt as it is sent."
+      uk: "Чек таким, яким він надсилається."
+  - key: 6
+    anchor: fiscal.saleUnit
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="fiscal.saleUnit"]'
+    title:
+      sq: "Njësia e shitjes"
+      en: "Sale unit"
+      uk: "Одиниця продажу"
+    caption:
+      sq: "Njësia që kërkon tatimi."
+      en: "The unit the tax office asks for."
+      uk: "Одиниця, якої вимагає податкова."
+  - key: 7
+    anchor: fiscal.feeItem
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="fiscal.feeItem"]'
+    title:
+      sq: "Tarifa e dërgesës"
+      en: "Delivery fee item"
+      uk: "Позиція доставки"
+    caption:
+      sq: "Artikulli i arkës për tarifën e dërgesës."
+      en: "The till item for the delivery fee."
+      uk: "Позиція каси для плати за доставку."
+  - key: 8
+    anchor: fiscal.save
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="fiscal.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+    caption:
+      sq: "Ruhet pa aktivizuar asgjë."
+      en: "Saves without arming anything."
+      uk: "Зберігає, нічого не вмикаючи."
+  - key: 9
+    anchor: fiscal.phrase
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="fiscal.phrase"]'
+    title:
+      sq: "Fraza"
+      en: "The phrase"
+      uk: "Фраза"
+    caption:
+      sq: "Për ta aktivizuar shkruani frazën e lokalit — kështu nuk ndodh rastësisht."
+      en: "To arm it, type the venue’s phrase — so it never happens by accident."
+      uk: "Щоб увімкнути, введіть фразу закладу — так це не станеться випадково."
+  - key: 10
+    anchor: fiscal.arm
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="fiscal.arm"]'
+    title:
+      sq: "Aktivizo"
+      en: "Arm"
+      uk: "Увімкнути"
+    caption:
+      sq: "Vetëm kur jeni gati ligjërisht."
+      en: "Only when you are legally ready."
+      uk: "Лише коли ви юридично готові."
+  - key: 11
+    anchor: fiscal.disarm
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="fiscal.disarm"]'
+    title:
+      sq: "Çaktivizo"
+      en: "Disarm"
+      uk: "Вимкнути"
+    caption:
+      sq: "Ndal dërgimin, po me frazë."
+      en: "Stops sending, with the phrase too."
+      uk: "Зупиняє надсилання — теж фразою."

@@ -1,0 +1,28 @@
+/* dowiz learn -- the lesson list. The tour itself is /lib/guide.css.
+ *
+ * WHY A FILE. `style-src 'self'`: /lib/learn.js adds a same-origin <link> to
+ * this sheet, once, the way guide.js adds its own; nothing inline.
+ *
+ * WHAT IT MAY USE. T2 tokens from /lib/tokens.css and the --brand-* names every
+ * surface defines. No motion at all: the list does not animate, so there is
+ * nothing for prefers-reduced-motion to switch off (the tour's ring is
+ * guide.css's and already honours it).
+ *
+ * lr- is the prefix, for the same reason guide.css uses gd-. */
+.lr-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.lr-item{display:flex;flex-direction:column;gap:var(--space-1);
+  border:1px solid var(--brand-border);border-radius:var(--radius-md);
+  background:var(--brand-surface);padding:var(--space-2)}
+.lr-open{display:flex;align-items:flex-start;gap:var(--space-3);width:100%;min-height:var(--tap);
+  padding:var(--space-2);border:0;border-radius:var(--radius-sm);background:none;color:inherit;
+  font:inherit;text-align:start;cursor:pointer}
+.lr-open:focus-visible,.lr-watch:focus-visible{outline:2px solid var(--brand-primary);outline-offset:2px}
+.lr-id{flex:none;min-width:2.5rem;font-variant-numeric:tabular-nums;font-weight:600;color:var(--brand-text-muted)}
+.lr-body{flex:1;display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
+
+
+
+.lr-item[data-state="done"] .ui-row-title::after{content:" \2713";color:var(--color-success)}
+.lr-watch{display:inline-flex;align-items:center;gap:var(--space-1);align-self:flex-start;
+  min-height:var(--tap);padding:0 var(--space-2);color:inherit;text-decoration:underline}
+.lr-empty{margin:0;padding:var(--space-3);color:var(--brand-text-muted)}

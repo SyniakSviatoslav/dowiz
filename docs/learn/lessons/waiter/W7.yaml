@@ -1,0 +1,171 @@
+# Lesson W7 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: W7
+role: waiter
+module: pay
+order: 7
+covers: [pay]
+title:
+  sq: "Merrni pagesën"
+  en: "Take payment"
+  uk: "Прийміть оплату"
+goal:
+  sq: "Mbyllni një tavolinë me dy pagesa dhe një bakshish."
+  en: "Close a table in two payments with a tip."
+  uk: "Закрити стіл двома оплатами з чайовими."
+steps:
+  - key: 1
+    anchor: round.pay
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="round.pay"]'
+    title:
+      sq: "Paguaj"
+      en: "Pay"
+      uk: "Оплата"
+    caption:
+      sq: "Nga raundi hapni pagesën."
+      en: "Open the payment from the round."
+      uk: "Відкрийте оплату з раунду."
+  - key: 2
+    anchor: pay.owed
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="pay.owed"]'
+    title:
+      sq: "Sa duhet"
+      en: "What is owed"
+      uk: "До сплати"
+    caption:
+      sq: "Shuma që mbetet, pas çdo pagese të mëparshme."
+      en: "The amount still due, after any earlier payment."
+      uk: "Сума, що лишилася, з урахуванням попередніх оплат."
+  - key: 3
+    anchor: pay.method
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="pay.method"]'
+    title:
+      sq: "Mënyra"
+      en: "The method"
+      uk: "Спосіб"
+    caption:
+      sq: "Para, kartë ose portofol. Mënyra shkon në raportin Z."
+      en: "Cash, card or wallet. The method goes into the Z report."
+      uk: "Готівка, картка чи гаманець. Спосіб потрапляє у Z-звіт."
+  - key: 4
+    anchor: pay.currency
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="pay.currency"]'
+    title:
+      sq: "Monedha"
+      en: "The currency"
+      uk: "Валюта"
+    caption:
+      sq: "Mysafiri paguan në euro? Zgjidhni monedhën — arka e numëron veçmas."
+      en: "The guest pays in euros? Choose the currency — the till counts it separately."
+      uk: "Гість платить у євро? Оберіть валюту — каса рахує її окремо."
+  - key: 5
+    anchor: pay.rate
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="pay.rate"]'
+      value: "100"
+    title:
+      sq: "Kursi"
+      en: "The rate"
+      uk: "Курс"
+    caption:
+      sq: "Për monedhë tjetër, shkruani kursin e tabelës së lokalit. Poshtë shihni sa zbritet nga fatura."
+      en: "For another currency, type the venue’s board rate. Below you see how much comes off the bill."
+      uk: "Для іншої валюти введіть курс із табло закладу. Нижче видно, скільки знімається з рахунку."
+  - key: 6
+    anchor: pay.fill
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="pay.fill"]'
+    title:
+      sq: "Sa duhet"
+      en: "Fill what is owed"
+      uk: "Уся сума"
+    caption:
+      sq: "Mbush shumën që mbyll faturën, në monedhën e zgjedhur."
+      en: "Fills in the amount that closes the bill, in the chosen currency."
+      uk: "Підставляє суму, що закриває рахунок, у вибраній валюті."
+  - key: 7
+    anchor: pay.amount
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="pay.amount"]'
+      value: "1000"
+    title:
+      sq: "Shuma"
+      en: "The amount"
+      uk: "Сума"
+    caption:
+      sq: "Për pagesë të ndarë, shkruani vetëm pjesën e këtij mysafiri."
+      en: "For a split payment, type only this guest’s share."
+      uk: "Для розділеної оплати введіть лише частку цього гостя."
+  - key: 8
+    anchor: pay.tip
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="pay.tip"]'
+      value: "200"
+    title:
+      sq: "Bakshishi"
+      en: "The tip"
+      uk: "Чайові"
+    caption:
+      sq: "Bakshishi regjistrohet veç faturës dhe shkon te personi që e mori."
+      en: "The tip is recorded apart from the bill and goes to the person who took it."
+      uk: "Чайові записуються окремо від рахунку й ідуть тому, хто їх отримав."
+  - key: 9
+    anchor: pay.wallet
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="pay.wallet"]'
+    title:
+      sq: "Kodi i portofolit"
+      en: "The wallet code"
+      uk: "Код гаманця"
+    caption:
+      sq: "Për pagesë me portofol, shkruani kodin që tregon telefoni i mysafirit."
+      en: "For a wallet payment, type the code the guest’s phone shows."
+      uk: "Для оплати гаманцем введіть код, який показує телефон гостя."
+  - key: 10
+    anchor: pay.submit
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="pay.submit"]'
+    title:
+      sq: "Merrni"
+      en: "Take it"
+      uk: "Прийняти"
+    caption:
+      sq: "Pagesa regjistrohet. Nëse mbetet diçka, përsëritni me mysafirin tjetër; kur shuma bëhet zero, tavolina mbyllet."
+      en: "The payment is recorded. If something is left, repeat with the next guest; when it reaches zero the table closes."
+      uk: "Оплату записано. Якщо щось лишилося, повторіть з наступним гостем; коли сума дійде до нуля, стіл закриється."

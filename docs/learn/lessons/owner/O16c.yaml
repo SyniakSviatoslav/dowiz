@@ -1,0 +1,228 @@
+# Lesson O16c (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O16c
+role: owner
+module: integrations
+order: 32
+covers: [integrations, channels, health]
+title:
+  sq: "Integrimet, kanalet, shëndeti"
+  en: "Integrations, channels, health"
+  uk: "Інтеграції, канали, стан"
+goal:
+  sq: "Shtypni «kontrollo të gjitha» dhe lexoni faqen e shëndetit."
+  en: "Run “check all” and read the health page."
+  uk: "Запустити «перевірити все» й прочитати сторінку стану."
+steps:
+  - key: 1
+    anchor: more.tile.integrations
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.integrations"]'
+    title:
+      sq: "Integrimet"
+      en: "Integrations"
+      uk: "Інтеграції"
+    caption:
+      sq: "Çdo lidhje me jashtë, me gjendjen e saj."
+      en: "Every outside link, with its state."
+      uk: "Кожен зовнішній зв’язок і його стан."
+  - key: 2
+    anchor: integrations.check
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="integrations.check"]'
+    title:
+      sq: "Kontrollo të gjitha"
+      en: "Check all"
+      uk: "Перевірити все"
+    caption:
+      sq: "Provon çdo lidhje tani dhe tregon çfarë nuk punon."
+      en: "Tries every link now and shows what does not work."
+      uk: "Перевіряє кожен зв’язок зараз і показує, що не працює."
+  - key: 3
+    anchor: integrations.configure
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="integrations.configure"]'
+    title:
+      sq: "Rregullo"
+      en: "Configure"
+      uk: "Налаштувати"
+    caption:
+      sq: "Ju çon te cilësimi që mungon."
+      en: "Takes you to the missing setting."
+      uk: "Веде до налаштування, якого бракує."
+  - key: 4
+    anchor: more.tile.channels
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.channels"]'
+    title:
+      sq: "Kanalet"
+      en: "Channels"
+      uk: "Канали"
+    caption:
+      sq: "WhatsApp dhe Instagram në kutinë hyrëse."
+      en: "WhatsApp and Instagram in the inbox."
+      uk: "WhatsApp та Instagram у вхідних."
+  - key: 5
+    anchor: channels.whatsapp
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="channels.whatsapp"]'
+    title:
+      sq: "WhatsApp"
+      en: "WhatsApp"
+      uk: "WhatsApp"
+    caption:
+      sq: "Mesazhet e klientëve vijnë këtu."
+      en: "Customers’ messages arrive here."
+      uk: "Сюди приходять повідомлення клієнтів."
+  - key: 6
+    anchor: channels.instagram
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="channels.instagram"]'
+    title:
+      sq: "Instagram"
+      en: "Instagram"
+      uk: "Instagram"
+    caption:
+      sq: "Po ashtu mesazhet e Instagram-it."
+      en: "Instagram messages too."
+      uk: "Так само повідомлення з Instagram."
+  - key: 7
+    anchor: channels.webhookUrl
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="channels.webhookUrl"]'
+    title:
+      sq: "Adresa e webhook-ut"
+      en: "Webhook address"
+      uk: "Адреса вебхука"
+    caption:
+      sq: "E ngjitni te Meta."
+      en: "You paste it into Meta."
+      uk: "Її вставляють у Meta."
+  - key: 8
+    anchor: channels.copy
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="channels.copy"]'
+    title:
+      sq: "Kopjo"
+      en: "Copy"
+      uk: "Копіювати"
+    caption:
+      sq: "Kopjon adresën."
+      en: "Copies the address."
+      uk: "Копіює адресу."
+  - key: 9
+    anchor: channels.verify
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="channels.verify"]'
+    title:
+      sq: "Kodi i verifikimit"
+      en: "Verify token"
+      uk: "Токен перевірки"
+    caption:
+      sq: "I njëjti kod këtu dhe te Meta."
+      en: "The same code here and in Meta."
+      uk: "Той самий код тут і в Meta."
+  - key: 10
+    anchor: channels.secret
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="channels.secret"]'
+    title:
+      sq: "Sekreti i aplikacionit"
+      en: "App secret"
+      uk: "Секрет застосунку"
+    caption:
+      sq: "Mbetet i fshehur; pa të, mesazhet nuk pranohen."
+      en: "It stays hidden; without it, messages are refused."
+      uk: "Лишається прихованим; без нього повідомлення не приймаються."
+  - key: 11
+    anchor: more.tile.health
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.health"]'
+    title:
+      sq: "Shëndeti"
+      en: "Health"
+      uk: "Стан"
+    caption:
+      sq: "Gjendja e sistemit të lokalit në një faqe."
+      en: "The state of the venue’s system on one page."
+      uk: "Стан системи закладу на одній сторінці."
+  - key: 12
+    anchor: health.verdict
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="health.verdict"]'
+    title:
+      sq: "Përfundimi"
+      en: "Verdict"
+      uk: "Висновок"
+    caption:
+      sq: "Mirë, apo çfarë kërkon vëmendje."
+      en: "Fine, or what needs attention."
+      uk: "Усе гаразд чи що потребує уваги."
+  - key: 13
+    anchor: health.image
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="health.image"]'
+    title:
+      sq: "Hapësira"
+      en: "Space"
+      uk: "Місце"
+    caption:
+      sq: "Sa është mbushur çdo pjesë e të dhënave."
+      en: "How full each part of the data is."
+      uk: "Наскільки заповнена кожна частина даних."
+  - key: 14
+    anchor: health.backup
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="health.backup"]'
+    title:
+      sq: "Kopje"
+      en: "Backup"
+      uk: "Резервна копія"
+    caption:
+      sq: "Shkarkoni një kopje të të dhënave tuaja tani."
+      en: "Download a copy of your data now."
+      uk: "Завантажте копію своїх даних зараз."

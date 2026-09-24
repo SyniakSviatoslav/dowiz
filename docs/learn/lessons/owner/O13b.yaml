@@ -1,0 +1,109 @@
+# Lesson O13b (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O13b
+role: owner
+module: customers
+order: 22
+covers: []
+title:
+  sq: "Lidhje, pëlqim dhe harresë"
+  en: "Links, consent and forgetting"
+  uk: "Зв’язки, згода й забуття"
+goal:
+  sq: "Bashkoni dy karta të të njëjtit klient dhe dini si tërhiqet pëlqimi."
+  en: "Join two cards of the same customer and know how consent is withdrawn."
+  uk: "Об’єднати дві картки одного клієнта й знати, як відкликається згода."
+steps:
+  - key: 1
+    anchor: customers.link
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="customers.link"]'
+    title:
+      sq: "Lidhe"
+      en: "Link"
+      uk: "Пов’язати"
+    caption:
+      sq: "I njëjti person me dy numra? Lidhini kartat."
+      en: "Same person, two numbers? Link the cards."
+      uk: "Та сама людина з двома номерами? Пов’яжіть картки."
+  - key: 2
+    anchor: customers.linkPick
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="customers.linkPick"]'
+    title:
+      sq: "Karta tjetër"
+      en: "The other card"
+      uk: "Інша картка"
+    caption:
+      sq: "Zgjidhni kartën tjetër."
+      en: "Choose the other card."
+      uk: "Оберіть іншу картку."
+  - key: 3
+    anchor: customers.linkReason
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="customers.linkReason"]'
+      value: "I njëjti emër dhe adresë"
+    title:
+      sq: "Arsyeja"
+      en: "The reason"
+      uk: "Причина"
+    caption:
+      sq: "Pse jeni të sigurt."
+      en: "Why you are sure."
+      uk: "Чому ви впевнені."
+  - key: 4
+    anchor: customers.unlink
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="customers.unlink"]'
+    title:
+      sq: "Ndaji"
+      en: "Unlink"
+      uk: "Роз’єднати"
+    caption:
+      sq: "Nëse gabuat."
+      en: "If you were wrong."
+      uk: "Якщо ви помилилися."
+  - key: 5
+    anchor: customers.withdraw
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="customers.withdraw"]'
+    title:
+      sq: "Tërhiq pëlqimin"
+      en: "Withdraw consent"
+      uk: "Відкликати згоду"
+    caption:
+      sq: "Kur klienti nuk do më mesazhe."
+      en: "When the customer wants no more messages."
+      uk: "Коли клієнт більше не хоче повідомлень."
+  - key: 6
+    anchor: customers.forget
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="customers.forget"]'
+    title:
+      sq: "Harroje"
+      en: "Forget"
+      uk: "Забути"
+    caption:
+      sq: "Kur klienti kërkon të fshihet: të dhënat personale hiqen, shifrat mbeten."
+      en: "When the customer asks to be erased: personal data goes, the numbers stay."
+      uk: "Коли клієнт просить його видалити: персональні дані зникають, цифри лишаються."
