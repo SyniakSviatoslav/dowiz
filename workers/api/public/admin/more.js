@@ -8,16 +8,18 @@ import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, m
 import { retranslate, lang, LANGS } from '/admin/i18n.js';
 import { loadVenue, loadStaff, rerender } from '/admin/app.js';
 import { openCard, cardLine } from '/admin/customers.js';
+import { ui, k, btn, iconBtn, field, input, select, check, pill, pillBtn, empty, loading, rowBtn, rowDiv, chips, press } from '/admin/parts.js';
 
 /// The rows, in groups, with the sheet each opens.
 const GROUPS = [
+  ['learnGroup', [['learn', 'player-play', openLearn]]],
   ['inbox', [['inbox', 'message-2', openInbox]]],
   ['roomGroup', [['bookings', 'tools-kitchen-2', openBookings], ['floorPlan', 'category', openFloorPlan]]],
   ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['campaigns', 'brand-whatsapp', openCampaigns], ['social', 'sparkles', openSocial]]],
   ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers], ['staff', 'apron', openStaff], ['exceptions', 'alert-triangle', openExceptions]]],
-  ['settings',  [['integrations', 'check', openIntegrations], ['ebills', 'receipt', openEbills], ['printer', 'receipt', openPrinter], ['tableQr', 'receipt', openTableQr], ['preview', 'eye', openPreview], ['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['payments', 'coin-hole', openPayments],
+  ['settings',  [['integrations', 'check', openIntegrations], ['ebills', 'receipt', openEbills], ['printer', 'receipt', openPrinter], ['tableQr', 'receipt', openTableQr], ['preview', 'eye', openPreview], ['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['deliveryArea', 'map-pin', openZones], ['payments', 'coin-hole', openPayments],
                  ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['mcp', 'cube-3d-sphere', openMcp], ['cloud', 'cloud-upload', openCloud], ['branding', 'fan', openBranding],
-                 ['features', 'tools-kitchen-2', openFeatures], ['assistant', 'sparkles', openAssistant], ['apiKeys', 'key', openKeys], ['activation', 'check', openActivation], ['health', 'cube-3d-sphere', openHealth]]],
+                 ['features', 'tools-kitchen-2', openFeatures], ['assistant', 'sparkles', openAssistant], ['apiKeys', 'key', openKeys], ['activation', 'check', openActivation], ['health', 'cube-3d-sphere', openHealth], ['dpa', 'shield-check', openDpa]]],
 ];
 /// The analytics windows the hub answers, in days.
 const WINDOWS = [7, 30];
@@ -36,7 +38,7 @@ export async function render(host){
   host.innerHTML = `<div class="screen-h"><div><p class="eyebrow" data-t="tabMore"></p><h1>${esc(S.venue?.name || '')}</h1></div></div>
     <p class="screen-hint" data-t="moreHint"></p>
     ${GROUPS.map(([g, rows]) => `<section class="group"><p class="eyebrow" data-t="${g}"></p><div class="tiles">
-      ${rows.map(([key, ic]) => `<button type="button" class="tile" data-open="${key}"><span class="tile-ic">${icon(ic)}</span><b data-t="${key}"></b><small data-t="${key}Sub"></small></button>`).join('')}</div></section>`).join('')}
+      ${rows.map(([key, ic]) => rowBtn({ cls: 'tile', leading: `<span class="tile-ic">${icon(ic)}</span>`, title: k(key), sub: `<span data-t="${key}Sub"></span>`, data: { open: key }, tour: 'more.tile.' + key })).join('')}</div></section>`).join('')}
     <p class="hint mono">${esc(store.loc)} · ${esc(S.venue?.slug || '')}</p>`;
   host.onclick = e => { const r = e.target.closest('[data-open]'); if (!r) return; for (const [, rows] of GROUPS) for (const [key, , fn] of rows) if (key === r.dataset.open) fn(); };
 }
@@ -44,9 +46,30 @@ export async function render(host){
 const head = (eyebrow, title) => `<p class="eyebrow" data-t="${eyebrow}"></p><h2 data-t="${title}"></h2>`;
 const fail = e => toast(String(e.message || e));
 const paint = () => { retranslate($('#sheetIn')); hydrate($('#sheetIn')); };
+/// The sheet's one main action, and an info row (icon, title, sub, trailing).
+const saveBtn = (id, tour, key = 'save', ic = 'check') => btn({ id, variant: 'primary', icon: ic, key, tour });
+const info = (ic, o) => rowDiv({ leading: icon(ic), ...o });
+const onOff = (on, tone = 'warn') => pill(on ? 'ok' : tone, { key: on ? 'on' : 'off' });
+
+// ── lessons (/lib/learn.js): the console's own, run as tours on this page ──
+async function learnFor(){
+  const [{ createLearn, loadLessons }, { createGuide }] = await Promise.all([import('/lib/learn.js'), import('/lib/guide.js')]);
+  const lessons = await loadLessons(); if (!lessons.length) return null;
+  return createLearn({ role: 'owner', lessons, lang: () => lang, createGuide, toast, words: { title: t('learn'), new: t('learnNew'), done: t('learnDone'),
+    paused: t('learnPaused'), watch: t('learnWatch'), writes: t('learnWrites'), steps: n => t('learnSteps').replace('{n}', n), empty: t('learnEmpty'), offline: t('learnOffline') } });
+}
+async function openLearn(){
+  const L = await learnFor(); if (!L) return toast(t('learnOffline'));
+  sheet(`${head('learnGroup', 'learn')}<div id="learnList">${L.renderList()}</div>`, { name: 'learn' });
+  L.bindList($('#learnList'), () => closeSheet());
+}
+/// `/admin/#learn=O1b` opens that lesson (the wiki links here).
+export async function learnFromHash(){ if (/learn=/.test(location.hash)) (await learnFor())?.deepLink(location.hash); }
 
 // ── the till link (ebills.al) ───────────────────────────────────────────────
 async function openEbills(){ (await import('/admin/ebills.js')).open(); }
+// The data processing agreement (P9): read and accept it for the venue.
+async function openDpa(){ (await import('/admin/dpa.js')).open(); }
 
 // ── exceptions: voids, comps, refunds, pay-outs, never a score ─────────────────
 async function openExceptions(){ (await import('/admin/exceptions.js')).open(); }
@@ -74,14 +97,14 @@ async function openStaff(){
 
 // ── marketing ───────────────────────────────────────────────────────────────
 async function openPromos(){
-  sheet(`${head('marketing', 'promos')}<div id="pList"><div class="skel skel-row"></div></div>
-    <button class="btn mt-3" id="pNew">${icon('plus')}<span data-t="add"></span></button><div id="pStamps"></div>`, { name: 'promos' });
+  sheet(`${head('marketing', 'promos')}<div id="pList">${loading()}</div>
+    <div class="btn-row">${btn({ id: 'pNew', variant: 'primary', icon: 'plus', key: 'add', tour: 'promos.new' })}</div><div id="pStamps"></div>`, { name: 'promos' });
   import('/admin/stamps.js').then(m => m.mount($('#pStamps'))).catch(fail);
   const draw = async () => {
     let d; try { d = await api('/owner/promotions'); } catch (e) { return fail(e); }
     const list = d.promotions || [];
-    $('#pList').innerHTML = list.length ? `<div class="rows">${list.map(p => { const stt = promoStatus(p); return `<div class="rowc ${stt === 'active' ? '' : 'off'}">${icon('ticket')}<span class="t"><b class="mono">${esc(p.code)}</b><small>${p.kind === 'percent' ? `−${p.value}%` : `−${money(p.value)}`}${p.minOrder ? ` · ${t('minOrder')} ${money(p.minOrder)}` : ''} · ${p.used || 0}${p.maxUses ? '/' + p.maxUses : ''}${p.fromMs ? ` · ${t('when')} ${day(p.fromMs)}` : ''}${p.untilMs ? ` · ${t('until')} ${day(p.untilMs - 1)}` : ''}</small></span>
-      <button type="button" class="pill ${stt === 'active' ? 'ok' : stt === 'scheduled' ? 'warn' : ''}" data-flip="${esc(p.code)}" data-t="promo_${stt}"></button><button type="button" class="act danger" data-del="${esc(p.code)}">${icon('trash')}</button></div>`; }).join('')}</div>` : `<div class="empty">${icon('ticket')}<b data-t="none"></b></div>`;
+    $('#pList').innerHTML = list.length ? `<div class="rows">${list.map(p => { const stt = promoStatus(p); return info('ticket', { cls: stt === 'active' ? '' : 'off', title: p.code, tour: 'promos.row', sub: `${p.kind === 'percent' ? `−${p.value}%` : `−${money(p.value)}`}${p.minOrder ? ` · ${t('minOrder')} ${money(p.minOrder)}` : ''} · ${p.used || 0}${p.maxUses ? '/' + p.maxUses : ''}${p.fromMs ? ` · ${t('when')} ${day(p.fromMs)}` : ''}${p.untilMs ? ` · ${t('until')} ${day(p.untilMs - 1)}` : ''}`,
+      trailing: pillBtn(stt === 'active' ? 'ok' : stt === 'scheduled' ? 'warn' : '', { key: 'promo_' + stt, data: { flip: p.code }, tour: 'promos.flip' }) + iconBtn({ icon: 'trash', ariaKey: 'remove', variant: 'plain', data: { del: p.code }, tour: 'promos.delete' }) }); }).join('')}</div>` : empty('ticket', { key: 'none' });
     paint();
     for (const b of $$('[data-flip]', $('#pList'))) b.onclick = async () => { const p = list.find(x => x.code === b.dataset.flip); if (!p) return; try { await busy(b, () => post('/owner/promotions', { ...p, active: !p.active, used: undefined, status: undefined })); draw(); } catch (e) { fail(e); } };
     for (const b of $$('[data-del]', $('#pList'))) b.onclick = async () => { const c = await confirm(t('remove'), b.dataset.del, { danger: true }); if (!c) return openPromos(); try { await post(`/owner/promotions/${encodeURIComponent(b.dataset.del)}/delete`, withLoc()); openPromos(); } catch (e) { fail(e); } };
@@ -89,14 +112,14 @@ async function openPromos(){
   draw();
   $('#pNew').onclick = () => {
     sheet(`${head('marketing', 'promos')}
-      <label for="pr-code" data-t="promo"></label><input id="pr-code" autocapitalize="characters" spellcheck="false">
-      <div class="seg" id="prKind">${PROMO_KINDS.map((k, i) => `<button type="button" class="seg-b ${i === 0 ? 'on' : ''}" data-k="${k}">${k === 'percent' ? '%' : esc(S.venue?.currencyCode || 'ALL')}</button>`).join('')}</div>
-      <div class="grid2"><div><label for="pr-value" data-t="discount"></label><input id="pr-value" inputmode="numeric"></div><div><label for="pr-min" data-t="minOrder"></label><input id="pr-min" inputmode="numeric"></div></div>
-      <div class="grid2"><div><label for="pr-from" data-t="when"></label><input id="pr-from" type="date"></div><div><label for="pr-until" data-t="until"></label><input id="pr-until" type="date"></div></div>
-      <label for="pr-max" data-t="maxUses"></label><input id="pr-max" inputmode="numeric">
-      <div class="btn-row"><button class="btn" id="prSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'promo' });
+      ${field({ id: 'pr-code', key: 'promo', autocapitalize: 'characters', spellcheck: false, tour: 'promos.code' })}
+      ${chips({ id: 'prKind', values: PROMO_KINDS.map(x => ({ value: x, label: x === 'percent' ? '%' : (S.venue?.currencyCode || 'ALL') })), value: PROMO_KINDS[0], attr: 'k', tour: 'promos.kind' })}
+      <div class="grid2">${field({ id: 'pr-value', key: 'discount', inputmode: 'numeric', tour: 'promos.value' })}${field({ id: 'pr-min', key: 'minOrder', inputmode: 'numeric', tour: 'promos.minOrder' })}</div>
+      <div class="grid2">${input({ id: 'pr-from', type: 'date', key: 'when', tour: 'promos.from' })}${input({ id: 'pr-until', type: 'date', key: 'until', tour: 'promos.until' })}</div>
+      ${field({ id: 'pr-max', key: 'maxUses', inputmode: 'numeric', tour: 'promos.maxUses' })}
+      <div class="btn-row">${saveBtn('prSave', 'promos.save')}</div>`, { name: 'promo' });
     let kind = PROMO_KINDS[0];
-    for (const b of $$('[data-k]', $('#sheetIn'))) b.onclick = () => { kind = b.dataset.k; for (const x of $$('[data-k]', $('#sheetIn'))) x.classList.toggle('on', x === b); };
+    for (const b of $$('[data-k]', $('#sheetIn'))) b.onclick = () => { kind = b.dataset.k; press($$('[data-k]', $('#sheetIn')), b); };
     $('#prSave').onclick = async () => {
       const body = { code: $('#pr-code').value.trim().toUpperCase(), kind, value: Number($('#pr-value').value) || 0, active: true };
       if ($('#pr-min').value) body.minOrder = Number($('#pr-min').value);
@@ -110,13 +133,13 @@ async function openPromos(){
 }
 
 async function openPosts(){
-  sheet(`${head('marketing', 'posts')}<p class="muted small" data-t="autopostHint"></p><div id="postList"><div class="skel skel-row"></div></div>
-    <button class="btn mt-3" id="postDraft">${icon('sparkles')}<span data-t="makeDraft"></span></button>`, { name: 'posts' });
+  sheet(`${head('marketing', 'posts')}<p class="muted small" data-t="autopostHint"></p><div id="postList">${loading()}</div>
+    <div class="btn-row">${btn({ id: 'postDraft', variant: 'primary', icon: 'sparkles', key: 'makeDraft', tour: 'posts.draft' })}</div>`, { name: 'posts' });
   const draw = async () => {
     let d; try { d = await api('/owner/posts'); } catch (e) { return fail(e); }
     const list = d.posts || [];
     $('#postList').innerHTML = `<p class="hint">${d.enabled ? `${t('autopost')}: ${t('on')}` : `${t('autopost')}: ${t('off')}`} · ${t('tgChannel')}: ${esc(d.channel || '—')}</p>` +
-      (list.length ? list.map(p => `<div class="rowc" data-post="${esc(p.id)}">${icon('send')}<span class="t"><b>${esc(p.text.slice(0, 80))}</b><small>${esc(p.about || '')} · <span data-t="${p.state === 'draft' ? 'draft' : p.state === 'published' ? 'published' : p.state === 'failed' ? 'failed' : 'rejectPost'}"></span>${p.error ? ' · ' + esc(p.error) : ''}</small></span></div>`).join('') : `<div class="empty">${icon('send')}<b data-t="noPosts"></b></div>`);
+      (list.length ? `<div class="rows">${list.map(p => rowBtn({ leading: icon('send'), title: p.text.slice(0, 80), data: { post: p.id }, tour: 'posts.row', sub: `${esc(p.about || '')} · <span data-t="${p.state === 'draft' ? 'draft' : p.state === 'published' ? 'published' : p.state === 'failed' ? 'failed' : 'rejectPost'}"></span>${p.error ? ' · ' + esc(p.error) : ''}` })).join('')}</div>` : empty('send', { key: 'noPosts' }));
     paint();
     for (const r of $$('[data-post]', $('#postList'))) r.onclick = () => openPost(list.find(p => p.id === r.dataset.post));
   };
@@ -125,8 +148,8 @@ async function openPosts(){
 }
 function openPost(p){
   if (!p) return;
-  sheet(`${head('posts', 'draft')}<textarea id="postText" rows="5">${esc(p.text)}</textarea><p class="hint">${esc(p.about || '')}</p>
-    <div class="btn-row">${p.state === 'draft' ? `<button class="btn danger" id="postNo">${icon('x')}<span data-t="rejectPost"></span></button><button class="btn" id="postYes">${icon('send')}<span data-t="approve"></span></button>` : `<button class="btn ghost" id="postBack" data-t="back"></button>`}</div>`, { name: 'post' });
+  sheet(`${head('posts', 'draft')}${field({ id: 'postText', rows: 5, value: p.text, attrs: { 'aria-label': t('draft') }, tour: 'posts.text' })}<p class="hint">${esc(p.about || '')}</p>
+    <div class="btn-row">${p.state === 'draft' ? btn({ id: 'postNo', variant: 'danger', icon: 'x', key: 'rejectPost', tour: 'posts.reject' }) + btn({ id: 'postYes', variant: 'primary', icon: 'send', key: 'approve', tour: 'posts.approve' }) : btn({ id: 'postBack', variant: 'ghost', icon: 'arrow-left', key: 'back' })}</div>`, { name: 'post' });
   const yes = $('#postYes'); if (yes) yes.onclick = async () => { try { await busy(yes, () => post(`/owner/posts/${encodeURIComponent(p.id)}/approve`, { text: $('#postText').value.trim() })); toast(t('published')); openPosts(); } catch (e) { fail(e); } };
   const no = $('#postNo'); if (no) no.onclick = async () => { try { await post(`/owner/posts/${encodeURIComponent(p.id)}/reject`, withLoc()); openPosts(); } catch (e) { fail(e); } };
   const back = $('#postBack'); if (back) back.onclick = openPosts;
@@ -137,17 +160,17 @@ async function openSocial(){
   const v = s.values || {};
   const igOn = v['social.instagram.token'] === SECRET_SET_MARK && !!(v['social.instagram.user_id'] || '').trim();
   sheet(`${head('marketing', 'social')}<p class="muted small" data-t="autopostHint"></p>
-    ${switchEl('so-on', v['social.enabled'] === '1', 'autopost')}
-    <label for="so-ch" data-t="tgChannel"></label><input id="so-ch" value="${esc(v['social.telegram.channel'] || '')}" placeholder="@channel">
+    ${switchEl('so-on', v['social.enabled'] === '1', 'autopost', null, 'social.autopost')}
+    ${field({ id: 'so-ch', key: 'tgChannel', value: v['social.telegram.channel'] || '', placeholder: '@channel', tour: 'social.channel' })}
     <p class="eyebrow mt-3" data-t="instagram"></p>
-    <div class="rows"><div class="rowc ${igOn ? '' : 'off'}">${icon('sparkles')}<span class="t"><b data-t="instagram"></b><small data-t="${igOn ? 'instagramOn' : 'socialNotYet'}"></small></span><span class="pill ${igOn ? 'ok' : ''}" data-t="${igOn ? 'on' : 'off'}"></span></div></div>
+    <div class="rows">${info('sparkles', { cls: igOn ? '' : 'off', title: k('instagram'), sub: `<span data-t="${igOn ? 'instagramOn' : 'socialNotYet'}"></span>`, trailing: onOff(igOn, '') })}</div>
     <p class="hint" data-t="instagramHint"></p>
-    <label for="ig-token" data-t="instagramToken"></label><input id="ig-token" autocomplete="off" spellcheck="false" placeholder="${igOn ? esc(SECRET_SET_MARK) : 'EAAB…'}">
-    <label for="ig-user" data-t="instagramUserId"></label><input id="ig-user" inputmode="numeric" value="${esc(v['social.instagram.user_id'] || '')}">
+    ${field({ id: 'ig-token', key: 'instagramToken', autocomplete: 'off', spellcheck: false, placeholder: igOn ? SECRET_SET_MARK : 'EAAB…', tour: 'social.igToken' })}
+    ${field({ id: 'ig-user', key: 'instagramUserId', inputmode: 'numeric', value: v['social.instagram.user_id'] || '', tour: 'social.igUser' })}
     <div class="rows mt-3">
-      ${['facebook', 'tiktok'].map(n => `<div class="rowc off">${icon('sparkles')}<span class="t"><b data-t="${n}"></b><small data-t="socialNotYet"></small></span><span class="pill" data-t="comingSoon"></span></div>`).join('')}
+      ${['facebook', 'tiktok'].map(n => info('sparkles', { cls: 'off', title: k(n), sub: '<span data-t="socialNotYet"></span>', trailing: pill('', { key: 'comingSoon' }) })).join('')}
     </div>
-    <div class="btn-row"><button class="btn" id="soSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'social' });
+    <div class="btn-row">${saveBtn('soSave', 'social.save')}</div>`, { name: 'social' });
   $('#soSave').onclick = async () => {
     try {
       await busy($('#soSave'), async () => {
@@ -164,8 +187,8 @@ async function openSocial(){
 // ── analytics, customers ────────────────────────────────────────────────────
 async function openAnalytics(days = WINDOWS[0]){
   sheet(`${head('analytics', 'analytics')}
-    <div class="seg">${WINDOWS.map(w => `<button type="button" class="seg-b ${w === days ? 'on' : ''}" data-days="${w}" data-t="${w === 7 ? 'week' : 'month'}"></button>`).join('')}</div>
-    <div id="anBody"><div class="skel skel-row"></div><div class="skel skel-row"></div></div>`, { name: 'analytics' });
+    ${chips({ values: WINDOWS.map(w => ({ value: w, key: w === 7 ? 'week' : 'month' })), value: days, attr: 'days', tour: 'analytics.window' })}
+    <div id="anBody">${loading(2)}</div>`, { name: 'analytics' });
   for (const b of $$('[data-days]', $('#sheetIn'))) b.onclick = () => openAnalytics(Number(b.dataset.days));
   let a; try { a = await api(`/owner/analytics?days=${days}`); } catch (e) { return fail(e); }
   const byDay = a.byDay || [], maxRev = Math.max(1, ...byDay.map(d => d.revenue || 0));
@@ -173,11 +196,11 @@ async function openAnalytics(days = WINDOWS[0]){
   $('#anBody').innerHTML = `
     <div class="stats"><div class="stat"><small data-t="orders7"></small><b>${a.orders ?? 0}</b></div><div class="stat"><small data-t="revenue7"></small><b>${money(a.revenue || 0)}</b></div>
       <div class="stat"><small data-t="avgCheck"></small><b>${money(a.averageOrder || 0)}</b></div><div class="stat ${a.rejected ? 'warn' : ''}"><small data-t="rejected"></small><b>${a.rejected ?? 0}</b></div></div>
-    <div class="rows"><div class="rowc">${icon('bike')}<span class="t"><b data-t="delivery"></b></span><b class="mono">${a.delivery ?? 0}</b></div><div class="rowc">${icon('walk')}<span class="t"><b data-t="pickup"></b></span><b class="mono">${a.pickup ?? 0}</b></div></div>
+    <div class="rows">${info('bike', { title: k('delivery'), trailing: `<b class="mono">${a.delivery ?? 0}</b>` })}${info('walk', { title: k('pickup'), trailing: `<b class="mono">${a.pickup ?? 0}</b>` })}</div>
     <p class="eyebrow mt-3" data-t="byDay"></p><div class="bars" role="img" aria-label="${esc(t('byDay'))} · max ${esc(money(maxRev))}">${byDay.map(d => `<i data-h="${Math.round(100 * (d.revenue || 0) / maxRev)}" title="${esc(day(d.at))} · ${esc(money(d.revenue || 0))}"></i>`).join('')}</div>
     <div class="axis"><span>${byDay.length ? day(byDay[0].at) : ''}</span><span>${byDay.length ? day(byDay[byDay.length - 1].at) : ''}</span></div>
     <p class="eyebrow mt-3" data-t="byHour"></p><div class="bars" role="img" aria-label="${esc(t('byHour'))} · max ${maxH}">${byHour.map((n, h) => `<i class="${n === maxH ? 'hi' : ''}" data-h="${Math.round(100 * n / maxH)}" title="${String(h).padStart(2, '0')}:00 · ${n}"></i>`).join('')}</div><div class="axis"><span>00</span><span>12</span><span>23</span></div>
-    <p class="eyebrow mt-3" data-t="topDishes"></p><div class="rows">${(a.topProducts || []).slice(0, 8).map(p => `<div class="rowc">${icon('bowl-chopsticks')}<span class="t"><b>${esc(p.name || p.id)}</b><small class="mono">${p.quantity ?? 0} ${esc(t('portions'))}</small></span><span class="money">${money(p.revenue || 0)}</span></div>`).join('')}</div>`;
+    <p class="eyebrow mt-3" data-t="topDishes"></p><div class="rows">${(a.topProducts || []).slice(0, 8).map(p => info('bowl-chopsticks', { title: p.name || p.id, sub: `<span class="mono">${p.quantity ?? 0} ${esc(t('portions'))}</span>`, trailing: ui.amount(money(p.revenue || 0)) })).join('')}</div>`;
   paint();
 }
 /// Customers are MASKED by default; a name and phone are revealed one at a
@@ -186,15 +209,16 @@ const CUSTOMER_SORTS = ['spent', 'orders', 'recent'];
 const REVEAL_REASON_MIN = 3;
 async function openCustomers(sort = CUSTOMER_SORTS[0]){
   sheet(`${head('analytics', 'customers')}
-    <div class="seg">${CUSTOMER_SORTS.map(k => `<button type="button" class="seg-b ${k === sort ? 'on' : ''}" data-sort="${k}" data-t="sort_${k}"></button>`).join('')}</div>
-    <div id="cuBody"><div class="skel skel-row"></div></div>
-    <div class="btn-row"><button class="btn ghost" id="cuCsv">${icon('download')}<span data-t="exportCsv"></span></button><button class="btn ghost" id="cuLog">${icon('eye')}<span data-t="revealLog"></span></button></div>`, { name: 'customers' });
+    ${chips({ values: CUSTOMER_SORTS.map(x => ({ value: x, key: 'sort_' + x })), value: sort, attr: 'sort', tour: 'customers.sort' })}
+    <div id="cuBody">${loading()}</div>
+    <div class="btn-row">${btn({ id: 'cuCsv', icon: 'download', key: 'exportCsv', tour: 'customers.csv' })}${btn({ id: 'cuLog', icon: 'eye', key: 'revealLog', tour: 'customers.revealLog' })}</div>`, { name: 'customers' });
   for (const b of $$('[data-sort]', $('#sheetIn'))) b.onclick = () => openCustomers(b.dataset.sort);
   let d; try { d = await api(`/owner/customers?sort=${sort}`); } catch (e) { return fail(e); }
   const list = d.customers || [];
-  $('#cuBody').innerHTML = list.length ? `<div class="rows">${list.map(c => `<button type="button" class="rowc" data-key="${esc(c.key)}">${icon('user')}<span class="t"><b>${esc(c.name || c.phone || c.key)}</b><small class="mono">${esc(c.phone || '')} · ${c.orders} · ${money(c.spent || 0)}</small>${cardLine(c) ? `<small>${esc(cardLine(c))}</small>` : ''}</span>${c.lastAt ? `<small class="muted">${esc(day(c.lastAt))}</small>` : ''}${icon('chevron-right', 'chev')}</button>`).join('')}</div>` : `<div class="empty">${icon('user')}<b data-t="none"></b></div>`;
+  $('#cuBody').innerHTML = list.length ? `<div class="rows">${list.map(c => rowBtn({ leading: icon('user'), title: c.name || c.phone || c.key, data: { key: c.key }, tour: 'customers.row', sub: `<span class="mono">${esc(c.phone || '')} · ${c.orders} · ${money(c.spent || 0)}</span>${cardLine(c) ? `<br>${esc(cardLine(c))}` : ''}`,
+    trailing: `${c.lastAt ? `<small class="muted">${esc(day(c.lastAt))}</small>` : ''}${icon('chevron-right', 'chev')}` })).join('')}</div>` : empty('user', { key: 'none' });
   paint();
-  for (const b of $$('[data-key]', $('#cuBody'))) b.onclick = () => openReveal(b.dataset.key, list.find(c => c.key === b.dataset.key));
+  for (const b of $$('[data-key]', $('#cuBody'))) b.onclick = () => openReveal(b.dataset.key, list.find(c => c.key === b.dataset.key), sort);
   $('#cuCsv').onclick = () => {
     const cell = v => { const x = String(v ?? ''); return /[",\n;]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
     const rows = [[t('customer'), t('phone'), t('orders7'), t('total'), t('lastSeen')].map(cell).join(','), ...list.map(c => [c.name, c.phone, c.orders, c.spent ?? 0, c.lastAt ? new Date(c.lastAt).toISOString() : ''].map(cell).join(','))];
@@ -203,12 +227,12 @@ async function openCustomers(sort = CUSTOMER_SORTS[0]){
   };
   $('#cuLog').onclick = openRevealLog;
 }
-async function openReveal(key, c){
+async function openReveal(key, c, sort){
   sheet(`${head('customers', 'reveal')}<p class="muted small" data-t="revealHint"></p>
     <div class="fact">${icon('user')}<span class="v">${esc(c?.name || key)}<br><small class="mono">${esc(c?.phone || '')}</small></span></div>
-    <label for="rv-reason" data-t="revealReason"></label><input id="rv-reason" autocomplete="off">
-    <div class="btn-row"><button class="btn" id="rvGo">${icon('eye')}<span data-t="reveal"></span></button><button class="btn ghost" id="rvCard">${icon('user')}<span data-t="card"></span></button></div><div id="rvOut"></div>`, { name: 'reveal' });
-  $('#rvCard').onclick = () => openCard(c || { key }, rec => openReveal(key, { ...c, ...{ note: rec.note, tags: rec.tags, allergens: rec.allergens, lang: rec.lang, usualTable: rec.usual_table, birthdayMd: rec.birthday_md } }));
+    ${field({ id: 'rv-reason', key: 'revealReason', autocomplete: 'off', tour: 'customers.revealReason' })}
+    <div class="btn-row">${btn({ id: 'rvGo', variant: 'primary', icon: 'eye', key: 'reveal', tour: 'customers.reveal' })}${btn({ id: 'rvCard', icon: 'user', key: 'card', tour: 'customers.card' })}</div><div id="rvOut"></div>`, { name: 'reveal' });
+  $('#rvCard').onclick = () => openCard(c || { key }, rec => openReveal(key, { ...c, ...{ note: rec.note, tags: rec.tags, allergens: rec.allergens, lang: rec.lang, usualTable: rec.usual_table, birthdayMd: rec.birthday_md } }, sort), () => openCustomers(sort));
   $('#rvGo').onclick = async () => {
     const reason = $('#rv-reason').value.trim(); if (reason.length < REVEAL_REASON_MIN) return toast(t('required'));
     try {
@@ -220,10 +244,10 @@ async function openReveal(key, c){
   };
 }
 async function openRevealLog(){
-  sheet(`${head('customers', 'revealLog')}<div id="rlBody"><div class="skel skel-row"></div></div>`, { name: 'reveals' });
+  sheet(`${head('customers', 'revealLog')}<div id="rlBody">${loading()}</div>`, { name: 'reveals' });
   let d; try { d = await api('/owner/customers/reveals'); } catch (e) { return fail(e); }
   const list = d.reveals || [];
-  $('#rlBody').innerHTML = list.length ? `<div class="rows">${list.map(r => `<div class="rowc">${icon('eye')}<span class="t"><b>${esc(r.reason || '')}</b><small class="mono">${esc(r.by || '')} · ${esc(day(r.atMs || r.at || 0))} ${esc(clock(r.atMs || r.at || 0))}</small></span></div>`).join('')}</div>` : `<div class="empty">${icon('eye')}<b data-t="none"></b></div>`;
+  $('#rlBody').innerHTML = list.length ? `<div class="rows">${list.map(r => info('eye', { title: r.reason || '', tour: 'customers.revealRow', sub: `<span class="mono">${esc(r.by || '')} · ${esc(day(r.atMs || r.at || 0))} ${esc(clock(r.atMs || r.at || 0))}</span>` })).join('')}</div>` : empty('eye', { key: 'none' });
   paint();
 }
 
@@ -231,11 +255,11 @@ async function openRevealLog(){
 async function openVenue(){
   const v = S.venue || {};
   sheet(`${head('settings', 'venue')}
-    <label for="v-name" data-t="venueName"></label><input id="v-name" value="${esc(v.name || '')}">
-    <label for="v-phone" data-t="venuePhone"></label><input id="v-phone" type="tel" value="${esc(v.phone || '')}">
-    <label for="v-addr" data-t="venueAddress"></label><input id="v-addr" value="${esc(v.address || '')}">
-    ${switchEl('v-pickup', !!v.pickup, 'pickupOn')}
-    <div class="btn-row"><button class="btn" id="vSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'venue' });
+    ${field({ id: 'v-name', key: 'venueName', value: v.name || '', tour: 'venue.name' })}
+    ${field({ id: 'v-phone', key: 'venuePhone', type: 'tel', value: v.phone || '', tour: 'venue.phone' })}
+    ${field({ id: 'v-addr', key: 'venueAddress', value: v.address || '', tour: 'venue.address' })}
+    ${switchEl('v-pickup', !!v.pickup, 'pickupOn', null, 'venue.pickup')}
+    <div class="btn-row">${saveBtn('vSave', 'venue.save')}</div>`, { name: 'venue' });
   $('#vSave').onclick = async () => {
     try {
       await busy($('#vSave'), async () => {
@@ -251,10 +275,8 @@ const toMin = s => { const [h, m] = String(s || '').split(':').map(Number); retu
 /// The zones the server will accept. Kept in step with `dowiz_hub::tz::NAMES`
 /// by the list the menu payload carries -- a second list here would drift, and
 /// the one that drifts is the one the owner picks from.
-const ZONES = ['Europe/Tirane', 'Europe/Belgrade', 'Europe/Berlin', 'Europe/Podgorica',
-  'Europe/Prague', 'Europe/Rome', 'Europe/Skopje', 'Europe/Vienna', 'Europe/Warsaw',
-  'Europe/Zagreb', 'Europe/Athens', 'Europe/Bucharest', 'Europe/Chisinau', 'Europe/Kyiv',
-  'Europe/Sofia', 'Europe/London', 'Europe/Lisbon', 'UTC'];
+const ZONES = ['Europe/Tirane', 'Europe/Belgrade', 'Europe/Berlin', 'Europe/Podgorica', 'Europe/Prague', 'Europe/Rome', 'Europe/Skopje', 'Europe/Vienna', 'Europe/Warsaw',
+  'Europe/Zagreb', 'Europe/Athens', 'Europe/Bucharest', 'Europe/Chisinau', 'Europe/Kyiv', 'Europe/Sofia', 'Europe/London', 'Europe/Lisbon', 'UTC'];
 
 async function openHours(){
   const week = Array.isArray(S.venue?.hours) && S.venue.hours.length === 7 ? S.venue.hours : Array.from({ length: 7 }, () => []);
@@ -265,12 +287,10 @@ async function openHours(){
   // what these numbers mean.
   const tz = S.venue?.tz || 'Europe/Tirane';
   sheet(`${head('settings', 'hours')}
-    <label for="h-tz" data-t="timezone"></label>
-    <select id="h-tz">${ZONES.map(z => `<option value="${z}"${z === tz ? ' selected' : ''}>${z.replace('_', ' ')}</option>`).join('')}</select>
+    ${select({ id: 'h-tz', key: 'timezone', value: tz, options: ZONES.map(z => ({ value: z, label: z.replace('_', ' ') })), tour: 'hours.timezone' })}
     <p class="hint" data-t="timezoneHint"></p>
-    ${week.map((w, i) => `<div class="grid3 hours-row"><label class="switch"><input type="checkbox" data-day="${i}" ${w.length ? 'checked' : ''}><span class="switch-k"></span><span class="t">${esc(t('day')[i])}</span></label>
-      <input type="time" data-open="${i}" value="${w.length ? hhmm(w[0].open) : '11:00'}"><input type="time" data-close="${i}" value="${w.length ? hhmm(w[0].close) : '23:00'}"></div>`).join('')}
-    <div class="btn-row"><button class="btn" id="hSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'hours' });
+    ${week.map((w, i) => `<div class="grid3 hours-row">${check({ label: t('day')[i], checked: w.length > 0, data: { day: i }, tour: 'hours.day' })}${input({ type: 'time', value: w.length ? hhmm(w[0].open) : '11:00', data: { open: i }, tour: 'hours.open' })}${input({ type: 'time', value: w.length ? hhmm(w[0].close) : '23:00', data: { close: i }, tour: 'hours.close' })}</div>`).join('')}
+    <div class="btn-row">${saveBtn('hSave', 'hours.save')}</div>`, { name: 'hours' });
   $('#hSave').onclick = async () => {
     const hours = week.map((_, i) => { const on = $(`[data-day="${i}"]`).checked; if (!on) return []; const o = toMin($(`[data-open="${i}"]`).value), c = toMin($(`[data-close="${i}"]`).value); return o !== null && c !== null ? [{ open: o, close: c }] : []; });
     const picked = $('#h-tz').value;
@@ -284,13 +304,14 @@ async function openHours(){
     } catch (e) { fail(e); }
   };
 }
+async function openZones(){ (await import('/admin/zones.js')).open(); }
+
 async function openDelivery(){
   const v = S.venue || {};
   sheet(`${head('settings', 'deliveryTerms')}
-    <div class="grid2"><div><label for="d-fee" data-t="deliveryFee"></label><input id="d-fee" inputmode="numeric" value="${v.deliveryFee ?? 0}"></div>
-      <div><label for="d-free" data-t="freeOver"></label><input id="d-free" inputmode="numeric" value="${v.freeDeliveryThreshold ?? ''}"></div></div>
-    <label for="d-min" data-t="minOrder"></label><input id="d-min" inputmode="numeric" value="${v.minOrder ?? 0}">
-    <div class="btn-row"><button class="btn" id="dSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'delivery' });
+    <div class="grid2">${field({ id: 'd-fee', key: 'deliveryFee', inputmode: 'numeric', value: v.deliveryFee ?? 0, tour: 'delivery.fee' })}${field({ id: 'd-free', key: 'freeOver', inputmode: 'numeric', value: v.freeDeliveryThreshold ?? '', tour: 'delivery.freeOver' })}</div>
+    ${field({ id: 'd-min', key: 'minOrder', inputmode: 'numeric', value: v.minOrder ?? 0, tour: 'delivery.minOrder' })}
+    <div class="btn-row">${saveBtn('dSave', 'delivery.save')}</div>`, { name: 'delivery' });
   $('#dSave').onclick = async () => {
     const free = $('#d-free').value.trim();
     try { await busy($('#dSave'), () => post('/owner/location', withLoc({ delivery_fee: Number($('#d-fee').value) || 0, min_order: Number($('#d-min').value) || 0, free_delivery_threshold: free ? Number(free) : null }))); toast(t('saved')); await loadVenue(); closeSheet(); } catch (e) { fail(e); }
@@ -300,13 +321,13 @@ async function openPayments(){
   const v = S.venue || {}, pay = v.payments || {}, wallets = pay.crypto || [];
   sheet(`${head('settings', 'payments')}
     <div class="rows">
-      <div class="rowc">${icon('cash')}<span class="t"><b data-t="cash"></b></span><span class="pill ok" data-t="on"></span></div>
-      <div class="rowc ${pay.card ? '' : 'off'}">${icon('credit-card')}<span class="t"><b data-t="stripe"></b><small data-t="${pay.card ? 'on' : 'stripeNotSet'}"></small></span><span class="pill ${pay.card ? 'ok' : 'warn'}" data-t="${pay.card ? 'on' : 'off'}"></span></div>
+      ${info('cash', { title: k('cash'), trailing: onOff(true), tour: 'payments.cash' })}
+      ${info('credit-card', { cls: pay.card ? '' : 'off', title: k('stripe'), sub: `<span data-t="${pay.card ? 'on' : 'stripeNotSet'}"></span>`, trailing: onOff(pay.card), tour: 'payments.stripe' })}
     </div>
     <p class="eyebrow mt-3" data-t="cryptoWallets"></p>
     <div id="wallets">${wallets.map((w, i) => walletRow(w, i)).join('')}</div>
-    <button type="button" class="act mt-2" id="wAdd">${icon('plus')}<span data-t="add"></span></button>
-    <div class="btn-row"><button class="btn" id="wSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'payments' });
+    ${btn({ id: 'wAdd', icon: 'plus', key: 'add', cls: 'mt-2', tour: 'payments.addWallet' })}
+    <div class="btn-row">${saveBtn('wSave', 'payments.save')}</div>`, { name: 'payments' });
   $('#wAdd').onclick = () => { $('#wallets').insertAdjacentHTML('beforeend', walletRow({}, $$('.wallet-row').length)); paint(); };
   $('#sheetIn').addEventListener('click', e => { const x = e.target.closest('[data-wdel]'); if (x) x.closest('.wallet-row').remove(); });
   $('#wSave').onclick = async () => {
@@ -314,9 +335,8 @@ async function openPayments(){
     try { await busy($('#wSave'), () => post('/owner/location', withLoc({ crypto_wallets: list }))); toast(t('saved')); await loadVenue(); closeSheet(); } catch (e) { fail(e); }
   };
 }
-const walletRow = (w, i) => `<div class="wallet-row grid3"><div><label data-t="network"></label><input data-f="network" value="${esc(w.network || '')}" placeholder="TRC20"></div>
-  <div><label data-t="symbol"></label><input data-f="symbol" value="${esc(w.symbol || '')}" placeholder="USDT"></div>
-  <div><label data-t="walletAddress"></label><div class="grid2"><input data-f="address" value="${esc(w.address || '')}"><button type="button" class="act danger" data-wdel="${i}">${icon('trash')}</button></div></div></div>`;
+const walletRow = (w, i) => `<div class="wallet-row grid3">${field({ key: 'network', value: w.network || '', placeholder: 'TRC20', data: { f: 'network' }, tour: 'payments.network' })}${field({ key: 'symbol', value: w.symbol || '', placeholder: 'USDT', data: { f: 'symbol' } })}
+  <div><p class="ui-label" data-t="walletAddress">${esc(t('walletAddress'))}</p>${ui.inputRow({ label: k('walletAddress'), attrs: { value: w.address || '', data: { f: 'address' } }, action: iconBtn({ icon: 'trash', ariaKey: 'remove', data: { wdel: i } }) })}</div></div>`;
 
 /// What the hub shows for a secret that IS set (dowiz_hub::settings::redacted).
 const SECRET_SET_MARK = '\u2022\u2022\u2022\u2022 set';
@@ -330,18 +350,17 @@ async function openNotifications(){
   const waOn = waSet && !!(v['notify.whatsapp.phone_id'] || '').trim();
   sheet(`${head('settings', 'notifications')}
     <div class="rows">
-      <div class="rowc">${icon('brand-telegram')}<span class="t"><b data-t="telegram"></b><small data-t="${live ? 'tgHow' : 'tgNotSet'}"></small></span><span class="pill ${live ? 'ok' : 'warn'}" data-t="${live ? 'on' : 'off'}"></span></div>
+      ${info('brand-telegram', { title: k('telegram'), sub: `<span data-t="${live ? 'tgHow' : 'tgNotSet'}"></span>`, trailing: onOff(live), tour: 'notify.telegramState' })}
     </div>
-    <label for="n-token" data-t="tgToken"></label><input id="n-token" autocomplete="off" spellcheck="false" placeholder="${tokenSet ? esc(SECRET_SET_MARK) : '123456:ABC…'}"><p class="hint" data-t="tgTokenHint"></p>
-    <label for="n-chat" data-t="ownerChat"></label><input id="n-chat" inputmode="numeric" value="${esc(chat)}" placeholder="chat id"><p class="hint" data-t="tgChatHint"></p>
-    <div class="btn-row"><button class="btn ghost" id="nTest">${icon('send')}<span data-t="testMessage"></span></button><button class="btn" id="nSave">${icon('check')}<span data-t="save"></span></button></div>
+    ${field({ id: 'n-token', key: 'tgToken', hintKey: 'tgTokenHint', autocomplete: 'off', spellcheck: false, placeholder: tokenSet ? SECRET_SET_MARK : '123456:ABC…', tour: 'notify.tgToken' })}
+    ${field({ id: 'n-chat', key: 'ownerChat', hintKey: 'tgChatHint', inputmode: 'numeric', value: chat, placeholder: 'chat id', tour: 'notify.tgChat' })}
+    <div class="btn-row">${btn({ id: 'nTest', icon: 'send', key: 'testMessage', tour: 'notify.test' })}${saveBtn('nSave', 'notify.save')}</div>
     <p class="eyebrow mt-3" data-t="whatsapp"></p>
-    <div class="rows"><div class="rowc ${waOn ? '' : 'off'}">${icon('phone')}<span class="t"><b data-t="whatsapp"></b><small data-t="${waOn ? 'whatsappOn' : 'waNotYet'}"></small></span><span class="pill ${waOn ? 'ok' : 'warn'}" data-t="${waOn ? 'on' : 'off'}"></span></div></div>
+    <div class="rows">${info('phone', { cls: waOn ? '' : 'off', title: k('whatsapp'), sub: `<span data-t="${waOn ? 'whatsappOn' : 'waNotYet'}"></span>`, trailing: onOff(waOn), tour: 'notify.whatsappState' })}</div>
     <p class="hint" data-t="whatsappHint"></p>
-    <label for="wa-token" data-t="whatsappToken"></label><input id="wa-token" autocomplete="off" spellcheck="false" placeholder="${waSet ? esc(SECRET_SET_MARK) : 'EAAB…'}">
-    <div class="grid2"><div><label for="wa-phone" data-t="whatsappPhoneId"></label><input id="wa-phone" inputmode="numeric" value="${esc(v['notify.whatsapp.phone_id'] || '')}"></div>
-      <div><label for="wa-to" data-t="whatsappTo"></label><input id="wa-to" inputmode="numeric" value="${esc(v['notify.whatsapp.to'] || '')}"></div></div>
-    <div class="btn-row"><button class="btn ghost" id="nTest2">${icon('send')}<span data-t="testMessage"></span></button><button class="btn" id="nSave2">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'notify' });
+    ${field({ id: 'wa-token', key: 'whatsappToken', autocomplete: 'off', spellcheck: false, placeholder: waSet ? SECRET_SET_MARK : 'EAAB…', tour: 'notify.waToken' })}
+    <div class="grid2">${field({ id: 'wa-phone', key: 'whatsappPhoneId', inputmode: 'numeric', value: v['notify.whatsapp.phone_id'] || '', tour: 'notify.waPhone' })}${field({ id: 'wa-to', key: 'whatsappTo', inputmode: 'numeric', value: v['notify.whatsapp.to'] || '', tour: 'notify.waTo' })}</div>
+    <div class="btn-row">${btn({ id: 'nTest2', icon: 'send', key: 'testMessage', tour: 'notify.test2' })}${btn({ id: 'nSave2', variant: 'secondary', icon: 'check', key: 'save', tour: 'notify.save2' })}</div>`, { name: 'notify' });
   const save = async () => {
     // An empty value CLEARS a setting on the hub, so a token is only sent when typed.
     const tok = $('#n-token').value.trim();
@@ -366,20 +385,20 @@ async function openChannels(){
   const webhook = `${location.origin}/api/webhooks/meta`;
   sheet(`${head('settings', 'channels')}
     <div class="rows">
-      <div class="rowc">${icon('bowl-chopsticks')}<span class="t"><b data-t="chStore"></b><small class="mono">${esc(location.host)}</small></span><span class="pill ok" data-t="on"></span></div>
-      <div class="rowc">${icon('phone')}<span class="t"><b data-t="chPhone"></b><small>${esc(S.venue?.phone || '')}</small></span><span class="pill ok" data-t="on"></span></div>
-      <button type="button" class="rowc ${waOn ? '' : 'off'}" data-go="notifications">${icon('brand-whatsapp')}<span class="t"><b data-t="whatsapp"></b><small data-t="${waOn ? 'whatsappOn' : 'waNotYet'}"></small></span><span class="pill ${waOn ? 'ok' : ''}" data-t="${waOn ? 'on' : 'off'}"></span></button>
-      <button type="button" class="rowc ${igOn ? '' : 'off'}" data-go="social">${icon('sparkles')}<span class="t"><b data-t="instagram"></b><small data-t="${igOn ? 'instagramOn' : 'socialNotYet'}"></small></span><span class="pill ${igOn ? 'ok' : ''}" data-t="${igOn ? 'on' : 'off'}"></span></button>
-      <div class="rowc off">${icon('brand-telegram')}<span class="t"><b data-t="chTelegramBot"></b></span><span class="pill" data-t="comingSoon"></span></div>
-      <button type="button" class="rowc" data-go="mcp">${icon('cube-3d-sphere')}<span class="t"><b data-t="mcp"></b><small class="mono">${esc(location.origin)}/api/mcp</small></span><span class="pill ok" data-t="on"></span></button>
-      <button type="button" class="rowc" data-go="keys">${icon('key')}<span class="t"><b data-t="chApi"></b><small data-t="apiHint"></small></span>${icon('chevron-right', 'chev')}</button>
-      <div class="rowc off">${icon('scroll')}<span class="t"><b data-t="chAggregators"></b></span><span class="pill" data-t="comingSoon"></span></div>
+      ${info('bowl-chopsticks', { title: k('chStore'), sub: `<span class="mono">${esc(location.host)}</span>`, trailing: onOff(true) })}
+      ${info('phone', { title: k('chPhone'), sub: esc(S.venue?.phone || ''), trailing: onOff(true) })}
+      ${rowBtn({ cls: waOn ? '' : 'off', leading: icon('brand-whatsapp'), title: k('whatsapp'), sub: `<span data-t="${waOn ? 'whatsappOn' : 'waNotYet'}"></span>`, trailing: onOff(waOn, ''), data: { go: 'notifications' }, tour: 'channels.whatsapp' })}
+      ${rowBtn({ cls: igOn ? '' : 'off', leading: icon('sparkles'), title: k('instagram'), sub: `<span data-t="${igOn ? 'instagramOn' : 'socialNotYet'}"></span>`, trailing: onOff(igOn, ''), data: { go: 'social' }, tour: 'channels.instagram' })}
+      ${info('brand-telegram', { cls: 'off', title: k('chTelegramBot'), trailing: pill('', { key: 'comingSoon' }) })}
+      ${rowBtn({ leading: icon('cube-3d-sphere'), title: k('mcp'), sub: `<span class="mono">${esc(location.origin)}/api/mcp</span>`, trailing: onOff(true), data: { go: 'mcp' }, tour: 'channels.mcp' })}
+      ${rowBtn({ leading: icon('key'), title: k('chApi'), sub: '<span data-t="apiHint"></span>', trailing: icon('chevron-right', 'chev'), data: { go: 'keys' }, tour: 'channels.api' })}
+      ${info('scroll', { cls: 'off', title: k('chAggregators'), trailing: pill('', { key: 'comingSoon' }) })}
     </div>
     <p class="eyebrow mt-3" data-t="webhookUrl"></p>
-    <div class="code small" id="whUrl">${esc(webhook)}</div><p class="hint" data-t="webhookHint"></p>
-    <label for="wh-verify" data-t="verifyToken"></label><input id="wh-verify" autocomplete="off" value="${esc(v['notify.whatsapp.verify'] || '')}"><p class="hint" data-t="verifyHint"></p>
-    <label for="wh-secret" data-t="appSecret"></label><input id="wh-secret" autocomplete="off" placeholder="${v['notify.meta.secret'] === SECRET_SET_MARK ? esc(SECRET_SET_MARK) : ''}">
-    <div class="btn-row"><button class="btn ghost" id="whCopy">${icon('copy')}<span data-t="copy"></span></button><button class="btn" id="whSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'channels' });
+    <div class="code small" id="whUrl" data-tour="channels.webhookUrl">${esc(webhook)}</div><p class="hint" data-t="webhookHint"></p>
+    ${field({ id: 'wh-verify', key: 'verifyToken', hintKey: 'verifyHint', autocomplete: 'off', value: v['notify.whatsapp.verify'] || '', tour: 'channels.verify' })}
+    ${field({ id: 'wh-secret', key: 'appSecret', autocomplete: 'off', placeholder: v['notify.meta.secret'] === SECRET_SET_MARK ? SECRET_SET_MARK : '', tour: 'channels.secret' })}
+    <div class="btn-row">${btn({ id: 'whCopy', icon: 'copy', key: 'copy', tour: 'channels.copy' })}${saveBtn('whSave', 'channels.save')}</div>`, { name: 'channels' });
   const go = { notifications: openNotifications, social: openSocial, mcp: openMcp, keys: openKeys };
   for (const b of $$('[data-go]', $('#sheetIn'))) b.onclick = () => go[b.dataset.go]();
   $('#whCopy').onclick = async () => { try { await navigator.clipboard.writeText(webhook); toast(t('copied')); } catch {} };
@@ -399,13 +418,13 @@ async function openMcp(){
   sheet(`${head('settings', 'mcp')}<p class="muted small" data-t="mcpHint"></p>
     <p class="eyebrow mt-3">URL</p><div class="code small" id="mcpUrl">${esc(location.origin)}/api/mcp</div>
     <p class="eyebrow mt-3">Authorization</p><div class="code small">Bearer dowiz_…</div>
-    <div class="btn-row"><button class="btn ghost" id="mcpCopy">${icon('copy')}<span data-t="copy"></span></button><button class="btn" id="mcpKeys">${icon('key')}<span data-t="apiKeys"></span></button></div>
-    <div id="mcpTools"><div class="skel skel-row"></div></div>`, { name: 'mcp' });
+    <div class="btn-row">${btn({ id: 'mcpCopy', icon: 'copy', key: 'copy', tour: 'mcp.copy' })}${btn({ id: 'mcpKeys', variant: 'primary', icon: 'key', key: 'apiKeys', tour: 'mcp.keys' })}</div>
+    <div id="mcpTools">${loading()}</div>`, { name: 'mcp' });
   $('#mcpCopy').onclick = async () => { try { await navigator.clipboard.writeText(`${location.origin}/api/mcp`); toast(t('copied')); } catch {} };
   $('#mcpKeys').onclick = openKeys;
   try {
     const d = await fetch('/api/mcp').then(r => r.json());
-    $('#mcpTools').innerHTML = `<p class="eyebrow mt-3">${(d.tools || []).length} ${esc(t('tools'))}</p><div class="chips">${(d.tools || []).map(n => `<span class="chip mono">${esc(n)}</span>`).join('')}</div>`;
+    $('#mcpTools').innerHTML = `<p class="eyebrow mt-3">${(d.tools || []).length} ${esc(t('tools'))}</p><div class="chips">${(d.tools || []).map(n => ui.chip({ label: n, labelCls: 'mono' })).join('')}</div>`;
   } catch (e) { $('#mcpTools').innerHTML = ''; }
 }
 
@@ -414,12 +433,13 @@ async function openCloud(){
   let s = { values: {} }, st = {}; try { [s, st] = await Promise.all([api('/owner/settings'), api('/owner/backup/cloud')]); } catch (e) { fail(e); }
   const v = s.values || {};
   sheet(`${head('settings', 'cloud')}<p class="muted small" data-t="cloudHint"></p>
-    <div class="rows"><div class="rowc ${st.configured ? '' : 'off'}">${icon('cloud-upload')}<span class="t"><b data-t="lastCopy"></b><small class="mono">${st.last ? `${esc(day(st.last.atMs))} · ${Math.round((st.last.bytes || 0) / 1024)} KB · ${esc(st.last.key || '')}` : t('neverPushed')}</small></span><span class="pill ${st.configured ? 'ok' : ''}" data-t="${st.configured ? 'nightly' : 'off'}"></span></div></div>
-    <label for="cl-endpoint" data-t="endpoint"></label><input id="cl-endpoint" inputmode="url" value="${esc(v['cloud.s3.endpoint'] || '')}" placeholder="https://<account>.r2.cloudflarestorage.com">
-    <div class="grid2"><div><label for="cl-region" data-t="region"></label><input id="cl-region" value="${esc(v['cloud.s3.region'] || 'auto')}"></div><div><label for="cl-bucket" data-t="bucket"></label><input id="cl-bucket" value="${esc(v['cloud.s3.bucket'] || '')}"></div></div>
-    <div class="grid2"><div><label for="cl-key" data-t="accessKey"></label><input id="cl-key" autocomplete="off" placeholder="${v['cloud.s3.key'] === SECRET_SET_MARK ? esc(SECRET_SET_MARK) : ''}"></div><div><label for="cl-secret" data-t="secretKey"></label><input id="cl-secret" autocomplete="off" placeholder="${v['cloud.s3.secret'] === SECRET_SET_MARK ? esc(SECRET_SET_MARK) : ''}"></div></div>
-    <label for="cl-prefix" data-t="prefix"></label><input id="cl-prefix" value="${esc(v['cloud.s3.prefix'] || 'dowiz')}">
-    <div class="btn-row"><button class="btn ghost" id="clPush" ${st.configured ? '' : 'disabled'}>${icon('cloud-upload')}<span data-t="pushNow"></span></button><button class="btn" id="clSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'cloud' });
+    <div class="rows">${info('cloud-upload', { cls: st.configured ? '' : 'off', title: k('lastCopy'), tour: 'cloud.last', sub: `<span class="mono">${st.last ? `${esc(day(st.last.atMs))} · ${Math.round((st.last.bytes || 0) / 1024)} KB · ${esc(st.last.key || '')}` : esc(t('neverPushed'))}</span>`,
+      trailing: pill(st.configured ? 'ok' : '', { key: st.configured ? 'nightly' : 'off' }) })}</div>
+    ${field({ id: 'cl-endpoint', key: 'endpoint', inputmode: 'url', value: v['cloud.s3.endpoint'] || '', placeholder: 'https://<account>.r2.cloudflarestorage.com', tour: 'cloud.endpoint' })}
+    <div class="grid2">${field({ id: 'cl-region', key: 'region', value: v['cloud.s3.region'] || 'auto', tour: 'cloud.region' })}${field({ id: 'cl-bucket', key: 'bucket', value: v['cloud.s3.bucket'] || '', tour: 'cloud.bucket' })}</div>
+    <div class="grid2">${field({ id: 'cl-key', key: 'accessKey', autocomplete: 'off', placeholder: v['cloud.s3.key'] === SECRET_SET_MARK ? SECRET_SET_MARK : '', tour: 'cloud.key' })}${field({ id: 'cl-secret', key: 'secretKey', autocomplete: 'off', placeholder: v['cloud.s3.secret'] === SECRET_SET_MARK ? SECRET_SET_MARK : '', tour: 'cloud.secret' })}</div>
+    ${field({ id: 'cl-prefix', key: 'prefix', value: v['cloud.s3.prefix'] || 'dowiz', tour: 'cloud.prefix' })}
+    <div class="btn-row">${btn({ id: 'clPush', icon: 'cloud-upload', key: 'pushNow', disabled: !st.configured, tour: 'cloud.push' })}${saveBtn('clSave', 'cloud.save')}</div>`, { name: 'cloud' });
   $('#clSave').onclick = async () => {
     try {
       await busy($('#clSave'), async () => {
@@ -434,22 +454,22 @@ async function openCloud(){
 
 /// Customers who wrote on WhatsApp or Instagram, and the answers.
 async function openInbox(){
-  sheet(`${head('inbox', 'inbox')}<p class="muted small" data-t="inboxHint"></p><div id="ibList"><div class="skel skel-row"></div></div>`, { name: 'inbox' });
+  sheet(`${head('inbox', 'inbox')}<p class="muted small" data-t="inboxHint"></p><div id="ibList">${loading()}</div>`, { name: 'inbox' });
   let d; try { d = await api('/owner/inbox'); } catch (e) { return fail(e); }
   const th = d.threads || [];
-  $('#ibList').innerHTML = th.length ? `<div class="rows">${th.map(x => `<button type="button" class="rowc" data-peer="${esc(x.peer)}" data-ch="${esc(x.channel)}">${icon(x.channel === 'whatsapp' ? 'brand-whatsapp' : 'sparkles')}
-      <span class="t"><b>${esc(x.name || x.peer)}</b><small>${x.fromThem ? '' : '↩ '}${esc(x.last)}</small></span>${x.unread ? `<span class="pill warn">${x.unread}</span>` : `<small class="muted">${esc(ago(x.atMs))}</small>`}</button>`).join('')}</div>`
-    : `<div class="empty">${icon('message-2')}<b data-t="noMessages"></b><span class="muted small">${d.channels?.whatsapp || d.channels?.instagram ? '' : t('waNotYet')}</span></div>`;
+  $('#ibList').innerHTML = th.length ? `<div class="rows">${th.map(x => rowBtn({ leading: icon(x.channel === 'whatsapp' ? 'brand-whatsapp' : 'sparkles'), title: x.name || x.peer, sub: `${x.fromThem ? '' : '↩ '}${esc(x.last)}`, data: { peer: x.peer, ch: x.channel }, tour: 'inbox.thread',
+      trailing: x.unread ? pill('warn', { label: String(x.unread) }) : `<small class="muted">${esc(ago(x.atMs))}</small>` })).join('')}</div>`
+    : empty('message-2', { key: 'noMessages', body: d.channels?.whatsapp || d.channels?.instagram ? '' : t('waNotYet') });
   paint();
   for (const b of $$('[data-peer]', $('#ibList'))) b.onclick = () => openThread(b.dataset.ch, b.dataset.peer, th.find(x => x.peer === b.dataset.peer && x.channel === b.dataset.ch)?.name);
 }
 async function openThread(channel, peer, name){
-  sheet(`<p class="eyebrow">${esc(channel)}</p><h2>${esc(name || peer)}</h2><div class="thread" id="thread"><div class="skel skel-row"></div></div>
-    <div class="reply-row"><input id="rp-text" data-t-attr="placeholder:writeReply" autocomplete="off"><button type="button" class="act pri" id="rpGo">${icon('send')}</button></div>`, { name: 'thread' });
+  sheet(`<p class="eyebrow">${esc(channel)}</p><h2>${esc(name || peer)}</h2><div class="thread" id="thread">${loading()}</div>
+    <div class="reply-row">${ui.inputRow({ id: 'rp-text', label: k('writeReply'), placeholder: k('writeReply'), attrs: { data: { tour: 'inbox.reply' } }, action: btn({ id: 'rpGo', variant: 'primary', icon: 'send', ariaKey: 'sendReply', tour: 'inbox.send' }) })}</div>`, { name: 'thread' });
   retranslate($('#sheetIn'));
   const draw = async () => {
     let d; try { d = await api(`/owner/inbox/${encodeURIComponent(peer)}?channel=${encodeURIComponent(channel)}`); } catch (e) { return fail(e); }
-    $('#thread').innerHTML = (d.messages || []).map(m => `<div class="msg ${m.fromThem ? 'them' : 'me'}"><span>${esc(m.text)}</span><small>${esc(clock(m.atMs))}</small></div>`).join('') || `<div class="empty"><b data-t="noMessages"></b></div>`;
+    $('#thread').innerHTML = (d.messages || []).map(m => `<div class="msg ${m.fromThem ? 'them' : 'me'}"><span>${esc(m.text)}</span><small>${esc(clock(m.atMs))}</small></div>`).join('') || empty('message-2', { key: 'noMessages' });
     paint(); $('#thread').scrollTop = $('#thread').scrollHeight;
   };
   draw();
@@ -458,10 +478,11 @@ async function openThread(channel, peer, name){
 }
 
 async function openKeys(){
-  sheet(`${head('settings', 'apiKeys')}<p class="muted small" data-t="apiHint"></p><div id="kList"><div class="skel skel-row"></div></div>
-    <label for="k-label" data-t="name"></label><input id="k-label"><div class="btn-row"><button class="btn" id="kNew">${icon('key')}<span data-t="newKey"></span></button></div><div id="kOut"></div>`, { name: 'keys' });
+  sheet(`${head('settings', 'apiKeys')}<p class="muted small" data-t="apiHint"></p><div id="kList">${loading()}</div>
+    ${field({ id: 'k-label', key: 'name', tour: 'keys.label' })}<div class="btn-row">${saveBtn('kNew', 'keys.new', 'newKey', 'key')}</div><div id="kOut"></div>`, { name: 'keys' });
   const draw = async () => { let d; try { d = await api('/owner/apikeys'); } catch (e) { return fail(e); }
-    $('#kList').innerHTML = (d.keys || []).length ? `<div class="rows">${d.keys.map(k => `<div class="rowc">${icon('key')}<span class="t"><b>${esc(k.label || '')}</b><small class="mono">${esc(k.id.slice(0, 8))} · ${k.lastUsedMs ? esc(ago(k.lastUsedMs)) : '—'} · ${t('until')} ${esc(day(k.expiresMs || 0))}</small></span><button type="button" class="act danger" data-rev="${esc(k.id)}">${icon('trash')}</button></div>`).join('')}</div>` : `<div class="empty">${icon('key')}<b data-t="none"></b></div>`;
+    $('#kList').innerHTML = (d.keys || []).length ? `<div class="rows">${d.keys.map(x => info('key', { title: x.label || '', tour: 'keys.row', sub: `<span class="mono">${esc(x.id.slice(0, 8))} · ${x.lastUsedMs ? esc(ago(x.lastUsedMs)) : '—'} · ${esc(t('until'))} ${esc(day(x.expiresMs || 0))}</span>`,
+      trailing: iconBtn({ icon: 'trash', ariaKey: 'remove', variant: 'plain', data: { rev: x.id }, tour: 'keys.revoke' }) })).join('')}</div>` : empty('key', { key: 'none' });
     paint(); for (const b of $$('[data-rev]', $('#kList'))) b.onclick = async () => { const ok = await confirm(t('remove'), t('revokeHint'), { danger: true }); if (!ok) return openKeys(); try { await post('/owner/apikeys/revoke', { id: b.dataset.rev }); draw(); } catch (e) { fail(e); } }; };
   draw();
   $('#kNew').onclick = async () => { try { const d = await busy($('#kNew'), () => post('/owner/apikeys', { label: $('#k-label').value.trim() || 'api' })); $('#kOut').innerHTML = `<div class="code">${esc(d.key || d.token || JSON.stringify(d))}</div><p class="hint" data-t="keyOnce"></p>`; paint(); draw(); } catch (e) { fail(e); } };
@@ -470,15 +491,12 @@ async function openBranding(){
   let b; try { b = await api('/owner/branding'); } catch (e) { return fail(e); }
   const st = S.venue?.stage || {};
   sheet(`${head('settings', 'branding')}
-    <div class="grid3"><div><label data-t="primary"></label><input type="color" id="b-primary" value="${esc(b.brand?.primary || '#c9a35a')}"></div>
-      <div><label data-t="paper"></label><input type="color" id="b-paper" value="${esc(b.brand?.paper || '#0b1717')}"></div>
-      <div><label data-t="typePair"></label><select id="b-type">${(b.typePairs || [{ id: 'classic' }]).map(p => `<option value="${esc(p.id)}" ${p.id === (b.brand?.typePair || 'classic') ? 'selected' : ''}>${esc(p.id)}</option>`).join('')}</select></div></div>
-    <label for="b-logo" data-t="uploadPhoto"></label><input type="file" id="b-logo" accept="image/*">
+    <div class="grid3">${input({ type: 'color', id: 'b-primary', key: 'primary', value: b.brand?.primary || '#c9a35a', tour: 'branding.primary' })}${input({ type: 'color', id: 'b-paper', key: 'paper', value: b.brand?.paper || '#0b1717', tour: 'branding.paper' })}${select({ id: 'b-type', key: 'typePair', value: b.brand?.typePair || 'classic', options: (b.typePairs || [{ id: 'classic' }]).map(p => ({ value: p.id, label: p.id })), tour: 'branding.typePair' })}</div>
+    ${input({ id: 'b-logo', type: 'file', accept: 'image/*', key: 'uploadPhoto', tour: 'branding.logo' })}
     <p class="eyebrow mt-3" data-t="seal"></p>
-    <div class="grid2"><div><label data-t="seal"></label><input id="s-seal" value="${esc(st.seal || '')}" maxlength="12"></div>
-      <div><label data-t="motif"></label><select id="s-motif">${['leaf', 'wave', 'none'].map(m => `<option value="${m}" ${st.motif === m ? 'selected' : ''}>${esc(t(m === 'none' ? 'noneMotif' : m))}</option>`).join('')}</select></div></div>
-    <div class="grid2"><div><label data-t="warmTone"></label><input type="color" id="s-warm" value="${esc(st.warm || '#e0754d')}"></div><div><label data-t="sageTone"></label><input type="color" id="s-sage" value="${esc(st.sage || '#8a9a7b')}"></div></div>
-    <div class="btn-row"><button class="btn ghost" id="bPreview">${icon('eye')}<span data-t="preview"></span></button><button class="btn" id="bSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'brand' });
+    <div class="grid2">${field({ id: 's-seal', key: 'seal', value: st.seal || '', maxlength: 12, tour: 'branding.seal' })}${select({ id: 's-motif', key: 'motif', value: st.motif, options: ['leaf', 'wave', 'none'].map(m => ({ value: m, key: m === 'none' ? 'noneMotif' : m })), tour: 'branding.motif' })}</div>
+    <div class="grid2">${input({ type: 'color', id: 's-warm', key: 'warmTone', value: st.warm || '#e0754d', tour: 'branding.warm' })}${input({ type: 'color', id: 's-sage', key: 'sageTone', value: st.sage || '#8a9a7b', tour: 'branding.sage' })}</div>
+    <div class="btn-row">${btn({ id: 'bPreview', icon: 'eye', key: 'preview', tour: 'branding.preview' })}${saveBtn('bSave', 'branding.save')}</div>`, { name: 'brand' });
   $('#bPreview').onclick = () => window.open(`${location.origin}/?s=${encodeURIComponent(S.venue?.slug || store.loc)}`, '_blank');
   $('#b-logo').onchange = async e => { const f = e.target.files?.[0]; if (!f) return; try { const { shrinkImage } = await import('/lib/shrink.js'); const blob = await shrinkImage(f, { max: LOGO_MAX_PX }).catch(() => f); await api('/owner/logo', { method: 'POST', body: blob, headers: { 'content-type': 'application/octet-stream' } }); toast(t('saved')); await loadVenue(); } catch (err) { fail(err); } };
   $('#bSave').onclick = async () => {
@@ -495,7 +513,8 @@ async function openFeatures(){
   let d; try { d = await api('/owner/features'); } catch (e) { return fail(e); }
   const tl = (k, fb) => { const v = t(k); return v === k ? fb : v; };
   const groups = [...new Set((d.features || []).map(f => f.surface || 'storefront'))];
-  sheet(`${head('settings', 'features')}${groups.map(g => `<p class="eyebrow mt-3">${esc(tl('surface_' + g, g))}</p>${(d.features || []).filter(f => (f.surface || 'storefront') === g).map(f => `<label class="switch"><input type="checkbox" data-f="${esc(f.key)}" ${f.on ? 'checked' : ''}><span class="switch-k"></span><span class="t">${esc(tl('feat_' + f.key, f.label))}${f.defaultOn != null && f.on !== f.defaultOn ? ` <span class="pill warn">${esc(t('changed'))}</span>` : ''}<small>${esc(tl('feat_' + f.key + '_h', f.hint || ''))}</small></span></label>`).join('')}`).join('')}`, { name: 'features' });
+  sheet(`${head('settings', 'features')}${groups.map(g => `<p class="eyebrow mt-3">${esc(tl('surface_' + g, g))}</p>${(d.features || []).filter(f => (f.surface || 'storefront') === g).map(f => `<div class="feat">${check({ label: tl('feat_' + f.key, f.label), checked: f.on, data: { f: f.key }, tour: 'features.' + f.key })}
+    ${f.defaultOn != null && f.on !== f.defaultOn ? pill('warn', { key: 'changed' }) : ''}<p class="hint">${esc(tl('feat_' + f.key + '_h', f.hint || ''))}</p></div>`).join('')}`).join('')}`, { name: 'features' });
   for (const el of $$('[data-f]', $('#sheetIn'))) el.onchange = async () => { try { await post('/owner/features', { key: el.dataset.f, on: el.checked }); toast(t('saved')); } catch (e) { fail(e); el.checked = !el.checked; } };
 }
 async function openActivation(){
@@ -505,21 +524,22 @@ async function openActivation(){
   const missing = new Map((a.missing || []).map(m => [m.key, m.why]));
   const CHECKS = [['menu', ['sellableDishes']], ['notifications', ['telegramChats']], ['fulfilment', ['hasVenuePhone', 'deliveryConfigured', 'pickupEnabled']]];
   sheet(`${head('settings', 'activation')}
-    <div class="rows">${CHECKS.map(([key, facts]) => `<div class="rowc ${missing.has(key) ? '' : ''}">${icon(missing.has(key) ? 'alert-circle' : 'check')}<span class="t"><b>${esc(tl('req_' + key, key))}</b><small>${missing.has(key) ? esc(missing.get(key)) : facts.map(f => `${esc(tl('fact_' + f, f))}: ${esc(word(a.facts?.[f]))}`).join(' · ')}</small></span><span class="pill ${missing.has(key) ? 'warn' : 'ok'}">${missing.has(key) ? '!' : '✓'}</span></div>`).join('')}</div>
+    <div class="rows">${CHECKS.map(([key, facts]) => info(missing.has(key) ? 'alert-circle' : 'check', { title: tl('req_' + key, key), tour: 'activation.' + key, sub: missing.has(key) ? esc(missing.get(key)) : facts.map(f => `${esc(tl('fact_' + f, f))}: ${esc(word(a.facts?.[f]))}`).join(' · '),
+      trailing: pill(missing.has(key) ? 'warn' : 'ok', { label: missing.has(key) ? '!' : '✓' }) })).join('')}</div>
     ${!(a.missing || []).length ? `<p class="ok mt-3" data-t="hubOk"></p>` : ''}`, { name: 'activation' });
 }
 /// Fullness per mille at which a fixed-size image turns amber, then red.
 const HEALTH_WARN_PM = 650, HEALTH_BAD_PM = 850;
 async function openHealth(){
-  sheet(`${head('settings', 'health')}<div id="hBody"><div class="skel skel-row"></div></div>
-    <div class="btn-row"><a class="btn ghost" id="hBackup" href="/api/owner/backup" download>${icon('download')}<span data-t="backup"></span></a></div>`, { name: 'health' });
+  sheet(`${head('settings', 'health')}<div id="hBody">${loading()}</div>
+    <div class="btn-row">${btn({ id: 'hBackup', href: '/api/owner/backup', icon: 'download', key: 'backup', attrs: { download: true }, tour: 'health.backup' })}</div>`, { name: 'health' });
   let h; try { h = await api('/owner/health'); } catch (e) { return fail(e); }
   // A self-growing image is never amber: fullness is not a warning when the
   // ceiling moves. Fixed-size images first, then the fullest.
   const entries = Object.entries(h.images || {}).sort(([, a], [, b]) => (a.grows === b.grows ? (b.usedPerMille || 0) - (a.usedPerMille || 0) : a.grows ? 1 : -1));
   const tone = im => im.grows ? '' : im.usedPerMille > HEALTH_BAD_PM ? 'bad' : im.usedPerMille > HEALTH_WARN_PM ? 'warn' : '';
-  $('#hBody').innerHTML = `<div class="rows">${entries.map(([k, im]) => `<div class="rowc">${icon('cube-3d-sphere')}<span class="t"><b>${esc(t('img_' + k) === 'img_' + k ? k : t('img_' + k))}</b><small class="mono">${Math.round((im.usedPerMille || 0) / 10)}% · ${im.usedCells}/${im.ceilingCells} · gen ${im.generation}${im.grows ? ` · ${esc(t('grows'))}` : ''}</small><span class="gauge"><i class="${tone(im)}" data-w="${Math.round((im.usedPerMille || 0) / 10)}"></i></span></span></div>`).join('')}</div>
-    <div class="rows mt-3"><div class="rowc">${icon(h.verdict === 'ok' ? 'check' : 'alert-circle')}<span class="t"><b data-t="verdict_${esc(h.verdict || 'ok')}"></b><small class="mono">${h.orders ?? ''} · ${esc(t('orders7'))}</small></span><span class="pill ${h.verdict === 'ok' ? 'ok' : h.verdict === 'watch' ? 'warn' : 'bad'}">${esc(h.verdict || '')}</span></div></div>`;
+  $('#hBody').innerHTML = `<div class="rows">${entries.map(([x, im]) => info('cube-3d-sphere', { title: t('img_' + x) === 'img_' + x ? x : t('img_' + x), tour: 'health.image', sub: `<span class="mono">${Math.round((im.usedPerMille || 0) / 10)}% · ${im.usedCells}/${im.ceilingCells} · gen ${im.generation}${im.grows ? ` · ${esc(t('grows'))}` : ''}</span><span class="gauge"><i class="${tone(im)}" data-w="${Math.round((im.usedPerMille || 0) / 10)}"></i></span>` })).join('')}</div>
+    <div class="rows mt-3">${info(h.verdict === 'ok' ? 'check' : 'alert-circle', { title: k('verdict_' + (h.verdict || 'ok')), sub: `<span class="mono">${h.orders ?? ''} · ${esc(t('orders7'))}</span>`, tour: 'health.verdict', trailing: pill(h.verdict === 'ok' ? 'ok' : h.verdict === 'watch' ? 'warn' : 'bad', { label: h.verdict || '' }) })}</div>`;
   paint();
   $('#hBackup').onclick = async e => { e.preventDefault(); try { const r = await fetch('/api/owner/backup', { headers: { authorization: 'Bearer ' + store.t } }); const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `dowiz-${store.loc}-${new Date().toISOString().slice(0, 10)}.json`; a.click(); } catch (err) { fail(err); } };
 }
@@ -531,17 +551,16 @@ async function openAssistant(){
   let s = { values: {} }; try { s = await api('/owner/settings'); } catch {}
   const v = s.values || {};
   sheet(`${head('settings', 'assistant')}<p class="muted small" data-t="askHint"></p>
-    <label for="as-q" data-t="ask"></label><textarea id="as-q" rows="2"></textarea>
-    <div class="btn-row"><button class="btn" id="asGo">${icon('sparkles')}<span data-t="ask"></span></button></div>
+    ${field({ id: 'as-q', key: 'ask', rows: 2, tour: 'assistant.question' })}
+    <div class="btn-row">${saveBtn('asGo', 'assistant.ask', 'ask', 'sparkles')}</div>
     <div id="asOut"></div>
     <p class="eyebrow mt-3" data-t="aiSettings"></p>
-    ${switchEl('ai-on', v['ai.enabled'] === '1', 'aiEnabled', 'aiEnabledHint')}
+    ${switchEl('ai-on', v['ai.enabled'] === '1', 'aiEnabled', 'aiEnabledHint', 'assistant.enabled')}
     ${v['ai.enabled'] === '1' && !String(v['ai.endpoint'] || '').startsWith('https://')
       ? `<p class="warn small" data-t="aiNotHttps"></p>` : ''}
-    <label for="ai-endpoint" data-t="aiEndpoint"></label><input id="ai-endpoint" inputmode="url" value="${esc(v['ai.endpoint'] || '')}" placeholder="https://…/v1">
-    <div class="grid2"><div><label for="ai-model" data-t="aiModel"></label><input id="ai-model" value="${esc(v['ai.model'] || '')}"></div>
-      <div><label for="ai-token" data-t="aiToken"></label><input id="ai-token" autocomplete="off" placeholder="${v['ai.token'] === SECRET_SET_MARK ? esc(SECRET_SET_MARK) : ''}"></div></div>
-    <div class="btn-row"><button class="btn" id="aiSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'assistant' });
+    ${field({ id: 'ai-endpoint', key: 'aiEndpoint', inputmode: 'url', value: v['ai.endpoint'] || '', placeholder: 'https://…/v1', tour: 'assistant.endpoint' })}
+    <div class="grid2">${field({ id: 'ai-model', key: 'aiModel', value: v['ai.model'] || '', tour: 'assistant.model' })}${field({ id: 'ai-token', key: 'aiToken', autocomplete: 'off', placeholder: v['ai.token'] === SECRET_SET_MARK ? SECRET_SET_MARK : '', tour: 'assistant.token' })}</div>
+    <div class="btn-row">${btn({ id: 'aiSave', icon: 'check', key: 'save', tour: 'assistant.save' })}</div>`, { name: 'assistant' });
   $('#asGo').onclick = async () => {
     const question = $('#as-q').value.trim(); if (!question) return;
     try {
@@ -603,19 +622,19 @@ async function openPreview(){
   sheet(`<p class="eyebrow" data-t="previewH"></p><h2 data-t="previewH"></h2>
     <p class="muted small" data-t="previewP"></p>
     <div class="phone"><div class="phone-screen"><iframe class="preview-frame" id="previewFrame" title="Storefront" loading="lazy" src="/?preview=1" referrerpolicy="same-origin"></iframe></div></div>
-    <div class="preview-row"><button class="btn ghost" id="previewReload">${icon('refresh')}<span data-t="previewReload"></span></button><a class="btn" href="/" target="_blank" rel="noopener">${icon('external-link')}<span data-t="previewOpen"></span></a></div>`, { name: 'preview' });
+    <div class="preview-row">${btn({ id: 'previewReload', icon: 'refresh', key: 'previewReload', tour: 'preview.reload' })}${btn({ variant: 'primary', href: '/', target: '_blank', icon: 'external-link', key: 'previewOpen', tour: 'preview.open' })}</div>`, { name: 'preview' });
   $('#previewReload').onclick = () => { const frame = $('#previewFrame'); if (frame) frame.src = frame.src; };
   paint();
 }
 
 async function openIntegrations(){
-  sheet(`${head('settings', 'integrations')}<p class="muted small" data-t="integrationsHint"></p><div id="igList"><div class="skel skel-row"></div><div class="skel skel-row"></div></div>
-    <div class="btn-row"><button class="btn" id="igAll">${icon('check')}<span data-t="checkAll"></span></button></div>`, { name: 'integrations' });
+  sheet(`${head('settings', 'integrations')}<p class="muted small" data-t="integrationsHint"></p><div id="igList">${loading(2)}</div>
+    <div class="btn-row">${saveBtn('igAll', 'integrations.checkAll', 'checkAll')}</div>`, { name: 'integrations' });
   let st; try { st = await api('/owner/integrations'); } catch (e) { return fail(e); }
   $('#igList').innerHTML = `<div class="rows">${INTEGRATIONS.map(([k, ic]) => `<div class="igrow ${integrationOn(k, st) ? 'on' : ''}" data-ig="${k}">
-      <div class="igrow-h">${icon(ic)}<b data-t="${k}"></b><span class="pill ${integrationOn(k, st) ? 'ok' : ''}" data-t="${integrationOn(k, st) ? 'on' : 'off'}"></span></div>
+      <div class="igrow-h">${icon(ic)}<b data-t="${k}"></b>${onOff(integrationOn(k, st), '')}</div>
       <small class="ig-line">${esc(integrationLine(k, st))}</small><small class="ig-out mono" hidden></small>
-      <div class="igrow-a"><button type="button" class="act" data-cfg="${k}">${icon('adjustments')}<span data-t="configure"></span></button><button type="button" class="act pri" data-chk="${k}">${icon('check')}<span data-t="check"></span></button></div></div>`).join('')}</div>`;
+      <div class="igrow-a">${btn({ icon: 'adjustments', key: 'configure', data: { cfg: k }, tour: 'integrations.configure' })}${btn({ icon: 'check', key: 'check', data: { chk: k }, tour: 'integrations.check' })}</div></div>`).join('')}</div>`;
   paint();
   const run = async k => {
     const row = $(`[data-ig="${k}"]`), out = $('.ig-out', row), b = $(`[data-chk="${k}"]`, row);

@@ -10,6 +10,7 @@ import { state } from '/store/state.js';
 import { t } from '/store/i18n.js';
 import { $, esc, icon, sheet, closeSheet, sheetName, toast } from '/store/ui.js';
 import { safeGet, safeSet } from '/store/storage.js';
+import { k, cta, ghost } from '/store/parts.js';
 
 /// The customer's "don't show again", per venue.
 const HIDE_KEY = 'dw_install_hide';
@@ -48,8 +49,8 @@ function open(){
       <p class="eyebrow" data-t="installApp"></p>
       <h2>${esc(name)}</h2>
       <p class="muted small" data-t="installBody"></p>
-      ${app.canInstall() ? `<button class="btn mb-1" id="insGo">${icon('bento')}<span data-t="installNow"></span></button>` : `<p class="install-ios">${icon('share')}<span data-t="installHint"></span></p>`}
-      <button class="btn btn-ghost mb-2" id="insLater" data-t="installLater"></button>
+      ${app.canInstall() ? cta({ id: 'insGo', cls: 'mb-1', icon: 'bento', label: k('installNow') }) : `<p class="install-ios">${icon('share')}<span data-t="installHint"></span></p>`}
+      ${ghost({ id: 'insLater', cls: 'mb-2', label: k('installLater') })}
       <label class="install-never"><input type="checkbox" id="insNever"><span data-t="installNever"></span></label>
     </div>`, { name: 'install' });
   const remember = () => { if ($('#insNever')?.checked) safeSet(HIDE_KEY, '1'); };

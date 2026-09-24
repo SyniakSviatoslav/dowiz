@@ -78,6 +78,21 @@ export function timesOn(windows, nowMinute = -1, step = SLOT_STEP_MIN, last = LA
   return [...new Set(out)].sort((a, b) => a - b);
 }
 
+/// One formatter per zone name: building an `Intl.DateTimeFormat` costs far
+/// more than using one, and the per-day arithmetic below asks many times.
+const FORMATTERS = new Map();
+function formatter(tzName) {
+  let f = FORMATTERS.get(tzName);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', {
+      timeZone: tzName, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    FORMATTERS.set(tzName, f);
+  }
+  return f;
+}
+
 /// The venue's UTC offset in minutes at an instant, from its zone NAME (the
 /// menu's `location.tz`, e.g. `Europe/Tirane`). The hub sends a name and no
 /// offset, so a caller that read `tzOffsetMinutes` read nothing and fell back
@@ -86,10 +101,7 @@ export function timesOn(windows, nowMinute = -1, step = SLOT_STEP_MIN, last = LA
 /// `fallback`, loudly in the console.
 export function offsetMinutes(tzName, atMs, fallback = 60) {
   try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tzName, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    }).formatToParts(new Date(atMs));
+    const parts = formatter(tzName).formatToParts(new Date(atMs));
     const v = k => Number(parts.find(p => p.type === k)?.value);
     const asUtc = Date.UTC(v('year'), v('month') - 1, v('day'), v('hour') % 24, v('minute'), v('second'));
     return Math.round((asUtc - Math.floor(atMs / 1000) * 1000) / 60_000);
@@ -97,4 +109,96 @@ export function offsetMinutes(tzName, atMs, fallback = 60) {
     console.error(`booking-time: unknown time zone ${JSON.stringify(tzName)}; using UTC+${fallback / 60}`);
     return fallback;
   }
+}
+
+// ── the venue's day by ZONE NAME, the offset read AT THE CANDIDATE ──────────
+//
+// THE FUNCTIONS ABOVE TAKE ONE OFFSET FOR EVERY DAY, and the screens passed the
+// offset in force NOW. On 24 October (+120) a guest booking Monday 26 October
+// at 19:00 (+60 by then) was stored as 17:00Z, which Tirane reads as 18:00, and
+// the console's day of 25 October (25 hours long) lost its last hour. Every
+// function below takes the zone NAME and asks the offset of the instant it is
+// building, so a day index past the change is measured in that day's offset.
+// Screens use these; the offset-taking forms stay for the arithmetic tests.
+
+/// The venue's civil date, minute of day and weekday (0 = Monday) at `atMs`.
+export function venueClock(tz, atMs) {
+  const local = new Date(atMs + offsetMinutes(tz, atMs) * 60_000);
+  return {
+    y: local.getUTCFullYear(), mo: local.getUTCMonth(), d: local.getUTCDate(),
+    minute: local.getUTCHours() * 60 + local.getUTCMinutes(),
+    weekday: (local.getUTCDay() + 6) % 7,
+  };
+}
+
+/// Epoch ms of the wall time `minute` on civil day (y, mo, d) in `tz`.
+///
+/// EVERY OFFSET THE ZONE HAS NEAR THAT DAY IS A CANDIDATE, and only a candidate
+/// whose own offset agrees with the one used to build it is a real instant --
+/// the lesson of `dowiz_hub::tz::start_of_local_day_ms`, where both the one-pass
+/// and the two-pass form returned a wrong midnight on a transition day. A wall
+/// time inside a spring-forward gap does not exist; it is carried forward by
+/// the gap (02:30 becomes 03:30), which is what a clock on the wall shows.
+export function wallMs(tz, y, mo, d, minute) {
+  const naive = Date.UTC(y, mo, d) + minute * 60_000;
+  const offs = new Set([-26, 0, 26].map(h => offsetMinutes(tz, naive + h * 3_600_000)));
+  const real = [...offs].map(o => naive - o * 60_000)
+    .filter(t => naive - offsetMinutes(tz, t) * 60_000 === t);
+  if (real.length) return Math.min(...real);
+  return naive - offsetMinutes(tz, naive - offsetMinutes(tz, naive) * 60_000) * 60_000;
+}
+
+/// The venue's civil day `n` days from `nowMs`, with its own weekday.
+export function venueDate(nowMs, tz, n = 0) {
+  const c = venueClock(tz, nowMs);
+  const day = new Date(Date.UTC(c.y, c.mo, c.d + n));
+  return { y: day.getUTCFullYear(), mo: day.getUTCMonth(), d: day.getUTCDate(), weekday: (day.getUTCDay() + 6) % 7 };
+}
+
+/// Epoch ms of the venue's midnight `n` days from `nowMs`.
+export function venueMidnightMs(nowMs, tz, n = 0) {
+  const c = venueClock(tz, nowMs);
+  return wallMs(tz, c.y, c.mo, c.d + n, 0);
+}
+
+/// The kernel's slot (minutes since the epoch) for venue-day `n` at local `minute`.
+export function venueSlot(nowMs, tz, n, minute) {
+  const c = venueClock(tz, nowMs);
+  return Math.round(wallMs(tz, c.y, c.mo, c.d + n, minute) / 60_000);
+}
+
+/// Venue-day `n` as slot minutes `[from, to)`, FROM TWO MIDNIGHTS: a day is 23,
+/// 24 or 25 hours long, and `from + 1440` drops or doubles an hour twice a year.
+export function venueDayRange(nowMs, tz, n = 0) {
+  return [Math.round(venueMidnightMs(nowMs, tz, n) / 60_000), Math.round(venueMidnightMs(nowMs, tz, n + 1) / 60_000)];
+}
+
+/// The local minute of day at which a stored slot falls, in that slot's own offset.
+export const slotMinuteOfDay = (tz, slotMin) => venueClock(tz, slotMin * 60_000).minute;
+
+/// A `datetime-local` value ("2026-10-26T19:00") read as the VENUE's wall time.
+/// `new Date(value)` reads it in the phone's zone: a phone in Kyiv picking 19:00
+/// sent the kitchen 18:00. Null for anything that is not that shape.
+export function venueWallMs(tz, value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(value || ''));
+  if (!m) return null;
+  const [y, mo, d, h, mi] = m.slice(1).map(Number);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59) return null;
+  return wallMs(tz, y, mo - 1, d, h * 60 + mi);
+}
+
+/// The inverse: an instant as a `datetime-local` value on the venue's wall.
+export function venueWallValue(tz, atMs) {
+  const c = venueClock(tz, atMs);
+  const p = n => String(n).padStart(2, '0');
+  return `${c.y}-${p(c.mo + 1)}-${p(c.d)}T${p(Math.floor(c.minute / 60))}:${p(c.minute % 60)}`;
+}
+
+/// The checkout's "later" prefill: `lead` from now, rounded up to the next
+/// `round` minutes of the VENUE's clock, as a `datetime-local` value on the
+/// venue's wall. Pure, so the zone of the phone running it cannot reach it.
+export function laterPrefill(tz, nowMs, leadMs, round = 30) {
+  const at = Math.floor((nowMs + leadMs) / 60_000) * 60_000;
+  const mm = venueClock(tz, at).minute % round;
+  return venueWallValue(tz, at + (mm ? round - mm : 0) * 60_000);
 }

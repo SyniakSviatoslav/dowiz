@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>dowiz · UI gallery</title>
+<!-- The living style guide for /lib/ui (docs/design/DESIGN-SYSTEM.md). Every
+     component in every state, three languages, both themes. Invented data
+     only; nothing on this page talks to the network. Same load order as a
+     surface: icons, tokens, shared rules, the component layer, then the
+     page's own sheet, which only lays the specimens out. -->
+<link rel="stylesheet" href="/lib/icons.css">
+<link rel="stylesheet" href="/lib/tokens.css">
+<link rel="stylesheet" href="/lib/components.css">
+<link rel="stylesheet" href="/lib/ui/ui.css">
+<link rel="stylesheet" href="/ui-gallery/gallery.css">
+</head>
+<body>
+<div id="app" aria-live="off"><p class="ui-hint">Loading…</p></div>
+<!-- The toast host exists before any notice, or it is not announced. -->
+<div class="ui-toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+<script type="module" src="/ui-gallery/gallery.js"></script>
+</body>
+</html>

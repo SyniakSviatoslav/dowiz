@@ -1,7 +1,7 @@
 // `node public/lib/booking-guest.test.mjs`. A guest's booking rules, no browser.
 
 import assert from 'node:assert/strict';
-import { guestErrors, bookingBody, remember, forget, ofVenue, linkHash, parseHash, canCancel, refusalText, STATUS_KEY, KEEP } from './booking-guest.js';
+import { guestErrors, bookingBody, requestKey, remember, forget, ofVenue, linkHash, parseHash, canCancel, refusalText, STATUS_KEY, KEEP } from './booking-guest.js';
 
 let run = 0;
 const test = (name, fn) => { fn(); run++; console.log(`  ok  ${name}`); };
@@ -57,6 +57,19 @@ test('a refusal reads the same plain or replayed', () => {
 test('every status the kernel knows has words', () => {
   for (const s of ['REQUESTED', 'CONFIRMED', 'SEATED', 'COMPLETED', 'DECLINED', 'CANCELLED_BY_GUEST', 'CANCELLED_BY_VENUE', 'NO_SHOW'])
     assert.ok(STATUS_KEY[s], s);
+});
+
+test('D28: a retried booking keeps its key until it succeeds; a changed one gets a new key', () => {
+  const r = (() => { let i = 0; return () => 0.1 + (i++) / 1000; })(); // distinct per call
+  const want = { slotMin: 29_000_000, pick: { zone: 'terasa', n: 4 }, party: 2 };
+  const first = requestKey(null, want, r);
+  assert.match(first, /^bk_29000000_terasa_4_2_/);
+  assert.equal(requestKey(first, want, r), first, 'the lost answer is asked for again, not a second table');
+  // TWINS: another party size, table or slot is another request.
+  assert.notEqual(requestKey(first, { ...want, party: 3 }, r), first);
+  assert.notEqual(requestKey(first, { ...want, pick: null }, r), first);
+  assert.notEqual(requestKey(first, { ...want, slotMin: 29_000_030 }, r), first);
+  assert.notEqual(requestKey(null, want, r), first, 'after a success the caller passes null: a new booking');
 });
 
 console.log(`booking-guest: ${run} tests passed`);

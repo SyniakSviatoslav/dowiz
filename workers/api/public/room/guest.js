@@ -3,13 +3,12 @@
 // the kitchen or rejects it (`POST /api/staff/orders/:id/guest`,
 // services/orders/room/guest_round.rs). Nothing else about the round differs:
 // it is amended, paid and moved like a waiter's own.
-import { esc } from './logic.js';
+import { guestWaiting } from './logic.js';
+import { ui, k, act } from './parts.js';
 
-/// The signer word a guest's round carries (`placer::GUEST`).
-export const GUEST = 'guest';
-
-/// Is this round a guest's, still waiting for the room?
-export const guestWaiting = r => r?.placed_by === GUEST && r?.status === 'PENDING';
+/// The signer word, and "a guest's round still waiting for the room": one
+/// definition, in `logic.js`, because the bill (`sittingDue`) needs it too.
+export { GUEST, guestWaiting } from './logic.js';
 
 /// Does this sitting hold one?
 export const sittingHasGuest = s => (s?.rounds || []).some(guestWaiting);
@@ -22,10 +21,10 @@ export const guestBody = (loc, action) => ({ location_id: loc, action });
 export function renderGuestBar(c, round) {
   if (!guestWaiting(round) || !c.S.caps.has('take_orders')) return '';
   const { t } = c;
-  return `<div class="acts guest-round" role="group" aria-label="${esc(t('guestRound'))}">
-    <p class="muted">${esc(t('guestRound'))}</p>
-    <button class="cta" data-act="guestConfirm">${esc(t('guestConfirm'))}</button>
-    <button class="btn" data-act="guestReject">${esc(t('guestReject'))}</button></div>`;
+  return `<div class="acts guest-round" role="group" aria-label="${ui.esc(t('guestRound'))}">
+    ${ui.alert({ tone: 'warning', icon: 'alert-circle', label: k('guestRound') })}
+    ${ui.button({ variant: 'success', size: 'lg', block: true, icon: 'check', label: k('guestConfirm'), attrs: act('guestConfirm', {}, 'guest.confirm') })}
+    ${ui.button({ variant: 'danger', block: true, icon: 'x', label: k('guestReject'), attrs: act('guestReject', {}, 'guest.reject') })}</div>`;
 }
 
 /// Send the answer. A refusal says the server's words; an unreachable network

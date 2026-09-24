@@ -22,6 +22,7 @@ import { liveOrders, loadOrders, rerender } from '/admin/app.js';
 // storefront, the sea and the kit -- all four short by `COMPENSATED_REFUND`.
 import { REFUSED as DEAD } from '/lib/vocab.js';
 import { openRefund, moneyBack, REFUNDABLE } from '/admin/refund.js';
+import { ui, k, btn, iconBtn, empty, choice, chips } from '/admin/parts.js';
 /// After a refund step: the list, then the order's own sheet again.
 async function reload(id){ await loadOrders(); await rerender(); openOrder(id); }
 
@@ -120,8 +121,8 @@ function row(o){
   const items = (o.items || []);
   const line = items.slice(0, ITEMS_SHOWN).map(i => `${i.quantity}× ${esc(i.name || i.product_id)}`).join(' · ') + (items.length > ITEMS_SHOWN ? ' …' : '');
   const fresh = S.fresh.has(o.id) ? 'fresh' : '';
-  return `<article class="orow ${fresh}" data-st="${esc(o.status)}" data-st-var="${esc(o.status)}" data-o="${esc(o.id)}">
-    <span class="st"><i class="dot"></i><span data-t-st="${esc(o.status)}"></span></span>
+  return `<article class="orow ${fresh}" data-tour="orders.row" data-st="${esc(o.status)}" data-st-var="${esc(o.status)}" data-o="${esc(o.id)}">
+    <span class="st" data-tour="orders.status"><i class="dot"></i><span data-t-st="${esc(o.status)}"></span></span>
     <span class="who">${esc(o.contact?.name || o.contact?.phone || platformOf(o) || '#' + o.id.slice(0, ORDER_ID_SHOWN))}</span>
     <span class="amt">${moneyEl(o.total ?? 0)}</span>
     <span class="num">${o.contact?.name || o.contact?.phone ? '#' + esc(o.id.slice(0, ORDER_ID_SHOWN)) : ''}</span>
@@ -136,10 +137,10 @@ function row(o){
     </span>
     <span class="age">${esc(ago(o.created_at_ms || Date.now()))}</span>
     <span class="items">${line}</span>
-    ${step && !DEAD.has(o.status) ? `<span class="go"><button type="button" class="act pri" data-act="${step[0]}" data-o="${esc(o.id)}">${icon('check')}<span data-t="${step[1]}"></span></button>
-      ${needsSeen(o) ? `<button type="button" class="act" data-seen="${esc(o.id)}">${icon('eye')}<span data-t="markSeen"></span></button>` : ''}
-      ${o.status === 'PENDING' ? `<button type="button" class="act danger" data-act="reject" data-o="${esc(o.id)}">${icon('x')}</button>` : ''}
-      ${o.status !== 'PENDING' && !isPickup(o) && !o.courier_id ? `<button type="button" class="act" data-assign="${esc(o.id)}">${icon('bike')}<span data-t="assign"></span></button>` : ''}</span>` : ''}
+    ${step && !DEAD.has(o.status) ? `<span class="go">${btn({ variant: 'primary', cls: 'pri', icon: 'check', key: step[1], data: { act: step[0], o: o.id }, tour: 'orders.next' })}
+      ${needsSeen(o) ? btn({ icon: 'eye', key: 'markSeen', data: { seen: o.id }, tour: 'orders.seen' }) : ''}
+      ${o.status === 'PENDING' ? iconBtn({ variant: 'plain', icon: 'x', ariaKey: 'reject', data: { act: 'reject', o: o.id }, tour: 'orders.reject' }) : ''}
+      ${o.status !== 'PENDING' && !isPickup(o) && !o.courier_id ? btn({ icon: 'bike', key: 'assign', data: { assign: o.id }, tour: 'orders.assign' }) : ''}</span>` : ''}
   </article>`;
 }
 const courierName = id => (S.couriers.find(c => c.id === id) || {}).name || id.slice(0, 6);
@@ -152,23 +153,21 @@ export async function render(host){
   host.innerHTML = `
     <div class="screen-h"><div><p class="eyebrow">${esc(t('today'))} · ${esc(now.toLocaleDateString(intlLocale(), { weekday: 'short', day: 'numeric', month: 'short' }))}</p><h1 data-t="tabOrders"></h1></div>
       <span class="clock mono">${esc(clock(now.getTime()))}</span></div>
-    <div class="stats strip">
+    <div class="stats strip" data-tour="orders.stats">
       <div class="stat"><b>${s.todayOrders ?? '—'}</b><small data-t="todayOrders"></small></div>
       <div class="stat ${s.pending ? 'warn' : ''}"><b>${s.pending ?? '—'}</b><small data-t="pending"></small></div>
       <div class="stat"><b>${s.active ?? '—'}</b><small data-t="active"></small></div>
       <div class="stat money"><b>${s.todayRevenue != null ? money(s.todayRevenue) : '—'}</b><small data-t="revenue"></small></div>
     </div>
-    <div class="seg" role="tablist">
-      <button type="button" class="seg-b ${view.mode === 'live' ? 'on' : ''}" data-mode="live"><span data-t="live"></span><span class="n">${liveOrders().length}</span></button>
-      <button type="button" class="seg-b ${view.mode === 'history' ? 'on' : ''}" data-mode="history"><span data-t="history"></span><span class="n">${historyAll().length}</span></button>
-    </div>
-    <label class="srch">${icon('search')}<input id="oq" type="search" value="${esc(view.q)}" data-t-attr="placeholder:findOrder"></label>
-    ${S.phase === 'error' ? `<div class="empty">${icon('alert-triangle')}<b>${esc(t('loadFail'))}</b><span class="muted small">${esc(S.error || '')}</span></div>` : ''}
-    ${S.phase === 'ready' && !list.length ? `<div class="empty">${icon('scroll')}<b data-t="${view.mode === 'live' ? 'noLive' : 'noOrders'}"></b></div>` : ''}
-    <div class="orders" id="olist">${list.map(row).join('')}</div>
-    <div class="btn-row compact">${view.mode === 'history' && all.length > list.length ? `<button type="button" class="act" id="oMore">${icon('chevron-down')}<span data-t="more"></span> · ${all.length - list.length}</button>` : ''}
-      <button type="button" class="act" id="oAgg">${icon('plus')}<span data-t="aggTitle"></span></button>
-      ${list.length ? `<button type="button" class="act" id="oCsv">${icon('download')}<span data-t="exportCsv"></span></button>` : ''}</div>`;
+    ${chips({ values: [{ value: 'live', label: `${t('live')} ${liveOrders().length}` }, { value: 'history', label: `${t('history')} ${historyAll().length}` }],
+      value: view.mode, attr: 'mode', tour: 'orders.mode' })}
+    <div class="srch">${icon('search')}${ui.inputRow({ id: 'oq', type: 'search', label: k('findOrder'), placeholder: k('findOrder'), attrs: { value: view.q, data: { tour: 'orders.search' } } })}</div>
+    ${S.phase === 'error' ? empty('alert-triangle', { key: 'loadFail', body: S.error || '', alert: true }) : ''}
+    ${S.phase === 'ready' && !list.length ? empty('scroll', { key: view.mode === 'live' ? 'noLive' : 'noOrders' }) : ''}
+    <div class="orders" id="olist" data-tour="orders.board">${list.map(row).join('')}</div>
+    <div class="btn-row compact">${view.mode === 'history' && all.length > list.length ? btn({ id: 'oMore', icon: 'chevron-down', label: `${t('more')} · ${all.length - list.length}`, tour: 'orders.more' }) : ''}
+      ${btn({ id: 'oAgg', icon: 'plus', key: 'aggTitle', tour: 'orders.platformOrder' })}
+      ${list.length ? btn({ id: 'oCsv', icon: 'download', key: 'exportCsv', tour: 'orders.csv' }) : ''}</div>`;
   S.fresh.clear();
   loadJobs();
   host.onclick = async e => {
@@ -235,10 +234,10 @@ async function chooseFoodBack(id, choice, el){
 
 async function openAssign(id){
   const on = S.couriers.filter(c => c.active && c.onShift), off = S.couriers.filter(c => c.active && !c.onShift);
-  const choice = c => `<button type="button" class="choice" data-c="${esc(c.id)}">${icon('bike')}<span class="t"><b>${esc(c.name)}</b><br><small class="muted" data-t="${c.onShift ? 'onShift' : 'offShift'}"></small></span>${icon('chevron-right', 'ck')}</button>`;
+  const pick = c => choice({ label: c.name, subKey: c.onShift ? 'onShift' : 'offShift', data: { c: c.id }, tour: 'orders.assignCourier' });
   sheet(`<p class="eyebrow">#${esc(id.slice(0, ORDER_ID_SHOWN))}</p><h2 data-t="assign"></h2>
-    ${on.length ? on.map(choice).join('') : `<div class="empty">${icon('bike')}<b data-t="noneOnShift"></b></div>`}
-    ${off.length ? `<details class="fold"><summary data-t="offShift"></summary>${off.map(choice).join('')}</details>` : ''}`, { name: 'assign' });
+    ${on.length ? ui.list(on.map(pick), { label: t('assign') }) : empty('bike', { key: 'noneOnShift' })}
+    ${off.length ? `<details class="fold"><summary data-t="offShift"></summary>${ui.list(off.map(pick), { label: t('offShift') })}</details>` : ''}`, { name: 'assign' });
   for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => {
     try { await busy(b, () => post(`/owner/orders/${encodeURIComponent(id)}/assign`, withLoc({ courier_id: b.dataset.c }))); toast(t('saved')); await loadOrders(); await rerender(); openOrder(id); }
     catch (e) { toast(String(e.message || e)); }
@@ -259,8 +258,8 @@ export function openOrder(id){
   const step = nextOf(o);
   sheet(`
     <p class="eyebrow">#${esc(o.id.slice(0, ORDER_ID_SHOWN))} · ${esc(clock(o.created_at_ms || Date.now()))} · ${esc(day(o.created_at_ms || Date.now()))}</p>
-    <h2 data-t-st="${esc(o.status)}"></h2>
-    ${!dead ? `<div class="steps">${FLOW.map((f, n) => `<i class="${n < i ? 'done' : n === i ? 'now' : ''}"></i>`).join('')}</div>` : ''}
+    <h2 data-t-st="${esc(o.status)}" data-tour="order.sheet"></h2>
+    ${!dead ? `<div class="steps" data-tour="order.steps">${FLOW.map((f, n) => `<i class="${n < i ? 'done' : n === i ? 'now' : ''}"></i>`).join('')}</div>` : ''}
     ${o.eta?.range && !dead ? (() => { const parts = [o.eta.parts?.prepLeftMin ? `${t('cookingMin')} ${o.eta.parts.prepLeftMin}` : '', o.eta.parts?.courierToVenueMin ? `${t('courier')} → ${o.eta.parts.courierToVenueMin}` : '', o.eta.parts?.toDoorMin ? `→ ${t('address')} ${o.eta.parts.toDoorMin}` : ''].filter(Boolean); return `<div class="fact">${icon('clock')}<span class="v"><span class="k" data-t="etaRange"></span><b>${esc(o.eta.range)} min</b>${parts.length ? `<small class="muted"> · ${parts.join(' · ')}</small>` : ''}</span></div>`; })() : ''}
     <div class="fact">${icon('user')}<span class="v"><span class="k" data-t="customer"></span>${esc(o.contact?.name || '—')}${o.contact?.phone ? ` · <a href="tel:${esc(o.contact.phone)}">${esc(o.contact.phone)}</a>` : ''}</span></div>
     <div class="fact">${icon(isPickup(o) ? 'walk' : 'map-pin')}<span class="v"><span class="k" data-t="${isPickup(o) ? 'pickup' : 'address'}"></span>
@@ -279,20 +278,18 @@ export function openOrder(id){
     ${o.feedback?.text ? `<div class="fact">${icon('message-2')}<span class="v">${esc(o.feedback.text)}</span></div>` : ''}
     ${o.refund?.note ? `<div class="fact">${icon('note')}<span class="v"><span class="k" data-t="refusedNote"></span>${esc(o.refund.note)}</span></div>` : ''}
     ${foodBack(o) ? `<p class="eyebrow mt-3" data-t="foodBack"></p><p class="muted" data-t="foodBackHint"></p>
+    <div class="btn-row">${btn({ variant: 'primary', icon: 'refresh', key: 'resell', data: { ret: 'resell', o: o.id }, tour: 'order.resell' })}
+      ${btn({ variant: 'danger', icon: 'trash', key: 'wasteIt', data: { ret: 'waste', o: o.id }, tour: 'order.waste' })}</div>` : ''}
     <div class="btn-row">
-      <button class="btn" data-ret="resell" data-o="${esc(o.id)}">${icon('refresh')}<span data-t="resell"></span></button>
-      <button class="btn danger" data-ret="waste" data-o="${esc(o.id)}">${icon('trash')}<span data-t="wasteIt"></span></button>
-    </div>` : ''}
-    <div class="btn-row">
-      ${step && !dead ? `<button class="btn" data-act="${step[0]}" data-o="${esc(o.id)}">${icon('check')}<span data-t="${step[1]}"></span></button>` : ''}
-      ${!dead && o.status !== 'PENDING' && !isPickup(o) && !o.courier_id ? `<button class="btn ghost" data-assign="${esc(o.id)}">${icon('bike')}<span data-t="assign"></span></button>` : ''}
+      ${step && !dead ? btn({ variant: foodBack(o) ? 'secondary' : 'primary', icon: 'check', key: step[1], data: { act: step[0], o: o.id }, tour: 'order.next' }) : ''}
+      ${!dead && o.status !== 'PENDING' && !isPickup(o) && !o.courier_id ? btn({ variant: 'ghost', icon: 'bike', key: 'assign', data: { assign: o.id }, tour: 'order.assign' }) : ''}
     </div>
     <div class="btn-row">
-      ${o.contact?.phone ? `<a class="btn ghost" href="tel:${esc(o.contact.phone)}">${icon('phone')}<span data-t="call"></span></a>` : ''}
-      <button class="btn ghost" id="oCopy">${icon('copy')}<span data-t="print"></span></button>
-      ${o.status === 'PENDING' ? `<button class="btn danger" data-act="reject" data-o="${esc(o.id)}">${icon('x')}<span data-t="reject"></span></button>`
-        : REFUNDABLE.has(o.status) ? `<button class="btn danger" data-refund="${esc(o.id)}">${icon('receipt')}<span data-t="refund"></span></button>`
-        : o.status === 'REFUNDING' ? `<button class="btn" data-moneyback="${esc(o.id)}">${icon('check')}<span data-t="moneyBack"></span></button>` : ''}
+      ${o.contact?.phone ? btn({ variant: 'ghost', href: `tel:${o.contact.phone}`, icon: 'phone', key: 'call', tour: 'order.call' }) : ''}
+      ${btn({ id: 'oCopy', variant: 'ghost', icon: 'copy', key: 'print', tour: 'order.copy' })}
+      ${o.status === 'PENDING' ? btn({ variant: 'danger', icon: 'x', key: 'reject', data: { act: 'reject', o: o.id }, tour: 'order.reject' })
+        : REFUNDABLE.has(o.status) ? btn({ variant: 'danger', icon: 'receipt', key: 'refund', data: { refund: o.id }, tour: 'order.refund' })
+        : o.status === 'REFUNDING' ? btn({ variant: step && !dead ? 'secondary' : 'primary', icon: 'check', key: 'moneyBack', data: { moneyback: o.id }, tour: 'order.moneyBack' }) : ''}
     </div>`, { name: 'order' });
   $('#sheetIn').onclick = e => {
     const act = e.target.closest('[data-act]'); if (act) return doAction(act.dataset.o, act.dataset.act, act);

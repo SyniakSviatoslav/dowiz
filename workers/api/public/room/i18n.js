@@ -7,6 +7,7 @@ import { T as ADMIN } from '../admin/i18n.js';
 
 export const T = {
   sq: {
+    learn: 'Mësimet', learnNew: 'I ri', learnDone: 'Mbaruar', learnPaused: 'Në pauzë', learnWatch: 'Shiko videon', learnWrites: 'ndryshon të dhëna reale', learnSteps: '{n} hapa', learnEmpty: 'Ky mësim nuk u gjet', learnOffline: 'Mësimet duan lidhje interneti', learnClose: 'Mbyll',
     waiter: 'Kamarier', 'counter-manager': 'Arkëtar-menaxher', kitchen: 'Kuzhina', owner: 'Pronar',
     loginLine: 'Salla, në dorën tuaj.', signIn: 'Hyni', email: 'Email', password: 'Fjalëkalimi',
     claimCode: 'Kodi i ftesës', haveCode: 'Kam një kod ftese', haveAccount: 'Kam llogari', claim: 'Aktivizo',
@@ -43,12 +44,13 @@ export const T = {
     alreadyThere: 'Tavolina është tashmë aty.', notHere: 'Kjo porosi nuk gjendet më; salla u ringarkua.', moved: 'U kalua',
     moveSitting: 'Kalo tavolinën', moveSittingHint: 'Të gjitha raundet që janë ende në sallë kalojnë në tavolinën e re.',
     openTable: 'Hap tavolinë', tableName: 'Tavolina', needTable: 'Shkruani tavolinën.',
-    tip: 'Bakshish', walletId: 'Portofoli (ID-ja e klientit)', badTip: 'Bakshishi nuk lexohet.', needWallet: 'Shkruani portofolin që paguan.', method_wallet: 'Portofol', walletNoTip: 'Portofoli paguan vetëm faturën; bakshishi merret me para ose kartë.',
+    tip: 'Bakshish', walletId: 'Portofoli (ID-ja e klientit)', walletCode: 'Kodi i portofolit të klientit (nga telefoni i tij)', badTip: 'Bakshishi nuk lexohet.', needWallet: 'Shkruani portofolin që paguan.', method_wallet: 'Portofol', walletNoTip: 'Portofoli paguan vetëm faturën; bakshishi merret me para ose kartë.',
     floor: 'Salla', floor_table: 'Tavolina', floor_legend: 'Legjenda', floor_state_free: 'E lirë', floor_state_booked: 'E rezervuar', floor_state_ordering: 'Po porosit', floor_state_waiting: 'Pret ushqimin', floor_state_paying: 'Po paguan', floor_state_dirty: 'Duhet pastruar', floor_cleared: 'Tavolina u pastrua', floor_clear: 'U pastrua', floor_clearHint: 'Tavolina u pagua dhe u pastrua? Shënojeni si të lirë.', floor_unplaced: 'Jashtë planit', floor_noPlan: 'Pronari nuk ka vizatuar ende planin e sallës.',
     guestWaiting: 'Porosi nga tavolina', guestRound: 'Klienti porositi nga kodi QR i tavolinës.', guestConfirm: 'Konfirmo', guestReject: 'Refuzo', guestConfirmed: 'U konfirmua', guestRejected: 'U refuzua',
     language: 'Gjuha', theme: 'Tema',
   },
   en: {
+    learn: 'Lessons', learnNew: 'New', learnDone: 'Done', learnPaused: 'Paused', learnWatch: 'Watch the video', learnWrites: 'changes real data', learnSteps: '{n} steps', learnEmpty: 'That lesson was not found', learnOffline: 'Lessons need a connection', learnClose: 'Close',
     waiter: 'Waiter', 'counter-manager': 'Counter manager', kitchen: 'Kitchen', owner: 'Owner',
     loginLine: 'The room, in your hand.', signIn: 'Sign in', email: 'Email', password: 'Password',
     claimCode: 'Invite code', haveCode: 'I have an invite code', haveAccount: 'I have an account', claim: 'Activate',
@@ -85,12 +87,13 @@ export const T = {
     alreadyThere: 'The table is already there.', notHere: 'This order is no longer here; the room was reloaded.', moved: 'Moved',
     moveSitting: 'Move the table', moveSittingHint: 'Every round still in the room moves to the new table.',
     openTable: 'Open a table', tableName: 'Table', needTable: 'Name the table.',
-    tip: 'Tip', walletId: 'Wallet (the guest\'s id)', badTip: 'That tip does not read.', needWallet: 'Name the wallet that pays.', method_wallet: 'Wallet', walletNoTip: 'A wallet pays the bill only; take the tip in cash or on the card.',
+    tip: 'Tip', walletId: 'Wallet (the guest\'s id)', walletCode: 'The guest\'s wallet code (from their phone)', badTip: 'That tip does not read.', needWallet: 'Name the wallet that pays.', method_wallet: 'Wallet', walletNoTip: 'A wallet pays the bill only; take the tip in cash or on the card.',
     floor: 'Floor', floor_table: 'Table', floor_legend: 'Legend', floor_state_free: 'Free', floor_state_booked: 'Booked', floor_state_ordering: 'Ordering', floor_state_waiting: 'Waiting for food', floor_state_paying: 'Paying', floor_state_dirty: 'To clear', floor_cleared: 'Table cleared', floor_clear: 'Cleared', floor_clearHint: 'Paid and cleared? Mark the table free.', floor_unplaced: 'Not on the plan', floor_noPlan: 'The owner has not drawn the floor plan yet.',
     guestWaiting: 'Guest order', guestRound: 'The guest ordered from the table\'s QR code.', guestConfirm: 'Confirm', guestReject: 'Reject', guestConfirmed: 'Confirmed', guestRejected: 'Rejected',
     language: 'Language', theme: 'Theme',
   },
   uk: {
+    learn: 'Уроки', learnNew: 'Новий', learnDone: 'Пройдено', learnPaused: 'На паузі', learnWatch: 'Дивитися відео', learnWrites: 'змінює реальні дані', learnSteps: 'кроків: {n}', learnEmpty: 'Такого уроку не знайдено', learnOffline: 'Для уроків потрібен інтернет', learnClose: 'Закрити',
     waiter: 'Офіціант', 'counter-manager': 'Касир-менеджер', kitchen: 'Кухня', owner: 'Власник',
     loginLine: 'Зал у вашій руці.', signIn: 'Увійти', email: 'Email', password: 'Пароль',
     claimCode: 'Код запрошення', haveCode: 'У мене код запрошення', haveAccount: 'У мене є акаунт', claim: 'Активувати',
@@ -127,7 +130,7 @@ export const T = {
     alreadyThere: 'Стіл уже там.', notHere: 'Цього замовлення вже немає; зал оновлено.', moved: 'Перенесено',
     moveSitting: 'Пересадити стіл', moveSittingHint: 'Усі раунди, що ще в залі, переходять за новий стіл.',
     openTable: 'Відкрити стіл', tableName: 'Стіл', needTable: 'Вкажіть стіл.',
-    tip: 'Чайові', walletId: 'Гаманець (ID гостя)', badTip: 'Чайові не прочитати.', needWallet: 'Вкажіть гаманець, що платить.', method_wallet: 'Гаманець', walletNoTip: 'Гаманець сплачує лише рахунок; чайові готівкою або карткою.',
+    tip: 'Чайові', walletId: 'Гаманець (ID гостя)', walletCode: 'Код гаманця гостя (з його телефону)', badTip: 'Чайові не прочитати.', needWallet: 'Вкажіть гаманець, що платить.', method_wallet: 'Гаманець', walletNoTip: 'Гаманець сплачує лише рахунок; чайові готівкою або карткою.',
     floor: 'Зала', floor_table: 'Стіл', floor_legend: 'Легенда', floor_state_free: 'Вільний', floor_state_booked: 'Заброньований', floor_state_ordering: 'Замовляють', floor_state_waiting: 'Чекають страви', floor_state_paying: 'Оплата', floor_state_dirty: 'Прибрати', floor_cleared: 'Стіл прибрано', floor_clear: 'Прибрано', floor_clearHint: 'Оплачено й прибрано? Позначте стіл вільним.', floor_unplaced: 'Поза планом', floor_noPlan: 'Власник ще не намалював план зали.',
     guestWaiting: 'Замовлення гостя', guestRound: 'Гість замовив через QR-код столика.', guestConfirm: 'Підтвердити', guestReject: 'Відхилити', guestConfirmed: 'Підтверджено', guestRejected: 'Відхилено',
     language: 'Мова', theme: 'Тема',

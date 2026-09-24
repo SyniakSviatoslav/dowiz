@@ -10,6 +10,7 @@
 
 import { $, $$, esc, icon, t, S, api, withLoc, toast, sheet, closeSheet, money, busy } from '/admin/core.js';
 import { newKey } from '/lib/outbox.js';
+import { btn, iconBtn, field, select } from '/admin/parts.js';
 import { loadOrders, rerender } from '/admin/app.js';
 
 const PLATFORMS = ['wolt', 'glovo', 'baboon'];
@@ -22,30 +23,26 @@ export function openAggregator(){
   const key = newKey();
   const lines = [];
   const dish = id => S.products.find(p => p.id === id);
-  const options = S.products.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  const options = S.products.map(p => ({ value: p.id, label: p.name }));
   sheet(`<h2 data-t="aggTitle"></h2>
-    <label for="ag-ch" data-t="aggPlatform"></label>
-    <select id="ag-ch">${PLATFORMS.map(p => `<option value="${p}">${p[0].toUpperCase() + p.slice(1)}</option>`).join('')}</select>
-    <label for="ag-x" data-t="aggNumber"></label>
-    <input id="ag-x" maxlength="64" autocomplete="off" pattern="[A-Za-z0-9_-]+">
+    ${select({ id: 'ag-ch', key: 'aggPlatform', options: PLATFORMS.map(p => ({ value: p, label: p[0].toUpperCase() + p.slice(1) })), tour: 'agg.platform' })}
+    ${field({ id: 'ag-x', key: 'aggNumber', maxlength: 64, autocomplete: 'off', pattern: '[A-Za-z0-9_-]+', tour: 'agg.number' })}
     <p class="eyebrow mt-3" data-t="items"></p>
     <div id="ag-lines"></div>
-    <div class="btn-row"><select id="ag-dish">${options}</select>
-      <button class="btn ghost" id="ag-add" type="button">${icon('plus')}<span data-t="aggAdd"></span></button></div>
-    <label for="ag-disc" data-t="discount"></label>
-    <input id="ag-disc" inputmode="numeric" value="0">
-    <label for="ag-total" data-t="total"></label>
-    <input id="ag-total" inputmode="numeric">
-    <p id="ag-check" class="muted" role="status"></p>
-    <div class="btn-row"><button class="btn" id="ag-go" type="button" disabled>${icon('check')}<span data-t="aggEnter"></span></button></div>`,
+    <div class="btn-row">${select({ id: 'ag-dish', ariaLabel: t('items'), options, tour: 'agg.dish' })}
+      ${btn({ id: 'ag-add', variant: 'ghost', icon: 'plus', key: 'aggAdd', tour: 'agg.addLine' })}</div>
+    ${field({ id: 'ag-disc', key: 'discount', inputmode: 'numeric', value: '0', tour: 'agg.discount' })}
+    ${field({ id: 'ag-total', key: 'total', inputmode: 'numeric', tour: 'agg.total' })}
+    <p id="ag-check" class="muted" role="status" data-tour="agg.check"></p>
+    <div class="btn-row">${btn({ id: 'ag-go', variant: 'primary', icon: 'check', key: 'aggEnter', disabled: true, tour: 'agg.save' })}</div>`,
     { name: 'aggregator' });
 
   const draw = () => {
     $('#ag-lines').innerHTML = lines.map((l, i) => `<div class="line">
       <span class="n">${esc(dish(l.product_id)?.name || l.product_id)}</span>
-      <input class="q" data-q="${i}" inputmode="numeric" value="${l.quantity}" aria-label="${esc(t('aggQty'))}">
-      <input class="p" data-p="${i}" inputmode="numeric" value="${l.unit_price}" aria-label="${esc(t('aggPrice'))}">
-      <button class="act danger" data-rm="${i}" type="button" aria-label="${esc(t('aggRemove'))}">${icon('x')}</button></div>`).join('');
+      ${field({ id: `ag-q${i}`, cls: 'q', label: t('aggQty'), inputmode: 'numeric', value: String(l.quantity), data: { q: i } })}
+      ${field({ id: `ag-p${i}`, cls: 'p', label: t('aggPrice'), inputmode: 'numeric', value: l.unit_price == null ? '' : String(l.unit_price), data: { p: i } })}
+      ${iconBtn({ icon: 'x', ariaKey: 'aggRemove', data: { rm: i } })}</div>`).join('');
     check();
   };
   // THE LAW, LIVE: what the hub will check, said before the tap.

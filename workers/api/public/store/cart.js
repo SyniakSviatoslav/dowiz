@@ -10,6 +10,7 @@ import { t, retranslate } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, toast, fallbackArt, paintFallbacks } from '/store/ui.js';
 import { quoteEta } from '/store/eta.js';
 import { TABLE, tableBanner } from '/store/table.js';
+import { k, cta, stepper, emptySheet } from '/store/parts.js';
 
 export function refreshBar(){
   const n = cartCount();
@@ -63,7 +64,7 @@ export function refreshTotals(){
 
 export function openCart(){
   const lines = cartLines();
-  if (!lines.length) return sheet(`<div class="empty">${icon('shopping-bag', 'ico-lg')}<b data-t="empty"></b><span data-t="emptyHint"></span></div>`, { name: 'cart' });
+  if (!lines.length) return sheet(emptySheet({ icon: 'shopping-bag', title: 'empty', body: 'emptyHint' }), { name: 'cart' });
   sheet(`
     <p class="eyebrow" data-t="yourOrder"></p>
     <h2 data-t="cart"></h2>
@@ -73,11 +74,10 @@ export function openCart(){
       <span class="cmain"><b>${esc(l.p.name)}</b>
         ${lineNames(l.p, l.m).length ? `<small class="muted">${lineNames(l.p, l.m).map(esc).join(' · ')}</small>` : ''}
         <small>${moneyEl(lineUnit(l.p, l.m))}</small></span>
-      <span class="qty"><button type="button" data-m="${esc(l.k)}" aria-label="−">${icon('minus')}</button>
-        <span>${l.q}</span><button type="button" data-a="${esc(l.k)}" aria-label="+">${icon('plus')}</button></span></div>`).join('')}</div>
+      ${stepper({ value: l.q, minus: { attrs: { data: { m: l.k } } }, plus: { attrs: { data: { a: l.k } } }, tour: 'cart.qty' })}</div>`).join('')}</div>
     <p class="geo" id="cartEta" hidden></p>
     ${totalsBlock()}
-    <button class="btn mb-2" id="toCheckout"><span data-t="checkout"></span>${icon('chevron-right')}</button>`,
+    ${cta({ id: 'toCheckout', cls: 'mb-2', label: k('checkout'), iconEnd: 'chevron-right', tour: 'checkout.open' })}`,
     { name: 'cart', keepScroll: true });
   paintFallbacks($('#sheetIn'));
   for (const b of $$('[data-a]', $('#sheetIn'))) b.onclick = () => { const l = state.cart[b.dataset.a]; if (!l) return; l.q++; saveCart(); refreshBar(); openCart(); };

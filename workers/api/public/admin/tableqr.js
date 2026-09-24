@@ -16,6 +16,7 @@
 
 import { $, $$, esc, icon, t, api, store, toast, sheet } from '/admin/core.js';
 import { T, LANGS } from '/admin/i18n.js';
+import { btn, empty } from '/admin/parts.js';
 
 const WORDS = {
   sq: { qrHint: 'Nje kod per cdo tavoline te planit. Klienti e skanon, porosit, dhe kamerieri e konfirmon porosine.', qrPrint: 'Printo kodet', qrNone: 'Plani i salles nuk ka ende tavolina. Vizatojeni te Rezervimet.', qrTable: 'Tavolina', qrDownload: 'Shkarko', qrScan: 'Skanoni per te porositur' },
@@ -34,7 +35,7 @@ export const svgSrc = svg => 'data:image/svg+xml,' + encodeURIComponent(svg || '
 export const card = x => `<figure class="qr-card">
   <img src="${svgSrc(x.svg)}" alt="${esc(t('qrTable'))} ${esc(x.zone_name || x.zone)} ${esc(x.n)}">
   <figcaption><b>${esc(t('qrTable'))} ${esc(x.n)}</b><small>${esc(x.zone_name || x.zone)} · ${esc(t('qrScan'))}</small></figcaption>
-  <button type="button" class="btn ghost qr-dl" data-zone="${esc(x.zone)}" data-n="${esc(x.n)}">${icon('download')}<span>${esc(t('qrDownload'))}</span></button>
+  ${btn({ variant: 'ghost', cls: 'qr-dl', icon: 'download', label: t('qrDownload'), data: { zone: x.zone, n: x.n }, tour: 'tableqr.download' })}
 </figure>`;
 
 function ensureCss(){
@@ -74,9 +75,9 @@ export async function open(){
   try { d = await api('/owner/tables/qr'); } catch (e) { return fail(e); }
   const list = d.tables || [];
   sheet(`<p class="eyebrow" data-t="settings"></p><h2 data-t="tableQr"></h2><p class="muted small" data-t="qrHint"></p>
-    ${list.length ? `<div class="btn-row"><button class="btn" id="qrPrintGo">${icon('download')}<span data-t="qrPrint"></span></button></div>
+    ${list.length ? `<div class="btn-row">${btn({ id: 'qrPrintGo', variant: 'primary', icon: 'download', key: 'qrPrint', tour: 'tableqr.print' })}</div>
     <p class="hint mono">${esc(d.host || '')}</p>
-    <div class="qr-grid">${list.map(card).join('')}</div>` : `<div class="empty">${icon('receipt')}<b data-t="qrNone"></b></div>`}`,
+    <div class="qr-grid" data-tour="tableqr.grid">${list.map(card).join('')}</div>` : empty('receipt', { key: 'qrNone' })}`,
     { name: 'tableqr', keepScroll: true });
   const go = $('#qrPrintGo');
   if (go) go.onclick = () => print(list);

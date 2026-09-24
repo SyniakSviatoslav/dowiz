@@ -48,6 +48,10 @@
   --space-10:40px;
   --radius-xl:16px; --radius-card:var(--radius-xl); --radius-btn:var(--radius-full);
   --z-backdrop:300; --z-modal:400;
+  /* /lib/ui KNOBS (docs/design/DESIGN-SYSTEM.md): the components take the storefront's
+     pill radius, and the one toast sits above the order pill and the tab bar. */
+  --ui-radius-btn:var(--radius-btn);
+  --ui-toast-bottom:calc(var(--nav-h) + var(--pill-h));
 
   /* ── T2: dowiz-fixed ── */
   /* The spectral. Terracotta → the venue's accent → gold. The ends are the
@@ -427,7 +431,10 @@ g:nth-of-type(3n) .leaf{animation-duration:6.1s;animation-delay:-2.6s}
      box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 35%,transparent),inset 0 -1px 0 color-mix(in srgb,#000 25%,transparent);
      font-weight:var(--weight-bold);font-size:var(--text-sm);letter-spacing:.08em;text-transform:uppercase;text-decoration:none;
      transition:background .15s var(--ease),transform .12s var(--ease),box-shadow .2s var(--ease)}
-@media (hover:hover) and (pointer:fine){ .btn:hover{background-position:0 0,100% 100%;box-shadow:0 8px 24px -8px var(--brand-primary)} }
+/* The foil is restated on hover: ui.css's primary hover sets the `background` shorthand, which
+   would otherwise flatten the metal to a plain colour under a mouse. */
+@media (hover:hover) and (pointer:fine){ .btn:hover{background-color:var(--brand-primary);background-image:var(--gold-grain),var(--gold-grad);
+  background-size:120px 120px,200% 200%;background-blend-mode:overlay,normal;background-position:0 0,100% 100%;box-shadow:0 8px 24px -8px var(--brand-primary)} }
 /* A press is a drop of ink: a ring that spreads from the centre and fades. */
 .btn,.tab,.tag,.seg-b,.choice,.pay{position:relative;overflow:hidden}
 .card-add{overflow:hidden}   /* already absolute: the ink ring needs only the clip */
@@ -439,7 +446,7 @@ g:nth-of-type(3n) .leaf{animation-duration:6.1s;animation-delay:-2.6s}
 @media (hover:hover) and (pointer:fine){ .btn-ghost:hover{background:var(--brand-surface-raised);box-shadow:none} }
 .btn .ti{font-size:18px}
 .seg{display:flex;gap:var(--space-2);margin-bottom:var(--space-3);flex-wrap:wrap}
-.seg-b{flex:1 1 0;min-width:96px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:var(--tap);
+.seg-b{flex:1 1 0;min-width:96px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:var(--tap);white-space:normal;font-weight:var(--weight-normal);
        padding:0 var(--space-3);border-radius:var(--radius-btn);border:1px solid var(--glass-border);background:var(--glass);
        color:var(--brand-text);font-size:var(--text-base);
        transition:background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease)}
@@ -449,17 +456,16 @@ g:nth-of-type(3n) .leaf{animation-duration:6.1s;animation-delay:-2.6s}
 .seg-b.on .ti,.seg-b.on small{color:var(--brand-on-primary)}
 /* A list of choices, one per row, the chosen one ticked: languages, currencies. */
 .choices{display:grid;gap:var(--space-2);margin-bottom:var(--space-4)}
-.choice{display:flex;align-items:center;gap:var(--space-3);min-height:52px;padding:0 var(--space-4);
-     border:1px solid var(--glass-border);border-radius:var(--radius-card);background:var(--glass);color:var(--brand-text);
-     text-align:left;transition:border-color .15s var(--ease),background .15s var(--ease)}
+/* A list of choices (languages, currencies, the sort) is ui.list of ui.row({ select }); the storefront
+   only sets the code's face and lights it on the chosen row. */
 .choice-code{font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:.08em;min-width:3.2em;color:var(--brand-text-muted)}
-.choice-name{flex:1;font-size:var(--text-base)}
-.choice-ck{font-size:18px;color:var(--brand-primary);opacity:0;transition:opacity .15s var(--ease)}
-.choice.on{border-color:var(--brand-primary);background:color-mix(in srgb,var(--brand-primary) 12%,var(--glass))}
-.choice.on .choice-code{color:var(--brand-primary)}
-.choice.on .choice-ck{opacity:1}
+.ui-row[aria-pressed="true"] .choice-code{color:var(--brand-primary)}
 label{display:block;font-size:var(--text-sm);font-weight:var(--weight-medium);margin:var(--space-3) 0 var(--space-2);color:var(--brand-text-muted)}
 label .opt{font-weight:var(--weight-normal);opacity:.8}
+/* ui.field draws its own label and spacing; the storefront's `label` margins are for the
+   labels it still writes by hand. */
+.ui-field>.ui-label{margin:0}
+.ui-field{gap:var(--space-2)}
 .fsec{font-size:var(--text-sm);text-transform:uppercase;letter-spacing:var(--track-head);
       margin:var(--space-6) 0 var(--space-3);padding-top:var(--space-4);border-top:1px solid var(--glass-border)}
 .fsec:first-of-type{border-top:0;padding-top:0;margin-top:var(--space-3)}
@@ -476,6 +482,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 .geo.ok{color:var(--color-success)}
 .geo.bad{color:var(--color-danger)}
 .promo-row{display:flex;gap:var(--space-2);align-items:stretch;margin-bottom:var(--space-2)}
+.promo-row .ui-field{flex:1 1 auto;margin:0}
 .promo-row input{flex:1 1 auto;margin:0;text-transform:uppercase}
 .promo-row .btn{flex:0 0 auto;width:auto;margin:0;padding-inline:var(--space-4);min-height:var(--tap)}
 
@@ -672,9 +679,10 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
         border-radius:var(--radius-md);background:var(--brand-surface-raised);color:var(--brand-text)}
 .addrs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 var(--space-2)}
 .addr-chip{display:inline-flex;align-items:center;gap:0}
-.addr-chip .chip{max-width:min(78vw,340px)}
-.addr-chip .chip span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.addr-chip .chip .ti{font-size:16px;color:currentColor;opacity:.8}
+.addr-chip .ui-chip{max-width:min(78vw,340px)}
+.addr-chip .ui-chip span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.addr-chip .ui-chip .ti{font-size:16px;color:currentColor;opacity:.8}
+.addr-chip .ui-chip.on{border-color:var(--brand-primary)}
 .addr-x{min-width:var(--tap);min-height:var(--tap);display:grid;place-items:center;border:0;background:none;color:var(--brand-text-muted);padding:0}
 .addr-x .ti{font-size:16px}
 
@@ -866,16 +874,6 @@ a.vsrc{text-decoration:underline}
 .loader-line{display:block;width:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold-hi),transparent);animation:grow 1.4s var(--ease-tide) 2.6s forwards}
 
 /* ── states ───────────────────────────────────────────────────────────────── */
-.skel{position:relative;overflow:hidden;background:var(--glass);border-radius:var(--radius-card)}
-.skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
-  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--brand-surface) 60%,transparent),transparent);
-  animation:sweep 1.4s var(--ease-tide) infinite}
-.skel-eyebrow{height:12px;width:28%;margin-bottom:12px}
-.skel-title{height:44px;width:70%;margin-bottom:12px}
-.skel-chips{height:36px;width:90%}
-.skel-rail{height:44px;margin:var(--space-3) 0}
-.skel-card{aspect-ratio:4/3.9}
-.skel-row{height:56px;margin-bottom:8px}
 .empty{text-align:center;padding:var(--space-12) var(--space-5);color:var(--brand-text-muted)}
 .empty b{display:block;font-family:var(--brand-font-heading);font-size:var(--text-lg);font-weight:var(--weight-normal);
          color:var(--brand-text);margin-bottom:var(--space-2)}
@@ -885,14 +883,6 @@ a.vsrc{text-decoration:underline}
 .tail-gap{height:28px}
 .offline{position:fixed;left:0;right:0;top:0;z-index:var(--z-toast);background:var(--color-warning);color:#fff;
          text-align:center;padding:var(--space-2) var(--space-4);font-size:var(--text-sm);font-weight:var(--weight-medium)}
-.toast{position:fixed;left:var(--space-4);right:var(--space-4);bottom:calc(var(--nav-h) + var(--pill-h) + var(--space-4));
-       z-index:var(--z-toast);background:color-mix(in srgb,var(--brand-surface) 90%,transparent);color:var(--brand-text);
-       border:1px solid var(--accent-line);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-       padding:var(--space-3) var(--space-4);border-radius:var(--radius-card);box-shadow:var(--elevation-3);
-       font-size:var(--text-sm);max-width:688px;margin:0 auto;
-       opacity:0;transform:translateY(10px);pointer-events:none;
-       transition:opacity .2s var(--ease),transform .2s var(--ease)}
-.toast.show{opacity:1;transform:none}
 
 /* ── motion the way a game does it (store/motion.js) ─────────────────────
    A card that leaves is shown out of flow where it was while it dissolves;
@@ -1088,7 +1078,6 @@ a.vsrc{text-decoration:underline}
   background:linear-gradient(to top,var(--brand-surface) 70%,transparent)}
 .bk-pick{margin:0 0 var(--space-2);min-height:20px;font-size:var(--text-sm);color:var(--brand-text-muted)}
 .bk-pick b{color:var(--brand-text)}
-.skel-plan{height:60vh;min-height:280px}
 .bk-key{display:inline-grid;place-items:center;width:14px;height:14px;border-radius:4px;
   border:1.4px solid var(--brand-text);background:var(--brand-surface);color:var(--brand-text-muted);
   font-size:10px;font-weight:var(--weight-bold);font-variant-numeric:tabular-nums}
@@ -1098,3 +1087,8 @@ a.vsrc{text-decoration:underline}
 .consent{display:flex;gap:var(--space-2);align-items:flex-start;min-height:44px;padding:var(--space-2) 0;font-weight:var(--weight-normal);color:var(--brand-text);cursor:pointer}
 .consent input{flex:none;width:22px;height:22px;margin:2px 0 0;accent-color:var(--brand-primary)}
 .consent[hidden]{display:none}
+/* The privacy notice link (P8): beside every consent prompt, the booking form
+   and the menu's foot. A real link at reading size, 44px tall to tap. */
+.privacy-link{margin:0;padding:var(--space-2) 0}
+.privacy-link a{display:inline-flex;align-items:center;min-height:44px;color:var(--brand-text);text-decoration:underline}
+.foot-legal{text-align:center}

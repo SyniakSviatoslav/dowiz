@@ -11,8 +11,9 @@
 // ASCII QUOTES ONLY in this file: a typographic quote once took down the
 // whole console.
 
-import { $, esc, icon, t, api, withLoc, toast, sheet, busy } from '/admin/core.js';
+import { $, esc, t, api, withLoc, toast, sheet, busy } from '/admin/core.js';
 import { T, LANGS } from '/admin/i18n.js';
+import { btn, field, select } from '/admin/parts.js';
 
 const WORDS = {
   sq: { refund: 'Rimburso', refundHint: 'Porosia mbyllet si e rimbursuar dhe del te Perjashtimet me emrin tuaj.', refundReason: 'Arsyeja', rr_venue_cancelled: 'Lokali e anuloi', rr_customer_request: 'Me kerkese te klientit', rr_payment_error: 'Gabim pagese', rr_other: 'Tjeter', refundNote: 'Shenim (per tjeter)', moneyBack: 'Parate u kthyen', refundStarted: 'Rimbursimi filloi', refundDone: 'Rimbursimi u mbyll' },
@@ -34,10 +35,9 @@ const send = (id, body, k) => api(`/staff/orders/${encodeURIComponent(id)}/refun
 export function openRefund(id, after){
   const k = key(id);
   sheet(`<p class="eyebrow">#${esc(id.slice(0, 8))}</p><h2 data-t="refund"></h2><p class="muted small" data-t="refundHint"></p>
-    <label for="rf-why" data-t="refundReason"></label>
-    <select id="rf-why">${REASONS.map(r => `<option value="${r}" data-t="rr_${r}"></option>`).join('')}</select>
-    <label for="rf-note" data-t="refundNote"></label><input id="rf-note" maxlength="140" autocomplete="off">
-    <div class="btn-row"><button class="btn danger" id="rfGo" type="button">${icon('receipt')}<span data-t="refund"></span></button></div>`, { name: 'refund' });
+    ${select({ id: 'rf-why', key: 'refundReason', options: REASONS.map(r => ({ value: r, key: 'rr_' + r })), tour: 'refund.reason' })}
+    ${field({ id: 'rf-note', key: 'refundNote', maxlength: 140, autocomplete: 'off', tour: 'refund.note' })}
+    <div class="btn-row">${btn({ id: 'rfGo', variant: 'danger', icon: 'receipt', key: 'refund', tour: 'refund.go' })}</div>`, { name: 'refund' });
   for (const o of document.querySelectorAll('#rf-why option')) o.textContent = t(o.dataset.t);
   $('#rfGo').onclick = async () => {
     const why = $('#rf-why').value, note = $('#rf-note').value.trim();

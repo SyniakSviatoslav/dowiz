@@ -14,9 +14,12 @@
 <link rel="stylesheet" href="/lib/icons.css">
 <link rel="stylesheet" href="/lib/tokens.css">
 <link rel="stylesheet" href="/lib/components.css">
+<link rel="stylesheet" href="/lib/ui/ui.css">
 <link rel="stylesheet" href="/admin/admin.css">
 <link rel="modulepreload" href="/admin/core.js">
 <link rel="modulepreload" href="/admin/i18n.js">
+<link rel="modulepreload" href="/admin/parts.js">
+<link rel="modulepreload" href="/lib/ui/index.js">
 </head>
 <body>
 <!-- The header: the venue's mark and name, its state as one chip, the words
@@ -24,9 +27,9 @@
 <header class="top" id="top" hidden><div class="wrap top-in">
   <img class="brand-mark" id="brandMark" alt="" width="34" height="34" hidden>
   <span class="brand" id="brandName">dowiz</span>
-  <button type="button" class="vstate" id="vstate" data-t-attr="title:setState"><span class="dot" aria-hidden="true"></span><span id="vstateT">—</span></button>
-  <button type="button" class="icon-btn" id="prefs" data-t-attr="aria-label:language title:language"><i class="ti ti-torii" aria-hidden="true"></i></button>
-  <button type="button" class="icon-btn" id="logout" data-t-attr="aria-label:signOut title:signOut"><i class="ti ti-logout" aria-hidden="true"></i></button>
+  <button type="button" class="ui-chip vstate" id="vstate" data-tour="header.state" data-t-attr="title:setState"><span class="dot" aria-hidden="true"></span><span id="vstateT">—</span></button>
+  <button type="button" class="ui-iconbtn" id="prefs" data-tour="header.prefs" data-t-attr="aria-label:language title:language"><i class="ti ti-torii" aria-hidden="true"></i></button>
+  <button type="button" class="ui-iconbtn" id="logout" data-tour="header.logout" data-t-attr="aria-label:signOut title:signOut"><i class="ti ti-logout" aria-hidden="true"></i></button>
 </div></header>
 <main id="app" class="wrap" aria-live="polite"></main>
 <!-- Five tabs under the thumb. Filled by admin/app.js. -->
@@ -34,10 +37,10 @@
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true">
   <div class="grab" id="grab" aria-hidden="true"></div>
-  <button type="button" class="sheet-x" id="sheetClose" data-t-attr="aria-label:close title:close"><i class="ti ti-x" aria-hidden="true"></i></button>
+  <button type="button" class="ui-iconbtn ui-iconbtn--plain sheet-x" id="sheetClose" data-t-attr="aria-label:close title:close"><i class="ti ti-x" aria-hidden="true"></i></button>
   <div class="sheet-in" id="sheetIn"></div>
 </div>
-<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<div class="ui-toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <script type="module" src="/admin/app.js"></script>
 </body>
 </html>

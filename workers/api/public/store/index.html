@@ -26,6 +26,9 @@
 <link rel="stylesheet" href="/lib/icons.css">
 <link rel="stylesheet" href="/lib/tokens.css">
 <link rel="stylesheet" href="/lib/components.css">
+<!-- The design system (/lib/ui): after the shared tokens, before this surface's
+     sheet, which keeps the venue's skin (store/parts.js says how). -->
+<link rel="stylesheet" href="/lib/ui/ui.css">
 <link rel="stylesheet" href="/store/store.css">
 <link rel="modulepreload" href="/app.js">
 <link rel="modulepreload" href="/store/state.js">
@@ -49,10 +52,10 @@
   <img class="brand-mark" id="brandMark" alt="" width="40" height="40" hidden>
   <span class="brand" id="brandName">…</span>
   <!-- Two decisions, two controls: what I read in, what I count in. -->
-  <button class="icon-btn glass" id="langBtn" type="button" data-t-attr="aria-label:language title:language">
-    <i class="ti ti-torii" aria-hidden="true"></i></button>
-  <button class="icon-btn glass cur-btn" id="curBtn" type="button" data-t-attr="aria-label:currency title:currency">
-    <i class="ti ti-coin-hole" aria-hidden="true"></i><span class="cur-code money" id="curCode"></span></button>
+  <button class="ui-iconbtn icon-btn glass" id="langBtn" type="button" data-tour="top.lang" data-t-attr="aria-label:language title:language">
+    <i class="ti ti-torii ui-i" aria-hidden="true"></i></button>
+  <button class="ui-iconbtn icon-btn glass cur-btn" id="curBtn" type="button" data-tour="top.currency" data-t-attr="aria-label:currency title:currency">
+    <i class="ti ti-coin-hole ui-i" aria-hidden="true"></i><span class="cur-code money" id="curCode"></span></button>
 </div></header>
 
 <!-- The metal, for SVG strokes: the same foil the CSS draws, as a gradient any
@@ -66,7 +69,7 @@
 <main id="app" class="wrap" aria-live="polite"></main>
 
 <!-- The floating order pill: count, label, total. A <Money> that snaps. -->
-<button class="cart-pill" id="cartPill" type="button">
+<button class="cart-pill" id="cartPill" type="button" data-tour="cart.open">
   <span class="pill-n" id="pillCount">0</span>
   <span class="pill-l" data-t="viewOrder">View order</span>
   <span class="money pill-t" id="pillTotal" data-money="0"></span>
@@ -82,7 +85,7 @@
   <div class="grab" id="grab" aria-hidden="true"></div>
   <div class="sheet-in" id="sheetIn"></div>
 </div>
-<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<div class="ui-toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <!-- Stripe.js is loaded ONLY when a card is chosen, so a cash-only venue ships no payment SDK. -->
 <script type="module" src="/app.js"></script>
 </body>

@@ -56,7 +56,7 @@ export function wanted(order){
 export function markup(order){
   if (!wanted(order)) return '';
   const riding = order.status === 'IN_DELIVERY';
-  return `<section class="ep-mapwrap"><div class="ep-map" id="epMap" aria-label="${t('mapLegend')}"></div>
+  return `<section class="ep-mapwrap" data-tour="track.map"><div class="ep-map" id="epMap" aria-label="${t('mapLegend')}"></div>
     <p class="ep-legend mono"><span><i class="tm-key tm-key-venue"></i>${t('mapVenue')}</span><span><i class="tm-key tm-key-door"></i>${t('mapYou')}</span>${riding ? `<span><i class="tm-key tm-key-courier"></i>${t('mapCourier')}</span>` : ''}</p></section>`;
 }
 

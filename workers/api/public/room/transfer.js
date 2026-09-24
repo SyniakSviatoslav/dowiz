@@ -8,7 +8,8 @@
 // known phrases, in the server's own. A stale version reloads the room -- the
 // lines are indices into what THIS screen showed, and moving "line 2" of a
 // round someone else just changed moves the wrong dish.
-import { esc, money, transferTargets, transferBody, refusalKey } from './logic.js';
+import { money, transferTargets, transferBody, refusalKey } from './logic.js';
+import { ui, k, act, backBar, amt } from './parts.js';
 
 /// The picked lines and target, per source round, so a redraw keeps them.
 function form(c, round) {
@@ -21,22 +22,22 @@ export function renderTransfer(c, round) {
   const { S, t } = c, cur = S.currency, loc = c.locale(), f = form(c, round);
   const items = Array.isArray(round.items) ? round.items : [];
   const targets = transferTargets(S.caps, S.sittings, round.id);
-  const lines = items.map((it, i) => {
-    const on = f.lines.includes(i);
-    return `<li><button type="button" class="line pick${on ? ' on' : ''}" role="checkbox" aria-checked="${on}" data-act="line" data-line="${i}">
-      <span class="qty">${Number(it.quantity || 0)}×</span><span class="name">${esc(it.name || it.product_id || '')}</span>
-      <span class="amt">${money(Number(it.unit_price || 0) * Number(it.quantity || 0), cur, loc)}</span></button></li>`;
-  }).join('');
-  const dests = targets.map(({ sitting, round: r }) => `<button type="button" class="seg-b${f.to === r.id ? ' on' : ''}" role="radio" aria-checked="${f.to === r.id}" data-act="to" data-id="${esc(r.id)}">
-      ${esc(t('table'))} ${esc(r.fulfilment?.table || sitting.table || '—')} · ${money(r.total || 0, cur, loc)}</button>`).join('');
+  // Lines are picked MANY at a time, destinations ONE: both are pressed rows.
+  const lines = items.map((it, i) => ui.row({ select: true, pressed: f.lines.includes(i), cls: 'line pick',
+    title: `${Number(it.quantity || 0)}× ${it.name || it.product_id || ''}`,
+    trailing: amt(money(Number(it.unit_price || 0) * Number(it.quantity || 0), cur, loc)),
+    attrs: act('line', { line: i }, 'transfer.line') })).join('');
+  const dests = targets.map(({ sitting, round: r }) => ui.row({ select: true, pressed: f.to === r.id,
+    title: `${t('table')} ${r.fulfilment?.table || sitting.table || '—'}`, trailing: amt(money(r.total || 0, cur, loc)),
+    attrs: act('to', { id: r.id }, 'transfer.target') })).join('');
   return `
-    <div class="bar"><button class="btn" data-act="back">← ${esc(t('back'))}</button></div>
-    <h2>${esc(t('moveLines'))} · ${esc(t('table'))} ${esc(c.tableOf(round) || '—')}</h2>
-    <p class="muted">${esc(t('pickLines'))}</p>
-    <ul class="lines">${lines || `<li class="muted">${esc(t('noLines'))}</li>`}</ul>
-    <label>${esc(t('moveLinesTo'))}</label>
-    ${dests ? `<div class="seg" role="radiogroup" aria-label="${esc(t('moveLinesTo'))}">${dests}</div>` : `<p class="muted">${esc(t('noTargets'))}</p>`}
-    <div class="acts"><button class="cta" data-act="send"${dests ? '' : ' disabled'}>${esc(t('moveLines'))}</button></div>`;
+    ${backBar()}
+    <h2>${ui.esc(t('moveLines'))} · ${ui.esc(t('table'))} ${ui.esc(c.tableOf(round) || '—')}</h2>
+    ${ui.para(k('pickLines'), { hint: true })}
+    ${lines ? ui.list([lines], { label: t('pickLines'), cls: 'lines' }) : ui.emptyState({ icon: 'receipt', title: k('noLines') })}
+    <h3>${ui.esc(t('moveLinesTo'))}</h3>
+    ${dests ? ui.list([dests], { label: t('moveLinesTo') }) : ui.emptyState({ icon: 'map-pin', title: k('noTargets') })}
+    <div class="acts">${ui.button({ variant: 'primary', size: 'lg', block: true, icon: 'arrows-sort', label: k('moveLines'), disabled: !dests, attrs: act('send', {}, 'transfer.send') })}</div>`;
 }
 
 export function bindTransfer(c, root, round) {
@@ -66,12 +67,12 @@ export function bindTransfer(c, root, round) {
 export function renderMoveSitting(c, sitting) {
   const { t } = c;
   return `
-    <div class="bar"><button class="btn" data-act="back">← ${esc(t('back'))}</button></div>
-    <h2>${esc(t('moveSitting'))} · ${esc(t('table'))} ${esc(sitting.table || '—')}</h2>
-    <p class="muted">${esc(t('moveSittingHint'))}</p>
-    <form class="row-form" data-form="moveSit"><label>${esc(t('moveTable'))}
-      <input name="table" required maxlength="24" autocomplete="off" inputmode="text"></label>
-      <button class="btn" type="submit">${esc(t('move'))}</button></form>`;
+    ${backBar()}
+    <h2>${ui.esc(t('moveSitting'))} · ${ui.esc(t('table'))} ${ui.esc(sitting.table || '—')}</h2>
+    ${ui.para(k('moveSittingHint'), { hint: true })}
+    <form class="row-form" data-form="moveSit">${ui.inputRow({ label: k('moveTable'), placeholder: k('moveTable'),
+      attrs: { name: 'table', required: true, maxlength: 24, inputmode: 'text', data: { tour: 'move.table' } },
+      action: ui.button({ type: 'submit', variant: 'primary', label: k('move'), attrs: { data: { tour: 'move.submit' } } }) })}</form>`;
 }
 
 export function bindMoveSitting(c, root, sitting) {
@@ -85,7 +86,7 @@ export function bindMoveSitting(c, root, sitting) {
     const table = ev.target.elements.table.value.trim();
     if (!table) return;
     const btn = ev.target.querySelector('button[type="submit"]');
-    if (btn) btn.disabled = true;
+    ui.setBusy(btn, t('loading'));
     const ok = await send(c, `/staff/sittings/${encodeURIComponent(sitting.sitting_id)}/move`, { location_id: S.loc, table }, 'move:' + sitting.sitting_id);
     if (ok) S.view = 'sitting';
     c.render();

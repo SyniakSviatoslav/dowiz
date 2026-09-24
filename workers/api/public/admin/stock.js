@@ -10,6 +10,7 @@ import { $, $$, esc, icon, t, api, post, withLoc, toast, sheet, closeSheet, busy
 import { lang } from '/admin/i18n.js';
 import { rerender } from '/admin/app.js';
 import { openBulk } from '/admin/bulk.js';
+import { ui, k as key, btn, iconBtn, field, select, chips, press, pill, empty, loading, rowBtn, rowDiv } from '/admin/parts.js';
 
 /// The bar reads full at this many times the low mark.
 const FULL_AT_LOW_MULTIPLE = 4;
@@ -31,18 +32,17 @@ const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Dia
 
 export async function render(host){
   host.innerHTML = `<div class="screen-h"><div><p class="eyebrow" data-t="tabStock"></p><h1 data-t="supplies"></h1></div>
-    <div class="btn-row compact"><button type="button" class="act" id="importSupplies" aria-label="${esc(t('importSupplies'))}">${icon('download')}</button><button type="button" class="act pri" id="addSupply">${icon('plus')}<span data-t="addSupply"></span></button></div></div>
+    <div class="btn-row compact">${iconBtn({ id: 'importSupplies', icon: 'download', ariaKey: 'importSupplies', tour: 'stock.import' })}${btn({ id: 'addSupply', variant: 'primary', icon: 'plus', key: 'addSupply', tour: 'stock.addSupply' })}</div></div>
     <p class="screen-hint" data-t="stockScreenHint"></p>
-    <label class="srch">${icon('search')}<input id="sq" type="search" value="${esc(view.q)}" data-t-attr="placeholder:search"></label>
-    <div class="chips filters"><button type="button" class="chip ${view.kind === 'all' ? 'on' : ''}" data-k="all"><span data-t="all"></span></button>
-      ${KINDS.map(([k, ic]) => `<button type="button" class="chip ${view.kind === k ? 'on' : ''}" data-k="${k}">${icon(ic)}<span data-t="kind_${k}"></span></button>`).join('')}
-      <select class="chip sortsel" id="sSort">${['name', 'category', 'low'].map(k => `<option value="${k}" ${view.sort === k ? 'selected' : ''}>${esc(t('ssort_' + k))}</option>`).join('')}</select></div>
-    <div id="stockList"><div class="skel skel-row"></div><div class="skel skel-row"></div></div>`;
+    <div class="srch">${icon('search')}${ui.inputRow({ id: 'sq', type: 'search', label: key('search'), placeholder: key('search'), attrs: { value: view.q, data: { tour: 'stock.search' } } })}</div>
+    ${chips({ values: [{ value: 'all', key: 'all' }, ...KINDS.map(([k, ic]) => ({ value: k, key: 'kind_' + k, icon: ic }))], value: view.kind, attr: 'k', labelKey: 'kind', tour: 'stock.filter' }).replace('class="chips"', 'class="chips filters"')}
+    ${select({ id: 'sSort', ariaLabel: t('sort'), controlCls: 'sortsel', value: view.sort, options: ['name', 'category', 'low'].map(k => ({ value: k, key: 'ssort_' + k })), tour: 'stock.sort' })}
+    <div id="stockList">${loading(2)}</div>`;
   $('#addSupply', host).onclick = () => openSupply(null);
   $('#importSupplies', host).onclick = () => openBulk('supplies', rerender);
   $('#sSort', host).onchange = e => { view.sort = e.target.value; rerender(); };
   $('#sq', host).oninput = e => { view.q = e.target.value; drawList(host); };
-  try { stock = await api('/owner/stock'); } catch (e) { $('#stockList', host).innerHTML = `<div class="empty">${icon('alert-triangle')}<b>${esc(t('loadFail'))}</b><span class="muted small">${esc(e.message || e)}</span></div>`; return; }
+  try { stock = await api('/owner/stock'); } catch (e) { $('#stockList', host).innerHTML = empty('alert-triangle', { key: 'loadFail', body: String(e.message || e), alert: true }); return; }
   drawList(host);
   host.onclick = e => {
     const k = e.target.closest('[data-k]'); if (k) { view.kind = k.dataset.k; return rerender(); }
@@ -53,7 +53,7 @@ export async function render(host){
 function drawList(host){
   const all = stock?.supplies || [];
   const lowN = all.filter(s => s.low || (s.available || 0) <= 0).length;
-  const h1 = $('.screen-h', host); if (h1 && lowN && !$('.pill.warn', h1)) h1.insertAdjacentHTML('beforeend', `<span class="pill warn">${lowN} <span data-t="low"></span></span>`);
+  const h1 = $('.screen-h', host); if (h1 && lowN && !$('.lowN', h1)) h1.insertAdjacentHTML('beforeend', pill('warn', { label: `${lowN} ${t('low')}`, cls: 'lowN' }));
   const q = norm(view.q).trim();
   let list = all.filter(s => (view.kind === 'all' || s.kind === view.kind) && (!q || norm(`${s.name} ${s.category} ${s.id}`).includes(q)));
   if (view.sort === 'name') list = [...list].sort((a, b) => String(a.name).localeCompare(String(b.name), lang));
@@ -67,19 +67,18 @@ function drawList(host){
     const ic = (KINDS.find(([k]) => k === sup.kind) || KINDS[0])[1];
     const per = `/${basisOf(sup.unit) === 1 ? '' : '100'}${sup.unit}`;
     const facts = [sup.category, isFood(sup.kind) && sup.kcalPer100 != null ? `${sup.kcalPer100} kcal${per}` : '', sup.costPerBasis != null ? `${money(sup.costPerBasis)}${per}` : ''].filter(Boolean).join(' · ');
-    return `<button type="button" class="rowc" data-s="${esc(sup.id)}">${icon(ic)}
-      <span class="t"><b>${esc(sup.name || sup.id)}${isFood(sup.kind) && !sup.nutritionConfirmed ? ` <span class="pill warn" data-t="unconfirmed"></span>` : ''}</b><small class="mono">${esc(facts)}</small>
-        <small class="mono">${sup.available ?? 0} ${esc(sup.unit || '')}${sup.reserved ? ` · ${t('reserved')} ${sup.reserved}` : ''}${low ? ` · ${t('minLevel')} ${low}` : ''}</small>
-        <span class="gauge"><i class="${state === 'ok' ? '' : state}" data-w="${pct}"></i></span></span>
-      <span class="pill ${state}" data-t="${state === 'bad' ? 'out' : state === 'warn' ? 'low' : 'onSale'}"></span></button>`; };
+    return rowBtn({ leading: icon(ic), title: sup.name || sup.id, data: { s: sup.id }, tour: 'stock.supply',
+      sub: `<span class="mono">${esc(facts)}</span><span class="mono">${sup.available ?? 0} ${esc(sup.unit || '')}${sup.reserved ? ` · ${esc(t('reserved'))} ${sup.reserved}` : ''}${low ? ` · ${esc(t('minLevel'))} ${low}` : ''}</span>
+        <span class="gauge"><i class="${state === 'ok' ? '' : state}" data-w="${pct}"></i></span>`,
+      trailing: `${isFood(sup.kind) && !sup.nutritionConfirmed ? pill('warn', { key: 'unconfirmed' }) : ''}${pill(state, { key: state === 'bad' ? 'out' : state === 'warn' ? 'low' : 'onSale' })}` }); };
   let html = '';
   if (view.sort === 'category') {
     const groups = [...new Set(list.map(s => s.category || ''))];
     html = groups.map(g => `<section class="group"><p class="eyebrow">${esc(g || t('none'))}</p><div class="rows">${list.filter(s => (s.category || '') === g).map(row).join('')}</div></section>`).join('');
   } else html = `<div class="rows">${list.map(row).join('')}</div>`;
   $('#stockList', host).innerHTML = (all.length ? `<p class="hint mono">${KINDS.map(([k], i) => `${counts[i]} ${t('kind_' + k).toLowerCase()}`).join(' · ')}</p>` : '') +
-    (list.length ? html : `<div class="empty">${icon('bento')}<b data-t="${all.length ? 'none' : 'noStock'}"></b><span class="muted small" data-t="stockHint"></span></div>`) +
-    (stock.stranded?.length ? `<section class="group mt-3"><p class="eyebrow" data-t="stranded"></p><p class="muted small" data-t="strandedHint"></p><div class="rows">${stock.stranded.map(s => `<div class="rowc off">${icon('alert-triangle')}<span class="t"><b>${esc(s.item)} × ${s.qty}</b><small class="mono">#${esc(String(s.order).slice(0, 8))}</small></span></div>`).join('')}</div></section>` : '');
+    (list.length ? html : empty('bento', { key: all.length ? 'none' : 'noStock', bodyKey: 'stockHint' })) +
+    (stock.stranded?.length ? `<section class="group mt-3"><p class="eyebrow" data-t="stranded"></p><p class="muted small" data-t="strandedHint"></p><div class="rows">${stock.stranded.map(s => rowDiv({ cls: 'off', leading: icon('alert-triangle'), title: `${s.item} × ${s.qty}`, sub: `<span class="mono">#${esc(String(s.order).slice(0, 8))}</span>` })).join('')}</div></section>` : '');
   retranslate($('#stockList', host)); hydrate($('#stockList', host));
 }
 
@@ -88,25 +87,25 @@ function openSupply(sup){
   const kind = sup?.kind || KINDS[0][0], unit = sup?.unit || 'g';
   const cats = [...new Set((stock?.supplies || []).map(s => s.category).filter(Boolean))];
   sheet(`<p class="eyebrow" data-t="supplies"></p><h2 data-t="${sup ? 'edit' : 'addSupply'}"></h2>
-    <label for="s-name" data-t="name"></label><input id="s-name" value="${esc(sup?.name || '')}" autocomplete="off">
-    <label for="s-id" data-t="ingredient"></label><input id="s-id" value="${esc(sup?.id || '')}" ${sup ? 'readonly' : ''} placeholder="salmon"><p class="hint" data-t="supplyIdHint"></p>
-    <label data-t="kind"></label><div class="seg" id="sKind">${KINDS.map(([k, ic]) => `<button type="button" class="seg-b ${k === kind ? 'on' : ''}" data-kind="${k}">${icon(ic)}<span data-t="kind_${k}"></span></button>`).join('')}</div>
-    <div class="grid2"><div><label for="s-cat" data-t="category"></label><input id="s-cat" list="catList" value="${esc(sup?.category || '')}" autocomplete="off"><datalist id="catList">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
-      <div><label for="s-unit" data-t="unit"></label><select id="s-unit">${UNITS.map(u => `<option value="${u}" ${u === unit ? 'selected' : ''}>${u}</option>`).join('')}</select></div></div>
+    ${field({ id: 's-name', key: 'name', value: sup?.name || '', autocomplete: 'off', tour: 'supply.name' })}
+    ${field({ id: 's-id', key: 'ingredient', value: sup?.id || '', placeholder: 'salmon', hintKey: 'supplyIdHint', attrs: { readonly: !!sup }, tour: 'supply.id' })}
+    <p class="ui-label" data-t="kind"></p>${chips({ id: 'sKind', values: KINDS.map(([k, ic]) => ({ value: k, key: 'kind_' + k, icon: ic })), value: kind, attr: 'kind', labelKey: 'kind', tour: 'supply.kind' })}
+    <div class="grid2"><div>${field({ id: 's-cat', key: 'category', value: sup?.category || '', autocomplete: 'off', attrs: { list: 'catList' }, tour: 'supply.category' })}<datalist id="catList">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
+      <div>${select({ id: 's-unit', key: 'unit', value: unit, options: UNITS.map(u => ({ value: u, label: u })), tour: 'supply.unit' })}</div></div>
     <div id="sFood" ${isFood(kind) ? '' : 'hidden'}>
       <p class="eyebrow mt-3"><span data-t="nutritionPer"></span> <span id="sBasis">${basisOf(unit) === 1 ? '1' : '100'} ${esc(unit)}</span></p>
-      <div class="grid2"><div><label for="s-kcal" data-t="kcal"></label><input id="s-kcal" inputmode="decimal" value="${sup?.kcalPer100 ?? ''}"></div><div><label for="s-prot" data-t="protein"></label><input id="s-prot" inputmode="decimal" value="${sup?.proteinPer100 ?? ''}"></div></div>
-      <div class="grid2"><div><label for="s-fat" data-t="fat"></label><input id="s-fat" inputmode="decimal" value="${sup?.fatPer100 ?? ''}"></div><div><label for="s-carb" data-t="carbs"></label><input id="s-carb" inputmode="decimal" value="${sup?.carbsPer100 ?? ''}"></div></div>
-      ${switchEl('s-conf', !!sup?.nutritionConfirmed, 'nutritionConfirmed', 'nutritionConfirmedHint')}
+      <div class="grid2"><div>${field({ id: 's-kcal', key: 'kcal', inputmode: 'decimal', value: sup?.kcalPer100 ?? '', tour: 'supply.kcal' })}</div><div>${field({ id: 's-prot', key: 'protein', inputmode: 'decimal', value: sup?.proteinPer100 ?? '' })}</div></div>
+      <div class="grid2"><div>${field({ id: 's-fat', key: 'fat', inputmode: 'decimal', value: sup?.fatPer100 ?? '' })}</div><div>${field({ id: 's-carb', key: 'carbs', inputmode: 'decimal', value: sup?.carbsPer100 ?? '' })}</div></div>
+      ${switchEl('s-conf', !!sup?.nutritionConfirmed, 'nutritionConfirmed', 'nutritionConfirmedHint', 'supply.confirmed')}
     </div>
-    <div class="grid2"><div><label for="s-cost"><span data-t="costPer"></span> <span class="sBasis">${basisOf(unit) === 1 ? '1' : '100'} ${esc(unit)}</span></label><input id="s-cost" inputmode="numeric" value="${sup?.costPerBasis ?? ''}"></div>
-      <div id="sWeight" ${unit === 'unit' ? '' : 'hidden'}><label for="s-wpu" data-t="weightPerUnit"></label><input id="s-wpu" inputmode="decimal" value="${sup?.weightPerUnit ?? ''}"></div></div>
-    <label for="s-low" data-t="minLevel"></label><input id="s-low" inputmode="numeric" value="${sup?.lowAt ?? ''}">
-    <div class="btn-row"><button class="btn" id="sSave">${icon('check')}<span data-t="save"></span></button></div>
-    ${sup ? `<div class="btn-row"><button class="btn danger" id="sRetire">${icon('trash')}<span data-t="retireSupply"></span></button></div>` : ''}`, { name: 'supply' });
+    <div class="grid2"><div>${field({ id: 's-cost', key: 'costPer', hint: `${basisOf(unit) === 1 ? '1' : '100'} ${unit}`, inputmode: 'numeric', value: sup?.costPerBasis ?? '', tour: 'supply.cost' })}</div>
+      <div id="sWeight" ${unit === 'unit' ? '' : 'hidden'}>${field({ id: 's-wpu', key: 'weightPerUnit', inputmode: 'decimal', value: sup?.weightPerUnit ?? '' })}</div></div>
+    ${field({ id: 's-low', key: 'minLevel', inputmode: 'numeric', value: sup?.lowAt ?? '', tour: 'supply.low' })}
+    <div class="btn-row">${btn({ id: 'sSave', variant: 'primary', icon: 'check', key: 'save', tour: 'supply.save' })}</div>
+    ${sup ? `<div class="btn-row">${btn({ id: 'sRetire', variant: 'danger', icon: 'trash', key: 'retireSupply', tour: 'supply.retire' })}</div>` : ''}`, { name: 'supply' });
   let k = kind;
-  for (const b of $$('[data-kind]', $('#sheetIn'))) b.onclick = () => { k = b.dataset.kind; for (const x of $$('[data-kind]', $('#sheetIn'))) x.classList.toggle('on', x === b); $('#sFood').hidden = !isFood(k); };
-  $('#s-unit').onchange = e => { const u = e.target.value; $('#sWeight').hidden = u !== 'unit'; for (const el of $$('#sBasis, .sBasis')) el.textContent = `${basisOf(u) === 1 ? '1' : '100'} ${u}`; };
+  for (const b of $$('[data-kind]', $('#sheetIn'))) b.onclick = () => { k = b.dataset.kind; press($$('[data-kind]', $('#sheetIn')), b); $('#sFood').hidden = !isFood(k); };
+  $('#s-unit').onchange = e => { const u = e.target.value; $('#sWeight').hidden = u !== 'unit'; for (const el of $$('#sBasis, #s-cost-hint')) el.textContent = `${basisOf(u) === 1 ? '1' : '100'} ${u}`; };
   if (!sup) $('#s-name').oninput = e => { $('#s-id').value = e.target.value.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9а-яіїєґ]+/gi, '-').replace(/^-|-$/g, ''); };
   const num = v => { const s = String(v ?? '').trim(); if (!s) return null; const n = Number(s.replace(',', '.')); return Number.isFinite(n) ? n : null; };
   $('#sSave').onclick = async () => {
@@ -125,14 +124,14 @@ function openMove(id){
   const sup = (stock?.supplies || []).find(s => s.id === id); if (!sup) return;
   sheet(`<p class="eyebrow" data-t="move"></p><h2>${esc(sup.name || sup.id)}</h2>
     <p class="mono muted">${sup.available ?? 0} ${esc(sup.unit || '')}</p>
-    <div class="seg" id="kind">${MOVES.map(([k, key, ic], i) => `<button type="button" class="seg-b ${i === 0 ? 'on' : ''}" data-k="${k}">${icon(ic)}<span data-t="${key}"></span></button>`).join('')}</div>
-    <label for="m-qty" data-t="level"></label><input id="m-qty" inputmode="decimal">
-    <div id="mReasons" hidden><label data-t="reason"></label><div class="chips">${WASTE_REASONS.map(r => `<button type="button" class="chip" data-r="${r}" data-t="${r}"></button>`).join('')}</div></div>
-    <label for="m-reason" data-t="reason"></label><input id="m-reason">
-    <div class="btn-row"><button class="btn ghost" id="mEdit">${icon('tools-kitchen-2')}<span data-t="edit"></span></button><button class="btn" id="mGo">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'move' });
+    <div class="chips" id="kind" role="group">${MOVES.map(([k, word, ic], i) => ui.chip({ as: 'button', selected: i === 0, icon: ic, label: key(word), attrs: { data: { k, tour: 'stock.' + k } } })).join('')}</div>
+    ${field({ id: 'm-qty', key: 'level', inputmode: 'decimal', tour: 'move.qty' })}
+    <div id="mReasons" hidden><p class="ui-label" data-t="reason"></p>${chips({ values: WASTE_REASONS.map(r => ({ value: r, key: r })), attr: 'r', labelKey: 'reason', tour: 'move.wasteReason' })}</div>
+    ${field({ id: 'm-reason', key: 'reason', tour: 'move.reason' })}
+    <div class="btn-row">${btn({ id: 'mEdit', variant: 'ghost', icon: 'tools-kitchen-2', key: 'edit', tour: 'move.edit' })}${btn({ id: 'mGo', variant: 'primary', icon: 'check', key: 'save', tour: 'move.save' })}</div>`, { name: 'move' });
   let kind = MOVES[0][0];
-  for (const b of $$('[data-k]', $('#sheetIn'))) b.onclick = () => { kind = b.dataset.k; for (const x of $$('[data-k]', $('#sheetIn'))) x.classList.toggle('on', x === b); $('#mReasons').hidden = kind !== 'wasted'; };
-  for (const b of $$('[data-r]', $('#sheetIn'))) b.onclick = () => { $('#m-reason').value = b.dataset.r; for (const x of $$('[data-r]', $('#sheetIn'))) x.classList.toggle('on', x === b); };
+  for (const b of $$('[data-k]', $('#sheetIn'))) b.onclick = () => { kind = b.dataset.k; press($$('[data-k]', $('#sheetIn')), b); $('#mReasons').hidden = kind !== 'wasted'; };
+  for (const b of $$('[data-r]', $('#sheetIn'))) b.onclick = () => { $('#m-reason').value = b.dataset.r; press($$('[data-r]', $('#sheetIn')), b); };
   $('#mEdit').onclick = () => openSupply(sup);
   $('#mGo').onclick = async () => {
     const qty = Number($('#m-qty').value); if (!Number.isFinite(qty)) return toast(t('required'));

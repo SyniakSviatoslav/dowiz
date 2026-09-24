@@ -26,6 +26,8 @@ import { t, tagName, lang } from '/store/i18n.js';
 import { $, $$, esc, icon, fallbackArt, paintFallbacks, spread, debounce } from '/store/ui.js';
 import { morph } from '/store/motion.js';
 import { heroMarkup } from '/store/venue.js';
+import { privacyLink } from '/store/consent.js';
+import { ui, k, ghost } from '/store/parts.js';
 
 // The venue's tags → an icon each. A tag with no icon still gets a chip, with
 // a dot; the venue wrote it down and it filters just the same.
@@ -100,7 +102,7 @@ function card(p, catId, shape = 'plate'){
   return `<article class="card ${shape} ${out ? 'sold-out' : ''}" data-p="${esc(p.id)}" data-cat="${esc(catId)}"
       data-price="${p.price | 0}" data-avail="${out ? 0 : 1}" data-tags="${esc(tags.join(' '))}"
       data-search="${esc(normalise(`${p.name} ${p.description || ''}`))}" data-sort="${p.sortOrder | 0}">
-    <button type="button" class="card-hit" data-open="${esc(p.id)}" ${out ? 'aria-disabled="true"' : ''}
+    <button type="button" class="card-hit" data-open="${esc(p.id)}" data-tour="menu.dish" ${out ? 'aria-disabled="true"' : ''}
             aria-label="${esc(p.name)}">
       <span class="card-media">${p.imageUrl
         ? `<img src="${esc(p.imageUrl)}" alt="" loading="lazy" decoding="async" data-fb="${esc(p.name)}"${p.imageUrlSmall ? ` srcset="${esc(p.imageUrlSmall)} 480w, ${esc(p.imageUrl)} 1200w" sizes="(max-width: 640px) 50vw, 400px"` : ''}>`
@@ -115,13 +117,13 @@ function card(p, catId, shape = 'plate'){
         ${facts.length ? `<span class="card-facts">${facts.map(f => `<span>${f}</span>`).join('')}</span>` : ''}
       </span>
     </button>
-    ${out ? '' : `<button type="button" class="card-add" data-add="${esc(p.id)}" aria-label="${esc(t('add'))}: ${esc(p.name)}">${icon('plus')}</button>`}
+    ${out ? '' : ui.iconButton({ icon: 'plus', ariaLabel: `${t('add')}: ${p.name}`, title: t('add'), cls: 'card-add', attrs: { data: { add: p.id, tour: 'menu.quickAdd' } } })}
   </article>`;
 }
 
 function railMarkup(cats){
   return `<nav class="rail" id="rail" aria-label="${esc(t('menu'))}"><div class="rail-in">
-    ${cats.map((c, i) => `<button type="button" class="rail-chip" data-c="${esc(c.id)}" ${i === 0 ? 'aria-current="true"' : ''}>${esc(c.name)}</button>`).join('')}
+    ${cats.map((c, i) => ui.chip({ as: 'button', label: c.name, cls: 'rail-chip', attrs: { 'aria-current': i === 0 ? 'true' : null, data: { c: c.id, tour: 'menu.category' } } })).join('')}
   </div></nav>`;
 }
 
@@ -135,13 +137,13 @@ function filtersMarkup(cats){
   return `<div class="find" id="find">
     <label class="srch">
       ${icon('search')}
-      <input id="q" type="search" inputmode="search" autocomplete="off"
+      <input id="q" type="search" inputmode="search" autocomplete="off" data-tour="menu.search"
              data-t-attr="placeholder:search aria-label:search" value="${esc(state.q || '')}">
-      <button id="qx" type="button" data-t-attr="aria-label:clear" ${state.q ? '' : 'hidden'}>${icon('x')}</button>
-      <button id="qmic" type="button" class="mic" data-t-attr="aria-label:voice title:voice">${icon('microphone')}</button>
-      <button id="qsort" type="button" class="mic ${state.sort !== SORTS[0] ? 'on' : ''}" data-t-attr="aria-label:sortBy title:sortBy">${icon('arrows-sort')}</button>
+      ${ui.iconButton({ id: 'qx', icon: 'x', ariaLabel: k('clear'), variant: 'plain', attrs: { hidden: !state.q } })}
+      ${ui.iconButton({ id: 'qmic', icon: 'microphone', ariaLabel: k('voice'), variant: 'plain', cls: 'mic', attrs: { data: { tour: 'menu.voice' } } })}
+      ${ui.iconButton({ id: 'qsort', icon: 'arrows-sort', ariaLabel: k('sortBy'), variant: 'plain', cls: ui.cx('mic', state.sort !== SORTS[0] && 'on'), attrs: { data: { tour: 'menu.sort' } } })}
     </label>
-    <div class="tags" id="tags" role="group" aria-label="${esc(t('filters'))}">
+    <div class="tags" id="tags" role="group" data-tour="menu.filter" aria-label="${esc(t('filters'))}">
       <button type="button" class="tag ${!state.tag ? 'on' : ''}" data-tag="" aria-pressed="${!state.tag}">
         ${icon('fan')}<span data-t="all"></span></button>
       ${tags.map(tg => `<button type="button" class="tag ${state.tag === tg ? 'on' : ''}" data-tag="${esc(tg)}" aria-pressed="${state.tag === tg}">
@@ -159,8 +161,9 @@ export function buildMenu(cats){
         <div class="cards">${(() => { const shapes = shapesOf((c.products || []).length); return (c.products || []).map((p, i) => card(p, c.id, shapes[i])).join(''); })()}</div>
       </section>`).join('')}
     </div>
-    <div class="empty" id="noHits" hidden>${icon('search-off', 'ico-lg')}<b data-t="noHits"></b>
-      <button class="btn btn-ghost mt-3 w-cap" id="qreset" data-t="clear"></button></div>
+    ${ui.emptyState({ id: 'noHits', icon: 'search-off', title: k('noHits'), attrs: { hidden: true },
+      action: ghost({ id: 'qreset', block: false, cls: 'w-cap', label: k('clear') }) })}
+    <footer class="foot-legal">${privacyLink()}</footer>
     <div class="tail-gap"></div>`;
   paintFallbacks(app);
   bind();
@@ -295,8 +298,8 @@ const SORT_ICON = { pop: 'scroll', low: 'chevron-down', high: 'chevron-up', az: 
 async function openSort(){
   const { sheet, closeSheet } = await import('/store/ui.js');
   sheet(`<p class="eyebrow" data-t="filters"></p><h2 data-t="sortBy"></h2>
-    <div class="choices" role="radiogroup">${SORTS.map(k => `<button type="button" class="choice ${state.sort === k ? 'on' : ''}" data-sort="${k}" aria-pressed="${state.sort === k}">
-      ${icon(SORT_ICON[k], 'choice-ic')}<span class="choice-name" data-t="sort${k[0].toUpperCase()}${k.slice(1)}"></span>${icon('check', 'choice-ck')}</button>`).join('')}</div>`, { name: 'sort' });
+    ${ui.list(SORTS.map(s => ui.row({ select: true, pressed: state.sort === s, title: k(`sort${s[0].toUpperCase()}${s.slice(1)}`),
+      trailing: icon(SORT_ICON[s], 'choice-ic'), data: { sort: s, tour: 'menu.sortChoice' } })), { label: t('sortBy'), cls: 'choices' })}`, { name: 'sort' });
   for (const b of $$('[data-sort]', $('#sheetIn'))) b.onclick = () => {
     state.sort = b.dataset.sort;
     $('#qsort')?.classList.toggle('on', state.sort !== SORTS[0]);

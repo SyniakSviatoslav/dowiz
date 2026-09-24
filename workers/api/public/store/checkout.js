@@ -23,6 +23,8 @@ import { quoteEta } from '/store/eta.js';
 import { seaCalm, seaEvent } from '/store/sea.js';
 import { consentMarkup, wireConsent, consentBody } from '/store/consent.js';
 import { TABLE, tableBanner, tableBody } from '/store/table.js';
+import { venueWallMs, laterPrefill } from '/lib/booking-time.js';
+import { ui, k, cta, ghost, seg } from '/store/parts.js';
 
 /// The tip choices, in minor units of the venue's currency; the first is "no tip".
 const TIPS = [0, 100, 200, 500];
@@ -31,6 +33,8 @@ const PHONE_MIN_DIGITS = 8;
 /// "Later" opens an hour from now, rounded up to the half hour.
 const LATER_LEAD_MS = 60 * 60 * 1000;
 const LATER_ROUND_MIN = 30;
+/// The venue's zone NAME, as the hub sends it on the menu's location.
+const venueTz = () => state.loc?.tz || 'Europe/Tirane';
 /// A saved address is cut to this many characters on its chip.
 const ADDR_CHIP_CHARS = 34;
 /// The Sea's beat when an order is placed.
@@ -71,9 +75,9 @@ function savedAddressMarkup(){
   const cur = (safeGet('dw_addr') || '').replace(/\s+/g, ' ').trim().toLowerCase();
   return `<div class="addrs" role="radiogroup" data-t-attr="aria-label:savedAddresses">
     ${list.map(a => { const onn = a.line.replace(/\s+/g, ' ').trim().toLowerCase() === cur; return `<span class="addr-chip">
-      <button type="button" class="chip ${onn ? 'on' : ''}" role="radio" aria-checked="${onn}"
-        data-addr="${esc(a.line)}" data-lat="${a.lat ?? ''}" data-lng="${a.lng ?? ''}">${icon('map-pin')}<span>${esc(a.line.length > ADDR_CHIP_CHARS ? a.line.slice(0, ADDR_CHIP_CHARS - 1) + '…' : a.line)}</span></button>
-      <button type="button" class="addr-x" data-addr-del="${esc(a.line)}" aria-label="${esc(t('forget'))}">${icon('x')}</button></span>`; }).join('')}
+      ${ui.chip({ as: 'button', icon: 'map-pin', label: a.line.length > ADDR_CHIP_CHARS ? a.line.slice(0, ADDR_CHIP_CHARS - 1) + '…' : a.line, cls: onn ? 'on' : '',
+        attrs: { role: 'radio', 'aria-checked': String(onn), data: { addr: a.line, lat: a.lat ?? '', lng: a.lng ?? '', tour: 'checkout.savedAddress' } } })}
+      ${ui.iconButton({ icon: 'x', ariaLabel: t('forget'), variant: 'plain', cls: 'addr-x', attrs: { data: { addrDel: a.line } } })}</span>`; }).join('')}
   </div>`;
 }
 
@@ -88,11 +92,12 @@ function savedParts(){
 function addressFieldsMarkup(){
   const v = savedParts();
   const priv = !!v.private;
-  const field = (k, extra = '') => `<label class="afield"><span data-t="${k}"></span><input id="f-${k}" value="${esc(v[k] || '')}" ${extra}></label>`;
+  const field = (key, o = {}) => ui.field({ id: `f-${key}`, label: k(key), value: v[key] || '', cls: ui.cx('afield', o.wide && 'wide'),
+    autocomplete: o.autocomplete, inputmode: o.inputmode, attrs: { data: { tour: o.tour } } });
   return `<div class="addr-grid">
-    ${field('street', 'autocomplete="address-line1" class="wide"')}${field('house', 'inputmode="text"')}
+    ${field('street', { autocomplete: 'address-line1', wide: true, tour: 'checkout.street' })}${field('house', { inputmode: 'text' })}
     <label class="switch"><input type="checkbox" id="f-private" ${priv ? 'checked' : ''}><span class="switch-k"></span>${icon('home')}<span data-t="privateHouse"></span></label>
-    <div class="addr-flat" id="addrFlat" ${priv ? 'hidden' : ''}>${field('apartment', 'inputmode="text"')}${field('entrance', 'inputmode="text"')}${field('floor', 'inputmode="numeric"')}</div>
+    <div class="addr-flat" id="addrFlat" ${priv ? 'hidden' : ''}>${field('apartment', { inputmode: 'text' })}${field('entrance', { inputmode: 'text' })}${field('floor', { inputmode: 'numeric' })}</div>
   </div>`;
 }
 /// The parts as typed, and the one line the courier reads.
@@ -121,7 +126,7 @@ function railMarkup(){
   const list = TABLE ? rails().filter(([kind]) => kind === 'cash') : rails();
   const syms = wallets().map(w => w.symbol).join(' · ');
   return `<div class="pays" role="radiogroup" id="pays">
-    ${list.map(([kind, ic, label, note], i) => `<button type="button" class="pay" role="radio" aria-checked="${i === 0}" data-pay="${kind}">
+    ${list.map(([kind, ic, label, note], i) => `<button type="button" class="pay" role="radio" aria-checked="${i === 0}" data-pay="${kind}" data-tour="checkout.payMethod">
       ${icon(ic)}<span class="t"><b data-t="${label}"></b>${kind === 'crypto' ? `<small>${esc(syms)}</small>` : note ? `<small data-t="${note}"></small>` : ''}</span>${icon('check', 'pay-ck')}</button>`).join('')}
   </div>
   ${wallets().length > 1 ? `<div class="seg" id="walletPick" role="radiogroup" hidden>
@@ -143,17 +148,17 @@ export function openCheckout(){
 
     ${L?.pickup && !TABLE ? `<h3 class="fsec" data-t="how"></h3>
     <div class="seg" role="radiogroup" data-t-attr="aria-label:how">
-      <button type="button" class="seg-b ${!pickup ? 'on' : ''}" data-how="delivery" aria-pressed="${!pickup}">${icon('bike')}<span data-t="toDoor"></span></button>
-      <button type="button" class="seg-b ${pickup ? 'on' : ''}" data-how="pickup" aria-pressed="${pickup}">${icon('walk')}<span data-t="toPickup"></span></button>
+      ${seg({ on: !pickup, icon: 'bike', label: k('toDoor'), attrs: { data: { how: 'delivery' } }, tour: 'checkout.delivery' })}
+      ${seg({ on: !!pickup, icon: 'walk', label: k('toPickup'), attrs: { data: { how: 'pickup' } }, tour: 'checkout.pickup' })}
     </div>` : ''}
 
     <div id="addrBox" ${pickup || TABLE ? 'hidden' : ''}>
       <h3 class="fsec" data-t="address"></h3>
       ${savedAddressMarkup()}
-      <button type="button" class="btn btn-ghost mb-2" id="pinGo">${icon('navigation')}<span data-t="pickOnMap"></span></button>
+      ${ghost({ id: 'pinGo', cls: 'mb-2', icon: 'navigation', label: k('pickOnMap'), tour: 'checkout.map' })}
       ${addressFieldsMarkup()}
       <p class="geo ok" id="pinLine" ${state.pin ? '' : 'hidden'}>${icon('map-pin-check')}<span data-t="confirmPin"></span></p>
-      ${L?.hasDeliveryZones ? `<button type="button" class="btn btn-ghost mb-1" id="f-geo">${icon('map-pin-check')}<span data-t="checkArea"></span></button>
+      ${L?.hasDeliveryZones ? `${ghost({ id: 'f-geo', cls: 'mb-1', icon: 'map-pin-check', label: k('checkArea'), tour: 'checkout.area' })}
         <p id="f-geo-out" class="geo" hidden></p>` : ''}
     </div>
     <p class="geo ok" id="pickupLine" ${pickup && L?.address ? '' : 'hidden'}>${icon('map-pin')}<span><span data-t="pickupAt"></span>: ${esc(L?.address || '')}</span></p>
@@ -161,39 +166,36 @@ export function openCheckout(){
     <div id="whenBox" ${TABLE ? 'hidden' : ''}>
     <h3 class="fsec" data-t="when"></h3>
     <div class="seg" role="radiogroup">
-      <button type="button" class="seg-b on" data-when="asap" aria-pressed="true">${icon('clock')}<span data-t="asap"></span></button>
-      <button type="button" class="seg-b" data-when="later" aria-pressed="false">${icon('history')}<span data-t="later"></span></button>
+      ${seg({ on: true, icon: 'clock', label: k('asap'), attrs: { data: { when: 'asap' } }, tour: 'checkout.asap' })}
+      ${seg({ on: false, icon: 'history', label: k('later'), attrs: { data: { when: 'later' } }, tour: 'checkout.later' })}
     </div>
     <input type="datetime-local" id="f-when" hidden>
     </div>
 
     <h3 class="fsec" data-t="contact"></h3>
-    <label for="f-name" data-t="name"></label>
-    <input id="f-name" autocomplete="name" value="${esc(safeGet('dw_name') || '')}">
-    <label for="f-phone"><span data-t="phone"></span> <span class="opt" data-t="optional"></span></label>
-    <input id="f-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+355…" value="${esc(safeGet('dw_phone') || '')}">
+    ${ui.field({ id: 'f-name', label: k('name'), autocomplete: 'name', value: safeGet('dw_name') || '', attrs: { data: { tour: 'checkout.name' } } })}
+    ${ui.field({ id: 'f-phone', label: `${t('phone')} ${t('optional')}`, type: 'tel', inputmode: 'tel', autocomplete: 'tel', placeholder: '+355…', value: safeGet('dw_phone') || '', attrs: { data: { tour: 'checkout.phone' } } })}
     ${consentMarkup()}
 
     <h3 class="fsec" data-t="pay"></h3>
     ${railMarkup()}
 
     <h3 class="fsec" data-t="extras"></h3>
-    <label for="f-note" id="noteLabel" data-t="${pickup || TABLE ? 'kitchenNote' : 'note'}"></label>
-    <input id="f-note">
+    ${ui.field({ id: 'f-note', label: k(pickup || TABLE ? 'kitchenNote' : 'note'), attrs: { data: { tour: 'checkout.note' } } })}
     ${on('tips') ? `<div id="tipBox" ${pickup || TABLE ? 'hidden' : ''}><label data-t="tip"></label>
     <div class="seg" role="radiogroup" data-t-attr="aria-label:tip">
-      ${TIPS.map(v => `<button type="button" class="seg-b ${state.tip === v ? 'on' : ''}" data-tip="${v}" aria-pressed="${state.tip === v}">${v ? moneyEl(v) : `<span data-t="tipNo"></span>`}</button>`).join('')}
+      ${TIPS.map(v => `<button type="button" class="seg-b ${state.tip === v ? 'on' : ''}" data-tip="${v}" data-tour="checkout.tip" aria-pressed="${state.tip === v}">${v ? moneyEl(v) : `<span data-t="tipNo"></span>`}</button>`).join('')}
     </div></div>` : ''}
     ${on('promo') ? `<label for="f-promo" data-t="promo"></label>
     <div class="promo-row">
-      <input id="f-promo" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${esc(state.promo ? state.promo.code : '')}">
-      <button type="button" class="btn btn-ghost" id="f-promo-go" data-t="${state.promo ? 'promoOff' : 'promoApply'}"></button>
+      ${ui.field({ id: 'f-promo', label: '', autocomplete: 'off', autocapitalize: 'characters', spellcheck: false, value: state.promo ? state.promo.code : '' })}
+      ${ghost({ id: 'f-promo-go', block: false, label: k(state.promo ? 'promoOff' : 'promoApply'), tour: 'checkout.promo' })}
     </div>
     <p id="f-promo-out" class="geo" hidden></p>` : ''}
 
     <div id="f-err"></div>
     ${totalsBlock()}
-    <button class="btn mb-2" id="place"><span data-t="place"></span>${icon('chevron-right')}</button>`,
+    ${cta({ id: 'place', cls: 'mb-2', label: k('place'), iconEnd: 'chevron-right', tour: 'checkout.place' })}`,
     { name: 'checkout' });
 
   let pay = rails()[0][0];
@@ -227,7 +229,7 @@ export function openCheckout(){
     const box = $('#addrBox'); if (box) box.hidden = collecting;
     const pl = $('#pickupLine'); if (pl) pl.hidden = !(collecting && L?.address);
     const tips = $('#tipBox'); if (tips) tips.hidden = collecting;
-    const nl = $('#noteLabel'); if (nl) { nl.dataset.t = collecting ? 'kitchenNote' : 'note'; nl.textContent = t(nl.dataset.t); }
+    const nl = $('label[for="f-note"] [data-t]'); if (nl) { nl.dataset.t = collecting ? 'kitchenNote' : 'note'; nl.textContent = t(nl.dataset.t); }
     refreshTotals(); etaLine();
   };
 
@@ -277,10 +279,9 @@ export function openCheckout(){
     for (const x of $$('[data-when]', $('#sheetIn'))) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }
     const f = $('#f-when'); f.hidden = when !== 'later';
     if (when === 'later' && !f.value) {
-      const d = new Date(Date.now() + LATER_LEAD_MS);
-      d.setMinutes(d.getMinutes() > LATER_ROUND_MIN ? 2 * LATER_ROUND_MIN : LATER_ROUND_MIN, 0, 0);
-      const pad = n => String(n).padStart(2, '0');
-      f.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; f.min = f.value;
+      // THE FIELD SHOWS THE VENUE'S WALL, not the phone's: the kitchen cooks
+      // in Durres time whatever zone the diner's phone is set to (audit D10).
+      f.value = laterPrefill(venueTz(), Date.now(), LATER_LEAD_MS, LATER_ROUND_MIN); f.min = f.value;
     }
     if (when === 'later') f.focus();
   };
@@ -333,8 +334,9 @@ export function openCheckout(){
 function scheduledAt(){
   const f = document.getElementById('f-when');
   if (!f || f.hidden || !f.value) return null;
-  const ms = new Date(f.value).getTime();
-  return Number.isFinite(ms) ? ms : null;
+  // Read as the VENUE's wall time. `new Date(value)` read it in the phone's
+  // zone, so a phone set to Kyiv picking 19:00 sent the kitchen 18:00.
+  return venueWallMs(venueTz(), f.value);
 }
 
 async function place(pay, wallet){
@@ -401,7 +403,7 @@ async function collectCard(order, openTracking){
   sheet(`<p class="eyebrow" data-t="pay"></p><h2>#${esc(String(order.id).slice(0, ORDER_ID_SHOWN))}</h2>
     <p class="muted">${moneyEl(order.total)}</p>
     <div id="pe" class="pe-box"></div><div id="pe-err"></div>
-    <button class="btn" id="pay" data-t="place"></button>`, { name: 'pay' });
+    ${cta({ id: 'pay', label: k('place'), tour: 'checkout.pay' })}`, { name: 'pay' });
   let stripe, elements;
   try {
     stripe = await loadStripe();

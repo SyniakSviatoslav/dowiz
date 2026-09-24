@@ -1,7 +1,7 @@
 // `node public/lib/floorplan.test.mjs`. The floor editor's rules, no browser.
 
 import assert from 'node:assert/strict';
-import { GRID, zoneId, nextNumber, snap, clampTable, nudge, placeAt, newTable, withShape, check, toWire } from './floorplan.js';
+import { GRID, zoneId, nextNumber, snap, clampTable, nudge, placeAt, newTable, withShape, check, toWire, overlaps } from './floorplan.js';
 
 let run = 0;
 const test = (name, fn) => { fn(); run++; console.log(`  ok  ${name}`); };
@@ -74,6 +74,29 @@ test('the wire carries integers and only the hub\'s fields', () => {
 
 test('clampTable leaves a table that fits exactly where it is', () => {
   assert.deepEqual(clampTable(T(3), LIM), T(3));
+});
+
+test('a new table never lands on an existing table\'s box', () => {
+  // THE DEFECT: newTable only dodged exact centres, so a table at (50,50)
+  // -- not on the 60-grid -- was covered by a new one at (40,40).
+  const z = { tables: [T(1, { x: 50, y: 50, w: 60, h: 60 })] };
+  const b = newTable(z, LIM);
+  assert.equal(overlaps(z.tables[0], b), false, `new table at ${b.x},${b.y} covers #1`);
+  // Fill the plan: every new table is clear of every older one.
+  for (let i = 0; i < 12; i++) z.tables.push(newTable(z, LIM));
+  assert.deepEqual(check([{ id: 'z', name: 'Z', tables: z.tables }], LIM), []);
+});
+
+test('check reports overlapping tables, and passes tables that only touch', () => {
+  const keys = zs => check(zs, LIM).map(e => e.key + '#' + e.n);
+  // 40x40 at x=100 and x=130: 10 units of shared width.
+  assert.deepEqual(keys([{ id: 'a', name: 'A', tables: [T(1), T(2, { x: 130 })] }]), ['fpOverlap#2']);
+  // Twin: edge to edge (100+20 == 140-20) is not an overlap.
+  assert.deepEqual(keys([{ id: 'a', name: 'A', tables: [T(1), T(2, { x: 140 })] }]), []);
+  // Twin: the same spot in two rooms is two different floors.
+  assert.deepEqual(keys([{ id: 'a', name: 'A', tables: [T(1)] }, { id: 'b', name: 'B', tables: [T(2)] }]), []);
+  assert.equal(overlaps(T(1), T(2, { y: 139 })), true);
+  assert.equal(overlaps(T(1), T(2, { y: 140 })), false);
 });
 
 console.log(`floorplan: ${run} tests passed`);

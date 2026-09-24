@@ -1,0 +1,34 @@
+/* The gallery's own layout. Components are styled by /lib/ui/ui.css alone;
+ * this sheet only arranges the specimens, and it uses the same role tokens a
+ * surface does, so switching the theme here is switching it for real. */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{min-height:100dvh;background:var(--ui-bg);color:var(--ui-fg);font-family:var(--ui-font);
+     font-size:var(--text-base);line-height:var(--leading-normal);-webkit-font-smoothing:antialiased}
+#app{max-width:72rem;margin:0 auto;padding:var(--space-6) var(--space-4) var(--space-16)}
+.g-top{display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:flex-end;justify-content:space-between}
+.g-titles{display:grid;gap:var(--space-2);max-width:var(--measure)}
+.g-controls{display:flex;flex-wrap:wrap;gap:var(--space-3)}
+.g-nav{position:sticky;top:0;z-index:var(--z-sticky);display:flex;gap:var(--space-1);overflow-x:auto;scrollbar-width:none;
+       margin:var(--space-5) calc(var(--space-4) * -1) 0;padding:var(--space-2) var(--space-4);
+       background:color-mix(in srgb,var(--ui-bg) 90%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+       border-bottom:1px solid var(--ui-line)}
+.g-link{display:inline-flex;align-items:center;min-height:var(--tap);padding:0 var(--space-3);border-radius:var(--radius-full);
+        color:var(--ui-fg-muted);font-weight:var(--weight-semibold);text-decoration:none;white-space:nowrap}
+.g-link:hover{color:var(--ui-fg);background:var(--ui-surface-2)}
+.g-link:focus-visible{outline:3px solid var(--ui-focus);outline-offset:2px}
+.g-main{display:grid;gap:var(--space-10);margin-top:var(--space-6)}
+.g-sec{scroll-margin-top:var(--space-16)}
+.g-h{font-family:var(--ui-font-heading);font-size:var(--text-xl);letter-spacing:var(--tracking-tight);margin-bottom:var(--space-3)}
+.g-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,18rem),1fr));gap:var(--space-3)}
+.g-spec{display:grid;grid-template-rows:1fr auto;border:1px solid var(--ui-line);border-radius:var(--radius-xl);
+        background:var(--ui-surface);overflow:hidden}
+.g-stage{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;align-content:center;padding:var(--space-4);min-width:0}
+.g-stage>.ui-list,.g-stage>.ui-field,.g-stage>.ui-inputrow,.g-stage>.ui-card,.g-stage>.ui-empty,
+.g-stage>.ui-skel-wrap,.g-stage>.ui-stat,.g-stage>.ui-section-head,.g-stage>.ui-alert,.g-stage>.ui-tabs,.g-stage>.ui-btn--block{flex:1 1 100%}
+.g-stage>.ui-field{margin-top:0}
+.g-cap{padding:var(--space-2) var(--space-4);border-top:1px solid var(--ui-line);background:var(--ui-surface-2);
+       color:var(--ui-fg-muted);font:var(--text-xs)/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}
+.g-map{flex:1 1 100%;display:grid;place-items:center;min-height:6rem;border-radius:var(--radius-lg);
+       background:repeating-linear-gradient(45deg,var(--ui-surface-2) 0 12px,var(--ui-bg) 12px 24px)}
+.g-panel{flex:1 1 100%}

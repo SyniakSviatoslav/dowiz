@@ -6,7 +6,7 @@ import {
   parseCaps, actionsFor, canTill, reasonWord, parseMinor, minorToInput, ratePpm, convertPpm,
   maxAmountFor, owed, sittingDue, money, slugOfHost, ageOf, METHODS, REASONS,
   canTransfer, transferTargets, transferBody, canMoveSitting, refusalKey,
-  settles, keepTheChange, tipMinor, walletOk, walletTipOk,
+  settles, keepTheChange, tipMinor, walletOk, walletTipOk, walletField,
   canClear, FLOOR_STATES,
 } from './logic.js';
 import { renderTill, visible } from './till-view.js';
@@ -316,4 +316,30 @@ test('floor: loading, an empty plan, and the two paths', () => {
   assert.match(renderFloor({ zones: [], unplaced: [] }, FT, parseCaps('')), /\[floor_noPlan\]/);
   assert.equal(floorPath('a b'), '/staff/floor?location_id=a%20b');
   assert.equal(clearedPath('s/1'), '/staff/floor/s%2F1/cleared');
+});
+
+// D9 (G4): a guest's QR round nobody confirmed is not on the table's bill and
+// is not offered for payment. The code on the table never expires, so a photo
+// of it taken last week could add 4200 to tonight's party.
+test('D9: an unconfirmed guest round is not due and not payable; confirmed, it is', () => {
+  const mine = { id: 'mine', status: 'READY', total: 1500, payments: [] };
+  const qr = { id: 'qr', status: 'PENDING', placed_by: 'guest', total: 4200, payments: [] };
+  const payer = parseCaps('take_orders,take_payment');
+  assert.equal(sittingDue({ rounds: [mine, qr] }), 1500);
+  assert.equal(actionsFor(payer, qr).pay, false);
+  // The twins: confirmed, the same round is owed and payable; a waiter's own
+  // PENDING round (pay-first at the bar) always was.
+  const confirmed = { ...qr, status: 'CONFIRMED' };
+  assert.equal(sittingDue({ rounds: [mine, confirmed] }), 5700);
+  assert.equal(actionsFor(payer, confirmed).pay, true);
+  const staffPending = { ...qr, placed_by: 'p1' };
+  assert.equal(sittingDue({ rounds: [mine, staffPending] }), 5700);
+  assert.equal(actionsFor(payer, staffPending).pay, true);
+});
+
+// D13 (G6): the wallet field sends the guest's code as a token, never as a
+// typed id the server would have to trust.
+test('D13: a customer code goes as wallet_token; a bare id as wallet', () => {
+  assert.deepEqual(walletField(' aaa.bbb.ccc '), { wallet_token: 'aaa.bbb.ccc' });
+  assert.deepEqual(walletField('u1'), { wallet: 'u1' });
 });

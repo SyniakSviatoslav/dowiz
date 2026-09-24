@@ -16,6 +16,7 @@ import { safeGet, safeSet } from '/store/storage.js';
 import { offsetMinutes } from '/lib/booking-time.js';
 import { remember, forget, ofVenue, linkHash, parseHash, canCancel, refusalText, STATUS_KEY } from '/lib/booking-guest.js';
 import '/store/booking-words.js';
+import { ui, k, ghost, rows as skeletonRows } from '/store/parts.js';
 
 const KEY = 'dw_bookings';
 const read = () => { try { const l = JSON.parse(safeGet(KEY) || '[]'); return Array.isArray(l) ? l : []; } catch { return []; } };
@@ -44,27 +45,27 @@ function when(slotMin) {
 }
 
 function card(b, d) {
-  if (!d) return `<div class="empty">${icon('alert-triangle')}<span data-t="bkLoadFail"></span></div>`;
+  if (!d) return ui.emptyState({ icon: 'alert-triangle', title: k('bkLoadFail'), alert: true });
   const table = d.tableN ? `${esc(t('bkTable'))} ${esc(d.tableN)}` : esc(t('bkAnyTable'));
   return `<article class="bk-mine" data-id="${esc(b.id)}">
     <p class="eyebrow">${esc(t(STATUS_KEY[d.status] || 'bkStRequested'))}</p>
     <h3>${esc(when(d.slotMin))} · ${esc(d.party)} ${esc(t('bkParty'))}</h3>
     <p class="muted small">${table} · ${esc(t('bkWho'))} ${esc(d.contactName || '')} · ${esc(t('bkRef'))} ${esc(b.id.slice(-6))}</p>
     <div class="bk-row">
-      <button type="button" class="btn ghost" data-share="${esc(b.id)}">${icon('share')}<span data-t="bkShare"></span></button>
-      ${canCancel(d) ? `<button type="button" class="btn ghost" data-cancel="${esc(b.id)}">${icon('x')}<span data-t="bkCancel"></span></button>` : ''}
+      ${ghost({ block: false, cls: 'ghost', icon: 'share', label: k('bkShare'), attrs: { data: { share: b.id } }, tour: 'booking.share' })}
+      ${canCancel(d) ? ghost({ block: false, cls: 'ghost', icon: 'x', label: k('bkCancel'), attrs: { data: { cancel: b.id } }, tour: 'booking.cancel' }) : ''}
     </div></article>`;
 }
 
 /// The sheet. `first` is a booking to put on top (the one just made).
 export async function openMine(first = null) {
-  sheet(`<div class="bk"><p class="eyebrow" data-t="bkRoom"></p><h2 data-t="bkMine"></h2><div class="skel skel-row"></div></div>`,
+  sheet(`<div class="bk"><p class="eyebrow" data-t="bkRoom"></p><h2 data-t="bkMine"></h2>${skeletonRows(1, t('loading'))}</div>`,
     { name: 'bookMine', full: true });
   const list = myBookings().sort((a, b) => (a.id === first ? -1 : b.id === first ? 1 : 0));
   const rows = await Promise.all(list.map(b => detail(b).then(d => [b, d], () => [b, null])));
   const shown = rows.filter(([, d]) => !d?.gone);
   sheet(`<div class="bk"><p class="eyebrow" data-t="bkRoom"></p><h2 data-t="bkMine"></h2>
-    ${shown.length ? shown.map(([b, d]) => card(b, d)).join('') : `<div class="empty">${icon('clock')}<b data-t="bkMineNone"></b></div>`}</div>`,
+    ${shown.length ? shown.map(([b, d]) => card(b, d)).join('') : ui.emptyState({ icon: 'clock', title: k('bkMineNone') })}</div>`,
     { name: 'bookMine', full: true, keepScroll: true });
   const root = $('#sheetIn');
   for (const btn of $$('[data-share]', root)) btn.onclick = () => share(btn.dataset.share);

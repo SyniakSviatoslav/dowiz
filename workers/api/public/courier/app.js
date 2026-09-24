@@ -9,12 +9,18 @@
 // "one incoming ripple + ping" on a new task.
 import { create as vcreate, speak, supported as vsupported } from '/lib/voice.js';
 import { createGuide } from '/lib/guide.js';
+import { createLearn, loadLessons } from '/lib/learn.js';
 import { createOutbox, newKey } from '/lib/outbox.js';
 import { t, lang, LANGS, setLang, nextLang, retranslate, intlLocale, voiceLocale } from '/courier/i18n.js';
+// THE DESIGN SYSTEM. Every control in the sheet is a /lib/ui component, built
+// by the pure screens in `screens.js`; this file keeps state, network, wiring.
+import * as ui from '/lib/ui/index.js';
+import * as screens from '/courier/screens.js';
+ui.useTranslator(t);
 
 const API = '/api';
 const $ = (s, r = document) => r.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc = ui.esc;
 // MONEY COMES FROM ONE PLACE NOW. This line was a second copy of a rule that
 // also lived on the storefront, with `currency:'ALL'` hardcoded -- so a venue
 // trading in anything else showed lek here and the right currency to its
@@ -35,8 +41,9 @@ async function setCurrency(base, display) {
   MoneyFmt = Money.formatter({ base: MoneyBase, display: MoneyDisplay, rates: MoneyRates, locale: 'sq' });
   Money.remember(MoneyDisplay);
 }
-const short = id => esc(String(id).slice(0, 8));
-const icon = (name, cls = '') => `<i class="ti ti-${name} i ${cls}" aria-hidden="true"></i>`;
+const icon = ui.icon;
+/// What the screens need from this file: the words, the ONE money formatter.
+const ctx = () => ({ t, money, lang, langs: LANGS });
 
 // THE LAST ANSWER THE HUB GAVE, for the phone that reopens underground. It
 // holds the courier's own run (an address and a phone number), so it lives
@@ -85,9 +92,9 @@ const THEME_UI = {
 function applyTheme(){
   const p = store.theme;
   if (p) document.documentElement.dataset.theme = p; else delete document.documentElement.dataset.theme;
-  const ui = THEME_UI[p] || THEME_UI[''];
-  $('#themeBtn').innerHTML = icon(ui.icon);
-  $('#themeBtn').setAttribute('aria-label', t(ui.label)); $('#themeBtn').title = t('theme');
+  const th = THEME_UI[p] || THEME_UI[''];
+  $('#themeBtn').innerHTML = icon(th.icon);
+  $('#themeBtn').setAttribute('aria-label', t(th.label)); $('#themeBtn').title = t('theme');
   // The two media-scoped theme-color metas follow the OS; a forced theme has
   // to drive the browser chrome itself, from the token the theme resolved to.
   if (p) document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', cssVar('--brand-surface')));
@@ -250,11 +257,13 @@ function ping(){
   } catch {}
 }
 
+// One toaster on the one host in index.html. The tone follows the icon the
+// call sites already pass, so none of them changed.
+const TOAST_TONE = { 'alert-circle':'danger', 'alert-triangle':'warning', 'circle-check':'success' };
+let toaster = null;
 function toast(m, ic = 'info-circle'){
-  const el = $('#toast');
-  el.innerHTML = `${icon(ic)}<span>${esc(m)}</span>`;
-  el.hidden = false;                       // hidden → shown animates from @starting-style
-  clearTimeout(toast._t); toast._t = setTimeout(() => { el.hidden = true; }, 3000);
+  toaster ??= ui.createToaster($('#toast'));
+  toaster.show(m, { icon: ic, tone: TOAST_TONE[ic] });
 }
 
 // `attend` marks a request the courier is waiting on: the spectral edge sweeps
@@ -378,7 +387,7 @@ async function tapped(path, { body = null, tag } = {}){
 const MAX_ACCURACY_M = 100, MAX_SPEED_MPS = 41.67, MOVING_MPS = 1.5;
 function gps(text, warn){
   const tag = $('#gpsTag');
-  tag.hidden = false; $('#gpsText').textContent = text; tag.classList.toggle('warn', !!warn);
+  tag.hidden = false; $('#gpsText').textContent = text; tag.classList.toggle('ui-chip--warning', !!warn);
 }
 // ONE FIX EVERY TEN SECONDS OR TWENTY METRES, whichever comes first. The map
 // shows the newest fix per courier and nothing reads the ones between, so a fix
@@ -485,23 +494,12 @@ document.addEventListener('visibilitychange', () => {
 // ── login ──
 function renderLogin(err){
   $('#sheet').classList.add('tall');
-  $('#app').innerHTML = `<form class="login" id="loginForm" novalidate>
-    <div class="login-mark" aria-hidden="true"><span>d</span></div>
-    <h2>${esc(t('loginTitle'))}</h2><p class="hint2 center">${esc(t('loginLine'))}</p>
-    <label for="em">${esc(t('emailOrPhone'))}</label>
-    <input id="em" autocomplete="username" inputmode="email" enterkeyhint="next">
-    <label for="pw">${esc(t('password'))}</label>
-    <input id="pw" type="password" autocomplete="current-password" enterkeyhint="go">
-    ${err ? `<div class="err" role="alert">${icon('alert-circle')}<span>${esc(err)}</span></div>` : ''}
-    <button class="cta" id="go" type="submit">${icon('login')}${esc(t('signIn'))}</button>
-    <button class="ghost" id="toClaim" type="button">${icon('ticket')}${esc(t('haveCode'))}</button>
-    <div class="langs">${LANGS.map(l => `<button type="button" class="chip ${l === lang ? 'on' : ''}" data-l="${l}">${l.toUpperCase()}</button>`).join('')}</div>
-  </form>`;
+  $('#app').innerHTML = screens.login(err, ctx());
   $('#toClaim').onclick = () => renderClaim();
-  for (const b of document.querySelectorAll('[data-l]')) b.onclick = () => { setLang(b.dataset.l); renderLogin(err); };
+  ui.bindSegmented($('#langSeg'), l => { setLang(l); renderLogin(err); });
   $('#loginForm').onsubmit = async ev => {
     ev.preventDefault();
-    const b = $('#go'); b.disabled = true; b.innerHTML = `${icon('loader-2')}${esc(t('signingIn'))}`;
+    ui.setBusy($('#go'), t('signingIn'));
     const v = $('#em').value.trim();
     try {
       const r = await fetch(API + '/courier/auth/login', { method:'POST',
@@ -521,25 +519,11 @@ function renderLogin(err){
 // would know it, and a shared password is not a password.
 function renderClaim(err){
   $('#sheet').classList.add('tall');
-  $('#app').innerHTML = `<form class="login" id="claimForm" novalidate>
-    <h2>${esc(t('claimTitle'))}</h2>
-    <p class="hint2">${esc(t('claimHint'))}</p>
-    <label for="cph">${esc(t('yourPhone'))}</label>
-    <input id="cph" type="tel" inputmode="tel" autocomplete="tel" enterkeyhint="next">
-    <label for="cod">${esc(t('code'))}</label>
-    <input id="cod" autocomplete="one-time-code" autocapitalize="characters"
-           spellcheck="false" maxlength="16" enterkeyhint="next">
-    <label for="cpw">${esc(t('choosePassword'))}</label>
-    <input id="cpw" type="password" autocomplete="new-password" minlength="8" enterkeyhint="go">
-    <p class="hint2">${esc(t('passwordHint'))}</p>
-    ${err ? `<div class="err" role="alert">${icon('alert-circle')}<span>${esc(err)}</span></div>` : ''}
-    <button class="cta" id="cgo" type="submit">${icon('check')}${esc(t('start'))}</button>
-    <button class="ghost" id="toLogin" type="button">${icon('arrow-left')}${esc(t('havePassword'))}</button>
-  </form>`;
+  $('#app').innerHTML = screens.claim(err);
   $('#toLogin').onclick = () => renderLogin();
   $('#claimForm').onsubmit = async ev => {
     ev.preventDefault();
-    const b = $('#cgo'); b.disabled = true; b.innerHTML = `${icon('loader-2')}${esc(t('checking'))}`;
+    ui.setBusy($('#cgo'), t('checking'));
     try {
       const r = await fetch(API + '/courier/auth/claim', { method:'POST',
         headers:{ 'content-type':'application/json' },
@@ -603,9 +587,11 @@ async function load(){
 
 function setShiftTag(){
   const tag = $('#shiftTag');
-  tag.classList.toggle('on', !!S.onShift);
+  tag.classList.toggle('ui-chip--success', !!S.onShift);
+  // `ui.amount` is the `.money` span; the figure is the one formatter's.
+  const cash = S.onShift ? ui.amount(money(S.shift?.cash ?? 0)) : '';
   $('#shiftText').innerHTML = S.onShift
-    ? `${esc(t('onShift'))} · ${esc(S.shift?.deliveries ?? 0)} · <span class="money">${esc(money(S.shift?.cash ?? 0))}</span>`
+    ? `${esc(t('onShift'))} · ${esc(S.shift?.deliveries ?? 0)} · ${cash}`
     : esc(t('offline'));
   if (S.staleAt) {
     const at = new Date(S.staleAt).toLocaleTimeString(intlLocale(), { hour:'2-digit', minute:'2-digit' });
@@ -621,19 +607,11 @@ function render(){
   // BEFORE anything is claimed about the shift. A skeleton here is not
   // decoration: the alternative is asserting "you are offline" on no evidence.
   if (S.phase === 'loading' && !S.loadedOnce) {
-    $('#app').innerHTML = `<div class="loadwrap" aria-busy="true" aria-label="${esc(t('loading'))}">
-      <div class="skel skel-line"></div>
-      <div class="skel skel-block"></div>
-      <div class="skel skel-block"></div>
-      <div class="skel skel-cta"></div>
-    </div>`;
+    $('#app').innerHTML = screens.loading(ctx());
     return;
   }
   if (S.phase === 'error' && !S.loadedOnce) {
-    $('#app').innerHTML = `<div class="empty" role="alert">${icon('plug-connected-x')}
-      <b>${esc(t('noLink'))}</b>
-      <span class="reason">${esc(S.error || '')}</span></div>
-      <button class="cta go" id="retry" type="button">${icon('refresh')}${esc(t('retry'))}</button>`;
+    $('#app').innerHTML = screens.failed(S.error);
     $('#retry').onclick = async () => {
       S.phase = 'loading'; render(); await load();
     };
@@ -642,9 +620,9 @@ function render(){
 
   if (!S.onShift) {
     stopTracking(); keepAwake(false); S.cashFor = null;
-    $('#app').innerHTML = `<div class="empty">${icon('moon-stars')}<b>${esc(t('youAreOffline'))}</b>${esc(t('offlineHint'))}</div>
-      <button class="cta go" id="openShift" type="button">${icon('player-play')}${esc(t('openShift'))}</button>`;
+    $('#app').innerHTML = screens.offShift();
     $('#openShift').onclick = () => setShift(true);
+    $('#learn').onclick = openLearn;
     return;
   }
   startTracking();
@@ -665,21 +643,11 @@ function render(){
     // on purpose, and a text field on a live delivery screen would compete with
     // the address and the call button for a thumb that is on a handlebar. This
     // is the one state where the courier is standing still.
-    $('#app').innerHTML = `<div class="empty">${icon('radar-2')}<b>${esc(t('noneFree'))}</b>${esc(t('noneFreeHint'))}</div>
-      <div class="askrow">
-        <input id="askBox" class="ask" type="text" placeholder="${esc(t('askPlaceholder'))}"
-               autocomplete="off" enterkeyhint="send">
-        <button class="ghost narrow" id="askGo" type="button">${icon('send')}</button>
-      </div>
-      <p id="answer" class="answer" hidden></p>
-      <div class="row2">
-        <button class="ghost" id="earn" type="button">${icon('coins')}${esc(t('myShifts'))}</button>
-        <button class="ghost" id="hist" type="button">${icon('history')}${esc(t('history'))}</button>
-      </div>
-      <button class="ghost" id="endShift" type="button">${icon('power')}${esc(t('endShift'))}</button>`;
+    $('#app').innerHTML = screens.waiting();
     $('#endShift').onclick = () => setShift(false);
     $('#earn').onclick = openEarnings;
     $('#hist').onclick = openHistory;
+    $('#learn').onclick = openLearn;
     bindAsk();
     return;
   }
@@ -688,18 +656,7 @@ function render(){
   // one screen, which the courier rules forbid.
   if (!S.available.some(o => o.id === S.sel)) S.sel = S.available[0].id;
   const chosen = S.available.find(o => o.id === S.sel);
-  $('#app').innerHTML = `<h2>${esc(t('readyForPickup'))}</h2><p class="sub">${S.available.length} ${esc(t('pcs'))} · ${esc(t('pickOne'))}</p>
-    ${S.available.map(o => `<button class="task" type="button" data-sel="${esc(o.id)}" aria-pressed="${o.id === S.sel}">
-      ${icon(o.id === S.sel ? 'circle-check-filled' : 'circle', 'pick')}
-      <b>#${short(o.id)}</b>
-      <span class="amt money">${esc(money(o.total))}</span>
-      <span class="note">${esc(o.address?.line || '—')}</span>
-    </button>`).join('')}
-    <button class="cta" id="take" type="button"${queuedFor(chosen.id) ? ' disabled' : ''}>${
-      queuedFor(chosen.id)
-        ? `${icon('cloud-upload')}${esc(t('queued'))}`
-        : `${icon('package')}${esc(t('take'))}`} #${short(chosen.id)}</button>
-    <button class="ghost" id="endShift" type="button">${icon('power')}${esc(t('endShift'))}</button>`;
+  $('#app').innerHTML = screens.pickList(S.available, S.sel, queuedFor, ctx());
   $('#endShift').onclick = () => setShift(false);
   document.querySelectorAll('[data-sel]').forEach(b => b.onclick = () => { S.sel = b.dataset.sel; render(); });
   $('#take').onclick = async () => {
@@ -737,25 +694,8 @@ function etaText(o){
 function bindLangChrome(){
   const b = $('#langBtn'); if (!b) return;
   b.textContent = lang.toUpperCase();
-  b.onclick = () => { setLang(nextLang()); b.textContent = lang.toUpperCase(); applyTheme(); guide = null; initGuide(); drawOutbox(); if (store.t) render(); else renderLogin(); };
+  b.onclick = () => { setLang(nextLang()); b.textContent = lang.toUpperCase(); applyTheme(); guide = null; learn = null; initGuide(); drawOutbox(); if (store.t) render(); else renderLogin(); };
 }
-function orderHead(o, picked){
-  const cash = o.payment === 'cash' ? o.total : 0;
-  const addr = o.address?.line || '';
-  return `
-    <h2>${picked ? esc(t('delivering')) : esc(t('pickUpOrder'))}</h2>
-    <p class="sub"><span class="status st-${picked ? 'delivery' : 'ready'}${picked ? ' live' : ''}">${picked ? esc(t('onTheWay')) : esc(t('ready'))}</span>
-      <span>#${short(o.id)} · ${esc(o.items)} ${esc(t('items'))}</span></p>
-    <p class="eta" id="etaLine">${etaText(o)}</p>
-    <div class="addr">${icon('map-pin')}<span>${esc(addr || '—')}</span></div>
-    ${o.address?.note ? `<div class="note">${esc(o.address.note)}</div>` : ''}
-    <div class="meta">
-      ${cash ? `<span class="cash">${icon('cash')}<span class="money">${esc(money(cash))}</span></span>`
-             : `<span class="note">${icon('credit-card')} ${esc(t('paidOnline'))}</span>`}
-      ${o.contact?.phone ? `<a class="tel" href="tel:${esc(o.contact.phone)}">${icon('phone')}${esc(o.contact.phone)}</a>` : ''}
-    </div>`;
-}
-
 // ── voice ───────────────────────────────────────────────────────────────────
 // The surface voice matters most on: a courier is outdoors, moving, often with
 // one hand on a handlebar and gloves on. Typing here is close to useless, which
@@ -834,7 +774,9 @@ async function confirmVoice(){
 
 function startVoice(){
   if (vlistening) { vrec?.stop(); return; }
-  if (!vsupported()) { toast(t('voiceUnsupported'), 'microphone-off'); return; }
+  // `microphone-off` is not in /lib/icons.css, so this toast drew no icon
+  // (found by lib/ui/css.test.mjs, which now checks every name used here).
+  if (!vsupported()) { toast(t('voiceUnsupported'), 'microphone'); return; }
   clearVoice();
   vrec = vcreate({
     lang: voiceLang(),
@@ -899,54 +841,25 @@ function bindAsk(){
 // `sheet()` is the app's existing panel; these replace its content and put a
 // back button on it rather than introducing a second navigation model.
 async function panel(title, bodyHtml){
-  $('#app').innerHTML = `
-    <div class="phead">
-      <button class="icon-btn" id="pback" type="button" aria-label="${esc(t('back'))}">${icon('arrow-left')}</button>
-      <b>${esc(title)}</b>
-    </div>
-    ${bodyHtml}`;
+  $('#app').innerHTML = screens.panel(title, bodyHtml);
   $('#pback').onclick = () => render();
 }
 
 async function openEarnings(){
-  await panel(t('myShifts'), `<div class="skel skel-5"></div>`);
+  await panel(t('myShifts'), screens.panelLoading(ctx()));
   let d;
   try { d = await api('/courier/earnings'); }
-  catch (e) { return panel(t('myShifts'), `<p class="answer">${esc(String(e.message || e))}</p>`); }
-  // TIPS ARE SHOWN APART FROM THE FLOAT. The cash on the first line is money
-  // the courier is holding FOR the venue and will hand over; the tips are
-  // theirs. One combined figure at the end of a shift is the wrong number to
-  // reach for, whichever way you reach.
-  const row = (label, w) => `
-    <div class="erow"><span>${esc(label)}</span>
-      <span><b>${w.deliveries}</b> · <span class="money">${money(w.cash)}</span>${
-        w.tips ? ` · <span class="money tips">+${money(w.tips)}</span>` : ''}</span></div>`;
-  await panel(t('myShifts'), `
-    <div class="ecash">
-      <span class="k">${esc(t('cashInHand'))}</span>
-      <span class="v money">${money(d.cashInHand)}</span>
-    </div>
-    ${d.expectedCash ? `<p class="hint2">${esc(t('stillOnRoad'))}: <span class="money">${money(d.expectedCash)}</span></p>` : ''}
-    <div class="elist">
-      ${row(t('today'), d.today)}${row(t('days7'), d.week)}${row(t('days30'), d.month)}
-    </div>
-    <p class="hint2">${esc(t('earningsHint'))}</p>`);
+  catch (e) { return panel(t('myShifts'), screens.panelError(String(e.message || e))); }
+  await panel(t('myShifts'), screens.earnings(d, ctx()));
 }
 
 async function openHistory(){
-  await panel(t('history'), `<div class="skel skel-4"></div>`);
+  await panel(t('history'), screens.panelLoading(ctx()));
   let d;
   try { d = await api('/courier/history'); }
-  catch (e) { return panel(t('history'), `<p class="answer">${esc(String(e.message || e))}</p>`); }
-  const rows = d.history || [];
-  await panel(t('history'), rows.length ? `
-    <div class="elist">${rows.map(r => `
-      <div class="erow">
-        <span>${esc(r.street || '—')}<br>
-          <small class="hint2">${new Date(r.at || 0).toLocaleDateString(intlLocale(), { day:'numeric', month:'short' })} · ${esc(r.status)}</small></span>
-        <span class="money">${money(r.cashCollected ?? r.total ?? 0)}</span>
-      </div>`).join('')}</div>`
-    : `<div class="empty">${icon('history')}<b>${esc(t('emptyHistory'))}</b>${esc(t('emptyHistoryHint'))}</div>`);
+  catch (e) { return panel(t('history'), screens.panelError(String(e.message || e))); }
+  const date = at => new Date(at).toLocaleDateString(intlLocale(), { day:'numeric', month:'short' });
+  await panel(t('history'), screens.history(d.history || [], date, ctx()));
 }
 
 // ── an offer, with the time left on it ──────────────────────────────────────
@@ -962,20 +875,7 @@ async function openHistory(){
 // polling every few seconds would show it jumping backwards.
 function renderOffer(o){
   const left = () => Math.max(0, Math.round((o.offerEndsMs - Date.now()) / 1000));
-  const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  const lapsed = left() === 0;
-  $('#app').innerHTML = `
-    <div class="offer">
-      <span class="tag on"><span class="dot"></span>${esc(t('offered'))}</span>
-      <b class="oid">#${short(o.id)}</b>
-      <span class="amt money">${esc(money(o.total))}</span>
-      <p class="note">${esc(o.address?.line || '—')}</p>
-      <p class="hint2" id="offerLeft">${lapsed
-        ? esc(t('offerLapsed'))
-        : `${esc(t('timeLeft'))} <b id="offerClock">${mmss(left())}</b>`}</p>
-    </div>
-    <button class="cta" id="takeOffer" type="button">${icon('package')}${esc(t('take'))}</button>
-    <button class="ghost" id="endShift" type="button">${icon('power')}${esc(t('endShift'))}</button>`;
+  $('#app').innerHTML = screens.offer(o, left(), ctx());
   $('#endShift').onclick = () => setShift(false);
   $('#takeOffer').onclick = async () => {
     const b = $('#takeOffer'); b.disabled = true;
@@ -996,38 +896,18 @@ function renderOffer(o){
     if (!el) { clearInterval(renderOffer._t); return; }
     const n = left();
     if (n === 0) { clearInterval(renderOffer._t); return load(); }
-    el.textContent = mmss(n);
+    el.textContent = ui.mmss(n);
   }, 1000);
 }
 
 function renderActive(o){
-  const picked = o.status === 'IN_DELIVERY';
-  const addr = o.address?.line || '';
   const cash = o.payment === 'cash' ? o.total : 0;
   // A TAP THIS PHONE IS STILL HOLDING REPLACES THE CONTROL, and it does not
   // touch the status chip above it -- that chip is the hub's answer and the hub
   // has not answered yet. Offering the same button again would invite a second
   // tap for a job whose first tap is already saved.
   const waiting = queuedFor(o.id);
-  $('#app').innerHTML = `${orderHead(o, picked)}
-    ${waiting
-      ? `<div class="empty" role="status">${icon('cloud-upload')}
-           <b>${esc(t('queued'))}</b>${esc(t('queuedHint'))}</div>`
-      : picked
-      ? `<div class="slide" id="slide">
-           <div class="slide-fill" id="slideFill"></div>
-           <button class="cta go slide-knob" id="done" type="button"
-                   aria-label="${esc(t('deliveredAria'))}">
-             ${icon('circle-check')}${esc(t('delivered'))}</button>
-           <span class="slide-hint" aria-hidden="true">${esc(t('swipe'))}</span>
-         </div>`
-        : `<button class="cta" id="pick" type="button">${icon('package')}${esc(t('pickedUp'))}</button>`}
-    <div class="row2">
-      ${addr ? `<a class="ghost" target="_blank" rel="noopener"
-          href="https://www.openstreetmap.org/search?query=${encodeURIComponent(addr)}">${icon('external-link')}${esc(t('inMaps'))}</a>` : ''}
-      ${o.contact?.phone ? `<a class="ghost" href="tel:${esc(o.contact.phone)}">${icon('phone')}${esc(t('call'))}</a>` : ''}
-    </div>
-    ${picked && !waiting ? `<button class="ghost" id="refused" type="button">${icon('x')}${esc(t('refusedAtDoor'))}</button>` : ''}`;
+  $('#app').innerHTML = screens.active(o, { waiting, eta: etaText(o) }, ctx());
 
   // THE DESTINATION ON THE MAP. Micro-degrees back to degrees here and nowhere
   // else: the wire and the store hold integers, and this is the single boundary
@@ -1043,15 +923,11 @@ function renderActive(o){
   }
 
   if ($('#pick')) $('#pick').onclick = async () => {
-    const b = $('#pick');
-    const had = b.innerHTML;
-    b.disabled = true; b.setAttribute('aria-busy', 'true');
-    b.innerHTML = `${icon('loader-2')}${esc(t('saving'))}`;
-    b.querySelector('.ti')?.classList.add('spin');
+    const restore = ui.setBusy($('#pick'), t('saving'));
     try { const r = await tapped(`/courier/orders/${encodeURIComponent(o.id)}/pickup`, { tag:'pickup:' + o.id }); if (r.landed) await load(); }
     catch (e) {
       toast(String(e.message || e), 'alert-circle');
-      b.disabled = false; b.removeAttribute('aria-busy'); b.innerHTML = had;
+      restore();
     }
   };
   // REFUSED AT THE DOOR (§2.4): the refund under this courier, with nothing
@@ -1112,12 +988,7 @@ function renderActive(o){
 }
 
 function renderCash(o){
-  const cash = o.total;
-  $('#app').innerHTML = `${orderHead(o, true)}
-    <label for="got">${esc(t('howMuchCash'))}</label>
-    <input id="got" class="money" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" value="${esc(cash)}">
-    <button class="cta go" id="confirm" type="button">${icon('circle-check')}${esc(t('confirm'))}</button>
-    <button class="ghost" id="back" type="button">${icon('arrow-left')}${esc(t('back'))}</button>`;
+  $('#app').innerHTML = screens.cash(o, etaText(o), ctx());
   const inp = $('#got');
   inp.focus(); inp.select();
   $('#back').onclick = () => { S.cashFor = null; renderActive(o); };
@@ -1134,14 +1005,9 @@ function renderCash(o){
 /// The refused-at-door screen: a confirm, and a short optional note (the
 /// server keeps at most 280 characters; the field stops there too). Sent
 /// through the outbox like every other tap.
-const NOTE_MAX = 280;
+const NOTE_MAX = screens.NOTE_MAX;
 function renderRefused(o){
-  $('#app').innerHTML = `${orderHead(o, true)}
-    <p>${esc(t('confirmRefused'))}</p>
-    <label for="rnote">${esc(t('refusedNoteLabel'))}</label>
-    <textarea id="rnote" maxlength="${NOTE_MAX}" rows="3" autocomplete="off" placeholder="${esc(t('refusedNoteHint'))}"></textarea>
-    <button class="cta" id="rgo" type="button">${icon('x')}${esc(t('refusedAtDoor'))}</button>
-    <button class="ghost" id="back" type="button">${icon('arrow-left')}${esc(t('back'))}</button>`;
+  $('#app').innerHTML = screens.refused(o, etaText(o), ctx());
   $('#back').onclick = () => renderActive(o);
   $('#rgo').onclick = async () => {
     const b = $('#rgo');
@@ -1199,11 +1065,11 @@ async function setShift(open){
 // button beside a live delivery is one more thing to mis-tap on a handlebar.
 const HELP = () => ({
   welcome: { hint:false, title:t('hWelcomeT'), body:t('hWelcome') },
-  shift: { at:'#shiftTag', hint:false, title:t('hShiftT'), body:t('hShift') },
-  sheet: { at:'#sheet', hint:false, title:t('hSheetT'), body:t('hSheet') },
-  mic: { at:'#mic', hint:false, title:t('hMicT'), body:t('hMic') },
-  ask: { at:'#askBox', title:t('hAskT'), body:t('hAsk') },
-  help: { at:'.gd-help', hint:false, title:t('hHelpT'), body:t('hHelp') },
+  shift: { at:'[data-tour="hud.shift"]', hint:false, title:t('hShiftT'), body:t('hShift') },
+  sheet: { at:'[data-tour="hud.sheet"]', hint:false, title:t('hSheetT'), body:t('hSheet') },
+  mic: { at:'[data-tour="hud.mic"]', hint:false, title:t('hMicT'), body:t('hMic') },
+  ask: { at:'[data-tour="ask.box"]', title:t('hAskT'), body:t('hAsk') },
+  help: { at:'[data-tour="help.open"]', hint:false, title:t('hHelpT'), body:t('hHelp') },
 });
 /// The guide's own buttons, in the reader's language.
 const guideWords = () => ({ step: (i, n) => t('gStep', { i, n }), skip: t('gSkip'), later: t('gLater'), back: t('gBack'), next: t('gNext'), done: t('gDone'),
@@ -1213,10 +1079,42 @@ let guide = null;
 function initGuide(){
   guide ??= createGuide({
     key:'courier', help: HELP(), tour: TOUR, toast, words: guideWords(),
-    mount: { into:'#app', className:'ghost', text:t('help'),
+    // The first-run tour IS lesson C1 (docs/learn/lessons/courier/C1.yaml, whose
+    // captions courier/learn.test.mjs holds equal to these h* strings). It keeps
+    // its own key, so `dw_guide_courier` is honoured as before; finishing it
+    // also ticks C1 in the lesson list.
+    onEnd: state => getLearn().then(l => l?.mark('C1', state)),
+    mount: { into:'#app', className:'ui-btn ui-btn--ghost ui-btn--block', text:t('help'), tour:'help.open',
              when: () => S.loadedOnce && !S.mine.length && !$('#pback') },
   });
   guide.init();
+}
+
+// ── lessons (C1..C6) ─────────────────────────────────────────────────────────
+// The list opens as a panel, like earnings and history, and only where the
+// help button is: standing still. Picking a lesson closes the panel first so
+// the controls it points at are on screen. `#learn=C3` (the wiki's "open in
+// the app" link) opens one directly.
+const learnWords = () => ({ title: t('learn'), new: t('learnNew'), done: t('learnDone'), paused: t('learnPaused'),
+  watch: t('learnWatch'), writes: t('learnWrites'), steps: n => t('learnSteps', { n }), empty: t('learnEmpty'), offline: t('learnOffline') });
+let learn = null, lessons = null;
+async function getLearn(){
+  if (!lessons || !lessons.length) lessons = await loadLessons();
+  if (!lessons.length) return null;
+  learn ??= createLearn({ role: 'courier', lessons, lang: () => lang, createGuide, toast, words: learnWords(), guideWords: guideWords() });
+  return learn;
+}
+async function openLearn(){
+  await panel(t('learn'), screens.panelLoading(ctx()));
+  const l = await getLearn();
+  if (!l) return panel(t('learn'), screens.panelError(t('learnOffline')));
+  await panel(t('learn'), l.renderList());
+  l.bindList($('#app'), () => render());
+}
+async function learnFromHash(){
+  if (!/learn=/.test(location.hash)) return;
+  const l = await getLearn();
+  if (l && !l.deepLink(location.hash)) toast(t('learnEmpty'), 'alert-circle');
 }
 
 function bindVoiceChrome(){
@@ -1239,7 +1137,9 @@ async function boot(){ S.booted = true;
   // the important thing wait for the helpful one.
   initMap();
   await load();
-  guide.autoStart();
+  // A lesson link wins over the first-run tour: the courier asked for it.
+  if (/learn=/.test(location.hash)) learnFromHash(); else guide.autoStart();
+  addEventListener('hashchange', learnFromHash);
   clearTimeout(boot._i);
   const scheduleLoad = () => {
     // ON SHIFT IS THE LIVE CASE, not "has work": an offer arrives when the

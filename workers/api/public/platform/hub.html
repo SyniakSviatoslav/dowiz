@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="/lib/icons.css">
 <link rel="stylesheet" href="/lib/tokens.css">
 <link rel="stylesheet" href="/lib/components.css">
+<link rel="stylesheet" href="/lib/ui/ui.css">
 <link rel="stylesheet" href="/platform/landing.css">
 <link rel="stylesheet" href="/platform/hub.css">
 </head>
@@ -46,11 +47,11 @@
         <div class="join-row">
           <div class="join-field">
             <label for="email">Пошта</label>
-            <input id="email" type="email" autocomplete="username" inputmode="email" spellcheck="false">
+            <input class="ui-input" id="email" type="email" autocomplete="username" inputmode="email" spellcheck="false">
           </div>
           <div class="join-field">
             <label for="pw">Пароль</label>
-            <input id="pw" type="password" autocomplete="current-password">
+            <input class="ui-input" id="pw" type="password" autocomplete="current-password">
           </div>
           <button class="btn" type="submit" id="go" data-magnet><span>Увійти</span><i class="ti ti-arrow-right" aria-hidden="true"></i></button>
         </div>
@@ -87,27 +88,28 @@
         <div class="join-row three">
           <div class="join-field">
             <label for="slug">Slug</label>
-            <input id="slug" placeholder="sushi-durres" autocapitalize="off" spellcheck="false">
+            <input class="ui-input" id="slug" placeholder="sushi-durres" autocapitalize="off" spellcheck="false">
           </div>
           <div class="join-field">
             <label for="name">Назва</label>
-            <input id="name" placeholder="Sushi Durrës">
+            <input class="ui-input" id="name" placeholder="Sushi Durrës">
           </div>
           <div class="join-field">
             <label for="phone">Телефон</label>
-            <input id="phone" placeholder="+355 …" inputmode="tel">
+            <input class="ui-input" id="phone" placeholder="+355 …" inputmode="tel">
           </div>
         </div>
+        <p class="hub-p"><label><input type="checkbox" id="dpa" value="dpa v1 2026-09-24"> Заклад прийняв <a href="/dpa?lang=uk" target="_blank" rel="noopener">договір про обробку даних</a> (dpa v1 2026-09-24). Без цього хаб не створюється.</label></p>
         <h3 class="hub-h3">Перший власник</h3>
         <p class="hub-p">Можна лишити порожнім — хаб створиться без власника.</p>
         <div class="join-row">
           <div class="join-field">
             <label for="oemail">Пошта власника</label>
-            <input id="oemail" type="email" autocomplete="off" spellcheck="false">
+            <input class="ui-input" id="oemail" type="email" autocomplete="off" spellcheck="false">
           </div>
           <div class="join-field">
             <label for="opw">Пароль</label>
-            <input id="opw" type="text" autocomplete="off">
+            <input class="ui-input" id="opw" type="text" autocomplete="off">
           </div>
           <button class="btn" type="submit" id="make" data-magnet><span>Створити</span><i class="ti ti-plus" aria-hidden="true"></i></button>
         </div>

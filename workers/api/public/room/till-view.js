@@ -7,7 +7,10 @@
 // only on the close. This renderer does not trust that: it draws them ONLY
 // for a `till.closed` answer, and drops them from any other -- a server that
 // one day leaks them into a count answer still shows the counter nothing.
-import { esc, money, TILL_CURRENCIES } from './logic.js';
+import { money, TILL_CURRENCIES } from './logic.js';
+import { ui } from './parts.js';
+
+const esc = ui.esc;
 
 export const CLOSED = 'till.closed';
 
@@ -18,7 +21,7 @@ function codesOf(...maps) {
   return [...seen].filter(c => maps.some(m => m && c in m));
 }
 
-const cell = (m, c, locale) => (m && c in m ? money(m[c], c, locale) : '—');
+const cell = (m, c, locale) => (m && c in m ? ui.amount(money(m[c], c, locale)) : '—');
 
 /// The fields a person may see for this answer. Exported for the test.
 export function visible(ans) {
@@ -35,14 +38,14 @@ export function visible(ans) {
 /// The drawer's state as HTML. `t` is the i18n lookup, `locale` for money.
 export function renderTill(ans, t, locale, timeOf = ms => new Date(ms).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })) {
   const v = visible(ans);
-  if (!v) return `<p class="muted">${esc(t('tillUnknown'))}</p>`;
+  if (!v) return ui.para(t('tillUnknown'), { hint: true });
   const when = v.opened_at ? ` · ${esc(t('openedAt'))} ${esc(timeOf(v.opened_at))}` : '';
   if (v.kind !== CLOSED) {
     const codes = codesOf(v.float, v.counted);
     const rows = codes.map(c => `<tr><th scope="row">${esc(c)}</th><td>${cell(v.float, c, locale)}</td>${v.counted ? `<td>${cell(v.counted, c, locale)}</td>` : ''}</tr>`).join('');
-    return `<p class="state ok">${esc(t(v.open ? 'tillOpen' : 'tillClosedWord'))}${when}</p>
-      <table class="z"><thead><tr><th></th><th>${esc(t('tillFloat'))}</th>${v.counted ? `<th>${esc(t('counted'))}</th>` : ''}</tr></thead><tbody>${rows}</tbody></table>
-      ${v.counted ? `<p class="muted">${esc(t('blindNote'))}</p>` : ''}`;
+    return `<p class="state">${ui.badge({ tone: v.open ? 'success' : 'neutral', dot: true, label: t(v.open ? 'tillOpen' : 'tillClosedWord') })}${when}</p>
+      <table class="z" data-tour="till.z"><thead><tr><th></th><th>${esc(t('tillFloat'))}</th>${v.counted ? `<th>${esc(t('counted'))}</th>` : ''}</tr></thead><tbody>${rows}</tbody></table>
+      ${v.counted ? ui.para(t('blindNote'), { hint: true }) : ''}`;
   }
   const codes = codesOf(v.expected, v.counted, v.over_short);
   const rows = codes.map(c => {
@@ -50,8 +53,8 @@ export function renderTill(ans, t, locale, timeOf = ms => new Date(ms).toLocaleT
     const cls = os == null ? '' : os < 0 ? ' short' : os > 0 ? ' over' : ' even';
     return `<tr><th scope="row">${esc(c)}</th><td>${cell(v.expected, c, locale)}</td><td>${cell(v.counted, c, locale)}</td><td class="os${cls}">${cell(v.over_short, c, locale)}</td></tr>`;
   }).join('');
-  return `<p class="state">${esc(t('tillClosedWord'))}${v.closed_at ? ` · ${esc(timeOf(v.closed_at))}` : ''}</p>
-    <table class="z"><thead><tr><th></th><th>${esc(t('expected'))}</th><th>${esc(t('counted'))}</th><th>${esc(t('overShort'))}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<p class="state">${ui.badge({ label: t('tillClosedWord') })}${v.closed_at ? ` · ${esc(timeOf(v.closed_at))}` : ''}</p>
+    <table class="z" data-tour="till.z"><thead><tr><th></th><th>${esc(t('expected'))}</th><th>${esc(t('counted'))}</th><th>${esc(t('overShort'))}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 /// THE TIP RECORD beside the Z report (`GET /api/staff/till/tips`): which
@@ -74,8 +77,8 @@ export function tipsQuery(ans, loc) {
 export function renderTips(res, t, locale) {
   const rows = (res && Array.isArray(res.tips) ? res.tips : []).filter(r => r && r.amount > 0);
   const names = (res && res.names) || {};
-  const head = `<h3>${esc(t('tipsTitle'))}</h3><p class="muted">${esc(t(res && res.day ? 'tipsHintDay' : 'tipsHint'))}</p>`;
-  if (!rows.length) return `${head}<p class="muted">${esc(t('tipsNone'))}</p>`;
-  const body = rows.map(r => `<tr><th scope="row">${esc(names[r.by] || r.by || '-')}</th><td>${money(r.amount, r.currency, locale)}</td></tr>`).join('');
+  const head = `<h3>${esc(t('tipsTitle'))}</h3>${ui.para(t(res && res.day ? 'tipsHintDay' : 'tipsHint'), { hint: true })}`;
+  if (!rows.length) return `${head}${ui.emptyState({ icon: 'coins', title: t('tipsNone') })}`;
+  const body = rows.map(r => `<tr><th scope="row">${esc(names[r.by] || r.by || '-')}</th><td>${ui.amount(money(r.amount, r.currency, locale))}</td></tr>`).join('');
   return `${head}<table class="z tips"><tbody>${body}</tbody></table>`;
 }

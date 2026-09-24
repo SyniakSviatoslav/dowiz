@@ -10,7 +10,8 @@
 // A DISH WITH MODIFIER GROUPS is offered without them. If one is required the
 // pricer refuses the line, and its words are shown -- choosing modifiers on a
 // tablet is not built yet (see the lane's OPEN list).
-import { esc, money } from './logic.js';
+import { money } from './logic.js';
+import { ui, k, act, backBar, actionRow, amt, loading } from './parts.js';
 
 /// Fetch and keep the menu. Sets `S.menu` (categories) and `S.currency`.
 export async function loadMenu(c) {
@@ -27,35 +28,44 @@ export async function loadMenu(c) {
   }
 }
 
-/// The picker: categories, a search, a basket of taps, one send.
-export function renderAdd(c) {
+/// One dish: a tap adds one; a count badge and a "less" once it is in the basket.
+function dish(c, p, n) {
   const { S, t } = c;
-  const loc = c.locale();
+  const off = p.available === false;
+  const pick = actionRow({ title: p.name || '', disabled: off,
+    sub: off ? ui.esc(t('unavailable')) : '',
+    trailing: amt(money(p.price || 0, S.currency, c.locale()), { cls: 'amt' }) + (n ? ui.badge({ tone: 'accent', label: String(n), cls: 'count' }) : ''),
+    attrs: act('pick', { id: p.id }, 'menu.dish') });
+  const less = n ? ui.iconButton({ icon: 'minus', ariaLabel: k('less'), attrs: act('unpick', { id: p.id }, 'menu.less') }) : '';
+  return `<li>${pick}${less}</li>`;
+}
+
+/// The picker: categories, a search, a basket of taps, one send. `title` is
+/// the heading key (`addItem` on a round, `openTable` when opening one) and
+/// `lead` is markup drawn under it (open.js's table field).
+export function renderAdd(c, title = 'addItem', lead = '') {
+  const { S, t } = c;
   const q = (S.menuQ || '').trim().toLowerCase();
   const basket = S.basket || {};
   const n = Object.values(basket).reduce((a, b) => a + b, 0);
   let body;
-  if (!S.menu) body = `<p class="muted">${esc(t(S.menuError === 'noSlug' ? 'noSlug' : S.menuError ? S.menuError : 'loading'))}</p>`;
+  if (!S.menu && !S.menuError) body = loading(t);
+  else if (!S.menu) body = ui.emptyState({ icon: 'plug-connected-x', title: k(S.menuError), alert: true });
   else {
     body = S.menu.map(cat => {
       const ps = (cat.products || []).filter(p => !q || String(p.name || '').toLowerCase().includes(q));
       if (!ps.length) return '';
-      return `<h3>${esc(cat.name)}</h3><ul class="menu">${ps.map(p => {
-        const k = basket[p.id] || 0;
-        const off = p.available === false;
-        return `<li><button class="row" data-act="pick" data-id="${esc(p.id)}" ${off ? 'disabled' : ''}>
-          <span class="name">${esc(p.name)}${off ? ` · <em>${esc(t('unavailable'))}</em>` : ''}</span>
-          <span class="amt">${money(p.price || 0, S.currency, loc)}</span>${k ? `<span class="count">${k}</span>` : ''}</button>
-          ${k ? `<button class="btn sq" data-act="unpick" data-id="${esc(p.id)}" aria-label="${esc(t('less'))}">−</button>` : ''}</li>`;
-      }).join('')}</ul>`;
-    }).join('') || `<p class="muted">${esc(t('noMatch'))}</p>`;
+      return `<h3>${ui.esc(cat.name)}</h3><ul class="menu">${ps.map(p => dish(c, p, basket[p.id] || 0)).join('')}</ul>`;
+    }).join('') || ui.emptyState({ icon: 'search-off', title: k('noMatch') });
   }
   return `
-    <div class="bar"><button class="btn" data-act="back">← ${esc(t('back'))}</button></div>
-    <h2>${esc(t('addItem'))}</h2>
-    <input class="search" type="search" data-in="q" value="${esc(S.menuQ || '')}" placeholder="${esc(t('search'))}" aria-label="${esc(t('search'))}">
+    ${backBar()}
+    <h2>${ui.esc(t(title))}</h2>
+    ${lead}
+    ${ui.inputRow({ type: 'search', label: k('search'), placeholder: k('search'), cls: 'search',
+      attrs: { value: S.menuQ || '', data: { in: 'q', tour: 'menu.search' } } })}
     ${body}
-    <div class="dock"><button class="cta" data-act="send" ${n ? '' : 'disabled'}>${esc(t('addN').replace('{n}', n))}</button></div>`;
+    <div class="dock">${ui.button({ variant: 'primary', size: 'lg', block: true, icon: 'send', label: t('addN').replace('{n}', n), disabled: !n, attrs: act('send', {}, 'menu.send') })}</div>`;
 }
 
 export function bindAdd(c, root, round, amend) {

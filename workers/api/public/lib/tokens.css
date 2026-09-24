@@ -136,4 +136,115 @@
   /* ── stacking, named so nothing invents a z-index ── */
   --z-sticky: 50; --z-toast: 90;
 
+  /* ── 2026-09-24: the design system's additions. Every name above keeps
+     working; nothing below renames or re-values it. ── */
+
+  /* A default base, so a surface that sets none still gets a scale rather than
+     `calc()` of nothing. Every surface that sets its own wins by load order. */
+  --text-base: 1rem;
+  --weight-normal: 400;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --tracking-tight: -.01em;
+
+  --space-10: 40px;
+  --radius-xl: 16px; --radius-2xl: 24px;
+
+  /* The tap floor has three steps (plan §8.1: 44/48/56). 56 is the courier's
+     primary action: a thumb on a phone held on a handlebar. */
+  --tap-md: 48px; --tap-lg: 56px;
+
+  /* Durations, named by what they are for. Exit is faster than enter. Under
+     reduced motion they fall to zero below: meaning is carried by state, not
+     travel, so nothing is lost. */
+  --motion-press: 120ms; --motion-enter: 200ms; --motion-exit: 140ms; --motion-sheet: 260ms;
+  --ease-enter: cubic-bezier(.2,.8,.2,1);
+  --ease-exit: cubic-bezier(.4,0,1,1);
+
+  --z-overlay: 80;
+
+  /* ── ORDER STATUS HUES (plan §8.1: `--status`, DOWIZ-FIXED) ──
+     Written out five times, byte-identical, in five surface sheets. The
+     lifecycle looks the same under every brand, so it lives here once. A hue
+     is a DOT's colour; the status WORD is always ink (ui.css `.ui-status`). */
+  --st-PENDING:#D97706; --st-CONFIRMED:#2563EB; --st-PREPARING:#F59E0B;
+  --st-READY:#0D9488; --st-IN_DELIVERY:#3B82F6; --st-DELIVERED:#059669;
+  --st-REJECTED:#DC2626; --st-CANCELLED:#DC2626; --st-PICKED_UP:#0D9488;
+  --st-SCHEDULED:#7C3AED; --st-REFUNDING:#7C3AED; --st-COMPENSATED_REFUND:#64748B;
+
+  /* ── COLOUR ROLES ──
+     What a component asks for is a ROLE (the text, the surface under it, the
+     line around it), never a hex and never a surface's private name. Each role
+     reads the venue's T1 `--brand-*` token when the surface defines it and
+     falls back to dowiz's own T3 chrome (Warm Cosmo-Noir, plan §8.1) when it
+     does not -- so a component drops onto any page and is coherent.
+     
+     Every fallback pair below is AA or better, and the test that says so is
+     lib/ui/tokens.test.mjs, which reads THIS file and prints what it measured
+     (2026-09-24, light): fg/bg 15.57, fg/surface 17.81, muted/surface 7.26,
+     on-accent/accent 7.25, every tone ink >= 6.54; dark: every pair >= 5.47. */
+  --ui-bg: var(--brand-bg, #f5efe5);
+  --ui-surface: var(--brand-surface, #ffffff);
+  --ui-surface-2: var(--brand-surface-raised, #f5efe5);
+  --ui-fg: var(--brand-text, #061b1a);
+  --ui-fg-muted: var(--brand-text-muted, #4a5a58);
+  --ui-line: var(--brand-border, #d9d2c5);
+  --ui-accent: var(--brand-primary, #d69a3d);
+  --ui-on-accent: var(--brand-on-primary, #061b1a);
+  /* The accent's EDGE: gold on white is 2.46:1, under the 3:1 a boundary needs. */
+  --ui-accent-edge: color-mix(in srgb, var(--ui-accent) 75%, var(--ui-fg));
+  /* Gold is invisible as a focus ring in daylight; ink is 17:1. */
+  --ui-focus: var(--ui-fg);
+  --ui-scrim: rgba(6,27,26,.45);
+  --ui-float: color-mix(in srgb, var(--ui-surface) 92%, transparent);
+  /* Tone INKS are for text and icons on the surface; tone FILLS are the
+     semantic colours above, and take ink (#061b1a), never white: white fails
+     on success (3.77) and warning (3.19).
+     
+     An ink is the tone MIXED TOWARD THE PAGE'S OWN INK, not a second hex per
+     theme: on a light page the ink is dark and the mix darkens, on a dark page
+     it lightens -- so a surface that stays light under a dark OS preference
+     still gets a readable danger. #DC2626 as text was 3.30:1 on the courier's
+     dark sheet; this mix measures 5.47:1 there and 9.27:1 on white. */
+  --ui-success-ink: color-mix(in srgb, var(--color-success) 60%, var(--ui-fg));
+  --ui-warning-ink: color-mix(in srgb, var(--color-warning) 60%, var(--ui-fg));
+  --ui-danger-ink:  color-mix(in srgb, var(--color-danger) 60%, var(--ui-fg));
+  --ui-info-ink:    color-mix(in srgb, var(--color-info) 60%, var(--ui-fg));
+  --ui-on-tone: #061b1a;
+  /* ...except danger, where ink is 3.69:1 and white is 4.83:1. Measured by
+     lib/ui/tokens.test.mjs, which is where this exception was found. */
+  --ui-on-danger: #ffffff;
+  --ui-shadow-sheet: 0 -8px 24px rgba(0,0,0,.18);
+}
+
+/* Dark: the same roles, the ground and ink swapped. A surface that forces a
+   theme with `data-theme` wins over the phone in both directions. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ui-bg: var(--brand-bg, #061b1a);
+    --ui-surface: var(--brand-surface, #0b2624);
+    --ui-surface-2: var(--brand-surface-raised, #12302d);
+    --ui-fg: var(--brand-text, #f5efe5);
+    --ui-fg-muted: var(--brand-text-muted, #a9b8b5);
+    --ui-line: var(--brand-border, #22403c);
+    --ui-accent-edge: var(--ui-accent);
+    --ui-focus: var(--ui-accent);
+    --ui-scrim: rgba(0,0,0,.6);
+    --ui-shadow-sheet: 0 -8px 24px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"] {
+  --ui-bg: var(--brand-bg, #061b1a);
+  --ui-surface: var(--brand-surface, #0b2624);
+  --ui-surface-2: var(--brand-surface-raised, #12302d);
+  --ui-fg: var(--brand-text, #f5efe5);
+  --ui-fg-muted: var(--brand-text-muted, #a9b8b5);
+  --ui-line: var(--brand-border, #22403c);
+  --ui-accent-edge: var(--ui-accent);
+  --ui-focus: var(--ui-accent);
+  --ui-scrim: rgba(0,0,0,.6);
+  --ui-shadow-sheet: 0 -8px 24px rgba(0,0,0,.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-press: 0ms; --motion-enter: 0ms; --motion-exit: 0ms; --motion-sheet: 0ms; }
 }

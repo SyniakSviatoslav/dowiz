@@ -7,8 +7,8 @@
 // `dine_in`, a table, and the hub mints the sitting and signs the round.
 //
 // The picker is `menu.js`'s own, drawn under a table field.
-import { esc } from './logic.js';
 import { renderAdd, bindAdd } from './menu.js';
+import { ui, k } from './parts.js';
 
 /// A table as the ticket prints it: trimmed, bounded, never empty.
 export const TABLE_MAX = 24;
@@ -30,10 +30,11 @@ export function placeBody(table, ops) {
 }
 
 export function renderOpen(c) {
-  const { S, t } = c;
-  return `<label class="table-field">${esc(t('tableName'))}
-      <input name="table" data-in="table" maxlength="${TABLE_MAX}" autocomplete="off" value="${esc(S.openTable || '')}" required></label>
-    ${renderAdd(c).replace(`<h2>${esc(t('addItem'))}</h2>`, `<h2>${esc(t('openTable'))}</h2>`)}`;
+  const { S } = c;
+  const table = ui.field({ id: 'openTable', name: 'table', label: k('tableName'), value: S.openTable || '', maxlength: TABLE_MAX,
+    autocomplete: 'off', required: true, cls: 'table-field', attrs: { data: { in: 'table', tour: 'open.table' } } });
+  // The table goes under the picker's heading, above its search.
+  return renderAdd(c, 'openTable', table);
 }
 
 export function bindOpen(c, root, back) {

@@ -32,6 +32,19 @@ export function bookingBody({ party, slotMin, pick, name, phone, rid }) {
   return b;
 }
 
+/// The request key for a booking attempt: `prev` again while it names the
+/// SAME request (slot, table, party) and has not succeeded, else a fresh one.
+///
+/// ONE KEY PER BOOKING, NOT PER TAP (audit D28). A fresh key on every tap
+/// turned "the answer was lost, tap again" into a second table held under a
+/// token nobody kept; the hub replays its first answer to a key it has seen.
+/// The caller forgets `prev` (passes null) once a booking succeeded.
+export function requestKey(prev, { slotMin, pick, party }, rand = Math.random) {
+  const what = `bk_${slotMin}_${pick ? `${pick.zone}_${pick.n}` : 'any'}_${party}`;
+  if (prev && String(prev).startsWith(`${what}_`)) return prev;
+  return `${what}_${rand().toString(36).slice(2, 10)}`;
+}
+
 /// Remember a booking, newest first, one entry per id.
 export function remember(list, entry, keep = KEEP) {
   if (!entry?.id || !entry?.t) return list || [];

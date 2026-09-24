@@ -10,7 +10,7 @@
 // The cache is named by the deploy's own version line below; a new deploy
 // with a new line drops the old shell on activation.
 
-const SHELL_CACHE = 'dowiz-shell-2026-09-24b';
+const SHELL_CACHE = 'dowiz-shell-2026-09-24d';
 /// THE WHOLE MODULE GRAPH, not just its entry.
 ///
 /// This list used to hold the document, `/app.js` and the three stylesheets,
@@ -42,6 +42,8 @@ const SHELL_CACHE_MODULES = [
   // blank offline.
   '/lib/vocab.js',
   '/store/cart.js',
+  // The privacy-notice link (P8): menu.js and booking.js import it statically.
+  '/store/consent.js',
   '/store/dish.js',
   '/store/eta.js',
   '/store/i18n.js',
@@ -49,12 +51,32 @@ const SHELL_CACHE_MODULES = [
   '/store/menu.js',
   '/store/motion.js',
   '/store/nav.js',
+  // The storefront's pieces on the design system (store/parts.js, 2026-09-24).
+  '/store/parts.js',
   '/store/sea.js',
   '/store/state.js',
   '/store/storage.js',
   '/store/table.js',
   '/store/ui.js',
   '/store/venue.js',
+  // The design system: `index.js` re-exports every component module, so the
+  // whole folder is in the graph, not only what the storefront calls.
+  '/lib/ui/index.js',
+  '/lib/ui/core.js',
+  '/lib/ui/button.js',
+  '/lib/ui/badge.js',
+  '/lib/ui/chip.js',
+  '/lib/ui/field.js',
+  '/lib/ui/segmented.js',
+  '/lib/ui/tabs.js',
+  '/lib/ui/list.js',
+  '/lib/ui/empty.js',
+  '/lib/ui/skeleton.js',
+  '/lib/ui/toast.js',
+  '/lib/ui/sheet.js',
+  '/lib/ui/money.js',
+  '/lib/ui/card.js',
+  '/lib/ui/time.js',
 ];
 const SHELL = [
   '/',
@@ -62,6 +84,7 @@ const SHELL = [
   '/store/store.css',
   '/lib/tokens.css',
   '/lib/components.css',
+  '/lib/ui/ui.css',
   '/lib/icons.css',
 ];
 /// Paths that are never cached: the hub speaks, the media is immutable already.

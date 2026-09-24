@@ -26,7 +26,13 @@ test('room: [hidden] is display:none !important', () => {
   assert.match(css, /(^|\})\s*\[hidden\]\s*\{\s*display\s*:\s*none\s*!important\s*;?\s*\}/);
 });
 
-test('room: the queued tag is one of the hidden elements a class would otherwise show', () => {
-  assert.ok(hiddenClasses().has('tag'), 'index.html starts #outboxTag hidden with class tag');
-  assert.match(css, /\.tag\s*\{[^}]*display\s*:\s*inline-flex/, 'the rule that beat [hidden]');
+test('room: the queued tag starts hidden, and a rule makes `hidden` beat its class', () => {
+  // Since the /lib/ui migration the tag is a `ui-chip` (display:inline-flex in
+  // ui.css). ui.css carries its own `[hidden]` rule for `ui-*` classes; the
+  // room's `[hidden]` rule above covers the rest.
+  assert.ok(hiddenClasses().has('ui-chip'), 'index.html starts #outboxTag hidden with class ui-chip');
+  const ui = readFileSync(new URL('../lib/ui/ui.css', here), 'utf8');
+  assert.match(ui, /\[class\^="ui-"\]\[hidden\][^{]*\{display:none!important\}/, 'ui.css: [hidden] wins over a ui-* class');
+  assert.match(html, /href="\/lib\/ui\/ui\.css"/, 'index.html loads ui.css');
+  assert.ok(html.indexOf('/lib/ui/ui.css') < html.indexOf('/room/room.css'), 'ui.css before the room sheet, so the room can tune it');
 });

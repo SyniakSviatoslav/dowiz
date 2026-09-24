@@ -9,8 +9,9 @@
 //
 // A SPLIT is several payments: the screen stays open after one, with what is
 // still owed as the next default, until the server says "paid".
-import { esc, money, METHODS, TILL_CURRENCIES, owed, parseMinor, minorToInput, ratePpm, convertPpm, maxAmountFor, quoteOf, settles, tipMinor, walletOk, walletTipOk } from './logic.js';
+import { money, METHODS, TILL_CURRENCIES, owed, parseMinor, minorToInput, ratePpm, convertPpm, maxAmountFor, quoteOf, settles, tipMinor, walletOk, walletTipOk, walletField } from './logic.js';
 import { pick } from './sheet.js';
+import { ui, k, backBar, pickChips, amt } from './parts.js';
 
 /// The form's working state, per round, so a redraw keeps what was typed.
 function form(c, round) {
@@ -21,40 +22,43 @@ function form(c, round) {
   return S.payForm;
 }
 
+/// A decimal amount field that keeps the binder's `data-in` and the form's `name`.
+const num = (name, tour, label, value, o = {}) => ui.field({ id: 'pay-' + name, name, label, value, inputmode: 'decimal', autocomplete: 'off',
+  controlCls: 'money', ...o, attrs: { data: { in: name, tour } } });
+
 export function renderPay(c, round) {
   const { S, t } = c;
   // The bill's currency is the venue's, read with the menu. Without it every
   // amount below would be parsed on a guessed number of decimals.
-  if (!S.currency) return `<div class="bar"><button class="btn" data-act="back">← ${esc(t('back'))}</button></div><p class="muted">${esc(t('menuFailed'))}</p>`;
+  if (!S.currency) return `${backBar()}${ui.emptyState({ icon: 'plug-connected-x', title: k('menuFailed'), alert: true })}`;
   const loc = c.locale(), order = S.currency, f = form(c, round), due = owed(round);
   const foreign = f.currency !== order;
   const ppm = foreign ? ratePpm(f.rate, order, f.currency) : null;
-  const amt = parseMinor(f.amount, f.currency);
-  const preview = foreign && ppm && amt ? convertPpm(amt, ppm) : null;
+  const amount = parseMinor(f.amount, f.currency);
+  const preview = foreign && ppm && amount ? convertPpm(amount, ppm) : null;
   const { base, quote } = quoteOf(order, f.currency);
   const curs = [...new Set([order, ...TILL_CURRENCIES])];
-  const seg = (name, vals, cur, word) => `<div class="seg" role="radiogroup" aria-label="${esc(t(name))}">${vals.map(v =>
-    `<button type="button" class="seg-b${v === cur ? ' on' : ''}" role="radio" aria-checked="${v === cur}" data-act="${name}" data-v="${v}">${esc(word(v))}</button>`).join('')}</div>`;
   const note = S.payNote;
+  const paid = round.payment_status === 'paid';
+  const head = paid ? ui.alert({ tone: 'success', label: k('paidInFull') })
+    : ui.stat({ label: k('owed'), value: amt(money(due, order, loc), { size: 'xl', strong: true }), emphasis: true, attrs: { data: { tour: 'pay.owed' } } });
   return `
-    <div class="bar"><button class="btn" data-act="back">← ${esc(t('back'))}</button></div>
-    <h2>${esc(t('take'))} · ${esc(t('table'))} ${esc(c.tableOf(round) || '—')}</h2>
-    <p class="big">${round.payment_status === 'paid' ? esc(t('paidInFull')) : `${esc(t('owed'))}: ${money(due, order, loc)}`}</p>
-    ${note ? `<p class="state ok" role="status">${note}</p>` : ''}
-    ${round.payment_status === 'paid' ? '' : `<form data-form="pay" novalidate>
-      <label>${esc(t('currency'))}</label>${seg('currency', curs, f.currency, v => v)}
-      <label>${esc(t('method'))}</label>${seg('method', METHODS, f.method, v => t('method_' + v))}
-      ${foreign ? `<label class="rate">${esc(t('rate'))}<span class="rate-row">1 ${esc(base)} =
-        <input name="rate" data-in="rate" inputmode="decimal" autocomplete="off" value="${esc(f.rate)}" required> ${esc(quote)}</span></label>` : ''}
-      <label>${esc(t('amount'))} (${esc(f.currency)})
-        <input name="amount" data-in="amount" inputmode="decimal" autocomplete="off" value="${esc(f.amount)}" required></label>
-      <label>${esc(t('tip'))} (${esc(order)})
-        <input name="tip" data-in="tip" inputmode="decimal" autocomplete="off" value="${esc(f.tip)}" placeholder="0"></label>
-      ${f.method === 'wallet' ? `<label>${esc(t('walletId'))}
-        <input name="wallet" data-in="wallet" autocomplete="off" value="${esc(f.wallet)}" required></label>` : ''}
-      ${foreign ? `<p class="muted">${preview != null ? `≈ ${money(preview, order, loc)} ${esc(t('offTheBill'))}` : esc(t('rateNeeded'))}
-        ${ppm ? `<button type="button" class="btn" data-act="fill">${esc(t('fillOwed'))}</button>` : ''}</p>` : ''}
-      <button class="cta" type="submit">${esc(t('takeN').replace('{a}', amt ? money(amt, f.currency, loc) : '—'))}</button>
+    ${backBar()}
+    <h2>${ui.esc(t('take'))} · ${ui.esc(t('table'))} ${ui.esc(c.tableOf(round) || '—')}</h2>
+    ${head}
+    ${note ? ui.alert({ tone: 'success', label: note }) : ''}
+    ${paid ? '' : `<form data-form="pay" class="card-form" novalidate>
+      <p class="ui-label">${ui.esc(t('currency'))}</p>${pickChips('currency', t('currency'), curs, f.currency, v => v, 'pay.currency')}
+      <p class="ui-label">${ui.esc(t('method'))}</p>${pickChips('method', t('method'), METHODS, f.method, v => t('method_' + v), 'pay.method')}
+      ${foreign ? num('rate', 'pay.rate', `${t('rate')}: 1 ${base} = … ${quote}`, f.rate, { required: true }) : ''}
+      ${num('amount', 'pay.amount', `${t('amount')} (${f.currency})`, f.amount, { required: true })}
+      ${num('tip', 'pay.tip', `${t('tip')} (${order})`, f.tip, { placeholder: '0' })}
+      ${f.method === 'wallet' ? ui.field({ id: 'pay-wallet', name: 'wallet', label: k('walletCode'), value: f.wallet, autocomplete: 'off', required: true,
+        attrs: { data: { in: 'wallet', tour: 'pay.wallet' } } }) : ''}
+      ${foreign ? `<div class="preview">${ui.para(preview != null ? `≈ ${money(preview, order, loc)} ${t('offTheBill')}` : t('rateNeeded'), { hint: true })}
+        ${ppm ? ui.button({ icon: 'coins', label: k('fillOwed'), attrs: { data: { act: 'fill', tour: 'pay.fill' } } }) : ''}</div>` : ''}
+      ${ui.button({ type: 'submit', variant: 'primary', size: 'lg', block: true, icon: 'cash',
+        label: t('takeN').replace('{a}', amount ? money(amount, f.currency, loc) : '—'), attrs: { data: { tour: 'pay.submit' } } })}
     </form>`}`;
 }
 
@@ -96,10 +100,14 @@ export function bindPay(c, root, round) {
     if (!walletOk(f.method, f.wallet)) return c.toast(t('needWallet'));
     if (!walletTipOk(f.method, tip)) return c.toast(t('walletNoTip'));
     const body = { location_id: S.loc, amount, method: f.method };
+    // D7: THE VERSION THIS SCREEN SHOWED, as an amendment quotes it. A second
+    // waiter's split, or this tap re-sent under a fresh key, meets a round
+    // that moved on and is refused instead of taking the same money twice.
+    if (Number.isInteger(round.seq)) body.base_seq = round.seq;
     // THE TIP is in the bill's currency and raises the round's total by
     // itself (command/pay.rs `PayIn::tip`); `amount` stays the bill's share.
     if (tip > 0) body.tip = tip;
-    if (f.method === 'wallet') body.wallet = f.wallet.trim();
+    if (f.method === 'wallet') Object.assign(body, walletField(f.wallet));
     if (f.currency !== order) {
       const ppm = ratePpm(f.rate, order, f.currency);
       if (!ppm) return c.toast(t('badRate'));
@@ -107,7 +115,7 @@ export function bindPay(c, root, round) {
       body.rate_ppm = ppm;
     }
     const btn = root.querySelector('button[type="submit"]');
-    if (btn) btn.disabled = true;
+    ui.setBusy(btn, t('loading'));
     try {
       const r = await c.write(`/staff/orders/${encodeURIComponent(round.id)}/pay`, body, 'pay:' + round.id);
       if (!r.landed) { c.toast(t(r.queued ? 'queuedSaved' : r.reason === 'full' ? 'queueFull' : 'queueNoStore')); S.view = 'round'; return c.render(); }
@@ -123,12 +131,13 @@ export function bindPay(c, root, round) {
 }
 
 /// "€20.00 taken: 1 950 L off the bill." -- the second figure is the
-/// server's, read off the payment it recorded.
+/// server's, read off the payment it recorded. PLAIN TEXT: the screen draws it
+/// through `ui.alert`, which escapes it once.
 export function paidNote(c, data, cur, amount) {
   const { t } = c, loc = c.locale();
   const ps = data?.order?.payments;
   const last = Array.isArray(ps) && ps.length ? ps[ps.length - 1] : null;
   const off = last ? settles(last) : null;
-  const tail = data?.order?.payment_status === 'paid' ? ` ${esc(t('paidInFull'))}` : '';
-  return `${esc(t('taken'))}: ${money(amount, cur, loc)}${off != null ? ` → ${money(off, c.S.currency, loc)} ${esc(t('offTheBill'))}` : ''}.${tail}`;
+  const tail = data?.order?.payment_status === 'paid' ? ` ${t('paidInFull')}` : '';
+  return `${t('taken')}: ${money(amount, cur, loc)}${off != null ? ` → ${money(off, c.S.currency, loc)} ${t('offTheBill')}` : ''}.${tail}`;
 }

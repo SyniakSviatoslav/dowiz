@@ -34,15 +34,17 @@ import { $, $$, esc, icon, sheet, sheetName, toast } from '/store/ui.js';
 // THE SLOT ARITHMETIC IS NOT IN THIS FILE. It reads no clock, so it can be
 // examined at a chosen instant -- `lib/booking-time.test.mjs` runs it in node
 // with no browser, which is the only way any of it was ever going to be tested.
-import { midnightMs, slotOf as slotAt, weekdayOf as weekdayAt, minuteNow, timesOn as timesIn, offsetMinutes }
-  from '/lib/booking-time.js';
+import { venueSlot, venueDate, venueClock, timesOn as timesIn } from '/lib/booking-time.js';
+// `ui` in this file is the sheet's own state; the design system is `kit`.
+import { ui as kit, k, cta, ghost } from '/store/parts.js';
 // A GUEST BOOKS WITHOUT AN ACCOUNT, the way a guest orders: a name and a
 // phone, and the booking comes back with a token for that one booking. The
 // rules that are not visual are in `lib/booking-guest.js` (node-tested); the
 // guest's own list, the link and the cancel are `booking-mine.js`.
 import { safeGet, safeSet } from '/store/storage.js';
-import { guestErrors, bookingBody, refusalText } from '/lib/booking-guest.js';
+import { guestErrors, bookingBody, refusalText, requestKey } from '/lib/booking-guest.js';
 import { keepBooking, myBookings, openMine, takeLinkFromHash } from '/store/booking-mine.js';
+import { privacyLink } from '/store/consent.js';
 import '/store/booking-words.js';
 
 /// How far ahead the day strip runs. The kernel's horizon is sixty days; two
@@ -73,15 +75,17 @@ const ui = { party: 2, day: 0, minute: null, zone: 0, pick: null, plan: null,
 
 /// FROM THE VENUE'S ZONE NAME. This read `state.loc.tzOffsetMinutes`, a field
 /// the hub never sends, so every slot was computed at +120 -- right until the
-/// last Sunday of October, an hour wrong after it.
-const tzOffset = () => offsetMinutes(state.loc?.tz || 'Europe/Tirane', now());
+/// last Sunday of October, an hour wrong after it. Then it read the offset in
+/// force NOW and applied it to every day in the strip, so on 24 October a
+/// booking for the 26th at 19:00 was stored as 18:00 (audit D3). The helpers
+/// below take the zone NAME and read the offset of the day being built.
+const tz = () => state.loc?.tz || 'Europe/Tirane';
 
 /// `Date.now()` IS READ HERE AND NOWHERE BELOW IT. Every rule takes the
 /// instant, so the screen is the only thing in this flow that touches a clock.
 const now = () => Date.now();
-const dayStartMs = n => midnightMs(now(), tzOffset(), n);
-const slotOf = (day, minute) => slotAt(now(), tzOffset(), day, minute);
-const weekdayOf = day => weekdayAt(now(), tzOffset(), day);
+const slotOf = (day, minute) => venueSlot(now(), tz(), day, minute);
+const weekdayOf = day => venueDate(now(), tz(), day).weekday;
 
 function windowsOn(day) {
   const week = Array.isArray(state.loc?.hours) && state.loc.hours.length === 7 ? state.loc.hours : null;
@@ -91,7 +95,7 @@ function windowsOn(day) {
 
 /// Every bookable minute on a day, with today's past times dropped.
 const timesOn = day =>
-  timesIn(windowsOn(day), day === 0 ? minuteNow(now(), tzOffset()) : -1);
+  timesIn(windowsOn(day), day === 0 ? venueClock(tz(), now()).minute : -1);
 
 // ── the plan, for the chosen slot ───────────────────────────────────────────
 
@@ -163,7 +167,7 @@ function tableSvg(tb, selected) {
   // The aria label is the whole sentence a screen reader needs: which table,
   // how many seats, and what state it is in for the slot being looked at.
   const label = `${t('bkTable')} ${tb.n}, ${tb.seats} ${t('bkSeats')}, ${word}`;
-  return `<g class="bk-t ${cls}" data-n="${tb.n}" role="button" tabindex="${out ? -1 : 0}"
+  return `<g class="bk-t ${cls}" data-n="${tb.n}" data-tour="booking.table" role="button" tabindex="${out ? -1 : 0}"
     aria-pressed="${selected}" aria-label="${esc(label)}"${out ? ' aria-disabled="true"' : ''}>
     ${chairs(tb)}${body}
     <text class="bk-num" x="${cx}" y="${cy - 1}" text-anchor="middle">${tb.n}</text>
@@ -197,48 +201,47 @@ function head() {
   return `
   <p class="eyebrow" data-t="bkRoom"></p>
   <h2 data-t="bkTitle"></h2>
-  ${mine ? `<button type="button" class="btn ghost" id="bkMine">${icon('clock')}<span data-t="bkMine"></span> (${mine})</button>` : ''}
+  ${mine ? ghost({ id: 'bkMine', block: false, cls: 'ghost', icon: 'clock', label: `${t('bkMine')} (${mine})`, tour: 'booking.mine' }) : ''}
   <p class="bk-hint" data-t="bkHint"></p>
 
   <p class="bk-lbl" data-t="bkGuests"></p>
   <div class="bk-row" role="radiogroup" aria-label="${esc(t('bkGuests'))}">
-    ${PARTIES.map(p => `<button type="button" class="bk-chip${p === ui.party ? ' on' : ''}"
-      data-party="${p}" aria-pressed="${p === ui.party}">${p}</button>`).join('')}
+    ${PARTIES.map(p => kit.chip({ as: 'button', selected: p === ui.party, label: String(p), cls: kit.cx('bk-chip', p === ui.party && 'on'),
+      attrs: { data: { party: p, tour: 'booking.party' } } })).join('')}
   </div>
 
   <p class="bk-lbl" data-t="bkDate"></p>
   <div class="bk-row bk-scroll" role="radiogroup" aria-label="${esc(t('bkDate'))}">
     ${days.map(n => {
-      const d = new Date(dayStartMs(n) + tzOffset() * 60_000);
-      const name = (DAY_NAMES[lang] || DAY_NAMES.en)[weekdayOf(n)];
+      const d = venueDate(now(), tz(), n);
+      const name = (DAY_NAMES[lang] || DAY_NAMES.en)[d.weekday];
       return `<button type="button" class="bk-chip bk-day${n === ui.day ? ' on' : ''}"
-        data-day="${n}" aria-pressed="${n === ui.day}"><b>${esc(name)}</b><i>${d.getUTCDate()}</i></button>`;
+        data-day="${n}" data-tour="booking.day" aria-pressed="${n === ui.day}"><b>${esc(name)}</b><i>${d.d}</i></button>`;
     }).join('') || `<span class="muted" data-t="closedNow"></span>`}
   </div>
 
   <p class="bk-lbl" data-t="bkTime"></p>
   <div class="bk-row bk-scroll" role="radiogroup" aria-label="${esc(t('bkTime'))}">
-    ${times.map(m => `<button type="button" class="bk-chip${m === ui.minute ? ' on' : ''}"
-      data-min="${m}" aria-pressed="${m === ui.minute}">${hhmm(m)}</button>`).join('')
+    ${times.map(m => kit.chip({ as: 'button', selected: m === ui.minute, label: hhmm(m), cls: kit.cx('bk-chip', m === ui.minute && 'on'),
+      attrs: { data: { min: m, tour: 'booking.time' } } })).join('')
       || `<span class="muted" data-t="closedNow"></span>`}
   </div>`;
 }
 
 function body() {
-  if (ui.minute === null) return `<div class="empty bk-empty">${icon('clock', 'ico-lg')}<b data-t="bkPickTime"></b></div>`;
-  if (ui.busy) return `<div class="skel skel-plan"></div>`;
-  if (ui.err) return `<div class="empty bk-empty">${icon('alert-triangle', 'ico-lg')}<b data-t="bkPlanFail"></b>
-    <span class="muted small">${esc(ui.err)}</span>
-    <button type="button" class="btn" id="bkRetry" data-t="retry"></button></div>`;
+  if (ui.minute === null) return kit.emptyState({ icon: 'clock', title: k('bkPickTime'), cls: 'bk-empty' });
+  if (ui.busy) return kit.skeleton({ shape: 'card', count: 2, label: t('loading') });
+  if (ui.err) return kit.emptyState({ icon: 'alert-triangle', title: k('bkPlanFail'), reason: ui.err, alert: true, cls: 'bk-empty',
+    action: cta({ id: 'bkRetry', block: false, label: k('retry') }) });
   const zones = ui.plan?.zones || [];
   // NO PLAN IS NOT NO BOOKING. A venue that has not drawn its room still
   // takes a party and a time; it seats them where there is room.
   if (!hasTables())
-    return `<div class="empty bk-empty">${icon('building', 'ico-lg')}<b data-t="bkNoPlanBook"></b>
-      ${state.loc?.phone ? `<a class="btn ghost" href="tel:${esc(state.loc.phone)}" data-t="callUs"></a>` : ''}</div>${contact()}`;
+    return `${kit.emptyState({ icon: 'building', title: k('bkNoPlanBook'), cls: 'bk-empty',
+      action: state.loc?.phone ? ghost({ href: `tel:${state.loc.phone}`, block: false, cls: 'ghost', icon: 'phone', label: k('callUs') }) : '' })}${contact()}`;
   return `
   <div class="bk-tabs" role="tablist" aria-label="${esc(t('bkRoom'))}">
-    ${zones.map((z, i) => `<button type="button" role="tab" class="bk-tab" data-zone="${i}"
+    ${zones.map((z, i) => `<button type="button" role="tab" class="bk-tab" data-zone="${i}" data-tour="booking.zone"
       aria-selected="${i === ui.zone}">${esc(z.name)}</button>`).join('')}
   </div>
   ${planSvg()}
@@ -260,10 +263,9 @@ const hasTables = () => (ui.plan?.zones || []).some(z => z.tables.length);
 /// press redraws the whole sheet, and remembered with the checkout's keys so
 /// a guest who ordered once does not type it twice.
 const contact = () => `
-  <label for="bk-name" data-t="bkName"></label>
-  <input id="bk-name" autocomplete="name" maxlength="80" value="${esc(ui.name)}">
-  <label for="bk-phone" data-t="bkPhone"></label>
-  <input id="bk-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+355..." value="${esc(ui.phone)}">`;
+  ${kit.field({ id: 'bk-name', label: k('bkName'), autocomplete: 'name', maxlength: 80, value: ui.name, attrs: { data: { tour: 'booking.name' } } })}
+  ${kit.field({ id: 'bk-phone', label: k('bkPhone'), type: 'tel', inputmode: 'tel', autocomplete: 'tel', placeholder: '+355...', value: ui.phone, attrs: { data: { tour: 'booking.phone' } } })}
+  ${privacyLink()}`;
 
 function foot() {
   const tb = tableOf(ui.pick);
@@ -277,10 +279,9 @@ function foot() {
        · ${tb.seats} <span data-t="bkSeats"></span> · ${esc(when)}`
     : ui.minute === null ? `<span data-t="bkPickTime"></span>`
     : `<span data-t="bkAnyTable"></span> · ${esc(when)}`;
-  const cta = ui.sending ? 'bkSending' : tb ? 'bkCta' : 'bkCtaAny';
+  const word = ui.sending ? 'bkSending' : tb ? 'bkCta' : 'bkCtaAny';
   return `<div class="bk-foot"><p class="bk-pick">${line}</p>
-    <button type="button" class="btn bk-cta" id="bkGo"${ready && !ui.sending ? '' : ' disabled'}
-      data-t="${cta}"></button></div>`;
+    ${cta({ id: 'bkGo', cls: 'bk-cta', label: k(word), disabled: !(ready && !ui.sending), tour: 'booking.submit' })}</div>`;
 }
 
 function draw() {
@@ -335,10 +336,11 @@ async function commit() {
   if (errs.length) { toast(errs.map(k => t(k)).join('. ')); $(errs[0] === 'bkNeedPhone' ? '#bk-phone' : '#bk-name')?.focus(); return; }
   ui.sending = true; draw();
   const slotMin = slotOf(ui.day, ui.minute);
+  // ONE KEY PER BOOKING, NOT PER TAP (audit D28, `requestKey`): kept while
+  // the request is unchanged and unanswered; forgotten on success, below.
+  ui.rid = requestKey(ui.rid, { slotMin, pick: tb ? ui.pick : null, party: ui.party });
   const body = bookingBody({
-    party: ui.party, slotMin, pick: tb ? ui.pick : null, name: ui.name, phone: ui.phone,
-    // The caller's own key: a retried request must not book a second table.
-    rid: `bk_${slotMin}_${tb ? `${ui.pick.zone}_${ui.pick.n}` : 'any'}_${Math.random().toString(36).slice(2, 10)}`,
+    party: ui.party, slotMin, pick: tb ? ui.pick : null, name: ui.name, phone: ui.phone, rid: ui.rid,
   });
   try {
     const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}/reservations`, {
@@ -349,6 +351,7 @@ async function commit() {
     if (r.ok) {
       const d = JSON.parse(text);
       safeSet('dw_name', ui.name.trim()); safeSet('dw_phone', ui.phone.trim());
+      ui.rid = null;
       if (d.access_token) keepBooking({ id: d.id, t: d.access_token, slotMin, party: ui.party });
       toast(t('bkSent'));
       ui.pick = null; ui.sending = false;

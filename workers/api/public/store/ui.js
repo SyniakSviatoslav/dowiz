@@ -9,10 +9,16 @@
 
 import { t, retranslate } from '/store/i18n.js';
 import { repaintMoney, state } from '/store/state.js';
+import * as UI from '/lib/ui/index.js';
+
+// The design system speaks the storefront's words: a component given
+// `{ t:'key' }` renders `t(key)` and `data-t`, which retranslate() rewrites.
+UI.useTranslator(t);
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/// THE one escaper (/lib/ui/core.js); the name stays for every importer.
+export const esc = UI.esc;
 export const icon = (name, cls = '') => `<i class="ti ti-${name} ${cls}" aria-hidden="true"></i>`;
 export const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -96,9 +102,13 @@ export function bindSheetChrome(){
 }
 
 // ── toast ───────────────────────────────────────────────────────────────────
+// ONE live region, `#toast` in index.html from the first paint; /lib/ui owns
+// the timer and the `hidden` state. Created on first use: the element is in
+// the document before any module runs, but a test page may not have it.
+let toaster = null;
 export function toast(msg){
-  const el = $('#toast'); el.textContent = msg; el.classList.add('show');
-  clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), TOAST_MS);
+  if (!toaster) toaster = UI.createToaster($('#toast'), { ms: TOAST_MS });
+  toaster.show(msg);
 }
 
 // ── a dish with no photo ────────────────────────────────────────────────────

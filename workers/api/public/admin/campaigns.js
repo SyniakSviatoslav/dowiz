@@ -14,6 +14,7 @@
 import { $, esc, icon, t, api, post, toast, sheet, day, busy, confirm } from '/admin/core.js';
 import { T, LANGS, intlLocale } from '/admin/i18n.js';
 import * as Money from '/lib/money.js';
+import { btn, field, select, loading, rowBtn, rowDiv } from '/admin/parts.js';
 
 const WORDS = {
   sq: { cpHint: 'Mesazhi shkon vetëm te klientët që kanë dhënë pëlqimin për oferta në WhatsApp. Dërgohet si shabllon i miratuar nga Meta, që duhet të përmbajë udhëzimin STOP.', cpTpl: 'Shablloni WhatsApp (emri në Meta)', cpTplLang: 'Gjuha e shabllonit', cpTplParams: 'Vlerat {{1}}, {{2}}... (një për rresht)', cpTplHint: 'Regjistroni mesazhin në WhatsApp Manager dhe prisni miratimin. Pa shabllon, fushata nuk dërgohet.', cpNew: 'Fushatë e re', cpNone: 'Asnjë fushatë ende.', cpName: 'Emri (vetëm për ju)', cpText: 'Mesazhi', cpWho: 'Për kë', cpDays: 'Ditë pa porosi', cpTag: 'Etiketa', cpPromo: 'Kodi i zbritjes (opsional)', cpPromoHint: 'Përdorimet e kodit pas dërgimit janë matja e vetme.', cpPreview: 'Shiko sa njerëz', cpSend: 'Dërgo', cpCount: 'Marrës', cpAlready: 'tashmë të dërguar', cpCost: 'Kosto e përafërt (Meta)', cpSendQ: 'Dërgo te', cpPeople: 'njerëz?', cpQueued: 'Në radhë', cpLeft: 'presin shtypjen tjetër', cpSent: 'Dërguar', cpWaiting: 'Në pritje', cpWithdrawn: 'Tërhequr', cpAbandoned: 'Dështuar', cpDelivered: 'Dorëzuar', cpRedeemed: 'Porosi me kodin', cpLocked: 'E dërguar: nuk ndryshohet më.', cpZero: 'Askush në këtë grup nuk ka dhënë pëlqim.',
@@ -35,12 +36,12 @@ const segText = s => t('seg_' + s.kind) + (s.kind === 'not_seen_since' ? ' · ' 
 
 /// The list: every campaign with how many it reached.
 export async function open(){
-  sheet(`${head}<div class="skel skel-row"></div>`, { name: 'campaigns', keepScroll: true });
+  sheet(`${head}${loading()}`, { name: 'campaigns', keepScroll: true });
   let d; try { d = await api('/owner/campaigns'); } catch (e) { return fail(e); }
   const list = d.campaigns || [];
-  const rows = list.map(({ campaign: c, sent }) => `<button type="button" class="rowc" data-id="${esc(c.id)}">${icon('brand-whatsapp')}<span class="t"><b>${esc(c.name)}</b>
-    <small>${esc(segText(c.segment))} · ${esc(day(c.atMs))}</small></span><span class="mono">${esc(sent)}</span></button>`).join('');
-  sheet(`${head}<div class="btn-row"><button class="btn" id="cpNew">${icon('plus')}<span data-t="cpNew"></span></button></div>
+  const rows = list.map(({ campaign: c, sent }) => rowBtn({ leading: icon('brand-whatsapp'), title: c.name,
+    sub: `${esc(segText(c.segment))} · ${esc(day(c.atMs))}`, trailing: `<span class="mono">${esc(sent)}</span>`, data: { id: c.id }, tour: 'campaigns.row' })).join('');
+  sheet(`${head}<div class="btn-row">${btn({ id: 'cpNew', variant: 'primary', icon: 'plus', key: 'cpNew', tour: 'campaigns.new' })}</div>
     ${list.length ? `<div class="rows mt-3">${rows}</div>` : `<p class="muted small mt-3" data-t="cpNone"></p>`}`, { name: 'campaigns', keepScroll: true });
   $('#cpNew').onclick = () => edit(null, d.tags || []);
   for (const b of document.querySelectorAll('#sheetIn [data-id]')) b.onclick = () => detail(b.dataset.id, d.tags || []);
@@ -51,16 +52,16 @@ function edit(c, tags){
   const s = (c && c.segment) || { kind: 'everyone_consented' };
   const tp = (c && c.template) || {};
   sheet(`${head}
-    <label for="cp-name" data-t="cpName"></label><input id="cp-name" maxlength="60" value="${esc(c ? c.name : '')}">
-    <label for="cp-text" data-t="cpText"></label><textarea id="cp-text" rows="5" maxlength="1000">${esc(c ? c.text : '')}</textarea>
-    <label for="cp-seg" data-t="cpWho"></label><select id="cp-seg">${SEGMENTS.map(k => `<option value="${k}" ${k === s.kind ? 'selected' : ''} data-t="seg_${k}"></option>`).join('')}</select>
-    <div id="cp-days-box"><label for="cp-days" data-t="cpDays"></label><input id="cp-days" inputmode="numeric" value="${esc(s.days || DEFAULT_DAYS)}"></div>
-    <div id="cp-tag-box"><label for="cp-tag" data-t="cpTag"></label><select id="cp-tag">${tags.map(x => `<option value="${esc(x)}" ${x === s.tag ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
-    <label for="cp-tpl" data-t="cpTpl"></label><input id="cp-tpl" maxlength="512" autocapitalize="off" spellcheck="false" value="${esc(tp.name || '')}">
-    <label for="cp-tpl-lang" data-t="cpTplLang"></label><select id="cp-tpl-lang">${TPL_LANGS.map(l => `<option value="${l}" ${l === (tp.lang || 'sq') ? 'selected' : ''}>${l}</option>`).join('')}</select>
-    <label for="cp-tpl-params" data-t="cpTplParams"></label><textarea id="cp-tpl-params" rows="3">${esc((tp.params || []).join('\n'))}</textarea><p class="hint" data-t="cpTplHint"></p>
-    <label for="cp-promo" data-t="cpPromo"></label><input id="cp-promo" maxlength="16" value="${esc((c && c.promo) || '')}"><p class="hint" data-t="cpPromoHint"></p>
-    <div class="btn-row"><button class="btn" id="cpSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'campaigns' });
+    ${field({ id: 'cp-name', key: 'cpName', maxlength: 60, value: c ? c.name : '', tour: 'campaigns.name' })}
+    ${field({ id: 'cp-text', key: 'cpText', rows: 5, maxlength: 1000, value: c ? c.text : '', tour: 'campaigns.text' })}
+    ${select({ id: 'cp-seg', key: 'cpWho', value: s.kind, options: SEGMENTS.map(k => ({ value: k, key: 'seg_' + k })), tour: 'campaigns.segment' })}
+    <div id="cp-days-box">${field({ id: 'cp-days', key: 'cpDays', inputmode: 'numeric', value: s.days || DEFAULT_DAYS, tour: 'campaigns.days' })}</div>
+    <div id="cp-tag-box">${select({ id: 'cp-tag', key: 'cpTag', value: s.tag, options: tags.map(x => ({ value: x, label: x })), tour: 'campaigns.tag' })}</div>
+    ${field({ id: 'cp-tpl', key: 'cpTpl', maxlength: 512, autocapitalize: 'off', spellcheck: false, value: tp.name || '', tour: 'campaigns.template' })}
+    ${select({ id: 'cp-tpl-lang', key: 'cpTplLang', value: tp.lang || 'sq', options: TPL_LANGS.map(l => ({ value: l, label: l })), tour: 'campaigns.templateLang' })}
+    ${field({ id: 'cp-tpl-params', key: 'cpTplParams', rows: 3, value: (tp.params || []).join('\n'), hintKey: 'cpTplHint', tour: 'campaigns.templateParams' })}
+    ${field({ id: 'cp-promo', key: 'cpPromo', maxlength: 16, value: (c && c.promo) || '', hintKey: 'cpPromoHint', tour: 'campaigns.promo' })}
+    <div class="btn-row">${btn({ id: 'cpSave', variant: 'primary', icon: 'check', key: 'save', tour: 'campaigns.save' })}</div>`, { name: 'campaigns' });
   const sync = () => { const k = $('#cp-seg').value; $('#cp-days-box').hidden = k !== 'not_seen_since'; $('#cp-tag-box').hidden = k !== 'tag'; };
   $('#cp-seg').onchange = sync; sync();
   $('#cpSave').onclick = async () => {
@@ -79,16 +80,16 @@ function edit(c, tags){
 async function detail(id, tags){
   let d; try { d = await api('/owner/campaigns/' + encodeURIComponent(id)); } catch (e) { return fail(e); }
   const c = d.campaign, r = d.report || {};
-  const line = (k, n) => `<div class="rowc"><span class="t"><b data-t="${k}"></b></span><span class="mono">${esc(n)}</span></div>`;
+  const line = (k, n) => rowDiv({ title: { t: k }, trailing: `<span class="mono">${esc(n)}</span>` });
   const sent = (r.sent || 0) > 0;
   sheet(`<p class="eyebrow" data-t="campaigns"></p><h2>${esc(c.name)}</h2><p class="muted small">${esc(segText(c.segment))}${c.promo ? ' · ' + esc(c.promo) : ''}${c.template ? ' · ' + esc(c.template.name) + ' (' + esc(c.template.lang) + ')' : ''}</p>
     <div class="code">${esc(c.text)}</div>
     <div class="rows mt-3">${line('cpSent', r.sent || 0)}${line('cpWaiting', r.waiting || 0)}${line('cpDelivered', r.delivered || 0)}${line('cpWithdrawn', r.withdrawn || 0)}${line('cpAbandoned', r.abandoned || 0)}${c.promo ? line('cpRedeemed', r.redeemed || 0) : ''}</div>
     ${sent ? '<p class="muted small" data-t="cpLocked"></p>' : ''}
     <div id="cpOut"></div>
-    <div class="btn-row">${sent ? '' : `<button class="btn ghost" id="cpEdit">${icon('note')}<span data-t="edit"></span></button>`}
-      <button class="btn ghost" id="cpPrev">${icon('eye')}<span data-t="cpPreview"></span></button>
-      <button class="btn" id="cpSend" disabled>${icon('send')}<span data-t="cpSend"></span></button></div>`, { name: 'campaigns', keepScroll: true });
+    <div class="btn-row">${sent ? '' : btn({ id: 'cpEdit', variant: 'ghost', icon: 'note', key: 'edit', tour: 'campaigns.edit' })}
+      ${btn({ id: 'cpPrev', icon: 'eye', key: 'cpPreview', tour: 'campaigns.preview' })}
+      ${btn({ id: 'cpSend', variant: 'primary', icon: 'send', key: 'cpSend', disabled: true, tour: 'campaigns.send' })}</div>`, { name: 'campaigns', keepScroll: true });
   const ed = $('#cpEdit'); if (ed) ed.onclick = () => edit(c, tags);
   $('#cpPrev').onclick = () => preview(id, tags);
 }
@@ -98,8 +99,8 @@ async function detail(id, tags){
 async function preview(id, tags){
   let d; try { d = await busy($('#cpPrev'), () => post('/owner/campaigns/' + encodeURIComponent(id) + '/preview', {})); } catch (e) { return fail(e); }
   const p = d.preview || {}, fresh = (p.count || 0) - (p.already || 0);
-  $('#cpOut').innerHTML = `<div class="rows mt-3"><div class="rowc">${icon('user')}<span class="t"><b>${esc(t('cpCount'))}</b><small>${esc(p.already || 0)} ${esc(t('cpAlready'))}</small></span><span class="mono">${esc(p.count || 0)}</span></div>
-    <div class="rowc">${icon('coin')}<span class="t"><b>${esc(t('cpCost'))}</b></span><span class="mono">${cost(p.cost_minor || 0, p.currency || 'USD')}</span></div></div>
+  $('#cpOut').innerHTML = `<div class="rows mt-3" data-tour="campaigns.count">${rowDiv({ leading: icon('user'), title: t('cpCount'), sub: `${esc(p.already || 0)} ${esc(t('cpAlready'))}`, trailing: `<span class="mono">${esc(p.count || 0)}</span>` })}
+    ${rowDiv({ leading: icon('coin'), title: t('cpCost'), trailing: `<span class="mono">${cost(p.cost_minor || 0, p.currency || 'USD')}</span>` })}</div>
     ${fresh > 0 ? '' : `<p class="muted small">${esc(t('cpZero'))}</p>`}`;
   const btn = $('#cpSend');
   btn.disabled = fresh <= 0;

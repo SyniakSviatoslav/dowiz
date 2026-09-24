@@ -13,7 +13,7 @@
 // The list is the module graph of `/room/app.js`, every static import
 // reachable from it (relative imports resolve to these same URLs).
 
-const SHELL_CACHE = 'dowiz-room-shell-2026-09-24c';
+const SHELL_CACHE = 'dowiz-room-shell-2026-09-24e';
 const SHELL = [
   '/room/',
   '/room/app.js',
@@ -29,14 +29,43 @@ const SHELL = [
   '/room/till-view.js',
   '/room/floor.js',
   '/room/guest.js',
+  '/room/screens.js',
+  '/room/parts.js',
   '/room/room.css',
   '/lib/money.js',
   '/lib/vocab.js',
   '/lib/outbox.js',
+  // The lessons (W1..W10): learn.js and guide.js are static imports of app.js;
+  // their sheets are added by the modules at run time. /learn/lessons.json is
+  // fetched when a lesson list opens and needs the network, so it is not here.
+  '/lib/guide.js',
+  '/lib/guide.css',
+  '/lib/learn.js',
+  '/lib/learn.css',
   '/store/storage.js',
   '/admin/i18n.js',
+  '/lib/icons.css',
   '/lib/tokens.css',
   '/lib/components.css',
+  // The design system: `index.js` re-exports every component module, so the
+  // whole folder is in the graph, not only what the room calls.
+  '/lib/ui/ui.css',
+  '/lib/ui/index.js',
+  '/lib/ui/core.js',
+  '/lib/ui/button.js',
+  '/lib/ui/badge.js',
+  '/lib/ui/chip.js',
+  '/lib/ui/field.js',
+  '/lib/ui/segmented.js',
+  '/lib/ui/tabs.js',
+  '/lib/ui/list.js',
+  '/lib/ui/empty.js',
+  '/lib/ui/skeleton.js',
+  '/lib/ui/toast.js',
+  '/lib/ui/sheet.js',
+  '/lib/ui/money.js',
+  '/lib/ui/card.js',
+  '/lib/ui/time.js',
 ];
 const NEVER = [/^\/api\//, /^\/media\//];
 

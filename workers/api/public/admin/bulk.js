@@ -4,6 +4,7 @@
 // and writes through the console's own writers, one object turn per file.
 
 import { $, esc, icon, t, api, sheet, busy, money, switchEl, retranslate } from '/admin/core.js';
+import { ui, btn, pill, rowDiv, input } from '/admin/parts.js';
 
 const ROUTE = { supplies: '/owner/supplies/import', recipes: '/owner/recipes/import' };
 
@@ -11,9 +12,9 @@ const ROUTE = { supplies: '/owner/supplies/import', recipes: '/owner/recipes/imp
 export function openBulk(kind, done){
   sheet(`<p class="eyebrow" data-t="importCsv"></p><h2 data-t="${kind === 'supplies' ? 'importSupplies' : 'importRecipes'}"></h2>
     <p class="muted small" data-t="${kind === 'supplies' ? 'bulkSuppliesHint' : 'bulkRecipesHint'}"></p>
-    <input type="file" id="bkFile" accept=".csv,text/csv">
-    ${kind === 'supplies' ? switchEl('bkRetire', false, 'bulkRetireMissing', 'bulkRetireHint') : ''}
-    <div class="btn-row"><button class="btn ghost" id="bkDry" disabled>${icon('eye')}<span data-t="dryRun"></span></button><button class="btn" id="bkApply" disabled>${icon('check')}<span data-t="applyImport"></span></button></div>
+    ${input({ id: 'bkFile', type: 'file', accept: '.csv,text/csv', tour: 'bulk.file' })}
+    ${kind === 'supplies' ? switchEl('bkRetire', false, 'bulkRetireMissing', 'bulkRetireHint', 'bulk.retire') : ''}
+    <div class="btn-row">${btn({ id: 'bkDry', variant: 'secondary', icon: 'eye', key: 'dryRun', disabled: true, tour: 'bulk.dryRun' })}${btn({ id: 'bkApply', variant: 'primary', icon: 'check', key: 'applyImport', disabled: true, tour: 'bulk.apply' })}</div>
     <div id="bkOut"></div>`, { name: 'bulk' });
   let csv = null;
   $('#bkFile').onchange = async e => {
@@ -30,7 +31,7 @@ export function openBulk(kind, done){
       // Apply follows a dry run of the same file, never the first click.
       $('#bkApply').disabled = apply || !((r.supplies || 0) + (r.recipes || 0));
       if (apply && r.written) done?.();
-    } catch (err) { $('#bkOut').innerHTML = `<p class="hint bad">${esc(String(err.message || err))}</p>`; }
+    } catch (err) { $('#bkOut').innerHTML = ui.alert({ label: String(err.message || err) }); }
   };
   $('#bkDry').onclick = () => run(false);
   $('#bkApply').onclick = () => run(true);
@@ -41,16 +42,15 @@ const per = u => u === 'unit' ? '' : '/100' + u;
 
 function supplyRow(s){
   const facts = [s.unit, s.kcalPer100 != null ? `${s.kcalPer100} kcal${per(s.unit)}` : '', s.costPerBasis != null ? `${money(s.costPerBasis)}${per(s.unit)}` : '', s.lowAt ? `min ${s.lowAt} ${s.unit}` : '', s.supplier || ''].filter(Boolean).join(' · ');
-  return `<div class="rowc">${icon('bottle')}<span class="t"><b>${esc(s.name)}</b><small class="mono">${esc(facts)}</small></span>${s.new ? `<span class="pill ok" data-t="bulkNew"></span>` : ''}</div>`;
+  return rowDiv({ leading: icon('bottle'), title: s.name, sub: `<span class="mono">${esc(facts)}</span>`, trailing: s.new ? pill('ok', { key: 'bulkNew' }) : '' });
 }
 
 function recipeRow(r){
   const side = x => `${x.lines} <span data-t="bulkLines"></span>${x.kcal != null ? ` · ${esc(String(x.kcal))} kcal` : ''}${x.weightG != null ? ` · ${esc(String(x.weightG))} g` : ''}${x.cost != null ? ` · ${money(x.cost)}` : ''}`;
   const lines = (r.bom || []).map(l => `${esc(l.name || l.supply)} ${l.qty} ${esc(l.unit || '')}`).join(', ');
-  return `<div class="rowc">${icon('bowl-chopsticks')}<span class="t"><b>${esc(r.dish)}</b>
-    <small class="mono"><span data-t="bulkNow"></span>: ${side(r.before)}</small>
-    <small class="mono"><span data-t="bulkThen"></span>: ${side(r.after)}</small>
-    <small class="muted">${lines}</small>${r.error ? `<small class="bad">${esc(r.error)}</small>` : ''}</span></div>`;
+  return rowDiv({ leading: icon('bowl-chopsticks'), title: r.dish, sub: `<span class="mono"><span data-t="bulkNow"></span>: ${side(r.before)}</span>
+    <br><span class="mono"><span data-t="bulkThen"></span>: ${side(r.after)}</span>
+    <br><span class="muted">${lines}</span>${r.error ? `<br><span class="bad">${esc(r.error)}</span>` : ''}` });
 }
 
 function report(kind, r, applied){

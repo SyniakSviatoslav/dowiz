@@ -9,16 +9,21 @@
 import * as Money from '/lib/money.js';
 import { safeGet, safeSet } from '/store/storage.js';
 import { t, lang, LANGS, setLang, retranslate, intlLocale } from '/admin/i18n.js';
+import * as ui from '/lib/ui/index.js';
+import { btn, field, check } from '/admin/parts.js';
 
 export const API = '/api';
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/// The one escaper is the design system's (four byte-identical copies existed).
+export const esc = ui.esc;
 export const icon = (name, cls = '') => `<i class="ti ti-${name} ${cls}" aria-hidden="true"></i>`;
 export { t, lang, LANGS, setLang, retranslate };
+// The components render the console's words through its own t(); a key they
+// are given also lands as `data-t`, so `retranslate()` keeps working.
+ui.useTranslator(t);
 
-/// The toast shows for this long; the queue is re-read this often.
-const TOAST_MS = 2600;
+/// The queue is re-read this often.
 export const POLL_MS = 15_000;
 /// When nothing is live, the queue is re-read this much more slowly: an idle
 /// venue with an open console used to cost as many requests as a busy one.
@@ -131,9 +136,11 @@ export const clock = ms => new Date(ms).toLocaleTimeString(intlLocale(), { hour:
 export const day = ms => new Date(ms).toLocaleDateString(intlLocale(), { day: 'numeric', month: 'short' });
 
 // ── the toast ───────────────────────────────────────────────────────────────
-export function toast(m){
-  const el = $('#toast'); el.textContent = m; el.classList.add('show');
-  clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), TOAST_MS);
+// One polite live region (`#toast` in index.html, `ui-toast`), one toaster.
+let toaster = null;
+export function toast(m, o = {}){
+  toaster = toaster || ui.createToaster($('#toast'));
+  toaster.show(String(m ?? ''), o);
 }
 
 // ── the one sheet ───────────────────────────────────────────────────────────
@@ -184,18 +191,17 @@ export function hydrate(root){
 // ── a button that waits shows that it waits ─────────────────────────────────
 export async function busy(el, fn){
   if (!el) return fn();
-  const was = el.innerHTML; el.disabled = true; el.setAttribute('aria-busy', 'true');
-  el.innerHTML = `${icon('loader-2', 'spin')}`;
+  const restore = ui.setBusy(el, t('loading'));
   try { return await fn(); }
-  finally { el.disabled = false; el.removeAttribute('aria-busy'); el.innerHTML = was; }
+  finally { restore(); }
 }
 
 /// A confirmation sheet for a consequential action: the one path to it.
 export function confirm(title, body, { danger = false, reasonLabel = null, reasonDefault = '' } = {}){
   return new Promise(resolve => {
     sheet(`<p class="eyebrow">${esc(title)}</p><h2>${esc(body)}</h2>
-      ${reasonLabel ? `<label for="cf-reason">${esc(reasonLabel)}</label><input id="cf-reason" value="${esc(reasonDefault)}">` : ''}
-      <div class="btn-row"><button class="btn ghost" id="cfNo" data-t="cancel"></button><button class="btn ${danger ? 'danger' : ''}" id="cfYes" data-t="done"></button></div>`, { name: 'confirm' });
+      ${reasonLabel ? field({ id: 'cf-reason', label: reasonLabel, value: reasonDefault, tour: 'confirm.reason' }) : ''}
+      <div class="btn-row">${btn({ id: 'cfNo', variant: 'ghost', key: 'cancel', tour: 'confirm.no' })}${btn({ id: 'cfYes', variant: danger ? 'danger' : 'primary', icon: 'check', key: 'done', tour: 'confirm.yes' })}</div>`, { name: 'confirm' });
     let settled = false;
     const done = v => { if (settled) return; settled = true; resolve(v); closeSheet(); };
     $('#cfNo').onclick = () => done(null);
@@ -204,6 +210,5 @@ export function confirm(title, body, { danger = false, reasonLabel = null, reaso
   });
 }
 
-/// The switch control, as markup.
-export const switchEl = (id, on, labelKey, hintKey = null) => `<label class="switch"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><span class="switch-k"></span>
-  <span class="t"><span data-t="${labelKey}"></span>${hintKey ? `<small data-t="${hintKey}"></small>` : ''}</span></label>`;
+/// The switch control, as markup (`parts.check`, the console's one checkbox).
+export const switchEl = (id, on, labelKey, hintKey = null, tour = null) => check({ id, checked: on, key: labelKey, hintKey, tour });

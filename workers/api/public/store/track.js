@@ -27,6 +27,7 @@ import { stampsMarkup, mountStamps } from '/store/stamps.js';
 // The hand copy this replaces was `new Set(['REJECTED', 'CANCELLED'])`, missing
 // the state a refund ends in.
 import { REFUSED as DEAD } from '/lib/vocab.js';
+import { ui, k, ghost } from '/store/parts.js';
 
 /// The happy path as a stepper. NOT generated -- a presentation choice; the
 /// kernel's graph has two longest paths out of PENDING and does not prefer one.
@@ -60,10 +61,9 @@ function sayBlock(order){
   const over = order.status === 'DELIVERED' || DEAD.has(order.status);
   if (!over || !on('feedback')) return '';
   if (order.feedback) return `<p class="geo ok mb-2" data-t="saidIt"></p>`;
-  return `<label for="f-say" data-t="sayHow"></label>
-    <textarea id="f-say" maxlength="${FEEDBACK_MAX}" rows="2"></textarea>
+  return `${ui.field({ id: 'f-say', label: k('sayHow'), rows: 2, maxlength: FEEDBACK_MAX, attrs: { data: { tour: 'track.feedback' } } })}
     <p class="avoid-h" data-t="sayHint"></p>
-    <button class="btn btn-ghost mb-2" id="sayGo" data-t="sayGo"></button>`;
+    ${ghost({ id: 'sayGo', cls: 'mb-2', label: k('sayGo'), tour: 'track.feedbackSend' })}`;
 }
 function bindSay(order){
   const go = $('#sayGo'); if (!go) return;
@@ -89,7 +89,7 @@ function cryptoBlock(order){
     <p class="eyebrow"><span data-t="payWith"></span> ${esc(w.symbol)} · <span data-t="network"></span> ${esc(w.network)}</p>
     <p><span data-t="sendExactly"></span> ${moneyEl(order.total ?? 0)} <span data-t="toAddress"></span>:</p>
     <div class="wallet-addr"><code class="money" id="walletAddr">${esc(w.address)}</code>
-      <button type="button" class="btn btn-ghost" id="walletCopy">${icon('copy')}<span data-t="copy"></span></button></div>
+      ${ghost({ id: 'walletCopy', block: false, icon: 'copy', label: k('copy') })}</div>
     ${w.note ? `<p class="muted small">${esc(w.note)}</p>` : ''}
     <p class="muted small" data-t="cryptoRate"></p>
     <p class="muted small" data-t="cryptoWait"></p>
@@ -160,14 +160,14 @@ function episodeMarkup(order, eta){
   const done = st === 'DELIVERED';
   return `<div class="ep">
     <p class="ep-eyebrow"><span data-t="episode"></span> · #${esc(String(order.id).slice(0, ORDER_ID_SHOWN))} · ${esc(state.loc?.name || '')}</p>
-    <div class="ep-plate">
+    <div class="ep-plate" data-tour="track.status">
       <h2 class="ep-title ${st !== lastStatus ? 'flip' : ''}" data-t-st="${esc(st)}"></h2>
       ${!dead ? `<div class="ep-dots" aria-hidden="true">${FLOW.map((f, n) => `<i class="${n < i ? 'done' : n === i ? 'now' : ''}"></i>`).join('')}</div>` : ''}
     </div>
     ${!dead ? `<p class="ep-step mono"><span data-t="stepOf"></span> ${i + 1} <span data-t="ofSteps"></span> ${FLOW.length}${!done && i + 1 < FLOW.length ? ` · <span data-t="nextUp"></span>: <span data-t-st="${FLOW[i + 1]}"></span>` : ''}</p>` : ''}
     <div class="ep-line" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(phase * 100)}"><i id="epBar"></i></div>
     <div class="ep-facts">
-      ${eta && !dead && !done ? `<span class="${eta.live ? 'live' : ''}">${icon('clock')}<b>${esc(eta.text)} <span data-t="etaMin"></span></b>${eta.live ? `<i class="dot-live" aria-hidden="true"></i>` : ''}</span>` : ''}
+      ${eta && !dead && !done ? `<span class="${eta.live ? 'live' : ''}" data-tour="track.eta">${icon('clock')}<b>${esc(eta.text)} <span data-t="etaMin"></span></b>${eta.live ? `<i class="dot-live" aria-hidden="true"></i>` : ''}</span>` : ''}
       <span>${icon('coin-hole')}<b>${moneyEl(order.total ?? order.subtotal ?? 0)}</b></span>
       ${PAY_KEY[order.payment] ? `<span>${icon(order.payment === 'cash' ? 'cash' : order.payment === 'crypto' ? 'currency-bitcoin' : 'credit-card')}<b data-t="${PAY_KEY[order.payment]}"></b></span>` : ''}
     </div>
@@ -243,7 +243,7 @@ export function openTracking(order){
           ${cryptoBlock(order)}
           ${follow}
           ${sayBlock(order)}
-          <button class="btn btn-ghost mb-2" id="closeTrack" data-t="done"></button>
+          ${ghost({ id: 'closeTrack', cls: 'mb-2', label: k('done'), tour: 'track.done' })}
         </div>
       </div>
     </div>`, { name: 'track', attending: !dead && st !== 'DELIVERED', full: true });

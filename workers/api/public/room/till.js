@@ -7,7 +7,8 @@
 // phone received, stored only as `visible()` -- the projection that cannot
 // carry `expected` before a close. Opening on a second phone shows
 // "not known here" until that phone does something to the drawer.
-import { esc, TILL_CURRENCIES, parseMinor } from './logic.js';
+import { TILL_CURRENCIES, parseMinor } from './logic.js';
+import { ui, k, backBar } from './parts.js';
 import { renderTill, visible, tipsQuery, renderTips } from './till-view.js';
 import { safeGet, safeSet } from '../store/storage.js';
 
@@ -18,37 +19,45 @@ export function lastTill(loc) {
 }
 export function keep(loc, ans) { safeSet(KEY, JSON.stringify({ loc, ans: visible(ans) })); }
 
-const pileInputs = (t, name) => TILL_CURRENCIES.map(c =>
-  `<label>${esc(c)}<input name="${name}_${c}" inputmode="decimal" autocomplete="off" placeholder="0"></label>`).join('');
+const pileInputs = (name, tour) => TILL_CURRENCIES.map(c => ui.field({ id: `till-${name}-${c}`, name: `${name}_${c}`, label: c,
+  inputmode: 'decimal', autocomplete: 'off', placeholder: '0', controlCls: 'money', attrs: { data: { tour } } })).join('');
+
+/// A titled till form: heading, hint, fields, one submit.
+const tillForm = (kind, tour, title, hint, body, submit) => `<form class="card-form" data-form="${kind}" data-tour="${tour}" novalidate>
+  <h3>${ui.esc(title)}</h3>${hint ? ui.para(hint, { hint: true }) : ''}${body}${submit}</form>`;
+
+/// The cash move's two choices: which way, which currency. Radio groups on
+/// /lib/ui; the choice lives in `S.tillMove` (bindTill), not in a form input.
+export function moveChoice(S) {
+  if (!S.tillMove) S.tillMove = { dir: 'pay_in', currency: TILL_CURRENCIES[0] };
+  return S.tillMove;
+}
 
 export function renderTillScreen(c) {
   const { S, t } = c;
   const ans = S.till;
   const open = ans && ans.open;
-  const curOpts = TILL_CURRENCIES.map(x => `<option value="${x}">${x}</option>`).join('');
+  const mv = moveChoice(S);
   return `
-    <div class="bar"><button class="btn" data-act="back">← ${esc(t('back'))}</button></div>
-    <h2>${esc(t('till'))}</h2>
-    <section class="till-state" aria-live="polite">${renderTill(ans, t, c.locale())}</section>
-    ${tipsQuery(ans, S.loc) ? `<section class="card-form till-tips" data-tips aria-live="polite"><h3>${esc(t('tipsTitle'))}</h3></section>` : ''}
-    ${open ? '' : `<form class="card-form" data-form="open"><h3>${esc(t('openTill'))}</h3>
-      <p class="muted">${esc(t('floatHint'))}</p><div class="piles">${pileInputs(t, 'f')}</div>
-      <button class="cta" type="submit">${esc(t('openTill'))}</button></form>`}
-    <form class="card-form" data-form="move"><h3>${esc(t('cashMove'))}</h3>
-      <div class="seg" role="radiogroup" aria-label="${esc(t('cashMove'))}">
-        <label class="seg-b"><input type="radio" name="dir" value="pay_in" checked> ${esc(t('payIn'))}</label>
-        <label class="seg-b"><input type="radio" name="dir" value="pay_out"> ${esc(t('payOut'))}</label></div>
-      <div class="piles"><label>${esc(t('currency'))}<select name="currency">${curOpts}</select></label>
-        <label>${esc(t('amount'))}<input name="amount" inputmode="decimal" autocomplete="off" required></label></div>
-      <label>${esc(t('reasonText'))}<input name="reason" maxlength="140" required autocomplete="off"></label>
-      <button class="btn" type="submit">${esc(t('send'))}</button></form>
-    <form class="card-form" data-form="count"><h3>${esc(t('count'))}</h3>
-      <p class="muted">${esc(t('countHint'))}</p><div class="piles">${pileInputs(t, 'o')}</div>
-      <button class="btn" type="submit">${esc(t('saveCount'))}</button></form>
-    <form class="card-form" data-form="close"><h3>${esc(t('closeTill'))}</h3>
-      <p class="muted">${esc(t('closeHint'))}</p>
-      <label class="check"><input type="checkbox" name="sure" required> ${esc(t('closeSure'))}</label>
-      <button class="cta danger" type="submit">${esc(t('closeTill'))}</button></form>`;
+    ${backBar()}
+    <h2>${ui.esc(t('till'))}</h2>
+    <section class="till-state" aria-live="polite" data-tour="till.state">${renderTill(ans, t, c.locale())}</section>
+    ${tipsQuery(ans, S.loc) ? `<section class="card-form till-tips" data-tips data-tour="till.tips" aria-live="polite"><h3>${ui.esc(t('tipsTitle'))}</h3>${ui.skeleton({ shape: 'line', count: 2, label: t('loading') })}</section>` : ''}
+    ${open ? '' : tillForm('open', 'till.open', t('openTill'), k('floatHint'), `<div class="piles">${pileInputs('f', 'till.float')}</div>`,
+      ui.button({ type: 'submit', variant: 'primary', size: 'lg', block: true, icon: 'cash', label: k('openTill') }))}
+    ${tillForm('move', 'till.move', t('cashMove'), '', `
+      ${ui.segmented({ id: 'tillDir', label: k('cashMove'), value: mv.dir, options: [
+        { value: 'pay_in', label: k('payIn'), icon: 'plus' }, { value: 'pay_out', label: k('payOut'), icon: 'minus' }], attrs: { data: { tour: 'till.direction' } } })}
+      <p class="ui-label">${ui.esc(t('currency'))}</p>
+      ${ui.segmented({ id: 'tillCur', label: k('currency'), value: mv.currency, options: TILL_CURRENCIES.map(x => ({ value: x, label: x })), attrs: { data: { tour: 'till.currency' } } })}
+      ${ui.field({ id: 'till-amount', name: 'amount', label: k('amount'), inputmode: 'decimal', autocomplete: 'off', required: true, controlCls: 'money', attrs: { data: { tour: 'till.amount' } } })}
+      ${ui.field({ id: 'till-reason', name: 'reason', label: k('reasonText'), maxlength: 140, required: true, autocomplete: 'off', attrs: { data: { tour: 'till.reason' } } })}`,
+      ui.button({ type: 'submit', icon: 'send', label: k('send') }))}
+    ${tillForm('count', 'till.count', t('count'), k('countHint'), `<div class="piles">${pileInputs('o', 'till.counted')}</div>`,
+      ui.button({ type: 'submit', icon: 'check', label: k('saveCount') }))}
+    ${tillForm('close', 'till.close', t('closeTill'), k('closeHint'),
+      `<label class="check"><input type="checkbox" name="sure" required data-tour="till.closeSure"> ${ui.esc(t('closeSure'))}</label>`,
+      ui.button({ type: 'submit', variant: 'danger', block: true, icon: 'power', label: k('closeTill') }))}`;
 }
 
 /// A per-currency map from the pile inputs. Empty fields are left out; a
@@ -68,6 +77,9 @@ export function piles(get, prefix) {
 export function bindTill(c, root) {
   const { S, t } = c;
   loadTips(c, root);
+  const mv = moveChoice(S);
+  ui.bindSegmented(root.querySelector('#tillDir'), v => { mv.dir = v; });
+  ui.bindSegmented(root.querySelector('#tillCur'), v => { mv.currency = v; });
   root.onclick = ev => {
     const b = ev.target.closest('[data-act]');
     if (b && b.dataset.act === 'back') { S.view = 'room'; c.render(); }
@@ -88,17 +100,17 @@ export function bindTill(c, root) {
       for (const cur of TILL_CURRENCIES) if (!(cur in observed)) observed[cur] = 0;
       path = 'count'; body.observed = observed;
     } else if (kind === 'move') {
-      const currency = get('currency'), amount = parseMinor(get('amount'), currency), reason = String(get('reason') || '').trim();
+      const currency = mv.currency, amount = parseMinor(get('amount'), currency), reason = String(get('reason') || '').trim();
       if (!amount) return c.toast(t('badAmount'));
       if (!reason) return c.toast(t('needReason'));
-      path = f.elements.dir.value === 'pay_out' ? 'pay_out' : 'pay_in';
+      path = mv.dir === 'pay_out' ? 'pay_out' : 'pay_in';
       Object.assign(body, { currency, amount, reason });
     } else if (kind === 'close') {
       if (!f.elements.sure.checked) return;
       path = 'close';
     } else return;
     const btn = f.querySelector('button[type="submit"]');
-    if (btn) btn.disabled = true;
+    ui.setBusy(btn, t('loading'));
     try {
       const r = await c.write('/staff/till/' + path, body, 'till:' + path);
       if (r.landed) { S.till = visible(r.data); keep(S.loc, r.data); c.toast(t('saved')); }
@@ -117,5 +129,5 @@ async function loadTips(c, root) {
   const q = tipsQuery(S.till, S.loc), el = root.querySelector('[data-tips]');
   if (!q || !el) return;
   try { el.innerHTML = renderTips(await c.api(q), t, c.locale()); }
-  catch (e) { el.innerHTML = `<h3>${esc(t('tipsTitle'))}</h3><p class="muted">${esc(t('tipsFailed'))} ${esc(e.message || '')}</p>`; }
+  catch (e) { el.innerHTML = `<h3>${ui.esc(t('tipsTitle'))}</h3>${ui.emptyState({ icon: 'plug-connected-x', title: k('tipsFailed'), reason: e.message || '', alert: true })}`; }
 }

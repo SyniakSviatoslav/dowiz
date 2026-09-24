@@ -12,6 +12,7 @@
 
 import { $, esc, icon, t, api, post, toast, sheet, busy } from '/admin/core.js';
 import { T, LANGS } from '/admin/i18n.js';
+import { btn, field, pill, rowDiv } from '/admin/parts.js';
 
 const WORDS = {
   sq: { prHint: 'Kur ka nje emer, cdo porosi e re del edhe si flete per kuzhinen. Printeri e merr vete nga adresa me poshte.', prName: 'Emri i printerit', prNameHint: 'P.sh. kuzhina. Bosh = pa printer, pa flete.', prUrl: 'Adresa e serverit (CloudPRNT)', prKey: 'Fjalekalimi i printerit', prKeyHint: 'Nje celes API i lokalit, vetem per printerin. Shfaqet nje here.', prNewKey: 'Krijo celes per printerin', prJobs: 'Fletet ne radhe', prNoJobs: 'Asnje flete ne radhe.', prOn: 'ndezur', prOff: 'fikur' },
@@ -31,14 +32,15 @@ export async function open(){
   const url = `${location.origin}/api/print/poll`;
   const jobs = j.jobs || [];
   sheet(`<p class="eyebrow" data-t="settings"></p><h2 data-t="printer"></h2><p class="muted small" data-t="prHint"></p>
-    <div class="rows"><div class="rowc">${icon('receipt')}<span class="t"><b data-t="printer"></b><small class="mono">${esc(name || '-')}</small></span><span class="pill ${name ? 'ok' : ''}" data-t="${name ? 'prOn' : 'prOff'}"></span></div></div>
-    <label for="pr-name" data-t="prName"></label><input id="pr-name" maxlength="40" autocomplete="off" value="${esc(name)}"><p class="hint" data-t="prNameHint"></p>
-    <div class="btn-row"><button class="btn" id="prSave">${icon('check')}<span data-t="save"></span></button></div>
-    <p class="eyebrow mt-3" data-t="prUrl"></p><div class="code" id="prUrl">${esc(url)}</div>
+    <div class="rows">${rowDiv({ leading: icon('receipt'), title: { t: 'printer' }, sub: `<span class="mono">${esc(name || '-')}</span>`, trailing: pill(name ? 'ok' : '', { key: name ? 'prOn' : 'prOff' }), tour: 'printer.state' })}</div>
+    ${field({ id: 'pr-name', key: 'prName', maxlength: 40, autocomplete: 'off', value: name, hintKey: 'prNameHint', tour: 'printer.name' })}
+    <div class="btn-row">${btn({ id: 'prSave', variant: 'primary', icon: 'check', key: 'save', tour: 'printer.save' })}</div>
+    <p class="eyebrow mt-3" data-t="prUrl"></p><div class="code" id="prUrl" data-tour="printer.url">${esc(url)}</div>
     <p class="eyebrow mt-3" data-t="prKey"></p><p class="hint" data-t="prKeyHint"></p>
-    <div class="btn-row"><button class="btn ghost" id="prKey">${icon('key')}<span data-t="prNewKey"></span></button></div><div id="prKeyOut"></div>
+    <div class="btn-row">${btn({ id: 'prKey', icon: 'key', key: 'prNewKey', tour: 'printer.key' })}</div><div id="prKeyOut"></div>
     <p class="eyebrow mt-3" data-t="prJobs"></p>
-    ${jobs.length ? `<div class="rows">${jobs.map(x => `<div class="rowc">${icon(x.state === 'failed' ? 'alert-triangle' : 'receipt')}<span class="t"><b>#${esc(String(x.orderId || '').slice(0, 8))}</b><small class="mono">${esc(t('print_' + x.state))}${x.tries ? ' · ' + esc(x.tries) : ''}${x.code ? ' · ' + esc(x.code) : ''}</small></span></div>`).join('')}</div>` : `<p class="muted small" data-t="prNoJobs"></p>`}`,
+    ${jobs.length ? `<div class="rows" data-tour="printer.jobs">${jobs.map(x => rowDiv({ leading: icon(x.state === 'failed' ? 'alert-triangle' : 'receipt'), title: '#' + String(x.orderId || '').slice(0, 8),
+      sub: `<span class="mono">${esc(t('print_' + x.state))}${x.tries ? ' · ' + esc(x.tries) : ''}${x.code ? ' · ' + esc(x.code) : ''}</span>` })).join('')}</div>` : `<p class="muted small" data-t="prNoJobs"></p>`}`,
     { name: 'printer', keepScroll: true });
   $('#prSave').onclick = async () => {
     const v = $('#pr-name').value.trim();

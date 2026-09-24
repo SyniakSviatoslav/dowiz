@@ -127,7 +127,9 @@ async function createHub() {
   const name = $('#name').value.trim();
   if (!slug || !name) { say(said, 'Потрібні slug і назва.', 'bad'); return; }
 
-  const body = { slug, name, phone: $('#phone').value.trim() };
+  // P9: the agreement is accepted by this click, and the server refuses without it.
+  if (!$('#dpa').checked) { say(said, 'Спершу заклад має прийняти договір про обробку даних.', 'bad'); return; }
+  const body = { slug, name, phone: $('#phone').value.trim(), dpa: $('#dpa').value };
   const oemail = $('#oemail').value.trim(), opw = $('#opw').value;
   if (oemail || opw) {
     if (!oemail || !opw) { say(said, 'Власнику потрібні і пошта, і пароль.', 'bad'); return; }
@@ -149,6 +151,7 @@ async function createHub() {
       'Хаб відкривається ЗАКРИТИМ — власник відкриє його, коли буде меню.',
       'good');
     ['slug', 'name', 'phone', 'oemail', 'opw'].forEach(id => { $('#' + id).value = ''; });
+    $('#dpa').checked = false;
     await loadHubs();
   } catch (e) {
     say(said, String(e.message || e), 'bad');

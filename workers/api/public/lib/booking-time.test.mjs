@@ -4,6 +4,8 @@
 import assert from 'node:assert/strict';
 import {
   midnightMs, slotOf, weekdayOf, minuteNow, timesOn, DAY_MIN, offsetMinutes,
+  venueClock, venueDate, venueMidnightMs, venueSlot, venueDayRange, slotMinuteOfDay,
+  venueWallMs, venueWallValue, laterPrefill,
 } from './booking-time.js';
 
 let run = 0;
@@ -88,6 +90,83 @@ test('the offset is the zone\'s at that instant, not a summer constant', () => {
   const err = console.error; console.error = () => {};
   try { assert.equal(offsetMinutes('Not/AZone', 0, 60), 60, 'an unknown name falls back, loudly'); }
   finally { console.error = err; }
+});
+
+// ── G3: the venue's day across the DST change (audit D3, D10, D11) ─────────
+const TZ = 'Europe/Tirane';
+const tirane = ms => new Intl.DateTimeFormat('en-GB', { timeZone: TZ, dateStyle: 'short', timeStyle: 'short' })
+  .format(new Date(ms));
+
+test('D3: booked on 24 Oct for Mon 26 Oct 19:00, the slot IS 19:00 in Tirane', () => {
+  const now = Date.UTC(2026, 9, 24, 10, 0); // Sat 12:00 CEST (+120)
+  const slot = venueSlot(now, TZ, 2, 19 * 60);
+  assert.equal(tirane(slot * 60_000), '26/10/2026, 19:00', 'not 18:00: the offset is the 26th\'s (+60)');
+  assert.equal(new Date(slot * 60_000).toISOString(), '2026-10-26T18:00:00.000Z');
+  assert.equal(slotMinuteOfDay(TZ, slot), 19 * 60, 'and the console renders it at 19:00');
+  // its positive twin: a day before the change keeps +120
+  assert.equal(tirane(venueSlot(now, TZ, 0, 19 * 60) * 60_000), '24/10/2026, 19:00');
+});
+
+test('D3: the day of 25 Oct is 25 hours, from two real midnights', () => {
+  const now = Date.UTC(2026, 9, 24, 10, 0);
+  const [from, to] = venueDayRange(now, TZ, 1);
+  assert.equal(to - from, 25 * 60, 'the hour 02:00-03:00 happens twice');
+  assert.equal(new Date(from * 60_000).toISOString(), '2026-10-24T22:00:00.000Z');
+  assert.equal(new Date(to * 60_000).toISOString(), '2026-10-25T23:00:00.000Z');
+  const [f0, t0] = venueDayRange(now, TZ, 0);
+  assert.equal(t0 - f0, DAY_MIN, 'an ordinary day is 1440');
+  const spring = venueDayRange(Date.UTC(2027, 2, 27, 12), TZ, 1); // Sun 28 Mar 2027
+  assert.equal(spring[1] - spring[0], 23 * 60, 'the spring day is 23 hours');
+  assert.equal(venueDate(now, TZ, 2).weekday, 0, 'the 26th is a Monday');
+  assert.equal(venueDate(now, TZ, 2).d, 26);
+});
+
+test('P6: every 5 hours of 2026, every day 0..60, the slot renders at its minute', () => {
+  const MINUTES = [0, 90, 19 * 60, 23 * 60 + 30];
+  let cases = 0;
+  for (let now = Date.UTC(2026, 0, 1); now < Date.UTC(2027, 0, 1); now += 5 * 3_600_000) {
+    const today = venueClock(TZ, now);
+    for (let n = 0; n <= 60; n++) {
+      const want = venueDate(now, TZ, n);
+      for (const m of MINUTES) {
+        const at = venueClock(TZ, venueSlot(now, TZ, n, m) * 60_000);
+        if (at.minute !== m || at.d !== want.d || at.mo !== want.mo) {
+          assert.fail(`now ${new Date(now).toISOString()} day ${n} minute ${m} -> ${JSON.stringify(at)}`);
+        }
+        cases++;
+      }
+    }
+    assert.equal(venueMidnightMs(now, TZ, 0) <= now && now < venueMidnightMs(now, TZ, 1), true);
+    assert.equal(venueClock(TZ, venueMidnightMs(now, TZ, 0)).minute, 0, `midnight at ${today.d}/${today.mo + 1}`);
+  }
+  assert.equal(cases, 1752 * 61 * 4, 'every case executed, none skipped');
+});
+
+test('D10: checkout "later" is the venue\'s 19:00 whatever the phone\'s zone', () => {
+  const ms = venueWallMs(TZ, '2026-09-24T19:00');
+  assert.equal(tirane(ms), '24/09/2026, 19:00');
+  assert.equal(new Date(ms).toISOString(), '2026-09-24T17:00:00.000Z');
+  assert.equal(tirane(venueWallMs(TZ, '2026-10-26T19:00')), '26/10/2026, 19:00', 'and after the change');
+  assert.equal(venueWallValue(TZ, ms), '2026-09-24T19:00', 'the prefill round-trips on the venue wall');
+  assert.equal(venueWallMs(TZ, ''), null);
+  assert.equal(venueWallMs(TZ, '2026-13-01T19:00'), null);
+});
+
+test('D11: the venue\'s weekday and minute come from the zone, not +120', () => {
+  const winter = venueClock(TZ, Date.UTC(2026, 9, 26, 21, 30)); // Mon 22:30 CET
+  assert.equal(winter.minute, 22 * 60 + 30, 'not 23:30');
+  assert.equal(winter.weekday, 0);
+  const summer = venueClock(TZ, Date.UTC(2026, 8, 21, 20, 30)); // Mon 22:30 CEST
+  assert.equal(summer.minute, 22 * 60 + 30);
+});
+
+test('D10: the "later" prefill is the venue\'s wall, an hour on, rounded up to :00/:30', () => {
+  const H = 3_600_000;
+  assert.equal(laterPrefill(TZ, Date.UTC(2026, 8, 24, 16, 40), H, 30), '2026-09-24T20:00', '18:40 CEST + 1h -> 20:00');
+  assert.equal(laterPrefill(TZ, Date.UTC(2026, 9, 26, 16, 10), H, 30), '2026-10-26T18:30', '17:10 CET + 1h -> 18:30');
+  assert.equal(laterPrefill(TZ, Date.UTC(2026, 9, 26, 17, 0), H, 30), '2026-10-26T19:00', 'on the half hour stays');
+  // the prefill read back is the instant it names, on the venue's wall
+  assert.equal(venueWallMs(TZ, laterPrefill(TZ, Date.UTC(2026, 9, 26, 17, 0), H, 30)), Date.UTC(2026, 9, 26, 18, 0));
 });
 
 console.log(`booking-time: ${run} tests, all green`);

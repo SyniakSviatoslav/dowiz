@@ -17,6 +17,7 @@ import { state, normalise, addLine, moneyEl } from '/store/state.js';
 import { t, lang } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, toast, fallbackArt, paintFallbacks } from '/store/ui.js';
 import { seaEvent } from '/store/sea.js';
+import { k, cta, ghost } from '/store/parts.js';
 
 /// How many candidates the card offers, and the lowest score shown at all.
 const CANDIDATES = 3;
@@ -86,8 +87,8 @@ function showResult(transcript){
   host.innerHTML = `<p class="voice-heard">${icon('microphone')}<span>${esc(transcript)}</span></p>
     <p class="eyebrow" data-t="heard"></p>
     ${card(picks[0], qty, true)}
-    <div class="vpick-row"><button type="button" class="btn" id="voiceAdd">${icon('plus')}<span data-t="add"></span></button>
-      <button type="button" class="btn btn-ghost" id="voiceAgain">${icon('microphone')}<span data-t="notThis"></span></button></div>
+    <div class="vpick-row">${cta({ id: 'voiceAdd', icon: 'plus', label: k('add'), tour: 'voice.add' })}
+      ${ghost({ id: 'voiceAgain', icon: 'microphone', label: k('notThis'), tour: 'voice.again' })}</div>
     ${picks.length > 1 ? `<div class="vpick-alt">${picks.slice(1).map(p => card(p, 1, false)).join('')}</div>` : ''}`;
   paintFallbacks(host);
   for (const el of $$('[data-t]', host)) el.textContent = t(el.dataset.t);

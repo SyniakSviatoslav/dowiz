@@ -10,6 +10,7 @@
 // whole console.
 
 import { $, $$, esc, icon, t, api, post, toast, sheet, ago, day, clock, store, busy } from '/admin/core.js';
+import { btn, field, select, pill, loading, rowDiv } from '/admin/parts.js';
 
 const q = () => '?location_id=' + encodeURIComponent(store.loc || '');
 const fail = e => toast(String(e.message || e));
@@ -17,37 +18,40 @@ const head = `<p class="eyebrow" data-t="settings"></p><h2 data-t="fx_title"></h
 const when = ms => ms ? `${day(ms)} ${clock(ms)}` : '';
 
 export async function open(){
-  sheet(`${head}<div id="fxBody"><div class="skel skel-row"></div><div class="skel skel-row"></div></div>`, { name: 'fiscal', keepScroll: true });
+  sheet(`${head}<div id="fxBody">${loading(2)}</div>`, { name: 'fiscal', keepScroll: true });
   let d;
   try { d = await api('/owner/fiscal' + q()); } catch (e) { return fail(e); }
   const a = d.arming || {};
-  const row = (ic, label, value, tone = '') => `<div class="rowc">${icon(ic)}<span class="t"><b data-t="${label}"></b><small class="mono">${value}</small></span>${tone ? `<span class="pill ${tone}"></span>` : ''}</div>`;
-  const units = (d.floor || []).map(u => `<option value="${esc(u)}" ${u === a.sale_unit ? 'selected' : ''}>${esc(u)}</option>`).join('');
-  const items = (d.items || []).map(i => `<option value="${esc(i.code)}" ${i.code === a.fee_item ? 'selected' : ''}>${esc(i.code)} - ${esc(i.name)}</option>`).join('');
-  const waiting = (d.waiting || []).map(w => `<div class="rowc" data-order="${esc(w.order_id)}">${icon(w.overdue ? 'alert-triangle' : 'receipt')}
-      <span class="t"><b class="mono">${esc(w.order_id)}</b><small><span data-t="fx_stage_${esc(w.stage)}"></span> · <span data-t="fx_deadline"></span> ${esc(when(w.deadline))}${w.sale_id ? ' · #' + esc(w.sale_id) : ''}${w.why ? ' · ' + esc(w.why) : ''}</small></span>
-      <button class="btn ghost fx-receipt">${icon('receipt')}<span data-t="fx_receipt"></span></button></div>`).join('');
+  const row = (ic, label, value) => rowDiv({ leading: icon(ic), title: { t: label }, sub: `<span class="mono">${value}</span>` });
+  const units = (d.floor || []).map(u => ({ value: u, label: u }));
+  // A sale unit the till no longer lists is still shown, chosen, as before.
+  const lost = a.sale_unit && !(d.floor || []).includes(a.sale_unit) ? [{ value: a.sale_unit, label: a.sale_unit }] : [];
+  const items = (d.items || []).map(i => ({ value: i.code, label: `${i.code} - ${i.name}` }));
+  const words = (k, rest = '') => `<span data-t="${k}">${esc(t(k))}</span>${rest}`;
+  const waiting = (d.waiting || []).map(w => rowDiv({ leading: icon(w.overdue ? 'alert-triangle' : 'receipt'), title: w.order_id, data: { order: w.order_id }, tour: 'fiscal.stage',
+      sub: `${words('fx_stage_' + w.stage)} · ${words('fx_deadline')} ${esc(when(w.deadline))}${w.sale_id ? ' · #' + esc(w.sale_id) : ''}${w.why ? ' · ' + esc(w.why) : ''}`,
+      trailing: btn({ cls: 'fx-receipt', variant: 'ghost', icon: 'receipt', key: 'fx_receipt', tour: 'fiscal.receipt' }) })).join('');
   const body = `
     <div class="rows">
-      <div class="rowc">${icon('receipt')}<span class="t"><b data-t="fx_title"></b><small>${d.armed ? '' : (d.why || []).map(esc).join(' / ')}</small></span><span class="pill ${d.armed ? 'ok' : ''}" data-t="${d.armed ? 'fx_armed' : 'fx_off'}"></span></div>
+      ${rowDiv({ leading: icon('receipt'), title: { t: 'fx_title' }, sub: d.armed ? '' : (d.why || []).map(esc).join(' / '), trailing: pill(d.armed ? 'ok' : '', { key: d.armed ? 'fx_armed' : 'fx_off' }), tour: 'fiscal.state' })}
       ${row('clock', 'fx_lastOk', d.last_ok_ms ? esc(ago(d.last_ok_ms)) : esc(t('eb_never')))}
       ${d.last_error ? row('alert-triangle', 'fx_lastError', `${esc(ago(d.last_error[0]))} · ${esc(d.last_error[1])}`) : ''}
       ${row('clock', 'fx_backlog', `${esc(d.backlog || 0)} · ${esc(d.overdue || 0)} ${esc(t('fx_overdue'))} · ${esc(d.sent || 0)} ${esc(t('fx_sent'))}`)}
     </div>
     <section class="group mt-3"><p class="eyebrow" data-t="fx_waiting"></p>
-      <div class="rows">${waiting || `<p class="muted small" data-t="fx_none"></p>`}</div>
+      <div class="rows" data-tour="fiscal.waiting">${waiting || `<p class="muted small" data-t="fx_none"></p>`}</div>
       <pre id="fxReceipt" class="mono small" hidden></pre></section>
     <section class="group mt-3"><p class="eyebrow" data-t="fx_setup"></p>
-      <label for="fx-unit" data-t="fx_saleUnit"></label><select id="fx-unit"><option value="" data-t="fx_pick"></option>${units}${a.sale_unit && !(d.floor || []).includes(a.sale_unit) ? `<option selected value="${esc(a.sale_unit)}">${esc(a.sale_unit)}</option>` : ''}</select>
+      ${select({ id: 'fx-unit', key: 'fx_saleUnit', value: a.sale_unit || '', options: [{ value: '', key: 'fx_pick' }, ...units, ...lost], tour: 'fiscal.saleUnit' })}
       <p class="muted small" data-t="fx_saleUnitHint"></p>
-      <label for="fx-fee" data-t="fx_feeItem"></label><select id="fx-fee"><option value="" data-t="fx_noFee"></option>${items}</select>
-      <div class="btn-row"><button class="btn" id="fxSave">${icon('check')}<span data-t="save"></span></button></div></section>
+      ${select({ id: 'fx-fee', key: 'fx_feeItem', value: a.fee_item || '', options: [{ value: '', key: 'fx_noFee' }, ...items], tour: 'fiscal.feeItem' })}
+      <div class="btn-row">${btn({ id: 'fxSave', variant: 'primary', icon: 'check', key: 'save', tour: 'fiscal.save' })}</div></section>
     <section class="group mt-3"><p class="eyebrow" data-t="fx_arming"></p>
       <p class="small" data-t="fx_consequence"></p><p class="muted small"><span data-t="fx_marker"></span> <b class="mono">${esc(d.marker || '')}</b></p>
       ${d.arming && d.arming.armed
-        ? `<div class="btn-row"><button class="btn ghost danger" id="fxDisarm">${icon('x')}<span data-t="fx_disarm"></span></button></div>`
-        : `<label for="fx-phrase"><span data-t="fx_typePhrase"></span> <b class="mono">${esc(d.confirm)}</b></label><input id="fx-phrase" autocomplete="off">
-           <div class="btn-row"><button class="btn danger" id="fxArm">${icon('alert-triangle')}<span data-t="fx_arm"></span></button></div>`}
+        ? `<div class="btn-row">${btn({ id: 'fxDisarm', variant: 'ghost', icon: 'x', key: 'fx_disarm', tour: 'fiscal.disarm' })}</div>`
+        : `${field({ id: 'fx-phrase', label: `${t('fx_typePhrase')} ${d.confirm || ''}`, autocomplete: 'off', spellcheck: false, tour: 'fiscal.phrase' })}
+           <div class="btn-row">${btn({ id: 'fxArm', variant: 'danger', icon: 'alert-triangle', key: 'fx_arm', tour: 'fiscal.arm' })}</div>`}
       <p class="muted small"><span data-t="fx_cancelState"></span> <b data-t="${a.cancel_armed ? 'fx_armed' : 'fx_off'}"></b> · ${esc(d.cancel_note || '')} · ${esc((d.cancels || []).length)} <span data-t="fx_cancelsQueued"></span></p></section>`;
   sheet(head + `<div id="fxBody">${body}</div>`, { name: 'fiscal', keepScroll: true });
   wire(d);

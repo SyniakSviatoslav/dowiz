@@ -56,15 +56,31 @@ export function placeAt(t, x, y, limits, step = GRID) {
   return clampTable({ ...t, x: snap(x, step), y: snap(y, step) }, limits);
 }
 
-/// A new table in `zone`: the next free number, at the first grid spot no
-/// other table's centre already sits on.
+/// Do two tables' boxes share any area? Edges that only touch do not. A round
+/// table is judged by its square box: conservative, never a false "clear".
+export function overlaps(a, b) {
+  const ax = Math.floor(a.w / 2), ay = Math.floor(a.h / 2), bx = Math.floor(b.w / 2), by = Math.floor(b.h / 2);
+  return a.x - ax < b.x + bx && b.x - bx < a.x + ax && a.y - ay < b.y + by && b.y - by < a.y + ay;
+}
+
+/// A new table in `zone`: the next free number, at the first grid spot (row
+/// by row from the top left) where its box overlaps no other table's box.
+///
+/// THE DEFECT (2026-09-24): this used to dodge only an exact CENTRE on a
+/// 60-unit grid, so a table dragged to (50,50) was silently covered by the
+/// next new one at (40,40). A plan with no free spot left gets the first spot
+/// anyway, and `check` names the overlap so it cannot be saved unseen.
 export function newTable(zone, limits) {
   const { W, H } = lim(limits);
-  const taken = new Set((zone?.tables || []).map(t => `${t.x},${t.y}`));
-  const step = 60;
-  let x = 40, y = 40;
-  outer: for (y = 40; y <= H - 40; y += step) for (x = 40; x <= W - 40; x += step) if (!taken.has(`${x},${y}`)) break outer;
-  return clampTable({ n: nextNumber(zone), x, y, ...NEW_TABLE }, limits);
+  const others = zone?.tables || [];
+  const at = (x, y) => clampTable({ n: nextNumber(zone), x, y, ...NEW_TABLE }, limits);
+  for (let y = 40; y <= H - 40; y += GRID) {
+    for (let x = 40; x <= W - 40; x += GRID) {
+      const t = at(x, y);
+      if (!others.some(o => overlaps(o, t))) return t;
+    }
+  }
+  return at(40, 40);
 }
 
 /// A round table has w equal to h (the hub refuses one that does not).
@@ -77,6 +93,7 @@ export function withShape(t, shape) {
 /// The editor's early word, as [{ zone, n, key }] -- `key` is an i18n key.
 /// The same rules the hub enforces: a zone has a name and a unique id; in a
 /// zone no two tables share a number; seats are 1..maxSeats; a table fits.
+/// One rule is the editor's own: in a zone no two tables' boxes overlap.
 export function check(zones, limits) {
   const { W, H, S } = lim(limits);
   const out = [], ids = new Set();
@@ -93,6 +110,9 @@ export function check(zones, limits) {
       const hw = Math.floor(t.w / 2), hh = Math.floor(t.h / 2);
       if (t.x - hw < 0 || t.y - hh < 0 || t.x + hw > W || t.y + hh > H) out.push({ zone: z.id, n: t.n, key: 'fpOffPlan' });
     }
+    // Two tables on one spot of one floor: named once, by the later table.
+    const ts = z.tables || [];
+    ts.forEach((t, i) => { if (ts.slice(0, i).some(o => overlaps(o, t))) out.push({ zone: z.id, n: t.n, key: 'fpOverlap' }); });
   }
   return out;
 }

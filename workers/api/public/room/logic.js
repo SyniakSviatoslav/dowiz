@@ -9,7 +9,8 @@
 import * as Money from '../lib/money.js';
 import { DECIMALS, REFUSED } from '../lib/vocab.js';
 
-export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/// THE one escaper is /lib/ui's (`core.js`); this name is kept for importers.
+export { esc } from '../lib/ui/core.js';
 
 /// Draw an amount. The one door to `lib/money.js` for this app. A currency
 /// not yet known draws a dash, NOT a guess: `money.js` would fall back to two
@@ -36,6 +37,14 @@ const NO_PAYMENT = new Set([...REFUSED, 'REFUNDING']);
 /// WHAT THIS PERSON IS SHOWN for one round. The server refuses the same things
 /// (`command::amend::apply`, `pay::decide`); hiding them is so a waiter is not
 /// offered a button whose only answer is "no".
+/// The signer word a guest's round carries (`placer::GUEST`, `pay::GUEST`).
+export const GUEST = 'guest';
+
+/// A guest's round still waiting for the room (D9). Not on the bill and not
+/// payable until a waiter confirms it: the server refuses the payment too
+/// (`dowiz_hub::room::pay::decide`) and leaves it out of `sitting::bill`.
+export const guestWaiting = r => r?.placed_by === GUEST && r?.status === 'PENDING';
+
 export function actionsFor(caps, round) {
   const stage = stageOf(round?.status);
   const paid = round?.payment_status === 'paid';
@@ -50,7 +59,7 @@ export function actionsFor(caps, round) {
     // A comp is the void-holder's word at any stage.
     comp: editable && orders && voids,
     table: editable && orders,
-    pay: caps.has('take_payment') && !NO_PAYMENT.has(round?.status) && !paid && owed(round) > 0,
+    pay: caps.has('take_payment') && !NO_PAYMENT.has(round?.status) && !guestWaiting(round) && !paid && owed(round) > 0,
   };
 }
 
@@ -187,6 +196,15 @@ export function tipMinor(text, code) {
 /// A wallet payment names its wallet (`PayIn.wallet`), and only it does.
 export const walletOk = (method, wallet) => method !== 'wallet' || String(wallet || '').trim().length > 0;
 
+/// D13 (G6): what the wallet field sends. The customer's own code -- their
+/// order token, three dot-joined parts -- goes as `wallet_token`, and staff
+/// spend only the wallet it names; anything else is a wallet id, which only
+/// the owner may name (`room/pay/whose.rs`).
+export const walletField = v => {
+  const s = String(v || '').trim();
+  return s.split('.').length === 3 ? { wallet_token: s } : { wallet: s };
+};
+
 /// A wallet pays the bill's share only (`command::pay::decide`): its leg
 /// debits `amount`, so a tip on it would settle money nobody paid.
 export const walletTipOk = (method, tip) => method !== 'wallet' || !(tip > 0);
@@ -200,8 +218,9 @@ export function owed(round) {
   return Math.max(0, Number(round.total || 0) - paid);
 }
 
-/// `took_money`'s complement, for the bill: a refused round is not owed.
-export const sittingDue = s => (s?.rounds || []).filter(r => !REFUSED.has(r.status)).reduce((a, r) => a + owed(r), 0);
+/// `took_money`'s complement, for the bill: a refused round is not owed, and
+/// neither is a guest's round nobody has confirmed (D9, `sitting::billed`).
+export const sittingDue = s => (s?.rounds || []).filter(r => !REFUSED.has(r.status) && !guestWaiting(r)).reduce((a, r) => a + owed(r), 0);
 
 // ── where, and how old ──────────────────────────────────────────────────────
 

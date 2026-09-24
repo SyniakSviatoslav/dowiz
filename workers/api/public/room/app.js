@@ -9,7 +9,7 @@
 // READS SAY THEIR AGE. The room is read every 20 s while the screen is
 // visible; the last answer is kept and, when the network is gone, drawn with
 // how old it is -- never presented as now.
-import { esc, money, parseCaps, canTill, sittingDue, slugOfHost, ageOf, canMoveSitting } from './logic.js';
+import { parseCaps, canTill, slugOfHost, ageOf } from './logic.js';
 import { api, write, session, lastRoom, OUT, hooks } from './net.js';
 import { t, lang, statusWord, intlLocale, nextLang, retranslate } from './i18n.js';
 import { renderRound, bindRound, amend } from './sheet.js';
@@ -21,7 +21,10 @@ import { renderTillScreen, bindTill, lastTill, keep as keepTill } from './till.j
 import { visible } from './till-view.js';
 import { renderFloor, bindFloor, loadFloor } from './floor.js';
 import { safeGet, safeSet } from '../store/storage.js';
-import { sittingHasGuest } from './guest.js';
+import { renderLogin, renderRoom, renderSitting } from './screens.js';
+import * as ui from '/lib/ui/index.js';
+import { createGuide } from '/lib/guide.js';
+import { createLearn, loadLessons } from '/lib/learn.js';
 
 const $ = s => document.querySelector(s);
 const POLL_MS = 20000;
@@ -46,12 +49,11 @@ const c = {
 const sitting = () => S.sittings.find(s => s.sitting_id === S.sittingId) || null;
 const round = () => sitting()?.rounds?.find(r => r.id === S.roundId) || null;
 
-function toast(msg) {
-  const el = $('#toast');
-  el.textContent = msg;
-  el.hidden = false;
-  clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 3500);
-}
+// ONE live region, in index.html from the first paint (a region created at the
+// moment of the notice is not announced); /lib/ui owns the timer.
+ui.useTranslator(t);
+const toaster = ui.createToaster($('#toast'), { ms: 3500 });
+function toast(msg) { toaster.show(msg); }
 
 // ── session ─────────────────────────────────────────────────────────────────
 function adopt(s) {
@@ -69,7 +71,7 @@ async function onLogin(ev) {
   const f = ev.target, btn = f.querySelector('button[type="submit"]');
   const body = { email: f.elements.email.value.trim(), password: f.elements.password.value };
   if (S.claiming) body.code = f.elements.code.value.trim();
-  btn.disabled = true;
+  const restore = ui.setBusy(btn, t('loading'));
   try {
     const d = await api(S.claiming ? '/staff/claim' : '/staff/login', { method: 'POST', body });
     session.set(d); adopt(d);
@@ -77,7 +79,7 @@ async function onLogin(ev) {
     render(); loadRoom(); loadMenu(c);
   } catch (e) {
     toast(e.offline ? t('offline') : e.message || t('error'));
-    btn.disabled = false;
+    restore();
   }
 }
 
@@ -115,54 +117,12 @@ function learn() {
 function hud() {
   const a = ageOf(Date.now() - S.at);
   $('#syncText').textContent = S.at ? `${S.live ? t('live') : t('offline')} · ${t('age' + a.unit.toUpperCase()).replace('{n}', a.n)}` : t(S.live ? 'live' : 'offline');
-  $('#syncTag').classList.toggle('warn', !S.live);
+  $('#syncTag').classList.toggle('ui-chip--warning', !S.live);
+  $('#syncTag').classList.toggle('ui-chip--success', S.live);
   const n = S.queued.length;
   $('#outboxTag').hidden = n === 0;
   $('#outboxText').textContent = t('queuedN').replace('{n}', n);
   $('#langBtn').textContent = lang().toUpperCase();
-}
-
-function renderLogin() {
-  return `<h1>dowiz</h1><p class="muted">${esc(t('loginLine'))}</p>
-    <form data-form="login" class="card-form">
-      <label>${esc(t('email'))}<input type="email" name="email" autocomplete="username" required></label>
-      ${S.claiming ? `<label>${esc(t('claimCode'))}<input name="code" autocomplete="one-time-code" required></label>` : ''}
-      <label>${esc(t('password'))}<input type="password" name="password" autocomplete="${S.claiming ? 'new-password' : 'current-password'}" minlength="${S.claiming ? 8 : 1}" required></label>
-      <button class="cta" type="submit">${esc(t(S.claiming ? 'claim' : 'signIn'))}</button>
-      <button class="btn ghost" type="button" data-act="claimToggle">${esc(t(S.claiming ? 'haveAccount' : 'haveCode'))}</button>
-    </form>`;
-}
-
-function renderRoom() {
-  const loc = intlLocale();
-  const cards = S.sittings.map(s => {
-    const due = sittingDue(s);
-    const n = (s.rounds || []).length;
-    const st = (s.rounds || []).map(r => `<span class="status st-${esc(r.status)}">${esc(statusWord(r.status))}</span>`).join('');
-    return `<li><button class="card" data-act="sit" data-id="${esc(s.sitting_id)}">
-      <span class="tbl">${esc(t('table'))} ${esc(s.table || '—')}</span>
-      <span class="meta">${n} ${esc(t('rounds'))} ${st}${sittingHasGuest(s) ? ` <span class="tag warn">${esc(t('guestWaiting'))}</span>` : ''}</span>
-      <span class="due">${esc(t('due'))} ${money(due, S.currency, loc)}</span></button></li>`;
-  }).join('');
-  return `<div class="bar"><span class="chip">${esc(t(S.role || 'waiter'))}</span><span class="sp"></span>
-      ${S.caps.has('take_orders') ? `<button class="btn" data-act="open">${esc(t('openTable'))}</button>` : ''}
-      ${canTill(S.caps) ? `<button class="btn" data-act="till">${esc(t('till'))}</button>` : ''}
-      ${S.caps.has('take_orders') ? `<button class="btn" data-act="floor">${esc(t('floor'))}</button>` : ''}
-      <button class="btn" data-act="refresh">${esc(t('refresh'))}</button></div>
-    <h2>${esc(t('room'))}</h2>
-    ${S.role === 'kitchen' ? `<p class="muted">${esc(t('kitchenNoRoom'))}</p>` : cards ? `<ul class="tables">${cards}</ul>` : `<p class="muted">${esc(S.at ? t('noOrders') : t('loading'))}</p>`}
-    <button class="btn ghost" data-act="signout">${esc(t('signOut'))}</button>`;
-}
-
-/// A sitting with more than one round lists them; one round opens directly.
-function renderSitting(s) {
-  const loc = intlLocale();
-  return `<div class="bar"><button class="btn" data-act="back">← ${esc(t('back'))}</button></div>
-    <h2>${esc(t('table'))} ${esc(s.table || '—')}</h2>
-    <ul class="tables">${(s.rounds || []).map((r, i) => `<li><button class="card" data-act="round" data-id="${esc(r.id)}">
-      <span class="tbl">#${i + 1}</span><span class="status st-${esc(r.status)}">${esc(statusWord(r.status))}</span>
-      <span class="due">${money(r.total || 0, S.currency, loc)}</span></button></li>`).join('')}</ul>
-    ${canMoveSitting(S.caps, s) ? `<div class="acts"><button class="btn" data-act="moveSit">${esc(t('moveSitting'))}</button></div>` : ''}`;
 }
 
 function render() {
@@ -182,9 +142,9 @@ function render() {
   if (S.view === 'open' && S.caps.has('take_orders')) { root.innerHTML = renderOpen(c); return bindOpen(c, root, () => { S.view = 'room'; render(); }); }
   if (S.view === 'till' && canTill(S.caps)) { root.innerHTML = renderTillScreen(c); return bindTill(c, root); }
   if (S.view === 'floor' && S.caps.has('take_orders')) { root.innerHTML = renderFloor(S.floor, t, S.caps, S.floorPick); return bindFloor(c, root, () => { S.view = 'room'; render(); }); }
-  if (S.view === 'login') { root.innerHTML = renderLogin(); }
-  else if (S.view === 'sitting') root.innerHTML = renderSitting(s);
-  else { S.view = 'room'; root.innerHTML = renderRoom(); }
+  if (S.view === 'login') { root.innerHTML = renderLogin(c); }
+  else if (S.view === 'sitting') root.innerHTML = renderSitting(c, s);
+  else { S.view = 'room'; root.innerHTML = renderRoom(c); }
   root.onsubmit = ev => { if (ev.target.dataset.form === 'login') onLogin(ev); };
   root.onclick = ev => {
     const b = ev.target.closest('[data-act]');
@@ -225,7 +185,29 @@ $('#themeBtn').onclick = () => {
   safeSet('dw_room_theme', ({ '': 'dark', dark: 'light', light: '' })[safeGet('dw_room_theme') || ''] ?? '');
   applyTheme();
 };
-$('#langBtn').onclick = () => { nextLang(); retranslate(); S.menu = null; if (session.get()) loadMenu(c).then(render); render(); };
+$('#langBtn').onclick = () => { tours = null; nextLang(); retranslate(); S.menu = null; if (session.get()) loadMenu(c).then(render); render(); };
+
+// ── lessons (/lib/learn.js): the waiter's own, run as tours on this page ────
+// The header's Learn button lists them in a /lib/ui sheet; `#learn=W7` (the
+// wiki's "open in the app") starts one directly.
+let tours = null;   // the lesson engine; `learn()` above is the payments memory
+const learnWords = () => ({ title: t('learn'), new: t('learnNew'), done: t('learnDone'), paused: t('learnPaused'), watch: t('learnWatch'),
+  writes: t('learnWrites'), steps: n => t('learnSteps').replace('{n}', n), empty: t('learnEmpty'), offline: t('learnOffline') });
+async function getLearn() {
+  if (tours) return tours;
+  const lessons = await loadLessons();
+  if (!lessons.length) return null;
+  return (tours = createLearn({ role: 'waiter', lessons, lang, createGuide, toast, words: learnWords() }));
+}
+async function openLearn() {
+  const L = await getLearn();
+  if (!L) return toast(t('learnOffline'));
+  const s = ui.openSheet({ title: t('learn'), body: L.renderList(), closeLabel: t('learnClose') });
+  L.bindList(s.el, () => s.close('picked'));
+}
+$('#learnBtn').onclick = openLearn;
+const learnHash = () => { if (/learn=/.test(location.hash)) getLearn().then(L => { if (L && L.deepLink(location.hash) === false) toast(t('learnEmpty')); }); };
+addEventListener('hashchange', learnHash);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/room/sw.js', { scope: '/room/' }).catch(() => {});
 
@@ -240,5 +222,6 @@ if (s0) {
   loadRoom(); loadMenu(c).then(() => { if (S.view === 'add') render(); });
 }
 render();
+learnHash();
 OUT.start();
 setInterval(() => { if (document.visibilityState === 'visible' && session.get() && (S.view === 'room' || S.view === 'sitting')) loadRoom(); else if (document.visibilityState === 'visible' && session.get() && S.view === 'floor') loadFloor(c); else hud(); }, POLL_MS);

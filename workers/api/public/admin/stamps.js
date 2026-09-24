@@ -10,6 +10,7 @@
 import { $, esc, icon, t, api, post, toast, busy, switchEl, retranslate } from '/admin/core.js';
 
 import { stampValues } from '/lib/stamps.js';
+import { btn, field } from '/admin/parts.js';
 
 const KEYS = { on: 'loyalty.stamps.enabled', n: 'loyalty.stamps.n', reward: 'loyalty.stamps.reward_minor' };
 
@@ -19,10 +20,10 @@ export async function mount(host){
   let s = { values: {} }; try { s = await api('/owner/settings'); } catch {}
   const v = s.values || {};
   host.innerHTML = `<p class="eyebrow mt-3" data-t="stampCard"></p><p class="muted small" data-t="stampHint"></p>
-    ${switchEl('st-on', v[KEYS.on] === '1', 'stampOn')}
-    <div class="grid2"><div><label for="st-n" data-t="stampN"></label><input id="st-n" inputmode="numeric" value="${esc(v[KEYS.n] || '10')}"></div>
-      <div><label for="st-reward" data-t="stampReward"></label><input id="st-reward" inputmode="numeric" value="${esc(v[KEYS.reward] || '')}"></div></div>
-    <div class="btn-row"><button class="btn" id="stSave">${icon('check')}<span data-t="save"></span></button></div>`;
+    ${switchEl('st-on', v[KEYS.on] === '1', 'stampOn', null, 'stamps.on')}
+    <div class="grid2">${field({ id: 'st-n', key: 'stampN', inputmode: 'numeric', value: v[KEYS.n] || '10', tour: 'stamps.count' })}
+      ${field({ id: 'st-reward', key: 'stampReward', inputmode: 'numeric', value: v[KEYS.reward] || '', tour: 'stamps.reward' })}</div>
+    <div class="btn-row">${btn({ id: 'stSave', icon: 'check', key: 'save', tour: 'stamps.save' })}</div>`;
   retranslate(host);
   $('#stSave').onclick = async () => {
     const vals = stampValues($('#st-on').checked, $('#st-n').value, $('#st-reward').value);

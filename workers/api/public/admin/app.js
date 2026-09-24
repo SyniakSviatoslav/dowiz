@@ -8,7 +8,8 @@
 // an action names an intent, the hub's FSM answers.
 
 import { $, $$, esc, icon, t, lang, LANGS, setLang, retranslate, store, S, api, post, withLoc, logout, whenLoggedOut,
-         toast, sheet, closeSheet, bindSheetChrome, hydrate, setCurrency, displayCurrency, CURRENCIES, baseCurrency, POLL_MS, POLL_IDLE_MS, confirm } from '/admin/core.js';
+         toast, sheet, closeSheet, bindSheetChrome, hydrate, setCurrency, displayCurrency, CURRENCIES, baseCurrency, POLL_MS, POLL_IDLE_MS, confirm, switchEl } from '/admin/core.js';
+import { ui, btn, field, chips, choice, press, loading } from '/admin/parts.js';
 import { safeGet, safeSet } from '/store/storage.js';
 
 /// The five tabs, their icons, their words, their modules.
@@ -39,15 +40,15 @@ function renderLogin(err){
   $('#app').innerHTML = `<div class="login">
     <div class="login-mark" aria-hidden="true"><span>d</span></div>
     <h1>dowiz</h1><p data-t="console"></p><p class="login-line" data-t="loginLine"></p>
-    <label for="e" data-t="email"></label><input id="e" type="email" autocomplete="username" inputmode="email">
-    <label for="p" data-t="password"></label><input id="p" type="password" autocomplete="current-password">
-    ${err ? `<div class="err" role="alert">${icon('alert-circle')}<span>${esc(err)}</span></div>` : ''}
-    <button class="btn" id="go" data-t="signIn"></button>
-    <div class="langs">${LANGS.map(l => `<button type="button" class="chip ${l === lang ? 'on' : ''}" data-l="${l}">${l.toUpperCase()}</button>`).join('')}</div>
+    ${field({ id: 'e', key: 'email', type: 'email', autocomplete: 'username', inputmode: 'email', tour: 'login.email' })}
+    ${field({ id: 'p', key: 'password', type: 'password', autocomplete: 'current-password', tour: 'login.password' })}
+    ${err ? ui.alert({ label: err }) : ''}
+    ${btn({ id: 'go', variant: 'primary', size: 'lg', block: true, icon: 'login', key: 'signIn', tour: 'login.go' })}
+    ${chips({ values: LANGS.map(l => ({ value: l, label: l.toUpperCase() })), value: lang, attr: 'l', labelKey: 'language', tour: 'login.lang' }).replace('class="chips"', 'class="chips langs"')}
   </div>`;
   retranslate($('#app'));
   const submit = async () => {
-    const b = $('#go'); b.disabled = true; b.textContent = t('signingIn');
+    const b = $('#go'); ui.setBusy(b, t('signingIn'));
     try {
       const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email: $('#e').value.trim(), password: $('#p').value }) });
@@ -68,7 +69,7 @@ $('#logout').onclick = async () => { try { await post('/auth/logout'); } catch {
 // ── the bottom bar ──────────────────────────────────────────────────────────
 function mountNav(){
   const nav = $('#nav');
-  nav.innerHTML = TABS.map(([id, ic, key]) => `<button type="button" class="tab" data-tab="${id}" aria-current="${id === S.tab ? 'page' : 'false'}">
+  nav.innerHTML = TABS.map(([id, ic, key]) => `<button type="button" class="tab" data-tab="${id}" data-tour="nav.${id}" aria-current="${id === S.tab ? 'page' : 'false'}">
     <span class="tab-ic">${icon(ic)}${id === 'orders' ? `<span class="tab-n" id="navLiveN" hidden>0</span>` : ''}</span><span data-t="${key}"></span></button>`).join('');
   nav.onclick = e => { const b = e.target.closest('[data-tab]'); if (b) show(b.dataset.tab); };
   retranslate(nav);
@@ -116,7 +117,7 @@ function paintStale(){
 function paintVenue(){
   const v = S.venue; if (!v) return;
   const st = v.deliveryPaused ? 'closed' : (v.ownerStatus || v.status || 'open');
-  const chip = $('#vstate'); chip.className = `vstate ${st}`;
+  const chip = $('#vstate'); chip.className = `ui-chip vstate ${st}`;
   $('#vstateT').textContent = v.deliveryPaused ? t('paused') : t(st);
   $('#brandName').textContent = v.name || 'dowiz';
   const mark = $('#brandMark'); if (v.logoUrl) { mark.src = v.logoUrl; mark.hidden = false; } else mark.hidden = true;
@@ -125,8 +126,8 @@ function paintVenue(){
 function openState(){
   const v = S.venue || {};
   sheet(`<p class="eyebrow" data-t="venue"></p><h2 data-t="setState"></h2>
-    ${STATES.map(s => `<button type="button" class="choice ${(v.ownerStatus || v.status) === s && !v.deliveryPaused ? 'on' : ''}" data-state="${s}">${icon(s === 'open' ? 'check' : s === 'busy' ? 'clock' : 'x')}<span class="t" data-t="${s}"></span>${icon('check', 'ck')}</button>`).join('')}
-    <label class="switch mt-2"><input type="checkbox" id="pauseD" ${v.deliveryPaused ? 'checked' : ''}><span class="switch-k"></span><span class="t" data-t="paused"></span></label>`, { name: 'state' });
+    ${ui.list(STATES.map(s => choice({ key: s, pressed: (v.ownerStatus || v.status) === s && !v.deliveryPaused, data: { state: s }, tour: 'state.' + s })), { label: t('setState') })}
+    ${switchEl('pauseD', v.deliveryPaused, 'paused', null, 'state.pauseDelivery')}`, { name: 'state' });
   for (const b of $$('[data-state]')) b.onclick = async () => {
     if (b.dataset.state === 'closed' && (v.ownerStatus || v.status) !== 'closed') {
       // Closing stops every new order; the old console asked, and so does this one.
@@ -146,11 +147,11 @@ $('#vstate').onclick = openState;
 /// Language and reading currency, from the header.
 function openPrefs(){
   sheet(`<p class="eyebrow" data-t="language"></p>
-    <div class="chips" id="langPick">${LANGS.map(l => `<button type="button" class="chip ${l === lang ? 'on' : ''}" data-l="${l}">${l.toUpperCase()}</button>`).join('')}</div>
+    ${chips({ id: 'langPick', values: LANGS.map(l => ({ value: l, label: l.toUpperCase() })), value: lang, attr: 'l', labelKey: 'language', tour: 'prefs.lang' })}
     <p class="eyebrow mt-3">${esc(baseCurrency())} → ${esc(displayCurrency())}</p>
-    <div class="chips">${[baseCurrency(), ...CURRENCIES.filter(c => c !== baseCurrency())].map(c => `<button type="button" class="chip ${c === displayCurrency() ? 'on' : ''}" data-c="${c}">${c}</button>`).join('')}</div>`, { name: 'prefs' });
-  for (const b of $$('[data-l]', $('#sheetIn'))) b.onclick = async () => { setLang(b.dataset.l); mountNav(); paintVenue(); await rerender(); for (const x of $$('[data-l]', $('#sheetIn'))) x.classList.toggle('on', x === b); };
-  for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => { await setCurrency(baseCurrency(), b.dataset.c); for (const x of $$('[data-c]', $('#sheetIn'))) x.classList.toggle('on', x === b); await rerender(); };
+    ${chips({ values: [baseCurrency(), ...CURRENCIES.filter(c => c !== baseCurrency())].map(c => ({ value: c, label: c })), value: displayCurrency(), attr: 'c', tour: 'prefs.currency' })}`, { name: 'prefs' });
+  for (const b of $$('[data-l]', $('#sheetIn'))) b.onclick = async () => { setLang(b.dataset.l); mountNav(); paintVenue(); await rerender(); press($$('[data-l]', $('#sheetIn')), b); };
+  for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => { await setCurrency(baseCurrency(), b.dataset.c); press($$('[data-c]', $('#sheetIn')), b); await rerender(); };
 }
 $('#prefs').onclick = openPrefs;
 
@@ -250,7 +251,7 @@ async function boot(){
     }
   } catch { /* no replica: the skeleton below is what a first visit sees */ }
   if (!S.orders?.length) {
-    $('#app').innerHTML = `<div class="screen"><div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div></div>`;
+    $('#app').innerHTML = `<div class="screen">${loading(3)}</div>`;
   }
   await Promise.all([loadVenue(), loadStats(), loadCouriers()]);
   try { await loadOrders(); S.phase = 'ready'; S.error = null; } catch (e) { S.phase = 'error'; S.error = String(e.message || e); }
@@ -259,6 +260,7 @@ async function boot(){
   paintLive();
   poll();
   openSocket();
+  import('/admin/more.js').then(m => m.learnFromHash()).catch(() => {});
 }
 let pollTimer = null, pollN = 0;
 // The queue moves in seconds; the dashboard's totals move in minutes. Reading

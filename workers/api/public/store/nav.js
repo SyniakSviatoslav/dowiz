@@ -19,6 +19,7 @@ import { openCart } from '/store/cart.js';
 import { openVenue } from '/store/venue.js';
 import { openBooking } from '/store/booking.js';
 import { focusSearch, scrollTop } from '/store/menu.js';
+import { choiceList, emptySheet, rows } from '/store/parts.js';
 
 let changeLang = null;
 export function onChangeLang(fn){ changeLang = fn; }
@@ -39,6 +40,8 @@ const TABS = [
   ['orders', 'scroll',       'orders'],
   ['info',   'lantern',      'info'],
 ];
+/// Each tab's learning anchor, as a literal (docs/learn/anchors-store.txt).
+const TOUR_OF_TAB = { menu: 'nav.menu', search: 'nav.search', book: 'nav.book', cart: 'nav.cart', orders: 'nav.orders', info: 'nav.info' };
 /// Which tab a sheet belongs to, so the bar follows what is open.
 const TAB_OF_SHEET = { book: 'book', cart: 'cart', checkout: 'cart', pay: 'cart', orders: 'orders', track: 'orders', info: 'info' };
 /// A tab answers the finger with a tap of the phone's own, where it can.
@@ -50,7 +53,7 @@ const ORDER_ID_SHOWN = 8;
 export function mountNav(){
   const nav = $('#nav');
   nav.innerHTML = TABS.map(([id, ic, key]) => `
-    <button type="button" class="tab" data-tab="${id}" aria-current="${id === 'menu' ? 'page' : 'false'}">
+    <button type="button" class="tab" data-tab="${id}" data-tour="${TOUR_OF_TAB[id]}" aria-current="${id === 'menu' ? 'page' : 'false'}">
       <span class="tab-ic">${icon(ic)}${id === 'cart' ? `<span class="tab-n" id="navCartN" hidden>0</span>` : ''}</span>
       <span class="tab-l" data-t="${key}"></span>
     </button>`).join('');
@@ -86,17 +89,17 @@ function paintCurrencyButton(){
   const el = $('#curCode'); if (el) el.textContent = displayCurrency();
 }
 
+/// One row of a pick-one list pressed, the rest released.
+function pick(all, b){ for (const x of all) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); } }
+
 /// Language. Choosing one rewrites text in place; nothing else moves.
 export function openLanguage(){
   sheet(`
     <p class="eyebrow" data-t="language"></p>
     <h2 data-t="chooseLang"></h2>
-    <div class="choices" role="radiogroup">
-      ${LANGS.map(l => `<button type="button" class="choice ${l === lang ? 'on' : ''}" data-l="${l}" aria-pressed="${l === lang}">
-        <span class="choice-code">${l.toUpperCase()}</span><span class="choice-name">${esc(t('langs')[l] || l)}</span>${icon('check', 'choice-ck')}</button>`).join('')}
-    </div>`, { name: 'lang' });
+    ${choiceList(LANGS.map(l => ({ on: l === lang, code: l.toUpperCase(), title: t('langs')[l] || l, data: { l, tour: 'lang.choice' } })), { label: t('chooseLang') })}`, { name: 'lang' });
   for (const b of $$('[data-l]', $('#sheetIn'))) b.onclick = async () => {
-    for (const x of $$('[data-l]', $('#sheetIn'))) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }
+    pick($$('[data-l]', $('#sheetIn')), b);
     await changeLang?.(b.dataset.l);
   };
 }
@@ -109,13 +112,10 @@ export function openCurrency(){
   sheet(`
     <p class="eyebrow" data-t="currency"></p>
     <h2 data-t="readIn"></h2>
-    <div class="choices" role="radiogroup">
-      ${codes.map(c => `<button type="button" class="choice ${c === displayCurrency() ? 'on' : ''}" data-c="${c}" aria-pressed="${c === displayCurrency()}">
-        <span class="choice-code money">${c}</span><span class="choice-name">${esc(t('curs')[c] || c)}</span>${icon('check', 'choice-ck')}</button>`).join('')}
-    </div>
+    ${choiceList(codes.map(c => ({ on: c === displayCurrency(), code: c, money: true, title: t('curs')[c] || c, data: { c, tour: 'currency.choice' } })), { label: t('readIn') })}
     <p class="muted small"><span data-t="chargedIn"></span>: <b class="money">${esc(base)}</b></p>`, { name: 'currency' });
   for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => {
-    for (const x of $$('[data-c]', $('#sheetIn'))) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }
+    pick($$('[data-c]', $('#sheetIn')), b);
     await relabel(() => setDisplayCurrency(b.dataset.c));
   };
 }
@@ -124,9 +124,9 @@ export function openCurrency(){
 /// whose token has expired is SHOWN, greyed, rather than dropped.
 export async function openHistory(){
   const list = history();
-  if (!list.length) return sheet(`<div class="empty">${icon('receipt', 'ico-lg')}<b data-t="noOrders"></b></div>`, { name: 'orders' });
+  if (!list.length) return sheet(emptySheet({ icon: 'receipt', title: 'noOrders' }), { name: 'orders' });
   sheet(`<p class="eyebrow" data-t="orders"></p><h2 data-t="myOrders"></h2>
-    <div id="histList">${list.map(() => `<div class="skel skel-row"></div>`).join('')}</div>`, { name: 'orders' });
+    <div id="histList">${rows(list.length, t('loading'))}</div>`, { name: 'orders' });
   const got = await Promise.allSettled(list.map(fetchRemembered));
   if (sheetName() !== 'orders') return;
   const host = $('#histList'); if (!host) return;
@@ -136,7 +136,7 @@ export async function openHistory(){
     const short = esc(String(e.id).slice(0, ORDER_ID_SHOWN));
     if (r.status !== 'fulfilled') return `<div class="hist gone"><span><b>#${short}</b><span class="muted">${esc(when)}</span></span>${moneyEl(e.total)}</div>`;
     const o = r.value;
-    return `<button type="button" class="hist" data-o="${i}"><span><b>#${short}</b>
+    return `<button type="button" class="hist" data-o="${i}" data-tour="orders.row"><span><b>#${short}</b>
       <span class="muted"><span data-t-st="${esc(o.status)}"></span> · ${esc(when)}</span></span>${moneyEl(o.total ?? e.total)}</button>`;
   }).join('');
   retranslate(host); repaintMoney(host);

@@ -7,20 +7,27 @@
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d2826">
 <title>dowiz · room</title>
+<link rel="stylesheet" href="/lib/icons.css">
 <link rel="stylesheet" href="/lib/tokens.css">
 <link rel="stylesheet" href="/lib/components.css">
+<!-- The design system (/lib/ui): after the shared tokens, before this surface's
+     own sheet, which only lays out what the components do not. -->
+<link rel="stylesheet" href="/lib/ui/ui.css">
 <link rel="stylesheet" href="/room/room.css">
 </head>
 <body>
 <header class="hud">
-  <span class="tag warn" id="syncTag"><span class="dot" aria-hidden="true"></span><span id="syncText" data-t="offline"></span></span>
+  <span class="ui-chip ui-chip--dot ui-chip--warning" id="syncTag" data-tour="hud.sync"><span class="ui-dot" aria-hidden="true"></span><span id="syncText" data-t="offline"></span></span>
   <span class="sp"></span>
-  <span class="tag warn" id="outboxTag" role="status" aria-live="polite" hidden><span id="outboxText"></span></span>
-  <button class="icon-btn" id="langBtn" type="button" data-t-attr="aria-label:language title:language">SQ</button>
-  <button class="icon-btn" id="themeBtn" type="button" data-t-attr="aria-label:theme title:theme">&#9680;</button>
+  <!-- UNSENT TAPS, counted. `hidden` is the state: ui.css makes it win over
+       the chip's display (the "0 queued" tag once showed on every phone). -->
+  <span class="ui-chip ui-chip--warning" id="outboxTag" role="status" aria-live="polite" data-tour="hud.outbox" hidden><i class="ti ti-cloud-upload ui-i" aria-hidden="true"></i><span id="outboxText"></span></span>
+  <button class="ui-iconbtn ui-iconbtn--plain" id="langBtn" type="button" data-tour="hud.lang" data-t-attr="aria-label:language title:language">SQ</button>
+  <button class="ui-iconbtn ui-iconbtn--plain" id="themeBtn" type="button" data-tour="hud.theme" data-t-attr="aria-label:theme title:theme"><i class="ti ti-sun-moon ui-i" aria-hidden="true"></i></button>
+  <button class="ui-iconbtn ui-iconbtn--plain" id="learnBtn" type="button" data-tour="hud.learn" data-t-attr="aria-label:learn title:learn"><i class="ti ti-info-circle ui-i" aria-hidden="true"></i></button>
 </header>
 <main id="app"></main>
-<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+<div class="ui-toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <script type="module" src="/room/app.js"></script>
 </body>
 </html>

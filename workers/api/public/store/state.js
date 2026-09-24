@@ -10,6 +10,7 @@
 // screen re-renders every time the truth moves.
 
 import * as Money from '/lib/money.js';
+import { venueClock } from '/lib/booking-time.js';
 import { safeGet, safeSet } from '/store/storage.js';
 import { lang, intlLocale } from '/store/i18n.js';
 
@@ -337,10 +338,12 @@ export const DAY_NAMES = {
 };
 export const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 /// Which weekday it is where the VENUE is, not where the phone is.
-export const todayAt = () => {
-  const off = Number.isFinite(state.loc?.tzOffsetMinutes) ? state.loc.tzOffsetMinutes : 120;
-  const local = new Date(Date.now() + off * 60_000);
-  return { day: (local.getUTCDay() + 6) % 7, minute: local.getUTCHours() * 60 + local.getUTCMinutes() };
+/// FROM THE ZONE NAME the hub sends (`loc.tz`). This read `tzOffsetMinutes`,
+/// which the hub never sends, and fell back to +120: from 25 October the venue
+/// read "closed" an hour early at night and "open" an hour late (audit D11).
+export const todayAt = (nowMs = Date.now()) => {
+  const c = venueClock(state.loc?.tz || 'Europe/Tirane', nowMs);
+  return { day: c.weekday, minute: c.minute };
 };
 /// "Opens Monday at 11:00" rather than "closed". Weekday 0 is Monday.
 export function whenOpens(n){

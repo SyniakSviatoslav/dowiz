@@ -98,10 +98,8 @@ button{cursor:pointer}
 .top-in{min-height:var(--top-h);gap:var(--space-2)}
 .brand-mark{width:34px;height:34px;border-radius:10px;object-fit:cover;background:var(--brand-surface-raised);flex:none}
 .brand{font-family:var(--brand-font-heading);font-size:var(--text-sm);text-transform:uppercase;letter-spacing:var(--track-head);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.icon-btn{display:grid;place-items:center;width:var(--tap);height:var(--tap);border:1px solid var(--glass-border);border-radius:var(--radius-full);background:var(--glass);color:var(--brand-text);font-size:1.15rem}
-.icon-btn:active{transform:scale(.94)}
 /* The venue's state as one chip: dot, word. Tap to change. */
-.vstate{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:0 12px;border:1px solid var(--glass-border);border-radius:var(--radius-full);background:var(--glass);color:var(--brand-text);font-size:var(--text-sm);white-space:nowrap}
+.vstate{display:inline-flex;align-items:center;gap:8px;min-height:var(--tap);padding:0 12px;border:1px solid var(--glass-border);border-radius:var(--radius-full);background:var(--glass);color:var(--brand-text);font-size:var(--text-sm);white-space:nowrap}
 .vstate .dot{width:9px;height:9px;border-radius:var(--radius-full);background:var(--brand-text-muted)}
 .vstate.open .dot{background:var(--st-DELIVERED);box-shadow:0 0 0 3px color-mix(in srgb,var(--st-DELIVERED) 25%,transparent)}
 .vstate.busy .dot{background:var(--st-PENDING)}
@@ -134,12 +132,6 @@ button{cursor:pointer}
 .stat small{display:block;font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--brand-text-muted);margin-bottom:4px}
 .stat b{font-family:var(--font-mono);font-size:var(--text-xl);font-weight:var(--weight-semibold);font-variant-numeric:tabular-nums;color:var(--brand-text)}
 .stat.warn b{color:var(--st-PENDING)}
-/* Segmented control: live / history, this week / month. */
-.seg{display:flex;gap:6px;padding:4px;border-radius:var(--radius-full);background:var(--glass);border:1px solid var(--glass-border);margin-bottom:var(--space-3)}
-.seg-b{flex:1;min-height:36px;border:0;border-radius:var(--radius-full);background:none;color:var(--brand-text-muted);font-size:var(--text-sm);font-weight:var(--weight-medium);
-  display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
-.seg-b.on{background-color:var(--brand-primary);color:var(--brand-on-primary)}
-.seg-b .n{font-family:var(--font-mono);font-size:var(--text-xs)}
 /* The search field, the console's one text field that is always there. */
 .srch{display:flex;align-items:center;gap:var(--space-2);min-height:var(--tap);padding:0 var(--space-3);border-radius:var(--radius-full);
   background:var(--glass-strong);border:1px solid var(--glass-border);color:var(--brand-text-muted);margin-bottom:var(--space-3)}
@@ -162,11 +154,6 @@ button{cursor:pointer}
 .orow .items{grid-column:1/-1;font-size:var(--text-sm);color:var(--brand-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .orow .go{grid-column:1/-1;display:flex;gap:8px;margin-top:2px}
 /* The one next step is a full gold button; the rest are quiet. */
-.act{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:0 14px;border-radius:var(--radius-btn);border:1px solid var(--glass-border);background:var(--glass);color:var(--brand-text);font-size:var(--text-sm);font-weight:var(--weight-medium);white-space:nowrap}
-.act.pri{flex:1;border:0;background-color:var(--brand-primary);color:var(--brand-on-primary);font-weight:var(--weight-bold);letter-spacing:.04em}
-.act.danger{color:var(--st-REJECTED);border-color:color-mix(in srgb,var(--st-REJECTED) 40%,transparent)}
-.act .ti{font-size:16px}
-.act:active{transform:scale(.97)}
 
 /* ── lists and rows ───────────────────────────────────────────────────────── */
 /* minmax(0,1fr), not the implicit `auto` track: an auto track grows to a row's
@@ -174,20 +161,6 @@ button{cursor:pointer}
    a 390px phone (measured 2026-09-19), which zoomed the whole console out. */
 .rows{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-2)}
 .rows>*{min-width:0}
-.rowc{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:56px;padding:10px 14px;border:1px solid var(--glass-border);border-radius:var(--radius-card);
-  background:var(--glass);color:var(--brand-text);text-align:left;font:inherit;text-decoration:none}
-.rowc .ti{font-size:20px;color:var(--brand-primary);flex:none}
-.rowc .t{flex:1;min-width:0}
-.rowc .t b{display:block;font-weight:var(--weight-medium);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rowc .t small{display:block;color:var(--brand-text-muted);font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rowc .chev{color:var(--brand-text-muted);font-size:18px}
-.rowc .thumb{width:52px;height:52px;border-radius:10px;object-fit:cover;background:var(--brand-surface-raised);flex:none}
-.rowc.off{opacity:.6}
-.rowc .pill{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:var(--radius-full);border:1px solid var(--glass-border);color:var(--brand-text-muted);white-space:nowrap}
-.rowc .pill.ok{color:var(--st-DELIVERED);border-color:color-mix(in srgb,var(--st-DELIVERED) 40%,transparent)}
-.rowc .pill.warn{color:var(--st-PENDING);border-color:color-mix(in srgb,var(--st-PENDING) 40%,transparent)}
-.rowc .pill.bad{color:var(--st-REJECTED);border-color:color-mix(in srgb,var(--st-REJECTED) 40%,transparent)}
-.rowc .money{font-weight:var(--weight-semibold)}
 /* A group of rows under a mono heading, like a settings page. */
 .group{margin-bottom:var(--space-6)}
 .group > .eyebrow{margin-bottom:var(--space-2)}
@@ -221,23 +194,10 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 .grid2>*,.grid3>*{min-width:0}
 input,textarea,select{min-width:0;box-sizing:border-box}
 .sheet-in{overflow-x:hidden}
-.btn{display:flex;align-items:center;justify-content:center;gap:var(--space-2);width:100%;min-height:50px;padding:10px var(--space-5);border:0;border-radius:var(--radius-full);
-     background-color:var(--brand-primary);
-     color:var(--brand-on-primary);font-weight:var(--weight-bold);font-size:var(--text-sm);letter-spacing:.08em;text-transform:uppercase;text-decoration:none;
-     transition:transform var(--dur) var(--ease-spring)}
-.btn.ghost{background-image:none;background-color:var(--glass);color:var(--brand-text);border:1px solid var(--accent-line);box-shadow:none}
-.btn.danger{background-image:none;background-color:transparent;color:var(--st-REJECTED);border:1px solid color-mix(in srgb,var(--st-REJECTED) 45%,transparent);box-shadow:none}
-.btn[disabled]{background-image:none;background-color:var(--brand-border);color:var(--brand-text-muted);cursor:not-allowed;box-shadow:none}
-.btn:active{transform:scale(.97);transition-duration:.08s}
-.btn .ti{font-size:18px}
 .btn-row{display:flex;gap:var(--space-2);margin-top:var(--space-3)}
-.btn-row .btn{flex:1}
-.err{display:flex;align-items:center;gap:8px;color:var(--st-REJECTED);font-size:var(--text-sm);margin-top:var(--space-2)}
 .ok{color:var(--st-DELIVERED)}
 .hint{font-size:var(--text-xs);color:var(--brand-text-muted);margin:6px 0 0}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 12px;border-radius:var(--radius-full);border:1px solid var(--glass-border);background:var(--glass);color:var(--brand-text);font-size:var(--text-sm)}
-.chip.on{background-color:var(--brand-primary);border-color:var(--brand-primary);color:var(--brand-on-primary);font-weight:var(--weight-medium)}
 .swatch{width:36px;height:36px;border-radius:10px;border:1px solid var(--glass-border);flex:none}
 input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .code{font-family:var(--font-mono);font-size:var(--text-lg);letter-spacing:.2em;padding:10px 14px;border-radius:var(--radius-btn);background:var(--brand-surface-raised);border:1px dashed var(--accent-line);text-align:center;word-break:break-all}
@@ -270,25 +230,8 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .line .n{flex:1}
 .line small{display:block;color:var(--brand-text-muted);font-size:var(--text-xs)}
 .line.total{font-weight:var(--weight-bold);font-size:var(--text-base);border:0;padding-top:12px}
-.choice{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:52px;padding:0 var(--space-4);border:1px solid var(--glass-border);border-radius:var(--radius-card);background:var(--glass);color:var(--brand-text);text-align:left;margin-bottom:8px}
-.choice .ti{font-size:18px;color:var(--brand-primary)}
-.choice .t{flex:1}
-.choice.on{border-color:var(--brand-primary);background:color-mix(in srgb,var(--brand-primary) 12%,var(--glass))}
-.choice .ck{opacity:0;color:var(--brand-primary)}
-.choice.on .ck{opacity:1}
 
 /* ── states ───────────────────────────────────────────────────────────────── */
-.empty{text-align:center;padding:var(--space-12) var(--space-5);color:var(--brand-text-muted)}
-.empty .ti{font-size:2rem;display:block;margin:0 auto var(--space-2);color:var(--brand-primary)}
-.empty b{display:block;font-family:var(--brand-font-heading);font-size:var(--text-lg);font-weight:var(--weight-normal);color:var(--brand-text);margin-bottom:var(--space-2)}
-.skel{position:relative;overflow:hidden;background:var(--glass);border-radius:var(--radius-card)}
-.skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:color-mix(in srgb,var(--brand-surface) 60%,transparent);animation:sweep 1.4s var(--ease-tide) infinite}
-.skel-row{height:84px;margin-bottom:8px}
-.skel-inline{display:inline-block;width:3em;height:1em;vertical-align:middle;border-radius:4px}
-.toast{position:fixed;left:var(--space-4);right:var(--space-4);bottom:calc(var(--nav-h) + var(--space-4));z-index:var(--z-toast);
-  background:color-mix(in srgb,var(--brand-surface) 92%,transparent);color:var(--brand-text);border:1px solid var(--accent-line);
-  padding:var(--space-3) var(--space-4);border-radius:var(--radius-card);box-shadow:var(--elevation-3);font-size:var(--text-sm);max-width:688px;margin:0 auto;
-  opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity var(--dur-fast) var(--ease),transform var(--dur-fast) var(--ease)}
 .login{max-width:360px;margin:12vh auto 0;padding:var(--space-6);border-radius:var(--radius-xl);background:var(--glass-strong);border:1px solid var(--glass-border)}
 .login h1{font-size:var(--text-3xl);text-transform:uppercase;letter-spacing:var(--track-head);text-align:center}
 .login p{text-align:center;color:var(--brand-text-muted);margin-bottom:var(--space-4)}
@@ -312,7 +255,7 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 @media (prefers-reduced-motion:reduce){
   .screen,.sheet.show .sheet-in > *,.orow.fresh,.tab-n.pop{animation:none;opacity:1;transform:none}
   .sheet,.scrim,.nav{transition-duration:.01ms!important}
-  .sheet::before,.steps i.now,.skel::after{animation:none}
+  .sheet::before,.steps i.now{animation:none}
 }
 
 /* ── the inbox thread: customer left in glass, the venue right in ink ── */
@@ -324,7 +267,6 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .msg.me small{color:color-mix(in srgb,var(--brand-bg) 70%,transparent)}
 .reply-row{display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-2)}
 .reply-row input{flex:1;min-width:0}
-.chip.mono{font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:0}
 .code.small{font-size:var(--text-sm);letter-spacing:0}
 
 /* folds, small stats, and the one green line */
@@ -340,7 +282,6 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .ig-out{display:block;white-space:normal;margin-top:2px}
 .ig-out.ok{color:var(--ok,#2f8f6b)}
 .ig-out.err{color:var(--danger,#b3261e)}
-.rowc .act+.act{margin-left:4px}
 
 /* ── 2026-09-19 design pass: clearer hierarchy, one way to close, tiles ── */
 /* the sheet's close button: swipe and Escape stay, but a visible × is what a
@@ -362,13 +303,6 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .orow .st .dot{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}
 .orow[data-st="PENDING"] .st .dot{animation:pulse 1.2s ease-in-out infinite}
 /* tiles: the More screen as a grid a thumb can scan, two across */
-.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2)}
-.tile{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:96px;padding:12px 12px 10px;border-radius:var(--radius-card);border:1px solid var(--glass-border);background:var(--glass);color:var(--brand-text);text-align:left;transition:transform var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
-.tile:active{transform:scale(.97)}
-.tile .tile-ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb,var(--brand-primary) 14%,transparent);color:var(--brand-primary)}
-.tile .tile-ic .ti{font-size:19px}
-.tile b{font-weight:var(--weight-medium);font-size:var(--text-sm);line-height:1.2;margin-top:auto}
-.tile small{color:var(--brand-text-muted);font-size:var(--text-xs);line-height:1.2}
 /* an integration as a stacked card: name and state, the line, the proof, then the two actions */
 .igrow{padding:12px 14px;border-radius:var(--radius-card);border:1px solid var(--glass-border);background:var(--glass);display:flex;flex-direction:column;gap:6px}
 .igrow.on{background:var(--glass-strong)}
@@ -377,20 +311,15 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .igrow-h b{flex:1;font-weight:var(--weight-medium)}
 .igrow .ig-line,.igrow .ig-out{display:block;font-size:var(--text-xs);color:var(--brand-text-muted);line-height:1.35;white-space:normal}
 .igrow-a{display:flex;gap:8px;margin-top:4px}
-.igrow-a .act{flex:1}
 /* login: a mark above the name, the line under it */
 .login-mark{width:64px;height:64px;margin:0 auto var(--space-3);border-radius:50%;display:grid;place-items:center;background-color:var(--brand-primary)}
 .login-mark span{font-family:var(--brand-font-heading);font-size:34px;color:var(--brand-on-primary);font-style:italic;line-height:1}
 .login-line{font-size:var(--text-sm)}
 .btn-row.compact{justify-content:flex-end;flex-wrap:wrap}
-.btn-row.compact .act{flex:none}
 
 /* menu filters: chips that scroll sideways, a sort in the same row */
 .chips.filters{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-bottom:var(--space-2);-webkit-overflow-scrolling:touch}
 .chips.filters::-webkit-scrollbar{display:none}
-.chips.filters .chip{flex:none;white-space:nowrap}
-.chip.sortsel{appearance:none;-webkit-appearance:none;padding-right:26px;background-image:none}
-.rowc input.inline{width:100%;min-height:36px;padding:4px 8px;font-size:var(--text-sm)}
 
 /* the recipe editor: one line per supply, a stepper, the sums */
 .rc-line{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--glass-border)}
@@ -399,19 +328,69 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .rc-line .t b{display:block;font-size:var(--text-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rc-line .t small{display:block;color:var(--brand-text-muted);font-size:var(--text-xs)}
 .rc-qty{display:inline-flex;align-items:center;gap:4px}
-.rc-qty input{width:64px;min-height:36px;padding:4px 6px;text-align:right;font-size:var(--text-sm)}
-.rc-qty .act{min-height:36px;padding:0 10px}
 .rc-sum{margin-top:var(--space-3)}
-.rowc.pick{cursor:pointer}
-.rowc.pick input{width:18px;height:18px;min-height:0;flex:none;accent-color:var(--brand-primary)}
 .taste-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--glass-border)}
 .taste-ax{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-sm)}
 .taste-ax .ti{color:var(--brand-primary);font-size:18px}
 .taste-lv{display:inline-flex;gap:4px}
-.taste-lv .chip{min-height:32px;padding:0 10px;font-size:var(--text-xs)}
 
 /* ── storefront preview ────────────────────────────────────────────────────── */
 .phone{width:min(320px,100%);aspect-ratio:393/844;border-radius:46px;background:var(--brand-text);padding:10px;margin-inline:auto}
 .phone-screen{width:100%;height:100%;border-radius:36px;overflow:hidden;background:var(--brand-surface)}
 .preview-frame{width:100%;height:100%;border:0;display:block}
 .preview-row{display:flex;gap:var(--space-3);flex-wrap:wrap;justify-content:center;margin-top:var(--space-4)}
+
+/* ── the design system inside the console (/lib/ui) ─────────────────────────
+   Only what the components cannot know: where the bottom bar is, how buttons
+   share a row, and the few console layouts built from ui rows. Nothing here
+   copies a .ui-* rule to change its look. */
+:root{--ui-toast-bottom:var(--nav-h)}
+.btn-row .ui-btn,.preview-row .ui-btn,.igrow-a .ui-btn{flex:1}
+.btn-row.compact .ui-btn{flex:none}
+.orow .go .ui-btn.pri{flex:1}
+.orow .go{align-items:center}
+.login .ui-field{margin-top:var(--space-3);text-align:left}
+.login .ui-btn{margin-top:var(--space-4)}
+.langs .ui-chip{min-width:var(--tap)}
+/* search: the rounded box is the .srch; the input inside it is bare */
+.srch .ui-inputrow{flex:1;min-width:0}
+.srch .ui-input{border:0;background:none;box-shadow:none;min-height:0;padding:0}
+/* rows: the console's leading icon, thumbnail, chevron, the switched-off row */
+.ui-row .ui-row-lead .ti{font-size:20px;color:var(--brand-primary)}
+.ui-row .thumb{width:52px;height:52px;border-radius:10px;object-fit:cover;background:var(--brand-surface-raised);flex:none;display:block}
+.ui-row .chev{color:var(--brand-text-muted);font-size:18px}
+.ui-row.off{opacity:.6}
+.ui-row-trail{display:flex;align-items:center;gap:var(--space-1)}
+.ui-row-trail .ui-btn{flex:none}
+.ui-row .ui-row-sub .ui-field,.ui-row .ui-row-sub .gauge{margin-top:var(--space-2)}
+.rows .ui-row+.ui-row{margin-top:0}
+/* the More grid: a tile is a ui row stood on its end */
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2)}
+.ui-row.tile{flex-direction:column;align-items:flex-start;gap:6px;min-height:96px;padding:12px 12px 10px}
+.ui-row.tile .ui-row-lead{margin:0}
+.ui-row.tile .tile-ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb,var(--brand-primary) 14%,transparent);color:var(--brand-primary)}
+.ui-row.tile .tile-ic .ti{font-size:19px;color:inherit}
+.ui-row.tile .ui-row-body{margin-top:auto}
+.ui-row.tile .ui-row-title{font-weight:var(--weight-medium);font-size:var(--text-sm);line-height:1.2}
+.ui-row.tile .ui-row-sub{font-size:var(--text-xs);line-height:1.2}
+@media (min-width:720px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* chip rows that scroll sideways (menu filters) */
+.chips.filters .ui-chip{flex:none;white-space:nowrap}
+/* the recipe line's quantity, the taste levels */
+.rc-qty .ui-inputrow{width:auto}
+.rc-qty .ui-input{width:72px;text-align:right}
+.taste-lv{flex-wrap:wrap}
+/* a switch with its hint below (features), a switch that picks a row (recipe book) */
+.feat{padding:var(--space-1) 0}
+.feat .hint{margin:0 0 var(--space-2) 50px}
+.switch.pick{padding:6px 0;border-bottom:1px solid var(--glass-border)}
+.ui-field+.ui-field,.ui-field+.switch,.switch+.ui-field{margin-top:var(--space-2)}
+.grid2 .ui-field,.grid3 .ui-field{margin-top:var(--space-2)}
+/* the queue row's actions wrap on a phone instead of leaving the card */
+.orow .go{flex-wrap:wrap}
+.orow .go .ui-btn{flex:1 1 auto;white-space:nowrap;padding-inline:var(--space-3)}
+.orow .go .ui-btn.pri{flex:2 1 auto}
+.vstate.ui-chip{padding-inline:12px;gap:8px;font-size:var(--text-sm);font-weight:var(--weight-medium)}
+.ui-row-sub small,.ui-row-sub>.mono{display:block}
+.gauge{display:block}
+.sortsel{margin-bottom:var(--space-3)}

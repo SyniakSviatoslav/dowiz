@@ -9,10 +9,21 @@
 //
 // What is hidden is what `actionsFor` says the caps do not allow; the server
 // still refuses it (`may_void`, the stage rule), and its words are shown.
-import { esc, money, actionsFor, owed, REASONS, reasonWord, canTransfer, transferTargets, canMoveSitting } from './logic.js';
+import { money, actionsFor, owed, REASONS, reasonWord, canTransfer, transferTargets, canMoveSitting } from './logic.js';
 import { renderGuestBar, answerGuest } from './guest.js';
+import { ui, k, act, backBar, amt, pickChips } from './parts.js';
 
 const CHANGED = 'changed while you were editing';
+
+/// One line's controls: quantity, remove, comp -- what the caps allow.
+function lineActs(can, i, qty) {
+  return [
+    can.qty ? ui.iconButton({ icon: 'minus', ariaLabel: k('less'), disabled: qty <= 1, attrs: act('qty', { line: i, q: qty - 1 }, 'round.less') })
+      + ui.iconButton({ icon: 'plus', ariaLabel: k('more'), attrs: act('qty', { line: i, q: qty + 1 }, 'round.more') }) : '',
+    can.remove ? ui.button({ icon: 'trash', label: k('remove'), attrs: act('ask', { op: 'remove', line: i }, 'round.remove') }) : '',
+    can.comp ? ui.button({ icon: 'sparkles', label: k('comp'), attrs: act('ask', { op: 'comp', line: i }, 'round.comp') }) : '',
+  ].join('');
+}
 
 /// The sheet's HTML. `c` is the app context (see app.js `ctx`).
 export function renderRound(c, round) {
@@ -24,49 +35,46 @@ export function renderRound(c, round) {
     const qty = Number(it.quantity || 0);
     const amount = Number(it.unit_price || 0) * qty;
     const comped = it.comped === true;
-    const acts = comped ? `<span class="chip">${esc(t('comped'))}</span>` : [
-      can.qty ? `<button class="btn sq" data-act="qty" data-line="${i}" data-q="${qty - 1}" aria-label="${esc(t('less'))}" ${qty <= 1 ? 'disabled' : ''}>−</button>
-                 <button class="btn sq" data-act="qty" data-line="${i}" data-q="${qty + 1}" aria-label="${esc(t('more'))}">+</button>` : '',
-      can.remove ? `<button class="btn" data-act="ask" data-op="remove" data-line="${i}">${esc(t('remove'))}</button>` : '',
-      can.comp ? `<button class="btn" data-act="ask" data-op="comp" data-line="${i}">${esc(t('comp'))}</button>` : '',
-    ].join('');
+    const acts = comped ? ui.badge({ tone: 'success', label: k('comped') }) : lineActs(can, i, qty);
     const asking = S.ask && S.ask.line === i ? reasonPanel(c) : '';
-    return `<li class="line${comped ? ' is-comped' : ''}">
-      <div class="line-main"><span class="qty">${qty}×</span><span class="name">${esc(it.name || it.product_id || '')}</span><span class="amt">${money(amount, cur, loc)}</span></div>
+    return `<li class="line${comped ? ' is-comped' : ''}" data-tour="round.line">
+      <div class="line-main"><span class="qty">${qty}×</span><span class="name">${ui.esc(it.name || it.product_id || '')}</span>${amt(money(amount, cur, loc), { cls: 'amt' })}</div>
       ${acts ? `<div class="line-acts">${acts}</div>` : ''}${asking}</li>`;
   }).join('');
   const due = owed(round);
+  const sitting = c.sitting();
   return `
-    <div class="bar"><button class="btn" data-act="back">← ${esc(t('back'))}</button>
-      <span class="status st-${esc(round.status)}">${esc(c.statusWord(round.status))}</span></div>
-    <h2>${esc(t('table'))} ${esc(c.tableOf(round) || '—')}</h2>
-    <ul class="lines">${lines || `<li class="muted">${esc(t('noLines'))}</li>`}</ul>
-    <dl class="sums">
-      <dt>${esc(t('subtotal'))}</dt><dd>${money(round.subtotal || 0, cur, loc)}</dd>
-      ${round.discount ? `<dt>${esc(t('discount'))}</dt><dd>−${money(round.discount, cur, loc)}</dd>` : ''}
-      <dt>${esc(t('total'))}</dt><dd>${money(round.total || 0, cur, loc)}</dd>
-      <dt>${esc(t('owed'))}</dt><dd class="owed">${round.payment_status === 'paid' ? esc(t('paidInFull')) : money(due, cur, loc)}</dd>
+    ${backBar(ui.status({ status: round.status, label: c.statusWord(round.status) }))}
+    <h2>${ui.esc(t('table'))} ${ui.esc(c.tableOf(round) || '—')}</h2>
+    <ul class="lines">${lines || `<li>${ui.emptyState({ icon: 'receipt', title: k('noLines') })}</li>`}</ul>
+    <dl class="sums" data-tour="round.sums">
+      <dt>${ui.esc(t('subtotal'))}</dt><dd>${amt(money(round.subtotal || 0, cur, loc))}</dd>
+      ${round.discount ? `<dt>${ui.esc(t('discount'))}</dt><dd>${amt(money(round.discount, cur, loc), { sign: '-' })}</dd>` : ''}
+      <dt>${ui.esc(t('total'))}</dt><dd>${amt(money(round.total || 0, cur, loc))}</dd>
+      <dt>${ui.esc(t('owed'))}</dt><dd class="owed">${round.payment_status === 'paid' ? ui.badge({ tone: 'success', icon: 'circle-check', label: k('paidInFull') }) : amt(money(due, cur, loc), { size: 'lg', strong: true })}</dd>
     </dl>
     ${renderGuestBar(c, round)}
     <div class="acts">
-      ${can.add ? `<button class="cta" data-act="add">${esc(t('addItem'))}</button>` : ''}
-      ${can.pay ? `<button class="cta" data-act="pay">${esc(t('take'))}</button>` : ''}
-      ${items.length > 1 && canTransfer(S.caps, round) && transferTargets(S.caps, S.sittings, round.id).length ? `<button class="btn" data-act="transfer">${esc(t('moveLines'))}</button>` : ''}
-      ${c.sitting() && canMoveSitting(S.caps, c.sitting()) ? `<button class="btn" data-act="moveSit">${esc(t('moveSitting'))}</button>` : ''}
+      ${can.add ? ui.button({ variant: can.pay ? 'secondary' : 'primary', size: 'lg', block: true, icon: 'plus', label: k('addItem'), attrs: act('add', {}, 'round.add') }) : ''}
+      ${can.pay ? ui.button({ variant: 'primary', size: 'lg', block: true, icon: 'cash', label: k('take'), attrs: act('pay', {}, 'round.pay') }) : ''}
+      ${items.length > 1 && canTransfer(S.caps, round) && transferTargets(S.caps, S.sittings, round.id).length ? ui.button({ block: true, icon: 'arrows-sort', label: k('moveLines'), attrs: act('transfer', {}, 'round.transfer') }) : ''}
+      ${sitting && canMoveSitting(S.caps, sitting) ? ui.button({ block: true, icon: 'map-pin', label: k('moveSitting'), attrs: act('moveSit', {}, 'round.moveSitting') }) : ''}
     </div>
-    ${can.table ? `<form class="row-form" data-form="table"><label>${esc(t('moveTable'))}
-      <input name="table" required maxlength="24" autocomplete="off" inputmode="text"></label>
-      <button class="btn" type="submit">${esc(t('move'))}</button></form>` : ''}`;
+    ${can.table ? `<form class="row-form" data-form="table">${ui.inputRow({ label: k('moveTable'), placeholder: k('moveTable'),
+      attrs: { name: 'table', required: true, maxlength: 24, inputmode: 'text', data: { tour: 'round.tableField' } },
+      action: ui.button({ type: 'submit', label: k('move'), attrs: { data: { tour: 'round.tableMove' } } }) })}</form>` : ''}`;
 }
 
-/// The closed set of reasons, as buttons; `other` opens a text field.
+/// The closed set of reasons, as chips; `other` opens a text field.
 function reasonPanel(c) {
   const { t, S } = c;
-  const btns = REASONS.map(r => `<button class="btn${S.ask.kind === r ? ' on' : ''}" data-act="reason" data-r="${r}">${esc(t('reason_' + r))}</button>`).join('');
+  const chips = pickChips('reason', t('reason'), REASONS, S.ask.kind, r => t('reason_' + r), 'round.reason', 'r');
   const other = S.ask.kind === 'other'
-    ? `<form class="row-form" data-form="other"><input name="text" maxlength="140" required placeholder="${esc(t('otherText'))}"><button class="btn" type="submit">${esc(t('send'))}</button></form>` : '';
-  return `<div class="ask" role="group" aria-label="${esc(t('reason'))}"><p>${esc(t(S.ask.op === 'comp' ? 'whyComp' : 'whyRemove'))}</p><div class="chips">${btns}</div>${other}
-    <button class="btn ghost" data-act="unask">${esc(t('cancel'))}</button></div>`;
+    ? `<form class="row-form" data-form="other">${ui.inputRow({ label: k('otherText'), placeholder: k('otherText'),
+        attrs: { name: 'text', maxlength: 140, required: true, data: { tour: 'round.reasonText' } },
+        action: ui.button({ type: 'submit', variant: 'primary', icon: 'send', label: k('send') }) })}</form>` : '';
+  return `<div class="ask" role="group" aria-label="${ui.esc(t('reason'))}"><p>${ui.esc(t(S.ask.op === 'comp' ? 'whyComp' : 'whyRemove'))}</p>${chips}${other}
+    ${ui.button({ variant: 'ghost', icon: 'x', label: k('cancel'), attrs: act('unask') })}</div>`;
 }
 
 /// Send one amendment. Answers true when the round moved, 'queued' when the

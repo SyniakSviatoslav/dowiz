@@ -25,6 +25,7 @@
 import { state } from '/store/state.js';
 import { t } from '/store/i18n.js';
 import { $, esc, icon, sheet, closeSheet, toast, loadMapLib } from '/store/ui.js';
+import { ui, k, cta, ghost } from '/store/parts.js';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/reverse';
 const TILES = 'https://tiles.openfreemap.org/styles/liberty';
@@ -143,14 +144,14 @@ export function pickOnMap({ initial = null } = {}){
           ${venue ? `<div class="hud" id="hud" aria-live="polite">
             <span class="hud-arrow" id="hudArrow">${icon('navigation')}</span>
             <span class="hud-t"><b id="hudDist">—</b><small><span id="hudWind"></span> · <span data-t="fromVenue"></span></small></span>
-            <button type="button" class="hud-btn" id="hudHeading" aria-pressed="false" data-t-attr="title:headingOn aria-label:headingOn">${icon('compass')}</button>
+            ${ui.iconButton({ id: 'hudHeading', icon: 'compass', ariaLabel: k('headingOn'), pressed: false, variant: 'plain', cls: 'hud-btn' })}
           </div>` : ''}
         </div>
         <div class="pickrow">
-          <button type="button" class="btn btn-ghost" id="myLoc">${icon('current-location')}<span data-t="useMyLocation"></span></button>
+          ${ghost({ id: 'myLoc', icon: 'current-location', label: k('useMyLocation'), tour: 'map.myLocation' })}
         </div>
         <p class="geo" id="pickLine">${esc(found.line)}</p>
-        <button class="btn" id="pickOk"><span data-t="confirmPin"></span>${icon('check')}</button>
+        ${cta({ id: 'pickOk', label: k('confirmPin'), iconEnd: 'check', tour: 'map.confirm' })}
       </div>`, { name: 'map' });
 
     const lineEl = $('#pickLine');

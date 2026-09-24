@@ -36,46 +36,49 @@
 
 <link rel="stylesheet" href="/lib/tokens.css">
 <link rel="stylesheet" href="/lib/components.css">
+<!-- The design system's component layer (/lib/ui). After the shared tokens and
+     rules, before this surface's own sheet, which only tunes its knobs. -->
+<link rel="stylesheet" href="/lib/ui/ui.css">
 <link rel="stylesheet" href="/courier/courier.css">
 </head>
 <body>
 <div id="map"></div>
 <canvas id="sea" aria-hidden="true"></canvas>
 <div class="hud">
-  <span class="tag" id="shiftTag"><span class="dot" aria-hidden="true"></span><span id="shiftText" data-t="offline"></span></span>
+  <span class="ui-chip ui-chip--float ui-chip--dot" id="shiftTag" data-tour="hud.shift"><span class="ui-dot" aria-hidden="true"></span><span id="shiftText" data-t="offline"></span></span>
   <span class="sp"></span>
-  <span class="tag" id="gpsTag" hidden><i class="ti ti-gps i" aria-hidden="true"></i><span id="gpsText">GPS</span></span>
+  <span class="ui-chip ui-chip--float" id="gpsTag" data-tour="hud.gps" hidden><i class="ti ti-gps ui-i" aria-hidden="true"></i><span id="gpsText">GPS</span></span>
   <!-- UNSENT TAPS, COUNTED, IN THE ONE PLACE THAT IS ON SCREEN IN EVERY STATE.
        A tap that is queued must never look like a tap that landed, and the
        courier rules forbid a second main action, so this is a tag and not a
        button: it says how many taps the phone is still holding and it goes
        away by itself when they land. -->
-  <span class="tag warn" id="outboxTag" role="status" aria-live="polite" hidden>
-    <i class="ti ti-cloud-upload i" aria-hidden="true"></i><span id="outboxText"></span></span>
+  <span class="ui-chip ui-chip--float ui-chip--warning" id="outboxTag" data-tour="hud.outbox" role="status" aria-live="polite" hidden>
+    <i class="ti ti-cloud-upload ui-i" aria-hidden="true"></i><span id="outboxText"></span></span>
   <!-- The microphone sits in the HUD, reachable in EVERY state including
        mid-delivery, because that is exactly when a courier's hands are busy.
        Hidden entirely where the browser has no recogniser -- a button that
        cannot work is worse than no button. -->
-  <button class="icon-btn" id="mic" type="button" aria-pressed="false"
+  <button class="ui-iconbtn" id="mic" data-tour="hud.mic" type="button" aria-pressed="false"
           data-t-attr="aria-label:sayCommand title:voice" hidden>
-    <i class="ti ti-microphone" aria-hidden="true"></i></button>
-  <button class="icon-btn lang" id="langBtn" type="button" data-t-attr="aria-label:language title:language">SQ</button>
-  <button class="icon-btn" id="themeBtn" type="button" data-t-attr="aria-label:theme title:theme"><i class="ti ti-sun-moon" aria-hidden="true"></i></button>
+    <i class="ti ti-microphone ui-i" aria-hidden="true"></i></button>
+  <button class="ui-iconbtn" id="langBtn" type="button" data-t-attr="aria-label:language title:language">SQ</button>
+  <button class="ui-iconbtn" id="themeBtn" type="button" data-t-attr="aria-label:theme title:theme"><i class="ti ti-sun-moon ui-i" aria-hidden="true"></i></button>
 </div>
 <!-- What was heard and what is about to happen. Above the sheet so it is
      readable at a glance without opening anything. -->
 <div class="vsay" id="vsay" role="status" aria-live="polite" hidden></div>
 <div class="vconfirm" id="vconfirm" hidden>
-  <button class="cta go" id="vyes" type="button"><i class="ti ti-check" aria-hidden="true"></i><span data-t="yes"></span></button>
-  <button class="ghost" id="vno" type="button"><i class="ti ti-x" aria-hidden="true"></i><span data-t="no"></span></button>
+  <button class="ui-btn ui-btn--success ui-btn--lg" id="vyes" data-tour="voice.yes" type="button"><i class="ti ti-check ui-i" aria-hidden="true"></i><span data-t="yes"></span></button>
+  <button class="ui-btn ui-btn--secondary ui-btn--lg" id="vno" type="button"><i class="ti ti-x ui-i" aria-hidden="true"></i><span data-t="no"></span></button>
 </div>
-<section class="sheet" id="sheet" aria-label="dowiz">
+<section class="sheet" id="sheet" data-tour="hud.sheet" aria-label="dowiz">
   <div class="grab" aria-hidden="true"></div>
   <div class="sheet-in" id="app" aria-live="polite"></div>
 </section>
 <!-- aria-live: this is the only notice of a failed action for a courier
      who is looking at the road, not the screen. -->
-<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+<div class="ui-toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <script type="module" src="/courier/app.js"></script>
 </body>
 </html>

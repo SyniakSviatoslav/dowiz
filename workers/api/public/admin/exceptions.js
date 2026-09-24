@@ -13,6 +13,7 @@
 import { $, esc, icon, t, api, post, toast, sheet, money, store, clock, day, busy } from '/admin/core.js';
 import { T, LANGS, intlLocale } from '/admin/i18n.js';
 import * as Money from '/lib/money.js';
+import { btn, field, chips, loading, rowDiv } from '/admin/parts.js';
 
 const WORDS = {
   sq: { exceptions: 'Përjashtimet', exHint: 'Çdo anulim pas kuzhinës, dhuratë, rimbursim, pagesë nga arka dhe diferencë arke, me emrin e kujt e bëri. Vetëm lexim.', exDay: '24 orët e fundit', exTill: 'Periudha e arkës', exNone: 'Asnjë përjashtim në këtë periudhë.', exGroups: 'Sipas llojit dhe arsyes', exRows: 'Ngjarjet', exBy: 'nga', exThreshold: 'Njoftim në Telegram pas', exLate: 'Ndryshim i vonë pas (min)', exNoChat: 'Asnjë bisedë Telegram: njoftimet nuk shkojnë askund. Vendoseni te Njoftimet.', exChatOk: 'Njoftimet shkojnë në bisedën tuaj Telegram.', exOff: '0 = pa njoftime', legs: 'Portofoli kundrejt pagesave', legsOk: 'Çdo pagesë me portofol ka zbritjen e saj.', legsMissing: 'Zbritje që mungojnë', legsCheck: 'Kontrollo riparimin', legsApply: 'Shkruaj zbritjet që mungojnë', legsWould: 'Do të shkruheshin', legsRefused: 'Të refuzuara',
@@ -32,27 +33,27 @@ const amount = (n, cur) => esc(cur ? Money.formatter({ base: cur, display: cur, 
 const when = ms => `${esc(day(ms))} ${esc(clock(ms))}`;
 
 export async function open(period = ''){
-  sheet(`${head}<div id="exBody"><div class="skel skel-row"></div><div class="skel skel-row"></div></div>`, { name: 'exceptions', keepScroll: true });
+  sheet(`${head}<div id="exBody">${loading(2)}</div>`, { name: 'exceptions', keepScroll: true });
   const q = '?location_id=' + encodeURIComponent(store.loc || '') + (period ? '&period=' + period : '');
   let d;
   try { d = await api('/owner/exceptions' + q); } catch (e) { return fail(e); }
   const rows = d.rows || [], groups = d.groups || [];
-  const tabs = `<div class="chips"><button class="chip ${period ? '' : 'on'}" data-period="" data-t="exDay"></button><button class="chip ${period ? 'on' : ''}" data-period="till" data-t="exTill"></button></div>`;
+  const tabs = chips({ values: [{ value: '', key: 'exDay' }, { value: 'till', key: 'exTill' }], value: period ? 'till' : '', attr: 'period', tour: 'exceptions.period' });
   // THE OWNER'S TWO NUMBERS, editable where they are read (they were only
   // printed: `alerts.exceptions.*` had no control anywhere in the console).
-  const facts = `<div class="grid2"><div><label for="ex-thr" data-t="exThreshold"></label><input id="ex-thr" inputmode="numeric" value="${esc(d.threshold)}"><small class="muted" data-t="exOff"></small></div>
-    <div><label for="ex-late" data-t="exLate"></label><input id="ex-late" inputmode="numeric" value="${esc(d.lateMinutes)}"></div></div>
-    <div class="btn-row"><button class="btn ghost" id="exSave">${icon('check')}<span data-t="save"></span></button></div>
+  const facts = `<div class="grid2">${field({ id: 'ex-thr', key: 'exThreshold', inputmode: 'numeric', value: d.threshold, hintKey: 'exOff', tour: 'exceptions.threshold' })}
+    ${field({ id: 'ex-late', key: 'exLate', inputmode: 'numeric', value: d.lateMinutes, tour: 'exceptions.late' })}</div>
+    <div class="btn-row">${btn({ id: 'exSave', icon: 'check', key: 'save', tour: 'exceptions.save' })}</div>
     <p class="${d.alertChat ? 'muted' : 'warn'} small" data-t="${d.alertChat ? 'exChatOk' : 'exNoChat'}"></p>`;
   const who = id => (d.names || {})[id] || id || '-';
-  const groupRows = groups.map(g => `<div class="rowc">${icon('alert-triangle')}<span class="t"><b>${esc(t('ex_' + g.kind))}</b><small>${esc(g.reason || '-')}</small></span>
-    <span class="mono">${esc(g.count)} · ${Object.entries(g.amount || {}).map(([c, n]) => amount(n, c)).join(' / ')}</span></div>`).join('');
-  const eventRows = rows.slice().reverse().map(r => `<div class="rowc">${icon('receipt')}<span class="t"><b>${esc(t('ex_' + r.kind))}</b>
-    <small class="mono">${when(r.at)} · ${esc(r.order_id || r.till_id || '-')} · ${esc(r.reason || '-')} · <span data-t="exBy"></span> ${esc(who(r.by))}</small></span>
-    <span class="mono">${amount(r.amount, r.currency)}</span></div>`).join('');
+  const groupRows = groups.map(g => rowDiv({ leading: icon('alert-triangle'), title: t('ex_' + g.kind), sub: esc(g.reason || '-'),
+    trailing: `<span class="mono">${esc(g.count)} · ${Object.entries(g.amount || {}).map(([c, n]) => amount(n, c)).join(' / ')}</span>` })).join('');
+  const eventRows = rows.slice().reverse().map(r => rowDiv({ leading: icon('receipt'), title: t('ex_' + r.kind),
+    sub: `<span class="mono">${when(r.at)} · ${esc(r.order_id || r.till_id || '-')} · ${esc(r.reason || '-')} · <span data-t="exBy">${esc(t('exBy'))}</span> ${esc(who(r.by))}</span>`,
+    trailing: `<span class="mono">${amount(r.amount, r.currency)}</span>` })).join('');
   const body = rows.length
-    ? `<section class="group mt-3"><p class="eyebrow" data-t="exGroups"></p><div class="rows">${groupRows}</div></section>
-       <section class="group mt-3"><p class="eyebrow" data-t="exRows"></p><div class="rows">${eventRows}</div></section>`
+    ? `<section class="group mt-3"><p class="eyebrow" data-t="exGroups"></p><div class="rows" data-tour="exceptions.groups">${groupRows}</div></section>
+       <section class="group mt-3"><p class="eyebrow" data-t="exRows"></p><div class="rows" data-tour="exceptions.rows">${eventRows}</div></section>`
     : `<p class="muted small mt-3" data-t="exNone"></p>`;
   sheet(`${head}<div id="exBody">${tabs}${facts}${body}<div id="exLegs"></div></div>`, { name: 'exceptions', keepScroll: true });
   for (const b of document.querySelectorAll('#exBody [data-period]')) b.onclick = () => open(b.dataset.period);
@@ -81,10 +82,11 @@ async function legs(){
   const au = a.audit || {}, missing = au.missing || [];
   const bad = missing.length + (au.mismatched || []).length + (au.orphans || []).length;
   $('#exLegs').innerHTML = `<section class="group mt-3"><p class="eyebrow">${esc(t('legs'))}</p>
-    ${a.holds ? `<p class="muted small">${esc(t('legsOk'))} (${esc((a.spends || []).length)})</p>` : `<div class="rows">${missing.map(l => `<div class="rowc">${icon('wallet')}<span class="t"><b>${esc(t('legsMissing'))}</b><small class="mono">${esc(l.order_id)} · ${esc(l.wallet)}</small></span><span class="mono">${amount(l.amount, l.currency)}</span></div>`).join('')}
-      ${[...(au.mismatched || []), ...(au.orphans || [])].map(x => `<div class="rowc">${icon('alert-triangle')}<span class="t"><small class="mono">${esc(x)}</small></span></div>`).join('')}</div>
+    ${a.holds ? `<p class="muted small" data-tour="exceptions.legs">${esc(t('legsOk'))} (${esc((a.spends || []).length)})</p>` : `<div class="rows" data-tour="exceptions.legs">${missing.map(l => rowDiv({ leading: icon('wallet'), title: t('legsMissing'),
+        sub: `<span class="mono">${esc(l.order_id)} · ${esc(l.wallet)}</span>`, trailing: `<span class="mono">${amount(l.amount, l.currency)}</span>` })).join('')}
+      ${[...(au.mismatched || []), ...(au.orphans || [])].map(x => rowDiv({ leading: icon('alert-triangle'), title: '', sub: `<span class="mono">${esc(x)}</span>` })).join('')}</div>
       <p class="muted small" id="exLegsOut"></p>
-      <div class="btn-row"><button class="btn ghost" id="exLegsCheck">${icon('check')}<span>${esc(t('legsCheck'))}</span></button>${missing.length ? `<button class="btn" id="exLegsApply">${icon('wallet')}<span>${esc(t('legsApply'))}</span></button>` : ''}</div>`}</section>`;
+      <div class="btn-row">${btn({ id: 'exLegsCheck', variant: 'ghost', icon: 'check', key: 'legsCheck', tour: 'exceptions.legsCheck' })}${missing.length ? btn({ id: 'exLegsApply', variant: 'primary', icon: 'wallet', key: 'legsApply', tour: 'exceptions.legsApply' }) : ''}</div>`}</section>`;
   if (!bad) return;
   const say = r => { $('#exLegsOut').textContent = `${t('legsWould')}: ${(r.wouldWrite || r.written || []).length} · ${t('legsRefused')}: ${(r.refused || []).length}`; };
   $('#exLegsCheck').onclick = async () => { try { say(await busy($('#exLegsCheck'), () => post('/owner/wallet/legs/repair', {}))); } catch (e) { fail(e); } };

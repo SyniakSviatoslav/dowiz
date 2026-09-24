@@ -20,7 +20,7 @@ export const T = {
     loginTitle: 'Hyrja e korrierit', loginLine: 'Një ekran, një punë. Rruga ju çon deri te «U dorëzua».', emailOrPhone: 'Email ose telefon', password: 'Fjalëkalimi', signIn: 'Hyni', signingIn: 'Duke hyrë…', haveCode: 'Kam një kod ftese',
     claimTitle: 'Kodi i ftesës', claimHint: 'Kodin jua dha lokali. Vlen një javë dhe punon një herë.', yourPhone: 'Telefoni juaj', code: 'Kodi', choosePassword: 'Zgjidhni një fjalëkalim', passwordHint: 'Të paktën 8 shenja. Lokali nuk e sheh.', start: 'Fillo', checking: 'Duke kontrolluar…', havePassword: 'Kam tashmë fjalëkalim',
     loading: 'Po ngarkohet', noLink: 'S’ka lidhje me lokalin', retry: 'Provo përsëri', youAreOffline: 'Jeni offline', staleAsOf: 'pa lidhje · të dhënat e {t}', offlineHint: 'Porositë nuk vijnë derisa të hapni turnin', openShift: 'Fillo turnin', endShift: 'Mbyll turnin',
-    noneFree: 'S’ka porosi të lira', noneFreeHint: 'Sapo diçka të jetë gati, shfaqet këtu', askPlaceholder: 'Pyet për dërgesat e mia…', myShifts: 'Turnet e mia', history: 'Historia', thinking: 'Po mendon…',
+    noneFree: 'S’ka porosi të lira', noneFreeHint: 'Sapo diçka të jetë gati, shfaqet këtu', askPlaceholder: 'Pyet për dërgesat e mia…', send: 'Dërgo', myShifts: 'Turnet e mia', history: 'Historia', thinking: 'Po mendon…',
     readyForPickup: 'Gati për marrje', pcs: 'copë', pickOne: 'zgjidhni dhe merrni', take: 'Merr', delivering: 'Po dorëzoni', pickUpOrder: 'Merrni porosinë', onTheWay: 'Në rrugë', ready: 'Gati', items: 'artikuj', paidOnline: 'Paguar online',
     delivered: 'U dorëzua', deliveredAria: 'U dorëzua — rrëshqitni ose shtypni', swipe: 'rrëshqitni →', pickedUp: 'E mora', inMaps: 'Në hartë', call: 'Telefono', saving: 'Po ruhet…', confirmDelivered: 'Ta shënoj si të dorëzuar?', refusedAtDoor: 'Refuzuar te dera', confirmRefused: 'Klienti e refuzoi porosinë? Nuk u mor asnjë para.', refusedDone: 'U shënua: refuzuar te dera', refusedNoteLabel: 'Shënim (jo i detyrueshëm)', refusedNoteHint: 'p.sh. askush nuk hapi derën',
     howMuchCash: 'Sa para në dorë morët?', confirm: 'Konfirmo', back: 'Prapa', badAmount: 'Shumë e pasaktë', shortfall: 'Mungesë', recorded: 'u regjistrua',
@@ -38,6 +38,7 @@ export const T = {
     hMicT: 'Me zë', hMic: 'Thoni «e mora», «u dorëzua» ose «ku është tjetra». Aplikacioni përsërit çfarë dëgjoi dhe kërkon konfirmim.',
     hAskT: 'Pyetje për dërgesat', hAsk: 'Përgjigjet vetëm për turnet dhe porositë tuaja: sa fituat, ku të shkoni, çfarë ndodhi dje.',
     hHelpT: 'Ndihma', hHelp: 'Ky buton përsërit turin. Ekziston vetëm kur qëndroni, jo në rrugë.',
+    learn: 'Mësimet', learnNew: 'I ri', learnDone: 'Mbaruar', learnPaused: 'Në pauzë', learnWatch: 'Shiko videon', learnWrites: 'ndryshon të dhëna reale', learnSteps: '{n} hapa', learnEmpty: 'Ky mësim nuk u gjet', learnOffline: 'Mësimet duan lidhje interneti',
   },
   en: {
     appTitle: 'dowiz · courier', offline: 'offline', onShift: 'on shift', gps: 'GPS', gpsDenied: 'GPS denied', gpsUnavailable: 'GPS unavailable', gpsUnit: 'm',
@@ -46,7 +47,7 @@ export const T = {
     loginTitle: 'Courier sign-in', loginLine: 'One screen, one job. The road leads to “Delivered”.', emailOrPhone: 'Email or phone', password: 'Password', signIn: 'Sign in', signingIn: 'Signing in…', haveCode: 'I have an invite code',
     claimTitle: 'Invite code', claimHint: 'The venue gave you the code. It lasts a week and works once.', yourPhone: 'Your phone', code: 'Code', choosePassword: 'Choose a password', passwordHint: 'At least 8 characters. The venue never sees it.', start: 'Start', checking: 'Checking…', havePassword: 'I already have a password',
     loading: 'Loading', noLink: 'No connection to the venue', retry: 'Try again', youAreOffline: 'You are offline', staleAsOf: 'no connection · as of {t}', offlineHint: 'Orders will not come in until you open a shift', openShift: 'Start shift', endShift: 'End shift',
-    noneFree: 'No free orders', noneFreeHint: 'As soon as something is ready, it appears here', askPlaceholder: 'Ask about my deliveries…', myShifts: 'My shifts', history: 'History', thinking: 'Thinking…',
+    noneFree: 'No free orders', noneFreeHint: 'As soon as something is ready, it appears here', askPlaceholder: 'Ask about my deliveries…', send: 'Send', myShifts: 'My shifts', history: 'History', thinking: 'Thinking…',
     readyForPickup: 'Ready for pickup', pcs: 'pcs', pickOne: 'pick one and take it', take: 'Take', delivering: 'Delivering', pickUpOrder: 'Pick up the order', onTheWay: 'On the way', ready: 'Ready', items: 'items', paidOnline: 'Paid online',
     delivered: 'Delivered', deliveredAria: 'Delivered — swipe or press', swipe: 'swipe →', pickedUp: 'Picked up', inMaps: 'In maps', call: 'Call', saving: 'Saving…', confirmDelivered: 'Mark as delivered?', refusedAtDoor: 'Refused at the door', confirmRefused: 'The customer refused the order? No money was taken.', refusedDone: 'Recorded: refused at the door', refusedNoteLabel: 'Note (optional)', refusedNoteHint: 'e.g. nobody opened the door',
     howMuchCash: 'How much cash did you receive?', confirm: 'Confirm', back: 'Back', badAmount: 'Invalid amount', shortfall: 'Short by', recorded: 'recorded',
@@ -64,6 +65,7 @@ export const T = {
     hMicT: 'By voice', hMic: 'Say “picked up”, “delivered” or “where next”. The app repeats what it heard and asks you to confirm.',
     hAskT: 'Questions about deliveries', hAsk: 'Answers only about your shifts and orders: how much you made, where to go next, what happened yesterday.',
     hHelpT: 'Help', hHelp: 'This button repeats the tour. It is here only while you stand still, not on a run.',
+    learn: 'Lessons', learnNew: 'New', learnDone: 'Done', learnPaused: 'Paused', learnWatch: 'Watch the video', learnWrites: 'changes real data', learnSteps: '{n} steps', learnEmpty: 'That lesson was not found', learnOffline: 'Lessons need a connection',
   },
   uk: {
     appTitle: 'dowiz · кур’єр', offline: 'офлайн', onShift: 'на зміні', gps: 'GPS', gpsDenied: 'GPS заборонено', gpsUnavailable: 'GPS недоступний', gpsUnit: 'м',
@@ -72,7 +74,7 @@ export const T = {
     loginTitle: 'Вхід для кур’єра', loginLine: 'Один екран, одна справа. Дорога веде до «Доставлено».', emailOrPhone: 'Email або телефон', password: 'Пароль', signIn: 'Увійти', signingIn: 'Входимо…', haveCode: 'У мене код запрошення',
     claimTitle: 'Код запрошення', claimHint: 'Код дав вам заклад. Він діє тиждень і спрацьовує один раз.', yourPhone: 'Ваш телефон', code: 'Код', choosePassword: 'Придумайте пароль', passwordHint: 'Щонайменше 8 символів. Заклад його не побачить.', start: 'Почати', checking: 'Перевіряємо…', havePassword: 'У мене вже є пароль',
     loading: 'Завантажуємо', noLink: 'Немає зв’язку із закладом', retry: 'Спробувати ще раз', youAreOffline: 'Ви офлайн', staleAsOf: 'немає зв’язку · дані на {t}', offlineHint: 'Замовлення не надходитимуть, поки зміну не відкрито', openShift: 'Почати зміну', endShift: 'Завершити зміну',
-    noneFree: 'Вільних замовлень немає', noneFreeHint: 'Щойно щось буде готове — з’явиться тут', askPlaceholder: 'Спитати про мої доставки…', myShifts: 'Мої зміни', history: 'Історія', thinking: 'Думає…',
+    noneFree: 'Вільних замовлень немає', noneFreeHint: 'Щойно щось буде готове — з’явиться тут', askPlaceholder: 'Спитати про мої доставки…', send: 'Надіслати', myShifts: 'Мої зміни', history: 'Історія', thinking: 'Думає…',
     readyForPickup: 'Готові до забору', pcs: 'шт.', pickOne: 'оберіть і візьміть', take: 'Взяти', delivering: 'Доставляєте', pickUpOrder: 'Заберіть замовлення', onTheWay: 'В дорозі', ready: 'Готове', items: 'поз.', paidOnline: 'Оплачено онлайн',
     delivered: 'Доставлено', deliveredAria: 'Доставлено — проведіть або натисніть', swipe: 'проведіть →', pickedUp: 'Забрав', inMaps: 'У картах', call: 'Подзвонити', saving: 'Записуємо…', confirmDelivered: 'Позначити як доставлене?', refusedAtDoor: 'Відмова біля дверей', confirmRefused: 'Клієнт відмовився від замовлення? Гроші не отримано.', refusedDone: 'Записано: відмова біля дверей', refusedNoteLabel: 'Примітка (необов\'язково)', refusedNoteHint: 'напр. ніхто не відчинив',
     howMuchCash: 'Скільки готівки отримано?', confirm: 'Підтвердити', back: 'Назад', badAmount: 'Некоректна сума', shortfall: 'Недостача', recorded: 'записано',
@@ -90,6 +92,7 @@ export const T = {
     hMicT: 'Голосом', hMic: 'Скажіть «взяв», «доставив» або «де наступне». Застосунок повторить, що почув, і попросить підтвердити.',
     hAskT: 'Питання про доставки', hAsk: 'Відповідає лише про ваші зміни й замовлення: скільки заробили, куди їхати далі, що було вчора.',
     hHelpT: 'Довідка', hHelp: 'Ця кнопка повторить тур. Вона є лише тоді, коли ви стоїте, не на маршруті.',
+    learn: 'Уроки', learnNew: 'Новий', learnDone: 'Пройдено', learnPaused: 'На паузі', learnWatch: 'Дивитися відео', learnWrites: 'змінює реальні дані', learnSteps: 'кроків: {n}', learnEmpty: 'Такого уроку не знайдено', learnOffline: 'Для уроків потрібен інтернет',
   },
 };
 

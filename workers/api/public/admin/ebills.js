@@ -10,6 +10,7 @@
 // whole console.
 
 import { $, $$, esc, icon, t, api, post, toast, sheet, money, ago, store, busy, switchEl } from '/admin/core.js';
+import { ui, k, btn, field, select, pill, loading, rowDiv } from '/admin/parts.js';
 
 /// Every call names the venue in the query: the bodies are closed shapes.
 const q = () => '?location_id=' + encodeURIComponent(store.loc || '');
@@ -17,45 +18,48 @@ const fail = e => toast(String(e.message || e));
 const head = `<p class="eyebrow" data-t="settings"></p><h2 data-t="ebills"></h2><p class="muted small" data-t="ebillsHint"></p>`;
 
 export async function open(){
-  sheet(`${head}<div id="ebBody"><div class="skel skel-row"></div><div class="skel skel-row"></div></div>`, { name: 'ebills', keepScroll: true });
+  sheet(`${head}<div id="ebBody">${loading(2)}</div>`, { name: 'ebills', keepScroll: true });
   let d;
   try { d = await api('/owner/ebills' + q()); } catch (e) { return fail(e); }
   const st = d.state || {}, cfg = d.config || {};
   const products = d.products || [];
   // Switched on and not yet read is 'not yet', never 'off': the owner just saved it.
   const status = st.halted ? ['bad', 'eb_halted'] : st.last_error ? ['warn', 'eb_failing'] : !cfg.enabled ? ['', 'off'] : st.last_ok_ms ? ['ok', 'eb_live'] : ['', 'eb_never'];
+  // The pick for one till code: the hub's suggestions first, then every dish.
   const opts = (sug) => {
-    const first = (sug || []).map(s => `<option value="${esc(s.product_id)}">${esc(s.product || s.product_id)}${s.price_agrees ? '' : ' (' + esc(t('eb_priceDiffers')) + ')'}</option>`).join('');
-    const rest = products.map(p => `<option value="${esc(p.id)}">${esc(p.name)} - ${esc(money(p.price))}</option>`).join('');
-    return `<option value="" data-t="eb_pick"></option>${first}${first ? '<option disabled>---</option>' : ''}${rest}`;
+    const first = (sug || []).map(s => ({ value: s.product_id, label: (s.product || s.product_id) + (s.price_agrees ? '' : ' (' + t('eb_priceDiffers') + ')') }));
+    const rest = products.map(p => ({ value: p.id, label: `${p.name} - ${money(p.price)}` }));
+    return [{ value: '', key: 'eb_pick' }, ...first, ...(first.length ? [{ value: '---', label: '---', disabled: true }] : []), ...rest];
   };
-  const row = (ic, label, value, tone = '') => `<div class="rowc">${icon(ic)}<span class="t"><b data-t="${label}"></b><small class="mono">${value}</small></span>${tone ? `<span class="pill ${tone}"></span>` : ''}</div>`;
+  const row = (ic, label, value, tour) => rowDiv({ leading: icon(ic), title: { t: label }, sub: `<span class="mono">${value}</span>`, tour });
   const body = `
     <div class="rows">
-      <div class="rowc">${icon('receipt')}<span class="t"><b data-t="ebills"></b><small class="mono">${cfg.user ? esc(cfg.user) + ' · POS ' + esc(cfg.pos_id) : ''}</small></span><span class="pill ${status[0]}" data-t="${status[1]}"></span></div>
+      ${rowDiv({ leading: icon('receipt'), title: { t: 'ebills' }, sub: `<span class="mono">${cfg.user ? esc(cfg.user) + ' · POS ' + esc(cfg.pos_id) : ''}</span>`, trailing: pill(status[0], { key: status[1] }), tour: 'ebills.status' })}
       ${row('clock', 'eb_lastOk', st.last_ok_ms ? esc(ago(st.last_ok_ms)) : esc(t('eb_never')))}
       ${st.last_error ? row('alert-triangle', 'eb_lastError', `${esc(ago(st.last_error.at_ms))} · ${esc(st.last_error.why)}`) : ''}
       ${row('download', 'eb_imported', `${st.placed || 0} ${esc(t('eb_placed'))} · ${st.paid || 0} ${esc(t('eb_paid'))} · ${st.noted || 0} ${esc(t('eb_noted'))} · #${esc(st.watermark || 0)}`)}
-      ${(st.pending || []).length ? row('clock-hour-4', 'eb_pending', st.pending.map(b => `${esc(t('table'))} ${esc(b.table)} · ${esc(money(b.total))}`).join(' / ')) : ''}
+      ${(st.pending || []).length ? row('clock-hour-4', 'eb_pending', st.pending.map(b => `${esc(t('table'))} ${esc(b.table)} · ${esc(money(b.total))}`).join(' / '), 'ebills.pending') : ''}
       ${(st.short || []).length ? row('alert-circle', 'eb_short', st.short.map(([i, n]) => `${esc(i)} ${esc(n)}`).join(' · ')) : ''}
       ${(st.refused || []).length ? row('x', 'eb_refused', st.refused.slice(-5).map(r => `#${esc(r.sale_id)} ${esc(r.why)}`).join(' / ')) : ''}
-      <div class="rowc">${icon('receipt')}<span class="t"><b data-t="fx_title"></b><small data-t="fx_openHint"></small></span><button class="btn ghost" id="ebFiscal"><span data-t="fx_open"></span></button></div>
+      ${rowDiv({ leading: icon('receipt'), title: { t: 'fx_title' }, sub: ui.label(k('fx_openHint')), trailing: btn({ id: 'ebFiscal', key: 'fx_open', tour: 'ebills.fiscal' }) })}
     </div>
     <section class="group mt-3"><p class="eyebrow" data-t="eb_unmatched"></p><p class="muted small" data-t="eb_unmatchedHint"></p>
-      <div class="rows">${(d.unmatched || []).map(u => `<div class="rowc" data-code="${esc(u.code)}">${icon('plug-connected-x')}<span class="t"><b>${esc(u.name)}</b><small class="mono">${esc(u.code)} · ${esc(money(u.price))}</small>
-        <select class="eb-pick">${opts(u.suggest)}</select></span><button class="btn ghost eb-map">${icon('check')}<span data-t="eb_map"></span></button></div>`).join('') || `<p class="muted small" data-t="eb_allMatched"></p>`}</div></section>
+      <div class="rows" data-tour="ebills.unmatched">${(d.unmatched || []).map(u => rowDiv({ leading: icon('plug-connected-x'), title: u.name, data: { code: u.code },
+        sub: `<span class="mono">${esc(u.code)} · ${esc(money(u.price))}</span>${select({ controlCls: 'eb-pick', ariaLabel: t('eb_pick'), options: opts(u.suggest), tour: 'ebills.pick' })}`,
+        trailing: btn({ cls: 'eb-map', icon: 'check', key: 'eb_map', tour: 'ebills.map' }) })).join('') || `<p class="muted small" data-t="eb_allMatched"></p>`}</div></section>
     <section class="group mt-3"><p class="eyebrow" data-t="eb_mapped"></p>
-      <div class="rows">${(d.mapped || []).map(m => `<div class="rowc" data-code="${esc(m.code)}">${icon('receipt')}<span class="t"><b>${esc(m.name || m.code)}</b><small class="mono">${esc(m.code)} &rarr; ${esc(m.product || m.product_id)}</small></span><button class="btn ghost eb-clear">${icon('x')}<span data-t="eb_clear"></span></button></div>`).join('')}</div></section>
+      <div class="rows" data-tour="ebills.mapped">${(d.mapped || []).map(m => rowDiv({ leading: icon('receipt'), title: m.name || m.code, data: { code: m.code },
+        sub: `<span class="mono">${esc(m.code)} &rarr; ${esc(m.product || m.product_id)}</span>`, trailing: btn({ cls: 'eb-clear', variant: 'ghost', icon: 'x', key: 'eb_clear', tour: 'ebills.clear' }) })).join('')}</div></section>
     ${d.floor && d.floor.tables ? `<section class="group mt-3"><p class="eyebrow" data-t="eb_floor"></p><p class="muted small">${esc(ago(d.floor.at_ms))}</p>
-      <div class="chips">${d.floor.tables.map(f => `<span class="chip ${f.occupied ? 'on' : ''}">${esc(f.table)}${f.unpaid != null ? ' · ' + esc(money(f.unpaid)) : ''}</span>`).join('')}</div></section>` : ''}
+      <div class="chips" data-tour="ebills.floor">${d.floor.tables.map(f => ui.chip({ tone: f.occupied ? 'accent' : 'neutral', dot: !!f.occupied, label: `${f.table}${f.unpaid != null ? ' · ' + money(f.unpaid) : ''}` })).join('')}</div></section>` : ''}
     <section class="group mt-3"><p class="eyebrow" data-t="eb_settings"></p>
-      ${switchEl('eb-on', !!cfg.enabled, 'eb_enabled', 'eb_enabledHint')}
-      <div class="grid2"><div><label for="eb-user" data-t="eb_user"></label><input id="eb-user" autocomplete="off" value="${esc(cfg.user || '')}"></div>
-        <div><label for="eb-pos" data-t="eb_pos"></label><input id="eb-pos" inputmode="numeric" value="${esc(cfg.pos_id || 1)}"></div></div>
-      <label for="eb-pass" data-t="eb_password"></label><input id="eb-pass" type="password" autocomplete="new-password" placeholder="${cfg.secret_set ? esc(t('eb_passwordSet')) : ''}">
+      ${switchEl('eb-on', !!cfg.enabled, 'eb_enabled', 'eb_enabledHint', 'ebills.enabled')}
+      <div class="grid2">${field({ id: 'eb-user', key: 'eb_user', autocomplete: 'off', value: cfg.user || '', tour: 'ebills.user' })}
+        ${field({ id: 'eb-pos', key: 'eb_pos', inputmode: 'numeric', value: cfg.pos_id || 1, tour: 'ebills.pos' })}</div>
+      ${field({ id: 'eb-pass', key: 'eb_password', type: 'password', autocomplete: 'new-password', phKey: cfg.secret_set ? 'eb_passwordSet' : undefined, tour: 'ebills.password' })}
       <p class="muted small" data-t="eb_roleHint"></p>
-      <div class="btn-row"><button class="btn" id="ebSave">${icon('check')}<span data-t="save"></span></button>
-        ${cfg.user || cfg.secret_set ? `<button class="btn ghost danger" id="ebForget">${icon('x')}<span data-t="eb_forget"></span></button>` : ''}</div></section>`;
+      <div class="btn-row">${btn({ id: 'ebSave', variant: 'primary', icon: 'check', key: 'save', tour: 'ebills.save' })}
+        ${cfg.user || cfg.secret_set ? btn({ id: 'ebForget', variant: 'danger', icon: 'x', key: 'eb_forget', tour: 'ebills.forget' }) : ''}</div></section>`;
   sheet(head + `<div id="ebBody">${body}</div>`, { name: 'ebills', keepScroll: true });
   wire();
 }

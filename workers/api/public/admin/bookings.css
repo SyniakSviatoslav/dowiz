@@ -3,8 +3,8 @@
    token the console already paints with. */
 
 .rs-days{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:var(--space-3)}
-.rs-days .chip{flex:none;display:flex;flex-direction:column;align-items:center;min-width:52px;line-height:1.2}
-.rs-days .chip i{font-style:normal;font-size:var(--text-xs);color:var(--brand-text-muted)}
+.rs-days .rs-day{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;min-width:52px;min-height:var(--tap-lg);line-height:1.2}
+.rs-days .rs-day i{font-style:normal;font-size:var(--text-xs);color:var(--brand-text-muted)}
 .rs-list{display:grid;gap:var(--space-2)}
 .rs-row{display:grid;gap:6px;padding:10px 14px;border:1px solid var(--glass-border);border-radius:var(--radius-card);background:var(--glass)}
 .rs-row.off{opacity:.62}
@@ -18,7 +18,6 @@
 .rs-pill.CONFIRMED,.rs-pill.SEATED{color:var(--st-DELIVERED);border-color:color-mix(in srgb,var(--st-DELIVERED) 40%,transparent)}
 .rs-pill.DECLINED,.rs-pill.CANCELLED_BY_VENUE,.rs-pill.NO_SHOW{color:var(--st-REJECTED);border-color:color-mix(in srgb,var(--st-REJECTED) 40%,transparent)}
 .rs-acts{display:flex;flex-wrap:wrap;gap:6px}
-.rs-acts .btn{min-height:36px;padding:6px 12px;font-size:var(--text-sm)}
 .rs-count{color:var(--brand-text-muted);font-size:var(--text-sm);margin:0 0 var(--space-2)}
 
 /* The floor editor: a grid the tables snap to, no canvas library. */
@@ -31,6 +30,5 @@
 .fp-t text{fill:var(--brand-text);font-family:var(--font-mono);font-size:13px;pointer-events:none}
 .fp-t text.fp-s{font-size:10px;fill:var(--brand-text-muted)}
 .fp-pad{display:grid;grid-template-columns:repeat(3,44px);gap:4px;justify-content:center;margin:var(--space-2) 0}
-.fp-pad .btn{min-height:40px;padding:0}
 .fp-fields{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
 .fp-issues{color:var(--st-REJECTED);font-size:var(--text-sm);margin:var(--space-2) 0}

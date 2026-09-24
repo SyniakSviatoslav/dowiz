@@ -17,6 +17,7 @@ import { state, addLine, lineUnit, moneyEl, money, on } from '/store/state.js';
 import { t, tagName } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, fallbackArt, toast } from '/store/ui.js';
 import { seaEvent } from '/store/sea.js';
+import { ui, k, ghost, stepper } from '/store/parts.js';
 
 /// The Sea's answer to a dish being added: a small pulse from the sheet, a
 /// smaller one from a card. Numbers are particle counts, not milliseconds.
@@ -95,7 +96,7 @@ export function openDish(p){
       <div class="dhero">${p.imageUrl
         ? `<img src="${esc(p.imageUrl)}" alt="${esc(p.name)}" decoding="async" data-fb="${esc(p.name)}">`
         : fallbackArt(p.name)}
-        <button type="button" class="dback" id="dback" data-t-attr="aria-label:back">${icon('chevron-left')}</button>
+        ${ui.iconButton({ id: 'dback', icon: 'chevron-left', ariaLabel: k('back'), cls: 'dback', attrs: { data: { tour: 'dish.back' } } })}
         <span class="dprice-pill">${moneyEl(p.price)}</span>
       </div>
       <div class="dbody">
@@ -107,12 +108,12 @@ export function openDish(p){
         ${factsMarkup(p)}
         ${groups.map(groupMarkup).join('')}
         <p id="derr" class="err" hidden></p>
-        <button class="btn btn-ghost mb-2" id="dar" hidden>${icon('cube-3d-sphere')}<span data-t="onTable"></span></button>
+        ${ghost({ id: 'dar', cls: 'mb-2', icon: 'cube-3d-sphere', label: k('onTable'), attrs: { hidden: true }, tour: 'dish.onTable' })}
         <p id="darNote" class="geo" hidden></p>
       </div>
       <div class="dfoot">
-        <span class="qty"><button type="button" id="dm" aria-label="−">${icon('minus')}</button><span id="dq">1</span><button type="button" id="dp" aria-label="+">${icon('plus')}</button></span>
-        <button class="btn dadd" id="dadd"><span data-t="add"></span><span class="money" id="dprice" data-money="${p.price | 0}">${money(p.price)}</span></button>
+        ${stepper({ value: 1, valueId: 'dq', minus: { id: 'dm' }, plus: { id: 'dp' }, tour: 'dish.qty' })}
+        <button class="btn dadd" id="dadd" data-tour="dish.add"><span data-t="add"></span><span class="money" id="dprice" data-money="${p.price | 0}">${money(p.price)}</span></button>
       </div>
     </div>`, { name: 'dish' });
   for (const [i, li] of $$('.ings li', $('#sheetIn')).entries()) li.style.setProperty('--i', String(i));
