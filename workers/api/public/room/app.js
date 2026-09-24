@@ -19,6 +19,7 @@ import { renderOpen, bindOpen } from './open.js';
 import { renderTransfer, bindTransfer, renderMoveSitting, bindMoveSitting } from './transfer.js';
 import { renderTillScreen, bindTill, lastTill, keep as keepTill } from './till.js';
 import { visible } from './till-view.js';
+import { renderFloor, bindFloor, loadFloor } from './floor.js';
 import { safeGet, safeSet } from '../store/storage.js';
 
 const $ = s => document.querySelector(s);
@@ -29,7 +30,7 @@ const S = {
   slug: slugOfHost(location.hostname, location.search),
   currency: safeGet('dw_room_currency') || null,
   sittings: [], at: 0, live: false, sittingId: null, roundId: null,
-  known: {}, queued: [], till: null, menu: null,
+  known: {}, queued: [], till: null, menu: null, floor: null, floorPick: null,
 };
 
 const c = {
@@ -58,7 +59,7 @@ function adopt(s) {
 }
 function signedOut() {
   session.set(null); lastRoom.clear(); OUT.forget();
-  Object.assign(S, { view: 'login', sittings: [], at: 0, loc: null, caps: new Set(), known: {} });
+  Object.assign(S, { view: 'login', sittings: [], at: 0, loc: null, caps: new Set(), known: {}, floor: null, floorPick: null });
   render();
 }
 
@@ -145,6 +146,7 @@ function renderRoom() {
   return `<div class="bar"><span class="chip">${esc(t(S.role || 'waiter'))}</span><span class="sp"></span>
       ${S.caps.has('take_orders') ? `<button class="btn" data-act="open">${esc(t('openTable'))}</button>` : ''}
       ${canTill(S.caps) ? `<button class="btn" data-act="till">${esc(t('till'))}</button>` : ''}
+      ${S.caps.has('take_orders') ? `<button class="btn" data-act="floor">${esc(t('floor'))}</button>` : ''}
       <button class="btn" data-act="refresh">${esc(t('refresh'))}</button></div>
     <h2>${esc(t('room'))}</h2>
     ${S.role === 'kitchen' ? `<p class="muted">${esc(t('kitchenNoRoom'))}</p>` : cards ? `<ul class="tables">${cards}</ul>` : `<p class="muted">${esc(S.at ? t('noOrders') : t('loading'))}</p>`}
@@ -178,6 +180,7 @@ function render() {
   if (S.view === 'moveSit') { root.innerHTML = renderMoveSitting(c, s); return bindMoveSitting(c, root, s); }
   if (S.view === 'open' && S.caps.has('take_orders')) { root.innerHTML = renderOpen(c); return bindOpen(c, root, () => { S.view = 'room'; render(); }); }
   if (S.view === 'till' && canTill(S.caps)) { root.innerHTML = renderTillScreen(c); return bindTill(c, root); }
+  if (S.view === 'floor' && S.caps.has('take_orders')) { root.innerHTML = renderFloor(S.floor, t, S.caps, S.floorPick); return bindFloor(c, root, () => { S.view = 'room'; render(); }); }
   if (S.view === 'login') { root.innerHTML = renderLogin(); }
   else if (S.view === 'sitting') root.innerHTML = renderSitting(s);
   else { S.view = 'room'; root.innerHTML = renderRoom(); }
@@ -190,6 +193,7 @@ function render() {
     if (act === 'refresh') return loadRoom();
     if (act === 'signout') return signedOut();
     if (act === 'till') { S.view = 'till'; return render(); }
+    if (act === 'floor') { S.view = 'floor'; S.floorPick = null; render(); return loadFloor(c); }
     if (act === 'open') { S.view = 'open'; S.basket = {}; return render(); }
     if (act === 'back') { S.view = 'room'; return render(); }
     if (act === 'sit') {
@@ -236,4 +240,4 @@ if (s0) {
 }
 render();
 OUT.start();
-setInterval(() => { if (document.visibilityState === 'visible' && session.get() && (S.view === 'room' || S.view === 'sitting')) loadRoom(); else hud(); }, POLL_MS);
+setInterval(() => { if (document.visibilityState === 'visible' && session.get() && (S.view === 'room' || S.view === 'sitting')) loadRoom(); else if (document.visibilityState === 'visible' && session.get() && S.view === 'floor') loadFloor(c); else hud(); }, POLL_MS);

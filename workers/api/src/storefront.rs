@@ -458,6 +458,8 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
                         "nutrition": p.get("nutrition").cloned().unwrap_or(Value::Null),
                         "nutritionDerived": p.get("nutritionDerived").cloned().unwrap_or(Value::Null),
                         "taste": p.get("taste").cloned().unwrap_or(Value::Null),
+                        // Where it is made (`bell_route`); the console's dish form reads it here.
+                        "station": p.get("station").cloned().unwrap_or(Value::Null),
                         "calories": p.get("calories").cloned().unwrap_or(Value::Null),
                         "sortOrder": p.get("sortOrder").cloned().unwrap_or(json!(0))
                     }),
@@ -913,12 +915,9 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
                 Some((names.get(&it.product_id).cloned().unwrap_or_else(|| it.product_id.clone()), json))
             })
             .collect();
-        let key = crate::services::customers::handlers::customer_key(
-            &crate::services::customers::handlers::signing_secret(&ctx.env),
-            phone,
-        );
+        let secret = crate::services::customers::handlers::signing_secret(&ctx.env);
         if let Err(why) =
-            crate::services::customers::at_placement::allergy_check(&place, &key, &dishes).await?
+            crate::services::customers::at_placement::allergy_check(&place, &secret, phone, &dishes).await?
         {
             return Response::error(why, 409);
         }
@@ -1029,6 +1028,11 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             // venue default is stamped by the object (`tax_block::stamp`).
             if let Some(r) = basket.lines.iter().find(|l| l.product_id == pid).and_then(|l| l.vat_ppm) {
                 line["vat_ppm"] = json!(r.0);
+            }
+            // THE STATION TRAVELS THE SAME WAY (`bell_route`), and only when it is
+            // not the kitchen: absent IS the kitchen, and every stored byte is paid for.
+            if let Some(l) = basket.lines.iter().find(|l| l.product_id == pid) {
+                crate::bell_route::stamp_line(line, l.station);
             }
         }
     }
@@ -1259,10 +1263,13 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // a number into ONE card per venue. The card holds no name and no hash of
     // the number (§3.1) -- see `services::customers::at_placement`.
     if !phone.is_empty() {
-        crate::services::customers::at_placement::remember(
+        // §3.4's RULE-SITE: a national spelling (`069…`) is linked to its
+        // E.164 key the first time it appears. Link, never merge.
+        crate::services::customers::at_placement::remember_spelling(
             &place,
             &phone_hash,
             &legacy_hash,
+            crate::services::customers::identity::alias_at_placement(&secret, &body.contact.phone),
             created_at_ms,
         )
         .await;

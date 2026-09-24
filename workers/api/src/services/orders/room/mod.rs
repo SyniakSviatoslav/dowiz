@@ -5,6 +5,7 @@
 //! `crate::command`; what is here is the door (`placer`), the projection a
 //! waiter reads (`sitting`), and the handlers that sequence the two.
 
+pub mod floor;
 pub mod handlers;
 pub mod pay;
 pub mod placer;

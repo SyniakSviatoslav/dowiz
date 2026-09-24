@@ -86,6 +86,7 @@ export const T = {
     // menu
     categories:'Kategoritë', dishes:'Pjata', onSale:'Në shitje', stopList:'Stop-lista', price:'Çmimi', photo:'Fotografia', noPhoto:'Pa fotografi',
     uploadPhoto:'Ngarko foto', removePhoto:'Hiq foton', ingredients:'Përbërësit', nutrition:'Vlerat ushqyese', kcal:'kcal', protein:'Proteina', fat:'Yndyrë', carbs:'Karbohidrate',
+    station:'Stacioni', station_kitchen:'Kuzhina', station_bar:'Bari', stationHint:'Ku përgatitet pjata: porosia shkon te biseda Telegram e atij stacioni.',
     weight:'Pesha, g', cookingMin:'Gatimi, min', tags:'Etiketat', translations:'Përkthimet', name:'Emri', description:'Përshkrimi',
     unavailableNote:'Pse s’ka', putOnSale:'Vëre në shitje', takeOff:'Hiqe nga shitja', importMenu:'Importo menynë', sold:'shitur', undeclared:'pa deklaruar',
     // stock
@@ -196,6 +197,7 @@ export const T = {
     pay:{cash:'Cash',card:'Card',apple_pay:'Apple Pay',google_pay:'Google Pay',crypto:'Crypto',platform:'Paid to the platform'},
     categories:'Categories', dishes:'Dishes', onSale:'On sale', stopList:'Stop list', price:'Price', photo:'Photo', noPhoto:'No photo',
     uploadPhoto:'Upload photo', removePhoto:'Remove photo', ingredients:'Ingredients', nutrition:'Nutrition', kcal:'kcal', protein:'Protein', fat:'Fat', carbs:'Carbs',
+    station:'Station', station_kitchen:'Kitchen', station_bar:'Bar', stationHint:'Where the dish is made: the ticket goes to the Telegram chat of that station.',
     weight:'Weight, g', cookingMin:'Cooking, min', tags:'Tags', translations:'Translations', name:'Name', description:'Description',
     unavailableNote:'Why unavailable', putOnSale:'Put on sale', takeOff:'Take off sale', importMenu:'Import menu', sold:'sold', undeclared:'undeclared',
     supplies:'Supplies', ingredient:'Ingredient', level:'Level', unit:'Unit', low:'Low', out:'Out', received:'Received', wasted:'Wasted', counted:'Counted',
@@ -295,6 +297,7 @@ export const T = {
     pay:{cash:'Готівка',card:'Картка',apple_pay:'Apple Pay',google_pay:'Google Pay',crypto:'Крипто',platform:'Оплачено платформі'},
     categories:'Категорії', dishes:'Страви', onSale:'У продажу', stopList:'Стоп-лист', price:'Ціна', photo:'Фото', noPhoto:'Без фото',
     uploadPhoto:'Завантажити фото', removePhoto:'Прибрати фото', ingredients:'Інгредієнти', nutrition:'Харчова цінність', kcal:'ккал', protein:'Білки', fat:'Жири', carbs:'Вуглеводи',
+    station:'Станція', station_kitchen:'Кухня', station_bar:'Бар', stationHint:'Де готують страву: замовлення йде в Telegram-чат цієї станції.',
     weight:'Вага, г', cookingMin:'Готування, хв', tags:'Теги', translations:'Переклади', name:'Назва', description:'Опис',
     unavailableNote:'Чому немає', putOnSale:'У продаж', takeOff:'Зняти з продажу', importMenu:'Імпортувати меню', sold:'продано', undeclared:'не заявлено',
     supplies:'Постачання', ingredient:'Інгредієнт', level:'Залишок', unit:'Одиниця', low:'Мало', out:'Закінчилось', received:'Прийнято', wasted:'Списано', counted:'Перераховано',

@@ -40,6 +40,7 @@ pub mod advance;
 pub mod aggregator;
 pub mod amend;
 pub mod assign;
+pub mod floor;
 pub mod kitchen_ack;
 pub mod pay;
 pub mod place;
@@ -47,6 +48,7 @@ pub mod refund;
 pub mod room_rules;
 pub mod sitting;
 pub mod till;
+pub mod tips;
 pub mod transfer;
 
 #[cfg(test)]

@@ -30,6 +30,7 @@ mod hubstore;
 mod otel;
 mod outbox;
 mod print_rail;
+mod bell_route;
 mod owner;
 mod assist;
 mod storefront;
@@ -53,6 +54,7 @@ mod quarantine;
 mod fold;
 mod live;
 mod exceptions;
+mod fiscal;
 
 use worker::wasm_bindgen::{JsCast, JsValue};
 use worker::*;
@@ -327,6 +329,9 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/staff/till/close", services::orders::room::till::close)
         .post_async("/api/staff/till/pay_in", services::orders::room::till::pay_in)
         .post_async("/api/staff/till/pay_out", services::orders::room::till::pay_out)
+        .get_async("/api/staff/till/tips", services::orders::room::till::tips)
+        .get_async("/api/staff/floor", services::orders::room::floor::get)
+        .post_async("/api/staff/floor/:sitting/cleared", services::orders::room::floor::post_cleared)
         // ── owner ──
         .get_async("/api/owner/orders", owner::orders)
         .post_async("/api/owner/orders/:id/action", owner::order_action)
@@ -358,6 +363,8 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .put_async("/api/owner/customers/:key/record", services::customers::record_routes::put_record)
         .post_async("/api/owner/customers/rekey", services::customers::record_routes::rekey)
         .post_async("/api/owner/customers/:key/consent", services::customers::consent_routes::owner_act)
+        .post_async("/api/owner/customers/:key/link", services::customers::alias_routes::link)
+        .post_async("/api/owner/customers/:key/unlink", services::customers::alias_routes::unlink)
         .get_async("/api/public/consent/wordings", services::customers::consent_routes::wordings)
         .get_async("/api/owner/stock", services::operations::stock::stock)
         .post_async("/api/owner/stock/:kind", services::operations::stock::stock_move)

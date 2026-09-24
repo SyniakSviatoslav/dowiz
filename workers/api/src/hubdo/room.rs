@@ -124,6 +124,15 @@ impl HubImages {
         // refund and the till asked -- so the three kinds the alert exists
         // for never reached the owner's chat. Never fails the amendment.
         self.exceptions_after(&input.location_id, input.now_ms).await;
+        // AN ADDED LINE IS RUNG AT ITS STATION (§2.7), in the turn that wrote it.
+        // A failure to queue is loud and does not undo the amendment.
+        let added = crate::bell_route::added_lines(&input.ops);
+        if !added.is_empty() {
+            let head = crate::bell_route::amend_header(&input.order_id, &round);
+            if let Err(e) = self.enqueue_bell(&input.order_id, &head, &added, Some(seq), input.now_ms).await {
+                console_error!("outbox: order {} was amended and the bell was NOT queued: {e}", input.order_id);
+            }
+        }
         Ok(Ok(crate::command::amend::AmendOut { merged: round.to_string(), seq, generation: next }))
     }
 

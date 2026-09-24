@@ -68,6 +68,7 @@ mod kitchen_ack;
 /// The kitchen print rail: poll, job, ack (LAST-MILE §3.1).
 mod print;
 mod exceptions; // the exception alert (P1-5), `hubdo/exceptions.rs`
+mod fiscal; // the fiscal document queued at placement (B6/B8), `hubdo/fiscal.rs`
 
 /// The catalogue image, which holds the venue's own record as well as its
 /// dishes. Named here because `/fold/venue` reads it and nothing else does.
@@ -728,9 +729,21 @@ impl HubImages {
         // and the customer has been charged; refusing now would lose a placed
         // order to protect a message about it. It is loud instead.
         if let Some(text) = input.notify_text.as_deref() {
-            if let Err(e) = self.enqueue_bell(&input.order_id, text, input.now_ms).await {
+            // The stored lines carry each dish's `station` (`bell_route`).
+            let lines = crate::bell_route::lines_of(&stored);
+            if let Err(e) = self.enqueue_bell(&input.order_id, text, &lines, None, input.now_ms).await {
                 console_error!("outbox: order {} was placed and the bell was NOT queued: {e}", input.order_id);
             }
+        }
+
+        // THE FISCAL DOCUMENT IS OWED THE MOMENT THE ORDER TAKES MONEY (B6/B8,
+        // `hubdo/fiscal.rs`), at a venue with `fiscal.since_ms` set; loud, never fatal.
+        match self.enqueue_fiscal(&stored, input.now_ms).await {
+            Ok(crate::fiscal::wire::AtPlacement::Refused(r)) => {
+                console_error!("fiscal: order {} owes a document and none was built: {r:?}", input.order_id)
+            }
+            Ok(_) => {}
+            Err(e) => console_error!("fiscal: order {} was placed and its document was NOT queued: {e}", input.order_id),
         }
 
         // AFTER THE WRITE LANDED, never before.
@@ -954,28 +967,41 @@ impl HubImages {
     /// A VENUE THAT HAS CONFIGURED NOTHING QUEUES NOTHING, and that is not a
     /// failure: it is most venues, and writing an entry with nowhere to send it
     /// would fill an image with messages that can only ever be abandoned.
-    async fn enqueue_bell(&self, order_id: &str, text: &str, now_ms: i64) -> Result<()> {
+    ///
+    /// ONE TELEGRAM TICKET PER STATION (`bell_route`, §2.7) when the venue set
+    /// `notify.telegram.chat.bar` and a bar line is on the bell; otherwise the
+    /// one entry it always was, same id, same text. `lines` are the lines the
+    /// bell is about; `amend_seq` is `Some` for an amendment's added lines,
+    /// which ring Telegram only — WhatsApp and the print rail announce orders.
+    async fn enqueue_bell(
+        &self,
+        order_id: &str,
+        text: &str,
+        lines: &[serde_json::Value],
+        amend_seq: Option<u64>,
+        now_ms: i64,
+    ) -> Result<()> {
         let settings = match self.image(crate::hubstore::IMAGE_SETTINGS).await? {
             Some((_, bytes)) => dowiz_hub::settings::Settings::load(&bytes)
                 .map_err(|_| Error::RustError("settings image is unreadable".into()))?,
             None => return Ok(()),
         };
-        let mut queued: Vec<crate::outbox::Entry> = Vec::new();
-        let chat = settings.known("notify.telegram.chat").trim().to_string();
-        if !chat.is_empty() {
-            queued.push(crate::outbox::Entry::new(
-                format!("{order_id}/telegram"),
-                "telegram",
-                chat,
-                text.to_string(),
-                now_ms,
-            ));
-        }
+        let mut queued: Vec<crate::outbox::Entry> = crate::bell_route::telegram_tickets(
+            order_id,
+            text,
+            lines,
+            amend_seq,
+            &settings.known("notify.telegram.chat"),
+            &settings.known("notify.telegram.chat.bar"),
+        )
+        .into_iter()
+        .map(|t| crate::outbox::Entry::new(t.id, "telegram", t.to, t.text, now_ms))
+        .collect();
         // ASKED FOR, NOT ASSUMED, exactly as the inline version had it: Meta
         // bills every one of these and Telegram carries the same text for
         // nothing, so a venue that has not set `notify.whatsapp.status = on` is
         // not billed for announcements it never asked for.
-        if settings.flag("notify.whatsapp.status") {
+        if amend_seq.is_none() && settings.flag("notify.whatsapp.status") {
             if let Some(wa) = crate::channels::whatsapp_cfg(&settings) {
                 if !wa.to.is_empty() {
                     queued.push(crate::outbox::Entry::new(
@@ -989,7 +1015,9 @@ impl HubImages {
             }
         }
         // THE KITCHEN'S TICKET, when the venue has a printer (`print_rail.rs`).
-        queued.extend(crate::print_rail::entry_for(&settings.known(crate::print_rail::SETTING), order_id, text, now_ms));
+        if amend_seq.is_none() {
+            queued.extend(crate::print_rail::entry_for(&settings.known(crate::print_rail::SETTING), order_id, text, now_ms));
+        }
         if queued.is_empty() {
             return Ok(());
         }

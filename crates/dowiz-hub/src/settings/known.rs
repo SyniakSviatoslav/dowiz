@@ -84,6 +84,13 @@ pub const KNOWN: &[Known] = &[
         default: "",
     },
     Known {
+        key: "notify.telegram.chat.bar",
+        label: "Telegram chat (bar)",
+        hint: "The chat the bot writes bar tickets to. Leave empty to send bar lines \
+               to the main kitchen chat.",
+        default: "",
+    },
+    Known {
         key: "alerts.exceptions.threshold",
         label: "Exception alert after",
         hint: "How many voids after the kitchen, comps, refunds, pay-outs (each kind counted apart) \
@@ -238,6 +245,15 @@ pub const KNOWN: &[Known] = &[
         key: "print.kitchen",
         label: "Kitchen printer",
         hint: "A name for the kitchen's printer (e.g. kitchen). When set, every order is also queued as a ticket the printer fetches: set the printer's server URL to /api/print/poll and its user name or password to a venue API key made for it.",
+        default: "",
+    },
+    // ── fiscalisation (BLUEPRINT-OPERATIONAL-BLIND-SPOTS §2.8; workers/api/src/fiscal/wire.rs) ──
+    Known {
+        key: "fiscal.since_ms",
+        label: "Fiscalisation from",
+        hint: "Epoch milliseconds (e.g. 1790000000000). From then on every order that takes money is \
+               queued as a fiscal document with a 48 h deadline, shown in the health pane. Nothing is sent \
+               to the tax platform yet. Empty means fiscalisation is not configured.",
         default: "",
     },
 ];
