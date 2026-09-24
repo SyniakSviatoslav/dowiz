@@ -96,3 +96,32 @@ pub async fn ack(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response
     }
     Response::from_json(&out)
 }
+
+/// `GET /api/owner/print/jobs` — the tickets still in the outbox, and which of
+/// them a printer holds (§3.1 step 3's `queued` / `printing`). `printed` and
+/// `failed` are on the orders themselves (`kitchen.printed`,
+/// `kitchen.print_failed`); this is the half only the outbox knows. Read-only.
+pub async fn jobs(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
+    };
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
+    let now = ctx.data.now_ms;
+    let rows: Vec<serde_json::Value> = crate::outbox::waiting(&place)
+        .await?
+        .iter()
+        .filter(|e| e.kind == crate::print_rail::KIND)
+        .map(|e| {
+            serde_json::json!({
+                "orderId": crate::print_rail::order_of(&e.id),
+                "state": crate::print_rail::state_of(Some(e), &serde_json::Value::Null, now),
+                "tries": e.tries,
+                "code": e.code,
+            })
+        })
+        .collect();
+    let mut res = Response::from_json(&serde_json::json!({ "jobs": rows }))?;
+    res.headers_mut().set("cache-control", "private, no-store")?;
+    Ok(res)
+}
