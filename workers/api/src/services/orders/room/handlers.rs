@@ -70,10 +70,13 @@ fn priced_line(
     let basket = price_basket(|id| catalog.product(id), [Want { product_id, modifier_ids, quantity }])
         .map_err(|r| (r.status(), r.text()))?;
     let l = basket.lines.into_iter().next().ok_or((400, "nothing priced".to_string()))?;
-    Ok(json!({
+    let mut line = json!({
         "product_id": l.product_id, "modifier_ids": l.modifier_ids,
         "quantity": l.quantity, "unit_price": l.unit_price, "name": l.name,
-    }))
+    });
+    // A round's added line is rung at its own station (`bell_route`).
+    crate::bell_route::stamp_line(&mut line, l.station);
+    Ok(line)
 }
 
 /// Every product that carries a recipe, so the object can move the shelf with

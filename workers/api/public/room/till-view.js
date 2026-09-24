@@ -53,3 +53,25 @@ export function renderTill(ans, t, locale, timeOf = ms => new Date(ms).toLocaleT
   return `<p class="state">${esc(t('tillClosedWord'))}${v.closed_at ? ` · ${esc(timeOf(v.closed_at))}` : ''}</p>
     <table class="z"><thead><tr><th></th><th>${esc(t('expected'))}</th><th>${esc(t('counted'))}</th><th>${esc(t('overShort'))}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
+
+/// THE TIP RECORD beside the Z report (`GET /api/staff/till/tips`): which
+/// period to ask about, from the drawer's own answer. PURE. The period's
+/// opening to its close, or to now while it is open; nothing without a start.
+export function tipsQuery(ans, loc) {
+  const v = visible(ans);
+  if (!v || !v.opened_at) return null;
+  let q = `/staff/till/tips?location_id=${encodeURIComponent(loc)}&from_ms=${v.opened_at}`;
+  if (v.kind === CLOSED && v.closed_at) q += `&to_ms=${v.closed_at}`;
+  return q;
+}
+
+/// Who took how much, per currency, as the server folded it. No shares, no
+/// pool: the venue's policy is not this screen's. `res` is the route's answer.
+export function renderTips(res, t, locale) {
+  const rows = (res && Array.isArray(res.tips) ? res.tips : []).filter(r => r && r.amount > 0);
+  const names = (res && res.names) || {};
+  const head = `<h3>${esc(t('tipsTitle'))}</h3><p class="muted">${esc(t('tipsHint'))}</p>`;
+  if (!rows.length) return `${head}<p class="muted">${esc(t('tipsNone'))}</p>`;
+  const body = rows.map(r => `<tr><th scope="row">${esc(names[r.by] || r.by || '-')}</th><td>${money(r.amount, r.currency, locale)}</td></tr>`).join('');
+  return `${head}<table class="z tips"><tbody>${body}</tbody></table>`;
+}

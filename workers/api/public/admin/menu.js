@@ -83,6 +83,8 @@ export async function render(host){
 
 /// The plate's diameter, for the storefront's "see it on the table" view.
 const SIZE_CM_MIN = 3, SIZE_CM_MAX = 120;
+// Where a dish is made: the closed set the Worker accepts (`bell_route::Station`).
+const STATIONS = ['kitchen', 'bar'];
 
 /// CSV import: a dry run first, with what would change, then apply.
 function openImport(){
@@ -131,6 +133,7 @@ export function openDish(id){
       <div><label for="d-price" data-t="price"></label><input id="d-price" inputmode="numeric" value="${p.price ?? ''}"></div>
       <div><label for="d-cook" data-t="cookingMin"></label><input id="d-cook" inputmode="numeric" value="${p.cookingMin ?? ''}"></div>
     </div>
+    <label for="d-station" data-t="station"></label><select id="d-station">${STATIONS.map(k => `<option value="${k}" data-t="station_${k}" ${(p.station || 'kitchen') === k ? 'selected' : ''}></option>`).join('')}</select><p class="hint" data-t="stationHint"></p>
     <label data-t="tags"></label>
     <div class="chips" id="tagPick">${TAGS.map(tg => `<button type="button" class="chip ${tags.has(tg) ? 'on' : ''}" data-tag="${tg}">${esc(tg)}</button>`).join('')}</div>
     ${recipeMarkup(p)}
@@ -191,6 +194,8 @@ export function openDish(id){
       available: avail, unavailable_note: avail ? null : ($('#d-note').value.trim() || null),
       price: num($('#d-price').value) ?? p.price,
       cooking_min: num($('#d-cook').value),
+      // Sent only when changed: a save never moves a dish between stations by accident.
+      ...($('#d-station').value !== (p.station || 'kitchen') ? { station: $('#d-station').value } : {}),
       tags: $$('[data-tag].on', $('#sheetIn')).map(b => b.dataset.tag),
       ingredients: $('#d-ings').value.split(',').map(s => s.trim()).filter(Boolean),
       nutrition: Object.keys(nutrition).length ? nutrition : null,

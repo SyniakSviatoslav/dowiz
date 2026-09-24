@@ -40,6 +40,9 @@ pub struct Line {
     /// "use the venue's default", resolved where the settings are
     /// (`tax_cfg::rate_for`, inside the object) — never a zero.
     pub vat_ppm: Option<dowiz_core::tax::RatePpm>,
+    /// Where the line is made (`bell_route`): the product's `station`, the
+    /// kitchen when it names none.
+    pub station: crate::bell_route::Station,
 }
 
 /// A whole basket, priced.
@@ -141,6 +144,7 @@ pub fn price_basket<'a>(
             product_id: w.product_id.to_string(),
             why,
         })?;
+        let station = crate::bell_route::Station::of_line(&p);
         let unit_price = (price + chosen.delta).max(0);
         subtotal += unit_price * w.quantity;
         lines.push(Line {
@@ -154,6 +158,7 @@ pub fn price_basket<'a>(
             quantity: w.quantity,
             unit_price,
             vat_ppm,
+            station,
         });
     }
     Ok(Basket { lines, subtotal })

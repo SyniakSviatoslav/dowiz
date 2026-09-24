@@ -119,7 +119,7 @@ pub async fn exceptions(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
 /// THE SIGNER'S NAME for each `by` on the rows: the report promised "the
 /// name of who did it" and printed a user id. Only a MEMBER of this venue is
 /// named -- a user id that is not one stays an id, never another venue's name.
-async fn names(env: &Env, venue: &str, rows: &serde_json::Value) -> Result<serde_json::Value> {
+pub(crate) async fn names(env: &Env, venue: &str, rows: &serde_json::Value) -> Result<serde_json::Value> {
     let mut ids: Vec<&str> = rows.as_array().map_or_else(Vec::new, |r| r.iter().filter_map(|x| x["by"].as_str()).collect());
     ids.sort_unstable();
     ids.dedup();

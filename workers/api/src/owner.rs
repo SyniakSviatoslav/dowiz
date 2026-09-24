@@ -768,6 +768,9 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         /// Five axes, levels 1…3; absent = not declared.
         #[serde(default)]
         taste: Option<serde_json::Map<String, Value>>,
+        /// Where the dish is made, `kitchen | bar` (`bell_route`); refused otherwise.
+        #[serde(default)]
+        station: Option<String>,
     }
     let body: In = match req.json().await {
         Ok(b) => b,
@@ -826,6 +829,11 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
             Ok(t) => Some(t),
             Err(e) => return Response::error(e, 400),
         },
+    };
+    let station = match body.station.as_deref().map(crate::bell_route::Station::from_wire) {
+        None => None,
+        Some(Ok(st)) => Some(st),
+        Some(Err(e)) => return Response::error(e, 400),
     };
     let bom = body.bom.clone();
     let want_id = id.clone();
@@ -890,6 +898,7 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         if let Some(t) = &taste {
             p["taste"] = if t.is_empty() { Value::Null } else { Value::Object(t.clone()) };
         }
+        crate::bell_route::edit_station(&mut p, station);
         // ── THE RECIPE, AND WHAT FOLLOWS FROM IT ──
         // Each line is snapshotted from the supply as it is now; the dish's
         // nutrition, ingredient list, weight and cost are summed from the

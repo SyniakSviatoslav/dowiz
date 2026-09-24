@@ -84,28 +84,9 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
             );
         }
         for p in &draft.products {
-            // AN EXISTING DISH KEEPS WHAT THE FILE HAS NO COLUMN FOR: its
-            // photo, its measured size, its option groups and its ALLERGENS.
-            // Blanking the last of those is the worst: a re-imported price list
-            // would make every declared dish undeclared, the publish gate would
-            // then refuse to keep them on sale, and a venue would find its whole
-            // menu stopped by an import that looked like it only touched prices.
+            // An existing dish keeps what the file has no column for (`imported_product`).
             let old = cat.product(&p.id).and_then(|j| serde_json::from_str::<Value>(&j).ok());
-            let keep = |k: &str| {
-                old.as_ref().and_then(|v| v.get(k).cloned()).unwrap_or(Value::Null)
-            };
-            cat.set_product(
-                &p.id,
-                &json!({
-                    "id": p.id, "categoryId": p.category_id, "name": p.name,
-                    "description": p.description, "price": p.price,
-                    "available": p.available, "sortOrder": p.sort_order,
-                    "imageUrl": keep("imageUrl"), "imageUrlSmall": keep("imageUrlSmall"),
-                    "sizeCm": keep("sizeCm"),
-                    "modifierGroups": keep("modifierGroups"), "allergens": keep("allergens")
-                })
-                .to_string(),
-            );
+            cat.set_product(&p.id, &imported_product(p, old.as_ref()).to_string());
         }
         if retire {
             for id in &missing_ids {
@@ -130,3 +111,28 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
     .await?;
     Response::from_json(&summary)
 }
+
+/// The record an imported row becomes. PURE.
+///
+/// AN EXISTING DISH KEEPS WHAT THE FILE HAS NO COLUMN FOR: its photo, its
+/// measured size, its option groups, its STATION (`bell_route`: a re-imported
+/// price list must not send the bar's drinks back to the kitchen's chat) and
+/// its ALLERGENS. Blanking the last of those is the worst: a re-imported price
+/// list would make every declared dish undeclared, the publish gate would then
+/// refuse to keep them on sale, and a venue would find its whole menu stopped
+/// by an import that looked like it only touched prices.
+pub fn imported_product(p: &dowiz_hub::import::DraftProduct, old: Option<&Value>) -> Value {
+    let keep = |k: &str| old.and_then(|v| v.get(k).cloned()).unwrap_or(Value::Null);
+    json!({
+        "id": p.id, "categoryId": p.category_id, "name": p.name,
+        "description": p.description, "price": p.price,
+        "available": p.available, "sortOrder": p.sort_order,
+        "imageUrl": keep("imageUrl"), "imageUrlSmall": keep("imageUrlSmall"),
+        "sizeCm": keep("sizeCm"),
+        "station": keep("station"),
+        "modifierGroups": keep("modifierGroups"), "allergens": keep("allergens")
+    })
+}
+
+#[cfg(test)]
+mod tests;

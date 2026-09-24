@@ -168,6 +168,71 @@ pub async fn pay_out(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
     run(req, ctx, Verb::PayOut).await
 }
 
+/// THE PERIOD a tips read asks about. PURE. `from_ms` is required (the Z
+/// report's `opened_at`), `to_ms` absent is now (an open till), and a period
+/// that ends before it starts is refused rather than read as empty.
+pub fn tips_period(from: Option<&str>, to: Option<&str>, now_ms: i64) -> std::result::Result<(i64, i64), String> {
+    let from_ms = from
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .ok_or("from_ms is required: a period has a start")?;
+    let to_ms = match to {
+        None => now_ms,
+        Some(v) => v.trim().parse::<i64>().map_err(|_| "to_ms is a number".to_string())?,
+    };
+    if to_ms < from_ms {
+        return Err("the period ends before it starts".into());
+    }
+    Ok((from_ms, to_ms))
+}
+
+/// `GET /api/staff/till/tips?[location_id=]&from_ms=&to_ms=` — who took how
+/// much in tips over a period, per currency (`command::tips`), the Z report's
+/// companion: the till screen passes the period's `opened_at`/`closed_at`.
+/// No distribution. Read-only, so no idempotency key.
+///
+/// THE VENUE IS THE HOST'S (`floor::venue_for`): a venue's own subdomain
+/// names it, `location_id` only on the apex; a request naming two is refused.
+/// THE ORDERS ARE THE SERVER'S: loaded from the venue's own log, filtered to
+/// its `location_id`; nothing about a payment is taken from the client.
+pub async fn tips(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    let url = req.url()?;
+    let q = |k: &str| url.query_pairs().find(|(n, _)| n == k).map(|(_, v)| v.into_owned());
+    let host = match crate::hubstore::Place::slug_of_host(&req, &ctx) {
+        Some(slug) => {
+            let v = crate::hubstore::Place::of_slug(&ctx, &slug).await?.venue;
+            (v != crate::hubstore::UNNAMED_VENUE).then_some(v)
+        }
+        None => None,
+    };
+    let loc = match super::floor::venue_for(q("location_id").as_deref(), host.as_deref()) {
+        Ok(l) => l,
+        Err((s, m)) => return Response::error(m, s),
+    };
+    let (from_ms, to_ms) = match tips_period(q("from_ms").as_deref(), q("to_ms").as_deref(), ctx.data.now_ms) {
+        Ok(p) => p,
+        Err(e) => return Response::error(e, 400),
+    };
+    if let Err(r) = crate::courier::staff_at(&req, &ctx, &loc, Cap::OpenTill).await {
+        return Ok(r);
+    }
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
+    let currency = crate::services::venue::currency_of(&crate::hubstore::load_catalog(&place).await?.catalog);
+    let orders: Vec<Value> = crate::hubstore::orders(&place)
+        .await?
+        .iter()
+        .filter_map(|o| serde_json::from_str::<Value>(&o.order_json).ok())
+        .filter(|v| v.get("location_id").and_then(Value::as_str) == Some(loc.as_str()))
+        .collect();
+    let t = match crate::command::tips::tips_by_person(&orders, &currency, from_ms, to_ms) {
+        Ok(t) => t,
+        Err(e) => return Response::error(e, 500),
+    };
+    let rows = json!(t);
+    // The display names of the venue's own members, as the exceptions view has them.
+    let names = crate::exceptions::names(&ctx.env, &loc, &rows).await?;
+    Response::from_json(&json!({ "from_ms": from_ms, "to_ms": to_ms, "tips": rows, "names": names }))
+}
+
 /// The `health.till` block, for `/api/owner/health` (law 10). The owner's
 /// route has already authorised the venue; this only asks its object.
 pub async fn report(place: &crate::hubstore::Place, location_id: &str) -> std::result::Result<Report, (u16, String)> {

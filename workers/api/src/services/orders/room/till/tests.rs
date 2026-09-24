@@ -104,3 +104,14 @@ fn every_verb_has_its_own_idempotency_route() {
     assert_eq!(routes.len(), all.len());
     assert!(routes.iter().all(|r| r.starts_with("staff.till_")));
 }
+
+#[test]
+fn a_tips_period_needs_a_start_and_an_open_till_ends_now() {
+    assert_eq!(tips_period(Some("100"), Some("200"), T0), Ok((100, 200)));
+    assert_eq!(tips_period(Some("100"), None, T0), Ok((100, T0)), "an open till reads up to now");
+    assert!(tips_period(None, Some("200"), T0).is_err(), "no start, no period");
+    assert!(tips_period(Some("x"), None, T0).is_err());
+    assert!(tips_period(Some("100"), Some("y"), T0).is_err());
+    assert!(tips_period(Some("300"), Some("200"), T0).is_err(), "ends before it starts");
+    assert_eq!(tips_period(Some("200"), Some("200"), T0), Ok((200, 200)), "an instant is a period");
+}

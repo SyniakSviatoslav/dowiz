@@ -2,12 +2,13 @@
 // currency, cash in and out with a reason, a BLIND count, and the close.
 // `POST /api/staff/till/{open,count,close,pay_in,pay_out}` (till.rs).
 //
-// There is no till READ route, so this screen shows the last answer THIS
+// The tips beside it are READ (`GET /api/staff/till/tips`, the period of
+// the drawer this phone knows). There is no till READ route, so this screen shows the last answer THIS
 // phone received, stored only as `visible()` -- the projection that cannot
 // carry `expected` before a close. Opening on a second phone shows
 // "not known here" until that phone does something to the drawer.
 import { esc, TILL_CURRENCIES, parseMinor } from './logic.js';
-import { renderTill, visible } from './till-view.js';
+import { renderTill, visible, tipsQuery, renderTips } from './till-view.js';
 import { safeGet, safeSet } from '../store/storage.js';
 
 const KEY = 'dw_room_till';
@@ -29,6 +30,7 @@ export function renderTillScreen(c) {
     <div class="bar"><button class="btn" data-act="back">← ${esc(t('back'))}</button></div>
     <h2>${esc(t('till'))}</h2>
     <section class="till-state" aria-live="polite">${renderTill(ans, t, c.locale())}</section>
+    ${tipsQuery(ans, S.loc) ? `<section class="card-form till-tips" data-tips aria-live="polite"><h3>${esc(t('tipsTitle'))}</h3></section>` : ''}
     ${open ? '' : `<form class="card-form" data-form="open"><h3>${esc(t('openTill'))}</h3>
       <p class="muted">${esc(t('floatHint'))}</p><div class="piles">${pileInputs(t, 'f')}</div>
       <button class="cta" type="submit">${esc(t('openTill'))}</button></form>`}
@@ -65,6 +67,7 @@ export function piles(get, prefix) {
 
 export function bindTill(c, root) {
   const { S, t } = c;
+  loadTips(c, root);
   root.onclick = ev => {
     const b = ev.target.closest('[data-act]');
     if (b && b.dataset.act === 'back') { S.view = 'room'; c.render(); }
@@ -105,4 +108,14 @@ export function bindTill(c, root) {
     }
     c.render();
   };
+}
+
+/// The tip record for the period on screen, read from the server each time the
+/// till is drawn. A failed read says so; it never draws a zero.
+async function loadTips(c, root) {
+  const { S, t } = c;
+  const q = tipsQuery(S.till, S.loc), el = root.querySelector('[data-tips]');
+  if (!q || !el) return;
+  try { el.innerHTML = renderTips(await c.api(q), t, c.locale()); }
+  catch (e) { el.innerHTML = `<h3>${esc(t('tipsTitle'))}</h3><p class="muted">${esc(t('tipsFailed'))} ${esc(e.message || '')}</p>`; }
 }
