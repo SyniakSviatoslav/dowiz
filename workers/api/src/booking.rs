@@ -134,7 +134,7 @@ fn fold_status(events: &[EventRow]) -> std::result::Result<ReservationStatus, St
 /// one write, and there is no window in which a reservation says one status
 /// and its events another.
 pub const IMAGE_BOOKINGS: &str = "bookings";
-pub const BOOKINGS_BYTES: usize = 2 * 1024 * 1024;
+pub const BOOKINGS_BYTES: usize = dowiz_hub::CEILING_BYTES;
 
 const K_RSV: &str = "rsv";
 const K_EV: &str = "ev";

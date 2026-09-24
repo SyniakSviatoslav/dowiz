@@ -26,7 +26,7 @@ use crate::HubError;
 use bebop_store::kv::Kv;
 use bebop_store::Store;
 
-pub const DEFAULT_ROSTER_BYTES: usize = 512 * 1024;
+pub const DEFAULT_ROSTER_BYTES: usize = crate::CEILING_BYTES;
 
 const P_PERSON: &str = "person:";
 /// A pending invite. A separate namespace from `person:` so an invite can never

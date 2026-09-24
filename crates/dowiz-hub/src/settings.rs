@@ -23,7 +23,7 @@ use crate::HubError;
 use bebop_store::kv::Kv;
 use bebop_store::Store;
 
-pub const DEFAULT_SETTINGS_BYTES: usize = 256 * 1024;
+pub const DEFAULT_SETTINGS_BYTES: usize = crate::CEILING_BYTES;
 
 const PREFIX: &str = "set:";
 

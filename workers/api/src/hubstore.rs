@@ -830,8 +830,8 @@ pub const IMAGE_OPS: &str = "ops";
 
 /// The venue's own people: the customer registry that `customers` was.
 pub const IMAGE_PEOPLE: &str = "people";
-pub const PEOPLE_BYTES: usize = 2 * 1024 * 1024;
-pub const OPS_BYTES: usize = 2 * 1024 * 1024;
+pub const PEOPLE_BYTES: usize = dowiz_hub::CEILING_BYTES;
+pub const OPS_BYTES: usize = dowiz_hub::CEILING_BYTES;
 
 /// The venue's translations: `<locale>/<entity_type>/<entity_id>/<field>`.
 pub const IMAGE_I18N: &str = "i18n";
@@ -850,7 +850,7 @@ pub fn i18n_key(locale: &str, entity_type: &str, entity_id: &str, field: &str) -
 
 /// Sized for a large multilingual catalogue: 165 dishes x 3 languages x 3
 /// fields is under 2,000 entries, and each is a short string.
-pub const I18N_BYTES: usize = 2 * 1024 * 1024;
+pub const I18N_BYTES: usize = dowiz_hub::CEILING_BYTES;
 
 /// The venue's own failure and audit log: `worker_errors` rows that name this
 /// venue, courier audit, reveals. An append log, newest first, pruned nightly.

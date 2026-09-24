@@ -25,7 +25,7 @@ use crate::HubError;
 
 /// Subscriptions are a handful of short strings; a restaurant with a thousand
 /// live orders is still well inside this.
-pub const DEFAULT_SUBS_BYTES: usize = 512 * 1024;
+pub const DEFAULT_SUBS_BYTES: usize = crate::CEILING_BYTES;
 
 const P_ORDER: &str = "order:";
 const P_STAFF: &str = "staff:";

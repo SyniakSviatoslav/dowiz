@@ -35,7 +35,7 @@ pub(crate) fn projected(cat: &mut Catalog, draft: &RecipeDraft, kind: Kind, reti
     if after.is_some_and(|p| p.fits) {
         return json!({ "nowPerMille": now, "perMille": per_mille, "fits": true });
     }
-    let much = per_mille.map_or("more than four times".to_string(), |n| format!("{n} per mille of"));
+    let much = per_mille.map_or("more than twice".to_string(), |n| format!("{n} per mille of"));
     json!({ "nowPerMille": now, "perMille": per_mille, "fits": false,
             "said": format!("this import would not fit: the catalogue would be {much} its ceiling; nothing would be saved") })
 }

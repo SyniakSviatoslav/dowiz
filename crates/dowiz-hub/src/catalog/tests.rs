@@ -138,7 +138,9 @@ fn a_full_menu_with_recipes_fits_the_catalogue() {
     let before = c.projected().unwrap();
     assert!(before.fits);
     let at = before.usage.used_per_mille();
-    assert!((505..=520).contains(&at), "the live venue read 513 per mille; this one reads {at}");
+    // The live venue read 513 per mille of the old 1 MiB ceiling, i.e. 51 of the
+    // 10 MiB one (dowiz_hub::CEILING_BYTES since 2026-09-25).
+    assert!((50..=52).contains(&at), "the live venue reads 51 per mille; this one reads {at}");
     for i in 0..75 {
         c.set_supply(&format!("supply-{i:02}x"), &live_supply(i));
     }
@@ -147,7 +149,8 @@ fn a_full_menu_with_recipes_fits_the_catalogue() {
     }
     let after = c.projected().unwrap();
     assert!(after.fits, "{after:?}");
-    assert!(after.usage.used_per_mille() < 850, "73 recipes must leave room: {}", after.usage.used_per_mille());
+    // 844 per mille of the old ceiling on the live venue = 84 of this one.
+    assert!(after.usage.used_per_mille() < 90, "73 recipes must leave room: {}", after.usage.used_per_mille());
     // The projection is the save: the image written reads the same number.
     let bytes = c.to_bytes().unwrap();
     assert_eq!(Catalog::load(&bytes).unwrap().usage().used_cells, after.usage.used_cells);
@@ -158,7 +161,7 @@ fn a_full_menu_with_recipes_fits_the_catalogue() {
 #[test]
 fn a_projection_past_the_ceiling_says_it_would_not_fit() {
     let mut c = dubin();
-    c.set_product("huge", &format!(r#"{{"blob":"{}"}}"#, "y".repeat(90_000)));
+    c.set_product("huge", &format!(r#"{{"blob":"{}"}}"#, "y".repeat(1_400_000)));
     let p = c.projected().unwrap();
     assert!(!p.fits);
     assert!(p.usage.used_per_mille() > 1000, "{p:?}");
@@ -166,9 +169,9 @@ fn a_projection_past_the_ceiling_says_it_would_not_fit() {
 }
 
 #[test]
-fn a_projection_beyond_four_ceilings_is_the_stores_own_error() {
+fn a_projection_beyond_two_ceilings_is_the_stores_own_error() {
     let mut c = Catalog::create().unwrap();
-    c.set_product("huge", &"z".repeat(600_000));
+    c.set_product("huge", &"z".repeat(2_800_000));
     assert!(matches!(c.projected(), Err(e) if e.arena_full().is_some()));
 }
 

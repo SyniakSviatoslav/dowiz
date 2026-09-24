@@ -59,16 +59,16 @@ pub const ERASURES: &str = "erasures";
 /// compacted image's usage -- see `bebop-ceiling-not-capacity`, where a healthy
 /// venue read 829 per mille because the gauge used capacity instead.
 ///
-/// Sized from what they hold rather than from a round number: the registry is
-/// one record per venue, identity is one per person plus their memberships,
-/// sessions turn over constantly and are swept nightly, couriers are a roster.
-pub const REGISTRY_BYTES: usize = 512 * 1024;
-pub const IDENTITY_BYTES: usize = 2 * 1024 * 1024;
-pub const SESSIONS_BYTES: usize = 4 * 1024 * 1024;
-pub const COURIERS_BYTES: usize = 1024 * 1024;
-pub const WAITLIST_BYTES: usize = 1024 * 1024;
+/// One ceiling for all of them, `dowiz_hub::CEILING_BYTES` (10 MiB): a table
+/// starts at 16 KiB and persists only what is live, so the ceiling is where a
+/// write is refused, not what a read or a write costs.
+pub const REGISTRY_BYTES: usize = dowiz_hub::CEILING_BYTES;
+pub const IDENTITY_BYTES: usize = dowiz_hub::CEILING_BYTES;
+pub const SESSIONS_BYTES: usize = dowiz_hub::CEILING_BYTES;
+pub const COURIERS_BYTES: usize = dowiz_hub::CEILING_BYTES;
+pub const WAITLIST_BYTES: usize = dowiz_hub::CEILING_BYTES;
 /// ~200 bytes a person plus 40 an order: thousands of erasures before it binds.
-pub const ERASURES_BYTES: usize = 2 * 1024 * 1024;
+pub const ERASURES_BYTES: usize = dowiz_hub::CEILING_BYTES;
 
 /// Platform-level failures. An append log, because that is what a failure
 /// record is: it arrives, it is read back newest first, and it is pruned.

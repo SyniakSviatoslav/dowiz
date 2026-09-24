@@ -125,7 +125,7 @@ pub fn complete(bytes: &[u8], kind: Kind) -> bool {
 /// A dish photo that has been through a browser canvas at 1600px is well under
 /// 400 KB. Two megabytes leaves room for a camera original that skipped the
 /// resize, and refuses a video somebody renamed.
-pub const MAX_BYTES: usize = 2 * 1024 * 1024;
+pub const MAX_BYTES: usize = crate::CEILING_BYTES;
 
 #[derive(Debug)]
 pub enum MediaError {

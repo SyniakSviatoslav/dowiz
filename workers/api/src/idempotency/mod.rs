@@ -37,7 +37,7 @@ use crate::hubstore::Place;
 
 /// The image, and the record kinds inside it.
 pub const IMAGE_IDEMPOTENCY: &str = "idem";
-pub const IDEMPOTENCY_BYTES: usize = 4 * 1024 * 1024;
+pub const IDEMPOTENCY_BYTES: usize = dowiz_hub::CEILING_BYTES;
 const KIND: &str = "k";
 
 pub mod verdict;

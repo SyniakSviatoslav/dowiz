@@ -20,9 +20,9 @@ use crate::HubError;
 pub mod bom;
 
 /// How large an image `projected` may build to measure a catalogue that does
-/// NOT fit: four ceilings, so an import that would overflow is reported with
-/// its number (up to 4000 per mille) instead of only "no".
-const PROJECTION_BYTES: usize = 4 * DEFAULT_CATALOG_BYTES;
+/// NOT fit: two ceilings (20 MiB of Worker memory at worst), so an import that
+/// would overflow is reported with its number (up to 2000 per mille) instead of only "no".
+const PROJECTION_BYTES: usize = 2 * DEFAULT_CATALOG_BYTES;
 
 /// What saving the catalogue now would spend, and whether it can be saved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,8 +33,9 @@ pub struct Projection {
     pub fits: bool,
 }
 
-/// 1 MiB is generous for a menu: fifty products of JSON is tens of kilobytes.
-pub const DEFAULT_CATALOG_BYTES: usize = 1024 * 1024;
+/// The shared ceiling (10 MiB). 1 MiB was too small: dubin-sushi's 165 dishes with
+/// supplies and recipes reached 844 per mille of it on 2026-09-25.
+pub const DEFAULT_CATALOG_BYTES: usize = crate::CEILING_BYTES;
 
 const K_LOCATION: &str = "location";
 const P_PRODUCT: &str = "product:";

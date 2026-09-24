@@ -24,7 +24,7 @@ use crate::HubError;
 use bebop_store::kv::Kv;
 use bebop_store::Store;
 
-pub const DEFAULT_POSTS_BYTES: usize = 512 * 1024;
+pub const DEFAULT_POSTS_BYTES: usize = crate::CEILING_BYTES;
 const P_POST: &str = "post:";
 
 /// What the post is about — a fact the hub computed, never a theme the model chose.

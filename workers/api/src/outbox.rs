@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 
 /// The image, and the record kind inside it.
 pub const IMAGE_OUTBOX: &str = "outbox";
-pub const OUTBOX_BYTES: usize = 1024 * 1024;
+pub const OUTBOX_BYTES: usize = dowiz_hub::CEILING_BYTES;
 pub const KIND: &str = "o";
 
 /// How many times an effect is attempted before it is abandoned.

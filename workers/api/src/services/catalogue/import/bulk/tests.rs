@@ -179,13 +179,14 @@ fn a_full_menu_with_recipes_fits_the_catalogue() {
     let mean = cat.products().iter().map(|(_, j)| j.len()).sum::<usize>() / 165;
     assert!((340..=360).contains(&mean), "the live dishes are 348 B on average; these are {mean}");
     let before = per_mille(&mut cat);
-    assert!((505..=520).contains(&before), "the live venue read 513 per mille; this one reads {before}");
+    // 513 per mille of the old 1 MiB ceiling = 51 of dowiz_hub::CEILING_BYTES (10 MiB).
+    assert!((50..=52).contains(&before), "the live venue reads 51 per mille; this one reads {before}");
     let (d, _) = read(&cat, &dubin_supplies(), Kind::Supplies, CostScale::Major, NOW);
     assert_eq!(apply_supplies(&mut cat, &d, false), Ok(75), "{:?}", d.warnings);
     let (d, _) = read(&cat, &dubin_recipes(), Kind::Recipes, CostScale::Major, NOW);
     assert_eq!(apply_recipes(&mut cat, &d), Ok(73), "{:?}", d.warnings);
     let after = cat.to_bytes().map(|b| Catalog::load(&b).unwrap().usage().used_per_mille());
-    assert!(matches!(after, Ok(n) if n < 850), "73 recipes must leave room: {after:?}");
+    assert!(matches!(after, Ok(n) if n < 90), "73 recipes must leave room: {after:?}");
 }
 
 /// PRINTS the modelled per mille for dubin-sushi from the inventory lane's real
@@ -236,9 +237,23 @@ fn nearly_full(blob: usize) -> Catalog {
     cat
 }
 
+/// The largest blob (to 4 KiB) that leaves dubin-with-supplies at or under
+/// `per_mille` of its ceiling.
+fn blob_under(per_mille: i64) -> usize {
+    let at = |blob: usize| nearly_full(blob).projected().ok().filter(|p| p.fits).map(|p| p.usage.used_per_mille());
+    let (mut lo, mut hi) = (0usize, 2 * dowiz_hub::CEILING_BYTES);
+    while hi - lo > 4096 {
+        let mid = (lo + hi) / 2;
+        if at(mid).is_some_and(|n| n <= per_mille) { lo = mid } else { hi = mid }
+    }
+    lo
+}
+
 #[test]
 fn a_dry_run_that_would_not_fit_says_so() {
-    let mut cat = nearly_full(35_000);
+    // Filled to just under the ceiling (found, not hard-coded, so the test
+    // follows dowiz_hub::CEILING_BYTES), so 73 recipes tip it over.
+    let mut cat = nearly_full(blob_under(990));
     let (d, _) = read(&cat, &dubin_recipes(), Kind::Recipes, CostScale::Major, NOW);
     assert_eq!(d.recipes.len(), 73, "{:?}", d.warnings);
     let room = projected(&mut cat, &d, Kind::Recipes, false);
@@ -252,19 +267,19 @@ fn a_dry_run_that_would_not_fit_says_so() {
     let mut cat = nearly_full(0);
     let room = projected(&mut cat, &d, Kind::Recipes, false);
     assert_eq!((room["fits"].clone(), room["said"].clone()), (json!(true), Value::Null), "{room}");
-    assert!(room["perMille"].as_i64().unwrap() < 850, "{room}");
+    assert!(room["perMille"].as_i64().unwrap() < 90, "{room}");
 }
 
 #[test]
-fn a_dry_run_past_four_ceilings_says_so_without_a_number() {
+fn a_dry_run_past_two_ceilings_says_so_without_a_number() {
     let mut cat = venue();
     let mut d = RecipeDraft::default();
     let (big, _) = read(&cat, "name,unit\nSalt,g\n", Kind::Supplies, CostScale::Major, NOW);
     d.supplies = big.supplies;
-    d.supplies[0].name = "n".repeat(4_500_000);
+    d.supplies[0].name = "n".repeat(22_000_000);
     let room = projected(&mut cat, &d, Kind::Supplies, false);
     assert_eq!((room["fits"].clone(), room["perMille"].clone()), (json!(false), Value::Null), "{room}");
-    assert!(room["said"].as_str().unwrap().contains("more than four times its ceiling"), "{room}");
+    assert!(room["said"].as_str().unwrap().contains("more than twice its ceiling"), "{room}");
 }
 
 /// Refused for another reason than room: Apply names it; the dry run does
@@ -281,7 +296,7 @@ fn a_draft_apply_would_refuse_is_not_measured() {
 #[test]
 fn a_catalogue_that_cannot_be_saved_now_says_so() {
     let mut cat = Catalog::create().unwrap();
-    cat.set_product("huge", &"h".repeat(1_100_000));
+    cat.set_product("huge", &"h".repeat(11_000_000));
     let room = projected(&mut cat, &RecipeDraft::default(), Kind::Recipes, false);
     assert_eq!(room["fits"], json!(false));
     assert!(room["said"].as_str().unwrap().contains("cannot be read to measure"), "{room}");

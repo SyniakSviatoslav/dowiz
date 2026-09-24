@@ -61,6 +61,14 @@ use bebop_store::{Store, StoreError};
 /// measured 47 cells per append, and the image is only as large as it is written.
 pub const DEFAULT_IMAGE_BYTES: usize = 4 * 1024 * 1024;
 
+/// THE REFUSAL POINT of every compacted image and table: 10 MiB (operator,
+/// 2026-09-25). A CEILING, not an allocation: those images start at 16 KiB,
+/// double only when an entry does not fit, and persist only what is live, so a
+/// high ceiling costs nothing until it is used. The append logs (`Hub`,
+/// `StockLog`, `LogImage`) have no ceiling at all -- they grow by doubling --
+/// and their `DEFAULT_*_BYTES` are birth sizes, deliberately NOT tied to this.
+pub const CEILING_BYTES: usize = 10 * 1024 * 1024;
+
 /// What happened. The kind is the first payload byte so a record can be routed
 /// without parsing the JSON behind it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1571,7 +1579,9 @@ mod usage_tests {
         let mut last_ok = 0;
         for n in 1.. {
             let mut s = settings::Settings::create().expect("settings");
-            for i in 0..n * 100 {
+            // 1500 entries a step: about 6% of the 10 MiB ceiling, fine enough
+            // for the last reading before the refusal to land above 700.
+            for i in 0..n * 1500 {
                 s.set(&format!("ai.k{i}"), &"x".repeat(60));
             }
             match s.to_bytes() {
@@ -1623,7 +1633,9 @@ mod usage_tests {
         let mut last = 0;
         for n in 1.. {
             let mut s = settings::Settings::create().expect("settings");
-            for i in 0..n * 100 {
+            // 1500 entries a step: about 6% of the 10 MiB ceiling, fine enough
+            // for the last reading before the refusal to land above 700.
+            for i in 0..n * 1500 {
                 s.set(&format!("k{i}"), &"x".repeat(60));
             }
             match s.to_bytes() {

@@ -57,7 +57,7 @@ impl Rail {
 /// rail's state changes on a cadence nothing else shares, and putting it beside
 /// the assignments would make every courier action rewrite it.
 pub const IMAGE_RAILS: &str = "rails";
-pub const RAILS_BYTES: usize = 256 * 1024;
+pub const RAILS_BYTES: usize = dowiz_hub::CEILING_BYTES;
 const KIND: &str = "rail";
 
 /// Consecutive failures that open the rail.

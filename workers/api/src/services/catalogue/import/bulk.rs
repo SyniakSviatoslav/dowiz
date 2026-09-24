@@ -23,7 +23,7 @@ use crate::services::operations::supplies::{check, record, SupplyIn};
 
 /// A spreadsheet of a thousand recipe lines is ~40 KiB; this is room for
 /// twenty of them and refuses a file that is not a spreadsheet at all.
-const MAX_BYTES: usize = 1 << 20;
+const MAX_BYTES: usize = dowiz_hub::CEILING_BYTES;
 
 /// `POST /api/owner/supplies/import[?apply=1][&retire=1][&cost=hundredths]` — body is the CSV.
 pub async fn import_supplies(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
