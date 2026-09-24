@@ -13,14 +13,18 @@ use crate::hubstore::{Place, IMAGE_PEOPLE, PEOPLE_BYTES};
 ///
 /// `Ok(Err(reason))` is the refusal, already RECORDED in the venue's error log
 /// with its reason -- a refusal is a record, never a silent default -- and the
-/// caller answers it 409. `key` is the customer's `customer_key`.
+/// caller answers it 409. The card read is every card of the person (§3.4,
+/// `alias::allergens_of`), including the link this placement will write.
 pub async fn allergy_check(
     place: &Place,
-    key: &str,
+    secret: &[u8],
+    phone: &str,
     dishes: &[(String, String)],
 ) -> Result<std::result::Result<(), String>> {
+    let key = super::handlers::customer_key(secret, phone);
+    let pending = super::identity::alias_at_placement(secret, phone);
     let people = crate::hubstore::load_table(place, IMAGE_PEOPLE, PEOPLE_BYTES).await?;
-    let card = allergy::of_record(people.table.get(KIND, key).as_deref());
+    let card = super::alias::allergens_of(&people.table, &key, pending.as_deref());
     match allergy::refuse(&card, dishes) {
         Ok(()) => Ok(Ok(())),
         Err(why) => {
@@ -35,9 +39,18 @@ pub async fn allergy_check(
 ///
 /// AFTER THE ORDER, AND IT CANNOT FAIL IT: the order is already in the log.
 /// A failure is recorded, loudly, rather than swallowed as `let _` was.
-pub async fn remember(place: &Place, key: &str, legacy: &str, now_ms: i64) {
+///
+/// And THE RULE-SITE of §3.4 in the same turn: `alias_to` is the E.164
+/// spelling's key when this order's phone was typed another way
+/// (`identity::alias_at_placement`). The alias is written BEFORE the card, because the
+/// card's absence is what says this spelling is appearing for the first time
+/// (`alias::rule_link`).
+pub async fn remember_spelling(place: &Place, key: &str, legacy: &str, alias_to: Option<String>, now_ms: i64) {
     let (key, legacy) = (key.to_string(), legacy.to_string());
     let wrote = crate::hubstore::with_table(place, IMAGE_PEOPLE, PEOPLE_BYTES, move |t| {
+        if let Some(to) = &alias_to {
+            super::alias::rule_link(t, &key, to, now_ms);
+        }
         if let Some(rec) = touch(t.get(KIND, &key).as_deref(), now_ms) {
             t.put(KIND, &key, &rec, &[], &[])
                 .map_err(|e| Error::RustError(format!("customer card: {e:?}")))?;

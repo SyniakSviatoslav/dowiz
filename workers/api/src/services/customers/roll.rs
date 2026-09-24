@@ -58,12 +58,17 @@ fn spent_on(o: &Value) -> i64 {
 /// needs the hub's signing secret, and a fold that needed a secret could not
 /// be tested.
 ///
+/// `resolve` takes a key and returns the canonical key it should be grouped by.
+/// This allows aliases (multiple phone spellings mapped to one canonical form)
+/// to be grouped into a single row.
+///
 /// AN ORDER WITHOUT A PHONE IS NOT A PERSON. The number is optional by
 /// operator decision, so a basket placed without one is counted in the venue's
 /// takings and simply has nobody to attribute it to.
 pub fn roll(
     orders: &[Value],
     key_of: impl Fn(&str) -> String,
+    resolve: impl Fn(&str) -> String,
     mask_name: impl Fn(&str) -> String,
     mask_phone: impl Fn(&str) -> String,
     sort: Sort,
@@ -77,7 +82,8 @@ pub fn roll(
         let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
         let spent = spent_on(o);
         let key = key_of(phone);
-        match rows.iter_mut().find(|r| r.key == key) {
+        let canonical = resolve(&key);
+        match rows.iter_mut().find(|r| r.key == canonical) {
             Some(r) => {
                 // A REFUSED ORDER STILL COUNTS AS A VISIT. They came, and the
                 // venue said no; hiding that from the count would hide the
@@ -92,7 +98,7 @@ pub fn roll(
                     .and_then(Value::as_str)
                     .unwrap_or("");
                 rows.push(Row {
-                    key,
+                    key: canonical,
                     name: mask_name(name),
                     phone: mask_phone(phone),
                     orders: 1,

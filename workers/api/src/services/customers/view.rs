@@ -23,12 +23,18 @@ const CARD: [(&str, &str); 6] = [
 /// `offers` is whether the consent fold holds a `Consented` for WhatsApp
 /// marketing right now (§3.2) -- shown so the owner can see who said yes
 /// before anything like a campaign exists.
-pub fn row_json(r: &Row, record: Option<&str>, offers: bool) -> Value {
+///
+/// `linked` are the keys shown under this row by an alias (§3.4), so the
+/// console can unlink each; absent when there are none.
+pub fn row_json(r: &Row, record: Option<&str>, offers: bool, linked: &[String]) -> Value {
     let mut v = json!({
         "key": r.key, "name": r.name, "phone": r.phone,
         "orders": r.orders, "spent": r.spent, "lastAt": r.last_at,
         "offersWhatsapp": offers,
     });
+    if !linked.is_empty() {
+        v["linked"] = json!(linked);
+    }
     let card = record.and_then(|j| serde_json::from_str::<Value>(j).ok());
     if let Some(card) = card {
         for (stored, shown) in CARD {

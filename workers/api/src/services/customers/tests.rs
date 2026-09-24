@@ -14,7 +14,7 @@ fn order(phone: &str, name: &str, at: i64, total: i64, tip: i64, status: &str) -
 }
 
 fn rolled(orders: &[serde_json::Value], sort: Sort) -> Vec<Row> {
-    roll(orders, |p| format!("k:{p}"), |n| n.to_string(), |p| p.to_string(), sort)
+    roll(orders, |p| format!("k:{p}"), |k| k.to_string(), |n| n.to_string(), |p| p.to_string(), sort)
 }
 
 /// A REFUSED ORDER IS NOT MONEY TAKEN, AND THE TIP WENT TO THE COURIER. A
@@ -58,15 +58,14 @@ fn four_spellings_of_one_number_are_one_customer() {
     // stops "normalise harder" from becoming "everyone is one customer".
     assert_ne!(super::handlers::customer_key(secret, "+355691234568"), canonical);
 
-    // THE NATIONAL FORM IS STILL A SECOND HANDLE, and this asserts the KNOWN
-    // GAP rather than hiding it: `069…` needs the venue's dialling code to
-    // become `+35569…`, and guessing one is how a Kosovan number becomes an
-    // Albanian customer. When that argument is added, this line changes to
-    // `assert_eq!` in the same commit.
+    // THE NATIONAL FORM IS STILL A SECOND HANDLE, BY DESIGN since §3.4: the
+    // key is never rewritten (a card or consent filed under it would lose its
+    // person). The two are ONE ROW through an alias instead --
+    // `two_spellings_of_one_number_are_one_row_and_unlinking_restores_two`.
     assert_ne!(
         super::handlers::customer_key(secret, "0691234567"),
         canonical,
-        "the national form is a known, written-down gap, not an accident"
+        "the national form is joined by an alias, never by the key"
     );
 }
 
@@ -378,7 +377,7 @@ fn a_records_note_appears_on_the_row() {
     use super::view::row_json;
     let r = Row { key: "k1".into(), name: "A***".into(), phone: "+35•••67".into(), orders: 2, spent: 900, last_at: 5 };
     let rec = r#"{"note":"extra ginger","tags":["regular"],"allergens":["fish"],"lang":"sq","usual_table":"7","birthday_md":"05-02","created_at_ms":1}"#;
-    let v = row_json(&r, Some(rec), true);
+    let v = row_json(&r, Some(rec), true, &[]);
     assert_eq!(v["offersWhatsapp"], true, "the consent fold's answer is on the row");
     assert_eq!(v["note"], "extra ginger");
     assert_eq!(v["tags"], serde_json::json!(["regular"]));
@@ -391,7 +390,7 @@ fn a_records_note_appears_on_the_row() {
     assert_eq!(v["orders"], 2);
     assert_eq!(v["spent"], 900);
     assert_eq!(v["lastAt"], 5);
-    let bare = row_json(&r, None, false);
+    let bare = row_json(&r, None, false, &[]);
     assert_eq!(bare["offersWhatsapp"], false);
     assert!(bare.get("note").is_none(), "no card, no card fields: {bare}");
     assert_eq!(bare["name"], "A***");
@@ -519,4 +518,63 @@ fn an_owner_grant_needs_evidence_and_the_sentence_shown() {
     assert_eq!(a.evidence, "signed paper form #12");
     let bad = owner_in(serde_json::json!({ "state": "maybe" }));
     assert!(owner_act("0123456789abcdef", &bad, "own_1", 9).is_err());
+}
+
+// ── identity: link, never merge (§3.4) ─────────────────────────────────────
+
+use super::alias::{self, Aliases, By};
+use super::handlers::customer_key;
+use super::identity::{rule_pair, VENUE_DIAL};
+use dowiz_hub::table::Table;
+
+const SECRET: &[u8] = b"a-test-signing-key";
+
+fn fold_with(os: &[serde_json::Value], t: &Table) -> Vec<Row> {
+    let a = Aliases::of(t);
+    roll(os, |p| customer_key(SECRET, p), |k| a.resolve(k), |n| n.to_string(), |p| p.to_string(), Sort::Recent)
+}
+
+/// TWO SPELLINGS OF ONE NUMBER ARE ONE ROW (§6 item 5's CHECK), through the
+/// placement's own rule; UNLINKING RESTORES TWO ROWS; and the next order of
+/// the unlinked spelling does not quietly relink it.
+#[test]
+fn two_spellings_of_one_number_are_one_row_and_unlinking_restores_two() {
+    let os = [
+        order("+355 69 123 4567", "Arben", 10, 100, 0, "DELIVERED"),
+        order("069 123 4567", "A.", 20, 200, 0, "DELIVERED"),
+    ];
+    let mut t = Table::create(64 * 1024).unwrap();
+    assert_eq!(fold_with(&os, &t).len(), 2, "no alias yet: two keys, two rows");
+
+    // The national spelling's first order, as `at_placement::remember_spelling` runs it.
+    let (from, to) = rule_pair(SECRET, "069 123 4567", VENUE_DIAL).expect("a national spelling links");
+    assert!(alias::rule_link(&mut t, &from, &to, 20));
+    t.put(super::record::KIND, &from, "{}", &[], &[]).unwrap();
+
+    let r = fold_with(&os, &t);
+    assert_eq!(r.len(), 1, "one person: {r:?}");
+    assert_eq!(r[0].key, customer_key(SECRET, "+355 69 123 4567"), "shown under the E.164 key");
+    assert_eq!((r[0].orders, r[0].spent), (2, 300));
+    assert_eq!(Aliases::of(&t).members(&r[0].key), vec![from.clone()], "the row names what it holds");
+
+    assert!(alias::unlink(&mut t, &from));
+    assert_eq!(fold_with(&os, &t).len(), 2, "unlinked: two rows again, nothing was merged");
+    assert!(!alias::rule_link(&mut t, &from, &to, 30), "the next order does not undo the owner");
+    assert_eq!(fold_with(&os, &t).len(), 2);
+}
+
+/// AN OWNER'S LINK joins two different numbers the owner knows are one
+/// person; the rows' money is the sum, and each order stays where it was.
+#[test]
+fn an_owner_link_joins_two_numbers_and_the_row_sums_them() {
+    let os = [
+        order("+355 69 111 1111", "Arben", 10, 100, 0, "DELIVERED"),
+        order("+355 68 222 2222", "Arben", 20, 250, 0, "DELIVERED"),
+    ];
+    let (a, b) = (customer_key(SECRET, "+355 69 111 1111"), customer_key(SECRET, "+355 68 222 2222"));
+    let mut t = Table::create(64 * 1024).unwrap();
+    alias::link(&mut t, &b, &a, By::Owner, "his work phone", 5).unwrap();
+    let r = fold_with(&os, &t);
+    assert_eq!((r.len(), r[0].key.clone(), r[0].spent), (1, a.clone(), 350));
+    assert_eq!(customer_key(SECRET, "+355 68 222 2222"), b, "the key itself never moved");
 }

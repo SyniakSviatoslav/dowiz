@@ -90,9 +90,13 @@ pub async fn customers(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // the mask is the WHOLE protection on this screen, and it had none.
     use crate::services::customers::roll;
     use dowiz_hub::redact;
+    // LINK, NEVER MERGE (§3.4): every key is shown under the key it is linked
+    // to, read from the `alias` kind of the same `people` image.
+    let aliases = crate::services::customers::alias::Aliases::of(&people.table);
     let rows = roll::roll(
         &orders_of(listed, &loc),
         |phone| customer_key(&secret, phone),
+        |key| aliases.resolve(key),
         redact::name,
         redact::phone,
         roll::Sort::of(sort.as_deref()),
@@ -105,6 +109,7 @@ pub async fn customers(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             r,
             people.table.get(crate::services::customers::record::KIND, &r.key).as_deref(),
             consented(&acts, &r.key, PURPOSE_MARKETING, CHANNEL_WHATSAPP).is_some(),
+            &aliases.members(&r.key),
         )).collect::<Vec<_>>(),
         "currency": currency_of(&cat),
     }))
@@ -141,14 +146,21 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<crate::Req>) ->
     };
 
     let secret = signing_secret(&ctx.env);
-    let listed = crate::hubstore::orders(&place).await?;
+    // THE ROW'S KEY IS A CANONICAL ONE (§3.4): the orders of every spelling
+    // linked into it are the row's orders, so they are the reveal's too.
+    let (listed, people) = futures_util::future::try_join(
+        crate::hubstore::orders(&place),
+        crate::hubstore::load_table(&place, crate::hubstore::IMAGE_PEOPLE, crate::hubstore::PEOPLE_BYTES),
+    )
+    .await?;
+    let aliases = crate::services::customers::alias::Aliases::of(&people.table);
     let mut found: Option<(String, String, Vec<Value>)> = None;
     for o in orders_of(listed, &loc) {
         let Some(phone) = o.get("contact").and_then(|c| c.get("phone")).and_then(Value::as_str)
         else {
             continue;
         };
-        if customer_key(&secret, phone) != key {
+        if aliases.resolve(&customer_key(&secret, phone)) != key {
             continue;
         }
         let name = o
@@ -216,6 +228,9 @@ pub async fn reveals(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
                 "by": v.get("by").cloned().unwrap_or(Value::Null),
                 "at": v.get("at").cloned().unwrap_or(json!(0)),
                 "reason": v.get("reason").cloned().unwrap_or(Value::Null),
+                // A LINK IS A REVEAL OF BOTH (§3.4): `alias_routes` files it
+                // here with `act` "linked"/"unlinked"; a plain reveal has none.
+                "act": v.get("act").cloned().unwrap_or(Value::Null),
             }))
         })
         .collect();
