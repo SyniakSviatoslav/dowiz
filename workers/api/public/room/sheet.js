@@ -10,6 +10,7 @@
 // What is hidden is what `actionsFor` says the caps do not allow; the server
 // still refuses it (`may_void`, the stage rule), and its words are shown.
 import { esc, money, actionsFor, owed, REASONS, reasonWord, canTransfer, transferTargets, canMoveSitting } from './logic.js';
+import { renderGuestBar, answerGuest } from './guest.js';
 
 const CHANGED = 'changed while you were editing';
 
@@ -46,6 +47,7 @@ export function renderRound(c, round) {
       <dt>${esc(t('total'))}</dt><dd>${money(round.total || 0, cur, loc)}</dd>
       <dt>${esc(t('owed'))}</dt><dd class="owed">${round.payment_status === 'paid' ? esc(t('paidInFull')) : money(due, cur, loc)}</dd>
     </dl>
+    ${renderGuestBar(c, round)}
     <div class="acts">
       ${can.add ? `<button class="cta" data-act="add">${esc(t('addItem'))}</button>` : ''}
       ${can.pay ? `<button class="cta" data-act="pay">${esc(t('take'))}</button>` : ''}
@@ -114,6 +116,7 @@ export function bindRound(c, root, round) {
     if (act === 'pay') { S.view = 'pay'; S.payNote = null; return c.render(); }
     if (act === 'transfer') { S.view = 'transfer'; S.moveForm = null; return c.render(); }
     if (act === 'moveSit') { S.view = 'moveSit'; return c.render(); }
+    if (act === 'guestConfirm' || act === 'guestReject') { b.disabled = true; return answerGuest(c, round, act === 'guestConfirm' ? 'confirm' : 'reject'); }
     if (act === 'qty') { b.disabled = true; await amend(c, round, [{ op: 'set_qty', line, qty: Number(b.dataset.q) }]); return c.render(); }
     if (act === 'ask') { S.ask = { op: b.dataset.op, line, kind: null }; return c.render(); }
     if (act === 'unask') { S.ask = null; return c.render(); }

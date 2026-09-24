@@ -45,6 +45,9 @@ argon2 = { version = "0.5", default-features = false, features = ["alloc", "pass
 password-hash = { version = "0.5", features = ["alloc", "getrandom"] }
 # getrandom on wasm32 has to be told to use the platform RNG explicitly.
 getrandom = { version = "0.2", features = ["js"] }
+# A table's QR code, drawn server-side (A9, `table_qr`). MIT, ZERO dependencies,
+# pure Rust -- builds for wasm32 like the rest.
+qrcodegen = "1.8"
 
 # Size-and-startup profile. The kernel's own [profile.release] targets native
 # SPEED (opt-level 3, thin LTO); a Worker is judged on bundle size and the 1s

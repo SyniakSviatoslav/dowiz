@@ -63,6 +63,12 @@ pub enum Claims {
         sub: String,
         order_id: String,
         location_id: String,
+        /// THE SITTING a guest's round joined from a table's code (A9), so
+        /// their order page can read the table's whole bill. `default` keeps
+        /// every token minted before this field existed parsing; skipped when
+        /// absent so an ordinary order's token is byte-for-byte what it was.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sitting_id: Option<String>,
         // NO phone. NO name. Deliberate -- see the module header.
         iat: i64,
         exp: i64,

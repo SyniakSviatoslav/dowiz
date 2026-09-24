@@ -1,0 +1,14 @@
+/* Table QR codes (admin/tableqr.js): the grid on screen, and the page on paper. */
+.qr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:12px}
+.qr-card{margin:0;padding:10px;border:1px solid var(--line,#ddd);border-radius:12px;background:#fff;color:#000;text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center}
+.qr-card img{width:100%;max-width:220px;height:auto;image-rendering:pixelated}
+.qr-card figcaption{display:flex;flex-direction:column;gap:2px}
+.qr-card small{color:#333}
+#qrPrint{display:none}
+@media print{
+  body.print-qr > *:not(#qrPrint){display:none !important}
+  body.print-qr #qrPrint{display:block}
+  #qrPrint .qr-grid{grid-template-columns:repeat(3,1fr);gap:8mm}
+  #qrPrint .qr-card{break-inside:avoid;border:1px solid #000}
+  #qrPrint .qr-dl{display:none}
+}
