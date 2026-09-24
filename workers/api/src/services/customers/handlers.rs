@@ -103,14 +103,20 @@ pub async fn customers(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     );
     let cat = loaded_cat.catalog;
     let acts = consent.log.entries();
-    use dowiz_hub::consent::{state as consented, CHANNEL_WHATSAPP, PURPOSE_MARKETING};
+    use dowiz_hub::consent::{CHANNEL_WHATSAPP, PURPOSE_MARKETING};
+    use crate::services::customers::consent_log::circle_state;
     Response::from_json(&json!({
-        "customers": rows.iter().map(|r| crate::services::customers::view::row_json(
-            r,
-            people.table.get(crate::services::customers::record::KIND, &r.key).as_deref(),
-            consented(&acts, &r.key, PURPOSE_MARKETING, CHANNEL_WHATSAPP).is_some(),
-            &aliases.members(&r.key),
-        )).collect::<Vec<_>>(),
+        "customers": rows.iter().map(|r| {
+            // READ ON THE CIRCLE (D26): the row's consent is its person's.
+            let members = aliases.members(&r.key);
+            let circle: Vec<String> = std::iter::once(r.key.clone()).chain(members.iter().cloned()).collect();
+            crate::services::customers::view::row_json(
+                r,
+                people.table.get(crate::services::customers::record::KIND, &r.key).as_deref(),
+                circle_state(&acts, &circle, PURPOSE_MARKETING, CHANNEL_WHATSAPP).is_some(),
+                &members,
+            )
+        }).collect::<Vec<_>>(),
         "currency": currency_of(&cat),
     }))
 }

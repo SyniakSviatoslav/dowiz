@@ -1,0 +1,146 @@
+//! Njoftimi i privatësisë në shqip.
+
+use super::words::Words;
+use crate::privacy::registry::{Basis, Data, Purpose};
+
+fn data(d: Data) -> &'static str {
+    match d {
+        Data::Name => "emri",
+        Data::Phone => "numri i telefonit",
+        Data::Address => "adresa",
+        Data::Coordinates => "pozicioni në hartë",
+        Data::OrderContent => "çfarë porositët",
+        Data::Note => "shënimet që shkruani",
+        Data::Messages => "mesazhet",
+        Data::Booking => "rezervimet e tavolinave",
+        Data::Payment => "mënyra e pagesës dhe shumat",
+        Data::Wallet => "bilanci i parapaguar",
+        Data::Consent => "zgjedhjet tuaja të pëlqimit",
+        Data::CustomerCard => "shënimet e lokalit për ju (p.sh. alergjitë, tavolina e zakonshme)",
+        Data::Email => "adresa e email-it",
+        Data::Password => "fjalëkalimi (ruhet vetëm si hash njëdrejtimësh)",
+        Data::Session => "seancat e hyrjes",
+        Data::CourierPosition => "pozicioni i korrierit",
+        Data::StaffId => "identifikuesit e stafit",
+        Data::Device => "të dhëna të pajisjes",
+        Data::Ip => "adresa e internetit e pajisjes suaj",
+        Data::Photo => "një foto që zgjidhni vetë",
+    }
+}
+
+fn purpose(p: Purpose) -> &'static str {
+    match p {
+        Purpose::Order => "për të përgatitur dhe dorëzuar porosinë tuaj",
+        Purpose::Accounting => "kontabiliteti i lokalit",
+        Purpose::Booking => "për të mbajtur tavolinën tuaj",
+        Purpose::CustomerCare => "për t'ju përgjigjur mesazheve",
+        Purpose::TableChat => "mesazhet në tavolinën tuaj",
+        Purpose::Kitchen => "për të njoftuar kuzhinën për porosinë tuaj",
+        Purpose::Crm => "që lokali t'ju kujtojë si mysafir",
+        Purpose::ConsentProof => "për të provuar se për çfarë keni rënë dakord",
+        Purpose::Marketing => "ofertat që keni pranuar të merrni",
+        Purpose::StoredValue => "bilanci juaj i parapaguar",
+        Purpose::Dispatch => "për të dërguar korrierët",
+        Purpose::Security => "për të gjetur dhe rregulluar gabimet dhe keqpërdorimet",
+        Purpose::ExactlyOnce => "që një prekje e përsëritur të mos porosisë dy herë",
+        Purpose::Account => "llogaria juaj",
+        Purpose::Prospect => "për t'ju kontaktuar për t'u bashkuar me dowiz",
+        Purpose::Erasure => "që fshirja juaj të mbetet e vlefshme pasi rikthehet një kopje rezervë",
+        Purpose::Operations => "për funksionimin e lokalit",
+    }
+}
+
+fn basis(b: Basis) -> &'static str {
+    match b {
+        Basis::Contract => "e nevojshme për atë që kërkuat (Ligji 124/2024 neni 7(1)(b))",
+        Basis::LegalObligation => "e detyruar me ligj (neni 7(1)(c))",
+        Basis::LegitimateInterest => "interesi i ligjshëm i lokalit (neni 7(1)(dh))",
+        Basis::Consent => "pëlqimi juaj (neni 7(1)(a))",
+        Basis::NotPersonal => "asnjë e dhënë personale",
+    }
+}
+
+fn processor(id: &str) -> Option<(&'static str, &'static str)> {
+    Some(match id {
+        "cloudflare" => ("Shtetet e Bashkuara (kompania); shërbehet nga rrjeti botëror i Cloudflare, dhe baza e të dhënave e çdo lokali ndodhet në një qendër të dhënash të Cloudflare",
+            "kushtet e përpunimit të të dhënave të Cloudflare, që përfshijnë Klauzolat Standarde Kontraktuale të BE-së; Cloudflare deklaron se është i certifikuar sipas Kuadrit të Privatësisë së të Dhënave BE-SHBA"),
+        "meta" => ("Irlandë dhe Shtetet e Bashkuara",
+            "kushtet e përpunimit të të dhënave të WhatsApp Business që lokali pranon me Meta; Meta deklaron se është e certifikuar sipas Kuadrit të Privatësisë së të Dhënave BE-SHBA"),
+        "telegram" => ("Emiratet e Bashkuara Arabe (kompania); serverë në disa vende",
+            "Telegram nuk ofron marrëveshje për përpunimin e të dhënave. Bileta e kuzhinës mban vetëm emrin tuaj dhe inicialin, porosinë, adresën dhe, vetëm për dërgesë, telefonin; dërgohet sepse nevojitet për të kryer porosinë tuaj (Ligji 124/2024 neni 41(3)(b))"),
+        "s3" => ("aty ku ndodhet ruajtja e lokalit; e zgjedh lokali",
+            "kontrata e vetë lokalit me ofruesin e ruajtjes; kopjet mund të vulosen me çelësin e lokalit"),
+        "stripe" => ("Irlandë dhe Shtetet e Bashkuara",
+            "kushtet e përpunimit të të dhënave të Stripe, që përfshijnë Klauzolat Standarde Kontraktuale të BE-së; Stripe deklaron se është i certifikuar sipas Kuadrit të Privatësisë së të Dhënave BE-SHBA"),
+        "ai" => ("e panjohur: shërbimin e zgjedh lokali",
+            "e zgjedhur nga lokali. Merr të dhënat e porosisë (numri, gjendja, totali, artikujt, lloji) dhe, për dërgesën e vetë korrierit, rreshtin e adresës; kurrë emrin ose telefonin tuaj"),
+        "ebills" => ("Shqipëri", "kontrata e vetë lokalit për pikën e shitjes; asnjë e dhënë klienti nuk i dërgohet"),
+        "tax" => ("Shqipëri", "detyrim ligjor; dërgimi është i fikur në këtë version, prandaj sot nuk i arrin asgjë"),
+        "osm" => ("Mbretëria e Bashkuar (e mbuluar nga një vendim përshtatshmërie i BE-së)",
+            "shfletuesi juaj e pyet në cilën rrugë është një gjilpërë në hartë, vetëm kur e vendosni vetë"),
+        "openfreemap" => ("nuk deklarohet nga ofruesi",
+            "merr vetëm adresën e internetit të pajisjes suaj dhe cila pjesë e hartës vizatohet; asnjë porosi, emër apo telefon"),
+        _ => return None,
+    })
+}
+
+pub const SQ: Words = Words {
+    lang: "sq",
+    title: "Njoftim për privatësinë",
+    version: "Versioni",
+    who_h: "Kush është përgjegjës",
+    who: "{venue} është përgjegjës për të dhënat tuaja personale kur porositni ose rezervoni këtu (kontrolluesi).",
+    who_address: "Adresa: {address}.",
+    who_phone: "Telefoni: {phone}.",
+    dowiz_role: "dowiz e drejton këtë sistem porosish për lokalin si përpunues i tij, sipas një marrëveshjeje të shkruar për përpunimin e të dhënave: i trajton të dhënat tuaja vetëm me udhëzimet e lokalit. dowiz është kontrollues vetëm i të dhënave të veta: llogaritë e pronarëve dhe stafit të lokaleve, dhe lista e pritjes.",
+    keep_h: "Çfarë ruhet, pse dhe për sa kohë",
+    keep_intro: "Çdo rresht më poshtë është një vend ku ky sistem ruan diçka për ju. Krijohet nga e njëjta tabelë me të cilën kontrollohet programi.",
+    col_what: "Çfarë",
+    col_why: "Pse",
+    col_basis: "Baza ligjore",
+    col_long: "Sa kohë",
+    col_erase: "Nëse kërkoni fshirjen",
+    days: "{n} ditë",
+    one_day: "një ditë",
+    latest: "vetëm vlera e fundit",
+    until_done: "derisa të përdoret, pastaj hiqet",
+    no_limit: "ende pa afat fiks; ruhet sa kohë lokali mban regjistrat e tij",
+    erased: "fshihet",
+    retained: "ruhet, sepse e kërkon një ligj ose e mban të vlefshme fshirjen tuaj; mban një pseudonim, jo emrin ose telefonin tuaj",
+    expires: "fshihet automatikisht",
+    not_reached: "fshirja automatike ende nuk e arrin",
+    must_give: "Një dërgesë kërkon adresë; fushat e shënuara si opsionale mund të lihen bosh. Pa të dhënat që kërkon një formular, porosia ose rezervimi nuk mund të bëhet.",
+    device_h: "Në pajisjen tuaj",
+    device: "Që të mos i shkruani përsëri, kjo faqe mban mend në pajisjen tuaj: {data}. Ato largohen nga pajisja juaj vetëm brenda një porosie ose rezervimi që dërgoni. Pastrimi i të dhënave të kësaj faqeje në shfletues i heq.",
+    recipients_h: "Kush tjetër merr të dhëna",
+    recipients_intro: "Renditen vetëm shërbimet që ky lokal ka aktivizuar.",
+    receives: "Merr",
+    where_: "Ku",
+    safeguard: "Mbrojtja",
+    backups_h: "Kopjet rezervë",
+    backups: "Kopjet rezervë të natës të lokalit mbahen më së shumti {days} ditë dhe askush nuk i lexon. Nëse rikthehet një kopje, çdo fshirje e mëparshme zbatohet përsëri automatikisht.",
+    recovery: "Cloudflare, që strehon bazën e të dhënave, mban pikat e veta të rikuperimit për 30 ditë. Nëse përdoret ndonjëra, çdo fshirje e regjistruar zbatohet përsëri nga regjistri i fshirjeve.",
+    rights_h: "Të drejtat tuaja",
+    rights: &[
+        "të shihni të dhënat që ruhen për ju dhe të merrni një kopje (Ligji 124/2024 neni 14)",
+        "t'i korrigjoni (neni 15)",
+        "t'i fshini (neni 15, 16)",
+        "të kufizoni përdorimin e tyre (neni 17)",
+        "t'i merrni me vete në një format të zakonshëm (neni 18)",
+        "të kundërshtoni përdorimin e tyre (neni 19)",
+        "të tërhiqni pëlqimin në çdo kohë, po aq lehtë sa e dhatë (neni 8(3))",
+    ],
+    how_to_ask: "Pyesni {venue}: {contact}. Mund t'ju kërkohet numri i porosisë ose telefoni i përdorur, që lokali të dijë se jeni ju.",
+    deadline: "Lokali përgjigjet brenda 30 ditëve nga kërkesa juaj. Nëse kërkesa është e ndërlikuar, mund të zgjasë deri në 60 ditë të tjera; ju njoftohet arsyeja brenda 30 ditëve të para (Ligji 124/2024 neni 12(4)). Përgjigjet janë falas.",
+    marketing_h: "Ofertat",
+    marketing: "Ofertat dërgohen vetëm nëse shënoni kutinë e veçantë, e cila nuk shënohet kurrë për ju. Duhet të jeni 16 vjeç ose më shumë për të pranuar vetë (Ligji 124/2024 neni 8(6)). Mund ta tërhiqni në çdo kohë; porosia nuk varet kurrë nga kjo.",
+    automated_h: "Asnjë vendim i automatizuar",
+    automated: "Askush nuk vlerësohet apo renditet, dhe asnjë vendim për ju nuk merret vetëm nga një makinë.",
+    complaint_h: "Ankesat",
+    complaint: "Mund të ankoheni te Komisioneri për të Drejtën e Informimit dhe Mbrojtjen e të Dhënave Personale, www.idp.al (Ligji 124/2024 neni 86), dhe t'i drejtoheni gjykatës.",
+    dowiz_contact: "Pyetje për vetë dowiz: {email}.",
+    platform_title: "Njoftimi i privatësisë i dowiz",
+    platform_who: "dowiz (dowiz.org) është kontrolluesi i të dhënave më poshtë: llogaritë e pronarëve dhe stafit të lokaleve, dhe lista e pritjes në këtë faqe.",
+    platform_venues: "Kur porositni ose rezervoni në një lokal në dowiz, ai lokal është përgjegjës për të dhënat tuaja dhe njoftimi i tij është në adresën e tij, /privacy.",
+    data, purpose, basis, processor,
+};

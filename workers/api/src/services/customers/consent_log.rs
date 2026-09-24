@@ -94,6 +94,51 @@ pub fn owner_act(key: &str, body: &OwnerActIn, by: &str, now_ms: i64) -> Result<
     Ok(act)
 }
 
+/// PURE. THE PERSON'S CONSENT, READ ACROSS THEIR ALIAS CIRCLE (G8, D26).
+///
+/// Consent filed under `069…` is the consent of the person the console shows
+/// under `+355…` once the two are linked, and a withdrawal on either spelling
+/// is theirs too. So the NEWEST act on ANY key of the circle decides -- the
+/// fold's own rule (`consent::state`), widened from one key to the circle; on
+/// a tie the withdrawal wins. `Some` only when that newest act is a grant, and
+/// the witness is minted by `consent::state` for the key that gave it (the
+/// number they said yes on, which is where a message goes).
+pub fn circle_state(entries: &[dowiz_hub::logimage::Entry], keys: &[String], purpose: &str, channel: &str) -> Option<dowiz_hub::consent::Consented> {
+    let mut best: Option<Act> = None;
+    for e in entries.iter().filter(|e| e.kind == dowiz_hub::consent::KIND_ACT) {
+        let Some(act) = Act::parse(&e.json) else { continue };
+        if !keys.contains(&act.key) || act.purpose != purpose || act.channel != channel || dowiz_hub::consent::check(&act).is_err() {
+            continue;
+        }
+        let takes = match &best {
+            None => true,
+            Some(b) => act.at_ms > b.at_ms || (act.at_ms == b.at_ms && act.state == State::Withdrawn),
+        };
+        if takes {
+            best = Some(act);
+        }
+    }
+    let act = best.filter(|a| a.state == State::Given)?;
+    dowiz_hub::consent::state(entries, &act.key, purpose, channel)
+}
+
+/// PURE. The acts an owner's press files, on the circle (D26): a WITHDRAWAL
+/// is filed under every key of the person, so no spelling -- and no queued
+/// campaign entry addressed under one (`send::gate` asks by the entry's key)
+/// -- can still carry a yes; a GRANT is filed once, under the row's key, the
+/// number the evidence is about. `circle` must contain `key`.
+pub fn owner_acts(key: &str, circle: &[String], body: &OwnerActIn, by: &str, now_ms: i64) -> Result<Vec<Act>, String> {
+    let first = owner_act(key, body, by, now_ms)?;
+    if first.state != State::Withdrawn {
+        return Ok(vec![first]);
+    }
+    let mut out = vec![first];
+    for k in circle.iter().filter(|k| k.as_str() != key) {
+        out.push(owner_act(k, body, by, now_ms)?);
+    }
+    Ok(out)
+}
+
 /// File one act. A refusal or a failed write is RECORDED in the venue's error
 /// log with its reason and answered as `Err`, never dropped.
 pub async fn file(place: &Place, act: &Act) -> std::result::Result<(), String> {
@@ -110,3 +155,6 @@ pub async fn file(place: &Place, act: &Act) -> std::result::Result<(), String> {
     crate::loud!(&place.ns, Some(&place.venue), "consent.file", "cust:{} not filed: {why}", act.key);
     Err(why)
 }
+
+#[cfg(test)]
+mod tests;

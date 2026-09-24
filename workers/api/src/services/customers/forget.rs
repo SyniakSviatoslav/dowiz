@@ -51,6 +51,13 @@ pub struct Found {
 
 /// PURE. The orders of `loc` whose contact phone hashes to `key`.
 pub fn find(views: &[OrderView], loc: &str, key: &str, secret: &[u8], found: &mut Found) {
+    find_any(views, loc, &BTreeSet::from([key.to_string()]), secret, found)
+}
+
+/// PURE. The orders of `loc` whose contact phone hashes to ANY of `keys` --
+/// the person's alias circle (G8, D15): `069…` and `+355 69…` are one person
+/// once linked, and forgetting one spelling forgets the other.
+pub fn find_any(views: &[OrderView], loc: &str, keys: &BTreeSet<String>, secret: &[u8], found: &mut Found) {
     for v in views {
         let Ok(o) = serde_json::from_str::<Value>(&v.order_json) else { continue };
         if !crate::services::orders::mine::belongs_to(&o, loc) {
@@ -59,7 +66,7 @@ pub fn find(views: &[OrderView], loc: &str, key: &str, secret: &[u8], found: &mu
         let Some(phone) = o.pointer("/contact/phone").and_then(Value::as_str).filter(|p| !p.is_empty()) else {
             continue;
         };
-        if customer_key(secret, phone) != key {
+        if !keys.contains(&customer_key(secret, phone)) {
             continue;
         }
         found.orders.insert(v.order_id.clone());
@@ -77,10 +84,14 @@ pub fn legacy_ids(phones: &BTreeSet<String>) -> Vec<String> {
     phones.iter().map(|p| crate::auth::sha256_hex(p)).collect()
 }
 
-/// PURE. Remove the card and every id it was filed under. Returns how many.
-pub fn forget_people(t: &mut dowiz_hub::table::Table, key: &str, legacy: &[String]) -> usize {
-    let kind = super::record::KIND;
-    std::iter::once(key).chain(legacy.iter().map(String::as_str)).filter(|id| t.remove(kind, id)).count()
+/// PURE. Remove the card of every key in the person's circle, every id it was
+/// filed under before the re-key, and the alias rows that linked the circle
+/// (a link between two spellings of a forgotten person says who they were).
+/// Returns how many records went.
+pub fn forget_people(t: &mut dowiz_hub::table::Table, keys: &[String], legacy: &[String]) -> usize {
+    let (card, alias) = (super::record::KIND, super::alias::KIND);
+    let cards = keys.iter().chain(legacy.iter()).filter(|id| t.remove(card, id)).count();
+    cards + keys.iter().filter(|id| t.remove(alias, id)).count()
 }
 
 /// Empty a string field when it holds something; true when it did.
@@ -190,10 +201,31 @@ pub fn is_customer_key(s: &str) -> bool {
 pub struct ForgetBody {
     /// Why (the audit's). Written into the declaration: say why, not who.
     pub reason: String,
+    /// The console's language, for the answer's `notice` (sq when absent).
+    #[serde(default)]
+    pub lang: Option<String>,
+}
+
+/// THE ANSWER'S PROMISE, in the owner's three languages, and TRUE: the
+/// nightly copies are kept 21 days (`cloud::KEEP_WEEKLY_MS`), so the last copy
+/// holding the person is gone within 22 days of tonight; and a restore replays
+/// the erasure register (`register`, `run::replay`). The console shows the
+/// sentence in the language it is set to.
+pub fn notice(lang: &str) -> &'static str {
+    match lang {
+        "en" => "Copies in the venue's nightly backup expire within 22 days and nothing reads them; a restored backup is forgotten again automatically.",
+        "uk" => "Копії в нічній резервній копії закладу зникають протягом 22 днів, і ніхто їх не читає; відновлена копія автоматично забуває людину знову.",
+        _ => "Kopjet në rezervën e natës së lokalit skadojnë brenda 22 ditëve dhe askush nuk i lexon; një rezervë e rikthyer e harron sërish personin automatikisht.",
+    }
 }
 
 /// `POST /api/owner/customers/:key/forget?location_id=` -- owner only, on the
 /// venue the caller is authorised for.
+///
+/// THE PERSON IS THE ALIAS CIRCLE (G8): every spelling linked to the key, and
+/// with them their bookings and their waiting messages (`run::scope`). The
+/// erasure register is written FIRST (`register`), so an erasure that fails
+/// half way is still re-applied after any restore.
 pub async fn forget_customer(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: ForgetBody = match req.json().await {
         Ok(b) => b,
@@ -211,50 +243,43 @@ pub async fn forget_customer(mut req: Request, ctx: RouteContext<crate::Req>) ->
     let Some(key) = ctx.param("key").cloned().filter(|k| is_customer_key(k)) else {
         return Response::error("not a customer key", 400);
     };
+    let lang = body.lang.as_deref().unwrap_or("sq");
 
-    // WHO: the hot fold and every archive's, under the secret the object lacks.
     let secret = signing_secret(&ctx.env);
-    let mut found = Found::default();
-    find(&crate::hubstore::orders(&place).await?, &loc, &key, &secret, &mut found);
-    let mut archives = Vec::new();
-    for id in crate::hubstore::archives_of(&crate::hubstore::load_settings(&place).await?.settings) {
-        let before = found.orders.len();
-        let views = crate::hubstore::archive_orders(&place, &id).await?.unwrap_or_default();
-        find(&views, &loc, &key, &secret, &mut found);
-        if found.orders.len() > before {
-            archives.push(id);
-        }
-    }
-    if let Some(order) = &found.live {
+    let scope = run::scope(&place, &loc, &key, &BTreeSet::new(), &secret).await?;
+    if let Some(order) = &scope.found.live {
         return Response::error(format!("order {order} is still on its way; finish or cancel it first"), 409);
     }
-
-    let input = crate::hubdo::forget::ForgetIn {
-        key: key.clone(),
-        reason,
-        by: who,
-        now_ms: ctx.data.now_ms,
-        orders: found.orders.into_iter().collect(),
-        archives,
-        legacy: legacy_ids(&found.phones),
-    };
-    let out: crate::hubdo::forget::ForgetOut = match crate::command::send(&place, "forget", &input).await {
-        Ok(o) => o,
-        Err((status, msg)) => {
-            crate::loud!(&place.ns, Some(&place.venue), "customers.forget", "cust:{key} not forgotten ({status}): {msg}");
-            return Response::error(msg, status);
+    let entry = register::Entry::new(&loc, &key, &scope.keys, &scope.found.orders, ctx.data.now_ms);
+    let filed = match register::file(&ctx.env, entry).await {
+        Ok(e) => e,
+        Err(e) => {
+            crate::loud!(&place.ns, Some(&place.venue), "customers.forget", "cust:{key} register not written: {e}");
+            return Response::error("the erasure could not be recorded, so nothing was erased; try again", 503);
         }
+    };
+    let input = run::input(scope, &key, &reason, &who, ctx.data.now_ms, &filed.orders);
+    let out = match run::send(&place, &input).await {
+        Ok(o) => o,
+        Err((status, msg)) => return Response::error(msg, status),
     };
     Response::from_json(&json!({
         "key": key,
+        "keys": input.keys.len(),
         "redacted": out.redacted,
         "archives": out.archives,
         "declared": out.declared,
         "people": out.people,
+        "bookings": out.bookings,
+        "queued": out.queued,
         "consent": { "redacted": out.consent_redacted, "withdrawn": out.consent_withdrawn },
-        "notice": "Copies older than tonight in the venue's own backup expire within one month, and nothing reads them.",
+        "notice": notice(lang),
     }))
 }
+
+pub mod queued;
+pub mod register;
+pub mod run;
 
 #[cfg(test)]
 mod tests;

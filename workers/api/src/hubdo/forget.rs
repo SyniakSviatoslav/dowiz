@@ -4,6 +4,9 @@
 //! under); this does WHAT, with the pure functions of
 //! `services::customers::forget`, and writes in the order that header argues
 //! for: people, consent, the hot log with its declaration, then each archive.
+//! G8 adds, before the log and with the same "idempotent, counted by no law"
+//! standing as people and consent: the bookings image and the outbox. Every
+//! step reaches the whole alias circle, not the one key the owner pressed.
 
 use super::HubImages;
 use crate::command::Refused;
@@ -28,6 +31,13 @@ pub struct ForgetIn {
     pub archives: Vec<String>,
     /// Card ids the person was filed under before the re-key.
     pub legacy: Vec<String>,
+    /// The alias circle (G8): every key the person is filed under, `key`
+    /// included. Empty from an older caller: then `key` alone.
+    #[serde(default)]
+    pub keys: Vec<String>,
+    /// Their reservations, picked by the Worker (`booking::forget::ids_of`).
+    #[serde(default)]
+    pub bookings: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -41,6 +51,12 @@ pub struct ForgetOut {
     pub people: usize,
     pub consent_redacted: usize,
     pub consent_withdrawn: usize,
+    /// Reservations emptied of the person (G8).
+    #[serde(default)]
+    pub bookings: usize,
+    /// Waiting outbox entries about them, dropped (G8).
+    #[serde(default)]
+    pub queued: usize,
 }
 
 fn unreadable(what: &str) -> Error {
@@ -62,6 +78,14 @@ impl HubImages {
             return Ok(Err(Refused::Invalid("not a customer key".into())));
         }
         let key = input.key.as_str();
+        // THE CIRCLE, `key` always in it. Each must be a key: a stray string
+        // here would be a card or a consent act removed by a guess.
+        let mut keys: BTreeSet<String> = input.keys.iter().cloned().collect();
+        keys.insert(key.to_string());
+        if !keys.iter().all(|k| pure::is_customer_key(k)) {
+            return Ok(Err(Refused::Invalid("the circle holds something that is not a customer key".into())));
+        }
+        let circle: Vec<String> = keys.iter().cloned().collect();
 
         // 1. PEOPLE. Idempotent; nothing counts it.
         let people_img = crate::hubstore::IMAGE_PEOPLE;
@@ -69,7 +93,7 @@ impl HubImages {
         if let Some((meta, bytes)) = self.image(people_img).await? {
             let mut t = dowiz_hub::table::Table::load(&bytes, crate::hubstore::PEOPLE_BYTES)
                 .map_err(|_| unreadable(people_img))?;
-            people = pure::forget_people(&mut t, key, &input.legacy);
+            people = pure::forget_people(&mut t, &circle, &input.legacy);
             if people > 0 {
                 let out = t.to_bytes().map_err(|e| Error::RustError(format!("people: {e:?}")))?;
                 if let Err(r) = self.put_or_refuse(people_img, meta.generation, &out).await? {
@@ -84,11 +108,48 @@ impl HubImages {
             Some((m, b)) => (m.generation, dowiz_hub::logimage::LogImage::load(&b).map_err(|_| unreadable(consent_img))?),
             None => (0, dowiz_hub::logimage::LogImage::create_sized(64 * 1024).map_err(|_| unreadable(consent_img))?),
         };
-        let forgot = dowiz_hub::consent::forget::forget(&mut consent, key, input.now_ms)
-            .map_err(|e| Error::RustError(format!("consent: {e}")))?;
+        let mut forgot = dowiz_hub::consent::forget::Forgot::default();
+        for k in &circle {
+            let f = dowiz_hub::consent::forget::forget(&mut consent, k, input.now_ms)
+                .map_err(|e| Error::RustError(format!("consent: {e}")))?;
+            forgot.redacted += f.redacted;
+            forgot.withdrawn += f.withdrawn;
+        }
         if forgot != dowiz_hub::consent::forget::Forgot::default() {
             if let Err(r) = self.put_or_refuse(consent_img, cgen, &consent.to_bytes()).await? {
                 return Ok(Err(r));
+            }
+        }
+
+        // 2b. BOOKINGS (G8): the reservation stays, the contact goes.
+        let mut bookings = 0;
+        if !input.bookings.is_empty() {
+            let img = crate::booking::IMAGE_BOOKINGS;
+            if let Some((meta, bytes)) = self.image(img).await? {
+                let mut t = dowiz_hub::table::Table::load(&bytes, crate::booking::BOOKINGS_BYTES).map_err(|_| unreadable(img))?;
+                bookings = crate::booking::forget::redact(&mut t, &input.bookings).map_err(Error::RustError)?;
+                if bookings > 0 {
+                    let out = t.to_bytes().map_err(|e| Error::RustError(format!("bookings: {e:?}")))?;
+                    if let Err(r) = self.put_or_refuse(img, meta.generation, &out).await? {
+                        return Ok(Err(r));
+                    }
+                }
+            }
+        }
+
+        // 2c. THE OUTBOX (G8): tickets and campaign messages still waiting
+        // about them are dropped, never sent after the erasure.
+        let order_set: BTreeSet<String> = input.orders.iter().cloned().collect();
+        let mut queued = 0;
+        let img = crate::outbox::IMAGE_OUTBOX;
+        if let Some((meta, bytes)) = self.image(img).await? {
+            let mut t = dowiz_hub::table::Table::load(&bytes, crate::outbox::OUTBOX_BYTES).map_err(|_| unreadable(img))?;
+            queued = crate::services::customers::forget::queued::drop_queued(&mut t, &order_set, &keys);
+            if queued > 0 {
+                let out = t.to_bytes().map_err(|e| Error::RustError(format!("outbox: {e:?}")))?;
+                if let Err(r) = self.put_or_refuse(img, meta.generation, &out).await? {
+                    return Ok(Err(r));
+                }
             }
         }
 
@@ -96,7 +157,7 @@ impl HubImages {
         // scope, because their phones are gone and no fold finds them again.
         let (log_gen, mut hot) = self.log_hub().await?;
         let (declared_orders, declared_archives) = pure::declared_scope(&hot, key);
-        let orders: BTreeSet<String> = input.orders.into_iter().chain(declared_orders).collect();
+        let orders: BTreeSet<String> = order_set.into_iter().chain(declared_orders).collect();
         let wanted: BTreeSet<String> = input.archives.into_iter().chain(declared_archives).collect();
         let (mut pairs, mut gens) = (Vec::new(), Vec::new());
         for id in wanted.into_iter().filter(|id| crate::hubstore::is_archive_id(id)) {
@@ -131,6 +192,8 @@ impl HubImages {
             people,
             consent_redacted: forgot.redacted,
             consent_withdrawn: forgot.withdrawn,
+            bookings,
+            queued,
         }))
     }
 }

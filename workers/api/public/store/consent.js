@@ -26,8 +26,13 @@ async function load(){
 }
 const shown = () => (wordings || []).find(w => w.lang === lang) || null;
 
+/// The venue's privacy notice (P8), linked wherever a person hands over data:
+/// beside every consent prompt, the booking form and the menu's foot.
+export const privacyLink = () =>
+  `<p class="privacy-link"><a href="/privacy?lang=${esc(lang)}" target="_blank" rel="noopener" data-t="privacy"></a></p>`;
+
 export const consentMarkup = () =>
-  `<label class="consent" id="offersBox" hidden><input type="checkbox" id="f-offers"><span id="f-offers-text"></span></label>`;
+  `<label class="consent" id="offersBox" hidden><input type="checkbox" id="f-offers"><span id="f-offers-text"></span></label>${privacyLink()}`;
 
 /// Fill the sentence and follow the phone field. Called once per render.
 export async function wireConsent(){

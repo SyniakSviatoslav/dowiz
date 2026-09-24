@@ -65,6 +65,19 @@ fn albanian_nsn(n: &str) -> bool {
     len_ok && (b'2'..=b'9').contains(&first)
 }
 
+/// THE ONE KEY FOR A PERSON, from any spelling of their phone (audit D38).
+///
+/// `customer_key` of the E.164 digits when the number is this venue's
+/// country's, of the phone as typed otherwise (a visitor's `+39…` is still a
+/// phone). Bookings, the wallet and the rule's alias target all derive from
+/// THIS function, so `069 123 4567` and `+355 69 123 4567` name one person in
+/// every module -- the booking module had its own copy of these two lines,
+/// and the wallet used the key of the spelling as typed.
+pub fn person_key(secret: &[u8], phone: &str) -> String {
+    let canonical = canonical_digits(phone, VENUE_DIAL);
+    super::handlers::customer_key(secret, canonical.as_deref().unwrap_or(phone))
+}
+
 /// The rule's alias for a placement, as `(from, to)` customer keys: the key of
 /// the spelling as typed, and the key of its E.164 spelling. `None` when the
 /// phone is already in the canonical spelling (the two keys are equal) or

@@ -1,31 +1,27 @@
 // Privacy Policy — Figma node 1:10282 (dark) / 1:20754 (light).
 //
-// Two 15/500 orange headings with 12/400 paragraphs under each. The kit's copy
-// is lorem; a venue's real policy replaces the strings and nothing else.
+// The same 15/500 heading over a 12/400 paragraph as the Figma frame. The text
+// is the venue's REAL notice, which the Worker renders at `/privacy` from the
+// personal-data registry and the venue's own settings (P8 of
+// BLUEPRINT-GDPR-AND-MCP-2026-09-24), in sq/en/uk. This screen points there
+// rather than copying it, so there is one notice and it cannot go stale here.
 
 import { esc } from '/kit/app.js';
 import { topBar } from '/kit/parts.js';
 
-const LOREM_LONG = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod ' +
-  'tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud ' +
-  'exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.';
-const LOREM_SHORT = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod ' +
-  'tempor incididunt ut labore et.';
+const LEAD = 'The venue is responsible for your data. Its privacy notice says what is kept about you, ' +
+  'why, for how long, who receives it, and how to see, correct or erase it. Requests are answered within 30 days.';
 
-const SECTIONS = [
-  { head: 'Cancelation Policy', paras: [LOREM_LONG, LOREM_SHORT] },
-  { head: 'Terms & Condition',  paras: [LOREM_LONG, LOREM_LONG, LOREM_SHORT,
-                                        LOREM_LONG, LOREM_LONG, LOREM_SHORT, LOREM_LONG] },
-];
+const LANGS = [['sq', 'Shqip'], ['en', 'English'], ['uk', 'Українська']];
 
 export function render(){
   return `
   ${topBar('Privacy Policy')}
   <div class="wrap k-page">
-    ${SECTIONS.map(s => `
-      <section class="k-legal">
-        <h2>${esc(s.head)}</h2>
-        ${s.paras.map(p => `<p>${esc(p)}</p>`).join('')}
-      </section>`).join('')}
+    <section class="k-legal">
+      <h2>${esc('Privacy notice')}</h2>
+      <p>${esc(LEAD)}</p>
+      ${LANGS.map(([l, name]) => `<p><a href="/privacy?lang=${l}" target="_blank" rel="noopener">${esc(name)}</a></p>`).join('')}
+    </section>
   </div>`;
 }

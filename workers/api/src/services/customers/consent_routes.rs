@@ -27,8 +27,8 @@ pub async fn wordings(_req: Request, _ctx: RouteContext<crate::Req>) -> Result<R
 /// withdrawal (or an evidenced grant) on the customer's behalf.
 ///
 /// THE WITHDRAWAL ROUTE. A STOP said at the counter, on the phone or in a
-/// message the webhook did not see is filed here, and the fold stops the next
-/// send. Nothing is removed: the grant stays as the proof of what the venue
+/// message the webhook did not see is filed here -- under EVERY key of the
+/// person's alias circle -- and the fold stops the next send. Nothing is removed: the grant stays as the proof of what the venue
 /// was allowed to do before.
 pub async fn owner_act(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: OwnerActIn = match req.json().await {
@@ -43,12 +43,18 @@ pub async fn owner_act(mut req: Request, ctx: RouteContext<crate::Req>) -> Resul
     let Some(key) = ctx.param("key").cloned().filter(|k| is_key(k)) else {
         return Response::error("not a customer key", 400);
     };
-    let act = match consent_log::owner_act(&key, &body, &who, ctx.data.now_ms) {
+    // THE CIRCLE (G8, D26): a withdrawal on one spelling is the person's.
+    let people = crate::hubstore::load_table(&place, crate::hubstore::IMAGE_PEOPLE, crate::hubstore::PEOPLE_BYTES).await?;
+    let circle = super::alias::Aliases::of(&people.table).circle(&key, None);
+    let acts = match consent_log::owner_acts(&key, &circle, &body, &who, ctx.data.now_ms) {
         Ok(a) => a,
         Err(why) => return Response::error(why, 400),
     };
-    match consent_log::file(&place, &act).await {
-        Ok(()) => Response::from_json(&json!({ "key": key, "state": act.state.as_str(), "atMs": act.at_ms })),
-        Err(why) => Response::error(why, 500),
+    for act in &acts {
+        if let Err(why) = consent_log::file(&place, act).await {
+            return Response::error(why, 500);
+        }
     }
+    let first = &acts[0];
+    Response::from_json(&json!({ "key": key, "state": first.state.as_str(), "atMs": first.at_ms, "keys": acts.len() }))
 }

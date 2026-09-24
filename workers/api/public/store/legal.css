@@ -1,0 +1,22 @@
+/* The privacy notice (/privacy) and the data processing agreement (/dpa).
+   Plain reading pages, served by the Worker with `style-src 'self'`: no
+   script, no web font, readable at phone width in both themes. */
+:root { --paper: #fbfaf8; --ink: #1d1b19; --muted: #6b655e; --rule: #e4dfd8; --accent: #b4441f; }
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #151311; --ink: #efebe6; --muted: #a39b91; --rule: #2e2a26; --accent: #f0875f; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.legal { max-width: 46rem; margin: 0 auto; padding: 24px 16px 64px; }
+.legal h1 { font-size: 1.6rem; line-height: 1.25; margin: 0 0 4px; }
+.legal h2 { font-size: 1.1rem; margin: 28px 0 8px; color: var(--accent); }
+.legal .ver { color: var(--muted); font-size: .85rem; margin: 0 0 8px; }
+.legal .langs { margin: 0 0 16px; font-size: .9rem; }
+.legal a { color: var(--accent); }
+.legal table { width: 100%; border-collapse: collapse; font-size: .88rem; display: block; overflow-x: auto; }
+.legal th, .legal td { text-align: left; vertical-align: top; padding: 8px 6px; border-bottom: 1px solid var(--rule); min-width: 8rem; }
+.legal th { color: var(--muted); font-weight: 600; }
+.legal ul { padding-left: 1.2rem; }
+.legal li { margin: 6px 0; }
+.legal .recipients li { margin: 12px 0; }

@@ -98,10 +98,10 @@ fn people_loses_the_card_and_the_legacy_card_and_nobody_elses() {
     for id in [key().as_str(), legacy[0].as_str(), "0123456789abcdef"] {
         t.put(kind, id, r#"{"note":"x"}"#, &[], &[]).unwrap();
     }
-    assert_eq!(forget_people(&mut t, &key(), &legacy), 2);
+    assert_eq!(forget_people(&mut t, &[key()], &legacy), 2);
     assert!(t.get(kind, &key()).is_none() && t.get(kind, &legacy[0]).is_none());
     assert!(t.get(kind, "0123456789abcdef").is_some(), "a stranger's card went");
-    assert_eq!(forget_people(&mut t, &key(), &legacy), 0, "a second run removes nothing");
+    assert_eq!(forget_people(&mut t, &[key()], &legacy), 0, "a second run removes nothing");
 }
 
 #[test]
@@ -178,4 +178,83 @@ fn only_a_customer_key_is_a_customer_key() {
     for bad in ["", "0123456789ABCDEF", "0123456789abcde", "0123456789abcdefg", PHONE] {
         assert!(!is_customer_key(bad), "{bad}");
     }
+}
+
+/// G8: forget via ONE spelling finds the orders of the LINKED spelling. The
+/// circle comes from the `alias` rows (`run::circle`), and `find_any` takes
+/// the whole of it. The twin: the key alone finds only its own orders.
+#[test]
+fn forget_via_one_spelling_reaches_the_linked_spelling() {
+    let national = "069 111 1111";
+    let (k, k2) = (key(), customer_key(SECRET, national));
+    let mut h = log("o", 0);
+    h.append(EventKind::Placed, "n1", &order("n1", national, "DELIVERED"), 100, ACTOR).unwrap();
+    let mut people = dowiz_hub::table::Table::create(1 << 16).unwrap();
+    crate::services::customers::alias::link(&mut people, &k2, &k, crate::services::customers::alias::By::Rule, "rule", 1).unwrap();
+    let aliases = crate::services::customers::alias::Aliases::of(&people);
+    let circle = run::circle(&aliases, &k, &BTreeSet::new());
+    assert_eq!(circle, BTreeSet::from([k.clone(), k2.clone()]));
+    let mut f = Found::default();
+    find_any(&views(&h), LOC, &circle, SECRET, &mut f);
+    assert_eq!(f.orders, BTreeSet::from(["o1".to_string(), "n1".to_string()]));
+    let mut alone = Found::default();
+    find(&views(&h), LOC, &k, SECRET, &mut alone);
+    assert_eq!(alone.orders, BTreeSet::from(["o1".to_string()]), "the twin: one key misses the linked spelling");
+    // And the people image loses both cards AND the link between them.
+    let card = crate::services::customers::record::KIND;
+    people.put(card, &k, "{}", &[], &[]).unwrap();
+    people.put(card, &k2, "{}", &[], &[]).unwrap();
+    assert_eq!(forget_people(&mut people, &circle.iter().cloned().collect::<Vec<_>>(), &[]), 3);
+    assert!(people.all(crate::services::customers::alias::KIND).is_empty(), "the link survives the person");
+}
+
+/// P3's CHECK. A bundle taken BEFORE an erasure is restored: the replay,
+/// driven only by the register's entry (no alias rows, no people image), finds
+/// the person in the restored log, redacts them, and the declared count is
+/// the one the log had before the restore.
+#[test]
+fn a_restored_bundle_from_before_the_erasure_is_forgotten_again() {
+    let bundle = log("o", 0).to_bytes();
+    let k = key();
+    // The erasure, as the route runs it: find, register, erase.
+    let mut hot = Hub::load(&bundle).unwrap();
+    let keys = BTreeSet::from([k.clone()]);
+    let mut f = Found::default();
+    find_any(&views(&hot), LOC, &keys, SECRET, &mut f);
+    let entry = register::Entry::new(LOC, &k, &keys, &f.orders, 1_800_000_000_000);
+    erase(&act(&k), &f.orders, &mut hot, &mut []).unwrap();
+    let declared_before = hot.declared();
+    assert!(declared_before > 0);
+
+    // The restore: the old bytes are back, the phone with them.
+    let mut restored = Hub::load(&bundle).unwrap();
+    assert!(has(&restored.to_bytes(), PHONE));
+    // The replay (`run::replay`): the register's keys and orders, the fold.
+    let mut again = Found::default();
+    find_any(&views(&restored), LOC, &run::circle(&Default::default(), &entry.key, &entry.keys), SECRET, &mut again);
+    let orders: BTreeSet<String> = again.orders.union(&entry.orders).cloned().collect();
+    erase(&act(&k), &orders, &mut restored, &mut []).unwrap();
+    let bytes = restored.to_bytes();
+    assert!(!has(&bytes, PHONE) && !has(&bytes, "Arben o1"), "the person came back with the backup");
+    assert_eq!(restored.declared(), declared_before, "declared after the replay equals the pre-restore value");
+    assert_eq!(law(&restored, &[]), (declared_before, declared_before));
+    assert!(has(&bytes, "Arben o0"), "a stranger was redacted by the replay");
+}
+
+/// P3: the answer's promise is TRUE and said in the console's three
+/// languages. "22 days" is derived from the rotation's own constant (the last
+/// copy made before tonight's is at most 21 days old when it goes, plus the
+/// night it was made), so shortening or lengthening the rotation without the
+/// sentence turns this red.
+#[test]
+fn the_backup_promise_matches_the_rotation_in_three_languages() {
+    let days = crate::cloud::KEEP_WEEKLY_MS / 86_400_000 + 1;
+    for lang in ["sq", "en", "uk"] {
+        let n = notice(lang);
+        assert!(n.contains(&format!("{days} ")), "{lang}: {n}");
+        assert!(!n.contains("month") && !n.contains("muaj") && !n.contains("місяц"), "{lang}: {n}");
+    }
+    assert_ne!(notice("sq"), notice("en"));
+    assert_ne!(notice("uk"), notice("en"));
+    assert_eq!(notice("xx"), notice("sq"), "an unknown language answers in the venue's own");
 }

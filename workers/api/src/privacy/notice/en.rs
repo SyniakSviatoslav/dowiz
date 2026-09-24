@@ -1,0 +1,146 @@
+//! The privacy notice in English.
+
+use super::words::Words;
+use crate::privacy::registry::{Basis, Data, Purpose};
+
+fn data(d: Data) -> &'static str {
+    match d {
+        Data::Name => "name",
+        Data::Phone => "phone number",
+        Data::Address => "address",
+        Data::Coordinates => "map position",
+        Data::OrderContent => "what you ordered",
+        Data::Note => "notes you write",
+        Data::Messages => "messages",
+        Data::Booking => "table bookings",
+        Data::Payment => "payment method and amounts",
+        Data::Wallet => "stored-value balance",
+        Data::Consent => "your consent choices",
+        Data::CustomerCard => "the venue's notes about you (e.g. allergies, usual table)",
+        Data::Email => "email address",
+        Data::Password => "password (stored only as a one-way hash)",
+        Data::Session => "sign-in sessions",
+        Data::CourierPosition => "courier position",
+        Data::StaffId => "staff identifiers",
+        Data::Device => "device details",
+        Data::Ip => "your device's internet address",
+        Data::Photo => "a picture you choose",
+    }
+}
+
+fn purpose(p: Purpose) -> &'static str {
+    match p {
+        Purpose::Order => "to prepare and deliver your order",
+        Purpose::Accounting => "the venue's accounts",
+        Purpose::Booking => "to hold your table",
+        Purpose::CustomerCare => "to answer your messages",
+        Purpose::TableChat => "messages at your table",
+        Purpose::Kitchen => "to tell the kitchen about your order",
+        Purpose::Crm => "so the venue remembers you as a guest",
+        Purpose::ConsentProof => "to prove what you agreed to",
+        Purpose::Marketing => "offers you agreed to receive",
+        Purpose::StoredValue => "your stored-value balance",
+        Purpose::Dispatch => "to dispatch couriers",
+        Purpose::Security => "to find and fix errors and misuse",
+        Purpose::ExactlyOnce => "so a repeated tap does not order twice",
+        Purpose::Account => "your account",
+        Purpose::Prospect => "to contact you about joining dowiz",
+        Purpose::Erasure => "to keep your erasure effective after a backup is restored",
+        Purpose::Operations => "to run the venue",
+    }
+}
+
+fn basis(b: Basis) -> &'static str {
+    match b {
+        Basis::Contract => "needed for what you asked for (Law 124/2024 Art. 7(1)(b))",
+        Basis::LegalObligation => "required by law (Art. 7(1)(c))",
+        Basis::LegitimateInterest => "the venue's legitimate interest (Art. 7(1)(dh))",
+        Basis::Consent => "your consent (Art. 7(1)(a))",
+        Basis::NotPersonal => "no personal data",
+    }
+}
+
+fn processor(id: &str) -> Option<(&'static str, &'static str)> {
+    Some(match id {
+        "cloudflare" => ("United States (company); served from Cloudflare's worldwide network, and each venue's database lives in one Cloudflare data centre",
+            "Cloudflare's data processing terms, which include the EU Standard Contractual Clauses; Cloudflare states it is certified under the EU-US Data Privacy Framework"),
+        "meta" => ("Ireland and the United States",
+            "the WhatsApp Business data processing terms the venue accepts with Meta; Meta states it is certified under the EU-US Data Privacy Framework"),
+        "telegram" => ("United Arab Emirates (company); servers in several countries",
+            "Telegram offers no data processing agreement. The kitchen ticket carries only your first name and initial, the order, the address and, for a delivery only, your phone; it is sent because it is needed to fulfil your order (Law 124/2024 Art. 41(3)(b))"),
+        "s3" => ("where the venue's storage is; the venue chooses it",
+            "the venue's own contract with its storage provider; copies can be sealed with the venue's key"),
+        "stripe" => ("Ireland and the United States",
+            "Stripe's data processing terms, which include the EU Standard Contractual Clauses; Stripe states it is certified under the EU-US Data Privacy Framework"),
+        "ai" => ("unknown: the venue chooses the service",
+            "chosen by the venue. It receives order details (number, status, total, items, type) and, for a courier's own delivery, the address line; never your name or phone"),
+        "ebills" => ("Albania", "the venue's own point-of-sale contract; no customer data is sent to it"),
+        "tax" => ("Albania", "a legal obligation; sending is switched off in this version, so nothing reaches it today"),
+        "osm" => ("United Kingdom (covered by an EU adequacy decision)",
+            "your browser asks it which street a map pin is on, only when you place the pin yourself"),
+        "openfreemap" => ("not stated by the provider",
+            "it receives only your device's internet address and which part of the map is drawn; no order, name or phone"),
+        _ => return None,
+    })
+}
+
+pub const EN: Words = Words {
+    lang: "en",
+    title: "Privacy notice",
+    version: "Version",
+    who_h: "Who is responsible",
+    who: "{venue} is responsible for your personal data when you order or book here (the controller).",
+    who_address: "Address: {address}.",
+    who_phone: "Phone: {phone}.",
+    dowiz_role: "dowiz runs this ordering system for the venue as its processor, under a written data processing agreement: it handles your data only on the venue's instructions. dowiz is the controller only of its own data: accounts of venue owners and staff, and its waiting list.",
+    keep_h: "What is kept, why, and for how long",
+    keep_intro: "Every row below is a place where this system keeps something about you. It is generated from the same table the software is checked against.",
+    col_what: "What",
+    col_why: "Why",
+    col_basis: "Legal basis",
+    col_long: "How long",
+    col_erase: "If you ask for erasure",
+    days: "{n} days",
+    one_day: "one day",
+    latest: "only the latest value",
+    until_done: "until it has been used, then removed",
+    no_limit: "no fixed limit yet; kept while the venue keeps its records",
+    erased: "erased",
+    retained: "kept, because a law requires it or it keeps your erasure effective; it holds a pseudonym, not your name or phone",
+    expires: "deleted automatically",
+    not_reached: "not yet reached by the automatic erasure",
+    must_give: "A delivery needs an address; fields marked optional can be left empty. Without the details a form requires, the order or booking cannot be made.",
+    device_h: "On your device",
+    device: "So you do not type them again, this site remembers on your own device: {data}. They leave your device only inside an order or booking you send. Clearing this site's data in your browser removes them.",
+    recipients_h: "Who else receives data",
+    recipients_intro: "Only the services this venue has switched on are listed.",
+    receives: "Receives",
+    where_: "Where",
+    safeguard: "Safeguard",
+    backups_h: "Backups",
+    backups: "The venue's nightly backup copies are kept for at most {days} days and nothing reads them. If a backup is restored, every erasure made before is applied again automatically.",
+    recovery: "Cloudflare, which hosts the database, keeps its own recovery points for 30 days. If one is ever used, every recorded erasure is applied again from the erasure register.",
+    rights_h: "Your rights",
+    rights: &[
+        "see the data kept about you and get a copy (Law 124/2024 Art. 14)",
+        "have it corrected (Art. 15)",
+        "have it erased (Art. 15, 16)",
+        "have its use restricted (Art. 17)",
+        "take it with you in a common format (Art. 18)",
+        "object to its use (Art. 19)",
+        "withdraw your consent at any time, as easily as you gave it (Art. 8(3))",
+    ],
+    how_to_ask: "Ask {venue}: {contact}. You may be asked for an order number or the phone used, so the venue knows it is you.",
+    deadline: "The venue answers within 30 days of your request. If a request is complex it may take up to 60 more days; you are told why within the first 30 days (Law 124/2024 Art. 12(4)). Answers are free of charge.",
+    marketing_h: "Offers",
+    marketing: "Offers are sent only if you tick the separate box, which is never ticked for you. You must be 16 or older to agree yourself (Law 124/2024 Art. 8(6)). You can withdraw at any time; ordering never depends on it.",
+    automated_h: "No automated decisions",
+    automated: "Nobody is scored or ranked, and no decision about you is made by a machine alone.",
+    complaint_h: "Complaints",
+    complaint: "You can complain to the Commissioner for the Right to Information and Personal Data Protection (Albania), www.idp.al (Law 124/2024 Art. 86), and go to court.",
+    dowiz_contact: "Questions about dowiz itself: {email}.",
+    platform_title: "dowiz privacy notice",
+    platform_who: "dowiz (dowiz.org) is the controller of the data below: accounts of venue owners and staff, and the waiting list on this site.",
+    platform_venues: "When you order from or book at a venue on dowiz, that venue is responsible for your data and its own notice is at its address, /privacy.",
+    data, purpose, basis, processor,
+};
