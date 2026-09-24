@@ -1,0 +1,31 @@
+{
+ "id": "W3",
+ "lang": "sq",
+ "durationMs": 12503,
+ "chapters": [
+  {
+   "n": 1,
+   "key": "1",
+   "startMs": 600,
+   "endMs": 6660,
+   "found": true,
+   "title": {
+    "sq": "Tavolinë e re",
+    "en": "New table",
+    "uk": "Новий стіл"
+   }
+  },
+  {
+   "n": 2,
+   "key": "2",
+   "startMs": 6660,
+   "endMs": 12503,
+   "found": true,
+   "title": {
+    "sq": "Zgjidhni tavolinën",
+    "en": "Choose the table",
+    "uk": "Оберіть стіл"
+   }
+  }
+ ]
+}

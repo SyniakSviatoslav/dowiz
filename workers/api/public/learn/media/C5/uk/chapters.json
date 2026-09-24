@@ -1,0 +1,55 @@
+{
+ "id": "C5",
+ "lang": "uk",
+ "durationMs": 34387,
+ "chapters": [
+  {
+   "n": 1,
+   "key": "1",
+   "startMs": 600,
+   "endMs": 12666,
+   "found": false,
+   "title": {
+    "sq": "Të padërguara",
+    "en": "Unsent",
+    "uk": "Не надіслано"
+   }
+  },
+  {
+   "n": 2,
+   "key": "2",
+   "startMs": 12666,
+   "endMs": 18801,
+   "found": true,
+   "title": {
+    "sq": "Do ta dërgojmë",
+    "en": "Will be sent",
+    "uk": "Буде надіслано"
+   }
+  },
+  {
+   "n": 3,
+   "key": "3",
+   "startMs": 18801,
+   "endMs": 26439,
+   "found": true,
+   "title": {
+    "sq": "Të dhëna të vjetra",
+    "en": "Old data",
+    "uk": "Застарілі дані"
+   }
+  },
+  {
+   "n": 4,
+   "key": "4",
+   "startMs": 26439,
+   "endMs": 34387,
+   "found": true,
+   "title": {
+    "sq": "GPS",
+    "en": "GPS",
+    "uk": "GPS"
+   }
+  }
+ ]
+}

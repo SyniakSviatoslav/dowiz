@@ -1,0 +1,310 @@
+{
+ "id": "O1a",
+ "role": "owner",
+ "app": "owner",
+ "module": "orders",
+ "order": 1,
+ "covers": [
+  "orders"
+ ],
+ "writes": false,
+ "title": {
+  "sq": "Lexoni tabelën e porosive",
+  "en": "Read the order board",
+  "uk": "Читайте дошку замовлень"
+ },
+ "goal": {
+  "sq": "Dini çfarë do të thotë çdo gjendje dhe cila porosi ka nevojë për ju.",
+  "en": "Say what each status means and which order needs a hand.",
+  "uk": "Знати, що означає кожен статус і якому замовленню потрібна увага."
+ },
+ "steps": [
+  {
+   "n": 1,
+   "key": "1",
+   "anchor": "nav.orders",
+   "at": "[data-tour=\"nav.orders\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "click",
+    "selector": "[data-tour=\"nav.orders\"]"
+   },
+   "title": {
+    "sq": "Porositë",
+    "en": "Orders",
+    "uk": "Замовлення"
+   },
+   "caption": {
+    "sq": "Skeda e parë: çdo porosi e gjallë e lokalit, nga uebi, tavolinat dhe platformat.",
+    "en": "The first tab: every live order of the venue, from the web, the tables and the platforms.",
+    "uk": "Перша вкладка: кожне живе замовлення закладу — з сайту, зі столів і з платформ."
+   }
+  },
+  {
+   "n": 2,
+   "key": "2",
+   "anchor": "orders.stats",
+   "at": "[data-tour=\"orders.stats\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "wait",
+    "selector": "[data-tour=\"orders.stats\"]"
+   },
+   "title": {
+    "sq": "Shifrat e ditës",
+    "en": "Today in numbers",
+    "uk": "День у цифрах"
+   },
+   "caption": {
+    "sq": "Sa porosi, sa para dhe sa presin tani — me një shikim.",
+    "en": "How many orders, how much money and how many are waiting now — at a glance.",
+    "uk": "Скільки замовлень, скільки грошей і скільки чекає зараз — з першого погляду."
+   }
+  },
+  {
+   "n": 3,
+   "key": "3",
+   "anchor": "orders.mode",
+   "at": "[data-tour=\"orders.mode\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "click",
+    "selector": "[data-tour=\"orders.mode\"]"
+   },
+   "title": {
+    "sq": "Tani ose historia",
+    "en": "Live or history",
+    "uk": "Зараз чи історія"
+   },
+   "caption": {
+    "sq": "Porositë e hapura, ose ato që u mbyllën.",
+    "en": "The open orders, or the ones already closed.",
+    "uk": "Відкриті замовлення або вже закриті."
+   }
+  },
+  {
+   "n": 4,
+   "key": "4",
+   "anchor": "orders.search",
+   "at": "[data-tour=\"orders.search\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "type",
+    "selector": "[data-tour=\"orders.search\"]",
+    "value": "Tregtare"
+   },
+   "title": {
+    "sq": "Kërkoni",
+    "en": "Search",
+    "uk": "Пошук"
+   },
+   "caption": {
+    "sq": "Me numër, telefon ose rrugë.",
+    "en": "By number, phone or street.",
+    "uk": "За номером, телефоном чи вулицею."
+   }
+  },
+  {
+   "n": 5,
+   "key": "5",
+   "anchor": "orders.board",
+   "at": "[data-tour=\"orders.board\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "wait",
+    "selector": "[data-tour=\"orders.board\"]"
+   },
+   "title": {
+    "sq": "Tabela",
+    "en": "The board",
+    "uk": "Дошка"
+   },
+   "caption": {
+    "sq": "Kolonat ndjekin rrugën e porosisë: NË PRITJE → KONFIRMUAR → PO PËRGATITET → GATI → NË DËRGESË.",
+    "en": "The columns follow an order’s path: PENDING → CONFIRMED → PREPARING → READY → IN DELIVERY.",
+    "uk": "Колонки йдуть шляхом замовлення: ОЧІКУЄ → ПІДТВЕРДЖЕНО → ГОТУЄТЬСЯ → ГОТОВО → У ДОСТАВЦІ."
+   }
+  },
+  {
+   "n": 6,
+   "key": "6",
+   "anchor": "orders.row",
+   "at": "[data-tour=\"orders.row\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "click",
+    "selector": "[data-tour=\"orders.row\"]"
+   },
+   "title": {
+    "sq": "Një porosi",
+    "en": "An order",
+    "uk": "Замовлення"
+   },
+   "caption": {
+    "sq": "Numri, artikujt, shuma dhe sa kohë ka që pret. Prekeni për detajet.",
+    "en": "Its number, items, total and how long it has waited. Tap it for the detail.",
+    "uk": "Номер, позиції, сума й скільки воно чекає. Торкніться — відкриються деталі."
+   }
+  },
+  {
+   "n": 7,
+   "key": "7",
+   "anchor": "orders.status",
+   "at": "[data-tour=\"orders.status\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "wait",
+    "selector": "[data-tour=\"orders.status\"]"
+   },
+   "title": {
+    "sq": "Gjendja",
+    "en": "The status",
+    "uk": "Статус"
+   },
+   "caption": {
+    "sq": "E njëjta fjalë që sheh klienti dhe korrieri.",
+    "en": "The same word the customer and the courier see.",
+    "uk": "Те саме слово, що бачать клієнт і кур’єр."
+   }
+  },
+  {
+   "n": 8,
+   "key": "8",
+   "anchor": "orders.seen",
+   "at": "[data-tour=\"orders.seen\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "click",
+    "selector": "[data-tour=\"orders.seen\"]"
+   },
+   "title": {
+    "sq": "E pashë",
+    "en": "Seen",
+    "uk": "Побачив"
+   },
+   "caption": {
+    "sq": "Ndal ziljen për një porosi që e keni parë, pa e lëvizur.",
+    "en": "Stops the bell for an order you have seen, without moving it.",
+    "uk": "Зупиняє дзвінок для замовлення, яке ви побачили, не змінюючи його."
+   }
+  },
+  {
+   "n": 9,
+   "key": "9",
+   "anchor": "orders.more",
+   "at": "[data-tour=\"orders.more\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "click",
+    "selector": "[data-tour=\"orders.more\"]"
+   },
+   "title": {
+    "sq": "Më shumë",
+    "en": "More",
+    "uk": "Ще"
+   },
+   "caption": {
+    "sq": "Në histori, ngarkon porositë më të vjetra.",
+    "en": "In the history, loads older orders.",
+    "uk": "В історії підвантажує старіші замовлення."
+   }
+  },
+  {
+   "n": 10,
+   "key": "10",
+   "anchor": "header.state",
+   "at": "[data-tour=\"header.state\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "click",
+    "selector": "[data-tour=\"header.state\"]"
+   },
+   "title": {
+    "sq": "Gjendja e lokalit",
+    "en": "The venue’s state",
+    "uk": "Стан закладу"
+   },
+   "caption": {
+    "sq": "Klientët e shohin menjëherë në faqe.",
+    "en": "Customers see it on the site at once.",
+    "uk": "Клієнти одразу бачать це на сайті."
+   }
+  },
+  {
+   "n": 11,
+   "key": "11",
+   "anchor": "state.open",
+   "at": "[data-tour=\"state.open\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "click",
+    "selector": "[data-tour=\"state.open\"]"
+   },
+   "title": {
+    "sq": "I hapur",
+    "en": "Open",
+    "uk": "Відкрито"
+   },
+   "caption": {
+    "sq": "Porositë vijnë normalisht.",
+    "en": "Orders come in as normal.",
+    "uk": "Замовлення надходять як завжди."
+   }
+  },
+  {
+   "n": 12,
+   "key": "12",
+   "anchor": "state.busy",
+   "at": "[data-tour=\"state.busy\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "wait",
+    "selector": "[data-tour=\"state.busy\"]"
+   },
+   "title": {
+    "sq": "I zënë",
+    "en": "Busy",
+    "uk": "Зайнято"
+   },
+   "caption": {
+    "sq": "Klienti paralajmërohet për pritje më të gjatë.",
+    "en": "Customers are warned of a longer wait.",
+    "uk": "Клієнтів попереджають про довше очікування."
+   }
+  },
+  {
+   "n": 13,
+   "key": "13",
+   "anchor": "state.closed",
+   "at": "[data-tour=\"state.closed\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "wait",
+    "selector": "[data-tour=\"state.closed\"]"
+   },
+   "title": {
+    "sq": "I mbyllur",
+    "en": "Closed",
+    "uk": "Зачинено"
+   },
+   "caption": {
+    "sq": "Faqja nuk pranon porosi të reja.",
+    "en": "The site accepts no new orders.",
+    "uk": "Сайт не приймає нових замовлень."
+   }
+  }
+ ]
+}

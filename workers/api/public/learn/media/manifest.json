@@ -1,0 +1,182 @@
+{
+ "version": 1,
+ "lessons": {
+  "C5": {
+   "role": "courier",
+   "module": "offline",
+   "cuts": {
+    "sq": {
+     "durationMs": 33214,
+     "steps": 4,
+     "absent": [
+      1
+     ],
+     "sha256": "a4efc8df8def37eb",
+     "bytes": 708300,
+     "video": "/learn/media/C5/sq/video.mp4",
+     "poster": "/learn/media/C5/sq/poster.jpg",
+     "chapters": "/learn/media/C5/sq/chapters.json",
+     "subs": {
+      "sq": "/learn/media/C5/sq/subs_sq.vtt",
+      "en": "/learn/media/C5/sq/subs_en.vtt",
+      "uk": "/learn/media/C5/sq/subs_uk.vtt"
+     }
+    },
+    "en": {
+     "durationMs": 33745,
+     "steps": 4,
+     "absent": [
+      1
+     ],
+     "sha256": "f7852166edcbc1f0",
+     "bytes": 675042,
+     "video": "/learn/media/C5/en/video.mp4",
+     "poster": "/learn/media/C5/en/poster.jpg",
+     "chapters": "/learn/media/C5/en/chapters.json",
+     "subs": {
+      "sq": "/learn/media/C5/en/subs_sq.vtt",
+      "en": "/learn/media/C5/en/subs_en.vtt",
+      "uk": "/learn/media/C5/en/subs_uk.vtt"
+     }
+    },
+    "uk": {
+     "durationMs": 34387,
+     "steps": 4,
+     "absent": [
+      1
+     ],
+     "sha256": "b1548433adf7bcde",
+     "bytes": 748954,
+     "video": "/learn/media/C5/uk/video.mp4",
+     "poster": "/learn/media/C5/uk/poster.jpg",
+     "chapters": "/learn/media/C5/uk/chapters.json",
+     "subs": {
+      "sq": "/learn/media/C5/uk/subs_sq.vtt",
+      "en": "/learn/media/C5/uk/subs_en.vtt",
+      "uk": "/learn/media/C5/uk/subs_uk.vtt"
+     }
+    }
+   }
+  },
+  "O1a": {
+   "role": "owner",
+   "module": "orders",
+   "cuts": {
+    "sq": {
+     "durationMs": 89934,
+     "steps": 13,
+     "absent": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "sha256": "8fac5df838f3d5d4",
+     "bytes": 1940441,
+     "video": "/learn/media/O1a/sq/video.mp4",
+     "poster": "/learn/media/O1a/sq/poster.jpg",
+     "chapters": "/learn/media/O1a/sq/chapters.json",
+     "subs": {
+      "sq": "/learn/media/O1a/sq/subs_sq.vtt",
+      "en": "/learn/media/O1a/sq/subs_en.vtt",
+      "uk": "/learn/media/O1a/sq/subs_uk.vtt"
+     }
+    },
+    "en": {
+     "durationMs": 88169,
+     "steps": 13,
+     "absent": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "sha256": "e14fe35891c9ec09",
+     "bytes": 1764556,
+     "video": "/learn/media/O1a/en/video.mp4",
+     "poster": "/learn/media/O1a/en/poster.jpg",
+     "chapters": "/learn/media/O1a/en/chapters.json",
+     "subs": {
+      "sq": "/learn/media/O1a/en/subs_sq.vtt",
+      "en": "/learn/media/O1a/en/subs_en.vtt",
+      "uk": "/learn/media/O1a/en/subs_uk.vtt"
+     }
+    },
+    "uk": {
+     "durationMs": 87217,
+     "steps": 13,
+     "absent": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "sha256": "8a7c3698f7075735",
+     "bytes": 1938947,
+     "video": "/learn/media/O1a/uk/video.mp4",
+     "poster": "/learn/media/O1a/uk/poster.jpg",
+     "chapters": "/learn/media/O1a/uk/chapters.json",
+     "subs": {
+      "sq": "/learn/media/O1a/uk/subs_sq.vtt",
+      "en": "/learn/media/O1a/uk/subs_en.vtt",
+      "uk": "/learn/media/O1a/uk/subs_uk.vtt"
+     }
+    }
+   }
+  },
+  "W3": {
+   "role": "waiter",
+   "module": "open",
+   "cuts": {
+    "sq": {
+     "durationMs": 12503,
+     "steps": 2,
+     "absent": [],
+     "sha256": "d607a5a25f9e28cd",
+     "bytes": 320861,
+     "video": "/learn/media/W3/sq/video.mp4",
+     "poster": "/learn/media/W3/sq/poster.jpg",
+     "chapters": "/learn/media/W3/sq/chapters.json",
+     "subs": {
+      "sq": "/learn/media/W3/sq/subs_sq.vtt",
+      "en": "/learn/media/W3/sq/subs_en.vtt",
+      "uk": "/learn/media/W3/sq/subs_uk.vtt"
+     }
+    },
+    "en": {
+     "durationMs": 11471,
+     "steps": 2,
+     "absent": [],
+     "sha256": "ca18411d61b58d8b",
+     "bytes": 279326,
+     "video": "/learn/media/W3/en/video.mp4",
+     "poster": "/learn/media/W3/en/poster.jpg",
+     "chapters": "/learn/media/W3/en/chapters.json",
+     "subs": {
+      "sq": "/learn/media/W3/en/subs_sq.vtt",
+      "en": "/learn/media/W3/en/subs_en.vtt",
+      "uk": "/learn/media/W3/en/subs_uk.vtt"
+     }
+    },
+    "uk": {
+     "durationMs": 10962,
+     "steps": 2,
+     "absent": [],
+     "sha256": "41c9de6fc72429c3",
+     "bytes": 303762,
+     "video": "/learn/media/W3/uk/video.mp4",
+     "poster": "/learn/media/W3/uk/poster.jpg",
+     "chapters": "/learn/media/W3/uk/chapters.json",
+     "subs": {
+      "sq": "/learn/media/W3/uk/subs_sq.vtt",
+      "en": "/learn/media/W3/uk/subs_en.vtt",
+      "uk": "/learn/media/W3/uk/subs_uk.vtt"
+     }
+    }
+   }
+  }
+ }
+}

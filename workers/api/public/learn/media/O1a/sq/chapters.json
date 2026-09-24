@@ -1,0 +1,163 @@
+{
+ "id": "O1a",
+ "lang": "sq",
+ "durationMs": 89934,
+ "chapters": [
+  {
+   "n": 1,
+   "key": "1",
+   "startMs": 600,
+   "endMs": 8133,
+   "found": true,
+   "title": {
+    "sq": "Porositë",
+    "en": "Orders",
+    "uk": "Замовлення"
+   }
+  },
+  {
+   "n": 2,
+   "key": "2",
+   "startMs": 8133,
+   "endMs": 12703,
+   "found": true,
+   "title": {
+    "sq": "Shifrat e ditës",
+    "en": "Today in numbers",
+    "uk": "День у цифрах"
+   }
+  },
+  {
+   "n": 3,
+   "key": "3",
+   "startMs": 12703,
+   "endMs": 17502,
+   "found": true,
+   "title": {
+    "sq": "Tani ose historia",
+    "en": "Live or history",
+    "uk": "Зараз чи історія"
+   }
+  },
+  {
+   "n": 4,
+   "key": "4",
+   "startMs": 17502,
+   "endMs": 23135,
+   "found": true,
+   "title": {
+    "sq": "Kërkoni",
+    "en": "Search",
+    "uk": "Пошук"
+   }
+  },
+  {
+   "n": 5,
+   "key": "5",
+   "startMs": 23135,
+   "endMs": 33421,
+   "found": false,
+   "title": {
+    "sq": "Tabela",
+    "en": "The board",
+    "uk": "Дошка"
+   }
+  },
+  {
+   "n": 6,
+   "key": "6",
+   "startMs": 33421,
+   "endMs": 42808,
+   "found": false,
+   "title": {
+    "sq": "Një porosi",
+    "en": "An order",
+    "uk": "Замовлення"
+   }
+  },
+  {
+   "n": 7,
+   "key": "7",
+   "startMs": 42808,
+   "endMs": 51755,
+   "found": false,
+   "title": {
+    "sq": "Gjendja",
+    "en": "The status",
+    "uk": "Статус"
+   }
+  },
+  {
+   "n": 8,
+   "key": "8",
+   "startMs": 51755,
+   "endMs": 60779,
+   "found": false,
+   "title": {
+    "sq": "E pashë",
+    "en": "Seen",
+    "uk": "Побачив"
+   }
+  },
+  {
+   "n": 9,
+   "key": "9",
+   "startMs": 60779,
+   "endMs": 69614,
+   "found": false,
+   "title": {
+    "sq": "Më shumë",
+    "en": "More",
+    "uk": "Ще"
+   }
+  },
+  {
+   "n": 10,
+   "key": "10",
+   "startMs": 69614,
+   "endMs": 76158,
+   "found": true,
+   "title": {
+    "sq": "Gjendja e lokalit",
+    "en": "The venue’s state",
+    "uk": "Стан закладу"
+   }
+  },
+  {
+   "n": 11,
+   "key": "11",
+   "startMs": 76158,
+   "endMs": 81020,
+   "found": true,
+   "title": {
+    "sq": "I hapur",
+    "en": "Open",
+    "uk": "Відкрито"
+   }
+  },
+  {
+   "n": 12,
+   "key": "12",
+   "startMs": 81020,
+   "endMs": 84873,
+   "found": true,
+   "title": {
+    "sq": "I zënë",
+    "en": "Busy",
+    "uk": "Зайнято"
+   }
+  },
+  {
+   "n": 13,
+   "key": "13",
+   "startMs": 84873,
+   "endMs": 89934,
+   "found": true,
+   "title": {
+    "sq": "I mbyllur",
+    "en": "Closed",
+    "uk": "Зачинено"
+   }
+  }
+ ]
+}

@@ -1,0 +1,67 @@
+{
+ "id": "W3",
+ "role": "waiter",
+ "app": "room",
+ "module": "open",
+ "order": 3,
+ "covers": [
+  "open"
+ ],
+ "writes": true,
+ "title": {
+  "sq": "Hapni një tavolinë",
+  "en": "Open a table",
+  "uk": "Відкрийте стіл"
+ },
+ "goal": {
+  "sq": "Hapni tavolinën 4 për dy veta.",
+  "en": "Open table 4 for two.",
+  "uk": "Відкрити стіл 4 на двох."
+ },
+ "steps": [
+  {
+   "n": 1,
+   "key": "1",
+   "anchor": "room.open",
+   "at": "[data-tour=\"room.open\"]",
+   "pending": false,
+   "writes": false,
+   "action": {
+    "do": "click",
+    "selector": "[data-tour=\"room.open\"]"
+   },
+   "title": {
+    "sq": "Tavolinë e re",
+    "en": "New table",
+    "uk": "Новий стіл"
+   },
+   "caption": {
+    "sq": "Kur ulen mysafirët, filloni këtu.",
+    "en": "When guests sit down, start here.",
+    "uk": "Коли гості сідають, почніть тут."
+   }
+  },
+  {
+   "n": 2,
+   "key": "2",
+   "anchor": "open.table",
+   "at": "[data-tour=\"open.table\"]",
+   "pending": false,
+   "writes": true,
+   "action": {
+    "do": "click",
+    "selector": "[data-tour=\"open.table\"]"
+   },
+   "title": {
+    "sq": "Zgjidhni tavolinën",
+    "en": "Choose the table",
+    "uk": "Оберіть стіл"
+   },
+   "caption": {
+    "sq": "Prekni numrin e tavolinës. Një tavolinë e zënë nuk mund të hapet dy herë.",
+    "en": "Tap the table’s number. A table already in use cannot be opened twice.",
+    "uk": "Торкніться номера столу. Зайнятий стіл не можна відкрити вдруге."
+   }
+  }
+ ]
+}

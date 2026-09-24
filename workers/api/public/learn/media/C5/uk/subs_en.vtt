@@ -1,0 +1,21 @@
+WEBVTT
+
+1
+00:00:00.600 --> 00:00:12.666
+Unsent
+With no network, your taps are kept on the phone. This tag shows how many are still unsent, and it goes away by itself once they land.
+
+2
+00:00:12.666 --> 00:00:18.801
+Will be sent
+A waiting action replaces the button: you see “Will be sent”, not a button to press again.
+
+3
+00:00:18.801 --> 00:00:26.439
+Old data
+Offline, the screen shows the venue’s last answer with its time. If the order changed meanwhile, your action is refused and you are told why.
+
+4
+00:00:26.439 --> 00:00:34.387
+GPS
+This tag shows whether the phone knows where you are. Without GPS the time to the door does not update.
