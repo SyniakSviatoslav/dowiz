@@ -1,0 +1,2 @@
+# Known exceptions to principal-binds.sh, one `file::fn` per line. May only shrink.
+# (none: every authenticated handler that takes an object or person id binds it)
