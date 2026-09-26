@@ -56,7 +56,7 @@ edit "$P/room/pay.js" "'pay.tip'" "'pay.gratuity'"
 want 1 "room anchor pay.tip renamed"
 
 copy
-edit "$P/admin/more.js" "['dpa', 'shield-check', openDpa]" "['dpa', 'shield-check', openDpa], ['loyalty', 'star', openDpa]"
+edit "$P/admin/more.js" "['dpa', 'circle-check', openDpa]" "['dpa', 'circle-check', openDpa], ['loyalty', 'star', openDpa]"
 want 1 "a More tile (loyalty) no lesson covers"
 
 copy

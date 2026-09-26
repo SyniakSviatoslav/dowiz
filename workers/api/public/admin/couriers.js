@@ -14,7 +14,7 @@ import { btn, iconBtn, field, pill, empty, loading, rowBtn, rowDiv } from '/admi
 const MAP_ZOOM = 16;
 
 export async function render(host){
-  host.innerHTML = `<div class="screen-h"><div><p class="eyebrow" data-t="tabCouriers"></p><h1 data-t="tabCouriers"></h1></div>
+  host.innerHTML = `<div class="screen-h"><div><h1 data-t="tabCouriers"></h1></div>
     ${btn({ id: 'invite', variant: 'primary', icon: 'user-plus', key: 'invite', tour: 'couriers.invite' })}</div>
     <p class="screen-hint" data-t="couriersHint"></p>
     <div id="clist" data-tour="couriers.list">${loading(3)}</div>`;

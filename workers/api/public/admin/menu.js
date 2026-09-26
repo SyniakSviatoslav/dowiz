@@ -56,8 +56,8 @@ export async function render(host){
   const cats = S.categories;
   const q = norm(view.q).trim();
   host.innerHTML = `
-    <div class="screen-h"><div><p class="eyebrow" data-t="tabMenu"></p><h1>${esc(S.venue?.name || '')}</h1></div>
-      <div class="btn-row compact">${btn({ id: 'mCats', icon: 'adjustments', key: 'categories', tour: 'menu.categories' })}${iconBtn({ id: 'mImport', icon: 'download', ariaKey: 'importMenu', tour: 'menu.import' })}${iconBtn({ id: 'mRecipes', icon: 'tools-kitchen-2', ariaKey: 'importRecipes', tour: 'menu.importRecipes' })}${btn({ id: 'mNew', variant: 'primary', icon: 'plus', key: 'addDish', tour: 'menu.addDish' })}</div></div>
+    <div class="screen-h"><div><h1 data-t="tabMenu"></h1></div>
+      <div class="screen-acts">${btn({ id: 'mCats', icon: 'adjustments', key: 'categories', tour: 'menu.categories' })}${iconBtn({ id: 'mImport', icon: 'download', ariaKey: 'importMenu', tour: 'menu.import' })}${iconBtn({ id: 'mRecipes', icon: 'tools-kitchen-2', ariaKey: 'importRecipes', tour: 'menu.importRecipes' })}${btn({ id: 'mNew', variant: 'primary', icon: 'plus', key: 'addDish', tour: 'menu.addDish' })}</div></div>
     <p class="screen-hint" data-t="menuHint"></p>
     ${search('mq', view.q, 'menu.search')}
     <div class="chips filters" role="group">

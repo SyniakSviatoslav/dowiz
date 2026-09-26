@@ -89,7 +89,7 @@ export async function render(host){
   const counts = K.stationCounts(S.orders);
   const stations = [{ value: 'all', label: `${t('kAll')} ${counts.all}` }, ...K.STATIONS.map(s => ({ value: s, label: `${t('st_' + s)} ${counts[s]}` }))];
   const open = counts.all > 0;
-  host.innerHTML = `<div class="screen-h"><div><p class="eyebrow" data-t="tabKitchen"></p><h1 data-t="tabKitchen"></h1></div></div>
+  host.innerHTML = `<div class="screen-h"><div><h1 data-t="tabKitchen"></h1></div></div>
     <p class="screen-hint" data-t="kBoardHint"></p>
     ${chips({ values: stations, value: view.station, attr: 'st', labelKey: 'tabKitchen', tour: 'kitchen.station' }).replace('class="chips"', 'class="chips kds-stations"')}
     ${allDayStrip()}
