@@ -33,9 +33,13 @@
 
   /* ── elevation: three steps, and only three. A fourth shadow is a fourth
      opinion about how far off the page something is. ── */
-  --elevation-1: 0 1px 2px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.10);
-  --elevation-2: 0 4px 6px -1px rgba(0,0,0,.10), 0 2px 4px -2px rgba(0,0,0,.10);
-  --elevation-3: 0 10px 15px -3px rgba(0,0,0,.12), 0 4px 6px -4px rgba(0,0,0,.10);
+  /* 2026-09-26: SOFT, LAYERED. Each step is a tight contact shadow plus a
+     wide low-opacity ambient one, so a raised thing reads as lifted rather
+     than outlined. This is what replaces the 1px box around every card: the
+     hierarchy is carried by layer and shadow, and a border is a hairline. */
+  --elevation-1: 0 1px 1px rgba(16,17,20,.04), 0 1px 3px rgba(16,17,20,.06);
+  --elevation-2: 0 1px 2px rgba(16,17,20,.05), 0 6px 16px -4px rgba(16,17,20,.10);
+  --elevation-3: 0 2px 6px rgba(16,17,20,.06), 0 18px 36px -10px rgba(16,17,20,.22);
 
   /* ── MEASURE ──
      The one rule both the Swiss school and the Renaissance canons put first,
@@ -90,6 +94,12 @@
      What makes a price a price. It is the same on all three surfaces or the
      same number looks like two different things to the same person. ── */
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* 2026-09-26: THE MONEY FACE IS THE READING FACE, WITH TABULAR FIGURES.
+     A monospace price looked like a code in a terminal next to a sans name;
+     what actually keeps a column of prices aligned is `tabular-nums`, which
+     every modern sans has. The rule "one money face on every surface, fixed
+     here" stands -- it is this token -- and `--font-mono` stays for code. */
+  --font-money: var(--brand-font-body, var(--font-sans));
 
   /* ── the tap floor. 44px is the smallest target a thumb hits reliably; the
      courier app raises its own above this, never below. ── */
@@ -147,7 +157,7 @@
   --tracking-tight: -.01em;
 
   --space-10: 40px;
-  --radius-xl: 16px; --radius-2xl: 24px;
+  --radius-xl: 16px; --radius-2xl: 20px;
 
   /* The tap floor has three steps (plan §8.1: 44/48/56). 56 is the courier's
      primary action: a thumb on a phone held on a handlebar. */
@@ -214,18 +224,25 @@
      lib/ui/tokens.test.mjs, which is where this exception was found. */
   --ui-on-danger: #ffffff;
   --ui-shadow-sheet: 0 -8px 24px rgba(0,0,0,.18);
+  /* 2026-09-26 roles. A HAIRLINE is the separator inside a list or under a
+     bar: the ink at 10%, so it is the same weight on every ground and never
+     a second border colour to keep in step. GLASS is a bar's translucent
+     ground (behind a backdrop blur, with a solid fallback in ui.css). */
+  --ui-hairline: color-mix(in srgb, var(--ui-fg) 10%, transparent);
+  --ui-glass: color-mix(in srgb, var(--ui-bg) 80%, transparent);
+  --ui-press: .98;
 }
 
 /* Dark: the same roles, the ground and ink swapped. A surface that forces a
    theme with `data-theme` wins over the phone in both directions. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ui-bg: var(--brand-bg, #061b1a);
-    --ui-surface: var(--brand-surface, #0b2624);
-    --ui-surface-2: var(--brand-surface-raised, #12302d);
-    --ui-fg: var(--brand-text, #f5efe5);
-    --ui-fg-muted: var(--brand-text-muted, #a9b8b5);
-    --ui-line: var(--brand-border, #22403c);
+    --ui-bg: var(--brand-bg, #131517);
+    --ui-surface: var(--brand-surface, #1b1e20);
+    --ui-surface-2: var(--brand-surface-raised, #25282b);
+    --ui-fg: var(--brand-text, #f3f1ec);
+    --ui-fg-muted: var(--brand-text-muted, #a8aaa6);
+    --ui-line: var(--brand-border, #33373a);
     --ui-accent-edge: var(--ui-accent);
     --ui-focus: var(--ui-accent);
     --ui-scrim: rgba(0,0,0,.6);
@@ -233,12 +250,12 @@
   }
 }
 :root[data-theme="dark"] {
-  --ui-bg: var(--brand-bg, #061b1a);
-  --ui-surface: var(--brand-surface, #0b2624);
-  --ui-surface-2: var(--brand-surface-raised, #12302d);
-  --ui-fg: var(--brand-text, #f5efe5);
-  --ui-fg-muted: var(--brand-text-muted, #a9b8b5);
-  --ui-line: var(--brand-border, #22403c);
+  --ui-bg: var(--brand-bg, #131517);
+  --ui-surface: var(--brand-surface, #1b1e20);
+  --ui-surface-2: var(--brand-surface-raised, #25282b);
+  --ui-fg: var(--brand-text, #f3f1ec);
+  --ui-fg-muted: var(--brand-text-muted, #a8aaa6);
+  --ui-line: var(--brand-border, #33373a);
   --ui-accent-edge: var(--ui-accent);
   --ui-focus: var(--ui-accent);
   --ui-scrim: rgba(0,0,0,.6);

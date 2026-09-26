@@ -12,22 +12,22 @@ body{min-height:100dvh;background:var(--ui-bg);color:var(--ui-fg);font-family:va
 .g-nav{position:sticky;top:0;z-index:var(--z-sticky);display:flex;gap:var(--space-1);overflow-x:auto;scrollbar-width:none;
        margin:var(--space-5) calc(var(--space-4) * -1) 0;padding:var(--space-2) var(--space-4);
        background:color-mix(in srgb,var(--ui-bg) 90%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
-       border-bottom:1px solid var(--ui-line)}
+       box-shadow:0 1px 0 var(--ui-hairline)}
 .g-link{display:inline-flex;align-items:center;min-height:var(--tap);padding:0 var(--space-3);border-radius:var(--radius-full);
         color:var(--ui-fg-muted);font-weight:var(--weight-semibold);text-decoration:none;white-space:nowrap}
 .g-link:hover{color:var(--ui-fg);background:var(--ui-surface-2)}
 .g-link:focus-visible{outline:3px solid var(--ui-focus);outline-offset:2px}
 .g-main{display:grid;gap:var(--space-10);margin-top:var(--space-6)}
 .g-sec{scroll-margin-top:var(--space-16)}
-.g-h{font-family:var(--ui-font-heading);font-size:var(--text-xl);letter-spacing:var(--tracking-tight);margin-bottom:var(--space-3)}
+.g-h{font-family:var(--ui-font-heading);font-size:var(--text-xl);font-weight:800;letter-spacing:-.02em;margin-bottom:var(--space-3)}
 .g-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,18rem),1fr));gap:var(--space-3)}
-.g-spec{display:grid;grid-template-rows:1fr auto;border:1px solid var(--ui-line);border-radius:var(--radius-xl);
-        background:var(--ui-surface);overflow:hidden}
+.g-spec{display:grid;grid-template-rows:1fr auto;border:0;border-radius:var(--radius-xl);
+        background:var(--ui-surface);box-shadow:var(--elevation-1);overflow:hidden}
 .g-stage{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;align-content:center;padding:var(--space-4);min-width:0}
 .g-stage>.ui-list,.g-stage>.ui-field,.g-stage>.ui-inputrow,.g-stage>.ui-card,.g-stage>.ui-empty,
 .g-stage>.ui-skel-wrap,.g-stage>.ui-stat,.g-stage>.ui-section-head,.g-stage>.ui-alert,.g-stage>.ui-tabs,.g-stage>.ui-btn--block{flex:1 1 100%}
 .g-stage>.ui-field{margin-top:0}
-.g-cap{padding:var(--space-2) var(--space-4);border-top:1px solid var(--ui-line);background:var(--ui-surface-2);
+.g-cap{padding:var(--space-2) var(--space-4);border-top:1px solid var(--ui-hairline);background:color-mix(in oklch,var(--ui-fg) 4%,var(--ui-surface));
        color:var(--ui-fg-muted);font:var(--text-xs)/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}
 .g-map{flex:1 1 100%;display:grid;place-items:center;min-height:6rem;border-radius:var(--radius-lg);
        background:repeating-linear-gradient(45deg,var(--ui-surface-2) 0 12px,var(--ui-bg) 12px 24px)}

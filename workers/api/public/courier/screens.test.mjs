@@ -150,3 +150,13 @@ test('panels: back button, earnings keep tips apart from the float, history empt
   assert.equal(hist.querySelector('.ui-row-sub').textContent, '24 Sep · DELIVERED');
   assert.deepEqual(injected(screens.history([{ street: XSS, status: XSS }], () => XSS, ctx) + screens.panelError(XSS) + screens.panel(XSS, '')), []);
 });
+
+test('order refs: a courier reads #01234567, never the storage prefix #ord_...', () => {
+  const o = order();
+  for (const h of [screens.pickList([o], o.id, () => null, ctx), screens.orderHead(o, false, null, ctx), screens.offer(o, 30, ctx)]) {
+    assert.ok(h.includes('#01234567'), 'the short ref is drawn');
+    assert.ok(!h.includes('#ord_'), 'the prefix never leaks');
+  }
+  // positive twin: an id that has no prefix is drawn as it is
+  assert.ok(screens.pickList([order({ id: 'A7B8C9' })], 'A7B8C9', () => null, ctx).includes('#A7B8C9'));
+});

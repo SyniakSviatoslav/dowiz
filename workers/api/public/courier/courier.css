@@ -8,6 +8,11 @@
  * what is the courier's alone: its palette (T1 values for the T3 chrome), the
  * map and the Sea, the HUD row, the sheet with its spectral edge, the order
  * head, the swipe-to-deliver track and the voice read-back. 487 lines -> this.
+ *
+ * 2026-09-26, THE CONTEMPORARY PASS. One family: the system sans, heavy for
+ * the sheet's title (the old-style serif is gone). Dark is layered charcoal
+ * (#131517 / #1b1e20 / #25282b) rather than the deep teal: the map and the
+ * gold accent carry the identity, the ground stays out of their way.
  */
 
 /* ── The courier surface, in Sea & Sheet terms ──────────────────────────────
@@ -46,7 +51,7 @@
   --spectral-a:#b5541c; --spectral-b:#f2c14e;
   --spectral:linear-gradient(90deg,transparent 0%,var(--spectral-a) 30%,var(--brand-primary) 50%,var(--spectral-b) 70%,transparent 100%);
   --brand-font-body:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-  --brand-font-heading:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+  --brand-font-heading:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   /* Anything read while moving is 16px or larger. */
   --text-base:1rem;
   --sheet-h:288px;               /* live value set by JS from the sheet's box */
@@ -61,14 +66,14 @@
    Tokens only; the guard lets an explicit light choice win. */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-raised:#12302d;
-    --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
+    --brand-bg:#131517; --brand-surface:#1b1e20; --brand-surface-raised:#25282b;
+    --brand-text:#f3f1ec; --brand-text-muted:#a8aaa6; --brand-border:#33373a;
     --scrim-marker:rgba(214,154,61,.3);
   }
 }
 :root[data-theme="dark"]{
-  --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-raised:#12302d;
-  --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
+  --brand-bg:#131517; --brand-surface:#1b1e20; --brand-surface-raised:#25282b;
+  --brand-text:#f3f1ec; --brand-text-muted:#a8aaa6; --brand-border:#33373a;
   --scrim-marker:rgba(214,154,61,.3);
 }
 
@@ -104,6 +109,9 @@ button{cursor:pointer;touch-action:manipulation}
      z-index:var(--z-sticky);display:flex;gap:var(--space-2);align-items:center;pointer-events:none}
 .hud>*{pointer-events:auto}
 .hud .sp{flex:1}
+/* two chips and the controls on a 360px phone: the chips give way rather
+   than run off the right edge (the GPS chip was cut in half at 390px) */
+.hud>.ui-chip{flex:0 1 auto;min-width:0;overflow:hidden;white-space:nowrap}
 /* Listening has to be visible without sound: a courier in traffic cannot hear
    a chime, and a microphone that is silently off is the worst of both. */
 #mic.on::after{content:"";position:absolute;inset:-2px;border-radius:var(--radius-full);
@@ -131,6 +139,7 @@ button{cursor:pointer;touch-action:manipulation}
           display:grid;gap:var(--space-2);align-content:start;
           -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .sheet-in>.ui-section-head{margin-bottom:0}
+.sheet-in .ui-title{font-weight:800;letter-spacing:-.025em}
 .sheet-in>.ui-empty+.ui-btn{margin-top:var(--space-1)}
 
 /* ── One order: status, the leg to the door, the address, the money ── */
@@ -142,14 +151,14 @@ button{cursor:pointer;touch-action:manipulation}
 .addr .ui-i{color:var(--brand-primary);margin-top:2px}
 .note{color:var(--brand-text-muted)}
 .meta{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-4);margin-block:var(--space-1)}
-.cash{display:inline-flex;align-items:center;gap:var(--space-2);background:var(--brand-surface-raised);
-      padding:var(--space-2) var(--space-4);border-radius:var(--radius-full);border:1px solid var(--brand-border)}
+.cash{display:inline-flex;align-items:center;gap:var(--space-2);background:color-mix(in oklch,var(--color-warning) 14%,var(--brand-surface));
+      padding:var(--space-2) var(--space-4);border-radius:var(--radius-full);border:0;font-weight:var(--weight-semibold)}
 .cash .ui-i{color:var(--color-warning)}
 a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration:none;
       display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--tap)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
 .row2:empty{display:none}
-.offer .oid{font-size:var(--text-lg)}
+.offer .oid{font-size:var(--text-lg);font-variant-numeric:tabular-nums}
 .answer{padding:var(--space-3);border-radius:var(--radius-md);background:var(--brand-surface-raised);
         line-height:1.55;white-space:pre-wrap}
 
@@ -164,7 +173,7 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
    pixel of jitter delivered the order, with no confirm. The knob now has a
    width, so there is a distance to cover. ── */
 .slide{position:relative;width:100%;overflow:hidden;border-radius:var(--radius-full);
-       background:var(--brand-surface-raised);border:1px solid var(--brand-border)}
+       background:color-mix(in oklch,var(--brand-text) 7%,var(--brand-surface));border:0}
 .slide-fill{position:absolute;inset:0 auto 0 0;width:0;pointer-events:none;
             background:color-mix(in srgb,var(--color-success) 22%,transparent)}
 .slide-knob{position:relative;width:62%;margin:0;touch-action:none;will-change:transform}
@@ -177,7 +186,7 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
 .vsay{position:fixed;left:var(--space-4);right:var(--space-4);
       top:calc(env(safe-area-inset-top,0px) + var(--space-12) + var(--space-3));
       z-index:var(--z-toast);padding:var(--space-3) var(--space-4);border-radius:var(--radius-lg);
-      background:var(--brand-surface);border:1px solid var(--brand-border);box-shadow:var(--elevation-2);
+      background:var(--brand-surface);border:1px solid var(--ui-hairline);box-shadow:var(--elevation-2);
       font-size:var(--text-lg);line-height:1.35;text-align:center;overflow-wrap:anywhere}
 .vsay.dim{color:var(--brand-text-muted)}
 .vsay.bad{border-color:var(--ui-danger-ink);color:var(--ui-danger-ink)}
@@ -192,7 +201,7 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
 .login-head{text-align:center;margin-bottom:0}
 .login-mark{width:var(--tap-lg);height:var(--tap-lg);margin:0 auto var(--space-1);border-radius:50%;
             display:grid;place-items:center;background:var(--brand-primary);box-shadow:var(--elevation-2)}
-.login-mark span{font-family:var(--brand-font-heading);font-style:italic;font-size:var(--text-2xl);line-height:1;color:var(--brand-on-primary)}
+.login-mark span{font-family:var(--brand-font-heading);font-weight:800;font-size:var(--text-2xl);line-height:1;color:var(--brand-on-primary)}
 .langs{display:flex;justify-content:center;margin-top:var(--space-3)}
 
 /* Reduced motion removes travel and keeps meaning: the sheet still fades in,

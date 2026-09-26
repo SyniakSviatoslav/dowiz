@@ -22,8 +22,11 @@
  * one does, so a divergence is a decision rather than a drift.
  */
 
-.money{font-family:var(--font-mono);font-variant-numeric:tabular-nums;
-       font-feature-settings:"tnum" 1;letter-spacing:-.01em}
+/* Money: the reading face with tabular, lining figures (lib/tokens.css
+   `--font-money`); `--font-mono` is only the fallback for a page that loads
+   this sheet without tokens.css. Still one rule, still never animated. */
+.money{font-family:var(--font-money,var(--font-mono));font-variant-numeric:tabular-nums lining-nums;
+       font-feature-settings:"tnum" 1,"lnum" 1;letter-spacing:0}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .top-in{display:flex;align-items:center;gap:var(--space-3);min-height:56px}
 .toast.show{opacity:1;transform:none}

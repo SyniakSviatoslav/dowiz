@@ -8,7 +8,7 @@
 // escaped) or a small behaviour binder that takes an element. See
 // docs/design/DESIGN-SYSTEM.md for the API, the do/don't and the migration
 // recipe; /ui-gallery/ shows every component in every state.
-export { esc, cx, attrs, icon, label, text, useTranslator, tr, uid, TONES } from './core.js';
+export { esc, cx, attrs, icon, label, text, useTranslator, tr, uid, TONES, orderRef, codeWord } from './core.js';
 export { button, iconButton, setBusy, VARIANTS } from './button.js';
 export { badge, status, STATUSES } from './badge.js';
 export { chip } from './chip.js';

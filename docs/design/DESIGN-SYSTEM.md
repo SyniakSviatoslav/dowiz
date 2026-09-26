@@ -47,8 +47,10 @@ Every existing token name still works; the 2026-09-24 additions only add.
 |---|---|
 | Space (4px grid) | `--space-1..6, 8, 10, 12, 16` |
 | Type | `--text-base` (1rem default; a surface may set its own), ratio `--text-ratio` 1.2 → `--text-xs, sm, lg, xl, 2xl, 3xl`; `--leading-tight/normal`; `--weight-normal/medium/semibold/bold`; `--tracking-tight`; `--font-sans` |
-| Radius | `--radius-sm 4, md 8, lg 12, xl 16, 2xl 24, full` |
-| Elevation | `--elevation-1..3`, `--ui-shadow-sheet` |
+| Radius | `--radius-sm 4, md 8, lg 12, xl 16, 2xl 20, full` (2xl was 24 until 2026-09-26) |
+| Elevation | `--elevation-1..3` (soft: a contact shadow plus a wide ambient one), `--ui-shadow-sheet` |
+| Money face | `--font-money` = the reading face (`--brand-font-body`, else `--font-sans`) with tabular, lining figures; `--font-mono` is for code only |
+| Surfaces | `--ui-hairline` (the ink at 10%: every separator), `--ui-glass` (a bar's translucent ground), `--ui-press` (.98, the press scale) |
 | Tap | `--tap` 44, `--tap-md` 48, `--tap-lg` 56 |
 | Motion | `--motion-press 120ms, enter 200ms, exit 140ms, sheet 260ms`; `--ease-snap, enter, exit, spring, tide` |
 | Stacking | `--z-sticky 50, --z-overlay 80, --z-toast 90` |
@@ -87,7 +89,8 @@ Call `ui.useTranslator(t)` once, passing the surface's `t(key, vars)`.
 | `iconButton({ icon, ariaLabel, variant:'plain', pressed, text })` | round 44px control | `ariaLabel` required |
 | `setBusy(btn, text) → undo` | spinner + text, `disabled`, `aria-busy` | `undo()` restores the exact markup |
 | `badge({ label, tone, dot, icon, live })` | non-interactive pill | tones `neutral accent success warning danger info` |
-| `status({ status, label, pulse })` | FSM status: hue dot + ink word | unknown status → `UNKNOWN`, not a throw |
+| `status({ status, label, pulse })` | FSM status: a pill -- hue dot + the word (hue mixed into the ink) on a 15% tint of the hue | unknown status → `UNKNOWN`, not a throw; AA held by `status.test.mjs` |
+| `orderRef(id, n=8)`, `codeWord(t, prefix, code)` | `#0001abcd` from `ord_0001abcd…`; the surface's word for an enum code, or the code made readable | a person never reads `#ord_…` or `rsSt_PENDING` |
 | `chip({ label, as:'span'|'button', selected, tone, dot, floating, live })` | readout or toggle | a `<span>` never pretends to be tappable |
 | `field({ id, label, type, value, placeholder, hint, error, rows, money, … })` | label + control + hint + error | `rows` → textarea; `money` → numeric keypad, `.money` face |
 | `inputRow({ id, label, placeholder, action })` | input with a trailing action | label is `aria-label` |
@@ -181,3 +184,43 @@ surface:
 
 `/ui-gallery/` is the review surface. Look at a component change there in both themes and all three
 languages before it reaches a surface. The page is static, uses no real data, and needs no login.
+
+## The contemporary pass (2026-09-26)
+
+The operator asked for every surface to look modern and contemporary. What was decided, and why:
+
+1. **Layers, not boxes.** Page ground → surface → raised. Cards, rows and inset lists lose their
+   1px border and get `--elevation-1`; separators inside a list are `--ui-hairline` (the ink at
+   10%, so one value is right on every ground). In the dark a shadow on charcoal is invisible, so
+   raised things get an inset hairline instead.
+2. **Radii by role.** Controls 12 (`--ui-radius`), cards and rows 16 (`--ui-radius-card`), sheets
+   20 (`--radius-2xl`), chips, statuses and the tab indicator are pills.
+3. **One status shape.** `.ui-status` is a dot + the translated word on a soft tint of the status
+   hue. Tints are mixed in OKLCH (15% into the surface); the word is the hue mixed 55% into the ink.
+   `lib/ui/status.test.mjs` resolves both mixes for all twelve FSM states on four grounds and holds
+   the word to 4.5:1 -- worst pairs measured: PREPARING on white 4.93 (system light), 5.39 (console
+   light); SCHEDULED/REFUNDING 5.69 (system dark), 5.77 (console dark); COMPENSATED_REFUND 6.31
+   (console dark). At 60% ink PREPARING drops to 4.40 and the test goes red, which is why it is 55.
+   The console's order pill and the bookings pill use the same formula in their own markup.
+4. **One family per surface; money in it.** The console drops Unbounded (200 KB of display face)
+   and sets titles in Manrope 800; the courier drops its old-style serif for the system sans. Money
+   and times are the reading face with `tabular-nums` (`--font-money`); the design gate's "money
+   has one face, fixed in tokens.css" rule still holds -- the face is that token.
+5. **Compact bar, large title.** The console header is compact; once the page scrolls under it
+   it turns to frosted glass (`backdrop-filter`, with a solid fallback) and gains its hairline
+   (scroll-driven where supported). The large title lives in the page.
+6. **Tab bar: a filled pill for "you are here".** The active tab's icon sits in a tinted pill
+   (console and storefront); labels are sentence case, not mono capitals.
+7. **The desktop is a desktop.** From 1024px the console's tabs become a left sidebar, the content
+   keeps a measure (1080px), the queue flows in two columns, and a sheet opens as a right-hand panel
+   beside the list (no scrim over the list), so the owner moves from order to order without closing.
+8. **Codes never reach a person.** `orderRef()` and `codeWord()` in `core.js`: `#0001abcd`, not
+   `#ord_0001`; a status the surface has no word for reads "Pending", never `RSST_PENDING`.
+9. **A failed logo is a monogram** (console and storefront headers), never a broken-image glyph.
+10. **Contrast fixes found on the way.** The console's light accent is `#d93a10` (white on the old
+    `#ff4d1c` was 3.32:1, every primary button failed AA; now 4.60); its dark accent is a softer
+    `#ff6a3d` with ink text (6.35). Dark mode everywhere is layered charcoal
+    (`#131517 / #1b1e20 / #25282b`), not black and not the old teal.
+11. **Motion.** Press is `scale(var(--ui-press))` at `--motion-press`; tab switches in the console
+    cross-fade through the View Transitions API where it exists; everything drops under
+    `prefers-reduced-motion`; money never animates.

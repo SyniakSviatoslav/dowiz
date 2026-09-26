@@ -81,8 +81,14 @@ async function fetchMenuIn(locale){
 function paintHeader(L){
   document.title = L.name;
   $('#brandName').textContent = L.name;
-  const mark = $('#brandMark');
-  if (L.logoUrl) { mark.src = L.logoUrl; mark.alt = L.name; mark.hidden = false; } else mark.hidden = true;
+  // A LOGO THAT FAILS TO LOAD BECOMES A MONOGRAM, never a broken-image glyph
+  // with the venue's name printed through it (seen 2026-09-24).
+  const mark = $('#brandMark'), mono = $('#brandMono');
+  const words = String(L.name || '').split(/[\s&+\-]+/).filter(Boolean);
+  if (mono) mono.textContent = (words.length > 1 ? words[0][0] + words[1][0] : (words[0] || '').slice(0, 2)).toUpperCase();
+  const noLogo = () => { mark.hidden = true; if (mono) mono.hidden = false; };
+  mark.onerror = noLogo;
+  if (L.logoUrl) { mark.src = L.logoUrl; mark.alt = L.name; mark.hidden = false; if (mono) mono.hidden = true; } else noLogo();
   // The tab's icon and the home-screen icon are the venue's mark.
   if (L.logoUrl) { $('#favicon').href = L.logoUrl; $('#touchIcon').href = L.logoUrl; }
 }

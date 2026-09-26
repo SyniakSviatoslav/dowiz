@@ -21,7 +21,7 @@ import * as ui from '../lib/ui/index.js';
 import { mcpButton } from './mcp.js';
 
 const k = key => ({ t: key });
-const short = id => String(id).slice(0, 8);
+const ref = id => ui.orderRef(id, 8); // `#0123` from `ord_0123...`: never the storage prefix
 const block = { size: 'lg', block: true };
 
 export function login(err, ctx){
@@ -86,12 +86,12 @@ export function waiting(){
 export function pickList(available, sel, queued, ctx){
   const chosen = available.find(o => o.id === sel) || available[0];
   const rows = available.map(o => ui.row({ select: true, pressed: o.id === chosen.id, data: { sel: o.id }, attrs: { data: { tour: 'pick.row' } },
-    title: `#${short(o.id)}`, sub: o.address?.line || '—', trailing: ui.amount(ctx.money(o.total), { strong: true }) }));
+    title: ref(o.id), sub: o.address?.line || '—', trailing: ui.amount(ctx.money(o.total), { strong: true }) }));
   const q = queued(chosen.id);
   return `${ui.section({ title: k('readyForPickup'), sub: `${available.length} ${ctx.t('pcs')} · ${ctx.t('pickOne')}` })}
     ${ui.list(rows, { label: ctx.t('readyForPickup') })}
     ${ui.button({ id: 'take', variant: 'primary', disabled: !!q, icon: q ? 'cloud-upload' : 'package',
-      label: `${ctx.t(q ? 'queued' : 'take')} #${short(chosen.id)}`, ...block, attrs: { data: { tour: 'pick.take' } } })}
+      label: `${ctx.t(q ? 'queued' : 'take')} ${ref(chosen.id)}`, ...block, attrs: { data: { tour: 'pick.take' } } })}
     ${endShift()}`;
 }
 
@@ -100,7 +100,7 @@ export function orderHead(o, picked, eta, ctx){
   const cash = o.payment === 'cash' ? o.total : 0;
   return `${ui.section({ title: k(picked ? 'delivering' : 'pickUpOrder') })}
     <p class="sub">${ui.status({ label: k(picked ? 'onTheWay' : 'ready'), status: picked ? 'IN_DELIVERY' : 'READY', pulse: picked })}
-      <span>#${ui.esc(short(o.id))} · ${ui.esc(o.items)} ${ui.esc(ctx.t('items'))}</span></p>
+      <span>${ui.esc(ref(o.id))} · ${ui.esc(o.items)} ${ui.esc(ctx.t('items'))}</span></p>
     <p class="eta" id="etaLine" data-tour="run.eta">${ui.esc(eta || '')}</p>
     <div class="addr" data-tour="run.address">${ui.icon('map-pin')}<span>${ui.esc(o.address?.line || '—')}</span></div>
     ${o.address?.note ? `<p class="note">${ui.esc(o.address.note)}</p>` : ''}
@@ -159,7 +159,7 @@ export function offer(o, left, ctx){
     : `${ui.esc(ctx.t('timeLeft'))} <b id="offerClock">${ui.mmss(left)}</b>`;
   return `${ui.card({ tone: 'accent', cls: 'offer', attrs: { data: { tour: 'offer.card' } }, body: `
       ${ui.badge({ label: k('offered'), tone: 'accent', dot: true })}
-      <b class="oid">#${ui.esc(short(o.id))}</b>
+      <b class="oid">${ui.esc(ref(o.id))}</b>
       ${ui.amount(ctx.money(o.total), { size: 'lg', strong: true })}
       <p class="note">${ui.esc(o.address?.line || '—')}</p>
       <p class="ui-hint" id="offerLeft" data-tour="offer.clock">${clock}</p>` })}

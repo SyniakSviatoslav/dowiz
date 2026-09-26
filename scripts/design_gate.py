@@ -18,7 +18,7 @@ SURFACES = {
 # §8.1 T2 — DOWIZ-FIXED tokens every surface must resolve. The plan flags
 # --font-mono as "NEW — real gap!"; it is on this list so it cannot be a gap
 # again.
-REQUIRED_TOKENS = ["--font-mono", "--ease-snap", "--ease-tide", "--tap"]
+REQUIRED_TOKENS = ["--font-mono", "--font-money", "--ease-snap", "--ease-tide", "--tap"]
 
 # The shared layer. T2 lives here ONCE and a surface may not redefine it: the
 # three surfaces each held their own copy until seventeen tokens had drifted
@@ -138,8 +138,8 @@ for name, (html_p, js_p) in SURFACES.items():
         fail(name, "R3", "no .money rule — money must have one styling in one place")
     else:
         body = m.group(1)
-        if "--font-mono" not in body:
-            fail(name, "R3", ".money does not use --font-mono")
+        if "--font-money" not in body:
+            fail(name, "R3", ".money does not use --font-money")
         if "tabular-nums" not in body:
             fail(name, "R3", ".money does not set tabular-nums")
         if "transition" in body or "animation" in body:

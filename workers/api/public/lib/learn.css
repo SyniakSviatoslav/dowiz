@@ -11,7 +11,7 @@
  * lr- is the prefix, for the same reason guide.css uses gd-. */
 .lr-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-2)}
 .lr-item{display:flex;flex-direction:column;gap:var(--space-1);
-  border:1px solid var(--brand-border);border-radius:var(--radius-md);
+  border:0;border-radius:var(--radius-xl);box-shadow:var(--elevation-1);
   background:var(--brand-surface);padding:var(--space-2)}
 .lr-open{display:flex;align-items:flex-start;gap:var(--space-3);width:100%;min-height:var(--tap);
   padding:var(--space-2);border:0;border-radius:var(--radius-sm);background:none;color:inherit;

@@ -8,7 +8,11 @@
  * empty states and skeletons are /lib/ui/ui.css; colours are its ROLES
  * (`--ui-*`, lib/tokens.css), which already carry the dark theme under both
  * `prefers-color-scheme` and `data-theme`. Tap floor is `--tap` (44px): the
- * person tapping is holding plates. */
+ * person tapping is holding plates.
+ *
+ * 2026-09-26, THE CONTEMPORARY PASS: the HUD is frosted glass with a hairline,
+ * titles are heavier and tighter, separators are hairlines, and the forms are
+ * raised surfaces rather than boxes. Dark is the system's layered charcoal. */
 :root{--text-base:1rem;color-scheme:light;
   /* The order statuses' dot hues, DESIGN.md §1's immutable set (the same values
      as lib/tokens.css). tools/gates/vocabulary.sh holds every surface that draws
@@ -23,11 +27,12 @@
 
 *{box-sizing:border-box}
 html,body{margin:0}
-body{background:var(--ui-bg);color:var(--ui-fg);font:400 var(--text-base)/1.45 var(--ui-font);-webkit-text-size-adjust:100%}
+body{background:var(--ui-bg);color:var(--ui-fg);font:400 var(--text-base)/1.45 var(--ui-font);-webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased}
 :focus-visible{outline:3px solid var(--ui-focus);outline-offset:2px}
-h1{font-size:var(--text-2xl);margin:var(--space-4) 0 var(--space-2)}
-h2{font-size:var(--text-xl);margin:var(--space-3) 0}
-h3{font-size:var(--text-lg);margin:var(--space-4) 0 var(--space-2)}
+h1,h2,h3{font-weight:800;letter-spacing:-.02em;line-height:1.15;text-wrap:balance}
+h1{font-size:var(--text-3xl);margin:var(--space-5) 0 var(--space-3)}
+h2{font-size:var(--text-xl);margin:var(--space-4) 0 var(--space-3)}
+h3{font-size:var(--text-lg);margin:var(--space-5) 0 var(--space-2)}
 ul{list-style:none;margin:0;padding:0}
 .sp{flex:1}
 
@@ -39,8 +44,16 @@ ul{list-style:none;margin:0;padding:0}
 /* ── HUD ── */
 .hud{position:sticky;top:0;z-index:var(--z-sticky);display:flex;align-items:center;gap:var(--space-2);
   padding:var(--space-2) var(--space-4);padding-top:max(var(--space-2),env(safe-area-inset-top));
-  background:var(--ui-surface);border-bottom:1px solid var(--ui-line)}
+  background:var(--ui-surface);box-shadow:0 1px 0 var(--ui-hairline)}
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .hud{background:var(--ui-glass);-webkit-backdrop-filter:saturate(1.6) blur(18px);backdrop-filter:saturate(1.6) blur(18px)}
+}
 .hud .ui-chip{min-height:36px;padding:var(--space-1) var(--space-3);font-size:var(--text-sm)}
+/* five controls and a chip on a 360px phone: the chip gives way (ellipsis)
+   and the icon buttons close up, so nothing is pushed off the right edge */
+.hud #syncTag{flex:0 1 auto;min-width:0;overflow:hidden}
+.hud #syncText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:420px){.hud{gap:0;padding-inline:var(--space-3)}}
 
 /* ── the page ── */
 #app{max-width:760px;margin:0 auto;padding:var(--space-3) var(--space-4) calc(var(--space-16) + env(safe-area-inset-bottom))}
@@ -51,21 +64,22 @@ ul{list-style:none;margin:0;padding:0}
 .tables{display:grid;gap:var(--space-3);grid-template-columns:1fr;margin-bottom:var(--space-4)}
 @media (min-width:600px){.tables{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:960px){#app{max-width:1040px}.tables{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.card{min-height:88px;align-items:flex-start}
+.card{min-height:88px;align-items:flex-start;padding:var(--space-4)}
+.card .ui-row-title{font-size:var(--text-lg);font-weight:800;letter-spacing:-.015em}
 .card .meta{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center}
 .card .due{display:grid;justify-items:end;gap:2px;font-size:var(--text-sm);color:var(--ui-fg-muted)}
 .card .due .money{color:var(--ui-fg)}
 
 /* ── a round ── */
-.lines{border-top:1px solid var(--ui-line);margin-bottom:var(--space-3)}
-.line{padding:var(--space-3) 0;border-bottom:1px solid var(--ui-line)}
+.lines{border-top:1px solid var(--ui-hairline);margin-bottom:var(--space-3)}
+.line{padding:var(--space-3) 0;border-bottom:1px solid var(--ui-hairline)}
 .line.is-comped .name,.line.is-comped .amt{text-decoration:line-through;color:var(--ui-fg-muted)}
 .line-main{display:flex;gap:var(--space-2);align-items:baseline}
 .line-main .name{flex:1;min-width:0;overflow-wrap:anywhere}
 .line-main .qty{font-weight:var(--weight-bold);min-width:2.5ch}
 .line-acts{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-2)}
 .ui-list.lines{border-top:0}
-.ask{margin-top:var(--space-2);padding:var(--space-3);border:1px solid var(--ui-accent-edge);border-radius:var(--ui-radius);background:var(--ui-surface-2)}
+.ask{margin-top:var(--space-2);padding:var(--space-3) var(--space-4);border:0;border-radius:var(--ui-radius-card);background:color-mix(in oklch,var(--ui-accent) 12%,var(--ui-surface))}
 .ask p{margin:0 0 var(--space-2);font-weight:var(--weight-semibold)}
 .chips{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2)}
 .sums{display:grid;grid-template-columns:1fr auto;gap:var(--space-1) var(--space-4);margin:0 0 var(--space-4)}
@@ -76,7 +90,7 @@ ul{list-style:none;margin:0;padding:0}
 .row-form{margin-bottom:var(--space-4)}
 
 /* ── forms ── */
-.card-form{display:grid;gap:var(--space-3);padding:var(--space-4);margin-bottom:var(--space-4);border:1px solid var(--ui-line);border-radius:calc(var(--ui-radius) + 4px);background:var(--ui-surface)}
+.card-form{display:grid;gap:var(--space-3);padding:var(--space-5);margin-bottom:var(--space-4);border:0;border-radius:var(--ui-radius-card);background:var(--ui-surface);box-shadow:var(--elevation-1)}
 .card-form h3{margin:0}
 .card-form .ui-field{margin-top:0}
 .card-form>.ui-label{margin:0}
@@ -95,7 +109,7 @@ ul{list-style:none;margin:0;padding:0}
 
 /* ── the till ── */
 .z{width:100%;border-collapse:collapse;margin:var(--space-2) 0;font-variant-numeric:tabular-nums}
-.z th,.z td{padding:var(--space-2);border-bottom:1px solid var(--ui-line);text-align:right}
+.z th,.z td{padding:var(--space-2);border-bottom:1px solid var(--ui-hairline);text-align:right}
 .z th[scope="row"],.z thead th:first-child{text-align:left}
 .os.short{color:var(--ui-danger-ink);font-weight:700} .os.over{color:var(--ui-warning-ink);font-weight:700} .os.even{color:var(--ui-success-ink)}
 
@@ -103,9 +117,9 @@ ul{list-style:none;margin:0;padding:0}
 .fs-free{--fs:var(--st-DELIVERED)}.fs-booked{--fs:var(--st-SCHEDULED)}.fs-ordering{--fs:var(--st-CONFIRMED)}
 .fs-waiting{--fs:var(--st-PREPARING)}.fs-paying{--fs:var(--st-READY)}.fs-dirty{--fs:var(--st-COMPENSATED_REFUND)}
 .floor-zone h3{margin-top:var(--space-3)}
-.floor-plan{display:block;width:100%;max-width:560px;height:auto;border:1px solid var(--ui-line);border-radius:var(--radius-md);background:var(--ui-surface)}
+.floor-plan{display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:var(--ui-radius-card);background:var(--ui-surface);box-shadow:var(--elevation-1)}
 .ft rect,.ft ellipse{fill:var(--fs);fill-opacity:.85;stroke:var(--ui-fg);stroke-width:1.5}
-.ft text{fill:var(--ui-fg);paint-order:stroke;stroke:var(--ui-bg);stroke-width:3px;font:700 14px system-ui,sans-serif;pointer-events:none}
+.ft text{fill:var(--ui-fg);paint-order:stroke;stroke:var(--ui-bg);stroke-width:3px;font:700 14px var(--ui-font);font-variant-numeric:tabular-nums;pointer-events:none}
 .ft.fs-dirty rect,.ft.fs-dirty ellipse{stroke-dasharray:5 3}
 .ft.tap{cursor:pointer}
 .ft.tap:focus-visible{outline:none}.ft.tap:focus-visible rect,.ft.tap:focus-visible ellipse,.ft.picked rect,.ft.picked ellipse{stroke:var(--ui-focus);stroke-width:4}

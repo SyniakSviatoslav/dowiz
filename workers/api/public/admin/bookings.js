@@ -76,7 +76,7 @@ function row(r){
   return `<article class="rs-row ${live ? '' : 'off'}" data-tour="bookings.row">
     <div class="rs-top"><span class="rs-time">${hhmm(localMin(r.slotMin))}</span>
       <span class="rs-who"><b>${esc(r.name || '-')}</b><small>${esc(r.party)} ${esc(t('rsGuests'))} · ${esc(table)}${r.occasion ? ` · ${esc(r.occasion)}` : ''}${r.lateCancel ? ` · ${esc(t('rsLate'))}` : ''}</small></span>
-      <span class="rs-pill ${esc(r.status)}">${esc(t('rsSt_' + r.status))}</span></div>
+      <span class="rs-pill ${esc(r.status)}">${esc(ui.codeWord(t, 'rsSt_', r.status))}</span></div>
     ${r.phone ? `<a class="muted small" href="tel:${esc(r.phone)}">${icon('phone')} ${esc(r.phone)}</a>` : ''}
     ${live ? `<div class="rs-acts">${r.next.map(to => btn({ variant: ASKS.includes(to) ? 'ghost' : 'secondary', key: 'rsDo_' + to,
       data: { id: r.id, to }, tour: 'bookings.' + (to === 'CONFIRMED' ? 'confirm' : to === 'DECLINED' ? 'decline' : to.toLowerCase()) })).join('')}</div>` : ''}

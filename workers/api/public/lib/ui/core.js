@@ -127,3 +127,32 @@ export function tone(v, fallback = 'neutral'){
   if (!TONES.includes(v)) throw new Error(`ui: unknown tone ${v}`);
   return v;
 }
+
+// ── words for codes ──────────────────────────────────────────────────────────
+// A person reads "Pending" and "#0001", never `RSST_PENDING` or `#ord_0001`.
+// Both leaks were on screen on 2026-09-24: a booking status whose key the
+// surface did not have fell through `t()` as the key itself, and an order id
+// was drawn with its storage prefix.
+
+/// The short reference a person says out loud: the id without its storage
+/// prefix (`ord_`, `ebills:`), first `n` characters, with a `#`.
+/// orderRef('ord_0001abcdef') -> '#0001abcd'; orderRef('glovo-7781') -> '#7781'.
+export function orderRef(id, n = 8){
+  const raw = String(id ?? '').trim();
+  if (!raw) return '';
+  const bare = raw.replace(/^[a-z]+[_:-](?=[A-Za-z0-9])/, '');
+  return '#' + bare.slice(0, n);
+}
+
+/// The translated word for an enum CODE: `t(prefix + code)` when the surface
+/// has the key, otherwise the code made readable ("NO_SHOW" -> "No show").
+/// A `t()` that returns the key unchanged is how a missing word is detected.
+export function codeWord(t, prefix, code){
+  const c = String(code ?? '');
+  if (!c) return '';
+  const key = prefix + c;
+  const w = typeof t === 'function' ? t(key) : key;
+  if (w && w !== key) return w;
+  const s = c.toLowerCase().replace(/_+/g, ' ').trim();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

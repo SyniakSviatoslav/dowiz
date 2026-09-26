@@ -87,6 +87,10 @@ function sections(){
   const badges = ui.TONES.map(tn => specimen(`badge · ${tn}`, ui.badge({ tone: tn, label: k(tn === 'danger' ? 'late' : tn === 'success' ? 'paid' : tn === 'warning' ? 'unsent' : 'offered'), dot: tn === 'accent' }))).join('')
     + specimen('status · READY', ui.status({ status: 'READY', label: k('ready') }))
     + specimen('status · IN_DELIVERY pulse', ui.status({ status: 'IN_DELIVERY', label: k('onTheWay'), pulse: true }))
+    // every status the FSM names, as the one pill: the word is the code made
+    // readable here, the way codeWord() reads a code a surface has no word for
+    + specimen('status · every FSM state', ui.STATUSES.map(s => ui.status({ status: s, label: ui.codeWord(null, '', s) })).join(''))
+    + specimen('orderRef · codeWord', `<span>${ui.esc(ui.orderRef('ord_0001abcdef'))}</span> ${ui.esc(ui.codeWord(null, 'rsSt_', 'NO_SHOW'))}`)
     + specimen('escaped', ui.badge({ label: XSS }));
   const chips = specimen('readout · dot · success', ui.chip({ label: k('onShift'), dot: true, tone: 'success' }))
     + specimen('readout · warning', ui.chip({ label: k('gps'), icon: 'gps', tone: 'warning' }))

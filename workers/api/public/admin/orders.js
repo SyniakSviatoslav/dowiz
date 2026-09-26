@@ -16,6 +16,8 @@ import { paidWith, paidIcon } from '/lib/paid-with.js';
 // three answers, and it called a table order a delivery.
 import { badgeOf, destinationOf, kindOf } from '/lib/fulfilment.js';
 import { liveOrders, loadOrders, rerender } from '/admin/app.js';
+/// The ref a person says: no storage prefix (`#0001`, never `#ord_0001`).
+const ref = id => ui.orderRef(id, ORDER_ID_SHOWN);
 // The kernel's own answer to "did this order end with the venue keeping the
 // money", generated from `OrderStatus::took_money` into `/lib/vocab.js`. It was
 // `new Set(['REJECTED', 'CANCELLED'])` here, and the same set again in the
@@ -123,9 +125,9 @@ function row(o){
   const fresh = S.fresh.has(o.id) ? 'fresh' : '';
   return `<article class="orow ${fresh}" data-tour="orders.row" data-st="${esc(o.status)}" data-st-var="${esc(o.status)}" data-o="${esc(o.id)}">
     <span class="st" data-tour="orders.status"><i class="dot"></i><span data-t-st="${esc(o.status)}"></span></span>
-    <span class="who">${esc(o.contact?.name || o.contact?.phone || platformOf(o) || '#' + o.id.slice(0, ORDER_ID_SHOWN))}</span>
+    <span class="who">${esc(o.contact?.name || o.contact?.phone || platformOf(o) || ref(o.id))}</span>
     <span class="amt">${moneyEl(o.total ?? 0)}</span>
-    <span class="num">${o.contact?.name || o.contact?.phone ? '#' + esc(o.id.slice(0, ORDER_ID_SHOWN)) : ''}</span>
+    <span class="num">${o.contact?.name || o.contact?.phone ? esc(ref(o.id)) : ''}</span>
     <span class="meta">
       ${platformOf(o) ? `<span class="chan" data-chan="${esc(o.channel)}">${icon('shopping-bag')}${esc(platformOf(o))}</span>` : ''}
       <span>${(b => `${icon(b.icon)}<span data-t="${b.key}"></span>${b.table ? ' ' + esc(b.table) : ''}`)(badgeOf(o))}</span>
@@ -187,7 +189,7 @@ export async function render(host){
 async function doAction(id, action, el){
   let reason = '';
   if (action === 'reject' || action === 'cancel') {
-    const c = await confirm(t(action === 'reject' ? 'reject' : 'cancelOrder'), '#' + id.slice(0, ORDER_ID_SHOWN), { danger: true, reasonLabel: t('reason'), reasonDefault: t('outOfStock') });
+    const c = await confirm(t(action === 'reject' ? 'reject' : 'cancelOrder'), ref(id), { danger: true, reasonLabel: t('reason'), reasonDefault: t('outOfStock') });
     if (!c) return; reason = c.reason;
   }
   try {
@@ -235,7 +237,7 @@ async function chooseFoodBack(id, choice, el){
 async function openAssign(id){
   const on = S.couriers.filter(c => c.active && c.onShift), off = S.couriers.filter(c => c.active && !c.onShift);
   const pick = c => choice({ label: c.name, subKey: c.onShift ? 'onShift' : 'offShift', data: { c: c.id }, tour: 'orders.assignCourier' });
-  sheet(`<p class="eyebrow">#${esc(id.slice(0, ORDER_ID_SHOWN))}</p><h2 data-t="assign"></h2>
+  sheet(`<p class="eyebrow">${esc(ref(id))}</p><h2 data-t="assign"></h2>
     ${on.length ? ui.list(on.map(pick), { label: t('assign') }) : empty('bike', { key: 'noneOnShift' })}
     ${off.length ? `<details class="fold"><summary data-t="offShift"></summary>${ui.list(off.map(pick), { label: t('offShift') })}</details>` : ''}`, { name: 'assign' });
   for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => {
@@ -248,7 +250,7 @@ function orderText(o){
   const lines = (o.items || []).map(i => `${i.quantity}× ${i.name || i.product_id}`).join('\n');
   const addr = o.fulfilment?.address;
   const parts = addr?.parts ? Object.entries(addr.parts).filter(([k, v]) => k !== 'private' && v).map(([k, v]) => `${t(k)}: ${v}`).join(', ') : '';
-  return `#${o.id.slice(0, ORDER_ID_SHOWN)} · ${st(o.status)}\n${o.contact?.name || ''} ${o.contact?.phone || ''}\n${isPickup(o) ? t('pickup') : (addr?.line || '')}${parts ? '\n' + parts : ''}\n${lines}\n${t('total')}: ${money(o.total ?? 0)} · ${paidWith(o).map(payName).join(' + ')}${o.fulfilment?.note || addr?.note ? '\n' + t('note') + ': ' + (o.fulfilment?.note || addr?.note) : ''}`;
+  return `${ref(o.id)} · ${st(o.status)}\n${o.contact?.name || ''} ${o.contact?.phone || ''}\n${isPickup(o) ? t('pickup') : (addr?.line || '')}${parts ? '\n' + parts : ''}\n${lines}\n${t('total')}: ${money(o.total ?? 0)} · ${paidWith(o).map(payName).join(' + ')}${o.fulfilment?.note || addr?.note ? '\n' + t('note') + ': ' + (o.fulfilment?.note || addr?.note) : ''}`;
 }
 
 export function openOrder(id){
@@ -257,7 +259,7 @@ export function openOrder(id){
   const addr = o.fulfilment?.address, parts = addr?.parts || {};
   const step = nextOf(o);
   sheet(`
-    <p class="eyebrow">#${esc(o.id.slice(0, ORDER_ID_SHOWN))} · ${esc(clock(o.created_at_ms || Date.now()))} · ${esc(day(o.created_at_ms || Date.now()))}</p>
+    <p class="eyebrow">${esc(ref(o.id))} · ${esc(clock(o.created_at_ms || Date.now()))} · ${esc(day(o.created_at_ms || Date.now()))}</p>
     <h2 data-t-st="${esc(o.status)}" data-tour="order.sheet"></h2>
     ${!dead ? `<div class="steps" data-tour="order.steps">${FLOW.map((f, n) => `<i class="${n < i ? 'done' : n === i ? 'now' : ''}"></i>`).join('')}</div>` : ''}
     ${o.eta?.range && !dead ? (() => { const parts = [o.eta.parts?.prepLeftMin ? `${t('cookingMin')} ${o.eta.parts.prepLeftMin}` : '', o.eta.parts?.courierToVenueMin ? `${t('courier')} → ${o.eta.parts.courierToVenueMin}` : '', o.eta.parts?.toDoorMin ? `→ ${t('address')} ${o.eta.parts.toDoorMin}` : ''].filter(Boolean); return `<div class="fact">${icon('clock')}<span class="v"><span class="k" data-t="etaRange"></span><b>${esc(o.eta.range)} min</b>${parts.length ? `<small class="muted"> · ${parts.join(' · ')}</small>` : ''}</span></div>`; })() : ''}

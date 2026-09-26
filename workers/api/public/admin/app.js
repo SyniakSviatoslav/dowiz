@@ -78,9 +78,15 @@ function light(id){ for (const b of $$('#nav [data-tab]')) b.setAttribute('aria-
 export async function show(id, arg){
   S.tab = id; light(id); closeSheet();
   const m = await module(id);
-  $('#app').innerHTML = `<div class="screen" id="screen"></div>`;
-  await m.render($('#screen'), arg);
-  retranslate($('#app')); hydrate($('#app'));
+  const swap = async () => {
+    $('#app').innerHTML = `<div class="screen" id="screen"></div>`;
+    await m.render($('#screen'), arg);
+    retranslate($('#app')); hydrate($('#app'));
+  };
+  // A cross-fade between tabs where the browser has View Transitions; the
+  // same swap, instantly, everywhere else and under reduced motion.
+  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) await document.startViewTransition(swap).updateCallbackDone;
+  else await swap();
 }
 /// Re-render the open tab in place after data moved (the poll, an action).
 export async function rerender(){
@@ -120,9 +126,16 @@ function paintVenue(){
   const chip = $('#vstate'); chip.className = `ui-chip vstate ${st}`;
   $('#vstateT').textContent = v.deliveryPaused ? t('paused') : t(st);
   $('#brandName').textContent = v.name || 'dowiz';
-  const mark = $('#brandMark'); if (v.logoUrl) { mark.src = v.logoUrl; mark.hidden = false; } else mark.hidden = true;
+  // A LOGO THAT FAILS TO LOAD IS A MONOGRAM, not a broken-image glyph.
+  const mark = $('#brandMark'), mono = $('#brandMono');
+  mono.textContent = monogram(v.name || 'dowiz');
+  const noLogo = () => { mark.hidden = true; mono.hidden = false; };
+  mark.onerror = noLogo;
+  if (v.logoUrl) { mark.src = v.logoUrl; mark.hidden = false; mono.hidden = true; } else noLogo();
   document.title = `${v.name || 'dowiz'} · ${t('console')}`;
 }
+/// "Dubin & Sushi" -> "DS"; one word -> its first two letters.
+const monogram = name => { const w = String(name).split(/[\s&+\-]+/).filter(Boolean); return (w.length > 1 ? w[0][0] + w[1][0] : (w[0] || '?').slice(0, 2)).toUpperCase(); };
 function openState(){
   const v = S.venue || {};
   sheet(`<p class="eyebrow" data-t="venue"></p><h2 data-t="setState"></h2>
