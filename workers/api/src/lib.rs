@@ -417,6 +417,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/telegram/test", notify::hook::owner::test)
         .post_async("/api/owner/telegram/unlink", notify::hook::owner::unlink)
         .get_async("/api/owner/inbox", channels::inbox)
+        .get_async("/api/owner/threads", social::inbox::list)
         .get_async("/api/owner/inbox/:peer", channels::thread)
         .post_async("/api/owner/inbox/:peer", channels::reply)
         .get_async("/api/owner/backup/cloud", cloud::status)

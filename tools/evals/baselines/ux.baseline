@@ -1,0 +1,17 @@
+# ux — written by tools/evals/run.mjs 2026-09-26 85b1d1d7-dirty; lowered freely, raised only with a dated note
+ux.admin.boot_requests=33
+ux.admin.console_errors=2
+ux.admin.contrast_failures=1
+ux.admin.fcp_ms=1844
+ux.courier.boot_requests=32
+ux.courier.console_errors=2
+ux.courier.contrast_failures=0
+ux.courier.fcp_ms=408
+ux.room.boot_requests=44
+ux.room.console_errors=2
+ux.room.contrast_failures=0
+ux.room.fcp_ms=496
+ux.store.boot_requests=49
+ux.store.console_errors=2
+ux.store.contrast_failures=31
+ux.store.fcp_ms=796

@@ -59,10 +59,14 @@ export async function render(host){
   host.innerHTML = `<div class="screen-h"><div><h1 data-t="tabMore"></h1><p class="screen-sub">${esc(S.venue?.name || '')}</p></div></div>
     <div class="srch">${icon('search')}${ui.inputRow({ id: 'moreQ', type: 'search', label: k('findSetting'), placeholder: k('findSetting'), attrs: { value: view.q } })}</div>
     <div class="more-groups" id="moreGroups">${groupsMarkup()}</div>
+    <div id="wireTiles"></div>
     <p class="hint mono">${esc(store.loc)} · ${esc(S.venue?.slug || '')}</p>`;
   const q = $('#moreQ', host);
   q.oninput = () => { view.q = q.value; const g = $('#moreGroups', host); g.innerHTML = groupsMarkup(); retranslate(g); };
   host.onclick = e => { const r = e.target.closest('[data-open]'); if (r) openSection(r.dataset.open); };
+  // EVERY BACKEND CAPABILITY HAS A SCREEN (operator 2026-09-26): the tiles
+  // for the ones that had none -- messages, wallets, history, tax, safety...
+  import('/admin/wire.js').then(m => m.mountTiles($('#wireTiles', host))).catch(fail);
 }
 
 const head = (eyebrow, title) => `<p class="eyebrow" data-t="${eyebrow}"></p><h2 data-t="${title}"></h2>`;

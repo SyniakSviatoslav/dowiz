@@ -78,6 +78,7 @@ export function groupCard(g, d, when = String){
   const where = [g.kind, g.thread ? `${ui.tr('tg_topic')} ${g.thread}` : ''].filter(Boolean).join(' · ');
   const waiting = g.waiting ? ` · ${g.waiting} <span data-t="tg_waitingN">${ui.esc(ui.tr('tg_waitingN'))}</span>` : '';
   const langs = chips({ values: (d.langs || []).map(l => ({ value: l, label: l.toUpperCase() })), value: g.lang, attr: 'glang', labelKey: 'tg_lang' });
+  const station = chips({ values: [{ value: '', key: 'tg_allStations' }, ...(d.stations || []).map(s => ({ value: s, key: 'station_' + s }))], value: g.station || '', attr: 'gstation', labelKey: 'station' });
   const pii = chips({ values: ['none', 'fulfil', 'full'].map(v => ({ value: v, key: 'tg_pii_' + v })), value: g.pii, attr: 'gpii', labelKey: 'tg_pii' });
   const q = g.quiet;
   const quiet = `<div class="grid3 tg-times">
@@ -94,6 +95,7 @@ export function groupCard(g, d, when = String){
     ${rowDiv({ leading: ui.icon('brand-telegram'), title: g.title || g.id, sub: `${ui.esc(where)} · ${healthLine(g, when)}${waiting}`,
       trailing: pill(STATE_TONE[g.state] || '', { key: 'tg_state_' + (g.state || 'active') }) })}
     <p class="ui-label" data-t="tg_lang"></p>${langs}
+    <p class="ui-label" data-t="station"></p>${station}
     <p class="ui-label" data-t="tg_pii"></p>${pii}<p class="muted small" data-t="tg_piiHint"></p>
     <p class="ui-label" data-t="tg_quiet"></p>${quiet}
     ${input({ type: 'time', key: 'tg_digestAt', value: hhmm(g.digest_at ?? 540), data: { gdig: g.id } })}

@@ -94,6 +94,7 @@ async function tap(el){
     return draw();
   }
   if (d.glang && g) { await patch(g, { lang: d.glang }); return draw(); }
+  if (d.gstation !== undefined && g) { await patch(g, { station: d.gstation || null }); return draw(); }
   if (d.gpii && g) { await patch(g, { pii: d.gpii }); return draw(); }
   if (d.gquiet) {
     const on = !group(d.gquiet).quiet;
