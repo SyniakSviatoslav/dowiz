@@ -7,8 +7,14 @@
 .inv-item{border-bottom:1px solid var(--ui-hairline)}
 .inv-alerts{margin:var(--space-2) 0}
 .inv-big .ui-input{font-size:var(--text-xl);font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
-.inv-line{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:var(--space-2);align-items:end;padding:var(--space-2) 0;border-bottom:1px solid var(--ui-hairline)}
+/* one invoice line: the ingredient across the whole row, then quantity and
+   price, then lot and expiry -- two columns that a 390px phone can read
+   (three columns truncated the ingredient's own name, HUB-APPLE rule L3) */
+.inv-line{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2) var(--space-3);align-items:end;padding:var(--space-3) 0 var(--space-4);border-bottom:1px solid var(--ui-hairline)}
+.inv-line>.ui-field:first-child{grid-column:1/-1}
 .inv-line .ui-field{margin:0}
+.inv-line .ui-hint{display:none}
+@media (min-width:600px){.inv-line{grid-template-columns:minmax(0,2fr) repeat(4,minmax(0,1fr))}.inv-line>.ui-field:first-child{grid-column:auto}}
 .inv-count{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:var(--space-2);align-items:center;padding:6px 0;border-bottom:1px solid var(--ui-hairline)}
 .inv-count .t{min-width:0}
 .inv-count .t b{display:block;font-size:var(--text-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

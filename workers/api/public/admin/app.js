@@ -14,6 +14,7 @@ import { safeGet, safeSet } from '/store/storage.js';
 import { principalOf, tabsFor, ordersPath } from '/admin/kitchen-logic.js';
 import '/admin/kitchen-i18n.js';
 import '/admin/ux-i18n.js';
+import '/admin/apple-i18n.js';
 import * as Theme from '/admin/theme.js';
 
 // THE PERSON'S LIGHT, before the first paint: auto (the phone decides), light
@@ -181,13 +182,13 @@ function paintVenue(){
 const monogram = name => { const w = String(name).split(/[\s&+\-]+/).filter(Boolean); return (w.length > 1 ? w[0][0] + w[1][0] : (w[0] || '?').slice(0, 2)).toUpperCase(); };
 function openState(){
   const v = S.venue || {};
-  sheet(`<p class="eyebrow" data-t="venue"></p><h2 data-t="setState"></h2>
+  sheet(`<p class="eyebrow" data-t="venue"></p><h2 data-t="setState"></h2><p class="sheet-hint" data-t="ap_h_state"></p>
     ${ui.list(STATES.map(s => choice({ key: s, pressed: (v.ownerStatus || v.status) === s && !v.deliveryPaused, data: { state: s }, tour: 'state.' + s })), { label: t('setState') })}
     ${switchEl('pauseD', v.deliveryPaused, 'paused', null, 'state.pauseDelivery')}`, { name: 'state' });
   for (const b of $$('[data-state]')) b.onclick = async () => {
     if (b.dataset.state === 'closed' && (v.ownerStatus || v.status) !== 'closed') {
       // Closing stops every new order; the old console asked, and so does this one.
-      const ok = await confirm(t('closed'), t('closeVenueHint'), { danger: true });
+      const ok = await confirm(t('closed'), t('closeVenueHint'), { danger: true, hint: t('ap_why_closeVenue') });
       if (!ok) return openState();
     }
     try { await post('/owner/location', withLoc({ status: b.dataset.state })); await loadVenue(); paintVenue(); closeSheet(); toast(t('saved')); }
@@ -204,12 +205,12 @@ $('#vstate').onclick = openState;
 /// header's sign-out is hidden on a phone, so it is offered here too).
 function openPrefs(){
   const theme = Theme.stored(k => localStorage.getItem(k));
-  sheet(`<h2 data-t="profileTitle"></h2>
-    <p class="eyebrow" data-t="language"></p>
+  sheet(`<h2 data-t="profileTitle"></h2><p class="sheet-hint" data-t="ap_h_prefs"></p>
+    <p class="eyebrow prefs-h" data-t="language"></p>
     ${chips({ id: 'langPick', values: LANGS.map(l => ({ value: l, label: l.toUpperCase() })), value: lang, attr: 'l', labelKey: 'language', tour: 'prefs.lang' })}
-    <p class="eyebrow mt-3">${esc(baseCurrency())} → ${esc(displayCurrency())}</p>
+    <p class="eyebrow prefs-h"><span data-t="ap_l_currency"></span> · ${esc(baseCurrency())} → ${esc(displayCurrency())}</p>
     ${chips({ values: [baseCurrency(), ...CURRENCIES.filter(c => c !== baseCurrency())].map(c => ({ value: c, label: c })), value: displayCurrency(), attr: 'c', tour: 'prefs.currency' })}
-    <p class="eyebrow mt-3" data-t="appearance"></p>
+    <p class="eyebrow prefs-h" data-t="appearance"></p>
     ${chips({ id: 'themePick', values: Theme.THEMES.map(v => ({ value: v, key: 'theme_' + v, icon: THEME_ICON[v] })), value: theme, attr: 'theme', labelKey: 'appearance' })}
     <div class="btn-row prefs-out">${btn({ id: 'prefsOut', variant: 'ghost', icon: 'logout', key: 'signOut' })}</div>`, { name: 'prefs' });
   for (const b of $$('[data-l]', $('#sheetIn'))) b.onclick = async () => { setLang(b.dataset.l); mountNav(); paintVenue(); await rerender(); press($$('[data-l]', $('#sheetIn')), b); };

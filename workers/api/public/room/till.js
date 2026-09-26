@@ -50,8 +50,8 @@ export function renderTillScreen(c) {
         { value: 'pay_in', label: k('payIn'), icon: 'plus' }, { value: 'pay_out', label: k('payOut'), icon: 'minus' }], attrs: { data: { tour: 'till.direction' } } })}
       <p class="ui-label">${ui.esc(t('currency'))}</p>
       ${ui.segmented({ id: 'tillCur', label: k('currency'), value: mv.currency, options: TILL_CURRENCIES.map(x => ({ value: x, label: x })), attrs: { data: { tour: 'till.currency' } } })}
-      ${ui.field({ id: 'till-amount', name: 'amount', label: k('amount'), inputmode: 'decimal', autocomplete: 'off', required: true, controlCls: 'money', attrs: { data: { tour: 'till.amount' } } })}
-      ${ui.field({ id: 'till-reason', name: 'reason', label: k('reasonText'), maxlength: 140, required: true, autocomplete: 'off', attrs: { data: { tour: 'till.reason' } } })}`,
+      ${ui.field({ id: 'till-amount', name: 'amount', label: k('amount'), placeholder: k('ex_amount'), inputmode: 'decimal', autocomplete: 'off', required: true, controlCls: 'money', attrs: { data: { tour: 'till.amount' } } })}
+      ${ui.field({ id: 'till-reason', name: 'reason', label: k('reasonText'), placeholder: k('ex_reason'), maxlength: 140, required: true, autocomplete: 'off', attrs: { data: { tour: 'till.reason' } } })}`,
       ui.button({ type: 'submit', icon: 'send', label: k('send') }))}
     ${tillForm('count', 'till.count', t('count'), k('countHint'), `<div class="piles">${pileInputs('o', 'till.counted')}</div>`,
       ui.button({ type: 'submit', icon: 'check', label: k('saveCount') }))}

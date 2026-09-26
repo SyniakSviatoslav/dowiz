@@ -61,7 +61,7 @@ function sayBlock(order){
   const over = order.status === 'DELIVERED' || DEAD.has(order.status);
   if (!over || !on('feedback')) return '';
   if (order.feedback) return `<p class="geo ok mb-2" data-t="saidIt"></p>`;
-  return `${ui.field({ id: 'f-say', label: k('sayHow'), rows: 2, maxlength: FEEDBACK_MAX, attrs: { data: { tour: 'track.feedback' } } })}
+  return `${ui.field({ id: 'f-say', label: k('sayHow'), placeholder: k('ex_say'), rows: 2, maxlength: FEEDBACK_MAX, attrs: { data: { tour: 'track.feedback' } } })}
     <p class="avoid-h" data-t="sayHint"></p>
     ${ghost({ id: 'sayGo', cls: 'mb-2', label: k('sayGo'), tour: 'track.feedbackSend' })}`;
 }

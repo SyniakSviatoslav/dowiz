@@ -50,9 +50,16 @@
   --st-REJECTED:#DC2626; --st-CANCELLED:#DC2626; --st-SCHEDULED:#7C3AED; --st-PICKED_UP:#0D9488;
   /* A refund is neither a success nor a refusal: it is money going back. */
   --st-REFUNDING:#7C3AED; --st-COMPENSATED_REFUND:#64748B;
-  --text-base:.9375rem; --weight-normal:400;
+  /* 2026-09-26 THE APPLE PASS (docs/design/HUB-APPLE-2026-09-26.md, rule T1):
+     16px is Apple's Callout, and from it tokens.css's x1.2 scale lands on the
+     Dynamic Type table -- 28 Title 1, 23 Title 2, 19 Title 3, 13 Footnote. */
+  --text-base:1rem; --weight-normal:400;
   --radius-card:16px; --radius-btn:12px;
   --ui-radius:12px;
+  /* rule L1: iPhone layout margins -- 16pt on a narrow phone, 20pt from 400pt */
+  --margin:16px;
+  /* rule S1: the iOS switch is 51x31 */
+  --switch-w:51px; --switch-h:31px;
   --z-backdrop:300; --z-modal:400;
   --top-h:56px; --nav-h:calc(60px + env(safe-area-inset-bottom,0px));
   --dur-fast:.2s; --dur:.42s; --dur-slow:.8s;
@@ -97,7 +104,8 @@ img{max-width:100%;display:block}
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:3px solid var(--brand-primary);outline-offset:2px;border-radius:var(--radius-sm)}
-.wrap{max-width:720px;margin:0 auto;padding-inline:var(--space-4)}
+.wrap{max-width:720px;margin:0 auto;padding-inline:var(--margin)}
+@media (min-width:400px){:root{--margin:20px}}
 .muted{color:var(--brand-text-muted)}
 .small{font-size:var(--text-sm)}
 .mono{font-variant-numeric:tabular-nums}
@@ -175,7 +183,8 @@ button{cursor:pointer}
    still render and is treated the same as `.screen-acts`. */
 .screen-h{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2) var(--space-3);align-items:center;margin-bottom:var(--space-4)}
 .screen-h>div:first-child{min-width:0}
-.screen-h h1{font-size:calc(var(--text-2xl) * 1.18)}
+/* Title 1 (28) on a phone; Large Title (33) from 1024px, below */
+.screen-h h1{font-size:var(--text-2xl)}
 .screen-sub{color:var(--brand-text-muted);font-size:var(--text-sm);margin-top:2px;overflow-wrap:anywhere}
 .screen-acts,.screen-h>.btn-row{display:flex;flex-wrap:wrap;gap:var(--space-2);justify-content:flex-end;align-items:center;margin:0}
 .screen-acts .ui-btn,.screen-h>.btn-row .ui-btn{flex:none}
@@ -183,10 +192,9 @@ button{cursor:pointer}
    couriers -- other lanes' markup, hand-backs filed): the label is dropped
    here, since it repeats the heading or the top bar */
 .screen-h .eyebrow{display:none}
-/* the menu's title is the venue's name with "Menu" as its eyebrow; until the
-   hand-back lands, the eyebrow is promoted to the title and the name hidden */
-#app[data-tab="menu"] .screen-h .eyebrow{display:block;margin:0;font-family:var(--brand-font-heading);font-size:calc(var(--text-2xl) * 1.18);font-weight:800;letter-spacing:-.025em;line-height:1.12;color:var(--brand-text)}
-#app[data-tab="menu"] .screen-h h1{display:none}
+/* (the menu's hand-back landed at ddf3ecfa: its h1 is "Menyja" and the rule
+   that hid the h1 while promoting the eyebrow is gone -- with it in place the
+   menu screen had NO title at all, see shots/before/phone-light/menu.png) */
 /* a pill appended to the heading (the stock screen's low count) sits under the title */
 .screen-h>.ui-badge{grid-column:1;justify-self:start}
 @media (max-width:599px){
@@ -194,7 +202,7 @@ button{cursor:pointer}
   .screen-h>.ui-badge{grid-row:2}
 }
 /* screen hints: one quiet line under a title that says what the screen is for */
-.screen-hint{color:var(--brand-text-muted);font-size:var(--text-sm);margin:calc(var(--space-2) * -1) 0 var(--space-3);line-height:1.4;max-width:var(--measure)}
+.screen-hint{color:var(--brand-text-muted);font-size:var(--text-sm);margin:calc(var(--space-2) * -1) 0 var(--space-4);line-height:var(--leading-normal);max-width:60ch}
 
 /* THE DAY'S NUMBERS: one surface, four cells parted by hairlines. Number
    above label, tabular figures; the waiting count turns warm when it is not
@@ -210,8 +218,10 @@ button{cursor:pointer}
 .stats.strip .stat{padding:10px 8px 9px;border-radius:0;box-shadow:none;background:none;text-align:center;min-width:0}
 .stats.strip .stat+.stat{box-shadow:inset 1px 0 0 var(--ui-hairline)}
 .stats.strip .stat b{display:block;font-size:var(--text-xl);line-height:1.1}
-.stats.strip .stat.money b{font-size:var(--text-base);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.stats.strip .stat small{margin:3px 0 0;font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* money never truncates (it read "ALL 45,6…" on a 390px phone): the cell
+   wraps the currency onto its own line instead */
+.stats.strip .stat.money b{font-size:var(--text-base);letter-spacing:-.01em;white-space:normal;overflow-wrap:anywhere;line-height:1.15}
+.stats.strip .stat small{margin:3px 0 0;font-size:var(--text-xs);white-space:normal;line-height:1.2;overflow-wrap:anywhere}
 .stats.strip .stat.warn{background:color-mix(in oklch,var(--st-PENDING) 10%,var(--brand-surface))}
 
 /* The search field, the console's one text field that is always there. */
@@ -264,21 +274,44 @@ button{cursor:pointer}
 .cat-h .n{font-size:var(--text-sm);font-variant-numeric:tabular-nums;color:var(--brand-text-muted);margin-left:auto}
 .cat-h .chev{transition:transform var(--dur-fast) var(--ease)}
 .cat-h[aria-expanded="true"] .chev{transform:rotate(180deg)}
-/* The switch. */
-.switch{display:flex;align-items:center;gap:10px;min-height:var(--tap);margin:0;font-size:var(--text-sm);color:var(--brand-text);cursor:pointer}
+/* THE SWITCH IS A LIST ROW (HIG toggles, HUB-APPLE rule S1): the word first,
+   its consequence under it in Footnote, the 51x31 iOS switch at the trailing
+   edge. It was 40x22 on the LEFT with the word after it. */
+.switch{display:flex;align-items:center;gap:var(--space-3);min-height:var(--tap);margin:0;padding:var(--space-2) 0;font-size:var(--text-base);color:var(--brand-text);cursor:pointer}
 .switch input{position:absolute;opacity:0;width:0;height:0;min-height:0}
-.switch-k{position:relative;width:40px;height:22px;flex:none;border-radius:var(--radius-full);background:var(--brand-border);transition:background var(--dur-fast) var(--ease)}
-.switch-k::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:var(--radius-full);background:var(--brand-surface);box-shadow:var(--elevation-1);transition:transform var(--dur-fast) var(--ease-snap)}
-.switch input:checked + .switch-k{background:var(--brand-primary)}
-.switch input:checked + .switch-k::after{transform:translateX(18px)}
-.switch .t{flex:1}
-.switch small{display:block;color:var(--brand-text-muted);font-size:var(--text-xs)}
+.switch-k{position:relative;order:2;width:var(--switch-w);height:var(--switch-h);flex:none;border-radius:var(--radius-full);background:color-mix(in oklch,var(--brand-text) 22%,var(--brand-surface));transition:background var(--dur-fast) var(--ease)}
+.switch-k::after{content:"";position:absolute;top:2px;left:2px;width:calc(var(--switch-h) - 4px);height:calc(var(--switch-h) - 4px);border-radius:var(--radius-full);background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.15),0 1px 1px rgba(0,0,0,.16);transition:transform var(--dur-fast) var(--ease-snap)}
+.switch input:checked + .switch-k{background:var(--color-success)}
+.switch input:checked + .switch-k::after{transform:translateX(calc(var(--switch-w) - var(--switch-h)))}
+.switch input:focus-visible + .switch-k{outline:3px solid var(--brand-primary);outline-offset:2px}
+.switch .t{flex:1;order:1;min-width:0}
+.switch small{display:block;color:var(--brand-text-muted);font-size:var(--text-sm);line-height:var(--leading-normal);margin-top:2px}
 
 /* ── forms ────────────────────────────────────────────────────────────────── */
+/* THE FORM (HUB-APPLE rules F1-F3, L2): label in Subhead (15) semibold ink,
+   8px, the field, 6px, a Footnote (13) footer; 12px to the next field. The
+   label was 12px muted and the fields sat 8px apart. */
 label{display:block;font-size:var(--text-sm);font-weight:var(--weight-semibold);color:var(--brand-text-muted);margin:var(--space-3) 0 6px}
-input,textarea,select{width:100%;min-height:var(--tap);padding:10px 14px;border:1px solid var(--brand-border);border-radius:var(--radius-btn);background:var(--brand-surface);font-size:16px;color:var(--brand-text);font-variant-numeric:tabular-nums}
+input,textarea,select{width:100%;min-height:var(--tap-md);padding:10px 14px;border:1px solid var(--brand-border);border-radius:var(--radius-btn);background:var(--brand-surface);font-size:16px;color:var(--brand-text);font-variant-numeric:tabular-nums}
 textarea{min-height:76px;resize:vertical}
 input::placeholder,textarea::placeholder{color:var(--brand-text-muted)}
+.ui-field{gap:var(--space-2);margin-top:var(--space-4)}
+.ui-label,.ui-field>.ui-label,p.ui-label{font-size:calc(var(--text-base) * .9375);font-weight:var(--weight-semibold);color:var(--brand-text);letter-spacing:0;margin:0}
+p.ui-label{margin:var(--space-4) 0 var(--space-2)}
+.ui-hint{margin-top:calc(var(--space-1) * -.5);font-size:var(--text-sm);color:var(--brand-text-muted);line-height:var(--leading-normal);max-width:60ch}
+.ui-input{min-height:var(--tap-md);border-color:color-mix(in oklch,var(--brand-text) 16%,var(--brand-surface))}
+.ui-input::placeholder{color:color-mix(in oklch,var(--brand-text-muted) 80%,transparent);opacity:1}
+/* the sentence under a sheet's title (rule H1) and a group's footer (rule G1) */
+.sheet-hint,.sheet-in>p.hint:first-of-type{color:var(--brand-text-muted);font-size:var(--text-sm);line-height:var(--leading-normal);margin:calc(var(--space-2) * -1) 0 var(--space-4);max-width:60ch}
+.sheet-in>.muted.small{font-size:var(--text-sm);line-height:var(--leading-normal);margin:calc(var(--space-2) * -1) 0 var(--space-4);max-width:60ch}
+/* a section header inside a sheet: Footnote, uppercase, tracked, 24px above
+   (iOS grouped-list header); the breadcrumb over the title stays sentence case */
+.sheet-in .eyebrow:not(:first-child),.screen .group>.eyebrow,.kds-stop>.eyebrow,.kds-allday>.eyebrow{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;margin:var(--space-6) 0 var(--space-2)}
+.sheet-in .eyebrow.mt-3{margin-top:var(--space-6)}
+.sheet-in>.eyebrow:first-child{font-size:var(--text-sm);text-transform:none;letter-spacing:0;margin:0 0 2px}
+/* the "hint" paragraph under a field or a group: Footnote, room above */
+.hint{font-size:var(--text-sm);line-height:var(--leading-normal);margin:var(--space-2) 0 0;max-width:60ch}
+p.hint+.ui-field,.hint+.grid2,.hint+.grid3{margin-top:var(--space-3)}
 input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--brand-primary) 22%,transparent)}
 /* `1fr` is minmax(auto,1fr): a grid cell will not shrink below an input's
    intrinsic ~170px, so three of them widened the layout viewport past a
@@ -287,19 +320,24 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 var(--space-3)}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:0 var(--space-3)}
 .grid2>*,.grid3>*{min-width:0}
+/* rule L3: on a narrow phone two fields with words in them stack; two short
+   numbers that belong together (price and minutes, kcal and protein) keep
+   their pair, which is what `.pair` says */
+@media (max-width:399px){.grid2:not(.pair){grid-template-columns:minmax(0,1fr)}}
 input,textarea,select{min-width:0;box-sizing:border-box}
 .sheet-in{overflow-x:hidden}
 /* AN ACTION ROW NEVER OVERFLOWS. A grid of equal columns that wraps at 150px:
    one button is full width, two share the row, three become two and one --
    the third action of the order sheet used to be cut off at the edge. */
-.btn-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--space-2);margin-top:var(--space-3)}
+.btn-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--space-2);margin-top:var(--space-5)}
+.btn-row+.btn-row{margin-top:var(--space-2)}
 .btn-row:empty{display:none}
 .btn-row .ui-btn{min-width:0}
 /* the quiet row under a list: right-aligned, each button its own width */
 .btn-row.compact{display:flex;justify-content:flex-end;flex-wrap:wrap}
 .btn-row.compact .ui-btn{flex:none}
 .ok{color:var(--st-DELIVERED)}
-.hint{font-size:var(--text-xs);color:var(--brand-text-muted);margin:6px 0 0}
+.hint{font-size:var(--text-sm);color:var(--brand-text-muted);margin:var(--space-2) 0 0;line-height:var(--leading-normal);max-width:60ch}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .swatch{width:36px;height:36px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--ui-hairline);flex:none}
 input[type="color"]{padding:4px;height:var(--tap);width:64px}
@@ -313,10 +351,11 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
   transform:translateY(100%);transition:transform var(--dur) var(--ease-tide);box-shadow:0 -12px 40px rgba(0,0,0,.28);padding-bottom:calc(var(--space-4) + env(safe-area-inset-bottom,0px))}
 .sheet.show{transform:none}
 .sheet.dragging{transition:none}
-.sheet-in{max-width:720px;margin:0 auto;padding-inline:var(--space-4)}
+.sheet-in{max-width:720px;margin:0 auto;padding-inline:var(--margin)}
 .grab{position:sticky;top:6px;z-index:3;width:44px;height:5px;border-radius:var(--radius-full);background:var(--accent-line);margin:var(--space-2) auto;touch-action:none;cursor:grab}
 .grab::before{content:"";position:absolute;inset:-14px -40px}
-.sheet h2{font-size:var(--text-2xl);margin:var(--space-1) 0 var(--space-3)}
+/* Title 2 (23), with room under it for the purpose sentence */
+.sheet h2{font-size:var(--text-xl);margin:var(--space-1) 0 var(--space-4)}
 .sheet.show .sheet-in > *{animation:rise var(--dur) var(--ease-tide) both}
 .sheet.show .sheet-in > :nth-child(2){animation-delay:.04s}.sheet.show .sheet-in > :nth-child(3){animation-delay:.08s}.sheet.show .sheet-in > :nth-child(n+4){animation-delay:.12s}
 /* the sheet's close button: swipe and Escape stay, but a visible × is what a
@@ -466,7 +505,8 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .rc-qty .ui-input{width:72px;text-align:right}
 /* a switch with its hint below (features), a switch that picks a row (recipe book) */
 .feat{padding:var(--space-1) 0}
-.feat .hint{margin:0 0 var(--space-2) 50px}
+.feat .hint{margin:calc(var(--space-2) * -1) 0 var(--space-3)}
+.feat .switch{padding-bottom:0}
 .switch.pick{padding:6px 0;border-bottom:1px solid var(--ui-hairline)}
 .ui-field+.ui-field,.ui-field+.switch,.switch+.ui-field{margin-top:var(--space-2)}
 .grid2 .ui-field,.grid3 .ui-field{margin-top:var(--space-2)}
@@ -513,6 +553,7 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
   .tab.side .ti{font-size:18px}
   .tab.side[aria-current="true"]{background:color-mix(in oklch,var(--brand-text) 7%,transparent);color:var(--brand-text)}
   .screen-h h1{font-size:var(--text-3xl)}
+  :root{--margin:var(--space-8)}
   .orders{grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:var(--space-3);align-items:start}
   .stats{gap:var(--space-3)}
   .stats.strip{gap:0;max-width:760px}
@@ -532,3 +573,50 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
   .orow:hover{box-shadow:var(--elevation-2)}
   .ui-row.setting:hover{background:color-mix(in oklch,var(--brand-text) 3%,var(--brand-surface))}
 }
+
+/* ── 2026-09-26 THE APPLE PASS: placement and room ─────────────────────────
+   docs/design/HUB-APPLE-2026-09-26.md. Everything below is presentation of
+   markup the screens already render; ids, data-* and handlers are untouched. */
+/* the stock screen's five shortcuts: a grid of tiles, not five rows of 60px
+   (300px of a 844px phone before the first ingredient) */
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);margin:0 0 var(--space-3)}
+.tiles .ui-row.tile{min-height:var(--tap-lg);padding:var(--space-3);gap:var(--space-2);border-radius:var(--radius-card)}
+.tiles .ui-row.tile .ui-row-title{font-size:var(--text-base);font-weight:var(--weight-semibold)}
+@media (min-width:600px){.tiles{grid-template-columns:repeat(5,minmax(0,1fr))}.tiles .ui-row.tile{flex-direction:column;text-align:center;justify-content:center}}
+/* the hours grid: a header row names the two times (they had no label at all),
+   the day's switch sits at the row's start, the times side by side */
+.hours-head{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:0 var(--space-3);margin-top:var(--space-4)}
+.grid3.hours-row{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1.15fr)}
+.hours-row .ui-input{padding-inline:var(--space-2)}
+.hours-row .switch .t{font-size:var(--text-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hours-head .ui-label{margin:0}
+.hours-row{align-items:center}
+.hours-row .switch{padding:0}
+.hours-row .switch-k{order:0}
+.hours-row .switch .t{order:1}
+.hours-row .ui-field{margin-top:var(--space-2)}
+/* the profile sheet: each choice under its own label */
+.prefs-h{margin:var(--space-5) 0 var(--space-2)}
+/* THE DESTRUCTIVE ACT IN A SHEET is iOS's red text row (Contacts' "Delete
+   Contact"): full width, the danger ink on a faint tint, last in the sheet.
+   The filled red is kept for the one button that COMMITS it (#cfYes in the
+   confirmation), so the colour means "this is the moment", not "this exists". */
+.sheet .btn-row .ui-btn--danger{grid-column:1/-1}
+.sheet .btn-row .ui-btn--danger:not(#cfYes){background:color-mix(in oklch,var(--color-danger) 8%,var(--brand-surface));color:var(--ui-danger-ink);border-color:transparent;box-shadow:none}
+/* a fact row's key in Footnote, its value in body */
+.fact{padding:var(--space-3) 0}
+.fact .k{font-size:var(--text-sm)}
+.fact .v{font-size:var(--text-base)}
+/* the day strip's numbers keep the 4-up on a 390px phone but the money cell
+   gets more room than a count */
+@media (max-width:420px){.stats.strip{grid-template-columns:1fr 1fr 1fr 1.4fr}}
+/* dark: the switch's knob stays white, the off track reads as a track */
+:root[data-theme="dark"] .switch-k{background:color-mix(in oklch,var(--brand-text) 28%,var(--brand-surface))}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .switch-k{background:color-mix(in oklch,var(--brand-text) 28%,var(--brand-surface))}}
+:root[data-theme="dark"] .switch input:checked + .switch-k{background:var(--color-success)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .switch input:checked + .switch-k{background:var(--color-success)}}
+/* the dish sheet's photo row: the thumbnail and the name, the two buttons on
+   their own line under them -- three things in one 358px row squeezed the
+   word "Fotografia" into four lines */
+#photoRow{flex-wrap:wrap}
+#photoRow .ui-row-trail{flex-basis:100%;justify-content:flex-start;padding-left:calc(52px + var(--space-3))}

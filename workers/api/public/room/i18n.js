@@ -7,6 +7,7 @@ import { T as ADMIN } from '../admin/i18n.js';
 
 export const T = {
   sq: {
+    ex_email: 'p.sh. elira@lokali.al', ex_amount: 'p.sh. 2 500', ex_reason: 'p.sh. blerje qumështi',
     learn: 'Mësimet', learnNew: 'I ri', learnDone: 'Mbaruar', learnPaused: 'Në pauzë', learnWatch: 'Shiko videon', learnWrites: 'ndryshon të dhëna reale', learnSteps: '{n} hapa', learnEmpty: 'Ky mësim nuk u gjet', learnOffline: 'Mësimet duan lidhje interneti', learnClose: 'Mbyll', agent: 'Agjenti AI (MCP)',
     waiter: 'Kamarier', 'counter-manager': 'Arkëtar-menaxher', kitchen: 'Kuzhina', owner: 'Pronar',
     loginLine: 'Salla, në dorën tuaj.', signIn: 'Hyni', email: 'Email', password: 'Fjalëkalimi',
@@ -51,6 +52,7 @@ export const T = {
     voice: 'Komandë me zë', voiceConfirm: 'Po, bëje', voiceOpened: 'Tavolina {t}', voiceGuests: '{n} veta', voiceStatus: '{open} tavolina të hapura, {waiting} në pritje', voiceDenied: 'S’ka leje për mikrofonin', voiceOffline: 'Njohja e zërit do lidhje',
   },
   en: {
+    ex_email: 'e.g. elira@venue.al', ex_amount: 'e.g. 2 500', ex_reason: 'e.g. bought milk',
     learn: 'Lessons', learnNew: 'New', learnDone: 'Done', learnPaused: 'Paused', learnWatch: 'Watch the video', learnWrites: 'changes real data', learnSteps: '{n} steps', learnEmpty: 'That lesson was not found', learnOffline: 'Lessons need a connection', learnClose: 'Close', agent: 'AI agent (MCP)',
     waiter: 'Waiter', 'counter-manager': 'Counter manager', kitchen: 'Kitchen', owner: 'Owner',
     loginLine: 'The room, in your hand.', signIn: 'Sign in', email: 'Email', password: 'Password',
@@ -95,6 +97,7 @@ export const T = {
     voice: 'Voice command', voiceConfirm: 'Yes, do it', voiceOpened: 'Table {t}', voiceGuests: '{n} guests', voiceStatus: '{open} tables open, {waiting} waiting', voiceDenied: 'No microphone permission', voiceOffline: 'Speech recognition needs a connection',
   },
   uk: {
+    ex_email: 'напр. elira@zaklad.al', ex_amount: 'напр. 2 500', ex_reason: 'напр. купили молоко',
     learn: 'Уроки', learnNew: 'Новий', learnDone: 'Пройдено', learnPaused: 'На паузі', learnWatch: 'Дивитися відео', learnWrites: 'змінює реальні дані', learnSteps: 'кроків: {n}', learnEmpty: 'Такого уроку не знайдено', learnOffline: 'Для уроків потрібен інтернет', learnClose: 'Закрити', agent: 'AI-агент (MCP)',
     waiter: 'Офіціант', 'counter-manager': 'Касир-менеджер', kitchen: 'Кухня', owner: 'Власник',
     loginLine: 'Зал у вашій руці.', signIn: 'Увійти', email: 'Email', password: 'Пароль',

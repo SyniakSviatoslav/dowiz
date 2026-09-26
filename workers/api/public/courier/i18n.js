@@ -14,6 +14,7 @@ const VOICE = { sq: 'sq-AL', en: 'en-US', uk: 'uk-UA' };
 
 export const T = {
   sq: {
+    ex_login: 'p.sh. +355 69 123 4567 ose emaili', ex_phone: 'p.sh. +355 69 123 4567',
     appTitle: 'dowiz · korrieri', offline: 'offline', onShift: 'në turn', gps: 'GPS', gpsDenied: 'GPS i ndaluar', gpsUnavailable: 'GPS s’është i disponueshëm', gpsUnit: 'm',
     backgroundGps: 'Aplikacioni ishte në sfond — GPS mund të jetë ndërprerë', sessionOver: 'Sesioni mbaroi',
     theme: 'Tema', themeSystem: 'Tema: si në telefon', themeDark: 'Tema: e errët', themeLight: 'Tema: e ndritshme', language: 'Gjuha', sayCommand: 'Thuaj një komandë', stopListening: 'Ndal regjistrimin', voice: 'Zëri', yes: 'Po', no: 'Jo',
@@ -41,6 +42,7 @@ export const T = {
     learn: 'Mësimet', learnNew: 'I ri', learnDone: 'Mbaruar', learnPaused: 'Në pauzë', learnWatch: 'Shiko videon', learnWrites: 'ndryshon të dhëna reale', learnSteps: '{n} hapa', learnEmpty: 'Ky mësim nuk u gjet', learnOffline: 'Mësimet duan lidhje interneti', agent: 'Agjenti AI (MCP)',
   },
   en: {
+    ex_login: 'e.g. +355 69 123 4567 or your e-mail', ex_phone: 'e.g. +355 69 123 4567',
     appTitle: 'dowiz · courier', offline: 'offline', onShift: 'on shift', gps: 'GPS', gpsDenied: 'GPS denied', gpsUnavailable: 'GPS unavailable', gpsUnit: 'm',
     backgroundGps: 'The app was in the background — GPS may have paused', sessionOver: 'Session ended',
     theme: 'Theme', themeSystem: 'Theme: as the phone', themeDark: 'Theme: dark', themeLight: 'Theme: light', language: 'Language', sayCommand: 'Say a command', stopListening: 'Stop listening', voice: 'Voice', yes: 'Yes', no: 'No',
@@ -68,6 +70,7 @@ export const T = {
     learn: 'Lessons', learnNew: 'New', learnDone: 'Done', learnPaused: 'Paused', learnWatch: 'Watch the video', learnWrites: 'changes real data', learnSteps: '{n} steps', learnEmpty: 'That lesson was not found', learnOffline: 'Lessons need a connection', agent: 'AI agent (MCP)',
   },
   uk: {
+    ex_login: 'напр. +355 69 123 4567 або e-mail', ex_phone: 'напр. +355 69 123 4567',
     appTitle: 'dowiz · кур’єр', offline: 'офлайн', onShift: 'на зміні', gps: 'GPS', gpsDenied: 'GPS заборонено', gpsUnavailable: 'GPS недоступний', gpsUnit: 'м',
     backgroundGps: 'Застосунок був у фоні — GPS міг перерватися', sessionOver: 'Сесію завершено',
     theme: 'Тема', themeSystem: 'Тема: як на телефоні', themeDark: 'Тема: темна', themeLight: 'Тема: світла', language: 'Мова', sayCommand: 'Сказати команду', stopListening: 'Зупинити запис', voice: 'Голос', yes: 'Так', no: 'Ні',

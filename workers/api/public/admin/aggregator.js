@@ -24,7 +24,7 @@ export function openAggregator(){
   const lines = [];
   const dish = id => S.products.find(p => p.id === id);
   const options = S.products.map(p => ({ value: p.id, label: p.name }));
-  sheet(`<h2 data-t="aggTitle"></h2>
+  sheet(`<h2 data-t="aggTitle"></h2><p class="sheet-hint" data-t="ap_h_agg"></p>
     ${select({ id: 'ag-ch', key: 'aggPlatform', options: PLATFORMS.map(p => ({ value: p, label: p[0].toUpperCase() + p.slice(1) })), tour: 'agg.platform' })}
     ${field({ id: 'ag-x', key: 'aggNumber', maxlength: 64, autocomplete: 'off', pattern: '[A-Za-z0-9_-]+', tour: 'agg.number' })}
     <p class="eyebrow mt-3" data-t="items"></p>

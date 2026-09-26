@@ -144,7 +144,7 @@ export function openDish(id){
   const tr = p.translations || {};
   sheet(`
     <p class="eyebrow">${esc(p.categoryName || '')}</p>
-    <h2>${esc(p.name)}</h2>
+    <h2>${esc(p.name)}</h2><p class="sheet-hint" data-t="ap_h_dish"></p>
     ${rowDiv({ id: 'photoRow', title: k('photo'), sub: `<span data-t="${p.imageUrl ? 'photo' : 'noPhoto'}"></span>`, leading: p.imageUrl ? `<img class="thumb" src="${esc(p.imageUrl)}" alt="">` : `<span class="thumb"></span>`,
       trailing: `${btn({ id: 'photoPick', icon: 'camera-plus', key: 'uploadPhoto', tour: 'dish.photo' })}${p.imageUrl ? iconBtn({ id: 'photoClear', icon: 'trash', ariaKey: 'remove', tour: 'dish.photoClear' }) : ''}
       ${input({ id: 'photoFile', type: 'file', accept: 'image/*', hidden: true, tour: 'dish.photoFile' })}` })}
@@ -166,7 +166,7 @@ export function openDish(id){
       <div>${field({ id: 'd-prot', key: 'protein', inputmode: 'numeric', value: n.protein ?? '' })}</div>
       <div>${field({ id: 'd-fat', key: 'fat', inputmode: 'numeric', value: n.fat ?? '' })}</div>
     </div>
-    <div class="grid2">
+    <div class="grid2 pair">
       <div>${field({ id: 'd-carb', key: 'carbs', inputmode: 'numeric', value: n.carbs ?? '' })}</div>
       <div>${field({ id: 'd-weight', key: 'weight', inputmode: 'numeric', value: p.weightG ?? '' })}</div>
     </div>
@@ -242,7 +242,7 @@ export function openDish(id){
 async function allCategories(){ try { return (await api('/owner/categories')).categories || []; } catch { return (S.categories || []).map(c => ({ id: c.id, name: c.name, count: (c.products || []).length })); } }
 async function openNewDish(){
   const cats = await allCategories();
-  sheet(`<p class="eyebrow" data-t="tabMenu"></p><h2 data-t="addDish"></h2>
+  sheet(`<p class="eyebrow" data-t="tabMenu"></p><h2 data-t="addDish"></h2><p class="sheet-hint" data-t="ap_h_dishNew"></p>
     ${field({ id: 'nd-name', key: 'name', autocomplete: 'off', tour: 'newDish.name' })}
     ${select({ id: 'nd-cat', key: 'category', value: view.cat, options: cats.map(c => ({ value: c.id, label: c.name })), tour: 'newDish.category' })}
     ${field({ id: 'nd-price', key: 'price', inputmode: 'numeric', tour: 'newDish.price' })}
@@ -266,7 +266,7 @@ async function openNewDish(){
 /// The categories: add one, rename one, remove an empty one.
 async function openCategories(){
   const cats = await allCategories();
-  sheet(`<p class="eyebrow" data-t="tabMenu"></p><h2 data-t="categories"></h2>
+  sheet(`<p class="eyebrow" data-t="tabMenu"></p><h2 data-t="categories"></h2><p class="sheet-hint" data-t="ap_h_categories"></p>
     <div class="rows">${cats.map(c => rowDiv({ title: '', sub: `${ui.inputRow({ label: k('name'), cls: 'inline', attrs: { value: c.name, data: { cn: c.id, tour: 'category.name' } } })}<span class="mono">${c.count ?? 0} · <span data-t="dishes"></span></span>`,
       trailing: `${iconBtn({ icon: 'check', ariaKey: 'save', data: { cs: c.id }, tour: 'category.save' })}${iconBtn({ icon: 'trash', ariaKey: 'remove', disabled: !!c.count, data: { cd: c.id }, tour: 'category.remove' })}` })).join('')}</div>
     <div class="grid2 mt-3">${field({ id: 'nc-name', key: 'addCategory', autocomplete: 'off', tour: 'menu.newCategory' })}${btn({ id: 'ncGo', variant: 'primary', icon: 'plus', key: 'add', tour: 'menu.addCategory' })}</div>
@@ -275,7 +275,7 @@ async function openCategories(){
   const fail = e => toast(String(e.message || e));
   $('#ncGo').onclick = async () => { const name = $('#nc-name').value.trim(); if (!name) return toast(t('required')); try { await busy($('#ncGo'), () => post('/owner/categories', withLoc({ name }))); await loadVenue(); openCategories(); rerender(); } catch (e) { fail(e); } };
   for (const b of $$('[data-cs]', $('#sheetIn'))) b.onclick = async () => { const name = $(`[data-cn="${b.dataset.cs}"]`).value.trim(); if (!name) return; try { await busy(b, () => post('/owner/categories', withLoc({ id: b.dataset.cs, name }))); toast(t('saved')); await loadVenue(); rerender(); } catch (e) { fail(e); } };
-  for (const b of $$('[data-cd]', $('#sheetIn'))) b.onclick = async () => { const ok = await confirm(t('remove'), $(`[data-cn="${b.dataset.cd}"]`).value, { danger: true }); if (!ok) return openCategories(); try { await post(`/owner/categories/${encodeURIComponent(b.dataset.cd)}/delete`, withLoc()); await loadVenue(); openCategories(); rerender(); } catch (e) { fail(e); } };
+  for (const b of $$('[data-cd]', $('#sheetIn'))) b.onclick = async () => { const ok = await confirm(t('remove'), $(`[data-cn="${b.dataset.cd}"]`).value, { danger: true, hint: t('ap_why_removeCategory') }); if (!ok) return openCategories(); try { await post(`/owner/categories/${encodeURIComponent(b.dataset.cd)}/delete`, withLoc()); await loadVenue(); openCategories(); rerender(); } catch (e) { fail(e); } };
 }
 
 

@@ -21,7 +21,7 @@ export function renderLogin(c) {
   const claiming = !!S.claiming;
   return `${ui.section({ title: 'dowiz', sub: k('loginLine'), level: 2 })}
     <form data-form="login" class="card-form" novalidate>
-      ${ui.field({ id: 'roomEmail', name: 'email', type: 'email', label: k('email'), autocomplete: 'username', required: true, enterkeyhint: 'next', attrs: { data: { tour: 'login.email' } } })}
+      ${ui.field({ id: 'roomEmail', name: 'email', type: 'email', label: k('email'), placeholder: k('ex_email'), autocomplete: 'username', required: true, enterkeyhint: 'next', attrs: { data: { tour: 'login.email' } } })}
       ${claiming ? ui.field({ id: 'roomCode', name: 'code', label: k('claimCode'), autocomplete: 'one-time-code', required: true, enterkeyhint: 'next', attrs: { data: { tour: 'login.code' } } }) : ''}
       ${ui.field({ id: 'roomPassword', name: 'password', type: 'password', label: k('password'), autocomplete: claiming ? 'new-password' : 'current-password',
         minlength: claiming ? 8 : 1, required: true, enterkeyhint: 'go', attrs: { data: { tour: 'login.password' } } })}

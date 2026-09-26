@@ -106,7 +106,7 @@ async function refresh(){ try { await load(); } catch (e) { fail(e); } draw(); }
 async function act(id, to, btn){
   let reason = '';
   if (ASKS.includes(to)) {
-    const ok = await confirm(t('bookings'), t('rsDo_' + to), { danger: true, reasonLabel: t('rsReason') });
+    const ok = await confirm(t('bookings'), t('rsDo_' + to), { danger: true, reasonLabel: t('rsReason'), hint: t('ap_why_booking') });
     if (!ok) return refresh();
     reason = ok.reason || '';
   }

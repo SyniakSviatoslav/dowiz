@@ -44,25 +44,27 @@ export function openSupply(sup, ctx){
   const kind = sup?.kind || KINDS[0][0], unit = sup?.unit || 'g';
   const cats = [...new Set((ctx.data?.supplies || []).map(s => s.category).filter(Boolean))];
   const pctOf = pm => (pm == null ? '' : String(pm / 10));
-  sheet(`<p class="eyebrow" data-t="supplies"></p><h2 data-t="${sup ? 'edit' : 'addSupply'}"></h2>
+  sheet(`<p class="eyebrow" data-t="supplies"></p><h2 data-t="${sup ? 'edit' : 'addSupply'}"></h2><p class="sheet-hint" data-t="ap_h_supply"></p>
     ${field({ id: 's-name', key: 'name', value: sup?.name || '', autocomplete: 'off', tour: 'supply.name' })}
     ${field({ id: 's-id', key: 'ingredient', value: sup?.id || '', placeholder: 'salmon', hintKey: 'supplyIdHint', attrs: { readonly: !!sup }, tour: 'supply.id' })}
     <p class="ui-label" data-t="kind"></p>${chips({ id: 'sKind', values: KINDS.map(([k, ic]) => ({ value: k, key: 'kind_' + k, icon: ic })), value: kind, attr: 'kind', labelKey: 'kind', tour: 'supply.kind' })}
+    <p class="hint" data-t="ap_f_kindLabel"></p>
     <div class="grid2"><div>${field({ id: 's-cat', key: 'category', value: sup?.category || '', autocomplete: 'off', attrs: { list: 'catList' }, tour: 'supply.category' })}<datalist id="catList">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
       <div>${select({ id: 's-unit', key: 'unit', value: unit, options: ['g', 'ml', 'unit'].map(u => ({ value: u, label: u })), tour: 'supply.unit' })}</div></div>
     <div id="sFood" ${isFood(kind) ? '' : 'hidden'}>
       <p class="eyebrow mt-3"><span data-t="nutritionPer"></span> <span id="sBasis">${C.basisOf(unit) === 1 ? '1' : '100'} ${esc(unit)}</span></p>
-      <div class="grid2"><div>${field({ id: 's-kcal', key: 'kcal', inputmode: 'decimal', value: sup?.kcalPer100 ?? '', tour: 'supply.kcal' })}</div><div>${field({ id: 's-prot', key: 'protein', inputmode: 'decimal', value: sup?.proteinPer100 ?? '' })}</div></div>
-      <div class="grid2"><div>${field({ id: 's-fat', key: 'fat', inputmode: 'decimal', value: sup?.fatPer100 ?? '' })}</div><div>${field({ id: 's-carb', key: 'carbs', inputmode: 'decimal', value: sup?.carbsPer100 ?? '' })}</div></div>
+      <div class="grid2 pair"><div>${field({ id: 's-kcal', key: 'kcal', inputmode: 'decimal', value: sup?.kcalPer100 ?? '', tour: 'supply.kcal' })}</div><div>${field({ id: 's-prot', key: 'protein', inputmode: 'decimal', value: sup?.proteinPer100 ?? '' })}</div></div>
+      <div class="grid2 pair"><div>${field({ id: 's-fat', key: 'fat', inputmode: 'decimal', value: sup?.fatPer100 ?? '' })}</div><div>${field({ id: 's-carb', key: 'carbs', inputmode: 'decimal', value: sup?.carbsPer100 ?? '' })}</div></div>
+      <p class="hint" data-t="ap_f_nutrition"></p>
       <p class="ui-label" data-t="inv_nutritionBasis"></p>${chips({ id: 'sNb', values: [{ value: 'raw', key: 'inv_basis_raw' }, { value: 'cooked', key: 'inv_basis_cooked' }], value: sup?.nutritionBasis || 'raw', attr: 'nb' })}
       ${switchEl('s-conf', !!sup?.nutritionConfirmed, 'nutritionConfirmed', 'nutritionConfirmedHint', 'supply.confirmed')}
     </div>
     <p class="eyebrow mt-3" data-t="inv_losses"></p><p class="hint" data-t="inv_lossesHint"></p>
-    <div class="grid2"><div>${field({ id: 's-clean', key: 'inv_cleanPct', inputmode: 'decimal', value: pctOf(sup?.cleanPm), placeholder: '100' })}</div>
+    <div class="grid2 pair"><div>${field({ id: 's-clean', key: 'inv_cleanPct', inputmode: 'decimal', value: pctOf(sup?.cleanPm), placeholder: '100' })}</div>
       <div>${field({ id: 's-cook', key: 'inv_cookPct', inputmode: 'decimal', value: pctOf(sup?.cookPm), placeholder: '100' })}</div></div>
     <div class="grid2"><div>${field({ id: 's-cost', key: 'costPer', hint: `${C.basisOf(unit) === 1 ? '1' : '100'} ${unit}`, inputmode: 'numeric', value: sup?.costPerBasis ?? '', tour: 'supply.cost' })}</div>
       <div id="sWeight" ${unit === 'unit' ? '' : 'hidden'}>${field({ id: 's-wpu', key: 'weightPerUnit', inputmode: 'decimal', value: sup?.weightPerUnit ?? '' })}</div></div>
-    <div class="grid2"><div>${field({ id: 's-low', key: 'minLevel', inputmode: 'numeric', value: sup?.lowAt ?? '', tour: 'supply.low' })}</div>
+    <div class="grid2 pair"><div>${field({ id: 's-low', key: 'minLevel', inputmode: 'numeric', value: sup?.lowAt ?? '', tour: 'supply.low' })}</div>
       <div>${field({ id: 's-shelf', key: 'inv_shelfDays', inputmode: 'numeric', value: sup?.shelfDays ?? '' })}</div></div>
     <div class="btn-row">${btn({ id: 'sSave', variant: 'primary', icon: 'check', key: 'save', tour: 'supply.save' })}</div>
     ${sup ? `<div class="btn-row">${btn({ id: 'sRetire', variant: 'danger', icon: 'trash', key: 'retireSupply', tour: 'supply.retire' })}</div>` : ''}`, { name: 'supply' });
@@ -90,7 +92,7 @@ export function openSupply(sup, ctx){
 export function openMove(sup, first, ctx){
   if (!sup) return;
   const sups = ctx.data?.suppliers || [];
-  sheet(`<p class="eyebrow" data-t="move"></p><h2>${esc(sup.name || sup.id)}</h2>
+  sheet(`<p class="eyebrow" data-t="move"></p><h2>${esc(sup.name || sup.id)}</h2><p class="sheet-hint" data-t="ap_h_move"></p>
     <p class="mono muted">${esc(t('inv_onHand'))} ${sup.onHand ?? 0} · ${esc(t('inv_available'))} ${sup.available ?? 0} ${esc(sup.unit || '')}</p>
     <div class="chips" id="kind" role="group">${MOVES.map(([k, word, ic]) => ui.chip({ as: 'button', selected: k === first, icon: ic, label: key(word), attrs: { data: { k, tour: 'stock.' + k } } })).join('')}</div>
     <div class="inv-big">${field({ id: 'm-qty', key: 'inv_qty', hintKey: 'inv_qtyHint', inputmode: 'decimal', autocomplete: 'off', tour: 'move.qty' })}</div>
@@ -99,7 +101,7 @@ export function openMove(sup, first, ctx){
       ${field({ id: 'm-price', key: 'inv_price', inputmode: 'numeric', autocomplete: 'off' })}
       <div class="grid2"><div>${field({ id: 'm-sup', key: 'inv_supplier', value: sup.supplier || '', autocomplete: 'off', attrs: { list: 'supList' } })}<datalist id="supList">${sups.map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
         <div>${field({ id: 'm-doc', key: 'inv_doc', autocomplete: 'off' })}</div></div>
-      <div class="grid2"><div>${field({ id: 'm-lot', key: 'inv_lot', autocomplete: 'off' })}</div><div>${input({ id: 'm-exp', type: 'date', key: 'inv_expiry' })}</div></div>
+      <div class="grid2 pair"><div>${field({ id: 'm-lot', key: 'inv_lot', autocomplete: 'off' })}</div><div>${input({ id: 'm-exp', type: 'date', key: 'inv_expiry' })}</div></div>
     </div>
     <div id="mReasons"><p class="ui-label" data-t="reason"></p>${chips({ values: WASTE_REASONS.map(r => ({ value: r, key: r })), attr: 'r', labelKey: 'reason', tour: 'move.wasteReason' })}
       ${(sup.lots || []).length > 1 ? `<p class="ui-label" data-t="inv_lot"></p>${chips({ values: sup.lots.map(l => ({ value: l.code, label: `${l.code} · ${l.left}${l.expiry ? ' · ' + l.expiry : ''}` })), attr: 'lot' })}` : ''}
@@ -156,7 +158,7 @@ export function openPrep(sup, ctx){
   const others = (ctx.data?.supplies || []).filter(s => s.id !== sup.id);
   sheet(`<p class="eyebrow" data-t="inv_prep"></p><h2>${esc(sup.name || sup.id)}</h2><p class="hint" data-t="inv_prepHint"></p>
     <p class="ui-label" data-t="inv_stage"></p>${chips({ id: 'pStage', values: [{ value: 'clean', key: 'inv_stage_clean' }, { value: 'cook', key: 'inv_stage_cook' }], value: 'clean', attr: 'st' })}
-    <div class="grid2 inv-big"><div>${field({ id: 'p-in', key: 'inv_qtyIn', inputmode: 'decimal', autocomplete: 'off' })}</div><div>${field({ id: 'p-out', key: 'inv_qtyOut', inputmode: 'decimal', autocomplete: 'off' })}</div></div>
+    <div class="grid2 pair inv-big"><div>${field({ id: 'p-in', key: 'inv_qtyIn', inputmode: 'decimal', autocomplete: 'off' })}</div><div>${field({ id: 'p-out', key: 'inv_qtyOut', inputmode: 'decimal', autocomplete: 'off' })}</div></div>
     ${select({ id: 'p-into', key: 'inv_into', value: '', options: [{ value: '', key: 'inv_intoSame' }, ...others.map(s => ({ value: s.id, label: s.name }))] })}
     <p class="mono" id="pYield"></p>
     <div class="btn-row">${btn({ id: 'pGo', variant: 'primary', icon: 'check', key: 'save' })}</div>

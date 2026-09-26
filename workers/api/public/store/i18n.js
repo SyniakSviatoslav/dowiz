@@ -16,7 +16,8 @@
 import { safeGet, safeSet } from '/store/storage.js';
 
 export const T = {
-  sq: { privacy:'Njoftimi i privatësisë', cart:'Shporta', add:'Shto', total:'Totali', chargedIn:'Do të paguhet', checkout:'Vazhdo', empty:'Shporta është bosh',
+  sq: { ex_name:'p.sh. Arta', ex_note:'p.sh. pa qepë, ju lutem', ex_promo:'p.sh. SUSHI10', ex_say:'p.sh. peshku i freskët, dërgesa vonoi pak',
+        privacy:'Njoftimi i privatësisë', cart:'Shporta', add:'Shto', total:'Totali', chargedIn:'Do të paguhet', checkout:'Vazhdo', empty:'Shporta është bosh',
         emptyHint:'Zgjidhni një pjatë nga menuja', name:'Emri', phone:'Telefoni', address:'Adresa',
         note:'Shënim për korrierin', pay:'Mënyra e pagesës', cash:'Para në dorë', card:'Kartë',
         cashNote:'Paguani korrierit në dorëzim', cardNote:'Kartë ose Apple/Google Pay', place:'Porosit',
@@ -93,7 +94,8 @@ export const T = {
         st:{PENDING:'Duke pritur konfirmimin',CONFIRMED:'U konfirmua',PREPARING:'Po gatuhet',
             READY:'Gati',IN_DELIVERY:'Në rrugë',DELIVERED:'U dorëzua',
             REJECTED:'U refuzua',CANCELLED:'U anulua'} },
-  en: { privacy:'Privacy notice', cart:'Cart', add:'Add', total:'Total', chargedIn:'You will be charged', checkout:'Checkout', empty:'Your cart is empty',
+  en: { ex_name:'e.g. Arta', ex_note:'e.g. no onion, please', ex_promo:'e.g. SUSHI10', ex_say:'e.g. fresh fish, delivery a little late',
+        privacy:'Privacy notice', cart:'Cart', add:'Add', total:'Total', chargedIn:'You will be charged', checkout:'Checkout', empty:'Your cart is empty',
         emptyHint:'Pick a dish from the menu', name:'Name', phone:'Phone', address:'Address',
         note:'Note for the courier', pay:'Payment', cash:'Cash', card:'Card',
         cashNote:'Pay the courier on delivery', cardNote:'Card or Apple/Google Pay', place:'Place order',
@@ -168,7 +170,8 @@ export const T = {
         st:{PENDING:'Awaiting confirmation',CONFIRMED:'Confirmed',PREPARING:'Being prepared',
             READY:'Ready',IN_DELIVERY:'On the way',DELIVERED:'Delivered',
             REJECTED:'Rejected',CANCELLED:'Cancelled'} },
-  uk: { privacy:'Конфіденційність', cart:'Кошик', add:'Додати', total:'Разом', chargedIn:'Буде списано', checkout:'Оформити', empty:'Кошик порожній',
+  uk: { ex_name:'напр. Арта', ex_note:'напр. без цибулі, будь ласка', ex_promo:'напр. SUSHI10', ex_say:'напр. свіжа риба, доставка трохи запізнилась',
+        privacy:'Конфіденційність', cart:'Кошик', add:'Додати', total:'Разом', chargedIn:'Буде списано', checkout:'Оформити', empty:'Кошик порожній',
         emptyHint:'Оберіть страву з меню', name:'Ім’я', phone:'Телефон', address:'Адреса',
         note:'Коментар кур’єру', pay:'Оплата', cash:'Готівка', card:'Картка',
         cashNote:'Оплата кур’єру при отриманні', cardNote:'Картка або Apple/Google Pay', place:'Замовити',

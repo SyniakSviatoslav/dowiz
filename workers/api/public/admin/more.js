@@ -69,7 +69,9 @@ export async function render(host){
   import('/admin/wire.js').then(m => m.mountTiles($('#wireTiles', host))).catch(fail);
 }
 
-const head = (eyebrow, title) => `<p class="eyebrow" data-t="${eyebrow}"></p><h2 data-t="${title}"></h2>`;
+/// The breadcrumb, the title, and -- when the sheet has one -- the sentence
+/// that says what it is for (HUB-APPLE rule H1; the words are `ap_h_*`).
+const head = (eyebrow, title, hint = null) => `<p class="eyebrow" data-t="${eyebrow}"></p><h2 data-t="${title}"></h2>${hint ? `<p class="sheet-hint" data-t="${hint}"></p>` : ''}`;
 const fail = e => toast(String(e.message || e));
 const paint = () => { retranslate($('#sheetIn')); hydrate($('#sheetIn')); };
 /// The sheet's one main action, and an info row (icon, title, sub, trailing).
@@ -86,7 +88,7 @@ async function learnFor(){
 }
 async function openLearn(){
   const L = await learnFor(); if (!L) return toast(t('learnOffline'));
-  sheet(`${head('learnGroup', 'learn')}<div id="learnList">${L.renderList()}</div>`, { name: 'learn' });
+  sheet(`${head('learnGroup', 'learn', 'ap_h_learn')}<div id="learnList">${L.renderList()}</div>`, { name: 'learn' });
   L.bindList($('#learnList'), () => closeSheet());
 }
 /// `/admin/#learn=O1b` opens that lesson (the wiki links here).
@@ -133,13 +135,13 @@ async function openPromos(){
       trailing: pillBtn(stt === 'active' ? 'ok' : stt === 'scheduled' ? 'warn' : '', { key: 'promo_' + stt, data: { flip: p.code }, tour: 'promos.flip' }) + iconBtn({ icon: 'trash', ariaKey: 'remove', variant: 'plain', data: { del: p.code }, tour: 'promos.delete' }) }); }).join('')}</div>` : empty('ticket', { key: 'none' });
     paint();
     for (const b of $$('[data-flip]', $('#pList'))) b.onclick = async () => { const p = list.find(x => x.code === b.dataset.flip); if (!p) return; try { await busy(b, () => post('/owner/promotions', { ...p, active: !p.active, used: undefined, status: undefined })); draw(); } catch (e) { fail(e); } };
-    for (const b of $$('[data-del]', $('#pList'))) b.onclick = async () => { const c = await confirm(t('remove'), b.dataset.del, { danger: true }); if (!c) return openPromos(); try { await post(`/owner/promotions/${encodeURIComponent(b.dataset.del)}/delete`, withLoc()); openPromos(); } catch (e) { fail(e); } };
+    for (const b of $$('[data-del]', $('#pList'))) b.onclick = async () => { const c = await confirm(t('remove'), b.dataset.del, { danger: true, hint: t('ap_why_removePromo') }); if (!c) return openPromos(); try { await post(`/owner/promotions/${encodeURIComponent(b.dataset.del)}/delete`, withLoc()); openPromos(); } catch (e) { fail(e); } };
   };
   draw();
   $('#pNew').onclick = () => {
-    sheet(`${head('marketing', 'promos')}
+    sheet(`${head('marketing', 'promos', 'ap_h_promo')}
       ${field({ id: 'pr-code', key: 'promo', autocapitalize: 'characters', spellcheck: false, tour: 'promos.code' })}
-      ${chips({ id: 'prKind', values: PROMO_KINDS.map(x => ({ value: x, label: x === 'percent' ? '%' : (S.venue?.currencyCode || 'ALL') })), value: PROMO_KINDS[0], attr: 'k', tour: 'promos.kind' })}
+      <p class="ui-label" data-t="ap_l_kind"></p>${chips({ id: 'prKind', values: PROMO_KINDS.map(x => ({ value: x, label: x === 'percent' ? '%' : (S.venue?.currencyCode || 'ALL') })), value: PROMO_KINDS[0], attr: 'k', tour: 'promos.kind' })}
       <div class="grid2">${field({ id: 'pr-value', key: 'discount', inputmode: 'numeric', tour: 'promos.value' })}${field({ id: 'pr-min', key: 'minOrder', inputmode: 'numeric', tour: 'promos.minOrder' })}</div>
       <div class="grid2">${input({ id: 'pr-from', type: 'date', key: 'when', tour: 'promos.from' })}${input({ id: 'pr-until', type: 'date', key: 'until', tour: 'promos.until' })}</div>
       ${field({ id: 'pr-max', key: 'maxUses', inputmode: 'numeric', tour: 'promos.maxUses' })}
@@ -212,7 +214,7 @@ async function openSocial(){
 
 // ── analytics, customers ────────────────────────────────────────────────────
 async function openAnalytics(days = WINDOWS[0]){
-  sheet(`${head('analytics', 'analytics')}
+  sheet(`${head('analytics', 'analytics', 'ap_h_analytics')}
     ${chips({ values: WINDOWS.map(w => ({ value: w, key: w === 7 ? 'week' : 'month' })), value: days, attr: 'days', tour: 'analytics.window' })}
     <div id="anBody">${loading(2)}</div>`, { name: 'analytics' });
   for (const b of $$('[data-days]', $('#sheetIn'))) b.onclick = () => openAnalytics(Number(b.dataset.days));
@@ -234,7 +236,7 @@ async function openAnalytics(days = WINDOWS[0]){
 const CUSTOMER_SORTS = ['spent', 'orders', 'recent'];
 const REVEAL_REASON_MIN = 3;
 async function openCustomers(sort = CUSTOMER_SORTS[0]){
-  sheet(`${head('analytics', 'customers')}
+  sheet(`${head('analytics', 'customers', 'ap_h_customers')}
     ${chips({ values: CUSTOMER_SORTS.map(x => ({ value: x, key: 'sort_' + x })), value: sort, attr: 'sort', tour: 'customers.sort' })}
     <div id="cuBody">${loading()}</div>
     <div class="btn-row">${btn({ id: 'cuCsv', icon: 'download', key: 'exportCsv', tour: 'customers.csv' })}${btn({ id: 'cuLog', icon: 'eye', key: 'revealLog', tour: 'customers.revealLog' })}</div>`, { name: 'customers' });
@@ -280,7 +282,7 @@ async function openRevealLog(){
 // ── settings ────────────────────────────────────────────────────────────────
 async function openVenue(){
   const v = S.venue || {};
-  sheet(`${head('settings', 'venue')}
+  sheet(`${head('settings', 'venue', 'ap_h_venue')}
     ${field({ id: 'v-name', key: 'venueName', value: v.name || '', tour: 'venue.name' })}
     ${field({ id: 'v-phone', key: 'venuePhone', type: 'tel', value: v.phone || '', tour: 'venue.phone' })}
     ${field({ id: 'v-addr', key: 'venueAddress', value: v.address || '', tour: 'venue.address' })}
@@ -312,9 +314,10 @@ async function openHours(){
   // reported closed from 22:00. The zone belongs on this sheet because it is
   // what these numbers mean.
   const tz = S.venue?.tz || 'Europe/Tirane';
-  sheet(`${head('settings', 'hours')}
+  sheet(`${head('settings', 'hours', 'ap_h_hours')}
     ${select({ id: 'h-tz', key: 'timezone', value: tz, options: ZONES.map(z => ({ value: z, label: z.replace('_', ' ') })), tour: 'hours.timezone' })}
     <p class="hint" data-t="timezoneHint"></p>
+    <div class="grid3 hours-head"><span class="ui-label" data-t="ap_l_day"></span><span class="ui-label" data-t="ap_l_opens"></span><span class="ui-label" data-t="ap_l_closes"></span></div>
     ${week.map((w, i) => `<div class="grid3 hours-row">${check({ label: t('day')[i], checked: w.length > 0, data: { day: i }, tour: 'hours.day' })}${input({ type: 'time', value: w.length ? hhmm(w[0].open) : '11:00', data: { open: i }, tour: 'hours.open' })}${input({ type: 'time', value: w.length ? hhmm(w[0].close) : '23:00', data: { close: i }, tour: 'hours.close' })}</div>`).join('')}
     <div class="btn-row">${saveBtn('hSave', 'hours.save')}</div>`, { name: 'hours' });
   $('#hSave').onclick = async () => {
@@ -334,7 +337,7 @@ async function openZones(){ (await import('/admin/zones.js')).open(); }
 
 async function openDelivery(){
   const v = S.venue || {};
-  sheet(`${head('settings', 'deliveryTerms')}
+  sheet(`${head('settings', 'deliveryTerms', 'ap_h_delivery')}
     <div class="grid2">${field({ id: 'd-fee', key: 'deliveryFee', inputmode: 'numeric', value: v.deliveryFee ?? 0, tour: 'delivery.fee' })}${field({ id: 'd-free', key: 'freeOver', inputmode: 'numeric', value: v.freeDeliveryThreshold ?? '', tour: 'delivery.freeOver' })}</div>
     ${field({ id: 'd-min', key: 'minOrder', inputmode: 'numeric', value: v.minOrder ?? 0, tour: 'delivery.minOrder' })}
     <div class="btn-row">${saveBtn('dSave', 'delivery.save')}</div>`, { name: 'delivery' });
@@ -345,7 +348,7 @@ async function openDelivery(){
 }
 async function openPayments(){
   const v = S.venue || {}, pay = v.payments || {}, wallets = pay.crypto || [];
-  sheet(`${head('settings', 'payments')}
+  sheet(`${head('settings', 'payments', 'ap_h_payments')}
     <div class="rows">
       ${info('cash', { title: k('cash'), trailing: onOff(true), tour: 'payments.cash' })}
       ${info('credit-card', { cls: pay.card ? '' : 'off', title: k('stripe'), sub: `<span data-t="${pay.card ? 'on' : 'stripeNotSet'}"></span>`, trailing: onOff(pay.card), tour: 'payments.stripe' })}
@@ -372,7 +375,7 @@ async function openNotifications(){
   const tokenSet = v['notify.telegram.token'] === SECRET_SET_MARK || !!(S.venue?.telegramBot);
   const waSet = v['notify.whatsapp.token'] === SECRET_SET_MARK;
   const waOn = waSet && !!(v['notify.whatsapp.phone_id'] || '').trim();
-  sheet(`${head('settings', 'notifications')}
+  sheet(`${head('settings', 'notifications', 'ap_h_notifications')}
     <div class="rows">
       ${rowBtn({ leading: icon('brand-telegram'), title: k('telegram'), sub: `<span data-t="${tokenSet ? 'tgHow' : 'tgNotSet'}"></span>`, trailing: icon('chevron-right', 'chev'), data: { go: 'telegram' } })}
     </div>
@@ -405,7 +408,7 @@ async function openChannels(){
   const waOn = v['notify.whatsapp.token'] === SECRET_SET_MARK && !!(v['notify.whatsapp.phone_id'] || '').trim();
   const igOn = v['social.instagram.token'] === SECRET_SET_MARK && !!(v['social.instagram.user_id'] || '').trim();
   const webhook = `${location.origin}/api/webhooks/meta`;
-  sheet(`${head('settings', 'channels')}
+  sheet(`${head('settings', 'channels', 'ap_h_channels')}
     <div class="rows">
       ${info('bowl-chopsticks', { title: k('chStore'), sub: `<span class="mono">${esc(location.host)}</span>`, trailing: onOff(true) })}
       ${info('phone', { title: k('chPhone'), sub: esc(S.venue?.phone || ''), trailing: onOff(true) })}
@@ -496,14 +499,14 @@ async function openKeys(){
   const draw = async () => { let d; try { d = await api('/owner/apikeys'); } catch (e) { return fail(e); }
     $('#kList').innerHTML = (d.keys || []).length ? `<div class="rows">${d.keys.map(x => info('key', { title: x.label || '', tour: 'keys.row', sub: `<span class="mono">${esc(x.id.slice(0, 8))} · ${x.lastUsedMs ? esc(ago(x.lastUsedMs)) : '—'} · ${esc(t('until'))} ${esc(day(x.expiresMs || 0))}</span>`,
       trailing: iconBtn({ icon: 'trash', ariaKey: 'remove', variant: 'plain', data: { rev: x.id }, tour: 'keys.revoke' }) })).join('')}</div>` : empty('key', { key: 'none' });
-    paint(); for (const b of $$('[data-rev]', $('#kList'))) b.onclick = async () => { const ok = await confirm(t('remove'), t('revokeHint'), { danger: true }); if (!ok) return openKeys(); try { await post('/owner/apikeys/revoke', { id: b.dataset.rev }); draw(); } catch (e) { fail(e); } }; };
+    paint(); for (const b of $$('[data-rev]', $('#kList'))) b.onclick = async () => { const ok = await confirm(t('remove'), t('revokeHint'), { danger: true, hint: t('ap_why_revokeKey') }); if (!ok) return openKeys(); try { await post('/owner/apikeys/revoke', { id: b.dataset.rev }); draw(); } catch (e) { fail(e); } }; };
   draw();
   $('#kNew').onclick = async () => { try { const d = await busy($('#kNew'), () => post('/owner/apikeys', { label: $('#k-label').value.trim() || 'api' })); $('#kOut').innerHTML = `<div class="code">${esc(d.key || d.token || JSON.stringify(d))}</div><p class="hint" data-t="keyOnce"></p>`; paint(); draw(); } catch (e) { fail(e); } };
 }
 async function openBranding(){
   let b; try { b = await api('/owner/branding'); } catch (e) { return fail(e); }
   const st = S.venue?.stage || {};
-  sheet(`${head('settings', 'branding')}
+  sheet(`${head('settings', 'branding', 'ap_h_branding')}
     <div class="grid3">${input({ type: 'color', id: 'b-primary', key: 'primary', value: b.brand?.primary || '#c9a35a', tour: 'branding.primary' })}${input({ type: 'color', id: 'b-paper', key: 'paper', value: b.brand?.paper || '#0b1717', tour: 'branding.paper' })}${select({ id: 'b-type', key: 'typePair', value: b.brand?.typePair || 'classic', options: (b.typePairs || [{ id: 'classic' }]).map(p => ({ value: p.id, label: p.id })), tour: 'branding.typePair' })}</div>
     ${input({ id: 'b-logo', type: 'file', accept: 'image/*', key: 'uploadPhoto', tour: 'branding.logo' })}
     <p class="eyebrow mt-3" data-t="seal"></p>
@@ -526,7 +529,7 @@ async function openFeatures(){
   let d; try { d = await api('/owner/features'); } catch (e) { return fail(e); }
   const tl = (k, fb) => { const v = t(k); return v === k ? fb : v; };
   const groups = [...new Set((d.features || []).map(f => f.surface || 'storefront'))];
-  sheet(`${head('settings', 'features')}${groups.map(g => `<p class="eyebrow mt-3">${esc(tl('surface_' + g, g))}</p>${(d.features || []).filter(f => (f.surface || 'storefront') === g).map(f => `<div class="feat">${check({ label: tl('feat_' + f.key, f.label), checked: f.on, data: { f: f.key }, tour: 'features.' + f.key })}
+  sheet(`${head('settings', 'features', 'ap_h_features')}${groups.map(g => `<p class="eyebrow mt-3">${esc(tl('surface_' + g, g))}</p>${(d.features || []).filter(f => (f.surface || 'storefront') === g).map(f => `<div class="feat">${check({ label: tl('feat_' + f.key, f.label), checked: f.on, data: { f: f.key }, tour: 'features.' + f.key })}
     ${f.defaultOn != null && f.on !== f.defaultOn ? pill('warn', { key: 'changed' }) : ''}<p class="hint">${esc(tl('feat_' + f.key + '_h', f.hint || ''))}</p></div>`).join('')}`).join('')}`, { name: 'features' });
   for (const el of $$('[data-f]', $('#sheetIn'))) el.onchange = async () => { try { await post('/owner/features', { key: el.dataset.f, on: el.checked }); toast(t('saved')); } catch (e) { fail(e); el.checked = !el.checked; } };
 }
@@ -536,7 +539,7 @@ async function openActivation(){
   const word = v => typeof v === 'boolean' ? t(v ? 'yes' : 'no') : String(v);
   const missing = new Map((a.missing || []).map(m => [m.key, m.why]));
   const CHECKS = [['menu', ['sellableDishes']], ['notifications', ['telegramChats']], ['fulfilment', ['hasVenuePhone', 'deliveryConfigured', 'pickupEnabled']]];
-  sheet(`${head('settings', 'activation')}
+  sheet(`${head('settings', 'activation', 'ap_h_activation')}
     <div class="rows">${CHECKS.map(([key, facts]) => info(missing.has(key) ? 'alert-circle' : 'check', { title: tl('req_' + key, key), tour: 'activation.' + key, sub: missing.has(key) ? esc(missing.get(key)) : facts.map(f => `${esc(tl('fact_' + f, f))}: ${esc(word(a.facts?.[f]))}`).join(' · '),
       trailing: pill(missing.has(key) ? 'warn' : 'ok', { label: missing.has(key) ? '!' : '✓' }) })).join('')}</div>
     ${!(a.missing || []).length ? `<p class="ok mt-3" data-t="hubOk"></p>` : ''}`, { name: 'activation' });
@@ -544,7 +547,7 @@ async function openActivation(){
 /// Fullness per mille at which a fixed-size image turns amber, then red.
 const HEALTH_WARN_PM = 650, HEALTH_BAD_PM = 850;
 async function openHealth(){
-  sheet(`${head('settings', 'health')}<div id="hBody">${loading()}</div>
+  sheet(`${head('settings', 'health', 'ap_h_health')}<div id="hBody">${loading()}</div>
     <div class="btn-row">${btn({ id: 'hBackup', href: '/api/owner/backup', icon: 'download', key: 'backup', attrs: { download: true }, tour: 'health.backup' })}</div>`, { name: 'health' });
   let h; try { h = await api('/owner/health'); } catch (e) { return fail(e); }
   // A self-growing image is never amber: fullness is not a warning when the

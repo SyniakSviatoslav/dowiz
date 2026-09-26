@@ -118,7 +118,7 @@ function bind(){
   $('#fp-zname', root).onchange = e => { z.name = e.target.value.trim(); draw(); };
   $('#fpAddT', root).onclick = () => { const tb = newTable(z, fp.lim); z.tables.push(tb); fp.sel = tb.n; draw(); };
   $('#fpDelZ', root).onclick = async () => {
-    const ok = await confirm(t('floorPlan'), `${t('fpDeleteZone')}: ${z.name}`, { danger: true });
+    const ok = await confirm(t('floorPlan'), `${t('fpDeleteZone')}: ${z.name}`, { danger: true, hint: t('ap_why_deleteZone') });
     if (ok) { fp.zones.splice(fp.zi, 1); fp.zi = 0; fp.sel = null; }
     draw();
   };

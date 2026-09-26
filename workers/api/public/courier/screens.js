@@ -28,7 +28,7 @@ export function login(err, ctx){
   return `<form class="login" id="loginForm" novalidate>
     <div class="login-mark" aria-hidden="true"><span>d</span></div>
     ${ui.section({ title: k('loginTitle'), sub: k('loginLine'), cls: 'login-head' })}
-    ${ui.field({ id: 'em', label: k('emailOrPhone'), autocomplete: 'username', inputmode: 'email', enterkeyhint: 'next' })}
+    ${ui.field({ id: 'em', label: k('emailOrPhone'), placeholder: k('ex_login'), autocomplete: 'username', inputmode: 'email', enterkeyhint: 'next' })}
     ${ui.field({ id: 'pw', label: k('password'), type: 'password', autocomplete: 'current-password', enterkeyhint: 'go' })}
     ${err ? ui.alert({ label: err }) : ''}
     ${ui.button({ id: 'go', type: 'submit', variant: 'primary', icon: 'login', label: k('signIn'), ...block })}
@@ -41,7 +41,7 @@ export function login(err, ctx){
 export function claim(err){
   return `<form class="login" id="claimForm" novalidate>
     ${ui.section({ title: k('claimTitle'), sub: k('claimHint') })}
-    ${ui.field({ id: 'cph', label: k('yourPhone'), type: 'tel', inputmode: 'tel', autocomplete: 'tel', enterkeyhint: 'next' })}
+    ${ui.field({ id: 'cph', label: k('yourPhone'), placeholder: k('ex_phone'), type: 'tel', inputmode: 'tel', autocomplete: 'tel', enterkeyhint: 'next' })}
     ${ui.field({ id: 'cod', label: k('code'), autocomplete: 'one-time-code', autocapitalize: 'characters', spellcheck: false, maxlength: 16, enterkeyhint: 'next' })}
     ${ui.field({ id: 'cpw', label: k('choosePassword'), type: 'password', autocomplete: 'new-password', minlength: 8, enterkeyhint: 'go', hint: k('passwordHint') })}
     ${err ? ui.alert({ label: err }) : ''}

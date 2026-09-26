@@ -173,7 +173,7 @@ export function openCheckout(){
     </div>
 
     <h3 class="fsec" data-t="contact"></h3>
-    ${ui.field({ id: 'f-name', label: k('name'), autocomplete: 'name', value: safeGet('dw_name') || '', attrs: { data: { tour: 'checkout.name' } } })}
+    ${ui.field({ id: 'f-name', label: k('name'), placeholder: k('ex_name'), autocomplete: 'name', value: safeGet('dw_name') || '', attrs: { data: { tour: 'checkout.name' } } })}
     ${ui.field({ id: 'f-phone', label: `${t('phone')} ${t('optional')}`, type: 'tel', inputmode: 'tel', autocomplete: 'tel', placeholder: '+355…', value: safeGet('dw_phone') || '', attrs: { data: { tour: 'checkout.phone' } } })}
     ${consentMarkup()}
 
@@ -181,14 +181,14 @@ export function openCheckout(){
     ${railMarkup()}
 
     <h3 class="fsec" data-t="extras"></h3>
-    ${ui.field({ id: 'f-note', label: k(pickup || TABLE ? 'kitchenNote' : 'note'), attrs: { data: { tour: 'checkout.note' } } })}
+    ${ui.field({ id: 'f-note', label: k(pickup || TABLE ? 'kitchenNote' : 'note'), placeholder: k('ex_note'), attrs: { data: { tour: 'checkout.note' } } })}
     ${on('tips') ? `<div id="tipBox" ${pickup || TABLE ? 'hidden' : ''}><label data-t="tip"></label>
     <div class="seg" role="radiogroup" data-t-attr="aria-label:tip">
       ${TIPS.map(v => `<button type="button" class="seg-b ${state.tip === v ? 'on' : ''}" data-tip="${v}" data-tour="checkout.tip" aria-pressed="${state.tip === v}">${v ? moneyEl(v) : `<span data-t="tipNo"></span>`}</button>`).join('')}
     </div></div>` : ''}
     ${on('promo') ? `<label for="f-promo" data-t="promo"></label>
     <div class="promo-row">
-      ${ui.field({ id: 'f-promo', label: '', autocomplete: 'off', autocapitalize: 'characters', spellcheck: false, value: state.promo ? state.promo.code : '' })}
+      ${ui.field({ id: 'f-promo', label: '', placeholder: k('ex_promo'), autocomplete: 'off', autocapitalize: 'characters', spellcheck: false, value: state.promo ? state.promo.code : '' })}
       ${ghost({ id: 'f-promo-go', block: false, label: k(state.promo ? 'promoOff' : 'promoApply'), tour: 'checkout.promo' })}
     </div>
     <p id="f-promo-out" class="geo" hidden></p>` : ''}

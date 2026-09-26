@@ -19,8 +19,19 @@
 // ASCII QUOTES ONLY in this file: a typographic quote once took down the
 // whole console.
 import * as ui from '../lib/ui/index.js';
+// THE WORD NEXT TO THE CONTROL (HUB-APPLE-2026-09-26 section 2, rules F2/F3):
+// a field the caller leaves without a placeholder shows an example, and one
+// without a hint shows its one-line footer, both looked up by the field's id
+// first and its label key second. A field nothing is known about renders
+// exactly as before.
+import { EXAMPLES, FOOTERS, lookup } from './apple-words.js';
 
 export { ui };
+
+/// The example placeholder key for a field, or null.
+export const exampleOf = o => (o.placeholder == null && o.phKey == null ? lookup(EXAMPLES, o.id, o.key) : null);
+/// The footer key for a field, or null.
+export const footerOf = o => (o.hint == null && o.hintKey == null ? lookup(FOOTERS, o.id, o.key) : null);
 
 /// The i18n key reference the components render with `data-t`.
 export const k = key => ({ t: key });
@@ -57,8 +68,9 @@ export function iconBtn(o = {}){
 /// Types ui.field does not take (date, time, color, datetime-local) go through
 /// `input()` below, which wears the same classes.
 export function field(o = {}){
-  return ui.field({ ...o, label: o.label ?? (o.key ? k(o.key) : undefined), placeholder: o.phKey ? k(o.phKey) : o.placeholder,
-    hint: o.hintKey ? k(o.hintKey) : o.hint, attrs: dataOf(o) });
+  const ex = exampleOf(o), foot = footerOf(o);
+  return ui.field({ ...o, label: o.label ?? (o.key ? k(o.key) : undefined), placeholder: o.phKey ? k(o.phKey) : ex ? k(ex) : o.placeholder,
+    hint: o.hintKey ? k(o.hintKey) : foot ? k(foot) : o.hint, attrs: dataOf(o) });
 }
 
 const INPUT_TYPES = ['date', 'time', 'color', 'datetime-local', 'month', 'file'];
@@ -73,7 +85,13 @@ export function input(o = {}){
     min: o.min, max: o.max, step: o.step, accept: o.accept, multiple: !!o.multiple, hidden: !!o.hidden,
     required: !!o.required, disabled: !!o.disabled, ...(dataOf(o) || {}) });
   const lab = (o.key || o.label) ? `<label class="ui-label" for="${ui.esc(id)}">${ui.label(words(o))}</label>` : '';
-  return `<div class="${ui.cx('ui-field', o.cls)}">${lab}<input class="ui-input${more(o.controlCls)}"${a}></div>`;
+  return `<div class="${ui.cx('ui-field', o.cls)}">${lab}<input class="ui-input${more(o.controlCls)}"${a}>${footer(o, id)}</div>`;
+}
+
+/// The one-line footer under a control, when the field has one.
+function footer(o, id){
+  const key = o.hintKey || footerOf({ ...o, id: o.id || null });
+  return key ? `<p class="ui-hint" id="${ui.esc(id)}-hint" data-t="${ui.esc(key)}">${ui.esc(ui.tr(key))}</p>` : '';
 }
 
 /// A select, styled as the system's input. `options`: [{ value, label | key }].
@@ -88,7 +106,7 @@ export function select(o = {}){
   const a = ui.attrs({ id, name: o.name, required: !!o.required, disabled: !!o.disabled,
     'aria-label': (!o.key && !o.label && o.ariaLabel) || null, ...(dataOf(o) || {}) });
   const lab = (o.key || o.label) ? `<label class="ui-label" for="${ui.esc(id)}">${ui.label(words(o))}</label>` : '';
-  return `<div class="${ui.cx('ui-field', o.cls)}">${lab}<select class="ui-input${more(o.controlCls)}"${a}>${opts}</select></div>`;
+  return `<div class="${ui.cx('ui-field', o.cls)}">${lab}<select class="ui-input${more(o.controlCls)}"${a}>${opts}</select>${footer(o, id)}</div>`;
 }
 
 /// THE CHECKBOX, once. `ui` has no checkbox or switch yet (hand-back): this is
@@ -97,7 +115,10 @@ export function select(o = {}){
 export function check(o = {}){
   const a = ui.attrs({ type: 'checkbox', id: o.id, name: o.name, value: o.value, checked: !!o.checked, disabled: !!o.disabled,
     required: !!o.required, ...(dataOf(o) || {}) });
-  const hint = o.hintKey ? `<small data-t="${ui.esc(o.hintKey)}">${ui.esc(ui.tr(o.hintKey))}</small>` : '';
+  // A switch is a list row (HIG toggles): the word first, the consequence
+  // under it, the switch at the trailing edge. `hintKey` or the footer table.
+  const hk = o.hintKey || (o.id && FOOTERS[o.id]) || null;
+  const hint = hk ? `<small data-t="${ui.esc(hk)}">${ui.esc(ui.tr(hk))}</small>` : '';
   return `<label class="${ui.cx('switch', o.cls)}"><input${a}><span class="switch-k"></span><span class="t">${ui.label(words(o))}${hint}</span></label>`;
 }
 

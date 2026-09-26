@@ -158,6 +158,7 @@ export async function render(host){
     <div class="screen-h"><div><h1 data-t="tabOrders"></h1>
       <p class="screen-sub"><span class="mono">${esc(clock(now.getTime()))}</span> · ${esc(now.toLocaleDateString(intlLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))}</p></div>
       <div class="screen-acts">${btn({ id: 'oAgg', icon: 'plus', key: 'aggTitle', tour: 'orders.platformOrder' })}</div></div>
+    <p class="screen-hint" data-t="ap_h_orders"></p>
     <div class="stats strip" data-tour="orders.stats">
       <div class="stat"><b>${s.todayOrders ?? '—'}</b><small data-t="todayOrders"></small></div>
       <div class="stat ${s.pending ? 'warn' : ''}"><b>${s.pending ?? '—'}</b><small data-t="pending"></small></div>
@@ -191,7 +192,7 @@ export async function render(host){
 async function doAction(id, action, el){
   let reason = '';
   if (action === 'reject' || action === 'cancel') {
-    const c = await confirm(t(action === 'reject' ? 'reject' : 'cancelOrder'), ref(id), { danger: true, reasonLabel: t('reason'), reasonDefault: t('outOfStock') });
+    const c = await confirm(t(action === 'reject' ? 'reject' : 'cancelOrder'), ref(id), { danger: true, reasonLabel: t('reason'), reasonDefault: t('outOfStock'), hint: t('ap_why_reject') });
     if (!c) return; reason = c.reason;
   }
   try {
@@ -228,7 +229,7 @@ function foodBack(o){
 }
 
 async function chooseFoodBack(id, choice, el){
-  const c = await confirm(t('foodBack'), t(choice === 'resell' ? 'resell' : 'wasteIt'), { danger: choice === 'waste' });
+  const c = await confirm(t('foodBack'), t(choice === 'resell' ? 'resell' : 'wasteIt'), { danger: choice === 'waste', hint: choice === 'waste' ? t('ap_why_waste') : null });
   if (!c) return;
   try {
     await busy(el, () => post(`/staff/orders/${encodeURIComponent(id)}/returned`, withLoc({ choice })));
@@ -239,7 +240,7 @@ async function chooseFoodBack(id, choice, el){
 async function openAssign(id){
   const on = S.couriers.filter(c => c.active && c.onShift), off = S.couriers.filter(c => c.active && !c.onShift);
   const pick = c => choice({ label: c.name, subKey: c.onShift ? 'onShift' : 'offShift', data: { c: c.id }, tour: 'orders.assignCourier' });
-  sheet(`<p class="eyebrow">${esc(ref(id))}</p><h2 data-t="assign"></h2>
+  sheet(`<p class="eyebrow">${esc(ref(id))}</p><h2 data-t="assign"></h2><p class="sheet-hint" data-t="ap_h_assign"></p>
     ${on.length ? ui.list(on.map(pick), { label: t('assign') }) : empty('bike', { key: 'noneOnShift' })}
     ${off.length ? `<details class="fold"><summary data-t="offShift"></summary>${ui.list(off.map(pick), { label: t('offShift') })}</details>` : ''}`, { name: 'assign' });
   for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => {

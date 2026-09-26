@@ -59,7 +59,7 @@ function openInvite(){
 
 async function openStaff(id){
   const s = S.staff.find(x => x.id === id) || { id };
-  sheet(`<p class="eyebrow" data-t="staff"></p><h2>${esc(s.name || id)}</h2><div id="sBody">${loading(1)}</div>`, { name: 'staff' });
+  sheet(`<p class="eyebrow" data-t="staff"></p><h2>${esc(s.name || id)}</h2><p class="sheet-hint" data-t="ap_h_staffCard"></p><div id="sBody">${loading(1)}</div>`, { name: 'staff' });
   // The list already carries id, name, role, active: there is no per-person
   // GET. An invite is withdrawn by inviting the same email again (the backend
   // revokes the pending one), so there is no revoke route to call either.

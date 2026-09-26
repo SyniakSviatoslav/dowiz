@@ -200,9 +200,12 @@ export async function busy(el, fn){
 }
 
 /// A confirmation sheet for a consequential action: the one path to it.
-export function confirm(title, body, { danger = false, reasonLabel = null, reasonDefault = '' } = {}){
+/// `hint` is the consequence, one sentence (HUB-APPLE rule B2): what changes
+/// and for whom, under the question and before the two buttons.
+export function confirm(title, body, { danger = false, reasonLabel = null, reasonDefault = '', hint = null } = {}){
   return new Promise(resolve => {
     sheet(`<p class="eyebrow">${esc(title)}</p><h2>${esc(body)}</h2>
+      ${hint ? `<p class="sheet-hint">${esc(hint)}</p>` : ''}
       ${reasonLabel ? field({ id: 'cf-reason', label: reasonLabel, value: reasonDefault, tour: 'confirm.reason' }) : ''}
       <div class="btn-row">${btn({ id: 'cfNo', variant: 'ghost', key: 'cancel', tour: 'confirm.no' })}${btn({ id: 'cfYes', variant: danger ? 'danger' : 'primary', icon: 'check', key: 'done', tour: 'confirm.yes' })}</div>`, { name: 'confirm' });
     let settled = false;

@@ -263,7 +263,7 @@ const hasTables = () => (ui.plan?.zones || []).some(z => z.tables.length);
 /// press redraws the whole sheet, and remembered with the checkout's keys so
 /// a guest who ordered once does not type it twice.
 const contact = () => `
-  ${kit.field({ id: 'bk-name', label: k('bkName'), autocomplete: 'name', maxlength: 80, value: ui.name, attrs: { data: { tour: 'booking.name' } } })}
+  ${kit.field({ id: 'bk-name', label: k('bkName'), placeholder: k('ex_name'), autocomplete: 'name', maxlength: 80, value: ui.name, attrs: { data: { tour: 'booking.name' } } })}
   ${kit.field({ id: 'bk-phone', label: k('bkPhone'), type: 'tel', inputmode: 'tel', autocomplete: 'tel', placeholder: '+355...', value: ui.phone, attrs: { data: { tour: 'booking.phone' } } })}
   ${privacyLink()}`;
 

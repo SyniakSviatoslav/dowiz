@@ -56,7 +56,7 @@ function openInvite(){
 
 async function openCourier(id){
   const c = S.couriers.find(x => x.id === id) || { id };
-  sheet(`<p class="eyebrow" data-t="courier"></p><h2>${esc(c.name || c.phone || id)}</h2><div id="cBody">${loading(1)}</div>`, { name: 'courier' });
+  sheet(`<p class="eyebrow" data-t="courier"></p><h2>${esc(c.name || c.phone || id)}</h2><p class="sheet-hint" data-t="ap_h_courier"></p><div id="cBody">${loading(1)}</div>`, { name: 'courier' });
   let d = null;
   try { d = await api(`/owner/couriers/${encodeURIComponent(id)}`); } catch {}
   const fix = d?.lastFix;
