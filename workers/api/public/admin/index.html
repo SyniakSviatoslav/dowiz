@@ -22,13 +22,15 @@
 <link rel="modulepreload" href="/lib/ui/index.js">
 </head>
 <body>
-<!-- The header: the venue's mark and name, its state as one chip, the words
-     and the currency behind one button, the way out. -->
+<!-- The header: the venue's mark and name, its state as one chip, the person
+     (language, currency, appearance, sign-out) behind one button, and the way
+     out itself from 720px -- on a phone it lives in that sheet, because the
+     name was being cut to four letters by a once-a-month control. -->
 <header class="top" id="top" hidden><div class="wrap top-in">
   <img class="brand-mark" id="brandMark" alt="" width="34" height="34" hidden><span class="brand-mark brand-mono" id="brandMono" aria-hidden="true" hidden></span>
   <span class="brand" id="brandName">dowiz</span>
   <button type="button" class="ui-chip vstate" id="vstate" data-tour="header.state" data-t-attr="title:setState"><span class="dot" aria-hidden="true"></span><span id="vstateT">—</span></button>
-  <button type="button" class="ui-iconbtn" id="prefs" data-tour="header.prefs" data-t-attr="aria-label:language title:language"><i class="ti ti-torii" aria-hidden="true"></i></button>
+  <button type="button" class="ui-iconbtn" id="prefs" data-tour="header.prefs" data-t-attr="aria-label:profileTitle title:profileTitle"><i class="ti ti-user" aria-hidden="true"></i></button>
   <button type="button" class="ui-iconbtn" id="logout" data-tour="header.logout" data-t-attr="aria-label:signOut title:signOut"><i class="ti ti-logout" aria-hidden="true"></i></button>
 </div></header>
 <main id="app" class="wrap" aria-live="polite"></main>

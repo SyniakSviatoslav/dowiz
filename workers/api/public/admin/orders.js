@@ -152,9 +152,12 @@ export async function render(host){
   const all = matching();
   const list = view.mode === 'history' ? all.slice(0, HISTORY_PAGE * view.pages) : all;
   const now = new Date();
+  // ONE HEADING, AND IT NAMES THE SCREEN (HUB-UX-2026-09-26 §2.1): the clock
+  // and the day are its subline; the one creating action sits beside it.
   host.innerHTML = `
-    <div class="screen-h"><div><p class="eyebrow">${esc(t('today'))} · ${esc(now.toLocaleDateString(intlLocale(), { weekday: 'short', day: 'numeric', month: 'short' }))}</p><h1 data-t="tabOrders"></h1></div>
-      <span class="clock mono">${esc(clock(now.getTime()))}</span></div>
+    <div class="screen-h"><div><h1 data-t="tabOrders"></h1>
+      <p class="screen-sub"><span class="mono">${esc(clock(now.getTime()))}</span> · ${esc(now.toLocaleDateString(intlLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))}</p></div>
+      <div class="screen-acts">${btn({ id: 'oAgg', icon: 'plus', key: 'aggTitle', tour: 'orders.platformOrder' })}</div></div>
     <div class="stats strip" data-tour="orders.stats">
       <div class="stat"><b>${s.todayOrders ?? '—'}</b><small data-t="todayOrders"></small></div>
       <div class="stat ${s.pending ? 'warn' : ''}"><b>${s.pending ?? '—'}</b><small data-t="pending"></small></div>
@@ -168,8 +171,7 @@ export async function render(host){
     ${S.phase === 'ready' && !list.length ? empty('scroll', { key: view.mode === 'live' ? 'noLive' : 'noOrders' }) : ''}
     <div class="orders" id="olist" data-tour="orders.board">${list.map(row).join('')}</div>
     <div class="btn-row compact">${view.mode === 'history' && all.length > list.length ? btn({ id: 'oMore', icon: 'chevron-down', label: `${t('more')} · ${all.length - list.length}`, tour: 'orders.more' }) : ''}
-      ${btn({ id: 'oAgg', icon: 'plus', key: 'aggTitle', tour: 'orders.platformOrder' })}
-      ${list.length ? btn({ id: 'oCsv', icon: 'download', key: 'exportCsv', tour: 'orders.csv' }) : ''}</div>`;
+      ${list.length ? btn({ id: 'oCsv', variant: 'ghost', icon: 'download', key: 'exportCsv', tour: 'orders.csv' }) : ''}</div>`;
   S.fresh.clear();
   loadJobs();
   host.onclick = async e => {

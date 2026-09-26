@@ -1,8 +1,8 @@
-// "More" -- everything that is not the day's service, as one list of rows,
-// each a sheet: marketing (promo codes, posts, social), analytics, customers,
-// and the settings a venue sets once (the venue itself, hours, delivery,
-// payments, notifications, order channels, brand, features, API keys, health,
-// backup). The list is the map; nothing is buried under a fold.
+// "More" (the tab reads "Lokali", the venue) -- everything that is not the
+// day's service, as grouped rows a thumb scans and a search finds, each a
+// sheet: messages, the room, marketing, the numbers, lessons, and the
+// settings a venue sets once. The list is the map; nothing is buried under a
+// fold. On a desktop the same map is the sidebar (app.js mountSideMap).
 
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, busy, confirm, switchEl, store, day, ago, clock, hydrate } from '/admin/core.js';
 import { retranslate, lang, LANGS } from '/admin/i18n.js';
@@ -10,18 +10,28 @@ import { loadVenue, loadStaff, rerender } from '/admin/app.js';
 import { openCard, cardLine } from '/admin/customers.js';
 import { ui, k, btn, iconBtn, field, input, select, check, pill, pillBtn, empty, loading, rowBtn, rowDiv, chips, press } from '/admin/parts.js';
 import { openMcp as openMcpSheet } from '/admin/mcp.js';
+import { filter, count } from '/admin/more-find.js';
 
-/// The rows, in groups, with the sheet each opens.
+/// The rows, in groups, with the sheet each opens (HUB-UX-2026-09-26 §3.3:
+/// most used first). Every icon is a name /lib/icons.css draws -- `apron`
+/// and `shield-check` were not, and drew a solid square.
 const GROUPS = [
-  ['learnGroup', [['learn', 'player-play', openLearn]]],
   ['inbox', [['inbox', 'message-2', openInbox]]],
-  ['roomGroup', [['bookings', 'tools-kitchen-2', openBookings], ['floorPlan', 'category', openFloorPlan]]],
+  ['roomGroup', [['bookings', 'tools-kitchen-2', openBookings], ['floorPlan', 'category', openFloorPlan], ['tableQr', 'photo', openTableQr]]],
   ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['campaigns', 'brand-whatsapp', openCampaigns], ['social', 'sparkles', openSocial]]],
-  ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers], ['staff', 'apron', openStaff], ['exceptions', 'alert-triangle', openExceptions]]],
-  ['settings',  [['integrations', 'check', openIntegrations], ['ebills', 'receipt', openEbills], ['printer', 'receipt', openPrinter], ['tableQr', 'receipt', openTableQr], ['preview', 'eye', openPreview], ['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['deliveryArea', 'map-pin', openZones], ['payments', 'coin-hole', openPayments],
-                 ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['mcp', 'cube-3d-sphere', openMcp], ['cloud', 'cloud-upload', openCloud], ['branding', 'fan', openBranding],
-                 ['features', 'tools-kitchen-2', openFeatures], ['assistant', 'sparkles', openAssistant], ['apiKeys', 'key', openKeys], ['activation', 'check', openActivation], ['health', 'cube-3d-sphere', openHealth], ['dpa', 'shield-check', openDpa]]],
+  ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers], ['staff', 'user-plus', openStaff], ['exceptions', 'alert-triangle', openExceptions]]],
+  ['learnGroup', [['learn', 'player-play', openLearn]]],
+  ['settingsVenue', [['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['deliveryArea', 'map-pin', openZones], ['payments', 'coin-hole', openPayments],
+                     ['branding', 'fan', openBranding], ['features', 'tools-kitchen-2', openFeatures], ['preview', 'eye', openPreview]]],
+  ['settingsLinks', [['integrations', 'plug-connected-x', openIntegrations], ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['ebills', 'receipt', openEbills],
+                     ['printer', 'receipt', openPrinter], ['assistant', 'sparkles', openAssistant], ['mcp', 'cube-3d-sphere', openMcp], ['apiKeys', 'key', openKeys], ['cloud', 'cloud-upload', openCloud]]],
+  ['settingsData', [['activation', 'check', openActivation], ['health', 'radar-2', openHealth], ['dpa', 'circle-check', openDpa]]],
 ];
+/// The map without its handlers, for the desktop sidebar (app.js).
+export const SECTIONS = GROUPS.map(([g, rows]) => [g, rows.map(([key, ic]) => [key, ic])]);
+/// Open the sheet behind a row, by its key (the sidebar and the rows both use it).
+export function openSection(key){ for (const [, rows] of GROUPS) for (const [key2, , fn] of rows) if (key2 === key) return fn(); }
+const view = { q: '' };
 /// The analytics windows the hub answers, in days.
 const WINDOWS = [7, 30];
 /// The hours grid: minutes of a day, and the minute steps a venue picks from.
@@ -35,13 +45,24 @@ const promoStatus = p => p.status || (!p.active ? 'inactive' : p.maxUses && (p.u
 /// A photograph's max side for the logo upload.
 const LOGO_MAX_PX = 800;
 
+/// The groups as inset lists of rows (icon, name, one line, chevron), or the
+/// ones the search leaves.
+function groupsMarkup(){
+  const shown = filter(GROUPS, view.q, t);
+  if (!count(shown)) return empty('search-off', { key: 'noSetting' });
+  return shown.map(([g, rows]) => `<section class="group"><p class="eyebrow" data-t="${g}"></p>${ui.list(rows.map(([key, ic]) =>
+    rowBtn({ cls: 'setting', leading: `<span class="tile-ic">${icon(ic)}</span>`, title: k(key), sub: `<span data-t="${key}Sub"></span>`,
+      trailing: icon('chevron-right', 'chev'), data: { open: key }, tour: 'more.tile.' + key })), { inset: true, label: t(g) })}</section>`).join('');
+}
+
 export async function render(host){
-  host.innerHTML = `<div class="screen-h"><div><p class="eyebrow" data-t="tabMore"></p><h1>${esc(S.venue?.name || '')}</h1></div></div>
-    <p class="screen-hint" data-t="moreHint"></p>
-    ${GROUPS.map(([g, rows]) => `<section class="group"><p class="eyebrow" data-t="${g}"></p><div class="tiles">
-      ${rows.map(([key, ic]) => rowBtn({ cls: 'tile', leading: `<span class="tile-ic">${icon(ic)}</span>`, title: k(key), sub: `<span data-t="${key}Sub"></span>`, data: { open: key }, tour: 'more.tile.' + key })).join('')}</div></section>`).join('')}
+  host.innerHTML = `<div class="screen-h"><div><h1 data-t="tabMore"></h1><p class="screen-sub">${esc(S.venue?.name || '')}</p></div></div>
+    <div class="srch">${icon('search')}${ui.inputRow({ id: 'moreQ', type: 'search', label: k('findSetting'), placeholder: k('findSetting'), attrs: { value: view.q } })}</div>
+    <div class="more-groups" id="moreGroups">${groupsMarkup()}</div>
     <p class="hint mono">${esc(store.loc)} · ${esc(S.venue?.slug || '')}</p>`;
-  host.onclick = e => { const r = e.target.closest('[data-open]'); if (!r) return; for (const [, rows] of GROUPS) for (const [key, , fn] of rows) if (key === r.dataset.open) fn(); };
+  const q = $('#moreQ', host);
+  q.oninput = () => { view.q = q.value; const g = $('#moreGroups', host); g.innerHTML = groupsMarkup(); retranslate(g); };
+  host.onclick = e => { const r = e.target.closest('[data-open]'); if (r) openSection(r.dataset.open); };
 }
 
 const head = (eyebrow, title) => `<p class="eyebrow" data-t="${eyebrow}"></p><h2 data-t="${title}"></h2>`;

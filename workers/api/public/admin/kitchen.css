@@ -26,3 +26,18 @@
 .kds-stop{margin-top:var(--space-6)}
 .kds-dish.off .ui-row-title{text-decoration:line-through}
 .kds-dish .ui-btn{min-height:var(--tap-lg)}
+
+/* 2026-09-26 W-UX: THE STOP-LIST IS QUIET UNTIL A DISH IS OFF. A hundred and
+   sixty-five red "Hiqe (86)" buttons made the list shout and the one dish
+   that WAS off sale vanish among them. Taking a dish off is a real act and
+   keeps the danger word; it wears the quiet secondary look until pressed.
+   A dish that is off sits on a warm ground and its green "Ktheje" stands out. */
+.kds-dish .ui-btn--danger{background:color-mix(in oklch,var(--ui-fg) 6%,var(--ui-surface));color:var(--ui-danger-ink);border-color:var(--ui-hairline);box-shadow:none}
+.kds-dish .ui-btn--danger:active{background:var(--color-danger);color:var(--ui-on-danger)}
+@media (hover:hover) and (pointer:fine){.kds-dish .ui-btn--danger:hover{background:color-mix(in oklch,var(--color-danger) 12%,var(--ui-surface))}}
+.kds-dish.off{background:color-mix(in oklch,var(--color-warning) 10%,var(--ui-surface))}
+.kds-dish.off .ui-row-title{text-decoration-thickness:2px;color:var(--ui-fg-muted)}
+.kds-dish .ui-btn{min-height:var(--tap);padding-inline:var(--space-4)}
+/* the ticket's late state: a plain red top edge, no halo (an accent glow is
+   decoration; the width of the edge is the signal) */
+.kds-age-late{box-shadow:none}

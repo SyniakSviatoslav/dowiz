@@ -13,6 +13,14 @@ import { ui, btn, field, chips, choice, press, loading } from '/admin/parts.js';
 import { safeGet, safeSet } from '/store/storage.js';
 import { principalOf, tabsFor, ordersPath } from '/admin/kitchen-logic.js';
 import '/admin/kitchen-i18n.js';
+import '/admin/ux-i18n.js';
+import * as Theme from '/admin/theme.js';
+
+// THE PERSON'S LIGHT, before the first paint: auto (the phone decides), light
+// or dark, remembered on this device (admin/theme.js; the profile sheet sets it).
+Theme.apply(document, Theme.stored(k => localStorage.getItem(k)));
+/// The icon each choice wears in the profile sheet.
+const THEME_ICON = { auto: 'sun-moon', light: 'sun', dark: 'moon' };
 
 /// The tabs, their icons, their words, their modules. A member of staff sees
 /// only the ones their capabilities open (`kitchen-logic.js` tabsFor).
@@ -88,12 +96,37 @@ function mountNav(){
     <span class="tab-ic">${icon(ic)}${id === mine[0][0] ? `<span class="tab-n" id="navLiveN" hidden>0</span>` : ''}</span><span data-t="${key}"></span></button>`).join('');
   nav.onclick = e => { const b = e.target.closest('[data-tab]'); if (b) show(b.dataset.tab); };
   retranslate(nav);
+  if (!me().staff) mountSideMap(nav);
 }
-function light(id){ for (const b of $$('#nav [data-tab]')) b.setAttribute('aria-current', b.dataset.tab === id ? 'page' : 'false'); }
+// THE DESKTOP SIDEBAR IS THE WHOLE MAP (design doc HUB-UX-2026-09-26 §3.2):
+// under the tabs, every More destination by group, one click to its sheet,
+// which opens as a side panel beside the content. Drawn only from 1024px
+// (admin.css); on a phone the More screen is the map.
+async function mountSideMap(nav){
+  let m; try { m = await import('/admin/more.js'); } catch { return; }
+  if (!m.SECTIONS || $('.side-map', nav)) return;
+  const map = document.createElement('div');
+  map.className = 'side-map'; map.setAttribute('role', 'group'); map.setAttribute('aria-label', t('sideMap'));
+  map.innerHTML = m.SECTIONS.map(([g, rows]) => `<p class="side-h" data-t="${g}"></p>` + rows.map(([key, ic]) =>
+    btn({ variant: 'ghost', icon: ic, key, cls: 'tab side', data: { open: key } })).join('')).join('');
+  map.onclick = e => {
+    const b = e.target.closest('[data-open]'); if (!b) return;
+    for (const x of $$('[data-open]', map)) x.setAttribute('aria-current', x === b ? 'true' : 'false');
+    m.openSection(b.dataset.open);
+  };
+  nav.appendChild(map); retranslate(map);
+}
+function light(id){
+  for (const b of $$('#nav [data-tab]')) b.setAttribute('aria-current', b.dataset.tab === id ? 'page' : 'false');
+  for (const b of $$('#nav [data-open]')) b.setAttribute('aria-current', 'false');
+}
 export async function show(id, arg){
   S.tab = id; light(id); closeSheet();
   const m = await module(id);
   const swap = async () => {
+    // The open tab's name on the host: admin.css scopes a few rules to a
+    // screen whose markup another lane owns (menu, stock) by this attribute.
+    $('#app').dataset.tab = id;
     $('#app').innerHTML = `<div class="screen" id="screen"></div>`;
     await m.render($('#screen'), arg);
     retranslate($('#app')); hydrate($('#app'));
@@ -172,14 +205,22 @@ function openState(){
 }
 $('#vstate').onclick = openState;
 
-/// Language and reading currency, from the header.
+/// The person: language, reading currency, appearance, and the way out (the
+/// header's sign-out is hidden on a phone, so it is offered here too).
 function openPrefs(){
-  sheet(`<p class="eyebrow" data-t="language"></p>
+  const theme = Theme.stored(k => localStorage.getItem(k));
+  sheet(`<h2 data-t="profileTitle"></h2>
+    <p class="eyebrow" data-t="language"></p>
     ${chips({ id: 'langPick', values: LANGS.map(l => ({ value: l, label: l.toUpperCase() })), value: lang, attr: 'l', labelKey: 'language', tour: 'prefs.lang' })}
     <p class="eyebrow mt-3">${esc(baseCurrency())} → ${esc(displayCurrency())}</p>
-    ${chips({ values: [baseCurrency(), ...CURRENCIES.filter(c => c !== baseCurrency())].map(c => ({ value: c, label: c })), value: displayCurrency(), attr: 'c', tour: 'prefs.currency' })}`, { name: 'prefs' });
+    ${chips({ values: [baseCurrency(), ...CURRENCIES.filter(c => c !== baseCurrency())].map(c => ({ value: c, label: c })), value: displayCurrency(), attr: 'c', tour: 'prefs.currency' })}
+    <p class="eyebrow mt-3" data-t="appearance"></p>
+    ${chips({ id: 'themePick', values: Theme.THEMES.map(v => ({ value: v, key: 'theme_' + v, icon: THEME_ICON[v] })), value: theme, attr: 'theme', labelKey: 'appearance' })}
+    <div class="btn-row prefs-out">${btn({ id: 'prefsOut', variant: 'ghost', icon: 'logout', key: 'signOut' })}</div>`, { name: 'prefs' });
   for (const b of $$('[data-l]', $('#sheetIn'))) b.onclick = async () => { setLang(b.dataset.l); mountNav(); paintVenue(); await rerender(); press($$('[data-l]', $('#sheetIn')), b); };
   for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => { await setCurrency(baseCurrency(), b.dataset.c); press($$('[data-c]', $('#sheetIn')), b); await rerender(); };
+  for (const b of $$('[data-theme]', $('#sheetIn'))) b.onclick = () => { Theme.choose(document, b.dataset.theme, (k, v) => localStorage.setItem(k, v)); press($$('[data-theme]', $('#sheetIn')), b); };
+  $('#prefsOut').onclick = () => $('#logout').click();
 }
 $('#prefs').onclick = openPrefs;
 
