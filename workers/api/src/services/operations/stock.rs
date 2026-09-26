@@ -8,8 +8,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::auth::Cap;
-use crate::owner::owner_and_venue;
 use dowiz_hub::stock::{StockEvent, WasteReason};
 
 //
@@ -31,10 +29,11 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
     // Two images, and they do not depend on each other either.
-    let (_, _loc, (cat, log)) = match crate::owner::owner_beside(
+    let (_, _loc, (cat, log)) = match crate::services::identity::staff::guard::staff_beside(
         &req,
         &ctx,
         &place,
+        &crate::services::identity::staff::guard::SHELF,
         async {
             let (c, s) = futures_util::future::join(
                 crate::hubstore::load_catalog(&place),
@@ -152,7 +151,7 @@ fn movement(kind: &str, body: StockMoveIn, by: &str, now_ms: i64) -> std::result
 /// person id is the signer. A delivery received and a count stay the owner's.
 async fn signer_for(req: &Request, ctx: &RouteContext<crate::Req>, kind: &str) -> std::result::Result<(String, String), Response> {
     if kind != "wasted" {
-        return owner_and_venue(req, ctx).await;
+        return crate::services::identity::staff::guard::staff_venue(req, ctx, &crate::services::identity::staff::guard::SHELF).await;
     }
     waste_signer(req, ctx).await
 }
@@ -168,7 +167,7 @@ async fn waste_signer(req: &Request, ctx: &RouteContext<crate::Req>) -> std::res
             .map_err(|e| Response::error(format!("which venue? {e}"), 400).unwrap())?
             .venue,
     };
-    let (by, _caps) = crate::courier::staff_at(req, ctx, &venue, Cap::OpenTill).await?;
+    let (by, _caps) = crate::courier::staff_any_at(req, ctx, &venue, &crate::services::identity::staff::guard::BIN).await?;
     Ok((by, venue))
 }
 

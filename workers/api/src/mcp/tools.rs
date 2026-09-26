@@ -102,10 +102,21 @@ pub const STAFF_TOOLS: &[Tool] = &[
         "/api/staff/orders/{id}/pay", true, Some(Cap::TakePayment)),
     get("tips", "Tips taken today (or between from_ms and to_ms), per person.",
         r#"{"type":"object","properties":{"from_ms":{"type":"integer"},"to_ms":{"type":"integer"}}}"#, "/api/staff/till/tips", Some(Cap::OpenTill)),
-    post("order_action", "Move an order through the kitchen: confirm, preparing, ready.",
-        r#"{"type":"object","required":["id","action"],"properties":{"id":{"type":"string"},"action":{"type":"string","enum":["confirm","preparing","ready"]}}}"#, "/api/owner/orders/{id}/action", true, Some(Cap::Advance)),
+    get("kitchen_board", "The pass: every open ticket (new, preparing, ready) with its dishes, station, table and age. No customer, no prices.",
+        NO_ARGS, "/api/staff/kitchen", Some(Cap::Advance)),
+    post("order_action", "Move an order through the kitchen: confirm, preparing, ready, collected (handed over); or reject / cancel with the reason the customer reads.",
+        r#"{"type":"object","required":["id","action"],"properties":{"id":{"type":"string"},"action":{"type":"string","enum":["confirm","preparing","ready","collected","reject","cancel"]},"reason":{"type":"string"}}}"#, "/api/owner/orders/{id}/action", true, Some(Cap::Advance)),
     post("kitchen_ack", "Record that the kitchen saw an order.",
         r#"{"type":"object","required":["id"],"properties":{"id":{"type":"string"}}}"#, "/api/staff/orders/{id}/kitchen-ack", true, Some(Cap::Advance)),
+    // THE KITCHEN'S MENU AND SHELF (operator Q8, 2026-09-26): the owner's own
+    // routes, which admit a member of staff holding `catalog` / `stock`.
+    get("dishes", "Every dish as stored, with its recipe (ingredients per portion), cost and availability.", NO_ARGS, "/api/owner/products", Some(Cap::Catalog)),
+    post("set_dish", "Take a dish off sale (86) or put it back, with a note customers see; change its price or cooking time.",
+        r#"{"type":"object","required":["id"],"properties":{"id":{"type":"string"},"available":{"type":"boolean"},"unavailable_note":{"type":"string"},"price":{"type":"integer"},"cooking_min":{"type":"integer"}}}"#, "/api/owner/products/{id}", true, Some(Cap::Catalog)),
+    get("stock", "Supplies the kitchen tracks, with available and reserved quantities and low marks.", NO_ARGS, "/api/owner/stock", Some(Cap::Stock)),
+    post("stock_move", "Record a movement: received (qty), wasted (qty and reason: spoiled, dropped, unsold, returned, staff_meal) or stocktake (observed).",
+        r#"{"type":"object","required":["kind","item"],"properties":{"kind":{"type":"string","enum":["received","wasted","stocktake"]},"item":{"type":"string"},"qty":{"type":"integer"},"observed":{"type":"integer"},"reason":{"type":"string","enum":["spoiled","dropped","unsold","returned","staff_meal"]}}}"#, "/api/owner/stock/{kind}", false, Some(Cap::Stock)),
+    get("waste_report", "Everything written off, by reason and by who signed it.", NO_ARGS, "/api/owner/stock/waste", Some(Cap::Stock)),
 ];
 
 /// The courier's own routes. Every one names the courier by the TOKEN, so a

@@ -105,9 +105,9 @@ steps:
       en: "The role"
       uk: "Роль"
     caption:
-      sq: "Kamarier: porosi dhe pagesa. Menaxher: edhe arka dhe anulimet. Kuzhina: vetëm porositë."
-      en: "Waiter: orders and payments. Manager: also the till and voids. Kitchen: orders only."
-      uk: "Офіціант: замовлення й оплата. Менеджер: ще й каса та анулювання. Кухня: лише замовлення."
+      sq: "Kamarier: porosi dhe pagesa. Menaxher: edhe arka dhe anulimet. Kuzhina: porositë, menyja dhe magazina."
+      en: "Waiter: orders and payments. Manager: also the till and voids. Kitchen: orders, the menu and the stock."
+      uk: "Офіціант: замовлення й оплата. Менеджер: ще й каса та анулювання. Кухня: замовлення, меню і склад."
   - key: 7
     anchor: staff.inviteSend
     pending: no

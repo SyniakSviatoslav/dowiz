@@ -7,14 +7,13 @@
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::owner_and_venue;
 
 /// `POST /api/owner/menu/import?apply=true&retire=true` — body is the CSV.
 ///
 /// PREVIEW BY DEFAULT. An import that applies on the first click is one the
 /// owner cannot inspect first, and a menu is the thing customers buy from.
 pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let loc = match owner_and_venue(&req, &ctx).await {
+    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

@@ -21,7 +21,7 @@ use crate::owner::owner_and_venue;
 
 /// `POST /api/owner/products/:id/image` — body is the image.
 pub async fn set_product_image(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let loc = match owner_and_venue(&req, &ctx).await {
+    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -164,7 +164,7 @@ pub async fn clear_venue_logo(req: Request, ctx: RouteContext<crate::Req>) -> Re
 
 /// `POST /api/owner/products/:id/image/clear`
 pub async fn clear_product_image(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let loc = match owner_and_venue(&req, &ctx).await {
+    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

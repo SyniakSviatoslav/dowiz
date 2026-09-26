@@ -324,6 +324,8 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/staff/orders/:id/amend", services::orders::room::handlers::amend)
         .post_async("/api/staff/orders/:id/pay", services::orders::room::pay::pay)
         .post_async("/api/staff/orders/:id/kitchen-ack", services::orders::kitchen_ack::kitchen_ack)
+        .get_async("/api/staff/kitchen", services::orders::kitchen_ack::board::kitchen_orders)
+        .post_async("/api/staff/assist", services::engagement::assist::kitchen::kitchen_assist)
         .post_async("/api/print/poll", services::orders::print::poll)
         .get_async("/api/print/job/:token", services::orders::print::job)
         .delete_async("/api/print/job/:token", services::orders::print::ack)

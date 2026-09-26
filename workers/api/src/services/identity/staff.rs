@@ -17,6 +17,9 @@ use crate::auth::{self, verify_password_constant_work, Claims};
 use crate::identity_store as ids;
 use dowiz_hub::caps::Preset;
 
+/// The owner's catalogue and stock routes, opened to staff holding the word.
+pub(crate) mod guard;
+
 /// Which venue the HOST names, or `None` on the apex and `*.workers.dev`.
 ///
 /// The courier's rule and the owner's (`accounts::venue_for_login`): a venue's

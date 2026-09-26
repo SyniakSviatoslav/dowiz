@@ -93,10 +93,10 @@ def match_brace(s, b):
         i += 1
     return i
 
-SOURCE = re.compile(r'principal_at\s*\(|Place::of_any\s*\(|\bauthenticate\s*\(|authenticate_token\s*\(|staff_at\s*\(')
+SOURCE = re.compile(r'principal_at\s*\(|Place::of_any\s*\(|\bauthenticate\s*\(|authenticate_token\s*\(|staff_at\s*\(|staff_any_at\s*\(|staff_venue\s*\(|staff_beside\s*\(')
 PARAM = re.compile(r'\bparam\(\s*"(id|key|token|order_id|thread_id)"\s*\)')
 PERSON = re.compile(r'\b(?:body|b)\.(wallet|user_id|user)\b')
-WHOLE = re.compile(r'\b(?:side_of|side_at|thread_party|owner_at|owner_and_venue|staff_at|courier_at|room_admits)\s*\(')
+WHOLE = re.compile(r'\b(?:side_of|side_at|thread_party|owner_at|owner_and_venue|staff_at|staff_any_at|staff_venue|staff_beside|courier_at|room_admits)\s*\(')
 PERSON_BINDER = re.compile(r'\b(?:wallet_who|payer|booking_user)\s*\(')
 OWNER_ONLY = re.compile(r'Principal::Owner\s*\{[^}]*\}\s*\)\s*=>\s*\{\s*\}\s*,?\s*Ok\(_\)\s*=>\s*return\b')
 ARM = re.compile(r'Principal::(Customer|Courier|Staff|Owner)\b')

@@ -8,7 +8,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::owner_and_venue;
 
 /// One supply as the console sends it -- and as the bulk import builds it
 /// (`services/catalogue/import/bulk.rs`), so both go through [`check`] and
@@ -59,7 +58,7 @@ pub async fn set_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let loc = match owner_and_venue(&req, &ctx).await {
+    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -185,7 +184,7 @@ pub async fn retire_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> R
     }
     let _body: In = req.json().await.unwrap_or(In { _location_id: None });
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing supply id", 400) };
-    let loc = match owner_and_venue(&req, &ctx).await {
+    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

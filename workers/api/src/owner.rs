@@ -787,7 +787,7 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
     // see `Place::of_authorised`.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
+    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
         return Ok(r);
     }
     if let Some(p) = body.price {
@@ -1126,7 +1126,7 @@ pub async fn write_translations(mut req: Request, ctx: RouteContext<crate::Req>)
     if body.entries.len() > 500 {
         return Response::error("at most 500 entries per call", 400);
     }
-    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
+    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
         return Ok(r);
     }
     // Only ids the catalogue actually has: a translation of a dish that does

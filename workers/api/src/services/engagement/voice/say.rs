@@ -38,6 +38,13 @@ const LINES: &[(&str, [&str; 3])] = &[
     ("cap_payment", ["Roli juaj nuk merr pagesa", "Your role does not take payments", "Ваша роль не приймає оплату"]),
     ("shift_owner", ["Turnet janë të korrierëve", "Shifts are the couriers'", "Зміни — це для кур'єрів"]),
     ("bad_draft", ["Raundi në telefon nuk lexohet", "The round on this phone cannot be read", "Раунд на телефоні не читається"]),
+    // The kitchen's words (voice/kitchen.rs), 2026-09-26.
+    ("cap_kitchen", ["Roli juaj nuk e bën këtë", "Your role does not do that", "Ваша роль цього не робить"]),
+    ("how_much", ["Sa?", "How much?", "Скільки?"]),
+    ("which_supply", ["Cili përbërës?", "Which ingredient?", "Який інгредієнт?"]),
+    ("no_supply", ["S'ka përbërës me këtë emër", "No ingredient by that name", "Немає інгредієнта з такою назвою"]),
+    ("stock_unit", ["Ky përbërës numërohet me njësi tjetër", "That ingredient is counted in another unit", "Цей інгредієнт рахують в іншій одиниці"]),
+    ("waste_reason", ["Pse hidhet? I prishur, i rënë, i pashitur, i kthyer apo për stafin", "Why? Spoiled, dropped, unsold, returned or staff meal", "Чому? Зіпсувалось, впало, непродане, повернули чи для персоналу"]),
 ];
 
 /// The line for a refusal key. An unknown key reads as itself.
@@ -102,6 +109,34 @@ pub fn venue(lang: &str, state: &str) -> String {
         0 => format!("lokali: {sq}"),
         2 => format!("заклад: {uk}"),
         _ => format!("the venue: {en}"),
+    }
+}
+
+/// "2000 g Salmon" -- a movement's quantity in the supply's own unit.
+fn amount(qty: i64, unit: &str, what: &str) -> String {
+    format!("{qty} {unit} {what}")
+}
+pub fn receive(lang: &str, qty: i64, unit: &str, what: &str) -> String {
+    let a = amount(qty, unit, what);
+    match pick(lang) {
+        0 => format!("erdhi në magazinë: {a}"),
+        2 => format!("прихід на склад: {a}"),
+        _ => format!("received onto the shelf: {a}"),
+    }
+}
+pub fn waste(lang: &str, qty: i64, unit: &str, what: &str, reason: &str) -> String {
+    let a = amount(qty, unit, what);
+    let [sq, en, uk] = match reason {
+        "spoiled" => ["i prishur", "spoiled", "зіпсувалось"],
+        "dropped" => ["i rënë", "dropped", "впало"],
+        "unsold" => ["i pashitur", "unsold", "непродане"],
+        "returned" => ["i kthyer", "returned", "повернули"],
+        _ => ["për stafin", "staff meal", "для персоналу"],
+    };
+    match pick(lang) {
+        0 => format!("hiq nga magazina: {a} ({sq})"),
+        2 => format!("списати: {a} ({uk})"),
+        _ => format!("write off: {a} ({en})"),
     }
 }
 

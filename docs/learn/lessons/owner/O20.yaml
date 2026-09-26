@@ -1,0 +1,243 @@
+# Lesson O20 (owner console, kitchen login too). Lane W-KITCHEN hand-back, 2026-09-26.
+# The ONE source for the in-app tour and the recorder (tools/learn/build-lessons.mjs).
+id: O20
+role: owner
+module: kitchen
+order: 38
+covers: [kitchen]
+title:
+  sq: "Kuzhina: biletat"
+  en: "The kitchen board"
+  uk: "Кухня: чеки"
+goal:
+  sq: "Shihni, pranoni dhe çoni gati një porosi; hiqni një pjatë nga shitja."
+  en: "See, accept and finish an order; take a dish off sale."
+  uk: "Побачити, прийняти й віддати замовлення; зняти страву з продажу."
+steps:
+  - key: 1
+    anchor: nav.kitchen
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.kitchen"]'
+    title:
+      sq: "Kuzhina"
+      en: "Kitchen"
+      uk: "Кухня"
+    caption:
+      sq: "Skeda e kuzhinës, në çdo telefon ose tablet."
+      en: "The kitchen tab, on any phone or tablet."
+      uk: "Вкладка кухні, на будь-якому телефоні чи планшеті."
+  - key: 2
+    anchor: kitchen.board
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="kitchen.board"]'
+    title:
+      sq: "Tri kolona"
+      en: "Three columns"
+      uk: "Три колонки"
+    caption:
+      sq: "Të reja, në përgatitje, gati. Më e vjetra majtas."
+      en: "New, preparing, ready. The oldest first."
+      uk: "Нові, готуються, готові. Найстаріші першими."
+  - key: 3
+    anchor: kitchen.station
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="kitchen.station"]'
+    title:
+      sq: "Stacioni"
+      en: "Station"
+      uk: "Станція"
+    caption:
+      sq: "Sushi, kuzhina ose bar: shihni vetëm pjatat tuaja."
+      en: "Sushi, kitchen or bar: see only your dishes."
+      uk: "Суші, кухня чи бар: бачите лише свої страви."
+  - key: 4
+    anchor: kitchen.seen
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="kitchen.seen"]'
+    title:
+      sq: "E pashë"
+      en: "Seen"
+      uk: "Побачено"
+    caption:
+      sq: "Prekni kokën e biletës kur e shihni."
+      en: "Tap the ticket head when you have seen it."
+      uk: "Торкніться шапки чека, коли побачили."
+  - key: 5
+    anchor: kitchen.bump
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="kitchen.bump"]'
+    title:
+      sq: "Butoni i madh"
+      en: "The big button"
+      uk: "Велика кнопка"
+    caption:
+      sq: "Prano, fillo, gati, u dorëzua: një prekje çdo herë."
+      en: "Accept, start, ready, handed over: one tap each."
+      uk: "Прийняти, почати, готово, видано: один дотик щоразу."
+  - key: 6
+    anchor: kitchen.reject
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="kitchen.reject"]'
+    title:
+      sq: "Refuzo"
+      en: "Reject"
+      uk: "Відхилити"
+    caption:
+      sq: "Kur s'mund ta bëni, refuzoni."
+      en: "When you cannot make it, reject."
+      uk: "Коли не можете приготувати, відхиліть."
+  - key: 7
+    anchor: kitchen.reasonClose
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="kitchen.reasonClose"]'
+    title:
+      sq: "Mbyll"
+      en: "Close"
+      uk: "Закрити"
+    caption:
+      sq: "Pa arsye nuk dërgohet asgjë."
+      en: "Without a reason nothing is sent."
+      uk: "Без причини нічого не надсилається."
+  - key: 8
+    anchor: kitchen.reject
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="kitchen.reject"]'
+    title:
+      sq: "Sërish"
+      en: "Again"
+      uk: "Ще раз"
+    caption:
+      sq: "Hapni sërish refuzimin."
+      en: "Open the refusal again."
+      uk: "Відкрийте відмову ще раз."
+  - key: 9
+    anchor: kitchen.reason
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="kitchen.reason"]'
+      value: "Mbaroi salmoni"
+    title:
+      sq: "Arsyeja"
+      en: "Reason"
+      uk: "Причина"
+    caption:
+      sq: "Klienti e lexon arsyen."
+      en: "The customer reads the reason."
+      uk: "Клієнт читає причину."
+  - key: 10
+    anchor: kitchen.reasonSend
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="kitchen.reasonSend"]'
+    title:
+      sq: "Dërgo"
+      en: "Send"
+      uk: "Надіслати"
+    caption:
+      sq: "Porosia refuzohet me arsyen tuaj."
+      en: "The order is rejected with your reason."
+      uk: "Замовлення відхилено з вашою причиною."
+  - key: 11
+    anchor: kitchen.allday
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="kitchen.allday"]'
+    title:
+      sq: "Gjithë ditën"
+      en: "All day"
+      uk: "Усього зараз"
+    caption:
+      sq: "Sa copë presin ende nga çdo pjatë."
+      en: "How many of each dish are still waiting."
+      uk: "Скільки кожної страви ще чекає."
+  - key: 12
+    anchor: kitchen.stoplist
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="kitchen.stoplist"]'
+    title:
+      sq: "Stop-lista"
+      en: "Stop list"
+      uk: "Стоп-лист"
+    caption:
+      sq: "Çdo pjatë, me një buton për ta hequr ose kthyer."
+      en: "Every dish, with one button to take it off or back on."
+      uk: "Кожна страва з кнопкою зняти чи повернути."
+  - key: 13
+    anchor: kitchen.dishSearch
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="kitchen.dishSearch"]'
+      value: "salmon"
+    title:
+      sq: "Kërko"
+      en: "Search"
+      uk: "Пошук"
+    caption:
+      sq: "Gjeni pjatën me emër."
+      en: "Find the dish by name."
+      uk: "Знайдіть страву за назвою."
+  - key: 14
+    anchor: kitchen.dishOff
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="kitchen.dishOff"]'
+    title:
+      sq: "Hiqe (86)"
+      en: "86 it"
+      uk: "Стоп (86)"
+    caption:
+      sq: "Klientët nuk e shohin më."
+      en: "Customers stop seeing it."
+      uk: "Клієнти її більше не бачать."
+  - key: 15
+    anchor: kitchen.dishOn
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="kitchen.dishOn"]'
+    title:
+      sq: "Ktheje"
+      en: "Back on"
+      uk: "Повернути"
+    caption:
+      sq: "Kur arrin sërish, ktheje në shitje."
+      en: "When it is back, put it on sale again."
+      uk: "Коли знову є, поверніть у продаж."

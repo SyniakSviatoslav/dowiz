@@ -11,7 +11,8 @@
 import { t, lang, api, post, store, toast } from '/admin/core.js';
 import * as ui from '/lib/ui/index.js';
 import { create, speak, supported, tagFor } from '/lib/voice.js';
-import { planOf, needsReason, lineOf } from '/admin/voice-plan.js';
+import { planOf, needsReason, lineOf, assistPath } from '/admin/voice-plan.js';
+import { principalOf } from '/admin/kitchen-logic.js';
 
 /// The header's mic, from the design system. `aria-pressed` says it is listening.
 export const micButton = () => ui.iconButton({ id: 'voiceBtn', icon: 'microphone', ariaLabel: { t: 'voice' }, pressed: false,
@@ -58,7 +59,7 @@ async function heard(res, refresh) {
     // Not answered here: the assistant answers if the venue switched it on,
     // and says so plainly if not.
     toast(t('voiceAsking'));
-    try { const d = await api('/owner/assist', { method: 'POST', body: { question: r.question } }); say(d.answer); }
+    try { const d = await api(assistPath(principalOf(store.t).staff, store.loc), { method: 'POST', body: { question: r.question } }); say(d.answer); }
     catch (e) { toast(String(e.message || e)); }
   }
 }

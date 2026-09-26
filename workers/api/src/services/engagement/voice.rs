@@ -20,6 +20,7 @@
 mod decide;
 mod dish;
 mod grammar;
+mod kitchen;
 mod menu;
 mod room;
 mod say;
@@ -174,12 +175,15 @@ pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         None
     };
 
-    // ── THE WAITER ──
+    // ── THE WAITER, AND THE KITCHEN (`kitchen.rs`: tickets, the stop list, the shelf) ──
     if let Who::Waiter(caps) = speaker {
         if let Some(why) = gate {
             return Response::from_json(&json!({ "understood": false, "say": why, "heard": body.transcript }));
         }
         let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
+        if kitchen::is_kitchen(&caps) {
+            return Response::from_json(&answer(kitchen::hear(&place, &loc, &body.transcript, &lang, caps).await?));
+        }
         let said = grammar::waiter(&body.transcript);
         let mine: Vec<_> = crate::hubstore::orders(&place)
             .await?
@@ -205,8 +209,12 @@ pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     let Who::Hub(speaker) = speaker else { return Response::error("forbidden role", 403) };
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
 
-    // ── THE OWNER'S STOP-LIST AND VENUE STATE ──
+    // ── THE OWNER'S SHELF, SCREENS, STOP-LIST AND VENUE STATE ──
     if speaker == Speaker::Owner && gate.is_none() {
+        if let Some(s) = kitchen::stock_said(&body.transcript) {
+            let rows = match s { kitchen::Said::Receive { .. } | kitchen::Said::Waste { .. } => crate::hubstore::load_catalog(&place).await?.catalog.supplies(), _ => Vec::new() };
+            return Response::from_json(&answer(kitchen::decide(&s, &dowiz_hub::caps::Preset::Owner.caps(), &lang, &kitchen::supplies(&rows))));
+        }
         if let Some(said) = grammar::owner(&body.transcript) {
             let dishes = match said {
                 grammar::Said::DishSale { .. } => menu::load(&place, &lang).await?,
@@ -236,30 +244,7 @@ pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         })
         .collect();
 
-    let resolve = |t: &Target| -> std::result::Result<String, &'static str> {
-        let id = |o: &Value| o.get("id").and_then(Value::as_str).unwrap_or("").to_string();
-        let at = |o: &Value| o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
-        match t {
-            Target::Newest => pool.iter().max_by_key(|o| at(o)).map(id).ok_or("зараз немає замовлень"),
-            Target::Oldest => pool.iter().min_by_key(|o| at(o)).map(id).ok_or("зараз немає замовлень"),
-            Target::Digits(d) => {
-                let hits: Vec<String> = pool.iter().filter(|o| id(o).ends_with(d.as_str())).map(id).collect();
-                match hits.len() {
-                    1 => Ok(hits[0].clone()),
-                    0 => Err("такого номера серед відкритих немає"),
-                    // AMBIGUITY IS REFUSED, not guessed. Two orders ending in
-                    // the same digits is exactly when a guess moves the wrong
-                    // one.
-                    _ => Err("під цей номер підходить кілька — скажіть більше цифр"),
-                }
-            }
-            Target::Unsaid => match pool.len() {
-                1 => Ok(id(&pool[0])),
-                0 => Err("зараз немає замовлень"),
-                _ => Err("яке саме?"),
-            },
-        }
-    };
+    let resolve = |t: &Target| kitchen::resolve(&pool, t);
     let order_verb = |verb: &'static str, target: &Target| -> decide::Out {
         match resolve(target) {
             Err(why) => decide::Out::Refuse(why.to_string()),

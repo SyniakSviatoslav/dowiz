@@ -13,6 +13,9 @@ use worker::*;
 
 use crate::services::orders::mine::of_venue as orders_of;
 
+/// The kitchen's door: its own facts, no customer (operator Q9).
+pub mod kitchen;
+
 
 #[derive(Deserialize)]
 struct AskIn {

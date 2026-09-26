@@ -153,7 +153,7 @@ pub fn totals(rows: &[WasteRow]) -> Value {
 /// `GET /api/owner/stock/waste` — every binned thing, with its signer.
 pub async fn waste_report(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (_, loc, (stock, hub)) = match crate::owner::owner_beside(&req, &ctx, &place, async {
+    let (_, loc, (stock, hub)) = match crate::services::identity::staff::guard::staff_beside(&req, &ctx, &place, &crate::services::identity::staff::guard::SHELF, async {
         let (s, h) = futures_util::future::join(crate::hubstore::load_stock(&place), crate::hubstore::load(&place)).await;
         Ok((s?.stock, h?.hub))
     })

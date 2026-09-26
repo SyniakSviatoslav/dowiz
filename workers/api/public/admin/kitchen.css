@@ -1,0 +1,28 @@
+/* The kitchen board (admin/kitchen.js). Tokens only, so the console's light
+   and dark themes both hold; a pass is often dark, and a cook reads it from a
+   metre away with wet hands: big type, one big button per ticket, no swipes. */
+.kds-stations{margin-bottom:var(--space-3)}
+.kds-board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3);align-items:start;margin:var(--space-3) 0 var(--space-6)}
+@media (max-width:760px){ .kds-board{grid-template-columns:minmax(0,1fr)} }
+.kds-col{display:grid;gap:var(--space-3);min-width:0}
+.kds-colh{display:flex;align-items:center;justify-content:space-between;margin:0;font-size:var(--text-lg)}
+.kds-n{min-width:2em;text-align:center;border-radius:var(--radius-full);background:var(--ui-surface-2);padding:2px 10px;font-variant-numeric:tabular-nums}
+.kds-ticket{display:grid;gap:var(--space-2);padding:var(--space-3);border-radius:var(--radius-lg);background:var(--ui-surface);border:2px solid var(--ui-line);border-top-width:8px}
+.kds-age-ok{border-top-color:var(--color-success)}
+.kds-age-warn{border-top-color:var(--color-warning)}
+.kds-age-late{border-top-color:var(--color-danger);box-shadow:0 0 0 2px color-mix(in oklch,var(--color-danger) 35%,transparent)}
+.kds-head{justify-content:flex-start;min-height:var(--tap-lg);font-size:var(--text-base);font-variant-numeric:tabular-nums;text-align:left;white-space:normal}
+.kds-seen .kds-head{opacity:.8}
+.kds-lines{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.kds-line{font-size:var(--text-xl);line-height:var(--leading-tight)}
+.kds-qty{display:inline-block;min-width:2.2em;font-variant-numeric:tabular-nums}
+.kds-st{font-style:normal;font-size:var(--text-sm);padding:1px 8px;border-radius:var(--radius-full);background:var(--ui-surface-2);color:var(--ui-fg-muted)}
+.kds-note{display:block;font-size:var(--text-sm);color:var(--ui-fg-muted);margin-left:2.2em}
+.kds-onote{margin:0;padding:var(--space-2);border-radius:var(--radius-md);background:color-mix(in oklch,var(--color-warning) 18%,transparent);font-size:var(--text-base)}
+/* THE BUMP: twice the --tap floor, full width, knuckle-sized. */
+.kds-bump{min-height:88px;font-size:var(--text-xl)}
+.kds-stopbtn{min-height:var(--tap)}
+.kds-allday{margin:var(--space-3) 0}
+.kds-stop{margin-top:var(--space-6)}
+.kds-dish.off .ui-row-title{text-decoration:line-through}
+.kds-dish .ui-btn{min-height:var(--tap-lg)}

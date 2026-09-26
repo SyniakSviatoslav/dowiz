@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { planOf, needsReason, lineOf, ORDER_VERBS, STATES } from './voice-plan.js';
+import { planOf, needsReason, lineOf, assistPath, ORDER_VERBS, STATES } from './voice-plan.js';
 
 // The console's words, read as TEXT: i18n.js imports storage by an absolute
 // URL node cannot load.
@@ -57,4 +57,20 @@ test('voice: every word the mic uses is in all three languages', () => {
     assert.notEqual(T.sq[k], T.en[k], k);
     assert.notEqual(T.uk[k], T.en[k], k);
   }
+});
+
+test('voice: the kitchen\'s shelf verbs are the stock route, venue in the query, only the fields it takes', () => {
+  assert.deepEqual(planOf({ verb: 'receive', args: { itemId: 'salmon', qty: 4000 } }, 'v 1'),
+    { path: '/owner/stock/received?location_id=v%201', body: { item: 'salmon', qty: 4000 } });
+  assert.deepEqual(planOf({ verb: 'waste', args: { itemId: 'soy', qty: 200, reason: 'spoiled' } }, 'v1'),
+    { path: '/owner/stock/wasted?location_id=v1', body: { item: 'soy', qty: 200, reason: 'spoiled' } });
+  for (const d of [{ verb: 'receive', args: { itemId: 'x' } }, { verb: 'receive', args: { itemId: 'x', qty: 1.5 } },
+    { verb: 'waste', args: { itemId: 'x', qty: 1 } }, { verb: 'waste', args: { qty: 1, reason: 'spoiled' } }]) {
+    assert.equal(planOf(d, 'v1'), null, JSON.stringify(d));
+  }
+});
+
+test('voice: a question from the kitchen goes to the kitchen\'s assistant, the owner\'s to the owner\'s', () => {
+  assert.equal(assistPath(true, 'v 1'), '/staff/assist?location_id=v%201');
+  assert.equal(assistPath(false, 'v1'), '/owner/assist');
 });

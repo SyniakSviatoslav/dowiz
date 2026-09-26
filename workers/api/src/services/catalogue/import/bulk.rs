@@ -16,7 +16,6 @@ use dowiz_hub::import::recipes::{self, CostScale, DraftRecipe, DraftSupply, Opts
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::owner_and_venue;
 use crate::recipe::apply::{set_bom, Typed};
 use crate::recipe::BomLineIn;
 use crate::services::operations::supplies::{check, record, SupplyIn};
@@ -42,7 +41,7 @@ pub(crate) enum Kind {
 }
 
 async fn bulk(mut req: Request, ctx: RouteContext<crate::Req>, kind: Kind) -> Result<Response> {
-    let loc = match owner_and_venue(&req, &ctx).await {
+    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -164,7 +163,7 @@ fn supplies_of(cat: &Catalog) -> (Vec<DraftSupply>, Vec<(String, String)>) {
 pub async fn owner_products(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (_, _loc, cat) =
-        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load_catalog(&place)).await {
+        match crate::services::identity::staff::guard::staff_beside(&req, &ctx, &place, &crate::services::identity::staff::guard::MENU, crate::hubstore::load_catalog(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };

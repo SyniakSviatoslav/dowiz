@@ -11,7 +11,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::owner_at;
 use crate::services::catalogue::import::bump_menu_version;
 
 /// Ids are slugs of the name, like the importer's; a clash gets a numeric tail.
@@ -64,7 +63,7 @@ pub async fn create_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     // See `Place::of_authorised`: these differ for an owner of two venues, and
     // the write used to land in the other one.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
+    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
         return Ok(r);
     }
     let name = body.name.trim().to_string();
@@ -134,7 +133,7 @@ pub async fn delete_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     // See `Place::of_authorised`: these differ for an owner of two venues, and
     // the write used to land in the other one.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
+    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
         return Ok(r);
     }
     let removed = crate::hubstore::with_catalog(&place, move |cat| {
@@ -172,7 +171,7 @@ pub async fn set_category(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
     // See `Place::of_authorised`: these differ for an owner of two venues, and
     // the write used to land in the other one.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
+    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
         return Ok(r);
     }
     let name = body.name.trim().to_string();
@@ -220,7 +219,7 @@ pub async fn delete_category(mut req: Request, ctx: RouteContext<crate::Req>) ->
     // See `Place::of_authorised`: these differ for an owner of two venues, and
     // the write used to land in the other one.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
+    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
         return Ok(r);
     }
     let out = crate::hubstore::with_catalog(&place, move |cat| {
@@ -269,7 +268,7 @@ mod tests {
 /// which is right for a customer and wrong for the owner about to put the
 /// first dish into it.
 pub async fn list_categories(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
+    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

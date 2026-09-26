@@ -11,10 +11,14 @@ import { $, $$, esc, icon, t, lang, LANGS, setLang, retranslate, store, S, api, 
          toast, sheet, closeSheet, bindSheetChrome, hydrate, setCurrency, displayCurrency, CURRENCIES, baseCurrency, POLL_MS, POLL_IDLE_MS, confirm, switchEl } from '/admin/core.js';
 import { ui, btn, field, chips, choice, press, loading } from '/admin/parts.js';
 import { safeGet, safeSet } from '/store/storage.js';
+import { principalOf, tabsFor, ordersPath } from '/admin/kitchen-logic.js';
+import '/admin/kitchen-i18n.js';
 
-/// The five tabs, their icons, their words, their modules.
+/// The tabs, their icons, their words, their modules. A member of staff sees
+/// only the ones their capabilities open (`kitchen-logic.js` tabsFor).
 const TABS = [
   ['orders',   'scroll',          'tabOrders',   () => import('/admin/orders.js')],
+  ['kitchen',  'flame',           'tabKitchen',  () => import('/admin/kitchen.js')],
   ['menu',     'bowl-chopsticks', 'tabMenu',     () => import('/admin/menu.js')],
   ['stock',    'bento',           'tabStock',    () => import('/admin/stock.js')],
   ['couriers', 'bike',            'tabCouriers', () => import('/admin/couriers.js')],
@@ -28,6 +32,9 @@ const STATES = ['open', 'busy', 'closed'];
 const RING_HZ = 880;
 const RING_MS = 160;
 
+/// Who is signed in, read from the token (the hub checks every request).
+export const me = () => principalOf(store.t);
+const myTabs = () => tabsFor(me(), TABS.map(x => x[0]));
 const modules = new Map();
 async function module(id){
   if (!modules.has(id)) modules.set(id, await TABS.find(x => x[0] === id)[3]());
@@ -50,11 +57,16 @@ function renderLogin(err){
   const submit = async () => {
     const b = $('#go'); ui.setBusy(b, t('signingIn'));
     try {
-      const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: $('#e').value.trim(), password: $('#p').value }) });
+      const creds = JSON.stringify({ email: $('#e').value.trim(), password: $('#p').value });
+      const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: creds });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error || d.message || 'HTTP ' + r.status);
-      store.t = d.access_token; store.r = d.refresh_token; store.loc = d.user.locationId;
+      if (r.ok && d.user?.locationId) { store.t = d.access_token; store.r = d.refresh_token; store.loc = d.user.locationId; return boot(); }
+      // THE SAME HUB FOR THE KITCHEN (operator Q3/Q8): a person who is staff
+      // here signs in with the same email and password and gets their role's tabs.
+      const sr = await fetch('/api/staff/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: creds });
+      const sd = await sr.json().catch(() => ({}));
+      if (!sr.ok) throw new Error(d.error || d.message || sd.error || 'HTTP ' + r.status);
+      store.t = sd.jwt; store.r = null; store.loc = sd.staff.locationId;
       boot();
     } catch (e) { renderLogin(String(e.message || e)); }
   };
@@ -69,8 +81,11 @@ $('#logout').onclick = async () => { try { await post('/auth/logout'); } catch {
 // ── the bottom bar ──────────────────────────────────────────────────────────
 function mountNav(){
   const nav = $('#nav');
-  nav.innerHTML = TABS.map(([id, ic, key]) => `<button type="button" class="tab" data-tab="${id}" data-tour="nav.${id}" aria-current="${id === S.tab ? 'page' : 'false'}">
-    <span class="tab-ic">${icon(ic)}${id === 'orders' ? `<span class="tab-n" id="navLiveN" hidden>0</span>` : ''}</span><span data-t="${key}"></span></button>`).join('');
+  const mine = TABS.filter(x => myTabs().includes(x[0]));
+  if (!mine.some(x => x[0] === S.tab)) S.tab = mine[0]?.[0] || 'orders';
+  nav.style.gridTemplateColumns = `repeat(${mine.length || 1},1fr)`;
+  nav.innerHTML = mine.map(([id, ic, key]) => `<button type="button" class="tab" data-tab="${id}" data-tour="nav.${id}" aria-current="${id === S.tab ? 'page' : 'false'}">
+    <span class="tab-ic">${icon(ic)}${id === mine[0][0] ? `<span class="tab-n" id="navLiveN" hidden>0</span>` : ''}</span><span data-t="${key}"></span></button>`).join('');
   nav.onclick = e => { const b = e.target.closest('[data-tab]'); if (b) show(b.dataset.tab); };
   retranslate(nav);
 }
@@ -187,13 +202,13 @@ export async function loadOrders(){
   const R = await import('/lib/replica.js');
   copy = copy || R.load(store.loc);
   const since = copy.generation >= 0 ? `&since=${copy.generation}` : '';
-  const d = await api(`/owner/orders?location_id=${encodeURIComponent(store.loc)}${since}`);
+  const d = await api(`${ordersPath(me(), store.loc)}${since}`);
   if (d.full === false && Array.isArray(d.changes)) {
     const next = R.apply(copy, d.changes, d.generation);
     if (next) { copy = next; announce(copy.orders); return; }
     // The changes did not fit what is held -- a gap this copy cannot bridge.
     // Ask for the list rather than guess.
-    const whole = await api(`/owner/orders?location_id=${encodeURIComponent(store.loc)}`);
+    const whole = await api(ordersPath(me(), store.loc));
     copy = R.replace(store.loc, whole.orders || [], whole.generation ?? -1);
     announce(copy.orders);
     return;
@@ -201,7 +216,7 @@ export async function loadOrders(){
   copy = R.replace(store.loc, d.orders || [], d.generation ?? -1);
   announce(copy.orders);
 }
-export async function loadStats(){ try { S.stats = await api(`/owner/dashboard?location_id=${encodeURIComponent(store.loc)}`); } catch {} }
+export async function loadStats(){ if (me().staff) return; try { S.stats = await api(`/owner/dashboard?location_id=${encodeURIComponent(store.loc)}`); } catch {} }
 /// The venue's storefront slug: the first label of the host on a venue
 /// subdomain, else the location id (which is the slug at birth, but a venue
 /// restored from a bundle may carry a different one).
@@ -228,7 +243,7 @@ export async function loadVenue(){
     await setCurrency(d.location?.currencyCode || 'ALL', safeGet('dw_admin_cur') || d.location?.currencyCode || 'ALL');
   } catch {}
 }
-export async function loadCouriers(){ try { S.couriers = (await api('/owner/couriers')).couriers || []; } catch {} }
+export async function loadCouriers(){ if (me().staff) return; try { S.couriers = (await api('/owner/couriers')).couriers || []; } catch {} }
 export async function loadStaff(){ try { S.staff = (await api('/owner/staff')).staff || []; } catch {} }
 
 function ring(){
@@ -249,6 +264,8 @@ async function boot(){
   if (!store.t || !store.loc) return renderLogin();
   document.documentElement.lang = lang;
   $('#top').hidden = false; $('#nav').hidden = false;
+  // The venue's open/busy/closed switch is the owner's; staff read it.
+  $('#vstate').disabled = me().staff;
   S.booted = true; S.phase = 'loading';
   mountNav();
   // THE COPY IS DRAWN BEFORE ANYTHING IS ASKED. A console reopened at the
@@ -278,7 +295,10 @@ async function boot(){
   import('/admin/voice.js').then(m => m.mountVoice($('#top .top-in'), $('#prefs'), async () => {
     await Promise.all([loadOrders().catch(() => {}), loadVenue()]); paintVenue(); await rerender();
   })).catch(() => {});
-  import('/admin/more.js').then(m => m.learnFromHash()).catch(() => {});
+  if (!me().staff) import('/admin/more.js').then(m => m.learnFromHash()).catch(() => {});
+  // THE AGENT IN THE HUB (operator Q9): one chat panel on every screen.
+  import('/admin/assistant.js').then(m => m.mountAssistant($('#top .top-in'), $('#prefs'), { show, refresh: async () => {
+    await Promise.all([loadOrders().catch(() => {}), loadVenue()]); paintVenue(); await rerender(); } })).catch(() => {});
 }
 let pollTimer = null, pollN = 0;
 // The queue moves in seconds; the dashboard's totals move in minutes. Reading
@@ -295,9 +315,20 @@ function openSocket(){
       token: store.t,
       // One nudge, one read. The message says an order moved; what an order
       // IS still comes from the same place it always did.
-      onEvent: () => { if (!document.hidden) refreshNow(); },
+      onEvent: m => { if (!document.hidden && !applyLocally(m)) refreshNow(); },
     });
   }).catch(() => { /* no socket: the poll is the whole story */ });
+}
+/// A kitchen socket carries the stripped delta itself: apply it to the copy
+/// and redraw, with no request. False = ask the hub (a `moved`, a gap).
+function applyLocally(m){
+  if (!me().staff || !copy || m?.t !== 'event' || !m.orderId) return false;
+  import('/lib/replica.js').then(R => {
+    const next = R.apply(copy, [{ kind: m.kind, order_id: m.orderId, payload: m.payload }], m.generation);
+    if (!next) return refreshNow();
+    copy = next; announce(copy.orders); socket?.polled(); rerender();
+  }).catch(() => refreshNow());
+  return true;
 }
 let refreshing = false;
 async function refreshNow(){

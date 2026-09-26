@@ -407,6 +407,28 @@ pub fn room_admits(
     }
 }
 
+/// `room_admits`, for a route that one of SEVERAL capabilities opens -- a
+/// write-off is the till holder's OR the shelf's (`Cap::OpenTill` or
+/// `Cap::Stock`). The venue is asked first, so another venue's principal is a
+/// 404 whatever it holds; an empty `needs` admits no member of staff.
+pub fn room_admits_any(
+    p: &Principal,
+    venue: &str,
+    needs: &[Cap],
+) -> std::result::Result<(String, Caps), (u16, &'static str)> {
+    if !belongs_to(p, venue) {
+        return Err((404, "not found"));
+    }
+    let mut last = Err((403, "this needs a capability your role does not hold"));
+    for need in needs {
+        last = room_admits(p, venue, *need);
+        if last.is_ok() {
+            return last;
+        }
+    }
+    last
+}
+
 /// Does this principal belong to this venue?
 ///
 /// THE CLAIM DECIDES, not a membership table. An owner's token carries the hub
@@ -828,6 +850,45 @@ mod staff_capability_tests {
         let caps = staff_caps("take_orders,take_payment,void", "waiter").expect("a waiter is staff");
         assert!(caps.allows(Cap::TakeOrders) && caps.allows(Cap::TakePayment));
         assert!(!caps.allows(Cap::Void) && !caps.allows(Cap::OpenTill) && !caps.allows(Cap::Advance));
+    }
+
+    /// OPERATOR Q8: a kitchen token minted today carries the menu and the
+    /// shelf, and a waiter's roster word strips both.
+    #[test]
+    fn a_kitchen_token_keeps_the_menu_and_the_shelf() {
+        let caps = staff_caps("advance,catalog,stock", "kitchen").expect("kitchen is staff");
+        assert!(caps.allows(Cap::Catalog) && caps.allows(Cap::Stock) && caps.allows(Cap::Advance));
+        let waiter = staff_caps("take_orders,catalog,stock", "waiter").expect("take_orders survives");
+        assert!(!waiter.allows(Cap::Catalog) && !waiter.allows(Cap::Stock));
+    }
+
+    fn staff(caps: &[Cap], at: &str) -> Principal {
+        Principal::Staff {
+            person_id: "p1".into(),
+            active_location_id: at.into(),
+            session_id: "s1".into(),
+            caps: Caps::of(caps),
+        }
+    }
+
+    /// ANY OF: a write-off opens to the till holder or to the shelf.
+    #[test]
+    fn any_of_several_capabilities_admits() {
+        let need = [Cap::OpenTill, Cap::Stock];
+        assert_eq!(room_admits_any(&staff(&[Cap::Stock], "v"), "v", &need).map(|x| x.0), Ok("p1".into()));
+        assert_eq!(room_admits_any(&staff(&[Cap::OpenTill], "v"), "v", &need).map(|x| x.0), Ok("p1".into()));
+        let owner = Principal::Owner { user_id: "o".into(), active_location_id: Some("v".into()) };
+        assert_eq!(room_admits_any(&owner, "v", &need).map(|x| x.0), Ok("o".into()));
+    }
+
+    /// THE TWIN: neither word is a 403; another venue is a 404 whatever the
+    /// principal holds; an empty list admits no member of staff.
+    #[test]
+    fn any_of_refuses_the_rest() {
+        let need = [Cap::OpenTill, Cap::Stock];
+        assert_eq!(room_admits_any(&staff(&[Cap::TakeOrders], "v"), "v", &need).map(|x| x.0), Err((403, "this needs a capability your role does not hold")));
+        assert_eq!(room_admits_any(&staff(&[Cap::Stock], "w"), "v", &need).map(|x| x.0), Err((404, "not found")));
+        assert!(room_admits_any(&staff(&[Cap::Stock], "v"), "v", &[]).is_err());
     }
 
     /// A capability name outside the closed set refuses the whole token rather

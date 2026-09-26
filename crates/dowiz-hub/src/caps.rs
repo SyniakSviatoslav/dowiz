@@ -51,14 +51,28 @@ pub enum Cap {
     Void,
     /// Open, count and close the drawer; pay in and pay out.
     OpenTill,
+    /// Manage the menu: dishes, categories, translations, the 86 switch,
+    /// supplies and recipes (operator Q8, 2026-09-26: the kitchen "fully
+    /// manages the menu, adds and changes ingredients").
+    Catalog,
+    /// Work the shelf: read levels and write-offs, record a delivery, a count
+    /// and a write-off (operator Q8: the kitchen runs the stock).
+    Stock,
 }
 
 impl Cap {
     /// Every capability, in canonical order. The order is the SPELLING of a
     /// set, so it is fixed here once: two orderings would be two strings for
     /// one set of rights, and a token is compared as bytes.
-    pub const ALL: [Cap; 5] =
-        [Cap::Advance, Cap::TakeOrders, Cap::TakePayment, Cap::Void, Cap::OpenTill];
+    pub const ALL: [Cap; 7] = [
+        Cap::Advance,
+        Cap::TakeOrders,
+        Cap::TakePayment,
+        Cap::Void,
+        Cap::OpenTill,
+        Cap::Catalog,
+        Cap::Stock,
+    ];
 
     /// The wire name. Pinned, like `scope.rs`'s discriminants: a rename is a
     /// change to every token already minted, so it is a decision, not a tidy-up.
@@ -69,6 +83,8 @@ impl Cap {
             Cap::TakePayment => "take_payment",
             Cap::Void => "void",
             Cap::OpenTill => "open_till",
+            Cap::Catalog => "catalog",
+            Cap::Stock => "stock",
         }
     }
 
@@ -87,11 +103,13 @@ impl Cap {
             Cap::TakePayment => 0x04,
             Cap::Void => 0x08,
             Cap::OpenTill => 0x10,
+            Cap::Catalog => 0x20,
+            Cap::Stock => 0x40,
         }
     }
 }
 
-/// A set of capabilities. Five bits; no allocation, and `==` compares SETS
+/// A set of capabilities. Seven bits; no allocation, and `==` compares SETS
 /// rather than spellings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Caps(u8);
@@ -163,7 +181,8 @@ impl fmt::Display for Caps {
 /// The capabilities table is in BLUEPRINT-POS-THE-ROOM §2.8.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Preset {
-    /// Moves rounds through the kitchen. Takes no money.
+    /// Moves rounds through the kitchen, manages the menu and the shelf.
+    /// Takes no money and sees no customer.
     Kitchen,
     /// Takes orders and payments before the kitchen, voids before kitchen, no till access.
     Waiter,
@@ -194,7 +213,7 @@ impl Preset {
 
     pub fn caps(self) -> Caps {
         match self {
-            Preset::Kitchen => Caps::of(&[Cap::Advance]),
+            Preset::Kitchen => Caps::of(&[Cap::Advance, Cap::Catalog, Cap::Stock]),
             Preset::Waiter => Caps::of(&[Cap::TakeOrders, Cap::TakePayment]),
             Preset::CounterManager => {
                 Caps::of(&[Cap::TakeOrders, Cap::TakePayment, Cap::Void, Cap::OpenTill])

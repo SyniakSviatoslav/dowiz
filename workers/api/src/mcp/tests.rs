@@ -39,8 +39,12 @@ fn a_waiter_key_cannot_call_an_owner_tool_and_the_owner_can() {
 #[test]
 fn staff_tools_follow_the_capabilities_of_the_word() {
     let (w, k, c) = (staff(Preset::Waiter), staff(Preset::Kitchen), staff(Preset::CounterManager));
-    // The kitchen moves orders and nothing else; a waiter does not.
-    assert_eq!(names(k), ["menu", "order_action", "kitchen_ack"]);
+    // The kitchen moves orders, and (operator Q8) runs the menu and the shelf;
+    // a waiter does none of it.
+    assert_eq!(names(k), ["menu", "kitchen_board", "order_action", "kitchen_ack", "dishes", "set_dish", "stock", "stock_move", "waste_report"]);
+    for kitchen_only in ["kitchen_board", "dishes", "set_dish", "stock", "stock_move", "waste_report"] {
+        assert!(tools::find(w, kitchen_only).is_none(), "a waiter got {kitchen_only}");
+    }
     assert!(tools::find(w, "order_action").is_none());
     assert_eq!(tools::find(k, "order_action").unwrap().path, "/api/owner/orders/{id}/action");
     // The till's numbers are the counter-manager's, not the waiter's.
@@ -53,8 +57,11 @@ fn staff_tools_follow_the_capabilities_of_the_word() {
 #[test]
 fn every_staff_tool_is_a_room_route_the_kitchen_route_or_the_menu() {
     for t in tools::STAFF_TOOLS {
+        use dowiz_hub::caps::Cap;
+        // An OWNER route is in a staff list only behind a word its guard
+        // (`staff_at` / `staff::guard`) admits: the kitchen's three.
         let ok = t.path.starts_with("/api/staff/")
-            || (t.path == "/api/owner/orders/{id}/action" && t.need == Some(dowiz_hub::caps::Cap::Advance))
+            || (t.path.starts_with("/api/owner/") && matches!(t.need, Some(Cap::Advance | Cap::Catalog | Cap::Stock)))
             || t.path.starts_with("/api/public/");
         assert!(ok, "{} -> {}", t.name, t.path);
     }
@@ -91,7 +98,8 @@ fn describe_lists_every_role_word_with_its_own_tools() {
     assert_eq!(d["tools"].as_array().unwrap().len(), tool_count());
     assert_eq!(tool_names().len(), tool_count());
     let listed = tools::listed(staff(Preset::Kitchen));
-    assert_eq!(listed.as_array().unwrap().len(), 3);
+    assert_eq!(listed.as_array().unwrap().len(), names(staff(Preset::Kitchen)).len());
+    assert_eq!(listed.as_array().unwrap().len(), 9, "the pass, the menu and the shelf");
     assert!(listed[0]["inputSchema"].is_object());
 }
 

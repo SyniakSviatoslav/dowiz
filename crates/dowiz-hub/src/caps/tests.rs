@@ -178,3 +178,42 @@ fn admit_with_a_token_minted_with_void_for_a_roster_role_waiter_narrows_it_away(
     // A token minted with Advance (which a waiter does not have) narrows to nothing.
     assert_eq!(admit("advance", "waiter"), None);
 }
+
+/// OPERATOR Q8 (2026-09-26): a kitchen login manages the menu and the shelf.
+/// The kitchen preset holds `catalog` and `stock` beside `advance`, and still
+/// nothing that touches money or the room.
+#[test]
+fn the_kitchen_holds_the_menu_and_the_shelf() {
+    let kitchen = Preset::Kitchen.caps();
+    for c in [Cap::Advance, Cap::Catalog, Cap::Stock] {
+        assert!(kitchen.allows(c), "kitchen must hold {}", c.as_str());
+    }
+    for c in [Cap::TakeOrders, Cap::TakePayment, Cap::Void, Cap::OpenTill] {
+        assert!(!kitchen.allows(c), "kitchen must not hold {}", c.as_str());
+    }
+    assert_eq!(kitchen.to_string(), "advance,catalog,stock");
+    assert_eq!(
+        admit("advance,catalog,stock", "kitchen"),
+        Some(Caps::of(&[Cap::Advance, Cap::Catalog, Cap::Stock]))
+    );
+}
+
+/// THE TWIN: a waiter and a counter-manager hold neither new word, and a token
+/// minted with them is narrowed away by the roster.
+#[test]
+fn a_waiter_is_refused_the_menu_and_the_shelf() {
+    for p in [Preset::Waiter, Preset::CounterManager] {
+        let caps = p.caps();
+        assert!(!caps.allows(Cap::Catalog), "{} must not hold catalog", p.as_str());
+        assert!(!caps.allows(Cap::Stock), "{} must not hold stock", p.as_str());
+    }
+    assert_eq!(admit("catalog,stock", "waiter"), None, "nothing survives: no principal");
+    assert_eq!(
+        admit("take_orders,catalog,stock", "waiter"),
+        Some(Caps::of(&[Cap::TakeOrders])),
+        "the roster is the ceiling"
+    );
+    assert!(Preset::Owner.caps().allows(Cap::Catalog) && Preset::Owner.caps().allows(Cap::Stock));
+    assert_eq!(Cap::from_str("catalog"), Some(Cap::Catalog));
+    assert_eq!(Cap::from_str("stock"), Some(Cap::Stock));
+}

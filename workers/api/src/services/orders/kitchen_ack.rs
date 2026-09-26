@@ -14,6 +14,9 @@ use worker::*;
 
 use crate::auth::Cap;
 
+/// The pass's read: the kitchen's ticket list, stripped of the customer.
+pub mod board;
+
 #[derive(Deserialize)]
 struct KitchenAckBody {
     location_id: String,

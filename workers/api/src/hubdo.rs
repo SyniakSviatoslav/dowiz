@@ -460,8 +460,10 @@ impl HubImages {
         if dowiz_hub::EventKind::from_u8(kind).is_none_or(|k| !k.is_order()) {
             self.recent.borrow_mut().clear();
             let msg = serde_json::json!({ "t": "moved", "generation": generation }).to_string();
-            for ws in self.state.get_websockets_with_tag(TAG_CONSOLE) {
-                let _ = ws.send_with_str(&msg);
+            for tag in [TAG_CONSOLE, crate::services::orders::kitchen_ack::board::TAG_KITCHEN] {
+                for ws in self.state.get_websockets_with_tag(tag) {
+                    let _ = ws.send_with_str(&msg);
+                }
             }
             return;
         }
@@ -498,6 +500,13 @@ impl HubImages {
                 let _ = ws.send_with_str(&msg);
             }
             seen.push(tag);
+        }
+        // THE KITCHEN HEARS THE TICKET, NEVER THE CUSTOMER (W-KITCHEN K3): the
+        // same event through the board's whitelist (`kitchen_ack::board`), so a
+        // pass tablet is never sent a phone, an address or a price.
+        let kitchen = crate::services::orders::kitchen_ack::board::frame(kind, order_id, payload, generation);
+        for ws in self.state.get_websockets_with_tag(crate::services::orders::kitchen_ack::board::TAG_KITCHEN) {
+            let _ = ws.send_with_str(&kitchen);
         }
     }
 
@@ -1110,7 +1119,7 @@ impl HubImages {
             // moved so they ask now rather than in ninety seconds.
             self.recent.borrow_mut().clear();
             let msg = serde_json::json!({ "t": "moved", "generation": next }).to_string();
-            for tag in [TAG_CONSOLE, TAG_COURIER] {
+            for tag in [TAG_CONSOLE, TAG_COURIER, crate::services::orders::kitchen_ack::board::TAG_KITCHEN] {
                 for ws in self.state.get_websockets_with_tag(tag) {
                     let _ = ws.send_with_str(&msg);
                 }

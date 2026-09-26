@@ -94,16 +94,17 @@ pub async fn connect(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
             }
             crate::hubdo::tag_order(&order_id)
         }
-        // The console tag carries every live order of the venue, so staff get
-        // it only with a capability that works those orders.
+        // The console tag carries every live order of the venue WITH ITS
+        // CUSTOMER, so staff get it only with a capability that serves that
+        // customer. The kitchen gets its own tag (`staff_tag`).
         Ok(Principal::Staff { active_location_id, caps, .. }) => {
             if active_location_id != place.venue {
                 return Response::error("not found", 404);
             }
-            if !(caps.allows(auth::Cap::Advance) || caps.allows(auth::Cap::TakeOrders)) {
-                return Response::error("no capability for the live console", 403);
+            match staff_tag(&caps) {
+                Some(tag) => tag.to_string(),
+                None => return Response::error("no capability for the live console", 403),
             }
-            crate::hubdo::TAG_CONSOLE.to_string()
         }
         Err(e) => return e.into_response(),
     };
@@ -125,8 +126,47 @@ pub async fn connect(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
     stub.fetch_with_request(out).await
 }
 
+/// Which audience a member of staff joins.
+///
+/// THE KITCHEN IS NOT THE CONSOLE (operator 2026-09-26: "no customer personal
+/// data on kitchen-facing surfaces"). `take_orders` serves the customer at the
+/// table and keeps the console's stream; `advance` alone -- the pass -- is
+/// sent the stripped ticket (`kitchen_ack::board::frame`) and nothing else.
+pub fn staff_tag(caps: &auth::Caps) -> Option<&'static str> {
+    if caps.allows(auth::Cap::TakeOrders) {
+        return Some(crate::hubdo::TAG_CONSOLE);
+    }
+    if caps.allows(auth::Cap::Advance) {
+        return Some(crate::services::orders::kitchen_ack::board::TAG_KITCHEN);
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::auth::{Cap, Caps};
+
+    /// A KITCHEN MUST NOT GET TAG_CONSOLE ANY MORE: that stream carries the
+    /// customer's phone and address. Put `Advance` back in the console branch
+    /// and this fails.
+    #[test]
+    fn the_kitchen_hears_the_kitchen_tag_never_the_console() {
+        let kitchen = dowiz_hub::caps::Preset::Kitchen.caps();
+        assert_eq!(super::staff_tag(&kitchen), Some("kitchen"));
+        assert_ne!(super::staff_tag(&kitchen), Some(crate::hubdo::TAG_CONSOLE));
+        assert_eq!(super::staff_tag(&Caps::of(&[Cap::Advance])), Some("kitchen"));
+    }
+
+    /// THE TWIN: a waiter and a counter keep the console; a set with neither
+    /// word hears nothing.
+    #[test]
+    fn the_room_keeps_the_console_and_the_rest_hear_nothing() {
+        for p in [dowiz_hub::caps::Preset::Waiter, dowiz_hub::caps::Preset::CounterManager] {
+            assert_eq!(super::staff_tag(&p.caps()), Some(crate::hubdo::TAG_CONSOLE));
+        }
+        assert_eq!(super::staff_tag(&Caps::of(&[Cap::Stock, Cap::Catalog, Cap::OpenTill])), None);
+    }
+
     /// The tags are a contract between this module and the object: the Worker
     /// decides them and the object enforces them, so a typo on either side is
     /// a customer hearing somebody else's order.

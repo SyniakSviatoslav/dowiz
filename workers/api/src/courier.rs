@@ -58,6 +58,17 @@ pub(crate) async fn staff_at(
     venue: &str,
     need: auth::Cap,
 ) -> std::result::Result<(String, auth::Caps), Response> {
+    staff_any_at(req, ctx, venue, &[need]).await
+}
+
+/// `staff_at`, for a route that ANY of `needs` opens (a write-off: the till's
+/// holder or the shelf's). One implementation: `staff_at` is this with one word.
+pub(crate) async fn staff_any_at(
+    req: &Request,
+    ctx: &RouteContext<crate::Req>,
+    venue: &str,
+    needs: &[auth::Cap],
+) -> std::result::Result<(String, auth::Caps), Response> {
     let is_staff = auth::bearer(req)
         .ok()
         .and_then(|raw| auth::verify(&ctx.env, &raw, ctx.data.now_ms).ok())
@@ -70,7 +81,7 @@ pub(crate) async fn staff_at(
         Ok(p) => p,
         Err(e) => return Err(e.into_response().unwrap()),
     };
-    auth::room_admits(&p, venue, need).map_err(|(s, m)| Response::error(m, s).unwrap())
+    auth::room_admits_any(&p, venue, needs).map_err(|(s, m)| Response::error(m, s).unwrap())
 }
 
 /// `GET /api/courier/tasks` — what is mine, and what is up for grabs.

@@ -71,6 +71,8 @@ export async function api(path, opts = {}, retried = false){
     headers: { ...(body instanceof Blob ? {} : { 'content-type': 'application/json' }), ...(opts.headers || {}),
                ...(store.t ? { authorization: 'Bearer ' + store.t } : {}) },
   });
+  // A staff session has no refresh token: its 401 is the end of the shift.
+  if (r.status === 401 && !store.r && store.t) { logout(); throw new Error(t('sessionOver')); }
   if (r.status === 401 && !retried && store.r) {
     const ok = await refresh();
     if (ok) return api(path, opts, true);

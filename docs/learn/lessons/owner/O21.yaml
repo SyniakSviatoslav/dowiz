@@ -1,0 +1,168 @@
+# Lesson O21 (owner console, kitchen login too). Lane W-KITCHEN hand-back, 2026-09-26.
+# The ONE source for the in-app tour and the recorder (tools/learn/build-lessons.mjs).
+id: O21
+role: owner
+module: assistant
+order: 39
+covers: [assistant]
+title:
+  sq: "Asistenti në hub"
+  en: "The assistant in the hub"
+  uk: "Асистент у хабі"
+goal:
+  sq: "Pyesni dhe veproni me shkrim; çdo ndryshim konfirmohet me një prekje."
+  en: "Ask and act in writing; every change is confirmed with one tap."
+  uk: "Питайте й дійте письмово; кожну зміну підтверджуєте одним дотиком."
+steps:
+  - key: 1
+    anchor: hud.assistant
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="hud.assistant"]'
+    title:
+      sq: "Asistenti"
+      en: "Assistant"
+      uk: "Асистент"
+    caption:
+      sq: "Butoni lart, në çdo ekran."
+      en: "The button at the top, on every screen."
+      uk: "Кнопка вгорі, на кожному екрані."
+  - key: 2
+    anchor: assistant.log
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="assistant.log"]'
+    title:
+      sq: "Biseda"
+      en: "The conversation"
+      uk: "Розмова"
+    caption:
+      sq: "Pyetjet dhe përgjigjet mbeten këtu."
+      en: "Questions and answers stay here."
+      uk: "Питання й відповіді лишаються тут."
+  - key: 3
+    anchor: assistant.starter
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="assistant.starter"]'
+    title:
+      sq: "Një prekje"
+      en: "One tap"
+      uk: "Один дотик"
+    caption:
+      sq: "Pyetjet e shpeshta janë gati."
+      en: "The common questions are ready."
+      uk: "Часті питання вже готові."
+  - key: 4
+    anchor: assistant.input
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="assistant.input"]'
+      value: "erdhi 4 kg salmon"
+    title:
+      sq: "Shkruani"
+      en: "Type"
+      uk: "Пишіть"
+    caption:
+      sq: "Një veprim me fjalë të thjeshta."
+      en: "An action in plain words."
+      uk: "Дія простими словами."
+  - key: 5
+    anchor: assistant.send
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="assistant.send"]'
+    title:
+      sq: "Dërgo"
+      en: "Send"
+      uk: "Надіслати"
+    caption:
+      sq: "Huba e lexon sipas të drejtave tuaja."
+      en: "The hub reads it by your rights."
+      uk: "Хаб читає це за вашими правами."
+  - key: 6
+    anchor: assistant.proposal
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="assistant.proposal"]'
+    title:
+      sq: "Leximi"
+      en: "The read-back"
+      uk: "Перепитування"
+    caption:
+      sq: "Asgjë nuk bëhet pa ju."
+      en: "Nothing happens without you."
+      uk: "Без вас нічого не відбувається."
+  - key: 7
+    anchor: assistant.reason
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="assistant.reason"]'
+      value: "Mbaroi salmoni"
+    title:
+      sq: "Arsyeja"
+      en: "Reason"
+      uk: "Причина"
+    caption:
+      sq: "Refuzimi kërkon arsye."
+      en: "A refusal needs a reason."
+      uk: "Відмова потребує причини."
+  - key: 8
+    anchor: assistant.cancel
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="assistant.cancel"]'
+    title:
+      sq: "Jo"
+      en: "No"
+      uk: "Ні"
+    caption:
+      sq: "«Jo» nuk dërgon asgjë."
+      en: "“No” sends nothing."
+      uk: "«Ні» нічого не надсилає."
+  - key: 9
+    anchor: assistant.confirm
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="assistant.confirm"]'
+    title:
+      sq: "Po, bëje"
+      en: "Yes, do it"
+      uk: "Так, зробити"
+    caption:
+      sq: "Një prekje, dhe është bërë."
+      en: "One tap, and it is done."
+      uk: "Один дотик, і зроблено."
+  - key: 10
+    anchor: assistant.agentKey
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="assistant.agentKey"]'
+    title:
+      sq: "Agjenti juaj"
+      en: "Your agent"
+      uk: "Ваш агент"
+    caption:
+      sq: "Çelësi MCP për agjentin tuaj, me të drejtat e rolit."
+      en: "The MCP key for your own agent, with your role's rights."
+      uk: "Ключ MCP для вашого агента, з правами вашої ролі."
