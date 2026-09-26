@@ -109,6 +109,7 @@ impl HubImages {
         let (_, mut hub) = self.log_hub().await?;
         let (stock_gen, mut stock) = self.stock_log().await?;
         let before = stock.len();
+        let low_before = self.low_watch(&stock).await;
         let (round, body, seq) = match crate::command::amend::decide(&mut hub, &mut stock, current.as_ref(), &input) {
             Ok(v) => v,
             Err(r) => return Ok(Err(r)),
@@ -119,6 +120,10 @@ impl HubImages {
             Err(r) => return Ok(Err(r)),
         };
         self.broadcast(dowiz_hub::EventKind::Amended as u8, &input.order_id, &body, next);
+        // `stock.low` (W0a): an added line that took a supply past its threshold.
+        if let (Some(b), true) = (low_before, stock.len() != before) {
+            self.tell_low(&b, &stock, input.now_ms).await;
+        }
         // THE EXCEPTION ALERT (P1-5): a void after the kitchen, a comp and a
         // late amendment are all AMENDMENTS, and until 2026-09-24 only the
         // refund and the till asked -- so the three kinds the alert exists

@@ -54,7 +54,7 @@ export function renderRoom(c) {
   return `<div class="bar">${ui.badge({ icon: 'user', label: t(S.role || 'waiter'), attrs: { data: { tour: 'room.role' } } })}<span class="sp"></span>
       ${orders ? ui.button({ variant: 'primary', icon: 'plus', label: k('openTable'), attrs: act('open', {}, 'room.open') }) : ''}
       ${canTill(S.caps) ? ui.button({ icon: 'cash', label: k('till'), attrs: act('till', {}, 'room.till') }) : ''}
-      ${orders ? ui.button({ icon: 'map-pin', label: k('floor'), attrs: act('floor', {}, 'room.floor') }) : ''}
+      ${orders ? ui.button({ icon: 'map-pin', label: k('floor'), attrs: act('floor', {}, 'room.floor') }) + ui.button({ icon: 'ticket', label: k('pass'), attrs: act('pass', {}, 'room.pass') }) : ''}
       ${ui.iconButton({ icon: 'refresh', ariaLabel: k('refresh'), variant: 'plain', attrs: act('refresh', {}, 'room.refresh') })}</div>
     <h2>${ui.esc(t('room'))}</h2>
     ${body}

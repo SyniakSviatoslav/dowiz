@@ -110,6 +110,12 @@ pub const KNOWN: &[Known] = &[
         hint: "A change to a round this long after it was placed is listed as an exception.",
         default: "30",
     },
+    Known {
+        key: "notify.order.late_min",
+        label: "Order late after (minutes)",
+        hint: "An order still waiting this long after it was placed is told once to the Telegram groups that hear order.late. 0 = off.",
+        default: "20",
+    },
     // ── WhatsApp, through Meta's Cloud API ──
     //
     // The venue's own WhatsApp Business number. A permanent System User token

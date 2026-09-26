@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use super::events;
+mod field;
+use field::{minute_ok, present};
 
 /// The groups, as JSON (`Vec<Group>`).
 pub const KEY_GROUPS: &str = "notify.tg.groups";
@@ -193,6 +195,9 @@ pub struct Patch {
     pub digest_at: Option<i64>,
     pub muted: Option<bool>,
     pub title: Option<String>,
+    /// `sushi | kitchen | bar`: only that station's lines; `null`/`""` = the whole order.
+    #[serde(default, deserialize_with = "present")]
+    pub station: Option<Option<String>>,
 }
 
 /// Apply one owner change. Refuses rather than guesses: an unknown event, a
@@ -242,16 +247,11 @@ pub fn apply(list: &mut [Group], id: &str, p: &Patch) -> Result<(), String> {
     if let Some(t) = &p.title {
         g.title = t.trim().chars().take(64).collect();
     }
+    if let Some(st) = &p.station {
+        let wanted = st.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        g.station = wanted.map(|s| crate::bell_route::Station::from_wire(s).map(|x| x.as_str().to_string())).transpose()?;
+    }
     Ok(())
-}
-
-/// A field that is present is `Some`, even when it is `null` (= clear it).
-fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<Window>>, D::Error> {
-    Option::<Window>::deserialize(d).map(Some)
-}
-
-fn minute_ok(m: i64) -> bool {
-    (0..1440).contains(&m)
 }
 
 /// A stable id for a new group: from its title, unique in the list.

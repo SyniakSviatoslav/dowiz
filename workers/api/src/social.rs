@@ -25,6 +25,8 @@ use dowiz_kernel::thread::{self, Body, Message, Party, Thread};
 
 /// Who may read or speak in a thread (D18).
 pub mod party;
+/// The venue's list of its threads (W-WIRE row 1).
+pub mod inbox;
 
 
 #[derive(Deserialize)]

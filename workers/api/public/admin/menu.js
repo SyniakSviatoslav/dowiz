@@ -8,6 +8,7 @@
 // customer within the menu's thirty-second cache.
 
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, busy, switchEl, store, retranslate, confirm } from '/admin/core.js';
+import '/admin/wire-i18n.js';
 import { lang, LANGS } from '/admin/i18n.js';
 import { loadVenue, rerender } from '/admin/app.js';
 import { openBulk } from '/admin/bulk.js';
@@ -106,7 +107,7 @@ async function markNoStock(host){
 /// The plate's diameter, for the storefront's "see it on the table" view.
 const SIZE_CM_MIN = 3, SIZE_CM_MAX = 120;
 // Where a dish is made: the closed set the Worker accepts (`bell_route::Station`).
-const STATIONS = ['kitchen', 'bar'];
+const STATIONS = ['sushi', 'kitchen', 'bar'];
 
 /// CSV import: a dry run first, with what would change, then apply.
 function openImport(){
@@ -268,7 +269,9 @@ async function openCategories(){
   sheet(`<p class="eyebrow" data-t="tabMenu"></p><h2 data-t="categories"></h2>
     <div class="rows">${cats.map(c => rowDiv({ title: '', sub: `${ui.inputRow({ label: k('name'), cls: 'inline', attrs: { value: c.name, data: { cn: c.id, tour: 'category.name' } } })}<span class="mono">${c.count ?? 0} · <span data-t="dishes"></span></span>`,
       trailing: `${iconBtn({ icon: 'check', ariaKey: 'save', data: { cs: c.id }, tour: 'category.save' })}${iconBtn({ icon: 'trash', ariaKey: 'remove', disabled: !!c.count, data: { cd: c.id }, tour: 'category.remove' })}` })).join('')}</div>
-    <div class="grid2 mt-3">${field({ id: 'nc-name', key: 'addCategory', autocomplete: 'off', tour: 'menu.newCategory' })}${btn({ id: 'ncGo', variant: 'primary', icon: 'plus', key: 'add', tour: 'menu.addCategory' })}</div>`, { name: 'cats' });
+    <div class="grid2 mt-3">${field({ id: 'nc-name', key: 'addCategory', autocomplete: 'off', tour: 'menu.newCategory' })}${btn({ id: 'ncGo', variant: 'primary', icon: 'plus', key: 'add', tour: 'menu.addCategory' })}</div>
+    <div class="btn-row">${btn({ id: 'ncWords', icon: 'language', key: 'w_catWords' })}</div>`, { name: 'cats' });
+  $('#ncWords').onclick = () => import('/admin/cat-i18n.js').then(m => m.openCategoryWords());
   const fail = e => toast(String(e.message || e));
   $('#ncGo').onclick = async () => { const name = $('#nc-name').value.trim(); if (!name) return toast(t('required')); try { await busy($('#ncGo'), () => post('/owner/categories', withLoc({ name }))); await loadVenue(); openCategories(); rerender(); } catch (e) { fail(e); } };
   for (const b of $$('[data-cs]', $('#sheetIn'))) b.onclick = async () => { const name = $(`[data-cn="${b.dataset.cs}"]`).value.trim(); if (!name) return; try { await busy(b, () => post('/owner/categories', withLoc({ id: b.dataset.cs, name }))); toast(t('saved')); await loadVenue(); rerender(); } catch (e) { fail(e); } };

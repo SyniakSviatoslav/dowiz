@@ -2,7 +2,7 @@
 //!
 //! The Telegram chat IS the printer at this venue, and a bar that reads the
 //! kitchen's ticket pours from a list of sushi. A product carries `station`
-//! (`kitchen | bar`, default kitchen); it travels on the line the way the
+//! (`sushi | kitchen | bar`, default kitchen); it travels on the line the way the
 //! dish's name does, and `hubdo::enqueue_bell` asks this module who gets what.
 //!
 //! A VENUE THAT HAS SET NO BAR CHAT GETS ONE BELL EXACTLY AS TODAY: the same
@@ -25,15 +25,36 @@ use serde_json::Value;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Station {
     Kitchen,
+    /// The sushi counter (operator Q6, 2026-09-26). A venue whose Telegram
+    /// has no sushi group rings it with the kitchen (`legacy`).
+    Sushi,
     Bar,
 }
+
+/// Every station, in the order a ticket lists them: kitchen first.
+pub const ALL: [Station; 3] = [Station::Kitchen, Station::Sushi, Station::Bar];
 
 impl Station {
     pub fn as_str(self) -> &'static str {
         match self {
             Station::Kitchen => "kitchen",
+            Station::Sushi => "sushi",
             Station::Bar => "bar",
         }
+    }
+
+    /// Where the OLD two-chat venue sends it: it has a kitchen chat and a bar
+    /// chat and nothing else, so the sushi counter reads the kitchen's ticket.
+    pub fn legacy(self) -> Station {
+        match self {
+            Station::Bar => Station::Bar,
+            _ => Station::Kitchen,
+        }
+    }
+
+    /// LENIENT, for a Telegram group's stored station: unknown is none.
+    pub fn of_group(s: Option<&str>) -> Option<Station> {
+        ALL.into_iter().find(|st| Some(st.as_str()) == s)
     }
 
     /// LENIENT, for a line already stored: missing or unknown is the kitchen,
@@ -42,6 +63,7 @@ impl Station {
     pub fn of_line(line: &Value) -> Station {
         match line.get("station").and_then(Value::as_str) {
             Some("bar") => Station::Bar,
+            Some("sushi") => Station::Sushi,
             _ => Station::Kitchen,
         }
     }
@@ -51,8 +73,9 @@ impl Station {
     pub fn from_wire(s: &str) -> Result<Station, String> {
         match s {
             "kitchen" => Ok(Station::Kitchen),
+            "sushi" => Ok(Station::Sushi),
             "bar" => Ok(Station::Bar),
-            other => Err(format!("station {other:?}: it is kitchen or bar")),
+            other => Err(format!("station {other:?}: it is sushi, kitchen or bar")),
         }
     }
 }
@@ -69,7 +92,7 @@ pub fn edit_station(product: &mut Value, st: Option<Station>) {
 /// THE STATION TRAVELS ON THE LINE, only when it is not the kitchen: absent IS
 /// the kitchen, and every stored byte is paid for.
 pub fn stamp_line(line: &mut Value, st: Station) {
-    if st == Station::Bar {
+    if st != Station::Kitchen {
         line["station"] = Value::from(st.as_str());
     }
 }
@@ -77,9 +100,18 @@ pub fn stamp_line(line: &mut Value, st: Station) {
 /// The lines of an order, grouped by station, each group in input order.
 /// Kitchen first; a station with no lines has no group.
 pub fn split_by_station(lines: &[Value]) -> Vec<(Station, Vec<Value>)> {
+    split_with(lines, |s| s)
+}
+
+/// The same, as the old two-chat venue sees it: sushi rides with the kitchen.
+pub fn split_legacy(lines: &[Value]) -> Vec<(Station, Vec<Value>)> {
+    split_with(lines, Station::legacy)
+}
+
+fn split_with(lines: &[Value], map: impl Fn(Station) -> Station) -> Vec<(Station, Vec<Value>)> {
     let mut out: Vec<(Station, Vec<Value>)> = Vec::new();
-    for s in [Station::Kitchen, Station::Bar] {
-        let mine: Vec<Value> = lines.iter().filter(|l| Station::of_line(l) == s).cloned().collect();
+    for s in ALL {
+        let mine: Vec<Value> = lines.iter().filter(|l| map(Station::of_line(l)) == s).cloned().collect();
         if !mine.is_empty() {
             out.push((s, mine));
         }
@@ -92,7 +124,7 @@ pub fn split_by_station(lines: &[Value]) -> Vec<(Station, Vec<Value>)> {
 pub fn entry_id(order_id: &str, kind: &str, station: Station) -> String {
     match station {
         Station::Kitchen => format!("{order_id}/{kind}"),
-        Station::Bar => format!("{order_id}/{kind}/bar"),
+        other => format!("{order_id}/{kind}/{}", other.as_str()),
     }
 }
 
@@ -106,7 +138,7 @@ pub fn targets<'a>(groups: &[(Station, Vec<Value>)], bar_chat: Option<&'a str>) 
             .iter()
             .map(|(s, _)| match s {
                 Station::Bar => (Station::Bar, Some(chat)),
-                Station::Kitchen => (Station::Kitchen, None),
+                other => (*other, None),
             })
             .collect(),
         _ => vec![(Station::Kitchen, None)],
@@ -162,7 +194,8 @@ pub fn telegram_tickets(
     bar_chat: &str,
 ) -> Vec<Ticket> {
     let chat = chat.trim();
-    let groups = split_by_station(lines);
+    // THE OLD TWO CHATS: a sushi line rings the kitchen's.
+    let groups = split_legacy(lines);
     let to = targets(&groups, Some(bar_chat));
     let split = to.iter().any(|(s, _)| *s == Station::Bar);
     let base = match amend_seq {

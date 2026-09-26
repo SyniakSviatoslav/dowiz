@@ -85,6 +85,8 @@ pub async fn state(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
             "scheduled": e.class == events::Class::Scheduled, "urgent": e.class == events::Class::Urgent,
         })).collect::<Vec<_>>(),
         "langs": render::langs(),
+        // The stations a group may take (W0c); the console's picker reads this.
+        "stations": crate::bell_route::ALL.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
     }))
 }
 

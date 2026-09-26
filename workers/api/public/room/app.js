@@ -27,6 +27,7 @@ import * as ui from '/lib/ui/index.js';
 import { createGuide } from '/lib/guide.js';
 import { createLearn, loadLessons } from '/lib/learn.js';
 import { openMcp } from './mcp.js';
+import { renderPass, bindPass } from './pass.js';
 
 const $ = s => document.querySelector(s);
 const POLL_MS = 20000;
@@ -145,6 +146,7 @@ function render() {
   if (S.view === 'moveSit') { root.innerHTML = renderMoveSitting(c, s); return bindMoveSitting(c, root, s); }
   if (S.view === 'open' && S.caps.has('take_orders')) { root.innerHTML = renderOpen(c); return bindOpen(c, root, () => { S.view = 'room'; render(); }); }
   if (S.view === 'till' && canTill(S.caps)) { root.innerHTML = renderTillScreen(c); return bindTill(c, root); }
+  if (S.view === 'pass' && S.caps.has('take_orders')) { root.innerHTML = renderPass(c); return bindPass(c, root, () => { S.view = 'room'; render(); }); }
   if (S.view === 'floor' && S.caps.has('take_orders')) { root.innerHTML = renderFloor(S.floor, t, S.caps, S.floorPick); return bindFloor(c, root, () => { S.view = 'room'; render(); }); }
   if (S.view === 'login') { root.innerHTML = renderLogin(c); }
   else if (S.view === 'sitting') root.innerHTML = renderSitting(c, s);
@@ -160,6 +162,7 @@ function render() {
     if (act === 'till') { S.view = 'till'; return render(); }
     if (act === 'floor') { S.view = 'floor'; S.floorPick = null; render(); return loadFloor(c); }
     if (act === 'open') { S.view = 'open'; S.basket = {}; return render(); }
+    if (act === 'pass') { S.view = 'pass'; return render(); }
     if (act === 'back') { S.view = 'room'; return render(); }
     if (act === 'sit') {
       S.sittingId = id;

@@ -150,3 +150,31 @@ fn a_stamped_line_survives_the_stored_order_and_splits_at_the_bar() {
     let g = split_by_station(&lines_of(&stored));
     assert_eq!(g.iter().map(|(s, l)| (*s, l.len())).collect::<Vec<_>>(), vec![(Station::Kitchen, 1), (Station::Bar, 1)]);
 }
+
+/// W0c: SUSHI IS A STATION. Stored, typed and split like the bar; the old
+/// two-chat venue rings it with the kitchen.
+#[test]
+fn sushi_is_a_station_an_owner_may_set() {
+    assert_eq!(Station::from_wire("sushi"), Ok(Station::Sushi));
+    assert!(Station::from_wire("Sushi").is_err(), "the closed set is exact");
+    assert_eq!(Station::of_line(&json!({ "station": "sushi" })), Station::Sushi);
+    assert_eq!(Station::Sushi.as_str(), "sushi");
+    assert_eq!(entry_id("r1", "telegram", Station::Sushi), "r1/telegram/sushi");
+    let mut l = json!({ "product_id": "maki" });
+    stamp_line(&mut l, Station::Sushi);
+    assert_eq!(l["station"], "sushi");
+    let mut k = json!({ "product_id": "ramen" });
+    stamp_line(&mut k, Station::Kitchen);
+    assert!(k.get("station").is_none(), "absent IS the kitchen");
+}
+
+#[test]
+fn a_sushi_line_is_its_own_group_and_rides_the_kitchen_chat_at_a_legacy_venue() {
+    let sushi = json!({ "product_id": "nigiri", "name": "Nigiri", "quantity": 2, "station": "sushi" });
+    let g = split_by_station(&[maki(), sushi.clone(), beer()]);
+    assert_eq!(g.iter().map(|(s, _)| *s).collect::<Vec<_>>(), vec![Station::Kitchen, Station::Sushi, Station::Bar]);
+    let t = telegram_tickets("r1", FULL, &[maki(), sushi, beer()], None, "-100kitchen", "-100bar");
+    assert_eq!(t.len(), 2, "no sushi chat exists at a legacy venue");
+    assert!(t[0].text.contains("2 × Nigiri") && t[0].text.contains("1 × Maki"), "{}", t[0].text);
+    assert_eq!(t[0].id, "r1/telegram");
+}

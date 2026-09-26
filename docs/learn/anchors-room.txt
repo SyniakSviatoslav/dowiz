@@ -2,7 +2,7 @@
 # One `data-tour` id per line: "<module>.<control> <file>:<line>" (the line that
 # writes it). docs/design/BLUEPRINT-LEARNING-VIDEOS-WIKI-2026-09-24.md §4.2 / §5.1.
 # Lessons: W1 hud.* login.* | W2 room.* sitting.* | W3 open.* menu.* | W4 floor.*
-# W5 round.* menu.* | W6 guest.* | W7 pay.* round.pay | W8 transfer.* move.*
+# W13 room.pass pass.* | W5 round.* menu.* | W6 guest.* | W7 pay.* round.pay | W8 transfer.* move.*
 # round.transfer round.moveSitting sitting.move | W9 till.* | W10 till.z till.tips.
 # Every id is a LITERAL string in its file (never built from parts), so grep
 # finds it. room/views.test.mjs fails when a listed id or its line moves, or
@@ -25,6 +25,7 @@ room.role workers/api/public/room/screens.js:54
 room.open workers/api/public/room/screens.js:55
 room.till workers/api/public/room/screens.js:56
 room.floor workers/api/public/room/screens.js:57
+room.pass workers/api/public/room/screens.js:57
 room.refresh workers/api/public/room/screens.js:58
 room.signout workers/api/public/room/screens.js:61
 sitting.round workers/api/public/room/screens.js:71
@@ -83,3 +84,5 @@ till.count workers/api/public/room/till.js:56
 till.counted workers/api/public/room/till.js:56
 till.close workers/api/public/room/till.js:58
 till.closeSure workers/api/public/room/till.js:59
+pass.code workers/api/public/room/pass.js:24
+pass.check workers/api/public/room/pass.js:25

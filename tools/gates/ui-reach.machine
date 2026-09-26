@@ -1,0 +1,10 @@
+# MACHINE-ONLY routes: no screen can or should call these. One line each:
+#   METHOD PATH  reason
+# A line here that names no route in lib.rs turns the gate red (stale).
+GET /healthz  uptime probe; answers "ok" to a monitor, not to a person
+POST /api/bootstrap  BOOTSTRAP_SECRET-gated seed for scripts and the platform's two-step hub creation
+POST /api/webhooks/stripe  Stripe signs it; its effect (a paid order) shows in Orders
+POST /api/webhooks/telegram  Telegram's bot webhook (group links, member changes); its effect shows on the Telegram screen
+GET /api/print/job/:token  the kitchen printer fetches its ticket with a venue API key minted on the Printer sheet
+DELETE /api/print/job/:token  the kitchen printer acknowledges a printed ticket; the queue shows on the Printer sheet
+GET /media/:name  image bytes; the URLs arrive inside the menu JSON and are drawn by <img> on every surface

@@ -249,7 +249,8 @@ export const threads = {
 export const wallet = {
   balance: () => call('/wallet'),
   statement: () => call('/wallet/statement'),
-  topUp: body => call('/wallet/topup', json(body)),
+  // NO `topUp`: a customer's top-up is refused by the hub (owner-only until a
+  // payment webhook signs one); the venue records it in `admin/wallet.js`.
 };
 
 // ── THE ORDER ──

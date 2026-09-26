@@ -36,7 +36,21 @@ pub async fn status(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         Ok(p) => p,
         Err(r) => return Ok(r),
     };
-    command(&place, "ebills/fiscal_status", &json!({ "now_ms": ctx.data.now_ms })).await
+    // THE PLATFORM SWITCH TRAVELS WITH THE STATUS (W-WIRE row 6), so the
+    // console says "sending is off for every venue" from the build's own
+    // constant rather than from a sentence somebody has to keep true.
+    match crate::command::send::<_, Value>(&place, "ebills/fiscal_status", &json!({ "now_ms": ctx.data.now_ms })).await {
+        Ok(v) => Response::from_json(&with_switch(v, super::SEND_ENABLED)),
+        Err((status, msg)) => Response::error(msg, status),
+    }
+}
+
+/// The status with the platform's send switch beside it. PURE.
+pub fn with_switch(mut v: Value, send_enabled: bool) -> Value {
+    if let Some(m) = v.as_object_mut() {
+        m.insert("sendEnabled".into(), Value::Bool(send_enabled));
+    }
+    v
 }
 
 /// `POST /api/owner/fiscal/ebills`
@@ -79,4 +93,19 @@ pub async fn receipt(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
         Err(r) => return Ok(r),
     };
     command(&place, "ebills/fiscal_receipt", &json!({ "order_id": id })).await
+}
+
+#[cfg(test)]
+mod switch_tests {
+    use super::with_switch;
+    use serde_json::json;
+
+    /// The console reads the platform switch from the status, never from a sentence.
+    #[test]
+    fn the_status_carries_the_platform_send_switch() {
+        assert_eq!(with_switch(json!({ "armed": true }), false), json!({ "armed": true, "sendEnabled": false }));
+        assert_eq!(with_switch(json!({}), true)["sendEnabled"], true);
+        assert_eq!(with_switch(json!("odd"), false), json!("odd"), "a non-object answer passes through");
+        assert!(!crate::fiscal::SEND_ENABLED, "operator 2026-09-24: import-only");
+    }
 }

@@ -592,25 +592,10 @@ pub async fn load_stock(place: &Place) -> Result<LoadedStock> {
     }
 }
 
-pub async fn with_stock<F, T>(place: &Place, mut f: F) -> Result<T>
-where
-    F: FnMut(&mut dowiz_hub::stock::StockLog) -> Result<T>,
-{
-    for _ in 0..5 {
-        let mut loaded = load_stock(place).await?;
-        let before = loaded.stock.len();
-        let out = f(&mut loaded.stock)?;
-        if loaded.stock.len() == before {
-            return Ok(out);
-        }
-        if save_image(place, IMAGE_STOCK, loaded.stock.to_bytes_trimmed(), loaded.generation)
-            .await?
-        {
-            return Ok(out);
-        }
-    }
-    Err(Error::RustError("stock image is contended".into()))
-}
+// `with_stock` WAS HERE. Its one caller, the stock movement, is now the
+// venue object's turn (`hubdo/stock_turn.rs`, W0a), which writes the shelf and
+// the groups' messages about it together; a Worker-side stock write is the
+// two-image shape `one-image` exists to refuse.
 
 /// Read, mutate, write the catalogue under the same generation guard.
 pub async fn with_catalog<F, T>(place: &Place, mut f: F) -> Result<T>

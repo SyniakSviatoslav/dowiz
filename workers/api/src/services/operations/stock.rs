@@ -13,6 +13,10 @@ pub mod as_is;
 pub mod moves;
 /// What the Stock screen shows, pure.
 pub mod view;
+/// What a movement tells the Telegram groups, pure (W0a).
+pub mod tell;
+/// One movement as the venue object's turn, pure (W0a).
+pub mod turn;
 pub use moves::StockMoveIn;
 #[cfg(test)]
 use moves::movement;
@@ -167,7 +171,11 @@ async fn waste_signer(req: &Request, ctx: &RouteContext<crate::Req>) -> std::res
 /// order lifecycle and are deliberately unreachable here: a hand-written
 /// reservation has no order to settle it and would strand immediately.
 pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: StockMoveIn = match req.json().await {
+    let raw: Value = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let body: StockMoveIn = match serde_json::from_value(raw.clone()) {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -190,25 +198,20 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
         return as_is::write(&place, ids).await;
     }
     let cat = crate::hubstore::load_catalog(&place).await?.catalog;
-    let shelf = |id: &str| {
-        cat.supply(id).and_then(|j| serde_json::from_str::<Value>(&j).ok()).and_then(|v| v.get("shelfDays").and_then(Value::as_i64))
+    // THE MOVEMENT IS THE OBJECT'S TURN (W0a): the stock image and the
+    // groups' messages about it are written there together, so this handler
+    // writes no image of its own.
+    let input = turn::StockTurnIn {
+        kind,
+        body: raw,
+        by,
+        now_ms: now,
+        today: today_of(&cat, now),
+        supplies: turn::supplies_of(cat.supplies()),
     };
-    let plan = match moves::plan(&kind, body, &by, now, today_of(&cat, now), shelf) {
-        Ok(p) => p,
-        Err((status, said)) => return Response::error(said, status),
-    };
-    if let Some(unknown) = plan.items().into_iter().find(|i| cat.supply(i).is_none()) {
-        return Response::error(format!("not found: {unknown}"), 404);
-    }
-    let outcome = crate::hubstore::with_stock(&place, move |log| {
-        log.set_clock(now);
-        plan.apply(log).map_err(|e| Error::RustError(e.to_string()))
-    })
-    .await;
-    match outcome {
+    match crate::command::send::<_, Value>(&place, "stock_move", &input).await {
         Ok(shown) => Response::from_json(&shown),
-        // The ledger's refusals are the venue's business, not a server fault.
-        Err(e) => Response::error(e.to_string(), 409),
+        Err((status, said)) => Response::error(said, status),
     }
 }
 

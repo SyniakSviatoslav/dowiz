@@ -61,6 +61,8 @@ async function signIn() {
     $('#wait').classList.remove('hidden');
     $('#create').classList.remove('hidden');
     loadWaitlist().catch(e => { $('#waitList').innerHTML = `<p class="hint">${esc(String(e.message || e))}</p>`; });
+    $('#errs').classList.remove('hidden');
+    loadErrors().catch(e => { $('#errList').innerHTML = `<p class="hint">${esc(String(e.message || e))}</p>`; });
     $('#who').textContent = email;
     said.classList.add('hidden');
   } catch (e) {
@@ -117,6 +119,27 @@ async function loadWaitlist() {
       </span>
       <span class="tag">${r.notified_ms ? 'mailed' : 'stored'}</span>
     </div>`).join('');
+  return d;
+}
+
+// ── the platform's error log (W-WIRE row 9) ─────────────────────────────────
+// `GET /api/platform/errors`: the worker's own failures that name no venue --
+// the black box that had no reader. A record this build cannot parse is
+// COUNTED by the hub, and the count is shown, never hidden.
+async function loadErrors() {
+  const d = await api('/platform/errors?limit=100');
+  const list = $('#errList');
+  const when = ms => new Date(ms).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'medium' });
+  const rows = (d.errors || []).map(r => `
+    <div class="hub">
+      <span class="grow">
+        <b>${esc(r.place)}</b>
+        <div>${esc(r.message)}</div>
+        <div class="hint">${esc(when(r.atMs))}</div>
+      </span>
+    </div>`).join('');
+  const q = d.quarantined ? `<p class="hint">Нечитабельних записів: ${esc(d.quarantined)}</p>` : '';
+  list.innerHTML = (rows || '<p class="hint">Помилок немає.</p>') + q;
   return d;
 }
 

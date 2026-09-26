@@ -15,7 +15,7 @@
 
 import { icon, esc } from '/kit/app.js';
 import { topBar, ctaBar } from '/kit/parts.js';
-import { wallet as api, requestId, formatMoney } from '/kit/data.js';
+import { wallet as api, formatMoney } from '/kit/data.js';
 
 const BALANCE = '$ 2400.00';
 const PRESETS = [100, 200, 500, 1000, 2000, 3000, 4000, 5000];
@@ -135,32 +135,13 @@ export function bind(root){
   });
 }
 
-async function topUp(root, value){
+// A TOP-UP IS THE VENUE'S ACT, NOT THE CUSTOMER'S (`wallet.rs::top_up`, the
+// red-team reason): the ledger it writes is the money this system treats as
+// authoritative, and until a payment provider's webhook signs a top-up only
+// the person who took the money may record it. This screen used to POST to a
+// door that answers 403 for every customer; it now says where the door is --
+// the counter -- and the owner records it in the console (`admin/wallet.js`).
+function topUp(root, value){
   const said = root.querySelector('#said');
-  const minor = Math.round(Number(value.replace(',', '.')) * 100);
-  said.textContent = 'Надсилаємо…';
-
-  // A TOP-UP IS THE VENUE'S ACT, not the customer's: the ledger it writes is
-  // the money this system treats as authoritative, and until a payment
-  // provider signs one, only the console may move it. So this call is expected
-  // to be refused from here, and the screen shows the hub's own words for why
-  // rather than inventing a success.
-  const answer = await api.topUp({
-    user: '',
-    amountMinor: minor,
-    currency: 'ALL',
-    // Deliberately empty: there is no payment rail wired yet, and the server
-    // refuses a top-up with nothing behind it. The refusal IS the feature —
-    // a posting without a payment would be money this system invented.
-    providerRef: '',
-    requestId: requestId(),
-  });
-
-  if (!answer){
-    said.textContent = 'Хост не називає заклад, тож поповнювати нічого.';
-    return;
-  }
-  said.textContent = answer.error
-    ? answer.error
-    : `Поповнено на ${formatMoney(minor, 'ALL')} (${answer.id}).`;
+  said.textContent = `Поповнення робить заклад: оплатіть ${value} на касі, і персонал зарахує їх на ваш гаманець.`;
 }

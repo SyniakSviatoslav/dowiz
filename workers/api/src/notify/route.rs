@@ -21,6 +21,8 @@ use dowiz_hub::tz::Zone;
 pub mod events;
 pub mod groups;
 pub mod health;
+/// What each object turn owes the groups, pure (W0a/W0b).
+pub mod produce;
 pub mod render;
 pub use groups::{Group, Groups, Mode, State, Window};
 
@@ -103,15 +105,14 @@ pub fn fan_out(e: &Entry, groups: &[Group], zone: Zone, now_ms: i64) -> Plan {
     let ev = e.to.as_str();
     let payload: Value = serde_json::from_str(&e.text).unwrap_or(Value::Null);
     let lines: Vec<Value> = payload.get("lines").and_then(Value::as_array).cloned().unwrap_or_default();
-    let has_bar = lines.iter().any(|l| crate::bell_route::Station::of_line(l) == crate::bell_route::Station::Bar);
-    let split = has_bar && groups.iter().any(|g| g.station.as_deref() == Some("bar") && g.mode(ev) == Mode::Now);
+    let apart = split_out(&lines, groups, ev);
     let mut plan = Plan::default();
     for g in groups {
         let mode = g.mode(ev);
         if mode == Mode::Off {
             continue;
         }
-        let Some(text) = text_for(g, ev, &payload, &lines, split) else { continue };
+        let Some(text) = text_for(g, ev, &payload, &lines, &apart) else { continue };
         if mode == Mode::Digest {
             plan.digest.push((g.id.clone(), text.lines().take(3).collect::<Vec<_>>().join(" · ")));
             continue;
@@ -128,26 +129,38 @@ pub fn fan_out(e: &Entry, groups: &[Group], zone: Zone, now_ms: i64) -> Plan {
     plan
 }
 
+/// The stations an order is split out to: a non-kitchen station with a line
+/// on it AND a group of its own that hears this event now. Every other line is
+/// the kitchen's. Empty = one ticket, today's.
+pub fn split_out(lines: &[Value], groups: &[Group], ev: &str) -> Vec<crate::bell_route::Station> {
+    use crate::bell_route::Station;
+    crate::bell_route::ALL
+        .into_iter()
+        .filter(|st| *st != Station::Kitchen)
+        .filter(|st| lines.iter().any(|l| Station::of_line(l) == *st))
+        .filter(|st| groups.iter().any(|g| Station::of_group(g.station.as_deref()) == Some(*st) && g.mode(ev) == Mode::Now))
+        .collect()
+}
+
 /// One group's text, or `None` when it has nothing to say to that group.
-fn text_for(g: &Group, ev: &str, p: &Value, lines: &[Value], split: bool) -> Option<String> {
+fn text_for(g: &Group, ev: &str, p: &Value, lines: &[Value], apart: &[crate::bell_route::Station]) -> Option<String> {
     use crate::bell_route::{header_of, ticket_text, Station};
     let t = if let Some(ticket) = p.get("ticket").and_then(Value::as_str) {
         let t = render::ticket(ticket, &g.lang, g.pii);
         let amend = p.get("amend").and_then(Value::as_bool).unwrap_or(false);
-        let station = match g.station.as_deref() {
-            Some("bar") => Some(Station::Bar),
-            Some(_) => Some(Station::Kitchen),
-            None => None,
-        };
-        match (split, station) {
-            (true, Some(st)) => {
-                let mine: Vec<Value> = lines.iter().filter(|l| Station::of_line(l) == st).cloned().collect();
+        // A line at a station nobody split out is made in the kitchen.
+        let at = |l: &Value| Some(Station::of_line(l)).filter(|s| apart.contains(s)).unwrap_or(Station::Kitchen);
+        // A group's station that is not one of ours is the kitchen, as before.
+        let mine_at = g.station.as_deref().map(|s| Station::of_group(Some(s)).unwrap_or(Station::Kitchen));
+        match (apart.is_empty(), mine_at) {
+            (false, Some(st)) => {
+                let mine: Vec<Value> = lines.iter().filter(|l| at(l) == st).cloned().collect();
                 if mine.is_empty() {
                     return None;
                 }
                 ticket_text(header_of(&t), Some(st), &mine)
             }
-            (false, Some(Station::Bar)) => return None,
+            (true, Some(st)) if st != Station::Kitchen => return None,
             _ if amend => ticket_text(header_of(&t), None, lines),
             _ => t,
         }
@@ -212,3 +225,6 @@ pub fn dues(groups: &[Group], zone: Zone, now_ms: i64) -> Vec<(String, i64)> {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+#[path = "route/station_tests.rs"]
+mod station_tests;

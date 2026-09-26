@@ -69,6 +69,8 @@ mod kitchen_ack;
 mod print;
 mod exceptions; // the exception alert (P1-5), `hubdo/exceptions.rs`
 mod fiscal; // the fiscal document queued at placement (B6/B8), `hubdo/fiscal.rs`
+mod routed; // the groups' messages written in the turn (W0a/W0b), `hubdo/routed.rs`
+mod stock_turn; // a stock movement as one turn (W0a), `hubdo/stock_turn.rs`
 
 /// The catalogue image, which holds the venue's own record as well as its
 /// dishes. Named here because `/fold/venue` reads it and nothing else does.
@@ -665,6 +667,8 @@ impl HubImages {
             },
             None => Ok(None),
         };
+        // `stock.low` (W0a): the shelf before, only when a group hears it.
+        let low_before = self.low_watch(&stock).await;
         let stored = match crate::command::place::decide(&mut hub, &mut stock, &listed, &venue_tax, &input) {
             Ok(v) => v,
             // NOTHING HAS BEEN WRITTEN. Both images go out of scope here.
@@ -733,6 +737,14 @@ impl HubImages {
             Ok(_) => {}
             Err(e) => console_error!("fiscal: order {} was placed and its document was NOT queued: {e}", input.order_id),
         }
+
+        // THE GROUPS (W0a/W0b): a crossing of a low threshold, and orders now late.
+        if let Some(before) = low_before {
+            self.tell_low(&before, &stock, input.now_ms).await;
+        }
+        let mut orders: Vec<(String, String)> = listed.iter().map(|o| (o.order_id.clone(), o.order_json.clone())).collect();
+        orders.push((input.order_id.clone(), stored.clone()));
+        self.tell_orders(None, &orders, input.now_ms).await;
 
         // AFTER THE WRITE LANDED, never before.
         self.broadcast(dowiz_hub::EventKind::Placed as u8, &input.order_id, &stored, next);
@@ -810,6 +822,14 @@ impl HubImages {
         )
         .to_string();
         self.broadcast(dowiz_hub::EventKind::Advanced as u8, &input.order_id, &body, next);
+        // THE GROUPS (W0b): this order's new status, and orders now late, as
+        // this turn left them.
+        let now_json = merged.to_string();
+        let orders: Vec<(String, String)> = listed
+            .iter()
+            .map(|o| (o.order_id.clone(), if o.order_id == input.order_id { now_json.clone() } else { o.order_json.clone() }))
+            .collect();
+        self.tell_orders(Some((&input.order_id, &input.next)), &orders, input.now_ms).await;
         Ok(Ok(crate::command::advance::AdvanceOut {
             merged: merged.to_string(),
             generation: next,
@@ -1354,6 +1374,11 @@ impl DurableObject for HubImages {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
                     }
+                }
+                // A STOCK MOVEMENT (W0a): `/fold/stock_move`
+                (Method::Post, "stock_move") => {
+                    let mut req = req;
+                    self.stock_move(req.json().await?).await
                 }
                 // THE KITCHEN SAW THE TICKET: `/fold/kitchen_ack`
                 (Method::Post, "kitchen_ack") => {
