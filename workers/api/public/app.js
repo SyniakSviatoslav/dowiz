@@ -6,6 +6,7 @@
 // which is what makes a category tap instant and a language switch a change
 // of words rather than a change of screen.
 
+import { readAgain } from '/lib/retry.js';
 import { state, API, SLUG, indexProducts, applyTheme, applyStage, resolveCurrency, repaintMoney, tokenFor, fetchRemembered } from '/store/state.js';
 import { t, lang, LANGS, setLang, retranslate } from '/store/i18n.js';
 import { $, esc, icon, bindSheetChrome } from '/store/ui.js';
@@ -67,7 +68,8 @@ function rememberBoot(L){ safeSet(BOOT_KEY, JSON.stringify({ name: L.name, theme
 
 const fetchMenu = () => fetchMenuIn(lang);
 async function fetchMenuIn(locale){
-  const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}/menu?locale=${locale}`);
+  // A platform 503 is asked again before the customer is told the menu did not load (lib/retry.js).
+  const r = await readAgain(fetch, `${API}/public/locations/${encodeURIComponent(SLUG)}/menu?locale=${locale}`);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const d = await r.json();
   // The key rides beside the location in the payload; the checkout reads it

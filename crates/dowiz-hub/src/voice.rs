@@ -111,7 +111,7 @@ impl Command {
             (Target::Oldest, true, _) => "найстаріше".to_string(),
             (Target::Oldest, _, true) => "më të vjetrin".to_string(),
             (Target::Oldest, ..) => "the oldest".to_string(),
-            (Target::Digits(d), ..) => format!("#{d}"),
+            (Target::Digits(d), ..) => format!("#{}", d.to_uppercase()),
             (Target::Unsaid, true, _) => "поточне".to_string(),
             (Target::Unsaid, _, true) => "aktualin".to_string(),
             (Target::Unsaid, ..) => "the current one".to_string(),
@@ -184,6 +184,20 @@ fn has(hay: &str, needles: &[&str]) -> bool {
 }
 
 fn target_of(t: &str) -> Target {
+    // THE NUMBER THE BOARD SHOWS. The kitchen board calls a ticket by the last
+    // four characters of its id (`kitchen-logic.js` shortId), and an id is
+    // hex: "#A57B". Only the digits were read, so "A57B ready" became "57",
+    // too short, and the hub asked "which one?" about a ticket the cook had
+    // just named (QA walk Q3, 2026-09-26). A word of hex with a digit in it is
+    // that reference, as typed or read off the ticket.
+    if let Some(tag) = t.split(' ').find(|w| {
+        (3..=12).contains(&w.len())
+            && w.chars().all(|c| c.is_ascii_hexdigit())
+            && w.chars().any(|c| c.is_ascii_digit())
+            && w.chars().any(|c| c.is_ascii_alphabetic())
+    }) {
+        return Target::Digits(tag.to_string());
+    }
     // Digits win: a number said aloud is the most specific reference there is.
     let digits: String = t.chars().filter(char::is_ascii_digit).collect();
     if digits.len() >= 3 {
@@ -305,6 +319,19 @@ mod tests {
     }
     fn courier(t: &str) -> Command {
         classify(t, 0.9, true, Courier)
+    }
+
+    /// The ticket's own number as the board prints it -- hex, "#A57B" -- names
+    /// that ticket (QA walk Q3: it was read as "57" and refused). The positive
+    /// twin: plain digits, and digits said apart, still name it as before.
+    #[test]
+    fn the_number_the_board_shows_names_the_ticket() {
+        assert_eq!(owner("move order A57B to ready"), Command::Order { verb: "ready", target: Target::Digits("a57b".into()) });
+        assert_eq!(owner("confirm #a57b"), Command::Order { verb: "confirm", target: Target::Digits("a57b".into()) });
+        assert_eq!(owner("готове 4821"), Command::Order { verb: "ready", target: Target::Digits("4821".into()) });
+        assert_eq!(owner("ready 4 8 2 1"), Command::Order { verb: "ready", target: Target::Digits("4821".into()) });
+        // A word of hex letters with no digit is a word, not a number.
+        assert_eq!(owner("confirm the cafe order"), Command::Order { verb: "confirm", target: Target::Unsaid });
     }
 
     /// The gate before the words: an unsure recogniser is not obeyed.

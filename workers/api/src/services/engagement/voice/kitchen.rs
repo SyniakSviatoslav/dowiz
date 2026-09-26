@@ -26,24 +26,30 @@ pub fn is_kitchen(caps: &Caps) -> bool {
 /// The one order a spoken target names, among `pool`. AMBIGUITY IS REFUSED,
 /// not guessed: two orders ending in the same digits is exactly when a guess
 /// moves the wrong one.
+///
+/// A REFUSAL IS A `say` KEY, not a sentence. These were Ukrainian literals, so
+/// an owner or a cook reading the console in Albanian or English was told
+/// "яке саме?" (QA walk Q3, 2026-09-26); the caller says the key in the
+/// speaker's language (`say::line`).
 pub fn resolve(pool: &[Value], t: &Target) -> Result<String, &'static str> {
     let id = |o: &Value| o.get("id").and_then(Value::as_str).unwrap_or("").to_string();
     let at = |o: &Value| o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
     match t {
-        Target::Newest => pool.iter().max_by_key(|o| at(o)).map(id).ok_or("зараз немає замовлень"),
-        Target::Oldest => pool.iter().min_by_key(|o| at(o)).map(id).ok_or("зараз немає замовлень"),
+        Target::Newest => pool.iter().max_by_key(|o| at(o)).map(id).ok_or("no_orders"),
+        Target::Oldest => pool.iter().min_by_key(|o| at(o)).map(id).ok_or("no_orders"),
         Target::Digits(d) => {
-            let hits: Vec<String> = pool.iter().filter(|o| id(o).ends_with(d.as_str())).map(id).collect();
+            let d = d.to_ascii_lowercase();
+            let hits: Vec<String> = pool.iter().filter(|o| id(o).to_ascii_lowercase().ends_with(d.as_str())).map(id).collect();
             match hits.len() {
                 1 => Ok(hits[0].clone()),
-                0 => Err("такого номера серед відкритих немає"),
-                _ => Err("під цей номер підходить кілька — скажіть більше цифр"),
+                0 => Err("no_such_number"),
+                _ => Err("many_numbers"),
             }
         }
         Target::Unsaid => match pool.len() {
             1 => Ok(id(&pool[0])),
-            0 => Err("зараз немає замовлень"),
-            _ => Err("яке саме?"),
+            0 => Err("no_orders"),
+            _ => Err("which_order"),
         },
     }
 }
@@ -200,7 +206,7 @@ pub fn decide(said: &Said, caps: &Caps, lang: &str, shelf: &[Supply]) -> Out {
 pub fn order(cmd: &Command, caps: &Caps, pool: &[Value], lang: &str) -> Out {
     match cmd {
         Command::Order { verb, target } if caps.allows(Cap::Advance) => match resolve(pool, target) {
-            Err(why) => Out::Refuse(why.to_string()),
+            Err(why) => refuse(why, lang),
             Ok(id) => Out::Propose { verb: *verb, arg: id.clone(), readback: cmd.readback(lang), extra: json!({ "orderId": id }) },
         },
         Command::Order { .. } => refuse("cap_kitchen", lang),

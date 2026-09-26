@@ -78,19 +78,19 @@ enum Who {
 
 /// A confirmation: the token's own instruction, handed back to the surface,
 /// which calls the same route the button calls.
-fn confirmed(claims: &dowiz_hub::token::Claims, who: &str, role: dowiz_hub::token::Role) -> Value {
-    let no = |say: &str| json!({ "understood": false, "say": say });
+fn confirmed(claims: &dowiz_hub::token::Claims, who: &str, role: dowiz_hub::token::Role, lang: &str) -> Value {
+    let no = |key: &str| json!({ "understood": false, "say": say::line(key, lang) });
     if claims.subject != who || claims.role != role {
-        return no("це підтвердження не ваше");
+        return no("not_yours");
     }
     let Some((verb, rest)) = claims.scope.strip_prefix("voice:").and_then(|r| r.split_once(':')) else {
-        return no("не та відповідь");
+        return no("bad_answer");
     };
     let mut out = json!({ "understood": true, "needsConfirmation": false, "action": "do", "verb": verb });
     if scope::is_ours(verb) {
         match scope::decode(verb, rest) {
             Some(args) => out["args"] = args,
-            None => return no("не та відповідь"),
+            None => return no("bad_answer"),
         }
     } else {
         out["orderId"] = json!(rest);
@@ -126,8 +126,8 @@ pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // A confirmation carries its own instruction; nothing is classified again.
     if let Some(tok) = &body.confirm {
         return match dowiz_hub::token::verify(crate::auth::signing_key(&ctx.env).as_slice(), tok, ctx.data.now_ms) {
-            Ok(c) => Response::from_json(&confirmed(&c, &who, role)),
-            Err(_) => Response::from_json(&json!({ "understood": false, "say": "та відповідь уже не дійсна" })),
+            Ok(c) => Response::from_json(&confirmed(&c, &who, role, &lang)),
+            Err(_) => Response::from_json(&json!({ "understood": false, "say": say::line("answer_expired", &lang) })),
         };
     }
 
@@ -247,7 +247,7 @@ pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     let resolve = |t: &Target| kitchen::resolve(&pool, t);
     let order_verb = |verb: &'static str, target: &Target| -> decide::Out {
         match resolve(target) {
-            Err(why) => decide::Out::Refuse(why.to_string()),
+            Err(why) => decide::Out::Refuse(say::line(why, &lang).to_string()),
             Ok(order) => decide::Out::Propose {
                 verb,
                 arg: order.clone(),

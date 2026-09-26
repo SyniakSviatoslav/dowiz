@@ -165,3 +165,26 @@ fn the_starter_lines_mean_what_they_say() {
         assert!(matches!(classify(q, 1.0, true, Speaker::Owner), Command::Ask(_)), "{q} must reach the assistant");
     }
 }
+
+/// "Which one?" is said in the reader's language, and the board's own number
+/// -- hex, any case -- names the ticket (QA walk Q3: a cook reading English
+/// was told "яке саме?" about "#A57B").
+#[test]
+fn which_ticket_is_asked_in_the_readers_language_and_the_board_number_names_it() {
+    let p = vec![
+        json!({ "id": "0f2c-a57b", "status": "PENDING", "created_at_ms": 2, "items": [] }),
+        json!({ "id": "1d9e-b810", "status": "PENDING", "created_at_ms": 1, "items": [] }),
+    ];
+    let caps = kitchen();
+    let said = |t: &str, lang: &str| match order(&classify(t, 1.0, true, dowiz_hub::voice::Speaker::Owner), &caps, &p, lang) {
+        Out::Refuse(s) => s,
+        Out::Propose { extra, .. } => format!("propose {}", extra["orderId"].as_str().unwrap_or("")),
+        Out::Now(v) => v.to_string(),
+    };
+    assert_eq!(said("move order A57B to ready", "en"), "propose 0f2c-a57b");
+    assert_eq!(said("ready", "en"), "Which order? Say the ticket's number");
+    assert_eq!(said("ready", "sq"), "Cila porosi? Thoni numrin e biletës");
+    assert_eq!(said("ready", "uk"), "Яке саме? Назвіть номер");
+    assert_eq!(said("ready 9999", "en"), "No open order has that number");
+    assert_eq!(said("ready", "en").chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c)), false);
+}

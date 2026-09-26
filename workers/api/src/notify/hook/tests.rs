@@ -39,3 +39,12 @@ fn the_bot_record_reads_back_and_absent_is_empty() {
     assert_eq!(bot_of(&s), Bot { username: "dubinbot".into(), hook_ms: 5 });
     assert!(dowiz_hub::settings::is_secret(groups::KEY_SECRET), "the webhook secret is redacted everywhere");
 }
+
+/// A Telegram refusal carries the hub's words where the console reads them
+/// (`d.error`), not as a text body it cannot parse (QA walk Q4: "HTTP 400").
+#[test]
+fn a_telegram_refusal_is_json_with_the_words_in_error() {
+    let v = owner::refusal("no bot token is set");
+    assert_eq!(v["error"], "no bot token is set");
+    assert_eq!(serde_json::from_str::<serde_json::Value>(&v.to_string()).unwrap(), v, "it parses as JSON");
+}

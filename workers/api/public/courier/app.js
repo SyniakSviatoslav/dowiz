@@ -11,6 +11,7 @@ import { create as vcreate, speak, supported as vsupported } from '/lib/voice.js
 import { createGuide } from '/lib/guide.js';
 import { createLearn, loadLessons } from '/lib/learn.js';
 import { createOutbox, newKey } from '/lib/outbox.js';
+import { bodyOf } from '/lib/body.js';
 import { t, lang, LANGS, setLang, nextLang, retranslate, intlLocale, voiceLocale } from '/courier/i18n.js';
 // THE DESIGN SYSTEM. Every control in the sheet is a /lib/ui component, built
 // by the pure screens in `screens.js`; this file keeps state, network, wiring.
@@ -291,7 +292,8 @@ async function api(path, opts = {}){
     }
     if (r.status === 401) { signedOut(); throw new Error('unauthorised'); }
     if (!r.ok) {
-      let m = 'HTTP ' + r.status; try { const d = await r.json(); m = d.error || d.message || m; } catch {}
+      // The hub refuses in plain text: its words, not 'HTTP 4xx' (lib/body.js).
+      const d = await bodyOf(r); const m = d.error || d.message || 'HTTP ' + r.status;
       const err = new Error(m); err.status = r.status; throw err;
     }
     return r.status === 204 ? null : r.json();
@@ -506,7 +508,8 @@ function renderLogin(err){
       const r = await fetch(API + '/courier/auth/login', { method:'POST',
         headers:{ 'content-type':'application/json' },
         body: JSON.stringify({ [v.includes('@') ? 'email' : 'phone']: v, password: $('#pw').value }) });
-      const d = await r.json();
+      // A refusal is plain text: `r.json()` threw and showed a parse error (lib/body.js).
+      const d = await bodyOf(r);
       if (!r.ok) throw new Error(d.error || d.message || 'HTTP ' + r.status);
       store.t = d.jwt; boot();
     } catch (e) { renderLogin(String(e.message || e)); }
@@ -531,7 +534,8 @@ function renderClaim(err){
         body: JSON.stringify({ phone: $('#cph').value.trim(),
                                code: $('#cod').value.trim().toUpperCase(),
                                password: $('#cpw').value }) });
-      const d = await r.json();
+      // A refusal is plain text: `r.json()` threw and showed a parse error (lib/body.js).
+      const d = await bodyOf(r);
       if (!r.ok) throw new Error(d.error || d.message || 'HTTP ' + r.status);
       // Signed in on the spot: they set the password ten seconds ago and
       // re-typing it proves nothing.

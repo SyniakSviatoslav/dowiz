@@ -44,6 +44,15 @@ const LINES: &[(&str, [&str; 3])] = &[
     ("which_supply", ["Cili përbërës?", "Which ingredient?", "Який інгредієнт?"]),
     ("no_supply", ["S'ka përbërës me këtë emër", "No ingredient by that name", "Немає інгредієнта з такою назвою"]),
     ("stock_unit", ["Ky përbërës numërohet me njësi tjetër", "That ingredient is counted in another unit", "Цей інгредієнт рахують в іншій одиниці"]),
+    // Which ticket, and the confirmation's own refusals (W-QA 2026-09-26: these
+    // were Ukrainian literals whatever the reader's language).
+    ("no_orders", ["Tani s'ka porosi", "There are no orders now", "Зараз немає замовлень"]),
+    ("no_such_number", ["S'ka porosi të hapur me këtë numër", "No open order has that number", "Такого номера серед відкритих немає"]),
+    ("many_numbers", ["Disa porosi përshtaten — thoni më shumë shifra", "Several orders fit — say more of the number", "Під цей номер підходить кілька — скажіть більше цифр"]),
+    ("which_order", ["Cila porosi? Thoni numrin e biletës", "Which order? Say the ticket's number", "Яке саме? Назвіть номер"]),
+    ("not_yours", ["Ky konfirmim nuk është i juaji", "That confirmation is not yours", "Це підтвердження не ваше"]),
+    ("bad_answer", ["Përgjigje e gabuar", "That is not the right answer", "Не та відповідь"]),
+    ("answer_expired", ["Kjo përgjigje nuk vlen më — thoni përsëri", "That answer has expired — say it again", "Та відповідь уже не дійсна — скажіть ще раз"]),
     ("waste_reason", ["Pse hidhet? I prishur, i rënë, i pashitur, i kthyer apo për stafin", "Why? Spoiled, dropped, unsold, returned or staff meal", "Чому? Зіпсувалось, впало, непродане, повернули чи для персоналу"]),
 ];
 

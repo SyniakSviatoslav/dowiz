@@ -20,8 +20,18 @@ use crate::owner::owner_and_venue;
 
 const TOKEN_KEY: &str = "notify.telegram.token";
 
+/// A refusal as the console reads it: `{"error": "..."}`.
+///
+/// IT WAS PLAIN TEXT (`Response::error`), and the console's `api()` reads a
+/// refusal with `r.json()`: the parse failed and the owner was shown "HTTP
+/// 400" where the hub had written "paste your bot's token from @BotFather
+/// first" or "no bot token is set" (QA walk Q4, 2026-09-26).
+pub(crate) fn refusal(msg: &str) -> serde_json::Value {
+    json!({ "error": msg })
+}
+
 fn fail(msg: impl Into<String>) -> Result<Response> {
-    Response::error(msg.into(), 400)
+    Ok(Response::from_json(&refusal(&msg.into()))?.with_status(400))
 }
 
 fn random(n: usize) -> Result<Vec<u8>> {

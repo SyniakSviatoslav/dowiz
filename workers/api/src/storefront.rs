@@ -615,8 +615,9 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
     });
     let mut res = Response::from_json(&out)?;
     // The menu is public and changes rarely; the version field is what a client
-    // uses to notice it moved.
-    res.headers_mut().set("cache-control", "public, max-age=30, stale-while-revalidate=300")?;
+    // uses to notice it moved. A `fresh` read is the console reading back its
+    // own save: see `menu_cache_control`.
+    res.headers_mut().set("cache-control", menu_cache_control(fresh))?;
     // Stored AFTER the response is built and cloned, so the store cannot fail
     // the request: a cache that breaks a page is worse than no cache.
     if let Ok(copy) = res.cloned() {
@@ -625,6 +626,23 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
         }
     }
     Ok(res)
+}
+
+/// The menu's `cache-control`, by who is reading.
+///
+/// A `fresh` READ MUST NOT BE KEPT BY THE BROWSER EITHER. `fresh` skipped the
+/// edge cache and still answered `max-age=30, stale-while-revalidate=300`, so
+/// the console's own browser kept the pre-save copy: an owner changed a price,
+/// saw "Saved", and the menu redrew the OLD price (QA walk Q1, 2026-09-26) --
+/// the same URL was answered from the browser's cache for up to half a minute,
+/// and past that stale-while-revalidate served the old copy once more.
+/// Customers keep the thirty-second window.
+pub(crate) fn menu_cache_control(fresh: bool) -> &'static str {
+    if fresh {
+        "no-store"
+    } else {
+        "public, max-age=30, stale-while-revalidate=300"
+    }
 }
 
 /// The venue's crypto wallets, validated on the way OUT as well as in: only
@@ -1444,3 +1462,6 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     res.headers_mut().set("content-type", "application/json; charset=utf-8")?;
     Ok(res)
 }
+
+#[cfg(test)]
+mod tests;
