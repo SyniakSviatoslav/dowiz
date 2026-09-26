@@ -233,16 +233,19 @@ mod advancing {
         assert_eq!(stock.len(), 0);
     }
 
-    /// THE SHELF FOLLOWS THE ORDER, and only for the three transitions that
-    /// mean something to it. PICKED_UP and DELIVERED settle NOTHING: the
-    /// consumption already happened at PREPARING, and settling twice would
-    /// take the same ingredients off the shelf a second time.
+    /// THE SHELF FOLLOWS THE ORDER (I0, 2026-09-26): every status an order
+    /// reaches on its way out of the kitchen consumes what is still held --
+    /// including IN_DELIVERY straight from CONFIRMED, which skipped PREPARING
+    /// and used to strand its reservation. REJECTED and CANCELLED release.
+    /// Settling twice takes nothing twice (`advance/consume_tests.rs`).
     #[test]
-    fn only_three_transitions_touch_the_shelf() {
-        assert_eq!(settlement("PREPARING"), Some(true), "preparing consumes");
+    fn every_fulfilment_status_consumes_and_the_exits_release() {
+        for consume in ["PREPARING", "READY", "IN_DELIVERY", "PICKED_UP", "DELIVERED"] {
+            assert_eq!(settlement(consume), Some(true), "{consume} consumes");
+        }
         assert_eq!(settlement("REJECTED"), Some(false), "a rejection releases");
         assert_eq!(settlement("CANCELLED"), Some(false), "so does a cancellation");
-        for quiet in ["CONFIRMED", "READY", "IN_DELIVERY", "DELIVERED", "PICKED_UP"] {
+        for quiet in ["CONFIRMED", "REFUNDING", "COMPENSATED_REFUND"] {
             assert_eq!(settlement(quiet), None, "{quiet} must not settle");
         }
     }

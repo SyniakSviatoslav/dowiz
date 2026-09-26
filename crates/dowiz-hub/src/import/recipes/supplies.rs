@@ -4,7 +4,7 @@ use super::num::{self, CostScale};
 use super::{DraftSupply, Opts, RecipeDraft, Sheet};
 use crate::import::slug;
 
-const KINDS: &[&str] = &["food_ingredient", "condiment", "packaging", "utensil"];
+const KINDS: &[&str] = &["food_ingredient", "condiment", "packaging", "utensil", "resale"];
 
 fn kind_of(raw: &str) -> Option<&'static str> {
     let l = raw.trim().to_lowercase();
@@ -16,6 +16,8 @@ fn kind_of(raw: &str) -> Option<&'static str> {
         "sauce" | "spice" | "salcë" | "соус" | "спеції" => "condiment",
         "package" | "box" | "ambalazh" | "упаковка" => "packaging",
         "cutlery" | "tool" | "прибори" => "utensil",
+        // Bought and sold as it is: a bottle, a can (operator I0, 2026-09-26).
+        "resale" | "as is" | "drink" | "pije" | "напій" | "товар" => "resale",
         _ => return None,
     })
 }

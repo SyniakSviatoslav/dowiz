@@ -134,3 +134,55 @@ fn the_owner_reads_a_lean_bom_with_names_and_numbers() {
         assert_eq!(q, before);
     }
 }
+
+// ── gross, net, out (research 2026-09-26 R6) ───────────────────────────────
+
+fn fish() -> Value {
+    json!({ "name": "Salmon", "unit": "g", "kind": "food_ingredient", "kcalPer100": 200, "costPerBasis": 1800, "cleanPm": 550, "cookPm": 900 })
+}
+
+/// The supply's defaults: 100 g gross -> 55 net -> 50 out. The dish weighs
+/// the OUT, nutrition follows the NET (raw basis), cost stays on the GROSS.
+#[test]
+fn a_line_follows_its_supplys_losses() {
+    let l = line_of("fish", 100, &fish());
+    assert_eq!((l.w.gross, l.w.net, l.w.out), (Some(100), Some(55), Some(50)));
+    assert_eq!(l.weight_g, Some(50.0));
+    assert_eq!(l.kcal.map(|k| k.round()), Some(110.0), "200 kcal/100 g x 55 g edible");
+    assert_eq!(l.cost, Some(1800));
+    assert_eq!(derive(&[l]).weight_g, Some(50));
+}
+
+/// Figures declared on the COOKED weight scale by the out instead.
+#[test]
+fn a_cooked_basis_scales_by_the_out() {
+    let mut rice = json!({ "name": "Rice", "unit": "g", "kind": "food_ingredient", "kcalPer100": 130, "cookPm": 2200 });
+    assert_eq!(line_of("rice", 100, &rice).kcal.map(|k| k.round()), Some(130.0), "raw basis: 100 g dry");
+    rice["nutritionBasis"] = json!("cooked");
+    assert_eq!(line_of("rice", 100, &rice).kcal.map(|k| k.round()), Some(286.0), "cooked basis: 220 g cooked");
+}
+
+/// A stored line with the owner's weighed numbers reads them back, writes
+/// them back, and an unweighed line stays lean -- so an old recipe is
+/// byte-identical after a save that changed nothing.
+#[test]
+fn weighed_numbers_round_trip_and_lean_lines_stay_lean() {
+    let stored = json!([{ "supply": "fish", "qty": 100, "net": 60, "out": 45 }, { "supply": "box", "qty": 1 }]);
+    let book2 = |id: &str| match id { "fish" => Some(fish().to_string()), other => book(other) };
+    let lines = lines_of_stored(&stored, book2);
+    assert_eq!((lines[0].w.net, lines[0].w.out, lines[0].w.net_set), (Some(60), Some(45), Some(60)));
+    assert_eq!(bom_json(&lines), stored);
+    let lean = json!([{ "supply": "salmon", "qty": 40 }]);
+    assert_eq!(bom_json(&lines_of_stored(&lean, book)), lean);
+}
+
+/// The owner's view carries every weight and the loss.
+#[test]
+fn the_owner_sees_gross_net_out_and_the_loss() {
+    let mut p = json!({ "bom": [{ "supply": "fish", "qty": 100 }] });
+    hydrate(&mut p, |id| (id == "fish").then(|| fish().to_string()));
+    let l = &p["bom"][0];
+    assert_eq!((l["grossG"].clone(), l["netG"].clone(), l["outG"].clone()), (json!(100), json!(55), json!(50)));
+    assert_eq!((l["cleanPm"].clone(), l["cookPm"].clone(), l["lossPm"].clone()), (json!(550), json!(900), json!(500)));
+    assert_eq!((l["net"].clone(), l["out"].clone()), (Value::Null, Value::Null), "nothing typed by the owner");
+}

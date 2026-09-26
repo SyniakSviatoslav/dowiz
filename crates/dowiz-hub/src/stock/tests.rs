@@ -38,7 +38,9 @@ fn old_encode(ev: &StockEvent) -> String {
             esc(stocktake_id)
         ),
         // Did not exist in HEAD's encoder: nothing old can have written one.
-        StockEvent::Served { .. } | StockEvent::Returned { .. } | StockEvent::Unserved { .. } => String::new(),
+        StockEvent::Served { .. } | StockEvent::Returned { .. } | StockEvent::Unserved { .. } | StockEvent::Produced { .. } => {
+            String::new()
+        }
     }
 }
 

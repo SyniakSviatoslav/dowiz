@@ -9,7 +9,7 @@
 
 use serde_json::{json, Value};
 
-use super::{bom_json, derive, line_of, BomLineIn, Derived, Line};
+use super::{bom_json, derive, line_with, weights, BomLineIn, Derived, Line};
 
 /// What the caller typed in the same request. A value the owner typed wins
 /// over the sum and stays marked as theirs; the import types none of them.
@@ -64,7 +64,9 @@ pub fn set_bom(
         if snap.iter().any(|x| x.supply == l.supply) {
             continue;
         }
-        snap.push(line_of(&l.supply, l.qty, &sv));
+        let line = line_with(&l.supply, l.qty, l.net, l.out, &sv);
+        weights::check(l.net, l.out, line.w.gross).map_err(|e| format!("{}: {e}", l.supply))?;
+        snap.push(line);
     }
     if snap.is_empty() {
         clear_derived(p);

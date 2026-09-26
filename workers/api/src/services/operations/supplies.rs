@@ -50,6 +50,18 @@ pub(crate) struct SupplyIn {
     /// Who the kitchen buys it from; a note, until F3's receipts name one.
     #[serde(default)]
     pub(crate) supplier: Option<String>,
+    /// Per mille of the gross left after cleaning (research R6); 1000 = none lost.
+    #[serde(default)]
+    pub(crate) clean_pm: Option<i64>,
+    /// Per mille of the net left after cooking; above 1000 when it grows.
+    #[serde(default)]
+    pub(crate) cook_pm: Option<i64>,
+    /// "raw" (default) or "cooked": which weight the per-100 figures describe.
+    #[serde(default)]
+    pub(crate) nutrition_basis: Option<String>,
+    /// Days a delivery keeps when its paper names no date.
+    #[serde(default)]
+    pub(crate) shelf_days: Option<i64>,
 }
 
 /// `POST /api/owner/supplies` — add or edit an ingredient.
@@ -117,7 +129,7 @@ pub(crate) fn check(body: &SupplyIn) -> std::result::Result<String, String> {
     }
     if let Some(k) = &body.kind {
         if !crate::recipe::KINDS.contains(&k.as_str()) {
-            return Err("kind is food_ingredient, condiment, packaging or utensil".into());
+            return Err(format!("kind is one of {}", crate::recipe::KINDS.join(", ")));
         }
     }
     if let Some(u) = &body.unit {
@@ -132,6 +144,19 @@ pub(crate) fn check(body: &SupplyIn) -> std::result::Result<String, String> {
     }
     if body.cost_per_basis.is_some_and(|c| c < 0) {
         return Err("cost cannot be negative".into());
+    }
+    use crate::recipe::weights::{CLEAN_MAX, COOK_MAX};
+    if body.clean_pm.is_some_and(|v| !(1..=CLEAN_MAX).contains(&v)) {
+        return Err(format!("after cleaning is 1 to {CLEAN_MAX} per mille of the gross"));
+    }
+    if body.cook_pm.is_some_and(|v| !(1..=COOK_MAX).contains(&v)) {
+        return Err(format!("after cooking is 1 to {COOK_MAX} per mille of the net"));
+    }
+    if body.nutrition_basis.as_deref().is_some_and(|b| b != "raw" && b != "cooked") {
+        return Err("nutrition is per raw or per cooked weight".into());
+    }
+    if body.shelf_days.is_some_and(|d| !(1..=3650).contains(&d)) {
+        return Err("shelf life is 1 to 3650 days".into());
     }
     Ok(id)
 }
@@ -162,12 +187,17 @@ pub(crate) fn record(id: &str, body: &SupplyIn, existing: &Value) -> Value {
         "weightPerUnit": opt("weightPerUnit", body.weight_per_unit.map(|v| json!(v))),
         "nutritionConfirmed": keep("nutritionConfirmed", body.nutrition_confirmed.map(|v| json!(v)), json!(false)),
         "supplier": opt("supplier", body.supplier.clone().map(|s| json!(s.trim()))),
+        // 1000 is the default and is left out, like every absent key.
+        "cleanPm": opt("cleanPm", body.clean_pm.map(|v| json!(v))),
+        "cookPm": opt("cookPm", body.cook_pm.map(|v| json!(v))),
+        "nutritionBasis": opt("nutritionBasis", body.nutrition_basis.clone().map(Value::String)),
+        "shelfDays": opt("shelfDays", body.shelf_days.map(|v| json!(v))),
         // Saving through the editor is an act of keeping: a retired supply
         // written again comes back to the list unless the body says otherwise.
         "active": json!(body.active.unwrap_or(true)),
     });
     if let Some(m) = rec.as_object_mut() {
-        m.retain(|_, v| !v.is_null());
+        m.retain(|k, v| !v.is_null() && !((k == "cleanPm" || k == "cookPm") && v == &json!(1000)) && !(k == "nutritionBasis" && v == "raw"));
     }
     rec
 }

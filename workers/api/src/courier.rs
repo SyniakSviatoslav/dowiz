@@ -330,16 +330,6 @@ async fn load_order(place: &crate::hubstore::Place, id: &str, loc: &str) -> Resu
     Ok(Some((raw, v)))
 }
 
-/// Advance one order through the kernel and record the result as an event.
-async fn write_status(
-    place: &crate::hubstore::Place,
-    id: &str,
-    next: &'static str,
-    now_ms: i64,
-) -> Result<Value> {
-    write_status_with(place, id, next, -1, now_ms).await
-}
-
 /// `cash` of -1 means "not a cash-collecting transition"; anything else is
 /// recorded on the order.
 async fn write_status_with(
@@ -548,9 +538,24 @@ pub async fn pickup(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         if load_order(&place, &id, &loc).await?.is_none() {
             return Response::error("not found", 404);
         }
-        let merged = match write_status(&place, &id, "IN_DELIVERY", now).await {
-            Ok(v) => v,
-            Err(e) => return Response::error(e.to_string(), 409),
+        // THROUGH THE ONE TRANSITION (I0, 2026-09-26): `command::advance`
+        // moves the order AND settles its ingredients in one object turn. A
+        // courier may take a CONFIRMED order straight to IN_DELIVERY, which
+        // skips PREPARING -- written here by `write_status`, that order never
+        // took its ingredients off the shelf and held them for ever.
+        let input = crate::command::advance::AdvanceIn {
+            order_id: id.clone(),
+            location_id: loc.clone(),
+            next: "IN_DELIVERY".into(),
+            reason: None,
+            now_ms: now,
+        };
+        let merged: Value = match crate::command::send::<_, crate::command::advance::AdvanceOut>(&place, "advance", &input).await {
+            Ok(out) => match serde_json::from_str(&out.merged) {
+                Ok(v) => v,
+                Err(e) => return Response::error(format!("hub answered unreadable json: {e}"), 500),
+            },
+            Err((status, said)) => return Response::error(said, status),
         };
         let oid = id.clone();
         with_ops(&place, move |t| {

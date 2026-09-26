@@ -368,6 +368,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/i18n", owner::write_translations)
         // ── ported from the native adapter, on the SAME dowiz-hub logic ──
         .get_async("/api/owner/analytics", services::analytics::analytics)
+        .get_async("/api/owner/analytics/kitchen", services::analytics::kitchen::kitchen)
         .get_async("/api/owner/exceptions", exceptions::exceptions)
         .get_async("/api/owner/promotions", services::ordering::promotions::promotions)
         .post_async("/api/owner/promotions", services::ordering::promotions::set_promotion)

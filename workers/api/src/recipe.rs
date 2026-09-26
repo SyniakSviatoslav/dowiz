@@ -26,9 +26,12 @@ use dowiz_hub::stock::BomLine;
 use serde_json::{json, Value};
 
 pub mod apply;
+pub mod weights;
 
-/// The four kinds of supply. The first two are food and carry nutrition.
-pub const KINDS: &[&str] = &["food_ingredient", "condiment", "packaging", "utensil"];
+/// The kinds of supply. The first two are food and carry nutrition. `resale`
+/// is a thing bought and SOLD AS IT IS -- a bottle, a can -- so a dish with no
+/// recipe can still take one off the shelf per sale (I0, 2026-09-26).
+pub const KINDS: &[&str] = &["food_ingredient", "condiment", "packaging", "utensil", "resale"];
 /// The base units a supply is counted in.
 pub const UNITS: &[&str] = &["g", "ml", "unit"];
 /// Nutrition and cost are declared per this many base units for g and ml,
@@ -41,9 +44,6 @@ pub const TASTE_MIN: i64 = 1;
 pub const TASTE_MAX: i64 = 3;
 /// A recipe line's quantity is bounded: a kitchen does not put a tonne in a roll.
 pub const QTY_MAX: i64 = 100_000;
-/// A millilitre of kitchen liquid weighs about a gram; close enough for a
-/// portion's weight, and the venue may override the dish's weight by hand.
-const ML_TO_G: f64 = 1.0;
 
 pub fn is_food(kind: &str) -> bool {
     kind == "food_ingredient" || kind == "condiment"
@@ -58,7 +58,14 @@ pub fn basis_of(unit: &str) -> i64 {
 #[serde(deny_unknown_fields)]
 pub struct BomLineIn {
     pub supply: String,
+    /// GROSS, in the supply's base unit: what the ledger reserves.
     pub qty: i64,
+    /// Weighed after cleaning, grams. Absent: the supply's `cleanPm`.
+    #[serde(default)]
+    pub net: Option<i64>,
+    /// Weighed on the plate, grams. Absent: net x the supply's `cookPm`.
+    #[serde(default)]
+    pub out: Option<i64>,
 }
 
 /// One line as the dish is derived from it: the ledger's two keys, then its
@@ -76,27 +83,49 @@ pub struct Line {
     pub carbs: Option<f64>,
     /// Minor units, for this line's quantity.
     pub cost: Option<i64>,
-    /// Grams, for this line's quantity.
+    /// Grams ON THE PLATE for this line: its `out` (research R6). It was the
+    /// gross until 2026-09-26, which over-stated anything trimmed.
     pub weight_g: Option<f64>,
+    /// Gross, net and out in grams, and the losses between them.
+    pub w: weights::Weights,
 }
 
 fn num(v: &Value, key: &str) -> Option<f64> {
     v.get(key).and_then(Value::as_f64)
 }
 
-/// Scale a supply's per-basis numbers to one line's quantity.
+/// Scale a supply's per-basis numbers to one line's quantity, at the
+/// supply's default losses. The writers take [`line_with`], which carries a
+/// line's weighed net and out; this is the defaults-only form the tests read.
+#[cfg(test)]
 pub fn line_of(supply_id: &str, qty: i64, supply: &Value) -> Line {
+    line_with(supply_id, qty, None, None, supply)
+}
+
+/// NUTRITION FOLLOWS THE EDIBLE PART (research §3.2). Figures declared on the
+/// RAW weight (the default; tables usually are) scale by the gross times the
+/// edible share -- calories are in the fillet, not the bones -- and cooking's
+/// loss is mostly water, so it does not change the portion's total. Figures
+/// declared `cooked` scale by the out, per 100 g.
+fn nutrition_scale(unit: &str, qty: i64, supply: &Value, w: &weights::Weights) -> f64 {
+    let cooked = supply.get("nutritionBasis").and_then(Value::as_str) == Some("cooked");
+    match (cooked && unit != "unit", w.out) {
+        (true, Some(o)) => o as f64 / PER_MASS as f64,
+        _ => qty as f64 / basis_of(unit) as f64 * w.edible(),
+    }
+}
+
+/// [`line_of`] with the line's own weighed net and out, grams.
+pub fn line_with(supply_id: &str, qty: i64, net: Option<i64>, out: Option<i64>, supply: &Value) -> Line {
     let unit = supply.get("unit").and_then(Value::as_str).unwrap_or("g").to_string();
     let kind = supply.get("kind").and_then(Value::as_str).unwrap_or("food_ingredient").to_string();
     let ratio = qty as f64 / basis_of(&unit) as f64;
     let food = is_food(&kind);
-    let scaled = |k: &str| if food { num(supply, k).map(|x| x * ratio) } else { None };
+    let w = weights::weights(&unit, qty, supply, net, out);
+    let n = nutrition_scale(&unit, qty, supply, &w);
+    let scaled = |k: &str| if food { num(supply, k).map(|x| x * n) } else { None };
     let cost = num(supply, "costPerBasis").map(|c| (c * ratio).round() as i64);
-    let weight_g = match unit.as_str() {
-        "g" => Some(qty as f64),
-        "ml" => Some(qty as f64 * ML_TO_G),
-        _ => num(supply, "weightPerUnit").map(|w| w * qty as f64),
-    };
+    let weight_g = w.out.map(|o| o as f64);
     Line {
         supply: supply_id.to_string(),
         qty,
@@ -109,6 +138,7 @@ pub fn line_of(supply_id: &str, qty: i64, supply: &Value) -> Line {
         carbs: scaled("carbsPer100"),
         cost,
         weight_g,
+        w,
     }
 }
 
@@ -157,11 +187,15 @@ pub fn derive(lines: &[Line]) -> Derived {
     }
 }
 
-/// The stored `bom` array: `{supply, qty}` per line, written by the hub's
-/// writer so the ledger's reader and it are one pair.
+/// The stored `bom` array: `{supply, qty}` per line -- plus `net`/`out` only
+/// where the owner weighed them -- written by the hub's writer so the
+/// ledger's reader and it are one pair.
 pub fn bom_json(lines: &[Line]) -> Value {
-    let lean: Vec<BomLine> = lines.iter().map(|l| BomLine { supply: l.supply.clone(), qty: l.qty }).collect();
-    serde_json::from_str(&dowiz_hub::catalog::bom::to_json(&lean)).expect("the hub's bom writer writes JSON")
+    let lean: Vec<(BomLine, Option<i64>, Option<i64>)> = lines
+        .iter()
+        .map(|l| (BomLine { supply: l.supply.clone(), qty: l.qty }, l.w.net_set, l.w.out_set))
+        .collect();
+    serde_json::from_str(&dowiz_hub::catalog::bom::to_json_weighed(&lean)).expect("the hub's bom writer writes JSON")
 }
 
 /// The lines as the OWNER reads them -- the console's dish sheet and the
@@ -174,6 +208,8 @@ pub fn bom_view(lines: &[Line]) -> Value {
             "kcal": l.kcal.map(|x| x.round()), "protein": l.protein.map(|x| (x * 10.0).round() / 10.0),
             "fat": l.fat.map(|x| (x * 10.0).round() / 10.0), "carbs": l.carbs.map(|x| (x * 10.0).round() / 10.0),
             "cost": l.cost, "weightG": l.weight_g.map(|x| x.round()),
+            "grossG": l.w.gross, "netG": l.w.net, "outG": l.w.out, "cleanPm": l.w.clean_pm, "cookPm": l.w.cook_pm,
+            "net": l.w.net_set, "out": l.w.out_set, "lossPm": l.w.loss_pm(),
         }))
         .collect::<Vec<_>>())
 }
@@ -191,8 +227,9 @@ pub fn lines_of_stored(bom: &Value, supply: impl Fn(&str) -> Option<String>) -> 
         let (Some(id), Some(qty)) = (l.get("supply").and_then(Value::as_str), l.get("qty").and_then(Value::as_i64)) else {
             continue;
         };
+        let weighed = |k: &str| l.get(k).and_then(Value::as_i64);
         out.push(match supply(id).and_then(|j| serde_json::from_str::<Value>(&j).ok()) {
-            Some(sv) => line_of(id, qty, &sv),
+            Some(sv) => line_with(id, qty, weighed("net"), weighed("out"), &sv),
             None => snapshot_of(id, qty, l),
         });
     }
@@ -214,6 +251,7 @@ fn snapshot_of(id: &str, qty: i64, l: &Value) -> Line {
         carbs: num(l, "carbs"),
         cost: l.get("cost").and_then(Value::as_i64),
         weight_g: num(l, "weightG"),
+        w: weights::Weights { clean_pm: weights::PM, cook_pm: weights::PM, ..weights::Weights::default() },
     }
 }
 

@@ -215,8 +215,21 @@ fn supply_row(s: &DraftSupply, new: bool) -> Value {
             "kcalPer100": s.kcal, "weightPerUnit": s.weight_per_unit, "lowAt": s.low_at, "supplier": s.supplier, "new": new })
 }
 
-fn lines_of(r: &DraftRecipe) -> Vec<BomLineIn> {
-    r.lines.iter().map(|l| BomLineIn { supply: l.supply.clone(), qty: l.qty }).collect()
+/// The draft's lines as the one recipe write takes them, KEEPING the file's
+/// net and yield (research R6) -- they were parsed and dropped until
+/// 2026-09-26. The file writes them in the supply's base unit; the line keeps
+/// grams, so a piece's figures are weighed by its `weightPerUnit` and dropped
+/// when it has none (the line itself stands).
+fn lines_of(r: &DraftRecipe, supply: impl Fn(&str) -> Option<String>) -> Vec<BomLineIn> {
+    r.lines
+        .iter()
+        .map(|l| {
+            let sv: Value = supply(&l.supply).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
+            let unit = sv.get("unit").and_then(Value::as_str).unwrap_or("g").to_string();
+            let grams = |v: Option<i64>| v.and_then(|x| crate::recipe::weights::gross_g(&unit, x, &sv));
+            BomLineIn { supply: l.supply.clone(), qty: l.qty, net: grams(l.net), out: grams(l.yield_) }
+        })
+        .collect()
 }
 
 /// What the dish reads now, and what it would read after this recipe.
@@ -225,7 +238,7 @@ fn recipe_row(cat: &Catalog, r: &DraftRecipe) -> Value {
     let mut after = before.clone();
     let shown = |p: &Value| json!({ "lines": p["bom"].as_array().map_or(0, Vec::len), "kcal": p["nutrition"]["kcal"], "weightG": p["weightG"], "cost": p["cost"] });
     // As Apply writes it: what the owner typed on the dish stays theirs.
-    let err = set_bom(&mut after, &lines_of(r), |s| cat.supply(s), Typed::from_record(&before)).err();
+    let err = set_bom(&mut after, &lines_of(r, |s| cat.supply(s)), |s| cat.supply(s), Typed::from_record(&before)).err();
     crate::recipe::hydrate(&mut after, |s| cat.supply(s));
     json!({ "productId": r.product_id, "dish": before.get("name").cloned().unwrap_or(json!(r.dish)),
             "bom": after["bom"], "before": shown(&before), "after": shown(&after),
@@ -265,7 +278,7 @@ pub(crate) fn apply_recipes(cat: &mut Catalog, draft: &RecipeDraft) -> std::resu
         let mut p: Value = serde_json::from_str(&pj).map_err(|e| format!("{}: unreadable: {e}", r.product_id))?;
         // What the owner typed on this dish stays theirs (audit D19).
         let typed = Typed::from_record(&p);
-        set_bom(&mut p, &lines_of(r), |s| cat.supply(s), typed).map_err(|e| format!("{}: {e}", r.dish))?;
+        set_bom(&mut p, &lines_of(r, |s| cat.supply(s)), |s| cat.supply(s), typed).map_err(|e| format!("{}: {e}", r.dish))?;
         cat.set_product(&r.product_id, &p.to_string());
         n += 1;
     }

@@ -651,6 +651,7 @@ impl HubImages {
             ),
         };
         let reserved_before = stock.len();
+        stock.set_clock(input.now_ms);
 
         // THE VENUE'S TAX, from the settings image THIS object holds, at the
         // request's one clock. G2: a venue with a rate never logs an untaxed order.
@@ -768,6 +769,7 @@ impl HubImages {
                     .map_err(|_| Error::RustError("cannot create stock image".into()))?,
             ),
         };
+        stock.set_clock(input.now_ms);
         let settled_before = stock.len();
 
         let merged = match crate::command::advance::decide(

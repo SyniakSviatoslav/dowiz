@@ -126,6 +126,38 @@ pub enum StockEvent {
     /// order has at least `qty` of `item` served and not yet reversed -- a
     /// void puts back only what its sale took, and never twice.
     Unserved { item: String, qty: Qty, order_id: String },
+    /// PREP (research 2026-09-26 §3.4): `qty` of `item` went onto the board
+    /// raw and `out` came off it after `stage` -- cleaning or cooking.
+    ///
+    /// `into`: the supply that came off, when it is a DIFFERENT one the
+    /// kitchen stocks (whole salmon -> salmon fillet): `item` loses `qty`,
+    /// `into` gains `out`. `None` is a MEASUREMENT only -- the shelf is still
+    /// counted gross, so nothing moves and the record is the yield. Signed.
+    Produced { item: String, qty: Qty, out: Qty, stage: PrepStage, into: Option<String>, by: String },
+}
+
+/// Which loss a [`StockEvent::Produced`] measured: raw -> net (cleaning) or
+/// net -> out (cooking). The supply's `cleanPm` / `cookPm` are its defaults.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrepStage {
+    Clean,
+    Cook,
+}
+
+impl PrepStage {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PrepStage::Clean => "clean",
+            PrepStage::Cook => "cook",
+        }
+    }
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "clean" => Some(PrepStage::Clean),
+            "cook" => Some(PrepStage::Cook),
+            _ => None,
+        }
+    }
 }
 
 impl StockEvent {
@@ -139,7 +171,8 @@ impl StockEvent {
             | StockEvent::Stocktake { item, .. }
             | StockEvent::Served { item, .. }
             | StockEvent::Returned { item, .. }
-            | StockEvent::Unserved { item, .. } => item,
+            | StockEvent::Unserved { item, .. }
+            | StockEvent::Produced { item, .. } => item,
         }
     }
 
@@ -218,6 +251,12 @@ pub struct StockLedger {
     /// recipes but not yet counted its shelf would otherwise have every dish
     /// refused at checkout for stock it plainly has -- dubin-sushi was, from
     /// 2026-09-25, with 75 of 76 supplies at a never-counted zero.
+    ///
+    /// EVERY ORDER STILL TAKES ITS INGREDIENTS OFF THE SHELF (operator,
+    /// 2026-09-26): an uncounted item's `on_hand` moves with every draw and
+    /// goes NEGATIVE -- "needs a count", never an error -- and only the
+    /// refusal waits for a measurement. Until then it said zero and hid how
+    /// much the kitchen had used.
     counted: Vec<String>,
 }
 
@@ -235,9 +274,9 @@ impl StockLedger {
     }
 
     /// Whether this item's shelf has ever been measured (received or counted).
-    /// An uncounted item is reserved and consumed for the record, but never
-    /// refuses an order and never moves `on_hand`: its zero is "nobody has
-    /// looked", not "empty".
+    /// An uncounted item is reserved and consumed like any other -- its
+    /// `on_hand` goes below zero -- but never refuses an order: its level is
+    /// "what was used since nobody looked", not what is there.
     pub fn is_counted(&self, item: &str) -> bool {
         self.counted.iter().any(|i| i == item)
     }
@@ -282,7 +321,8 @@ impl StockLedger {
                     | StockEvent::Wasted { qty, .. }
                     | StockEvent::Served { qty, .. }
                     | StockEvent::Returned { qty, .. }
-                    | StockEvent::Unserved { qty, .. } => *qty,
+                    | StockEvent::Unserved { qty, .. }
+                    | StockEvent::Produced { qty, .. } => *qty,
                     StockEvent::Stocktake { .. } => unreachable!(),
                 };
                 if q <= 0 {
@@ -320,13 +360,11 @@ impl StockLedger {
                         "{order_id} reserved {held} of {item}, cannot consume {qty}"
                     )));
                 }
-                if self.is_counted(item) && *qty > lvl.on_hand {
-                    return Err(StockError::OutOfStock {
-                        item: item.clone(),
-                        wanted: *qty,
-                        available: lvl.on_hand,
-                    });
-                }
+                // NO SHELF CHECK HERE. The reservation was the check, at the
+                // moment the customer was promised the dish; a later move of the
+                // order (to PREPARING, or straight to IN_DELIVERY) must never be
+                // refused because the shelf moved since. What was cooked is
+                // recorded, as `Served` is, whatever the shelf now says.
             }
             StockEvent::Released { item, qty, order_id } => {
                 let held = self.held(order_id, item);
@@ -344,8 +382,9 @@ impl StockLedger {
             StockEvent::Wasted { item, qty, .. } => {
                 // Waste comes off the shelf, and what is reserved is still
                 // owed to somebody. Wasting into a reservation would let a
-                // kitchen bin a portion it has already promised.
-                if *qty > lvl.on_hand.saturating_sub(lvl.reserved) {
+                // kitchen bin a portion it has already promised. An uncounted
+                // shelf has no measured level to protect, so it only records.
+                if self.is_counted(item) && *qty > lvl.on_hand.saturating_sub(lvl.reserved) {
                     return Err(StockError::OutOfStock {
                         item: item.clone(),
                         wanted: *qty,
@@ -381,6 +420,19 @@ impl StockLedger {
             // Waste of food `Consumed` already took: the shelf does not move,
             // so there is nothing for it to refuse.
             StockEvent::Returned { resell: false, .. } => {}
+            StockEvent::Produced { item, qty, out, into, .. } => {
+                if *out < 0 {
+                    return Err(StockError::NotPositive { qty: *out });
+                }
+                // Moving stock takes it off the unspoken-for shelf, as waste
+                // does; a measurement moves nothing and refuses nothing.
+                if let Some(to) = moved_into(item, into) {
+                    if self.is_counted(item) && *qty > lvl.available() {
+                        return Err(StockError::OutOfStock { item: item.clone(), wanted: *qty, available: lvl.available() });
+                    }
+                    self.level(to).on_hand.checked_add(*out).ok_or(StockError::Overflow)?;
+                }
+            }
         }
         Ok(())
     }
@@ -429,8 +481,15 @@ impl StockLedger {
         self.decide(ev)?;
         match ev {
             StockEvent::Received { item, qty } => {
+                // THE FIRST DELIVERY ARMS THE ITEM AT WHAT CAME IN, as it
+                // always did: an uncounted item's negative is use nobody
+                // measured against, not a debt this box of salmon pays.
+                let was_counted = self.is_counted(item);
                 self.mark_counted(item);
                 let l = self.level_mut(item);
+                if !was_counted {
+                    l.on_hand = l.on_hand.max(0);
+                }
                 l.on_hand = l.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
             }
             StockEvent::Reserved { item, qty, order_id } => {
@@ -443,11 +502,8 @@ impl StockLedger {
                 }
             }
             StockEvent::Consumed { item, qty, order_id } => {
-                let counted = self.is_counted(item);
                 let l = self.level_mut(item);
-                if counted {
-                    l.on_hand = l.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
-                }
+                l.on_hand = l.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
                 l.reserved = l.reserved.checked_sub(*qty).ok_or(StockError::Overflow)?;
                 self.take_held(order_id, item, *qty);
             }
@@ -469,11 +525,8 @@ impl StockLedger {
                 l.on_hand = *observed;
             }
             StockEvent::Served { item, qty, order_id } => {
-                let counted = self.is_counted(item);
                 let l = self.level_mut(item);
-                if counted {
-                    l.on_hand = l.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
-                }
+                l.on_hand = l.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
                 let key = (order_id.clone(), item.clone());
                 match self.served.iter().position(|(k, _)| *k == key) {
                     Some(p) => self.served[p].1 = self.served[p].1.saturating_add(*qty),
@@ -481,11 +534,8 @@ impl StockLedger {
                 }
             }
             StockEvent::Unserved { item, qty, order_id } => {
-                let counted = self.is_counted(item);
                 let l = self.level_mut(item);
-                if counted {
-                    l.on_hand = l.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
-                }
+                l.on_hand = l.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
                 if let Some(p) = self.served.iter().position(|((o, i), _)| o == order_id && i == item) {
                     self.served[p].1 -= qty;
                     if self.served[p].1 <= 0 {
@@ -494,9 +544,19 @@ impl StockLedger {
                 }
             }
             StockEvent::Returned { item, qty, resell, .. } => {
-                if *resell && self.is_counted(item) {
+                if *resell {
                     let l = self.level_mut(item);
                     l.on_hand = l.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
+                }
+            }
+            StockEvent::Produced { item, qty, out, into, .. } => {
+                if let Some(to) = moved_into(item, into).map(str::to_string) {
+                    let l = self.level_mut(item);
+                    l.on_hand = l.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
+                    // What came off the board was weighed: a measurement.
+                    self.mark_counted(&to);
+                    let l = self.level_mut(&to);
+                    l.on_hand = l.on_hand.checked_add(*out).ok_or(StockError::Overflow)?;
                 }
             }
         }
@@ -528,6 +588,12 @@ impl StockLedger {
     }
 }
 
+/// The supply a `Produced` moves stock into, or `None` for a measurement
+/// (no `into`, or `into` naming the input itself).
+pub fn moved_into<'a>(item: &str, into: &'a Option<String>) -> Option<&'a str> {
+    into.as_deref().filter(|t| !t.is_empty() && *t != item)
+}
+
 /// THE SIGNER RULE, for a NEW event: a write-off or a count names a person.
 ///
 /// Deliberately NOT in `decide`, which `fold` runs over the whole history: an
@@ -535,7 +601,9 @@ impl StockLedger {
 /// venue's shelf -- and every order that reserves against it -- stops.
 pub fn signed(ev: &StockEvent) -> Result<(), StockError> {
     match ev {
-        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } if by.trim().is_empty() => {
+        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } | StockEvent::Produced { by, .. }
+            if by.trim().is_empty() =>
+        {
             Err(StockError::Unsigned)
         }
         StockEvent::Returned { chosen_by, .. } if chosen_by.trim().is_empty() => Err(StockError::Unsigned),
@@ -547,7 +615,11 @@ pub fn signed(ev: &StockEvent) -> Result<(), StockError> {
 /// lifecycle's) and for a write-off recorded before signers existed.
 pub fn signer(ev: &StockEvent) -> Option<&str> {
     match ev {
-        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } if !by.is_empty() => Some(by),
+        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } | StockEvent::Produced { by, .. }
+            if !by.is_empty() =>
+        {
+            Some(by)
+        }
         StockEvent::Returned { chosen_by, .. } if !chosen_by.is_empty() => Some(chosen_by),
         _ => None,
     }
@@ -605,6 +677,13 @@ pub fn encode(ev: &StockEvent) -> String {
             esc(by),
             esc(chosen_by)
         ),
+        StockEvent::Produced { item, qty, out, stage, into, by } => format!(
+            r#"{{"k":"produced","item":"{}","qty":{qty},"out":{out},"stage":"{}","into":"{}","by":"{}"}}"#,
+            esc(item),
+            stage.as_str(),
+            esc(into.as_deref().unwrap_or("")),
+            esc(by)
+        ),
     }
 }
 
@@ -659,6 +738,14 @@ pub fn decode(rec: &str) -> Option<StockEvent> {
             by: str_field(rec, "by")?,
             chosen_by: str_field(rec, "chosen_by")?,
         }),
+        "produced" => Some(StockEvent::Produced {
+            item,
+            qty: int_field(rec, "qty")?,
+            out: int_field(rec, "out")?,
+            stage: PrepStage::from_str(&str_field(rec, "stage")?)?,
+            into: str_field(rec, "into").filter(|t| !t.is_empty()),
+            by: str_field(rec, "by")?,
+        }),
         _ => None,
     }
 }
@@ -709,17 +796,21 @@ mod tests {
         assert!(led.decide(&res("salmon", 40, "ord_2")).is_ok());
     }
 
-    /// A never-counted item is not an empty one. A venue that has written its
-    /// recipes but not counted its shelf must still sell: the reservation and
-    /// the consumption are recorded, `on_hand` does not move, and nothing is
-    /// refused -- until the first delivery or count, from which point the 86
-    /// is exactly as strict as above.
+    /// A never-counted item is not an empty one -- and every order still
+    /// takes its ingredients (operator, 2026-09-26). The reservation and the
+    /// consumption are recorded, `on_hand` goes NEGATIVE (what was used since
+    /// nobody looked: "needs a count"), and nothing is refused -- until the
+    /// first count or delivery, from which point the 86 is exactly as strict
+    /// as above.
     #[test]
-    fn an_uncounted_item_never_refuses_and_the_first_count_arms_it() {
+    fn an_uncounted_item_never_refuses_but_every_order_takes_it_and_the_first_count_arms_it() {
         let led = StockLedger::fold(&[res("nori", 5, "ord_1"), con("nori", 5, "ord_1")]).unwrap();
         assert!(!led.is_counted("nori"));
-        assert_eq!(led.level("nori"), StockLevel { on_hand: 0, reserved: 0 });
-        assert!(led.decide(&res("nori", 1_000, "ord_2")).is_ok(), "an uncounted zero is not a measurement");
+        assert_eq!(led.level("nori"), StockLevel { on_hand: -5, reserved: 0 }, "the order took 5: needs a count");
+        assert!(led.decide(&res("nori", 1_000, "ord_2")).is_ok(), "an uncounted level is not a measurement");
+        assert!(led.decide(&StockEvent::Wasted {
+            item: "nori".into(), qty: 3, reason: WasteReason::Spoiled, by: "p".into()
+        }).is_ok(), "nor does it refuse a write-off");
         assert!(led.stranded().is_empty(), "the reservation was settled, not left behind");
 
         let count = StockEvent::Stocktake {
@@ -731,9 +822,34 @@ mod tests {
         assert!(led.decide(&res("nori", 21, "ord_2")).is_err(), "counted: the 86 is armed");
         assert!(led.decide(&res("nori", 20, "ord_2")).is_ok());
 
-        // A delivery arms it too.
-        let led = StockLedger::fold(&[recv("rice", 10)]).unwrap();
+        // A delivery arms it too, AT WHAT CAME IN: the uncounted use before it
+        // is not a debt the delivery pays.
+        let led = StockLedger::fold(&[res("rice", 7, "o0"), con("rice", 7, "o0"), recv("rice", 10)]).unwrap();
+        assert_eq!(led.level("rice").on_hand, 10);
         assert!(led.is_counted("rice") && led.decide(&res("rice", 11, "ord_3")).is_err());
+        // Twin: once counted, a draw below zero is the ledger's own number again.
+        let led = StockLedger::fold(&[recv("rice", 10), recv("rice", 5)]).unwrap();
+        assert_eq!(led.level("rice").on_hand, 15, "only the FIRST delivery re-bases");
+    }
+
+    /// Once an order holds its portion, moving it on is never refused for
+    /// stock: here a till sale (`Served`) took the shelf below what the order
+    /// holds, and the order still cooks. The shelf goes negative -- a count is
+    /// owed -- rather than a courier being stopped at IN_DELIVERY.
+    #[test]
+    fn a_held_order_always_cooks_even_when_the_shelf_moved_under_it() {
+        let served = StockEvent::Served { item: "tuna".into(), qty: 5, order_id: "till_1".into() };
+        let led = StockLedger::fold(&[recv("tuna", 10), res("tuna", 10, "ord_1"), served]).unwrap();
+        assert_eq!(led.level("tuna").on_hand, 5);
+        assert!(led.decide(&con("tuna", 10, "ord_1")).is_ok());
+        let led = StockLedger::fold(&[
+            recv("tuna", 10), res("tuna", 10, "ord_1"),
+            StockEvent::Served { item: "tuna".into(), qty: 5, order_id: "till_1".into() },
+            con("tuna", 10, "ord_1"),
+        ]).unwrap();
+        assert_eq!(led.level("tuna"), StockLevel { on_hand: -5, reserved: 0 });
+        // A NEW order is still refused: the 86 is armed for what was counted.
+        assert!(led.decide(&res("tuna", 1, "ord_2")).is_err());
     }
 
     /// Two orders cannot be promised the same portion. This is the oversell the
@@ -911,6 +1027,9 @@ use bebop_store::Store;
 /// itself on every write would be quadratic by dinner service.
 pub struct StockLog {
     store: Store,
+    /// The request clock, when the caller set one ([`StockLog::set_clock`]):
+    /// every record written then carries `"at"`.
+    clock: Option<i64>,
 }
 
 /// Room for roughly a year of a single venue's stock events.
@@ -947,7 +1066,7 @@ impl StockLog {
     pub fn create_sized(bytes: usize) -> Result<Self, crate::HubError> {
         let mut store = Store::create_bytes(bytes);
         EvLog::init_bytes(&mut store)?;
-        Ok(StockLog { store })
+        Ok(StockLog { store, clock: None })
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, crate::HubError> {
@@ -955,7 +1074,7 @@ impl StockLog {
         if store.pick().is_none() {
             return Err(crate::HubError::NotAHub);
         }
-        Ok(StockLog { store })
+        Ok(StockLog { store, clock: None })
     }
 
     /// FULL CAPACITY: `grow()` doubles from this length, so it keeps the
@@ -994,7 +1113,8 @@ impl StockLog {
     /// tamper-evident: editing any event changes every content id after it,
     /// which is I4's other half.
     fn write(&mut self, ev: &StockEvent) -> Result<(), StockError> {
-        self.write_payload(encode(ev).into_bytes())
+        let m = self.stamped(&meta::Meta::default());
+        self.write_payload(meta::with_meta(&encode(ev), &m).into_bytes())
     }
 
     /// The record itself. Split from `write` so a test can lay down bytes in
@@ -1131,6 +1251,11 @@ mod served_tests;
 #[cfg(test)]
 #[path = "stock/returned_tests.rs"]
 mod returned_tests;
+
+/// I5: prep batches -- a measurement, or stock moving between supplies.
+#[cfg(test)]
+#[path = "stock/produced_tests.rs"]
+mod produced_tests;
 
 /// The owner's choice on a door-refused order, already made? Any `Returned`
 /// for it says yes. And what the kitchen took for it: Σ `Consumed` per item,
@@ -1475,3 +1600,9 @@ mod bom_tests {
 
 /// Cost that follows purchases (§2.10): priced receipts on this log, WAC fold.
 pub mod cost;
+/// When, which lot, from whom: the keys a record carries besides its movement.
+pub mod meta;
+/// ONE pass over the raw log: every record dated, valued and folded.
+pub mod journal;
+/// Lots on hand, first-expiry-first-out.
+pub mod lots;

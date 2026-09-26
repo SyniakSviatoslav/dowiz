@@ -71,7 +71,7 @@ export const T = {
     back:'Prapa', add:'Shto', remove:'Hiq', edit:'Ndrysho', search:'Kërko', close:'Mbyll', copy:'Kopjo', copied:'U kopjua',
     on:'Ndezur', off:'Fikur', today:'Sot', week:'7 ditë', month:'30 ditë', more:'Më shumë', none:'Asnjë', all:'Të gjitha',
     // tabs
-    tabOrders:'Porositë', tabMenu:'Menyja', tabStock:'Magazina', tabCouriers:'Korrierët', tabMore:'Tjetër',
+    tabOrders:'Porositë', tabMenu:'Menyja', tabStock:'Përbërësit & magazina', tabCouriers:'Korrierët', tabMore:'Tjetër',
     // venue state
     open:'Hapur', closed:'Mbyllur', busy:'I zënë', paused:'Dërgesat ndalur', setState:'Gjendja e lokalit',
     offlineCopy:'Pa lidhje — kopja e fundit',
@@ -196,7 +196,7 @@ export const T = {
     language:'Language', retry:'Try again', loading:'Loading…', sendReply:'Send', deliveryArea:'Delivery area', learnGroup:'Learn', learn:'Lessons', learnSub:'Tours of the console, with videos', learnNew:'New', learnDone:'Done', learnPaused:'Paused', learnWatch:'Watch the video', learnWrites:'changes real data', learnSteps:'{n} steps', learnEmpty:'That lesson was not found', learnOffline:'Lessons need a connection', save:'Save', saved:'Saved', cancel:'Cancel', done:'Done',
     back:'Back', add:'Add', remove:'Remove', edit:'Edit', search:'Search', close:'Close', copy:'Copy', copied:'Copied',
     on:'On', off:'Off', today:'Today', week:'7 days', month:'30 days', more:'More', none:'None', all:'All',
-    tabOrders:'Orders', tabMenu:'Menu', tabStock:'Stock', tabCouriers:'Couriers', tabMore:'More',
+    tabOrders:'Orders', tabMenu:'Menu', tabStock:'Ingredients & stock', tabCouriers:'Couriers', tabMore:'More',
     open:'Open', closed:'Closed', busy:'Busy', paused:'Delivery paused', setState:'Venue state',
     offlineCopy:'Offline — last known queue',
     todayOrders:'Orders today', pending:'Waiting', active:'In progress', revenue:'Revenue', scheduled:'Scheduled',
@@ -306,7 +306,7 @@ export const T = {
     language:'Мова', retry:'Спробувати ще', loading:'Завантажуємо…', sendReply:'Надіслати', deliveryArea:'Зона доставки', learnGroup:'Навчання', learn:'Уроки', learnSub:'Тури консоллю, з відео', learnNew:'Новий', learnDone:'Пройдено', learnPaused:'На паузі', learnWatch:'Дивитися відео', learnWrites:'змінює реальні дані', learnSteps:'кроків: {n}', learnEmpty:'Такого уроку не знайдено', learnOffline:'Для уроків потрібен інтернет', save:'Зберегти', saved:'Збережено', cancel:'Скасувати', done:'Готово',
     back:'Назад', add:'Додати', remove:'Прибрати', edit:'Змінити', search:'Пошук', close:'Закрити', copy:'Копіювати', copied:'Скопійовано',
     on:'Увімкнено', off:'Вимкнено', today:'Сьогодні', week:'7 днів', month:'30 днів', more:'Ще', none:'Немає', all:'Усі',
-    tabOrders:'Замовлення', tabMenu:'Меню', tabStock:'Склад', tabCouriers:'Кур’єри', tabMore:'Ще',
+    tabOrders:'Замовлення', tabMenu:'Меню', tabStock:'Інгредієнти та склад', tabCouriers:'Кур’єри', tabMore:'Ще',
     open:'Відчинено', closed:'Зачинено', busy:'Зайнято', paused:'Доставку призупинено', setState:'Стан закладу',
     offlineCopy:'Без зв’язку — остання копія',
     todayOrders:'Замовлень сьогодні', pending:'Чекають', active:'У роботі', revenue:'Виручка', scheduled:'На час',

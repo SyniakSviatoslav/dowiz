@@ -13,6 +13,9 @@ import { loadVenue, rerender } from '/admin/app.js';
 import { openBulk } from '/admin/bulk.js';
 import { publishedFields, FIELDS } from '/lib/dish-edit.js';
 import { ui, k, btn, iconBtn, field, input, select, chips, press, pill, empty, loading, rowBtn, rowDiv, check } from '/admin/parts.js';
+import '/admin/ingredients-i18n.js';
+import * as IC from '/admin/ingredients-calc.js';
+import { ensureCss } from '/admin/kitchen-analytics.js';
 /// A filter chip whose data-* the screen's click handler reads.
 const fchip = (on, data, label, tour) => ui.chip({ as: 'button', selected: on, label, attrs: { data: { ...data, tour } } });
 const search = (id, value, tour) => `<div class="srch">${icon('search')}${ui.inputRow({ id, type: 'search', label: k('search'), placeholder: k('search'), attrs: { value, data: { tour } } })}</div>`;
@@ -84,8 +87,20 @@ export async function render(host){
     const r = e.target.closest('[data-p]'); if (r) openDish(r.dataset.p);
   };
   const mq = $('#mq', host); mq.oninput = () => { view.q = mq.value; rerender().then(() => $('#mq')?.focus()); };
+  ensureCss(); markNoStock(host);
   $('#mImport', host).onclick = openImport;
   $('#mRecipes', host).onclick = () => openBulk('recipes', async () => { await loadVenue(); rerender(); });
+}
+
+/// I0c: a dish that takes nothing off the shelf says so on its row, so the
+/// owner sees which dishes the stock does not follow yet.
+async function markNoStock(host){
+  await supplies();
+  const none = new Set(noRecipeIds || []);
+  for (const r of $$('[data-p]', host)) if (none.has(r.dataset.p) && !$('.nostock', r)) {
+    $('.ui-row-trail', r)?.insertAdjacentHTML('afterbegin', pill('info', { key: 'inv_noStockLink', cls: 'nostock' }));
+  }
+  retranslate(host);
 }
 
 /// The plate's diameter, for the storefront's "see it on the table" view.
@@ -210,7 +225,7 @@ export function openDish(id){
       ...(num($('#d-size').value) != null ? { size_cm: num($('#d-size').value) } : {}),
       // Only a recipe READ from the owner route is sent back: an unread one is
       // not an empty one, and sending [] would clear it.
-      ...(recipeKnown === id ? { bom: recipeDraft.map(l => ({ supply: l.supply, qty: l.qty })) } : {}),
+      ...(recipeKnown === id ? { bom: recipeDraft.map(l => ({ supply: l.supply, qty: l.qty, ...(l.net != null ? { net: l.net } : {}), ...(l.out != null ? { out: l.out } : {}) })) } : {}),
       taste: tasteDraft,
       translations,
     });
@@ -267,23 +282,37 @@ let recipeDraft = [];
 /// The dish whose stored recipe was read (`GET /owner/products?id=`); null until then.
 let recipeKnown = null;
 let supplyBook = null;
+/// The dishes that reduce no stock, from the same answer.
+let noRecipeIds = null;
 const TASTE_AXES = ['spicy', 'sweet', 'salty', 'sour', 'richness'];
 const TASTE_ICONS = { spicy: 'pepper', sweet: 'candy', salty: 'salt', sour: 'lemon-2', richness: 'flame' };
 const TASTE_LEVELS = [1, 2, 3];
 let tasteDraft = {};
-const KIND_ICON = { food_ingredient: 'meat', condiment: 'bottle', packaging: 'box', utensil: 'tool' };
+const KIND_ICON = { food_ingredient: 'meat', condiment: 'bottle', packaging: 'box', utensil: 'tool', resale: 'beer' };
 const isFoodKind = k => k === 'food_ingredient' || k === 'condiment';
 const basisOf = u => u === 'unit' ? 1 : 100;
 /// The stepper moves by ten grams or millilitres, by one piece.
 const STEP_MASS = 10, STEP_PIECE = 1;
 
-async function supplies(){ if (!supplyBook) { try { supplyBook = (await api('/owner/stock')).supplies || []; } catch { supplyBook = []; } } return supplyBook; }
-/// A line scaled from its supply, the way the hub will scale it on save.
-function lineOf(sup, qty){
-  const ratio = qty / basisOf(sup.unit), food = isFoodKind(sup.kind);
-  const sc = v => food && v != null ? v * ratio : null;
-  return { supply: sup.id, qty, name: sup.name, unit: sup.unit, kind: sup.kind, kcal: sc(sup.kcalPer100), protein: sc(sup.proteinPer100), fat: sc(sup.fatPer100), carbs: sc(sup.carbsPer100),
-    cost: sup.costPerBasis != null ? Math.round(sup.costPerBasis * ratio) : null, weightG: sup.unit === 'unit' ? (sup.weightPerUnit != null ? sup.weightPerUnit * qty : null) : qty };
+/// The shelf answer is kept this long: prices and links move between visits.
+const SUPPLY_BOOK_MS = 60_000;
+let supplyBookAt = 0;
+async function supplies(){ if (supplyBook && performance.now() - supplyBookAt > SUPPLY_BOOK_MS) supplyBook = null;
+  if (!supplyBook) { supplyBookAt = performance.now(); try { const r = await api('/owner/stock'); supplyBook = r.supplies || []; noRecipeIds = (r.noRecipe || []).map(d => d.id); } catch { supplyBook = []; noRecipeIds = []; } } return supplyBook; }
+/// A line scaled from its supply, the way the hub will scale it on save
+/// (`recipe.rs` + `recipe/weights.rs`): GROSS `qty` in the supply's unit, NET
+/// and OUT in grams (typed, or from the supply's cleaning / cooking losses),
+/// nutrition on the edible part, the dish's weight on the plate, and the cost
+/// of the gross at the AVERAGE a priced delivery set (else the list price).
+function lineOf(sup, qty, net = null, out = null){
+  const w = IC.weights(sup, qty, net, out), food = isFoodKind(sup.kind);
+  const cooked = sup.nutritionBasis === 'cooked' && sup.unit !== 'unit' && w.out != null;
+  const edible = w.gross > 0 && w.net != null ? w.net / w.gross : w.cleanPm / IC.PM;
+  const n = cooked ? w.out / 100 : qty / basisOf(sup.unit) * edible;
+  const sc = v => food && v != null ? v * n : null;
+  const price = IC.priceOf(sup);
+  return { supply: sup.id, qty, net, out, w, name: sup.name, unit: sup.unit, kind: sup.kind, kcal: sc(sup.kcalPer100), protein: sc(sup.proteinPer100), fat: sc(sup.fatPer100), carbs: sc(sup.carbsPer100),
+    cost: IC.costOf(price.perBasis, qty, basisOf(sup.unit)), costFrom: price.from, weightG: w.out };
 }
 function derived(lines){
   const food = lines.filter(l => isFoodKind(l.kind));
@@ -308,7 +337,10 @@ const step = l => l.unit === 'unit' ? STEP_PIECE : STEP_MASS;
 function drawRecipe(p){
   const host = $('#rcLines'); if (!host) return;
   host.innerHTML = recipeDraft.length ? recipeDraft.map((l, i) => `<div class="rc-line"><span class="rc-ic">${icon(KIND_ICON[l.kind] || 'meat')}</span>
-      <span class="t"><b>${esc(l.name)}</b><small class="mono">${l.kcal != null ? `${Math.round(l.kcal)} kcal` : isFoodKind(l.kind) ? pill('warn', { key: 'noData' }) : ''}${l.cost != null ? ` · ${money(l.cost)}` : ''}</small></span>
+      <span class="t"><b>${esc(l.name)}</b><small class="mono">${l.kcal != null ? `${Math.round(l.kcal)} kcal` : isFoodKind(l.kind) ? pill('warn', { key: 'noData' }) : ''}${l.cost != null ? ` · ${money(l.cost)}` : ''}${l.w?.gross ? ` · ${esc(t('inv_loss'))} ${IC.pct(IC.lossPm(l.w))}` : ''}</small>
+        ${l.w ? `<span class="inv-w"><label><small data-t="inv_gross"></small><span class="mono">${l.w.gross ?? '-'} g</span></label>
+          <label><small data-t="inv_net"></small>${ui.inputRow({ label: k('inv_net'), cls: 'mono', attrs: { value: l.net ?? '', placeholder: String(l.w.net ?? ''), inputmode: 'numeric', data: { rn: i } } })}</label>
+          <label><small data-t="inv_out"></small>${ui.inputRow({ label: k('inv_out'), cls: 'mono', attrs: { value: l.out ?? '', placeholder: String(l.w.out ?? ''), inputmode: 'numeric', data: { ro: i } } })}</label></span>` : ''}</span>
       <span class="rc-qty">${iconBtn({ icon: 'minus', ariaLabel: `- ${step(l)}`, data: { rm: i }, tour: 'recipe.less' })}${ui.inputRow({ label: l.name, cls: 'mono', attrs: { value: String(l.qty), inputmode: 'numeric', data: { rq: i, tour: 'recipe.qty' } } })}<span class="mono">${esc(l.unit)}</span>${iconBtn({ icon: 'plus', ariaLabel: `+ ${step(l)}`, data: { rp: i }, tour: 'recipe.more' })}</span>
       ${iconBtn({ icon: 'x', ariaKey: 'remove', data: { rx: i }, tour: 'recipe.removeLine' })}</div>`).join('')
     : `<p class="hint" data-t="noRecipe"></p>`;
@@ -317,9 +349,12 @@ function drawRecipe(p){
   $('#rcSum').innerHTML = recipeDraft.length ? `<div class="stats strip">
       <div class="stat"><b>${d.kcal}</b><small data-t="kcal"></small></div><div class="stat"><b>${d.protein}</b><small data-t="protein"></small></div><div class="stat"><b>${d.fat}</b><small data-t="fat"></small></div><div class="stat"><b>${d.carbs}</b><small data-t="carbs"></small></div></div>
     <p class="hint ${d.complete ? 'ok' : ''}" data-t="${d.complete ? 'nutritionPerServing' : 'nutritionIncomplete'}"></p>
-    <p class="hint mono">${d.weightG != null ? `${t('weight')}: ${d.weightG} g · ` : ''}${cost != null ? `${t('foodCost')}: ${money(cost)}${price ? ` · ${Math.round(100 * cost / price)}%` : ''}` : t('costUnknown')}</p>` : '';
+    <p class="hint mono">${d.weightG != null ? `${t('weight')} (${t('inv_out')}): ${d.weightG} g · ` : ''}${cost != null ? `${t('foodCost')}: ${money(cost)}${price ? ` · ${IC.pct(Math.trunc(IC.PM * cost / price))} · ${t('ka_margin')} ${money(price - cost)}` : ''}${recipeDraft.some(l => l.costFrom === 'list') ? ` · ${t('inv_listPrice')}` : ''}` : t('costUnknown')}</p>` : '';
   retranslate($('#sheetIn'));
-  const setQty = (i, q) => { if (q <= 0) { recipeDraft.splice(i, 1); } else { const sup = supplyBook?.find(s => s.id === recipeDraft[i].supply); recipeDraft[i] = sup ? lineOf(sup, q) : { ...recipeDraft[i], qty: q }; } drawRecipe(p); };
+  const setQty = (i, q, net = recipeDraft[i].net ?? null, out = recipeDraft[i].out ?? null) => { if (q <= 0) { recipeDraft.splice(i, 1); } else { const sup = supplyBook?.find(s => s.id === recipeDraft[i].supply); recipeDraft[i] = sup ? lineOf(sup, q, net, out) : { ...recipeDraft[i], qty: q }; } drawRecipe(p); };
+  const typed = v => { const s = String(v ?? '').trim(); if (!s) return null; const n = IC.amount(s, 'g'); return n == null || n < 0 ? undefined : n; };
+  for (const inp of $$('[data-rn]', host)) inp.onchange = () => { const v = typed(inp.value); if (v === undefined) return toast(t('required')); setQty(+inp.dataset.rn, recipeDraft[+inp.dataset.rn].qty, v); };
+  for (const inp of $$('[data-ro]', host)) inp.onchange = () => { const v = typed(inp.value); if (v === undefined) return toast(t('required')); const l = recipeDraft[+inp.dataset.ro]; setQty(+inp.dataset.ro, l.qty, l.net ?? null, v); };
   for (const b of $$('[data-rm]', host)) b.onclick = () => setQty(+b.dataset.rm, recipeDraft[+b.dataset.rm].qty - step(recipeDraft[+b.dataset.rm]));
   for (const b of $$('[data-rp]', host)) b.onclick = () => setQty(+b.dataset.rp, recipeDraft[+b.dataset.rp].qty + step(recipeDraft[+b.dataset.rp]));
   for (const b of $$('[data-rx]', host)) b.onclick = () => setQty(+b.dataset.rx, 0);
@@ -336,7 +371,7 @@ async function bindRecipe(p){
   const book = await supplies();
   try { recipeDraft = (await storedBom(p.id)).map(l => ({ ...l })); recipeKnown = p.id; } catch { recipeKnown = null; }
   // Lines loaded from the dish are re-scaled from today's supply numbers, as the hub does on save.
-  recipeDraft = recipeDraft.map(l => { const sup = book.find(s => s.id === l.supply); return sup ? lineOf(sup, l.qty) : l; });
+  recipeDraft = recipeDraft.map(l => { const sup = book.find(s => s.id === l.supply); return sup ? lineOf(sup, l.qty, l.net ?? null, l.out ?? null) : l; });
   drawRecipe(p);
   let kind = 'all';
   const drawBook = () => {

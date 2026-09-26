@@ -29,8 +29,9 @@
 //! MILLIONTHS of a minor unit per base unit (i128), so 1,000 per kg is exactly
 //! 1,000,000 per gram and no average is taken through a float.
 
-use super::{decode, encode, BomLine, EvLog, Qty, StockError, StockEvent, StockLog};
-use crate::minijson::{esc, int_field};
+use super::meta::Meta;
+use super::{decode, BomLine, EvLog, Qty, StockError, StockEvent, StockLog};
+use crate::minijson::int_field;
 
 const MICRO: i128 = 1_000_000;
 
@@ -76,14 +77,21 @@ impl Pool {
         }
     }
     fn draw(&mut self, q: i128) {
+        self.take(q);
+    }
+    /// Draw `q` and answer the value that left, in millionths.
+    fn take(&mut self, q: i128) -> i128 {
         if self.qty <= 0 {
-            return;
+            return 0;
         }
         self.last_avg = self.avg();
         let d = q.min(self.qty);
         // Proportional, so drawing everything leaves exactly nothing.
-        self.value = self.value * (self.qty - d) / self.qty;
+        let left = self.value * (self.qty - d) / self.qty;
+        let gone = self.value - left;
+        self.value = left;
         self.qty -= d;
+        gone
     }
 }
 
@@ -106,7 +114,7 @@ impl CostBook {
         &mut self.pools.last_mut().expect("just pushed").1
     }
 
-    fn avg_micro(&self, item: &str) -> Option<i128> {
+    pub(super) fn avg_micro(&self, item: &str) -> Option<i128> {
         self.pools.iter().find(|(i, _)| i == item).and_then(|(_, p)| p.avg())
     }
 
@@ -130,10 +138,22 @@ impl CostBook {
         i64::try_from(half_up(sum, MICRO)).ok()
     }
 
+    /// What `qty` of `item` is worth at the current average, in minor units;
+    /// `None` for a supply no priced delivery has reached.
+    pub fn value_of(&self, item: &str, qty: Qty) -> Option<i64> {
+        let a = self.avg_micro(item)?;
+        i64::try_from(half_up(a * i128::from(qty), MICRO)).ok()
+    }
+
     /// Fold one raw record.
-    fn apply(&mut self, rec: &str) {
+    pub(super) fn apply(&mut self, rec: &str) {
         let Some(ev) = decode(rec) else { return };
-        match &ev {
+        self.apply_event(&ev, rec);
+    }
+
+    /// Fold one decoded record; `rec` is its raw text, for the price.
+    pub(super) fn apply_event(&mut self, ev: &StockEvent, rec: &str) {
+        match ev {
             StockEvent::Received { item, qty } => match price_of(rec) {
                 Some((unit_cost, per)) => {
                     let p = self.pool(item);
@@ -157,6 +177,21 @@ impl CostBook {
                     p.value = p.qty * a;
                 }
             }
+            // PREP moves VALUE with the food: what the board took from the
+            // input leaves its pool and joins the output's, so a fillet costs
+            // what the whole fish did, spread over fewer grams.
+            StockEvent::Produced { item, qty, out, into, .. } => {
+                if let Some(to) = super::moved_into(item, into) {
+                    let gone = self.pool(item).take(i128::from(*qty));
+                    let p = self.pool(to);
+                    if gone > 0 {
+                        p.value += gone;
+                        p.qty += i128::from(*out);
+                    } else {
+                        p.add_at_avg(i128::from(*out));
+                    }
+                }
+            }
             StockEvent::Reserved { .. } | StockEvent::Released { .. } | StockEvent::Returned { .. } => {}
         }
     }
@@ -168,26 +203,23 @@ fn price_of(rec: &str) -> Option<(i64, Qty)> {
     (c >= 0 && per > 0).then_some((c, per))
 }
 
-/// The record a priced delivery writes: `encode`'s own bytes with the price
-/// appended inside the object, so the shelf's decoder is untouched.
-fn priced_payload(ev: &StockEvent, price: &Price) -> String {
-    let base = encode(ev);
-    let mut s = base.strip_suffix('}').unwrap_or(&base).to_string();
-    s.push_str(&format!(r#","unit_cost":{},"per":{}"#, price.unit_cost, price.per));
-    if let Some(v) = &price.supplier {
-        s.push_str(&format!(r#","supplier":"{}""#, esc(v)));
+impl Price {
+    /// The price as the keys a record carries ([`Meta`]).
+    pub fn meta(&self) -> Meta {
+        Meta {
+            unit_cost: Some(self.unit_cost),
+            per: Some(self.per),
+            supplier: self.supplier.clone(),
+            doc: self.doc.clone(),
+            ..Meta::default()
+        }
     }
-    if let Some(v) = &price.doc {
-        s.push_str(&format!(r#","doc":"{}""#, esc(v)));
-    }
-    s.push('}');
-    s
 }
 
 impl StockLog {
     /// Every record's payload, OLDEST FIRST, undecoded: the price lives in
     /// fields `StockEvent` does not carry.
-    fn raw(&self) -> Vec<String> {
+    pub(super) fn raw(&self) -> Vec<String> {
         let mut out: Vec<String> =
             EvLog::walk(&self.store).into_iter().map(|r| String::from_utf8_lossy(&r.payload).into_owned()).collect();
         out.reverse();
@@ -198,15 +230,28 @@ impl StockLog {
     /// `Received` is, and refused -- nothing written -- for a price that is not
     /// one (negative cost, a basis that is not positive).
     pub fn receive_priced(&mut self, item: &str, qty: Qty, price: &Price) -> Result<(), StockError> {
-        if price.per <= 0 {
-            return Err(StockError::NotPositive { qty: price.per });
-        }
-        if price.unit_cost < 0 {
-            return Err(StockError::NotPositive { qty: price.unit_cost });
+        self.receive_with(item, qty, &price.meta())
+    }
+
+    /// A DELIVERY with everything the paper says: price, supplier, invoice,
+    /// lot, expiry (research R3/R8). A price half-given -- a cost without a
+    /// basis or the other way round -- or one that is not a price is refused
+    /// and nothing is written; no price at all is an unpriced delivery.
+    pub fn receive_with(&mut self, item: &str, qty: Qty, meta: &Meta) -> Result<(), StockError> {
+        match (meta.unit_cost, meta.per) {
+            (None, None) => {}
+            (Some(c), Some(per)) => {
+                if per <= 0 {
+                    return Err(StockError::NotPositive { qty: per });
+                }
+                if c < 0 {
+                    return Err(StockError::NotPositive { qty: c });
+                }
+            }
+            _ => return Err(StockError::Linkage("a price names its cost and what it is per, together".into())),
         }
         let ev = StockEvent::Received { item: item.to_string(), qty };
-        self.ledger()?.decide(&ev)?;
-        self.write_payload(priced_payload(&ev, price).into_bytes())
+        self.append_with(&ev, meta)
     }
 
     /// The cost book folded over the first `at` records (the whole log when

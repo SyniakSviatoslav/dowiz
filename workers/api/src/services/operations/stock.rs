@@ -4,11 +4,26 @@
 //! THE LEDGER IS THE TRUTH AND IT IS APPEND-ONLY. `dowiz_hub::stock` decides
 //! every movement; nothing here computes a balance.
 
-use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
+/// Dishes with no recipe, linked to a piece they are sold as (I0c).
+pub mod as_is;
+/// What a movement request becomes, pure.
+pub mod moves;
+/// What the Stock screen shows, pure.
+pub mod view;
+pub use moves::StockMoveIn;
+#[cfg(test)]
+use moves::movement;
+#[cfg(test)]
 use dowiz_hub::stock::{StockEvent, WasteReason};
+
+/// The venue's zone and today's local day, `yyyymmdd`, from its own record.
+fn today_of(cat: &dowiz_hub::catalog::Catalog, now_ms: i64) -> i64 {
+    let zone = crate::hubstore::zone_of(cat.location().and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref());
+    dowiz_hub::stock::meta::day_of_local_ms(dowiz_hub::tz::local_ms(zone, now_ms))
+}
 
 //
 // §4's deterministic ledger, reachable at last. A stock level is a FOLD over
@@ -48,10 +63,13 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    let led = match log.ledger() {
-        Ok(l) => l,
+    // ONE PASS: shelf, cost, lots and history from a single walk of the log.
+    let journal = match log.journal() {
+        Ok(j) => j,
         Err(e) => return Response::error(e.to_string(), 500),
     };
+    let led = &journal.ledger;
+    let today = today_of(&cat, ctx.data.now_ms);
     let rows: Vec<Value> = cat
         .supplies()
         .into_iter()
@@ -64,7 +82,9 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
             let level = led.level(&id);
             let low_at = v.get("lowAt").and_then(Value::as_i64).unwrap_or(0);
             let take = |k: &str| v.get(k).cloned().unwrap_or(Value::Null);
-            Some(json!({
+            let unit = v.get("unit").and_then(Value::as_str).unwrap_or("g");
+            let more = view::extras(&id, crate::recipe::basis_of(unit), &journal, today);
+            let mut row = json!({
                 "id": id,
                 "name": v.get("name").cloned().unwrap_or(Value::Null),
                 "unit": v.get("unit").cloned().unwrap_or(json!("g")),
@@ -72,6 +92,8 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
                 "category": v.get("category").cloned().unwrap_or(json!("")),
                 "kcalPer100": take("kcalPer100"), "proteinPer100": take("proteinPer100"), "fatPer100": take("fatPer100"), "carbsPer100": take("carbsPer100"),
                 "costPerBasis": take("costPerBasis"), "weightPerUnit": take("weightPerUnit"),
+                "cleanPm": take("cleanPm"), "cookPm": take("cookPm"), "nutritionBasis": take("nutritionBasis"),
+                "shelfDays": take("shelfDays"), "supplier": take("supplier"),
                 "nutritionConfirmed": v.get("nutritionConfirmed").and_then(Value::as_bool).unwrap_or(false),
                 "onHand": level.on_hand,
                 "reserved": level.reserved,
@@ -81,9 +103,19 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
                 // and it neither refuses orders nor raises a low alarm.
                 "counted": led.is_counted(&id),
                 "low": led.is_counted(&id) && low_at > 0 && level.available() <= low_at,
-            }))
+                // Never counted, and orders have taken from it (I0): its level
+                // is use nobody measured against -- a count is due, not an alarm.
+                "needsCount": !led.is_counted(&id) && level.on_hand < 0,
+            });
+            if let (Some(m), Some(x)) = (row.as_object_mut(), more.as_object()) {
+                for (k, val) in x {
+                    m.insert(k.clone(), val.clone());
+                }
+            }
+            Some(row)
         })
         .collect();
+    let (recent, suppliers) = view::recent_and_suppliers(&journal);
     // Reservations whose order never settled. Surfaced rather than swept: a
     // stranded hold makes a kitchen believe it is out of something it has.
     let stranded: Vec<Value> = led
@@ -91,64 +123,21 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
         .into_iter()
         .map(|(order, item, qty)| json!({ "order": order, "item": item, "qty": qty }))
         .collect();
-    Response::from_json(&json!({ "supplies": rows, "stranded": stranded }))
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct StockMoveIn {
-    item: String,
-    #[serde(default)]
-    qty: Option<i64>,
-    /// For a stocktake: what was actually counted.
-    #[serde(default)]
-    observed: Option<i64>,
-    /// For waste: one of `WasteReason::allowed_words()`. Required.
-    #[serde(default)]
-    reason: Option<String>,
-    // NO `by`. THE SIGNER IS WHO AUTHENTICATED, never a field the caller
-    // fills in: a body that could name its signer is a write-off anybody can
-    // put on somebody else. `deny_unknown_fields` turns a `by` into a 400.
-}
-
-/// The event a movement is, signed by `by` -- the AUTHENTICATED principal.
-///
-/// PURE, so the refusals are tested without a Worker. A waste reason outside
-/// the closed set, or none, is a 400 naming the allowed words: never a
-/// default, or the report says the kitchen spoils everything (§2.1).
-fn movement(kind: &str, body: StockMoveIn, by: &str, now_ms: i64) -> std::result::Result<StockEvent, (u16, String)> {
-    let item = body.item.trim().to_string();
-    if item.is_empty() {
-        return Err((400, "which ingredient?".into()));
-    }
-    let by = by.to_string();
-    match kind {
-        "received" => body.qty.map(|qty| StockEvent::Received { item, qty }).ok_or((400, "how much?".into())),
-        "wasted" => {
-            let qty = body.qty.ok_or((400, "how much?".to_string()))?;
-            let reason = match body.reason.as_deref().map(str::trim) {
-                None | Some("") => {
-                    return Err((400, format!("a write-off says why: one of {}", WasteReason::allowed_words())))
-                }
-                Some(r) => WasteReason::from_str(r).ok_or_else(|| {
-                    (400, format!("{r:?} is not a waste reason: one of {}", WasteReason::allowed_words()))
-                })?,
-            };
-            Ok(StockEvent::Wasted { item, qty, reason, by })
-        }
-        "stocktake" => body
-            .observed
-            .map(|observed| StockEvent::Stocktake { item, observed, stocktake_id: format!("st_{now_ms}"), by })
-            .ok_or((400, "what was counted?".into())),
-        other => Err((400, format!("no such movement: {other}"))),
-    }
+    Response::from_json(&json!({
+        "supplies": rows, "stranded": stranded, "today": dowiz_hub::stock::meta::show_day(today),
+        "recent": recent, "suppliers": suppliers, "sessions": view::sessions(&journal, 5),
+        "expiryWarnDays": view::EXPIRY_WARN_DAYS,
+        // I0c: every dish that takes nothing off the shelf yet.
+        "noRecipe": as_is::without_recipe(&cat),
+    }))
 }
 
 /// Who may record a movement, and at which venue: `(signer, venue)`.
 ///
 /// A WRITE-OFF IS A STAFF ACT (§2.1): the owner, or a member of staff holding
 /// `open_till` -- the drawer's holder is who bins the stock at midnight. Their
-/// person id is the signer. A delivery received and a count stay the owner's.
+/// person id is the signer. Every other movement (delivery, count, prep, sold
+/// as is) is the owner's or a member of staff holding `stock` -- the kitchen.
 async fn signer_for(req: &Request, ctx: &RouteContext<crate::Req>, kind: &str) -> std::result::Result<(String, String), Response> {
     if kind != "wasted" {
         return crate::services::identity::staff::guard::staff_venue(req, ctx, &crate::services::identity::staff::guard::SHELF).await;
@@ -171,9 +160,10 @@ async fn waste_signer(req: &Request, ctx: &RouteContext<crate::Req>) -> std::res
     Ok((by, venue))
 }
 
-/// `POST /api/owner/stock/:kind` — received, wasted or counted.
+/// `POST /api/owner/stock/:kind` — received, wasted, stocktake, count (a
+/// session of many lines) or produced (prep). See [`moves`].
 ///
-/// THE THREE A HUMAN CAUSES. Reserved, Consumed and Released are emitted by the
+/// WHAT A HUMAN CAUSES. Reserved, Consumed and Released are emitted by the
 /// order lifecycle and are deliberately unreachable here: a hand-written
 /// reservation has no order to settle it and would strand immediately.
 pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
@@ -190,19 +180,33 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
     };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
-    let ev = match movement(&kind, body, &by, ctx.data.now_ms) {
-        Ok(ev) => ev,
+    let now = ctx.data.now_ms;
+    // SOLD AS IS is a catalogue write, not a movement: one per request.
+    if kind == "as-is" {
+        let ids = body.products.clone().unwrap_or_default();
+        if ids.is_empty() {
+            return Response::error("which dishes?", 400);
+        }
+        return as_is::write(&place, ids).await;
+    }
+    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
+    let shelf = |id: &str| {
+        cat.supply(id).and_then(|j| serde_json::from_str::<Value>(&j).ok()).and_then(|v| v.get("shelfDays").and_then(Value::as_i64))
+    };
+    let plan = match moves::plan(&kind, body, &by, now, today_of(&cat, now), shelf) {
+        Ok(p) => p,
         Err((status, said)) => return Response::error(said, status),
     };
-    if crate::hubstore::load_catalog(&place).await?.catalog.supply(ev.item()).is_none() {
-        return Response::error("not found", 404);
+    if let Some(unknown) = plan.items().into_iter().find(|i| cat.supply(i).is_none()) {
+        return Response::error(format!("not found: {unknown}"), 404);
     }
     let outcome = crate::hubstore::with_stock(&place, move |log| {
-        log.append(&ev).map_err(|e| Error::RustError(e.to_string()))
+        log.set_clock(now);
+        plan.apply(log).map_err(|e| Error::RustError(e.to_string()))
     })
     .await;
     match outcome {
-        Ok(()) => Response::from_json(&json!({ "ok": true })),
+        Ok(shown) => Response::from_json(&shown),
         // The ledger's refusals are the venue's business, not a server fault.
         Err(e) => Response::error(e.to_string(), 409),
     }

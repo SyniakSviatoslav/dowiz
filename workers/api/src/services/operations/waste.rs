@@ -17,6 +17,7 @@
 //! READS two images; writes none (`tools/gates/one-image.sh` counts writes).
 
 use crate::command::room_rules::{self as rr, Stage, VoidReason};
+use dowiz_hub::stock::journal::Entry;
 use dowiz_hub::stock::{self, StockEvent};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -37,17 +38,42 @@ pub struct WasteRow {
     pub by: Option<String>,
     /// For a void: the round it left.
     pub order: Option<String>,
-    /// For a void: when (the stock log carries no clock).
+    /// When. A void's from the order log; a write-off's from its record's
+    /// `at` (research R2) -- `None` for one written before 2026-09-26.
     pub at: Option<i64>,
     /// For food back from a door: who chose to bin it (`by` is the courier
     /// who brought it back).
     pub chosen_by: Option<String>,
+    /// Minor units at the average cost of that moment (research R5): stamped
+    /// at the write, else re-folded. `None`: no priced delivery had reached
+    /// the supply, and never a zero that looks like a price.
+    pub value: Option<i64>,
+    /// The lot binned, when the write-off named one.
+    pub lot: Option<String>,
 }
 
-/// The fold. `stock` oldest first (`StockLog::events`), `orders` oldest first
-/// (`Hub::events_oldest_first`). Pure: same logs, same rows.
+/// The fold over bare events (no dates, no values): every row the report
+/// has always had, for the tests that lay down events by hand. The route
+/// folds the journal ([`fold_entries`]). Pure: same logs, same rows.
+#[cfg(test)]
 pub fn fold(stock: &[StockEvent], orders: &[dowiz_hub::Event]) -> Vec<WasteRow> {
-    let mut rows: Vec<WasteRow> = stock.iter().filter_map(stock_row).collect();
+    let entries: Vec<Entry> = stock
+        .iter()
+        .enumerate()
+        .map(|(seq, ev)| Entry { seq, ev: ev.clone(), meta: dowiz_hub::stock::meta::Meta::default(), before: 0, value: None })
+        .collect();
+    fold_entries(&entries, orders)
+}
+
+/// The fold. `stock` oldest first (`StockLog::journal`), `orders` oldest
+/// first (`Hub::events_oldest_first`). Pure: same logs, same rows.
+pub fn fold_entries(stock: &[Entry], orders: &[dowiz_hub::Event]) -> Vec<WasteRow> {
+    let mut rows: Vec<WasteRow> = stock
+        .iter()
+        .filter_map(|e| {
+            stock_row(&e.ev).map(|r| WasteRow { at: e.meta.at, value: e.value, lot: e.meta.lot.clone(), ..r })
+        })
+        .collect();
     let mut state: HashMap<&str, Value> = HashMap::new();
     for e in orders.iter().filter(|e| e.kind.is_order()) {
         let before = state.remove(e.order_id.as_str()).unwrap_or(Value::Null);
@@ -77,6 +103,8 @@ fn stock_row(ev: &StockEvent) -> Option<WasteRow> {
             order: None,
             at: None,
             chosen_by: None,
+            value: None,
+            lot: None,
         }),
         // FOOD BACK FROM A DOOR, BINNED (§2.4). Its ingredients left the shelf
         // at `Consumed`; this is the record that they were thrown away, not a
@@ -90,6 +118,8 @@ fn stock_row(ev: &StockEvent) -> Option<WasteRow> {
             order: Some(order_id.clone()),
             at: None,
             chosen_by: Some(chosen_by.clone()),
+            value: None,
+            lot: None,
         }),
         StockEvent::Returned { resell: true, .. }
         | StockEvent::Received { .. }
@@ -98,7 +128,10 @@ fn stock_row(ev: &StockEvent) -> Option<WasteRow> {
         | StockEvent::Released { .. }
         | StockEvent::Stocktake { .. }
         | StockEvent::Served { .. }
-        | StockEvent::Unserved { .. } => None,
+        | StockEvent::Unserved { .. }
+        // PREP IS NOT WASTE: its loss (gross - out) is the recipe's own,
+        // reported by the kitchen analytics as a yield, not a write-off.
+        | StockEvent::Produced { .. } => None,
     }
 }
 
@@ -133,6 +166,8 @@ fn dropped_after_kitchen(order: &str, before: &Value, after: &Value) -> Vec<Wast
             order: Some(order.to_string()),
             at: entry.get("at").and_then(Value::as_i64),
             chosen_by: None,
+            value: None,
+            lot: None,
         })
         .collect()
 }
@@ -142,12 +177,23 @@ fn dropped_after_kitchen(order: &str, before: &Value, after: &Value) -> Vec<Wast
 pub fn totals(rows: &[WasteRow]) -> Value {
     let mut by_reason: BTreeMap<&str, BTreeMap<&str, i64>> = BTreeMap::new();
     let mut by_signer: BTreeMap<&str, BTreeMap<String, i64>> = BTreeMap::new();
+    // Money is one unit whatever the source, so the value IS summed across
+    // reasons -- of the rows that have one; `unvalued` counts the rest.
+    let mut value_by_reason: BTreeMap<&str, i64> = BTreeMap::new();
+    let (mut value, mut unvalued) = (0i64, 0i64);
     for r in rows {
+        match r.value {
+            Some(v) => {
+                *value_by_reason.entry(r.reason.as_str()).or_default() += v;
+                value += v;
+            }
+            None => unvalued += 1,
+        }
         *by_reason.entry(r.source).or_default().entry(r.reason.as_str()).or_default() += r.qty;
         let who = r.by.clone().unwrap_or_else(|| "(unsigned)".into());
         *by_signer.entry(r.source).or_default().entry(who).or_default() += r.qty;
     }
-    json!({ "byReason": by_reason, "bySigner": by_signer })
+    json!({ "byReason": by_reason, "bySigner": by_signer, "valueByReason": value_by_reason, "value": value, "unvalued": unvalued })
 }
 
 /// `GET /api/owner/stock/waste` — every binned thing, with its signer.
@@ -162,7 +208,11 @@ pub async fn waste_report(req: Request, ctx: RouteContext<crate::Req>) -> Result
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    let rows = fold(&stock.events(), &hub.events_oldest_first());
+    let journal = match stock.journal() {
+        Ok(j) => j,
+        Err(e) => return Response::error(e.to_string(), 500),
+    };
+    let rows = fold_entries(&journal.entries, &hub.events_oldest_first());
     let totals = totals(&rows);
     Response::from_json(&json!({ "venue": loc, "rows": rows, "totals": totals }))
 }

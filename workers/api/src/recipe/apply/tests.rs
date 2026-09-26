@@ -12,7 +12,7 @@ fn supply(id: &str) -> Option<String> {
 }
 
 fn line(s: &str, qty: i64) -> BomLineIn {
-    BomLineIn { supply: s.into(), qty }
+    BomLineIn { supply: s.into(), qty, net: None, out: None }
 }
 
 fn dish() -> Value {
@@ -113,4 +113,24 @@ fn clearing_a_recipe_clears_only_what_it_derived() {
     set_bom(&mut q, &[], supply, Typed::default()).unwrap();
     assert_eq!((q["nutrition"]["kcal"].clone(), q["weightG"].clone()), (json!(1), json!(999)));
     assert_eq!(q["ingredients"], json!(["salmon"]));
+}
+
+/// R6 THROUGH THE ONE WRITE: a weighed line is stored with its net and out,
+/// the dish weighs its OUT, and a net heavier than its gross writes nothing.
+#[test]
+fn a_weighed_line_is_stored_and_the_dish_weighs_its_out() {
+    let mut p = dish();
+    let fillet = BomLineIn { supply: "salmon".into(), qty: 100, net: Some(55), out: Some(50) };
+    set_bom(&mut p, &[fillet, line("rice", 90)], supply, Typed::default()).unwrap();
+    assert_eq!(p["bom"], json!([{ "supply": "salmon", "qty": 100, "net": 55, "out": 50 }, { "supply": "rice", "qty": 90 }]));
+    assert_eq!(p["weightG"], json!(140), "50 g of salmon on the plate + 90 g rice");
+    // Nutrition follows the edible 55 of the 100 g gross: 208 x 0.55 = 114.4, + 117 rice.
+    assert_eq!(p["nutrition"]["kcal"], json!(231));
+    assert_eq!(p["cost"], json!(240 + 34), "cost is the GROSS the kitchen paid for");
+    // Refusal twin: a net above the gross, and nothing changed on the dish.
+    let before = p.clone();
+    let bad = BomLineIn { supply: "salmon".into(), qty: 100, net: Some(101), out: None };
+    let e = set_bom(&mut p, &[bad], supply, Typed::default()).unwrap_err();
+    assert!(e.contains("salmon") && e.contains("more than the gross"), "{e}");
+    assert_eq!(p, before);
 }

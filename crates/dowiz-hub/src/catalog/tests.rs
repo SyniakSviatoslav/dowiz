@@ -188,3 +188,16 @@ fn a_lean_bom_reads_back_through_the_ledger() {
     assert_eq!(crate::stock::bom_of(&format!(r#"{{"bom":{json}}}"#)), lines);
     assert_eq!(bom::to_json(&[]), "[]");
 }
+
+/// R6: a weighed line keeps its net and out, an unweighed one is byte for
+/// byte the lean form, and the ledger reads `supply` and `qty` out of both.
+#[test]
+fn a_weighed_bom_reads_back_through_the_ledger_unchanged() {
+    let salmon = crate::stock::BomLine { supply: "salmon".into(), qty: 100 };
+    let rice = crate::stock::BomLine { supply: "rice".into(), qty: 90 };
+    let json = bom::to_json_weighed(&[(salmon.clone(), Some(55), Some(50)), (rice.clone(), None, None)]);
+    assert_eq!(json, r#"[{"supply":"salmon","qty":100,"net":55,"out":50},{"supply":"rice","qty":90}]"#);
+    assert_eq!(crate::stock::bom_of(&format!(r#"{{"bom":{json}}}"#)), vec![salmon.clone(), rice.clone()]);
+    assert_eq!(bom::to_json_weighed(&[(rice.clone(), None, None)]), bom::to_json(&[rice]));
+    assert_eq!(bom::to_json_weighed(&[(salmon, None, Some(0))]), r#"[{"supply":"salmon","qty":100,"out":0}]"#);
+}

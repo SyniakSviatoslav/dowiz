@@ -51,14 +51,17 @@ pub struct AdvanceOut {
 
 /// Does this transition consume the ingredients, release them, or neither?
 ///
-/// PREPARING consumes: the food is being made and those ingredients are gone.
-/// REJECTED and CANCELLED release: nothing was cooked, and holding them would
-/// strand the difference for ever. Everything else leaves the shelf alone —
-/// including PICKED_UP and DELIVERED, because by then the consumption already
-/// happened at PREPARING and settling twice would double-count it.
+/// EVERY WAY AN ORDER LEAVES THE KITCHEN CONSUMES (operator, 2026-09-26).
+/// PREPARING consumes: the food is being made. So do READY, IN_DELIVERY,
+/// PICKED_UP and DELIVERED -- CONFIRMED -> IN_DELIVERY is a legal edge that
+/// skips PREPARING, and until this an order taken that way held its
+/// ingredients for ever and never took them off the shelf. It cannot
+/// double-count: `stock::settle` consumes what the ledger still HOLDS for the
+/// order, and after the first settlement it holds nothing.
+/// REJECTED and CANCELLED release: nothing was cooked.
 pub fn settlement(next: &str) -> Option<bool> {
     match next {
-        "PREPARING" => Some(true),
+        "PREPARING" | "READY" | "IN_DELIVERY" | "PICKED_UP" | "DELIVERED" => Some(true),
         "REJECTED" | "CANCELLED" => Some(false),
         _ => None,
     }
@@ -133,3 +136,8 @@ pub fn decide(
     }
     Ok(merged)
 }
+
+/// I0: every fulfilment path consumes, and none consumes twice.
+#[cfg(test)]
+#[path = "advance/consume_tests.rs"]
+mod consume_tests;

@@ -71,3 +71,36 @@ fn a_field_with_no_value_is_left_out_of_the_record() {
     let r = record("kuti", &b, &json!({}));
     assert_eq!((r["weightPerUnit"].clone(), r["supplier"].clone()), (json!(12.0), json!("Metro")));
 }
+
+/// R6: the supply's losses are per mille in range, the basis is one of two
+/// words, and the defaults (1000, raw) are not stored -- the catalogue image
+/// spends a cell per byte. Each refusal beside its twin.
+#[test]
+fn losses_and_basis_are_checked_and_defaults_are_left_out() {
+    for (clean, cook, ok) in [(Some(0), None, false), (Some(1001), None, false), (None, Some(5001), false), (Some(550), Some(2200), true), (Some(1000), Some(1), true)] {
+        let mut b = body("salmon");
+        b.clean_pm = clean;
+        b.cook_pm = cook;
+        assert_eq!(check(&b).is_ok(), ok, "{clean:?} {cook:?}");
+    }
+    let mut b = body("rice");
+    b.nutrition_basis = Some("boiled".into());
+    assert!(check(&b).is_err());
+    b.nutrition_basis = Some("cooked".into());
+    b.shelf_days = Some(0);
+    assert!(check(&b).is_err());
+    b.shelf_days = Some(3);
+    assert!(check(&b).is_ok());
+    let r = record("rice", &b, &json!({}));
+    assert_eq!((r["nutritionBasis"].clone(), r["shelfDays"].clone()), (json!("cooked"), json!(3)));
+
+    let mut b = body("salmon");
+    b.clean_pm = Some(550);
+    let r = record("salmon", &b, &json!({ "cookPm": 900 }));
+    assert_eq!((r["cleanPm"].clone(), r["cookPm"].clone()), (json!(550), json!(900)), "given, and kept");
+    // Adopting 1000 (no loss) or `raw` stores nothing: the default.
+    b.clean_pm = Some(1000);
+    b.nutrition_basis = Some("raw".into());
+    let r = record("salmon", &b, &json!({ "cleanPm": 550, "nutritionBasis": "cooked" }));
+    assert!(r.get("cleanPm").is_none() && r.get("nutritionBasis").is_none(), "{r}");
+}

@@ -6,6 +6,7 @@
 use super::*;
 use crate::command::amend::{self, AmendIn, Op};
 use crate::hubdo::OrderView;
+use dowiz_hub::stock::meta::Meta;
 use dowiz_hub::stock::{StockLog, WasteReason};
 use dowiz_hub::{EventKind, Hub};
 
@@ -121,6 +122,7 @@ fn food_binned_after_a_refused_door_is_a_returned_row() {
     assert_eq!(rows, vec![WasteRow {
         source: "stock", item: "rice".into(), qty: 200, reason: "returned".into(),
         by: Some("courier-7".into()), order: Some("o9".into()), at: None, chosen_by: Some("owner1".into()),
+        value: None, lot: None,
     }]);
     let t = totals(&rows);
     assert_eq!(t["byReason"]["stock"]["returned"], json!(200));
@@ -132,4 +134,34 @@ fn food_binned_after_a_refused_door_is_a_returned_row() {
 fn resold_food_is_not_waste() {
     assert!(fold(&[back("rice", 200, true)], &[]).is_empty());
     assert_eq!(fold(&[back("rice", 200, true), back("nori", 2, false)], &[]).len(), 1);
+}
+
+/// R5: A WRITE-OFF CARRIES ITS VALUE AND ITS DATE, through the real log: a
+/// priced delivery, a write-off stamped with the average of its moment and
+/// dated by the clock, and an old undated unvalued one beside it. The totals
+/// sum money across reasons and count what could not be valued.
+#[test]
+fn a_write_off_is_dated_and_valued_and_an_old_one_is_not_invented() {
+    use dowiz_hub::stock::StockLog;
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    log.append(&binned("nori", 0, WasteReason::Spoiled, "p")).unwrap_err();
+    log.append(&StockEvent::Received { item: "nori".into(), qty: 10 }).unwrap();
+    log.append(&binned("nori", 1, WasteReason::Spoiled, "p_old")).unwrap();
+    log.set_clock(1_790_000_000_000);
+    log.receive_with("salmon", 1000, &Meta { unit_cost: Some(3000), per: Some(1000), ..Meta::default() }).unwrap();
+    log.append_with(&binned("salmon", 200, WasteReason::Dropped, "p_cook"), &Meta { lot: Some("L1".into()), ..Meta::default() })
+        .unwrap();
+    let j = log.journal().unwrap();
+    let rows = fold_entries(&j.entries, &[]);
+    assert_eq!(rows.len(), 2);
+    assert_eq!((rows[0].at, rows[0].value), (None, None), "the old one: no date, no invented value");
+    assert_eq!((rows[1].at, rows[1].value, rows[1].lot.as_deref()), (Some(1_790_000_000_000), Some(600), Some("L1")));
+    let t = totals(&rows);
+    assert_eq!((t["value"].clone(), t["unvalued"].clone()), (json!(600), json!(1)));
+    assert_eq!(t["valueByReason"]["dropped"], json!(600));
+    // Prep is not waste.
+    let prep = StockEvent::Produced {
+        item: "salmon".into(), qty: 100, out: 55, stage: dowiz_hub::stock::PrepStage::Clean, into: None, by: "p".into(),
+    };
+    assert!(fold(&[prep], &[]).is_empty());
 }
