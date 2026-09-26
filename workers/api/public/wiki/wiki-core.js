@@ -13,15 +13,15 @@ export const T = {
   sq: { title: 'Mësime', owner: 'Pronari', waiter: 'Kamarieri', courier: 'Korrieri', guest: 'Mysafiri', all: 'Të gjitha',
     search: 'Kërko një mësim', video: 'Video', noVideo: 'Video së shpejti', steps: 'Hapat', goal: 'Qëllimi',
     open: 'Hapeni në aplikacion', back: 'Mbrapa', none: 'Asnjë mësim nuk përputhet.', writes: 'Ndryshon të dhëna reale',
-    loading: 'Po ngarkohet…', failed: 'Mësimet nuk u ngarkuan.', notFound: 'Ky mësim nuk ekziston.', subs: 'Titrat' },
+    loading: 'Po ngarkohet…', failed: 'Mësimet nuk u ngarkuan.', notFound: 'Ky mësim nuk ekziston.', subs: 'Titrat', signIn: 'Hyni në aplikacion që të shihni videot.' },
   en: { title: 'Lessons', owner: 'Owner', waiter: 'Waiter', courier: 'Courier', guest: 'Guest', all: 'All',
     search: 'Search the lessons', video: 'Video', noVideo: 'Video coming soon', steps: 'Steps', goal: 'Goal',
     open: 'Open it in the app', back: 'Back', none: 'No lesson matches.', writes: 'Changes real data',
-    loading: 'Loading…', failed: 'The lessons did not load.', notFound: 'There is no such lesson.', subs: 'Subtitles' },
+    loading: 'Loading…', failed: 'The lessons did not load.', notFound: 'There is no such lesson.', subs: 'Subtitles', signIn: 'Sign in to the app to watch the videos.' },
   uk: { title: 'Уроки', owner: 'Власник', waiter: 'Офіціант', courier: 'Кур’єр', guest: 'Гість', all: 'Усі',
     search: 'Пошук уроку', video: 'Відео', noVideo: 'Відео незабаром', steps: 'Кроки', goal: 'Мета',
     open: 'Відкрити в застосунку', back: 'Назад', none: 'Жоден урок не підходить.', writes: 'Змінює реальні дані',
-    loading: 'Завантаження…', failed: 'Уроки не завантажилися.', notFound: 'Такого уроку немає.', subs: 'Субтитри' },
+    loading: 'Завантаження…', failed: 'Уроки не завантажилися.', notFound: 'Такого уроку немає.', subs: 'Субтитри', signIn: 'Увійдіть у застосунок, щоб дивитися відео.' },
 };
 
 /// '#/uk/waiter/W3' -> { lang, role, id }. Unknown parts fall back, never throw.
@@ -77,3 +77,19 @@ export function clock(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/// The videos are gated (GET /api/learn/*, Bearer). The token is the one the reader's app
+/// already holds on this origin: the console's access token (sessionStorage dw_at, renewable
+/// from dw_rt), the room's session (dw_room_session, unexpired), the courier's dw_c_jwt.
+/// `get(area, key)` reads storage; answers { token, refresh } (either may be null).
+export function bearer(get, now = Date.now()) {
+  const at = get('session', 'dw_at'), rt = get('local', 'dw_rt');
+  if (at) return { token: at, refresh: rt };
+  let room = null;
+  try { room = JSON.parse(get('local', 'dw_room_session') || 'null'); } catch { room = null; }
+  if (room && room.jwt && !(room.staff?.expiresMs < now)) return { token: room.jwt, refresh: rt };
+  return { token: get('local', 'dw_c_jwt') || null, refresh: rt };
+}
+
+/// A manifest URL (/learn/media/.. from an old publish, or /api/learn/media/..) -> the gated one.
+export const gatedUrl = u => String(u || '').replace(/^\/learn\/media\//, '/api/learn/media/');

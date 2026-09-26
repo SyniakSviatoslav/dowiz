@@ -74,10 +74,28 @@ edit "$R/docs/learn/lessons/courier/C5.yaml" "anchor: hud.gps
     pending: yes"
 edit "$R/docs/learn/lessons/courier/C5.yaml" "selector: '[data-tour=\"hud.gps\"]'" "selector: '[data-tour=\"hud.compass\"]'"
 edit "$P/courier/index.html" ' data-tour="hud.gps"' ''
-edit "$R/docs/learn/anchors-courier.txt" 'hud.gps workers/api/public/courier/index.html:50
-' ''
+# The list names the line the anchor is on; the UI moves it, so drop the entry by its name.
+grep -q '^hud.gps ' "$R/docs/learn/anchors-courier.txt" && sed -i '/^hud.gps /d' "$R/docs/learn/anchors-courier.txt" || { echo "prove: hud.gps is not in anchors-courier.txt"; fail=1; }
 node "$R/tools/learn/build-lessons.mjs" --root "$R" >/dev/null 2>&1 || { echo "prove: rebuild failed"; fail=1; }
 want 0 "a pending anchor that does not exist yet"
+
+# 8. item 5 (a WARN, never red): a video recorded from W3's YAML is current until the YAML moves.
+copy
+python3 - "$R" <<'PY'
+import hashlib, json, os, sys
+r = sys.argv[1]
+y = os.path.join(r, 'docs/learn/lessons/waiter/W3.yaml')
+m = {'version': 1, 'lessons': {'W3': {'role': 'waiter', 'source': hashlib.sha256(open(y, 'rb').read()).hexdigest(), 'cuts': {}}}}
+os.makedirs(os.path.join(r, 'workers/api/public/learn/media'), exist_ok=True)
+json.dump(m, open(os.path.join(r, 'workers/api/public/learn/media/manifest.json'), 'w'))
+PY
+want 0 "W3's video recorded from the current YAML"
+grep -q 'stale video: W3' "$SCRATCH/out" && { echo "prove: a current video was called stale"; fail=1; }
+grep -q 'videos: 1/.* 0 stale' "$SCRATCH/out" || { echo "prove: the video count is missing"; fail=1; }
+printf '# edited after the recording\n' >> "$R/docs/learn/lessons/waiter/W3.yaml"
+node "$R/tools/learn/build-lessons.mjs" --root "$R" >/dev/null 2>&1 || { echo "prove: rebuild failed"; fail=1; }
+want 0 "W3's YAML edited after its video (warned, not refused)"
+grep -q '5 WARN stale video: W3' "$SCRATCH/out" && echo "prove: item 5 warns: $(grep -m1 'stale video: W3' "$SCRATCH/out" | cut -c1-60)" || { echo "prove: item 5 did not warn on a stale W3"; fail=1; }
 
 [ $fail -eq 0 ] && echo "learn.prove: the gate fires in both directions" || echo "learn.prove: FAILED"
 exit $fail

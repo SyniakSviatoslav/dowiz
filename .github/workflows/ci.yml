@@ -102,6 +102,29 @@ jobs:
       - name: node --test over every browser module test
         run: node --test $(find workers/api/public -name '*.test.mjs' | sort)
 
+  # THE LESSON VIDEO PIPELINE (Wave L, L9). No browser, no venue, no network: the recorder's rules,
+  # the assembly plan, the ffprobe self-review (check.sh, driven end to end by assemble.test.mjs on
+  # a synthetic recording -- hence ffmpeg), the publish/R2 logic against a fake `put`, and the
+  # run's order/state. 100 % lines, branches and functions of the modules (2026-09-26); the
+  # browser driver capture.mjs and the committed build-lessons/yaml-lite are outside the include.
+  learn-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: ffmpeg (assemble.sh + check.sh run for real in assemble.test.mjs)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+      - name: tools/learn tests, with coverage
+        run: |
+          node --test --experimental-test-coverage \
+            --test-coverage-include='tools/learn/{all-plan,assemble-plan,capture-lib,capture-venue,check,publish}.mjs' \
+            --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 \
+            tools/learn/*.test.mjs
+      - name: the ffmpeg leg did run (a skipped end-to-end test would pass the step above)
+        run: node --test --test-name-pattern='assemble.sh \+ check.sh end to end' tools/learn/assemble.test.mjs 2>&1 | tee /tmp/e2e.txt && grep -q '^# pass 1' /tmp/e2e.txt && ! grep -q '# SKIP' /tmp/e2e.txt
+
   # THE WORKER, COMPILED FOR WHAT IT RUNS ON. The distro rustc on the dev box cannot build wasm32;
   # the pinned upstream toolchain can. A native `cargo test` does not prove the wasm32 build links.
   wasm32:

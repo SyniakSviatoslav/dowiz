@@ -102,6 +102,13 @@ run_worker_first = ["/"]
 binding = "MEDIA"
 id = "0af8bfcd828e4802a4ec7f5bb399666f"
 
+# LESSON VIDEOS (Wave L, L7). Served only through /api/learn/* (src/learn.rs) to a signed-in
+# owner, staff member or courier -- never as a static asset, which could not be gated. Written
+# by tools/learn/publish.sh --r2 under `learn/`.
+[[r2_buckets]]
+binding = "LEARN"
+bucket_name = "dowiz-learn"
+
 [observability]
 enabled = true
 # One request in ten is logged. Unsampled, this is the biggest line on the bill

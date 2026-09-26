@@ -20,6 +20,12 @@
 #      YAML: `node tools/learn/build-lessons.mjs --check`
 # PRINTED, NOT RED: `pending` anchors still missing (the design-system lanes add
 # them), and `pending` anchors that now exist ("drop pending: in <file>").
+#   5. (WARN) a lesson whose video was made from an older YAML: the sha256 the
+#      recorder stored (workers/api/public/learn/media/manifest.json `source`,
+#      written by tools/learn/publish.sh) is not the YAML's sha256 now. The video
+#      then shows steps, captions or anchors the lesson no longer has. Re-render:
+#      sh tools/learn/all.sh --out DIR --only <id>. Lessons with no video yet are
+#      counted, not listed.
 #
 # `sh tools/gates/learn.sh [ROOT]` -- the proof runs this same code on a scratch copy.
 # Exit 1 when the count rises above the baseline, or falls without the baseline
@@ -114,6 +120,21 @@ for role in DIR:
         if m not in covered:
             red += 1; lines.append(f'  3 {role}: module {m} is covered by no lesson (add it to a lesson\'s `covers`)')
 
+import hashlib
+mf = os.path.join(PUB, 'learn/media/manifest.json')
+media = json.load(open(mf, encoding='utf-8')).get('lessons', {}) if os.path.exists(mf) else {}
+stale, novideo = 0, 0
+for l in lessons:
+    y = os.path.join(R, 'docs/learn/lessons', l['role'], l['id'] + '.yaml')
+    m = media.get(l['id'])
+    if not m:
+        novideo += 1
+        continue
+    now = hashlib.sha256(open(y, 'rb').read()).hexdigest() if os.path.exists(y) else None
+    if m.get('source') != now:
+        stale += 1
+        info.append(f"  5 WARN stale video: {l['id']} was recorded from {str(m.get('source'))[:12]}, the YAML is {str(now)[:12]} now -- re-render: sh tools/learn/all.sh --out DIR --only {l['id']}")
+info.append(f"  videos: {len(lessons) - novideo}/{len(lessons)} lesson(s) have one, {stale} stale")
 pend = sum(1 for i in info if i.startswith('  pending'))
 print(red, pend, seen['anchors'], seen['steps'], seen['modules'])
 for l in lines + info:

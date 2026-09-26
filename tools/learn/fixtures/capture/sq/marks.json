@@ -1,0 +1,13 @@
+{
+ "id": "W3",
+ "lang": "sq",
+ "host": "https://dubin-sushi.dowiz.org",
+ "ui": "local",
+ "viewport": { "width": 390, "height": 844 },
+ "recordedAt": "2026-09-24T00:00:00.000Z",
+ "marks": [
+  { "n": 1, "key": "1", "startMs": 3000, "endMs": 7000, "found": true, "blocked": [], "wrote": [], "anchor": "room.open", "skipped": false },
+  { "n": 2, "key": "2", "startMs": 7000, "endMs": 11500, "found": true, "blocked": [], "wrote": [], "anchor": "open.table", "skipped": false }
+ ],
+ "errors": []
+}

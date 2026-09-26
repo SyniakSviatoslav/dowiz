@@ -56,6 +56,7 @@ mod live;
 mod exceptions;
 mod fiscal;
 mod privacy;
+mod learn;
 
 use worker::wasm_bindgen::{JsCast, JsValue};
 use worker::*;
@@ -414,6 +415,9 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/integrations", integrations::status)
         .get_async("/api/owner/dpa", privacy::dpa::read)
         .post_async("/api/owner/dpa/accept", privacy::dpa::accept)
+        // L7: lesson videos from R2 `dowiz-learn`, staff/owner/courier Bearer only, Range-aware.
+        .get_async("/api/learn/manifest", learn::manifest)
+        .get_async("/api/learn/media/*key", learn::media)
         .post_async("/api/owner/integrations/check", integrations::check)
         .get_async("/api/owner/ebills", ebills::routes::status)
         .post_async("/api/owner/ebills/config", ebills::routes::config)

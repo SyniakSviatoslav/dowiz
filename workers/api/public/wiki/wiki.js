@@ -1,14 +1,16 @@
 // /wiki/ -- the lesson library: every lesson of every track, its video with three caption
 // tracks, its chapters, a search, and a link back into the app at the lesson.
 //
-// Two static inputs, both built by tools/learn: /learn/lessons.json (every lesson's words, the
-// one source the in-app tour reads too) and /learn/media/manifest.json (which cuts are
-// published). CSP-clean: no inline script or style, text only through textContent.
-import { T, LANGS, ROLES, parseRoute, href, appLink, pickLang, search, tracks, clock } from './wiki-core.js';
+// Two inputs: /learn/lessons.json (static; every lesson's words, the one source the in-app tour
+// reads too) and GET /api/learn/manifest (GATED: the cuts this reader's role may watch). Every
+// media file comes through GET /api/learn/media/... with the app's own Bearer token and is
+// played from a blob: URL, because a <video> or <track> cannot send an Authorization header.
+// CSP-clean: no inline script or style, text only through textContent.
+import { T, LANGS, ROLES, parseRoute, href, appLink, pickLang, search, tracks, clock, bearer, gatedUrl } from './wiki-core.js';
 
 const $ = s => document.querySelector(s);
 const main = $('#main');
-const S = { lessons: [], media: {}, q: '' };
+const S = { lessons: [], media: {}, q: '', signedOut: false };
 
 function h(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
@@ -23,6 +25,40 @@ function h(tag, attrs = {}, ...kids) {
 }
 const safeGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const safeSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const store = area => area === 'session' ? sessionStorage : localStorage;
+const read = (area, k) => { try { return store(area).getItem(k); } catch { return null; } };
+const write = (area, k, v) => { try { store(area).setItem(k, v); } catch {} };
+
+/// A gated GET with the app's token. The console's access token is renewed from dw_rt when
+/// absent (a new tab) or refused (401). The refresh token ROTATES, so a second concurrent use of
+/// the same one would read as a reuse: one renewal per refresh token, shared. null = no token.
+const renewals = new Map();
+function renew(rt) {
+  if (!renewals.has(rt)) renewals.set(rt, fetch('/api/auth/refresh', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refresh_token: rt }) })
+    .then(x => x.ok ? x.json() : null).then(d => {
+      if (!d || !d.access_token) return null;
+      write('session', 'dw_at', d.access_token); if (d.refresh_token) write('local', 'dw_rt', d.refresh_token);
+      return d.access_token;
+    }).catch(() => null));
+  return renewals.get(rt);
+}
+async function authed(url) {
+  const b = bearer(read);
+  const t = b.token || (b.refresh ? await renew(b.refresh) : null);
+  if (!t) return null;
+  const go = x => fetch(url, { headers: { authorization: 'Bearer ' + x } });
+  const r = await go(t);
+  if (r.status !== 401 || !b.refresh || t !== read('session', 'dw_at')) return r;
+  const n = await renew(b.refresh);
+  return n && n !== t ? go(n) : r;
+}
+const blobs = new Map();
+/// One media file as a blob: URL, fetched once per page.
+function blobUrl(url) {
+  const u = gatedUrl(url);
+  if (!blobs.has(u)) blobs.set(u, authed(u).then(r => { if (!r || !r.ok) throw new Error(`${u}: ${r ? r.status : 'signed out'}`); return r.blob(); }).then(b => URL.createObjectURL(b)));
+  return blobs.get(u);
+}
 
 function langBar(r) {
   return h('nav', { class: 'w-langs', 'aria-label': 'language' }, LANGS.map(l =>
@@ -37,12 +73,14 @@ function roleTabs(r, t) {
 
 function card(l, r, t) {
   const cut = S.media[l.id]?.cuts?.[r.lang];
+  const img = cut ? h('img', { class: 'w-thumb', alt: '', width: 90, height: 160 }) : null;
+  if (img) blobUrl(cut.poster).then(u => { img.src = u; }).catch(() => {});
   return h('li', {}, h('a', { class: 'w-card', href: href({ lang: r.lang, role: l.role, id: l.id }) },
-    cut ? h('img', { class: 'w-thumb', src: cut.poster, alt: '', loading: 'lazy', width: 90, height: 160 }) : h('span', { class: 'w-thumb w-thumb--none', 'aria-hidden': 'true' }),
+    img || h('span', { class: 'w-thumb w-thumb--none', 'aria-hidden': 'true' }),
     h('span', { class: 'w-card-body' },
       h('strong', { text: `${l.id} · ${l.title[r.lang]}` }),
       h('span', { class: 'w-muted', text: l.goal[r.lang] }),
-      h('span', { class: 'w-meta' }, h('span', { class: 'ui-chip', text: cut ? `${t.video} ${clock(cut.durationMs)}` : t.noVideo }),
+      h('span', { class: 'w-meta' }, h('span', { class: 'ui-chip', text: cut ? `${t.video} ${clock(cut.durationMs)}` : S.signedOut ? t.signIn : t.noVideo }),
         l.writes ? h('span', { class: 'ui-chip ui-chip--warning', text: t.writes }) : null))));
 }
 
@@ -63,10 +101,15 @@ function lessonPage(r) {
   if (!l) { main.replaceChildren(h('p', { text: t.notFound }), h('a', { href: href({ lang: r.lang, role: r.role }), text: t.back })); return; }
   const cut = S.media[l.id]?.cuts?.[r.lang];
   let video = null, chapters = [];
+  const slot = cut ? h('p', { class: 'w-muted', text: t.loading }) : null;
   if (cut) {
-    video = h('video', { class: 'w-video', controls: true, playsinline: true, preload: 'metadata', poster: cut.poster, src: cut.video },
-      tracks(cut, r.lang).map(tr => h('track', { kind: 'subtitles', srclang: tr.lang, label: tr.label, src: tr.src, default: tr.default })));
-    fetch(cut.chapters).then(x => x.json()).then(c => { chapters = c.chapters || []; paintSteps(); }).catch(() => {});
+    const tr = tracks(cut, r.lang);
+    Promise.all([blobUrl(cut.video), blobUrl(cut.poster), ...tr.map(x => blobUrl(x.src))]).then(([v, p, ...subs]) => {
+      video = h('video', { class: 'w-video', controls: true, playsinline: true, preload: 'metadata', poster: p, src: v },
+        tr.map((x, i) => h('track', { kind: 'subtitles', srclang: x.lang, label: x.label, src: subs[i], default: x.default })));
+      slot.replaceWith(video); paintSteps();
+    }).catch(() => { slot.textContent = t.failed; });
+    authed(gatedUrl(cut.chapters)).then(x => x.json()).then(c => { chapters = c.chapters || []; paintSteps(); }).catch(() => {});
   }
   const steps = h('ol', { class: 'w-steps' });
   function paintSteps() {
@@ -82,7 +125,7 @@ function lessonPage(r) {
     h('header', { class: 'w-head' }, h('a', { class: 'w-back', href: href({ lang: r.lang, role: l.role }), text: `← ${t.back}` }), langBar(r)),
     h('h1', { text: `${l.id} · ${l.title[r.lang]}` }),
     h('p', {}, h('strong', { text: `${t.goal}: ` }), l.goal[r.lang]),
-    video || h('p', { class: 'ui-chip', text: t.noVideo }),
+    slot || h('p', { class: 'ui-chip', text: S.signedOut ? t.signIn : t.noVideo }),
     h('p', {}, h('a', { class: 'ui-btn ui-btn--primary', href: appLink(l.role, l.id), text: t.open })),
     h('h2', { text: t.steps }), steps);
 }
@@ -101,7 +144,7 @@ async function boot() {
   main.replaceChildren(h('p', { class: 'w-muted', text: T.sq.loading }));
   try {
     const [les, med] = await Promise.all([fetch('/learn/lessons.json').then(r => r.json()),
-      fetch('/learn/media/manifest.json').then(r => r.ok ? r.json() : { lessons: {} }).catch(() => ({ lessons: {} }))]);
+      authed('/api/learn/manifest').then(r => { if (r && r.ok) return r.json(); S.signedOut = true; return { lessons: {} }; }).catch(() => ({ lessons: {} }))]);
     S.lessons = les.lessons || []; S.media = med.lessons || {};
   } catch { main.replaceChildren(h('p', { text: T.sq.failed })); return; }
   window.addEventListener('hashchange', () => { draw(); window.scrollTo(0, 0); });

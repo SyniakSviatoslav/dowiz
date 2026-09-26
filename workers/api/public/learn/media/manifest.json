@@ -1,59 +1,112 @@
 {
  "version": 1,
  "lessons": {
-  "C5": {
+  "C1": {
    "role": "courier",
-   "module": "offline",
+   "module": "shift",
+   "source": "c1daeb6e3fe175906a14a6c860f3784715951f6ed608f762be816ab2a432af63",
    "cuts": {
     "sq": {
-     "durationMs": 33214,
-     "steps": 4,
-     "absent": [
-      1
-     ],
-     "sha256": "a4efc8df8def37eb",
-     "bytes": 708300,
-     "video": "/learn/media/C5/sq/video.mp4",
-     "poster": "/learn/media/C5/sq/poster.jpg",
-     "chapters": "/learn/media/C5/sq/chapters.json",
+     "durationMs": 29595,
+     "steps": 5,
+     "absent": [],
+     "sha256": "31c563a9e637e187",
+     "bytes": 665490,
+     "video": "/api/learn/media/C1/sq/video.mp4",
+     "poster": "/api/learn/media/C1/sq/poster.jpg",
+     "chapters": "/api/learn/media/C1/sq/chapters.json",
      "subs": {
-      "sq": "/learn/media/C5/sq/subs_sq.vtt",
-      "en": "/learn/media/C5/sq/subs_en.vtt",
-      "uk": "/learn/media/C5/sq/subs_uk.vtt"
+      "sq": "/api/learn/media/C1/sq/subs_sq.vtt",
+      "en": "/api/learn/media/C1/sq/subs_en.vtt",
+      "uk": "/api/learn/media/C1/sq/subs_uk.vtt"
      }
     },
     "en": {
-     "durationMs": 33745,
-     "steps": 4,
-     "absent": [
-      1
-     ],
-     "sha256": "f7852166edcbc1f0",
-     "bytes": 675042,
-     "video": "/learn/media/C5/en/video.mp4",
-     "poster": "/learn/media/C5/en/poster.jpg",
-     "chapters": "/learn/media/C5/en/chapters.json",
+     "durationMs": 30088,
+     "steps": 5,
+     "absent": [],
+     "sha256": "5ac26fc316901de2",
+     "bytes": 642660,
+     "video": "/api/learn/media/C1/en/video.mp4",
+     "poster": "/api/learn/media/C1/en/poster.jpg",
+     "chapters": "/api/learn/media/C1/en/chapters.json",
      "subs": {
-      "sq": "/learn/media/C5/en/subs_sq.vtt",
-      "en": "/learn/media/C5/en/subs_en.vtt",
-      "uk": "/learn/media/C5/en/subs_uk.vtt"
+      "sq": "/api/learn/media/C1/en/subs_sq.vtt",
+      "en": "/api/learn/media/C1/en/subs_en.vtt",
+      "uk": "/api/learn/media/C1/en/subs_uk.vtt"
      }
     },
     "uk": {
-     "durationMs": 34387,
+     "durationMs": 29583,
+     "steps": 5,
+     "absent": [],
+     "sha256": "f2e22f881b0dd492",
+     "bytes": 656505,
+     "video": "/api/learn/media/C1/uk/video.mp4",
+     "poster": "/api/learn/media/C1/uk/poster.jpg",
+     "chapters": "/api/learn/media/C1/uk/chapters.json",
+     "subs": {
+      "sq": "/api/learn/media/C1/uk/subs_sq.vtt",
+      "en": "/api/learn/media/C1/uk/subs_en.vtt",
+      "uk": "/api/learn/media/C1/uk/subs_uk.vtt"
+     }
+    }
+   }
+  },
+  "C5": {
+   "role": "courier",
+   "module": "offline",
+   "source": "587f08137a057e1ceac54343c6db124aad0dd4e747be7618a18bf2e410cf831f",
+   "cuts": {
+    "sq": {
+     "durationMs": 32503,
      "steps": 4,
      "absent": [
       1
      ],
-     "sha256": "b1548433adf7bcde",
-     "bytes": 748954,
-     "video": "/learn/media/C5/uk/video.mp4",
-     "poster": "/learn/media/C5/uk/poster.jpg",
-     "chapters": "/learn/media/C5/uk/chapters.json",
+     "sha256": "ad27f3a1a0911cbe",
+     "bytes": 728510,
+     "video": "/api/learn/media/C5/sq/video.mp4",
+     "poster": "/api/learn/media/C5/sq/poster.jpg",
+     "chapters": "/api/learn/media/C5/sq/chapters.json",
      "subs": {
-      "sq": "/learn/media/C5/uk/subs_sq.vtt",
-      "en": "/learn/media/C5/uk/subs_en.vtt",
-      "uk": "/learn/media/C5/uk/subs_uk.vtt"
+      "sq": "/api/learn/media/C5/sq/subs_sq.vtt",
+      "en": "/api/learn/media/C5/sq/subs_en.vtt",
+      "uk": "/api/learn/media/C5/sq/subs_uk.vtt"
+     }
+    },
+    "en": {
+     "durationMs": 32579,
+     "steps": 4,
+     "absent": [
+      1
+     ],
+     "sha256": "8ec8b06a6a419706",
+     "bytes": 687908,
+     "video": "/api/learn/media/C5/en/video.mp4",
+     "poster": "/api/learn/media/C5/en/poster.jpg",
+     "chapters": "/api/learn/media/C5/en/chapters.json",
+     "subs": {
+      "sq": "/api/learn/media/C5/en/subs_sq.vtt",
+      "en": "/api/learn/media/C5/en/subs_en.vtt",
+      "uk": "/api/learn/media/C5/en/subs_uk.vtt"
+     }
+    },
+    "uk": {
+     "durationMs": 32564,
+     "steps": 4,
+     "absent": [
+      1
+     ],
+     "sha256": "9fcfc19c765099a7",
+     "bytes": 719191,
+     "video": "/api/learn/media/C5/uk/video.mp4",
+     "poster": "/api/learn/media/C5/uk/poster.jpg",
+     "chapters": "/api/learn/media/C5/uk/chapters.json",
+     "subs": {
+      "sq": "/api/learn/media/C5/uk/subs_sq.vtt",
+      "en": "/api/learn/media/C5/uk/subs_en.vtt",
+      "uk": "/api/learn/media/C5/uk/subs_uk.vtt"
      }
     }
    }
@@ -61,6 +114,7 @@
   "O1a": {
    "role": "owner",
    "module": "orders",
+   "source": null,
    "cuts": {
     "sq": {
      "durationMs": 89934,
@@ -74,13 +128,13 @@
      ],
      "sha256": "8fac5df838f3d5d4",
      "bytes": 1940441,
-     "video": "/learn/media/O1a/sq/video.mp4",
-     "poster": "/learn/media/O1a/sq/poster.jpg",
-     "chapters": "/learn/media/O1a/sq/chapters.json",
+     "video": "/api/learn/media/O1a/sq/video.mp4",
+     "poster": "/api/learn/media/O1a/sq/poster.jpg",
+     "chapters": "/api/learn/media/O1a/sq/chapters.json",
      "subs": {
-      "sq": "/learn/media/O1a/sq/subs_sq.vtt",
-      "en": "/learn/media/O1a/sq/subs_en.vtt",
-      "uk": "/learn/media/O1a/sq/subs_uk.vtt"
+      "sq": "/api/learn/media/O1a/sq/subs_sq.vtt",
+      "en": "/api/learn/media/O1a/sq/subs_en.vtt",
+      "uk": "/api/learn/media/O1a/sq/subs_uk.vtt"
      }
     },
     "en": {
@@ -95,13 +149,13 @@
      ],
      "sha256": "e14fe35891c9ec09",
      "bytes": 1764556,
-     "video": "/learn/media/O1a/en/video.mp4",
-     "poster": "/learn/media/O1a/en/poster.jpg",
-     "chapters": "/learn/media/O1a/en/chapters.json",
+     "video": "/api/learn/media/O1a/en/video.mp4",
+     "poster": "/api/learn/media/O1a/en/poster.jpg",
+     "chapters": "/api/learn/media/O1a/en/chapters.json",
      "subs": {
-      "sq": "/learn/media/O1a/en/subs_sq.vtt",
-      "en": "/learn/media/O1a/en/subs_en.vtt",
-      "uk": "/learn/media/O1a/en/subs_uk.vtt"
+      "sq": "/api/learn/media/O1a/en/subs_sq.vtt",
+      "en": "/api/learn/media/O1a/en/subs_en.vtt",
+      "uk": "/api/learn/media/O1a/en/subs_uk.vtt"
      }
     },
     "uk": {
@@ -116,13 +170,13 @@
      ],
      "sha256": "8a7c3698f7075735",
      "bytes": 1938947,
-     "video": "/learn/media/O1a/uk/video.mp4",
-     "poster": "/learn/media/O1a/uk/poster.jpg",
-     "chapters": "/learn/media/O1a/uk/chapters.json",
+     "video": "/api/learn/media/O1a/uk/video.mp4",
+     "poster": "/api/learn/media/O1a/uk/poster.jpg",
+     "chapters": "/api/learn/media/O1a/uk/chapters.json",
      "subs": {
-      "sq": "/learn/media/O1a/uk/subs_sq.vtt",
-      "en": "/learn/media/O1a/uk/subs_en.vtt",
-      "uk": "/learn/media/O1a/uk/subs_uk.vtt"
+      "sq": "/api/learn/media/O1a/uk/subs_sq.vtt",
+      "en": "/api/learn/media/O1a/uk/subs_en.vtt",
+      "uk": "/api/learn/media/O1a/uk/subs_uk.vtt"
      }
     }
    }
@@ -130,6 +184,7 @@
   "W3": {
    "role": "waiter",
    "module": "open",
+   "source": null,
    "cuts": {
     "sq": {
      "durationMs": 12503,
@@ -137,13 +192,13 @@
      "absent": [],
      "sha256": "d607a5a25f9e28cd",
      "bytes": 320861,
-     "video": "/learn/media/W3/sq/video.mp4",
-     "poster": "/learn/media/W3/sq/poster.jpg",
-     "chapters": "/learn/media/W3/sq/chapters.json",
+     "video": "/api/learn/media/W3/sq/video.mp4",
+     "poster": "/api/learn/media/W3/sq/poster.jpg",
+     "chapters": "/api/learn/media/W3/sq/chapters.json",
      "subs": {
-      "sq": "/learn/media/W3/sq/subs_sq.vtt",
-      "en": "/learn/media/W3/sq/subs_en.vtt",
-      "uk": "/learn/media/W3/sq/subs_uk.vtt"
+      "sq": "/api/learn/media/W3/sq/subs_sq.vtt",
+      "en": "/api/learn/media/W3/sq/subs_en.vtt",
+      "uk": "/api/learn/media/W3/sq/subs_uk.vtt"
      }
     },
     "en": {
@@ -152,13 +207,13 @@
      "absent": [],
      "sha256": "ca18411d61b58d8b",
      "bytes": 279326,
-     "video": "/learn/media/W3/en/video.mp4",
-     "poster": "/learn/media/W3/en/poster.jpg",
-     "chapters": "/learn/media/W3/en/chapters.json",
+     "video": "/api/learn/media/W3/en/video.mp4",
+     "poster": "/api/learn/media/W3/en/poster.jpg",
+     "chapters": "/api/learn/media/W3/en/chapters.json",
      "subs": {
-      "sq": "/learn/media/W3/en/subs_sq.vtt",
-      "en": "/learn/media/W3/en/subs_en.vtt",
-      "uk": "/learn/media/W3/en/subs_uk.vtt"
+      "sq": "/api/learn/media/W3/en/subs_sq.vtt",
+      "en": "/api/learn/media/W3/en/subs_en.vtt",
+      "uk": "/api/learn/media/W3/en/subs_uk.vtt"
      }
     },
     "uk": {
@@ -167,13 +222,13 @@
      "absent": [],
      "sha256": "41c9de6fc72429c3",
      "bytes": 303762,
-     "video": "/learn/media/W3/uk/video.mp4",
-     "poster": "/learn/media/W3/uk/poster.jpg",
-     "chapters": "/learn/media/W3/uk/chapters.json",
+     "video": "/api/learn/media/W3/uk/video.mp4",
+     "poster": "/api/learn/media/W3/uk/poster.jpg",
+     "chapters": "/api/learn/media/W3/uk/chapters.json",
      "subs": {
-      "sq": "/learn/media/W3/uk/subs_sq.vtt",
-      "en": "/learn/media/W3/uk/subs_en.vtt",
-      "uk": "/learn/media/W3/uk/subs_uk.vtt"
+      "sq": "/api/learn/media/W3/uk/subs_sq.vtt",
+      "en": "/api/learn/media/W3/uk/subs_en.vtt",
+      "uk": "/api/learn/media/W3/uk/subs_uk.vtt"
      }
     }
    }

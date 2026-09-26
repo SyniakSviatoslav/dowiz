@@ -54,6 +54,9 @@
   #   that silently fails to open looks exactly like a venue with nothing
   #   happening. `wss://*.dowiz.org` is that sentence said out loud; a venue on
   #   its own domain is covered by `'self'`.
+  # media-src `blob:`: the wiki's lesson videos and caption tracks are gated
+  #   (/api/learn/media, Bearer), and a <video> or <track> cannot send a header,
+  #   so wiki.js fetches them and plays blob: URLs. 'self' keeps the landing film.
   # base-uri 'none': a `<base>` injected into the page would silently re-point
   #   every relative fetch, including the API ones.
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; font-src 'self'; connect-src 'self' wss://*.dowiz.org https://tiles.openfreemap.org https://api.stripe.com https://nominatim.openstreetmap.org; worker-src 'self' blob:; frame-src 'self' https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; font-src 'self'; media-src 'self' blob:; connect-src 'self' wss://*.dowiz.org https://tiles.openfreemap.org https://api.stripe.com https://nominatim.openstreetmap.org; worker-src 'self' blob:; frame-src 'self' https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; upgrade-insecure-requests
