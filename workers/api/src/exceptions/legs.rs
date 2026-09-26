@@ -130,7 +130,7 @@ pub fn first(rows: &[Row], marked: &dyn Fn(&str) -> bool, now_ms: i64, venue: &V
         let new: Vec<&Row> = rows.iter().filter(|r| r.kind == kind && !marked(&mark_of(r))).collect();
         let Some(since) = new.iter().map(|r| r.at).min() else { continue };
         let ids: Vec<String> = new.iter().map(|r| mark_of(r)).collect();
-        entries.push(Entry::new(ids[0].clone(), "telegram", chat.trim().to_string(), text(venue, kind, &new, since), now_ms));
+        entries.push(crate::notify::route::alert_entry(ids[0].clone(), chat.trim(), &|l| text(&venue.speaking(l), kind, &new, since), now_ms));
         marks.extend(ids);
     }
     (entries, marks)

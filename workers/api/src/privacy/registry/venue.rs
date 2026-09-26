@@ -53,8 +53,12 @@ pub const STORES: &[Store] = &[
         erase: Eraser::Missing("P2"),
         export: NO_EXPORT },
     // Rendered kitchen tickets waiting to be sent (Telegram, WhatsApp).
-    Store { image: "outbox", kinds: &["o", "print"], home: Venue,
-        holds: &[Name, Phone, Address, OrderContent], subjects: &[Customer],
+    // W-TG: "route" (an event waiting to be fanned out to the groups),
+    // "digest" (a group's recurring summary), "dg" (a line waiting for that
+    // summary, rendered at the group's personal-data level), "h" (a target's
+    // last success and Telegram's last refusal: a chat id and an error, no person).
+    Store { image: "outbox", kinds: &["o", "print", "route", "digest", "dg", "h"], home: Venue,
+        holds: &[Name, Phone, Address, OrderContent, Messages], subjects: &[Customer],
         purpose: P::Kitchen, basis: Basis::Contract,
         retention: Retention::UntilDone("removed once delivered (outbox/rails.rs); given up after six tries"),
         erase: Eraser::Remove("services/customers/forget/queued.rs: drop_queued (G8)"),
@@ -122,12 +126,16 @@ pub const STORES: &[Store] = &[
         erase: Eraser::NotPersonal("tables and their state, read from the till; no person"),
         export: Exporter::NotPersonal },
     // Venue configuration; notification tokens; the AI endpoint.
-    Store { image: "settings", kinds: &["fiscal.sender"], home: Venue,
-        holds: &[], subjects: &[],
-        purpose: P::Operations, basis: Basis::NotPersonal,
-        retention: Retention::NoLimitYet("configuration"),
-        erase: Eraser::NotPersonal("the venue's configuration and provider tokens; no customer"),
-        export: Exporter::NotPersonal },
+    // The venue's configuration. W-TG: `notify.tg.groups` keeps, per linked
+    // Telegram group, its title and the Telegram user id of the staff member
+    // who sent the link code (who connected that chat); unlinking the group
+    // removes both. No customer.
+    Store { image: "settings", kinds: &["fiscal.sender", "notify.tg.groups"], home: Venue,
+        holds: &[StaffId], subjects: &[Staff],
+        purpose: P::Operations, basis: Basis::Contract,
+        retention: Retention::NoLimitYet("configuration; a linked group's linker id lives as long as the link"),
+        erase: Eraser::Remove("notify/hook/owner.rs: unlink removes the group and its linker id"),
+        export: NO_EXPORT },
     Store { image: "catalog", kinds: &[], home: Venue,
         holds: &[], subjects: &[],
         purpose: P::Operations, basis: Basis::NotPersonal,

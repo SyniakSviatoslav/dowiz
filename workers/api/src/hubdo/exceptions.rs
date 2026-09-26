@@ -36,7 +36,7 @@ impl HubImages {
         let settings = dowiz_hub::settings::Settings::load(&sb)
             .map_err(|_| Error::RustError("settings image is unreadable".into()))?;
         let threshold = alert::threshold(settings.get(alert::THRESHOLD_KEY).as_deref());
-        let chat = settings.known("notify.telegram.chat");
+        let chat = crate::notify::route::alert_target(&settings);
         // No chat: nobody to tell. A threshold of 0 turns the COUNT alerts off,
         // never the wallet-leg ones (money integrity, first sight).
         if chat.trim().is_empty() {

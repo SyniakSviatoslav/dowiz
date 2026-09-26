@@ -76,11 +76,18 @@ pub const KNOWN: &[Known] = &[
                is also what posts to your channel when no platform bot exists.",
         default: "",
     },
+    // THE GROUPS (W-TG, 2026-09-26) are NOT declared here, on purpose: like
+    // `cloud.rs`'s hub-written keys, `notify.tg.groups` (JSON), `notify.tg.link`
+    // (the pending code), `notify.tg.bot` and `notify.tg.secret` are written
+    // only by `/api/owner/telegram/*`, which validates them; declared, the
+    // generic settings route would accept any JSON for them. While
+    // `notify.tg.groups` is unset, the two chat keys below ARE the groups
+    // (`workers/api/src/notify/route/groups.rs::legacy`).
     Known {
         key: "notify.telegram.chat",
         label: "Telegram chat",
-        hint: "The chat the bot writes to: your own user id, or a group's id. \
-               Send the bot any message first, then use the test button.",
+        hint: "The chat the bot writes to. Linking a group on the Telegram screen \
+               replaces this; until then it works as before.",
         default: "",
     },
     Known {

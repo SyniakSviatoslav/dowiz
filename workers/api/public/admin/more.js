@@ -345,17 +345,12 @@ async function openNotifications(){
   let s = { values: {}, known: [] }; try { s = await api('/owner/settings'); } catch {}
   const v = s.values || {};
   const tokenSet = v['notify.telegram.token'] === SECRET_SET_MARK || !!(S.venue?.telegramBot);
-  const chat = v['notify.telegram.chat'] || '';
-  const live = tokenSet && !!chat.trim();
   const waSet = v['notify.whatsapp.token'] === SECRET_SET_MARK;
   const waOn = waSet && !!(v['notify.whatsapp.phone_id'] || '').trim();
   sheet(`${head('settings', 'notifications')}
     <div class="rows">
-      ${info('brand-telegram', { title: k('telegram'), sub: `<span data-t="${live ? 'tgHow' : 'tgNotSet'}"></span>`, trailing: onOff(live), tour: 'notify.telegramState' })}
+      ${rowBtn({ leading: icon('brand-telegram'), title: k('telegram'), sub: `<span data-t="${tokenSet ? 'tgHow' : 'tgNotSet'}"></span>`, trailing: icon('chevron-right', 'chev'), data: { go: 'telegram' } })}
     </div>
-    ${field({ id: 'n-token', key: 'tgToken', hintKey: 'tgTokenHint', autocomplete: 'off', spellcheck: false, placeholder: tokenSet ? SECRET_SET_MARK : '123456:ABC…', tour: 'notify.tgToken' })}
-    ${field({ id: 'n-chat', key: 'ownerChat', hintKey: 'tgChatHint', inputmode: 'numeric', value: chat, placeholder: 'chat id', tour: 'notify.tgChat' })}
-    <div class="btn-row">${btn({ id: 'nTest', icon: 'send', key: 'testMessage', tour: 'notify.test' })}${saveBtn('nSave', 'notify.save')}</div>
     <p class="eyebrow mt-3" data-t="whatsapp"></p>
     <div class="rows">${info('phone', { cls: waOn ? '' : 'off', title: k('whatsapp'), sub: `<span data-t="${waOn ? 'whatsappOn' : 'waNotYet'}"></span>`, trailing: onOff(waOn), tour: 'notify.whatsappState' })}</div>
     <p class="hint" data-t="whatsappHint"></p>
@@ -364,18 +359,19 @@ async function openNotifications(){
     <div class="btn-row">${btn({ id: 'nTest2', icon: 'send', key: 'testMessage', tour: 'notify.test2' })}${btn({ id: 'nSave2', variant: 'secondary', icon: 'check', key: 'save', tour: 'notify.save2' })}</div>`, { name: 'notify' });
   const save = async () => {
     // An empty value CLEARS a setting on the hub, so a token is only sent when typed.
-    const tok = $('#n-token').value.trim();
-    if (tok) await post('/owner/settings', { key: 'notify.telegram.token', value: tok });
-    await post('/owner/settings', { key: 'notify.telegram.chat', value: $('#n-chat').value.trim() });
     const wtok = $('#wa-token').value.trim();
     if (wtok) await post('/owner/settings', { key: 'notify.whatsapp.token', value: wtok });
     await post('/owner/settings', { key: 'notify.whatsapp.phone_id', value: $('#wa-phone').value.trim() });
     await post('/owner/settings', { key: 'notify.whatsapp.to', value: $('#wa-to').value.trim() });
   };
-  const test = async b => { try { const r = await busy(b, async () => { await save(); return post('/owner/notify/test', withLoc()); }); toast(`${t('telegram')}: ${verdict(r.telegram)} · WhatsApp: ${verdict(r.whatsapp)}`); } catch (e) { fail(e); } };
-  for (const id of ['nSave', 'nSave2']) $('#' + id).onclick = async () => { try { await busy($('#' + id), save); toast(t('saved')); openNotifications(); } catch (e) { fail(e); } };
-  for (const id of ['nTest', 'nTest2']) $('#' + id).onclick = () => test($('#' + id));
+  const test = async b => { try { const r = await busy(b, async () => { await save(); return post('/owner/notify/test', withLoc()); }); toast(`WhatsApp: ${verdict(r.whatsapp)}`); } catch (e) { fail(e); } };
+  // Telegram has its own screen now: groups, the matrix, per-group tests (admin/telegram.js).
+  $('[data-go="telegram"]').onclick = openTelegram;
+  for (const id of ['nSave2']) $('#' + id).onclick = async () => { try { await busy($('#' + id), save); toast(t('saved')); openNotifications(); } catch (e) { fail(e); } };
+  for (const id of ['nTest2']) $('#' + id).onclick = () => test($('#' + id));
 }
+/// The Telegram screen (admin/telegram.js, W-TG): bot, groups, what goes where.
+async function openTelegram(){ (await import('/admin/telegram.js')).open(); }
 /// A channel's verdict from /owner/notify/test, as one word or Meta's/Telegram's reason.
 const verdict = v => v === 'ok' ? t('testOk') : v === 'unset' ? t('off') : (v && v.error) || String(v);
 async function openChannels(){
@@ -390,7 +386,7 @@ async function openChannels(){
       ${info('phone', { title: k('chPhone'), sub: esc(S.venue?.phone || ''), trailing: onOff(true) })}
       ${rowBtn({ cls: waOn ? '' : 'off', leading: icon('brand-whatsapp'), title: k('whatsapp'), sub: `<span data-t="${waOn ? 'whatsappOn' : 'waNotYet'}"></span>`, trailing: onOff(waOn, ''), data: { go: 'notifications' }, tour: 'channels.whatsapp' })}
       ${rowBtn({ cls: igOn ? '' : 'off', leading: icon('sparkles'), title: k('instagram'), sub: `<span data-t="${igOn ? 'instagramOn' : 'socialNotYet'}"></span>`, trailing: onOff(igOn, ''), data: { go: 'social' }, tour: 'channels.instagram' })}
-      ${info('brand-telegram', { cls: 'off', title: k('chTelegramBot'), trailing: pill('', { key: 'comingSoon' }) })}
+      ${rowBtn({ leading: icon('brand-telegram'), title: k('chTelegramBot'), trailing: icon('chevron-right', 'chev'), data: { go: 'telegram' } })}
       ${rowBtn({ leading: icon('cube-3d-sphere'), title: k('mcp'), sub: `<span class="mono">${esc(location.origin)}/api/mcp</span>`, trailing: onOff(true), data: { go: 'mcp' }, tour: 'channels.mcp' })}
       ${rowBtn({ leading: icon('key'), title: k('chApi'), sub: '<span data-t="apiHint"></span>', trailing: icon('chevron-right', 'chev'), data: { go: 'keys' }, tour: 'channels.api' })}
       ${info('scroll', { cls: 'off', title: k('chAggregators'), trailing: pill('', { key: 'comingSoon' }) })}
@@ -400,7 +396,7 @@ async function openChannels(){
     ${field({ id: 'wh-verify', key: 'verifyToken', hintKey: 'verifyHint', autocomplete: 'off', value: v['notify.whatsapp.verify'] || '', tour: 'channels.verify' })}
     ${field({ id: 'wh-secret', key: 'appSecret', autocomplete: 'off', placeholder: v['notify.meta.secret'] === SECRET_SET_MARK ? SECRET_SET_MARK : '', tour: 'channels.secret' })}
     <div class="btn-row">${btn({ id: 'whCopy', icon: 'copy', key: 'copy', tour: 'channels.copy' })}${saveBtn('whSave', 'channels.save')}</div>`, { name: 'channels' });
-  const go = { notifications: openNotifications, social: openSocial, mcp: openMcp, keys: openKeys };
+  const go = { notifications: openNotifications, telegram: openTelegram, social: openSocial, mcp: openMcp, keys: openKeys };
   for (const b of $$('[data-go]', $('#sheetIn'))) b.onclick = () => go[b.dataset.go]();
   $('#whCopy').onclick = async () => { try { await navigator.clipboard.writeText(webhook); toast(t('copied')); } catch {} };
   $('#whSave').onclick = async () => {
@@ -577,7 +573,7 @@ async function openAssistant(){
 /// provider's own answer (a bot's username, a number's verified name, an
 /// object's etag), never a message to a customer.
 const INTEGRATIONS = [
-  ['telegram', 'brand-telegram', () => openNotifications()],
+  ['telegram', 'brand-telegram', () => openTelegram()],
   ['whatsapp', 'brand-whatsapp', () => openNotifications()],
   ['instagram', 'sparkles', () => openSocial()],
   ['webhook', 'scroll', () => openChannels()],

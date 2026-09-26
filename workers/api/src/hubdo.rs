@@ -970,17 +970,7 @@ impl HubImages {
                 .map_err(|_| Error::RustError("settings image is unreadable".into()))?,
             None => return Ok(()),
         };
-        let mut queued: Vec<crate::outbox::Entry> = crate::bell_route::telegram_tickets(
-            order_id,
-            text,
-            lines,
-            amend_seq,
-            &settings.known("notify.telegram.chat"),
-            &settings.known("notify.telegram.chat.bar"),
-        )
-        .into_iter()
-        .map(|t| crate::outbox::Entry::new(t.id, "telegram", t.to, t.text, now_ms))
-        .collect();
+        let mut queued: Vec<crate::outbox::Entry> = crate::notify::route::bell(&settings, order_id, text, lines, amend_seq, now_ms);
         // ASKED FOR, NOT ASSUMED, exactly as the inline version had it: Meta
         // bills every one of these and Telegram carries the same text for
         // nothing, so a venue that has not set `notify.whatsapp.status = on` is

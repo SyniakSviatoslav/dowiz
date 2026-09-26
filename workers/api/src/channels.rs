@@ -428,13 +428,15 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
         match landed {
             Ok(true) => {
                 stored += 1;
-                let chat = settings.known("notify.telegram.chat");
-                if let (false, Some(token)) = (chat.trim().is_empty(), crate::notify::bot_token(&ctx.env, &settings)) {
-                    let who = m.peer_name.clone().unwrap_or_else(|| m.peer.clone());
-                    let text = format!("💬 {} · {who}\n{}", m.channel.as_str(), m.text);
-                    if let Err(e) = crate::notify::telegram(&token, chat.trim(), &text).await {
-                        crate::loud!(&place.ns, Some(&place.venue), "channels.telegram", "inbox relay refused: {e}");
-                    }
+                let who = m.peer_name.clone().unwrap_or_else(|| m.peer.clone());
+                let relay = crate::notify::route::routed(
+                    format!("inbox/{}/{}", m.channel.as_str(), m.external_id),
+                    "inbox.message",
+                    &json!({ "data": { "channel": m.channel.as_str(), "peer": who, "text": m.text } }),
+                    m.at_ms,
+                );
+                if let Err(e) = crate::outbox::enqueue(&place, &[relay]).await {
+                    crate::loud!(&place.ns, Some(&place.venue), "channels.telegram", "inbox relay not queued: {e}");
                 }
             }
             Ok(false) => {}

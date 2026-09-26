@@ -69,13 +69,13 @@ steps:
       do: wait
       selector: '[data-tour="notify.tgChat"]'
     title:
-      sq: "Biseda"
-      en: "The chat"
-      uk: "Чат"
+      sq: "Lidh një grup"
+      en: "Connect a group"
+      uk: "Підключити групу"
     caption:
-      sq: "Biseda e kuzhinës."
-      en: "The kitchen’s chat."
-      uk: "Чат кухні."
+      sq: "Lidh një grup: shto botin, dërgo /link KODI."
+      en: "Connect a group: add the bot, send /link CODE."
+      uk: "Підключіть групу: додайте бота, надішліть /link КОД."
   - key: 5
     anchor: notify.test
     pending: no

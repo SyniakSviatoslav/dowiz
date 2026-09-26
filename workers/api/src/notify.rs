@@ -16,9 +16,6 @@ use worker::*;
 use crate::owner::owner_and_venue;
 use dowiz_core::money::Currency;
 
-/// Telegram refuses messages past this many characters; an order with many
-/// lines is cut at the lines, not mid-word, and the total always survives.
-const TELEGRAM_TEXT_MAX: usize = 4096;
 /// A message longer than this is trimmed to its first lines plus the totals.
 const LINES_SHOWN_MAX: usize = 30;
 /// The order id is long; the owner sees the same first characters the console
@@ -63,34 +60,19 @@ pub fn bot_token(env: &Env, settings: &dowiz_hub::settings::Settings) -> Option<
 }
 
 /// One Telegram message. `Err` carries Telegram's own words, which name the
-/// fix ("chat not found" means the owner never wrote to the bot).
+/// fix ("chat not found" means the owner never wrote to the bot). `chat` may
+/// be `chat:thread` (a forum topic). The drain uses [`tg::send`] instead, which
+/// keeps the refusal classified (429 / migrated / gone).
 pub async fn telegram(token: &str, chat: &str, text: &str) -> std::result::Result<(), String> {
-    let url = format!("https://api.telegram.org/bot{token}/sendMessage");
-    let headers = Headers::new();
-    headers.set("content-type", "application/json").map_err(|e| e.to_string())?;
-    let text: String = text.chars().take(TELEGRAM_TEXT_MAX).collect();
-    let payload = json!({ "chat_id": chat, "text": text, "disable_web_page_preview": true });
-    let r = Request::new_with_init(
-        &url,
-        RequestInit::new()
-            .with_method(Method::Post)
-            .with_headers(headers)
-            .with_body(Some(payload.to_string().into())),
-    )
-    .map_err(|e| e.to_string())?;
-    let mut res = Fetch::Request(r).send().await.map_err(|e| e.to_string())?;
-    if res.status_code() < 400 {
-        return Ok(());
-    }
-    let body = res.text().await.unwrap_or_default();
-    // Telegram answers `{"ok":false,"description":"..."}`; the description is
-    // the useful part and the rest is noise on a phone.
-    let desc = serde_json::from_str::<Value>(&body)
-        .ok()
-        .and_then(|v| v.get("description").and_then(Value::as_str).map(str::to_string))
-        .unwrap_or(body);
-    Err(desc.chars().take(200).collect())
+    tg::send(token, chat, text).await.map_err(|f| f.words())
 }
+
+/// Telegram's answers, classified (429, migration, a removed bot).
+pub mod tg;
+/// Groups, the event catalogue and the pure router (`fan_out`).
+pub mod route;
+/// The bot's webhook and the console's Telegram routes.
+pub mod hook;
 
 /// The order as a message. Plain text on purpose: Markdown escaping of dish
 /// names and street names is where a notification silently stops arriving.

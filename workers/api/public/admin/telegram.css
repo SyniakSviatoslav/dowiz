@@ -1,0 +1,15 @@
+/* The Telegram screen (admin/telegram.js): groups, the link code, the matrix. Tokens only. */
+.tg-group{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3) 0;border-top:1px solid var(--ui-line)}
+.tg-group:first-child{border-top:0}
+.tg-times{align-items:end}
+.tg-wizard{margin:var(--space-3) 0;padding:var(--space-4);border:1px solid var(--ui-accent-edge);border-radius:var(--radius-lg);background:var(--ui-surface-2)}
+.tg-steps{margin:0 0 var(--space-2);padding-left:var(--space-5);display:flex;flex-direction:column;gap:var(--space-1)}
+.tg-code{font-size:var(--text-xl);font-weight:var(--weight-bold);word-break:break-all;margin:var(--space-2) 0;user-select:all}
+.tg-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tg-matrix{border-collapse:collapse;width:100%;font-size:var(--text-sm)}
+.tg-matrix th,.tg-matrix td{padding:var(--space-1) var(--space-2);text-align:left;vertical-align:middle;border-bottom:1px solid var(--ui-hairline)}
+.tg-matrix thead th,.tg-matrix tr:first-child th{position:sticky;top:0;background:var(--ui-surface);font-weight:var(--weight-semibold)}
+.tg-matrix th[scope="row"]{font-weight:var(--weight-normal);min-width:12em}
+.tg-matrix .tg-area th{padding-top:var(--space-4);font-weight:var(--weight-bold);color:var(--ui-fg-muted);text-transform:uppercase;font-size:var(--text-xs)}
+.tg-matrix td .ui-chip{min-width:7em;justify-content:center}
+.tg-matrix td .ui-chip[disabled]{opacity:.45}

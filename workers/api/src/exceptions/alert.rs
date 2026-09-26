@@ -62,11 +62,12 @@ pub fn due(rows: &[Row], since: i64, now_ms: i64, threshold: usize, venue: &Voic
             continue;
         }
         let level = (after / threshold) * threshold;
-        out.push(Entry::new(
+        // A legacy chat gets the venue's language as today; a route (`@...`,
+        // once the venue has groups) carries one text per language.
+        out.push(crate::notify::route::alert_entry(
             format!("exceptions/{since}/{kind}/{level}"),
-            "telegram",
-            chat.trim().to_string(),
-            text(venue, kind, &mine, since),
+            chat.trim(),
+            &|l| text(&venue.speaking(l), kind, &mine, since),
             now_ms,
         ));
     }
@@ -82,11 +83,19 @@ pub struct Voice<'a> {
     pub lang: &'a str,
 }
 
+impl<'a> Voice<'a> {
+    /// The same voice in `lang`; empty = the venue's own.
+    pub fn speaking(&self, lang: &'a str) -> Voice<'a> {
+        Voice { venue: self.venue, zone: self.zone, lang: if lang.is_empty() { self.lang } else { lang } }
+    }
+}
+
 /// (header words, "since", "by", "and N more"), per language.
 fn words(lang: &str) -> [&'static str; 4] {
     match lang {
         "sq" => ["përjashtime", "që nga", "nga", "të tjera te"],
         "uk" => ["винятків", "з", "від", "ще у"],
+        "ru" => ["исключений", "с", "от", "ещё в"],
         _ => ["exceptions", "since", "by", "more in"],
     }
 }
@@ -104,6 +113,8 @@ pub fn kind_word(lang: &str, kind: &str) -> &'static str {
             "mungon hapi i portofolit", "hapi i portofolit i refuzuar", "hapi i portofolit nuk përputhet", "hap portofoli pa pagesë"],
         "uk" => ["скасування після кухні", "комплімент", "пізня зміна", "повернення", "готівка поза касою", "виплата з каси", "розбіжність каси",
             "немає списання з гаманця", "списання з гаманця відмовлено", "списання з гаманця не збігається", "списання з гаманця без оплати"],
+        "ru" => ["отмена после кухни", "комплимент", "поздняя правка", "возврат", "наличные вне кассы", "выплата из кассы", "расхождение кассы",
+            "нет списания с кошелька", "списание с кошелька отклонено", "списание с кошелька не совпадает", "списание с кошелька без оплаты"],
         _ => ["void after kitchen", "comp", "late amendment", "refund", "cash outside a till", "pay-out", "till over/short",
             "wallet leg missing", "wallet leg refused", "wallet leg mismatched", "wallet leg orphan"],
     };
@@ -141,3 +152,6 @@ pub fn text(v: &Voice, kind: &str, rows: &[&Row], since: i64) -> String {
     }
     t
 }
+
+#[cfg(test)]
+mod tests;

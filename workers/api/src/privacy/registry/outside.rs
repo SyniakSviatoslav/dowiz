@@ -24,7 +24,7 @@ pub const PROCESSORS: &[Processor] = &[
         location: "Ireland and the United States",
         safeguard: "the WhatsApp Business data processing terms, which the venue accepts with Meta; Meta states that it is certified under the EU-US Data Privacy Framework",
         terms: "https://www.whatsapp.com/legal/business-data-processing-terms" },
-    Processor { id: "telegram", name: "Telegram (the venue's kitchen chat)",
+    Processor { id: "telegram", name: "Telegram (the venue's kitchen chat or a staff group the venue chooses)",
         receives: &[Name, Phone, Address, OrderContent, Note],
         role: VenueProcessor, switch: Switch::Telegram,
         location: "United Arab Emirates (company); servers in several countries",
@@ -86,6 +86,8 @@ pub const HOSTS: &[Host] = &[
     Host { host: "*.js.stripe.com", recipient: To("stripe") },
     Host { host: "hooks.stripe.com", recipient: To("stripe") },
     Host { host: "api.telegram.org", recipient: To("telegram") },
+    // W-TG: the `startgroup` deep link the owner's console shows; the hub never calls it.
+    Host { host: "t.me", recipient: NotARecipient("a link the owner opens to pick a group; the hub never calls it and sends it nothing") },
     Host { host: "graph.facebook.com", recipient: To("meta") },
     Host { host: "www.ebills.al", recipient: To("ebills") },
     Host { host: "efiskalizimi-app.tatime.gov.al", recipient: To("tax") },

@@ -157,6 +157,10 @@ pub struct Depth {
 }
 
 pub fn depth(entries: &[Entry], now_ms: i64) -> Depth {
+    // A SUMMARY WAITS BY DESIGN (`digest.rs`: it is rescheduled, never sent
+    // away), so it is not queue depth: counted, it would read as a message
+    // stuck for a day.
+    let entries: Vec<&Entry> = entries.iter().filter(|e| e.kind != digest::KIND).collect();
     Depth {
         waiting: entries.len(),
         oldest_ms: entries.iter().map(|e| now_ms - e.queued_at_ms).max().unwrap_or(0).max(0),
@@ -169,7 +173,12 @@ pub fn depth(entries: &[Entry], now_ms: i64) -> Depth {
 /// above are pure and the ones next door touch the images and the rails, which
 /// is the same seam `services/mod.rs` describes.
 mod rails;
-pub use rails::{sweep, waiting};
+pub use rails::{enqueue, sweep, waiting};
+/// Summaries as recurring entries (W-TG).
+pub mod digest;
+mod digest_rail;
+/// The drain's Telegram bookkeeping: fan-out, pacing, refusals (W-TG).
+mod tgrail;
 
 #[cfg(test)]
 mod tests;
