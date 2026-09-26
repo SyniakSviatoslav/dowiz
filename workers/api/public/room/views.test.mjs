@@ -163,7 +163,7 @@ test('anchors: every data-tour in the room is listed with its file:line, and eve
     .split('\n').filter(l => l.trim() && !l.startsWith('#')).map(l => l.trim().split(/\s+/));
   // An anchor is a LITERAL string in the source (never built from parts), so
   // grep finds it: '<module>.<control>' with one of the room's module names.
-  const ANCHOR = /["'](login|hud|nav|room|sitting|round|menu|open|guest|pay|transfer|move|till|floor)\.([a-zA-Z]+)["']/g;
+  const ANCHOR = /["'](login|hud|nav|room|sitting|round|menu|open|guest|pay|transfer|move|till|floor|pass)\.([a-zA-Z]+)["']/g;
   const inTree = new Map();
   for (const [f, s] of sources) s.split('\n').forEach((line, i) => {
     if (/^export const [A-Z_]+ = /.test(line)) return; // a constant (till-view's CLOSED kind), not an anchor
