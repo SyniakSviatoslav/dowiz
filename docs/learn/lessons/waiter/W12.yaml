@@ -1,0 +1,80 @@
+# Lesson W12 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# The phrases below are the ones the hub's grammar is tested on
+# (workers/api/src/services/engagement/voice/grammar/tests.rs `the_lessons_phrases_work`).
+id: W12
+role: waiter
+module: voice
+order: 12
+covers: []
+title:
+  sq: "Me zë"
+  en: "By voice"
+  uk: "Голосом"
+goal:
+  sq: "Hapni një tavolinë, shtoni pjata, dërgoni raundin dhe mbyllni llogarinë me zë — çdo shkrim me konfirmim."
+  en: "Open a table, add dishes, send the round and settle the bill by voice — every write confirmed."
+  uk: "Відкрити стіл, додати страви, відправити раунд і закрити рахунок голосом — кожен запис з підтвердженням."
+steps:
+  - key: 1
+    anchor: hud.voice
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="hud.voice"]'
+    title:
+      sq: "Mikrofoni"
+      en: "The microphone"
+      uk: "Мікрофон"
+    caption:
+      sq: "Prekeni dhe thoni: «hap tavolinën 5 për 4 veta», «shto dy margarita në tavolinën 5», «shto një kola», «statusi». Pjata shkon në raundin që po ndërtoni."
+      en: "Tap it and say: «open table 5 for 4», «add 2 margherita to table 5», «add cola», «status». The dish joins the round you are building."
+      uk: "Торкніться й скажіть: «відкрий стіл 5 на чотири», «додай дві маргарити на стіл 5», «додай колу», «скільки столів». Страва йде в раунд, що ви збираєте."
+  - key: 2
+    anchor: voice.readback
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="voice.readback"]'
+    title:
+      sq: "Çfarë u kuptua"
+      en: "What was understood"
+      uk: "Що зрозуміло"
+    caption:
+      sq: "Pastaj: «dërgo porosinë», «tavolina 5 paguar kesh», «tavolina 5 paguar me kartë». Shuma lexohet e plotë, siç e llogarit lokali."
+      en: "Then: «send the round», «table 5 paid cash», «table 5 paid card». The amount is read back in full, as the hub counts it."
+      uk: "Далі: «відправ замовлення», «стіл 5 оплатив готівкою», «стіл 5 оплата карткою». Сума читається повністю, як її рахує хаб."
+  - key: 3
+    anchor: voice.confirm
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="voice.confirm"]'
+    title:
+      sq: "Konfirmoni"
+      en: "Confirm"
+      uk: "Підтвердіть"
+    caption:
+      sq: "Asgjë nuk shkruhet pa këtë buton. Ajo që roli juaj nuk e lejon — p.sh. pagesa pa të drejtën e arkës — refuzohet që në fillim."
+      en: "Nothing is written without this button. What your role cannot do — a payment without the payment right — is refused up front."
+      uk: "Без цієї кнопки нічого не записується. Те, чого ваша роль не може, — оплата без права на неї — відхиляється одразу."
+  - key: 4
+    anchor: voice.cancel
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="voice.cancel"]'
+    title:
+      sq: "Ose jo"
+      en: "Or not"
+      uk: "Або ні"
+    caption:
+      sq: "Anulo e lë gjithçka si ishte. Dy tavolina ose dy raunde që përshtaten refuzohen — zgjidhni në ekran."
+      en: "Cancel leaves everything as it was. Two tables or two rounds that fit are refused — pick on the screen."
+      uk: "Скасувати — усе лишається як було. Два столи чи два раунди, що підходять, — відмова: оберіть на екрані."

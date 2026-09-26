@@ -38,7 +38,7 @@ export const T = {
     hMicT: 'Me zë', hMic: 'Thoni «e mora», «u dorëzua» ose «ku është tjetra». Aplikacioni përsërit çfarë dëgjoi dhe kërkon konfirmim.',
     hAskT: 'Pyetje për dërgesat', hAsk: 'Përgjigjet vetëm për turnet dhe porositë tuaja: sa fituat, ku të shkoni, çfarë ndodhi dje.',
     hHelpT: 'Ndihma', hHelp: 'Ky buton përsërit turin. Ekziston vetëm kur qëndroni, jo në rrugë.',
-    learn: 'Mësimet', learnNew: 'I ri', learnDone: 'Mbaruar', learnPaused: 'Në pauzë', learnWatch: 'Shiko videon', learnWrites: 'ndryshon të dhëna reale', learnSteps: '{n} hapa', learnEmpty: 'Ky mësim nuk u gjet', learnOffline: 'Mësimet duan lidhje interneti',
+    learn: 'Mësimet', learnNew: 'I ri', learnDone: 'Mbaruar', learnPaused: 'Në pauzë', learnWatch: 'Shiko videon', learnWrites: 'ndryshon të dhëna reale', learnSteps: '{n} hapa', learnEmpty: 'Ky mësim nuk u gjet', learnOffline: 'Mësimet duan lidhje interneti', agent: 'Agjenti AI (MCP)',
   },
   en: {
     appTitle: 'dowiz · courier', offline: 'offline', onShift: 'on shift', gps: 'GPS', gpsDenied: 'GPS denied', gpsUnavailable: 'GPS unavailable', gpsUnit: 'm',
@@ -65,7 +65,7 @@ export const T = {
     hMicT: 'By voice', hMic: 'Say “picked up”, “delivered” or “where next”. The app repeats what it heard and asks you to confirm.',
     hAskT: 'Questions about deliveries', hAsk: 'Answers only about your shifts and orders: how much you made, where to go next, what happened yesterday.',
     hHelpT: 'Help', hHelp: 'This button repeats the tour. It is here only while you stand still, not on a run.',
-    learn: 'Lessons', learnNew: 'New', learnDone: 'Done', learnPaused: 'Paused', learnWatch: 'Watch the video', learnWrites: 'changes real data', learnSteps: '{n} steps', learnEmpty: 'That lesson was not found', learnOffline: 'Lessons need a connection',
+    learn: 'Lessons', learnNew: 'New', learnDone: 'Done', learnPaused: 'Paused', learnWatch: 'Watch the video', learnWrites: 'changes real data', learnSteps: '{n} steps', learnEmpty: 'That lesson was not found', learnOffline: 'Lessons need a connection', agent: 'AI agent (MCP)',
   },
   uk: {
     appTitle: 'dowiz · кур’єр', offline: 'офлайн', onShift: 'на зміні', gps: 'GPS', gpsDenied: 'GPS заборонено', gpsUnavailable: 'GPS недоступний', gpsUnit: 'м',
@@ -92,7 +92,7 @@ export const T = {
     hMicT: 'Голосом', hMic: 'Скажіть «взяв», «доставив» або «де наступне». Застосунок повторить, що почув, і попросить підтвердити.',
     hAskT: 'Питання про доставки', hAsk: 'Відповідає лише про ваші зміни й замовлення: скільки заробили, куди їхати далі, що було вчора.',
     hHelpT: 'Довідка', hHelp: 'Ця кнопка повторить тур. Вона є лише тоді, коли ви стоїте, не на маршруті.',
-    learn: 'Уроки', learnNew: 'Новий', learnDone: 'Пройдено', learnPaused: 'На паузі', learnWatch: 'Дивитися відео', learnWrites: 'змінює реальні дані', learnSteps: 'кроків: {n}', learnEmpty: 'Такого уроку не знайдено', learnOffline: 'Для уроків потрібен інтернет',
+    learn: 'Уроки', learnNew: 'Новий', learnDone: 'Пройдено', learnPaused: 'На паузі', learnWatch: 'Дивитися відео', learnWrites: 'змінює реальні дані', learnSteps: 'кроків: {n}', learnEmpty: 'Такого уроку не знайдено', learnOffline: 'Для уроків потрібен інтернет', agent: 'AI-агент (MCP)',
   },
 };
 

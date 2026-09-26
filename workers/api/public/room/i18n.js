@@ -7,7 +7,7 @@ import { T as ADMIN } from '../admin/i18n.js';
 
 export const T = {
   sq: {
-    learn: 'Mësimet', learnNew: 'I ri', learnDone: 'Mbaruar', learnPaused: 'Në pauzë', learnWatch: 'Shiko videon', learnWrites: 'ndryshon të dhëna reale', learnSteps: '{n} hapa', learnEmpty: 'Ky mësim nuk u gjet', learnOffline: 'Mësimet duan lidhje interneti', learnClose: 'Mbyll',
+    learn: 'Mësimet', learnNew: 'I ri', learnDone: 'Mbaruar', learnPaused: 'Në pauzë', learnWatch: 'Shiko videon', learnWrites: 'ndryshon të dhëna reale', learnSteps: '{n} hapa', learnEmpty: 'Ky mësim nuk u gjet', learnOffline: 'Mësimet duan lidhje interneti', learnClose: 'Mbyll', agent: 'Agjenti AI (MCP)',
     waiter: 'Kamarier', 'counter-manager': 'Arkëtar-menaxher', kitchen: 'Kuzhina', owner: 'Pronar',
     loginLine: 'Salla, në dorën tuaj.', signIn: 'Hyni', email: 'Email', password: 'Fjalëkalimi',
     claimCode: 'Kodi i ftesës', haveCode: 'Kam një kod ftese', haveAccount: 'Kam llogari', claim: 'Aktivizo',
@@ -48,9 +48,10 @@ export const T = {
     floor: 'Salla', floor_table: 'Tavolina', floor_legend: 'Legjenda', floor_state_free: 'E lirë', floor_state_booked: 'E rezervuar', floor_state_ordering: 'Po porosit', floor_state_waiting: 'Pret ushqimin', floor_state_paying: 'Po paguan', floor_state_dirty: 'Duhet pastruar', floor_cleared: 'Tavolina u pastrua', floor_clear: 'U pastrua', floor_clearHint: 'Tavolina u pagua dhe u pastrua? Shënojeni si të lirë.', floor_unplaced: 'Jashtë planit', floor_noPlan: 'Pronari nuk ka vizatuar ende planin e sallës.',
     guestWaiting: 'Porosi nga tavolina', guestRound: 'Klienti porositi nga kodi QR i tavolinës.', guestConfirm: 'Konfirmo', guestReject: 'Refuzo', guestConfirmed: 'U konfirmua', guestRejected: 'U refuzua',
     language: 'Gjuha', theme: 'Tema',
+    voice: 'Komandë me zë', voiceConfirm: 'Po, bëje', voiceOpened: 'Tavolina {t}', voiceGuests: '{n} veta', voiceStatus: '{open} tavolina të hapura, {waiting} në pritje', voiceDenied: 'S’ka leje për mikrofonin', voiceOffline: 'Njohja e zërit do lidhje',
   },
   en: {
-    learn: 'Lessons', learnNew: 'New', learnDone: 'Done', learnPaused: 'Paused', learnWatch: 'Watch the video', learnWrites: 'changes real data', learnSteps: '{n} steps', learnEmpty: 'That lesson was not found', learnOffline: 'Lessons need a connection', learnClose: 'Close',
+    learn: 'Lessons', learnNew: 'New', learnDone: 'Done', learnPaused: 'Paused', learnWatch: 'Watch the video', learnWrites: 'changes real data', learnSteps: '{n} steps', learnEmpty: 'That lesson was not found', learnOffline: 'Lessons need a connection', learnClose: 'Close', agent: 'AI agent (MCP)',
     waiter: 'Waiter', 'counter-manager': 'Counter manager', kitchen: 'Kitchen', owner: 'Owner',
     loginLine: 'The room, in your hand.', signIn: 'Sign in', email: 'Email', password: 'Password',
     claimCode: 'Invite code', haveCode: 'I have an invite code', haveAccount: 'I have an account', claim: 'Activate',
@@ -91,9 +92,10 @@ export const T = {
     floor: 'Floor', floor_table: 'Table', floor_legend: 'Legend', floor_state_free: 'Free', floor_state_booked: 'Booked', floor_state_ordering: 'Ordering', floor_state_waiting: 'Waiting for food', floor_state_paying: 'Paying', floor_state_dirty: 'To clear', floor_cleared: 'Table cleared', floor_clear: 'Cleared', floor_clearHint: 'Paid and cleared? Mark the table free.', floor_unplaced: 'Not on the plan', floor_noPlan: 'The owner has not drawn the floor plan yet.',
     guestWaiting: 'Guest order', guestRound: 'The guest ordered from the table\'s QR code.', guestConfirm: 'Confirm', guestReject: 'Reject', guestConfirmed: 'Confirmed', guestRejected: 'Rejected',
     language: 'Language', theme: 'Theme',
+    voice: 'Voice command', voiceConfirm: 'Yes, do it', voiceOpened: 'Table {t}', voiceGuests: '{n} guests', voiceStatus: '{open} tables open, {waiting} waiting', voiceDenied: 'No microphone permission', voiceOffline: 'Speech recognition needs a connection',
   },
   uk: {
-    learn: 'Уроки', learnNew: 'Новий', learnDone: 'Пройдено', learnPaused: 'На паузі', learnWatch: 'Дивитися відео', learnWrites: 'змінює реальні дані', learnSteps: 'кроків: {n}', learnEmpty: 'Такого уроку не знайдено', learnOffline: 'Для уроків потрібен інтернет', learnClose: 'Закрити',
+    learn: 'Уроки', learnNew: 'Новий', learnDone: 'Пройдено', learnPaused: 'На паузі', learnWatch: 'Дивитися відео', learnWrites: 'змінює реальні дані', learnSteps: 'кроків: {n}', learnEmpty: 'Такого уроку не знайдено', learnOffline: 'Для уроків потрібен інтернет', learnClose: 'Закрити', agent: 'AI-агент (MCP)',
     waiter: 'Офіціант', 'counter-manager': 'Касир-менеджер', kitchen: 'Кухня', owner: 'Власник',
     loginLine: 'Зал у вашій руці.', signIn: 'Увійти', email: 'Email', password: 'Пароль',
     claimCode: 'Код запрошення', haveCode: 'У мене код запрошення', haveAccount: 'У мене є акаунт', claim: 'Активувати',
@@ -134,6 +136,7 @@ export const T = {
     floor: 'Зала', floor_table: 'Стіл', floor_legend: 'Легенда', floor_state_free: 'Вільний', floor_state_booked: 'Заброньований', floor_state_ordering: 'Замовляють', floor_state_waiting: 'Чекають страви', floor_state_paying: 'Оплата', floor_state_dirty: 'Прибрати', floor_cleared: 'Стіл прибрано', floor_clear: 'Прибрано', floor_clearHint: 'Оплачено й прибрано? Позначте стіл вільним.', floor_unplaced: 'Поза планом', floor_noPlan: 'Власник ще не намалював план зали.',
     guestWaiting: 'Замовлення гостя', guestRound: 'Гість замовив через QR-код столика.', guestConfirm: 'Підтвердити', guestReject: 'Відхилити', guestConfirmed: 'Підтверджено', guestRejected: 'Відхилено',
     language: 'Мова', theme: 'Тема',
+    voice: 'Голосова команда', voiceConfirm: 'Так, виконати', voiceOpened: 'Стіл {t}', voiceGuests: 'гостей: {n}', voiceStatus: 'Відкритих столів {open}, чекає {waiting}', voiceDenied: 'Немає дозволу на мікрофон', voiceOffline: 'Розпізнавання голосу потребує зв’язку',
   },
 };
 

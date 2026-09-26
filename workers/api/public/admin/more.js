@@ -9,6 +9,7 @@ import { retranslate, lang, LANGS } from '/admin/i18n.js';
 import { loadVenue, loadStaff, rerender } from '/admin/app.js';
 import { openCard, cardLine } from '/admin/customers.js';
 import { ui, k, btn, iconBtn, field, input, select, check, pill, pillBtn, empty, loading, rowBtn, rowDiv, chips, press } from '/admin/parts.js';
+import { openMcp as openMcpSheet } from '/admin/mcp.js';
 
 /// The rows, in groups, with the sheet each opens.
 const GROUPS = [
@@ -413,19 +414,10 @@ async function openChannels(){
   };
 }
 
-/// The venue as an MCP server: the URL, the auth, the tools it offers.
-async function openMcp(){
-  sheet(`${head('settings', 'mcp')}<p class="muted small" data-t="mcpHint"></p>
-    <p class="eyebrow mt-3">URL</p><div class="code small" id="mcpUrl">${esc(location.origin)}/api/mcp</div>
-    <p class="eyebrow mt-3">Authorization</p><div class="code small">Bearer dowiz_…</div>
-    <div class="btn-row">${btn({ id: 'mcpCopy', icon: 'copy', key: 'copy', tour: 'mcp.copy' })}${btn({ id: 'mcpKeys', variant: 'primary', icon: 'key', key: 'apiKeys', tour: 'mcp.keys' })}</div>
-    <div id="mcpTools">${loading()}</div>`, { name: 'mcp' });
-  $('#mcpCopy').onclick = async () => { try { await navigator.clipboard.writeText(`${location.origin}/api/mcp`); toast(t('copied')); } catch {} };
-  $('#mcpKeys').onclick = openKeys;
-  try {
-    const d = await fetch('/api/mcp').then(r => r.json());
-    $('#mcpTools').innerHTML = `<p class="eyebrow mt-3">${(d.tools || []).length} ${esc(t('tools'))}</p><div class="chips">${(d.tools || []).map(n => ui.chip({ label: n, labelCls: 'mono' })).join('')}</div>`;
-  } catch (e) { $('#mcpTools').innerHTML = ''; }
+/// The venue as an MCP server, per role (admin/mcp.js): the URL, the tools
+/// each role's key gets, client setup, and every person's key.
+function openMcp(){
+  return openMcpSheet({ lang: () => lang, sheet, root: () => $('#sheetIn'), head: head('settings', 'mcp'), api, post, toast, openKeys });
 }
 
 /// Off-site copies in the venue's own bucket.

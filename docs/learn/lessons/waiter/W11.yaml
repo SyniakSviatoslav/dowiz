@@ -1,0 +1,199 @@
+# Lesson W11 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: W11
+role: waiter
+module: agent
+order: 11
+covers: []
+title:
+  sq: "Lidhni një agjent AI (MCP)"
+  en: "Connect an AI agent (MCP)"
+  uk: "Підключити AI-агента (MCP)"
+goal:
+  sq: "Krijoni çelësin tuaj dhe lidhni Claude ose Codex me punën tuaj në sallë."
+  en: "Make your own key and connect Claude or Codex to your work on the floor."
+  uk: "Створити власний ключ і підключити Claude чи Codex до своєї роботи в залі."
+steps:
+  - key: 1
+    anchor: hud.agent
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="hud.agent"]'
+    title:
+      sq: "Agjenti AI"
+      en: "AI agent"
+      uk: "AI-агент"
+    caption:
+      sq: "Hapni panelin e agjentit nga lart."
+      en: "Open the agent panel from the top bar."
+      uk: "Відкрийте панель агента вгорі."
+  - key: 2
+    anchor: agent.url
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="agent.url"]'
+    title:
+      sq: "Adresa"
+      en: "The address"
+      uk: "Адреса"
+    caption:
+      sq: "Kjo është adresa MCP e lokalit."
+      en: "This is the venue's MCP address."
+      uk: "Це MCP-адреса закладу."
+  - key: 3
+    anchor: agent.copyUrl
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="agent.copyUrl"]'
+    title:
+      sq: "Kopjo adresën"
+      en: "Copy the address"
+      uk: "Копіювати адресу"
+    caption:
+      sq: "Kopjon adresën për agjentin."
+      en: "Copies the address for your agent."
+      uk: "Копіює адресу для агента."
+  - key: 4
+    anchor: agent.label
+    pending: no
+    writes: yes
+    action:
+      do: type
+      selector: '[data-tour="agent.label"]'
+      value: "Laptop"
+    title:
+      sq: "Emri i çelësit"
+      en: "Key label"
+      uk: "Назва ключа"
+    caption:
+      sq: "Shkruani për çfarë është, p.sh. laptopi."
+      en: "Say what it is for, e.g. your laptop."
+      uk: "Напишіть, для чого він, напр. ноутбук."
+  - key: 5
+    anchor: agent.mint
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="agent.mint"]'
+    title:
+      sq: "Krijo çelësin"
+      en: "Make the key"
+      uk: "Створити ключ"
+    caption:
+      sq: "Çelësi merr vetëm të drejtat tuaja."
+      en: "The key gets only your own rights."
+      uk: "Ключ отримує лише ваші права."
+  - key: 6
+    anchor: agent.key
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="agent.key"]'
+    title:
+      sq: "Çelësi, një herë"
+      en: "The key, once"
+      uk: "Ключ, один раз"
+    caption:
+      sq: "Kopjojeni tani: nuk shfaqet më."
+      en: "Copy it now: it is never shown again."
+      uk: "Скопіюйте зараз: його більше не покажуть."
+  - key: 7
+    anchor: agent.tools
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="agent.tools"]'
+    title:
+      sq: "Veglat tuaja"
+      en: "Your tools"
+      uk: "Ваші інструменти"
+    caption:
+      sq: "Agjenti merr vetëm këto vegla."
+      en: "The agent gets only these tools."
+      uk: "Агент отримує лише ці інструменти."
+  - key: 8
+    anchor: agent.clients
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="agent.clients"]'
+    title:
+      sq: "Zgjidhni klientin"
+      en: "Pick the client"
+      uk: "Оберіть клієнта"
+    caption:
+      sq: "Claude Code, Claude Desktop, Codex ose çdo klient MCP."
+      en: "Claude Code, Claude Desktop, Codex or any MCP client."
+      uk: "Claude Code, Claude Desktop, Codex чи будь-який MCP-клієнт."
+  - key: 9
+    anchor: agent.snippet
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="agent.snippet"]'
+    title:
+      sq: "Konfigurimi"
+      en: "The setup"
+      uk: "Налаштування"
+    caption:
+      sq: "Gati për ngjitje, me çelësin tuaj brenda."
+      en: "Ready to paste, with your key in it."
+      uk: "Готово до вставлення, з вашим ключем."
+  - key: 10
+    anchor: agent.copySnippet
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="agent.copySnippet"]'
+    title:
+      sq: "Kopjo konfigurimin"
+      en: "Copy the setup"
+      uk: "Копіювати налаштування"
+    caption:
+      sq: "Ngjiteni në Claude ose Codex dhe agjenti lidhet."
+      en: "Paste it into Claude or Codex and the agent connects."
+      uk: "Вставте в Claude чи Codex, і агент підключиться."
+  - key: 11
+    anchor: agent.keyRow
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="agent.keyRow"]'
+    title:
+      sq: "Çelësat tuaj"
+      en: "Your keys"
+      uk: "Ваші ключі"
+    caption:
+      sq: "Çdo çelës me emrin dhe datën kur mbaron."
+      en: "Each key with its label and when it ends."
+      uk: "Кожен ключ із назвою та датою завершення."
+  - key: 12
+    anchor: agent.revoke
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="agent.revoke"]'
+    title:
+      sq: "Revoko"
+      en: "Revoke"
+      uk: "Відкликати"
+    caption:
+      sq: "Çelësi ndalon menjëherë. Edhe pronari mund ta revokojë."
+      en: "The key stops at once. The owner can revoke it too."
+      uk: "Ключ одразу перестає діяти. Власник теж може його відкликати."

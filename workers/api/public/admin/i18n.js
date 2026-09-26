@@ -44,6 +44,8 @@ export const T = {
     req_menu:'Menyja', req_notifications:'Njoftimet', req_fulfilment:'Dorëzimi', fact_sellableDishes:'pjata në shitje', fact_telegramChats:'Telegram', fact_hasVenuePhone:'telefoni i lokalit', fact_deliveryConfigured:'dërgesa', fact_pickupEnabled:'marrja vetë', yes:'po', no:'jo',
     // restored from the old console, 2026-09-19
     aggTitle:'Porosi nga platforma', aggPlatform:'Platforma', aggNumber:'Numri i porosisë te platforma', aggAdd:'Shto pjatë', aggQty:'Sasia', aggPrice:'Çmimi te platforma', aggRemove:'Hiq', aggLines:'Pjatat', aggAddsUp:'përputhet', aggNotTotal:'nuk përputhet me totalin', aggEnter:'Regjistro porosinë', aggAlready:'Kjo porosi ishte regjistruar tashmë',
+    // voice, 2026-09-25 (admin/voice.js)
+    voice:'Komandë me zë', voiceConfirm:'Po, bëje', voiceStatus:'Të hapura {open}, në pritje {waiting}', voiceDenied:'S’ka leje për mikrofonin', voiceOffline:'Njohja e zërit do lidhje', voiceAsking:'Po pyes…', voiceFailed:'Nuk u krye',
     exportCsv:'Eksporto CSV', outOfStock:'S’ka në magazinë', noneOnShift:'Asnjë korrier në turn', status:'Gjendja', onShelf:'në raft', stranded:'Rezerva të varura', strandedHint:'Porosi që s’u mbyll, por mban përbërës. Numëroni raftin për t’i çliruar.',
     spoiled:'u prish', dropped:'ra', unsold:'s’u shit', returned:'u kthye', staff_meal:'ushqim stafi', inviteExpired:'kodi ka skaduar', inviteWaiting:'pret kodin', deliveries30:'Dorëzime, 30 ditë', inFlight:'Në rrugë tani', cashHeld:'Para në dorë sot',
     deactivate:'Çaktivizo korrierin', deactivateHint:'Nuk do të mund të hyjë më dhe çdo sesion i tij mbyllet.', closeVenueHint:'Porositë e reja nuk do të pranohen derisa ta hapni përsëri.',
@@ -169,6 +171,8 @@ export const T = {
     req_menu:'Menu', req_notifications:'Notifications', req_fulfilment:'Fulfilment', fact_sellableDishes:'dishes on sale', fact_telegramChats:'Telegram', fact_hasVenuePhone:'venue phone', fact_deliveryConfigured:'delivery', fact_pickupEnabled:'pickup', yes:'yes', no:'no',
     // restored from the old console, 2026-09-19
     aggTitle:'Platform order', aggPlatform:'Platform', aggNumber:'Platform order number', aggAdd:'Add dish', aggQty:'Quantity', aggPrice:'Platform price', aggRemove:'Remove', aggLines:'Dishes', aggAddsUp:'adds up', aggNotTotal:'does not match the total', aggEnter:'Enter order', aggAlready:'This order was already entered',
+    // voice, 2026-09-25 (admin/voice.js)
+    voice:'Voice command', voiceConfirm:'Yes, do it', voiceStatus:'Open {open}, waiting {waiting}', voiceDenied:'No microphone permission', voiceOffline:'Speech recognition needs a connection', voiceAsking:'Asking…', voiceFailed:'That did not go through',
     exportCsv:'Export CSV', outOfStock:'Out of stock', noneOnShift:'No courier on shift', status:'Status', onShelf:'on shelf', stranded:'Stranded holds', strandedHint:'Orders that never closed but still hold ingredients. A stocktake releases them.',
     spoiled:'spoiled', dropped:'dropped', unsold:'unsold', returned:'returned', staff_meal:'staff meal', inviteExpired:'code expired', inviteWaiting:'waiting for code', deliveries30:'Deliveries, 30 days', inFlight:'On the road now', cashHeld:'Cash in hand today',
     deactivate:'Deactivate courier', deactivateHint:'They will no longer be able to sign in and every session of theirs ends.', closeVenueHint:'No new orders will come in until you open again.',
@@ -277,6 +281,8 @@ export const T = {
     req_menu:'Меню', req_notifications:'Сповіщення', req_fulfilment:'Доставка', fact_sellableDishes:'страв у продажу', fact_telegramChats:'Telegram', fact_hasVenuePhone:'телефон закладу', fact_deliveryConfigured:'доставка', fact_pickupEnabled:'самовивіз', yes:'так', no:'ні',
     // restored from the old console, 2026-09-19
     aggTitle:'Замовлення з платформи', aggPlatform:'Платформа', aggNumber:'Номер замовлення на платформі', aggAdd:'Додати страву', aggQty:'Кількість', aggPrice:'Ціна на платформі', aggRemove:'Прибрати', aggLines:'Страви', aggAddsUp:'сходиться', aggNotTotal:'не збігається з сумою', aggEnter:'Записати замовлення', aggAlready:'Це замовлення вже записано',
+    // voice, 2026-09-25 (admin/voice.js)
+    voice:'Голосова команда', voiceConfirm:'Так, виконати', voiceStatus:'Відкритих {open}, чекає {waiting}', voiceDenied:'Немає дозволу на мікрофон', voiceOffline:'Розпізнавання голосу потребує зв’язку', voiceAsking:'Питаю…', voiceFailed:'Не вдалося',
     exportCsv:'Експорт CSV', outOfStock:'Немає в наявності', noneOnShift:'Немає кур’єрів на зміні', status:'Статус', onShelf:'на полиці', stranded:'Зависли резерви', strandedHint:'Замовлення, що не закрилися, але тримають інгредієнти. Інвентаризація їх звільняє.',
     spoiled:'зіпсувалось', dropped:'впало', unsold:'не продано', returned:'повернено', staff_meal:'їжа персоналу', inviteExpired:'код прострочено', inviteWaiting:'чекає на код', deliveries30:'Доставок за 30 днів', inFlight:'Зараз у дорозі', cashHeld:'Готівка на руках сьогодні',
     deactivate:'Деактивувати кур’єра', deactivateHint:'Він більше не зможе увійти, усі його сесії завершаться.', closeVenueHint:'Нові замовлення не надходитимуть, доки ви не відкриєтесь знову.',

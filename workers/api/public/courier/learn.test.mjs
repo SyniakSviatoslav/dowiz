@@ -12,7 +12,7 @@ const HERE = new URL('./', import.meta.url);
 const REPO = new URL('../../../../', import.meta.url);
 const read = f => readFileSync(new URL(f, HERE), 'utf8');
 const LESSONS = JSON.parse(readFileSync(new URL('../learn/lessons.json', HERE), 'utf8')).lessons.filter(l => l.role === 'courier');
-const SOURCES = ['app.js', 'screens.js', 'index.html'].map(f => [f, read(f)]);
+const SOURCES = ['app.js', 'screens.js', 'index.html', 'mcp.js'].map(f => [f, read(f)]);
 // i18n.js imports '/store/storage.js' by its site path, which node cannot
 // resolve; the table is loaded with that one import swapped for inert stubs.
 const I18N = read('i18n.js').replace(/^import \{ safeGet, safeSet \} from '\/store\/storage\.js';$/m,
@@ -39,8 +39,8 @@ test('anchors: every data-tour the courier writes is listed with its file:line, 
   assert.ok(ids.length >= 30, `only ${ids.length} anchors`);
 });
 
-test('lessons: C1..C6, and every step anchor is a listed courier anchor (none pending)', () => {
-  assert.deepEqual(LESSONS.map(l => l.id), ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']);
+test('lessons: C1..C7, and every step anchor is a listed courier anchor (none pending)', () => {
+  assert.deepEqual(LESSONS.map(l => l.id), ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']);
   const ids = new Set(listed.map(([id]) => id));
   for (const l of LESSONS) for (const s of l.steps) {
     if (!s.anchor) continue;
@@ -104,6 +104,6 @@ test('words: every Learn key in all three languages; the step count carries {n}'
 test('offline shell: the lessons engine and both sheets are cached, under a new cache name', () => {
   const sw = read('sw.js');
   for (const f of ['/lib/learn.js', '/lib/learn.css', '/lib/guide.css']) assert.match(sw, new RegExp(`^  '${f.replace(/\./g, '\\.')}',$`, 'm'), f);
-  assert.match(sw, /const SHELL_CACHE = 'dowiz-courier-shell-2026-09-24b';/);
+  assert.match(sw, /const SHELL_CACHE = 'dowiz-courier-shell-2026-09-25-mcp';/);
   assert.match(read('app.js'), /^import \{ createLearn, loadLessons \} from '\/lib\/learn\.js';$/m);
 });

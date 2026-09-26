@@ -24,12 +24,16 @@
 // Bumped 2026-09-24 (b): courier.css changed (the --st-* status colours were
 // restored) and the lessons engine (/lib/learn.js + its sheet) joined the graph;
 // a cache under the old name would keep serving the old sheet offline.
-const SHELL_CACHE = 'dowiz-courier-shell-2026-09-24b';
+const SHELL_CACHE = 'dowiz-courier-shell-2026-09-25-mcp';
 const SHELL = [
   '/courier/',
   '/courier/app.js',
   '/courier/i18n.js',
   '/courier/screens.js',
+  '/courier/mcp.js',
+  '/lib/mcp.js',
+  '/lib/mcp-words.js',
+  '/lib/mcp.css',
   '/courier/courier.css',
   '/lib/guide.js',
   // The lessons (C1..C6). learn.js is a static import of app.js; the two sheets

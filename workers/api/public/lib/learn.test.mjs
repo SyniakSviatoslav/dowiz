@@ -96,7 +96,7 @@ test('createLearn: an unknown role is refused; the role filter and the order hol
   assert.throws(() => createLearn({ role: 'chef', lessons: ALL }), /unknown role chef/);
   const L = createLearn({ role: 'waiter', lessons: ALL, storage: mem() });
   assert.equal(L.app, 'room');
-  assert.deepEqual(L.lessons.map(l => l.id), ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10']);
+  assert.deepEqual(L.lessons.map(l => l.id), ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12']);
 });
 
 test('open: builds the lesson as a tour with its own key, starts at the step asked, clamped', () => {

@@ -13,6 +13,7 @@
 <!-- The design system (/lib/ui): after the shared tokens, before this surface's
      own sheet, which only lays out what the components do not. -->
 <link rel="stylesheet" href="/lib/ui/ui.css">
+<link rel="stylesheet" href="/lib/mcp.css">
 <link rel="stylesheet" href="/room/room.css">
 </head>
 <body>
@@ -24,6 +25,7 @@
   <span class="ui-chip ui-chip--warning" id="outboxTag" role="status" aria-live="polite" data-tour="hud.outbox" hidden><i class="ti ti-cloud-upload ui-i" aria-hidden="true"></i><span id="outboxText"></span></span>
   <button class="ui-iconbtn ui-iconbtn--plain" id="langBtn" type="button" data-tour="hud.lang" data-t-attr="aria-label:language title:language">SQ</button>
   <button class="ui-iconbtn ui-iconbtn--plain" id="themeBtn" type="button" data-tour="hud.theme" data-t-attr="aria-label:theme title:theme"><i class="ti ti-sun-moon ui-i" aria-hidden="true"></i></button>
+  <button class="ui-iconbtn ui-iconbtn--plain" id="mcpBtn" type="button" data-tour="hud.agent" data-t-attr="aria-label:agent title:agent" hidden><i class="ti ti-cube-3d-sphere ui-i" aria-hidden="true"></i></button>
   <button class="ui-iconbtn ui-iconbtn--plain" id="learnBtn" type="button" data-tour="hud.learn" data-t-attr="aria-label:learn title:learn"><i class="ti ti-info-circle ui-i" aria-hidden="true"></i></button>
 </header>
 <main id="app"></main>

@@ -7,11 +7,13 @@
 # Every id is a LITERAL string in its file (never built from parts), so grep
 # finds it. room/views.test.mjs fails when a listed id or its line moves, or
 # when the tree gains an id this list does not carry; it prints which one.
-hud.sync workers/api/public/room/index.html:20
-hud.outbox workers/api/public/room/index.html:24
-hud.lang workers/api/public/room/index.html:25
-hud.theme workers/api/public/room/index.html:26
-hud.learn workers/api/public/room/index.html:27
+hud.sync workers/api/public/room/index.html:21
+hud.outbox workers/api/public/room/index.html:25
+hud.lang workers/api/public/room/index.html:26
+hud.theme workers/api/public/room/index.html:27
+hud.agent workers/api/public/room/index.html:28
+hud.learn workers/api/public/room/index.html:29
+hud.voice workers/api/public/room/voice.js:124
 login.email workers/api/public/room/screens.js:24
 login.code workers/api/public/room/screens.js:25
 login.password workers/api/public/room/screens.js:27

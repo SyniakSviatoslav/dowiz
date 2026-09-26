@@ -1,0 +1,183 @@
+# Lesson O16j (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O16j
+role: owner
+module: mcp
+order: 37
+covers: [mcp]
+title:
+  sq: "Lidhni një agjent AI (MCP)"
+  en: "Connect an AI agent (MCP)"
+  uk: "Підключити AI-агента (MCP)"
+goal:
+  sq: "Shihni çfarë merr agjenti i secilit rol, lidhni Claude ose Codex dhe mbani nën kontroll çelësat e njerëzve."
+  en: "See what each role's agent gets, connect Claude or Codex, and keep your people's keys in hand."
+  uk: "Побачити, що отримує агент кожної ролі, підключити Claude чи Codex і тримати ключі людей під контролем."
+steps:
+  - key: 1
+    anchor: more.tile.mcp
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.mcp"]'
+    title:
+      sq: "Agjentët"
+      en: "Agents"
+      uk: "Агенти"
+    caption:
+      sq: "Hapni panelin MCP."
+      en: "Open the MCP panel."
+      uk: "Відкрийте панель MCP."
+  - key: 2
+    anchor: mcp.url
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="mcp.url"]'
+    title:
+      sq: "Adresa"
+      en: "The address"
+      uk: "Адреса"
+    caption:
+      sq: "E njëjta adresë për çdo rol."
+      en: "The same address for every role."
+      uk: "Та сама адреса для кожної ролі."
+  - key: 3
+    anchor: mcp.copy
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="mcp.copy"]'
+    title:
+      sq: "Kopjo"
+      en: "Copy"
+      uk: "Копіювати"
+    caption:
+      sq: "Kopjon adresën."
+      en: "Copies the address."
+      uk: "Копіює адресу."
+  - key: 4
+    anchor: mcp.keys
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="mcp.keys"]'
+    title:
+      sq: "Çelësi juaj"
+      en: "Your key"
+      uk: "Ваш ключ"
+    caption:
+      sq: "Çelësi i pronarit krijohet te Çelësat API."
+      en: "The owner's key is made in API keys."
+      uk: "Ключ власника створюють у ключах API."
+  - key: 5
+    anchor: mcp.role
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="mcp.role"]'
+    title:
+      sq: "Roli"
+      en: "The role"
+      uk: "Роль"
+    caption:
+      sq: "Zgjidhni një rol: kamarieri, kuzhina, banakieri, korrieri."
+      en: "Pick a role: waiter, kitchen, counter, courier."
+      uk: "Оберіть роль: офіціант, кухня, каса, кур'єр."
+  - key: 6
+    anchor: mcp.tools
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="mcp.tools"]'
+    title:
+      sq: "Veglat e rolit"
+      en: "The role's tools"
+      uk: "Інструменти ролі"
+    caption:
+      sq: "Agjenti i këtij roli merr vetëm këto."
+      en: "That role's agent gets only these."
+      uk: "Агент цієї ролі отримує лише їх."
+  - key: 7
+    anchor: mcp.clients
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="mcp.clients"]'
+    title:
+      sq: "Klienti"
+      en: "The client"
+      uk: "Клієнт"
+    caption:
+      sq: "Claude Code, Claude Desktop, Codex ose çdo klient MCP."
+      en: "Claude Code, Claude Desktop, Codex or any MCP client."
+      uk: "Claude Code, Claude Desktop, Codex чи будь-який MCP-клієнт."
+  - key: 8
+    anchor: mcp.snippet
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="mcp.snippet"]'
+    title:
+      sq: "Konfigurimi"
+      en: "The setup"
+      uk: "Налаштування"
+    caption:
+      sq: "Vendosni çelësin tuaj në vend të <YOUR_KEY>."
+      en: "Put your key where it says <YOUR_KEY>."
+      uk: "Вставте свій ключ замість <YOUR_KEY>."
+  - key: 9
+    anchor: mcp.copySnippet
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="mcp.copySnippet"]'
+    title:
+      sq: "Kopjo konfigurimin"
+      en: "Copy the setup"
+      uk: "Копіювати налаштування"
+    caption:
+      sq: "Ngjiteni në Claude ose Codex."
+      en: "Paste it into Claude or Codex."
+      uk: "Вставте в Claude чи Codex."
+  - key: 10
+    anchor: mcp.personKey
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="mcp.personKey"]'
+    title:
+      sq: "Çelësat e njerëzve"
+      en: "People's keys"
+      uk: "Ключі людей"
+    caption:
+      sq: "Çdo punonjës dhe korrier krijon çelësin e vet; këtu i shihni të gjithë."
+      en: "Staff and couriers make their own keys; you see them all here."
+      uk: "Працівники й кур'єри створюють власні ключі; тут ви бачите всі."
+  - key: 11
+    anchor: mcp.personRevoke
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="mcp.personRevoke"]'
+    title:
+      sq: "Revoko"
+      en: "Revoke"
+      uk: "Відкликати"
+    caption:
+      sq: "Ndaloni cilindo çelës menjëherë."
+      en: "Stop any key at once."
+      uk: "Зупиніть будь-який ключ одразу."

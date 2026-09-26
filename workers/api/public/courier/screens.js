@@ -18,6 +18,7 @@
 // `ctx` is { t, money, lang, langs }: the surface's translator and its ONE money
 // formatter (/lib/money.js). Relative imports so node can load this file too.
 import * as ui from '../lib/ui/index.js';
+import { mcpButton } from './mcp.js';
 
 const k = key => ({ t: key });
 const short = id => String(id).slice(0, 8);
@@ -58,7 +59,7 @@ export const failed = error => ui.emptyState({ icon: 'plug-connected-x', title: 
 
 export const offShift = () => ui.emptyState({ icon: 'moon-stars', title: k('youAreOffline'), body: k('offlineHint') })
   + ui.button({ id: 'openShift', variant: 'success', icon: 'player-play', label: k('openShift'), ...block, attrs: { data: { tour: 'shift.open' } } })
-  + learnButton();
+  + learnButton() + mcpButton();
 
 const endShift = () => ui.button({ id: 'endShift', variant: 'ghost', icon: 'power', label: k('endShift'), block: true, attrs: { data: { tour: 'shift.end' } } });
 /// The lessons (C1..C6, /lib/learn.js). Only where the courier stands still --
@@ -77,6 +78,7 @@ export function waiting(){
       ${ui.button({ id: 'hist', variant: 'secondary', icon: 'history', label: k('history'), block: true, attrs: { data: { tour: 'panel.history' } } })}
     </div>
     ${learnButton()}
+    ${mcpButton()}
     ${endShift()}`;
 }
 

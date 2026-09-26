@@ -16,6 +16,7 @@ import { t, lang, LANGS, setLang, nextLang, retranslate, intlLocale, voiceLocale
 // by the pure screens in `screens.js`; this file keeps state, network, wiring.
 import * as ui from '/lib/ui/index.js';
 import * as screens from '/courier/screens.js';
+import { openMcp } from '/courier/mcp.js';
 ui.useTranslator(t);
 
 const API = '/api';
@@ -623,6 +624,7 @@ function render(){
     $('#app').innerHTML = screens.offShift();
     $('#openShift').onclick = () => setShift(true);
     $('#learn').onclick = openLearn;
+    $('#mcpOpen').onclick = openAgent;
     return;
   }
   startTracking();
@@ -648,6 +650,7 @@ function render(){
     $('#earn').onclick = openEarnings;
     $('#hist').onclick = openHistory;
     $('#learn').onclick = openLearn;
+    $('#mcpOpen').onclick = openAgent;
     bindAsk();
     return;
   }
@@ -1104,6 +1107,8 @@ async function getLearn(){
   learn ??= createLearn({ role: 'courier', lessons, lang: () => lang, createGuide, toast, words: learnWords(), guideWords: guideWords() });
   return learn;
 }
+/// The courier's own AI agent (courier/mcp.js), in the same sheet as the lessons.
+function openAgent(){ return openMcp({ api, lang: () => lang, toast, panel, root: () => $('#app') }); }
 async function openLearn(){
   await panel(t('learn'), screens.panelLoading(ctx()));
   const l = await getLearn();

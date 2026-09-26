@@ -260,6 +260,11 @@ async function boot(){
   paintLive();
   poll();
   openSocket();
+  // Voice (admin/voice.js): the mic before the language button, where the
+  // browser can recognise speech. A confirmed action re-reads what it moved.
+  import('/admin/voice.js').then(m => m.mountVoice($('#top .top-in'), $('#prefs'), async () => {
+    await Promise.all([loadOrders().catch(() => {}), loadVenue()]); paintVenue(); await rerender();
+  })).catch(() => {});
   import('/admin/more.js').then(m => m.learnFromHash()).catch(() => {});
 }
 let pollTimer = null, pollN = 0;

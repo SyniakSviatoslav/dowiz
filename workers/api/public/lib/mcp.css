@@ -1,0 +1,9 @@
+/* The "AI agent (MCP)" panel (/lib/mcp.js), in every app. A setup block wraps
+   instead of scrolling sideways: a phone has no room for a 90-column line. */
+.mcp .mcp-code{font-family:var(--font-mono);font-size:var(--text-sm);white-space:pre-wrap;word-break:break-all;
+  margin:8px 0;padding:10px 12px;border-radius:var(--radius-md);background:var(--ui-surface);
+  border:1px dashed var(--ui-line);user-select:all}
+.mcp .mcp-copy{margin:0 0 8px}
+.mcp .mcp-clients{margin:8px 0;overflow-x:auto}
+.mcp .mcp-tool .ui-row-title{font-family:var(--font-mono)}
+.mcp .mt-3{margin-top:16px}

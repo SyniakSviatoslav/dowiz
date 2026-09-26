@@ -22,9 +22,11 @@ import { visible } from './till-view.js';
 import { renderFloor, bindFloor, loadFloor } from './floor.js';
 import { safeGet, safeSet } from '../store/storage.js';
 import { renderLogin, renderRoom, renderSitting } from './screens.js';
+import { mountVoice } from './voice.js';
 import * as ui from '/lib/ui/index.js';
 import { createGuide } from '/lib/guide.js';
 import { createLearn, loadLessons } from '/lib/learn.js';
+import { openMcp } from './mcp.js';
 
 const $ = s => document.querySelector(s);
 const POLL_MS = 20000;
@@ -123,6 +125,8 @@ function hud() {
   $('#outboxTag').hidden = n === 0;
   $('#outboxText').textContent = t('queuedN').replace('{n}', n);
   $('#langBtn').textContent = lang().toUpperCase();
+  const mic = $('#voiceBtn'); if (mic) mic.hidden = !session.get();
+  $('#mcpBtn').hidden = !session.get();
 }
 
 function render() {
@@ -206,6 +210,11 @@ async function openLearn() {
   L.bindList(s.el, () => s.close('picked'));
 }
 $('#learnBtn').onclick = openLearn;
+// Voice (room/voice.js): the mic sits before the language button, where the
+// browser can recognise speech; hidden while nobody is signed in (`hud`).
+mountVoice(c, $('.hud'), $('#langBtn'));
+// The person's own AI agent (room/mcp.js): only once signed in, since the key is theirs.
+$('#mcpBtn').onclick = () => openMcp({ api, lang, toast, role: S.role, closeLabel: t('learnClose') });
 const learnHash = () => { if (/learn=/.test(location.hash)) getLearn().then(L => { if (L && L.deepLink(location.hash) === false) toast(t('learnEmpty')); }); };
 addEventListener('hashchange', learnHash);
 
