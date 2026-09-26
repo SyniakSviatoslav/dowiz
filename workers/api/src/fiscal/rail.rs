@@ -55,28 +55,27 @@ async fn queued(place: &crate::hubstore::Place, cfg: &Config, now_ms: i64) -> Va
 /// allow-listed client (`ebills_fire::fire`, ≤ `ebills_sender::BATCH`
 /// documents), and the answer back in one command. Every failure is LOUD,
 /// in the venue's error log; none is read as "sent".
-pub async fn sweep(env: &worker::Env, now_ms: i64) {
+/// One venue's minute of fiscal sending (run inside a Durable Object by
+/// `crate::cron`; see `outbox::rails::drain_venue` for why).
+pub async fn venue_minute(env: &worker::Env, venue: &str, now_ms: i64) {
     if !super::SEND_ENABLED {
         return;
     }
     use super::ebills_cmd::{AnswerIn, PlanIn, PlanOut};
     use super::ebills_sender::Outcome;
-    let registry = match crate::identity_store::registry(env).await {
-        Ok(t) => t,
-        Err(e) => return worker::console_error!("fiscal sweep: registry unreadable: {e}"),
-    };
-    for (venue, _) in registry.all(crate::identity_store::K_LOC) {
+    {
         let Ok(ns) = env.durable_object("HUB") else { return worker::console_error!("fiscal sweep: no HUB binding") };
+        let venue = venue.to_string();
         let place = crate::hubstore::Place { ns, venue: venue.clone() };
         let plan: PlanOut = match crate::command::send(&place, "ebills/fiscal_plan", &PlanIn { now_ms }).await {
             Ok(p) => p,
             Err((s, m)) => {
                 crate::loud!(&place.ns, Some(&venue), "fiscal.plan", "{s}: {m}");
-                continue;
+                return;
             }
         };
         if !plan.ready || plan.batch.items.is_empty() {
-            continue;
+            return;
         }
         let mut c = crate::ebills::fetch::Client::new(&plan.user, &plan.secret, plan.session.clone());
         let outcomes = super::ebills_fire::fire(&mut c, &plan.batch).await;

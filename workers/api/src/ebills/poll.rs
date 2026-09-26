@@ -30,23 +30,22 @@ async fn hub<I: serde::Serialize, O: serde::de::DeserializeOwned>(place: &Place,
 
 /// Every venue, every minute. A venue with no link configured answers
 /// `enabled: false` from one storage read and costs nothing else.
-pub(crate) async fn sweep(env: &Env, now_ms: i64) {
-    let registry = match crate::identity_store::registry(env).await {
-        Ok(t) => t,
-        Err(e) => return console_error!("ebills sweep: registry unreadable: {e}"),
-    };
-    for (venue, _) in registry.all(crate::identity_store::K_LOC) {
+/// One venue's minute of the e-bills poll (run inside a Durable Object by
+/// `crate::cron`; see `outbox::rails::drain_venue` for why).
+pub(crate) async fn tick_venue(env: &Env, venue: &str, now_ms: i64) {
+    {
         let Ok(ns) = env.durable_object("HUB") else { return console_error!("ebills sweep: no HUB binding") };
+        let venue = venue.to_string();
         let place = Place { ns, venue: venue.clone() };
         let plan: Plan = match hub(&place, "ebills/tick", &TickIn { now_ms }).await {
             Ok(p) => p,
             Err(f) => {
                 crate::loud!(&place.ns, Some(&venue), "ebills.tick", "{}", f.line());
-                continue;
+                return;
             }
         };
         if !plan.enabled || !(plan.floor || plan.sales || plan.reread || plan.recheck) {
-            continue;
+            return;
         }
         if let Err(f) = run(&place, &plan, now_ms).await {
             let report = ReportIn {

@@ -204,6 +204,9 @@ pub struct HubImages {
     /// a write bumps the generation, and a generation that does not match is
     /// simply refolded.
     folded: RefCell<Option<(i64, Vec<OrderView>)>>,
+    /// The Worker's bindings, for the one route that calls OTHER objects:
+    /// `/fold/cron`, answered only by a `cron~<venue>` runner (`crate::cron`).
+    env: Env,
 }
 
 /// A stored chunk comes back as whatever the platform decided to hand us —
@@ -1122,13 +1125,14 @@ impl HubImages {
 }
 
 impl DurableObject for HubImages {
-    fn new(state: State, _env: Env) -> Self {
+    fn new(state: State, env: Env) -> Self {
         Self {
             state,
             mem: RefCell::new(HashMap::new()),
             recent: RefCell::new(Vec::new()),
             positions: RefCell::new(HashMap::new()),
             folded: RefCell::new(None),
+            env,
         }
     }
 
@@ -1150,6 +1154,22 @@ impl DurableObject for HubImages {
         if head == "fold" {
             let what = seg.next().unwrap_or("");
             return match (req.method(), what) {
+                // ── THE MINUTE CRON, for one venue (`crate::cron`) ──
+                //
+                // Only a runner object is asked this: the Worker addresses
+                // `cron~<venue>`, never a venue's own hub, so the jobs below
+                // call the venue's object as a different instance and never
+                // wait on themselves.
+                (Method::Post, "cron") => {
+                    let url = req.url()?;
+                    let Some((venue, now_ms)) = crate::cron::parse_runner_query(
+                        url.query_pairs().map(|(k, v)| (k.to_string(), v.to_string())),
+                    ) else {
+                        return Response::error("cron needs a venue and a clock", 400);
+                    };
+                    crate::cron::run(&self.env, &venue, now_ms).await;
+                    Response::ok("done")
+                }
                 // ── THE SOCKET ──
                 //
                 // The Worker has already decided WHO this is and which topic

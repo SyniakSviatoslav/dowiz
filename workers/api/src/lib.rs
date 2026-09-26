@@ -39,6 +39,7 @@ mod project;
 mod notify;
 mod channels;
 mod cloud;
+mod cron;
 mod mcp;
 mod integrations;
 mod ebills;
@@ -584,10 +585,9 @@ pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     if event.cron().starts_with("17 3") {
         cloud::nightly(&env, now_ms).await;
     } else {
-        outbox::sweep(&env, now_ms).await;
-        ebills::poll::sweep(&env, now_ms).await;
-        // AFTER the poll, never beside it: one session per venue per minute.
-        // Sends nothing for a venue its owner has not armed (card L70).
-        fiscal::rail::sweep(&env, now_ms).await;
+        // ONE CHEAP REQUEST PER VENUE: the work runs inside each venue's
+        // runner object, not here -- see `cron.rs` for the 10 ms outage this
+        // replaced. Order per venue is unchanged: outbox, e-bills, fiscal.
+        cron::minute(&env, now_ms).await;
     }
 }

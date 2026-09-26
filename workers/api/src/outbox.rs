@@ -173,7 +173,7 @@ pub fn depth(entries: &[Entry], now_ms: i64) -> Depth {
 /// above are pure and the ones next door touch the images and the rails, which
 /// is the same seam `services/mod.rs` describes.
 mod rails;
-pub use rails::{enqueue, sweep, waiting};
+pub use rails::{drain_venue, enqueue, waiting};
 /// Summaries as recurring entries (W-TG).
 pub mod digest;
 mod digest_rail;

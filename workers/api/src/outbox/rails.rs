@@ -219,20 +219,13 @@ pub async fn drain(
 ///
 /// LOUD ON ANYTHING IT ABANDONS. A message that has failed six times is a
 /// broken integration, and the venue's own error log is where an owner looks.
-pub async fn sweep(env: &Env, now_ms: i64) {
-    let Ok(ns) = env.durable_object("HUB") else {
-        console_error!("outbox sweep: no HUB binding");
-        return;
-    };
-    let registry = match crate::identity_store::registry(env).await {
-        Ok(t) => t,
-        Err(e) => {
-            console_error!("outbox sweep: registry unreadable: {e}");
-            return;
-        }
-    };
-    for (venue, _) in registry.all(crate::identity_store::K_LOC) {
-        let Ok(ns) = env.durable_object("HUB") else { continue };
+/// One venue's minute of the outbox: drain, and say out loud what was
+/// abandoned. The cron runs this INSIDE a Durable Object (`crate::cron`), not
+/// in the Worker, because the Worker's Free-plan budget is 10 ms of CPU.
+pub async fn drain_venue(env: &Env, venue: &str, now_ms: i64) {
+    {
+        let Ok(ns) = env.durable_object("HUB") else { return };
+        let venue = venue.to_string();
         let place = crate::hubstore::Place { ns, venue: venue.clone() };
         match drain(env, &place, now_ms).await {
             // NOT `(0, 0, _)`: an entry abandoned on its own is neither sent
@@ -248,5 +241,4 @@ pub async fn sweep(env: &Env, now_ms: i64) {
             Err(e) => console_error!("outbox {venue}: drain refused: {e}"),
         }
     }
-    let _ = ns;
 }
