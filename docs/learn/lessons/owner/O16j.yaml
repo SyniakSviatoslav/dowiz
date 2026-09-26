@@ -118,9 +118,9 @@ steps:
       en: "The client"
       uk: "Клієнт"
     caption:
-      sq: "Claude Code, Claude Desktop, Codex ose çdo klient MCP."
-      en: "Claude Code, Claude Desktop, Codex or any MCP client."
-      uk: "Claude Code, Claude Desktop, Codex чи будь-який MCP-клієнт."
+      sq: "Claude Code, Claude Desktop, Codex, Gemini CLI ose çdo klient MCP."
+      en: "Claude Code, Claude Desktop, Codex, Gemini CLI or any MCP client."
+      uk: "Claude Code, Claude Desktop, Codex, Gemini CLI чи будь-який MCP-клієнт."
   - key: 8
     anchor: mcp.snippet
     pending: no

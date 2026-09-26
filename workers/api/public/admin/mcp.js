@@ -1,6 +1,6 @@
 // The console's "Agents (MCP)" sheet, per role: the URL, the owner's own key
 // (API keys), the tools EACH role's key gets -- owner, waiter, kitchen,
-// counter-manager, courier -- the setup for Claude Code, Claude Desktop, Codex
+// counter-manager, courier -- the setup for Claude Code, Claude Desktop, Codex, Gemini CLI
 // and any MCP client, and every key the venue's people minted in their own
 // apps, each revocable here. The pieces are /lib/mcp.js; this file composes
 // them and does the owner's I/O through the functions `more.js` hands it, so

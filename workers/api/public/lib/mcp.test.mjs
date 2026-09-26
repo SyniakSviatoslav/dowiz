@@ -28,6 +28,9 @@ test('every client gets a setup naming the URL; the key only when one is given',
   assert.equal(desk.env.DOWIZ_AUTH, `Bearer ${KEY}`);
   assert.match(withKey.codex, /\[mcp_servers\.dowiz\]\nurl = "https:\/\/dubin-sushi\.dowiz\.org\/api\/mcp"\nbearer_token_env_var = "DOWIZ_MCP_KEY"/);
   assert.match(withKey.codex, /export DOWIZ_MCP_KEY="dowizs_0f3a\.9b1c2d"/);
+  assert.ok(withKey.gemini.startsWith(`gemini mcp add --transport http dowiz ${URL} -H "Authorization: Bearer ${KEY}"`));
+  const gem = JSON.parse(withKey.gemini.slice(withKey.gemini.indexOf('{'))).mcpServers.dowiz;
+  assert.deepEqual(gem, { httpUrl: URL, headers: { Authorization: `Bearer ${KEY}` } });
   assert.match(none.generic, /Authorization: Bearer <YOUR_KEY>/);
 });
 

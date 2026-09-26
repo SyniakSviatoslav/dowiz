@@ -4,7 +4,7 @@
 //
 // What it shows: the URL, how this person gets a key, the tools THEIR key
 // gets (from `GET /api/mcp` -> roles), and ready setup for Claude Code,
-// Claude Desktop, OpenAI Codex and any other MCP client.
+// Claude Desktop, OpenAI Codex, Gemini CLI and any other MCP client.
 //
 // THE KEY IS NEVER IN A SNIPPET unless the person minted it on this screen a
 // moment ago (the hub keeps only a hash and cannot show it again). Otherwise
@@ -18,22 +18,28 @@
 //   Codex: ~/.codex/config.toml `[mcp_servers.<name>]` with `url` and
 //     `bearer_token_env_var` (learn.chatgpt.com/docs/extend/mcp, the page
 //     developers.openai.com/codex/mcp redirects to).
+//   Gemini CLI: `gemini mcp add --transport http <name> <url> -H "..."`, or
+//     ~/.gemini/settings.json `mcpServers.<name>` with `httpUrl` (Streamable
+//     HTTP; `url` there means SSE) and `headers` (geminicli.com/docs/tools/mcp-server).
 import * as ui from './ui/index.js';
 
 export const PLACEHOLDER = '<YOUR_KEY>';
-export const CLIENTS = ['claudeCode', 'claudeDesktop', 'codex', 'generic'];
+export const CLIENTS = ['claudeCode', 'claudeDesktop', 'codex', 'gemini', 'generic'];
 
-/// The four setups for one URL. `key` only when it was just minted.
+/// The five setups for one URL. `key` only when it was just minted.
 export function snippets(url, key){
   const k = key || PLACEHOLDER;
   const desktop = { mcpServers: { dowiz: { command: 'npx',
     args: ['-y', 'mcp-remote', url, '--header', 'Authorization:${DOWIZ_AUTH}'], env: { DOWIZ_AUTH: `Bearer ${k}` } } } };
+  const gemini = { mcpServers: { dowiz: { httpUrl: url, headers: { Authorization: `Bearer ${k}` } } } };
   return {
     claudeCode: `claude mcp add --transport http dowiz ${url} --header "Authorization: Bearer ${k}"`,
     claudeDesktop: JSON.stringify(desktop, null, 2),
     codex: `# ~/.codex/config.toml\n[mcp_servers.dowiz]\nurl = "${url}"\nbearer_token_env_var = "DOWIZ_MCP_KEY"\n\n`
       + `# in the shell that starts codex\nexport DOWIZ_MCP_KEY="${k}"\n\n`
       + `# or: codex mcp add dowiz --url ${url} --bearer-token-env-var DOWIZ_MCP_KEY`,
+    gemini: `gemini mcp add --transport http dowiz ${url} -H "Authorization: Bearer ${k}"\n\n`
+      + `# or in ~/.gemini/settings.json\n${JSON.stringify(gemini, null, 2)}`,
     generic: `URL: ${url}\nTransport: Streamable HTTP (JSON-RPC over POST)\nHeader: Authorization: Bearer ${k}`,
   };
 }
@@ -54,7 +60,7 @@ export function toolList(tools, w, tours){
 /// The client tabs and their snippets.
 export function clientTabs(url, key, w, tours){
   const s = snippets(url, key);
-  const hint = { claudeCode: w.hintClaudeCode, claudeDesktop: w.hintClaudeDesktop, codex: w.hintCodex, generic: w.hintGeneric };
+  const hint = { claudeCode: w.hintClaudeCode, claudeDesktop: w.hintClaudeDesktop, codex: w.hintCodex, gemini: w.hintGemini, generic: w.hintGeneric };
   const tabs = ui.tabs({ id: 'mcpClients', label: w.clients, items: CLIENTS.map(c => ({ id: `mcp-${c}`, label: w[c] })) });
   const panels = CLIENTS.map((c, i) => `<div id="mcp-${c}-panel" role="tabpanel" aria-labelledby="tab-mcp-${c}"${i ? ' hidden' : ''}>
       <p class="ui-hint">${ui.esc(hint[c])}</p>${code(`mcpSnip-${c}`, s[c], i ? null : tours, 'snippet')}

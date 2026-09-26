@@ -4,7 +4,7 @@
 //! half only: a client POSTs `initialize`, `tools/list`, `tools/call`, and
 //! reads one JSON response. No SSE stream is opened, because nothing here
 //! pushes; every answer is the answer to a call. That is enough for Claude
-//! Desktop, Claude Code, Codex, Cursor and any agent runtime that speaks MCP.
+//! Desktop, Claude Code, Codex, Gemini CLI, Cursor and any agent runtime that speaks MCP.
 //!
 //! **Authority is a key, exchanged at this door, and the key decides the role.**
 //! An owner's key (`dowiz_…`, the console's API keys) becomes a five-minute
