@@ -65,16 +65,11 @@ function renderLogin(err){
   const submit = async () => {
     const b = $('#go'); ui.setBusy(b, t('signingIn'));
     try {
-      const creds = JSON.stringify({ email: $('#e').value.trim(), password: $('#p').value });
-      const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: creds });
-      const d = await r.json();
-      if (r.ok && d.user?.locationId) { store.t = d.access_token; store.r = d.refresh_token; store.loc = d.user.locationId; return boot(); }
-      // THE SAME HUB FOR THE KITCHEN (operator Q3/Q8): a person who is staff
-      // here signs in with the same email and password and gets their role's tabs.
-      const sr = await fetch('/api/staff/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: creds });
-      const sd = await sr.json().catch(() => ({}));
-      if (!sr.ok) throw new Error(d.error || d.message || sd.error || 'HTTP ' + r.status);
-      store.t = sd.jwt; store.r = null; store.loc = sd.staff.locationId;
+      // THE SAME HUB FOR THE KITCHEN (operator Q3/Q8): the owner's door, then
+      // the staff door, and the hub's own words on a refusal (`signin.js`).
+      const { signIn } = await import('/admin/signin.js');
+      const s = await signIn(fetch.bind(window), $('#e').value.trim(), $('#p').value);
+      store.t = s.token; store.r = s.refresh; store.loc = s.loc;
       boot();
     } catch (e) { renderLogin(String(e.message || e)); }
   };

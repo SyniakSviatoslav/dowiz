@@ -7,6 +7,7 @@
 // action names an intent and the hub's FSM answers.
 
 import * as Money from '/lib/money.js';
+import { bodyOf } from '/lib/body.js';
 import { safeGet, safeSet } from '/store/storage.js';
 import { t, lang, LANGS, setLang, retranslate, intlLocale } from '/admin/i18n.js';
 import * as ui from '/lib/ui/index.js';
@@ -82,7 +83,7 @@ export async function api(path, opts = {}, retried = false){
     // The hub's refusal, with the machine-readable `code` when it sends one,
     // so a screen can say it in the reader's language.
     let msg = 'HTTP ' + r.status, code = null;
-    try { const d = await r.json(); msg = d.error || d.message || msg; code = d.code || null; } catch {}
+    try { const d = await bodyOf(r); msg = d.error || d.message || msg; code = d.code || null; } catch {}
     const err = new Error(msg); err.status = r.status; if (code) err.code = code;
     throw err;
   }

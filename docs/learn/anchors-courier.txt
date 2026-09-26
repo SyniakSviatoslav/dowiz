@@ -8,7 +8,7 @@
 # Every id is a LITERAL string in its file (never built from parts), so grep
 # finds it. courier/learn.test.mjs fails when a listed id or its line moves, or
 # when the tree gains an id this list does not carry; it prints which one.
-help.open workers/api/public/courier/app.js:1090
+help.open workers/api/public/courier/app.js:1094
 hud.shift workers/api/public/courier/index.html:49
 hud.gps workers/api/public/courier/index.html:51
 hud.outbox workers/api/public/courier/index.html:57
