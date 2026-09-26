@@ -50,7 +50,9 @@ fn a_served_quantity_must_be_a_quantity() {
     for q in [0, -3] {
         assert!(matches!(led.decide(&served("x", q, "o")), Err(StockError::NotPositive { .. })));
     }
-    let deep = StockLedger::fold(&[served("x", i64::MAX, "o")]).unwrap();
+    // Counted, so the shelf moves; an uncounted item's never does.
+    let count = StockEvent::Stocktake { item: "x".into(), observed: 0, stocktake_id: "st".into(), by: "m".into() };
+    let deep = StockLedger::fold(&[count, served("x", i64::MAX, "o")]).unwrap();
     assert!(matches!(deep.decide(&served("x", 2, "o")), Err(StockError::Overflow)));
     assert!(led.decide(&served("x", 1, "o")).is_ok());
 }

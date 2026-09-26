@@ -64,10 +64,10 @@ fn the_choice_is_signed_and_a_quantity() {
 fn the_lines_and_the_marker_come_from_the_log() {
     let mut log = cooked_and_back();
     log.append_all(&[
+        StockEvent::Received { item: "nori".into(), qty: 1 },
         StockEvent::Reserved { item: "nori".into(), qty: 2, order_id: "o1".into() },
-        StockEvent::Received { item: "nori".into(), qty: 10 },
     ])
-    .unwrap_err(); // reserve before stock: refused, nothing written
+    .unwrap_err(); // reserve beyond a counted shelf: refused, nothing written
     log.append(&StockEvent::Received { item: "nori".into(), qty: 10 }).unwrap();
     log.append(&StockEvent::Reserved { item: "nori".into(), qty: 2, order_id: "o1".into() }).unwrap();
     log.append(&StockEvent::Consumed { item: "nori".into(), qty: 2, order_id: "o1".into() }).unwrap();

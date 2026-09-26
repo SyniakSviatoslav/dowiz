@@ -78,7 +78,10 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
                 "reserved": level.reserved,
                 "available": level.available(),
                 "lowAt": low_at,
-                "low": low_at > 0 && level.available() <= low_at,
+                // Never received or counted: its zero is unknown, not empty,
+                // and it neither refuses orders nor raises a low alarm.
+                "counted": led.is_counted(&id),
+                "low": led.is_counted(&id) && low_at > 0 && level.available() <= low_at,
             }))
         })
         .collect();
