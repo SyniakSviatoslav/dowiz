@@ -395,9 +395,7 @@ pub async fn orders(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         .collect();
     // The time that is left on each live order, from where it is and where
     // the courier is, with one read of the map for the whole queue.
-    if let Ok(loaded) = crate::hubstore::load_catalog(&place).await {
-        crate::live_eta::attach_all(&place, &loaded, &mut out, ctx.data.now_ms).await;
-    }
+    crate::live_eta::attach_all(&place, &mut out, ctx.data.now_ms).await;
     // The generation travels with the list so a client can ask for changes
     // after it next time -- and it is the generation THIS list was folded
     // from, read off the same response, never asked for afterwards.

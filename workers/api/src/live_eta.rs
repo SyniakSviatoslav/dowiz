@@ -306,16 +306,39 @@ pub fn estimate(
     }))
 }
 
+/// The product ids an estimate will look up: lines of LIVE orders that did not
+/// carry their own `cookingMin`. R2: the object answers these and the venue's
+/// record (`/fold/products`), never the catalogue image they sit in.
+pub fn products_needed<'a>(orders: impl IntoIterator<Item = &'a Value>) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    for o in orders {
+        if crate::services::orders::status::is_terminal(o.get("status").and_then(Value::as_str).unwrap_or("")) {
+            continue;
+        }
+        for it in o.get("items").and_then(Value::as_array).into_iter().flatten() {
+            if it.get("cookingMin").and_then(Value::as_u64).is_some() {
+                continue;
+            }
+            if let Some(id) = it.get("product_id").and_then(Value::as_str) {
+                if !ids.iter().any(|x| x == id) {
+                    ids.push(id.to_string());
+                }
+            }
+        }
+    }
+    ids
+}
+
+/// A product's cooking time, from the products the object answered.
+pub fn cooking_in(products: &std::collections::HashMap<String, Value>, id: &str) -> Option<u16> {
+    products.get(id).and_then(|p| p.get("cookingMin")).and_then(Value::as_u64).map(|n| n as u16)
+}
+
 /// Attach a live estimate to every order in `orders`, in place, with one
-/// read of the map. Orders that are over get none.
-pub async fn attach_all(
-    place: &crate::hubstore::Place,
-    loaded: &crate::hubstore::LoadedCatalog,
-    orders: &mut [Value],
-    now_ms: i64,
-) {
-    let Some(loc_json) = loaded.catalog.location() else { return };
-    let loc: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
+/// read of the map and one of the object. Orders that are over get none.
+pub async fn attach_all(place: &crate::hubstore::Place, orders: &mut [Value], now_ms: i64) {
+    let ids = products_needed(orders.iter());
+    let Ok((Some(loc), products)) = crate::fold::menu_edge::products(place, &ids).await else { return };
     let k = crate::eta::profile_of(&loc);
     let busy: Vec<String> = orders
         .iter()
@@ -323,14 +346,7 @@ pub async fn attach_all(
         .filter_map(|o| o.get("courier_id").and_then(Value::as_str).map(String::from))
         .collect();
     let fixes = fixes_at(place, &place.venue, now_ms, !busy.is_empty()).await;
-    let cooking = |id: &str| -> Option<u16> {
-        loaded
-            .catalog
-            .product(id)
-            .and_then(|pj| serde_json::from_str::<Value>(&pj).ok())
-            .and_then(|p| p.get("cookingMin").and_then(Value::as_u64))
-            .map(|n| n as u16)
-    };
+    let cooking = |id: &str| cooking_in(&products, id);
     for o in orders.iter_mut() {
         if let Some(e) = estimate(o, &loc, &k, &cooking, &fixes, &busy, now_ms) { o["eta"] = e; }
     }
@@ -342,13 +358,12 @@ pub async fn attach_one(
     order: &mut Value,
     now_ms: i64,
 ) {
-    let Ok(loaded) = crate::hubstore::load_catalog(place).await else { return };
+    // The venue's record and this order's products, folded in the object
+    // (R2) -- not the catalogue image.
+    let Ok((Some(loc), products)) = crate::fold::menu_edge::products(place, &products_needed([&*order])).await else { return };
     // Whether a courier is busy is read from the venue's other live orders --
     // from the object's PROJECTION, which is a folded list of orders rather
-    // than the log. This function used to load and fold the whole venue
-    // history, on top of the load the caller had already done to find this
-    // order; then it shared the caller's image; now neither of them reads an
-    // image at all.
+    // than the log.
     let Ok(others) = crate::hubstore::orders(place).await else { return };
     let busy: Vec<String> = others
         .into_iter()
@@ -356,18 +371,9 @@ pub async fn attach_one(
         .filter(|o| o.get("status").and_then(Value::as_str) == Some("IN_DELIVERY"))
         .filter_map(|o| o.get("courier_id").and_then(Value::as_str).map(String::from))
         .collect();
-    let Some(loc_json) = loaded.catalog.location() else { return };
-    let loc: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
     let k = crate::eta::profile_of(&loc);
     let fixes = fixes_at(place, &place.venue, now_ms, !busy.is_empty()).await;
-    let cooking = |id: &str| -> Option<u16> {
-        loaded
-            .catalog
-            .product(id)
-            .and_then(|pj| serde_json::from_str::<Value>(&pj).ok())
-            .and_then(|p| p.get("cookingMin").and_then(Value::as_u64))
-            .map(|n| n as u16)
-    };
+    let cooking = |id: &str| cooking_in(&products, id);
     if let Some(mut e) = estimate(order, &loc, &k, &cooking, &fixes, &busy, now_ms) {
         // THE CUSTOMER SEES THE COURIER ONLY WHILE THE COURIER CARRIES THEIR
         // ORDER. Before pickup the fix is a person's whereabouts on someone
@@ -390,3 +396,6 @@ pub fn stamp(order: &mut Value, status: &str, now_ms: i64) {
     }
     order["at"][status] = json!(now_ms);
 }
+
+#[cfg(test)]
+mod tests;

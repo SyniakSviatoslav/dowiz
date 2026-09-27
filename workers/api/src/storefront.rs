@@ -7,7 +7,7 @@
 //! nothing -- which is the same guarantee `place_order_priced` gives natively,
 //! reached through the JSON boundary.
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
@@ -139,38 +139,8 @@ pub struct PlaceIn {
     pub table_link: Option<String>,
 }
 
-#[derive(Serialize)]
-struct LocationOut {
-    id: String,
-    name: String,
-    slug: String,
-    phone: String,
-    address: Option<String>,
-    status: String,
-    #[serde(rename = "closesAt")]
-    closes_at: Option<String>,
-    #[serde(rename = "deliveryEta")]
-    delivery_eta: String,
-    #[serde(rename = "deliveryFee")]
-    delivery_fee: i64,
-    #[serde(rename = "freeDeliveryThreshold")]
-    free_delivery_threshold: Option<i64>,
-    #[serde(rename = "minOrder")]
-    min_order: i64,
-    #[serde(rename = "currencyCode")]
-    currency_code: String,
-    #[serde(rename = "menuVersion")]
-    menu_version: i64,
-    #[serde(rename = "supportedLocales")]
-    supported_locales: Value,
-    #[serde(rename = "defaultLocale")]
-    default_locale: String,
-    /// The venue's IANA zone, so a client that renders a local time renders the
-    /// venue's and not the phone's. Also what the owner console's hours sheet
-    /// shows, because a weekly schedule without its zone is a schedule in an
-    /// unstated timezone -- which is the defect this field exists to end.
-    tz: String,
-}
+// `LocationOut` WAS HERE: the menu's `location` block is rendered in the
+// venue's object now (`fold::menu_venue`, R2).
 
 #[derive(Deserialize)]
 pub(crate) struct LocRow {
@@ -178,18 +148,18 @@ pub(crate) struct LocRow {
     pub(crate) name: String,
     pub(crate) slug: String,
     pub(crate) phone: String,
-    address: Option<String>,
+    pub(crate) address: Option<String>,
     pub(crate) status: String,
-    closes_at: Option<String>,
-    delivery_eta: String,
-    delivery_fee: i64,
-    free_delivery_threshold: Option<i64>,
-    min_order: i64,
-    currency_code: String,
-    menu_version: i64,
-    supported_locales: String,
-    default_locale: String,
-    delivery_paused: i64,
+    pub(crate) closes_at: Option<String>,
+    pub(crate) delivery_eta: String,
+    pub(crate) delivery_fee: i64,
+    pub(crate) free_delivery_threshold: Option<i64>,
+    pub(crate) min_order: i64,
+    pub(crate) currency_code: String,
+    pub(crate) menu_version: i64,
+    pub(crate) supported_locales: String,
+    pub(crate) default_locale: String,
+    pub(crate) delivery_paused: i64,
 }
 
 
@@ -225,389 +195,25 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
     }
     // The slug is not the id — see `Place::of_slug`.
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    let loaded = crate::hubstore::load_catalog(&place).await?;
-
-    let Some(loc_json) = loaded.catalog.location() else {
-        return Response::error("not found", 404);
+    // ── THE MENU IS FOLDED WHERE THE CATALOGUE IS (R2) ──
+    //
+    // This handler used to pull the whole catalogue image (~0.5 MB at 165
+    // dishes), the settings and -- on another language -- the translations
+    // across the hop, parse all of it and render the menu, per request the
+    // edge cache missed: the Free plan's 10 ms kills clustered exactly here.
+    // The venue's object now renders it once per generation of those three
+    // images (`fold::menu`, `hubdo/menu.rs`) and answers bytes, which this
+    // passes through unparsed. Only the clock is sent: whether the venue is
+    // open is decided per request, as it always was, from `now_ms`.
+    //
+    // `?locale=` is passed on as given; absent, the venue's own language.
+    let locale = req.url()?.query_pairs().find(|(k, _)| k == "locale").map(|(_, v)| v.to_string());
+    let body = match crate::fold::menu_edge::menu_body(&place, &slug, locale.as_deref(), fresh, ctx.data.now_ms).await? {
+        Ok(body) => body,
+        Err(_) => return Response::error("not found", 404),
     };
-    let loc: LocRow = serde_json::from_str(&loc_json)
-        .map_err(|e| Error::RustError(format!("catalogue location unreadable: {e}")))?;
-    if loc.slug != slug {
-        return Response::error("not found", 404);
-    }
-
-    // The same record, untyped, for the fields that arrived after `LocRow` was
-    // written. Growing the struct for each one means a venue saved by an older
-    // hub fails to deserialise entirely; reading them off the Value means a
-    // missing field is a missing field.
-    let raw: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
-
-    // ── THE STATUS IS DERIVED, not read ──
-    //
-    // A paused venue is closed however its flag reads: the owner needs a way to
-    // stop the queue without rewriting opening hours. And a SCHEDULE can only
-    // ever close -- never open -- which is what lets the activation gate live on
-    // the manual flag alone.
-    let sched = raw
-        .get("hours")
-        .map(|h| dowiz_hub::hours::from_json(&h.to_string()))
-        .unwrap_or_default();
-    // THE OFFSET IS NOT A CONSTANT, which is what this used to assume: the line
-    // here read "Durrës is UTC+2" and defaulted to 120 minutes all year.
-    // Europe/Tirane is UTC+1 in winter, so from 25 October 2026 a venue whose
-    // kitchen closes at 23:00 would have been reported closed from 22:00 -- and
-    // one opening at 09:00 would have taken orders from 08:00.
-    //
-    // A Worker still needs no timezone database. It needs a NAME and the EU
-    // rule, both of which are arithmetic in `dowiz_hub::tz`, and the name is
-    // already on the record this handler has in hand -- no extra read.
-    let zone = crate::hubstore::zone_of(Some(&raw));
-    let now_ms = ctx.data.now_ms;
-    let (weekday, minute) = dowiz_hub::tz::local_weekday_minute(zone, now_ms);
-    let scheduled_open = sched.is_empty() || sched.is_open_at(weekday, minute);
-    let next_open = sched.next_open(weekday, minute);
-    let paused = loc.delivery_paused == 1;
-    let status = if paused || loc.status == "closed" || !scheduled_open {
-        "closed".to_string()
-    } else {
-        loc.status.clone()
-    };
-
-    // Category order comes from the catalogue, and products are grouped into it.
-    // Keys are sorted by the KV layout, so the order is stable across reads
-    // rather than incidentally whatever the store returned.
-    let mut cat_meta: Vec<(String, String, i64)> = loaded
-        .catalog
-        .categories()
-        .into_iter()
-        .filter_map(|(id, j)| {
-            let v: Value = serde_json::from_str(&j).ok()?;
-            Some((
-                id,
-                v.get("name").and_then(|x| x.as_str()).unwrap_or("—").to_string(),
-                v.get("sortOrder").and_then(|x| x.as_i64()).unwrap_or(0),
-            ))
-        })
-        .collect();
-    cat_meta.sort_by_key(|(_, _, sort)| *sort);
-
-    let products: Vec<(String, Value)> = loaded
-        .catalog
-        .products()
-        .into_iter()
-        .filter_map(|(id, j)| serde_json::from_str::<Value>(&j).ok().map(|v| (id, v)))
-        .collect();
-
-    // ── THE MENU IS SERVED IN THE LANGUAGE THAT WAS ASKED FOR ──
-    //
-    // `?locale=` was accepted by the route and then IGNORED: the chrome around
-    // the menu translated on every surface while the dishes stayed in the
-    // venue's own language, which is what a customer reads as "the translation
-    // does not work". `content_i18n` has held the translated strings since the
-    // first catalogue migration and NOTHING HAS EVER READ IT -- the table was
-    // created, documented, and never joined.
-    //
-    // Only a locale that DIFFERS from the venue's own costs a query, and a
-    // missing translation falls back to the venue's string rather than to an
-    // empty one: a dish with no Ukrainian name must still have a name.
-    let want_locale = req
-        .url()?
-        .query_pairs()
-        .find(|(k, _)| k == "locale")
-        .map(|(_, v)| v.to_string())
-        .unwrap_or_else(|| loc.default_locale.clone());
-
-    // `(rank, text)`: rank 0 is the language asked for, rank 1 its fallback.
-    let mut i18n: std::collections::HashMap<(String, String), (u8, String)> =
-        std::collections::HashMap::new();
-    // A customer missing a Russian name reads the English one (`ru -> en ->
-    // venue`). The console's `fresh` read does NOT: it fills the dish sheet's
-    // translation fields from this answer, and an English name shown in the
-    // RU field would be saved back as the Russian translation.
-    let second = if fresh { None } else { dowiz_hub::lang::content_fallback(&want_locale, &loc.default_locale) };
-    // What could not be translated and why. A failure here must not take the
-    // menu down -- the venue's own words are still a menu -- but it must not
-    // look like "no translations exist" either, which is exactly how 146
-    // stored rows were served as Albanian for a day.
-    let mut warnings: Vec<String> = Vec::new();
-    if want_locale != loc.default_locale && !want_locale.is_empty() {
-        // ONE PREFIX SCAN, AND NO IDS AT ALL.
-        //
-        // This was a chunked `WHERE entity_id IN (...)` against `content_i18n`,
-        // and it carried two defects that were both the table's shape:
-        //   * D1 refuses more than 100 bound values and a 165-dish catalogue
-        //     plus its headings is 186 of them, so the ids had to be chunked --
-        //     and before that was noticed, 187 ids in one statement failed
-        //     SILENTLY and a venue served Albanian for a day.
-        //   * `content_i18n` HAD NO VENUE COLUMN. Every row of every venue
-        //     shared one table, keyed by an entity id and nothing else.
-        //
-        // In the venue's own image both stop existing. The image IS the venue,
-        // so there is no venue to filter on; and the key carries the locale, so
-        // the whole language is one sorted range. What is read is whatever the
-        // catalogue actually has, which is also why the ids are no longer built
-        // and passed at all.
-        match crate::hubstore::load_table(
-            &place,
-            crate::hubstore::IMAGE_I18N,
-            crate::hubstore::I18N_BYTES,
-        )
-        .await
-        {
-            Ok(l) => {
-                for (key, value) in l.table.all(crate::hubstore::I18N_KIND) {
-                    i18n_keep(&mut i18n, &key, value, &want_locale, second);
-                }
-            }
-            // A failure here must not take the menu down -- the venue's own
-            // words are still a menu -- but it must not look like "no
-            // translations exist" either, which is exactly how 146 stored rows
-            // were served as Albanian for a day.
-            Err(e) => {
-                console_error!("menu i18n {want_locale}: {e}");
-                warnings.push(format!("translations unavailable: {e}"));
-            }
-        }
-        // THE MIGRATION FALLBACK HAS BEEN DELETED. The old D1 migration table
-        // is no longer accessible. Empty translations mean the storefront uses
-        // the default locale for all dishes. The migration to the new system
-        // should be complete; if not, the venue must re-enter translations.
-    }
-    let translated = |id: &str, field: &str, fallback: Value| -> Value {
-        match i18n.get(&(id.to_string(), field.to_string())) {
-            Some((_, v)) => json!(v),
-            None => fallback,
-        }
-    };
-    // A list field: the stored value is a JSON array of strings. One that does
-    // not parse as such falls back to the venue's own list rather than to a
-    // one-element list holding the raw text.
-    let translated_list = |id: &str, field: &str, fallback: Value| -> Value {
-        match i18n
-            .get(&(id.to_string(), field.to_string()))
-            .and_then(|(_, v)| serde_json::from_str::<Value>(v).ok())
-        {
-            Some(Value::Array(a)) if a.iter().all(|x| x.is_string()) => Value::Array(a),
-            _ => fallback,
-        }
-    };
-
-    let mut cats: Vec<Value> = Vec::new();
-    for (cid, cname, csort) in &cat_meta {
-        let mut items: Vec<(i64, Value)> = products
-            .iter()
-            .filter(|(_, p)| p.get("categoryId").and_then(|x| x.as_str()) == Some(cid.as_str()))
-            .map(|(id, p)| {
-                (
-                    p.get("sortOrder").and_then(|x| x.as_i64()).unwrap_or(0),
-                    json!({
-                        "id": id,
-                        "name": translated(id, "name",
-                            p.get("name").cloned().unwrap_or(json!(""))),
-                        "description": translated(id, "description",
-                            p.get("description").cloned().unwrap_or(Value::Null)),
-                        "price": p.get("price").cloned().unwrap_or(json!(0)),
-                        "available": p.get("available").and_then(|x| x.as_bool()).unwrap_or(true),
-                        "unavailableNote": p.get("unavailableNote").cloned().unwrap_or(Value::Null),
-                        "imageUrl": p.get("imageUrl").cloned().unwrap_or(Value::Null),
-                        // The grid's card, when the venue has uploaded one.
-                        // `menu.js` turns the pair into a `srcset`, so a phone
-                        // fetches about a tenth of the bytes for the same
-                        // picture; absent, the full photograph is used exactly
-                        // as before.
-                        "imageUrlSmall": p.get("imageUrlSmall").cloned().unwrap_or(Value::Null),
-                        // ── the four fields the storefront reads and this
-                        // payload did not send ──
-                        //
-                        // Their absence was not cosmetic. `allergens` missing
-                        // means every dish renders as "not declared" -- the
-                        // loudest state -- even for one the venue declared
-                        // clear. `modifierGroups` missing means a dish with
-                        // choices is sold without them. `sizeCm` missing means
-                        // the AR button never appears.
-                        //
-                        // `allergens` is passed through as STORED, including
-                        // its absence: null and [] are different claims and
-                        // flattening them here would undo the whole design.
-                        "allergens": p.get("allergens").cloned().unwrap_or(Value::Null),
-                        "modifierGroups": p.get("modifierGroups").cloned().unwrap_or(Value::Null),
-                        "sizeCm": p.get("sizeCm").cloned().unwrap_or(Value::Null),
-                        // What the VENUE says this dish takes. Null means it
-                        // has not said — which the estimate treats as the
-                        // venue's default, never as instant.
-                        "cookingMin": p.get("cookingMin").cloned().unwrap_or(Value::Null),
-                        // ── What is in the dish ──
-                        //
-                        // The three questions a price cannot answer: what is in
-                        // it, how much of it there is, what it does to the day.
-                        // Every one of them is passed through AS STORED, null
-                        // included: a dish whose protein the venue never
-                        // declared must reach the screen as "not declared", and
-                        // a zero here would reach it as "0 g" instead — the
-                        // same distinction `allergens` is careful about, for
-                        // the same reason.
-                        // WHAT THE DISH IS, as the venue files it: salmon, tuna,
-                        // vegetarian, hot. The customer's filter is built from
-                        // these, so a venue that has declared none gets no
-                        // filter rather than an empty one.
-                        "tags": p.get("tags").cloned().unwrap_or(Value::Null),
-                        "ingredients": translated_list(id, "ingredients",
-                            p.get("ingredients").cloned().unwrap_or(Value::Null)),
-                        "weightG": p.get("weightG").cloned().unwrap_or(Value::Null),
-                        "nutrition": p.get("nutrition").cloned().unwrap_or(Value::Null),
-                        "nutritionDerived": p.get("nutritionDerived").cloned().unwrap_or(Value::Null),
-                        "taste": p.get("taste").cloned().unwrap_or(Value::Null),
-                        // Where it is made (`bell_route`); the console's dish form reads it here.
-                        "station": p.get("station").cloned().unwrap_or(Value::Null),
-                        "calories": p.get("calories").cloned().unwrap_or(Value::Null),
-                        "sortOrder": p.get("sortOrder").cloned().unwrap_or(json!(0))
-                    }),
-                )
-            })
-            .collect();
-        items.sort_by_key(|(sort, _)| *sort);
-        if items.is_empty() {
-            continue;
-        }
-        cats.push(json!({
-            // A category is a heading the customer reads, so it is translated
-            // on exactly the same terms as the dishes under it.
-            "id": cid, "name": translated(cid, "name", json!(cname)), "sortOrder": csort,
-            "products": items.into_iter().map(|(_, p)| p).collect::<Vec<_>>()
-        }));
-    }
-
-    let mut location = serde_json::to_value(LocationOut {
-        id: loc.id,
-        name: loc.name,
-        slug: loc.slug,
-        phone: loc.phone,
-        address: loc.address,
-        status,
-        closes_at: loc.closes_at,
-        delivery_eta: loc.delivery_eta,
-        delivery_fee: loc.delivery_fee,
-        free_delivery_threshold: loc.free_delivery_threshold,
-        min_order: loc.min_order,
-        currency_code: loc.currency_code,
-        menu_version: loc.menu_version,
-        supported_locales: serde_json::from_str(&loc.supported_locales)
-            .unwrap_or_else(|_| json!(["sq"])),
-        default_locale: loc.default_locale,
-        // The name the venue is configured with, or the default this build
-        // applies when it has none -- never an empty string, because a client
-        // reading "" would have to invent a fallback and would invent a
-        // different one from the server's.
-        tz: raw
-            .get("tz")
-            .and_then(Value::as_str)
-            .filter(|n| dowiz_hub::tz::zone(n).is_some())
-            .unwrap_or(dowiz_hub::tz::DEFAULT_NAME)
-            .to_string(),
-    })
-    .unwrap_or(json!({}));
-
-    // ── the fields the storefront reads and this payload did not send ──
-    //
-    // Each absence had a visible consequence. No `theme` meant the venue's own
-    // colours never reached its own storefront -- the branding editor wrote to a
-    // field nothing read. No `pickup` meant the collection choice could not be
-    // offered even where the hub accepted it. No `nextOpen` meant a closed venue
-    // said "closed" instead of "opens at eleven", and a customer told only that
-    // a place is shut goes somewhere else.
-    location["theme"] = raw.get("theme").cloned().unwrap_or(Value::Null);
-    // The venue's own mark, for the same reason its own colours are here: a
-    // storefront that carries the platform's name and not the venue's is a
-    // storefront the customer does not recognise as the place they are
-    // ordering from.
-    location["logoUrl"] = raw.get("logo_url").cloned().unwrap_or(Value::Null);
-    // What the venue puts around its mark (seal, motif, two supporting
-    // colours), validated on the way in by `owner::clean_stage`.
-    location["stage"] = raw.get("stage").cloned().unwrap_or(Value::Null);
-    // Where the venue is, and what its Google listing says. Both are the
-    // venue's own material about itself; the storefront draws a map from the
-    // first and attributes the second to where it came from.
-    location["lat"] = raw.get("lat").cloned().unwrap_or(Value::Null);
-    location["lng"] = raw.get("lng").cloned().unwrap_or(Value::Null);
-    location["google"] = raw.get("google").cloned().unwrap_or(Value::Null);
-    // The WEEK, not just today. `status` and `nextOpen` answer "can I order
-    // now"; a customer deciding whether to come on Sunday needs the table, and
-    // the schedule has never left the Worker.
-    location["hours"] = raw.get("hours").cloned().unwrap_or(Value::Null);
-    location["pickup"] = json!(raw.get("pickup").and_then(Value::as_bool).unwrap_or(false));
-    location["hasDeliveryZones"] = json!(crate::services::venue::activation::has_delivery_zones(&raw));
-    location["deliveryZones"] = crate::services::venue::activation::delivery_zones(&raw);
-    location["nextOpen"] = next_open
-        .map(|(d, m)| json!({ "weekday": d, "minute": m }))
-        .unwrap_or(Value::Null);
-    // The owner's OWN switches, for the console: `status` above is what a
-    // customer sees (closed outside hours or when paused), not what was set.
-    location["ownerStatus"] = json!(loc.status);
-    location["deliveryPaused"] = json!(paused);
-    // Which KIND of closed, so the storefront can say which.
-    location["closedReason"] = if paused {
-        json!("paused")
-    } else if loc.status == "closed" {
-        json!("manual")
-    } else if !scheduled_open {
-        json!("hours")
-    } else {
-        Value::Null
-    };
-    // WHICH FEATURES THIS VENUE HAS ON. Sent with the menu rather than fetched
-    // separately: a control that appears a moment after the page does is worse
-    // than one that was never there, and a second request to decide what to
-    // render is a second chance to render the wrong thing.
-    let settings = crate::hubstore::load_settings(&place).await?.settings;
-    let mut features = serde_json::Map::new();
-    for (f, on) in dowiz_hub::features::all(&settings) {
-        if f.surface != "storefront" {
-            continue;
-        }
-        // The prefix is an internal namespace; the client asks for `tips`, not
-        // `feature.tips`.
-        features.insert(f.key.trim_start_matches("feature.").to_string(), json!(on));
-    }
-    location["features"] = Value::Object(features);
-
-    location["telegramBot"] = ctx
-        .env
-        .secret("TELEGRAM_BOT_USERNAME")
-        .map(|v| Value::from(v.to_string()))
-        .unwrap_or(Value::Null);
-    // ── HOW THIS VENUE CAN BE PAID ──
-    //
-    // One block, decided here, so the storefront never offers a rail that
-    // cannot complete. Cash is always on. Card, Apple Pay and Google Pay are
-    // all the Stripe rail -- the wallets are the Payment Element's own tabs --
-    // and exist exactly when the publishable key does. Crypto is the venue's
-    // own wallets, declared by the owner (`payments.crypto` on the venue
-    // record): a network, a symbol and an address each, and nothing is
-    // invented for a venue that declared none.
-    let stripe_on = ctx.env.secret("STRIPE_PUBLISHABLE_KEY").is_ok();
-    let crypto = payment_wallets(&raw);
-    location["payments"] = json!({
-        "cash": true,
-        "card": stripe_on,
-        "applePay": stripe_on,
-        "googlePay": stripe_on,
-        "crypto": crypto,
-    });
-
-    let out = json!({
-        "location": location,
-        "categories": cats,
-        // Empty when everything the menu needed was read. Anything here is a
-        // degraded answer and says so, rather than a full one that is wrong.
-        "warnings": warnings,
-        // The PUBLISHABLE key only. It is designed to be public -- it can create
-        // a payment method and nothing else -- and the browser needs it to mount
-        // the Payment Element. Absent when the card rail is off, so the storefront
-        // can hide the option rather than offer one that cannot complete.
-        "stripePublishableKey": ctx.env.secret("STRIPE_PUBLISHABLE_KEY")
-            .map(|v| Value::from(v.to_string())).unwrap_or(Value::Null)
-    });
-    let mut res = Response::from_json(&out)?;
+    let mut res = Response::ok(body)?;
+    res.headers_mut().set("content-type", "application/json")?;
     // The menu is public and changes rarely; the version field is what a client
     // uses to notice it moved. A `fresh` read is the console reading back its
     // own save: see `menu_cache_control`.
@@ -686,11 +292,11 @@ pub async fn manifest(req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
         return Response::error("not found", 404);
     };
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    let loaded = crate::hubstore::load_catalog(&place).await?;
-    let Some(loc_json) = loaded.catalog.location() else {
+    // The venue's record alone (`/fold/venue`): a manifest needs a name, a
+    // paper and a logo, not the catalogue image they sit in (R2).
+    let Some(raw) = crate::hubstore::venue_record(&place).await? else {
         return Response::error("not found", 404);
     };
-    let raw: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
     let name = raw.get("name").and_then(Value::as_str).unwrap_or("dowiz");
     let paper = raw
         .pointer("/theme/paper")
@@ -732,7 +338,7 @@ const MANIFEST_SHORT_NAME_CHARS: usize = 12;
 /// `want` (rank 0) always wins, one in `second` (rank 1) only fills a gap.
 /// The table walks its keys sorted, so "en/" comes before "ru/" and the rank,
 /// not the order, decides.
-fn i18n_keep(
+pub(crate) fn i18n_keep(
     map: &mut std::collections::HashMap<(String, String), (u8, String)>,
     key: &str,
     value: String,

@@ -88,7 +88,7 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     let rebuilt = match crate::rebuild::ask(&place).await {
         Ok(r) => json!({
             "intact": r.intact(), "orders": r.orders, "stale": r.stale,
-            "stranded": r.stranded, "unheld": r.unheld, "modelled": r.modelled,
+            "stranded": r.stranded, "unheld": r.unheld, "modelled": r.modelled, "archived": r.archived,
         }),
         Err(e) => json!({ "intact": false, "error": e.to_string() }),
     };

@@ -38,10 +38,25 @@ pub struct Report {
     /// Orders the LOG says are live and unprepared, for which the ledger holds
     /// nothing. Usually a venue that models no recipes — see `modelled`.
     pub unheld: Vec<String>,
+    /// The `stranded` orders an ARCHIVE holds (R5): rotation moved their
+    /// history to `log@<gen>` while the ledger kept their reservation, so no
+    /// hot screen will ever settle them. Named apart from the orders no log
+    /// has heard of, because the two have different causes. Empty when the
+    /// venue has no archives or nothing is stranded.
+    #[serde(default)]
+    pub archived: Vec<Archived>,
     /// Does this venue model ingredients at all? When false, `unheld` is the
     /// expected state and means nothing; reporting the count without this
     /// would make every venue without recipes look broken.
     pub modelled: bool,
+}
+
+/// One stranded order, found in an archive, with its status there.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Archived {
+    pub order: String,
+    pub archive: String,
+    pub status: String,
 }
 
 impl Report {
@@ -141,7 +156,7 @@ pub fn compare(
         unheld.sort();
     }
 
-    Report { orders: fresh.len(), stale, stranded, unheld, modelled }
+    Report { orders: fresh.len(), stale, stranded, unheld, archived: Vec::new(), modelled }
 }
 
 /// THE OBJECT'S REBUILD, minus its I/O: refold `hub` from the bytes with
@@ -166,6 +181,37 @@ pub fn of_log(
         None => fresh.clone(),
     };
     compare(&fresh, &memo, held, modelled)
+}
+
+/// R5: CROSS THE ARCHIVES' ORDERS AGAINST THE LEDGER'S OPEN RESERVATIONS.
+///
+/// `stranded` already names a held order the hot log does not know -- but it
+/// cannot say whether that order was ARCHIVED (finished, rotated out after 30
+/// days, its reservation leaked: `docs/research/2026-09-27-dag-architecture.md`
+/// §2, rows 3 and 8) or never existed. `archives` is each archive's id and its
+/// fold (`hubstore::orders_state` pairs); every stranded order an archive
+/// holds is named in `archived` with its status there. Nothing is removed from
+/// `stranded`: an archived order holding stock is exactly as stranded, and the
+/// gate's question (`intact`) does not change.
+pub fn cross_archives(report: &mut Report, archives: &[(String, Vec<(String, String)>)]) {
+    for id in &report.stranded {
+        let found = archives.iter().find_map(|(archive, pairs)| {
+            pairs.iter().find(|(o, _)| o == id).map(|(_, json)| (archive, json))
+        });
+        if let Some((archive, json)) = found {
+            let status = serde_json::from_str::<serde_json::Value>(json)
+                .ok()
+                .and_then(|v| v.get("status").and_then(|s| s.as_str()).map(str::to_string))
+                .unwrap_or_default();
+            report.archived.push(Archived { order: id.clone(), archive: archive.clone(), status });
+        }
+    }
+}
+
+/// Does this report need the archives read? Only when something is stranded
+/// that the hot log does not know: the common night reads no archive at all.
+pub fn needs_archives(report: &Report, hub: &dowiz_hub::Hub) -> bool {
+    report.stranded.iter().any(|id| hub.history(id).is_empty())
 }
 
 /// Ask the venue's object to refold and diff. READ-ONLY; see `hubdo::rebuild`

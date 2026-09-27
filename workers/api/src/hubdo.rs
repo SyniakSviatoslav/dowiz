@@ -72,6 +72,8 @@ mod exceptions; // the exception alert (P1-5), `hubdo/exceptions.rs`
 mod fiscal; // the fiscal document queued at placement (B6/B8), `hubdo/fiscal.rs`
 mod routed; // the groups' messages written in the turn (W0a/W0b), `hubdo/routed.rs`
 mod stock_turn; // a stock movement as one turn (W0a), `hubdo/stock_turn.rs`
+mod menu; // the catalogue projection's routes (R2), `hubdo/menu.rs`
+mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
 
 /// The catalogue image, which holds the venue's own record as well as its
 /// dishes. Named here because `/fold/venue` reads it and nothing else does.
@@ -205,6 +207,9 @@ pub struct HubImages {
     /// it. Keyed by generation so it cannot go stale: a generation that does
     /// not match is simply refolded.
     folded: RefCell<Option<crate::fold::projection::Orders>>,
+    /// The catalogue, translations and settings FOLDED into the storefront's
+    /// menu, per generation of the three (R2, `fold::menu`, `hubdo/menu.rs`).
+    menu: RefCell<Option<crate::fold::menu::Memo>>,
     /// The Worker's bindings, for the one route that calls OTHER objects:
     /// `/fold/cron`, answered only by a `cron~<venue>` runner (`crate::cron`).
     env: Env,
@@ -952,8 +957,14 @@ impl HubImages {
             }
             None => (Vec::new(), false),
         };
-        // The memo is borrowed only here, after the last await.
-        Ok(crate::rebuild::of_log(&hub, self.folded.borrow().as_ref(), meta.generation, &held, modelled))
+        // The memo is borrowed only here, before the archives' awaits.
+        let mut report = crate::rebuild::of_log(&hub, self.folded.borrow().as_ref(), meta.generation, &held, modelled);
+        // R5: a stranded order the hot log does not know is looked for in
+        // the archives (`hubdo/archives.rs`, `rebuild::cross_archives`).
+        if crate::rebuild::needs_archives(&report, &hub) {
+            crate::rebuild::cross_archives(&mut report, &self.archive_folds().await?);
+        }
+        Ok(report)
     }
 
     /// Queue the kitchen's message for every channel this venue has configured.
@@ -1081,6 +1092,12 @@ impl HubImages {
         }
         let next = current + 1;
         let store = self.state.storage();
+        // The menu memo is DROPPED BEFORE a write to what it was folded from,
+        // so a failed write cannot leave one standing over bytes it no longer
+        // describes (R2, `hubdo/menu.rs`).
+        if menu::MENU_INPUTS.contains(&id) {
+            *self.menu.borrow_mut() = None;
+        }
 
         let chunks = bytes.len().div_ceil(CHUNK).max(1);
         // ONLY THE CHUNKS THAT MOVED. The log is append-only: an append touches
@@ -1170,6 +1187,7 @@ impl DurableObject for HubImages {
             recent: RefCell::new(Vec::new()),
             positions: RefCell::new(HashMap::new()),
             folded: RefCell::new(None),
+            menu: RefCell::new(None),
             env,
         }
     }
@@ -1278,6 +1296,11 @@ impl DurableObject for HubImages {
                 // guard used to ask for the orders and throw them away, which
                 // on a venue with a thousand of them is a list built for a
                 // number.
+                // THE STOREFRONT'S MENU AND THE PRODUCTS AN ESTIMATE NEEDS,
+                // folded here once per catalogue generation and answered as
+                // bytes (R2, `hubdo/menu.rs`), instead of the catalogue image.
+                (Method::Get, "menu") => self.fold_menu(&req).await,
+                (Method::Get, "products") => self.fold_products(&req).await,
                 (Method::Get, "generation") => {
                     let generation =
                         self.image(LOG_IMAGE).await?.map(|(m, _)| m.generation).unwrap_or(0);

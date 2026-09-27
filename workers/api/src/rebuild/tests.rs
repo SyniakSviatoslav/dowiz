@@ -129,3 +129,72 @@ fn an_order_holding_several_ingredients_is_named_once() {
     let r = compare(&fresh, &fresh.clone(), &held, true);
     assert_eq!(r.stranded, vec!["o1"]);
 }
+
+// ── R5: THE ARCHIVES ARE CROSSED TOO ─────────────────────────────────────────
+
+fn hub_of(orders: &[(&str, &str)]) -> dowiz_hub::Hub {
+    let mut h = dowiz_hub::Hub::create_sized(64 * 1024).unwrap();
+    for (n, (id, st)) in orders.iter().enumerate() {
+        let o = json!({ "id": id, "order_id": id, "status": st }).to_string();
+        h.append(dowiz_hub::EventKind::Placed, id, &o, n as u64 + 1, [0u8; 32]).unwrap();
+    }
+    h
+}
+
+fn archive(id: &str, h: &dowiz_hub::Hub) -> (String, Vec<(String, String)>) {
+    (id.to_string(), crate::hubstore::orders_state(h).into_iter().map(|e| (e.order_id, e.order_json)).collect())
+}
+
+/// A shelf with rice on it and ONE NAMED CELL: `o_old`'s reservation, which
+/// nothing released -- the order finished, was rotated into `log@1790`, and
+/// its 200 g of rice stayed held. `released` writes the release the settle
+/// path should have written.
+fn shelf(released: bool) -> Vec<(String, String, i64)> {
+    use dowiz_hub::stock::{StockEvent, StockLog};
+    let mut s = StockLog::create_sized(64 * 1024).unwrap();
+    s.append(&StockEvent::Received { item: "rice".into(), qty: 1000 }).unwrap();
+    s.append(&StockEvent::Reserved { item: "rice".into(), qty: 200, order_id: "o_old".into() }).unwrap();
+    if released {
+        s.append(&StockEvent::Released { item: "rice".into(), qty: 200, order_id: "o_old".into() }).unwrap();
+    }
+    s.ledger().unwrap().stranded()
+}
+
+#[test]
+fn a_reservation_held_for_an_archived_order_is_named_with_its_archive() {
+    let hot = hub_of(&[("o_live", "PENDING")]);
+    let old = hub_of(&[("o_old", "DELIVERED")]);
+    let mut r = of_log(&hot, None, 1, &shelf(false), true);
+    assert_eq!(r.stranded, vec!["o_old"], "the hot log alone already says stranded");
+    assert!(needs_archives(&r, &hot), "and cannot say why: the archives must be read");
+    cross_archives(&mut r, &[archive("log@1700", &hub_of(&[])), archive("log@1790", &old)]);
+    assert_eq!(r.archived, vec![Archived { order: "o_old".into(), archive: "log@1790".into(), status: "DELIVERED".into() }]);
+    assert!(!r.intact(), "an archived order holding stock is still a breach");
+}
+
+#[test]
+fn a_released_reservation_reads_no_archive_and_names_nothing() {
+    let hot = hub_of(&[("o_live", "PENDING")]);
+    let mut r = of_log(&hot, None, 1, &shelf(true), true);
+    assert!(r.stranded.is_empty() && !needs_archives(&r, &hot), "{r:?}");
+    cross_archives(&mut r, &[archive("log@1790", &hub_of(&[("o_old", "DELIVERED")]))]);
+    assert!(r.archived.is_empty() && r.intact());
+}
+
+#[test]
+fn a_ghost_stays_stranded_but_is_not_called_archived() {
+    let hot = hub_of(&[("o_gone", "CANCELLED")]);
+    let holds = vec![held("o_gone"), held("ghost")];
+    let mut r = of_log(&hot, None, 1, &holds, true);
+    assert_eq!(r.stranded, vec!["ghost", "o_gone"]);
+    cross_archives(&mut r, &[archive("log@1790", &hub_of(&[("o_old", "DELIVERED")]))]);
+    assert!(r.archived.is_empty(), "no archive holds either");
+    let only_hot = of_log(&hot, None, 1, &[held("o_gone")], true);
+    assert!(!needs_archives(&only_hot, &hot), "stranded in the HOT log: its status is already known");
+}
+
+#[test]
+fn an_old_report_without_the_field_still_reads() {
+    let r: Report = serde_json::from_str(r#"{"orders":1,"stale":[],"stranded":[],"unheld":[],"modelled":false}"#).unwrap();
+    assert!(r.archived.is_empty() && r.intact());
+}
