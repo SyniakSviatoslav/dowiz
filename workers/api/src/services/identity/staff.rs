@@ -116,6 +116,53 @@ pub async fn staff_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
 }
 
 #[derive(Deserialize)]
+struct PasswordIn {
+    email: String,
+    old_password: String,
+    new_password: String,
+}
+
+/// `POST /api/staff/password` — a person changes their own password.
+///
+/// The old password is the credential, checked with the same work on a miss as
+/// on a hit, so this door is no easier to guess through than the login. Only
+/// the hash changes: the account, its memberships and its address stay put.
+pub async fn staff_password(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    let body: PasswordIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    if body.new_password.chars().count() < sr::MIN_PASSWORD_CHARS {
+        return Response::error("choose a password of at least 8 characters", 400);
+    }
+    let ident = ids::identity(&ctx.env).await?;
+    let email = body.email.trim().to_lowercase();
+    let user = ids::user_id_for_email(&ident, &email)
+        .and_then(|id| ids::rec(&ident, ids::K_USER, &id).map(|u| (id, u)));
+    let stored = user.as_ref().map(|(_, u)| ids::s_of(u, "password_hash"));
+    // Same work on a miss as on a hit.
+    if !verify_password_constant_work(&body.old_password, stored.as_deref()) {
+        return Response::error("invalid credentials", 401);
+    }
+    let (user_id, _) = user.expect("verified above");
+    let fresh = match auth::hash_password(&body.new_password) {
+        Ok(h) => h,
+        Err(e) => return e.into_response(),
+    };
+    ids::with_identity(&ctx.env, move |t| {
+        if let Some(mut u) = ids::rec(t, ids::K_USER, &user_id) {
+            u["password_hash"] = json!(fresh);
+            let index = vec![(ids::user_by_email(&ids::s_of(&u, "email")), user_id.clone())];
+            t.put(ids::K_USER, &user_id, &u.to_string(), &index, &[])
+                .map_err(|e| Error::RustError(format!("user: {e}")))?;
+        }
+        Ok(())
+    })
+    .await?;
+    Response::from_json(&json!({ "changed": true }))
+}
+
+#[derive(Deserialize)]
 struct ClaimIn {
     email: String,
     code: String,

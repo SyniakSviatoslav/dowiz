@@ -318,6 +318,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         // THE ROOM (docs/design/BLUEPRINT-POS-THE-ROOM-2026-09-22.md).
         .post_async("/api/staff/login", services::identity::staff::staff_login)
         .post_async("/api/staff/claim", services::identity::staff::staff_claim)
+        .post_async("/api/staff/password", services::identity::staff::staff_password)
         .get_async("/api/owner/staff", services::identity::staff_admin::list_staff)
         .post_async("/api/owner/staff/invite", services::identity::staff_admin::invite_staff)
         .post_async("/api/owner/staff/:id", services::identity::staff_admin::set_staff)
