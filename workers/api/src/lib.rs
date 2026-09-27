@@ -402,6 +402,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/stock/waste", services::operations::waste::waste_report)
         .post_async("/api/owner/supplies", services::operations::supplies::set_supply)
         .post_async("/api/owner/supplies/:id/retire", services::operations::supplies::retire_supply)
+        .post_async("/api/owner/ingredients/reset", services::operations::supplies::reset_ingredients)
         // F1: supplies and recipes in bulk, dry run first; the dishes as stored.
         .post_async("/api/owner/supplies/import", services::catalogue::import::bulk::import_supplies)
         .post_async("/api/owner/recipes/import", services::catalogue::import::bulk::import_recipes)

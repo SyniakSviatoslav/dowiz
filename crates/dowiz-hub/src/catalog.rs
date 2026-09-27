@@ -186,6 +186,13 @@ impl Catalog {
         self.kv.remove(&format!("{P_PROMO}{code}"))
     }
 
+    /// Removing a supply is a real delete, used only by the owner's
+    /// ingredients reset: `active: false` (retire) keeps the row and its id,
+    /// and a supply re-created under the same id would inherit its old shelf.
+    pub fn remove_supply(&mut self, id: &str) -> bool {
+        self.kv.remove(&format!("{P_SUPPLY}{id}"))
+    }
+
     /// Removing a dish is a real delete, for the same reason removing a promo
     /// is: a dish the venue took off the menu must stop being orderable, and
     /// `available: false` is the separate, reversible thing that says "not

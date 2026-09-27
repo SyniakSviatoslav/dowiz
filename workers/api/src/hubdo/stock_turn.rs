@@ -15,6 +15,20 @@ use crate::services::operations::stock::turn::{self, StockTurnIn};
 use worker::*;
 
 impl HubImages {
+    /// THE OWNER'S INGREDIENTS RESET (`/fold/stock_reset`): the stock image is
+    /// replaced by an empty ledger, under the generation guard like any other
+    /// write. Answers how many records the old ledger held.
+    pub(super) async fn stock_reset(&self) -> Result<Response> {
+        let (gen, old) = self.stock_log().await?;
+        let dropped = old.len();
+        let fresh = dowiz_hub::stock::StockLog::create_sized(64 * 1024)
+            .map_err(|_| Error::RustError("cannot create stock image".into()))?;
+        if self.put_image(crate::hubstore::IMAGE_STOCK, gen, &fresh.to_bytes_trimmed()).await?.is_none() {
+            return Response::error("the stock generation moved during the reset", 409);
+        }
+        Response::from_json(&serde_json::json!({ "dropped": dropped }))
+    }
+
     pub(super) async fn stock_move(&self, input: StockTurnIn) -> Result<Response> {
         let (gen, mut log) = self.stock_log().await?;
         let before = log.len();

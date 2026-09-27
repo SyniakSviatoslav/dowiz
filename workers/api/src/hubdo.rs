@@ -1380,6 +1380,8 @@ impl DurableObject for HubImages {
                     let mut req = req;
                     self.stock_move(req.json().await?).await
                 }
+                // THE OWNER'S INGREDIENTS RESET: `/fold/stock_reset`
+                (Method::Post, "stock_reset") => self.stock_reset().await,
                 // THE KITCHEN SAW THE TICKET: `/fold/kitchen_ack`
                 (Method::Post, "kitchen_ack") => {
                     let mut req = req;
