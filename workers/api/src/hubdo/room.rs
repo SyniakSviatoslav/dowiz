@@ -96,7 +96,7 @@ impl HubImages {
         hub: &dowiz_hub::Hub,
         stock: Option<(i64, &dowiz_hub::stock::StockLog)>,
     ) -> Result<std::result::Result<i64, Refused>> {
-        let Some(next) = self.put_image(LOG_IMAGE, log_gen, &hub.to_bytes_trimmed()).await? else {
+        let Some(next) = self.put_log(log_gen, hub).await? else {
             return Ok(Err(Refused::Append(format!("the log generation moved during {what}"))));
         };
         if let Some((gen, s)) = stock {

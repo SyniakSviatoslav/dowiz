@@ -23,6 +23,9 @@
 
 pub use dowiz_hub::room::delta::{delta, fold, fold_one, DELTA_DROP, DELTA_MARK};
 
+/// The orders projection the venue's object keeps current (R1).
+pub mod projection;
+
 #[cfg(test)]
 use serde_json::Value;
 

@@ -144,6 +144,30 @@ pub fn compare(
     Report { orders: fresh.len(), stale, stranded, unheld, modelled }
 }
 
+/// THE OBJECT'S REBUILD, minus its I/O: refold `hub` from the bytes with
+/// `orders_state` and diff it against the memo being SERVED at `generation`.
+///
+/// A memo at another generation, or none, is not being served (`read` would
+/// refold), so the fresh fold stands on both sides and `stale` is empty BECAUSE
+/// nothing was being served. A memo at this generation that is EMPTY while the
+/// log holds orders is a served lie, and is named -- the old check read an
+/// empty memo as a cold one and could not see that.
+pub fn of_log(
+    hub: &dowiz_hub::Hub,
+    served: Option<&crate::fold::projection::Orders>,
+    generation: i64,
+    held: &[(String, String, i64)],
+    modelled: bool,
+) -> Report {
+    let fresh: Vec<(String, String)> =
+        crate::hubstore::orders_state(hub).into_iter().map(|e| (e.order_id, e.order_json)).collect();
+    let memo = match served.filter(|m| m.generation() == generation) {
+        Some(m) => m.pairs(),
+        None => fresh.clone(),
+    };
+    compare(&fresh, &memo, held, modelled)
+}
+
 /// Ask the venue's object to refold and diff. READ-ONLY; see `hubdo::rebuild`
 /// for what it compares.
 ///

@@ -198,14 +198,12 @@ pub struct HubImages {
     /// Where the couriers are, as they last said. Not persisted on purpose:
     /// see `Fix`.
     positions: RefCell<HashMap<String, Fix>>,
-    /// The log image, FOLDED, at the generation it was folded from.
-    ///
-    /// A venue's consoles, couriers and customers all poll; between two polls
-    /// nothing has usually changed, and re-folding an unchanged log is the
-    /// same answer computed again. Keyed by generation so it cannot go stale:
-    /// a write bumps the generation, and a generation that does not match is
-    /// simply refolded.
-    folded: RefCell<Option<(i64, Vec<OrderView>)>>,
+    /// The log image, FOLDED, at the generation it was folded from, and
+    /// KEPT CURRENT by the writes (R1, `fold::projection`): an append or a
+    /// command steps it over the events it added, a whole-image write drops
+    /// it. Keyed by generation so it cannot go stale: a generation that does
+    /// not match is simply refolded.
+    folded: RefCell<Option<crate::fold::projection::Orders>>,
     /// The Worker's bindings, for the one route that calls OTHER objects:
     /// `/fold/cron`, answered only by a `cron~<venue>` runner (`crate::cron`).
     env: Env,
@@ -425,16 +423,11 @@ impl HubImages {
         let Some((meta, bytes)) = self.image(LOG_IMAGE).await? else {
             return Ok((0, Vec::new()));
         };
-        if let Some((gen, view)) = self.folded.borrow().as_ref() {
-            if *gen == meta.generation {
-                return Ok((*gen, view.clone()));
-            }
-        }
-        let hub = dowiz_hub::Hub::load(&bytes)
-            .map_err(|_| Error::RustError("hub image is unreadable".into()))?;
-        let view: Vec<OrderView> =
-            crate::hubstore::orders_state(&hub).into_iter().map(OrderView::of).collect();
-        *self.folded.borrow_mut() = Some((meta.generation, view.clone()));
+        let view = crate::fold::projection::read(&mut self.folded.borrow_mut(), meta.generation, || {
+            dowiz_hub::Hub::load(&bytes)
+                .map(|hub| hub.events())
+                .map_err(|_| Error::RustError("hub image is unreadable".into()))
+        })?;
         Ok((meta.generation, view))
     }
 
@@ -591,7 +584,10 @@ impl HubImages {
         hub.append(kind, &ev.order_id, &ev.payload, seq, [0u8; 32])
             .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
         let len = hub.len();
-        match self.put_image(LOG_IMAGE, generation, &hub.to_bytes_trimmed()).await? {
+        // THE ONE EVENT THIS WRITE ADDS is the memo's whole dirty set (R1).
+        let added = dowiz_hub::Event { kind, order_id: ev.order_id.clone(), order_json: ev.payload.clone(), seq };
+        let written = crate::fold::projection::Written::Appended(added);
+        match self.put_image_as(LOG_IMAGE, generation, &hub.to_bytes_trimmed(), written).await? {
             Some(next) => {
                 // AFTER THE WRITE LANDED, never before: a subscriber told about
                 // an event that was not persisted would be told the truth about
@@ -684,7 +680,7 @@ impl HubImages {
         };
 
         let events = hub.len();
-        let Some(next) = self.put_image(LOG_IMAGE, log_generation, &hub.to_bytes_trimmed()).await?
+        let Some(next) = self.put_log(log_generation, &hub).await?
         else {
             // Cannot happen inside a serialised object -- the generation was
             // read above and nothing else runs between -- but the caller's
@@ -806,7 +802,7 @@ impl HubImages {
             Err(r) => return Ok(Err(r)),
         };
 
-        let Some(next) = self.put_image(LOG_IMAGE, log_generation, &hub.to_bytes_trimmed()).await?
+        let Some(next) = self.put_log(log_generation, &hub).await?
         else {
             return Ok(Err(crate::command::Refused::Append(
                 "the log generation moved during a transition".into(),
@@ -889,7 +885,7 @@ impl HubImages {
             return Ok(Err(r));
         }
 
-        let Some(next) = self.put_image(LOG_IMAGE, log_generation, &hub.to_bytes_trimmed()).await?
+        let Some(next) = self.put_log(log_generation, &hub).await?
         else {
             return Ok(Err(crate::command::Refused::Append(
                 "the log generation moved during an assignment".into(),
@@ -930,30 +926,14 @@ impl HubImages {
     /// anything — a gate that fixes what it finds is a gate whose findings
     /// nobody ever sees.
     async fn rebuild(&self) -> Result<crate::rebuild::Report> {
-        let memo: Vec<(String, String)> = self
-            .folded
-            .borrow()
-            .as_ref()
-            .map(|(_, v)| v.iter().map(|o| (o.order_id.clone(), o.order_json.clone())).collect())
-            .unwrap_or_default();
-        let Some((_, bytes)) = self.image(LOG_IMAGE).await? else {
+        let Some((meta, bytes)) = self.image(LOG_IMAGE).await? else {
             return Ok(crate::rebuild::Report::default());
         };
         // FRESH, from the bytes. `Hub::load` parses the arena and
-        // `orders_state` replays the chain; neither consults the memo.
+        // `orders_state` replays the chain (`rebuild::of_log`); neither
+        // consults the memo.
         let hub = dowiz_hub::Hub::load(&bytes)
             .map_err(|_| Error::RustError("hub image is unreadable".into()))?;
-        let fresh: Vec<(String, String)> = crate::hubstore::orders_state(&hub)
-            .into_iter()
-            .map(OrderView::of)
-            .map(|o| (o.order_id, o.order_json))
-            .collect();
-
-        // WHEN THE MEMO IS COLD there is nothing to compare it against, and
-        // saying "everything agrees" would be a measurement of nothing. The
-        // fresh fold is used for both sides, so `stale` is empty BECAUSE
-        // nothing was being served, not because it was right.
-        let memo = if memo.is_empty() { fresh.clone() } else { memo };
 
         let (held, modelled) = match self.image(crate::hubstore::IMAGE_STOCK).await? {
             Some((_, b)) => {
@@ -967,7 +947,8 @@ impl HubImages {
             }
             None => (Vec::new(), false),
         };
-        Ok(crate::rebuild::compare(&fresh, &memo, &held, modelled))
+        // The memo is borrowed only here, after the last await.
+        Ok(crate::rebuild::of_log(&hub, self.folded.borrow().as_ref(), meta.generation, &held, modelled))
     }
 
     /// Queue the kitchen's message for every channel this venue has configured.
@@ -1065,6 +1046,30 @@ impl HubImages {
     /// else moved it" from "it failed", and because the day this moves again is
     /// the day the guard is load-bearing.
     async fn put_image(&self, id: &str, expected: i64, bytes: &[u8]) -> Result<Option<i64>> {
+        self.put_image_as(id, expected, bytes, crate::fold::projection::Written::Whole).await
+    }
+
+    /// A COMMAND'S LOG WRITE: `put_image` of the hub, and the memo steps over
+    /// the events the command added (R1) -- when the memo is at `expected`;
+    /// a cold one is not walked for, the next read folds it.
+    pub(super) async fn put_log(&self, expected: i64, hub: &dowiz_hub::Hub) -> Result<Option<i64>> {
+        let warm = self.folded.borrow().as_ref().is_some_and(|m| m.generation() == expected);
+        let written = if warm {
+            crate::fold::projection::Written::Log(hub.events())
+        } else {
+            crate::fold::projection::Written::Whole
+        };
+        self.put_image_as(LOG_IMAGE, expected, &hub.to_bytes_trimmed(), written).await
+    }
+
+    /// `put_image`, saying how a LOG write landed (`fold::projection::Written`).
+    async fn put_image_as(
+        &self,
+        id: &str,
+        expected: i64,
+        bytes: &[u8],
+        how: crate::fold::projection::Written,
+    ) -> Result<Option<i64>> {
         let current = self.image(id).await?.map(|(m, _)| m.generation).unwrap_or(0);
         if expected != current {
             return Ok(None);
@@ -1121,11 +1126,11 @@ impl HubImages {
             let _ = store.delete(&Self::chunk_key(id, n)).await;
         }
         self.mem.borrow_mut().insert(id.to_string(), (meta, bytes.to_vec()));
-        // THE PROJECTION IS DERIVED FROM THIS IMAGE, so it dies with the write
-        // that replaced it. Keyed by generation it could only ever be stale
-        // for a moment; dropped here it cannot be stale at all.
+        // THE PROJECTION IS DERIVED FROM THIS IMAGE, so it moves with the
+        // write: stepped over the events an append or a command added, dropped
+        // by any other write (`fold::projection::after_log_write`).
         if id == LOG_IMAGE {
-            *self.folded.borrow_mut() = None;
+            crate::fold::projection::after_log_write(&mut self.folded.borrow_mut(), expected, next, how);
             // ── A WHOLE-IMAGE WRITE IS A GAP, AND IT HAS TO BE ONE ──
             //
             // Not every write to this log comes through `append`. A placement
