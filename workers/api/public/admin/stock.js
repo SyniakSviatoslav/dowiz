@@ -16,7 +16,7 @@
 import '/admin/ingredients-i18n.js';
 import { $, $$, esc, icon, t, api, post, withLoc, toast, retranslate, hydrate, money, busy } from '/admin/core.js';
 import { lang } from '/admin/i18n.js';
-import { rerender } from '/admin/app.js';
+import { rerender, me } from '/admin/app.js';
 import { openBulk } from '/admin/bulk.js';
 import { ui, k as key, btn, iconBtn, select, chips, empty, loading, rowBtn, rowDiv } from '/admin/parts.js';
 import * as C from '/admin/ingredients-calc.js';
@@ -46,7 +46,7 @@ const ctx = {
 export async function render(host){
   ensureCss();
   host.innerHTML = `<div class="screen-h"><div><h1 data-t="inv_title"></h1></div>
-    <div class="screen-acts">${iconBtn({ id: 'importSupplies', icon: 'download', ariaKey: 'importSupplies', tour: 'stock.import' })}${btn({ id: 'addSupply', variant: 'primary', icon: 'plus', key: 'addSupply', tour: 'stock.addSupply' })}</div></div>
+    <div class="screen-acts">${me().staff ? '' : iconBtn({ id: 'resetIngredients', icon: 'trash', ariaKey: 'inv_reset' })}${iconBtn({ id: 'importSupplies', icon: 'download', ariaKey: 'importSupplies', tour: 'stock.import' })}${btn({ id: 'addSupply', variant: 'primary', icon: 'plus', key: 'addSupply', tour: 'stock.addSupply' })}</div></div>
     <p class="screen-hint" data-t="inv_hint"></p>
     <div class="tiles">${TILES.map(([id, ic, word]) => rowBtn({ cls: 'tile', leading: `<span class="tile-ic">${icon(ic)}</span>`, title: key(word), data: { tile: id } })).join('')}</div>
     <div id="invAlerts" class="inv-alerts"></div>
@@ -57,6 +57,8 @@ export async function render(host){
   retranslate(host);
   $('#addSupply', host).onclick = () => openSupply(null, ctx);
   $('#importSupplies', host).onclick = () => openBulk('supplies', rerender);
+  const reset = $('#resetIngredients', host);
+  if (reset) reset.onclick = () => resetAll(reset);
   $('#sSort', host).onchange = e => { view.sort = e.target.value; rerender(); };
   $('#sq', host).oninput = e => { view.q = e.target.value; drawList(host); };
   try { stock = await api('/owner/stock'); } catch (e) { $('#stockList', host).innerHTML = empty('alert-triangle', { key: 'loadFail', body: String(e.message || e), alert: true }); return; }
@@ -121,4 +123,19 @@ function drawList(host){
     (stock.stranded?.length ? `<section class="group mt-3"><p class="eyebrow" data-t="stranded"></p><p class="muted small" data-t="strandedHint"></p><div class="rows">${stock.stranded.map(s => rowDiv({ cls: 'off', leading: icon('alert-triangle'), title: `${s.item} × ${s.qty}`, sub: `<span class="mono">#${esc(String(s.order).slice(0, 8))}</span>` })).join('')}</div></section>` : '');
   retranslate($('#stockList', host)); hydrate($('#stockList', host));
   if (view.flag === 'noRecipe') $('#invNoRecipe', host)?.scrollIntoView({ block: 'start' });
+}
+
+/// THE OWNER'S WIPE (`POST /api/owner/ingredients/reset`): every ingredient,
+/// recipe, allergen list and stock record goes, so the venue can fill them in
+/// again. The owner types the venue's id to confirm; the server checks it too.
+async function resetAll(el){
+  const loc = withLoc().location_id;
+  const typed = window.prompt(`${t('inv_resetAsk')}\n\n${loc}`);
+  if (typed === null) return;
+  if (typed.trim() !== loc) { toast(t('inv_resetMismatch')); return; }
+  try {
+    const r = await busy(el, () => post('/owner/ingredients/reset', withLoc({ confirm: loc })));
+    toast(`${t('inv_resetDone')}: ${r.supplies} / ${r.recipes} / ${r.stockRecords}`);
+    rerender();
+  } catch (e) { toast(String(e.message || e)); }
 }

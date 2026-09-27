@@ -11,6 +11,7 @@ import { T } from '/admin/i18n.js';
 
 export const WORDS = {
   en: {
+    inv_reset: 'Delete all ingredient data', inv_resetAsk: 'This deletes every ingredient, recipe, allergen list and stock record of this venue. It cannot be undone. Type the venue id below to confirm:', inv_resetMismatch: 'The id does not match; nothing was deleted.', inv_resetDone: 'Deleted (ingredients / recipes / stock records)',
     inv_title: 'Ingredients & stock', inv_hint: 'Every ingredient with what is on the shelf. Tap one for its card; the buttons record what happened.',
     inv_delivery: 'Delivery', inv_count: 'Count', inv_prep: 'Prep', inv_waste: 'Write-offs', inv_numbers: 'Kitchen numbers',
     inv_needsCount: 'needs a count', inv_needsCountHint: 'Orders took it and nobody has counted it yet: the minus is what they used. Count it once and it is exact.',
@@ -43,6 +44,7 @@ export const WORDS = {
     ka_usedHint: 'By recipes = portions sold x recipe (gross). Recorded = what orders took off the shelf. A count difference is what nobody recorded.',
   },
   sq: {
+    inv_reset: 'Fshi të gjitha të dhënat e përbërësve', inv_resetAsk: 'Kjo fshin çdo përbërës, recetë, listë alergjenësh dhe regjistrim magazine të këtij lokali. Nuk kthehet mbrapsht. Shkruani ID-në e lokalit më poshtë për ta konfirmuar:', inv_resetMismatch: 'ID-ja nuk përputhet; asgjë nuk u fshi.', inv_resetDone: 'U fshinë (përbërës / receta / regjistrime magazine)',
     inv_title: 'Përbërësit & magazina', inv_hint: 'Çdo përbërës me sa ka në raft. Prekni njërin për kartelën; butonat regjistrojnë çfarë ndodhi.',
     inv_delivery: 'Furnizim', inv_count: 'Numërim', inv_prep: 'Përgatitje', inv_waste: 'Të hedhurat', inv_numbers: 'Numrat e kuzhinës',
     inv_needsCount: 'duhet numëruar', inv_needsCountHint: 'Porositë e morën dhe askush nuk e ka numëruar: minusi është sa u përdor. Numërojeni një herë dhe bëhet i saktë.',
@@ -75,6 +77,7 @@ export const WORDS = {
     ka_usedHint: 'Sipas recetave = porcione të shitura x receta (bruto). Regjistruar = sa hoqën porositë nga rafti. Diferenca e numërimit është ajo që askush nuk regjistroi.',
   },
   uk: {
+    inv_reset: 'Видалити всі дані про інгредієнти', inv_resetAsk: 'Буде видалено всі інгредієнти, рецепти, списки алергенів і записи складу цього закладу. Скасувати не можна. Щоб підтвердити, введіть id закладу нижче:', inv_resetMismatch: 'Id не збігається; нічого не видалено.', inv_resetDone: 'Видалено (інгредієнти / рецепти / записи складу)',
     inv_title: 'Інгредієнти та склад', inv_hint: 'Кожен інгредієнт і скільки його на полиці. Торкніться, щоб відкрити картку; кнопки записують, що сталося.',
     inv_delivery: 'Прихід', inv_count: 'Інвентаризація', inv_prep: 'Заготовка', inv_waste: 'Списання', inv_numbers: 'Аналітика кухні',
     inv_needsCount: 'потрібен підрахунок', inv_needsCountHint: 'Замовлення списали його, а ніхто ще не рахував: мінус показує, скільки використано. Порахуйте один раз, і число стане точним.',

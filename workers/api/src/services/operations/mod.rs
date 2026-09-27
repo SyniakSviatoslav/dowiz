@@ -8,6 +8,7 @@
 use serde_json::{json, Value};
 use worker::*;
 
+pub mod ingredients_reset;
 pub mod stock;
 pub mod supplies;
 pub mod waste;
