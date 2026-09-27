@@ -19,7 +19,9 @@ use crate::auth::{self, Principal};
 use dowiz_kernel::json_api;
 
 pub(crate) mod run;
+mod cash;
 mod door;
+mod refusal;
 pub use door::refused;
 
 /// GPS sanity, from the old platform's courier UX rules: reject a fix worse than
@@ -81,7 +83,7 @@ pub(crate) async fn staff_any_at(
         Ok(p) => p,
         Err(e) => return Err(e.into_response().unwrap()),
     };
-    auth::room_admits_any(&p, venue, needs).map_err(|(s, m)| Response::error(m, s).unwrap())
+    auth::room_admits_any(&p, venue, needs).map_err(|(s, m)| refusal::of(m, s))
 }
 
 /// `GET /api/courier/tasks` — what is mine, and what is up for grabs.
@@ -575,16 +577,15 @@ pub async fn pickup(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
 
 /// `POST /api/courier/orders/:id/deliver` — `{cash_collected?}`
 pub async fn deliver(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    #[derive(Deserialize)]
-    struct In {
-        #[serde(default)]
-        cash_collected: Option<i64>,
-    }
     // THE RAW BODY IS READ ONCE, because the idempotency layer fingerprints it:
     // rule 3 is "same key, different body is a 409", and it cannot answer that
     // from a parsed struct that has already dropped whatever else was sent.
+    // AN UNREADABLE BODY IS A 400, never "collected everything" (`cash::said`).
     let raw_body = req.text().await.unwrap_or_default();
-    let body: In = serde_json::from_str(&raw_body).unwrap_or(In { cash_collected: None });
+    let said = match cash::said(&raw_body) {
+        Ok(v) => v,
+        Err(why) => return Response::error(why, 400),
+    };
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
@@ -626,13 +627,13 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
             return Response::error("not your delivery", 403);
         };
         let cash_due = field_i64(&a, "cash_due");
-        let collected = body.cash_collected.unwrap_or(cash_due);
-        if collected < 0 {
-            return Response::error("cash cannot be negative", 400);
-        }
-        // A short handover is RECORDED, never silently rounded. The difference is
-        // what a settlement dispute is later resolved from.
-        let short = cash_due - collected;
+        // A short handover is RECORDED, never silently rounded, and bounded by
+        // what the delivery owes (`cash::handover`). The difference is what a
+        // settlement dispute is later resolved from.
+        let cash::Handover { collected, short } = match cash::handover(cash_due, said) {
+            Ok(h) => h,
+            Err(why) => return Response::error(why, 400),
+        };
     
         if load_order(&place, &id, &loc).await?.is_none() {
             return Response::error("not found", 404);
@@ -662,8 +663,13 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
                 .and_then(|j| serde_json::from_str::<Value>(&j).ok())
                 .filter(|s| s.get("ended_at_ms").map_or(true, |v| v.is_null()))
             {
-                s["deliveries"] = json!(field_i64(&s, "deliveries") + 1);
-                s["cash_collected"] = json!(field_i64(&s, "cash_collected") + collected);
+                let (Some(n), Some(cash)) =
+                    (cash::add(field_i64(&s, "deliveries"), 1), cash::add(field_i64(&s, "cash_collected"), collected))
+                else {
+                    return Err(Error::RustError("shift: its totals would overflow".into()));
+                };
+                s["deliveries"] = json!(n);
+                s["cash_collected"] = json!(cash);
                 t.put(K_SHIFT, &cid, &s.to_string(), &[], &[])
                     .map_err(|e| Error::RustError(format!("shift: {e}")))?;
             }

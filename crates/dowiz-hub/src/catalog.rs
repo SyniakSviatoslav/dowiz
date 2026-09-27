@@ -69,7 +69,7 @@ impl Catalog {
     }
 
     pub fn create() -> Result<Self, HubError> {
-        let mut store = Store::create_bytes(DEFAULT_CATALOG_BYTES);
+        let mut store = Store::create_bytes(DEFAULT_CATALOG_BYTES)?;
         Kv::init_bytes(&mut store)?;
         let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
         Ok(Catalog { store, kv })

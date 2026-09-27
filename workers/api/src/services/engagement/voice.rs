@@ -103,8 +103,6 @@ pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     use dowiz_hub::token::Role;
     use dowiz_hub::voice::{classify, Command, Speaker, Target, MIN_CONFIDENCE};
 
-    let body: VoiceIn = req.json().await.unwrap_or_default();
-
     // WHICH VOCABULARY APPLIES IS DECIDED BY THE TOKEN, never by what the
     // caller says they are: a courier claiming to be an owner would otherwise
     // reach the owner's commands by typing a word.
@@ -121,6 +119,8 @@ pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         Ok(_) => return Response::error("forbidden role", 403),
         Err(e) => return e.into_response(),
     };
+    // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
+    let body: VoiceIn = req.json().await.unwrap_or_default();
     let lang = body.lang.clone().unwrap_or_else(|| "uk".into());
 
     // A confirmation carries its own instruction; nothing is classified again.

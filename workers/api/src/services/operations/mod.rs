@@ -273,14 +273,15 @@ pub async fn backup(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
 /// overwrites a live hub is a one-click way to erase a venue's history, and it
 /// would be reachable by anything that could reach an owner's token.
 pub async fn restore(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let bundle: Value = match req.json().await {
-        Ok(v) => v,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
-    };
     // Authority first and alone: this one writes, so nothing starts beside it.
     let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
+    };
+    // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
+    let bundle: Value = match req.json().await {
+        Ok(v) => v,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;

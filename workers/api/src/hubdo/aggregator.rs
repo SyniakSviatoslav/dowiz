@@ -17,6 +17,6 @@ impl HubImages {
             return Ok(same_entry(&o.order_json, &input.envelope)
                 .map(|()| AggregatorOut { stored: o.order_json.clone(), existing: true }));
         }
-        Ok(self.place(input).await?.map(|out| AggregatorOut { stored: out.stored, existing: false }))
+        Ok(self.place(input, None).await?.map(|out| AggregatorOut { stored: out.stored, existing: false }))
     }
 }

@@ -11,7 +11,7 @@
 use super::*;
 use worker::*;
 
-use super::{digest, digest_rail, tgrail};
+use super::{digest, digest_rail, lease, tgrail};
 
 /// Every entry waiting for this venue.
 pub async fn waiting(place: &crate::hubstore::Place) -> Result<Vec<Entry>> {
@@ -58,13 +58,47 @@ pub async fn drain(
     place: &crate::hubstore::Place,
     now_ms: i64,
 ) -> Result<(usize, usize, Vec<String>)> {
-    let image = crate::hubstore::load_table(place, IMAGE_OUTBOX, OUTBOX_BYTES).await?.table;
-    let entries: Vec<Entry> = image.all(KIND).into_iter().filter_map(|(_, j)| serde_json::from_str::<Entry>(&j).ok()).collect();
+    let first = crate::hubstore::load_table(place, IMAGE_OUTBOX, OUTBOX_BYTES).await?.table;
+    let entries: Vec<Entry> = first.all(KIND).into_iter().filter_map(|(_, j)| serde_json::from_str::<Entry>(&j).ok()).collect();
     // NOTHING DUE, NOTHING READ: a venue whose only entries are tomorrow's
     // summaries or backed-off retries costs this one read a minute, as before.
     if due(&entries, now_ms).is_empty() {
         return Ok((0, 0, Vec::new()));
     }
+    // ONE DRAIN AT A TIME (`lease`, W-FIX O4): an overlapping minute sends nothing.
+    let mine = crate::hubstore::with_table(place, IMAGE_OUTBOX, OUTBOX_BYTES, move |t| {
+        lease::take(t, now_ms).map_err(Error::RustError)
+    })
+    .await?;
+    if !mine {
+        return Ok((0, 0, Vec::new()));
+    }
+    let mut released = false;
+    let res = held(env, place, now_ms, &mut released).await;
+    // A drain that did not reach its verdicts' write gives the lease back here.
+    if !released {
+        let _ = crate::hubstore::with_table(place, IMAGE_OUTBOX, OUTBOX_BYTES, move |t| {
+            lease::give_back(t, now_ms);
+            Ok(())
+        })
+        .await;
+    }
+    res
+}
+
+/// The drain, holding the lease. `released` is set by the write that applies
+/// the verdicts, which gives the lease back in the same write.
+async fn held(
+    env: &Env,
+    place: &crate::hubstore::Place,
+    now_ms: i64,
+    released: &mut bool,
+) -> Result<(usize, usize, Vec<String>)> {
+    // READ AGAIN UNDER THE LEASE: the copy `drain` checked may predate the
+    // verdicts of a drain that finished between that read and this lease, and
+    // sending from it would send what that drain already sent.
+    let image = crate::hubstore::load_table(place, IMAGE_OUTBOX, OUTBOX_BYTES).await?.table;
+    let entries: Vec<Entry> = image.all(KIND).into_iter().filter_map(|(_, j)| serde_json::from_str::<Entry>(&j).ok()).collect();
     let settings = crate::hubstore::load_settings(place).await?.settings;
     let token = crate::notify::bot_token(env, &settings);
     let wa = crate::channels::whatsapp_cfg(&settings);
@@ -193,7 +227,13 @@ pub async fn drain(
         return Ok((0, entries.len(), abandoned));
     }
     let (gone, moved) = (ops.gone.clone(), ops.moved.clone());
-    let dropped = crate::hubstore::with_table(place, IMAGE_OUTBOX, OUTBOX_BYTES, move |t| ops.apply(t).map_err(Error::RustError)).await?;
+    let dropped = crate::hubstore::with_table(place, IMAGE_OUTBOX, OUTBOX_BYTES, move |t| {
+        let d = ops.apply(t).map_err(Error::RustError)?;
+        lease::give_back(t, now_ms);
+        Ok(d)
+    })
+    .await?;
+    *released = true;
     abandoned.extend(dropped.into_iter().map(|id| format!("{id}: its chat is gone")));
     if !gone.is_empty() || !moved.is_empty() {
         if let Err(e) = digest_rail::chats_changed(place, &gone, &moved, &crate::notify::hook::venue_lang(record.as_ref())).await {

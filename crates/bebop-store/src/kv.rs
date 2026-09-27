@@ -277,7 +277,7 @@ impl Kv {
     /// and an audit trail belongs in the event log, which is append-only on
     /// purpose and is not this.
     pub fn compacted_bytes(&self, capacity: usize) -> Result<Vec<u8>, StoreError> {
-        let mut fresh = Store::create_bytes(capacity);
+        let mut fresh = Store::create_bytes(capacity)?;
         Kv::init_bytes(&mut fresh)?;
         let (tx, root) = self.stage_commit_into(&mut fresh)?;
         fresh.commit_bytes(&tx, root);
@@ -331,7 +331,7 @@ mod tests {
     #[test]
     fn a_non_ascii_key_survives_the_image() {
         let keys = ["pije-ujë-0-5l", "sushi-sets-durrës-set-24", "страва-суші", "ascii-plain"];
-        let mut st = Store::create_bytes(64 * 1024);
+        let mut st = Store::create_bytes(64 * 1024).unwrap();
         Kv::init_bytes(&mut st).expect("init");
         let mut kv = Kv::load(&st).expect("load");
         for k in keys {
@@ -367,7 +367,7 @@ mod tests {
     /// the whole point, and a named bit is a test that says what it protects.
     #[test]
     fn a_key_length_larger_than_the_image_is_refused_not_allocated() {
-        let mut st = Store::create_bytes(64 * 1024);
+        let mut st = Store::create_bytes(64 * 1024).unwrap();
         Kv::init_bytes(&mut st).expect("init");
         let mut kv = Kv::load(&st).expect("load");
         kv.put("order/0001", b"pending");

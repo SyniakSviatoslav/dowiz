@@ -166,7 +166,7 @@ impl Posts {
     }
 
     pub fn create() -> Result<Self, HubError> {
-        let mut store = Store::create_bytes(DEFAULT_POSTS_BYTES);
+        let mut store = Store::create_bytes(DEFAULT_POSTS_BYTES)?;
         Kv::init_bytes(&mut store)?;
         let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
         Ok(Posts { store, kv })

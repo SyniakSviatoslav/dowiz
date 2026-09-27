@@ -8,12 +8,19 @@
 //!   it appends the missing legs, re-deciding against the ledger as it stands
 //!   inside the write guard. Idempotent: a leg's id is derived, so a second
 //!   apply finds nothing missing and writes nothing.
+//!
+//! THE HAND-BACK TOO (W-FIX O3). A completed refund's wallet reversal that
+//! failed to write was only logged. Both routes carry it now, from the same
+//! `refund::wallet::hand_back` the refund's own rule is: the audit lists the
+//! orders owed (`handBack`), and the repair writes them beside the legs
+//! (`wouldHandBack` / `handedBack`, refusals in `handBackRefused`).
 
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
 use crate::command::pay::legs;
+use crate::command::refund::wallet::hand_back;
 use crate::wallet::{IMAGE_LEDGER, K_TX};
 
 /// The venue's orders (the log is read BEFORE the ledger: a leg is written
@@ -50,7 +57,12 @@ pub async fn audit(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
         .filter(legs::is_spend)
         .collect();
     let a = legs::audit(&orders, &rows, &loc, &currency);
-    let mut res = Response::from_json(&json!({ "venue": loc, "spends": spends, "audit": a, "holds": a.holds() }))?;
+    let owed = match hand_back(&orders, &loc, &rows, ctx.data.now_ms) {
+        Ok(h) => h.listed(),
+        Err(r) => return Response::error(r.message().to_string(), r.status()),
+    };
+    let holds = a.holds() && owed.is_empty();
+    let mut res = Response::from_json(&json!({ "venue": loc, "spends": spends, "audit": a, "handBack": owed, "holds": holds }))?;
     res.headers_mut().set("cache-control", "private, no-store")?;
     Ok(res)
 }
@@ -85,21 +97,34 @@ pub async fn repair(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
             Ok(p) => p,
             Err(r) => return Response::error(r.message().to_string(), r.status()),
         };
+        let back = match hand_back(&orders, &loc, &rows, ctx.data.now_ms) {
+            Ok(h) => h,
+            Err(r) => return Response::error(r.message().to_string(), r.status()),
+        };
         let would: Vec<&str> = plan.write.iter().map(|d| d.tx_id.as_str()).collect();
-        return Response::from_json(&json!({ "applied": false, "wouldWrite": would, "refused": refused_of(&plan) }));
+        return Response::from_json(&json!({ "applied": false, "wouldWrite": would, "refused": refused_of(&plan),
+            "wouldHandBack": back.listed(), "handBackRefused": back.refused_listed() }));
     }
     // DECIDED AGAIN INSIDE THE GUARD, against the ledger as it is now; a
     // retried closure re-decides rather than replaying a stale plan.
     let (loc2, cur2) = (loc.clone(), currency.clone());
-    let plan = crate::hubstore::with_log(&place, IMAGE_LEDGER, move |log| {
+    let now = ctx.data.now_ms;
+    let (plan, back) = crate::hubstore::with_log(&place, IMAGE_LEDGER, move |log| {
         let plan = legs::repair(&orders, &rows_of(log), &loc2, &cur2)
             .map_err(|r| Error::RustError(r.message().to_string()))?;
         for d in &plan.write {
             log.append(K_TX, &d.tx_id, &d.record).map_err(|e| Error::RustError(format!("ledger: {e:?}")))?;
         }
-        Ok(plan)
+        // The legs first: a hand-back reverses a SPEND, and a leg written just
+        // now may be the spend a completed refund is owed against.
+        let back = hand_back(&orders, &loc2, &rows_of(log), now).map_err(|r| Error::RustError(r.message().to_string()))?;
+        for d in &back.write {
+            log.append(K_TX, &d.tx_id, &d.record).map_err(|e| Error::RustError(format!("ledger: {e:?}")))?;
+        }
+        Ok((plan, back))
     })
     .await?;
     let wrote: Vec<&str> = plan.write.iter().map(|d| d.tx_id.as_str()).collect();
-    Response::from_json(&json!({ "applied": true, "written": wrote, "refused": refused_of(&plan) }))
+    Response::from_json(&json!({ "applied": true, "written": wrote, "refused": refused_of(&plan),
+        "handedBack": back.listed(), "handBackRefused": back.refused_listed() }))
 }

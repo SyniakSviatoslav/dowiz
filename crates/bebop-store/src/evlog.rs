@@ -541,7 +541,7 @@ mod tests {
     /// is that a chain which does not end is not a length.
     #[test]
     fn a_chain_that_loops_is_reported_rather_than_walked_for_ever() {
-        let mut st = Store::create_bytes(64 * 1024);
+        let mut st = Store::create_bytes(64 * 1024).unwrap();
         EvLog::init_bytes(&mut st).expect("init");
         for i in 0..5u8 {
             EvLog::append_bytes(&mut st, &rec(i, b"payload")).expect("append");
@@ -565,7 +565,7 @@ mod tests {
     /// hands back that record last; a predicate that accepts nothing is `walk`.
     #[test]
     fn walk_until_stops_at_the_first_accepted_record() {
-        let mut st = Store::create_bytes(64 * 1024);
+        let mut st = Store::create_bytes(64 * 1024).unwrap();
         EvLog::init_bytes(&mut st).expect("init");
         for (i, p) in [b"a".as_slice(), b"CK", b"b", b"c"].iter().enumerate() {
             EvLog::append_bytes(&mut st, &rec(i as u8, p)).expect("append");
@@ -583,7 +583,7 @@ mod tests {
     /// deploy would blank every venue's history at once.
     #[test]
     fn a_v1_log_is_read_and_appended_to_as_v1() {
-        let mut st = Store::create_bytes(1 << 20);
+        let mut st = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_v1_bytes(&mut st).unwrap();
         assert_eq!(EvLog::version(&st), 1, "a root with no version cell is v1");
         for (i, body) in [b"alpha".as_slice(), b"beta", b"gamma"].iter().enumerate() {
@@ -599,7 +599,7 @@ mod tests {
 
         // And a v1 record still costs what v1 records cost: 15 + payload + 2,
         // plus a 7-cell root and its header.
-        let mut st2 = Store::create_bytes(1 << 20);
+        let mut st2 = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_v1_bytes(&mut st2).unwrap();
         let before = st2.pick().unwrap().arena_used;
         EvLog::append_bytes(&mut st2, &rec(1, b"payload-of-fixed-size")).unwrap();
@@ -612,14 +612,14 @@ mod tests {
     /// v2, which is the only way an old log ever becomes a new one.
     #[test]
     fn replaying_a_v1_log_into_a_fresh_store_makes_it_v2() {
-        let mut old = Store::create_bytes(1 << 20);
+        let mut old = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_v1_bytes(&mut old).unwrap();
         for i in 0..5u8 {
             EvLog::append_bytes(&mut old, &rec(i + 1, b"a realistic little payload")).unwrap();
         }
         EvLog::set_tip_bytes(&mut old, &[5u8; 32]).unwrap();
 
-        let mut fresh = Store::create_bytes(1 << 20);
+        let mut fresh = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_bytes(&mut fresh).unwrap();
         let mut records = EvLog::walk(&old);
         records.reverse();
@@ -649,7 +649,7 @@ mod tests {
     /// short of a cell, exactly a cell, one past it.
     #[test]
     fn a_v2_payload_survives_at_every_length() {
-        let mut st = Store::create_bytes(1 << 20);
+        let mut st = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_bytes(&mut st).unwrap();
         let sizes = [0usize, 1, 7, 8, 9, 63, 64, 65, 330];
         for (i, n) in sizes.iter().enumerate() {
@@ -668,7 +668,7 @@ mod tests {
     /// key, and v1 wrote 32 bytes of zeros for each of them.
     #[test]
     fn an_unnamed_actor_takes_no_cells() {
-        let mut st = Store::create_bytes(1 << 20);
+        let mut st = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_bytes(&mut st).unwrap();
         let anon = Record {
             id: [1u8; 32],
@@ -700,14 +700,14 @@ mod tests {
     #[test]
     fn appending_with_the_tip_costs_one_commit_not_two() {
         let payload = b"a realistic little payload";
-        let mut two = Store::create_bytes(1 << 20);
+        let mut two = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_bytes(&mut two).unwrap();
         let before = two.pick().unwrap().arena_used;
         EvLog::append_bytes(&mut two, &rec(1, payload)).unwrap();
         EvLog::set_tip_bytes(&mut two, &[1u8; 32]).unwrap();
         let two_cost = two.pick().unwrap().arena_used - before;
 
-        let mut one = Store::create_bytes(1 << 20);
+        let mut one = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_bytes(&mut one).unwrap();
         let before = one.pick().unwrap().arena_used;
         EvLog::append_tip_bytes(&mut one, &rec(1, payload)).unwrap();
@@ -725,7 +725,7 @@ mod tests {
     /// is a crash rather than a corrupt-image message.
     #[test]
     fn a_record_that_lies_about_its_actor_key_is_read_as_unnamed() {
-        let mut st = Store::create_bytes(1 << 20);
+        let mut st = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_bytes(&mut st).unwrap();
         EvLog::append_tip_bytes(&mut st, &Record {
             id: [1u8; 32],
@@ -750,7 +750,7 @@ mod tests {
     /// every hub image takes on every request.
     #[test]
     fn the_version_survives_the_byte_round_trip() {
-        let mut st = Store::create_bytes(1 << 20);
+        let mut st = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_bytes(&mut st).unwrap();
         EvLog::append_tip_bytes(&mut st, &rec(1, b"hello")).unwrap();
         let back = Store::from_bytes(&st.to_bytes_trimmed());
@@ -764,7 +764,7 @@ mod tests {
     /// would not open on a hub.
     #[test]
     fn byte_path_produces_the_same_log_as_the_file_path() {
-        let mut st = Store::create_bytes(1 << 20);
+        let mut st = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_bytes(&mut st).unwrap();
         for (i, body) in [b"alpha".as_slice(), b"beta", b"gamma"].iter().enumerate() {
             EvLog::append_bytes(&mut st, &rec(i as u8 + 1, body)).unwrap();
@@ -791,7 +791,7 @@ mod tests {
     /// as arena growth, because that is the thing that would betray a rewrite.
     #[test]
     fn byte_append_is_constant_cost() {
-        let mut st = Store::create_bytes(1 << 20);
+        let mut st = Store::create_bytes(1 << 20).unwrap();
         EvLog::init_bytes(&mut st).unwrap();
         let mut prev_used = 0i64;
         let mut deltas = Vec::new();
@@ -893,7 +893,7 @@ mod tests {
     /// The ratio (cells × 8) / payload_len gives the storage cost in bytes per byte.
     #[test]
     fn cells_per_event_for_a_realistic_payload() {
-        let mut st = Store::create_bytes(8 << 20);
+        let mut st = Store::create_bytes(8 << 20).unwrap();
         EvLog::init_bytes(&mut st).unwrap();
 
         // Build a 330-byte payload

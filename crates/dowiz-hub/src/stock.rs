@@ -1067,7 +1067,7 @@ impl StockLog {
     /// order that reserves an ingredient. The log grows itself when an append
     /// does not fit, so a small start costs a few doublings and nothing else.
     pub fn create_sized(bytes: usize) -> Result<Self, crate::HubError> {
-        let mut store = Store::create_bytes(bytes);
+        let mut store = Store::create_bytes(bytes)?;
         EvLog::init_bytes(&mut store)?;
         Ok(StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false })
     }
@@ -1183,7 +1183,7 @@ impl StockLog {
         let mut records = EvLog::walk(&self.store);
         records.reverse();
         let bigger = self.store.to_bytes().len().saturating_mul(2).max(64 * 1024);
-        let mut fresh = Store::create_bytes(bigger);
+        let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
         let mut last = None;
         for r in &records {

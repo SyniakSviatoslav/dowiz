@@ -212,12 +212,13 @@ pub async fn retire_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> R
         #[serde(rename = "location_id")]
         _location_id: Option<String>,
     }
-    let _body: In = req.json().await.unwrap_or(In { _location_id: None });
-    let Some(id) = ctx.param("id").cloned() else { return Response::error("missing supply id", 400) };
     let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
+    // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
+    let _body: In = req.json().await.unwrap_or(In { _location_id: None });
+    let Some(id) = ctx.param("id").cloned() else { return Response::error("missing supply id", 400) };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let done = crate::hubstore::with_catalog(&place, move |cat| {

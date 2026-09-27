@@ -57,7 +57,8 @@ pub const STORES: &[Store] = &[
     // "digest" (a group's recurring summary), "dg" (a line waiting for that
     // summary, rendered at the group's personal-data level), "h" (a target's
     // last success and Telegram's last refusal: a chat id and an error, no person).
-    Store { image: "outbox", kinds: &["o", "print", "route", "digest", "dg", "h"], home: Venue,
+    // W-FIX O4: "drain" (the one drain lease: an expiry time, no person).
+    Store { image: "outbox", kinds: &["o", "print", "route", "digest", "dg", "h", "drain"], home: Venue,
         holds: &[Name, Phone, Address, OrderContent, Messages], subjects: &[Customer],
         purpose: P::Kitchen, basis: Basis::Contract,
         retention: Retention::UntilDone("removed once delivered (outbox/rails.rs); given up after six tries"),

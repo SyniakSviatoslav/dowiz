@@ -69,3 +69,37 @@ fn no_wallet_leg_no_reversal() {
     assert!(reversals(&cash_only, "v1", &rows, NOW).unwrap().is_empty());
     assert!(reversals(&o, "v1", &rows[..1], NOW).unwrap().is_empty(), "the SPEND never reached the ledger");
 }
+
+/// W-FIX O3: a completed refund whose hand-back never reached the ledger is
+/// found and written by the repair, once; a refund not yet completed is not.
+#[test]
+fn a_lost_hand_back_is_repaired_once_and_only_for_a_completed_refund() {
+    let (mut o, mut rows) = paid_round();
+    o["status"] = json!("REFUNDING");
+    assert!(hand_back(std::slice::from_ref(&o), "v1", &rows, NOW + 20).unwrap().write.is_empty(), "the money has not gone back yet");
+    o["status"] = json!("COMPENSATED_REFUND");
+    let plan = hand_back(std::slice::from_ref(&o), "v1", &rows, NOW + 20).unwrap();
+    assert_eq!((plan.write.len(), plan.refused.len()), (1, 0));
+    assert_eq!(plan.write[0].tx_id, refund_tx_id("v1", "r1", NOW), "the id the refund itself would have written");
+    assert_eq!(plan.listed(), vec![json!({"tx_id": refund_tx_id("v1", "r1", NOW), "order_id": "r1", "amount": 600, "currency": "ALL"})]);
+    rows.extend(plan.write.into_iter().map(|d| d.record));
+    assert_eq!(balance(&rows), 1000, "the wallet holds what it held before the round");
+    assert!(hand_back(&[o], "v1", &rows, NOW + 21).unwrap().write.is_empty(), "a second repair writes nothing");
+}
+
+/// The refusals: a ledger that does not replay is an error, never "nothing to
+/// hand back"; a spend already reversed under another id is named, not doubled.
+#[test]
+fn a_broken_ledger_errs_and_a_spend_reversed_elsewhere_is_refused() {
+    let (mut o, mut rows) = paid_round();
+    o["status"] = json!("COMPENSATED_REFUND");
+    assert!(hand_back(std::slice::from_ref(&o), "v1", &[r#"{"id":"t","kind":"NOPE","reverses":null,"memo":"","at_ms":1,"postings":[]}"#.to_string()], NOW).is_err());
+    let back = reversals(&o, "v1", &rows, NOW + 10).unwrap().remove(0);
+    rows.push(back.record.replace(&back.tx_id, "tx_manual"));
+    let plan = hand_back(std::slice::from_ref(&o), "v1", &rows, NOW + 20).unwrap();
+    assert!(plan.write.is_empty());
+    assert_eq!(plan.refused.len(), 1, "{:?}", plan.refused);
+    assert_eq!(plan.refused[0].0, "r1");
+    assert!(plan.refused[0].1.contains("already refunded"), "{:?}", plan.refused);
+    assert_eq!(plan.refused_listed()[0]["order_id"], "r1");
+}

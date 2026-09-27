@@ -85,7 +85,7 @@ impl Table {
         // START SMALL AND DOUBLE. The ceiling is the refusal point, not the
         // allocation: a platform with four users should not carry a quarter of
         // a megabyte of empty arena on every read.
-        let mut store = Store::create_bytes(ceiling_bytes.min(16 * 1024));
+        let mut store = Store::create_bytes(ceiling_bytes.min(16 * 1024))?;
         Kv::init_bytes(&mut store)?;
         let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
         Ok(Table { store, kv, ceiling: ceiling_bytes })

@@ -40,6 +40,7 @@ pub const IMAGE_IDEMPOTENCY: &str = "idem";
 pub const IDEMPOTENCY_BYTES: usize = dowiz_hub::CEILING_BYTES;
 const KIND: &str = "k";
 
+pub mod commit;
 pub mod verdict;
 
 /// How long a key is honoured. Long enough for a phone to retry after a tunnel,
@@ -60,6 +61,10 @@ pub enum Decision {
     Replay { status: u16, body: String, ctype: String },
     /// Same key, different body — or the first call is still running.
     Refuse(Response),
+    /// The command already ran in the object and its answer was lost on the
+    /// way back (`commit`, W-FIX O2). This call owns the key again and answers
+    /// from `output` instead of sending the command a second time.
+    Committed { key: String, output: String },
 }
 
 /// The key a caller sent, if any, and what it is scoped by.
@@ -131,6 +136,7 @@ pub async fn begin(
             Decision::Refuse(res)
         }
         Ok(verdict::Seen::Answered { status, body, ctype }) => Decision::Replay { status, body, ctype },
+        Ok(verdict::Seen::Committed { output }) => Decision::Committed { key, output },
     }
 }
 
@@ -152,6 +158,8 @@ pub struct Guard {
     key: Option<String>,
     print: String,
     at_ms: i64,
+    /// The command's output when it already ran (`Decision::Committed`).
+    committed: Option<String>,
 }
 
 pub async fn guard(
@@ -164,8 +172,11 @@ pub async fn guard(
 ) -> std::result::Result<Guard, Response> {
     let print = fingerprint(body);
     match begin(place, header, principal, route, body, now_ms).await {
-        Decision::NoKey => Ok(Guard { key: None, print, at_ms: now_ms }),
-        Decision::Proceed { key } => Ok(Guard { key: Some(key), print, at_ms: now_ms }),
+        Decision::NoKey => Ok(Guard { key: None, print, at_ms: now_ms, committed: None }),
+        Decision::Proceed { key } => Ok(Guard { key: Some(key), print, at_ms: now_ms, committed: None }),
+        Decision::Committed { key, output } => {
+            Ok(Guard { key: Some(key), print, at_ms: now_ms, committed: Some(output) })
+        }
         Decision::Refuse(r) => Err(r),
         Decision::Replay { status, body, ctype } => {
             // THE FIRST CALL'S WHOLE ANSWER, not a marker. On a courier's
@@ -182,6 +193,17 @@ pub async fn guard(
 }
 
 impl Guard {
+    /// The claim to hand the object beside a command (`commit::Claimed`), so
+    /// the object's own turn can mark it committed. `None` without a key.
+    pub fn claim(&self) -> Option<commit::Claim> {
+        self.key.as_ref().map(|key| commit::Claim { key: key.clone(), print: self.print.clone() })
+    }
+
+    /// The output of a command that already ran under this key, if it did.
+    pub fn committed(&self) -> Option<&str> {
+        self.committed.as_deref()
+    }
+
     /// Record a SUCCESS this call answered. Does nothing when there was no key.
     /// A refusal goes through `refused`, anything else through `answered`
     /// (`verdict.rs`): an exit that records nothing wedges the key (D1).

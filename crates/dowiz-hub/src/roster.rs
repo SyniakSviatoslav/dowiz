@@ -138,7 +138,7 @@ pub struct Roster {
 
 impl Roster {
     pub fn create() -> Result<Self, HubError> {
-        let mut store = Store::create_bytes(DEFAULT_ROSTER_BYTES);
+        let mut store = Store::create_bytes(DEFAULT_ROSTER_BYTES)?;
         Kv::init_bytes(&mut store)?;
         let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
         Ok(Roster { kv, iterations: PBKDF2_ITERATIONS })

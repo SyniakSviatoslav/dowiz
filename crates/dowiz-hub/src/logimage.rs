@@ -112,7 +112,7 @@ impl LogImage {
     }
 
     pub fn create_sized(bytes: usize) -> Result<Self, HubError> {
-        let mut store = Store::create_bytes(bytes.max(MIN_LOG_BYTES));
+        let mut store = Store::create_bytes(bytes.max(MIN_LOG_BYTES))?;
         EvLog::init_bytes(&mut store)?;
         Ok(LogImage { store })
     }
@@ -248,7 +248,7 @@ impl LogImage {
         let dropped = all.len() - n;
         let mut keep: Vec<Entry> = all.into_iter().take(n).collect();
         keep.reverse();
-        let mut fresh = Store::create_bytes(self.store.to_bytes().len().max(MIN_LOG_BYTES));
+        let mut fresh = Store::create_bytes(self.store.to_bytes().len().max(MIN_LOG_BYTES))?;
         EvLog::init_bytes(&mut fresh)?;
         let mut prev = [0u8; 32];
         let mut last = None;
@@ -277,7 +277,7 @@ impl LogImage {
         // read for the rest of its life. The floor is only there so a corrupt
         // zero-length image cannot produce another one.
         let bigger = self.store.to_bytes().len().saturating_mul(2).max(MIN_LOG_BYTES);
-        let mut fresh = Store::create_bytes(bigger);
+        let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
         let mut last = None;
         for r in &records {
@@ -505,7 +505,7 @@ mod tests {
         // which is what editing the stored bytes would look like.
         let mut records = EvLog::walk(&l.store);
         records.reverse();
-        let mut fresh = Store::create_bytes(64 * 1024);
+        let mut fresh = Store::create_bytes(64 * 1024).unwrap();
         EvLog::init_bytes(&mut fresh).unwrap();
         let mut last = None;
         for (i, r) in records.iter().enumerate() {

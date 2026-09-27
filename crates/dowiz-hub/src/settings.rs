@@ -58,7 +58,7 @@ impl Settings {
     }
 
     pub fn create() -> Result<Self, HubError> {
-        let mut store = Store::create_bytes(DEFAULT_SETTINGS_BYTES);
+        let mut store = Store::create_bytes(DEFAULT_SETTINGS_BYTES)?;
         Kv::init_bytes(&mut store)?;
         let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
         Ok(Settings { store, kv })

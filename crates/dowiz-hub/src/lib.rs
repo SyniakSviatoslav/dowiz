@@ -330,7 +330,7 @@ impl Hub {
     }
 
     pub fn create_sized(bytes: usize) -> Result<Self, HubError> {
-        let mut store = Store::create_bytes(bytes);
+        let mut store = Store::create_bytes(bytes)?;
         EvLog::init_bytes(&mut store)?;
         Ok(Hub { store })
     }
@@ -480,7 +480,7 @@ impl Hub {
         // floor exists so a corrupt zero-length image cannot produce a
         // zero-length one; it is not a target.
         let bigger = self.store.to_bytes().len().saturating_mul(2).max(64 * 1024);
-        let mut fresh = Store::create_bytes(bigger);
+        let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
         let mut last: Option<[u8; 32]> = None;
         for r in &records {
@@ -646,7 +646,7 @@ impl Hub {
 
         // A fresh image sized for what it will hold, never smaller than a hub's
         // birth size: the whole point is that it is not the old one.
-        let mut fresh = Store::create_bytes(self.store.to_bytes().len().max(64 * 1024));
+        let mut fresh = Store::create_bytes(self.store.to_bytes().len().max(64 * 1024))?;
         EvLog::init_bytes(&mut fresh)?;
         let check_id = content_id_chained(&tip, &payload);
         EvLog::append_tip_bytes(
@@ -1362,7 +1362,7 @@ mod tests {
         };
         // Written straight into a store, because no public path writes an old
         // id any more -- which is the point.
-        let mut st = Store::create_bytes(64 * 1024);
+        let mut st = Store::create_bytes(64 * 1024).unwrap();
         EvLog::init_bytes(&mut st).unwrap();
         EvLog::append_tip_bytes(&mut st, &rec).unwrap();
         let h = Hub::load(&st.to_bytes()).unwrap();

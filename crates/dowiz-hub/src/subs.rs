@@ -42,7 +42,7 @@ pub struct Subs {
 
 impl Subs {
     pub fn create() -> Result<Self, HubError> {
-        let mut store = Store::create_bytes(DEFAULT_SUBS_BYTES);
+        let mut store = Store::create_bytes(DEFAULT_SUBS_BYTES)?;
         Kv::init_bytes(&mut store)?;
         let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
         Ok(Subs { kv })

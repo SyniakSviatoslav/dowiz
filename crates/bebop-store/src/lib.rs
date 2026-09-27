@@ -31,6 +31,10 @@ pub const SB_A: usize = 0;
 pub const SB_B: usize = 512;
 /// First cell of the arena.
 pub const ARENA: usize = 1024;
+/// The smallest image a store can be created at: the superblocks and one
+/// arena cell. Below it `create_bytes` REFUSES (W-FIX O11); it used to panic
+/// on `n - ARENA`, and only `LogImage` had a floor of its own.
+pub const MIN_BYTES: usize = (ARENA + 1) * 8;
 
 /// zlib CRC-32, table-free (bitwise), over raw bytes.
 pub fn crc32(bytes: &[u8]) -> u32 {
@@ -80,6 +84,9 @@ impl Store {
     /// file with no valid superblock: superblock A only, generation 0, root 0, cursor at the
     /// first arena cell, capacity = size/8 - 1024.
     pub fn create(path: &str, size_bytes: usize) -> io::Result<Self> {
+        if size_bytes < MIN_BYTES {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("a store needs {MIN_BYTES} bytes, not {size_bytes}")));
+        }
         let n = size_bytes / 8;
         let mut st = Store { cells: vec![0i64; n] };
         let capacity = (n - ARENA) as i64;
@@ -103,7 +110,13 @@ impl Store {
     /// That is what lets the store live somewhere with no `open()` -- an R2
     /// object, a Durable Object's storage, a Worker's heap -- rather than only
     /// on a disk.
-    pub fn create_bytes(size_bytes: usize) -> Self {
+    ///
+    /// REFUSED BELOW `MIN_BYTES` (W-FIX O11): `n - ARENA` panicked there, and
+    /// every caller can already say "no" -- they all return a store error.
+    pub fn create_bytes(size_bytes: usize) -> Result<Self, StoreError> {
+        if size_bytes < MIN_BYTES {
+            return Err(StoreError::TooSmall { bytes: size_bytes, floor: MIN_BYTES });
+        }
         let n = size_bytes / 8;
         let mut st = Store { cells: vec![0i64; n] };
         let capacity = (n - ARENA) as i64;
@@ -114,7 +127,7 @@ impl Store {
         st.cells[SB_A + 4] = ARENA as i64;
         st.cells[SB_A + 12] = capacity;
         st.cells[SB_A + 15] = crc32_cells(&st.cells, SB_A, 15) as i64;
-        st
+        Ok(st)
     }
 
     /// Load a store from a byte image. Trailing bytes that do not fill a whole
@@ -486,6 +499,8 @@ pub enum StoreError {
     /// sits in (W-AUDIT S1, 2026-09-27). Named, so the layer above can refuse
     /// the image loudly instead of writing through a lie.
     Corrupt(&'static str),
+    /// A store asked for below `MIN_BYTES` (W-FIX O11).
+    TooSmall { bytes: usize, floor: usize },
 }
 
 impl From<io::Error> for StoreError {
@@ -641,6 +656,30 @@ pub mod evlog;
 mod bytes_tests {
     use super::*;
 
+    /// W-FIX O11: a store asked for below the superblocks and one arena cell is
+    /// REFUSED, in memory and on disk. Both used to panic on `n - ARENA`.
+    #[test]
+    fn a_store_below_the_floor_is_refused_not_a_panic() {
+        for size in [0, 8, 4096, ARENA * 8, MIN_BYTES - 1] {
+            assert!(
+                matches!(Store::create_bytes(size), Err(StoreError::TooSmall { bytes, floor: MIN_BYTES }) if bytes == size),
+                "{size}"
+            );
+        }
+        let p = std::env::temp_dir().join("bebop_bytes_too_small.store");
+        let e = Store::create(p.to_str().unwrap(), 4096).err().expect("refused on disk too");
+        assert_eq!(e.kind(), io::ErrorKind::InvalidInput);
+        assert!(!p.exists(), "nothing was written");
+    }
+
+    /// The twin: the floor itself is a store, with one arena cell.
+    #[test]
+    fn a_store_at_the_floor_is_created() {
+        let st = Store::create_bytes(MIN_BYTES).unwrap();
+        assert_eq!(st.cells[SB_A + 12], 1, "capacity: one arena cell");
+        assert!(st.pick().is_some(), "a valid superblock");
+    }
+
     /// A fresh store built with no filesystem must be byte-identical to one
     /// `create()` writes. If these ever diverge, the format has two definitions.
     #[test]
@@ -648,7 +687,7 @@ mod bytes_tests {
         let p = std::env::temp_dir().join("bebop_bytes_create.store");
         let p = p.to_str().unwrap();
         let on_disk = Store::create(p, 1 << 20).unwrap();
-        let in_mem = Store::create_bytes(1 << 20);
+        let in_mem = Store::create_bytes(1 << 20).unwrap();
         assert_eq!(on_disk.cells, in_mem.cells, "same format, two constructors");
         assert_eq!(std::fs::read(p).unwrap(), in_mem.to_bytes(), "byte image matches the file");
         let _ = std::fs::remove_file(p);
@@ -659,7 +698,7 @@ mod bytes_tests {
     /// object on a Worker and in a file on a hub.
     #[test]
     fn commit_bytes_is_readable_by_the_file_reader() {
-        let mut st = Store::create_bytes(1 << 20);
+        let mut st = Store::create_bytes(1 << 20).unwrap();
         let mut tx = st.begin().unwrap();
         let obj = st.alloc(&mut tx, 4, 0x1234).unwrap();
         for i in 0..4 {
@@ -686,7 +725,7 @@ mod bytes_tests {
     /// from_bytes must not invent cells out of a truncated image.
     #[test]
     fn from_bytes_ignores_a_partial_trailing_cell() {
-        let st = Store::create_bytes(1 << 16);
+        let st = Store::create_bytes(1 << 16).unwrap();
         let mut b = st.to_bytes();
         b.extend_from_slice(&[0xAB, 0xCD, 0xEF]); // three stray bytes, not a cell
         let back = Store::from_bytes(&b);
@@ -699,7 +738,7 @@ mod bytes_tests {
     /// used to hand back the OLDER generation, missing every write since.
     #[test]
     fn a_cut_one_cell_short_is_refused_not_read_as_the_previous_generation() {
-        let mut st = Store::create_bytes(1 << 16);
+        let mut st = Store::create_bytes(1 << 16).unwrap();
         for v in [0x1111, 0x2222] {
             let mut tx = st.begin().unwrap();
             let root = st.alloc(&mut tx, 3, v).unwrap();
@@ -717,7 +756,7 @@ mod bytes_tests {
     /// more would keep a zero nobody needs, one cell less would drop a record.
     #[test]
     fn the_trim_lands_on_the_arena_cursor() {
-        let mut st = Store::create_bytes(4 << 20);
+        let mut st = Store::create_bytes(4 << 20).unwrap();
         let mut tx = st.begin().unwrap();
         let root = st.alloc(&mut tx, 3, 0x1111).unwrap();
         st.seal(root);
@@ -731,7 +770,7 @@ mod bytes_tests {
     /// looking valid: the cells the superblock claims are simply not there.
     #[test]
     fn a_truncated_image_is_left_as_it_arrived() {
-        let mut st = Store::create_bytes(1 << 20);
+        let mut st = Store::create_bytes(1 << 20).unwrap();
         let mut tx = st.begin().unwrap();
         let root = st.alloc(&mut tx, 8, 0x2222).unwrap();
         for i in 0..8 { st.put_cell(root, i, 7); }
@@ -752,7 +791,7 @@ mod bytes_tests {
     /// A trimmed image reopens identical to the full image.
     #[test]
     fn a_trimmed_image_reopens_identical() {
-        let mut st = Store::create_bytes(4 << 20);
+        let mut st = Store::create_bytes(4 << 20).unwrap();
         let mut tx = st.begin().unwrap();
 
         // Write a few objects to move the cursor forward
@@ -801,7 +840,7 @@ mod bytes_tests {
     /// memory the reader allocates.
     #[test]
     fn an_absurd_capacity_is_not_padded_to() {
-        let mut st = Store::create_bytes(1 << 20);
+        let mut st = Store::create_bytes(1 << 20).unwrap();
         let mut tx = st.begin().unwrap();
         let root = st.alloc(&mut tx, 2, 0x3333).unwrap();
         st.seal(root);
@@ -823,7 +862,7 @@ mod bytes_tests {
     /// A trimmed image is much smaller than the full one.
     #[test]
     fn a_trimmed_image_is_much_smaller() {
-        let mut st = Store::create_bytes(4 << 20);
+        let mut st = Store::create_bytes(4 << 20).unwrap();
         let mut tx = st.begin().unwrap();
 
         // Write a small object to a huge store

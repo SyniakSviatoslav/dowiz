@@ -21,6 +21,8 @@
 //! claim worth re-reading whenever one of its files grows.
 
 pub mod analytics;
+/// The door before the body (W-FIX O9): the order, locked by a test.
+mod authority_first;
 pub mod campaigns;
 pub mod catalogue;
 pub mod courier;

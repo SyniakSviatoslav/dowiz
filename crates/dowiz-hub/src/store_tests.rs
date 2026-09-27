@@ -68,3 +68,13 @@ fn overlapping_records_cannot_read_more_than_the_image() {
     assert_eq!(EvLog::walk(&honest).len(), 6);
     assert!(EvLog::walk(&honest).iter().all(|r| !r.payload.is_empty()));
 }
+
+/// W-FIX O11: a hub asked for at a size a store cannot hold is refused through
+/// the hub's own error, never a panic in the store beneath it.
+#[test]
+fn a_hub_below_the_store_floor_is_refused() {
+    let r = Hub::create_sized(100);
+    assert!(matches!(r, Err(HubError::Store(StoreError::TooSmall { bytes: 100, .. }))), "{:?}", r.err());
+    // Twin: the smallest store a hub's log fits in is created.
+    assert!(Hub::create_sized(64 * 1024).is_ok());
+}

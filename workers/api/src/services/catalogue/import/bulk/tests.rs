@@ -363,3 +363,11 @@ fn the_preview_keeps_what_the_owner_typed_as_apply_does() {
     apply_recipes(&mut cat, &d).unwrap();
     assert_eq!((rows[0]["after"]["weightG"].clone(), product(&cat, "maki-salmon")["weightG"].clone()), (json!(200), json!(200)));
 }
+
+/// W-FIX O9: the one bound every CSV doorway -- the menu's included -- refuses past.
+#[test]
+fn a_file_past_the_bound_is_too_big_and_one_at_it_is_not() {
+    assert!(too_big(MAX_BYTES + 1));
+    assert!(!too_big(MAX_BYTES));
+    assert!(!too_big(0));
+}

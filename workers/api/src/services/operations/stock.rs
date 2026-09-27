@@ -171,6 +171,14 @@ async fn waste_signer(req: &Request, ctx: &RouteContext<crate::Req>) -> std::res
 /// order lifecycle and are deliberately unreachable here: a hand-written
 /// reservation has no order to settle it and would strand immediately.
 pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    let Some(kind) = ctx.param("kind").cloned() else {
+        return Response::error("which movement?", 400);
+    };
+    let (by, loc) = match signer_for(&req, &ctx, &kind).await {
+        Ok(v) => v,
+        Err(r) => return Ok(r),
+    };
+    // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
     let raw: Value = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -178,13 +186,6 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
     let body: StockMoveIn = match serde_json::from_value(raw.clone()) {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
-    };
-    let Some(kind) = ctx.param("kind").cloned() else {
-        return Response::error("which movement?", 400);
-    };
-    let (by, loc) = match signer_for(&req, &ctx, &kind).await {
-        Ok(v) => v,
-        Err(r) => return Ok(r),
     };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;

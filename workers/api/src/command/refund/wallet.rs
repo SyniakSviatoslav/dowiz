@@ -61,5 +61,55 @@ pub fn reversals(order: &Value, venue: &str, ledger: &[String], now_ms: i64) -> 
     Ok(out)
 }
 
+/// A completed refund's wallet reversal the ledger lacks (W-FIX O3), or why it
+/// cannot be written.
+#[derive(Debug, Clone, Default)]
+pub struct HandBack {
+    pub write: Vec<Debit>,
+    /// `(order id, why)`: a reversal the journal refuses.
+    pub refused: Vec<(String, String)>,
+}
+
+impl HandBack {
+    /// The reversals as the screen lists them: order, amount, currency (the
+    /// credited posting -- the wallet's side).
+    pub fn listed(&self) -> Vec<Value> {
+        self.write.iter().map(|d| {
+            let r: Value = serde_json::from_str(&d.record).unwrap_or_default();
+            let credit = r.get("postings").and_then(Value::as_array).into_iter().flatten()
+                .find(|p| p.get("minor").and_then(Value::as_i64).unwrap_or(0) > 0).cloned().unwrap_or_default();
+            json!({ "tx_id": d.tx_id, "order_id": r.get("memo"), "amount": credit.get("minor"), "currency": credit.get("currency") })
+        }).collect()
+    }
+
+    /// The refusals, as the screen lists them.
+    pub fn refused_listed(&self) -> Vec<Value> {
+        self.refused.iter().map(|(o, why)| json!({ "order_id": o, "why": why })).collect()
+    }
+}
+
+/// THE REPAIR OF A LOST HAND-BACK (W-FIX O3). `refund` appends the reversals
+/// after the order's log, and a ledger write that failed was only logged: the
+/// order sat at COMPENSATED_REFUND with its wallet never credited, and nothing
+/// re-entered it. Every COMPENSATED_REFUND order's reversals are decided here
+/// against the ledger AS IT GROWS (oldest first), by the same `reversals` the
+/// refund runs -- derived ids, so a reversal already written is skipped and a
+/// second repair writes nothing.
+pub fn hand_back(orders: &[Value], venue: &str, ledger: &[String], now_ms: i64) -> Result<HandBack, Refused> {
+    let mut rows = ledger.to_vec();
+    crate::wallet::journal_from(&rows).map_err(|e| Refused::Append(format!("the wallet ledger does not replay: {e}")))?;
+    let mut plan = HandBack::default();
+    for o in orders.iter().filter(|o| o.get("status").and_then(Value::as_str) == Some("COMPENSATED_REFUND")) {
+        match reversals(o, venue, &rows, now_ms) {
+            Ok(back) => {
+                rows.extend(back.iter().map(|d| d.record.clone()));
+                plan.write.extend(back);
+            }
+            Err(r) => plan.refused.push((o.get("id").and_then(Value::as_str).unwrap_or_default().to_string(), r.message().to_string())),
+        }
+    }
+    Ok(plan)
+}
+
 #[cfg(test)]
 mod tests;

@@ -38,6 +38,9 @@ pub const RESERVED_SLUGS: &[&str] = &[
     "ns1", "ns2", "dns", "mx", "webhook", "static", "assets", "cdn", "img",
     "images", "media", "dashboard", "platform", "status", "health", "support",
     "help", "docs", "blog", "shop", "store", "test", "staging", "dev", "demo",
+    // THE OBJECT WITH NO VENUE (`hubstore::UNNAMED_VENUE`): a venue slugged
+    // `hub` would own what every request without a venue lands in.
+    "hub",
 ];
 
 /// Is this a legal DNS label AND a name the platform is willing to give away?
@@ -500,5 +503,14 @@ mod tests {
                 "'{name}' was available and it must not be"
             );
         }
+    }
+
+    /// W-FIX H4 (W-AUDIT O10): `hub` is the object every request with no venue
+    /// resolves to (`hubstore::UNNAMED_VENUE`). A venue registered as `hub`
+    /// would be handed that object's orders, and every unrouted request its.
+    #[test]
+    fn the_unnamed_venues_object_name_cannot_be_taken() {
+        assert!(slug_problem(crate::hubstore::UNNAMED_VENUE).is_some(), "'hub' must be reserved");
+        assert_eq!(slug_problem("hubs"), None, "only the exact name is reserved");
     }
 }

@@ -31,8 +31,8 @@ impl HubImages {
         }
         // D12 (G5): THE WALLET'S SHARE GOES BACK when the refund is completed.
         // The log first, then the ledger, for `write_both`'s reason (as `pay`
-        // writes its leg). A lost reversal is named on the console; nothing
-        // re-attempts it yet (OPEN in G5's verdict).
+        // writes its leg). A lost reversal is named on the console, and the
+        // law-12 repair writes it (`refund::wallet::hand_back`, W-FIX O3).
         if input.complete {
             self.hand_back_wallets(&merged, &input).await?;
         }

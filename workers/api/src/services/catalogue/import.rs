@@ -30,6 +30,10 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
     };
     let (apply, retire) = (flag("apply"), flag("retire"));
     let text = req.text().await?;
+    // BOUNDED LIKE ITS SIBLINGS (W-FIX O9): the menu doorway had no limit at all.
+    if bulk::too_big(text.len()) {
+        return Response::error("the file is larger than a menu spreadsheet", 413);
+    }
     let mut draft = dowiz_hub::import::from_csv(&text);
 
     let cat = crate::hubstore::load_catalog(&place).await?.catalog;

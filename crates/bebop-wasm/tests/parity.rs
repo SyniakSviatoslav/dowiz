@@ -78,7 +78,7 @@ fn a_cut_below_the_arena_is_refused_not_read_as_the_previous_generation() {
 #[test]
 fn a_kv_image_is_not_a_log_and_a_log_is_not_a_kv() {
     assert_eq!(log_view(&fixture()), Err(Refusal::NotALog));
-    let mut st = Store::create_bytes(64 * 1024);
+    let mut st = Store::create_bytes(64 * 1024).unwrap();
     EvLog::init_bytes(&mut st).expect("init");
     assert_eq!(kv_view(&st.to_bytes()), Err(Refusal::NotAKv));
 }
@@ -97,7 +97,7 @@ fn rec(n: u8, payload: &[u8]) -> Record {
 /// payload does; and a chain that lost a record is refused with both numbers.
 #[test]
 fn the_log_fold_is_stable_across_a_trim_and_sensitive_to_a_byte() {
-    let mut st = Store::create_bytes(64 * 1024);
+    let mut st = Store::create_bytes(64 * 1024).unwrap();
     EvLog::init_bytes(&mut st).expect("init");
     for (i, body) in [b"alpha".as_slice(), b"beta", b"gamma"].iter().enumerate() {
         EvLog::append_tip_bytes(&mut st, &rec(i as u8 + 1, body)).expect("append");

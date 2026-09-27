@@ -142,7 +142,7 @@ impl Hub {
 /// The same chain, oldest first, in a fresh store of `size` bytes. The ids and
 /// `prev` links are copied, never recomputed: that is what "in place" means.
 pub(crate) fn rebuilt(records: &[Record], tip: Option<[u8; 32]>, size: usize) -> Result<Store, HubError> {
-    let mut fresh = Store::create_bytes(size);
+    let mut fresh = Store::create_bytes(size)?;
     EvLog::init_bytes(&mut fresh)?;
     for r in records {
         EvLog::append_bytes(&mut fresh, r)?;

@@ -1300,16 +1300,31 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         )),
         stamps,
     };
-    let placed: crate::command::place::PlaceOut =
-        match crate::command::send(&place, "place", &input).await {
-        Ok(v) => v,
-        // THE OBJECT'S OWN WORDS REACH THE CUSTOMER. A 409 names the short
-        // ingredient so they can change one line; a 400 says what is wrong with
-        // the code. Collapsing both into "something went wrong" sends them
-        // hunting through a basket.
-        Err((status, said)) => return idem.refused(&place, status, &said).await,
+    // THE ORDER MAY ALREADY EXIST (W-FIX O2): the first try's reply was lost
+    // after the object wrote it, and the object marked this key committed in
+    // that same turn. This try answers from THAT order and places none.
+    let committed = idem.committed().and_then(|o| serde_json::from_str::<crate::command::place::PlaceOut>(o).ok());
+    let placed: crate::command::place::PlaceOut = match committed {
+        Some(p) => p,
+        None => match crate::command::send(
+            &place,
+            "place",
+            &crate::idempotency::commit::Claimed { input: &input, idem: idem.claim() },
+        )
+        .await
+        {
+            Ok(v) => v,
+            // THE OBJECT'S OWN WORDS REACH THE CUSTOMER. A 409 names the short
+            // ingredient so they can change one line; a 400 says what is wrong
+            // with the code. Collapsing both into "something went wrong" sends
+            // them hunting through a basket.
+            Err((status, said)) => return idem.refused(&place, status, &said).await,
+        },
     };
     let stored = placed.stored;
+    // The order's id is the one the object stored: on a committed retry the id
+    // minted above belongs to no order.
+    let id = crate::idempotency::commit::stored_id(&stored).unwrap_or(id);
 
     // WHAT THE CUSTOMER IS CHARGED IS WHAT THE ORDER SAYS, and those were two
     // different numbers. `total` above is `subtotal + fee + tip`, computed

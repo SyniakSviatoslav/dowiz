@@ -58,13 +58,14 @@ pub async fn promotions(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
 /// Deserialised by hand so the refusal names the field instead of arriving as a
 /// bare 422 with an empty body.
 pub async fn set_promotion(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let raw: Value = match req.json().await {
-        Ok(v) => v,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
-    };
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
+    };
+    // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
+    let raw: Value = match req.json().await {
+        Ok(v) => v,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;

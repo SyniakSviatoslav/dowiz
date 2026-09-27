@@ -24,6 +24,11 @@ use crate::services::operations::supplies::{check, record, SupplyIn};
 /// twenty of them and refuses a file that is not a spreadsheet at all.
 const MAX_BYTES: usize = dowiz_hub::CEILING_BYTES;
 
+/// Too big to read? The one bound for every CSV doorway, the menu's too (W-FIX O9).
+pub(crate) fn too_big(n: usize) -> bool {
+    n > MAX_BYTES
+}
+
 /// `POST /api/owner/supplies/import[?apply=1][&retire=1][&cost=hundredths]` — body is the CSV.
 pub async fn import_supplies(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     bulk(req, ctx, Kind::Supplies).await
@@ -53,7 +58,7 @@ async fn bulk(mut req: Request, ctx: RouteContext<crate::Req>, kind: Kind) -> Re
     let (apply, retire) = (flag("apply"), flag("retire"));
     let scale = if q("cost").as_deref() == Some("hundredths") { CostScale::Hundredths } else { CostScale::Major };
     let text = req.text().await?;
-    if text.len() > MAX_BYTES {
+    if too_big(text.len()) {
         return Response::error("the file is larger than a spreadsheet of supplies or recipes", 413);
     }
     // Everything the draft is judged against is read SERVER-SIDE, now.

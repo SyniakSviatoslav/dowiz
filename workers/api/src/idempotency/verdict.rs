@@ -41,6 +41,10 @@ pub enum Seen {
     Mismatch,
     /// The first call is inside its lease and has not answered (rule 4).
     Running,
+    /// The command RAN in the object (`commit`, W-FIX O2) and no answer was
+    /// recorded: this is the command's own output, for the handler to answer
+    /// from instead of running it again.
+    Committed { output: String },
 }
 
 /// Does an answer with this status become the key's permanent answer?
@@ -75,6 +79,9 @@ pub fn claim(t: &mut Table, key: &str, print: &str, now_ms: i64) -> Result<Seen>
         let ctype = Some(s("type")).filter(|c| !c.is_empty()).unwrap_or_else(|| "application/json".into());
         return Ok(Seen::Answered { status, body: s("body"), ctype });
     }
+    if let Some(output) = r.get("committed").and_then(Value::as_str) {
+        return Ok(Seen::Committed { output: output.to_string() });
+    }
     let at = r.get("at_ms").and_then(Value::as_i64).unwrap_or(0);
     if now_ms - at < LEASE_MS {
         return Ok(Seen::Running);
@@ -93,12 +100,13 @@ pub fn record(t: &mut Table, key: &str, print: &str, at_ms: i64, status: u16, bo
 }
 
 /// Give an unfinished claim back. An answered record is never removed here:
-/// only the nightly sweep ends a recorded answer.
+/// only the nightly sweep ends a recorded answer. NOR IS A COMMITTED ONE (W-FIX
+/// O2): the command ran, and a claim given back now is a command run twice.
 pub fn release(t: &mut Table, key: &str) {
     let open = t
         .get(KIND, key)
         .and_then(|j| serde_json::from_str::<Value>(&j).ok())
-        .is_some_and(|r| r.get("done").and_then(Value::as_bool) != Some(true));
+        .is_some_and(|r| r.get("done").and_then(Value::as_bool) != Some(true) && r.get("committed").is_none());
     if open {
         t.remove(KIND, key);
     }

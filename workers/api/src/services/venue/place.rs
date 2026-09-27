@@ -49,13 +49,14 @@ pub async fn set_place(mut req: Request, ctx: RouteContext<crate::Req>) -> Resul
         #[serde(default)]
         google: Option<Value>,
     }
-    let body: In = match req.json().await {
-        Ok(b) => b,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
-    };
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
+    };
+    // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
+    let body: In = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;

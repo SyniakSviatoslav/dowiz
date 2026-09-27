@@ -54,13 +54,14 @@ struct InviteIn {
 
 /// `POST /api/owner/staff/invite` — mint a code for one address, shown ONCE.
 pub async fn invite_staff(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: InviteIn = match req.json().await {
-        Ok(b) => b,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
-    };
     let (owner, loc) = match owner_and_venue(&req, &ctx).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
+    };
+    // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
+    let body: InviteIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let (email, name) = match sr::invite_fields(&body.email, &body.name) {
         Ok(v) => v,
@@ -82,29 +83,20 @@ pub async fn invite_staff(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
     };
     let now = ctx.data.now_ms;
     let (em, l2, own, nm, ch, iid) = (email.clone(), loc.clone(), owner.clone(), name.clone(), minted.hash, id.clone());
-    // THE REVOKE AND THE MINT IN ONE TURN: a second invite to one address
-    // replaces the first, and only holds if nothing runs in between.
-    ids::with_identity(&ctx.env, move |t| {
-        if let Some(pending) = t.lookup(&sr::sinvite_by_email(&em)) {
-            if let Some(mut i) = ids::rec(t, sr::K_SINVITE, &pending) {
-                i["revoked_at_ms"] = json!(now);
-                let at = sr::sinvite_at(&ids::s_of(&i, "location_id"), &pending);
-                t.put(sr::K_SINVITE, &pending, &i.to_string(), &[(at, pending.clone())], &[])
-                    .map_err(|e| Error::RustError(format!("invite: {e}")))?;
-            }
-        }
-        let rec = json!({
-            "id": iid, "location_id": l2, "created_by_owner_id": own, "role": preset.as_str(),
-            "invited_email": em, "invited_name": nm, "code_hash": ch,
-            "expires_at_ms": now + sr::STAFF_INVITE_TTL_MS, "created_at_ms": now,
-            "used_at_ms": null, "revoked_at_ms": null,
-        })
-        .to_string();
-        let index = [(sr::sinvite_by_email(&em), iid.clone()), (sr::sinvite_at(&l2, &iid), iid.clone())];
-        t.put(sr::K_SINVITE, &iid, &rec, &index, &[])
-            .map_err(|e| Error::RustError(format!("invite: {e}")))
+    // THE REVOKE AND THE MINT IN ONE TURN (`invite_turn`): a second invite to
+    // one address replaces THIS venue's first, and only holds if nothing runs
+    // in between.
+    let rec = json!({
+        "id": iid, "location_id": l2, "created_by_owner_id": own, "role": preset.as_str(),
+        "invited_email": em, "invited_name": nm, "code_hash": ch,
+        "expires_at_ms": now + sr::STAFF_INVITE_TTL_MS, "created_at_ms": now,
+        "used_at_ms": null, "revoked_at_ms": null,
     })
-    .await?;
+    .to_string();
+    let taken = ids::with_identity(&ctx.env, move |t| invite_turn(t, &em, &l2, &iid, &rec, now)).await?;
+    if taken {
+        return Response::error("that address has an open invitation from another venue", 409);
+    }
     let _ = body.location_id;
     Response::from_json(&json!({ "code": minted.code, "expiresMs": now + sr::STAFF_INVITE_TTL_MS }))
 }
@@ -127,13 +119,14 @@ struct ChangeIn {
 /// as well means a later restore does not quietly revive a tablet that was
 /// left somewhere during the suspension.
 pub async fn set_staff(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ChangeIn = match req.json().await {
-        Ok(b) => b,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
-    };
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
+    };
+    // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
+    let body: ChangeIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let Some(uid) = ctx.param("id").cloned() else {
         return Response::error("missing staff id", 400);
@@ -166,3 +159,49 @@ pub async fn set_staff(mut req: Request, ctx: RouteContext<crate::Req>) -> Resul
     let _ = body.location_id;
     Response::from_json(&json!({ "ok": true, "role": m["role"], "active": m["status"] == "active", "sessionsEnded": ended }))
 }
+
+/// THE CHECK, THE REVOKE AND THE MINT, as one table turn over the identity
+/// image. `Ok(true)` means another venue's invitation to this address is still
+/// open and NOTHING was written; `Ok(false)` means `rec` (invitation `iid` of
+/// `venue`) now stands and holds the address index.
+///
+/// ONLY THIS VENUE'S OWN PENDING INVITATION IS REVOKED (W-FIX H2 / W-AUDIT O6,
+/// 2026-09-27). The address index is platform-wide and this turn used to revoke
+/// whatever it found there: venue B inviting an address venue A had invited
+/// revoked A's code -- a cross-tenant write, the same one `hiring::invite_turn`
+/// closed for couriers (S8). Skipping the revoke alone is not enough: the index
+/// holds ONE invitation and `staff_claim` finds the code through it, so taking
+/// the index would strand A's code just the same. Another venue's OPEN
+/// invitation therefore refuses; a spent, revoked or expired one of another
+/// venue is left exactly as it is and the address index moves to this one --
+/// a person may work at two venues, one after the other.
+pub(crate) fn invite_turn(
+    t: &mut dowiz_hub::table::Table,
+    em: &str,
+    venue: &str,
+    iid: &str,
+    rec: &str,
+    now: i64,
+) -> Result<bool> {
+    if let Some(pending) = t.lookup(&sr::sinvite_by_email(em)) {
+        if let Some(mut i) = ids::rec(t, sr::K_SINVITE, &pending) {
+            if ids::s_of(&i, "location_id") != venue {
+                let open = |k: &str| i.get(k).map_or(true, serde_json::Value::is_null);
+                if open("used_at_ms") && open("revoked_at_ms") && now < ids::i_of(&i, "expires_at_ms") {
+                    return Ok(true);
+                }
+            } else {
+                i["revoked_at_ms"] = json!(now);
+                let at = sr::sinvite_at(venue, &pending);
+                t.put(sr::K_SINVITE, &pending, &i.to_string(), &[(at, pending.clone())], &[])
+                    .map_err(|e| Error::RustError(format!("invite: {e}")))?;
+            }
+        }
+    }
+    let index = [(sr::sinvite_by_email(em), iid.to_string()), (sr::sinvite_at(venue, iid), iid.to_string())];
+    t.put(sr::K_SINVITE, iid, rec, &index, &[]).map_err(|e| Error::RustError(format!("invite: {e}")))?;
+    Ok(false)
+}
+
+#[cfg(test)]
+mod tests;

@@ -64,6 +64,7 @@ mod ebills;
 
 /// The kitchen's "seen" ack: one `Noted`, the broadcast (A13, §2.6).
 mod kitchen_ack;
+mod idem; // a placement's claim marked committed in its turn (W-FIX O2), `hubdo/idem.rs`
 
 /// The kitchen print rail: poll, job, ack (LAST-MILE §3.1).
 mod print;
@@ -632,6 +633,7 @@ impl HubImages {
     async fn place(
         &self,
         input: crate::command::place::PlaceIn,
+        claim: Option<crate::idempotency::commit::Claim>,
     ) -> Result<std::result::Result<crate::command::place::PlaceOut, crate::command::Refused>>
     {
         // The projection is what the promo count is taken from -- the same one
@@ -689,6 +691,9 @@ impl HubImages {
                 "the log generation moved during a placement".into(),
             )));
         };
+        // THE ORDER EXISTS: its claim is marked committed now (W-FIX O2).
+        let out = crate::command::place::PlaceOut { stored: stored.clone(), generation: next, events };
+        self.commit_claim(claim.as_ref(), &serde_json::to_string(&out).unwrap_or_default()).await;
 
         // A venue that models no ingredients reserved none, and writing the
         // stock image to say so would cost a request per order for no change.
@@ -752,7 +757,7 @@ impl HubImages {
 
         // AFTER THE WRITE LANDED, never before.
         self.broadcast(dowiz_hub::EventKind::Placed as u8, &input.order_id, &stored, next);
-        Ok(Ok(crate::command::place::PlaceOut { stored, generation: next, events }))
+        Ok(Ok(out))
     }
 
     /// ADVANCE AN ORDER AND SETTLE THE SHELF, in one turn.
@@ -1406,8 +1411,8 @@ impl DurableObject for HubImages {
                 }
                 (Method::Post, "place") => {
                     let mut req = req;
-                    let input: crate::command::place::PlaceIn = req.json().await?;
-                    match self.place(input).await? {
+                    let crate::idempotency::commit::Claimed { input, idem } = req.json().await?;
+                    match self.place(input, idem).await? {
                         Ok(out) => {
                             let mut res = Response::from_json(&out)?;
                             res.headers_mut().set("x-generation", &out.generation.to_string())?;
