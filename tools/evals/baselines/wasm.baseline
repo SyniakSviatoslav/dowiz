@@ -1,12 +1,19 @@
 # wasm — written 2026-09-27 by lane W-PERF from tools/evals/collect/wasm.py over a fresh
 # worker-build --release of ab2973d6 + W-PERF (build/index_bg.wasm, 14:39). Ratchets: lowered freely,
 # raised only with a dated note. Five days earlier (09-22) raw was 2,426,605 and nothing caught the 2x.
-# If the post-glue strip (workers/api/scripts/strip-wasm.mjs) is wired in, raw falls to 4221157,
-# gzip to 1627335 and section.name to 0; worker_share_permille then reads 0 (no names to attribute).
+#
+# LOWERED 2026-09-27 by lane W-STRIP: the post-glue strip is now wired into wrangler.toml's
+# `[build] command` (workers/api/scripts/strip-wasm.mjs). Measured on worker-build --release of
+# fa2e7ace (wasm-opt -O, unchanged): unstripped raw 4954023 / gzip 1824704 / name 657742 /
+# worker_share 620; stripped (what uploads) raw 4296128 / gzip 1658647 / name 0. code and data
+# are byte-identical across the strip. HEAD had grown +89,848 raw over the W-PERF build before the
+# strip, so section.code (3796297 -> 3868791) and section.data (401527 -> 403828) are RAISED here,
+# dated 2026-09-27: HEAD's own growth (e6ab7182, fa2e7ace), not the strip. worker_share_permille reads 0 on a stripped file (no names to attribute crates by); the
+# names live in build/unstripped/index_bg.<digest>.wasm -- see the hand-back for wasm.py.
 wasm.functions_over_40k=2
-wasm.gzip=1790461
-wasm.raw=4864175
-wasm.section.code=3796297
-wasm.section.data=401527
-wasm.section.name=642865
-wasm.worker_share_permille=617
+wasm.gzip=1658647
+wasm.raw=4296128
+wasm.section.code=3868791
+wasm.section.data=403828
+wasm.section.name=0
+wasm.worker_share_permille=0

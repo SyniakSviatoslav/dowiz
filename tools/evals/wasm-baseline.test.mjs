@@ -29,3 +29,13 @@ test('the raw bundle baseline is a real build, not a placeholder', () => {
   assert.ok(Number(base['wasm.raw']) > 1_000_000, 'a Worker bundle is megabytes');
   assert.ok(Number(base['wasm.gzip']) < Number(base['wasm.raw']));
 });
+
+// THE STRIP IS WIRED (lane W-STRIP, 2026-09-27). The baseline below assumes the post-glue strip
+// runs on every build; if the `[build] command` loses it, the name section (~640 KB) comes back and
+// the ratchet goes red for a reason nobody would find in the Rust. This names the cause instead.
+test('wrangler builds with the post-glue strip and keeps the unstripped copy', () => {
+  const toml = fs.readFileSync(path.join(HERE, '../../workers/api/wrangler.toml'), 'utf8');
+  const cmd = toml.match(/^\[build\][\s\S]*?^command\s*=\s*"([^"]*)"/m)?.[1] ?? '';
+  assert.match(cmd, /^worker-build --release && node scripts\/strip-wasm\.mjs build\/index_bg\.wasm --keep build\/unstripped$/);
+  assert.equal(Number(base['wasm.section.name']), 0, 'a stripped bundle has no name section');
+});

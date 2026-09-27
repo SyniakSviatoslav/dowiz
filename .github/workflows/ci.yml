@@ -101,6 +101,8 @@ jobs:
         with: { node-version: '22' }
       - name: node --test over every browser module test
         run: node --test $(find workers/api/public -name '*.test.mjs' | sort)
+      - name: the post-glue wasm strip and the size baseline
+        run: node --test workers/api/scripts/strip-wasm.test.mjs tools/evals/wasm-baseline.test.mjs
 
   # THE LESSON VIDEO PIPELINE (Wave L, L9). No browser, no venue, no network: the recorder's rules,
   # the assembly plan, the ffprobe self-review (check.sh, driven end to end by assemble.test.mjs on

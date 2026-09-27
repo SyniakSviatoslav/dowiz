@@ -60,7 +60,16 @@ WAITLIST_TO = "syniaksviatoslav@proton.me"
 WAITLIST_FROM = "waitlist@dowiz.org"
 
 [build]
-command = "worker-build --release"
+# THE STRIP RUNS AFTER THE GLUE (docs/research/2026-09-27-binary-size.md §4
+# row 2). worker-build keeps the `name` section (its wasm-opt gets
+# `--debuginfo`), 13 % of the bundle; scripts/strip-wasm.mjs drops `name` and
+# `producers` and copies every other section byte for byte. Rust's own
+# `strip = true` is NOT the same thing and breaks wasm-bindgen (Cargo.toml).
+# The unstripped build is kept as build/unstripped/index_bg.<digest>.wasm,
+# named by the first 16 hex of `sha256sum build/index_bg.wasm` (what shipped),
+# for symbolising a Workers Logs stack trace. `&&`: a failed strip fails the
+# build, so nothing half-written is uploaded.
+command = "worker-build --release && node scripts/strip-wasm.mjs build/index_bg.wasm --keep build/unstripped"
 
 # THE BELL FOR THE WAITING LIST. `send_email` needs Email Routing ENABLED on
 # the dowiz.org zone and WAITLIST_TO VERIFIED as a destination address there

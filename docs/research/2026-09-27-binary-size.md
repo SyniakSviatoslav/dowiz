@@ -216,3 +216,70 @@ falling as the DAG lands.
 - `startup_time_ms` for any build: no deploy log exists on this box (`ls` of `workers/api/*.log` empty) and the
   dashboard is unreadable from here.
 - Whether worker-build 0.8.7 (2026-09-25) changed the `--debuginfo` default; 0.8.5's source was read.
+
+---
+
+## 7. MEASURED 2026-09-27 (lane W-STRIP): rows 2 and 3
+
+Build: `worker-build --release` of `fa2e7ace` in `/root/lanes/w-strip` through `slot.sh` (rc=0, 5 m 26 s
+cargo), with `WASM_OPT_BIN` pointed at a wrapper that kept the post-bindgen, pre-opt module (5,284,282 B) so the
+three wasm-opt profiles were run on the SAME input (binaryen 130, `--all-features --debuginfo`, as worker-build
+passes them).
+
+### 7.1 Row 2 — the strip, now WIRED
+
+`workers/api/wrangler.toml` `[build] command = "worker-build --release && node scripts/strip-wasm.mjs
+build/index_bg.wasm --keep build/unstripped"`. The script (W-PERF's byte-safe section drop, not
+`wasm-opt --strip-debug`, which re-encodes code) now also writes the unstripped bundle to
+`build/unstripped/index_bg.<first 16 hex of sha256 of the STRIPPED file>.wasm` before it strips, and
+`--name <kept.wasm> <index>...` symbolises a stripped stack trace. worker-build's build lock replaces only the
+entries it produces (`build_lock.rs` `finish()`), so `build/unstripped/` survives the next build; wrangler
+uploads only what `build/index.js` imports.
+
+| | raw | gzip -9 (wasm.py) | code | data | name |
+|---|---:|---:|---:|---:|---:|
+| unstripped (`-O`, what shipped until now) | 4,954,023 | 1,824,704 | 3,868,791 | 403,828 | 657,742 |
+| stripped (what uploads now) | **4,296,128** | **1,658,647** | 3,868,791 | 403,828 | 0 |
+| delta | −657,895 (−13.3 %) | −166,057 (−9.1 %) | 0 | 0 | −657,742 |
+
+Every kept section is byte-identical (the script checks before writing). A stripped trace reads
+`wasm-function[4690]:0x39c695`, the same index and offset as the unstripped one; `--name` on the kept copy
+answers `__wbindgen_malloc`, `wasm_bindgen::__wbindgen_string_get`, `worker::request::Request::text::{{closure}}`,
+`dowiz_api_worker::storefront::place::{{closure}}` — the same frames the unstripped run printed.
+
+### 7.2 Row 3 — `-O` vs `-Os` vs `-Oz`: KEEP `-O`
+
+| profile | raw unstripped | raw stripped | `gzip -9c` stripped |
+|---|---:|---:|---:|
+| `-O` (today) | 4,954,000 | 4,296,128 | 1,659,343 |
+| `-Os` | **byte-identical to `-O`** (`cmp`) | — | — |
+| `-Oz` | 4,786,127 | 4,128,255 (−167,873, −3.9 %) | 1,662,744 (**+3,401**, worse) |
+
+CPU, three interleaved rounds × 40 requests per class, medians of per-request process CPU (µs), Node 26.4 /
+V8 14.6 on the box's A78 cores through `slot.sh` (the same engine family as workerd; not workerd):
+
+| request | `-O` stripped | `-Oz` stripped | `-O` unstripped |
+|---|---|---|---|
+| GET menu | 9,993 / 11,049 / 13,978 | 13,546 / 12,333 / 15,463 | 10,821 / 12,560 / 11,543 |
+| place order | 43,794 / 43,990 / 55,499 | 52,457 / 45,387 / 60,938 | 48,799 / 50,539 / 45,384 |
+| owner orders | 14,174 / 14,729 / 14,637 | 14,291 / 14,526 / 14,895 | 14,132 / 15,985 / 13,077 |
+| startup (import+compile+instantiate, CPU ms) | 94.1 / 91.3 / 91.7 | 125.4 / 107.6 / 149.1 | 95.3 / 101.1 / 95.5 |
+
+`-Oz` is slower in every round on menu (+~18 %), placement (+~11 %) and startup compile (+~30 %), saves 3.9 %
+raw and makes gzip WORSE. With 1.4 % of requests already hitting the Free plan's 10 ms CPU kill, row 3 is
+REJECTED; the Cargo.toml metadata is unchanged. The strip itself moves CPU by nothing measurable (same code
+section; `-O` stripped vs unstripped are within the round-to-round spread). Absolute µs here are a phone core
+running a Node harness and are for comparison between builds only.
+
+### 7.3 The panic path, run locally
+
+workerd cannot start on this box (both cached builds, 1.20260918.1: "TCMalloc assumes a 48-bit virtual address
+space ... CHECK in AllocSlow: FATAL ERROR: Out of memory"; Android's kernel gives 39 bits), so `wrangler dev
+--local` / miniflare are impossible here. The distro Node 22 (V8 12.4) refuses the bundle's exception-handling
+code ("type error in branch[0] (expected (ref exn), got exnref)"); Termux's Node 26.4 (V8 14.6) runs it. The
+harness (lane scratchpad, not committed) loads `build/index.js` + `index_bg.wasm` with a Map-backed Durable
+Object/storage, routes `uncaughtException` to the glue's `addEventListener('error')` as workerd does, caps wasm
+memory at 2048 pages (128 MiB, the Workers isolate limit) and posts a 140 MiB body: `Request::text` →
+`__wbindgen_malloc` fails → Rust panic → `unreachable` → 500, "Reinitializing Wasm application", and the next
+requests (health, menu, owner orders with the pre-panic order still listed, a new order, both listed) succeed.
+Stripped and unstripped transcripts are identical apart from generated ids.
