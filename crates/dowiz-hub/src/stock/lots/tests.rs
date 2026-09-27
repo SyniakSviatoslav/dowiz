@@ -92,3 +92,25 @@ fn a_prep_carries_its_lot_forward() {
     assert_eq!((f[0].code.as_str(), f[0].left, f[0].expiry), ("L7>fillet", 2750, Some(20261001)));
     assert_eq!(j.lots.open().len(), 1);
 }
+
+/// A lot used up is closed: the same label on a later delivery is a new box
+/// with its own expiry, not the empty one revived with the old date.
+#[test]
+fn a_used_up_lot_is_closed_and_its_label_opens_a_new_one() {
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    log.receive_with("salmon", 100, &lot("L1", 20261001)).unwrap();
+    log.append_all_with(&[waste(100, Some("L1"))]).unwrap();
+    assert!(left(&log, "salmon").is_empty());
+    assert!(log.journal().unwrap().lots.lots.is_empty(), "nothing is kept for an empty lot");
+    log.receive_with("salmon", 300, &lot("L1", 20261020)).unwrap();
+    let j = log.journal().unwrap();
+    let l = &j.lots.of("salmon")[0];
+    assert_eq!((l.code.as_str(), l.expiry, l.received, l.left), ("L1", Some(20261020), 300, 300));
+    // Twin: a lot NOT used up takes the second delivery under its label.
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    log.receive_with("salmon", 100, &lot("L1", 20261001)).unwrap();
+    log.receive_with("salmon", 300, &lot("L1", 20261020)).unwrap();
+    let j = log.journal().unwrap();
+    let l = &j.lots.of("salmon")[0];
+    assert_eq!((l.expiry, l.received, l.left), (Some(20261001), 400, 400));
+}

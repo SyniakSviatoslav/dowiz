@@ -1386,6 +1386,8 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // tap, a replay after a lost generation guard -- returns the SAME intent
     // rather than charging twice.
     let mut out: Value = serde_json::from_str(&stored).unwrap_or(json!({}));
+    // What each dish cost the kitchen stays in the venue's log (R4).
+    crate::command::place::cost::strip(&mut out);
     // `notify::order_placed` WAS AWAITED HERE, after the order was already in
     // the log. Telegram refuses, or the isolate is cut off at the end of the
     // response, and the kitchen is never told about an order that exists and is

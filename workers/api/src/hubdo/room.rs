@@ -78,6 +78,14 @@ impl HubImages {
         })
     }
 
+    /// `stock_log`, CLOCKED at the request's instant: every record the turn
+    /// writes carries `at`, so a report dates it by itself (P3).
+    pub(super) async fn stock_log_at(&self, now_ms: i64) -> Result<(i64, dowiz_hub::stock::StockLog)> {
+        let (gen, mut s) = self.stock_log().await?;
+        s.set_clock(now_ms);
+        Ok((gen, s))
+    }
+
     /// Write the log, then the stock if it moved — THE LOG FIRST, for the
     /// reason `place` gives: a lost second write then leaves an order whose
     /// shelf is wrong, which the audit sees, never a shelf with no order.
@@ -107,7 +115,7 @@ impl HubImages {
         let (log_gen, listed) = self.orders_view().await?;
         let current: Option<OrderView> = listed.into_iter().find(|o| o.order_id == input.order_id);
         let (_, mut hub) = self.log_hub().await?;
-        let (stock_gen, mut stock) = self.stock_log().await?;
+        let (stock_gen, mut stock) = self.stock_log_at(input.now_ms).await?;
         let before = stock.len();
         let low_before = self.low_watch(&stock).await;
         let (round, body, seq) = match crate::command::amend::decide(&mut hub, &mut stock, current.as_ref(), &input) {
@@ -239,7 +247,7 @@ impl HubImages {
         let from = listed.iter().find(|o| o.order_id == input.from_order_id);
         let to = listed.iter().find(|o| o.order_id == input.to_order_id);
         let (_, mut hub) = self.log_hub().await?;
-        let (stock_gen, mut stock) = self.stock_log().await?;
+        let (stock_gen, mut stock) = self.stock_log_at(input.now_ms).await?;
         let before = stock.len();
         let d = match crate::command::transfer::decide(&mut hub, &mut stock, from, to, &input) {
             Ok(v) => v,

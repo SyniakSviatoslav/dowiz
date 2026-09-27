@@ -319,6 +319,14 @@ impl EvLog {
     /// caller asks whether that happened, and `LogImage::load` refuses the
     /// image when it did.
     pub fn walk(st: &Store) -> Vec<Record> {
+        Self::walk_until(st, |_| false)
+    }
+
+    /// `walk`, STOPPING after the first record `stop` accepts (it is the last
+    /// one returned). A log that keeps a checkpoint record reads back only as
+    /// far as its newest checkpoint instead of to its first record: the
+    /// records older than it are never unpacked. Same cap as `walk`.
+    pub fn walk_until(st: &Store, mut stop: impl FnMut(&Record) -> bool) -> Vec<Record> {
         let mut out = Vec::new();
         let Some(root) = st.root() else { return out };
         let version = Self::version(st);
@@ -330,7 +338,12 @@ impl EvLog {
             if out.len() >= cap {
                 break;
             }
-            out.push(Self::read_at(st, version, obj, &mut budget));
+            let r = Self::read_at(st, version, obj, &mut budget);
+            let done = stop(&r);
+            out.push(r);
+            if done {
+                break;
+            }
             cur = st.follow(obj, 2);
         }
         out
@@ -546,6 +559,23 @@ mod tests {
             EvLog::walk(&st).len() <= EvLog::step_cap(&st),
             "the walk must stop at the cap rather than run out of memory"
         );
+    }
+
+    /// `walk_until` stops AT the first accepted record, newest first, and
+    /// hands back that record last; a predicate that accepts nothing is `walk`.
+    #[test]
+    fn walk_until_stops_at_the_first_accepted_record() {
+        let mut st = Store::create_bytes(64 * 1024);
+        EvLog::init_bytes(&mut st).expect("init");
+        for (i, p) in [b"a".as_slice(), b"CK", b"b", b"c"].iter().enumerate() {
+            EvLog::append_bytes(&mut st, &rec(i as u8, p)).expect("append");
+        }
+        let got = EvLog::walk_until(&st, |r| r.payload == b"CK");
+        let bodies: Vec<&[u8]> = got.iter().map(|r| r.payload.as_slice()).collect();
+        assert_eq!(bodies, vec![b"c".as_slice(), b"b", b"CK"], "the older record is never read");
+        // Twin: nothing accepted is the whole chain, exactly `walk`.
+        assert_eq!(EvLog::walk_until(&st, |_| false), EvLog::walk(&st));
+        assert_eq!(EvLog::walk(&st).len(), 4);
     }
 
     /// A V1 IMAGE STILL READS, and that is the whole risk of this change.

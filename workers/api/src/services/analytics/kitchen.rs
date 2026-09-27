@@ -123,14 +123,15 @@ pub async fn kitchen(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
         Ok(w) => w,
         Err(why) => return Response::error(why, 400),
     };
-    let journal = match stock.journal() {
+    // From the newest checkpoint older than the window, not the first record (R7).
+    let journal = match stock.journal_since(w.starts.first().copied().unwrap_or(i64::MIN)) {
         Ok(j) => j,
         Err(e) => return Response::error(e.to_string(), 500),
     };
     let orders = crate::services::orders::mine::of_venue(listed, &loc);
     let (dishes, supplies) = (dishes_of(&cat), supplies_of(&cat));
     let sold = sales::fold(&orders, &dishes, &w);
-    let moved = shelf::fold(&journal.entries, &supplies, &sold.placed_at, &w);
+    let moved = shelf::fold_journal(&journal, &supplies, &sold.placed_at, &w);
     let mut out = report::report(&sold, &moved, &dishes, &supplies, &journal, &w);
     out["currency"] = serde_json::json!(crate::services::venue::currency_of(&cat));
     let out = if who.is_staff() { access::numbers_for_kitchen(out) } else { out };

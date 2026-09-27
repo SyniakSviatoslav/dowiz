@@ -9,7 +9,7 @@
 //! dates (research R2) rather than having it silently land on "today".
 
 use super::sales::{Supply, Window};
-use dowiz_hub::stock::journal::Entry;
+use dowiz_hub::stock::journal::{Entry, Journal};
 use dowiz_hub::stock::StockEvent;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
@@ -121,6 +121,15 @@ pub fn fold(entries: &[Entry], supplies: &HashMap<String, Supply>, placed_at: &H
             _ => {}
         }
     }
+    s
+}
+
+/// [`fold`] over a journal that may start at a checkpoint
+/// (`StockLog::journal_since`, R7): its rows, plus the undatable rows the
+/// checkpoint carries -- the ones no order placement in `placed_at` dates.
+pub fn fold_journal(j: &Journal, supplies: &HashMap<String, Supply>, placed_at: &HashMap<String, i64>, w: &Window) -> Shelf {
+    let mut s = fold(&j.entries, supplies, placed_at, w);
+    s.undated += j.before.left(|o| placed_at.contains_key(o)) as i64;
     s
 }
 

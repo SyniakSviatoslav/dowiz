@@ -239,7 +239,7 @@ impl StockLevel {
 }
 
 /// A PROJECTION. Rebuilt by fold, never edited in place.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StockLedger {
     levels: Vec<(String, StockLevel)>,
     /// Open reservations, for I3. `(order_id, item)` -> qty.
@@ -1028,6 +1028,11 @@ pub struct StockLog {
     /// The request clock, when the caller set one ([`StockLog::set_clock`]):
     /// every record written then carries `"at"`.
     clock: Option<i64>,
+    /// A checkpoint is written once this many records follow the last one
+    /// ([`checkpoint::CHECKPOINT_EVERY`]).
+    every: usize,
+    /// The image was rewritten (`grow`) since the last checkpoint.
+    grew: bool,
 }
 
 /// Room for roughly a year of a single venue's stock events.
@@ -1064,7 +1069,7 @@ impl StockLog {
     pub fn create_sized(bytes: usize) -> Result<Self, crate::HubError> {
         let mut store = Store::create_bytes(bytes);
         EvLog::init_bytes(&mut store)?;
-        Ok(StockLog { store, clock: None })
+        Ok(StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false })
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, crate::HubError> {
@@ -1080,7 +1085,7 @@ impl StockLog {
         // `Reserved` was in the lost tail turned every later stock write into
         // a `Linkage` refusal. Refusing here is what a caller can act on.
         crate::chain_is_whole(&store)?;
-        Ok(StockLog { store, clock: None })
+        Ok(StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false })
     }
 
     /// FULL CAPACITY: `grow()` doubles from this length, so it keeps the
@@ -1117,14 +1122,9 @@ impl StockLog {
 
     /// One record, chained to the previous. The chain is what makes the log
     /// tamper-evident: editing any event changes every content id after it,
-    /// which is I4's other half.
-    fn write(&mut self, ev: &StockEvent) -> Result<(), StockError> {
-        let m = self.stamped(&meta::Meta::default());
-        self.write_payload(meta::with_meta(&encode(ev), &m).into_bytes())
-    }
-
-    /// The record itself. Split from `write` so a test can lay down bytes in
-    /// an OLDER encoding and prove the fold still reads them.
+    /// which is I4's other half. Takes the bytes, so a test can lay down an
+    /// OLDER encoding and prove the fold still reads them, and a checkpoint
+    /// is written through the same door as an event.
     fn write_payload(&mut self, payload: Vec<u8>) -> Result<(), StockError> {
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
         // CHAINED, which is what the comment above has always claimed: the id
@@ -1196,11 +1196,14 @@ impl StockLog {
         // Swapped in only once the whole copy succeeded: a partial grow that
         // replaced the store would lose the ledger to save space.
         self.store = fresh;
+        self.grew = true;
         Ok(())
     }
 
+    /// The shelf NOW: the newest checkpoint plus the records after it (R7),
+    /// equal to `StockLedger::fold(&self.events())` by the checkpoint's law.
     pub fn ledger(&self) -> Result<StockLedger, StockError> {
-        StockLedger::fold(&self.events())
+        self.fold_tail(true, false).map(|f| f.0)
     }
 
     /// Append one event, AFTER the ledger has agreed to it.
@@ -1213,9 +1216,7 @@ impl StockLog {
     /// A new write-off or count must be SIGNED ([`signed`]); the history it is
     /// decided against need not be.
     pub fn append(&mut self, ev: &StockEvent) -> Result<(), StockError> {
-        signed(ev)?;
-        self.ledger()?.decide(ev)?;
-        self.write(ev)
+        self.append_all(std::slice::from_ref(ev))
     }
 
     /// Append several as ONE decision.
@@ -1228,17 +1229,8 @@ impl StockLog {
         // Decided against a ledger that accumulates the batch, so two lines of
         // one order competing for the same ingredient are caught here rather
         // than by the second one failing after the first was written.
-        for ev in evs {
-            signed(ev)?;
-        }
-        let mut trial = self.ledger()?;
-        for ev in evs {
-            trial.apply(ev)?;
-        }
-        for ev in evs {
-            self.write(ev)?;
-        }
-        Ok(())
+        let with: Vec<(StockEvent, meta::Meta)> = evs.iter().map(|e| (e.clone(), meta::Meta::default())).collect();
+        self.commit(&with, false).map(|_| ())
     }
 }
 
@@ -1610,6 +1602,8 @@ pub mod meta;
 pub mod journal;
 /// Lots on hand, first-expiry-first-out.
 pub mod lots;
+/// The fold's state as a record in the chain: fold = checkpoint + tail (R7).
+pub mod checkpoint;
 
 /// W-AUDIT S7 (2026-09-27): the recipe is read through brackets inside names
 /// and never from the next array in the record.

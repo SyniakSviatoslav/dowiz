@@ -44,6 +44,7 @@ pub fn guest_view(card: &Value) -> Value {
     let mut v = card.clone();
     if let Some(rounds) = v.get_mut("rounds").and_then(Value::as_array_mut) {
         for r in rounds {
+            crate::command::place::cost::strip(r);
             if let Some(o) = r.as_object_mut() {
                 for k in ["placed_by", "payments", "amended", "adjustments", "seq"] {
                     o.remove(k);

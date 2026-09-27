@@ -100,3 +100,31 @@ fn measure_a_kitchen_request() {
         j.entries.len(), t1 - t0, orders.len(), t2 - t1
     );
 }
+
+/// R4: the dish's margin is taken at what each portion cost WHEN IT WAS
+/// SOLD. The stamped order keeps 150 a portion though the average is now 200;
+/// the order from before stamps takes today's 200.
+#[test]
+fn the_margin_uses_the_stamped_cost_and_old_orders_todays() {
+    let (dishes, supplies, w) = world();
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    log.receive_with("salmon", 1000, &Meta { unit_cost: Some(2000), per: Some(1000), ..Meta::default() }).unwrap();
+    let orders = vec![
+        serde_json::json!({ "id": "o1", "created_at_ms": 100, "status": "DELIVERED", "items": [{ "product_id": "sake", "quantity": 2, "unit_price": 1000, "unit_cost": 150, "cost_at": 0 }] }),
+        serde_json::json!({ "id": "o2", "created_at_ms": 1100, "status": "DELIVERED", "items": [{ "product_id": "sake", "quantity": 1, "unit_price": 1000 }] }),
+    ];
+    let j = log.journal().unwrap();
+    let s = sales::fold(&orders, &dishes, &w);
+    let sh = shelf::fold(&j.entries, &supplies, &s.placed_at, &w);
+    let r = report(&s, &sh, &dishes, &supplies, &j, &w);
+    let d = &r["dishes"][0];
+    assert_eq!((d["portionCost"].clone(), d["cogs"].clone(), d["margin"].clone()), (json!(200), json!(2 * 150 + 200), json!(3000 - 500)));
+    assert_eq!((r["byDay"][0]["cogs"].clone(), r["byDay"][1]["cogs"].clone()), (json!(300), json!(200)));
+    assert_eq!((r["totals"]["cogs"].clone(), r["totals"]["uncosted"].clone()), (json!(500), json!(0)));
+    // No cost today at all (no delivery priced, no list price): the stamped
+    // portions still count, the old one is uncosted, the dish's whole is unknown.
+    let bare: HashMap<String, Supply> = HashMap::new();
+    let empty = StockLog::create_sized(64 * 1024).unwrap().journal().unwrap();
+    let r = report(&s, &shelf::fold(&[], &bare, &s.placed_at, &w), &dishes, &bare, &empty, &w);
+    assert_eq!((r["dishes"][0]["cogs"].clone(), r["totals"]["cogs"].clone(), r["totals"]["uncosted"].clone()), (Value::Null, json!(300), json!(1)));
+}

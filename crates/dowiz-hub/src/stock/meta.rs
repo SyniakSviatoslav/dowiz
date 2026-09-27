@@ -187,18 +187,7 @@ impl StockLog {
     /// Several as ONE decision, each with its own meta (a stocktake session:
     /// one `expected` per line). All or nothing, as [`StockLog::append_all`].
     pub fn append_all_with(&mut self, evs: &[(StockEvent, Meta)]) -> Result<(), StockError> {
-        for (ev, _) in evs {
-            super::signed(ev)?;
-        }
-        let mut trial = self.ledger()?;
-        for (ev, _) in evs {
-            trial.apply(ev)?;
-        }
-        for (ev, meta) in evs {
-            let m = self.stamped(meta);
-            self.write_payload(with_meta(&encode(ev), &m).into_bytes())?;
-        }
-        Ok(())
+        self.commit(evs, false).map(|_| ())
     }
 }
 

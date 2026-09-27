@@ -39,13 +39,54 @@ impl Entry {
     }
 }
 
-/// The whole log, folded once.
+/// Rows no report can date: no `at` of their own, and -- for the ones with an
+/// order -- dated only if that order's placement is known to the reader.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Undated {
+    /// No `at` and no order: never datable.
+    pub plain: usize,
+    /// No `at`, with an order: how many rows per order, first-seen order.
+    pub by_order: Vec<(String, usize)>,
+}
+
+impl Undated {
+    fn count(&mut self, e: &Entry) {
+        if e.meta.at.is_some() || matches!(e.ev, StockEvent::Reserved { .. } | StockEvent::Released { .. }) {
+            return;
+        }
+        match e.ev.order_id() {
+            None => self.plain += 1,
+            Some(o) => match self.by_order.iter_mut().find(|(k, _)| k == o) {
+                Some(p) => p.1 += 1,
+                None => self.by_order.push((o.to_string(), 1)),
+            },
+        }
+    }
+
+    /// How many of these rows a reader who knows `placed` still cannot date.
+    pub fn left(&self, placed: impl Fn(&str) -> bool) -> usize {
+        self.plain + self.by_order.iter().filter(|(o, _)| !placed(o)).map(|(_, n)| n).sum::<usize>()
+    }
+}
+
+/// The whole log, folded once -- or, from [`StockLog::journal_since`], the
+/// newest checkpoint older than a report's window plus every row after it.
 #[derive(Debug, Clone, Default)]
 pub struct Journal {
+    /// The rows folded HERE; a checkpoint's rows are in its state, not here.
     pub entries: Vec<Entry>,
     pub ledger: StockLedger,
     pub book: CostBook,
     pub lots: Lots,
+    /// Rows folded so far, counting the checkpoint's: the next row's `seq`.
+    pub seen: usize,
+    /// The newest `at` any folded row carried.
+    pub max_at: Option<i64>,
+    /// Every undatable row folded so far, counting the checkpoint's.
+    pub undated: Undated,
+    /// The part of `undated` that is NOT in `entries` (the checkpoint's), so
+    /// a report over `entries` adds it once. Empty for a fold from genesis.
+    pub before: Undated,
 }
 
 /// Minor units for `qty` at `unit_cost` per `per`, rounded half up.
@@ -81,27 +122,49 @@ impl Journal {
     /// Fold one raw record. A record that does not decode is skipped, as
     /// `events()` skips it; one the ledger refuses stops the fold, as
     /// `ledger()` does.
-    fn step(&mut self, rec: &str) -> Result<(), StockError> {
+    pub(super) fn step(&mut self, rec: &str) -> Result<(), StockError> {
         let Some(ev) = decode(rec) else { return Ok(()) };
         let meta = meta_of(rec);
         let before = self.ledger.level(ev.item()).on_hand;
         let value = self.value_of(&ev, &meta, before);
         self.ledger.apply(&ev)?;
         self.book.apply_event(&ev, rec);
-        let entry = Entry { seq: self.entries.len(), ev, meta, before, value };
+        let entry = Entry { seq: self.seen, ev, meta, before, value };
         let ledger = &self.ledger;
         self.lots.step(&entry, |i| ledger.level(i).on_hand);
+        self.seen += 1;
+        self.max_at = self.max_at.max(entry.meta.at);
+        self.undated.count(&entry);
         self.entries.push(entry);
         Ok(())
     }
 }
 
 impl StockLog {
-    /// Every record folded ONCE: shelf, cost, lots and the dated rows.
+    /// Every record folded ONCE, from the first: shelf, cost, lots and the
+    /// dated rows. Checkpoints are not read (they do not decode).
     pub fn journal(&self) -> Result<Journal, StockError> {
         let mut j = Journal::default();
         for rec in self.raw() {
             j.step(&rec)?;
+        }
+        Ok(j)
+    }
+
+    /// The journal a report over `[since_ms, ...)` needs: the state of the
+    /// newest checkpoint EVERY row of which is dated before `since_ms`, and
+    /// the rows after it. Its `ledger`, `book` and `lots` are today's, as
+    /// [`StockLog::journal`]'s are; its `entries` start at that checkpoint,
+    /// and `before` carries the undatable rows behind it.
+    ///
+    /// Exact for a window starting at `since_ms` on one assumption, stated:
+    /// a row without its own `at` belongs to an order placed no later than
+    /// the row was written (a reservation, a draw, a till sale).
+    pub fn journal_since(&self, since_ms: i64) -> Result<Journal, StockError> {
+        let t = self.tail(|_, newest| newest.is_some_and(|n| n < since_ms));
+        let mut j = t.base.unwrap_or_default();
+        for rec in &t.recs {
+            j.step(rec)?;
         }
         Ok(j)
     }

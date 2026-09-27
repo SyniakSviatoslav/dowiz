@@ -70,6 +70,13 @@ pub struct DishRow {
     pub sold: i64,
     pub revenue: i64,
     pub by_day: Vec<i64>,
+    /// Portions whose line carries the cost stamped at placement (R4), and
+    /// what they cost then, in total and per day. The rest fall back to
+    /// today's average -- every order placed before stamps existed.
+    pub stamped: i64,
+    pub stamped_cogs: i64,
+    pub stamped_by_day: Vec<i64>,
+    pub stamped_cogs_by_day: Vec<i64>,
 }
 
 /// One ingredient's theoretical use, grams by stage and base units by day.
@@ -122,10 +129,18 @@ pub fn fold(orders: &[Value], dishes: &HashMap<String, Dish>, w: &Window) -> Sal
             let q = it.get("quantity").and_then(Value::as_i64).unwrap_or(0).max(0);
             let money = it.get("unit_price").and_then(Value::as_i64).unwrap_or(0) * q;
             s.days[d].revenue += money;
-            let row = s.dishes.entry(pid.to_string()).or_insert_with(|| DishRow { by_day: vec![0; n], ..DishRow::default() });
+            let row = s.dishes.entry(pid.to_string()).or_insert_with(|| DishRow {
+                by_day: vec![0; n], stamped_by_day: vec![0; n], stamped_cogs_by_day: vec![0; n], ..DishRow::default()
+            });
             row.sold += q;
             row.revenue += money;
             row.by_day[d] += q;
+            if let Some(c) = crate::command::place::cost::line_cost(it, q) {
+                row.stamped += q;
+                row.stamped_cogs += c;
+                row.stamped_by_day[d] += q;
+                row.stamped_cogs_by_day[d] += c;
+            }
             let Some(dish) = dishes.get(pid).filter(|x| !x.lines.is_empty()) else {
                 s.unmodelled += q;
                 continue;
@@ -141,6 +156,24 @@ pub fn fold(orders: &[Value], dishes: &HashMap<String, Dish>, w: &Window) -> Sal
         }
     }
     s
+}
+
+/// A dish's cost of goods over the window, whole and per day: the stamped
+/// portions at what they cost when sold, the rest at `today` (a portion's
+/// cost now). `None` for the whole when some portions have no cost either way.
+pub fn cogs_of(row: &DishRow, today: Option<i64>) -> (Option<i64>, Vec<i64>) {
+    let rest = row.sold - row.stamped;
+    let by_day = (0..row.by_day.len())
+        .map(|d| {
+            let at = |v: &Vec<i64>| v.get(d).copied().unwrap_or(0);
+            at(&row.stamped_cogs_by_day) + today.map_or(0, |c| c * (row.by_day[d] - at(&row.stamped_by_day)))
+        })
+        .collect();
+    let whole = match today {
+        Some(c) => Some(row.stamped_cogs + c * rest),
+        None => (rest == 0).then_some(row.stamped_cogs),
+    };
+    (whole, by_day)
 }
 
 /// One portion's cost: every line's gross at its cost; `None` unless every

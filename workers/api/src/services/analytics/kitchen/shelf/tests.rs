@@ -57,3 +57,31 @@ fn outside_the_window_is_left_out() {
     let s = fold(&j.entries, &supplies(), &HashMap::new(), &w());
     assert!(s.moved.is_empty() && s.undated == 0);
 }
+
+/// R7: the report read from the newest checkpoint older than its window is
+/// the report read from the first record -- every number, and the undatable
+/// rows behind the checkpoint counted once.
+#[test]
+fn a_report_from_a_checkpoint_is_the_report_from_genesis() {
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    log.set_checkpoint_every(5);
+    log.append(&StockEvent::Received { item: "salmon".into(), qty: 5000 }).unwrap(); // undated
+    log.append_all(&dowiz_hub::stock::reservations_for("o0", &[(r#"{"bom":[{"supply":"salmon","qty":10}]}"#.into(), 1)])).unwrap();
+    let led = log.ledger().unwrap();
+    log.append_all(&dowiz_hub::stock::settle(&led, "o0", true)).unwrap(); // undated, dated by o0 if known
+    for (i, at) in [100, 400, 900, 1200, 1700, 2200, 2600].into_iter().enumerate() {
+        log.set_clock(at);
+        log.receive_with("salmon", 100, &Meta { unit_cost: Some(3000 + i as i64), per: Some(1000), ..Meta::default() }).unwrap();
+        log.append(&StockEvent::Wasted { item: "salmon".into(), qty: 3, reason: WasteReason::Spoiled, by: "p".into() }).unwrap();
+    }
+    assert!(log.verify_checkpoints().unwrap() >= 2);
+    for placed in [HashMap::new(), HashMap::from([("o0".to_string(), 50i64)])] {
+        let full = fold(&log.journal().unwrap().entries, &supplies(), &placed, &w());
+        let j = log.journal_since(w().starts[0]).unwrap();
+        assert!(j.entries.len() < log.journal().unwrap().entries.len(), "the report started at a checkpoint");
+        assert_eq!(fold_journal(&j, &supplies(), &placed, &w()), full);
+    }
+    // Twin: from genesis nothing is carried, so the two folds are the same fold.
+    let g = log.journal().unwrap();
+    assert_eq!(fold_journal(&g, &supplies(), &HashMap::new(), &w()), fold(&g.entries, &supplies(), &HashMap::new(), &w()));
+}

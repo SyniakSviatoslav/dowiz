@@ -40,7 +40,7 @@ pub struct Lot {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Lots {
-    lots: Vec<Lot>,
+    pub(super) lots: Vec<Lot>,
 }
 
 /// The lot code a count's surplus or a put-back lands in.
@@ -153,6 +153,12 @@ impl Lots {
             _ => {}
         }
         self.reconcile(&item, on_hand(&item), e);
+        // A LOT USED UP IS CLOSED (R7): nothing reads it -- `of` and `open`
+        // list only what is left -- and keeping it made the fold's state, and
+        // so every checkpoint, grow with every delivery ever made. A later
+        // delivery under the same label is a new box: it opens its own lot
+        // with its own date, instead of reviving the empty one's.
+        self.lots.retain(|l| l.left > 0);
     }
 }
 

@@ -13,7 +13,7 @@ impl HubImages {
         let (log_gen, listed) = self.orders_view().await?;
         let current: Option<OrderView> = listed.into_iter().find(|o| o.order_id == input.order_id);
         let (_, mut hub) = self.log_hub().await?;
-        let (stock_gen, mut stock) = self.stock_log().await?;
+        let (stock_gen, mut stock) = self.stock_log_at(input.now_ms).await?;
         let venue_currency = self.venue_currency().await?;
         let before = stock.len();
         let (merged, written) = match crate::command::refund::decide(&mut hub, &mut stock, current.as_ref(), &input, &venue_currency) {
@@ -76,7 +76,7 @@ impl HubImages {
     pub(super) async fn returned(&self, input: ReturnedIn) -> Result<std::result::Result<ReturnedOut, Refused>> {
         let (_, listed) = self.orders_view().await?;
         let current: Option<OrderView> = listed.into_iter().find(|o| o.order_id == input.order_id);
-        let (stock_gen, mut stock) = self.stock_log().await?;
+        let (stock_gen, mut stock) = self.stock_log_at(input.now_ms).await?;
         let out = match crate::command::refund::returned::decide(&mut stock, current.as_ref(), &input) {
             Ok(v) => v,
             // NOTHING HAS BEEN WRITTEN.
@@ -88,3 +88,8 @@ impl HubImages {
         Ok(Ok(out))
     }
 }
+
+/// P3: every stock write site in the object's turns is clocked.
+#[cfg(test)]
+#[path = "refund/clock_tests.rs"]
+mod clock_tests;

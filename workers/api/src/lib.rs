@@ -512,6 +512,10 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             let envelope: serde_json::Value =
                 serde_json::from_str(&order_json).unwrap_or(serde_json::json!({}));
 
+            // Only the venue's own people see what a dish costs the kitchen
+            // (W-PERF P1's stamp); the customer and the courier read the order
+            // without it.
+            let mut insider = false;
             let allowed = match auth::authenticate(&req, &ctx.env, ctx.data.now_ms).await {
                 Ok(auth::Principal::Customer { order_id, .. }) => order_id == id,
                 // AN OWNER OF THIS VENUE, not an owner of any venue.
@@ -525,15 +529,17 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
                 // many words that it cannot do. The claim has to name THIS
                 // hub.
                 Ok(auth::Principal::Owner { active_location_id, .. }) => {
-                    active_location_id.as_deref() == Some(place.venue.as_str())
+                    insider = active_location_id.as_deref() == Some(place.venue.as_str());
+                    insider
                 }
                 Ok(auth::Principal::Courier { courier_id, .. }) => {
                     envelope.get("courier_id").and_then(|c| c.as_str()) == Some(courier_id.as_str())
                 }
                 // Staff of THIS venue who may move or take orders read them.
                 Ok(auth::Principal::Staff { active_location_id, caps, .. }) => {
-                    active_location_id == place.venue
-                        && (caps.allows(auth::Cap::Advance) || caps.allows(auth::Cap::TakeOrders))
+                    insider = active_location_id == place.venue
+                        && (caps.allows(auth::Cap::Advance) || caps.allows(auth::Cap::TakeOrders));
+                    insider
                 }
                 Err(_) => false,
             };
@@ -542,6 +548,9 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             }
             // The order as it stands NOW: the time that is left rides with it.
             let mut live = envelope.clone();
+            if !insider {
+                crate::command::place::cost::strip(&mut live);
+            }
             live_eta::attach_one(&place, &mut live, ctx.data.now_ms).await;
             let mut res = Response::ok(serde_json::to_string(&live).unwrap_or(order_json))?;
             res.headers_mut().set("content-type", "application/json; charset=utf-8")?;

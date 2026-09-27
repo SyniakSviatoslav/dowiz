@@ -1,0 +1,12 @@
+# wasm — written 2026-09-27 by lane W-PERF from tools/evals/collect/wasm.py over a fresh
+# worker-build --release of ab2973d6 + W-PERF (build/index_bg.wasm, 14:39). Ratchets: lowered freely,
+# raised only with a dated note. Five days earlier (09-22) raw was 2,426,605 and nothing caught the 2x.
+# If the post-glue strip (workers/api/scripts/strip-wasm.mjs) is wired in, raw falls to 4221157,
+# gzip to 1627335 and section.name to 0; worker_share_permille then reads 0 (no names to attribute).
+wasm.functions_over_40k=2
+wasm.gzip=1790461
+wasm.raw=4864175
+wasm.section.code=3796297
+wasm.section.data=401527
+wasm.section.name=642865
+wasm.worker_share_permille=617

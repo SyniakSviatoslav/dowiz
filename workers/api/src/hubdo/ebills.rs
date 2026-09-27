@@ -93,7 +93,7 @@ impl HubImages {
         let st: State = state::get(&t, K_STATE, ONE).map_err(bad)?.unwrap_or_default();
         let (log_gen, listed) = self.orders_view().await?;
         let (_, mut hub) = self.log_hub().await?;
-        let (stock_gen, mut stock) = self.stock_log().await?;
+        let (stock_gen, mut stock) = self.stock_log_at(input.now_ms).await?;
         let before = stock.len();
         let cat = self.catalog().await?;
         let out = {

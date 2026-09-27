@@ -49,3 +49,27 @@ fn a_portion_costs_its_gross_at_the_average_else_the_list_price() {
     assert_eq!(portion_cost(&dishes()["sake"], &supplies, &book), Some(180 + 18), "salmon at list, rice at its average");
     assert_eq!(portion_cost(&dishes()["cola"], &supplies, &book), None, "no recipe is no cost");
 }
+
+/// R4: a line stamped at placement is costed at what it cost THEN; an order
+/// from before stamps falls back to today's portion cost; a dish with no
+/// cost today is costed only when every portion was stamped.
+#[test]
+fn stamped_lines_keep_their_cost_and_old_ones_fall_back_to_today() {
+    let orders = vec![
+        order("new", 10, "DELIVERED", json!([{ "product_id": "sake", "quantity": 2, "unit_price": 900, "unit_cost": 300, "cost_at": 7 }])),
+        order("old", 150, "DELIVERED", json!([{ "product_id": "sake", "quantity": 1, "unit_price": 900 }])),
+    ];
+    let s = fold(&orders, &dishes(), &w());
+    let sake = &s.dishes["sake"];
+    assert_eq!((sake.stamped, sake.stamped_cogs, sake.stamped_by_day.clone()), (2, 600, vec![2, 0, 0]));
+    // Today a portion costs 450: the stamped two stay at 300, the old one takes 450.
+    assert_eq!(cogs_of(sake, Some(450)), (Some(600 + 450), vec![600, 450, 0]));
+    // With no cost today the old portion has none: the whole is unknown, the stamped days still count.
+    assert_eq!(cogs_of(sake, None), (None, vec![600, 0, 0]));
+    // Twin: every portion stamped needs no cost today.
+    let only_new = fold(&orders[..1], &dishes(), &w());
+    assert_eq!(cogs_of(&only_new.dishes["sake"], None), (Some(600), vec![600, 0, 0]));
+    // A row built without the stamped columns reads as unstamped.
+    let bare = DishRow { sold: 1, by_day: vec![1], ..DishRow::default() };
+    assert_eq!(cogs_of(&bare, Some(5)), (Some(5), vec![5]));
+}

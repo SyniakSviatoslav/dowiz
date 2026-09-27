@@ -54,12 +54,12 @@ pub struct Stamp {
 
 /// One supply's pool: the costed quantity and its value, in millionths.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct Pool {
-    qty: i128,
-    value: i128,
+pub(super) struct Pool {
+    pub(super) qty: i128,
+    pub(super) value: i128,
     /// The average when the pool last held something, so a shelf drawn to
     /// zero still has a cost to stamp.
-    last_avg: Option<i128>,
+    pub(super) last_avg: Option<i128>,
 }
 
 impl Pool {
@@ -102,7 +102,7 @@ fn half_up(n: i128, d: i128) -> i128 {
 /// The cost of every supply, as folded over a log prefix.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CostBook {
-    pools: Vec<(String, Pool)>,
+    pub(super) pools: Vec<(String, Pool)>,
 }
 
 impl CostBook {
@@ -255,8 +255,11 @@ impl StockLog {
     }
 
     /// The cost book folded over the first `at` records (the whole log when
-    /// `at` is past its end).
+    /// `at` is past its end: then from the newest checkpoint, R7).
     pub fn cost_book_at(&self, at: usize) -> CostBook {
+        if at >= self.len() {
+            return self.fold_tail(false, true).map(|f| f.1).unwrap_or_default();
+        }
         let mut book = CostBook::default();
         for rec in self.raw().iter().take(at) {
             book.apply(rec);
@@ -272,7 +275,7 @@ impl StockLog {
 /// The stamp for one portion of a dish, as of NOW (the log's current length).
 pub fn stamp(log: &StockLog, bom: &[BomLine]) -> Option<Stamp> {
     let at = log.len();
-    log.cost_book_at(at).dish_cost(bom).map(|cost| Stamp { cost, at })
+    log.cost_book().dish_cost(bom).map(|cost| Stamp { cost, at })
 }
 
 /// LAW 8: the cost a stamp claims, re-folded from the log alone.

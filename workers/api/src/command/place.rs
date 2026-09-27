@@ -40,6 +40,9 @@
 use super::Refused;
 use serde::{Deserialize, Serialize};
 
+/// Each line's cost of goods at placement, and the read a guest gets (R4).
+pub mod cost;
+
 /// Everything the object needs to place an order, and nothing it can look up
 /// itself.
 ///
@@ -127,10 +130,15 @@ pub fn decide(
     // that was never placed. `append_all` is that atomicity: it refuses the
     // whole batch, and because nothing is written until the end of this
     // function, a refusal here leaves the image exactly as it was found.
+    //
+    // THE COST STAMP COMES FROM THE SAME FOLD (R4): the book the shelf was
+    // decided against, and the log length it was folded at -- one walk of the
+    // stock log's tail, not a second one for the cost.
     let reservations = dowiz_hub::stock::reservations_for(&input.order_id, &input.bom_lines);
-    if !reservations.is_empty() {
-        stock.append_all(&reservations).map_err(|e| Refused::Stock(format!("{e}")))?;
-    }
+    let costed = match reservations.is_empty() {
+        true => None,
+        false => Some(stock.append_all_costed(&reservations).map_err(|e| Refused::Stock(format!("{e}")))?),
+    };
 
     // ── THE DISCOUNT, IN THE SAME BREATH AS THE APPEND THAT MAKES IT REAL ──
     //
@@ -141,6 +149,9 @@ pub fn decide(
     // object turn, which is as close together as they can be.
     let mut envelope: serde_json::Value = serde_json::from_str(&input.envelope)
         .map_err(|e| Refused::Append(format!("envelope is not json: {e}")))?;
+    if let Some((book, at)) = &costed {
+        cost::stamp_lines(&mut envelope, &input.bom_lines, book, *at);
+    }
     if let Some(raw) = &input.promo {
         let Some(p) = dowiz_hub::promo::Promo::parse(raw) else {
             return Err(Refused::Promo(dowiz_hub::promo::Refusal::Unknown.as_str().to_string()));

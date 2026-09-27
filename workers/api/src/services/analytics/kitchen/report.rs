@@ -6,7 +6,7 @@
 //! side and are never mixed into one number: the difference between them is
 //! the point of the screen.
 
-use super::sales::{portion_cost, Dish, Sales, Supply, Window};
+use super::sales::{cogs_of, portion_cost, Dish, Sales, Supply, Window};
 use super::shelf::Shelf;
 use dowiz_hub::stock::journal::Journal;
 use dowiz_hub::stock::meta::show_day;
@@ -48,16 +48,17 @@ pub fn report(
     let mut uncosted = 0i64;
     for (id, row) in &sales.dishes {
         let dish = dishes.get(id);
+        // Today's portion cost is the dish sheet's number; the margin is
+        // taken at what each portion cost WHEN IT WAS SOLD where the line
+        // was stamped (R4), and at today's only for the rest.
         let cost = dish.and_then(|d| portion_cost(d, supplies, &j.book));
-        match cost {
-            Some(c) => {
-                for (d, q) in row.by_day.iter().enumerate() {
-                    cogs_by_day[d] += c * q;
-                }
-            }
-            None => uncosted += row.sold,
+        let (cogs, by_day) = cogs_of(row, cost);
+        for (d, c) in by_day.iter().enumerate() {
+            cogs_by_day[d] += c;
         }
-        let cogs = cost.map(|c| c * row.sold);
+        if cost.is_none() {
+            uncosted += row.sold - row.stamped;
+        }
         dish_rows.push(json!({
             "id": id, "name": dish.map_or(id.clone(), |d| d.name.clone()), "sold": row.sold, "revenue": row.revenue,
             "portionCost": cost, "cogs": cogs, "margin": cogs.map(|c| row.revenue - c),
