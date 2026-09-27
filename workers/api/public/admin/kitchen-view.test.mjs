@@ -35,3 +35,17 @@ test('a window with nothing in it says so, and still shows the totals', () => {
   assert.ok(html.includes('data-t="ka_revenue"'));
   assert.ok(!html.includes('data-t="ka_byDish"'));
 });
+
+test('the kitchen numbers (scope kitchen) draw cost and usage with no revenue column (KITCHEN-ACCESS-2026-09-27)', () => {
+  // The hub's staff answer: the same report with revenue, margin and food cost removed.
+  const strip = v => Array.isArray(v) ? v.map(strip) : v && typeof v === 'object'
+    ? Object.fromEntries(Object.entries(v).filter(([k]) => !['revenue', 'margin', 'marginPortion', 'foodCostPm'].includes(k)).map(([k, x]) => [k, strip(x)])) : v;
+  const html = draw({ ...strip(answer), scope: 'kitchen' }, fmt);
+  for (const k of ['ka_revenue', 'ka_margin', 'ka_marginPortion', 'ka_foodCost']) assert.ok(!html.includes(`data-t="${k}"`), `${k} drawn for the kitchen`);
+  for (const k of ['ka_cogs', 'ka_portionCost', 'ka_sold', 'ka_ingredients', 'ka_waste']) assert.ok(html.includes(`data-t="${k}"`), k);
+  for (const v of ['L600', 'L200', '135 g', '850 g']) assert.ok(html.includes(v), v);
+  assert.ok(!html.includes('L3000') && !html.includes('L2400'), 'no revenue or margin figure');
+  // The twin: the owner's answer still draws every revenue column.
+  const own = draw(answer, fmt);
+  for (const k of ['ka_revenue', 'ka_margin', 'ka_marginPortion', 'ka_foodCost']) assert.ok(own.includes(`data-t="${k}"`), k);
+});

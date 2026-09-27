@@ -33,13 +33,19 @@ pub async fn venue_day(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     if to <= from || to - from > WINDOW_MAX_MIN {
         return Response::error(format!("the window is 1..{WINDOW_MAX_MIN} minutes"), 400);
     }
-    let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
-        Ok((_, l)) => l,
+    // THE KITCHEN PREPS FOR TONIGHT'S COVERS (KITCHEN-ACCESS-2026-09-27): a
+    // member of staff at the pass reads the day too, without the guest --
+    // no name, no phone, no moves (`access::bookings_for_kitchen`).
+    use crate::services::identity::staff::{access, guard};
+    let (loc, who) = match guard::staff_venue_as(&req, &ctx, &guard::PASS).await {
+        Ok((_, l, who)) => (l, who),
         Err(r) => return Ok(r),
     };
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let t = load_bookings(&place).await?;
-    Response::from_json(&json!({ "from": from, "to": to, "reservations": day_rows(&t, from, to) }))
+    let rows = day_rows(&t, from, to);
+    let rows = if who.is_staff() { access::bookings_for_kitchen(rows) } else { rows };
+    Response::from_json(&json!({ "from": from, "to": to, "reservations": rows }))
 }
 
 #[derive(Deserialize)]

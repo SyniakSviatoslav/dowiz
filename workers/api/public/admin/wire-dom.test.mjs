@@ -267,3 +267,11 @@ test('tiles: every W-WIRE screen has one, and the messages tile carries the unre
   assert.ok(p.box.querySelector('#w-gq'), 'a tile opens its screen');
   await T.openTile('nope');
 });
+
+test('tiles for the kitchen: only the menu words; the owner keeps all (KITCHEN-ACCESS-2026-09-27)', async () => {
+  const T = await import('./wire.js');
+  const tok = c => `h.${Buffer.from(JSON.stringify(c)).toString('base64url')}.s`;
+  assert.deepEqual(T.myTiles(tok({ role: 'staff', caps: 'advance,catalog,stock' })).map(x => x.id), ['catWords']);
+  assert.deepEqual(T.myTiles(tok({ role: 'staff', caps: 'take_orders,take_payment' })), []);
+  assert.equal(T.myTiles(tok({ role: 'owner' })).length, T.TILES.length);
+});

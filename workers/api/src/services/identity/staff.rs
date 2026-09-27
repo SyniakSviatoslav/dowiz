@@ -19,6 +19,10 @@ use dowiz_hub::caps::Preset;
 
 /// The owner's catalogue and stock routes, opened to staff holding the word.
 pub(crate) mod guard;
+/// What the kitchen reaches, route by route, and the narrowing of a shared screen.
+pub(crate) mod access;
+/// A member of staff's password: their own change, and the owner's reset.
+pub(crate) mod password;
 
 /// Which venue the HOST names, or `None` on the apex and `*.workers.dev`.
 ///
@@ -132,34 +136,31 @@ pub async fn staff_password(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    if body.new_password.chars().count() < sr::MIN_PASSWORD_CHARS {
-        return Response::error("choose a password of at least 8 characters", 400);
-    }
     let ident = ids::identity(&ctx.env).await?;
     let email = body.email.trim().to_lowercase();
     let user = ids::user_id_for_email(&ident, &email)
         .and_then(|id| ids::rec(&ident, ids::K_USER, &id).map(|u| (id, u)));
     let stored = user.as_ref().map(|(_, u)| ids::s_of(u, "password_hash"));
-    // Same work on a miss as on a hit.
-    if !verify_password_constant_work(&body.old_password, stored.as_deref()) {
-        return Response::error("invalid credentials", 401);
+    // The length (400), then the old password with the same work on a miss as
+    // on a hit (401) -- the rules `password::self_change` states and tests.
+    if let Err((status, why)) = password::self_change(stored.as_deref(), &body.old_password, &body.new_password) {
+        return Response::error(why, status);
     }
     let (user_id, _) = user.expect("verified above");
     let fresh = match auth::hash_password(&body.new_password) {
         Ok(h) => h,
         Err(e) => return e.into_response(),
     };
-    ids::with_identity(&ctx.env, move |t| {
-        if let Some(mut u) = ids::rec(t, ids::K_USER, &user_id) {
-            u["password_hash"] = json!(fresh);
-            let index = vec![(ids::user_by_email(&ids::s_of(&u, "email")), user_id.clone())];
-            t.put(ids::K_USER, &user_id, &u.to_string(), &index, &[])
-                .map_err(|e| Error::RustError(format!("user: {e}")))?;
-        }
-        Ok(())
-    })
-    .await?;
-    Response::from_json(&json!({ "changed": true }))
+    let now = ctx.data.now_ms;
+    password::store_hash(&ctx.env, &user_id, fresh, now).await?;
+    // EVERY OPEN STAFF SESSION ENDS, at every venue the person works: a
+    // password changed because a tablet walked off must sign that tablet out.
+    // The device that changed it signs in again with the new one.
+    let mut ended = 0;
+    for venue in ident.scan(&format!("member.user/{user_id}/")).into_iter().filter_map(|(k, _)| k.rsplit('/').next().map(str::to_string)) {
+        ended += password::end_sessions(&ctx.env, &venue, &user_id, now).await?;
+    }
+    Response::from_json(&json!({ "changed": true, "sessionsEnded": ended }))
 }
 
 #[derive(Deserialize)]

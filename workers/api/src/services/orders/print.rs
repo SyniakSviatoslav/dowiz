@@ -101,8 +101,9 @@ pub async fn ack(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response
 /// them a printer holds (§3.1 step 3's `queued` / `printing`). `printed` and
 /// `failed` are on the orders themselves (`kitchen.printed`,
 /// `kitchen.print_failed`); this is the half only the outbox knows. Read-only.
+/// THE KITCHEN READS IT TOO (KITCHEN-ACCESS-2026-09-27): it is their printer.
 pub async fn jobs(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
+    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::PASS).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

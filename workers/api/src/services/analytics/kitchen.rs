@@ -17,7 +17,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 use worker::*;
 
-use crate::owner::owner_and_venue;
 use dowiz_hub::stock::meta::{day_number, day_of_local_ms, parse_day};
 use dowiz_hub::tz::Zone;
 
@@ -102,9 +101,13 @@ pub fn dishes_of(cat: &dowiz_hub::catalog::Catalog) -> HashMap<String, Dish> {
         .collect()
 }
 
+/// THE KITCHEN READS ITS OWN NUMBERS (KITCHEN-ACCESS-2026-09-27): a member of
+/// staff holding the shelf's or the menu's word gets cost and usage, and the
+/// hub strips what the venue took (`access::numbers_for_kitchen`).
 pub async fn kitchen(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let loc = match owner_and_venue(&req, &ctx).await {
-        Ok((_, l)) => l,
+    use crate::services::identity::staff::{access, guard};
+    let (loc, who) = match guard::staff_venue_as(&req, &ctx, &guard::NUMBERS).await {
+        Ok((_, l, who)) => (l, who),
         Err(r) => return Ok(r),
     };
     // The venue this caller was authorised for, and no other.
@@ -130,6 +133,7 @@ pub async fn kitchen(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
     let moved = shelf::fold(&journal.entries, &supplies, &sold.placed_at, &w);
     let mut out = report::report(&sold, &moved, &dishes, &supplies, &journal, &w);
     out["currency"] = serde_json::json!(crate::services::venue::currency_of(&cat));
+    let out = if who.is_staff() { access::numbers_for_kitchen(out) } else { out };
     Response::from_json(&out)
 }
 

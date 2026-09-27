@@ -6,7 +6,8 @@
 
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, busy, confirm, switchEl, store, day, ago, clock, hydrate } from '/admin/core.js';
 import { retranslate, lang, LANGS } from '/admin/i18n.js';
-import { loadVenue, loadStaff, rerender } from '/admin/app.js';
+import { loadVenue, loadStaff, rerender, me, TAB_IDS } from '/admin/app.js';
+import { sectionsFor, canOpen, readOnly, lessonsFor } from '/admin/access.js';
 import { openCard, cardLine } from '/admin/customers.js';
 import { ui, k, btn, iconBtn, field, input, select, check, pill, pillBtn, empty, loading, rowBtn, rowDiv, chips, press } from '/admin/parts.js';
 import { openMcp as openMcpSheet } from '/admin/mcp.js';
@@ -30,7 +31,9 @@ const GROUPS = [
 /// The map without its handlers, for the desktop sidebar (app.js).
 export const SECTIONS = GROUPS.map(([g, rows]) => [g, rows.map(([key, ic]) => [key, ic])]);
 /// Open the sheet behind a row, by its key (the sidebar and the rows both use it).
-export function openSection(key){ for (const [, rows] of GROUPS) for (const [key2, , fn] of rows) if (key2 === key) return fn(); }
+/// A row a member of staff does not open is not opened (the list never draws
+/// it; a deep link or the sidebar could still name it).
+export function openSection(key){ if (!canOpen(me(), key)) return; for (const [, rows] of GROUPS) for (const [key2, , fn] of rows) if (key2 === key) return fn(); }
 const view = { q: '' };
 /// The analytics windows the hub answers, in days.
 const WINDOWS = [7, 30];
@@ -48,7 +51,7 @@ const LOGO_MAX_PX = 800;
 /// The groups as inset lists of rows (icon, name, one line, chevron), or the
 /// ones the search leaves.
 function groupsMarkup(){
-  const shown = filter(GROUPS, view.q, t);
+  const shown = filter(sectionsFor(me(), GROUPS), view.q, t);
   if (!count(shown)) return empty('search-off', { key: 'noSetting' });
   return shown.map(([g, rows]) => `<section class="group"><p class="eyebrow" data-t="${g}"></p>${ui.list(rows.map(([key, ic]) =>
     rowBtn({ cls: 'setting', leading: `<span class="tile-ic">${icon(ic)}</span>`, title: k(key), sub: `<span data-t="${key}Sub"></span>`,
@@ -82,7 +85,8 @@ const onOff = (on, tone = 'warn') => pill(on ? 'ok' : tone, { key: on ? 'on' : '
 // ── lessons (/lib/learn.js): the console's own, run as tours on this page ──
 async function learnFor(){
   const [{ createLearn, loadLessons }, { createGuide }] = await Promise.all([import('/lib/learn.js'), import('/lib/guide.js')]);
-  const lessons = await loadLessons(); if (!lessons.length) return null;
+  // A member of staff is offered the lessons of the screens they can open and change.
+  const lessons = lessonsFor(me(), await loadLessons(), TAB_IDS); if (!lessons.length) return null;
   return createLearn({ role: 'owner', lessons, lang: () => lang, createGuide, toast, words: { title: t('learn'), new: t('learnNew'), done: t('learnDone'),
     paused: t('learnPaused'), watch: t('learnWatch'), writes: t('learnWrites'), steps: n => t('learnSteps').replace('{n}', n), empty: t('learnEmpty'), offline: t('learnOffline') } });
 }
@@ -106,14 +110,16 @@ async function openExceptions(){ (await import('/admin/exceptions.js')).open(); 
 async function openCampaigns(){ (await import('/admin/campaigns.js')).open(); }
 
 // ── the kitchen printer (print.kitchen): the setting had no control ─────────
-async function openPrinter(){ (await import('/admin/printer.js')).open(); }
+async function openPrinter(){ (await import('/admin/printer.js')).open({ staff: me().staff }); }
 
 // ── table QR codes (A9): order at the table, a waiter confirms ──────────────
 async function openTableQr(){ (await import('/admin/tableqr.js')).open(); }
 
 // ── bookings and the floor plan (A2/A3): the day's list, the room's tables ───
-async function openBookings(){ (await import('/admin/bookings.js')).open(); }
-async function openFloorPlan(){ (await import('/admin/floorplan.js')).open(); }
+// The kitchen READS both (KITCHEN-ACCESS-2026-09-27): the hub strips the
+// guest from a booking and refuses the writes; the sheets draw no action.
+async function openBookings(){ (await import('/admin/bookings.js')).open({ readOnly: readOnly(me(), 'bookings') }); }
+async function openFloorPlan(){ (await import('/admin/floorplan.js')).open({ readOnly: readOnly(me(), 'floorPlan') }); }
 
 // ── staff ───────────────────────────────────────────────────────────────────
 async function openStaff(){
@@ -314,6 +320,13 @@ async function openHours(){
   // reported closed from 22:00. The zone belongs on this sheet because it is
   // what these numbers mean.
   const tz = S.venue?.tz || 'Europe/Tirane';
+  // THE KITCHEN READS THE HOURS (when does the pass close?); the owner sets them.
+  if (readOnly(me(), 'hours')) {
+    sheet(`${head('settings', 'hours')}<p class="sheet-hint" data-t="acc_readOnly"></p><p class="hint mono">${esc(tz)}</p>
+      <div class="rows">${week.map((w, i) => info('clock', { cls: w.length ? '' : 'off', title: t('day')[i],
+        sub: w.length ? `<span class="mono">${esc(w.map(x => `${hhmm(x.open)}-${hhmm(x.close)}`).join(', '))}</span>` : `<span data-t="closed"></span>` })).join('')}</div>`, { name: 'hours' });
+    return paint();
+  }
   sheet(`${head('settings', 'hours', 'ap_h_hours')}
     ${select({ id: 'h-tz', key: 'timezone', value: tz, options: ZONES.map(z => ({ value: z, label: z.replace('_', ' ') })), tour: 'hours.timezone' })}
     <p class="hint" data-t="timezoneHint"></p>

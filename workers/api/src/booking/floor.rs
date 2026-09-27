@@ -205,8 +205,10 @@ pub async fn set_plan(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
 /// `GET /api/owner/floorplan` -- the plan as stored, for the editor to open.
 /// The drawing's bounds and the seat ceiling come with it, so the editor's
 /// grid is the reader's and not a second copy of the numbers.
+/// The kitchen READS it (which table is "table 4" on a ticket); drawing it
+/// stays the owner's (`set_plan`). KITCHEN-ACCESS-2026-09-27.
 pub async fn get_plan(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
+    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::PASS).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

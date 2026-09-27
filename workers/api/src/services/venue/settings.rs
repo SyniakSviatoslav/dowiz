@@ -15,22 +15,28 @@ use crate::owner::owner_and_venue;
 /// The KEY SPACE IS CLOSED. An open one would make this a place to stash
 /// arbitrary data that nothing ever reads back, and the console renders the
 /// list the hub declares rather than a list of its own.
+///
+/// THE KITCHEN'S PRINTER (KITCHEN-ACCESS-2026-09-27): a member of staff at the
+/// pass reads `access::KITCHEN_SETTINGS` and NOTHING ELSE -- every secret of
+/// the venue lives in this space, so the narrowing is the hub's, not the page's.
 pub async fn settings(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let loc = match owner_and_venue(&req, &ctx).await {
-        Ok((_, l)) => l,
+    use crate::services::identity::staff::{access, guard};
+    let (loc, who) = match guard::staff_venue_as(&req, &ctx, &guard::PASS).await {
+        Ok((_, l, who)) => (l, who),
         Err(r) => return Ok(r),
     };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let loaded = crate::hubstore::load_settings(&place).await?;
     let values: Value = serde_json::from_str(&loaded.settings.as_json()).unwrap_or(json!({}));
-    Response::from_json(&json!({
-        "values": values,
-        "known": dowiz_hub::settings::KNOWN.iter().map(|k| json!({
-            "key": k.key, "label": k.label, "hint": k.hint, "default": k.default,
-            "secret": dowiz_hub::settings::is_secret(k.key),
-        })).collect::<Vec<_>>(),
-    }))
+    let known: Vec<Value> = dowiz_hub::settings::KNOWN.iter().map(|k| json!({
+        "key": k.key, "label": k.label, "hint": k.hint, "default": k.default,
+        "secret": dowiz_hub::settings::is_secret(k.key),
+    })).collect();
+    if who.is_staff() {
+        return Response::from_json(&access::settings_for_kitchen(&values, known));
+    }
+    Response::from_json(&json!({ "values": values, "known": known }))
 }
 
 #[derive(Deserialize)]
@@ -48,10 +54,15 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let loc = match owner_and_venue(&req, &ctx).await {
-        Ok((_, l)) => l,
+    // A member of staff at the pass sets the kitchen printer and nothing else.
+    use crate::services::identity::staff::{access, guard};
+    let (loc, who) = match guard::staff_venue_as(&req, &ctx, &guard::PASS).await {
+        Ok((_, l, who)) => (l, who),
         Err(r) => return Ok(r),
     };
+    if who.is_staff() && !access::kitchen_may_set(&body.key) {
+        return Response::error("this setting is the owner's", 403);
+    }
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     if !dowiz_hub::settings::KNOWN.iter().any(|k| k.key == body.key) {

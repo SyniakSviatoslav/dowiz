@@ -7,7 +7,9 @@
 // not grow by eight modules.
 //
 // ASCII QUOTES ONLY as delimiters (DOWIZ-COMMON-RULES rule 11).
-import { $$, icon } from '/admin/core.js';
+import { $$, icon, store } from '/admin/core.js';
+import { principalOf } from '/admin/kitchen-logic.js';
+import { tilesFor, canTile } from '/admin/access.js';
 import { rowBtn, pill } from '/admin/parts.js';
 import { paint } from '/admin/wire-core.js';
 
@@ -23,19 +25,26 @@ export const TILES = [
   { id: 'graph', icon: 'sparkles', key: 'w_assistSources', sub: 'w_assistSourcesSub', mod: '/admin/assist-sources.js', fn: 'openAssistSources' },
 ];
 
-/// Open one tile's screen.
+/// The tiles the signed-in person opens: all for an owner; for a member of
+/// staff only those their words open (KITCHEN-ACCESS-2026-09-27, `access.js`).
+export const myTiles = (token = store.t) => tilesFor(principalOf(token), TILES);
+
+/// Open one tile's screen (never one the person's words do not open).
 export const openTile = id => {
-  const tile = TILES.find(x => x.id === id);
+  const tile = canTile(principalOf(store.t), id) && TILES.find(x => x.id === id);
   return tile ? import(tile.mod).then(m => m[tile.fn]()) : Promise.resolve();
 };
 
 /// Draw the tiles into `host`; the messages tile carries the unread count.
 export async function mountTiles(host){
   if (!host) return;
-  host.innerHTML = `<div class="rows" role="list">${TILES.map(x => rowBtn({ data: { wtile: x.id }, leading: icon(x.icon), title: { t: x.key },
+  const tiles = myTiles();
+  if (!tiles.length) { host.innerHTML = ''; return; }
+  host.innerHTML = `<div class="rows" role="list">${tiles.map(x => rowBtn({ data: { wtile: x.id }, leading: icon(x.icon), title: { t: x.key },
     sub: `<span data-t="${x.sub}"></span>`, trailing: x.id === 'messages' ? '<span data-wunread></span>' : icon('chevron-right') })).join('')}</div>`;
   paint(host);
   for (const b of $$('[data-wtile]', host)) b.onclick = () => openTile(b.dataset.wtile);
+  if (!tiles.some(x => x.id === 'messages')) return;
   const n = await import('/admin/threads.js').then(m => m.unread()).catch(() => 0);
   const slot = host.querySelector('[data-wunread]');
   if (slot) slot.innerHTML = n ? pill('warn', { label: String(n) }) : icon('chevron-right');

@@ -159,23 +159,7 @@ pub async fn set_staff(mut req: Request, ctx: RouteContext<crate::Req>) -> Resul
         Err(why) => return Response::error(why, 400),
     };
     let ended = if body.active == Some(false) {
-        let now = ctx.data.now_ms;
-        let (l3, u3) = (loc.clone(), uid.clone());
-        ids::with_sessions(&ctx.env, move |t| {
-            let mut n = 0usize;
-            for (_, sid) in t.scan(&sr::ssessions_prefix(&l3, &u3)) {
-                let Some(r) = ids::rec(t, sr::K_SSESSION, &sid) else { continue };
-                if r.get("revoked_at_ms").is_some_and(|v| !v.is_null()) {
-                    continue;
-                }
-                let index = [(sr::ssession_of(&l3, &u3, &sid), sid.clone())];
-                t.put(sr::K_SSESSION, &sid, &sr::revoked(r, now).to_string(), &index, &[])
-                    .map_err(|e| Error::RustError(format!("staff session: {e}")))?;
-                n += 1;
-            }
-            Ok(n)
-        })
-        .await?
+        super::staff::password::end_sessions(&ctx.env, &loc, &uid, ctx.data.now_ms).await?
     } else {
         0
     };

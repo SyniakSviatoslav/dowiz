@@ -95,6 +95,18 @@ function draw(){
   bind();
 }
 
+/// THE KITCHEN READS THE ROOM (KITCHEN-ACCESS-2026-09-27): which table is
+/// "table 4" on a ticket. The rooms and their tables, nothing to change --
+/// the hub refuses a staff token's `POST /api/owner/floorplan` anyway.
+function drawRead(){
+  const z = zone();
+  sheet(`<p class="eyebrow" data-t="roomGroup"></p><h2 data-t="floorPlan"></h2><p class="muted small" data-t="acc_readOnly"></p>
+    <div class="chips">${fp.zones.map((x, i) => ui.chip({ as: 'button', selected: i === fp.zi, label: x.name || x.id, attrs: { data: { zi: i } } })).join('')}</div>
+    ${z ? `<svg class="fp-plan" viewBox="0 0 ${fp.lim.planW} ${fp.lim.planH}" role="img" aria-label="${esc(z.name)}">${tablesSvg()}</svg>` : empty('category', { key: 'fpEmpty' })}`,
+    { name: 'floorplan', keepScroll: true });
+  for (const b of $$('[data-zi]', $('#sheetIn'))) b.onclick = () => { fp.zi = +b.dataset.zi; drawRead(); };
+}
+
 /// Only the drawing, during a drag: rewriting the sheet would drop the pointer.
 const redrawSvg = () => { const s = $('#fpSvg'); if (s) s.innerHTML = tablesSvg(); };
 
@@ -155,12 +167,14 @@ async function save(btn){
   });
 }
 
-export async function open(){
+/// `readOnly`: a member of staff at the pass sees the rooms, not the editor.
+export async function open({ readOnly = false } = {}){
   ensureCss();
   let d;
   try { d = await api('/owner/floorplan'); } catch (e) { return fail(e); }
   fp.lim = { planW: d.planW, planH: d.planH, maxSeats: d.maxSeats };
   fp.zones = (d.zones || []).map(z => ({ id: z.id, name: z.name || '', tables: (z.tables || []).map(x => ({ shape: 'rect', ...x })) }));
   fp.zi = 0; fp.sel = null;
+  if (readOnly) return drawRead();
   draw();
 }

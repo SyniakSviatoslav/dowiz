@@ -25,7 +25,10 @@ for (const l of LANGS) Object.assign(T[l], WORDS[l]);
 const SETTING = 'print.kitchen';
 const fail = e => toast(String(e.message || e));
 
-export async function open(){
+/// `staff`: the kitchen names its printer and reads its queue
+/// (KITCHEN-ACCESS-2026-09-27); pairing one mints a venue API key, which stays
+/// the owner's -- the key button is not drawn and the hub refuses it anyway.
+export async function open({ staff = false } = {}){
   let s = { values: {} }, j = { jobs: [] };
   try { [s, j] = await Promise.all([api('/owner/settings'), api('/owner/print/jobs')]); } catch (e) { return fail(e); }
   const name = (s.values || {})[SETTING] || '';
@@ -36,8 +39,8 @@ export async function open(){
     ${field({ id: 'pr-name', key: 'prName', maxlength: 40, autocomplete: 'off', value: name, hintKey: 'prNameHint', tour: 'printer.name' })}
     <div class="btn-row">${btn({ id: 'prSave', variant: 'primary', icon: 'check', key: 'save', tour: 'printer.save' })}</div>
     <p class="eyebrow mt-3" data-t="prUrl"></p><div class="code" id="prUrl" data-tour="printer.url">${esc(url)}</div>
-    <p class="eyebrow mt-3" data-t="prKey"></p><p class="hint" data-t="prKeyHint"></p>
-    <div class="btn-row">${btn({ id: 'prKey', icon: 'key', key: 'prNewKey', tour: 'printer.key' })}</div><div id="prKeyOut"></div>
+    ${staff ? '' : `<p class="eyebrow mt-3" data-t="prKey"></p><p class="hint" data-t="prKeyHint"></p>
+    <div class="btn-row">${btn({ id: 'prKey', icon: 'key', key: 'prNewKey', tour: 'printer.key' })}</div><div id="prKeyOut"></div>`}
     <p class="eyebrow mt-3" data-t="prJobs"></p>
     ${jobs.length ? `<div class="rows" data-tour="printer.jobs">${jobs.map(x => rowDiv({ leading: icon(x.state === 'failed' ? 'alert-triangle' : 'receipt'), title: '#' + String(x.orderId || '').slice(0, 8),
       sub: `<span class="mono">${esc(t('print_' + x.state))}${x.tries ? ' · ' + esc(x.tries) : ''}${x.code ? ' · ' + esc(x.code) : ''}</span>` })).join('')}</div>` : `<p class="muted small" data-t="prNoJobs"></p>`}`,
@@ -45,8 +48,9 @@ export async function open(){
   $('#prSave').onclick = async () => {
     const v = $('#pr-name').value.trim();
     // An empty value CLEARS the setting on the hub: the printer is off.
-    try { await busy($('#prSave'), () => post('/owner/settings', { key: SETTING, value: v })); toast(t('saved')); open(); } catch (e) { fail(e); }
+    try { await busy($('#prSave'), () => post('/owner/settings', { key: SETTING, value: v })); toast(t('saved')); open({ staff }); } catch (e) { fail(e); }
   };
+  if (staff) return;
   $('#prKey').onclick = async () => {
     try {
       const d = await busy($('#prKey'), () => post('/owner/apikeys', { label: 'printer' }));

@@ -68,9 +68,12 @@ async function openStaff(id){
     <div class="fact">${icon('tag')}<span class="v"><span class="k" data-t="role"></span><span data-t="role-${esc(staff.role || 'unknown')}"></span></span></div>
     ${switchEl('s-active', staff.active ?? s.active, 'active', null, 'staff.active')}
     ${select({ id: 's-role', key: 'role', value: staff.role || 'kitchen', options: ROLES, tour: 'staff.role' })}
-    ${btn({ id: 'sGo', variant: 'primary', icon: 'check', key: 'save', cls: 'mt-3', tour: 'staff.save' })}`;
+    ${btn({ id: 'sGo', variant: 'primary', icon: 'check', key: 'save', cls: 'mt-3', tour: 'staff.save' })}
+    ${btn({ id: 'sPw', variant: 'ghost', icon: 'key', key: 'acc_setPw', cls: 'mt-3' })}`;
   for (const el of $$('[data-t]', $('#sBody'))) el.textContent = t(el.dataset.t);
   $('#s-role').value = staff.role || 'kitchen';
+  // The owner sets a new password for this person (`password.js`).
+  $('#sPw').onclick = () => import('/admin/password.js').then(m => m.openReset(id, s.name));
   $('#s-role').onchange = async () => {
     try {
       await post(`/owner/staff/${encodeURIComponent(id)}`, { role: $('#s-role').value, ...withLoc() });

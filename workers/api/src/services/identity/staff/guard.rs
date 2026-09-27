@@ -23,6 +23,26 @@ pub(crate) const MENU: [Cap; 1] = [Cap::Catalog];
 pub(crate) const SHELF: [Cap; 1] = [Cap::Stock];
 /// A write-off: the drawer's holder at midnight, or the shelf's.
 pub(crate) const BIN: [Cap; 2] = [Cap::OpenTill, Cap::Stock];
+/// The pass (docs/design/KITCHEN-ACCESS-2026-09-27.md): what the kitchen
+/// READS to cook -- the ticket printer, the floor plan, tonight's bookings.
+pub(crate) const PASS: [Cap; 1] = [Cap::Advance];
+/// The kitchen's own numbers: the shelf's or the menu's word, never revenue
+/// (`access::numbers_for_kitchen` strips it for staff).
+pub(crate) const NUMBERS: [Cap; 2] = [Cap::Stock, Cap::Catalog];
+
+/// Who was let in: the owner's path, or a member of staff with these words.
+/// A route that SHARES a screen asks this to decide what to strip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Viewer {
+    Owner,
+    Staff(auth::Caps),
+}
+
+impl Viewer {
+    pub(crate) fn is_staff(self) -> bool {
+        matches!(self, Viewer::Staff(_))
+    }
+}
 
 /// Is the bearer a staff token? Signature and expiry only; the principal (the
 /// session row, the live roster word) is built by `authenticate` after this.
@@ -49,17 +69,28 @@ pub(crate) async fn staff_venue(
     ctx: &RouteContext<crate::Req>,
     needs: &[Cap],
 ) -> std::result::Result<(String, String), Response> {
+    staff_venue_as(req, ctx, needs).await.map(|(by, venue, _)| (by, venue))
+}
+
+/// `staff_venue`, saying WHO was let in, for a route whose answer is
+/// narrowed for staff (`access.rs`). One implementation: `staff_venue` is
+/// this without the third answer.
+pub(crate) async fn staff_venue_as(
+    req: &Request,
+    ctx: &RouteContext<crate::Req>,
+    needs: &[Cap],
+) -> std::result::Result<(String, String, Viewer), Response> {
     let Some(claim) = staff_claim(req, ctx) else {
-        return crate::owner::owner_and_venue(req, ctx).await;
+        return crate::owner::owner_and_venue(req, ctx).await.map(|(by, venue)| (by, venue, Viewer::Owner));
     };
     let venue = staff_venue_of(crate::owner::location_of(req), &claim)
         .ok_or_else(|| Response::error("which venue?", 400).unwrap())?;
     let p = auth::authenticate(req, &ctx.env, ctx.data.now_ms)
         .await
         .map_err(|e| e.into_response().unwrap())?;
-    let (by, _) =
+    let (by, caps) =
         auth::room_admits_any(&p, &venue, needs).map_err(|(s, m)| Response::error(m, s).unwrap())?;
-    Ok((by, venue))
+    Ok((by, venue, Viewer::Staff(caps)))
 }
 
 /// `owner_beside`, or a member of staff holding ANY of `needs`:
@@ -121,7 +152,7 @@ mod tests {
     #[test]
     fn each_family_admits_exactly_its_words() {
         use dowiz_hub::caps::Preset::*;
-        for (fam, name) in [(&MENU[..], "menu"), (&SHELF[..], "shelf"), (&BIN[..], "bin")] {
+        for (fam, name) in [(&MENU[..], "menu"), (&SHELF[..], "shelf"), (&BIN[..], "bin"), (&PASS[..], "pass"), (&NUMBERS[..], "numbers")] {
             assert!(auth::room_admits_any(&staff(Kitchen), "v", fam).is_ok(), "kitchen refused {name}");
             assert_eq!(auth::room_admits_any(&staff(Waiter), "v", fam).map(|x| x.0).map_err(|e| e.0), Err(403), "waiter got {name}");
             assert_eq!(auth::room_admits_any(&staff(Kitchen), "w", fam).map(|x| x.0).map_err(|e| e.0), Err(404), "{name} crossed venues");
@@ -131,6 +162,15 @@ mod tests {
         assert!(auth::room_admits_any(&staff(CounterManager), "v", &BIN).is_ok());
         assert!(auth::room_admits_any(&staff(CounterManager), "v", &MENU).is_err());
         assert!(auth::room_admits_any(&staff(CounterManager), "v", &SHELF).is_err());
+        assert!(auth::room_admits_any(&staff(CounterManager), "v", &PASS).is_err());
+        assert!(auth::room_admits_any(&staff(CounterManager), "v", &NUMBERS).is_err());
+    }
+
+    /// A shared screen asks who came in; only a staff answer is narrowed.
+    #[test]
+    fn a_viewer_knows_whether_it_is_staff() {
+        assert!(Viewer::Staff(dowiz_hub::caps::Preset::Kitchen.caps()).is_staff());
+        assert!(!Viewer::Owner.is_staff());
     }
 
     /// A claim that is not staff names no venue here: the owner's path decides

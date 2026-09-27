@@ -48,7 +48,13 @@ const ASKS = ['DECLINED', 'CANCELLED_BY_VENUE', 'NO_SHOW'];
 /// A party a phone call books; the kernel refuses past 20.
 const PARTY_MAX = 20;
 
-const view = { day: 0, rows: [], plan: null };
+const view = { day: 0, rows: [], plan: null, readOnly: false };
+/// The statuses a kitchen cooks for: a guest still coming or seated.
+const COMING = ['REQUESTED', 'CONFIRMED', 'SEATED'];
+/// Is this booking still ahead? The owner reads it from the moves the hub
+/// offers; the kitchen, which is offered none (KITCHEN-ACCESS-2026-09-27),
+/// from its status.
+const coming = r => (view.readOnly ? COMING.includes(r.status) : (r.next || []).length > 0);
 const fail = e => toast(String(e.message || e));
 const tz = () => S.venue?.tz || 'Europe/Tirane';
 /// The venue's day `n` as slot minutes, `[from, to)`, FROM TWO MIDNIGHTS, each
@@ -71,14 +77,14 @@ async function load(){
 }
 
 function row(r){
-  const live = (r.next || []).length > 0;
+  const live = coming(r);
   const table = r.tableN ? `${t('rsTable')} ${r.tableN}` : t('rsAny');
   return `<article class="rs-row ${live ? '' : 'off'}" data-tour="bookings.row">
     <div class="rs-top"><span class="rs-time">${hhmm(localMin(r.slotMin))}</span>
       <span class="rs-who"><b>${esc(r.name || '-')}</b><small>${esc(r.party)} ${esc(t('rsGuests'))} · ${esc(table)}${r.occasion ? ` · ${esc(r.occasion)}` : ''}${r.lateCancel ? ` · ${esc(t('rsLate'))}` : ''}</small></span>
       <span class="rs-pill ${esc(r.status)}">${esc(ui.codeWord(t, 'rsSt_', r.status))}</span></div>
     ${r.phone ? `<a class="muted small" href="tel:${esc(r.phone)}">${icon('phone')} ${esc(r.phone)}</a>` : ''}
-    ${live ? `<div class="rs-acts">${r.next.map(to => btn({ variant: ASKS.includes(to) ? 'ghost' : 'secondary', key: 'rsDo_' + to,
+    ${live && !view.readOnly && (r.next || []).length ? `<div class="rs-acts">${r.next.map(to => btn({ variant: ASKS.includes(to) ? 'ghost' : 'secondary', key: 'rsDo_' + to,
       data: { id: r.id, to }, tour: 'bookings.' + (to === 'CONFIRMED' ? 'confirm' : to === 'DECLINED' ? 'decline' : to.toLowerCase()) })).join('')}</div>` : ''}
   </article>`;
 }
@@ -86,19 +92,19 @@ function row(r){
 function draw(){
   const days = Array.from({ length: DAYS }, (_, n) => n);
   const names = new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: tz() });
-  sheet(`<p class="eyebrow" data-t="roomGroup"></p><h2 data-t="bookings"></h2><p class="muted small" data-t="rsHint"></p>
+  sheet(`<p class="eyebrow" data-t="roomGroup"></p><h2 data-t="bookings"></h2><p class="muted small" data-t="${view.readOnly ? 'acc_readOnly' : 'rsHint'}"></p>
     <div class="rs-days" role="radiogroup">${days.map(n => {
       const d = new Date(venueMidnightMs(Date.now(), tz(), n) + 12 * 3600_000);
       return `<button type="button" class="ui-chip rs-day" data-day="${n}" data-tour="bookings.day" aria-pressed="${n === view.day}"><b>${esc(names.format(d))}</b><i>${new Intl.DateTimeFormat(undefined, { day: 'numeric', timeZone: tz() }).format(d)}</i></button>`;
     }).join('')}</div>
-    <div class="btn-row">${btn({ id: 'rsNew', variant: 'primary', icon: 'plus', key: 'rsNew', tour: 'bookings.new' })}</div>
-    <p class="rs-count">${view.rows.length} ${esc(t('rsCount'))} · ${view.rows.filter(r => (r.next || []).length).reduce((s, r) => s + (r.party | 0), 0)} ${esc(t('rsGuests'))}</p>
+    ${view.readOnly ? '' : `<div class="btn-row">${btn({ id: 'rsNew', variant: 'primary', icon: 'plus', key: 'rsNew', tour: 'bookings.new' })}</div>`}
+    <p class="rs-count">${view.rows.length} ${esc(t('rsCount'))} · ${view.rows.filter(coming).reduce((s, r) => s + (r.party | 0), 0)} ${esc(t('rsGuests'))}</p>
     <div class="rs-list" data-tour="bookings.list">${view.rows.length ? view.rows.map(row).join('') : empty('clock', { key: 'rsNone' })}</div>`,
     { name: 'bookings', keepScroll: true });
   const root = $('#sheetIn');
   for (const b of $$('[data-day]', root)) b.onclick = async () => { view.day = +b.dataset.day; await refresh(); };
   for (const b of $$('[data-to]', root)) b.onclick = () => act(b.dataset.id, b.dataset.to, b);
-  $('#rsNew', root).onclick = () => newBooking().catch(fail);
+  const add = $('#rsNew', root); if (add) add.onclick = () => newBooking().catch(fail);
 }
 
 async function refresh(){ try { await load(); } catch (e) { fail(e); } draw(); }
@@ -150,8 +156,10 @@ async function newBooking(){
   });
 }
 
-export async function open(){
+/// `readOnly`: a member of staff at the pass -- the hub sends no guest and no
+/// moves; the sheet draws no "New booking" and no buttons.
+export async function open({ readOnly = false } = {}){
   ensureCss();
-  view.plan = null;
+  view.plan = null; view.readOnly = !!readOnly;
   await refresh();
 }

@@ -30,3 +30,37 @@ export async function signIn(fetchFn, email, password){
   const why = /no active owner membership/.test(owners) ? (sd.error || owners) : (owners || sd.error);
   throw new Error(why || `HTTP ${sr.status || r.status}`);
 }
+
+/// "I have a staff code" (lane W-KACCESS, 2026-09-27): the invite's code, the
+/// person's email and a password turn into an account and a signed-in console
+/// -- the same `POST /api/staff/claim` the room app uses, so a cook never needs
+/// the room app to start. An address that already has an account keeps its
+/// password; the hub says so in its own words. Nothing is sent when a field is
+/// empty. Answers what `signIn` answers.
+export async function claim(fetchFn, email, code, password){
+  const e = String(email || '').trim(), c = String(code || '').trim();
+  if (!e || !c || !password) throw new Error('missing');
+  const r = await fetchFn('/api/staff/claim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: e, code: c, password }) });
+  const d = await bodyOf(r);
+  if (r.ok && d.jwt && d.staff && d.staff.locationId) return { token: d.jwt, refresh: null, loc: d.staff.locationId, staff: true };
+  throw new Error(d.error || d.message || `HTTP ${r.status}`);
+}
+
+/// The fewest characters the hub accepts for a password (`staff_rules`
+/// MIN_PASSWORD_CHARS); checked here only to answer before the round trip.
+export const MIN_PASSWORD_CHARS = 8;
+
+/// A member of staff changes their own password (`POST /api/staff/password`,
+/// main 282d2c45). The hub checks the old one and ENDS every open staff
+/// session of the person, this device's too -- so this signs in again with
+/// the new password and answers what `signIn` answers: the console carries on.
+export async function changePassword(fetchFn, email, oldPassword, newPassword){
+  const e = String(email || '').trim();
+  if (!e || !oldPassword || !newPassword) throw new Error('missing');
+  if ([...String(newPassword)].length < MIN_PASSWORD_CHARS) throw new Error('short');
+  const r = await fetchFn('/api/staff/password', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: e, old_password: oldPassword, new_password: newPassword }) });
+  const d = await bodyOf(r);
+  if (!(r.ok && d.changed)) throw new Error(d.error || d.message || `HTTP ${r.status}`);
+  return signIn(fetchFn, e, newPassword);
+}

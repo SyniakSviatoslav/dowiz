@@ -11,8 +11,13 @@ import { $, $$, esc, icon, t, lang, LANGS, setLang, retranslate, store, S, api, 
          toast, sheet, closeSheet, bindSheetChrome, hydrate, setCurrency, displayCurrency, CURRENCIES, baseCurrency, POLL_MS, POLL_IDLE_MS, confirm, switchEl } from '/admin/core.js';
 import { ui, btn, field, chips, choice, press, loading } from '/admin/parts.js';
 import { safeGet, safeSet } from '/store/storage.js';
-import { principalOf, tabsFor, ordersPath } from '/admin/kitchen-logic.js';
+import { principalOf, ordersPath } from '/admin/kitchen-logic.js';
+// WHAT A MEMBER OF STAFF SEES (docs/design/KITCHEN-ACCESS-2026-09-27.md): the
+// kitchen reaches most of the hub; money, customers, people, keys and legal
+// stay the owner's. The hub refuses those routes; this only avoids drawing them.
+import { tabsFor, sectionsFor } from '/admin/access.js';
 import '/admin/kitchen-i18n.js';
+import '/admin/access-i18n.js';
 import '/admin/ux-i18n.js';
 import '/admin/apple-i18n.js';
 import * as Theme from '/admin/theme.js';
@@ -24,7 +29,7 @@ Theme.apply(document, Theme.stored(k => localStorage.getItem(k)));
 const THEME_ICON = { auto: 'sun-moon', light: 'sun', dark: 'moon' };
 
 /// The tabs, their icons, their words, their modules. A member of staff sees
-/// only the ones their capabilities open (`kitchen-logic.js` tabsFor).
+/// only the ones their capabilities open (`access.js` tabsFor).
 const TABS = [
   ['orders',   'scroll',          'tabOrders',   () => import('/admin/orders.js')],
   ['kitchen',  'flame',           'tabKitchen',  () => import('/admin/kitchen.js')],
@@ -33,6 +38,8 @@ const TABS = [
   ['couriers', 'bike',            'tabCouriers', () => import('/admin/couriers.js')],
   ['more',     'lantern',         'tabMore',     () => import('/admin/more.js')],
 ];
+/// The tab ids, for a screen that asks what a person can open (more.js lessons).
+export const TAB_IDS = TABS.map(x => x[0]);
 const LIVE = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY'];
 export const liveOrders = () => S.orders.filter(o => LIVE.includes(o.status));
 /// The venue's state, as the header chip and the sheet say it.
@@ -60,6 +67,7 @@ function renderLogin(err){
     ${field({ id: 'p', key: 'password', type: 'password', autocomplete: 'current-password', tour: 'login.password' })}
     ${err ? ui.alert({ label: err }) : ''}
     ${btn({ id: 'go', variant: 'primary', size: 'lg', block: true, icon: 'login', key: 'signIn', tour: 'login.go' })}
+    ${btn({ id: 'claimOpen', variant: 'ghost', block: true, icon: 'key', key: 'acc_claimOpen' })}
     ${chips({ values: LANGS.map(l => ({ value: l, label: l.toUpperCase() })), value: lang, attr: 'l', labelKey: 'language', tour: 'login.lang' }).replace('class="chips"', 'class="chips langs"')}
   </div>`;
   retranslate($('#app'));
@@ -76,8 +84,39 @@ function renderLogin(err){
   };
   $('#go').onclick = submit;
   $('#p').onkeydown = e => { if (e.key === 'Enter') submit(); };
+  $('#claimOpen').onclick = () => renderClaim();
   for (const b of $$('[data-l]')) b.onclick = () => { setLang(b.dataset.l); renderLogin(err); };
   $('#e').focus();
+}
+/// "I HAVE A STAFF CODE": the invite's code turns into an account and a
+/// signed-in console here, so a cook never needs the room app to start
+/// (`POST /api/staff/claim`, the room's own door; `signin.js` claim()).
+function renderClaim(err){
+  $('#top').hidden = true; $('#nav').hidden = true;
+  $('#app').innerHTML = `<div class="login">
+    <div class="login-mark" aria-hidden="true"><span>d</span></div>
+    <h1 data-t="acc_claimTitle"></h1><p class="login-line" data-t="acc_claimHint"></p>
+    ${field({ id: 'cc', key: 'acc_code', autocomplete: 'one-time-code', autocapitalize: 'characters', spellcheck: false })}
+    ${field({ id: 'ce', key: 'email', type: 'email', autocomplete: 'username', inputmode: 'email' })}
+    ${field({ id: 'cp', key: 'password', type: 'password', autocomplete: 'new-password' })}
+    ${err ? ui.alert({ label: err }) : ''}
+    ${btn({ id: 'cgo', variant: 'primary', size: 'lg', block: true, icon: 'login', key: 'acc_claimGo' })}
+    ${btn({ id: 'cback', variant: 'ghost', block: true, icon: 'arrow-left', key: 'acc_back' })}
+  </div>`;
+  retranslate($('#app'));
+  const submit = async () => {
+    const b = $('#cgo'); ui.setBusy(b, t('signingIn'));
+    try {
+      const { claim } = await import('/admin/signin.js');
+      const s = await claim(fetch.bind(window), $('#ce').value, $('#cc').value, $('#cp').value);
+      store.t = s.token; store.r = s.refresh; store.loc = s.loc;
+      boot();
+    } catch (e) { const m = String(e.message || e); renderClaim(m === 'missing' ? t('acc_missing') : m); }
+  };
+  $('#cgo').onclick = submit;
+  $('#cp').onkeydown = e => { if (e.key === 'Enter') submit(); };
+  $('#cback').onclick = () => renderLogin();
+  $('#cc').focus();
 }
 whenLoggedOut(renderLogin);
 $('#logout').onclick = async () => { try { await post('/auth/logout'); } catch {} logout(); };
@@ -92,7 +131,7 @@ function mountNav(){
     <span class="tab-ic">${icon(ic)}${id === mine[0][0] ? `<span class="tab-n" id="navLiveN" hidden>0</span>` : ''}</span><span data-t="${key}"></span></button>`).join('');
   nav.onclick = e => { const b = e.target.closest('[data-tab]'); if (b) show(b.dataset.tab); };
   retranslate(nav);
-  if (!me().staff) mountSideMap(nav);
+  if (myTabs().includes('more')) mountSideMap(nav);
 }
 // THE DESKTOP SIDEBAR IS THE WHOLE MAP (design doc HUB-UX-2026-09-26 §3.2):
 // under the tabs, every More destination by group, one click to its sheet,
@@ -101,9 +140,11 @@ function mountNav(){
 async function mountSideMap(nav){
   let m; try { m = await import('/admin/more.js'); } catch { return; }
   if (!m.SECTIONS || $('.side-map', nav)) return;
+  // A member of staff's map has only the rows their words open.
+  const sections = sectionsFor(me(), m.SECTIONS);
   const map = document.createElement('div');
   map.className = 'side-map'; map.setAttribute('role', 'group'); map.setAttribute('aria-label', t('sideMap'));
-  map.innerHTML = m.SECTIONS.map(([g, rows]) => `<p class="side-h" data-t="${g}"></p>` + rows.map(([key, ic]) =>
+  map.innerHTML = sections.map(([g, rows]) => `<p class="side-h" data-t="${g}"></p>` + rows.map(([key, ic]) =>
     btn({ variant: 'ghost', icon: ic, key, cls: 'tab side', data: { open: key } })).join('')).join('');
   map.onclick = e => {
     const b = e.target.closest('[data-open]'); if (!b) return;
@@ -212,11 +253,13 @@ function openPrefs(){
     ${chips({ values: [baseCurrency(), ...CURRENCIES.filter(c => c !== baseCurrency())].map(c => ({ value: c, label: c })), value: displayCurrency(), attr: 'c', tour: 'prefs.currency' })}
     <p class="eyebrow prefs-h" data-t="appearance"></p>
     ${chips({ id: 'themePick', values: Theme.THEMES.map(v => ({ value: v, key: 'theme_' + v, icon: THEME_ICON[v] })), value: theme, attr: 'theme', labelKey: 'appearance' })}
-    <div class="btn-row prefs-out">${btn({ id: 'prefsOut', variant: 'ghost', icon: 'logout', key: 'signOut' })}</div>`, { name: 'prefs' });
+    <div class="btn-row prefs-out">${me().staff ? btn({ id: 'prefsPw', variant: 'ghost', icon: 'key', key: 'acc_changePw' }) : ''}${btn({ id: 'prefsOut', variant: 'ghost', icon: 'logout', key: 'signOut' })}</div>`, { name: 'prefs' });
   for (const b of $$('[data-l]', $('#sheetIn'))) b.onclick = async () => { setLang(b.dataset.l); mountNav(); paintVenue(); await rerender(); press($$('[data-l]', $('#sheetIn')), b); };
   for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => { await setCurrency(baseCurrency(), b.dataset.c); press($$('[data-c]', $('#sheetIn')), b); await rerender(); };
   for (const b of $$('[data-theme]', $('#sheetIn'))) b.onclick = () => { Theme.choose(document, b.dataset.theme, (k, v) => localStorage.setItem(k, v)); press($$('[data-theme]', $('#sheetIn')), b); };
   $('#prefsOut').onclick = () => $('#logout').click();
+  // A member of staff changes their own password here (`password.js`).
+  const pw = $('#prefsPw'); if (pw) pw.onclick = () => import('/admin/password.js').then(m => m.openOwn());
 }
 $('#prefs').onclick = openPrefs;
 
@@ -332,7 +375,7 @@ async function boot(){
   import('/admin/voice.js').then(m => m.mountVoice($('#top .top-in'), $('#prefs'), async () => {
     await Promise.all([loadOrders().catch(() => {}), loadVenue()]); paintVenue(); await rerender();
   })).catch(() => {});
-  if (!me().staff) import('/admin/more.js').then(m => m.learnFromHash()).catch(() => {});
+  if (myTabs().includes('more')) import('/admin/more.js').then(m => m.learnFromHash()).catch(() => {});
   // THE AGENT IN THE HUB (operator Q9): one chat panel on every screen.
   import('/admin/assistant.js').then(m => m.mountAssistant($('#top .top-in'), $('#prefs'), { show, refresh: async () => {
     await Promise.all([loadOrders().catch(() => {}), loadVenue()]); paintVenue(); await rerender(); } })).catch(() => {});

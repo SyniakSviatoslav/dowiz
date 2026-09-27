@@ -18,17 +18,27 @@ const tbl = (head, rows, foot = '') => `<div class="kt-wrap"><table class="kt">$
 const cell = (v, cls = '') => `<td class="${cls}">${v == null ? '-' : v}</td>`;
 const bar = (w, warn) => `<span class="kt-bar"><i class="${warn ? 'warn' : ''}" data-w="${w}"></i></span>`;
 const sign = v => (v < 0 ? 'neg' : v > 0 ? 'pos' : '');
+/// THE KITCHEN'S NUMBERS (KITCHEN-ACCESS-2026-09-27): the hub answers a member
+/// of staff with `scope: 'kitchen'` and no revenue, margin or food cost; the
+/// columns that would be empty are not drawn.
+export const isKitchen = r => !!r && r.scope === 'kitchen';
 
 function totals(r, money){
   const x = r.totals || {};
   const stat = (v, word, cls = 'money') => `<div class="stat ${cls}"><b>${v}</b><small data-t="${word}"></small></div>`;
-  return `<div class="stats kt-tot">${stat(money(x.revenue || 0), 'ka_revenue')}${stat(money(x.cogs || 0), 'ka_cogs')}${stat(C.pct(x.foodCostPm) || '-', 'ka_foodCost', '')}${stat(money(x.margin || 0), 'ka_margin')}
+  const sales = isKitchen(r) ? '' : stat(money(x.revenue || 0), 'ka_revenue');
+  const kept = isKitchen(r) ? '' : `${stat(C.pct(x.foodCostPm) || '-', 'ka_foodCost', '')}${stat(money(x.margin || 0), 'ka_margin')}`;
+  return `<div class="stats kt-tot">${sales}${stat(money(x.cogs || 0), 'ka_cogs')}${kept}
     ${stat(money(x.wasteValue || 0), 'ka_waste')}${stat(money(x.driftValue || 0), 'ka_drift')}${stat(money(x.receivedValue || 0), 'ka_received')}${stat(x.orders || 0, 'ka_orders', '')}</div>
     ${[['undated', 'ka_undated'], ['unmodelled', 'ka_unmodelled'], ['uncosted', 'ka_uncosted']].filter(([k2]) => x[k2]).map(([k2, w]) => `<p class="hint">${x[k2]} <span data-t="${w}"></span></p>`).join('')}`;
 }
 
 function byDay(r, m){
   const days = r.byDay || [];
+  if (isKitchen(r)) {
+    const w = C.bars(days.map(d => d.cogs || 0));
+    return tbl(['ka_day', 'ka_orders', 'ka_cogs', 'ka_waste', 'ka_received'], days.map((d, i) => `<tr><td>${esc(d.day)}${bar(w[i])}</td>${cell(d.orders)}${cell(m(d.cogs))}${cell(m(d.waste))}${cell(m(d.received))}</tr>`).join(''));
+  }
   const w = C.bars(days.map(d => d.revenue));
   const rows = days.map((d, i) => `<tr><td>${esc(d.day)}${bar(w[i])}</td>${cell(d.orders)}${cell(m(d.revenue))}${cell(m(d.cogs))}${cell(C.pct(d.foodCostPm) || '-')}${cell(m(d.waste))}${cell(m(d.received))}</tr>`).join('');
   return tbl(['ka_day', 'ka_orders', 'ka_revenue', 'ka_cogs', 'ka_foodCost', 'ka_waste', 'ka_received'], rows);
@@ -36,6 +46,10 @@ function byDay(r, m){
 
 function byDish(r, m){
   const dishes = r.dishes || [];
+  if (isKitchen(r)) {
+    const w = C.bars(dishes.map(d => d.sold || 0));
+    return tbl(['ka_dish', 'ka_sold', 'ka_portionCost', 'ka_cogs'], dishes.map((d, i) => `<tr><td>${esc(d.name)}${d.hasRecipe ? '' : ` <small data-t="inv_noStockLink"></small>`}${bar(w[i])}</td>${cell(d.sold)}${cell(m(d.portionCost))}${cell(m(d.cogs))}</tr>`).join(''));
+  }
   const w = C.bars(dishes.map(d => d.revenue));
   const rows = dishes.map((d, i) => `<tr><td>${esc(d.name)}${d.hasRecipe ? '' : ` <small data-t="inv_noStockLink"></small>`}${bar(w[i], (d.foodCostPm || 0) > FOOD_COST_WARN_PM)}</td>${cell(d.sold)}${cell(m(d.revenue))}${cell(m(d.portionCost))}
     ${cell(m(d.marginPortion), sign(d.marginPortion))}${cell(m(d.margin), sign(d.margin))}${cell(C.pct(d.foodCostPm) || '-')}</tr>`).join('');
