@@ -76,7 +76,7 @@ pub fn due(rows: &[Row], since: i64, now_ms: i64, threshold: usize, venue: &Voic
 
 /// Who the message speaks for: the venue's name, its zone (the period start is
 /// shown in venue-local time) and its language — the venue record's
-/// `default_locale` when it is one of the console's three, else English.
+/// `default_locale` when it is one of the console's languages, else English.
 pub struct Voice<'a> {
     pub venue: &'a str,
     pub zone: dowiz_hub::tz::Zone,

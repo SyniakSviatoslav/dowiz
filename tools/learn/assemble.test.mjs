@@ -15,6 +15,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const FIX = join(HERE, 'fixtures', 'capture');
 const lesson = JSON.parse(readFileSync(join(FIX, 'lesson.json'), 'utf8'));
 const marks = JSON.parse(readFileSync(join(FIX, 'sq', 'marks.json'), 'utf8')).marks;
+const rec = () => { const lines = []; return { lines, log: l => lines.push(l), error: l => lines.push(l) }; };
 const quiet = { log: () => {}, error: () => {} };
 const scratch = () => { const d = mkdtempSync(join(tmpdir(), 'asm-')); cpSync(FIX, d, { recursive: true }); return d; };
 
@@ -139,6 +140,10 @@ test('checkCut + main: missing files and unusable input', () => {
   assert.match(checkCut('/nonexistent', 'sq', fake())[0].what, /lesson\.json/);
   assert.equal(checkMain([], quiet), 2);
   assert.equal(checkMain([d, 'de'], quiet), 2);
+  // The usage line names the films' languages (it printed NaN when it was a
+  // quoted string holding a template, lane W-RU) -- and no Russian cut.
+  const said = rec(); checkMain([d, 'ru'], said);
+  assert.equal(said.lines.join(), 'usage: check.mjs DIR LANG [LANG...]   (LANG in sq/en/uk)');
   assert.equal(checkMain([assembled(), 'sq'], quiet, fake()), 0);
 });
 

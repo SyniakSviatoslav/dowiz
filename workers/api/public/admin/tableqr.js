@@ -22,6 +22,7 @@ const WORDS = {
   sq: { qrHint: 'Nje kod per cdo tavoline te planit. Klienti e skanon, porosit, dhe kamerieri e konfirmon porosine.', qrPrint: 'Printo kodet', qrNone: 'Plani i salles nuk ka ende tavolina. Vizatojeni te Rezervimet.', qrTable: 'Tavolina', qrDownload: 'Shkarko', qrScan: 'Skanoni per te porositur' },
   en: { qrHint: 'One code per table on the plan. A guest scans it, orders, and a waiter confirms the round.', qrPrint: 'Print the codes', qrNone: 'The floor plan has no tables yet. Draw it under Bookings.', qrTable: 'Table', qrDownload: 'Download', qrScan: 'Scan to order' },
   uk: { qrHint: 'Один код на кожен стіл плану. Гість сканує, замовляє, а офіціант підтверджує замовлення.', qrPrint: 'Надрукувати коди', qrNone: 'У плані зали ще немає столів. Намалюйте його в Бронюваннях.', qrTable: 'Стіл', qrDownload: 'Завантажити', qrScan: 'Скануйте, щоб замовити' },
+  ru: { qrHint: 'Один код на каждый стол плана. Гость сканирует, заказывает, а официант подтверждает заказ.', qrPrint: 'Напечатать коды', qrNone: 'В плане зала ещё нет столов. Нарисуйте его в Бронированиях.', qrTable: 'Стол', qrDownload: 'Скачать', qrScan: 'Сканируйте, чтобы заказать' },
 };
 for (const l of LANGS) Object.assign(T[l], WORDS[l]);
 

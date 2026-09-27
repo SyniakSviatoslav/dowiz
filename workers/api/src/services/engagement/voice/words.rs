@@ -44,7 +44,8 @@ pub fn has(ws: &[&str], needles: &[&str]) -> bool {
 /// not a round anybody says aloud and is refused rather than rung.
 pub const MAX_SAID: u32 = 99;
 
-/// Spoken numbers, one to twelve, in the three languages. Recognisers mostly
+/// Spoken numbers, one to twelve, in every language (Russian shares "один",
+/// "одна", "два", "три", "пять", "девять", "десять" with Ukrainian). Recognisers mostly
 /// write digits; these are for the ones that do not.
 const NUMBER_WORDS: &[(&str, u32)] = &[
     ("one", 1), ("two", 2), ("three", 3), ("four", 4), ("five", 5), ("six", 6),
@@ -52,6 +53,8 @@ const NUMBER_WORDS: &[(&str, u32)] = &[
     ("один", 1), ("одна", 1), ("одну", 1), ("одне", 1), ("два", 2), ("дві", 2),
     ("три", 3), ("чотири", 4), ("пять", 5), ("шість", 6), ("сім", 7), ("вісім", 8),
     ("девять", 9), ("десять", 10), ("одинадцять", 11), ("дванадцять", 12),
+    ("одно", 1), ("две", 2), ("четыре", 4), ("шесть", 6), ("семь", 7), ("восемь", 8),
+    ("одиннадцать", 11), ("двенадцать", 12),
     ("një", 1), ("nje", 1), ("dy", 2), ("tre", 3), ("tri", 3), ("katër", 4),
     ("kater", 4), ("pesë", 5), ("pese", 5), ("gjashtë", 6), ("gjashte", 6),
     ("shtatë", 7), ("shtate", 7), ("tetë", 8), ("tete", 8), ("nëntë", 9),

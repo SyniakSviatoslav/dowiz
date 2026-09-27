@@ -55,6 +55,7 @@ pub fn stop_line(lang: &str) -> &'static str {
     match lang {
         "en" => "Reply STOP to stop these messages.",
         "uk" => "Відповідайте STOP, щоб більше не отримувати ці повідомлення.",
+        "ru" => "Ответьте STOP, чтобы больше не получать эти сообщения.",
         _ => "Përgjigjuni me STOP për të mos marrë më këto mesazhe.",
     }
 }

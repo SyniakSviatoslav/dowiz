@@ -2,7 +2,7 @@
 //! 2026-09-22): "the word STOP in a WhatsApp thread (`channels.rs`'s inbound
 //! path, one match) ... a STOP that reaches the inbox and is not folded within
 //! the minute is a defect, not a delay." Every consent sentence the checkout
-//! shows ends "...by replying STOP", in all three languages.
+//! shows ends "...by replying STOP", in every language.
 //!
 //! THE ONE SITE is `channels::webhook`, which calls `heard` for each fresh
 //! inbound message. `heard` does NOTHING unless the text is a stop word, so an

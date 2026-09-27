@@ -12,7 +12,7 @@
 // -- so each has its own control and its own sheet.
 
 import { history, fetchRemembered, CURRENCIES, baseCurrency, displayCurrency, setDisplayCurrency, moneyEl, repaintMoney } from '/store/state.js';
-import { t, lang, LANGS, retranslate } from '/store/i18n.js';
+import { t, lang, LANGS, retranslate, intlLocale } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, isSheetOpen, sheetName } from '/store/ui.js';
 import { relabel } from '/store/motion.js';
 import { openCart } from '/store/cart.js';
@@ -28,13 +28,13 @@ export function onChangeLang(fn){ changeLang = fn; }
 // knew the URL, which is the defect class `tools/gates/unreached.py` exists
 // for: a capability that is built, tested, and that no live path reaches. It
 // gets a tab, beside the menu, because that is where a diner looks. The label
-// is one word in all three languages, for the reason `tabSearch` is.
+// is one word in every language, for the reason `tabSearch` is.
 const TABS = [
   ['menu',   'bowl-chopsticks', 'menu'],
   ['book',   'tools-kitchen-2', 'bkTab'],
   // ITS OWN KEY. `search` is the field's placeholder ("Search the menu"), and
-  // a tab is 78px wide on a phone: that label wrapped to two lines in all
-  // three languages. A tab gets one word.
+  // a tab is 78px wide on a phone: that label wrapped to two lines in
+  // every language. A tab gets one word.
   ['search', 'search',       'tabSearch'],
   ['cart',   'bento',        'cart'],
   ['orders', 'scroll',       'orders'],
@@ -132,7 +132,7 @@ export async function openHistory(){
   const host = $('#histList'); if (!host) return;
   host.innerHTML = got.map((r, i) => {
     const e = list[i];
-    const when = new Date(e.at).toLocaleDateString(lang === 'uk' ? 'uk' : lang === 'en' ? 'en' : 'sq', { day: 'numeric', month: 'short' });
+    const when = new Date(e.at).toLocaleDateString(intlLocale(), { day: 'numeric', month: 'short' });
     const short = esc(String(e.id).slice(0, ORDER_ID_SHOWN));
     if (r.status !== 'fulfilled') return `<div class="hist gone"><span><b>#${short}</b><span class="muted">${esc(when)}</span></span>${moneyEl(e.total)}</div>`;
     const o = r.value;

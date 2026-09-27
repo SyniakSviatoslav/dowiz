@@ -9,15 +9,15 @@ test('flatten: nested keys dotted; arrays and functions are leaves', () => {
   assert.deepEqual(flatten({ a: 1, b: { c: [1], d: () => 1, e: { f: null } } }), ['a', 'b.c', 'b.d', 'b.e.f']);
 });
 
-test('pickDict prefers T, else any export with all three languages', () => {
-  const d = { sq: {}, en: {}, uk: {} };
+test('pickDict prefers T, else any export with every language', () => {
+  const d = { sq: {}, en: {}, uk: {}, ru: {} };
   assert.equal(pickDict({ T: d }), d);
   assert.equal(pickDict({ other: 1, dict: d }), d);
   assert.equal(pickDict({ half: { sq: {}, en: {} } }), null);
 });
 
 test('completeness: the union less each language, qtyWords excluded', () => {
-  const c = completeness({ sq: { a: 1, qtyWords: { one: 'x' } }, en: { a: 1, b: 1 }, uk: { a: 1, b: 1 } });
+  const c = completeness({ sq: { a: 1, qtyWords: { one: 'x' } }, en: { a: 1, b: 1 }, uk: { a: 1, b: 1 }, ru: { a: 1, b: 1 } });
   assert.equal(c.union, 2);
   assert.deepEqual(c.per.sq, { keys: 1, missing: ['b'] });
   assert.deepEqual(c.per.en, { keys: 2, missing: [] });
@@ -61,6 +61,6 @@ test('the collector imports each dictionary the way the page does', async () => 
   assert.equal(r['i18n.admin.keys'].value, 3);
   assert.equal(r['i18n.admin.missing_uk'].note, 'd');
   assert.equal(r['i18n.room.importable'].value, 0);
-  assert.equal(r['i18n.room.importable'].note, 'no export holds sq, en and uk');
+  assert.equal(r['i18n.room.importable'].note, 'no export holds sq, en, uk, ru');
   assert.equal(r['i18n.courier.importable'].note, 'boom at import');
 });

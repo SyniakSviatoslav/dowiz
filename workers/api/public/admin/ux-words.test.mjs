@@ -31,8 +31,9 @@ test('merge: adds the words to each language and fills a missing language from E
   assert.equal(T.sq.save, 'Ruaj');
   assert.equal(T.sq.appearance, 'Pamja');
   assert.equal(T.uk.theme_dark, 'Темний');
-  // ru has no words yet: it reads English, never the key
-  assert.equal(T.ru.appearance, 'Appearance');
+  // ru has its own words (lane W-RU); a language without them reads English,
+  // never the key -- the next test holds that
+  assert.equal(T.ru.appearance, 'Вид');
   assert.equal(T.ru.save, 'Сохранить');
 });
 

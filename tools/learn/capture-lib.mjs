@@ -6,7 +6,9 @@ import { createHash } from 'node:crypto';
 import { join, dirname, normalize as normPath, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseYaml } from './yaml-lite.mjs';
-import { normalize, LANGS, ROLES } from './build-lessons.mjs';
+import { normalize, ROLES } from './build-lessons.mjs';
+// The recorder films in the films' languages only (no Russian cut; lib/langs.js MEDIA_LANGS).
+import { MEDIA_LANGS as LANGS } from '../../workers/api/public/lib/langs.js';
 
 export const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 /// The operator's venue for recordings (2026-09-24). Any other host needs --host.

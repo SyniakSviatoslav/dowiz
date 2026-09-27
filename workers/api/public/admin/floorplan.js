@@ -35,6 +35,12 @@ const WORDS = {
     fpSave: 'Зберегти план', fpEmpty: 'Ще немає зал. Додайте першу.', fpPick: 'Виберіть стіл, щоб змінити його.',
     fpNoName: 'Зала без назви', fpZoneTwice: 'Дві зали з одним id', fpBadNumber: 'Недійсний номер столу',
     fpNumberTwice: 'Два столи з одним номером', fpOffPlan: 'Стіл виходить за межі плану', fpOverlap: 'Два столи накладаються', fpNewZone: 'Зала' },
+  ru: { fpHint: 'Нарисуйте залы и столы. Перетащите стол или выберите его и двигайте стрелками.',
+    fpZone: 'Зал', fpAddZone: 'Новый зал', fpZoneName: 'Название зала', fpAddTable: 'Новый стол', fpNumber: 'Номер',
+    fpSeats: 'Мест', fpShape: 'Форма', fpRect: 'Квадратный', fpCircle: 'Круглый', fpDelete: 'Убрать стол', fpDeleteZone: 'Убрать зал',
+    fpSave: 'Сохранить план', fpEmpty: 'Ещё нет залов. Добавьте первый.', fpPick: 'Выберите стол, чтобы изменить его.',
+    fpNoName: 'Зал без названия', fpZoneTwice: 'Два зала с одним id', fpBadNumber: 'Недопустимый номер стола',
+    fpNumberTwice: 'Два стола с одним номером', fpOffPlan: 'Стол выходит за пределы плана', fpOverlap: 'Два стола накладываются', fpNewZone: 'Зал' },
 };
 for (const l of LANGS) Object.assign(T[l], WORDS[l]);
 

@@ -792,7 +792,7 @@ function startVoice(){
       if (!res.isFinal) return;
       try { await handleVoice(await sendVoice({
         transcript: res.transcript, confidence: res.confidence,
-        is_final: true, lang: 'uk' })); }
+        is_final: true, lang })); }
       catch (e) { voiceSay(String(e.message || e), 'bad'); }
     },
     onError: err => {

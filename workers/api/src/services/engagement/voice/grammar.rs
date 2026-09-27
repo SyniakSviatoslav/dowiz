@@ -1,7 +1,7 @@
 //! PURE. What a waiter said, and the owner's two extra verbs (a dish on or
 //! off sale, the venue's state), as a closed set of intents.
 //!
-//! THE SAME RULES AS `dowiz_hub::voice`: deterministic, three languages, two
+//! THE SAME RULES AS `dowiz_hub::voice`: deterministic, every language, two
 //! commands in one breath refused rather than resolved by precedence, and a
 //! missing piece (which table? cash or card?) asked for rather than guessed.
 //! Nothing here knows the menu or the room; `dish` and `room` resolve the
@@ -47,17 +47,19 @@ pub enum Said {
 const TABLE: &[&str] = &[
     "table", "стіл", "столу", "стола", "столик", "столика", "столі", "tavolina", "tavolinën",
     "tavolinen", "tavolinës", "tavolines", "tavolinë", "tavoline",
+    "стол", "столе", "столом",
 ];
-const OPEN: &[&str] = &["open", "seat", "відкрий", "відкрити", "посади", "посадити", "hap", "hape"];
-const ADD: &[&str] = &["add", "plus", "додай", "додати", "плюс", "shto", "shtoj", "shtoni"];
-const SEND: &[&str] = &["send", "fire", "відправ", "відправити", "надішли", "надіслати", "dërgo", "dergo", "dërgoje", "dergoje"];
+const OPEN: &[&str] = &["open", "seat", "відкрий", "відкрити", "посади", "посадити", "hap", "hape", "открой", "открыть", "посадить"];
+const ADD: &[&str] = &["add", "plus", "додай", "додати", "плюс", "shto", "shtoj", "shtoni", "добавь", "добавить"];
+const SEND: &[&str] = &["send", "fire", "відправ", "відправити", "надішли", "надіслати", "dërgo", "dergo", "dërgoje", "dergoje", "отправь", "отправить", "пошли"];
 const PAID: &[&str] = &[
     "paid", "pay", "pays", "settled", "оплатив", "оплатила", "оплатили", "оплата", "оплачено",
     "розрахувався", "розрахувалась", "розрахувались", "paguar", "pagoi", "paguan", "pagesë", "pagese",
+    "оплатил", "рассчитался", "рассчиталась", "рассчитались",
 ];
-const CASH: &[&str] = &["cash", "готівка", "готівкою", "готівку", "кеш", "кешем", "kesh", "para"];
-const CARD: &[&str] = &["card", "карта", "картка", "карткою", "картою", "карту", "картку", "kartë", "karte", "kartën", "karten", "kartelë", "kartele"];
-const STATUS: &[&str] = &["status", "statusi", "статус", "скільки", "many", "sa"];
+const CASH: &[&str] = &["cash", "готівка", "готівкою", "готівку", "кеш", "кешем", "kesh", "para", "наличные", "наличными", "наличкой", "налом"];
+const CARD: &[&str] = &["card", "карта", "картка", "карткою", "картою", "карту", "картку", "kartë", "karte", "kartën", "karten", "kartelë", "kartele", "картой"];
+const STATUS: &[&str] = &["status", "statusi", "статус", "скільки", "many", "sa", "сколько"];
 /// Words that carry no meaning of their own between the ones that do.
 const FILLER: &[&str] = &[
     "to", "at", "on", "for", "the", "a", "an", "please", "of", "times", "portion", "portions", "more",
@@ -66,6 +68,7 @@ const FILLER: &[&str] = &[
     "штук", "шт", "рази", "раз", "ще", "раунд", "замовлення", "гостей", "гості", "осіб", "людей",
     "në", "ne", "te", "tek", "për", "per", "ju", "lutem", "copë", "cope", "porcion", "porcione",
     "herë", "here", "edhe", "porosinë", "porosine", "porosia", "persona", "veta", "vetë",
+    "пожалуйста", "порции", "порций", "раза", "ещё", "еще", "заказ", "гостя", "человек", "человека",
 ];
 
 /// The number said right after a table word, and the word's position.
@@ -136,19 +139,24 @@ pub fn waiter(transcript: &str) -> Said {
     Said::Unclear("not_room")
 }
 
-const VENUE: &[&str] = &["venue", "restaurant", "заклад", "закладу", "ресторан", "ресторану", "lokali", "lokalin", "lokal", "restoranti", "restorantin"];
-const V_OPEN: &[&str] = &["open", "reopen", "відкрий", "відкрити", "відкритий", "відкрито", "hap", "hape", "hapur"];
-const V_BUSY: &[&str] = &["busy", "зайнятий", "зайнято", "завантажений", "завантажено", "zënë", "zene", "ngarkuar"];
-const V_CLOSED: &[&str] = &["close", "closed", "закрий", "закрити", "закритий", "закрито", "mbyll", "mbylle", "mbyllur"];
+const VENUE: &[&str] = &["venue", "restaurant", "заклад", "закладу", "ресторан", "ресторану", "lokali", "lokalin", "lokal", "restoranti", "restorantin", "заведение", "заведения"];
+const V_OPEN: &[&str] = &["open", "reopen", "відкрий", "відкрити", "відкритий", "відкрито", "hap", "hape", "hapur", "открой", "открыть", "открыт", "открыто"];
+const V_BUSY: &[&str] = &["busy", "зайнятий", "зайнято", "завантажений", "завантажено", "zënë", "zene", "ngarkuar", "занят", "занято", "загружен", "загружено"];
+const V_CLOSED: &[&str] = &["close", "closed", "закрий", "закрити", "закритий", "закрито", "mbyll", "mbylle", "mbyllur", "закрой", "закрыть", "закрыт", "закрыто"];
 const OFF: &[&str] = &[
     "off", "86", "unavailable", "stop", "стоп", "зніми", "зняти", "закінчилась", "закінчився",
     "закінчилось", "закінчились", "скінчилась", "скінчився", "скінчилось", "hiq", "hiqe", "mbaroi", "mbaruan", "ndalo",
+    "сними", "снять", "закончилась", "закончился", "закончилось", "закончились", "кончилась", "кончился", "кончилось",
 ];
-const ON: &[&str] = &["back", "available", "restore", "поверни", "повернути", "увімкни", "увімкнути", "віднови", "відновити", "rikthe", "ktheje", "aktivizo"];
+const ON: &[&str] = &[
+    "back", "available", "restore", "поверни", "повернути", "увімкни", "увімкнути", "віднови", "відновити", "rikthe", "ktheje", "aktivizo",
+    "верни", "вернуть", "включи", "включить", "восстанови", "восстановить",
+];
 const SALE_FILLER: &[&str] = &[
     "sale", "menu", "is", "are", "put", "take", "from", "sold", "out", "it", "the", "on", "please", "again",
     "з", "із", "в", "у", "продажу", "продаж", "меню", "будь", "ласка", "вже", "знову",
     "nga", "në", "ne", "shitja", "shitje", "shitjes", "menuja", "menusë", "ju", "lutem", "është", "eshte", "u", "përsëri", "perseri",
+    "с", "со", "продажи", "продажа", "пожалуйста", "уже", "снова", "опять",
 ];
 
 /// The owner's extra verbs, or `None` when the utterance is not one of them

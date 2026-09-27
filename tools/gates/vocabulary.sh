@@ -32,9 +32,9 @@ n=$(printf '%s\n' "$statuses" | wc -l | tr -d ' ')
 
 missing=0
 for s in $statuses; do
-  for f in workers/api/public/admin/i18n.js; do
-    # Three languages in one file: the word must appear as many times as there
-    # are `st:{` blocks, or one language is quietly short.
+  for f in workers/api/public/admin/i18n.js workers/api/public/admin/i18n-ru.js; do
+    # sq/en/uk in i18n.js, ru in its own file (lane W-RU): the word must appear
+    # as many times as there are `st:{` blocks, or one language is quietly short.
     langs=$(grep -c 'st:{' "$f")
     have=$(grep -oE "\b$s:" "$f" | wc -l | tr -d ' ')
     if [ "$have" -lt "$langs" ]; then
@@ -55,4 +55,4 @@ if [ "$missing" -gt 0 ]; then
   echo "vocabulary: add the word and the colour, or generate them (blueprint P4)."
   exit 1
 fi
-echo "vocabulary: $n kernel statuses, all present in 3 languages and 3 stylesheets"
+echo "vocabulary: $n kernel statuses, all present in 4 languages and 4 stylesheets"

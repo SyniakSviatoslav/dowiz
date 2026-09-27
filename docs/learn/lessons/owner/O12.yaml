@@ -11,10 +11,12 @@ title:
   sq: "Anulime, falas, kthime — dhe shifrat"
   en: "Voids, comps, refunds — and the numbers"
   uk: "Анулювання, безкоштовне, повернення — і цифри"
+  ru: "Аннулирования, бесплатное, возвраты — и цифры"
 goal:
   sq: "Lexoni një javë përjashtimesh dhe shitjesh."
   en: "Read a week of exceptions and sales."
   uk: "Прочитати тиждень винятків і продажів."
+  ru: "Прочитать неделю исключений и продаж."
 steps:
   - key: 1
     anchor: more.tile.exceptions
@@ -27,10 +29,12 @@ steps:
       sq: "Përjashtimet"
       en: "Exceptions"
       uk: "Винятки"
+      ru: "Исключения"
     caption:
       sq: "Çdo anulim, falas, kthim dhe dalje parash, me emrin dhe arsyen."
       en: "Every void, comp, refund and pay-out, with the name and the reason."
       uk: "Кожне анулювання, безкоштовне, повернення й видача — з ім’ям і причиною."
+      ru: "Каждое аннулирование, бесплатное, возврат и выдача — с именем и причиной."
   - key: 2
     anchor: exceptions.period
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Periudha"
       en: "The period"
       uk: "Період"
+      ru: "Период"
     caption:
       sq: "Sot, 7 ose 30 ditë."
       en: "Today, 7 or 30 days."
       uk: "Сьогодні, 7 або 30 днів."
+      ru: "Сегодня, 7 или 30 дней."
   - key: 3
     anchor: exceptions.groups
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Sipas llojit"
       en: "By kind"
       uk: "За видом"
+      ru: "По виду"
     caption:
       sq: "Shuma për çdo lloj. Nuk është pikë për askënd — është një listë për t’u lexuar."
       en: "A sum per kind. It is not a score for anyone — it is a list to read."
       uk: "Сума за кожним видом. Це не рейтинг для когось — це список для читання."
+      ru: "Сумма по каждому виду. Это не рейтинг для кого-то — это список для чтения."
   - key: 4
     anchor: exceptions.rows
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Një nga një"
       en: "One by one"
       uk: "По одному"
+      ru: "По одному"
     caption:
       sq: "Kush, kur, sa dhe pse."
       en: "Who, when, how much and why."
       uk: "Хто, коли, скільки й чому."
+      ru: "Кто, когда, сколько и почему."
   - key: 5
     anchor: exceptions.threshold
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Pragu"
       en: "The threshold"
       uk: "Поріг"
+      ru: "Порог"
     caption:
       sq: "Mbi këtë shumë, një përjashtim ju njofton."
       en: "Above this amount, an exception notifies you."
       uk: "Понад цю суму виняток вас сповіщає."
+      ru: "Выше этой суммы исключение вас уведомляет."
   - key: 6
     anchor: exceptions.late
     pending: no
@@ -104,10 +116,12 @@ steps:
       sq: "Vonesa"
       en: "Late after"
       uk: "Запізнення"
+      ru: "Опоздание"
     caption:
       sq: "Pas sa minutash një porosi quhet e vonuar."
       en: "After how many minutes an order counts as late."
       uk: "Через скільки хвилин замовлення вважається запізнілим."
+      ru: "Через сколько минут заказ считается опоздавшим."
   - key: 7
     anchor: exceptions.save
     pending: no
@@ -119,10 +133,12 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Pragjet ruhen për lokalin."
       en: "The thresholds are saved for the venue."
       uk: "Пороги збережено для закладу."
+      ru: "Пороги сохранены для заведения."
   - key: 8
     anchor: exceptions.legs
     pending: no
@@ -134,10 +150,12 @@ steps:
       sq: "Llogaritë"
       en: "The ledger"
       uk: "Рахунки"
+      ru: "Счета"
     caption:
       sq: "Çdo kthim duhet të ketë dy anët e veta në libër."
       en: "Every refund must have both its sides in the books."
       uk: "Кожне повернення має мати обидві сторони в обліку."
+      ru: "У каждого возврата должны быть обе стороны в учёте."
   - key: 9
     anchor: exceptions.legsCheck
     pending: no
@@ -149,10 +167,12 @@ steps:
       sq: "Kontrollo"
       en: "Check"
       uk: "Перевірити"
+      ru: "Проверить"
     caption:
       sq: "Gjen kthimet që i mungon njëra anë."
       en: "Finds refunds missing one side."
       uk: "Знаходить повернення, яким бракує однієї сторони."
+      ru: "Находит возвраты, которым не хватает одной стороны."
   - key: 10
     anchor: exceptions.legsApply
     pending: no
@@ -164,10 +184,12 @@ steps:
       sq: "Plotëso"
       en: "Complete"
       uk: "Доповнити"
+      ru: "Дополнить"
     caption:
       sq: "Shton anët që mungojnë."
       en: "Adds the missing sides."
       uk: "Додає відсутні сторони."
+      ru: "Добавляет недостающие стороны."
   - key: 11
     anchor: more.tile.analytics
     pending: no
@@ -179,10 +201,12 @@ steps:
       sq: "Analitika"
       en: "Analytics"
       uk: "Аналітика"
+      ru: "Аналитика"
     caption:
       sq: "Shifrat e shitjeve, pa asnjë të dhënë personale."
       en: "Sales numbers, with no personal data."
       uk: "Цифри продажів без жодних персональних даних."
+      ru: "Цифры продаж без каких-либо персональных данных."
   - key: 12
     anchor: analytics.window
     pending: no
@@ -194,7 +218,9 @@ steps:
       sq: "Periudha"
       en: "The period"
       uk: "Період"
+      ru: "Период"
     caption:
       sq: "7 ose 30 ditë."
       en: "7 or 30 days."
       uk: "7 або 30 днів."
+      ru: "7 или 30 дней."

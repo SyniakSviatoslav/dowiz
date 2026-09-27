@@ -12,8 +12,10 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { MEDIA_LANGS } from '../../workers/api/public/lib/langs.js';
 
-export const LANGS = ['sq', 'en', 'uk'];
+/// The films' languages (lib/langs.js MEDIA_LANGS): one VTT per language, none in Russian.
+export const LANGS = MEDIA_LANGS;
 export const W = 720, H = 1280, BAND = 112, SW = 540, SH = 1168;
 export const INK = '0x16130f', BONE = '0xf3ede2', MUTED = '0xb9b0a3', HOT = '0xff4d2e';
 export const FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';

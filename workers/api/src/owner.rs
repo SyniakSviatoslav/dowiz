@@ -1051,6 +1051,11 @@ fn i18n_check(
     if locale.len() != 2 || !locale.chars().all(|c| c.is_ascii_lowercase()) {
         return Err(format!("{locale:?} is not a locale"));
     }
+    // A translation into a language no surface speaks is stored and never
+    // read (research 2026-09-26 B2): refuse it, and name the ones that are read.
+    if !dowiz_hub::lang::is_lang(&locale) {
+        return Err(format!("{locale:?} is not one of the storefront's languages ({})", dowiz_hub::lang::LANGS.join(", ")));
+    }
     if !value.trim().is_empty() {
         i18n_value_ok(field, value)?;
     }
@@ -1450,3 +1455,6 @@ where
 {
     Option::<T>::deserialize(d).map(Some)
 }
+
+#[cfg(test)]
+mod tests;

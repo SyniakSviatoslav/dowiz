@@ -3,12 +3,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { draftOf, applyNow, planOf, readbackOf, micButton, mountVoice } from './voice.js';
 import { readFileSync } from 'node:fs';
+import { LANGS } from '../lib/langs.js';
 
 // THE WORDS, READ FROM i18n.js AS TEXT: it imports the console's dictionary by
-// an absolute URL node cannot load, so the three blocks are parsed here.
+// an absolute URL node cannot load, so the blocks are parsed here.
 const SRC = readFileSync(new URL('./i18n.js', import.meta.url), 'utf8');
 const block = l => SRC.slice(SRC.indexOf(`  ${l}: {`), SRC.indexOf('\n  },', SRC.indexOf(`  ${l}: {`)));
-const T = Object.fromEntries(['sq', 'en', 'uk'].map(l => [l, Object.fromEntries([...block(l).matchAll(/(\w+): '([^']*)'/g)].map(m => [m[1], m[2]]))]));
+const T = Object.fromEntries(LANGS.map(l => [l, Object.fromEntries([...block(l).matchAll(/(\w+): '([^']*)'/g)].map(m => [m[1], m[2]]))]));
 const t = k => T.en[k] ?? k;
 
 test('voice: the round being built is the Open view\'s table and basket, and only that view\'s', () => {
@@ -91,10 +92,9 @@ test('voice: no mic is drawn where the browser cannot recognise speech', () => {
   assert.doesNotThrow(() => mountVoice({ t }, null, null));
 });
 
-test('voice: every word the mic uses is in all three languages', () => {
+test('voice: every word the mic uses is in every language', () => {
   for (const k of ['voice', 'voiceConfirm', 'voiceOpened', 'voiceGuests', 'voiceStatus', 'voiceDenied', 'voiceOffline']) {
-    for (const l of ['sq', 'en', 'uk']) assert.ok(T[l][k], `${l}.${k}`);
-    assert.notEqual(T.sq[k], T.en[k], k);
-    assert.notEqual(T.uk[k], T.en[k], k);
+    for (const l of LANGS) assert.ok(T[l][k], `${l}.${k}`);
+    for (const l of LANGS.filter(l => l !== 'en')) assert.notEqual(T[l][k], T.en[k], `${l}.${k}`);
   }
 });

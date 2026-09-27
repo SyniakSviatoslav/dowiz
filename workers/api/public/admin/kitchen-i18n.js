@@ -50,6 +50,20 @@ export const WORDS = {
     kNoTickets: 'Відкритих чеків немає', kNoTicketsHint: 'Нове замовлення з\'явиться тут само, зі звуком.',
     kLive: 'наживо', kPolling: 'оновлення', kNote: 'Примітка',
   },
+  ru: {
+    tabKitchen: 'Кухня', kBoardHint: 'Коснитесь чека, когда увидели. Большая кнопка двигает его дальше.',
+    col_new: 'Новые', col_preparing: 'Готовятся', col_ready: 'Готовы', kAll: 'Все',
+    st_sushi: 'Суши', st_kitchen: 'Кухня', st_bar: 'Бар',
+    kTable: 'Стол', kPickup: 'Самовывоз', kDelivery: 'Доставка', kMin: 'мин',
+    bump_confirm: 'Принять', bump_preparing: 'Начать', bump_ready: 'Готово', bump_collected: 'Выдано',
+    stop_reject: 'Отклонить', stop_cancel: 'Отменить', kReason: 'Причина', kReasonHint: 'Клиент видит причину.',
+    kReasonNeeded: 'Напишите причину.', kSeen: 'увидели', kUnseen: 'коснитесь, когда увидите',
+    kAllDay: 'Всего сейчас', kAllDayHint: 'Сколько каждого блюда ещё ждут открытые чеки.',
+    kStopList: 'Стоп-лист', kStopHint: 'Снимите блюдо с продажи сразу; клиенты его больше не видят.',
+    k86: 'Стоп (86)', kBackOn: 'Вернуть', kOffSale: 'не в продаже', kSearchDish: 'Найти блюдо',
+    kNoTickets: 'Открытых чеков нет', kNoTicketsHint: 'Новый заказ появится здесь сам, со звуком.',
+    kLive: 'вживую', kPolling: 'обновление', kNote: 'Примечание',
+  },
 };
 
 /// Merge into the console's table. Existing keys are never overwritten: the

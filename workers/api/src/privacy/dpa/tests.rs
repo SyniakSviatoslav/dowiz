@@ -1,5 +1,5 @@
 //! The agreement: a hub is refused without it, the version lands on the
-//! `loc` record, and the served text is the tree's, in three languages.
+//! `loc` record, and the served text is the tree's, in every language.
 
 use super::*;
 
@@ -35,7 +35,7 @@ fn the_acceptance_is_stamped_on_the_loc_record_and_read_back() {
 /// clocks, and never claims post-quantum encryption.
 #[test]
 fn each_text_is_versioned_and_says_what_the_law_needs() {
-    for lang in ["sq", "en", "uk"] {
+    for lang in dowiz_hub::lang::LANGS {
         let t = text(lang);
         assert!(t.contains(VERSION), "{lang}: carries its version");
         assert!(t.contains("26"), "{lang}: cites Law 124/2024 Art. 26");
@@ -51,6 +51,11 @@ fn each_text_is_versioned_and_says_what_the_law_needs() {
     }
     assert_ne!(text("sq"), text("en"));
     assert_ne!(text("uk"), text("en"));
+    assert_ne!(text("ru"), text("uk"));
+    assert_ne!(text("ru"), text("sq"));
+    // Russian is a draft nobody has reviewed yet, and says so in its own words.
+    assert!(text("ru").contains("черновой перевод"), "ru: the draft line");
+    assert!(!text("uk").contains("черновой"));
     assert_eq!(text("xx"), text("sq"));
 }
 
@@ -58,4 +63,15 @@ fn each_text_is_versioned_and_says_what_the_law_needs() {
 fn the_markdown_is_escaped_before_it_is_markup() {
     let h = to_html("# T\n\nA <b>x</b> & y\n\n- one\n- two\n\nend");
     assert_eq!(h, "<h1>T</h1><p>A &lt;b&gt;x&lt;/b&gt; &amp; y</p><ul><li>one</li><li>two</li></ul><p>end</p>");
+}
+
+/// The page links every language and is in the one asked (lane W-RU).
+#[test]
+fn the_page_links_every_language_and_speaks_the_one_asked() {
+    let h = render("ru");
+    assert!(h.contains("<html lang=\"ru\""));
+    assert!(h.contains("<h1>Договор об обработке данных"));
+    for l in dowiz_hub::lang::LANGS {
+        assert!(h.contains(&format!("href=\"?lang={l}\"")), "{l}");
+    }
 }

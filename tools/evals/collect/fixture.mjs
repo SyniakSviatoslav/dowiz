@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const dict = extra => `export const T = { sq: { a: 'a', qtyWords: { one: 'nje' } }, en: { a: 'a', b: { c: 'c' }${extra} }, uk: { a: 'a', b: { c: 'c' } } };\n`;
+const dict = extra => `export const T = { sq: { a: 'a', qtyWords: { one: 'nje' } }, en: { a: 'a', b: { c: 'c' }${extra} }, uk: { a: 'a', b: { c: 'c' } }, ru: { a: 'a', b: { c: 'c' } } };\n`;
 
 export const FILES = {
   'workers/api/public/store/index.html': '<link rel="stylesheet" href="/store/s.css"><!-- <script src="/gone.js"></script> -->\n'

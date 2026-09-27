@@ -18,11 +18,13 @@
 
 use crate::minijson::esc;
 
-/// The three the storefront speaks (`public/store/i18n.js`). Three languages
-/// are THREE wordings: a shared id could not say which was read.
-pub const LANGS: [&str; 3] = ["sq", "en", "uk"];
+/// Every language the storefront speaks (`crate::lang::LANGS`). N languages
+/// are N wordings: a shared id could not say which was read.
+pub use crate::lang::LANGS;
 
-pub const WORDINGS: [(&str, &str); 3] = [
+/// One sentence per language, in `LANGS` order; the array's length IS the
+/// language count, so a new language does not compile until it has its words.
+pub const WORDINGS: [(&str, &str); LANGS.len()] = [
     (
         "sq",
         "{venue} mund të më dërgojë oferta në WhatsApp në këtë numër. \
@@ -37,6 +39,13 @@ pub const WORDINGS: [(&str, &str); 3] = [
         "uk",
         "{venue} може надсилати мені пропозиції у WhatsApp на цей номер. \
          Я можу зупинити це будь-коли, відповівши STOP.",
+    ),
+    // DRAFT, not legally reviewed (lane W-RU, 2026-09-27); the operator is the
+    // reviewer, as for sq/en/uk (docs/privacy/LEGAL-DECISIONS-2026-09-24.md).
+    (
+        "ru",
+        "{venue} может отправлять мне предложения в WhatsApp на этот номер. \
+         Я могу остановить это в любой момент, ответив STOP.",
     ),
 ];
 

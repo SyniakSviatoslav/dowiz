@@ -11,10 +11,12 @@ title:
   sq: "Dita e parë: dërgesa, pagesat, aktivizimi"
   en: "First day: delivery, payments, activation"
   uk: "Перший день: доставка, оплата, активація"
+  ru: "Первый день: доставка, оплата, активация"
 goal:
   sq: "Kaloni çdo kontroll aktivizimi."
   en: "Pass every activation check."
   uk: "Пройти кожну перевірку активації."
+  ru: "Пройти каждую проверку активации."
 steps:
   - key: 1
     anchor: more.tile.deliveryTerms
@@ -27,10 +29,12 @@ steps:
       sq: "Dërgesa"
       en: "Delivery"
       uk: "Доставка"
+      ru: "Доставка"
     caption:
       sq: "Çmimi dhe kushtet e dërgesës."
       en: "The delivery price and terms."
       uk: "Ціна й умови доставки."
+      ru: "Цена и условия доставки."
   - key: 2
     anchor: delivery.fee
     pending: no
@@ -43,10 +47,12 @@ steps:
       sq: "Tarifa"
       en: "The fee"
       uk: "Плата"
+      ru: "Плата"
     caption:
       sq: "Sa paguan klienti për dërgesën."
       en: "What the customer pays for delivery."
       uk: "Скільки клієнт платить за доставку."
+      ru: "Сколько клиент платит за доставку."
   - key: 3
     anchor: delivery.minOrder
     pending: no
@@ -59,10 +65,12 @@ steps:
       sq: "Minimumi"
       en: "Minimum"
       uk: "Мінімум"
+      ru: "Минимум"
     caption:
       sq: "Porosia më e vogël që dërgoni."
       en: "The smallest order you deliver."
       uk: "Найменше замовлення, яке ви доставляєте."
+      ru: "Самый маленький заказ, который вы доставляете."
   - key: 4
     anchor: delivery.freeOver
     pending: no
@@ -75,10 +83,12 @@ steps:
       sq: "Falas mbi"
       en: "Free over"
       uk: "Безкоштовно від"
+      ru: "Бесплатно от"
     caption:
       sq: "Mbi këtë shumë, dërgesa është falas."
       en: "Above this amount, delivery is free."
       uk: "Понад цю суму доставка безкоштовна."
+      ru: "Выше этой суммы доставка бесплатна."
   - key: 5
     anchor: more.tile.payments
     pending: no
@@ -90,10 +100,12 @@ steps:
       sq: "Pagesat"
       en: "Payments"
       uk: "Оплата"
+      ru: "Оплата"
     caption:
       sq: "Si paguajnë klientët."
       en: "How customers pay."
       uk: "Як платять клієнти."
+      ru: "Как платят клиенты."
   - key: 6
     anchor: payments.cash
     pending: no
@@ -105,10 +117,12 @@ steps:
       sq: "Para në dorë"
       en: "Cash"
       uk: "Готівка"
+      ru: "Наличные"
     caption:
       sq: "Pagesë te dera ose në lokal."
       en: "Paid at the door or at the venue."
       uk: "Оплата біля дверей чи в закладі."
+      ru: "Оплата у двери или в заведении."
   - key: 7
     anchor: payments.stripe
     pending: no
@@ -120,10 +134,12 @@ steps:
       sq: "Kartë online"
       en: "Card online"
       uk: "Картка онлайн"
+      ru: "Карта онлайн"
     caption:
       sq: "Kërkon llogarinë tuaj të pagesave."
       en: "Needs your own payments account."
       uk: "Потрібен ваш власний платіжний акаунт."
+      ru: "Нужен ваш собственный платёжный аккаунт."
   - key: 8
     anchor: payments.addWallet
     pending: no
@@ -135,10 +151,12 @@ steps:
       sq: "Portofol"
       en: "Wallet"
       uk: "Гаманець"
+      ru: "Кошелёк"
     caption:
       sq: "Shtoni një adresë portofoli kripto."
       en: "Add a crypto wallet address."
       uk: "Додайте адресу криптогаманця."
+      ru: "Добавьте адрес криптокошелька."
   - key: 9
     anchor: payments.network
     pending: no
@@ -150,10 +168,12 @@ steps:
       sq: "Rrjeti"
       en: "Network"
       uk: "Мережа"
+      ru: "Сеть"
     caption:
       sq: "Rrjeti i portofolit, p.sh. TRC20."
       en: "The wallet’s network, for example TRC20."
       uk: "Мережа гаманця, наприклад TRC20."
+      ru: "Сеть кошелька, например TRC20."
   - key: 10
     anchor: more.tile.dpa
     pending: no
@@ -165,10 +185,12 @@ steps:
       sq: "Marrëveshja e të dhënave"
       en: "Data agreement"
       uk: "Угода про дані"
+      ru: "Соглашение о данных"
     caption:
       sq: "Si i përpunon dowiz të dhënat e klientëve tuaj."
       en: "How dowiz processes your customers’ data."
       uk: "Як dowiz обробляє дані ваших клієнтів."
+      ru: "Как dowiz обрабатывает данные ваших клиентов."
   - key: 11
     anchor: dpa.state
     pending: no
@@ -180,10 +202,12 @@ steps:
       sq: "Gjendja"
       en: "State"
       uk: "Стан"
+      ru: "Состояние"
     caption:
       sq: "E pranuar apo jo, dhe kur."
       en: "Accepted or not, and when."
       uk: "Прийнято чи ні, і коли."
+      ru: "Принято или нет, и когда."
   - key: 12
     anchor: dpa.read
     pending: no
@@ -195,10 +219,12 @@ steps:
       sq: "Lexojeni"
       en: "Read it"
       uk: "Прочитайте"
+      ru: "Прочитайте"
     caption:
       sq: "Teksti i plotë."
       en: "The full text."
       uk: "Повний текст."
+      ru: "Полный текст."
   - key: 13
     anchor: dpa.agree
     pending: no
@@ -210,10 +236,12 @@ steps:
       sq: "Pajtohem"
       en: "I agree"
       uk: "Погоджуюся"
+      ru: "Согласен"
     caption:
       sq: "Konfirmoni që e lexuat."
       en: "Confirm you have read it."
       uk: "Підтвердіть, що прочитали."
+      ru: "Подтвердите, что прочитали."
   - key: 14
     anchor: dpa.accept
     pending: no
@@ -225,10 +253,12 @@ steps:
       sq: "Prano"
       en: "Accept"
       uk: "Прийняти"
+      ru: "Принять"
     caption:
       sq: "Pranohet për lokalin, me emrin tuaj dhe datën."
       en: "Accepted for the venue, with your name and the date."
       uk: "Прийнято за заклад з вашим ім’ям і датою."
+      ru: "Принято за заведение с вашим именем и датой."
   - key: 15
     anchor: more.tile.activation
     pending: no
@@ -240,10 +270,12 @@ steps:
       sq: "Aktivizimi"
       en: "Activation"
       uk: "Активація"
+      ru: "Активация"
     caption:
       sq: "Lista e kontrolleve para se lokali të hapet."
       en: "The checklist before the venue goes live."
       uk: "Список перевірок перед запуском закладу."
+      ru: "Список проверок перед запуском заведения."
   - key: 16
     anchor: activation.menu
     pending: no
@@ -255,10 +287,12 @@ steps:
       sq: "Menuja"
       en: "Menu"
       uk: "Меню"
+      ru: "Меню"
     caption:
       sq: "Të paktën një pjatë në shitje."
       en: "At least one dish on sale."
       uk: "Щонайменше одна страва в продажу."
+      ru: "Хотя бы одно блюдо в продаже."
   - key: 17
     anchor: activation.notifications
     pending: no
@@ -270,10 +304,12 @@ steps:
       sq: "Zilja"
       en: "The bell"
       uk: "Дзвінок"
+      ru: "Звонок"
     caption:
       sq: "Një bisedë Telegram ku bie çdo porosi."
       en: "A Telegram chat where every order rings."
       uk: "Чат Telegram, куди дзвонить кожне замовлення."
+      ru: "Чат Telegram, куда звонит каждый заказ."
   - key: 18
     anchor: activation.fulfilment
     pending: no
@@ -285,7 +321,9 @@ steps:
       sq: "Dorëzimi"
       en: "Fulfilment"
       uk: "Виконання"
+      ru: "Выполнение"
     caption:
       sq: "Telefoni i lokalit dhe dërgesa ose marrja në lokal. Kur gjithçka është e gjelbër, jeni gati."
       en: "The venue phone, and delivery or pickup. When everything is green, you are ready."
       uk: "Телефон закладу й доставка чи самовивіз. Коли все зелене — ви готові."
+      ru: "Телефон заведения и доставка или самовывоз. Когда всё зелёное — вы готовы."

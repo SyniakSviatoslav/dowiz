@@ -224,3 +224,15 @@ fn a_clean_press_queues_everyone_and_files_everyone() {
     prune(&mut t, &d.id, &crate::services::campaigns::campaign::sent_entries(&log.entries(), &d.id));
     assert_eq!(t.all(MARK).len(), 1);
 }
+
+/// The way out is said in every language the consent sentence is, and every
+/// one names STOP -- the word the consent wording promised (lane W-RU).
+#[test]
+fn the_stop_line_is_in_every_language_and_names_stop() {
+    for l in dowiz_hub::lang::LANGS {
+        assert!(super::stop_line(l).contains("STOP"), "{l}");
+    }
+    assert_ne!(super::stop_line("ru"), super::stop_line("uk"));
+    assert_ne!(super::stop_line("ru"), super::stop_line("sq"));
+    assert_eq!(super::stop_line("xx"), super::stop_line("sq"));
+}

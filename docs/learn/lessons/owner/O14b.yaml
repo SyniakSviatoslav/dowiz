@@ -11,10 +11,12 @@ title:
   sq: "Fushatat"
   en: "Campaigns"
   uk: "Кампанії"
+  ru: "Кампании"
 goal:
   sq: "Shikoni paraprakisht një fushatë para se të dërgohet."
   en: "Preview a campaign before anything is sent."
   uk: "Переглянути кампанію до надсилання."
+  ru: "Просмотреть кампанию до отправки."
 steps:
   - key: 1
     anchor: more.tile.campaigns
@@ -27,10 +29,12 @@ steps:
       sq: "Fushatat"
       en: "Campaigns"
       uk: "Кампанії"
+      ru: "Кампании"
     caption:
       sq: "Mesazhe vetëm për klientët që kanë dhënë pëlqimin."
       en: "Messages only to customers who have given consent."
       uk: "Повідомлення лише клієнтам, які дали згоду."
+      ru: "Сообщения только клиентам, которые дали согласие."
   - key: 2
     anchor: campaigns.row
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Një fushatë"
       en: "A campaign"
       uk: "Кампанія"
+      ru: "Кампания"
     caption:
       sq: "Emri, kujt i shkon dhe kur u dërgua."
       en: "Its name, who it goes to and when it was sent."
       uk: "Назва, кому йде і коли надіслано."
+      ru: "Название, кому идёт и когда отправлено."
   - key: 3
     anchor: campaigns.new
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Fushatë e re"
       en: "New campaign"
       uk: "Нова кампанія"
+      ru: "Новая кампания"
     caption:
       sq: "Filloni një fushatë."
       en: "Start a campaign."
       uk: "Почніть кампанію."
+      ru: "Начните кампанию."
   - key: 4
     anchor: campaigns.name
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Emri"
       en: "The name"
       uk: "Назва"
+      ru: "Название"
     caption:
       sq: "Vetëm për ju."
       en: "For you only."
       uk: "Лише для вас."
+      ru: "Только для вас."
   - key: 5
     anchor: campaigns.text
     pending: no
@@ -89,10 +99,12 @@ steps:
       sq: "Teksti"
       en: "The text"
       uk: "Текст"
+      ru: "Текст"
     caption:
       sq: "Çfarë lexon klienti."
       en: "What the customer reads."
       uk: "Що читає клієнт."
+      ru: "Что читает клиент."
   - key: 6
     anchor: campaigns.segment
     pending: no
@@ -104,10 +116,12 @@ steps:
       sq: "Kujt"
       en: "To whom"
       uk: "Кому"
+      ru: "Кому"
     caption:
       sq: "Të gjithë me pëlqim, ata që s’kanë porositur prej kohësh, ose sipas etiketës."
       en: "Everyone with consent, those who have not ordered in a while, or by tag."
       uk: "Усім зі згодою, тим, хто давно не замовляв, або за міткою."
+      ru: "Всем с согласием, тем, кто давно не заказывал, или по метке."
   - key: 7
     anchor: campaigns.days
     pending: no
@@ -120,10 +134,12 @@ steps:
       sq: "Prej sa ditësh"
       en: "For how many days"
       uk: "Скільки днів"
+      ru: "Сколько дней"
     caption:
       sq: "Pa porosi prej kaq ditësh."
       en: "No order for this many days."
       uk: "Без замовлень стільки днів."
+      ru: "Без заказов столько дней."
   - key: 8
     anchor: campaigns.tag
     pending: no
@@ -135,10 +151,12 @@ steps:
       sq: "Etiketa"
       en: "The tag"
       uk: "Мітка"
+      ru: "Метка"
     caption:
       sq: "P.sh. «drekë zyre»."
       en: "For example “office lunch”."
       uk: "Наприклад, «офісний обід»."
+      ru: "Например, «офисный обед»."
   - key: 9
     anchor: campaigns.template
     pending: no
@@ -150,10 +168,12 @@ steps:
       sq: "Shablloni"
       en: "The template"
       uk: "Шаблон"
+      ru: "Шаблон"
     caption:
       sq: "WhatsApp kërkon një shabllon të miratuar."
       en: "WhatsApp requires an approved template."
       uk: "WhatsApp вимагає схваленого шаблону."
+      ru: "WhatsApp требует одобренного шаблона."
   - key: 10
     anchor: campaigns.templateLang
     pending: no
@@ -165,10 +185,12 @@ steps:
       sq: "Gjuha e shabllonit"
       en: "Template language"
       uk: "Мова шаблону"
+      ru: "Язык шаблона"
     caption:
       sq: "Gjuha në të cilën u miratua."
       en: "The language it was approved in."
       uk: "Мова, якою його схвалено."
+      ru: "Язык, на котором он одобрен."
   - key: 11
     anchor: campaigns.templateParams
     pending: no
@@ -181,10 +203,12 @@ steps:
       sq: "Fushat e shabllonit"
       en: "Template fields"
       uk: "Поля шаблону"
+      ru: "Поля шаблона"
     caption:
       sq: "Fjalët që mbushin vendet bosh."
       en: "The words that fill its blanks."
       uk: "Слова, що заповнюють пропуски."
+      ru: "Слова, которые заполняют пропуски."
   - key: 12
     anchor: campaigns.promo
     pending: no
@@ -196,10 +220,12 @@ steps:
       sq: "Kodi"
       en: "The code"
       uk: "Код"
+      ru: "Код"
     caption:
       sq: "Bashkëngjitni një kod promocional, nëse doni."
       en: "Attach a promo code, if you like."
       uk: "Додайте промокод, якщо хочете."
+      ru: "Добавьте промокод, если хотите."
   - key: 13
     anchor: campaigns.save
     pending: no
@@ -211,10 +237,12 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Ruhet si draft; asgjë nuk dërgohet."
       en: "Saved as a draft; nothing is sent."
       uk: "Збережено як чернетку; нічого не надіслано."
+      ru: "Сохранено как черновик; ничего не отправлено."
   - key: 14
     anchor: campaigns.edit
     pending: no
@@ -226,10 +254,12 @@ steps:
       sq: "Ndrysho"
       en: "Edit"
       uk: "Змінити"
+      ru: "Изменить"
     caption:
       sq: "Një draft ndryshohet sa herë të doni."
       en: "A draft can be edited as often as you like."
       uk: "Чернетку можна змінювати скільки завгодно."
+      ru: "Черновик можно менять сколько угодно."
   - key: 15
     anchor: campaigns.preview
     pending: no
@@ -241,10 +271,12 @@ steps:
       sq: "Shiko"
       en: "Preview"
       uk: "Перегляд"
+      ru: "Просмотр"
     caption:
       sq: "Si duket dhe sa veta e marrin."
       en: "What it looks like and how many get it."
       uk: "Як виглядає і скільки людей отримає."
+      ru: "Как выглядит и сколько людей получит."
   - key: 16
     anchor: campaigns.count
     pending: no
@@ -256,10 +288,12 @@ steps:
       sq: "Sa veta"
       en: "How many"
       uk: "Скільки людей"
+      ru: "Сколько людей"
     caption:
       sq: "Vetëm ata me pëlqim; ata që e morën tashmë numërohen veç."
       en: "Only those with consent; those who already got it are counted apart."
       uk: "Лише ті, хто дав згоду; ті, хто вже отримав, рахуються окремо."
+      ru: "Только те, кто дал согласие; те, кто уже получил, считаются отдельно."
   - key: 17
     anchor: campaigns.send
     pending: no
@@ -271,7 +305,9 @@ steps:
       sq: "Dërgo"
       en: "Send"
       uk: "Надіслати"
+      ru: "Отправить"
     caption:
       sq: "Dërgimi nuk kthehet pas."
       en: "Sending cannot be undone."
       uk: "Надсилання не скасувати."
+      ru: "Отправку не отменить."

@@ -17,11 +17,13 @@ import { readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { MEDIA_LANGS } from '../../workers/api/public/lib/langs.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = join(HERE, '..', '..');
 export const ROLE_ORDER = ['courier', 'guest', 'owner', 'waiter'];
-export const LANGS = ['sq', 'en', 'uk'];
+/// The films' languages (lib/langs.js MEDIA_LANGS): a cut per language, none in Russian.
+export const LANGS = MEDIA_LANGS;
 export const RECORDER = ['capture.mjs', 'capture-lib.mjs', 'capture-venue.mjs'];
 /// Seconds, measured on this box 2026-09-26 (see phase1.txt): per language a browser start and
 /// sign-in, per step the dwell; per cut the assembly; per uploaded object one wrangler put.

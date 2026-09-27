@@ -53,6 +53,7 @@ pub mod tables;
 pub mod tz;
 pub mod token;
 pub mod forget;
+pub mod lang;
 #[cfg(test)] mod store_tests; // W-AUDIT S1/S2: named corrupted cells in the store beneath the hub
 
 use bebop_store::evlog::{EvLog, Record};

@@ -11,10 +11,12 @@ title:
   sq: "Ndryshoni një pjatë"
   en: "Edit a dish"
   uk: "Змініть страву"
+  ru: "Измените блюдо"
 goal:
   sq: "Vendosni foto, çmim, stacion dhe përkthime, ose hiqeni nga shitja."
   en: "Set a photo, price, station and translations, or take it off sale."
   uk: "Додати фото, ціну, станцію й переклади або зняти з продажу."
+  ru: "Добавить фото, цену, станцию и переводы или снять с продажи."
 steps:
   - key: 1
     anchor: menu.dish
@@ -27,10 +29,12 @@ steps:
       sq: "Një pjatë"
       en: "A dish"
       uk: "Страва"
+      ru: "Блюдо"
     caption:
       sq: "Prekni pjatën për ta ndryshuar."
       en: "Tap the dish to edit it."
       uk: "Торкніться страви, щоб її змінити."
+      ru: "Коснитесь блюда, чтобы его изменить."
   - key: 2
     anchor: dish.price
     pending: no
@@ -43,10 +47,12 @@ steps:
       sq: "Çmimi"
       en: "The price"
       uk: "Ціна"
+      ru: "Цена"
     caption:
       sq: "Çmimi i ri vlen për porositë e reja."
       en: "The new price applies to new orders."
       uk: "Нова ціна діє для нових замовлень."
+      ru: "Новая цена действует для новых заказов."
   - key: 3
     anchor: dish.photo
     pending: no
@@ -58,10 +64,12 @@ steps:
       sq: "Foto"
       en: "Photo"
       uk: "Фото"
+      ru: "Фото"
     caption:
       sq: "Fotoja që sheh klienti."
       en: "The photo the customer sees."
       uk: "Фото, яке бачить клієнт."
+      ru: "Фото, которое видит клиент."
   - key: 4
     anchor: dish.photoFile
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Ngarko foto"
       en: "Upload a photo"
       uk: "Завантажити фото"
+      ru: "Загрузить фото"
     caption:
       sq: "Zvogëlohet dhe pastrohet nga të dhënat e vendndodhjes para ngarkimit."
       en: "It is shrunk and stripped of location data before it uploads."
       uk: "Зменшується й очищається від даних про місце перед завантаженням."
+      ru: "Уменьшается и очищается от данных о месте перед загрузкой."
   - key: 5
     anchor: dish.photoClear
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Hiq foton"
       en: "Remove the photo"
       uk: "Прибрати фото"
+      ru: "Убрать фото"
     caption:
       sq: "Pjata mbetet pa foto."
       en: "The dish stays without a photo."
       uk: "Страва лишається без фото."
+      ru: "Блюдо остаётся без фото."
   - key: 6
     anchor: dish.offNote
     pending: no
@@ -104,10 +116,12 @@ steps:
       sq: "Pse s’ka"
       en: "Why it is off"
       uk: "Чому немає"
+      ru: "Почему нет"
     caption:
       sq: "Kur e hiqni nga shitja, një fjalë për klientin — p.sh. «nesër»."
       en: "When it is off sale, a word for the customer — for example “tomorrow”."
       uk: "Коли страву знято з продажу — слово для клієнта, наприклад «завтра»."
+      ru: "Когда блюдо снято с продажи — слово для клиента, например «завтра»."
   - key: 7
     anchor: dish.station
     pending: no
@@ -119,10 +133,12 @@ steps:
       sq: "Stacioni"
       en: "The station"
       uk: "Станція"
+      ru: "Станция"
     caption:
       sq: "Kuzhina apo bari — ku printohet fleta."
       en: "Kitchen or bar — where its ticket prints."
       uk: "Кухня чи бар — де друкується чек."
+      ru: "Кухня или бар — где печатается чек."
   - key: 8
     anchor: dish.tag
     pending: no
@@ -134,10 +150,12 @@ steps:
       sq: "Etiketat"
       en: "Tags"
       uk: "Мітки"
+      ru: "Метки"
     caption:
       sq: "Vegjetariane, pikante… klienti filtron me to."
       en: "Vegetarian, spicy… customers filter by them."
       uk: "Вегетаріанське, гостре… клієнти фільтрують за ними."
+      ru: "Вегетарианское, острое… клиенты фильтруют по ним."
   - key: 9
     anchor: dish.ingredients
     pending: no
@@ -150,10 +168,12 @@ steps:
       sq: "Përbërësit"
       en: "Ingredients"
       uk: "Склад"
+      ru: "Состав"
     caption:
       sq: "Përbërësit dhe alergjenët që sheh klienti."
       en: "The ingredients and allergens the customer sees."
       uk: "Склад і алергени, які бачить клієнт."
+      ru: "Состав и аллергены, которые видит клиент."
   - key: 10
     anchor: dish.translation
     pending: no
@@ -166,10 +186,12 @@ steps:
       sq: "Përkthimet"
       en: "Translations"
       uk: "Переклади"
+      ru: "Переводы"
     caption:
-      sq: "Emri dhe përshkrimi në anglisht dhe ukrainisht."
-      en: "The name and description in English and Ukrainian."
-      uk: "Назва й опис англійською та українською."
+      sq: "Emri dhe përshkrimi në anglisht, ukrainisht dhe rusisht."
+      en: "The name and description in English, Ukrainian and Russian."
+      uk: "Назва й опис англійською, українською та російською."
+      ru: "Название и описание на английском, украинском и русском."
   - key: 11
     anchor: dish.save
     pending: no
@@ -181,10 +203,12 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Ndryshimet dalin menjëherë në faqe."
       en: "The changes are on the site at once."
       uk: "Зміни одразу з’являються на сайті."
+      ru: "Изменения сразу появляются на сайте."
   - key: 12
     anchor: dish.delete
     pending: no
@@ -196,7 +220,9 @@ steps:
       sq: "Fshije"
       en: "Delete"
       uk: "Видалити"
+      ru: "Удалить"
     caption:
       sq: "Fshirja nuk kthehet. Heqja nga shitja zakonisht mjafton."
       en: "Deleting cannot be undone. Taking it off sale is usually enough."
       uk: "Видалення не скасувати. Зазвичай досить зняти з продажу."
+      ru: "Удаление не отменить. Обычно достаточно снять с продажи."

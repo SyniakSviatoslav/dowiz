@@ -1,9 +1,10 @@
-// The room's words, in the three languages. sq is the default: the venue is in
+// The room's words, in every language of lib/langs.js. sq is the default: the venue is in
 // Albania. The ORDER STATUS words are not copied here: they are the console's
 // (`admin/i18n.js` `st`), which `tools/gates/vocabulary.sh` holds to the
 // kernel's twelve -- a fifth hand copy is how a status goes missing.
 import { safeGet, safeSet } from '../store/storage.js';
 import { T as ADMIN } from '../admin/i18n.js';
+import { LANGS, pickLang } from '../lib/langs.js';
 
 export const T = {
   sq: {
@@ -141,10 +142,56 @@ export const T = {
     language: 'Мова', theme: 'Тема',
     voice: 'Голосова команда', voiceConfirm: 'Так, виконати', voiceOpened: 'Стіл {t}', voiceGuests: 'гостей: {n}', voiceStatus: 'Відкритих столів {open}, чекає {waiting}', voiceDenied: 'Немає дозволу на мікрофон', voiceOffline: 'Розпізнавання голосу потребує зв’язку',
   },
+  ru: {
+    ex_email: 'напр. elira@zavedenie.al', ex_amount: 'напр. 2 500', ex_reason: 'напр. купили молоко',
+    learn: 'Уроки', learnNew: 'Новый', learnDone: 'Пройден', learnPaused: 'На паузе', learnWatch: 'Смотреть видео', learnWrites: 'меняет реальные данные', learnSteps: 'шагов: {n}', learnEmpty: 'Такой урок не найден', learnOffline: 'Для уроков нужен интернет', learnClose: 'Закрыть', agent: 'AI-агент (MCP)',
+    waiter: 'Официант', 'counter-manager': 'Кассир-менеджер', kitchen: 'Кухня', owner: 'Владелец',
+    loginLine: 'Зал в вашей руке.', signIn: 'Войти', email: 'Email', password: 'Пароль',
+    claimCode: 'Код приглашения', haveCode: 'У меня код приглашения', haveAccount: 'У меня есть аккаунт', claim: 'Активировать',
+    signOut: 'Выйти', loading: 'Загружаем…', refresh: 'Обновить', back: 'Назад', cancel: 'Отмена', send: 'Отправить',
+    room: 'Зал', noOrders: 'Открытых столов нет', table: 'Стол', rounds: 'раунды', due: 'К оплате',
+    kitchenNoRoom: 'Кухня видит заказы на кухонном экране; этот экран для зала.',
+    noLines: 'Позиций нет', subtotal: 'Подытог', discount: 'Скидка', total: 'Итого', owed: 'Осталось',
+    addItem: 'Добавить позиции', addN: 'Добавить {n}', search: 'Поиск', noMatch: 'Ничего не найдено', unavailable: 'закончилось',
+    remove: 'Убрать', comp: 'За счёт заведения', comped: 'За счёт заведения', less: 'Меньше', more: 'Больше',
+    moveTable: 'Пересадить за стол', move: 'Пересадить', reason: 'Причина', whyRemove: 'Почему убрать?', whyComp: 'Почему бесплатно?',
+    reason_mistake: 'Ошибка', reason_guest_changed: 'Гость передумал', reason_unavailable: 'Нет в наличии',
+    reason_dropped: 'Упало', reason_other: 'Другое', otherText: 'Укажите причину', needReason: 'Укажите причину.',
+    changedReload: 'Заказ изменился, пока вы редактировали. Обновлено — проверьте и попробуйте ещё.',
+    take: 'Принять оплату', takeN: 'Принять {a}', amount: 'Сумма', method: 'Способ', currency: 'Валюта', rate: 'Курс',
+    method_cash: 'Наличные', method_card: 'Карта', method_cheque: 'Чек', method_transfer: 'Перевод',
+    method_gift_card: 'Подарочная карта', method_other: 'Другое',
+    rateNeeded: 'Введите курс с табло.', offTheBill: 'со счёта', fillOwed: 'Сколько осталось',
+    taken: 'Принято', paidInFull: 'Оплачено полностью.', badAmount: 'Сумму не прочитать.', badRate: 'Курс не прочитать.',
+    till: 'Касса', openTill: 'Открыть кассу', closeTill: 'Закрыть кассу', floatHint: 'С чем касса начинает, для каждой валюты.',
+    tillFloat: 'Размен', counted: 'Посчитано', expected: 'Ожидалось', overShort: 'Излишек / недостача',
+    cashMove: 'Внесение / изъятие', payIn: 'Внести', payOut: 'Изъять', reasonText: 'Причина',
+    count: 'Пересчитать кассу', countHint: 'Введите, что есть в кассе. Ожидаемая сумма появится только при закрытии. Пусто = ноль.',
+    saveCount: 'Сохранить пересчёт', closeHint: 'После закрытия видно ожидаемое, посчитанное и разницу.',
+    closeSure: 'Я пересчитал и закрываю', tillOpen: 'Касса открыта', tillClosedWord: 'Касса закрыта',
+    tipsTitle: 'Чаевые по людям', tipsHint: 'Кто сколько взял чаевых за этот период кассы. Без распределения.', tipsNone: 'За этот период чаевых нет.', tipsFailed: 'Чаевые не загрузились.', tipsHintDay: 'Кто сколько взял чаевых сегодня, с кассой или без. Без распределения.',
+    tillUnknown: 'Этот телефон ещё не знает состояния кассы.', blindNote: 'Пересчёт сохранён. Сравнение — при закрытии.',
+    openedAt: 'открыто', offline: 'Нет связи', live: 'На связи', ageS: '{n} с назад', ageM: '{n} мин назад', ageH: '{n} ч назад',
+    error: 'Ошибка', saved: 'Сохранено', noSlug: 'Откройте с адреса вашего заведения.', menuFailed: 'Меню не загрузилось.',
+    queuedN: '{n} в очереди', queuedSaved: 'Нет связи — сохранено, отправится само.', queuedChanged: 'Заказ изменился; сохранённое действие не принято.',
+    queuedRefused: 'Сохранённое действие отклонено.', queueFull: 'Очередь полна — не сохранено.', queueNoStore: 'Браузер не сохраняет — не сохранено.',
+    moveLines: 'Перенести позиции', moveLinesTo: 'В раунд', pickLines: 'Выберите позиции, которые переходят.', pickRound: 'Выберите раунд, куда они идут.',
+    notAllLines: 'Хоть одна позиция должна остаться; чтобы перенести все, отмените раунд.', noTargets: 'Ни один другой раунд не примет их до кухни.',
+    kitchenHasIt: 'Кухня уже получила этот раунд; позиции больше не переносятся.', roundPaid: 'Этот раунд оплачен; его не изменить.',
+    alreadyThere: 'Стол уже там.', notHere: 'Этого заказа уже нет; зал обновлён.', moved: 'Перенесено',
+    moveSitting: 'Пересадить стол', moveSittingHint: 'Все раунды, которые ещё в зале, переходят за новый стол.',
+    openTable: 'Открыть стол', tableName: 'Стол', needTable: 'Укажите стол.',
+    tip: 'Чаевые', walletId: 'Кошелёк (ID гостя)', walletCode: 'Код кошелька гостя (с его телефона)', badTip: 'Чаевые не прочитать.', needWallet: 'Укажите кошелёк, который платит.', method_wallet: 'Кошелёк', walletNoTip: 'Кошелёк оплачивает только счёт; чаевые наличными или картой.',
+    floor: 'Зал', floor_table: 'Стол', floor_legend: 'Легенда', floor_state_free: 'Свободен', floor_state_booked: 'Забронирован', floor_state_ordering: 'Заказывают', floor_state_waiting: 'Ждут блюда', floor_state_paying: 'Оплата', floor_state_dirty: 'Убрать', floor_cleared: 'Стол убран', floor_clear: 'Убрано', floor_clearHint: 'Оплачено и убрано? Отметьте стол свободным.', floor_unplaced: 'Вне плана', floor_noPlan: 'Владелец ещё не нарисовал план зала.',
+    guestWaiting: 'Заказ гостя', guestRound: 'Гость заказал через QR-код столика.', guestConfirm: 'Подтвердить', guestReject: 'Отклонить', guestConfirmed: 'Подтверждено', guestRejected: 'Отклонено',
+    language: 'Язык', theme: 'Тема',
+    voice: 'Голосовая команда', voiceConfirm: 'Да, выполнить', voiceOpened: 'Стол {t}', voiceGuests: 'гостей: {n}', voiceStatus: 'Открытых столов {open}, ждёт {waiting}', voiceDenied: 'Нет разрешения на микрофон', voiceOffline: 'Распознавание голоса требует связи',
+  },
 };
 
-export const LANGS = ['sq', 'en', 'uk'];
-let current = LANGS.includes(safeGet('dw_room_lang')) ? safeGet('dw_room_lang') : 'sq';
+export { LANGS };
+/// A choice made here wins; else the phone's own languages on first open; else Albanian.
+let current = pickLang([safeGet('dw_room_lang')], globalThis.navigator?.languages || [], 'sq');
 
 export const lang = () => current;
 export const t = k => T[current]?.[k] ?? T.en[k] ?? k;

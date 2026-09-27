@@ -130,6 +130,11 @@ fn a_get_names_the_venue_and_passes_its_arguments() {
     let t = tools::find(Role::Owner, "menu").unwrap();
     assert_eq!(tools::plan(t, json!({ "lang": "uk" }), "v1", "sushi", "").unwrap().url, "/api/public/locations/sushi/menu?location_id=v1&locale=uk");
     assert!(tools::plan(t, json!([1]), "v1", "s", "").is_err());
+    // The menu speaks every language (lane W-RU): the schema's enum IS the set.
+    let schema: Value = serde_json::from_str(t.schema).unwrap();
+    let langs: Vec<&str> = schema["properties"]["lang"]["enum"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
+    assert_eq!(langs, dowiz_hub::lang::LANGS.to_vec());
+    assert_eq!(tools::plan(t, json!({ "lang": "ru" }), "v1", "sushi", "").unwrap().url, "/api/public/locations/sushi/menu?location_id=v1&locale=ru");
     let t = tools::find(Role::Owner, "order_action").unwrap();
     assert_eq!(tools::plan(t, json!({ "action": "ready" }), "v1", "s", "").unwrap_err(), "missing argument: id");
 }

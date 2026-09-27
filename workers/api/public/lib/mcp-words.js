@@ -1,5 +1,5 @@
-// The words of the "AI agent (MCP)" panel (/lib/mcp.js), in the three
-// languages every app speaks. ONE copy for the three apps: the panel is the
+// The words of the "AI agent (MCP)" panel (/lib/mcp.js), in every
+// language every app speaks. ONE copy for the three apps: the panel is the
 // same panel, and three dictionaries would drift apart by the next edit.
 // Plain ASCII quotes only (a typographic quote once took the console down).
 
@@ -54,6 +54,23 @@ const WORDS = {
     hintCodex: 'OpenAI Codex (CLI чи IDE), у ~/.codex/config.toml:', hintGemini: 'Google Gemini CLI, у терміналі (або в ~/.gemini/settings.json):', hintGeneric: 'Для будь-якого іншого клієнта з MCP:',
     roleOf: 'Інструменти ролі', personKeys: 'Ключі людей', ownerKey: 'Ваш ключ: API-ключі', error: 'Щось пішло не так',
     roleNames: { owner: 'Власник', waiter: 'Офіціант', kitchen: 'Кухня', 'counter-manager': 'Каса', courier: 'Кур\'єр' },
+  },
+  ru: {
+    title: 'AI-агент (MCP)',
+    hintOwner: 'Подключите Claude, Codex, Gemini или любой MCP-агент к заведению. Агент получает только инструменты своего ключа: ваш API-ключ даёт инструменты владельца; каждый сотрудник и курьер создаёт собственный ключ в своём приложении и получает только свои права.',
+    hintStaff: 'Подключите Claude, Codex, Gemini или любой MCP-агент к своей работе. Ключ, созданный здесь, позволяет агенту только то, что можете вы, и перестаёт действовать вместе с вашей ролью или когда вы его отзовёте.',
+    hintCourier: 'Подключите Claude, Codex, Gemini или любой MCP-агент к своей смене. Агент видит только ваши заказы и свободные, как вы в приложении.',
+    copy: 'Копировать', copyKey: 'Копировать ключ', copied: 'Скопировано',
+    keyHow: 'Создайте ключ для агента', label: 'Для чего он (напр. ноутбук)', mint: 'Создать ключ',
+    shownOnce: 'Этот ключ виден только сейчас. Скопируйте его; показать его снова невозможно.',
+    placeholderNote: 'Замените {k} своим ключом.',
+    yourKeys: 'Ваши ключи', noKeys: 'Ключей ещё нет.', revoke: 'Отозвать', revoked: 'Ключ отозван', until: 'до',
+    tools: 'инструментов', noTools: 'У этой роли нет инструментов.', clients: 'Как подключить',
+    claudeCode: 'Claude Code', claudeDesktop: 'Claude Desktop', codex: 'Codex', gemini: 'Gemini CLI', generic: 'Любой MCP-клиент',
+    hintClaudeCode: 'В терминале, один раз:', hintClaudeDesktop: 'В claude_desktop_config.json (нужен Node.js):',
+    hintCodex: 'OpenAI Codex (CLI или IDE), в ~/.codex/config.toml:', hintGemini: 'Google Gemini CLI, в терминале (или в ~/.gemini/settings.json):', hintGeneric: 'Для любого другого клиента с MCP:',
+    roleOf: 'Инструменты роли', personKeys: 'Ключи людей', ownerKey: 'Ваш ключ: API-ключи', error: 'Что-то пошло не так',
+    roleNames: { owner: 'Владелец', waiter: 'Официант', kitchen: 'Кухня', 'counter-manager': 'Касса', courier: 'Курьер' },
   },
 };
 

@@ -115,3 +115,19 @@ fn the_platform_notice_is_about_accounts_and_the_waitlist() {
     assert!(h.contains("waiting list") && h.contains("email address"));
     assert!(!h.contains("to prepare and deliver your order"));
 }
+
+/// Russian is its own notice (lane W-RU, 2026-09-27), and until a reviewer
+/// clears it the page says it is a draft; no other language carries that line.
+#[test]
+fn russian_is_its_own_notice_and_says_it_is_a_draft() {
+    let h = render_venue(&venue(), &On::default(), "ru");
+    assert!(h.contains("<html lang=\"ru\""), "{h}");
+    assert!(h.contains("Уведомление о конфиденциальности"));
+    assert!(h.contains("class=\"draft\""));
+    assert!(h.contains("?lang=ru"));
+    for l in ["sq", "en", "uk"] {
+        assert!(!render_venue(&venue(), &On::default(), l).contains("class=\"draft\""), "{l}");
+    }
+    assert_eq!(words::words("ru").lang, "ru");
+    assert_eq!(words::words("xx").lang, "sq");
+}

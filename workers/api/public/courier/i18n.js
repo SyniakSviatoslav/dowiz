@@ -1,4 +1,4 @@
-// The courier's words, in the three languages a Durrës courier might read.
+// The courier's words, in every language of lib/langs.js.
 //
 // Same mechanism as the console: static copy carries `data-t`, templates call
 // `t()`, and a language change rewrites text in place. Albanian first: the
@@ -7,10 +7,10 @@
 
 import { safeGet, safeSet } from '/store/storage.js';
 
-export const LANGS = ['sq', 'en', 'uk'];
+import { LANGS, pickLang, tagFor } from '../lib/langs.js';
+
+export { LANGS };
 const STORAGE_KEY = 'dw_c_lang';
-/// BCP-47 tags the browser's recogniser wants, per language.
-const VOICE = { sq: 'sq-AL', en: 'en-US', uk: 'uk-UA' };
 
 export const T = {
   sq: {
@@ -97,16 +97,46 @@ export const T = {
     hHelpT: 'Довідка', hHelp: 'Ця кнопка повторить тур. Вона є лише тоді, коли ви стоїте, не на маршруті.',
     learn: 'Уроки', learnNew: 'Новий', learnDone: 'Пройдено', learnPaused: 'На паузі', learnWatch: 'Дивитися відео', learnWrites: 'змінює реальні дані', learnSteps: 'кроків: {n}', learnEmpty: 'Такого уроку не знайдено', learnOffline: 'Для уроків потрібен інтернет', agent: 'AI-агент (MCP)',
   },
+  ru: {
+    ex_login: 'напр. +355 69 123 4567 или e-mail', ex_phone: 'напр. +355 69 123 4567',
+    appTitle: 'dowiz · курьер', offline: 'офлайн', onShift: 'на смене', gps: 'GPS', gpsDenied: 'GPS запрещён', gpsUnavailable: 'GPS недоступен', gpsUnit: 'м',
+    backgroundGps: 'Приложение было в фоне — GPS мог прерваться', sessionOver: 'Сессия завершена',
+    theme: 'Тема', themeSystem: 'Тема: как в телефоне', themeDark: 'Тема: тёмная', themeLight: 'Тема: светлая', language: 'Язык', sayCommand: 'Сказать команду', stopListening: 'Остановить запись', voice: 'Голос', yes: 'Да', no: 'Нет',
+    loginTitle: 'Вход для курьера', loginLine: 'Один экран, одно дело. Дорога ведёт к «Доставлено».', emailOrPhone: 'Email или телефон', password: 'Пароль', signIn: 'Войти', signingIn: 'Входим…', haveCode: 'У меня код приглашения',
+    claimTitle: 'Код приглашения', claimHint: 'Код дало вам заведение. Он действует неделю и срабатывает один раз.', yourPhone: 'Ваш телефон', code: 'Код', choosePassword: 'Придумайте пароль', passwordHint: 'Не меньше 8 символов. Заведение его не увидит.', start: 'Начать', checking: 'Проверяем…', havePassword: 'У меня уже есть пароль',
+    loading: 'Загружаем', noLink: 'Нет связи с заведением', retry: 'Попробовать ещё раз', youAreOffline: 'Вы офлайн', staleAsOf: 'нет связи · данные на {t}', offlineHint: 'Заказы не будут поступать, пока смена не открыта', openShift: 'Начать смену', endShift: 'Завершить смену',
+    noneFree: 'Свободных заказов нет', noneFreeHint: 'Как только что-то будет готово — появится здесь', askPlaceholder: 'Спросить о моих доставках…', send: 'Отправить', myShifts: 'Мои смены', history: 'История', thinking: 'Думает…',
+    readyForPickup: 'Готовы к выдаче', pcs: 'шт.', pickOne: 'выберите и возьмите', take: 'Взять', delivering: 'Доставляете', pickUpOrder: 'Заберите заказ', onTheWay: 'В пути', ready: 'Готов', items: 'поз.', paidOnline: 'Оплачено онлайн',
+    delivered: 'Доставлено', deliveredAria: 'Доставлено — проведите или нажмите', swipe: 'проведите →', pickedUp: 'Забрал', inMaps: 'В картах', call: 'Позвонить', saving: 'Записываем…', confirmDelivered: 'Отметить как доставленный?', refusedAtDoor: 'Отказ у двери', confirmRefused: 'Клиент отказался от заказа? Деньги не получены.', refusedDone: 'Записано: отказ у двери', refusedNoteLabel: 'Примечание (необязательно)', refusedNoteHint: 'напр. никто не открыл',
+    howMuchCash: 'Сколько наличных получено?', confirm: 'Подтвердить', back: 'Назад', badAmount: 'Некорректная сумма', shortfall: 'Недостача', recorded: 'записано',
+    queued: 'Отправим', queuedN: '{n} не отправлено', queuedHint: 'Нет связи — сохранили на телефоне и отправим сами, как только она появится', queuedSaved: 'Сохранили — отправится само',
+    queueFull: 'Слишком много неотправленных действий — дождитесь связи', queueNoStore: 'Телефон не сохраняет — попробуйте, когда будет связь', queuedChanged: 'Заказ изменился, пока вы были без связи', queuedRefused: 'Действие не принято',
+    offered: 'Вам предлагают', offerLapsed: 'Время вышло — заказ снова свободен, но вы ещё можете его взять', timeLeft: 'Осталось',
+    cashInHand: 'Наличные на руках', stillOnRoad: 'Ещё в пути', today: 'Сегодня', days7: '7 дней', days30: '30 дней', earningsHint: 'Доставки, собранные наличные и чаевые. Наличные отдаёте заведению, чаевые — ваши. Расчёт оплаты dowiz не ведёт.', tips: 'чаевые',
+    emptyHistory: 'Пока пусто', emptyHistoryHint: 'Завершённые доставки появятся здесь',
+    voiceUnsupported: 'Браузер не распознаёт голос', micDenied: 'Нет разрешения на микрофон', voiceOffline: 'Распознавание недоступно офлайн', asking: 'Спрашиваю…', openWaiting: 'Открытых {open}, ждёт {waiting}',
+    etaToDoor: 'до двери', km: 'км', min: 'мин',
+    help: 'Справка', gStep: 'Шаг {i} из {n}', gSkip: 'Пропустить', gLater: 'Завершить позже', gBack: 'Назад', gNext: 'Далее', gDone: 'Готово', gPaused: 'Тур сохранён — «Справка» продолжит с этого места', gSkipped: 'Тур пропущен — его всегда можно открыть через «Справка»', gFinished: 'Готово. Маленькие «?» рядом с элементами объясняют каждый отдельно', gUnfinished: 'Тур не завершён — «Справка» продолжит с того же места', gWhat: 'Что это', gClose: 'Закрыть',
+    hWelcomeT: 'Это ваше приложение курьера', hWelcome: 'Один экран — одно дело. Три коротких шага покажут, что здесь к чему. Можно пропустить или завершить позже.',
+    hShiftT: 'Смена', hShift: 'Пока смена не открыта, заказы не поступают. На смене здесь видно количество доставок и собранные наличные.',
+    hSheetT: 'Одно дело на экране', hSheet: 'Готовые заказы появляются здесь. Выберите один, нажмите «Взять» — и дальше экран ведёт шаг за шагом до «Доставлено».',
+    hMicT: 'Голосом', hMic: 'Скажите «взял», «доставил» или «где следующий». Приложение повторит, что услышало, и попросит подтвердить.',
+    hAskT: 'Вопросы о доставках', hAsk: 'Отвечает только о ваших сменах и заказах: сколько заработали, куда ехать дальше, что было вчера.',
+    hHelpT: 'Справка', hHelp: 'Эта кнопка повторит тур. Она есть только тогда, когда вы стоите, не на маршруте.',
+    learn: 'Уроки', learnNew: 'Новый', learnDone: 'Пройден', learnPaused: 'На паузе', learnWatch: 'Смотреть видео', learnWrites: 'меняет реальные данные', learnSteps: 'шагов: {n}', learnEmpty: 'Такой урок не найден', learnOffline: 'Для уроков нужен интернет', agent: 'AI-агент (MCP)',
+  },
 };
 
-export let lang = LANGS.includes(safeGet(STORAGE_KEY)) ? safeGet(STORAGE_KEY) : 'sq';
+/// A choice made here wins; else the phone's own languages on first open; else Albanian.
+export let lang = pickLang([safeGet(STORAGE_KEY)], globalThis.navigator?.languages || [], 'sq');
 export const t = (k, vars) => {
   let v = (T[lang] && T[lang][k]) ?? T.en[k] ?? k;
   if (vars) for (const [name, val] of Object.entries(vars)) v = v.replace(`{${name}}`, String(val));
   return v;
 };
 export const intlLocale = () => lang;
-export const voiceLocale = () => VOICE[lang] || VOICE.en;
+/// The BCP-47 tag the browser's recogniser wants (lib/langs.js INTL).
+export const voiceLocale = () => tagFor(lang);
 /// The next language in the ring, for a one-button switch.
 export const nextLang = () => LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length];
 

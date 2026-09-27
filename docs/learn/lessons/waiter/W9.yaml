@@ -11,10 +11,12 @@ title:
   sq: "Hapni dhe mbyllni arkën"
   en: "Open and close the till"
   uk: "Відкрийте й закрийте касу"
+  ru: "Откройте и закройте кассу"
 goal:
   sq: "Hapni me fond dhe mbyllni me numërim."
   en: "Open with a float, close with a count."
   uk: "Відкрити з розмінною сумою, закрити з перерахунком."
+  ru: "Открыть с разменной суммой, закрыть с пересчётом."
 steps:
   - key: 1
     anchor: room.till
@@ -27,10 +29,12 @@ steps:
       sq: "Arka"
       en: "The till"
       uk: "Каса"
+      ru: "Касса"
     caption:
       sq: "Vetëm kush ka të drejtë arke e sheh këtë buton."
       en: "Only someone with till rights sees this button."
       uk: "Цю кнопку бачить лише той, хто має право на касу."
+      ru: "Эту кнопку видит только тот, у кого есть право на кассу."
   - key: 2
     anchor: till.state
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Gjendja"
       en: "The state"
       uk: "Стан"
+      ru: "Состояние"
     caption:
       sq: "E hapur apo e mbyllur, sa pritet në arkë dhe sa hyri sot."
       en: "Open or closed, what is expected in the drawer and what came in today."
       uk: "Відкрита чи закрита, скільки має бути в касі і скільки надійшло сьогодні."
+      ru: "Открыта или закрыта, сколько должно быть в кассе и сколько поступило сегодня."
   - key: 3
     anchor: till.open
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Hapja"
       en: "Opening"
       uk: "Відкриття"
+      ru: "Открытие"
     caption:
       sq: "Në fillim të ditës hapni arkën."
       en: "At the start of the day, open the till."
       uk: "На початку дня відкрийте касу."
+      ru: "В начале дня откройте кассу."
   - key: 4
     anchor: till.float
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Fondi"
       en: "The float"
       uk: "Розмінна сума"
+      ru: "Разменная сумма"
     caption:
       sq: "Shkruani paratë e vogla që vendosni në arkë, për çdo monedhë."
       en: "Type the change you put in the drawer, per currency."
       uk: "Введіть дрібні гроші, які кладете в касу, для кожної валюти."
+      ru: "Введите мелкие деньги, которые кладёте в кассу, для каждой валюты."
   - key: 5
     anchor: till.move
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Hyrje dhe dalje"
       en: "Pay in and out"
       uk: "Внесення й видача"
+      ru: "Внесение и выдача"
     caption:
       sq: "Para që hyjnë ose dalin pa shitje — p.sh. blerje buke."
       en: "Money that goes in or out without a sale — buying bread, for example."
       uk: "Гроші, що надходять або видаються без продажу — наприклад, на хліб."
+      ru: "Деньги, которые поступают или выдаются без продажи — например, на хлеб."
   - key: 6
     anchor: till.direction
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Hyrje apo dalje"
       en: "In or out"
       uk: "Внесення чи видача"
+      ru: "Внесение или выдача"
     caption:
       sq: "Zgjidhni drejtimin."
       en: "Choose the direction."
       uk: "Оберіть напрямок."
+      ru: "Выберите направление."
   - key: 7
     anchor: till.currency
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "Monedha"
       en: "The currency"
       uk: "Валюта"
+      ru: "Валюта"
     caption:
       sq: "Në cilën monedhë."
       en: "In which currency."
       uk: "У якій валюті."
+      ru: "В какой валюте."
   - key: 8
     anchor: till.amount
     pending: no
@@ -134,10 +150,12 @@ steps:
       sq: "Shuma"
       en: "The amount"
       uk: "Сума"
+      ru: "Сумма"
     caption:
       sq: "Sa."
       en: "How much."
       uk: "Скільки."
+      ru: "Сколько."
   - key: 9
     anchor: till.reason
     pending: no
@@ -150,10 +168,12 @@ steps:
       sq: "Arsyeja"
       en: "The reason"
       uk: "Причина"
+      ru: "Причина"
     caption:
       sq: "Çdo lëvizje ka arsye — pa të nuk ruhet."
       en: "Every movement has a reason — without one it is not saved."
       uk: "Кожен рух має причину — без неї не зберігається."
+      ru: "У каждого движения есть причина — без неё не сохраняется."
   - key: 10
     anchor: till.count
     pending: no
@@ -165,10 +185,12 @@ steps:
       sq: "Numërimi"
       en: "The count"
       uk: "Перерахунок"
+      ru: "Пересчёт"
     caption:
       sq: "Në fund numëroni paratë në arkë."
       en: "At the end, count the money in the drawer."
       uk: "Наприкінці перерахуйте гроші в касі."
+      ru: "В конце пересчитайте деньги в кассе."
   - key: 11
     anchor: till.counted
     pending: no
@@ -181,10 +203,12 @@ steps:
       sq: "Sa numëruat"
       en: "What you counted"
       uk: "Скільки нараховано"
+      ru: "Сколько насчитано"
     caption:
       sq: "Shkruani sa ka realisht. Diferenca — tepricë ose mungesë — shfaqet menjëherë."
       en: "Type what is really there. The difference — over or short — shows at once."
       uk: "Введіть, скільки є насправді. Різниця — надлишок чи нестача — видно одразу."
+      ru: "Введите, сколько есть на самом деле. Разница — излишек или недостача — видна сразу."
   - key: 12
     anchor: till.closeSure
     pending: no
@@ -196,10 +220,12 @@ steps:
       sq: "Jam i sigurt"
       en: "I am sure"
       uk: "Я впевнений"
+      ru: "Я уверен"
     caption:
       sq: "Mbyllja nuk kthehet pas. Konfirmoni që numërimi është i fundit."
       en: "Closing cannot be undone. Confirm the count is the final one."
       uk: "Закриття не можна скасувати. Підтвердіть, що перерахунок остаточний."
+      ru: "Закрытие нельзя отменить. Подтвердите, что пересчёт окончательный."
   - key: 13
     anchor: till.close
     pending: no
@@ -211,7 +237,9 @@ steps:
       sq: "Mbyllni arkën"
       en: "Close the till"
       uk: "Закрийте касу"
+      ru: "Закройте кассу"
     caption:
       sq: "Dita mbyllet dhe krijohet raporti Z."
       en: "The day closes and the Z report is made."
       uk: "День закривається, і формується Z-звіт."
+      ru: "День закрывается, и формируется Z-отчёт."

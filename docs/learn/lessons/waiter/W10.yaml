@@ -11,10 +11,12 @@ title:
   sq: "Raporti Z dhe bakshishet"
   en: "The Z report and the tips"
   uk: "Z-звіт і чайові"
+  ru: "Z-отчёт и чаевые"
 goal:
   sq: "Lexoni raportin Z të djeshëm dhe kush mori cilin bakshish."
   en: "Read yesterday’s Z report and who got which tip."
   uk: "Прочитати вчорашній Z-звіт і хто отримав які чайові."
+  ru: "Прочитать вчерашний Z-отчёт и кто получил какие чаевые."
 steps:
   - key: 1
     anchor: till.z
@@ -27,10 +29,12 @@ steps:
       sq: "Raporti Z"
       en: "The Z report"
       uk: "Z-звіт"
+      ru: "Z-отчёт"
     caption:
       sq: "Shitjet sipas mënyrës dhe monedhës, falas, anulimet dhe diferenca e arkës për një ditë të mbyllur."
       en: "Sales by method and currency, comps, voids and the till difference for a closed day."
       uk: "Продажі за способом і валютою, безкоштовне, анулювання й різниця каси за закритий день."
+      ru: "Продажи по способу и валюте, бесплатное, аннулирования и разница кассы за закрытый день."
   - key: 2
     anchor: till.tips
     pending: no
@@ -42,7 +46,9 @@ steps:
       sq: "Bakshishet"
       en: "The tips"
       uk: "Чайові"
+      ru: "Чаевые"
     caption:
       sq: "Bakshishet sipas personit që i mori — jo një shumë e përbashkët."
       en: "Tips by the person who took them — not one shared sum."
       uk: "Чайові за людиною, яка їх отримала, — а не одна спільна сума."
+      ru: "Чаевые по человеку, который их получил, — а не одна общая сумма."

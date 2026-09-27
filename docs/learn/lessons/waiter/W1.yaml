@@ -11,10 +11,12 @@ title:
   sq: "Hyrja e parë"
   en: "Your first sign-in"
   uk: "Перший вхід"
+  ru: "Первый вход"
 goal:
   sq: "Hyni me kodin e ftesës dhe lexoni kokën e ekranit: gjuha, tema, lidhja dhe të padërguarat."
   en: "Sign in with the invite code and read the header: language, theme, connection and unsent actions."
   uk: "Увійти з кодом запрошення й прочитати шапку: мова, тема, зв’язок і ненадіслане."
+  ru: "Войти с кодом приглашения и прочитать шапку: язык, тема, связь и неотправленное."
 steps:
   - key: 1
     anchor: login.email
@@ -28,10 +30,12 @@ steps:
       sq: "Email-i juaj"
       en: "Your email"
       uk: "Ваш email"
+      ru: "Ваш email"
     caption:
       sq: "Shkruani email-in me të cilin ju ftoi lokali."
       en: "Type the email the venue invited you with."
       uk: "Введіть email, на який вас запросив заклад."
+      ru: "Введите email, на который вас пригласило заведение."
   - key: 2
     anchor: login.claimToggle
     pending: no
@@ -43,10 +47,12 @@ steps:
       sq: "Kam një kod ftese"
       en: "I have an invite code"
       uk: "У мене є код запрошення"
+      ru: "У меня есть код приглашения"
     caption:
       sq: "Herën e parë keni vetëm kodin nga pronari. Prekni këtu që të shfaqet fusha e kodit."
       en: "The first time, you only have the code from the owner. Tap here to show the code field."
       uk: "Першого разу у вас є лише код від власника. Торкніться тут, щоб з’явилося поле для коду."
+      ru: "В первый раз у вас есть только код от владельца. Коснитесь здесь, чтобы появилось поле для кода."
   - key: 3
     anchor: login.code
     pending: no
@@ -59,10 +65,12 @@ steps:
       sq: "Kodi i ftesës"
       en: "The invite code"
       uk: "Код запрошення"
+      ru: "Код приглашения"
     caption:
       sq: "Kodi vlen një herë dhe për pak ditë. Pasi e përdorni, hyni vetëm me fjalëkalim."
       en: "The code works once and for a few days. After you use it, you sign in with your password only."
       uk: "Код діє один раз і кілька днів. Після цього ви входите лише з паролем."
+      ru: "Код действует один раз и несколько дней. После этого вы входите только с паролем."
   - key: 4
     anchor: login.password
     pending: no
@@ -75,10 +83,12 @@ steps:
       sq: "Fjalëkalimi"
       en: "The password"
       uk: "Пароль"
+      ru: "Пароль"
     caption:
       sq: "Me kod: zgjidhni një fjalëkalim të ri, të paktën 8 shenja. Lokali nuk e sheh kurrë."
       en: "With a code: choose a new password, at least 8 characters. The venue never sees it."
       uk: "З кодом: оберіть новий пароль, щонайменше 8 символів. Заклад його ніколи не бачить."
+      ru: "С кодом: выберите новый пароль, не менее 8 символов. Заведение его никогда не видит."
   - key: 5
     anchor: login.submit
     pending: no
@@ -90,10 +100,12 @@ steps:
       sq: "Hyni"
       en: "Sign in"
       uk: "Увійти"
+      ru: "Войти"
     caption:
       sq: "Pas hyrjes shihni sallën e lokalit tuaj."
       en: "After signing in you see your venue’s room."
       uk: "Після входу ви бачите зал свого закладу."
+      ru: "После входа вы видите зал своего заведения."
   - key: 6
     anchor: hud.lang
     pending: no
@@ -105,10 +117,12 @@ steps:
       sq: "Gjuha"
       en: "Language"
       uk: "Мова"
+      ru: "Язык"
     caption:
-      sq: "Shqip, anglisht ose ukrainisht — çdo prekje kalon te tjetra. Porositë dhe emrat e pjatave nuk ndryshojnë."
-      en: "Albanian, English or Ukrainian — each tap moves to the next. Orders and dish names stay as they are."
-      uk: "Албанська, англійська чи українська — кожен дотик перемикає на наступну. Замовлення й назви страв не змінюються."
+      sq: "Shqip, anglisht, ukrainisht ose rusisht — çdo prekje kalon te tjetra. Porositë dhe emrat e pjatave nuk ndryshojnë."
+      en: "Albanian, English, Ukrainian or Russian — each tap moves to the next. Orders and dish names stay as they are."
+      uk: "Албанська, англійська, українська чи російська — кожен дотик перемикає на наступну. Замовлення й назви страв не змінюються."
+      ru: "Албанский, английский, украинский или русский — каждое касание переключает на следующий. Заказы и названия блюд не меняются."
   - key: 7
     anchor: hud.theme
     pending: no
@@ -120,10 +134,12 @@ steps:
       sq: "Tema"
       en: "Theme"
       uk: "Тема"
+      ru: "Тема"
     caption:
       sq: "E ndritshme, e errët ose si telefoni. Në sallë të errët, tema e errët lodh më pak sytë."
       en: "Light, dark or as the phone. In a dim room, the dark theme is easier on the eyes."
       uk: "Світла, темна або як у телефоні. У темному залі темна тема менше втомлює очі."
+      ru: "Светлая, тёмная или как в телефоне. В тёмном зале тёмная тема меньше утомляет глаза."
   - key: 8
     anchor: hud.learn
     pending: no
@@ -135,10 +151,12 @@ steps:
       sq: "Mësimet"
       en: "Lessons"
       uk: "Уроки"
+      ru: "Уроки"
     caption:
       sq: "Çdo mësim i sallës, me videon e vet. Hapeni kur të doni."
       en: "Every room lesson, each with its video. Open them any time."
       uk: "Усі уроки залу, кожен зі своїм відео. Відкривайте будь-коли."
+      ru: "Все уроки зала, каждый со своим видео. Открывайте в любое время."
   - key: 9
     anchor: hud.sync
     pending: no
@@ -150,10 +168,12 @@ steps:
       sq: "Lidhja"
       en: "Connection"
       uk: "Зв’язок"
+      ru: "Связь"
     caption:
       sq: "Tregon nëse jeni live apo sa kohë më parë erdhën të dhënat e fundit."
       en: "Shows whether you are live, or how long ago the last data arrived."
       uk: "Показує, чи ви на зв’язку, або як давно прийшли останні дані."
+      ru: "Показывает, на связи ли вы, или как давно пришли последние данные."
   - key: 10
     anchor: hud.outbox
     pending: no
@@ -165,7 +185,9 @@ steps:
       sq: "Të padërguara"
       en: "Unsent"
       uk: "Не надіслано"
+      ru: "Не отправлено"
     caption:
       sq: "Pa rrjet, porositë e marra ruhen në telefon dhe dërgohen vetë kur kthehet lidhja. Numri tregon sa janë në pritje."
       en: "Without network, the orders you take are kept on the phone and sent by themselves when the connection returns. The number shows how many are waiting."
       uk: "Без мережі прийняті замовлення зберігаються в телефоні й надсилаються самі, щойно з’явиться зв’язок. Число показує, скільки їх чекає."
+      ru: "Без сети принятые заказы сохраняются в телефоне и отправляются сами, как только появится связь. Число показывает, сколько их ждёт."

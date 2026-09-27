@@ -86,6 +86,7 @@ fn processor(id: &str) -> Option<(&'static str, &'static str)> {
 
 pub const SQ: Words = Words {
     lang: "sq",
+    draft: "",
     title: "Njoftim për privatësinë",
     version: "Versioni",
     who_h: "Kush është përgjegjës",

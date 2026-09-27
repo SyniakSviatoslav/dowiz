@@ -1,4 +1,4 @@
-// The console's words, in the three languages its owners read.
+// The console's words, in every language its owners read (lib/langs.js).
 //
 // THE LANGUAGE SWITCH CHANGES TEXT, NOT SCREENS, the same way the storefront
 // does it: every piece of static copy carries a `data-t` key and is rewritten
@@ -8,6 +8,8 @@
 // sq is the default: the venue is in Albania.
 
 import { safeGet, safeSet } from '/store/storage.js';
+import { LANGS, pickLang, pluralIndex } from '../lib/langs.js';
+import { RU } from './i18n-ru.js';
 
 export const T = {
   sq: {
@@ -357,24 +359,22 @@ export const T = {
     tabStaff:'Персонал', staffHint:'Хто працює: кухня, офіціант, касир-менеджер. Запрошуйте кодом.', staff:'Персонал', role:'Роль', kitchen:'Кухня', waiter:'Офіціант', counterManager:'Касир-менеджер', 'role-kitchen':'Кухня', 'role-waiter':'Офіціант', 'role-counter-manager':'Касир-менеджер',
     inviteStaff:'Запросити працівника', deactivateStaff:'Деактивувати працівника', noStaff:'Персоналу ще немає',
   },
+  ru: RU,
 };
 
-export const LANGS = ['sq', 'en', 'uk'];
-export let lang = LANGS.includes(safeGet('dw_admin_lang')) ? safeGet('dw_admin_lang') : 'sq';
+export { LANGS };
+/// A choice made here wins; else the browser's own languages on first visit; else Albanian.
+export let lang = pickLang([safeGet('dw_admin_lang')], globalThis.navigator?.languages || [], 'sq');
 export const t = k => (T[lang] && T[lang][k]) ?? T.en[k] ?? k;
 export const st = s => (t('st')[s]) || s;
 export const payName = p => (t('pay')[p]) || p || '';
-export const intlLocale = () => lang === 'uk' ? 'uk' : lang === 'en' ? 'en' : 'sq';
+export const intlLocale = () => lang;
 
-/// Ukrainian needs three forms; Albanian and English two.
+/// Ukrainian and Russian need three forms; Albanian and English two.
 export function plural(n, key){
   const forms = t(key);
   if (!Array.isArray(forms)) return String(forms);
-  if (lang !== 'uk') return n === 1 ? forms[0] : forms[forms.length - 1];
-  const m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return forms[0];
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return forms[1];
-  return forms[2];
+  return forms[pluralIndex(lang, n, forms.length)];
 }
 
 export function setLang(code){

@@ -11,10 +11,12 @@ title:
   sq: "Punësoni dhe menaxhoni korrierët"
   en: "Hire and manage couriers"
   uk: "Наймайте й керуйте кур’єрами"
+  ru: "Нанимайте курьеров и управляйте ими"
 goal:
   sq: "Ftoni një korrier dhe lexoni kartën e tij."
   en: "Invite a courier and read their card."
   uk: "Запросити кур’єра й прочитати його картку."
+  ru: "Пригласить курьера и прочитать его карточку."
 steps:
   - key: 1
     anchor: nav.couriers
@@ -27,10 +29,12 @@ steps:
       sq: "Korrierët"
       en: "Couriers"
       uk: "Кур’єри"
+      ru: "Курьеры"
     caption:
       sq: "Kush punon për lokalin tuaj."
       en: "Who works for your venue."
       uk: "Хто працює на ваш заклад."
+      ru: "Кто работает на ваше заведение."
   - key: 2
     anchor: couriers.list
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Lista"
       en: "The list"
       uk: "Список"
+      ru: "Список"
     caption:
       sq: "Kush është në turn, kush në rrugë dhe sa para mban secili."
       en: "Who is on shift, who is on the road and how much cash each one holds."
       uk: "Хто на зміні, хто в дорозі і скільки готівки в кожного."
+      ru: "Кто на смене, кто в пути и сколько наличных у каждого."
   - key: 3
     anchor: couriers.shift
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Në turn"
       en: "On shift"
       uk: "На зміні"
+      ru: "На смене"
     caption:
       sq: "Vetëm korrierët në turn marrin porosi."
       en: "Only couriers on shift get orders."
       uk: "Замовлення отримують лише кур’єри на зміні."
+      ru: "Заказы получают только курьеры на смене."
   - key: 4
     anchor: couriers.invite
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Ftesë"
       en: "Invite"
       uk: "Запросити"
+      ru: "Пригласить"
     caption:
       sq: "Një kod që vlen një javë dhe punon një herë."
       en: "A code that lasts a week and works once."
       uk: "Код, що діє тиждень і спрацьовує один раз."
+      ru: "Код, который действует неделю и срабатывает один раз."
   - key: 5
     anchor: couriers.inviteName
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Emri"
       en: "Name"
       uk: "Ім’я"
+      ru: "Имя"
     caption:
       sq: "Emri i korrierit."
       en: "The courier’s name."
       uk: "Ім’я кур’єра."
+      ru: "Имя курьера."
   - key: 6
     anchor: couriers.invitePhone
     pending: no
@@ -104,10 +116,12 @@ steps:
       sq: "Telefoni"
       en: "Phone"
       uk: "Телефон"
+      ru: "Телефон"
     caption:
       sq: "Numri ku i vjen ftesa."
       en: "The number the invite goes to."
       uk: "Номер, на який прийде запрошення."
+      ru: "Номер, на который придёт приглашение."
   - key: 7
     anchor: couriers.inviteSend
     pending: no
@@ -119,10 +133,12 @@ steps:
       sq: "Dërgo"
       en: "Send"
       uk: "Надіслати"
+      ru: "Отправить"
     caption:
       sq: "Ftesa dërgohet; kodi shfaqet edhe këtu."
       en: "The invite is sent; the code also shows here."
       uk: "Запрошення надіслано; код також видно тут."
+      ru: "Приглашение отправлено; код также виден здесь."
   - key: 8
     anchor: couriers.inviteCopy
     pending: no
@@ -134,10 +150,12 @@ steps:
       sq: "Kopjo"
       en: "Copy"
       uk: "Копіювати"
+      ru: "Копировать"
     caption:
       sq: "Ose kopjojeni dhe dërgojeni vetë."
       en: "Or copy it and send it yourself."
       uk: "Або скопіюйте й надішліть самі."
+      ru: "Или скопируйте и отправьте сами."
   - key: 9
     anchor: couriers.card
     pending: no
@@ -149,10 +167,12 @@ steps:
       sq: "Karta"
       en: "The card"
       uk: "Картка"
+      ru: "Карточка"
     caption:
       sq: "Dorëzimet, paratë në dorë dhe mungesat e korrierit."
       en: "The courier’s deliveries, cash in hand and shortfalls."
       uk: "Доставки кур’єра, готівка на руках і нестачі."
+      ru: "Доставки курьера, наличные на руках и недостачи."
   - key: 10
     anchor: couriers.uninvite
     pending: no
@@ -164,7 +184,9 @@ steps:
       sq: "Çaktivizo"
       en: "Deactivate"
       uk: "Деактивувати"
+      ru: "Деактивировать"
     caption:
       sq: "Kur dikush largohet: nuk hyn më, historia mbetet."
       en: "When someone leaves: they can no longer sign in, the history stays."
       uk: "Коли хтось іде: він більше не може увійти, історія лишається."
+      ru: "Когда кто-то уходит: он больше не может войти, история остаётся."

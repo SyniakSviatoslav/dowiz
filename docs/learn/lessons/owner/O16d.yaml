@@ -11,10 +11,12 @@ title:
   sq: "Kutia hyrëse dhe asistenti"
   en: "Inbox and the assistant"
   uk: "Вхідні та асистент"
+  ru: "Входящие и ассистент"
 goal:
   sq: "Përgjigjuni një mesazhi WhatsApp dhe bëjini asistentit një pyetje."
   en: "Answer a WhatsApp message and ask the assistant one question."
   uk: "Відповісти на повідомлення WhatsApp і поставити асистенту одне запитання."
+  ru: "Ответить на сообщение WhatsApp и задать ассистенту один вопрос."
 steps:
   - key: 1
     anchor: more.tile.inbox
@@ -27,10 +29,12 @@ steps:
       sq: "Kutia hyrëse"
       en: "Inbox"
       uk: "Вхідні"
+      ru: "Входящие"
     caption:
       sq: "Mesazhet nga WhatsApp dhe Instagram, në një vend."
       en: "Messages from WhatsApp and Instagram, in one place."
       uk: "Повідомлення з WhatsApp та Instagram в одному місці."
+      ru: "Сообщения из WhatsApp и Instagram в одном месте."
   - key: 2
     anchor: inbox.thread
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Një bisedë"
       en: "A thread"
       uk: "Розмова"
+      ru: "Разговор"
     caption:
       sq: "Mesazhet e një klienti."
       en: "One customer’s messages."
       uk: "Повідомлення одного клієнта."
+      ru: "Сообщения одного клиента."
   - key: 3
     anchor: inbox.reply
     pending: no
@@ -58,10 +64,12 @@ steps:
       sq: "Përgjigjuni"
       en: "Reply"
       uk: "Відповісти"
+      ru: "Ответить"
     caption:
       sq: "Përgjigjja shkon në të njëjtin kanal."
       en: "The reply goes back on the same channel."
       uk: "Відповідь іде тим самим каналом."
+      ru: "Ответ идёт тем же каналом."
   - key: 4
     anchor: inbox.send
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Dërgo"
       en: "Send"
       uk: "Надіслати"
+      ru: "Отправить"
     caption:
       sq: "Klienti e merr menjëherë."
       en: "The customer gets it at once."
       uk: "Клієнт отримує одразу."
+      ru: "Клиент получает сразу."
   - key: 5
     anchor: more.tile.assistant
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Asistenti"
       en: "Assistant"
       uk: "Асистент"
+      ru: "Ассистент"
     caption:
       sq: "Pyetni për lokalin tuaj: shitjet e javës, pjatat më të shitura."
       en: "Ask about your venue: the week’s sales, the best-selling dishes."
       uk: "Запитайте про свій заклад: продажі за тиждень, найпопулярніші страви."
+      ru: "Спросите о своём заведении: продажи за неделю, самые популярные блюда."
   - key: 6
     anchor: assistant.endpoint
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Modeli juaj"
       en: "Your model"
       uk: "Ваша модель"
+      ru: "Ваша модель"
     caption:
       sq: "Mund të lidhni modelin tuaj."
       en: "You can connect your own model."
       uk: "Можна підключити свою модель."
+      ru: "Можно подключить свою модель."
   - key: 7
     anchor: assistant.model
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "Modeli"
       en: "Model"
       uk: "Модель"
+      ru: "Модель"
     caption:
       sq: "Emri i modelit."
       en: "The model’s name."
       uk: "Назва моделі."
+      ru: "Название модели."
   - key: 8
     anchor: assistant.token
     pending: no
@@ -133,10 +149,12 @@ steps:
       sq: "Çelësi"
       en: "Token"
       uk: "Токен"
+      ru: "Токен"
     caption:
       sq: "Mbetet i fshehur."
       en: "It stays hidden."
       uk: "Лишається прихованим."
+      ru: "Остаётся скрытым."
   - key: 9
     anchor: assistant.save
     pending: no
@@ -148,10 +166,12 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Ruan lidhjen."
       en: "Saves the connection."
       uk: "Зберігає підключення."
+      ru: "Сохраняет подключение."
   - key: 10
     anchor: assistant.question
     pending: no
@@ -164,7 +184,9 @@ steps:
       sq: "Një pyetje"
       en: "One question"
       uk: "Одне запитання"
+      ru: "Один вопрос"
     caption:
       sq: "Asistenti lexon vetëm të dhënat e lokalit tuaj."
       en: "The assistant reads only your venue’s data."
       uk: "Асистент читає лише дані вашого закладу."
+      ru: "Ассистент читает только данные вашего заведения."

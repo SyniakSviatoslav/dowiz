@@ -11,10 +11,12 @@ title:
   sq: "Kontrolli i biletës"
   en: "Checking a pass"
   uk: "Перевірка перепустки"
+  ru: "Проверка пропуска"
 goal:
   sq: "Kontrolloni biletën e rezervimit të një mysafiri te dera."
   en: "Check a guest's booking pass at the door."
   uk: "Перевірити перепустку бронювання гостя біля дверей."
+  ru: "Проверить пропуск бронирования гостя у двери."
 steps:
   - key: 1
     anchor: room.pass
@@ -27,10 +29,12 @@ steps:
       sq: "Biletat"
       en: "Passes"
       uk: "Перепустки"
+      ru: "Пропуски"
     caption:
       sq: "Mysafiri tregon biletën që mori me rezervimin."
       en: "The guest shows the pass they got with their booking."
       uk: "Гість показує перепустку, отриману з бронюванням."
+      ru: "Гость показывает пропуск, полученный с бронированием."
   - key: 2
     anchor: pass.code
     pending: no
@@ -43,10 +47,12 @@ steps:
       sq: "Kodi"
       en: "The code"
       uk: "Код"
+      ru: "Код"
     caption:
       sq: "Shkruani kodin nga bileta, ose ngjisni atë që lexoi skaneri."
       en: "Type the code from the pass, or paste what a scanner read."
       uk: "Введіть код із перепустки або вставте те, що прочитав сканер."
+      ru: "Введите код с пропуска или вставьте то, что прочитал сканер."
   - key: 3
     anchor: pass.check
     pending: no
@@ -58,10 +64,12 @@ steps:
       sq: "Kontrolloni"
       en: "Check"
       uk: "Перевірте"
+      ru: "Проверьте"
     caption:
       sq: "Hub-i thotë nëse bileta është e vlefshme, për sa persona dhe për cilën orë."
       en: "The hub says whether the pass is valid, for how many people and for what time."
       uk: "Хаб каже, чи дійсна перепустка, на скільки осіб і на котру годину."
+      ru: "Хаб говорит, действителен ли пропуск, на сколько человек и на какое время."
   - key: 4
     anchor: nav.back
     pending: no
@@ -73,7 +81,9 @@ steps:
       sq: "Prapa"
       en: "Back"
       uk: "Назад"
+      ru: "Назад"
     caption:
       sq: "Kthehuni te salla."
       en: "Go back to the room."
       uk: "Поверніться до залу."
+      ru: "Вернитесь в зал."

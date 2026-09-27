@@ -1,11 +1,12 @@
 // The living style guide: every /lib/ui component, in every state, in the
-// three languages and both themes. No real data -- every name, address and
+// every language and both themes. No real data -- every name, address and
 // amount below is invented -- and nothing here talks to the network.
 //
 // It is built with the same calls a surface makes, so what it shows is what a
 // surface gets. A component that looks wrong here looks wrong everywhere.
 import * as ui from '/lib/ui/index.js';
 import { formatter } from '/lib/money.js';
+import { INTL } from '../lib/langs.js';
 
 const W = {
   en: { title: 'dowiz design system', lead: 'Every component, every state. Pure functions from options to escaped HTML; behaviour binds to an element.',
@@ -53,8 +54,23 @@ const W = {
     showToast: 'Показати сповіщення', toastText: 'Збережено. Кухня вже бачить.', openSheet: 'Відкрити аркуш', confirm: 'Попросити підтвердження',
     sheetTitle: 'Повернути кошти за замовлення?', sheetBody: 'Клієнт отримає всю суму. Це не можна скасувати.',
     cashInHand: 'Готівка на руках', tips: 'Чайові', today: 'Сьогодні', offer: 'Нове замовлення', timeLeft: 'Залишилось' },
+  ru: { title: 'Дизайн-система dowiz', lead: 'Каждый компонент, каждое состояние. Чистые функции из опций в экранированный HTML; поведение привязывается к элементу.',
+    language: 'Язык', theme: 'Тема', system: 'Системная', light: 'Светлая', dark: 'Тёмная',
+    buttons: 'Кнопки', badges: 'Бейджи и статус', chips: 'Чипы', fields: 'Поля', choice: 'Переключатели и вкладки',
+    rows: 'Строки и списки', states: 'Пусто, сбой, загрузка', feedback: 'Уведомления и лист', money: 'Деньги, показатели, время', cards: 'Карточки',
+    save: 'Сохранить', deliver: 'Доставлено', cancel: 'Отмена', back: 'Назад', refund: 'Вернуть', saving: 'Записываем…', busy: 'Попробовать ожидание',
+    paid: 'Оплачено онлайн', unsent: '3 не отправлено', offered: 'Предлагают вам', late: 'Опаздывает', ready: 'Готов', onTheWay: 'В пути',
+    onShift: 'На смене', gps: 'Слабый GPS', filter: 'Вегетарианское',
+    email: 'Email или телефон', password: 'Пароль', pwHint: 'Не меньше 8 символов.', cash: 'Получено наличных', note: 'Примечание',
+    noteHint: 'напр. никто не открыл', badEmail: 'В адресе нет @', ask: 'Спросить о моих доставках…', send: 'Отправить',
+    day: 'День', week: 'Неделя', month: 'Месяц', orders: 'Заказы', menu: 'Меню', stock: 'Склад',
+    street: 'Rruga Tregtare 5', street2: 'Bulevardi Epidamn 12', noneFree: 'Свободных заказов нет', noneHint: 'Как только что-то будет готово — появится здесь',
+    noLink: 'Нет связи с заведением', retry: 'Попробовать ещё раз', loading: 'Загружаем',
+    showToast: 'Показать уведомление', toastText: 'Сохранено. Кухня уже видит.', openSheet: 'Открыть лист', confirm: 'Попросить подтверждение',
+    sheetTitle: 'Вернуть деньги за заказ?', sheetBody: 'Клиент получит всю сумму. Это нельзя отменить.',
+    cashInHand: 'Наличные на руках', tips: 'Чаевые', today: 'Сегодня', offer: 'Новый заказ', timeLeft: 'Осталось' },
 };
-const LOCALE = { en: 'en-GB', sq: 'sq-AL', uk: 'uk-UA' };
+const LOCALE = INTL;
 const THEMES = ['', 'light', 'dark'];
 
 const store = (() => { try { return globalThis.localStorage; } catch { return null; } })();

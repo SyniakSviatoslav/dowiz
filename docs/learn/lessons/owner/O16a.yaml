@@ -11,10 +11,12 @@ title:
   sq: "Dita e parë: hyrja dhe preferencat"
   en: "First day: sign-in and preferences"
   uk: "Перший день: вхід і налаштування"
+  ru: "Первый день: вход и настройки"
 goal:
   sq: "Hyni, zgjidhni gjuhën dhe monedhën tuaj dhe gjeni mësimet."
   en: "Sign in, choose your language and currency, and find the lessons."
   uk: "Увійти, обрати свою мову й валюту та знайти уроки."
+  ru: "Войти, выбрать свой язык и валюту и найти уроки."
 steps:
   - key: 1
     anchor: login.email
@@ -28,10 +30,12 @@ steps:
       sq: "Email-i"
       en: "Email"
       uk: "Email"
+      ru: "Email"
     caption:
       sq: "Email-i i pronarit."
       en: "The owner’s email."
       uk: "Email власника."
+      ru: "Email владельца."
   - key: 2
     anchor: login.password
     pending: no
@@ -44,10 +48,12 @@ steps:
       sq: "Fjalëkalimi"
       en: "Password"
       uk: "Пароль"
+      ru: "Пароль"
     caption:
       sq: "Fjalëkalimi juaj."
       en: "Your password."
       uk: "Ваш пароль."
+      ru: "Ваш пароль."
   - key: 3
     anchor: login.lang
     pending: no
@@ -59,10 +65,12 @@ steps:
       sq: "Gjuha"
       en: "Language"
       uk: "Мова"
+      ru: "Язык"
     caption:
-      sq: "Shqip, anglisht ose ukrainisht."
-      en: "Albanian, English or Ukrainian."
-      uk: "Албанська, англійська чи українська."
+      sq: "Shqip, anglisht, ukrainisht ose rusisht."
+      en: "Albanian, English, Ukrainian or Russian."
+      uk: "Албанська, англійська, українська чи російська."
+      ru: "Албанский, английский, украинский или русский."
   - key: 4
     anchor: login.go
     pending: no
@@ -74,10 +82,12 @@ steps:
       sq: "Hyni"
       en: "Sign in"
       uk: "Увійти"
+      ru: "Войти"
     caption:
       sq: "Konsola hapet te porositë."
       en: "The console opens on orders."
       uk: "Консоль відкривається на замовленнях."
+      ru: "Консоль открывается на заказах."
   - key: 5
     anchor: nav.more
     pending: no
@@ -89,10 +99,12 @@ steps:
       sq: "Më shumë"
       en: "More"
       uk: "Більше"
+      ru: "Ещё"
     caption:
       sq: "Të gjitha cilësimet, në grupe."
       en: "Every setting, in groups."
       uk: "Усі налаштування, за групами."
+      ru: "Все настройки, по группам."
   - key: 6
     anchor: more.tile.learn
     pending: no
@@ -104,10 +116,12 @@ steps:
       sq: "Mësimet"
       en: "Lessons"
       uk: "Уроки"
+      ru: "Уроки"
     caption:
       sq: "Mësimet e konsolës, me videon e secilit. Hapini kur të doni."
       en: "The console’s lessons, each with its video. Open them any time."
       uk: "Уроки консолі, кожен зі своїм відео. Відкривайте будь-коли."
+      ru: "Уроки консоли, каждый со своим видео. Открывайте в любое время."
   - key: 7
     anchor: header.prefs
     pending: no
@@ -119,10 +133,12 @@ steps:
       sq: "Preferencat"
       en: "Preferences"
       uk: "Налаштування"
+      ru: "Настройки"
     caption:
       sq: "Gjuha dhe monedha e shfaqjes, vetëm për ju."
       en: "Language and display currency, just for you."
       uk: "Мова й валюта відображення — лише для вас."
+      ru: "Язык и валюта отображения — только для вас."
   - key: 8
     anchor: prefs.lang
     pending: no
@@ -134,10 +150,12 @@ steps:
       sq: "Gjuha"
       en: "Language"
       uk: "Мова"
+      ru: "Язык"
     caption:
       sq: "Ndryshon vetëm konsolën tuaj."
       en: "Changes only your console."
       uk: "Змінює лише вашу консоль."
+      ru: "Меняет только вашу консоль."
   - key: 9
     anchor: prefs.currency
     pending: no
@@ -149,10 +167,12 @@ steps:
       sq: "Monedha"
       en: "Currency"
       uk: "Валюта"
+      ru: "Валюта"
     caption:
       sq: "Shumat shfaqen në këtë monedhë; llogaritë mbeten në lekë."
       en: "Amounts are shown in this currency; the books stay in lek."
       uk: "Суми показано в цій валюті; облік лишається в леках."
+      ru: "Суммы показаны в этой валюте; учёт остаётся в леках."
   - key: 10
     anchor: header.logout
     pending: no
@@ -164,7 +184,9 @@ steps:
       sq: "Dilni"
       en: "Sign out"
       uk: "Вийти"
+      ru: "Выйти"
     caption:
       sq: "Në një kompjuter të përbashkët, dilni gjithmonë."
       en: "On a shared computer, always sign out."
       uk: "На спільному комп’ютері завжди виходьте."
+      ru: "На общем компьютере всегда выходите."

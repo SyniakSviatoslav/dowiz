@@ -11,10 +11,12 @@ title:
   sq: "Marka dhe pamja"
   en: "Branding and preview"
   uk: "Бренд і перегляд"
+  ru: "Бренд и просмотр"
 goal:
   sq: "Ndryshoni ngjyrën kryesore dhe shihni faqen."
   en: "Change the main colour and see the storefront."
   uk: "Змінити основний колір і побачити вітрину."
+  ru: "Изменить основной цвет и увидеть витрину."
 steps:
   - key: 1
     anchor: more.tile.branding
@@ -27,10 +29,12 @@ steps:
       sq: "Marka"
       en: "Branding"
       uk: "Бренд"
+      ru: "Бренд"
     caption:
       sq: "Pamja e faqes suaj."
       en: "The look of your site."
       uk: "Вигляд вашого сайту."
+      ru: "Вид вашего сайта."
   - key: 2
     anchor: branding.primary
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Ngjyra kryesore"
       en: "Main colour"
       uk: "Основний колір"
+      ru: "Основной цвет"
     caption:
       sq: "Kontrasti kontrollohet vetë kundrejt letrës."
       en: "The contrast is checked against the paper for you."
       uk: "Контраст перевіряється з фоном автоматично."
+      ru: "Контраст проверяется с фоном автоматически."
   - key: 3
     anchor: branding.paper
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Letra"
       en: "Paper"
       uk: "Фон"
+      ru: "Фон"
     caption:
       sq: "Ngjyra e sfondit."
       en: "The background colour."
       uk: "Колір фону."
+      ru: "Цвет фона."
   - key: 4
     anchor: branding.typePair
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Shkronjat"
       en: "Type"
       uk: "Шрифти"
+      ru: "Шрифты"
     caption:
       sq: "Një çift shkronjash për titujt dhe tekstin."
       en: "A pair of faces for headings and text."
       uk: "Пара шрифтів для заголовків і тексту."
+      ru: "Пара шрифтов для заголовков и текста."
   - key: 5
     anchor: branding.logo
     pending: no
@@ -87,10 +97,12 @@ steps:
       sq: "Logoja"
       en: "Logo"
       uk: "Логотип"
+      ru: "Логотип"
     caption:
       sq: "Ngarkoni logon."
       en: "Upload your logo."
       uk: "Завантажте логотип."
+      ru: "Загрузите логотип."
   - key: 6
     anchor: branding.seal
     pending: no
@@ -102,10 +114,12 @@ steps:
       sq: "Vula"
       en: "Seal"
       uk: "Печатка"
+      ru: "Печать"
     caption:
       sq: "Shenja e vogël e lokalit."
       en: "The venue’s small mark."
       uk: "Маленький знак закладу."
+      ru: "Маленький знак заведения."
   - key: 7
     anchor: branding.motif
     pending: no
@@ -117,10 +131,12 @@ steps:
       sq: "Motivi"
       en: "Motif"
       uk: "Мотив"
+      ru: "Мотив"
     caption:
       sq: "Një motiv i lehtë në sfond."
       en: "A light pattern in the background."
       uk: "Легкий візерунок на фоні."
+      ru: "Лёгкий узор на фоне."
   - key: 8
     anchor: branding.warm
     pending: no
@@ -132,10 +148,12 @@ steps:
       sq: "I ngrohtë"
       en: "Warm"
       uk: "Теплий"
+      ru: "Тёплый"
     caption:
       sq: "Një palë ngjyrash e gatshme."
       en: "A ready colour pair."
       uk: "Готова пара кольорів."
+      ru: "Готовая пара цветов."
   - key: 9
     anchor: branding.sage
     pending: no
@@ -147,10 +165,12 @@ steps:
       sq: "Sherebelë"
       en: "Sage"
       uk: "Шавлія"
+      ru: "Шалфей"
     caption:
       sq: "Një tjetër."
       en: "Another one."
       uk: "Ще одна."
+      ru: "Ещё одна."
   - key: 10
     anchor: branding.preview
     pending: no
@@ -162,10 +182,12 @@ steps:
       sq: "Si duket"
       en: "How it looks"
       uk: "Як виглядає"
+      ru: "Как выглядит"
     caption:
       sq: "Pamja e ndryshimit para se ta ruani."
       en: "The change before you save it."
       uk: "Зміна до збереження."
+      ru: "Изменение до сохранения."
   - key: 11
     anchor: more.tile.preview
     pending: no
@@ -177,10 +199,12 @@ steps:
       sq: "Pamja"
       en: "Preview"
       uk: "Перегляд"
+      ru: "Просмотр"
     caption:
       sq: "Faqja ashtu siç e sheh klienti."
       en: "The site as the customer sees it."
       uk: "Сайт таким, яким його бачить клієнт."
+      ru: "Сайт таким, каким его видит клиент."
   - key: 12
     anchor: preview.reload
     pending: no
@@ -192,10 +216,12 @@ steps:
       sq: "Rifresko"
       en: "Reload"
       uk: "Оновити"
+      ru: "Обновить"
     caption:
       sq: "Pas një ndryshimi."
       en: "After a change."
       uk: "Після зміни."
+      ru: "После изменения."
   - key: 13
     anchor: preview.open
     pending: no
@@ -207,7 +233,9 @@ steps:
       sq: "Hape"
       en: "Open it"
       uk: "Відкрити"
+      ru: "Открыть"
     caption:
       sq: "Në një skedë të re."
       en: "In a new tab."
       uk: "У новій вкладці."
+      ru: "В новой вкладке."

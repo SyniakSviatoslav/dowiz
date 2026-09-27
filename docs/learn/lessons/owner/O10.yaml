@@ -11,10 +11,12 @@ title:
   sq: "Kodet e tavolinave"
   en: "Table codes"
   uk: "Коди столів"
+  ru: "Коды столов"
 goal:
   sq: "Printoni fletën e kodeve."
   en: "Print the sheet of codes."
   uk: "Роздрукувати аркуш із кодами."
+  ru: "Распечатать лист с кодами."
 steps:
   - key: 1
     anchor: more.tile.tableQr
@@ -27,10 +29,12 @@ steps:
       sq: "Kodet QR"
       en: "QR codes"
       uk: "QR-коди"
+      ru: "QR-коды"
     caption:
       sq: "Një kod për çdo tavolinë. Mysafiri e skanon, sheh menunë dhe porosit — kamarieri konfirmon."
       en: "One code per table. The guest scans it, sees the menu and orders — the waiter confirms."
       uk: "Один код на стіл. Гість сканує, бачить меню й замовляє — офіціант підтверджує."
+      ru: "Один код на стол. Гость сканирует, видит меню и заказывает — официант подтверждает."
   - key: 2
     anchor: tableqr.grid
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Kodet"
       en: "The codes"
       uk: "Коди"
+      ru: "Коды"
     caption:
       sq: "Çdo tavolinë e planit ka kodin e vet."
       en: "Every table on the plan has its own code."
       uk: "Кожен стіл на плані має свій код."
+      ru: "У каждого стола на плане свой код."
   - key: 3
     anchor: tableqr.print
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Printo"
       en: "Print"
       uk: "Друк"
+      ru: "Печать"
     caption:
       sq: "Një fletë me të gjitha kodet."
       en: "One sheet with every code."
       uk: "Один аркуш з усіма кодами."
+      ru: "Один лист со всеми кодами."
   - key: 4
     anchor: tableqr.download
     pending: no
@@ -72,7 +80,9 @@ steps:
       sq: "Shkarko"
       en: "Download"
       uk: "Завантажити"
+      ru: "Скачать"
     caption:
       sq: "Kodet si skedarë, për një printer tjetër."
       en: "The codes as files, for another printer."
       uk: "Коди файлами — для іншого принтера."
+      ru: "Коды файлами — для другого принтера."

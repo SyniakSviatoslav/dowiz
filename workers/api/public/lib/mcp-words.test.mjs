@@ -2,9 +2,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mcpWords, LANGS } from './mcp-words.js';
+import { LANGS as ALL } from './langs.js';
 
 test('every language has every word, filled, and no typographic quote', () => {
-  assert.deepEqual(LANGS, ['sq', 'en', 'uk']);
+  assert.deepEqual(LANGS, [...ALL]);
   const keys = Object.keys(mcpWords('en', 'owner')).sort();
   for (const l of LANGS) {
     const w = mcpWords(l, 'staff');

@@ -18,6 +18,7 @@
 
 import { state, tokenFor, moneyEl, on, API } from '/store/state.js';
 import { t, lang } from '/store/i18n.js';
+import { scriptLang } from '../lib/langs.js';
 import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses, stars } from '/store/ui.js';
 import { openOcean, phaseOf, seaRest } from '/store/sea.js';
 import * as trackMap from '/store/track-map.js';
@@ -104,11 +105,11 @@ function bindCopy(){
 }
 
 // ── the credits: the venue's guests, one at a time ──────────────────────────
-/// The language a review is written in, from its letters: Cyrillic is
-/// Ukrainian here, the Albanian diacritics are Albanian, the rest English.
-const CYRILLIC = /[\u0400-\u04FF]/;
-const ALBANIAN = /[ëçË]|\b(dhe|është|shumë|për|nuk)\b/i;
-const langOf = text => CYRILLIC.test(text) ? 'uk' : ALBANIAN.test(text) ? 'sq' : 'en';
+/// The language a review is written in, from its letters (lib/langs.js
+/// scriptLang): Cyrillic is NOT one language -- і/ї/є/ґ say Ukrainian, ё/ъ/ы/э
+/// say Russian, and Cyrillic with neither is read as the reader's own language
+/// when that is Cyrillic. It used to call every Cyrillic review Ukrainian.
+const langOf = text => scriptLang(text, lang);
 /// The review in the reader's language: a translation the venue holds, else
 /// the original when it already is that language, else nothing.
 function reviewText(r){

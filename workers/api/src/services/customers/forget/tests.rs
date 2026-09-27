@@ -247,14 +247,17 @@ fn a_restored_bundle_from_before_the_erasure_is_forgotten_again() {
 /// night it was made), so shortening or lengthening the rotation without the
 /// sentence turns this red.
 #[test]
-fn the_backup_promise_matches_the_rotation_in_three_languages() {
+fn the_backup_promise_matches_the_rotation_in_every_language() {
     let days = crate::cloud::KEEP_WEEKLY_MS / 86_400_000 + 1;
-    for lang in ["sq", "en", "uk"] {
+    for lang in dowiz_hub::lang::LANGS {
         let n = notice(lang);
         assert!(n.contains(&format!("{days} ")), "{lang}: {n}");
         assert!(!n.contains("month") && !n.contains("muaj") && !n.contains("місяц"), "{lang}: {n}");
     }
     assert_ne!(notice("sq"), notice("en"));
     assert_ne!(notice("uk"), notice("en"));
+    assert_ne!(notice("ru"), notice("uk"));
+    assert_ne!(notice("ru"), notice("sq"));
+    assert!(!notice("ru").contains("месяц"));
     assert_eq!(notice("xx"), notice("sq"), "an unknown language answers in the venue's own");
 }

@@ -11,10 +11,12 @@ title:
   sq: "Klientët pa spiunim"
   en: "Customers without spying"
   uk: "Клієнти без стеження"
+  ru: "Клиенты без слежки"
 goal:
   sq: "Zbuloni një kontakt me arsye dhe gjejeni në regjistër."
   en: "Reveal one contact with a reason and find it in the log."
   uk: "Розкрити один контакт із причиною й знайти це в журналі."
+  ru: "Раскрыть один контакт с причиной и найти это в журнале."
 steps:
   - key: 1
     anchor: more.tile.customers
@@ -27,10 +29,12 @@ steps:
       sq: "Klientët"
       en: "Customers"
       uk: "Клієнти"
+      ru: "Клиенты"
     caption:
       sq: "Kartat e klientëve, me telefon dhe email të maskuar."
       en: "Customer cards, with phone and email masked."
       uk: "Картки клієнтів із прихованими телефоном та email."
+      ru: "Карточки клиентов со скрытыми телефоном и email."
   - key: 2
     anchor: customers.sort
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Renditja"
       en: "Sort"
       uk: "Сортування"
+      ru: "Сортировка"
     caption:
       sq: "Sipas porosisë së fundit ose numrit të porosive."
       en: "By last order or number of orders."
       uk: "За останнім замовленням чи кількістю замовлень."
+      ru: "По последнему заказу или числу заказов."
   - key: 3
     anchor: customers.csv
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Eksporto"
       en: "Export"
       uk: "Експорт"
+      ru: "Экспорт"
     caption:
       sq: "Një skedar pa kontaktet e fshehura."
       en: "A file without the hidden contacts."
       uk: "Файл без прихованих контактів."
+      ru: "Файл без скрытых контактов."
   - key: 4
     anchor: customers.row
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Një klient"
       en: "A customer"
       uk: "Клієнт"
+      ru: "Клиент"
     caption:
       sq: "Porositë, shpeshtësia dhe etiketat — pa kontaktin."
       en: "Orders, frequency and tags — without the contact."
       uk: "Замовлення, частота й мітки — без контакту."
+      ru: "Заказы, частота и метки — без контакта."
   - key: 5
     anchor: customers.card
     pending: no
@@ -87,10 +97,12 @@ steps:
       sq: "Karta"
       en: "The card"
       uk: "Картка"
+      ru: "Карточка"
     caption:
       sq: "Ajo që lokali di për këtë klient."
       en: "What the venue knows about this customer."
       uk: "Що заклад знає про цього клієнта."
+      ru: "Что заведение знает об этом клиенте."
   - key: 6
     anchor: customers.note
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Shënim"
       en: "Note"
       uk: "Примітка"
+      ru: "Примечание"
     caption:
       sq: "P.sh. «pa qepë». Klienti mund ta kërkojë."
       en: "For example “no onion”. The customer can ask to see it."
       uk: "Наприклад, «без цибулі». Клієнт може попросити її показати."
+      ru: "Например, «без лука». Клиент может попросить её показать."
   - key: 7
     anchor: customers.table
     pending: no
@@ -119,10 +133,12 @@ steps:
       sq: "Tavolina e zakonshme"
       en: "Usual table"
       uk: "Звичний стіл"
+      ru: "Привычный стол"
     caption:
       sq: "Ku i pëlqen të ulet."
       en: "Where they like to sit."
       uk: "Де клієнт любить сидіти."
+      ru: "Где клиент любит сидеть."
   - key: 8
     anchor: customers.lang
     pending: no
@@ -134,10 +150,12 @@ steps:
       sq: "Gjuha"
       en: "Language"
       uk: "Мова"
+      ru: "Язык"
     caption:
       sq: "Në cilën gjuhë i shkruani."
       en: "Which language to write in."
       uk: "Якою мовою писати."
+      ru: "На каком языке писать."
   - key: 9
     anchor: customers.birthday
     pending: no
@@ -150,10 +168,12 @@ steps:
       sq: "Ditëlindja"
       en: "Birthday"
       uk: "День народження"
+      ru: "День рождения"
     caption:
       sq: "Vetëm nëse klienti e dha vetë."
       en: "Only if the customer gave it."
       uk: "Лише якщо клієнт сам її вказав."
+      ru: "Только если клиент сам его указал."
   - key: 10
     anchor: customers.save
     pending: no
@@ -165,10 +185,12 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Ruhet në kartë."
       en: "Saved on the card."
       uk: "Збережено в картці."
+      ru: "Сохранено в карточке."
   - key: 11
     anchor: customers.reveal
     pending: no
@@ -180,10 +202,12 @@ steps:
       sq: "Zbulo"
       en: "Reveal"
       uk: "Розкрити"
+      ru: "Раскрыть"
     caption:
       sq: "Kontakti shfaqet vetëm me një arsye të shkruar, një herë."
       en: "The contact is shown only with a written reason, once."
       uk: "Контакт показується лише з письмовою причиною, один раз."
+      ru: "Контакт показывается только с письменной причиной, один раз."
   - key: 12
     anchor: customers.revealReason
     pending: no
@@ -196,10 +220,12 @@ steps:
       sq: "Arsyeja"
       en: "The reason"
       uk: "Причина"
+      ru: "Причина"
     caption:
       sq: "P.sh. «porosia e harruar në lokal»."
       en: "For example “order left at the venue”."
       uk: "Наприклад, «замовлення забули в закладі»."
+      ru: "Например, «заказ забыли в заведении»."
   - key: 13
     anchor: customers.revealLog
     pending: no
@@ -211,10 +237,12 @@ steps:
       sq: "Regjistri"
       en: "The log"
       uk: "Журнал"
+      ru: "Журнал"
     caption:
       sq: "Çdo zbulim mbetet këtu."
       en: "Every reveal stays here."
       uk: "Кожне розкриття лишається тут."
+      ru: "Каждое раскрытие остаётся здесь."
   - key: 14
     anchor: customers.revealRow
     pending: no
@@ -226,7 +254,9 @@ steps:
       sq: "Një zbulim"
       en: "One reveal"
       uk: "Одне розкриття"
+      ru: "Одно раскрытие"
     caption:
       sq: "Kush, kur dhe pse."
       en: "Who, when and why."
       uk: "Хто, коли й чому."
+      ru: "Кто, когда и почему."

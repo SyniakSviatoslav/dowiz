@@ -11,10 +11,12 @@ title:
   sq: "Lidhje, pëlqim dhe harresë"
   en: "Links, consent and forgetting"
   uk: "Зв’язки, згода й забуття"
+  ru: "Связи, согласие и забвение"
 goal:
   sq: "Bashkoni dy karta të të njëjtit klient dhe dini si tërhiqet pëlqimi."
   en: "Join two cards of the same customer and know how consent is withdrawn."
   uk: "Об’єднати дві картки одного клієнта й знати, як відкликається згода."
+  ru: "Объединить две карточки одного клиента и знать, как отзывается согласие."
 steps:
   - key: 1
     anchor: customers.link
@@ -27,10 +29,12 @@ steps:
       sq: "Lidhe"
       en: "Link"
       uk: "Пов’язати"
+      ru: "Связать"
     caption:
       sq: "I njëjti person me dy numra? Lidhini kartat."
       en: "Same person, two numbers? Link the cards."
       uk: "Та сама людина з двома номерами? Пов’яжіть картки."
+      ru: "Тот же человек с двумя номерами? Свяжите карточки."
   - key: 2
     anchor: customers.linkPick
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Karta tjetër"
       en: "The other card"
       uk: "Інша картка"
+      ru: "Другая карточка"
     caption:
       sq: "Zgjidhni kartën tjetër."
       en: "Choose the other card."
       uk: "Оберіть іншу картку."
+      ru: "Выберите другую карточку."
   - key: 3
     anchor: customers.linkReason
     pending: no
@@ -58,10 +64,12 @@ steps:
       sq: "Arsyeja"
       en: "The reason"
       uk: "Причина"
+      ru: "Причина"
     caption:
       sq: "Pse jeni të sigurt."
       en: "Why you are sure."
       uk: "Чому ви впевнені."
+      ru: "Почему вы уверены."
   - key: 4
     anchor: customers.unlink
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Ndaji"
       en: "Unlink"
       uk: "Роз’єднати"
+      ru: "Разъединить"
     caption:
       sq: "Nëse gabuat."
       en: "If you were wrong."
       uk: "Якщо ви помилилися."
+      ru: "Если вы ошиблись."
   - key: 5
     anchor: customers.withdraw
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Tërhiq pëlqimin"
       en: "Withdraw consent"
       uk: "Відкликати згоду"
+      ru: "Отозвать согласие"
     caption:
       sq: "Kur klienti nuk do më mesazhe."
       en: "When the customer wants no more messages."
       uk: "Коли клієнт більше не хоче повідомлень."
+      ru: "Когда клиент больше не хочет сообщений."
   - key: 6
     anchor: customers.forget
     pending: no
@@ -103,7 +115,9 @@ steps:
       sq: "Harroje"
       en: "Forget"
       uk: "Забути"
+      ru: "Забыть"
     caption:
       sq: "Kur klienti kërkon të fshihet: të dhënat personale hiqen, shifrat mbeten."
       en: "When the customer asks to be erased: personal data goes, the numbers stay."
       uk: "Коли клієнт просить його видалити: персональні дані зникають, цифри лишаються."
+      ru: "Когда клиент просит его удалить: персональные данные исчезают, цифры остаются."

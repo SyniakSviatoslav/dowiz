@@ -11,10 +11,12 @@ title:
   sq: "Pa sinjal"
   en: "No signal"
   uk: "Без зв’язку"
+  ru: "Без связи"
 goal:
   sq: "Dini çfarë ruhet në telefon, çfarë dërgohet më vonë dhe çfarë refuzohet."
   en: "Know what the phone keeps, what is sent later and what is refused."
   uk: "Знати, що телефон зберігає, що надішле пізніше і що буде відхилено."
+  ru: "Знать, что телефон сохраняет, что отправит позже и что будет отклонено."
 steps:
   - key: 1
     anchor: hud.outbox
@@ -27,10 +29,12 @@ steps:
       sq: "Të padërguara"
       en: "Unsent"
       uk: "Не надіслано"
+      ru: "Не отправлено"
     caption:
       sq: "Pa rrjet, prekjet tuaja ruhen në telefon. Kjo etiketë tregon sa janë ende pa dërguar dhe zhduket vetë kur dërgohen."
       en: "With no network, your taps are kept on the phone. This tag shows how many are still unsent, and it goes away by itself once they land."
       uk: "Без мережі ваші дотики зберігаються в телефоні. Ця позначка показує, скільки ще не надіслано, і зникає сама, щойно вони дійдуть."
+      ru: "Без сети ваши касания сохраняются в телефоне. Эта отметка показывает, сколько ещё не отправлено, и исчезает сама, как только они дойдут."
   - key: 2
     anchor: hud.sheet
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Do ta dërgojmë"
       en: "Will be sent"
       uk: "Буде надіслано"
+      ru: "Будет отправлено"
     caption:
       sq: "Një veprim në pritje zëvendëson butonin: shihni «Do ta dërgojmë», jo një buton për ta shtypur sërish."
       en: "A waiting action replaces the button: you see “Will be sent”, not a button to press again."
       uk: "Дія в черзі замінює кнопку: ви бачите «Буде надіслано», а не кнопку, яку треба натиснути знову."
+      ru: "Действие в очереди заменяет кнопку: вы видите «Будет отправлено», а не кнопку, которую нужно нажать снова."
   - key: 3
     anchor: hud.shift
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Të dhëna të vjetra"
       en: "Old data"
       uk: "Застарілі дані"
+      ru: "Устаревшие данные"
     caption:
       sq: "Pa lidhje, ekrani tregon përgjigjen e fundit të lokalit me orën e saj. Nëse porosia ndryshoi ndërkohë, veprimi juaj refuzohet dhe ju tregohet pse."
       en: "Offline, the screen shows the venue’s last answer with its time. If the order changed meanwhile, your action is refused and you are told why."
       uk: "Без зв’язку екран показує останню відповідь закладу з її часом. Якщо замовлення тим часом змінилося, вашу дію відхилять і скажуть чому."
+      ru: "Без связи экран показывает последний ответ заведения с его временем. Если заказ за это время изменился, ваше действие отклонят и скажут почему."
   - key: 4
     anchor: hud.gps
     pending: no
@@ -72,7 +80,9 @@ steps:
       sq: "GPS"
       en: "GPS"
       uk: "GPS"
+      ru: "GPS"
     caption:
       sq: "Kjo etiketë tregon nëse telefoni e di ku jeni. Pa GPS, koha deri te dera nuk rifreskohet."
       en: "This tag shows whether the phone knows where you are. Without GPS the time to the door does not update."
       uk: "Ця позначка показує, чи знає телефон, де ви. Без GPS час до дверей не оновлюється."
+      ru: "Эта отметка показывает, знает ли телефон, где вы. Без GPS время до двери не обновляется."

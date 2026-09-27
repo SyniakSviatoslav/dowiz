@@ -13,6 +13,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { parseYaml, YamlError } from '../../../../tools/learn/yaml-lite.mjs';
 import { bool, normalize, build, sources, main, OUT, SRC, ROLES } from '../../../../tools/learn/build-lessons.mjs';
+import { LANGS } from '../lib/langs.js';
 
 const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
 const BUILD = join(REPO, 'tools/learn/build-lessons.mjs');
@@ -83,7 +84,7 @@ test('yaml: reads every lesson file the same as js-yaml does (when this box has 
 });
 
 // ── normalize ────────────────────────────────────────────────────────────────
-const tri = s => ({ sq: `${s} sq`, en: `${s} en`, uk: `${s} uk` });
+const tri = s => Object.fromEntries(LANGS.map(l => [l, `${s} ${l}`]));
 const good = () => ({ id: 'C9', role: 'courier', module: 'm', order: '3', covers: ['x'], title: tri('t'), goal: tri('g'),
   steps: [
     { key: 'hi', anchor: 'none', writes: 'no', action: { do: 'wait' }, title: tri('a'), caption: tri('b') },
@@ -155,14 +156,15 @@ test('build: the committed lessons.json is exactly what the YAML builds (the gat
   const j = JSON.parse(text);
   assert.equal(j.lessons.length, lessons.length);
   for (const r of ROLES) assert.equal(j.counts[r], lessons.filter(l => l.role === r).length, r);
-  assert.deepEqual(j.langs, ['sq', 'en', 'uk']);
+  assert.deepEqual(j.langs, LANGS);
+  assert.ok(j.langs.includes('ru'), 'every lesson string is in Russian too');
   assert.match(j.built_from, /^[0-9a-f]{16}$/);
   const ids = j.lessons.map(l => l.id);
   assert.equal(new Set(ids).size, ids.length);
 });
 
 test('build: a parse error, an invalid lesson and a duplicate id are each reported; valid ones still sort by role then order', () => {
-  const y = (id, role, order) => `id: ${id}\nrole: ${role}\nmodule: m\norder: ${order}\ntitle:\n  sq: a\n  en: a\n  uk: a\ngoal:\n  sq: a\n  en: a\n  uk: a\nsteps:\n  - anchor: none\n    writes: no\n    action:\n      do: wait\n    title:\n      sq: a\n      en: a\n      uk: a\n    caption:\n      sq: a\n      en: a\n      uk: a\n`;
+  const y = (id, role, order) => `id: ${id}\nrole: ${role}\nmodule: m\norder: ${order}\ntitle:\n  sq: a\n  en: a\n  uk: a\n  ru: a\ngoal:\n  sq: a\n  en: a\n  uk: a\n  ru: a\nsteps:\n  - anchor: none\n    writes: no\n    action:\n      do: wait\n    title:\n      sq: a\n      en: a\n      uk: a\n      ru: a\n    caption:\n      sq: a\n      en: a\n      uk: a\n      ru: a\n`;
   const r = build([
     ['x/courier/C2.yaml', y('C2', 'courier', 2)],
     ['x/courier/C1.yaml', y('C1', 'courier', 1)],

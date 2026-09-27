@@ -4,11 +4,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { WORDS, EXAMPLES, FOOTERS, merge, lookup } from './apple-words.js';
+import { LANGS as ALL } from '../lib/langs.js';
 
 const LANGS = Object.keys(WORDS);
 
-test('three languages today, and no language is missing a key another has', () => {
-  assert.deepEqual(LANGS.sort(), ['en', 'sq', 'uk']);
+test('every language of lib/langs.js, and no language is missing a key another has', () => {
+  assert.deepEqual([...LANGS].sort(), [...ALL].sort());
   const all = new Set(LANGS.flatMap(l => Object.keys(WORDS[l])));
   for (const l of LANGS) {
     const missing = [...all].filter(k => !(k in WORDS[l]));
@@ -41,12 +42,13 @@ test('lookup: the id wins over the key, and nothing is invented', () => {
   assert.equal(lookup(FOOTERS, 'v-name', 'venueName'), null);
 });
 
-test('merge: a fourth language gets English for every key, existing words are untouched', () => {
-  const T = { sq: { save: 'Ruaj' }, en: { save: 'Save' }, uk: { save: 'Зберегти' }, ru: { save: 'Сохранить' } };
+test('merge: a language with no words here gets English for every key, existing words are untouched', () => {
+  const T = { sq: { save: 'Ruaj' }, en: { save: 'Save' }, ru: { save: 'Сохранить' }, xx: { save: 'X' } };
   merge(T);
   assert.equal(T.sq.save, 'Ruaj');
   assert.equal(T.sq.ap_h_venue, WORDS.sq.ap_h_venue);
-  assert.equal(T.ru.ap_h_venue, WORDS.en.ap_h_venue);
+  assert.equal(T.ru.ap_h_venue, WORDS.ru.ap_h_venue);
+  assert.equal(T.xx.ap_h_venue, WORDS.en.ap_h_venue);
   assert.equal(T.ru.save, 'Сохранить');
 });
 

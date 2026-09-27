@@ -20,10 +20,14 @@ import { join, dirname, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseYaml } from './yaml-lite.mjs';
+import { LANGS as UI_LANGS } from '../../workers/api/public/lib/langs.js';
 
 export const ROLES = ['owner', 'waiter', 'courier', 'guest'];
 export const ROLE_APP = { owner: 'owner', waiter: 'room', courier: 'courier', guest: 'store' };
-export const LANGS = ['sq', 'en', 'uk'];
+/// Every lesson string is required in every UI language (lib/langs.js); the
+/// learn gate (tools/gates/learn.sh item 4) runs this check.
+export const LANGS_REQUIRED = UI_LANGS;
+export const LANGS = LANGS_REQUIRED;
 export const ACTIONS = ['click', 'type', 'wait'];
 const ANCHOR = /^[a-z][A-Za-z]*(?:\.[A-Za-z]+)+$/;
 const ID = /^[A-Z][0-9]+[a-z]?$/;

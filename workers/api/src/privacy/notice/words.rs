@@ -6,6 +6,9 @@ use crate::privacy::registry::{Basis, Data, Purpose};
 
 pub struct Words {
     pub lang: &'static str,
+    /// A line shown under the title while the text is an unreviewed draft;
+    /// empty once a reviewer has cleared it.
+    pub draft: &'static str,
     pub title: &'static str,
     pub version: &'static str,
     pub who_h: &'static str,
@@ -69,14 +72,15 @@ pub struct Words {
     pub processor: fn(&str) -> Option<(&'static str, &'static str)>,
 }
 
-/// The three languages the storefront speaks; anything else gets Albanian,
-/// the venue's own language.
+/// Every language the storefront speaks (`dowiz_hub::lang::LANGS`); anything
+/// else gets Albanian, the venue's own language.
 pub fn words(lang: &str) -> &'static Words {
     match lang {
         "en" => &super::en::EN,
         "uk" => &super::uk::UK,
+        "ru" => &super::ru::RU,
         _ => &super::sq::SQ,
     }
 }
 
-pub const LANGS: [&str; 3] = ["sq", "en", "uk"];
+pub use dowiz_hub::lang::LANGS;

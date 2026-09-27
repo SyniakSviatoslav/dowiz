@@ -11,10 +11,12 @@ title:
   sq: "Zhvendosni një raund ose një tavolinë"
   en: "Move a round or a sitting"
   uk: "Перенесіть раунд або стіл"
+  ru: "Перенесите раунд или стол"
 goal:
   sq: "Zhvendosni një raund në një tavolinë tjetër."
   en: "Move a round to another table."
   uk: "Перенести раунд на інший стіл."
+  ru: "Перенести раунд на другой стол."
 steps:
   - key: 1
     anchor: round.transfer
@@ -27,10 +29,12 @@ steps:
       sq: "Kaloni artikuj"
       en: "Transfer items"
       uk: "Перенести позиції"
+      ru: "Перенести позиции"
     caption:
       sq: "Kur një mysafir ndërron tavolinë, artikujt e tij shkojnë me të."
       en: "When a guest changes tables, their items go with them."
       uk: "Коли гість пересідає, його позиції переходять разом із ним."
+      ru: "Когда гость пересаживается, его позиции переходят вместе с ним."
   - key: 2
     anchor: transfer.line
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Zgjidhni rreshtat"
       en: "Choose the lines"
       uk: "Оберіть рядки"
+      ru: "Выберите строки"
     caption:
       sq: "Shënoni çfarë kalon."
       en: "Mark what moves."
       uk: "Позначте, що переноситься."
+      ru: "Отметьте, что переносится."
   - key: 3
     anchor: transfer.target
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Tavolina e re"
       en: "The new table"
       uk: "Новий стіл"
+      ru: "Новый стол"
     caption:
       sq: "Zgjidhni ku shkojnë."
       en: "Choose where they go."
       uk: "Оберіть, куди вони йдуть."
+      ru: "Выберите, куда они идут."
   - key: 4
     anchor: transfer.send
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Kaloni"
       en: "Transfer"
       uk: "Перенести"
+      ru: "Перенести"
     caption:
       sq: "Shumat e të dyja tavolinave rillogariten menjëherë."
       en: "Both tables’ totals are recalculated at once."
       uk: "Суми обох столів перераховуються одразу."
+      ru: "Суммы обоих столов пересчитываются сразу."
   - key: 5
     anchor: round.tableField
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Numri i tavolinës"
       en: "The table number"
       uk: "Номер столу"
+      ru: "Номер стола"
     caption:
       sq: "Për të zhvendosur gjithë raundin, shkruani numrin e tavolinës së re…"
       en: "To move the whole round, type the new table’s number…"
       uk: "Щоб перенести весь раунд, введіть номер нового столу…"
+      ru: "Чтобы перенести весь раунд, введите номер нового стола…"
   - key: 6
     anchor: round.tableMove
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Zhvendos"
       en: "Move"
       uk: "Перенести"
+      ru: "Перенести"
     caption:
       sq: "…dhe shtypni «Zhvendos»."
       en: "…and press “Move”."
       uk: "…і натисніть «Перенести»."
+      ru: "…и нажмите «Перенести»."
   - key: 7
     anchor: round.moveSitting
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "Gjithë tavolina"
       en: "The whole sitting"
       uk: "Увесь стіл"
+      ru: "Весь стол"
     caption:
       sq: "Kur gjithë grupi ndërron vend, zhvendosni tavolinën me të gjitha raundet."
       en: "When the whole party moves, move the sitting with all its rounds."
       uk: "Коли пересідає вся компанія, перенесіть стіл з усіма раундами."
+      ru: "Когда пересаживается вся компания, перенесите стол со всеми раундами."
   - key: 8
     anchor: sitting.move
     pending: no
@@ -133,10 +149,12 @@ steps:
       sq: "Nga tavolina"
       en: "From the table"
       uk: "Зі столу"
+      ru: "Со стола"
     caption:
       sq: "E njëjta gjë, direkt nga karta e tavolinës."
       en: "The same, straight from the table’s card."
       uk: "Те саме — прямо з картки столу."
+      ru: "То же самое — прямо с карточки стола."
   - key: 9
     anchor: move.table
     pending: no
@@ -148,10 +166,12 @@ steps:
       sq: "Ku"
       en: "Where to"
       uk: "Куди"
+      ru: "Куда"
     caption:
       sq: "Zgjidhni tavolinën e lirë."
       en: "Choose the free table."
       uk: "Оберіть вільний стіл."
+      ru: "Выберите свободный стол."
   - key: 10
     anchor: move.submit
     pending: no
@@ -163,7 +183,9 @@ steps:
       sq: "Zhvendosni"
       en: "Move"
       uk: "Перенести"
+      ru: "Перенести"
     caption:
       sq: "Tavolina e vjetër lirohet; asgjë nuk humbet."
       en: "The old table is freed; nothing is lost."
       uk: "Старий стіл звільняється; нічого не губиться."
+      ru: "Старый стол освобождается; ничего не теряется."

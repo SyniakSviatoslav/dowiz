@@ -11,10 +11,12 @@ title:
   sq: "Kthimi i parave"
   en: "Money back"
   uk: "Повернення коштів"
+  ru: "Возврат денег"
 goal:
   sq: "Ktheni paratë për një porosi me marrje në lokal dhe shpjegoni pse një dërgesë ende nuk mundet."
   en: "Refund a pickup order and explain why a delivery cannot be refunded yet."
   uk: "Повернути кошти за замовлення із самовивозом і пояснити, чому доставку поки не можна."
+  ru: "Вернуть деньги за заказ с самовывозом и объяснить, почему доставку пока нельзя."
 steps:
   - key: 1
     anchor: order.refund
@@ -27,10 +29,12 @@ steps:
       sq: "Kthe paratë"
       en: "Refund"
       uk: "Повернути кошти"
+      ru: "Вернуть деньги"
     caption:
       sq: "Nga detajet e porosisë. Sot kthimi punon për porositë me marrje në lokal; për dërgesat do të vijë më vonë."
       en: "From the order’s detail. Today refunds work for pickup orders; deliveries come later."
       uk: "З деталей замовлення. Зараз повернення працює для самовивозу; для доставок — згодом."
+      ru: "Из деталей заказа. Сейчас возврат работает для самовывоза; для доставок — позже."
   - key: 2
     anchor: order.moneyBack
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Çfarë u kthye"
       en: "What was paid back"
       uk: "Що повернуто"
+      ru: "Что возвращено"
     caption:
       sq: "Kthimet e mëparshme të kësaj porosie."
       en: "Earlier refunds on this order."
       uk: "Попередні повернення за цим замовленням."
+      ru: "Предыдущие возвраты по этому заказу."
   - key: 3
     anchor: refund.reason
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Arsyeja"
       en: "The reason"
       uk: "Причина"
+      ru: "Причина"
     caption:
       sq: "Zgjidhni pse — shkon në raportin e përjashtimeve."
       en: "Choose why — it goes into the exceptions report."
       uk: "Оберіть чому — це потрапляє у звіт винятків."
+      ru: "Выберите почему — это попадает в отчёт исключений."
   - key: 4
     anchor: refund.note
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Shënim"
       en: "A note"
       uk: "Примітка"
+      ru: "Примечание"
     caption:
       sq: "Disa fjalë më shumë, nëse duhen."
       en: "A few more words, if needed."
       uk: "Кілька слів більше, якщо треба."
+      ru: "Несколько слов больше, если нужно."
   - key: 5
     anchor: refund.go
     pending: no
@@ -88,7 +98,9 @@ steps:
       sq: "Konfirmoni"
       en: "Confirm"
       uk: "Підтвердіть"
+      ru: "Подтвердите"
     caption:
       sq: "Kthimi regjistrohet me emrin tuaj dhe orën."
       en: "The refund is recorded with your name and the time."
       uk: "Повернення записується з вашим ім’ям і часом."
+      ru: "Возврат записывается с вашим именем и временем."

@@ -86,6 +86,7 @@ fn processor(id: &str) -> Option<(&'static str, &'static str)> {
 
 pub const EN: Words = Words {
     lang: "en",
+    draft: "",
     title: "Privacy notice",
     version: "Version",
     who_h: "Who is responsible",

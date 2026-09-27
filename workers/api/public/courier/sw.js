@@ -24,7 +24,7 @@
 // Bumped 2026-09-24 (b): courier.css changed (the --st-* status colours were
 // restored) and the lessons engine (/lib/learn.js + its sheet) joined the graph;
 // a cache under the old name would keep serving the old sheet offline.
-const SHELL_CACHE = 'dowiz-courier-shell-2026-09-26-body';
+const SHELL_CACHE = 'dowiz-courier-shell-2026-09-27-ru';
 const SHELL = [
   '/courier/',
   '/courier/app.js',
@@ -51,6 +51,7 @@ const SHELL = [
   '/lib/outbox.js',
   '/lib/body.js',
   '/lib/voice.js',
+  '/lib/langs.js',
   '/store/storage.js',
   '/lib/icons.css',
   '/lib/tokens.css',

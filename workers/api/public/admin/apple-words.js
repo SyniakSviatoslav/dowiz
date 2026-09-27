@@ -5,7 +5,7 @@
 // only the language files beside it, so node and the browser load the same.
 //
 // Three tables:
-//   WORDS     sq/en/uk (one file per language, apple-words-<lang>.js) -- purpose lines (ap_h_*), examples (ap_ex_*), footers
+//   WORDS     every language (one file per language, apple-words-<lang>.js) -- purpose lines (ap_h_*), examples (ap_ex_*), footers
 //             (ap_f_*), consequences of a destructive act (ap_why_*), labels
 //             that were missing (ap_l_*). A language the console gains later
 //             is one more key here; the merge fills its gaps from English.
@@ -20,9 +20,10 @@
 import { SQ } from './apple-words-sq.js';
 import { EN } from './apple-words-en.js';
 import { UK } from './apple-words-uk.js';
+import { RU } from './apple-words-ru.js';
 
 /// The languages, by code. A fourth is one more import and one more key.
-export const WORDS = { sq: SQ, en: EN, uk: UK };
+export const WORDS = { sq: SQ, en: EN, uk: UK, ru: RU };
 
 /// Field id or label key -> the example's word key. Ids first (a `name` is a
 /// courier on one sheet and a dish on another), keys as the fallback.

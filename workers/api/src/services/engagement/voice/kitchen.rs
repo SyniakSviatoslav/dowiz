@@ -65,33 +65,33 @@ pub enum Said {
     Unclear(&'static str),
 }
 
-const RECEIVE: &[&str] = &["received", "receive", "arrived", "delivery", "прийшло", "прийшов", "прийшла", "прихід", "надійшло", "erdhi", "erdhën", "mbërriti", "mberriti", "pranova", "pranim"];
-const WASTE: &[&str] = &["waste", "wasted", "binned", "write", "списати", "спиши", "списання", "викинути", "викинули", "hidh", "hodhëm", "hodhem", "shkruaj", "humbje"];
-const SHOW: &[&str] = &["show", "go", "open", "покажи", "показати", "відкрий", "перейди", "trego", "hap", "shko"];
+const RECEIVE: &[&str] = &["received", "receive", "arrived", "delivery", "прийшло", "прийшов", "прийшла", "прихід", "надійшло", "пришло", "пришёл", "пришел", "пришла", "приход", "поступило", "erdhi", "erdhën", "mbërriti", "mberriti", "pranova", "pranim"];
+const WASTE: &[&str] = &["waste", "wasted", "binned", "write", "списати", "спиши", "списання", "викинути", "викинули", "списать", "списание", "выбросить", "выбросили", "hidh", "hodhëm", "hodhem", "shkruaj", "humbje"];
+const SHOW: &[&str] = &["show", "go", "open", "покажи", "показати", "відкрий", "перейди", "показать", "открой", "перейти", "trego", "hap", "shko"];
 /// Screens a "show me" reaches, the words for each, and the capabilities that
 /// open each (any one). Ingredients and stock are ONE screen (operator,
 /// 2026-09-26), so both words land on `stock`.
 const SCREENS: &[(&str, &[&str], &[Cap])] = &[
     ("kitchen", &["kitchen", "board", "tickets", "кухня", "кухню", "чеки", "kuzhina", "kuzhinën", "kuzhinen"], &[Cap::Advance]),
-    ("menu", &["menu", "dishes", "меню", "страви", "menuja", "menunë", "menune", "pjatat"], &[Cap::Catalog]),
-    ("stock", &["stock", "shelf", "ingredients", "склад", "інгредієнти", "магазин", "magazina", "magazinën", "magazinen", "përbërësit", "përbërës", "ingredient", "інгредієнтів"], &[Cap::Stock, Cap::Catalog]),
+    ("menu", &["menu", "dishes", "меню", "страви", "блюда", "menuja", "menunë", "menune", "pjatat"], &[Cap::Catalog]),
+    ("stock", &["stock", "shelf", "ingredients", "склад", "інгредієнти", "магазин", "magazina", "magazinën", "magazinen", "përbërësit", "përbërës", "ingredient", "інгредієнтів", "ингредиенты", "ингредиентов"], &[Cap::Stock, Cap::Catalog]),
 ];
 /// The five waste reasons (`dowiz_hub::stock::WasteReason`), by the words for each.
 const REASONS: &[(&str, &[&str])] = &[
-    ("spoiled", &["spoiled", "spoilt", "зіпсувалось", "зіпсувався", "зіпсувалася", "зіпсоване", "prishur", "prishet"]),
-    ("dropped", &["dropped", "fell", "впало", "впав", "упало", "уронили", "rrëzua", "rrezua", "ra"]),
-    ("unsold", &["unsold", "leftover", "непродане", "залишок", "pashitur", "mbeti"]),
-    ("returned", &["returned", "return", "повернули", "повернення", "kthyer", "ktheu"]),
-    ("staff_meal", &["staff", "персонал", "персоналу", "stafi", "stafit"]),
+    ("spoiled", &["spoiled", "spoilt", "зіпсувалось", "зіпсувався", "зіпсувалася", "зіпсоване", "испортилось", "испортился", "испортилась", "испорчено", "prishur", "prishet"]),
+    ("dropped", &["dropped", "fell", "впало", "впав", "упало", "уронили", "упал", "упала", "rrëzua", "rrezua", "ra"]),
+    ("unsold", &["unsold", "leftover", "непродане", "залишок", "непроданное", "остаток", "pashitur", "mbeti"]),
+    ("returned", &["returned", "return", "повернули", "повернення", "вернули", "возврат", "kthyer", "ktheu"]),
+    ("staff_meal", &["staff", "персонал", "персоналу", "персонала", "stafi", "stafit"]),
 ];
 /// Unit words: `(word, base unit, factor to the base)`.
 const UNITS: &[(&str, &str, i64)] = &[
-    ("g", "g", 1), ("gr", "g", 1), ("gram", "g", 1), ("grams", "g", 1), ("г", "g", 1), ("грам", "g", 1), ("грамів", "g", 1), ("gramë", "g", 1),
-    ("kg", "g", 1000), ("kilo", "g", 1000), ("кг", "g", 1000), ("кілограм", "g", 1000), ("кілограмів", "g", 1000),
-    ("ml", "ml", 1), ("мл", "ml", 1), ("l", "ml", 1000), ("litre", "ml", 1000), ("liter", "ml", 1000), ("л", "ml", 1000), ("літр", "ml", 1000), ("litër", "ml", 1000),
+    ("g", "g", 1), ("gr", "g", 1), ("gram", "g", 1), ("grams", "g", 1), ("г", "g", 1), ("грам", "g", 1), ("грамів", "g", 1), ("грамм", "g", 1), ("грамма", "g", 1), ("граммов", "g", 1), ("gramë", "g", 1),
+    ("kg", "g", 1000), ("kilo", "g", 1000), ("кг", "g", 1000), ("кілограм", "g", 1000), ("кілограмів", "g", 1000), ("килограмм", "g", 1000), ("килограмма", "g", 1000), ("килограммов", "g", 1000),
+    ("ml", "ml", 1), ("мл", "ml", 1), ("l", "ml", 1000), ("litre", "ml", 1000), ("liter", "ml", 1000), ("л", "ml", 1000), ("літр", "ml", 1000), ("литр", "ml", 1000), ("литра", "ml", 1000), ("литров", "ml", 1000), ("litër", "ml", 1000),
     ("pcs", "unit", 1), ("pieces", "unit", 1), ("шт", "unit", 1), ("штук", "unit", 1), ("copë", "unit", 1), ("cope", "unit", 1),
 ];
-const FILLER: &[&str] = &["off", "me", "the", "a", "of", "please", "мені", "будь", "ласка", "мене", "на", "të", "te", "nga", "ju", "lutem", "из", "з", "із"];
+const FILLER: &[&str] = &["off", "me", "the", "a", "of", "please", "мені", "будь", "ласка", "мене", "на", "të", "te", "nga", "ju", "lutem", "из", "з", "із", "мне", "пожалуйста"];
 /// The most a spoken movement may carry: a large delivery, not a typo.
 pub const QTY_MAX: i64 = 1_000_000;
 

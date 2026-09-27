@@ -11,10 +11,12 @@ title:
   sq: "Ndiqni porosinë"
   en: "Track the order"
   uk: "Відстежуйте замовлення"
+  ru: "Отслеживайте заказ"
 goal:
   sq: "Dini ku është porosia dhe kur arrin."
   en: "Know where the order is and when it arrives."
   uk: "Знати, де замовлення і коли воно прибуде."
+  ru: "Знать, где заказ и когда он прибудет."
 steps:
   - key: 1
     anchor: nav.orders
@@ -27,10 +29,12 @@ steps:
       sq: "Porositë"
       en: "Orders"
       uk: "Замовлення"
+      ru: "Заказы"
     caption:
       sq: "Skeda e porosive tuaja."
       en: "The tab with your orders."
       uk: "Вкладка з вашими замовленнями."
+      ru: "Вкладка с вашими заказами."
   - key: 2
     anchor: orders.row
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Porositë tuaja"
       en: "Your orders"
       uk: "Ваші замовлення"
+      ru: "Ваши заказы"
     caption:
       sq: "Porositë e bëra nga ky telefon; prekni njërën për ta ndjekur."
       en: "Orders placed from this phone; tap one to follow it."
       uk: "Замовлення з цього телефона; торкніться одного, щоб стежити."
+      ru: "Заказы с этого телефона; коснитесь одного, чтобы следить."
   - key: 3
     anchor: track.status
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Gjendja"
       en: "The status"
       uk: "Статус"
+      ru: "Статус"
     caption:
       sq: "Pranuar, po përgatitet, gati, në rrugë, dorëzuar."
       en: "Accepted, preparing, ready, on the way, delivered."
       uk: "Прийнято, готується, готово, в дорозі, доставлено."
+      ru: "Принят, готовится, готов, в пути, доставлен."
   - key: 4
     anchor: track.eta
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Koha e mbërritjes"
       en: "Arrival time"
       uk: "Час прибуття"
+      ru: "Время прибытия"
     caption:
       sq: "E njëjta kohë që sheh korrieri, e rifreskuar gjatë rrugës."
       en: "The same time the courier sees, updated on the way."
       uk: "Той самий час, що бачить кур’єр, оновлюється дорогою."
+      ru: "То же время, что видит курьер, обновляется в пути."
   - key: 5
     anchor: track.map
     pending: no
@@ -87,10 +97,12 @@ steps:
       sq: "Harta"
       en: "The map"
       uk: "Мапа"
+      ru: "Карта"
     caption:
       sq: "Ku është korrieri tani."
       en: "Where the courier is now."
       uk: "Де зараз кур’єр."
+      ru: "Где сейчас курьер."
   - key: 6
     anchor: track.feedback
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Si shkoi?"
       en: "How was it?"
       uk: "Як усе пройшло?"
+      ru: "Как всё прошло?"
     caption:
       sq: "Pas dorëzimit, disa fjalë për lokalin."
       en: "After delivery, a few words for the venue."
       uk: "Після доставки — кілька слів для закладу."
+      ru: "После доставки — несколько слов для заведения."
   - key: 7
     anchor: track.feedbackSend
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "Dërgo"
       en: "Send"
       uk: "Надіслати"
+      ru: "Отправить"
     caption:
       sq: "Lokali e lexon."
       en: "The venue reads it."
       uk: "Заклад це прочитає."
+      ru: "Заведение это прочитает."
   - key: 8
     anchor: track.done
     pending: no
@@ -133,7 +149,9 @@ steps:
       sq: "Mbyll"
       en: "Done"
       uk: "Готово"
+      ru: "Готово"
     caption:
       sq: "Mbyll ndjekjen."
       en: "Closes the tracking."
       uk: "Закриває відстеження."
+      ru: "Закрывает отслеживание."

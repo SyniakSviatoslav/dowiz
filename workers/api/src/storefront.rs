@@ -317,8 +317,14 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
         .map(|(_, v)| v.to_string())
         .unwrap_or_else(|| loc.default_locale.clone());
 
-    let mut i18n: std::collections::HashMap<(String, String), String> =
+    // `(rank, text)`: rank 0 is the language asked for, rank 1 its fallback.
+    let mut i18n: std::collections::HashMap<(String, String), (u8, String)> =
         std::collections::HashMap::new();
+    // A customer missing a Russian name reads the English one (`ru -> en ->
+    // venue`). The console's `fresh` read does NOT: it fills the dish sheet's
+    // translation fields from this answer, and an English name shown in the
+    // RU field would be saved back as the Russian translation.
+    let second = if fresh { None } else { dowiz_hub::lang::content_fallback(&want_locale, &loc.default_locale) };
     // What could not be translated and why. A failure here must not take the
     // menu down -- the venue's own words are still a menu -- but it must not
     // look like "no translations exist" either, which is exactly how 146
@@ -341,7 +347,6 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
         // the whole language is one sorted range. What is read is whatever the
         // catalogue actually has, which is also why the ids are no longer built
         // and passed at all.
-        let want = format!("{want_locale}/");
         match crate::hubstore::load_table(
             &place,
             crate::hubstore::IMAGE_I18N,
@@ -351,18 +356,7 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
         {
             Ok(l) => {
                 for (key, value) in l.table.all(crate::hubstore::I18N_KIND) {
-                    // `<locale>/<entity_type>/<entity_id>/<field>`
-                    let Some(rest) = key.strip_prefix(&want) else { continue };
-                    let mut parts = rest.splitn(3, '/');
-                    let (_entity_type, id, field) =
-                        match (parts.next(), parts.next(), parts.next()) {
-                            (Some(a), Some(b), Some(c)) => (a, b, c),
-                            _ => continue,
-                        };
-                    if !matches!(field, "name" | "description" | "ingredients") {
-                        continue;
-                    }
-                    i18n.insert((id.to_string(), field.to_string()), value);
+                    i18n_keep(&mut i18n, &key, value, &want_locale, second);
                 }
             }
             // A failure here must not take the menu down -- the venue's own
@@ -381,7 +375,7 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
     }
     let translated = |id: &str, field: &str, fallback: Value| -> Value {
         match i18n.get(&(id.to_string(), field.to_string())) {
-            Some(v) => json!(v),
+            Some((_, v)) => json!(v),
             None => fallback,
         }
     };
@@ -391,7 +385,7 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
     let translated_list = |id: &str, field: &str, fallback: Value| -> Value {
         match i18n
             .get(&(id.to_string(), field.to_string()))
-            .and_then(|v| serde_json::from_str::<Value>(v).ok())
+            .and_then(|(_, v)| serde_json::from_str::<Value>(v).ok())
         {
             Some(Value::Array(a)) if a.iter().all(|x| x.is_string()) => Value::Array(a),
             _ => fallback,
@@ -733,6 +727,31 @@ const MANIFEST_DEFAULT_PAPER: &str = "#fbfaf8";
 /// is the longest run of WHOLE words that fits ("Dubin", not "Dubin & Sush"),
 /// and the first word cut only when even that is too long.
 const MANIFEST_SHORT_NAME_CHARS: usize = 12;
+/// One `<locale>/<entity_type>/<entity_id>/<field>` row of the venue's i18n
+/// table into the menu's `(id, field) -> (rank, text)` map: a menu field in
+/// `want` (rank 0) always wins, one in `second` (rank 1) only fills a gap.
+/// The table walks its keys sorted, so "en/" comes before "ru/" and the rank,
+/// not the order, decides.
+fn i18n_keep(
+    map: &mut std::collections::HashMap<(String, String), (u8, String)>,
+    key: &str,
+    value: String,
+    want: &str,
+    second: Option<&str>,
+) {
+    let Some((lang, rest)) = key.split_once('/') else { return };
+    let rank = if lang == want { 0 } else if Some(lang) == second { 1 } else { return };
+    let mut parts = rest.splitn(3, '/');
+    let (Some(_entity), Some(id), Some(field)) = (parts.next(), parts.next(), parts.next()) else { return };
+    if !matches!(field, "name" | "description" | "ingredients") {
+        return;
+    }
+    let k = (id.to_string(), field.to_string());
+    if map.get(&k).map_or(true, |(r, _)| rank < *r) {
+        map.insert(k, (rank, value));
+    }
+}
+
 fn short_name(name: &str) -> String {
     if name.chars().count() <= MANIFEST_SHORT_NAME_CHARS {
         return name.to_string();

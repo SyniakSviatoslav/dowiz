@@ -11,10 +11,12 @@ title:
   sq: "Ushqim i kthyer dhe eksporti CSV"
   en: "Food back and CSV export"
   uk: "Повернення їжі та експорт CSV"
+  ru: "Возврат еды и экспорт CSV"
 goal:
   sq: "Vendosni çfarë bëhet me një porosi të kthyer dhe eksportoni një ditë."
   en: "Decide what happens to an order that came back, and export a day."
   uk: "Вирішити, що робити з поверненим замовленням, і експортувати день."
+  ru: "Решить, что делать с возвращённым заказом, и экспортировать день."
 steps:
   - key: 1
     anchor: order.copy
@@ -27,10 +29,12 @@ steps:
       sq: "Printo"
       en: "Print"
       uk: "Друк"
+      ru: "Печать"
     caption:
       sq: "Një kopje e fletës së porosisë për kuzhinën."
       en: "A copy of the order ticket for the kitchen."
       uk: "Копія чека замовлення для кухні."
+      ru: "Копия чека заказа для кухни."
   - key: 2
     anchor: order.resell
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Rishite"
       en: "Resell"
       uk: "Перепродати"
+      ru: "Перепродать"
     caption:
       sq: "Ushqimi u kthye i paprekur: kthehet në stok dhe mund të shitet sërish."
       en: "The food came back untouched: it returns to stock and can be sold again."
       uk: "Їжу повернули неторканою: вона повертається до запасів і її можна продати знову."
+      ru: "Еду вернули нетронутой: она возвращается в запасы, и её можно продать снова."
   - key: 3
     anchor: order.waste
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Hidhe"
       en: "Waste it"
       uk: "Списати"
+      ru: "Списать"
     caption:
       sq: "Nuk shitet dot më: regjistrohet si humbje."
       en: "It cannot be sold any more: it is recorded as waste."
       uk: "Продати вже не можна: записується як списання."
+      ru: "Продать уже нельзя: записывается как списание."
   - key: 4
     anchor: orders.csv
     pending: no
@@ -72,7 +80,9 @@ steps:
       sq: "Eksporto CSV"
       en: "Export CSV"
       uk: "Експорт CSV"
+      ru: "Экспорт CSV"
     caption:
       sq: "Porositë si skedar, për kontabilistin."
       en: "The orders as a file, for the accountant."
       uk: "Замовлення файлом — для бухгалтера."
+      ru: "Заказы файлом — для бухгалтера."

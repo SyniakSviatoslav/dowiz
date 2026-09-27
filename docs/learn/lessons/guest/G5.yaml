@@ -11,10 +11,12 @@ title:
   sq: "Rezervoni një tavolinë"
   en: "Book a table"
   uk: "Забронюйте стіл"
+  ru: "Забронируйте стол"
 goal:
   sq: "Rezervoni një tavolinë për një ditë, orë dhe numër personash."
   en: "Book a table for a day, a time and a party size."
   uk: "Забронювати стіл на день, час і кількість гостей."
+  ru: "Забронировать стол на день, время и число гостей."
 steps:
   - key: 1
     anchor: nav.book
@@ -27,10 +29,12 @@ steps:
       sq: "Rezervo"
       en: "Book"
       uk: "Бронювання"
+      ru: "Бронирование"
     caption:
       sq: "Skeda e rezervimeve."
       en: "The booking tab."
       uk: "Вкладка бронювання."
+      ru: "Вкладка бронирования."
   - key: 2
     anchor: booking.day
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Dita"
       en: "The day"
       uk: "День"
+      ru: "День"
     caption:
       sq: "Zgjidhni ditën."
       en: "Choose the day."
       uk: "Оберіть день."
+      ru: "Выберите день."
   - key: 3
     anchor: booking.zone
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Zona"
       en: "The area"
       uk: "Зона"
+      ru: "Зона"
     caption:
       sq: "Brenda, tarracë ose bar — nëse lokali i ka."
       en: "Inside, terrace or bar — if the venue has them."
       uk: "Усередині, тераса чи бар — якщо вони є в закладі."
+      ru: "Внутри, терраса или бар — если они есть в заведении."
   - key: 4
     anchor: booking.time
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Ora"
       en: "The time"
       uk: "Час"
+      ru: "Время"
     caption:
       sq: "Vetëm orët kur ka vend."
       en: "Only the times with room."
       uk: "Лише час, коли є місця."
+      ru: "Только время, когда есть места."
   - key: 5
     anchor: booking.table
     pending: no
@@ -87,10 +97,12 @@ steps:
       sq: "Tavolina"
       en: "The table"
       uk: "Стіл"
+      ru: "Стол"
     caption:
       sq: "Nëse lokali e lejon, zgjidhni tavolinën në plan."
       en: "If the venue allows it, pick the table on the plan."
       uk: "Якщо заклад дозволяє, оберіть стіл на плані."
+      ru: "Если заведение позволяет, выберите стол на плане."
   - key: 6
     anchor: booking.party
     pending: no
@@ -102,10 +114,12 @@ steps:
       sq: "Sa veta"
       en: "How many"
       uk: "Скільки гостей"
+      ru: "Сколько гостей"
     caption:
       sq: "Numri i personave."
       en: "The number of people."
       uk: "Кількість людей."
+      ru: "Число людей."
   - key: 7
     anchor: booking.name
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "Emri"
       en: "Name"
       uk: "Ім’я"
+      ru: "Имя"
     caption:
       sq: "Me këtë emër ju pret lokali."
       en: "The name the venue expects you under."
       uk: "Ім’я, на яке вас чекає заклад."
+      ru: "Имя, на которое вас ждёт заведение."
   - key: 8
     anchor: booking.phone
     pending: no
@@ -134,10 +150,12 @@ steps:
       sq: "Telefoni"
       en: "Phone"
       uk: "Телефон"
+      ru: "Телефон"
     caption:
       sq: "Që lokali t’ju konfirmojë ose t’ju njoftojë."
       en: "So the venue can confirm or let you know."
       uk: "Щоб заклад міг підтвердити або повідомити вас."
+      ru: "Чтобы заведение могло подтвердить или сообщить вам."
   - key: 9
     anchor: booking.submit
     pending: no
@@ -149,10 +167,12 @@ steps:
       sq: "Rezervo"
       en: "Book"
       uk: "Забронювати"
+      ru: "Забронировать"
     caption:
       sq: "Rezervimi pret konfirmimin e lokalit."
       en: "The booking waits for the venue’s confirmation."
       uk: "Бронювання чекає підтвердження закладу."
+      ru: "Бронирование ждёт подтверждения заведения."
   - key: 10
     anchor: booking.mine
     pending: no
@@ -164,10 +184,12 @@ steps:
       sq: "Rezervimet tuaja"
       en: "Your bookings"
       uk: "Ваші бронювання"
+      ru: "Ваши бронирования"
     caption:
       sq: "Këtu shihni kur konfirmohet."
       en: "Here you see when it is confirmed."
       uk: "Тут видно, коли його підтвердять."
+      ru: "Здесь видно, когда его подтвердят."
   - key: 11
     anchor: booking.share
     pending: no
@@ -179,10 +201,12 @@ steps:
       sq: "Ndaje"
       en: "Share"
       uk: "Поділитися"
+      ru: "Поделиться"
     caption:
       sq: "Dërgojani shoqërisë."
       en: "Send it to your party."
       uk: "Надішліть своїй компанії."
+      ru: "Отправьте своей компании."
   - key: 12
     anchor: booking.cancel
     pending: no
@@ -194,7 +218,9 @@ steps:
       sq: "Anulo"
       en: "Cancel"
       uk: "Скасувати"
+      ru: "Отменить"
     caption:
       sq: "Nëse nuk vini dot, anulojeni që tavolina të lirohet."
       en: "If you cannot come, cancel so the table is freed."
       uk: "Якщо не зможете прийти, скасуйте, щоб стіл звільнився."
+      ru: "Если не сможете прийти, отмените, чтобы стол освободился."

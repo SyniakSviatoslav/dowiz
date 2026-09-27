@@ -11,10 +11,12 @@ title:
   sq: "Kategoritë dhe pjatat e reja"
   en: "Categories and new dishes"
   uk: "Категорії та нові страви"
+  ru: "Категории и новые блюда"
 goal:
   sq: "Krijoni një kategori dhe vendosni në shitje një pjatë të re."
   en: "Create a category and put a new dish on sale."
   uk: "Створити категорію й виставити в продаж нову страву."
+  ru: "Создать категорию и выставить в продажу новое блюдо."
 steps:
   - key: 1
     anchor: nav.menu
@@ -27,10 +29,12 @@ steps:
       sq: "Menuja"
       en: "Menu"
       uk: "Меню"
+      ru: "Меню"
     caption:
       sq: "Kategoritë dhe pjatat, siç i shohin klientët."
       en: "Categories and dishes, as customers see them."
       uk: "Категорії та страви — так, як їх бачать клієнти."
+      ru: "Категории и блюда — так, как их видят клиенты."
   - key: 2
     anchor: menu.categories
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Kategoritë"
       en: "Categories"
       uk: "Категорії"
+      ru: "Категории"
     caption:
       sq: "Rendi këtu është rendi në faqe."
       en: "The order here is the order on the site."
       uk: "Порядок тут — це порядок на сайті."
+      ru: "Порядок здесь — это порядок на сайте."
   - key: 3
     anchor: menu.category
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Një kategori"
       en: "A category"
       uk: "Категорія"
+      ru: "Категория"
     caption:
       sq: "Prekeni për ta riemërtuar ose hequr."
       en: "Tap it to rename or remove it."
       uk: "Торкніться, щоб перейменувати чи прибрати."
+      ru: "Коснитесь, чтобы переименовать или убрать."
   - key: 4
     anchor: category.name
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Emri"
       en: "The name"
       uk: "Назва"
+      ru: "Название"
     caption:
       sq: "Emri që sheh klienti."
       en: "The name the customer sees."
       uk: "Назва, яку бачить клієнт."
+      ru: "Название, которое видит клиент."
   - key: 5
     anchor: category.save
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Ndryshimi del menjëherë në faqe."
       en: "The change is on the site at once."
       uk: "Зміна одразу з’являється на сайті."
+      ru: "Изменение сразу появляется на сайте."
   - key: 6
     anchor: category.remove
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Hiqe"
       en: "Remove"
       uk: "Прибрати"
+      ru: "Убрать"
     caption:
       sq: "Vetëm një kategori bosh hiqet."
       en: "Only an empty category can be removed."
       uk: "Прибрати можна лише порожню категорію."
+      ru: "Убрать можно только пустую категорию."
   - key: 7
     anchor: menu.newCategory
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "Kategori e re"
       en: "New category"
       uk: "Нова категорія"
+      ru: "Новая категория"
     caption:
       sq: "Shkruani emrin…"
       en: "Type its name…"
       uk: "Введіть назву…"
+      ru: "Введите название…"
   - key: 8
     anchor: menu.addCategory
     pending: no
@@ -133,10 +149,12 @@ steps:
       sq: "Shtoje"
       en: "Add it"
       uk: "Додати"
+      ru: "Добавить"
     caption:
       sq: "…dhe shtojeni në fund."
       en: "…and add it at the end."
       uk: "…і додайте в кінець."
+      ru: "…и добавьте в конец."
   - key: 9
     anchor: menu.sort
     pending: no
@@ -148,10 +166,12 @@ steps:
       sq: "Renditja"
       en: "Order"
       uk: "Порядок"
+      ru: "Порядок"
     caption:
       sq: "Lëvizni kategoritë lart e poshtë."
       en: "Move categories up and down."
       uk: "Пересувайте категорії вгору й униз."
+      ru: "Передвигайте категории вверх и вниз."
   - key: 10
     anchor: menu.addDish
     pending: no
@@ -163,10 +183,12 @@ steps:
       sq: "Pjatë e re"
       en: "New dish"
       uk: "Нова страва"
+      ru: "Новое блюдо"
     caption:
       sq: "Tre gjëra mjaftojnë për ta vendosur në shitje."
       en: "Three things are enough to put it on sale."
       uk: "Трьох речей досить, щоб виставити її в продаж."
+      ru: "Трёх вещей достаточно, чтобы выставить его в продажу."
   - key: 11
     anchor: newDish.name
     pending: no
@@ -179,10 +201,12 @@ steps:
       sq: "Emri"
       en: "The name"
       uk: "Назва"
+      ru: "Название"
     caption:
       sq: "Përkthimet i shtoni më vonë."
       en: "You add the translations later."
       uk: "Переклади додасте пізніше."
+      ru: "Переводы добавите позже."
   - key: 12
     anchor: newDish.category
     pending: no
@@ -194,10 +218,12 @@ steps:
       sq: "Kategoria"
       en: "The category"
       uk: "Категорія"
+      ru: "Категория"
     caption:
       sq: "Ku shfaqet në menu."
       en: "Where it shows on the menu."
       uk: "Де вона з’явиться в меню."
+      ru: "Где оно появится в меню."
   - key: 13
     anchor: newDish.price
     pending: no
@@ -210,10 +236,12 @@ steps:
       sq: "Çmimi"
       en: "The price"
       uk: "Ціна"
+      ru: "Цена"
     caption:
       sq: "Në lekë."
       en: "In lek."
       uk: "У леках."
+      ru: "В леках."
   - key: 14
     anchor: newDish.save
     pending: no
@@ -225,7 +253,9 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Pjata është në shitje."
       en: "The dish is on sale."
       uk: "Страва в продажу."
+      ru: "Блюдо в продаже."

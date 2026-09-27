@@ -3,13 +3,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { planOf, needsReason, lineOf, assistPath, ORDER_VERBS, STATES } from './voice-plan.js';
+import { LANGS } from '../lib/langs.js';
 
 // The console's words, read as TEXT: i18n.js imports storage by an absolute
 // URL node cannot load.
+// Russian lives in its own file (admin/i18n-ru.js), read whole.
 const SRC = readFileSync(new URL('./i18n.js', import.meta.url), 'utf8');
+const RU_SRC = readFileSync(new URL('./i18n-ru.js', import.meta.url), 'utf8');
 const at = l => SRC.indexOf(`  ${l}: {`);
-const block = l => SRC.slice(at(l), l === 'uk' ? SRC.indexOf('\n};', at(l)) : SRC.indexOf('\n  },', at(l)));
-const T = Object.fromEntries(['sq', 'en', 'uk'].map(l => [l, Object.fromEntries([...block(l).matchAll(/(\w+):'([^']*)'/g)].map(m => [m[1], m[2]]))]));
+const block = l => l === 'ru' ? RU_SRC : SRC.slice(at(l), SRC.indexOf('\n  },', at(l)));
+const T = Object.fromEntries(LANGS.map(l => [l, Object.fromEntries([...block(l).matchAll(/(\w+):'([^']*)'/g)].map(m => [m[1], m[2]]))]));
 const t = k => T.en[k] ?? k;
 
 test('voice: a confirmed order verb is the action the console\'s button posts', () => {
@@ -51,11 +54,10 @@ test('voice: "how many are waiting" is answered at once, anything else is not a 
   assert.equal(lineOf(null, t), null);
 });
 
-test('voice: every word the mic uses is in all three languages', () => {
+test('voice: every word the mic uses is in every language', () => {
   for (const k of ['voice', 'voiceConfirm', 'voiceStatus', 'voiceDenied', 'voiceOffline', 'voiceAsking', 'voiceFailed']) {
-    for (const l of ['sq', 'en', 'uk']) assert.ok(T[l][k], `${l}.${k}`);
-    assert.notEqual(T.sq[k], T.en[k], k);
-    assert.notEqual(T.uk[k], T.en[k], k);
+    for (const l of LANGS) assert.ok(T[l][k], `${l}.${k}`);
+    for (const l of LANGS.filter(l => l !== 'en')) assert.notEqual(T[l][k], T.en[k], `${l}.${k}`);
   }
 });
 

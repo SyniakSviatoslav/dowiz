@@ -5,7 +5,9 @@
 //   #/<lang>/<role>                       one track (owner | waiter | courier | guest)
 //   #/<lang>/<role>/<id>                  a lesson (what lib/learn.js links to)
 //   #/<lang>/<role>/<module>/<id>         the same, with the module the blueprint names
-export const LANGS = ['sq', 'en', 'uk'];
+import { LANGS, pickLang as pickFirst } from '../lib/langs.js';
+
+export { LANGS };
 export const ROLES = ['owner', 'waiter', 'courier', 'guest'];
 const ID = /^[A-Z][0-9]+[a-z]?$/;
 
@@ -22,6 +24,10 @@ export const T = {
     search: 'Пошук уроку', video: 'Відео', noVideo: 'Відео незабаром', steps: 'Кроки', goal: 'Мета',
     open: 'Відкрити в застосунку', back: 'Назад', none: 'Жоден урок не підходить.', writes: 'Змінює реальні дані',
     loading: 'Завантаження…', failed: 'Уроки не завантажилися.', notFound: 'Такого уроку немає.', subs: 'Субтитри', signIn: 'Увійдіть у застосунок, щоб дивитися відео.' },
+  ru: { title: 'Уроки', owner: 'Владелец', waiter: 'Официант', courier: 'Курьер', guest: 'Гость', all: 'Все',
+    search: 'Поиск урока', video: 'Видео', noVideo: 'Видео скоро', steps: 'Шаги', goal: 'Цель',
+    open: 'Открыть в приложении', back: 'Назад', none: 'Ни один урок не подходит.', writes: 'Меняет реальные данные',
+    loading: 'Загрузка…', failed: 'Уроки не загрузились.', notFound: 'Такого урока нет.', subs: 'Субтитры', signIn: 'Войдите в приложение, чтобы смотреть видео.' },
 };
 
 /// '#/uk/waiter/W3' -> { lang, role, id }. Unknown parts fall back, never throw.
@@ -43,10 +49,7 @@ const APP = { owner: '/admin/', waiter: '/room/', courier: '/courier/', guest: '
 export const appLink = (role, id) => `${APP[role] || '/'}#learn=${encodeURIComponent(id)}`;
 
 /// The first language the reader already uses in one of the apps, else Albanian.
-export function pickLang(stored = [], nav = []) {
-  for (const v of [...stored, ...nav.map(n => String(n || '').slice(0, 2).toLowerCase())]) if (LANGS.includes(v)) return v;
-  return 'sq';
-}
+export const pickLang = (stored = [], nav = []) => pickFirst(stored, nav, 'sq');
 
 /// Words of a lesson in one language, lowercased, for the search.
 export function words(lesson, lang) {
@@ -66,7 +69,14 @@ export function search(lessons, q, lang) {
   }).filter(Boolean).sort((a, b) => b.score - a.score).map(x => x.l);
 }
 
-/// The three caption tracks, the page's language first and default.
+/// The film a reader watches: the cut in their language, else the English cut
+/// -- the films are not recorded in every UI language (Russian has none:
+/// operator 2026-09-26), and English is the one every reader was offered.
+export function cutFor(cuts, lang) {
+  return cuts?.[lang] || cuts?.en || null;
+}
+
+/// The caption tracks the cut has, the page's language first and default.
 export function tracks(cut, lang) {
   const order = [lang, ...LANGS.filter(l => l !== lang)];
   return order.filter(l => cut?.subs?.[l]).map(l => ({ lang: l, src: cut.subs[l], label: l.toUpperCase(), default: l === lang }));

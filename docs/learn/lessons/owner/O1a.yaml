@@ -11,10 +11,12 @@ title:
   sq: "Lexoni tabelën e porosive"
   en: "Read the order board"
   uk: "Читайте дошку замовлень"
+  ru: "Читайте доску заказов"
 goal:
   sq: "Dini çfarë do të thotë çdo gjendje dhe cila porosi ka nevojë për ju."
   en: "Say what each status means and which order needs a hand."
   uk: "Знати, що означає кожен статус і якому замовленню потрібна увага."
+  ru: "Знать, что означает каждый статус и какому заказу нужно внимание."
 steps:
   - key: 1
     anchor: nav.orders
@@ -27,10 +29,12 @@ steps:
       sq: "Porositë"
       en: "Orders"
       uk: "Замовлення"
+      ru: "Заказы"
     caption:
       sq: "Skeda e parë: çdo porosi e gjallë e lokalit, nga uebi, tavolinat dhe platformat."
       en: "The first tab: every live order of the venue, from the web, the tables and the platforms."
       uk: "Перша вкладка: кожне живе замовлення закладу — з сайту, зі столів і з платформ."
+      ru: "Первая вкладка: каждый живой заказ заведения — с сайта, со столов и с платформ."
   - key: 2
     anchor: orders.stats
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Shifrat e ditës"
       en: "Today in numbers"
       uk: "День у цифрах"
+      ru: "День в цифрах"
     caption:
       sq: "Sa porosi, sa para dhe sa presin tani — me një shikim."
       en: "How many orders, how much money and how many are waiting now — at a glance."
       uk: "Скільки замовлень, скільки грошей і скільки чекає зараз — з першого погляду."
+      ru: "Сколько заказов, сколько денег и сколько ждёт сейчас — с первого взгляда."
   - key: 3
     anchor: orders.mode
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Tani ose historia"
       en: "Live or history"
       uk: "Зараз чи історія"
+      ru: "Сейчас или история"
     caption:
       sq: "Porositë e hapura, ose ato që u mbyllën."
       en: "The open orders, or the ones already closed."
       uk: "Відкриті замовлення або вже закриті."
+      ru: "Открытые заказы или уже закрытые."
   - key: 4
     anchor: orders.search
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Kërkoni"
       en: "Search"
       uk: "Пошук"
+      ru: "Поиск"
     caption:
       sq: "Me numër, telefon ose rrugë."
       en: "By number, phone or street."
       uk: "За номером, телефоном чи вулицею."
+      ru: "По номеру, телефону или улице."
   - key: 5
     anchor: orders.board
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Tabela"
       en: "The board"
       uk: "Дошка"
+      ru: "Доска"
     caption:
       sq: "Kolonat ndjekin rrugën e porosisë: NË PRITJE → KONFIRMUAR → PO PËRGATITET → GATI → NË DËRGESË."
       en: "The columns follow an order’s path: PENDING → CONFIRMED → PREPARING → READY → IN DELIVERY."
       uk: "Колонки йдуть шляхом замовлення: ОЧІКУЄ → ПІДТВЕРДЖЕНО → ГОТУЄТЬСЯ → ГОТОВО → У ДОСТАВЦІ."
+      ru: "Колонки идут путём заказа: НОВЫЙ → ПРИНЯТ → ГОТОВИТСЯ → ГОТОВ → В ПУТИ."
   - key: 6
     anchor: orders.row
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Një porosi"
       en: "An order"
       uk: "Замовлення"
+      ru: "Заказы"
     caption:
       sq: "Numri, artikujt, shuma dhe sa kohë ka që pret. Prekeni për detajet."
       en: "Its number, items, total and how long it has waited. Tap it for the detail."
       uk: "Номер, позиції, сума й скільки воно чекає. Торкніться — відкриються деталі."
+      ru: "Номер, позиции, сумма и сколько он ждёт. Коснитесь — откроются детали."
   - key: 7
     anchor: orders.status
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "Gjendja"
       en: "The status"
       uk: "Статус"
+      ru: "Статус"
     caption:
       sq: "E njëjta fjalë që sheh klienti dhe korrieri."
       en: "The same word the customer and the courier see."
       uk: "Те саме слово, що бачать клієнт і кур’єр."
+      ru: "То же слово, что видят клиент и курьер."
   - key: 8
     anchor: orders.seen
     pending: no
@@ -133,10 +149,12 @@ steps:
       sq: "E pashë"
       en: "Seen"
       uk: "Побачив"
+      ru: "Увидел"
     caption:
       sq: "Ndal ziljen për një porosi që e keni parë, pa e lëvizur."
       en: "Stops the bell for an order you have seen, without moving it."
       uk: "Зупиняє дзвінок для замовлення, яке ви побачили, не змінюючи його."
+      ru: "Останавливает звонок для заказа, который вы увидели, не меняя его."
   - key: 9
     anchor: orders.more
     pending: no
@@ -148,10 +166,12 @@ steps:
       sq: "Më shumë"
       en: "More"
       uk: "Ще"
+      ru: "Ещё"
     caption:
       sq: "Në histori, ngarkon porositë më të vjetra."
       en: "In the history, loads older orders."
       uk: "В історії підвантажує старіші замовлення."
+      ru: "В истории подгружает более старые заказы."
   - key: 10
     anchor: header.state
     pending: no
@@ -163,10 +183,12 @@ steps:
       sq: "Gjendja e lokalit"
       en: "The venue’s state"
       uk: "Стан закладу"
+      ru: "Состояние заведения"
     caption:
       sq: "Klientët e shohin menjëherë në faqe."
       en: "Customers see it on the site at once."
       uk: "Клієнти одразу бачать це на сайті."
+      ru: "Клиенты сразу видят это на сайте."
   - key: 11
     anchor: state.open
     pending: no
@@ -178,10 +200,12 @@ steps:
       sq: "I hapur"
       en: "Open"
       uk: "Відкрито"
+      ru: "Открыто"
     caption:
       sq: "Porositë vijnë normalisht."
       en: "Orders come in as normal."
       uk: "Замовлення надходять як завжди."
+      ru: "Заказы поступают как обычно."
   - key: 12
     anchor: state.busy
     pending: no
@@ -193,10 +217,12 @@ steps:
       sq: "I zënë"
       en: "Busy"
       uk: "Зайнято"
+      ru: "Занято"
     caption:
       sq: "Klienti paralajmërohet për pritje më të gjatë."
       en: "Customers are warned of a longer wait."
       uk: "Клієнтів попереджають про довше очікування."
+      ru: "Клиентов предупреждают о более долгом ожидании."
   - key: 13
     anchor: state.closed
     pending: no
@@ -208,7 +234,9 @@ steps:
       sq: "I mbyllur"
       en: "Closed"
       uk: "Зачинено"
+      ru: "Закрыто"
     caption:
       sq: "Faqja nuk pranon porosi të reja."
       en: "The site accepts no new orders."
       uk: "Сайт не приймає нових замовлень."
+      ru: "Сайт не принимает новых заказов."

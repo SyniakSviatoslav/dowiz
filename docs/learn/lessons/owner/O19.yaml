@@ -13,10 +13,12 @@ title:
   sq: "Me zë"
   en: "By voice"
   uk: "Голосом"
+  ru: "Голосом"
 goal:
   sq: "Pranoni, refuzoni dhe hiqni pjata nga shitja pa prekur ekranin — gjithmonë me konfirmim."
   en: "Accept, reject and take dishes off sale without touching the screen — always with a confirm."
   uk: "Приймати, відхиляти й знімати страви з продажу, не торкаючись екрана, — завжди з підтвердженням."
+  ru: "Принимать, отклонять и снимать блюда с продажи, не касаясь экрана, — всегда с подтверждением."
 steps:
   - key: 1
     anchor: hud.voice
@@ -29,10 +31,12 @@ steps:
       sq: "Mikrofoni"
       en: "The microphone"
       uk: "Мікрофон"
+      ru: "Микрофон"
     caption:
       sq: "Prekeni dhe flisni. Porositë: «prano të fundit», «gati 4821», «refuzo 4821», «sa janë në pritje». Shfaqet vetëm aty ku shfletuesi e njeh zërin."
       en: "Tap it and speak. Orders: «accept the last one», «ready 4821», «reject 4821», «how many are waiting». It shows only where the browser can recognise speech."
       uk: "Торкніться й говоріть. Замовлення: «прийми останнє», «готово 4821», «відхили 4821», «скільки чекає». Видно лише там, де браузер розпізнає голос."
+      ru: "Коснитесь и говорите. Заказы: «прими последний», «готово 4821», «отклони 4821», «сколько ждёт». Видно только там, где браузер распознаёт голос."
   - key: 2
     anchor: voice.readback
     pending: no
@@ -44,10 +48,12 @@ steps:
       sq: "Çfarë u kuptua"
       en: "What was understood"
       uk: "Що зрозуміло"
+      ru: "Что понято"
     caption:
       sq: "Menyja dhe lokali: «hiq margaritën nga menuja», «rikthe margaritën», «lokali i zënë», «mbyll lokalin». Lokali e lexon me zë atë që kuptoi."
       en: "Menu and venue: «margherita is off», «put margherita back on sale», «venue busy», «close the venue». The hub reads back what it understood."
       uk: "Меню й заклад: «зніми маргариту з продажу», «поверни маргариту в продаж», «заклад зайнятий», «закрий заклад». Хаб читає вголос, що зрозумів."
+      ru: "Меню и заведение: «сними маргариту с продажи», «верни маргариту в продажу», «заведение занято», «закрой заведение». Хаб читает вслух, что понял."
   - key: 3
     anchor: voice.reason
     pending: no
@@ -59,10 +65,12 @@ steps:
       sq: "Arsyeja"
       en: "The reason"
       uk: "Причина"
+      ru: "Причина"
     caption:
       sq: "Një refuzim ose anulim merr një arsye, si te butoni."
       en: "A rejection or a cancellation carries a reason, as the button does."
       uk: "Відмова чи скасування має причину, як і з кнопки."
+      ru: "Отказ или отмена имеет причину, как и с кнопки."
   - key: 4
     anchor: voice.confirm
     pending: no
@@ -74,10 +82,12 @@ steps:
       sq: "Konfirmoni"
       en: "Confirm"
       uk: "Підтвердіть"
+      ru: "Подтвердите"
     caption:
       sq: "Asgjë nuk ndryshon pa këtë buton. Një numër që i përshtatet dy porosive ose një pjatë me dy emra refuzohet — thoni më shumë."
       en: "Nothing changes without this button. A number that fits two orders, or a dish two names fit, is refused — say more."
       uk: "Без цієї кнопки нічого не змінюється. Номер, що підходить двом замовленням, або назва двох страв — відмова: скажіть точніше."
+      ru: "Без этой кнопки ничего не меняется. Номер, который подходит двум заказам, или название двух блюд — отказ: скажите точнее."
   - key: 5
     anchor: voice.cancel
     pending: no
@@ -89,7 +99,9 @@ steps:
       sq: "Ose jo"
       en: "Or not"
       uk: "Або ні"
+      ru: "Или нет"
     caption:
       sq: "Anulo e lë gjithçka si ishte. Leximi skadon pas 90 sekondash."
       en: "Cancel leaves everything as it was. A read-back expires after 90 seconds."
       uk: "Скасувати — усе лишається як було. Прочитане діє 90 секунд."
+      ru: "Отменить — всё остаётся как было. Прочитанное действует 90 секунд."

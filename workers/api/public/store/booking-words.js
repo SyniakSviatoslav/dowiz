@@ -1,4 +1,4 @@
-// The words the guest booking adds, in the storefront's three languages.
+// The words the guest booking adds, in every language the storefront speaks.
 // Merged into the shared table on import (the way admin/tableqr.js does), so
 // the shared i18n.js is not edited by this lane.
 //
@@ -48,6 +48,20 @@ const WORDS = {
     bkStRequested: 'Чекає підтвердження', bkStConfirmed: 'Підтверджено', bkStSeated: 'За столом',
     bkStCompleted: 'Завершено', bkStDeclined: 'Ресторан відхилив', bkStCancelled: 'Скасовано вами',
     bkStCancelledVenue: 'Скасовано рестораном', bkStNoShow: 'Не прийшли',
+  },
+  ru: {
+    bkName: 'Имя', bkPhone: 'Телефон', bkWho: 'Бронирование на имя',
+    bkNeedName: 'Укажите имя для бронирования', bkNameLong: 'Имя слишком длинное',
+    bkNeedPhone: 'Укажите номер телефона, по которому ресторан может позвонить',
+    bkCtaAny: 'Забронировать любой стол', bkAnyTable: 'Любой свободный стол',
+    bkNoPlanBook: 'Заведение ещё не опубликовало план зала. Бронируйте, и ресторан посадит вас туда, где есть место.',
+    bkMine: 'Мои бронирования', bkMineNone: 'В этом браузере бронирований нет.',
+    bkCancel: 'Отменить бронирование', bkCancelSure: 'Отменить это бронирование?', bkCancelled: 'Бронирование отменено',
+    bkShare: 'Скопировать ссылку', bkCopied: 'Ссылка скопирована', bkParty: 'гостей',
+    bkLoadFail: 'Бронирование не загрузилось', bkRef: 'Номер',
+    bkStRequested: 'Ждёт подтверждения', bkStConfirmed: 'Подтверждено', bkStSeated: 'За столом',
+    bkStCompleted: 'Завершено', bkStDeclined: 'Ресторан отклонил', bkStCancelled: 'Отменено вами',
+    bkStCancelledVenue: 'Отменено рестораном', bkStNoShow: 'Не пришли',
   },
 };
 for (const l of LANGS) Object.assign(T[l], WORDS[l]);

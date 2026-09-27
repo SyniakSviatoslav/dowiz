@@ -11,10 +11,12 @@ title:
   sq: "Vizatoni sallën"
   en: "Draw the floor"
   uk: "Накресліть зал"
+  ru: "Начертите зал"
 goal:
   sq: "Vizatoni katër tavolina dhe ruajini."
   en: "Draw four tables and save."
   uk: "Накреслити чотири столи й зберегти."
+  ru: "Начертить четыре стола и сохранить."
 steps:
   - key: 1
     anchor: more.tile.floorPlan
@@ -27,10 +29,12 @@ steps:
       sq: "Plani i sallës"
       en: "Floor plan"
       uk: "План залу"
+      ru: "План зала"
     caption:
       sq: "Plani që sheh kamarieri dhe ku lidhen kodet QR të tavolinave."
       en: "The plan the waiter sees, and where the table QR codes belong."
       uk: "План, який бачить офіціант, і до якого прив’язані QR-коди столів."
+      ru: "План, который видит официант и к которому привязаны QR-коды столов."
   - key: 2
     anchor: floor.zones
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Zonat"
       en: "Areas"
       uk: "Зони"
+      ru: "Зоны"
     caption:
       sq: "Salla, tarraca, bari — secila me planin e vet."
       en: "Room, terrace, bar — each with its own plan."
       uk: "Зал, тераса, бар — кожна зі своїм планом."
+      ru: "Зал, терраса, бар — каждая со своим планом."
   - key: 3
     anchor: floor.addZone
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Zonë e re"
       en: "New area"
       uk: "Нова зона"
+      ru: "Новая зона"
     caption:
       sq: "Shtoni një zonë."
       en: "Add an area."
       uk: "Додайте зону."
+      ru: "Добавьте зону."
   - key: 4
     anchor: floor.zoneName
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Emri i zonës"
       en: "Area name"
       uk: "Назва зони"
+      ru: "Название зоны"
     caption:
       sq: "Si e quani."
       en: "What you call it."
       uk: "Як ви її називаєте."
+      ru: "Как вы её называете."
   - key: 5
     anchor: floor.deleteZone
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Fshije zonën"
       en: "Delete the area"
       uk: "Видалити зону"
+      ru: "Удалить зону"
     caption:
       sq: "Vetëm një zonë pa tavolina."
       en: "Only an area with no tables."
       uk: "Лише зону без столів."
+      ru: "Только зону без столов."
   - key: 6
     anchor: floor.plan
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Plani"
       en: "The plan"
       uk: "План"
+      ru: "План"
     caption:
       sq: "Tavolinat ku janë në të vërtetë."
       en: "The tables where they really are."
       uk: "Столи там, де вони насправді."
+      ru: "Столы там, где они на самом деле."
   - key: 7
     anchor: floor.addTable
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "Tavolinë e re"
       en: "New table"
       uk: "Новий стіл"
+      ru: "Новый стол"
     caption:
       sq: "Shtoni një tavolinë."
       en: "Add a table."
       uk: "Додайте стіл."
+      ru: "Добавьте стол."
   - key: 8
     anchor: floor.number
     pending: no
@@ -134,10 +150,12 @@ steps:
       sq: "Numri"
       en: "The number"
       uk: "Номер"
+      ru: "Номер"
     caption:
       sq: "Numri që shohin kamarierët dhe kodi QR."
       en: "The number the waiters and the QR code use."
       uk: "Номер, який бачать офіціанти й QR-код."
+      ru: "Номер, который видят официанты и QR-код."
   - key: 9
     anchor: floor.seats
     pending: no
@@ -150,10 +168,12 @@ steps:
       sq: "Vendet"
       en: "Seats"
       uk: "Місця"
+      ru: "Места"
     caption:
       sq: "Sa veta ulen."
       en: "How many can sit."
       uk: "Скільки людей сідає."
+      ru: "Сколько людей садится."
   - key: 10
     anchor: floor.shape
     pending: no
@@ -165,10 +185,12 @@ steps:
       sq: "Forma"
       en: "Shape"
       uk: "Форма"
+      ru: "Форма"
     caption:
       sq: "Katrore ose e rrumbullakët."
       en: "Square or round."
       uk: "Прямокутний чи круглий."
+      ru: "Прямоугольный или круглый."
   - key: 11
     anchor: floor.nudge
     pending: no
@@ -180,10 +202,12 @@ steps:
       sq: "Lëvizni"
       en: "Move it"
       uk: "Пересуньте"
+      ru: "Передвиньте"
     caption:
       sq: "Shigjetat e lëvizin me hapa të vegjël."
       en: "The arrows move it in small steps."
       uk: "Стрілки пересувають його малими кроками."
+      ru: "Стрелки передвигают его маленькими шагами."
   - key: 12
     anchor: floor.deleteTable
     pending: no
@@ -195,10 +219,12 @@ steps:
       sq: "Fshije tavolinën"
       en: "Delete the table"
       uk: "Видалити стіл"
+      ru: "Удалить стол"
     caption:
       sq: "Kur tavolina nuk ekziston më."
       en: "When the table no longer exists."
       uk: "Коли стола більше немає."
+      ru: "Когда стола больше нет."
   - key: 13
     anchor: floor.save
     pending: no
@@ -210,7 +236,9 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Kamarierët e shohin planin e ri menjëherë."
       en: "Waiters see the new plan at once."
       uk: "Офіціанти одразу бачать новий план."
+      ru: "Официанты сразу видят новый план."

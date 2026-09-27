@@ -32,6 +32,14 @@ export const WORDS = {
     asStatus: 'скільки чекає', asShowKitchen: 'покажи кухню', asShowStock: 'покажи склад',
     asLow: 'Яких інгредієнтів мало?', asAgentKey: 'Ключ мого агента (MCP)',
   },
+  ru: {
+    asTitle: 'Ассистент', asHint: 'Напишите, что нужно: вопрос или действие, например «пришло 4 кг лосось». Каждое изменение сначала подтверждаете вы.',
+    asPlaceholder: 'Пишите здесь…', asSend: 'Отправить', asConfirm: 'Да, сделать', asCancel: 'Нет',
+    asDone: 'Сделано.', asCancelled: 'Отменено.', asFailed: 'Не сделано.', asThinking: 'Думаю…',
+    asOpened: 'Открыто.', asNotUnderstood: 'Не понятно.', asHeard: 'услышано', asYou: 'Вы', asHub: 'Хаб',
+    asStatus: 'сколько ждёт', asShowKitchen: 'покажи кухню', asShowStock: 'покажи склад',
+    asLow: 'Каких ингредиентов мало?', asAgentKey: 'Ключ моего агента (MCP)',
+  },
 };
 
 merge(T, WORDS);

@@ -11,10 +11,12 @@ title:
   sq: "Plani i sallës"
   en: "The floor"
   uk: "План залу"
+  ru: "План зала"
 goal:
   sq: "Uleni një tavolinë të rezervuar dhe pastroni një të paguar."
   en: "Seat a booked table and clear a paid one."
   uk: "Посадити гостей за заброньований стіл і прибрати оплачений."
+  ru: "Посадить гостей за забронированный стол и убрать оплаченный."
 steps:
   - key: 1
     anchor: room.floor
@@ -27,10 +29,12 @@ steps:
       sq: "Plani"
       en: "The floor"
       uk: "План"
+      ru: "План"
     caption:
       sq: "Salla si vizatim: çdo tavolinë në vendin e saj, me ngjyrën e gjendjes."
       en: "The room as a drawing: each table in its place, coloured by its state."
       uk: "Зал як креслення: кожен стіл на своєму місці, кольором позначено стан."
+      ru: "Зал как чертёж: каждый стол на своём месте, цветом отмечено состояние."
   - key: 2
     anchor: floor.legend
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Ngjyrat"
       en: "The colours"
       uk: "Кольори"
+      ru: "Цвета"
     caption:
       sq: "E lirë, e rezervuar, po porosit, po pret, po paguan, për t’u pastruar — legjenda i shpjegon të gjitha."
       en: "Free, booked, ordering, waiting, paying, to be cleared — the legend explains each one."
       uk: "Вільний, заброньований, замовляє, чекає, платить, прибрати — легенда пояснює кожен."
+      ru: "Свободен, забронирован, заказывает, ждёт, платит, убрать — легенда объясняет каждый."
   - key: 3
     anchor: floor.table
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Prekni tavolinën"
       en: "Tap a table"
       uk: "Торкніться столу"
+      ru: "Коснитесь стола"
     caption:
       sq: "Një tavolinë e rezervuar hapet për mysafirët e saj; një e hapur ju çon te raundet."
       en: "A booked table opens for its guests; an open one takes you to its rounds."
       uk: "Заброньований стіл відкривається для його гостей; відкритий — веде до раундів."
+      ru: "Забронированный стол открывается для его гостей; открытый — ведёт к раундам."
   - key: 4
     anchor: floor.unplaced
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Pa vend në plan"
       en: "Not on the plan"
       uk: "Не на плані"
+      ru: "Не на плане"
     caption:
       sq: "Tavolinat që pronari ende s’i ka vendosur në plan shfaqen këtu si listë."
       en: "Tables the owner has not placed on the plan yet appear here as a list."
       uk: "Столи, які власник ще не розмістив на плані, показані тут списком."
+      ru: "Столы, которые владелец ещё не разместил на плане, показаны здесь списком."
   - key: 5
     anchor: floor.clear
     pending: no
@@ -87,10 +97,12 @@ steps:
       sq: "Pastruar"
       en: "Cleared"
       uk: "Прибрано"
+      ru: "Убрано"
     caption:
       sq: "Pas pagesës tavolina mbetet «për t’u pastruar». Shënojeni kur është gati për mysafirët e rinj."
       en: "After payment a table stays “to be cleared”. Mark it once it is ready for new guests."
       uk: "Після оплати стіл лишається «прибрати». Позначте, щойно він готовий для нових гостей."
+      ru: "После оплаты стол остаётся «убрать». Отметьте, как только он готов для новых гостей."
   - key: 6
     anchor: floor.refresh
     pending: no
@@ -102,10 +114,12 @@ steps:
       sq: "Rifreskoni planin"
       en: "Refresh the floor"
       uk: "Оновіть план"
+      ru: "Обновите план"
     caption:
       sq: "Plani rifreskohet vetë; ky buton e bën menjëherë."
       en: "The floor refreshes by itself; this button does it now."
       uk: "План оновлюється сам; ця кнопка робить це одразу."
+      ru: "План обновляется сам; эта кнопка делает это сразу."
   - key: 7
     anchor: nav.back
     pending: no
@@ -117,7 +131,9 @@ steps:
       sq: "Prapa"
       en: "Back"
       uk: "Назад"
+      ru: "Назад"
     caption:
       sq: "Kthehuni te salla."
       en: "Go back to the room."
       uk: "Поверніться до залу."
+      ru: "Вернитесь в зал."

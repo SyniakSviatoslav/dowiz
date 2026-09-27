@@ -11,10 +11,12 @@ title:
   sq: "Ku dhe kur"
   en: "Where and when"
   uk: "Куди й коли"
+  ru: "Куда и когда"
 goal:
   sq: "Zgjidhni dërgesë ose marrje, adresën dhe orën."
   en: "Choose delivery or pickup, the address and the time."
   uk: "Обрати доставку чи самовивіз, адресу й час."
+  ru: "Выбрать доставку или самовывоз, адрес и время."
 steps:
   - key: 1
     anchor: checkout.open
@@ -27,10 +29,12 @@ steps:
       sq: "Vazhdo"
       en: "Continue"
       uk: "Далі"
+      ru: "Далее"
     caption:
       sq: "Te adresa dhe pagesa."
       en: "On to the address and payment."
       uk: "До адреси й оплати."
+      ru: "К адресу и оплате."
   - key: 2
     anchor: checkout.delivery
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Dërgesë"
       en: "Delivery"
       uk: "Доставка"
+      ru: "Доставка"
     caption:
       sq: "Korrieri e sjell te dera juaj…"
       en: "A courier brings it to your door…"
       uk: "Кур’єр привезе до ваших дверей…"
+      ru: "Курьер привезёт к вашей двери…"
   - key: 3
     anchor: checkout.pickup
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Marrje në lokal"
       en: "Pickup"
       uk: "Самовивіз"
+      ru: "Самовывоз"
     caption:
       sq: "…ose e merrni vetë në lokal."
       en: "…or you collect it at the venue."
       uk: "…або ви забираєте самі в закладі."
+      ru: "…или вы забираете сами в заведении."
   - key: 4
     anchor: checkout.savedAddress
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Adresa e ruajtur"
       en: "A saved address"
       uk: "Збережена адреса"
+      ru: "Сохранённый адрес"
     caption:
       sq: "Adresat e mëparshme ruhen vetëm në këtë telefon."
       en: "Earlier addresses are kept on this phone only."
       uk: "Попередні адреси зберігаються лише на цьому телефоні."
+      ru: "Прежние адреса хранятся только на этом телефоне."
   - key: 5
     anchor: checkout.street
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Rruga"
       en: "Street"
       uk: "Вулиця"
+      ru: "Улица"
     caption:
       sq: "Rruga dhe numri."
       en: "The street and number."
       uk: "Вулиця й номер."
+      ru: "Улица и номер."
   - key: 6
     anchor: checkout.map
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Në hartë"
       en: "On the map"
       uk: "На мапі"
+      ru: "На карте"
     caption:
       sq: "Vendosni pikën saktë, që korrieri ta gjejë derën."
       en: "Drop the pin exactly, so the courier finds the door."
       uk: "Поставте точку точно, щоб кур’єр знайшов двері."
+      ru: "Поставьте точку точно, чтобы курьер нашёл дверь."
   - key: 7
     anchor: map.myLocation
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "Vendndodhja ime"
       en: "My location"
       uk: "Моє місце"
+      ru: "Моё место"
     caption:
       sq: "Telefoni e gjen vetë — vetëm nëse e lejoni."
       en: "The phone finds it — only if you allow it."
       uk: "Телефон знаходить сам — лише якщо ви дозволите."
+      ru: "Телефон найдёт сам — только если вы разрешите."
   - key: 8
     anchor: map.confirm
     pending: no
@@ -133,10 +149,12 @@ steps:
       sq: "Konfirmo pikën"
       en: "Confirm the pin"
       uk: "Підтвердіть точку"
+      ru: "Подтвердите точку"
     caption:
       sq: "Kjo pikë shkon te korrieri."
       en: "This pin goes to the courier."
       uk: "Ця точка йде кур’єру."
+      ru: "Эта точка уходит курьеру."
   - key: 9
     anchor: checkout.area
     pending: no
@@ -148,10 +166,12 @@ steps:
       sq: "Zona"
       en: "The area"
       uk: "Зона"
+      ru: "Зона"
     caption:
       sq: "Kontrolloni nëse lokali dërgon deri te ju."
       en: "Check that the venue delivers to you."
       uk: "Перевірте, чи заклад доставляє до вас."
+      ru: "Проверьте, доставляет ли заведение к вам."
   - key: 10
     anchor: checkout.note
     pending: no
@@ -164,10 +184,12 @@ steps:
       sq: "Shënim"
       en: "Note"
       uk: "Примітка"
+      ru: "Примечание"
     caption:
       sq: "Kati, zilja, hyrja — për korrierin."
       en: "Floor, bell, entrance — for the courier."
       uk: "Поверх, дзвінок, під’їзд — для кур’єра."
+      ru: "Этаж, звонок, подъезд — для курьера."
   - key: 11
     anchor: checkout.name
     pending: no
@@ -180,10 +202,12 @@ steps:
       sq: "Emri"
       en: "Name"
       uk: "Ім’я"
+      ru: "Имя"
     caption:
       sq: "Si t’ju thërrasë korrieri."
       en: "What the courier should call you."
       uk: "Як кур’єру до вас звертатися."
+      ru: "Как курьеру к вам обращаться."
   - key: 12
     anchor: checkout.phone
     pending: no
@@ -196,10 +220,12 @@ steps:
       sq: "Telefoni"
       en: "Phone"
       uk: "Телефон"
+      ru: "Телефон"
     caption:
       sq: "Vetëm për këtë porosi; korrieri e sheh vetëm gjatë dërgesës."
       en: "For this order only; the courier sees it only during the delivery."
       uk: "Лише для цього замовлення; кур’єр бачить його тільки під час доставки."
+      ru: "Только для этого заказа; курьер видит его только во время доставки."
   - key: 13
     anchor: checkout.asap
     pending: no
@@ -211,10 +237,12 @@ steps:
       sq: "Sa më shpejt"
       en: "As soon as possible"
       uk: "Якнайшвидше"
+      ru: "Как можно скорее"
     caption:
       sq: "Përgatitet menjëherë…"
       en: "Prepared right away…"
       uk: "Готується одразу…"
+      ru: "Готовится сразу…"
   - key: 14
     anchor: checkout.later
     pending: no
@@ -226,7 +254,9 @@ steps:
       sq: "Më vonë"
       en: "Later"
       uk: "Пізніше"
+      ru: "Позже"
     caption:
       sq: "…ose në një orë që zgjidhni."
       en: "…or at a time you choose."
       uk: "…або на обраний вами час."
+      ru: "…или к выбранному вами времени."

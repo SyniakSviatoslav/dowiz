@@ -22,9 +22,9 @@
 //! network or 2 GB of RAM, and is confidently wrong in exactly the cases that
 //! matter.
 //!
-//! THREE LANGUAGES, because the venue is Albanian, the operator is Ukrainian
-//! and the tooling is English. A courier must not have to switch language to
-//! be understood.
+//! EVERY LANGUAGE OF `crate::lang::LANGS`, because the venue is Albanian, the
+//! operator is Ukrainian, the tooling is English and many guests and staff
+//! speak Russian. A courier must not have to switch language to be understood.
 
 /// Who is speaking. The same words mean different things to different people:
 /// "готово" from a kitchen means the food is ready, from a courier it means
@@ -82,67 +82,39 @@ impl Command {
     /// A short line to read back before acting, in the speaker's own language.
     /// Confirming something the person cannot restate is not confirmation.
     pub fn readback(&self, lang: &str) -> String {
-        let uk = lang.starts_with("uk");
-        let sq = lang.starts_with("sq");
-        fn verb_word(v: &str, uk: bool, sq: bool) -> &str {
-            match (v, uk, sq) {
-                ("confirm", true, _) => "підтвердити",
-                ("confirm", _, true) => "konfirmo",
-                ("confirm", ..) => "confirm",
-                ("preparing", true, _) => "готуємо",
-                ("preparing", _, true) => "po gatuhet",
-                ("preparing", ..) => "start preparing",
-                ("ready", true, _) => "готове",
-                ("ready", _, true) => "gati",
-                ("ready", ..) => "mark ready",
-                ("reject", true, _) => "відхилити",
-                ("reject", _, true) => "refuzo",
-                ("reject", ..) => "reject",
-                ("cancel", true, _) => "скасувати",
-                ("cancel", _, true) => "anulo",
-                ("cancel", ..) => "cancel",
-                (other, ..) => other,
-            }
-        }
-        let which = |t: &Target| match (t, uk, sq) {
-            (Target::Newest, true, _) => "останнє".to_string(),
-            (Target::Newest, _, true) => "të fundit".to_string(),
-            (Target::Newest, ..) => "the newest".to_string(),
-            (Target::Oldest, true, _) => "найстаріше".to_string(),
-            (Target::Oldest, _, true) => "më të vjetrin".to_string(),
-            (Target::Oldest, ..) => "the oldest".to_string(),
-            (Target::Digits(d), ..) => format!("#{}", d.to_uppercase()),
-            (Target::Unsaid, true, _) => "поточне".to_string(),
-            (Target::Unsaid, _, true) => "aktualin".to_string(),
-            (Target::Unsaid, ..) => "the current one".to_string(),
+        // One word per language, in `crate::lang::LANGS` order (sq, en, uk,
+        // ru); the array's length is the language count, so a language added
+        // there does not compile until it is said here. Unknown is English.
+        type Say = [&'static str; crate::lang::LANGS.len()];
+        let i = crate::lang::LANGS.iter().position(|l| lang.starts_with(l)).unwrap_or(1);
+        let verb_word = |v: &str| -> String {
+            let w: Say = match v {
+                "confirm" => ["konfirmo", "confirm", "підтвердити", "подтвердить"],
+                "preparing" => ["po gatuhet", "start preparing", "готуємо", "готовим"],
+                "ready" => ["gati", "mark ready", "готове", "готово"],
+                "reject" => ["refuzo", "reject", "відхилити", "отклонить"],
+                "cancel" => ["anulo", "cancel", "скасувати", "отменить"],
+                other => return other.to_string(),
+            };
+            w[i].to_string()
         };
+        let which = |t: &Target| -> String {
+            let w: Say = match t {
+                Target::Newest => ["të fundit", "the newest", "останнє", "последний"],
+                Target::Oldest => ["më të vjetrin", "the oldest", "найстаріше", "самый старый"],
+                Target::Unsaid => ["aktualin", "the current one", "поточне", "текущий"],
+                Target::Digits(d) => return format!("#{}", d.to_uppercase()),
+            };
+            w[i].to_string()
+        };
+        let said = |w: Say| w[i].to_string();
         match self {
-            Command::Order { verb, target } => format!("{} {}", verb_word(verb, uk, sq), which(target)),
-            Command::Pickup { target } => match (uk, sq) {
-                (true, _) => format!("забрав {}", which(target)),
-                (_, true) => format!("mora {}", which(target)),
-                _ => format!("picked up {}", which(target)),
-            },
-            Command::Deliver { target } => match (uk, sq) {
-                (true, _) => format!("доставив {}", which(target)),
-                (_, true) => format!("dorëzova {}", which(target)),
-                _ => format!("delivered {}", which(target)),
-            },
-            Command::Shift { open: true } => match (uk, sq) {
-                (true, _) => "почати зміну".into(),
-                (_, true) => "nis turnin".into(),
-                _ => "start the shift".into(),
-            },
-            Command::Shift { open: false } => match (uk, sq) {
-                (true, _) => "завершити зміну".into(),
-                (_, true) => "mbyll turnin".into(),
-                _ => "end the shift".into(),
-            },
-            Command::Status => match (uk, sq) {
-                (true, _) => "статус".into(),
-                (_, true) => "statusi".into(),
-                _ => "status".into(),
-            },
+            Command::Order { verb, target } => format!("{} {}", verb_word(verb), which(target)),
+            Command::Pickup { target } => format!("{} {}", said(["mora", "picked up", "забрав", "забрал"]), which(target)),
+            Command::Deliver { target } => format!("{} {}", said(["dorëzova", "delivered", "доставив", "доставил"]), which(target)),
+            Command::Shift { open: true } => said(["nis turnin", "start the shift", "почати зміну", "начать смену"]),
+            Command::Shift { open: false } => said(["mbyll turnin", "end the shift", "завершити зміну", "завершить смену"]),
+            Command::Status => said(["statusi", "status", "статус", "статус"]),
             Command::Ask(q) => q.clone(),
             Command::Unclear(why) => (*why).to_string(),
         }
@@ -203,10 +175,10 @@ fn target_of(t: &str) -> Target {
     if digits.len() >= 3 {
         return Target::Digits(digits);
     }
-    if has(t, &["останнє", "останній", "остання", "last", "latest", "fundit", "fundit"]) {
+    if has(t, &["останнє", "останній", "остання", "последний", "последнее", "последняя", "last", "latest", "fundit", "fundit"]) {
         return Target::Newest;
     }
-    if has(t, &["перше", "перший", "найстаріше", "first", "oldest", "parin", "pari"]) {
+    if has(t, &["перше", "перший", "найстаріше", "первый", "первое", "первая", "старый", "first", "oldest", "parin", "pari"]) {
         return Target::Oldest;
     }
     Target::Unsaid
@@ -232,9 +204,9 @@ pub fn classify(transcript: &str, confidence: f64, is_final: bool, who: Speaker)
     }
 
     // Shift, first: it takes no target and cannot be confused with an order.
-    let open = has(&t, &["почати", "почни", "відкрити", "start", "open", "nis", "hap"]);
-    let close = has(&t, &["завершити", "заверши", "закрити", "end", "finish", "close", "mbyll", "perfundo"]);
-    if has(&t, &["зміну", "зміна", "shift", "turn", "turnin"]) && (open || close) {
+    let open = has(&t, &["почати", "почни", "відкрити", "начать", "начни", "открыть", "открой", "start", "open", "nis", "hap"]);
+    let close = has(&t, &["завершити", "заверши", "закрити", "завершить", "закрыть", "закрой", "закончить", "end", "finish", "close", "mbyll", "perfundo"]);
+    if has(&t, &["зміну", "зміна", "смену", "смена", "shift", "turn", "turnin"]) && (open || close) {
         // Both words present is not a command, it is a sentence about shifts.
         if open && close {
             return Command::Unclear("start or end?");
@@ -246,13 +218,13 @@ pub fn classify(transcript: &str, confidence: f64, is_final: bool, who: Speaker)
 
     // Consequential verbs. Checked BEFORE status, so "reject" is never read as
     // a question about rejections.
-    let reject = has(&t, &["відхилити", "відхили", "відмова", "reject", "refuse", "refuzo"]);
-    let cancel = has(&t, &["скасувати", "скасуй", "cancel", "anulo"]);
-    let confirm = has(&t, &["підтвердити", "підтверди", "прийняти", "прийми", "confirm", "accept", "konfirmo", "prano"]);
-    let preparing = has(&t, &["готуємо", "готую", "готувати", "preparing", "cooking", "gatuaj"]);
-    let ready = has(&t, &["готове", "готово", "готовий", "ready", "gati"]);
-    let picked = has(&t, &["забрав", "забрала", "взяв", "picked", "pickup", "mora"]);
-    let delivered = has(&t, &["доставив", "доставила", "віддав", "delivered", "dorezova", "dorezoi"]);
+    let reject = has(&t, &["відхилити", "відхили", "відмова", "отклонить", "отклони", "отказ", "reject", "refuse", "refuzo"]);
+    let cancel = has(&t, &["скасувати", "скасуй", "отменить", "отмени", "cancel", "anulo"]);
+    let confirm = has(&t, &["підтвердити", "підтверди", "прийняти", "прийми", "подтвердить", "подтверди", "принять", "прими", "confirm", "accept", "konfirmo", "prano"]);
+    let preparing = has(&t, &["готуємо", "готую", "готувати", "готовим", "готовлю", "готовить", "preparing", "cooking", "gatuaj"]);
+    let ready = has(&t, &["готове", "готово", "готовий", "готов", "готова", "ready", "gati"]);
+    let picked = has(&t, &["забрав", "забрала", "взяв", "забрал", "взял", "взяла", "picked", "pickup", "mora"]);
+    let delivered = has(&t, &["доставив", "доставила", "віддав", "доставил", "отдал", "отдала", "delivered", "dorezova", "dorezoi"]);
 
     // TWO CONSEQUENTIAL VERBS IN ONE UTTERANCE is the dangerous case -- "cancel,
     // no, confirm" -- and it is refused rather than resolved by precedence.
@@ -302,7 +274,7 @@ pub fn classify(transcript: &str, confidence: f64, is_final: bool, who: Speaker)
         }
     }
 
-    if has(&t, &["статус", "скільки", "що", "стан", "status", "how many", "what", "sa", "cfare"]) {
+    if has(&t, &["статус", "скільки", "що", "стан", "сколько", "что", "состояние", "status", "how many", "what", "sa", "cfare"]) {
         return Command::Status;
     }
 
@@ -471,6 +443,9 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod ru_tests;
 
 /// W-AUDIT S4 (2026-09-27): NaN is not confidence.
 #[cfg(test)]

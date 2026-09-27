@@ -51,6 +51,8 @@ fn media_key_serves_a_cuts_files_and_nothing_else() {
         "W3/sq/../../manifest.json", "W3/de/video.mp4", "W3/sq/video.exe", "W3/sq/Video.mp4", "W3/sq/.mp4",
         "w3/sq/video.mp4", "W/sq/video.mp4", "W3ab/sq/video.mp4", "W3/sq", "W3/sq/a/video.mp4", "",
         "W3/sq/video", "manifest.json",
+        // No film is recorded in Russian (operator 2026-09-26): a ru cut is not a key.
+        "W3/ru/video.mp4",
     ] {
         assert_eq!(media_key(bad), None, "{bad}");
     }

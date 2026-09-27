@@ -29,13 +29,15 @@ import { spawnSync } from 'node:child_process';
 import { homedir, tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { checkCut, probe as ffprobe } from './check.mjs';
+import { MEDIA_LANGS } from '../../workers/api/public/lib/langs.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = join(HERE, '..', '..');
 export const MANIFEST = 'workers/api/public/learn/media/manifest.json';
 export const STAGE = process.env.LEARN_STAGE || join(homedir(), '.cache', 'dowiz-learn', 'media');
-export const LANGS = ['sq', 'en', 'uk'];
-export const FILES = ['video.mp4', 'poster.jpg', 'subs_sq.vtt', 'subs_en.vtt', 'subs_uk.vtt', 'chapters.json'];
+/// The films' languages (lib/langs.js MEDIA_LANGS): no Russian cut, no Russian track.
+export const LANGS = MEDIA_LANGS;
+export const FILES = ['video.mp4', 'poster.jpg', ...LANGS.map(l => `subs_${l}.vtt`), 'chapters.json'];
 export const BUCKET = 'dowiz-learn';
 export const R2_PREFIX = 'learn/';
 export const LEDGER = join(homedir(), '.cache', 'dowiz-learn', 'r2-ledger.json');

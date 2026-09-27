@@ -38,6 +38,12 @@ const WORDS = {
     rsDo_CONFIRMED: 'Підтвердити', rsDo_DECLINED: 'Відхилити', rsDo_SEATED: 'Посадили', rsDo_COMPLETED: 'Завершено', rsDo_NO_SHOW: 'Не прийшли', rsDo_CANCELLED_BY_VENUE: 'Скасувати',
     rsSt_REQUESTED: 'Запит', rsSt_CONFIRMED: 'Підтверджено', rsSt_SEATED: 'За столом', rsSt_COMPLETED: 'Завершено', rsSt_DECLINED: 'Відхилено',
     rsSt_CANCELLED_BY_GUEST: 'Гість скасував', rsSt_CANCELLED_BY_VENUE: 'Скасовано', rsSt_NO_SHOW: 'Не прийшли', rsLate: 'скасував пізно' },
+  ru: { rsHint: 'Бронирования дня. Подтвердите, посадите или отмените; ничего не стирается.', rsNone: 'В этот день бронирований нет.',
+    rsNew: 'Новое бронирование', rsName: 'Имя', rsPhone: 'Телефон', rsParty: 'Гостей', rsTime: 'Время', rsTable: 'Стол', rsAny: 'Любой стол',
+    rsBook: 'Забронировать', rsReason: 'Причина (гость её видит)', rsCount: 'бронирований', rsGuests: 'гостей',
+    rsDo_CONFIRMED: 'Подтвердить', rsDo_DECLINED: 'Отклонить', rsDo_SEATED: 'Посадили', rsDo_COMPLETED: 'Завершено', rsDo_NO_SHOW: 'Не пришли', rsDo_CANCELLED_BY_VENUE: 'Отменить',
+    rsSt_REQUESTED: 'Запрос', rsSt_CONFIRMED: 'Подтверждено', rsSt_SEATED: 'За столом', rsSt_COMPLETED: 'Завершено', rsSt_DECLINED: 'Отклонено',
+    rsSt_CANCELLED_BY_GUEST: 'Гость отменил', rsSt_CANCELLED_BY_VENUE: 'Отменено', rsSt_NO_SHOW: 'Не пришли', rsLate: 'отменил поздно' },
 };
 for (const l of LANGS) Object.assign(T[l], WORDS[l]);
 

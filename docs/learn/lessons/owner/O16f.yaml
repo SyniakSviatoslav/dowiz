@@ -11,10 +11,12 @@ title:
   sq: "Zilja e kuzhinës dhe printeri"
   en: "The kitchen bell and the printer"
   uk: "Дзвінок кухні та принтер"
+  ru: "Звонок кухни и принтер"
 goal:
   sq: "Lidhni Telegram-in dhe provoni ziljen; lidhni printerin."
   en: "Connect Telegram and test the bell; connect the printer."
   uk: "Підключити Telegram і перевірити дзвінок; підключити принтер."
+  ru: "Подключить Telegram и проверить звонок; подключить принтер."
 steps:
   - key: 1
     anchor: more.tile.notifications
@@ -27,10 +29,12 @@ steps:
       sq: "Zilja"
       en: "The bell"
       uk: "Дзвінок"
+      ru: "Звонок"
     caption:
       sq: "Ku bie njoftimi për çdo porosi të re."
       en: "Where each new order rings."
       uk: "Куди дзвонить кожне нове замовлення."
+      ru: "Куда звонит каждый новый заказ."
   - key: 2
     anchor: notify.telegramState
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Telegram"
       en: "Telegram"
       uk: "Telegram"
+      ru: "Telegram"
     caption:
       sq: "A është lidhur boti i lokalit."
       en: "Whether the venue’s own bot is connected."
       uk: "Чи підключено власного бота закладу."
+      ru: "Подключён ли собственный бот заведения."
   - key: 3
     anchor: notify.tgToken
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Çelësi i botit"
       en: "Bot token"
       uk: "Токен бота"
+      ru: "Токен бота"
     caption:
       sq: "Nga boti juaj; mbetet i fshehur."
       en: "From your own bot; it stays hidden."
       uk: "Від вашого бота; лишається прихованим."
+      ru: "От вашего бота; остаётся скрытым."
   - key: 4
     anchor: notify.tgChat
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Lidh një grup"
       en: "Connect a group"
       uk: "Підключити групу"
+      ru: "Подключить группу"
     caption:
       sq: "Lidh një grup: shto botin, dërgo /link KODI."
       en: "Connect a group: add the bot, send /link CODE."
       uk: "Підключіть групу: додайте бота, надішліть /link КОД."
+      ru: "Подключите группу: добавьте бота, отправьте /link КОД."
   - key: 5
     anchor: notify.test
     pending: no
@@ -87,10 +97,12 @@ steps:
       sq: "Provë"
       en: "Test"
       uk: "Перевірка"
+      ru: "Проверка"
     caption:
       sq: "Dërgon një njoftim prove — duhet të bjerë në kuzhinë."
       en: "Sends a test notice — it should ring in the kitchen."
       uk: "Надсилає тестове сповіщення — воно має задзвонити на кухні."
+      ru: "Отправляет тестовое уведомление — оно должно зазвонить на кухне."
   - key: 6
     anchor: notify.whatsappState
     pending: no
@@ -102,10 +114,12 @@ steps:
       sq: "WhatsApp"
       en: "WhatsApp"
       uk: "WhatsApp"
+      ru: "WhatsApp"
     caption:
       sq: "Ose përmes WhatsApp-it të biznesit."
       en: "Or through WhatsApp Business."
       uk: "Або через WhatsApp Business."
+      ru: "Или через WhatsApp Business."
   - key: 7
     anchor: notify.waToken
     pending: no
@@ -117,10 +131,12 @@ steps:
       sq: "Çelësi"
       en: "Token"
       uk: "Токен"
+      ru: "Токен"
     caption:
       sq: "Mbetet i fshehur."
       en: "It stays hidden."
       uk: "Лишається прихованим."
+      ru: "Остаётся скрытым."
   - key: 8
     anchor: notify.waPhone
     pending: no
@@ -132,10 +148,12 @@ steps:
       sq: "Numri i biznesit"
       en: "Business number"
       uk: "Бізнес-номер"
+      ru: "Бизнес-номер"
     caption:
       sq: "Numri nga i cili dërgohet."
       en: "The number it sends from."
       uk: "Номер, з якого надсилається."
+      ru: "Номер, с которого отправляется."
   - key: 9
     anchor: notify.waTo
     pending: no
@@ -147,10 +165,12 @@ steps:
       sq: "Kujt"
       en: "To"
       uk: "Кому"
+      ru: "Кому"
     caption:
       sq: "Numri që merr njoftimin."
       en: "The number that gets the notice."
       uk: "Номер, що отримує сповіщення."
+      ru: "Номер, который получает уведомления."
   - key: 10
     anchor: more.tile.printer
     pending: no
@@ -162,10 +182,12 @@ steps:
       sq: "Printeri"
       en: "Printer"
       uk: "Принтер"
+      ru: "Принтер"
     caption:
       sq: "Fleta e kuzhinës për çdo porosi."
       en: "The kitchen ticket for every order."
       uk: "Кухонний чек для кожного замовлення."
+      ru: "Кухонный чек для каждого заказа."
   - key: 11
     anchor: printer.state
     pending: no
@@ -177,10 +199,12 @@ steps:
       sq: "Gjendja"
       en: "State"
       uk: "Стан"
+      ru: "Состояние"
     caption:
       sq: "Kur printoi për herë të fundit."
       en: "When it last printed."
       uk: "Коли друкував востаннє."
+      ru: "Когда печатал в последний раз."
   - key: 12
     anchor: printer.name
     pending: no
@@ -193,10 +217,12 @@ steps:
       sq: "Emri"
       en: "Name"
       uk: "Назва"
+      ru: "Название"
     caption:
       sq: "P.sh. «kuzhina»."
       en: "For example “kitchen”."
       uk: "Наприклад, «кухня»."
+      ru: "Например, «кухня»."
   - key: 13
     anchor: printer.url
     pending: no
@@ -208,10 +234,12 @@ steps:
       sq: "Adresa"
       en: "Address"
       uk: "Адреса"
+      ru: "Адрес"
     caption:
       sq: "Ku dëgjon printeri."
       en: "Where the printer listens."
       uk: "Де слухає принтер."
+      ru: "Где слушает принтер."
   - key: 14
     anchor: printer.key
     pending: no
@@ -223,10 +251,12 @@ steps:
       sq: "Çelësi"
       en: "Key"
       uk: "Ключ"
+      ru: "Ключ"
     caption:
       sq: "Mbetet i fshehur."
       en: "It stays hidden."
       uk: "Лишається прихованим."
+      ru: "Остаётся скрытым."
   - key: 15
     anchor: printer.save
     pending: no
@@ -238,10 +268,12 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Porositë e reja printohen."
       en: "New orders print."
       uk: "Нові замовлення друкуються."
+      ru: "Новые заказы печатаются."
   - key: 16
     anchor: printer.jobs
     pending: no
@@ -253,7 +285,9 @@ steps:
       sq: "Punët"
       en: "Jobs"
       uk: "Завдання"
+      ru: "Задания"
     caption:
       sq: "Fletët e fundit dhe nëse dolën."
       en: "The latest tickets and whether they came out."
       uk: "Останні чеки й чи вони вийшли."
+      ru: "Последние чеки и вышли ли они."

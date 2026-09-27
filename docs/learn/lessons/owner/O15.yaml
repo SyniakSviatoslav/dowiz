@@ -11,10 +11,12 @@ title:
   sq: "Karta me vula"
   en: "The stamp card"
   uk: "Картка з печатками"
+  ru: "Карточка с печатями"
 goal:
   sq: "Aktivizojeni me 8 vula."
   en: "Switch it on with 8 stamps."
   uk: "Увімкнути з 8 печатками."
+  ru: "Включить с 8 печатями."
 steps:
   - key: 1
     anchor: more.tile.features
@@ -27,10 +29,12 @@ steps:
       sq: "Funksionet"
       en: "Features"
       uk: "Функції"
+      ru: "Функции"
     caption:
       sq: "Karta me vula është këtu, me funksionet e tjera të faqes."
       en: "The stamp card lives here, with the site’s other features."
       uk: "Картка з печатками тут, разом з іншими функціями сайту."
+      ru: "Карточка с печатями здесь, вместе с другими функциями сайта."
   - key: 2
     anchor: stamps.count
     pending: no
@@ -43,10 +47,12 @@ steps:
       sq: "Sa vula"
       en: "How many stamps"
       uk: "Скільки печаток"
+      ru: "Сколько печатей"
     caption:
       sq: "P.sh. 8 porosi për një dhuratë."
       en: "For example 8 orders for a reward."
       uk: "Наприклад, 8 замовлень за винагороду."
+      ru: "Например, 8 заказов за награду."
   - key: 3
     anchor: stamps.reward
     pending: no
@@ -59,10 +65,12 @@ steps:
       sq: "Dhurata"
       en: "The reward"
       uk: "Винагорода"
+      ru: "Награда"
     caption:
       sq: "Çfarë merr klienti — e sheh në faqen e tij."
       en: "What the customer gets — they see it on their page."
       uk: "Що отримує клієнт — він бачить це на своїй сторінці."
+      ru: "Что получает клиент — он видит это на своей странице."
   - key: 4
     anchor: stamps.save
     pending: no
@@ -74,7 +82,9 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Karta del në faqe."
       en: "The card appears on the site."
       uk: "Картка з’являється на сайті."
+      ru: "Карточка появляется на сайте."

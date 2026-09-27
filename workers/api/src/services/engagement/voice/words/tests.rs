@@ -28,3 +28,12 @@ fn numbers_in_digits_words_and_marks() {
     }
     assert_eq!(number("99"), Some(MAX_SAID));
 }
+
+/// Russian number words, one to twelve (lane W-RU, 2026-09-27).
+#[test]
+fn russian_numbers() {
+    for (w, n) in [("одна", 1), ("две", 2), ("три", 3), ("четыре", 4), ("пять", 5), ("шесть", 6), ("семь", 7), ("восемь", 8),
+                   ("девять", 9), ("десять", 10), ("одиннадцать", 11), ("двенадцать", 12)] {
+        assert_eq!(number(w), Some(n), "{w}");
+    }
+}

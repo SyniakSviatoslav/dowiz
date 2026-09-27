@@ -11,10 +11,12 @@ title:
   sq: "Hidhni me dorë një porosi Wolt ose Glovo"
   en: "Enter a Wolt or Glovo order by hand"
   uk: "Внесіть замовлення Wolt або Glovo вручну"
+  ru: "Внесите заказ Wolt или Glovo вручную"
 goal:
   sq: "Futni një porosi nga jashtë që «përputhet», që stoku dhe shifrat të mbeten të plota."
   en: "Enter an outside order that “adds up”, so stock and numbers stay whole."
   uk: "Внести зовнішнє замовлення, яке «сходиться», щоб запаси й цифри були повними."
+  ru: "Внести внешний заказ, который «сходится», чтобы запасы и цифры были полными."
 steps:
   - key: 1
     anchor: orders.platformOrder
@@ -27,10 +29,12 @@ steps:
       sq: "Porosi platforme"
       en: "Platform order"
       uk: "Замовлення платформи"
+      ru: "Заказ платформы"
     caption:
       sq: "Porositë e Wolt ose Glovo nuk vijnë vetë. Hidhini këtu."
       en: "Wolt or Glovo orders do not arrive by themselves. Enter them here."
       uk: "Замовлення Wolt чи Glovo не надходять самі. Вносьте їх тут."
+      ru: "Заказы Wolt или Glovo не поступают сами. Вносите их здесь."
   - key: 2
     anchor: agg.platform
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Platforma"
       en: "The platform"
       uk: "Платформа"
+      ru: "Платформа"
     caption:
       sq: "Nga cila platformë erdhi."
       en: "Which platform it came from."
       uk: "З якої платформи воно прийшло."
+      ru: "С какой платформы он пришёл."
   - key: 3
     anchor: agg.number
     pending: no
@@ -58,10 +64,12 @@ steps:
       sq: "Numri"
       en: "The number"
       uk: "Номер"
+      ru: "Номер"
     caption:
       sq: "Numri i porosisë në platformë, që ta gjeni më vonë."
       en: "The platform’s order number, so you can find it later."
       uk: "Номер замовлення на платформі, щоб знайти його пізніше."
+      ru: "Номер заказа на платформе, чтобы найти его позже."
   - key: 4
     anchor: agg.dish
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Pjata"
       en: "A dish"
       uk: "Страва"
+      ru: "Блюдо"
     caption:
       sq: "Nga menuja juaj, jo tekst i lirë — kështu zbritet stoku."
       en: "From your own menu, not free text — that is how stock comes off."
       uk: "Зі свого меню, а не вільним текстом — так списуються запаси."
+      ru: "Из своего меню, а не свободным текстом — так списываются запасы."
   - key: 5
     anchor: agg.addLine
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Një rresht më shumë"
       en: "Another line"
       uk: "Ще рядок"
+      ru: "Ещё строка"
     caption:
       sq: "Për çdo pjatë tjetër."
       en: "For every other dish."
       uk: "Для кожної іншої страви."
+      ru: "Для каждого другого блюда."
   - key: 6
     anchor: agg.discount
     pending: no
@@ -104,10 +116,12 @@ steps:
       sq: "Zbritja"
       en: "The discount"
       uk: "Знижка"
+      ru: "Скидка"
     caption:
       sq: "Zbritja që dha platforma, nëse ka."
       en: "The discount the platform gave, if any."
       uk: "Знижка платформи, якщо була."
+      ru: "Скидка платформы, если была."
   - key: 7
     anchor: agg.total
     pending: no
@@ -120,10 +134,12 @@ steps:
       sq: "Totali"
       en: "The total"
       uk: "Сума"
+      ru: "Сумма"
     caption:
       sq: "Totali nga fatura e platformës."
       en: "The total from the platform’s receipt."
       uk: "Сума з чека платформи."
+      ru: "Сумма из чека платформы."
   - key: 8
     anchor: agg.check
     pending: no
@@ -135,10 +151,12 @@ steps:
       sq: "A përputhet?"
       en: "Does it add up?"
       uk: "Чи сходиться?"
+      ru: "Сходится?"
     caption:
       sq: "Artikujt minus zbritja duhet të bëjnë totalin; përndryshe tregohet diferenca."
       en: "The items less the discount must make the total; otherwise the difference is shown."
       uk: "Позиції мінус знижка мають дати суму; інакше показано різницю."
+      ru: "Позиции минус скидка должны дать сумму; иначе показана разница."
   - key: 9
     anchor: agg.save
     pending: no
@@ -150,7 +168,9 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Porosia hyn në tabelë si çdo tjetër."
       en: "The order joins the board like any other."
       uk: "Замовлення з’являється на дошці, як будь-яке інше."
+      ru: "Заказ появляется на доске, как любой другой."

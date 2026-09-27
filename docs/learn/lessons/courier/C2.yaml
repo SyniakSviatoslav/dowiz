@@ -11,10 +11,12 @@ title:
   sq: "Merrni një porosi"
   en: "Take an order"
   uk: "Візьміть замовлення"
+  ru: "Возьмите заказ"
 goal:
   sq: "Hapni turnin dhe merrni një porosi të gatshme, edhe kur koha e ofertës ka kaluar."
   en: "Open the shift and take a ready order, even after the offer time has run out."
   uk: "Відкрити зміну й узяти готове замовлення — навіть коли час пропозиції минув."
+  ru: "Открыть смену и взять готовый заказ — даже когда время предложения истекло."
 steps:
   - key: 1
     anchor: shift.open
@@ -27,10 +29,12 @@ steps:
       sq: "Hapni turnin"
       en: "Start the shift"
       uk: "Відкрийте зміну"
+      ru: "Откройте смену"
     caption:
       sq: "Pa turn të hapur nuk vjen asnjë porosi. Një prekje këtu dhe lokali e di që jeni gati."
       en: "With no shift open, no order comes to you. One tap here and the venue knows you are ready."
       uk: "Без відкритої зміни замовлення не надходять. Один дотик — і заклад знає, що ви готові."
+      ru: "Без открытой смены заказы не поступают. Одно касание — и заведение знает, что вы готовы."
   - key: 2
     anchor: pick.row
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Zgjidhni një porosi"
       en: "Pick an order"
       uk: "Оберіть замовлення"
+      ru: "Выберите заказ"
     caption:
       sq: "Çdo rresht është një porosi e gatshme: numri, adresa dhe shuma. Prekja e zgjedh, por ende nuk e merr."
       en: "Each row is a ready order: its number, the address and the amount. A tap selects it; it does not take it yet."
       uk: "Кожен рядок — готове замовлення: номер, адреса й сума. Дотик обирає його, але ще не бере."
+      ru: "Каждая строка — готовый заказ: номер, адрес и сумма. Касание выбирает его, но ещё не берёт."
   - key: 3
     anchor: pick.take
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Merr"
       en: "Take"
       uk: "Взяти"
+      ru: "Взять"
     caption:
       sq: "Vetëm ky buton e merr porosinë e zgjedhur. Pas tij porosia është e juaja dhe të tjerët nuk e shohin më."
       en: "Only this button takes the chosen order. After it, the order is yours and the others no longer see it."
       uk: "Лише ця кнопка бере обране замовлення. Після неї воно ваше, і інші кур’єри його більше не бачать."
+      ru: "Только эта кнопка берёт выбранный заказ. После неё он ваш, и другие курьеры его больше не видят."
   - key: 4
     anchor: offer.card
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Një ofertë për ju"
       en: "An offer for you"
       uk: "Пропозиція для вас"
+      ru: "Предложение для вас"
     caption:
       sq: "Kur lokali jua cakton një porosi, ajo vjen si kartë: numri, shuma dhe adresa, vetëm për ju."
       en: "When the venue assigns you an order, it arrives as a card: number, amount and address, for you alone."
       uk: "Коли заклад призначає вам замовлення, воно приходить карткою: номер, сума й адреса — лише для вас."
+      ru: "Когда заведение назначает вам заказ, он приходит карточкой: номер, сумма и адрес — только для вас."
   - key: 5
     anchor: offer.clock
     pending: no
@@ -87,10 +97,12 @@ steps:
       sq: "Koha e ofertës"
       en: "The offer clock"
       uk: "Час пропозиції"
+      ru: "Время предложения"
     caption:
       sq: "Ora tregon sa kohë e mban lokali për ju. Kur kalon, porosia lirohet për të tjerët — por nëse askush s’e ka marrë, ende mund ta merrni."
       en: "The clock shows how long the venue holds it for you. When it runs out the order is free for others — but if nobody has taken it, you can still take it."
       uk: "Годинник показує, скільки заклад тримає замовлення для вас. Коли час мине, воно відкрите для інших — але якщо його ніхто не взяв, ви ще можете його взяти."
+      ru: "Часы показывают, сколько заведение держит заказ для вас. Когда время истечёт, он открыт для других — но если его никто не взял, вы ещё можете его взять."
   - key: 6
     anchor: offer.take
     pending: no
@@ -102,7 +114,9 @@ steps:
       sq: "Pranoni ofertën"
       en: "Accept the offer"
       uk: "Прийміть пропозицію"
+      ru: "Примите предложение"
     caption:
       sq: "«Merr» e bën porosinë tuajën. Ekrani kalon menjëherë te marrja në lokal."
       en: "“Take” makes the order yours. The screen moves straight to the pickup at the venue."
       uk: "«Взяти» робить замовлення вашим. Екран одразу переходить до отримання в закладі."
+      ru: "«Взять» делает заказ вашим. Экран сразу переходит к получению в заведении."

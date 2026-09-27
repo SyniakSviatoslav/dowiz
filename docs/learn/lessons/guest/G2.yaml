@@ -11,10 +11,12 @@ title:
   sq: "Mbushni shportën"
   en: "Fill the basket"
   uk: "Наповніть кошик"
+  ru: "Наполните корзину"
 goal:
   sq: "Hapni një pjatë, zgjidhni sasinë dhe shtojeni në shportë."
   en: "Open a dish, choose the quantity and add it to the basket."
   uk: "Відкрити страву, обрати кількість і додати в кошик."
+  ru: "Открыть блюдо, выбрать количество и добавить в корзину."
 steps:
   - key: 1
     anchor: menu.quickAdd
@@ -27,10 +29,12 @@ steps:
       sq: "Shtim i shpejtë"
       en: "Quick add"
       uk: "Швидко додати"
+      ru: "Быстро добавить"
     caption:
       sq: "«+» në kartë e shton pjatën pa e hapur."
       en: "The “+” on a card adds the dish without opening it."
       uk: "«+» на картці додає страву, не відкриваючи її."
+      ru: "«+» на карточке добавляет блюдо, не открывая его."
   - key: 2
     anchor: menu.dish
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Hapni një pjatë"
       en: "Open a dish"
       uk: "Відкрийте страву"
+      ru: "Откройте блюдо"
     caption:
       sq: "Foto, përbërës, alergjenë dhe kalori."
       en: "Photo, ingredients, allergens and calories."
       uk: "Фото, склад, алергени й калорії."
+      ru: "Фото, состав, аллергены и калории."
   - key: 3
     anchor: dish.onTable
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Në tavolinë"
       en: "On your table"
       uk: "На вашому столі"
+      ru: "На вашем столе"
     caption:
       sq: "Aty ku telefoni e lejon, shihni pjatën në madhësi reale mbi tavolinën tuaj."
       en: "Where the phone allows it, see the dish life-size on your own table."
       uk: "Де телефон дозволяє, побачте страву в справжньому розмірі на своєму столі."
+      ru: "Где телефон позволяет, увидьте блюдо в настоящем размере на своём столе."
   - key: 4
     anchor: dish.qty
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Sasia"
       en: "Quantity"
       uk: "Кількість"
+      ru: "Количество"
     caption:
       sq: "Sa copë."
       en: "How many."
       uk: "Скільки порцій."
+      ru: "Сколько порций."
   - key: 5
     anchor: dish.add
     pending: no
@@ -87,10 +97,12 @@ steps:
       sq: "Shto në shportë"
       en: "Add to basket"
       uk: "Додати в кошик"
+      ru: "Добавить в корзину"
     caption:
       sq: "Çmimi në buton është për sasinë e zgjedhur."
       en: "The price on the button is for the chosen quantity."
       uk: "Ціна на кнопці — за обрану кількість."
+      ru: "Цена на кнопке — за выбранное количество."
   - key: 6
     anchor: dish.back
     pending: no
@@ -102,10 +114,12 @@ steps:
       sq: "Prapa"
       en: "Back"
       uk: "Назад"
+      ru: "Назад"
     caption:
       sq: "Kthehuni te menuja."
       en: "Back to the menu."
       uk: "Назад до меню."
+      ru: "Назад к меню."
   - key: 7
     anchor: cart.open
     pending: no
@@ -117,10 +131,12 @@ steps:
       sq: "Shporta"
       en: "The basket"
       uk: "Кошик"
+      ru: "Корзина"
     caption:
       sq: "Shihni çfarë zgjodhët dhe totalin."
       en: "See what you chose and the total."
       uk: "Перегляньте обране й загальну суму."
+      ru: "Просмотрите выбранное и общую сумму."
   - key: 8
     anchor: nav.cart
     pending: no
@@ -132,10 +148,12 @@ steps:
       sq: "Skeda e shportës"
       en: "The basket tab"
       uk: "Вкладка кошика"
+      ru: "Вкладка корзины"
     caption:
       sq: "E njëjta shportë, nga shiriti poshtë."
       en: "The same basket, from the bar at the bottom."
       uk: "Той самий кошик — з панелі внизу."
+      ru: "Та же корзина — с панели внизу."
   - key: 9
     anchor: cart.qty
     pending: no
@@ -147,7 +165,9 @@ steps:
       sq: "Ndryshoni sasinë"
       en: "Change a quantity"
       uk: "Змініть кількість"
+      ru: "Измените количество"
     caption:
       sq: "Më shumë, më pak, ose hiqeni."
       en: "More, fewer, or remove it."
       uk: "Більше, менше або приберіть."
+      ru: "Больше, меньше или уберите."

@@ -375,11 +375,7 @@ no hashtags unless they are the restaurant's own name, no emoji beyond one.";
 
 /// Build the prompt for one subject.
 pub fn prompt_for(subject: &Subject, venue: &str, lang: &str) -> String {
-    let language = match lang {
-        l if l.starts_with("uk") => "Ukrainian",
-        l if l.starts_with("sq") => "Albanian",
-        _ => "English",
-    };
+    let language = crate::lang::english_name(lang);
     format!(
         "RESTAURANT: {venue}\nLANGUAGE: {language}\nFACT: {}\n\nWrite the post.",
         subject.fact()
@@ -557,6 +553,8 @@ mod tests {
         assert!(p.contains("FACT:"));
         assert!(prompt_for(&Subject::Reopened, "V", "sq").contains("Albanian"));
         assert!(prompt_for(&Subject::Reopened, "V", "en").contains("English"));
+        assert!(prompt_for(&Subject::Reopened, "V", "ru").contains("LANGUAGE: Russian"));
+        assert!(prompt_for(&Subject::Reopened, "V", "de").contains("LANGUAGE: English"));
     }
 
     /// The system prompt has to forbid the two failure modes by name.

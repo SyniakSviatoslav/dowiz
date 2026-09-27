@@ -61,6 +61,7 @@ const DAY_NAMES = {
   sq: ['Hën', 'Mar', 'Mër', 'Enj', 'Pre', 'Sht', 'Die'],
   en: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   uk: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'],
+  ru: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
 };
 
 // TWO SEPARATE WAITS. `busy` is the plan being fetched, which replaces the
@@ -251,7 +252,7 @@ function body() {
     <span><i class="occ"></i><span data-t="bkTaken"></span></span>
     <!-- The small number under each table's own number. The prototype writes
          "4 mis." on the table itself; at 11px inside a 40px table that word
-         does not fit in three languages, so it is said once here instead, and
+         does not fit in every language, so it is said once here instead, and
          in full in every table's aria-label. -->
     <span><b class="bk-key">4</b><span data-t="bkSeats"></span></span>
   </div>${contact()}`;
@@ -383,7 +384,7 @@ export function openBooking() {
 // A LANGUAGE SWITCH REWRITES `data-t` NODES IN PLACE (i18n.js `retranslate`),
 // which cannot reach the words built into an SVG `aria-label` or into the
 // "chosen" line. Watching the attribute app.js sets is one listener and keeps
-// this page honest in all three languages without it knowing about app.js.
+// this page honest in every language without it knowing about app.js.
 new MutationObserver(() => { if (sheetName() === 'book') { draw(); retranslate($('#sheetIn')); } })
   .observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
 

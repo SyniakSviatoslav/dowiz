@@ -216,13 +216,13 @@ fn the_record_carries_no_phone_and_no_name() {
 
 // ── the wordings ────────────────────────────────────────────────────────────
 
-/// THREE LANGUAGES ARE THREE WORDINGS. "What you told people" is the sentence
-/// in the language they read it in, and a shared id would make the record
-/// unable to say which of the three that was.
+/// N LANGUAGES ARE N WORDINGS. "What you told people" is the sentence in the
+/// language they read it in, and a shared id would make the record unable to
+/// say which of them that was.
 #[test]
 fn each_language_is_its_own_wording() {
     let ids: Vec<String> = LANGS.iter().map(|l| wording_id(l)).collect();
-    assert_eq!(ids.len(), 3);
+    assert_eq!(ids.len(), crate::lang::LANGS.len());
     for (i, a) in ids.iter().enumerate() {
         assert!(!a.is_empty());
         for b in ids.iter().skip(i + 1) {
@@ -357,4 +357,16 @@ fn an_erasure_withdraws_and_can_never_grant() {
     assert!(check(&g).is_err());
     let l = log(&[act(State::Given, 1_000), w]);
     assert!(state(&l, KEY, PURPOSE_MARKETING, CHANNEL_WHATSAPP).is_none());
+}
+
+/// Every UI language has its own sentence, so no language shows a reader a
+/// box whose words it cannot say it read (ru added by lane W-RU, 2026-09-27).
+#[test]
+fn every_language_has_a_wording() {
+    for l in LANGS {
+        assert!(wording_of(l).is_some(), "{l} has no wording");
+        assert!(!wording_id(l).is_empty(), "{l} has no id");
+        assert!(wording_of(l).unwrap().1.contains("{venue}") && wording_of(l).unwrap().1.contains("STOP"), "{l}");
+    }
+    assert_eq!(&LANGS[..], &crate::lang::LANGS[..], "the consent set is the language set");
 }

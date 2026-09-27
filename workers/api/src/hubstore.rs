@@ -833,8 +833,8 @@ pub fn i18n_key(locale: &str, entity_type: &str, entity_id: &str, field: &str) -
     format!("{locale}/{entity_type}/{entity_id}/{field}")
 }
 
-/// Sized for a large multilingual catalogue: 165 dishes x 3 languages x 3
-/// fields is under 2,000 entries, and each is a short string.
+/// Sized for a large multilingual catalogue: 165 dishes x 4 languages x 3
+/// fields is about 2,000 entries, and each is a short string.
 pub const I18N_BYTES: usize = dowiz_hub::CEILING_BYTES;
 
 /// The venue's own failure and audit log: `worker_errors` rows that name this

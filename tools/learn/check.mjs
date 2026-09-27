@@ -11,8 +11,10 @@ import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { MEDIA_LANGS } from '../../workers/api/public/lib/langs.js';
 
-export const LANGS = ['sq', 'en', 'uk'];
+/// The films' languages: every UI language but Russian (lib/langs.js MEDIA_LANGS).
+export const LANGS = MEDIA_LANGS;
 export const MAX_KBPS = 1400, LOOP_MAX = 409600, TOL_MS = 500;
 
 /// ffprobe as JSON; injectable so the tests run on a fake.
@@ -88,7 +90,7 @@ export function checkCut(dir, lang, p = probe, warn = []) {
 
 export function main(argv, log = console, p = probe) {
   const [dir, ...langs] = argv;
-  if (!dir || !langs.length || langs.some(l => !LANGS.includes(l))) { log.error('usage: check.mjs DIR LANG [LANG...]   (LANG in sq/en/uk)'); return 2; }
+  if (!dir || !langs.length || langs.some(l => !LANGS.includes(l))) { log.error(`usage: check.mjs DIR LANG [LANG...]   (LANG in ${LANGS.join('/')})`); return 2; }
   let fails = 0;
   const warn = [];
   for (const lang of langs) for (const c of checkCut(dir, lang, p, warn)) {

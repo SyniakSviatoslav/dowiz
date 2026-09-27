@@ -11,10 +11,12 @@ title:
   sq: "Kodet promocionale"
   en: "Promo codes"
   uk: "Промокоди"
+  ru: "Промокоды"
 goal:
   sq: "Krijoni një kod të planifikuar."
   en: "Create a scheduled code."
   uk: "Створити запланований код."
+  ru: "Создать запланированный код."
 steps:
   - key: 1
     anchor: more.tile.promos
@@ -27,10 +29,12 @@ steps:
       sq: "Promocionet"
       en: "Promos"
       uk: "Промоакції"
+      ru: "Промоакции"
     caption:
       sq: "Kodet që klientët shkruajnë kur porosisin."
       en: "The codes customers type when they order."
       uk: "Коди, які клієнти вводять під час замовлення."
+      ru: "Коды, которые клиенты вводят при заказе."
   - key: 2
     anchor: promos.row
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Një kod"
       en: "A code"
       uk: "Код"
+      ru: "Код"
     caption:
       sq: "Aktiv, i planifikuar, i skaduar ose i mbaruar."
       en: "Active, scheduled, expired or used up."
       uk: "Активний, запланований, прострочений чи вичерпаний."
+      ru: "Активный, запланированный, просроченный или исчерпанный."
   - key: 3
     anchor: promos.new
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Kod i ri"
       en: "New code"
       uk: "Новий код"
+      ru: "Новый код"
     caption:
       sq: "Krijoni një kod."
       en: "Create a code."
       uk: "Створіть код."
+      ru: "Создайте код."
   - key: 4
     anchor: promos.code
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Kodi"
       en: "The code"
       uk: "Код"
+      ru: "Код"
     caption:
       sq: "Fjala që shkruan klienti."
       en: "The word the customer types."
       uk: "Слово, яке вводить клієнт."
+      ru: "Слово, которое вводит клиент."
   - key: 5
     anchor: promos.kind
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Lloji"
       en: "The kind"
       uk: "Тип"
+      ru: "Тип"
     caption:
       sq: "Përqindje ose shumë fikse."
       en: "Percent or a fixed amount."
       uk: "Відсоток чи фіксована сума."
+      ru: "Процент или фиксированная сумма."
   - key: 6
     anchor: promos.value
     pending: no
@@ -104,10 +116,12 @@ steps:
       sq: "Vlera"
       en: "The value"
       uk: "Значення"
+      ru: "Значение"
     caption:
       sq: "Sa zbritet."
       en: "How much comes off."
       uk: "Скільки знімається."
+      ru: "Сколько списывается."
   - key: 7
     anchor: promos.minOrder
     pending: no
@@ -120,10 +134,12 @@ steps:
       sq: "Porosia minimale"
       en: "Minimum order"
       uk: "Мінімальне замовлення"
+      ru: "Минимальный заказ"
     caption:
       sq: "Kodi vlen vetëm mbi këtë shumë."
       en: "The code works only above this amount."
       uk: "Код діє лише понад цю суму."
+      ru: "Код действует только выше этой суммы."
   - key: 8
     anchor: promos.from
     pending: no
@@ -136,10 +152,12 @@ steps:
       sq: "Nga"
       en: "From"
       uk: "З"
+      ru: "С"
     caption:
       sq: "Një datë në të ardhmen e bën «të planifikuar»; hapet vetë."
       en: "A future date makes it “scheduled”; it opens by itself."
       uk: "Майбутня дата робить його «запланованим»; він відкривається сам."
+      ru: "Будущая дата делает его «запланированным»; он открывается сам."
   - key: 9
     anchor: promos.until
     pending: no
@@ -152,10 +170,12 @@ steps:
       sq: "Deri"
       en: "Until"
       uk: "До"
+      ru: "До"
     caption:
       sq: "Mbaron në mesnatë të asaj dite."
       en: "It ends at midnight of that day."
       uk: "Діє до опівночі цього дня."
+      ru: "Действует до полуночи этого дня."
   - key: 10
     anchor: promos.maxUses
     pending: no
@@ -168,10 +188,12 @@ steps:
       sq: "Sa herë"
       en: "Max uses"
       uk: "Скільки разів"
+      ru: "Сколько раз"
     caption:
       sq: "Pas kaq përdorimesh kodi mbaron."
       en: "After this many uses the code is used up."
       uk: "Після стількох використань код вичерпано."
+      ru: "После стольких использований код исчерпан."
   - key: 11
     anchor: promos.flip
     pending: no
@@ -183,10 +205,12 @@ steps:
       sq: "Aktiv / joaktiv"
       en: "On / off"
       uk: "Увімк. / вимк."
+      ru: "Вкл. / выкл."
     caption:
       sq: "Ndaleni pa e fshirë."
       en: "Stop it without deleting it."
       uk: "Зупиніть, не видаляючи."
+      ru: "Остановите, не удаляя."
   - key: 12
     anchor: promos.delete
     pending: no
@@ -198,7 +222,9 @@ steps:
       sq: "Fshije"
       en: "Delete"
       uk: "Видалити"
+      ru: "Удалить"
     caption:
       sq: "Fshirja nuk kthehet — ndalimi zakonisht mjafton."
       en: "Deleting cannot be undone — stopping is usually enough."
       uk: "Видалення не скасувати — зазвичай досить зупинити."
+      ru: "Удаление не отменить — обычно достаточно остановить."

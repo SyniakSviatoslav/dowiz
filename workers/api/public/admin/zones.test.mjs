@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as Z from './zones.js';
+import { LANGS } from '../lib/langs.js';
 import { useTranslator } from '../lib/ui/core.js';
 import { Element, render, injected, XSS } from '../lib/ui/dom-shim.mjs';
 import { register } from 'node:module';
@@ -72,11 +73,11 @@ test('centreOf and newRow: the venue position when it has one, blank when not', 
   assert.deepEqual(Z.newRow(null), { kind: 'circle', lat: '', lng: '', km: String(Z.DEFAULT_KM) });
 });
 
-test('install merges the three languages into the console table', () => {
-  const T = { sq: { save: 'Ruaj' }, en: {}, uk: {} };
-  Z.install(T, ['sq', 'en', 'uk']);
+test('install merges every language into the console table', () => {
+  const T = Object.fromEntries(LANGS.map(l => [l, {}])); T.sq.save = 'Ruaj';
+  Z.install(T, LANGS);
   assert.equal(T.sq.save, 'Ruaj');
-  for (const l of ['sq', 'en', 'uk']) assert.deepEqual(Object.keys(T[l]).filter(k => k !== 'save').sort(), Object.keys(Z.WORDS.en).sort());
+  for (const l of LANGS) assert.deepEqual(Object.keys(T[l]).filter(k => k !== 'save').sort(), Object.keys(Z.WORDS.en).sort());
 });
 
 test('render: empty state and no clear button when there is no area; rows and clear when there is', () => {

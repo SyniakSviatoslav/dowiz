@@ -11,10 +11,12 @@ title:
   sq: "Rezervimet"
   en: "Reservations"
   uk: "Бронювання"
+  ru: "Бронирование"
 goal:
   sq: "Merrni një rezervim me telefon dhe konfirmoni një nga uebi."
   en: "Take a booking by phone and confirm one from the web."
   uk: "Прийняти бронювання телефоном і підтвердити одне з сайту."
+  ru: "Принять бронирование по телефону и подтвердить одно с сайта."
 steps:
   - key: 1
     anchor: more.tile.bookings
@@ -27,10 +29,12 @@ steps:
       sq: "Rezervimet"
       en: "Bookings"
       uk: "Бронювання"
+      ru: "Бронирование"
     caption:
       sq: "Nga «Më shumë»."
       en: "From “More”."
       uk: "З розділу «Більше»."
+      ru: "Из раздела «Ещё»."
   - key: 2
     anchor: bookings.day
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Dita"
       en: "The day"
       uk: "День"
+      ru: "День"
     caption:
       sq: "Zgjidhni ditën."
       en: "Choose the day."
       uk: "Оберіть день."
+      ru: "Выберите день."
   - key: 3
     anchor: bookings.list
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Lista"
       en: "The list"
       uk: "Список"
+      ru: "Список"
     caption:
       sq: "Rezervimet e ditës sipas orës."
       en: "The day’s bookings by time."
       uk: "Бронювання дня за часом."
+      ru: "Бронирования дня по времени."
   - key: 4
     anchor: bookings.row
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Një rezervim"
       en: "A booking"
       uk: "Бронювання"
+      ru: "Бронирование"
     caption:
       sq: "Ora, emri, sa veta, tavolina dhe gjendja."
       en: "The time, name, party, table and status."
       uk: "Час, ім’я, кількість гостей, стіл і статус."
+      ru: "Время, имя, число гостей, стол и статус."
   - key: 5
     anchor: bookings.confirm
     pending: no
@@ -87,10 +97,12 @@ steps:
       sq: "Konfirmo"
       en: "Confirm"
       uk: "Підтвердити"
+      ru: "Подтвердить"
     caption:
       sq: "Klienti merr konfirmimin."
       en: "The customer gets the confirmation."
       uk: "Клієнт отримує підтвердження."
+      ru: "Клиент получает подтверждение."
   - key: 6
     anchor: bookings.decline
     pending: no
@@ -102,10 +114,12 @@ steps:
       sq: "Refuzo"
       en: "Decline"
       uk: "Відхилити"
+      ru: "Отклонить"
     caption:
       sq: "Kur s’ka vend."
       en: "When there is no room."
       uk: "Коли немає місць."
+      ru: "Когда нет мест."
   - key: 7
     anchor: bookings.new
     pending: no
@@ -117,10 +131,12 @@ steps:
       sq: "Rezervim me telefon"
       en: "Booking by phone"
       uk: "Бронювання телефоном"
+      ru: "Бронирование по телефону"
     caption:
       sq: "Kur klienti telefonon, shkruajeni këtu që salla ta dijë."
       en: "When a customer calls, write it here so the room knows."
       uk: "Коли клієнт телефонує, запишіть тут, щоб зал знав."
+      ru: "Когда клиент звонит, запишите здесь, чтобы зал знал."
   - key: 8
     anchor: bookings.name
     pending: no
@@ -133,10 +149,12 @@ steps:
       sq: "Emri"
       en: "Name"
       uk: "Ім’я"
+      ru: "Имя"
     caption:
       sq: "Me cilin emër."
       en: "Under which name."
       uk: "На яке ім’я."
+      ru: "На какое имя."
   - key: 9
     anchor: bookings.phone
     pending: no
@@ -149,10 +167,12 @@ steps:
       sq: "Telefoni"
       en: "Phone"
       uk: "Телефон"
+      ru: "Телефон"
     caption:
       sq: "Për ta njoftuar."
       en: "To reach them."
       uk: "Щоб зв’язатися."
+      ru: "Чтобы связаться."
   - key: 10
     anchor: bookings.party
     pending: no
@@ -165,10 +185,12 @@ steps:
       sq: "Sa veta"
       en: "Party size"
       uk: "Скільки гостей"
+      ru: "Сколько гостей"
     caption:
       sq: "Numri i personave."
       en: "The number of people."
       uk: "Кількість людей."
+      ru: "Число людей."
   - key: 11
     anchor: bookings.time
     pending: no
@@ -181,10 +203,12 @@ steps:
       sq: "Ora"
       en: "The time"
       uk: "Час"
+      ru: "Время"
     caption:
       sq: "Ora e mbërritjes."
       en: "The arrival time."
       uk: "Час прибуття."
+      ru: "Время прибытия."
   - key: 12
     anchor: bookings.table
     pending: no
@@ -197,10 +221,12 @@ steps:
       sq: "Tavolina"
       en: "The table"
       uk: "Стіл"
+      ru: "Стол"
     caption:
       sq: "Nëse e dini tashmë."
       en: "If you already know it."
       uk: "Якщо вже знаєте."
+      ru: "Если уже знаете."
   - key: 13
     anchor: bookings.book
     pending: no
@@ -212,7 +238,9 @@ steps:
       sq: "Rezervo"
       en: "Book"
       uk: "Забронювати"
+      ru: "Забронировать"
     caption:
       sq: "Kamarieri e sheh tavolinën si të rezervuar."
       en: "The waiter sees the table as booked."
       uk: "Офіціант бачить стіл заброньованим."
+      ru: "Официант видит стол забронированным."

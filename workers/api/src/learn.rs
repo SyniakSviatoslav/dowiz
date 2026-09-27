@@ -25,7 +25,6 @@ use worker::*;
 pub const PREFIX: &str = "learn/";
 pub const MANIFEST: &str = "learn/manifest.json";
 pub const BINDING: &str = "LEARN";
-const LANGS: [&str; 3] = ["sq", "en", "uk"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Audience {
@@ -71,7 +70,7 @@ pub fn media_key(raw: &str) -> Option<(String, String)> {
     let raw = raw.strip_prefix('/').unwrap_or(raw);
     let mut it = raw.split('/');
     let (id, lang, file) = (it.next()?, it.next()?, it.next()?);
-    if it.next().is_some() || !lesson_id_ok(id) || !LANGS.contains(&lang) {
+    if it.next().is_some() || !lesson_id_ok(id) || !dowiz_hub::lang::is_media_lang(lang) {
         return None;
     }
     let (stem, ext) = file.rsplit_once('.')?;

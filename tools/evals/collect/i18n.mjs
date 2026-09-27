@@ -1,12 +1,14 @@
 // SUITE ci · I18N: every surface's dictionary, imported the way the browser imports it, keys
 // flattened per language, `qtyWords.*` excluded (number words are MEANT to differ per language).
-// missing = keys in the union a language does not have. Rule: 0 for sq, en and uk (§B.2 UX row).
+// missing = keys in the union a language does not have. Rule: 0 for every language of
+// workers/api/public/lib/langs.js (§B.2 UX row; ru added by lane W-RU 2026-09-27).
 import { register } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ind } from '../rules.mjs';
+import { LANGS } from '../../../workers/api/public/lib/langs.js';
 
-export const LANGS = ['sq', 'en', 'uk'];
+export { LANGS };
 export const DICTS = {
   store: 'store/i18n.js',
   admin: 'admin/i18n.js',
@@ -90,7 +92,7 @@ export async function collect(ctx) {
     let err = '';
     try {
       dict = pickDict(await import(pathToFileURL(path.join(pub, rel)).href));
-      if (!dict) err = 'no export holds sq, en and uk';
+      if (!dict) err = `no export holds ${LANGS.join(', ')}`;
     } catch (e) {
       err = e.message;
     }

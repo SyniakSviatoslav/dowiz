@@ -16,6 +16,8 @@
 // SpeechRecognition. `create()` returns null there and the caller shows no
 // microphone at all, rather than a button that does nothing.
 
+import { tagFor as langTag } from './langs.js';
+
 const SR = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
 
 export const supported = () => Boolean(SR);
@@ -78,5 +80,6 @@ export function speak(text, lang = 'uk-UA') {
   } catch { /* speech is an enhancement; its absence changes nothing */ }
 }
 
-/// The tag to recognise in, from the app's two-letter language.
-export const tagFor = l => ({ uk: 'uk-UA', sq: 'sq-AL', en: 'en-GB' }[l] || 'uk-UA');
+/// The tag to recognise in, from the app's two-letter language (lib/langs.js
+/// INTL); an unknown code keeps the old default, Ukrainian.
+export const tagFor = l => langTag(l, 'uk');

@@ -102,7 +102,7 @@ fn order_verbs_are_left_to_the_hubs_grammar() {
 }
 
 /// Every phrase the "By voice" lessons (docs/learn/lessons/owner/O19.yaml,
-/// waiter/W12.yaml) teach, in all three languages, does what the lesson says.
+/// waiter/W12.yaml) teach, in every language, does what the lesson says.
 #[test]
 fn the_lessons_phrases_work() {
     use dowiz_hub::voice::{classify, Command, Speaker, Target};
@@ -111,45 +111,74 @@ fn the_lessons_phrases_work() {
         classify(t, 0.9, true, Speaker::Owner)
     };
     let digits = || Target::Digits("4821".into());
-    for t in ["accept the last one", "прийми останнє", "prano të fundit"] {
+    for t in ["accept the last one", "прийми останнє", "prano të fundit", "прими последний"] {
         assert_eq!(hub(t), Command::Order { verb: "confirm", target: Target::Newest }, "{t}");
     }
     for t in ["ready 4821", "готово 4821", "gati 4821"] {
         assert_eq!(hub(t), Command::Order { verb: "ready", target: digits() }, "{t}");
     }
-    for t in ["reject 4821", "відхили 4821", "refuzo 4821"] {
+    for t in ["reject 4821", "відхили 4821", "refuzo 4821", "отклони 4821"] {
         assert_eq!(hub(t), Command::Order { verb: "reject", target: digits() }, "{t}");
     }
-    for t in ["how many are waiting", "скільки чекає", "sa janë në pritje"] {
+    for t in ["how many are waiting", "скільки чекає", "sa janë në pritje", "сколько ждёт"] {
         assert_eq!(hub(t), Command::Status, "{t}");
     }
     for (t, on) in [("margherita is off", false), ("зніми маргариту з продажу", false), ("hiq margaritën nga menuja", false),
-                    ("put margherita back on sale", true), ("поверни маргариту в продаж", true), ("rikthe margaritën", true)] {
+                    ("put margherita back on sale", true), ("поверни маргариту в продаж", true), ("rikthe margaritën", true),
+                    ("сними маргариту с продажи", false), ("верни маргариту в продажу", true)] {
         assert!(matches!(owner(t), Some(Said::DishSale { on: o, .. }) if o == on), "{t}");
     }
     for (t, s) in [("venue busy", "busy"), ("заклад зайнятий", "busy"), ("lokali i zënë", "busy"),
-                   ("close the venue", "closed"), ("закрий заклад", "closed"), ("mbyll lokalin", "closed")] {
+                   ("close the venue", "closed"), ("закрий заклад", "closed"), ("mbyll lokalin", "closed"),
+                   ("заведение занято", "busy"), ("закрой заведение", "closed")] {
         assert_eq!(owner(t), Some(Said::Venue { state: s }), "{t}");
     }
-    for t in ["open table 5 for 4", "відкрий стіл 5 на чотири", "hap tavolinën 5 për 4 veta"] {
+    for t in ["open table 5 for 4", "відкрий стіл 5 на чотири", "hap tavolinën 5 për 4 veta", "открой стол 5 на четыре"] {
         assert_eq!(waiter(t), Said::Open { table: 5, guests: Some(4) }, "{t}");
     }
-    for t in ["add 2 margherita to table 5", "додай дві маргарити на стіл 5", "shto dy margarita në tavolinën 5"] {
+    for t in ["add 2 margherita to table 5", "додай дві маргарити на стіл 5", "shto dy margarita në tavolinën 5", "добавь две маргариты на стол 5"] {
         assert!(matches!(waiter(t), Said::Add { qty: 2, table: Some(5), .. }), "{t}");
     }
-    for t in ["add cola", "додай колу", "shto një kola"] {
+    for t in ["add cola", "додай колу", "shto një kola", "добавь колу"] {
         assert!(matches!(waiter(t), Said::Add { qty: 1, table: None, .. }), "{t}");
     }
-    for t in ["send the round", "відправ замовлення", "dërgo porosinë"] {
+    for t in ["send the round", "відправ замовлення", "dërgo porosinë", "отправь заказ"] {
         assert_eq!(waiter(t), Said::Send { table: None }, "{t}");
     }
-    for t in ["table 5 paid cash", "стіл 5 оплатив готівкою", "tavolina 5 paguar kesh"] {
+    for t in ["table 5 paid cash", "стіл 5 оплатив готівкою", "tavolina 5 paguar kesh", "стол 5 оплатил наличными"] {
         assert_eq!(waiter(t), Said::Paid { table: 5, method: Method::Cash }, "{t}");
     }
-    for t in ["table 5 paid card", "стіл 5 оплата карткою", "tavolina 5 paguar me kartë"] {
+    for t in ["table 5 paid card", "стіл 5 оплата карткою", "tavolina 5 paguar me kartë", "стол 5 оплата картой"] {
         assert_eq!(waiter(t), Said::Paid { table: 5, method: Method::Card }, "{t}");
     }
-    for t in ["status", "скільки столів", "statusi"] {
+    for t in ["status", "скільки столів", "statusi", "сколько столов"] {
         assert_eq!(waiter(t), Said::Status, "{t}");
     }
+}
+
+/// Russian, the fourth language (lane W-RU, 2026-09-27): the waiter's and the
+/// owner's words, heard the same way as the other three.
+#[test]
+fn the_waiters_russian_words() {
+    assert_eq!(waiter("Открой стол 5 на четыре"), Said::Open { table: 5, guests: Some(4) });
+    assert_eq!(waiter("добавь две маргариты на стол 5"), add("маргариты", 2, Some(5)));
+    assert_eq!(waiter("добавь колу пожалуйста"), add("колу", 1, None));
+    assert_eq!(waiter("отправь заказ на стол 3"), Said::Send { table: Some(3) });
+    assert_eq!(waiter("стол 7 оплатил наличными"), Said::Paid { table: 7, method: Method::Cash });
+    assert_eq!(waiter("стол 7 оплата картой"), Said::Paid { table: 7, method: Method::Card });
+    assert_eq!(waiter("стол 7 оплатили"), Said::Unclear("cash_or_card"));
+    assert_eq!(waiter("сколько столов"), Said::Status);
+    assert_eq!(waiter("добавь и отправь"), Said::Unclear("more_than_one"));
+}
+
+#[test]
+fn the_owners_russian_words() {
+    assert_eq!(owner("сними маргариту с продажи"), Some(Said::DishSale { dish: "маргариту".into(), on: false }));
+    assert_eq!(owner("закончилась кола"), Some(Said::DishSale { dish: "кола".into(), on: false }));
+    assert_eq!(owner("верни колу в продажу"), Some(Said::DishSale { dish: "колу".into(), on: true }));
+    assert_eq!(owner("заведение закрыто"), Some(Said::Venue { state: "closed" }));
+    assert_eq!(owner("заведение занято"), Some(Said::Venue { state: "busy" }));
+    assert_eq!(owner("открой ресторан"), Some(Said::Venue { state: "open" }));
+    assert_eq!(owner("сколько ждёт"), None);
+    assert_eq!(owner("Каких ингредиентов мало?"), None);
 }

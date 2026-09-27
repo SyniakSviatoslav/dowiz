@@ -26,12 +26,15 @@ pub const VERSION: &str = "dpa v1 2026-09-24";
 const SQ: &str = include_str!("../../../../docs/privacy/DPA-v1-2026-09-24.sq.md");
 const EN: &str = include_str!("../../../../docs/privacy/DPA-v1-2026-09-24.en.md");
 const UK: &str = include_str!("../../../../docs/privacy/DPA-v1-2026-09-24.uk.md");
+/// DRAFT, not legally reviewed (lane W-RU, 2026-09-27); the text says so first.
+const RU: &str = include_str!("../../../../docs/privacy/DPA-v1-2026-09-24.ru.md");
 
 /// The text in a language; Albanian otherwise.
 pub fn text(lang: &str) -> &'static str {
     match lang {
         "en" => EN,
         "uk" => UK,
+        "ru" => RU,
         _ => SQ,
     }
 }
@@ -102,24 +105,26 @@ pub fn to_html(md: &str) -> String {
     out
 }
 
-fn lang_of(req: &Request) -> String {
-    req.url().ok().and_then(|u| u.query_pairs().find(|(k, _)| k == "lang").map(|(_, v)| v.to_string())).unwrap_or_else(|| "sq".into())
-}
-
-/// `GET /dpa?lang=sq|en|uk`
+/// `GET /dpa?lang=<one of LANGS>`; without `?lang`, the browser's
+/// `Accept-Language`, else Albanian.
 pub async fn page(req: Request, _ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let lang = lang_of(&req);
-    let l = if ["sq", "en", "uk"].contains(&lang.as_str()) { lang } else { "sq".into() };
-    let body = format!(
-        "<!doctype html><html lang=\"{l}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
-         <title>DPA</title><link rel=\"stylesheet\" href=\"/store/legal.css\"></head><body><main class=\"legal\">\
-         <nav class=\"langs\"><a href=\"?lang=sq\">SQ</a> · <a href=\"?lang=en\">EN</a> · <a href=\"?lang=uk\">UK</a></nav>{}</main></body></html>",
-        to_html(text(&l))
-    );
+    let body = render(super::notice::lang_of(&req, "sq"));
     let mut res = Response::from_html(body)?;
     res.headers_mut().set("content-security-policy", "default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'")?;
     res.headers_mut().set("cache-control", "public, max-age=300")?;
+    res.headers_mut().set("vary", "accept-language")?;
     Ok(res)
+}
+
+/// The DPA page in `l`, with a link to every language.
+pub fn render(l: &str) -> String {
+    let links = dowiz_hub::lang::LANGS.iter().map(|x| format!("<a href=\"?lang={x}\" hreflang=\"{x}\">{}</a>", x.to_uppercase())).collect::<Vec<_>>().join(" · ");
+    format!(
+        "<!doctype html><html lang=\"{l}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+         <title>DPA</title><link rel=\"stylesheet\" href=\"/store/legal.css\"></head><body><main class=\"legal\">\
+         <nav class=\"langs\">{links}</nav>{}</main></body></html>",
+        to_html(text(l))
+    )
 }
 
 /// `GET /api/owner/dpa` — the venue's acceptance, read from its `loc` record.

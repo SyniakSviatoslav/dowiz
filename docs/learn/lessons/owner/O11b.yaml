@@ -11,10 +11,12 @@ title:
   sq: "Dërgimi fiskal"
   en: "Fiscal sending"
   uk: "Фіскальне надсилання"
+  ru: "Фискальная отправка"
 goal:
   sq: "Shpjegoni pasojën para se ta aktivizoni."
   en: "Explain the consequence before arming it."
   uk: "Пояснити наслідки до ввімкнення."
+  ru: "Объяснить последствия до включения."
 steps:
   - key: 1
     anchor: ebills.fiscal
@@ -27,10 +29,12 @@ steps:
       sq: "Fiskalizimi"
       en: "Fiscal"
       uk: "Фіскалізація"
+      ru: "Фискализация"
     caption:
       sq: "Nga faqja eBills."
       en: "From the eBills page."
       uk: "Зі сторінки eBills."
+      ru: "Со страницы eBills."
   - key: 2
     anchor: fiscal.state
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Gjendja"
       en: "State"
       uk: "Стан"
+      ru: "Состояние"
     caption:
       sq: "Joaktiv, apo aktiv. Pasi aktivizohet, çdo faturë është dokument ligjor."
       en: "Off, or armed. Once armed, every receipt is a legal document."
       uk: "Вимкнено чи ввімкнено. Після ввімкнення кожен чек — юридичний документ."
+      ru: "Выключено или включено. После включения каждый чек — юридический документ."
   - key: 3
     anchor: fiscal.waiting
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Në pritje"
       en: "Waiting"
       uk: "Очікують"
+      ru: "Ожидают"
     caption:
       sq: "Faturat që ende s’janë dërguar."
       en: "Receipts not yet sent."
       uk: "Чеки, ще не надіслані."
+      ru: "Чеки, ещё не отправленные."
   - key: 4
     anchor: fiscal.stage
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Një faturë"
       en: "A receipt"
       uk: "Чек"
+      ru: "Чек"
     caption:
       sq: "Porosia dhe hapi ku ndodhet; e kuqja do të thotë vonesë."
       en: "The order and the stage it is at; red means late."
       uk: "Замовлення та етап, на якому воно; червоне — запізнення."
+      ru: "Заказ и этап, на котором он; красное — опоздание."
   - key: 5
     anchor: fiscal.receipt
     pending: no
@@ -87,10 +97,12 @@ steps:
       sq: "Shiko faturën"
       en: "See the receipt"
       uk: "Переглянути чек"
+      ru: "Посмотреть чек"
     caption:
       sq: "Fatura ashtu siç shkon."
       en: "The receipt as it is sent."
       uk: "Чек таким, яким він надсилається."
+      ru: "Чек таким, каким он отправляется."
   - key: 6
     anchor: fiscal.saleUnit
     pending: no
@@ -102,10 +114,12 @@ steps:
       sq: "Njësia e shitjes"
       en: "Sale unit"
       uk: "Одиниця продажу"
+      ru: "Единица продажи"
     caption:
       sq: "Njësia që kërkon tatimi."
       en: "The unit the tax office asks for."
       uk: "Одиниця, якої вимагає податкова."
+      ru: "Единица, которую требует налоговая."
   - key: 7
     anchor: fiscal.feeItem
     pending: no
@@ -117,10 +131,12 @@ steps:
       sq: "Tarifa e dërgesës"
       en: "Delivery fee item"
       uk: "Позиція доставки"
+      ru: "Позиция доставки"
     caption:
       sq: "Artikulli i arkës për tarifën e dërgesës."
       en: "The till item for the delivery fee."
       uk: "Позиція каси для плати за доставку."
+      ru: "Позиция кассы для платы за доставку."
   - key: 8
     anchor: fiscal.save
     pending: no
@@ -132,10 +148,12 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Ruhet pa aktivizuar asgjë."
       en: "Saves without arming anything."
       uk: "Зберігає, нічого не вмикаючи."
+      ru: "Сохраняет, ничего не включая."
   - key: 9
     anchor: fiscal.phrase
     pending: no
@@ -147,10 +165,12 @@ steps:
       sq: "Fraza"
       en: "The phrase"
       uk: "Фраза"
+      ru: "Фраза"
     caption:
       sq: "Për ta aktivizuar shkruani frazën e lokalit — kështu nuk ndodh rastësisht."
       en: "To arm it, type the venue’s phrase — so it never happens by accident."
       uk: "Щоб увімкнути, введіть фразу закладу — так це не станеться випадково."
+      ru: "Чтобы включить, введите фразу заведения — так это не случится случайно."
   - key: 10
     anchor: fiscal.arm
     pending: no
@@ -162,10 +182,12 @@ steps:
       sq: "Aktivizo"
       en: "Arm"
       uk: "Увімкнути"
+      ru: "Включить"
     caption:
       sq: "Vetëm kur jeni gati ligjërisht."
       en: "Only when you are legally ready."
       uk: "Лише коли ви юридично готові."
+      ru: "Только когда вы юридически готовы."
   - key: 11
     anchor: fiscal.disarm
     pending: no
@@ -177,7 +199,9 @@ steps:
       sq: "Çaktivizo"
       en: "Disarm"
       uk: "Вимкнути"
+      ru: "Выключить"
     caption:
       sq: "Ndal dërgimin, po me frazë."
       en: "Stops sending, with the phrase too."
       uk: "Зупиняє надсилання — теж фразою."
+      ru: "Останавливает отправку — тоже фразой."

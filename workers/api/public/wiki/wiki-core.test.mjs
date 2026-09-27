@@ -2,7 +2,7 @@
 // search, links, and which token opens the gated videos.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { T, LANGS, ROLES, parseRoute, href, appLink, pickLang, words, search, tracks, clock, bearer, gatedUrl } from './wiki-core.js';
+import { T, LANGS, ROLES, parseRoute, href, appLink, pickLang, words, search, tracks, clock, bearer, gatedUrl, cutFor } from './wiki-core.js';
 
 test('T: every language carries every word the pages use', () => {
   const keys = Object.keys(T.en).sort();
@@ -71,4 +71,12 @@ test('gatedUrl: a static media path moves under /api/learn/media; a gated one is
   assert.equal(gatedUrl('/learn/media/W3/sq/video.mp4'), '/api/learn/media/W3/sq/video.mp4');
   assert.equal(gatedUrl('/api/learn/media/W3/sq/poster.jpg'), '/api/learn/media/W3/sq/poster.jpg');
   assert.equal(gatedUrl(undefined), '');
+});
+
+test('cutFor: the reader\'s own cut; a language with no films (ru) watches the English cut; none is null', () => {
+  const cuts = { sq: { video: 's' }, en: { video: 'e' }, uk: { video: 'u' } };
+  assert.equal(cutFor(cuts, 'uk').video, 'u');
+  assert.equal(cutFor(cuts, 'ru').video, 'e');
+  assert.equal(cutFor({ sq: { video: 's' } }, 'ru'), null);
+  assert.equal(cutFor(undefined, 'ru'), null);
 });

@@ -11,10 +11,12 @@ title:
   sq: "Paguani dhe porositni"
   en: "Pay and place the order"
   uk: "Оплатіть і оформіть"
+  ru: "Оплатите и оформите"
 goal:
   sq: "Zgjidhni pagesën, një bakshish ose kod, dhe dërgoni porosinë."
   en: "Choose the payment, a tip or a code, and place the order."
   uk: "Обрати оплату, чайові чи код і оформити замовлення."
+  ru: "Выбрать оплату, чаевые или код и оформить заказ."
 steps:
   - key: 1
     anchor: checkout.payMethod
@@ -27,10 +29,12 @@ steps:
       sq: "Mënyra e pagesës"
       en: "Payment method"
       uk: "Спосіб оплати"
+      ru: "Способ оплаты"
     caption:
       sq: "Para në dorë, kartë ose portofol — aq sa pranon lokali."
       en: "Cash, card or wallet — whatever the venue accepts."
       uk: "Готівка, картка чи гаманець — те, що приймає заклад."
+      ru: "Наличные, карта или кошелёк — то, что принимает заведение."
   - key: 2
     anchor: checkout.tip
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Bakshishi"
       en: "Tip"
       uk: "Чайові"
+      ru: "Чаевые"
     caption:
       sq: "Nëse doni, një bakshish për korrierin."
       en: "If you like, a tip for the courier."
       uk: "Якщо хочете, чайові для кур’єра."
+      ru: "Если хотите, чаевые для курьера."
   - key: 3
     anchor: checkout.promo
     pending: no
@@ -58,10 +64,12 @@ steps:
       sq: "Kodi promocional"
       en: "Promo code"
       uk: "Промокод"
+      ru: "Промокод"
     caption:
       sq: "Nëse keni një kod, shkruajeni këtu."
       en: "If you have a code, type it here."
       uk: "Якщо маєте код, введіть його тут."
+      ru: "Если у вас есть код, введите его здесь."
   - key: 4
     anchor: checkout.place
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Dërgo porosinë"
       en: "Place the order"
       uk: "Оформити замовлення"
+      ru: "Оформить заказ"
     caption:
       sq: "Kontrolloni totalin dhe dërgojeni."
       en: "Check the total and send it."
       uk: "Перевірте суму й надішліть."
+      ru: "Проверьте сумму и отправьте."
   - key: 5
     anchor: checkout.pay
     pending: no
@@ -88,7 +98,9 @@ steps:
       sq: "Paguani"
       en: "Pay"
       uk: "Оплатіть"
+      ru: "Оплатите"
     caption:
       sq: "Me kartë online, ose paguani me para në dorë te dera. Lokali e merr porosinë menjëherë."
       en: "By card online, or pay cash at the door. The venue gets the order at once."
       uk: "Карткою онлайн або готівкою біля дверей. Заклад одразу отримує замовлення."
+      ru: "Картой онлайн или наличными у двери. Заведение сразу получает заказ."

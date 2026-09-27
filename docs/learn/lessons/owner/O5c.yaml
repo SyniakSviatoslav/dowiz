@@ -11,10 +11,12 @@ title:
   sq: "Një furnizim i ri"
   en: "A new supply"
   uk: "Новий запас"
+  ru: "Новый запас"
 goal:
   sq: "Shtoni një furnizim me njësi, kosto dhe nivel minimal."
   en: "Add a supply with its unit, cost and low level."
   uk: "Додати запас з одиницею, собівартістю й мінімальним рівнем."
+  ru: "Добавить запас с единицей, себестоимостью и минимальным уровнем."
 steps:
   - key: 1
     anchor: stock.addSupply
@@ -27,10 +29,12 @@ steps:
       sq: "Furnizim i ri"
       en: "New supply"
       uk: "Новий запас"
+      ru: "Новый запас"
     caption:
       sq: "Çdo përbërës që blini."
       en: "Every ingredient you buy."
       uk: "Кожен інгредієнт, який ви купуєте."
+      ru: "Каждый ингредиент, который вы покупаете."
   - key: 2
     anchor: supply.name
     pending: no
@@ -43,10 +47,12 @@ steps:
       sq: "Emri"
       en: "The name"
       uk: "Назва"
+      ru: "Название"
     caption:
       sq: "Si e quani në kuzhinë."
       en: "What the kitchen calls it."
       uk: "Як його називають на кухні."
+      ru: "Как его называют на кухне."
   - key: 3
     anchor: supply.id
     pending: no
@@ -59,10 +65,12 @@ steps:
       sq: "Kodi"
       en: "The code"
       uk: "Код"
+      ru: "Код"
     caption:
       sq: "Një fjalë e shkurtër pa hapësira; recetat dhe skedarët CSV e përdorin. Nuk ndryshon më pas."
       en: "A short word with no spaces; recipes and CSV files use it. It cannot change later."
       uk: "Коротке слово без пробілів; його використовують рецепти й CSV. Потім не змінюється."
+      ru: "Короткое слово без пробелов; его используют рецепты и CSV. Потом не меняется."
   - key: 4
     anchor: supply.kind
     pending: no
@@ -74,10 +82,12 @@ steps:
       sq: "Lloji"
       en: "The kind"
       uk: "Тип"
+      ru: "Тип"
     caption:
       sq: "Përbërës apo artikull i gatshëm."
       en: "Ingredient or ready item."
       uk: "Інгредієнт чи готовий товар."
+      ru: "Ингредиент или готовый товар."
   - key: 5
     anchor: supply.category
     pending: no
@@ -89,10 +99,12 @@ steps:
       sq: "Kategoria"
       en: "The category"
       uk: "Категорія"
+      ru: "Категория"
     caption:
       sq: "Peshk, perime, pije…"
       en: "Fish, vegetables, drinks…"
       uk: "Риба, овочі, напої…"
+      ru: "Рыба, овощи, напитки…"
   - key: 6
     anchor: supply.unit
     pending: no
@@ -104,10 +116,12 @@ steps:
       sq: "Njësia"
       en: "The unit"
       uk: "Одиниця"
+      ru: "Единица"
     caption:
       sq: "Gram, mililitër ose copë."
       en: "Gram, millilitre or piece."
       uk: "Грам, мілілітр чи штука."
+      ru: "Грамм, миллилитр или штука."
   - key: 7
     anchor: supply.kcal
     pending: no
@@ -120,10 +134,12 @@ steps:
       sq: "Kaloritë"
       en: "Calories"
       uk: "Калорії"
+      ru: "Калории"
     caption:
       sq: "Për 100 njësi; kaloritë e pjatave llogariten nga kjo."
       en: "Per 100 units; dish calories are worked out from it."
       uk: "На 100 одиниць; з цього рахуються калорії страв."
+      ru: "На 100 единиц; из этого считаются калории блюд."
   - key: 8
     anchor: supply.cost
     pending: no
@@ -136,10 +152,12 @@ steps:
       sq: "Kostoja"
       en: "The cost"
       uk: "Собівартість"
+      ru: "Себестоимость"
     caption:
       sq: "Sa ju kushton; kostoja e pjatës del prej saj."
       en: "What it costs you; the dish cost comes from it."
       uk: "Скільки коштує вам; з цього виходить собівартість страви."
+      ru: "Сколько стоит вам; из этого выходит себестоимость блюда."
   - key: 9
     anchor: supply.low
     pending: no
@@ -152,10 +170,12 @@ steps:
       sq: "Niveli minimal"
       en: "Low level"
       uk: "Мінімальний рівень"
+      ru: "Минимальный уровень"
     caption:
       sq: "Nën këtë sasi, furnizimi shfaqet si «po mbaron»."
       en: "Below this, the supply shows as “running low”."
       uk: "Нижче цього запас позначено як «закінчується»."
+      ru: "Ниже этого запас отмечен как «заканчивается»."
   - key: 10
     anchor: supply.save
     pending: no
@@ -167,10 +187,12 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Furnizimi është gati për receta."
       en: "The supply is ready for recipes."
       uk: "Запас готовий для рецептів."
+      ru: "Запас готов для рецептов."
   - key: 11
     anchor: supply.retire
     pending: no
@@ -182,7 +204,9 @@ steps:
       sq: "Tërhiqe"
       en: "Retire"
       uk: "Вивести"
+      ru: "Вывести"
     caption:
       sq: "Kur nuk e blini më; historia mbetet."
       en: "When you stop buying it; the history stays."
       uk: "Коли ви більше не купуєте; історія лишається."
+      ru: "Когда вы больше не покупаете; история остаётся."

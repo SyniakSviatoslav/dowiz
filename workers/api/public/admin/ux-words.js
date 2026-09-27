@@ -27,6 +27,13 @@ export const WORDS = {
     staffSub: 'ролі та входи', deliveryAreaSub: 'зони та тарифи',
     sideMap: 'Налаштування та інше',
   },
+  ru: {
+    appearance: 'Вид', theme_auto: 'Как в телефоне', theme_light: 'Светлый', theme_dark: 'Тёмный',
+    profileTitle: 'Язык, валюта, вид', findSetting: 'Найти настройку…', noSetting: 'Нет настройки с таким названием',
+    settingsVenue: 'Заведение', settingsLinks: 'Подключения', settingsData: 'Данные и безопасность',
+    staffSub: 'роли и входы', deliveryAreaSub: 'зоны и тарифы',
+    sideMap: 'Настройки и прочее',
+  },
 };
 
 /// Merge these words into a console dictionary `T` ({ lang: { key: word } }),

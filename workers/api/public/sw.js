@@ -10,7 +10,7 @@
 // The cache is named by the deploy's own version line below; a new deploy
 // with a new line drops the old shell on activation.
 
-const SHELL_CACHE = 'dowiz-shell-2026-09-26-retry';
+const SHELL_CACHE = 'dowiz-shell-2026-09-27-ru';
 /// THE WHOLE MODULE GRAPH, not just its entry.
 ///
 /// This list used to hold the document, `/app.js` and the three stylesheets,
@@ -36,6 +36,7 @@ const SHELL_CACHE_MODULES = [
   '/store/booking-mine.js',
   '/store/booking-words.js',
   '/lib/money.js',
+  '/lib/langs.js',
   // `/store/sea.js` imports the generated vocabulary at parse time, and a
   // static import that is not in the shell is the exact failure the list above
   // describes: the shell caches, the module fails at link time, the page is
@@ -49,6 +50,7 @@ const SHELL_CACHE_MODULES = [
   '/store/dish.js',
   '/store/eta.js',
   '/store/i18n.js',
+  '/store/i18n-ru.js',
   '/store/install.js',
   '/store/menu.js',
   '/store/motion.js',

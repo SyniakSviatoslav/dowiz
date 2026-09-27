@@ -11,10 +11,12 @@ title:
   sq: "Receta dhe shija e një pjate"
   en: "A dish’s recipe and taste profile"
   uk: "Рецепт і смак страви"
+  ru: "Рецепт и вкус блюда"
 goal:
   sq: "Lidhni një recetë dhe vendosni pesë boshtet e shijes."
   en: "Attach a recipe and set the five taste axes."
   uk: "Прив’язати рецепт і задати п’ять осей смаку."
+  ru: "Привязать рецепт и задать пять осей вкуса."
 steps:
   - key: 1
     anchor: recipe.kind
@@ -27,10 +29,12 @@ steps:
       sq: "Lloji"
       en: "The kind"
       uk: "Тип"
+      ru: "Тип"
     caption:
       sq: "Pjatë me recetë, apo artikull i gatshëm si një pije."
       en: "A dish with a recipe, or a ready item such as a drink."
       uk: "Страва з рецептом чи готовий товар, як-от напій."
+      ru: "Блюдо с рецептом или готовый товар, например напиток."
   - key: 2
     anchor: recipe.pick
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Furnizimi"
       en: "A supply"
       uk: "Запас"
+      ru: "Запас"
     caption:
       sq: "Zgjidhni nga furnizimet tuaja."
       en: "Pick from your supplies."
       uk: "Оберіть зі своїх запасів."
+      ru: "Выберите из своих запасов."
   - key: 3
     anchor: recipe.addLine
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Shto rresht"
       en: "Add a line"
       uk: "Додати рядок"
+      ru: "Добавить строку"
     caption:
       sq: "Një rresht për çdo përbërës."
       en: "One line per ingredient."
       uk: "Один рядок на інгредієнт."
+      ru: "Одна строка на ингредиент."
   - key: 4
     anchor: recipe.qty
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Sasia"
       en: "The quantity"
       uk: "Кількість"
+      ru: "Количество"
     caption:
       sq: "Në njësinë e furnizimit. Kaloritë, pesha dhe kostoja llogariten nga kjo."
       en: "In the supply’s unit. Calories, weight and cost are worked out from it."
       uk: "В одиницях запасу. З цього рахуються калорії, вага й собівартість."
+      ru: "В единицах запаса. Из этого считаются калории, вес и себестоимость."
   - key: 5
     anchor: recipe.more
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Më shumë"
       en: "More"
       uk: "Більше"
+      ru: "Ещё"
     caption:
       sq: "Rrit sasinë me një hap."
       en: "Raises the quantity by one step."
       uk: "Збільшує кількість на крок."
+      ru: "Увеличивает количество на шаг."
   - key: 6
     anchor: recipe.less
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Më pak"
       en: "Less"
       uk: "Менше"
+      ru: "Меньше"
     caption:
       sq: "E ul me një hap."
       en: "Lowers it by one step."
       uk: "Зменшує на крок."
+      ru: "Уменьшает на шаг."
   - key: 7
     anchor: recipe.removeLine
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "Hiq rreshtin"
       en: "Remove the line"
       uk: "Прибрати рядок"
+      ru: "Убрать строку"
     caption:
       sq: "Kur një përbërës nuk hyn më."
       en: "When an ingredient no longer goes in."
       uk: "Коли інгредієнт більше не входить."
+      ru: "Когда ингредиент больше не входит."
   - key: 8
     anchor: taste.spicy
     pending: no
@@ -133,10 +149,12 @@ steps:
       sq: "Pikant"
       en: "Spicy"
       uk: "Гостре"
+      ru: "Острое"
     caption:
       sq: "Pesë boshte shije; klienti zgjedh sipas tyre."
       en: "Five taste axes; customers choose by them."
       uk: "П’ять осей смаку; клієнти обирають за ними."
+      ru: "Пять осей вкуса; клиенты выбирают по ним."
   - key: 9
     anchor: taste.sweet
     pending: no
@@ -148,10 +166,12 @@ steps:
       sq: "I ëmbël"
       en: "Sweet"
       uk: "Солодке"
+      ru: "Сладкое"
     caption:
       sq: "Sa i ëmbël."
       en: "How sweet."
       uk: "Наскільки солодке."
+      ru: "Насколько сладкое."
   - key: 10
     anchor: taste.salty
     pending: no
@@ -163,10 +183,12 @@ steps:
       sq: "I kripur"
       en: "Salty"
       uk: "Солоне"
+      ru: "Солёное"
     caption:
       sq: "Sa i kripur."
       en: "How salty."
       uk: "Наскільки солоне."
+      ru: "Насколько солёное."
   - key: 11
     anchor: taste.sour
     pending: no
@@ -178,10 +200,12 @@ steps:
       sq: "I thartë"
       en: "Sour"
       uk: "Кисле"
+      ru: "Кислое"
     caption:
       sq: "Sa i thartë."
       en: "How sour."
       uk: "Наскільки кисле."
+      ru: "Насколько кислое."
   - key: 12
     anchor: taste.richness
     pending: no
@@ -193,7 +217,9 @@ steps:
       sq: "I rëndë"
       en: "Rich"
       uk: "Ситне"
+      ru: "Сытное"
     caption:
       sq: "Sa i yndyrshëm dhe i ngopshëm."
       en: "How rich and filling."
       uk: "Наскільки жирне й ситне."
+      ru: "Насколько жирное и сытное."

@@ -206,7 +206,7 @@ pub struct ForgetBody {
     pub lang: Option<String>,
 }
 
-/// THE ANSWER'S PROMISE, in the owner's three languages, and TRUE: the
+/// THE ANSWER'S PROMISE, in every language the console speaks, and TRUE: the
 /// nightly copies are kept 21 days (`cloud::KEEP_WEEKLY_MS`), so the last copy
 /// holding the person is gone within 22 days of tonight; and a restore replays
 /// the erasure register (`register`, `run::replay`). The console shows the
@@ -215,6 +215,7 @@ pub fn notice(lang: &str) -> &'static str {
     match lang {
         "en" => "Copies in the venue's nightly backup expire within 22 days and nothing reads them; a restored backup is forgotten again automatically.",
         "uk" => "Копії в нічній резервній копії закладу зникають протягом 22 днів, і ніхто їх не читає; відновлена копія автоматично забуває людину знову.",
+        "ru" => "Копии в ночной резервной копии заведения исчезают в течение 22 дней, и никто их не читает; восстановленная копия автоматически забывает человека снова.",
         _ => "Kopjet në rezervën e natës së lokalit skadojnë brenda 22 ditëve dhe askush nuk i lexon; një rezervë e rikthyer e harron sërish personin automatikisht.",
     }
 }

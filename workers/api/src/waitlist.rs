@@ -22,9 +22,9 @@ use crate::platform::admin_only;
 const VENUE_MAX: usize = 120;
 /// RFC 5321's limit on a path; longer is not an address anybody can mail.
 const EMAIL_MAX: usize = 254;
-/// The languages the landing page is served in; anything else is recorded as
-/// the default rather than as whatever the client sent.
-const LANGS: &[&str] = &["uk", "en", "sq"];
+/// The landing's languages (`dowiz_hub::lang::LANGS`); anything else is
+/// recorded as the default rather than as whatever the client sent.
+use dowiz_hub::lang::LANGS;
 /// How many rows the console reads at once. The list is read by a person.
 const LIST_MAX: usize = 500;
 
@@ -85,6 +85,11 @@ pub fn mail_raw(from: &str, to: &str, email: &str, venue: &str, lang: &str, sour
     )
 }
 
+/// The visitor's language when it is one of ours; else the default, Ukrainian.
+pub fn lang_of(sent: &str) -> &'static str {
+    LANGS.iter().copied().find(|l| *l == sent).unwrap_or("uk")
+}
+
 fn b64(bytes: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
@@ -112,7 +117,7 @@ pub async fn join(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
         return Response::error("that is not an email address", 400);
     }
     let venue: String = body.venue.trim().chars().take(VENUE_MAX).collect();
-    let lang = if LANGS.contains(&body.lang.as_str()) { body.lang.as_str() } else { "uk" };
+    let lang = lang_of(&body.lang);
     let source = req
         .headers()
         .get("host")
@@ -270,6 +275,17 @@ mod tests {
         // The honest mail is unchanged.
         let ok = mail_raw("w@dowiz.org", "op@example.com", "k@d.al", "Dubin", "sq", "dowiz.org", 7);
         assert!(ok.contains("Subject: dowiz waitlist: Dubin <k@d.al>\r\n"));
+    }
+
+    /// A Russian visitor is recorded as Russian (lane W-RU): the landing now
+    /// speaks ru, and the row said "uk" for every ru page.
+    #[test]
+    fn every_landing_language_is_recorded_as_itself() {
+        for l in dowiz_hub::lang::LANGS {
+            assert_eq!(lang_of(l), l);
+        }
+        assert_eq!(lang_of("de"), "uk");
+        assert_eq!(lang_of(""), "uk");
     }
 
     #[test]

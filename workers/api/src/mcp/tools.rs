@@ -43,7 +43,7 @@ pub enum Role {
 }
 
 const NO_ARGS: &str = r#"{"type":"object","properties":{}}"#;
-const MENU_SCHEMA: &str = r#"{"type":"object","properties":{"lang":{"type":"string","enum":["sq","en","uk"]}}}"#;
+const MENU_SCHEMA: &str = concat!(r#"{"type":"object","properties":{"lang":{"type":"string","enum":"#, dowiz_hub::langs_json!(), "}}}");
 const MENU_PATH: &str = "/api/public/locations/{slug}/menu";
 const MENU_TEXT: &str = "The public menu as customers see it: categories, dishes, prices, availability, photos.";
 

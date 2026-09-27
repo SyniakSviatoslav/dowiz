@@ -292,20 +292,20 @@ export function forgetAddress(line){
 // ── allergens ───────────────────────────────────────────────────────────────
 // THE FILTER HIDES THE UNDECLARED TOO, and that is the whole design.
 export const ALLERGENS = [
-  ['gluten',      { sq:'Gluten',      en:'Gluten',      uk:'Глютен' }],
-  ['crustaceans', { sq:'Guaskorë',    en:'Crustaceans', uk:'Ракоподібні' }],
-  ['eggs',        { sq:'Vezë',        en:'Eggs',        uk:'Яйця' }],
-  ['fish',        { sq:'Peshk',       en:'Fish',        uk:'Риба' }],
-  ['peanuts',     { sq:'Kikirikë',    en:'Peanuts',     uk:'Арахіс' }],
-  ['soy',         { sq:'Soja',        en:'Soy',         uk:'Соя' }],
-  ['milk',        { sq:'Qumësht',     en:'Milk',        uk:'Молоко' }],
-  ['nuts',        { sq:'Arra',        en:'Nuts',        uk:'Горіхи' }],
-  ['celery',      { sq:'Selino',      en:'Celery',      uk:'Селера' }],
-  ['mustard',     { sq:'Mustardë',    en:'Mustard',     uk:'Гірчиця' }],
-  ['sesame',      { sq:'Susam',       en:'Sesame',      uk:'Кунжут' }],
-  ['sulphites',   { sq:'Sulfite',     en:'Sulphites',   uk:'Сульфіти' }],
-  ['lupin',       { sq:'Lupin',       en:'Lupin',       uk:'Люпин' }],
-  ['molluscs',    { sq:'Molusqe',     en:'Molluscs',    uk:'Молюски' }],
+  ['gluten',      { sq:'Gluten',      en:'Gluten',      uk:'Глютен', ru:'Глютен' }],
+  ['crustaceans', { sq:'Guaskorë',    en:'Crustaceans', uk:'Ракоподібні', ru:'Ракообразные' }],
+  ['eggs',        { sq:'Vezë',        en:'Eggs',        uk:'Яйця', ru:'Яйца' }],
+  ['fish',        { sq:'Peshk',       en:'Fish',        uk:'Риба', ru:'Рыба' }],
+  ['peanuts',     { sq:'Kikirikë',    en:'Peanuts',     uk:'Арахіс', ru:'Арахис' }],
+  ['soy',         { sq:'Soja',        en:'Soy',         uk:'Соя', ru:'Соя' }],
+  ['milk',        { sq:'Qumësht',     en:'Milk',        uk:'Молоко', ru:'Молоко' }],
+  ['nuts',        { sq:'Arra',        en:'Nuts',        uk:'Горіхи', ru:'Орехи' }],
+  ['celery',      { sq:'Selino',      en:'Celery',      uk:'Селера', ru:'Сельдерей' }],
+  ['mustard',     { sq:'Mustardë',    en:'Mustard',     uk:'Гірчиця', ru:'Горчица' }],
+  ['sesame',      { sq:'Susam',       en:'Sesame',      uk:'Кунжут', ru:'Кунжут' }],
+  ['sulphites',   { sq:'Sulfite',     en:'Sulphites',   uk:'Сульфіти', ru:'Сульфиты' }],
+  ['lupin',       { sq:'Lupin',       en:'Lupin',       uk:'Люпин', ru:'Люпин' }],
+  ['molluscs',    { sq:'Molusqe',     en:'Molluscs',    uk:'Молюски', ru:'Моллюски' }],
 ];
 export const allergenName = c => {
   const row = ALLERGENS.find(a => a[0] === c);
@@ -335,6 +335,7 @@ export const DAY_NAMES = {
   sq: ['E hënë','E martë','E mërkurë','E enjte','E premte','E shtunë','E diel'],
   en: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
   uk: ['Понеділок','Вівторок','Середа','Четвер','Пʼятниця','Субота','Неділя'],
+  ru: ['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота','Воскресенье'],
 };
 export const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 /// Which weekday it is where the VENUE is, not where the phone is.
@@ -348,7 +349,7 @@ export const todayAt = (nowMs = Date.now()) => {
 /// "Opens Monday at 11:00" rather than "closed". Weekday 0 is Monday.
 export function whenOpens(n){
   const days = { uk:['пн','вт','ср','чт','пт','сб','нд'], en:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
-                 sq:['Hën','Mar','Mër','Enj','Pre','Sht','Die'] };
+                 sq:['Hën','Mar','Mër','Enj','Pre','Sht','Die'], ru:['пн','вт','ср','чт','пт','сб','вс'] };
   const d = (days[lang] || days.en)[n.weekday] ?? '';
   const time = hhmm(n.minute || 0);
   return n.weekday === todayAt().day ? time : `${d} ${time}`;

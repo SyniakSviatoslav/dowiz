@@ -1,4 +1,4 @@
-//! THE PRIVACY NOTICE (P8): `GET /privacy?lang=sq|en|uk` on a venue's host.
+//! THE PRIVACY NOTICE (P8): `GET /privacy?lang=<one of LANGS>` on a venue's host.
 //!
 //! RENDERED, NOT WRITTEN. Every row of "what is kept" is a row of
 //! `registry::stores()` about a customer; every recipient is a row of
@@ -12,6 +12,7 @@
 //! controller (owner/staff accounts, the waiting list).
 
 mod en;
+mod ru;
 mod sq;
 mod uk;
 pub mod words;
@@ -137,8 +138,9 @@ fn page(w: &Words, title: &str, body: &str) -> String {
     format!(
         "<!doctype html><html lang=\"{}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
          <title>{}</title><link rel=\"stylesheet\" href=\"/store/legal.css\"></head><body><main class=\"legal\">\
-         <h1>{}</h1><p class=\"ver\">{} {}</p><nav class=\"langs\">{}</nav>{body}</main></body></html>",
+         <h1>{}</h1><p class=\"ver\">{} {}</p>{}<nav class=\"langs\">{}</nav>{body}</main></body></html>",
         w.lang, esc(title), esc(title), esc(w.version), esc(VERSION),
+        if w.draft.is_empty() { String::new() } else { format!("<p class=\"draft\">{}</p>", esc(w.draft)) },
         words::LANGS.iter().map(|l| format!("<a href=\"?lang={l}\" hreflang=\"{l}\">{}</a>", l.to_uppercase())).collect::<Vec<_>>().join(" · "),
     )
 }
@@ -234,10 +236,12 @@ pub fn render_platform(lang: &str) -> String {
     page(w, w.platform_title, &body)
 }
 
-fn lang_of(req: &Request, fallback: &str) -> String {
+/// `?lang=` when it is ours, else the browser's `Accept-Language`, else the
+/// venue's own default (research 2026-09-26 B2.5), else Albanian.
+pub(crate) fn lang_of(req: &Request, fallback: &str) -> &'static str {
     let asked = req.url().ok().and_then(|u| u.query_pairs().find(|(k, _)| k == "lang").map(|(_, v)| v.to_string()));
-    let l = asked.unwrap_or_else(|| fallback.to_string());
-    if words::LANGS.contains(&l.as_str()) { l } else { "sq".to_string() }
+    let accept = req.headers().get("accept-language").ok().flatten();
+    dowiz_hub::lang::choose(asked.as_deref(), accept.as_deref(), dowiz_hub::lang::or(fallback, "sq"))
 }
 
 fn html(body: String) -> Result<Response> {
@@ -245,6 +249,7 @@ fn html(body: String) -> Result<Response> {
     let h = res.headers_mut();
     h.set("content-security-policy", "default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'")?;
     h.set("cache-control", "public, max-age=300")?;
+    h.set("vary", "accept-language")?;
     Ok(res)
 }
 

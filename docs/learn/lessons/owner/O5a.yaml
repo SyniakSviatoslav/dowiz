@@ -11,10 +11,12 @@ title:
   sq: "Tre lëvizjet e stokut"
   en: "The three stock movements"
   uk: "Три рухи запасів"
+  ru: "Три движения запасов"
 goal:
   sq: "Regjistroni një furnizim, një humbje dhe një numërim."
   en: "Book a delivery, a waste and a count."
   uk: "Записати надходження, списання й перерахунок."
+  ru: "Записать поступление, списание и пересчёт."
 steps:
   - key: 1
     anchor: nav.stock
@@ -27,10 +29,12 @@ steps:
       sq: "Stoku"
       en: "Stock"
       uk: "Запаси"
+      ru: "Запасы"
     caption:
       sq: "Çdo furnizim, sa ka dhe sa është rezervuar nga porositë e hapura."
       en: "Every supply, what is there and what open orders have reserved."
       uk: "Кожен запас: скільки є і скільки зарезервовано відкритими замовленнями."
+      ru: "Каждый запас: сколько есть и сколько зарезервировано открытыми заказами."
   - key: 2
     anchor: stock.search
     pending: no
@@ -43,10 +47,12 @@ steps:
       sq: "Kërkoni"
       en: "Search"
       uk: "Пошук"
+      ru: "Поиск"
     caption:
       sq: "Gjeni një furnizim me emër."
       en: "Find a supply by name."
       uk: "Знайдіть запас за назвою."
+      ru: "Найдите запас по названию."
   - key: 3
     anchor: stock.filter
     pending: no
@@ -58,10 +64,12 @@ steps:
       sq: "Filtri"
       en: "Filter"
       uk: "Фільтр"
+      ru: "Фильтр"
     caption:
       sq: "Vetëm ato që po mbarojnë, ose sipas kategorisë."
       en: "Only what is running low, or by category."
       uk: "Лише те, що закінчується, або за категорією."
+      ru: "Только то, что заканчивается, или по категории."
   - key: 4
     anchor: stock.sort
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Renditja"
       en: "Sort"
       uk: "Сортування"
+      ru: "Сортировка"
     caption:
       sq: "Sipas emrit ose sasisë."
       en: "By name or quantity."
       uk: "За назвою чи кількістю."
+      ru: "По названию или количеству."
   - key: 5
     anchor: stock.supply
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Një furnizim"
       en: "A supply"
       uk: "Запас"
+      ru: "Запас"
     caption:
       sq: "Prekeni për të regjistruar një lëvizje."
       en: "Tap it to book a movement."
       uk: "Торкніться, щоб записати рух."
+      ru: "Коснитесь, чтобы записать движение."
   - key: 6
     anchor: stock.received
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Erdhi"
       en: "Came in"
       uk: "Надійшло"
+      ru: "Поступило"
     caption:
       sq: "Një dërgesë nga furnitori."
       en: "A delivery from the supplier."
       uk: "Поставка від постачальника."
+      ru: "Поставка от поставщика."
   - key: 7
     anchor: stock.wasted
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "U hodh"
       en: "Thrown away"
       uk: "Списано"
+      ru: "Списано"
     caption:
       sq: "Ajo që u prish ose ra."
       en: "What spoiled or was dropped."
       uk: "Те, що зіпсувалося чи впало."
+      ru: "То, что испортилось или упало."
   - key: 8
     anchor: stock.stocktake
     pending: no
@@ -133,10 +149,12 @@ steps:
       sq: "U numërua"
       en: "Counted"
       uk: "Пораховано"
+      ru: "Посчитано"
     caption:
       sq: "Numërimi i vërtetë zëvendëson shifrën e llogaritur."
       en: "A real count replaces the worked-out figure."
       uk: "Реальний перерахунок замінює розрахункову цифру."
+      ru: "Реальный пересчёт заменяет расчётную цифру."
   - key: 9
     anchor: move.qty
     pending: no
@@ -149,10 +167,12 @@ steps:
       sq: "Sasia"
       en: "The quantity"
       uk: "Кількість"
+      ru: "Количество"
     caption:
       sq: "Sa, në njësinë e furnizimit."
       en: "How much, in the supply’s unit."
       uk: "Скільки, в одиницях запасу."
+      ru: "Сколько, в единицах запаса."
   - key: 10
     anchor: move.wasteReason
     pending: no
@@ -164,10 +184,12 @@ steps:
       sq: "Pse u hodh"
       en: "Why it was wasted"
       uk: "Чому списано"
+      ru: "Почему списано"
     caption:
       sq: "U prish, ra, s’u shit, u kthye, ushqim stafi."
       en: "Spoiled, dropped, unsold, returned, staff meal."
       uk: "Зіпсувалося, впало, не продалося, повернули, їжа персоналу."
+      ru: "Испортилось, упало, не продалось, вернули, еда персонала."
   - key: 11
     anchor: move.reason
     pending: no
@@ -180,10 +202,12 @@ steps:
       sq: "Shënim"
       en: "A note"
       uk: "Примітка"
+      ru: "Примечание"
     caption:
       sq: "Disa fjalë, nëse duhen."
       en: "A few words, if needed."
       uk: "Кілька слів, якщо треба."
+      ru: "Несколько слов, если нужно."
   - key: 12
     anchor: move.edit
     pending: no
@@ -195,10 +219,12 @@ steps:
       sq: "Ndrysho furnizimin"
       en: "Edit the supply"
       uk: "Змінити запас"
+      ru: "Изменить запас"
     caption:
       sq: "Nga këtu hapni kartën e furnizimit."
       en: "From here, open the supply’s card."
       uk: "Звідси відкривається картка запасу."
+      ru: "Отсюда открывается карточка запаса."
   - key: 13
     anchor: move.save
     pending: no
@@ -210,7 +236,9 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Sasia ndryshon menjëherë dhe lëvizja mbetet në histori."
       en: "The quantity changes at once and the movement stays in the history."
       uk: "Кількість змінюється одразу, а рух лишається в історії."
+      ru: "Количество меняется сразу, а движение остаётся в истории."

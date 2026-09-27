@@ -11,10 +11,12 @@ title:
   sq: "Furnizimet dhe recetat në masë"
   en: "Supplies and recipes in bulk"
   uk: "Запаси й рецепти масово"
+  ru: "Запасы и рецепты массово"
 goal:
   sq: "Importoni të dy skedarët CSV: së pari prova, pastaj zbatimi."
   en: "Import both CSV files: dry run first, then apply."
   uk: "Імпортувати обидва CSV: спершу пробний прогін, потім застосування."
+  ru: "Импортировать оба CSV: сначала пробный прогон, потом применение."
 steps:
   - key: 1
     anchor: stock.import
@@ -27,10 +29,12 @@ steps:
       sq: "Furnizimet nga CSV"
       en: "Supplies from CSV"
       uk: "Запаси з CSV"
+      ru: "Запасы из CSV"
     caption:
       sq: "Gjithë furnizimet nga një skedar."
       en: "All supplies from one file."
       uk: "Усі запаси з одного файлу."
+      ru: "Все запасы из одного файла."
   - key: 2
     anchor: menu.importRecipes
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Recetat nga CSV"
       en: "Recipes from CSV"
       uk: "Рецепти з CSV"
+      ru: "Рецепты из CSV"
     caption:
       sq: "Nga menuja: recetat e gjithë pjatave nga një skedar."
       en: "From the menu: every dish’s recipe from one file."
       uk: "З меню: рецепти всіх страв з одного файлу."
+      ru: "Из меню: рецепты всех блюд из одного файла."
   - key: 3
     anchor: bulk.file
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Skedari"
       en: "The file"
       uk: "Файл"
+      ru: "Файл"
     caption:
       sq: "Zgjidhni skedarin."
       en: "Choose the file."
       uk: "Оберіть файл."
+      ru: "Выберите файл."
   - key: 4
     anchor: bulk.dryRun
     pending: no
@@ -72,10 +80,12 @@ steps:
       sq: "Provë"
       en: "Dry run"
       uk: "Пробний прогін"
+      ru: "Пробный прогон"
     caption:
       sq: "Tregon çdo rresht që nuk gjen furnizimin ose pjatën e vet."
       en: "Shows every line that cannot find its supply or its dish."
       uk: "Показує кожен рядок, що не знаходить свого запасу чи страви."
+      ru: "Показывает каждую строку, которая не находит свой запас или блюдо."
   - key: 5
     anchor: bulk.apply
     pending: no
@@ -87,7 +97,9 @@ steps:
       sq: "Zbato"
       en: "Apply"
       uk: "Застосувати"
+      ru: "Применить"
     caption:
       sq: "Pas provës, zbatojeni."
       en: "After the dry run, apply it."
       uk: "Після пробного прогону застосуйте."
+      ru: "После пробного прогона примените."

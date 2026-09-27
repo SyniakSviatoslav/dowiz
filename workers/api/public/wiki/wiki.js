@@ -1,4 +1,4 @@
-// /wiki/ -- the lesson library: every lesson of every track, its video with three caption
+// /wiki/ -- the lesson library: every lesson of every track, its video with its caption
 // tracks, its chapters, a search, and a link back into the app at the lesson.
 //
 // Two inputs: /learn/lessons.json (static; every lesson's words, the one source the in-app tour
@@ -6,7 +6,7 @@
 // media file comes through GET /api/learn/media/... with the app's own Bearer token and is
 // played from a blob: URL, because a <video> or <track> cannot send an Authorization header.
 // CSP-clean: no inline script or style, text only through textContent.
-import { T, LANGS, ROLES, parseRoute, href, appLink, pickLang, search, tracks, clock, bearer, gatedUrl } from './wiki-core.js';
+import { T, LANGS, ROLES, parseRoute, href, appLink, pickLang, search, tracks, clock, bearer, gatedUrl, cutFor } from './wiki-core.js';
 
 const $ = s => document.querySelector(s);
 const main = $('#main');
@@ -72,7 +72,7 @@ function roleTabs(r, t) {
 }
 
 function card(l, r, t) {
-  const cut = S.media[l.id]?.cuts?.[r.lang];
+  const cut = cutFor(S.media[l.id]?.cuts, r.lang);
   const img = cut ? h('img', { class: 'w-thumb', alt: '', width: 90, height: 160 }) : null;
   if (img) blobUrl(cut.poster).then(u => { img.src = u; }).catch(() => {});
   return h('li', {}, h('a', { class: 'w-card', href: href({ lang: r.lang, role: l.role, id: l.id }) },
@@ -99,7 +99,7 @@ function lessonPage(r) {
   const t = T[r.lang];
   const l = S.lessons.find(x => x.id === r.id);
   if (!l) { main.replaceChildren(h('p', { text: t.notFound }), h('a', { href: href({ lang: r.lang, role: r.role }), text: t.back })); return; }
-  const cut = S.media[l.id]?.cuts?.[r.lang];
+  const cut = cutFor(S.media[l.id]?.cuts, r.lang);
   let video = null, chapters = [];
   const slot = cut ? h('p', { class: 'w-muted', text: t.loading }) : null;
   if (cut) {

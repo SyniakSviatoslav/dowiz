@@ -26,8 +26,9 @@
 // the control. A step marked `writes` changes real data when the learner does
 // it, and the list says so beside the lesson.
 import { esc, badge, icon, row } from './ui/index.js';
+import { LANGS } from './langs.js';
 
-export const LANGS = ['sq', 'en', 'uk'];
+export { LANGS };
 /// The app a role's lessons run in, which is also the storage suffix.
 export const ROLE_APP = { owner: 'owner', waiter: 'room', courier: 'courier', guest: 'store' };
 const CSS_HREF = '/lib/learn.css';

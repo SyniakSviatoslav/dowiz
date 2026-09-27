@@ -11,10 +11,12 @@ title:
   sq: "Hapni një tavolinë"
   en: "Open a table"
   uk: "Відкрийте стіл"
+  ru: "Откройте стол"
 goal:
   sq: "Hapni tavolinën 4 për dy veta."
   en: "Open table 4 for two."
   uk: "Відкрити стіл 4 на двох."
+  ru: "Открыть стол 4 на двоих."
 steps:
   - key: 1
     anchor: room.open
@@ -27,10 +29,12 @@ steps:
       sq: "Tavolinë e re"
       en: "New table"
       uk: "Новий стіл"
+      ru: "Новый стол"
     caption:
       sq: "Kur ulen mysafirët, filloni këtu."
       en: "When guests sit down, start here."
       uk: "Коли гості сідають, почніть тут."
+      ru: "Когда гости садятся, начните здесь."
   - key: 2
     anchor: open.table
     pending: no
@@ -42,7 +46,9 @@ steps:
       sq: "Zgjidhni tavolinën"
       en: "Choose the table"
       uk: "Оберіть стіл"
+      ru: "Выберите стол"
     caption:
       sq: "Prekni numrin e tavolinës. Një tavolinë e zënë nuk mund të hapet dy herë."
       en: "Tap the table’s number. A table already in use cannot be opened twice."
       uk: "Торкніться номера столу. Зайнятий стіл не можна відкрити вдруге."
+      ru: "Коснитесь номера стола. Занятый стол нельзя открыть второй раз."

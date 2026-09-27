@@ -11,10 +11,12 @@ title:
   sq: "Lidhni një agjent AI (MCP)"
   en: "Connect an AI agent (MCP)"
   uk: "Підключити AI-агента (MCP)"
+  ru: "Подключить ИИ-агента (MCP)"
 goal:
   sq: "Krijoni çelësin tuaj dhe lidhni Claude ose Codex me turnin tuaj."
   en: "Make your own key and connect Claude or Codex to your shift."
   uk: "Створити власний ключ і підключити Claude чи Codex до своєї зміни."
+  ru: "Создать собственный ключ и подключить Claude или Codex к своей смене."
 steps:
   - key: 1
     anchor: panel.agent
@@ -27,10 +29,12 @@ steps:
       sq: "Agjenti AI"
       en: "AI agent"
       uk: "AI-агент"
+      ru: "ИИ-агент"
     caption:
       sq: "Kur jeni pa porosi, hapni agjentin."
       en: "While you have no run, open the agent."
       uk: "Коли немає доставки, відкрийте агента."
+      ru: "Когда нет доставки, откройте агента."
   - key: 2
     anchor: agent.url
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Adresa"
       en: "The address"
       uk: "Адреса"
+      ru: "Адрес"
     caption:
       sq: "Kjo është adresa MCP e lokalit."
       en: "This is the venue's MCP address."
       uk: "Це MCP-адреса закладу."
+      ru: "Это MCP-адрес заведения."
   - key: 3
     anchor: agent.copyUrl
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Kopjo adresën"
       en: "Copy the address"
       uk: "Копіювати адресу"
+      ru: "Копировать адрес"
     caption:
       sq: "Kopjon adresën për agjentin."
       en: "Copies the address for your agent."
       uk: "Копіює адресу для агента."
+      ru: "Копирует адрес для агента."
   - key: 4
     anchor: agent.label
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Emri i çelësit"
       en: "Key label"
       uk: "Назва ключа"
+      ru: "Название ключа"
     caption:
       sq: "Shkruani për çfarë është, p.sh. laptopi."
       en: "Say what it is for, e.g. your laptop."
       uk: "Напишіть, для чого він, напр. ноутбук."
+      ru: "Напишите, для чего он, напр. ноутбук."
   - key: 5
     anchor: agent.mint
     pending: no
@@ -88,10 +98,12 @@ steps:
       sq: "Krijo çelësin"
       en: "Make the key"
       uk: "Створити ключ"
+      ru: "Создать ключ"
     caption:
       sq: "Çelësi merr vetëm të drejtat tuaja."
       en: "The key gets only your own rights."
       uk: "Ключ отримує лише ваші права."
+      ru: "Ключ получает только ваши права."
   - key: 6
     anchor: agent.key
     pending: no
@@ -103,10 +115,12 @@ steps:
       sq: "Çelësi, një herë"
       en: "The key, once"
       uk: "Ключ, один раз"
+      ru: "Ключ, один раз"
     caption:
       sq: "Kopjojeni tani: nuk shfaqet më."
       en: "Copy it now: it is never shown again."
       uk: "Скопіюйте зараз: його більше не покажуть."
+      ru: "Скопируйте сейчас: его больше не покажут."
   - key: 7
     anchor: agent.tools
     pending: no
@@ -118,10 +132,12 @@ steps:
       sq: "Veglat tuaja"
       en: "Your tools"
       uk: "Ваші інструменти"
+      ru: "Ваши инструменты"
     caption:
       sq: "Agjenti merr vetëm këto vegla."
       en: "The agent gets only these tools."
       uk: "Агент отримує лише ці інструменти."
+      ru: "Агент получает только эти инструменты."
   - key: 8
     anchor: agent.clients
     pending: no
@@ -133,10 +149,12 @@ steps:
       sq: "Zgjidhni klientin"
       en: "Pick the client"
       uk: "Оберіть клієнта"
+      ru: "Выберите клиента"
     caption:
       sq: "Claude Code, Claude Desktop, Codex ose çdo klient MCP."
       en: "Claude Code, Claude Desktop, Codex or any MCP client."
       uk: "Claude Code, Claude Desktop, Codex чи будь-який MCP-клієнт."
+      ru: "Claude Code, Claude Desktop, Codex или любой MCP-клиент."
   - key: 9
     anchor: agent.snippet
     pending: no
@@ -148,10 +166,12 @@ steps:
       sq: "Konfigurimi"
       en: "The setup"
       uk: "Налаштування"
+      ru: "Настройки"
     caption:
       sq: "Gati për ngjitje, me çelësin tuaj brenda."
       en: "Ready to paste, with your key in it."
       uk: "Готово до вставлення, з вашим ключем."
+      ru: "Готово к вставке, с вашим ключом."
   - key: 10
     anchor: agent.copySnippet
     pending: no
@@ -163,10 +183,12 @@ steps:
       sq: "Kopjo konfigurimin"
       en: "Copy the setup"
       uk: "Копіювати налаштування"
+      ru: "Копировать настройки"
     caption:
       sq: "Ngjiteni në Claude ose Codex dhe agjenti lidhet."
       en: "Paste it into Claude or Codex and the agent connects."
       uk: "Вставте в Claude чи Codex, і агент підключиться."
+      ru: "Вставьте в Claude или Codex, и агент подключится."
   - key: 11
     anchor: agent.keyRow
     pending: no
@@ -178,10 +200,12 @@ steps:
       sq: "Çelësat tuaj"
       en: "Your keys"
       uk: "Ваші ключі"
+      ru: "Ваши ключи"
     caption:
       sq: "Çdo çelës me emrin dhe datën kur mbaron."
       en: "Each key with its label and when it ends."
       uk: "Кожен ключ із назвою та датою завершення."
+      ru: "Каждый ключ с названием и датой окончания."
   - key: 12
     anchor: agent.revoke
     pending: no
@@ -193,7 +217,9 @@ steps:
       sq: "Revoko"
       en: "Revoke"
       uk: "Відкликати"
+      ru: "Отозвать"
     caption:
       sq: "Çelësi ndalon menjëherë. Edhe pronari mund ta revokojë."
       en: "The key stops at once. The owner can revoke it too."
       uk: "Ключ одразу перестає діяти. Власник теж може його відкликати."
+      ru: "Ключ сразу перестаёт действовать. Владелец тоже может его отозвать."

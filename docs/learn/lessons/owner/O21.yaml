@@ -9,10 +9,12 @@ title:
   sq: "Asistenti në hub"
   en: "The assistant in the hub"
   uk: "Асистент у хабі"
+  ru: "Ассистент в хабе"
 goal:
   sq: "Pyesni dhe veproni me shkrim; çdo ndryshim konfirmohet me një prekje."
   en: "Ask and act in writing; every change is confirmed with one tap."
   uk: "Питайте й дійте письмово; кожну зміну підтверджуєте одним дотиком."
+  ru: "Спрашивайте и действуйте письменно; каждое изменение подтверждаете одним касанием."
 steps:
   - key: 1
     anchor: hud.assistant
@@ -25,10 +27,12 @@ steps:
       sq: "Asistenti"
       en: "Assistant"
       uk: "Асистент"
+      ru: "Ассистент"
     caption:
       sq: "Butoni lart, në çdo ekran."
       en: "The button at the top, on every screen."
       uk: "Кнопка вгорі, на кожному екрані."
+      ru: "Кнопка вверху, на каждом экране."
   - key: 2
     anchor: assistant.log
     pending: no
@@ -40,10 +44,12 @@ steps:
       sq: "Biseda"
       en: "The conversation"
       uk: "Розмова"
+      ru: "Разговор"
     caption:
       sq: "Pyetjet dhe përgjigjet mbeten këtu."
       en: "Questions and answers stay here."
       uk: "Питання й відповіді лишаються тут."
+      ru: "Вопросы и ответы остаются здесь."
   - key: 3
     anchor: assistant.starter
     pending: no
@@ -55,10 +61,12 @@ steps:
       sq: "Një prekje"
       en: "One tap"
       uk: "Один дотик"
+      ru: "Одно касание"
     caption:
       sq: "Pyetjet e shpeshta janë gati."
       en: "The common questions are ready."
       uk: "Часті питання вже готові."
+      ru: "Частые вопросы уже готовы."
   - key: 4
     anchor: assistant.input
     pending: no
@@ -71,10 +79,12 @@ steps:
       sq: "Shkruani"
       en: "Type"
       uk: "Пишіть"
+      ru: "Пишите"
     caption:
       sq: "Një veprim me fjalë të thjeshta."
       en: "An action in plain words."
       uk: "Дія простими словами."
+      ru: "Действие простыми словами."
   - key: 5
     anchor: assistant.send
     pending: no
@@ -86,10 +96,12 @@ steps:
       sq: "Dërgo"
       en: "Send"
       uk: "Надіслати"
+      ru: "Отправить"
     caption:
       sq: "Huba e lexon sipas të drejtave tuaja."
       en: "The hub reads it by your rights."
       uk: "Хаб читає це за вашими правами."
+      ru: "Хаб читает это по вашим правам."
   - key: 6
     anchor: assistant.proposal
     pending: no
@@ -101,10 +113,12 @@ steps:
       sq: "Leximi"
       en: "The read-back"
       uk: "Перепитування"
+      ru: "Переспрашивание"
     caption:
       sq: "Asgjë nuk bëhet pa ju."
       en: "Nothing happens without you."
       uk: "Без вас нічого не відбувається."
+      ru: "Без вас ничего не происходит."
   - key: 7
     anchor: assistant.reason
     pending: no
@@ -117,10 +131,12 @@ steps:
       sq: "Arsyeja"
       en: "Reason"
       uk: "Причина"
+      ru: "Причина"
     caption:
       sq: "Refuzimi kërkon arsye."
       en: "A refusal needs a reason."
       uk: "Відмова потребує причини."
+      ru: "Отказ требует причины."
   - key: 8
     anchor: assistant.cancel
     pending: no
@@ -132,10 +148,12 @@ steps:
       sq: "Jo"
       en: "No"
       uk: "Ні"
+      ru: "Нет"
     caption:
       sq: "«Jo» nuk dërgon asgjë."
       en: "“No” sends nothing."
       uk: "«Ні» нічого не надсилає."
+      ru: "«Нет» ничего не отправляет."
   - key: 9
     anchor: assistant.confirm
     pending: no
@@ -147,10 +165,12 @@ steps:
       sq: "Po, bëje"
       en: "Yes, do it"
       uk: "Так, зробити"
+      ru: "Да, сделать"
     caption:
       sq: "Një prekje, dhe është bërë."
       en: "One tap, and it is done."
       uk: "Один дотик, і зроблено."
+      ru: "Одно касание, и сделано."
   - key: 10
     anchor: assistant.agentKey
     pending: no
@@ -162,7 +182,9 @@ steps:
       sq: "Agjenti juaj"
       en: "Your agent"
       uk: "Ваш агент"
+      ru: "Ваш агент"
     caption:
       sq: "Çelësi MCP për agjentin tuaj, me të drejtat e rolit."
       en: "The MCP key for your own agent, with your role's rights."
       uk: "Ключ MCP для вашого агента, з правами вашої ролі."
+      ru: "Ключ MCP для вашего агента, с правами вашей роли."

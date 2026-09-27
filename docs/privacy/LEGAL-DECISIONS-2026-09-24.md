@@ -156,3 +156,12 @@ read). The code at the working tree of this date, cited by file.
 5. Courier notice (Art. 13) and the courier-location DPIA screening (P13) before ~17 Jan 2027.
 6. Breach runbook (P12). Retention jobs (P6). Albania's electronic-communications and accounting-law
    retention periods.
+
+## Addendum 2026-09-27 (lane W-RU): Russian texts are unreviewed drafts
+
+The P8 notice (`workers/api/src/privacy/notice/ru.rs`), the P9 DPA (`DPA-v1-2026-09-24.ru.md`),
+the `ru` consent wording, the erasure promise and the STOP line were translated by the lane from the
+Ukrainian and English texts. Nobody has reviewed them. The notice and the DPA say so on the page (the
+notice's `draft` line; the DPA's first paragraph) and name the English text as the one that governs.
+Reviewer: the operator, under the same rule as 2026-09-24 (research 2026-09-26, Q6). Clearing the
+review = emptying `RU.draft` and removing the DPA's draft paragraph (the DPA is then a new version).

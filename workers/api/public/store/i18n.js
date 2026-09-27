@@ -1,4 +1,4 @@
-// The storefront's words, in the three languages its diners read.
+// The storefront's words, in every language of lib/langs.js.
 //
 // THE LANGUAGE SWITCH CHANGES TEXT, NOT SCREENS. Every piece of static copy is
 // written into the DOM with a `data-t="key"` beside it, so switching language
@@ -14,6 +14,8 @@
 // sq is the default: the diners are in Durrës.
 
 import { safeGet, safeSet } from '/store/storage.js';
+import { LANGS, NAMES, pickLang } from '../lib/langs.js';
+import { RU } from './i18n-ru.js';
 
 export const T = {
   sq: { ex_name:'p.sh. Arta', ex_note:'p.sh. pa qepë, ju lutem', ex_promo:'p.sh. SUSHI10', ex_say:'p.sh. peshku i freskët, dërgesa vonoi pak',
@@ -60,7 +62,7 @@ export const T = {
         sendExactly:'Dërgoni saktësisht', toAddress:'në këtë adresë', copy:'Kopjo', copied:'U kopjua',
         cryptoWait:'Lokali e konfirmon pagesën sapo të mbërrijë', cryptoRate:'Shuma në kriptovalutë sipas kursit të ditës',
         nutrition:'Vlerat ushqyese', approx:'afërsisht, për porcion', pickup:'Marrje vetë', kitchenNote:'Shënim për kuzhinën',
-        langs:{sq:'Shqip', en:'English', uk:'Українська'}, curs:{ALL:'Lekë', EUR:'Euro', USD:'Dollarë amerikanë'},
+        curs:{ALL:'Lekë', EUR:'Euro', USD:'Dollarë amerikanë'},
         addToOrder:'Shto në porosi', payLater:'Paguani në dorëzim', ready:'Gati për', min2:'min',
         street:'Rruga', house:'Numri', apartment:'Apartamenti', entrance:'Hyrja', floor:'Kati', privateHouse:'Shtëpi private',
         distance:'Larg', fromVenue:'nga lokali', headingOn:'Ndiq drejtimin tim', headingOff:'Veri lart',
@@ -136,7 +138,7 @@ export const T = {
         sendExactly:'Send exactly', toAddress:'to this address', copy:'Copy', copied:'Copied',
         cryptoWait:'The venue confirms the payment as soon as it lands', cryptoRate:'Crypto amount at the day’s rate',
         nutrition:'Nutrition', approx:'approx., per portion', pickup:'Pickup', kitchenNote:'Note for the kitchen',
-        langs:{sq:'Shqip', en:'English', uk:'Українська'}, curs:{ALL:'Lekë', EUR:'Euro', USD:'US dollars'},
+        curs:{ALL:'Lekë', EUR:'Euro', USD:'US dollars'},
         addToOrder:'Add to order', payLater:'Pay on delivery', ready:'Ready in', min2:'min',
         street:'Street', house:'House no.', apartment:'Apartment', entrance:'Entrance', floor:'Floor', privateHouse:'Private house',
         distance:'Away', fromVenue:'from the venue', headingOn:'Follow my heading', headingOff:'North up',
@@ -212,7 +214,7 @@ export const T = {
         sendExactly:'Надішліть рівно', toAddress:'на цю адресу', copy:'Копіювати', copied:'Скопійовано',
         cryptoWait:'Заклад підтвердить оплату, щойно вона надійде', cryptoRate:'Сума в криптовалюті за курсом дня',
         nutrition:'Харчова цінність', approx:'приблизно, на порцію', pickup:'Самовивіз', kitchenNote:'Коментар для кухні',
-        langs:{sq:'Shqip', en:'English', uk:'Українська'}, curs:{ALL:'Леки', EUR:'Євро', USD:'Долари США'},
+        curs:{ALL:'Леки', EUR:'Євро', USD:'Долари США'},
         addToOrder:'Додати до замовлення', payLater:'Оплата при отриманні', ready:'Готово за', min2:'хв',
         street:'Вулиця', house:'Будинок', apartment:'Квартира', entrance:'Під’їзд', floor:'Поверх', privateHouse:'Приватний будинок',
         distance:'Відстань', fromVenue:'від закладу', headingOn:'За моїм напрямком', headingOff:'Північ угорі',
@@ -246,9 +248,13 @@ export const T = {
         st:{PENDING:'Очікує підтвердження',CONFIRMED:'Підтверджено',PREPARING:'Готується',
             READY:'Готове',IN_DELIVERY:'У дорозі',DELIVERED:'Доставлено',
             REJECTED:'Відхилено',CANCELLED:'Скасовано'} },
+  ru: RU,
 };
+/// A language's own name, the same in every language's table (lib/langs.js).
+for (const l of LANGS) T[l].langs = NAMES;
 
-export let lang = safeGet('dw_lang') || 'sq';
+/// A choice made here wins; else the diner's browser languages on first visit; else Albanian.
+export let lang = pickLang([safeGet('dw_lang')], globalThis.navigator?.languages || [], 'sq');
 
 /// A key, in the current language, falling back to English and then to the key
 /// itself -- a missing translation must read as a word, never as `undefined`.
@@ -259,10 +265,10 @@ export const t = k => (T[lang] && T[lang][k]) ?? T.en[k] ?? k;
 /// rather than dropped: the venue wrote it down for a reason.
 export const tagName = tag => (T[lang]?.tags?.[tag]) ?? T.en.tags[tag] ?? tag;
 
-export const LANGS = ['sq', 'en', 'uk'];
+export { LANGS };
 
 /// The Intl locale for money and dates.
-export const intlLocale = () => lang === 'uk' ? 'uk' : lang === 'en' ? 'en' : 'sq';
+export const intlLocale = () => lang;
 
 /// Switch the language and rewrite every translated node IN PLACE. The caller
 /// (app.js) is responsible for the venue's own words -- it re-fetches the menu

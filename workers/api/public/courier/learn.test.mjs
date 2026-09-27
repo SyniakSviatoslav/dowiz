@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { LANGS } from '../lib/langs.js';
 import * as screens from './screens.js';
 import { useTranslator } from '../lib/ui/core.js';
 import { render } from '../lib/ui/dom-shim.mjs';
@@ -16,7 +17,9 @@ const SOURCES = ['app.js', 'screens.js', 'index.html', 'mcp.js'].map(f => [f, re
 // i18n.js imports '/store/storage.js' by its site path, which node cannot
 // resolve; the table is loaded with that one import swapped for inert stubs.
 const I18N = read('i18n.js').replace(/^import \{ safeGet, safeSet \} from '\/store\/storage\.js';$/m,
-  'const safeGet = () => null, safeSet = () => {};');
+  'const safeGet = () => null, safeSet = () => {};')
+  // A data: module has no base, so its one relative import is made absolute.
+  .replace("from '../lib/langs.js'", `from '${new URL('../lib/langs.js', HERE).href}'`);
 const { T } = await import('data:text/javascript;base64,' + Buffer.from(I18N).toString('base64'));
 useTranslator(k => `«${k}»`);
 
@@ -51,12 +54,12 @@ test('lessons: C1..C7, and every step anchor is a listed courier anchor (none pe
   for (const id of ids) assert.ok(named.has(id), `${id} is named by no courier lesson`);
 });
 
-test('C1 IS the first-run tour: same five keys in the same order, the same words in all three languages', () => {
+test('C1 IS the first-run tour: same five keys in the same order, the same words in every language', () => {
   const c1 = LESSONS.find(l => l.id === 'C1');
   const tour = /const TOUR = \[([^\]]*)\]/.exec(read('app.js'))[1].match(/'(\w+)'/g).map(x => x.slice(1, -1));
   assert.deepEqual(c1.steps.map(s => s.key), tour);
   const KEY = { welcome: 'hWelcome', shift: 'hShift', sheet: 'hSheet', mic: 'hMic', help: 'hHelp' };
-  for (const lang of ['sq', 'en', 'uk']) for (const s of c1.steps) {
+  for (const lang of LANGS) for (const s of c1.steps) {
     assert.equal(s.title[lang], T[lang][KEY[s.key] + 'T'], `${lang} ${s.key} title`);
     assert.equal(s.caption[lang], T[lang][KEY[s.key]], `${lang} ${s.key} caption`);
   }
@@ -90,13 +93,13 @@ test('the Learn entry: only where the courier stands still (offline and waiting)
   assert.equal((app.match(/\$\('#learn'\)\.onclick = openLearn;/g) || []).length, 2, 'bound on both screens');
 });
 
-test('words: every Learn key in all three languages; the step count carries {n}', () => {
+test('words: every Learn key in every language; the step count carries {n}', () => {
   const KEYS = ['learn', 'learnNew', 'learnDone', 'learnPaused', 'learnWatch', 'learnWrites', 'learnSteps', 'learnEmpty', 'learnOffline'];
-  for (const lang of ['sq', 'en', 'uk']) for (const k of KEYS) {
+  for (const lang of LANGS) for (const k of KEYS) {
     assert.equal(typeof T[lang][k], 'string', `${lang}.${k}`);
     assert.ok(T[lang][k].trim(), `${lang}.${k} empty`);
   }
-  for (const lang of ['sq', 'en', 'uk']) assert.match(T[lang].learnSteps, /\{n\}/);
+  for (const lang of LANGS) assert.match(T[lang].learnSteps, /\{n\}/);
   const used = [...read('app.js').matchAll(/t\('(learn\w*)'/g)].map(m => m[1]);
   for (const k of used) assert.ok(KEYS.includes(k), `${k} used but not tested`);
 });
@@ -104,6 +107,6 @@ test('words: every Learn key in all three languages; the step count carries {n}'
 test('offline shell: the lessons engine and both sheets are cached, under a new cache name', () => {
   const sw = read('sw.js');
   for (const f of ['/lib/learn.js', '/lib/learn.css', '/lib/guide.css']) assert.match(sw, new RegExp(`^  '${f.replace(/\./g, '\\.')}',$`, 'm'), f);
-  assert.match(sw, /const SHELL_CACHE = 'dowiz-courier-shell-2026-09-26-body';/);
+  assert.match(sw, /const SHELL_CACHE = 'dowiz-courier-shell-2026-09-27-ru';/);
   assert.match(read('app.js'), /^import \{ createLearn, loadLessons \} from '\/lib\/learn\.js';$/m);
 });

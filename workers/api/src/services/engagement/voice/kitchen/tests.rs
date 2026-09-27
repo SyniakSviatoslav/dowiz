@@ -150,7 +150,7 @@ fn a_write_off_reads_back_its_reason_in_the_speakers_language() {
 /// so each must mean what its chip says, in every language it is written in.
 #[test]
 fn the_starter_lines_mean_what_they_say() {
-    for status in ["sa porosi presin", "status", "скільки чекає"] {
+    for status in ["sa porosi presin", "status", "скільки чекає", "сколько ждёт"] {
         assert_eq!(stock_said(status), None, "{status}");
         assert_eq!(grammar::owner(status), None, "{status}");
         assert_eq!(classify(status, 1.0, true, Speaker::Owner), Command::Status, "{status}");
@@ -159,7 +159,7 @@ fn the_starter_lines_mean_what_they_say() {
                            ("trego magazinën", "stock"), ("show me the stock", "stock"), ("покажи склад", "stock")] {
         assert_eq!(stock_said(line), Some(Said::Show(screen)), "{line}");
     }
-    for q in ["Cilët përbërës po mbarojnë?", "Which ingredients are running low?", "Яких інгредієнтів мало?"] {
+    for q in ["Cilët përbërës po mbarojnë?", "Which ingredients are running low?", "Яких інгредієнтів мало?", "Каких ингредиентов мало?"] {
         assert_eq!(stock_said(q), None, "{q}");
         assert_eq!(grammar::owner(q), None, "{q}");
         assert!(matches!(classify(q, 1.0, true, Speaker::Owner), Command::Ask(_)), "{q} must reach the assistant");
@@ -185,6 +185,18 @@ fn which_ticket_is_asked_in_the_readers_language_and_the_board_number_names_it()
     assert_eq!(said("ready", "en"), "Which order? Say the ticket's number");
     assert_eq!(said("ready", "sq"), "Cila porosi? Thoni numrin e biletës");
     assert_eq!(said("ready", "uk"), "Яке саме? Назвіть номер");
+    assert_eq!(said("ready", "ru"), "Какой именно? Назовите номер");
     assert_eq!(said("ready 9999", "en"), "No open order has that number");
     assert_eq!(said("ready", "en").chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c)), false);
+}
+
+/// The kitchen's shelf words in Russian (lane W-RU, 2026-09-27): the panel's
+/// own example "пришло 4 кг лосось" and a write-off with its reason.
+#[test]
+fn the_kitchens_russian_shelf_words() {
+    assert_eq!(stock_said("пришло 4 кг лосось"), Some(Said::Receive { item: "лосось".into(), qty: 4000, unit: Some("g") }));
+    assert_eq!(stock_said("спиши 300 грамм лосося испортилось"), Some(Said::Waste { item: "лосося".into(), qty: 300, unit: Some("g"), reason: Some("spoiled") }));
+    assert_eq!(stock_said("списать 2 литра молока упало"), Some(Said::Waste { item: "молока".into(), qty: 2000, unit: Some("ml"), reason: Some("dropped") }));
+    assert_eq!(stock_said("покажи меню"), Some(Said::Show("menu")));
+    assert_eq!(stock_said("покажи ингредиенты"), Some(Said::Show("stock")));
 }

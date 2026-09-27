@@ -9,10 +9,12 @@ title:
   sq: "Kuzhina: biletat"
   en: "The kitchen board"
   uk: "Кухня: чеки"
+  ru: "Кухня: чеки"
 goal:
   sq: "Shihni, pranoni dhe çoni gati një porosi; hiqni një pjatë nga shitja."
   en: "See, accept and finish an order; take a dish off sale."
   uk: "Побачити, прийняти й віддати замовлення; зняти страву з продажу."
+  ru: "Увидеть, принять и отдать заказ; снять блюдо с продажи."
 steps:
   - key: 1
     anchor: nav.kitchen
@@ -25,10 +27,12 @@ steps:
       sq: "Kuzhina"
       en: "Kitchen"
       uk: "Кухня"
+      ru: "Кухня"
     caption:
       sq: "Skeda e kuzhinës, në çdo telefon ose tablet."
       en: "The kitchen tab, on any phone or tablet."
       uk: "Вкладка кухні, на будь-якому телефоні чи планшеті."
+      ru: "Вкладка кухни, на любом телефоне или планшете."
   - key: 2
     anchor: kitchen.board
     pending: no
@@ -40,10 +44,12 @@ steps:
       sq: "Tri kolona"
       en: "Three columns"
       uk: "Три колонки"
+      ru: "Три колонки"
     caption:
       sq: "Të reja, në përgatitje, gati. Më e vjetra majtas."
       en: "New, preparing, ready. The oldest first."
       uk: "Нові, готуються, готові. Найстаріші першими."
+      ru: "Новые, готовятся, готовые. Самые старые первыми."
   - key: 3
     anchor: kitchen.station
     pending: no
@@ -55,10 +61,12 @@ steps:
       sq: "Stacioni"
       en: "Station"
       uk: "Станція"
+      ru: "Станция"
     caption:
       sq: "Sushi, kuzhina ose bar: shihni vetëm pjatat tuaja."
       en: "Sushi, kitchen or bar: see only your dishes."
       uk: "Суші, кухня чи бар: бачите лише свої страви."
+      ru: "Суши, кухня или бар: видите только свои блюда."
   - key: 4
     anchor: kitchen.seen
     pending: no
@@ -70,10 +78,12 @@ steps:
       sq: "E pashë"
       en: "Seen"
       uk: "Побачено"
+      ru: "Увидено"
     caption:
       sq: "Prekni kokën e biletës kur e shihni."
       en: "Tap the ticket head when you have seen it."
       uk: "Торкніться шапки чека, коли побачили."
+      ru: "Коснитесь шапки чека, когда увидели."
   - key: 5
     anchor: kitchen.bump
     pending: no
@@ -85,10 +95,12 @@ steps:
       sq: "Butoni i madh"
       en: "The big button"
       uk: "Велика кнопка"
+      ru: "Большая кнопка"
     caption:
       sq: "Prano, fillo, gati, u dorëzua: një prekje çdo herë."
       en: "Accept, start, ready, handed over: one tap each."
       uk: "Прийняти, почати, готово, видано: один дотик щоразу."
+      ru: "Принять, начать, готово, выдано: одно касание каждый раз."
   - key: 6
     anchor: kitchen.reject
     pending: no
@@ -100,10 +112,12 @@ steps:
       sq: "Refuzo"
       en: "Reject"
       uk: "Відхилити"
+      ru: "Отклонить"
     caption:
       sq: "Kur s'mund ta bëni, refuzoni."
       en: "When you cannot make it, reject."
       uk: "Коли не можете приготувати, відхиліть."
+      ru: "Когда не можете приготовить, отклоните."
   - key: 7
     anchor: kitchen.reasonClose
     pending: no
@@ -115,10 +129,12 @@ steps:
       sq: "Mbyll"
       en: "Close"
       uk: "Закрити"
+      ru: "Закрыть"
     caption:
       sq: "Pa arsye nuk dërgohet asgjë."
       en: "Without a reason nothing is sent."
       uk: "Без причини нічого не надсилається."
+      ru: "Без причины ничего не отправляется."
   - key: 8
     anchor: kitchen.reject
     pending: no
@@ -130,10 +146,12 @@ steps:
       sq: "Sërish"
       en: "Again"
       uk: "Ще раз"
+      ru: "Ещё раз"
     caption:
       sq: "Hapni sërish refuzimin."
       en: "Open the refusal again."
       uk: "Відкрийте відмову ще раз."
+      ru: "Откройте отказ ещё раз."
   - key: 9
     anchor: kitchen.reason
     pending: no
@@ -146,10 +164,12 @@ steps:
       sq: "Arsyeja"
       en: "Reason"
       uk: "Причина"
+      ru: "Причина"
     caption:
       sq: "Klienti e lexon arsyen."
       en: "The customer reads the reason."
       uk: "Клієнт читає причину."
+      ru: "Клиент читает причину."
   - key: 10
     anchor: kitchen.reasonSend
     pending: no
@@ -161,10 +181,12 @@ steps:
       sq: "Dërgo"
       en: "Send"
       uk: "Надіслати"
+      ru: "Отправить"
     caption:
       sq: "Porosia refuzohet me arsyen tuaj."
       en: "The order is rejected with your reason."
       uk: "Замовлення відхилено з вашою причиною."
+      ru: "Заказ отклонён с вашей причиной."
   - key: 11
     anchor: kitchen.allday
     pending: no
@@ -176,10 +198,12 @@ steps:
       sq: "Gjithë ditën"
       en: "All day"
       uk: "Усього зараз"
+      ru: "Всего сейчас"
     caption:
       sq: "Sa copë presin ende nga çdo pjatë."
       en: "How many of each dish are still waiting."
       uk: "Скільки кожної страви ще чекає."
+      ru: "Сколько каждого блюда ещё ждёт."
   - key: 12
     anchor: kitchen.stoplist
     pending: no
@@ -191,10 +215,12 @@ steps:
       sq: "Stop-lista"
       en: "Stop list"
       uk: "Стоп-лист"
+      ru: "Стоп-лист"
     caption:
       sq: "Çdo pjatë, me një buton për ta hequr ose kthyer."
       en: "Every dish, with one button to take it off or back on."
       uk: "Кожна страва з кнопкою зняти чи повернути."
+      ru: "Каждое блюдо с кнопкой снять или вернуть."
   - key: 13
     anchor: kitchen.dishSearch
     pending: no
@@ -207,10 +233,12 @@ steps:
       sq: "Kërko"
       en: "Search"
       uk: "Пошук"
+      ru: "Поиск"
     caption:
       sq: "Gjeni pjatën me emër."
       en: "Find the dish by name."
       uk: "Знайдіть страву за назвою."
+      ru: "Найдите блюдо по названию."
   - key: 14
     anchor: kitchen.dishOff
     pending: no
@@ -222,10 +250,12 @@ steps:
       sq: "Hiqe (86)"
       en: "86 it"
       uk: "Стоп (86)"
+      ru: "Стоп (86)"
     caption:
       sq: "Klientët nuk e shohin më."
       en: "Customers stop seeing it."
       uk: "Клієнти її більше не бачать."
+      ru: "Клиенты его больше не видят."
   - key: 15
     anchor: kitchen.dishOn
     pending: no
@@ -237,7 +267,9 @@ steps:
       sq: "Ktheje"
       en: "Back on"
       uk: "Повернути"
+      ru: "Вернуть"
     caption:
       sq: "Kur arrin sërish, ktheje në shitje."
       en: "When it is back, put it on sale again."
       uk: "Коли знову є, поверніть у продаж."
+      ru: "Когда снова есть, верните в продажу."

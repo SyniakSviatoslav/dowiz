@@ -9,6 +9,8 @@ export const WORDS = {
     passCode: 'Pass code', passCheck: 'Check', passYes: 'Valid', passNo: 'Not valid', passParty: '{n} people', passNeedCode: 'Type the code.' },
   uk: { pass: 'Перепустки', passTitle: 'Перевірити перепустку', passHint: 'Введіть код із перепустки гостя (або вставте те, що прочитав сканер).',
     passCode: 'Код перепустки', passCheck: 'Перевірити', passYes: 'Дійсна', passNo: 'Недійсна', passParty: '{n} осіб', passNeedCode: 'Введіть код.' },
+  ru: { pass: 'Пропуска', passTitle: 'Проверить пропуск', passHint: 'Введите код из пропуска гостя (или вставьте то, что прочитал сканер).',
+    passCode: 'Код пропуска', passCheck: 'Проверить', passYes: 'Действителен', passNo: 'Недействителен', passParty: '{n} чел.', passNeedCode: 'Введите код.' },
 };
 
 for (const [l, dict] of Object.entries(WORDS)) {

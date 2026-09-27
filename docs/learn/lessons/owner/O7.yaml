@@ -11,10 +11,12 @@ title:
   sq: "Stafi dhe të drejtat e tij"
   en: "Staff and their rights"
   uk: "Персонал і його права"
+  ru: "Персонал и его права"
 goal:
   sq: "Ftoni një kamarier dhe shpjegoni tre rolet."
   en: "Invite a waiter and explain the three roles."
   uk: "Запросити офіціанта й пояснити три ролі."
+  ru: "Пригласить официанта и объяснить три роли."
 steps:
   - key: 1
     anchor: more.tile.staff
@@ -27,10 +29,12 @@ steps:
       sq: "Stafi"
       en: "Staff"
       uk: "Персонал"
+      ru: "Персонал"
     caption:
       sq: "Nga «Më shumë», te stafi."
       en: "From “More”, open staff."
       uk: "З розділу «Більше» відкрийте персонал."
+      ru: "Из раздела «Ещё» откройте персонал."
   - key: 2
     anchor: staff.list
     pending: no
@@ -42,10 +46,12 @@ steps:
       sq: "Lista"
       en: "The list"
       uk: "Список"
+      ru: "Список"
     caption:
       sq: "Kush punon në sallë dhe në kuzhinë."
       en: "Who works in the room and the kitchen."
       uk: "Хто працює в залі й на кухні."
+      ru: "Кто работает в зале и на кухне."
   - key: 3
     anchor: staff.invite
     pending: no
@@ -57,10 +63,12 @@ steps:
       sq: "Ftesë"
       en: "Invite"
       uk: "Запросити"
+      ru: "Пригласить"
     caption:
       sq: "Një kod ftese për telefonin e tij."
       en: "An invite code for their phone."
       uk: "Код запрошення для їхнього телефона."
+      ru: "Код приглашения для их телефона."
   - key: 4
     anchor: staff.inviteName
     pending: no
@@ -73,10 +81,12 @@ steps:
       sq: "Emri"
       en: "Name"
       uk: "Ім’я"
+      ru: "Имя"
     caption:
       sq: "Emri i personit."
       en: "The person’s name."
       uk: "Ім’я людини."
+      ru: "Имя человека."
   - key: 5
     anchor: staff.inviteEmail
     pending: no
@@ -89,10 +99,12 @@ steps:
       sq: "Email-i"
       en: "Email"
       uk: "Email"
+      ru: "Email"
     caption:
       sq: "Me këtë email do të hyjë."
       en: "The email they will sign in with."
       uk: "Email, з яким людина входитиме."
+      ru: "Email, с которым человек будет входить."
   - key: 6
     anchor: staff.inviteRole
     pending: no
@@ -104,10 +116,12 @@ steps:
       sq: "Roli"
       en: "The role"
       uk: "Роль"
+      ru: "Роль"
     caption:
       sq: "Kamarier: porosi dhe pagesa. Menaxher: edhe arka dhe anulimet. Kuzhina: porositë, menyja dhe magazina."
       en: "Waiter: orders and payments. Manager: also the till and voids. Kitchen: orders, the menu and the stock."
       uk: "Офіціант: замовлення й оплата. Менеджер: ще й каса та анулювання. Кухня: замовлення, меню і склад."
+      ru: "Официант: заказы и оплата. Менеджер: ещё и касса и аннулирования. Кухня: заказы, меню и склад."
   - key: 7
     anchor: staff.inviteSend
     pending: no
@@ -119,10 +133,12 @@ steps:
       sq: "Dërgo"
       en: "Send"
       uk: "Надіслати"
+      ru: "Отправить"
     caption:
       sq: "Ftesa dërgohet."
       en: "The invite is sent."
       uk: "Запрошення надіслано."
+      ru: "Приглашение отправлено."
   - key: 8
     anchor: staff.inviteCopy
     pending: no
@@ -134,10 +150,12 @@ steps:
       sq: "Kopjo"
       en: "Copy"
       uk: "Копіювати"
+      ru: "Копировать"
     caption:
       sq: "Ose kopjoni kodin."
       en: "Or copy the code."
       uk: "Або скопіюйте код."
+      ru: "Или скопируйте код."
   - key: 9
     anchor: staff.card
     pending: no
@@ -149,10 +167,12 @@ steps:
       sq: "Karta"
       en: "The card"
       uk: "Картка"
+      ru: "Карточка"
     caption:
       sq: "Një person dhe të drejtat e tij."
       en: "One person and their rights."
       uk: "Одна людина та її права."
+      ru: "Один человек и его права."
   - key: 10
     anchor: staff.role
     pending: no
@@ -164,10 +184,12 @@ steps:
       sq: "Ndryshoni rolin"
       en: "Change the role"
       uk: "Змініть роль"
+      ru: "Измените роль"
     caption:
       sq: "Të drejtat ndryshojnë në hyrjen e tij të radhës."
       en: "The rights change at their next sign-in."
       uk: "Права зміняться під час наступного входу."
+      ru: "Права изменятся при следующем входе."
   - key: 11
     anchor: staff.save
     pending: no
@@ -179,7 +201,9 @@ steps:
       sq: "Ruaj"
       en: "Save"
       uk: "Зберегти"
+      ru: "Сохранить"
     caption:
       sq: "Ruhet me emrin tuaj."
       en: "Saved under your name."
       uk: "Зберігається з вашим ім’ям."
+      ru: "Сохраняется с вашим именем."
