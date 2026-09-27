@@ -154,8 +154,52 @@ pub fn groups_of(product_json: &str) -> Vec<Group> {
     out
 }
 
+/// The body of the JSON ARRAY that `"key"` holds -- the text between its
+/// brackets -- or `None` when the key is absent or holds anything else.
+///
+/// STRING-AWARE, and that is the whole point (W-AUDIT S7, 2026-09-27).
+/// `bom_of` found `"bom"`, took the first `[` after it and the first `]`
+/// after that: `"bom":null,"ingredients":[...]` read the NEXT array in the
+/// record, and a `]` inside any supply name cut the recipe short, so the
+/// lines after it were never reserved. This walks brackets outside strings
+/// only, as `groups_of` always has.
+pub(crate) fn array_of<'a>(json: &'a str, key: &str) -> Option<&'a str> {
+    let pat = format!("\"{key}\"");
+    let mut from = 0usize;
+    let open = loop {
+        let at = json[from..].find(&pat)? + from;
+        let after = json[at + pat.len()..].trim_start();
+        // `"bom" :` with anything but `[` behind the colon is not an array.
+        let Some(v) = after.strip_prefix(':') else { from = at + pat.len(); continue };
+        let v = v.trim_start();
+        if !v.starts_with('[') {
+            from = at + pat.len();
+            continue;
+        }
+        break json.len() - v.len();
+    };
+    let bytes = json.as_bytes();
+    let (mut depth, mut in_str, mut i) = (0i32, false, open);
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' if in_str => i += 1,
+            b'"' => in_str = !in_str,
+            b'[' if !in_str => depth += 1,
+            b']' if !in_str => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&json[open + 1..i]);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
 /// Split a JSON array body into its top-level object chunks.
-fn split_objects(body: &str) -> Vec<String> {
+pub(crate) fn split_objects(body: &str) -> Vec<String> {
     let mut out = Vec::new();
     let bytes = body.as_bytes();
     let (mut depth, mut start, mut in_str) = (0i32, 0usize, false);

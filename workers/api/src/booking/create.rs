@@ -131,6 +131,11 @@ pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
         }
         Side::Venue => (body.contact_name.trim().to_string(), body.contact_phone.trim().to_string()),
     };
+    // Bounded on every side (W-AUDIT S11): the image has a ceiling, the form does not.
+    let occasion = match guest::occasion(&body.occasion) {
+        Ok(o) => o,
+        Err(why) => return Response::error(why, 400),
+    };
     let phone_key = guest::phone_key(&secret, &phone);
 
     // ── THE PLACEMENT'S IDEMPOTENCY, keyed to the phone ──
@@ -171,7 +176,7 @@ pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
             venue: place.venue.clone(),
             party: body.party,
             slot_min: body.slot_min,
-            occasion: body.occasion.clone(),
+            occasion: occasion.clone(),
         };
         if let Err(e) = reservation::validate_request(&request, &BookingPolicy::default_policy(), now_min(now)) {
             return Ok((422, e.message()));
@@ -205,7 +210,7 @@ pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
             venue: place.venue.clone(),
             party: body.party as i64,
             slot_min: body.slot_min,
-            occasion: body.occasion.clone(),
+            occasion: occasion.clone(),
             name,
             phone,
             phone_key,

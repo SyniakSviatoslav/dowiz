@@ -580,7 +580,15 @@ impl HubImages {
         };
         let kind = dowiz_hub::EventKind::from_u8(ev.kind)
             .ok_or_else(|| Error::RustError(format!("unknown event kind {}", ev.kind)))?;
-        hub.append(kind, &ev.order_id, &ev.payload, ev.clock, [0u8; 32])
+        // THE VERSION MOVES FORWARD (W-AUDIT F9): the clock the Worker sends
+        // is the seq only when it is ahead of the order's newest event. Three
+        // writers in one coarse millisecond used to leave the seq where it
+        // was, and a tablet quoting that seq passed its `base_seq` check.
+        let seq = dowiz_hub::room::amend::next_seq(
+            dowiz_hub::room::view::latest_seq(&hub, &ev.order_id),
+            i64::try_from(ev.clock).unwrap_or(i64::MAX),
+        );
+        hub.append(kind, &ev.order_id, &ev.payload, seq, [0u8; 32])
             .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
         let len = hub.len();
         match self.put_image(LOG_IMAGE, generation, &hub.to_bytes_trimmed()).await? {

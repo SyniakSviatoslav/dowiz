@@ -25,6 +25,10 @@ import { consentMarkup, wireConsent, consentBody } from '/store/consent.js';
 import { TABLE, tableBanner, tableBody } from '/store/table.js';
 import { venueWallMs, laterPrefill } from '/lib/booking-time.js';
 import { ui, k, cta, ghost, seg } from '/store/parts.js';
+import { keyFor, settle } from '/store/order-key.js';
+
+/// The basket attempt's Idempotency-Key, kept across a lost response (order-key.js).
+const orderKeys = { key: null, body: null };
 
 /// The tip choices, in minor units of the venue's currency; the first is "no tip".
 const TIPS = [0, 100, 200, 500];
@@ -358,9 +362,7 @@ async function place(pay, wallet){
   const eta = state.lastEta;
   try {
     const items = cartLines().map(l => ({ product_id: l.p.id, modifier_ids: l.m, quantity: l.q, unit_price: lineUnit(l.p, l.m) }));
-    const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}/orders`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ items, contact: { name, phone },
+    const body = JSON.stringify({ items, contact: { name, phone },
         fulfilment: collecting ? { kind: 'pickup', note: note || null }
                                : { kind: 'delivery', address: { line: addr, note: note || null, parts, ...geo } },
         payment: pay, locale: lang, ...consentBody(phone),
@@ -368,9 +370,18 @@ async function place(pay, wallet){
         ...(state.promo ? { promo: state.promo.code } : {}),
         ...(state.tip && !collecting && !TABLE ? { tip: state.tip } : {}),
         ...(TABLE ? tableBody(note) : {}),
-        ...(scheduledAt() ? { scheduled_for_ms: scheduledAt() } : {}) })
+        ...(scheduledAt() ? { scheduled_for_ms: scheduledAt() } : {}) });
+    // THE SAME BASKET SENT AGAIN IS THE SAME ORDER (order-key.js): the Worker
+    // replays its first answer instead of cooking twice.
+    const idem = keyFor(orderKeys, body);
+    const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}/orders`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...(idem ? { 'idempotency-key': idem } : {}) }, body
     });
     const d = await r.json();
+    // AN ANSWER, EITHER WAY, spends the key; a 409 "still running" keeps it
+    // (order-key.js). A lost connection throws before this line and keeps
+    // the key, which is the whole point.
+    settle(orderKeys, r.status);
     if (!r.ok) throw new Error(d.error || d.message || ('HTTP ' + r.status));
     state.cart = {}; saveCart(); refreshBar();
     safeSet('dw_last_order', d.id);

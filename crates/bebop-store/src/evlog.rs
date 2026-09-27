@@ -218,7 +218,15 @@ impl EvLog {
     }
 
     /// Read a record object, in the version the log is written in.
-    fn read_at(st: &Store, version: i64, obj: usize) -> Record {
+    ///
+    /// `budget` is the payload cells the WHOLE WALK may still read (W-AUDIT
+    /// S2, 2026-09-27). Each record is bounded by the image, but records are
+    /// data and can overlap: a crafted chain of records that each claim the
+    /// rest of the image reads n × image, about 9 GB from a 1 MB log, and the
+    /// process is killed for the memory. One budget for the walk makes the
+    /// most a read can allocate the size of the image itself; a record past
+    /// the budget comes back short, and the layer above refuses it.
+    fn read_at(st: &Store, version: i64, obj: usize, budget: &mut usize) -> Record {
         let seq = st.get(obj, 0) as u64;
         let plen = st.get(obj, 1) as usize;
         let idc: Vec<i64> = (3..7).map(|i| st.get(obj, i)).collect();
@@ -247,7 +255,8 @@ impl EvLog {
             // damaged one claims up to four billion cells and this line
             // allocated every one of them. Bounded by the image, a corrupt
             // record is a SHORT record -- which the layer above refuses.
-            let have = st.obj_cells(obj).saturating_sub(payload_at);
+            let have = st.obj_cells(obj).saturating_sub(payload_at).min(*budget);
+            *budget -= have;
             let cells: Vec<i64> =
                 (0..have).map(|j| st.get(obj, payload_at + j)).collect();
             Record {
@@ -273,7 +282,8 @@ impl EvLog {
             // log is v2 and the reader falls back to v1 only when the root's
             // version cell is damaged), so the bytes that ARE there are handed
             // back exactly like a truncated record's, for the caller to refuse.
-            let have = st.obj_cells(obj).saturating_sub(HEAD_V1 as usize);
+            let have = st.obj_cells(obj).saturating_sub(HEAD_V1 as usize).min(*budget);
+            *budget -= have;
             let plen = plen.min(have);
             let payload: Vec<u8> =
                 (0..plen).map(|j| st.get(obj, HEAD_V1 as usize + j) as u8).collect();
@@ -313,12 +323,14 @@ impl EvLog {
         let Some(root) = st.root() else { return out };
         let version = Self::version(st);
         let cap = Self::step_cap(st);
+        // The whole walk may read at most the image (`read_at`).
+        let mut budget = st.cells.len();
         let mut cur = st.follow(root, 1);
         while let Some(obj) = cur {
             if out.len() >= cap {
                 break;
             }
-            out.push(Self::read_at(st, version, obj));
+            out.push(Self::read_at(st, version, obj, &mut budget));
             cur = st.follow(obj, 2);
         }
         out

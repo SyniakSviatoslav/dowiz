@@ -98,6 +98,7 @@ pub const HOSTS: &[Host] = &[
     Host { host: "open.er-api.com", recipient: NotARecipient("exchange rates: the request carries a currency code and nothing else") },
     Host { host: "rates.dowiz", recipient: NotARecipient("a cache key in this Worker's own cache; never fetched") },
     Host { host: "hub", recipient: NotARecipient("the internal URL of a Durable Object stub; it never leaves Cloudflare") },
+    Host { host: "cron", recipient: NotARecipient("the internal URL of the minute cron's runner object (cron.rs); it never leaves Cloudflare") },
     Host { host: "{host}", recipient: NotARecipient("the venue's own storefront address, printed on a table's QR code") },
     Host { host: "{slug}.{platform}", recipient: NotARecipient("the venue's own addresses on this platform") },
     Host { host: "{}.{}", recipient: NotARecipient("the venue's own addresses on this platform") },
@@ -154,6 +155,8 @@ pub const BROWSER: &[DeviceKey] = &[
     key("dw_loc", &[], "admin"),
     key("dw_admin_lang", &[], "admin"),
     key("dw_admin_cur", &[], "admin"),
+    // The console's light/dark choice (admin/theme.js): a word, nothing personal.
+    key("dw_theme", &[], "admin"),
     key("dowiz.replica.v1", &[Name, Phone, Address, OrderContent], "admin"),
     prefix("dw_guide_", &[], "admin"),
     // Lesson progress (lib/learn.js), one index per app: lesson ids and done/paused, nothing personal.
@@ -172,4 +175,6 @@ pub const BROWSER: &[DeviceKey] = &[
     key("dw_room_theme", &[], "room"),
     key("dw_room_currency", &[], "room"),
     key("dowiz.room.outbox", &[OrderContent], "room"),
+    // The wiki (wiki/): the language the reader last chose, nothing personal.
+    key("dw_wiki_lang", &[], "wiki"),
 ];

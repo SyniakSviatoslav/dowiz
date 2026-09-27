@@ -165,3 +165,14 @@ fn the_booking_key_is_the_one_person_key() {
         assert_eq!(phone_key(b"k", s), Some(person_key(b"k", s)), "{s:?}");
     }
 }
+
+/// W-AUDIT S11 (2026-09-27): the form is open to the world and the image has
+/// a ceiling, so the phone and the occasion are bounded like the name.
+#[test]
+fn a_guests_phone_and_occasion_are_bounded_like_the_name() {
+    assert!(contact("Ana", &"1".repeat(PHONE_MAX + 1)).is_err(), "a phone longer than {PHONE_MAX} is refused");
+    assert!(contact("Ana", "+355 69 123 4567").is_ok());
+    assert!(occasion(&"x".repeat(OCCASION_MAX + 1)).is_err());
+    assert_eq!(occasion("  birthday  "), Ok("birthday".to_string()));
+    assert_eq!(occasion(""), Ok(String::new()));
+}

@@ -290,7 +290,7 @@ pub async fn send(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
         "from_party": from.as_str(),
         "seq": candidate.seq as i64,
         "kind": match candidate.body { Body::Read { .. } => "READ", _ => "TEXT" },
-        "body": b.body,
+        "body": stored_text(&b.kind, &b.body),
         "read_through": match candidate.body {
             Body::Read { through_seq } => json!(through_seq as i64),
             _ => serde_json::Value::Null,
@@ -313,3 +313,28 @@ pub async fn send(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
     }))
 }
 
+
+/// The text a stored message keeps. A READ receipt keeps NONE (W-AUDIT S10,
+/// 2026-09-27): the kernel's `MAX_TEXT_BYTES` guards `Body::Text` alone, so a
+/// `{"kind":"READ","body":"<5 MB>"}` from any order token was stored
+/// verbatim, and a few of them filled the venue's threads image for every
+/// conversation in it. A receipt has nothing to say; it says nothing.
+pub fn stored_text<'a>(kind: &str, body: &'a str) -> &'a str {
+    if kind == "READ" {
+        ""
+    } else {
+        body
+    }
+}
+
+#[cfg(test)]
+mod text_tests {
+    use super::stored_text;
+
+    #[test]
+    fn a_read_receipt_stores_no_text_and_a_message_stores_its_own() {
+        assert_eq!(stored_text("READ", "x".repeat(5 << 20).as_str()), "");
+        assert_eq!(stored_text("TEXT", "on my way"), "on my way");
+        assert_eq!(stored_text("", "on my way"), "on my way");
+    }
+}

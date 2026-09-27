@@ -60,6 +60,13 @@ pub fn plausible_email(s: &str) -> bool {
 /// The mail the operator reads. Plain text, 7-bit safe headers, the body in
 /// UTF-8; a MIME parser would call this the minimum, and that is the point.
 pub fn mail_raw(from: &str, to: &str, email: &str, venue: &str, lang: &str, source: &str, at_ms: i64) -> String {
+    // ONE LINE PER HEADER (W-AUDIT S9, 2026-09-27). `venue` and the Host
+    // header came off the wire with their CR and LF intact, and an ASCII
+    // subject was passed through unencoded: `"venue":"x\r\nBcc: spy@x"` wrote
+    // a Bcc into the operator's mail. A control character has no place in a
+    // header value or in this body; it is dropped before anything is built.
+    let clean = |s: &str| -> String { s.chars().filter(|c| !c.is_control()).collect() };
+    let (from, to, email, venue, lang, source) = (clean(from), clean(to), clean(email), clean(venue), clean(lang), clean(source));
     let subject = if venue.is_empty() {
         format!("dowiz waitlist: {email}")
     } else {
@@ -251,6 +258,18 @@ mod tests {
         let uk = mail_raw("w@dowiz.org", "op@example.com", "k@d.al", "Кав'ярня", "uk", "dowiz.org", 7);
         assert!(uk.contains("Subject: =?UTF-8?B?"));
         assert!(!uk.lines().next().unwrap().contains('К'));
+    }
+
+    /// W-AUDIT S9: a CR/LF in the venue or the Host header never starts a header.
+    #[test]
+    fn a_header_cannot_be_injected_through_the_venue_or_the_host() {
+        let raw = mail_raw("w@dowiz.org", "op@example.com", "k@d.al", "x\r\nBcc: spy@x.al", "sq", "dowiz.org\nX-Evil: 1", 7);
+        assert!(!raw.contains("\r\nBcc:") && !raw.contains("\nX-Evil"), "{raw}");
+        assert!(raw.contains("Subject: dowiz waitlist: xBcc: spy@x.al <k@d.al>\r\n"), "{raw}");
+        assert!(raw.contains("source: dowiz.orgX-Evil: 1\r\n"), "{raw}");
+        // The honest mail is unchanged.
+        let ok = mail_raw("w@dowiz.org", "op@example.com", "k@d.al", "Dubin", "sq", "dowiz.org", 7);
+        assert!(ok.contains("Subject: dowiz waitlist: Dubin <k@d.al>\r\n"));
     }
 
     #[test]

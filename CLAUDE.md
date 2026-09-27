@@ -161,15 +161,20 @@ bug existed and is closed; back performance claims with a measured benchmark num
 
 ## graphify
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+This project has a knowledge graph in bebop-lang's `graphify-out/` directory (god nodes, community
+structure, cross-file relationships). **That directory is GENERATED and GITIGNORED** (`bebop-lang/.gitignore`):
+it exists on the box that ran graphify and in no clone or worktree, which is why this section names it
+through a shell variable rather than as a tree path -- `tools/gates/paths.sh` refuses a document that
+cites a file a fresh checkout cannot open, and from 2026-09-26 to 2026-09-27 this section was the one
+citation that failed it.
 
-Rules:
+Rules (`G=bebop-lang/graphify-out`, regenerate with `graphify update bebop-lang --no-cluster` if `$G` is absent):
 - For codebase questions use `graphify explain "<name>"` and `graphify path "<A>" "<B>" [--undirected]`
-  against `bebop-lang/graphify-out/graph.json`. **There is NO `graphify query` command in this version** --
+  against `$G/graph.json`. **There is NO `graphify query` command in this version** --
   the CLAUDE.md line that told every agent to run it was wrong from 2026-09-04 to 2026-09-09.
   The index covers `.bp` only because `bebop-lang/tools/bp_graph.py` supplies the extractor graphify lacks;
   after editing `.bp`, refresh with `bebop-lang/tools/bp_graph.py bebop-lang -o /tmp/bp.json && graphify merge-graphs
-  bebop-lang/graphify-out/graph.json /tmp/bp.json --out bebop-lang/graphify-out/graph.json`.
+  $G/graph.json /tmp/bp.json --out $G/graph.json`.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update bebop-lang --no-cluster` for the harness, then the

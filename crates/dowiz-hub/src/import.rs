@@ -155,6 +155,13 @@ pub fn parse_price(raw: &str) -> Result<i64, String> {
     if digits.is_empty() {
         return Err(format!("no digits in {t:?}"));
     }
+    // ONE NUMBER, NOT EVERY DIGIT IN THE CELL (W-AUDIT S6, 2026-09-27).
+    // "450/650" (small/large) imported as 450650, "900-1200" as 9001200,
+    // "2 x 450" as 2450 and "-900" as 900: the digits were joined whatever
+    // stood between them. Two runs of digits are one number only when what
+    // separates them is a thousands group -- a separator and exactly three
+    // digits, as in "1 200" and "1,200". Anything else is two prices, a range
+    // or a sign, and the owner is asked which one they meant.
 
     // A separator with one or two digits after it and nothing further is a
     // DECIMAL, not a thousands group: "1,50" and "9.50" are prices with
@@ -174,7 +181,50 @@ pub fn parse_price(raw: &str) -> Result<i64, String> {
         }
     }
 
+    // AFTER the fraction rule above, so "9.50" keeps its own refusal.
+    if t.starts_with('-') {
+        return Err(format!("{t:?} is negative; a price is not"));
+    }
+    if !one_number(t) {
+        return Err(format!("{t:?} holds more than one number; write one price per cell"));
+    }
     digits.parse::<i64>().map_err(|_| format!("price {t:?} is too large"))
+}
+
+/// Do the digit runs of `t` spell ONE number? Consecutive runs may only be
+/// joined by a thousands group: one of `. , ' space nbsp` and then exactly
+/// three digits. A leading `0` before a separator is a fraction, not a group.
+fn one_number(t: &str) -> bool {
+    let mut runs: Vec<String> = Vec::new();
+    let mut seps: Vec<String> = Vec::new();
+    let (mut cur, mut sep, mut in_run) = (String::new(), String::new(), false);
+    for c in t.chars() {
+        if c.is_ascii_digit() {
+            if !in_run {
+                if !runs.is_empty() {
+                    seps.push(std::mem::take(&mut sep));
+                }
+                sep.clear();
+                in_run = true;
+            }
+            cur.push(c);
+        } else if in_run {
+            runs.push(std::mem::take(&mut cur));
+            in_run = false;
+            sep.push(c);
+        } else {
+            sep.push(c);
+        }
+    }
+    if in_run {
+        runs.push(cur);
+    }
+    if runs.len() > 1 && runs[0] == "0" {
+        return false;
+    }
+    seps.iter().enumerate().all(|(i, s)| {
+        matches!(s.as_str(), "." | "," | "'" | " " | "\u{a0}" | "\u{202f}" | "\u{2009}") && runs[i + 1].len() == 3
+    })
 }
 
 /// Split one CSV line, honouring double quotes.
@@ -399,6 +449,21 @@ mod tests {
         for raw in ["", "   ", "free", "-", "n/a"] {
             assert!(parse_price(raw).is_err(), "{raw:?} must be refused");
         }
+    }
+
+    /// W-AUDIT S6 (2026-09-27): two numbers in one cell used to import as
+    /// their digits joined -- "450/650" as 450650. A thousands group still
+    /// reads as one number.
+    #[test]
+    fn a_cell_with_more_than_one_number_is_refused_and_a_grouped_one_is_not() {
+        for raw in ["450/650", "900-1200", "2 x 450", "-900", "0.500", "900 / 1200 lek", "12 34"] {
+            assert!(parse_price(raw).is_err(), "{raw:?} must be refused, not joined");
+        }
+        assert_eq!(parse_price("1 200"), Ok(1200));
+        assert_eq!(parse_price("1,200"), Ok(1200));
+        assert_eq!(parse_price("1.500 lek"), Ok(1500));
+        assert_eq!(parse_price("ALL 900"), Ok(900));
+        assert_eq!(parse_price("12 345 678"), Ok(12_345_678));
     }
 
     #[test]

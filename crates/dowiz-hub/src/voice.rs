@@ -221,7 +221,9 @@ pub fn classify(transcript: &str, confidence: f64, is_final: bool, who: Speaker)
     if !is_final {
         return Command::Unclear("interim");
     }
-    if confidence < MIN_CONFIDENCE {
+    // NaN is not confidence (W-AUDIT S4, 2026-09-27): `NaN < 0.55` is false,
+    // so a recogniser that answered NaN had "cancel 4821" carried out.
+    if confidence.is_nan() || confidence < MIN_CONFIDENCE {
         return Command::Unclear("not sure I heard that");
     }
     let t = norm(transcript);
@@ -467,5 +469,17 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+/// W-AUDIT S4 (2026-09-27): NaN is not confidence.
+#[cfg(test)]
+mod nan_tests {
+    use super::{classify, Command, Speaker};
+
+    #[test]
+    fn a_nan_confidence_is_not_confidence() {
+        assert_eq!(classify("cancel 4821", f64::NAN, true, Speaker::Owner), Command::Unclear("not sure I heard that"));
+        assert_ne!(classify("cancel 4821", 0.9, true, Speaker::Owner), Command::Unclear("not sure I heard that"));
     }
 }

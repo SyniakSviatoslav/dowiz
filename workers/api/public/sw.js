@@ -55,6 +55,8 @@ const SHELL_CACHE_MODULES = [
   '/store/nav.js',
   // The storefront's pieces on the design system (store/parts.js, 2026-09-24).
   '/store/parts.js',
+  // The basket attempt's Idempotency-Key (W-AUDIT F1, 2026-09-27).
+  '/store/order-key.js',
   '/store/sea.js',
   '/store/state.js',
   '/store/storage.js',

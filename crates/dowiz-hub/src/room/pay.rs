@@ -129,12 +129,37 @@ pub fn settles(p: &Value) -> i64 {
 /// Σ what has been paid against one round, in the order's currency. The
 /// Worker's `command::sitting::paid_of` is the same sum over the same field.
 pub fn paid_of(order: &Value) -> i64 {
-    order.get("payments").and_then(Value::as_array).into_iter().flatten().map(settles).sum()
+    order.get("payments").and_then(Value::as_array).into_iter().flatten().map(settles).sum::<i64>()
+        .saturating_add(card_received(order))
 }
 
-/// Σ of the payments already on the order plus this one, in the order's currency.
+/// What the CARD rail took, in the order's currency. The Stripe webhook
+/// (`stripe.rs`) never writes `payments[]`: it stamps `payment_status: "paid"`
+/// and records `amount_received`. A paid order with no such record (an older
+/// log) took its total.
+///
+/// W-AUDIT F4 (2026-09-27): `paid_with` summed `payments[]` alone, so a card
+/// order paid on the storefront could be paid AGAIN in the room -- 1200 on the
+/// card, then "pay 1200 cash" accepted, the drawer expected to hold money
+/// nobody owed, and a refund of it (`refund::money_taken` sums both rails)
+/// owing 2400. The same rule as `money_taken`, on this side of the seam.
+pub fn card_received(order: &Value) -> i64 {
+    if let Some(card) = order.get("amount_received").and_then(Value::as_i64) {
+        return card.max(0);
+    }
+    let room_paid = order.get("payments").and_then(Value::as_array).is_some_and(|p| !p.is_empty());
+    if !room_paid && order.get("payment_status").and_then(Value::as_str) == Some("paid") {
+        return order.get("total").and_then(Value::as_i64).unwrap_or(0).max(0);
+    }
+    0
+}
+
+/// Σ of the payments already on the order plus this one, in the order's
+/// currency -- the card rail included (`card_received`).
 fn paid_with(order: &Value, this: i64) -> Result<i64, Refused> {
-    let mut sum = this;
+    let mut sum = this
+        .checked_add(card_received(order))
+        .ok_or_else(|| Refused::Invalid("payment sum overflows".into()))?;
     for p in order.get("payments").and_then(Value::as_array).into_iter().flatten() {
         sum = sum.checked_add(settles(p)).ok_or_else(|| Refused::Invalid("payment sum overflows".into()))?;
     }

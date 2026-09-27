@@ -26,9 +26,6 @@ struct InviteIn {
 pub async fn invite_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     use crate::services::courier::roster;
 
-    /// A week. Long enough for a courier who starts next Monday, short enough
-    /// that a code found in an old message no longer opens anything.
-    const TTL_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 
     let body: InviteIn = match req.json().await {
         Ok(b) => b,
@@ -79,57 +76,80 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         minted.hash,
     );
     let taken = crate::identity_store::with_couriers(&ctx.env, move |t| {
-        if crate::identity_store::courier_id_for_phone(t, &ph).is_some() {
-            return Ok(true);
-        }
-        if let Some(pending) = t.lookup(&crate::identity_store::invite_by_phone(&ph)) {
-            if let Some(mut i) =
-                crate::identity_store::rec(t, crate::identity_store::K_INVITE, &pending)
-            {
-                i["revoked_at_ms"] = serde_json::json!(now);
-                let loc = crate::identity_store::s_of(&i, "location_id");
-                // The phone index goes with the revocation: a revoked invite
-                // must stop being findable by the number it was sent to.
-                let index =
-                    vec![(crate::identity_store::invite_at(&loc, &pending), pending.clone())];
-                t.put(
-                    crate::identity_store::K_INVITE,
-                    &pending,
-                    &i.to_string(),
-                    &index,
-                    &[],
-                )
-                .map_err(|e| Error::RustError(format!("invite: {e}")))?;
-            }
-        }
-        let rec = serde_json::json!({
-            "id": id, "location_id": l2, "created_by_owner_id": own, "role": "courier",
-            "invited_email_hash": ph, "invited_phone_hash": ph, "invited_name": nm,
-            "code_hash": ch, "expires_at_ms": now + TTL_MS, "created_at_ms": now,
-            "used_at_ms": serde_json::Value::Null,
-            "revoked_at_ms": serde_json::Value::Null,
-        })
-        .to_string();
-        t.put(
-            crate::identity_store::K_INVITE,
-            &id,
-            &rec,
-            &[
-                (crate::identity_store::invite_by_phone(&ph), id.clone()),
-                (crate::identity_store::invite_at(&l2, &id), id.clone()),
-            ],
-            &[],
-        )
-        .map_err(|e| Error::RustError(format!("invite: {e}")))?;
-        Ok(false)
+        invite_turn(t, &ph, &l2, &own, &nm, &ch, &id, now)
     })
     .await?;
     if taken {
-        return Response::error("that phone already has an account", 409);
+        return Response::error("that phone already has an account or an open invitation", 409);
     }
 
     Response::from_json(&json!({ "code": code, "expiresMs": now + TTL_MS }))
 }
+
+/// A week. Long enough for a courier who starts next Monday, short enough
+/// that a code found in an old message no longer opens anything.
+const TTL_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+
+/// THE CHECK, THE REVOKE AND THE MINT, as one table turn. `Ok(true)` means the
+/// phone is taken and nothing was written; `Ok(false)` means the invitation
+/// `id` now stands and any earlier one OF THIS VENUE is revoked.
+///
+/// ONLY THIS VENUE'S OWN PENDING INVITATION IS REPLACED (W-AUDIT S8,
+/// 2026-09-27). The phone index is platform-wide, and this turn revoked
+/// whatever it found there: venue B inviting a phone venue A had invited
+/// revoked A's code -- a cross-tenant write, repeatable at will, that
+/// `uninvite_courier` two functions down had always guarded against. Another
+/// venue's open invitation now reads as "taken", the same word an account
+/// gets, which tells B nothing an account did not already.
+pub(crate) fn invite_turn(
+    t: &mut dowiz_hub::table::Table,
+    ph: &str,
+    l2: &str,
+    own: &str,
+    nm: &str,
+    ch: &str,
+    id: &str,
+    now: i64,
+) -> Result<bool> {
+    use crate::identity_store as ids;
+    if ids::courier_id_for_phone(t, ph).is_some() {
+        return Ok(true);
+    }
+    if let Some(pending) = t.lookup(&ids::invite_by_phone(ph)) {
+        if let Some(mut i) = ids::rec(t, ids::K_INVITE, &pending) {
+            if ids::s_of(&i, "location_id") != l2 {
+                return Ok(true);
+            }
+            i["revoked_at_ms"] = serde_json::json!(now);
+            // The phone index goes with the revocation: a revoked invite
+            // must stop being findable by the number it was sent to.
+            let index = vec![(ids::invite_at(l2, &pending), pending.clone())];
+            t.put(ids::K_INVITE, &pending, &i.to_string(), &index, &[])
+                .map_err(|e| Error::RustError(format!("invite: {e}")))?;
+        }
+    }
+    let rec = serde_json::json!({
+        "id": id, "location_id": l2, "created_by_owner_id": own, "role": "courier",
+        "invited_email_hash": ph, "invited_phone_hash": ph, "invited_name": nm,
+        "code_hash": ch, "expires_at_ms": now + TTL_MS, "created_at_ms": now,
+        "used_at_ms": serde_json::Value::Null,
+        "revoked_at_ms": serde_json::Value::Null,
+    })
+    .to_string();
+    t.put(
+        ids::K_INVITE,
+        id,
+        &rec,
+        &[(ids::invite_by_phone(ph), id.to_string()), (ids::invite_at(l2, id), id.to_string())],
+        &[],
+    )
+    .map_err(|e| Error::RustError(format!("invite: {e}")))?;
+    Ok(false)
+}
+
+#[cfg(test)]
+#[path = "hiring/tests.rs"]
+mod tests;
 
 /// `POST /api/owner/couriers/:id/uninvite` — withdraw a pending code.
 pub async fn uninvite_courier(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {

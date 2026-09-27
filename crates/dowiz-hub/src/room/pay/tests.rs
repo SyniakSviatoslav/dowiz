@@ -108,3 +108,41 @@ fn a_payment_quoting_the_current_seq_or_none_lands() {
     let (o, _, _) = decide(&mut h, cur.as_ref(), &PayIn { now_ms: 5_002, ..cash(100) }, &OPEN).expect("no base_seq");
     assert_eq!(o["payment_status"], json!("paid"));
 }
+
+/// W-AUDIT F4 (2026-09-27): the CARD rail's money counts. A storefront card
+/// order the webhook marked paid cannot be paid again in the room.
+#[test]
+fn a_card_paid_order_takes_no_second_payment_in_the_room() {
+    for paid in [json!({"payment_status": "paid", "amount_received": 1500}), json!({"payment_status": "paid"})] {
+        let mut h = Hub::create_sized(64 * 1024).unwrap();
+        let mut r = json!({"id": "r1", "status": "READY", "location_id": "v1", "tip": 0, "total": 1500});
+        for (k, v) in paid.as_object().unwrap() {
+            r[k] = v.clone();
+        }
+        h.append(EventKind::Placed, "r1", &r.to_string(), 100, [0; 32]).unwrap();
+        let cur = crate::room::view::current(&h, "r1");
+        let got = decide(&mut h, cur.as_ref(), &cash(1500), &OPEN);
+        assert!(matches!(&got, Err(Refused::Conflict(m)) if m.contains("exceeds")), "{paid}: {got:?}");
+        assert_eq!(h.len(), 1, "a refusal appends nothing");
+        assert_eq!(paid_of(&r), 1500, "the card money is what was paid");
+        assert_eq!(card_received(&r), 1500);
+    }
+}
+
+/// F4's twin: a card that took PART of the bill leaves the rest to the room,
+/// and the room's own "paid" stamp is not double-counted as card money.
+#[test]
+fn a_partly_card_paid_order_takes_the_rest_in_the_room_and_no_more() {
+    let mut h = Hub::create_sized(64 * 1024).unwrap();
+    let r = json!({"id": "r1", "status": "READY", "location_id": "v1", "tip": 0, "total": 1500, "amount_received": 500});
+    h.append(EventKind::Placed, "r1", &r.to_string(), 100, [0; 32]).unwrap();
+    let cur = crate::room::view::current(&h, "r1");
+    assert!(matches!(decide(&mut h, cur.as_ref(), &cash(1001), &OPEN), Err(Refused::Conflict(_))));
+    let (order, _, _) = decide(&mut h, cur.as_ref(), &cash(1000), &OPEN).expect("the rest of the bill");
+    assert_eq!(order["payment_status"], json!("paid"));
+    assert_eq!(paid_of(&order), 1500);
+    // The room's stamp with a payment on the order is the room's money, not the card's.
+    let stamped = json!({"payment_status": "paid", "total": 1500, "payments": [{"amount": 1500}]});
+    assert_eq!(card_received(&stamped), 0);
+    assert_eq!(paid_of(&stamped), 1500);
+}

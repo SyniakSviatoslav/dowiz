@@ -111,11 +111,14 @@ pub fn decide(
     ops.put("asg", &input.order_id, &record, &[], &[])
         .map_err(|e| Refused::Append(format!("assignment: {e}")))?;
     let body = crate::fold::delta(&old, &updated).to_string();
+    // THE VERSION MOVES FORWARD (W-AUDIT F9): `next_seq` over the order's
+    // newest event, as every other command writes it, never the bare clock.
+    let seq = super::amend::next_seq(dowiz_hub::room::view::latest_seq(hub, &input.order_id), input.now_ms);
     hub.append(
         dowiz_hub::EventKind::Noted,
         &input.order_id,
         &body,
-        input.now_ms as u64,
+        seq,
         [0u8; 32],
     )
     .map_err(|e| Refused::Append(format!("hub append failed: {e:?}")))?;

@@ -129,7 +129,28 @@ pub fn contact(name: &str, phone: &str) -> Result<(String, String), &'static str
     if phone.chars().filter(char::is_ascii_digit).count() < PHONE_MIN_DIGITS {
         return Err("a booking needs a phone number the venue can call");
     }
+    if phone.chars().count() > PHONE_MAX {
+        return Err("that phone number is too long for a booking");
+    }
     Ok((name.to_string(), phone.to_string()))
+}
+
+/// A phone number with its spaces, dashes and a `+`: never a document.
+pub const PHONE_MAX: usize = 32;
+/// The occasion line: one sentence at the door, never a document.
+pub const OCCASION_MAX: usize = 200;
+
+/// The occasion a guest wrote, trimmed and bounded (W-AUDIT S11, 2026-09-27).
+/// The form is open to the world and the kernel's `validate_request` never
+/// looks at this field; the name was capped at 80 characters and the phone
+/// and the occasion at nothing, so a few multi-megabyte occasions reached the
+/// bookings image's ceiling and every booking at the venue failed after that.
+pub fn occasion(raw: &str) -> Result<String, &'static str> {
+    let o = raw.trim();
+    if o.chars().count() > OCCASION_MAX {
+        return Err("that occasion note is too long for a booking");
+    }
+    Ok(o.to_string())
 }
 
 #[cfg(test)]

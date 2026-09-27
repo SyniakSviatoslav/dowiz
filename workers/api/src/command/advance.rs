@@ -94,9 +94,17 @@ pub fn decide(
     // CANCELLED drop a round from the bill and the takings; with a payment on
     // it the cash stays in the drawer and nothing says it is owed back. The
     // one exit that records money going back is the refund, past PENDING.
+    //
+    // EVERY RAIL, not the room's alone (W-AUDIT F2, 2026-09-27). This read
+    // `sitting::paid_of`, which sums `payments[]` -- the room's tenders. The
+    // card webhook writes `payment_status`/`amount_received` and never a
+    // payment, so a storefront card order the customer had ALREADY PAID was
+    // rejected with paid = 0: charged, rejected, and nothing anywhere saying
+    // the money was owed back. `refund::money_taken` is the one sum that
+    // knows every rail; it is the guard now.
     if matches!(input.next.as_str(), "REJECTED" | "CANCELLED") {
-        let paid = super::sitting::paid_of(&old);
-        if paid > 0 {
+        let (paid, any) = super::refund::money_taken(&old)?;
+        if any {
             return Err(Refused::Conflict(format!(
                 "{paid} has been paid on this round: confirm it, then refund it, so the money is recorded going back"
             )));
@@ -118,11 +126,14 @@ pub fn decide(
 
     // The delta against the state this transition started from.
     let body = crate::fold::delta(&old, &merged).to_string();
+    // THE VERSION MOVES FORWARD, never sideways (W-AUDIT F9): `next_seq` over
+    // the order's newest event, as every other command writes it.
+    let seq = super::amend::next_seq(dowiz_hub::room::view::latest_seq(hub, &input.order_id), input.now_ms);
     hub.append(
         dowiz_hub::EventKind::Advanced,
         &input.order_id,
         &body,
-        input.now_ms as u64,
+        seq,
         [0u8; 32],
     )
     .map_err(|e| Refused::Append(format!("hub append failed: {e:?}")))?;
@@ -141,3 +152,8 @@ pub fn decide(
 #[cfg(test)]
 #[path = "advance/consume_tests.rs"]
 mod consume_tests;
+
+/// W-AUDIT F2 / F9: the card rail's money survives a rejection; the version never goes back.
+#[cfg(test)]
+#[path = "advance/tests.rs"]
+mod tests;

@@ -341,18 +341,52 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
     // `ledger_postings` insert per leg; a half-applied batch is a transaction
     // with no legs, and a journal with one of those does not balance.
     let subject = tx_id.clone();
-    crate::hubstore::with_log(&place, IMAGE_LEDGER, move |log| {
-        log.append(K_TX, &subject, &rec)
-            .map_err(|e| Error::RustError(format!("ledger: {e:?}")))
-    })
-    .await?;
+    let appended =
+        crate::hubstore::with_log(&place, IMAGE_LEDGER, move |log| append_once(log, &subject, &rec)).await?;
 
     Response::from_json(&json!({
         "id": tx_id,
-        "replayed": false,
+        "replayed": !appended,
         "amountMinor": b.amount_minor,
         "currency": currency.code(),
     }))
+}
+
+/// ONE ENTRY PER TRANSACTION ID, decided in the same object turn as the append.
+///
+/// W-AUDIT F6 (2026-09-27). The read above ("is this id already in the
+/// journal?") and the append were two separate object turns, and the closure
+/// never asked again. Two top-ups with one `requestId` -- a double tap, a
+/// retry racing its original -- both passed the read and both appended. The
+/// journal then held two transactions with one id, `ledger_account::post`
+/// refused the whole journal as "duplicate transaction id", and from that
+/// moment every balance was a 500 and every wallet tender was refused, for
+/// good, with no repair path. `false` means the id was already there and
+/// nothing was written: the caller answers "replayed".
+pub fn append_once(log: &mut dowiz_hub::logimage::LogImage, subject: &str, rec: &str) -> Result<bool> {
+    if !log.about(K_TX, Some(subject), 1).is_empty() {
+        return Ok(false);
+    }
+    log.append(K_TX, subject, rec).map_err(|e| Error::RustError(format!("ledger: {e:?}")))?;
+    Ok(true)
+}
+
+#[cfg(test)]
+mod once_tests {
+    use super::{append_once, K_TX};
+    use dowiz_hub::logimage::LogImage;
+
+    /// F6: the same id twice, in one image, is one entry -- and the second
+    /// call says so. A different id is a second entry.
+    #[test]
+    fn the_same_transaction_id_is_appended_once() {
+        let mut log = LogImage::create_sized(64 * 1024).unwrap();
+        assert_eq!(append_once(&mut log, "tx_1", r#"{"id":"tx_1"}"#).unwrap(), true);
+        assert_eq!(append_once(&mut log, "tx_1", r#"{"id":"tx_1"}"#).unwrap(), false, "a retry is replayed, not credited");
+        assert_eq!(log.about(K_TX, Some("tx_1"), 10).len(), 1);
+        assert_eq!(append_once(&mut log, "tx_2", r#"{"id":"tx_2"}"#).unwrap(), true);
+        assert_eq!(log.about(K_TX, None, 10).len(), 2);
+    }
 }
 
 /// The wallet key a principal owns, or `None` for one that owns no wallet.

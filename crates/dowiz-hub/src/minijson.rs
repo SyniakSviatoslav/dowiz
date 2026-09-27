@@ -104,6 +104,13 @@ pub fn int_field(json: &str, key: &str) -> Option<i64> {
         let end = rest
             .find(|c: char| !c.is_ascii_digit() && c != '-')
             .unwrap_or(rest.len());
+        // A NUMBER THAT IS NOT AN INTEGER IS NOT THIS FIELD (W-AUDIT S5,
+        // 2026-09-27). `12.5` read as 12 and `1e3` as 1, and the callers are
+        // `priceDelta`, a recipe's grams and a supply's unit cost -- money and
+        // quantities, silently truncated. `None` is the honest answer.
+        if rest[end..].starts_with(['.', 'e', 'E']) {
+            return None;
+        }
         return rest[..end].parse().ok();
     }
 }
@@ -260,5 +267,21 @@ mod array_tests {
         assert!(objects_in(r#"{"a":1}"#, "items").is_empty());
         assert!(objects_in(r#"{"items":[]}"#, "items").is_empty());
         assert!(objects_in(r#"{"items":[{"id":"a""#, "items").is_empty(), "unterminated yields nothing");
+    }
+}
+
+/// W-AUDIT S5 (2026-09-27): a fraction or an exponent is not an integer field.
+#[cfg(test)]
+mod int_tests {
+    use super::int_field;
+
+    #[test]
+    fn a_fraction_or_an_exponent_is_none_not_a_truncated_integer() {
+        assert_eq!(int_field(r#"{"p":12.5}"#, "p"), None);
+        assert_eq!(int_field(r#"{"q":1e3}"#, "q"), None);
+        assert_eq!(int_field(r#"{"r":2E2}"#, "r"), None);
+        assert_eq!(int_field(r#"{"n":950,"m":-3}"#, "n"), Some(950));
+        assert_eq!(int_field(r#"{"n":950,"m":-3}"#, "m"), Some(-3));
+        assert_eq!(int_field(r#"{"n":950}"#, "n"), Some(950));
     }
 }

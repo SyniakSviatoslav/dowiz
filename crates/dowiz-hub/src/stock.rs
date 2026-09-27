@@ -19,6 +19,7 @@
 //! next order and oversells.
 
 use crate::minijson::{esc, int_field, str_field};
+use std::collections::BTreeMap;
 
 /// Quantity in the item's base unit -- pieces, grams, millilitres. Integer,
 /// because a conserved quantity that can be 0.30000000000000004 is not
@@ -242,10 +243,17 @@ impl StockLevel {
 pub struct StockLedger {
     levels: Vec<(String, StockLevel)>,
     /// Open reservations, for I3. `(order_id, item)` -> qty.
-    open: Vec<((String, String), Qty)>,
+    ///
+    /// A MAP, NOT A VEC (W-AUDIT M1, 2026-09-27). Both this and `served` were
+    /// `Vec`s scanned with `position` on every event, so the fold every stock
+    /// write runs first was O(n^2) in the log: 20 000 `Served` lines -- a busy
+    /// room's year through the e-bills import, and nothing ever removes one
+    /// -- folded in 896 ms native release. The map is ordered, so every
+    /// reading that iterates it is as deterministic as it was.
+    open: BTreeMap<(String, String), Qty>,
     /// Served and not reversed, `(order_id, item)` -> qty: what a void may
     /// put back. Empty for every log written before `served` existed.
-    served: Vec<((String, String), Qty)>,
+    served: BTreeMap<(String, String), Qty>,
     /// Items whose shelf somebody has actually measured: a delivery or a
     /// count. Only these can refuse an order. A venue that has written its
     /// recipes but not yet counted its shelf would otherwise have every dish
@@ -438,24 +446,23 @@ impl StockLedger {
     }
 
     fn served_qty(&self, order_id: &str, item: &str) -> Qty {
-        self.served.iter().find(|((o, i), _)| o == order_id && i == item).map(|(_, q)| *q).unwrap_or(0)
+        self.served.get(&(order_id.to_string(), item.to_string())).copied().unwrap_or(0)
     }
 
     /// What an order has served and not had reversed, `(item, qty)`, sorted:
     /// exactly the `Unserved` a void of it emits.
     pub fn served_of(&self, order_id: &str) -> Vec<(String, Qty)> {
-        let mut out: Vec<(String, Qty)> =
-            self.served.iter().filter(|((o, _), _)| o == order_id).map(|((_, i), q)| (i.clone(), *q)).collect();
-        out.sort();
-        out
+        // The map is ordered by (order, item): one order's lines are one
+        // contiguous, item-sorted range.
+        self.served
+            .range((order_id.to_string(), String::new())..)
+            .take_while(|((o, _), _)| o == order_id)
+            .map(|((_, i), q)| (i.clone(), *q))
+            .collect()
     }
 
     fn held(&self, order_id: &str, item: &str) -> Qty {
-        self.open
-            .iter()
-            .find(|((o, i), _)| o == order_id && i == item)
-            .map(|(_, q)| *q)
-            .unwrap_or(0)
+        self.open.get(&(order_id.to_string(), item.to_string())).copied().unwrap_or(0)
     }
 
     fn mark_counted(&mut self, item: &str) {
@@ -465,14 +472,11 @@ impl StockLedger {
     }
 
     fn take_held(&mut self, order_id: &str, item: &str, qty: Qty) {
-        if let Some(pos) = self
-            .open
-            .iter()
-            .position(|((o, i), _)| o == order_id && i == item)
-        {
-            self.open[pos].1 -= qty;
-            if self.open[pos].1 <= 0 {
-                self.open.remove(pos);
+        let key = (order_id.to_string(), item.to_string());
+        if let Some(q) = self.open.get_mut(&key) {
+            *q -= qty;
+            if *q <= 0 {
+                self.open.remove(&key);
             }
         }
     }
@@ -495,11 +499,7 @@ impl StockLedger {
             StockEvent::Reserved { item, qty, order_id } => {
                 let l = self.level_mut(item);
                 l.reserved = l.reserved.checked_add(*qty).ok_or(StockError::Overflow)?;
-                let key = (order_id.clone(), item.clone());
-                match self.open.iter().position(|(k, _)| *k == key) {
-                    Some(p) => self.open[p].1 += qty,
-                    None => self.open.push((key, *qty)),
-                }
+                *self.open.entry((order_id.clone(), item.clone())).or_insert(0) += qty;
             }
             StockEvent::Consumed { item, qty, order_id } => {
                 let l = self.level_mut(item);
@@ -527,19 +527,17 @@ impl StockLedger {
             StockEvent::Served { item, qty, order_id } => {
                 let l = self.level_mut(item);
                 l.on_hand = l.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
-                let key = (order_id.clone(), item.clone());
-                match self.served.iter().position(|(k, _)| *k == key) {
-                    Some(p) => self.served[p].1 = self.served[p].1.saturating_add(*qty),
-                    None => self.served.push((key, *qty)),
-                }
+                let q = self.served.entry((order_id.clone(), item.clone())).or_insert(0);
+                *q = q.saturating_add(*qty);
             }
             StockEvent::Unserved { item, qty, order_id } => {
                 let l = self.level_mut(item);
                 l.on_hand = l.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
-                if let Some(p) = self.served.iter().position(|((o, i), _)| o == order_id && i == item) {
-                    self.served[p].1 -= qty;
-                    if self.served[p].1 <= 0 {
-                        self.served.remove(p);
+                let key = (order_id.clone(), item.clone());
+                if let Some(q) = self.served.get_mut(&key) {
+                    *q -= qty;
+                    if *q <= 0 {
+                        self.served.remove(&key);
                     }
                 }
             }
@@ -1074,6 +1072,14 @@ impl StockLog {
         if store.pick().is_none() {
             return Err(crate::HubError::NotAHub);
         }
+        // AND REFUSES ONE THAT LOST RECORDS ON THE WAY HERE (W-AUDIT S3,
+        // 2026-09-27), as `Hub::load` and `LogImage::load` have since the
+        // short-read defect. This loader alone trusted the superblock: a stock
+        // image cut short LOADED, folded a partial history, and -- because
+        // `append` re-folds the whole log first -- a `Consumed` whose
+        // `Reserved` was in the lost tail turned every later stock write into
+        // a `Linkage` refusal. Refusing here is what a caller can act on.
+        crate::chain_is_whole(&store)?;
         Ok(StockLog { store, clock: None })
     }
 
@@ -1394,14 +1400,12 @@ pub struct BomLine {
 /// nobody switches on.
 pub fn bom_of(product_json: &str) -> Vec<BomLine> {
     let mut out = Vec::new();
-    // `"bom":[{"supply":"salmon","qty":40}, ...]`
-    let Some(start) = product_json.find("\"bom\"") else { return out };
-    let rest = &product_json[start..];
-    let Some(open) = rest.find('[') else { return out };
-    let Some(close) = rest[open..].find(']') else { return out };
-    for chunk in rest[open..open + close].split('{').skip(1) {
-        let Some(supply) = crate::minijson::str_field(chunk, "supply") else { continue };
-        let Some(qty) = crate::minijson::int_field(chunk, "qty") else { continue };
+    // `"bom":[{"supply":"salmon","qty":40}, ...]` -- the array `"bom"` holds,
+    // brackets walked outside strings (`modifiers::array_of`, W-AUDIT S7).
+    let Some(body) = crate::modifiers::array_of(product_json, "bom") else { return out };
+    for chunk in crate::modifiers::split_objects(body) {
+        let Some(supply) = crate::minijson::str_field(&chunk, "supply") else { continue };
+        let Some(qty) = crate::minijson::int_field(&chunk, "qty") else { continue };
         if qty > 0 && !supply.is_empty() {
             out.push(BomLine { supply, qty });
         }
@@ -1606,3 +1610,21 @@ pub mod meta;
 pub mod journal;
 /// Lots on hand, first-expiry-first-out.
 pub mod lots;
+
+/// W-AUDIT S7 (2026-09-27): the recipe is read through brackets inside names
+/// and never from the next array in the record.
+#[cfg(test)]
+mod bom_audit_tests {
+    use super::bom_of;
+
+    #[test]
+    fn the_recipe_is_read_whole_and_only_from_its_own_array() {
+        let lines = bom_of(r#"{"bom":[{"supply":"a]","qty":1},{"supply":"rice","qty":90}]}"#);
+        assert_eq!(lines.iter().map(|l| (l.supply.as_str(), l.qty)).collect::<Vec<_>>(), vec![("a]", 1), ("rice", 90)]);
+        assert!(bom_of(r#"{"bom":null,"ingredients":[{"supply":"x","qty":5}]}"#).is_empty(), "null is not the next array");
+        assert!(bom_of(r#"{"name":"bom","ingredients":[{"supply":"x","qty":5}]}"#).is_empty(), "a value is not the key");
+        assert!(bom_of(r#"{"bom":[{"supply":"salmon","qty":40.5}]}"#).is_empty(), "a fractional qty is refused, not truncated");
+        let nested = bom_of(r#"{"modifierGroups":[{"options":[{"id":"x"}]}],"bom":[{"supply":"nori","qty":1,"tags":["a","b"]},{"supply":"rice","qty":90}]}"#);
+        assert_eq!(nested.len(), 2, "a nested array inside a line does not end the recipe: {nested:?}");
+    }
+}

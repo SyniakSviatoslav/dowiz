@@ -482,6 +482,10 @@ pub enum StoreError {
     NoSuperblock,
     ArenaFull { need: i64, capacity: i64 },
     Io(io::Error),
+    /// A cell the write path was about to TRUST disagrees with the image it
+    /// sits in (W-AUDIT S1, 2026-09-27). Named, so the layer above can refuse
+    /// the image loudly instead of writing through a lie.
+    Corrupt(&'static str),
 }
 
 impl From<io::Error> for StoreError {
@@ -493,12 +497,35 @@ impl Store {
     /// `st_begin` reads `used_p` and `gen_p` rather than the superblock's own cells.
     pub fn begin(&self) -> Result<Tx, StoreError> {
         let sb = self.pick().ok_or(StoreError::NoSuperblock)?;
+        let n = self.cells.len() as i64;
         let pt = self.cells[sb.at + 3];
         let (used, gen) = if pt == 0 {
             (self.cells[sb.at + 4], self.cells[sb.at + 2])
         } else {
+            // `sb_fits` proved `pt + 18 < n`; the cursor and the generation
+            // sit two cells further, and a PartTab cut off there is not one.
+            if pt.checked_add(20).is_none_or(|end| end >= n) {
+                return Err(StoreError::Corrupt("the PartTab's cursor cells are outside the image"));
+            }
             (self.cells[pt as usize + 19], self.cells[pt as usize + 20])
         };
+        // THE CURSOR IS A CLAIM, AND THIS IS WHERE THE CLAIM BECOMES A WRITE
+        // (W-AUDIT S1, 2026-09-27). Every reader bounds what it reads by the
+        // image; `alloc` bounded nothing, because nothing checked the one cell
+        // it starts from. `used_p = -8` passed the arena test (`-8 + 2 + len`
+        // is small), became a usize of 1.8e19 and PANICKED the next append --
+        // in a Worker, the isolate. `used_p = arena_used - 20` passed too and
+        // wrote the next record over the newest one. So: inside the arena,
+        // never behind the superblock's own high-water mark (`stage_commit`
+        // writes both from one `tx.cursor`, so a cursor behind it is a lie).
+        let capacity = self.cells[sb.at + 12];
+        let floor = ARENA as i64;
+        if capacity < 0 || used < floor || used > floor.saturating_add(capacity) {
+            return Err(StoreError::Corrupt("the write cursor is outside the arena"));
+        }
+        if used < self.cells[sb.at + 4] {
+            return Err(StoreError::Corrupt("the write cursor is behind the superblock's arena_used"));
+        }
         Ok(Tx { sb: sb.at, mark: used, cursor: used, live_delta: 0, sup_delta: 0, next_gen: gen + 1 })
     }
 

@@ -294,15 +294,29 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     .await
     .map(|v| v.is_some());
 
+    let (status, body) = ack(&applied.map_err(|e| e.to_string()), &order_id);
+    Ok(Response::from_json(&body)?.with_status(status))
+}
+
+/// The answer whose status decides whether Stripe SENDS THIS EVENT AGAIN.
+///
+/// W-AUDIT F3 (2026-09-27). Every failure to apply used to be acknowledged
+/// with 200 -- "a 500 here just fills Stripe's retry queue" -- which was
+/// written for the one failure that is final: an order this venue does not
+/// know. It also swallowed every failure that is not: the object unreachable,
+/// an append refused by a 5xx, five lost generation races on a busy venue.
+/// Stripe stops on a 2xx, so a card the customer HAD PAID with was never
+/// recorded on the order, and nothing would ever try again. Only "order not
+/// found" is final; everything else is 503, and Stripe retries for days.
+pub fn ack(applied: &std::result::Result<bool, String>, order_id: &str) -> (u16, serde_json::Value) {
     match applied {
-        Ok(true) => Response::from_json(&serde_json::json!({ "ok": true, "applied": order_id })),
-        Ok(false) => {
-            Response::from_json(&serde_json::json!({ "ok": true, "duplicate": order_id }))
-        }
-        // An order we do not know is still acknowledged: retrying will not make
-        // it appear, and a 500 here just fills Stripe's retry queue.
-        Err(e) => Response::from_json(&serde_json::json!({
-            "ok": true, "unapplied": e.to_string()
-        })),
+        Ok(true) => (200, serde_json::json!({ "ok": true, "applied": order_id })),
+        Ok(false) => (200, serde_json::json!({ "ok": true, "duplicate": order_id })),
+        Err(e) if e.contains("order not found") => (200, serde_json::json!({ "ok": true, "unapplied": e })),
+        Err(e) => (503, serde_json::json!({ "ok": false, "retry": e })),
     }
 }
+
+#[cfg(test)]
+#[path = "stripe/tests.rs"]
+mod tests;

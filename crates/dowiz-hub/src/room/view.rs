@@ -42,6 +42,22 @@ impl OrderView {
 /// kind and seq with the folded state as its JSON. An order whose fold is null
 /// (every payload unreadable) is not there, exactly as the projection drops it.
 /// The Worker's `command/amend/agrees.rs` holds the two to one delta.
+/// The version the tablets quote for this order: the seq of its NEWEST order
+/// event, without folding the order. `0` when the log has never seen it.
+///
+/// W-AUDIT F9 (2026-09-27): `advance` and `assign` wrote `seq = now_ms`
+/// while every other command writes `next_seq(prev, now)`. In one busy
+/// millisecond -- Workers' clock is coarse -- an amend at T, a pay at T+1 and
+/// an owner's advance at T left the view's seq at T again, and a second
+/// tablet still showing seq T passed the `base_seq` check and took the same
+/// money twice. This is the `prev` every writer must pass to `next_seq`.
+pub fn latest_seq(hub: &Hub, order_id: &str) -> u64 {
+    hub.events()
+        .into_iter()
+        .find(|e| e.kind.is_order() && e.order_id == order_id)
+        .map_or(0, |e| e.seq)
+}
+
 pub fn current(hub: &Hub, order_id: &str) -> Option<OrderView> {
     let mut state = serde_json::Value::Null;
     let mut newest: Option<Event> = None;

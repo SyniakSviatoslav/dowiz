@@ -250,3 +250,23 @@ fn a_partly_paid_destination_may_take_lines() {
     assert_eq!(d.moved.to["total"], json!(1800));
     assert!(law3(&d.moved.from) && law3(&d.moved.to));
 }
+
+/// W-AUDIT F8 (2026-09-27): a line is priced in its round's minor units, and
+/// nothing converts, so a EUR round and an ALL round exchange nothing.
+#[test]
+fn rounds_in_different_currencies_exchange_no_lines() {
+    let mut eur = round("r1", "PENDING");
+    eur["currency"] = json!("EUR");
+    let r = refused(&eur, &round("r2", "PENDING"), &input(vec![0]));
+    assert!(matches!(&r, Refused::Conflict(m) if m.contains("currenc")), "{r:?}");
+    let mut all = round("r2", "PENDING");
+    all["currency"] = json!("ALL");
+    let r = refused(&eur, &all, &input(vec![0]));
+    assert!(matches!(&r, Refused::Conflict(m) if m.contains("currenc")), "{r:?}");
+    // Twin: the same currency on both sides moves the line.
+    let mut eur2 = round("r2", "PENDING");
+    eur2["currency"] = json!("EUR");
+    let (mut h, mut s) = (hub(), shelf());
+    let d = decide(&mut h, &mut s, Some(&view(&eur)), Some(&view(&eur2)), &input(vec![1]));
+    assert_eq!(d.expect("same currency lands").moved.to["total"], json!(1800));
+}

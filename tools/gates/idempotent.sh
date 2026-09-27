@@ -56,6 +56,21 @@ for v in $guarded; do
   printf '%s\n' "$queued" | grep -qx "$v" || echo "idempotent: note — $SRV guards '$v', which no client queues"
 done
 
+# THE OTHER HALF THE HEADER ABOVE SAID IT COULD NOT SEE, and it was the half
+# that mattered most (W-AUDIT F1, 2026-09-27). `storefront::place` has carried
+# `idempotency::guard` since the day the module was written for it -- "a
+# customer on a weak connection whose response is lost ... gets a SECOND
+# ORDER" -- and `store/checkout.js` never sent the key. The guard was real and
+# inert. So the storefront is paired the same way: the server's
+# `"storefront.place"` guard must meet an `idempotency-key` header on the
+# storefront's own order POST, in the file that sends it.
+STORE=workers/api/public/store/checkout.js
+if grep -rq --include='*.rs' '"storefront\.place"' workers/api/src; then
+  if ! grep -q "idempotency-key" "$STORE"; then
+    missing="$missing  storefront.place: guarded in workers/api/src, but $STORE sends no idempotency-key\n"
+  fi
+fi
+
 n=$(printf "$missing" | grep -c . || true)
 echo "idempotent: $(printf '%s\n' "$queued" | wc -l | tr -d ' ') queueable route(s), $n without a server guard"
 if [ "$n" -gt 0 ]; then

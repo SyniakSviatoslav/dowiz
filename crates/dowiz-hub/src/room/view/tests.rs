@@ -28,3 +28,18 @@ fn an_order_the_log_does_not_hold_is_none() {
     h.append(EventKind::Placed, "r3", "not json", 1, [0; 32]).unwrap();
     assert_eq!(current(&h, "r3"), None, "a fold that is null is not an order");
 }
+
+/// W-AUDIT F9 (2026-09-27): the newest ORDER event's seq, without a fold;
+/// audit records on the same id do not count, and an unknown id is 0.
+#[test]
+fn latest_seq_is_the_newest_order_events_seq() {
+    let mut h = crate::Hub::create_sized(64 * 1024).unwrap();
+    assert_eq!(super::latest_seq(&h, "r1"), 0);
+    let r = serde_json::json!({"id": "r1", "status": "PENDING", "location_id": "v1"}).to_string();
+    h.append(crate::EventKind::Placed, "r1", &r, 100, [0; 32]).unwrap();
+    h.append(crate::EventKind::Noted, "r1", "{}", 250, [0; 32]).unwrap();
+    h.append(crate::EventKind::Revealed, "r1", "{}", 900, [0; 32]).unwrap();
+    h.append(crate::EventKind::Placed, "r2", &r, 700, [0; 32]).unwrap();
+    assert_eq!(super::latest_seq(&h, "r1"), 250);
+    assert_eq!(super::latest_seq(&h, "r2"), 700);
+}

@@ -173,3 +173,50 @@ fn an_item_name_cannot_forge_a_signer() {
         other => panic!("{other:?}"),
     }
 }
+
+/// W-AUDIT S3 (2026-09-27): a stock image cut short is REFUSED, as the order
+/// log's and the log image's are -- never folded short.
+#[test]
+fn a_truncated_stock_image_is_refused_not_folded_short() {
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    for i in 0..40 {
+        log.append(&StockEvent::Received { item: format!("s{i}"), qty: 10 }).unwrap();
+    }
+    let bytes = log.to_bytes();
+    let mut refused = 0;
+    for tenth in 1..10usize {
+        let keep = bytes.len() * tenth / 10;
+        match StockLog::load(&bytes[..keep]) {
+            Err(_) => refused += 1,
+            Ok(short) => assert_eq!(short.events().len(), 40, "a log cut to {keep} of {} bytes loaded SHORT", bytes.len()),
+        }
+    }
+    assert!(refused > 0, "no prefix of a 40-record stock log was refused");
+    assert_eq!(StockLog::load(&bytes).unwrap().events().len(), 40, "the whole image still loads whole");
+    // The sharpest case: every byte is there, one `next` ref is not.
+    let mut st = bebop_store::Store::from_bytes(&bytes);
+    let newest = st.follow(st.root().unwrap(), 1).unwrap();
+    st.cells[newest + 2 + 2] = 1 << 40;
+    assert!(matches!(StockLog::load(&st.to_bytes()), Err(crate::HubError::Corrupt { .. })));
+}
+
+/// W-AUDIT M1 (2026-09-27): what the `served` projection costs to fold, measured
+/// natively (`cargo test --release --lib measure_served -- --ignored --nocapture`).
+/// A year of a busy room: 20 000 `Served` lines on distinct orders, then one
+/// `ledger()` -- the fold every stock write runs first.
+#[test]
+#[ignore]
+fn measure_served_fold() {
+    let mut log = StockLog::create_sized(4 * 1024 * 1024).unwrap();
+    log.append(&StockEvent::Received { item: "rice".into(), qty: 100_000_000 }).unwrap();
+    let evs: Vec<StockEvent> =
+        (0..20_000).map(|i| StockEvent::Served { item: "rice".into(), qty: 90, order_id: format!("o{i}") }).collect();
+    for chunk in evs.chunks(500) {
+        log.append_all(chunk).unwrap();
+    }
+    let t = std::time::Instant::now();
+    let led = log.ledger().unwrap();
+    let dt = t.elapsed();
+    assert_eq!(led.served_of("o19999"), vec![("rice".to_string(), 90)]);
+    println!("served fold: {} records in {dt:?}", log.len());
+}

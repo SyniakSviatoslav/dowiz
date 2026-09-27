@@ -93,6 +93,14 @@ pub fn apply(from: &OrderView, to: &OrderView, input: &TransferIn) -> Result<Mov
     if input.from_base_seq != from.seq || input.to_base_seq != to.seq {
         return Err(Refused::Conflict("this order changed while you were editing it".into()));
     }
+    // ONE CURRENCY ON BOTH SIDES (W-AUDIT F8, 2026-09-27). A line's
+    // `unit_price` is in ITS round's minor units; moved unconverted between a
+    // EUR round and an ALL round, 1200 cents became 1200 lek. Nothing here
+    // converts, so nothing here moves across currencies.
+    let cur = |o: &Value| o.get("currency").and_then(Value::as_str).map(str::to_string);
+    if cur(&src) != cur(&dst) {
+        return Err(Refused::Conflict("the two rounds are in different currencies: nothing moves between them".into()));
+    }
     let old = items(&src);
     if input.lines.is_empty() {
         return Err(Refused::Invalid("a transfer moves at least one line".into()));

@@ -113,6 +113,12 @@ impl Kv {
             Some(len as usize)
         };
         let mut entries = Vec::with_capacity(n);
+        // EVERY ENTRY OWNS ITS OWN BYTES, so the entries together cannot be
+        // larger than the two blobs (W-AUDIT S2, 2026-09-27). Each entry was
+        // bounded by its blob; n entries that all name the whole blob read
+        // n × blob, and a crafted index made one `load` allocate quadratically
+        // in the image. An index that over-claims the blobs is refused.
+        let mut budget = kblob_cells.checked_add(vblob_cells)?;
         for i in 0..n {
             let ko = st.get(kidx, 2 * i);
             let kl = st.get(kidx, 2 * i + 1);
@@ -120,6 +126,7 @@ impl Kv {
             let vl = st.get(vidx, 2 * i + 1);
             let kl = fits(ko, kl, kblob_cells)?;
             let vl = fits(vo, vl, vblob_cells)?;
+            budget = budget.checked_sub(kl.checked_add(vl)?)?;
             let (ko, vo) = (ko as usize, vo as usize);
             // KEYS ARE UTF-8 BYTES AND MUST BE DECODED AS UTF-8. This read
             // `(byte as char)`, which is not a decode at all -- in Rust that
