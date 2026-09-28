@@ -1,0 +1,26 @@
+# DG2: three node-key frames (SPEC-BEBOP-DAG-RUNTIME §2), the numbers every
+# reader in gate.sh must print. ONE file, three fixtures, prefixed by name.
+# Field values (each reader builds the frame itself from these, never from a
+# shared byte file -- a reader that orders fields wrongly moves its numbers):
+#   compile ('C' 0x43): compiler_digest=-7046029254386353131,
+#     fn_source="fn add(a: i64, b: i64) -> i64 { a + b }" (39 bytes),
+#     sig_digest=81985529216486895, lit_digest=-2, use_digest=1311768467294899695
+#     len = K-3's 1 + 5*8 + 8 + 39 + 8 + 8 + 8 = 112
+#   proj ('P' 0x50, two inputs): code_version=-7046029254386353131,
+#     fn_key=compile_k64, inputs=[(key 8B 1234605616436508552, gen 7),
+#     (key 32B = bytes 0x00..0x1f, gen 1)], params=[1790000000000, 3]
+#   empty ('P' 0x50): as proj with inputs=[] and params=[] (two len-0 fields)
+# A number is an 8-byte field (len=8); a list is ONE field whose bytes are its
+# elements' fields; an input element is field(key) || field(generation).
+# K64 = (zlib crc32(frame) << 32) | (len & 0xffffffff) as i64; K256 = sha256.
+# Derived 2026-09-29 from the spec text by a throwaway script, then agreed by
+# the four readers in gate.sh.
+compile_len=112
+compile_k64=1347934262753493104
+compile_k256=9e0b5ed28151fc4f2a640ecd62bd1db9cda9966eeee8c3238d46cabe08231140
+proj_len=169
+proj_k64=5849129618971295913
+proj_k256=553f9c13c32dccda664366363999c2679fd7f1f2ff26959f2ab0fed9d635a5e5
+empty_len=49
+empty_k64=8538448267812274225
+empty_k256=74da7c87dd73370a0afb3e3f32b18b56f6cdb8c85235dd056b1d25b3d0fce5ea

@@ -43,6 +43,12 @@ serde_json = { version = "1", optional = true }
 [features]
 default = []
 decide = ["dep:dowiz-hub", "dep:serde_json"]
+# THE NODE-KEY READER'S EXPORT (DG2), OFF by default. `src/nodekey.rs` is always
+# compiled and natively tested; this feature only makes `bw_key` a wasm export.
+# It exports the three fixture frames of `fixtures/key.expected` and nothing a
+# Worker calls, so it stays out of the module `bytes.baseline` ratchets: gate.sh
+# builds it into `target/key/` and prints its size beside the reader's.
+key = []
 
 # The Worker's own profile (workers/api/Cargo.toml) minus `strip = false`,
 # which only wasm-bindgen's catch wrappers need. `panic = "abort"` because a

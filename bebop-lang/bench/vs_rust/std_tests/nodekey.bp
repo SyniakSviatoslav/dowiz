@@ -1,0 +1,96 @@
+use "selfhost/prelude/nodekey.bp"
+// bench/vs_rust/std_tests/nodekey.bp -- the bebop reader of the three node-key frames in
+// crates/bebop-wasm/fixtures/key.expected (DG2), built from the field values that file lists.
+//
+//   nodekey.bin <c|p|e> <l|k|0|1|2|3|x>
+//     fixture c = compile, p = proj (two inputs), e = empty (two len-0 lists);
+//     l = frame length, k = K64, 0..3 = K256 as four big-endian 64-bit words (h[2i]<<32 | h[2i+1]),
+//     x = RT K-3 holds for the compile frame (1) or not (0). (Under seed, argv[1] is the .bin
+//     itself, so the two arguments are argv[2] and argv[3], as kv.bp reads its phase.)
+//   nodekey.bin (no args) -- std_golden's `gate nodekey`: every number above folded as
+//     acc*31 + v over (c, p, e) x (l, k, 0, 1, 2, 3), or -1 when K-3 fails.
+
+module core { }
+
+fn nk_compile(buf: [i64], src: str) -> i64 {
+  let p = key_frame(buf, 67);
+  let p = kf_i64(buf, p, -7046029254386353131);
+  let p = kf_str(buf, p, src);
+  let p = kf_i64(buf, p, 81985529216486895);
+  let p = kf_i64(buf, p, -2);
+  kf_i64(buf, p, 1311768467294899695)
+}
+
+// nk_proj: a projection frame; two = 1 for the two-input fixture, 0 for the empty-list one.
+fn nk_proj(buf: [i64], fnkey: i64, two: i64, d: [i64]) -> i64 {
+  let p = key_frame(buf, 80);
+  let p = kf_i64(buf, p, -7046029254386353131);
+  let p = kf_i64(buf, p, fnkey);
+  let s = p;
+  let p = kf_open(buf, p);
+  let p = if two == 1 then (
+    let q = kf_i64(buf, p, 1234605616436508552) in
+    let q = kf_i64(buf, q, 7) in
+    let q = kf_bytes(buf, q, d, 32) in
+    kf_i64(buf, q, 1)
+  ) else p;
+  let p = kf_close(buf, s, p);
+  let t = p;
+  let p = kf_open(buf, p);
+  let p = if two == 1 then (
+    let q = kf_i64(buf, p, 1790000000000) in
+    kf_i64(buf, q, 3)
+  ) else p;
+  kf_close(buf, t, p)
+}
+
+// nk_one: build fixture fx into buf and return item `what` of it.
+fn nk_one(buf: [i64], h: [i64], d: [i64], fx: i64, what: i64, src: str) -> i64 {
+  let cn = nk_compile(buf, src);
+  let k3 = if cn == 1 + 5 * 8 + 8 + str_len(src) + 8 + 8 + 8 then 1 else 0;
+  let ck = key64(buf, cn);
+  let n = if fx == 112 then nk_proj(buf, ck, 1, d) else (if fx == 101 then nk_proj(buf, ck, 0, d) else cn);
+  let _ = key256(buf, n, h);
+  let w = what - 48;
+  if what == 108 then n
+  else (if what == 107 then key64(buf, n)
+  else (if what == 120 then k3
+  else (if w >= 0 then (if w < 4 then (h[2 * w] << 32) | h[2 * w + 1] else 0 - 1) else 0 - 1)))
+}
+
+// nk_fold: std_golden's single number over all three fixtures.
+fn nk_fold(buf: [i64], h: [i64], d: [i64], src: str) -> i64 {
+  let fxs = [99, 112, 101];
+  let whats = [108, 107, 48, 49, 50, 51];
+  let acc = 0;
+  let i = 0;
+  while i < 3 {
+    let j = 0;
+    while j < 6 {
+      let acc = acc * 31 + nk_one(buf, h, d, fxs[i], whats[j], src);
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  if nk_one(buf, h, d, 99, 120, src) == 1 then acc else 0 - 1
+}
+
+fn nk_main(argc: i64, argv: [str], src: str) -> i64 {
+  let buf = zeros(512);
+  let h = zeros(8);
+  let d = zeros(32);
+  let k = 0;
+  while k < 32 {
+    let _ = d[k] = k;
+    let k = k + 1;
+    0
+  };
+  if argc > 3 then nk_one(buf, h, d, char(argv[2], 0), char(argv[3], 0), src)
+  else nk_fold(buf, h, d, src)
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  nk_main(argc, argv, "fn add(a: i64, b: i64) -> i64 { a + b }")
+}

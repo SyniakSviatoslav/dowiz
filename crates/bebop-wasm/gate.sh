@@ -69,6 +69,16 @@ else
     say "wasm32: the ratchet has fallen $b -> $bytes. Lower $BASELINE in this commit."
   fi
 fi
+# The node-key reader's module (DG2): the same crate with `bw_key` exported,
+# built apart so the ratchet above measures the Worker's reader and nothing else.
+KEYWASM=target/key/wasm32-unknown-unknown/release/bebop_wasm.wasm
+if "$CARGO" build --release --target wasm32-unknown-unknown --offline --features key --target-dir target/key > "$SCRATCH/keywasm.txt" 2>&1; then
+  kb=$(wc -c < "$KEYWASM" | tr -d ' ')
+  say "wasm32 key: $kb bytes with bw_key exported (+$((kb - bytes)) over the reader; not in the ratchet)"
+else
+  say "wasm32 key: build FAILED rc=$? -- $(grep -m1 'error' "$SCRATCH/keywasm.txt")"
+  fail=1
+fi
 if [ "${1:-}" = "--prove" ]; then
   for f in $FIXTURES; do
     # One bit, in a copy: the LAST payload byte of the image, which is the
@@ -94,11 +104,19 @@ fi
 SEED=../../bebop-lang/seed/build/seed
 BIN=../../bebop-lang/bebop.bin
 KVBIN=""
+NKBIN=""
+NKTRY=0
 if [ "$(uname -m)" = "aarch64" ] && [ -x "$SEED" ] && [ -f "$BIN" ]; then
   if (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile selfhost/std/kv.bp "$SCRATCH/kv.bin") > "$SCRATCH/kvc.txt" 2>&1; then
     KVBIN="$SCRATCH/kv.bin"
   else
     say "bebop.bin: kv.bp did not compile rc=$? -- $(tail -1 "$SCRATCH/kvc.txt")"; fail=1
+  fi
+  NKTRY=1
+  if (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile bench/vs_rust/std_tests/nodekey.bp "$SCRATCH/nodekey.bin") > "$SCRATCH/nkc.txt" 2>&1; then
+    NKBIN="$SCRATCH/nodekey.bin"
+  else
+    say "bebop.bin: nodekey.bp did not compile rc=$? -- $(tail -1 "$SCRATCH/nkc.txt")"; fail=1
   fi
 else
   say "bebop.bin: NOT MEASURED (uname -m = $(uname -m); seed present: $([ -x "$SEED" ] && echo yes || echo no)) -- a skip is not an agreement"
@@ -152,6 +170,62 @@ for f in $FIXTURES; do
   [ "$ran" -lt "$minran" ] && minran=$ran
 done
 
+# 5. THE NODE KEY (DG2, SPEC-BEBOP-DAG-RUNTIME §2) -----------------------------
+# Three frames -- a compile node, a projection with two inputs, a projection
+# whose two lists are empty -- each BUILT by each reader from the field values
+# in fixtures/key.expected (never read from a shared byte file), hashed to K64
+# and K256. Every reader prints `key <name> len=<n> k64=<i64> k256=<hex>`;
+# the line must equal the one key.expected implies, and a reader that does not
+# is NAMED. The native reader is bebop_store::nodekey (tests/parity.rs); the
+# wasm32 reader is src/nodekey.rs, a frame builder of its own, run by node.
+keyline() { echo "key $1 len=$(want key "$1_len") k64=$(want key "$1_k64") k256=$(want key "$1_k256")"; }
+if [ -n "$NKBIN" ]; then
+  k3=$("$SEED" "$NKBIN" c x 2>&1)
+  say "key bebop.bin: compile frame length == 1 + 5*8 + 8 + len(fn_source) + 8 + 8 + 8 -> '$k3' (1 = holds)"
+  [ "$k3" = 1 ] || { say "key bebop.bin: K-3 does NOT hold"; fail=1; }
+fi
+minkey=4
+for f in compile proj empty; do
+  line=$(keyline "$f")
+  ran=0
+  bad=""
+  if grep -q "test key_${f}_frame_agrees_with_key_expected ... ok" "$SCRATCH/native.txt"; then
+    ran=$((ran + 1))
+  else
+    bad="$bad native"
+  fi
+  out=$(node harness.mjs --key "$KEYWASM" "$f" 2>&1)
+  say "key $f wasm32: '$out' rc=$?"
+  if [ "$out" = "$line" ]; then ran=$((ran + 1)); else bad="$bad wasm32"; fi
+  out=$(python3 oracle.py --key "$f" 2>&1)
+  say "key $f python: '$out' rc=$?"
+  if [ "$out" = "$line" ]; then ran=$((ran + 1)); else bad="$bad python"; fi
+  if [ -n "$NKBIN" ]; then
+    c=$(echo "$f" | cut -c1)
+    vals=""
+    for w in l k 0 1 2 3; do vals="$vals $("$SEED" "$NKBIN" "$c" "$w" 2>&1)"; done
+    out=$(python3 -c 'import sys
+v = sys.argv[2:]
+try:
+    hx = "".join("%016x" % (int(x) & (2**64 - 1)) for x in v[2:6])
+    print("key %s len=%s k64=%s k256=%s" % (sys.argv[1], v[0], v[1], hx))
+except (ValueError, IndexError):
+    print("key %s UNREADABLE:%s" % (sys.argv[1], " ".join(v)))' "$f" $vals)
+    say "key $f bebop.bin: '$out'"
+    if [ "$out" = "$line" ]; then ran=$((ran + 1)); else bad="$bad bebop.bin"; fi
+  elif [ "$NKTRY" = 1 ]; then
+    bad="$bad bebop.bin"   # measurable here, and it did not compile: a disagreement, not a skip
+  fi
+  if [ -n "$bad" ]; then
+    say "key $f: readers agreeing with key.expected: $ran of 4 -- DISAGREE:$bad"
+    fail=1
+  else
+    say "key $f: readers agreeing with key.expected: $ran of 4 (bebop.bin counts only on aarch64)"
+  fi
+  [ "$ran" -lt "$minkey" ] && minkey=$ran
+done
+[ "$minkey" -lt "$minran" ] && minran=$minkey
+
 if [ "$fail" -ne 0 ]; then
   say "RED"
   exit 1
@@ -160,5 +234,5 @@ if [ "$minran" -lt 3 ]; then
   say "RED -- fewer than three readers ran; that is not a parity check"
   exit 1
 fi
-say "GREEN ($minran readers on each of: $FIXTURES; $bytes bytes)"
+say "GREEN ($minran readers on each of: $FIXTURES + key compile/proj/empty; $bytes bytes)"
 exit 0

@@ -7,6 +7,29 @@
 // a quietly printed zero.
 import { readFileSync } from "node:fs";
 
+// Usage: node harness.mjs --key <module.wasm> <compile|proj|empty>
+// Asks the module's own node-key frame builder (src/nodekey.rs, `bw_key`) and
+// prints `key <name> len=<n> k64=<i64> k256=<hex>`, the line gate.sh compares.
+if (process.argv[2] === "--key") {
+  const names = ["compile", "proj", "empty"];
+  const [, , , keyModule, name] = process.argv;
+  const which = names.indexOf(name);
+  if (!keyModule || which < 0) {
+    console.error("usage: node harness.mjs --key <module.wasm> <compile|proj|empty>");
+    process.exit(2);
+  }
+  const { instance } = await WebAssembly.instantiate(readFileSync(keyModule), {});
+  const { memory, bw_alloc, bw_free, bw_key } = instance.exports;
+  const out = bw_alloc(48);
+  const status = bw_key(which, out);
+  const c = new BigInt64Array(memory.buffer, out, 6);
+  const hex = [2, 3, 4, 5].map((i) => BigInt.asUintN(64, c[i]).toString(16).padStart(16, "0")).join("");
+  if (status === 0) console.log(`key ${name} len=${c[0]} k64=${c[1]} k256=${hex}`);
+  else console.log(`key ${name} status=${status}`);
+  bw_free(out, 48);
+  process.exit(status === 0 ? 0 : 1);
+}
+
 const [, , modulePath, imagePath, family = "kv"] = process.argv;
 if (!modulePath || !imagePath) {
   console.error("usage: node harness.mjs <module.wasm> <image> [kv|log]");

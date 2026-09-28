@@ -23,6 +23,7 @@
 //! `Truncated`, exactly as `dowiz_hub::Hub::load` refuses it.
 
 pub mod abi;
+pub mod nodekey;
 #[cfg(feature = "decide")]
 pub mod decide;
 #[cfg(feature = "decide")]

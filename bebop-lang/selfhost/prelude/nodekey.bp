@@ -1,0 +1,86 @@
+use "selfhost/prelude/sha256.bp"
+// selfhost/prelude/nodekey.bp -- the node key (docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md §2,
+// DG2). One byte frame, two hashes, built the same way by bebop, crates/bebop-store/src/nodekey.rs,
+// crates/bebop-wasm/src/nodekey.rs and crates/bebop-wasm/oracle.py --key (gate.sh holds all four
+// to crates/bebop-wasm/fixtures/key.expected).
+//
+//   frame := tag(1 byte) || field*          field := len(8 bytes, u64 LE) || bytes(len)
+//
+// A number is an 8-byte little-endian field (len = 8); a LIST is one field whose bytes are its
+// elements' fields (kf_open reserves the length, kf_close writes it). The frame lives ONE BYTE
+// PER CELL in a caller-supplied buffer (the shape crc32 and sha256_words take); every writer
+// takes the write position and returns the next one. `>>` is logical, so v's bytes come out
+// right for negative v.
+//
+//   K64  = (crc32(frame) << 32) | (len & 0xffffffff)   -- the INDEX (RT K-1: never a proof).
+//          crc32(cells, n) is zlib crc32 of n one-per-cell bytes: the same function as crc32x
+//          (which takes packed cells) and as dowiz_hub::block::schema::k64's crc.
+//   K256 = sha256(frame) as 8 u32 words in h[0..8) -- the cross-machine name.
+
+// key_frame: start a frame with its node-kind tag (67 'C', 79 'O', 80 'P', 69 'E'); returns 1.
+fn key_frame(buf: [i64], tag: i64) -> i64 {
+  let _ = buf[0] = tag & 255;
+  1
+}
+
+// kf_u64: v as 8 little-endian bytes at buf[pos..pos+8); returns pos + 8.
+fn kf_u64(buf: [i64], pos: i64, v: i64) -> i64 {
+  let i = 0;
+  while i < 8 {
+    let _ = buf[pos + i] = (v >> (8 * i)) & 255;
+    let i = i + 1;
+    0
+  };
+  pos + 8
+}
+
+// kf_i64: a number field -- len 8, then v's bytes.
+fn kf_i64(buf: [i64], pos: i64, v: i64) -> i64 {
+  kf_u64(buf, kf_u64(buf, pos, 8), v)
+}
+
+// kf_bytes: a field of n byte cells from src (n may be 0).
+fn kf_bytes(buf: [i64], pos: i64, src: [i64], n: i64) -> i64 {
+  let p = kf_u64(buf, pos, n);
+  let i = 0;
+  while i < n {
+    let _ = buf[p + i] = src[i] & 255;
+    let i = i + 1;
+    0
+  };
+  p + n
+}
+
+// kf_str: a field holding the bytes of a string literal.
+fn kf_str(buf: [i64], pos: i64, s: str) -> i64 {
+  let n = str_len(s);
+  let p = kf_u64(buf, pos, n);
+  let i = 0;
+  while i < n {
+    let _ = buf[p + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  p + n
+}
+
+// kf_open: reserve a list field's length; the caller keeps pos to hand to kf_close.
+fn kf_open(buf: [i64], pos: i64) -> i64 {
+  kf_u64(buf, pos, 0)
+}
+
+// kf_close: the list opened at `start` holds everything written up to pos; returns pos.
+fn kf_close(buf: [i64], start: i64, pos: i64) -> i64 {
+  let _ = kf_u64(buf, start, pos - start - 8);
+  pos
+}
+
+// key64: K64 of the n-byte frame in buf.
+fn key64(buf: [i64], n: i64) -> i64 {
+  (crc32(buf, n) << 32) | (n & 4294967295)
+}
+
+// key256: K256 of the n-byte frame in buf -> 8 u32 words in h[0..8).
+fn key256(buf: [i64], n: i64, h: [i64]) -> i64 {
+  sha256_words(buf, n, h)
+}

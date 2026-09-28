@@ -651,6 +651,7 @@ impl Store {
 }
 pub mod kv;
 pub mod evlog;
+pub mod nodekey;
 
 #[cfg(test)]
 mod bytes_tests {

@@ -135,6 +135,13 @@ r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sh
 # was captured from the S0/S1-as-zero miscompile (the lost is_alpha A-Z fix).
 gate sha256 -4000131497313522475 "$r"
 
+# ---- nodekey (DG2, SPEC-BEBOP-DAG-RUNTIME §2: the three frames of crates/bebop-wasm/fixtures/key.expected) ----
+# The golden is key.expected's numbers folded acc*31 + v (u64 wrap) over (compile, proj, empty) x
+# (len, K64, K256 words 0..3), computed from that file by python -- NOT copied from this program's
+# output; -1 would mean the compile frame broke RT K-3. gate.sh's `key` step compares each number.
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/nodekey.bp ${BEBOP_TMP:-/tmp/opencode}/nodekey_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/nodekey_test.bin | tail -1)
+gate nodekey 4527185576689197451 "$r"
+
 # ---- crc32 (zlib_crc32 check value 0xCBF43926 for "123456789") ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/crc.bp ${BEBOP_TMP:-/tmp/opencode}/crc_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/crc_test.bin | tail -1)
 gate crc32 3421780262 "$r"

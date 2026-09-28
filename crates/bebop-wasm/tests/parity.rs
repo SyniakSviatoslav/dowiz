@@ -182,3 +182,61 @@ fn the_abi_says_what_the_rust_surface_says() {
     assert_eq!(out, [n, root]);
     assert_eq!(abi::bw_abi_version(), abi::ABI_VERSION);
 }
+
+/// THE NODE KEY, NATIVE READER (DG2): `bebop_store::nodekey` builds the three
+/// frames of `fixtures/key.expected` and must print exactly its numbers. The
+/// line format is the one every reader in gate.sh prints; gate.sh greps these
+/// three test names to count the native reader.
+fn key_line_native(name: &str) -> String {
+    use bebop_store::nodekey::{fixtures, hex};
+    let f = fixtures::named(name).expect("a fixture key.expected names");
+    format!("key {name} len={} k64={} k256={}", f.len(), f.k64(), hex(&f.k256()))
+}
+
+fn key_line_expected(name: &str) -> String {
+    let text = std::fs::read_to_string(format!("{}/fixtures/key.expected", env!("CARGO_MANIFEST_DIR")))
+        .expect("key.expected");
+    let get = |k: &str| -> String {
+        let pre = format!("{name}_{k}=");
+        text.lines()
+            .find_map(|l| l.strip_prefix(pre.as_str()))
+            .unwrap_or_else(|| panic!("{pre} missing from key.expected"))
+            .trim()
+            .to_string()
+    };
+    format!("key {name} len={} k64={} k256={}", get("len"), get("k64"), get("k256"))
+}
+
+#[test]
+fn key_compile_frame_agrees_with_key_expected() {
+    use bebop_store::nodekey::fixtures::{compile, FN_SOURCE};
+    // RT K-3, derived: tag + five length prefixes + the five fields' bytes.
+    assert_eq!(compile().len(), 1 + 5 * 8 + 8 + FN_SOURCE.len() + 8 + 8 + 8);
+    assert_eq!(key_line_native("compile"), key_line_expected("compile"));
+}
+
+#[test]
+fn key_proj_frame_agrees_with_key_expected() {
+    assert_eq!(key_line_native("proj"), key_line_expected("proj"));
+}
+
+#[test]
+fn key_empty_frame_agrees_with_key_expected() {
+    assert_eq!(key_line_native("empty"), key_line_expected("empty"));
+}
+
+/// The wasm32 reader's frames, asked natively too: the same numbers through the
+/// C surface `harness.mjs --key` calls (gate.sh runs the wasm32 build of it).
+#[test]
+fn bw_key_cells_agree_with_the_native_frames() {
+    use bebop_store::nodekey::fixtures;
+    for (i, name) in ["compile", "proj", "empty"].iter().enumerate() {
+        let f = fixtures::named(name).unwrap();
+        let c = bebop_wasm::nodekey::cells(i as i32).unwrap();
+        let mut d = [0u8; 32];
+        for w in 0..4 {
+            d[8 * w..8 * w + 8].copy_from_slice(&c[2 + w].to_be_bytes());
+        }
+        assert_eq!((c[0] as usize, c[1], d), (f.len(), f.k64(), f.k256()), "{name}");
+    }
+}

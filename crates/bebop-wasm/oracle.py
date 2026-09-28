@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The fourth reader: a KV image folded in Python from the bytes alone.
+"""The fourth reader: a KV image folded in Python, or key frames hashed.
 
 Nothing here is imported from the Rust side or from bebop; the layout is the
 one `crates/bebop-store/src/lib.rs:1-22` and `kv.rs:1-10` document, re-derived
@@ -12,10 +12,15 @@ cells with a positive cell 5 names its version; anything else is v1. v1 holds
 one byte per cell; v2 holds offsets and lengths in BYTES and the bytes packed
 eight to a cell, little-endian. A version above 2 is refused (status 3). The
 fold is over bytes, so both versions of the same entries print the same root.
+
+`--key <compile|proj|empty>`: build one node-key frame of fixtures/key.expected
+(SPEC-BEBOP-DAG-RUNTIME §2) from its field values and print its length, K64 and
+K256 -- the fourth of gate.sh's four key readers.
 """
 import struct
 import sys
 import zlib
+import hashlib
 
 MAGIC = 3554557610294396226  # "BEBOPST1" as a little-endian i64
 FNV_OFFSET = 0xCBF29CE484222325
@@ -31,6 +36,56 @@ def fnv(h, data):
 
 def to_i64(u):
     return u - (1 << 64) if u >= (1 << 63) else u
+
+
+# --- the node key (DG2, SPEC-BEBOP-DAG-RUNTIME §2) --------------------------
+# frame := tag(1) || field*;  field := len(8, u64 LE) || bytes(len).
+# A number is an 8-byte field; a list is ONE field holding its elements' fields.
+# Built here from the field values fixtures/key.expected lists, never from Rust.
+KEY_CD = -7046029254386353131
+KEY_SRC = b"fn add(a: i64, b: i64) -> i64 { a + b }"
+
+
+def key_field(b):
+    return struct.pack("<Q", len(b)) + b
+
+
+def key_num(v):
+    return key_field(struct.pack("<q", v))
+
+
+def key64(frame):
+    """K64 = (zlib crc32(frame) << 32) | (len & 0xffffffff), as an i64."""
+    return to_i64(((zlib.crc32(frame) & 0xFFFFFFFF) << 32) | (len(frame) & 0xFFFFFFFF))
+
+
+def key_compile():
+    return (b"C" + key_num(KEY_CD) + key_field(KEY_SRC) + key_num(81985529216486895)
+            + key_num(-2) + key_num(1311768467294899695))
+
+
+def key_proj(two):
+    inputs = params = b""
+    if two:
+        inputs = (key_num(1234605616436508552) + key_num(7)
+                  + key_field(bytes(range(32))) + key_num(1))
+        params = key_num(1790000000000) + key_num(3)
+    return (b"P" + key_num(KEY_CD) + key_num(key64(key_compile()))
+            + key_field(inputs) + key_field(params))
+
+
+def key_mode(name):
+    frames = {"compile": key_compile, "proj": lambda: key_proj(True),
+              "empty": lambda: key_proj(False)}
+    if name not in frames:
+        print("unknown key fixture: %s (compile|proj|empty)" % name, file=sys.stderr)
+        return 2
+    f = frames[name]()
+    if name == "compile":
+        # RT K-3, derived: tag + five length prefixes + the five fields' bytes.
+        assert len(f) == 1 + 5 * 8 + 8 + len(KEY_SRC) + 8 + 8 + 8, "K-3"
+    print("key %s len=%d k64=%d k256=%s" % (name, len(f), key64(f), hashlib.sha256(f).hexdigest()))
+    return 0
 
 
 def main(path):
@@ -111,7 +166,10 @@ def main(path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("usage: oracle.py <image>", file=sys.stderr)
+    if len(sys.argv) == 3 and sys.argv[1] == "--key":
+        sys.exit(key_mode(sys.argv[2]))
+    elif len(sys.argv) == 2:
+        sys.exit(main(sys.argv[1]))
+    else:
+        print("usage: oracle.py <image> | oracle.py --key compile|proj|empty", file=sys.stderr)
         sys.exit(2)
-    sys.exit(main(sys.argv[1]))
