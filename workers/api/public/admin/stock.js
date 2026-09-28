@@ -14,16 +14,18 @@
 // tap that fixes them.
 
 import '/admin/ingredients-i18n.js';
+import '/admin/stock-health-i18n.js';
 import { $, $$, esc, icon, t, api, post, withLoc, toast, retranslate, hydrate, money, busy } from '/admin/core.js';
-import { lang } from '/admin/i18n.js';
+import { lang, st } from '/admin/i18n.js';
 import { rerender, me } from '/admin/app.js';
 import { openBulk } from '/admin/bulk.js';
-import { ui, k as key, btn, iconBtn, select, chips, empty, loading, rowBtn, rowDiv } from '/admin/parts.js';
+import { ui, k as key, btn, iconBtn, select, chips, empty, loading, rowBtn } from '/admin/parts.js';
 import * as C from '/admin/ingredients-calc.js';
 import { openCard, openSupply, openMove, openPrep } from '/admin/ingredients.js';
 import { KINDS, matches, alertsMarkup, rowMarkup, noRecipeMarkup } from '/admin/ingredients-view.js';
 import { openCount, openWaste, openDelivery } from '/admin/ingredients-count.js';
 import { openKitchen, ensureCss } from '/admin/kitchen-analytics.js';
+import { drawHealth } from '/admin/stock-health.js';
 
 export { KINDS };
 export const UNITS = ['g', 'ml', 'unit'];
@@ -53,7 +55,8 @@ export async function render(host){
     <div class="srch">${icon('search')}${ui.inputRow({ id: 'sq', type: 'search', label: key('search'), placeholder: key('search'), attrs: { value: view.q, data: { tour: 'stock.search' } } })}</div>
     ${chips({ values: [{ value: 'all', key: 'all' }, ...KINDS.map(([k, ic]) => ({ value: k, key: 'kind_' + k, icon: ic }))], value: view.kind, attr: 'k', labelKey: 'kind', tour: 'stock.filter' }).replace('class="chips"', 'class="chips filters"')}
     ${select({ id: 'sSort', ariaLabel: t('sort'), controlCls: 'sortsel', value: view.sort, options: ['name', 'category', 'low'].map(k => ({ value: k, key: 'ssort_' + k })), tour: 'stock.sort' })}
-    <div id="stockList">${loading(2)}</div>`;
+    <div id="stockList">${loading(2)}</div>
+    <section id="invHealth" class="group mt-3"></section>`;
   retranslate(host);
   $('#addSupply', host).onclick = () => openSupply(null, ctx);
   $('#importSupplies', host).onclick = () => openBulk('supplies', rerender);
@@ -63,6 +66,8 @@ export async function render(host){
   $('#sq', host).oninput = e => { view.q = e.target.value; drawList(host); };
   try { stock = await api('/owner/stock'); } catch (e) { $('#stockList', host).innerHTML = empty('alert-triangle', { key: 'loadFail', body: String(e.message || e), alert: true }); return; }
   drawList(host);
+  // THE STOCK CHECK (owner only: the rebuild report is on the owner's health route).
+  if (!me().staff) drawHealth($('#invHealth', host), { api, stock: () => stock, t, st });
   host.onclick = e => {
     const tile = e.target.closest('[data-tile]'); if (tile) return openTile(tile.dataset.tile);
     const f = e.target.closest('[data-flag]'); if (f) { view.flag = view.flag === f.dataset.flag ? '' : f.dataset.flag; return drawList(host); }
@@ -119,8 +124,7 @@ function drawList(host){
   } else html = `<div class="rows">${list.map(row).join('')}</div>`;
   $('#stockList', host).innerHTML = (all.length ? `<p class="hint mono">${KINDS.map(([k], i) => counts[i] ? `${counts[i]} ${t('kind_' + k).toLowerCase()}` : '').filter(Boolean).join(' · ')}</p>` : '') +
     (view.flag === 'noRecipe' ? '' : list.length ? html : empty('bento', { key: all.length ? 'none' : 'noStock', bodyKey: 'stockHint' })) +
-    noRecipeMarkup(noRecipe(), t) +
-    (stock.stranded?.length ? `<section class="group mt-3"><p class="eyebrow" data-t="stranded"></p><p class="muted small" data-t="strandedHint"></p><div class="rows">${stock.stranded.map(s => rowDiv({ cls: 'off', leading: icon('alert-triangle'), title: `${s.item} × ${s.qty}`, sub: `<span class="mono">#${esc(String(s.order).slice(0, 8))}</span>` })).join('')}</div></section>` : '');
+    noRecipeMarkup(noRecipe(), t);
   retranslate($('#stockList', host)); hydrate($('#stockList', host));
   if (view.flag === 'noRecipe') $('#invNoRecipe', host)?.scrollIntoView({ block: 'start' });
 }

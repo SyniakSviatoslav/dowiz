@@ -10,10 +10,16 @@
 # strip, so section.code (3796297 -> 3868791) and section.data (401527 -> 403828) are RAISED here,
 # dated 2026-09-27: HEAD's own growth (e6ab7182, fa2e7ace), not the strip. worker_share_permille reads 0 on a stripped file (no names to attribute crates by); the
 # names live in build/unstripped/index_bg.<digest>.wasm -- see the hand-back for wasm.py.
+#
+# RESTORED 2026-09-28 by lane W-HEALTH: wasm.py now names a stripped file's functions from its kept
+# twin (build/unstripped/index_bg.<sha256(stripped)[:16]>.wasm), and says UNVERIFIED -- never 0 --
+# when there is no twin. Measured over the W-STRIP pair (stripped 4296128, digest 0681c3764e5c65ea,
+# twin 4954023): worker_share_permille 620, the same value the unstripped build read. The 0 below
+# it was the stripped file's missing names, not a smaller worker.
 wasm.functions_over_40k=2
 wasm.gzip=1658647
 wasm.raw=4296128
 wasm.section.code=3868791
 wasm.section.data=403828
 wasm.section.name=0
-wasm.worker_share_permille=0
+wasm.worker_share_permille=620

@@ -57,6 +57,82 @@ def module(big=0, with_name=True):
     return b"\0asm\x01\0\0\0" + section(1, u(0)) + imports() + code + data + custom + section(99, b"")
 
 
+def keep(d, stripped, unstripped):
+    """What strip-wasm.mjs --keep writes: build/index_bg.wasm + build/unstripped/index_bg.<digest>.wasm."""
+    import hashlib
+    p = os.path.join(d, "index_bg.wasm")
+    with open(p, "wb") as f:
+        f.write(stripped)
+    if unstripped is not None:
+        os.makedirs(os.path.join(d, "unstripped"), exist_ok=True)
+        k = os.path.join(d, "unstripped", "index_bg.%s.wasm" % hashlib.sha256(stripped).hexdigest()[:16])
+        with open(k, "wb") as f:
+            f.write(unstripped)
+    return p
+
+
+def run_main(p):
+    s = io.StringIO()
+    with redirect_stdout(s):
+        rc = wasm.main(["wasm.py", p])
+    return rc, {i["id"]: i for i in json.loads(s.getvalue())}
+
+
+class Stripped(unittest.TestCase):
+    """96c2b790: the shipped file has no name section; its kept twin names its functions."""
+
+    def test_names_come_from_the_kept_copy(self):
+        with tempfile.TemporaryDirectory() as d:
+            stripped = module(with_name=False)
+            p = keep(d, stripped, module())
+            self.assertIsNotNone(wasm.kept_copy(p, stripped))
+            rc, out = run_main(p)
+            self.assertEqual(rc, 0)
+            # Sizes are the shipped file's, names are the twin's.
+            self.assertEqual(out["wasm.raw"]["value"], len(stripped))
+            self.assertEqual(out["wasm.section.name"]["value"], 0)
+            share = out["wasm.worker_share_permille"]
+            self.assertEqual(share["value"], round(1000 * 200 / 208))
+            self.assertIn("unstripped", share["note"])
+            self.assertEqual(out["wasm.crate.dowiz_api_worker"]["value"], 200)
+            self.assertNotIn("wasm.crate.unnamed", out)
+
+    def test_no_kept_copy_is_unverified_never_zero(self):
+        with tempfile.TemporaryDirectory() as d:
+            stripped = module(with_name=False)
+            p = keep(d, stripped, None)
+            self.assertIsNone(wasm.kept_copy(p, stripped))
+            rc, out = run_main(p)
+            self.assertEqual(rc, 0)
+            share = out["wasm.worker_share_permille"]
+            self.assertIsNone(share["value"])
+            self.assertIn("no kept copy", share["unverified"])
+            self.assertFalse([k for k in out if k.startswith("wasm.crate.")])
+            self.assertEqual(out["wasm.raw"]["value"], len(stripped))
+
+    def test_a_kept_copy_of_another_build_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = keep(d, module(with_name=False), module(big=1))
+            with self.assertRaises(ValueError):
+                run_main(p)
+
+    def test_a_kept_copy_without_names_falls_back_to_the_file(self):
+        # An unstripped file at the path (an old build) names itself even if a
+        # nameless twin sits beside it.
+        with tempfile.TemporaryDirectory() as d:
+            full = module()
+            p = keep(d, full, module(with_name=False))
+            _, out = run_main(p)
+            self.assertIn("names from", out["wasm.worker_share_permille"]["note"])
+            self.assertGreater(out["wasm.worker_share_permille"]["value"], 900)
+
+    def test_helpers(self):
+        self.assertIsNone(wasm.names_in(module(with_name=False)))
+        self.assertEqual(wasm.names_in(module())[2], "dowiz_api_worker::route::h1")
+        self.assertEqual(wasm.body_sizes_of(module()), [3, 200, 5])
+        self.assertEqual(wasm.body_sizes_of(b"\0asm\x01\0\0\0"), [])
+
+
 class Walker(unittest.TestCase):
     def test_leb_and_names(self):
         self.assertEqual(wasm.leb(u(624485), 0), (624485, 3))
@@ -100,10 +176,11 @@ class Walker(unittest.TestCase):
         self.assertEqual(out["wasm.crate.dowiz_api_worker"]["rule"], "trend")
         self.assertGreater(out["wasm.worker_share_permille"]["value"], 990)
         self.assertEqual(out["wasm.functions"]["value"], 3)
-        empty = {i["id"]: i for i in wasm.indicators("x.wasm", b"\0asm\x01\0\0\0", 0)}
+        self.assertIn("names from x.wasm", out["wasm.worker_share_permille"]["note"])
+        # A module with names but no code: the share is a real 0, not unverified.
+        named_empty = b"\0asm\x01\0\0\0" + section(0, name("name"))
+        empty = {i["id"]: i for i in wasm.indicators("x.wasm", named_empty, 0)}
         self.assertEqual(empty["wasm.worker_share_permille"]["value"], 0)
-        unnamed = {i["id"] for i in wasm.indicators("x.wasm", module(with_name=False), 0)}
-        self.assertIn("wasm.crate.unnamed", unnamed)
 
     def test_main_reads_a_file_or_says_unverified(self):
         with tempfile.TemporaryDirectory() as d:

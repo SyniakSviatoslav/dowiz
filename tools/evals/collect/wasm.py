@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """SUITE ci . WASM: the Worker bundle's bytes, sections, code bytes per crate, largest functions.
 
-Reads workers/api/build/index_bg.wasm (what wrangler uploads); builds nothing. The box's
+Reads workers/api/build/index_bg.wasm (what wrangler uploads); builds nothing. That file is
+STRIPPED after the glue (workers/api/scripts/strip-wasm.mjs, 96c2b790): sizes come from it, but
+function NAMES -- and so the per-crate bytes and worker_share_permille -- come from the kept
+unstripped twin build/unstripped/index_bg.<first 16 hex of sha256(stripped)>.wasm when it exists.
+With neither a kept copy nor a name section of its own, the name-derived indicators are
+UNVERIFIED (null + why), never 0: a 0 would ratchet the baseline down to nothing (it did, 09-27). The box's
 wasm-objdump is too old for the reference types the build uses, so this is the 40-line LEB128
 walker of BLUEPRINT-OPTIMIZATION-AND-EVALS-2026-09-24 section A.1, as a module with tests.
 
@@ -9,6 +14,7 @@ Prints a JSON list of indicators in the shape of tools/evals/rules.mjs `ind()`.
 Usage: wasm.py [path/to/index_bg.wasm]
 """
 import gzip
+import hashlib
 import json
 import os
 import re
@@ -131,7 +137,23 @@ def crate_of(name):
     return "?"
 
 
-def analyse(buf):
+def kept_copy(path, buf):
+    """The unstripped twin strip-wasm.mjs --keep wrote beside `path`, or None when there is none."""
+    digest = hashlib.sha256(buf).hexdigest()[:16]
+    kept = os.path.join(os.path.dirname(path), "unstripped", "index_bg.%s.wasm" % digest)
+    return kept if os.path.exists(kept) else None
+
+
+def names_in(buf):
+    """{function index: name} from `buf`'s name section, or None when it has none."""
+    for label, start, size in sections(buf):
+        if label == "custom:name":
+            return function_names(buf, start, size)
+    return None
+
+
+def analyse(buf, names=None):
+    """`names` overrides the module's own name section (the kept twin's, for a stripped file)."""
     secs = sections(buf)
     by = {}
     for label, start, size in secs:
@@ -139,7 +161,8 @@ def analyse(buf):
         by[label + "#bytes"] = by.get(label + "#bytes", 0) + size
     imports = imported_functions(buf, by["import"][0]) if "import" in by else 0
     bodies = body_sizes(buf, by["code"][0]) if "code" in by else []
-    names = function_names(buf, *by["custom:name"]) if "custom:name" in by else {}
+    if names is None:
+        names = function_names(buf, *by["custom:name"]) if "custom:name" in by else {}
     crates, fns = {}, []
     for n, size in enumerate(bodies):
         nm = names.get(imports + n, "?")
@@ -151,14 +174,30 @@ def analyse(buf):
             "crates": crates, "fns": fns, "code": sum(bodies)}
 
 
+def body_sizes_of(buf):
+    """Every function body's size: equal across the strip, which touches custom sections only."""
+    for label, start, _ in sections(buf):
+        if label == "code":
+            return body_sizes(buf, start)
+    return []
+
+
 def ind(id_, value, unit, rule, source, **extra):
     d = {"id": id_, "value": value, "unit": unit, "rule": rule, "source": source}
     d.update(extra)
     return d
 
 
-def indicators(path, buf, mtime):
-    a = analyse(buf)
+def indicators(path, buf, mtime, kept=None):
+    """`kept`: (path, bytes) of the unstripped twin, whose name section names `buf`'s functions."""
+    names, named_by = None, None
+    if kept is not None:
+        names, named_by = names_in(kept[1]), kept[0]
+        if names is not None and body_sizes_of(kept[1]) != body_sizes_of(buf):
+            raise ValueError("kept copy %s has other code than %s" % (kept[0], path))
+    if names is None and names_in(buf) is not None:
+        names, named_by = names_in(buf), path
+    a = analyse(buf, names or {})
     src = "wasm.py over " + os.path.relpath(path)
     age = "artifact built %s" % time.strftime("%Y-%m-%d %H:%M", time.localtime(mtime))
     out = [ind("wasm.raw", len(buf), "bytes", "ratchet", src, note=age),
@@ -168,13 +207,20 @@ def indicators(path, buf, mtime):
         out.append(ind(key, a["secs"].get(label, 0), "bytes", "ratchet", src))
     rest = len(buf) - sum(a["secs"].get(k, 0) for k in ("code", "data", "custom:name"))
     out.append(ind("wasm.section.other", rest, "bytes", "trend", src))
-    top = sorted(a["crates"].items(), key=lambda kv: -kv[1])[:12]
-    for crate, n in top:
-        out.append(ind("wasm.crate." + ("unnamed" if crate == "?" else crate), n, "bytes", "trend", src))
-    own = a["crates"].get("dowiz_api_worker", 0)
-    share = round(1000 * own / a["code"]) if a["code"] else 0
-    out.append(ind("wasm.worker_share_permille", share, "permille", "ratchet", src,
-                   note="dowiz_api_worker code bytes / all code bytes"))
+    if names is None:
+        why = ("stripped, and no kept copy at %s: run the [build] command (strip-wasm.mjs --keep)"
+               % os.path.relpath(os.path.join(os.path.dirname(path), "unstripped")))
+        out.append(ind("wasm.worker_share_permille", None, "permille", "ratchet", src, unverified=why))
+    else:
+        named = "names from " + os.path.relpath(named_by)
+        top = sorted(a["crates"].items(), key=lambda kv: -kv[1])[:12]
+        for crate, n in top:
+            out.append(ind("wasm.crate." + ("unnamed" if crate == "?" else crate), n, "bytes", "trend", src,
+                           note=named))
+        own = a["crates"].get("dowiz_api_worker", 0)
+        share = round(1000 * own / a["code"]) if a["code"] else 0
+        out.append(ind("wasm.worker_share_permille", share, "permille", "ratchet", src,
+                       note="dowiz_api_worker code bytes / all code bytes; " + named))
     big = [(s, n) for s, n in a["fns"] if s > BIG_FN]
     out.append(ind("wasm.functions_over_40k", len(big), "functions", "ratchet", src,
                    note="; ".join("%s %d" % (n[:60], s) for s, n in big[:6])))
@@ -191,7 +237,11 @@ def main(argv):
         return 0
     with open(path, "rb") as f:
         buf = f.read()
-    print(json.dumps(indicators(path, buf, os.path.getmtime(path))))
+    kept = kept_copy(path, buf)
+    if kept is not None:
+        with open(kept, "rb") as f:
+            kept = (kept, f.read())
+    print(json.dumps(indicators(path, buf, os.path.getmtime(path), kept)))
     return 0
 
 
