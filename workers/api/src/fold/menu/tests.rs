@@ -250,3 +250,22 @@ fn a_customer_missing_a_name_reads_the_english_one_and_the_console_does_not() {
     let uk = body(m.menu("dubin", Some("uk"), NOON));
     assert_eq!((uk["categories"][1]["products"][1]["name"].clone(), uk["categories"][1]["name"].clone()), (json!("Макі"), json!("Rolls EN")));
 }
+
+#[test]
+fn the_memo_answers_the_catalogue_blocks_beside_the_json() {
+    use dowiz_hub::block::{decode::decode, view::Catalogue, Col};
+    let m = memo();
+    let (prices, skipped) = m.block("menu_prices").unwrap().expect("menu_prices is a block");
+    assert_eq!(skipped, 0);
+    let block = decode(prices).expect("the block the route answers decodes");
+    assert_eq!(block.n, 3, "the three products");
+    let Col::I64(p) = &block.cols[1] else { panic!("price is i64") };
+    let mut got = p.clone();
+    got.sort_unstable();
+    assert_eq!(got, vec![400, 700, 900], "the prices the JSON holds");
+    let (bom, _) = m.block("bom").unwrap().unwrap();
+    let (names, _) = m.block("names").unwrap().unwrap();
+    let cat = Catalogue::new(prices, bom, names).expect("the three blocks read together");
+    assert_eq!(cat.bom_of("p_b"), Some(vec![]), "a product with no recipe has an empty one");
+    assert_eq!(m.block("json").unwrap(), None, "an unknown block is not an empty one");
+}

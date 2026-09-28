@@ -23,6 +23,9 @@ fn json_body(body: String) -> Result<Response> {
     Ok(res)
 }
 
+/// §B.4 blocks travel as their own media type; the JSON stays for the browser.
+const BLOCK_TYPE: &str = "application/vnd.dowiz.block";
+
 fn bytes_of(image: &Option<(super::Meta, Vec<u8>)>) -> Option<&[u8]> {
     image.as_ref().map(|(_, b)| b.as_slice())
 }
@@ -57,10 +60,33 @@ impl HubImages {
         Ok(())
     }
 
+    /// `?block=menu_prices|bom|names` on either route: that block of the
+    /// catalogue projection (row DG7), from the same memo as the JSON.
+    async fn fold_block(&self, name: &str) -> Result<Response> {
+        self.menu_memo().await?;
+        let found = match self.menu.borrow().as_ref() {
+            Some(m) => m.block(name).map(|b| b.map(|(bytes, skipped)| (bytes.to_vec(), skipped))),
+            None => Err("the menu memo is missing".into()),
+        };
+        match found {
+            Ok(Some((bytes, skipped))) => {
+                let mut res = Response::from_bytes(bytes)?;
+                res.headers_mut().set("content-type", BLOCK_TYPE)?;
+                res.headers_mut().set("x-dwb-skipped", &skipped.to_string())?;
+                Ok(res)
+            }
+            Ok(None) => Response::error("no such block: menu_prices, bom or names", 404),
+            Err(e) => Response::error(e, 500),
+        }
+    }
+
     /// `GET /fold/menu?slug=&locale=&now=[&fresh=1]`: the storefront's menu as bytes.
     pub(super) async fn fold_menu(&self, req: &Request) -> Result<Response> {
         let url = req.url()?;
         let q = |k: &str| url.query_pairs().find(|(n, _)| n == k).map(|(_, v)| v.to_string());
+        if let Some(name) = q("block") {
+            return self.fold_block(&name).await;
+        }
         let (Some(slug), Some(now_ms)) = (q("slug"), q("now").and_then(|n| n.parse::<i64>().ok())) else {
             return Response::error("a menu needs a slug and a clock", 400);
         };
@@ -80,6 +106,9 @@ impl HubImages {
     /// for, as stored -- what the live estimate needs, not the catalogue.
     pub(super) async fn fold_products(&self, req: &Request) -> Result<Response> {
         let url = req.url()?;
+        if let Some((_, name)) = url.query_pairs().find(|(k, _)| k == "block") {
+            return self.fold_block(&name).await;
+        }
         let ids: Vec<String> = url.query_pairs().filter(|(k, _)| k == "ids").map(|(_, v)| v.to_string()).collect();
         self.menu_memo().await?;
         let body = self.menu.borrow().as_ref().map(|m| m.products(&ids));

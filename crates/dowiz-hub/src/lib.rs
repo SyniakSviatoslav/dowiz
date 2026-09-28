@@ -22,6 +22,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod block;
 pub mod caps;
 pub mod catalog;
 pub mod consent;
@@ -184,7 +185,6 @@ pub enum HubError {
     /// can point backwards, and a reader that followed it would walk for ever.
     Corrupt { claimed: usize, chained: Option<usize> },
 }
-
 
 /// How much of an image is spent, and on what.
 ///

@@ -1422,6 +1422,19 @@ pub fn bom_of(product_json: &str) -> Vec<BomLine> {
     out
 }
 
+/// `bom_of`, read from the catalogue's `bom` block when one is present (row DG7).
+///
+/// The block is the catalogue projection (`block::encode::project`), rebuilt
+/// with every catalogue generation; a product it does not have -- one written
+/// after the block was folded -- falls back to its JSON, which stays the
+/// writers' format. Both readers give equal lines (`block::tests::bom_of_block_equals_json`).
+pub fn bom_of_product(blocks: Option<&crate::block::view::Catalogue<'_>>, product_id: &str, product_json: &str) -> Vec<BomLine> {
+    match blocks.and_then(|c| c.bom_of(product_id)) {
+        Some(lines) => lines,
+        None => bom_of(product_json),
+    }
+}
+
 /// The stock events one order's lines imply.
 ///
 /// `lines` is `(product_json, quantity_ordered)`. Quantities MULTIPLY: two

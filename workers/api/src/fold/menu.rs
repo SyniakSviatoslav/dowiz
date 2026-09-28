@@ -55,6 +55,25 @@ struct Venue {
     base: Value,
 }
 
+/// The catalogue projection as §B.4 blocks (row DG7; SPEC-DATALOG-AND-CODEC
+/// Part B), folded in the same pass as the JSON, so the two cannot describe
+/// different generations. `/fold/menu?block=` and `/fold/products?block=`
+/// answer them; the JSON body stays for the browser.
+pub struct Blocks {
+    pub menu_prices: Vec<u8>,
+    pub bom: Vec<u8>,
+    pub names: Vec<u8>,
+    /// Products the projection could not read (the readers fall back to JSON).
+    pub skipped: Vec<String>,
+}
+
+fn blocks_of(listed: &[(String, String)]) -> Result<Blocks, String> {
+    use dowiz_hub::block::encode::{encode, project};
+    let p = project(listed).map_err(|e| e.to_string())?;
+    let enc = |b: &dowiz_hub::block::Block| encode(b).map_err(|e| e.to_string());
+    Ok(Blocks { menu_prices: enc(&p.menu_prices)?, bom: enc(&p.bom)?, names: enc(&p.names)?, skipped: p.skipped })
+}
+
 /// What `/fold/menu` answers.
 #[derive(Debug, PartialEq)]
 pub enum Answer {
@@ -74,6 +93,7 @@ pub struct Memo {
     products: Vec<(String, Value)>,
     stored: HashMap<String, String>,
     i18n: Result<Vec<(String, String)>, String>,
+    blocks: Result<Blocks, String>,
     stripe_key: Option<String>,
     /// Per locale: the `categories` array and the `warnings` array, as JSON.
     rendered: HashMap<String, (String, String)>,
@@ -143,12 +163,13 @@ impl Memo {
         cats.sort_by_key(|(_, _, sort)| *sort);
         // The KV layout's order, as the Worker used to read it.
         let listed = catalog.products();
+        let blocks = blocks_of(&listed);
         let products: Vec<(String, Value)> = listed
             .iter()
             .filter_map(|(id, j)| serde_json::from_str::<Value>(j).ok().map(|v| (id.clone(), v)))
             .collect();
         let stored: HashMap<String, String> = listed.into_iter().collect();
-        Memo { gens, record, venue, cats, products, stored, i18n, stripe_key: rails.stripe_key, rendered: HashMap::new() }
+        Memo { gens, record, venue, cats, products, stored, i18n, blocks, stripe_key: rails.stripe_key, rendered: HashMap::new() }
     }
 
     #[cfg(test)]
@@ -206,6 +227,19 @@ impl Memo {
         Answer::Body(format!(
             "{{\"categories\":{cats},\"location\":{location},\"stripePublishableKey\":{key},\"warnings\":{warnings}}}"
         ))
+    }
+
+    /// One block of the projection by its §B.4 name (`Ok(None)`: no such
+    /// block), or why the projection could not be folded.
+    pub fn block(&self, name: &str) -> Result<Option<(&[u8], usize)>, String> {
+        let b = self.blocks.as_ref().map_err(Clone::clone)?;
+        let bytes = match name {
+            "menu_prices" => &b.menu_prices,
+            "bom" => &b.bom,
+            "names" => &b.names,
+            _ => return Ok(None),
+        };
+        Ok(Some((bytes.as_slice(), b.skipped.len())))
     }
 
     /// `{"venue": <record|null>, "products": {id: <product as stored>}}` for
