@@ -7,7 +7,7 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { lessons, order, filter, captureHash, readState, mark, isDone, todo, estimateS, planTable, summary, parse, main, COST, REPO } from './all-plan.mjs';
+import { lessons, lessonEntry, order, filter, captureHash, readState, mark, isDone, todo, estimateS, planTable, summary, parse, main, COST, REPO } from './all-plan.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const L = [
@@ -19,14 +19,16 @@ const L = [
 const quiet = { log: () => {}, error: () => {} };
 const rec = () => { const lines = []; return { lines, log: l => lines.push(l), error: l => lines.push(l) }; };
 
-/// A scratch repo: lessons.json + three YAMLs.
+/// A normalized step and lesson, as lessons.json carries them.
+const w = t => ({ sq: `${t} sq`, en: `${t} en`, uk: `${t} uk` });
+const step = n => ({ n, key: `k${n}`, anchor: null, pending: false, writes: false, action: { do: 'wait', selector: null }, title: w('t'), caption: w('c') });
+/// A scratch repo: lessons.json with three lessons.
 function root() {
   const r = mkdtempSync(join(tmpdir(), 'allp-'));
   mkdirSync(join(r, 'workers/api/public/learn'), { recursive: true });
-  const ls = [{ id: 'C1', role: 'courier', writes: false, steps: [{}, {}] }, { id: 'O2', role: 'owner', writes: true, steps: [{}] },
-    { id: 'G1', role: 'guest', steps: [{}] }];
+  const ls = [{ id: 'C1', role: 'courier', writes: false, title: w('C1'), steps: [step(1), step(2)] },
+    { id: 'O2', role: 'owner', writes: true, title: w('O2'), steps: [step(1)] }, { id: 'G1', role: 'guest', title: w('G1'), steps: [step(1)] }];
   writeFileSync(join(r, 'workers/api/public/learn/lessons.json'), JSON.stringify({ lessons: ls }));
-  for (const l of ls) { mkdirSync(join(r, 'docs/learn/lessons', l.role), { recursive: true }); writeFileSync(join(r, 'docs/learn/lessons', l.role, `${l.id}.yaml`), `id: ${l.id}\n`); }
   return r;
 }
 
@@ -45,17 +47,20 @@ test('lessons: the real catalogue loads with role, writes and step count', () =>
   assert.deepEqual(lessons(r).find(l => l.id === 'G1'), { id: 'G1', role: 'guest', writes: false, steps: 1 });
 });
 
-test('captureHash: moves with the YAML and with the recorder', () => {
-  const r = root(), y = join(r, 'docs/learn/lessons/courier/C1.yaml');
-  const h = captureHash(y);
+test('captureHash: moves with what the English film shows and with the recorder; not with another language', () => {
+  const r = root(), c1 = lessonEntry('C1', r);
+  assert.equal(lessonEntry('Z9', r), null);
+  const h = captureHash(c1);
   assert.match(h, /^[0-9a-f]{64}$/);
-  writeFileSync(y, 'id: C1\n# edited\n');
-  assert.notEqual(captureHash(y), h);
+  const ru = structuredClone(c1); ru.steps[0].caption.ru = 'новое'; ru.steps[0].caption.sq = 'tjetër';
+  assert.equal(captureHash(ru), h);                                             // a Russian or Albanian edit: same film
+  const en = structuredClone(c1); en.steps[1].caption.en = 'edited';
+  assert.notEqual(captureHash(en), h);                                          // an English caption: due again
   const fake = mkdtempSync(join(tmpdir(), 'rec-'));
-  for (const f of ['capture.mjs', 'capture-lib.mjs', 'capture-venue.mjs']) writeFileSync(join(fake, f), f);
-  const a = captureHash(y, fake);
-  writeFileSync(join(fake, 'capture.mjs'), 'changed');
-  assert.notEqual(captureHash(y, fake), a);
+  for (const f of ['capture.mjs', 'capture-lib.mjs', 'capture-venue.mjs', 'film.mjs']) writeFileSync(join(fake, f), f);
+  const a = captureHash(c1, fake);
+  writeFileSync(join(fake, 'film.mjs'), 'changed');
+  assert.notEqual(captureHash(c1, fake), a);
 });
 
 test('state: mark writes through a rename; a broken file reads as empty; done needs the current hash', () => {
@@ -80,7 +85,7 @@ test('state: mark writes through a rename; a broken file reads as empty; done ne
 test('estimate + planTable + summary: minutes per lesson, a total, done and failed named', () => {
   const l = { id: 'C1', role: 'courier', writes: false, steps: 5 };
   assert.equal(estimateS(l), Math.round(3 * (COST.launchS + 5 * COST.stepS) + 3 * COST.assembleS + (3 * COST.filesPerCut + 2) * COST.putS));
-  assert.ok(estimateS(l, ['sq']) < estimateS(l));
+  assert.ok(estimateS(l, ['en']) < estimateS(l));
   const t = planTable([l, { ...l, id: 'O2', role: 'owner', writes: true }]);
   assert.match(t[0], /^C1 +courier +reads +5 steps x sq,en,uk +~\d+ min$/);
   assert.match(t[1], /writes/);
@@ -120,7 +125,8 @@ test('main: usage, capture-hash, mark, summary, list (resumes past done), plan',
   main(['--out', out, '--summary'], { ...o, log: s });
   assert.deepEqual(s.lines, ['progress: 1/3 done, 1 failed: O2 (capture rc=1)']);
   const p = rec();
-  assert.equal(main(['--out', out, '--plan', '--lang', 'sq'], { ...o, log: p }), 0);
+  assert.equal(main(['--out', out, '--plan'], { ...o, log: p }), 0);   // the default: the English film only
+  assert.match(p.lines[0], /steps x en +~/);
   assert.match(p.lines.at(-1), /^plan: 2 lesson\(s\) x 1 language/);
   assert.equal(readFileSync(join(out, '.state.json'), 'utf8').includes('"O2"'), true);
 });

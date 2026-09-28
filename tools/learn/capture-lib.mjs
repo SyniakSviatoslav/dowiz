@@ -2,7 +2,6 @@
 // refusal, which lesson and app, the write guard, local assets, redaction. No browser
 // and no network here, so every rule is proved by capture.test.mjs without a live venue.
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { join, dirname, normalize as normPath, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseYaml } from './yaml-lite.mjs';
@@ -11,9 +10,24 @@ import { normalize, ROLES } from './build-lessons.mjs';
 import { MEDIA_LANGS as LANGS } from '../../workers/api/public/lib/langs.js';
 
 export const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-/// The operator's venue for recordings (2026-09-24). Any other host needs --host.
-export const DEFAULT_HOST = 'https://dubin-sushi.dowiz.org';
-export const LOCATION = { 'https://dubin-sushi.dowiz.org': 'dubin-durres' };
+/// The venues a recording may use without --host. The QA hub is the default (operator
+/// 2026-09-27: record on qa-durres; dubin-sushi only with every artefact TEST-marked and closed).
+export const QA_HOST = 'https://qa-durres.dowiz.org';
+export const DUBIN_HOST = 'https://dubin-sushi.dowiz.org';
+export const DEFAULT_HOST = QA_HOST;
+export const VENUES = [QA_HOST, DUBIN_HOST];
+export const LOCATION = { [QA_HOST]: 'qa-durres', [DUBIN_HOST]: 'dubin-durres' };
+/// The venue a role records on when --host is not given: the QA hub, for every role.
+export const hostFor = () => QA_HOST;
+/// Which credentials sign the courier in, per venue (names in /root/.dowiz_owner): the QA hub
+/// has its own TEST courier (created 2026-09-27 by lane W-VIDEO); anywhere else COURIER_*.
+export const courierKeys = host => host === QA_HOST ? ['QA_HUB_COURIER_PHONE', 'QA_HUB_COURIER_PASSWORD'] : ['COURIER_PHONE', 'COURIER_PASSWORD'];
+/// May a lesson's `writes: yes` steps go out without --allow-writes? Only a courier lesson on the
+/// QA hub: a shift opened, an order taken and delivered there is what the film is about, and the
+/// QA hub is the venue walks may write to (operator 2026-09-26). The owner's writing steps stay
+/// blocked even there -- a delete, a logout, a forget or a campaign send would break the lessons
+/// filmed after it.
+export const autoWrites = (role, host) => role === 'courier' && host === QA_HOST;
 
 /// Each role's app: where it lives, the key its language is read from, the viewport.
 export const APPS = {
@@ -28,7 +42,7 @@ export const DESKTOP = { width: 1280, height: 800 };
 /// argv -> options, or { error }. Nothing is read from the environment: a stray HOST=
 /// in a shell must not point a recording that writes at another venue.
 export function parseArgs(argv) {
-  const o = { id: null, langs: [...LANGS], host: DEFAULT_HOST, hostGiven: false, ui: 'local',
+  const o = { id: null, langs: [...LANGS], host: null, hostGiven: false, ui: 'local',
     out: null, desktop: false, lesson: null, dryRun: false, allowWrites: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], v = argv[i + 1];
@@ -52,14 +66,14 @@ export function parseArgs(argv) {
   return o;
 }
 
-/// The refusal: the default venue always; anything else only when --host named it
+/// The refusal: the recording venues always; anything else only when --host named it
 /// explicitly, and only https (or a local stand on http://127.0.0.1 / localhost).
 export function checkHost(host, given) {
   let u;
   try { u = new URL(host); } catch { return `not a URL: ${host}`; }
   if (u.origin !== host) return `give the host as an origin (scheme://name), not ${host}`;
-  if (host === DEFAULT_HOST) return null;
-  if (!given) return `refusing ${host}: recordings run on ${DEFAULT_HOST} unless --host names another`;
+  if (VENUES.includes(host)) return null;
+  if (!given) return `refusing ${host}: recordings run on ${VENUES.join(' or ')} unless --host names another`;
   const local = u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost');
   if (u.protocol !== 'https:' && !local) return `refusing ${host}: https only`;
   return null;
@@ -74,8 +88,9 @@ export function lessonFile(id, root = REPO) {
   return null;
 }
 
-/// sha256 of a lesson's YAML bytes: recorded beside a capture, compared by the stale-video gate.
-export const sourceSha = file => createHash('sha256').update(readFileSync(file)).digest('hex');
+/// How long a step stays on screen: long enough to read ITS caption in the film's language
+/// (45 ms a character), never under 2.8 s or over 6.5 s.
+export const dwell = (s, lang) => Math.min(6500, Math.max(2800, 45 * String(s.caption[lang] ?? '').length));
 
 /// Parse and validate one lesson with the SAME rules the in-app build applies.
 export function loadLesson(file, root = REPO) {
@@ -136,6 +151,36 @@ export function plan(lesson) {
   return lesson.steps.map(s => ({ n: s.n, key: s.key, anchor: s.anchor, writes: s.writes,
     do: s.pending ? 'skip' : s.action.do, selector: s.action.selector, value: s.action.value ?? null,
     why: s.pending ? 'pending: the markup does not carry this anchor yet' : null }));
+}
+
+/// How to REACH a control that is not on screen. The in-app tour starts where the reader already
+/// is (the lessons list sits in the owner's Venue tab), so a lesson's YAML names only the control
+/// it teaches; the recorder starts on the app's first screen and, when a step's anchor is absent,
+/// taps these anchors first (the tab, then the row or card that opens the sheet). Keyed by the
+/// anchor or its leading parts (the longest key wins); the taps are filmed -- they are the way there.
+export const REACH = {
+  owner: {
+    'more.tile': ['nav.more'],
+    orders: ['nav.orders'], order: ['nav.orders', 'orders.row'], state: ['header.state'],
+    // the menu's categories start folded: a category row opens (the dishes show), a dish row opens its sheet
+    menu: ['nav.menu'], 'menu.dish': ['nav.menu', 'menu.category'], category: ['nav.menu', 'menu.category'], newDish: ['nav.menu', 'menu.addDish'],
+    dish: ['nav.menu', 'menu.category', 'menu.dish'], recipe: ['nav.menu', 'menu.category', 'menu.dish', 'dish.ingredients'],
+    taste: ['nav.menu', 'menu.category', 'menu.dish', 'dish.ingredients'],
+    import: ['nav.menu', 'menu.import'],
+    stock: ['nav.stock'], supply: ['nav.stock', 'stock.addSupply'], bulk: ['nav.stock', 'stock.import'],
+    couriers: ['nav.couriers'], kitchen: ['nav.kitchen'],
+  },
+  guest: { menu: ['nav.menu'], dish: ['nav.menu', 'menu.dish'], orders: ['nav.orders'], booking: ['nav.book'],
+    // the basket and the checkout need a dish in the basket: one quick add (the basket lives in the page, nothing is sent)
+    cart: ['nav.menu', 'menu.quickAdd', 'cart.open'], 'checkout.open': ['nav.menu', 'menu.quickAdd', 'cart.open'],
+    checkout: ['nav.menu', 'menu.quickAdd', 'cart.open', 'checkout.open'], map: ['nav.menu', 'menu.quickAdd', 'cart.open', 'checkout.open', 'checkout.map'] },
+};
+export function reachFor(role, anchor) {
+  if (!anchor) return [];
+  const map = REACH[role] || {};
+  const parts = anchor.split('.');
+  for (let i = parts.length; i >= 1; i--) { const k = parts.slice(0, i).join('.'); if (map[k]) return map[k]; }
+  return [];
 }
 
 /// Was a step's anchor on screen? A card-only step (no anchor, `wait` over the whole screen)

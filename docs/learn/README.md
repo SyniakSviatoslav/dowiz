@@ -81,6 +81,34 @@ the step's heading and `caption` as its cue; ship the three captions as `.vtt` t
 order placed for the recording and closed after) rather than letting a recording mutate live orders.
 Steps with `pending: yes` have no control to drive yet — skip them and say so.
 
+## The videos (tools/learn, 2026-09-27)
+
+ONE film per lesson, in English, with one English caption track (operator 2026-09-26: "training
+videos only 1 version with english subtitles"); no voice. One command renders every lesson whose
+film is missing or older than what it shows, one lesson at a time, and puts each into R2 as soon
+as it passes:
+
+    bash bebop-lang/tools/slot.sh video sh tools/learn/all.sh --out ~/.cache/dowiz-learn/out-en
+    sh tools/learn/all.sh --out ~/.cache/dowiz-learn/out-en --dry-run      # the plan and an estimate
+
+Per lesson: `capture.mjs` (Playwright, one Chromium; on the QA hub qa-durres.dowiz.org, courier
+lessons on dubin-sushi.dowiz.org, which has the courier account; every mutating `/api/` call is
+ABORTED and listed, and a writing lesson's venue is compared before and after) -> `assemble.sh`
+(720x1280 H.264, burned step titles, `subs_en.vtt`, MP4 chapters, loops, poster, contact sheet) ->
+`check.sh` (every file measured with ffprobe) -> `publish.mjs` (the staging tree
+`~/.cache/dowiz-learn/media` and the manifest `workers/api/public/learn/media/manifest.json`, which
+holds no media) -> `publish.sh --r2` (bucket `dowiz-learn`, probe first, ledger skip).
+State: `<out>/.state.json`; a killed run resumes.
+
+A film is stale only when what it SHOWS changed (`tools/learn/film.mjs`: id, role, per step the
+anchor, action, flags and the English title and caption). A new Russian or Albanian string does
+not make it due again; `tools/gates/learn.sh` item 5 computes the same hash from lessons.json.
+
+Hosting is gated: `GET /api/learn/manifest` and `GET /api/learn/media/<id>/<lang>/<file>`
+(`workers/api/src/learn.rs`, owner/staff/courier Bearer, Range -> 206) and the wiki plays the
+media from `blob:` URLs (a `<video>` cannot send a header; `_headers` allows `media-src blob:`).
+A reader whose language has no cut watches the English one. No video is a static asset.
+
 ## Counts (2026-09-24)
 
 | role | lessons | steps | pending |

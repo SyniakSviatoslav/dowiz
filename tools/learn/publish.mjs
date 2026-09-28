@@ -37,9 +37,10 @@ export const MANIFEST = 'workers/api/public/learn/media/manifest.json';
 export const STAGE = process.env.LEARN_STAGE || join(homedir(), '.cache', 'dowiz-learn', 'media');
 /// The films' languages (lib/langs.js MEDIA_LANGS): no Russian cut, no Russian track.
 export const LANGS = MEDIA_LANGS;
-export const FILES = ['video.mp4', 'poster.jpg', ...LANGS.map(l => `subs_${l}.vtt`), 'chapters.json'];
 export const BUCKET = 'dowiz-learn';
 export const R2_PREFIX = 'learn/';
+/// What one cut publishes: its film, poster, its ONE caption track (in its own language) and chapters.
+export const cutFiles = lang => ['video.mp4', 'poster.jpg', `subs_${lang}.vtt`, 'chapters.json'];
 export const LEDGER = join(homedir(), '.cache', 'dowiz-learn', 'r2-ledger.json');
 export const REFUSED = 4;
 
@@ -51,7 +52,7 @@ export function publishCut(out, id, lang, media) {
   const dst = join(media, id, lang);
   mkdirSync(dst, { recursive: true });
   let wrote = 0;
-  for (const f of FILES) {
+  for (const f of cutFiles(lang)) {
     const a = join(out, id, lang, f), b = join(dst, f);
     if (!existsSync(a)) throw new Error(`${id}/${lang}/${f} missing: assemble it first`);
     if (!same(a, b)) { copyFileSync(a, b); wrote++; }
@@ -74,12 +75,12 @@ export function manifest(media) {
     const cuts = {};
     for (const lang of LANGS) {
       const dir = join(media, id, lang);
-      if (!FILES.every(f => existsSync(join(dir, f)))) continue;
+      if (!cutFiles(lang).every(f => existsSync(join(dir, f)))) continue;
       const ch = JSON.parse(readFileSync(join(dir, 'chapters.json'), 'utf8'));
       const url = f => `/api/learn/media/${id}/${lang}/${f}`;
       cuts[lang] = { durationMs: ch.durationMs, steps: ch.chapters.length, absent: ch.chapters.filter(c => c.found === false).map(c => c.n), sha256: sha(join(dir, 'video.mp4')).slice(0, 16),
         bytes: statSync(join(dir, 'video.mp4')).size, video: url('video.mp4'), poster: url('poster.jpg'), chapters: url('chapters.json'),
-        subs: Object.fromEntries(LANGS.map(l => [l, url(`subs_${l}.vtt`)])) };
+        subs: { [lang]: url(`subs_${lang}.vtt`) } };
     }
     if (Object.keys(cuts).length) lessons[id] = { role: lesson?.role ?? null, module: lesson?.module ?? null,
       source: existsSync(sf) ? readFileSync(sf, 'utf8').trim() : null, cuts };
@@ -95,7 +96,7 @@ export const typeOf = f => TYPES[f.split('.').pop()] || 'application/octet-strea
 export function objects(media) {
   const out = [];
   for (const [id, l] of Object.entries(manifest(media).lessons))
-    for (const lang of Object.keys(l.cuts)) for (const f of FILES) out.push([`${R2_PREFIX}${id}/${lang}/${f}`, join(media, id, lang, f)]);
+    for (const lang of Object.keys(l.cuts)) for (const f of cutFiles(lang)) out.push([`${R2_PREFIX}${id}/${lang}/${f}`, join(media, id, lang, f)]);
   return out;
 }
 

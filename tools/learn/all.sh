@@ -1,8 +1,10 @@
 #!/bin/sh
 # The one command: every lesson that lacks an up-to-date video, one at a time, end to end:
-# capture -> assemble (sq, en, uk) -> check.sh -> publish into the staging tree -> R2.
+# capture -> assemble -> check.sh -> publish into the staging tree -> R2. ONE film per lesson, in
+# English with one English caption track (operator 2026-09-26); --lang can add others.
+# Venue: the QA hub qa-durres; courier lessons on dubin-sushi (capture-lib.mjs hostFor).
 #
-#   sh tools/learn/all.sh --out DIR [--only W3,O1a] [--role owner] [--lang sq,en,uk] [--ui live|local]
+#   sh tools/learn/all.sh --out DIR [--only W3,O1a] [--role owner] [--lang en] [--ui live|local]
 #                         [--dry-run] [--no-r2] [--no-retry]
 #
 # Run it through the slot:  bash bebop-lang/tools/slot.sh learn-all sh tools/learn/all.sh --out DIR
@@ -16,7 +18,7 @@
 # Log: one line per stage, `all: <id> ...`, and `progress: n/N done` after every lesson.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
-OUT= FILTER= LANGS=sq,en,uk UI=live DRY=0 R2=1 RETRY=1
+OUT= FILTER= LANGS=en UI=live DRY=0 R2=1 RETRY=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT=$2; shift 2 ;;
@@ -44,7 +46,7 @@ one() {   # one lesson, every stage; answers 0 or the name of the stage that fai
     rm -f "$OUT/$id/.captured"
     node "$HERE/capture.mjs" "$id" --out "$OUT/$id" --lang "$LANGS" --ui "$UI" > "$OUT/$id.capture.log" 2>&1
     rc=$?
-    grep -E "ABSENT|blocked|wrote|artefacts|still open|OPEN|capture:|anchors found" "$OUT/$id.capture.log" | sed "s/^/  $id /"
+    grep -E "ABSENT|blocked|wrote|artefacts|still open|OPEN|capture:|anchors found|processes with|5xx|not ready|reached|covered" "$OUT/$id.capture.log" | sed "s/^/  $id /"
     [ $rc -eq 0 ] || { echo "capture rc=$rc"; return 1; }
     echo "$h" > "$OUT/$id/.captured"
   fi

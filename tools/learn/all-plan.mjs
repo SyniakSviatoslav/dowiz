@@ -18,16 +18,17 @@ import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { MEDIA_LANGS } from '../../workers/api/public/lib/langs.js';
+import { filmSha, FILM_LANG } from './film.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = join(HERE, '..', '..');
 export const ROLE_ORDER = ['courier', 'guest', 'owner', 'waiter'];
-/// The films' languages (lib/langs.js MEDIA_LANGS): a cut per language, none in Russian.
+/// The languages a film COULD be cut in (lib/langs.js MEDIA_LANGS); the operator's rule records English only (FILM_LANG).
 export const LANGS = MEDIA_LANGS;
-export const RECORDER = ['capture.mjs', 'capture-lib.mjs', 'capture-venue.mjs'];
+export const RECORDER = ['capture.mjs', 'capture-lib.mjs', 'capture-venue.mjs', 'film.mjs'];
 /// Seconds, measured on this box 2026-09-26 (see phase1.txt): per language a browser start and
 /// sign-in, per step the dwell; per cut the assembly; per uploaded object one wrangler put.
-export const COST = { launchS: 35, stepS: 5.5, assembleS: 25, putS: 9, filesPerCut: 6 };
+export const COST = { launchS: 35, stepS: 5.5, assembleS: 25, putS: 9, filesPerCut: 4 };
 
 export function lessons(root = REPO) {
   return JSON.parse(readFileSync(join(root, 'workers/api/public/learn/lessons.json'), 'utf8')).lessons
@@ -45,10 +46,17 @@ export function filter(list, { only = [], role = null } = {}) {
   return list.filter(l => (!only.length || only.includes(l.id)) && (!role || l.role === role));
 }
 
-/// sha256 over the lesson's YAML and the recorder's scripts: what a capture is made from.
-export function captureHash(yamlFile, here = HERE) {
+/// One lesson as lessons.json carries it (normalized: every language, steps, actions).
+export function lessonEntry(id, root = REPO) {
+  return JSON.parse(readFileSync(join(root, 'workers/api/public/learn/lessons.json'), 'utf8')).lessons.find(l => l.id === id) || null;
+}
+
+/// sha256 over what the film shows (film.mjs: the English words, anchors, actions -- a new
+/// Russian string does not make a film due) and the recorder's scripts.
+export function captureHash(lesson, here = HERE, lang = FILM_LANG) {
   const h = createHash('sha256');
-  for (const f of [yamlFile, ...RECORDER.map(s => join(here, s))]) h.update(readFileSync(f));
+  h.update(filmSha(lesson, lang));
+  for (const f of RECORDER.map(s => join(here, s))) h.update(readFileSync(f));
   return h.digest('hex');
 }
 
@@ -96,7 +104,7 @@ export function summary(all, out) {
 }
 
 export function parse(argv) {
-  const o = { out: null, cmd: null, only: [], role: null, langs: LANGS, retry: false, rest: [] };
+  const o = { out: null, cmd: null, only: [], role: null, langs: [FILM_LANG], retry: false, rest: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], v = argv[i + 1];
     if (a === '--out') { o.out = v; i++; }
@@ -113,8 +121,7 @@ export function parse(argv) {
 export function main(argv, { root = REPO, log = console } = {}) {
   const o = parse(argv);
   if (!o.out || !o.cmd) { log.error('usage: all-plan.mjs --out DIR --list|--plan|--mark ID STATUS [NOTE]|--summary|--capture-hash ID'); return 2; }
-  const yaml = id => { const l = lessons(root).find(x => x.id === id); return l && join(root, 'docs/learn/lessons', l.role, `${id}.yaml`); };
-  if (o.cmd === 'capture-hash') { const f = yaml(o.rest[0]); if (!f) { log.error(`all-plan: no lesson ${o.rest[0]}`); return 1; } log.log(captureHash(f)); return 0; }
+  if (o.cmd === 'capture-hash') { const l = lessonEntry(o.rest[0], root); if (!l) { log.error(`all-plan: no lesson ${o.rest[0]}`); return 1; } log.log(captureHash(l)); return 0; }
   if (o.cmd === 'mark') {
     const [id, status, ...note] = o.rest;
     if (!id || !['done', 'failed'].includes(status)) { log.error('all-plan: --mark ID done|failed [NOTE]'); return 2; }
@@ -122,7 +129,7 @@ export function main(argv, { root = REPO, log = console } = {}) {
   }
   const all = order(filter(lessons(root), o));
   if (o.cmd === 'summary') { log.log(summary(all, o.out)); return 0; }
-  const due = todo(all, o.out, { hashOf: id => captureHash(yaml(id)), retry: o.retry });
+  const due = todo(all, o.out, { hashOf: id => captureHash(lessonEntry(id, root)), retry: o.retry });
   if (o.cmd === 'list') { for (const l of due) log.log(l.id); return 0; }
   for (const r of planTable(due, o.langs)) log.log(r);
   return 0;

@@ -20,10 +20,13 @@
 #      YAML: `node tools/learn/build-lessons.mjs --check`
 # PRINTED, NOT RED: `pending` anchors still missing (the design-system lanes add
 # them), and `pending` anchors that now exist ("drop pending: in <file>").
-#   5. (WARN) a lesson whose video was made from an older YAML: the sha256 the
+#   5. (WARN) a lesson whose video shows an older lesson: the film hash the
 #      recorder stored (workers/api/public/learn/media/manifest.json `source`,
-#      written by tools/learn/publish.sh) is not the YAML's sha256 now. The video
-#      then shows steps, captions or anchors the lesson no longer has. Re-render:
+#      written by tools/learn/publish.sh) is not the film hash of lessons.json now
+#      (tools/learn/film.mjs: id, role, per step anchor/action/flags and the English
+#      title and caption -- the films are English only, so a new Russian string does
+#      not make one stale). The video then shows steps, captions or anchors the
+#      lesson no longer has. Re-render:
 #      sh tools/learn/all.sh --out DIR --only <id>. Lessons with no video yet are
 #      counted, not listed.
 #
@@ -124,16 +127,22 @@ import hashlib
 mf = os.path.join(PUB, 'learn/media/manifest.json')
 media = json.load(open(mf, encoding='utf-8')).get('lessons', {}) if os.path.exists(mf) else {}
 stale, novideo = 0, 0
+def film_sha(l, lang='en'):
+    # the same canonical form as tools/learn/film.mjs filmSource: key order, compact, non-ASCII as is
+    src = {'id': l['id'], 'role': l['role'], 'lang': lang, 'title': l['title'][lang],
+           'steps': [{'n': s['n'], 'key': s['key'], 'anchor': s['anchor'], 'pending': s['pending'], 'writes': s['writes'],
+                      'do': s['action']['do'], 'selector': s['action']['selector'], 'value': s['action'].get('value'),
+                      'title': s['title'][lang], 'caption': s['caption'][lang]} for s in l['steps']]}
+    return hashlib.sha256(json.dumps(src, ensure_ascii=False, separators=(',', ':')).encode('utf-8')).hexdigest()
 for l in lessons:
-    y = os.path.join(R, 'docs/learn/lessons', l['role'], l['id'] + '.yaml')
     m = media.get(l['id'])
     if not m:
         novideo += 1
         continue
-    now = hashlib.sha256(open(y, 'rb').read()).hexdigest() if os.path.exists(y) else None
+    now = film_sha(l)
     if m.get('source') != now:
         stale += 1
-        info.append(f"  5 WARN stale video: {l['id']} was recorded from {str(m.get('source'))[:12]}, the YAML is {str(now)[:12]} now -- re-render: sh tools/learn/all.sh --out DIR --only {l['id']}")
+        info.append(f"  5 WARN stale video: {l['id']} was recorded from {str(m.get('source'))[:12]}, the lesson's film hash is {now[:12]} now -- re-render: sh tools/learn/all.sh --out DIR --only {l['id']}")
 info.append(f"  videos: {len(lessons) - novideo}/{len(lessons)} lesson(s) have one, {stale} stale")
 pend = sum(1 for i in info if i.startswith('  pending'))
 print(red, pend, seen['anchors'], seen['steps'], seen['modules'])

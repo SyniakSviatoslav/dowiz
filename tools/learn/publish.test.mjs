@@ -6,7 +6,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, cpSync
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { publishCut, manifest, objects, toR2, wranglerPut, authError, typeOf, main, MANIFEST, STAGE, FILES, REFUSED, sha } from './publish.mjs';
+import { publishCut, manifest, objects, toR2, wranglerPut, authError, typeOf, main, MANIFEST, STAGE, cutFiles, REFUSED, sha } from './publish.mjs';
+const FILES = cutFiles('sq');
 import { makePlan, timeline } from './assemble-plan.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -54,7 +55,8 @@ test('manifest: only complete cuts, the source hash carried, every URL the gated
   assert.equal(l.role, lesson.role);
   assert.equal(l.cuts.sq.video, `/api/learn/media/${lesson.id}/sq/video.mp4`);
   assert.equal(l.cuts.sq.steps, lesson.steps.length);
-  assert.equal(l.cuts.sq.subs.uk, `/api/learn/media/${lesson.id}/sq/subs_uk.vtt`);
+  assert.deepEqual(l.cuts.sq.subs, { sq: `/api/learn/media/${lesson.id}/sq/subs_sq.vtt` });   // the cut's one track
+  assert.deepEqual(cutFiles('en'), ['video.mp4', 'poster.jpg', 'subs_en.vtt', 'chapters.json']);
   assert.doesNotMatch(JSON.stringify(m), /"\/learn\/media/);
   mkdirSync(join(media, 'Y1', 'sq'), { recursive: true });                       // no lesson.json / source: nulls, not a crash
   for (const f of FILES) cpSync(join(media, lesson.id, 'sq', f), join(media, 'Y1', 'sq', f));

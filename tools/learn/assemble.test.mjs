@@ -66,12 +66,14 @@ test('filter: every step titled only during its own step, the screen padded into
   assert.deepEqual(loops({ steps: [{ n: 1, startMs: 0, endMs: 20000 }] }), [[1, 0, 8]]);
 });
 
-test('makePlan: writes the tracks, then SKIPs on the same inputs; refuses a mismatched capture', () => {
+test('makePlan: writes the cut\'s ONE track (an older cut\'s others removed), then SKIPs on the same inputs; refuses a mismatched capture', () => {
   const d = scratch();
+  writeFileSync(join(d, 'sq', 'subs_uk.vtt'), 'WEBVTT\n');                          // left by a three-track assembly
   const p = makePlan(d, 'sq', { scripts: [] });
   assert.equal(p.skip, false);
-  for (const f of ['subs_sq.vtt', 'subs_en.vtt', 'subs_uk.vtt', 'chapters.json', 'plan/filter.txt', 'plan/ffmeta.txt', 'plan/steps.tsv', 'plan/title-1.txt'])
+  for (const f of ['subs_sq.vtt', 'chapters.json', 'plan/filter.txt', 'plan/ffmeta.txt', 'plan/steps.tsv', 'plan/title-1.txt'])
     assert.ok(existsSync(join(d, 'sq', f)), f);
+  for (const f of ['subs_en.vtt', 'subs_uk.vtt']) assert.ok(!existsSync(join(d, 'sq', f)), `${f} is not this cut's track`);
   writeFileSync(join(d, 'sq', 'video.mp4'), 'x'); writeFileSync(join(d, 'sq', '.assembled'), p.hash);
   assert.equal(makePlan(d, 'sq', { scripts: [] }).skip, true);
   assert.equal(makePlan(d, 'sq', { scripts: [], force: true }).skip, false);
@@ -113,7 +115,9 @@ function assembled() {
 test('checkCut: a good cut passes every check', () => {
   const r = checkCut(assembled(), 'sq', fake());
   assert.deepEqual(r.filter(c => !c.ok), []);
-  assert.ok(r.length >= 18);
+  assert.ok(r.length >= 16);
+  assert.ok(r.some(c => c.what === 'sq/subs_sq.vtt has a cue per step'));
+  assert.ok(!r.some(c => /subs_(en|uk)/.test(c.what)));                              // one track per cut
 });
 
 test('checkCut: each defect is caught by name', () => {
@@ -130,8 +134,8 @@ test('checkCut: each defect is caught by name', () => {
   assert.deepEqual(warn, ['WARN sq anchor not on screen: step 2']);
   ch.chapters[0].found = false; writeFileSync(join(d, 'sq', 'chapters.json'), JSON.stringify(ch));
   assert.match(checkCut(d, 'sq', fake()).filter(c => !c.ok).map(c => c.got).join(), /absent: step 1, 2/);
-  writeFileSync(join(d, 'sq', 'subs_en.vtt'), 'garbage');
-  assert.match(checkCut(d, 'sq', fake()).filter(c => !c.ok).map(c => c.what).join(), /subs_en\.vtt parses/);
+  writeFileSync(join(d, 'sq', 'subs_sq.vtt'), 'garbage');
+  assert.match(checkCut(d, 'sq', fake()).filter(c => !c.ok).map(c => c.what).join(), /subs_sq\.vtt parses/);
 });
 
 test('checkCut + main: missing files and unusable input', () => {

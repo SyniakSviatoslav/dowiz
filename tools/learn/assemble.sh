@@ -6,7 +6,7 @@
 # DIR is a capture.mjs output (lesson.json, LANG/raw.webm, LANG/marks.json). Writes into DIR/LANG/:
 #   video.mp4       720x1280, 24 fps, H.264 High, <= 1.4 Mbps, +faststart, no audio, step titles burned in,
 #                   one MP4 chapter per step
-#   subs_sq.vtt subs_en.vtt subs_uk.vtt   the captions, on this cut's timings (the player overlays any)
+#   subs_LANG.vtt   the cut's one caption track, on this cut's timings
 #   chapters.json   { n, key, startMs, endMs, title{sq,en,uk} } per step
 #   step-N.mp4      each step as a short loop (<= 8 s, <= 400 KB, 540x960)
 #   poster.jpg      a frame of step 1;   contact.jpg  one frame per step, tiled
@@ -39,7 +39,9 @@ rm -f "$CUT"/step-*.mp4
 while IFS="$(printf '\t')" read -r n ss dur; do
   [ -n "$n" ] || continue
   for crf in 28 33 38; do
-    run "loop $n" $FF -ss "$ss" -t "$dur" -i "$CUT/video.mp4" -an -vf "scale=540:960:flags=lanczos" \
+    # -t AFTER -i: an output duration is exact; as an input option the loop ran to the next
+    # keyframe (8.65-8.89 s for an 8 s cut, 2026-09-28) and failed check.mjs's 8.5 s bound.
+    run "loop $n" $FF -ss "$ss" -i "$CUT/video.mp4" -t "$dur" -an -vf "scale=540:960:flags=lanczos" \
       -c:v libx264 -preset veryfast -crf "$crf" -maxrate 380k -bufsize 760k -r 24 -pix_fmt yuv420p \
       -movflags +faststart "$CUT/step-$n.mp4"
     [ "$(wc -c < "$CUT/step-$n.mp4")" -le 409600 ] && break

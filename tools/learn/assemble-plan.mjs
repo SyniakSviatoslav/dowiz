@@ -4,11 +4,11 @@
 //
 //   node tools/learn/assemble-plan.mjs DIR LANG    -> DIR/LANG/plan/* and prints shell lines
 //
-// Written into DIR/LANG/: subs_sq.vtt subs_en.vtt subs_uk.vtt (one cue per step, on THIS cut's
-// timings), chapters.json, and plan/ (ffmeta.txt MP4 chapters, filter.txt the burn-in graph,
+// Written into DIR/LANG/: subs_LANG.vtt (the cut's ONE caption track -- operator 2026-09-26:
+// one English film with English subtitles; one cue per step, on THIS cut's timings), chapters.json, and plan/ (ffmeta.txt MP4 chapters, filter.txt the burn-in graph,
 // title-*.txt the burned step titles, steps.tsv the loop cuts). Prints SKIP when the inputs'
 // hash equals the one the last finished assembly left in DIR/LANG/.assembled.
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -103,7 +103,8 @@ export function makePlan(dir, lang, { force = false, scripts = [join(HERE, 'asse
   const tl = timeline(m.marks);
   if (!force && done === hash && existsSync(join(cut, 'video.mp4'))) return { skip: true, hash, tl, lines: ['SKIP=1', `HASH=${hash}`] };
   mkdirSync(planDir, { recursive: true });
-  for (const l of LANGS) writeFileSync(join(cut, `subs_${l}.vtt`), vtt(lesson, tl, l));
+  for (const l of LANGS) if (l !== lang) rmSync(join(cut, `subs_${l}.vtt`), { force: true });   // an older cut's other tracks
+  writeFileSync(join(cut, `subs_${lang}.vtt`), vtt(lesson, tl, lang));
   writeFileSync(join(cut, 'chapters.json'), JSON.stringify({ id: lesson.id, lang, durationMs: tl.durationMs, chapters: chapters(lesson, tl) }, null, 1));
   writeFileSync(join(planDir, 'ffmeta.txt'), ffmeta(lesson, tl, lang));
   writeFileSync(join(planDir, 'title-0.txt'), clean(`${lesson.id} · ${lesson.title[lang]}`));

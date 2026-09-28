@@ -4,12 +4,13 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseArgs, checkHost, lessonFile, loadLesson, guard, localAsset, typeOf, redact, plan, mark, closeMarks, stepFound, sourceSha,
-  DEFAULT_HOST, APPS, REPO } from './capture-lib.mjs';
+import { parseArgs, checkHost, lessonFile, loadLesson, guard, localAsset, typeOf, redact, plan, mark, closeMarks, stepFound, dwell, reachFor, REACH,
+  hostFor, courierKeys, autoWrites, DEFAULT_HOST, QA_HOST, DUBIN_HOST, LOCATION, APPS, REPO } from './capture-lib.mjs';
+import { filmSource, filmSha, FILM_LANG } from './film.mjs';
 
-test('parseArgs: defaults to the three languages, the operator venue and the local UI', () => {
+test('parseArgs: defaults to the three languages, no host yet (the role picks it) and the local UI', () => {
   const o = parseArgs(['W3', '--out', '/x']);
-  assert.deepEqual([o.id, o.langs, o.host, o.hostGiven, o.ui, o.out, o.desktop, o.dryRun], ['W3', ['sq', 'en', 'uk'], DEFAULT_HOST, false, 'local', '/x', false, false]);
+  assert.deepEqual([o.id, o.langs, o.host, o.hostGiven, o.ui, o.out, o.desktop, o.dryRun], ['W3', ['sq', 'en', 'uk'], null, false, 'local', '/x', false, false]);
   const p = parseArgs(['--lesson', 'f.yaml', '--out', 'o', '--lang', 'uk', '--ui', 'live', '--host', 'https://a.b/', '--desktop', '--dry-run']);
   assert.deepEqual([p.lesson, p.langs, p.ui, p.host, p.hostGiven, p.desktop, p.dryRun], ['f.yaml', ['uk'], 'live', 'https://a.b', true, true, true]);
   assert.equal(parseArgs(['W3', '--out', 'o', '--allow-writes']).allowWrites, true);
@@ -26,8 +27,21 @@ test('parseArgs: every bad input is named', () => {
   assert.match(parseArgs(['W3', 'W4', '--out', 'o']).error, /unexpected argument W4/);
 });
 
-test('checkHost: dubin-sushi passes; another host is refused unless --host named it', () => {
-  assert.equal(checkHost(DEFAULT_HOST, false), null);
+test('hostFor + courierKeys + autoWrites: the QA hub for every role; its own courier; only a QA courier lesson writes', () => {
+  assert.equal(DEFAULT_HOST, QA_HOST);
+  for (const r of ['owner', 'waiter', 'guest', 'courier']) assert.equal(hostFor(r), QA_HOST);
+  assert.deepEqual(courierKeys(QA_HOST), ['QA_HUB_COURIER_PHONE', 'QA_HUB_COURIER_PASSWORD']);
+  assert.deepEqual(courierKeys(DUBIN_HOST), ['COURIER_PHONE', 'COURIER_PASSWORD']);
+  assert.equal(autoWrites('courier', QA_HOST), true);
+  assert.equal(autoWrites('courier', DUBIN_HOST), false);
+  assert.equal(autoWrites('owner', QA_HOST), false);
+  assert.equal(LOCATION[QA_HOST], 'qa-durres');
+  assert.equal(LOCATION[DUBIN_HOST], 'dubin-durres');
+});
+
+test('checkHost: the QA hub and dubin-sushi pass; another host is refused unless --host named it', () => {
+  assert.equal(checkHost(QA_HOST, false), null);
+  assert.equal(checkHost(DUBIN_HOST, false), null);
   assert.match(checkHost('https://sushi-durres.dowiz.org', false), /refusing .* unless --host/);
   assert.equal(checkHost('https://sushi-durres.dowiz.org', true), null);
   assert.equal(checkHost('http://127.0.0.1:8787', true), null);
@@ -117,13 +131,31 @@ test('stepFound: a card-only step has nothing to find; a pending one never is; a
   assert.equal(stepFound({ do: 'click', selector: '[data-tour="a.b"]' }, {}), true);
 });
 
-test('sourceSha: the YAML bytes, so any edit moves it', () => {
-  const d = mkdtempSync(join(tmpdir(), 'sha-'));
-  writeFileSync(join(d, 'a.yaml'), 'id: A1\n');
-  const h = sourceSha(join(d, 'a.yaml'));
+test('filmSha: what the English film shows -- words, anchors, actions; another language never moves it', () => {
+  const { lesson } = loadLesson(lessonFile('W3'));
+  assert.equal(FILM_LANG, 'en');
+  const src = filmSource(lesson);
+  assert.equal(src.title, lesson.title.en);
+  assert.deepEqual(Object.keys(src.steps[0]), ['n', 'key', 'anchor', 'pending', 'writes', 'do', 'selector', 'value', 'title', 'caption']);
+  assert.equal(src.steps[0].caption, lesson.steps[0].caption.en);
+  const h = filmSha(lesson);
   assert.match(h, /^[0-9a-f]{64}$/);
-  writeFileSync(join(d, 'a.yaml'), 'id: A2\n');
-  assert.notEqual(sourceSha(join(d, 'a.yaml')), h);
+  const other = structuredClone(lesson); other.title.uk = 'x'; other.steps[0].caption.sq = 'x'; other.steps[0].caption.ru = 'x';
+  assert.equal(filmSha(other), h);
+  for (const edit of [l => { l.steps[0].caption.en = 'x'; }, l => { l.steps[0].anchor = 'zz.zz'; }, l => { l.steps[0].action.do = 'type'; },
+    l => { l.steps[0].action.value = 'typed'; }, l => { l.steps.pop(); }, l => { l.title.en = 'x'; }]) {
+    const e = structuredClone(lesson); edit(e);
+    assert.notEqual(filmSha(e), h);
+  }
+  assert.notEqual(filmSha(lesson, 'uk'), h);
+});
+
+test('dwell: long enough to read the caption in the film\'s language, 2.8 s to 6.5 s', () => {
+  const s = { caption: { en: 'x'.repeat(100), uk: 'x'.repeat(10) } };
+  assert.equal(dwell(s, 'en'), 4500);
+  assert.equal(dwell(s, 'uk'), 2800);
+  assert.equal(dwell({ caption: { en: 'x'.repeat(1000) } }, 'en'), 6500);
+  assert.equal(dwell({ caption: {} }, 'en'), 2800);
 });
 
 test('parseArgs + loadLesson: a bare --host is an empty origin (refused by checkHost); a file outside the root keeps its path', () => {
@@ -132,4 +164,20 @@ test('parseArgs + loadLesson: a bare --host is an empty origin (refused by check
   assert.match(checkHost(o.host, o.hostGiven), /not a URL/);
   const { lesson } = loadLesson(lessonFile('W3'), '/nowhere');
   assert.equal(lesson.id, 'W3');
+});
+
+test('reachFor: the longest known prefix wins; an unknown role or anchor has no way there', () => {
+  assert.deepEqual(reachFor('owner', 'more.tile.tableQr'), ['nav.more']);
+  assert.deepEqual(reachFor('owner', 'order.refund'), ['nav.orders', 'orders.row']);
+  assert.deepEqual(reachFor('owner', 'orders.row'), ['nav.orders']);
+  assert.deepEqual(reachFor('owner', 'recipe.kind'), ['nav.menu', 'menu.category', 'menu.dish', 'dish.ingredients']);
+  assert.deepEqual(reachFor('owner', 'menu.dish'), ['nav.menu', 'menu.category']);
+  assert.deepEqual(reachFor('owner', 'menu.sort'), ['nav.menu']);
+  assert.deepEqual(reachFor('owner', 'nav.menu'), []);
+  assert.deepEqual(reachFor('guest', 'cart.qty'), ['nav.menu', 'menu.quickAdd', 'cart.open']);
+  assert.deepEqual(reachFor('guest', 'checkout.open'), ['nav.menu', 'menu.quickAdd', 'cart.open']);      // the whole anchor is a key too
+  assert.deepEqual(reachFor('guest', 'checkout.tip').at(-1), 'checkout.open');
+  assert.deepEqual(reachFor('waiter', 'round.add'), []);
+  assert.deepEqual(reachFor('owner', null), []);
+  for (const m of Object.values(REACH)) for (const via of Object.values(m)) for (const a of via) assert.match(a, /^[a-z][A-Za-z]*(\.[A-Za-z]+)+$/);
 });

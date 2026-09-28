@@ -79,22 +79,31 @@ grep -q '^hud.gps ' "$R/docs/learn/anchors-courier.txt" && sed -i '/^hud.gps /d'
 node "$R/tools/learn/build-lessons.mjs" --root "$R" >/dev/null 2>&1 || { echo "prove: rebuild failed"; fail=1; }
 want 0 "a pending anchor that does not exist yet"
 
-# 8. item 5 (a WARN, never red): a video recorded from W3's YAML is current until the YAML moves.
+# 8. item 5 (a WARN, never red): a video recorded from W3's FILM hash (tools/learn/film.mjs: English
+# words, anchors, actions) is current until something the film SHOWS moves; a Russian edit does not.
 copy
-python3 - "$R" <<'PY'
-import hashlib, json, os, sys
-r = sys.argv[1]
-y = os.path.join(r, 'docs/learn/lessons/waiter/W3.yaml')
-m = {'version': 1, 'lessons': {'W3': {'role': 'waiter', 'source': hashlib.sha256(open(y, 'rb').read()).hexdigest(), 'cuts': {}}}}
-os.makedirs(os.path.join(r, 'workers/api/public/learn/media'), exist_ok=True)
-json.dump(m, open(os.path.join(r, 'workers/api/public/learn/media/manifest.json'), 'w'))
-PY
-want 0 "W3's video recorded from the current YAML"
+node --input-type=module - "$R" <<'JS'
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+const r = process.argv[2];
+const { filmSha } = await import(join(r, 'tools/learn/film.mjs'));
+const w3 = JSON.parse(readFileSync(join(r, 'workers/api/public/learn/lessons.json'), 'utf8')).lessons.find(l => l.id === 'W3');
+mkdirSync(join(r, 'workers/api/public/learn/media'), { recursive: true });
+writeFileSync(join(r, 'workers/api/public/learn/media/manifest.json'),
+  JSON.stringify({ version: 1, lessons: { W3: { role: 'waiter', source: filmSha(w3), cuts: {} } } }));
+JS
+want 0 "W3's video recorded from the current film"
 grep -q 'stale video: W3' "$SCRATCH/out" && { echo "prove: a current video was called stale"; fail=1; }
 grep -q 'videos: 1/.* 0 stale' "$SCRATCH/out" || { echo "prove: the video count is missing"; fail=1; }
-printf '# edited after the recording\n' >> "$R/docs/learn/lessons/waiter/W3.yaml"
+sed -i 's/^  ru: "Откройте стол"$/  ru: "Откройте столик"/' "$R/docs/learn/lessons/waiter/W3.yaml"
+grep -q 'Откройте столик' "$R/docs/learn/lessons/waiter/W3.yaml" || { echo "prove: the Russian edit did not land"; fail=1; }
 node "$R/tools/learn/build-lessons.mjs" --root "$R" >/dev/null 2>&1 || { echo "prove: rebuild failed"; fail=1; }
-want 0 "W3's YAML edited after its video (warned, not refused)"
+want 0 "W3's Russian title edited (the English film is still current)"
+grep -q 'stale video: W3' "$SCRATCH/out" && { echo "prove: a Russian-only edit made the English film stale"; fail=1; }
+sed -i 's/^  en: "Open a table"$/  en: "Open a new table"/' "$R/docs/learn/lessons/waiter/W3.yaml"
+grep -q 'Open a new table' "$R/docs/learn/lessons/waiter/W3.yaml" || { echo "prove: the English edit did not land"; fail=1; }
+node "$R/tools/learn/build-lessons.mjs" --root "$R" >/dev/null 2>&1 || { echo "prove: rebuild failed"; fail=1; }
+want 0 "W3's English title edited after its video (warned, not refused)"
 grep -q '5 WARN stale video: W3' "$SCRATCH/out" && echo "prove: item 5 warns: $(grep -m1 'stale video: W3' "$SCRATCH/out" | cut -c1-60)" || { echo "prove: item 5 did not warn on a stale W3"; fail=1; }
 
 [ $fail -eq 0 ] && echo "learn.prove: the gate fires in both directions" || echo "learn.prove: FAILED"

@@ -70,7 +70,7 @@ export function checkCut(dir, lang, p = probe, warn = []) {
     add(!(v.streams || []).some(x => x.codec_type === 'audio'), `${lang} video is silent (no audio stream)`, (v.streams || []).map(x => x.codec_type).join(','));
     add((v.chapters || []).length === n, `${lang} video carries ${n} MP4 chapters`, (v.chapters || []).length);
     if (chap) add(Math.abs(dur - chap.durationMs) <= TOL_MS, `${lang} duration = chapters' end +-${TOL_MS} ms`, `${dur.toFixed(0)} vs ${chap.durationMs}`);
-    for (const l of LANGS) if (need(`subs_${l}.vtt`)) {
+    for (const l of [lang]) if (need(`subs_${l}.vtt`)) {   // one caption track per cut, in its own language
       let c; try { c = cues(readFileSync(join(cut, `subs_${l}.vtt`), 'utf8')); } catch (e) { add(false, `${lang}/subs_${l}.vtt parses`, e.message); continue; }
       add(c.length === n, `${lang}/subs_${l}.vtt has a cue per step`, `${c.length}/${n}`);
       add(c.every(x => x.endMs > x.startMs && x.endMs <= dur + TOL_MS && x.text.trim()), `${lang}/subs_${l}.vtt cues are inside the video and not empty`, c.map(x => x.endMs).join(','));

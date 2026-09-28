@@ -1,20 +1,25 @@
 // The venue side of a recording: sign in, snapshot what is open, and close what the
 // recording left behind. `fetch` is injectable so capture.test.mjs proves every branch
 // without the network. Tokens stay in memory; nothing here prints one.
+import { courierKeys } from './capture-lib.mjs';
+
 const UA = { 'user-agent': 'Mozilla/5.0 (dowiz learn capture)', 'content-type': 'application/json' };
 export const ENDED = new Set(['REJECTED', 'CANCELLED', 'COMPENSATED_REFUND', 'REFUNDED', 'DELIVERED', 'COLLECTED', 'COMPLETED', 'SERVED']);
 export const REASON = 'TEST learn capture cleanup';
+export const TIMEOUT_MS = 30000;
 
-/// One API call. A 503 "Worker exceeded resource limits" (the platform's flap) is retried
-/// (1102 on a sign-in's argon2 is common) is retried for reads and sign-ins only, at most eight
-/// tries, `wait` ms apart; a write that 503'd may have landed and is never retried.
+/// One API call. A 5xx -- "Worker exceeded resource limits" (the platform's flap; 1102 on a
+/// sign-in's argon2 is common) or a 500 from it -- is retried for reads and sign-ins only, at most eight
+/// tries, `wait` ms times the try apart (the flaps come in bursts); a write that 503'd may have landed and is never retried.
 export async function call(host, path, { method = 'GET', body, token } = {}, f = globalThis.fetch, wait = 2500) {
   for (let i = 0; ; i++) {
+    // A bounded wait: an unanswered sign-in held one lesson for 42 minutes (O19, 2026-09-28).
     const r = await f(`${host}${path}`, { method, headers: { ...UA, ...(token ? { authorization: `Bearer ${token}` } : {}) },
-      body: body == null ? undefined : JSON.stringify(body) });
+      body: body == null ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(TIMEOUT_MS) })
+      .catch(e => ({ status: 599, text: async () => `no answer: ${e.name}` }));
     const t = await r.text();
-    const retry = r.status === 503 && i < 7 && (method === 'GET' || /\/login$/.test(path));
-    if (retry) { await new Promise(res => setTimeout(res, wait)); continue; }
+    const retry = r.status >= 500 && i < 7 && (method === 'GET' || /\/login$/.test(path));
+    if (retry) { await new Promise(res => setTimeout(res, wait * (i + 1))); continue; }   // 2.5 s, 5 s, ... ~70 s in all
     let b; try { b = JSON.parse(t); } catch { b = t; }
     return { status: r.status, body: b };
   }
@@ -25,7 +30,10 @@ export async function call(host, path, { method = 'GET', body, token } = {}, f =
 export function seed(role, who) {
   if (role === 'owner') return { local: { dw_rt: who.owner.refresh_token, dw_loc: who.owner.user?.locationId }, session: { dw_at: who.owner.access_token } };
   if (role === 'waiter') return { local: { dw_room_session: JSON.stringify(who.staffBody) }, session: {} };
-  if (role === 'courier') return { local: { dw_c_jwt: who.courier }, session: {} };
+  // The courier's own first-run tour (lib/guide.js, key dw_guide_courier) would open over
+  // every recording, frozen at "Step 1 of 5" (seen in C1's first contact sheet, 2026-09-26):
+  // the recording draws its own ring and titles, so the app's tour is marked done.
+  if (role === 'courier') return { local: { dw_c_jwt: who.courier, dw_guide_courier: '{"state":"done"}' }, session: {} };
   if (role === 'guest') return { local: {}, session: {} };   // the storefront needs no sign-in
   return null;
 }
@@ -33,7 +41,7 @@ export const ROLES_SIGNED = ['owner', 'waiter', 'courier', 'guest'];
 
 /// API sign-in with the owner's credentials: the console token and, as staff, the room's
 /// (both needed for the before/after snapshot whatever the role); a courier lesson also signs
-/// the venue's courier in (COURIER_PHONE / COURIER_PASSWORD).
+/// the venue's courier in (capture-lib.mjs courierKeys: the QA hub's own, else COURIER_*).
 export async function signIn(host, role, c, f = globalThis.fetch) {
   if (!ROLES_SIGNED.includes(role)) return { status: `no sign-in for role ${role}`, token: null };
   const o = await call(host, '/api/auth/login', { method: 'POST', body: { email: c.OWNER_EMAIL, password: c.OWNER_PASSWORD } }, f);
@@ -41,7 +49,8 @@ export async function signIn(host, role, c, f = globalThis.fetch) {
   let token = o.body?.access_token || null, status = `${o.status}/${s.status}`, courier = null;
   const staff = s.body?.jwt || null;
   if (role === 'courier') {
-    const k = await call(host, '/api/courier/auth/login', { method: 'POST', body: { phone: c.COURIER_PHONE, password: c.COURIER_PASSWORD } }, f);
+    const [ph, pw] = courierKeys(host);
+    const k = await call(host, '/api/courier/auth/login', { method: 'POST', body: { phone: c[ph], password: c[pw] } }, f);
     courier = k.body?.jwt || null; status += `/${k.status}`;
     if (!courier) token = null;
   }

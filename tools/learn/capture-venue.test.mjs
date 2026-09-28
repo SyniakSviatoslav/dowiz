@@ -2,7 +2,7 @@
 // sweep against a fake venue (an injected fetch), so every branch runs without the network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { call, seed, signIn, snapshot, diff, closeNew, REASON, ROLES_SIGNED } from './capture-venue.mjs';
+import { call, seed, signIn, snapshot, diff, closeNew, REASON, ROLES_SIGNED, TIMEOUT_MS } from './capture-venue.mjs';
 
 /// A fake venue: answers by "METHOD path", records every call; a list answer is consumed in order.
 function venue(routes) {
@@ -31,6 +31,12 @@ test('call: JSON parsed, text kept, bearer sent, UA set', async () => {
 });
 
 test('call: a 503 on a read or a sign-in is retried (bounded); a write is never retried', async () => {
+  const five = venue({ 'POST /api/staff/login': [[500, 'x'], [200, { jwt: 'J' }]] });   // a 500 on a sign-in is retried too
+  assert.equal((await call(H, '/api/staff/login', { method: 'POST', body: {} }, five.f, 0)).status, 200);
+  const hung = async () => { throw Object.assign(new Error('t'), { name: 'TimeoutError' }); };   // no answer: a 599, retried like a 5xx
+  const h = await call(H, '/a', {}, hung, 0);
+  assert.deepEqual([h.status, h.body], [599, 'no answer: TimeoutError']);
+  assert.equal(TIMEOUT_MS, 30000);
   const r = venue({ 'GET /a': [[503, 'error code: 1102'], [200, { ok: 1 }]] });
   assert.equal((await call(H, '/a', {}, r.f, 0)).status, 200);
   assert.equal(r.calls.length, 2);
@@ -56,6 +62,10 @@ test('signIn: both tokens or none; unknown roles are refused', async () => {
   const k = await signIn(H, 'courier', { ...C, COURIER_PHONE: '+1', COURIER_PASSWORD: 'q' }, cr.f);
   assert.deepEqual([k.token, k.courier, k.status], ['A', 'K', '200/200/200']);
   assert.deepEqual(JSON.parse(cr.calls[2].init.body), { phone: '+1', password: 'q' });
+  const qa = venue({ 'POST /api/auth/login': [200, { access_token: 'A' }], 'POST /api/staff/login': [200, { jwt: 'J' }], 'POST /api/courier/auth/login': [200, { jwt: 'Q' }] });
+  const q = await signIn('https://qa-durres.dowiz.org', 'courier', { ...C, COURIER_PHONE: '+1', QA_HUB_COURIER_PHONE: '+2', QA_HUB_COURIER_PASSWORD: 'r' }, qa.f);
+  assert.equal(q.courier, 'Q');
+  assert.deepEqual(JSON.parse(qa.calls[2].init.body), { phone: '+2', password: 'r' });   // the QA hub's own courier
   const nocr = venue({ 'POST /api/auth/login': [200, { access_token: 'A' }], 'POST /api/staff/login': [200, { jwt: 'J' }], 'POST /api/courier/auth/login': [403, {}] });
   const n = await signIn(H, 'courier', C, nocr.f);
   assert.deepEqual([n.token, n.status], [null, '200/200/403']);
@@ -65,7 +75,7 @@ test('seed: the console gets its token pair, the room its session; others nothin
   const who = { owner: { access_token: 'A', refresh_token: 'R', user: { locationId: 'L' } }, staffBody: { jwt: 'J', staff: { id: 's' } } };
   assert.deepEqual(seed('owner', who), { local: { dw_rt: 'R', dw_loc: 'L' }, session: { dw_at: 'A' } });
   assert.deepEqual(JSON.parse(seed('waiter', who).local.dw_room_session), who.staffBody);
-  assert.deepEqual(seed('courier', { courier: 'K' }), { local: { dw_c_jwt: 'K' }, session: {} });
+  assert.deepEqual(seed('courier', { courier: 'K' }), { local: { dw_c_jwt: 'K', dw_guide_courier: '{"state":"done"}' }, session: {} });
   assert.deepEqual(seed('guest', who), { local: {}, session: {} });
   assert.equal(seed('kitchen', who), null);
 });
