@@ -111,7 +111,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="dish.offNote"]'
-      value: "Nesër"
+      value: "Tomorrow"
     title:
       sq: "Pse s’ka"
       en: "Why it is off"
@@ -163,7 +163,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="dish.ingredients"]'
-      value: "salmon, oriz, nori"
+      value: "salmon, rice, nori"
     title:
       sq: "Përbërësit"
       en: "Ingredients"

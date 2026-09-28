@@ -76,7 +76,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="orders.search"]'
-      value: "Tregtare"
+      value: "salmon"
     title:
       sq: "Kërkoni"
       en: "Search"

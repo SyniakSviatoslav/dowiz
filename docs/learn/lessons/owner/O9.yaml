@@ -76,7 +76,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="floor.zoneName"]'
-      value: "Tarraca"
+      value: "Terrace"
     title:
       sq: "Emri i zonës"
       en: "Area name"

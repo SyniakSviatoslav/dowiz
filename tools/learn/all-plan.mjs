@@ -25,7 +25,7 @@ export const REPO = join(HERE, '..', '..');
 export const ROLE_ORDER = ['courier', 'guest', 'owner', 'waiter'];
 /// The languages a film COULD be cut in (lib/langs.js MEDIA_LANGS); the operator's rule records English only (FILM_LANG).
 export const LANGS = MEDIA_LANGS;
-export const RECORDER = ['capture.mjs', 'capture-lib.mjs', 'capture-venue.mjs', 'film.mjs'];
+export const RECORDER = ['capture.mjs', 'capture-lib.mjs', 'capture-venue.mjs', 'capture-stage.mjs', 'film.mjs'];
 /// Seconds, measured on this box 2026-09-26 (see phase1.txt): per language a browser start and
 /// sign-in, per step the dwell; per cut the assembly; per uploaded object one wrangler put.
 export const COST = { launchS: 35, stepS: 5.5, assembleS: 25, putS: 9, filesPerCut: 4 };

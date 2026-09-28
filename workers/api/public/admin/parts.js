@@ -113,13 +113,17 @@ export function select(o = {}){
 /// the console's only definition, drawn as the switch the console always had.
 /// `hintKey` adds the small line under the words.
 export function check(o = {}){
+  // The anchor sits on the LABEL: the input is a zero-size box under the drawn switch, so a
+  // ring (or the recorder) looking for the anchor on it finds nothing visible; the label is the
+  // switch as seen, and tapping it toggles the input.
   const a = ui.attrs({ type: 'checkbox', id: o.id, name: o.name, value: o.value, checked: !!o.checked, disabled: !!o.disabled,
-    required: !!o.required, ...(dataOf(o) || {}) });
+    required: !!o.required, ...(dataOf({ ...o, tour: null }) || {}) });
+  const tour = o.tour ? ` data-tour="${ui.esc(o.tour)}"` : '';
   // A switch is a list row (HIG toggles): the word first, the consequence
   // under it, the switch at the trailing edge. `hintKey` or the footer table.
   const hk = o.hintKey || (o.id && FOOTERS[o.id]) || null;
   const hint = hk ? `<small data-t="${ui.esc(hk)}">${ui.esc(ui.tr(hk))}</small>` : '';
-  return `<label class="${ui.cx('switch', o.cls)}"><input${a}><span class="switch-k"></span><span class="t">${ui.label(words(o))}${hint}</span></label>`;
+  return `<label class="${ui.cx('switch', o.cls)}"${tour}><input${a}><span class="switch-k"></span><span class="t">${ui.label(words(o))}${hint}</span></label>`;
 }
 
 /// The console's old three-tone pill, as a badge: ok / warn / bad / (none).

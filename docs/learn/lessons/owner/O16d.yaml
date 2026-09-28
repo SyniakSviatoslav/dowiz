@@ -59,7 +59,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="inbox.reply"]'
-      value: "Faleminderit! Po, jemi hapur deri në 23:00."
+      value: "Thank you! Yes, we are open until 23:00."
     title:
       sq: "Përgjigjuni"
       en: "Reply"
@@ -179,7 +179,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="assistant.question"]'
-      value: "Cila pjatë u shit më shumë këtë javë?"
+      value: "Which dish sold most this week?"
     title:
       sq: "Një pyetje"
       en: "One question"

@@ -174,10 +174,26 @@ test('reachFor: the longest known prefix wins; an unknown role or anchor has no 
   assert.deepEqual(reachFor('owner', 'menu.dish'), ['nav.menu', 'menu.category']);
   assert.deepEqual(reachFor('owner', 'menu.sort'), ['nav.menu']);
   assert.deepEqual(reachFor('owner', 'nav.menu'), []);
+  // Telegram is one row inside the bell's sheet; the WhatsApp half is the sheet itself
+  assert.deepEqual(reachFor('owner', 'notify.tgToken'), ['nav.more', 'more.tile.notifications', 'notify.telegram']);
+  assert.deepEqual(reachFor('owner', 'notify.waToken'), ['nav.more', 'more.tile.notifications']);
+  assert.deepEqual(reachFor('owner', 'stamps.count'), ['nav.more', 'more.tile.promos']);
+  assert.deepEqual(reachFor('owner', 'channels.api'), ['nav.more', 'more.tile.channels']);
   assert.deepEqual(reachFor('guest', 'cart.qty'), ['nav.menu', 'menu.quickAdd', 'cart.open']);
   assert.deepEqual(reachFor('guest', 'checkout.open'), ['nav.menu', 'menu.quickAdd', 'cart.open']);      // the whole anchor is a key too
   assert.deepEqual(reachFor('guest', 'checkout.tip').at(-1), 'checkout.open');
-  assert.deepEqual(reachFor('waiter', 'round.add'), []);
+  // the room opens on its tables: a round's controls are two taps in, the till one
+  assert.deepEqual(reachFor('waiter', 'round.add'), ['room.table', 'sitting.round']);
+  assert.deepEqual(reachFor('waiter', 'pay.cash'), ['room.table', 'sitting.round', 'round.pay']);
+  assert.deepEqual(reachFor('waiter', 'till.z'), ['room.till']);
+  // the room's own controls are one Back away from any inner screen (a round, the till, the floor)
+  assert.deepEqual(reachFor('waiter', 'room.table'), ['nav.back']);
+  assert.deepEqual(reachFor('waiter', 'room.role'), ['nav.back']);
+  assert.deepEqual(reachFor('waiter', 'sitting.move'), ['nav.back', 'room.table']);
+  // an ingredient's movement chips live in the form its card's Delivery button opens
+  assert.deepEqual(reachFor('owner', 'stock.wasted'), ['nav.stock', 'stock.supply', 'card.received']);
+  assert.deepEqual(reachFor('owner', 'card.received'), ['nav.stock', 'stock.supply']);
+  assert.deepEqual(reachFor('kitchen', 'round.add'), []);
   assert.deepEqual(reachFor('owner', null), []);
   for (const m of Object.values(REACH)) for (const via of Object.values(m)) for (const a of via) assert.match(a, /^[a-z][A-Za-z]*(\.[A-Za-z]+)+$/);
 });

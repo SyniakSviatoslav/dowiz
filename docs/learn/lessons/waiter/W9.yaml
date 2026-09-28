@@ -163,7 +163,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="till.reason"]'
-      value: "Bukë"
+      value: "Bread"
     title:
       sq: "Arsyeja"
       en: "The reason"

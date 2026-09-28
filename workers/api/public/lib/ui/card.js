@@ -18,10 +18,10 @@ export function card(o = {}){
   return `<div${attrs(a)}>${head}${o.body || ''}</div>`;
 }
 
-/// @param o { title, sub, back: { id, label } , action (markup), level=2, id, cls }
+/// @param o { title, sub, back: { id, label, attrs } , action (markup), level=2, id, cls }
 export function section(o = {}){
   const lvl = o.level === 3 ? 'h3' : 'h2';
-  const back = o.back ? iconButton({ id: o.back.id, icon: 'arrow-left', ariaLabel: o.back.label, variant: 'plain' }) : '';
+  const back = o.back ? iconButton({ id: o.back.id, icon: 'arrow-left', ariaLabel: o.back.label, variant: 'plain', attrs: o.back.attrs }) : '';
   const a = merge({ id: o.id, class: cx('ui-section-head', o.cls) }, o.attrs);
   return `<header${attrs(a)}>${back}<div class="ui-section-titles">${label(o.title, lvl, 'ui-title')}${label(o.sub, 'p', 'ui-sub')}</div>${o.action || ''}</header>`;
 }

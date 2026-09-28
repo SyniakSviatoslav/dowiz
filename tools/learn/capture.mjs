@@ -26,6 +26,7 @@ import { parseArgs, checkHost, hostFor, lessonFile, loadLesson, APPS, PHONE, DES
   guard, localAsset, typeOf, redact, plan, mark, closeMarks, stepFound, dwell, reachFor, autoWrites } from './capture-lib.mjs';
 import { snapshot, diff, closeNew, signIn, seed } from './capture-venue.mjs';
 import { filmSha } from './film.mjs';
+import { stageFor, stagedAnswer, stateAfter, chooseFor, merge, speechShim, outboxShim } from './capture-stage.mjs';
 
 const opt = parseArgs(process.argv.slice(2));
 if (opt.error) { console.error(`capture: ${opt.error}`); process.exit(2); }
@@ -36,7 +37,10 @@ if (errors) { for (const e of errors) console.error(`capture: ${e}`); process.ex
 if (!opt.hostGiven) opt.host = hostFor(lesson.role);
 const refused = checkHost(opt.host, opt.hostGiven);
 if (refused) { console.error(`capture: ${refused}`); process.exit(2); }
-const allowWrites = opt.allowWrites || autoWrites(lesson.role, opt.host);
+// A STAGED lesson (capture-stage.mjs) makes its screens in the browser and answers its own writes
+// there: nothing it does reaches the venue, so it never writes, whatever the flags say.
+const stage = stageFor(lesson.id);
+const allowWrites = !stage && (opt.allowWrites || autoWrites(lesson.role, opt.host));
 const app = APPS[lesson.role];
 const steps = plan(lesson);
 const view = opt.desktop ? DESKTOP : PHONE;
@@ -44,7 +48,7 @@ const OUT = resolve(opt.out);
 mkdirSync(OUT, { recursive: true });
 writeFileSync(join(OUT, 'lesson.json'), JSON.stringify(lesson, null, 1));
 writeFileSync(join(OUT, 'source.sha256'), filmSha(lesson) + '\n');   // what the film shows (film.mjs; tools/gates/learn.sh item 5)
-console.log(`host ${opt.host}${allowWrites ? ' -- writes: yes steps GO OUT' : ''}`);
+console.log(`host ${opt.host}${allowWrites ? ' -- writes: yes steps GO OUT' : ''}${stage ? ` -- STAGED (${stage.start || 'patched'}): reads and writes answered in the browser` : ''}`);
 for (const s of steps) console.log(`plan ${lesson.id}.${s.n} ${s.do.padEnd(5)} ${s.anchor || '(card)'}${s.writes ? ' WRITES' : ''}${s.why ? ' -- ' + s.why : ''}`);
 if (opt.dryRun) process.exit(0);
 
@@ -69,6 +73,16 @@ async function routes(ctx, cur) {
   await ctx.route('**/*', async route => {
     const r = route.request(), u = new URL(r.url());
     if (u.origin === opt.host && u.pathname.startsWith('/api/')) {
+      const st = stagedAnswer(stage, cur.state, r.method(), u.pathname, { since: cur.since, session: cur.session });
+      if (st && st.offline) { cur.staged.push(`${r.method()} ${u.pathname} (offline)`); return route.abort('internetdisconnected'); }
+      if (st && st.patch) {   // the venue's real answer with the stage's fields over it
+        const live = await route.fetch().catch(() => null);
+        if (live && live.ok()) { cur.staged.push(`${r.method()} ${u.pathname} (patched)`);
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(merge(await live.json().catch(() => ({})), st.patch)) }); }
+      } else if (st) {
+        cur.staged.push(`${r.method()} ${u.pathname}`);
+        return route.fulfill({ status: st.status, contentType: 'application/json', body: JSON.stringify(st.body) });
+      }
       const g = guard(cur.step, r.method(), r.url(), allowWrites);
       if (g === 'block') { cur.blocked.push(`${r.method()} ${u.pathname}`); return route.abort('blockedbyclient'); }
       if (g === 'record') cur.wrote.push(`${r.method()} ${u.pathname}`);
@@ -120,20 +134,25 @@ try {
   const before = lesson.writes ? await snapshot(opt.host, loc, who) : null;
   for (const lang of opt.langs) {
     const dir = join(OUT, lang); rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true });
-    const cur = { step: null, blocked: [], wrote: [] };
+    const cur = { step: null, blocked: [], wrote: [], staged: [], state: stage?.start || null, since: Date.now(), session: lesson.role === 'owner' ? who.owner : who.staffBody };
     const base = { viewport: view, deviceScaleFactor: 2, isMobile: !opt.desktop, hasTouch: !opt.desktop, serviceWorkers: 'block', locale: lang };
     // Signed in once by the API, the app's storage seeded: no credential is typed on camera.
     // One context only: with --single-process a second context's page dies.
-    const store = seed(lesson.role, who);
+    // A `signedOut` stage opens on the sign-in screen: nothing seeded but the language.
+    const store = stage?.signedOut ? { local: {}, session: {} } : seed(lesson.role, who);
     browser = await chromium.launch({ args: ARGS });
-    const ctx = await browser.newContext({ ...base, recordVideo: { dir, size: { width: view.width, height: view.height } } });
+    const ctx = await browser.newContext({ ...base, ...(stage?.geo ? { geolocation: { latitude: 41.3175, longitude: 19.4460, accuracy: 12 }, permissions: ['geolocation'] } : {}), recordVideo: { dir, size: { width: view.width, height: view.height } } });
     await routes(ctx, cur);
     await ctx.addInitScript(([k, v, st]) => {
       try { localStorage.setItem(k, v); for (const [a, b] of Object.entries(st.local)) localStorage.setItem(a, b);
         for (const [a, b] of Object.entries(st.session)) sessionStorage.setItem(a, b); } catch {}
-    }, [app.langKey, lang, store]);
+    }, [app.langKey, lang, { ...store, local: { ...store.local, ...(stage?.local || {}) } }]);
     await ctx.addInitScript(overlay);
+    if (stage?.speech) await ctx.addInitScript(speechShim, stage.speech);   // the recogniser "hears" the stage's phrase
+    if (stage?.outbox) await ctx.addInitScript(outboxShim, stage.outbox);   // taps already waiting on the phone
     const p = await ctx.newPage();
+    // A staged lesson's native confirm() ("delivered?") is the courier's yes; any other is dismissed.
+    p.on('dialog', d => (stage?.dialogs ? d.accept() : d.dismiss()).catch(() => {}));
     console.log(`${lang}: ${procs()} processes with the browser up`);
     const t0 = Date.now();
     const errs = []; p.on('pageerror', e => errs.push(redact(e.message).slice(0, 200)));
@@ -149,6 +168,9 @@ try {
       ready = !!await p.waitForSelector(app.ready, { timeout: 20000 }).catch(() => null);
     }
     if (!ready) throw new Error(`the app never became ready (${app.ready}) after 4 loads -- nothing filmed`);
+    // Ready is the nav, not the venue: on a slow hub the venue's reads land seconds later and
+    // redraw the screen under the first tap (the tile opened, then vanished). Let them land.
+    await p.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => {});
     await p.waitForTimeout(2500);
     if (lesson.role === 'guest') for (let i = 0; i < 4; i++) {   // the storefront's first-visit sheets (install hint)
       const open = await p.evaluate(() => document.getElementById('sheet')?.dataset.name || '').catch(() => '');
@@ -160,10 +182,12 @@ try {
     const marks = [];
     for (const s of lesson.steps) {
       const st = steps[s.n - 1];
-      cur.step = s; cur.blocked = []; cur.wrote = [];
+      cur.step = s; cur.blocked = []; cur.wrote = []; cur.staged = [];
       const start = Date.now() - t0;
       let el = null;
       if (st.do !== 'skip' && st.selector) {
+        const ch = chooseFor(stage, s.n);   // a native select the step's field depends on (O14b's segment)
+        if (ch) await p.selectOption(ch[0], ch[1], { timeout: 3000 }).then(() => p.waitForTimeout(600)).catch(e => errs.push(`step ${s.n} choose: ${e.message.split('\n')[0]}`));
         el = await p.waitForSelector(st.selector, { state: 'visible', timeout: 3000 }).catch(() => null);
         const via = el ? [] : reachFor(lesson.role, s.anchor);
         if (via.length) {   // not on screen: close what is open, then tap the way there (filmed)
@@ -182,6 +206,9 @@ try {
           // the film in English where the first row would switch it to Albanian.
           const chosen = await p.$(['[aria-pressed="true"]', '[aria-checked="true"]', '.on'].map(x => st.selector + x).join(', ')).catch(() => null);
           if (chosen && await chosen.isVisible().catch(() => false)) el = chosen;
+          // ...unless the stage names the option this step taps (W7: the euro, the wallet).
+          const pick = stage?.pick?.[s.n] ? await p.$(`${st.selector}[data-v="${stage.pick[s.n]}"]`).catch(() => null) : null;
+          if (pick && await pick.isVisible().catch(() => false)) el = pick;
           await el.scrollIntoViewIfNeeded().catch(() => {});
           // A sheet left open by an earlier step (the voice sheet listens on) covers the control:
           // close it -- Escape, then the scrim -- so the tap lands and the frame shows the control.
@@ -194,6 +221,9 @@ try {
           const b = await el.boundingBox();
           if (b) await p.evaluate(([x, y, w, h]) => window.__ring(x, y, w, h), [b.x, b.y, b.width, b.height]);
           await p.waitForTimeout(900);
+          // The stage moves on as the control is used, so the app's own reload after it shows the next state.
+          const next = stateAfter(stage, s.n, cur.state);
+          if (next !== cur.state) { cur.state = next; cur.since = Date.now(); }
           if (st.do === 'click') {
             // A covered control (a sheet's scrim, a sticky bar) times Playwright's click out; the
             // DOM click is the fallback, and the fallback is listed so the frame can be checked.
@@ -209,12 +239,14 @@ try {
       const found = stepFound(st, el);
       await p.waitForTimeout(dwell(s, lang));
       await p.evaluate(() => window.__unring && window.__unring()).catch(() => {});
-      marks.push({ ...mark(s.n, s.key, start, found, [...cur.blocked]), wrote: [...cur.wrote], anchor: s.anchor, skipped: st.do === 'skip' });
+      marks.push({ ...mark(s.n, s.key, start, found, [...cur.blocked]), wrote: [...cur.wrote], staged: [...cur.staged], anchor: s.anchor, skipped: st.do === 'skip' });
       console.log(`${lang} step ${s.n} ${s.anchor || '(card)'} ${st.do === 'skip' ? 'SKIPPED (pending)' : found ? 'found' : 'ABSENT'}${cur.blocked.length ? ' blocked: ' + cur.blocked.join(', ') : ''}${cur.wrote.length ? ' wrote: ' + cur.wrote.join(', ') : ''}`);
     }
     await p.waitForTimeout(1200);
     const end = Date.now() - t0;
     const video = p.video();
+    // a staged answer still in flight must not throw into a closed page (it killed the whole run)
+    await ctx.unrouteAll({ behavior: 'ignoreErrors' }).catch(() => {});
     await ctx.close();
     renameSync(await video.path(), join(dir, 'raw.webm'));
     await browser.close(); browser = null;

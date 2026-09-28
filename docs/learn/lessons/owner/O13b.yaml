@@ -59,7 +59,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="customers.linkReason"]'
-      value: "I njëjti emër dhe adresë"
+      value: "Same name and address"
     title:
       sq: "Arsyeja"
       en: "The reason"

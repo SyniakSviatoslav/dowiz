@@ -76,7 +76,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="campaigns.name"]'
-      value: "Vjeshta"
+      value: "Autumn"
     title:
       sq: "Emri"
       en: "The name"
@@ -94,7 +94,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="campaigns.text"]'
-      value: "Supë e ngrohtë për ditët e ftohta."
+      value: "A warm soup for the cold days."
     title:
       sq: "Teksti"
       en: "The text"
@@ -198,7 +198,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="campaigns.templateParams"]'
-      value: "Supë miso"
+      value: "Miso soup"
     title:
       sq: "Fushat e shabllonit"
       en: "Template fields"

@@ -159,8 +159,9 @@ steps:
     pending: no
     writes: yes
     action:
-      do: wait
+      do: type
       selector: '[data-tour="fiscal.phrase"]'
+      value: "ARM QA"
     title:
       sq: "Fraza"
       en: "The phrase"
@@ -176,7 +177,7 @@ steps:
     pending: no
     writes: yes
     action:
-      do: wait
+      do: click
       selector: '[data-tour="fiscal.arm"]'
     title:
       sq: "Aktivizo"

@@ -169,7 +169,7 @@ export function offer(o, left, ctx){
 
 /// A panel REPLACES the sheet's content and puts a back button on it, rather
 /// than adding a second navigation model to a one-job app.
-export const panel = (title, body) => ui.section({ title, back: { id: 'pback', label: k('back') } }) + body;
+export const panel = (title, body) => ui.section({ title, back: { id: 'pback', label: k('back'), attrs: { data: { tour: 'panel.back' } } } }) + body;
 export const panelLoading = ctx => ui.skeleton({ shape: 'row', count: 3, label: ctx.t('loading') });
 export const panelError = msg => ui.alert({ label: msg });
 

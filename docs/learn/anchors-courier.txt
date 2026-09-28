@@ -22,6 +22,7 @@ ask.box workers/api/public/courier/screens.js:73
 ask.go workers/api/public/courier/screens.js:74
 panel.earnings workers/api/public/courier/screens.js:77
 panel.history workers/api/public/courier/screens.js:78
+panel.back workers/api/public/courier/screens.js:172
 pick.row workers/api/public/courier/screens.js:88
 pick.take workers/api/public/courier/screens.js:94
 run.eta workers/api/public/courier/screens.js:104

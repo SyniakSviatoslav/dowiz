@@ -76,7 +76,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="refund.note"]'
-      value: "Pjata e gabuar"
+      value: "Wrong dish"
     title:
       sq: "Shënim"
       en: "A note"

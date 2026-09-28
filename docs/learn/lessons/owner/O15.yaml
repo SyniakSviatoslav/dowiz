@@ -31,11 +31,28 @@ steps:
       uk: "Функції"
       ru: "Функции"
     caption:
-      sq: "Karta me vula është këtu, me funksionet e tjera të faqes."
-      en: "The stamp card lives here, with the site’s other features."
-      uk: "Картка з печатками тут, разом з іншими функціями сайту."
-      ru: "Карточка с печатями здесь, вместе с другими функциями сайта."
+      sq: "Funksionet ndezin e fikin pjesë të faqes. Karta me vula ka cilësimet e veta, te Promocionet."
+      en: "Features switch parts of the site on and off. The stamp card has its own settings, under Promos."
+      uk: "Функції вмикають і вимикають частини сайту. Картка з печатками має власні налаштування — у Промоакціях."
+      ru: "Функции включают и выключают части сайта. У карточки с печатями свои настройки — в Промоакциях."
   - key: 2
+    anchor: more.tile.promos
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.promos"]'
+    title:
+      sq: "Promocionet"
+      en: "Promos"
+      uk: "Промоакції"
+      ru: "Промоакции"
+    caption:
+      sq: "Karta me vula është poshtë kodeve promocionale."
+      en: "The stamp card sits below the promo codes."
+      uk: "Картка з печатками — під промокодами."
+      ru: "Карточка с печатями — под промокодами."
+  - key: 3
     anchor: stamps.count
     pending: no
     writes: no
@@ -53,25 +70,25 @@ steps:
       en: "For example 8 orders for a reward."
       uk: "Наприклад, 8 замовлень за винагороду."
       ru: "Например, 8 заказов за награду."
-  - key: 3
+  - key: 4
     anchor: stamps.reward
     pending: no
     writes: no
     action:
       do: type
       selector: '[data-tour="stamps.reward"]'
-      value: "Një sushi falas"
+      value: "1000"
     title:
-      sq: "Dhurata"
-      en: "The reward"
-      uk: "Винагорода"
-      ru: "Награда"
+      sq: "Zbritja"
+      en: "The discount"
+      uk: "Знижка"
+      ru: "Скидка"
     caption:
-      sq: "Çfarë merr klienti — e sheh në faqen e tij."
-      en: "What the customer gets — they see it on their page."
-      uk: "Що отримує клієнт — він бачить це на своїй сторінці."
-      ru: "Что получает клиент — он видит это на своей странице."
-  - key: 4
+      sq: "Sa zbret karta e plotë nga porosia e radhës — klienti e sheh në faqen e porosisë."
+      en: "How much a full card takes off the next order — the customer sees it on their order page."
+      uk: "Скільки повна картка знімає з наступного замовлення — клієнт бачить це на сторінці замовлення."
+      ru: "Сколько полная карточка снимает со следующего заказа — клиент видит это на странице заказа."
+  - key: 5
     anchor: stamps.save
     pending: no
     writes: yes

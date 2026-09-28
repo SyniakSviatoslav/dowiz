@@ -94,7 +94,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="refused.note"]'
-      value: "Askush nuk hapi derën"
+      value: "Nobody opened the door"
     title:
       sq: "Një shënim"
       en: "A note"

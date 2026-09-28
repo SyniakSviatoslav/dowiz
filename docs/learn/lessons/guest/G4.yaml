@@ -110,7 +110,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="track.feedback"]'
-      value: "Shumë e shijshme, faleminderit!"
+      value: "Very tasty, thank you!"
     title:
       sq: "Si shkoi?"
       en: "How was it?"

@@ -145,7 +145,7 @@ steps:
     pending: no
     writes: no
     action:
-      do: wait
+      do: click
       selector: '[data-tour="payments.addWallet"]'
     title:
       sq: "Portofol"

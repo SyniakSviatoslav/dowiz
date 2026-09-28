@@ -76,7 +76,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="category.name"]'
-      value: "Supa"
+      value: "Soups"
     title:
       sq: "Emri"
       en: "The name"
@@ -196,7 +196,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="newDish.name"]'
-      value: "Supë miso"
+      value: "Miso soup"
     title:
       sq: "Emri"
       en: "The name"

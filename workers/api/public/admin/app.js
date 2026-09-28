@@ -253,7 +253,7 @@ function openPrefs(){
     ${chips({ values: [baseCurrency(), ...CURRENCIES.filter(c => c !== baseCurrency())].map(c => ({ value: c, label: c })), value: displayCurrency(), attr: 'c', tour: 'prefs.currency' })}
     <p class="eyebrow prefs-h" data-t="appearance"></p>
     ${chips({ id: 'themePick', values: Theme.THEMES.map(v => ({ value: v, key: 'theme_' + v, icon: THEME_ICON[v] })), value: theme, attr: 'theme', labelKey: 'appearance' })}
-    <div class="btn-row prefs-out">${me().staff ? btn({ id: 'prefsPw', variant: 'ghost', icon: 'key', key: 'acc_changePw' }) : ''}${btn({ id: 'prefsOut', variant: 'ghost', icon: 'logout', key: 'signOut' })}</div>`, { name: 'prefs' });
+    <div class="btn-row prefs-out">${me().staff ? btn({ id: 'prefsPw', variant: 'ghost', icon: 'key', key: 'acc_changePw' }) : ''}${btn({ id: 'prefsOut', variant: 'ghost', icon: 'logout', key: 'signOut', tour: 'prefs.signOut' })}</div>`, { name: 'prefs' });
   for (const b of $$('[data-l]', $('#sheetIn'))) b.onclick = async () => { setLang(b.dataset.l); mountNav(); paintVenue(); await rerender(); press($$('[data-l]', $('#sheetIn')), b); };
   for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => { await setCurrency(baseCurrency(), b.dataset.c); press($$('[data-c]', $('#sheetIn')), b); await rerender(); };
   for (const b of $$('[data-theme]', $('#sheetIn'))) b.onclick = () => { Theme.choose(document, b.dataset.theme, (k, v) => localStorage.setItem(k, v)); press($$('[data-theme]', $('#sheetIn')), b); };

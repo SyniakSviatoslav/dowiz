@@ -159,7 +159,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="kitchen.reason"]'
-      value: "Mbaroi salmoni"
+      value: "Out of salmon"
     title:
       sq: "Arsyeja"
       en: "Reason"

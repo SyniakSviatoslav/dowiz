@@ -75,7 +75,7 @@ steps:
     pending: no
     writes: no
     action:
-      do: click
+      do: wait
       selector: '[data-tour="menu.less"]'
     title:
       sq: "Një më pak"
@@ -213,7 +213,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="round.reasonText"]'
-      value: "Mysafiri priti shumë"
+      value: "The guest waited too long"
     title:
       sq: "…ose shkruani një"
       en: "…or write one"

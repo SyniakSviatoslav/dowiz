@@ -36,6 +36,23 @@ steps:
       uk: "Куди дзвонить кожне нове замовлення."
       ru: "Куда звонит каждый новый заказ."
   - key: 2
+    anchor: notify.telegram
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="notify.telegram"]'
+    title:
+      sq: "Ekrani i Telegramit"
+      en: "The Telegram screen"
+      uk: "Екран Telegram"
+      ru: "Экран Telegram"
+    caption:
+      sq: "Telegrami ka ekranin e vet: boti, grupet dhe çfarë shkon ku."
+      en: "Telegram has its own screen: the bot, the groups, and what goes where."
+      uk: "Telegram має власний екран: бот, групи і що куди надходить."
+      ru: "У Telegram свой экран: бот, группы и что куда приходит."
+  - key: 3
     anchor: notify.telegramState
     pending: no
     writes: no
@@ -52,7 +69,7 @@ steps:
       en: "Whether the venue’s own bot is connected."
       uk: "Чи підключено власного бота закладу."
       ru: "Подключён ли собственный бот заведения."
-  - key: 3
+  - key: 4
     anchor: notify.tgToken
     pending: no
     writes: no
@@ -69,7 +86,7 @@ steps:
       en: "From your own bot; it stays hidden."
       uk: "Від вашого бота; лишається прихованим."
       ru: "От вашего бота; остаётся скрытым."
-  - key: 4
+  - key: 5
     anchor: notify.tgChat
     pending: no
     writes: no
@@ -86,7 +103,7 @@ steps:
       en: "Connect a group: add the bot, send /link CODE."
       uk: "Підключіть групу: додайте бота, надішліть /link КОД."
       ru: "Подключите группу: добавьте бота, отправьте /link КОД."
-  - key: 5
+  - key: 6
     anchor: notify.test
     pending: no
     writes: yes
@@ -103,7 +120,7 @@ steps:
       en: "Sends a test notice — it should ring in the kitchen."
       uk: "Надсилає тестове сповіщення — воно має задзвонити на кухні."
       ru: "Отправляет тестовое уведомление — оно должно зазвонить на кухне."
-  - key: 6
+  - key: 7
     anchor: notify.whatsappState
     pending: no
     writes: no
@@ -120,7 +137,7 @@ steps:
       en: "Or through WhatsApp Business."
       uk: "Або через WhatsApp Business."
       ru: "Или через WhatsApp Business."
-  - key: 7
+  - key: 8
     anchor: notify.waToken
     pending: no
     writes: no
@@ -137,7 +154,7 @@ steps:
       en: "It stays hidden."
       uk: "Лишається прихованим."
       ru: "Остаётся скрытым."
-  - key: 8
+  - key: 9
     anchor: notify.waPhone
     pending: no
     writes: no
@@ -154,7 +171,7 @@ steps:
       en: "The number it sends from."
       uk: "Номер, з якого надсилається."
       ru: "Номер, с которого отправляется."
-  - key: 9
+  - key: 10
     anchor: notify.waTo
     pending: no
     writes: no
@@ -171,7 +188,7 @@ steps:
       en: "The number that gets the notice."
       uk: "Номер, що отримує сповіщення."
       ru: "Номер, который получает уведомления."
-  - key: 10
+  - key: 11
     anchor: more.tile.printer
     pending: no
     writes: no
@@ -188,7 +205,7 @@ steps:
       en: "The kitchen ticket for every order."
       uk: "Кухонний чек для кожного замовлення."
       ru: "Кухонный чек для каждого заказа."
-  - key: 11
+  - key: 12
     anchor: printer.state
     pending: no
     writes: no
@@ -205,14 +222,14 @@ steps:
       en: "When it last printed."
       uk: "Коли друкував востаннє."
       ru: "Когда печатал в последний раз."
-  - key: 12
+  - key: 13
     anchor: printer.name
     pending: no
     writes: no
     action:
       do: type
       selector: '[data-tour="printer.name"]'
-      value: "Kuzhina"
+      value: "Kitchen"
     title:
       sq: "Emri"
       en: "Name"
@@ -223,7 +240,7 @@ steps:
       en: "For example “kitchen”."
       uk: "Наприклад, «кухня»."
       ru: "Например, «кухня»."
-  - key: 13
+  - key: 14
     anchor: printer.url
     pending: no
     writes: no
@@ -240,7 +257,7 @@ steps:
       en: "Where the printer listens."
       uk: "Де слухає принтер."
       ru: "Где слушает принтер."
-  - key: 14
+  - key: 15
     anchor: printer.key
     pending: no
     writes: no
@@ -257,7 +274,7 @@ steps:
       en: "It stays hidden."
       uk: "Лишається прихованим."
       ru: "Остаётся скрытым."
-  - key: 15
+  - key: 16
     anchor: printer.save
     pending: no
     writes: yes
@@ -274,7 +291,7 @@ steps:
       en: "New orders print."
       uk: "Нові замовлення друкуються."
       ru: "Новые заказы печатаются."
-  - key: 16
+  - key: 17
     anchor: printer.jobs
     pending: no
     writes: no

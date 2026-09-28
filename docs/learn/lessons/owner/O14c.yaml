@@ -76,7 +76,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="posts.text"]'
-      value: "Sot: supë miso me 450 lekë."
+      value: "Today: miso soup for 450 lek."
     title:
       sq: "Teksti"
       en: "The text"
@@ -88,23 +88,6 @@ steps:
       uk: "Змінюйте як хочете."
       ru: "Меняйте как хотите."
   - key: 5
-    anchor: posts.approve
-    pending: no
-    writes: yes
-    action:
-      do: click
-      selector: '[data-tour="posts.approve"]'
-    title:
-      sq: "Mirato"
-      en: "Approve"
-      uk: "Схвалити"
-      ru: "Одобрить"
-    caption:
-      sq: "Postimi publikohet."
-      en: "The post is published."
-      uk: "Допис опубліковано."
-      ru: "Пост опубликован."
-  - key: 6
     anchor: posts.reject
     pending: no
     writes: no
@@ -121,6 +104,23 @@ steps:
       en: "The draft is dropped."
       uk: "Чернетку прибрано."
       ru: "Черновик убран."
+  - key: 6
+    anchor: posts.approve
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="posts.approve"]'
+    title:
+      sq: "Mirato"
+      en: "Approve"
+      uk: "Схвалити"
+      ru: "Одобрить"
+    caption:
+      sq: "Postimi publikohet."
+      en: "The post is published."
+      uk: "Допис опубліковано."
+      ru: "Пост опубликован."
   - key: 7
     anchor: more.tile.social
     pending: no

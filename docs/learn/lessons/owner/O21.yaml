@@ -74,7 +74,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="assistant.input"]'
-      value: "erdhi 4 kg salmon"
+      value: "4 kg of salmon came in"
     title:
       sq: "Shkruani"
       en: "Type"
@@ -126,7 +126,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="assistant.reason"]'
-      value: "Mbaroi salmoni"
+      value: "Out of salmon"
     title:
       sq: "Arsyeja"
       en: "Reason"

@@ -31,8 +31,8 @@ export const autoWrites = (role, host) => role === 'courier' && host === QA_HOST
 
 /// Each role's app: where it lives, the key its language is read from, the viewport.
 export const APPS = {
-  owner:   { path: '/admin/',   langKey: 'dw_admin_lang', ready: '#nav:not([hidden])' },
-  waiter:  { path: '/room/',    langKey: 'dw_room_lang',  ready: '[data-act="open"], .bar' },
+  owner:   { path: '/admin/',   langKey: 'dw_admin_lang', ready: '#nav:not([hidden]), [data-tour="login.go"]' },
+  waiter:  { path: '/room/',    langKey: 'dw_room_lang',  ready: '[data-act="open"], .bar, form[data-form="login"]' },
   courier: { path: '/courier/', langKey: 'dw_c_lang',     ready: 'body' },
   guest:   { path: '/',         langKey: 'dw_lang',       ready: '.card' },
 };
@@ -168,8 +168,38 @@ export const REACH = {
     taste: ['nav.menu', 'menu.category', 'menu.dish', 'dish.ingredients'],
     import: ['nav.menu', 'menu.import'],
     stock: ['nav.stock'], supply: ['nav.stock', 'stock.addSupply'], bulk: ['nav.stock', 'stock.import'],
+    // an ingredient's card, and the movement form its Delivery button opens
+    card: ['nav.stock', 'stock.supply'], move: ['nav.stock', 'stock.supply', 'card.received'],
+    'stock.received': ['nav.stock', 'stock.supply', 'card.received'], 'stock.wasted': ['nav.stock', 'stock.supply', 'card.received'],
+    'stock.stocktake': ['nav.stock', 'stock.supply', 'card.received'],
     couriers: ['nav.couriers'], kitchen: ['nav.kitchen'],
+    // the e-bills sheet is a Venue tile; the fiscal sheet opens from a row in it
+    // customers: the list is a Venue tile, a row opens the reveal sheet, its Card button the card
+    customers: ['nav.more', 'more.tile.customers'], 'customers.revealRow': ['nav.more', 'more.tile.customers', 'customers.revealLog'],
+    'customers.card': ['nav.more', 'more.tile.customers', 'customers.row'], 'customers.reveal': ['nav.more', 'more.tile.customers', 'customers.row'],
+    'customers.revealReason': ['nav.more', 'more.tile.customers', 'customers.row'],
+    ...Object.fromEntries(['note', 'allergens', 'tags', 'table', 'lang', 'birthday', 'save', 'link', 'linkPick', 'linkReason', 'unlink', 'withdraw', 'forget']
+      .map(x => ['customers.' + x, ['nav.more', 'more.tile.customers', 'customers.row', 'customers.card']])),
+    exceptions: ['nav.more', 'more.tile.exceptions'],
+    // marketing: each list is a Venue tile; the stamp card sits under the promo codes
+    promos: ['nav.more', 'more.tile.promos'], campaigns: ['nav.more', 'more.tile.campaigns'], posts: ['nav.more', 'more.tile.posts'], social: ['nav.more', 'more.tile.social'],
+    stamps: ['nav.more', 'more.tile.promos'],
+    // settings: the WhatsApp half of the bell is its sheet; Telegram is a screen one row further in
+    notify: ['nav.more', 'more.tile.notifications'],
+    ...Object.fromEntries(['telegramState', 'tgToken', 'tgChat', 'test'].map(x => ['notify.' + x, ['nav.more', 'more.tile.notifications', 'notify.telegram']])),
+    printer: ['nav.more', 'more.tile.printer'], channels: ['nav.more', 'more.tile.channels'], keys: ['nav.more', 'more.tile.apiKeys'],
+    mcp: ['nav.more', 'more.tile.mcp'], inbox: ['nav.more', 'more.tile.inbox'], dpa: ['nav.more', 'more.tile.dpa'],
+    ebills: ['nav.more', 'more.tile.ebills'], fiscal: ['nav.more', 'more.tile.ebills', 'ebills.fiscal'],
   },
+  // an open panel (earnings, history, lessons) covers the waiting screen: its back button returns there
+  courier: { 'panel.earnings': ['panel.back'], 'panel.history': ['panel.back'], 'panel.learn': ['panel.back'],
+    'panel.agent': ['panel.back'], 'shift.end': ['panel.back'], ask: ['panel.back'] },
+  // the room opens on the list of tables: a table opens its sitting, a round row its round sheet;
+  // every inner screen's Back returns to the room
+  waiter: { room: ['nav.back'], sitting: ['nav.back', 'room.table'], round: ['room.table', 'sitting.round'], guest: ['room.table', 'sitting.round'],
+    pay: ['room.table', 'sitting.round', 'round.pay'], transfer: ['room.table', 'sitting.round', 'round.transfer'],
+    move: ['room.table', 'sitting.round', 'round.moveSitting'], till: ['room.till'], floor: ['room.floor'], pass: ['room.pass'],
+    open: ['room.open'], agent: ['hud.agent'] },
   guest: { menu: ['nav.menu'], dish: ['nav.menu', 'menu.dish'], orders: ['nav.orders'], booking: ['nav.book'],
     // the basket and the checkout need a dish in the basket: one quick add (the basket lives in the page, nothing is sent)
     cart: ['nav.menu', 'menu.quickAdd', 'cart.open'], 'checkout.open': ['nav.menu', 'menu.quickAdd', 'cart.open'],

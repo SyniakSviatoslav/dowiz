@@ -57,7 +57,7 @@ test('captureHash: moves with what the English film shows and with the recorder;
   const en = structuredClone(c1); en.steps[1].caption.en = 'edited';
   assert.notEqual(captureHash(en), h);                                          // an English caption: due again
   const fake = mkdtempSync(join(tmpdir(), 'rec-'));
-  for (const f of ['capture.mjs', 'capture-lib.mjs', 'capture-venue.mjs', 'film.mjs']) writeFileSync(join(fake, f), f);
+  for (const f of ['capture.mjs', 'capture-lib.mjs', 'capture-venue.mjs', 'capture-stage.mjs', 'film.mjs']) writeFileSync(join(fake, f), f);
   const a = captureHash(c1, fake);
   writeFileSync(join(fake, 'film.mjs'), 'changed');
   assert.notEqual(captureHash(c1, fake), a);

@@ -93,7 +93,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="confirm.reason"]'
-      value: "Mbaroi peshku"
+      value: "Out of fish"
     title:
       sq: "Arsyeja"
       en: "The reason"

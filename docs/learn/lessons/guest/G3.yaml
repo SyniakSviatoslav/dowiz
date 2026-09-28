@@ -179,7 +179,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="checkout.note"]'
-      value: "Kati 2, zilja Hoxha"
+      value: "Floor 2, ring Hoxha"
     title:
       sq: "Shënim"
       en: "Note"

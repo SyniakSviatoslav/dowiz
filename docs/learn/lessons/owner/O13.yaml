@@ -91,7 +91,7 @@ steps:
     pending: no
     writes: no
     action:
-      do: wait
+      do: click
       selector: '[data-tour="customers.card"]'
     title:
       sq: "Karta"
@@ -110,7 +110,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="customers.note"]'
-      value: "Pa qepë"
+      value: "No onion"
     title:
       sq: "Shënim"
       en: "Note"
@@ -215,7 +215,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="customers.revealReason"]'
-      value: "Porosia u harrua në lokal"
+      value: "The order was left at the venue"
     title:
       sq: "Arsyeja"
       en: "The reason"

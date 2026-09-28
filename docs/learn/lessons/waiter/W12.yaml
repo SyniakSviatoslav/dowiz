@@ -25,7 +25,7 @@ steps:
     pending: no
     writes: no
     action:
-      do: wait
+      do: click
       selector: '[data-tour="hud.voice"]'
     title:
       sq: "Mikrofoni"

@@ -70,6 +70,7 @@ campaigns.template workers/api/public/admin/campaigns.js:60
 campaigns.templateLang workers/api/public/admin/campaigns.js:61
 campaigns.templateParams workers/api/public/admin/campaigns.js:62
 campaigns.text workers/api/public/admin/campaigns.js:56
+card.received workers/api/public/admin/ingredients-view.js:95
 category.name workers/api/public/admin/menu.js:254
 category.remove workers/api/public/admin/menu.js:255
 category.save workers/api/public/admin/menu.js:255
@@ -182,7 +183,6 @@ floor.seats workers/api/public/admin/floorplan.js:74
 floor.shape workers/api/public/admin/floorplan.js:75
 floor.zoneName workers/api/public/admin/floorplan.js:87
 floor.zones workers/api/public/admin/floorplan.js:85
-header.logout workers/api/public/admin/index.html:32
 header.prefs workers/api/public/admin/index.html:31
 header.state workers/api/public/admin/index.html:30
 health.backup workers/api/public/admin/more.js:533
@@ -228,8 +228,8 @@ more.tile.campaigns workers/api/public/admin/more.js:41
 more.tile.channels workers/api/public/admin/more.js:41
 more.tile.cloud workers/api/public/admin/more.js:41
 more.tile.customers workers/api/public/admin/more.js:41
-more.tile.deliveryTerms workers/api/public/admin/more.js:41
 more.tile.deliveryArea workers/api/public/admin/more.js:41
+more.tile.deliveryTerms workers/api/public/admin/more.js:41
 more.tile.dpa workers/api/public/admin/more.js:41
 more.tile.ebills workers/api/public/admin/more.js:41
 more.tile.exceptions workers/api/public/admin/more.js:41
@@ -251,11 +251,11 @@ more.tile.social workers/api/public/admin/more.js:41
 more.tile.staff workers/api/public/admin/more.js:41
 more.tile.tableQr workers/api/public/admin/more.js:41
 more.tile.venue workers/api/public/admin/more.js:41
-move.edit workers/api/public/admin/stock.js:131
-move.qty workers/api/public/admin/stock.js:128
-move.reason workers/api/public/admin/stock.js:130
-move.save workers/api/public/admin/stock.js:131
-move.wasteReason workers/api/public/admin/stock.js:129
+move.edit workers/api/public/admin/ingredients.js:110
+move.qty workers/api/public/admin/ingredients.js:98
+move.reason workers/api/public/admin/ingredients.js:108
+move.save workers/api/public/admin/ingredients.js:110
+move.wasteReason workers/api/public/admin/ingredients.js:106
 nav.couriers workers/api/public/admin/app.js:72
 nav.menu workers/api/public/admin/app.js:72
 nav.more workers/api/public/admin/app.js:72
@@ -265,6 +265,7 @@ newDish.category workers/api/public/admin/menu.js:231
 newDish.name workers/api/public/admin/menu.js:230
 newDish.price workers/api/public/admin/menu.js:232
 newDish.save workers/api/public/admin/menu.js:235
+notify.telegram workers/api/public/admin/more.js:393
 notify.telegramState workers/api/public/admin/more.js:351
 notify.test workers/api/public/admin/more.js:355
 notify.tgChat workers/api/public/admin/more.js:354
@@ -309,6 +310,7 @@ posts.row workers/api/public/admin/more.js:142
 posts.text workers/api/public/admin/more.js:151
 prefs.currency workers/api/public/admin/app.js:152
 prefs.lang workers/api/public/admin/app.js:150
+prefs.signOut workers/api/public/admin/app.js:256
 preview.open workers/api/public/admin/more.js:623
 preview.reload workers/api/public/admin/more.js:623
 printer.jobs workers/api/public/admin/printer.js:42
@@ -360,12 +362,12 @@ state.open workers/api/public/admin/app.js:129
 stock.addSupply workers/api/public/admin/stock.js:35
 stock.filter workers/api/public/admin/stock.js:38
 stock.import workers/api/public/admin/stock.js:35
-stock.received workers/api/public/admin/stock.js:127
+stock.received workers/api/public/admin/ingredients.js:97
 stock.search workers/api/public/admin/stock.js:37
 stock.sort workers/api/public/admin/stock.js:39
-stock.stocktake workers/api/public/admin/stock.js:127
+stock.stocktake workers/api/public/admin/ingredients.js:97
 stock.supply workers/api/public/admin/stock.js:70
-stock.wasted workers/api/public/admin/stock.js:127
+stock.wasted workers/api/public/admin/ingredients.js:97
 supply.category workers/api/public/admin/stock.js:93
 supply.cost workers/api/public/admin/stock.js:101
 supply.id workers/api/public/admin/stock.js:91

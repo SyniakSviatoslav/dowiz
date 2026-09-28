@@ -102,7 +102,9 @@ test('check: the one checkbox -- id, state, words, hint, anchor', () => {
   const i = one(h, 'input');
   assert.equal(i.getAttribute('type'), 'checkbox');
   assert.equal(i.hasAttribute('checked'), true);
-  assert.equal(i.dataset.tour, 'state.pause');
+  // the anchor is on the label (the switch as seen): the input is a zero-size box
+  assert.equal(one(h, 'label').dataset.tour, 'state.pause');
+  assert.equal(i.hasAttribute('data-tour'), false);
   assert.ok(one(h, 'small[data-t="pausedHint"]'));
   assert.equal(one(P.check({ id: 'x' }), 'input').hasAttribute('checked'), false);
   assert.deepEqual(injected(P.check({ id: 'x', label: XSS })), []);

@@ -25,7 +25,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="login.email"]'
-      value: "kamarier@example.com"
+      value: "waiter@example.com"
     title:
       sq: "Email-i juaj"
       en: "Your email"

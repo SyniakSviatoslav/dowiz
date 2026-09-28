@@ -59,7 +59,7 @@ steps:
     action:
       do: type
       selector: '[data-tour="ask.box"]'
-      value: "Sa dorëzime bëra sot?"
+      value: "How many deliveries did I do today?"
     title:
       sq: "Pyetni"
       en: "Ask"
@@ -105,6 +105,23 @@ steps:
       uk: "Готівка на руках, а також за сьогодні, 7 і 30 днів: доставки, зібрана готівка, чайові. Готівка — закладу, чайові — ваші."
       ru: "Наличные на руках, а также за сегодня, 7 и 30 дней: доставки, собранные наличные, чаевые. Наличные — заведению, чаевые — ваши."
   - key: 6
+    anchor: panel.back
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="panel.back"]'
+    title:
+      sq: "Mbrapa"
+      en: "Back"
+      uk: "Назад"
+      ru: "Назад"
+    caption:
+      sq: "Kthehuni te ekrani i pritjes: historia, mësimet dhe mbyllja e turnit janë aty."
+      en: "Back to the waiting screen: the history, the lessons and the end of the shift are there."
+      uk: "Назад до екрана очікування: там історія, уроки й завершення зміни."
+      ru: "Назад к экрану ожидания: там история, уроки и завершение смены."
+  - key: 7
     anchor: panel.history
     pending: no
     writes: no
@@ -121,7 +138,7 @@ steps:
       en: "Finished deliveries, with the street, the time and the amount."
       uk: "Завершені доставки з вулицею, часом і сумою."
       ru: "Завершённые доставки с улицей, временем и суммой."
-  - key: 7
+  - key: 8
     anchor: panel.learn
     pending: no
     writes: no
@@ -138,7 +155,7 @@ steps:
       en: "All the lessons are here, each with its video. They open only while you stand still."
       uk: "Усі уроки тут, до кожного — відео. Вони відкриваються, лише коли ви стоїте."
       ru: "Все уроки здесь, к каждому — видео. Они открываются, только когда вы стоите."
-  - key: 8
+  - key: 9
     anchor: shift.end
     pending: no
     writes: yes

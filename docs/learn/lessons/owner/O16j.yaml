@@ -125,7 +125,7 @@ steps:
     pending: no
     writes: no
     action:
-      do: click
+      do: wait
       selector: '[data-tour="mcp.clients"]'
     title:
       sq: "Klienti"

@@ -172,7 +172,11 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
    "90% of the travel" test passed on the first pointermove: any touch with a
    pixel of jitter delivered the order, with no confirm. The knob now has a
    width, so there is a distance to cover. ── */
-.slide{position:relative;width:100%;overflow:hidden;border-radius:var(--radius-full);
+/* CLIP, NOT HIDDEN (2026-09-28, lane W-LESSON): the sheet is a 48dvh scroll container laid out as a
+   grid, and a grid item that is itself a scroll container (overflow:hidden) may shrink to ZERO
+   height -- measured 358x0 on a 390x844 phone with a cash run (address note, phone, Refused), so
+   the Delivered slide was not on screen at all. `clip` clips the same but keeps the content height. */
+.slide{position:relative;width:100%;overflow:hidden;overflow:clip;border-radius:var(--radius-full);
        background:color-mix(in oklch,var(--brand-text) 7%,var(--brand-surface));border:0}
 .slide-fill{position:absolute;inset:0 auto 0 0;width:0;pointer-events:none;
             background:color-mix(in srgb,var(--color-success) 22%,transparent)}

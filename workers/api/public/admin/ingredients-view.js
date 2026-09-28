@@ -94,7 +94,7 @@ export function cardMarkup(sup, { money, t, when, warnDays }){
     <div class="stats strip"><div class="stat"><b>${sup.onHand ?? 0}</b><small data-t="inv_onHand"></small></div><div class="stat"><b>${sup.reserved ?? 0}</b><small data-t="reserved"></small></div>
       <div class="stat"><b>${sup.available ?? 0}</b><small data-t="inv_available"></small></div><div class="stat money"><b>${price.perBasis != null ? money(price.perBasis) : '-'}</b><small>${esc(t(price.from === 'wac' ? 'inv_avgPrice' : 'inv_listPrice'))}${esc(per)}</small></div></div>
     <div class="btn-row">${ACTIONS
-      .map(([a, ic, word]) => btn({ icon: ic, key: word, data: { cact: a } })).join('')}</div>
+      .map(([a, ic, word]) => btn({ icon: ic, key: word, data: { cact: a }, tour: 'card.' + a })).join('')}</div>
     <p class="eyebrow mt-3" data-t="inv_losses"></p>
     <p class="mono">${esc(t('inv_gross'))} ${w.gross ?? '-'} g → ${esc(t('inv_net'))} ${w.net ?? '-'} g → ${esc(t('inv_out'))} ${w.out ?? '-'} g · ${esc(t('inv_loss'))} ${C.pct(C.lossPm(w))}</p>
     <p class="hint">${esc(t('inv_stage_clean'))}: ${C.pct(w.cleanPm)} ${adopt('clean', sup.measuredCleanPm)}</p>

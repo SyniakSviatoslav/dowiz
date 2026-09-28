@@ -390,7 +390,7 @@ async function openNotifications(){
   const waOn = waSet && !!(v['notify.whatsapp.phone_id'] || '').trim();
   sheet(`${head('settings', 'notifications', 'ap_h_notifications')}
     <div class="rows">
-      ${rowBtn({ leading: icon('brand-telegram'), title: k('telegram'), sub: `<span data-t="${tokenSet ? 'tgHow' : 'tgNotSet'}"></span>`, trailing: icon('chevron-right', 'chev'), data: { go: 'telegram' } })}
+      ${rowBtn({ leading: icon('brand-telegram'), title: k('telegram'), sub: `<span data-t="${tokenSet ? 'tgHow' : 'tgNotSet'}"></span>`, trailing: icon('chevron-right', 'chev'), data: { go: 'telegram' }, tour: 'notify.telegram' })}
     </div>
     <p class="eyebrow mt-3" data-t="whatsapp"></p>
     <div class="rows">${info('phone', { cls: waOn ? '' : 'off', title: k('whatsapp'), sub: `<span data-t="${waOn ? 'whatsappOn' : 'waNotYet'}"></span>`, trailing: onOff(waOn), tour: 'notify.whatsappState' })}</div>

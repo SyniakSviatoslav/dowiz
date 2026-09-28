@@ -173,6 +173,23 @@ steps:
       uk: "Скажіть, що шукаєте, замість того щоб писати."
       ru: "Скажите, что ищете, вместо того чтобы писать."
   - key: 10
+    anchor: voice.again
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="voice.again"]'
+    title:
+      sq: "Jo ky"
+      en: "Not this"
+      uk: "Не це"
+      ru: "Не то"
+    caption:
+      sq: "Dëgjoi pjatën e gabuar? Thojeni sërish."
+      en: "Heard the wrong dish? Say it again."
+      uk: "Почуло не ту страву? Скажіть ще раз."
+      ru: "Услышало не то блюдо? Скажите ещё раз."
+  - key: 11
     anchor: voice.add
     pending: no
     writes: no
@@ -189,23 +206,6 @@ steps:
       en: "If it heard right, add it to the basket."
       uk: "Якщо почуто правильно, додайте в кошик."
       ru: "Если услышано правильно, добавьте в корзину."
-  - key: 11
-    anchor: voice.again
-    pending: no
-    writes: no
-    action:
-      do: click
-      selector: '[data-tour="voice.again"]'
-    title:
-      sq: "Jo ky"
-      en: "Not this"
-      uk: "Не це"
-      ru: "Не то"
-    caption:
-      sq: "Provoni sërish me zë."
-      en: "Try again by voice."
-      uk: "Спробуйте ще раз голосом."
-      ru: "Попробуйте ещё раз голосом."
   - key: 12
     anchor: menu.category
     pending: no

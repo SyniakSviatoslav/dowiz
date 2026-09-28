@@ -53,23 +53,6 @@ steps:
       uk: "Оберіть день."
       ru: "Выберите день."
   - key: 3
-    anchor: booking.zone
-    pending: no
-    writes: no
-    action:
-      do: click
-      selector: '[data-tour="booking.zone"]'
-    title:
-      sq: "Zona"
-      en: "The area"
-      uk: "Зона"
-      ru: "Зона"
-    caption:
-      sq: "Brenda, tarracë ose bar — nëse lokali i ka."
-      en: "Inside, terrace or bar — if the venue has them."
-      uk: "Усередині, тераса чи бар — якщо вони є в закладі."
-      ru: "Внутри, терраса или бар — если они есть в заведении."
-  - key: 4
     anchor: booking.time
     pending: no
     writes: no
@@ -86,6 +69,23 @@ steps:
       en: "Only the times with room."
       uk: "Лише час, коли є місця."
       ru: "Только время, когда есть места."
+  - key: 4
+    anchor: booking.zone
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="booking.zone"]'
+    title:
+      sq: "Zona"
+      en: "The area"
+      uk: "Зона"
+      ru: "Зона"
+    caption:
+      sq: "Brenda, tarracë ose bar — nëse lokali i ka."
+      en: "Inside, terrace or bar — if the venue has them."
+      uk: "Усередині, тераса чи бар — якщо вони є в закладі."
+      ru: "Внутри, терраса или бар — если они есть в заведении."
   - key: 5
     anchor: booking.table
     pending: no

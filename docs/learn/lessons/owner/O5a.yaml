@@ -100,16 +100,33 @@ steps:
       uk: "Запас"
       ru: "Запас"
     caption:
-      sq: "Prekeni për të regjistruar një lëvizje."
-      en: "Tap it to book a movement."
-      uk: "Торкніться, щоб записати рух."
-      ru: "Коснитесь, чтобы записать движение."
+      sq: "Prekeni: hapet karta e tij, me sasitë, humbjet dhe partitë."
+      en: "Tap it: its card opens, with the levels, losses and lots."
+      uk: "Торкніться: відкриється його картка із залишками, втратами й партіями."
+      ru: "Коснитесь: откроется его карточка с остатками, потерями и партиями."
   - key: 6
-    anchor: stock.received
+    anchor: card.received
     pending: no
     writes: no
     action:
       do: click
+      selector: '[data-tour="card.received"]'
+    title:
+      sq: "Furnizim"
+      en: "Delivery"
+      uk: "Прихід"
+      ru: "Приход"
+    caption:
+      sq: "Një dërgesë nga furnitori: prekeni në kartë dhe hapet formulari."
+      en: "A delivery from the supplier: tap it on the card and the form opens."
+      uk: "Поставка від постачальника: торкніться на картці, і відкриється форма."
+      ru: "Поставка от поставщика: коснитесь на карточке, и откроется форма."
+  - key: 7
+    anchor: stock.received
+    pending: no
+    writes: no
+    action:
+      do: wait
       selector: '[data-tour="stock.received"]'
     title:
       sq: "Erdhi"
@@ -117,45 +134,11 @@ steps:
       uk: "Надійшло"
       ru: "Поступило"
     caption:
-      sq: "Një dërgesë nga furnitori."
-      en: "A delivery from the supplier."
-      uk: "Поставка від постачальника."
-      ru: "Поставка от поставщика."
-  - key: 7
-    anchor: stock.wasted
-    pending: no
-    writes: no
-    action:
-      do: click
-      selector: '[data-tour="stock.wasted"]'
-    title:
-      sq: "U hodh"
-      en: "Thrown away"
-      uk: "Списано"
-      ru: "Списано"
-    caption:
-      sq: "Ajo që u prish ose ra."
-      en: "What spoiled or was dropped."
-      uk: "Те, що зіпсувалося чи впало."
-      ru: "То, что испортилось или упало."
+      sq: "Formulari hapet te një dërgesë: zgjedhja është bërë tashmë."
+      en: "The form opens on a delivery: that choice is already made."
+      uk: "Форма відкривається на надходженні: цей вибір уже зроблено."
+      ru: "Форма открывается на поступлении: этот выбор уже сделан."
   - key: 8
-    anchor: stock.stocktake
-    pending: no
-    writes: no
-    action:
-      do: click
-      selector: '[data-tour="stock.stocktake"]'
-    title:
-      sq: "U numërua"
-      en: "Counted"
-      uk: "Пораховано"
-      ru: "Посчитано"
-    caption:
-      sq: "Numërimi i vërtetë zëvendëson shifrën e llogaritur."
-      en: "A real count replaces the worked-out figure."
-      uk: "Реальний перерахунок замінює розрахункову цифру."
-      ru: "Реальный пересчёт заменяет расчётную цифру."
-  - key: 9
     anchor: move.qty
     pending: no
     writes: no
@@ -173,6 +156,23 @@ steps:
       en: "How much, in the supply’s unit."
       uk: "Скільки, в одиницях запасу."
       ru: "Сколько, в единицах запаса."
+  - key: 9
+    anchor: stock.wasted
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.wasted"]'
+    title:
+      sq: "U hodh"
+      en: "Thrown away"
+      uk: "Списано"
+      ru: "Списано"
+    caption:
+      sq: "Ajo që u prish ose ra."
+      en: "What spoiled or was dropped."
+      uk: "Те, що зіпсувалося чи впало."
+      ru: "То, что испортилось или упало."
   - key: 10
     anchor: move.wasteReason
     pending: no
@@ -195,20 +195,36 @@ steps:
     pending: no
     writes: no
     action:
-      do: type
+      do: wait
       selector: '[data-tour="move.reason"]'
-      value: "Furnitori Hoxha"
     title:
-      sq: "Shënim"
-      en: "A note"
-      uk: "Примітка"
-      ru: "Примечание"
+      sq: "Arsyeja"
+      en: "The reason"
+      uk: "Причина"
+      ru: "Причина"
     caption:
-      sq: "Disa fjalë, nëse duhen."
-      en: "A few words, if needed."
-      uk: "Кілька слів, якщо треба."
-      ru: "Несколько слов, если нужно."
+      sq: "Arsyeja që zgjodhët shkruhet këtu, për regjistrin."
+      en: "The reason you chose is written here, for the record."
+      uk: "Обрана причина записується тут, для обліку."
+      ru: "Выбранная причина записывается здесь, для учёта."
   - key: 12
+    anchor: stock.stocktake
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.stocktake"]'
+    title:
+      sq: "U numërua"
+      en: "Counted"
+      uk: "Пораховано"
+      ru: "Посчитано"
+    caption:
+      sq: "Numërimi i vërtetë zëvendëson shifrën e llogaritur."
+      en: "A real count replaces the worked-out figure."
+      uk: "Реальний перерахунок замінює розрахункову цифру."
+      ru: "Реальный пересчёт заменяет расчётную цифру."
+  - key: 13
     anchor: move.edit
     pending: no
     writes: no
@@ -225,7 +241,7 @@ steps:
       en: "From here, open the supply’s card."
       uk: "Звідси відкривається картка запасу."
       ru: "Отсюда открывается карточка запаса."
-  - key: 13
+  - key: 14
     anchor: move.save
     pending: no
     writes: yes
