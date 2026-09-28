@@ -219,7 +219,7 @@ level above this file): `docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md` (RT),
 Row ids are `DG*` because `G1-G10` are the store's GATE ids. Wave 1 (DG4-DG6) is the one-jump commit; Waves 0/2/3 are
 independent lanes that add no second runtime. A10 is RE-OPENED as DG4 (its row above carries the marker). Every row is DONE only
 when its gate number is quoted from a real run through `tools/slot.sh` and the battery is green (execution-order rule above).
-Max 3 lanes per wave (box cap). Two rows need an OPERATOR DECISION before they start (DG25, and DG26 which follows it).
+Max 3 lanes per wave (box cap). Operator decisions 2026-09-28: C-1 NO tensors -- DG20, DG25, DG26 withdrawn; prices/stock stay sparse CSR + scalar (the measured winner). C-7 MANY COMMITS allowed -- Wave 1 (DG4-DG6) may land as several commits, each leaving exactly ONE runtime (no parallel copy) and passing the switch checks.
 
 | # | task | blueprint | gate (the number) | depends on |
 |---|---|---|---|---|
@@ -235,13 +235,13 @@ Max 3 lanes per wave (box cap). Two rows need an OPERATOR DECISION before they s
 | DG10 | crypto-shredding for NEW logs (per-person key table, forget = drop key + `Forgotten`), REUSING `crates/dowiz-core/src/pq/aes_gcm.rs` (KAT-gated; corrects R §14 "no AEAD"); history keeps in-place declared redaction (dowiz row DW8) | BP §4 DG10 | after `forget`: 0 hits for the phone's three spellings in every image and archived block AND every block `K256` unchanged; KAT byte-exact; `personal-data` 0; default `cargo tree` has 0 `aes` | the switch; Wave P P2/P3 |
 | DG17 | MEASUREMENT: the per-fn memo's real gain on `bebop.bp` (R §14 row 1) | BP §6 | `selfcompile_edit_wall` recorded in `docs/PERF.md`, both outputs' md5 equal | DG4 |
 | DG18 | MEASUREMENT: the cause of the superlinear compile -- `clock_ms()` per fn in a scratch `compile_fn_at`, ms vs fn index and call count | BP §6 | a fitted exponent per phase, quoted; confirms or refutes the `fntab[5600]` scan hypothesis (R §2.2) | -- |
-| DG20 | MEASUREMENT: wasm SIMD inside a real Worker -- the R §12.3 probe crate as an owner-gated `/fold/probe-simd` route on the QA hub, `performance.now()`, removed after (dowiz row DW9) | BP §6 | ns per kernel in the Worker vs node 22; feeds DG25 | QA hub (Wave F F7) |
+| DG20 | **WITHDRAWN 2026-09-28 (operator: "не треба тензорів", C-1)** -- MEASUREMENT: wasm SIMD inside a real Worker -- the R §12.3 probe crate as an owner-gated `/fold/probe-simd` route on the QA hub, `performance.now()`, removed after (dowiz row DW9) | BP §6 | ns per kernel in the Worker vs node 22; feeds DG25 | QA hub (Wave F F7) |
 | DG21 | MEASUREMENT: AEAD KAT for shredding -- `cd crates/dowiz-core && cargo test --features pq aes_gcm` | BP §6 | KAT byte-exact; corrects R §14 | -- |
 | DG22 | MEASUREMENT: the Lean confluence theorem built -- `lake build` through the slot, `grep -c sorryAx` | BP §6 | rc 0, count 0 | DG6 |
 | DG23 | MEASUREMENT: B6's 1.00x scan, untouched by the DAG probe (compute-bound only) | B6 step 3 (a) as written | the number, whatever it is | -- |
 | DG24 | MEASUREMENT: any number on the Box (Raspberry Pi class), `-C target-cpu=cortex-a76` | BP §6 | none until a board exists; recorded so it is not forgotten | a board |
-| DG25 | **OPERATOR DECISION NEEDED** -- dense integer tensors + wasm SIMD for prices/stock (operator D-4) as a measurement row behind feature `dense-simd` | BP §7 DG25, DC §B.8 | lands ONLY if dense simd128 mask <= 1,089 ns at 1x AND <= 137,533 ns at 100x in the Worker, byte-identical to the scalar oracle (MEASURED today: 9,749 ns vs 1,089 ns = 8x SLOWER at 1x, 580x at 100x; price/portions 0 % from SIMD, R §12.3); else closes REFUTED with the numbers | DG20 |
-| DG26 | a bebop v128 emitter (T64/T94-class) -- **NOT in the jump**; re-entry = DG25 green AND a Box where bebop must run it | BP §7 DG26 | none until re-entry (no gain to collect: R §12.2, §12.3) | DG25 |
+| DG25 | **WITHDRAWN 2026-09-28 (operator: "не треба тензорів", C-1)** -- dense integer tensors + wasm SIMD for prices/stock (operator D-4) as a measurement row behind feature `dense-simd` | BP §7 DG25, DC §B.8 | lands ONLY if dense simd128 mask <= 1,089 ns at 1x AND <= 137,533 ns at 100x in the Worker, byte-identical to the scalar oracle (MEASURED today: 9,749 ns vs 1,089 ns = 8x SLOWER at 1x, 580x at 100x; price/portions 0 % from SIMD, R §12.3); else closes REFUTED with the numbers | DG20 |
+| DG26 | **WITHDRAWN 2026-09-28 (operator: "не треба тензорів", C-1)** -- a bebop v128 emitter (T64/T94-class) -- **NOT in the jump**; re-entry = DG25 green AND a Box where bebop must run it | BP §7 DG26 | none until re-entry (no gain to collect: R §12.2, §12.3) | DG25 |
 
 Dowiz-side rows of the same programme (browser replica as subscriber, personal labels as the rule, gates as graph queries,
 per-edge invariants, provenance, per-node accounting, the block and shredding halves, QA-hub measurements) are `DW1-DW9` in

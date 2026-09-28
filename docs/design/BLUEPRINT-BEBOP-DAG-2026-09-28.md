@@ -381,7 +381,7 @@ the verdict — R §8.3's "360" is re-derived, not copied (RT §12 C-5).
 
 ## 7. Gated and refused rows
 
-### DG25 — dense integer tensors + wasm SIMD for prices/stock (operator D-4; **OPERATOR DECISION NEEDED**)
+### DG25 — WITHDRAWN 2026-09-28 (operator C-1: no tensors) — dense integer tensors + wasm SIMD for prices/stock (operator D-4; **OPERATOR DECISION NEEDED**)
 
 - **What the operator decided:** dense/columnar integer tensors recomputed via v128 in the Worker and the hub
   object, the same kernels natively on the Box, a scalar oracle, byte-identical results.
@@ -396,7 +396,7 @@ the verdict — R §8.3's "360" is re-derived, not copied (RT §12 C-5).
 - **Decision the operator owns:** run DG25 as this measurement row, or withdraw the dense form and keep the
   Arrow-sense tensors (DC Part B) as the whole of D-4.
 
-### DG26 — a bebop v128 emitter (R §8.5, §12.2) — NOT in the jump
+### DG26 — WITHDRAWN 2026-09-28 (operator C-1) — a bebop v128 emitter (R §8.5, §12.2) — NOT in the jump
 
 No v128 emitter exists (`bebop.bp` has NEON only inside `hvham`/`hvham2`, `:1521-1600`); a vector register
 tier is T64/T94-class work with its own register model and its own construct set; R §12.3 found no gain to
@@ -415,6 +415,8 @@ AND a Box exists where bebop, not Rust, must run it. Until then: refused, with t
 ---
 
 ## 8. Conflicts needing an operator decision (numbered; both numbers)
+
+**Operator decisions, 2026-09-28:** C-1 — **no tensors** ("не треба тензорів"): DG25 and DG26 are withdrawn, DG20 (wasm SIMD probe in a Worker) is withdrawn with them; prices, stock and recipes stay sparse CSR with scalar kernels. The columnar block (DG7, DG9) stays: it replaces JSON parsing (2,600x, R §13.2), not arithmetic. C-7 — **many commits allowed** ("можна багато комітів"): Wave 1 (DG4-DG6) may land as several commits; each must leave exactly ONE runtime in the tree (no parallel copy, no feature-flagged second path) and pass the §5 switch checks for what it replaces.
 
 | # | Operator | Research / tree | What this blueprint does meanwhile |
 |---|---|---|---|
