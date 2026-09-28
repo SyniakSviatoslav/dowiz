@@ -102,6 +102,28 @@ Fixed box-wide in `~/.cargo/config.toml` (outside every repo, so it covers all o
 (same peak 21). Anything that raises cargo parallelism on this box (`-j`, `CARGO_BUILD_JOBS`,
 `--test-threads`) re-opens the gap.
 
+## Gap found 2026-09-28: waiters, not builds (death #11)
+
+Session bd401157 died at 15:32:30Z with three lanes and the main session all getting exit 137 in the
+same second. `slot.sh --status` had printed **`procs 34/26`** at 15:30:41 -- two minutes earlier. Only
+one heavy job was running (a single-process Chromium probe holding the slot: measured +2 procs,
+~360 MB). The other ~20 were *waiters*: `until grep ...; do sleep 5; done` loops, Monitor watchers
+(`tail -f | grep`, 3 procs each for up to 30 min), a 40-try chain retry loop and several jobs queued
+behind the slot. The lane rules already forbade all of these in words; Opus lanes wrote them anyway,
+and so did one card. The four deaths before it (c6ad1cf3, c14b7273, 1b0cc400) had the same shape.
+
+Enforcement, not rules:
+- `~/.claude/hooks/no-poll.sh` (PreToolUse on Bash|Monitor, builtins only) refuses
+  `until|while|for ... sleep`, `tail -f/-F/--follow`, `watch -n`, and the Monitor tool.
+- `tools/procguard.sh` -- one process, no forks in steady state. At >= 30 procs it SIGKILLs the
+  newest polling waiters; at >= 31 with none left, the slot holder's job tree (one build fails, the
+  box lives). Every 30 s it logs procs/MemAvailable/SwapFree to `/root/.cache/bebop/procguard.log`,
+  with a full process list on crossing 27 -- the flight recorder that outlives the death.
+  `tools/procguard.sh --status` shows it.
+- Both are installed by the operator: `bash tools/install-boxguard.sh` (auto-mode refuses Claude
+  editing its own settings or starting a persistent daemon).
+- Baseline is 13 procs, 5 of them Termux's runit ssh services (runsvdir, 2x runsv, 2x svlogd).
+
 ## Escape hatches
 
 `SERIAL=0` (parallel battery), `SLOTS=3` (the old three lanes) and `PHANTOM_CAP=<n>` all still

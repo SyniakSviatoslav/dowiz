@@ -73,12 +73,13 @@ hits() {
   for f in $(find workers/api/src -name '*.rs' | sort); do
     sed 's,//.*,,' "$f" | grep -nE 'Date::now\(\)|now_ms\(\)' | sed "s|^|$f:|"
   done \
-    | grep -v '^workers/api/src/otel\.rs:' \
-    | grep -v '^workers/api/src/hubdo\.rs:' \
-    | grep -v 'Router::with_data(Req { now_ms:' \
-    | grep -v '^workers/api/src/lib\.rs:[0-9]*: *let now_ms = Date::now()\.as_millis() as i64;$' \
-    | grep -v '^workers/api/src/errlog\.rs:[0-9]*: *"atMs": Date::now()\.as_millis() as i64,$' \
-    | grep -v '^workers/api/src/errlog\.rs:[0-9]*: *"atMs": Date::now()\.as_millis() as i64,$'
+    | grep -v -e '^workers/api/src/otel\.rs:' \
+        -e '^workers/api/src/hubdo\.rs:' \
+        -e 'Router::with_data(Req { now_ms:' \
+        -e '^workers/api/src/lib\.rs:[0-9]*: *let now_ms = Date::now()\.as_millis() as i64;$' \
+        -e '^workers/api/src/errlog\.rs:[0-9]*: *"atMs": Date::now()\.as_millis() as i64,$'
+  # ONE grep, not a chain of six (2026-09-28): the chain was 13 live processes at once, and
+  # with three lanes working it took the box to 35 of Android's 32 -- procguard killed the run.
 }
 n=$(hits | wc -l | tr -d ' ')
 echo "clock: $n site(s) decide the time for themselves, outside the four allowed places"
