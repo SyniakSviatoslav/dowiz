@@ -8,15 +8,23 @@ use "selfhost/prelude/store.bp"
 // side never has to reimplement sha256 to write data. Rust (crates/bebop-store) reads and
 // writes the same file through the documented pointer-free format.
 //
-// Layout. Root KV{n, ref KIDX, ref KBLOB, ref VIDX, ref VBLOB}:
+// Layout, TWO VERSIONS, and the root says which (DG3 2026-09-28, evlog v2's rule):
+// v1 root, 5 cells KV{n, ref KIDX, ref KBLOB, ref VIDX, ref VBLOB}:
 //   KIDX  2n cells, (offset, len) per key into KBLOB, keys in SORTED order
-//   KBLOB key bytes, ONE BYTE PER CELL (bebop's str convention)
+//   KBLOB key bytes, ONE BYTE PER CELL (bebop's str convention) -- 8x the content
 //   VIDX  2n cells, (offset, len) per value into VBLOB
 //   VBLOB value bytes, one per cell
+// v2 root, 6 cells {n, KIDX, KBLOB, VIDX, VBLOB, VERSION=2}, the SAME digest:
+//   offsets and lengths are in BYTES; KBLOB/VBLOB hold the bytes PACKED EIGHT TO A
+//   CELL, little-endian, ceil(bytes/8) cells, last cell zero-filled.
+// A root shorter than 6 cells, or with 0 in cell 5, is v1 -- every image before DG3.
+// `i` creates a v2 store; the Rust writer (crates/bebop-store/src/kv.rs) keeps whatever
+// version the root already has. The snapshot folds BYTES, so v1 and v2 of the same
+// entries give the same root.
 // Sorted keys are what make `keys()` deterministic and the snapshot root order-independent,
 // which is the property dowiz's InMemoryStore relies on.
 //
-// argv[2] phase: i init an empty store | n count | h snapshot_root | d dump lengths
+// argv[2] phase: i init an empty (v2) store | n count | h snapshot_root | d dump lengths | v version
 //
 // snapshot_root is FNV-1a 64 over frame-delimited (key, value) pairs -- len||bytes for each --
 // byte-for-byte the fold dowiz-core computes in InMemoryStore::snapshot_root. The offset basis
@@ -27,8 +35,20 @@ fn fnv_prime() -> i64 { 1099511628211 }
 
 fn fnv_byte(h: i64, b: i64) -> i64 { (h ^ b) * fnv_prime() }
 
+// byte b of a blob: one per cell in v1, eight to a cell (little-endian) in v2
+fn kv_byte(base: [i64], blob: i64, b: i64, ver: i64) -> i64 {
+  if ver == 2 then (st_get(base, blob, b >> 3) >> (8 * (b & 7))) & 255
+  else st_get(base, blob, b) & 255
+}
+
+// the version the root says: cell 5 of a root of 6+ cells, else 1
+fn kv_version(base: [i64], g: i64) -> i64 {
+  if st_len(base, g) < 6 then 1
+  else (if st_get(base, g, 5) > 0 then st_get(base, g, 5) else 1)
+}
+
 // fold len||bytes of a blob slice
-fn fnv_frame(h0: [i64], blob: i64, base: [i64], off: i64, len: i64) -> i64 {
+fn fnv_frame(h0: [i64], blob: i64, base: [i64], off: i64, len: i64, ver: i64) -> i64 {
   let h = h0[0];
   let k = 0;
   while k < 8 {
@@ -40,7 +60,7 @@ fn fnv_frame(h0: [i64], blob: i64, base: [i64], off: i64, len: i64) -> i64 {
   };
   let j = 0;
   while j < len {
-    let _ = h0[0] = fnv_byte(h0[0], st_get(base, blob, off + j) & 255);
+    let _ = h0[0] = fnv_byte(h0[0], kv_byte(base, blob, off + j, ver));
     let j = j + 1;
     0
   };
@@ -56,6 +76,7 @@ fn kv_snapshot(base: [i64], tmp: [i64]) -> i64 {
   let kblob = st_ref(base, g, 2);
   let vidx = st_ref(base, g, 3);
   let vblob = st_ref(base, g, 4);
+  let ver = kv_version(base, g);
   let h0 = zeros(1);
   let _ = h0[0] = fnv_offset();
   let i = 0;
@@ -64,8 +85,8 @@ fn kv_snapshot(base: [i64], tmp: [i64]) -> i64 {
     let kl = st_get(base, kidx, 2 * i + 1);
     let vo = st_get(base, vidx, 2 * i);
     let vl = st_get(base, vidx, 2 * i + 1);
-    let _ = fnv_frame(h0, kblob, base, ko, kl);
-    let _ = fnv_frame(h0, vblob, base, vo, vl);
+    let _ = fnv_frame(h0, kblob, base, ko, kl, ver);
+    let _ = fnv_frame(h0, vblob, base, vo, vl, ver);
     let i = i + 1;
     0
   };
@@ -86,7 +107,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let base = st_open(path, pl, size, tmp);
 
   let r = if ph == 105 then (
-    // init: an empty KV -- four zero-length arrays and a root naming them
+    // init: an empty v2 KV -- four zero-length arrays and a 6-cell root naming them
     let tx = zeros(6) in
     let _ = st_begin(base, tx, tmp) in
     let kidx = st_alloc(base, tx, 1, d[1]) in
@@ -97,12 +118,13 @@ fn main(argc: i64, argv: [str]) -> i64 {
     let _ = st_seal(base, kblob, tmp) in
     let _ = st_seal(base, vidx, tmp) in
     let _ = st_seal(base, vblob, tmp) in
-    let root = st_alloc(base, tx, 5, d[0]) in
+    let root = st_alloc(base, tx, 6, d[0]) in
     let _ = st_put(base, root, 0, 0) in
     let _ = st_link(base, root, 1, kidx) in
     let _ = st_link(base, root, 2, kblob) in
     let _ = st_link(base, root, 3, vidx) in
     let _ = st_link(base, root, 4, vblob) in
+    let _ = st_put(base, root, 5, 2) in
     let _ = st_seal(base, root, tmp) in
     let _ = st_commit(base, tx, root, tmp) in
     0
@@ -110,7 +132,8 @@ fn main(argc: i64, argv: [str]) -> i64 {
   else (if ph == 104 then kv_snapshot(base, tmp)
   else (if ph == 103 then st_gen(base, tmp)
   else (if ph == 100 then st_get(base, st_ref(base, kv_root(base, tmp), 1), 0)
-  else 0))));
+  else (if ph == 118 then kv_version(base, kv_root(base, tmp))
+  else 0)))));
 
   let _ = sys_munmap(st_addr(base), size);
   r

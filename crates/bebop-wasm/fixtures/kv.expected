@@ -3,5 +3,7 @@
 #   Rust native: crates/bebop-store `kvdemo` snapshot_root_i64 -> -211109995167561145
 # The image: kv.bp `i` (bebop created the schema, 64 MiB), kvdemo wrote five entries
 # (generation 2), trimmed at arena_used (cell 4 of the live superblock) = 1170 cells = 9360 bytes.
+# FROZEN AS v1 (DG3 2026-09-28): kv.bp `i` now creates a v2 store, so this image can no longer be
+# re-made by that recipe -- it is the stand-in for every image written before DG3. See kv2.expected.
 n=5
 root=-211109995167561145

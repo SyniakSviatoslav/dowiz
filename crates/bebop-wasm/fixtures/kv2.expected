@@ -1,0 +1,11 @@
+# What every reader of fixtures/kv2.store must answer. RE-DERIVED, not copied (DG3 2026-09-28):
+#   bebop.bin  : selfhost/std/kv.bp compiled by bebop.bin, `kv.bin n` -> 5, `kv.bin h` -> -211109995167561145,
+#                `kv.bin v` -> 2
+#   Rust native: crates/bebop-store `kvdemo` snapshot_root_i64 -> -211109995167561145
+#   oracle.py  : kv status=0 n=5 root=-211109995167561145
+# The image: kv.bp `i` (a v2 store: 6-cell root, cell 5 = 2), kvdemo wrote the SAME five entries as
+# kv.store (commit_into keeps the root's version, generation 2), trimmed at arena_used = 1092 cells
+# = 8736 bytes. v2 packs key/value bytes eight to a cell; the fold is over bytes, so the root is
+# kv.store's root exactly -- that equality is the point of this fixture.
+n=5
+root=-211109995167561145

@@ -12,17 +12,25 @@ use bebop_store::Store;
 use bebop_wasm::{abi, kv_view, log_view, Refusal};
 
 fn fixture() -> Vec<u8> {
-    std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/kv.store")).expect("fixture")
+    fixture_named("kv")
 }
 
-/// `n=` and `root=` from `fixtures/kv.expected`, parsed rather than copied.
+fn fixture_named(name: &str) -> Vec<u8> {
+    std::fs::read(format!("{}/fixtures/{name}.store", env!("CARGO_MANIFEST_DIR"))).expect("fixture")
+}
+
 fn expected() -> (i64, i64) {
-    let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/kv.expected"))
+    expected_named("kv")
+}
+
+/// `n=` and `root=` from `fixtures/<name>.expected`, parsed rather than copied.
+fn expected_named(name: &str) -> (i64, i64) {
+    let text = std::fs::read_to_string(format!("{}/fixtures/{name}.expected", env!("CARGO_MANIFEST_DIR")))
         .expect("expected");
     let field = |k: &str| -> i64 {
         text.lines()
             .find_map(|l| l.strip_prefix(k))
-            .unwrap_or_else(|| panic!("{k} missing from kv.expected"))
+            .unwrap_or_else(|| panic!("{k} missing from {name}.expected"))
             .trim()
             .parse()
             .expect("an integer")
@@ -30,12 +38,30 @@ fn expected() -> (i64, i64) {
     (field("n="), field("root="))
 }
 
+/// The v1 image (one byte per cell) -- frozen: every image before DG3 is this.
+/// `gate.sh` greps these two test names to say which image the native reader
+/// agreed on.
 #[test]
-fn the_fixture_reads_to_what_bebop_bin_printed() {
+fn kv_fixture_reads_to_what_bebop_bin_printed() {
     let (n, root) = expected();
     let v = kv_view(&fixture()).expect("a KV image bebop.bin reads must read here");
     assert_eq!(v.n, n, "entry count");
     assert_eq!(v.root, root, "kv.bin h");
+}
+
+/// The v2 image (eight bytes to a cell, DG3): the same five entries as `kv.store`,
+/// so the SAME root -- the fold is over bytes, not cells.
+#[test]
+fn kv2_fixture_reads_to_what_bebop_bin_printed() {
+    let (n, root) = expected_named("kv2");
+    let v = kv_view(&fixture_named("kv2")).expect("a v2 KV image must read here");
+    assert_eq!(v.n, n, "entry count");
+    assert_eq!(v.root, root, "kv.bin h");
+    assert_eq!((n, root), expected(), "v2 and v1 of the same entries fold to one root");
+    let img = fixture_named("kv2");
+    let st = bebop_store::Store::from_bytes(&img);
+    assert_eq!(bebop_store::kv::Kv::version(&st), 2, "kv2.store is not a v2 image");
+    assert_eq!(bebop_store::kv::Kv::version(&Store::from_bytes(&fixture())), 1, "kv.store is not v1");
 }
 
 /// THE BIT THAT ABORTED A PROCESS: bit 33 of a key's length. `bebop-store`

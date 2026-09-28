@@ -179,14 +179,17 @@ fn a_full_menu_with_recipes_fits_the_catalogue() {
     let mean = cat.products().iter().map(|(_, j)| j.len()).sum::<usize>() / 165;
     assert!((340..=360).contains(&mean), "the live dishes are 348 B on average; these are {mean}");
     let before = per_mille(&mut cat);
-    // 513 per mille of the old 1 MiB ceiling = 51 of dowiz_hub::CEILING_BYTES (10 MiB).
-    assert!((50..=52).contains(&before), "the live venue reads 51 per mille; this one reads {before}");
+    // 513 per mille of the old 1 MiB ceiling = 51 of dowiz_hub::CEILING_BYTES (10 MiB),
+    // in a v1 image (one byte per cell). A fresh image is KV v2 since DG3 (2026-09-28),
+    // eight bytes to a cell: the same menu reads 6 (MEASURED, dowiz-hub's twin agrees).
+    assert!((5..=7).contains(&before), "a v2 image of the live venue reads 6 per mille; this one reads {before}");
     let (d, _) = read(&cat, &dubin_supplies(), Kind::Supplies, CostScale::Major, NOW);
     assert_eq!(apply_supplies(&mut cat, &d, false), Ok(75), "{:?}", d.warnings);
     let (d, _) = read(&cat, &dubin_recipes(), Kind::Recipes, CostScale::Major, NOW);
     assert_eq!(apply_recipes(&mut cat, &d), Ok(73), "{:?}", d.warnings);
     let after = cat.to_bytes().map(|b| Catalog::load(&b).unwrap().usage().used_per_mille());
-    assert!(matches!(after, Ok(n) if n < 90), "73 recipes must leave room: {after:?}");
+    // 84 per mille in v1; 11 in v2 (MEASURED 2026-09-28).
+    assert!(matches!(after, Ok(n) if (10..=12).contains(&n)), "73 recipes in a v2 image read 11 per mille: {after:?}");
 }
 
 /// PRINTS the modelled per mille for dubin-sushi from the inventory lane's real
@@ -252,8 +255,9 @@ fn blob_under(per_mille: i64) -> usize {
 #[test]
 fn a_dry_run_that_would_not_fit_says_so() {
     // Filled to just under the ceiling (found, not hard-coded, so the test
-    // follows dowiz_hub::CEILING_BYTES), so 73 recipes tip it over.
-    let mut cat = nearly_full(blob_under(990));
+    // follows dowiz_hub::CEILING_BYTES), so 73 recipes tip it over. They add about
+    // 5 per mille in a KV v2 image (33 in v1, which is why this read 990 before DG3).
+    let mut cat = nearly_full(blob_under(998));
     let (d, _) = read(&cat, &dubin_recipes(), Kind::Recipes, CostScale::Major, NOW);
     assert_eq!(d.recipes.len(), 73, "{:?}", d.warnings);
     let room = projected(&mut cat, &d, Kind::Recipes, false);

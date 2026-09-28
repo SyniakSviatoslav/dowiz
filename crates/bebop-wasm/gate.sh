@@ -1,7 +1,10 @@
 #!/bin/sh
-# THE FOUR-WAY FOLD, RUN. One image, `fixtures/kv.store`; four readers; one
-# number each; the gate is green only when every reader that COULD run agrees
-# with `fixtures/kv.expected`, and it says which readers ran.
+# THE FOUR-WAY FOLD, RUN. Two images -- `fixtures/kv.store` (v1, one byte per
+# cell, FROZEN: every image written before DG3 looks like it) and
+# `fixtures/kv2.store` (v2, eight bytes to a cell, DG3 2026-09-28); four
+# readers; one number each. The gate is green only when every reader that
+# COULD run agrees with the fixture's `.expected` on BOTH images, and for each
+# image it prints how many readers agreed and NAMES each one that did not.
 #
 #   bebop.bin  -- selfhost/std/kv.bp, compiled and run by bebop.bin. AArch64
 #                 only, so on an x86 CI runner it is NOT MEASURED and said so;
@@ -27,22 +30,19 @@ cd "$(dirname "$0")"
 CARGO="${CARGO:-$HOME/.cargo/bin/cargo}"
 WASM=target/wasm32-unknown-unknown/release/bebop_wasm.wasm
 BASELINE=bytes.baseline
-FIX=fixtures/kv.store
+FIXTURES="kv kv2"
 SCRATCH="${BEBOP_WASM_SCRATCH:-${TMPDIR:-/tmp}/bebop-wasm-gate.$$}"
 mkdir -p "$SCRATCH"
 trap 'rm -rf "$SCRATCH"' EXIT
-
-want_n=$(awk -F= '/^n=/{print $2}' fixtures/kv.expected)
-want_root=$(awk -F= '/^root=/{print $2}' fixtures/kv.expected)
 fail=0
-ran=0
 
 say() { echo "bebop-wasm: $*"; }
+want() { awk -F= "/^$2=/{print \$2}" "fixtures/$1.expected"; }
 
-# 1. native ---------------------------------------------------------------
-if "$CARGO" test --offline --quiet > "$SCRATCH/native.txt" 2>&1; then
-  say "native: cargo test rc=0 (n=$want_n root=$want_root asserted in tests/parity.rs)"
-  ran=$((ran + 1))
+# 1. native: one parity test per fixture, so a failure names the image ------
+# One cargo run (not --quiet, so every test prints its own `... ok` line).
+if "$CARGO" test --offline > "$SCRATCH/native.txt" 2>&1; then
+  say "native: cargo test rc=0"
 else
   say "native: cargo test FAILED rc=$? -- $(grep -m1 'panicked\|error' "$SCRATCH/native.txt")"
   fail=1
@@ -70,67 +70,33 @@ else
   fi
 fi
 if [ "${1:-}" = "--prove" ]; then
-  # One bit, in a copy: cell 2 of the first key's index entry (its length).
-  python3 - "$FIX" "$SCRATCH/broken.store" <<'EOF'
+  for f in $FIXTURES; do
+    # One bit, in a copy: the LAST payload byte of the image, which is the
+    # newest value blob.
+    python3 - "fixtures/$f.store" "$SCRATCH/broken.store" <<'EOF2'
 import sys
 b = bytearray(open(sys.argv[1], 'rb').read())
-# The live PartTab names the root; the root's first ref names KIDX; flip a
-# bit in the LAST payload byte of the image, which is the newest value blob.
 b[-8] ^= 1
 open(sys.argv[2], 'wb').write(b)
-EOF
-  out=$(node harness.mjs "$WASM" "$SCRATCH/broken.store" 2>&1)
-  rc=$?
-  say "prove: one flipped payload bit -> '$out' rc=$rc"
-  case "$out" in
-    *"root=$want_root"*) say "prove: FAILED -- the root did not move"; exit 1 ;;
-  esac
-  say "prove: the number moved; the gate measures the bytes"
+EOF2
+    out=$(node harness.mjs "$WASM" "$SCRATCH/broken.store" 2>&1)
+    rc=$?
+    say "prove $f: one flipped payload bit -> '$out' rc=$rc"
+    case "$out" in
+      *"root=$(want "$f" root)"*) say "prove $f: FAILED -- the root did not move"; exit 1 ;;
+    esac
+  done
+  say "prove: the number moved on every fixture; the gate measures the bytes"
   exit 0
 fi
-out=$(node harness.mjs "$WASM" "$FIX" 2>&1)
-rc=$?
-say "wasm32: node -> '$out' rc=$rc"
-case "$out" in
-  "kv status=0 n=$want_n root=$want_root") ran=$((ran + 1)) ;;
-  *) say "wasm32: DISAGREES with kv.expected"; fail=1 ;;
-esac
 
-# 3. python ---------------------------------------------------------------
-out=$(python3 oracle.py "$FIX" 2>&1)
-rc=$?
-say "python: '$out' rc=$rc"
-case "$out" in
-  "kv status=0 n=$want_n root=$want_root") ran=$((ran + 1)) ;;
-  *) say "python: DISAGREES with kv.expected"; fail=1 ;;
-esac
-
-# 3b. THE CUT IMAGE: one cell short of the arena. Every reader must REFUSE
-# it; the Rust reader used to answer the previous generation (n=0), which is
-# the disagreement this crate's second reader found.
-head -c $(( $(wc -c < "$FIX") - 8 )) "$FIX" > "$SCRATCH/cut.store"
-wout=$(node harness.mjs "$WASM" "$SCRATCH/cut.store" 2>&1)
-pout=$(python3 oracle.py "$SCRATCH/cut.store" 2>&1)
-say "cut: wasm32 -> '$wout'; python -> '$pout'"
-case "$wout" in "kv status=0"*) say "cut: wasm32 READ a truncated image"; fail=1 ;; esac
-case "$pout" in "kv status=0"*) say "cut: python READ a truncated image"; fail=1 ;; esac
-
-# 4. bebop.bin ------------------------------------------------------------
+# 3. bebop.bin, compiled once -----------------------------------------------
 SEED=../../bebop-lang/seed/build/seed
 BIN=../../bebop-lang/bebop.bin
+KVBIN=""
 if [ "$(uname -m)" = "aarch64" ] && [ -x "$SEED" ] && [ -f "$BIN" ]; then
   if (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile selfhost/std/kv.bp "$SCRATCH/kv.bin") > "$SCRATCH/kvc.txt" 2>&1; then
-    # kv.bp opens `kv.store` in the working directory and EXTENDS it to 64 MiB
-    # (st_open ftruncates), so it reads a copy, never the fixture.
-    cp "$FIX" "$SCRATCH/kv.store"
-    n=$(cd "$SCRATCH" && "$OLDPWD/$SEED" ./kv.bin n 2>&1)
-    r=$(cd "$SCRATCH" && "$OLDPWD/$SEED" ./kv.bin h 2>&1)
-    say "bebop.bin: kv.bin n -> '$n', kv.bin h -> '$r'"
-    if [ "$n" = "$want_n" ] && [ "$r" = "$want_root" ]; then
-      ran=$((ran + 1))
-    else
-      say "bebop.bin: DISAGREES with kv.expected"; fail=1
-    fi
+    KVBIN="$SCRATCH/kv.bin"
   else
     say "bebop.bin: kv.bp did not compile rc=$? -- $(tail -1 "$SCRATCH/kvc.txt")"; fail=1
   fi
@@ -138,14 +104,61 @@ else
   say "bebop.bin: NOT MEASURED (uname -m = $(uname -m); seed present: $([ -x "$SEED" ] && echo yes || echo no)) -- a skip is not an agreement"
 fi
 
-say "readers agreeing with kv.expected: $ran of 4 (bebop.bin counts only on aarch64)"
+# 4. every reader, on every fixture -------------------------------------------
+minran=4
+for f in $FIXTURES; do
+  FIX=fixtures/$f.store
+  want_n=$(want "$f" n)
+  want_root=$(want "$f" root)
+  ran=0
+  bad=""
+  # native: tests/parity.rs has `<fixture>_fixture_reads_to_what_bebop_bin_printed`.
+  if grep -q "test ${f}_fixture_reads_to_what_bebop_bin_printed ... ok" "$SCRATCH/native.txt"; then
+    ran=$((ran + 1))
+  else
+    bad="$bad native"
+  fi
+  out=$(node harness.mjs "$WASM" "$FIX" 2>&1)
+  say "$f wasm32: '$out' rc=$?"
+  if [ "$out" = "kv status=0 n=$want_n root=$want_root" ]; then ran=$((ran + 1)); else bad="$bad wasm32"; fi
+  out=$(python3 oracle.py "$FIX" 2>&1)
+  say "$f python: '$out' rc=$?"
+  if [ "$out" = "kv status=0 n=$want_n root=$want_root" ]; then ran=$((ran + 1)); else bad="$bad python"; fi
+  if [ -n "$KVBIN" ]; then
+    # kv.bp opens `kv.store` in the working directory and EXTENDS it to 64 MiB
+    # (st_open ftruncates), so it reads a copy, never the fixture.
+    mkdir -p "$SCRATCH/$f" && cp "$FIX" "$SCRATCH/$f/kv.store"
+    n=$(cd "$SCRATCH/$f" && "$OLDPWD/$SEED" "$KVBIN" n 2>&1)
+    r=$(cd "$SCRATCH/$f" && "$OLDPWD/$SEED" "$KVBIN" h 2>&1)
+    say "$f bebop.bin: kv.bin n -> '$n', kv.bin h -> '$r'"
+    if [ "$n" = "$want_n" ] && [ "$r" = "$want_root" ]; then ran=$((ran + 1)); else bad="$bad bebop.bin"; fi
+  fi
+
+  # THE CUT IMAGE: one cell short of the arena. Every reader must REFUSE it;
+  # the Rust reader used to answer the previous generation (n=0).
+  head -c $(( $(wc -c < "$FIX") - 8 )) "$FIX" > "$SCRATCH/cut.store"
+  wout=$(node harness.mjs "$WASM" "$SCRATCH/cut.store" 2>&1)
+  pout=$(python3 oracle.py "$SCRATCH/cut.store" 2>&1)
+  say "$f cut: wasm32 -> '$wout'; python -> '$pout'"
+  case "$wout" in "kv status=0"*) say "$f cut: wasm32 READ a truncated image"; fail=1 ;; esac
+  case "$pout" in "kv status=0"*) say "$f cut: python READ a truncated image"; fail=1 ;; esac
+
+  if [ -n "$bad" ]; then
+    say "$f: readers agreeing with $f.expected: $ran of 4 -- DISAGREE:$bad"
+    fail=1
+  else
+    say "$f: readers agreeing with $f.expected: $ran of 4 (bebop.bin counts only on aarch64)"
+  fi
+  [ "$ran" -lt "$minran" ] && minran=$ran
+done
+
 if [ "$fail" -ne 0 ]; then
   say "RED"
   exit 1
 fi
-if [ "$ran" -lt 3 ]; then
+if [ "$minran" -lt 3 ]; then
   say "RED -- fewer than three readers ran; that is not a parity check"
   exit 1
 fi
-say "GREEN ($ran readers, $bytes bytes)"
+say "GREEN ($minran readers on each of: $FIXTURES; $bytes bytes)"
 exit 0

@@ -1,10 +1,28 @@
 //! The KV layout `bebop-lang/selfhost/std/kv.bp` creates, shaped to dowiz's `MemoryStore`.
 //!
-//! Root `KV{n, ref KIDX, ref KBLOB, ref VIDX, ref VBLOB}`:
+//! ── TWO VERSIONS, AND THE ROOT SAYS WHICH (evlog.rs's rule, DG3 2026-09-28) ──
+//!
+//! v1 root, 5 cells `KV{n, ref KIDX, ref KBLOB, ref VIDX, ref VBLOB}`:
 //!   KIDX  2n cells, (offset, len) per key into KBLOB, keys SORTED
-//!   KBLOB key bytes, one per cell
+//!   KBLOB key bytes, ONE PER CELL -- eight bytes of arena for one byte of key
 //!   VIDX  2n cells, (offset, len) per value into VBLOB
 //!   VBLOB value bytes, one per cell
+//!
+//! v2 root, 6 cells `{n, ref KIDX, ref KBLOB, ref VIDX, ref VBLOB, VERSION=2}`, same digest:
+//!   KIDX/VIDX  (BYTE offset, BYTE len) per entry
+//!   KBLOB/VBLOB the bytes PACKED EIGHT TO A CELL, little-endian, `ceil(bytes/8)` cells
+//!              (at least one), the last cell zero-filled
+//!
+//! WHY v2: the catalogue's shape (165 entries x 3.2 KB) was a 4,256,224-byte image for
+//! ~530 KB of content (docs/research/2026-09-28-bebop-dag.md §4). The fold does not
+//! change: `snapshot_root` is over BYTES, never over cells, so a v1 and a v2 image of the
+//! same entries give the same root.
+//!
+//! HOW THE TWO LIVE TOGETHER: a root with no version cell (or a zero there) is v1, which
+//! is every image written before DG3. `commit_into` writes the version the root already
+//! has, so an old image stays v1; every FRESH image (`init`, `compacted_bytes`) is v2, so a
+//! hub's image becomes v2 the next time it is compacted. A version this code does not know
+//! is refused, not guessed at.
 //!
 //! bebop creates the schema (the layout digests come from sha256, which stays on that side);
 //! this module reads and writes the data through the documented pointer-free format.
@@ -37,24 +55,89 @@ pub const DIGEST_KV_ROOT: i64 = 610082063;
 /// `st_digest("arr i64")`, the layout of the four entry arrays. Same provenance.
 pub const DIGEST_ARR_I64: i64 = 4290599237;
 
+/// The version a FRESH image is created as. A store says its own version in its root.
+pub const VERSION: i64 = 2;
+/// Cells in a v1 root and in a v2 one; the extra cell is the version itself.
+const ROOT_V1: usize = 5;
+const ROOT_V2: usize = 6;
+
+/// Cells a blob of `bytes` bytes takes in version `v`: one per byte in v1, eight bytes
+/// to a cell in v2. Never zero: an empty blob is still one (zero) cell, as it always was.
+fn blob_cells(v: i64, bytes: usize) -> usize {
+    let c = if v >= 2 { bytes.div_ceil(8) } else { bytes };
+    c.max(1)
+}
+
+/// Byte `b` of a blob, in version `v`.
+fn blob_byte(st: &Store, blob: usize, v: i64, b: usize) -> u8 {
+    if v >= 2 {
+        (st.get(blob, b >> 3) >> (8 * (b & 7))) as u8
+    } else {
+        st.get(blob, b) as u8
+    }
+}
+
+/// Write a whole blob -- every cell of it, including v2's zero-filled tail and the one
+/// zero cell of an empty blob. `alloc` does not zero what it hands out, so a cell this
+/// does not write is whatever an aborted transaction left there.
+fn blob_write(st: &mut Store, blob: usize, v: i64, bytes: &[u8]) {
+    if v >= 2 {
+        for (c, chunk) in bytes.chunks(8).enumerate() {
+            let mut w = [0u8; 8];
+            w[..chunk.len()].copy_from_slice(chunk);
+            st.put_cell(blob, c, i64::from_le_bytes(w));
+        }
+    } else {
+        for (j, &b) in bytes.iter().enumerate() {
+            st.put_cell(blob, j, b as i64);
+        }
+    }
+    if bytes.is_empty() {
+        st.put_cell(blob, 0, 0);
+    }
+}
+
 impl Kv {
     /// Create the empty KV schema in a fresh store -- the same four zero-length arrays and
     /// root that `kv.bp`'s init phase writes.
     fn stage_init(st: &mut Store) -> Result<(crate::Tx, usize), StoreError> {
+        Self::stage_init_v(st, VERSION)
+    }
+
+    /// Stage the empty schema in version `v`. v1 exists for the tests that prove an old
+    /// image still reads and still writes as v1, and for nothing else.
+    fn stage_init_v(st: &mut Store, v: i64) -> Result<(crate::Tx, usize), StoreError> {
         let mut tx = st.begin()?;
         let kidx = st.alloc(&mut tx, 1, DIGEST_ARR_I64)?;
         let kblob = st.alloc(&mut tx, 1, DIGEST_ARR_I64)?;
         let vidx = st.alloc(&mut tx, 1, DIGEST_ARR_I64)?;
         let vblob = st.alloc(&mut tx, 1, DIGEST_ARR_I64)?;
         st.seal(kidx); st.seal(kblob); st.seal(vidx); st.seal(vblob);
-        let root = st.alloc(&mut tx, 5, DIGEST_KV_ROOT)?;
+        let root = st.alloc(&mut tx, if v >= 2 { ROOT_V2 } else { ROOT_V1 } as i64, DIGEST_KV_ROOT)?;
         st.put_cell(root, 0, 0);
         st.link(root, 1, kidx);
         st.link(root, 2, kblob);
         st.link(root, 3, vidx);
         st.link(root, 4, vblob);
+        if v >= 2 {
+            st.put_cell(root, 5, v);
+        }
         st.seal(root);
         Ok((tx, root))
+    }
+
+    /// Which version this store's KV is written in. READ OFF THE ROOT: a root of six or
+    /// more cells whose cell 5 is positive says its version; anything else is v1, which is
+    /// exactly what every image written before DG3 looks like.
+    pub fn version(st: &Store) -> i64 {
+        let Some(root) = st.root() else { return VERSION };
+        if st.obj_cells(root) >= ROOT_V2 {
+            let v = st.get(root, 5);
+            if v > 0 {
+                return v;
+            }
+        }
+        1
     }
 
     /// Create the empty KV schema in a fresh store.
@@ -86,6 +169,15 @@ impl Kv {
     /// crate keeps finding: a shorter image that still looks valid.
     pub fn load(st: &Store) -> Option<Kv> {
         let root = st.root()?;
+        let ver = Self::version(st);
+        if ver > VERSION {
+            return None;
+        }
+        // A blob of c cells holds c bytes in v1 and 8c in v2; every slice below is a
+        // BYTE slice and is bounded by this.
+        let bytes_of = |cells: usize| -> Option<usize> {
+            if ver >= 2 { cells.checked_mul(8) } else { Some(cells) }
+        };
         let n = st.get(root, 0);
         let kidx = st.follow(root, 1)?;
         let kblob = st.follow(root, 2)?;
@@ -94,7 +186,7 @@ impl Kv {
         // Each entry owns two cells in each index, so the count is bounded by
         // the index arrays that are really there -- not by the root's word.
         let (kidx_cells, vidx_cells) = (st.obj_cells(kidx), st.obj_cells(vidx));
-        let (kblob_cells, vblob_cells) = (st.obj_cells(kblob), st.obj_cells(vblob));
+        let (kblob_cells, vblob_cells) = (bytes_of(st.obj_cells(kblob))?, bytes_of(st.obj_cells(vblob))?);
         if n < 0 {
             return None;
         }
@@ -142,9 +234,9 @@ impl Kv {
             // Lossy rather than strict: a key that is already damaged must still
             // be readable, or this fix would make an affected image unopenable
             // instead of repairable.
-            let kb: Vec<u8> = (0..kl).map(|j| st.get(kblob, ko + j) as u8).collect();
+            let kb: Vec<u8> = (0..kl).map(|j| blob_byte(st, kblob, ver, ko + j)).collect();
             let k: String = String::from_utf8_lossy(&kb).into_owned();
-            let v: Vec<u8> = (0..vl).map(|j| st.get(vblob, vo + j) as u8).collect();
+            let v: Vec<u8> = (0..vl).map(|j| blob_byte(st, vblob, ver, vo + j)).collect();
             entries.push((k, v));
         }
         Some(Kv { entries })
@@ -206,6 +298,12 @@ impl Kv {
         let old_root = st.root().ok_or(StoreError::NoSuperblock)?;
         let arr_dig = st.obj_digest(st.follow(old_root, 1).unwrap());
         let root_dig = st.obj_digest(old_root);
+        // THE ROOT'S OWN VERSION, never this module's: a v1 image keeps being written as
+        // v1 (a mixed image would be unreadable), a fresh one is v2.
+        let ver = Self::version(st);
+        if ver > VERSION {
+            return Err(StoreError::Corrupt("KV root names a version this code does not know"));
+        }
 
         let n = self.entries.len();
         let kbytes: usize = self.entries.iter().map(|(k, _)| k.len()).sum();
@@ -213,33 +311,36 @@ impl Kv {
 
         let mut tx = st.begin()?;
         let kidx = st.alloc(&mut tx, (2 * n).max(1) as i64, arr_dig)?;
-        let kblob = st.alloc(&mut tx, kbytes.max(1) as i64, arr_dig)?;
+        let kblob = st.alloc(&mut tx, blob_cells(ver, kbytes) as i64, arr_dig)?;
         let vidx = st.alloc(&mut tx, (2 * n).max(1) as i64, arr_dig)?;
-        let vblob = st.alloc(&mut tx, vbytes.max(1) as i64, arr_dig)?;
+        let vblob = st.alloc(&mut tx, blob_cells(ver, vbytes) as i64, arr_dig)?;
 
-        let (mut ko, mut vo) = (0usize, 0usize);
+        let (mut kall, mut vall) = (Vec::with_capacity(kbytes), Vec::with_capacity(vbytes));
         for (i, (k, v)) in self.entries.iter().enumerate() {
-            st.put_cell(kidx, 2 * i, ko as i64);
+            st.put_cell(kidx, 2 * i, kall.len() as i64);
             st.put_cell(kidx, 2 * i + 1, k.len() as i64);
-            for (j, b) in k.as_bytes().iter().enumerate() {
-                st.put_cell(kblob, ko + j, *b as i64);
-            }
-            ko += k.len();
-            st.put_cell(vidx, 2 * i, vo as i64);
+            kall.extend_from_slice(k.as_bytes());
+            st.put_cell(vidx, 2 * i, vall.len() as i64);
             st.put_cell(vidx, 2 * i + 1, v.len() as i64);
-            for (j, b) in v.iter().enumerate() {
-                st.put_cell(vblob, vo + j, *b as i64);
-            }
-            vo += v.len();
+            vall.extend_from_slice(v);
         }
+        if n == 0 {
+            st.put_cell(kidx, 0, 0);
+            st.put_cell(vidx, 0, 0);
+        }
+        blob_write(st, kblob, ver, &kall);
+        blob_write(st, vblob, ver, &vall);
         st.seal(kidx); st.seal(kblob); st.seal(vidx); st.seal(vblob);
 
-        let root = st.alloc(&mut tx, 5, root_dig)?;
+        let root = st.alloc(&mut tx, if ver >= 2 { ROOT_V2 } else { ROOT_V1 } as i64, root_dig)?;
         st.put_cell(root, 0, n as i64);
         st.link(root, 1, kidx);
         st.link(root, 2, kblob);
         st.link(root, 3, vidx);
         st.link(root, 4, vblob);
+        if ver >= 2 {
+            st.put_cell(root, 5, ver);
+        }
         st.seal(root);
         Ok((tx, root))
     }
@@ -317,137 +418,4 @@ impl Kv {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A store created, written and read back entirely by Rust: the schema, five entries, a
-    /// reopen, and the FNV-1a root. The root value is dowiz-core's own — the same constant
-    /// `InMemoryStore` folds over these entries — so this test fails if either the store
-    /// format handling or the fold drifts.
-    /// A NON-ASCII KEY MUST SURVIVE A ROUND TRIP. It did not: keys were written
-    /// as UTF-8 and read back as Latin-1, so an Albanian or Ukrainian id came
-    /// back as a different string -- and writing that back damaged it further,
-    /// so the same dish became a new product on every menu import.
-    #[test]
-    fn a_non_ascii_key_survives_the_image() {
-        let keys = ["pije-ujë-0-5l", "sushi-sets-durrës-set-24", "страва-суші", "ascii-plain"];
-        let mut st = Store::create_bytes(64 * 1024).unwrap();
-        Kv::init_bytes(&mut st).expect("init");
-        let mut kv = Kv::load(&st).expect("load");
-        for k in keys {
-            kv.put(k, b"v");
-        }
-        let bytes = kv.compacted_bytes_fit(256 * 1024).expect("write");
-
-        let back = Kv::load(&Store::from_bytes(&bytes)).expect("reload");
-        for k in keys {
-            assert!(
-                back.get(k).is_some(),
-                "key {k:?} did not survive; the image holds {:?}",
-                back.keys()
-            );
-        }
-        // And the damage must not compound: a second round trip is identical.
-        let mut again = back;
-        let twice = again.compacted_bytes_fit(256 * 1024).expect("rewrite");
-        let back2 = Kv::load(&Store::from_bytes(&twice)).expect("reload twice");
-        assert_eq!(back2.keys(), again.keys(), "a second round trip changed the keys");
-    }
-
-    /// ONE FLIPPED BIT USED TO ABORT THE PROCESS, and this is that bit.
-    ///
-    /// A key's length lives in a cell of the key index. Setting bit 33 of a
-    /// length of 1 asks for 8589934601 bytes, and the read of it was a
-    /// `collect` over that range: `memory allocation of 8589934601 bytes
-    /// failed`, which is an abort rather than an error -- on a Worker, the
-    /// whole isolate. The length is now measured against the blob that is
-    /// really there, so the image is REFUSED instead of believed.
-    ///
-    /// Written as a fixed corruption rather than a generated one: the bit is
-    /// the whole point, and a named bit is a test that says what it protects.
-    #[test]
-    fn a_key_length_larger_than_the_image_is_refused_not_allocated() {
-        let mut st = Store::create_bytes(64 * 1024).unwrap();
-        Kv::init_bytes(&mut st).expect("init");
-        let mut kv = Kv::load(&st).expect("load");
-        kv.put("order/0001", b"pending");
-        let bytes = kv.compacted_bytes_fit(256 * 1024).expect("write");
-
-        let mut st = Store::from_bytes(&bytes);
-        let root = st.root().expect("root");
-        let kidx = st.follow(root, 1).expect("key index");
-        // Payload cell 1 of the key index is the first key's LENGTH.
-        let len_cell = kidx + 2 + 1;
-        assert!(st.cells[len_cell] > 0, "the entry's key length should be positive");
-        st.cells[len_cell] |= 1 << 33;
-        assert!(Kv::load(&st).is_none(), "a key that does not fit its blob is not a key");
-
-        // The same law for a value, and for the entry COUNT -- a root that
-        // claims a million entries over an index holding two cells.
-        let mut st = Store::from_bytes(&bytes);
-        let root = st.root().expect("root");
-        let vidx = st.follow(root, 3).expect("value index");
-        st.cells[vidx + 2 + 1] |= 1 << 33;
-        assert!(Kv::load(&st).is_none(), "a value that does not fit its blob is not a value");
-
-        let mut st = Store::from_bytes(&bytes);
-        let root = st.root().expect("root");
-        st.cells[root + 2] = 1_000_000;
-        assert!(Kv::load(&st).is_none(), "a count the index cannot hold is not a count");
-    }
-
-    #[test]
-    fn rust_roundtrip_matches_dowiz_root() {
-        let path = std::env::temp_dir().join("bebop_store_kv_roundtrip.store");
-        let path = path.to_str().unwrap();
-        let mut st = Store::create(path, 1 << 20).expect("create");
-        Kv::init(&mut st, path).expect("init");
-
-        let st = Store::open(path).expect("open");
-        let mut kv = Kv::load(&st).expect("load");
-        assert_eq!(kv.entries.len(), 0, "a fresh KV must be empty");
-        assert_eq!(kv.snapshot_root_u64(), FNV_OFFSET, "empty root is the FNV offset basis");
-
-        for (k, v) in [
-            ("order/0001", "pending"),
-            ("order/0002", "confirmed"),
-            ("courier/alpha", "idle"),
-            ("zone/north", "{\"cap\":12}"),
-            ("order/0003", "delivered"),
-        ] {
-            kv.put(k, v.as_bytes());
-        }
-        let mut st = Store::open(path).expect("reopen for write");
-        kv.commit_into(&mut st, path).expect("commit");
-
-        let st = Store::open(path).expect("reopen");
-        let kv = Kv::load(&st).expect("reload");
-        assert_eq!(kv.entries.len(), 5);
-        assert_eq!(
-            kv.keys(),
-            vec!["courier/alpha", "order/0001", "order/0002", "order/0003", "zone/north"],
-            "keys must come back sorted"
-        );
-        assert_eq!(kv.get("order/0002").unwrap(), b"confirmed");
-        assert_eq!(kv.snapshot_root(), "fd11fc93f180ca47", "dowiz-core's snapshot_root");
-        let _ = std::fs::remove_file(path);
-    }
-
-    /// Overwriting a key must change the root, and restoring the old value must restore it.
-    #[test]
-    fn root_is_sensitive_to_every_byte() {
-        let path = std::env::temp_dir().join("bebop_store_kv_sensitive.store");
-        let path = path.to_str().unwrap();
-        let mut st = Store::create(path, 1 << 20).expect("create");
-        Kv::init(&mut st, path).expect("init");
-        let st = Store::open(path).expect("open");
-        let mut kv = Kv::load(&st).expect("load");
-        kv.put("a", b"one");
-        let before = kv.snapshot_root_u64();
-        kv.put("a", b"onf");
-        assert_ne!(kv.snapshot_root_u64(), before, "a one-bit value change must move the root");
-        kv.put("a", b"one");
-        assert_eq!(kv.snapshot_root_u64(), before, "restoring the value restores the root");
-        let _ = std::fs::remove_file(path);
-    }
-}
+mod tests;

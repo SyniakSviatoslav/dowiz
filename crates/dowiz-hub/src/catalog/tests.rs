@@ -139,8 +139,10 @@ fn a_full_menu_with_recipes_fits_the_catalogue() {
     assert!(before.fits);
     let at = before.usage.used_per_mille();
     // The live venue read 513 per mille of the old 1 MiB ceiling, i.e. 51 of the
-    // 10 MiB one (dowiz_hub::CEILING_BYTES since 2026-09-25).
-    assert!((50..=52).contains(&at), "the live venue reads 51 per mille; this one reads {at}");
+    // 10 MiB one (dowiz_hub::CEILING_BYTES since 2026-09-25) -- in a v1 image, one
+    // byte per cell. A fresh image is KV v2 since DG3 (2026-09-28): eight bytes to a
+    // cell, so the same menu reads 6 (RE-DERIVED by this test, not divided by 8).
+    assert!((5..=7).contains(&at), "a v2 image of the live venue reads 6 per mille; this one reads {at}");
     for i in 0..75 {
         c.set_supply(&format!("supply-{i:02}x"), &live_supply(i));
     }
@@ -149,8 +151,10 @@ fn a_full_menu_with_recipes_fits_the_catalogue() {
     }
     let after = c.projected().unwrap();
     assert!(after.fits, "{after:?}");
-    // 844 per mille of the old ceiling on the live venue = 84 of this one.
-    assert!(after.usage.used_per_mille() < 90, "73 recipes must leave room: {}", after.usage.used_per_mille());
+    // 844 per mille of the old 1 MiB ceiling on the live venue = 84 of this one in
+    // v1; a v2 image reads 11 (MEASURED 2026-09-28, DG3).
+    let after_pm = after.usage.used_per_mille();
+    assert!((10..=12).contains(&after_pm), "73 recipes in a v2 image read 11 per mille: {after_pm}");
     // The projection is the save: the image written reads the same number.
     let bytes = c.to_bytes().unwrap();
     assert_eq!(Catalog::load(&bytes).unwrap().usage().used_cells, after.usage.used_cells);
@@ -161,7 +165,9 @@ fn a_full_menu_with_recipes_fits_the_catalogue() {
 #[test]
 fn a_projection_past_the_ceiling_says_it_would_not_fit() {
     let mut c = dubin();
-    c.set_product("huge", &format!(r#"{{"blob":"{}"}}"#, "y".repeat(1_400_000)));
+    // 12 MB of value bytes: past the 10 MiB ceiling, inside the 20 MiB projection.
+    // (1.4 MB was enough while a byte took a whole cell; KV v2 packs eight to one.)
+    c.set_product("huge", &format!(r#"{{"blob":"{}"}}"#, "y".repeat(12_000_000)));
     let p = c.projected().unwrap();
     assert!(!p.fits);
     assert!(p.usage.used_per_mille() > 1000, "{p:?}");
@@ -171,7 +177,8 @@ fn a_projection_past_the_ceiling_says_it_would_not_fit() {
 #[test]
 fn a_projection_beyond_two_ceilings_is_the_stores_own_error() {
     let mut c = Catalog::create().unwrap();
-    c.set_product("huge", &"z".repeat(2_800_000));
+    // 24 MB: past the 20 MiB projection too (2.8 MB was, at one byte per cell).
+    c.set_product("huge", &"z".repeat(24_000_000));
     assert!(matches!(c.projected(), Err(e) if e.arena_full().is_some()));
 }
 
