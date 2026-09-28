@@ -15,10 +15,10 @@
 //! resellable `Received`, "never inferred"), so this tap writes no stock event
 //! for food the kitchen cooked.
 
-use serde_json::{json, Value};
+use serde_json::Value;
 use worker::*;
 
-use super::{courier_at, ops, run, K_ASG};
+use super::{courier_at, ops, replay, run, K_ASG};
 use crate::command::refund::{RefundIn, RefundOut};
 
 pub async fn refused(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
@@ -49,6 +49,11 @@ pub async fn refused(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     // G1 / D1: every exit below is an ANSWER, recorded (or, for a 5xx or an
     // internal error, released) by `answered` -- never a claim left standing.
     let res: Result<Response> = async {
+        // THE TAP ALREADY RAN (W-O2): the object wrote the refund and marked
+        // this key in that turn. The retry is given that refund, not a 409.
+        if let Some(first) = replay::committed::<RefundOut>(idem.committed()) {
+            return Response::from_json(&replay::refused_answer(&first));
+        }
         // ONLY THE COURIER CARRYING IT. The same answer `deliver` gives.
         if !run::may_refuse(&ops(&place).await?.all(K_ASG), &courier_id, &id) {
             return Response::error("not your delivery", 403);
@@ -64,12 +69,13 @@ pub async fn refused(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
             // `{note?}`: what the courier saw. An unreadable body is no note.
             note: serde_json::from_str::<Value>(&raw).ok().and_then(|b| b.get("note").and_then(Value::as_str).map(String::from)),
         };
-        let out: RefundOut = match crate::command::send(&place, "refund", &input).await {
+        let claim = idem.claim();
+        let claimed = crate::idempotency::commit::Claimed { input: &input, idem: claim };
+        let out: RefundOut = match crate::command::send(&place, "refund", &claimed).await {
             Ok(v) => v,
             Err((status, said)) => return Response::error(said, status),
         };
-        let answer = json!({ "order": serde_json::from_str::<Value>(&out.merged).unwrap_or(Value::Null), "seq": out.seq });
-        Response::from_json(&answer)
+        Response::from_json(&replay::refused_answer(&out))
     }
     .await;
     idem.answered(&place, res).await

@@ -42,6 +42,15 @@ pub struct Claimed<T> {
     pub idem: Option<Claim>,
 }
 
+/// An APPEND's claim (W-O2): the Worker decided the event, so it decided the
+/// answer too, and hands both to `/fold/append`; the object marks the claim
+/// with `output` in the turn the event lands.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Marked {
+    pub claim: Claim,
+    pub output: String,
+}
+
 /// Mark `claim` committed with `output`. `Ok(false)` (nothing written) when the
 /// claim is not this one's any more: absent, another body's, or already
 /// answered -- a committed mark must never overwrite an answer.

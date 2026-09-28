@@ -9,7 +9,11 @@ use crate::command::Refused;
 use worker::*;
 
 impl HubImages {
-    pub(super) async fn refund(&self, input: RefundIn) -> Result<std::result::Result<RefundOut, Refused>> {
+    pub(super) async fn refund(
+        &self,
+        input: RefundIn,
+        claim: Option<crate::idempotency::commit::Claim>,
+    ) -> Result<std::result::Result<RefundOut, Refused>> {
         let (log_gen, listed) = self.orders_view().await?;
         let current: Option<OrderView> = listed.into_iter().find(|o| o.order_id == input.order_id);
         let (_, mut hub) = self.log_hub().await?;
@@ -26,6 +30,10 @@ impl HubImages {
             Ok(n) => n,
             Err(r) => return Ok(Err(r)),
         };
+        // THE REFUND IS IN THE LOG: its claim is marked committed now (W-O2).
+        let seq = written.last().map_or(0, |w| w.2);
+        let out = RefundOut { merged: merged.to_string(), seq, generation: next };
+        self.commit_claim(claim.as_ref(), &serde_json::to_string(&out).unwrap_or_default()).await;
         for (kind, body, _) in &written {
             self.broadcast(*kind as u8, &input.order_id, body, next);
         }
@@ -39,8 +47,7 @@ impl HubImages {
         // THE EXCEPTION ALERT (P1-5): a refund is an exception row; the
         // alert is evidence about it and never fails the refund.
         self.exceptions_after(&input.location_id, input.now_ms).await;
-        let seq = written.last().map_or(0, |w| w.2);
-        Ok(Ok(RefundOut { merged: merged.to_string(), seq, generation: next }))
+        Ok(Ok(out))
     }
 
     /// Append the REFUND records for every wallet payment on the round

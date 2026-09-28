@@ -188,6 +188,9 @@ struct AppendIn {
     order_id: String,
     payload: String,
     clock: u64,
+    /// The courier tap's claim and answer (W-O2), absent on every other append.
+    #[serde(default)]
+    idem: Option<crate::idempotency::commit::Marked>,
 }
 
 #[durable_object]
@@ -780,6 +783,7 @@ impl HubImages {
     async fn advance(
         &self,
         input: crate::command::advance::AdvanceIn,
+        claim: Option<crate::idempotency::commit::Claim>,
     ) -> Result<std::result::Result<crate::command::advance::AdvanceOut, crate::command::Refused>>
     {
         let (log_generation, listed) = self.orders_view().await?;
@@ -822,6 +826,9 @@ impl HubImages {
                 "the log generation moved during a transition".into(),
             )));
         };
+        // THE ORDER MOVED: its claim is marked committed now (W-O2).
+        let out = crate::command::advance::AdvanceOut { merged: merged.to_string(), generation: next };
+        self.commit_claim(claim.as_ref(), &serde_json::to_string(&out).unwrap_or_default()).await;
         if stock.len() != settled_before
             && self
                 .put_image(stock_image, stock_generation, &stock.to_bytes_trimmed())
@@ -848,10 +855,7 @@ impl HubImages {
             .map(|o| (o.order_id.clone(), if o.order_id == input.order_id { now_json.clone() } else { o.order_json.clone() }))
             .collect();
         self.tell_orders(Some((&input.order_id, &input.next)), &orders, input.now_ms).await;
-        Ok(Ok(crate::command::advance::AdvanceOut {
-            merged: merged.to_string(),
-            generation: next,
-        }))
+        Ok(Ok(out))
     }
 
     /// HAND AN ORDER TO A COURIER: the assignment record and the event that
@@ -1403,8 +1407,8 @@ impl DurableObject for HubImages {
                 // REFUND AN ORDER: `/fold/refund`
                 (Method::Post, "refund") => {
                     let mut req = req;
-                    let input: crate::command::refund::RefundIn = req.json().await?;
-                    match self.refund(input).await? {
+                    let crate::idempotency::commit::Claimed { input, idem } = req.json().await?;
+                    match self.refund(input, idem).await? {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
                     }
@@ -1459,8 +1463,8 @@ impl DurableObject for HubImages {
                 (Method::Get, "rebuild") => Response::from_json(&self.rebuild().await?),
                 (Method::Post, "advance") => {
                     let mut req = req;
-                    let input: crate::command::advance::AdvanceIn = req.json().await?;
-                    match self.advance(input).await? {
+                    let crate::idempotency::commit::Claimed { input, idem } = req.json().await?;
+                    match self.advance(input, idem).await? {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
                     }
@@ -1485,9 +1489,14 @@ impl DurableObject for HubImages {
                         return Response::error("x-generation is required on a write", 400);
                     }
                     let mut req = req;
-                    let ev: AppendIn = req.json().await?;
+                    let mut ev: AppendIn = req.json().await?;
+                    let mark = ev.idem.take();
                     match self.append(expected, ev).await? {
                         Some((generation, len)) => {
+                            // THE EVENT LANDED: its claim is marked now (W-O2).
+                            if let Some(m) = &mark {
+                                self.commit_claim(Some(&m.claim), &m.output).await;
+                            }
                             let mut res = Response::from_json(
                                 &serde_json::json!({ "generation": generation, "events": len }),
                             )?;

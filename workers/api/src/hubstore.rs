@@ -942,70 +942,10 @@ pub async fn append_blind(
     Err(Error::RustError("hub log is contended; five attempts lost the generation guard".into()))
 }
 
-/// Append one event, retrying if another writer moved the log first.
-///
-/// `read` is given the CURRENT state of the order (`None` when the hub has
-/// never seen it) and returns the event to write: its kind and its payload.
-/// Returning `Ok(None)` means "nothing to record", which is not a failure --
-/// the Stripe webhook replaying a payment already recorded takes that branch.
-///
-/// THE RETRY IS THE SAME CONTRACT `with_hub` had. A Durable Object serialises
-/// its own requests, so the guard fires only if a second Worker appended
-/// between this reader's question and this writer's answer; then the decision
-/// is made again against the newer state, which is correct for a log whose
-/// events are deltas.
-pub async fn append_for<F>(
-    place: &Place,
-    order_id: &str,
-    now_ms: i64,
-    mut decide: F,
-) -> Result<Option<serde_json::Value>>
-where
-    F: FnMut(Option<String>) -> Result<Option<(dowiz_hub::EventKind, String, serde_json::Value)>>,
-{
-    for _ in 0..5 {
-        let stub = place.stub()?;
-        let req = Request::new(
-            &format!("https://hub/fold/order?id={}", crate::mcp::enc(order_id)),
-            Method::Get,
-        )?;
-        let mut res = stub.fetch_with_request(req).await?;
-        let generation: i64 =
-            res.headers().get("x-generation").ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(0);
-        let current = match res.status_code() {
-            200 => Some(res.json::<crate::hubdo::OrderView>().await?.order_json),
-            404 => None,
-            other => {
-                return Err(Error::RustError(format!("hub object refused an order: {other}")))
-            }
-        };
-        let Some((kind, payload, out)) = decide(current)? else { return Ok(None) };
-        let body = serde_json::json!({
-            "kind": kind as u8,
-            "order_id": order_id,
-            "payload": payload,
-            "clock": now_ms,
-        });
-        let mut write = Request::new_with_init(
-            "https://hub/fold/append",
-            RequestInit::new()
-                .with_method(Method::Post)
-                .with_body(Some(JsValue::from_str(&body.to_string()))),
-        )?;
-        write.headers_mut()?.set("x-generation", &generation.to_string())?;
-        write.headers_mut()?.set("content-type", "application/json")?;
-        let res = stub.fetch_with_request(write).await?;
-        match res.status_code() {
-            200 => return Ok(Some(out)),
-            // Someone else appended first: ask again and decide again.
-            409 => continue,
-            other => {
-                return Err(Error::RustError(format!("hub object refused an append: {other}")))
-            }
-        }
-    }
-    Err(Error::RustError("hub log is contended; five attempts lost the generation guard".into()))
-}
+// `append_for` (and its claimed twin `append_claimed`, W-O2) live in
+// `hubstore/append.rs`.
+mod append;
+pub use append::{append_claimed, append_for};
 
 /// ── ROTATION: A BOUNDED HOT LOG WITH COLD HISTORY ──
 ///

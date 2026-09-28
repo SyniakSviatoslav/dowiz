@@ -22,6 +22,7 @@ pub(crate) mod run;
 mod cash;
 mod door;
 mod refusal;
+mod replay;
 pub use door::refused;
 
 /// GPS sanity, from the old platform's courier UX rules: reject a fix worse than
@@ -333,33 +334,49 @@ async fn load_order(place: &crate::hubstore::Place, id: &str, loc: &str) -> Resu
 }
 
 /// `cash` of -1 means "not a cash-collecting transition"; anything else is
-/// recorded on the order.
+/// recorded on the order. Answers `answer(merged)`, and hands `claim` to the
+/// object with that answer (W-O2): the claim is committed with the event.
+///
+/// `Ok(Err(why))` is the ORDER refusing (not found, an illegal edge): an
+/// answer. `Err` is the trip to the object failing, which may be AFTER it
+/// wrote -- a 5xx, so the claim is not recorded as a refusal and a retry is
+/// answered from the committed mark instead of "that order moved on".
 async fn write_status_with(
     place: &crate::hubstore::Place,
     id: &str,
     next: &'static str,
-    cash: i64,
-    now_ms: i64,
-) -> Result<Value> {
+    (cash, now_ms): (i64, i64),
+    claim: Option<&crate::idempotency::commit::Claim>,
+    answer: impl Fn(&Value) -> Value,
+) -> Result<std::result::Result<Value, String>> {
     let id_s = id.to_string();
-    crate::hubstore::append_for(&place, &id_s.clone(), now_ms, move |current| {
-        let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
-        let updated = json_api::apply_event_logic(&current, next).map_err(Error::RustError)?;
-        let mut merged: Value = serde_json::from_str(&updated)
-            .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
-        let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-        crate::hubstore::carry_over(&old, &mut merged);
-        crate::live_eta::stamp(&mut merged, next, now_ms);
-        if cash >= 0 {
-            merged["cash_collected"] = json!(cash);
+    let refused = std::cell::RefCell::new(None::<String>);
+    let written = crate::hubstore::append_claimed(&place, &id_s.clone(), now_ms, claim, |current| {
+        let decided = (|| -> std::result::Result<(String, Value), String> {
+            let current = current.ok_or("order not found")?;
+            let updated = json_api::apply_event_logic(&current, next)?;
+            let mut merged: Value = serde_json::from_str(&updated)
+                .map_err(|e| format!("kernel order json unreadable: {e}"))?;
+            let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+            crate::hubstore::carry_over(&old, &mut merged);
+            crate::live_eta::stamp(&mut merged, next, now_ms);
+            if cash >= 0 {
+                merged["cash_collected"] = json!(cash);
+            }
+            // WHAT CHANGED, not what is. The whole envelope was written six times
+            // per delivery; the fold puts it back together on the way out.
+            Ok((crate::fold::delta(&old, &merged).to_string(), merged))
+        })();
+        match decided {
+            Ok((body, merged)) => Ok(Some((dowiz_hub::EventKind::Advanced, body, answer(&merged)))),
+            Err(why) => {
+                *refused.borrow_mut() = Some(why);
+                Ok(None)
+            }
         }
-        // WHAT CHANGED, not what is. The whole envelope was written six times
-        // per delivery; the fold puts it back together on the way out.
-        let body = crate::fold::delta(&old, &merged).to_string();
-        Ok(Some((dowiz_hub::EventKind::Advanced, body, merged)))
     })
-    .await
-    .and_then(|v| v.ok_or_else(|| Error::RustError("order not found".into())))
+    .await?;
+    Ok(written.ok_or_else(|| refused.take().unwrap_or_else(|| "order not found".into())))
 }
 
 /// `POST /api/courier/orders/:id/accept`
@@ -406,6 +423,11 @@ pub async fn accept(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     // G1 / D1: every exit below is an ANSWER, recorded (or, for a 5xx or an
     // internal error, released) by `answered` -- never a claim left standing.
     let res: Result<Response> = async {
+        // THE TAP ALREADY RAN (W-O2): its `Noted` landed and the object marked
+        // this key with the answer. Nothing below runs again.
+        if let Some(first) = replay::committed::<Value>(idem.committed()) {
+            return Response::from_json(&first);
+        }
         let Some((_, v)) = load_order(&place, &id, &loc).await? else {
             return Response::error("not found", 404);
         };
@@ -468,7 +490,10 @@ pub async fn accept(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         // answer where the rest of the system looks.
         let oid = id.clone();
         let who = courier_id.clone();
-        let claimed = crate::hubstore::append_for(&place, &oid.clone(), now, move |current| {
+        let out = replay::accept_answer(&id, cash_due);
+        let answer = out.clone();
+        let claim = idem.claim();
+        let claimed = crate::hubstore::append_claimed(&place, &oid.clone(), now, claim.as_ref(), move |current| {
             let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
             let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
             let mut o = old.clone();
@@ -480,7 +505,7 @@ pub async fn accept(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
             // `Noted`, not `Advanced`: taking an order is not a transition the
             // order machine decided, and writing it as one would put an edge in
             // the log that does not exist.
-            Ok(Some((dowiz_hub::EventKind::Noted, body, json!(true))))
+            Ok(Some((dowiz_hub::EventKind::Noted, body, answer.clone())))
         })
         .await;
         if let Err(e) = claimed {
@@ -494,7 +519,6 @@ pub async fn accept(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
             );
         }
     
-        let out = json!({ "ok": true, "orderId": id, "cashDue": cash_due });
         Response::from_json(&out)
     }
     .await;
@@ -533,6 +557,16 @@ pub async fn pickup(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     // G1 / D1: every exit below is an ANSWER, recorded (or, for a 5xx or an
     // internal error, released) by `answered` -- never a claim left standing.
     let res: Result<Response> = async {
+        // THE TAP ALREADY RAN (W-O2): the object moved the order and marked
+        // this key in that turn. Finish the tail (once) and give the first answer.
+        if let Some(first) = replay::committed::<crate::command::advance::AdvanceOut>(idem.committed()) {
+            let oid = id.clone();
+            with_ops(&place, move |t| replay::stamp_pickup(t, &oid, now).map_err(Error::RustError)).await?;
+            return match serde_json::from_str::<Value>(&first.merged) {
+                Ok(v) => Response::from_json(&v),
+                Err(e) => Response::error(format!("hub answered unreadable json: {e}"), 500),
+            };
+        }
         let t = ops(&place).await?;
         if asg_of(&t, &id).map(|a| field_str(&a, "courier_id")) != Some(courier_id.clone()) {
             return Response::error("not your delivery", 403);
@@ -552,7 +586,9 @@ pub async fn pickup(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
             reason: None,
             now_ms: now,
         };
-        let merged: Value = match crate::command::send::<_, crate::command::advance::AdvanceOut>(&place, "advance", &input).await {
+        let claim = idem.claim();
+        let claimed = crate::idempotency::commit::Claimed { input: &input, idem: claim };
+        let merged: Value = match crate::command::send::<_, crate::command::advance::AdvanceOut>(&place, "advance", &claimed).await {
             Ok(out) => match serde_json::from_str(&out.merged) {
                 Ok(v) => v,
                 Err(e) => return Response::error(format!("hub answered unreadable json: {e}"), 500),
@@ -560,15 +596,7 @@ pub async fn pickup(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
             Err((status, said)) => return Response::error(said, status),
         };
         let oid = id.clone();
-        with_ops(&place, move |t| {
-            if let Some(mut a) = asg_of(t, &oid) {
-                a["picked_up_at_ms"] = json!(now);
-                t.put(K_ASG, &oid, &a.to_string(), &[], &[])
-                    .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
-            }
-            Ok(())
-        })
-        .await?;
+        with_ops(&place, move |t| replay::stamp_pickup(t, &oid, now).map_err(Error::RustError)).await?;
         Response::from_json(&merged)
     }
     .await;
@@ -617,7 +645,16 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     // G1 / D1: every exit below is an ANSWER, recorded (or, for a 5xx or an
     // internal error, released) by `answered` -- never a claim left standing.
     let res: Result<Response> = async {
-    
+        // THE TAP ALREADY RAN (W-O2): DELIVERED is in the log and the object
+        // marked this key with the answer, shortfall and all. Finish the ops
+        // tail (once -- a second shift count is a second delivery) and answer it.
+        if let Some(first) = replay::committed::<Value>(idem.committed()) {
+            let (oid, cid) = (id.clone(), courier_id.clone());
+            let collected = field_i64(&first, "cashCollected");
+            with_ops(&place, move |t| replay::settle_delivery(t, &oid, &cid, now, collected).map_err(Error::RustError))
+                .await?;
+            return Response::from_json(&first);
+        }
         let t = ops(&place).await?;
         let a = asg_of(&t, &id).filter(|a| {
             field_str(a, "courier_id") == courier_id
@@ -630,7 +667,7 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
         // A short handover is RECORDED, never silently rounded, and bounded by
         // what the delivery owes (`cash::handover`). The difference is what a
         // settlement dispute is later resolved from.
-        let cash::Handover { collected, short } = match cash::handover(cash_due, said) {
+        let handed = match cash::handover(cash_due, said) {
             Ok(h) => h,
             Err(why) => return Response::error(why, 400),
         };
@@ -643,41 +680,19 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
         // reason the takings and the promo count do -- so a number kept only in a
         // side table is a number that screen will never show. It read zero for
         // every delivery until now.
-        let merged = match write_status_with(&place, &id, "DELIVERED", collected, now).await {
+        let collected = handed.collected;
+        let claim = idem.claim();
+        let shape = |merged: &Value| replay::deliver_answer(merged, cash_due, &handed);
+        let out = match write_status_with(&place, &id, "DELIVERED", (collected, now), claim.as_ref(), shape).await? {
             Ok(v) => v,
-            Err(e) => return Response::error(e.to_string(), 409),
+            Err(why) => return Response::error(why, 409),
         };
         // THE ASSIGNMENT AND THE SHIFT IN ONE WRITE. They were two UPDATEs, and
         // half of that is a delivery recorded against nobody's shift -- the
         // courier's own count and cash silently short by one run.
         let (oid, cid) = (id.clone(), courier_id.clone());
-        with_ops(&place, move |t| {
-            if let Some(mut a) = asg_of(t, &oid) {
-                a["delivered_at_ms"] = json!(now);
-                a["cash_collected"] = json!(collected);
-                t.put(K_ASG, &oid, &a.to_string(), &[], &[])
-                    .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
-            }
-            if let Some(mut s) = t
-                .get(K_SHIFT, &cid)
-                .and_then(|j| serde_json::from_str::<Value>(&j).ok())
-                .filter(|s| s.get("ended_at_ms").map_or(true, |v| v.is_null()))
-            {
-                let (Some(n), Some(cash)) =
-                    (cash::add(field_i64(&s, "deliveries"), 1), cash::add(field_i64(&s, "cash_collected"), collected))
-                else {
-                    return Err(Error::RustError("shift: its totals would overflow".into()));
-                };
-                s["deliveries"] = json!(n);
-                s["cash_collected"] = json!(cash);
-                t.put(K_SHIFT, &cid, &s.to_string(), &[], &[])
-                    .map_err(|e| Error::RustError(format!("shift: {e}")))?;
-            }
-            Ok(())
-        })
-        .await?;
-        let out =
-            json!({ "order": merged, "cashDue": cash_due, "cashCollected": collected, "short": short });
+        with_ops(&place, move |t| replay::settle_delivery(t, &oid, &cid, now, collected).map_err(Error::RustError))
+            .await?;
         Response::from_json(&out)
     }
     .await;
