@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readCfEnv, fold, analytics, measure, QUERY, ENDPOINT, WHY_NO_TOKEN, FILE } from './cf.mjs';
+import { readCfEnv, fold, analytics, measure, QUERY, ENDPOINT, WHY_NO_TOKEN, FILE, SCHEDULED_LIMIT, NO_ORDER_DAY_DO_TARGET } from './cf.mjs';
 
 const byId = xs => Object.fromEntries(xs.map(x => [x.id, x]));
 const ACC = {
@@ -13,7 +13,17 @@ const ACC = {
     { dimensions: { scriptName: 'dowiz-api', status: 'clientDisconnected' }, sum: { requests: 0 } },
     { dimensions: { scriptName: 'other', status: 'success' }, sum: { requests: 999 } },
   ],
-  d: [{ dimensions: { scriptName: 'dowiz-api' }, sum: { requests: 30, errors: 1, responseBodySize: 500 } }, { dimensions: { scriptName: 'x' }, sum: { requests: 1 } }],
+  d: [
+    { dimensions: { scriptName: 'dowiz-api', type: 'http' }, sum: { requests: 26, errors: 1, responseBodySize: 500 } },
+    { dimensions: { scriptName: 'dowiz-api', type: 'alarm' }, sum: { requests: 4, errors: 0, responseBodySize: 0 } },
+    { dimensions: { scriptName: 'x', type: 'alarm' }, sum: { requests: 1 } },
+  ],
+  s: [
+    { scriptName: 'dowiz-api', cron: '17 3 * * *' },
+    { scriptName: 'dowiz-api', cron: '* * * * *' },
+    { scriptName: 'dowiz-api', cron: '* * * * *' },
+    { scriptName: 'x', cron: '* * * * *' },
+  ],
 };
 
 test('the token file: export lines, quotes stripped; absent is empty', () => {
@@ -25,8 +35,15 @@ test('the token file: export lines, quotes stripped; absent is empty', () => {
 });
 
 test('fold sums one script over its status rows and takes the worst quantile', () => {
-  assert.deepEqual(fold(ACC), { workerRequests: 12, workerErrors: 2, subrequests: 4, cpuP50Us: 9, cpuP99Us: 40, doRequests: 30, doErrors: 1, doResponseBytes: 500 });
-  assert.deepEqual(fold({}), { workerRequests: 0, workerErrors: 0, subrequests: 0, cpuP50Us: 0, cpuP99Us: 0, doRequests: 0, doErrors: 0, doResponseBytes: 0 });
+  assert.deepEqual(fold(ACC), { workerRequests: 12, workerErrors: 2, subrequests: 4, cpuP50Us: 9, cpuP99Us: 40, doRequests: 30, doErrors: 1, doResponseBytes: 500, doAlarms: 4, cronRuns: 3, cronMinute: 2 });
+  assert.deepEqual(fold({}), { workerRequests: 0, workerErrors: 0, subrequests: 0, cpuP50Us: 0, cpuP99Us: 0, doRequests: 0, doErrors: 0, doResponseBytes: 0, doAlarms: 0, cronRuns: 0, cronMinute: 0 });
+});
+
+test('the query asks for the object type and every scheduled firing, bounded', () => {
+  assert.match(QUERY, /dimensions\{scriptName type\}/);
+  assert.match(QUERY, new RegExp(`workersInvocationsScheduled\\(limit:${SCHEDULED_LIMIT},`));
+  assert.ok(SCHEDULED_LIMIT > 1441, 'a whole day of the old minute cron fits, so its disappearance is measured');
+  assert.equal(NO_ORDER_DAY_DO_TARGET, 1000);
 });
 
 test('one POST with the bearer and the day window; a refusal throws with the answer', async () => {
@@ -54,6 +71,13 @@ test('measure: the indicators, an error as the reason, and no token as the reaso
   assert.equal(r['cf.worker_errors_day'].rule, 'zero');
   assert.equal(r['cf.do_response_bytes_day'].value, 500);
   assert.equal(r['cf.worker_requests_day'].note, '4 subrequests');
+  assert.equal(r['cf.do_alarms_day'].value, 4);
+  assert.equal(r['cf.cron_runs_day'].value, 3);
+  assert.equal(r['cf.cron_runs_day'].note, '2 of the removed * * * * *');
+  assert.match(r['cf.do_requests_day'].note, /no orders: < 1000/);
+  const full = { ...ACC, s: Array.from({ length: SCHEDULED_LIMIT }, () => ({ scriptName: 'dowiz-api', cron: '* * * * *' })) };
+  const capped = byId((await measure({ env, now: () => 0, fetch: async () => new Response(JSON.stringify({ data: { viewer: { accounts: [full] } } })) })).out);
+  assert.match(capped['cf.cron_runs_day'].note, /capped at 2000 rows/);
   const bad = byId((await measure({ env, now: () => 0, fetch: async () => new Response('{}', { status: 500 }) })).out);
   assert.match(bad['cf.worker_requests_day'].unverified, /graphql answered 500/);
   const none = await measure({ env: { CF_ANALYTICS_FILE: '/no/such' }, now: () => 0 });

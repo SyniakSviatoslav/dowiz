@@ -195,8 +195,11 @@ The sender in `workers/api/src/fiscal/` is built and switched off (`SEND_ENABLED
 
 | Cron | Runs | Code |
 |---|---|---|
-| `17 3 * * *` | nightly off-site copy to the venue's bucket, rotation, prune, witness | `workers/api/src/cloud.rs` (`nightly`), `workers/api/src/witness/` |
-| `* * * * *` | outbox drain, eBills poll, fiscal sweep (returns while switched off) | `workers/api/src/lib.rs` (`scheduled`) |
+| `17 3 * * *` | nightly off-site copy to the venue's bucket, rotation, prune, witness; re-arms a venue whose alarm was lost | `workers/api/src/cloud.rs` (`nightly`), `workers/api/src/witness/`, `workers/api/src/cron.rs` (`nightly`) |
+
+The outbox drain, eBills poll and fiscal sweep have no cron: each venue's object sets an alarm when a
+write makes work due and runs it through its `cron~<venue>` runner (`workers/api/src/hubdo/timer.rs`,
+`workers/api/src/cron/timer.rs`). An idle venue sets none.
 
 ## What is not part of the live product
 

@@ -587,23 +587,23 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
 }
 
 /// The cron in wrangler.toml (`cloud::NIGHTLY_CRON`): every venue with a
-/// bucket gets its nightly copy.
+/// bucket gets its nightly copy, and every venue's alarm is checked.
 #[event(scheduled)]
 pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
-    // TWO CRONS, AND THE EXPRESSION SAYS WHICH. The nightly is a long job over
-    // every venue; the minute one exists to deliver a message a kitchen is
-    // waiting for, and running the nightly every minute would be absurd.
+    // ONE CRON (DAG Phase 2, 2026-09-28). The minute one is gone: a venue's
+    // timed work -- outbox, e-bills, fiscal -- is woken by its own object's
+    // alarm (`cron.rs`, `hubdo/timer.rs`). An expression this build does not
+    // know is said, never run as the nightly.
     // ONE CLOCK READ PER INVOCATION, for the reason `Req` gives on the fetch
     // path: a job whose parts each ask the wall clock has as many answers as it
     // has parts. `tools/gates/clock.sh` allows this line and the router's, and
     // nothing else on either entry point.
     let now_ms = Date::now().as_millis() as i64;
-    if event.cron().starts_with("17 3") {
+    if event.cron() == cloud::NIGHTLY_CRON {
         cloud::nightly(&env, now_ms).await;
+        // THE SAFETY NET: a venue with work due and no alarm is re-armed.
+        cron::nightly(&env, now_ms).await;
     } else {
-        // ONE CHEAP REQUEST PER VENUE: the work runs inside each venue's
-        // runner object, not here -- see `cron.rs` for the 10 ms outage this
-        // replaced. Order per venue is unchanged: outbox, e-bills, fiscal.
-        cron::minute(&env, now_ms).await;
+        console_error!("scheduled: unknown cron {:?} -- nothing run", event.cron());
     }
 }

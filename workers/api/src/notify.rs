@@ -191,7 +191,7 @@ pub fn ticket_contact(name: &str, phone: &str, kind: &str) -> Option<String> {
 //
 // The effect is now WRITTEN by the object turn that writes the order
 // (`hubdo::enqueue_bell`), so "the order landed" and "the message is owed" are
-// one fact, and the minute cron (`cron.rs`) delivers it with a backoff. `order_text` below
+// one fact, and the venue's alarm (`cron.rs`, `hubdo/timer.rs`) delivers it with a backoff. `order_text` below
 // is what survived: the Worker renders, the object queues, the cron sends.
 
 /// `POST /api/owner/notify/test` — send one line to the configured chat and

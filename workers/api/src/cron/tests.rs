@@ -27,3 +27,14 @@ fn a_runner_query_without_a_venue_or_a_clock_is_refused() {
     assert_eq!(q(&[("venue", "v")]), None, "no clock");
     assert_eq!(q(&[("venue", "v"), ("now", "soon")]), None, "a clock that is not a number");
 }
+
+/// THE NIGHTLY'S QUESTION goes to the venue's OWN object and carries its name
+/// and the one clock read, which the object parses with the runner's parser.
+#[test]
+fn the_nightly_asks_the_venues_own_object_with_its_name_and_clock() {
+    let p = timer_path("dubin-durres", 1_790_000_000_000);
+    assert_eq!(p, "https://hub/fold/timer?venue=dubin-durres&now=1790000000000");
+    let url = Url::parse(&p).unwrap();
+    let back = parse_runner_query(url.query_pairs().map(|(k, v)| (k.to_string(), v.to_string())));
+    assert_eq!(back, Some(("dubin-durres".to_string(), 1_790_000_000_000)));
+}

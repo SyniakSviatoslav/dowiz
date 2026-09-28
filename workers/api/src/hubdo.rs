@@ -74,6 +74,7 @@ mod routed; // the groups' messages written in the turn (W0a/W0b), `hubdo/routed
 mod stock_turn; // a stock movement as one turn (W0a), `hubdo/stock_turn.rs`
 mod menu; // the catalogue projection's routes (R2), `hubdo/menu.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
+mod timer; // the venue's alarm: timed work without the minute cron (DAG Phase 2), `hubdo/timer.rs`
 
 /// The catalogue image, which holds the venue's own record as well as its
 /// dishes. Named here because `/fold/venue` reads it and nothing else does.
@@ -210,6 +211,9 @@ pub struct HubImages {
     /// The catalogue, translations and settings FOLDED into the storefront's
     /// menu, per generation of the three (R2, `fold::menu`, `hubdo/menu.rs`).
     menu: RefCell<Option<crate::fold::menu::Memo>>,
+    /// An `alarm()` run is under way: the writes it causes do not re-arm,
+    /// its end does (`hubdo/timer.rs`).
+    in_alarm: std::cell::Cell<bool>,
     /// The Worker's bindings, for the one route that calls OTHER objects:
     /// `/fold/cron`, answered only by a `cron~<venue>` runner (`crate::cron`).
     env: Env,
@@ -1148,6 +1152,10 @@ impl HubImages {
             let _ = store.delete(&Self::chunk_key(id, n)).await;
         }
         self.mem.borrow_mut().insert(id.to_string(), (meta, bytes.to_vec()));
+        // TIMED WORK ARMS THE ALARM in the write that makes it due (DAG Phase 2).
+        if crate::cron::timer::TIMED.contains(&id) {
+            self.timer_after_write(Date::now().as_millis() as i64).await;
+        }
         // THE PROJECTION IS DERIVED FROM THIS IMAGE, so it moves with the
         // write: stepped over the events an append or a command added, dropped
         // by any other write (`fold::projection::after_log_write`).
@@ -1188,6 +1196,7 @@ impl DurableObject for HubImages {
             positions: RefCell::new(HashMap::new()),
             folded: RefCell::new(None),
             menu: RefCell::new(None),
+            in_alarm: std::cell::Cell::new(false),
             env,
         }
     }
@@ -1226,6 +1235,8 @@ impl DurableObject for HubImages {
                     crate::cron::run(&self.env, &venue, now_ms).await;
                     Response::ok("done")
                 }
+                // The nightly's safety net: re-arm a lost alarm (`hubdo/timer.rs`).
+                (Method::Post, "timer") => self.timer_route(req).await,
                 // ── THE SOCKET ──
                 //
                 // The Worker has already decided WHO this is and which topic
@@ -1620,5 +1631,12 @@ impl DurableObject for HubImages {
     async fn websocket_error(&self, _ws: WebSocket, error: Error) -> Result<()> {
         console_log!("hub socket error: {error}");
         Ok(())
+    }
+
+    /// THE VENUE'S TIMED WORK, due now (`hubdo/timer.rs`): the outbox drain,
+    /// the till link's poll and the fiscal firing, in place of the minute cron.
+    /// The object's own clock read, as `append` stamps an event with one.
+    async fn alarm(&self) -> Result<Response> {
+        self.timer_alarm(Date::now().as_millis() as i64).await
     }
 }

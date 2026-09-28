@@ -147,8 +147,11 @@ new_sqlite_classes = ["HubImages"]
 
 # Nightly off-site copy for every venue that set a bucket (src/cloud.rs, NIGHTLY_CRON).
 [triggers]
-# TWO CRONS. The nightly is the off-site copy, the rotation, the prune and the
-# witness -- a long job over every venue. The minute one drains the outbox: a
-# kitchen waiting to be told about an order cannot wait until 03:17, and the
-# sweep costs one platform read plus a 204 from each venue with nothing queued.
-crons = ["17 3 * * *", "* * * * *"]
+# ONE CRON. The nightly is the off-site copy, the rotation, the prune, the
+# witness, and the timers' safety net (a venue with work due and no alarm is
+# re-armed) -- a long job over every venue. The minute cron that drained the
+# outbox is GONE (DAG Phase 2, 2026-09-28): it woke every venue 1,440 times a
+# day whether or not anything was queued. The write that makes a message due
+# now sets the venue object's alarm (src/hubdo/timer.rs), and an idle venue
+# sets none.
+crons = ["17 3 * * *"]

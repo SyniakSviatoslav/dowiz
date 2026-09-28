@@ -1,5 +1,5 @@
-//! THE POLLER, on the minute cron that already exists (`lib.rs`'s
-//! `scheduled`; wrangler's `"* * * * *"`). Per venue: ask the venue's object
+//! THE POLLER, run when the venue's alarm fires (`hubdo/timer.rs` sets it a
+//! minute on while the link is usable; the `"* * * * *"` cron is gone). Per venue: ask the venue's object
 //! what is due (`tick`), read ebills.al through the allow-listed client, map,
 //! and hand the result back as ONE command (`import` / `floor`). A failure is
 //! LOUD -- the venue's error log, the health lines, a backoff -- and is never

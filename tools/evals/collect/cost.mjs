@@ -22,6 +22,10 @@ export const REQUESTS_PER_ORDER_BUDGET = 120; // traffic.mjs BUDGET.apiRequests
 export const LOG_SAMPLING_PER_MILLE = 100; // head_sampling_rate = 0.1
 export const LOGS_FREE_MONTH = 20_000_000;
 export const MARGINAL_MAX = USD; // ≤ $1.00 per venue-month (§B.2 Cost)
+/** Object requests one alarm run costs when an order's message is sent (EST from the code,
+ * 2026-09-28: the alarm, the runner, the drain's outbox read + lease + re-read + settings +
+ * verdict write, the till link's tick). The minute cron that cost 2 x 1,440 per venue is gone. */
+export const TIMER_DO_PER_ORDER = 10;
 
 const val = (r, id) => (r[id] && Number.isFinite(r[id].value) ? r[id].value : null);
 
@@ -49,10 +53,11 @@ export function price(worker, durable, venues) {
   return { marginal, allIn: marginal + Math.round(FIXED_MONTH / venues) };
 }
 
-/** Modelled requests per day and their price. */
+/** Modelled requests per day and their price. TIMERS, NOT A MINUTE CRON (DAG Phase 2): each
+ * order's alarm run, plus the nightly's one timer check per venue; one scheduled firing a day. */
 export function model(i) {
-  const cronDo = 2 * MINUTES * i.venues; // outbox + ebills sweep, one object request each per venue
-  const cronWorker = MINUTES + 1;
+  const cronDo = i.ordersPerDay * TIMER_DO_PER_ORDER + i.venues;
+  const cronWorker = 1;
   const user = i.ordersPerDay * i.perOrder; // each: one Worker request and one object request
   const worker = cronWorker + user;
   const durable = cronDo + user;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { inputs, model, price, collect, FIXED_MONTH, REQUESTS_PER_ORDER_BUDGET, USD } from './cost.mjs';
+import { inputs, model, price, collect, FIXED_MONTH, REQUESTS_PER_ORDER_BUDGET, USD, TIMER_DO_PER_ORDER } from './cost.mjs';
 
 const byId = xs => Object.fromEntries(xs.map(x => [x.id, x]));
 const I = v => ({ value: v });
@@ -21,12 +21,15 @@ test('inputs: measured where the run measured them, modelled and labelled otherw
   assert.equal(inputs({}, []).venues, 1, 'never divides by zero venues');
 });
 
-test('the model: integer micro-dollars; cron share of object requests', () => {
+test('the model: integer micro-dollars; timers\' share of object requests (no minute cron)', () => {
   const m = model({ venues: 2, ordersPerDay: 10, perOrder: 100 });
-  assert.equal(m.durable, 2 * 1440 * 2 + 1000);
-  assert.equal(m.worker, 1441 + 1000);
-  assert.equal(m.cronShare, Math.round((1000 * 5760) / 6760));
-  assert.equal(m.marginal, Math.round(Math.round((30 * (2441 * 300_000 + 6760 * 150_000)) / 1e6) / 2));
+  assert.equal(TIMER_DO_PER_ORDER, 10);
+  assert.equal(m.durable, 10 * 10 + 2 + 1000);
+  assert.equal(m.worker, 1 + 1000);
+  assert.equal(m.cronShare, Math.round((1000 * 102) / 1102));
+  assert.equal(m.marginal, Math.round(Math.round((30 * (1001 * 300_000 + 1102 * 150_000)) / 1e6) / 2));
+  // AN IDLE PLATFORM: the nightly's one check per venue, nothing else.
+  assert.equal(model({ venues: 4, ordersPerDay: 0, perOrder: 100 }).durable, 4);
   assert.equal(m.allIn, m.marginal + Math.round(FIXED_MONTH / 2));
   for (const v of Object.values(m)) assert.ok(Number.isInteger(v));
   assert.equal(FIXED_MONTH, 5 * USD + 933_333);
@@ -36,7 +39,7 @@ test('without a token: modelled prices, the cf numbers UNVERIFIED with the reaso
   const r = byId(await collect({ results: {}, hosts: ['a'], env: { CF_ANALYTICS_FILE: '/no/such' }, now: () => 0 }));
   assert.equal(r['cost.marginal_venue_month_micro_usd'].limit, USD);
   assert.match(r['cost.marginal_venue_month_micro_usd'].source, /^modelled/);
-  assert.equal(r['cost.logs_month'].value, Math.round((1441 * 30 * 100) / 1000));
+  assert.equal(r['cost.logs_month'].value, Math.round((1 * 30 * 100) / 1000));
   assert.equal(r['cost.cron_share_permille'].value, 1000);
   assert.equal(r['cost.cron_share_permille'].limit, 500);
   assert.match(r['cf.do_requests_day'].unverified, /no Account Analytics:Read token/);
@@ -57,5 +60,5 @@ test('with a token: the measured day prices the month and the gap to the model i
   assert.match(r['cost.marginal_venue_month_micro_usd'].source, /^MEASURED/);
   assert.equal(r['cost.marginal_venue_month_micro_usd'].value, price(2000, 6000, 2).marginal);
   assert.equal(r['cost.logs_month'].value, 6000);
-  assert.equal(r['cost.do_measured_over_modelled_permille'].value, Math.round((1000 * 6000) / 5760));
+  assert.equal(r['cost.do_measured_over_modelled_permille'].value, Math.round((1000 * 6000) / 2));
 });

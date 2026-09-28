@@ -361,8 +361,8 @@ Static count of `#[test]` functions on 2026-09-24 (`grep -rE '#\[(tokio::)?test\
 ## Deployment
 
 One Worker serves every venue and the platform: `workers/api/wrangler.toml` (Durable Object class
-`HubImages`, KV `MEDIA`, two crons: `17 3 * * *` for the nightly copy and witness, `* * * * *` for
-the outbox, eBills poll and fiscal sweep). Deploy with a token that has Workers Scripts write:
+`HubImages`, KV `MEDIA`, one cron: `17 3 * * *` for the nightly copy, witness and timers' safety net;
+the outbox, eBills poll and fiscal sweep run on each venue object's own alarm, `workers/api/src/hubdo/timer.rs`). Deploy with a token that has Workers Scripts write:
 
 ```sh
 cd workers/api

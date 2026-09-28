@@ -61,10 +61,21 @@ From `workers/api/wrangler.toml` and `scheduled` in `workers/api/src/lib.rs`:
 
 | Cron | Does |
 |---|---|
-| `17 3 * * *` | the nightly: each venue's off-site copy to its own bucket (with a manifest of each image's SHA-256), rotation (every copy for 7 days, weekly ones to 21 days), pruning, and the witness of each log's tip |
-| `* * * * *` | drain every venue's outbox (Telegram, WhatsApp, campaigns), poll eBills for new till sales, and the fiscal sweep, which returns at once while `SEND_ENABLED = false` |
+| `17 3 * * *` | the nightly: each venue's off-site copy to its own bucket (with a manifest of each image's SHA-256), rotation (every copy for 7 days, weekly ones to 21 days), pruning, the witness of each log's tip, and the timers' safety net: every venue whose object has work due and no alarm is re-armed (log line `timers: N armed, N idle, N re-armed (lost alarms), N unreachable`; each re-arm is also a `timer.rearmed` line in that venue's error log) |
 
 Each firing reads the clock once and passes the instant down.
+
+There is no minute cron (removed 2026-09-28). Each venue's Durable Object sets its own ALARM
+(`workers/api/src/hubdo/timer.rs`, rules in `workers/api/src/cron/timer.rs`) when a write makes work
+due: an outbox entry (Telegram, WhatsApp, campaigns; due at once, retries on their backoff), a usable
+eBills link (a minute on while open; while closed when the sales list is due or the venue opens), and
+queued fiscal documents (never while `SEND_ENABLED = false`). The alarm asks the venue's runner object
+(`cron~<venue>`) for one run -- at most 40 sends, the rest a minute later -- and sets the next alarm
+only while work remains. A venue with nothing queued and no eBills link sets no alarm at all.
+
+How to see it: `node tools/evals/run.mjs --suite nightly` (its cost group reads `tools/evals/collect/cf.mjs`) reports `cf.do_alarms_day` (alarm invocations) and
+`cf.cron_runs_day` (scheduled invocations; 1 a day now, was 1,441). A day with no orders should show
+`cf.do_requests_day` under 1,000.
 
 ## Runbooks
 

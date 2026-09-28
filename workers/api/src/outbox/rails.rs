@@ -5,8 +5,9 @@
 //! it, inside the one turn that already writes the log — so "the order landed"
 //! and "the message is owed" are the same fact and cannot come apart. Sending is
 //! a `fetch` to a third party, which belongs nowhere near that turn: it is done
-//! later, by the cron, which has the `Env` the rails need and can take as long
-//! as it takes.
+//! later, by the venue's runner object when the venue's ALARM fires (the write
+//! that made the entry due set it -- `hubdo/timer.rs`), which has the `Env` the
+//! rails need and can take as long as it takes.
 
 use super::*;
 use worker::*;
@@ -132,7 +133,9 @@ async fn held(
         None => entries.clone(),
     };
     let groups = groups.unwrap_or_default();
-    let due_now = due(&work, now_ms);
+    // AT MOST `SEND_CAP` SENDS A RUN (the platform's 50 subrequests per
+    // invocation); the rest stay due and the alarm comes back for them.
+    let due_now = crate::cron::timer::within_budget(due(&work, now_ms), crate::cron::timer::SEND_CAP);
     // CAMPAIGNS RE-ASK THE CONSENT FOLD HERE (G4): read once, only when one
     // is due; `None` = unreadable, and campaign entries wait.
     let acts = crate::services::campaigns::rail::acts_if_due(place, &due_now).await;
@@ -244,24 +247,19 @@ async fn held(
     Ok((sent, kept, abandoned))
 }
 
-/// The minute cron: deliver what every venue is owed.
+/// Deliver what one venue is owed, when its alarm fires.
 ///
-/// IT WALKS THE REGISTRY, one platform read plus one object read per venue,
-/// and a venue with no outbox image answers 204 -- which is most of them, most
-/// of the time, and is the cheapest answer a Durable Object can give.
-///
-/// THE BOUND IS WRITTEN DOWN RATHER THAN DISCOVERED: at roughly forty venues
-/// this becomes forty object wakes a minute whether or not anything is queued,
-/// and the answer at that point is a platform-level set of venues with
-/// something waiting, written by the enqueue. It is NOT built now, because a
-/// set that can disagree with the outboxes is a second source of truth, and
-/// two venues do not need one.
+/// NO SWEEP (DAG Phase 2, 2026-09-28). The minute cron that walked every venue
+/// -- forty object wakes a minute at forty venues, queued or not -- is gone: the
+/// write that makes an entry due sets the venue's alarm (`hubdo/timer.rs`), so
+/// a venue with nothing queued is never woken, and no platform-level set of
+/// "venues with something waiting" (a second source of truth) was needed.
 ///
 /// LOUD ON ANYTHING IT ABANDONS. A message that has failed six times is a
 /// broken integration, and the venue's own error log is where an owner looks.
 /// One venue's minute of the outbox: drain, and say out loud what was
-/// abandoned. The cron runs this INSIDE a Durable Object (`crate::cron`), not
-/// in the Worker, because the Worker's Free-plan budget is 10 ms of CPU.
+/// abandoned. This runs INSIDE a Durable Object (`crate::cron`), not in the
+/// Worker, because the Worker's Free-plan budget is 10 ms of CPU.
 pub async fn drain_venue(env: &Env, venue: &str, now_ms: i64) {
     {
         let Ok(ns) = env.durable_object("HUB") else { return };

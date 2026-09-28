@@ -4,7 +4,7 @@
 //! WhatsApp (the object's input gate is open across every one of those
 //! fetches), and only then writes what was sent. A drain slower than a minute
 //! -- a rail timing out, fifteen paced messages -- let the next minute's
-//! `/fold/cron` read the same image, find the same entries due, and send every
+//! `/fold/cron` (now: a retried or re-armed alarm's) read the same image, find the same entries due, and send every
 //! one of them again: a kitchen told about one order twice.
 //!
 //! THE LEASE. Before anything is sent the drain takes a lease in the outbox
@@ -20,7 +20,7 @@
 //! of it.
 //!
 //! THE HOLDER IS NAMED BY ITS EXPIRY, `now + LEASE_MS`, which is distinct per
-//! cron minute: a drain gives back only its own lease, never one a later drain
+//! run (each alarm run reads its own clock): a drain gives back only its own lease, never one a later drain
 //! took after its own ran out.
 
 use dowiz_hub::table::Table;

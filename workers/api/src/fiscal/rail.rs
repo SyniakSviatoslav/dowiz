@@ -49,7 +49,8 @@ async fn queued(place: &crate::hubstore::Place, cfg: &Config, now_ms: i64) -> Va
     }
 }
 
-/// THE MINUTE CRON'S eBills FIRING (card L70), after the till link's poll so
+/// THE eBills FIRING (card L70), run when the venue's alarm fires (it was the
+/// minute cron's until 2026-09-28), after the till link's poll so
 /// the two never share a minute's session. Per venue: the object's gate and
 /// claim (`fiscal_plan` -- nothing unless ARMED), the firing over the
 /// allow-listed client (`ebills_fire::fire`, ≤ `ebills_sender::BATCH`
