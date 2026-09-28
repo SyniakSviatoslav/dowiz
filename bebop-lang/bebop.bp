@@ -365,8 +365,12 @@ fn sym_bind(s: str, stab: [i64], name: i64, srcpos: i64) -> i64 {
 // A bare name: i64 -> 0, str -> 2, fp -> 6, ref -> 3. ANY OTHER bare name is a TYPE
 // VARIABLE and yields 0 WITHOUT the declared bit -- an unrecognised scalar type must
 // not be checked, or `fn f[T](x: T)` would reject a caller that passes an array.
-fn param_type_word(s: str, from: i64, to: i64) -> i64 {
-  let q = [from, to];
+// DG1 (2026-09-28): `strn` is the caller's source length. q[1] used to be `to`, which is not
+// the string's end, so slen() rejected it and every skip_ws/read_ident below re-ran a
+// whole-source str_len -- once per ARGUMENT at every direct call site (A8, parse_operands)
+// and per param in the planning pass. `to` still bounds every char read here explicitly.
+fn param_type_word(s: str, from: i64, to: i64, strn: i64) -> i64 {
+  let q = [from, strn];
   let _ = skip_ws(s, q);
   let c0 = if q[0] >= to then 0 else char(s, q[0]);
   let is_colon = if c0 == 58 then 1 else 0;
@@ -379,7 +383,6 @@ fn param_type_word(s: str, from: i64, to: i64) -> i64 {
   let is_u8 = (if a1 == 117 then 1 else 0) * (if a2 == 56 then 1 else 0);
   let is_bstr = (if a1 == 115 then 1 else 0) * (if a2 == 116 then 1 else 0);
   let atag = 1 + is_u32 * 3 + is_u8 * 6 + is_bstr * 4;
-  let _ = if is_arr == 1 then 0 else (let _ = q[1] = to in 0);
   let nm = if is_arr == 1 then 0 else read_ident(s, q);
   let known = (if nm == 1809031 then 1 else 0) + (if nm == 1988825 then 1 else 0) + (if nm == 13474 then 1 else 0) + (if nm == 1969687 then 1 else 0);
   let ntag = (if nm == 1988825 then 2 else 0) + (if nm == 13474 then 6 else 0) + (if nm == 1969687 then 3 else 0);
@@ -401,7 +404,7 @@ fn param_type_at(s: str, npos: i64, strn: i64) -> i64 {
   let _ = read_ident(s, q);
   let from = q[0];
   let _ = skip_to_delim(s, q);
-  param_type_word(s, from, q[0])
+  param_type_word(s, from, q[0], strn)
 }
 
 // ---- A8: the expression-type walk (blueprint section 3's scratch cell) ----
@@ -480,6 +483,71 @@ fn callee_param_type_at(s: str, sp: i64, idx: i64, strn: i64) -> i64 {
   };
   ty[0]
 }
+// ---- ROADMAP DG1 (2026-09-28): the O(1) fn-name index ----
+// fntab_lookup / ft_srcpos / ft_name_count were linear scans over the name zone
+// fntab[1..cnt] at EVERY call site (dispatch, arity, A8 param types): fns x calls.
+// The index is open addressing over the name zone, 1024 slots for the 768-fn cap
+// (load <= 0.75), at fntab[7168 + slot] where 7168 = 8192 - 1024: the top of the
+// zeros(8192) table, above tuple_abi (7100..7102) and ety (7110). Slot value
+// v = (idx + 1) + (dups * 1024): idx = the fn index of the LAST definition with that
+// name (the linear scans' "last match wins", kept because insertion runs in index
+// order and a same-name insert overwrites), dups = how many EARLIER definitions share
+// it, so ft_name_count stays exact. idx + 1 <= 768 < 1024, so the two fields never
+// overlap. fntab[7103] = cnt + 1 marks the index BUILT for exactly this cnt: a table
+// built without it (or whose cnt changed after) reads fnh_get = -1 and takes the
+// linear scan, so a missed builder costs time, never an answer.
+// Hash: Fibonacci multiply, top 10 bits (`>>` is LOGICAL here, so 0..1023).
+fn fnh_slot(name: i64) -> i64 { (name * 11400714819323198485) >> 54 }
+fn fnh_idx(v: i64) -> i64 { (v & 1023) - 1 }
+fn fnh_count(v: i64) -> i64 { (v >> 10) + 1 }
+
+// -1 = no index for this table (caller scans), 0 = indexed and absent, v > 0 = the slot value.
+fn fnh_get(fntab: [i64], name: i64) -> i64 {
+  let cnt = fntab[0];
+  let built = if cnt > 0 then (if fntab[7103] == cnt + 1 then 1 else 0) else 0;
+  let j = [fnh_slot(name)];
+  let res = [0 - built];
+  while res[0] < 0 {
+    let v = fntab[7168 + j[0]];
+    let same = if v == 0 then 0 else (if fntab[1 + fnh_idx(v)] == name then 1 else 0);
+    let _ = if v == 0 then (let _ = res[0] = 0 in 0) else 0;
+    let _ = if same == 1 then (let _ = res[0] = v in 0) else 0;
+    let _ = j[0] = (j[0] + 1) & 1023;
+    0
+  };
+  if built == 1 then res[0] else 0 - 1
+}
+
+// Insert fn idx (its name is fntab[1 + idx]); probing ends at the empty slot or the
+// slot already holding that name. Terminates: cnt < 768 < 1024 slots.
+fn fnh_insert(fntab: [i64], idx: i64) -> i64 {
+  let name = fntab[1 + idx];
+  let j = [fnh_slot(name)];
+  let go = [1];
+  while go[0] == 1 {
+    let v = fntab[7168 + j[0]];
+    let same = if v == 0 then 0 else (if fntab[1 + fnh_idx(v)] == name then 1 else 0);
+    let _ = if v == 0 then (let _ = fntab[7168 + j[0]] = idx + 1 in (let _ = go[0] = 0 in 0)) else 0;
+    let _ = if same == 1 then (let _ = fntab[7168 + j[0]] = idx + 1 + fnh_count(v) * 1024 in (let _ = go[0] = 0 in 0)) else 0;
+    let _ = j[0] = (j[0] + go[0]) & 1023;
+    0
+  };
+  0
+}
+
+// Build the index over the name zone fntab[1..cnt]; call once the names are written.
+fn fnh_build(fntab: [i64]) -> i64 {
+  let cnt = fntab[0];
+  let i = [0];
+  while i[0] < cnt {
+    let _ = fnh_insert(fntab, i[0]);
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  let _ = fntab[7103] = cnt + 1;
+  0
+}
+
 // How many fns in the table carry this name? A8 will not type-check a call whose callee is
 // AMBIGUOUS, and the reason is concrete: `ft_srcpos` returns the LAST match while
 // `fntab_lookup` picks the `bl` target, so with two definitions the checker can be reading
@@ -491,8 +559,9 @@ fn callee_param_type_at(s: str, sp: i64, idx: i64, strn: i64) -> i64 {
 // verdict; that is a corpus defect, not a checker limitation.
 fn ft_name_count(tab: [i64], name: i64) -> i64 {
   let cnt = tab[0];
-  let i = 0;
-  let k = 0;
+  let hv = fnh_get(tab, name);
+  let i = if hv < 0 then 0 else cnt;
+  let k = if hv > 0 then fnh_count(hv) else 0;
   while i < cnt {
     let k = k + (if tab[1 + i] == name then 1 else 0);
     let i = i + 1;
@@ -534,7 +603,7 @@ fn fn_ret_type_at(s: str, sp: i64, strn: i64) -> i64 {
   };
   let e = [if arrow[0] < 0 then 0 else arrow[0], strn];
   let _ = if arrow[0] >= 0 then skip_to(s, e, 123) else 0;
-  if arrow[0] < 0 then 0 else param_type_word(s, arrow[0], e[0])
+  if arrow[0] < 0 then 0 else param_type_word(s, arrow[0], e[0], strn)
 }
 fn fn_ret_type(s: str, name: i64, fntab: [i64], strn: i64) -> i64 {
   let amb = if ft_name_count(fntab, name) > 1 then 1 else 0;
@@ -1046,8 +1115,9 @@ fn emit_bl(insns: [i64], n: [i64], target: i64, has_spills: i64) -> i64 {
 // Look up a function's start offset in the layout table; -1 if absent.
 fn fntab_lookup(fntab: [i64], name: i64) -> i64 {
   let cnt = fntab[0];
-  let i = 0;
-  let start = 0 - 1;
+  let hv = fnh_get(fntab, name);
+  let i = if hv < 0 then 0 else cnt;
+  let start = if hv > 0 then fntab[1 + cnt + fnh_idx(hv)] else 0 - 1;
   while i < cnt {
     let nm = fntab[1 + i];
     let st = fntab[1 + cnt + i];
@@ -1101,9 +1171,9 @@ fn fntab_fact_lookup(fntab: [i64], srcpos: i64) -> i64 {
 // (legacy single-fn path passes cnt=0). O(#fns) not O(source bytes).
 fn ft_srcpos(tab: [i64], name: i64) -> i64 {
   let cnt = tab[0];
-
-  let i = 0;
-  let sp = 0 - 1;
+  let hv = fnh_get(tab, name);
+  let i = if hv < 0 then 0 else cnt;
+  let sp = if hv > 0 then tab[1 + cnt + cnt + fnh_idx(hv)] else 0 - 1;
   while i < cnt {
     let nm = tab[1 + i];
     let pos_i = tab[1 + cnt + cnt + i];
@@ -2917,7 +2987,11 @@ fn skip_ws(s: str, pos: [i64]) -> i64 {
     let is_sl = if ch0 == 47 then 1 else 0;
     let is_sl2 = if ch1 == 47 then 1 else 0;
     let is_comment = is_sl * is_sl2;
-    let _ = if is_comment == 1 then skip_line_comment(s, pos) else 0;
+    // DG1 (2026-09-28): `n` is already this scan's length; skip_line_comment(s, pos)
+    // re-derived it with str_len -- a whole-source NUL scan per comment crossed.
+    // MEASURED: stripping bebop.bp's comment lines alone took the cold self-compile
+    // 14.2-15.1 s -> 8.4-8.9 s with the output unchanged (d1dedc62).
+    let _ = if is_comment == 1 then skip_line_comment_n(s, pos, n) else 0;
     let done = if is_ws + is_comment >= 1 then 0 else 1;
     0
   };
@@ -5397,6 +5471,7 @@ fn compile(s: str) -> i64 {
     let fl_d = if fl_i[0] >= cnt_l[0] then 1 else 0;
     0
   };
+  let _ = fnh_build(fntab);
   let enames_l = zeros(256);
   let ecnt_l = [0];
   let _ = collect_ctors(s, enames_l, ecnt_l);
@@ -7504,6 +7579,7 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
     let _ = pm[0] = pm[0] + 1;
     0
   };
+  let _ = fnh_build(ptab);
 
   let pz = [0];
   while pz[0] < cnt[0] {
@@ -7562,6 +7638,7 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
     let _ = m[0] = m[0] + 1;
     0
   };
+  let _ = fnh_build(fntab);
 
   let fz = [0];
   while fz[0] < cnt[0] {
@@ -7726,6 +7803,7 @@ fn emit_expr_words(src: str) -> [i64] {
     let fl_d = if fl_i[0] >= cnt_l[0] then 1 else 0;
     0
   };
+  let _ = fnh_build(fntab);
   let enames_l = zeros(512);
   let ecnt_l = zeros(16);
   let _ = collect_ctors(src, enames_l, ecnt_l);

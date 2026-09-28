@@ -232,7 +232,14 @@ ZONES = [(0, 1, "fntab"), (2900, 3667, "b1_facts"), (3668, 3670, "b1_scratch"),
          # answer, memoised as 0 not-scanned / 1 no / 2 yes so a fresh zeros() fntab reads
          # as not-scanned; 7102 = the callee NAME exempted from the E120 guard, which is the
          # by-name exemption A21's own commit named as a hole (`let (a,b) = f(f(1))` escapes).
-         (7100, 7102, "tuple_abi")]
+         (7100, 7102, "tuple_abi"),
+         # ROADMAP DG1 (2026-09-28): 7103 = cnt + 1 once the fn-name index is built for
+         # exactly this cnt (bebop.bp fnh_build / fnh_get); 7168..8191 = its 1024 open-
+         # addressing slots, 7168 = 8192 - 1024, the TOP of zeros(8192). 1024 >= the 768-fn
+         # cap / 0.75 load. 7110 = A8's "type word of the last completed expression" (ety,
+         # bebop.bp ety_set) -- used since A8 but never registered, so `--fntab` has been
+         # RED at d157fd07 ("fntab[7110] outside the zone map"); registered here.
+         (7103, 7103, "fnhash_hdr"), (7110, 7110, "ety"), (7168, 8191, "fnhash")]
 # A16 prerequisite RELAYOUT (2026-09-09): the fn cap is 768, so the FLOATING fn zone
 # (3*cnt + ecnt + 258 cells = 0..2816 at cnt=768, ecnt=255) needs everything above it
 # to move. b1_facts is 768 cells because IT IS INDEXED BY FN INDEX -- see PERFN below,
@@ -271,6 +278,8 @@ REGISTERED = {
     7002: "struct_table", 7034: "struct_table",
     # A21 steps 1+2.
     7100: "tuple_abi", 7101: "tuple_abi", 7102: "tuple_abi",
+    # DG1 + A8 (see ZONES).
+    7103: "fnhash_hdr", 7110: "ety", 7168: "fnhash",
     5387: "window_hdr", 5388: "window_hdr",
     5389: "window_cs", 5390: "window_cs", 5391: "window_cs", 5392: "window_cs", 5393: "window_cs",
     5394: "hoist", 5395: "hoist", 5396: "hoist", 5397: "hoist",
@@ -327,6 +336,15 @@ def check_perfn(src_path):
         if nm in PERFN_ARRAYS and n < cap:
             print("PERFN FAIL: array `%s` is zeros(%d) for a fn cap of %d -- an OOB store "
                   "at fn index %d" % (nm, n, cap, n))
+            bad = 1
+    # DG1: the fn-name index needs a FREE slot at the cap (open addressing probes until
+    # an empty slot; a full table never stops), and its wrap mask must be its own size.
+    fh = [(lo, hi) for lo, hi, name in ZONES if name == "fnhash"]
+    if fh:
+        size = fh[0][1] - fh[0][0] + 1
+        if size <= cap or size & (size - 1) or ("& %d" % (size - 1)) not in src:
+            print("PERFN FAIL: fnhash is %d slots for a fn cap of %d -- needs > cap, a power of "
+                  "two, and bebop.bp's probe mask `& %d`" % (size, cap, size - 1))
             bad = 1
     if not bad:
         print("perfn: fn cap %d; every per-fn zone and array is at least that wide" % cap)
