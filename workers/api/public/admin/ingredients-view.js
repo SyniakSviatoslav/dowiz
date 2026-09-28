@@ -39,7 +39,7 @@ export function alertsMarkup(all, noRecipe, flag, t){
 }
 
 /// One ingredient: its facts, its levels, its state and its four actions.
-export function rowMarkup(sup, { money, t, warnDays }){
+export function rowMarkup(sup, { money, t, warnDays, del = false }){
   const low = sup.lowAt || 0, state = C.levelState(sup);
   const pct = low ? Math.min(100, Math.round(100 * Math.max(0, sup.available || 0) / (low * FULL_AT_LOW_MULTIPLE))) : 100;
   const ic = (KINDS.find(([k]) => k === sup.kind) || KINDS[0])[1];
@@ -58,7 +58,9 @@ export function rowMarkup(sup, { money, t, warnDays }){
       ${sup.counted ? `<span class="gauge"><i class="${state === 'ok' ? '' : state === 'low' ? 'warn' : 'bad'}" data-w="${pct}"></i></span>` : ''}`,
     trailing: pills });
   const acts = ACTIONS.map(([a, ic2, word]) => btn({ variant: 'ghost', icon: ic2, key: word, data: { act: a, s: sup.id } })).join('');
-  return `<div class="inv-item">${card}<div class="inv-acts">${acts}</div></div>`;
+  // W-NOM: the owner's red Delete, armed by the first tap (admin/nom.js).
+  const gone = del ? btn({ variant: 'ghost', icon: 'x', key: 'nom_delete', data: { del: sup.id } }) : '';
+  return `<div class="inv-item">${card}<div class="inv-acts">${acts}${gone}</div></div>`;
 }
 
 /// The dishes that take nothing off the shelf, by category, with the one tap

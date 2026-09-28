@@ -13,6 +13,10 @@ use worker::*;
 
 use crate::services::catalogue::import::bump_menu_version;
 
+/// Many dishes, and a category with its dishes (W-NOM).
+mod remove;
+pub use remove::{delete_category, delete_products};
+
 /// Ids are slugs of the name, like the importer's; a clash gets a numeric tail.
 const ID_MAX: usize = 64;
 const NAME_MAX: usize = 120;
@@ -202,47 +206,6 @@ pub async fn set_category(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
     match rec {
         Ok(rec) => Response::from_json(&rec),
         Err(e) if e.to_string().contains("no id") => Response::error("no id could be made from that name", 400),
-        Err(e) => Err(e),
-    }
-}
-
-/// `POST /api/owner/categories/:id/delete` — only an EMPTY category goes;
-/// dishes are moved or deleted first, on purpose, so nothing vanishes by
-/// accident with its heading.
-pub async fn delete_category(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: LocOnly = match req.json().await {
-        Ok(b) => b,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
-    };
-    let Some(id) = ctx.param("id").cloned() else { return Response::error("missing category id", 400) };
-    // THE PLACE IS THE VENUE THAT WAS AUTHORISED, not the one in the token.
-    // See `Place::of_authorised`: these differ for an owner of two venues, and
-    // the write used to land in the other one.
-    let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
-        return Ok(r);
-    }
-    let out = crate::hubstore::with_catalog(&place, move |cat| {
-        let used = cat
-            .products()
-            .iter()
-            .filter_map(|(_, j)| serde_json::from_str::<Value>(j).ok())
-            .filter(|p| p.get("categoryId").and_then(Value::as_str) == Some(id.as_str()))
-            .count();
-        if used > 0 {
-            return Err(Error::RustError(format!("not empty: {used}")));
-        }
-        let was = cat.remove_category(&id);
-        if was {
-            bump_menu_version(cat);
-        }
-        Ok(was)
-    })
-    .await;
-    match out {
-        Ok(true) => Response::from_json(&json!({ "ok": true })),
-        Ok(false) => Response::error("unknown category", 404),
-        Err(e) if e.to_string().starts_with("not empty") => Response::error("the category still has dishes; move or delete them first", 409),
         Err(e) => Err(e),
     }
 }

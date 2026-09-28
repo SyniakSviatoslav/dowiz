@@ -85,3 +85,22 @@ fn a_report_from_a_checkpoint_is_the_report_from_genesis() {
     let g = log.journal().unwrap();
     assert_eq!(fold_journal(&g, &supplies(), &HashMap::new(), &w()), fold(&g.entries, &supplies(), &HashMap::new(), &w()));
 }
+
+/// W-NOM: a deletion is not a movement of food -- it makes no row for the
+/// item, not even an empty one, and is not counted as undated; its twin, a
+/// dated delivery of another item beside it, is one.
+#[test]
+fn a_deletion_moves_nothing_in_the_numbers() {
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    log.set_clock(1500);
+    log.append(&StockEvent::Received { item: "rice".into(), qty: 10 }).unwrap();
+    log.append(&StockEvent::Removed { item: "nori".into(), by: "p_owner".into() }).unwrap();
+    let mut undated = StockLog::create_sized(64 * 1024).unwrap();
+    undated.append(&StockEvent::Removed { item: "tuna".into(), by: "p_owner".into() }).unwrap();
+    let j = log.journal().unwrap();
+    let s = fold(&j.entries, &supplies(), &HashMap::new(), &w());
+    assert!(!s.moved.contains_key("nori"));
+    assert!(s.moved.contains_key("rice"));
+    let s = fold(&undated.journal().unwrap().entries, &supplies(), &HashMap::new(), &w());
+    assert_eq!((s.undated, s.moved.len()), (0, 0));
+}

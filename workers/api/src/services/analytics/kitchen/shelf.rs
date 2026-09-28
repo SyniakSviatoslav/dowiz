@@ -55,8 +55,8 @@ pub fn fold(entries: &[Entry], supplies: &HashMap<String, Supply>, placed_at: &H
     let n = w.starts.len();
     let mut s = Shelf { waste_by_day: vec![0; n], received_by_day: vec![0; n], ..Shelf::default() };
     for e in entries {
-        if matches!(e.ev, StockEvent::Reserved { .. } | StockEvent::Released { .. }) {
-            continue; // a hold is not a movement of food
+        if matches!(e.ev, StockEvent::Reserved { .. } | StockEvent::Released { .. } | StockEvent::Removed { .. }) {
+            continue; // a hold is not a movement of food, and a deletion is not one either (W-NOM)
         }
         let Some(at) = when(e, placed_at) else {
             s.undated += 1;

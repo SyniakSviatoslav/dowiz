@@ -547,7 +547,10 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         .map(|l| {
             json!({
                 "product_id": l.product_id, "modifier_ids": l.modifier_ids,
-                "quantity": l.quantity, "unit_price": l.unit_price   // base + options, from the catalogue
+                "quantity": l.quantity, "unit_price": l.unit_price,  // base + options, from the catalogue
+                // THE NAME TOO (W-NOM): a dish deleted later leaves this order
+                // saying what it sold, not a bare id -- as a room order always did.
+                "name": l.name
             })
         })
         .collect();

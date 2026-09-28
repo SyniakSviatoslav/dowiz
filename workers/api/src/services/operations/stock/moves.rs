@@ -75,6 +75,9 @@ pub struct StockMoveIn {
     /// `as-is`: the dishes to link to their own piece (`as_is`).
     #[serde(default)]
     pub products: Option<Vec<String>>,
+    /// `removed`: the supplies deleted from the nomenclature (`removed`).
+    #[serde(default)]
+    pub items: Option<Vec<String>>,
 }
 
 /// A movement, decided but not yet applied: `expected` and `value` are the
@@ -164,6 +167,9 @@ pub fn plan(
     today: i64,
     shelf_days: impl Fn(&str) -> Option<i64>,
 ) -> Result<Plan, Bad> {
+    if kind == "removed" {
+        return super::removed::plan(&body, by, now_ms);
+    }
     let base = Meta { at: Some(now_ms), lot: text(&body.lot)?, ..Meta::default() };
     let lines = match kind {
         "count" => {
@@ -233,6 +239,9 @@ impl Plan {
     /// a count's `expected` (the shelf at the write) and a write-off's value
     /// (at the average then). Answers the drift per line for the screen.
     pub fn apply(&self, log: &mut StockLog) -> Result<Value, StockError> {
+        if self.kind == "removed" {
+            return super::removed::apply(self, log);
+        }
         let led = log.ledger()?;
         let book = log.cost_book();
         let mut lines = self.lines.clone();

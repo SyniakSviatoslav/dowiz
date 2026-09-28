@@ -24,8 +24,10 @@ import * as C from '/admin/ingredients-calc.js';
 import { openCard, openSupply, openMove, openPrep } from '/admin/ingredients.js';
 import { KINDS, matches, alertsMarkup, rowMarkup, noRecipeMarkup } from '/admin/ingredients-view.js';
 import { openCount, openWaste, openDelivery } from '/admin/ingredients-count.js';
+import * as N from '/admin/nom-logic.js';
 import { openKitchen, ensureCss } from '/admin/kitchen-analytics.js';
 import { drawHealth } from '/admin/stock-health.js';
+import { selection, pickRow, barMarkup, bindBar, tapDelete, deleteSupplies, openQuickAdd, ensureNomCss } from '/admin/nom.js';
 
 export { KINDS };
 export const UNITS = ['g', 'ml', 'unit'];
@@ -37,6 +39,8 @@ const TILES = [['delivery', 'package', 'inv_delivery'], ['count', 'check', 'inv_
 
 let stock = null;
 const view = { kind: 'all', q: '', sort: 'name', flag: '' };
+/// W-NOM: the ingredients ticked for a bulk delete (the owner's).
+const sel = selection();
 const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
 /// What every sheet opened from here needs: the answer, and how to refresh it.
@@ -46,9 +50,10 @@ const ctx = {
 };
 
 export async function render(host){
-  ensureCss();
+  ensureCss(); ensureNomCss();
+  const owner = !me().staff;
   host.innerHTML = `<div class="screen-h"><div><h1 data-t="inv_title"></h1></div>
-    <div class="screen-acts">${me().staff ? '' : iconBtn({ id: 'resetIngredients', icon: 'trash', ariaKey: 'inv_reset' })}${iconBtn({ id: 'importSupplies', icon: 'download', ariaKey: 'importSupplies', tour: 'stock.import' })}${btn({ id: 'addSupply', variant: 'primary', icon: 'plus', key: 'addSupply', tour: 'stock.addSupply' })}</div></div>
+    <div class="screen-acts">${me().staff ? '' : iconBtn({ id: 'resetIngredients', icon: 'trash', ariaKey: 'inv_reset' })}${iconBtn({ id: 'importSupplies', icon: 'download', ariaKey: 'importSupplies', tour: 'stock.import' })}${owner ? btn({ id: 'nomSel', variant: 'ghost', icon: 'check', key: sel.on ? 'nom_selectDone' : 'nom_select' }) : ''}${btn({ id: 'addMany', icon: 'note', key: 'nom_addMany' })}${btn({ id: 'addSupply', variant: 'primary', icon: 'plus', key: 'addSupply', tour: 'stock.addSupply' })}</div></div>
     <p class="screen-hint" data-t="inv_hint"></p>
     <div class="tiles">${TILES.map(([id, ic, word]) => rowBtn({ cls: 'tile', leading: `<span class="tile-ic">${icon(ic)}</span>`, title: key(word), data: { tile: id } })).join('')}</div>
     <div id="invAlerts" class="inv-alerts"></div>
@@ -59,6 +64,8 @@ export async function render(host){
     <section id="invHealth" class="group mt-3"></section>`;
   retranslate(host);
   $('#addSupply', host).onclick = () => openSupply(null, ctx);
+  $('#addMany', host).onclick = () => openQuickAdd(ctx);
+  const ns = $('#nomSel', host); if (ns) ns.onclick = () => { sel.on = !sel.on; sel.ids = new Set(); rerender(); };
   $('#importSupplies', host).onclick = () => openBulk('supplies', rerender);
   const reset = $('#resetIngredients', host);
   if (reset) reset.onclick = () => resetAll(reset);
@@ -69,6 +76,8 @@ export async function render(host){
   // THE STOCK CHECK (owner only: the rebuild report is on the owner's health route).
   if (!me().staff) drawHealth($('#invHealth', host), { api, stock: () => stock, t, st });
   host.onclick = e => {
+    const pk = e.target.closest('[data-pick]'); if (pk) { sel.ids = N.toggle(sel.ids, pk.dataset.pick); return drawList(host); }
+    const del = e.target.closest('[data-del]'); if (del) return tapDelete(del, del.dataset.del, () => removeOne(del.dataset.del, del));
     const tile = e.target.closest('[data-tile]'); if (tile) return openTile(tile.dataset.tile);
     const f = e.target.closest('[data-flag]'); if (f) { view.flag = view.flag === f.dataset.flag ? '' : f.dataset.flag; return drawList(host); }
     const k = e.target.closest('[data-k]'); if (k) { view.kind = k.dataset.k; return rerender(); }
@@ -80,6 +89,12 @@ export async function render(host){
 }
 
 const find = id => (stock?.supplies || []).find(s => s.id === id);
+
+/// The row's red Delete, second tap: one ingredient, for good (W-NOM).
+async function removeOne(id, el){
+  const r = await deleteSupplies([id], el, { ask: false });
+  if (r) ctx.reload();
+}
 const noRecipe = () => stock?.noRecipe || [];
 
 function openTile(id){
@@ -110,9 +125,11 @@ async function asIs(ids, el){
 function drawList(host){
   const all = stock?.supplies || [];
   $('#invAlerts', host).innerHTML = alertsMarkup(all, noRecipe(), view.flag, t);
-  const row = sup => rowMarkup(sup, { money, t, warnDays: stock.expiryWarnDays });
+  const owner = !me().staff;
+  const row = sel.on ? sup => pickRow(sup.id, sup.name || sup.id, esc(`${sup.category || ''} · ${sup.onHand ?? 0} ${sup.unit || ''}`), sel.ids.has(sup.id))
+    : sup => rowMarkup(sup, { money, t, warnDays: stock.expiryWarnDays, del: owner });
   const q = norm(view.q).trim();
-  let list = all.filter(s => (view.kind === 'all' || s.kind === view.kind) && (!q || norm(`${s.name} ${s.category} ${s.id}`).includes(q)) && matches(s, view.flag));
+  let list = all.filter(s => (view.kind === 'all' || s.kind === view.kind) && (!q || norm(`${s.name} ${s.category} ${s.id} ${s.code || ''} ${s.barcode || ''}`).includes(q)) && matches(s, view.flag));
   if (view.sort === 'name') list = [...list].sort((a, b) => String(a.name).localeCompare(String(b.name), lang));
   else if (view.sort === 'category') list = [...list].sort((a, b) => String(a.category).localeCompare(String(b.category), lang) || String(a.name).localeCompare(String(b.name), lang));
   else list = [...list].sort((a, b) => (a.available || 0) - (b.available || 0));
@@ -124,8 +141,11 @@ function drawList(host){
   } else html = `<div class="rows">${list.map(row).join('')}</div>`;
   $('#stockList', host).innerHTML = (all.length ? `<p class="hint mono">${KINDS.map(([k], i) => counts[i] ? `${counts[i]} ${t('kind_' + k).toLowerCase()}` : '').filter(Boolean).join(' · ')}</p>` : '') +
     (view.flag === 'noRecipe' ? '' : list.length ? html : empty('bento', { key: all.length ? 'none' : 'noStock', bodyKey: 'stockHint' })) +
+    (sel.on ? barMarkup(sel) : '') +
     noRecipeMarkup(noRecipe(), t);
   retranslate($('#stockList', host)); hydrate($('#stockList', host));
+  if (sel.on) bindBar($('#stockList', host), sel, { shown: () => list.map(s => s.id), redraw: () => (sel.on ? drawList(host) : rerender()),
+    del: async (ids, el) => { const r = await deleteSupplies(ids, el, { names: ids.map(id => find(id)?.name || id) }); if (r) { sel.ids = new Set(); sel.on = false; ctx.reload(); } } });
   if (view.flag === 'noRecipe') $('#invNoRecipe', host)?.scrollIntoView({ block: 'start' });
 }
 

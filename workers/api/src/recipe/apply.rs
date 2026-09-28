@@ -35,7 +35,7 @@ impl Typed {
 
 /// Drop what the recipe put there, and only that (audit D40): a value marked
 /// derived followed a recipe that is gone; a value the owner typed stays.
-fn clear_derived(p: &mut Value) {
+pub(crate) fn clear_derived(p: &mut Value) {
     for (value, mark) in [("nutrition", "nutritionDerived"), ("weightG", "weightDerived"), ("ingredients", "ingredientsDerived")] {
         if p.get(mark).and_then(Value::as_bool) == Some(true) {
             p[value] = Value::Null;

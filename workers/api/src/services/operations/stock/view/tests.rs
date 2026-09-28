@@ -63,3 +63,23 @@ fn the_last_movements_and_the_sessions() {
     let s = sessions(&j, 5);
     assert_eq!(s, vec![json!({ "session": "s1", "at": 1_790_000_000_000i64, "lines": 1, "value": -320 })]);
 }
+
+/// W-NOM: a supply deleted and re-created under its id shows only its new
+/// life -- no old lots, price, count or movements -- and the deletion is a
+/// row of the recent history, named "removed".
+#[test]
+fn a_recreated_supply_shows_only_what_came_after_its_deletion() {
+    let mut l = log();
+    l.append(&StockEvent::Removed { item: "salmon".into(), by: "p_owner".into() }).unwrap();
+    l.append(&StockEvent::Received { item: "salmon".into(), qty: 400 }).unwrap();
+    let j = l.journal().unwrap();
+    let x = extras("salmon", 100, &j, 20260926);
+    let kinds: Vec<&str> = x["moves"].as_array().unwrap().iter().map(|m| m["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, vec!["received"]);
+    assert_eq!((x["prices"].clone(), x["wac"].clone(), x["lastCount"].clone()), (json!([]), Value::Null, Value::Null));
+    assert_eq!(x["lots"].as_array().unwrap().len(), 1, "one unlabelled lot of the new delivery");
+    let (recent, _) = recent_and_suppliers(&j);
+    assert_eq!((recent[1]["kind"].clone(), recent[1]["qty"].clone()), (json!("removed"), json!(0)));
+    // Its twin: without a deletion the whole history shows.
+    assert_eq!(extras("salmon", 100, &log().journal().unwrap(), 20260926)["moves"].as_array().unwrap().len(), 5);
+}

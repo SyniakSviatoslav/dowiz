@@ -1,0 +1,10 @@
+/* The nomenclature (lane W-NOM): the bar under a list being selected for a
+   bulk delete, a ticked row, a pack row, the preview of a quick list. Tokens
+   only; loaded once by admin/nom.js. */
+.nom-bar{position:sticky;bottom:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);padding:var(--space-3);margin:var(--space-3) 0 0;background:var(--brand-surface);border-top:1px solid var(--ui-hairline);box-shadow:0 -6px 16px rgba(0,0,0,.08)}
+.nom-bar .mono{flex:1 1 100%}
+.nom-bar .ui-btn{flex:1 1 auto}
+.ui-row.nom-on{background:var(--brand-primary-soft, var(--brand-border))}
+.nom-pack{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:var(--space-2);margin:0 0 var(--space-2)}
+.nom-preview{margin:var(--space-3) 0}
+.nom-armed{font-weight:700}

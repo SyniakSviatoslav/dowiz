@@ -34,6 +34,7 @@ pub fn kind_of(ev: &StockEvent) -> &'static str {
         StockEvent::Returned { .. } => "returned",
         StockEvent::Unserved { .. } => "unserved",
         StockEvent::Produced { .. } => "produced",
+        StockEvent::Removed { .. } => "removed",
     }
 }
 
@@ -86,7 +87,9 @@ pub fn extras(id: &str, basis: i64, j: &Journal, today: i64) -> Value {
         })
         .collect();
     let left = |max: i64| lots.iter().filter(|l| l["daysLeft"].as_i64().is_some_and(|d| d <= max)).count();
-    let mine = || j.entries.iter().filter(move |e| e.ev.item() == id);
+    // A supply re-created after a deletion (W-NOM) shows only its new life.
+    let since = j.entries.iter().rposition(|e| matches!(&e.ev, StockEvent::Removed { item, .. } if item == id)).map_or(0, |p| p + 1);
+    let mine = || j.entries[since..].iter().filter(move |e| e.ev.item() == id);
     let prices: Vec<Value> = mine()
         .filter_map(|e| match (&e.ev, e.meta.unit_cost, e.meta.per) {
             (StockEvent::Received { qty, .. }, Some(c), Some(p)) => Some(json!({

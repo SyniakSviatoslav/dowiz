@@ -17,6 +17,8 @@ pub mod view;
 pub mod tell;
 /// One movement as the venue object's turn, pure (W0a).
 pub mod turn;
+/// A supply deleted from the nomenclature, as a movement (W-NOM).
+pub mod removed;
 pub use moves::StockMoveIn;
 #[cfg(test)]
 use moves::movement;
@@ -24,7 +26,7 @@ use moves::movement;
 use dowiz_hub::stock::{StockEvent, WasteReason};
 
 /// The venue's zone and today's local day, `yyyymmdd`, from its own record.
-fn today_of(cat: &dowiz_hub::catalog::Catalog, now_ms: i64) -> i64 {
+pub(crate) fn today_of(cat: &dowiz_hub::catalog::Catalog, now_ms: i64) -> i64 {
     let zone = crate::hubstore::zone_of(cat.location().and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref());
     dowiz_hub::stock::meta::day_of_local_ms(dowiz_hub::tz::local_ms(zone, now_ms))
 }
@@ -98,6 +100,8 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
                 "costPerBasis": take("costPerBasis"), "weightPerUnit": take("weightPerUnit"),
                 "cleanPm": take("cleanPm"), "cookPm": take("cookPm"), "nutritionBasis": take("nutritionBasis"),
                 "shelfDays": take("shelfDays"), "supplier": take("supplier"),
+                // W-NOM: the nomenclature's own fields.
+                "code": take("code"), "barcode": take("barcode"), "packs": take("packs"),
                 "nutritionConfirmed": v.get("nutritionConfirmed").and_then(Value::as_bool).unwrap_or(false),
                 "onHand": level.on_hand,
                 "reserved": level.reserved,
@@ -174,6 +178,11 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
     let Some(kind) = ctx.param("kind").cloned() else {
         return Response::error("which movement?", 400);
     };
+    // A DELETION IS NOT A MOVEMENT ANYBODY MAY POST: it is the owner's, and the
+    // catalogue goes first (`supplies/delete.rs`), which sends it to the object.
+    if kind == "removed" {
+        return Response::error("no such movement: removed", 400);
+    }
     let (by, loc) = match signer_for(&req, &ctx, &kind).await {
         Ok(v) => v,
         Err(r) => return Ok(r),

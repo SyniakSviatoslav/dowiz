@@ -62,7 +62,23 @@ pub(crate) struct SupplyIn {
     /// Days a delivery keeps when its paper names no date.
     #[serde(default)]
     pub(crate) shelf_days: Option<i64>,
+    /// NOMENCLATURE (W-NOM): the venue's own article code; "" clears it.
+    #[serde(default)]
+    pub(crate) code: Option<String>,
+    /// The pack's barcode (EAN/UPC digits); "" clears it.
+    #[serde(default)]
+    pub(crate) barcode: Option<String>,
+    /// How it is bought: `[{name: "box 5 kg", qty: 5000}]` in base units; [] clears.
+    #[serde(default)]
+    pub(crate) packs: Option<Vec<nomenclature::Pack>>,
 }
+
+/// Code, barcode and packs: the nomenclature's own fields (W-NOM).
+pub mod nomenclature;
+/// Adding many at once: `POST /api/owner/supplies/bulk` (W-NOM).
+pub mod quick;
+/// Deleting for good: `POST /api/owner/supplies/delete` (W-NOM).
+pub mod delete;
 
 /// `POST /api/owner/supplies` — add or edit an ingredient.
 pub async fn set_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
@@ -70,7 +86,7 @@ pub async fn set_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
+    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &quick::ADD).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -158,6 +174,7 @@ pub(crate) fn check(body: &SupplyIn) -> std::result::Result<String, String> {
     if body.shelf_days.is_some_and(|d| !(1..=3650).contains(&d)) {
         return Err("shelf life is 1 to 3650 days".into());
     }
+    nomenclature::check(body)?;
     Ok(id)
 }
 
@@ -192,6 +209,9 @@ pub(crate) fn record(id: &str, body: &SupplyIn, existing: &Value) -> Value {
         "cookPm": opt("cookPm", body.cook_pm.map(|v| json!(v))),
         "nutritionBasis": opt("nutritionBasis", body.nutrition_basis.clone().map(Value::String)),
         "shelfDays": opt("shelfDays", body.shelf_days.map(|v| json!(v))),
+        "code": opt("code", nomenclature::text(&body.code)),
+        "barcode": opt("barcode", nomenclature::text(&body.barcode)),
+        "packs": opt("packs", nomenclature::packs(&body.packs)),
         // Saving through the editor is an act of keeping: a retired supply
         // written again comes back to the list unless the body says otherwise.
         "active": json!(body.active.unwrap_or(true)),

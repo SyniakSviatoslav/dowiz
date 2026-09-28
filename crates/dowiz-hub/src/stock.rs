@@ -135,6 +135,10 @@ pub enum StockEvent {
     /// `into` gains `out`. `None` is a MEASUREMENT only -- the shelf is still
     /// counted gross, so nothing moves and the record is the yield. Signed.
     Produced { item: String, qty: Qty, out: Qty, stage: PrepStage, into: Option<String>, by: String },
+    /// THE SUPPLY WAS DELETED from the nomenclature (W-NOM, 2026-09-28): its
+    /// shelf, holds, lots and cost leave every fold; the records before stay.
+    /// NOT a write-off -- no quantity, no waste, no value. Signed.
+    Removed { item: String, by: String },
 }
 
 /// Which loss a [`StockEvent::Produced`] measured: raw -> net (cleaning) or
@@ -173,7 +177,8 @@ impl StockEvent {
             | StockEvent::Served { item, .. }
             | StockEvent::Returned { item, .. }
             | StockEvent::Unserved { item, .. }
-            | StockEvent::Produced { item, .. } => item,
+            | StockEvent::Produced { item, .. }
+            | StockEvent::Removed { item, .. } => item,
         }
     }
 
@@ -320,6 +325,8 @@ impl StockLedger {
                     return Err(StockError::NotPositive { qty: *observed });
                 }
             }
+            // A deletion moves no quantity, and deleting nothing is not wrong.
+            StockEvent::Removed { .. } => return Ok(()),
             _ => {
                 let q = match ev {
                     StockEvent::Received { qty, .. }
@@ -331,7 +338,7 @@ impl StockLedger {
                     | StockEvent::Returned { qty, .. }
                     | StockEvent::Unserved { qty, .. }
                     | StockEvent::Produced { qty, .. } => *qty,
-                    StockEvent::Stocktake { .. } => unreachable!(),
+                    StockEvent::Stocktake { .. } | StockEvent::Removed { .. } => unreachable!(),
                 };
                 if q <= 0 {
                     return Err(StockError::NotPositive { qty: q });
@@ -427,7 +434,7 @@ impl StockLedger {
             }
             // Waste of food `Consumed` already took: the shelf does not move,
             // so there is nothing for it to refuse.
-            StockEvent::Returned { resell: false, .. } => {}
+            StockEvent::Returned { resell: false, .. } | StockEvent::Removed { .. } => {}
             StockEvent::Produced { item, qty, out, into, .. } => {
                 if *out < 0 {
                     return Err(StockError::NotPositive { qty: *out });
@@ -557,6 +564,7 @@ impl StockLedger {
                     l.on_hand = l.on_hand.checked_add(*out).ok_or(StockError::Overflow)?;
                 }
             }
+            StockEvent::Removed { item, .. } => self.forget(item),
         }
         Ok(())
     }
@@ -599,7 +607,7 @@ pub fn moved_into<'a>(item: &str, into: &'a Option<String>) -> Option<&'a str> {
 /// venue's shelf -- and every order that reserves against it -- stops.
 pub fn signed(ev: &StockEvent) -> Result<(), StockError> {
     match ev {
-        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } | StockEvent::Produced { by, .. }
+        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } | StockEvent::Produced { by, .. } | StockEvent::Removed { by, .. }
             if by.trim().is_empty() =>
         {
             Err(StockError::Unsigned)
@@ -613,7 +621,7 @@ pub fn signed(ev: &StockEvent) -> Result<(), StockError> {
 /// lifecycle's) and for a write-off recorded before signers existed.
 pub fn signer(ev: &StockEvent) -> Option<&str> {
     match ev {
-        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } | StockEvent::Produced { by, .. }
+        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } | StockEvent::Produced { by, .. } | StockEvent::Removed { by, .. }
             if !by.is_empty() =>
         {
             Some(by)
@@ -682,6 +690,7 @@ pub fn encode(ev: &StockEvent) -> String {
             esc(into.as_deref().unwrap_or("")),
             esc(by)
         ),
+        StockEvent::Removed { item, by } => format!(r#"{{"k":"removed","item":"{}","by":"{}"}}"#, esc(item), esc(by)),
     }
 }
 
@@ -744,6 +753,7 @@ pub fn decode(rec: &str) -> Option<StockEvent> {
             into: str_field(rec, "into").filter(|t| !t.is_empty()),
             by: str_field(rec, "by")?,
         }),
+        "removed" => Some(StockEvent::Removed { item, by: str_field(rec, "by")? }),
         _ => None,
     }
 }
@@ -1254,6 +1264,13 @@ mod returned_tests;
 #[cfg(test)]
 #[path = "stock/produced_tests.rs"]
 mod produced_tests;
+
+/// W-NOM: a supply deleted from the nomenclature leaves every fold.
+#[path = "stock/removed.rs"]
+mod removed;
+#[cfg(test)]
+#[path = "stock/removed_tests.rs"]
+mod removed_tests;
 
 /// The owner's choice on a door-refused order, already made? Any `Returned`
 /// for it says yes. And what the kitchen took for it: Σ `Consumed` per item,

@@ -11,6 +11,8 @@ import { $, $$, esc, icon, t, post, withLoc, toast, sheet, closeSheet, busy, mon
 import { ui, k as key, btn, field, input, select, chips, press, pill, rowBtn, rowDiv } from '/admin/parts.js';
 import * as C from '/admin/ingredients-calc.js';
 import { KINDS, cardMarkup } from '/admin/ingredients-view.js';
+import { packsMarkup, packChips, bindPacks, deleteSupplies, N } from '/admin/nom.js';
+import { me } from '/admin/app.js';
 
 export { KINDS };
 const isFood = k => k === 'food_ingredient' || k === 'condiment';
@@ -40,8 +42,8 @@ async function adoptYield(sup, stage, pm, el, ctx){
 }
 
 /// The supply as the old service knew it, plus its losses and shelf life.
-export function openSupply(sup, ctx){
-  const kind = sup?.kind || KINDS[0][0], unit = sup?.unit || 'g';
+export function openSupply(sup, ctx, preset = {}){
+  const kind = sup?.kind || preset.kind || KINDS[0][0], unit = sup?.unit || preset.unit || 'g';
   const cats = [...new Set((ctx.data?.supplies || []).map(s => s.category).filter(Boolean))];
   const pctOf = pm => (pm == null ? '' : String(pm / 10));
   sheet(`<p class="eyebrow" data-t="supplies"></p><h2 data-t="${sup ? 'edit' : 'addSupply'}"></h2><p class="sheet-hint" data-t="ap_h_supply"></p>
@@ -49,7 +51,7 @@ export function openSupply(sup, ctx){
     ${field({ id: 's-id', key: 'ingredient', value: sup?.id || '', placeholder: 'salmon', hintKey: 'supplyIdHint', attrs: { readonly: !!sup }, tour: 'supply.id' })}
     <p class="ui-label" data-t="kind"></p>${chips({ id: 'sKind', values: KINDS.map(([k, ic]) => ({ value: k, key: 'kind_' + k, icon: ic })), value: kind, attr: 'kind', labelKey: 'kind', tour: 'supply.kind' })}
     <p class="hint" data-t="ap_f_kindLabel"></p>
-    <div class="grid2"><div>${field({ id: 's-cat', key: 'category', value: sup?.category || '', autocomplete: 'off', attrs: { list: 'catList' }, tour: 'supply.category' })}<datalist id="catList">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
+    <div class="grid2"><div>${field({ id: 's-cat', key: 'category', value: sup?.category || preset.category || '', autocomplete: 'off', attrs: { list: 'catList' }, tour: 'supply.category' })}<datalist id="catList">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
       <div>${select({ id: 's-unit', key: 'unit', value: unit, options: ['g', 'ml', 'unit'].map(u => ({ value: u, label: u })), tour: 'supply.unit' })}</div></div>
     <div id="sFood" ${isFood(kind) ? '' : 'hidden'}>
       <p class="eyebrow mt-3"><span data-t="nutritionPer"></span> <span id="sBasis">${C.basisOf(unit) === 1 ? '1' : '100'} ${esc(unit)}</span></p>
@@ -66,25 +68,44 @@ export function openSupply(sup, ctx){
       <div id="sWeight" ${unit === 'unit' ? '' : 'hidden'}>${field({ id: 's-wpu', key: 'weightPerUnit', inputmode: 'decimal', value: sup?.weightPerUnit ?? '' })}</div></div>
     <div class="grid2 pair"><div>${field({ id: 's-low', key: 'minLevel', inputmode: 'numeric', value: sup?.lowAt ?? '', tour: 'supply.low' })}</div>
       <div>${field({ id: 's-shelf', key: 'inv_shelfDays', inputmode: 'numeric', value: sup?.shelfDays ?? '' })}</div></div>
-    <div class="btn-row">${btn({ id: 'sSave', variant: 'primary', icon: 'check', key: 'save', tour: 'supply.save' })}</div>
-    ${sup ? `<div class="btn-row">${btn({ id: 'sRetire', variant: 'danger', icon: 'trash', key: 'retireSupply', tour: 'supply.retire' })}</div>` : ''}`, { name: 'supply' });
+    <div class="grid2 pair"><div>${field({ id: 's-code', key: 'nom_code', value: sup?.code || '', autocomplete: 'off' })}</div>
+      <div>${field({ id: 's-bar', key: 'nom_barcode', inputmode: 'numeric', value: sup?.barcode || '', autocomplete: 'off' })}</div></div>
+    ${packsMarkup(sup?.packs)}
+    <div class="btn-row">${sup ? '' : btn({ id: 'sNext', icon: 'plus', key: 'nom_saveNext' })}${btn({ id: 'sSave', variant: 'primary', icon: 'check', key: 'save', tour: 'supply.save' })}</div>
+    ${sup ? `<div class="btn-row">${btn({ id: 'sRetire', variant: 'ghost', icon: 'box', key: 'retireSupply', tour: 'supply.retire' })}${me().staff ? '' : btn({ id: 'sDelete', variant: 'danger', icon: 'trash', key: 'nom_delete' })}</div>
+      <p class="hint" data-t="retireSupplyHint"></p>${me().staff ? '' : '<p class="hint" data-t="nom_deleteHint"></p>'}` : ''}`, { name: 'supply' });
+  const readPacks = bindPacks();
   let k = kind, nb = sup?.nutritionBasis || 'raw';
   for (const b of $$('[data-kind]', $('#sheetIn'))) b.onclick = () => { k = b.dataset.kind; press($$('[data-kind]', $('#sheetIn')), b); $('#sFood').hidden = !isFood(k); };
   for (const b of $$('[data-nb]', $('#sheetIn'))) b.onclick = () => { nb = b.dataset.nb; press($$('[data-nb]', $('#sheetIn')), b); };
   $('#s-unit').onchange = e => { const u = e.target.value; $('#sWeight').hidden = u !== 'unit'; for (const el of $$('#sBasis, #s-cost-hint')) el.textContent = `${C.basisOf(u) === 1 ? '1' : '100'} ${u}`; };
   if (!sup) $('#s-name').oninput = e => { $('#s-id').value = e.target.value.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9а-яіїєґ]+/gi, '-').replace(/^-|-$/g, ''); };
   const num = v => { const s = String(v ?? '').trim(); if (!s) return null; const n = Number(s.replace(',', '.')); return Number.isFinite(n) ? n : null; };
-  $('#sSave').onclick = async () => {
-    const id = $('#s-id').value.trim().toLowerCase().replace(/\s+/g, '-'); if (!id) return toast(t('required'));
+  const read = async () => {
+    const id = $('#s-id').value.trim().toLowerCase().replace(/\s+/g, '-'); if (!id) { toast(t('required')); return null; }
     const body = { id, name: $('#s-name').value.trim() || id, unit: $('#s-unit').value, kind: k, category: $('#s-cat').value.trim() };
     const low = num($('#s-low').value); if (low != null) body.lowAt = Math.round(low);
     if (isFood(k)) { for (const [f, kk] of [['s-kcal', 'kcalPer100'], ['s-prot', 'proteinPer100'], ['s-fat', 'fatPer100'], ['s-carb', 'carbsPer100']]) { const v = num($('#' + f).value); if (v != null) body[kk] = v; } body.nutritionConfirmed = $('#s-conf').checked; body.nutritionBasis = nb; }
     const cost = num($('#s-cost').value); if (cost != null) body.costPerBasis = Math.round(cost);
     const wpu = num($('#s-wpu').value); if (wpu != null) body.weightPerUnit = wpu;
-    for (const [f, kk] of [['s-clean', 'cleanPm'], ['s-cook', 'cookPm']]) { const raw = $('#' + f).value.trim(); if (!raw) continue; const pm = C.pmOfPct(raw); if (pm == null) return toast(t('required')); body[kk] = pm; }
+    for (const [f, kk] of [['s-clean', 'cleanPm'], ['s-cook', 'cookPm']]) { const raw = $('#' + f).value.trim(); if (!raw) continue; const pm = C.pmOfPct(raw); if (pm == null) return void toast(t('required')); body[kk] = pm; }
     const shelf = num($('#s-shelf').value); if (shelf != null) body.shelfDays = Math.round(shelf);
-    try { await busy($('#sSave'), () => post('/owner/supplies', body)); toast(t('saved')); closeSheet(); ctx.reload(); } catch (e) { fail(e); }
+    body.code = $('#s-code').value.trim(); body.barcode = $('#s-bar').value.trim();
+    const pk = readPacks(body.unit); if (pk.error) return void toast(t(pk.error)); body.packs = pk.packs;
+    return body;
   };
+  const save = async (el, next) => {
+    const body = await read(); if (!body) return;
+    try {
+      await busy(el, () => post('/owner/supplies', body)); toast(t('saved'));
+      // THE NEXT ONE KEEPS THE GROUP, UNIT AND KIND: a list is typed in a row.
+      if (next) { ctx.data?.supplies?.push?.(body); return openSupply(null, ctx, { category: body.category, unit: body.unit, kind: body.kind }); }
+      closeSheet(); ctx.reload();
+    } catch (e) { fail(e); }
+  };
+  $('#sSave').onclick = () => save($('#sSave'), false);
+  const nx = $('#sNext'); if (nx) nx.onclick = () => save(nx, true);
+  const del = $('#sDelete'); if (del) del.onclick = async () => { const r = await deleteSupplies([sup.id], del, { names: [sup.name || sup.id] }); if (r) { closeSheet(); ctx.reload(); } };
   const ret = $('#sRetire'); if (ret) ret.onclick = async () => { const ok = await confirm(t('retireSupply'), t('retireSupplyHint'), { danger: true }); if (!ok) return openSupply(sup, ctx); try { await post(`/owner/supplies/${encodeURIComponent(sup.id)}/retire`, withLoc()); toast(t('saved')); closeSheet(); ctx.reload(); } catch (e) { fail(e); } };
 }
 
@@ -96,6 +117,7 @@ export function openMove(sup, first, ctx){
     <p class="mono muted">${esc(t('inv_onHand'))} ${sup.onHand ?? 0} · ${esc(t('inv_available'))} ${sup.available ?? 0} ${esc(sup.unit || '')}</p>
     <div class="chips" id="kind" role="group">${MOVES.map(([k, word, ic]) => ui.chip({ as: 'button', selected: k === first, icon: ic, label: key(word), attrs: { data: { k, tour: 'stock.' + k } } })).join('')}</div>
     <div class="inv-big">${field({ id: 'm-qty', key: 'inv_qty', hintKey: 'inv_qtyHint', inputmode: 'decimal', autocomplete: 'off', tour: 'move.qty' })}</div>
+    ${packChips(sup)}
     <div id="mRecv">
       <p class="ui-label" data-t="inv_price"></p>${chips({ id: 'mMode', values: [{ value: 'per', label: perWord(sup.unit) }, { value: 'total', key: 'inv_total' }], value: 'per', attr: 'mode' })}
       ${field({ id: 'm-price', key: 'inv_price', inputmode: 'numeric', autocomplete: 'off' })}
@@ -116,6 +138,8 @@ export function openMove(sup, first, ctx){
   for (const b of $$('[data-r]', $('#sheetIn'))) b.onclick = () => { $('#m-reason').value = b.dataset.r; press($$('[data-r]', $('#sheetIn')), b); };
   for (const b of $$('[data-lot]', $('#sheetIn'))) b.onclick = () => { lot = lot === b.dataset.lot ? null : b.dataset.lot; press($$('[data-lot]', $('#sheetIn')), lot ? b : null); };
   $('#mEdit').onclick = () => openSupply(sup, ctx);
+  // W-NOM: one tap adds one pack to the quantity ("2 boxes" is two taps).
+  for (const b of $$('[data-pack]', $('#sheetIn'))) b.onclick = () => { $('#m-qty').value = String(N.plusPack($('#m-qty').value, { qty: Number(b.dataset.pack) }, sup.unit)); };
   $('#mGo').onclick = async () => {
     const qty = C.amount($('#m-qty').value, sup.unit);
     if (qty == null || qty < 0 || (kind !== 'stocktake' && qty === 0)) return toast(t('required'));

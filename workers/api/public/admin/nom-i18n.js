@@ -1,0 +1,86 @@
+// The words of the nomenclature (adding ingredients one by one and in a list,
+// code / barcode / packs) and of DELETING FOR GOOD (ingredients, dishes,
+// categories), in the lane's own dictionary (never admin/i18n.js). Merged
+// into the console's T once, on import, for every language this file has.
+//
+// ASCII QUOTES ONLY as string delimiters (DOWIZ-COMMON-RULES rule 11);
+// apostrophes inside words use U+02BC.
+
+import { T } from '/admin/i18n.js';
+
+export const WORDS = {
+  sq: {
+    nom_addMany: 'Shto disa', nom_addManyHint: 'Një përbërës për rresht. Njësia dhe grupi më poshtë vlejnë për çdo rresht; një rresht mund tʼi ndryshojë: «Salmon; kg; Peshk».',
+    nom_lines: 'Përbërësit, një për rresht', nom_unitAll: 'Njësia', nom_groupAll: 'Grupi', nom_kindAll: 'Lloji',
+    nom_willAdd: 'Do të shtohen', nom_exists: 'ekzistojnë tashmë', nom_add: 'Shto', nom_added: 'U shtuan',
+    nom_needOne: 'Shkruani të paktën një emër.', nom_tooMany: 'Të shumtën 200 në një herë.', nom_nameLong: 'Një emër ka të shumtën 80 shkronja.',
+    nom_saveNext: 'Ruaj dhe shto tjetrin',
+    nom_code: 'Kodi', nom_barcode: 'Barkodi', nom_packs: 'Paketimet', nom_packsHint: 'Si e blini: «kuti 5 kg» = 5 kg. Te furnizimi një prekje shton një paketë.',
+    nom_packName: 'Paketimi', nom_packQty: 'Sa ka brenda', nom_packAdd: 'Shto paketim',
+    nom_packBad: 'Një paketim ka emër dhe sasi të plotë.', nom_packTwice: 'Dy paketime me të njëjtin emër.', nom_packMany: 'Të shumtën 6 paketime.',
+    nom_select: 'Zgjidh', nom_selectDone: 'Mbaro', nom_selected: 'të zgjedhura', nom_all: 'Të gjitha të shfaqurat',
+    nom_delete: 'Fshi', nom_deleteArmed: 'Prek sërish për ta fshirë', nom_deleteSel: 'Fshi të zgjedhurat',
+    nom_deleteHint: 'Fshihet përgjithmonë: nga lista, nga çdo recetë dhe nga magazina. Historia e lëvizjeve mbetet. Nuk është shlyerje (nuk numërohet si humbje).',
+    nom_deleteDishesHint: 'Pjatat fshihen nga menyja përgjithmonë; porositë e kaluara ruajnë emrin dhe çmimin e tyre.',
+    nom_deleted: 'U fshinë', nom_recipesChanged: 'receta u përditësuan', nom_ownerOnly: 'Vetëm pronari fshin përgjithmonë.',
+    nom_catDelete: 'Fshi kategorinë', nom_catWithDishes: 'bashkë me pjatat e saj', nom_dishes: 'pjata',
+    nom_pcs: 'copë',
+    inv_mv_removed: 'fshirë',
+  },
+  en: {
+    nom_addMany: 'Add several', nom_addManyHint: 'One ingredient per line. The unit and group below apply to every line; a line may change them: “Salmon; kg; Fish”.',
+    nom_lines: 'Ingredients, one per line', nom_unitAll: 'Unit', nom_groupAll: 'Group', nom_kindAll: 'Kind',
+    nom_willAdd: 'Will be added', nom_exists: 'already there', nom_add: 'Add', nom_added: 'Added',
+    nom_needOne: 'Type at least one name.', nom_tooMany: 'At most 200 at once.', nom_nameLong: 'A name is at most 80 characters.',
+    nom_saveNext: 'Save and add another',
+    nom_code: 'Code', nom_barcode: 'Barcode', nom_packs: 'Packs', nom_packsHint: 'How you buy it: “box 5 kg” = 5 kg. On a delivery one tap adds one pack.',
+    nom_packName: 'Pack', nom_packQty: 'Holds', nom_packAdd: 'Add a pack',
+    nom_packBad: 'A pack has a name and a whole quantity.', nom_packTwice: 'Two packs with one name.', nom_packMany: 'At most 6 packs.',
+    nom_select: 'Select', nom_selectDone: 'Done', nom_selected: 'selected', nom_all: 'All shown',
+    nom_delete: 'Delete', nom_deleteArmed: 'Tap again to delete', nom_deleteSel: 'Delete selected',
+    nom_deleteHint: 'Deleted for good: from the list, from every recipe and from the shelf. The movement history stays. This is not a write-off (it is not counted as waste).',
+    nom_deleteDishesHint: 'The dishes leave the menu for good; past orders keep their name and price.',
+    nom_deleted: 'Deleted', nom_recipesChanged: 'recipes updated', nom_ownerOnly: 'Only the owner deletes for good.',
+    nom_catDelete: 'Delete the category', nom_catWithDishes: 'with its dishes', nom_dishes: 'dishes',
+    nom_pcs: 'pcs',
+    inv_mv_removed: 'deleted',
+  },
+  uk: {
+    nom_addMany: 'Додати кілька', nom_addManyHint: 'Один інгредієнт на рядок. Одиниця й група нижче діють на кожен рядок; рядок може їх змінити: «Лосось; кг; Риба».',
+    nom_lines: 'Інгредієнти, по одному на рядок', nom_unitAll: 'Одиниця', nom_groupAll: 'Група', nom_kindAll: 'Тип',
+    nom_willAdd: 'Буде додано', nom_exists: 'вже є', nom_add: 'Додати', nom_added: 'Додано',
+    nom_needOne: 'Напишіть хоча б одну назву.', nom_tooMany: 'Не більше 200 за раз.', nom_nameLong: 'Назва — не більше 80 символів.',
+    nom_saveNext: 'Зберегти й додати ще',
+    nom_code: 'Код', nom_barcode: 'Штрихкод', nom_packs: 'Упаковки', nom_packsHint: 'Як ви це купуєте: «ящик 5 кг» = 5 кг. На приході один дотик додає одну упаковку.',
+    nom_packName: 'Упаковка', nom_packQty: 'Скільки в ній', nom_packAdd: 'Додати упаковку',
+    nom_packBad: 'Упаковка має назву й цілу кількість.', nom_packTwice: 'Дві упаковки з однією назвою.', nom_packMany: 'Не більше 6 упаковок.',
+    nom_select: 'Вибрати', nom_selectDone: 'Готово', nom_selected: 'вибрано', nom_all: 'Усі показані',
+    nom_delete: 'Видалити', nom_deleteArmed: 'Торкніться ще раз, щоб видалити', nom_deleteSel: 'Видалити вибрані',
+    nom_deleteHint: 'Видаляється назавжди: зі списку, з кожної техкарти і зі складу. Історія рухів лишається. Це не списання (не рахується як втрати).',
+    nom_deleteDishesHint: 'Страви зникають з меню назавжди; минулі замовлення зберігають свою назву й ціну.',
+    nom_deleted: 'Видалено', nom_recipesChanged: 'техкарт оновлено', nom_ownerOnly: 'Назавжди видаляє лише власник.',
+    nom_catDelete: 'Видалити категорію', nom_catWithDishes: 'разом з її стравами', nom_dishes: 'страв',
+    nom_pcs: 'шт',
+    inv_mv_removed: 'видалено',
+  },
+  ru: {
+    nom_addMany: 'Добавить несколько', nom_addManyHint: 'Один ингредиент на строку. Единица и группа ниже действуют на каждую строку; строка может их изменить: «Лосось; кг; Рыба».',
+    nom_lines: 'Ингредиенты, по одному на строку', nom_unitAll: 'Единица', nom_groupAll: 'Группа', nom_kindAll: 'Тип',
+    nom_willAdd: 'Будет добавлено', nom_exists: 'уже есть', nom_add: 'Добавить', nom_added: 'Добавлено',
+    nom_needOne: 'Напишите хотя бы одно название.', nom_tooMany: 'Не больше 200 за раз.', nom_nameLong: 'Название — не больше 80 символов.',
+    nom_saveNext: 'Сохранить и добавить ещё',
+    nom_code: 'Код', nom_barcode: 'Штрихкод', nom_packs: 'Упаковки', nom_packsHint: 'Как вы это покупаете: «ящик 5 кг» = 5 кг. На приходе одно касание добавляет одну упаковку.',
+    nom_packName: 'Упаковка', nom_packQty: 'Сколько в ней', nom_packAdd: 'Добавить упаковку',
+    nom_packBad: 'У упаковки есть название и целое количество.', nom_packTwice: 'Две упаковки с одним названием.', nom_packMany: 'Не больше 6 упаковок.',
+    nom_select: 'Выбрать', nom_selectDone: 'Готово', nom_selected: 'выбрано', nom_all: 'Все показанные',
+    nom_delete: 'Удалить', nom_deleteArmed: 'Коснитесь ещё раз, чтобы удалить', nom_deleteSel: 'Удалить выбранные',
+    nom_deleteHint: 'Удаляется навсегда: из списка, из каждой техкарты и со склада. История движений остаётся. Это не списание (не считается потерями).',
+    nom_deleteDishesHint: 'Блюда исчезают из меню навсегда; прошлые заказы сохраняют своё название и цену.',
+    nom_deleted: 'Удалено', nom_recipesChanged: 'техкарт обновлено', nom_ownerOnly: 'Навсегда удаляет только владелец.',
+    nom_catDelete: 'Удалить категорию', nom_catWithDishes: 'вместе с её блюдами', nom_dishes: 'блюд',
+    nom_pcs: 'шт',
+    inv_mv_removed: 'удалено',
+  },
+};
+
+for (const [l, words] of Object.entries(WORDS)) if (T[l]) Object.assign(T[l], words);

@@ -131,7 +131,9 @@ fn stock_row(ev: &StockEvent) -> Option<WasteRow> {
         | StockEvent::Unserved { .. }
         // PREP IS NOT WASTE: its loss (gross - out) is the recipe's own,
         // reported by the kitchen analytics as a yield, not a write-off.
-        | StockEvent::Produced { .. } => None,
+        | StockEvent::Produced { .. }
+        // A DELETED SUPPLY IS NOT WASTE (W-NOM): no quantity left the shelf.
+        | StockEvent::Removed { .. } => None,
     }
 }
 

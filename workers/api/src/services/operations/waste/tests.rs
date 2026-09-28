@@ -165,3 +165,17 @@ fn a_write_off_is_dated_and_valued_and_an_old_one_is_not_invented() {
     };
     assert!(fold(&[prep], &[]).is_empty());
 }
+
+/// W-NOM: an ingredient DELETED is not waste -- no row, however much it held;
+/// its twin, a real write-off beside it, is one.
+#[test]
+fn a_deleted_ingredient_is_never_a_waste_row() {
+    let evs = vec![
+        StockEvent::Received { item: "salmon".into(), qty: 5000 },
+        StockEvent::Wasted { item: "salmon".into(), qty: 100, reason: WasteReason::Spoiled, by: "p".into() },
+        StockEvent::Removed { item: "salmon".into(), by: "p_owner".into() },
+    ];
+    let rows = fold(&evs, &[]);
+    assert_eq!(rows.len(), 1, "only the write-off");
+    assert_eq!(rows[0].reason, "spoiled");
+}

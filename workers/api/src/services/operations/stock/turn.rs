@@ -65,7 +65,8 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn, expiring_due: bool) -> Resul
     let body: moves::StockMoveIn = serde_json::from_value(input.body.clone()).map_err(|e| (400, format!("bad request body: {e}")))?;
     let shelf = |id: &str| input.supplies.get(id).and_then(|s| s.shelf_days);
     let plan = moves::plan(&input.kind, body, &input.by, input.now_ms, input.today, shelf)?;
-    if let Some(unknown) = plan.items().into_iter().find(|i| !input.supplies.contains_key(i)) {
+    // A deletion names supplies the catalogue has just let go (W-NOM).
+    if let Some(unknown) = plan.items().into_iter().find(|i| input.kind != "removed" && !input.supplies.contains_key(i)) {
         return Err((404, format!("not found: {unknown}")));
     }
     log.set_clock(input.now_ms);

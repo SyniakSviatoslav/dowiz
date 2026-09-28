@@ -17,6 +17,10 @@ import { ui, k, btn, iconBtn, field, input, select, chips, press, pill, empty, l
 import '/admin/ingredients-i18n.js';
 import * as IC from '/admin/ingredients-calc.js';
 import { ensureCss } from '/admin/kitchen-analytics.js';
+import { selection, pickRow, barMarkup, bindBar, deleteDishes, ensureNomCss, N } from '/admin/nom.js';
+import { me } from '/admin/app.js';
+/// W-NOM: the dishes ticked for a bulk delete (the owner's).
+const sel = selection();
 /// A filter chip whose data-* the screen's click handler reads.
 const fchip = (on, data, label, tour) => ui.chip({ as: 'button', selected: on, label, attrs: { data: { ...data, tour } } });
 const search = (id, value, tour) => `<div class="srch">${icon('search')}${ui.inputRow({ id, type: 'search', label: k('search'), placeholder: k('search'), attrs: { value, data: { tour } } })}</div>`;
@@ -48,6 +52,7 @@ const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Dia
 function dishRow(p){
   const q = norm(view.q).trim();
   if (q && !norm(`${p.name} ${p.description || ''}`).includes(q)) return '';
+  if (sel.on) return pickRow(p.id, p.name, `${ui.amount(String(money(p.price)))}`, sel.ids.has(p.id));
   return rowBtn({ cls: p.available ? '' : 'off', data: { p: p.id }, tour: 'menu.dish', title: p.name, sub: esc(p.description || ''),
     leading: p.imageUrl ? `<img class="thumb" src="${esc(p.imageUrl)}" alt="" loading="lazy">` : `<span class="thumb"></span>`,
     trailing: `${ui.amount(String(money(p.price)))}${pill(p.available ? 'ok' : 'bad', { key: p.available ? 'onSale' : 'stopList' })}` });
@@ -58,7 +63,7 @@ export async function render(host){
   const q = norm(view.q).trim();
   host.innerHTML = `
     <div class="screen-h"><div><h1 data-t="tabMenu"></h1></div>
-      <div class="screen-acts">${btn({ id: 'mCats', icon: 'adjustments', key: 'categories', tour: 'menu.categories' })}${iconBtn({ id: 'mImport', icon: 'download', ariaKey: 'importMenu', tour: 'menu.import' })}${iconBtn({ id: 'mRecipes', icon: 'tools-kitchen-2', ariaKey: 'importRecipes', tour: 'menu.importRecipes' })}${btn({ id: 'mNew', variant: 'primary', icon: 'plus', key: 'addDish', tour: 'menu.addDish' })}</div></div>
+      <div class="screen-acts">${me().staff ? '' : btn({ id: 'mSel', variant: 'ghost', icon: 'check', key: sel.on ? 'nom_selectDone' : 'nom_select' })}${btn({ id: 'mCats', icon: 'adjustments', key: 'categories', tour: 'menu.categories' })}${iconBtn({ id: 'mImport', icon: 'download', ariaKey: 'importMenu', tour: 'menu.import' })}${iconBtn({ id: 'mRecipes', icon: 'tools-kitchen-2', ariaKey: 'importRecipes', tour: 'menu.importRecipes' })}${btn({ id: 'mNew', variant: 'primary', icon: 'plus', key: 'addDish', tour: 'menu.addDish' })}</div></div>
     <p class="screen-hint" data-t="menuHint"></p>
     ${search('mq', view.q, 'menu.search')}
     <div class="chips filters" role="group">
@@ -76,7 +81,12 @@ export async function render(host){
         ${rowBtn({ cls: 'cat-h', title: c.name, data: { cat: c.id }, attrs: { 'aria-expanded': String(open) }, tour: 'menu.category', trailing: `<span class="n">${(c.products || []).length}</span>${icon('chevron-down', 'chev')}` })}
         <div class="rows" ${open ? '' : 'hidden'}>${rows}</div>
       </section>`; }).join('')}
-    ${!cats.length ? empty('bowl-chopsticks', { key: 'loadFail', alert: true }) : ''}`;
+    ${!cats.length ? empty('bowl-chopsticks', { key: 'loadFail', alert: true }) : ''}
+    ${sel.on ? barMarkup(sel) : ''}`;
+  ensureNomCss();
+  const ms = $('#mSel', host); if (ms) ms.onclick = () => { sel.on = !sel.on; sel.ids = new Set(); if (sel.on) for (const c of cats) view.open.add(c.id); rerender(); };
+  if (sel.on) bindBar(host, sel, { shown: () => $$('[data-pick]', host).map(r => r.dataset.pick), redraw: rerender,
+    del: async (ids, el) => { const r = await deleteDishes(ids, el, ids.map(id => S.products.find(x => x.id === id)?.name || id)); if (r) { sel.ids = new Set(); sel.on = false; await loadVenue(); rerender(); } } });
   $('#mNew', host).onclick = openNewDish;
   $('#mCats', host).onclick = openCategories;
   $('#mSort', host).onchange = e => { view.sort = e.target.value; rerender(); };
@@ -85,6 +95,7 @@ export async function render(host){
     const fs = e.target.closest('[data-fs]'); if (fs) { view.state = view.state === fs.dataset.fs ? 'all' : fs.dataset.fs; return rerender(); }
     const fp = e.target.closest('[data-fp]'); if (fp) { view.photo = view.photo === 'none' ? 'all' : 'none'; return rerender(); }
     const h = e.target.closest('[data-cat]'); if (h) { const id = h.dataset.cat; view.open.has(id) ? view.open.delete(id) : view.open.add(id); const rows = h.nextElementSibling; rows.hidden = !view.open.has(id); h.setAttribute('aria-expanded', String(view.open.has(id))); return; }
+    const pk = e.target.closest('[data-pick]'); if (pk) { sel.ids = N.toggle(sel.ids, pk.dataset.pick); return rerender(); }
     const r = e.target.closest('[data-p]'); if (r) openDish(r.dataset.p);
   };
   const mq = $('#mq', host); mq.oninput = () => { view.q = mq.value; rerender().then(() => $('#mq')?.focus()); };
@@ -268,14 +279,21 @@ async function openCategories(){
   const cats = await allCategories();
   sheet(`<p class="eyebrow" data-t="tabMenu"></p><h2 data-t="categories"></h2><p class="sheet-hint" data-t="ap_h_categories"></p>
     <div class="rows">${cats.map(c => rowDiv({ title: '', sub: `${ui.inputRow({ label: k('name'), cls: 'inline', attrs: { value: c.name, data: { cn: c.id, tour: 'category.name' } } })}<span class="mono">${c.count ?? 0} · <span data-t="dishes"></span></span>`,
-      trailing: `${iconBtn({ icon: 'check', ariaKey: 'save', data: { cs: c.id }, tour: 'category.save' })}${iconBtn({ icon: 'trash', ariaKey: 'remove', disabled: !!c.count, data: { cd: c.id }, tour: 'category.remove' })}` })).join('')}</div>
+      trailing: `${iconBtn({ icon: 'check', ariaKey: 'save', data: { cs: c.id }, tour: 'category.save' })}${iconBtn({ icon: 'trash', ariaKey: 'remove', disabled: !!c.count && !!me().staff, data: { cd: c.id, cn2: String(c.count ?? 0) }, tour: 'category.remove' })}` })).join('')}</div>
     <div class="grid2 mt-3">${field({ id: 'nc-name', key: 'addCategory', autocomplete: 'off', tour: 'menu.newCategory' })}${btn({ id: 'ncGo', variant: 'primary', icon: 'plus', key: 'add', tour: 'menu.addCategory' })}</div>
     <div class="btn-row">${btn({ id: 'ncWords', icon: 'language', key: 'w_catWords' })}</div>`, { name: 'cats' });
   $('#ncWords').onclick = () => import('/admin/cat-i18n.js').then(m => m.openCategoryWords());
   const fail = e => toast(String(e.message || e));
   $('#ncGo').onclick = async () => { const name = $('#nc-name').value.trim(); if (!name) return toast(t('required')); try { await busy($('#ncGo'), () => post('/owner/categories', withLoc({ name }))); await loadVenue(); openCategories(); rerender(); } catch (e) { fail(e); } };
   for (const b of $$('[data-cs]', $('#sheetIn'))) b.onclick = async () => { const name = $(`[data-cn="${b.dataset.cs}"]`).value.trim(); if (!name) return; try { await busy(b, () => post('/owner/categories', withLoc({ id: b.dataset.cs, name }))); toast(t('saved')); await loadVenue(); rerender(); } catch (e) { fail(e); } };
-  for (const b of $$('[data-cd]', $('#sheetIn'))) b.onclick = async () => { const ok = await confirm(t('remove'), $(`[data-cn="${b.dataset.cd}"]`).value, { danger: true, hint: t('ap_why_removeCategory') }); if (!ok) return openCategories(); try { await post(`/owner/categories/${encodeURIComponent(b.dataset.cd)}/delete`, withLoc()); await loadVenue(); openCategories(); rerender(); } catch (e) { fail(e); } };
+  // W-NOM: a category WITH dishes goes too, once the owner has seen how many.
+  for (const b of $$('[data-cd]', $('#sheetIn'))) b.onclick = async () => {
+    const n = Number(b.dataset.cn2) || 0, name = $(`[data-cn="${b.dataset.cd}"]`).value;
+    const ok = await confirm(n ? t('nom_catDelete') : t('remove'), n ? `${name} · ${t('nom_catWithDishes')}: ${n} ${t('nom_dishes')}` : name,
+      { danger: true, hint: n ? t('nom_deleteDishesHint') : t('ap_why_removeCategory') });
+    if (!ok) return openCategories();
+    try { await post(`/owner/categories/${encodeURIComponent(b.dataset.cd)}/delete`, withLoc(n ? { with_dishes: n } : {})); await loadVenue(); openCategories(); rerender(); } catch (e) { fail(e); }
+  };
 }
 
 

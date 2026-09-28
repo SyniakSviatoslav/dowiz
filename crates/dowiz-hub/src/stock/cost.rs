@@ -192,6 +192,8 @@ impl CostBook {
                     }
                 }
             }
+            // A DELETED supply takes its price with it: re-created, it starts unpriced.
+            StockEvent::Removed { item, .. } => self.pools.retain(|(i, _)| i != item),
             StockEvent::Reserved { .. } | StockEvent::Released { .. } | StockEvent::Returned { .. } => {}
         }
     }
