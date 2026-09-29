@@ -26,7 +26,7 @@ pub async fn feedback(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order", 400);
     };
-    let body: FeedbackIn = match req.json().await {
+    let body: FeedbackIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

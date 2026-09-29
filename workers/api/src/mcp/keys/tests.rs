@@ -63,3 +63,16 @@ fn a_staff_key_is_indexed_under_its_persons_sessions_and_a_courier_key_under_not
     assert_eq!(index_of(Holder::Staff, &row, "s1"), vec![(sr::ssession_of("v1", "ana", "s1"), "s1".to_string())]);
     assert!(index_of(Holder::Courier, &rk::courier_row("c", "v1", "c1", "t", "h", NOW), "c1").is_empty());
 }
+
+/// W-STRICT: a mint takes a label and nothing else; a revoke takes the id and,
+/// from the owner, the holder. Both read through `crate::body`.
+#[test]
+fn the_key_bodies_pass_and_a_stray_field_is_refused_by_name() {
+    use crate::body::from_text;
+    assert_eq!(from_text::<MintIn>(r#"{"label":"laptop"}"#).ok().expect("declared fields").label, "laptop");
+    let e = crate::body::refusal::<MintIn>(r#"{"label":"laptop","scopes":["*"]}"#);
+    assert!(e.contains("unknown field `scopes`"), "{e}");
+    let ok: RevokeIn = from_text(r#"{"id":"k1","holder":"staff:s1"}"#).unwrap();
+    assert_eq!(ok.holder.as_deref(), Some("staff:s1"));
+    assert!(crate::body::refusal::<RevokeIn>(r#"{"id":"k1","reason":"lost"}"#).contains("unknown field `reason`"));
+}

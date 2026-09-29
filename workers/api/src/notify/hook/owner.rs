@@ -99,7 +99,7 @@ struct ConnectIn {
 
 /// `POST /api/owner/telegram/connect`
 pub async fn connect(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ConnectIn = match req.json().await {
+    let body: ConnectIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return fail(format!("bad request body: {e}")),
     };
@@ -184,7 +184,7 @@ struct GroupIn {
 
 /// `POST /api/owner/telegram/group`
 pub async fn group(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: GroupIn = match req.json().await {
+    let body: GroupIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return fail(format!("bad request body: {e}")),
     };
@@ -217,7 +217,7 @@ struct IdIn {
 
 /// `POST /api/owner/telegram/test`
 pub async fn test(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: IdIn = match req.json().await {
+    let body: IdIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return fail(format!("bad request body: {e}")),
     };
@@ -243,7 +243,7 @@ pub async fn test(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
 
 /// `POST /api/owner/telegram/unlink`
 pub async fn unlink(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: IdIn = match req.json().await {
+    let body: IdIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return fail(format!("bad request body: {e}")),
     };

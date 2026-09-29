@@ -66,7 +66,7 @@ async fn write_audit(place: &Place, entries: [(String, String); 2], now: i64) ->
 /// `POST /api/owner/customers/:key/link?location_id=` `{to, reason}` -- show
 /// `:key`'s orders under `to`. Nothing moves; `unlink` undoes it.
 pub async fn link(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: LinkIn = match req.json().await {
+    let body: LinkIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -99,7 +99,7 @@ pub async fn link(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
 /// rows come back. A rule-written link is unlinked the same way, and the next
 /// order does not relink it (`alias::rule_link`).
 pub async fn unlink(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: UnlinkIn = match req.json().await {
+    let body: UnlinkIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

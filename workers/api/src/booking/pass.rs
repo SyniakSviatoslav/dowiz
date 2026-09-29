@@ -149,7 +149,7 @@ pub async fn verify_pass(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
-    let body: VerifyBody = match req.json().await {
+    let body: VerifyBody = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request: {e}"), 400),
     };

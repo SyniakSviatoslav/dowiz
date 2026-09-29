@@ -79,3 +79,17 @@ fn a_first_invite_is_written_with_both_indexes() {
     assert_eq!(t.lookup(&sr::sinvite_by_email(EM)).as_deref(), Some("inv_b"));
     assert_eq!(t.lookup(&sr::sinvite_at("venue-b", "inv_b")).as_deref(), Some("inv_b"));
 }
+
+/// W-STRICT: the console's invite `{email, name, role}` and the card's
+/// `{role|active, location_id}` pass whole; a stray field is refused by name.
+#[test]
+fn the_staff_admin_bodies_pass_and_a_stray_field_is_refused() {
+    use crate::body::from_text;
+    let ok: super::InviteIn = from_text(r#"{"email":"cook@x.al","name":"Ana","role":"kitchen"}"#).unwrap();
+    assert_eq!(ok.role, "kitchen");
+    let e = crate::body::refusal::<super::InviteIn>(r#"{"email":"cook@x.al","name":"Ana","role":"kitchen","phone":"+355"}"#);
+    assert!(e.contains("unknown field `phone`"), "{e}");
+    let ok: super::ChangeIn = from_text(r#"{"active":false,"location_id":"v1"}"#).unwrap();
+    assert_eq!(ok.active, Some(false));
+    assert!(crate::body::refusal::<super::ChangeIn>(r#"{"role":"waiter","name":"Ana"}"#).contains("unknown field `name`"));
+}

@@ -228,7 +228,7 @@ pub fn notice(lang: &str) -> &'static str {
 /// erasure register is written FIRST (`register`), so an erasure that fails
 /// half way is still re-applied after any restore.
 pub async fn forget_customer(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ForgetBody = match req.json().await {
+    let body: ForgetBody = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

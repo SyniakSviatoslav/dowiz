@@ -137,7 +137,7 @@ pub async fn delete_supplies(mut req: Request, ctx: RouteContext<crate::Req>) ->
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    let body: In = match req.json().await {
+    let body: In = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

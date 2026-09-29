@@ -99,7 +99,7 @@ struct AskIn {
 /// `POST /api/staff/assist` — `{question}`, venue from `?location_id=` or the
 /// token. The kitchen's facts, never the owner's.
 pub async fn kitchen_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: AskIn = match req.json().await {
+    let body: AskIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

@@ -106,7 +106,7 @@ struct CheckIn {
 
 /// `POST /api/owner/integrations/check` — one proof, the provider's words.
 pub async fn check(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: CheckIn = match req.json().await {
+    let body: CheckIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

@@ -41,7 +41,7 @@ fn body_of<'a>(src: &'a str, name: &str) -> Option<&'a str> {
 /// Where the door is asked and where the body is first read, in `body`.
 fn door_then_read(body: &str) -> (Option<usize>, Option<usize>) {
     let first = |pats: &[&str]| pats.iter().filter_map(|p| body.find(p)).min();
-    (first(DOORS), first(&["req.json()", "req.text()", "req.bytes()"]))
+    (first(DOORS), first(&["req.json()", "req.text()", "req.bytes()", "body::parse(", "body::strict("]))
 }
 
 #[test]

@@ -27,6 +27,7 @@ const COURIER_REFRESH_TTL_MS: i64 = 30 * 24 * 60 * 60 * 1000;
 const CONCURRENT_REFRESH_GRACE_MS: i64 = 5_000;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LoginIn {
     pub email: String,
     pub password: String,
@@ -47,6 +48,7 @@ pub struct LoginIn {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RefreshIn {
     pub refresh_token: String,
 }
@@ -165,7 +167,7 @@ enum Who {
 
 /// `POST /api/auth/login` — owner, email + password.
 pub async fn owner_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: LoginIn = match req.json().await {
+    let body: LoginIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -303,7 +305,7 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
 
 /// `POST /api/auth/refresh` — rotate within the family, detect reuse.
 pub async fn owner_refresh(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: RefreshIn = match req.json().await {
+    let body: RefreshIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -529,6 +531,7 @@ pub fn venue_for_login(
 
 pub async fn courier_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
     struct In {
         #[serde(default)]
         email: Option<String>,
@@ -538,7 +541,7 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<crate::Req>) -> R
         #[serde(default)]
         location_id: Option<String>,
     }
-    let body: In = match req.json().await {
+    let body: In = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -721,6 +724,7 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<crate::Req>) -> R
 
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ClaimIn {
     pub phone: String,
     pub code: String,
@@ -741,7 +745,7 @@ pub struct ClaimIn {
 /// The courier chooses their own password. An owner who set it for them would
 /// know it.
 pub async fn courier_claim(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ClaimIn = match req.json().await {
+    let body: ClaimIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -922,6 +926,25 @@ pub async fn courier_claim(mut req: Request, ctx: RouteContext<crate::Req>) -> R
 #[cfg(test)]
 mod tests {
     use super::{venue_for_login as venue, VenueContradiction};
+
+    /// W-STRICT: the owner's and the courier's doors are read through
+    /// `crate::body`, so a field the door has no name for is a 400, not a
+    /// silently narrower body. The console sends exactly these two / three.
+    #[test]
+    fn the_sign_in_bodies_pass_and_a_stray_field_is_refused_by_name() {
+        use crate::body::from_text;
+        let ok: super::LoginIn = from_text(r#"{"email":"o@x.al","password":"pw","location_id":"v1"}"#).unwrap();
+        assert_eq!(ok.location_id.as_deref(), Some("v1"));
+        let e = crate::body::refusal::<super::LoginIn>(r#"{"email":"o@x.al","password":"pw","locationId":"v1"}"#);
+        assert!(e.contains("unknown field `locationId`"), "{e}");
+        let ok: super::ClaimIn = from_text(r#"{"phone":"+355691234567","code":"ABCDEFGH12345678","password":"pw-pw-pw"}"#).unwrap();
+        assert_eq!(ok.code, "ABCDEFGH12345678");
+        let e = crate::body::refusal::<super::ClaimIn>(r#"{"phone":"+355691234567","code":"A","password":"p","name":"Ana"}"#);
+        assert!(e.contains("unknown field `name`"), "{e}");
+        let ok: super::RefreshIn = from_text(r#"{"refresh_token":"rt"}"#).unwrap();
+        assert_eq!(ok.refresh_token, "rt");
+        assert!(from_text::<super::RefreshIn>(r#"{"refresh_token":"rt","access_token":"at"}"#).is_err());
+    }
 
     /// THE BUG THIS ENCODES. A courier of `dubin-durres` signed in at
     /// `sushi-durres.dowiz.org` and was given a dubin session, because the app

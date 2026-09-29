@@ -49,6 +49,7 @@ pub async fn venue_day(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct VenueMove {
     to: String,
     #[serde(default)]
@@ -66,7 +67,7 @@ pub async fn venue_action(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
         Ok(x) => x,
         Err(r) => return Ok(r),
     };
-    let body: VenueMove = match req.json().await {
+    let body: VenueMove = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request: {e}"), 400),
     };

@@ -59,7 +59,7 @@ pub async fn invite_staff(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
         Err(r) => return Ok(r),
     };
     // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
-    let body: InviteIn = match req.json().await {
+    let body: InviteIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -124,7 +124,7 @@ pub async fn set_staff(mut req: Request, ctx: RouteContext<crate::Req>) -> Resul
         Err(r) => return Ok(r),
     };
     // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
-    let body: ChangeIn = match req.json().await {
+    let body: ChangeIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

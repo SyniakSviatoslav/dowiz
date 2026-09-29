@@ -73,7 +73,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     if !secret_ok(&secret, &given) {
         return Response::error("bad secret", 401);
     }
-    let body: Value = req.json().await.unwrap_or(Value::Null);
+    let body: Value = crate::body::parse(&mut req).await.unwrap_or(Value::Null);
     let update = inbound::parse(&body, &bot_of(&settings).username);
     if update == inbound::Update::Ignore {
         return Response::from_json(&json!({ "ok": true }));

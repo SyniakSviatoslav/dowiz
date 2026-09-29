@@ -116,6 +116,7 @@ pub async fn list(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ActionBody {
     /// The status to move into, in the kernel's wire form.
     to: String,
@@ -169,7 +170,7 @@ pub async fn action(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
         Ok(s) => s,
         Err(r) => return Ok(r),
     };
-    let body: ActionBody = match req.json().await {
+    let body: ActionBody = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request: {e}"), 400),
     };

@@ -133,7 +133,7 @@ struct RevealIn {
 /// reveal is the one thing this route must not do, and answering first would
 /// make the log best-effort.
 pub async fn reveal_customer(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: RevealIn = match req.json().await {
+    let body: RevealIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

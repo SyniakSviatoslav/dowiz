@@ -205,10 +205,11 @@ pub async fn tasks(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
 /// `POST /api/courier/shift` — `{open: bool}`
 pub async fn shift(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
     struct In {
         open: bool,
     }
-    let body: In = match req.json().await {
+    let body: In = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -702,6 +703,7 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
 /// `POST /api/courier/position` — `{lat, lon, accuracy_m?, speed_mps?, order_id?}`
 pub async fn position(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
     struct In {
         lat: f64,
         lon: f64,
@@ -712,7 +714,7 @@ pub async fn position(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
         #[serde(default)]
         order_id: Option<String>,
     }
-    let body: In = match req.json().await {
+    let body: In = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

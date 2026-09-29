@@ -607,7 +607,7 @@ struct ReplyIn {
 
 /// `POST /api/owner/inbox/:peer` — answer, through the channel the customer used.
 pub async fn reply(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ReplyIn = match req.json().await {
+    let body: ReplyIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

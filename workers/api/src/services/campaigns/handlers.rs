@@ -54,7 +54,7 @@ pub async fn list(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
 
 /// `POST /api/owner/campaigns` — define a campaign, or edit one not yet sent.
 pub async fn define(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: DefIn = match req.json().await {
+    let body: DefIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return bad(format!("bad request body: {e}"), 400),
     };
@@ -160,9 +160,11 @@ struct SendIn {
 /// `POST /api/owner/campaigns/:id/send` — the owner pressed "send". Queues one
 /// outbox entry per consented recipient not already reached, within budget.
 pub async fn send_now(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let ok = matches!(req.json::<SendIn>().await, Ok(SendIn { confirm: true }));
-    if !ok {
-        return bad("a send needs {\"confirm\": true}", 400);
+    match crate::body::parse::<SendIn>(&mut req).await {
+        Ok(SendIn { confirm: true }) => {}
+        Ok(_) => return bad("a send needs {\"confirm\": true}", 400),
+        // A stray field is named, not folded into "needs confirm" (W-STRICT).
+        Err(e) => return bad(format!("bad request body: {e}"), 400),
     }
     let (_, loc) = match owner_and_venue(&req, &ctx).await {
         Ok(v) => v,

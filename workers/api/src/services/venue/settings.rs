@@ -50,7 +50,7 @@ struct SettingIn {
 
 /// `POST /api/owner/settings`
 pub async fn set_setting(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: SettingIn = match req.json().await {
+    let body: SettingIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -128,7 +128,7 @@ struct FeatureIn {
 
 /// `POST /api/owner/features`
 pub async fn set_feature(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: FeatureIn = match req.json().await {
+    let body: FeatureIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

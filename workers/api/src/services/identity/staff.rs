@@ -23,6 +23,8 @@ pub(crate) mod guard;
 pub(crate) mod access;
 /// A member of staff's password: their own change, and the owner's reset.
 pub(crate) mod password;
+#[cfg(test)]
+mod tests;
 
 /// Which venue the HOST names, or `None` on the apex and `*.workers.dev`.
 ///
@@ -75,6 +77,7 @@ async fn open_session(
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LoginIn {
     email: String,
     password: String,
@@ -90,7 +93,7 @@ struct LoginIn {
 /// word — is refused exactly as a wrong password is not: the password was
 /// right, and they need the owner, not another try.
 pub async fn staff_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: LoginIn = match req.json().await {
+    let body: LoginIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -120,6 +123,7 @@ pub async fn staff_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PasswordIn {
     email: String,
     old_password: String,
@@ -132,7 +136,7 @@ struct PasswordIn {
 /// on a hit, so this door is no easier to guess through than the login. Only
 /// the hash changes: the account, its memberships and its address stay put.
 pub async fn staff_password(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: PasswordIn = match req.json().await {
+    let body: PasswordIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -164,6 +168,7 @@ pub async fn staff_password(mut req: Request, ctx: RouteContext<crate::Req>) -> 
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ClaimIn {
     email: String,
     code: String,
@@ -178,7 +183,7 @@ struct ClaimIn {
 /// or the code would be a way to take over somebody else's account by being
 /// invited under their address.
 pub async fn staff_claim(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ClaimIn = match req.json().await {
+    let body: ClaimIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

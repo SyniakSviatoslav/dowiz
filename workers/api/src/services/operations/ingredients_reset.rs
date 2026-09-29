@@ -23,7 +23,7 @@ pub async fn reset_ingredients(mut req: Request, ctx: RouteContext<crate::Req>) 
         #[serde(rename = "location_id")]
         _location_id: Option<String>,
     }
-    let body: In = match req.json().await {
+    let body: In = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

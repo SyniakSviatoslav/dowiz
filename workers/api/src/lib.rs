@@ -44,6 +44,8 @@ mod mcp;
 mod integrations;
 mod ebills;
 mod catalog_edit;
+/// The request body, parsed so `deny_unknown_fields` means it (gate: strict-body).
+mod body;
 mod rebuild;
 mod recipe;
 mod services;

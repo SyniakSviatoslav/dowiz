@@ -249,6 +249,7 @@ pub(crate) fn location_seed(
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NewHub {
     pub slug: String,
     pub name: String,
@@ -263,6 +264,7 @@ pub struct NewHub {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NewOwner {
     pub email: String,
     pub password: String,
@@ -284,7 +286,7 @@ pub async fn create_hub(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
         Ok(a) => a,
         Err(r) => return Ok(r),
     };
-    let body: NewHub = match req.json().await {
+    let body: NewHub = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -453,6 +455,19 @@ pub async fn create_hub(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// W-STRICT: the platform page sends slug, name, phone, dpa and the owner
+    /// pair -- that passes whole; a field the hub has no name for is refused.
+    #[test]
+    fn the_new_hub_body_passes_and_a_stray_field_is_refused_by_name() {
+        use crate::body::from_text;
+        let ok: NewHub = from_text(r#"{"slug":"durres","name":"Dubin","phone":"+355","dpa":"2026-09-24","owner":{"email":"o@x.al","password":"pw-pw-pw"}}"#).unwrap();
+        assert_eq!(ok.owner.as_ref().map(|o| o.email.as_str()), Some("o@x.al"));
+        let e = crate::body::refusal::<NewHub>(r#"{"slug":"durres","name":"Dubin","currency":"ALL"}"#);
+        assert!(e.contains("unknown field `currency`"), "{e}");
+        let e = crate::body::refusal::<NewHub>(r#"{"slug":"durres","name":"Dubin","owner":{"email":"o@x.al","password":"pw","role":"owner"}}"#);
+        assert!(e.contains("unknown field `role`"), "the owner block is held to its own fields: {e}");
+    }
 
     /// A slug becomes a public hostname, so the things a hostname cannot hold
     /// are the things this must refuse -- and the platform's own names are the

@@ -120,7 +120,7 @@ pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         Err(e) => return e.into_response(),
     };
     // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
-    let body: VoiceIn = req.json().await.unwrap_or_default();
+    let body: VoiceIn = crate::body::parse(&mut req).await.unwrap_or_default();
     let lang = body.lang.clone().unwrap_or_else(|| "uk".into());
 
     // A confirmation carries its own instruction; nothing is classified again.

@@ -122,3 +122,14 @@ fn the_cost_is_integer_and_rounds_up() {
     let p = preview(10, 4);
     assert_eq!((p.count, p.already, p.cost_minor, p.channel), (10, 4, cost_minor(6), "whatsapp"));
 }
+
+/// W-STRICT: the console's define body passes whole through `crate::body`, and
+/// a field the campaign has no name for is refused by name, not dropped.
+#[test]
+fn the_console_define_body_passes_and_a_stray_field_is_refused() {
+    use crate::body::from_text;
+    let ok: DefIn = from_text(r#"{"name":"Friday","text":"Come by","segment":{"kind":"tag","tag":"regular"},"promo":"FRI","template":{"name":"fri","lang":"sq","params":["x"]}}"#).unwrap();
+    assert_eq!(ok.name, "Friday");
+    let e = from_text::<DefIn>(r#"{"name":"Friday","text":"Come by","segment":{"kind":"everyone_consented"},"channel":"sms"}"#).unwrap_err();
+    assert!(e.contains("unknown field `channel`"), "{e}");
+}

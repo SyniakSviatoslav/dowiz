@@ -25,6 +25,9 @@ use serde::Deserialize;
 use serde_json::json;
 use worker::*;
 
+#[cfg(test)]
+mod tests;
+
 use dowiz_kernel::ledger_account::{self, Account, Journal, Posting, Transaction, TxKind};
 use dowiz_kernel::money::{Currency, Money};
 
@@ -237,6 +240,7 @@ pub async fn balance(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct TopUpBody {
     user: String,
     #[serde(rename = "amountMinor")]
@@ -276,7 +280,7 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
         Err(r) => return Ok(r),
     }
 
-    let b: TopUpBody = match req.json().await {
+    let b: TopUpBody = match crate::body::parse(&mut req).await {
         Ok(v) => v,
         Err(e) => return Response::error(format!("bad request: {e}"), 400),
     };

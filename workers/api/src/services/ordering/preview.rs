@@ -26,7 +26,7 @@ struct PromoCheckIn {
 /// on its last use can be quoted here and refused at checkout. That is the right
 /// way round -- the alternative gives the same last use away twice.
 pub async fn promo_check(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: PromoCheckIn = match req.json().await {
+    let body: PromoCheckIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

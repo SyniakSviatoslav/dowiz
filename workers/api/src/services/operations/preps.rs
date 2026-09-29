@@ -123,7 +123,7 @@ pub async fn set_prep(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
         Err(r) => return Ok(r),
     };
     // AUTHORITY BEFORE THE BODY (W-FIX O9).
-    let body: PrepIn = match req.json().await {
+    let body: PrepIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

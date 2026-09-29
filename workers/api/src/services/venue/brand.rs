@@ -106,7 +106,7 @@ async fn store_brand(place: &crate::hubstore::Place, b: dowiz_hub::brand::Brand)
 
 /// `POST /api/owner/branding?location_id=`
 pub async fn set_branding(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: BrandIn = match req.json().await {
+    let body: BrandIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -161,7 +161,7 @@ pub async fn set_branding(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
 
 /// `POST /api/owner/branding/preset?location_id=` — a whole look at once.
 pub async fn set_preset(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: PresetIn = match req.json().await {
+    let body: PresetIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

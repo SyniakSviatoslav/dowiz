@@ -31,7 +31,7 @@ pub async fn wordings(_req: Request, _ctx: RouteContext<crate::Req>) -> Result<R
 /// person's alias circle -- and the fold stops the next send. Nothing is removed: the grant stays as the proof of what the venue
 /// was allowed to do before.
 pub async fn owner_act(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: OwnerActIn = match req.json().await {
+    let body: OwnerActIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

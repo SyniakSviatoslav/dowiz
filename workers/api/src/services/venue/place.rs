@@ -37,6 +37,7 @@ pub async fn set_place(mut req: Request, ctx: RouteContext<crate::Req>) -> Resul
         close: i64,
     }
     #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
     struct In {
         #[serde(default)]
         address: Option<String>,
@@ -54,7 +55,7 @@ pub async fn set_place(mut req: Request, ctx: RouteContext<crate::Req>) -> Resul
         Err(r) => return Ok(r),
     };
     // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
-    let body: In = match req.json().await {
+    let body: In = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

@@ -1396,7 +1396,7 @@ impl DurableObject for HubImages {
                 // FORGET A CUSTOMER: `/fold/forget`
                 (Method::Post, "forget") => {
                     let mut req = req;
-                    let input: forget::ForgetIn = req.json().await?;
+                    let input: forget::ForgetIn = crate::body::parse(&mut req).await?;
                     match self.forget(input).await? {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
@@ -1407,7 +1407,7 @@ impl DurableObject for HubImages {
                 // REFUND AN ORDER: `/fold/refund`
                 (Method::Post, "refund") => {
                     let mut req = req;
-                    let crate::idempotency::commit::Claimed { input, idem } = req.json().await?;
+                    let crate::idempotency::commit::Claimed { input, idem } = crate::body::parse(&mut req).await?;
                     match self.refund(input, idem).await? {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
@@ -1416,7 +1416,7 @@ impl DurableObject for HubImages {
                 // AN AGGREGATOR ORDER ENTERED BY HAND: `/fold/aggregator`
                 (Method::Post, "aggregator") => {
                     let mut req = req;
-                    let input: crate::command::place::PlaceIn = req.json().await?;
+                    let input: crate::command::place::PlaceIn = crate::body::parse(&mut req).await?;
                     match self.aggregator(input).await? {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
@@ -1425,7 +1425,7 @@ impl DurableObject for HubImages {
                 // THE FOOD A REFUSED DELIVERY BROUGHT BACK: `/fold/returned`
                 (Method::Post, "returned") => {
                     let mut req = req;
-                    let input: crate::command::refund::returned::ReturnedIn = req.json().await?;
+                    let input: crate::command::refund::returned::ReturnedIn = crate::body::parse(&mut req).await?;
                     match self.returned(input).await? {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
@@ -1434,14 +1434,14 @@ impl DurableObject for HubImages {
                 // A STOCK MOVEMENT (W0a): `/fold/stock_move`
                 (Method::Post, "stock_move") => {
                     let mut req = req;
-                    self.stock_move(req.json().await?).await
+                    self.stock_move(crate::body::parse(&mut req).await?).await
                 }
                 // THE OWNER'S INGREDIENTS RESET: `/fold/stock_reset`
                 (Method::Post, "stock_reset") => self.stock_reset().await,
                 // THE KITCHEN SAW THE TICKET: `/fold/kitchen_ack`
                 (Method::Post, "kitchen_ack") => {
                     let mut req = req;
-                    let input: crate::command::kitchen_ack::KitchenAckIn = req.json().await?;
+                    let input: crate::command::kitchen_ack::KitchenAckIn = crate::body::parse(&mut req).await?;
                     match self.kitchen_ack(input).await? {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
@@ -1449,7 +1449,7 @@ impl DurableObject for HubImages {
                 }
                 (Method::Post, "place") => {
                     let mut req = req;
-                    let crate::idempotency::commit::Claimed { input, idem } = req.json().await?;
+                    let crate::idempotency::commit::Claimed { input, idem } = crate::body::parse(&mut req).await?;
                     match self.place(input, idem).await? {
                         Ok(out) => {
                             let mut res = Response::from_json(&out)?;
@@ -1463,7 +1463,7 @@ impl DurableObject for HubImages {
                 (Method::Get, "rebuild") => Response::from_json(&self.rebuild().await?),
                 (Method::Post, "advance") => {
                     let mut req = req;
-                    let crate::idempotency::commit::Claimed { input, idem } = req.json().await?;
+                    let crate::idempotency::commit::Claimed { input, idem } = crate::body::parse(&mut req).await?;
                     match self.advance(input, idem).await? {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
@@ -1471,7 +1471,7 @@ impl DurableObject for HubImages {
                 }
                 (Method::Post, "assign") => {
                     let mut req = req;
-                    let input: crate::command::assign::AssignIn = req.json().await?;
+                    let input: crate::command::assign::AssignIn = crate::body::parse(&mut req).await?;
                     match self.assign(input).await? {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
@@ -1489,7 +1489,7 @@ impl DurableObject for HubImages {
                         return Response::error("x-generation is required on a write", 400);
                     }
                     let mut req = req;
-                    let mut ev: AppendIn = req.json().await?;
+                    let mut ev: AppendIn = crate::body::parse(&mut req).await?;
                     let mark = ev.idem.take();
                     match self.append(expected, ev).await? {
                         Some((generation, len)) => {

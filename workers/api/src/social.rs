@@ -199,7 +199,7 @@ pub async fn send(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
     else {
         return Response::error("missing slug or id", 400);
     };
-    let b: SendBody = match req.json().await {
+    let b: SendBody = match crate::body::parse(&mut req).await {
         Ok(v) => v,
         Err(e) => return Response::error(format!("bad request: {e}"), 400),
     };

@@ -410,11 +410,12 @@ pub async fn orders(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
 /// already has a courier is refused rather than quietly reassigned.
 pub async fn assign_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
     struct In {
         location_id: String,
         courier_id: String,
     }
-    let body: In = match req.json().await {
+    let body: In = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -700,7 +701,7 @@ pub async fn dashboard(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     }))
 }
 
-/// The dish sheet's save body (`update_product`). Parsed by `catalog_edit::body::strict`,
+/// The dish sheet's save body (`update_product`). Parsed by `body::strict`,
 /// so an unknown field is a 400 and never a silent `ok`.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -799,7 +800,7 @@ pub(crate) struct ProductEdit {
 /// arguments and sends only its schema's fields plus `location_id`
 /// (`mcp::tools::plan`), and the console sends only what is named here.
 pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ProductEdit = match crate::catalog_edit::body::strict(&mut req).await {
+    let body: ProductEdit = match crate::body::strict(&mut req).await {
         Ok(b) => b,
         Err(r) => return Ok(r),
     };
@@ -1162,11 +1163,12 @@ pub async fn write_translations(mut req: Request, ctx: RouteContext<crate::Req>)
         value: String,
     }
     #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
     struct In {
         location_id: String,
         entries: Vec<Entry>,
     }
-    let body: In = match req.json().await {
+    let body: In = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -1226,6 +1228,7 @@ pub async fn write_translations(mut req: Request, ctx: RouteContext<crate::Req>)
 /// `PATCH /api/owner/location` — open, close, go busy, pause delivery.
 pub async fn update_location(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
     struct In {
         location_id: String,
         #[serde(default)]
@@ -1275,7 +1278,7 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<crate::Req>) ->
         #[serde(default)]
         stage: Option<Value>,
     }
-    let body: In = match req.json().await {
+    let body: In = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

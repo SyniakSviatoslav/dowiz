@@ -281,7 +281,7 @@ pub async fn restore(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
         Err(r) => return Ok(r),
     };
     // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
-    let bundle: Value = match req.json().await {
+    let bundle: Value = match crate::body::parse(&mut req).await {
         Ok(v) => v,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

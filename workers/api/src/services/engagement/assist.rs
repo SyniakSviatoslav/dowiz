@@ -237,7 +237,7 @@ pub async fn graph(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
 }
 
 pub async fn owner_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: AskIn = match req.json().await {
+    let body: AskIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -263,7 +263,7 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
 
 /// `POST /api/courier/assist` — a question about this courier's own run.
 pub async fn courier_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: AskIn = match req.json().await {
+    let body: AskIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

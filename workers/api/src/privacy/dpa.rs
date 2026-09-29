@@ -147,7 +147,7 @@ struct AcceptIn {
 
 /// `POST /api/owner/dpa/accept {version}` — the owner accepts the current text.
 pub async fn accept(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: AcceptIn = match req.json().await {
+    let body: AcceptIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

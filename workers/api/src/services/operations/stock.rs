@@ -189,7 +189,7 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
         Err(r) => return Ok(r),
     };
     // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
-    let raw: Value = match req.json().await {
+    let raw: Value = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

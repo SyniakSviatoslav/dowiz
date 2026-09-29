@@ -27,7 +27,7 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     use crate::services::courier::roster;
 
 
-    let body: InviteIn = match req.json().await {
+    let body: InviteIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -202,7 +202,7 @@ struct ActiveIn {
 /// session they hold dies, because somebody who has left must not keep a working
 /// app in their pocket.
 pub async fn set_courier_active(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ActiveIn = match req.json().await {
+    let body: ActiveIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

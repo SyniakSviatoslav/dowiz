@@ -82,7 +82,7 @@ pub async fn add_supplies(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
-    let body: In = match req.json().await {
+    let body: In = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

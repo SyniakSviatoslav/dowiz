@@ -108,7 +108,7 @@ struct ResetIn {
 /// member of staff of their venue, and every session of that person there ends.
 /// Routed by the `lib.rs` line handed back to the main session.
 pub async fn owner_reset(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ResetIn = match req.json().await {
+    let body: ResetIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

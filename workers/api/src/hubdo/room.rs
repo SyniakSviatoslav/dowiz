@@ -30,17 +30,17 @@ impl HubImages {
     /// checked the capability; what arrives here is that decision.
     pub(super) async fn room(&self, what: &str, mut req: Request) -> Result<Response> {
         match what {
-            "amend" => reply(self.amend(req.json().await?).await?),
-            "pay" => reply(self.pay(req.json().await?).await?),
-            "transfer" => reply(self.transfer(req.json().await?).await?),
-            "move_sitting" => reply(self.move_sitting(req.json().await?).await?),
+            "amend" => reply(self.amend(crate::body::parse(&mut req).await?).await?),
+            "pay" => reply(self.pay(crate::body::parse(&mut req).await?).await?),
+            "transfer" => reply(self.transfer(crate::body::parse(&mut req).await?).await?),
+            "move_sitting" => reply(self.move_sitting(crate::body::parse(&mut req).await?).await?),
             // THE TILL (`room/till.rs`). One segment each: `/fold/room/till_open`.
-            "till_open" => reply(self.till(Cmd::Open(req.json().await?)).await?),
-            "till_pay_in" => reply(self.till(Cmd::PayIn(req.json().await?)).await?),
-            "till_pay_out" => reply(self.till(Cmd::PayOut(req.json().await?)).await?),
-            "till_count" => reply(self.till(Cmd::Count(req.json().await?)).await?),
-            "till_close" => reply(self.till(Cmd::Close(req.json().await?)).await?),
-            "till_report" => reply(self.till_report(req.json().await?).await?),
+            "till_open" => reply(self.till(Cmd::Open(crate::body::parse(&mut req).await?)).await?),
+            "till_pay_in" => reply(self.till(Cmd::PayIn(crate::body::parse(&mut req).await?)).await?),
+            "till_pay_out" => reply(self.till(Cmd::PayOut(crate::body::parse(&mut req).await?)).await?),
+            "till_count" => reply(self.till(Cmd::Count(crate::body::parse(&mut req).await?)).await?),
+            "till_close" => reply(self.till(Cmd::Close(crate::body::parse(&mut req).await?)).await?),
+            "till_report" => reply(self.till_report(crate::body::parse(&mut req).await?).await?),
             _ => Response::error("no such room command", 404),
         }
     }

@@ -82,7 +82,7 @@ pub async fn quote(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
-    let body: EtaBody = match req.json().await {
+    let body: EtaBody = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request: {e}"), 400),
     };

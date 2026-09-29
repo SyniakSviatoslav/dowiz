@@ -16,6 +16,9 @@ use worker::*;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct SupplyIn {
     pub(crate) id: String,
+    /// `withLoc` sends it (ingredients.js adoptYield); the venue is the guard's, not this field's.
+    #[serde(rename = "location_id", default)]
+    pub(crate) _location_id: Option<String>,
     #[serde(default)]
     pub(crate) name: Option<String>,
     #[serde(default)]
@@ -86,7 +89,7 @@ pub mod delete;
 
 /// `POST /api/owner/supplies` — add or edit an ingredient.
 pub async fn set_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: SupplyIn = match req.json().await {
+    let body: SupplyIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -254,7 +257,7 @@ pub async fn retire_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> R
         Err(r) => return Ok(r),
     };
     // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
-    let _body: In = req.json().await.unwrap_or(In { _location_id: None });
+    let _body: In = crate::body::parse(&mut req).await.unwrap_or(In { _location_id: None });
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing supply id", 400) };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;

@@ -21,7 +21,7 @@ struct PixelsIn {
 /// back. An upload that silently repainted the storefront would be a change
 /// nobody approved, made from a photograph.
 pub async fn extract_branding(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: PixelsIn = match req.json().await {
+    let body: PixelsIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

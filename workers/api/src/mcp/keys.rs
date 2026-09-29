@@ -88,7 +88,7 @@ struct RevokeIn {
 }
 
 async fn mint(mut req: Request, ctx: RouteContext<crate::Req>, h: Holder) -> Result<Response> {
-    let body: MintIn = match req.json().await {
+    let body: MintIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -159,7 +159,7 @@ async fn end(env: &Env, h: Holder, id: String, now: i64, allowed: impl Fn(Option
 }
 
 async fn revoke(mut req: Request, ctx: RouteContext<crate::Req>, h: Holder) -> Result<Response> {
-    let body: RevokeIn = match req.json().await {
+    let body: RevokeIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -194,7 +194,7 @@ pub async fn owner_list(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
 
 /// `POST /api/owner/mcp/keys/revoke {id, holder}` — end any key of this venue.
 pub async fn owner_revoke(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: RevokeIn = match req.json().await {
+    let body: RevokeIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

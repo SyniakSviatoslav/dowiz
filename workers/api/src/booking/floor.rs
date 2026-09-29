@@ -159,6 +159,7 @@ pub(super) fn plan_orphans(plan: &floor::Plan, t: &dowiz_hub::table::Table, now_
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PlanIn {
     /// The zones as the owner drew them. An EMPTY list removes the plan, which
     /// is how a venue that does not seat by table turns the feature off.
@@ -167,7 +168,7 @@ struct PlanIn {
 
 /// `POST /api/owner/floorplan` -- the console's floor editor saves here.
 pub async fn set_plan(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: PlanIn = match req.json().await {
+    let body: PlanIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

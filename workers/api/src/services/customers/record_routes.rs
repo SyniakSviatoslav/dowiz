@@ -22,7 +22,7 @@ pub(crate) fn is_key(k: &str) -> bool {
 /// Every refusal of `merge` is answered 400 with its reason and nothing is
 /// written.
 pub async fn put_record(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let card: Card = match req.json().await {
+    let card: Card = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

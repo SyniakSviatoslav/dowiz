@@ -78,7 +78,7 @@ pub async fn delete_products(mut req: Request, ctx: RouteContext<crate::Req>) ->
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
-    let body: In = match crate::catalog_edit::body::strict(&mut req).await {
+    let body: In = match crate::body::strict(&mut req).await {
         Ok(b) => b,
         Err(r) => return Ok(r),
     };
@@ -105,7 +105,7 @@ pub async fn delete_category(mut req: Request, ctx: RouteContext<crate::Req>) ->
         #[serde(default)]
         with_dishes: Option<usize>,
     }
-    let body: In = match crate::catalog_edit::body::strict(&mut req).await {
+    let body: In = match crate::body::strict(&mut req).await {
         Ok(b) => b,
         Err(r) => return Ok(r),
     };

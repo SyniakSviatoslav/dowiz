@@ -30,7 +30,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
         Err(r) => return Ok(r),
     };
     // AUTHORITY BEFORE THE BODY (W-FIX O9): nobody's JSON is parsed before the door.
-    let body: ApproveIn = req.json().await.unwrap_or_default();
+    let body: ApproveIn = crate::body::parse(&mut req).await.unwrap_or_default();
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let Some(id) = ctx.param("id").cloned() else {

@@ -31,23 +31,23 @@ impl HubImages {
     /// owner's three (`status`, `config`, `map`); the cron is the caller of the rest.
     pub(super) async fn ebills(&self, what: &str, mut req: Request) -> Result<Response> {
         match what {
-            "tick" => Response::from_json(&self.ebills_tick(req.json().await?).await?),
-            "import" => reply(self.ebills_import(req.json().await?).await?),
-            "floor" => reply(self.ebills_floor(req.json().await?).await?),
-            "report" => reply(self.ebills_report(req.json().await?).await?),
+            "tick" => Response::from_json(&self.ebills_tick(crate::body::parse(&mut req).await?).await?),
+            "import" => reply(self.ebills_import(crate::body::parse(&mut req).await?).await?),
+            "floor" => reply(self.ebills_floor(crate::body::parse(&mut req).await?).await?),
+            "report" => reply(self.ebills_report(crate::body::parse(&mut req).await?).await?),
             "status" => Response::from_json(&self.ebills_status().await?),
-            "config" => reply(self.ebills_config(req.json().await?).await?),
-            "map" => reply(self.ebills_map(req.json().await?).await?),
+            "config" => reply(self.ebills_config(crate::body::parse(&mut req).await?).await?),
+            "map" => reply(self.ebills_map(crate::body::parse(&mut req).await?).await?),
             // THE FISCAL SENDER (card L70, `hubdo/fiscal/send.rs`): the cron's
             // two, and the owner's pane and receipt.
-            "fiscal_plan" => Response::from_json(&self.fiscal_plan(req.json().await?).await?),
-            "fiscal_answer" => reply(self.fiscal_answer(req.json().await?).await?),
+            "fiscal_plan" => Response::from_json(&self.fiscal_plan(crate::body::parse(&mut req).await?).await?),
+            "fiscal_answer" => reply(self.fiscal_answer(crate::body::parse(&mut req).await?).await?),
             "fiscal_status" => {
-                let at: crate::fiscal::ebills_cmd::PlanIn = req.json().await?;
+                let at: crate::fiscal::ebills_cmd::PlanIn = crate::body::parse(&mut req).await?;
                 Response::from_json(&self.fiscal_status(at.now_ms).await?)
             }
             "fiscal_receipt" => {
-                let at: Value = req.json().await?;
+                let at: Value = crate::body::parse(&mut req).await?;
                 reply(self.fiscal_receipt(at["order_id"].as_str().unwrap_or("")).await?)
             }
             _ => Response::error("no such ebills command", 404),

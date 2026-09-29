@@ -21,7 +21,7 @@ struct ZonesIn {
 /// so a configuration that silently means nothing would quietly turn the check
 /// off while the owner believed they had drawn a boundary.
 pub async fn set_zones(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ZonesIn = match req.json().await {
+    let body: ZonesIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

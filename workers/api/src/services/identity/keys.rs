@@ -24,7 +24,7 @@ struct KeyIn {
 pub async fn create_api_key(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     const YEAR_MS: i64 = 365 * 24 * 60 * 60 * 1000;
 
-    let body: KeyIn = match req.json().await {
+    let body: KeyIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -126,7 +126,7 @@ struct RevokeIn {
 
 /// `POST /api/owner/apikeys/revoke`
 pub async fn revoke_api_key(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: RevokeIn = match req.json().await {
+    let body: RevokeIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

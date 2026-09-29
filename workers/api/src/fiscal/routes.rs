@@ -58,7 +58,7 @@ pub async fn set(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
     if !super::SEND_ENABLED {
         return Response::error("sending invoices to ebills is switched off for the platform; the till import (ebills -> dowiz) is unaffected", 409);
     }
-    let body: ArmIn = match req.json().await {
+    let body: ArmIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

@@ -108,7 +108,7 @@ fn b64(bytes: &[u8]) -> String {
 /// `POST /api/waitlist` — `{email, venue?, lang?}`. 204 once the row is
 /// written; the mail is best-effort and reported only in the row.
 pub async fn join(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: Join = match req.json().await {
+    let body: Join = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(_) => return Response::error("expected {email, venue?, lang?}", 400),
     };

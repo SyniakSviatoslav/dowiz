@@ -43,7 +43,7 @@ pub(crate) async fn status(req: Request, ctx: RouteContext<crate::Req>) -> Resul
 
 /// `POST /api/owner/ebills/config`
 pub(crate) async fn config(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ConfigIn = match req.json().await {
+    let body: ConfigIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -56,7 +56,7 @@ pub(crate) async fn config(mut req: Request, ctx: RouteContext<crate::Req>) -> R
 
 /// `POST /api/owner/ebills/map`
 pub(crate) async fn map(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let mut body: MapIn = match req.json().await {
+    let mut body: MapIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };

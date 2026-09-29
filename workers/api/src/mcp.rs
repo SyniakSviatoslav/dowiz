@@ -247,7 +247,7 @@ pub async fn rpc(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
         location_id,
         slug,
     };
-    let body: Value = match req.json().await {
+    let body: Value = match crate::body::parse(&mut req).await {
         Ok(v) => v,
         Err(_) => {
             let mut r = Response::from_json(&rpc_error(Value::Null, PARSE_ERROR, "the body is not JSON"))?;

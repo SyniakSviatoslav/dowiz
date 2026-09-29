@@ -102,7 +102,7 @@ pub async fn seed(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
         return Response::error("not found", 404);
     }
 
-    let bundle: Bundle = match req.json().await {
+    let bundle: Bundle = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad bundle: {e}"), 400),
     };

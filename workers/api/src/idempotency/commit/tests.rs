@@ -97,7 +97,7 @@ fn the_placement_marks_its_claim_and_the_storefront_reads_it_first() {
     let mark = place.find("self.commit_claim(claim.as_ref()").expect("place marks its claim");
     assert!(place.find("\"the log generation moved during a placement\"").unwrap() < mark, "after the log write");
     assert!(mark < place.find("self.broadcast(").expect("the broadcast"), "before anyone is told");
-    assert!(hub.contains("Claimed { input, idem } = req.json().await?"), "the object reads the claim");
+    assert!(hub.contains("Claimed { input, idem } = crate::body::parse(&mut req).await?"), "the object reads the claim");
     let front = include_str!("../../storefront.rs");
     let read = front.find("idem.committed()").expect("the storefront reads a committed output");
     let send = front.find("idem: idem.claim()").expect("the storefront sends its claim");

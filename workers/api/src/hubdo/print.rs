@@ -21,11 +21,11 @@ impl HubImages {
     pub(super) async fn print(&self, what: &str, mut req: Request) -> Result<Response> {
         match what {
             "poll" => {
-                let input: PollIn = req.json().await?;
+                let input: PollIn = crate::body::parse(&mut req).await?;
                 self.print_poll(input.now_ms).await
             }
             "job" => {
-                let input: JobIn = req.json().await?;
+                let input: JobIn = crate::body::parse(&mut req).await?;
                 let (_, table) = self.outbox_table().await?;
                 let found = pr::id_of(&input.token)
                     .and_then(|id| table.get(OUTBOX_KIND, &id))
@@ -36,7 +36,7 @@ impl HubImages {
                 }
             }
             "ack" => {
-                let input: AckIn = req.json().await?;
+                let input: AckIn = crate::body::parse(&mut req).await?;
                 self.print_ack(input).await
             }
             _ => Response::error("no such print command", 404),

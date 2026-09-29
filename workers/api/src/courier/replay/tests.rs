@@ -182,8 +182,8 @@ fn the_object_marks_advance_refund_and_append_after_the_log_write() {
     let adv = body_of(hub, "    async fn advance(");
     before(adv, "\"the log generation moved during a transition\"", "self.commit_claim(claim.as_ref()");
     before(adv, "self.commit_claim(claim.as_ref()", "self.broadcast(");
-    assert!(hub.contains("Claimed { input, idem } = req.json().await?;\n                    match self.advance(input, idem)"));
-    assert!(hub.contains("Claimed { input, idem } = req.json().await?;\n                    match self.refund(input, idem)"));
+    assert!(hub.contains("Claimed { input, idem } = crate::body::parse(&mut req).await?;\n                    match self.advance(input, idem)"));
+    assert!(hub.contains("Claimed { input, idem } = crate::body::parse(&mut req).await?;\n                    match self.refund(input, idem)"));
     let arm = &hub[hub.find("(Method::Post, \"append\")").unwrap()..];
     before(arm, "Some((generation, len)) =>", "self.commit_claim(Some(&m.claim)");
     let refund = include_str!("../../hubdo/refund.rs");
