@@ -46,11 +46,12 @@ if (!VENUE) process.exit(1);
 const P = 'qapf-';
 const RAW = [['vinegar', 'ml', 15], ['salt', 'g', 5], ['sugar', 'g', 12], ['rice-dry', 'g', 20]];
 const ids = { water: P + 'water', mitsukan: P + 'mitsukan', rice: P + 'rice-seasoned' };
-const cleanup = async () => {
-  if (ORDER) await own(`/api/owner/orders/${ORDER}/action`, { action: 'cancel', location_id: VENUE });
-  if (PROD) await own('/api/owner/products/delete', { ids: [PROD], location_id: VENUE });
-  if (CAT) await own(`/api/owner/categories/${CAT}`, { location_id: VENUE }, 'DELETE');
-  await own('/api/owner/supplies/delete', { ids: [ids.rice, ids.mitsukan, ...RAW.map(([r]) => P + r), ids.water], location_id: VENUE, confirmUses: true });
+const cleanup = async (say = false) => {
+  const log = (what, r) => { if (say) console.log(`     cleanup ${what}: ${r.status} ${JSON.stringify(r.body).slice(0, 160)}`); return r; };
+  if (ORDER) log('cancel order', await own(`/api/owner/orders/${ORDER}/action`, { action: 'cancel', location_id: VENUE }));
+  if (PROD) log('delete dish', await own('/api/owner/products/delete', { ids: [PROD], location_id: VENUE }));
+  if (CAT) log('delete category', await own(`/api/owner/categories/${CAT}/delete`, { location_id: VENUE }));
+  log('delete supplies', await own('/api/owner/supplies/delete', { ids: [ids.rice, ids.mitsukan, ...RAW.map(([r]) => P + r), ids.water], location_id: VENUE, confirmUses: true }));
 };
 let ORDER = null, PROD = null, CAT = null;
 // A run that died mid-way left its items: start clean.
@@ -58,11 +59,11 @@ await cleanup();
 
 // ── 1. raw items ────────────────────────────────────────────────────────────
 for (const [r, unit, cost] of RAW) {
-  const s = await own('/api/owner/supplies', { id: P + r, name: `QA ${r}`, unit, kind: 'food_ingredient', category: 'QA', costPerBasis: cost, locationId: VENUE });
+  const s = await own('/api/owner/supplies', { id: P + r, name: `QA ${r}`, unit, kind: 'food_ingredient', category: 'QA', costPerBasis: cost, location_id: VENUE });
   step(`raw ${r} is created`, s.status === 200, `${s.status} ${JSON.stringify(s.body).slice(0, 100)}`);
   await own('/api/owner/stock/stocktake', { item: P + r, observed: 0 });
 }
-const w = await own('/api/owner/supplies', { id: ids.water, name: 'QA water', unit: 'ml', kind: 'food_ingredient', category: 'QA', costPerBasis: 0, untracked: true, locationId: VENUE });
+const w = await own('/api/owner/supplies', { id: ids.water, name: 'QA water', unit: 'ml', kind: 'food_ingredient', category: 'QA', costPerBasis: 0, untracked: true, location_id: VENUE });
 step('water is created untracked', w.status === 200 && w.body?.untracked === true, `${w.status} ${JSON.stringify(w.body).slice(0, 100)}`);
 
 // ── 2. the two cards ────────────────────────────────────────────────────────
@@ -82,9 +83,11 @@ step('a cycle is refused with its path', cyc.status === 400 && String(cyc.body?.
 // ── 4. the dish and what one sale takes ─────────────────────────────────────
 const cat = await own('/api/owner/categories', { location_id: VENUE, name: 'QA PF' });
 CAT = cat.body?.id || cat.body?.category?.id;
-const prod = await own('/api/owner/products', { location_id: VENUE, category_id: CAT, name: 'QA Philadelphia', price: 650, available: true });
+step('a QA category is created', cat.status === 200 && !!CAT, `${cat.status} ${JSON.stringify(cat.body).slice(0, 160)}`);
+const prod = await own('/api/owner/products', { location_id: VENUE, category_id: CAT, name: 'QA Philadelphia', price: 650 });
 PROD = prod.body?.id || prod.body?.product?.id;
-const bom = await own(`/api/owner/products/${PROD}`, { location_id: VENUE, bom: [{ supply: ids.rice, qty: 130 }] });
+step('the dish is created', prod.status === 200 && !!PROD, `${prod.status} ${JSON.stringify(prod.body).slice(0, 200)}`);
+const bom = await own(`/api/owner/products/${PROD}`, { location_id: VENUE, bom: [{ supply: ids.rice, qty: 130 }], available: true, allergens: [] });
 const stored = bom.body?.product || bom.body || {};
 step('the dish stores 130 g of ПФ 2: cost 15, weight 130', bom.status === 200 && (stored.cost === 15 || stored.cost === undefined) , `${bom.status} cost=${stored.cost} weightG=${stored.weightG}`);
 const tk = await own(`/api/owner/products/${PROD}/takes`, undefined, 'GET');
@@ -94,9 +97,14 @@ step('one sale takes rice 61.905, vinegar 12.381, salt 0.774, sugar 2.321, no wa
   `${tk.status} ${JSON.stringify(leaves)} cost=${tk.body?.cost}`);
 
 // ── 5. an order of two draws the raw leaves, not the ПФ ─────────────────────
+// The QA shelf starts empty; an order is refused against an empty shelf, so receive the raw items first.
+for (const r of ['rice-dry', 'vinegar', 'salt', 'sugar']) {
+  const rc = await own('/api/owner/stock/received', { item: P + r, qty: 1000 });
+  step(`1000 of ${r} received`, rc.status === 200, `${rc.status} ${JSON.stringify(rc.body).slice(0, 120)}`);
+}
 const o = await j(`/api/public/locations/${slug}/orders`, { method: 'POST', headers: { 'content-type': 'application/json' },
   body: JSON.stringify({ contact: { name: 'QA pf', phone: '+355690000019' }, fulfilment: { kind: 'pickup' }, items: [{ product_id: PROD, quantity: 2 }], payment: 'cash' }) });
-ORDER = o.body?.id || o.body?.order?.id;
+ORDER = o.body?.id || o.body?.order?.id || o.body?.order_id;
 step('an order of two is placed', o.status < 400 && !!ORDER, `${o.status} ${JSON.stringify(o.body).slice(0, 120)}`);
 const st = await own('/api/owner/stock', undefined, 'GET');
 const lvl = id => (st.body?.supplies || []).find(x => x.id === id);
@@ -116,7 +124,7 @@ const stillThere = await own(`/api/owner/supplies/${P}salt/uses`, undefined, 'GE
 step('and nothing was deleted', stillThere.status === 200);
 
 // ── 7. cleanup ──────────────────────────────────────────────────────────────
-await cleanup();
+await cleanup(true);
 const gone = await own(`/api/owner/supplies/${ids.rice}/uses`, undefined, 'GET');
 step('cleanup: the cards are gone', gone.status === 404, `${gone.status}`);
 const ledger = await own('/api/owner/stock', undefined, 'GET');
