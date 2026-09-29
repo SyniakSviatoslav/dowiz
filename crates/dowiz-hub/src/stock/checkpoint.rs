@@ -27,6 +27,7 @@
 //! so `decode` reads `"k":"checkpoint"` and answers `None` whatever an item
 //! name inside the body says.
 
+use super::carry::Carry;
 use super::cost::CostBook;
 use super::journal::Journal;
 use super::meta::{with_meta, Meta};
@@ -76,11 +77,12 @@ impl StockLog {
         Tail { base, recs }
     }
 
-    /// The shelf and/or the cost book NOW, from the newest checkpoint, and
-    /// how many records follow it.
-    pub(super) fn fold_tail(&self, ledger: bool, book: bool) -> Result<(StockLedger, CostBook, usize), StockError> {
+    /// The shelf and/or the cost book NOW, from the newest checkpoint, the
+    /// carry (always: it is one integer read per record), and how many
+    /// records follow the checkpoint.
+    pub(super) fn fold_tail(&self, ledger: bool, book: bool) -> Result<(StockLedger, CostBook, Carry, usize), StockError> {
         let t = self.tail(|_, _| true);
-        let (mut led, mut b) = t.base.map(|j| (j.ledger, j.book)).unwrap_or_default();
+        let (mut led, mut b, mut c) = t.base.map(|j| (j.ledger, j.book, j.carry)).unwrap_or_default();
         for rec in &t.recs {
             let Some(ev) = decode(rec) else { continue };
             if ledger {
@@ -89,8 +91,9 @@ impl StockLog {
             if book {
                 b.apply_event(&ev, rec);
             }
+            c.apply(&ev, crate::minijson::int_field(rec, "uq").filter(|u| *u > 0));
         }
-        Ok((led, b, t.recs.len()))
+        Ok((led, b, c, t.recs.len()))
     }
 
     /// THE WRITE DOOR: signed, decided against the shelf as a batch, written,
@@ -102,7 +105,7 @@ impl StockLog {
             signed(ev)?;
         }
         let at = self.len();
-        let (mut trial, costs, since) = self.fold_tail(true, book)?;
+        let (mut trial, costs, _, since) = self.fold_tail(true, book)?;
         for (ev, _) in evs {
             trial.apply(ev)?;
         }

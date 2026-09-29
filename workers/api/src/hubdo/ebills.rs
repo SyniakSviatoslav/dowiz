@@ -99,7 +99,8 @@ impl HubImages {
         let out = {
             let map = |code: &str| state::get::<Mapping>(&t, K_MAP, code).ok().flatten().map(|m| m.product_id);
             let product = |pid: &str| cat.as_ref().and_then(|c| c.product(pid));
-            let look = Lookups { map: &map, product: &product };
+            let supply = |sid: &str| cat.as_ref().and_then(|c| c.supply(sid));
+            let look = Lookups { map: &map, product: &product, supply: &supply };
             let waiting = Waiting { bills: st.pending.clone(), leads: st.leads.clone() };
             match import::decide(&mut hub, &mut stock, &listed, &look, waiting, &input.sales, input.now_ms) {
                 Ok(o) => o,

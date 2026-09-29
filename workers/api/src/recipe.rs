@@ -26,7 +26,12 @@ use dowiz_hub::stock::BomLine;
 use serde_json::{json, Value};
 
 pub mod apply;
+/// A semi-finished supply, hydrated with the numbers its card derives.
+pub mod prep;
+/// The five taste axes.
+pub mod taste;
 pub mod weights;
+pub use taste::validate_taste;
 
 /// The kinds of supply. The first two are food and carry nutrition. `resale`
 /// is a thing bought and SOLD AS IT IS -- a bottle, a can -- so a dish with no
@@ -45,8 +50,10 @@ pub const TASTE_MAX: i64 = 3;
 /// A recipe line's quantity is bounded: a kitchen does not put a tonne in a roll.
 pub const QTY_MAX: i64 = 100_000;
 
+/// A semi-finished product is eaten too: its line counts towards nutrition,
+/// weight and the ingredient list like any food.
 pub fn is_food(kind: &str) -> bool {
-    kind == "food_ingredient" || kind == "condiment"
+    kind == "food_ingredient" || kind == "condiment" || kind == dowiz_hub::prep::KIND
 }
 
 /// How many base units the per-basis numbers describe.
@@ -124,7 +131,12 @@ pub fn line_with(supply_id: &str, qty: i64, net: Option<i64>, out: Option<i64>, 
     let w = weights::weights(&unit, qty, supply, net, out);
     let n = nutrition_scale(&unit, qty, supply, &w);
     let scaled = |k: &str| if food { num(supply, k).map(|x| x * n) } else { None };
-    let cost = num(supply, "costPerBasis").map(|c| (c * ratio).round() as i64);
+    // A hydrated semi-finished record carries its cost exactly, in millionths
+    // per base unit (`recipe::prep`); a raw supply its list price per basis.
+    let cost = match supply.get("costMicroPerUnit").and_then(Value::as_i64) {
+        Some(m) => Some(((i128::from(m) * i128::from(qty) + i128::from(prep::MICRO_HALF)) / i128::from(dowiz_hub::prep::MICRO)) as i64),
+        None => num(supply, "costPerBasis").map(|c| (c * ratio).round() as i64),
+    };
     let weight_g = w.out.map(|o| o as f64);
     Line {
         supply: supply_id.to_string(),
@@ -193,7 +205,7 @@ pub fn derive(lines: &[Line]) -> Derived {
 pub fn bom_json(lines: &[Line]) -> Value {
     let lean: Vec<(BomLine, Option<i64>, Option<i64>)> = lines
         .iter()
-        .map(|l| (BomLine { supply: l.supply.clone(), qty: l.qty }, l.w.net_set, l.w.out_set))
+        .map(|l| (BomLine::whole(l.supply.clone(), l.qty), l.w.net_set, l.w.out_set))
         .collect();
     serde_json::from_str(&dowiz_hub::catalog::bom::to_json_weighed(&lean)).expect("the hub's bom writer writes JSON")
 }
@@ -222,6 +234,7 @@ pub fn bom_view(lines: &[Line]) -> Value {
 /// own snapshot says, else just its id. A line without a supply id or an
 /// integer qty is not a line (the ledger skips it too).
 pub fn lines_of_stored(bom: &Value, supply: impl Fn(&str) -> Option<String>) -> Vec<Line> {
+    let supply = prep::lookup(&supply);
     let mut out = Vec::new();
     for l in bom.as_array().map(Vec::as_slice).unwrap_or_default() {
         let (Some(id), Some(qty)) = (l.get("supply").and_then(Value::as_str), l.get("qty").and_then(Value::as_i64)) else {
@@ -256,29 +269,27 @@ fn snapshot_of(id: &str, qty: i64, l: &Value) -> Line {
 }
 
 /// A stored dish as the owner reads it: its `bom`, if it has one, in the
-/// display form ([`bom_view`] of [`lines_of_stored`]).
+/// display form ([`bom_view`] of [`lines_of_stored`]) -- and its cost, and
+/// the nutrition and weight the recipe derived, REFRESHED from today's
+/// supplies (SPEC-SEMI-FINISHED §d: a raw price or a card changed since the
+/// dish was saved shows on the next read, nothing re-saved). What the owner
+/// typed (`…Derived: false`) is left alone.
 pub fn hydrate(p: &mut Value, supply: impl Fn(&str) -> Option<String>) {
-    if p.get("bom").is_some_and(Value::is_array) {
-        p["bom"] = bom_view(&lines_of_stored(&p["bom"], supply));
+    if !p.get("bom").is_some_and(Value::is_array) {
+        return;
     }
-}
-
-/// A taste map is five known axes at levels 1…3; anything else is refused.
-pub fn validate_taste(m: &serde_json::Map<String, Value>) -> Result<serde_json::Map<String, Value>, String> {
-    let mut out = serde_json::Map::new();
-    for (k, v) in m {
-        if !TASTE_AXES.contains(&k.as_str()) {
-            return Err(format!("unknown taste axis {k:?}"));
-        }
-        match v.as_i64() {
-            Some(n) if (TASTE_MIN..=TASTE_MAX).contains(&n) => {
-                out.insert(k.clone(), json!(n));
-            }
-            Some(0) | None if v.is_null() || v.as_i64() == Some(0) => {} // 0 or null = not declared
-            _ => return Err(format!("taste {k} is 1 to 3")),
+    let lines = lines_of_stored(&p["bom"], supply);
+    let d = derive(&lines);
+    p["cost"] = d.cost.map(|c| json!(c)).unwrap_or(Value::Null);
+    if p.get("nutritionDerived").and_then(Value::as_bool) == Some(true) && d.nutrition_complete {
+        p["nutrition"] = json!({ "kcal": d.kcal, "protein": d.protein, "fat": d.fat, "carbs": d.carbs, "approx": false });
+    }
+    if p.get("weightDerived").and_then(Value::as_bool) == Some(true) {
+        if let Some(w) = d.weight_g {
+            p["weightG"] = json!(w);
         }
     }
-    Ok(out)
+    p["bom"] = bom_view(&lines);
 }
 
 #[cfg(test)]

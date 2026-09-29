@@ -4,35 +4,63 @@
 //! whole number of its base unit, or the dish is refused. iiko's
 //! `getPrepared` rounds each level to the gram; rounding at every level is
 //! how a sauce used in forty dishes drifts forty ways.
+//!
+//! THE RECURSION IS THE CATALOGUE'S (`crate::prep::tree`, 2026-09-29): the
+//! same walker that expands a stored semi-finished card at a sale, so a cycle,
+//! a depth and an overflow are found by one piece of code in both places.
 
 use super::cards::{Card, Item};
-use super::num::{Base, Rat};
 use super::{DraftLine, QTY_MAX};
-
-/// One leaf supply, summed over every path that reaches it.
-struct Acc {
-    id: String,
-    base: Base,
-    qty: Rat,
-    net: Option<i64>,
-    yld: Option<i64>,
-    uses: u32,
-}
+use crate::prep::tree::{self, Edge, Walk};
 
 /// Expand one card to leaf lines, exactly; then each must be a whole unit.
 pub(super) fn flatten(c: &Card, cards: &[Card], report: &mut Vec<String>) -> Result<Vec<DraftLine>, String> {
     if let Some(e) = c.errors.first() {
         return Err(e.clone());
     }
-    let mut acc: Vec<Acc> = Vec::new();
-    let mut stack = vec![c.key.clone()];
-    expand(c, Rat::new(1, 1), cards, &mut stack, &mut acc, report)?;
-    let mut out = Vec::with_capacity(acc.len());
-    for Acc { id, base, qty, net, yld, uses } in acc {
-        let q = qty.whole(base, QTY_MAX).map_err(|e| format!("{id} {e}"))?;
-        // Net and yield describe ONE direct line; merged ones would lie.
-        let (net, yield_) = if uses == 1 { (net, yld) } else { (None, None) };
-        out.push(DraftLine { supply: id, qty: q, net, yield_ });
+    let root: Vec<Edge> = c.items.iter().map(edge).collect();
+    // Net and yield describe ONE direct line of THIS card; a leaf reached
+    // through a semi-finished product, or twice, keeps neither.
+    let side = |id: &str| {
+        c.items.iter().find_map(|i| match i {
+            Item::Supply { id: s, net, yld, .. } if s == id => Some((*net, *yld)),
+            _ => None,
+        })
+    };
+    let mut node = |key: &str| -> Result<Option<tree::Card>, String> {
+        let Some(p) = cards.iter().find(|p| p.key == key && p.prepack) else {
+            // A supply id, or a name no card in force answers: a leaf. The
+            // line reader already refused a name that is neither.
+            return Ok(None);
+        };
+        if let Some(e) = p.errors.first() {
+            return Err(format!("uses {:?}, which was refused ({e})", p.dish));
+        }
+        let (_, batch) = p.batch.ok_or_else(|| format!("{:?} has no batch size", p.dish))?;
+        Ok(Some(tree::Card { lines: p.items.iter().map(edge).collect(), batch }))
+    };
+    let walked = Walk { depth_max: crate::prep::DEPTH_MAX }.run(&c.key, &root, &mut node).map_err(|s| s.to_string())?;
+    for (key, n) in &walked.through {
+        let dish = cards.iter().find(|p| &p.key == key).map(|p| p.dish.as_str()).unwrap_or(key);
+        report.push(format!("{dish:?} expanded into {n} line(s)"));
+    }
+    let mut out = Vec::with_capacity(walked.leaves.len());
+    for leaf in walked.leaves {
+        let base = c
+            .items
+            .iter()
+            .chain(cards.iter().filter(|p| p.prepack).flat_map(|p| p.items.iter()))
+            .find_map(|i| match i {
+                Item::Supply { id, base, .. } if *id == leaf.item => Some(*base),
+                _ => None,
+            })
+            .ok_or_else(|| format!("{} is not a supply", leaf.item))?;
+        let q = leaf.qty.whole(base, QTY_MAX).map_err(|e| format!("{} {e}", leaf.item))?;
+        let (net, yield_) = match (leaf.uses, leaf.direct) {
+            (1, true) => side(&leaf.item).unwrap_or((None, None)),
+            _ => (None, None),
+        };
+        out.push(DraftLine { supply: leaf.item, qty: q, net, yield_ });
     }
     if out.is_empty() {
         return Err("the card has no lines".into());
@@ -40,44 +68,11 @@ pub(super) fn flatten(c: &Card, cards: &[Card], report: &mut Vec<String>) -> Res
     Ok(out)
 }
 
-fn expand(
-    c: &Card,
-    factor: Rat,
-    cards: &[Card],
-    stack: &mut Vec<String>,
-    acc: &mut Vec<Acc>,
-    report: &mut Vec<String>,
-) -> Result<(), String> {
-    for item in &c.items {
-        match item {
-            Item::Supply { id, base, qty, net, yld } => {
-                let q = qty.mul(factor);
-                match acc.iter_mut().find(|a| &a.id == id) {
-                    Some(a) => {
-                        a.qty = a.qty.add(q);
-                        a.uses += 1;
-                    }
-                    None => acc.push(Acc { id: id.clone(), base: *base, qty: q, net: *net, yld: *yld, uses: 1 }),
-                }
-            }
-            Item::Pre { key, qty } => {
-                if stack.contains(key) {
-                    stack.push(key.clone());
-                    return Err(format!("semi-finished products name each other: {}", stack.join(" → ")));
-                }
-                let Some(p) = cards.iter().find(|p| &p.key == key && p.prepack) else {
-                    return Err(format!("semi-finished {key:?} has no card in force today"));
-                };
-                if let Some(e) = p.errors.first() {
-                    return Err(format!("uses {:?}, which was refused ({e})", p.dish));
-                }
-                let (_, batch) = p.batch.ok_or_else(|| format!("{:?} has no batch size", p.dish))?;
-                stack.push(key.clone());
-                expand(p, qty.mul(factor).div(batch), cards, stack, acc, report)?;
-                stack.pop();
-                report.push(format!("{:?} expanded into {} line(s)", p.dish, p.items.len()));
-            }
-        }
+/// A card's item as the walker's edge: a supply by its id, a semi-finished
+/// product by its card key.
+fn edge(i: &Item) -> Edge {
+    match i {
+        Item::Supply { id, qty, .. } => Edge { item: id.clone(), qty: *qty },
+        Item::Pre { key, qty } => Edge { item: key.clone(), qty: *qty },
     }
-    Ok(())
 }

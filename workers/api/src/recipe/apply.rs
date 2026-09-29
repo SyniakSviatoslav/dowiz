@@ -55,6 +55,7 @@ pub fn set_bom(
     supply: impl Fn(&str) -> Option<String>,
     typed: Typed,
 ) -> Result<Option<Derived>, String> {
+    let supply = super::prep::lookup(&supply);
     let mut snap: Vec<Line> = Vec::with_capacity(lines.len());
     for l in lines {
         let Some(sj) = supply(&l.supply) else {

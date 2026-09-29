@@ -18,7 +18,7 @@ use super::state::{Noted, PendingBill, PendingLead, PENDING_FOR_MS};
 use crate::command::amend::next_seq;
 use crate::command::Refused;
 use crate::hubdo::OrderView;
-use dowiz_hub::stock::{reservations_for, StockEvent, StockLog};
+use dowiz_hub::stock::{StockEvent, StockLog};
 use dowiz_hub::{EventKind, Hub};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -82,6 +82,8 @@ pub(crate) struct Lookups<'a> {
     pub(crate) map: &'a dyn Fn(&str) -> Option<String>,
     /// dowiz `product_id` -> the catalogue record (for its `bom`).
     pub(crate) product: &'a dyn Fn(&str) -> Option<String>,
+    /// supply id -> its record, so a dish with a semi-finished line draws raw leaves.
+    pub(crate) supply: &'a dyn Fn(&str) -> Option<String>,
 }
 
 /// `(total, logCis length)` -- what an amendment in ebills moves (§6.1).
@@ -142,24 +144,18 @@ fn order(hub: &mut Hub, stock: &mut StockLog, look: &Lookups, out: &mut Outcome,
             item["ebills_code"] = json!(code);
             item["product_id"] = json!(pid);
             if let Some(p) = (look.product)(&pid) {
-                bom.push((p, qty));
+                bom.push((dowiz_hub::prep::for_ledger(look.supply, &p).0, qty));
             }
         }
     }
-    let served: Vec<StockEvent> = reservations_for(&id, &bom)
-        .into_iter()
-        .filter_map(|e| match e {
-            StockEvent::Reserved { item, qty, order_id } => Some(StockEvent::Served { item, qty, order_id }),
-            _ => None,
-        })
-        .collect();
+    let served = dowiz_hub::stock::draws_for(&id, &bom);
     if let Err(u) = crate::services::ordering::channel::of(&env) {
         out.refused.push(Noted { at_ms: now, sale_id, why: u.to_string() });
         return Ok(());
     }
     if !served.is_empty() {
         // §6.4: `Served` is never refused for the shelf; only arithmetic can.
-        if let Err(e) = stock.append_all(&served) {
+        if let Err(e) = stock.append_served_draws(&served) {
             out.refused.push(Noted { at_ms: now, sale_id, why: format!("stock: {e}") });
             return Ok(());
         }

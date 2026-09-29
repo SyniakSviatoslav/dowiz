@@ -1,0 +1,9 @@
+/* Semi-finished products (lane W-PF): one editor line -- the item, its
+   quantity in its own unit, the unit, remove -- on a phone. Tokens only;
+   loaded once by admin/prep.js. */
+.pf-line{display:grid;grid-template-columns:minmax(0,1fr) 96px auto auto;gap:var(--space-2);align-items:center;padding:6px 0;border-bottom:1px solid var(--ui-hairline)}
+.pf-line .t{min-width:0}
+.pf-line .t b{display:block;font-size:var(--text-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-line .t small{display:block;color:var(--brand-text-muted);font-size:var(--text-xs)}
+.pf-line .ui-input{text-align:right;font-variant-numeric:tabular-nums}
+.pf-line .ui-field{margin:0}

@@ -9,6 +9,8 @@ use serde_json::{json, Value};
 use worker::*;
 
 pub mod ingredients_reset;
+/// Semi-finished products: cards, where-used, one sale's leaves.
+pub mod preps;
 pub mod stock;
 pub mod supplies;
 pub mod waste;

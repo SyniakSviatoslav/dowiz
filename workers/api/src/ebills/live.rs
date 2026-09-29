@@ -84,7 +84,7 @@ fn todays_real_answers_parse_map_and_import() {
     let mut hub = dowiz_hub::Hub::create_sized(64 * 1024).unwrap();
     let mut stock = dowiz_hub::stock::StockLog::create_sized(64 * 1024).unwrap();
     let none = |_: &str| None;
-    let look = Lookups { map: &none, product: &none };
+    let look = Lookups { map: &none, product: &none, supply: &none };
     let out = decide(&mut hub, &mut stock, &[], &look, Waiting::default(), &sales, 1_790_200_000_000).expect("import");
     println!("import: {} placed, {} paid (courses), {} bills waiting, {} refused", out.placed, out.paid, out.pending.len(), out.refused.len());
     for b in &out.pending {

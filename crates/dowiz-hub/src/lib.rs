@@ -45,6 +45,7 @@ pub mod roster;
 pub mod room;
 pub mod settings;
 pub mod stock;
+pub mod prep;
 pub mod subs;
 pub mod voice;
 pub mod zone;
@@ -57,8 +58,7 @@ pub mod forget;
 pub mod lang;
 #[cfg(test)] mod store_tests; // W-AUDIT S1/S2: named corrupted cells in the store beneath the hub
 
-use bebop_store::evlog::{EvLog, Record};
-use bebop_store::{Store, StoreError};
+use bebop_store::{evlog::{EvLog, Record}, Store, StoreError};
 
 /// Default image size for a fresh hub. 4 MiB holds a few thousand orders at the
 /// measured 47 cells per append, and the image is only as large as it is written.

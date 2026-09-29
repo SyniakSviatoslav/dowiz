@@ -47,9 +47,12 @@ fn a_served_dish_on_a_stocked_shelf_subtracts_and_holds_nothing() {
 #[test]
 fn a_served_quantity_must_be_a_quantity() {
     let led = StockLedger::default();
-    for q in [0, -3] {
-        assert!(matches!(led.decide(&served("x", q, "o")), Err(StockError::NotPositive { .. })));
-    }
+    assert!(matches!(led.decide(&served("x", -3, "o")), Err(StockError::NotPositive { .. })));
+    // ZERO IS A SALE'S LINE since semi-finished cards (SPEC-SEMI-FINISHED §c):
+    // 0.3 g of salt sold through a card books 0 whole grams and must still
+    // be a record for the carried remainder. A person's own movement stays
+    // "Always > 0" (`returned_tests`, `a_prep_is_signed_and_its_numbers_are_numbers`).
+    assert!(led.decide(&served("x", 0, "o")).is_ok());
     // Counted, so the shelf moves; an uncounted item's never does.
     let count = StockEvent::Stocktake { item: "x".into(), observed: 0, stocktake_id: "st".into(), by: "m".into() };
     let deep = StockLedger::fold(&[count, served("x", i64::MAX, "o")]).unwrap();

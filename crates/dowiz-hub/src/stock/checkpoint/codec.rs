@@ -92,6 +92,25 @@ pub(in crate::stock) fn body(j: &Journal) -> String {
         w.s(o);
         w.n(c);
     }
+    // THE CARRY (SPEC-SEMI-FINISHED §c), written ONLY when there is one: a
+    // checkpoint on a log with no fractional draw is byte-identical to the
+    // one written before this section existed, so `verify_checkpoints` still
+    // holds every checkpoint already on a live venue.
+    if !j.carry.rem.is_empty() || !j.carry.open.is_empty() {
+        w.n("X");
+        w.n(j.carry.rem.len());
+        for (i, r) in &j.carry.rem {
+            w.s(i);
+            w.n(r);
+        }
+        w.n(j.carry.open.len());
+        for ((o, i), (uq, q)) in &j.carry.open {
+            w.s(o);
+            w.s(i);
+            w.n(uq);
+            w.n(q);
+        }
+    }
     w.0
 }
 
@@ -183,6 +202,16 @@ pub(in crate::stock) fn parse(payload: &[u8]) -> Option<(Journal, Option<i64>)> 
     j.undated.plain = r.n()?;
     for _ in 0..r.n::<usize>()? {
         j.undated.by_order.push((r.s()?, r.n()?));
+    }
+    if r.0.starts_with(" X") {
+        for _ in 0..r.tag("X")? {
+            let item = r.s()?;
+            j.carry.rem.insert(item, r.n()?);
+        }
+        for _ in 0..r.n::<usize>()? {
+            let (o, i) = (r.s()?, r.s()?);
+            j.carry.open.insert((o, i), (r.n()?, r.n()?));
+        }
     }
     if !r.0.is_empty() {
         return None;

@@ -71,6 +71,10 @@ pub(crate) struct SupplyIn {
     /// How it is bought: `[{name: "box 5 kg", qty: 5000}]` in base units; [] clears.
     #[serde(default)]
     pub(crate) packs: Option<Vec<nomenclature::Pack>>,
+    /// OUTSIDE THE SHELF (water, SPEC-SEMI-FINISHED §a): a line of every card
+    /// it is on and of K, never a leaf of the write-off. `false` clears.
+    #[serde(default)]
+    pub(crate) untracked: Option<bool>,
 }
 
 /// Code, barcode and packs: the nomenclature's own fields (W-NOM).
@@ -102,8 +106,16 @@ pub async fn set_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
         if let Some(why) = unit_change(&body, &existing) {
             return Err(Error::RustError(format!("unit-change: {why}")));
         }
-        let rec = record(&id, &body, &existing);
+        // A SEMI-FINISHED PRODUCT IS NOT EDITED HERE: `record` rebuilds the
+        // row from the form's keys and would drop its card (bug B3, 2026-09-29).
+        if existing.get("kind").and_then(Value::as_str) == Some(dowiz_hub::prep::KIND) {
+            return Err(Error::RustError(format!("unit-change: {} is a semi-finished product; edit it through /api/owner/preps", body.id.trim())));
+        }
+        let mut rec = record(&id, &body, &existing);
         cat.set_supply(&id, &rec.to_string());
+        // Every dish (through every card) that reaches it stores what this
+        // supply's numbers derive: caught up in the same write (bug B1).
+        rec["dishes"] = json!(super::preps::rederive::dishes_using(cat, &id));
         Ok(rec)
     })
     .await;
@@ -144,6 +156,9 @@ pub(crate) fn check(body: &SupplyIn) -> std::result::Result<String, String> {
         return Err("a threshold cannot be negative".into());
     }
     if let Some(k) = &body.kind {
+        if k == dowiz_hub::prep::KIND {
+            return Err("a semi-finished product is saved with its card through /api/owner/preps".into());
+        }
         if !crate::recipe::KINDS.contains(&k.as_str()) {
             return Err(format!("kind is one of {}", crate::recipe::KINDS.join(", ")));
         }
@@ -212,6 +227,8 @@ pub(crate) fn record(id: &str, body: &SupplyIn, existing: &Value) -> Value {
         "code": opt("code", nomenclature::text(&body.code)),
         "barcode": opt("barcode", nomenclature::text(&body.barcode)),
         "packs": opt("packs", nomenclature::packs(&body.packs)),
+        // Only `true` is stored; `false` (the default) and absent are one thing.
+        "untracked": opt("untracked", body.untracked.map(|u| json!(u))).eq(&json!(true)).then(|| json!(true)).unwrap_or(Value::Null),
         // Saving through the editor is an act of keeping: a retired supply
         // written again comes back to the list unless the body says otherwise.
         "active": json!(body.active.unwrap_or(true)),

@@ -99,7 +99,7 @@ fn an_import_turn_moves_the_state_with_what_it_did() {
     let mut hub = dowiz_hub::Hub::create_sized(64 * 1024).unwrap();
     let mut stock = dowiz_hub::stock::StockLog::create_sized(64 * 1024).unwrap();
     let none = |_: &str| None;
-    let look = Lookups { map: &none, product: &none };
+    let look = Lookups { map: &none, product: &none, supply: &none };
     let bill = Mapped::Bill { sale_id: 9, paid: json!({ "table": "3", "total": 100, "at_ms": 5, "external": { "uuid": "b" } }) };
     let out = decide(&mut hub, &mut stock, &[], &look, Waiting::default(), &[bill], 1_000).unwrap();
     let s = record_import(&mut t, &import_in(40, false, vec![]), &out, None).unwrap();

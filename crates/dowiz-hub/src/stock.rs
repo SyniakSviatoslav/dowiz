@@ -340,7 +340,17 @@ impl StockLedger {
                     | StockEvent::Produced { qty, .. } => *qty,
                     StockEvent::Stocktake { .. } | StockEvent::Removed { .. } => unreachable!(),
                 };
-                if q <= 0 {
+                // AN ORDER LINE MAY BE ZERO (SPEC-SEMI-FINISHED §c): a draw of
+                // 0.3 g of salt through a semi-finished card books 0 whole
+                // grams THIS sale and must still be a record, or the carried
+                // remainder forgets it and every later draw rounds to 0 for
+                // ever. Everything a person types (a delivery, a write-off, a
+                // prep) keeps §4's "Always > 0".
+                let order_line = matches!(
+                    ev,
+                    StockEvent::Reserved { .. } | StockEvent::Consumed { .. } | StockEvent::Released { .. } | StockEvent::Served { .. } | StockEvent::Unserved { .. }
+                );
+                if q < 0 || (q == 0 && !order_line) {
                     return Err(StockError::NotPositive { qty: q });
                 }
             }
@@ -363,6 +373,8 @@ impl StockLedger {
                     });
                 }
             }
+            // A zero line consumes or releases nothing: nothing to check.
+            StockEvent::Consumed { qty: 0, .. } | StockEvent::Released { qty: 0, .. } => {}
             StockEvent::Consumed { item, qty, order_id } => {
                 let held = self.held(order_id, item);
                 if held == 0 {
@@ -759,266 +771,8 @@ pub fn decode(rec: &str) -> Option<StockEvent> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn recv(item: &str, q: Qty) -> StockEvent {
-        StockEvent::Received { item: item.into(), qty: q }
-    }
-    fn res(item: &str, q: Qty, o: &str) -> StockEvent {
-        StockEvent::Reserved { item: item.into(), qty: q, order_id: o.into() }
-    }
-    fn con(item: &str, q: Qty, o: &str) -> StockEvent {
-        StockEvent::Consumed { item: item.into(), qty: q, order_id: o.into() }
-    }
-    fn rel(item: &str, q: Qty, o: &str) -> StockEvent {
-        StockEvent::Released { item: item.into(), qty: q, order_id: o.into() }
-    }
-
-    #[test]
-    fn the_happy_path_conserves() {
-        let led = StockLedger::fold(&[
-            recv("salmon", 1000),
-            res("salmon", 200, "ord_1"),
-            con("salmon", 200, "ord_1"),
-        ])
-        .expect("fold");
-        assert_eq!(led.level("salmon"), StockLevel { on_hand: 800, reserved: 0 });
-        assert_eq!(led.available("salmon"), 800);
-        assert!(led.stranded().is_empty());
-    }
-
-    /// I1, and the sentence §4 builds the whole design around: the refusal IS
-    /// the automatic stop-listing. Nothing sets a flag; there is nothing to race.
-    #[test]
-    fn reserving_more_than_is_available_is_refused_and_that_is_the_86() {
-        let led = StockLedger::fold(&[recv("salmon", 100), res("salmon", 60, "ord_1")]).unwrap();
-        assert_eq!(led.available("salmon"), 40);
-        match led.decide(&res("salmon", 41, "ord_2")) {
-            Err(StockError::OutOfStock { wanted, available, .. }) => {
-                assert_eq!((wanted, available), (41, 40));
-            }
-            other => panic!("expected OutOfStock, got {other:?}"),
-        }
-        // Exactly what is left is fine; one more is not.
-        assert!(led.decide(&res("salmon", 40, "ord_2")).is_ok());
-    }
-
-    /// A never-counted item is not an empty one -- and every order still
-    /// takes its ingredients (operator, 2026-09-26). The reservation and the
-    /// consumption are recorded, `on_hand` goes NEGATIVE (what was used since
-    /// nobody looked: "needs a count"), and nothing is refused -- until the
-    /// first count or delivery, from which point the 86 is exactly as strict
-    /// as above.
-    #[test]
-    fn an_uncounted_item_never_refuses_but_every_order_takes_it_and_the_first_count_arms_it() {
-        let led = StockLedger::fold(&[res("nori", 5, "ord_1"), con("nori", 5, "ord_1")]).unwrap();
-        assert!(!led.is_counted("nori"));
-        assert_eq!(led.level("nori"), StockLevel { on_hand: -5, reserved: 0 }, "the order took 5: needs a count");
-        assert!(led.decide(&res("nori", 1_000, "ord_2")).is_ok(), "an uncounted level is not a measurement");
-        assert!(led.decide(&StockEvent::Wasted {
-            item: "nori".into(), qty: 3, reason: WasteReason::Spoiled, by: "p".into()
-        }).is_ok(), "nor does it refuse a write-off");
-        assert!(led.stranded().is_empty(), "the reservation was settled, not left behind");
-
-        let count = StockEvent::Stocktake {
-            item: "nori".into(), observed: 20, stocktake_id: "st_1".into(), by: "mgr1".into(),
-        };
-        let led = StockLedger::fold(&[res("nori", 5, "ord_1"), con("nori", 5, "ord_1"), count]).unwrap();
-        assert!(led.is_counted("nori"));
-        assert_eq!(led.level("nori").on_hand, 20, "the count is the basis, not 20 minus earlier uncounted use");
-        assert!(led.decide(&res("nori", 21, "ord_2")).is_err(), "counted: the 86 is armed");
-        assert!(led.decide(&res("nori", 20, "ord_2")).is_ok());
-
-        // A delivery arms it too, AT WHAT CAME IN: the uncounted use before it
-        // is not a debt the delivery pays.
-        let led = StockLedger::fold(&[res("rice", 7, "o0"), con("rice", 7, "o0"), recv("rice", 10)]).unwrap();
-        assert_eq!(led.level("rice").on_hand, 10);
-        assert!(led.is_counted("rice") && led.decide(&res("rice", 11, "ord_3")).is_err());
-        // Twin: once counted, a draw below zero is the ledger's own number again.
-        let led = StockLedger::fold(&[recv("rice", 10), recv("rice", 5)]).unwrap();
-        assert_eq!(led.level("rice").on_hand, 15, "only the FIRST delivery re-bases");
-    }
-
-    /// Once an order holds its portion, moving it on is never refused for
-    /// stock: here a till sale (`Served`) took the shelf below what the order
-    /// holds, and the order still cooks. The shelf goes negative -- a count is
-    /// owed -- rather than a courier being stopped at IN_DELIVERY.
-    #[test]
-    fn a_held_order_always_cooks_even_when_the_shelf_moved_under_it() {
-        let served = StockEvent::Served { item: "tuna".into(), qty: 5, order_id: "till_1".into() };
-        let led = StockLedger::fold(&[recv("tuna", 10), res("tuna", 10, "ord_1"), served]).unwrap();
-        assert_eq!(led.level("tuna").on_hand, 5);
-        assert!(led.decide(&con("tuna", 10, "ord_1")).is_ok());
-        let led = StockLedger::fold(&[
-            recv("tuna", 10), res("tuna", 10, "ord_1"),
-            StockEvent::Served { item: "tuna".into(), qty: 5, order_id: "till_1".into() },
-            con("tuna", 10, "ord_1"),
-        ]).unwrap();
-        assert_eq!(led.level("tuna"), StockLevel { on_hand: -5, reserved: 0 });
-        // A NEW order is still refused: the 86 is armed for what was counted.
-        assert!(led.decide(&res("tuna", 1, "ord_2")).is_err());
-    }
-
-    /// Two orders cannot be promised the same portion. This is the oversell the
-    /// design exists to make structurally impossible.
-    #[test]
-    fn the_same_portion_cannot_be_promised_twice() {
-        let led = StockLedger::fold(&[recv("uni", 2), res("uni", 2, "ord_1")]).unwrap();
-        assert_eq!(led.available("uni"), 0, "all of it is spoken for");
-        assert_eq!(led.level("uni").on_hand, 2, "and it is still on the shelf");
-        assert!(led.decide(&res("uni", 1, "ord_2")).is_err());
-    }
-
-    /// I1 non-negativity, across every event that subtracts.
-    #[test]
-    fn nothing_can_drive_a_level_negative() {
-        let led = StockLedger::fold(&[recv("rice", 10)]).unwrap();
-        assert!(led.decide(&StockEvent::Wasted {
-            item: "rice".into(), qty: 11, reason: WasteReason::Spoiled, by: "mgr1".into()
-        }).is_err());
-        // And waste cannot eat a reservation: that portion is owed to somebody.
-        let led = StockLedger::fold(&[recv("rice", 10), res("rice", 8, "ord_1")]).unwrap();
-        assert!(led.decide(&StockEvent::Wasted {
-            item: "rice".into(), qty: 3, reason: WasteReason::Dropped, by: "mgr1".into()
-        }).is_err(), "only 2 are unspoken for");
-        assert!(led.decide(&StockEvent::Wasted {
-            item: "rice".into(), qty: 2, reason: WasteReason::Dropped, by: "mgr1".into()
-        }).is_ok());
-    }
-
-    /// §4: "Always > 0".
-    #[test]
-    fn a_quantity_that_is_not_a_quantity_is_refused() {
-        let led = StockLedger::default();
-        for q in [0, -1, i64::MIN] {
-            assert!(matches!(led.decide(&recv("x", q)), Err(StockError::NotPositive { .. })));
-        }
-        // An observed count of zero is legitimate: a shelf can be empty.
-        assert!(led.decide(&StockEvent::Stocktake {
-            item: "x".into(), observed: 0, stocktake_id: "s1".into(), by: "mgr1".into()
-        }).is_ok());
-        assert!(led.decide(&StockEvent::Stocktake {
-            item: "x".into(), observed: -1, stocktake_id: "s1".into(), by: "mgr1".into()
-        }).is_err());
-    }
-
-    /// I3: exactly one of Consumed or Released, never both, never neither.
-    #[test]
-    fn a_reservation_is_matched_exactly_once() {
-        // Released, then consumed: refused.
-        let led = StockLedger::fold(&[recv("a", 10), res("a", 4, "o1"), rel("a", 4, "o1")]).unwrap();
-        assert!(matches!(led.decide(&con("a", 4, "o1")), Err(StockError::Linkage(_))));
-        assert_eq!(led.level("a"), StockLevel { on_hand: 10, reserved: 0 });
-
-        // Consumed, then released: also refused.
-        let led = StockLedger::fold(&[recv("a", 10), res("a", 4, "o1"), con("a", 4, "o1")]).unwrap();
-        assert!(matches!(led.decide(&rel("a", 4, "o1")), Err(StockError::Linkage(_))));
-
-        // Consuming more than was reserved is refused.
-        let led = StockLedger::fold(&[recv("a", 10), res("a", 4, "o1")]).unwrap();
-        assert!(matches!(led.decide(&con("a", 5, "o1")), Err(StockError::Linkage(_))));
-
-        // And an order nobody reserved for cannot consume at all.
-        assert!(matches!(led.decide(&con("a", 1, "ghost")), Err(StockError::Linkage(_))));
-    }
-
-    /// A reservation that is never matched is stock the venue thinks it owes to
-    /// an order that ended -- the slow leak that makes a kitchen believe it is
-    /// out of something it has.
-    #[test]
-    fn stranded_reservations_are_visible() {
-        let led = StockLedger::fold(&[
-            recv("a", 10), res("a", 3, "o1"), res("a", 2, "o2"), rel("a", 2, "o2"),
-        ])
-        .unwrap();
-        assert_eq!(led.stranded(), vec![("o1".to_string(), "a".to_string(), 3)]);
-        assert_eq!(led.available("a"), 7);
-    }
-
-    /// I2: the basis resets at a count, and reservations survive it.
-    #[test]
-    fn a_stocktake_resets_the_basis_and_keeps_promises() {
-        let led = StockLedger::fold(&[
-            recv("tuna", 50),
-            res("tuna", 10, "o1"),
-            // Somebody counted and there are only 30.
-            StockEvent::Stocktake { item: "tuna".into(), observed: 30, stocktake_id: "s1".into(), by: "mgr1".into() },
-        ])
-        .unwrap();
-        assert_eq!(led.level("tuna"), StockLevel { on_hand: 30, reserved: 10 });
-        assert_eq!(led.available("tuna"), 20);
-        // The open order can still be fulfilled.
-        assert!(led.decide(&con("tuna", 10, "o1")).is_ok());
-    }
-
-    /// A count below what is already promised cannot be right, and accepting it
-    /// would make the ledger claim it owes more than it has.
-    #[test]
-    fn a_count_below_what_is_reserved_is_refused() {
-        let led = StockLedger::fold(&[recv("tuna", 50), res("tuna", 20, "o1")]).unwrap();
-        assert!(led.decide(&StockEvent::Stocktake {
-            item: "tuna".into(), observed: 5, stocktake_id: "s1".into(), by: "mgr1".into()
-        }).is_err());
-        assert!(led.decide(&StockEvent::Stocktake {
-            item: "tuna".into(), observed: 20, stocktake_id: "s1".into(), by: "mgr1".into()
-        }).is_ok());
-    }
-
-    /// I4: the same sequence folds to the same projection, and the item order
-    /// is stable, so two processes agree byte for byte.
-    #[test]
-    fn the_fold_is_deterministic() {
-        let evs = vec![
-            recv("z", 5), recv("a", 3), res("z", 2, "o1"), recv("m", 7), con("z", 2, "o1"),
-        ];
-        let a = StockLedger::fold(&evs).unwrap();
-        let b = StockLedger::fold(&evs).unwrap();
-        assert_eq!(a.items(), b.items());
-        assert_eq!(
-            a.items().iter().map(|(i, _)| i.as_str()).collect::<Vec<_>>(),
-            vec!["a", "m", "z"],
-            "items come out sorted, so two folds serialise identically"
-        );
-    }
-
-    /// The events survive the round trip that a restart is.
-    #[test]
-    fn every_event_round_trips() {
-        let evs = vec![
-            recv("salmon", 100),
-            res("salmon", 5, "ord_1"),
-            con("salmon", 5, "ord_1"),
-            rel("rice", 2, "ord_2"),
-            StockEvent::Wasted { item: "rice".into(), qty: 1, reason: WasteReason::Spoiled, by: "mgr1".into() },
-            StockEvent::Stocktake { item: "nori".into(), observed: 42, stocktake_id: "s1".into(), by: "mgr1".into() },
-        ];
-        for ev in &evs {
-            assert_eq!(decode(&encode(ev)).as_ref(), Some(ev), "{ev:?}");
-        }
-        assert_eq!(decode("not json"), None);
-        assert_eq!(decode(r#"{"k":"nonsense","item":"x"}"#), None);
-    }
-
-    /// An item name with a quote cannot forge a second field.
-    #[test]
-    fn a_hostile_item_name_cannot_forge_a_record() {
-        let ev = recv(r#"x","qty":9999"#, 1);
-        let back = decode(&encode(&ev)).expect("decode");
-        match back {
-            StockEvent::Received { qty, .. } => assert_eq!(qty, 1, "the quantity must not move"),
-            other => panic!("{other:?}"),
-        }
-    }
-
-    /// Checked arithmetic, not wrapping. A receipt that would overflow is
-    /// refused rather than turning a full shelf into a negative one.
-    #[test]
-    fn overflow_is_refused_not_wrapped() {
-        let led = StockLedger::fold(&[recv("x", i64::MAX)]).unwrap();
-        assert!(matches!(led.decide(&recv("x", 1)), Err(StockError::Overflow)));
-    }
-}
+#[path = "stock/fold/tests.rs"]
+mod tests;
 
 // ── the log ─────────────────────────────────────────────────────────────────
 
@@ -1300,95 +1054,8 @@ pub fn short(ledger: &StockLedger) -> Vec<(String, Qty)> {
 }
 
 #[cfg(test)]
-mod log_tests {
-    use super::*;
-
-    #[test]
-    fn the_log_survives_the_byte_image() {
-        let mut log = StockLog::create().expect("create");
-        log.append(&StockEvent::Received { item: "salmon".into(), qty: 500 }).unwrap();
-        log.append(&StockEvent::Reserved {
-            item: "salmon".into(), qty: 50, order_id: "o1".into()
-        }).unwrap();
-        let bytes = log.to_bytes();
-
-        let log = StockLog::load(&bytes).expect("load");
-        assert_eq!(log.events().len(), 2);
-        let led = log.ledger().unwrap();
-        assert_eq!(led.level("salmon"), StockLevel { on_hand: 500, reserved: 50 });
-        assert_eq!(led.available("salmon"), 450);
-    }
-
-    /// THE ORDER OF A FOLD IS NOT NEGOTIABLE. `EvLog::walk` returns newest
-    /// first; applying that order makes a reservation land before the delivery
-    /// that made it possible, and the ledger refuses its own history. This is
-    /// the regression test for exactly that -- it failed with
-    /// `OutOfStock { wanted: 50, available: 0 }` on a log holding 500.
-    #[test]
-    fn a_reloaded_log_replays_in_the_order_it_happened() {
-        let mut log = StockLog::create().expect("create");
-        for ev in [
-            StockEvent::Received { item: "salmon".into(), qty: 500 },
-            StockEvent::Reserved { item: "salmon".into(), qty: 50, order_id: "o1".into() },
-            StockEvent::Consumed { item: "salmon".into(), qty: 50, order_id: "o1".into() },
-            StockEvent::Received { item: "salmon".into(), qty: 100 },
-        ] {
-            log.append(&ev).expect("append");
-        }
-        let replayed = StockLog::load(&log.to_bytes()).expect("load");
-        // Oldest first, as it happened.
-        assert!(matches!(replayed.events()[0], StockEvent::Received { qty: 500, .. }));
-        assert_eq!(replayed.ledger().unwrap().level("salmon"),
-                   StockLevel { on_hand: 550, reserved: 0 });
-    }
-
-    /// Nothing is written when the gate refuses, so a replay can never
-    /// reconstruct an impossible state.
-    #[test]
-    fn a_refused_event_does_not_reach_the_log() {
-        let mut log = StockLog::create().expect("create");
-        log.append(&StockEvent::Received { item: "uni".into(), qty: 2 }).unwrap();
-        assert!(log.append(&StockEvent::Reserved {
-            item: "uni".into(), qty: 3, order_id: "o1".into()
-        }).is_err());
-        assert_eq!(log.events().len(), 1, "the refusal wrote nothing");
-    }
-
-    /// §4's "one commit, not two". A basket whose third line is short must
-    /// reserve NOTHING -- otherwise the first two are held by an order that was
-    /// never placed, and nothing will ever release them.
-    #[test]
-    fn a_batch_is_all_or_nothing() {
-        let mut log = StockLog::create().expect("create");
-        log.append(&StockEvent::Received { item: "rice".into(), qty: 100 }).unwrap();
-        log.append(&StockEvent::Received { item: "nori".into(), qty: 100 }).unwrap();
-        log.append(&StockEvent::Received { item: "uni".into(), qty: 1 }).unwrap();
-        let before = log.events().len();
-
-        let batch = vec![
-            StockEvent::Reserved { item: "rice".into(), qty: 10, order_id: "o1".into() },
-            StockEvent::Reserved { item: "nori".into(), qty: 2, order_id: "o1".into() },
-            StockEvent::Reserved { item: "uni".into(), qty: 5, order_id: "o1".into() },
-        ];
-        assert!(log.append_all(&batch).is_err(), "the third line is short");
-        assert_eq!(log.events().len(), before, "and so NOTHING was reserved");
-        assert_eq!(log.ledger().unwrap().level("rice").reserved, 0);
-    }
-
-    /// Two lines of ONE order competing for the same ingredient are caught by
-    /// the batch, not by the second one failing after the first was written.
-    #[test]
-    fn two_lines_of_one_order_are_decided_together() {
-        let mut log = StockLog::create().expect("create");
-        log.append(&StockEvent::Received { item: "uni".into(), qty: 3 }).unwrap();
-        let batch = vec![
-            StockEvent::Reserved { item: "uni".into(), qty: 2, order_id: "o1".into() },
-            StockEvent::Reserved { item: "uni".into(), qty: 2, order_id: "o1".into() },
-        ];
-        assert!(log.append_all(&batch).is_err(), "4 wanted, 3 on the shelf");
-        assert_eq!(log.ledger().unwrap().level("uni").reserved, 0);
-    }
-}
+#[path = "stock/log/tests.rs"]
+mod log_tests;
 
 // ── what a dish is made of ──────────────────────────────────────────────────
 
@@ -1396,8 +1063,26 @@ mod log_tests {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BomLine {
     pub supply: String,
-    /// How much ONE portion uses, in the supply's base unit.
+    /// How much ONE portion uses, in the supply's base unit -- WHOLE units;
+    /// for a leaf of a semi-finished tree, `uq` rounded to the nearest.
     pub qty: Qty,
+    /// The same in MILLIONTHS of the base unit (`prep::MICRO`): exact for a
+    /// leaf expanded through a semi-finished card (`prep::for_ledger` writes
+    /// `{"supply","uq"}`), `qty × 10^6` for a whole line. What `draws_for`
+    /// books and `cost::CostBook::dish_cost` prices.
+    pub uq: i64,
+}
+
+impl BomLine {
+    /// A whole-unit line, as every stored dish writes it.
+    pub fn whole(supply: impl Into<String>, qty: Qty) -> BomLine {
+        BomLine { supply: supply.into(), qty, uq: qty.saturating_mul(prep_micro()) }
+    }
+}
+
+/// `prep::MICRO`, named here so this file's readers do not import the tree.
+const fn prep_micro() -> i64 {
+    crate::prep::MICRO
 }
 
 /// Read a product's recipe out of its catalogue record.
@@ -1414,9 +1099,20 @@ pub fn bom_of(product_json: &str) -> Vec<BomLine> {
     let Some(body) = crate::modifiers::array_of(product_json, "bom") else { return out };
     for chunk in crate::modifiers::split_objects(body) {
         let Some(supply) = crate::minijson::str_field(&chunk, "supply") else { continue };
+        if supply.is_empty() {
+            continue;
+        }
+        // A leaf line (`uq`, millionths) or a whole line (`qty`). A line with
+        // neither, or a fraction written as `qty`, is not a line.
+        if let Some(uq) = crate::minijson::int_field(&chunk, "uq") {
+            if uq > 0 {
+                out.push(BomLine { supply, qty: (uq + prep_micro() / 2).div_euclid(prep_micro()), uq });
+            }
+            continue;
+        }
         let Some(qty) = crate::minijson::int_field(&chunk, "qty") else { continue };
-        if qty > 0 && !supply.is_empty() {
-            out.push(BomLine { supply, qty });
+        if qty > 0 {
+            out.push(BomLine::whole(supply, qty));
         }
     }
     out
@@ -1494,135 +1190,8 @@ pub fn settle(ledger: &StockLedger, order_id: &str, consume: bool) -> Vec<StockE
 }
 
 #[cfg(test)]
-mod bom_tests {
-    use super::*;
-
-    const ROLL: &str = r#"{"id":"p1","name":"Sake","bom":[{"supply":"salmon","qty":40},{"supply":"rice","qty":90}]}"#;
-    const MAKI: &str = r#"{"id":"p2","name":"Ebi","bom":[{"supply":"rice","qty":60},{"supply":"prawn","qty":30}]}"#;
-    const WATER: &str = r#"{"id":"p3","name":"Water","price":100}"#;
-
-    #[test]
-    fn a_recipe_reads_back() {
-        assert_eq!(
-            bom_of(ROLL),
-            vec![
-                BomLine { supply: "salmon".into(), qty: 40 },
-                BomLine { supply: "rice".into(), qty: 90 },
-            ]
-        );
-    }
-
-    /// A dish with no recipe reserves nothing, and that is a normal venue --
-    /// a bought-in bottle of water has no bill of materials worth keeping.
-    #[test]
-    fn a_dish_with_no_recipe_is_not_an_error() {
-        assert!(bom_of(WATER).is_empty());
-        assert!(reservations_for("o1", &[(WATER.into(), 3)]).is_empty());
-    }
-
-    /// Quantities multiply. Getting this wrong is how a kitchen runs out
-    /// mid-service while the ledger says it is fine.
-    #[test]
-    fn quantities_multiply_by_the_portions_ordered() {
-        let evs = reservations_for("o1", &[(ROLL.into(), 2)]);
-        let salmon = evs.iter().find(|e| e.item() == "salmon").expect("salmon");
-        match salmon {
-            StockEvent::Reserved { qty, .. } => assert_eq!(*qty, 80),
-            other => panic!("{other:?}"),
-        }
-    }
-
-    /// Two different dishes sharing an ingredient are checked against the
-    /// TOTAL they need, not one line at a time.
-    #[test]
-    fn a_shared_ingredient_is_summed_across_the_basket() {
-        let evs = reservations_for("o1", &[(ROLL.into(), 1), (MAKI.into(), 2)]);
-        let rice = evs.iter().find(|e| e.item() == "rice").expect("rice");
-        match rice {
-            // 90 for one roll + 60x2 for two maki
-            StockEvent::Reserved { qty, .. } => assert_eq!(*qty, 210),
-            other => panic!("{other:?}"),
-        }
-        assert_eq!(evs.len(), 3, "salmon, rice, prawn — one event each");
-        // Sorted, so the same basket always produces the same sequence.
-        let names: Vec<&str> = evs.iter().map(|e| e.item()).collect();
-        assert_eq!(names, vec!["prawn", "rice", "salmon"]);
-    }
-
-    /// The whole reason to route a basket through the ledger.
-    #[test]
-    fn a_basket_that_exceeds_the_shelf_reserves_nothing() {
-        let mut log = StockLog::create().expect("create");
-        log.append(&StockEvent::Received { item: "salmon".into(), qty: 100 }).unwrap();
-        log.append(&StockEvent::Received { item: "rice".into(), qty: 1000 }).unwrap();
-
-        // Three portions need 120g of salmon and there are 100.
-        let evs = reservations_for("o1", &[(ROLL.into(), 3)]);
-        assert!(log.append_all(&evs).is_err());
-        assert_eq!(log.ledger().unwrap().level("rice").reserved, 0, "rice was not held either");
-
-        // Two portions fit.
-        let evs = reservations_for("o2", &[(ROLL.into(), 2)]);
-        assert!(log.append_all(&evs).is_ok());
-        assert_eq!(log.ledger().unwrap().available("salmon"), 20);
-    }
-
-    /// Settlement comes from what the LEDGER holds, not from the basket: if the
-    /// recipe changed between placing and cooking, releasing a recomputed
-    /// quantity would strand the difference forever.
-    #[test]
-    fn settlement_releases_exactly_what_was_reserved() {
-        let mut log = StockLog::create().expect("create");
-        log.append(&StockEvent::Received { item: "salmon".into(), qty: 200 }).unwrap();
-        log.append(&StockEvent::Received { item: "rice".into(), qty: 500 }).unwrap();
-        log.append_all(&reservations_for("o1", &[(ROLL.into(), 1)])).unwrap();
-
-        let led = log.ledger().unwrap();
-        let release = settle(&led, "o1", false);
-        assert_eq!(release.len(), 2);
-        log.append_all(&release).unwrap();
-
-        let led = log.ledger().unwrap();
-        assert!(led.stranded().is_empty(), "nothing left held");
-        assert_eq!(led.level("salmon"), StockLevel { on_hand: 200, reserved: 0 });
-
-        // And consuming instead takes it off the shelf.
-        log.append_all(&reservations_for("o2", &[(ROLL.into(), 1)])).unwrap();
-        let led = log.ledger().unwrap();
-        log.append_all(&settle(&led, "o2", true)).unwrap();
-        assert_eq!(log.ledger().unwrap().level("salmon"), StockLevel { on_hand: 160, reserved: 0 });
-    }
-
-    /// Settling one order must not touch another's reservations.
-    #[test]
-    fn settlement_is_scoped_to_its_own_order() {
-        let mut log = StockLog::create().expect("create");
-        log.append(&StockEvent::Received { item: "salmon".into(), qty: 500 }).unwrap();
-        log.append(&StockEvent::Received { item: "rice".into(), qty: 500 }).unwrap();
-        log.append_all(&reservations_for("o1", &[(ROLL.into(), 1)])).unwrap();
-        log.append_all(&reservations_for("o2", &[(ROLL.into(), 1)])).unwrap();
-
-        let led = log.ledger().unwrap();
-        log.append_all(&settle(&led, "o1", false)).unwrap();
-        let led = log.ledger().unwrap();
-        assert_eq!(led.stranded().len(), 2, "o2 still holds its two lines");
-        assert!(led.stranded().iter().all(|(o, _, _)| o == "o2"));
-    }
-
-    #[test]
-    fn a_malformed_recipe_is_ignored_rather_than_fatal() {
-        for junk in [
-            r#"{"id":"p","bom":"not an array"}"#,
-            r#"{"id":"p","bom":[]}"#,
-            r#"{"id":"p","bom":[{"supply":"","qty":5}]}"#,
-            r#"{"id":"p","bom":[{"supply":"x","qty":0}]}"#,
-            r#"{"id":"p","bom":[{"supply":"x","qty":-3}]}"#,
-            r#"{"id":"p"}"#,
-        ] {
-            assert!(bom_of(junk).is_empty(), "accepted {junk}");
-        }
-    }
-}
+#[path = "stock/bom/tests.rs"]
+mod bom_tests;
 
 /// Cost that follows purchases (§2.10): priced receipts on this log, WAC fold.
 pub mod cost;
@@ -1634,6 +1203,9 @@ pub mod journal;
 pub mod lots;
 /// The fold's state as a record in the chain: fold = checkpoint + tail (R7).
 pub mod checkpoint;
+/// The carried remainder of fractional draws, and the exact write door.
+pub mod carry;
+pub use carry::{draws_for, Draw};
 
 /// W-AUDIT S7 (2026-09-27): the recipe is read through brackets inside names
 /// and never from the next array in the record.

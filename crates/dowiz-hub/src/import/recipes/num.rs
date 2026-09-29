@@ -150,14 +150,31 @@ impl Rat {
     pub fn of(d: Dec, per: i128) -> Rat {
         Rat::new(d.mant * per, 10i128.pow(d.scale))
     }
-    pub fn mul(self, o: Rat) -> Rat {
-        Rat::new(self.num * o.num, self.den * o.den)
+    /// CHECKED, because the tree of semi-finished cards (`crate::prep::tree`,
+    /// which the importer's flattening also walks) multiplies denominators,
+    /// and an i128 that wraps is a write-off that is silently wrong. `None`
+    /// is a loud refusal there. (The unchecked `mul`/`div` went with the
+    /// importer's own recursion, 2026-09-29.)
+    pub fn checked_mul(self, o: Rat) -> Option<Rat> {
+        Some(Rat::new(self.num.checked_mul(o.num)?, self.den.checked_mul(o.den)?))
     }
-    pub fn div(self, o: Rat) -> Rat {
-        Rat::new(self.num * o.den, self.den * o.num)
+    pub fn checked_div(self, o: Rat) -> Option<Rat> {
+        if o.num == 0 {
+            return None;
+        }
+        let (n, d) = (self.num.checked_mul(o.den)?, self.den.checked_mul(o.num)?);
+        // A negative divisor would put the sign in the denominator.
+        Some(if d < 0 { Rat::new(-n, -d) } else { Rat::new(n, d) })
     }
-    pub fn add(self, o: Rat) -> Rat {
-        Rat::new(self.num * o.den + o.num * self.den, self.den * o.den)
+    pub fn checked_add(self, o: Rat) -> Option<Rat> {
+        let n = self.num.checked_mul(o.den)?.checked_add(o.num.checked_mul(self.den)?)?;
+        Some(Rat::new(n, self.den.checked_mul(o.den)?))
+    }
+    /// This fraction in MILLIONTHS, rounded half up ONCE -- the one rounding a
+    /// leaf of the tree gets. `None` when it does not fit an i64.
+    pub fn to_micro(self) -> Option<i64> {
+        let n = self.num.checked_mul(1_000_000)?;
+        i64::try_from((n + self.den / 2).div_euclid(self.den)).ok()
     }
     /// The whole number this is, or why it is not one.
     pub fn whole(self, base: Base, max: i64) -> Result<i64, String> {

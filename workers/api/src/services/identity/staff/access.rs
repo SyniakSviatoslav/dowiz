@@ -58,8 +58,7 @@ const TILL: [Cap; 1] = [Cap::OpenTill];
 
 #[allow(unused_imports)]
 use Door::{Own, Owner, Staff};
-#[allow(unused_imports)]
-use Kitchen::{No, Read, Yes};
+#[allow(unused_imports)] use Kitchen::{No, Read, Yes};
 
 /// `(method, path, door, kitchen)` for every owner and staff route.
 #[allow(dead_code)]
@@ -90,6 +89,10 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/supplies", Staff(&crate::services::operations::supplies::quick::ADD), Yes),
     ("post", "/api/owner/supplies/bulk", Staff(&crate::services::operations::supplies::quick::ADD), Yes),
     ("post", "/api/owner/supplies/delete", Owner, No),
+    ("post", "/api/owner/preps", Staff(&crate::services::operations::supplies::quick::ADD), Yes),
+    ("get", "/api/owner/preps", Staff(&NUMBERS), Read),
+    ("get", "/api/owner/supplies/:id/uses", Staff(&NUMBERS), Read),
+    ("get", "/api/owner/products/:id/takes", Staff(&NUMBERS), Read),
     ("post", "/api/owner/products/delete", Owner, No),
     ("post", "/api/owner/supplies/:id/retire", Staff(&MENU), Yes),
     ("post", "/api/owner/supplies/import", Staff(&MENU), Yes),

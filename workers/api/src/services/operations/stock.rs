@@ -80,6 +80,7 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
         .supplies()
         .into_iter()
         .filter_map(|(id, j)| {
+            let j = if dowiz_hub::prep::is_prep(&j) { crate::recipe::prep::hydrated(&id, &j, &|s| cat.supply(s)) } else { j };
             let v: Value = serde_json::from_str(&j).ok()?;
             // A retired supply keeps its ledger history and leaves the list.
             if v.get("active").and_then(Value::as_bool) == Some(false) {

@@ -404,6 +404,10 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/supplies/:id/retire", services::operations::supplies::retire_supply)
         .post_async("/api/owner/supplies/bulk", services::operations::supplies::quick::add_supplies)
         .post_async("/api/owner/supplies/delete", services::operations::supplies::delete::delete_supplies)
+        .post_async("/api/owner/preps", services::operations::preps::set_prep)
+        .get_async("/api/owner/preps", services::operations::preps::list_preps)
+        .get_async("/api/owner/supplies/:id/uses", services::operations::preps::uses)
+        .get_async("/api/owner/products/:id/takes", services::operations::preps::takes_of)
         .post_async("/api/owner/products/delete", catalog_edit::delete_products)
         .post_async("/api/owner/ingredients/reset", services::operations::ingredients_reset::reset_ingredients)
         // F1: supplies and recipes in bulk, dry run first; the dishes as stored.

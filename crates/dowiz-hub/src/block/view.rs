@@ -122,7 +122,7 @@ impl<'a> Catalogue<'a> {
         (s..e)
             .map(|j| {
                 let supply = self.names.str_at(self.bom.u32_at(SUPPLY, j)? as usize)?;
-                Some(BomLine { supply: supply.to_string(), qty: self.bom.i64_at(QTY, j)? })
+                Some(BomLine::whole(supply, self.bom.i64_at(QTY, j)?))
             })
             .collect()
     }

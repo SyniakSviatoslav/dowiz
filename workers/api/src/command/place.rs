@@ -134,10 +134,10 @@ pub fn decide(
     // THE COST STAMP COMES FROM THE SAME FOLD (R4): the book the shelf was
     // decided against, and the log length it was folded at -- one walk of the
     // stock log's tail, not a second one for the cost.
-    let reservations = dowiz_hub::stock::reservations_for(&input.order_id, &input.bom_lines);
-    let costed = match reservations.is_empty() {
+    let draws = dowiz_hub::stock::draws_for(&input.order_id, &input.bom_lines);
+    let costed = match draws.is_empty() {
         true => None,
-        false => Some(stock.append_all_costed(&reservations).map_err(|e| Refused::Stock(format!("{e}")))?),
+        false => Some(stock.append_draws(&draws).map_err(|e| Refused::Stock(format!("{e}")))?),
     };
 
     // ── THE DISCOUNT, IN THE SAME BREATH AS THE APPEND THAT MAKES IT REAL ──

@@ -64,7 +64,7 @@ pub async fn enter(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
                 .and_then(|p| p.get("name").and_then(Value::as_str).map(String::from))
                 .unwrap_or_default();
             names.push((l.product_id.clone(), name));
-            bom_lines.push((rec, l.quantity));
+            bom_lines.push((dowiz_hub::prep::for_ledger(&|s| catalog.supply(s), &rec).0, l.quantity));
         }
         let (order_id, mut env, subtotal) = match envelope(&body.entry, &body.location_id, &currency, &names, now) {
             Ok(v) => v,

@@ -10,6 +10,7 @@
 //! history, before the row moved it: a write-off in March is valued at
 //! March's average, not today's.
 
+use super::carry::Carry;
 use super::cost::CostBook;
 use super::lots::Lots;
 use super::meta::{meta_of, Meta};
@@ -78,6 +79,8 @@ pub struct Journal {
     pub ledger: StockLedger,
     pub book: CostBook,
     pub lots: Lots,
+    /// The carried remainder of fractional draws (`carry.rs`).
+    pub carry: Carry,
     /// Rows folded so far, counting the checkpoint's: the next row's `seq`.
     pub seen: usize,
     /// The newest `at` any folded row carried.
@@ -129,6 +132,7 @@ impl Journal {
         let value = self.value_of(&ev, &meta, before);
         self.ledger.apply(&ev)?;
         self.book.apply_event(&ev, rec);
+        self.carry.apply(&ev, meta.uq);
         let entry = Entry { seq: self.seen, ev, meta, before, value };
         let ledger = &self.ledger;
         self.lots.step(&entry, |i| ledger.level(i).on_hand);

@@ -127,15 +127,17 @@ impl CostBook {
 
     /// One portion's cost in minor units; `None` unless EVERY line's supply
     /// has a cost (a partial sum is not a cost, as `recipe::derive` holds).
+    /// Priced by the line's `uq` (millionths), so a leaf of a semi-finished
+    /// tree costs its exact fraction and a whole line what it always did.
     pub fn dish_cost(&self, bom: &[BomLine]) -> Option<i64> {
         if bom.is_empty() {
             return None;
         }
         let mut sum: i128 = 0;
         for l in bom {
-            sum += self.avg_micro(&l.supply)? * i128::from(l.qty);
+            sum += self.avg_micro(&l.supply)? * i128::from(l.uq);
         }
-        i64::try_from(half_up(sum, MICRO)).ok()
+        i64::try_from(half_up(sum, MICRO * MICRO)).ok()
     }
 
     /// What `qty` of `item` is worth at the current average, in minor units;

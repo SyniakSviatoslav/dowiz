@@ -62,7 +62,8 @@ impl Venue {
         let listed: Vec<OrderView> = crate::hubstore::orders_state(&self.hub).into_iter().map(OrderView::of_event).collect();
         let map = |c: &str| self.map.iter().find(|(k, _)| k == c).map(|(_, v)| v.clone());
         let product = |p: &str| (p == "p-roll").then(|| ROLL.to_string());
-        let look = Lookups { map: &map, product: &product };
+        let supply = |_: &str| None;
+        let look = Lookups { map: &map, product: &product, supply: &supply };
         let out = decide(&mut self.hub, &mut self.stock, &listed, &look, std::mem::take(&mut self.waiting), sales, now).unwrap();
         self.waiting = Waiting { bills: out.pending.clone(), leads: out.leads.clone() };
         out

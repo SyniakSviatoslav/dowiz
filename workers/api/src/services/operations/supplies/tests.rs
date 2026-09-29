@@ -104,3 +104,23 @@ fn losses_and_basis_are_checked_and_defaults_are_left_out() {
     let r = record("salmon", &b, &json!({ "cleanPm": 550, "nutritionBasis": "cooked" }));
     assert!(r.get("cleanPm").is_none() && r.get("nutritionBasis").is_none(), "{r}");
 }
+
+/// 2026-09-29 (W-PF): a semi-finished product is written with its card
+/// through `/api/owner/preps`; the raw form refuses the kind (RED before:
+/// `kind: "prep"` was not in KINDS and was refused by accident with the
+/// generic message, and nothing stopped a card-less prep from other paths),
+/// and `untracked` is stored only when true.
+#[test]
+fn the_raw_form_refuses_the_prep_kind_and_stores_untracked_only_when_true() {
+    let mut b = body("water");
+    b.kind = Some("prep".into());
+    assert_eq!(check(&b), Err("a semi-finished product is saved with its card through /api/owner/preps".to_string()));
+    b.kind = Some("food_ingredient".into());
+    b.untracked = Some(true);
+    let r = record("water", &b, &json!({}));
+    assert_eq!(r["untracked"], json!(true));
+    b.untracked = Some(false);
+    assert!(record("water", &b, &json!({ "untracked": true })).get("untracked").is_none(), "false clears");
+    b.untracked = None;
+    assert_eq!(record("water", &b, &json!({ "untracked": true }))["untracked"], json!(true), "absent keeps");
+}

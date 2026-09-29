@@ -39,6 +39,10 @@ pub struct Meta {
     pub value: Option<i64>,
     /// Who acted, on a record whose event has no signer of its own (a receipt).
     pub by: Option<String>,
+    /// A `reserved`/`served` leaf's EXACT draw in millionths of the base unit
+    /// (`stock::carry`); absent on a whole-unit line and on every record
+    /// written before semi-finished cards existed.
+    pub uq: Option<i64>,
 }
 
 impl Meta {
@@ -60,6 +64,7 @@ impl Meta {
         int("per", self.per);
         int("expected", self.expected);
         int("value", self.value);
+        int("uq", self.uq);
         for (k, v) in [
             ("lot", &self.lot),
             ("supplier", &self.supplier),
@@ -103,6 +108,7 @@ pub fn meta_of(rec: &str) -> Meta {
         expected: int_field(rec, "expected"),
         value: int_field(rec, "value"),
         by: str_field(rec, "by_"),
+        uq: int_field(rec, "uq").filter(|u| *u > 0),
     }
 }
 

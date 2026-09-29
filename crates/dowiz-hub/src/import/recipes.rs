@@ -22,7 +22,8 @@
 mod against;
 mod cards;
 mod flatten;
-mod num;
+/// Exact numbers; `Rat` is also the tree of semi-finished cards' arithmetic (`crate::prep`).
+pub(crate) mod num;
 mod supplies;
 #[cfg(test)]
 mod tests;

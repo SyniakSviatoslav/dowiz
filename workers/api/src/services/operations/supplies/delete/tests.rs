@@ -82,3 +82,31 @@ fn a_recipe_with_a_stale_line_still_loses_the_deleted_one() {
     remove_supplies(&mut cat, &["rice".into()]);
     assert_eq!(product(&cat, "odd")["bom"], json!([{ "supply": "lost", "qty": 5 }]));
 }
+
+/// SPEC-SEMI-FINISHED §e: the where-used answer names every card and dish an
+/// item reaches (RED before 2026-09-29: `uses_of` did not exist and the
+/// route removed lines with nobody asked), and a deletion strips the item
+/// from every card too.
+#[test]
+fn where_used_names_cards_and_dishes_and_a_deletion_strips_the_cards() {
+    let mut cat = catalogue();
+    cat.set_supply("mitsukan", &json!({ "id": "mitsukan", "name": "Mitsukan", "unit": "g", "kind": "prep", "card": { "lines": [{ "item": "rice", "qty": 50 }, { "item": "salmon", "qty": 5 }], "yield": 100 } }).to_string());
+    let mut dish = json!({ "id": "pf-dish", "name": "PF dish", "price": 500 });
+    set_bom(&mut dish, &[BomLineIn { supply: "mitsukan".into(), qty: 20, net: None, out: None }], |s| cat.supply(s), Typed::default()).unwrap();
+    cat.set_product("pf-dish", &dish.to_string());
+    let u = uses_of(&cat, &["salmon".into(), "nobody".into()]);
+    let salmon = &u["salmon"];
+    assert_eq!(salmon["preps"], json!([{ "id": "mitsukan", "name": "Mitsukan" }]));
+    let dishes: Vec<&str> = salmon["dishes"].as_array().unwrap().iter().map(|d| d["id"].as_str().unwrap()).collect();
+    assert_eq!(dishes, vec!["pf-dish", "roll", "sashimi"], "through the card AND directly");
+    assert!(u.get("nobody").is_none(), "an unused id is absent, so an empty map means nothing is used");
+    assert!(uses_of(&cat, &["ghost".into()]).as_object().unwrap().is_empty());
+
+    let r = remove_supplies(&mut cat, &["salmon".into()]);
+    assert!(r.dishes.contains(&"pf-dish".to_string()), "the dish through the card is re-derived: {:?}", r.dishes);
+    let card = dowiz_hub::prep::card_of(&cat.supply("mitsukan").unwrap()).unwrap();
+    assert_eq!(card.lines.iter().map(|l| l.item.as_str()).collect::<Vec<_>>(), vec!["rice"], "the card lost the line");
+    assert_eq!(card.yield_qty, 100, "and kept its yield");
+    assert_eq!(product(&cat, "pf-dish")["bom"], json!([{ "supply": "mitsukan", "qty": 20 }]), "the dish still names the card");
+    assert_eq!(product(&cat, "pf-dish")["cost"], json!(4), "20 g at 50 g rice per 100 g: 10 g rice at 38/100 = 3.8");
+}

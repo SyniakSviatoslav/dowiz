@@ -21,6 +21,7 @@ import { selection, pickRow, barMarkup, bindBar, deleteDishes, ensureNomCss, N }
 import { me } from '/admin/app.js';
 import '/admin/crud-i18n.js';
 import { translationBoxes, baseEdits } from '/admin/menu-edit.js';
+import '/admin/prep-i18n.js';
 /// W-NOM: the dishes ticked for a bulk delete (the owner's).
 const sel = selection();
 /// A filter chip whose data-* the screen's click handler reads.
@@ -338,8 +339,8 @@ const TASTE_AXES = ['spicy', 'sweet', 'salty', 'sour', 'richness'];
 const TASTE_ICONS = { spicy: 'pepper', sweet: 'candy', salty: 'salt', sour: 'lemon-2', richness: 'flame' };
 const TASTE_LEVELS = [1, 2, 3];
 let tasteDraft = {};
-const KIND_ICON = { food_ingredient: 'meat', condiment: 'bottle', packaging: 'box', utensil: 'tool', resale: 'beer' };
-const isFoodKind = k => k === 'food_ingredient' || k === 'condiment';
+const KIND_ICON = { food_ingredient: 'meat', condiment: 'bottle', packaging: 'box', utensil: 'tool', resale: 'beer', prep: 'chef-hat' };
+const isFoodKind = k => k === 'food_ingredient' || k === 'condiment' || k === 'prep';
 const basisOf = u => u === 'unit' ? 1 : 100;
 /// The stepper moves by ten grams or millilitres, by one piece.
 const STEP_MASS = 10, STEP_PIECE = 1;
@@ -381,7 +382,8 @@ function recipeMarkup(p){
       <div id="rcBook" class="rows">${loading()}</div>
       <div class="btn-row">${btn({ id: 'rcAdd', icon: 'plus', key: 'addSelected', tour: 'recipe.addLine' })}</div>
     </details>
-    <div id="rcSum" class="rc-sum"></div>`;
+    <div id="rcSum" class="rc-sum"></div>
+    ${p.id ? `<div class="btn-row">${btn({ id: 'rcTakes', variant: 'ghost', icon: 'scale', key: 'pf_takes' })}</div>` : ''}`;
 }
 const step = l => l.unit === 'unit' ? STEP_PIECE : STEP_MASS;
 function drawRecipe(p){
@@ -432,6 +434,8 @@ async function bindRecipe(p){
     retranslate($('#rcBook'));
   };
   $('#rcQ').oninput = drawBook;
+  // W-PF: what one sale of this dish takes off the shelf, expanded through every semi-finished product.
+  if ($('#rcTakes')) $('#rcTakes').onclick = () => import('/admin/prep.js').then(m => m.openTakes(p.id, p.name));
   for (const b of $$('[data-rk]', $('#rcKinds'))) b.onclick = () => { kind = b.dataset.rk; press($$('[data-rk]', $('#rcKinds')), b); drawBook(); };
   $('#rcAdd').onclick = () => {
     for (const cb of $$('[data-rs]:checked', $('#rcBook'))) { const sup = book.find(s => s.id === cb.dataset.rs); if (sup && !recipeDraft.some(l => l.supply === sup.id)) recipeDraft.push(lineOf(sup, sup.unit === 'unit' ? 1 : 100)); }

@@ -120,7 +120,7 @@ fn dubin() -> Catalog {
 /// `set_bom` stores beside them (derived names, cost, the four marks).
 fn recipe_keys(d: usize) -> String {
     let lines: Vec<crate::stock::BomLine> = (0..6)
-        .map(|l| crate::stock::BomLine { supply: format!("supply-{:02}x", (d * 5 + l) % 72), qty: 20 + 7 * l as i64 })
+        .map(|l| crate::stock::BomLine::whole(format!("supply-{:02}x", (d * 5 + l) % 72), 20 + 7 * l as i64))
         .collect();
     let names: Vec<String> = lines.iter().map(|l| format!(r#""Supply {}""#, &l.supply[7..])).collect();
     format!(
@@ -187,8 +187,8 @@ fn a_projection_beyond_two_ceilings_is_the_stores_own_error() {
 #[test]
 fn a_lean_bom_reads_back_through_the_ledger() {
     let lines = vec![
-        crate::stock::BomLine { supply: "salmon".into(), qty: 40 },
-        crate::stock::BomLine { supply: "rice \"sushi\"".into(), qty: 90 },
+        crate::stock::BomLine::whole("salmon", 40),
+        crate::stock::BomLine::whole("rice \"sushi\"", 90),
     ];
     let json = bom::to_json(&lines);
     assert_eq!(json, r#"[{"supply":"salmon","qty":40},{"supply":"rice \"sushi\"","qty":90}]"#);
@@ -200,8 +200,8 @@ fn a_lean_bom_reads_back_through_the_ledger() {
 /// byte the lean form, and the ledger reads `supply` and `qty` out of both.
 #[test]
 fn a_weighed_bom_reads_back_through_the_ledger_unchanged() {
-    let salmon = crate::stock::BomLine { supply: "salmon".into(), qty: 100 };
-    let rice = crate::stock::BomLine { supply: "rice".into(), qty: 90 };
+    let salmon = crate::stock::BomLine::whole("salmon", 100);
+    let rice = crate::stock::BomLine::whole("rice", 90);
     let json = bom::to_json_weighed(&[(salmon.clone(), Some(55), Some(50)), (rice.clone(), None, None)]);
     assert_eq!(json, r#"[{"supply":"salmon","qty":100,"net":55,"out":50},{"supply":"rice","qty":90}]"#);
     assert_eq!(crate::stock::bom_of(&format!(r#"{{"bom":{json}}}"#)), vec![salmon.clone(), rice.clone()]);

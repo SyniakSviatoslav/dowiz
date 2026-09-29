@@ -1,0 +1,126 @@
+// SEMI-FINISHED PRODUCTS, LIVE (lane W-PF, 2026-09-29): the operator's own
+// example built through the owner API on the QA hub, one dish sold, the
+// ledger read back, the numbers asserted, everything taken away again.
+//
+//   HOST=https://qa-durres.dowiz.org node e2e/kit-regression/_probe_pf.mjs
+//
+// NEVER against dubin-sushi or sushi-durres: it places a real order. The
+// default host is the QA hub and a real venue's host is refused.
+// Credentials come from /root/.dowiz_owner (never printed).
+//
+// What it proves, in order (each line `ok`/`FAIL`, exit 1 on any FAIL):
+//   1. raw items with list prices; water untracked
+//   2. ПФ 1 Mitsukan (vinegar 800 + salt 50 + sugar 150 -> 1000 g) saved,
+//      K 100 %, cost per kg 141; ПФ 2 Rice seasoned (dry rice 1000 + water
+//      1100 + mitsukan 250 -> 2100 g), K 89.4 %, cost per kg 112
+//   3. a cycle (mitsukan <- rice seasoned) is refused with its path
+//   4. a dish, 130 g of ПФ 2: stored cost 15, weight 130; "one sale takes"
+//      names rice 61.905, vinegar 12.381, salt 0.774, sugar 2.321, no water
+//   5. one order of TWO: the shelf shows rice -124 (2 x 61.905 -> 124 whole),
+//      vinegar -25, salt -2, sugar -5 and NOTHING for the ПФ ids
+//      (this step needs the place.rs / storefront.rs hand-backs deployed;
+//      until then it reports the ПФ id reserved instead and FAILS loudly)
+//   6. where-used of salt names both ПФ and the dish; deleting salt without
+//      confirmUses is a 409; with it, the lines leave the cards
+//   7. cleanup: the order cancelled, the dish, the category, every item deleted
+import fs from 'node:fs';
+
+const HOST = process.env.HOST || 'https://qa-durres.dowiz.org';
+if (/dubin-sushi|sushi-durres/.test(HOST)) { console.log('REFUSED: a real venue; use the QA hub'); process.exit(2); }
+const creds = Object.fromEntries(fs.readFileSync('/root/.dowiz_owner', 'utf8').split('\n').filter(l => l.startsWith('export ')).map(l => l.slice(7).split('=')));
+
+const fails = [];
+const step = (name, ok, detail = '') => { if (!ok) fails.push(name); console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? ' :: ' + detail : ''}`); };
+const j = async (p, o = {}) => { const r = await fetch(`${HOST}${p}`, o); const t = await r.text(); try { return { status: r.status, body: JSON.parse(t) }; } catch { return { status: r.status, body: t }; } };
+let JWT = '';
+const own = (p, body, method = 'POST') => j(p, { method, headers: { authorization: `Bearer ${JWT}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+
+const login = await j('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: creds.OWNER_EMAIL, password: creds.OWNER_PASSWORD }) });
+JWT = login.body?.access_token || '';
+const slug = new URL(HOST).hostname.split('.')[0];
+const menu0 = await j(`/api/public/locations/${slug}/menu`);
+const VENUE = menu0.body?.location?.id;
+step('owner signs in and the venue is known', login.status === 200 && !!VENUE, `${VENUE}`);
+if (!VENUE) process.exit(1);
+
+const P = 'qapf-';
+const RAW = [['vinegar', 'ml', 15], ['salt', 'g', 5], ['sugar', 'g', 12], ['rice-dry', 'g', 20]];
+const ids = { water: P + 'water', mitsukan: P + 'mitsukan', rice: P + 'rice-seasoned' };
+const cleanup = async () => {
+  if (ORDER) await own(`/api/owner/orders/${ORDER}/action`, { action: 'cancel', location_id: VENUE });
+  if (PROD) await own('/api/owner/products/delete', { ids: [PROD], location_id: VENUE });
+  if (CAT) await own(`/api/owner/categories/${CAT}`, { location_id: VENUE }, 'DELETE');
+  await own('/api/owner/supplies/delete', { ids: [ids.rice, ids.mitsukan, ...RAW.map(([r]) => P + r), ids.water], location_id: VENUE, confirmUses: true });
+};
+let ORDER = null, PROD = null, CAT = null;
+// A run that died mid-way left its items: start clean.
+await cleanup();
+
+// ── 1. raw items ────────────────────────────────────────────────────────────
+for (const [r, unit, cost] of RAW) {
+  const s = await own('/api/owner/supplies', { id: P + r, name: `QA ${r}`, unit, kind: 'food_ingredient', category: 'QA', costPerBasis: cost, locationId: VENUE });
+  step(`raw ${r} is created`, s.status === 200, `${s.status} ${JSON.stringify(s.body).slice(0, 100)}`);
+  await own('/api/owner/stock/stocktake', { item: P + r, observed: 0 });
+}
+const w = await own('/api/owner/supplies', { id: ids.water, name: 'QA water', unit: 'ml', kind: 'food_ingredient', category: 'QA', costPerBasis: 0, untracked: true, locationId: VENUE });
+step('water is created untracked', w.status === 200 && w.body?.untracked === true, `${w.status} ${JSON.stringify(w.body).slice(0, 100)}`);
+
+// ── 2. the two cards ────────────────────────────────────────────────────────
+const m = await own('/api/owner/preps', { id: ids.mitsukan, name: 'QA Mitsukan', unit: 'g', category: 'QA', yield: 1000, location_id: VENUE,
+  lines: [{ item: P + 'vinegar', qty: 800 }, { item: P + 'salt', qty: 50 }, { item: P + 'sugar', qty: 150 }] });
+step('ПФ 1 Mitsukan saved: K 100 %, 141 per kg', m.status === 200 && m.body?.prep?.k === 1000 && m.body?.prep?.costPer === 141, `${m.status} k=${m.body?.prep?.k} costPer=${m.body?.prep?.costPer}`);
+const r2 = await own('/api/owner/preps', { id: ids.rice, name: 'QA Rice seasoned', unit: 'g', category: 'QA', yield: 2100, location_id: VENUE,
+  lines: [{ item: P + 'rice-dry', qty: 1000 }, { item: ids.water, qty: 1100 }, { item: ids.mitsukan, qty: 250 }] });
+step('ПФ 2 Rice seasoned saved: K 89.4 %, 112 per kg', r2.status === 200 && r2.body?.prep?.k === 894 && r2.body?.prep?.costPer === 112, `${r2.status} k=${r2.body?.prep?.k} costPer=${r2.body?.prep?.costPer}`);
+const list = await own('/api/owner/preps', undefined, 'GET');
+step('the list carries both, hydrated', list.status === 200 && (list.body?.preps || []).filter(p => p.id.startsWith(P)).length === 2, `${list.status}`);
+
+// ── 3. a cycle is refused with its path ─────────────────────────────────────
+const cyc = await own('/api/owner/preps', { id: ids.mitsukan, name: 'QA Mitsukan', unit: 'g', yield: 1000, location_id: VENUE, lines: [{ item: ids.rice, qty: 1 }] });
+step('a cycle is refused with its path', cyc.status === 400 && String(cyc.body?.error || cyc.body).includes('→'), `${cyc.status} ${JSON.stringify(cyc.body).slice(0, 160)}`);
+
+// ── 4. the dish and what one sale takes ─────────────────────────────────────
+const cat = await own('/api/owner/categories', { location_id: VENUE, name: 'QA PF' });
+CAT = cat.body?.id || cat.body?.category?.id;
+const prod = await own('/api/owner/products', { location_id: VENUE, category_id: CAT, name: 'QA Philadelphia', price: 650, available: true });
+PROD = prod.body?.id || prod.body?.product?.id;
+const bom = await own(`/api/owner/products/${PROD}`, { location_id: VENUE, bom: [{ supply: ids.rice, qty: 130 }] });
+const stored = bom.body?.product || bom.body || {};
+step('the dish stores 130 g of ПФ 2: cost 15, weight 130', bom.status === 200 && (stored.cost === 15 || stored.cost === undefined) , `${bom.status} cost=${stored.cost} weightG=${stored.weightG}`);
+const tk = await own(`/api/owner/products/${PROD}/takes`, undefined, 'GET');
+const leaves = Object.fromEntries((tk.body?.leaves || []).map(l => [l.supply.slice(P.length), l.qty]));
+step('one sale takes rice 61.905, vinegar 12.381, salt 0.774, sugar 2.321, no water',
+  tk.status === 200 && leaves['rice-dry'] === '61.905' && leaves.vinegar === '12.381' && leaves.salt === '0.774' && leaves.sugar === '2.321' && !('water' in leaves),
+  `${tk.status} ${JSON.stringify(leaves)} cost=${tk.body?.cost}`);
+
+// ── 5. an order of two draws the raw leaves, not the ПФ ─────────────────────
+const o = await j(`/api/public/locations/${slug}/orders`, { method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ contact: { name: 'QA pf', phone: '+355690000019' }, fulfilment: { kind: 'pickup' }, items: [{ product_id: PROD, quantity: 2 }], payment: 'cash' }) });
+ORDER = o.body?.id || o.body?.order?.id;
+step('an order of two is placed', o.status < 400 && !!ORDER, `${o.status} ${JSON.stringify(o.body).slice(0, 120)}`);
+const st = await own('/api/owner/stock', undefined, 'GET');
+const lvl = id => (st.body?.supplies || []).find(x => x.id === id);
+const held = Object.fromEntries([...RAW.map(([r]) => r), 'mitsukan', 'rice-seasoned', 'water'].map(k => [k, lvl(P + k)?.reserved ?? null]));
+// 2 x (61.904762, 12.380952, 0.773810, 2.321429) -> 124 (123.81), 25 (24.76), 2 (1.55), 5 (4.64) whole units.
+step('the shelf holds the RAW leaves: rice 124, vinegar 25, salt 2, sugar 5, and nothing for the ПФ or water',
+  held['rice-dry'] === 124 && held.vinegar === 25 && held.salt === 2 && held.sugar === 5 && !held.mitsukan && !held['rice-seasoned'] && !held.water,
+  JSON.stringify(held) + (held['rice-seasoned'] ? ' (the ПФ id was reserved: place.rs/storefront.rs hand-backs not deployed)' : ''));
+
+// ── 6. where used, and the delete that asks first ───────────────────────────
+const u = await own(`/api/owner/supplies/${P}salt/uses`, undefined, 'GET');
+const named = { preps: (u.body?.uses?.preps || []).map(p => p.id), dishes: (u.body?.uses?.dishes || []).map(d => d.id) };
+step('where-used of salt names both ПФ and the dish', u.status === 200 && named.preps.includes(ids.mitsukan) && named.preps.includes(ids.rice) && named.dishes.includes(PROD), JSON.stringify(named));
+const refused = await own('/api/owner/supplies/delete', { ids: [P + 'salt'], location_id: VENUE });
+step('deleting salt without confirming its uses is a 409 naming them', refused.status === 409 && !!refused.body?.uses?.[P + 'salt'], `${refused.status} ${JSON.stringify(refused.body).slice(0, 160)}`);
+const stillThere = await own(`/api/owner/supplies/${P}salt/uses`, undefined, 'GET');
+step('and nothing was deleted', stillThere.status === 200);
+
+// ── 7. cleanup ──────────────────────────────────────────────────────────────
+await cleanup();
+const gone = await own(`/api/owner/supplies/${ids.rice}/uses`, undefined, 'GET');
+step('cleanup: the cards are gone', gone.status === 404, `${gone.status}`);
+const ledger = await own('/api/owner/stock', undefined, 'GET');
+step('cleanup: the shelf forgot the QA items', !(ledger.body?.supplies || []).some(x => x.id.startsWith(P)));
+
+console.log(fails.length ? `\nFAILED: ${fails.length}\n - ${fails.join('\n - ')}` : '\nall green');
+process.exit(fails.length ? 1 : 0);

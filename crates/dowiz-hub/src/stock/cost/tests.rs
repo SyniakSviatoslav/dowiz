@@ -12,7 +12,7 @@ fn price(c: i64) -> Price {
     Price { unit_cost: c, per: KG, supplier: Some("Fish & Co".into()), doc: Some("DN-17".into()) }
 }
 fn maki() -> Vec<BomLine> {
-    vec![BomLine { supply: "rice".into(), qty: 100 }]
+    vec![BomLine::whole("rice", 100)]
 }
 const MAKI: &str = r#"{"id":"maki","bom":[{"supply":"rice","qty":100}]}"#;
 
@@ -66,7 +66,7 @@ fn a_dish_costs_only_when_every_supply_does() {
     let mut log = StockLog::create_sized(64 * 1024).unwrap();
     log.receive_priced("rice", KG, &price(1000)).unwrap();
     log.append(&StockEvent::Received { item: "nori".into(), qty: 50 }).unwrap();
-    let both = vec![BomLine { supply: "rice".into(), qty: 100 }, BomLine { supply: "nori".into(), qty: 2 }];
+    let both = vec![BomLine::whole("rice", 100), BomLine::whole("nori", 2)];
     assert_eq!(log.cost_book().dish_cost(&both), None, "nori was never priced");
     assert_eq!(log.cost_book().dish_cost(&[]), None, "no recipe, no cost");
     // Twin: once nori is priced, its unpriced 50 join at that price.

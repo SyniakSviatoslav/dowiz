@@ -13,7 +13,8 @@
 // ASCII QUOTES ONLY in this file (DOWIZ-COMMON-RULES rule 11).
 
 import './nom-i18n.js';
-import { $, $$, esc, icon, t, post, withLoc, toast, sheet, closeSheet, busy, confirm, retranslate } from '/admin/core.js';
+import { $, $$, esc, icon, t, api, post, withLoc, toast, sheet, closeSheet, busy, confirm, retranslate } from '/admin/core.js';
+import { usesLine, isUsed } from '/admin/prep-logic.js';
 import { btn, field, chips, press } from '/admin/parts.js';
 import { KINDS } from '/admin/ingredients-view.js';
 import * as N from '/admin/nom-logic.js';
@@ -67,19 +68,52 @@ function disarm(b){
   was.delete(b);
 }
 
-/// Delete ingredients for good. `names` label the confirmation of a list.
+/// Up to this many ids are asked about one by one before a delete; past it
+/// the hub's 409 says "in use" and the second confirmation carries the list.
+export const USES_ASKED = 30;
+
+/// Where `ids` are still used (`GET /api/owner/supplies/:id/uses`), by id;
+/// an id nothing uses is absent. A failed question is a missing answer,
+/// never a silent "unused": the hub asks again before it deletes.
+export async function usesOf(ids){
+  const out = {};
+  for (const id of ids.slice(0, USES_ASKED)) {
+    try { const r = await api(`/owner/supplies/${encodeURIComponent(id)}/uses`); if (isUsed(r.uses)) out[id] = r.uses; } catch {}
+  }
+  return out;
+}
+
+/// Delete ingredients (raw or semi-finished) for good. `names` label the
+/// confirmation of a list. WHERE THEY ARE USED IS SHOWN FIRST (SPEC-SEMI-
+/// FINISHED §e): a line leaves a card or a recipe only after the owner has
+/// seen it named; the hub refuses (409) without `confirmUses`.
 export async function deleteSupplies(ids, el, { names = [], ask = true } = {}){
   if (!ids.length) return null;
-  if (ask) {
+  const used = await usesOf(ids);
+  const inUse = usesLine(used, t);
+  if (ask || inUse) {
     const shown = names.slice(0, 6).join(', ') + (names.length > 6 ? ' …' : '');
-    const ok = await confirm(`${t('nom_deleteSel')}: ${ids.length}`, shown || ids.join(', '), { danger: true, hint: t('nom_deleteHint') });
+    const body = inUse ? `${shown || ids.join(', ')}
+
+${t('pf_deleteUsed')}
+${inUse}` : shown || ids.join(', ');
+    const ok = await confirm(`${t('nom_deleteSel')}: ${ids.length}`, body, { danger: true, hint: t('nom_deleteHint') });
     if (!ok) return null;
   }
+  const send = confirmUses => post('/owner/supplies/delete', withLoc(confirmUses ? { ids, confirmUses: true } : { ids }));
   try {
-    const r = await busy(el, () => post('/owner/supplies/delete', withLoc({ ids })));
+    const r = await busy(el, () => send(!!inUse));
     toast(N.deletedLine(r, t));
     return r;
-  } catch (e) { fail(e); return null; }
+  } catch (e) {
+    // More ids than were asked about, and one of the rest is in use: ask once more.
+    if (e.status === 409 && ids.length > USES_ASKED) {
+      const ok = await confirm(`${t('nom_deleteSel')}: ${ids.length}`, t('pf_deleteUsed'), { danger: true, hint: t('nom_deleteHint') });
+      if (!ok) return null;
+      try { const r = await busy(el, () => send(true)); toast(N.deletedLine(r, t)); return r; } catch (e2) { fail(e2); return null; }
+    }
+    fail(e); return null;
+  }
 }
 
 /// Delete dishes for good (many at once).

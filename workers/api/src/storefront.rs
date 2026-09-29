@@ -885,7 +885,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     let bom_lines: Vec<(String, i64)> = body
         .items
         .iter()
-        .filter_map(|it| Some((loaded.catalog.product(&it.product_id)?, it.quantity)))
+        .filter_map(|it| Some((dowiz_hub::prep::for_ledger(&|s| loaded.catalog.supply(s), &loaded.catalog.product(&it.product_id)?).0, it.quantity)))
         .collect();
     // THE ONE WRITE OF THE SOURCE before the only `Placed` append: whatever
     // the envelope carried is overwritten, and a word outside the set is

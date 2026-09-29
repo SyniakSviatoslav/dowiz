@@ -52,16 +52,52 @@ pub fn ids_of(raw: &[String]) -> std::result::Result<Vec<String>, String> {
     Ok(ids)
 }
 
-/// Remove `ids` from the catalogue and from every recipe. PURE on `cat`.
+/// Where each of `ids` is still used (SPEC-SEMI-FINISHED §e): the owner sees
+/// this list and confirms before a line leaves any card or recipe. PURE.
+pub fn uses_of(cat: &Catalog, ids: &[String]) -> Value {
+    let (supplies, products) = (cat.supplies(), cat.products());
+    let mut out = serde_json::Map::new();
+    for id in ids {
+        let u = dowiz_hub::prep::uses_of(id, &supplies, &products);
+        if u.preps.is_empty() && u.dishes.is_empty() {
+            continue;
+        }
+        let rows = |l: &[(String, String)]| l.iter().map(|(i, n)| json!({ "id": i, "name": n })).collect::<Vec<_>>();
+        out.insert(id.clone(), json!({ "preps": rows(&u.preps), "dishes": rows(&u.dishes) }));
+    }
+    Value::Object(out)
+}
+
+/// Remove `ids` from the catalogue, from every semi-finished card and from
+/// every recipe. PURE on `cat`.
 pub fn remove_supplies(cat: &mut Catalog, ids: &[String]) -> Removal {
     let gone = |s: &str| ids.iter().any(|i| i == s);
+    // Which cards reach a deleted item, READ BEFORE anything is removed: a
+    // dish naming such a card is re-derived below although its own lines
+    // do not change.
+    let before = cat.supplies();
+    let touched: Vec<String> = ids.iter().flat_map(|id| dowiz_hub::prep::uses_of(id, &before, &[]).preps).map(|(p, _)| p).collect();
     let deleted: Vec<String> = ids.iter().filter(|id| cat.remove_supply(id)).cloned().collect();
+    // The cards first, so the dishes below re-derive from cards without the line.
+    for (sid, j) in before {
+        let Some(mut card) = dowiz_hub::prep::card_of(&j) else { continue };
+        let n = card.lines.len();
+        card.lines.retain(|l| !gone(&l.item));
+        if card.lines.len() == n {
+            continue;
+        }
+        let Ok(mut v) = serde_json::from_str::<Value>(&j) else { continue };
+        v["card"] = dowiz_hub::prep::card_json(&card);
+        cat.set_supply(&sid, &v.to_string());
+    }
     let mut dishes = Vec::new();
     for (pid, j) in cat.products() {
         let Ok(mut p) = serde_json::from_str::<Value>(&j) else { continue };
         let Some(bom) = p.get("bom").and_then(Value::as_array).cloned() else { continue };
         let keep: Vec<Value> = bom.into_iter().filter(|l| !l.get("supply").and_then(Value::as_str).is_some_and(gone)).collect();
-        if keep.len() == p["bom"].as_array().map_or(0, Vec::len) {
+        // Unchanged lines, and no card under them touched: not rewritten.
+        let through_card = keep.iter().any(|l| l.get("supply").and_then(Value::as_str).is_some_and(|s| touched.iter().any(|t| t == s)));
+        if keep.len() == p["bom"].as_array().map_or(0, Vec::len) && !through_card {
             continue;
         }
         let lines: Vec<BomLineIn> = keep
@@ -87,9 +123,12 @@ pub fn remove_supplies(cat: &mut Catalog, ids: &[String]) -> Removal {
 /// `POST /api/owner/supplies/delete` -- see the module.
 pub async fn delete_supplies(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
-    #[serde(deny_unknown_fields)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
     struct In {
         ids: Vec<String>,
+        /// The owner saw where the ids are used (`uses_of`) and still says delete.
+        #[serde(default)]
+        confirm_uses: bool,
         #[serde(rename = "location_id")]
         _location_id: Option<String>,
     }
@@ -109,14 +148,33 @@ pub async fn delete_supplies(mut req: Request, ctx: RouteContext<crate::Req>) ->
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let now = ctx.data.now_ms;
     let wanted = ids.clone();
-    let (removal, today) = crate::hubstore::with_catalog(&place, move |cat| {
+    let confirmed = body.confirm_uses;
+    let (removal, today) = match crate::hubstore::with_catalog(&place, move |cat| {
+        // WHERE IT IS USED, FIRST (SPEC §e): a line leaves a card or a recipe
+        // only after the owner has seen it named.
+        if !confirmed {
+            let used = uses_of(cat, &wanted);
+            if !used.as_object().is_some_and(|m| m.is_empty()) {
+                return Err(Error::RustError(format!("in-use: {used}")));
+            }
+        }
         let r = remove_supplies(cat, &wanted);
         if !r.dishes.is_empty() {
             crate::services::catalogue::import::bump_menu_version(cat);
         }
         Ok((r, crate::services::operations::stock::today_of(cat, now)))
     })
-    .await?;
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => match e.to_string().split_once("in-use: ") {
+            Some((_, used)) => {
+                let uses: Value = serde_json::from_str(used).unwrap_or(Value::Null);
+                return Ok(Response::from_json(&json!({ "error": "in use", "uses": uses }))?.with_status(409));
+            }
+            None => return Err(e),
+        },
+    };
     let input = crate::services::operations::stock::turn::StockTurnIn {
         kind: "removed".into(),
         body: json!({ "items": ids }),
