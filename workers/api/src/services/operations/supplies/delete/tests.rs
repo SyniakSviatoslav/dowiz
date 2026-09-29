@@ -110,3 +110,22 @@ fn where_used_names_cards_and_dishes_and_a_deletion_strips_the_cards() {
     assert_eq!(product(&cat, "pf-dish")["bom"], json!([{ "supply": "mitsukan", "qty": 20 }]), "the dish still names the card");
     assert_eq!(product(&cat, "pf-dish")["cost"], json!(4), "20 g at 50 g rice per 100 g: 10 g rice at 38/100 = 3.8");
 }
+
+/// Live on qa-durres 2026-09-29: deleting a ПФ TOGETHER WITH an item on its
+/// card answered `deleted` for both, then the card rewrite (which walked the
+/// catalogue as it was before) stripped the line and wrote the deleted ПФ
+/// straight back.
+#[test]
+fn a_prep_deleted_with_its_own_line_stays_deleted() {
+    let mut cat = catalogue();
+    cat.set_supply("mitsukan", &json!({ "id": "mitsukan", "name": "Mitsukan", "unit": "g", "kind": "prep", "card": { "lines": [{ "item": "rice", "qty": 50 }, { "item": "salmon", "qty": 5 }], "yield": 100 } }).to_string());
+    let r = remove_supplies(&mut cat, &["mitsukan".into(), "salmon".into()]);
+    assert!(r.deleted.contains(&"mitsukan".to_string()));
+    assert!(cat.supply("mitsukan").is_none(), "the deleted ПФ came back");
+    assert!(cat.supply("salmon").is_none());
+    // The twin: a ПФ that is NOT deleted still loses the deleted line and stays.
+    let mut cat = catalogue();
+    cat.set_supply("mitsukan", &json!({ "id": "mitsukan", "name": "Mitsukan", "unit": "g", "kind": "prep", "card": { "lines": [{ "item": "rice", "qty": 50 }, { "item": "salmon", "qty": 5 }], "yield": 100 } }).to_string());
+    remove_supplies(&mut cat, &["salmon".into()]);
+    assert!(cat.supply("mitsukan").is_some(), "a kept ПФ stays");
+}

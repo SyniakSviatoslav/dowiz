@@ -80,6 +80,10 @@ pub fn remove_supplies(cat: &mut Catalog, ids: &[String]) -> Removal {
     let deleted: Vec<String> = ids.iter().filter(|id| cat.remove_supply(id)).cloned().collect();
     // The cards first, so the dishes below re-derive from cards without the line.
     for (sid, j) in before {
+        // A ПФ deleted in this same call is not rewritten: that would write it back.
+        if gone(&sid) {
+            continue;
+        }
         let Some(mut card) = dowiz_hub::prep::card_of(&j) else { continue };
         let n = card.lines.len();
         card.lines.retain(|l| !gone(&l.item));
