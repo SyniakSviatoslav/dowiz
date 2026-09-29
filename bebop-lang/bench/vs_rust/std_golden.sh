@@ -142,6 +142,13 @@ gate sha256 -4000131497313522475 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/nodekey.bp ${BEBOP_TMP:-/tmp/opencode}/nodekey_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/nodekey_test.bin | tail -1)
 gate nodekey 4527185576689197451 "$r"
 
+# ---- qplan_cover (W-BATGREEN 2026-09-29: every function of selfhost/std/qplan.bp, B7 step 2's planner) ----
+# The golden is bench/oracles/qplan_cover.py's fold, derived from the cost model with a FULL
+# permutation search -- not copied from this program. Before this gate nothing ran the planner:
+# the coverage file called the pre-a8afebde API and the library's own `main` self-test had no runner.
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/qplan_cover.bp ${BEBOP_TMP:-/tmp/opencode}/qplan_cover_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/qplan_cover_test.bin | tail -1)
+gate qplan_cover -219637322991865218 "$r"
+
 # ---- crc32 (zlib_crc32 check value 0xCBF43926 for "123456789") ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/crc.bp ${BEBOP_TMP:-/tmp/opencode}/crc_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/crc_test.bin | tail -1)
 gate crc32 3421780262 "$r"
@@ -719,6 +726,37 @@ gate scrash 4231007695826602272 "$r"
 # bench/vs_rust/REPORT-g5b.md, run separately, not part of this gate) ----
 r=$(TRIALS=50 BEBOP_TMP=${BEBOP_TMP:-/tmp/opencode} BEBOP_BIN=${BEBOP_BIN:-bebop.bin} timeout 120 bash bench/vs_rust/scrash_torn.sh 2>/dev/null | tail -1 | awk '{print $4}')
 gate scrash_torn 0 "$r"
+
+# ---- sproj / sproj_neg / sanchor (DG5, docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md §6) ----
+# sproj: projection nodes through st_proj_eval (selfhost/prelude/proj.bp) -- a 300-record log's fold
+# read cold, hit, stepped +1 and +50 (each step == the full refold, S-2), record 3 rewritten in place
+# with the tip re-chained (refold on the tip, S-4), another code (K-4); a KV snapshot memoised per
+# generation and re-derived whole on a put (S-3). sproj_neg: an unregistered fold fn exits 124 before
+# touching the image (P-3's run-time twin), its registered twin reads normally; the negative run is a
+# PRODUCER of an exit code, so it runs directly (never through the memo) and keeps its stderr in a file.
+# The positive twin re-opens the image the negative left (st_open: not fresh) and inits a new log root in it,
+# so its first read is still a no-memo read (2); nothing is removed between the two runs.
+# sanchor: the anchor verify of a non-fresh open (S-6) -- seven bits, one per case (bench/oracles/sanchor.py).
+rm -f sproj.store
+rm -f sproj_kv.store
+rm -f sproj_neg.store
+rm -f sanchor_a.store
+rm -f sanchor_b.store
+rm -f sanchor_c.store
+rm -f sanchor_d.store
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sproj.bp ${BEBOP_TMP:-/tmp/opencode}/sproj_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/sproj_test.bin | tail -1)
+gate sproj -7262713819064612088 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sproj_neg.bp ${BEBOP_TMP:-/tmp/opencode}/sproj_neg_test.bin >/dev/null 2>&1 && { timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sproj_neg_test.bin > ${BEBOP_TMP:-/tmp/opencode}/sproj_neg.out 2> ${BEBOP_TMP:-/tmp/opencode}/sproj_neg.err; echo "$?:$(run 30 ${BEBOP_TMP:-/tmp/opencode}/sproj_neg_test.bin p | tail -1)"; })
+gate sproj_neg 124:2 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sanchor.bp ${BEBOP_TMP:-/tmp/opencode}/sanchor_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/sanchor_test.bin | tail -1)
+gate sanchor 127 "$r"
+rm -f sproj.store
+rm -f sproj_kv.store
+rm -f sproj_neg.store
+rm -f sanchor_a.store
+rm -f sanchor_b.store
+rm -f sanchor_c.store
+rm -f sanchor_d.store
 
 # ---- smw (G10, ROADMAP B5: P writer THREADS on disjoint partitions, N updates each,
 # a cross-partition 2PC transaction every 100th. Fold = every C{i64} payload walked out of

@@ -1,0 +1,15 @@
+# What every reader of fixtures/proj.store must answer (DG5, SPEC-BEBOP-DAG-RUNTIME §6). DERIVED, not copied:
+#   the log is 9 records, record i = seq i, 330 payload bytes (i*31 + j*7) % 251 (bench/vs_rust/std_tests/sproj.bp
+#   sp_pay); root = FNV-1a 64 over seq||plen||payload oldest first -- bench/oracles/sproj.py's log_fold(9) prints
+#   6344481284825166345 from those bytes alone, and memo must equal it (the memo IS that fold, S-2).
+#   bebop.bin  : sproj.bp `f` WROTE the image (7 records, a first read writes the memo, 2 more, a second read
+#                steps it by 2 -- sp_fixture refuses to print otherwise) and printed 6344481284825166345;
+#                `n` -> 9, `h` -> the fold, `p` (st_proj_peek) -> the memo
+#   Rust native: bebop_wasm::proj::proj_view (tests/parity.rs), the memo through a borrowed bebop_store::View
+#   wasm32     : bw_proj (the `proj` feature's module) under node, harness.mjs --proj
+#   oracle.py  : --proj, from the bytes alone: proj status=0 n=9 root=6344481284825166345 memo=6344481284825166345
+# The image: written by bebop's store.bp (so both superblocks carry an anchor in cell 9 and the projection
+# table in cell 5), trimmed at arena_used = 1670 cells = 13360 bytes. Cells 13-14 are 0 (S-1).
+n=9
+root=6344481284825166345
+memo=6344481284825166345

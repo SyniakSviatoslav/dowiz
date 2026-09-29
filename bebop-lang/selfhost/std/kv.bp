@@ -1,5 +1,6 @@
 use "selfhost/prelude/sha256.bp"
 use "selfhost/prelude/store.bp"
+use "selfhost/prelude/proj.bp"
 // kv.bp — a key/value store over the bebop store, shaped to dowiz's `MemoryStore` trait
 // (crates/dowiz-core/src/retrieval/memory_store.rs): put / get / keys / snapshot_root.
 //
@@ -25,72 +26,27 @@ use "selfhost/prelude/store.bp"
 // which is the property dowiz's InMemoryStore relies on.
 //
 // argv[2] phase: i init an empty (v2) store | n count | h snapshot_root | d dump lengths | v version
+//                m snapshot_root memoised (DG5 kind 2) | M how the memoised read was answered
 //
 // snapshot_root is FNV-1a 64 over frame-delimited (key, value) pairs -- len||bytes for each --
 // byte-for-byte the fold dowiz-core computes in InMemoryStore::snapshot_root. The offset basis
 // 0xcbf29ce484222325 exceeds i64::MAX, so it is written as its two's-complement value; the BITS
 // are identical and that is what the comparison is on.
-fn fnv_offset() -> i64 { 0 - 3750763034362895579 }
-fn fnv_prime() -> i64 { 1099511628211 }
-
-fn fnv_byte(h: i64, b: i64) -> i64 { (h ^ b) * fnv_prime() }
-
-// byte b of a blob: one per cell in v1, eight to a cell (little-endian) in v2
-fn kv_byte(base: [i64], blob: i64, b: i64, ver: i64) -> i64 {
-  if ver == 2 then (st_get(base, blob, b >> 3) >> (8 * (b & 7))) & 255
-  else st_get(base, blob, b) & 255
-}
-
-// the version the root says: cell 5 of a root of 6+ cells, else 1
-fn kv_version(base: [i64], g: i64) -> i64 {
-  if st_len(base, g) < 6 then 1
-  else (if st_get(base, g, 5) > 0 then st_get(base, g, 5) else 1)
-}
-
-// fold len||bytes of a blob slice
-fn fnv_frame(h0: [i64], blob: i64, base: [i64], off: i64, len: i64, ver: i64) -> i64 {
-  let h = h0[0];
-  let k = 0;
-  while k < 8 {
-    let byte = (len >>> (8 * k)) & 255;
-    let h = fnv_byte(h, byte);
-    let _ = h0[0] = h;
-    let k = k + 1;
-    0
-  };
-  let j = 0;
-  while j < len {
-    let _ = h0[0] = fnv_byte(h0[0], kv_byte(base, blob, off + j, ver));
-    let j = j + 1;
-    0
-  };
-  h0[0]
-}
+// THE FOLD lives in selfhost/prelude/proj.bp (`pj_kv_fold`), so that the SAME fn value is the one a
+// kind-2 projection registers (DG5, RT S-3); `h` below is that fold run directly, `m` is the same fold
+// memoised in the image per generation (st_proj_eval kind 2: a hit when the root has not moved, a whole
+// re-derivation when it has -- never extended). m prints the value; `M` prints how it was answered
+// (0 hit, 2 first read, 3 refold) so a caller can see the memo work without trusting it.
+fn kv_version(base: [i64], g: i64) -> i64 { pj_kv_ver(base, g) }
 
 fn kv_root(base: [i64], tmp: [i64]) -> i64 { st_root(base, tmp) }
 
-fn kv_snapshot(base: [i64], tmp: [i64]) -> i64 {
-  let g = kv_root(base, tmp);
-  let n = st_get(base, g, 0);
-  let kidx = st_ref(base, g, 1);
-  let kblob = st_ref(base, g, 2);
-  let vidx = st_ref(base, g, 3);
-  let vblob = st_ref(base, g, 4);
-  let ver = kv_version(base, g);
-  let h0 = zeros(1);
-  let _ = h0[0] = fnv_offset();
-  let i = 0;
-  while i < n {
-    let ko = st_get(base, kidx, 2 * i);
-    let kl = st_get(base, kidx, 2 * i + 1);
-    let vo = st_get(base, vidx, 2 * i);
-    let vl = st_get(base, vidx, 2 * i + 1);
-    let _ = fnv_frame(h0, kblob, base, ko, kl, ver);
-    let _ = fnv_frame(h0, vblob, base, vo, vl, ver);
-    let i = i + 1;
-    0
-  };
-  h0[0]
+fn kv_snapshot(base: [i64], tmp: [i64]) -> i64 { pj_kv_fold(base, kv_root(base, tmp)) }
+
+// kv_memo: the snapshot through the projection memo; how[0] says how it was answered.
+fn kv_memo(base: [i64], code: i64, how: [i64], tmp: [i64]) -> i64 {
+  let tx = zeros(6);
+  st_proj_eval(base, tx, code, pj_kind_kv(), &pj_kv_fold, how, tmp)
 }
 
 fn main(argc: i64, argv: [str]) -> i64 {
@@ -133,7 +89,9 @@ fn main(argc: i64, argv: [str]) -> i64 {
   else (if ph == 103 then st_gen(base, tmp)
   else (if ph == 100 then st_get(base, st_ref(base, kv_root(base, tmp), 1), 0)
   else (if ph == 118 then kv_version(base, kv_root(base, tmp))
-  else 0)))));
+  else (if ph == 109 then kv_memo(base, pj_code(argv[1]), zeros(3), tmp)
+  else (if ph == 77 then (let how = zeros(3) in let _ = kv_memo(base, pj_code(argv[1]), how, tmp) in how[0])
+  else 0)))))));
 
   let _ = sys_munmap(st_addr(base), size);
   r

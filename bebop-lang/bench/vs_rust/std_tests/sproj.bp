@@ -1,0 +1,236 @@
+use "selfhost/prelude/proj.bp"
+// sproj (DG5, SPEC-BEBOP-DAG-RUNTIME §6): projection nodes in the store, end to end in bebop.
+// A 300-record event log (330-byte payloads, R §4's event size) and a 2-then-3-entry KV, each read
+// through st_proj_eval, and every answer folded acc*31 + x in this order:
+//   log  : first read (how 2, value) | again (how 0, value) | +1 record (how 1, stepped 1, value,
+//          full refold) | +50 (how 1, 50, value, full) | record 3 rewritten IN PLACE and the tip id
+//          re-chained, same generation (how 3, why 3 = tip, value, full) | again (how 0) |
+//          another code's read (how 2, value)
+//   kv   : first (how 2, value) | again (how 0, value) | a put: new root (how 3, why 4 = gen, value)
+// bench/oracles/sproj.py derives every number from the record bytes alone (FNV-1a 64 over
+// seq||plen||payload per record; over len||key||len||value per entry) and the spec's codes -- it
+// never reads this program's output. S-2 is `value == full` in each step pair; S-4 is the tip row.
+// argv[2] = f / n / h / p: crates/bebop-wasm's proj.store fixture, written and read (sp_fixture, sp_read).
+// argv[2] = m: the MEASUREMENT (5,400 events, then 1,000 x (append + fold_step) vs 10 full folds);
+// prints step_us * 10^9 + full_us (each per operation; 1,000 steps in ms = us each), NEGATED unless
+// hi == hf and every one of the 1,000 reads was a 1-record step.
+fn sp_mix(a: i64, x: i64) -> i64 { a * 31 + x }
+fn sp_pay(pay: [i64], i: i64) -> i64 {
+  let j = 0;
+  while j < 330 {
+    let _ = pay[j] = (i * 31 + j * 7) % 251;
+    let j = j + 1;
+    0
+  };
+  330
+}
+fn sp_app(base: [i64], tx: [i64], pay: [i64], i: i64, tmp: [i64]) -> i64 {
+  let _ = sp_pay(pay, i);
+  pj_log_append(base, tx, i, pay, 330, pj_fnv_u64(pj_fnv_offset(), i + 1), i + 1, tmp)
+}
+fn sp_apps(base: [i64], tx: [i64], pay: [i64], from: i64, k: i64, tmp: [i64]) -> i64 {
+  let i = from;
+  while i < from + k {
+    let _ = sp_app(base, tx, pay, i, tmp);
+    let i = i + 1;
+    0
+  };
+  from + k
+}
+fn sp_eval(base: [i64], tx: [i64], code: i64, how: [i64], tmp: [i64]) -> i64 {
+  st_proj_eval(base, tx, code, pj_kind_log(), &pj_log_step, how, tmp)
+}
+// sp_step_row: value, how[0], how[1] and the full refold, folded onto a.
+fn sp_row(a: i64, v: i64, how: [i64], full: i64) -> i64 {
+  sp_mix(sp_mix(sp_mix(sp_mix(a, how[0]), how[1]), v), full)
+}
+// sp_redact: record 3 (oldest = 0) gets 8 'x' bytes over its first payload cell, and the newest
+// record's id0 -- and the root's copy of it -- is flipped, as a re-chain would move it. In place,
+// resealed, no commit: the generation does not move.
+fn sp_redact(base: [i64], tmp: [i64]) -> i64 {
+  let root = st_root(base, tmp);
+  let n = st_get(base, root, 0);
+  let recs = zeros(n + 1);
+  let k = pj_log_chain(base, root, recs, n + 1, 0, 0, 0);
+  let r3 = recs[k - 1 - 3];
+  let _ = st_put(base, r3, 12, 8680820740569200760);
+  let _ = st_seal(base, r3, tmp);
+  let tip = recs[0];
+  let _ = st_put(base, tip, 3, st_get(base, tip, 3) ^ 1);
+  let _ = st_seal(base, tip, tmp);
+  let _ = st_put(base, root, 3, st_get(base, tip, 3));
+  let _ = st_seal(base, root, tmp);
+  k
+}
+// sp_blob: an `arr i64` of nb bytes packed eight to a cell, little-endian (KV v2).
+fn sp_blob(base: [i64], tx: [i64], b: [i64], nb: i64, dig: i64, tmp: [i64]) -> i64 {
+  let nc = (nb + 7) / 8;
+  let o = st_alloc(base, tx, if nc < 1 then 1 else nc, dig);
+  let _ = st_put(base, o, 0, 0);
+  let j = 0;
+  while j < nb {
+    let _ = st_put(base, o, j >> 3, st_get(base, o, j >> 3) | ((b[j] & 255) << (8 * (j & 7))));
+    let j = j + 1;
+    0
+  };
+  let _ = st_seal(base, o, tmp);
+  o
+}
+// sp_kv: a v2 KV of the first n of {a:1, b:22, c:333}, committed as the root.
+fn sp_kv(base: [i64], tx: [i64], n: i64, d: [i64], tmp: [i64]) -> i64 {
+  let kb = zeros(3);
+  let _ = kb[0] = 97;
+  let _ = kb[1] = 98;
+  let _ = kb[2] = 99;
+  let vb = zeros(6);
+  let _ = vb[0] = 49;
+  let _ = vb[1] = 50;
+  let _ = vb[2] = 50;
+  let _ = vb[3] = 51;
+  let _ = vb[4] = 51;
+  let _ = vb[5] = 51;
+  let _ = st_begin(base, tx, tmp);
+  let kidx = st_alloc(base, tx, 2 * n, d[1]);
+  let vidx = st_alloc(base, tx, 2 * n, d[1]);
+  let i = 0;
+  while i < n {
+    let _ = st_put(base, kidx, 2 * i, i);
+    let _ = st_put(base, kidx, 2 * i + 1, 1);
+    let _ = st_put(base, vidx, 2 * i, i * (i + 1) / 2);
+    let _ = st_put(base, vidx, 2 * i + 1, i + 1);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, kidx, tmp);
+  let _ = st_seal(base, vidx, tmp);
+  let kblob = sp_blob(base, tx, kb, n, d[1], tmp);
+  let vblob = sp_blob(base, tx, vb, n * (n + 1) / 2, d[1], tmp);
+  let root = st_alloc(base, tx, 6, d[0]);
+  let _ = st_put(base, root, 0, n);
+  let _ = st_link(base, root, 1, kidx);
+  let _ = st_link(base, root, 2, kblob);
+  let _ = st_link(base, root, 3, vidx);
+  let _ = st_link(base, root, 4, vblob);
+  let _ = st_put(base, root, 5, 2);
+  let _ = st_seal(base, root, tmp);
+  st_commit(base, tx, root, tmp)
+}
+fn sp_kv_eval(base: [i64], tx: [i64], code: i64, how: [i64], tmp: [i64]) -> i64 {
+  st_proj_eval(base, tx, code, pj_kind_kv(), &pj_kv_fold, how, tmp)
+}
+fn sp_open(name: str, size: i64, tmp: [i64]) -> [i64] {
+  let path = zeros(64);
+  let pl = st_str(path, name);
+  st_open(path, pl, size, tmp)
+}
+fn sp_log(code: i64, tmp: [i64]) -> i64 {
+  let base = sp_open("sproj.store", 8388608, tmp);
+  let tx = zeros(6);
+  let how = zeros(3);
+  let pay = zeros(336);
+  let _ = pj_log_init(base, tx, tmp);
+  let _ = sp_apps(base, tx, pay, 0, 300, tmp);
+  let v = sp_eval(base, tx, code, how, tmp);
+  let a = sp_mix(sp_mix(0, how[0]), v);
+  let v = sp_eval(base, tx, code, how, tmp);
+  let a = sp_mix(sp_mix(a, how[0]), v);
+  let _ = sp_apps(base, tx, pay, 300, 1, tmp);
+  let v = sp_eval(base, tx, code, how, tmp);
+  let a = sp_row(a, v, how, pj_log_fold(base, tmp));
+  let _ = sp_apps(base, tx, pay, 301, 50, tmp);
+  let v = sp_eval(base, tx, code, how, tmp);
+  let a = sp_row(a, v, how, pj_log_fold(base, tmp));
+  let _ = sp_redact(base, tmp);
+  let v = sp_eval(base, tx, code, how, tmp);
+  let a = sp_row(a, v, how, pj_log_fold(base, tmp));
+  let v = sp_eval(base, tx, code, how, tmp);
+  let a = sp_mix(a, how[0]);
+  let v = sp_eval(base, tx, code + 1, how, tmp);
+  let a = sp_mix(sp_mix(a, how[0]), v);
+  let _ = sys_munmap(st_addr(base), 8388608);
+  a
+}
+fn sp_kvs(a0: i64, code: i64, tmp: [i64]) -> i64 {
+  let base = sp_open("sproj_kv.store", 1048576, tmp);
+  let tx = zeros(6);
+  let how = zeros(3);
+  let d = zeros(2);
+  let _ = d[0] = st_digest("KV{i64,ref [i64],ref [i64],ref [i64],ref [i64]}");
+  let _ = d[1] = st_digest("arr i64");
+  let _ = sp_kv(base, tx, 2, d, tmp);
+  let v = sp_kv_eval(base, tx, code, how, tmp);
+  let a = sp_mix(sp_mix(a0, how[0]), v);
+  let v = sp_kv_eval(base, tx, code, how, tmp);
+  let a = sp_mix(sp_mix(a, how[0]), v);
+  let _ = sp_kv(base, tx, 3, d, tmp);
+  let v = sp_kv_eval(base, tx, code, how, tmp);
+  let a = sp_mix(sp_mix(sp_mix(a, how[0]), how[1]), v);
+  let _ = sys_munmap(st_addr(base), 1048576);
+  a
+}
+// sp_measure: 5,400 events, one full read, then 1,000 x (append + step) timed as a block, then
+// 10 full folds timed as a block. hi == hf is checked on the final image.
+fn sp_measure(code: i64, tmp: [i64]) -> i64 {
+  let base = sp_open("sproj_m.store", 67108864, tmp);
+  let tx = zeros(6);
+  let how = zeros(3);
+  let pay = zeros(336);
+  let _ = pj_log_init(base, tx, tmp);
+  let _ = sp_apps(base, tx, pay, 0, 5400, tmp);
+  let _ = sp_eval(base, tx, code, how, tmp);
+  let t0 = clock_ms();
+  let i = 0;
+  let steps = 0;
+  while i < 1000 {
+    let _ = sp_app(base, tx, pay, 5400 + i, tmp);
+    let _ = sp_eval(base, tx, code, how, tmp);
+    let steps = steps + (if how[0] == 1 then how[1] else 0);
+    let i = i + 1;
+    0
+  };
+  let t1 = clock_ms();
+  let hi = sp_eval(base, tx, code, how, tmp);
+  let j = 0;
+  let hf = 0;
+  while j < 10 {
+    let hf = pj_log_fold(base, tmp);
+    let j = j + 1;
+    0
+  };
+  let t2 = clock_ms();
+  let _ = sys_munmap(st_addr(base), 67108864);
+  let ok = if hi == hf then (if steps == 1000 then 1 else 0) else 0;
+  let r = (t1 - t0) * 1000000000 + (t2 - t1) * 100;
+  if ok == 1 then r else 0 - r
+}
+// sp_fixture (argv[2] = f): WRITES proj.store in the working directory -- crates/bebop-wasm's
+// fixture: 7 records, a first read (full: the memo is written), 2 more records, a second read (a
+// 2-record step: the memo is rewritten, current at 9). Prints the log fold.
+fn sp_fixture(code: i64, tmp: [i64]) -> i64 {
+  let base = sp_open("proj.store", 1048576, tmp);
+  let tx = zeros(6);
+  let how = zeros(3);
+  let pay = zeros(336);
+  let _ = pj_log_init(base, tx, tmp);
+  let _ = sp_apps(base, tx, pay, 0, 7, tmp);
+  let _ = sp_eval(base, tx, code, how, tmp);
+  let _ = sp_apps(base, tx, pay, 7, 2, tmp);
+  let v = sp_eval(base, tx, code, how, tmp);
+  let ok = if how[0] == 1 then (if how[1] == 2 then 1 else 0) else 0;
+  let _ = sys_munmap(st_addr(base), 1048576);
+  if ok == 1 then v else 0
+}
+// sp_read (argv[2] = n | h | p): READS proj.store (a copy: st_open extends it) -- the record count,
+// the full log fold, or the memo through st_proj_peek (0 - 1 = no current memo, or S-1 broken).
+fn sp_read(ph: i64, tmp: [i64]) -> i64 {
+  let base = sp_open("proj.store", 1048576, tmp);
+  let r = if ph == 110 then st_get(base, st_root(base, tmp), 0) else (if ph == 104 then pj_log_fold(base, tmp) else st_proj_peek(base, tmp));
+  let _ = sys_munmap(st_addr(base), 1048576);
+  r
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let tmp = zeros(256);
+  let code = pj_code(argv[1]);
+  let ph = if argc > 2 then char(argv[2], 0) else 0;
+  if ph == 109 then sp_measure(code, tmp) else (if ph == 102 then sp_fixture(code, tmp) else (if ph == 0 then sp_kvs(sp_log(code, tmp), code, tmp) else sp_read(ph, tmp)))
+}

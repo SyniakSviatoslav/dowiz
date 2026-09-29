@@ -20,6 +20,9 @@ csr.bp generated selfhost/std/csr.bp
 csr_build_plain.bp local
 csr_build_profile.bp local
 csr_build_ram.bp local
+csr_part_scatter.bp local
+csr_radix.bp local
+csr_radix_par.bp local
 deltasync.bp generated selfhost/std/deltasync.bp
 dispatcher.bp generated selfhost/std/dispatcher.bp
 dp.bp generated selfhost/std/dp.bp
@@ -38,6 +41,7 @@ gb_cc.bp local
 gb_gen.bp local
 gb_mbfs_big.bp local
 gb_mbfs_gen.bp local
+gb_orphan_cover.bp local
 gb_pool.bp local
 gb_pool_abi.bp local
 gb_pr.bp local
@@ -66,6 +70,7 @@ morph.bp generated selfhost/std/morph.bp
 msuper.bp generated selfhost/std/msuper.bp
 mutlsys.bp generated selfhost/std/mutlsys.bp
 mvcc.bp generated selfhost/std/mvcc.bp
+nodekey.bp local
 ntt.bp generated selfhost/std/ntt.bp
 ordfsm.bp generated selfhost/std/ordfsm.bp
 petri.bp generated selfhost/std/petri.bp
@@ -73,6 +78,7 @@ phant.bp generated selfhost/std/phant.bp
 pieblock.bp generated selfhost/std/pieblock.bp
 ptrless.bp generated selfhost/std/ptrless.bp
 qlora.bp generated selfhost/std/qlora.bp
+qplan_cover.bp local
 r3x.bp generated selfhost/std/r3x.bp
 rev.bp generated selfhost/std/rev.bp
 rewrite.bp generated selfhost/std/rewrite.bp
@@ -81,6 +87,7 @@ rle.bp generated selfhost/std/rle.bp
 rng.bp generated selfhost/std/rng.bp
 rns.bp generated selfhost/std/rns.bp
 rnsrot.bp generated selfhost/std/rnsrot.bp
+sanchor.bp local
 sbench.bp generated selfhost/std/sbench.bp
 schain.bp local
 scolp.bp local
@@ -109,6 +116,8 @@ sort.bp generated selfhost/std/sort.bp
 spacetime.bp generated selfhost/std/spacetime.bp
 spectral.bp generated selfhost/std/spectral.bp
 spike.bp generated selfhost/std/spike.bp
+sproj.bp local
+sproj_neg.bp local
 srepl.bp generated selfhost/std/srepl.bp
 sround.bp generated selfhost/std/sround.bp
 stm.bp generated selfhost/std/stm.bp

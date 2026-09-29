@@ -49,6 +49,10 @@ decide = ["dep:dowiz-hub", "dep:serde_json"]
 # Worker calls, so it stays out of the module `bytes.baseline` ratchets: gate.sh
 # builds it into `target/key/` and prints its size beside the reader's.
 key = []
+# THE PROJECTION READER'S EXPORT (DG5), OFF by default for the same reason: `src/proj.rs` is
+# always compiled and natively tested; this only makes `bw_proj` a wasm export. gate.sh builds it
+# into `target/proj/` and prints its size beside the reader's; `bytes.baseline` does not move.
+proj = []
 
 # The Worker's own profile (workers/api/Cargo.toml) minus `strip = false`,
 # which only wasm-bindgen's catch wrappers need. `panic = "abort"` because a

@@ -30,6 +30,30 @@ if (process.argv[2] === "--key") {
   process.exit(status === 0 ? 0 : 1);
 }
 
+// Usage: node harness.mjs --proj <module.wasm> <image>   (DG5)
+// Asks `bw_proj` (src/proj.rs, the `proj` feature's module) and prints
+// `proj status=<n> n=<records> root=<log fold> memo=<memo value>`.
+if (process.argv[2] === "--proj") {
+  const [, , , projModule, projImage] = process.argv;
+  if (!projModule || !projImage) {
+    console.error("usage: node harness.mjs --proj <module.wasm> <image>");
+    process.exit(2);
+  }
+  const { instance } = await WebAssembly.instantiate(readFileSync(projModule), {});
+  const { memory, bw_alloc, bw_free, bw_proj } = instance.exports;
+  const img = readFileSync(projImage);
+  const at = bw_alloc(img.length);
+  new Uint8Array(memory.buffer, at, img.length).set(img);
+  const res = bw_alloc(24);
+  const status = bw_proj(at, img.length, res);
+  const c = new BigInt64Array(memory.buffer, res, 3);
+  if (status === 0) console.log(`proj status=0 n=${c[0]} root=${c[1]} memo=${c[2]}`);
+  else console.log(`proj status=${status}`);
+  bw_free(res, 24);
+  bw_free(at, img.length);
+  process.exit(status === 0 ? 0 : 1);
+}
+
 const [, , modulePath, imagePath, family = "kv"] = process.argv;
 if (!modulePath || !imagePath) {
   console.error("usage: node harness.mjs <module.wasm> <image> [kv|log]");

@@ -415,6 +415,10 @@ class Parser:
             return ('neg', self.factor())
         if v == '!':
             return ('not', self.factor())
+        if v == '&':
+            # `&name`: a function as a value (DG5's registered folds). A word the
+            # language compares and passes; bpref does not call through it.
+            return ('fnref', self.ident())
         if k == 's':
             return ('str', v)
         if v == '(':
@@ -593,6 +597,8 @@ class Interp:
         t = e[0]
         if t == 'num':
             return e[1]
+        if t == 'fnref':
+            return ('fnref', e[1])
         if t == 'var':
             if e[1] in self.ctors:
                 return ('ctor', self.ctors[e[1]], [])

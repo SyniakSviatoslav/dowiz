@@ -24,6 +24,8 @@
 
 pub mod abi;
 pub mod nodekey;
+/// DG5: a log image's projection memo, read (`bw_proj`, exported under the `proj` feature).
+pub mod proj;
 #[cfg(feature = "decide")]
 pub mod decide;
 #[cfg(feature = "decide")]

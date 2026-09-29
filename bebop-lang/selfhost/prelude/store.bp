@@ -7,9 +7,13 @@
 // address: the mapping may land at any base. st_cells/st_addr are the ONLY
 // i64 <-> [i64] casts in the tree (the mapping base), allowlisted by name in
 // tools/typecheck.py; everything else stays under the T48 census. Superblock (16 cells): 0 magic
-// "BEBOPST1", 1 version, 2 generation, 3 root, 4 arena_used, 5 layout_table,
-// 6 migration_table, 7 live_cells, 8 superseded_cells, 9 reserved (B1 `anc`),
-// 10 commit-object offset (C3), 11 heads-table offset (C3), 12..14 zero, 15 crc32 of
+// "BEBOPST1", 1 version, 2 generation, 3 root, 4 arena_used, 5 PROJTAB (DG5: the
+// projection table, selfhost/prelude/proj.bp; 0 = none -- it was `layout_table`, which no
+// writer ever set, so every older image reads 0), 6 migration_table, 7 live_cells,
+// 8 superseded_cells, 9 `anc` (DG5, B1's designed follow-up: `(mark << 32) | crc32` of the
+// cells [mark, arena_used) the commit that wrote this superblock appended; 0 = no anchor, as
+// in every image before DG5 and every P>1 / Rust-written commit), 10 commit-object offset
+// (C3), 11 heads-table offset (C3), 12 arena capacity in cells, 13..14 zero, 15 crc32 of
 // cells 0..14. A reader picks the valid superblock with the higher generation.
 //
 // PartTab (B5 step 1, P=1 degenerate case): the live superblock's `root` cell (3)
@@ -71,16 +75,21 @@ fn st_sb_write(base: [i64], sb: i64, gen: i64, root: i64, used: i64, live: i64, 
 }
 // st_sb_write_m: the same with the migration-table object offset (cell 6, T114).
 fn st_sb_write_m(base: [i64], sb: i64, gen: i64, root: i64, used: i64, live: i64, sup: i64, mig: i64, arena_capacity_cells: i64, tmp: [i64]) -> i64 {
+  st_sb_write_x(base, sb, gen, root, used, live, sup, mig, arena_capacity_cells, 0, 0, tmp)
+}
+// st_sb_write_x: the same, naming the projection table (cell 5) and the commit anchor (cell 9).
+fn st_sb_write_x(base: [i64], sb: i64, gen: i64, root: i64, used: i64, live: i64, sup: i64, mig: i64, arena_capacity_cells: i64, projtab: i64, anc: i64, tmp: [i64]) -> i64 {
   let _ = base[sb] = st_magic();
   let _ = base[sb + 1] = 2;
   let _ = base[sb + 2] = gen;
   let _ = base[sb + 3] = root;
   let _ = base[sb + 4] = used;
-  let _ = base[sb + 5] = 0;
+  let _ = base[sb + 5] = projtab;
   let _ = base[sb + 6] = mig;
   let _ = base[sb + 7] = live;
   let _ = base[sb + 8] = sup;
-  let k = 9;
+  let _ = base[sb + 9] = anc;
+  let k = 10;
   while k < 12 {
     let _ = base[sb + k] = 0;
     let k = k + 1;
@@ -173,9 +182,12 @@ fn st_reopen_lo(base: [i64], sb: i64, tmp: [i64]) -> i64 {
 // payload range was written and made durable several commits before the one
 // that tore. Returns the superblock finally selected (matches st_pick's
 // return convention, -1 if both copies fail verification).
+// DG5 (RT S-6): a superblock with an anchor (cell 9 != 0) is verified by the anchor instead of the
+// object walk -- its own crc (st_pick), its PartTab's crc, and ONE crc over the range its commit
+// wrote. A zero anchor (every older image) takes the bounded walk exactly as before.
 fn st_reopen_verify(base: [i64], tmp: [i64]) -> i64 {
   let sb = st_pick(base, tmp);
-  let bad = st_verify_range(base, st_reopen_lo(base, sb, tmp), base[sb + 4], tmp) >> 32;
+  let bad = if base[sb + 9] != 0 then 1 - st_anc_ok(base, sb, tmp) else st_verify_range(base, st_reopen_lo(base, sb, tmp), base[sb + 4], tmp) >> 32;
   let _ = if bad > 0 then base[sb] = 0 else 0;
   let sb2 = if bad > 0 then st_pick(base, tmp) else sb;
   // The FALLBACK is scanned in FULL on purpose: we have just proved that a valid superblock did
@@ -186,6 +198,31 @@ fn st_reopen_verify(base: [i64], tmp: [i64]) -> i64 {
   let bad2 = if bad > 0 then (if sb2 < 0 then 0 else st_verify(base, base[sb2 + 4], tmp) >> 32) else 0;
   let _ = if bad2 > 0 then base[sb2] = 0 else 0;
   sb2
+}
+// st_anc_ok(base, sb, tmp): 1 when the superblock's PartTab checks and its anchor range
+// [mark, arena_used) still has the crc the commit recorded; 0 otherwise (a torn last commit).
+fn st_anc_ok(base: [i64], sb: i64, tmp: [i64]) -> i64 {
+  let a = base[sb + 9];
+  let lo = a >> 32;
+  let up = base[sb + 4];
+  let pt = base[sb + 3];
+  let ptok = if pt == 0 then 1 else (if pt < 16 then 0 else st_check(base, pt, tmp));
+  let fits = if lo >= 1024 then (if lo <= up then 1 else 0) else 0;
+  let crc = if fits == 1 then st_crc(base, lo, up - lo, tmp) else 0 - 1;
+  if ptok == 1 then (if crc == (a & 4294967295) then 1 else 0) else 0
+}
+// st_open_verify_all(path, plen, size, tmp): st_open, then the WHOLE-arena scan of the live
+// generation (and of the fallback, if the live one fails) -- the fsck-grade open the crash
+// harnesses and dagfull use; an ordinary open trusts the anchor (RT S-6).
+fn st_open_verify_all(path: [i64], plen: i64, size: i64, tmp: [i64]) -> [i64] {
+  let base = st_open(path, plen, size, tmp);
+  let sb = st_pick(base, tmp);
+  let bad = if sb < 0 then 0 else st_verify(base, base[sb + 4], tmp) >> 32;
+  let _ = if bad > 0 then base[sb] = 0 else 0;
+  let sb2 = if bad > 0 then st_pick(base, tmp) else sb;
+  let bad2 = if bad > 0 then (if sb2 < 0 then 0 else st_verify(base, base[sb2 + 4], tmp) >> 32) else 0;
+  let _ = if bad2 > 0 then base[sb2] = 0 else 0;
+  base
 }
 // st_open(path, plen, size, tmp): create/extend, map MAP_SHARED RW, init superblock A
 // when the file is fresh; on a real (non-fresh) open, verify-and-heal per
@@ -338,6 +375,9 @@ fn st_alloc(base: [i64], tx: [i64], len: i64, digest: i64) -> i64 {
   off
 }
 fn st_len(base: [i64], off: i64) -> i64 { base[off] & 4294967295 }
+// st_h1(base, off): an object's second header cell, (payload crc << 32) | generation -- the
+// generation an object was written at (proj.bp reads its input root's).
+fn st_h1(base: [i64], off: i64) -> i64 { base[off + 1] }
 fn st_seal(base: [i64], off: i64, tmp: [i64]) -> i64 {
   // LOUD (trap 85): a length this large is not an object length, it is a header cell that
   // something overwrote. Without this guard st_crc simply walks it: measured 2026-09-12, a
@@ -384,6 +424,15 @@ fn st_commit_d(base: [i64], tx: [i64], root: i64, ptdig: i64, tmp: [i64]) -> i64
 }
 // st_commit_d_m: st_commit_m's body with the PartTab digest passed in rather than computed.
 fn st_commit_d_m(base: [i64], tx: [i64], root: i64, mig: i64, ptdig: i64, tmp: [i64]) -> i64 {
+  st_commit_x(base, tx, root, mig, ptdig, base[tx[0] + 5], tmp)
+}
+// st_commit_pt: a commit that names a NEW projection table (proj.bp's memo write); every other
+// commit carries the live table forward unchanged, so an image that never had one keeps 0.
+fn st_commit_pt(base: [i64], tx: [i64], root: i64, projtab: i64, tmp: [i64]) -> i64 {
+  st_commit_x(base, tx, root, base[tx[0] + 6], st_digest("PartTab"), projtab, tmp)
+}
+// st_commit_x: the P=1 commit. Also writes the anchor (cell 9) over the cells this commit appended.
+fn st_commit_x(base: [i64], tx: [i64], root: i64, mig: i64, ptdig: i64, projtab: i64, tmp: [i64]) -> i64 {
   let sb = tx[0];
   let live = base[sb + 7] + tx[3] - tx[4];
   let sup = base[sb + 8] + tx[4];
@@ -413,7 +462,8 @@ fn st_commit_d_m(base: [i64], tx: [i64], root: i64, mig: i64, ptdig: i64, tmp: [
   // Write the OTHER superblock with root = PartTab offset, used = tx[2] (same
   // as before for byte-compat), gen = tx[5] (same as before).
   let arena_capacity_cells = base[sb + 12];
-  let _ = st_sb_write_m(base, 512 - sb, tx[5], pt, tx[2], live, sup, mig, arena_capacity_cells, tmp);
+  let anc = (tx[1] << 32) | st_crc(base, tx[1], tx[2] - tx[1], tmp);
+  let _ = st_sb_write_x(base, 512 - sb, tx[5], pt, tx[2], live, sup, mig, arena_capacity_cells, projtab, anc, tmp);
   tx[5]
 }
 

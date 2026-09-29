@@ -1,0 +1,73 @@
+use "selfhost/prelude/proj.bp"
+// sanchor (DG5, RT S-6): a non-fresh open verifies the LAST commit through the superblock's anchor
+// (cell 9 = (mark << 32) | crc32 of the cells [mark, arena_used) that commit appended) and refuses a
+// torn one -- the live superblock is stamped invalid and the open falls back one generation. An
+// image whose cell 9 is 0 (every image before DG5) takes the bounded object walk exactly as before.
+// Each case builds a 20-record log in its own file, tears the newest record IN PLACE, reopens with
+// st_open, and reports whether the open fell back (1) or kept the torn generation (0):
+//   bit 0  a fresh commit carries an anchor that verifies (cell 9 != 0, st_anc_ok == 1)
+//   bit 1  anchored image, newest record's h1 generation bits flipped -> REFUSED via the anchor
+//   bit 2  the same flip is invisible to the object walk (its crc covers the payload only)
+//   bit 3  anchored image, a payload cell of the newest record changed -> refused
+//   bit 4  anchor zeroed (a pre-DG5 image), payload tear -> refused by the walk, as before
+//   bit 5  anchor zeroed, h1 flip -> kept (the walk's blind spot; the old path is unchanged)
+//   bit 6  after a refusal the fallback generation has 19 records and the stamped superblock is dead
+// EXPECT 127 (bench/oracles/sanchor.py).
+fn sa_log(base: [i64], tmp: [i64]) -> i64 {
+  let tx = zeros(6);
+  let pay = zeros(24);
+  let _ = pj_log_init(base, tx, tmp);
+  let i = 0;
+  while i < 20 {
+    let _ = pay[i % 16] = i + 65;
+    let _ = pj_log_append(base, tx, i, pay, 16, 1000 + i, i + 1, tmp);
+    let i = i + 1;
+    0
+  };
+  20
+}
+// sa_tear: 1 flips the low (generation) bit of the newest record's h1; 2 changes its first payload
+// cell. Neither reseals, and neither touches the superblock.
+fn sa_tear(base: [i64], how: i64, tmp: [i64]) -> i64 {
+  let tip = pj_ref(base, st_root(base, tmp), 1);
+  let _ = if how == 1 then base[tip + 1] = base[tip + 1] ^ 1 else base[tip + 2 + 12] = base[tip + 2 + 12] ^ 255;
+  tip
+}
+// sa_case: build, optionally zero the anchor (re-sealing the superblock's crc), tear, unmap, reopen.
+// Returns fell_back | walk_blind << 1 | anchor_ok_before << 2 | fallback_sound << 3.
+fn sa_case(name: str, zero: i64, how: i64, tmp: [i64]) -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, name);
+  let base = st_open(path, pl, 1048576, tmp);
+  let _ = sa_log(base, tmp);
+  let sb = st_pick(base, tmp);
+  let g = base[sb + 2];
+  let aok = if base[sb + 9] != 0 then st_anc_ok(base, sb, tmp) else 0;
+  let _ = if zero == 1 then (let _ = base[sb + 9] = 0 in base[sb + 15] = st_crc(base, sb, 15, tmp)) else 0;
+  let lo = st_reopen_lo(base, sb, tmp);
+  let _ = sa_tear(base, how, tmp);
+  let blind = if (st_verify_range(base, lo, base[sb + 4], tmp) >> 32) == 0 then 1 else 0;
+  let _ = sys_munmap(st_addr(base), 1048576);
+  let b2 = st_open(path, pl, 1048576, tmp);
+  let sb2 = st_pick(b2, tmp);
+  let fell = if b2[sb2 + 2] == g - 1 then 1 else 0;
+  let n2 = st_get(b2, st_root(b2, tmp), 0);
+  let sound = if fell == 1 then (if n2 == 19 then (if b2[sb] == 0 then 1 else 0) else 0) else 0;
+  let _ = sys_munmap(st_addr(b2), 1048576);
+  fell + blind * 2 + aok * 4 + sound * 8
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let tmp = zeros(256);
+  let a = sa_case("sanchor_a.store", 0, 1, tmp);
+  let b = sa_case("sanchor_b.store", 0, 2, tmp);
+  let c = sa_case("sanchor_c.store", 1, 2, tmp);
+  let d = sa_case("sanchor_d.store", 1, 1, tmp);
+  let b0 = (a >> 2) & 1;
+  let b1 = a & 1;
+  let b2 = (a >> 1) & 1;
+  let b3 = b & 1;
+  let b4 = c & 1;
+  let b5 = 1 - (d & 1);
+  let b6 = ((a >> 3) & 1) * ((b >> 3) & 1) * ((c >> 3) & 1);
+  b0 + b1 * 2 + b2 * 4 + b3 * 8 + b4 * 16 + b5 * 32 + b6 * 64
+}

@@ -1,78 +1,92 @@
 use "selfhost/std/qplan.bp"
-// qplan_cover.bp — coverage for selfhost/std/qplan.bp (B7 step 2's planner).
+// qplan_cover.bp -- std_golden `gate qplan_cover`: every function of selfhost/std/qplan.bp (B7
+// step 2's planner) executed, and each observed value folded as acc*31 + v.
 //
-// WHY THIS EXISTS: arch_check's dead-function invariant named six qplan_* functions as
-// "defined and never called". They were: `grep -rln qplan` over the whole tree returned
-// exactly one file, qplan.bp itself. The planner is a LIBRARY with no main, written ahead
-// of B7 step 2, and nothing had ever executed a line of it. This is the wire-up rather
-// than the deletion, because the row it belongs to is planned, not abandoned -- and because
-// a planner nobody has run is exactly the thing that rots.
+// HISTORY. 8e438580 wrote this file to wire up six qplan_* functions arch_check named dead. Six
+// hours later a8afebde rewrote qplan.bp -- renamed qplan_join_order -> qplan_order and
+// qplan_group_strategy -> qplan_group, gave qplan_access a third parameter, and put its own
+// self-test in a `main` inside the library. Nothing ran this file, so nothing noticed: it called
+// functions that no longer existed, qplan_cost and qplan_plan_query had no caller at all, and the
+// library's `main` was executed by no gate either. W-BATGREEN (2026-09-29) rewrote it against the
+// current API, moved a8afebde's self-test here, and made it a GATE with an oracle that derives
+// every value from the cost model independently (bench/oracles/qplan_cover.py), so the next
+// API change turns the battery red instead of rotting in silence.
 //
-// This is a COVERAGE test, not a correctness gate for the planner: the cost model's numbers
-// are B2/B6's business. What it pins is that every function is reachable, returns, and
-// answers the one thing about it that is decidable today. Two of those answers are
-// unflattering and are pinned deliberately:
-//   * qplan_access is a STUB -- its body is `0` for every input, so "scan" is the only
-//     access path the planner can ever choose. Pinned at 0 so that when bucket/spgemm
-//     land, this number MOVES and someone has to look.
-//   * qplan_validate reads only the child COUNT (nc <= 6), so it accepts any AST shape
-//     with few enough children. Pinned on a 7-child node to show it rejects on arity
-//     alone, which is all it does.
-//
-// The join-order arithmetic IS decidable and is the one real assertion here: with
-// scan_cost = 1 and spgemm_cost = 15, order (0,1) costs rows0*1 + rows1*15 and (1,0) costs
-// rows1*1 + rows0*15, so the planner must put the LARGER table first. Derived from the cost
-// model, not from running the planner: rows = (1000, 10) gives c01 = 1000 + 150 = 1150 and
-// c10 = 10 + 15000 = 15010, so order (0,1) wins at 1150.
+// What is pinned, in fold order (the oracle's list is the same list):
+//   qplan_access(0,0,a)            0  -- a STUB: scan is the only access path until indexes land
+//   qplan_cost(7, 0|1|2)           7, 140, 105  (per-row 1 / 20 / 15)
+//   qplan_order k=1 rows [7]       rc 0, cost 7, order [0]
+//   qplan_order k=2 [1000,10]      rc 0, cost 10 + 10*1000 = 10010, order [1,0]
+//   qplan_order k=3 [1000,10,100]  rc 0, cost 10 + 10*100 + 10*100*1000 = 1001010, order [1,2,0]
+//   qplan_order k=4 [2,3,4,5]      rc 0, cost 2 + 6 + 24 + 120 = 152, order [0,1,2,3]
+//                                  (k=4 compares only 3 of the 24 orders; this input's true
+//                                  minimum is one of them, so the oracle's full search agrees)
+//   qplan_order k=5                92, the refusal for k > 4
+//   qplan_group(4096), (4097)      0, 1   -- the dense/counting-sort boundary is inclusive
+//   qplan_fingerprint(2,1,0),(1,0,1)  102, 11
+//   qplan_validate, 6 / 7 children 1, 0   -- it reads the child COUNT and nothing else
+//   qplan_explain(1)               25 = len("access=0 group=0 tables=1"), then every byte
+//   qplan_plan_query               1 for "q { from T }", 0 for "x" (unparseable). The planner's
+//                                  fingerprint is 1 for EVERY parseable query today: access is
+//                                  the stub's 0, n_tables is fixed at 1, and a group clause asks
+//                                  qplan_group(100), which is dense (0) -- pinned so it moves.
+fn qc_fold(acc: i64, v: i64) -> i64 { acc * 31 + v }
+
+fn qc_order(acc: i64, k: i64, rows: [i64]) -> i64 {
+  let order = zeros(8);
+  let cost = zeros(2);
+  let rc = qplan_order(k, rows, order, cost, zeros(1));
+  let acc = qc_fold(qc_fold(acc, rc), cost[0]);
+  let i = 0;
+  while i < k {
+    let acc = qc_fold(acc, order[i]);
+    let i = i + 1;
+    0
+  };
+  acc
+}
+
 fn main() -> i64 {
   let a = zeros(64);
-  let order = zeros(4);
-  let cost = zeros(2);
-  let rows = zeros(4);
-
-  // (1) qplan_access: the stub. 0 = scan, for every input.
-  let acc = qplan_access(0, a);
-
-  // (2) qplan_join_order, k = 1: cost = rows * scan_cost = 7 * 1.
+  let rows = zeros(8);
+  let acc = qc_fold(0, qplan_access(0, 0, a));
+  let acc = qc_fold(acc, qplan_cost(7, 0));
+  let acc = qc_fold(acc, qplan_cost(7, 1));
+  let acc = qc_fold(acc, qplan_cost(7, 2));
   let _ = rows[0] = 7;
-  let _ = qplan_join_order(1, rows, order, cost, a);
-  let k1_ok = if cost[0] == 7 then (if order[0] == 0 then 1 else 0) else 0;
-
-  // (3) qplan_join_order, k = 2, larger table first: 1000 + 10*15 = 1150.
-  let _ = rows[0] = 1000; let _ = rows[1] = 10;
-  let _ = qplan_join_order(2, rows, order, cost, a);
-  let k2_ok = if cost[0] == 1150 then (if order[0] == 0 then (if order[1] == 1 then 1 else 0) else 0) else 0;
-
-  // (4) the SAME two tables the other way round must pick the other order and the same cost.
-  let _ = rows[0] = 10; let _ = rows[1] = 1000;
-  let _ = qplan_join_order(2, rows, order, cost, a);
-  let k2r_ok = if cost[0] == 1150 then (if order[0] == 1 then (if order[1] == 0 then 1 else 0) else 0) else 0;
-
-  // (5) k = 3 is unsupported and returns the scan-everything CEILING, not a real plan.
-  let _ = rows[0] = 5;
-  let _ = qplan_join_order(3, rows, order, cost, a);
-  let k3_ok = if cost[0] == 5 then 1 else 0;
-
-  // (6) qplan_group_strategy: the boundary is 4096 inclusive.
-  let g_lo = qplan_group_strategy(4096);
-  let g_hi = qplan_group_strategy(4097);
-  let g_ok = if g_lo == 0 then (if g_hi == 1 then 1 else 0) else 0;
-
-  // (7) qplan_cost_bucket is the one cost constant nothing else reads.
-  let cb_ok = if qplan_cost_bucket() == 20 then 1 else 0;
-
-  // (8) qplan_fingerprint: access*100 + group*10 + n_tables, order-sensitive by construction.
-  let fp_ok = if qplan_fingerprint(2, 1, 0) == 102 then (if qplan_fingerprint(0, 2, 1) == 210 then 1 else 0) else 0;
-
-  // (9) qplan_validate on a 6-child node (accept) and a 7-child node (reject on arity alone).
+  let acc = qc_order(acc, 1, rows);
+  let _ = rows[0] = 1000;
+  let _ = rows[1] = 10;
+  let acc = qc_order(acc, 2, rows);
+  let _ = rows[2] = 100;
+  let acc = qc_order(acc, 3, rows);
+  let _ = rows[0] = 2;
+  let _ = rows[1] = 3;
+  let _ = rows[2] = 4;
+  let _ = rows[3] = 5;
+  let acc = qc_order(acc, 4, rows);
+  let acc = qc_fold(acc, qplan_order(5, rows, zeros(8), zeros(2), zeros(1)));
+  let acc = qc_fold(qc_fold(acc, qplan_group(4096)), qplan_group(4097));
+  let acc = qc_fold(qc_fold(acc, qplan_fingerprint(2, 1, 0)), qplan_fingerprint(1, 0, 1));
   let _ = a[1] = 6;
-  let v6 = qplan_validate(0, a);
+  let acc = qc_fold(acc, qplan_validate(0, a));
   let _ = a[1] = 7;
-  let v7 = qplan_validate(0, a);
-  let v_ok = if v6 == 1 then (if v7 == 0 then 1 else 0) else 0;
-
-  // one digit per check, most significant first; 0 anywhere is a failure that names itself.
-  (if acc == 0 then 1 else 0) * 100000000
-    + k1_ok * 10000000 + k2_ok * 1000000 + k2r_ok * 100000 + k3_ok * 10000
-    + g_ok * 1000 + cb_ok * 100 + fp_ok * 10 + v_ok
+  let acc = qc_fold(acc, qplan_validate(0, a));
+  let buf = zeros(64);
+  let n = qplan_explain(1, a, buf);
+  let acc = qc_fold(acc, n);
+  let i = 0;
+  while i < n {
+    let acc = qc_fold(acc, buf[i]);
+    let i = i + 1;
+    0
+  };
+  let q = zeros(4096);
+  let qp = zeros(1);
+  let sb = zeros(512);
+  let sp = zeros(1);
+  let acc = qc_fold(acc, qplan_plan_query("q { from T }", q, qp, sb, sp));
+  let _ = qp[0] = 0;
+  let _ = sp[0] = 0;
+  qc_fold(acc, qplan_plan_query("x", q, qp, sb, sp))
 }

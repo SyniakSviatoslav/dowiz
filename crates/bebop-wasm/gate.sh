@@ -1,5 +1,6 @@
 #!/bin/sh
-# THE FOUR-WAY FOLD, RUN. Two images -- `fixtures/kv.store` (v1, one byte per
+# THE FOUR-WAY FOLD, RUN. (DG5 adds a third image, `fixtures/proj.store`: a log with a
+# projection memo, step 6 below.) Two images -- `fixtures/kv.store` (v1, one byte per
 # cell, FROZEN: every image written before DG3 looks like it) and
 # `fixtures/kv2.store` (v2, eight bytes to a cell, DG3 2026-09-28); four
 # readers; one number each. The gate is green only when every reader that
@@ -79,6 +80,15 @@ else
   say "wasm32 key: build FAILED rc=$? -- $(grep -m1 'error' "$SCRATCH/keywasm.txt")"
   fail=1
 fi
+# The projection reader's module (DG5): `bw_proj` exported, built apart like the key's.
+PROJWASM=target/proj/wasm32-unknown-unknown/release/bebop_wasm.wasm
+if "$CARGO" build --release --target wasm32-unknown-unknown --offline --features proj --target-dir target/proj > "$SCRATCH/projwasm.txt" 2>&1; then
+  pb=$(wc -c < "$PROJWASM" | tr -d ' ')
+  say "wasm32 proj: $pb bytes with bw_proj exported (+$((pb - bytes)) over the reader; not in the ratchet)"
+else
+  say "wasm32 proj: build FAILED rc=$? -- $(grep -m1 'error' "$SCRATCH/projwasm.txt")"
+  fail=1
+fi
 if [ "${1:-}" = "--prove" ]; then
   for f in $FIXTURES; do
     # One bit, in a copy: the LAST payload byte of the image, which is the
@@ -106,6 +116,7 @@ BIN=../../bebop-lang/bebop.bin
 KVBIN=""
 NKBIN=""
 NKTRY=0
+SPBIN=""
 if [ "$(uname -m)" = "aarch64" ] && [ -x "$SEED" ] && [ -f "$BIN" ]; then
   if (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile selfhost/std/kv.bp "$SCRATCH/kv.bin") > "$SCRATCH/kvc.txt" 2>&1; then
     KVBIN="$SCRATCH/kv.bin"
@@ -113,6 +124,11 @@ if [ "$(uname -m)" = "aarch64" ] && [ -x "$SEED" ] && [ -f "$BIN" ]; then
     say "bebop.bin: kv.bp did not compile rc=$? -- $(tail -1 "$SCRATCH/kvc.txt")"; fail=1
   fi
   NKTRY=1
+  if (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile bench/vs_rust/std_tests/sproj.bp "$SCRATCH/sproj.bin") > "$SCRATCH/spc.txt" 2>&1; then
+    SPBIN="$SCRATCH/sproj.bin"
+  else
+    say "bebop.bin: sproj.bp did not compile rc=$? -- $(tail -1 "$SCRATCH/spc.txt")"; fail=1
+  fi
   if (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile bench/vs_rust/std_tests/nodekey.bp "$SCRATCH/nodekey.bin") > "$SCRATCH/nkc.txt" 2>&1; then
     NKBIN="$SCRATCH/nodekey.bin"
   else
@@ -226,6 +242,51 @@ except (ValueError, IndexError):
 done
 [ "$minkey" -lt "$minran" ] && minran=$minkey
 
+# 6. THE PROJECTION MEMO (DG5, SPEC-BEBOP-DAG-RUNTIME §6) ---------------------
+# fixtures/proj.store: a 9-record log bebop wrote, with its fold memoised in the
+# projection table. Each reader prints `proj status=0 n=<records> root=<log fold>
+# memo=<memo value>`; proj.expected derives the numbers. RT S-1 rides along: the
+# wasm32 and python readers refuse a valid superblock whose cells 13-14 are not 0.
+pline="proj status=0 n=$(want proj n) root=$(want proj root) memo=$(want proj memo)"
+ran=0
+bad=""
+if grep -q "test proj_fixture_reads_to_what_bebop_bin_printed ... ok" "$SCRATCH/native.txt"; then
+  ran=$((ran + 1))
+else
+  bad="$bad native"
+fi
+out=$(node harness.mjs --proj "$PROJWASM" fixtures/proj.store 2>&1)
+say "proj wasm32: '$out' rc=$?"
+if [ "$out" = "$pline" ]; then ran=$((ran + 1)); else bad="$bad wasm32"; fi
+out=$(python3 oracle.py --proj fixtures/proj.store 2>&1)
+say "proj python: '$out' rc=$?"
+if [ "$out" = "$pline" ]; then ran=$((ran + 1)); else bad="$bad python"; fi
+if [ -n "$SPBIN" ]; then
+  # sproj.bin reads `proj.store` in the working directory and EXTENDS it (st_open), so a copy.
+  mkdir -p "$SCRATCH/proj" && cp fixtures/proj.store "$SCRATCH/proj/proj.store"
+  pn=$(cd "$SCRATCH/proj" && "$OLDPWD/$SEED" "$SPBIN" n 2>&1)
+  ph=$(cd "$SCRATCH/proj" && "$OLDPWD/$SEED" "$SPBIN" h 2>&1)
+  pp=$(cd "$SCRATCH/proj" && "$OLDPWD/$SEED" "$SPBIN" p 2>&1)
+  out="proj status=0 n=$pn root=$ph memo=$pp"
+  say "proj bebop.bin: '$out'"
+  if [ "$out" = "$pline" ]; then ran=$((ran + 1)); else bad="$bad bebop.bin"; fi
+elif [ "$NKTRY" = 1 ]; then
+  bad="$bad bebop.bin"
+fi
+head -c $(( $(wc -c < fixtures/proj.store) - 8 )) fixtures/proj.store > "$SCRATCH/pcut.store"
+wout=$(node harness.mjs --proj "$PROJWASM" "$SCRATCH/pcut.store" 2>&1)
+pout=$(python3 oracle.py --proj "$SCRATCH/pcut.store" 2>&1)
+say "proj cut: wasm32 -> '$wout'; python -> '$pout'"
+case "$wout" in "proj status=0"*) say "proj cut: wasm32 READ a truncated image"; fail=1 ;; esac
+case "$pout" in "proj status=0"*) say "proj cut: python READ a truncated image"; fail=1 ;; esac
+if [ -n "$bad" ]; then
+  say "proj: readers agreeing with proj.expected: $ran of 4 -- DISAGREE:$bad"
+  fail=1
+else
+  say "proj: readers agreeing with proj.expected: $ran of 4 (bebop.bin counts only on aarch64)"
+fi
+[ "$ran" -lt "$minran" ] && minran=$ran
+
 if [ "$fail" -ne 0 ]; then
   say "RED"
   exit 1
@@ -234,5 +295,5 @@ if [ "$minran" -lt 3 ]; then
   say "RED -- fewer than three readers ran; that is not a parity check"
   exit 1
 fi
-say "GREEN ($minran readers on each of: $FIXTURES + key compile/proj/empty; $bytes bytes)"
+say "GREEN ($minran readers on each of: $FIXTURES + key compile/proj/empty + proj memo; $bytes bytes)"
 exit 0

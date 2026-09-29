@@ -328,7 +328,12 @@ def check_cited_files_exist(r):
         for i, line in enumerate(open(d, errors="replace"), 1):
             for m in pat.finditer(line):
                 rel = m.group(1)
-                if os.path.exists(os.path.join(ROOT, rel)): continue
+                # (iii) W-BATGREEN 2026-09-29: a citation written `../docs/...` names a file in the
+                #     dowiz repo root (the DAG specs live there, not under bebop-lang/). Resolve it
+                #     where it points and STILL require it to exist -- without this, the only ways
+                #     to pass were a false "planned" marker or deleting the citation.
+                up = line[max(0, m.start() - 3):m.start()] == "../"
+                if os.path.exists(os.path.join(ROOT, "..", rel) if up else os.path.join(ROOT, rel)): continue
                 if planned.search(line): continue
                 missing.setdefault(rel, []).append("%s:%d" % (os.path.basename(d), i))
     worst = r.get("max_missing_citations", 0)

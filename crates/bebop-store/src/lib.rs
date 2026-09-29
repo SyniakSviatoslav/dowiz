@@ -6,9 +6,11 @@
 //!   cells 1024..   append-only bump arena of objects
 //!
 //! Superblock (16 cells): 0 magic "BEBOPST1", 1 version, 2 generation, 3 root,
-//! 4 arena_used, 5 layout_table, 6 migration_table, 7 live_cells, 8 superseded_cells,
-//! 9 reserved, 10 commit-object, 11 heads-table, 12 arena capacity in cells,
-//! 13..14 zero, 15 crc32 of cells 0..14.
+//! 4 arena_used, 5 PROJTAB (DG5: the projection table, 0 = none; was `layout_table`, which no
+//! writer ever set), 6 migration_table, 7 live_cells, 8 superseded_cells,
+//! 9 `anc` (DG5: `(first cell the last commit wrote << 32) | crc32` of the cells it wrote; 0 =
+//! no anchor -- every image before DG5, and every commit this crate writes), 10 commit-object,
+//! 11 heads-table, 12 arena capacity in cells, 13..14 zero, 15 crc32 of cells 0..14.
 //! A reader picks the VALID superblock with the higher generation.
 //!
 //! Object: h0 = (layout_digest_lo32 << 32) | length_in_cells,
@@ -36,9 +38,9 @@ pub const ARENA: usize = 1024;
 /// on `n - ARENA`, and only `LogImage` had a floor of its own.
 pub const MIN_BYTES: usize = (ARENA + 1) * 8;
 
-/// zlib CRC-32, table-free (bitwise), over raw bytes.
-pub fn crc32(bytes: &[u8]) -> u32 {
-    let mut c: u32 = 0xFFFF_FFFF;
+/// One step of zlib CRC-32 (table-free, bitwise): the running register over more bytes.
+/// Streaming, so a CRC over cells never stages them in a buffer.
+fn crc32_step(mut c: u32, bytes: &[u8]) -> u32 {
     for &b in bytes {
         c ^= b as u32;
         for _ in 0..8 {
@@ -46,16 +48,17 @@ pub fn crc32(bytes: &[u8]) -> u32 {
             c = (c >> 1) ^ (0xEDB8_8320 & m);
         }
     }
-    !c
+    c
+}
+
+/// zlib CRC-32 over raw bytes.
+pub fn crc32(bytes: &[u8]) -> u32 {
+    !crc32_step(0xFFFF_FFFF, bytes)
 }
 
 /// CRC-32 over `n` cells starting at `off`, taken as little-endian bytes.
 pub fn crc32_cells(cells: &[i64], off: usize, n: usize) -> u32 {
-    let mut buf = Vec::with_capacity(n * 8);
-    for i in 0..n {
-        buf.extend_from_slice(&cells[off + i].to_le_bytes());
-    }
-    crc32(&buf)
+    !cells[off..off + n].iter().fold(0xFFFF_FFFF, |c, v| crc32_step(c, &v.to_le_bytes()))
 }
 
 /// A bebop store file loaded into memory as cells.
@@ -78,6 +81,207 @@ pub struct Superblock {
 /// Far above anything dowiz stores (a hub that has traded for a year is tens of
 /// megabytes) and far below what would hurt to allocate by accident.
 pub const MAX_PAD_CELLS: usize = (512 << 20) / 8;
+
+// ---------------------------------------------------------------------------
+// Read rules over `Cells` (DG5), for the borrowed reader.
+//
+// `Store` owns its cells (`from_bytes` copies the image: 31.1 ms for a 2.9 MB log, five
+// times the fold it feeds -- R §4 of docs/research/2026-09-28-bebop-dag.md). `View` reads
+// the same cells straight out of the caller's `&[u8]`, so a reader that only wants a
+// persisted projection pays for the cells it touches and nothing else. Every rule a reader
+// applies -- which superblock is live, whether it fits, where the root is, what an object
+// header claims -- is a free function over the trait below. The `Store` methods of the same
+// names keep their own slice-based bodies ON PURPOSE: delegating them through the trait grew
+// the Worker's wasm reader by 507 bytes (crates/bebop-wasm bytes.baseline, a ratchet that only
+// falls; measured 2026-09-29, 32262 vs 31755 at one build path). What stops the two drifting
+// is `view_tests::the_view_and_the_store_answer_alike`, over real and corrupted images.
+// ---------------------------------------------------------------------------
+
+/// Read access to an image's cells, owned (`Store`) or borrowed (`View`).
+pub trait Cells {
+    /// Cell `i`, or 0 past the end -- 0 is already this format's null (see `Store::cell`).
+    fn cell_at(&self, i: usize) -> i64;
+    /// How many whole cells the image holds.
+    fn n_cells(&self) -> usize;
+}
+
+impl Cells for Store {
+    #[inline]
+    fn cell_at(&self, i: usize) -> i64 {
+        self.cells.get(i).copied().unwrap_or(0)
+    }
+    fn n_cells(&self) -> usize {
+        self.cells.len()
+    }
+}
+
+/// A borrowed image: the cells are read out of `bytes` on demand, never copied.
+///
+/// NOT PADDED. `Store::from_bytes` pads a trimmed image back to its capacity; a view
+/// reads a cell past the end as 0, which is what the padding would have put there -- but
+/// the rules that bound a CLAIM by the image (`obj_cells`, `sb_fits`, `follow`) bound it by
+/// the bytes the view was given, so on a trimmed image they are STRICTER than `Store`'s
+/// (measured: an object claiming 7166 cells is 7166 in a padded Store, 170 in the view).
+pub struct View<'a> {
+    bytes: &'a [u8],
+    reads: std::cell::Cell<usize>,
+}
+
+impl<'a> View<'a> {
+    pub fn new(bytes: &'a [u8]) -> View<'a> {
+        View { bytes, reads: std::cell::Cell::new(0) }
+    }
+    /// Cells read through this view so far. A memo HIT claims O(1) (RT §6.2); this is the
+    /// number that claim is checked against (`proj::tests::hit_is_o1`).
+    pub fn reads(&self) -> usize {
+        self.reads.get()
+    }
+    pub fn pick(&self) -> Option<Superblock> {
+        pick_in(self)
+    }
+    pub fn root(&self) -> Option<usize> {
+        root_in(self)
+    }
+}
+
+impl Cells for View<'_> {
+    #[inline]
+    fn cell_at(&self, i: usize) -> i64 {
+        self.reads.set(self.reads.get() + 1);
+        match i.checked_mul(8).and_then(|a| self.bytes.get(a..a + 8)) {
+            Some(w) => i64::from_le_bytes([w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]]),
+            None => 0,
+        }
+    }
+    fn n_cells(&self) -> usize {
+        self.bytes.len() / 8
+    }
+}
+
+/// CRC-32 over `n` cells from `off`, little-endian, through `Cells` (a cell past the end reads 0,
+/// as everywhere else; callers bound `n` first).
+pub fn crc32_in<C: Cells + ?Sized>(c: &C, off: usize, n: usize) -> u32 {
+    !(0..n).fold(0xFFFF_FFFF, |h, i| crc32_step(h, &c.cell_at(off + i).to_le_bytes()))
+}
+
+/// `Store::sb_valid`: magic, and cell 15 = CRC-32 of cells 0..14.
+pub fn sb_valid_in<C: Cells + ?Sized>(c: &C, at: usize) -> bool {
+    if at + 16 > c.n_cells() || c.cell_at(at) != MAGIC {
+        return false;
+    }
+    let want = c.cell_at(at + 15) as u32;
+    crc32_in(c, at, 15) == want
+}
+
+/// `Store::sb_fits` -- the reasoning is on that method.
+pub fn sb_fits_in<C: Cells + ?Sized>(c: &C, at: usize) -> bool {
+    let n = c.n_cells() as i64;
+    let pt = c.cell_at(at + 3);
+    let used = c.cell_at(at + 4);
+    if pt < 0 || used < 0 || used > n {
+        return false;
+    }
+    // A PartTab is read at `pt + 18` (B5 step 1), so that cell must exist.
+    // `pt == 0` means "no root", which is a legitimate empty store.
+    // Checked: every one of these came out of the image, and an i64 near
+    // its maximum makes the addition itself a panic.
+    if pt != 0 && pt.checked_add(18).is_none_or(|end| end >= n) {
+        return false;
+    }
+    // And the root the PartTab names has to be inside the image too, or the
+    // first object read walks off the end instead.
+    if pt != 0 {
+        let r = c.cell_at(pt as usize + 18);
+        // An object's header is two cells before its payload.
+        if r < 0 || (r != 0 && r.checked_add(2).is_none_or(|end| end >= n)) {
+            return false;
+        }
+    }
+    true
+}
+
+/// `Store::pick` -- the reasoning is on that method.
+pub fn pick_in<C: Cells + ?Sized>(c: &C) -> Option<Superblock> {
+    let ok = |at: usize| at + 15 <= c.n_cells() && sb_valid_in(c, at);
+    let at = match (ok(SB_A), ok(SB_B)) {
+        (true, true) if c.cell_at(SB_B + 2) > c.cell_at(SB_A + 2) => SB_B,
+        (true, _) => SB_A,
+        (false, true) => SB_B,
+        (false, false) => return None,
+    };
+    if !sb_fits_in(c, at) {
+        return None;
+    }
+    Some(Superblock {
+        at,
+        generation: c.cell_at(at + 2),
+        root: c.cell_at(at + 3),
+        arena_used: c.cell_at(at + 4),
+        live_cells: c.cell_at(at + 7),
+        superseded_cells: c.cell_at(at + 8),
+    })
+}
+
+/// `Store::root`: the DATA root through the PartTab (raw cell `pt + 18`).
+pub fn root_in<C: Cells + ?Sized>(c: &C) -> Option<usize> {
+    let sb = pick_in(c)?;
+    let pt = c.cell_at(sb.at + 3);
+    if pt <= 0 {
+        return None;
+    }
+    let r = c.cell_at(pt as usize + 18);
+    if r <= 0 { None } else { Some(r as usize) }
+}
+
+/// `Store::obj_len`: the header's CLAIM.
+pub fn obj_len_in<C: Cells + ?Sized>(c: &C, obj: usize) -> i64 {
+    c.cell_at(obj) & 0xFFFF_FFFF
+}
+
+/// `Store::obj_cells`: the FACT -- the claim bounded by the image.
+pub fn obj_cells_in<C: Cells + ?Sized>(c: &C, obj: usize) -> usize {
+    let claim = obj_len_in(c, obj).max(0) as usize;
+    claim.min(c.n_cells().saturating_sub(obj.saturating_add(2)))
+}
+
+/// `Store::obj_digest`: the layout digest's low 32 bits.
+pub fn obj_digest_in<C: Cells + ?Sized>(c: &C, obj: usize) -> i64 {
+    (c.cell_at(obj) >> 32) & 0xFFFF_FFFF
+}
+
+/// `Store::obj_crc_ok`: a length that does not fit cannot have a matching CRC.
+pub fn obj_crc_ok_in<C: Cells + ?Sized>(c: &C, obj: usize) -> bool {
+    let len = obj_len_in(c, obj) as usize;
+    if obj.saturating_add(2).saturating_add(len) > c.n_cells() {
+        return false;
+    }
+    let want = ((c.cell_at(obj + 1) >> 32) & 0xFFFF_FFFF) as u32;
+    crc32_in(c, obj + 2, len) == want
+}
+
+/// `Store::get`: payload cell `i`.
+pub fn get_in<C: Cells + ?Sized>(c: &C, obj: usize, i: usize) -> i64 {
+    c.cell_at(obj.saturating_add(2).saturating_add(i))
+}
+
+/// `Store::follow` -- the reasoning is on that method.
+pub fn follow_in<C: Cells + ?Sized>(c: &C, obj: usize, i: usize) -> Option<usize> {
+    let off = get_in(c, obj, i);
+    if off == 0 {
+        return None;
+    }
+    // CHECKED, because the sum itself can overflow: `off` is a whole cell
+    // out of the image, so a corrupted one is any i64 at all, and
+    // `obj as i64 + off` PANICS in a debug build before the bounds test
+    // below ever runs. An arithmetic panic is the same outage as the
+    // out-of-bounds index this function exists to prevent.
+    let at = (obj as i64).checked_add(off)?;
+    // An object needs its two header cells to exist before it is an object.
+    if at < 0 || at as usize + 2 > c.n_cells() {
+        return None;
+    }
+    Some(at as usize)
+}
 
 impl Store {
     /// Create a FRESH store file of `size_bytes`, initialised exactly as `st_open` does on a
@@ -289,8 +493,8 @@ impl Store {
     ///
     /// So a superblock whose offsets do not fit is not a valid superblock. The
     /// image is then refused by the loader above it, loudly, which is what a
-    /// caller can act on.
-    fn sb_fits(&self, at: usize) -> bool {
+    /// caller can act on. (`pick` applies it through `pick_in` -> `sb_fits_in`.)
+    pub fn sb_fits(&self, at: usize) -> bool {
         let n = self.cells.len() as i64;
         let pt = self.cells[at + 3];
         let used = self.cells[at + 4];
@@ -583,6 +787,22 @@ impl Store {
     /// Stage a commit in memory: write the new PartTab and the other superblock.
     /// Returns (parttab_offset, other_superblock_offset).
     pub fn stage_commit(&mut self, tx: &Tx, root: usize) -> (usize, usize) {
+        let keep = self.cells[tx.sb + 5];
+        self.stage_commit_projtab(tx, root, keep)
+    }
+
+    /// `commit_bytes`, naming the projection table the new generation carries (DG5,
+    /// superblock cell 5). Only `proj` calls it; every other commit carries the live
+    /// table forward unchanged, so an image that never had one stays byte-identical.
+    pub fn commit_bytes_projtab(&mut self, tx: &Tx, root: usize, projtab: i64) -> i64 {
+        let _ = self.stage_commit_projtab(tx, root, projtab);
+        tx.next_gen
+    }
+
+    /// `stage_commit` with the PROJTAB cell given. Cell 9 (`anc`) is written 0: this
+    /// writer does not anchor its commits, and a zero anchor sends a bebop reopen down
+    /// the bounded arena scan it has always taken (store.bp `st_reopen_verify`).
+    fn stage_commit_projtab(&mut self, tx: &Tx, root: usize, projtab: i64) -> (usize, usize) {
         let sb = tx.sb;
         let live = self.cells[sb + 7] + tx.live_delta - tx.sup_delta;
         let sup = self.cells[sb + 8] + tx.sup_delta;
@@ -613,7 +833,7 @@ impl Store {
         self.cells[osb + 2] = tx.next_gen;
         self.cells[osb + 3] = pt as i64;
         self.cells[osb + 4] = tx.cursor;
-        self.cells[osb + 5] = 0;
+        self.cells[osb + 5] = projtab;
         self.cells[osb + 6] = mig;
         self.cells[osb + 7] = live;
         self.cells[osb + 8] = sup;
@@ -652,6 +872,10 @@ impl Store {
 pub mod kv;
 pub mod evlog;
 pub mod nodekey;
+pub mod proj;
+
+#[cfg(test)]
+mod view_tests;
 
 #[cfg(test)]
 mod bytes_tests {

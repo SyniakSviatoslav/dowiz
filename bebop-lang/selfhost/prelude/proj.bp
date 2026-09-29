@@ -1,0 +1,498 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/nodekey.bp"
+// selfhost/prelude/proj.bp -- projection nodes in the store (docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md
+// §6, BLUEPRINT DG5). The bebop reader/writer of the SAME bytes crates/bebop-store/src/proj.rs reads and
+// writes; crates/bebop-wasm (oracle.py, the wasm32 module) are the other two readers of fixtures/proj.store.
+//
+//   superblock cell 5  PROJTAB  (0 = no table; every image before DG5 reads 0 there -- st_sb_write_m always
+//                                wrote 0 into the never-used `layout_table` cell)
+//   PROJTAB  [m, (key64, ref PROJ, kind) x m]                                  sorted by key64
+//   PROJ     [key64, kind, code, fmt=1, input_gen, tip0, tip1, ref OUT, fn_key]  9 cells
+//   OUT      [value, count]
+//
+// A memo lives in the SAME image as its input and is reached only through the table, so an image rebuilt
+// from its records carries no memo. `input_gen` is the generation stamped in the INPUT ROOT's h1 (low 32
+// bits), not the image generation: writing a memo is itself a commit, which moves the image generation
+// but not the root (only an append or a put reallocates the root). `tip` is the first 16 bytes of the
+// newest log record's content id (kind 1), or (root offset, root h1) (kind 2). HIT: code, input_gen,
+// tip and count all match. STEP (kind 1 only): the memo's tip is still in the chain, so the memo value is
+// extended by one pj_log_step per newer record -- FNV over frames is prefix-extendable, step == full
+// (S-2). Anything else: the whole fold, and the memo is rewritten. Kind 2 is never extended (S-3).
+//
+// PURITY (P-3): st_proj_eval refuses a fold fn value that is not REGISTERED with trap 124 at run time.
+// Until DG6 lands the `pure` class, the registry is an allowlist of the folds this file defines
+// (pj_log_step for kind 1, pj_kv_fold for kind 2) -- an honest stand-in, not the compiler's check.
+//
+// The event log (crates/bebop-store/src/evlog.rs is the layout's home): root {n, ref LAST, has_tip,
+// tip0..tip3, VERSION} (v2, 8 cells; 7 cells = v1), record {seq, plen, ref PREV, id0..id3, prev0..prev3,
+// flags | actor0..3 if flags&1 | payload packed 8 bytes/cell LE} (v2) or {.., actor0..3, payload one byte
+// per cell} (v1). pj_log_init / pj_log_append write v2 exactly as EvLog::append_tip_bytes does.
+fn pj_sb_projtab() -> i64 { 5 }
+fn pj_kind_log() -> i64 { 1 }
+fn pj_kind_kv() -> i64 { 2 }
+fn pj_fmt() -> i64 { 1 }
+// st_digest of the three layout strings, pinned (sproj re-derives them with st_digest; proj.rs has the test).
+fn pj_dig_projtab() -> i64 { 2699843079 }
+fn pj_dig_proj() -> i64 { 313398166 }
+fn pj_dig_out() -> i64 { 514297014 }
+// evlog.rs DIGEST_EVLOG_ROOT = 0x4556_4C47, DIGEST_EV = 0x4556_5F52 (ASCII tags, not sha256).
+fn pj_dig_evroot() -> i64 { 69 * 16777216 + 86 * 65536 + 76 * 256 + 71 }
+fn pj_dig_ev() -> i64 { 69 * 16777216 + 86 * 65536 + 95 * 256 + 82 }
+// FNV-1a 64: the offset basis 0xcbf29ce484222325 as its two's-complement i64 (kv.bp's fnv_offset).
+fn pj_fnv_offset() -> i64 { 0 - 3750763034362895579 }
+fn pj_fnv_byte(h: i64, b: i64) -> i64 { (h ^ b) * 1099511628211 }
+fn pj_fnv_u64(h: i64, v: i64) -> i64 {
+  let x = h;
+  let k = 0;
+  while k < 8 {
+    let x = pj_fnv_byte(x, (v >> (8 * k)) & 255);
+    let k = k + 1;
+    0
+  };
+  x
+}
+
+// ---- the event log, read -------------------------------------------------------------------------
+fn pj_log_ver(base: [i64], root: ref Obj) -> i64 {
+  if st_len(base, root) < 8 then 1 else (if st_get(base, root, 7) > 0 then st_get(base, root, 7) else 1)
+}
+// pj_ref: payload cell i of obj as an object offset, 0 for a null ref.
+fn pj_ref(base: [i64], obj: i64, i: i64) -> i64 {
+  if st_get(base, obj, i) == 0 then 0 else st_ref(base, obj, i)
+}
+// pj_rec_plen: the payload length a reader can honour -- the header's claim bounded by the cells the
+// object really holds (evlog.rs read_at: obj_cells, not obj_len), so every reader folds the same bytes.
+fn pj_rec_at(base: [i64], ev: i64, ver: i64) -> i64 {
+  if ver >= 2 then (if (st_get(base, ev, 11) & 1) == 1 then (if st_len(base, ev) >= 16 then 16 else 12) else 12) else 15
+}
+fn pj_rec_plen(base: [i64], ev: i64, ver: i64) -> i64 {
+  let at = pj_rec_at(base, ev, ver);
+  let have = st_len(base, ev) - at;
+  let cap = if ver >= 2 then have * 8 else have;
+  let p = st_get(base, ev, 1);
+  if p < 0 then 0 else (if p > cap then (if cap < 0 then 0 else cap) else p)
+}
+// pj_log_step: fold_step (S-2) -- ONE frame of the four-reader LOG fold, seq(8) || plen(8) || payload.
+fn pj_log_step(h: i64, base: [i64], ev: i64, ver: i64) -> i64 {
+  let at = pj_rec_at(base, ev, ver);
+  let n = pj_rec_plen(base, ev, ver);
+  let x = pj_fnv_u64(pj_fnv_u64(h, st_get(base, ev, 0)), n);
+  let b = 0;
+  while b < n {
+    let byte = if ver >= 2 then (st_get(base, ev, at + (b >> 3)) >> (8 * (b & 7))) & 255 else st_get(base, ev, at + b) & 255;
+    let x = pj_fnv_byte(x, byte);
+    let b = b + 1;
+    0
+  };
+  x
+}
+// pj_log_chain: the records newest-first into out[0..], stopping AFTER the record whose id0/id1 equal
+// (t0, t1) when stop == 1; returns how many were written. Bounded by `cap` (a chain that loops is not
+// walked for ever -- evlog.rs step_cap).
+fn pj_log_chain(base: [i64], root: ref Obj, out: [i64], cap: i64, stop: i64, t0: i64, t1: i64) -> i64 {
+  let cur = pj_ref(base, root, 1);
+  let n = 0;
+  let go = if cur == 0 then 0 else 1;
+  while go == 1 {
+    let _ = out[n] = cur;
+    let n = n + 1;
+    let hit = if stop == 1 then (if st_get(base, cur, 3) == t0 then (if st_get(base, cur, 4) == t1 then 1 else 0) else 0) else 0;
+    let nxt = pj_ref(base, cur, 2);
+    let go = if hit == 1 then 0 else (if nxt == 0 then 0 else (if n >= cap then 0 else 1));
+    let cur = nxt;
+    0
+  };
+  n
+}
+// pj_log_back: records from the newest back to AND including the one whose id0/id1 = (t0, t1);
+// 0 when that record is not in the chain within `cap`. A counting pass, so the step path
+// allocates k cells for k new records, never n (the step is O(k) in time AND in arena).
+fn pj_log_back(base: [i64], root: ref Obj, cap: i64, t0: i64, t1: i64) -> i64 {
+  let cur = pj_ref(base, root, 1);
+  let n = 0;
+  let found = 0;
+  let go = if cur == 0 then 0 else 1;
+  while go == 1 {
+    let n = n + 1;
+    let found = if st_get(base, cur, 3) == t0 then (if st_get(base, cur, 4) == t1 then 1 else 0) else 0;
+    let nxt = pj_ref(base, cur, 2);
+    let go = if found == 1 then 0 else (if nxt == 0 then 0 else (if n >= cap then 0 else 1));
+    let cur = nxt;
+    0
+  };
+  n * found
+}
+// pj_log_fold_from: fold recs[k-1] .. recs[0] (oldest first) onto h through the fn value fnv.
+fn pj_log_fold_from(base: [i64], recs: [i64], k: i64, h: i64, ver: i64, fnv: i64) -> i64 {
+  let x = h;
+  let i = k - 1;
+  while i >= 0 {
+    let x = call_fn(fnv, x, base, recs[i], ver);
+    let i = i - 1;
+    0
+  };
+  x
+}
+// pj_log_cap: the root's record count, bounded by what the arena could hold (a record is >= 14 cells) --
+// the count is a CLAIM, and zeros() of a corrupt one would be trap 80 far from the cause.
+fn pj_log_cap(base: [i64], root: ref Obj, tmp: [i64]) -> i64 {
+  let n = st_get(base, root, 0);
+  let most = base[st_pick(base, tmp) + 4] / 14 + 1;
+  if n < 0 then 0 else (if n > most then most else n)
+}
+// pj_log_fold: the whole LOG fold of the image's log, oldest first (the full refold every memo answers to).
+fn pj_log_fold(base: [i64], tmp: [i64]) -> i64 {
+  let root = st_root(base, tmp);
+  let n = pj_log_cap(base, root, tmp);
+  let recs = zeros(n + 1);
+  let k = pj_log_chain(base, root, recs, n + 1, 0, 0, 0);
+  pj_log_fold_from(base, recs, k, pj_fnv_offset(), pj_log_ver(base, root), &pj_log_step)
+}
+
+// ---- the event log, written (v2, one commit per append, tip moved in the same commit) --------------
+fn pj_log_init(base: [i64], tx: [i64], tmp: [i64]) -> i64 {
+  let _ = st_begin(base, tx, tmp);
+  let r = st_alloc(base, tx, 8, pj_dig_evroot());
+  let i = 0;
+  while i < 7 {
+    let _ = st_put(base, r, i, 0);
+    let i = i + 1;
+    0
+  };
+  let _ = st_put(base, r, 7, 2);
+  let _ = st_seal(base, r, tmp);
+  st_commit(base, tx, r, tmp)
+}
+// pay: payload bytes one per cell, plen of them; id = (id0, id1, 0, 0).
+fn pj_log_append(base: [i64], tx: [i64], seq: i64, pay: [i64], plen: i64, id0: i64, id1: i64, tmp: [i64]) -> i64 {
+  let old = st_root(base, tmp);
+  let n = st_get(base, old, 0);
+  let last = pj_ref(base, old, 1);
+  let _ = st_begin(base, tx, tmp);
+  let pc = (plen + 7) / 8;
+  let ev = st_alloc(base, tx, 12 + pc, pj_dig_ev());
+  let _ = st_put(base, ev, 0, seq);
+  let _ = st_put(base, ev, 1, plen);
+  let _ = if last == 0 then st_put(base, ev, 2, 0) else st_link(base, ev, 2, last);
+  let _ = st_put(base, ev, 3, id0);
+  let _ = st_put(base, ev, 4, id1);
+  let _ = st_put(base, ev, 5, 0);
+  let _ = st_put(base, ev, 6, 0);
+  let q = 0;
+  while q < 4 {
+    let _ = st_put(base, ev, 7 + q, if last == 0 then 0 else st_get(base, last, 3 + q));
+    let q = q + 1;
+    0
+  };
+  let _ = st_put(base, ev, 11, 0);
+  let j = 0;
+  while j < pc {
+    let w = 0;
+    let b = 7;
+    while b >= 0 {
+      let w = (w << 8) | (if j * 8 + b < plen then pay[j * 8 + b] & 255 else 0);
+      let b = b - 1;
+      0
+    };
+    let _ = st_put(base, ev, 12 + j, w);
+    let j = j + 1;
+    0
+  };
+  let _ = st_seal(base, ev, tmp);
+  let r = st_alloc(base, tx, 8, pj_dig_evroot());
+  let _ = st_put(base, r, 0, n + 1);
+  let _ = st_link(base, r, 1, ev);
+  let _ = st_put(base, r, 2, 1);
+  let _ = st_put(base, r, 3, id0);
+  let _ = st_put(base, r, 4, id1);
+  let _ = st_put(base, r, 5, 0);
+  let _ = st_put(base, r, 6, 0);
+  let _ = st_put(base, r, 7, 2);
+  let _ = st_seal(base, r, tmp);
+  st_commit(base, tx, r, tmp)
+}
+
+// ---- the KV snapshot fold (kind 2; the fold kv.bp's `h` prints, moved here so it can be registered) -
+fn pj_kv_ver(base: [i64], g: i64) -> i64 {
+  if st_len(base, g) < 6 then 1 else (if st_get(base, g, 5) > 0 then st_get(base, g, 5) else 1)
+}
+fn pj_kv_frame(h: i64, base: [i64], blob: ref Obj, off: i64, len: i64, ver: i64) -> i64 {
+  let x = pj_fnv_u64(h, len);
+  let j = 0;
+  while j < len {
+    let b = off + j;
+    let byte = if ver == 2 then (st_get(base, blob, b >> 3) >> (8 * (b & 7))) & 255 else st_get(base, blob, b) & 255;
+    let x = pj_fnv_byte(x, byte);
+    let j = j + 1;
+    0
+  };
+  x
+}
+// pj_kv_fold: FNV-1a 64 over len||key||len||value in key order -- kv.bp's snapshot_root, byte for byte.
+fn pj_kv_fold(base: [i64], g: i64) -> i64 {
+  let n = st_get(base, g, 0);
+  let kidx = st_ref(base, g, 1);
+  let kblob = st_ref(base, g, 2);
+  let vidx = st_ref(base, g, 3);
+  let vblob = st_ref(base, g, 4);
+  let ver = pj_kv_ver(base, g);
+  let x = pj_fnv_offset();
+  let i = 0;
+  while i < n {
+    let x = pj_kv_frame(x, base, kblob, st_get(base, kidx, 2 * i), st_get(base, kidx, 2 * i + 1), ver);
+    let x = pj_kv_frame(x, base, vblob, st_get(base, vidx, 2 * i), st_get(base, vidx, 2 * i + 1), ver);
+    let i = i + 1;
+    0
+  };
+  x
+}
+
+// ---- keys ------------------------------------------------------------------------------------------
+// pj_fn_key: STAND-IN until DG4 gives every fn a compile-node K64 -- K64 of 'C' || field(name).
+fn pj_fn_key(name: str) -> i64 {
+  let buf = zeros(128);
+  let p = kf_str(buf, key_frame(buf, 67), name);
+  key64(buf, p)
+}
+// pj_key: K64 of 'P' || code || fn_key || [0 || 0] || [kind]. The input's generation is recorded in the
+// entry, never in the index key (the key would move on every append and no memo could be found).
+fn pj_key(code: i64, fnk: i64, kind: i64) -> i64 {
+  let buf = zeros(128);
+  let p = kf_i64(buf, key_frame(buf, 80), code);
+  let p = kf_i64(buf, p, fnk);
+  let s = p;
+  let p = kf_open(buf, p);
+  let p = kf_i64(buf, kf_i64(buf, p, 0), 0);
+  let p = kf_close(buf, s, p);
+  let t = p;
+  let p = kf_open(buf, p);
+  let p = kf_close(buf, t, kf_i64(buf, p, kind));
+  key64(buf, p)
+}
+// pj_code: code_version (RT §2.3 field 1) of a program binary -- (crc32(bytes) << 32) | len, over the
+// .bin at `path` (argv[1] under the seed loader), crc32x over its packed bytes (a partial last cell
+// is zero-filled). The caller computes it ONCE: it reads up to 8 MiB into the arena.
+fn pj_code(path: str) -> i64 {
+  let pl = str_len(path);
+  let pb = zeros(pl + 1);
+  let n = st_str(pb, path);
+  let fd = sys_open(pb, n, 0);
+  let buf = zeros(1048576);
+  let got = sys_read(fd, buf, 1048576 * 8);
+  let _ = sys_close(fd);
+  let len = if got > 0 then got else 0;
+  (crc32x(buf, 0, (len + 7) / 8) << 32) | (len & 4294967295)
+}
+
+// ---- the table ----------------------------------------------------------------------------------------
+fn pj_table(base: [i64], tmp: [i64]) -> i64 {
+  let sb = st_pick(base, tmp);
+  let t = if sb < 0 then 0 else base[sb + pj_sb_projtab()];
+  let ok = if t >= 1024 then (if (base[t] >> 32) == pj_dig_projtab() then st_check(base, t, tmp) else 0) else 0;
+  if ok == 1 then t else 0
+}
+// pj_find: the PROJ for key, CRC-checked through its OUT; 0 = none. why[0]: 0 found, 1 none, 2 corrupt.
+fn pj_find(base: [i64], key: i64, why: [i64], tmp: [i64]) -> i64 {
+  let t = pj_table(base, tmp);
+  let m = if t == 0 then 0 else st_get(base, t, 0);
+  let fits = if m < 0 then 0 else (if 1 + 3 * m <= st_len(base, t) then 1 else 0);
+  let i = 0;
+  let at = 0;
+  while i < m * fits {
+    let at = if st_get(base, t, 1 + 3 * i) == key then pj_ref(base, t, 2 + 3 * i) else at;
+    let i = i + 1;
+    0
+  };
+  let pok = if at == 0 then 0 else (if (base[at] >> 32) == pj_dig_proj() then (if st_len(base, at) == 9 then st_check(base, at, tmp) else 0) else 0);
+  let out = if pok == 1 then pj_ref(base, at, 7) else 0;
+  let ook = if out == 0 then 0 else (if (base[out] >> 32) == pj_dig_out() then (if st_len(base, out) == 2 then st_check(base, out, tmp) else 0) else 0);
+  let good = ook * (if st_get(base, at, 0) == key then 1 else 0) * (if st_get(base, at, 3) == pj_fmt() then 1 else 0);
+  let _ = why[0] = if at == 0 then 1 else (if good == 1 then 0 else 2);
+  if good == 1 then at else 0
+}
+// pj_put: OUT + PROJ + a new sorted table in ONE commit that keeps the data root. Entries of the same fn and
+// kind under another code are dropped (a deploy supersedes its memo; the table does not grow per deploy).
+fn pj_put(base: [i64], tx: [i64], key: i64, kind: i64, code: i64, gen: i64, t0: i64, t1: i64, val: i64, cnt: i64, fnk: i64, tmp: [i64]) -> i64 {
+  let root = st_root(base, tmp);
+  let old = pj_table(base, tmp);
+  let m = if old == 0 then 0 else st_get(base, old, 0);
+  let keep = zeros(m * 3 + 3);
+  let kn = pj_keep(base, old, m, key, kind, fnk, keep);
+  let _ = st_begin(base, tx, tmp);
+  let out = st_alloc(base, tx, 2, pj_dig_out());
+  let _ = st_put(base, out, 0, val);
+  let _ = st_put(base, out, 1, cnt);
+  let _ = st_seal(base, out, tmp);
+  let p = st_alloc(base, tx, 9, pj_dig_proj());
+  let _ = st_put(base, p, 0, key);
+  let _ = st_put(base, p, 1, kind);
+  let _ = st_put(base, p, 2, code);
+  let _ = st_put(base, p, 3, pj_fmt());
+  let _ = st_put(base, p, 4, gen);
+  let _ = st_put(base, p, 5, t0);
+  let _ = st_put(base, p, 6, t1);
+  let _ = st_link(base, p, 7, out);
+  let _ = st_put(base, p, 8, fnk);
+  let _ = st_seal(base, p, tmp);
+  let _ = keep[kn * 3] = key;
+  let _ = keep[kn * 3 + 1] = p;
+  let _ = keep[kn * 3 + 2] = kind;
+  let rows = kn + 1;
+  let _ = pj_sort(keep, rows);
+  let t = st_alloc(base, tx, 1 + 3 * rows, pj_dig_projtab());
+  let _ = st_put(base, t, 0, rows);
+  let i = 0;
+  while i < rows {
+    let _ = st_put(base, t, 1 + 3 * i, keep[i * 3]);
+    let _ = st_link(base, t, 2 + 3 * i, keep[i * 3 + 1]);
+    let _ = st_put(base, t, 3 + 3 * i, keep[i * 3 + 2]);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, t, tmp);
+  let _ = if old == 0 then 0 else st_supersede(base, tx, old);
+  st_commit_pt(base, tx, root, t, tmp)
+}
+// pj_keep: the old table's rows that survive into the new one; returns how many.
+fn pj_keep(base: [i64], old: i64, m: i64, key: i64, kind: i64, fnk: i64, keep: [i64]) -> i64 {
+  let i = 0;
+  let kn = 0;
+  while i < m {
+    let k = st_get(base, old, 1 + 3 * i);
+    let p = pj_ref(base, old, 2 + 3 * i);
+    let same = if p == 0 then 1 else (if st_get(base, p, 8) == fnk then (if st_get(base, p, 1) == kind then 1 else 0) else 0);
+    let drop = if k == key then 1 else same;
+    let _ = if drop == 1 then 0 else (
+      let _ = keep[kn * 3] = k in
+      let _ = keep[kn * 3 + 1] = p in
+      let _ = keep[kn * 3 + 2] = st_get(base, old, 3 + 3 * i) in
+      0
+    );
+    let kn = kn + (1 - drop);
+    let i = i + 1;
+    0
+  };
+  kn
+}
+// pj_sort: insertion sort of `rows` 3-cell rows by their first cell (a table holds a handful of rows).
+fn pj_sort(r: [i64], rows: i64) -> i64 {
+  let i = 1;
+  while i < rows {
+    let j = i;
+    let go = 1;
+    while go == 1 {
+      let sw = if j > 0 then (if r[(j - 1) * 3] > r[j * 3] then 1 else 0) else 0;
+      let _ = if sw == 1 then pj_swap(r, j - 1, j) else 0;
+      let j = j - sw;
+      let go = sw;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn pj_swap(r: [i64], a: i64, b: i64) -> i64 {
+  let q = 0;
+  while q < 3 {
+    let x = r[a * 3 + q];
+    let _ = r[a * 3 + q] = r[b * 3 + q];
+    let _ = r[b * 3 + q] = x;
+    let q = q + 1;
+    0
+  };
+  0
+}
+
+// ---- evaluation ----------------------------------------------------------------------------------------
+// pj_refuse_impure: P-3's run-time twin, trap 124, loud on stderr.
+fn pj_refuse_impure() -> i64 {
+  let m = zeros(48);
+  let n = st_str(m, "trap 124: projection fn is not pure");
+  let _ = m[n] = 10;
+  let _ = sys_write(2, m, n + 1);
+  sys_exit(124)
+}
+fn pj_registered(kind: i64, fnv: i64) -> i64 {
+  if kind == 1 then (if fnv == &pj_log_step then 1 else 0) else (if kind == 2 then (if fnv == &pj_kv_fold then 1 else 0) else 0)
+}
+// st_proj_eval(base, tx, code, kind, fnv, how, tmp): the projection's value, memoised in the image.
+//   how[0] = 0 hit | 1 step (how[1] = records stepped) | 2 full (no memo) | 3 refold (how[1]: 1 code,
+//   2 corrupt, 3 tip, 4 gen); how[2] = the memo count. Writes (and commits) the memo unless it was a hit.
+fn st_proj_eval(base: [i64], tx: [i64], code: i64, kind: i64, fnv: i64, how: [i64], tmp: [i64]) -> i64 {
+  let _ = if pj_registered(kind, fnv) == 1 then 0 else pj_refuse_impure();
+  let key = pj_key(code, pj_fn_key_of(kind), kind);
+  let root = st_root(base, tmp);
+  let gen = st_h1(base, root) & 4294967295;
+  let t0 = pj_tip(base, root, kind, 0);
+  let t1 = pj_tip(base, root, kind, 1);
+  let n = st_get(base, root, 0);
+  let why = zeros(1);
+  let p = pj_find(base, key, why, tmp);
+  let hit = if p == 0 then 0 else pj_is_hit(base, p, code, gen, t0, t1, n);
+  let _ = how[0] = 0;
+  let _ = how[1] = 0;
+  let _ = how[2] = n;
+  let v = if hit == 1 then st_get(base, pj_ref(base, p, 7), 0) else pj_eval_miss(base, tx, code, kind, fnv, key, p, why[0], how, tmp);
+  v
+}
+// pj_tip: word w (0 or 1) of the input's tip -- the newest record's id0/id1 (kind 1; 0 for an
+// empty log), or the root's offset and h1 (kind 2).
+fn pj_tip(base: [i64], root: ref Obj, kind: i64, w: i64) -> i64 {
+  let last = if kind == 1 then pj_ref(base, root, 1) else 0;
+  if kind == 1 then (if last == 0 then 0 else st_get(base, last, 3 + w)) else (if w == 0 then root else st_h1(base, root))
+}
+// st_proj_peek(base, tmp): READ ONLY -- the value of the table's FIRST memo when it is current for
+// the image's input (st_proj_eval's hit rule without the code check: a reader of a memo another
+// program wrote), else 0 - 1; also 0 - 1 when the live superblock's cells 13-14 are not zero (RT
+// S-1). The bebop reader of crates/bebop-wasm/fixtures/proj.store.
+fn st_proj_peek(base: [i64], tmp: [i64]) -> i64 {
+  let sb = st_pick(base, tmp);
+  let s1 = if sb < 0 then 0 else (if base[sb + 13] == 0 then (if base[sb + 14] == 0 then 1 else 0) else 0);
+  let t = if s1 == 1 then pj_table(base, tmp) else 0;
+  let m = if t == 0 then 0 else st_get(base, t, 0);
+  let why = zeros(1);
+  let p = if m < 1 then 0 else pj_find(base, st_get(base, t, 1), why, tmp);
+  let kind = if p == 0 then 0 else st_get(base, p, 1);
+  let root = st_root(base, tmp);
+  let gen = st_h1(base, root) & 4294967295;
+  let ok = if p == 0 then 0 else pj_is_hit(base, p, st_get(base, p, 2), gen, pj_tip(base, root, kind, 0), pj_tip(base, root, kind, 1), st_get(base, root, 0));
+  if ok == 1 then st_get(base, pj_ref(base, p, 7), 0) else 0 - 1
+}
+// pj_is_hit: the memo at p is current -- same code, input generation, tip, and record count.
+fn pj_is_hit(base: [i64], p: i64, code: i64, gen: i64, t0: i64, t1: i64, n: i64) -> i64 {
+  let c = if st_get(base, p, 2) == code then 1 else 0;
+  let g = if st_get(base, p, 4) == gen then 1 else 0;
+  let t = if st_get(base, p, 5) == t0 then (if st_get(base, p, 6) == t1 then 1 else 0) else 0;
+  let k = if st_get(base, pj_ref(base, p, 7), 1) == n then 1 else 0;
+  c * g * t * k
+}
+fn pj_fn_key_of(kind: i64) -> i64 {
+  if kind == 1 then pj_fn_key("st_log_step") else pj_fn_key("kv_snapshot")
+}
+// pj_eval_miss: the step or the whole fold, then the memo write.
+fn pj_eval_miss(base: [i64], tx: [i64], code: i64, kind: i64, fnv: i64, key: i64, p: i64, why: i64, how: [i64], tmp: [i64]) -> i64 {
+  let root = st_root(base, tmp);
+  let gen = st_h1(base, root) & 4294967295;
+  let n = st_get(base, root, 0);
+  let t0 = pj_tip(base, root, kind, 0);
+  let t1 = pj_tip(base, root, kind, 1);
+  let ver = pj_log_ver(base, root);
+  let foreign = if p == 0 then 0 else (if st_get(base, p, 2) == code then 0 else 1);
+  let pv = if p == 0 then 0 else st_get(base, pj_ref(base, p, 7), 0);
+  let pc = if p == 0 then 0 else st_get(base, pj_ref(base, p, 7), 1);
+  let steppable = if kind == 1 then (if p == 0 then 0 else 1 - foreign) else 0;
+  let nc = if kind == 1 then pj_log_cap(base, root, tmp) else 0;
+  let back = if steppable == 1 then pj_log_back(base, root, nc + 1, st_get(base, p, 5), st_get(base, p, 6)) else 0;
+  let k = back - 1;
+  let step = if back > 0 then (if pc + k == n then 1 else 0) else 0;
+  let recs = zeros(if step == 1 then back + 1 else 1);
+  let _ = if step == 1 then pj_log_chain(base, root, recs, back, 1, st_get(base, p, 5), st_get(base, p, 6)) else 0;
+  let v = if step == 1 then pj_log_fold_from(base, recs, k, pv, ver, fnv) else (if kind == 1 then pj_log_fold(base, tmp) else call_fn(fnv, base, root));
+  let r = if p == 0 then (if why == 2 then 2 else 0) else (if foreign == 1 then 1 else (if kind == 2 then (if st_get(base, p, 4) == gen then 3 else 4) else 3));
+  let _ = how[0] = if step == 1 then 1 else (if p == 0 then (if why == 2 then 3 else 2) else 3);
+  let _ = how[1] = if step == 1 then k else r;
+  let _ = pj_put(base, tx, key, kind, code, gen, t0, t1, v, n, pj_fn_key_of(kind), tmp);
+  v
+}
