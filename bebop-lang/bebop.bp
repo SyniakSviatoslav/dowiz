@@ -1306,12 +1306,16 @@ fn fn_param_arity(s: str, name: i64, fntab: [i64], strn: i64) -> i64 {
 fn unit_tuple_scan(s: str, strn: i64) -> i64 {
   let j = [0];
   let hit = [0];
+  // W-GBPOOL (2026-09-29): ONE cursor for the whole scan. `[j[0] + 2, strn]` in the loop body
+  // (b7d025d1) bump-allocated 2 cells per source character, per pass -- measured +407,488
+  // cells (3.26 MB) on a 101,872-byte kernel, the larger half of gb_pool's trap 80.
+  let q = [0, strn];
   let go = 1;
   while go == 1 {
     let c = if j[0] >= strn then 0 else char(s, j[0]);
     let c1 = if j[0] + 1 >= strn then 0 else char(s, j[0] + 1);
     let is_arrow = (if c == 45 then 1 else 0) * (if c1 == 62 then 1 else 0);
-    let q = [j[0] + 2, strn];
+    let _ = q[0] = j[0] + 2;
     let _ = if is_arrow == 1 then skip_ws(s, q) else 0;
     let ca = if q[0] >= strn then 0 else char(s, q[0]);
     let _ = if is_arrow * (if ca == 40 then 1 else 0) == 1 then (let _ = hit[0] = 1 in 0) else 0;
@@ -7162,6 +7166,12 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
   let spc = [0];
   let cpc = [0];
   let tpc = [0];
+  // W-GBPOOL (2026-09-29): the module-brace cursors live OUTSIDE the per-character loop. As
+  // loop-body literals (e08194f0) they bump-allocated fresh cells on EVERY scanned character
+  // and the arena never frees -- measured +211,396 cells (1.69 MB) on a 101,872-byte kernel,
+  // which pushed gb_bg_child past its 8 MiB clone arena (trap 80, gb_pool rc=107).
+  let mbp = [0, strn];
+  let mcp = [0, strn];
   while j + 2 < strn {
     let c0 = char(s, j);
     let c1 = char(s, j + 1);
@@ -7232,13 +7242,13 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
     let _ = if thm_bad >= 0 then diag_exit(s, thm_bad, 110) else 0;
     let thm_next = if is_theorem == 1 then (if thm_line_end >= strn then strn else thm_line_end + 1) else j + 1;
     // WAVE 0: validate module declarations contain only whitespace between braces
-    let mod_brace_pos = [j + 7];
-    let _ = if is_module == 1 then skip_to(s, mod_brace_pos, 123) else 0;
-    let mod_close_pos = [mod_brace_pos[0] + 1];
-    let _ = if is_module == 1 then skip_to(s, mod_close_pos, 125) else 0;
-    let mod_bad = if is_module == 1 then scan_nonspace(s, mod_brace_pos[0] + 1, mod_close_pos[0]) else -1;
+    let _ = mbp[0] = j + 7;
+    let _ = if is_module == 1 then skip_to(s, mbp, 123) else 0;
+    let _ = mcp[0] = mbp[0] + 1;
+    let _ = if is_module == 1 then skip_to(s, mcp, 125) else 0;
+    let mod_bad = if is_module == 1 then scan_nonspace(s, mbp[0] + 1, mcp[0]) else -1;
     let _ = if mod_bad >= 0 then diag_exit(s, mod_bad, 112) else 0;
-    let mod_next = if is_module == 1 then (if mod_close_pos[0] >= strn then strn else mod_close_pos[0] + 1) else j + 1;
+    let mod_next = if is_module == 1 then (if mcp[0] >= strn then strn else mcp[0] + 1) else j + 1;
     let jnext = (j + 1) * (1 - is_quote - is_comment - is_fn - is_test - is_theorem - is_module) + spc[0] * is_quote + cpc[0] * is_comment + tpos_c[0] * is_fn + tpc[0] * is_test + thm_next * is_theorem + mod_next * is_module;
     let j = jnext;
     0

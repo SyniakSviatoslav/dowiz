@@ -432,12 +432,44 @@ fn gb_str_from_file(path: [i64], plen: i64, cap: i64) -> str {
 // internals, out of scope to shrink here) plus this 3.2 MB oversized slurp cap (the real
 // kernel+lib text is ~57 KB) left no headroom. Trimming the slurp cap to the actual known
 // upper bound is the only knob available without touching codegen.
+//
+// W-GBPOOL (2026-09-29), MEASURED -- the budget this child runs in, in 8-byte CELLS: the
+// sys_clone child arena is [sp+4 MiB, sp+12 MiB) = 1,048,576 cells (emit_sys_clone). Replaying
+// this child's allocations for kernel (1,1) in the main arena (bump cursor before/after, 101,103-
+// byte libtext, 101,872-byte kernel source) gave: libtext slurp 101,114; + outbuf/libbuf/path
+// 235,693 (= 336,807); + compile. The compile was 693,771 at ddae413a (peak 1,030,578 -- 18K
+// cells to spare) and 1,411,247 at a88f958a (peak 1,748,054): two per-CHARACTER array literals
+// in bebop.bp's collect_fns (e08194f0, +211,396) and unit_tuple_scan (b7d025d1, +407,488) were
+// hoisted out of their loops, which brought the compile to 792,379 (peak 1,129,186 -- still
+// 80,610 over). The rest is this fn's own buffer: emit_words_offs's insns is a fixed 262,144
+// cells sized for bebop.bp itself, while a kernel is ~10,700 words (nb 42,740 bytes). So the
+// insns buffer here is gb_bg_insns_cap() = 65,536 cells (6x the measured kernel), and an
+// oversize kernel is a loud exit 89 (em's cap_exit inside compile_program_offs, or the n > cap
+// check below for the data section), never a silent overrun.
+fn gb_bg_insns_cap() -> i64 { 65536 }
+// gb_emit_words_capped: bebop.bp's emit_words_offs with the insns buffer sized by the caller.
+// Same result layout ([n, w0, w1, ...]), same compile_program_offs call.
+fn gb_emit_words_capped(src: str, offs: [i64], cap: i64) -> [i64] {
+  let insns = zeros(cap);
+  let n = [0, cap];
+  let _ = compile_program_offs(src, insns, n, offs);
+  let _ = if n[0] > cap then sys_exit(89) else 0;
+  let out = zeros(n[0] + 1);
+  let _ = out[0] = n[0];
+  let k = 0;
+  while k < n[0] {
+    let _ = out[k + 1] = insns[k];
+    let k = k + 1;
+    0
+  };
+  out
+}
 fn gb_bg_compile_noexpand(path: [i64], plen: i64, outbuf: [i64], outcap: i64, srccap: i64) -> i64 {
   let fd = sys_open(path, plen, 0);
   let srcv = sys_slurp(fd, srccap);
   let _ = sys_close(fd);
   let offs = zeros(512);
-  let words0 = emit_words_offs(srcv, offs);
+  let words0 = gb_emit_words_capped(srcv, offs, gb_bg_insns_cap());
   let n0 = words0[0];
   let fnames = zeros(512);
   let fpos = zeros(512);
