@@ -112,7 +112,8 @@ impl Journal {
             StockEvent::Consumed { item, qty, .. }
             | StockEvent::Served { item, qty, .. }
             | StockEvent::Wasted { item, qty, .. }
-            | StockEvent::Produced { item, qty, .. } => self.book.value_of(item, *qty),
+            | StockEvent::Produced { item, qty, .. }
+            | StockEvent::Cooked { item, qty, .. } => self.book.value_of(item, *qty),
             StockEvent::Returned { item, qty, resell: false, .. } => self.book.value_of(item, *qty),
             StockEvent::Stocktake { item, observed, .. } => {
                 let drift = observed - meta.expected.unwrap_or(before);

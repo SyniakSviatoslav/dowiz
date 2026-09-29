@@ -22,6 +22,8 @@
 mod against;
 mod cards;
 mod flatten;
+mod preps;
+pub use preps::DraftPrep;
 /// Exact numbers; `Rat` is also the tree of semi-finished cards' arithmetic (`crate::prep`).
 pub(crate) mod num;
 mod supplies;
@@ -58,6 +60,10 @@ pub struct Opts<'a> {
     /// them; one whose unit the file changes is refused, because the ledger's
     /// counts would silently change meaning.
     pub existing_supplies: &'a [(String, String)],
+    /// Write a semi-finished card as a REAL semi-finished product (`DraftPrep`,
+    /// `crate::prep`) and name it on the dish; `false` flattens it (the reading
+    /// before 2026-09-29, kept for a caller that cannot write supplies).
+    pub preps: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -116,6 +122,8 @@ pub struct RecipeDraft {
     /// "dish: 'sauce' expanded into 4 lines", one per semi-finished use.
     pub flattened: Vec<String>,
     pub warnings: Vec<String>,
+    /// Semi-finished products to create or update, children first (`Opts::preps`).
+    pub preps: Vec<DraftPrep>,
 }
 
 /// Parse the two files. Either may be empty; recipes need the supplies file,
@@ -266,13 +274,14 @@ impl RecipeDraft {
             })
             .collect();
         format!(
-            r#"{{"supplies":[{}],"recipes":[{}],"withoutRecipe":[{}],"retired":[{}],"flattened":[{}],"warnings":[{}]}}"#,
+            r#"{{"supplies":[{}],"recipes":[{}],"withoutRecipe":[{}],"retired":[{}],"flattened":[{}],"warnings":[{}]{}}}"#,
             sup.join(","),
             rec.join(","),
             strs(&self.without_recipe),
             strs(&self.retired),
             strs(&self.flattened),
-            strs(&self.warnings)
+            strs(&self.warnings),
+            preps::json_tail(&self.preps)
         )
     }
 }

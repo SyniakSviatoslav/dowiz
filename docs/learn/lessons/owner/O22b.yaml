@@ -1,0 +1,90 @@
+# Lesson O22b (owner, lane W-PF2 2026-09-29). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# The film is rendered by the operator (tools/learn/all.sh); this file only writes the lesson.
+id: O22b
+role: owner
+module: stock
+order: 14
+covers: []
+title:
+  sq: "Akti i përgatitjes"
+  en: "The production act"
+  uk: "Акт приготування"
+  ru: "Акт приготовления"
+goal:
+  sq: "Regjistroni një përgatitje të gatuar paraprakisht: lëndët dalin sipas kartës, përgatitja hyn në magazinë."
+  en: "Record a batch cooked ahead: the raw items leave by the card, the batch goes onto the shelf."
+  uk: "Записати партію, приготовану заздалегідь: сировина списується за карткою, партія надходить на склад."
+  ru: "Записать партию, приготовленную заранее: сырьё списывается по карте, партия поступает на склад."
+steps:
+  - key: 1
+    anchor: pf.cook
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="pf.cook"]'
+    title:
+      sq: "Gatuaj një përgatitje"
+      en: "Cook a batch"
+      uk: "Приготувати партію"
+      ru: "Приготовить партию"
+    caption:
+      sq: "Nga karta e gjysmëproduktit."
+      en: "From the semi-finished product's card."
+      uk: "З картки напівфабрикату."
+      ru: "Из карты полуфабриката."
+  - key: 2
+    anchor: pf.cookQty
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="pf.cookQty"]'
+      value: "1000"
+    title:
+      sq: "Sa sipas kartës"
+      en: "How much by the card"
+      uk: "Скільки за карткою"
+      ru: "Сколько по карте"
+    caption:
+      sq: "Lëndët e para dalin nga magazina për këtë sasi."
+      en: "The raw items leave the shelf for this amount."
+      uk: "Сировина списується на цю кількість."
+      ru: "Сырьё списывается на это количество."
+  - key: 3
+    anchor: pf.cookOut
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="pf.cookOut"]'
+      value: "960"
+    title:
+      sq: "Sa doli"
+      en: "How much came out"
+      uk: "Скільки вийшло"
+      ru: "Сколько вышло"
+    caption:
+      sq: "E peshuar; ndryshimi është humbja në gatim."
+      en: "Weighed; the difference is the loss on cooking."
+      uk: "Зважено; різниця — втрати при приготуванні."
+      ru: "Взвешено; разница — потери при приготовлении."
+  - key: 4
+    anchor: pf.cookSave
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="pf.cookSave"]'
+    title:
+      sq: "Regjistro"
+      en: "Record"
+      uk: "Записати"
+      ru: "Записать"
+    caption:
+      sq: "Shitjet marrin së pari nga kjo përgatitje."
+      en: "Sales take from this batch first."
+      uk: "Продажі спершу беруть із цієї партії."
+      ru: "Продажи сначала берут из этой партии."

@@ -18,7 +18,8 @@
 //! carried remainder (`stock::carry`), so a thousand sales of 0.77 g book
 //! 774 g, not 1 000.
 //!
-//! A ПФ IS NOT STOCKED (yet): the expander's `stocked` predicate is the seam.
+//! A ПФ MAY BE KEPT READY (W-PF2 R2): a production act (`stock::act`) puts a
+//! batch on the shelf, and a sale takes it first ([`stocked`]).
 
 use serde_json::{json, Value};
 
@@ -194,6 +195,11 @@ pub fn for_ledger(supply: &dyn Fn(&str) -> Option<String>, product_json: &str) -
         Ok(leaves) => {
             let Ok(mut v) = serde_json::from_str::<Value>(product_json) else { return (product_json.to_string(), None) };
             v["bom"] = Value::Array(leaves.iter().map(|l| json!({ "supply": l.item, "uq": l.uq })).collect());
+            // The tree itself, so the ledger can take a batch cooked ahead
+            // first (`stock::basket`); `bom` stays the all-raw answer.
+            if let Some(t) = stocked::tree_json(supply, &lines) {
+                v["tree"] = t;
+            }
             (v.to_string(), None)
         }
         Err(why) => (product_json.to_string(), Some(why)),
@@ -262,8 +268,10 @@ pub fn k_pm(card: &Card, own_unit: &str, own_weight_per_unit: Option<f64>, suppl
 /// Where an item is used, and what one unit of it costs.
 pub mod uses;
 pub mod cost;
+/// A semi-finished product kept ready: the shelf first, the card for the rest.
+pub mod stocked;
 pub use cost::cost_micro;
 pub use uses::{uses_of, Uses};
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

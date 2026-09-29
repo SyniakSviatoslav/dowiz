@@ -139,6 +139,16 @@ pub enum StockEvent {
     /// shelf, holds, lots and cost leave every fold; the records before stay.
     /// NOT a write-off -- no quantity, no waste, no value. Signed.
     Removed { item: String, by: String },
+    /// A PRODUCTION ACT'S INPUT (акт приготування, W-PF2 R2): `qty` of `item`
+    /// went into batch `act` of the semi-finished product `into`, by its card.
+    /// on_hand -= qty and MAY GO NEGATIVE: what was cooked is recorded, as
+    /// `Consumed` and `Served` are. May be ZERO with a `uq` (the carry).
+    Cooked { item: String, qty: Qty, into: String, act: String, by: String },
+    /// A PRODUCTION ACT'S OUTPUT: `qty` of the semi-finished `item` onto the
+    /// shelf, WEIGHED -- so the item is counted from here. `planned`: what
+    /// the card makes from the inputs; `gross`: their grams (0 unknown), so
+    /// the loss on cooking is `gross - qty`. Its value rides on the record.
+    Made { item: String, qty: Qty, planned: Qty, gross: Qty, act: String, by: String },
 }
 
 /// Which loss a [`StockEvent::Produced`] measured: raw -> net (cleaning) or
@@ -178,7 +188,9 @@ impl StockEvent {
             | StockEvent::Returned { item, .. }
             | StockEvent::Unserved { item, .. }
             | StockEvent::Produced { item, .. }
-            | StockEvent::Removed { item, .. } => item,
+            | StockEvent::Removed { item, .. }
+            | StockEvent::Cooked { item, .. }
+            | StockEvent::Made { item, .. } => item,
         }
     }
 
@@ -337,7 +349,9 @@ impl StockLedger {
                     | StockEvent::Served { qty, .. }
                     | StockEvent::Returned { qty, .. }
                     | StockEvent::Unserved { qty, .. }
-                    | StockEvent::Produced { qty, .. } => *qty,
+                    | StockEvent::Produced { qty, .. }
+                    | StockEvent::Cooked { qty, .. }
+                    | StockEvent::Made { qty, .. } => *qty,
                     StockEvent::Stocktake { .. } | StockEvent::Removed { .. } => unreachable!(),
                 };
                 // AN ORDER LINE MAY BE ZERO (SPEC-SEMI-FINISHED §c): a draw of
@@ -348,7 +362,7 @@ impl StockLedger {
                 // prep) keeps §4's "Always > 0".
                 let order_line = matches!(
                     ev,
-                    StockEvent::Reserved { .. } | StockEvent::Consumed { .. } | StockEvent::Released { .. } | StockEvent::Served { .. } | StockEvent::Unserved { .. }
+                    StockEvent::Reserved { .. } | StockEvent::Consumed { .. } | StockEvent::Released { .. } | StockEvent::Served { .. } | StockEvent::Unserved { .. } | StockEvent::Cooked { .. }
                 );
                 if q < 0 || (q == 0 && !order_line) {
                     return Err(StockError::NotPositive { qty: q });
@@ -459,6 +473,17 @@ impl StockLedger {
                     }
                     self.level(to).on_hand.checked_add(*out).ok_or(StockError::Overflow)?;
                 }
+            }
+            // What went into a batch was used, whatever the shelf says (the act
+            // takes a ready product only as far as the shelf has it).
+            StockEvent::Cooked { qty, .. } => {
+                lvl.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
+            }
+            StockEvent::Made { qty, planned, gross, .. } => {
+                if *planned <= 0 || *gross < 0 {
+                    return Err(StockError::NotPositive { qty: (*planned).min(*gross) });
+                }
+                lvl.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
             }
         }
         Ok(())
@@ -577,6 +602,20 @@ impl StockLedger {
                 }
             }
             StockEvent::Removed { item, .. } => self.forget(item),
+            StockEvent::Cooked { item, qty, .. } => {
+                let l = self.level_mut(item);
+                l.on_hand = l.on_hand.checked_sub(*qty).ok_or(StockError::Overflow)?;
+            }
+            StockEvent::Made { item, qty, .. } => {
+                // The batch was weighed: a measurement, like a delivery's.
+                let was_counted = self.is_counted(item);
+                self.mark_counted(item);
+                let l = self.level_mut(item);
+                if !was_counted {
+                    l.on_hand = l.on_hand.max(0);
+                }
+                l.on_hand = l.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
+            }
         }
         Ok(())
     }
@@ -619,7 +658,12 @@ pub fn moved_into<'a>(item: &str, into: &'a Option<String>) -> Option<&'a str> {
 /// venue's shelf -- and every order that reserves against it -- stops.
 pub fn signed(ev: &StockEvent) -> Result<(), StockError> {
     match ev {
-        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } | StockEvent::Produced { by, .. } | StockEvent::Removed { by, .. }
+        StockEvent::Wasted { by, .. }
+        | StockEvent::Stocktake { by, .. }
+        | StockEvent::Produced { by, .. }
+        | StockEvent::Removed { by, .. }
+        | StockEvent::Cooked { by, .. }
+        | StockEvent::Made { by, .. }
             if by.trim().is_empty() =>
         {
             Err(StockError::Unsigned)
@@ -633,7 +677,12 @@ pub fn signed(ev: &StockEvent) -> Result<(), StockError> {
 /// lifecycle's) and for a write-off recorded before signers existed.
 pub fn signer(ev: &StockEvent) -> Option<&str> {
     match ev {
-        StockEvent::Wasted { by, .. } | StockEvent::Stocktake { by, .. } | StockEvent::Produced { by, .. } | StockEvent::Removed { by, .. }
+        StockEvent::Wasted { by, .. }
+        | StockEvent::Stocktake { by, .. }
+        | StockEvent::Produced { by, .. }
+        | StockEvent::Removed { by, .. }
+        | StockEvent::Cooked { by, .. }
+        | StockEvent::Made { by, .. }
             if !by.is_empty() =>
         {
             Some(by)
@@ -703,6 +752,19 @@ pub fn encode(ev: &StockEvent) -> String {
             esc(by)
         ),
         StockEvent::Removed { item, by } => format!(r#"{{"k":"removed","item":"{}","by":"{}"}}"#, esc(item), esc(by)),
+        StockEvent::Cooked { item, qty, into, act, by } => format!(
+            r#"{{"k":"cooked","item":"{}","qty":{qty},"into":"{}","act":"{}","by":"{}"}}"#,
+            esc(item),
+            esc(into),
+            esc(act),
+            esc(by)
+        ),
+        StockEvent::Made { item, qty, planned, gross, act, by } => format!(
+            r#"{{"k":"made","item":"{}","qty":{qty},"planned":{planned},"gross":{gross},"act":"{}","by":"{}"}}"#,
+            esc(item),
+            esc(act),
+            esc(by)
+        ),
     }
 }
 
@@ -766,6 +828,21 @@ pub fn decode(rec: &str) -> Option<StockEvent> {
             by: str_field(rec, "by")?,
         }),
         "removed" => Some(StockEvent::Removed { item, by: str_field(rec, "by")? }),
+        "cooked" => Some(StockEvent::Cooked {
+            item,
+            qty: int_field(rec, "qty")?,
+            into: str_field(rec, "into")?,
+            act: str_field(rec, "act")?,
+            by: str_field(rec, "by")?,
+        }),
+        "made" => Some(StockEvent::Made {
+            item,
+            qty: int_field(rec, "qty")?,
+            planned: int_field(rec, "planned")?,
+            gross: int_field(rec, "gross")?,
+            act: str_field(rec, "act")?,
+            by: str_field(rec, "by")?,
+        }),
         _ => None,
     }
 }
@@ -1206,6 +1283,10 @@ pub mod checkpoint;
 /// The carried remainder of fractional draws, and the exact write door.
 pub mod carry;
 pub use carry::{draws_for, Draw};
+/// A basket whose dishes reach a semi-finished product kept ready.
+pub mod basket;
+/// The production act: a batch of a semi-finished product cooked ahead.
+pub mod act;
 
 /// W-AUDIT S7 (2026-09-27): the recipe is read through brackets inside names
 /// and never from the next array in the record.

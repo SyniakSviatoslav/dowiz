@@ -19,6 +19,7 @@ fn opts(products: &[(String, String)]) -> Opts<'_> {
         local_now_ms: NOW,
         products,
         existing_supplies: &[],
+        preps: false,
     }
 }
 

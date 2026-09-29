@@ -35,6 +35,8 @@ pub fn kind_of(ev: &StockEvent) -> &'static str {
         StockEvent::Unserved { .. } => "unserved",
         StockEvent::Produced { .. } => "produced",
         StockEvent::Removed { .. } => "removed",
+        StockEvent::Cooked { .. } => "cooked",
+        StockEvent::Made { .. } => "made",
     }
 }
 
@@ -48,6 +50,10 @@ pub fn movement_row(e: &Entry) -> Value {
             (*qty, json!({ "out": out, "stage": stage.as_str(), "into": into, "yieldPm": if *qty > 0 { out * 1000 / qty } else { 0 } }))
         }
         StockEvent::Received { qty, .. } => (*qty, json!({ "supplier": e.meta.supplier, "doc": e.meta.doc })),
+        StockEvent::Cooked { qty, into, act, .. } => (*qty, json!({ "into": into, "act": act })),
+        StockEvent::Made { qty, planned, gross, act, .. } => {
+            (*qty, json!({ "planned": planned, "gross": gross, "act": act, "lossG": if *gross > 0 { Some(gross - qty) } else { None } }))
+        }
         other => (other_qty(other), json!({ "order": other.order_id() })),
     };
     let mut row = json!({

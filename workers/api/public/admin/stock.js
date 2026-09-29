@@ -63,7 +63,7 @@ export async function render(host){
   ensureCss(); ensureNomCss(); ensurePrepCss();
   const owner = !me().staff;
   host.innerHTML = `<div class="screen-h"><div><h1 data-t="inv_title"></h1></div>
-    <div class="screen-acts">${me().staff ? '' : iconBtn({ id: 'resetIngredients', icon: 'trash', ariaKey: 'inv_reset' })}${iconBtn({ id: 'importSupplies', icon: 'download', ariaKey: 'importSupplies', tour: 'stock.import' })}${owner ? btn({ id: 'nomSel', variant: 'ghost', icon: 'check', key: sel.on ? 'nom_selectDone' : 'nom_select' }) : ''}${btn({ id: 'addMany', icon: 'note', key: 'nom_addMany' })}${btn({ id: 'addPrep', icon: PREP_ICON, key: 'pf_add' })}${btn({ id: 'addSupply', variant: 'primary', icon: 'plus', key: 'addSupply', tour: 'stock.addSupply' })}</div></div>
+    <div class="screen-acts">${me().staff ? '' : iconBtn({ id: 'resetIngredients', icon: 'trash', ariaKey: 'inv_reset' })}${iconBtn({ id: 'importSupplies', icon: 'download', ariaKey: 'importSupplies', tour: 'stock.import' })}${owner ? btn({ id: 'nomSel', variant: 'ghost', icon: 'check', key: sel.on ? 'nom_selectDone' : 'nom_select' }) : ''}${btn({ id: 'addMany', icon: 'note', key: 'nom_addMany' })}${btn({ id: 'addPrep', icon: PREP_ICON, key: 'pf_add', tour: 'pf.add' })}${btn({ id: 'addSupply', variant: 'primary', icon: 'plus', key: 'addSupply', tour: 'stock.addSupply' })}</div></div>
     <p class="screen-hint" data-t="inv_hint"></p>
     <div class="tiles">${TILES.map(([id, ic, word]) => rowBtn({ cls: 'tile', leading: `<span class="tile-ic">${icon(ic)}</span>`, title: key(word), data: { tile: id } })).join('')}</div>
     <div id="invAlerts" class="inv-alerts"></div>
@@ -95,7 +95,7 @@ export async function render(host){
     const k = e.target.closest('[data-k]'); if (k) { if (k.dataset.k === 'dish') return show('menu'); view.kind = k.dataset.k; return rerender(); }
     const pe = e.target.closest('[data-pedit]'); if (pe) return openPrepEditor(preps.get(pe.dataset.pedit), ctx);
     const a = e.target.closest('[data-act]'); if (a) return act(a.dataset.act, a.dataset.s);
-    const r = e.target.closest('[data-s]'); if (r) return r.dataset.prep ? openPrepCard(preps.get(r.dataset.s), ctx) : openCard(find(r.dataset.s), ctx);
+    const r = e.target.closest('[data-s]'); if (r) return r.dataset.prep ? openPrepCard(withShelf(r.dataset.s), ctx) : openCard(find(r.dataset.s), ctx);
     const one = e.target.closest('[data-asis]'); if (one) return asIs([one.dataset.asis], one);
     const all = e.target.closest('[data-asiscat]'); if (all) return asIs(noRecipe().filter(d => (d.categoryId || '') === all.dataset.asiscat).map(d => d.id), all);
   };
@@ -135,13 +135,21 @@ async function asIs(ids, el){
   } catch (e) { toast(String(e.message || e)); }
 }
 
+/// A semi-finished product with its shelf (W-PF2 R2): the card's numbers
+/// from `/owner/preps`, the level from `/owner/stock` (a batch cooked ahead).
+function withShelf(id){
+  const s = (stock?.supplies || []).find(x => x.id === id) || {};
+  const p = preps.get(id) || s;
+  return { ...p, onHand: s.onHand, available: s.available, counted: s.counted };
+}
+
 function drawList(host){
   const all = stock?.supplies || [];
   $('#invAlerts', host).innerHTML = alertsMarkup(all, noRecipe(), view.flag, t);
   const owner = !me().staff;
   // A semi-finished product is not stocked: its row is its card's numbers, not a shelf.
   const row = sel.on ? sup => pickRow(sup.id, sup.name || sup.id, esc(`${sup.category || ''} · ${P.isPrep(sup) ? t('kind_prep') : `${sup.onHand ?? 0} ${sup.unit || ''}`}`), sel.ids.has(sup.id))
-    : sup => (P.isPrep(sup) ? prepRowMarkup(preps.get(sup.id) || sup, { money, t, del: owner }) : rowMarkup(sup, { money, t, warnDays: stock.expiryWarnDays, del: owner }));
+    : sup => (P.isPrep(sup) ? prepRowMarkup(withShelf(sup.id), { money, t, del: owner }) : rowMarkup(sup, { money, t, warnDays: stock.expiryWarnDays, del: owner }));
   const q = norm(view.q).trim();
   let list = all.filter(s => (view.kind === 'all' || s.kind === view.kind) && (!q || norm(`${s.name} ${s.category} ${s.id} ${s.code || ''} ${s.barcode || ''}`).includes(q)) && matches(s, view.flag));
   if (view.sort === 'name') list = [...list].sort((a, b) => String(a.name).localeCompare(String(b.name), lang));

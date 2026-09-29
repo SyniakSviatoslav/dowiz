@@ -76,6 +76,9 @@ impl Pool {
             self.qty += q;
         }
     }
+    fn join(&mut self, value: i128, q: i128) {
+        (self.value, self.qty) = (self.value + value, self.qty + q);
+    }
     fn draw(&mut self, q: i128) {
         self.take(q);
     }
@@ -114,7 +117,7 @@ impl CostBook {
         &mut self.pools.last_mut().expect("just pushed").1
     }
 
-    pub(super) fn avg_micro(&self, item: &str) -> Option<i128> {
+    pub fn avg_micro(&self, item: &str) -> Option<i128> {
         self.pools.iter().find(|(i, _)| i == item).and_then(|(_, p)| p.avg())
     }
 
@@ -170,7 +173,13 @@ impl CostBook {
             }
             StockEvent::Consumed { item, qty, .. }
             | StockEvent::Wasted { item, qty, .. }
-            | StockEvent::Served { item, qty, .. } => self.pool(item).draw(i128::from(*qty)),
+            | StockEvent::Served { item, qty, .. }
+            | StockEvent::Cooked { item, qty, .. } => self.pool(item).draw(i128::from(*qty)),
+            // A BATCH joins at what its inputs cost when drawn (`value`, `act`); unpriced: at the average.
+            StockEvent::Made { item, qty, .. } => match int_field(rec, "value").filter(|v| *v >= 0) {
+                Some(v) => self.pool(item).join(i128::from(v) * MICRO, i128::from(*qty)),
+                None => self.pool(item).add_at_avg(i128::from(*qty)),
+            },
             StockEvent::Stocktake { item, observed, .. } => {
                 let p = self.pool(item);
                 if let Some(a) = p.avg() {

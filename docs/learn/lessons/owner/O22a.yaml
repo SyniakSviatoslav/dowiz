@@ -1,0 +1,124 @@
+# Lesson O22a (owner, lane W-PF2 2026-09-29). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# The film is rendered by the operator (tools/learn/all.sh); this file only writes the lesson.
+id: O22a
+role: owner
+module: stock
+order: 13
+covers: []
+title:
+  sq: "Gjysmëproduktet"
+  en: "Semi-finished products"
+  uk: "Напівфабрикати"
+  ru: "Полуфабрикаты"
+goal:
+  sq: "Krijoni një gjysmëprodukt me përbërjen bruto dhe daljen, dhe shihni çfarë merr nga magazina një shitje."
+  en: "Create a semi-finished product with its gross components and yield, and see what one sale takes off the shelf."
+  uk: "Створити напівфабрикат зі складом брутто й виходом і побачити, що списує зі складу один продаж."
+  ru: "Создать полуфабрикат с составом брутто и выходом и увидеть, что списывает со склада одна продажа."
+steps:
+  - key: 1
+    anchor: pf.add
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="pf.add"]'
+    title:
+      sq: "Gjysmëprodukt i ri"
+      en: "New semi-finished"
+      uk: "Новий напівфабрикат"
+      ru: "Новый полуфабрикат"
+    caption:
+      sq: "Një salcë, orizi i përgatitur: gatuhet nga lëndë të para."
+      en: "A sauce, seasoned rice: made from raw items."
+      uk: "Соус, заправлений рис: готується із сировини."
+      ru: "Соус, заправленный рис: готовится из сырья."
+  - key: 2
+    anchor: pf.name
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="pf.name"]'
+      value: "Mitsukan"
+    title:
+      sq: "Emri"
+      en: "The name"
+      uk: "Назва"
+      ru: "Название"
+    caption:
+      sq: "Si e quan kuzhina."
+      en: "What the kitchen calls it."
+      uk: "Як його називає кухня."
+      ru: "Как его называет кухня."
+  - key: 3
+    anchor: pf.addLine
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="pf.addLine"]'
+    title:
+      sq: "Përbërja bruto"
+      en: "Gross components"
+      uk: "Склад брутто"
+      ru: "Состав брутто"
+    caption:
+      sq: "Lëndë të para ose gjysmëprodukte të tjera, me sasinë bruto."
+      en: "Raw items or other semi-finished products, with the gross quantity."
+      uk: "Сировина або інші напівфабрикати, з масою брутто."
+      ru: "Сырьё или другие полуфабрикаты, с массой брутто."
+  - key: 4
+    anchor: pf.yield
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="pf.yield"]'
+      value: "1000"
+    title:
+      sq: "Dalja"
+      en: "The yield"
+      uk: "Вихід"
+      ru: "Выход"
+    caption:
+      sq: "Sa peshon gati; K dhe kostoja për kg dalin vetë."
+      en: "What it weighs ready; K and cost per kg follow."
+      uk: "Скільки важить готовим; K і ціна за кг рахуються самі."
+      ru: "Сколько весит готовым; K и цена за кг считаются сами."
+  - key: 5
+    anchor: pf.save
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="pf.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+      ru: "Сохранить"
+    caption:
+      sq: "Çdo pjatë që e përdor përditësohet."
+      en: "Every dish that uses it is updated."
+      uk: "Кожна страва, що його використовує, оновлюється."
+      ru: "Каждое блюдо, которое его использует, обновляется."
+  - key: 6
+    anchor: pf.takes
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="pf.takes"]'
+    title:
+      sq: "Një shitje merr"
+      en: "One sale takes"
+      uk: "Один продаж списує"
+      ru: "Одна продажа списывает"
+    caption:
+      sq: "Lëndët e para të një porcioni, të sakta deri në miligram."
+      en: "The raw items of one portion, exact to the milligram."
+      uk: "Сировина однієї порції, точно до міліграма."
+      ru: "Сырьё одной порции, точно до миллиграмма."

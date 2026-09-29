@@ -22,6 +22,10 @@ pub struct SupplyIn {
     pub low_at: i64,
     #[serde(default)]
     pub shelf_days: Option<i64>,
+    /// The catalogue record itself, sent only for a production act (its
+    /// card and every card under it are read in the object: `cook`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record: Option<String>,
 }
 
 /// What the Worker decided and the object executes.
@@ -49,6 +53,7 @@ pub fn supplies_of(list: Vec<(String, String)>) -> BTreeMap<String, SupplyIn> {
                 unit: v.get("unit").and_then(Value::as_str).unwrap_or("g").to_string(),
                 low_at: v.get("lowAt").and_then(Value::as_i64).unwrap_or(0),
                 shelf_days: v.get("shelfDays").and_then(Value::as_i64),
+                record: None,
             };
             (id, s)
         })
@@ -62,6 +67,10 @@ pub type Told = Vec<(&'static str, Value)>;
 /// A refusal is `(status, words)` and leaves nothing written -- the caller
 /// drops the log.
 pub fn run(log: &mut StockLog, input: &StockTurnIn, expiring_due: bool) -> Result<(Value, Told), (u16, String)> {
+    // A BATCH COOKED AHEAD (W-PF2 R2): its own door, the card read here.
+    if input.kind == super::cook::KIND {
+        return super::cook::run(log, input);
+    }
     let body: moves::StockMoveIn = serde_json::from_value(input.body.clone()).map_err(|e| (400, format!("bad request body: {e}")))?;
     let shelf = |id: &str| input.supplies.get(id).and_then(|s| s.shelf_days);
     let plan = moves::plan(&input.kind, body, &input.by, input.now_ms, input.today, shelf)?;

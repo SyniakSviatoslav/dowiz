@@ -84,7 +84,7 @@ pub fn report(
             "cleanLossG": u.gross_g - u.net_g, "cookLossG": u.net_g - u.out_g, "cost": cost,
             "drawn": m.drawn, "drawnValue": m.drawn_value, "wasted": m.wasted, "wastedValue": m.wasted_value,
             "drift": m.drift, "driftValue": m.drift_value, "received": m.received, "receivedValue": m.received_value,
-            "prepIn": m.prep_in, "prepOut": m.prep_out,
+            "prepIn": m.prep_in, "prepOut": m.prep_out, "cooked": m.cooked, "made": m.made,
             "available": j.ledger.available(id), "counted": j.ledger.is_counted(id),
             "adu": adu, "daysCover": days_cover, "reorder": reorder,
             "byDay": if u.by_day.is_empty() { vec![0; n] } else { u.by_day.clone() }, "drawnByDay": if m.by_day_drawn.is_empty() { vec![0; n] } else { m.by_day_drawn.clone() },

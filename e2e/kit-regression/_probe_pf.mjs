@@ -22,7 +22,14 @@
 //      until then it reports the ПФ id reserved instead and FAILS loudly)
 //   6. where-used of salt names both ПФ and the dish; deleting salt without
 //      confirmUses is a 409; with it, the lines leave the cards
-//   7. cleanup: the order cancelled, the dish, the category, every item deleted
+//   5b. (W-PF2 R2) a PRODUCTION ACT: 2100 g of ПФ 2 by the card, 2050 weighed:
+//      raw items leave by the card, the batch is on the shelf (2050, counted),
+//      the loss on cooking is 300 g (2350 in); a second order of ONE then
+//      reserves 130 g of the READY ПФ 2 and no dry rice
+//   5c. (W-PF2 R1) the recipes IMPORT creates a real ПФ from a semi-finished card:
+//      the dry run names it (new, K 100 %), Apply writes it and the dish's
+//      recipe names it; a second import says "update"
+//   7. cleanup: the orders cancelled, the dish, the category, every item deleted
 import fs from 'node:fs';
 
 const HOST = process.env.HOST || 'https://qa-durres.dowiz.org';
@@ -45,15 +52,17 @@ if (!VENUE) process.exit(1);
 
 const P = 'qapf-';
 const RAW = [['vinegar', 'ml', 15], ['salt', 'g', 5], ['sugar', 'g', 12], ['rice-dry', 'g', 20]];
-const ids = { water: P + 'water', mitsukan: P + 'mitsukan', rice: P + 'rice-seasoned' };
+// The import names its ПФ by the card's slug: 'QA PF sauce' -> 'qa-pf-sauce'.
+const ids = { water: P + 'water', mitsukan: P + 'mitsukan', rice: P + 'rice-seasoned', sauce: 'qa-pf-sauce' };
 const cleanup = async (say = false) => {
   const log = (what, r) => { if (say) console.log(`     cleanup ${what}: ${r.status} ${JSON.stringify(r.body).slice(0, 160)}`); return r; };
   if (ORDER) log('cancel order', await own(`/api/owner/orders/${ORDER}/action`, { action: 'cancel', location_id: VENUE }));
+  if (ORDER2) log('cancel order 2', await own(`/api/owner/orders/${ORDER2}/action`, { action: 'cancel', location_id: VENUE }));
   if (PROD) log('delete dish', await own('/api/owner/products/delete', { ids: [PROD], location_id: VENUE }));
   if (CAT) log('delete category', await own(`/api/owner/categories/${CAT}/delete`, { location_id: VENUE }));
-  log('delete supplies', await own('/api/owner/supplies/delete', { ids: [ids.rice, ids.mitsukan, ...RAW.map(([r]) => P + r), ids.water], location_id: VENUE, confirmUses: true }));
+  log('delete supplies', await own('/api/owner/supplies/delete', { ids: [ids.sauce, ids.rice, ids.mitsukan, ...RAW.map(([r]) => P + r), ids.water], location_id: VENUE, confirmUses: true }));
 };
-let ORDER = null, PROD = null, CAT = null;
+let ORDER = null, ORDER2 = null, PROD = null, CAT = null;
 // A run that died mid-way left its items: start clean.
 await cleanup();
 
@@ -114,6 +123,40 @@ step('the shelf holds the RAW leaves: rice 124, vinegar 25, salt 2, sugar 5, and
   held['rice-dry'] === 124 && held.vinegar === 25 && held.salt === 2 && held.sugar === 5 && !held.mitsukan && !held['rice-seasoned'] && !held.water,
   JSON.stringify(held) + (held['rice-seasoned'] ? ' (the ПФ id was reserved: place.rs/storefront.rs hand-backs not deployed)' : ''));
 
+// ── 5b. a production act, and a sale that takes the ready batch (R2) ────────
+const shelfOf = async id => ((await own('/api/owner/stock', undefined, 'GET')).body?.supplies || []).find(x => x.id === id) || {};
+const riceBefore = await shelfOf(P + 'rice-dry');
+const act = await own('/api/owner/stock/cooked', { item: ids.rice, qty: 2100, out: 2050 });
+step('a batch of ПФ 2 is cooked: 2350 g in, 2050 out, 300 g lost, a cost', act.status === 200 && act.body?.gross === 2350 && act.body?.lossG === 300 && act.body?.value != null,
+  `${act.status} ${JSON.stringify(act.body).slice(0, 200)}`);
+const drawn = Object.fromEntries((act.body?.lines || []).map(l => [String(l.item).slice(P.length), l.qty]));
+step('the act took the card off the shelf: dry rice 1000, vinegar 200, no water', drawn['rice-dry'] === 1000 && drawn.vinegar === 200 && !('water' in drawn), JSON.stringify(drawn));
+const pot = await shelfOf(ids.rice);
+step('the batch is on the shelf, counted', pot.onHand === 2050 && pot.counted === true, `onHand=${pot.onHand} counted=${pot.counted}`);
+const o2 = await j(`/api/public/locations/${slug}/orders`, { method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ contact: { name: 'QA pf', phone: '+355690000019' }, fulfilment: { kind: 'pickup' }, items: [{ product_id: PROD, quantity: 1 }], payment: 'cash' }) });
+ORDER2 = o2.body?.id || o2.body?.order?.id || o2.body?.order_id;
+step('an order of one is placed', o2.status < 400 && !!ORDER2, `${o2.status} ${JSON.stringify(o2.body).slice(0, 120)}`);
+const potAfter = await shelfOf(ids.rice), riceAfter = await shelfOf(P + 'rice-dry');
+step('it reserves 130 g of the READY ПФ 2 and no dry rice', potAfter.reserved === 130 && riceAfter.reserved === riceBefore.reserved,
+  `rice-seasoned reserved ${potAfter.reserved}, dry rice ${riceBefore.reserved} -> ${riceAfter.reserved} (needs the W-PF2 hub deployed)`);
+
+// ── 5c. the recipes import creates a real ПФ (R1) ───────────────────────────
+const CSV = 'dish,ingredient,qty,unit,batch\nQA PF sauce,QA vinegar,80,ml,100 g\nQA PF sauce,QA sugar,20,g,\nQA Philadelphia,QA Rice seasoned,130,g,\nQA Philadelphia,QA PF sauce,10,g,\n';
+const imp = (q = '') => j(`/api/owner/recipes/import${q}`, { method: 'POST', headers: { authorization: `Bearer ${JWT}`, 'content-type': 'text/csv' }, body: CSV });
+const dry = await imp();
+const pv = (dry.body?.preps || []).find(p => p.id === ids.sauce);
+step('the dry run names the ПФ it will create: new, K 100 %', dry.status === 200 && pv?.new === true && pv?.k === 1000 && !(dry.body?.rows || []).some(r => r.error),
+  `${dry.status} ${JSON.stringify(dry.body?.preps || dry.body).slice(0, 200)}`);
+const applied = await imp('?apply=1');
+step('Apply writes the ПФ and the dish', applied.status === 200 && applied.body?.written === 2, `${applied.status} written=${applied.body?.written} ${JSON.stringify(applied.body?.warnings)}`);
+const dish = ((await own(`/api/owner/products?id=${PROD}`, undefined, 'GET')).body?.products || [])[0] || {};
+const lines = Object.fromEntries((dish.bom || []).map(l => [l.supply, l.qty]));
+step('the dish names both ПФ: rice seasoned 130, the sauce 10', lines[ids.rice] === 130 && lines[ids.sauce] === 10, JSON.stringify(lines));
+const again = await imp();
+step('a second import says update, not new', again.status === 200 && !(again.body?.warnings || []).length && (again.body?.preps || []).find(p => p.id === ids.sauce)?.new === false,
+  `${again.status} ${JSON.stringify(again.body?.warnings)}`);
+
 // ── 6. where used, and the delete that asks first ───────────────────────────
 const u = await own(`/api/owner/supplies/${P}salt/uses`, undefined, 'GET');
 const named = { preps: (u.body?.uses?.preps || []).map(p => p.id), dishes: (u.body?.uses?.dishes || []).map(d => d.id) };
@@ -126,7 +169,8 @@ step('and nothing was deleted', stillThere.status === 200);
 // ── 7. cleanup ──────────────────────────────────────────────────────────────
 await cleanup(true);
 const gone = await own(`/api/owner/supplies/${ids.rice}/uses`, undefined, 'GET');
-step('cleanup: the cards are gone', gone.status === 404, `${gone.status}`);
+const gone2 = await own(`/api/owner/supplies/${ids.sauce}/uses`, undefined, 'GET');
+step('cleanup: the cards are gone', gone.status === 404 && gone2.status === 404, `${gone.status} ${gone2.status}`);
 const ledger = await own('/api/owner/stock', undefined, 'GET');
 step('cleanup: the shelf forgot the QA items', !(ledger.body?.supplies || []).some(x => x.id.startsWith(P)));
 

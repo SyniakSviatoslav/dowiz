@@ -9,8 +9,8 @@ fn w() -> Window {
 fn dishes() -> HashMap<String, Dish> {
     let line = |s: &str, qty, g, n, o| DishLine { supply: s.into(), qty, gross_g: Some(g), net_g: Some(n), out_g: Some(o) };
     HashMap::from([
-        ("sake".to_string(), Dish { id: "sake".into(), name: "Sake".into(), lines: vec![line("salmon", 100, 100, 55, 50), line("rice", 90, 90, 90, 200)] }),
-        ("cola".to_string(), Dish { id: "cola".into(), name: "Cola".into(), lines: vec![] }),
+        ("sake".to_string(), Dish { id: "sake".into(), name: "Sake".into(), lines: vec![line("salmon", 100, 100, 55, 50), line("rice", 90, 90, 90, 200)], leaves: vec![] }),
+        ("cola".to_string(), Dish { id: "cola".into(), name: "Cola".into(), lines: vec![], leaves: vec![] }),
     ])
 }
 fn order(id: &str, at: i64, status: &str, items: Value) -> Value {

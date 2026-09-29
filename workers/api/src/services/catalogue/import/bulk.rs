@@ -74,6 +74,7 @@ async fn bulk(mut req: Request, ctx: RouteContext<crate::Req>, kind: Kind) -> Re
         "notInFile": draft.retired,
         "retired": if apply && retire { draft.retired.len() } else { 0 },
         "flattened": draft.flattened,
+        "preps": preps::rows(&cat, &draft),
         "warnings": draft.warnings,
         "rows": preview,
         "catalogue": room,
@@ -109,7 +110,7 @@ pub(crate) fn read(cat: &Catalog, text: &str, kind: Kind, scale: CostScale, now_
     let zone = crate::hubstore::zone_of(location.as_ref());
     let currency = crate::services::venue::currency_of(cat);
     let products = products_of(cat);
-    let (known, existing) = supplies_of(cat);
+    let (known, existing) = preps::supplies_of(cat);
     let opts = Opts {
         currency: &currency,
         cost_scale: Some(scale),
@@ -117,6 +118,7 @@ pub(crate) fn read(cat: &Catalog, text: &str, kind: Kind, scale: CostScale, now_
         local_now_ms: dowiz_hub::tz::local_ms(zone, now_ms),
         products: &products,
         existing_supplies: &existing,
+        preps: true,
     };
     match kind {
         Kind::Supplies => {
@@ -126,7 +128,8 @@ pub(crate) fn read(cat: &Catalog, text: &str, kind: Kind, scale: CostScale, now_
         }
         Kind::Recipes => {
             let d = recipes::recipes_against(text, &opts, &known);
-            let rows = d.recipes.iter().map(|r| recipe_row(cat, r)).collect();
+            let staged = preps::staged(cat, &d); // the dishes judged against the ПФ they name
+            let rows = d.recipes.iter().map(|r| recipe_row(staged.as_ref().unwrap_or(cat), r)).collect();
             (d, rows)
         }
     }
@@ -140,22 +143,6 @@ fn products_of(cat: &Catalog) -> Vec<(String, String)> {
             Some((id, v.get("name")?.as_str()?.to_string()))
         })
         .collect()
-}
-
-/// The catalogue's supplies: as matchable drafts, and as `(id, unit)`.
-fn supplies_of(cat: &Catalog) -> (Vec<DraftSupply>, Vec<(String, String)>) {
-    let mut known = Vec::new();
-    let mut existing = Vec::new();
-    for (id, j) in cat.supplies() {
-        let Ok(v) = serde_json::from_str::<Value>(&j) else { continue };
-        let unit = v.get("unit").and_then(Value::as_str).unwrap_or("g");
-        let name = v.get("name").and_then(Value::as_str).unwrap_or(&id);
-        if let Some(d) = DraftSupply::known(&id, name, unit) {
-            known.push(d);
-        }
-        existing.push((id, unit.to_string()));
-    }
-    (known, existing)
 }
 
 /// `GET /api/owner/products[?id=]` — the dishes AS STORED, recipe included.
@@ -277,7 +264,8 @@ pub(crate) fn apply_supplies(cat: &mut Catalog, draft: &RecipeDraft, retire: boo
 /// removed since the dry run is skipped; an unknown supply refuses the whole
 /// request (nothing is saved -- the closure's error aborts the object turn).
 pub(crate) fn apply_recipes(cat: &mut Catalog, draft: &RecipeDraft) -> std::result::Result<usize, String> {
-    let mut n = 0;
+    // The ПФ first: the dishes' lines name them (R1).
+    let mut n = preps::stage(cat, draft)?;
     for r in &draft.recipes {
         let Some(pj) = cat.product(&r.product_id) else { continue };
         let mut p: Value = serde_json::from_str(&pj).map_err(|e| format!("{}: unreadable: {e}", r.product_id))?;
@@ -293,6 +281,7 @@ pub(crate) fn apply_recipes(cat: &mut Catalog, draft: &RecipeDraft) -> std::resu
     Ok(n)
 }
 
+pub(crate) mod preps;
 pub(crate) mod room;
 pub(crate) use room::projected;
 

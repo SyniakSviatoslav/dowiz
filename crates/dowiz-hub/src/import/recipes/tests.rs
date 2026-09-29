@@ -21,6 +21,7 @@ fn opts<'a>(products: &'a [(String, String)], existing: &'a [(String, String)]) 
         local_now_ms: NOW,
         products,
         existing_supplies: existing,
+        preps: false,
     }
 }
 

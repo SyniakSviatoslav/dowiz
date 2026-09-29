@@ -39,7 +39,7 @@ fn old_encode(ev: &StockEvent) -> String {
         ),
         // Did not exist in HEAD's encoder: nothing old can have written one.
         StockEvent::Served { .. } | StockEvent::Returned { .. } | StockEvent::Unserved { .. } | StockEvent::Produced { .. }
-        | StockEvent::Removed { .. } => {
+        | StockEvent::Removed { .. } | StockEvent::Cooked { .. } | StockEvent::Made { .. } => {
             String::new()
         }
     }

@@ -12,7 +12,7 @@ fn log() -> StockLog {
     log
 }
 fn draw(i: usize) -> Vec<Draw> {
-    vec![Draw { item: "salt".into(), uq: SALT, order_id: format!("o{i}") }]
+    vec![Draw { item: "salt".into(), uq: SALT, order_id: format!("o{i}"), via: None }]
 }
 
 #[test]
@@ -77,14 +77,14 @@ fn a_cancel_undoes_its_own_fraction_exactly() {
 fn whole_lines_and_every_old_record_leave_the_carry_at_zero() {
     let mut log = log();
     log.append(&StockEvent::Reserved { item: "salt".into(), qty: 50, order_id: "o1".into() }).unwrap();
-    log.append_draws(&[Draw { item: "salt".into(), uq: 100 * MICRO, order_id: "o2".into() }]).unwrap();
+    log.append_draws(&[Draw { item: "salt".into(), uq: 100 * MICRO, order_id: "o2".into(), via: None }]).unwrap();
     let c = log.fold_tail(false, false).unwrap().2;
     assert_eq!(c, Carry::default(), "no fractional draw: both maps empty, so old checkpoints keep their bytes");
     assert!(!log.raw()[2].contains("uq"), "a whole draw writes no uq: {}", log.raw()[2]);
     assert_eq!(log.ledger().unwrap().level("salt").reserved, 150);
     let d = draws_for("o3", &[(r#"{"bom":[{"supply":"salt","qty":2},{"supply":"x","uq":1500000}]}"#.into(), 3), (r#"{"bom":[{"supply":"x","qty":1}]}"#.into(), 1)]);
-    assert_eq!(d, vec![Draw { item: "salt".into(), uq: 6 * MICRO, order_id: "o3".into() }, Draw { item: "x".into(), uq: 5_500_000, order_id: "o3".into() }]);
-    assert!(log.append_draws(&[Draw { item: "salt".into(), uq: 0, order_id: "o4".into() }]).is_err(), "a zero draw is not a draw");
+    assert_eq!(d, vec![Draw { item: "salt".into(), uq: 6 * MICRO, order_id: "o3".into(), via: None }, Draw { item: "x".into(), uq: 5_500_000, order_id: "o3".into(), via: None }]);
+    assert!(log.append_draws(&[Draw { item: "salt".into(), uq: 0, order_id: "o4".into(), via: None }]).is_err(), "a zero draw is not a draw");
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn the_carry_survives_a_checkpoint_and_a_short_shelf_still_refuses() {
     assert_eq!(through, genesis, "fold = checkpoint + tail");
     assert_eq!(log.ledger().unwrap(), StockLedger::fold(&log.events()).unwrap());
     // The shelf still decides: 2000 g on hand, a draw of 3 kg is refused whole.
-    assert!(log.append_draws(&[Draw { item: "salt".into(), uq: 3000 * MICRO, order_id: "big".into() }]).is_err());
+    assert!(log.append_draws(&[Draw { item: "salt".into(), uq: 3000 * MICRO, order_id: "big".into(), via: None }]).is_err());
 }
 
 /// A till import's sales go through the same door as `served`, and a void

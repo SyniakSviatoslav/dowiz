@@ -7,6 +7,7 @@
 
 import { ui, btn, pill, rowBtn, rowDiv } from './parts.js';
 import * as P from './prep-logic.js';
+import { shelfFact } from './pf2-view.js';
 
 const esc = ui.esc;
 const icon = name => `<i class="ti ti-${esc(name)}" aria-hidden="true"></i>`;
@@ -17,7 +18,8 @@ const pct = pm => (pm == null ? null : `${Math.abs(pm) % 10 ? (pm / 10).toFixed(
 export function prepRowMarkup(p, { money, t, del = false }){
   const k = pct(p.k);
   const facts = [p.category, `${t('pf_yield')} ${p.yield ?? '-'} ${esc(p.unit || 'g')}`, k ? `K ${k}` : null,
-    p.costPer != null ? `${money(p.costPer)} ${t(P.perWord(p.unit))}` : t('pf_costUnknown')].filter(Boolean).join(' · ');
+    p.costPer != null ? `${money(p.costPer)} ${t(P.perWord(p.unit))}` : t('pf_costUnknown'),
+    p.counted ? `${t('pf_onShelf')} ${p.onHand ?? 0} ${p.unit || 'g'}` : null].filter(Boolean).join(' · ');
   const n = (p.uses?.dishes || []).length, np = (p.uses?.preps || []).length;
   const used = n || np ? `${t('pf_usedIn')}: ${n} ${t('pf_dishes')}${np ? `, ${np} ${t('pf_preps')}` : ''}` : t('pf_usedNowhere');
   const card = rowBtn({ leading: icon(PREP_ICON), title: p.name || p.id, data: { s: p.id, prep: '1' },
@@ -40,7 +42,7 @@ export function usesMarkup(uses, t){
   const preps = uses?.preps || [], dishes = uses?.dishes || [];
   if (!preps.length && !dishes.length) return `<p class="hint" data-t="pf_usedNowhere"></p>`;
   const rows = (list, kind) => list.map(x => rowDiv({ title: x.name || x.id, leading: icon(kind === 'prep' ? PREP_ICON : 'bowl-chopsticks'),
-    trailing: kind === 'dish' ? btn({ variant: 'ghost', icon: 'scale', key: 'pf_takes', data: { takes: x.id, tname: x.name || x.id } }) : '' })).join('');
+    trailing: kind === 'dish' ? btn({ variant: 'ghost', icon: 'scale', key: 'pf_takes', tour: 'pf.takes', data: { takes: x.id, tname: x.name || x.id } }) : '' })).join('');
   return `${preps.length ? `<p class="ui-label">${esc(t('pf_preps'))} · ${preps.length}</p><div class="rows">${rows(preps, 'prep')}</div>` : ''}
     ${dishes.length ? `<p class="ui-label">${esc(t('pf_dishes'))} · ${dishes.length}</p><div class="rows">${rows(dishes, 'dish')}</div>` : ''}`;
 }
@@ -56,7 +58,8 @@ export function cardMarkup(p, { money, t, owner = true }){
     ${k ? '' : `<p class="hint">${esc(t('pf_k'))}: ${esc(t('pf_kUnknown'))}</p>`}${p.costPer == null ? `<p class="hint" data-t="pf_costUnknown"></p>` : ''}
     <p class="eyebrow mt-3" data-t="pf_lines"></p>${linesTable(p, { money, t })}
     <p class="eyebrow" data-t="pf_usedIn"></p>${usesMarkup(p.uses, t)}
-    <div class="btn-row">${btn({ id: 'pfEdit', variant: 'primary', icon: 'adjustments', key: 'edit' })}${btn({ id: 'pfRetire', variant: 'ghost', icon: 'box', key: 'retireSupply' })}${owner ? btn({ id: 'pfDelete', variant: 'danger', icon: 'trash', key: 'nom_delete' }) : ''}</div>`;
+    <p class="eyebrow mt-3" data-t="pf_onShelf"></p>${shelfFact(p, t)}
+    <div class="btn-row">${btn({ id: 'pfCook', variant: 'primary', icon: 'flame', key: 'pf_cook', tour: 'pf.cook' })}${btn({ id: 'pfEdit', variant: 'secondary', icon: 'adjustments', key: 'edit' })}${btn({ id: 'pfRetire', variant: 'ghost', icon: 'box', key: 'retireSupply' })}${owner ? btn({ id: 'pfDelete', variant: 'danger', icon: 'trash', key: 'nom_delete' }) : ''}</div>`;
 }
 
 /// One editor line: the item's name, its quantity field in ITS unit, remove.

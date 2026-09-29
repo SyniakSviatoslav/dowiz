@@ -38,6 +38,18 @@ pub struct Dish {
     pub id: String,
     pub name: String,
     pub lines: Vec<DishLine>,
+    /// THE RAW ITEMS ONE PORTION TAKES, in millionths of each one's base
+    /// unit, when a line names a semi-finished product (W-PF2 R3,
+    /// `dowiz_hub::prep::expand`): the ingredient use is counted from these,
+    /// not from the ПФ line. Empty for a recipe of raw lines only.
+    pub leaves: Vec<(String, i64)>,
+}
+
+const MICRO: i64 = dowiz_hub::prep::MICRO;
+
+/// Millionths to whole base units, half up.
+fn whole(micro: i64) -> i64 {
+    (micro + MICRO / 2).div_euclid(MICRO)
 }
 
 /// The days of the report, local midnights oldest first, and where it ends.
@@ -88,6 +100,10 @@ pub struct Use {
     pub gross_g: i64,
     pub net_g: i64,
     pub out_g: i64,
+    /// Leaf draws not yet rounded (millionths), whole and per day: a ПФ's
+    /// fraction of a gram is summed over the window and rounded ONCE.
+    pub micro: i64,
+    pub micro_by_day: Vec<i64>,
 }
 
 /// One day's sales.
@@ -145,14 +161,32 @@ pub fn fold(orders: &[Value], dishes: &HashMap<String, Dish>, w: &Window) -> Sal
                 s.unmodelled += q;
                 continue;
             };
-            for l in &dish.lines {
-                let u = s.uses.entry(l.supply.clone()).or_insert_with(|| Use { by_day: vec![0; n], ..Use::default() });
+            for (item, uq) in &dish.leaves {
+                let u = s.uses.entry(item.clone()).or_insert_with(|| Use { by_day: vec![0; n], micro_by_day: vec![0; n], ..Use::default() });
+                u.micro += uq * q;
+                u.micro_by_day[d] += uq * q;
+            }
+            for l in dish.lines.iter().filter(|_| dish.leaves.is_empty()) {
+                let u = s.uses.entry(l.supply.clone()).or_insert_with(|| Use { by_day: vec![0; n], micro_by_day: vec![0; n], ..Use::default() });
                 u.by_day[d] += l.qty * q;
                 u.qty += l.qty * q;
                 u.gross_g += l.gross_g.unwrap_or(0) * q;
                 u.net_g += l.net_g.unwrap_or(0) * q;
                 u.out_g += l.out_g.unwrap_or(0) * q;
             }
+        }
+    }
+    // The leaves' millionths, rounded once over the window. Grams through a
+    // ПФ are its raw grams: no cleaning or cooking loss at the dish (the
+    // batch's loss is the production act's, `shelf::fold` "yields").
+    for u in s.uses.values_mut() {
+        let g = whole(u.micro);
+        u.qty += g;
+        u.gross_g += g;
+        u.net_g += g;
+        u.out_g += g;
+        for (d, m) in u.micro_by_day.iter().enumerate() {
+            u.by_day[d] += whole(*m);
         }
     }
     s
@@ -181,6 +215,20 @@ pub fn cogs_of(row: &DishRow, today: Option<i64>) -> (Option<i64>, Vec<i64>) {
 pub fn portion_cost(dish: &Dish, supplies: &HashMap<String, Supply>, book: &CostBook) -> Option<i64> {
     if dish.lines.is_empty() {
         return None;
+    }
+    if !dish.leaves.is_empty() {
+        // Exact through the tree: Σ millionths × the average, rounded once.
+        let mut sum: i128 = 0;
+        for (item, uq) in &dish.leaves {
+            let s = supplies.get(item)?;
+            let per = match book.avg_micro(item) {
+                Some(a) => a,
+                None => i128::from(s.list_cost?) * i128::from(MICRO) / i128::from(s.basis.max(1)),
+            };
+            sum += per * i128::from(*uq);
+        }
+        let m2 = i128::from(MICRO) * i128::from(MICRO);
+        return i64::try_from((sum + m2 / 2) / m2).ok();
     }
     dish.lines.iter().map(|l| supplies.get(&l.supply).and_then(|s| cost_of(s, book, l.qty))).sum()
 }

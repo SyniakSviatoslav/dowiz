@@ -249,3 +249,96 @@ the old checkpoint bodies (`fixtures_are_the_encoder_output`, `the_codec_round_t
 `ebills/import.rs:145` (`for_ledger`), `command/place.rs:137-141` (`draws_for` + `append_draws`),
 `services/operations/stock.rs` (hydrate a `prep` row), `services/analytics/kitchen.rs` (expand through ПФ),
 `public/admin/menu.js` (the "one sale takes" button).
+
+---
+
+## k) Second pass (lane W-PF2, tree `/root/lanes/w-pf2` at `620e2464`)
+
+Rows R1–R5 of the lane card. Paths that exist unless written `+new`.
+
+### k.1 The importer creates real ПФ (R1) — supersedes §g
+
+§g's seam is built. `import::recipes::Opts` gains `preps: bool`; the Worker's bulk import passes `true`, so a
+prepack card of the RECIPES file becomes a `+import/recipes/preps.rs` `DraftPrep` (id = the card's slug, name,
+unit = its batch unit, lines = `(item, gross)`, yield = the batch) in `RecipeDraft::preps`, CHILDREN FIRST (a fixpoint
+over "every ПФ it names is already made"), and a dish whose card uses it gets a `bom` line NAMING the ПФ. The Worker
+(`+services/catalogue/import/bulk/preps.rs`) writes each through the console's own card writer
+(`operations::preps::{check, save}`: unknown item, cycle, depth, bounds, re-derivation of every dish it reaches)
+BEFORE `set_bom` writes the dishes, in the same object turn. The dry run judges the dish rows against a copy of the
+catalogue already holding the ПФ (no false "unknown supply") and lists them (`preps: [{id, name, unit, yield, lines,
+new, k}]`); the console draws them (`public/admin/pf2-view.js prepsBlock`).
+
+- **Not guessed.** A prepack that cannot be a real card — a line or batch that is not a whole number of its unit,
+  more than 40 lines, a refused row, a cycle, more than 6 levels — is not created; a warning names it, and each dish
+  using it is FLATTENED through it as before (or refused by the same rule). A real ПФ removes one refusal: 7 g of a
+  sauce whose leaves would be 5.6 g of mayo was refused flattened and is now a line of 7 g (the carry books it).
+- **Idempotent.** A second import finds the ПФ it made (`bulk/preps.rs supplies_of` marks catalogue ПФ `kind: prep`),
+  says "update", and writes the same records (test `the_same_file_twice_changes_nothing`). A RAW supply of that name
+  is still a clash ("is both a supply and a semi-finished product").
+- **A flat file reads byte for byte as before**: `as_json` of the old reader was captured from the unmodified tree and
+  pinned (`import/recipes/preps/tests.rs FLAT_BEFORE`); `preps` is written only when non-empty; the catalogue after
+  Apply equals the `preps: false` reading's (`a_flat_file_writes_what_it_wrote_before_this_row`).
+- **Defect closed on the way.** A supplies import with "retire missing" retired every ПФ (a ПФ is in no ingredients
+  file). The existing-supplies list handed to the reader now holds raw items only
+  (`a_supplies_file_never_retires_a_semi_finished_product`).
+
+### k.2 ПФ kept ready: the production act (R2) — supersedes §c's "OUT OF SCOPE"
+
+**Two new records** (`stock.rs`, every reader re-derived in the same change: ledger, `decide`, signer, encode/decode,
+cost book, carry, journal value, lots, stock view, waste, kitchen analytics):
+
+    {"k":"cooked","item":<input>,"qty":Q,"into":<ПФ>,"act":<id>,"by":<signer>[,"uq":…]}
+    {"k":"made","item":<ПФ>,"qty":OUT,"planned":P,"gross":G,"act":<id>,"by":<signer>[,"value":V,"lot","expiry"]}
+
+`POST /api/owner/stock/cooked {item, qty, out?, lot?, expiry?}` (the existing `/api/owner/stock/:kind` route, same
+SHELF guard, no new route) — `+services/operations/stock/cook.rs` → `+dowiz_hub::stock::act` `StockLog::cook`:
+
+- `qty` = what the CARD makes from what went in (`planned`); the inputs are the card × `planned / yield`, expanded
+  exactly by `+prep/stocked.rs plan` (a READY ПФ inside the card is taken first), rounded once per leaf, whole units
+  booked from the carry (`Cooked` joins the carry fold like a consumed draw; 100 batches of 10 g mitsukan take 50 g of
+  salt, not 100 or 0). Water (untracked) never leaves.
+- `out` = what came off the stove, WEIGHED (default `planned`). The ПФ's `on_hand += out` and it is COUNTED from here
+  (a measurement, like a delivery). `gross` = the card's grams at `planned` (g/ml 1:1, a piece its `weightPerUnit`;
+  0 when unknown). **Loss on cooking = `gross − out`**, shown in the answer (`lossG`, measured `yieldPm` vs the card's
+  `cardPm`), in the stock view's movement row and in the kitchen analytics' `yields` (stage `batch`).
+- **Cost = WAC of what was drawn.** `value` = Σ leaf `uq` × the leaf's weighted average at that moment, rounded once,
+  stamped on the `made` record; the cost book adds it to the ПФ's pool (`qty += out`), so the ПФ's average is the raw
+  cost actually used over what came out. An unpriced input: no `value`, the batch joins at the ПФ's average (unknown
+  until something priced reaches it) — a partial sum is never a cost.
+- **Inputs never refuse** (`Cooked` may drive a level negative, "needs a count"): what was cooked is recorded, as
+  `Consumed`/`Served` are. `Made` needs `planned > 0`, `gross ≥ 0`, `out > 0`. All records of an act are ONE commit.
+
+**A sale takes the ready ПФ first; the rest is EXPANDED, not refused.** Decided: a batch running out mid-service does
+not stop the kitchen — the cook makes the next from raw, which is exactly what the expansion books; refusing would 86
+a dish whose raw items are on the shelf, against the standing rule that only a MEASURED raw shortage refuses. How:
+`prep::for_ledger` now embeds the dish's tree (`"tree": {lines, cards, untracked}`) beside the all-raw `bom`; the
+ledger's own door (`stock::draws_for` attaches the basket, `+stock/basket.rs`; `append_draws` / `append_served_draws`
+re-plan in the venue's object where the shelf is) walks the basket's tree top-down in topological order: each ПФ's
+WHOLE need over the basket is split into "from the shelf" (as far as `+basket::ready_micro` allows: whole units
+available, the carry included, so a reservation never exceeds what is available and is never refused) and "from its
+card". With nothing ready, the answer is `prep::expand`'s leaf for leaf and the records are identical
+(`nothing_cooked_ahead_books_what_the_raw_expansion_booked`). **No call site changed**: `command/place.rs` and
+`ebills/import.rs` still call `draws_for` + `append_draws`. The cost STAMP at placement still prices the all-raw
+`bom` (the recipe's cost at today's averages), not the ready batch's own average — OPEN, one line in
+`command/place/cost.rs` if the operator wants the batch's.
+
+**Stock view, stock-health, analytics.** The `/owner/stock` row of a ПФ already carried its level; the console now
+shows it (`pf_onShelf`, "a sale takes the ready batch first") and a "Cook a batch" button on the ПФ card
+(`public/admin/prep.js openCook`). Stock-health's stranded holds list ПФ like any item (names from the same rows).
+Kitchen analytics: `cooked` (raw into batches; also counted in `drawn`, it is food used) and `made` per item, and a
+`batch` row in `yields` per act.
+
+### k.3 Kitchen analytics through ПФ (R3)
+
+`services/analytics/kitchen.rs dishes_of` gives each dish its raw `leaves` (`prep::expand`, millionths per portion)
+when a line names a ПФ; `sales::fold` counts ingredient use from them, summed in millionths over the window and
+rounded ONCE (1 000 Philadelphias: 774 g of salt, 61 905 g of dry rice; the ПФ is not an ingredient row; water is
+not one); `portion_cost` prices the leaves exactly (average, else list price). A recipe of raw lines is counted as
+before (`kitchen/prep_tests.rs`, each with its raw twin).
+
+### k.4 Lessons and probe (R4, R5)
+
+Lessons `docs/learn/lessons/owner/O22a.yaml` (the directory, the editor, "one sale takes") and `O22b.yaml` (the
+production act), sq/en/uk/ru, anchors `pf.add, pf.name, pf.addLine, pf.yield, pf.save, pf.takes, pf.cook,
+pf.cookQty, pf.cookOut, pf.cookSave`; films are the operator's to render. `e2e/kit-regression/_probe_pf.mjs` steps
+5b (act + a sale from the ready batch) and 5c (import creates a ПФ, idempotent), qa-durres only.

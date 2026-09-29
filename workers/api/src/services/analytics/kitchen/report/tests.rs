@@ -11,7 +11,7 @@ fn world() -> (HashMap<String, Dish>, HashMap<String, Supply>, Window) {
     let sup = |id: &str, list| Supply { id: id.into(), name: id.to_uppercase(), unit: "g".into(), basis: 100, list_cost: list, clean_pm: 550, cook_pm: 1000 };
     let dishes = HashMap::from([(
         "sake".to_string(),
-        Dish { id: "sake".into(), name: "Sake".into(), lines: vec![DishLine { supply: "salmon".into(), qty: 100, gross_g: Some(100), net_g: Some(55), out_g: Some(55) }] },
+        Dish { id: "sake".into(), name: "Sake".into(), lines: vec![DishLine { supply: "salmon".into(), qty: 100, gross_g: Some(100), net_g: Some(55), out_g: Some(55) }], leaves: vec![] },
     )]);
     let supplies = HashMap::from([("salmon".to_string(), sup("salmon", Some(250)))]);
     (dishes, supplies, Window { starts: vec![0, 1000], end: 2000, days: vec![20260925, 20260926] })

@@ -96,9 +96,22 @@ pub fn dishes_of(cat: &dowiz_hub::catalog::Catalog) -> HashMap<String, Dish> {
                 .map(|l| DishLine { supply: l.supply, qty: l.qty, gross_g: l.w.gross, net_g: l.w.net, out_g: l.w.out })
                 .collect();
             let name = p.get("name").and_then(Value::as_str).unwrap_or(&id).to_string();
-            Some((id.clone(), Dish { id, name, lines }))
+            Some((id.clone(), Dish { id, name, lines, leaves: leaves_of(cat, &j) }))
         })
         .collect()
+}
+
+/// A dish's raw leaves per portion when its recipe reaches a semi-finished
+/// product (R3): `dowiz_hub::prep::expand`, the sale's own expansion. Empty
+/// for a recipe of raw lines, or one that does not expand (then its lines
+/// are counted as they are, and `takes` says why).
+pub fn leaves_of(cat: &dowiz_hub::catalog::Catalog, product_json: &str) -> Vec<(String, i64)> {
+    let supply = |s: &str| cat.supply(s);
+    let bom: Vec<(String, i64)> = dowiz_hub::stock::bom_of(product_json).into_iter().map(|l| (l.supply, l.qty)).collect();
+    if !bom.iter().any(|(s, _)| supply(s).is_some_and(|j| dowiz_hub::prep::is_prep(&j))) {
+        return Vec::new();
+    }
+    dowiz_hub::prep::expand(&bom, &supply).map(|v| v.into_iter().map(|l| (l.item, l.uq)).collect()).unwrap_or_default()
 }
 
 /// THE KITCHEN READS ITS OWN NUMBERS (KITCHEN-ACCESS-2026-09-27): a member of
@@ -141,3 +154,7 @@ pub async fn kitchen(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
 #[cfg(test)]
 #[path = "kitchen/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "kitchen/prep_tests.rs"]
+mod prep_tests;

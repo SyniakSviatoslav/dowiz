@@ -129,6 +129,8 @@ pub(super) fn read(text: &str, opts: &Opts, draft: &mut RecipeDraft) {
         }
     }
     cards.retain(|c| c.in_force);
+    // Real semi-finished products, when the caller writes them (R1).
+    let made = if opts.preps { super::preps::build(&cards, draft) } else { Vec::new() };
 
     // ── flatten, check, and hand each dish its bom ──
     for c in cards.iter() {
@@ -159,6 +161,13 @@ pub(super) fn read(text: &str, opts: &Opts, draft: &mut RecipeDraft) {
         };
         if twice.contains(&c.key) {
             refuse(draft, "more than one card is in force today");
+            continue;
+        }
+        if let Some(named) = super::preps::dish_lines(c, &cards, &made) {
+            match named {
+                Ok(lines) => draft.recipes.push(DraftRecipe { product_id: pid, dish: c.dish.clone(), lines }),
+                Err(why) => refuse(draft, &why),
+            }
             continue;
         }
         let mut report = Vec::new();
@@ -202,7 +211,9 @@ fn line(
     let key = slug(name);
     let supply = draft.supplies.iter().find(|s| s.id == key || slug(&s.name) == key);
     if let Some((_, pbase)) = prepacks.iter().find(|p| p.0 == key) {
-        if supply.is_some() {
+        // The catalogue's own semi-finished product of that name is this card
+        // again (a second import): an update, not a clash.
+        if supply.is_some_and(|s| s.kind.as_deref() != Some(crate::prep::KIND)) {
             return Err(format!("{name:?} is both a supply and a semi-finished product"));
         }
         let Some(pbase) = pbase else { return Err(format!("semi-finished {name:?} has no readable batch size")) };

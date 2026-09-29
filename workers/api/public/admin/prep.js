@@ -13,11 +13,13 @@
 
 import './prep-i18n.js';
 import { $, $$, esc, icon, t, api, post, withLoc, toast, sheet, closeSheet, busy, money, retranslate } from '/admin/core.js';
-import { ui, k as key, btn, field, chips, press } from '/admin/parts.js';
+import { ui, k as key, btn, field, input, chips, press } from '/admin/parts.js';
 import { me } from '/admin/app.js';
 import * as P from '/admin/prep-logic.js';
 import { cardMarkup, editorLine, liveMarkup, takesMarkup, PREP_ICON } from '/admin/prep-view.js';
 import { deleteSupplies } from '/admin/nom.js';
+import { cookForm, cookLive, cookResult } from '/admin/pf2-view.js';
+import './pf2-i18n.js';
 
 const fail = e => toast(String(e.message || e));
 
@@ -39,9 +41,30 @@ export function openPrepCard(p, ctx){
   if (!p) return;
   sheet(cardMarkup(p, { money, t, owner: !me().staff }), { name: 'prepCard' });
   $('#pfEdit').onclick = () => openPrepEditor(p, ctx);
+  $('#pfCook').onclick = () => openCook(p, ctx);
   const del = $('#pfDelete'); if (del) del.onclick = async () => { const r = await deleteSupplies([p.id], del, { names: [p.name || p.id] }); if (r) { closeSheet(); ctx.reload(); } };
   $('#pfRetire').onclick = async () => { try { await post(`/owner/supplies/${encodeURIComponent(p.id)}/retire`, withLoc()); toast(t('saved')); closeSheet(); ctx.reload(); } catch (e) { fail(e); } };
   for (const b of $$('[data-takes]', $('#sheetIn'))) b.onclick = () => openTakes(b.dataset.takes, b.dataset.tname, () => openPrepCard(p, ctx));
+}
+
+/// THE PRODUCTION ACT (W-PF2 R2): a batch of `p` cooked ahead. The raw items
+/// leave the shelf by the card; the batch lands weighed; the loss is shown.
+export function openCook(p, ctx){
+  sheet(cookForm(p, { field, input }), { name: 'prepCook' });
+  const live = () => {
+    const l = cookLive($('#ck-qty').value, $('#ck-out').value, p.grossG, p.yield);
+    $('#ckLive').textContent = l ? `${t('pf_cookLoss')}: ${l.loss} g · ${(l.pm / 10).toFixed(1)}%` : '';
+  };
+  $('#ck-qty').oninput = live; $('#ck-out').oninput = live; live();
+  $('#ckSave').onclick = async () => {
+    const qty = Math.round(Number($('#ck-qty').value)), out = $('#ck-out').value.trim();
+    if (!(qty > 0)) return toast(t('pf_yieldBad'));
+    const b = { item: p.id, qty, ...(out ? { out: Math.round(Number(out)) } : {}), ...($('#ck-exp').value ? { expiry: $('#ck-exp').value } : {}) };
+    try {
+      const r = await busy($('#ckSave'), () => post('/owner/stock/cooked', withLoc(b)));
+      $('#ckOut').innerHTML = cookResult(r, { money, t }); $('#ckSave').disabled = true; ctx.reload();
+    } catch (e) { fail(e); }
+  };
 }
 
 /// What one sale of a dish takes off the shelf. `back` reopens what was under it.
@@ -72,16 +95,16 @@ export function openPrepEditor(p, ctx, st = null){
   st = st || stateOf(p, all);
   const cats = [...new Set(all.map(s => s.category).filter(Boolean))];
   sheet(`<p class="eyebrow" data-t="pf_title"></p><h2 data-t="${st.fresh ? 'pf_add' : 'pf_edit'}"></h2><p class="sheet-hint" data-t="pf_hint"></p>
-    ${field({ id: 'pf-name', key: 'name', value: st.name, autocomplete: 'off' })}
+    ${field({ id: 'pf-name', key: 'name', value: st.name, autocomplete: 'off', tour: 'pf.name' })}
     ${field({ id: 'pf-id', key: 'ingredient', value: st.id, placeholder: 'rice-seasoned', hintKey: 'supplyIdHint', attrs: { readonly: !st.fresh } })}
     <div class="grid2"><div>${field({ id: 'pf-cat', key: 'category', value: st.category, autocomplete: 'off', attrs: { list: 'pfCats' } })}<datalist id="pfCats">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
       <div><p class="ui-label" data-t="unit"></p>${chips({ id: 'pfUnit', values: ['g', 'ml', 'unit'].map(u => (u === 'unit' ? { value: u, key: 'nom_pcs' } : { value: u, label: u })), value: st.unit, attr: 'pu' })}</div></div>
     <p class="eyebrow mt-3" data-t="pf_lines"></p><div id="pfLines"></div>
-    <div class="btn-row">${btn({ id: 'pfAddLine', icon: 'plus', key: 'pf_addLine' })}</div>
-    <div class="inv-big">${field({ id: 'pf-yield', key: 'pf_yield', hintKey: 'pf_yieldHint', inputmode: 'decimal', autocomplete: 'off', value: st.yield })}</div>
+    <div class="btn-row">${btn({ id: 'pfAddLine', icon: 'plus', key: 'pf_addLine', tour: 'pf.addLine' })}</div>
+    <div class="inv-big">${field({ id: 'pf-yield', key: 'pf_yield', hintKey: 'pf_yieldHint', inputmode: 'decimal', autocomplete: 'off', value: st.yield, tour: 'pf.yield' })}</div>
     <div id="pfWpu" ${st.unit === 'unit' ? '' : 'hidden'}>${field({ id: 'pf-wpu', key: 'weightPerUnit', inputmode: 'decimal', value: st.weightPerUnit })}</div>
     <p class="mono" id="pfLive"></p><p class="hint" data-t="pf_kHint"></p>
-    <div class="btn-row">${btn({ id: 'pfSave', variant: 'primary', icon: 'check', key: 'save' })}</div>`, { name: 'prepEdit' });
+    <div class="btn-row">${btn({ id: 'pfSave', variant: 'primary', icon: 'check', key: 'save', tour: 'pf.save' })}</div>`, { name: 'prepEdit' });
   const typed = () => { st.name = $('#pf-name').value; st.id = $('#pf-id').value; st.category = $('#pf-cat').value; st.yield = $('#pf-yield').value; st.weightPerUnit = $('#pf-wpu').value; return st; };
   const live = () => {
     const y = P.readYield($('#pf-yield').value, st.unit), wpu = Number($('#pf-wpu').value) || null;

@@ -29,7 +29,7 @@ fn keys(t: &Told) -> Vec<&str> {
 #[test]
 fn a_supplys_words_and_thresholds_are_read_from_the_catalogue() {
     let s = supplies();
-    assert_eq!(s["rice"], SupplyIn { name: "Rice".into(), unit: "g".into(), low_at: 1000, shelf_days: Some(3) });
+    assert_eq!(s["rice"], SupplyIn { name: "Rice".into(), unit: "g".into(), low_at: 1000, shelf_days: Some(3), record: None });
     assert_eq!(s["salmon"].low_at, 0);
     let odd = supplies_of(vec![("x".into(), "not json".into())]);
     assert_eq!(odd["x"].name, "x", "an unreadable record is named by its id");

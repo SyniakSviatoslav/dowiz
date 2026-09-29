@@ -5,6 +5,8 @@
 
 import { $, esc, icon, t, api, sheet, busy, money, switchEl, retranslate } from '/admin/core.js';
 import { ui, btn, pill, rowDiv, input } from '/admin/parts.js';
+import './pf2-i18n.js';
+import { prepsBlock } from '/admin/pf2-view.js';
 
 const ROUTE = { supplies: '/owner/supplies/import', recipes: '/owner/recipes/import' };
 
@@ -62,6 +64,7 @@ function report(kind, r, applied){
     ${fold((r.withoutRecipe || []).length, 'bulkWithout', r.withoutRecipe || [])}
     ${fold((r.notInFile || []).length, 'notInFile', r.notInFile || [])}
     ${fold((r.flattened || []).length, 'bulkFlattened', r.flattened || [])}
+    ${prepsBlock(r.preps)}
     ${applied ? `<p class="ok"><span data-t="bulkWritten"></span>: ${r.written ?? 0}${r.retired ? ` · ${r.retired} <span data-t="retired"></span>` : ''}</p>` : ''}
     <div class="rows mt-2">${rows.map(kind === 'supplies' ? supplyRow : recipeRow).join('')}</div>`;
 }

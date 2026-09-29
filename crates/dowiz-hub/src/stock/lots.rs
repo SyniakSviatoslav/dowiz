@@ -132,7 +132,9 @@ impl Lots {
         let item = e.ev.item().to_string();
         match &e.ev {
             StockEvent::Received { qty, .. } => self.open_lot(&item, *qty, e),
-            StockEvent::Consumed { qty, .. } | StockEvent::Served { qty, .. } | StockEvent::Wasted { qty, .. } => {
+            // A batch cooked ahead is a lot of its own, dated by the cook.
+            StockEvent::Made { qty, .. } => self.open_lot(&item, *qty, e),
+            StockEvent::Consumed { qty, .. } | StockEvent::Served { qty, .. } | StockEvent::Wasted { qty, .. } | StockEvent::Cooked { qty, .. } => {
                 self.take(&item, *qty, e.meta.lot.as_deref())
             }
             StockEvent::Produced { qty, out, into, .. } => {

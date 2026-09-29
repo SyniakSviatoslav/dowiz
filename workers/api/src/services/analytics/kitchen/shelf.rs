@@ -31,6 +31,10 @@ pub struct Moved {
     pub prep_in: i64,
     pub prep_out: i64,
     pub by_day_drawn: Vec<i64>,
+    /// Production acts (W-PF2 R2): raw into batches (also in `drawn`, it is
+    /// food used), and a semi-finished product's batches made.
+    pub cooked: i64,
+    pub made: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -105,6 +109,22 @@ pub fn fold(entries: &[Entry], supplies: &HashMap<String, Supply>, placed_at: &H
             StockEvent::Stocktake { observed, .. } => {
                 m.drift += observed - e.expected();
                 m.drift_value += v;
+            }
+            StockEvent::Cooked { qty, .. } => {
+                m.drawn += qty;
+                m.drawn_value += v;
+                m.by_day_drawn[d] += qty;
+                m.cooked += qty;
+            }
+            // A batch: the card's yield against the weighed one, and the loss on cooking.
+            StockEvent::Made { qty, planned, gross, act, .. } => {
+                m.made += qty;
+                let pm = |x: i64| (*gross > 0).then(|| x * 1000 / gross);
+                s.yields.push(json!({
+                    "item": item, "name": supplies.get(&item).map(|x| x.name.clone()), "stage": "batch", "at": at, "day": dowiz_hub::stock::meta::show_day(w.days[d]),
+                    "qty": gross, "out": qty, "planned": planned, "act": act, "measuredPm": pm(*qty), "expectedPm": pm(*planned),
+                    "diffPm": pm(*qty).zip(pm(*planned)).map(|(a, b)| a - b), "lossG": (*gross > 0).then(|| gross - qty), "lossValue": Value::Null,
+                }));
             }
             StockEvent::Produced { qty, out, stage, into, .. } => {
                 m.prep_in += qty;

@@ -19,6 +19,8 @@ pub mod tell;
 pub mod turn;
 /// A supply deleted from the nomenclature, as a movement (W-NOM).
 pub mod removed;
+/// A batch of a semi-finished product cooked ahead (W-PF2 R2).
+pub mod cook;
 pub use moves::StockMoveIn;
 #[cfg(test)]
 use moves::movement;
@@ -212,13 +214,14 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
     // THE MOVEMENT IS THE OBJECT'S TURN (W0a): the stock image and the
     // groups' messages about it are written there together, so this handler
     // writes no image of its own.
+    let supplies = cook::supplies_for(&kind, cat.supplies());
     let input = turn::StockTurnIn {
         kind,
         body: raw,
         by,
         now_ms: now,
         today: today_of(&cat, now),
-        supplies: turn::supplies_of(cat.supplies()),
+        supplies,
     };
     match crate::command::send::<_, Value>(&place, "stock_move", &input).await {
         Ok(shown) => Response::from_json(&shown),

@@ -80,6 +80,12 @@ impl Carry {
             StockEvent::Consumed { item, order_id, .. } => {
                 self.open.remove(&key(order_id, item));
             }
+            // A batch's input: booked for good, as a consumed draw is.
+            StockEvent::Cooked { item, qty, .. } => {
+                if let Some(uq) = uq.filter(|u| u % MICRO != 0) {
+                    self.shift(item, uq, *qty);
+                }
+            }
             StockEvent::Released { item, qty, order_id } | StockEvent::Unserved { item, qty, order_id } => {
                 // Undo exactly what was booked, as far as this record releases it.
                 let (uq_held, q_held) = self.open.remove(&key(order_id, item)).unwrap_or((qty.saturating_mul(MICRO), *qty));
@@ -104,6 +110,11 @@ pub struct Draw {
     pub item: String,
     pub uq: i64,
     pub order_id: String,
+    /// The basket's tree, when a dish in it reaches a semi-finished product
+    /// (`super::basket`): the door then asks the shelf for a batch cooked
+    /// ahead first, and these draws (the all-raw answer) are replaced. The
+    /// same `Arc` on every draw of the basket; `None` for every other order.
+    pub via: Option<std::sync::Arc<super::basket::Basket>>,
 }
 
 /// What one order's lines draw, exactly: `lines` is `(product JSON, quantity
@@ -122,7 +133,8 @@ pub fn draws_for(order_id: &str, lines: &[(String, i64)]) -> Vec<Draw> {
             *e = e.saturating_add(uq.saturating_mul(*ordered));
         }
     }
-    totals.into_iter().map(|(item, uq)| Draw { item, uq, order_id: order_id.to_string() }).collect()
+    let via = super::basket::of(lines).map(std::sync::Arc::new);
+    totals.into_iter().map(|(item, uq)| Draw { item, uq, order_id: order_id.to_string(), via: via.clone() }).collect()
 }
 
 impl StockLog {
@@ -145,7 +157,17 @@ impl StockLog {
         draws: &[Draw],
         make: fn(String, Qty, String) -> StockEvent,
     ) -> Result<(CostBook, usize), StockError> {
-        let (_, _, carry, _) = self.fold_tail(false, false)?;
+        let via = draws.first().and_then(|d| d.via.clone());
+        let (led, _, carry, _) = self.fold_tail(via.is_some(), false)?;
+        // A batch kept ready is taken first (R2); the rest as the tree says.
+        let planned;
+        let draws = match (&via, draws.first()) {
+            (Some(b), Some(d)) => {
+                planned = b.draws(&d.order_id, &led, &carry)?;
+                planned.as_slice()
+            }
+            _ => draws,
+        };
         let mut trial = carry;
         let mut evs: Vec<(StockEvent, Meta)> = Vec::with_capacity(draws.len());
         for d in draws {
