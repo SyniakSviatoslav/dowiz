@@ -16,13 +16,19 @@ use crate::services::catalogue::import::bump_menu_version;
 /// Many dishes, and a category with its dishes (W-NOM).
 mod remove;
 pub use remove::{delete_category, delete_products};
+/// Rename, category move, up/down order (W-CRUD).
+pub(crate) mod order;
+/// A deleted dish's or category's translations go with it (W-CRUD).
+pub(crate) mod forget;
+/// A request body whose unknown fields are refused for real (W-CRUD).
+pub(crate) mod body;
 
 /// Ids are slugs of the name, like the importer's; a clash gets a numeric tail.
 const ID_MAX: usize = 64;
-const NAME_MAX: usize = 120;
+pub(crate) const NAME_MAX: usize = 120;
 /// How many `-2`, `-3`… tails are tried before giving up on a name.
 const ID_TAIL_TRIES: i64 = 99;
-const SORT_STEP: i64 = 10; // a new record sorts after everything in its category
+pub(crate) const SORT_STEP: i64 = 10; // a new record sorts after everything in its category
 const UNDECLARED_409: &str = "declare this dish's allergens before putting it on sale; add it, then declare them";
 
 /// A free id for a name: its slug, or the slug with the first free tail.
@@ -59,9 +65,9 @@ struct ProductNew {
 /// `POST /api/owner/products` — a new dish, minimal; the editor fills the rest
 /// through `POST /api/owner/products/:id`.
 pub async fn create_product(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: ProductNew = match req.json().await {
+    let body: ProductNew = match crate::catalog_edit::body::strict(&mut req).await {
         Ok(b) => b,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+        Err(r) => return Ok(r),
     };
     // THE PLACE IS THE VENUE THAT WAS AUTHORISED, not the one in the token.
     // See `Place::of_authorised`: these differ for an owner of two venues, and
@@ -128,9 +134,9 @@ struct LocOnly {
 /// `POST /api/owner/products/:id/delete` — gone from the menu. Past orders
 /// keep their own copy of the name and price, so nothing they show changes.
 pub async fn delete_product(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: LocOnly = match req.json().await {
+    let body: LocOnly = match crate::catalog_edit::body::strict(&mut req).await {
         Ok(b) => b,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+        Err(r) => return Ok(r),
     };
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing product id", 400) };
     // THE PLACE IS THE VENUE THAT WAS AUTHORISED, not the one in the token.
@@ -140,8 +146,9 @@ pub async fn delete_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
         return Ok(r);
     }
+    let pid = id.clone();
     let removed = crate::hubstore::with_catalog(&place, move |cat| {
-        let was = cat.remove_product(&id);
+        let was = cat.remove_product(&pid);
         if was {
             bump_menu_version(cat);
         }
@@ -151,7 +158,9 @@ pub async fn delete_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     if !removed {
         return Response::error("unknown product", 404);
     }
-    Response::from_json(&json!({ "ok": true }))
+    // Its words in the other languages go with it (`forget.rs`).
+    let words = forget::forget_or_log(&place, "product", &[id]).await;
+    Response::from_json(&json!({ "ok": true, "translations": words }))
 }
 
 #[derive(Deserialize)]
@@ -163,13 +172,21 @@ struct CategoryIn {
     name: String,
     #[serde(default)]
     sort_order: Option<i64>,
+    /// `up` or `down`: one place among the venue's categories (W-CRUD).
+    #[serde(default, rename = "move")]
+    nudge: Option<String>,
 }
 
 /// `POST /api/owner/categories` — make one, or rename / reorder one by id.
 pub async fn set_category(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: CategoryIn = match req.json().await {
+    let body: CategoryIn = match crate::catalog_edit::body::strict(&mut req).await {
         Ok(b) => b,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+        Err(r) => return Ok(r),
+    };
+    let nudge = match body.nudge.as_deref().map(order::Move::from_wire) {
+        None => None,
+        Some(Ok(m)) => Some(m),
+        Some(Err(e)) => return Response::error(e, 400),
     };
     // THE PLACE IS THE VENUE THAT WAS AUTHORISED, not the one in the token.
     // See `Place::of_authorised`: these differ for an owner of two venues, and
@@ -197,8 +214,16 @@ pub async fn set_category(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
                 (id, body.sort_order.unwrap_or(last + SORT_STEP))
             }
         };
-        let rec = json!({ "id": id, "name": name, "sortOrder": sort });
+        let mut rec = json!({ "id": id, "name": name, "sortOrder": sort });
         cat.set_category(&id, &rec.to_string());
+        if let Some(m) = nudge {
+            let after = order::nudge_category(cat, &id, m).map_err(Error::RustError)?;
+            rec["order"] = json!(after);
+            rec["sortOrder"] = serde_json::from_str::<Value>(&cat.categories().into_iter().find(|(c, _)| *c == id).map(|(_, j)| j).unwrap_or_default())
+                .ok()
+                .and_then(|v| v.get("sortOrder").cloned())
+                .unwrap_or(json!(sort));
+        }
         bump_menu_version(cat);
         Ok(rec)
     })

@@ -64,31 +64,57 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<crate::Req>) 
     let small = matches!(req.url()?.query_pairs().find(|(k, _)| k == "variant"), Some((_, v)) if v == "small");
     let field = if small { "imageUrlSmall" } else { "imageUrl" };
     let (pid, u) = (id.clone(), url.clone());
-    crate::hubstore::with_catalog(&place, move |cat| {
-        let Some(raw) = cat.product(&pid) else {
-            return Err(Error::RustError("unknown product".into()));
-        };
-        let mut p: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
-        // The PREVIOUS image is not deleted. Another product may reference the
-        // same bytes -- content addressing makes that likely, not rare -- and an
-        // order placed an hour ago still names the dish it was sold as.
-        p[field] = json!(u);
-        // A NEW FULL PHOTOGRAPH DROPS THE OLD CARD. They are two renderings of
-        // one picture, so leaving the previous small one beside a new large one
-        // would show the customer the dish that was replaced.
-        if !small {
-            if let Some(obj) = p.as_object_mut() {
-                obj.remove("imageUrlSmall");
-            }
-        }
-        cat.set_product(&pid, &serde_json::to_string(&p).unwrap_or(raw));
-        Ok(())
-    })
-    .await?;
+    crate::hubstore::with_catalog(&place, move |cat| set_image_in(cat, &pid, &u, small).map_err(|e| Error::RustError(e.into()))).await?;
     Response::from_json(&json!({
         field: url, "bytes": stored.bytes, "type": stored.kind.mime()
     }))
 }
+
+/// Point a stored dish at its new photograph. PURE on the catalogue.
+///
+/// The PREVIOUS image is not deleted. Another product may reference the
+/// same bytes -- content addressing makes that likely, not rare -- and an
+/// order placed an hour ago still names the dish it was sold as.
+/// A NEW FULL PHOTOGRAPH DROPS THE OLD CARD. They are two renderings of
+/// one picture, so leaving the previous small one beside a new large one
+/// would show the customer the dish that was replaced.
+/// A PHOTOGRAPH IS A MENU CHANGE: the menu version moves (W-CRUD; until
+/// 2026-09-29 it did not, so a cart never noticed the picture had changed).
+pub(crate) fn set_image_in(cat: &mut dowiz_hub::catalog::Catalog, id: &str, url: &str, small: bool) -> std::result::Result<(), &'static str> {
+    let Some(raw) = cat.product(id) else {
+        return Err("unknown product");
+    };
+    let mut p: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
+    p[if small { "imageUrlSmall" } else { "imageUrl" }] = json!(url);
+    if !small {
+        if let Some(obj) = p.as_object_mut() {
+            obj.remove("imageUrlSmall");
+        }
+    }
+    cat.set_product(id, &serde_json::to_string(&p).unwrap_or(raw));
+    super::import::bump_menu_version(cat);
+    Ok(())
+}
+
+/// Take a dish's photograph off the menu, both renderings: a card left behind
+/// would be the only picture the grid still had, of a dish whose photograph
+/// the owner just removed. The blob STAYS (see `clear_product_image`).
+pub(crate) fn clear_image_in(cat: &mut dowiz_hub::catalog::Catalog, id: &str) -> std::result::Result<(), &'static str> {
+    let Some(raw) = cat.product(id) else {
+        return Err("unknown product");
+    };
+    let mut p: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
+    p["imageUrl"] = Value::Null;
+    if let Some(obj) = p.as_object_mut() {
+        obj.remove("imageUrlSmall");
+    }
+    cat.set_product(id, &serde_json::to_string(&p).unwrap_or(raw));
+    super::import::bump_menu_version(cat);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;
 
 /// `POST /api/owner/logo`
 ///
@@ -176,21 +202,10 @@ pub async fn clear_product_image(req: Request, ctx: RouteContext<crate::Req>) ->
     // The blob STAYS. Clearing a dish's photo is not a statement about every
     // other dish that might share those bytes, nor about the orders that
     // already carry the URL.
-    crate::hubstore::with_catalog(&place, move |cat| {
-        let Some(raw) = cat.product(&id) else {
-            return Err(Error::RustError("unknown product".into()));
-        };
-        let mut p: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
-        p["imageUrl"] = Value::Null;
-        // Both renderings go: a card left behind would be the only picture the
-        // grid still had, of a dish whose photograph the owner just removed.
-        if let Some(obj) = p.as_object_mut() {
-            obj.remove("imageUrlSmall");
-        }
-        cat.set_product(&id, &serde_json::to_string(&p).unwrap_or(raw));
-        Ok(())
-    })
-    .await?;
+    let cleared = crate::hubstore::with_catalog(&place, move |cat| Ok(clear_image_in(cat, &id).is_ok())).await?;
+    if !cleared {
+        return Response::error("not found", 404);
+    }
     Response::from_json(&json!({ "ok": true }))
 }
 

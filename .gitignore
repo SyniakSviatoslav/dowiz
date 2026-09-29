@@ -132,4 +132,6 @@ workers/api/design/document.json
 # `_kitorder2.mjs`, …). The gates they graduated into — render/mobile/interact/
 # pwa/domains — are committed; the scratch that produced them is not.
 e2e/kit-regression/_*.mjs
+!e2e/kit-regression/_probe_crud.mjs
+!e2e/kit-regression/_probe_pf.mjs
 *.tmp.mjs

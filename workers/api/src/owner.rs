@@ -700,84 +700,108 @@ pub async fn dashboard(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     }))
 }
 
-/// `PATCH /api/owner/products/:id` — the stop-list and the price.
+/// The dish sheet's save body (`update_product`). Parsed by `catalog_edit::body::strict`,
+/// so an unknown field is a 400 and never a silent `ok`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ProductEdit {
+    location_id: String,
+    /// The venue's OWN name and description (`catalog_edit::order::rename`);
+    /// the other languages travel in `translations`.
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    /// Another category of this venue; the dish lands last in it.
+    #[serde(default)]
+    category_id: Option<String>,
+    /// `up` or `down`: one place inside its category.
+    #[serde(default, rename = "move")]
+    nudge: Option<String>,
+    #[serde(default)]
+    available: Option<bool>,
+    #[serde(default)]
+    unavailable_note: Option<String>,
+    #[serde(default)]
+    price: Option<i64>,
+    /// The fourteen declarable allergens. AN EMPTY ARRAY IS A CLAIM --
+    /// "none of the fourteen" -- and absent is not, which is why this is
+    /// `Option<Vec<_>>` all the way from the wire.
+    #[serde(default)]
+    allergens: Option<Vec<String>>,
+    /// The dish's real widest dimension, in centimetres. Without it the
+    /// storefront shows no AR button, which is correct: a guessed size
+    /// answers the customer's question wrongly.
+    #[serde(default)]
+    size_cm: Option<i64>,
+    /// How long THIS dish takes in the kitchen, in minutes.
+    ///
+    /// The venue's own figure, not a guess and not a platform average. It
+    /// is what `dowiz_kernel::eta` uses to quote a delivery time, so a
+    /// coffee and a slow roast stop sharing one published estimate. Absent
+    /// means the venue has not said, and the estimate falls back to the
+    /// venue's default rather than treating the dish as instant.
+    #[serde(default)]
+    cooking_min: Option<i64>,
+    /// WHAT IS IN THE DISH, as the venue declares it.
+    ///
+    /// A customer choosing food asks three things a price cannot answer:
+    /// what is in it, how much of it there is, and what it does to their
+    /// day. `ingredients` is the venue's own list, `weight_g` the served
+    /// weight, `nutrition` the per-portion figures it publishes
+    /// (`{"kcal":..,"protein":..,"fat":..,"carbs":..}`, each optional).
+    ///
+    /// ALL THREE ARE OPTIONAL AND ABSENT IS NOT ZERO. A dish with no
+    /// declared protein must render as "not declared", never as "0 g" --
+    /// the same rule the allergen list already follows, for the same
+    /// reason: a made-up number about food is worse than no number.
+    #[serde(default)]
+    ingredients: Option<Vec<String>>,
+    #[serde(default)]
+    weight_g: Option<i64>,
+    #[serde(default)]
+    nutrition: Option<serde_json::Map<String, Value>>,
+    /// The dish's name and description in the venue's OTHER languages:
+    /// `{"uk": {"name": "...", "description": "..."}, "en": {...}}`.
+    ///
+    /// The read side of this has existed since the first catalogue
+    /// migration (`content_i18n`) and had no write side at all, which is
+    /// why every menu was served in the venue's own language whatever the
+    /// customer chose. A locale that is not supplied is left alone; an
+    /// EMPTY STRING deletes that translation rather than storing a blank
+    /// one, because a dish whose Ukrainian name is "" must fall back to the
+    /// venue's own name, not render nameless.
+    #[serde(default)]
+    translations: Option<std::collections::HashMap<String, std::collections::HashMap<String, String>>>,
+    /// What the dish IS, as the venue files it: `salmon`, `hot`,
+    /// `vegetarian`, `popular`. The storefront's filter rail is built from
+    /// these. Lower-case slugs; an empty list clears them.
+    #[serde(default)]
+    tags: Option<Vec<String>>,
+    /// One portion's recipe: `[{supply, qty}]`. An empty list clears it.
+    #[serde(default)]
+    bom: Option<Vec<crate::recipe::BomLineIn>>,
+    /// Five axes, levels 1…3; absent = not declared.
+    #[serde(default)]
+    taste: Option<serde_json::Map<String, Value>>,
+    /// Where the dish is made, `kitchen | bar` (`bell_route`); refused otherwise.
+    #[serde(default)]
+    station: Option<String>,
+}
+
+/// `POST /api/owner/products/:id` — the stop-list, the price, and every other
+/// field of the dish sheet.
+///
+/// UNKNOWN FIELDS ARE REFUSED (W-CRUD, 2026-09-29). This struct took whatever
+/// it was sent and answered `ok` for the fields it had no name for: a `name`,
+/// a `description` and a `category_id` were dropped on the floor for as long
+/// as the route existed, and nothing said so. The MCP fills `{id}` from its
+/// arguments and sends only its schema's fields plus `location_id`
+/// (`mcp::tools::plan`), and the console sends only what is named here.
 pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    #[derive(Deserialize)]
-    struct In {
-        location_id: String,
-        #[serde(default)]
-        available: Option<bool>,
-        #[serde(default)]
-        unavailable_note: Option<String>,
-        #[serde(default)]
-        price: Option<i64>,
-        /// The fourteen declarable allergens. AN EMPTY ARRAY IS A CLAIM --
-        /// "none of the fourteen" -- and absent is not, which is why this is
-        /// `Option<Vec<_>>` all the way from the wire.
-        #[serde(default)]
-        allergens: Option<Vec<String>>,
-        /// The dish's real widest dimension, in centimetres. Without it the
-        /// storefront shows no AR button, which is correct: a guessed size
-        /// answers the customer's question wrongly.
-        #[serde(default)]
-        size_cm: Option<i64>,
-        /// How long THIS dish takes in the kitchen, in minutes.
-        ///
-        /// The venue's own figure, not a guess and not a platform average. It
-        /// is what `dowiz_kernel::eta` uses to quote a delivery time, so a
-        /// coffee and a slow roast stop sharing one published estimate. Absent
-        /// means the venue has not said, and the estimate falls back to the
-        /// venue's default rather than treating the dish as instant.
-        #[serde(default)]
-        cooking_min: Option<i64>,
-        /// WHAT IS IN THE DISH, as the venue declares it.
-        ///
-        /// A customer choosing food asks three things a price cannot answer:
-        /// what is in it, how much of it there is, and what it does to their
-        /// day. `ingredients` is the venue's own list, `weight_g` the served
-        /// weight, `nutrition` the per-portion figures it publishes
-        /// (`{"kcal":..,"protein":..,"fat":..,"carbs":..}`, each optional).
-        ///
-        /// ALL THREE ARE OPTIONAL AND ABSENT IS NOT ZERO. A dish with no
-        /// declared protein must render as "not declared", never as "0 g" --
-        /// the same rule the allergen list already follows, for the same
-        /// reason: a made-up number about food is worse than no number.
-        #[serde(default)]
-        ingredients: Option<Vec<String>>,
-        #[serde(default)]
-        weight_g: Option<i64>,
-        #[serde(default)]
-        nutrition: Option<serde_json::Map<String, Value>>,
-        /// The dish's name and description in the venue's OTHER languages:
-        /// `{"uk": {"name": "...", "description": "..."}, "en": {...}}`.
-        ///
-        /// The read side of this has existed since the first catalogue
-        /// migration (`content_i18n`) and had no write side at all, which is
-        /// why every menu was served in the venue's own language whatever the
-        /// customer chose. A locale that is not supplied is left alone; an
-        /// EMPTY STRING deletes that translation rather than storing a blank
-        /// one, because a dish whose Ukrainian name is "" must fall back to the
-        /// venue's own name, not render nameless.
-        #[serde(default)]
-        translations: Option<std::collections::HashMap<String, std::collections::HashMap<String, String>>>,
-        /// What the dish IS, as the venue files it: `salmon`, `hot`,
-        /// `vegetarian`, `popular`. The storefront's filter rail is built from
-        /// these. Lower-case slugs; an empty list clears them.
-        #[serde(default)]
-        tags: Option<Vec<String>>,
-        /// One portion's recipe: `[{supply, qty}]`. An empty list clears it.
-        #[serde(default)]
-        bom: Option<Vec<crate::recipe::BomLineIn>>,
-        /// Five axes, levels 1…3; absent = not declared.
-        #[serde(default)]
-        taste: Option<serde_json::Map<String, Value>>,
-        /// Where the dish is made, `kitchen | bar` (`bell_route`); refused otherwise.
-        #[serde(default)]
-        station: Option<String>,
-    }
-    let body: In = match req.json().await {
+    let body: ProductEdit = match crate::catalog_edit::body::strict(&mut req).await {
         Ok(b) => b,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+        Err(r) => return Ok(r),
     };
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing product id", 400);
@@ -838,6 +862,18 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         Some(Ok(st)) => Some(st),
         Some(Err(e)) => return Response::error(e, 400),
     };
+    let nudge = match body.nudge.as_deref().map(crate::catalog_edit::order::Move::from_wire) {
+        None => None,
+        Some(Ok(m)) => Some(m),
+        Some(Err(e)) => return Response::error(e, 400),
+    };
+    // Checked on a scratch record before the write, so a blank name is a 400
+    // and never reaches the closure as a marker word.
+    if let Err(e) = crate::catalog_edit::order::rename(&mut json!({}), body.name.as_deref(), body.description.as_deref()) {
+        return Response::error(e, 400);
+    }
+    let words = (body.name.clone(), body.description.clone());
+    let category = body.category_id.clone();
     let bom = body.bom.clone();
     let want_id = id.clone();
     let price = body.price;
@@ -946,7 +982,15 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
             // reason on an available dish reads as a contradiction.
             p["unavailableNote"] = if a { Value::Null } else { json!(note) };
         }
+        // ── THE WORDS, THE CATEGORY, THE PLACE IN IT (W-CRUD) ──
+        crate::catalog_edit::order::rename(&mut p, words.0.as_deref(), words.1.as_deref()).map_err(Error::RustError)?;
+        if let Some(c) = &category {
+            crate::catalog_edit::order::move_to_category(cat, &mut p, c).map_err(Error::RustError)?;
+        }
         cat.set_product(&want_id, &serde_json::to_string(&p).unwrap_or(pj));
+        if let Some(m) = nudge {
+            crate::catalog_edit::order::nudge_product(cat, &want_id, m).map_err(Error::RustError)?;
+        }
 
         // Any catalogue write moves the menu version, which is how a client
         // notices its cart went stale.
@@ -971,7 +1015,7 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
                 409,
             );
         }
-        if e.to_string().starts_with("unknown supply") {
+        if e.to_string().starts_with("unknown supply") || e.to_string().starts_with("unknown category") {
             return Response::error(e.to_string(), 400);
         }
         if e.to_string().contains("unknown product") {

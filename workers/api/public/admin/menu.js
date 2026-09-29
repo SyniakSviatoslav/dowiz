@@ -19,6 +19,8 @@ import * as IC from '/admin/ingredients-calc.js';
 import { ensureCss } from '/admin/kitchen-analytics.js';
 import { selection, pickRow, barMarkup, bindBar, deleteDishes, ensureNomCss, N } from '/admin/nom.js';
 import { me } from '/admin/app.js';
+import '/admin/crud-i18n.js';
+import { translationBoxes, baseEdits } from '/admin/menu-edit.js';
 /// W-NOM: the dishes ticked for a bulk delete (the owner's).
 const sel = selection();
 /// A filter chip whose data-* the screen's click handler reads.
@@ -148,14 +150,28 @@ function openImport(){
 /// The number as typed, or null when the field is empty.
 const num = v => { const s = String(v ?? '').trim(); if (!s) return null; const n = Number(s.replace(',', '.')); return Number.isFinite(n) ? n : null; };
 
-export function openDish(id){
+export async function openDish(id){
   const p = S.products.find(x => x.id === id); if (!p) return;
   const n = p.nutrition || {};
   const tags = new Set(p.tags || []);
   const tr = p.translations || {};
+  // The venue's own language is edited here; the others below (W-CRUD). A box
+  // for another language is EMPTY when that menu only echoed the base words
+  // (`menu-edit.js translationBoxes`): the echo used to be saved back as a
+  // translation on every save, and a later rename left it behind.
+  const base = S.venue?.defaultLocale || LANGS[0];
+  const own = { name: tr[base]?.name ?? p.name, description: tr[base]?.description ?? p.description ?? '', categoryId: p.categoryId };
+  const boxes = translationBoxes(tr, base, LANGS);
+  // Every category, empty ones too: a dish must be able to move into one.
+  const cats = await allCategories();
   sheet(`
     <p class="eyebrow">${esc(p.categoryName || '')}</p>
     <h2>${esc(p.name)}</h2><p class="sheet-hint" data-t="ap_h_dish"></p>
+    <p class="ui-label" data-t="ownLanguage"></p>
+    ${field({ id: 'd-name', label: `${base.toUpperCase()} · ${t('name')}`, value: own.name, autocomplete: 'off', maxlength: 120 })}
+    ${field({ id: 'd-desc', label: `${base.toUpperCase()} · ${t('description')}`, rows: 2, value: own.description })}
+    ${select({ id: 'd-cat', key: 'category', value: own.categoryId, options: cats.map(c => ({ value: c.id, label: c.name })) })}
+    ${rowDiv({ title: k('position'), sub: `<span data-t="positionHint"></span>`, trailing: `${iconBtn({ id: 'dUp', icon: 'chevron-up', ariaKey: 'moveUp' })}${iconBtn({ id: 'dDown', icon: 'chevron-down', ariaKey: 'moveDown' })}` })}
     ${rowDiv({ id: 'photoRow', title: k('photo'), sub: `<span data-t="${p.imageUrl ? 'photo' : 'noPhoto'}"></span>`, leading: p.imageUrl ? `<img class="thumb" src="${esc(p.imageUrl)}" alt="">` : `<span class="thumb"></span>`,
       trailing: `${btn({ id: 'photoPick', icon: 'camera-plus', key: 'uploadPhoto', tour: 'dish.photo' })}${p.imageUrl ? iconBtn({ id: 'photoClear', icon: 'trash', ariaKey: 'remove', tour: 'dish.photoClear' }) : ''}
       ${input({ id: 'photoFile', type: 'file', accept: 'image/*', hidden: true, tour: 'dish.photoFile' })}` })}
@@ -183,9 +199,9 @@ export function openDish(id){
     </div>
     ${field({ id: 'd-size', key: 'sizeCm', inputmode: 'numeric', hintKey: 'sizeCmHint', value: p.sizeCm ?? '', attrs: { min: SIZE_CM_MIN, max: SIZE_CM_MAX } })}
     <p class="ui-label" data-t="translations"></p>
-    ${LANGS.filter(l => l !== (S.venue?.defaultLocale || 'sq')).map(l => `<div class="grid2">
-      <div>${field({ id: `d-name-${l}`, label: `${l.toUpperCase()} · ${t('name')}`, value: tr[l]?.name || '', tour: 'dish.translation' })}</div>
-      <div>${field({ id: `d-desc-${l}`, label: `${l.toUpperCase()} · ${t('description')}`, value: tr[l]?.description || '' })}</div>
+    ${Object.entries(boxes).map(([l, b]) => `<div class="grid2">
+      <div>${field({ id: `d-name-${l}`, label: `${l.toUpperCase()} · ${t('name')}`, value: b.name, tour: 'dish.translation' })}</div>
+      <div>${field({ id: `d-desc-${l}`, label: `${l.toUpperCase()} · ${t('description')}`, value: b.description })}</div>
     </div>`).join('')}
     <div class="btn-row">${btn({ id: 'dSave', variant: 'primary', icon: 'check', key: 'save', tour: 'dish.save' })}</div>
     <div class="btn-row">${btn({ id: 'dDel', variant: 'danger', icon: 'trash', key: 'deleteDish', tour: 'dish.delete' })}</div>`, { name: 'dish' });
@@ -195,6 +211,12 @@ export function openDish(id){
     try { await post(`/owner/products/${encodeURIComponent(id)}/delete`, withLoc()); toast(t('saved')); closeSheet(); await loadVenue(); rerender(); } catch (e) { toast(String(e.message || e)); }
   };
   $('#d-avail').onchange = e => { $('#offBox').hidden = e.target.checked; };
+  // One place up or down inside its category: written at once, the sheet reopens on the new order.
+  const nudge = async dir => {
+    try { await busy($(dir === 'up' ? '#dUp' : '#dDown'), () => post(`/owner/products/${encodeURIComponent(id)}`, withLoc({ move: dir }))); toast(t('moved')); await loadVenue(); openDish(id); rerender(); }
+    catch (e) { toast(String(e.message || e)); }
+  };
+  $('#dUp').onclick = () => nudge('up'); $('#dDown').onclick = () => nudge('down');
   // What the owner changes in THIS sheet; the rest follows the recipe (audit D19).
   const edited = new Set();
   for (const f of FIELDS) $(BOX[f]).addEventListener('input', () => edited.add(f));
@@ -227,6 +249,8 @@ export function openDish(id){
     const body = withLoc({
       available: avail, unavailable_note: avail ? null : ($('#d-note').value.trim() || null),
       price: num($('#d-price').value) ?? p.price,
+      // The venue's own words and the category, only when changed (W-CRUD).
+      ...baseEdits(own, { name: $('#d-name').value, description: $('#d-desc').value, categoryId: $('#d-cat').value }),
       cooking_min: num($('#d-cook').value),
       // Sent only when changed: a save never moves a dish between stations by accident.
       ...($('#d-station').value !== (p.station || 'kitchen') ? { station: $('#d-station').value } : {}),
@@ -279,13 +303,18 @@ async function openCategories(){
   const cats = await allCategories();
   sheet(`<p class="eyebrow" data-t="tabMenu"></p><h2 data-t="categories"></h2><p class="sheet-hint" data-t="ap_h_categories"></p>
     <div class="rows">${cats.map(c => rowDiv({ title: '', sub: `${ui.inputRow({ label: k('name'), cls: 'inline', attrs: { value: c.name, data: { cn: c.id, tour: 'category.name' } } })}<span class="mono">${c.count ?? 0} · <span data-t="dishes"></span></span>`,
-      trailing: `${iconBtn({ icon: 'check', ariaKey: 'save', data: { cs: c.id }, tour: 'category.save' })}${iconBtn({ icon: 'trash', ariaKey: 'remove', disabled: !!c.count && !!me().staff, data: { cd: c.id, cn2: String(c.count ?? 0) }, tour: 'category.remove' })}` })).join('')}</div>
+      trailing: `${iconBtn({ icon: 'chevron-up', ariaKey: 'moveUp', data: { cu: c.id } })}${iconBtn({ icon: 'chevron-down', ariaKey: 'moveDown', data: { cdn: c.id } })}${iconBtn({ icon: 'check', ariaKey: 'save', data: { cs: c.id }, tour: 'category.save' })}${iconBtn({ icon: 'trash', ariaKey: 'remove', disabled: !!c.count && !!me().staff, data: { cd: c.id, cn2: String(c.count ?? 0) }, tour: 'category.remove' })}` })).join('')}</div>
     <div class="grid2 mt-3">${field({ id: 'nc-name', key: 'addCategory', autocomplete: 'off', tour: 'menu.newCategory' })}${btn({ id: 'ncGo', variant: 'primary', icon: 'plus', key: 'add', tour: 'menu.addCategory' })}</div>
     <div class="btn-row">${btn({ id: 'ncWords', icon: 'language', key: 'w_catWords' })}</div>`, { name: 'cats' });
   $('#ncWords').onclick = () => import('/admin/cat-i18n.js').then(m => m.openCategoryWords());
   const fail = e => toast(String(e.message || e));
   $('#ncGo').onclick = async () => { const name = $('#nc-name').value.trim(); if (!name) return toast(t('required')); try { await busy($('#ncGo'), () => post('/owner/categories', withLoc({ name }))); await loadVenue(); openCategories(); rerender(); } catch (e) { fail(e); } };
   for (const b of $$('[data-cs]', $('#sheetIn'))) b.onclick = async () => { const name = $(`[data-cn="${b.dataset.cs}"]`).value.trim(); if (!name) return; try { await busy(b, () => post('/owner/categories', withLoc({ id: b.dataset.cs, name }))); toast(t('saved')); await loadVenue(); rerender(); } catch (e) { fail(e); } };
+  // W-CRUD: one place up or down among the categories; the stored name travels with it, not the box's draft.
+  const names = Object.fromEntries(cats.map(c => [c.id, c.name]));
+  const nudgeCat = async (b, id, dir) => { try { await busy(b, () => post('/owner/categories', withLoc({ id, name: names[id] || id, move: dir }))); await loadVenue(); openCategories(); rerender(); } catch (e) { fail(e); } };
+  for (const b of $$('[data-cu]', $('#sheetIn'))) b.onclick = () => nudgeCat(b, b.dataset.cu, 'up');
+  for (const b of $$('[data-cdn]', $('#sheetIn'))) b.onclick = () => nudgeCat(b, b.dataset.cdn, 'down');
   // W-NOM: a category WITH dishes goes too, once the owner has seen how many.
   for (const b of $$('[data-cd]', $('#sheetIn'))) b.onclick = async () => {
     const n = Number(b.dataset.cn2) || 0, name = $(`[data-cn="${b.dataset.cd}"]`).value;

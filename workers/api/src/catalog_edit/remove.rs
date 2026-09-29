@@ -78,9 +78,9 @@ pub async fn delete_products(mut req: Request, ctx: RouteContext<crate::Req>) ->
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
-    let body: In = match req.json().await {
+    let body: In = match crate::catalog_edit::body::strict(&mut req).await {
         Ok(b) => b,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+        Err(r) => return Ok(r),
     };
     if body.ids.iter().all(|s| s.trim().is_empty()) || body.ids.len() > IDS_MAX {
         return Response::error(format!("1 to {IDS_MAX} dishes at once"), 400);
@@ -90,7 +90,9 @@ pub async fn delete_products(mut req: Request, ctx: RouteContext<crate::Req>) ->
     if gone.is_empty() {
         return Response::error("unknown product", 404);
     }
-    Response::from_json(&json!({ "ok": true, "deleted": gone }))
+    // Their words in the other languages go with them (W-CRUD, `forget.rs`).
+    let words = super::forget::forget_or_log(&place, "product", &gone).await;
+    Response::from_json(&json!({ "ok": true, "deleted": gone, "translations": words }))
 }
 
 /// `POST /api/owner/categories/:id/delete {location_id, with_dishes?}`.
@@ -103,9 +105,9 @@ pub async fn delete_category(mut req: Request, ctx: RouteContext<crate::Req>) ->
         #[serde(default)]
         with_dishes: Option<usize>,
     }
-    let body: In = match req.json().await {
+    let body: In = match crate::catalog_edit::body::strict(&mut req).await {
         Ok(b) => b,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+        Err(r) => return Ok(r),
     };
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing category id", 400) };
     // THE PLACE IS THE VENUE THAT WAS AUTHORISED, not the one in the token.
@@ -122,9 +124,17 @@ pub async fn delete_category(mut req: Request, ctx: RouteContext<crate::Req>) ->
         }
     }
     let with = body.with_dishes;
-    let out = crate::hubstore::with_catalog(&place, move |cat| Ok(remove_category(cat, &id, with))).await?;
+    let cid = id.clone();
+    let out = crate::hubstore::with_catalog(&place, move |cat| Ok(remove_category(cat, &cid, with))).await?;
     match out {
-        CategoryOut::Gone(dishes) => Response::from_json(&json!({ "ok": true, "dishes": dishes })),
+        CategoryOut::Gone(dishes) => {
+            // The heading's and the dishes' words in the other languages go
+            // with them (W-CRUD, `forget.rs`): a category made again under
+            // the same name used to come back with the old Ukrainian heading.
+            let mut words = super::forget::forget_or_log(&place, "category", &[id]).await;
+            words += super::forget::forget_or_log(&place, "product", &dishes).await;
+            Response::from_json(&json!({ "ok": true, "dishes": dishes, "translations": words }))
+        }
         CategoryOut::Unknown => Response::error("unknown category", 404),
         CategoryOut::NotEmpty(n) => {
             let mut r = Response::from_json(&json!({ "error": format!("the category still has {n} dishes; move or delete them first"), "dishes": n }))?;
