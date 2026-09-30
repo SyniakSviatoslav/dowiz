@@ -46,6 +46,9 @@ for p in tools/gates/*.prove.sh; do run "$(basename "$p" .sh)" sh "$p"; done
 for g in tools/gates/*.sh; do
   case "$g" in
     *.prove.sh|*/run-all.sh) continue ;;
+    # Needs the network, a browser and a DEPLOYED build: tools/deploy/deploy.sh runs it after the upload.
+    # Run here it tested the OLD live build before the new one existed, and nested a browser inside the gates' slot (rc=137).
+    */flows.sh) skip flows "live browser gate; run by tools/deploy/deploy.sh after the upload"; continue ;;
     */vocab.sh)
       if [ $CARGO = 1 ]; then run vocab sh "$g"; else skip vocab "compiles Rust; pass --cargo"; fi
       continue ;;
