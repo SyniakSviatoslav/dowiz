@@ -10,6 +10,8 @@
 # It takes the SAME global flock as every other heavy job (/root/.cache/bebop/slots, absolute,
 # so lane worktrees share it), waits under the Android phantom ceiling instead of refusing, and
 # is a no-op wrapper when it is already inside a slot -- so nesting it is free.
+# DG4 (2026-09-30): the compile also writes the per-fn memo <out>.dag; DAG_CAP=<cells> (its capacity) and
+# DAG_HITS=1 (print `dag: hits h/n`) pass through untouched -- the compiler reads /proc/self/environ.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 SLOT=tools/slot.sh; [ -f "$SLOT" ] || SLOT=/root/dowiz/bebop-lang/tools/slot.sh

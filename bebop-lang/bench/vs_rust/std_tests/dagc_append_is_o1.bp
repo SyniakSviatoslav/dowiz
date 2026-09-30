@@ -1,0 +1,23 @@
+// DG4 gate dagc_append_is_o1 (SPEC §4.2 M-2): each "compile" is ONE commit (the generation moves
+// by exactly 1) and appends only its own objects: the arena growth of the third put is within 2x
+// of the cells its entry, context, index and root need. Prints gen*10 + within (want 31).
+use "bench/vs_rust/std_tests/lib/dagc_t.bp"
+fn main() -> i64 {
+  let path = zeros(32);
+  let pl = st_str(path, "dagc_o1.dag");
+  let dm = zeros(48);
+  let lc = zeros(32);
+  let sc = zeros(16);
+  let _ = t_open(dm, path, pl, 22);
+  let _ = t_ctx(dm, lc, "ctx");
+  let n = t_text(sc, "fn a(x: i64) -> i64 { x + 1 }\n");
+  let _ = t_put(dm, sc, n, 0 - 1);
+  let _ = t_put(dm, sc, n, 0 - 1);
+  let base = dag_base(dm);
+  let u0 = base[st_pick(base, base) + 4];
+  let _ = t_put(dm, sc, n, 0 - 1);
+  let u1 = base[st_pick(base, base) + 4];
+  let need = (2 + 13) + (2 + (n + 7) / 8) + (2 + 1) + (2 + 1 + (dm[13] + 7) / 8) + (2 + 3 * 3) + (2 + 9);
+  let within = if u1 - u0 <= need * 2 then (if u1 - u0 >= need then 1 else 0) else 0;
+  dm[4] * 10 + within
+}

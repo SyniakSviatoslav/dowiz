@@ -1,0 +1,100 @@
+use "selfhost/prelude/dagc.bp"
+// bench/vs_rust/std_tests/lib/dagc_t.bp -- shared scaffolding of the dagc_* std_tests (DG4,
+// SPEC-BEBOP-DAG-RUNTIME §4). Not a program (no main): each dagc_*.bp `use`s it. It drives
+// selfhost/prelude/dagc.bp exactly as compiler/dagdrv.bp does -- open, one transaction per
+// "compile", entries, merged IDX, root, one commit -- with fixed stand-ins for what a compile
+// supplies: the compiler digest (11, comp), two instruction words per entry, no relocations.
+
+// t_open(dm, path, pl, comp): memo state for the image at path (cwd-relative cells), capacity
+// exactly 4096 cells (dm[25], as DAG_CAP=4096), compiler digest (11, comp). Returns dm[1].
+fn t_open(dm: [i64], path: [i64], pl: i64, comp: i64) -> i64 {
+  let _ = dm[16] = st_addr(path);
+  let _ = dm[17] = pl;
+  let _ = dm[8] = 11;
+  let _ = dm[9] = comp;
+  let _ = dm[25] = 4096;
+  let _ = dm[34] = 4096;
+  let _ = dm[14] = 0 - 1;
+  let _ = dag_digests(dm);
+  dag_open(dm, 4096)
+}
+// t_text(sc, s): the bytes of literal s packed into sc from byte 0; returns the length.
+fn t_text(sc: [i64], s: str) -> i64 {
+  let n = str_len(s);
+  let k = 0;
+  while k < 16 {
+    let _ = sc[k] = 0;
+    let k = k + 1;
+    0
+  };
+  let i = 0;
+  let m = 0;
+  while i < n {
+    let m = dag_put_byte(sc, m, char(s, i));
+    let i = i + 1;
+    0
+  };
+  n
+}
+// t_ctx(dm, lc, s): the live context = the bytes of s (one piece: length cell + packed bytes).
+fn t_ctx(dm: [i64], lc: [i64], s: str) -> i64 {
+  let tmp = zeros(16);
+  let n = t_text(tmp, s);
+  let _ = lc[0] = n;
+  let k = 0;
+  while k < 15 {
+    let _ = lc[1 + k] = tmp[k];
+    let k = k + 1;
+    0
+  };
+  let _ = dm[12] = st_addr(lc);
+  let _ = dm[13] = (1 + (n + 7) / 8) * 8;
+  let _ = dm[14] = 0 - 1;
+  dm[13]
+}
+// t_put(dm, sc, len, hitpos): one "compile" that stores the span sc[0..len) as a new entry and
+// marks IDX position hitpos (-1 = none) as hit. Returns the new ENTRY offset; dm reloaded.
+fn t_put(dm: [i64], sc: [i64], len: i64, hitpos: i64) -> i64 {
+  let base = dag_base(dm);
+  let tx = zeros(8);
+  let _ = st_begin(base, tx, base);
+  let gen = dm[4] + 1;
+  let ctxo = dag_put_ctx(dm, tx, st_cells(dm[12]), dm[13]);
+  let f = zeros(16);
+  let words = zeros(4);
+  let _ = words[0] = len;
+  let _ = words[1] = len + 1;
+  let _ = f[0] = dag_key(sc, 0, len);
+  let _ = f[1] = 1;
+  let _ = f[2] = len;
+  let _ = f[3] = 2;
+  let _ = f[6] = 2;
+  let _ = f[7] = dag_put_cells(dm, tx, dm[21], sc, 0, (len + 7) / 8);
+  let _ = f[8] = dag_put_words(dm, tx, words, 0, 2);
+  let _ = f[11] = ctxo;
+  let e = dag_put_entry(dm, tx, f);
+  let on = dm[7];
+  let keep = zeros(on + 1);
+  let hitg = zeros(on + 1);
+  let p = 0;
+  while p < on {
+    let _ = keep[p] = 1;
+    let p = p + 1;
+    0
+  };
+  let _ = if hitpos >= 0 then (let _ = hitg[hitpos] = 1 in 0) else 0;
+  let nk = [f[0], 0];
+  let ne = [e, 0];
+  let ng = [gen, 0];
+  let idx = dag_put_idx(dm, tx, nk, ne, ng, 1, keep, hitg, gen);
+  let _ = dag_put_root(dm, tx, idx, on + 1, ctxo, gen);
+  let _ = dag_load(dm, base, st_root(base, base));
+  let _ = dm[1] = 1;
+  e
+}
+// t_look(dm, sc, len): 1 when the span sc[0..len) hits under the live context, else 0.
+fn t_look(dm: [i64], sc: [i64], len: i64) -> i64 {
+  let _ = dm[29] = 0;
+  let e = dag_lookup(dm, dag_key(sc, 0, len), sc, 0, len);
+  if e > 0 then 1 else 0
+}

@@ -1,0 +1,45 @@
+// DG4 gate dagc_key_fields (SPEC §2.3 K-3 as built: the compile node's K64 = (crc32 of the span's
+// bytes, zero-padded to a cell) << 32 | span length). The same 29-byte span sliced out of a text at
+// all eight alignments packs to the same cells and the same key; the fold is over the eight keys,
+// then checked against crc32 over one-byte-per-cell (the builtin the byte frame would use).
+use "bench/vs_rust/std_tests/lib/dagc_t.bp"
+fn main() -> i64 {
+  let src = zeros(16);
+  let pad = zeros(16);
+  let one = zeros(64);
+  let out = zeros(16);
+  let acc = 0;
+  let same = 1;
+  let a = 0;
+  while a < 8 {
+    let m = 0;
+    let k = 0;
+    while k < 16 {
+      let _ = src[k] = 0;
+      let k = k + 1;
+      0
+    };
+    let j = 0;
+    while j < a {
+      let m = dag_put_byte(src, m, 35);
+      let j = j + 1;
+      0
+    };
+    let n = t_text(pad, "fn f(x: i64) -> i64 { x * 3 }");
+    let i = 0;
+    while i < n {
+      let m = dag_put_byte(src, m, char("fn f(x: i64) -> i64 { x * 3 }", i));
+      let _ = one[i] = char("fn f(x: i64) -> i64 { x * 3 }", i);
+      let i = i + 1;
+      0
+    };
+    let _ = dag_pack_span(src, a, a + n, out, 0);
+    let key = dag_key(out, 0, n);
+    let byk = (crc32(one, ((n + 7) / 8) * 8) << 32) | n;
+    let same = if key == byk then same else 0;
+    let acc = acc * 31 + key;
+    let a = a + 1;
+    0
+  };
+  if same == 1 then acc else 0 - 1
+}

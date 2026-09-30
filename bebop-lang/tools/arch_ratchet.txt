@@ -10,7 +10,9 @@ max_new_bp_lines = 800
 # 2026-09-29 (W-DG4 phase 1, operator: "split in files"): 8500 -> 6153. bebop.bp was 9210 (over
 # the ratchet); its first 3067 lines moved to compiler/*.bp (five files, each under the 800 cap),
 # pulled back in by `use` lines, codegen byte-identical. New compiler code goes into compiler/*.bp.
-max_bp_lines = 6153
+# 2026-09-30 (W-DG4 phase 2): 6153 -> 5894. The driver (compile_program_offs, emit_words_offs,
+# cli_compile, cli_check) moved to compiler/dagdrv.bp + compiler/dagcli.bp with the per-fn memo.
+max_bp_lines = 5894
 #
 # GENERATED files: exempt from the cap AND left out of max_bp_lines (a generated copy of an old
 # compiler is not the file the ratchet exists to shrink -- gb_pool_build.bp at 8388 would

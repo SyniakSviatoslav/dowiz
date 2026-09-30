@@ -1,0 +1,26 @@
+// DG4 gate dagc_hit_exact (SPEC-BEBOP-DAG-RUNTIME §4.2 M-1, §2.4 K-4): an entry written by one
+// "compile" is a HIT for the same bytes under the same context and compiler after a REOPEN, and a
+// miss under a changed context or a changed compiler digest. Prints h_same*100 + h_ctx*10 + h_comp.
+use "bench/vs_rust/std_tests/lib/dagc_t.bp"
+fn main() -> i64 {
+  let path = zeros(32);
+  let pl = st_str(path, "dagc_hit.dag");
+  let dm = zeros(48);
+  let lc = zeros(32);
+  let sc = zeros(16);
+  let _ = t_open(dm, path, pl, 22);
+  let _ = t_ctx(dm, lc, "fn a(x: i64) -> i64");
+  let n = t_text(sc, "fn a(x: i64) -> i64 { x + 1 }\n");
+  let _ = t_put(dm, sc, n, 0 - 1);
+  let d2 = zeros(48);
+  let _ = t_open(d2, path, pl, 22);
+  let _ = t_ctx(d2, lc, "fn a(x: i64) -> i64");
+  let h1 = t_look(d2, sc, n);
+  let _ = t_ctx(d2, lc, "fn a(x: i64, y: i64) -> i64");
+  let h2 = t_look(d2, sc, n);
+  let d3 = zeros(48);
+  let _ = t_open(d3, path, pl, 23);
+  let _ = t_ctx(d3, lc, "fn a(x: i64) -> i64");
+  let h3 = t_look(d3, sc, n);
+  h1 * 100 + h2 * 10 + h3
+}

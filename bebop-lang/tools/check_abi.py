@@ -241,7 +241,12 @@ ZONES = [(0, 1, "fntab"), (2900, 3667, "b1_facts"), (3668, 3670, "b1_scratch"),
          # cap / 0.75 load. 7110 = A8's "type word of the last completed expression" (ety,
          # bebop.bp ety_set) -- used since A8 but never registered, so `--fntab` has been
          # RED at d157fd07 ("fntab[7110] outside the zone map"); registered here.
-         (7103, 7103, "fnhash_hdr"), (7110, 7110, "ety"), (7168, 8191, "fnhash")]
+         (7103, 7103, "fnhash_hdr"), (7110, 7110, "ety"),
+         # DG4 (2026-09-30): the relocation recorder (compiler/dagdrv.bp dag_rel): 7111 = the
+         # reloc buffer (st_addr, 0 = not recording -- the planning table and every other fntab),
+         # 7112 = pairs recorded, 7113 = capacity, 7114 = "this fn cannot be memoised".
+         (7111, 7114, "dag_reloc"),
+         (7168, 8191, "fnhash")]
 # A16 prerequisite RELAYOUT (2026-09-09): the fn cap is 768, so the FLOATING fn zone
 # (3*cnt + ecnt + 258 cells = 0..2816 at cnt=768, ecnt=255) needs everything above it
 # to move. b1_facts is 768 cells because IT IS INDEXED BY FN INDEX -- see PERFN below,
@@ -277,6 +282,7 @@ REGISTERED = {
     # each is "inside the zone map" on its own, and being inside is not being the base we
     # said it was (that is the F3 fntab[4810] defect this dict was added to prevent).
     7000: "struct_table", 7001: "struct_table",
+    7111: "dag_reloc", 7112: "dag_reloc", 7113: "dag_reloc", 7114: "dag_reloc",
     7002: "struct_table", 7034: "struct_table",
     # A21 steps 1+2.
     7100: "tuple_abi", 7101: "tuple_abi", 7102: "tuple_abi",

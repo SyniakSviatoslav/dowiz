@@ -769,6 +769,30 @@ rm -f sanchor_b.store
 rm -f sanchor_c.store
 rm -f sanchor_d.store
 
+# ---- dagc_* (DG4, docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md §2.2-§4.3): the compile-node memo
+# image `<out>.dag` driven through selfhost/prelude/dagc.bp (scaffolding bench/vs_rust/std_tests/lib/
+# dagc_t.bp): hit on the same bytes/context/compiler after a reopen (M-1, K-4), miss on one flipped byte,
+# a forced K64 collision misses (K-1), the key over eight alignments (K-3), one commit per compile and an
+# O(1) append (M-2), last_hit_gen carried into the new index (M-3), a torn image refused (M-5). Each writes
+# its own dagc_*.dag in the cwd (side effects: run directly, never through the memo), removed before and
+# after. The compile-level proof (warm == cold for every program) is bench/vs_rust/dagfull.sh compile.
+rm -f dagc_hit.dag dagc_one.dag dagc_coll.dag dagc_o1.dag dagc_gen.dag dagc_torn.dag
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dagc_hit_exact.bp ${BEBOP_TMP:-/tmp/opencode}/dagc_hit_exact_test.bin >/dev/null 2>&1 && ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dagc_hit_exact_test.bin 2>/dev/null | tail -1)
+gate dagc_hit_exact 100 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dagc_miss_on_one_byte.bp ${BEBOP_TMP:-/tmp/opencode}/dagc_miss_on_one_byte_test.bin >/dev/null 2>&1 && ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dagc_miss_on_one_byte_test.bin 2>/dev/null | tail -1)
+gate dagc_miss_on_one_byte 11 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dagc_key_collision.bp ${BEBOP_TMP:-/tmp/opencode}/dagc_key_collision_test.bin >/dev/null 2>&1 && ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dagc_key_collision_test.bin 2>/dev/null | tail -1)
+gate dagc_key_collision 11 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dagc_key_fields.bp ${BEBOP_TMP:-/tmp/opencode}/dagc_key_fields_test.bin >/dev/null 2>&1 && ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dagc_key_fields_test.bin 2>/dev/null | tail -1)
+gate dagc_key_fields 392808500309892736 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dagc_append_is_o1.bp ${BEBOP_TMP:-/tmp/opencode}/dagc_append_is_o1_test.bin >/dev/null 2>&1 && ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dagc_append_is_o1_test.bin 2>/dev/null | tail -1)
+gate dagc_append_is_o1 31 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dagc_hit_gen.bp ${BEBOP_TMP:-/tmp/opencode}/dagc_hit_gen_test.bin >/dev/null 2>&1 && ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dagc_hit_gen_test.bin 2>/dev/null | tail -1)
+gate dagc_hit_gen 32 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dagc_torn_image.bp ${BEBOP_TMP:-/tmp/opencode}/dagc_torn_image_test.bin >/dev/null 2>&1 && ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dagc_torn_image_test.bin 2>/dev/null | tail -1)
+gate dagc_torn_image 201 "$r"
+rm -f dagc_hit.dag dagc_one.dag dagc_coll.dag dagc_o1.dag dagc_gen.dag dagc_torn.dag
+
 # ---- smw (G10, ROADMAP B5: P writer THREADS on disjoint partitions, N updates each,
 # a cross-partition 2PC transaction every 100th. Fold = every C{i64} payload walked out of
 # the arena by fold_partition; the closed form is absent from the program by design, so the
@@ -1087,7 +1111,11 @@ gate gb_bfs_gen 997 "$r"
 #      already-mmap'd store base + GbMatrix cell offset as decimal argv via fork+sys_run,
 #      the exact sgraph2 dispatch shape -- checking driver == _addr kernel before accepting
 #      the golden (997, == bench/oracles/gb_bfs_gen_addr.py, source 0). ----
-./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_bfs_gen_addr.bp "$GBT/gb_bfs_gen_addr.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_bfs_gen_addr.bin" "$GBT" >/dev/null 2>&1 || r="COMPILEFAIL($r)"
+# W-DG4 (2026-09-30): the generator runs DIRECTLY, never through `run`'s memo -- it WRITES
+# $GBT/gb_bfs_1_0_2_0.bp, and a memo replay (same .bin md5 in a later battery: a codegen-neutral
+# compiler change reproduces it exactly) printed cached stdout and wrote nothing, so the next
+# line's compile failed and the gate read COMPILEFAIL(997) -- the gb_bfs_gen hazard named above.
+./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_bfs_gen_addr.bp "$GBT/gb_bfs_gen_addr.bin" >/dev/null 2>&1 && timeout 30 ./seed/build/seed "$GBT/gb_bfs_gen_addr.bin" "$GBT" >/dev/null 2>&1 || r="COMPILEFAIL($r)"
 ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_bfs_1_0_2_0.bp" "$GBT/gb_bfs_1_0_2_0.bin" >/dev/null 2>&1 || r="COMPILEFAIL($r)"
 ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_bfs_gen_addr_gate.bp "$GBT/gb_bfs_gen_addr_gate.bin" >/dev/null 2>&1 || r="COMPILEFAIL($r)"
 ra=$(run 30 "$GBT/gb_bfs_gen_addr_gate.bin" "$GBT" | tail -1)

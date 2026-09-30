@@ -327,21 +327,28 @@ fn collect_structs(s: str, fntab: [i64]) -> i64 {
   let strn = str_len(s);
   let j = 0;
   let _ = fntab[7001] = 0;
-  let tpc = [0];
+  // DG4 (2026-09-30): the per-byte path is one line-start test; the keyword tests run in
+  // cs_at only on line starts beginning with `s` or `t`. Same list, same order. MEASURED
+  // before: ~30 ms per call on bebop.bp, paid by every compile that emits even one fn.
   while j + 6 < strn {
+    let c = char(s, j);
     let at_bol = if j == 0 then 1 else ceq(s, j - 1, 10);
-    let t0 = at_bol * ceq(s, j, 116) * ceq(s, j + 1, 101);
-    let is_test = t0 * ceq(s, j + 2, 115) * ceq(s, j + 3, 116) * ceq(s, j + 4, 32);
-    let h0 = at_bol * ceq(s, j, 115) * ceq(s, j + 1, 116);
-    let h1 = h0 * ceq(s, j + 2, 114) * ceq(s, j + 3, 117);
-    let hit = h1 * ceq(s, j + 4, 99) * ceq(s, j + 5, 116) * ceq(s, j + 6, 32);
-    let _ = if hit == 1 then st_record(s, j, fntab) else 0;
-    let _ = tpc[0] = if is_test == 1 then find_body_end(s, j + 5, strn) else j;
-    let j = if is_test == 1 then tpc[0] + 1 else j + 1;
+    let cand = at_bol * ((if c == 116 then 1 else 0) + (if c == 115 then 1 else 0));
+    let j = if cand == 1 then cs_at(s, j, strn, fntab) else j + 1;
     0
   };
   let _ = fntab[7000] = 1;
   fntab[7001]
+}
+// cs_at: a line start at j: record a `struct ` there, skip a `test ` body whole; the next j.
+fn cs_at(s: str, j: i64, strn: i64, fntab: [i64]) -> i64 {
+  let t0 = ceq(s, j, 116) * ceq(s, j + 1, 101);
+  let is_test = t0 * ceq(s, j + 2, 115) * ceq(s, j + 3, 116) * ceq(s, j + 4, 32);
+  let h0 = ceq(s, j, 115) * ceq(s, j + 1, 116);
+  let h1 = h0 * ceq(s, j + 2, 114) * ceq(s, j + 3, 117);
+  let hit = h1 * ceq(s, j + 4, 99) * ceq(s, j + 5, 116) * ceq(s, j + 6, 32);
+  let _ = if hit == 1 then st_record(s, j, fntab) else 0;
+  if is_test == 1 then find_body_end(s, j + 5, strn) + 1 else j + 1
 }
 
 // Index of the struct named by hash `name`, or -1. A stored hash is never 0 (an
@@ -497,49 +504,38 @@ fn find_enum(s: str, out: [i64]) -> i64 {
   // the compiler's own source -> phantom decl -> collect_ctors loop over
   // garbage with names[] overrun. Self-source is the first input that
   // actually contains those tokens.
+  // DG4 (2026-09-30): one compare per byte; fe_step runs only on a byte that can start a string,
+  // a comment, `enum ` or `test ` -- same answer (the LAST match), ~14 ms -> a few on bebop.bp.
   let strn = str_len(s);
   let j = 0;
-  let found = 0;
-  let best = strn;
-  let spc = [0];
-  let cpc = [0];
-  let tpc = [0];
+  let st = [strn, 0];
   while j + 4 < strn {
     let c0 = char(s, j);
-    let c1 = char(s, j + 1);
-    let c2 = char(s, j + 2);
-    let c3 = char(s, j + 3);
-    let c4 = char(s, j + 4);
-    let is_quote = if c0 == 34 then 1 else 0;
-    let is_sl = if c0 == 47 then 1 else 0;
-    let is_sl2 = if c1 == 47 then 1 else 0;
-    let is_comment = is_sl * is_sl2;
-    let is_e = if c0 == 101 then 1 else 0;
-    let is_n = if c1 == 110 then 1 else 0;
-    let is_u = if c2 == 117 then 1 else 0;
-    let is_m = if c3 == 109 then 1 else 0;
-    let is_sp = if c4 == 32 then 1 else 0;
-    let hit = is_e * is_n * is_u * is_m * is_sp * (1 - is_quote) * (1 - is_comment);
-    let ist = if c0 == 116 then 1 else 0;
-    let ise = if c1 == 101 then 1 else 0;
-    let iss = if c2 == 115 then 1 else 0;
-    let ist2 = if c3 == 116 then 1 else 0;
-    let issp = if c4 == 32 then 1 else 0;
-    let is_test = ist * ise * iss * ist2 * issp;
-    let best = if hit == 1 then j else best;
-    let found = if hit == 1 then 1 else found;
-    let _ = spc[0] = j;
-    let _ = cpc[0] = j;
-    let _ = tpc[0] = j;
-    let _ = if is_quote == 1 then skip_string_n(s, spc, strn) else 0;
-    let _ = if is_comment == 1 then skip_line_comment_n(s, cpc, strn) else 0;
-    let _ = if is_test == 1 then (let _ = tpc[0] = find_body_end(s, j + 5, strn) in (let _ = tpc[0] = if tpc[0] >= strn then strn else tpc[0] + 1 in 0)) else 0;
-    let jnext = (j + 1) * (1 - is_quote - is_comment - hit - is_test) + spc[0] * is_quote + cpc[0] * is_comment + tpc[0] * is_test;
-    let j = if hit == 1 then j + 5 else jnext;
+    let slow = (if c0 == 34 then 1 else 0) + (if c0 == 47 then 1 else 0) + (if c0 == 101 then 1 else 0) + (if c0 == 116 then 1 else 0);
+    let j = if slow > 0 then fe_step(s, j, strn, st) else j + 1;
     0
   };
-  let _ = out[0] = best;
-  found
+  let _ = out[0] = st[0];
+  st[1]
+}
+// fe_step: find_enum's old loop body at j (st = [best, found]); returns the next j.
+fn fe_step(s: str, j: i64, strn: i64, st: [i64]) -> i64 {
+  let c0 = char(s, j);
+  let c1 = char(s, j + 1);
+  let c2 = char(s, j + 2);
+  let c3 = char(s, j + 3);
+  let c4 = char(s, j + 4);
+  let is_quote = if c0 == 34 then 1 else 0;
+  let is_comment = (if c0 == 47 then 1 else 0) * (if c1 == 47 then 1 else 0);
+  let hit = (if c0 == 101 then 1 else 0) * (if c1 == 110 then 1 else 0) * (if c2 == 117 then 1 else 0) * (if c3 == 109 then 1 else 0) * (if c4 == 32 then 1 else 0);
+  let is_test = (if c0 == 116 then 1 else 0) * (if c1 == 101 then 1 else 0) * (if c2 == 115 then 1 else 0) * (if c3 == 116 then 1 else 0) * (if c4 == 32 then 1 else 0);
+  let _ = if hit == 1 then (let _ = st[0] = j in (let _ = st[1] = 1 in 0)) else 0;
+  let p = [j, strn];
+  let _ = if is_quote == 1 then skip_string_n(s, p, strn) else 0;
+  let _ = if is_comment == 1 then skip_line_comment_n(s, p, strn) else 0;
+  let tb = if is_test == 1 then find_body_end(s, j + 5, strn) else 0;
+  let tn = if tb >= strn then strn else tb + 1;
+  if hit == 1 then j + 5 else if is_quote == 1 then p[0] else if is_comment == 1 then p[0] else if is_test == 1 then tn else j + 1
 }
 
 // Tag (0-based) of ctor name in the enum decl, or -1 if absent / no enum.
@@ -626,9 +622,7 @@ fn emit_bl(insns: [i64], n: [i64], target: i64, has_spills: i64) -> i64 {
   // x15 preserved across ANY call, regardless of what the specific callee does.
   let _ = if has_spills == 1 then em(insns, n, 4162785263) else 0;
   let offset = target - n[0];
-  let is_back = if offset < 0 then 1 else 0;
-  let word = 2483027968 + offset + is_back * 67108864;
-  let _ = em(insns, n, word);
+  let _ = em(insns, n, w_bl(offset));
   let _ = if has_spills == 1 then em(insns, n, 4165011439) else 0;
   n[0]
 }

@@ -1,0 +1,230 @@
+// bebop-lang/compiler/dagcli.bp -- part of the self-hosting compiler, NOT a standalone program.
+// DG4: the command-line half of the driver (moved from bebop.bp 2026-09-30): emit_words_offs,
+// cli_compile, cli_check and the memo setup they share. The compile itself is compiler/dagdrv.bp.
+
+fn emit_words_offs(src: str, offs: [i64]) -> [i64] {
+  let dm = zeros(48);
+  let _ = dm[29] = 1;
+  dag_words_offs(src, 0, offs, dm)
+}
+// dag_words_offs: [n, words...] of the whole program, through the memo named by dm (dm[29] = 1: none).
+fn dag_words_offs(src: str, sidx: i64, offs: [i64], dm: [i64]) -> [i64] {
+  let insns = zeros(262144);
+  let n = [0, 262144];
+  let _ = dag_program(src, sidx, insns, n, offs, dm);
+  let out = zeros(n[0] + 1);
+  let _ = out[0] = n[0];
+  let k = [0];
+  let go = 1;
+  while go == 1 {
+    let done = if k[0] >= n[0] then 1 else 0;
+    let _ = if done == 0 then (let _ = out[k[0] + 1] = insns[k[0]] in 0) else 0;
+    let _ = k[0] = k[0] + 1;
+    let go = 1 - done;
+    0
+  };
+  out
+}
+
+fn cli_compile(argc: i64, argv: [str]) -> i64 {
+  let src = argv[3];
+  let out = argv[4];
+  let ls = str_len(src);
+  let lo = str_len(out);
+  let psrc = zeros(ls + 1);
+  let pout = zeros(lo + 1);
+  let _ = str_to_cells(psrc, src);
+  let _ = str_to_cells(pout, out);
+  let fd = sys_open(psrc, ls, 0);
+  // Found 2026-09-13 while TRIGGERING code 90 rather than trusting that it fired: this open
+  // was the one file open in the compiler with no guard, so `compile /typo.bp out.bin` slurped
+  // an invalid fd, compiled the resulting empty program and exited 0 -- a silent failure on a
+  // mistyped filename, and it made TRAPS.md row 90's "source" case a claim nothing could produce.
+  let _ = if fd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
+  let at = [sys_arena_base()];
+  let srcv0 = sys_slurp(fd, src_slurp_cap());
+  let _ = if str_len(srcv0) >= src_slurp_cap() then cli_exit(113, "source file too large -- it reached the slurp cap and would be silently truncated mid-program") else 0;
+  let _ = sys_close(fd);
+  // T47: `<out>.use` is the scratch file of the expansion (rewritten each compile)
+  let tmpc = zeros(lo + 5);
+  let _ = str_to_cells(tmpc, out);
+  let _ = tmpc[lo] = 46;
+  let _ = tmpc[lo + 1] = 117;
+  let _ = tmpc[lo + 2] = 115;
+  let _ = tmpc[lo + 3] = 101;
+  let srcv = use_expand_at(srcv0, tmpc, lo + 4, at);
+  let cpath = zeros(lo + 9);
+  let _ = str_to_cells(cpath, out);
+  let _ = cpath[lo] = 46;
+  let _ = cpath[lo + 1] = 98;
+  let _ = cpath[lo + 2] = 101;
+  let _ = cpath[lo + 3] = 99;
+  let _ = cpath[lo + 4] = 97;
+  let _ = cpath[lo + 5] = 99;
+  let _ = cpath[lo + 6] = 104;
+  let _ = cpath[lo + 7] = 101;
+  let lc = str_len(argv[1]);
+  let pcomp = zeros(lc + 1);
+  let _ = str_to_cells(pcomp, argv[1]);
+  let ta = zeros(8192);
+  let tb = zeros(8192);
+  let nocache = if argc >= 6 then 1 else 0;
+  let ofd0 = if nocache == 1 then 0 - 1 else sys_open(pout, lo, 0);
+  let cfd0 = if ofd0 >= 0 then sys_open(cpath, lo + 8, 0) else 0 - 1;
+  let kfd0 = if cfd0 >= 0 then sys_open(pcomp, lc, 0) else 0 - 1;
+  let hit = if kfd0 >= 0 then cache_hit(cfd0, kfd0, srcv, ta, tb) else 0;
+  let _ = if ofd0 >= 0 then sys_close(ofd0) else 0;
+  let _ = if cfd0 >= 0 then sys_close(cfd0) else 0;
+  let _ = if kfd0 >= 0 then sys_close(kfd0) else 0;
+  while hit == 1 {
+    return 0;
+    0
+  };
+  // DG4: the per-fn memo <out>.dag (publish mode, like .becache, compiles cold and writes none)
+  let dm = zeros(48);
+  let _ = if nocache == 1 then (let _ = dm[29] = 1 in 0) else dag_setup(dm, pout, lo, pcomp, lc, str_len(srcv));
+  let offs = zeros(784);
+  let words0 = dag_words_offs(srcv, at[0], offs, dm);
+  let _ = if dm[26] == 1 then dag_hits_line(dm) else 0;
+  let n0 = words0[0];
+  let main_off = offs[(offs[0] >> 32) + 1];
+  let stub = zeros(172);
+  let _ = entry_stub(stub);
+  let _ = stub[83] = 335544320 + ((main_off - (n0 + 83)) & 67108863);
+  let words = zeros(n0 + 173);
+  let ci = 0;
+  while ci <= n0 {
+    let _ = words[ci] = words0[ci];
+    let ci = ci + 1;
+    0
+  };
+  let cj = 0;
+  while cj < 172 {
+    let _ = words[n0 + 1 + cj] = stub[cj];
+    let cj = cj + 1;
+    0
+  };
+  let n = n0 + 172;
+  let _ = words[0] = n;
+  let entry = n0;
+  let e4 = entry * 4;
+  let nb = n * 4 + 8;
+  let buf = zeros(nb);
+  let k = 0;
+  while k < n {
+    let w = words[k + 1];
+    let _ = buf[k * 4] = w & 255;
+    let _ = buf[k * 4 + 1] = (w >> 8) & 255;
+    let _ = buf[k * 4 + 2] = (w >> 16) & 255;
+    let _ = buf[k * 4 + 3] = (w >> 24) & 255;
+    let k = k + 1;
+    0
+  };
+  let _ = buf[n * 4] = e4 & 255;
+  let _ = buf[n * 4 + 1] = (e4 >> 8) & 255;
+  let _ = buf[n * 4 + 2] = (e4 >> 16) & 255;
+  let _ = buf[n * 4 + 3] = (e4 >> 24) & 255;
+  let _ = buf[n * 4 + 4] = (e4 >> 32) & 255;
+  let _ = buf[n * 4 + 5] = (e4 >> 40) & 255;
+  let _ = buf[n * 4 + 6] = (e4 >> 48) & 255;
+  let _ = buf[n * 4 + 7] = (e4 >> 56) & 255;
+  // F2 atomic publish (Ф6): argv[5] = tmp path (when argc >= 6) - export the
+  // artifact to tmp via mmap (ftruncate + MAP_SHARED stores, NO sys_write on
+  // the artifact path), close, then renameat(tmp, out): the artifact appears
+  // atomically - readers never observe a partially-written .bin. Without
+  // argv[5]: direct export to out.
+  let rc2 = 0;
+  let publish = if argc >= 6 then 1 else 0;
+  let ptmp = zeros(256);
+  let ptl = [0];
+  let _ = if publish == 1 then (let _ = ptl[0] = str_len(argv[5]) in 0) else 0;
+  let _ = if publish == 1 then str_to_cells(ptmp, argv[5]) else 0;
+  let tg = if publish == 1 then ptmp else pout;
+  let tl = if publish == 1 then ptl[0] else lo;
+  let ofd = sys_open(tg, tl, 578);
+  let _ = if ofd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
+  let rc2 = sys_export(ofd, buf, nb);
+  let _ = sys_close(ofd);
+  let kfd1 = if nocache == 1 then 0 - 1 else sys_open(pcomp, lc, 0);
+  let cfd1 = if kfd1 >= 0 then sys_open(cpath, lo + 8, 578) else 0 - 1;
+  let _ = if cfd1 >= 0 then cache_write(cfd1, kfd1, srcv, ta) else 0;
+  let _ = if cfd1 >= 0 then sys_close(cfd1) else 0;
+  let _ = if kfd1 >= 0 then sys_close(kfd1) else 0;
+  let rn = if publish == 1 then sys_rename(ptmp, ptl[0], pout, lo) else 0;
+  rc2 * 10 + rn
+}
+
+fn cli_check(argc: i64, argv: [str]) -> i64 {
+  let _ = if argc >= 4 then 0 else cli_exit(64, "unknown CLI command (compile, check, size, version, run-via-exec, cas) or check without a file");
+  let src = argv[3];
+  let ls = str_len(src);
+  let psrc = zeros(ls + 1);
+  let _ = str_to_cells(psrc, src);
+  let fd = sys_open(psrc, ls, 0);
+  let _ = if fd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
+  let srcv0 = sys_slurp(fd, src_slurp_cap());
+  let _ = if str_len(srcv0) >= src_slurp_cap() then cli_exit(113, "source file too large -- it reached the slurp cap and would be silently truncated mid-program") else 0;
+  let _ = sys_close(fd);
+  // RT L-4 (DG4): the expansion scratch goes under $BEBOP_TMP (else /tmp), named by the crc of
+  // the source path -- never beside the source (`<src>.use` once rewrote a tracked file).
+  let dm = zeros(48);
+  let _ = dag_env(dm);
+  let tmpc = zeros(4200);
+  let tl = dag_check_scratch(dm, tmpc, crc32b(src));
+  let srcv = use_expand(srcv0, tmpc, tl);
+  let offs = zeros(784);
+  let words0 = emit_words_offs(srcv, offs);
+  words0[0] * 0
+}
+
+// dag_setup: the memo for `compile <src> <out>`: environment, digests, compiler bytes, <out>.dag.
+fn dag_setup(dm: [i64], pout: [i64], lo: i64, pcomp: [i64], lc: i64, strn: i64) -> i64 {
+  let _ = dag_env(dm);
+  let _ = dag_digests(dm);
+  let _ = dag_compiler(dm, pcomp, lc);
+  let path = zeros(lo + 8);
+  let k = 0;
+  while k < lo {
+    let _ = path[k] = pout[k];
+    let k = k + 1;
+    0
+  };
+  let _ = path[lo] = 46;
+  let _ = path[lo + 1] = 100;
+  let _ = path[lo + 2] = 97;
+  let _ = path[lo + 3] = 103;
+  let _ = dm[16] = st_addr(path);
+  let _ = dm[17] = lo + 4;
+  // RT §4.4, derived not literal: 4 * (len + 4 * nwords_est) / 8 + 2 * 1024, nwords_est = len / 2,
+  // rounded up to a 1 MiB multiple (131072 cells); DAG_CAP overrides.
+  let raw = 4 * (strn + 4 * (strn / 2)) / 8 + 2 * 1024;
+  let mib = 1048576 / 8;
+  let derived = ((raw + mib - 1) / mib) * mib;
+  let _ = dm[34] = if dm[25] > 0 then dm[25] else derived;
+  dag_open(dm, dm[34])
+}
+// dag_hits_line: `dag: hits <h>/<n>` on stderr (DAG_HITS=1; the mutation proof reads it, RT §8.3).
+fn dag_hits_line(dm: [i64]) -> i64 {
+  let b = zeros(64);
+  let a = dag_str(b, 0, "dag: hits ");
+  let a = put_num(b, a, dm[10]);
+  let _ = b[a] = 47;
+  let a = put_num(b, a + 1, dm[11]);
+  let _ = b[a] = 10;
+  sys_write(2, b, a + 1)
+}
+// dag_check_scratch(dm, tmpc, h): <BEBOP_TMP or /tmp>/bebop-check-<h>.use into tmpc; returns its length.
+fn dag_check_scratch(dm: [i64], tmpc: [i64], h: i64) -> i64 {
+  let tb = st_cells(dm[30]);
+  let n = dm[31];
+  let k = 0;
+  while k < n {
+    let _ = tmpc[k] = tb[k];
+    let k = k + 1;
+    0
+  };
+  let a = if n > 0 then n else dag_str(tmpc, 0, "/tmp");
+  let a = dag_str(tmpc, a, "/bebop-check-");
+  let a = put_num(tmpc, a, h & 4294967295);
+  dag_str(tmpc, a, ".use")
+}

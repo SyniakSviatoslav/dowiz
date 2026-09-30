@@ -309,6 +309,9 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
   // behaviour and is the default in any fntab this mechanism never touches;
   // 1 = the caller's own facts say it never needs x15/x14 preserved).
   let _ = fntab[3668] = fntab[3668] + 1;
+  // DG4: a call to ANOTHER fn is a BL relocation (RT L-2); a self-call stays relative. The bl
+  // word follows emit_bl's optional `str x15`, hence the has_spills offset.
+  let _ = if name == selfname then 0 else dag_rel_fn(fntab, n[0] + 1 - fntab[3669], 1, name);
   let _ = emit_bl(insns, n, target, 1 - fntab[3669]);
   // x1..x7 are free (parked); x0 holds the result. `bl` has no destination
   // field to retarget, so p = -1.

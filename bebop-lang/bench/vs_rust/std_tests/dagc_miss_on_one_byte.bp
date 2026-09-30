@@ -1,0 +1,25 @@
+// DG4 gate dagc_miss_on_one_byte (SPEC §4.2 M-1): two entries A and B; A with ONE byte flipped
+// misses, B and A themselves hit. Prints miss_flipped*100 + hit_b*10 + hit_a (want 11).
+use "bench/vs_rust/std_tests/lib/dagc_t.bp"
+fn main() -> i64 {
+  let path = zeros(32);
+  let pl = st_str(path, "dagc_one.dag");
+  let dm = zeros(48);
+  let lc = zeros(32);
+  let sa = zeros(16);
+  let sb = zeros(16);
+  let _ = t_open(dm, path, pl, 22);
+  let _ = t_ctx(dm, lc, "ctx");
+  let na = t_text(sa, "fn a(x: i64) -> i64 { x + 1 }\n");
+  let nb = t_text(sb, "fn b(x: i64) -> i64 { a(x) * 2 }\n");
+  let _ = t_put(dm, sa, na, 0 - 1);
+  let _ = t_put(dm, sb, nb, 0 - 1);
+  let d2 = zeros(48);
+  let _ = t_open(d2, path, pl, 22);
+  let _ = t_ctx(d2, lc, "ctx");
+  let ha = t_look(d2, sa, na);
+  let hb = t_look(d2, sb, nb);
+  let _ = sa[2] = sa[2] ^ 256;
+  let hf = t_look(d2, sa, na);
+  hf * 100 + hb * 10 + ha
+}

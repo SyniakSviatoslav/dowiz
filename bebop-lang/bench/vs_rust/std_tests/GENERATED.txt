@@ -144,3 +144,14 @@ vecinv.bp generated selfhost/std/vecinv.bp
 whileb.bp generated selfhost/std/whileb.bp
 wht.bp generated selfhost/std/wht.bp
 zgrade.bp generated selfhost/std/zgrade.bp
+dagc_append_is_o1.bp local
+dagc_hit_exact.bp local
+dagc_hit_gen.bp local
+dagc_key_collision.bp local
+dagc_key_fields.bp local
+dagc_miss_on_one_byte.bp local
+dagc_torn_image.bp local
+block_money_neg.bp local
+block_neg.bp local
+block_rt.bp local
+block_schema.bp local

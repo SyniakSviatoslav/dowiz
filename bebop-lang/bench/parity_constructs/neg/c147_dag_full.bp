@@ -1,0 +1,11 @@
+// EXPECT COMPILEFAIL:126 from: E126 memo image full (SPEC-BEBOP-DAG-RUNTIME §4.3 M-4, BLUEPRINT DG4)
+// ENV DAG_CAP=64
+// DG4 negative control (2026-09-30). The compile-node memo `<out>.dag` is sized by DAG_CAP (arena
+// cells). 64 cells cannot hold even this program's three entries plus its index and root, so the
+// compiler must REFUSE with exit 126 and write neither the .bin nor a partial image -- never
+// silently compile without a memo. The blueprint names DAG_CAP=4096; a program that overflows
+// 4096 cells is a ~32 KB source, so the construct keeps the SAME failure at a small capacity.
+// Its positive twin is every other construct: under the derived capacity they all compile.
+fn twice(x: i64) -> i64 { x + x }
+fn thrice(x: i64) -> i64 { x + twice(x) }
+fn main() -> i64 { thrice(14) }

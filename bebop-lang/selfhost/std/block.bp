@@ -62,7 +62,14 @@ fn bk_tok(s: [i64], at: i64, l: i64, prev: i64) -> i64 {
 // bk_parse: schema i = the string s[st..en), `name:vN(col:type:unit,...)`. Returns ncols.
 fn bk_parse(t: [i64], i: i64, s: [i64], st: i64, en: i64) -> i64 {
   let r = 64 * i;
-  let _ = t[r] = (crc32(s + st, en - st) << 32) | ((en - st) & 4294967295);
+  let one = zeros(en - st + 1);
+  let k = 0;
+  while k < en - st {
+    let _ = one[k] = s[st + k];
+    let k = k + 1;
+    0
+  };
+  let _ = t[r] = (crc32(one, en - st) << 32) | ((en - st) & 4294967295);
   let _ = t[r + 3] = st;
   let p = st;
   while s[p] != 58 { let p = p + 1; 0 };
@@ -435,18 +442,18 @@ fn bk_gross(price: i64, own: i64, dflt: i64, inclusive: i64, st: [i64]) -> i64 {
 fn bk_puts(o: [i64], p: i64, x: str) -> i64 { bk_load(o, p, x) }
 
 fn bk_putn(o: [i64], p: i64, x: i64) -> i64 {
-  let d = zeros(24);
-  let k = 0;
-  let y = x;
-  while (k == 0) | (y > 0) {
-    let _ = d[k] = 48 + y % 10;
+  let k = 1;
+  let y = x / 10;
+  while y > 0 {
     let y = y / 10;
     let k = k + 1;
     0
   };
   let i = 0;
+  let y = x;
   while i < k {
-    let _ = o[p + i] = d[k - 1 - i];
+    let _ = o[p + k - 1 - i] = 48 + y % 10;
+    let y = y / 10;
     let i = i + 1;
     0
   };
@@ -519,15 +526,23 @@ fn bk_line_ok(o: [i64], p: i64, st: [i64], e: [i64], h: [i64]) -> i64 {
 }
 
 // bk_read: the file named by path[0..plen) (one byte per cell) into b, at most `cap` bytes plus
-// one 8 KiB read (sys_read unpacks at most 8192 bytes a call); -1 when it does not open.
-fn bk_read(path: [i64], plen: i64, b: [i64], cap: i64) -> i64 {
+// one 8 KiB read (sys_read unpacks at most 8192 bytes a call, into the caller's >= 8192-cell `chunk`,
+// copied onward -- an array names a whole allocation, never a slice, tools/typecheck.py; allocating
+// the chunk here exhausted the arena over 4,000 files, trap 80); -1 when it does not open.
+fn bk_read(path: [i64], plen: i64, b: [i64], cap: i64, chunk: [i64]) -> i64 {
   let _ = path[plen] = 0;
   let fd = sys_open(path, plen, 0);
   let _ = if fd < 0 then return 0 - 1 else 0;
   let total = 0;
   let go = 1;
   while go == 1 {
-    let got = sys_read(fd, b + total, 8192);
+    let got = sys_read(fd, chunk, 8192);
+    let j = 0;
+    while j < got {
+      let _ = b[total + j] = chunk[j];
+      let j = j + 1;
+      0
+    };
     let total = if got > 0 then total + got else total;
     let go = if got > 0 then (if total < cap then 1 else 0) else 0;
     0

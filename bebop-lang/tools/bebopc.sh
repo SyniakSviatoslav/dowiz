@@ -133,7 +133,7 @@ cmd_save() {
   # say `+dirty` when bebop.bp differs from it; the commit that lands the pair then supersedes it.
   source_commit=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
   # every compiler file, and an UNTRACKED compiler/*.bp counts as dirty too (git diff never sees one)
-  git diff --quiet HEAD -- $(python3 tools/bp_src.py --files) 2>/dev/null || source_commit="${source_commit}+dirty"
+  git diff --quiet HEAD -- $(python3 tools/bp_src.py --deps) 2>/dev/null || source_commit="${source_commit}+dirty"  # DG4: preludes too
   [ -z "$(git status --porcelain -- compiler 2>/dev/null)" ] || case "$source_commit" in *+dirty) ;; *) source_commit="${source_commit}+dirty";; esac
 
   local short_sha

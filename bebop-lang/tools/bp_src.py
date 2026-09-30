@@ -16,6 +16,7 @@ They read them through here, so the list lives in ONE place: bebop.bp's own `use
 never read as part of "bebop.bp" either); only `compiler/` includes are followed.
 
   python3 tools/bp_src.py --files          # one relative path per line, codegen order
+  python3 tools/bp_src.py --deps           # every file the build reads (preludes too), use order
   python3 tools/bp_src.py --cat            # the compiler text, concatenated in that order
   python3 tools/bp_src.py --flat           # ONE equivalent source (compiler uses commented out)
   python3 tools/bp_src.py --digest         # sha256 over (path, bytes) of every file
@@ -177,5 +178,11 @@ if __name__ == "__main__":
     elif a == ["--cat"]: sys.stdout.write(text())
     elif a == ["--digest"]: print(digest())
     elif a == ["--flat"]: sys.stdout.write(flat())
+    elif a == ["--deps"]:
+        # DG4 (2026-09-30): EVERY file the compiler build reads, preludes included -- since the
+        # per-fn memo, bebop.bp `use`s selfhost/prelude/dagc.bp and through it store.bp, so a
+        # change there changes bebop.bin. Text tools keep reading --files (compiler/ only); what
+        # asks "did the compiler change?" (the pre-commit hook, bebopc.sh's dirty flag) reads this.
+        print("\n".join(os.path.relpath(f, ROOT) for f in expand_order(os.path.join(ROOT, MAIN), cwd=ROOT)))
     elif len(a) == 2 and a[0] == "--old2new": print("%s:%d" % old2new(int(a[1])))
-    else: die("usage: bp_src.py --files | --cat | --flat | --digest | --old2new N")
+    else: die("usage: bp_src.py --files | --deps | --cat | --flat | --digest | --old2new N")

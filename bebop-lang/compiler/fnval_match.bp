@@ -38,11 +38,10 @@ fn emit_fnref(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fntab: [i
   // legacy single-fn path carries cnt = 0 and resolves nothing, so it is exempt.
   let _ = if tgt < 0 then (if fntab[0] == 0 then 0 else diag_exit(s, npos, 101)) else 0;
   let off = if tgt < 0 then 0 else tgt + 1;
-  let lo = off & 65535;
-  let hi = (off / 65536) & 65535;
   let d = vs_alloc(insns, n, fntab, stab);
-  let _ = em(insns, n, 3531603968 + lo * 32 + d);
-  let _ = em(insns, n, 4070572032 + hi * 32 + d);
+  let _ = dag_rel_fn(fntab, n[0], 2, name);  // DG4: FNVAL relocation (RT §5.2)
+  let _ = em(insns, n, w_fnlo(off, d));
+  let _ = em(insns, n, w_fnhi(off, d));
   vs_push(insns, n, fntab, stab, 2, d, 0 - 1)
 }
 
@@ -85,7 +84,8 @@ fn emit_call_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfnam
   let _ = em(insns, n, 3036676096 + 64 + k);
   let _ = em(insns, n, 3558869728);
   let _ = if has_spills == 1 then em(insns, n, 4162785263) else 0;
-  let _ = em(insns, n, 268435456 + ((524288 - n[0] - 1) & 524287) * 32 + 16);
+  let _ = dag_rel(fntab, n[0], 4, 0);  // DG4: BASE relocation (RT §5.2)
+  let _ = em(insns, n, w_adr_base(n[0]));
   let _ = em(insns, n, 2332035600 + k * 65536);
   let _ = em(insns, n, 3594453504);
   let _ = if has_spills == 1 then em(insns, n, 4165011439) else 0;
@@ -151,7 +151,8 @@ fn emit_call_packed(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   let _ = em(insns, n, 3036676160 + j);
   let _ = em(insns, n, 3558869728);
   let _ = if has_spills == 1 then em(insns, n, 4162785263) else 0;
-  let _ = em(insns, n, 268435456 + ((524288 - n[0] - 1) & 524287) * 32 + 16);
+  let _ = dag_rel(fntab, n[0], 4, 0);  // DG4: BASE relocation (RT §5.2)
+  let _ = em(insns, n, w_adr_base(n[0]));
   let _ = em(insns, n, 2332035600 + j * 65536);
   let _ = em(insns, n, 3594453504);
   let _ = if has_spills == 1 then em(insns, n, 4165011439) else 0;

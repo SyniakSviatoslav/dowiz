@@ -1,0 +1,23 @@
+// DG4 gate dagc_key_collision (SPEC §2.2 K-1): a K64 is an INDEX, never a proof. Looking up the
+// bytes of B under the stored KEY of A (a forced collision: equal K64, unequal bytes, equal length)
+// finds the key in the index and still MISSES. Prints found*10 + (1 - hit) (want 11).
+use "bench/vs_rust/std_tests/lib/dagc_t.bp"
+fn main() -> i64 {
+  let path = zeros(32);
+  let pl = st_str(path, "dagc_coll.dag");
+  let dm = zeros(48);
+  let lc = zeros(32);
+  let sa = zeros(16);
+  let sb = zeros(16);
+  let _ = t_open(dm, path, pl, 22);
+  let _ = t_ctx(dm, lc, "ctx");
+  let na = t_text(sa, "fn a(x: i64) -> i64 { x + 1 }");
+  let nb = t_text(sb, "fn a(x: i64) -> i64 { x + 2 }");
+  let _ = t_put(dm, sa, na, 0 - 1);
+  let ka = dag_key(sa, 0, na);
+  let found = if dag_find(dm, ka) >= 0 then 1 else 0;
+  let _ = dm[29] = 0;
+  let e = dag_lookup(dm, ka, sb, 0, nb);
+  let hit = if e > 0 then 1 else 0;
+  found * 10 + (1 - hit) + (if na == nb then 0 else 100)
+}

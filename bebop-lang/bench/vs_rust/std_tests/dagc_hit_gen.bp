@@ -1,0 +1,25 @@
+// DG4 gate dagc_hit_gen (SPEC §4.2 M-3): a hit's last_hit_gen is carried into the NEW index at the
+// generation of the compile that hit it (nothing is overwritten in place); an entry not hit keeps
+// its own. A at gen 1, B at gen 2, a third compile hits A: prints gen(A)*10 + gen(B) (want 32).
+use "bench/vs_rust/std_tests/lib/dagc_t.bp"
+fn main() -> i64 {
+  let path = zeros(32);
+  let pl = st_str(path, "dagc_gen.dag");
+  let dm = zeros(48);
+  let lc = zeros(32);
+  let sa = zeros(16);
+  let sb = zeros(16);
+  let sc = zeros(16);
+  let _ = t_open(dm, path, pl, 22);
+  let _ = t_ctx(dm, lc, "ctx");
+  let na = t_text(sa, "fn a(x: i64) -> i64 { x + 1 }\n");
+  let nb = t_text(sb, "fn b(x: i64) -> i64 { a(x) * 2 }\n");
+  let nc = t_text(sc, "fn c() -> i64 { 3 }");
+  let _ = t_put(dm, sa, na, 0 - 1);
+  let _ = t_put(dm, sb, nb, 0 - 1);
+  let _ = t_look(dm, sa, na);
+  let _ = t_put(dm, sc, nc, dm[35]);
+  let pa = dag_find(dm, dag_key(sa, 0, na));
+  let pb = dag_find(dm, dag_key(sb, 0, nb));
+  dag_idx_gen(dm, pa) * 10 + dag_idx_gen(dm, pb)
+}

@@ -1,0 +1,591 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// selfhost/prelude/dagc.bp -- the compile-node memo image `<out>.dag` (DG4; docs/design/
+// SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md §2.3, §4, §5). A bebop STORE image (store.bp superblocks,
+// PartTab, h0/h1 objects, anchor), so st_pick / st_reopen_verify and the store's other readers open
+// it unchanged; KV meaning: sorted keys, one entry per key, one commit per compile. The driver that
+// uses it is bebop-lang/compiler/dagdrv.bp. Objects (payload cells; refs are object-relative):
+//   ROOT   dag_magic, version 1, compiler_hi, compiler_lo, n, ref IDX, gen, cap_cells, ref CTX
+//   IDX    3 cells per entry SORTED by key64: key64, ref ENTRY, last_hit_gen
+//   ENTRY  key64, kind 1, src_len, nwords, nrelocs, facts, size_words, ref SRC, ref WORDS,
+//          ref RELOCS (0 = none), cost_ms, ref CTX, nlits                           (13 cells)
+//   SRC    the fn's source span, 8 bytes per cell LE, last cell zero-filled
+//   WORDS  two 32-bit words per cell, word 2k in the low half
+//   RELOCS 2 cells per relocation: fn-relative word index, (kind << 56) | target
+//   CTX    nbytes (= 8 * cells), then the context CELLS: a sequence of pieces, each a length cell
+//          and the piece's bytes packed from a cell boundary -- the text before the first fn, every
+//          fn header, the enum and every struct declaration: the part of the program outside a
+//          fn's own span that its words read (compiler/dagdrv.bp dag_ctx names each reader)
+// K64 of a compile node = (crc32x(span cells) << 32) | span_len: an INDEX (RT K-1), never a proof;
+// a hit is decided by the bytes (dag_src_eq) and the context bytes (dag_ctx_eq).
+//
+// Memo state dm = zeros(48):
+//   0 base (st_addr)  1 usable: 1 = hits allowed  2 file bytes  3 cap cells  4 image gen (0 fresh)
+//   5 root off        6 IDX off   7 IDX n          8 compiler_hi 9 compiler_lo
+//  10 hits           11 fns looked up             12 live ctx cells (st_addr)  13 live ctx bytes
+//  14 last ctx off compared       15 its answer   16 path cells (st_addr)      17 path len
+//  18..24 layout digests: root idx entry src words relocs ctx
+//  25 DAG_CAP (0 = derive)        26 DAG_HITS     27 read-only (check)         28 fresh image
+//  29 poisoned: no hits, no writes this compile   30 BEBOP_TMP bytes (st_addr) 31 its length
+//  32 refused reason (0 none)     33 fd           34 derived cap for this compile  35 last hit IDX position
+
+fn dag_magic() -> i64 { (68 << 16) + (65 << 24) + (71 << 32) + (77 << 40) + (79 << 48) + (49 << 56) }
+// KEEP_GENS (RT §4.3): entries not hit in the last 16 compiles are dropped at compaction.
+// HYPOTHESIS, as the spec labels it: "compiles a lane runs between two battery runs".
+fn dag_keep_gens() -> i64 { 16 }
+fn dag_base(dm: [i64]) -> [i64] { st_cells(dm[0]) }
+
+// ---- environment: /proc/self/environ (the seed passes argv only) ----
+// dag_env(dm): DAG_CAP=<cells> -> dm[25], DAG_HITS=1 -> dm[26], BEBOP_TMP=<dir> -> dm[30]/[31].
+fn dag_env(dm: [i64]) -> i64 {
+  let p = zeros(24);
+  let pl = st_str(p, "/proc/self/environ");
+  let fd = sys_open(p, pl, 0);
+  let buf = zeros(65536);
+  let n = if fd >= 0 then sys_read(fd, buf, 65536) else 0;
+  let _ = if fd >= 0 then sys_close(fd) else 0;
+  let tmp = zeros(4096);
+  let _ = dm[30] = st_addr(tmp);
+  let i = 0;
+  while i < n {
+    let _ = dag_env_var(dm, buf, i, n);
+    let e = i;
+    while buf[e] != 0 {
+      let e = e + 1;
+      0
+    };
+    let i = e + 1;
+    0
+  };
+  0
+}
+// dag_env_var: one NAME=VALUE entry starting at buf[i].
+fn dag_env_var(dm: [i64], buf: [i64], i: i64, n: i64) -> i64 {
+  let c = (if buf[i] == 68 then 1 else 0) * (if buf[i + 1] == 65 then 1 else 0) * (if buf[i + 2] == 71 then 1 else 0) * (if buf[i + 3] == 95 then 1 else 0);
+  let isc = c * (if buf[i + 4] == 67 then 1 else 0) * (if buf[i + 5] == 65 then 1 else 0) * (if buf[i + 6] == 80 then 1 else 0) * (if buf[i + 7] == 61 then 1 else 0);
+  let ish = c * (if buf[i + 4] == 72 then 1 else 0) * (if buf[i + 5] == 73 then 1 else 0) * (if buf[i + 6] == 84 then 1 else 0) * (if buf[i + 7] == 83 then 1 else 0) * (if buf[i + 8] == 61 then 1 else 0);
+  let b0 = (if buf[i] == 66 then 1 else 0) * (if buf[i + 1] == 69 then 1 else 0) * (if buf[i + 2] == 66 then 1 else 0) * (if buf[i + 3] == 79 then 1 else 0) * (if buf[i + 4] == 80 then 1 else 0);
+  let ist = b0 * (if buf[i + 5] == 95 then 1 else 0) * (if buf[i + 6] == 84 then 1 else 0) * (if buf[i + 7] == 77 then 1 else 0) * (if buf[i + 8] == 80 then 1 else 0) * (if buf[i + 9] == 61 then 1 else 0);
+  let _ = if isc == 1 then (let _ = dm[25] = dag_env_num(buf, i + 8) in 0) else 0;
+  let _ = if ish == 1 then (let _ = dm[26] = if buf[i + 9] == 49 then 1 else 0 in 0) else 0;
+  let _ = if ist == 1 then (let _ = dm[31] = dag_env_copy(st_cells(dm[30]), buf, i + 10) in 0) else 0;
+  0
+}
+fn dag_env_num(buf: [i64], i: i64) -> i64 {
+  let v = 0;
+  let j = i;
+  let go = 1;
+  while go == 1 {
+    let c = buf[j];
+    let dig = (if c >= 48 then 1 else 0) * (if c <= 57 then 1 else 0);
+    let v = if dig == 1 then v * 10 + c - 48 else v;
+    let j = j + 1;
+    let go = dig;
+    0
+  };
+  v
+}
+fn dag_env_copy(dst: [i64], buf: [i64], i: i64) -> i64 {
+  let k = 0;
+  while buf[i + k] * (if k < 4000 then 1 else 0) != 0 {
+    let _ = dst[k] = buf[i + k];
+    let k = k + 1;
+    0
+  };
+  k
+}
+
+// ---- layout digests (store h0 high half), computed once per compile ----
+fn dag_digests(dm: [i64]) -> i64 {
+  let _ = dm[18] = st_digest("dag.root");
+  let _ = dm[19] = st_digest("dag.idx");
+  let _ = dm[20] = st_digest("dag.entry");
+  let _ = dm[21] = st_digest("dag.src");
+  let _ = dm[22] = st_digest("dag.words");
+  let _ = dm[23] = st_digest("dag.relocs");
+  let _ = dm[24] = st_digest("dag.ctx");
+  0
+}
+
+// ---- compiler digest: the chunked crc of the compiler's own bytes (argv[1]) ----
+// crc32 has no running seed, so the bytes are folded as crc32x over the per-8192-byte-chunk
+// crcs followed by the total length (RT §2.3 field 1's role: a changed compiler byte changes it).
+fn dag_compiler(dm: [i64], path: [i64], plen: i64) -> i64 {
+  let fd = sys_open(path, plen, 0);
+  let ta = zeros(8192);
+  let ch = zeros(1024);
+  let k = 0;
+  let tot = 0;
+  let go = if fd >= 0 then 1 else 0;
+  while go == 1 {
+    let r = sys_read(fd, ta, 8192);
+    let _ = if r > 0 then (let _ = ch[k] = crc32(ta, r) in 0) else 0;
+    let k = if r > 0 then (if k < 1022 then k + 1 else k) else k;
+    let tot = if r > 0 then tot + r else tot;
+    let go = if r > 0 then 1 else 0;
+    0
+  };
+  let _ = if fd >= 0 then sys_close(fd) else 0;
+  let _ = ch[k] = tot;
+  let _ = dm[8] = crc32x(ch, 0, k + 1);
+  let _ = dm[9] = tot;
+  tot
+}
+
+// ---- open / refuse / create ----
+// dag_str(buf, at, s): the bytes of literal s at buf[at..]; returns at + len.
+fn dag_str(buf: [i64], at: i64, s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = buf[at + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  at + n
+}
+// dag_say(dm, why): the ONE stderr line of a refused image (RT M-5); the compile then runs cold.
+fn dag_say(dm: [i64], why: i64) -> i64 {
+  let _ = dm[32] = why;
+  let b = zeros(96);
+  let a = dag_str(b, 0, "dag: image refused (");
+  let a = if why == 1 then dag_str(b, a, "no valid superblock") else a;
+  let a = if why == 2 then dag_str(b, a, "torn last commit") else a;
+  let a = if why == 3 then dag_str(b, a, "store version") else a;
+  let a = if why == 4 then dag_str(b, a, "root object") else a;
+  let a = if why == 5 then dag_str(b, a, "object crc") else a;
+  let a = dag_str(b, a, "), cold compile");
+  let _ = b[a] = 10;
+  sys_write(2, b, a + 1)
+}
+// dag_old_cap(fd): arena capacity of an existing image from its superblocks' bytes (cell 12 of the
+// valid superblock with the higher generation), -1 when neither is valid, 0 for an empty file.
+fn dag_old_cap(fd: i64) -> i64 {
+  let bb = zeros(4224);
+  let r = sys_read(fd, bb, 4224);
+  let a = if r >= 128 then dag_sb_cap(bb, 0) else 0 - 1;
+  let b = if r >= 4224 then dag_sb_cap(bb, 4096) else 0 - 1;
+  let ga = if a >= 0 then dag_le(bb, 16) else 0 - 1;
+  let gb = if b >= 0 then dag_le(bb, 4096 + 16) else 0 - 1;
+  if r <= 0 then 0 else if ga < 0 then b else if gb > ga then b else a
+}
+fn dag_le(bb: [i64], at: i64) -> i64 {
+  let v = 0;
+  let j = 7;
+  while j >= 0 {
+    let v = (v << 8) | (bb[at + j] & 255);
+    let j = j - 1;
+    0
+  };
+  v
+}
+fn dag_sb_cap(bb: [i64], at: i64) -> i64 {
+  let ok = if dag_le(bb, at) == st_magic() then (if dag_le(bb, at + 120) == crc32(st_cells(st_addr(bb) + at), 120) then 1 else 0) else 0;
+  if ok == 1 then dag_le(bb, at + 96) else 0 - 1
+}
+// dag_map(dm, cap): (re)map the file named by dm[16..17] at arena capacity cap; fresh = zero it.
+fn dag_map(dm: [i64], cap: i64, fresh: i64) -> [i64] {
+  let size = (cap + 1024) * 8;
+  let fd = sys_open(st_cells(dm[16]), dm[17], 66);
+  let _ = if fresh == 1 then sys_ftruncate(fd, 0) else 0;
+  let _ = sys_ftruncate(fd, size);
+  let base = st_cells(sys_mmap(0, size, 3, 1, fd, 0));
+  let _ = sys_close(fd);
+  let tmp = base;
+  let _ = if fresh == 1 then st_sb_write(base, 0, 0, 0, 1024, 0, 0, cap, tmp) else 0;
+  let _ = dm[0] = st_addr(base);
+  let _ = dm[2] = size;
+  let _ = dm[3] = cap;
+  let _ = dm[28] = fresh;
+  base
+}
+// dag_open(dm, want): open or create the image at dm[16..17]. want = the arena capacity this
+// compile derives (RT §4.4) or DAG_CAP. An image whose capacity differs is re-created (cold) --
+// never mapped at a size it was not written at (st_open's trap 86 case). A torn or corrupt image
+// is REFUSED with one stderr line and re-created (RT M-5): slow, never silent, never wrong.
+fn dag_open(dm: [i64], want: i64) -> i64 {
+  let fd = sys_open(st_cells(dm[16]), dm[17], 66);
+  // an image that cannot even be created (the output's directory is missing or unwritable) means
+  // NO memo for this compile; the compile goes on and the output's own open reports E90 as before
+  let _ = if fd < 0 then (let _ = dm[29] = 1 in 0) else 0;
+  if fd < 0 then 0 else dag_open_fd(dm, want, fd)
+}
+fn dag_open_fd(dm: [i64], want: i64, fd: i64) -> i64 {
+  let old = dag_old_cap(fd);
+  let _ = sys_close(fd);
+  let _ = if old < 0 then dag_say(dm, 1) else 0;
+  // reuse at the image's own capacity when it is large enough; DAG_CAP (dm[25]) asks for exactly
+  // its value. Anything else is re-created at `want`.
+  let big = if dm[25] > 0 then (if old == want then 1 else 0) else (if old >= want then 1 else 0);
+  let reuse = if old > 0 then big else 0;
+  let cap = if reuse == 1 then old else want;
+  let base = dag_map(dm, cap, 1 - reuse);
+  let why = if reuse == 1 then dag_verify(dm, base) else 0;
+  let _ = if why > 0 then dag_say(dm, why) else 0;
+  let _ = if why > 0 then dag_map(dm, cap, 1) else base;
+  let _ = dm[1] = if reuse == 1 then (if why == 0 then 1 else 0) else 0;
+  dm[1]
+}
+// dag_verify: 0 = the image is usable; else a refusal reason for dag_say. Loads root/IDX into dm.
+fn dag_verify(dm: [i64], base: [i64]) -> i64 {
+  let sb0 = st_pick(base, base);
+  let sb = if sb0 >= 0 then st_reopen_verify(base, base) else 0 - 1;
+  let w1 = if sb0 < 0 then 1 else if sb != sb0 then 2 else if base[sb + 1] != 2 then 3 else 0;
+  let root = if w1 == 0 then st_root(base, base) else 0;
+  let inb = if root < 1024 then 0 else (if root <= 1024 + dm[3] - 11 then 1 else 0);
+  let w2 = if w1 > 0 then w1 else if inb == 0 then 4 else dag_root_ok(dm, base, root);
+  let _ = if w2 == 0 then dag_load(dm, base, root) else 0;
+  w2
+}
+fn dag_root_ok(dm: [i64], base: [i64], root: ref Obj) -> i64 {
+  let ok = st_check(base, root, base) * (if st_len(base, root) == 9 then 1 else 0);
+  let ok2 = ok * (if st_get(base, root, 0) == dag_magic() then 1 else 0) * (if st_get(base, root, 1) == 1 then 1 else 0);
+  let idx = if ok2 == 1 then st_ref(base, root, 5) else 0;
+  let ok3 = if ok2 == 1 then (if st_get(base, root, 5) == 0 then 1 else st_check(base, idx, base)) else 0;
+  if ok3 == 1 then 0 else 4
+}
+fn dag_load(dm: [i64], base: [i64], root: ref Obj) -> i64 {
+  let _ = dm[5] = root;
+  let _ = dm[6] = if st_get(base, root, 5) == 0 then 0 else st_ref(base, root, 5);
+  let _ = dm[7] = st_get(base, root, 4);
+  let _ = dm[4] = st_get(base, root, 6);
+  // K-4: another compiler's entries are never used -- the whole image is treated as empty.
+  let same = (if st_get(base, root, 2) == dm[8] then 1 else 0) * (if st_get(base, root, 3) == dm[9] then 1 else 0);
+  let _ = if same == 0 then (let _ = dm[7] = 0 in 0) else 0;
+  0
+}
+
+// ---- lookup ----
+// dag_find(dm, key): the first IDX position holding key, -1 when absent (binary search).
+fn dag_find(dm: [i64], key: i64) -> i64 {
+  let base = dag_base(dm);
+  let ix = dm[6] + 2;
+  let lo = 0;
+  let hi = dm[7];
+  while lo < hi {
+    let mid = (lo + hi) / 2;
+    let lt = if base[ix + mid * 3] < key then 1 else 0;
+    let lo = if lt == 1 then mid + 1 else lo;
+    let hi = if lt == 1 then hi else mid;
+    0
+  };
+  let found = if lo < dm[7] then (if base[ix + lo * 3] == key then 1 else 0) else 0;
+  if found == 1 then lo else 0 - 1
+}
+fn dag_idx_key(dm: [i64], pos: i64) -> i64 { let b = dag_base(dm); b[dm[6] + 2 + pos * 3] }
+fn dag_idx_entry(dm: [i64], pos: i64) -> i64 { let b = dag_base(dm); dm[6] + b[dm[6] + 3 + pos * 3] }
+fn dag_idx_gen(dm: [i64], pos: i64) -> i64 { let b = dag_base(dm); b[dm[6] + 4 + pos * 3] }
+// dag_objs_ok(dm, e): every object an entry names still has its crc (1), else 0.
+fn dag_objs_ok(dm: [i64], e: i64) -> i64 {
+  let base = dag_base(dm);
+  let ok = st_check(base, e, base) * (if st_len(base, e) == 13 then 1 else 0) * (if (base[e] >> 32) == dm[20] then 1 else 0);
+  let ok = ok * st_check(base, st_ref(base, e, 7), base) * st_check(base, st_ref(base, e, 8), base);
+  let ok = ok * (if st_get(base, e, 9) == 0 then 1 else st_check(base, st_ref(base, e, 9), base));
+  ok * st_check(base, st_ref(base, e, 11), base)
+}
+// dag_src_eq(dm, e, sc, off, len): the entry's SRC holds exactly the len bytes packed at sc[off..].
+fn dag_src_eq(dm: [i64], e: i64, sc: [i64], off: i64, len: i64) -> i64 {
+  let base = dag_base(dm);
+  let src = st_ref(base, e, 7);
+  let nc = (len + 7) / 8;
+  let ok = if st_get(base, e, 2) == len then 1 else 0;
+  let k = 0;
+  while k < nc * ok {
+    let ok = if st_get(base, src, k) == sc[off + k] then 1 else 0;
+    let k = k + 1;
+    0
+  };
+  ok
+}
+// dag_ctx_eq(dm, c): the CTX object at c holds the live context bytes. Entries written by one
+// compile share one CTX object, so the last answer is cached by offset.
+fn dag_ctx_eq(dm: [i64], c: ref Obj) -> i64 {
+  let cached = if dm[14] == c then 1 else 0;
+  let r = if cached == 1 then dm[15] else dag_ctx_cmp(dm, c);
+  let _ = dm[14] = c;
+  let _ = dm[15] = r;
+  r
+}
+fn dag_ctx_cmp(dm: [i64], c: ref Obj) -> i64 {
+  let base = dag_base(dm);
+  let lc = st_cells(dm[12]);
+  let nb = dm[13];
+  let nc = (nb + 7) / 8;
+  let ok = if st_get(base, c, 0) == nb then 1 else 0;
+  let k = 0;
+  while k < nc * ok {
+    let ok = if st_get(base, c, 1 + k) == lc[k] then 1 else 0;
+    let k = k + 1;
+    0
+  };
+  ok
+}
+// dag_lookup(dm, key, sc, off, len): the ENTRY offset whose key, bytes and context all match, else 0.
+// A K64 collision with unequal bytes is a miss (RT K-1). A crc failure on any object the entry
+// names refuses the whole image (dm[29] = 5): the caller re-runs cold.
+fn dag_lookup(dm: [i64], key: i64, sc: [i64], off: i64, len: i64) -> i64 {
+  let _ = dm[11] = dm[11] + 1;
+  let p = if dm[1] * (1 - dm[29]) == 1 then dag_find(dm, key) else 0 - 1;
+  let got = 0;
+  let go = if p >= 0 then 1 else 0;
+  while go == 1 {
+    let e = dag_idx_entry(dm, p);
+    let ok = dag_objs_ok(dm, e);
+    let _ = if ok == 0 then (let _ = dm[29] = 5 in 0) else 0;
+    let m = if ok == 1 then dag_src_eq(dm, e, sc, off, len) else 0;
+    let m = if m == 1 then dag_ctx_eq(dm, st_ref(dag_base(dm), e, 11)) else 0;
+    let got = if m == 1 then e else got;
+    let _ = if m == 1 then (let _ = dm[35] = p in 0) else 0;
+    let p = p + 1;
+    let more = if p < dm[7] then (if dag_idx_key(dm, p) == key then 1 else 0) else 0;
+    let go = more * (1 - m) * ok;
+    0
+  };
+  let _ = if got > 0 then (let _ = dm[10] = dm[10] + 1 in 0) else 0;
+  got
+}
+
+// ---- span packing and keys ----
+// dag_pack_span(src, a, b, dst, off): the bytes [a, b) of the packed text src, re-packed from byte 0
+// into dst[off..], last cell zero-filled; returns the cell count. `>>` is logical (memory
+// bebop-shift-right-is-logical), so the high bytes come in as zeros.
+fn dag_pack_span(src: [i64], a: i64, b: i64, dst: [i64], off: i64) -> i64 {
+  let len = b - a;
+  let nc = (len + 7) / 8;
+  let q = a / 8;
+  let sh = (a - q * 8) * 8;
+  let k = 0;
+  while k < nc {
+    let lo = src[q + k] >> sh;
+    let v = if sh == 0 then lo else lo | (src[q + k + 1] << (64 - sh));
+    let _ = dst[off + k] = v;
+    let k = k + 1;
+    0
+  };
+  let rem = len - (nc - 1) * 8;
+  let _ = if rem < 8 then (let _ = dst[off + nc - 1] = dst[off + nc - 1] & ((1 << (rem * 8)) - 1) in 0) else 0;
+  nc
+}
+fn dag_key(sc: [i64], off: i64, len: i64) -> i64 {
+  (crc32x(sc, off, (len + 7) / 8) << 32) | (len & 4294967295)
+}
+// dag_put_byte(dst, nb, c): append byte c to the packed buffer dst holding nb bytes; returns nb + 1.
+fn dag_put_byte(dst: [i64], nb: i64, c: i64) -> i64 {
+  let q = nb / 8;
+  let _ = dst[q] = dst[q] | ((c & 255) << ((nb - q * 8) * 8));
+  nb + 1
+}
+
+// ---- writing: one transaction and ONE commit per compile (RT M-2); nothing is rewritten ----
+// dag_put_cells(dm, tx, dig, src, off, nc): an object of nc cells copied from src[off..].
+fn dag_put_cells(dm: [i64], tx: [i64], dig: i64, src: [i64], off: i64, nc: i64) -> i64 {
+  let base = dag_base(dm);
+  let o = st_alloc(base, tx, nc, dig);
+  let k = 0;
+  while k < nc {
+    let _ = st_put(base, o, k, src[off + k]);
+    let k = k + 1;
+    0
+  };
+  let _ = st_seal(base, o, base);
+  o
+}
+// dag_put_words(dm, tx, insns, start, nw): WORDS, two 32-bit words per cell, word 2k low.
+fn dag_put_words(dm: [i64], tx: [i64], insns: [i64], start: i64, nw: i64) -> i64 {
+  let base = dag_base(dm);
+  let nc = (nw + 1) / 2;
+  let o = st_alloc(base, tx, nc, dm[22]);
+  let k = 0;
+  while k < nc {
+    let lo = insns[start + k * 2] & 4294967295;
+    let hi = if k * 2 + 1 < nw then insns[start + k * 2 + 1] & 4294967295 else 0;
+    let _ = st_put(base, o, k, lo | (hi << 32));
+    let k = k + 1;
+    0
+  };
+  let _ = st_seal(base, o, base);
+  o
+}
+// dag_put_relocs(dm, tx, rb, lo, hi, start, li0): RELOCS from the recorder pairs rb[2lo..2hi):
+// word index made fn-relative, a LIT target (kind 3) made fn-local (global ordinal - li0). 0 = none.
+fn dag_put_relocs(dm: [i64], tx: [i64], rb: [i64], lo: i64, hi: i64, start: i64, li0: i64) -> i64 {
+  let base = dag_base(dm);
+  let o = if hi > lo then st_alloc(base, tx, (hi - lo) * 2, dm[23]) else 0;
+  let k = lo;
+  while k < hi {
+    let kt = rb[k * 2 + 1];
+    let lit = if (kt >> 56) == 3 then 1 else 0;
+    let _ = st_put(base, o, (k - lo) * 2, rb[k * 2] - start);
+    let _ = st_put(base, o, (k - lo) * 2 + 1, kt - lit * li0);
+    let k = k + 1;
+    0
+  };
+  let _ = if o > 0 then st_seal(base, o, base) else 0;
+  o
+}
+// dag_put_ctx(dm, tx, lc, nb): CTX = [nb, packed bytes].
+fn dag_put_ctx(dm: [i64], tx: [i64], lc: [i64], nb: i64) -> i64 {
+  let base = dag_base(dm);
+  let nc = (nb + 7) / 8;
+  let o = st_alloc(base, tx, nc + 1, dm[24]);
+  let _ = st_put(base, o, 0, nb);
+  let k = 0;
+  while k < nc {
+    let _ = st_put(base, o, 1 + k, lc[k]);
+    let k = k + 1;
+    0
+  };
+  let _ = st_seal(base, o, base);
+  o
+}
+// dag_put_entry(dm, tx, f): ENTRY from the 13-cell payload f, whose ref fields (7 SRC, 8 WORDS,
+// 9 RELOCS, 11 CTX) hold ABSOLUTE offsets here and are stored object-relative (0 stays null).
+fn dag_put_entry(dm: [i64], tx: [i64], f: [i64]) -> i64 {
+  let base = dag_base(dm);
+  let o = st_alloc(base, tx, 13, dm[20]);
+  let k = 0;
+  while k < 13 {
+    let isref = (if k == 7 then 1 else 0) + (if k == 8 then 1 else 0) + (if k == 9 then 1 else 0) + (if k == 11 then 1 else 0);
+    let v = f[k];
+    let _ = if isref * (if v != 0 then 1 else 0) == 1 then st_link(base, o, k, v) else st_put(base, o, k, v);
+    let k = k + 1;
+    0
+  };
+  let _ = st_seal(base, o, base);
+  o
+}
+// dag_sort3(k, e, g, n): insertion sort of the triples (k[i], e[i], g[i]) by k (signed order,
+// the order dag_find's binary search assumes).
+fn dag_sort3(k: [i64], e: [i64], g: [i64], n: i64) -> i64 {
+  let i = 1;
+  while i < n {
+    let kk = k[i];
+    let ee = e[i];
+    let gg = g[i];
+    let j = i - 1;
+    let go = if j >= 0 then (if k[j] > kk then 1 else 0) else 0;
+    while go == 1 {
+      let _ = k[j + 1] = k[j];
+      let _ = e[j + 1] = e[j];
+      let _ = g[j + 1] = g[j];
+      let j = j - 1;
+      let go = if j >= 0 then (if k[j] > kk then 1 else 0) else 0;
+      0
+    };
+    let _ = k[j + 1] = kk;
+    let _ = e[j + 1] = ee;
+    let _ = g[j + 1] = gg;
+    let i = i + 1;
+    0
+  };
+  n
+}
+// dag_put_idx(dm, tx, nk, ne, ng, nn, keep, hitg, gen): the new IDX = the old IDX of dm (positions
+// with keep[p] == 1; a hit position hitg[p] == 1 gets last_hit_gen = gen, RT M-3) merged with the
+// nn new triples (sorted here). Returns the object; dm[7] is NOT updated (the root carries n).
+fn dag_put_idx(dm: [i64], tx: [i64], nk: [i64], ne: [i64], ng: [i64], nn: i64, keep: [i64], hitg: [i64], gen: i64) -> i64 {
+  let base = dag_base(dm);
+  let _ = dag_sort3(nk, ne, ng, nn);
+  let on = dm[7];
+  let tot = dag_count(keep, on) + nn;
+  let o = st_alloc(base, tx, if tot > 0 then tot * 3 else 1, dm[19]);
+  let _ = st_put(base, o, 0, 0);
+  let a = 0;
+  let b = 0;
+  let w = 0;
+  while w < tot {
+    let a = dag_skip(keep, a, on);
+    let ta = if a < on then 1 else 0;
+    let tb = if b < nn then 1 else 0;
+    let ka = if ta == 1 then dag_idx_key(dm, a) else 0;
+    let kb = if tb == 1 then nk[b] else 0;
+    let take_a = if ta == 1 then (if tb == 1 then (if ka <= kb then 1 else 0) else 1) else 0;
+    let key = if take_a == 1 then ka else kb;
+    let ent = if take_a == 1 then dag_idx_entry(dm, a) else ne[b];
+    let g = if take_a == 1 then (if hitg[a] == 1 then gen else dag_idx_gen(dm, a)) else ng[b];
+    let _ = st_put(base, o, w * 3, key);
+    let _ = st_link(base, o, w * 3 + 1, ent);
+    let _ = st_put(base, o, w * 3 + 2, g);
+    let a = a + take_a;
+    let b = b + 1 - take_a;
+    let w = w + 1;
+    0
+  };
+  let _ = st_seal(base, o, base);
+  o
+}
+fn dag_count(keep: [i64], n: i64) -> i64 {
+  let c = 0;
+  let i = 0;
+  while i < n {
+    let c = c + keep[i];
+    let i = i + 1;
+    0
+  };
+  c
+}
+// dag_skip(keep, a, n): the first position >= a with keep == 1 (n when none).
+fn dag_skip(keep: [i64], a: i64, n: i64) -> i64 {
+  let p = a;
+  let go = if p < n then 1 - keep[p] else 0;
+  while go == 1 {
+    let p = p + 1;
+    let go = if p < n then 1 - keep[p] else 0;
+    0
+  };
+  p
+}
+// dag_put_root(dm, tx, idx, n, ctx, gen): ROOT, then the commit. Returns the new generation.
+fn dag_put_root(dm: [i64], tx: [i64], idx: i64, n: i64, ctx: i64, gen: i64) -> i64 {
+  let base = dag_base(dm);
+  let o = st_alloc(base, tx, 9, dm[18]);
+  let _ = st_put(base, o, 0, dag_magic());
+  let _ = st_put(base, o, 1, 1);
+  let _ = st_put(base, o, 2, dm[8]);
+  let _ = st_put(base, o, 3, dm[9]);
+  let _ = st_put(base, o, 4, n);
+  let _ = st_link(base, o, 5, idx);
+  let _ = st_put(base, o, 6, gen);
+  let _ = st_put(base, o, 7, dm[3]);
+  let _ = if ctx > 0 then st_link(base, o, 8, ctx) else st_put(base, o, 8, 0);
+  let _ = st_seal(base, o, base);
+  st_commit(base, tx, o, base)
+}
+
+// ---- compaction (RT §4.3): a fresh image holding only the entries worth keeping ----
+// dag_obj_cells(dm, e): the arena cells an entry's own objects occupy (ENTRY, SRC, WORDS, RELOCS).
+fn dag_obj_cells(dm: [i64], e: i64) -> i64 {
+  let base = dag_base(dm);
+  let r = if st_get(base, e, 9) == 0 then 0 else 2 + st_len(base, st_ref(base, e, 9));
+  15 + 2 + st_len(base, st_ref(base, e, 7)) + 2 + st_len(base, st_ref(base, e, 8)) + r
+}
+// dag_copy_obj(sb, o, dn, tx, dig): object o of image sb (layout digest dig) copied into dn's open transaction.
+fn dag_copy_obj(sb: [i64], o: ref Obj, dn: [i64], tx: [i64], dig: i64) -> i64 {
+  let db = dag_base(dn);
+  let len = st_len(sb, o);
+  let n = st_alloc(db, tx, len, dig);
+  let k = 0;
+  while k < len {
+    let _ = st_put(db, n, k, st_get(sb, o, k));
+    let k = k + 1;
+    0
+  };
+  let _ = st_seal(db, n, db);
+  n
+}
+// dag_copy_entry(dm, e, dn, tx, ctx, f): entry e of dm re-written into dn with CTX = ctx (an
+// offset in dn). f is a 13-cell scratch. Returns the new ENTRY offset.
+fn dag_copy_entry(dm: [i64], e: i64, dn: [i64], tx: [i64], ctx: i64, f: [i64]) -> i64 {
+  let base = dag_base(dm);
+  let k = 0;
+  while k < 13 {
+    let _ = f[k] = st_get(base, e, k);
+    let k = k + 1;
+    0
+  };
+  let _ = f[7] = dag_copy_obj(base, st_ref(base, e, 7), dn, tx, dm[21]);
+  let _ = f[8] = dag_copy_obj(base, st_ref(base, e, 8), dn, tx, dm[22]);
+  let _ = f[9] = if st_get(base, e, 9) == 0 then 0 else dag_copy_obj(base, st_ref(base, e, 9), dn, tx, dm[23]);
+  let _ = f[11] = ctx;
+  dag_put_entry(dn, tx, f)
+}

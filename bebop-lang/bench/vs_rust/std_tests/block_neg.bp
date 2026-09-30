@@ -30,7 +30,7 @@ fn main() -> i64 {
   let path = zeros(256);
   let _ = bk_table(t, s);
   let pl = bk_load(path, 0, "../crates/dowiz-hub/fixtures/blocks/menu_prices.dwb");
-  let len = bk_read(path, pl, b, 98305);
+  let len = bk_read(path, pl, b, 98305, v);
   let twin = if bk_block(b, len, t, st, v, e) == 0 then st[7] else 0;
   let pad = st[8 + 2 * 4] + st[9 + 2 * 4];
   let ok = twin;

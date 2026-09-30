@@ -1,0 +1,28 @@
+// DG4 gate dagc_torn_image (SPEC §4.2 M-5): an image whose last commit is torn (the file cut by one
+// cell inside the last commit's range) is REFUSED on open -- reason 2 "torn last commit", one
+// stderr line -- and re-created empty, so a lookup that hit before now misses. Prints
+// reason*100 + usable*10 + hit_before (want 201).
+use "bench/vs_rust/std_tests/lib/dagc_t.bp"
+fn main() -> i64 {
+  let path = zeros(32);
+  let pl = st_str(path, "dagc_torn.dag");
+  let dm = zeros(48);
+  let lc = zeros(32);
+  let sa = zeros(16);
+  let _ = t_open(dm, path, pl, 22);
+  let _ = t_ctx(dm, lc, "ctx");
+  let na = t_text(sa, "fn a(x: i64) -> i64 { x + 1 }\n");
+  let _ = t_put(dm, sa, na, 0 - 1);
+  let _ = t_put(dm, sa, na, 0 - 1);
+  let before = t_look(dm, sa, na);
+  let base = dag_base(dm);
+  let used = base[st_pick(base, base) + 4];
+  let fd = sys_open(path, pl, 2);
+  let _ = sys_ftruncate(fd, used * 8 - 8);
+  let _ = sys_close(fd);
+  let d2 = zeros(48);
+  let u = t_open(d2, path, pl, 22);
+  let _ = t_ctx(d2, lc, "ctx");
+  let after = t_look(d2, sa, na);
+  d2[32] * 100 + u * 10 + before + after * 1000
+}

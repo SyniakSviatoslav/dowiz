@@ -19,7 +19,7 @@ fn rt_unreadable(o: [i64]) -> i64 {
 
 // rt_one: read the file path[0..plen) into b and print its line; 1 = accepted with rt ok.
 fn rt_one(path: [i64], plen: i64, b: [i64], t: [i64], s: [i64], st: [i64], v: [i64], e: [i64], h: [i64], o: [i64]) -> i64 {
-  let len = bk_read(path, plen, b, 98305);
+  let len = bk_read(path, plen, b, 98305, v);
   let _ = if len < 0 then rt_unreadable(o) else 0;
   let _ = if len < 0 then return 0 else 0;
   let rc = bk_line(b, len, t, s, st, v, e, h, o);
@@ -32,7 +32,7 @@ fn rt_list(list: str, b: [i64], t: [i64], s: [i64], st: [i64], v: [i64], e: [i64
   let _ = bk_load(lp, 0, list);
   let cap = 4194304;
   let buf = zeros(cap + 8192);
-  let n = bk_read(lp, ln, buf, cap);
+  let n = bk_read(lp, ln, buf, cap, v);
   let _ = if n < 0 then return 0 - 1 else 0;
   let path = zeros(4096);
   let i = 0;

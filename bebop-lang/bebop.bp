@@ -4,6 +4,8 @@ use "compiler/tables.bp"
 use "compiler/calls.bp"
 use "compiler/sys_builtins.bp"
 use "compiler/fnval_match.bp"
+use "compiler/dagdrv.bp"
+use "compiler/dagcli.bp"
 // selfhost/expr_compile.bp - real expression + function compiler (self-host).
 //
 // Two stages toward a self-hosting compiler:
@@ -1937,7 +1939,8 @@ fn emit_str(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64], stab: [i64
   let d = vs_alloc(insns, n, fntab, stab);
   let cur = n[0];
   let imm21 = dw - cur;
-  let _ = em(insns, n, 268435456 + imm21 * 32 + d);
+  let _ = dag_rel(fntab, cur, 3, li);  // DG4: LIT relocation, the literal's global ordinal (RT §5.2)
+  let _ = em(insns, n, w_adr(imm21, d));
   let _ = fntab[5552] = li + 1;
   let _ = skip_string(s, pos);
   vs_push(insns, n, fntab, stab, 2, d, n[0] - 1)
@@ -3962,6 +3965,7 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   // T130 (2026-09-06): a call whose callee never resolves is a RUNTIME trap (exit 87),
   // not a silent 0 -- `brk #87` (T90 2c: the stub's SIGTRAP handler prints the text); the push keeps the stack shape.
   let _ = if okres == 0 then (let _ = em(insns, n, 3558869728) in vs_push(insns, n, fntab, stab, 1, 0, 0)) else 0;
+  let _ = if okres == 1 then dag_nomemo(fntab) else 0;  // DG4: an inlined callee's body is outside this fn's key
   let _ = pos[0] = pos[0] + 1;
   let i = 0;
   while i < pcnt {
@@ -4115,7 +4119,19 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
   // which pushed gb_bg_child past its 8 MiB clone arena (trap 80, gb_pool rc=107).
   let mbp = [0, strn];
   let mcp = [0, strn];
+  // DG4 (2026-09-30): the per-byte path is one compare; cf_step (the old loop body, unchanged)
+  // runs only on a byte that can start a string, a comment, `fn `, `test `, `module ` or
+  // `theorem `. Same table, same order.
   while j + 2 < strn {
+    let c0 = char(s, j);
+    let slow = (if c0 == 34 then 1 else 0) + (if c0 == 47 then 1 else 0) + (if c0 == 102 then 1 else 0) + (if c0 == 116 then 1 else 0) + (if c0 == 109 then 1 else 0);
+    let j = if slow > 0 then cf_step(s, j, strn, fnames, fpos, cnt, tpos_c, spc, cpc, tpc, mbp, mcp) else j + 1;
+    0
+  };
+  cnt[0]
+}
+// cf_step: collect_fns' loop body at j; returns the next j.
+fn cf_step(s: str, j: i64, strn: i64, fnames: [i64], fpos: [i64], cnt: [i64], tpos_c: [i64], spc: [i64], cpc: [i64], tpc: [i64], mbp: [i64], mcp: [i64]) -> i64 {
     let c0 = char(s, j);
     let c1 = char(s, j + 1);
     let c2 = char(s, j + 2);
@@ -4193,10 +4209,7 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
     let _ = if mod_bad >= 0 then diag_exit(s, mod_bad, 112) else 0;
     let mod_next = if is_module == 1 then (if mcp[0] >= strn then strn else mcp[0] + 1) else j + 1;
     let jnext = (j + 1) * (1 - is_quote - is_comment - is_fn - is_test - is_theorem - is_module) + spc[0] * is_quote + cpc[0] * is_comment + tpos_c[0] * is_fn + tpc[0] * is_test + thm_next * is_theorem + mod_next * is_module;
-    let j = jnext;
-    0
-  };
-  cnt[0]
+  jnext
 }
 
 // Compile one function whose "fn" keyword is at source offset fpos, appending
@@ -4443,7 +4456,22 @@ fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
   let pos = [0, strn];
   let lcnt = [0];
   let cum = [0];
+  // DG4 (2026-09-30): one compare per byte; sl_step (the old loop body) runs only on a byte that
+  // can start a comment, a literal or a `test ` block. Same offsets, same order.
   while pos[0] < strn {
+    let c0 = char(s, pos[0]);
+    let slow = (if c0 == 34 then 1 else 0) + (if c0 == 47 then 1 else 0) + (if c0 == 116 then 1 else 0);
+    let _ = if slow > 0 then sl_step(s, pos, fntab, L, lcnt, cum, strn) else (let _ = pos[0] = pos[0] + 1 in 0);
+    0
+  };
+  let _ = fntab[5550] = lcnt[0];
+  let _ = fntab[5551] = L;
+  let _ = fntab[5552] = 0;
+  let _ = fntab[5549] = cum[0];
+  cum[0]
+}
+// sl_step: scan_literals' loop body at pos[0].
+fn sl_step(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64], strn: i64) -> i64 {
     let c0 = char(s, pos[0]);
     let e1 = if pos[0] + 1 >= strn then 1 else 0;
     let c1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
@@ -4468,13 +4496,7 @@ fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
     let _ = if is_test == 1 then (let _ = pos[0] = find_body_end(s, pos[0] + 5, strn) in (let _ = pos[0] = if pos[0] >= strn then strn else pos[0] + 1 in 0)) else 0;
     let adv = 1 - is_q - is_cm - is_test;
     let _ = pos[0] = pos[0] + adv;
-    0
-  };
-  let _ = fntab[5550] = lcnt[0];
-  let _ = fntab[5551] = L;
-  let _ = fntab[5552] = 0;
-  let _ = fntab[5549] = cum[0];
-  cum[0]
+  0
 }
 
 // Measure + register one literal: pos is INSIDE it (just after '"'). Record
@@ -4515,139 +4537,6 @@ fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
   let offs = zeros(784);
   compile_program_offs(s, insns, n, offs)
 }
-fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
-  let fnames = zeros(784);
-  let fpos = zeros(784);
-  let cnt = [0];
-  let _ = collect_fns(s, fnames, fpos, cnt);
-  let _ = if cnt[0] >= 768 then diag_exit(s, 0, 104) else 0;
-  let _ = offs[0] = cnt[0] + (idx_of_main(fnames, cnt[0]) << 32);
-  let sizes = zeros(784);
-  let starts = zeros(784);
-  let ptab = zeros(8192);
-  let _ = ptab[0] = cnt[0];
-  let pm = [0];
-  while pm[0] < cnt[0] {
-    let _ = ptab[1 + pm[0]] = fnames[pm[0]];
-    let _ = pm[0] = pm[0] + 1;
-    0
-  };
-  let _ = fnh_build(ptab);
-
-  let pz = [0];
-  while pz[0] < cnt[0] {
-    let _ = ptab[1 + cnt[0] + cnt[0] + pz[0]] = fpos[pz[0]];
-    let _ = pz[0] = pz[0] + 1;
-    0
-  };
-
-  let enames_pz = zeros(256);
-  let ecnt_pz = [0];
-  let _ = collect_ctors(s, enames_pz, ecnt_pz);
-  let _ = if ecnt_pz[0] >= 256 then diag_exit(s, 0, 89) else 0;
-  let eb_pz = cnt[0] + cnt[0] + cnt[0] + 1;
-  let _ = ptab[eb_pz] = ecnt_pz[0];
-  let ez_pz = [0];
-  let ed_pz = if ecnt_pz[0] == 0 then 1 else 0;
-  while ed_pz == 0 {
-    let _ = ptab[eb_pz + 1 + ez_pz[0]] = enames_pz[ez_pz[0]];
-    let _ = ez_pz[0] = ez_pz[0] + 1;
-    let ed_pz = if ez_pz[0] >= ecnt_pz[0] then 1 else 0;
-    0
-  };
-  let stk_a = zeros(1088);
-    let tmp = zeros(65536);
-  // B1 (2026-09-06): factbuf[i] harvests fn i's own facts (fntab[3670],
-  // packed vc*2+has_alloc) right after its planning-pass compile, in the
-  // same fn-index order as fnames/fpos/sizes/starts -- copied into the real
-  // fntab[2900+i] below once fntab exists, for the emission pass to look up.
-  let factbuf = zeros(784);
-  let i = [0];
-  while i[0] < cnt[0] {
-    let tn = [0, 65536];
-    let _ = compile_fn_at(s, fpos[i[0]], 0, ptab, tmp, tn, stk_a, 0);
-    let _ = sizes[i[0]] = tn[0];
-    let _ = factbuf[i[0]] = ptab[3670];
-    let _ = i[0] = i[0] + 1;
-    0
-  };
-  let acc = 0;
-  let k = [0];
-  while k[0] < cnt[0] {
-    let _ = starts[k[0]] = acc;
-    let _ = offs[1 + k[0]] = acc;
-    let acc = acc + sizes[k[0]];
-    let _ = k[0] = k[0] + 1;
-    0
-  };
-  let fntab = zeros(8192);
-  let _ = fntab[0] = cnt[0];
-  let _ = scan_literals(s, fntab, acc);
-  let m = [0];
-  while m[0] < cnt[0] {
-    let _ = fntab[1 + m[0]] = fnames[m[0]];
-    let _ = fntab[1 + cnt[0] + m[0]] = starts[m[0]];
-    let _ = fntab[2900 + m[0]] = factbuf[m[0]];  // B1: publish planning's facts for emission
-    let _ = m[0] = m[0] + 1;
-    0
-  };
-  let _ = fnh_build(fntab);
-
-  let fz = [0];
-  while fz[0] < cnt[0] {
-    let _ = fntab[1 + cnt[0] + cnt[0] + fz[0]] = fpos[fz[0]];
-    let _ = fz[0] = fz[0] + 1;
-    0
-  };
-
-  let eb_fz = cnt[0] + cnt[0] + cnt[0] + 1;
-  let ecnt_fz = [0];
-  let _ = ecnt_fz[0] = ptab[eb_fz];
-  let _ = fntab[eb_fz] = ecnt_fz[0];
-  let ez_fz = [0];
-  let ed_fz = if ecnt_fz[0] == 0 then 1 else 0;
-  while ed_fz == 0 {
-    let _ = fntab[eb_fz + 1 + ez_fz[0]] = ptab[eb_fz + 1 + ez_fz[0]];
-    let _ = ez_fz[0] = ez_fz[0] + 1;
-    let ed_fz = if ez_fz[0] >= ecnt_fz[0] then 1 else 0;
-    0
-  };
-  let stk_b = zeros(1088);
-  let q = [0];
-  while q[0] < cnt[0] {
-    let _ = compile_fn_at(s, fpos[q[0]], starts[q[0]], fntab, insns, n, stk_b, 1);
-    let _ = q[0] = q[0] + 1;
-    0
-  };
-  // R3.x(d): append the string-literal data section after the code words.
-  // Scan the source in order, write each literal's bytes (NUL-terminated)
-  // into the reserved cells at insns[L + cum].
-  let dcell_tot = fntab[5549];
-  let dlitc = fntab[5550];
-  let Lcode = n[0];
-  let strn = str_len(s);
-  let sp = [0];
-  let dli = [0];
-  let dgo = if dlitc > 0 then 1 else 0;
-  while dgo == 1 {
-    let c0 = if sp[0] >= strn then 0 else char(s, sp[0]);
-    let e1 = if sp[0] + 1 >= strn then 1 else 0;
-    let c1 = if e1 == 1 then 0 else char(s, sp[0] + 1);
-    let is_sl = if c0 == 47 then 1 else 0;
-    let is_sl2 = if c1 == 47 then 1 else 0;
-    let is_cm = is_sl * is_sl2;
-    let _ = if is_cm == 1 then skip_line_comment_n(s, sp, strn) else 0;
-    let is_q = if c0 == 34 then 1 else 0;
-    let adv = 1 - is_q - is_cm;
-    let _ = sp[0] = sp[0] + adv;
-    let _ = if is_q == 1 then (let _ = sp[0] = sp[0] + 1 in (let _ = write_lit_cells(s, sp, insns, fntab, dli, strn) in 0)) else 0;
-    let dgo = if dli[0] >= dlitc then 0 else 1;
-    0
-  };
-  let _ = n[0] = Lcode + dcell_tot;
-  sum_words(insns, n[0])
-}
-
 // Write literal li's bytes into cells starting at data word fntab[6000+li].
 // sp points INSIDE the literal (just after '"'). Advances sp past '"',
 // bumps dli. The trailing cell's unused bytes stay 0 -> NUL termination.
@@ -4796,23 +4685,6 @@ fn emit_expr_words(src: str) -> [i64] {
 fn emit_words(src: str) -> [i64] {
   let offs = zeros(784);
   emit_words_offs(src, offs)
-}
-fn emit_words_offs(src: str, offs: [i64]) -> [i64] {
-  let insns = zeros(262144);
-  let n = [0, 262144];
-  let _ = compile_program_offs(src, insns, n, offs);
-  let out = zeros(n[0] + 1);
-  let _ = out[0] = n[0];
-  let k = [0];
-  let go = 1;
-  while go == 1 {
-    let done = if k[0] >= n[0] then 1 else 0;
-    let _ = if done == 0 then (let _ = out[k[0] + 1] = insns[k[0]] in 0) else 0;
-    let _ = k[0] = k[0] + 1;
-    let go = 1 - done;
-    0
-  };
-  out
 }
 
 
@@ -5187,7 +5059,8 @@ fn use_comment(buf: [i64], base: i64, txt: str) -> i64 {
   let bol2 = 1;
   while m < strn {
     let c = char(txt, m);
-    let is_use = bol2 * (if c == 117 then 1 else 0) * (if char(txt, m + 1) == 115 then 1 else 0) * (if char(txt, m + 2) == 101 then 1 else 0) * (if char(txt, m + 3) == 32 then 1 else 0) * (if char(txt, m + 4) == 34 then 1 else 0);
+    let cand = if bol2 == 1 then (if c == 117 then 1 else 0) else 0;
+    let is_use = if cand == 1 then (if char(txt, m + 1) == 115 then 1 else 0) * (if char(txt, m + 2) == 101 then 1 else 0) * (if char(txt, m + 3) == 32 then 1 else 0) * (if char(txt, m + 4) == 34 then 1 else 0) else 0;
     let _ = if is_use == 1 then (let _ = buf[base + m] = 47 in (let _ = buf[base + m + 1] = 47 in 0)) else 0;
     let bol2 = if c == 10 then 1 else 0;
     let m = m + 1;
@@ -5273,53 +5146,66 @@ fn use_scan(srcv: str, buf: [i64], off: [i64], seen: [i64], nseen: [i64]) -> i64
   let i = 0;
   let bol = 1;
   let nuse = 0;
+  // DG4 (2026-09-30): the per-character path is ONE compare -- a `use` line can only start at
+  // a line start with a `u`, so everything else (the five-byte match, the path, the dedup scan
+  // over `seen`) runs in use_one on those lines only. MEASURED before: the dedup loop ran for
+  // EVERY character, 77-100 ms of a 190 ms memo-hit compile of bebop.bp. Same expansion bytes.
   while i < strn {
     let c = char(srcv, i);
-    let is_use = bol * (if c == 117 then 1 else 0) * (if char(srcv, i + 1) == 115 then 1 else 0) * (if char(srcv, i + 2) == 101 then 1 else 0) * (if char(srcv, i + 3) == 32 then 1 else 0) * (if char(srcv, i + 4) == 34 then 1 else 0);
-    let j = i + 5;
-    let pl = 0;
-    let go = is_use;
-    while go == 1 {
-      let pc = char(srcv, j + pl);
-      let end = (if pc == 34 then 1 else 0) + (if pc == 0 then 1 else 0) + (if pc == 10 then 1 else 0);
-      let _ = if end == 0 then (let _ = pathc[pl] = pc in 0) else 0;
-      let pl = pl + (1 - end);
-      let go = 1 - end;
-      0
-    };
-    let h = if is_use == 1 then use_path_hash(pathc, pl) else 0;
-    let k = 0;
-    let dup = 0;
-    while k < nseen[0] {
-      let dup = dup + (if seen[k] == h then 1 else 0);
-      let k = k + 1;
-      0
-    };
-    let fresh = is_use * (if dup == 0 then 1 else 0) * (if nseen[0] < 64 then 1 else 0);
-    let _ = if fresh == 1 then (let _ = seen[nseen[0]] = h in (let _ = nseen[0] = nseen[0] + 1 in 0)) else 0;
-    let is_cas = fresh * cas_prefix(pathc, pl);
-    let rl = if is_cas == 1 then cas_path(pathc, real) else pl;
-    let src_path = if is_cas == 1 then real else pathc;
-    let fd = if fresh == 1 then sys_open(src_path, rl, 0) else 0 - 1;
-    let _ = if fd < 0 then (if fresh == 1 then cli_exit(90, "open failed (source, output or binary file)") else 0) else 0;
-    let inc = if fresh == 1 then sys_slurp(fd, src_slurp_cap()) else srcv;
-    let _ = if fresh == 1 then (if str_len(inc) >= src_slurp_cap() then cli_exit(113, "included file too large -- it reached the slurp cap and would be silently truncated mid-program") else 0) else 0;
-    let _ = if fresh == 1 then sys_close(fd) else 0;
-    let _ = if fresh * is_cas == 1 then cas_verify(inc, pathc) else 0;
-    let _ = if fresh == 1 then use_scan(inc, buf, off, seen, nseen) else 0;
-    let _ = if fresh == 1 then (let _ = off[0] = use_mark(buf, off[0], pathc, pl) in 0) else 0;
-    let base = off[0];
-    let _ = if fresh == 1 then (let _ = off[0] = use_append_str(buf, base, inc) in 0) else 0;
-    let _ = if fresh == 1 then use_comment(buf, base, inc) else 0;
-    let _ = if fresh == 1 then (let _ = buf[off[0]] = 10 in (let _ = off[0] = off[0] + 1 in 0)) else 0;
-    let nuse = nuse + is_use;
+    let cand = if bol == 1 then (if c == 117 then 1 else 0) else 0;
+    let nuse = nuse + (if cand == 1 then use_one(srcv, i, buf, off, seen, nseen, pathc, real) else 0);
     let bol = if c == 10 then 1 else 0;
     let i = i + 1;
     0
   };
   nuse
 }
-fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
+// use_one: the line starting at i is `use "PATH"`: include PATH once (deps first). Returns 1 for a
+// use line (included now or already seen), 0 for any other line starting with `u`.
+fn use_one(srcv: str, i: i64, buf: [i64], off: [i64], seen: [i64], nseen: [i64], pathc: [i64], real: [i64]) -> i64 {
+  let is_use = (if char(srcv, i + 1) == 115 then 1 else 0) * (if char(srcv, i + 2) == 101 then 1 else 0) * (if char(srcv, i + 3) == 32 then 1 else 0) * (if char(srcv, i + 4) == 34 then 1 else 0);
+  let j = i + 5;
+  let pl = 0;
+  let go = is_use;
+  while go == 1 {
+    let pc = char(srcv, j + pl);
+    let end = (if pc == 34 then 1 else 0) + (if pc == 0 then 1 else 0) + (if pc == 10 then 1 else 0);
+    let _ = if end == 0 then (let _ = pathc[pl] = pc in 0) else 0;
+    let pl = pl + (1 - end);
+    let go = 1 - end;
+    0
+  };
+  let h = if is_use == 1 then use_path_hash(pathc, pl) else 0;
+  let k = 0;
+  let dup = 0;
+  while k < nseen[0] * is_use {
+    let dup = dup + (if seen[k] == h then 1 else 0);
+    let k = k + 1;
+    0
+  };
+  let fresh = is_use * (if dup == 0 then 1 else 0) * (if nseen[0] < 64 then 1 else 0);
+  let _ = if fresh == 1 then (let _ = seen[nseen[0]] = h in (let _ = nseen[0] = nseen[0] + 1 in 0)) else 0;
+  let is_cas = fresh * cas_prefix(pathc, pl);
+  let rl = if is_cas == 1 then cas_path(pathc, real) else pl;
+  let src_path = if is_cas == 1 then real else pathc;
+  let fd = if fresh == 1 then sys_open(src_path, rl, 0) else 0 - 1;
+  let _ = if fd < 0 then (if fresh == 1 then cli_exit(90, "open failed (source, output or binary file)") else 0) else 0;
+  let inc = if fresh == 1 then sys_slurp(fd, src_slurp_cap()) else srcv;
+  let _ = if fresh == 1 then (if str_len(inc) >= src_slurp_cap() then cli_exit(113, "included file too large -- it reached the slurp cap and would be silently truncated mid-program") else 0) else 0;
+  let _ = if fresh == 1 then sys_close(fd) else 0;
+  let _ = if fresh * is_cas == 1 then cas_verify(inc, pathc) else 0;
+  let _ = if fresh == 1 then use_scan(inc, buf, off, seen, nseen) else 0;
+  let _ = if fresh == 1 then (let _ = off[0] = use_mark(buf, off[0], pathc, pl) in 0) else 0;
+  let base = off[0];
+  let _ = if fresh == 1 then (let _ = off[0] = use_append_str(buf, base, inc) in 0) else 0;
+  let _ = if fresh == 1 then use_comment(buf, base, inc) else 0;
+  let _ = if fresh == 1 then (let _ = buf[off[0]] = 10 in (let _ = off[0] = off[0] + 1 in 0)) else 0;
+  is_use
+}
+fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str { use_expand_at(srcv, tmpc, tmpl, [0]) }
+// use_expand_at: at[0] = the arena cell index of the returned text when it is the expansion (DG4:
+// the memo reads the source as packed cells), untouched when it is srcv itself.
+fn use_expand_at(srcv: str, tmpc: [i64], tmpl: i64, at: [i64]) -> str {
   let seen = zeros(64);
   let nseen = zeros(1);
   let buf = zeros(1600000);
@@ -5339,6 +5225,7 @@ fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
   let _ = if nuse > 0 then sys_export(ofd, buf, total) else 0;
   let _ = if nuse > 0 then sys_close(ofd) else 0;
   let rfd = if nuse > 0 then sys_open(tmpc, tmpl, 0) else 0 - 1;
+  let _ = if nuse > 0 then (let _ = at[0] = sys_arena_base() in 0) else 0;
   let out = if nuse > 0 then sys_slurp(rfd, 1600000) else srcv;
   let _ = if nuse > 0 then sys_close(rfd) else 0;
   out
@@ -5573,129 +5460,6 @@ fn entry_stub(st: [i64]) -> i64 {
   let _ = st[171] = 175009641;
   172
 }
-fn cli_compile(argc: i64, argv: [str]) -> i64 {
-  let src = argv[3];
-  let out = argv[4];
-  let ls = str_len(src);
-  let lo = str_len(out);
-  let psrc = zeros(ls + 1);
-  let pout = zeros(lo + 1);
-  let _ = str_to_cells(psrc, src);
-  let _ = str_to_cells(pout, out);
-  let fd = sys_open(psrc, ls, 0);
-  // Found 2026-09-13 while TRIGGERING code 90 rather than trusting that it fired: this open
-  // was the one file open in the compiler with no guard, so `compile /typo.bp out.bin` slurped
-  // an invalid fd, compiled the resulting empty program and exited 0 -- a silent failure on a
-  // mistyped filename, and it made TRAPS.md row 90's "source" case a claim nothing could produce.
-  let _ = if fd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
-  let srcv0 = sys_slurp(fd, src_slurp_cap());
-  let _ = if str_len(srcv0) >= src_slurp_cap() then cli_exit(113, "source file too large -- it reached the slurp cap and would be silently truncated mid-program") else 0;
-  let _ = sys_close(fd);
-  // T47: `<out>.use` is the scratch file of the expansion (rewritten each compile)
-  let tmpc = zeros(lo + 5);
-  let _ = str_to_cells(tmpc, out);
-  let _ = tmpc[lo] = 46;
-  let _ = tmpc[lo + 1] = 117;
-  let _ = tmpc[lo + 2] = 115;
-  let _ = tmpc[lo + 3] = 101;
-  let srcv = use_expand(srcv0, tmpc, lo + 4);
-  let cpath = zeros(lo + 9);
-  let _ = str_to_cells(cpath, out);
-  let _ = cpath[lo] = 46;
-  let _ = cpath[lo + 1] = 98;
-  let _ = cpath[lo + 2] = 101;
-  let _ = cpath[lo + 3] = 99;
-  let _ = cpath[lo + 4] = 97;
-  let _ = cpath[lo + 5] = 99;
-  let _ = cpath[lo + 6] = 104;
-  let _ = cpath[lo + 7] = 101;
-  let lc = str_len(argv[1]);
-  let pcomp = zeros(lc + 1);
-  let _ = str_to_cells(pcomp, argv[1]);
-  let ta = zeros(8192);
-  let tb = zeros(8192);
-  let nocache = if argc >= 6 then 1 else 0;
-  let ofd0 = if nocache == 1 then 0 - 1 else sys_open(pout, lo, 0);
-  let cfd0 = if ofd0 >= 0 then sys_open(cpath, lo + 8, 0) else 0 - 1;
-  let kfd0 = if cfd0 >= 0 then sys_open(pcomp, lc, 0) else 0 - 1;
-  let hit = if kfd0 >= 0 then cache_hit(cfd0, kfd0, srcv, ta, tb) else 0;
-  let _ = if ofd0 >= 0 then sys_close(ofd0) else 0;
-  let _ = if cfd0 >= 0 then sys_close(cfd0) else 0;
-  let _ = if kfd0 >= 0 then sys_close(kfd0) else 0;
-  while hit == 1 {
-    return 0;
-    0
-  };
-  let offs = zeros(784);
-  let words0 = emit_words_offs(srcv, offs);
-  let n0 = words0[0];
-  let main_off = offs[(offs[0] >> 32) + 1];
-  let stub = zeros(172);
-  let _ = entry_stub(stub);
-  let _ = stub[83] = 335544320 + ((main_off - (n0 + 83)) & 67108863);
-  let words = zeros(n0 + 173);
-  let ci = 0;
-  while ci <= n0 {
-    let _ = words[ci] = words0[ci];
-    let ci = ci + 1;
-    0
-  };
-  let cj = 0;
-  while cj < 172 {
-    let _ = words[n0 + 1 + cj] = stub[cj];
-    let cj = cj + 1;
-    0
-  };
-  let n = n0 + 172;
-  let _ = words[0] = n;
-  let entry = n0;
-  let e4 = entry * 4;
-  let nb = n * 4 + 8;
-  let buf = zeros(nb);
-  let k = 0;
-  while k < n {
-    let w = words[k + 1];
-    let _ = buf[k * 4] = w & 255;
-    let _ = buf[k * 4 + 1] = (w >> 8) & 255;
-    let _ = buf[k * 4 + 2] = (w >> 16) & 255;
-    let _ = buf[k * 4 + 3] = (w >> 24) & 255;
-    let k = k + 1;
-    0
-  };
-  let _ = buf[n * 4] = e4 & 255;
-  let _ = buf[n * 4 + 1] = (e4 >> 8) & 255;
-  let _ = buf[n * 4 + 2] = (e4 >> 16) & 255;
-  let _ = buf[n * 4 + 3] = (e4 >> 24) & 255;
-  let _ = buf[n * 4 + 4] = (e4 >> 32) & 255;
-  let _ = buf[n * 4 + 5] = (e4 >> 40) & 255;
-  let _ = buf[n * 4 + 6] = (e4 >> 48) & 255;
-  let _ = buf[n * 4 + 7] = (e4 >> 56) & 255;
-  // F2 atomic publish (Ф6): argv[5] = tmp path (when argc >= 6) - export the
-  // artifact to tmp via mmap (ftruncate + MAP_SHARED stores, NO sys_write on
-  // the artifact path), close, then renameat(tmp, out): the artifact appears
-  // atomically - readers never observe a partially-written .bin. Without
-  // argv[5]: direct export to out.
-  let rc2 = 0;
-  let publish = if argc >= 6 then 1 else 0;
-  let ptmp = zeros(256);
-  let ptl = [0];
-  let _ = if publish == 1 then (let _ = ptl[0] = str_len(argv[5]) in 0) else 0;
-  let _ = if publish == 1 then str_to_cells(ptmp, argv[5]) else 0;
-  let tg = if publish == 1 then ptmp else pout;
-  let tl = if publish == 1 then ptl[0] else lo;
-  let ofd = sys_open(tg, tl, 578);
-  let _ = if ofd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
-  let rc2 = sys_export(ofd, buf, nb);
-  let _ = sys_close(ofd);
-  let kfd1 = if nocache == 1 then 0 - 1 else sys_open(pcomp, lc, 0);
-  let cfd1 = if kfd1 >= 0 then sys_open(cpath, lo + 8, 578) else 0 - 1;
-  let _ = if cfd1 >= 0 then cache_write(cfd1, kfd1, srcv, ta) else 0;
-  let _ = if cfd1 >= 0 then sys_close(cfd1) else 0;
-  let _ = if kfd1 >= 0 then sys_close(kfd1) else 0;
-  let rn = if publish == 1 then sys_rename(ptmp, ptl[0], pout, lo) else 0;
-  rc2 * 10 + rn
-}
-
 // T90 step 2b (2026-09-06): `bebop.bin check <src.bp>` -- the whole compile (use expansion,
 // planning, emission) without an output file: exit 0 when the program compiles, else the
 // same `line:col: <message>` + exit 95-99 as `compile`. The T47 expansion scratch is
@@ -5704,29 +5468,6 @@ fn fill_check(p: [i64]) -> i64 {
   let _ = p[0] = 99; let _ = p[1] = 104; let _ = p[2] = 101; let _ = p[3] = 99; let _ = p[4] = 107;
   5
 }
-fn cli_check(argc: i64, argv: [str]) -> i64 {
-  let _ = if argc >= 4 then 0 else cli_exit(64, "unknown CLI command (compile, check, size, version, run-via-exec, cas) or check without a file");
-  let src = argv[3];
-  let ls = str_len(src);
-  let psrc = zeros(ls + 1);
-  let _ = str_to_cells(psrc, src);
-  let fd = sys_open(psrc, ls, 0);
-  let _ = if fd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
-  let srcv0 = sys_slurp(fd, src_slurp_cap());
-  let _ = if str_len(srcv0) >= src_slurp_cap() then cli_exit(113, "source file too large -- it reached the slurp cap and would be silently truncated mid-program") else 0;
-  let _ = sys_close(fd);
-  let tmpc = zeros(ls + 5);
-  let _ = str_to_cells(tmpc, src);
-  let _ = tmpc[ls] = 46;
-  let _ = tmpc[ls + 1] = 117;
-  let _ = tmpc[ls + 2] = 115;
-  let _ = tmpc[ls + 3] = 101;
-  let srcv = use_expand(srcv0, tmpc, ls + 4);
-  let offs = zeros(784);
-  let words0 = emit_words_offs(srcv, offs);
-  words0[0] * 0
-}
-
 // T80 (2026-09-06): `bebop.bin cas add <file>` -- the file's SHA-256 names it: the bytes
 // are stored as .bcas/<hex>.bp (the directory must exist; exit 90 otherwise) and the
 // address line `cas://sha256:<hex>` is written to stdout, ready to paste into a `use`.

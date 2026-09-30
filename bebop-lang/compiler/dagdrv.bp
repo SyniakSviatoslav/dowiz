@@ -1,0 +1,698 @@
+// bebop-lang/compiler/dagdrv.bp -- part of the self-hosting compiler, NOT a standalone program.
+// DG4 (docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md §4-§5, BLUEPRINT DG4): the whole-program
+// driver, per-fn hit-or-compile against the `<out>.dag` memo (selfhost/prelude/dagc.bp), the
+// relocation recorder and the link. Moved here from bebop.bp: compile_program_offs,
+// emit_words_offs, cli_compile, cli_check. Contents are pulled in by bebop.bp's `use` line.
+use "selfhost/prelude/dagc.bp"
+
+// ---- instruction words shared by the emitters and the link (ONE formula each) ----
+// bl imm26: today's `offset + is_back * 2^26` two's-complement form.
+fn w_bl(offset: i64) -> i64 {
+  let is_back = if offset < 0 then 1 else 0;
+  2483027968 + offset + is_back * 67108864
+}
+// movz/movk pair of a one-based fn value (A16).
+fn w_fnlo(v: i64, d: i64) -> i64 { 3531603968 + (v & 65535) * 32 + d }
+fn w_fnhi(v: i64, d: i64) -> i64 { 4070572032 + ((v / 65536) & 65535) * 32 + d }
+// adr xd, #imm (word units, forward) -- a literal handle.
+fn w_adr(imm: i64, d: i64) -> i64 { 268435456 + imm * 32 + d }
+// adr x16 one word below the image base (call_fn / call_packed).
+fn w_adr_base(p: i64) -> i64 { 268435456 + ((524288 - p - 1) & 524287) * 32 + 16 }
+
+// ---- the relocation recorder (RT §5.2). fntab cells: 7111 buffer (st_addr, 0 = off),
+// 7112 count, 7113 capacity (pairs), 7114 this fn cannot be memoised (1). Kinds: 1 BL (target =
+// callee fn index), 2 FNVAL (fn index; the movz/movk pair at w, w+1), 3 LIT (global literal
+// ordinal), 4 BASE. The planning table and every other fntab have 7111 = 0: nothing recorded.
+fn dag_rel(fntab: [i64], w: i64, kind: i64, t: i64) -> i64 {
+  let on = if fntab[7111] == 0 then 0 else 1;
+  let c = fntab[7112];
+  let fits = if c < fntab[7113] then 1 else 0;
+  let _ = if on * fits == 1 then dag_rel_put(st_cells(fntab[7111]), c, w, (kind << 56) | t) else 0;
+  let _ = if on * fits == 1 then (let _ = fntab[7112] = c + 1 in 0) else 0;
+  let _ = if on * (1 - fits) == 1 then (let _ = fntab[7114] = 1 in 0) else 0;
+  0
+}
+fn dag_rel_put(rb: [i64], c: i64, w: i64, kt: i64) -> i64 {
+  let _ = rb[c * 2] = w;
+  let _ = rb[c * 2 + 1] = kt;
+  0
+}
+// dag_rel_fn: a reference to fn `name` by index (the name index's LAST definition, as
+// fntab_lookup resolves it). No index for the name while recording = the fn is not memoised.
+fn dag_rel_fn(fntab: [i64], w: i64, kind: i64, name: i64) -> i64 {
+  let v = if fntab[7111] == 0 then 0 else fnh_get(fntab, name);
+  let _ = if fntab[7111] == 0 then 0 else (if v > 0 then dag_rel(fntab, w, kind, fnh_idx(v)) else (let _ = fntab[7114] = 1 in 0));
+  0
+}
+// dag_nomemo(fntab): the fn being compiled read something no key covers (an inlined callee).
+fn dag_nomemo(fntab: [i64]) -> i64 {
+  let _ = fntab[7114] = 1;
+  0
+}
+
+// ---- driver state ws: st_addr handles and scalars ----
+//  0 cnt  1 fnames  2 fpos  3 sizes  4 starts  5 facts  6 ptab  7 fntab  8 hit entry (0 = miss)
+//  9 hit IDX position  10 span cell offset  11 span len  12 span cells  13 key  14 nlits
+// 15 reloc lo  16 reloc hi  17 reloc buffer  18 literal ordinal at fn start  19 source cells
+// 20 strn  21 bad (do not store)  22 code words  23 fn line starts
+
+fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
+  let dm = zeros(48);
+  let _ = dm[29] = 1;
+  dag_program(s, 0, insns, n, offs, dm)
+}
+// dag_program: the one whole-program compile. dm[29] != 0 = no memo (every fn compiled, nothing
+// recorded or written) -- the path every in-process caller (gb_run, pool_compile) takes.
+fn dag_program(s: str, sidx: i64, insns: [i64], n: [i64], offs: [i64], dm: [i64]) -> i64 {
+  let ws = zeros(32);
+  let _ = ws[19] = sidx;
+  let _ = dag_tables(s, ws, offs);
+  let _ = if dm[29] == 0 then dag_probe(s, ws, dm) else 0;
+  let _ = dag_plan(s, ws, dm);
+  let _ = dag_layout(s, ws, offs);
+  let _ = dag_emit(s, ws, dm, insns, n);
+  let _ = dag_litdata(s, ws, insns, n);
+  let _ = if dm[29] == 0 then dag_store(ws, dm, insns) else 0;
+  sum_words(insns, n[0])
+}
+fn wsa(ws: [i64], k: i64) -> [i64] { st_cells(ws[k]) }
+
+// dag_tables: collect_fns, the planning table (names, index, srcpos, ctors) -- as before the memo.
+fn dag_tables(s: str, ws: [i64], offs: [i64]) -> i64 {
+  let fnames = zeros(784);
+  let fpos = zeros(784);
+  let cnt = [0];
+  let _ = collect_fns(s, fnames, fpos, cnt);
+  let _ = if cnt[0] >= 768 then diag_exit(s, 0, 104) else 0;
+  let _ = offs[0] = cnt[0] + (idx_of_main(fnames, cnt[0]) << 32);
+  let ptab = zeros(8192);
+  let _ = ptab[0] = cnt[0];
+  let pm = 0;
+  while pm < cnt[0] {
+    let _ = ptab[1 + pm] = fnames[pm];
+    let pm = pm + 1;
+    0
+  };
+  let _ = fnh_build(ptab);
+  let pz = 0;
+  while pz < cnt[0] {
+    let _ = ptab[1 + cnt[0] + cnt[0] + pz] = fpos[pz];
+    let pz = pz + 1;
+    0
+  };
+  let enames = zeros(256);
+  let ecnt = [0];
+  let _ = collect_ctors(s, enames, ecnt);
+  let _ = if ecnt[0] >= 256 then diag_exit(s, 0, 89) else 0;
+  let eb = cnt[0] * 3 + 1;
+  let _ = ptab[eb] = ecnt[0];
+  let ez = 0;
+  while ez < ecnt[0] {
+    let _ = ptab[eb + 1 + ez] = enames[ez];
+    let ez = ez + 1;
+    0
+  };
+  let _ = ws[0] = cnt[0];
+  let _ = ws[1] = st_addr(fnames);
+  let _ = ws[2] = st_addr(fpos);
+  let _ = ws[3] = st_addr(zeros(784));
+  let _ = ws[4] = st_addr(zeros(784));
+  let _ = ws[5] = st_addr(zeros(784));
+  let _ = ws[6] = st_addr(ptab);
+  let _ = ws[8] = st_addr(zeros(784));
+  let _ = ws[9] = st_addr(zeros(784));
+  let _ = ws[14] = st_addr(zeros(784));
+  let _ = ws[15] = st_addr(zeros(784));
+  let _ = ws[16] = st_addr(zeros(784));
+  let _ = ws[18] = st_addr(zeros(784));
+  let _ = ws[21] = st_addr(zeros(784));
+  let _ = ws[20] = str_len(s);
+  cnt[0]
+}
+
+// ---- probe: context bytes, spans, keys, lookups ----
+// What a fn's words read OUTSIDE its own span (audited 2026-09-30 over the emitters): other fns'
+// HEADERS (arity, param and return types via ft_srcpos -> fn_*_at), the enum declaration
+// (collect_ctors / ft_ctor_tag), the struct declarations (st_find -> collect_structs), the fn
+// LAYOUT (bl / &f / literal / image-base words: relocated, dag_patch) and the literal ORDER
+// (relocated by ordinal). The first three are the context bytes; the text before the first fn is
+// added whole. A fn span runs from the start of its `fn` line to the start of the next fn's line
+// (a `kernel` marker is on the fn's own line; comments ABOVE a fn belong to the fn before it).
+fn dag_line_start(s: str, p: i64) -> i64 {
+  let q = p;
+  let go = if q > 0 then (if char(s, q - 1) == 10 then 0 else 1) else 0;
+  while go == 1 {
+    let q = q - 1;
+    let go = if q > 0 then (if char(s, q - 1) == 10 then 0 else 1) else 0;
+    0
+  };
+  q
+}
+// dag_piece(lc, at, srcc, a, b): the source bytes [a, b) as one context piece -- a length cell,
+// then the bytes packed from a cell boundary (so the whole context is cells, compared cellwise).
+fn dag_piece(lc: [i64], at: i64, srcc: [i64], a: i64, b: i64) -> i64 {
+  let _ = lc[at] = b - a;
+  at + 1 + dag_pack_span(srcc, a, b, lc, at + 1)
+}
+// dag_ctx(s, ws, dm): the live context -> dm[12] (cells), dm[13] (bytes = 8 * cells).
+fn dag_ctx(s: str, ws: [i64], dm: [i64]) -> i64 {
+  let cnt = ws[0];
+  let strn = ws[20];
+  let fpos = wsa(ws, 2);
+  let ptab = wsa(ws, 6);
+  let srcc = st_cells(ws[19]);
+  let lc = zeros(strn / 8 + cnt * 4 + 4096);
+  let a0 = if cnt > 0 then dag_line_start(s, fpos[0]) else strn;
+  let at = dag_piece(lc, 0, srcc, 0, a0);
+  let pos = [0, strn];
+  let i = 0;
+  while i < cnt {
+    let _ = pos[0] = fpos[i];
+    let _ = skip_to(s, pos, 123);
+    let at = dag_piece(lc, at, srcc, fpos[i], pos[0]);
+    let i = i + 1;
+    0
+  };
+  let ep = [0];
+  let has_en = if ptab[cnt * 3 + 1] > 0 then find_enum(s, ep) else 0;
+  let at = if has_en == 1 then dag_decl(lc, at, s, srcc, ep[0], pos) else at;
+  let at = dag_structs(lc, at, s, srcc, pos);
+  let _ = dm[12] = st_addr(lc);
+  let _ = dm[13] = at * 8;
+  at
+}
+// dag_decl: a declaration from its keyword through its closing `}` as one piece.
+fn dag_decl(lc: [i64], at: i64, s: str, srcc: [i64], k: i64, pos: [i64]) -> i64 {
+  let _ = pos[0] = k;
+  let _ = skip_to(s, pos, 125);
+  dag_piece(lc, at, srcc, k, pos[0] + 1)
+}
+// dag_structs: every line-initial `struct ` declaration (a SUPERSET of collect_structs' list,
+// which also skips `test` bodies -- more context is only more conservative). One compare per
+// byte; the keyword test runs on line starts that begin with `s`.
+fn dag_structs(lc: [i64], at: i64, s: str, srcc: [i64], pos: [i64]) -> i64 {
+  let strn = pos[1];
+  let a = at;
+  let j = 0;
+  let bol = 1;
+  while j + 7 < strn {
+    let c = char(s, j);
+    let cand = if bol == 1 then (if c == 115 then 1 else 0) else 0;
+    let hit = if cand == 1 then dag_kw_struct(s, j) else 0;
+    let a = if hit == 1 then dag_decl(lc, a, s, srcc, j, pos) else a;
+    let bol = if c == 10 then 1 else 0;
+    let j = j + 1;
+    0
+  };
+  a
+}
+fn dag_kw_struct(s: str, j: i64) -> i64 {
+  (if char(s, j + 1) == 116 then 1 else 0) * (if char(s, j + 2) == 114 then 1 else 0) * (if char(s, j + 3) == 117 then 1 else 0) * (if char(s, j + 4) == 99 then 1 else 0) * (if char(s, j + 5) == 116 then 1 else 0) * (if char(s, j + 6) == 32 then 1 else 0)
+}
+fn dag_probe(s: str, ws: [i64], dm: [i64]) -> i64 {
+  let cnt = ws[0];
+  let strn = ws[20];
+  let fpos = wsa(ws, 2);
+  let ls = zeros(cnt + 1);
+  let i = 0;
+  while i < cnt {
+    let _ = ls[i] = dag_line_start(s, fpos[i]);
+    let _ = if i > 0 then (if ls[i] <= fpos[i - 1] then (let _ = dm[29] = 1 in 0) else 0) else 0;
+    let i = i + 1;
+    0
+  };
+  let _ = ls[cnt] = strn;
+  let _ = ws[23] = st_addr(ls);
+  let _ = if dm[29] == 0 then dag_ctx(s, ws, dm) else 0;
+  let _ = if dm[29] == 0 then dag_keys(ws, dm) else 0;
+  // a crc failure met during the lookups refuses the whole image: say so, forget every hit,
+  // start a fresh image, and compile cold (RT M-5)
+  let bad = if dm[29] == 5 then 1 else 0;
+  let _ = if bad == 1 then dag_say(dm, 5) else 0;
+  let _ = if bad == 1 then dag_forget(ws, dm) else 0;
+  0
+}
+fn dag_forget(ws: [i64], dm: [i64]) -> i64 {
+  let hit = wsa(ws, 8);
+  let i = 0;
+  while i < ws[0] {
+    let _ = hit[i] = 0;
+    let i = i + 1;
+    0
+  };
+  let _ = dag_map(dm, dm[3], 1);
+  let _ = dm[1] = 0;
+  let _ = dm[7] = 0;
+  let _ = dm[10] = 0;
+  let _ = dm[29] = 0;
+  0
+}
+fn dag_keys(ws: [i64], dm: [i64]) -> i64 {
+  let cnt = ws[0];
+  let ls = wsa(ws, 23);
+  let srcc = st_cells(ws[19]);
+  let sc = zeros(ws[20] / 8 + cnt * 2 + 16);
+  let spoff = zeros(cnt + 1);
+  let splen = zeros(cnt + 1);
+  let key = zeros(cnt + 1);
+  let hit = wsa(ws, 8);
+  let hpos = wsa(ws, 9);
+  let off = 0;
+  let i = 0;
+  while i < cnt {
+    let len = ls[i + 1] - ls[i];
+    let _ = spoff[i] = off;
+    let _ = splen[i] = len;
+    let nc = dag_pack_span(srcc, ls[i], ls[i + 1], sc, off);
+    let _ = key[i] = dag_key(sc, off, len);
+    let _ = hit[i] = dag_lookup(dm, key[i], sc, off, len);
+    let _ = hpos[i] = dm[35];
+    let off = off + nc;
+    let i = i + 1;
+    0
+  };
+  let _ = ws[10] = st_addr(spoff);
+  let _ = ws[11] = st_addr(splen);
+  let _ = ws[12] = st_addr(sc);
+  let _ = ws[13] = st_addr(key);
+  0
+}
+
+// ---- planning (misses only; a hit's size and facts come from its entry) ----
+fn dag_plan(s: str, ws: [i64], dm: [i64]) -> i64 {
+  let cnt = ws[0];
+  let fpos = wsa(ws, 2);
+  let sizes = wsa(ws, 3);
+  let facts = wsa(ws, 5);
+  let ptab = wsa(ws, 6);
+  let hit = wsa(ws, 8);
+  let stk_a = zeros(1088);
+  let tmp = zeros(65536);
+  let tn = [0, 65536];
+  let i = 0;
+  while i < cnt {
+    let e = hit[i];
+    let _ = tn[0] = 0;
+    let _ = tn[1] = 65536;
+    let _ = if e == 0 then compile_fn_at(s, fpos[i], 0, ptab, tmp, tn, stk_a, 0) else 0;
+    let _ = sizes[i] = if e == 0 then tn[0] else st_get(dag_base(dm), e, 3);
+    let _ = facts[i] = if e == 0 then ptab[3670] else st_get(dag_base(dm), e, 5);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+// ---- layout: starts (prefix sums, source order -- RT L-3), the emission table ----
+fn dag_layout(s: str, ws: [i64], offs: [i64]) -> i64 {
+  let cnt = ws[0];
+  let fnames = wsa(ws, 1);
+  let fpos = wsa(ws, 2);
+  let sizes = wsa(ws, 3);
+  let starts = wsa(ws, 4);
+  let facts = wsa(ws, 5);
+  let ptab = wsa(ws, 6);
+  let acc = 0;
+  let k = 0;
+  while k < cnt {
+    let _ = starts[k] = acc;
+    let _ = offs[1 + k] = acc;
+    let acc = acc + sizes[k];
+    let k = k + 1;
+    0
+  };
+  let fntab = zeros(8192);
+  let _ = fntab[0] = cnt;
+  let _ = scan_literals(s, fntab, acc);
+  let m = 0;
+  while m < cnt {
+    let _ = fntab[1 + m] = fnames[m];
+    let _ = fntab[1 + cnt + m] = starts[m];
+    let _ = fntab[2900 + m] = facts[m];  // B1: publish planning's facts for emission
+    let m = m + 1;
+    0
+  };
+  let _ = fnh_build(fntab);
+  let fz = 0;
+  while fz < cnt {
+    let _ = fntab[1 + cnt + cnt + fz] = fpos[fz];
+    let fz = fz + 1;
+    0
+  };
+  let eb = cnt * 3 + 1;
+  let _ = fntab[eb] = ptab[eb];
+  let ez = 0;
+  while ez < ptab[eb] {
+    let _ = fntab[eb + 1 + ez] = ptab[eb + 1 + ez];
+    let ez = ez + 1;
+    0
+  };
+  let _ = dag_share(ptab, fntab);
+  let _ = ws[7] = st_addr(fntab);
+  let _ = ws[22] = acc;
+  acc
+}
+
+// dag_share: the lazily built whole-source tables the planning table already holds -- the struct
+// table (fntab[7000..7065], collect_structs) and the tuple-unit flag (7101, unit_tuple_scan) --
+// copied into the emission table instead of rescanning the source (same values: both are pure
+// functions of the source). A table the planning pass never built stays lazy.
+fn dag_share(ptab: [i64], fntab: [i64]) -> i64 {
+  let k = if ptab[7000] == 1 then 7000 else 7066;
+  while k < 7066 {
+    let _ = fntab[k] = ptab[k];
+    let k = k + 1;
+    0
+  };
+  let _ = fntab[7101] = ptab[7101];
+  0
+}
+
+// ---- emission: a hit is copied and linked, a miss is compiled in place and recorded ----
+fn dag_emit(s: str, ws: [i64], dm: [i64], insns: [i64], n: [i64]) -> i64 {
+  let cnt = ws[0];
+  let fpos = wsa(ws, 2);
+  let sizes = wsa(ws, 3);
+  let starts = wsa(ws, 4);
+  let fntab = wsa(ws, 7);
+  let hit = wsa(ws, 8);
+  let nlit = wsa(ws, 14);
+  let rlo = wsa(ws, 15);
+  let rhi = wsa(ws, 16);
+  let li0 = wsa(ws, 18);
+  let bad = wsa(ws, 21);
+  let rec = if dm[29] == 0 then 1 else 0;
+  let rb = zeros(if rec == 1 then 262144 else 2);
+  let _ = ws[17] = st_addr(rb);
+  let _ = fntab[7111] = if rec == 1 then st_addr(rb) else 0;
+  let _ = fntab[7112] = 0;
+  let _ = fntab[7113] = 131072;
+  let stk_b = zeros(1088);
+  let q = 0;
+  while q < cnt {
+    let _ = li0[q] = fntab[5552];
+    let _ = rlo[q] = fntab[7112];
+    let _ = fntab[7114] = 0;
+    let e = hit[q];
+    let _ = if e > 0 then dag_link_fn(ws, dm, q, insns, n) else compile_fn_at(s, fpos[q], starts[q], fntab, insns, n, stk_b, 1);
+    let _ = rhi[q] = fntab[7112];
+    let _ = nlit[q] = fntab[5552] - li0[q];
+    let _ = bad[q] = fntab[7114] + (if n[0] - starts[q] == sizes[q] then 0 else 1);
+    let q = q + 1;
+    0
+  };
+  let _ = fntab[7111] = 0;
+  0
+}
+// dag_link_fn: copy hit fn q's WORDS to its start, patch its relocations, advance the literal cursor.
+fn dag_link_fn(ws: [i64], dm: [i64], q: i64, insns: [i64], n: [i64]) -> i64 {
+  let base = dag_base(dm);
+  let hit = wsa(ws, 8);
+  let sts = wsa(ws, 4);
+  let e = hit[q];
+  let st = sts[q];
+  let fntab = wsa(ws, 7);
+  let nw = st_get(base, e, 3);
+  let _ = n[0] = st;
+  let _ = if st + nw > n[1] then cap_exit(n) else 0;
+  let wo = st_ref(base, e, 8);
+  let k = 0;
+  while k < nw {
+    let c = st_get(base, wo, k / 2);
+    let _ = insns[st + k] = if (k & 1) == 0 then c & 4294967295 else c >> 32;
+    let k = k + 1;
+    0
+  };
+  let _ = n[0] = st + nw;
+  let nr = st_get(base, e, 4);
+  let ro = if nr > 0 then st_ref(base, e, 9) else 0;
+  let r = 0;
+  while r < nr {
+    let kt = st_get(base, ro, r * 2 + 1);
+    let _ = dag_patch(insns, st + st_get(base, ro, r * 2), kt >> 56, kt & 72057594037927935, ws, fntab);
+    let r = r + 1;
+    0
+  };
+  let _ = fntab[5552] = fntab[5552] + st_get(base, e, 12);
+  0
+}
+// dag_patch: one relocation at absolute word p (RT §5.2); every word is re-derived from the
+// current layout through the SAME w_* formula the emitter used, the register kept from the word.
+fn dag_patch(insns: [i64], p: i64, kind: i64, t: i64, ws: [i64], fntab: [i64]) -> i64 {
+  let starts = wsa(ws, 4);
+  let d = insns[p] & 31;
+  let _ = if kind == 1 then (let _ = insns[p] = w_bl(starts[t] - p) in 0) else 0;
+  let _ = if kind == 2 then (let _ = insns[p] = w_fnlo(starts[t] + 1, d) in (let _ = insns[p + 1] = w_fnhi(starts[t] + 1, insns[p + 1] & 31) in 0)) else 0;
+  let _ = if kind == 3 then (let _ = insns[p] = w_adr(fntab[6000 + fntab[5552] + t] - p, d) in 0) else 0;
+  let _ = if kind == 4 then (let _ = insns[p] = w_adr_base(p) in 0) else 0;
+  0
+}
+
+// R3.x(d): append the string-literal data section after the code words (moved from
+// compile_program_offs; DG4: one compare per byte, dl_step on `"` and `/` only).
+fn dag_litdata(s: str, ws: [i64], insns: [i64], n: [i64]) -> i64 {
+  let fntab = wsa(ws, 7);
+  let dcell_tot = fntab[5549];
+  let dlitc = fntab[5550];
+  let Lcode = n[0];
+  let strn = str_len(s);
+  let sp = [0];
+  let dli = [0];
+  let dgo = if dlitc > 0 then 1 else 0;
+  while dgo == 1 {
+    let c0 = if sp[0] >= strn then 0 else char(s, sp[0]);
+    let slow = (if c0 == 34 then 1 else 0) + (if c0 == 47 then 1 else 0);
+    let _ = if slow > 0 then dl_step(s, sp, insns, fntab, dli, strn) else (let _ = sp[0] = sp[0] + 1 in 0);
+    let dgo = if dli[0] >= dlitc then 0 else 1;
+    0
+  };
+  let _ = n[0] = Lcode + dcell_tot;
+  0
+}
+// dl_step: dag_litdata's loop body at sp[0] (a byte that can start a comment or a literal).
+fn dl_step(s: str, sp: [i64], insns: [i64], fntab: [i64], dli: [i64], strn: i64) -> i64 {
+    let c0 = if sp[0] >= strn then 0 else char(s, sp[0]);
+    let e1 = if sp[0] + 1 >= strn then 1 else 0;
+    let c1 = if e1 == 1 then 0 else char(s, sp[0] + 1);
+    let is_sl = if c0 == 47 then 1 else 0;
+    let is_sl2 = if c1 == 47 then 1 else 0;
+    let is_cm = is_sl * is_sl2;
+    let _ = if is_cm == 1 then skip_line_comment_n(s, sp, strn) else 0;
+    let is_q = if c0 == 34 then 1 else 0;
+    let adv = 1 - is_q - is_cm;
+    let _ = sp[0] = sp[0] + adv;
+    let _ = if is_q == 1 then (let _ = sp[0] = sp[0] + 1 in (let _ = write_lit_cells(s, sp, insns, fntab, dli, strn) in 0)) else 0;
+  0
+}
+
+// ---- store: ONE transaction, ONE commit per compile (RT M-2), compaction when 3/4 full ----
+fn dag_store(ws: [i64], dm: [i64], insns: [i64]) -> i64 {
+  if dm[27] == 1 then 0 else dag_store_go(ws, dm, insns)
+}
+// dag_miss_cells(ws, i): arena cells fn i's entry objects take (0 for a hit or an unstorable fn).
+fn dag_miss_cells(ws: [i64], i: i64) -> i64 {
+  let hit = wsa(ws, 8);
+  let bad = wsa(ws, 21);
+  let sizes = wsa(ws, 3);
+  let splen = wsa(ws, 11);
+  let rlo = wsa(ws, 15);
+  let rhi = wsa(ws, 16);
+  let nr = rhi[i] - rlo[i];
+  let c = 15 + 2 + (splen[i] + 7) / 8 + 2 + (sizes[i] + 1) / 2 + (if nr > 0 then 2 + nr * 2 else 0);
+  if hit[i] + bad[i] == 0 then c else 0
+}
+fn dag_store_go(ws: [i64], dm: [i64], insns: [i64]) -> i64 {
+  let cnt = ws[0];
+  let hit = wsa(ws, 8);
+  let hpos = wsa(ws, 9);
+  let mc = 0;
+  let nm = 0;
+  let i = 0;
+  while i < cnt {
+    let c = dag_miss_cells(ws, i);
+    let mc = mc + c;
+    let nm = nm + (if c > 0 then 1 else 0);
+    let i = i + 1;
+    0
+  };
+  let on = dm[7];
+  let hitg = zeros(on + 1);
+  let keep = zeros(on + 1);
+  let p = 0;
+  while p < on {
+    let _ = keep[p] = 1;
+    let p = p + 1;
+    0
+  };
+  let j = 0;
+  while j < cnt {
+    let _ = if hit[j] > 0 then (let _ = hitg[hpos[j]] = 1 in 0) else 0;
+    let j = j + 1;
+    0
+  };
+  let gen = dm[4] + 1;
+  let base = dag_base(dm);
+  let tx = zeros(8);
+  let _ = st_begin(base, tx, base);
+  let need = mc + 3 + (dm[13] + 7) / 8 + 2 + 3 * (on + nm) + 11;
+  let inplace = if tx[2] + need <= 1024 + dm[3] * 3 / 4 then 1 else 0;
+  if inplace == 1 then dag_store_in(ws, dm, tx, insns, gen, nm, keep, hitg) else dag_compact(ws, dm, insns, gen, mc, nm, hitg)
+}
+fn dag_store_in(ws: [i64], dm: [i64], tx: [i64], insns: [i64], gen: i64, nm: i64, keep: [i64], hitg: [i64]) -> i64 {
+  let nk = zeros(ws[0] + 1);
+  let ne = zeros(ws[0] + 1);
+  let ng = zeros(ws[0] + 1);
+  let ctxo = if nm > 0 then dag_put_ctx(dm, tx, st_cells(dm[12]), dm[13]) else 0;
+  let j = dag_put_misses(ws, dm, tx, insns, gen, ctxo, nk, ne, ng, 0);
+  let idx = dag_put_idx(dm, tx, nk, ne, ng, j, keep, hitg, gen);
+  dag_put_root(dm, tx, idx, dm[7] + j, ctxo, gen)
+}
+// dag_put_misses: every storable miss written into dt's transaction; its (key, entry, gen) triple
+// appended at nk[j0..]. Returns the new count.
+fn dag_put_misses(ws: [i64], dt: [i64], tx: [i64], insns: [i64], gen: i64, ctxo: i64, nk: [i64], ne: [i64], ng: [i64], j0: i64) -> i64 {
+  let cnt = ws[0];
+  let f = zeros(16);
+  let j = j0;
+  let i = 0;
+  while i < cnt {
+    let c = dag_miss_cells(ws, i);
+    let _ = if c > 0 then dag_put_miss(ws, dt, tx, insns, ctxo, f, i) else 0;
+    let _ = if c > 0 then (let _ = nk[j] = f[0] in (let _ = ne[j] = f[14] in (let _ = ng[j] = gen in 0))) else 0;
+    let j = j + (if c > 0 then 1 else 0);
+    let i = i + 1;
+    0
+  };
+  j
+}
+fn dag_put_miss(ws: [i64], dt: [i64], tx: [i64], insns: [i64], ctxo: i64, f: [i64], i: i64) -> i64 {
+  let sizes = wsa(ws, 3);
+  let starts = wsa(ws, 4);
+  let facts = wsa(ws, 5);
+  let spoff = wsa(ws, 10);
+  let splen = wsa(ws, 11);
+  let key = wsa(ws, 13);
+  let nlit = wsa(ws, 14);
+  let rlo = wsa(ws, 15);
+  let rhi = wsa(ws, 16);
+  let li0 = wsa(ws, 18);
+  let _ = f[0] = key[i];
+  let _ = f[1] = 1;
+  let _ = f[2] = splen[i];
+  let _ = f[3] = sizes[i];
+  let _ = f[4] = rhi[i] - rlo[i];
+  let _ = f[5] = facts[i];
+  let _ = f[6] = sizes[i];
+  let _ = f[7] = dag_put_cells(dt, tx, dt[21], wsa(ws, 12), spoff[i], (splen[i] + 7) / 8);
+  let _ = f[8] = dag_put_words(dt, tx, insns, starts[i], sizes[i]);
+  let _ = f[9] = dag_put_relocs(dt, tx, wsa(ws, 17), rlo[i], rhi[i], starts[i], li0[i]);
+  let _ = f[10] = 0;
+  let _ = f[11] = ctxo;
+  let _ = f[12] = nlit[i];
+  let _ = f[14] = dag_put_entry(dt, tx, f);
+  f[14]
+}
+// dag_compact: a fresh image at <out>.dag.new holding this compile's hits and misses plus the old
+// entries hit within KEEP_GENS under the same context, renamed over <out>.dag. When even the
+// hits and misses alone exceed the capacity: E126, and nothing is written (RT M-4).
+fn dag_compact(ws: [i64], dm: [i64], insns: [i64], gen: i64, mc: i64, nm: i64, hitg: [i64]) -> i64 {
+  let on = dm[7];
+  let sel = zeros(on + 1);
+  let ch = dag_select(dm, sel, hitg, gen, 1);
+  let nh = dag_count(sel, on);
+  let fixed = mc + 3 + (dm[13] + 7) / 8 + 11 + 2;
+  let cap = if dm[25] > 0 then dm[25] else (if dm[34] > dm[3] then dm[34] else dm[3]);
+  let all = dag_select(dm, sel, hitg, gen, 0);
+  let na = dag_count(sel, on);
+  let fits_all = if all + fixed + 3 * (na + nm) <= cap then 1 else 0;
+  let _ = if fits_all == 0 then dag_select(dm, sel, hitg, gen, 1) else 0;
+  let nk0 = if fits_all == 1 then na else nh;
+  let need = (if fits_all == 1 then all else ch) + fixed + 3 * (nk0 + nm);
+  let _ = if need > cap then dag_full(dm, need, cap) else 0;
+  let dn = zeros(48);
+  let k = 8;
+  while k < 25 {
+    let _ = dn[k] = dm[k];
+    let k = k + 1;
+    0
+  };
+  let pn = zeros(dm[17] + 8);
+  let pd = st_cells(dm[16]);
+  let c = 0;
+  while c < dm[17] {
+    let _ = pn[c] = pd[c];
+    let c = c + 1;
+    0
+  };
+  let _ = pn[dm[17]] = 46;
+  let _ = pn[dm[17] + 1] = 110;
+  let _ = pn[dm[17] + 2] = 101;
+  let _ = pn[dm[17] + 3] = 119;
+  let _ = dn[16] = st_addr(pn);
+  let _ = dn[17] = dm[17] + 4;
+  let _ = dag_map(dn, cap, 1);
+  let db = dag_base(dn);
+  let tx = zeros(8);
+  let _ = st_begin(db, tx, db);
+  let ctxo = dag_put_ctx(dn, tx, st_cells(dm[12]), dm[13]);
+  let tot = nk0 + nm + 1;
+  let nk = zeros(tot);
+  let ne = zeros(tot);
+  let ng = zeros(tot);
+  let j = dag_copy_kept(dm, dn, tx, sel, hitg, gen, ctxo, nk, ne, ng);
+  let j = dag_put_misses(ws, dn, tx, insns, gen, ctxo, nk, ne, ng, j);
+  let z = zeros(2);
+  let idx = dag_put_idx(dn, tx, nk, ne, ng, j, z, z, gen);
+  let g = dag_put_root(dn, tx, idx, j, ctxo, gen);
+  let _ = sys_rename(pn, dn[17], pd, dm[17]);
+  g
+}
+// dag_select(dm, sel, hitg, gen, hits_only): mark the old IDX positions to keep; returns their cells.
+fn dag_select(dm: [i64], sel: [i64], hitg: [i64], gen: i64, hits_only: i64) -> i64 {
+  let on = dm[7];
+  let cells = 0;
+  let p = 0;
+  while p < on {
+    let e = dag_idx_entry(dm, p);
+    let recent = if hits_only == 1 then 0 else (if dag_idx_gen(dm, p) >= gen - dag_keep_gens() then 1 else 0);
+    let ok = if hitg[p] == 1 then 1 else (if recent == 1 then dag_objs_ok(dm, e) * dag_ctx_eq(dm, st_ref(dag_base(dm), e, 11)) else 0);
+    let _ = sel[p] = ok;
+    let cells = cells + (if ok == 1 then dag_obj_cells(dm, e) else 0);
+    let p = p + 1;
+    0
+  };
+  cells
+}
+fn dag_copy_kept(dm: [i64], dn: [i64], tx: [i64], sel: [i64], hitg: [i64], gen: i64, ctxo: i64, nk: [i64], ne: [i64], ng: [i64]) -> i64 {
+  let f = zeros(16);
+  let j = 0;
+  let p = 0;
+  while p < dm[7] {
+    let e = dag_idx_entry(dm, p);
+    let _ = if sel[p] == 1 then (let _ = nk[j] = dag_idx_key(dm, p) in (let _ = ne[j] = dag_copy_entry(dm, e, dn, tx, ctxo, f) in (let _ = ng[j] = if hitg[p] == 1 then gen else dag_idx_gen(dm, p) in 0))) else 0;
+    let j = j + sel[p];
+    let p = p + 1;
+    0
+  };
+  j
+}
+// dag_full: E126 (RT M-4) -- the memo cannot hold this compile; nothing has been written.
+fn dag_full(dm: [i64], need: i64, cap: i64) -> i64 {
+  let b = zeros(512);
+  let a = dag_str(b, 0, "0:0: error[E126]: memo image full (");
+  let a = put_num(b, a, need);
+  let a = dag_str(b, a, " cells over ");
+  let a = put_num(b, a, cap);
+  let a = dag_str(b, a, ") -- delete ");
+  let pd = st_cells(dm[16]);
+  let c = 0;
+  while c < dm[17] * (if dm[17] < 400 then 1 else 0) {
+    let _ = b[a + c] = pd[c];
+    let c = c + 1;
+    0
+  };
+  let a = dag_str(b, a + c, " or raise DAG_CAP");
+  let _ = b[a] = 10;
+  let _ = sys_write(2, b, a + 1);
+  sys_exit(126)
+}
+

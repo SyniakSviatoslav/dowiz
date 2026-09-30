@@ -23,7 +23,10 @@
 # 2026-09-29 split: the compiler source is bebop.bp AND bebop-lang/compiler/*.bp (its `use`
 # includes, tools/bp_src.py); a staged change to ANY of them is a compiler change.
 staged=$(git diff --cached --name-only)
-if printf '%s\n' "$staged" | grep -qE '^bebop-lang/(bebop\.bp|compiler/[^/]+\.bp)$'; then
+# DG4 (2026-09-30): the compiler also reads the preludes it `use`s (selfhost/prelude/dagc.bp ->
+# store.bp, sha256.bp): tools/bp_src.py --deps lists every one; a staged change to any is a compiler change.
+cdeps=$(cd bebop-lang && python3 tools/bp_src.py --deps | sed 's|^|bebop-lang/|; s|\.|\\.|g' | paste -sd'|')
+if printf '%s\n' "$staged" | grep -qE "^(bebop-lang/(bebop\.bp|compiler/[^/]+\.bp)|${cdeps:-bebop-lang/bebop\.bp})$"; then
   # A SOURCE-ONLY change that leaves the binary identical (a split, a comment) is accepted when a
   # staged MANIFEST row records THIS source (md5 of tools/bp_src.py --cat) against THIS bebop.bin,
   # written by `tools/bebopc.sh save` after compile(source) == bebop.bin was proven. No --no-verify.

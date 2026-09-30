@@ -102,7 +102,10 @@ for f in "${DIR%/}/neg"/*.bp; do
     continue
   fi
   want=${EXPECT#COMPILEFAIL:}
-  ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$f" "$out" >/dev/null 2>&1; rc=$?
+  # DG4: `// ENV NAME=VALUE` header lines are passed to the compile (c147_dag_full needs DAG_CAP)
+  cenv=$(sed -n 's|^// ENV \([A-Z_]*=[0-9A-Za-z_./-]*\)$|\1|p' "$f" | tr '\n' ' ')
+  rm -f "$out.dag"
+  env $cenv ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$f" "$out" >/dev/null 2>&1; rc=$?
   if [ -n "$want" ] && [ "$rc" = "$want" ] && [ ! -e "$out" ]; then
     echo "MATCH $b (compile exit $rc, no .bin)"; PASS=$((PASS+1))
   else
