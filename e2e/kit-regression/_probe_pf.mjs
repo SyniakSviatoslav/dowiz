@@ -111,7 +111,7 @@ step('one sale takes rice 61.905, vinegar 12.381, salt 0.774, sugar 2.321, no wa
 // ── 5. an order of two draws the raw leaves, not the ПФ ─────────────────────
 // The QA shelf starts empty; an order is refused against an empty shelf, so receive the raw items first.
 for (const r of ['rice-dry', 'vinegar', 'salt', 'sugar']) {
-  const rc = await own('/api/owner/stock/received', { item: P + r, qty: 1000 });
+  const rc = await own('/api/owner/stock/received', { item: P + r, qty: 1000, total: RAW.find(x => x[0] === r)[2] });  // 1000 at its list price per 1000, so the batch has a cost
   step(`1000 of ${r} received`, rc.status === 200, `${rc.status} ${JSON.stringify(rc.body).slice(0, 120)}`);
 }
 const o = await j(`/api/public/locations/${slug}/orders`, { method: 'POST', headers: { 'content-type': 'application/json' },
@@ -130,8 +130,10 @@ step('the shelf holds the RAW leaves: rice 124, vinegar 25, salt 2, sugar 5, and
 const shelfOf = async id => ((await own('/api/owner/stock', undefined, 'GET')).body?.supplies || []).find(x => x.id === id) || {};
 const riceBefore = await shelfOf(P + 'rice-dry');
 const act = await own('/api/owner/stock/cooked', { item: ids.rice, qty: 2100, out: 2050 });
-step('a batch of ПФ 2 is cooked: 2350 g in, 2050 out, 300 g lost, a cost', act.status === 200 && act.body?.gross === 2350 && act.body?.lossG === 300 && act.body?.value != null,
-  `${act.status} ${JSON.stringify(act.body).slice(0, 200)}`);
+step('a batch of ПФ 2 is cooked: 2350 g in, 2050 out, 300 g lost, a cost', act.status === 200 && act.body?.gross === 2350 && act.body?.lossG === 300 && act.body?.value === 24,
+  // value = WAC of what was drawn (spec §k): rice 1000 g x 20/kg + vinegar 200 x 15/l + salt 12 x 5/kg + sugar 37 x 12/kg = 23.504 -> 24
+
+  `${act.status} gross=${act.body?.gross} out=${act.body?.out} lossG=${act.body?.lossG} value=${act.body?.value} keys=${Object.keys(act.body || {}).join(',')}`);
 const drawn = Object.fromEntries((act.body?.lines || []).map(l => [String(l.item).slice(P.length), l.qty]));
 step('the act took the card off the shelf: dry rice 1000, vinegar 200, no water', drawn['rice-dry'] === 1000 && drawn.vinegar === 200 && !('water' in drawn), JSON.stringify(drawn));
 const pot = await shelfOf(ids.rice);
