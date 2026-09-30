@@ -172,32 +172,64 @@ fn uses_json(u: &prep::Uses) -> Value {
     json!({ "preps": rows(&u.preps), "dishes": rows(&u.dishes) })
 }
 
-/// The catalogue, for a reader holding the shelf's or the menu's word.
-async fn read_catalog(req: &Request, ctx: &RouteContext<crate::Req>) -> std::result::Result<Catalog, Response> {
-    let loc = crate::services::identity::staff::guard::staff_venue(req, ctx, &crate::services::identity::staff::guard::NUMBERS).await?.1;
-    let place = crate::hubstore::Place::of_authorised(ctx, &loc).map_err(|e| Response::error(e.to_string(), 500).unwrap())?;
-    crate::hubstore::load_catalog(&place).await.map(|l| l.catalog).map_err(|e| Response::error(e.to_string(), 500).unwrap())
+/// What `answer` says to a question it does not know.
+pub const NO_SUCH_QUESTION: &str = "no such question: list, uses:<id> or takes:<id>";
+
+/// THE THREE READS' ANSWERS, derived where the catalogue is: the venue's
+/// object calls this (`/fold/preps?q=`, `hubdo/preps.rs`) so the catalogue
+/// image never crosses the hop (R3, `tools/gates/dataflow.sh`). `q` is `list`,
+/// `uses:<supply id>` or `takes:<product id>`; a refusal is a status and its
+/// words, exactly the ones the Worker's handlers gave. PURE.
+pub fn answer(cat: &Catalog, q: &str) -> std::result::Result<Value, (u16, &'static str)> {
+    match q.split_once(':') {
+        None if q == "list" => Ok(json!({ "preps": list(cat) })),
+        Some(("uses", id)) => {
+            let j = cat.supply(id).ok_or((404, "unknown supply"))?;
+            let u = prep::uses_of(id, &cat.supplies(), &cat.products());
+            Ok(json!({ "id": id, "kind": if prep::is_prep(&j) { prep::KIND } else { "raw" }, "uses": uses_json(&u) }))
+        }
+        Some(("takes", id)) => {
+            let j = cat.product(id).ok_or((404, "unknown dish"))?;
+            let mut v = takes(cat, &j);
+            v["id"] = json!(id);
+            Ok(v)
+        }
+        _ => Err((400, NO_SUCH_QUESTION)),
+    }
+}
+
+/// Ask the venue's object: the venue is checked HERE, for a reader holding
+/// the shelf's or the menu's word, and the object answers the derived JSON
+/// (`answer`); its refusals pass through with their status and words.
+async fn ask(req: &Request, ctx: &RouteContext<crate::Req>, q: &str) -> Result<Response> {
+    let loc = match crate::services::identity::staff::guard::staff_venue(req, ctx, &crate::services::identity::staff::guard::NUMBERS).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
+    };
+    let place = match crate::hubstore::Place::of_authorised(ctx, &loc) {
+        Ok(p) => p,
+        Err(e) => return Response::error(e.to_string(), 500),
+    };
+    let url = format!("https://hub/fold/preps?q={}", crate::mcp::enc(q));
+    let mut res = place.stub()?.fetch_with_request(Request::new(&url, Method::Get)?).await?;
+    let (status, text) = (res.status_code(), res.text().await?);
+    if status != 200 {
+        return Response::error(text, status);
+    }
+    let mut out = Response::ok(text)?;
+    out.headers_mut().set("content-type", "application/json")?;
+    Ok(out)
 }
 
 /// `GET /api/owner/preps`.
 pub async fn list_preps(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let cat = match read_catalog(&req, &ctx).await {
-        Ok(c) => c,
-        Err(r) => return Ok(r),
-    };
-    Response::from_json(&json!({ "preps": list(&cat) }))
+    ask(&req, &ctx, "list").await
 }
 
 /// `GET /api/owner/supplies/:id/uses`.
 pub async fn uses(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing supply id", 400) };
-    let cat = match read_catalog(&req, &ctx).await {
-        Ok(c) => c,
-        Err(r) => return Ok(r),
-    };
-    let Some(j) = cat.supply(&id) else { return Response::error("unknown supply", 404) };
-    let u = prep::uses_of(&id, &cat.supplies(), &cat.products());
-    Response::from_json(&json!({ "id": id, "kind": if prep::is_prep(&j) { prep::KIND } else { "raw" }, "uses": uses_json(&u) }))
+    ask(&req, &ctx, &format!("uses:{id}")).await
 }
 
 /// What one sale of `product_json` takes off the shelf, and what it costs
@@ -230,14 +262,7 @@ pub fn takes(cat: &Catalog, product_json: &str) -> Value {
 /// `GET /api/owner/products/:id/takes`.
 pub async fn takes_of(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing product id", 400) };
-    let cat = match read_catalog(&req, &ctx).await {
-        Ok(c) => c,
-        Err(r) => return Ok(r),
-    };
-    let Some(j) = cat.product(&id) else { return Response::error("unknown dish", 404) };
-    let mut v = takes(&cat, &j);
-    v["id"] = json!(id);
-    Response::from_json(&v)
+    ask(&req, &ctx, &format!("takes:{id}")).await
 }
 
 #[cfg(test)]

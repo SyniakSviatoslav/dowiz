@@ -60,6 +60,7 @@ mod exceptions;
 mod fiscal;
 mod privacy;
 mod learn;
+mod version;
 
 use worker::wasm_bindgen::{JsCast, JsValue};
 use worker::*;
@@ -253,6 +254,8 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
     // this line by name; everything below is handed the answer.
     Router::with_data(Req { now_ms: Date::now().as_millis() as i64 })
         .get("/healthz", |_, _| Response::ok("ok"))
+        // W-DEPLOY: which commit this build is; tools/deploy/deploy.sh reads it back after a rollout.
+        .get("/api/version", version::serve)
         // ── public storefront ──
         .get_async("/api/public/locations/:slug/menu", storefront::menu)
         .get_async("/manifest.webmanifest", storefront::manifest)

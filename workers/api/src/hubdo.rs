@@ -73,6 +73,7 @@ mod fiscal; // the fiscal document queued at placement (B6/B8), `hubdo/fiscal.rs
 mod routed; // the groups' messages written in the turn (W0a/W0b), `hubdo/routed.rs`
 mod stock_turn; // a stock movement as one turn (W0a), `hubdo/stock_turn.rs`
 mod menu; // the catalogue projection's routes (R2), `hubdo/menu.rs`
+mod preps; // the ПФ reads, answered here (R3), `hubdo/preps.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
 mod timer; // the venue's alarm: timed work without the minute cron (DAG Phase 2), `hubdo/timer.rs`
 
@@ -1316,6 +1317,7 @@ impl DurableObject for HubImages {
                 // bytes (R2, `hubdo/menu.rs`), instead of the catalogue image.
                 (Method::Get, "menu") => self.fold_menu(&req).await,
                 (Method::Get, "products") => self.fold_products(&req).await,
+                (Method::Get, "preps") => self.fold_preps(&req).await,
                 (Method::Get, "generation") => {
                     let generation =
                         self.image(LOG_IMAGE).await?.map(|(m, _)| m.generation).unwrap_or(0);

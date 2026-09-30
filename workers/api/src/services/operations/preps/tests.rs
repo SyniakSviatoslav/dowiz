@@ -139,3 +139,47 @@ fn a_dish_that_cannot_expand_says_why_instead_of_a_partial_list() {
     let none = takes(&cat, r#"{"id":"x"}"#);
     assert_eq!((none["leaves"].clone(), none["lines"].clone()), (json!([]), json!(0)));
 }
+
+/// The kitchen of the first test, with its dish: the fixture the answers below
+/// were recorded on, from the handlers as they were BEFORE the move into the
+/// object (lane W-DF, 2026-09-30, at c0262881).
+fn fixture() -> Catalog {
+    let mut cat = kitchen();
+    saved(&mut cat, &prep_in("mitsukan", &[("vinegar", 800), ("salt", 50), ("sugar", 150)], 1000)).unwrap();
+    saved(&mut cat, &prep_in("rice-seasoned", &[("rice-dry", 1000), ("water", 1100), ("mitsukan", 250)], 2100)).unwrap();
+    let mut dish = json!({ "id": "philadelphia", "name": "Philadelphia", "price": 650 });
+    set_bom(&mut dish, &[BomLineIn { supply: "rice-seasoned".into(), qty: 130, net: None, out: None }], |s| cat.supply(s), Typed::default()).unwrap();
+    cat.set_product("philadelphia", &dish.to_string());
+    cat
+}
+
+/// THE MOVE CANNOT CHANGE AN ANSWER (R3, `/fold/preps`): the object answers
+/// through `answer`, and these are the bytes the Worker's handlers answered
+/// when they pulled the catalogue themselves. The console reads `preps`,
+/// `uses.{preps,dishes}`, `leaves` and `cost` (admin/prep.js, nom.js, stock.js).
+#[test]
+fn the_three_reads_answer_the_same_bytes_from_the_object() {
+    let cat = fixture();
+    let body = |q: &str| answer(&cat, q).map(|v| v.to_string());
+    assert_eq!(body("list").unwrap(), r#"{"preps":[{"active":true,"batchCost":141,"card":{"lines":[{"item":"vinegar","qty":800},{"item":"salt","qty":50},{"item":"sugar","qty":150}],"yield":1000},"category":"","costMicroPerUnit":140500,"costPer":141,"costPerBasis":14,"costPerQty":1000,"grossG":1000,"id":"mitsukan","k":1000,"kcalPer100":76.0,"kind":"prep","lines":[{"cost":120,"grossG":800,"item":"vinegar","kcal":160.0,"kind":"food_ingredient","name":"vinegar","qty":800,"unit":"ml","untracked":false},{"cost":3,"grossG":50,"item":"salt","kcal":0.0,"kind":"food_ingredient","name":"salt","qty":50,"unit":"g","untracked":false},{"cost":18,"grossG":150,"item":"sugar","kcal":600.0,"kind":"food_ingredient","name":"sugar","qty":150,"unit":"g","untracked":false}],"name":"mitsukan","nutritionBasis":"cooked","unit":"g","uses":{"dishes":[{"id":"philadelphia","name":"Philadelphia"}],"preps":[{"id":"rice-seasoned","name":"rice-seasoned"}]},"yield":1000},{"active":true,"batchCost":235,"card":{"lines":[{"item":"rice-dry","qty":1000},{"item":"water","qty":1100},{"item":"mitsukan","qty":250}],"yield":2100},"category":"","costMicroPerUnit":111964,"costPer":112,"costPerBasis":11,"costPerQty":1000,"grossG":2350,"id":"rice-seasoned","k":894,"kcalPer100":175.7,"kind":"prep","lines":[{"cost":200,"grossG":1000,"item":"rice-dry","kcal":3500.0,"kind":"food_ingredient","name":"rice-dry","qty":1000,"unit":"g","untracked":false},{"cost":0,"grossG":1100,"item":"water","kcal":0.0,"kind":"food_ingredient","name":"Water","qty":1100,"unit":"ml","untracked":true},{"cost":35,"grossG":250,"item":"mitsukan","kcal":190.0,"kind":"prep","name":"mitsukan","qty":250,"unit":"g","untracked":false}],"name":"rice-seasoned","nutritionBasis":"cooked","unit":"g","uses":{"dishes":[{"id":"philadelphia","name":"Philadelphia"}],"preps":[]},"yield":2100}]}"#);
+    assert_eq!(body("uses:mitsukan").unwrap(), r#"{"id":"mitsukan","kind":"prep","uses":{"dishes":[{"id":"philadelphia","name":"Philadelphia"}],"preps":[{"id":"rice-seasoned","name":"rice-seasoned"}]}}"#);
+    assert_eq!(body("uses:salt").unwrap(), r#"{"id":"salt","kind":"raw","uses":{"dishes":[{"id":"philadelphia","name":"Philadelphia"}],"preps":[{"id":"mitsukan","name":"mitsukan"},{"id":"rice-seasoned","name":"rice-seasoned"}]}}"#);
+    assert_eq!(body("takes:philadelphia").unwrap(), r#"{"cost":15,"id":"philadelphia","leaves":[{"cost":12,"name":"rice-dry","qty":"61.905","supply":"rice-dry","unit":"g","uq":61904762},{"cost":0,"name":"salt","qty":"0.774","supply":"salt","unit":"g","uq":773810},{"cost":0,"name":"sugar","qty":"2.321","supply":"sugar","unit":"g","uq":2321429},{"cost":2,"name":"vinegar","qty":"12.381","supply":"vinegar","unit":"ml","uq":12380952}],"lines":1}"#);
+}
+
+/// The refusals the handlers gave, beside the answers above: an unknown id is
+/// the same 404 with the same words, and a question the object does not know
+/// is a 400 rather than a guess.
+#[test]
+fn an_unknown_id_or_question_is_refused_as_before() {
+    let cat = fixture();
+    assert_eq!(answer(&cat, "uses:nobody"), Err((404, "unknown supply")));
+    assert_eq!(answer(&cat, "uses:philadelphia"), Err((404, "unknown supply")), "a dish is not a supply");
+    assert_eq!(answer(&cat, "takes:nobody"), Err((404, "unknown dish")));
+    assert_eq!(answer(&cat, "takes:mitsukan"), Err((404, "unknown dish")), "a ПФ is not a dish");
+    assert_eq!(answer(&cat, "lists"), Err((400, NO_SUCH_QUESTION)));
+    assert_eq!(answer(&cat, ""), Err((400, NO_SUCH_QUESTION)));
+    // The twins: a raw supply's where-used, and an empty catalogue's list.
+    assert_eq!(answer(&cat, "uses:vinegar").unwrap()["kind"], json!("raw"));
+    assert_eq!(answer(&Catalog::create().unwrap(), "list").unwrap(), json!({ "preps": [] }));
+}
