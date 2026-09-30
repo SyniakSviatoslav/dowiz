@@ -62,6 +62,25 @@ export async function f4(log) {
     if (w.status !== 200) throw new Fail(`restoring the name: ${w.status} ${w.text.slice(0, 100)}`);
     return `restored "${cur}" -> "${S.restore.dishName}"`;
   });
+  if (S.restore.bom !== undefined) await attempt('qa-tuna-roll recipe', async () => {
+    const r = await own(`/api/owner/products?location_id=${LOC}`);
+    const cur = JSON.stringify(((r.body?.products || []).find(x => x.id === 'qa-tuna-roll')?.bom || []).map(l => [l.supply, l.qty]));
+    const want = JSON.stringify(S.restore.bom.map(l => [l.supply, l.qty]));
+    if (cur === want) return `${cur} (as found)`;
+    const w = await own('/api/owner/products/qa-tuna-roll', { location_id: LOC, bom: S.restore.bom });
+    if (w.status !== 200) throw new Fail(`restoring the recipe: ${w.status} ${w.text.slice(0, 100)}`);
+    return `restored ${cur} -> ${want}`;
+  });
+  // The ПФ cards F2 made (id `flows-…-pf`), this run's or a crashed one's.
+  await attempt('QA ПФ cards', async () => {
+    const r = await own(`/api/owner/preps?location_id=${LOC}`);
+    const mine = (r.body?.preps || []).filter(x => String(x.id).startsWith(PREFIX.toLowerCase())).map(x => x.id);
+    for (const id of mine) {
+      const d = await own('/api/owner/supplies/delete', { ids: [id], location_id: LOC, confirmUses: true });
+      if (d.status !== 200) throw new Fail(`deleting ${id}: ${d.status} ${d.text.slice(0, 100)}`);
+    }
+    return mine.length ? `deleted ${mine.join(', ')}` : '';
+  });
   if (S.restore.pickup !== undefined) await attempt('venue pickup switch', async () => {
     const cur = !!(await menu()).location?.pickup;
     if (cur === S.restore.pickup) return `${cur} (as found)`;

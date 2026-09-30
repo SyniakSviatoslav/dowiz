@@ -5,6 +5,7 @@
 // and save nothing there. F4 refunds the accepted order.
 import { HOST, LOC, RUN, S, save, Fail, creds, own, ownerOrder } from './lib.mjs';
 import { launch, go, PHONE, routeLocal, localServed, guard, clean, inspect, shot, until } from './page.mjs';
+import { tab, openDish, recipeStep, prepStep } from './f2-components.mjs';
 
 const RENAME = 'qa-water';
 const productOf = async id => {
@@ -24,30 +25,8 @@ async function closeSheet(p) {
     await p.keyboard.press('Escape'); await p.waitForTimeout(800);
   }
 }
-/// Each tab's screen names itself in its heading.
-const HEAD = { orders: 'tabOrders', menu: 'tabMenu', stock: 'inv_title' };
-async function tab(p, name) {
-  const b = await p.$(`#nav [data-tab="${name}"]`);
-  if (!b) throw new Fail(`the console has no "${name}" tab`);
-  const drawn = () => until(p, k => !!document.querySelector(`#app h1[data-t="${k}"]`), HEAD[name], 20000);
-  await b.click();
-  if (await drawn()) return;
-  // Measured 2026-09-30 (run FLOWS-muo9h3om): the Menu tab lit up and the
-  // Orders screen stayed for 30 s. One more tap is what a person does; it is
-  // printed, and a second miss is a FAIL.
-  console.log(`  !! F2: tapping the "${name}" tab did not draw its screen in 20 s; tapping again`);
-  await b.click();
-  if (!(await drawn())) throw new Fail(`tapping the "${name}" tab twice did not draw its screen (heading ${HEAD[name]} absent)`);
-}
 async function rename(p, g, to, cat) {
-  await tab(p, 'menu');
-  // Categories are folded; a dish row is tapped the way a person reaches it.
-  const head = `.cat-h[data-cat="${cat}"]`;
-  if (!(await p.waitForSelector(head, { timeout: 30000 }).then(() => true, () => false))) throw new Fail(`menu editor shows no category ${cat}`);
-  if (await p.$eval(head, e => e.getAttribute('aria-expanded')) !== 'true') await p.click(head);
-  if (!(await p.waitForSelector(`[data-p="${RENAME}"]`, { timeout: 10000 }).then(() => true, () => false))) throw new Fail(`menu editor lists no ${RENAME} under ${cat}`);
-  await p.click(`[data-p="${RENAME}"]`);
-  if (!(await p.waitForSelector('#d-name', { timeout: 15000 }).then(() => true, () => false))) throw new Fail(`tapping ${RENAME} opened no dish sheet`);
+  await openDish(p, RENAME, cat);
   await inspect(p, `F2 dish sheet (${to})`);
   const shown = await p.$eval('#d-name', e => e.value);
   await p.fill('#d-name', to);
@@ -127,9 +106,17 @@ export async function f2(log) {
     if (preps1 !== preps0) throw new Fail(`opening the ПФ editor changed the number of ПФ: ${preps0} -> ${preps1}`);
     clean(g, 'F2 stock');
     log(`stock + ПФ filter + ПФ editor opened; ПФ count unchanged (${preps1})`);
+
+    // ── components: a ПФ card's lines, a dish's recipe ─────────────────────
+    await prepStep(p, g, log, async () => {
+      await tab(p, 'stock');
+      if (!(await p.waitForSelector('#addPrep', { timeout: 30000 }).then(() => true, () => false))) throw new Fail('the stock screen drew no ПФ button');
+    });
+    await recipeStep(p, g, log);
     // ── rename a QA dish and back ─────────────────────────────────────────
-    // RED on the build deployed 2026-09-30 (22ff93e8): the rename BACK is saved
-    // with "Saved" and no name in the body -- see the W-FLOWS hand-back.
+    // (The first gate runs reported the rename BACK as a product bug. It was
+    // this flow: it typed into the previous, closed sheet's box. openDish now
+    // waits for the OPEN sheet -- see f2-components.mjs.)
     await rename(p, g, `${dish.name} ${RUN}`, dish.categoryId);
     await rename(p, g, dish.name, dish.categoryId);
     log(`dish ${RENAME}: renamed to "${dish.name} ${RUN}" and back, API read-back both times`);

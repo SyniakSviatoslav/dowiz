@@ -243,6 +243,8 @@ export async function openDish(id){
     try { await busy(clr, () => post(`/owner/products/${encodeURIComponent(id)}/image/clear`, withLoc())); await loadVenue(); openDish(id); rerender(); } catch (err) { toast(String(err.message || err)); }
   };
   $('#dSave').onclick = async () => {
+    // Never "Saved" for a recipe change that cannot be sent (belt to bindRecipe's braces).
+    if (recipeDirty && recipeKnown !== id) return toast(t('recipeUnread'));
     const avail = $('#d-avail').checked;
     const values = Object.fromEntries(FIELDS.map(f => [f, $(BOX[f]).value]));
     const translations = {};
@@ -262,7 +264,8 @@ export async function openDish(id){
       ...(num($('#d-size').value) != null ? { size_cm: num($('#d-size').value) } : {}),
       // Only a recipe READ from the owner route is sent back: an unread one is
       // not an empty one, and sending [] would clear it.
-      ...(recipeKnown === id ? { bom: recipeDraft.map(l => ({ supply: l.supply, qty: l.qty, ...(l.net != null ? { net: l.net } : {}), ...(l.out != null ? { out: l.out } : {}) })) } : {}),
+      // A line typed down to 0 is a line taken out.
+      ...(recipeKnown === id ? { bom: recipeDraft.filter(l => l.qty > 0).map(l => ({ supply: l.supply, qty: l.qty, ...(l.net != null ? { net: l.net } : {}), ...(l.out != null ? { out: l.out } : {}) })) } : {}),
       taste: tasteDraft,
       translations,
     });
@@ -332,6 +335,12 @@ async function openCategories(){
 let recipeDraft = [];
 /// The dish whose stored recipe was read (`GET /owner/products?id=`); null until then.
 let recipeKnown = null;
+/// Which sheet the recipe state belongs to: every dish sheet drawn takes the
+/// next number, and a read that answers for an older one is dropped (a slow
+/// read used to land in the NEXT dish's sheet and take over its recipe).
+let recipeGen = 0;
+/// The owner changed the recipe in this sheet.
+let recipeDirty = false;
 let supplyBook = null;
 /// The dishes that reduce no stock, from the same answer.
 let noRecipeIds = null;
@@ -373,7 +382,7 @@ function derived(lines){
     weightG: food.length && food.every(l => l.weightG != null) ? Math.round(food.reduce((a, l) => a + l.weightG, 0)) : null };
 }
 function recipeMarkup(p){
-  recipeDraft = (p.bom || []).map(l => ({ ...l })); recipeKnown = null;
+  recipeDraft = (p.bom || []).map(l => ({ ...l })); recipeKnown = null; recipeGen += 1; recipeDirty = false;
   return `<p class="eyebrow mt-3" data-t="recipe"></p><p class="muted small" data-t="recipeHint"></p>
     <div id="rcLines"></div>
     <details class="fold" id="rcPick"><summary>${icon('plus')} <span data-t="addSupplyToRecipe"></span></summary>
@@ -389,28 +398,67 @@ const step = l => l.unit === 'unit' ? STEP_PIECE : STEP_MASS;
 function drawRecipe(p){
   const host = $('#rcLines'); if (!host) return;
   host.innerHTML = recipeDraft.length ? recipeDraft.map((l, i) => `<div class="rc-line"><span class="rc-ic">${icon(KIND_ICON[l.kind] || 'meat')}</span>
-      <span class="t"><b>${esc(l.name)}</b><small class="mono">${l.kcal != null ? `${Math.round(l.kcal)} kcal` : isFoodKind(l.kind) ? pill('warn', { key: 'noData' }) : ''}${l.cost != null ? ` · ${money(l.cost)}` : ''}${l.w?.gross ? ` · ${esc(t('inv_loss'))} ${IC.pct(IC.lossPm(l.w))}` : ''}</small>
-        ${l.w ? `<span class="inv-w"><label><small data-t="inv_gross"></small><span class="mono">${l.w.gross ?? '-'} g</span></label>
+      <span class="t"><b>${esc(l.name)}</b><small class="mono" data-rmeta="${i}">${lineMeta(l)}</small>
+        ${l.w ? `<span class="inv-w"><label><small data-t="inv_gross"></small><span class="mono" data-rgross="${i}">${l.w.gross ?? '-'} g</span></label>
           <label><small data-t="inv_net"></small>${ui.inputRow({ label: k('inv_net'), cls: 'mono', attrs: { value: l.net ?? '', placeholder: String(l.w.net ?? ''), inputmode: 'numeric', data: { rn: i } } })}</label>
           <label><small data-t="inv_out"></small>${ui.inputRow({ label: k('inv_out'), cls: 'mono', attrs: { value: l.out ?? '', placeholder: String(l.w.out ?? ''), inputmode: 'numeric', data: { ro: i } } })}</label></span>` : ''}</span>
       <span class="rc-qty">${iconBtn({ icon: 'minus', ariaLabel: `- ${step(l)}`, data: { rm: i }, tour: 'recipe.less' })}${ui.inputRow({ label: l.name, cls: 'mono', attrs: { value: String(l.qty), inputmode: 'numeric', data: { rq: i, tour: 'recipe.qty' } } })}<span class="mono">${esc(l.unit)}</span>${iconBtn({ icon: 'plus', ariaLabel: `+ ${step(l)}`, data: { rp: i }, tour: 'recipe.more' })}</span>
       ${iconBtn({ icon: 'x', ariaKey: 'remove', data: { rx: i }, tour: 'recipe.removeLine' })}</div>`).join('')
     : `<p class="hint" data-t="noRecipe"></p>`;
-  const d = derived(recipeDraft);
+  drawSum(p);
+  const setQty = (i, q, net = recipeDraft[i].net ?? null, out = recipeDraft[i].out ?? null) => { recipeDirty = true; if (q <= 0) { recipeDraft.splice(i, 1); } else { const sup = supplyBook?.find(s => s.id === recipeDraft[i].supply); recipeDraft[i] = sup ? lineOf(sup, q, net, out) : { ...recipeDraft[i], qty: q }; } drawRecipe(p); };
+  // A TYPED number changes the draft IN PLACE and repaints only the numbers
+  // around it. It used to redraw every line on `change`, which a browser fires
+  // on BLUR -- on the pointer-down of the next tap -- so the x or +/- the
+  // owner was tapping was replaced before its click landed: "type 70, tap x
+  // on the rice" saved the rice again, with "Saved" (W-FLOWS, live 2026-09-30).
+  // A line typed down to 0 stays on screen, greyed, and the save leaves it out.
+  const edit = (i, q, net, out) => {
+    const l = recipeDraft[i]; if (!l) return;
+    const sup = supplyBook?.find(s => s.id === l.supply);
+    recipeDraft[i] = q > 0 && sup ? lineOf(sup, q, net, out) : { ...l, qty: q, net, out };
+    recipeDirty = true; paintLine(i); drawSum(p);
+  };
+  const typed = v => { const s = String(v ?? '').trim(); if (!s) return null; const n = IC.amount(s, 'g'); return n == null || n < 0 ? undefined : n; };
+  for (const inp of $$('[data-rn]', host)) {
+    const i = +inp.dataset.rn;
+    inp.oninput = () => { const v = typed(inp.value); if (v !== undefined) edit(i, recipeDraft[i].qty, v, recipeDraft[i].out ?? null); };
+    inp.onchange = () => { if (typed(inp.value) === undefined) toast(t('required')); };
+  }
+  for (const inp of $$('[data-ro]', host)) {
+    const i = +inp.dataset.ro;
+    inp.oninput = () => { const v = typed(inp.value); if (v !== undefined) edit(i, recipeDraft[i].qty, recipeDraft[i].net ?? null, v); };
+    inp.onchange = () => { if (typed(inp.value) === undefined) toast(t('required')); };
+  }
+  for (const b of $$('[data-rm]', host)) b.onclick = () => setQty(+b.dataset.rm, recipeDraft[+b.dataset.rm].qty - step(recipeDraft[+b.dataset.rm]));
+  for (const b of $$('[data-rp]', host)) b.onclick = () => setQty(+b.dataset.rp, recipeDraft[+b.dataset.rp].qty + step(recipeDraft[+b.dataset.rp]));
+  for (const b of $$('[data-rx]', host)) b.onclick = () => setQty(+b.dataset.rx, 0);
+  for (const inp of $$('[data-rq]', host)) {
+    const i = +inp.dataset.rq;
+    inp.oninput = inp.onchange = () => { const l = recipeDraft[i]; edit(i, Math.round(num(inp.value) ?? 0), l.net ?? null, l.out ?? null); };
+  }
+}
+/// One line's small print: nutrition, cost, loss.
+function lineMeta(l){
+  return `${l.kcal != null ? `${Math.round(l.kcal)} kcal` : isFoodKind(l.kind) ? pill('warn', { key: 'noData' }) : ''}${l.cost != null ? ` · ${money(l.cost)}` : ''}${l.w?.gross ? ` · ${esc(t('inv_loss'))} ${IC.pct(IC.lossPm(l.w))}` : ''}`;
+}
+/// Repaint one line's numbers, never its controls.
+function paintLine(i){
+  const l = recipeDraft[i], meta = $(`[data-rmeta="${i}"]`), gross = $(`[data-rgross="${i}"]`);
+  if (meta) { meta.innerHTML = lineMeta(l); retranslate(meta); }
+  if (gross) gross.textContent = `${l.w?.gross ?? '-'} g`;
+  meta?.closest?.('.rc-line')?.classList.toggle('off', !(l.qty > 0));
+}
+/// The recipe's totals under the lines.
+function drawSum(p){
+  const d = derived(recipeDraft.filter(l => l.qty > 0));
   const cost = d.cost, price = num($('#d-price')?.value) ?? p.price ?? 0;
-  $('#rcSum').innerHTML = recipeDraft.length ? `<div class="stats strip">
+  const box = $('#rcSum'); if (!box) return;
+  box.innerHTML = recipeDraft.length ? `<div class="stats strip">
       <div class="stat"><b>${d.kcal}</b><small data-t="kcal"></small></div><div class="stat"><b>${d.protein}</b><small data-t="protein"></small></div><div class="stat"><b>${d.fat}</b><small data-t="fat"></small></div><div class="stat"><b>${d.carbs}</b><small data-t="carbs"></small></div></div>
     <p class="hint ${d.complete ? 'ok' : ''}" data-t="${d.complete ? 'nutritionPerServing' : 'nutritionIncomplete'}"></p>
     <p class="hint mono">${d.weightG != null ? `${t('weight')} (${t('inv_out')}): ${d.weightG} g · ` : ''}${cost != null ? `${t('foodCost')}: ${money(cost)}${price ? ` · ${IC.pct(Math.trunc(IC.PM * cost / price))} · ${t('ka_margin')} ${money(price - cost)}` : ''}${recipeDraft.some(l => l.costFrom === 'list') ? ` · ${t('inv_listPrice')}` : ''}` : t('costUnknown')}</p>` : '';
   retranslate($('#sheetIn'));
-  const setQty = (i, q, net = recipeDraft[i].net ?? null, out = recipeDraft[i].out ?? null) => { if (q <= 0) { recipeDraft.splice(i, 1); } else { const sup = supplyBook?.find(s => s.id === recipeDraft[i].supply); recipeDraft[i] = sup ? lineOf(sup, q, net, out) : { ...recipeDraft[i], qty: q }; } drawRecipe(p); };
-  const typed = v => { const s = String(v ?? '').trim(); if (!s) return null; const n = IC.amount(s, 'g'); return n == null || n < 0 ? undefined : n; };
-  for (const inp of $$('[data-rn]', host)) inp.onchange = () => { const v = typed(inp.value); if (v === undefined) return toast(t('required')); setQty(+inp.dataset.rn, recipeDraft[+inp.dataset.rn].qty, v); };
-  for (const inp of $$('[data-ro]', host)) inp.onchange = () => { const v = typed(inp.value); if (v === undefined) return toast(t('required')); const l = recipeDraft[+inp.dataset.ro]; setQty(+inp.dataset.ro, l.qty, l.net ?? null, v); };
-  for (const b of $$('[data-rm]', host)) b.onclick = () => setQty(+b.dataset.rm, recipeDraft[+b.dataset.rm].qty - step(recipeDraft[+b.dataset.rm]));
-  for (const b of $$('[data-rp]', host)) b.onclick = () => setQty(+b.dataset.rp, recipeDraft[+b.dataset.rp].qty + step(recipeDraft[+b.dataset.rp]));
-  for (const b of $$('[data-rx]', host)) b.onclick = () => setQty(+b.dataset.rx, 0);
-  for (const inp of $$('[data-rq]', host)) inp.onchange = () => { const q = Math.round(num(inp.value) ?? 0); setQty(+inp.dataset.rq, q); };
 }
 /// The dish's recipe AS STORED: the public menu the console loads never carries it.
 async function storedBom(id){
@@ -420,13 +468,25 @@ async function storedBom(id){
   return p.bom || [];
 }
 async function bindRecipe(p){
+  // THIS SHEET'S number: an answer that arrives after another dish's sheet
+  // was drawn belongs to nobody (W-FLOWS 2026-09-30: a slow read for dish A
+  // drew A's recipe into dish B's sheet and B's save then sent no recipe).
+  const gen = recipeGen;
   const book = await supplies();
-  try { recipeDraft = (await storedBom(p.id)).map(l => ({ ...l })); recipeKnown = p.id; } catch { recipeKnown = null; }
-  // Lines loaded from the dish are re-scaled from today's supply numbers, as the hub does on save.
-  recipeDraft = recipeDraft.map(l => { const sup = book.find(s => s.id === l.supply); return sup ? lineOf(sup, l.qty, l.net ?? null, l.out ?? null) : l; });
+  let stored = null;
+  try { stored = await storedBom(p.id); } catch { stored = null; }
+  if (gen !== recipeGen) return;
   // The sheet may have moved on while the book loaded (Delete tapped, a
   // nudge reopened it): binding into a sheet that is gone threw (W-VERIFY).
   if (!$('#rcQ')) return;
+  if ($('#rcTakes')) $('#rcTakes').onclick = () => import('/admin/prep.js').then(m => m.openTakes(p.id, p.name));
+  // A RECIPE NOBODY READ IS NOT EDITABLE. The save sends `bom` only for the
+  // recipe it read; editing one it could not read was silently dropped with
+  // "Saved". The sheet says so and offers no control on it.
+  if (!stored) { recipeKnown = null; $('#rcLines').innerHTML = `<p class="hint warn" data-t="recipeLoadFail"></p>`; retranslate($('#rcLines')); return; }
+  recipeKnown = p.id;
+  // Lines loaded from the dish are re-scaled from today's supply numbers, as the hub does on save.
+  recipeDraft = stored.map(l => { const sup = book.find(s => s.id === l.supply); return sup ? lineOf(sup, l.qty, l.net ?? null, l.out ?? null) : { ...l }; });
   drawRecipe(p);
   let kind = 'all';
   const drawBook = () => {
@@ -437,11 +497,9 @@ async function bindRecipe(p){
     retranslate($('#rcBook'));
   };
   $('#rcQ').oninput = drawBook;
-  // W-PF: what one sale of this dish takes off the shelf, expanded through every semi-finished product.
-  if ($('#rcTakes')) $('#rcTakes').onclick = () => import('/admin/prep.js').then(m => m.openTakes(p.id, p.name));
   for (const b of $$('[data-rk]', $('#rcKinds'))) b.onclick = () => { kind = b.dataset.rk; press($$('[data-rk]', $('#rcKinds')), b); drawBook(); };
   $('#rcAdd').onclick = () => {
-    for (const cb of $$('[data-rs]:checked', $('#rcBook'))) { const sup = book.find(s => s.id === cb.dataset.rs); if (sup && !recipeDraft.some(l => l.supply === sup.id)) recipeDraft.push(lineOf(sup, sup.unit === 'unit' ? 1 : 100)); }
+    for (const cb of $$('[data-rs]:checked', $('#rcBook'))) { const sup = book.find(s => s.id === cb.dataset.rs); if (sup && !recipeDraft.some(l => l.supply === sup.id)) { recipeDraft.push(lineOf(sup, sup.unit === 'unit' ? 1 : 100)); recipeDirty = true; } }
     drawRecipe(p); drawBook();
   };
   $('#d-price').oninput = () => drawRecipe(p);
