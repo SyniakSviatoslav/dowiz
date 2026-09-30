@@ -105,3 +105,15 @@ fn a_turns_entries_are_routed_with_ids_unique_to_the_turn() {
     assert_eq!((e[0].id.as_str(), e[0].kind.as_str(), e[0].to.as_str()), ("stock/12/stock.wasted/route", "route", "stock.wasted"));
     assert_eq!(serde_json::from_str::<Value>(&e[0].text).unwrap(), json!({ "data": { "name": "Rice" } }));
 }
+
+/// W-PF3 T2: a production act is told only to a group that chose it.
+#[test]
+fn a_production_act_reaches_only_a_group_that_chose_it() {
+    assert!(events::get("stock.cooked").is_some_and(|e| e.live && e.area == events::Area::Stock));
+    assert!(events::holds_in_quiet("stock.cooked"), "a batch waits out the quiet hours");
+    assert!(wants(&[group(&[("stock.cooked", Mode::Now)])], "stock.cooked"));
+    // Twins: no group linked, and a freshly linked one that never chose it.
+    assert!(!wants(&[], "stock.cooked"));
+    let fresh = Group::fresh("g".into(), "-1".into(), None, "g".into(), "group".into(), "en");
+    assert!(!wants(&[fresh], "stock.cooked"));
+}

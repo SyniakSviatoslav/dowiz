@@ -12,7 +12,7 @@ fn body(v: Value) -> StockMoveIn {
 
 fn turn(body: Value) -> StockTurnIn {
     // The catalogue has already let the supplies go: the list is empty.
-    StockTurnIn { kind: "removed".into(), body, by: "p_owner".into(), now_ms: NOW, today: 20260928, supplies: BTreeMap::new() }
+    StockTurnIn { kind: "removed".into(), body, by: "p_owner".into(), now_ms: NOW, today: 20260928, supplies: BTreeMap::new(), currency: String::new() }
 }
 
 #[test]

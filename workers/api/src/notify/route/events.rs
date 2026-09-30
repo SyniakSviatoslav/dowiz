@@ -58,6 +58,7 @@ pub const EVENTS: &[Event] = &[
     ev("stock.received", Area::Stock, Class::Normal, true),
     ev("stock.expiring", Area::Stock, Class::Normal, true),
     ev("stock.wasted", Area::Stock, Class::Normal, true),
+    ev("stock.cooked", Area::Stock, Class::Normal, true),
     ev("stocktake.variance", Area::Stock, Class::Normal, true),
     ev("digest.daily", Area::Analytics, Class::Scheduled, true),
     ev("digest.weekly", Area::Analytics, Class::Scheduled, true),

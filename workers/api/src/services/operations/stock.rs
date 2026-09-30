@@ -222,6 +222,7 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
         now_ms: now,
         today: today_of(&cat, now),
         supplies,
+        currency: crate::services::venue::currency_of(&cat),
     };
     match crate::command::send::<_, Value>(&place, "stock_move", &input).await {
         Ok(shown) => Response::from_json(&shown),

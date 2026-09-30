@@ -41,6 +41,10 @@ pub struct StockTurnIn {
     pub today: i64,
     /// Every supply of the catalogue, retired ones too (history keeps them).
     pub supplies: BTreeMap<String, SupplyIn>,
+    /// The venue's currency code, for the words of a production act's cost
+    /// (`stock.cooked`, W-PF3 T2). Empty: none is shown.
+    #[serde(default)]
+    pub currency: String,
 }
 
 /// The supplies of a catalogue, as the turn reads them. PURE.

@@ -15,7 +15,7 @@ fn supplies() -> BTreeMap<String, SupplyIn> {
 }
 
 fn input(kind: &str, body: Value) -> StockTurnIn {
-    StockTurnIn { kind: kind.into(), body, by: "p_anna".into(), now_ms: NOW, today: TODAY, supplies: supplies() }
+    StockTurnIn { kind: kind.into(), body, by: "p_anna".into(), now_ms: NOW, today: TODAY, supplies: supplies(), currency: String::new() }
 }
 
 fn log() -> StockLog {

@@ -25,6 +25,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::prep::stocked::Shelf;
 use super::cost::CostBook;
 use super::meta::Meta;
 use super::{BomLine, Qty, StockError, StockEvent, StockLog};
@@ -144,26 +145,34 @@ impl StockLog {
     /// with its `uq`. Answers the cost book of the same fold and the log
     /// length it was folded at, as `append_all_costed` does (R4).
     pub fn append_draws(&mut self, draws: &[Draw]) -> Result<(CostBook, usize), StockError> {
+        self.append_draws_split(draws).map(|(b, at, _)| (b, at))
+    }
+
+    /// [`StockLog::append_draws`], and the share of each semi-finished
+    /// product a ready batch gave (empty when none did): what the placement's
+    /// cost stamp prices at the batch's own average (W-PF3 T1).
+    pub fn append_draws_split(&mut self, draws: &[Draw]) -> Result<(CostBook, usize, Shelf), StockError> {
         self.commit_drawn(draws, |item, qty, order_id| StockEvent::Reserved { item, qty, order_id })
     }
 
     /// The same door for a till import's sales (`served`, no reservation).
     pub fn append_served_draws(&mut self, draws: &[Draw]) -> Result<(CostBook, usize), StockError> {
-        self.commit_drawn(draws, |item, qty, order_id| StockEvent::Served { item, qty, order_id })
+        self.commit_drawn(draws, |item, qty, order_id| StockEvent::Served { item, qty, order_id }).map(|(b, at, _)| (b, at))
     }
 
     fn commit_drawn(
         &mut self,
         draws: &[Draw],
         make: fn(String, Qty, String) -> StockEvent,
-    ) -> Result<(CostBook, usize), StockError> {
+    ) -> Result<(CostBook, usize, Shelf), StockError> {
         let via = draws.first().and_then(|d| d.via.clone());
         let (led, _, carry, _) = self.fold_tail(via.is_some(), false)?;
         // A batch kept ready is taken first (R2); the rest as the tree says.
         let planned;
+        let mut shelf = Shelf::new();
         let draws = match (&via, draws.first()) {
             (Some(b), Some(d)) => {
-                planned = b.draws(&d.order_id, &led, &carry)?;
+                (planned, shelf) = b.draws_split(&d.order_id, &led, &carry)?;
                 planned.as_slice()
             }
             _ => draws,
@@ -180,7 +189,7 @@ impl StockLog {
             let whole = d.uq % MICRO == 0;
             evs.push((ev, Meta { uq: (!whole).then_some(d.uq), ..Meta::default() }));
         }
-        self.commit(&evs, true)
+        self.commit(&evs, true).map(|(b, at)| (b, at, shelf))
     }
 }
 

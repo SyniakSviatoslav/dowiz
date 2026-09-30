@@ -186,6 +186,7 @@ pub async fn delete_supplies(mut req: Request, ctx: RouteContext<crate::Req>) ->
         now_ms: now,
         today,
         supplies: Default::default(),
+        currency: String::new(),
     };
     let shelf: Value = match crate::command::send(&place, "stock_move", &input).await {
         Ok(v) => v,

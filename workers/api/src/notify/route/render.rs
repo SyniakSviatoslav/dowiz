@@ -29,6 +29,10 @@ pub struct Words {
     pub received: &'static str,
     pub expiring: &'static str,
     pub wasted: &'static str,
+    /// A production act (`stock.cooked`, W-PF3 T2): the head, the loss, the cost.
+    pub cooked: &'static str,
+    pub loss: &'static str,
+    pub cost: &'static str,
     pub variance: &'static str,
     pub status: &'static str,
     pub late: &'static str,
@@ -45,25 +49,25 @@ pub struct Words {
 pub const WORDS: &[Words] = &[
     Words { lang: "en", pickup: "pickup", delivery: "delivery", table: "table", in_venue: "in the venue (no table recorded)",
         fee: "delivery", discount: "discount", tip: "tip", message: "new message - open the console to read it",
-        low: "running low", received: "delivery received", expiring: "expiring soon", wasted: "written off",
+        low: "running low", received: "delivery received", expiring: "expiring soon", wasted: "written off", cooked: "batch cooked", loss: "loss", cost: "cost",
         variance: "stocktake difference", status: "order", late: "waiting for", daily: "Daily summary", weekly: "Weekly summary",
         orders: "orders", revenue: "revenue", top: "Top dishes", also: "Also", test: "test message: this group is linked",
         gone: "The bot was removed from a group; nothing more goes there until it is linked again:" },
     Words { lang: "sq", pickup: "merr vetë", delivery: "dërgesë", table: "tavolina", in_venue: "në lokal (pa tavolinë)",
         fee: "dërgesa", discount: "zbritje", tip: "bakshish", message: "mesazh i ri - hapeni panelin për ta lexuar",
-        low: "po mbaron", received: "mall i ardhur", expiring: "skadon së shpejti", wasted: "u hodh",
+        low: "po mbaron", received: "mall i ardhur", expiring: "skadon së shpejti", wasted: "u hodh", cooked: "partia u gatua", loss: "humbje", cost: "kosto",
         variance: "diferencë numërimi", status: "porosia", late: "pret prej", daily: "Përmbledhja e ditës", weekly: "Përmbledhja e javës",
         orders: "porosi", revenue: "të ardhura", top: "Pjatat kryesore", also: "Gjithashtu", test: "mesazh prove: ky grup është lidhur",
         gone: "Boti u hoq nga një grup; asgjë nuk shkon më atje derisa të lidhet përsëri:" },
     Words { lang: "uk", pickup: "самовивіз", delivery: "доставка", table: "стіл", in_venue: "у закладі (стіл не вказано)",
         fee: "доставка", discount: "знижка", tip: "чайові", message: "нове повідомлення - відкрийте консоль, щоб прочитати",
-        low: "закінчується", received: "надійшла партія", expiring: "скоро спливає термін", wasted: "списано",
+        low: "закінчується", received: "надійшла партія", expiring: "скоро спливає термін", wasted: "списано", cooked: "приготовано партію", loss: "втрати", cost: "собівартість",
         variance: "розбіжність інвентаризації", status: "замовлення", late: "чекає вже", daily: "Підсумок дня", weekly: "Підсумок тижня",
         orders: "замовлень", revenue: "виручка", top: "Топ страв", also: "Також", test: "тестове повідомлення: групу підключено",
         gone: "Бота видалили з групи; туди більше нічого не надходить, доки її не підключать знову:" },
     Words { lang: "ru", pickup: "самовывоз", delivery: "доставка", table: "стол", in_venue: "в заведении (стол не указан)",
         fee: "доставка", discount: "скидка", tip: "чаевые", message: "новое сообщение - откройте консоль, чтобы прочитать",
-        low: "заканчивается", received: "поступила партия", expiring: "скоро истекает срок", wasted: "списано",
+        low: "заканчивается", received: "поступила партия", expiring: "скоро истекает срок", wasted: "списано", cooked: "приготовлена партия", loss: "потери", cost: "себестоимость",
         variance: "расхождение инвентаризации", status: "заказ", late: "ждёт уже", daily: "Итог дня", weekly: "Итог недели",
         orders: "заказов", revenue: "выручка", top: "Топ блюд", also: "Также", test: "тестовое сообщение: группа подключена",
         gone: "Бота удалили из группы; туда больше ничего не приходит, пока её не подключат снова:" },
@@ -140,6 +144,7 @@ fn qty(d: &Value, k: &str) -> String {
 ///   stock.received     {name, qty, unit, lot?, expiry?}
 ///   stock.expiring     {items: [{name, qty, unit, expiry}]}
 ///   stock.wasted       {name, qty, unit, reason}
+///   stock.cooked       {name, out, unit, lossG?, lossPm?, value?, currency?}
 ///   stocktake.variance {items: [{name, expected, observed, unit}]}
 ///   order.status       {order, status}
 ///   order.late         {order, minutes}
@@ -166,6 +171,7 @@ pub fn event(ev: &str, d: &Value, lang: &str) -> String {
             format!("⏳ {}\n{}", w.expiring, rows.join("\n"))
         }
         "stock.wasted" => format!("🗑 {}: {} {} · {}", w.wasted, s(d, "name"), qty(d, "qty"), s(d, "reason")),
+        "stock.cooked" => cooked(d, w),
         "stocktake.variance" => {
             let rows: Vec<String> = items()
                 .iter()
@@ -177,6 +183,24 @@ pub fn event(ev: &str, d: &Value, lang: &str) -> String {
         "order.late" => format!("⏰ #{} {} {} min", s(d, "order").chars().take(8).collect::<String>(), w.late, n(d, "minutes")),
         _ => s(d, "text").to_string(),
     }
+}
+
+/// `stock.cooked`: what came out; the loss when the card weighs what went
+/// in (`lossPm` is per mille of it, shown to one decimal of a percent); the
+/// cost when the batch was priced and the venue has a currency.
+fn cooked(d: &Value, w: &Words) -> String {
+    let mut t = format!("🍳 {}: {} {}", w.cooked, s(d, "name"), qty(d, "out"));
+    if let (Some(g), Some(pm)) = (d.get("lossG").and_then(Value::as_i64), d.get("lossPm").and_then(Value::as_i64)) {
+        let sign = if pm < 0 { "-" } else { "" };
+        let a = pm.unsigned_abs();
+        t.push_str(&format!(" · {} {g} {} ({sign}{}.{}%)", w.loss, s(d, "unit"), a / 10, a % 10));
+    }
+    if let (Some(v), c) = (d.get("value").and_then(Value::as_i64), s(d, "currency")) {
+        if !c.is_empty() {
+            t.push_str(&format!(" · {} {}", w.cost, crate::notify::money_text(v, c)));
+        }
+    }
+    t
 }
 
 /// A customer's message relayed from WhatsApp/Instagram: the words only at

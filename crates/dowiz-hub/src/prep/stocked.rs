@@ -97,30 +97,37 @@ fn cards_under(roots: &[(String, Rat)], w: &World) -> Result<(BTreeMap<String, C
     Ok((cards, users))
 }
 
-/// `roots` (item, exact quantity) down to what leaves the shelf: raw leaves,
-/// and ready semi-finished products as far as the shelf has them. Sorted by
-/// id, untracked items out, every leaf rounded once.
-pub fn plan(roots: &[(String, Rat)], w: &World) -> Result<Vec<Leaf>, Refusal> {
+/// How much of each semi-finished product's WHOLE need the shelf gave
+/// (`take / need`), for the products it gave anything (W-PF3 T1): the same
+/// share of every dish that reaches the product, so a stamp per dish adds up
+/// to what the basket booked.
+pub type Shelf = BTreeMap<String, Rat>;
+
+/// The walk itself: top-down, `take(id, need)` says how much of a node's
+/// whole need comes off the shelf; the rest goes through its card. Exact.
+fn walk(roots: &[(String, Rat)], w: &World, take_of: &dyn Fn(&str, Rat) -> Result<Rat, Refusal>) -> Result<(BTreeMap<String, Rat>, Shelf), Refusal> {
+    let over = || Refusal::Tree(Stop::Overflow);
     let (cards, mut users) = cards_under(roots, w)?;
     let mut need: BTreeMap<String, Rat> = BTreeMap::new();
     for (id, q) in roots {
         add(&mut need, id, *q)?;
     }
     let mut out: BTreeMap<String, Rat> = BTreeMap::new();
+    let mut shelf: Shelf = BTreeMap::new();
     let mut ready: BTreeSet<String> = users.iter().filter(|(_, n)| **n == 0).map(|(k, _)| k.clone()).collect();
     while let Some(id) = ready.pop_first() {
         let c = &cards[&id];
         let n = need.remove(&id).unwrap_or(Rat::new(0, 1));
-        let shelf = Rat::new(i128::from((w.ready)(&id).max(0)), i128::from(MICRO));
-        let take = if lt(n, shelf)? { n } else { shelf };
+        let take = take_of(&id, n)?;
         if take.num > 0 {
             add(&mut out, &id, take)?;
+            shelf.insert(id.clone(), take.checked_div(n).ok_or_else(over)?);
         }
-        let rest = n.checked_add(Rat::new(-take.num, take.den)).ok_or(Refusal::Tree(Stop::Overflow))?;
-        let per = rest.checked_div(c.batch).ok_or(Refusal::Tree(Stop::Overflow))?;
+        let rest = n.checked_add(Rat::new(-take.num, take.den)).ok_or_else(over)?;
+        let per = rest.checked_div(c.batch).ok_or_else(over)?;
         for l in &c.lines {
             if rest.num > 0 {
-                add(&mut need, &l.item, l.qty.checked_mul(per).ok_or(Refusal::Tree(Stop::Overflow))?)?;
+                add(&mut need, &l.item, l.qty.checked_mul(per).ok_or_else(over)?)?;
             }
             if let Some(u) = users.get_mut(&l.item) {
                 *u -= 1;
@@ -135,6 +142,23 @@ pub fn plan(roots: &[(String, Rat)], w: &World) -> Result<Vec<Leaf>, Refusal> {
             add(&mut out, &id, q)?;
         }
     }
+    Ok((out, shelf))
+}
+
+/// `roots` (item, exact quantity) down to what leaves the shelf: raw leaves,
+/// and ready semi-finished products as far as the shelf has them. Sorted by
+/// id, untracked items out, every leaf rounded once.
+pub fn plan(roots: &[(String, Rat)], w: &World) -> Result<Vec<Leaf>, Refusal> {
+    plan_split(roots, w).map(|(l, _)| l)
+}
+
+/// [`plan`], and the share of each product the shelf gave ([`Shelf`]).
+pub fn plan_split(roots: &[(String, Rat)], w: &World) -> Result<(Vec<Leaf>, Shelf), Refusal> {
+    let take = |id: &str, n: Rat| -> Result<Rat, Refusal> {
+        let shelf = Rat::new(i128::from((w.ready)(id).max(0)), i128::from(MICRO));
+        Ok(if lt(n, shelf)? { n } else { shelf })
+    };
+    let (out, shelf) = walk(roots, w, &take)?;
     let mut leaves = Vec::with_capacity(out.len());
     for (item, q) in out {
         let uq = q.to_micro().ok_or(Refusal::Tree(Stop::Overflow))?;
@@ -142,7 +166,20 @@ pub fn plan(roots: &[(String, Rat)], w: &World) -> Result<Vec<Leaf>, Refusal> {
             leaves.push(Leaf { item, uq });
         }
     }
-    Ok(leaves)
+    Ok((leaves, shelf))
+}
+
+/// What `roots` take when every product gives the SAME share from the shelf
+/// as the basket's walk gave it (`shelf`), exact, unrounded: one dish's part
+/// of a basket (`w.ready` is not asked).
+pub fn portion(roots: &[(String, Rat)], w: &World, shelf: &Shelf) -> Result<BTreeMap<String, Rat>, Refusal> {
+    let take = |id: &str, n: Rat| -> Result<Rat, Refusal> {
+        Ok(match shelf.get(id) {
+            Some(f) => n.checked_mul(*f).ok_or(Refusal::Tree(Stop::Overflow))?,
+            None => Rat::new(0, 1),
+        })
+    };
+    walk(roots, w, &take).map(|(out, _)| out)
 }
 
 /// The world a catalogue answers: cards from its supplies, unknown ids refused.

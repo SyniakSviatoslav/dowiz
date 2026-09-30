@@ -25,7 +25,7 @@ export const WORDS = {
     'tgev_order.placed': 'Porosi e re', 'tgev_order.amended': 'Porosia ndryshoi (pjata të shtuara)', 'tgev_order.status': 'Gjendja e porosisë (gati, dorëzuar)',
     'tgev_order.late': 'Porosi e vonuar', 'tgev_order.exception': 'Përjashtime (anulime, rimbursime)', 'tgev_inbox.message': 'Mesazh klienti (WhatsApp / Instagram)',
     'tgev_stock.low': 'Përbërës që po mbaron', 'tgev_stock.received': 'Mall i ardhur (partia)', 'tgev_stock.expiring': 'Parti që skadon së shpejti',
-    'tgev_stock.wasted': 'Të hedhura (humbje)', 'tgev_stocktake.variance': 'Diferencë numërimi', 'tgev_digest.daily': 'Përmbledhja e ditës',
+    'tgev_stock.wasted': 'Të hedhura (humbje)', 'tgev_stock.cooked': 'Partia e gatuar (humbja, kosto)', 'tgev_stocktake.variance': 'Diferencë numërimi', 'tgev_digest.daily': 'Përmbledhja e ditës',
     'tgev_digest.weekly': 'Përmbledhja e javës', 'tgev_system.alert': 'Probleme (boti u hoq, dërgime të dështuara)',
   },
   en: {
@@ -47,7 +47,7 @@ export const WORDS = {
     'tgev_order.placed': 'New order', 'tgev_order.amended': 'Order changed (dishes added)', 'tgev_order.status': 'Order status (ready, delivered)',
     'tgev_order.late': 'Late order', 'tgev_order.exception': 'Exceptions (voids, refunds)', 'tgev_inbox.message': 'Customer message (WhatsApp / Instagram)',
     'tgev_stock.low': 'Ingredient running low', 'tgev_stock.received': 'Delivery received (batch)', 'tgev_stock.expiring': 'Batch expiring soon',
-    'tgev_stock.wasted': 'Written off (waste)', 'tgev_stocktake.variance': 'Stocktake difference', 'tgev_digest.daily': 'Daily summary',
+    'tgev_stock.wasted': 'Written off (waste)', 'tgev_stock.cooked': 'Batch cooked (loss, cost)', 'tgev_stocktake.variance': 'Stocktake difference', 'tgev_digest.daily': 'Daily summary',
     'tgev_digest.weekly': 'Weekly summary', 'tgev_system.alert': 'Problems (bot removed, failed sends)',
   },
   uk: {
@@ -69,7 +69,7 @@ export const WORDS = {
     'tgev_order.placed': 'Нове замовлення', 'tgev_order.amended': 'Замовлення змінено (додано страви)', 'tgev_order.status': 'Статус замовлення (готово, доставлено)',
     'tgev_order.late': 'Замовлення запізнюється', 'tgev_order.exception': 'Винятки (скасування, повернення)', 'tgev_inbox.message': 'Повідомлення клієнта (WhatsApp / Instagram)',
     'tgev_stock.low': 'Інгредієнт закінчується', 'tgev_stock.received': 'Надійшла партія', 'tgev_stock.expiring': 'Партія скоро зіпсується',
-    'tgev_stock.wasted': 'Списання', 'tgev_stocktake.variance': 'Розбіжність інвентаризації', 'tgev_digest.daily': 'Підсумок дня',
+    'tgev_stock.wasted': 'Списання', 'tgev_stock.cooked': 'Приготовано партію (втрати, собівартість)', 'tgev_stocktake.variance': 'Розбіжність інвентаризації', 'tgev_digest.daily': 'Підсумок дня',
     'tgev_digest.weekly': 'Підсумок тижня', 'tgev_system.alert': 'Проблеми (бота видалили, помилки надсилання)',
   },
   ru: {
@@ -91,7 +91,7 @@ export const WORDS = {
     'tgev_order.placed': 'Новый заказ', 'tgev_order.amended': 'Заказ изменён (добавлены блюда)', 'tgev_order.status': 'Статус заказа (готов, доставлен)',
     'tgev_order.late': 'Заказ опаздывает', 'tgev_order.exception': 'Исключения (отмены, возвраты)', 'tgev_inbox.message': 'Сообщение клиента (WhatsApp / Instagram)',
     'tgev_stock.low': 'Ингредиент заканчивается', 'tgev_stock.received': 'Пришла партия', 'tgev_stock.expiring': 'Партия скоро испортится',
-    'tgev_stock.wasted': 'Списание', 'tgev_stocktake.variance': 'Расхождение инвентаризации', 'tgev_digest.daily': 'Итог дня',
+    'tgev_stock.wasted': 'Списание', 'tgev_stock.cooked': 'Приготовлена партия (потери, себестоимость)', 'tgev_stocktake.variance': 'Расхождение инвентаризации', 'tgev_digest.daily': 'Итог дня',
     'tgev_digest.weekly': 'Итог недели', 'tgev_system.alert': 'Проблемы (бота удалили, ошибки отправки)',
   },
 };

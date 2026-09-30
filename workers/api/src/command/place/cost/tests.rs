@@ -81,7 +81,7 @@ fn only_a_fully_priced_recipe_is_stamped() {
 fn a_line_whose_product_is_not_in_the_basket_lines_is_left_alone() {
     let mut env = json!({"items": [{"product_id": "ghost", "quantity": 1}, {"quantity": 1}]});
     let book = dowiz_hub::stock::cost::CostBook::default();
-    stamp_lines(&mut env, &[(MAKI.into(), 1), ("not json".into(), 1)], &book, 3);
+    stamp_lines(&mut env, &[(MAKI.into(), 1), ("not json".into(), 1)], &book, 3, &Default::default());
     assert_eq!(env, json!({"items": [{"product_id": "ghost", "quantity": 1}, {"quantity": 1}]}));
 }
 
@@ -94,6 +94,54 @@ fn a_guest_never_reads_the_cost() {
     let mut bare = json!({"total": 1});
     strip(&mut bare);
     assert_eq!(bare, json!({"total": 1}));
+}
+
+/// W-PF3 T1: a kitchen where the seasoned rice is a semi-finished product
+/// (card: 100 g of rice makes 100 g), priced so the batch and today's raw
+/// rice differ: the first kilo at 1,000/kg is cooked into 500 g of batch,
+/// then a kilo at 3,000/kg arrives -- the raw average is now above 2 per g,
+/// the batch's own is 1.
+fn pf_kitchen(cook: i64) -> (StockLog, String) {
+    let supplies = [
+        ("rice", r#"{"id":"rice","name":"Rice","unit":"g","kind":"food_ingredient"}"#),
+        ("rice-s", r#"{"id":"rice-s","name":"Rice seasoned","unit":"g","kind":"prep","card":{"lines":[{"item":"rice","qty":100}],"yield":100}}"#),
+    ];
+    let look = |id: &str| supplies.iter().find(|(i, _)| *i == id).map(|(_, j)| j.to_string());
+    let mut stock = StockLog::create_sized(64 * 1024).unwrap();
+    stock.receive_priced("rice", 1000, &price(1000)).unwrap();
+    if cook > 0 {
+        let act = dowiz_hub::stock::act::Act { prep: "rice-s".into(), planned: cook, out: cook, act: "pa_1".into(), by: "cook-1".into(), lot: None, expiry: None };
+        assert_eq!(stock.cook(&act, &look).unwrap().value, Some(cook), "the batch cost 1 per g");
+    }
+    stock.receive_priced("rice", 1000, &price(3000)).unwrap();
+    let dish = dowiz_hub::prep::for_ledger(&look, r#"{"id":"roll","name":"Roll","bom":[{"supply":"rice-s","qty":100}]}"#).0;
+    assert!(dish.contains(r#""tree""#));
+    (stock, dish)
+}
+
+#[test]
+fn a_sale_from_a_ready_batch_is_stamped_at_the_batch_cost() {
+    let (mut stock, dish) = pf_kitchen(500);
+    let o = place(&mut stock, &input("o1", &[("roll", &dish, 2)]));
+    // Priced as all raw it would be 100 g at (500 x 1 + 1000 x 3) / 1500 g = 233.
+    assert_eq!(o["items"][0]["unit_cost"], json!(100), "100 g from the batch at 1 per g, not today's raw average");
+}
+
+#[test]
+fn a_short_batch_stamps_its_part_at_the_batch_cost_and_the_rest_at_raw() {
+    // 150 g ready for two rolls of 100 g: each roll takes 75 g of batch at 1
+    // and 25 g of rice at (850 x 1 + 1000 x 3) / 1850 = 2.081081 -> 75 + 52.03 = 127.
+    let (mut stock, dish) = pf_kitchen(150);
+    let o = place(&mut stock, &input("o1", &[("roll", &dish, 2)]));
+    assert_eq!(o["items"][0]["unit_cost"], json!(127));
+}
+
+#[test]
+fn with_no_batch_ready_the_stamp_is_the_raw_cost_as_before() {
+    // Twin: nothing cooked, rice at (1,000 + 3,000) / 2 kg = 2 per g.
+    let (mut stock, dish) = pf_kitchen(0);
+    let o = place(&mut stock, &input("o1", &[("roll", &dish, 2)]));
+    assert_eq!(o["items"][0]["unit_cost"], json!(200));
 }
 
 /// MEASURED, not asserted (`cargo test --release --lib measure_ -- --ignored

@@ -14,7 +14,8 @@ use serde_json::Value;
 use super::carry::{Carry, Draw, MICRO};
 use super::{bom_of, StockError, StockLedger};
 use crate::import::recipes::num::Rat;
-use crate::prep::stocked::{plan, World};
+use super::cost::CostBook;
+use crate::prep::stocked::{plan_split, portion, Shelf, World};
 use crate::prep::tree::{Card, Edge};
 use crate::prep::Refusal;
 
@@ -84,11 +85,44 @@ pub fn ready_micro(led: &StockLedger, carry: &Carry, id: &str) -> i64 {
 impl Basket {
     /// What the order draws, the shelf asked first.
     pub fn draws(&self, order_id: &str, led: &StockLedger, carry: &Carry) -> Result<Vec<Draw>, StockError> {
+        self.draws_split(order_id, led, carry).map(|(d, _)| d)
+    }
+
+    /// [`Basket::draws`], and the share of each semi-finished product the
+    /// shelf gave (`prep::stocked::Shelf`), for the cost stamp (W-PF3 T1).
+    pub fn draws_split(&self, order_id: &str, led: &StockLedger, carry: &Carry) -> Result<(Vec<Draw>, Shelf), StockError> {
         let card = |id: &str| -> Result<Option<Card>, Refusal> { Ok(self.cards.get(id).cloned()) };
         let quiet = |id: &str| self.untracked.contains(id);
         let ready = |id: &str| ready_micro(led, carry, id);
-        let leaves = plan(&self.roots, &World { card: &card, untracked: &quiet, ready: &ready }).map_err(|r| StockError::Linkage(r.to_string()))?;
-        Ok(leaves.into_iter().map(|l| Draw { item: l.item, uq: l.uq, order_id: order_id.to_string(), via: None }).collect())
+        let (leaves, shelf) = plan_split(&self.roots, &World { card: &card, untracked: &quiet, ready: &ready }).map_err(|r| StockError::Linkage(r.to_string()))?;
+        Ok((leaves.into_iter().map(|l| Draw { item: l.item, uq: l.uq, order_id: order_id.to_string(), via: None }).collect(), shelf))
+    }
+
+    /// THE COST THE LEDGER BOOKS for this basket (one portion of one dish,
+    /// `of(&[(dish, 1)])`) when each semi-finished product gives the share
+    /// `shelf` says: the part from a ready batch at the BATCH's average, the
+    /// rest at the raw averages, exact inside and rounded ONCE to minor
+    /// units. `None` when the shelf gave nothing this dish reaches (the
+    /// caller prices the all-raw `bom` as before); `Some(None)` when anything
+    /// it takes has no price (a partial sum is not a cost: no stamp).
+    pub fn portion_cost(&self, shelf: &Shelf, book: &CostBook) -> Option<Option<i64>> {
+        if !self.cards.keys().any(|k| shelf.contains_key(k)) {
+            return None;
+        }
+        Some(self.priced(shelf, book))
+    }
+
+    fn priced(&self, shelf: &Shelf, book: &CostBook) -> Option<i64> {
+        let card = |id: &str| -> Result<Option<Card>, Refusal> { Ok(self.cards.get(id).cloned()) };
+        let quiet = |id: &str| self.untracked.contains(id);
+        let takes = portion(&self.roots, &World { card: &card, untracked: &quiet, ready: &|_| 0 }, shelf).ok()?;
+        // avg_micro is micro-minor per unit: sum(avg * q) / MICRO minor units.
+        let mut sum = Rat::new(0, 1);
+        for (item, q) in &takes {
+            sum = sum.checked_add(q.checked_mul(Rat::new(book.avg_micro(item)?, 1))?)?;
+        }
+        let den = sum.den.checked_mul(i128::from(MICRO))?;
+        i64::try_from((sum.num.checked_mul(2)?.checked_add(den)?).div_euclid(den.checked_mul(2)?)).ok()
     }
 }
 

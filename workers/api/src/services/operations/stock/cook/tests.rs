@@ -18,7 +18,7 @@ fn catalogue() -> Vec<(String, String)> {
 }
 
 fn input(kind: &str, body: Value) -> StockTurnIn {
-    StockTurnIn { kind: kind.into(), body, by: "p_cook".into(), now_ms: NOW, today: 20260929, supplies: supplies_for(kind, catalogue()) }
+    StockTurnIn { kind: kind.into(), body, by: "p_cook".into(), now_ms: NOW, today: 20260929, supplies: supplies_for(kind, catalogue()), currency: "ALL".into() }
 }
 
 fn shelf() -> StockLog {
@@ -33,7 +33,9 @@ fn shelf() -> StockLog {
 fn a_batch_is_cooked_through_the_turn_and_shows_its_loss() {
     let mut log = shelf();
     let (shown, told) = super::super::turn::run(&mut log, &input("cooked", json!({ "item": "mitsukan", "qty": 1000, "out": 960 })), false).unwrap();
-    assert!(told.is_empty());
+    // W-PF3 T2: one message for the groups -- what came out, the loss, the cost.
+    let said = json!({ "name": "Mitsukan", "out": 960, "unit": "g", "lossG": 40, "lossPm": 40, "value": 265, "currency": "ALL" });
+    assert_eq!(told, vec![("stock.cooked", said)]);
     assert_eq!((shown["planned"].clone(), shown["out"].clone(), shown["gross"].clone(), shown["lossG"].clone()), (json!(1000), json!(960), json!(1000), json!(40)));
     assert_eq!((shown["yieldPm"].clone(), shown["cardPm"].clone(), shown["value"].clone()), (json!(960), json!(1000), json!(265)));
     assert_eq!(shown["lines"].as_array().unwrap().len(), 3);

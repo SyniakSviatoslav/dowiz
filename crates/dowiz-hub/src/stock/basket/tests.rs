@@ -65,3 +65,44 @@ fn a_short_batch_is_used_up_and_the_rest_comes_from_raw() {
     assert!(reserved(&log, "o2").iter().all(|(i, _)| i != "rice-seasoned"));
     assert_eq!(log.ledger().unwrap().available("rice-seasoned"), 0);
 }
+
+/// W-PF3 T1: the share the shelf gave, and a dish's cost at that share.
+#[test]
+fn the_shelf_share_prices_the_batch_at_its_own_average() {
+    let k = kitchen();
+    let dish = for_ledger(&look(&k), PHILADELPHIA).0;
+    let one = of(&[(dish.clone(), 1)]).unwrap();
+    // Nothing ready: no share, and the caller prices the raw bom as before.
+    let mut log = stocked_log();
+    let (_, _, shelf) = log.append_draws_split(&draws_for("o0", &[(dish.clone(), 1)])).unwrap();
+    assert!(shelf.is_empty());
+    assert_eq!(one.portion_cost(&shelf, &log.cost_book()), None);
+    // A whole batch ready: the dish's 130 g all come from it, at ITS average.
+    log.cook(&act("rice-seasoned", 2100, 2100), &look(&k)).unwrap();
+    let book = log.cost_book();
+    let (_, _, shelf) = log.append_draws_split(&draws_for("o1", &[(dish.clone(), 1)])).unwrap();
+    assert_eq!(shelf.get("rice-seasoned").map(|r| r.num == r.den), Some(true), "the batch gave all of it");
+    let batch = i128::from(book.avg_micro("rice-seasoned").unwrap());
+    let m = i128::from(MICRO);
+    assert_eq!(one.portion_cost(&shelf, &book), Some(Some(((batch * 130 + m / 2) / m) as i64)));
+    // 100 g ready for 130: the shelf gives 100 g plus the half-unit a whole
+    // booking of 100 absorbs (`ready_micro`), and the rest from raw.
+    let mut log = stocked_log();
+    log.cook(&act("rice-seasoned", 100, 100), &look(&k)).unwrap();
+    let (_, _, shelf) = log.append_draws_split(&draws_for("o2", &[(dish, 1)])).unwrap();
+    assert_eq!(shelf.get("rice-seasoned"), Some(&Rat::new(100_499_999, 130_000_000)));
+}
+
+#[test]
+fn a_batch_nobody_priced_is_not_a_cost() {
+    let k = kitchen();
+    let dish = for_ledger(&look(&k), PHILADELPHIA).0;
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    for item in ["rice-dry", "vinegar", "salt", "sugar"] {
+        log.append(&StockEvent::Received { item: item.into(), qty: 10_000 }).unwrap();
+    }
+    log.cook(&act("rice-seasoned", 2100, 2100), &look(&k)).unwrap();
+    let book = log.cost_book();
+    let (_, _, shelf) = log.append_draws_split(&draws_for("o1", &[(dish.clone(), 1)])).unwrap();
+    assert_eq!(of(&[(dish, 1)]).unwrap().portion_cost(&shelf, &book), Some(None), "a partial sum is never a cost");
+}

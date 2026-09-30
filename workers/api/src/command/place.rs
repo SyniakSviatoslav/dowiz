@@ -137,7 +137,7 @@ pub fn decide(
     let draws = dowiz_hub::stock::draws_for(&input.order_id, &input.bom_lines);
     let costed = match draws.is_empty() {
         true => None,
-        false => Some(stock.append_draws(&draws).map_err(|e| Refused::Stock(format!("{e}")))?),
+        false => Some(stock.append_draws_split(&draws).map_err(|e| Refused::Stock(format!("{e}")))?),
     };
 
     // ── THE DISCOUNT, IN THE SAME BREATH AS THE APPEND THAT MAKES IT REAL ──
@@ -149,8 +149,8 @@ pub fn decide(
     // object turn, which is as close together as they can be.
     let mut envelope: serde_json::Value = serde_json::from_str(&input.envelope)
         .map_err(|e| Refused::Append(format!("envelope is not json: {e}")))?;
-    if let Some((book, at)) = &costed {
-        cost::stamp_lines(&mut envelope, &input.bom_lines, book, *at);
+    if let Some((book, at, shelf)) = &costed {
+        cost::stamp_lines(&mut envelope, &input.bom_lines, book, *at, shelf);
     }
     if let Some(raw) = &input.promo {
         let Some(p) = dowiz_hub::promo::Promo::parse(raw) else {

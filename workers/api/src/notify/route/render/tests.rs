@@ -57,3 +57,14 @@ fn a_summary_lists_numbers_then_top_dishes_then_what_the_group_chose() {
     let empty = Summary { venue: "D".into(), orders: 0, revenue: "0 ALL".into(), top: vec![] };
     assert_eq!(digest("sq", true, &empty, &[]), "📊 Përmbledhja e javës · D\n0 porosi · të ardhura 0 ALL\n");
 }
+
+#[test]
+fn a_production_act_says_what_came_out_the_loss_and_the_cost() {
+    let d = json!({ "name": "Mitsukan", "out": 960, "unit": "g", "lossG": 40, "lossPm": 40, "value": 265, "currency": "EUR" });
+    assert_eq!(event("stock.cooked", &d, "en"), "🍳 batch cooked: Mitsukan 960 g · loss 40 g (4.0%) · cost 2.65 EUR");
+    assert_eq!(event("stock.cooked", &d, "uk"), "🍳 приготовано партію: Mitsukan 960 g · втрати 40 g (4.0%) · собівартість 2.65 EUR");
+    let lek = json!({ "name": "Oriz", "out": 2050, "unit": "g", "lossG": 300, "lossPm": 127, "value": 266, "currency": "ALL" });
+    assert_eq!(event("stock.cooked", &lek, "sq"), "🍳 partia u gatua: Oriz 2050 g · humbje 300 g (12.7%) · kosto 266 ALL");
+    // Twin: no weight on the card and no price -- only what came out.
+    assert_eq!(event("stock.cooked", &json!({ "name": "Sauce", "out": 3, "unit": "pc" }), "ru"), "🍳 приготовлена партия: Sauce 3 pc");
+}

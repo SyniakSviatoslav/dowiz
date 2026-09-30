@@ -72,7 +72,25 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn) -> Result<(Value, Told), (u1
         "lossG": (g > 0).then(|| g - out), "yieldPm": (g > 0).then(|| out * 1000 / g), "cardPm": (g > 0).then(|| planned * 1000 / g),
         "value": done.value, "lines": lines, "expiry": expiry.map(dowiz_hub::stock::meta::show_day),
     });
-    Ok((shown, Vec::new()))
+    Ok((shown, vec![("stock.cooked", told(input, &item, out, g, done.value))]))
+}
+
+/// The groups' words of the act (W-PF3 T2): what came out, the loss when
+/// the card weighed what went in (per mille of it), the cost when priced.
+/// `hubdo/stock_turn.rs` drops it unless a group chose `stock.cooked`.
+fn told(input: &StockTurnIn, item: &str, out: i64, gross: i64, value: Option<i64>) -> Value {
+    let s = input.supplies.get(item);
+    let mut t = json!({ "name": s.map_or(item, |s| s.name.as_str()), "out": out, "unit": s.map_or("g", |s| s.unit.as_str()) });
+    if gross > 0 {
+        let pm = i64::try_from((i128::from(gross) - i128::from(out)) * 1000 / i128::from(gross)).unwrap_or(0);
+        t["lossG"] = json!(gross - out);
+        t["lossPm"] = json!(pm);
+    }
+    if let Some(v) = value.filter(|_| !input.currency.is_empty()) {
+        t["value"] = json!(v);
+        t["currency"] = json!(input.currency);
+    }
+    t
 }
 
 #[cfg(test)]
