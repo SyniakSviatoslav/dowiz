@@ -22,6 +22,8 @@ case "$1 $2" in
   "deployments status") [ -n "${NO_PREV:-}" ] && { echo "error: nope"; exit 1; }
     echo '{"versions":[{"version_id":"0ld00000-0000-4000-8000-000000000000","percentage":100}]}' ;;
   deploy*) mkdir -p build
+    if [ -n "${FETCH_FAILS:-}" ] && [ "$(grep -c '^deploy ' "$STUB_CALLS")" -le "$FETCH_FAILS" ]; then echo "X [ERROR] fetch failed"; exit 1; fi
+    [ -n "${UPLOAD_ERR:-}" ] && { echo "X [ERROR] Authentication error [code: 10000]"; exit 1; }
     if [ -n "${WASM_NO_COMMIT:-}" ]; then echo x > build/index_bg.wasm; else printf 'wasm\0%s\0' "$DOWIZ_COMMIT" > build/index_bg.wasm; fi
     case "$*" in *--dry-run*) echo "--dry-run: exiting now." ;; *) echo "Current Version ID: 4e400000-0000-4000-8000-000000000000" ;; esac ;;
 esac
@@ -74,6 +76,14 @@ if [ $RC = 0 ] && has "deploy: OK $SHA" && [ "$(uploads)" = 1 ] && grep -q '^dep
    && grep -q "^deployments status --json token=set" "$T/calls" && [ ! -e "$T/work/src/workers/api/public/untracked.js" ] \
    && [ "$(readlink "$T/work/src/workers/api/public/link.js")" = admin/app.js ] && has "verify args: --host https://qa-stub.invalid --commit $SHA" \
    && ! grep -rq 'stub-secret-9f3k' "$T/out" "$T/work/logs"; then ok "clean main deploys once (0), copy == HEAD, token never printed"; else no "happy path"; fi
+
+# ── upload: the box's connect timeout ("fetch failed") is retried, up to 3 tries; any other error is not ──
+FETCH_FAILS=2 run; [ $RC = 0 ] && [ "$(uploads)" = 3 ] && has 'upload try 2: fetch failed' && has "deploy: OK $SHA" \
+  && ok "fetch failed twice, third upload lands (0), 3 uploads" || no "fetch-failed retry"
+FETCH_FAILS=3 run; [ $RC = 31 ] && [ "$(uploads)" = 3 ] && has 'FAIL upload: wrangler rc=1' \
+  && ok "fetch failed three times -> gives up (31) after 3 uploads" || no "fetch-failed give up"
+UPLOAD_ERR=1 run; [ $RC = 31 ] && [ "$(uploads)" = 1 ] && ! has 'retrying' \
+  && ok "any other upload error fails at once (31), no retry" || no "no retry on other errors"
 
 # ── after the upload: a verifier or probe FAIL stops with the rollback command, and runs none ──
 VERIFY_RC=1 run; [ $RC = 40 ] && has 'FAIL live-is-not-head' && has 'rollback 0ld00000-0000-4000-8000-000000000000' \

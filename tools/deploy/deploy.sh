@@ -113,10 +113,18 @@ if [ $MODE != verify ]; then
   step upload
   BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   if [ $MODE = dry ]; then args="deploy --dry-run --outdir $WORK/dry"; else args=deploy; fi
-  ( cd "$SRC/workers/api" && export RUSTUP_TOOLCHAIN=$TOOLCHAIN DOWIZ_COMMIT=$SHA DOWIZ_BUILT_AT=$BUILT_AT &&
-    if [ $MODE = dry ]; then $SLOT deploy $WRANGLER $args
-    else $SLOT deploy bash -c 'set -a && . "$0" && set +a && exec "$@"' "$TOKEN_FILE" $WRANGLER $args; fi
-  ) > "$WORK/logs/upload.log" 2>&1; rc=$?
+  # The box's TCP connect to Cloudflare takes 5-16 s and wrangler's fetch (undici) gives up at 10 s, so an
+  # upload fails at random with "fetch failed" after a good build. Only that failure, with no Version ID
+  # printed, is retried (the rebuild is cached); anything else fails at once.
+  for try in 1 2 3; do
+    ( cd "$SRC/workers/api" && export RUSTUP_TOOLCHAIN=$TOOLCHAIN DOWIZ_COMMIT=$SHA DOWIZ_BUILT_AT=$BUILT_AT &&
+      if [ $MODE = dry ]; then $SLOT deploy $WRANGLER $args
+      else $SLOT deploy bash -c 'set -a && . "$0" && set +a && exec "$@"' "$TOKEN_FILE" $WRANGLER $args; fi
+    ) > "$WORK/logs/upload.log" 2>&1; rc=$?
+    [ $rc != 0 ] && [ $try -lt 3 ] && grep -q 'fetch failed' "$WORK/logs/upload.log" \
+      && ! grep -q 'Current Version ID' "$WORK/logs/upload.log" || break
+    echo "   upload try $try: fetch failed (connect timeout), retrying"
+  done
   tail -6 "$WORK/logs/upload.log" | sed 's/^/   /'
   [ $rc = 0 ] || fail 31 "upload: wrangler rc=$rc (log $WORK/logs/upload.log)"
   NEW=$(grep -o 'Current Version ID: [0-9a-f-]*' "$WORK/logs/upload.log" | tail -1 | cut -d' ' -f4)
