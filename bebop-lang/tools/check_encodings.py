@@ -20,6 +20,8 @@ import re, sys, os, subprocess, struct, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BP = os.path.join(ROOT, "bebop.bp")
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import bp_src   # 2026-09-29 split: BP is read WITH its compiler/*.bp includes
 
 # Verified table: word -> (asm, objdump_hex, smoke_desc)
 # Populated from `echo '<asm>' | aarch64-linux-gnu-as -o ref.o && objdump -d ref.o`
@@ -61,7 +63,7 @@ VERIFIED = {
 }
 
 def check_bp():
-    txt = open(BP).read()
+    txt = bp_src.read(BP)
     # Find all em(insns, n, <expr>) where <expr> is a decimal literal or simple arith
     # We look for em(..., <num>) where <num> is a decimal integer literal
     pat = re.compile(r'em\(insns,\s*n,\s*([^\)]+)\)')

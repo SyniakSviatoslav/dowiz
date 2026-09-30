@@ -1,0 +1,685 @@
+// bebop-lang/compiler/calls.bp -- part of the self-hosting compiler, NOT a standalone program.
+// Split out of bebop.bp (was bebop.bp:1188-1866 at 64d2d5cd, 2026-09-29, operator: "split in files")
+// and pulled back in by bebop.bp's `use` lines IN ORDER: use_expand places every include ahead
+// of the main text, so only a prefix of the compiler can live here and the order of these
+// files is the order of the functions in the binary. Contents: return/parameter arity tables, ctor collection, the operand-list parser and the direct-call / IO builtin emitters.
+
+// ---- ROADMAP A21 step 1 (2026-09-14): the return-arity table ----
+// A fn's DECLARED return arity, read off its own header at the source offset
+// collect_fns already recorded (ft_srcpos above, the table's 3rd zone). That table
+// is complete before ANY fn is compiled, so the answer is order-independent BY
+// CONSTRUCTION -- `divmod` may be declared after `main` -- and no new fntab zone is
+// needed. 1 when the name is not a known fn (the legacy single-fn path passes
+// cnt = 0) or when the header declares no tuple.
+// THE `(` MUST FOLLOW `->` IMMEDIATELY, whitespace and `//` comments aside: the
+// contract region between `)` and `{` may legally contain parens and commas
+// (scan_inert permits both, bebop.bp:4697), so anchoring on `->` is what stops
+// `requires (x > 0)` being read as a 2-tuple. > 3 is E121 at the header.
+fn fn_ret_arity_tuple(s: str, arrow: i64, strn: i64) -> i64 {
+  let j = [arrow];
+  let cm = [0];
+  let opened = [0];
+  let k = [1];
+  let go = 1;
+  while go == 1 {
+    let at_end = if j[0] >= strn then 1 else 0;
+    let c = if at_end == 1 then 0 else char(s, j[0]);
+    let c1 = if j[0] + 1 >= strn then 0 else char(s, j[0] + 1);
+    let is_cmt = (if c == 47 then 1 else 0) * (if c1 == 47 then 1 else 0);
+    let _ = cm[0] = j[0];
+    let _ = if is_cmt == 1 then skip_line_comment_n(s, cm, strn) else 0;
+    let is_ws = (if c == 32 then 1 else 0) + (if c == 9 then 1 else 0) + (if c == 10 then 1 else 0) + (if c == 13 then 1 else 0);
+    let is_lp = if c == 40 then 1 else 0;
+    let _ = if is_lp * (1 - opened[0]) == 1 then (let _ = opened[0] = 1 in 0) else 0;
+    let _ = if (if c == 44 then 1 else 0) * opened[0] == 1 then (let _ = k[0] = k[0] + 1 in 0) else 0;
+    // before the `(` only whitespace and comments may intervene
+    let bail = (1 - opened[0]) * (1 - is_cmt) * (1 - is_ws) * (1 - is_lp);
+    let stop = at_end + bail + (if c == 41 then 1 else 0) * opened[0] + (if c == 123 then 1 else 0);
+    let go = if stop >= 1 then 0 else 1;
+    let _ = j[0] = if is_cmt == 1 then cm[0] else j[0] + 1;
+    0
+  };
+  if opened[0] == 1 then k[0] else 1
+}
+
+// `strn` is the CALLER's cached source length (slen's pos[1] cache): calling
+// str_len here instead cost a full O(source) scan at every call site -- measured
+// +25% on bebop.bp's own self-compile (0.965 s -> 1.203 s) before this parameter.
+fn fn_ret_arity_at(s: str, sp: i64, strn: i64) -> i64 {
+  let p = [sp, strn];
+  let _ = skip_to(s, p, 40);
+  let _ = skip_to(s, p, 41);
+  let j = [p[0] + 1];
+  let cm = [0];
+  let arrow = [0 - 1];
+  let go = 1;
+  while go == 1 {
+    let at_end = if j[0] >= strn then 1 else 0;
+    let c = if at_end == 1 then 0 else char(s, j[0]);
+    let c1 = if j[0] + 1 >= strn then 0 else char(s, j[0] + 1);
+    let is_cmt = (if c == 47 then 1 else 0) * (if c1 == 47 then 1 else 0);
+    let _ = cm[0] = j[0];
+    let _ = if is_cmt == 1 then skip_line_comment_n(s, cm, strn) else 0;
+    let is_arrow = (1 - is_cmt) * (if c == 45 then 1 else 0) * (if c1 == 62 then 1 else 0);
+    let _ = if is_arrow == 1 then (let _ = arrow[0] = j[0] + 2 in 0) else 0;
+    let stop = at_end + (if c == 123 then 1 else 0) + is_arrow;
+    let go = if stop >= 1 then 0 else 1;
+    let _ = j[0] = if is_cmt == 1 then cm[0] else j[0] + 1;
+    0
+  };
+  let k = if arrow[0] < 0 then 1 else fn_ret_arity_tuple(s, arrow[0], strn);
+  let _ = if k > 3 then diag_exit(s, sp, 121) else 0;
+  k
+}
+
+fn fn_ret_arity(s: str, name: i64, fntab: [i64], strn: i64) -> i64 {
+  let sp = ft_srcpos(fntab, name);
+  if sp < 0 then 1 else fn_ret_arity_at(s, sp, strn)
+}
+
+// ---- ROADMAP F2 step 3+4: parameter-arity lookup ----
+// A fn's DECLARED parameter arity, read off its own header at the source offset
+// Same pattern as A21's return-arity table but counts parameters between `(` and `)`
+// Count is 0 if next non-space after `(` is `)`, otherwise commas+1. Mirrors fn_ret_arity_tuple.
+fn fn_param_arity_at(s: str, sp: i64, strn: i64) -> i64 {
+  let p = [sp, strn];
+  let _ = skip_to(s, p, 40);
+  let j = [p[0] + 1];
+  let cm = [0];
+  let count = [0];
+  let has_content = [0];
+  let go = 1;
+  while go == 1 {
+    let at_end = if j[0] >= strn then 1 else 0;
+    let c = if at_end == 1 then 0 else char(s, j[0]);
+    let c1 = if j[0] + 1 >= strn then 0 else char(s, j[0] + 1);
+    let is_cmt = (if c == 47 then 1 else 0) * (if c1 == 47 then 1 else 0);
+    let _ = cm[0] = j[0];
+    let _ = if is_cmt == 1 then skip_line_comment_n(s, cm, strn) else 0;
+    let is_ws = (if c == 32 then 1 else 0) + (if c == 9 then 1 else 0) + (if c == 10 then 1 else 0) + (if c == 13 then 1 else 0);
+    let is_rp = if c == 41 then 1 else 0;
+    let is_comma = if c == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = count[0] = count[0] + 1 in 0) else 0;
+    let _ = if (1 - is_rp) * (1 - is_ws) * (1 - is_cmt) == 1 then (let _ = has_content[0] = 1 in 0) else 0;
+    let stop = at_end + is_rp + (if c == 123 then 1 else 0);
+    let go = if stop >= 1 then 0 else 1;
+    let _ = j[0] = if is_cmt == 1 then cm[0] else j[0] + 1;
+    0
+  };
+  if has_content[0] == 0 then 0 else (if count[0] == 0 then 1 else count[0] + 1)
+}
+
+fn fn_param_arity(s: str, name: i64, fntab: [i64], strn: i64) -> i64 {
+  let sp = ft_srcpos(fntab, name);
+  if sp < 0 then 0 else fn_param_arity_at(s, sp, strn)
+}
+
+// Does this compilation unit declare any tuple-returning fn? ONE source scan, cached in
+// fntab[7101] (0 = not scanned, 1 = no, 2 = yes; a fresh fntab is zeros so the lifetime is
+// the unit, like A22's fntab[7000]). It bounds emit_bl_call's arity guard -- an O(#fns)
+// ft_srcpos at every call site -- to programs that can have a multi-value callee. HONEST
+// MEASUREMENT: it bought no measurable time (1.128 s pre-A21 vs 1.227 s after, either way;
+// that 8.8% is source growth), and is kept because it bounds the cost, not because it moved
+// a number. Conservative: an arrow-then-paren pair in a comment turns the guard ON, which
+// costs time and changes no answer -- hence this file never spells the pair literally.
+fn unit_tuple_scan(s: str, strn: i64) -> i64 {
+  let j = [0];
+  let hit = [0];
+  // W-GBPOOL (2026-09-29): ONE cursor for the whole scan. `[j[0] + 2, strn]` in the loop body
+  // (b7d025d1) bump-allocated 2 cells per source character, per pass -- measured +407,488
+  // cells (3.26 MB) on a 101,872-byte kernel, the larger half of gb_pool's trap 80.
+  let q = [0, strn];
+  let go = 1;
+  while go == 1 {
+    let c = if j[0] >= strn then 0 else char(s, j[0]);
+    let c1 = if j[0] + 1 >= strn then 0 else char(s, j[0] + 1);
+    let is_arrow = (if c == 45 then 1 else 0) * (if c1 == 62 then 1 else 0);
+    let _ = q[0] = j[0] + 2;
+    let _ = if is_arrow == 1 then skip_ws(s, q) else 0;
+    let ca = if q[0] >= strn then 0 else char(s, q[0]);
+    let _ = if is_arrow * (if ca == 40 then 1 else 0) == 1 then (let _ = hit[0] = 1 in 0) else 0;
+    let _ = j[0] = j[0] + 1;
+    let go = (1 - hit[0]) * (if j[0] + 1 < strn then 1 else 0);
+    0
+  };
+  hit[0]
+}
+
+fn unit_has_tuple_fn(s: str, fntab: [i64], strn: i64) -> i64 {
+  let _ = if fntab[7101] == 0 then (let _ = fntab[7101] = 1 + unit_tuple_scan(s, strn) in 0) else 0;
+  fntab[7101] - 1
+}
+
+// Collect ctor names of the FIRST enum decl into names[0..): single scan.
+// Returns 1 when an enum decl exists, else 0 (cnt[0] stays 0).
+fn collect_ctors(s: str, names: [i64], cnt: [i64]) -> i64 {
+  let epos = [0];
+  let found = find_enum(s, epos);
+  let pos = [0, 0];
+  let _ = pos[0] = if found == 1 then epos[0] + 5 else 0;
+  let nm = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let k = [0];
+  let done = if found == 1 then 0 else 1;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let cname = read_ident(s, pos);
+    let is_name = if cname == 0 then 0 else 1;
+    let capok = if k[0] < 256 then 1 else 0;
+    let _ = if is_name * capok == 1 then (let _ = names[k[0]] = cname in 0) else 0;
+    let _ = k[0] = k[0] + is_name;
+    let _ = skip_to_field_delim(s, pos);
+    let ch = char(s, pos[0]);
+    let is_rb = if ch == 125 then 1 else 0;
+    let at_end = if ch == 0 then 1 else 0;
+    let _ = if is_rb + at_end == 0 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = cnt[0] = k[0];
+  found
+}
+
+// Tag of ctor name from table zone-4 [.., ecnt, c1, c2, ..]; -1 when absent.
+// O(#ctors) per ab; replaces the full-source rescan per identifier.
+fn ft_ctor_tag(tab: [i64], name: i64) -> i64 {
+  let cnt = tab[0];
+
+  let base = cnt + cnt + cnt + 1;
+  let ecnt = tab[base];
+  let i = 0;
+  let tag = 0 - 1;
+  while i < ecnt {
+    let cn = tab[base + 1 + i];
+    let is_match = if cn == name then 1 else 0;
+    let tag = if is_match == 1 then i else tag;
+    let i = i + 1;
+    0
+  };
+  tag
+}
+
+// Callee-resolution cache (zone-5, 128 direct-mapped 2-word [name,val] slots
+// after the ctor zone): val 0 = unresolved, k>0 = srcpos k-1 (ft_srcpos hit),
+// k<0 = find_fn result -k-2. The name is stored beside the value so a hash
+// collision between two callee names can never serve one name the other's
+// resolution (was: bare slot -> colliding name reused a foreign fnpos ->
+// wrong bl target / runaway inline parse). Memoizes the per-name resolve so
+// each callee is scanned for once, not once per call site. Words emitted are
+// unchanged: the resolved position is identical every time.
+fn ft_cache_slot(tab: [i64], name: i64) -> i64 {
+  let cnt = tab[0];
+
+  let eb = cnt + cnt + cnt + 1;
+  let ecnt = tab[eb];
+  let cb = eb + ecnt + 2;
+  let slot = name - name / 128 * 128;
+  let slot2 = if slot < 0 then slot + 128 else slot;
+  cb + slot2 + slot2
+}
+
+fn ft_cache_get(tab: [i64], name: i64) -> i64 {
+  let s0 = ft_cache_slot(tab, name);
+  let hit = if tab[s0] == name then 1 else 0;
+  let v = if hit == 1 then tab[s0 + 1] else 0;
+  v
+}
+
+fn ft_cache_set(tab: [i64], name: i64, val: i64) -> i64 {
+  let s0 = ft_cache_slot(tab, name);
+  let _ = tab[s0] = name;
+  let _ = tab[s0 + 1] = val;
+  0
+}
+
+// ---- ONE operand-list parser for all three call forms (2026-09-14) ----
+// `pos` is on the `(`; on return it is past the `)` and the result is the operand count.
+// This body existed THREE times (emit_bl_call, emit_call_fn, emit_call_packed) -- a
+// file-size cost and three places for one fix to be applied twice. `cname` is the DIRECT
+// callee's name for A8's argument check, or 0 for an indirect call whose target is a value
+// and whose param types are unknowable. `start`: call_packed pushes a placeholder first.
+fn parse_operands(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cname: i64, start: i64) -> i64 {
+  let strn = slen(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let nops = start;
+  let done = 0;
+  while done == 0 {
+    // progress guard: a malformed operand (e.g. "(3,{") must not spin forever
+    let before = pos[0];
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rp = if ch == 41 then 1 else 0;
+    let apos0 = pos[0];
+    let _ = if is_rp == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    // A8 check (3), which also IS check (5): the argument's inferred type against the
+    // callee's DECLARED parameter type. `[u32]` (tag 4) where `[i64]` (tag 1) is declared
+    // is the same comparison as `str` where `i64` is declared. Silent when either side is
+    // unknown, and skipped entirely for an indirect call.
+    let chk = (1 - is_rp) * (if cname == 0 then 0 else 1);
+    let _ = if chk == 1 then (if ty_clash(fntab[7110], callee_param_type(s, cname, nops, fntab, strn)) == 1 then diag_exit(s, apos0, 84) else 0) else 0;
+    let nops = nops + (1 - is_rp);
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let at_end2 = if pos[0] >= strn then 1 else 0;
+    // T90 step 2: after an operand only `,` or `)` may follow (lax d08: `g(k, e]`
+    // compiled -- the progress guard consumed `]` as the closing paren)
+    let bad2 = (1 - is_comma) * (if ch2 == 41 then 0 else 1) * (1 - at_end2);
+    let _ = if bad2 == 1 then diag_exit(s, pos[0], 95) else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let stuck = if pos[0] > before then 0 else 1;
+    let done = if is_rp + at_end + stuck >= 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  nops
+}
+
+// A real cross-function call via bl: eval args -> x0..x(n-1), bl target, push.
+fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  // A21 step 1: a fn declared with k > 1 return values may only be called as the
+  // whole RHS of a destructuring `let`, which publishes its name in fntab[7102].
+  // Anywhere else x1..x(k-1) would be dropped silently -- exactly the "reads
+  // garbage" failure the arity table exists to make impossible.
+  let cpos = pos[0];
+  let _ = if unit_has_tuple_fn(s, fntab, strn) == 1 then (if name == fntab[7102] then 0 else (if fn_ret_arity(s, name, fntab, strn) > 1 then diag_exit(s, cpos, 120) else 0)) else 0;
+  let nargs = parse_operands(s, pos, insns, n, stab, selfname, selfstart, fntab, name, 0);
+  // F2: check parameter arity -- user fns only (builtins have no fntab entry)
+  let sp = ft_srcpos(fntab, name);
+  let _ = if sp >= 0 then (let parity = fn_param_arity(s, name, fntab, strn) in if nargs != parity then diag_exit(s, cpos, 93) else 0) else 0;
+  // Every window temp deeper than the args survives the call in cs/slot;
+  // then a parallel move places the args into x0..x(nargs-1) (params 9-14
+  // arrive in x8..x13, so target register == argument index uniformly).
+  let base = fntab[5387] - nargs;
+  let _ = vs_park(insns, n, fntab, stab, nargs);
+  let _ = vs_place_args(insns, n, fntab, stab, base, nargs);
+  let i = [nargs - 1];
+  while i[0] >= 0 {
+    let _ = vs_pop(fntab);
+    let _ = i[0] = i[0] - 1;
+    0
+  };
+  let tgt0 = fntab_lookup(fntab, name);
+  let target = if name == selfname then selfstart else tgt0;
+  // B1 (2026-09-06): fntab[3668]/[1801] are the current fn's own call-site
+  // counter and skip-save flag (0 = save, matches the pre-B1 unconditional
+  // behaviour and is the default in any fntab this mechanism never touches;
+  // 1 = the caller's own facts say it never needs x15/x14 preserved).
+  let _ = fntab[3668] = fntab[3668] + 1;
+  let _ = emit_bl(insns, n, target, 1 - fntab[3669]);
+  // x1..x7 are free (parked); x0 holds the result. `bl` has no destination
+  // field to retarget, so p = -1.
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// Parallel move of the nargs argument tags (window indices base..base+nargs-1)
+// into x0..x(nargs-1) (spec fix 2026-09-06, §3.8 was under-specified): each
+// pass places every entry whose target register is free (materialising it
+// there -- a plain SYM/CS/CONST/SLOT/FLAGS entry has no register of its own
+// to free, so it is left for vs_mat to place directly once its target opens
+// up). If a pass places nothing, the remaining args form a genuine register
+// cycle among REG/MULC-window entries (arg i's register is arg j's target);
+// break it by evicting ONE cycle member into the scratch x16 (outside both
+// masks -- vs_find_blocker only ever names a REG/MULC-window entry, so this
+// always frees a real register and the recursion-free bound (2*nargs+2
+// passes) always settles). L8: all loop-carried state is hoisted above the
+// while bodies.
+fn vs_place_args(insns: [i64], n: [i64], fntab: [i64], stab: [i64], base: i64, nargs: i64) -> i64 {
+  let progress = [1];
+  let i = [0];
+  let pass = [0];
+  let j = [0 - 1];
+  let bound = 2 * nargs + 2;
+  while (progress[0] == 1) * (if pass[0] < bound then 1 else 0) {
+    let _ = progress[0] = 0;
+    let _ = i[0] = 0;
+    while i[0] < nargs {
+      let idx = base + i[0];
+      let is_placed = (if vs_entry_kind(fntab, idx) == 2 then 1 else 0) * (if vs_entry_p0(fntab, idx) == i[0] then 1 else 0);
+      let target_free = if vs_find_owning(fntab, i[0], idx) < 0 then 1 else 0;
+      let _ = if is_placed == 0 then (if target_free == 1 then (let _ = vs_mat(insns, n, fntab, stab, idx, i[0]) in (let _ = progress[0] = 1 in 0)) else 0) else 0;
+      let _ = i[0] = i[0] + 1;
+      0
+    };
+    let _ = j[0] = if progress[0] == 0 then vs_find_blocker(fntab, base, nargs) else 0 - 1;
+    let _ = if j[0] >= 0 then (let _ = vs_mat(insns, n, fntab, stab, base + j[0], 16) in (let _ = progress[0] = 1 in 0)) else 0;
+    let _ = pass[0] = pass[0] + 1;
+    0
+  };
+  let _ = if vs_find_unplaced(fntab, base, nargs) >= 0 then sys_exit(89) else 0;
+  0
+}
+fn vs_find_unplaced(fntab: [i64], base: i64, nargs: i64) -> i64 {
+  let i = [0];
+  let found = [0 - 1];
+  while i[0] < nargs {
+    let idx = base + i[0];
+    let placed = (if vs_entry_kind(fntab, idx) == 2 then 1 else 0) * (if vs_entry_p0(fntab, idx) == i[0] then 1 else 0);
+    let _ = if placed == 0 then (if found[0] < 0 then found[0] = idx else 0) else 0;
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  found[0]
+}
+// The first arg (index 0..nargs-1) whose CURRENT register blocks another
+// arg's target: a REG or MULC-window entry (owns a real register) sitting
+// on a register < nargs that isn't its own index. One must exist whenever
+// a pass makes no progress (else every target would already be free).
+fn vs_find_blocker(fntab: [i64], base: i64, nargs: i64) -> i64 {
+  let i = [0];
+  let found = [0 - 1];
+  while i[0] < nargs {
+    let e = base + i[0];
+    let k = vs_entry_kind(fntab, e);
+    let p0 = vs_entry_p0(fntab, e);
+    let is_reg_or_mulc = (if k == 2 then 1 else 0) + (if k == 6 then (if p0 < 8 then 1 else 0) else 0);
+    let is_blocker = is_reg_or_mulc * (if p0 < nargs then 1 else 0) * (if p0 != i[0] then 1 else 0);
+    let _ = if found[0] < 0 then (if is_blocker == 1 then found[0] = i[0] else 0) else 0;
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  found[0]
+}
+
+// Builtin operand delivery (replaces the old `pop k;...;pop 0` sequence):
+// park everything below the nops operands, place them into x0..x(nops-1)
+// via the same parallel-move as a call (identical order: "top -> x<nops-1>"
+// is argument nops-1 -> x<nops-1>, matching today exactly), then drop the
+// tags (the hand-word block below may clobber x0..x13 and the flags freely).
+fn vs_deliver(insns: [i64], n: [i64], fntab: [i64], stab: [i64], nops: i64) -> i64 {
+  let base = fntab[5387] - nops;
+  let _ = vs_park(insns, n, fntab, stab, nops);
+  let _ = vs_place_args(insns, n, fntab, stab, base, nops);
+  let i = [nops - 1];
+  while i[0] >= 0 {
+    let _ = vs_pop(fntab);
+    let _ = i[0] = i[0] - 1;
+    0
+  };
+  0
+}
+
+// Self-recursive call: same N-argument path as any resolved callee, target =
+// selfstart (T42 2026-09-04: this used to parse exactly ONE argument and
+// strand pos on the first `,` -- every multi-arg recursion (gcd, ackermann)
+// silently returned garbage; only 1-arg recursion (c09 factorial) was right).
+fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  emit_bl_call(s, selfname, pos, insns, n, stab, selfname, selfstart, fntab)
+}
+
+// hvham(a, b, n): NEON popcount of a^b over floor(n/8)*8 words.
+// Single-path loop form (works for any n%8==0). Dossier: BUGFIXES.md.
+fn emit_hvham(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
+  // ldp q0,q1 covers 32 BYTES = 4 words per iteration -> divide by 4
+  let _ = em(insns, n, 3544382532);
+  let _ = em(insns, n, 3019899236);
+  let _ = em(insns, n, 1325458436);
+  let _ = em(insns, n, 2898330624);
+  let _ = em(insns, n, 2898332706);
+  let _ = em(insns, n, 1847729152);
+  let _ = em(insns, n, 1847794721);
+  let _ = em(insns, n, 1310742528);
+  let _ = em(insns, n, 1310742561);
+  let _ = em(insns, n, 1310753924);
+  let _ = em(insns, n, 1310819460);
+  let _ = em(insns, n, 3506439300);
+  let _ = em(insns, n, 3053453028);
+  let _ = em(insns, n, 1848653957);
+  let _ = em(insns, n, 235027622);
+  let _ = em(insns, n, 2852520928);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// hvham2(a, ao, b, bo, n): NEON hamming with row offsets — no bounce copy.
+fn emit_hvham2(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  // non-sequential target registers (a->x0, ao->x6, b->x1, bo->x5, n->x3):
+  // deliver sequentially (a->x0, ao->x1, b->x2, bo->x3, n->x4) then shuffle
+  // with plain register moves into the real targets.
+  let _ = vs_deliver(insns, n, fntab, stab, 5);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  // A5 step 1b: cell argument -> address, add x2,x17,x2,lsl #3.
+  let _ = em(insns, n, 2332167714);
+  let _ = em(insns, n, 2852193254);
+  let _ = em(insns, n, 2852258785);
+  let _ = em(insns, n, 2852324325);
+  let _ = em(insns, n, 2852389859);
+  let _ = em(insns, n, 2332363809);
+  let _ = em(insns, n, 2332429312);
+  let _ = em(insns, n, 2852324322);
+  let _ = em(insns, n, 1325458436);
+  let _ = em(insns, n, 3544382532);
+  let _ = em(insns, n, 3019899236);
+  let _ = em(insns, n, 2898330624);
+  let _ = em(insns, n, 2898332706);
+  let _ = em(insns, n, 1847729152);
+  let _ = em(insns, n, 1847794721);
+  let _ = em(insns, n, 1310742528);
+  let _ = em(insns, n, 1310742561);
+  let _ = em(insns, n, 1310753924);
+  let _ = em(insns, n, 1310819460);
+  let _ = em(insns, n, 3506439300);
+  let _ = em(insns, n, 3053453028);
+  let _ = em(insns, n, 1848653957);
+  let _ = em(insns, n, 235027622);
+  let _ = em(insns, n, 2852520928);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_open(p,n,flags): pack byte-per-element path into the IO scratch zone
+// (last 8 KiB below x28), then raw openat. Words assembler+execution-verified.
+fn emit_sys_open(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  em(insns, n, 2852127723);
+  em(insns, n, 2852193261);
+  em(insns, n, 2852258796);
+  em(insns, n, 3531866122);
+  em(insns, n, 3406431114);
+  em(insns, n, 3531603977);
+  em(insns, n, 3943498047);
+  em(insns, n, 1409286314);
+  em(insns, n, 4167661927);
+  em(insns, n, 942238023);
+  em(insns, n, 2432697641);
+  em(insns, n, 402653179);
+  em(insns, n, 942500191);
+  em(insns, n, 2457865312);
+  em(insns, n, 2852783073);
+  em(insns, n, 2852914146);
+  em(insns, n, 3531617411);  // mov x3, #0o644 = openat mode (was #0: files got mode 000, proot chmod races -> EACCES rc=90, journal 1788641800)
+  em(insns, n, 3531605768);
+  em(insns, n, 3556769793);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_read(fd,buf,len): raw read into scratch, unpack bytes to element slots.
+fn emit_sys_read(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
+  em(insns, n, 2852127723);
+  em(insns, n, 2852193260);
+  em(insns, n, 3531866122);
+  em(insns, n, 3406431114);
+  em(insns, n, 2852848608);
+  em(insns, n, 2852783073);
+  em(insns, n, 3531605992);
+  em(insns, n, 3556769793);
+  em(insns, n, 2852127725);
+  em(insns, n, 3531603977);
+  em(insns, n, 3943498047);
+  em(insns, n, 1409286314);
+  em(insns, n, 946432327);
+  em(insns, n, 4163467655);
+  em(insns, n, 2432697641);
+  em(insns, n, 402653179);
+  em(insns, n, 2852979680);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_write(fd,buf,len): pack low bytes of elements to scratch, raw write.
+fn emit_sys_write(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
+  em(insns, n, 2852127723);
+  em(insns, n, 2852258797);
+  em(insns, n, 3531866122);
+  em(insns, n, 3406431114);
+  em(insns, n, 3531603977);
+  em(insns, n, 3943498047);
+  em(insns, n, 1409286314);
+  em(insns, n, 4167661607);
+  em(insns, n, 942238023);
+  em(insns, n, 2432697641);
+  em(insns, n, 402653179);
+  em(insns, n, 2852783073);
+  em(insns, n, 2852848608);
+  em(insns, n, 3531606024);
+  em(insns, n, 3556769793);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_close(fd): raw close.
+fn emit_sys_close(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 1);
+  em(insns, n, 3531605800);
+  em(insns, n, 3556769793);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_exit(code): raw exit_group — noreturn, nothing pushed.
+fn emit_sys_exit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 1);
+  // 2026-09-12: this word was 3531606952 = 0xd2800ba8 = `movz x8,#93`, and syscall 93 is
+  // EXIT -- it ends the calling THREAD only -- while the comment above has always claimed
+  // exit_group. Inside a CLONE_THREAD child (flags 68864) that meant st_alloc_p's
+  // sys_exit(80) killed just the thread, its done flag was never set, and the parent waited
+  // for ever: a dead thread indistinguishable from a slow one, the costliest failure shape
+  // in this project's record. 3531606984 = 0xd2800bc8 = `movz x8,#94` = exit_group, derived
+  // by as+objdump per law L1 and never from memory. emit_sys_exit_thread_guard keeps #93
+  // deliberately -- that one IS meant to end only its own thread.
+  let _ = em(insns, n, 3531606984);
+  let _ = em(insns, n, 3556769793);
+  // BUGFIX (2026-09-06, bug 9 hunt, exit-107): sys_exit(...) is a NORETURN
+  // builtin (raw svc, never returns to the caller) so it used to push
+  // nothing -- harmless historically since the code path following it is
+  // unreachable, but it desyncs the window's entry count whenever
+  // sys_exit(...) is used AS AN EXPRESSION (e.g. the else-branch of
+  // `if cond then 0 else sys_exit(64)`, main.bp's own argc guard): the
+  // enclosing if-expression's machinery expects exactly one value on top
+  // of the window after compiling either branch. Push a dummy result
+  // (x0, matching every real call's convention) so the bookkeeping stays
+  // consistent even though this value can never actually be read.
+  vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
+}
+
+// clock_ms(): CLOCK_MONOTONIC via raw svc; ms = sec*1000 + nsec/1000000.
+// timespec parked at x28-8208 (below the 8 KiB IO scratch zone).
+fn emit_clock_ms(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  // R3.x(e) FIX: the zero-arg builtin consumed `()` AND the trailing ';' -
+  // the extra skip ate the first char of the NEXT statement (`let i` became
+  // `et i` -> unbound-ident reads, hangs/segfaults). Only the parens belong
+  // to the builtin; the ';' is the statement layer's.
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 0);
+  em(insns, n, 3531866625);
+  em(insns, n, 3405841281);
+  em(insns, n, 3531604000);
+  em(insns, n, 3531607592);
+  em(insns, n, 3556769793);
+  em(insns, n, 4181721124);
+  em(insns, n, 4181722149);
+  em(insns, n, 3531635974);
+  em(insns, n, 2600893572);
+  em(insns, n, 3531739655);
+  em(insns, n, 4070572519);
+  em(insns, n, 2596735141);
+  em(insns, n, 2332360832);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+

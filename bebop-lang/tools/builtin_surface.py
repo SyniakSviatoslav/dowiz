@@ -38,13 +38,14 @@ import sys
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, 'tools'))
+import bp_src   # 2026-09-29 split: bebop.bp is read WITH its compiler/*.bp includes
 M64 = (1 << 64) - 1
 
 
 def read(rel):
     p = os.path.join(ROOT, rel)
-    with open(p, encoding='utf-8', errors='replace') as f:
-        t = f.read()
+    t = bp_src.read(p)
     if not t.strip():
         sys.exit('builtin_surface: %s is empty -- refusing to report a surface from nothing' % rel)
     return t

@@ -1,0 +1,640 @@
+// bebop-lang/compiler/sys_builtins.bp -- part of the self-hosting compiler, NOT a standalone program.
+// Split out of bebop.bp (was bebop.bp:1867-2500 at 64d2d5cd, 2026-09-29, operator: "split in files")
+// and pulled back in by bebop.bp's `use` lines IN ORDER: use_expand places every include ahead
+// of the main text, so only a prefix of the compiler can live here and the order of these
+// files is the order of the functions in the binary. Contents: the T45 thread/arena/syscall builtins and the other fixed-word builtin emitters.
+
+// ---- T45 (2026-09-04): thread/arena builtins ported verbatim from the legacy
+// selfhost/expr_compile.bp (now attic). Word tables per L2; check_abi allowlists
+// every em() inside fn emit_sys_* (clone re-homes x14/x15/x27/x28 for the child).
+// sys_arena_base(): mov x0, x27 — the seed loader's arena cursor
+// (post-argv). x27/x28 are reserved by the register protocol and survive
+// into the program; callers derive shared cell addresses as
+// sys_arena_base() + idx * 8. Assembler-verified (m6.s).
+// ROADMAP A6 (2026-09-08): this used the ORR form `mov x0,x27` (2853897184).
+// A6 makes that exact word the SENTINEL for "this fn allocates an aggregate on
+// the arena cursor" (count_word in emit_while_stmt / compile_fn_at_total_saved
+// is an exact 32-bit match), so sys_arena_base() would have false-positived as
+// an allocation. Retargeted onto the ADD alias `add x0,x27,xzr` (2334065504),
+// which is bit-identical in effect, sets no flags, and is already the word
+// emit_zeros uses for the same move -- so it is not, and never was, a sentinel.
+fn emit_sys_arena_base(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 0);
+  // A5 step 1b: the cursor is returned as a cell INDEX -- sub x0,x27,x17
+  // (3406889824) ; lsr x0,x0,#3 (3544448000). "base" still means CURSOR (the
+  // store and pool code read it that way); only the units changed.
+  let _ = em(insns, n, 3406889824);
+  let _ = em(insns, n, 3544448000);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_arena_end(): mov x0, x28 — arena limit (seed loader's x28).
+fn emit_sys_arena_end(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 0);
+  // A5 step 1b: the arena end as a cell INDEX -- sub x0,x28,x17 (3406889856) ;
+  // lsr x0,x0,#3 (3544448000).
+  let _ = em(insns, n, 3406889856);
+  let _ = em(insns, n, 3544448000);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_clone(flags, stack_top): raw clone. x0=flags, x1=stack_top, x2..x5=0.
+// Returns child tid in the parent, 0 in the child. The child continues at
+// the same instruction stream with the caller's registers (VM shared), so
+// the worker must branch on r==0 and finish with sys_exit_thread.
+// Register table: x0=flags (arg0), x1=stack_top (arg1), x2..x5=xzr, x8=220.
+fn emit_sys_clone(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let srcpos = pos[0];
+  // A19 step 1 (2026-09-13). MEASURED, not assumed: 8 symbols kept across a sys_clone -> both
+  // children correct; 9 -> one child silently lost; 11 -> both. The mechanism is now measured
+  // too -- lane L22's probe read the 9th symbol as 0 in the child on all five runs, which is the
+  // FRESH x15 frame (the child re-homes x15 onto its own stack, so a symbol the allocator
+  // SPILLED before the spawn reads 0 there). It is NOT the "shared frame" story that circulated
+  // for a day: selfhost/std/pool.bp:6-7 says spilled slots are per-thread, and it is right.
+  //
+  // The metric is `stab[0]`, the number of symbols bound SO FAR -- which in a one-pass compiler
+  // is exactly the set bound BEFORE this spawn, i.e. tools/arch_check.py CHECK 20's rule. The
+  // withdrawn trap 103 used FUNCTION-WIDE counters (fntab[5393] + fntab[5391]) and that is why
+  // it refused working programs and had to be removed; a function-wide count is not a
+  // point-specific one, and re-deriving it here would repeat the same mistake.
+  let _ = if stab[0] > 8 then diag_exit(s, srcpos, 109) else 0;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
+  let _ = em(insns, n, 2854159330);
+  let _ = em(insns, n, 2854159331);
+  let _ = em(insns, n, 2854159332);
+  let _ = em(insns, n, 2854159333);
+  let _ = em(insns, n, 2457660449);
+  let _ = em(insns, n, 3531611016);
+  let _ = em(insns, n, 3556769793);
+  // A6 step 2 commit B (2026-09-09): the clone child no longer re-homes x14 --
+  // it is a dead register since step 1 deleted the frame heap. x15/x27/x28 still
+  // are. The child's x15 stays sp+256: that is a FRESH 12 MiB stack, not this
+  // fn's frame, so it is deliberately independent of frame_x15off.
+  // THE SKIP LENGTH IS COUPLED TO THE BLOCK: this `cbnz x0` is the PARENT's
+  // branch OVER the child's re-home words, so dropping one word must shorten it
+  // from `.+20` (3036676256) to `.+16` (3036676224), as+objdump-derived. Getting
+  // this wrong is silent -- the parent lands one word past the block, mid-stream:
+  // bisected 2026-09-09 from c84_run (got 0, want 1035) and the two gb_pool
+  // gates, all three of which go through sys_run/sys_clone, with a two-variant
+  // control that cleared the has_spills change of any part in it.
+  let _ = em(insns, n, 3036676224);
+  let _ = em(insns, n, 2432959471);
+  let _ = em(insns, n, 2437940219);
+  // T118 (2026-09-05): the child arena is [sp+4 MiB, sp+12 MiB) -- the arena
+  // trap exposed that x28 = sp+8 MiB left par_compile's in-thread compiler
+  // (slurp 3.2 MB + insns 2 MB + tables) only 4 MiB, which it silently overran
+  // before; 12 MiB still leaves 4 MiB of stack for the next 16 MiB-pitched worker.
+  let _ = em(insns, n, 2440037372);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_cond_set(cond, arr, idx, val): *arr[idx] = val iff cond != 0.
+// Real cbz inside: both threads may execute it, only the guard-matching
+// one writes — no branchless speculation, no lost updates on shared cells.
+// Register table: x0=cond (arg0), x1=arr (arg1), x2=idx (arg2),
+// x3=val (arg3); cbz x0,+3; add x1,x1,x2<<3; str x3,[x1]; mov x0,xzr.
+fn emit_sys_cond_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 4);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
+  let _ = em(insns, n, 3019898976);
+  let _ = em(insns, n, 2332167201);
+  let _ = em(insns, n, 4177526819);
+  let _ = em(insns, n, 2854159328);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_futex_wait_guard(cond, arr, idx, val): FUTEX_WAIT on arr[idx] iff
+// cond == 0 (the parked/waiting side), else return cond untouched. Real
+// cbnz (0xB5000100 = cbnz x0,+8 words): x0=cond (arg0), x1=arr, x2=idx,
+// x3=val; mov x0,x1; add x0,x0,x2<<3; x1=0 (WAIT); x2=val; x3=0; x8=98;
+// svc; mov x0,xzr. (The legacy comment said "iff cond != 0" - wrong; a
+// worker that parks passes r (0 in the child), see D4-clone-3.)
+fn emit_sys_futex_wait_guard(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 4);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
+  let _ = em(insns, n, 3036676352);
+  let _ = em(insns, n, 2852193248);
+  let _ = em(insns, n, 2332167168);
+  let _ = em(insns, n, 2854159329);
+  let _ = em(insns, n, 2852324322);
+  let _ = em(insns, n, 2854159331);
+  let _ = em(insns, n, 3531607112);
+  let _ = em(insns, n, 3556769793);
+  let _ = em(insns, n, 2854159328);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_futex_wake(arr, idx, n): futex WAKE n waiters on arr[idx].
+// Register table: x0=base (arg0), x1=idx (arg1), x2=n (arg2),
+// then x0+=x1<<3, x1=1 (FUTEX_WAKE), x3=0, x8=98.
+fn emit_sys_futex_wake(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  let _ = em(insns, n, 2332101632);
+  let _ = em(insns, n, 3531604001);
+  let _ = em(insns, n, 2854159331);
+  let _ = em(insns, n, 3573758911);
+  let _ = em(insns, n, 3531607112);
+  let _ = em(insns, n, 3556769793);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_atomic_add(arr, idx, val): LSE LDADDAL — *arr[idx] += val atomically,
+// returns the OLD value (full barrier). Register table: x0=arr (arg0),
+// x1=idx (arg1), x2=val (arg2); add x0,x0,x1<<3; ldaddal x2,x1,[x0];
+// mov x0,x1.
+fn emit_sys_atomic_add(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  let _ = em(insns, n, 2332101632);
+  let _ = em(insns, n, 4175560705);
+  let _ = em(insns, n, 2852193248);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_exit_thread_guard(cond, code): raw thread exit (svc 93 = exit; T127 2026-09-05:
+// it emitted 94 = exit_group on AArch64 and killed the whole process) iff
+// cond != 0 — the worker dies alone, the parent skips (real cbz) and
+// returns 0. Never speculate this: svc 94 would kill the main thread.
+fn emit_sys_exit_thread_guard(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  let _ = em(insns, n, 3019899008);
+  let _ = em(insns, n, 2852193248);
+  let _ = em(insns, n, 3531606952);
+  let _ = em(insns, n, 3556769793);
+  let _ = em(insns, n, 2854159328);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_setaffinity(arr, idx): sched_setaffinity(0, 8, &arr[idx]) -- pin the calling
+// thread to the CPU mask in arr[idx] (T72, 2026-09-05). Register table: x0=arr
+// (arg0), x1=idx (arg1); add x0,x0,x1,lsl #3; mov x2,x0; mov x0,xzr (pid 0 =
+// self); mov x1,#8 (cpusetsize); mov x8,#122; svc. Returns the syscall result.
+fn emit_sys_setaffinity(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  let _ = em(insns, n, 2332101632);
+  let _ = em(insns, n, 2852127714);
+  let _ = em(insns, n, 2854159328);
+  let _ = em(insns, n, 3531604225);
+  let _ = em(insns, n, 3531607880);
+  let _ = em(insns, n, 3556769793);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// clz(x): count leading zeros of the 64-bit word, clz(0) = 64 (T105, 2026-09-05).
+// pop x0; clz x0,x0 (0xDAC01000); push. Seeds the Newton isqrt in prelude/fp.bp.
+fn emit_clz(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 1);
+  let _ = em(insns, n, 3670020096);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// scan(s, pos, class) -> new pos (A9 step 3, scalar form). Advances pos[0] over bytes whose
+// class matches: 0 = whitespace (' ' \t \n \r), 1 = ident [0-9A-Za-z_], 2 = not-'"'-not-'\\',
+// anything else = 3 = not-'\n'. x0 = s (raw byte base, same address form as char()), x1 = the
+// pos array, x2 = class (a runtime value, not a compile-time constant). The scan STOPS at
+// pos[1] -- the caller's length bound -- so no byte past pos[1] is ever read (the over-read
+// slack rule of the blueprint is not needed for the scalar form). pos[0] is written back and
+// the same value is returned in x0. bpref stub (tools/bpref.py 'scan') mirrors all of this,
+// bound included. Words: $BEBOP_TMP/words.objdump (as + objdump, 46 words).
+fn emit_sys_scan(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
+  let _ = em(insns, n, -113246173);
+  let _ = em(insns, n, -113245148);
+  let _ = em(insns, n, -352059265);
+  let _ = em(insns, n, 1409287466);
+  let _ = em(insns, n, 946038789);
+  let _ = em(insns, n, -251658145);
+  let _ = em(insns, n, 1409286465);
+  let _ = em(insns, n, 1895858367);
+  let _ = em(insns, n, 1409287232);
+  let _ = em(insns, n, 1895834815);
+  let _ = em(insns, n, 1409287168);
+  let _ = em(insns, n, 1895835839);
+  let _ = em(insns, n, 1409287104);
+  let _ = em(insns, n, 1895838911);
+  let _ = em(insns, n, 1409287040);
+  let _ = em(insns, n, 335544349);
+  let _ = em(insns, n, -251657121);
+  let _ = em(insns, n, 1409286657);
+  let _ = em(insns, n, 1895922879);
+  let _ = em(insns, n, 1409286880);
+  let _ = em(insns, n, 1895874751);
+  let _ = em(insns, n, 1409286891);
+  let _ = em(insns, n, 1895883967);
+  let _ = em(insns, n, 1409286765);
+  let _ = em(insns, n, 1895892159);
+  let _ = em(insns, n, 1409286763);
+  let _ = em(insns, n, 1895917759);
+  let _ = em(insns, n, 1409286637);
+  let _ = em(insns, n, 1895924927);
+  let _ = em(insns, n, 1409286635);
+  let _ = em(insns, n, 1895950527);
+  let _ = em(insns, n, 1409286509);
+  let _ = em(insns, n, 335544332);
+  let _ = em(insns, n, -251656097);
+  let _ = em(insns, n, 1409286337);
+  let _ = em(insns, n, 1895860415);
+  let _ = em(insns, n, 1409286400);
+  let _ = em(insns, n, 1895919807);
+  let _ = em(insns, n, 1409286336);
+  let _ = em(insns, n, 335544323);
+  let _ = em(insns, n, 1895835839);
+  let _ = em(insns, n, 1409286240);
+  let _ = em(insns, n, -1862269853);
+  let _ = em(insns, n, 402653143);
+  let _ = em(insns, n, -117440477);
+  let _ = em(insns, n, -1442642976);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// crc32(cells, n): zlib crc32 of n bytes held one per cell (T109, 2026-09-05), on the
+// hardware CRC32B unit: pop x1 = n, pop x0 = cells; movn w2,#0; L: cbz x1,done;
+// ldr x3,[x0],#8; crc32b w2,w2,w3; sub x1,x1,#1; b L; done: orn w0,wzr,w2; push.
+// Bytes-in-cells is the language's byte form (sys_read, sys_export, str_to_cells),
+// so crc.bp / tb.bp folds are unchanged; ~1 cell per cycle.
+fn emit_crc32(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  let _ = em(insns, n, 310378498);
+  let _ = em(insns, n, 3019899041);
+  let _ = em(insns, n, 4164977667);
+  let _ = em(insns, n, 449003586);
+  let _ = em(insns, n, 3506439201);
+  let _ = em(insns, n, 402653180);
+  let _ = em(insns, n, 706872288);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// crc32x(cells, off, n): zlib crc32 of the RAW little-endian bytes of n cells starting
+// at cells[off] (T109b, 2026-09-05) -- the store's integrity crc with no staging
+// (8 B per CRC32X). pop x2 = n, pop x1 = off, pop x0 = cells; add x0,x0,x1,lsl #3;
+// movn w3,#0; L: cbz x2,done; ldr x4,[x0],#8; crc32x w3,w3,x4; sub x2,x2,#1; b L;
+// done: orn w0,wzr,w3; push. Equals zlib.crc32(struct.pack('<%dq' % n, cells)).
+fn emit_crc32x(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  let _ = em(insns, n, 2332101632);
+  let _ = em(insns, n, 310378499);
+  let _ = em(insns, n, 3019899042);
+  let _ = em(insns, n, 4164977668);
+  let _ = em(insns, n, 2596555875);
+  let _ = em(insns, n, 3506439234);
+  let _ = em(insns, n, 402653180);
+  let _ = em(insns, n, 706937824);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// A8 step 2 / A9 (2026-09-14): smulh(a,b) / umulh(a,b) -- the HIGH 64 bits of a 128-bit
+// product, signed and unsigned. Two-argument register builtins, i.e. emit_crc32x's shape
+// with one (emit_cmp, skip_ws, pos+1) triple dropped and vs_deliver's arity 2 (x0, x1).
+// smulh x0,x0,x1 = 0x9b417c00, umulh x0,x0,x1 = 0x9bc17c00 -- both assembler-verified
+// with `as` + `objdump -d` (AGENTS.md T3).
+fn emit_smulh(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  let _ = em(insns, n, 2604760064);
+  vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
+}
+fn emit_umulh(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  let _ = em(insns, n, 2613148672);
+  vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
+}
+
+// crc32b(s): zlib crc32 of the bytes of the NUL-terminated string s (ROADMAP A7
+// step 1, 2026-09-09) -- the first handle-shaped string builtin. Under today's
+// raw-pointer strings s is a byte pointer already, so unlike crc32/crc32x there
+// is NO x17 cell-index conversion: movn w1,#0; L: ldrb w2,[x0],#1; cbz w2,done;
+// crc32b w1,w1,w2; b L; done: orn w0,wzr,w1; push. The contract (crc over
+// exactly str_len(s) bytes) is repr-independent: when A7 step 2 makes `str` a
+// handle the loop gains an lsr/add prologue and this EXPECT stays valid.
+// Words as+objdump-verified (0x12800001 movn w1, 0x38401402 ldrb w2,[x0],#1,
+// 0x34000062 cbz w2,+3, 0x1ac24021 crc32b w1,w1,w2, 0x17fffffd b -3,
+// 0x2a2103e0 orn w0,wzr,w1).
+fn emit_crc32b(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 1);
+  let _ = em(insns, n, 310378497);
+  let _ = em(insns, n, 943723522);
+  let _ = em(insns, n, 872415330);
+  let _ = em(insns, n, 448938017);
+  let _ = em(insns, n, 402653181);
+  let _ = em(insns, n, 706806752);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_msync(addr, len, flags): msync (syscall 227) — the store's durability row
+// (T110, 2026-09-05). pop x2 = flags, pop x1 = len, pop x0 = addr; mov x8,#227; svc.
+fn emit_sys_msync(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  let _ = em(insns, n, 3531611240);
+  let _ = em(insns, n, 3556769793);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_mprotect(addr, len, prot): mprotect (syscall 226) — ROADMAP C1 step 1's mapping
+// fence (docs/blueprints/C1-checked-kernel-dialect.md §3(v)). Same three-argument shape as
+// emit_sys_msync above: pop x2 = prot, pop x1 = len, pop x0 = addr; mov x8,#226; svc.
+// Words objdump-verified 2026-09-08 ($BEBOP_TMP/words.objdump: d2801c48 = mov x8,#0xe2,
+// d4000001 = svc #0 — the second is the word emit_sys_msync already emits).
+fn emit_sys_mprotect(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  let _ = em(insns, n, 3531611208);
+  let _ = em(insns, n, 3556769793);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_fsync(fd): fsync (syscall 82) — sync a file descriptor to disk.
+// Syscall 82 on aarch64 (/usr/include/asm-generic/unistd.h:218).
+// pop x0 = fd; mov x8,#82; svc.
+fn emit_sys_fsync(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 1);
+  let _ = em(insns, n, 3531606600);
+  let _ = em(insns, n, 3556769793);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_readbuf(fd,len): allocate zeros(ceil(len/8)) in the byte region,
+// read(fd, x17+off, len), return (off<<32)|nread handle. This replaces the
+// old IO-scratch-zone version — the returned handle feeds char()/str_len()
+// directly (A7 step 3).
+fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  // x0=fd, x1=len. Save both in callee-saved regs, compute n_cells,
+  // bump arena, zero, read, construct handle. 26 words + vs_push.
+  em(insns, n, 2852127731);
+  em(insns, n, 2852193268);
+  em(insns, n, 2432704149);
+  em(insns, n, 3544448693);
+  em(insns, n, 3548246689);
+  em(insns, n, 2853897206);
+  em(insns, n, 2332099287);
+  em(insns, n, 3944154015);
+  em(insns, n, 1409286377);
+  em(insns, n, 2332099451);
+  em(insns, n, 2853569507);
+  em(insns, n, 335544322);
+  em(insns, n, 4160783487);
+  em(insns, n, 3944153215);
+  em(insns, n, 1426063307);
+  em(insns, n, 3406889665);
+  em(insns, n, 2332099108);
+  em(insns, n, 2853372896);
+  em(insns, n, 2852193251);
+  em(insns, n, 2852389857);
+  em(insns, n, 2853438434);
+  em(insns, n, 3531605992);
+  em(insns, n, 3556769793);
+  em(insns, n, 2852127735);
+  em(insns, n, 3546315872);
+  em(insns, n, 2853634048);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// str_len(s): NUL-scan over a raw byte pointer (JIT string contract).
+fn emit_str_len_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 1);
+  em(insns, n, 3531603970);
+  em(insns, n, 945973249);
+  em(insns, n, 872415329);
+  em(insns, n, 2432697410);
+  em(insns, n, 402653181);
+  em(insns, n, 2852258784);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// char(s,i): zero-extended byte load from a raw pointer.
+fn emit_char_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  em(insns, n, 2852193250);
+  em(insns, n, 2852127713);
+  em(insns, n, 945907776);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_slurp(fd,len): arena-allocate round16(len*8) bytes, raw read into it,
+// NUL-terminate at nread, return the base address. Feeds emit_words directly.
+fn emit_sys_slurp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  em(insns, n, 2852193250);
+  em(insns, n, 3548246057);
+  em(insns, n, 2432711977);
+  em(insns, n, 3544513833);
+  em(insns, n, 3548179753);
+  em(insns, n, 2853897194);
+  em(insns, n, 2332623739);
+  em(insns, n, 2852783073);
+  em(insns, n, 3531605992);
+  em(insns, n, 3556769793);
+  em(insns, n, 2852127725);
+  em(insns, n, 942500191);
+  em(insns, n, 2852783072);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}

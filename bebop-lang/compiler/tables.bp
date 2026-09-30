@@ -1,0 +1,708 @@
+// bebop-lang/compiler/tables.bp -- part of the self-hosting compiler, NOT a standalone program.
+// Split out of bebop.bp (was bebop.bp:486-1187 at 64d2d5cd, 2026-09-29, operator: "split in files")
+// and pulled back in by bebop.bp's `use` lines IN ORDER: use_expand places every include ahead
+// of the main text, so only a prefix of the compiler can live here and the order of these
+// files is the order of the functions in the binary. Contents: the DG1 fn-name index, parameter types, emit_ident, the A22 struct/enum table and fntab lookups.
+
+// ---- ROADMAP DG1 (2026-09-28): the O(1) fn-name index ----
+// fntab_lookup / ft_srcpos / ft_name_count were linear scans over the name zone
+// fntab[1..cnt] at EVERY call site (dispatch, arity, A8 param types): fns x calls.
+// The index is open addressing over the name zone, 1024 slots for the 768-fn cap
+// (load <= 0.75), at fntab[7168 + slot] where 7168 = 8192 - 1024: the top of the
+// zeros(8192) table, above tuple_abi (7100..7102) and ety (7110). Slot value
+// v = (idx + 1) + (dups * 1024): idx = the fn index of the LAST definition with that
+// name (the linear scans' "last match wins", kept because insertion runs in index
+// order and a same-name insert overwrites), dups = how many EARLIER definitions share
+// it, so ft_name_count stays exact. idx + 1 <= 768 < 1024, so the two fields never
+// overlap. fntab[7103] = cnt + 1 marks the index BUILT for exactly this cnt: a table
+// built without it (or whose cnt changed after) reads fnh_get = -1 and takes the
+// linear scan, so a missed builder costs time, never an answer.
+// Hash: Fibonacci multiply, top 10 bits (`>>` is LOGICAL here, so 0..1023).
+fn fnh_slot(name: i64) -> i64 { (name * 11400714819323198485) >> 54 }
+fn fnh_idx(v: i64) -> i64 { (v & 1023) - 1 }
+fn fnh_count(v: i64) -> i64 { (v >> 10) + 1 }
+
+// -1 = no index for this table (caller scans), 0 = indexed and absent, v > 0 = the slot value.
+fn fnh_get(fntab: [i64], name: i64) -> i64 {
+  let cnt = fntab[0];
+  let built = if cnt > 0 then (if fntab[7103] == cnt + 1 then 1 else 0) else 0;
+  let j = [fnh_slot(name)];
+  let res = [0 - built];
+  while res[0] < 0 {
+    let v = fntab[7168 + j[0]];
+    let same = if v == 0 then 0 else (if fntab[1 + fnh_idx(v)] == name then 1 else 0);
+    let _ = if v == 0 then (let _ = res[0] = 0 in 0) else 0;
+    let _ = if same == 1 then (let _ = res[0] = v in 0) else 0;
+    let _ = j[0] = (j[0] + 1) & 1023;
+    0
+  };
+  if built == 1 then res[0] else 0 - 1
+}
+
+// Insert fn idx (its name is fntab[1 + idx]); probing ends at the empty slot or the
+// slot already holding that name. Terminates: cnt < 768 < 1024 slots.
+fn fnh_insert(fntab: [i64], idx: i64) -> i64 {
+  let name = fntab[1 + idx];
+  let j = [fnh_slot(name)];
+  let go = [1];
+  while go[0] == 1 {
+    let v = fntab[7168 + j[0]];
+    let same = if v == 0 then 0 else (if fntab[1 + fnh_idx(v)] == name then 1 else 0);
+    let _ = if v == 0 then (let _ = fntab[7168 + j[0]] = idx + 1 in (let _ = go[0] = 0 in 0)) else 0;
+    let _ = if same == 1 then (let _ = fntab[7168 + j[0]] = idx + 1 + fnh_count(v) * 1024 in (let _ = go[0] = 0 in 0)) else 0;
+    let _ = j[0] = (j[0] + go[0]) & 1023;
+    0
+  };
+  0
+}
+
+// Build the index over the name zone fntab[1..cnt]; call once the names are written.
+fn fnh_build(fntab: [i64]) -> i64 {
+  let cnt = fntab[0];
+  let i = [0];
+  while i[0] < cnt {
+    let _ = fnh_insert(fntab, i[0]);
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  let _ = fntab[7103] = cnt + 1;
+  0
+}
+
+// How many fns in the table carry this name? A8 will not type-check a call whose callee is
+// AMBIGUOUS, and the reason is concrete: `ft_srcpos` returns the LAST match while
+// `fntab_lookup` picks the `bl` target, so with two definitions the checker can be reading
+// a different signature from the one the call actually reaches. `fntab_fact_lookup`'s own
+// comment records the same hazard for B1's facts. Silence, not a guess.
+// FOUND BY THIS GUARD, 2026-09-14: selfhost/std/qdsl.bp declares `qdsl_explain` TWICE --
+// :371 as (i64, [i64], [i64], [i64]) -> i64 and :537 as (str) -> str -- so its own
+// recursive call at :382 passes FOUR arguments to whichever the table resolves. See the
+// verdict; that is a corpus defect, not a checker limitation.
+fn ft_name_count(tab: [i64], name: i64) -> i64 {
+  let cnt = tab[0];
+  let hv = fnh_get(tab, name);
+  let i = if hv < 0 then 0 else cnt;
+  let k = if hv > 0 then fnh_count(hv) else 0;
+  while i < cnt {
+    let k = k + (if tab[1 + i] == name then 1 else 0);
+    let i = i + 1;
+    0
+  };
+  k
+}
+
+fn callee_param_type(s: str, name: i64, idx: i64, fntab: [i64], strn: i64) -> i64 {
+  let amb = if ft_name_count(fntab, name) > 1 then 1 else 0;
+  let sp = if amb == 1 then 0 - 1 else ft_srcpos(fntab, name);
+  if sp < 0 then 0 else callee_param_type_at(s, sp, idx, strn)
+}
+
+// The declared RETURN type word of the fn at sp: the text after `->`, classified by the
+// same param_type_word. A tuple return `-> (T, U)` opens with `(`, which classifies as
+// unknown, so a multi-value return is never checked here -- A21's arity check owns it.
+fn fn_ret_type_at(s: str, sp: i64, strn: i64) -> i64 {
+  let q = [sp, strn];
+  let _ = skip_to(s, q, 40);
+  let _ = skip_to(s, q, 41);
+  let j = [q[0] + 1];
+  let cm = [0];
+  let arrow = [0 - 1];
+  let go = 1;
+  while go == 1 {
+    let at_end = if j[0] >= strn then 1 else 0;
+    let c = if at_end == 1 then 0 else char(s, j[0]);
+    let c1 = if j[0] + 1 >= strn then 0 else char(s, j[0] + 1);
+    let is_cmt = (if c == 47 then 1 else 0) * (if c1 == 47 then 1 else 0);
+    let _ = cm[0] = j[0];
+    let _ = if is_cmt == 1 then skip_line_comment_n(s, cm, strn) else 0;
+    let is_arrow = (1 - is_cmt) * (if c == 45 then 1 else 0) * (if c1 == 62 then 1 else 0);
+    let _ = if is_arrow == 1 then (let _ = arrow[0] = j[0] + 2 in 0) else 0;
+    let stop = at_end + (if c == 123 then 1 else 0) + is_arrow;
+    let go = if stop >= 1 then 0 else 1;
+    let _ = j[0] = if is_cmt == 1 then cm[0] else j[0] + 1;
+    0
+  };
+  let e = [if arrow[0] < 0 then 0 else arrow[0], strn];
+  let _ = if arrow[0] >= 0 then skip_to(s, e, 123) else 0;
+  if arrow[0] < 0 then 0 else param_type_word(s, arrow[0], e[0], strn)
+}
+fn fn_ret_type(s: str, name: i64, fntab: [i64], strn: i64) -> i64 {
+  let amb = if ft_name_count(fntab, name) > 1 then 1 else 0;
+  let sp = if amb == 1 then 0 - 1 else ft_srcpos(fntab, name);
+  if sp < 0 then 0 else fn_ret_type_at(s, sp, strn)
+}
+
+// Skip over a param's type annotation up to the next ',' or ')'.
+fn skip_to_delim(s: str, pos: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_comma = if ch == 44 then 1 else 0;
+    let is_rp = if ch == 41 then 1 else 0;
+    let is_delim = is_comma + is_rp;
+    let _ = pos[0] = pos[0] + (1 - is_delim - at_end);
+    let done = if is_delim + at_end >= 1 then 1 else 0;
+    0
+  };
+  0
+}
+
+// Parse a param list (pos at '('): read each param name hash into pnames,
+// advance pos past ')', return the count.
+fn parse_params(s: str, pos: [i64], pnames: [i64], ppos: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  // ---- ROADMAP A16 step 3 (2026-09-14): generics are ERASURE ----
+  // A `[T]` / `[T, U]` between the fn name and the parameter list is SKIPPED and
+  // NOTHING is emitted: `[T]` is `[i64]` for every T, and stays so until cell widths
+  // actually differ -- which is A8's `[u32]` and step 4's monomorphisation, costed and
+  // NOT scheduled. So a type parameter costs ZERO words by construction, not by
+  // measurement. Param types and return types already admit type variables for free:
+  // `x: T` and `x: [T]` are consumed by skip_to_delim below, `-> T` by compile_fn_at's
+  // skip_to('{'), and `-> (T, U)` by fn_ret_arity_tuple, which counts commas and never
+  // reads a type name.
+  // UNAMBIGUOUS: `fn NAME[` occurs 0 times tree-wide for any other reason, so no
+  // program that parses today changes meaning. Done here rather than at compile_fn_at
+  // so that BOTH parse_params call sites (:6639 and :6906) get it from one place.
+  let _ = skip_ws(s, pos);
+  let tv = if pos[0] >= strn then 0 else (if char(s, pos[0]) == 91 then 1 else 0);
+  let _ = if tv == 1 then skip_to(s, pos, 93) else 0;
+  let _ = if tv == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = skip_ws(s, pos) in 0)) else 0;
+  let _ = pos[0] = pos[0] + 1;
+  let pcnt = 0;
+  let done = 0;
+  let first_param_pos = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rp = if ch == 41 then 1 else 0;
+    let is_letter = is_alpha(ch);
+    let _ = if pcnt < 14 then (let _ = ppos[pcnt] = pos[0] in 0) else 0;
+    let _ = if pcnt == 0 then (let _ = first_param_pos = pos[0] in 0) else 0;
+    let name = read_ident(s, pos);
+    let _ = if pcnt < 14 then (let _ = pnames[pcnt] = name in 0) else 0;
+    let pcnt = pcnt + is_letter;
+    let _ = skip_to_delim(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rp + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  let _ = if pcnt > 14 then diag_exit(s, first_param_pos, 100) else 0;
+  pcnt
+}
+
+// Identifier: a function call name(args) or a variable reference.
+fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let npos = pos[0];
+  let name = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let strn = slen(s, pos);
+  // C1 step 2: inside a `kernel fn` (fntab[5543]) any `sys_` name is a compile-time reject,
+  // exit 102 (docs/TRAPS.md) -- the dialect's whole point is that a kernel cannot reach the
+  // kernel. DIAGNOSTIC ONLY: fntab[5543] is 0 for every fn that is not marked, so an
+  // unmarked fn's emitted word stream is unchanged, word for word.
+  let _ = if fntab[5543] == 1 then (if sys_prefix_at(s, npos, strn) == 1 then diag_exit(s, npos, 102) else 0) else 0;
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_lp = if ch == 40 then 1 else 0;
+  let is_br = if ch == 123 then 1 else 0;
+  let is_lb = if ch == 91 then 1 else 0;
+  // T43 rest: a bare `ident {` would eat a while/if body, so `NAME {` is a
+  // literal only when NAME is a table struct (A22: ANY of them, not the one
+  // fntab[5541] hash) and fntab[5542] says we are not in a `while` condition.
+  let si = st_find(s, name, fntab);
+  let is_sname = if si >= 0 then 1 else 0;
+  let struct_ok = is_sname * (1 - fntab[5542]);
+  // A22 step 1: `T.f`/`T.size` on a struct NAME is a COMPILE-TIME CONSTANT (0
+  // words, folds into `add #imm`). A bound symbol of that spelling wins first.
+  let is_dot = if ch == 46 then 1 else 0;
+  let const_ok = if is_dot * is_sname == 1 then (if sym_lookup(s, stab, name, npos) < 0 then 1 else 0) else 0;
+  let rr = if is_lp == 1 then emit_call_or_ctor(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if const_ok == 1 then emit_struct_const(s, si, pos, insns, n, fntab, stab)
+  else if is_br * struct_ok == 1 then emit_struct_lit(s, si, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_lb == 1 then emit_array_index(s, name, npos, pos, insns, n, stab, selfname, selfstart, fntab)
+  else emit_var_or_ctor(s, name, npos, insns, n, stab, fntab);
+  // A8: publish this factor's type. A CALL takes the callee's declared return type (0 for
+  // a builtin, which ft_srcpos does not know -- unknown, so unchecked); `T.f` and an
+  // element load are i64; a struct literal is a cell array; a bare name is its own
+  // recorded type. Written AFTER the dispatch because a builtin's arguments run through
+  // emit_factor and would otherwise leave the last argument's type standing.
+  // A8 step 2: a BUILTIN has no `fn` header, so fn_ret_type returns 0 (unknown) for it and
+  // overwrites whatever the builtin's own emitter published in fntab[7110] -- MEASURED
+  // 2026-09-14: `fn f(x: i64); let t = zeros(3); f(t)` compiles rc=0 today, so emit_zeros's
+  // ety_set(257) never survives to the `let`. zeros32 is named here because its tag is what
+  // SELECTS the 4-byte load/store forms; the ladder is left alone for every other builtin so
+  // no accepted program changes its verdict.
+  let ety = if is_lp == 1 then (if name == 620507756566374 then 260 else fn_ret_type(s, name, fntab, strn))
+    else if const_ok == 1 then 256
+    else if is_br * struct_ok == 1 then 257
+    else if is_lb == 1 then (if (sy_type_get(s, stab, name, npos) & 255) == 5 then 258 else 0)
+    else sy_type_get(s, stab, name, npos);
+  let _ = ety_set(fntab, ety);
+  rr
+}
+
+
+
+// Skip over a struct field's type annotation up to the next ',' or '}'.
+fn skip_to_field_delim(s: str, pos: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_comma = if ch == 44 then 1 else 0;
+    let is_rb = if ch == 125 then 1 else 0;
+    let is_delim = is_comma + is_rb;
+    let _ = pos[0] = pos[0] + (1 - is_delim - at_end);
+    let done = if is_delim + at_end >= 1 then 1 else 0;
+    0
+  };
+  0
+}
+
+// 0-based index of field fname in the struct decl at spos ("struct "), -1 if absent.
+// A22: fcnt[0] = declared field count (one extra pass on `}`, so i - 1).
+fn field_index(s: str, spos: i64, fname: i64, fcnt: [i64]) -> i64 {
+  let strn = str_len(s);
+  let pos = [spos + 7, 0];
+  let _ = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let i = 0;
+  let idx = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch == 125 then 1 else 0;
+    let name = read_ident(s, pos);
+    let is_match = if name == fname then 1 else 0;
+    let idx = if is_match == 1 then i else idx;
+    let i = i + 1;
+    let _ = skip_to_field_delim(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = fcnt[0] = i - 1;
+  idx
+}
+
+// ---- A22 step 1: the program-wide struct table ----
+// fntab[5541] held ONE struct name hash, so every other struct was invisible: its literal
+// parsed as a block and its `.f` resolved against the cached layout. Now ONE pre-pass per
+// unit, above the literal table (E114 caps that below 7000):
+//   fntab[7000]      scanned flag: 0 = not built, 1 = built
+//   fntab[7001]      struct count S (0..32)
+//   fntab[7002 + i]  struct i: name hash (read_ident hash)
+//   fntab[7034 + i]  struct i: byte offset of its `struct` keyword
+// Top cell 7065, inside zeros(8192). Field NAMES are not copied: field k's cell
+// offset IS k, read off the decl text. Caps trap: >32 E115, >16 fields E116
+// (16 = emit_struct_lit's zeros(16) slots).
+fn st_record(s: str, spos: i64, fntab: [i64]) -> i64 {
+  let si = fntab[7001];
+  let _ = if si >= 32 then diag_exit(s, spos, 115) else 0;
+  let pos = [spos + 7, 0];
+  let nm = read_ident(s, pos);
+  let fc = [0];
+  let _ = field_index(s, spos, 0, fc);
+  let _ = if fc[0] > 16 then diag_exit(s, spos, 116) else 0;
+  let _ = fntab[7002 + si] = nm;
+  let _ = fntab[7034 + si] = spos;
+  let _ = fntab[7001] = si + 1;
+  si
+}
+
+// Every `struct ` STARTING A LINE, in source order; a `test ` body is skipped
+// whole (as find_enum does): its decls are not part of the program.
+fn collect_structs(s: str, fntab: [i64]) -> i64 {
+  let strn = str_len(s);
+  let j = 0;
+  let _ = fntab[7001] = 0;
+  let tpc = [0];
+  while j + 6 < strn {
+    let at_bol = if j == 0 then 1 else ceq(s, j - 1, 10);
+    let t0 = at_bol * ceq(s, j, 116) * ceq(s, j + 1, 101);
+    let is_test = t0 * ceq(s, j + 2, 115) * ceq(s, j + 3, 116) * ceq(s, j + 4, 32);
+    let h0 = at_bol * ceq(s, j, 115) * ceq(s, j + 1, 116);
+    let h1 = h0 * ceq(s, j + 2, 114) * ceq(s, j + 3, 117);
+    let hit = h1 * ceq(s, j + 4, 99) * ceq(s, j + 5, 116) * ceq(s, j + 6, 32);
+    let _ = if hit == 1 then st_record(s, j, fntab) else 0;
+    let _ = tpc[0] = if is_test == 1 then find_body_end(s, j + 5, strn) else j;
+    let j = if is_test == 1 then tpc[0] + 1 else j + 1;
+    0
+  };
+  let _ = fntab[7000] = 1;
+  fntab[7001]
+}
+
+// Index of the struct named by hash `name`, or -1. A stored hash is never 0 (an
+// ident starts with a letter), so `name == 0` needs no guard.
+fn st_find(s: str, name: i64, fntab: [i64]) -> i64 {
+  let _ = if fntab[7000] == 0 then collect_structs(s, fntab) else 0;
+  let cnt = fntab[7001];
+  let i = 0;
+  let got = 0 - 1;
+  while i < cnt {
+    let got = if fntab[7002 + i] == name then i else got;
+    let i = i + 1;
+    0
+  };
+  got
+}
+
+// Cell offset of field `fname` in struct `si`, -1 if absent.
+fn st_field(s: str, si: i64, fname: i64, fntab: [i64]) -> i64 {
+  let c = [0];
+  field_index(s, fntab[7034 + si], fname, c)
+}
+
+// `x.f` on a VALUE has no type yet (step 2 tags symbols; needs A8). Step 1's
+// rule: every struct declaring `f` puts it at the SAME offset, so the answer is
+// independent of x's type. That disagreement was silent; it is E117 now.
+fn st_field_any(s: str, fname: i64, npos: i64, fntab: [i64]) -> i64 {
+  let _ = if fntab[7000] == 0 then collect_structs(s, fntab) else 0;
+  let cnt = fntab[7001];
+  let i = 0;
+  let idx = 0 - 1;
+  let bad = 0;
+  while i < cnt {
+    let k = st_field(s, i, fname, fntab);
+    let clash = (if k >= 0 then 1 else 0) * (if idx >= 0 then 1 else 0) * (if k == idx then 0 else 1);
+    let bad = if clash == 1 then 1 else bad;
+    let idx = if k >= 0 then k else idx;
+    let i = i + 1;
+    0
+  };
+  let _ = if bad == 1 then diag_exit(s, npos, 117) else 0;
+  idx
+}
+
+// A22 step 1: `T.f` = field f's cell OFFSET in T, `T.size` = T's field count in
+// CELLS -- COMPILE-TIME CONSTANTS, so emit_lit's CONST push costs ZERO words
+// until consumed and folds into `add #imm`. 260348453 = read_ident's hash of
+// "size"; a real field named `size` wins, looked up first. Unknown field = E101.
+fn emit_struct_const(s: str, si: i64, pos: [i64], insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let fp = pos[0];
+  let c = [0];
+  let fname = read_ident(s, pos);
+  let idx = field_index(s, fntab[7034 + si], fname, c);
+  let v = if idx >= 0 then idx else (if fname == 260348453 then c[0] else 0 - 1);
+  let _ = if v < 0 then diag_exit(s, fp, 101) else 0;
+  emit_lit(insns, n, v, fntab, stab)
+}
+
+// Emit one struct-literal field: read the name, resolve its declaration index
+// (slots[fcnt] = index in STRUCT si's field list), skip ':', emit the value
+// (it stays pushed; emit_struct_lit stores it after the bump).
+fn emit_struct_field(s: str, si: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], fcnt: i64, slots: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let fname = read_ident(s, pos);
+  let idx = st_field(s, si, fname, fntab);
+  let _ = slots[fcnt] = if idx < 0 then fcnt else idx;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  n[0]
+}
+
+// Emit a struct literal NAME { f: v, ... }: the declaration order is the layout
+// (c40 writes the fields out of order on purpose). Every field value is
+// evaluated first (each stays on the stack), THEN mov x0,x14; add x14,#8n
+// (+ the T118 frame trap) and the values are popped into their slots from the
+// last down -- the same order rule as emit_array_lit (T42).
+fn emit_struct_lit(s: str, si: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let slots = zeros(16);
+  let fcnt = 0;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch == 125 then 1 else 0;
+    let _ = if is_rb == 0 then emit_struct_field(s, si, pos, insns, n, stab, fcnt, slots, selfname, selfstart, fntab) else 0;
+    let fcnt = if is_rb == 0 then fcnt + 1 else fcnt;
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  // Deviation from allocate-first (VERDICT: same reasoning as emit_array_lit
+  // -- the literal's field count needs a pre-count the grammar does not
+  // otherwise require).
+  let _ = vs_park(insns, n, fntab, stab, fcnt);
+  let _ = vs_evict(insns, n, fntab, stab, 0);
+  let _ = vs_mask_take(fntab, 0, 2);
+  let _ = em(insns, n, 2853897184);
+  let _ = em(insns, n, 2432696320 + fcnt * 8192 + 891);
+  // ROADMAP A6 (2026-09-08): aggregates allocate at the ARENA CURSOR x27, the
+  // same bump `zeros` uses, and inherit its capacity trap -- cmp x27,x28 ;
+  // b.ls +2 ; brk #80. The T118 frame-heap trap (brk #81) and its helper
+  // emit_heap_trap are DELETED: there is no frame heap any more, so exit 81
+  // cannot be reached and the class is gone rather than merely under budget.
+  let _ = em(insns, n, 3944481663);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869504);
+  let k = [fcnt];
+  while k[0] > 0 {
+    let _ = k[0] = k[0] - 1;
+    let r = vs_reg(insns, n, fntab, stab, fntab[5387] - 1);
+    let _ = em(insns, n, 4177526784 + slots[k[0]] * 1024 + r);
+    let _ = vs_pop(fntab);
+    0
+  };
+  // A5 step 1b: address -> cell index (sub x0,x0,x17 ; lsr x0,x0,#3).
+  let _ = em(insns, n, 3406888960);
+  let _ = em(insns, n, 3544448000);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// Emit a field access .f: pop the base pointer, ldr x0,[x0,#idx*8], push.
+fn emit_field_access(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let fpos = pos[0];
+  let fname = read_ident(s, pos);
+  let idx = st_field_any(s, fname, fpos, fntab);
+  let _ = vs_deliver(insns, n, fntab, stab, 1);
+  // A5 step 1b: the struct VALUE in x0 is a cell INDEX, so the field load is
+  // `add x0,x0,#idx ; ldr x0,[x17,x0,lsl #3]` (the add is dropped for field 0).
+  // Base and destination are both x0, so no scratch register is needed.
+  let _ = if idx > 0 then em(insns, n, 2432696320 + idx * 1024) else 0;
+  let _ = em(insns, n, 4167072288);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// Scan for the first enum declaration ("enum "); record pos in out[0].
+fn find_enum(s: str, out: [i64]) -> i64 {
+  // Lexical scan: skips strings/comments (same discipline as find_fn).
+  // Raw scanning matched "enum " inside comments and string literals of
+  // the compiler's own source -> phantom decl -> collect_ctors loop over
+  // garbage with names[] overrun. Self-source is the first input that
+  // actually contains those tokens.
+  let strn = str_len(s);
+  let j = 0;
+  let found = 0;
+  let best = strn;
+  let spc = [0];
+  let cpc = [0];
+  let tpc = [0];
+  while j + 4 < strn {
+    let c0 = char(s, j);
+    let c1 = char(s, j + 1);
+    let c2 = char(s, j + 2);
+    let c3 = char(s, j + 3);
+    let c4 = char(s, j + 4);
+    let is_quote = if c0 == 34 then 1 else 0;
+    let is_sl = if c0 == 47 then 1 else 0;
+    let is_sl2 = if c1 == 47 then 1 else 0;
+    let is_comment = is_sl * is_sl2;
+    let is_e = if c0 == 101 then 1 else 0;
+    let is_n = if c1 == 110 then 1 else 0;
+    let is_u = if c2 == 117 then 1 else 0;
+    let is_m = if c3 == 109 then 1 else 0;
+    let is_sp = if c4 == 32 then 1 else 0;
+    let hit = is_e * is_n * is_u * is_m * is_sp * (1 - is_quote) * (1 - is_comment);
+    let ist = if c0 == 116 then 1 else 0;
+    let ise = if c1 == 101 then 1 else 0;
+    let iss = if c2 == 115 then 1 else 0;
+    let ist2 = if c3 == 116 then 1 else 0;
+    let issp = if c4 == 32 then 1 else 0;
+    let is_test = ist * ise * iss * ist2 * issp;
+    let best = if hit == 1 then j else best;
+    let found = if hit == 1 then 1 else found;
+    let _ = spc[0] = j;
+    let _ = cpc[0] = j;
+    let _ = tpc[0] = j;
+    let _ = if is_quote == 1 then skip_string_n(s, spc, strn) else 0;
+    let _ = if is_comment == 1 then skip_line_comment_n(s, cpc, strn) else 0;
+    let _ = if is_test == 1 then (let _ = tpc[0] = find_body_end(s, j + 5, strn) in (let _ = tpc[0] = if tpc[0] >= strn then strn else tpc[0] + 1 in 0)) else 0;
+    let jnext = (j + 1) * (1 - is_quote - is_comment - hit - is_test) + spc[0] * is_quote + cpc[0] * is_comment + tpc[0] * is_test;
+    let j = if hit == 1 then j + 5 else jnext;
+    0
+  };
+  let _ = out[0] = best;
+  found
+}
+
+// Tag (0-based) of ctor name in the enum decl, or -1 if absent / no enum.
+
+// Emit an enum ctor with a payload: ctor(expr) -> [tag, payload] block.
+fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  // ROADMAP A6 step 1 defect, FIXED 2026-09-09: A6 moved the ctor's BUMP from
+  // the frame heap x14 to the arena cursor x27 and left the two payload stores
+  // on `str x0,[x14]` / `str x0,[x14,#8]`, so a payload ctor handed back an
+  // UNINITIALISED arena block. The fix is an order change, not a register
+  // rename: the payload expression must be evaluated FIRST (it may itself be a
+  // ctor -- c60_nestctor -- and bump x27 out from under us), and only then is
+  // the block reserved. `mov x16,x27` snapshots the base into the register
+  // model's parallel-move scratch (x16, dead here exactly as at every
+  // vs_array_set_imm site), the cursor is bumped and capacity-checked, the
+  // payload (still in x0 from vs_deliver) is stored at [x16,#8], the tag
+  // overwrites x0 and is stored at [x16], and the block index is
+  // `mov x0,x16 ; sub x0,x0,x17 ; lsr x0,x0,#3` -- A5 step 1b's cell index,
+  // which is what emit_match_rt then reads through `ldr xd,[x17,xi,lsl #3]`.
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = vs_deliver(insns, n, fntab, stab, 1);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = em(insns, n, 2853897200);
+  let _ = em(insns, n, 2432713595);
+  // ROADMAP A6 (2026-09-08): aggregates allocate at the ARENA CURSOR x27, the
+  // same bump `zeros` uses, and inherit its capacity trap -- cmp x27,x28 ;
+  // b.ls +2 ; brk #80. The T118 frame-heap trap (brk #81) and its helper
+  // emit_heap_trap are DELETED: there is no frame heap any more, so exit 81
+  // cannot be reached and the class is gone rather than merely under budget.
+  let _ = em(insns, n, 3944481663);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869504);
+  let _ = em(insns, n, 4177528320);
+  let _ = em(insns, n, 3531603968 + tag * 32);
+  let _ = em(insns, n, 4177527296);
+  let _ = em(insns, n, 2853176288);
+  // A5 step 1b: address -> cell index.
+  let _ = em(insns, n, 3406888960);
+  let _ = em(insns, n, 3544448000);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// Emit a nullary enum ctor: ctor -> [tag] block (no payload).
+fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64, fntab: [i64], stab: [i64]) -> i64 {
+  let _ = em(insns, n, 3531603968 + tag * 32);
+  // A6 step 1 defect (2026-09-09): was `str x0,[x14]` -- the dead frame-heap
+  // register -- while the block returned came from x27. Nothing runs between
+  // the tag store and the bump, so the nullary form needs no x16 snapshot:
+  // store straight through the cursor.
+  let _ = em(insns, n, 4177527648);
+  let _ = em(insns, n, 2853897184);
+  let _ = em(insns, n, 2432713595);
+  // ROADMAP A6 (2026-09-08): aggregates allocate at the ARENA CURSOR x27, the
+  // same bump `zeros` uses, and inherit its capacity trap -- cmp x27,x28 ;
+  // b.ls +2 ; brk #80. The T118 frame-heap trap (brk #81) and its helper
+  // emit_heap_trap are DELETED: there is no frame heap any more, so exit 81
+  // cannot be reached and the class is gone rather than merely under budget.
+  let _ = em(insns, n, 3944481663);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869504);
+  // A5 step 1b: address -> cell index.
+  let _ = em(insns, n, 3406888960);
+  let _ = em(insns, n, 3544448000);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// Dispatch name( ... ): enum ctor (with payload) or a function call.
+fn emit_bl(insns: [i64], n: [i64], target: i64, has_spills: i64) -> i64 {
+  // x15 (spill base) is caller-saved: callees rebind it from their own sp, so
+  // a caller that reads its own spill slots after a call must get it back.
+  // T103 (2026-09-05) made this ONE pair instead of the old 48-byte frame.
+  // ROADMAP A6 step 2 commit B (2026-09-09): x14 was the frame-heap cursor and
+  // A6 step 1 deleted the frame heap, so x14 is written by nothing and read by
+  // nothing -- `stp x15,x14,[sp,#-16]!` / `ldp x15,x14,[sp],#16` (2847882223 /
+  // 2831236079) become `str x15,[sp,#-16]!` / `ldr x15,[sp],#16` (4162785263 /
+  // 4165011439, as+objdump). STILL TWO WORDS, so saved_calls' arithmetic keeps
+  // its shape; what changes is has_spills' CONDITION, below.
+  // B1 (2026-09-06): has_spills is the CALLER's own published fact (does the
+  // caller itself bind a spill anywhere in its body) -- not the callee's. The
+  // save is a conservative superset: it fires whenever the caller might need
+  // x15 preserved across ANY call, regardless of what the specific callee does.
+  let _ = if has_spills == 1 then em(insns, n, 4162785263) else 0;
+  let offset = target - n[0];
+  let is_back = if offset < 0 then 1 else 0;
+  let word = 2483027968 + offset + is_back * 67108864;
+  let _ = em(insns, n, word);
+  let _ = if has_spills == 1 then em(insns, n, 4165011439) else 0;
+  n[0]
+}
+
+// Look up a function's start offset in the layout table; -1 if absent.
+fn fntab_lookup(fntab: [i64], name: i64) -> i64 {
+  let cnt = fntab[0];
+  let hv = fnh_get(fntab, name);
+  let i = if hv < 0 then 0 else cnt;
+  let start = if hv > 0 then fntab[1 + cnt + fnh_idx(hv)] else 0 - 1;
+  while i < cnt {
+    let nm = fntab[1 + i];
+    let st = fntab[1 + cnt + i];
+    let is_match = if nm == name then 1 else 0;
+    let start = if is_match == 1 then st else start;
+    let i = i + 1;
+    0
+  };
+  start
+}
+
+// B1 (2026-09-06): look up a function's PUBLISHED planning-pass facts (packed
+// as vc*2+has_alloc, vc = final symbol count incl. params, has_alloc = body
+// allocates on x14) from fntab[2900+i]. 0 if absent (harmless default: a
+// caller with no lookup hit behaves as if vc=0/has_alloc=0, i.e. does not
+// need x15/x14 -- only used during the emission pass, where every fn's own
+// source position is guaranteed to have been published by the planning pass
+// first). A2 step 0 (2026-09-06/07) relayout: indices 2200..2763 are free
+// (fn cap raised 300 -> 512; the ctor/name/start/fpos zones + ft_cache top
+// out at 2046 worst case, cnt=511/ecnt=255), and 4410+ is claimed by
+// unrelated per-fn scratch (loop/mask/struct/literal cells, window moved to
+// fntab[3700+3i]).
+//
+// Keyed by SOURCE POSITION (srcpos, zone 3: fntab[1+2*cnt+i]), not by name:
+// two `fn` DEFINITIONS CAN share a spelling (bench/vs_rust/std_tests/cache.bp
+// has two differently-shaped `cache_lookup`s) and fntab_lookup's own
+// name-keyed "last match wins" is harmless there (every caller ends up
+// resolved to the same one implementation either way). Facts are NOT
+// interchangeable across two same-named-but-different-bodied definitions --
+// a name-keyed lookup silently handed instance A instance B's vc, dropping a
+// callee-saved pair instance A genuinely used (wrong "needs save" -> a
+// clobbered register survives past a `ret`, corrupting the caller). Source
+// position is unique per `fn` keyword, so this cannot alias.
+fn fntab_fact_lookup(fntab: [i64], srcpos: i64) -> i64 {
+  let cnt = fntab[0];
+  let i = 0;
+  let val = 0;
+  while i < cnt {
+    let sp = fntab[1 + cnt + cnt + i];
+    let is_match = if sp == srcpos then 1 else 0;
+    let fv = fntab[2900 + i];
+    let val = if is_match == 1 then fv else val;
+    let i = i + 1;
+    0
+  };
+  val
+}
+
+// Source-position ab over a 3-zone table [cnt, names..., offsets..., srcpos...]:
+// returns the callee byte offset in source text, or -1 when absent
+// (legacy single-fn path passes cnt=0). O(#fns) not O(source bytes).
+fn ft_srcpos(tab: [i64], name: i64) -> i64 {
+  let cnt = tab[0];
+  let hv = fnh_get(tab, name);
+  let i = if hv < 0 then 0 else cnt;
+  let sp = if hv > 0 then tab[1 + cnt + cnt + fnh_idx(hv)] else 0 - 1;
+  while i < cnt {
+    let nm = tab[1 + i];
+    let pos_i = tab[1 + cnt + cnt + i];
+    let is_match = if nm == name then 1 else 0;
+    let sp = if is_match == 1 then pos_i else sp;
+    let i = i + 1;
+    0
+  };
+  sp
+}
+

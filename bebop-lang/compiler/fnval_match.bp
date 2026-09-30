@@ -1,0 +1,589 @@
+// bebop-lang/compiler/fnval_match.bp -- part of the self-hosting compiler, NOT a standalone program.
+// Split out of bebop.bp (was bebop.bp:2501-3083 at 64d2d5cd, 2026-09-29, operator: "split in files")
+// and pulled back in by bebop.bp's `use` lines IN ORDER: use_expand places every include ahead
+// of the main text, so only a prefix of the compiler can live here and the order of these
+// files is the order of the functions in the binary. Contents: function values, closures, call/ctor dispatch, match, whitespace/comment skipping, the exits and em().
+
+
+// D14/register-model exit-89 rewrite: this was 30 `let is_XX = ...;`
+// bindings ahead of a 34-way else-if dispatch. Under the register model the
+// whole else-if chain is ONE tail expression, so its ~30 nested join
+// registers (d1..d30, one per level, all alive until the innermost arm
+// resolves) spill to temp slots once the 8 window/cs registers run out --
+// and the 30 extra symbol bindings pushed S (spilled-symbol count) up
+// enough that S + tsp tripped the 64-slot overflow trap (§5) durin the
+// self-compile. Fix: compare `name` INLINE in each condition instead of
+// pre-binding a symbol per case -- same dispatch, vc back down near the
+// param count, S small again (the nesting depth itself, and its tsp cost,
+// is unchanged and still within budget once S shrinks).
+// ---- A16 step 1: function values and indirect calls (T50, HISTORY.md:1749) ----
+// `&f` is a COMPILE-TIME CONSTANT: f's start offset in WORDS from the image base, which is
+// what fntab_lookup returns and the coordinate emit_bl's `target - n[0]` works in.
+// EMITTED AS A FIXED TWO-WORD movz/movk deliberately: mat_const's word count depends on the
+// VALUE's magnitude and the planning pass sees 0 where emission sees the real offset, so a
+// per-pass count is the T96-class desync that moves every later `bl`. Two words are
+// unconditional, cover offsets to 2^32, and only emission's VALUE has to be right.
+// THE VALUE IS ONE-BASED: `&f` is f's word offset PLUS ONE. The FIRST declared fn starts
+// at image word 0 (the entry stub is APPENDED at n0..n0+171), so a zero-based fn value is
+// indistinguishable from a never-initialised cell and the trap below rejected `&f0` --
+// loudly, which is how this was found. The bias costs ZERO words: call_fn's `adr` aims one
+// word BELOW the image base and the `lsl #2` add puts it back.
+fn emit_fnref(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let npos = pos[0];
+  let name = read_ident(s, pos);
+  let tgt = fntab_lookup(fntab, name);
+  // `&f` needs f in the same compilation unit (A16 section 1.3, the `use` note). The
+  // legacy single-fn path carries cnt = 0 and resolves nothing, so it is exempt.
+  let _ = if tgt < 0 then (if fntab[0] == 0 then 0 else diag_exit(s, npos, 101)) else 0;
+  let off = if tgt < 0 then 0 else tgt + 1;
+  let lo = off & 65535;
+  let hi = (off / 65536) & 65535;
+  let d = vs_alloc(insns, n, fntab, stab);
+  let _ = em(insns, n, 3531603968 + lo * 32 + d);
+  let _ = em(insns, n, 4070572032 + hi * 32 + d);
+  vs_push(insns, n, fntab, stab, 2, d, 0 - 1)
+}
+
+// `call_fn(v, a0, .., ak-1)`, k <= 13. Operands are evaluated LEFT TO RIGHT, then one
+// vs_rot_up puts the args in x0..x(k-1) and v in x<k> through the SAME vs_deliver
+// parallel move every builtin already uses -- so there is no new argument machinery
+// and no new callee convention. Then:
+//   cbnz x<k>, +2 ; brk #87     a 0 fn value is the "call to an unresolved function"
+//                               trap that already exists (docs/TRAPS.md row 87), so a
+//                               never-initialised cell cannot silently `blr` anywhere.
+//                               This is only sound because `&f` is ONE-BASED; see there.
+//                               An out-of-image value is the stub's own SIGSEGV
+//                               handler, exit 82 -- also loud.
+//   adr x16, #-(4 * (n[0] + 1)) ONE WORD BELOW the image base, PC-relative, so the
+//                               one-based fn value lands back on the fn. The code
+//                               survives
+//                               sys_run of a foreign image (A5 step 1b's pointer-free
+//                               model is untouched: the fn VALUE is an index, not an
+//                               address). In range because the program cap is 262144
+//                               words = 1 MiB = adr's reach; at a larger cap this
+//                               becomes adrp + add.
+//   add x16, x16, x<k>, lsl #2  index -> byte offset
+//   blr x16
+// x16 is the scratch vs_place_args itself uses to break a register cycle, which is
+// why the adr/add come AFTER vs_deliver, never before. The x15 save/restore and the
+// fntab[3668] call-site bump are emit_sys_run's shape verbatim -- a blr callee rebinds
+// x15 from its own sp exactly as a bl callee does.
+// 5 words + 2 under has_spills.
+fn emit_call_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  let cpos = pos[0];
+  let nops = parse_operands(s, pos, insns, n, stab, selfname, selfstart, fntab, 0, 0);
+  let okn = (if nops >= 1 then 1 else 0) * (if nops <= 14 then 1 else 0);
+  let _ = if okn == 1 then 0 else diag_exit(s, cpos, 122);
+  let k = nops - 1;
+  let _ = vs_rot_up(fntab, nops);
+  let _ = vs_deliver(insns, n, fntab, stab, nops);
+  let has_spills = 1 - fntab[3669];
+  let _ = fntab[3668] = fntab[3668] + 1;
+  let _ = em(insns, n, 3036676096 + 64 + k);
+  let _ = em(insns, n, 3558869728);
+  let _ = if has_spills == 1 then em(insns, n, 4162785263) else 0;
+  let _ = em(insns, n, 268435456 + ((524288 - n[0] - 1) & 524287) * 32 + 16);
+  let _ = em(insns, n, 2332035600 + k * 65536);
+  let _ = em(insns, n, 3594453504);
+  let _ = if has_spills == 1 then em(insns, n, 4165011439) else 0;
+  vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
+}
+
+// ---- ROADMAP A16 step 2 (2026-09-14): closures = fn value + EXPLICIT env ----
+// A closure here is a PAIR, not an inferred capture: the callee takes its environment
+// as an ordinary FIRST parameter and the caller passes it explicitly. That is the shape
+// 22 fns in the tree already use, and capture inference (`|x| x + a`) is the human-
+// legibility trade the row names and does NOT schedule -- it is not built here.
+// `pack_fn(v, env)` is the SUGAR that makes the pair fit one cell: `(v << 40) | env`.
+//   v   is `&f`, one-based, 19 bits at the 262144-word program cap -> bits 40..58.
+//   env is an ARENA CELL INDEX (A5 step 1b: no pointers; an array literal's value IS
+//       such an index since A6), 26 bits for the 256 MiB arena -> bits 0..39.
+// ONE word: `orr x0, x1, x0, lsl #40` (as + objdump: aa00a020), operands delivered
+// x0 = v, x1 = env by the ordinary builtin path.
+fn emit_pack_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  let _ = em(insns, n, 2852167712);
+  vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
+}
+
+// `call_packed(c, a0, .., ak-1)`, k <= 12: unpack c and call f(env, a0, .., ak-1).
+// ENV IS THE FIRST PARAMETER, so the k args must land in x1..xk -- but vs_place_args maps
+// entry base+i to x(i) with no offset, so a zero CONST is pushed first purely to occupy
+// x0. Its `movz x0,#0` is one dead word the `and` below overwrites: the honest price of
+// keeping env FIRST (env-LAST saves it but needs the link register as scratch and would
+// disagree with the unpacked `call_fn(v, env, x)`). 8 words, 10 under has_spills.
+//   and x0, x<j>, #0xFFFFFFFFFF   env  (as + objdump: 92409c20 for j=1)
+//   lsr x<j>, x<j>, #40           fn, IN PLACE -- x<j> is one past the callee's last
+//                                 parameter, so scribbling on it is free and no extra
+//                                 scratch register is needed
+//   cbnz x<j>, +2 ; brk #87       a packed 0, i.e. an uninitialised cell, is the
+//                                 existing "unresolved function" trap; sound only
+//                                 because `&f` is ONE-BASED
+//   adr x16 ; add x16, x16, x<j>, lsl #2 ; blr x16      step 1's sequence verbatim
+fn emit_call_packed(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  let cpos = pos[0];
+  let _ = vs_push(insns, n, fntab, stab, 1, 0, 0);
+  let nops = parse_operands(s, pos, insns, n, stab, selfname, selfstart, fntab, 0, 1);
+  // nops counts the placeholder + c + k args; the callee sees env + k, so k <= 12.
+  let okn = (if nops >= 2 then 1 else 0) * (if nops <= 14 then 1 else 0);
+  let _ = if okn == 1 then 0 else diag_exit(s, cpos, 123);
+  let j = nops - 1;
+  // the window is [zero, c, a0..ak-1]; rotating the ZERO to the top would be wrong --
+  // it is `c` that must reach x<j>, so rotate the top nops-1 entries (c and the args)
+  // and leave the placeholder where it is.
+  let _ = vs_rot_up(fntab, nops - 1);
+  let _ = vs_deliver(insns, n, fntab, stab, nops);
+  let has_spills = 1 - fntab[3669];
+  let _ = fntab[3668] = fntab[3668] + 1;
+  let _ = em(insns, n, 2453707776 + j * 32);
+  let _ = em(insns, n, 3546872832 + j * 33);
+  let _ = em(insns, n, 3036676160 + j);
+  let _ = em(insns, n, 3558869728);
+  let _ = if has_spills == 1 then em(insns, n, 4162785263) else 0;
+  let _ = em(insns, n, 268435456 + ((524288 - n[0] - 1) & 524287) * 32 + 16);
+  let _ = em(insns, n, 2332035600 + j * 65536);
+  let _ = em(insns, n, 3594453504);
+  let _ = if has_spills == 1 then em(insns, n, 4165011439) else 0;
+  vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
+}
+
+fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let tag = ft_ctor_tag(fntab, name);
+  let tgt = fntab_lookup(fntab, name);
+  if name == 504111662209029 then emit_call_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 569809880337302 then emit_pack_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 1448390905445389245 then emit_call_packed(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 30895064082 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 4047253394792 then emit_hvham2(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 76753189874778913 then emit_sys_mmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 585902212871437 then emit_sys_run(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 10054667876514197585 then emit_sys_wait4(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 7442662398273192292 then emit_sys_rename(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 12598865016055593546 then emit_sys_ftruncate(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 7442661902340062434 then emit_sys_export(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 7442662210087947144 then emit_sys_munmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 7040940390938053523 then emit_sys_arena_base(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 12163823898702034029 then emit_sys_arena_end(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 10054667870649030395 then emit_sys_clone(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 16710314075682296179 then emit_sys_cond_set(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 15293169932641766580 then emit_sys_futex_wait_guard(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 8779068393901189725 then emit_sys_futex_wake(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 1084841420853388659 then emit_sys_exit_thread_guard(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 7221016679989100487 then emit_sys_atomic_add(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 7304771531850188344 then emit_sys_setaffinity(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 1713209 then emit_clz(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 260242221 then emit_sys_scan(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 29413480223 then emit_crc32(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 3853165909311 then emit_crc32b(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == -8392076200099613766 then emit_sys_msync(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == -8392076202161113213 then emit_sys_fsync(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == -1729804160290675916 then emit_sys_mprotect(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 3853165909333 then emit_crc32x(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 10054667875361132632 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 585709020818199 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 224358574 then emit_char_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 15758082337069564947 then emit_sys_readbuf(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 76753189879327100 then emit_sys_open(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 76753189885882068 then emit_sys_read(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 76753189874574932 then emit_sys_mapb(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 10054667876552415181 then emit_sys_write(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 10054667870649031050 then emit_sys_close(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 76753189856984008 then emit_sys_exit(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 66094333908796503 then emit_clock_ms(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 36158018563 then emit_zeros(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 620507756566374 then emit_zeros32(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 34114554923 then emit_smulh(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 34703554765 then emit_umulh(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if tag >= 0 then emit_enum_ctor(s, tag, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == selfname then emit_self_call(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if tgt >= 0 then emit_bl_call(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
+  else emit_call(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
+}
+
+// Dispatch a bare name: nullary enum ctor or a variable reference.
+fn emit_var_or_ctor(s: str, name: i64, npos: i64, insns: [i64], n: [i64], stab: [i64], fntab: [i64]) -> i64 {
+  let tag = ft_ctor_tag(fntab, name);
+  let is_ctor = if tag >= 0 then 1 else 0;
+  let vreg = if is_ctor == 1 then 0 else sym_lookup(s, stab, name, npos);
+  let _ = if vreg < 0 then diag_exit(s, npos, 101) else 0;
+  if is_ctor == 1 then emit_enum_ctor_nullary(insns, n, tag, fntab, stab)
+  else emit_var(insns, n, vreg, fntab, stab)
+}
+
+fn emit_match_payload(s: str, ppos: i64, vname: i64, vpos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = ppos;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let reg = sym_bind(s, stab, vname, vpos);
+  let _ = check_reg_collision(s, insns, n, fntab, stab, reg, vpos);
+  vs_bind(insns, n, fntab, stab, reg)
+}
+
+// Emit a matching match-arm: bind the payload var (if any) then emit the arm body.
+fn emit_match_arm(s: str, ppos: i64, has_var: i64, vname: i64, vpos: i64, bodypos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let saved = pos[0];
+  let _ = if has_var == 1 then emit_match_payload(s, ppos, vname, vpos, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+  let _ = pos[0] = bodypos;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = pos[0] = saved;
+  n[0]
+}
+
+// Compile-time match on a literal enum scrutinee: match ctor(payload) { arm, ... }.
+// The arm loop stops at the closing brace and consumes ONLY it (T42 2026-09-04:
+// it used to run the arm tail at "}" and scan into the enclosing expression).
+fn emit_match(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 5;
+  let _ = skip_ws(s, pos);
+  let cpos = pos[0];
+  let cname = read_ident(s, pos);
+  // A6 step 1 (2026-09-09): the scrutinee is a CTOR NAME (compile-time arm
+  // selection, unchanged) or anything else, which is a bound variable holding
+  // a ctor block -- the runtime path below.
+  let ctag = ft_ctor_tag(fntab, cname);
+  let rm0 = if ctag >= 0 then emit_match_lit(s, cname, pos, insns, n, stab, selfname, selfstart, fntab)
+  else emit_match_var(s, cpos, cname, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = ety_set(fntab, 0);
+  rm0
+}
+
+fn emit_match_lit(s: str, cname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  let _ = skip_ws(s, pos);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_lp = if ch == 40 then 1 else 0;
+  let ppos = [0];
+  let _ = if is_lp == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = ppos[0] = pos[0] in (let _ = skip_args(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)))) else 0;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch0 = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch0 == 125 then 1 else 0;
+    let stop = if is_rb + at_end >= 1 then 1 else 0;
+    let aname = read_ident(s, pos);
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_lp2 = if ch2 == 40 then 1 else 0;
+    let vpos = if is_lp2 == 1 then (let _ = pos[0] = pos[0] + 1 in pos[0]) else 0;
+    let vname = if is_lp2 == 1 then read_ident(s, pos) else 0;
+    let _ = if is_lp2 == 1 then (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)) else 0;
+    let _ = skip_ws(s, pos);
+    let adv = if stop == 1 then is_rb else 2;
+    let _ = pos[0] = pos[0] + adv;
+    let bodypos = pos[0];
+    let _ = if stop == 0 then skip_to_field_delim(s, pos) else 0;
+    let is_match = if aname == cname then 1 else 0;
+    let has_var = is_lp * is_lp2;
+    let _ = if is_match == 1 then emit_match_arm(s, ppos[0], has_var, vname, vpos, bodypos, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let ch3 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch3 == 44 then 1 - stop else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = stop;
+    0
+  };
+  n[0]
+}
+
+// Restore the whole register-model state an if/match arm may have changed, so
+// the next arm compiles from byte-identical bookkeeping (emit_cond_branch does
+// this inline for its two arms; a match has N).
+fn vs_restore(fntab: [i64], sw: i64, smask: i64, scs: i64, sslot: i64) -> i64 {
+  let _ = fntab[5387] = sw;
+  let _ = fntab[5388] = smask;
+  let _ = fntab[5389] = scs;
+  let _ = fntab[5390] = sslot;
+  0
+}
+
+// Patch an already-emitted unconditional `b` placeholder at word p to `target`
+// (imm26, forward). p < 0 = nothing to patch.
+fn patch_b(insns: [i64], p: i64, target: i64) -> i64 {
+  let _ = if p >= 0 then (let _ = insns[p] = 335544320 + (target - p) in 0) else 0;
+  0
+}
+
+// RUNTIME match (A6 step 1, 2026-09-09) -- the second half of the ctor defect.
+// `match v { a => .., b(x) => .. }` where v is a bound variable was emitting
+// NOTHING at all (emit_match compared each arm name against the scrutinee TEXT,
+// so no arm ever matched a variable) and the match evaluated to whatever was
+// left in the result register -- the 8209 that remained after the two ctor
+// stores were fixed. The block is [tag, payload] at the x17-relative CELL INDEX
+// the variable holds, so the tag is read with the A5 step-1b index form
+// (`ldr xtg,[x17,xsc,lsl #3]`, idx 0) and the payload with
+// `add xp,xsc,#1 ; ldr xp,[x17,xp,lsl #3]` -- NOT an address dereference.
+// sc (block index), tg (tag) and d (join) are held as free-mask reservations
+// and NOT as window entries: an arm that parked a window entry would emit the
+// park inside its own conditionally-executed code, which is exactly the
+// arm-spanning fault emit_cond_branch's fntab[5402] guard exists for. Every arm
+// compiles from the SAME saved window/cs/slot state and converges on d.
+fn emit_match_var(s: str, cpos: i64, cname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let vreg = sym_lookup(s, stab, cname, cpos);
+  let _ = if vreg < 0 then diag_exit(s, cpos, 101) else 0;
+  let _ = emit_var(insns, n, vreg, fntab, stab);
+  // fntab[5403]: arms can bind, so surviving values go to temp SLOTS, not cs
+  // registers (same rule emit_cond applies to a branch-shaped `if`).
+  let _ = fntab[5403] = 1;
+  let _ = vs_park(insns, n, fntab, stab, 1);
+  let _ = vs_span_to_slots(insns, n, fntab, stab, 1);
+  let _ = fntab[5403] = 0;
+  let sc = vs_alloc(insns, n, fntab, stab);
+  let _ = vs_to(insns, n, fntab, stab, sc);
+  let _ = vs_pop(fntab);
+  let _ = vs_mask_take(fntab, sc, 16);
+  let tg = vs_alloc(insns, n, fntab, stab);
+  let _ = vs_array_get_imm(insns, n, sc, 0, tg, 0);
+  let d = vs_alloc(insns, n, fntab, stab);
+  let _ = emit_match_rt(s, pos, insns, n, stab, selfname, selfstart, fntab, sc, tg, d);
+  let _ = vs_mask_free(fntab, sc, 16);
+  let _ = vs_mask_free(fntab, tg, 16);
+  let _ = vs_mask_free(fntab, d, 16);
+  let _ = vs_push(insns, n, fntab, stab, 2, d, 0 - 1);
+  n[0]
+}
+
+// One runtime arm: bind the payload (if the arm names one), compile the body
+// from `bodypos` and converge it on the join register d.
+fn emit_match_rt_arm(s: str, pos: [i64], bodypos: i64, vname: i64, vpos: i64, insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], sc: i64, d: i64) -> i64 {
+  let saved = pos[0];
+  let saved_arm = fntab[5402];
+  let _ = fntab[5402] = fntab[5387];
+  let _ = if vname != 0 then emit_match_rt_bind(s, vname, vpos, insns, n, stab, fntab, sc) else 0;
+  let _ = pos[0] = bodypos;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = vs_to(insns, n, fntab, stab, d);
+  let _ = vs_pop(fntab);
+  let _ = fntab[5402] = saved_arm;
+  let _ = pos[0] = saved;
+  n[0]
+}
+
+// Bind an arm's payload variable: cell sc+1 of the block, through the index
+// form, then the ordinary symbol bind every `let` uses.
+fn emit_match_rt_bind(s: str, vname: i64, vpos: i64, insns: [i64], n: [i64], stab: [i64], fntab: [i64], sc: i64) -> i64 {
+  let p = vs_alloc(insns, n, fntab, stab);
+  let _ = vs_array_get_imm(insns, n, sc, 1, p, 0);
+  let _ = vs_push(insns, n, fntab, stab, 2, p, n[0] - 1);
+  let reg = sym_bind(s, stab, vname, vpos);
+  let _ = check_reg_collision(s, insns, n, fntab, stab, reg, vpos);
+  vs_bind(insns, n, fntab, stab, reg)
+}
+
+// The arm chain: `cmp xtg,#tag ; b.ne <next arm>` per arm, the arm body, then a
+// `b` to the join. The exit branches are CHAINED (arm i jumps to arm i+1's own
+// exit branch, the last one to the join) so no per-match fixup list is needed --
+// only the previous arm's word index is carried across the loop.
+fn emit_match_rt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], sc: i64, tg: i64, d: i64) -> i64 {
+  let strn = slen(s, pos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let sw = fntab[5387];
+  let smask = fntab[5388];
+  let scs = fntab[5389];
+  let sslot = fntab[5390];
+  let prevb = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch0 = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch0 == 125 then 1 else 0;
+    let stop = if is_rb + at_end >= 1 then 1 else 0;
+    let aname = read_ident(s, pos);
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_lp2 = if ch2 == 40 then 1 else 0;
+    let vpos = if is_lp2 == 1 then (let _ = pos[0] = pos[0] + 1 in pos[0]) else 0;
+    let vname = if is_lp2 == 1 then read_ident(s, pos) else 0;
+    let _ = if is_lp2 == 1 then (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)) else 0;
+    let _ = skip_ws(s, pos);
+    let adv = if stop == 1 then is_rb else 2;
+    let _ = pos[0] = pos[0] + adv;
+    let bodypos = pos[0];
+    let _ = if stop == 0 then skip_to_field_delim(s, pos) else 0;
+    let atag = if stop == 0 then ft_ctor_tag(fntab, aname) else 0;
+    let _ = if atag < 0 then diag_exit(s, bodypos, 101) else 0;
+    let _ = if stop == 0 then vs_restore(fntab, sw, smask, scs, sslot) else 0;
+    let _ = if stop == 0 then em(insns, n, 4043309087 + atag * 1024 + tg * 32) else 0;
+    let pne = n[0];
+    let _ = if stop == 0 then em(insns, n, 1409286145) else 0;
+    let _ = if stop == 0 then emit_match_rt_arm(s, pos, bodypos, vname, vpos, insns, n, stab, selfname, selfstart, fntab, sc, d) else 0;
+    let q = n[0];
+    let _ = if stop == 0 then em(insns, n, 335544320) else 0;
+    let _ = if stop == 0 then patch_b(insns, prevb, q) else 0;
+    let _ = if stop == 0 then (let _ = insns[pne] = insns[pne] + (n[0] - pne) * 32 in 0) else 0;
+    let prevb = if stop == 0 then q else prevb;
+    let ch3 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch3 == 44 then 1 - stop else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = stop;
+    0
+  };
+  let _ = patch_b(insns, prevb, n[0]);
+  let _ = vs_restore(fntab, sw, smask, scs, sslot);
+  n[0]
+}
+
+
+// Skip a "//" line comment: advance pos to the newline (or end). pos is at '/'.
+// PERF (2026-09-08): skip_line_comment/skip_string called str_len -- a byte-at-a-time
+// NUL scan of the WHOLE source -- once per call. The four whole-source scans call them
+// ~1,643 times each over a 337 KB self-source, i.e. 555 MB of NUL-scanning per scan to
+// skip 337 KB of text. The `_n` twins take strn from the caller (the discipline
+// docs/WORKER-CARD.md already states for text scanners); the bare names stay as wrappers
+// so the two dozen cold call sites are untouched.
+fn skip_line_comment_n(s: str, pos: [i64], strn: i64) -> i64 {
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_nl = if ch == 10 then 1 else 0;
+    let adv = 1 - is_nl - at_end;
+    let _ = pos[0] = pos[0] + adv;
+    let done = if is_nl + at_end >= 1 then 1 else 0;
+    0
+  };
+  0
+}
+fn skip_line_comment(s: str, pos: [i64]) -> i64 { skip_line_comment_n(s, pos, str_len(s)) }
+
+// Skip a "..." string literal: pos is at the opening '"', leave it after the
+// closing '"'.
+fn skip_string_n(s: str, pos: [i64], strn: i64) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_q = if ch == 34 then 1 else 0;
+    let adv = 1 - is_q - at_end;
+    let _ = pos[0] = pos[0] + adv;
+    let done = if is_q + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  0
+}
+fn skip_string(s: str, pos: [i64]) -> i64 { skip_string_n(s, pos, str_len(s)) }
+
+fn skip_ws(s: str, pos: [i64]) -> i64 {
+  let n = slen(s, pos);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_sp = if ch == 32 then 1 else 0;
+    let is_tab = if ch == 9 then 1 else 0;
+    let is_nl = if ch == 10 then 1 else 0;
+    let is_cr = if ch == 13 then 1 else 0;
+    let is_ws = is_sp + is_tab + is_nl + is_cr;
+    let _ = pos[0] = pos[0] + is_ws;
+    let at_end2 = if pos[0] >= n then 1 else 0;
+    let e1 = if pos[0] + 1 >= n then 1 else 0;
+    let ch0 = if at_end2 == 1 then 0 else char(s, pos[0]);
+    let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+    let is_sl = if ch0 == 47 then 1 else 0;
+    let is_sl2 = if ch1 == 47 then 1 else 0;
+    let is_comment = is_sl * is_sl2;
+    // DG1 (2026-09-28): `n` is already this scan's length; skip_line_comment(s, pos)
+    // re-derived it with str_len -- a whole-source NUL scan per comment crossed.
+    // MEASURED: stripping bebop.bp's comment lines alone took the cold self-compile
+    // 14.2-15.1 s -> 8.4-8.9 s with the output unchanged (d1dedc62).
+    let _ = if is_comment == 1 then skip_line_comment_n(s, pos, n) else 0;
+    let done = if is_ws + is_comment >= 1 then 0 else 1;
+    0
+  };
+  0
+}
+
+// Append one instruction word and advance the count.
+// The stream counter is [n, cap]: em traps 83 BEFORE the write that would cross cap
+// (planning tmp 65536 words per fn, program buffers 262144; roadmap 1b, 2026-09-06).
+fn cap_exit(n: [i64]) -> i64 {
+  let buf = zeros(64);
+  let a1 = diag_str(buf, 0, "code buffer exhausted at ");
+  let a2 = put_num(buf, a1, n[1]);
+  let _ = buf[a2] = 32;
+  let a3 = diag_str(buf, a2 + 1, "words (one fn or the program)");
+  let _ = buf[a3] = 10;
+  let _ = sys_write(2, buf, a3 + 1);
+  sys_exit(83)
+}
+// ROADMAP F2 prerequisite (2026-09-09): THE EXIT-CODE SPACE IS PARTITIONED.
+// Before this, vs_mask_take/vs_mask_free/vs_cs_take/vs_cs_free exited with
+// `99 + site` / `100 + site` / `119 + site` / `120 + site` for a caller-chosen
+// site in 1..20, so the compiler could emit ANY code in 99..140 -- a span that
+// contains every documented compile-time diagnostic. Two codes were live
+// ALIASES (102 = the kernel-fn diagnostic AND a window-mask self-check; 104 =
+// "too many fns" AND a cs-mask self-check) and 103/105/106/107 were emitted and
+// documented nowhere, against a table whose first line says a code not in it is
+// a bug. The partition is now: USER-FACING DIAGNOSTICS BELOW 99 (plus the
+// grandfathered 99..104 the gates and docs already pin), COMPILER SELF-CHECKS AT
+// 201 -- one code, with the site printed on stderr, the same trade cap_exit and
+// diag_exit already make. The site is not lost, it moves from the exit code
+// (where it collided with real diagnostics) to the message (where it is free).
+// kind: 1 window-mask register out of range   2 window mask corrupt past bit 7
+//       3 cs-mask register out of range       4 cs mask corrupt past bit 7
+//       5 window free-mask not fully released at a boundary
+//       6 cs mask not released at a boundary
+//       7 cs mask non-zero at a statement boundary (was diag_exit 103)
+//       8 window not empty where it must be (was diag_exit 107)
+// Kinds 7 and 8 give up diag_exit's line:col for the kind.site pair: for an
+// invariant that can only be a bug in THIS compiler, the failing check names the
+// bug better than the user source position that tripped over it.
+fn selfcheck_exit(kind: i64, site: i64) -> i64 {
+  let buf = zeros(64);
+  let a1 = diag_str(buf, 0, "0:0: error[E201]: compiler self-check ");
+  let a2 = put_num(buf, a1, kind);
+  let _ = buf[a2] = 46;
+  let a3 = put_num(buf, a2 + 1, site);
+  let _ = buf[a3] = 10;
+  let _ = sys_write(2, buf, a3 + 1);
+  sys_exit(201)
+}
+// The source slurp cap, as ONE definition rather than a literal at four call sites.
+// sys_slurp(fd, N) reads at most N bytes and NUL-terminates at nread, so a file
+// LARGER than N is silently truncated and the compiler then parses a program that
+// ends mid-expression. Measured 2026-09-13: bench/vs_rust/std_tests/gb_pool.bp
+// concatenated onto a main-stripped bebop.bp reached 401529 bytes against this
+// 400000 cap, the .use expansion ended inside `let P = pool_ref_i64(`, and the only
+// symptom was `12247:25: error[E97]: fn body without a tail expression` at a line
+// number PAST THE END of an 8253-line file. That is a capacity failing quietly and
+// then lying about where, which is the L1 violation this trap closes.
+// RAISED 2026-09-14, 400000 -> 1200000. The old "moves the child arena pitch" reason was
+// WRONG: [sp+4 MiB, sp+12 MiB) is a CLONE CHILD's arena (emit_sys_clone), but every
+// src_slurp_cap() slurp is CLI-side (cli_compile/check/cas, use_scan) in the seed's MAIN
+// arena -- measured 33546736 cells free at entry, one slurp costs exactly N cells. Bound
+// by use_expand's zeros(1600000); at 1200000 up to 24 includes fit (deepest real: 7).
+fn src_slurp_cap() -> i64 { 1200000 }
+
+fn cli_exit(code: i64, m: str) -> i64 {
+  let buf = zeros(256);
+  let a1 = diag_str(buf, 0, "0:0: error[E");
+  let a2 = put_num(buf, a1, code);
+  let a3 = diag_str(buf, a2, "]: ");
+  let a4 = diag_str(buf, a3, m);
+  let _ = buf[a4] = 10;
+  let _ = sys_write(2, buf, a4 + 1);
+  sys_exit(code)
+}
+
+fn em(insns: [i64], n: [i64], w: i64) -> i64 {
+  let _ = if n[0] >= n[1] then cap_exit(n) else 0;
+  let _ = insns[n[0]] = w;
+  let _ = n[0] = n[0] + 1;
+  n[0]
+}
+

@@ -21,7 +21,9 @@ import sys, os, re, struct, collections
 sys.path.insert(0, "tools"); import check_abi
 W, entry, code_end = check_abi.load_bin(os.environ["BIN"])
 starts = check_abi.fn_starts(W, code_end)
-names = re.findall(r"^fn (\w+)", open(os.environ["SRC"]).read(), re.M)
+import bp_src   # fn order = use_expand order over every include (compiler/*.bp, preludes), then SRC
+names = [n for f in bp_src.expand_order(os.environ["SRC"], cwd=".")
+         for n in re.findall(r"^fn (\w+)", open(f).read(), re.M)]
 assert len(names) == len(starts), (len(names), len(starts))
 pcs = [int(x, 16) for x in sys.stdin.read().split()]
 # the .bin is mmapped at one base: every sample lies in [base, base + 4*len(W)); take the

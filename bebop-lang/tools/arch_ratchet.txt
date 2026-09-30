@@ -5,14 +5,21 @@
 # The cap a NEW .bp file must satisfy. Small files with named helpers, not one long one.
 max_new_bp_lines = 800
 #
-# The largest .bp we currently have. bebop.bp is the self-hosting compiler and is the
-# reason this is not 800 yet; every extraction out of it should lower this line.
-max_bp_lines = 8500
+# The largest HAND-WRITTEN .bp we currently have. bebop.bp is the self-hosting compiler and is
+# the reason this is not 800 yet; every extraction out of it should lower this line.
+# 2026-09-29 (W-DG4 phase 1, operator: "split in files"): 8500 -> 6153. bebop.bp was 9210 (over
+# the ratchet); its first 3067 lines moved to compiler/*.bp (five files, each under the 800 cap),
+# pulled back in by `use` lines, codegen byte-identical. New compiler code goes into compiler/*.bp.
+max_bp_lines = 6153
+#
+# GENERATED files: exempt from the cap AND left out of max_bp_lines (a generated copy of an old
+# compiler is not the file the ratchet exists to shrink -- gb_pool_build.bp at 8388 would
+# otherwise have pinned the ratchet above the compiler it was generated from).
+bp_generated:gb_pool_build.bp = 1            # generated aggregate, not hand-written
+bp_generated:bench/traps/t114_literal_table_full.bp = 1  # GENERATED, and its size IS the assertion:
 #
 # Files that exceed max_new_bp_lines today, each with the reason it is allowed to.
 bp_exempt:bebop.bp = 1                       # the self-hosting compiler; split is task T-split
-bp_exempt:gb_pool_build.bp = 1               # generated aggregate, not hand-written
-bp_exempt:bench/traps/t114_literal_table_full.bp = 1  # GENERATED, and its size IS the assertion:
 #   trap 114 fires only past 1000 string literals (fntab[6000..6999]), so a probe under the 800-line
 #   cap cannot trigger it. A 1000-literal version was tried first and compiles rc=0 -- measured -- which
 #   is why this file carries 1001. Splitting it would destroy the property under test.
@@ -70,7 +77,7 @@ magic_literal_min = 1000
 #   1 st_commit_c -> the same file. C3's row claims the `schain` gate covers it; schain names
 #     it in a COMMENT and calls st_cobj/st_publish directly, because st_commit_c returns
 #     st_publish's value instead of the commit offset its only plausible caller needs.
-# The remaining 1 is src_rename_idents (bebop.bp:7786), A25's deliberate loud stub -- it is
+# The remaining 1 is src_rename_idents (bebop.bp:7786 then; bebop.bp:5175 after the 2026-09-29 split), A25's deliberate loud stub -- it is
 # `cli_exit(84, "src_rename_idents: NOT IMPLEMENTED")` and is owed an implementation, not a
 # caller. It stays at 1 until A25 step 1b lands, and it is in bebop.bp, which the lane that
 # lowered this line did not own.

@@ -283,11 +283,13 @@ def size(binpath):
     W, entry, end = load_bin(binpath)
     starts = fn_starts(W, end)
     stub = len(entry_stub("bebop.bp"))   # T118b/T90: the stub words of THIS source (172 since ROADMAP A5 step 1; was 131 from T90 2c)
-    names = re.findall(r"^fn (\w+)", open("bebop.bp").read(), re.M)
-    if any(l.startswith('use "') for l in open("bebop.bp")):  # prelude fns come first in the stream
-        for u in re.findall(r'^use "([^"]+)"', open("bebop.bp").read(), re.M):
-            try: names = re.findall(r"^fn (\w+)", open(u).read(), re.M) + names
-            except OSError: pass
+    # fn order in the binary == `^fn ` order over use_expand's file order (includes first, in
+    # order of first use, dependencies first). The old loop PREPENDED each include, which reversed
+    # them -- harmless with one `use`, and with the 2026-09-29 split's six it named every fn of
+    # compiler/*.bp after the wrong body while the count check still passed.
+    import bp_src
+    names = [n for f in bp_src.expand_order("bebop.bp", cwd=".")
+             for n in re.findall(r"^fn (\w+)", open(f).read(), re.M)]
     fnw = {}
     for i, s in enumerate(starts):
         nxt = starts[i + 1] if i + 1 < len(starts) else (entry if entry > s else end)

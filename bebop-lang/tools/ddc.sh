@@ -78,7 +78,7 @@ done
 chain() {
   echo "== artifact chain (every hash from seed.S to the promoted binary)"
   printf '%-34s %9s  %s\n' file bytes md5
-  for f in seed/seed.S seed/pack.py seed/build/seed bebop.bp \
+  for f in seed/seed.S seed/pack.py seed/build/seed $(python3 tools/bp_src.py --files) \
            selfhost/prelude/sha256.bp "$BEBOP_BIN" "$WIT_SRC" "$WIT_DRV"; do
     printf '%-34s %9s  %s\n' "$f" "$(sz "$f")" "$(h "$f")"
   done
@@ -97,7 +97,7 @@ why() {
   echo -n "witness \`use\` support (grep for a use handler in $WIT_SRC): "
   grep -c 'skip_use\|is_use\|"use"' "$WIT_SRC" 2>/dev/null || true
   echo "bebop.bp \`use\` lines the witness would silently drop: $(grep -c '^use ' bebop.bp)"
-  echo "bebop.bp top-level fns: $(grep -c '^fn ' bebop.bp)   witness top-level fns: $(grep -c '^fn ' "$WIT_SRC")"
+  echo "compiler top-level fns (bebop.bp + compiler/*.bp): $(python3 tools/bp_src.py --cat | grep -c '^fn ')   witness top-level fns: $(grep -c '^fn ' "$WIT_SRC")"
   echo "ec_driver.bp fn-table capacity: $(grep -o 'zeros([0-9]*)' "$WIT_DRV" | head -1) (overflow is UNCHECKED)"
   echo "the witness targets the RETIRED stack machine; invariants.sh (ix) gates it out:"
   grep -h 'push_words == 0' bench/vs_rust/invariants.sh | head -1 | sed 's/^/  /'
@@ -188,8 +188,14 @@ measure() {  # measure <mode>  mode=report | recut
 
 full_ddc() {
   echo "== --full: Wheeler two-stage DDC of bebop.bp through the witness"
-  sed -e "1r selfhost/prelude/sha256.bp" -e '1d' bebop.bp > "$OUT/bebop_inlined.bp"
-  echo "   stage 0: bebop.bp with its one \`use\` line inlined = $(sz "$OUT/bebop_inlined.bp") B"
+  # 2026-09-29 split: flatten bebop.bp + compiler/*.bp into one source first (tools/bp_src.py
+  # --flat comments the compiler `use` lines out), then inline the sha256 prelude in place of its
+  # `use` line -- the witness follows no `use` at all. Refuse if any line-initial `use` survives.
+  python3 tools/bp_src.py --flat > "$OUT/bebop_flat.bp" || { echo "   stage 0 FAILED: bp_src.py --flat"; return 1; }
+  # the prelude goes FIRST, where use_expand puts it (same fn order as the compiler's own expansion)
+  { cat selfhost/prelude/sha256.bp; grep -vx 'use "selfhost/prelude/sha256.bp"' "$OUT/bebop_flat.bp"; } > "$OUT/bebop_inlined.bp"
+  if grep -q '^use "' "$OUT/bebop_inlined.bp"; then echo "   stage 0 FAILED: a \`use\` line survived inlining"; return 1; fi
+  echo "   stage 0: bebop.bp + compiler/*.bp flattened, the sha256 prelude inlined ahead = $(sz "$OUT/bebop_inlined.bp") B"
   echo "   stage 1: W1 = witness(bebop.bp), timeout ${DDC_FULL_TIMEOUT:-900}s ..."
   if run timeout "${DDC_FULL_TIMEOUT:-900}" $SEED "$OUT/witness.bin" compile "$OUT/bebop_inlined.bp" "$OUT/W1.bin" >/dev/null 2>&1 && [ -s "$OUT/W1.bin" ]; then
     echo "   stage 1 produced W1 = $(sz "$OUT/W1.bin") B md5 $(h "$OUT/W1.bin")"

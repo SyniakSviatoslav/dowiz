@@ -33,6 +33,8 @@ SIMD/FP words are ignored (no GPR write tracked). No external disassembler.
 import os, re, struct, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import bp_src   # 2026-09-29 split: a compiler main (bebop.bp) is read WITH its compiler/*.bp includes
 PROLOGUE = (0xA9BF7BFD, 0x910003FD)  # stp x29,x30,[sp,#-16]! ; mov x29,sp
 RET = 0xD65F03C0
 PRO_N, EPI_N = 10, 8                   # emit_prologue / emit_epilogue word counts
@@ -134,7 +136,7 @@ T43_X27_RESET = {0xf94003fb + (10 + d) * 1024 for d in range(21)}
 def sys_allow(bp):
     """Words emitted by `em(insns, n, <int>)` inside every `fn emit_sys_*` of bp,
     plus T43's x27 mark-reset loads (A6)."""
-    src = open(bp).read()
+    src = bp_src.read(bp)
     allow = set(T43_X27_RESET)
     for m in re.finditer(r"^fn emit_sys_\w+\(.*?\n}\n", src, re.S | re.M):
         allow |= {int(x) for x in re.findall(r"em\(insns, n, (\d+)\)", m.group(0))}
@@ -143,7 +145,7 @@ def sys_allow(bp):
 
 def entry_stub(bp):
     """T118b: the words of bebop.bp entry_stub (`st[i] = <int>`); the 0x14000000 word is `b main`."""
-    m = re.search(r"^fn entry_stub\(.*?\n}\n", open(bp).read(), re.S | re.M)
+    m = re.search(r"^fn entry_stub\(.*?\n}\n", bp_src.read(bp), re.S | re.M)
     return [int(x) for x in re.findall(r"st\[\d+\] = (\d+)", m.group(0))] if m else []
 
 
@@ -315,7 +317,7 @@ PERFN_ARRAYS = ["fnames", "fpos", "offs", "sizes", "starts", "factbuf", "fnames_
 
 def check_perfn(src_path):
     import re as _re
-    src = open(src_path, encoding="utf-8", errors="replace").read()
+    src = bp_src.read(src_path)
     caps = {int(m) for m in _re.findall(r">= (\d+) then diag_exit\(s, 0, 104\)", src)}
     caps |= {int(m) for m in _re.findall(r"cnt\[0\] < (\d+)", src)}
     if not caps:
@@ -392,7 +394,7 @@ def zone_of(b):
 
 def count_literals(bp):
     """Mirror of bebop.bp scan_literals: `"..."` outside `//` comments."""
-    s, i, n = open(bp).read(), 0, 0
+    s, i, n = bp_src.read(bp), 0, 0
     while i < len(s):
         if s.startswith("//", i):
             i = s.find("\n", i)
@@ -407,14 +409,15 @@ def count_literals(bp):
 
 
 def check_fntab(bp, extra):
-    src = open(bp).read().split("\n")
+    lab = bp_src.labeled_lines(bp)          # every compiler file, in order, with file:line labels
+    src = [l for _, _, l in lab]
     errs, used = [], {}
     for ln, line in enumerate(src, 1):
         for b in re.findall(r"fntab\[(\d+)", line):
             used.setdefault(int(b), ln)
     for b, ln in sorted(used.items()):
         if zone_of(b) is None:
-            errs.append(f"{bp}:{ln}: fntab[{b}] outside the zone map")
+            errs.append(f"{lab[ln - 1][0]}:{lab[ln - 1][1]}: fntab[{b}] outside the zone map")
     sizes = {int(x) for x in re.findall(r"fntab = zeros\((\d+)\)", "\n".join(src))}
     if not sizes or min(sizes) <= LIT_END:
         errs.append(f"fntab allocation {sizes} does not cover index {LIT_END}")
@@ -435,7 +438,7 @@ def check_fntab(bp, extra):
     print(f"fntab zones: {len(used)} constant bases, all in "
           + "/".join(z for _, _, z in ZONES))
     print(f"literal trap ({LIT_BASE} + nlits >= {LIT_END}): "
-          + ("PRESENT" if guarded else f"MISSING at {bp}:{trap[0] if trap else '?'}")
+          + ("PRESENT" if guarded else "MISSING at %s" % ("%s:%d" % lab[trap[0] - 1][:2] if trap else "?"))
           + " (compile-time trap owned by bebop.bp)")
     for f in [bp] + extra:
         nl = count_literals(f)

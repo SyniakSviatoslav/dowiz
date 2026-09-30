@@ -22,9 +22,14 @@ digest() {
   md5sum < "$file" | cut -c1-8
 }
 
-# Helper: compute digest of bebop.bp
+# Helper: compute digest of the compiler SOURCE. Since the 2026-09-29 split that is bebop.bp AND
+# the compiler/*.bp it `use`s, concatenated in codegen order (tools/bp_src.py --cat) -- md5 of
+# bebop.bp alone would not move when an included file changes. For an unsplit bebop.bp the
+# concatenation IS bebop.bp, so every older MANIFEST row's source_md5 keeps its meaning.
 source_md5() {
-  digest "bebop.bp"
+  local t; t=$(python3 tools/bp_src.py --cat | md5sum | cut -c1-8) || { echo "ERROR: tools/bp_src.py --cat failed" >&2; return 1; }
+  [ "${#t}" = 8 ] || { echo "ERROR: source digest empty" >&2; return 1; }
+  echo "$t"
 }
 
 # Helper: compile bebop.bp WITH <compiler> and echo the digest of what comes out.
@@ -127,7 +132,9 @@ cmd_save() {
   # DIFFERENT compiler, which is the exact confusion this file exists to end. Record HEAD, and
   # say `+dirty` when bebop.bp differs from it; the commit that lands the pair then supersedes it.
   source_commit=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-  git diff --quiet HEAD -- bebop.bp 2>/dev/null || source_commit="${source_commit}+dirty"
+  # every compiler file, and an UNTRACKED compiler/*.bp counts as dirty too (git diff never sees one)
+  git diff --quiet HEAD -- $(python3 tools/bp_src.py --files) 2>/dev/null || source_commit="${source_commit}+dirty"
+  [ -z "$(git status --porcelain -- compiler 2>/dev/null)" ] || case "$source_commit" in *+dirty) ;; *) source_commit="${source_commit}+dirty";; esac
 
   local short_sha
   short_sha=$(git rev-parse --short HEAD)

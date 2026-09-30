@@ -68,10 +68,10 @@ line braille.log '^braille_check:' '^braille_check: 7 PASS 0 FAIL$'  # pinned at
 line traps.log '^trap_verify' '^trap_verify traps=1[0-9] match=1[0-9] mismatch=0 not_triggered=0$'  # a probe that stops triggering must not read green
 line oracles.log '^SUMMARY' '^SUMMARY ok=[1-9][0-9]* self-frozen=0 mismatch=0 missing=0'
 line bpp.log '^bpref_parity:' '^bpref_parity: agree=[1-9][0-9]* .*disagree=0 error=0'  # A23: agreement between the two implementations; 2026-09-13 audit: an ABSENT tools/bpref.py read `agree=0 unsupported=100 disagree=0 error=0` and matched the old expect
-line f7_kcheck.log '^kernel_neg:' ' 0 accepted of 21'  # F7: twin soundness (Python reference) -- NOTE this number is computed by tools/kcheck.py's PYTHON twin, not by tkernel.bin; the kernel's own acceptance is the next line (kernel_neg_bin), which caught two soundness holes on 2026-09-13 while this line stayed green
-line f7_kcheck.log '^kernel_neg_bin:' ' 0 accepted of 21'  # F7: kernel binary soundness (must reject all unsound terms)
+line f7_kcheck.log '^kernel_neg:' ' 0 accepted of 29'  # F7: twin soundness (Python reference) -- NOTE this number is computed by tools/kcheck.py's PYTHON twin, not by tkernel.bin; the kernel's own acceptance is the next line (kernel_neg_bin), which caught two soundness holes on 2026-09-13 while this line stayed green
+line f7_kcheck.log '^kernel_neg_bin:' ' 0 accepted of 29'  # F7: kernel binary soundness (must reject all unsound terms)
 line f7_kcheck.log '^kernel_pos:' ' 0 rejected of [1-9][0-9]*'  # F7: a kernel that REJECTS EVERYTHING passes kernel_neg and kernel_neg_bin (rejecting all = accepting none); this is the complement that catches it
-line f7_kcheck.log '^kernel_parity:' '28/28'  # F7: kernel parity measurement (must be real, not "NOT MEASURED")
+line f7_kcheck.log '^kernel_parity:' '40/40'  # 2026-09-29: corpus is 29 negatives / 40 parity files since 4a982be0 (09-14); 21 and 28/28 were never re-derived, so the battery was RED on these three lines; F7: kernel parity measurement (must be real, not "NOT MEASURED")
 line abi.txt 'ABI' '^ABI ok'
 line inv.log '^invariants:' 'GREEN'
 line andand.log '^no_andand:' '^no_andand: PASS'  # A26: fails if `bench/parity_constructs/c46_andor.bp` stops carrying `// EXPECT 101100`, or is missing. The `&&`/`||` site counts it prints are INFORMATION, not a verdict -- the ban was retired 2026-09-14 because A26 made its premise false. Comment- and string-aware for the counts (a `//` inside a string literal used to hide a real `&&` on the same line -- measured false negative, fixed 2026-09-13). TRIGGERED 2026-09-14: setting the header back to the pre-A26 111100 turns this red with the derivation in the message, restoring 101100 turns it green

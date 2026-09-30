@@ -49,14 +49,24 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, 'tools'))
+import bp_src   # 2026-09-29 split: bebop.bp is read WITH its compiler/*.bp includes
 
 
 def rd(rel):
     p = os.path.join(ROOT, rel)
     if not os.path.exists(p):
         return None
-    with open(p, encoding='utf-8', errors='replace') as f:
-        return f.read()
+    return bp_src.read(p)
+
+
+def src_lines(rel):
+    """[(label, line_no, text)] over a source and, for the compiler, every compiler/*.bp it
+    includes -- so an exit site is named by the file it is really in."""
+    p = os.path.join(ROOT, rel)
+    if not os.path.exists(p):
+        return []
+    return bp_src.labeled_lines(p)
 
 
 def lines(rel):
@@ -75,17 +85,17 @@ def scan_exit_sites():
     """Every code bebop.bp can exit with, from the source. Returns
     {code_or_expr: [ 'bebop.bp:<line>', ... ]} plus the computed-code sites."""
     fixed, computed = {}, {}
-    for i, ln in enumerate(lines('bebop.bp'), 1):
+    for f, i, ln in src_lines('bebop.bp'):
         for m in re.finditer(r'diag_exit\s*\([^,]*,[^,]*,\s*(\d+)\s*\)', ln):
-            fixed.setdefault(int(m.group(1)), []).append('bebop.bp:%d' % i)
+            fixed.setdefault(int(m.group(1)), []).append('%s:%d' % (f, i))
         for m in re.finditer(r'sys_exit\s*\(\s*(\d+)\s*\)', ln):
             c = int(m.group(1))
             if c != 0:
-                fixed.setdefault(c, []).append('bebop.bp:%d' % i)
+                fixed.setdefault(c, []).append('%s:%d' % (f, i))
         # computed codes: sys_exit(<base> + site) -- the code depends on a
         # caller-chosen constant, so ONE site spans a whole RANGE of codes.
         for m in re.finditer(r'sys_exit\s*\(\s*(\d+)\s*\+\s*([A-Za-z_]\w*)\s*\)', ln):
-            computed.setdefault((int(m.group(1)), m.group(2)), []).append('bebop.bp:%d' % i)
+            computed.setdefault((int(m.group(1)), m.group(2)), []).append('%s:%d' % (f, i))
     if not fixed:
         die('found no exit sites in bebop.bp -- the scan is broken, not the tree')
     return fixed, computed
@@ -467,23 +477,23 @@ def handle_texts(argv):
 
     # Scan all exit sites from the specified source file
     # Strip // comments before scanning to avoid false positives
-    src_content = rd(src_path) or ''
     exits_fixed = {}
-    for i, ln in enumerate(src_content.split('\n'), 1):
+    for f, i, ln in src_lines(src_path):
+        src_path_f = f if f != os.path.basename(src_path) else src_path
         # Remove line comment (everything after //)
         code_part = ln.split('//')[0]
         for m in re.finditer(r'diag_exit\s*\([^,]*,[^,]*,\s*(\d+)\s*\)', code_part):
-            exits_fixed.setdefault(int(m.group(1)), []).append(f'{src_path}:{i}')
+            exits_fixed.setdefault(int(m.group(1)), []).append(f'{src_path_f}:{i}')
         for m in re.finditer(r'sys_exit\s*\(\s*(\d+)\s*\)', code_part):
             c = int(m.group(1))
             if c != 0:
-                exits_fixed.setdefault(c, []).append(f'{src_path}:{i}')
+                exits_fixed.setdefault(c, []).append(f'{src_path_f}:{i}')
         # A17 (2026-09-13): the CLI exits route through a shared `cli_exit(code, m: str)`
         # helper, so the code is an ARGUMENT and there is no literal `sys_exit(N)` left to
         # find. Without this pattern the census reported 64/88/90 as "documented but not
         # emitted" -- the exact opposite of the truth -- the moment they gained texts.
         for m in re.finditer(r'cli_exit\s*\(\s*(\d+)\s*,', code_part):
-            exits_fixed.setdefault(int(m.group(1)), []).append(f'{src_path}:{i}')
+            exits_fixed.setdefault(int(m.group(1)), []).append(f'{src_path_f}:{i}')
 
     all_exit_codes = set(exits_fixed.keys())
 

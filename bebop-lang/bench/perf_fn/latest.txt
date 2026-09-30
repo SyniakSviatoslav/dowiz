@@ -62,7 +62,7 @@ fn_ret_arity_at 224
 fn_ret_arity 29
 fn_param_arity_at 260
 fn_param_arity 29
-unit_tuple_scan 146
+unit_tuple_scan 148
 unit_has_tuple_fn 34
 collect_ctors 178
 ft_ctor_tag 46
@@ -295,7 +295,7 @@ skip_args 150
 emit_call_resolve 160
 emit_call 392
 compile_fn 617
-collect_fns 759
+collect_fns 765
 compile_fn_at_total_saved 149
 fw_vc 13
 fw_alloc 16

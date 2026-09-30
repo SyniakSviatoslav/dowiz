@@ -21,6 +21,14 @@ import argparse, os, re, subprocess, sys, time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEED = os.path.join(ROOT, "seed", "build", "seed")
 SRC = os.path.join(ROOT, "bebop.bp")
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import bp_src
+# 2026-09-29 split: the compiler is bebop.bp + compiler/*.bp. Mutants are built from ONE
+# flattened source (bp_src.flat: every file in order, the compiler `use` lines commented out),
+# which compiles to the same binary -- so an emitter in compiler/*.bp is mutable, and a
+# line number below is a line of that flat text.
+def src_text():
+    return bp_src.flat(ROOT)
 OUTDB = os.path.join(ROOT, "tools", "mutation_coverage.txt")
 TMP = "/tmp/mutc"
 THREAD_BASE = None
@@ -28,7 +36,7 @@ THREAD_BASE = None
 def sites():
     """One mutable literal word per emitter: the first `em(insns, n, <literal>)` in each."""
     out, fn = [], None
-    for i, line in enumerate(open(SRC, errors="replace").read().split("\n"), 1):
+    for i, line in enumerate(src_text().split("\n"), 1):
         m = re.match(r"^fn (emit_\w+)\(", line)
         if m: fn = m.group(1); continue
         if fn is None: continue
@@ -86,7 +94,7 @@ def main():
     if os.path.exists(OUTDB):
         for l in open(OUTDB):
             if l.strip() and not l.startswith("#"): done.add(l.split()[0])
-    base_text = open(SRC, errors="replace").read()
+    base_text = src_text()
     global THREAD_BASE
     THREAD_BASE = threads(os.path.join(ROOT, "bebop.bin"))
     print("thread-gate baseline: %s" % THREAD_BASE)

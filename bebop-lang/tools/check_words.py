@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """check_words.py (item 7, retro D13/L1 mechanised): every numeric literal >= 0x1000 that is
-NEW in `git diff HEAD -- bebop.bp`, inside an `em(insns, n, N)` or `st[i] = N` call, must
+NEW in `git diff HEAD -- bebop.bp` (since the 2026-09-29 split: in the diff of the WHOLE compiler
+text -- bebop.bp + compiler/*.bp concatenated in codegen order, HEAD vs the tree -- so a word added
+to an included file is seen, and a block MOVED between files is not a new word), inside an `em(insns, n, N)` or `st[i] = N` call, must
 appear (decimal or 0x hex) in $BEBOP_TMP/words.objdump -- the `as` + `objdump -d` listing the
 author produces BEFORE editing (L1: asm -> objdump -> script -> LE int -> scripted insert).
 No bebop.bp diff, or no new literal >= 0x1000, is a pass. Run by tools/battery.sh.
@@ -17,6 +19,33 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
+import bp_src
+
+
+def git_show(rel):
+    r = subprocess.run(['git', 'show', 'HEAD:./' + rel], cwd=ROOT, capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else ''
+
+
+def head_text():
+    """HEAD's compiler text: HEAD's bebop.bp, the compiler/*.bp ITS use lines name (as they are at
+    HEAD; a file new since HEAD is empty there), concatenated in the same order as bp_src.text."""
+    main = git_show('bebop.bp')
+    seen, out = set(), []
+    for rel in bp_src.USE.findall(main):
+        if rel in seen: continue
+        seen.add(rel)
+        out.append(git_show(rel))
+    return ''.join(out) + main
+
+
+def compiler_diff(old_text, new_text):
+    import difflib
+    return ''.join(difflib.unified_diff(old_text.splitlines(True), new_text.splitlines(True),
+                                        'a/compiler', 'b/compiler'))
+
+
 LIT = re.compile(r'\bem\(\s*insns\s*,\s*n\s*,\s*(-?\d+)\s*\)|\bst\[[^\]]*\]\s*=\s*(-?\d+)\s*;')
 
 
@@ -44,18 +73,15 @@ def main(argv):
         diff_text = open(argv[0]).read()
     elif os.environ.get('WORDS_BASE'):
         # a lane tree has no .git: diff against the base bebop.bp the lane runner hands us, no git at all
-        import difflib
-        base = os.environ['WORDS_BASE']
-        diff_text = ''.join(difflib.unified_diff(open(base).readlines(), open(os.path.join(ROOT, 'bebop.bp')).readlines(),
-                                                 'a/bebop.bp', 'b/bebop.bp'))
+        base = os.path.abspath(os.environ['WORDS_BASE'])
+        diff_text = compiler_diff(bp_src.text(os.path.dirname(base), os.path.basename(base)), bp_src.text(ROOT))
     elif subprocess.run(['git', 'ls-files', '--error-unmatch', 'bebop.bp'], cwd=ROOT,
                         capture_output=True, text=True).returncode == 0:
         # TRACKEDNESS, not a local .git: bebop-lang/ is a SUBDIRECTORY of the repo at
         # /root/dowiz, so it has no .git of its own and an isdir() test rejects the real
         # tree. A lane tree fails this test for the right reason -- .gitignore lists
         # .claude/lanes/, so bebop.bp there is untracked and the diff would be empty.
-        diff_text = subprocess.run(['git', 'diff', 'HEAD', '--', 'bebop.bp'], cwd=ROOT,
-                                    capture_output=True, text=True).stdout
+        diff_text = compiler_diff(head_text(), bp_src.text(ROOT))
     else:
         # 2026-09-13 (battery audit): from a lane tree `git` walked up to the MAIN repo, whose .gitignore
         # lists .claude/lanes/, so `git diff HEAD -- bebop.bp` was EMPTY and this printed PASS in every

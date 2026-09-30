@@ -13,6 +13,8 @@ Exit 0 = all invariants hold. Exit 1 = at least one violated.
 import collections, hashlib, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import bp_src   # 2026-09-29 split: the compiler is bebop.bp + compiler/*.bp; read ALL of it
 RATCHET = os.path.join(ROOT, "tools", "arch_ratchet.txt")
 fails, notes = [], []
 
@@ -94,13 +96,19 @@ def check_no_nested_fn():
 # --- CHECK 2: file size ratchet ---------------------------------------------------
 # Incident: bebop.bp is 7700 lines and every change to it is high-risk. New files must
 # stay small; existing offenders may only shrink.
+# 2026-09-29 (W-DG4 split): a GENERATED file (`bp_generated:<path> = 1`) is exempt from the cap
+# AND from the largest-file ratchet. Without that the ratchet measured the wrong file: after the
+# split, bebop.bp is 6153 lines and the largest .bp became gb_pool_build.bp (8388, a generated
+# main-stripped copy of an OLD bebop.bp), so the ratchet could not follow the compiler down.
 def check_file_size(r):
     cap = r.get("max_new_bp_lines", 800)
     worst = r.get("max_bp_lines", 8500)
-    biggest, biggest_n = None, 0
+    biggest, biggest_n, gen = None, 0, []
     for p in bp_sources():
         n = sum(1 for _ in open(p, errors="replace"))
         rel = os.path.relpath(p, ROOT)
+        if ("bp_generated:" + rel) in r:
+            gen.append("%s %d" % (rel, n)); continue
         if n > biggest_n: biggest, biggest_n = rel, n
         if n > cap and ("bp_exempt:" + rel) not in r:
             fail("file-size", "%s is %d lines, cap for non-exempt files is %d "
@@ -108,7 +116,12 @@ def check_file_size(r):
     if biggest_n > worst:
         fail("file-size-ratchet", "%s grew to %d lines, ratchet is %d -- the ratchet may go "
              "DOWN, never up" % (biggest, biggest_n, worst))
-    note("largest .bp: %s at %d lines (ratchet %d)" % (biggest, biggest_n, worst))
+    missing = sorted(k[len("bp_generated:"):] for k in r if k.startswith("bp_generated:")
+                     and not os.path.exists(os.path.join(ROOT, k[len("bp_generated:"):])))
+    if missing:
+        fail("file-size", "bp_generated names file(s) that do not exist: " + ", ".join(missing))
+    note("largest .bp: %s at %d lines (ratchet %d); generated, not ratcheted: %s"
+         % (biggest, biggest_n, worst, ", ".join(gen) or "none"))
 
 # --- CHECK 3: the promoted compiler IS the source's compiler ----------------------
 # Incident 2026-09-12 (a18fa8b): bebop.bin at HEAD was 292b8953 while compile(bebop.bp)
@@ -121,8 +134,10 @@ def check_binary_matches_source():
     out = "/tmp/arch_check_gen.bin"
     seed = os.path.join(ROOT, "seed", "build", "seed")
     if not os.path.exists(seed): return note("artifact-identity: skipped, no seed binary")
+    # cwd=ROOT: bebop.bp's `use` paths (sha256 prelude, compiler/*.bp) resolve against the
+    # compile's working directory, so from any other cwd this was an rc=90 open failure.
     rc = subprocess.run([seed, binp, "compile", os.path.join(ROOT, "bebop.bp"), out],
-                        capture_output=True).returncode
+                        capture_output=True, cwd=ROOT).returncode
     if rc != 0: return fail("artifact-identity", "bebop.bin cannot compile bebop.bp (rc=%d)" % rc)
     a = hashlib.md5(open(binp, "rb").read()).hexdigest()[:8]
     b = hashlib.md5(open(out, "rb").read()).hexdigest()[:8]
@@ -311,7 +326,8 @@ def check_cited_files_exist(r):
     # (i) the extension group had no right boundary, so `bebop-f86bee7.sha256` matched as
     #     `bebop-f86bee7.sh` and was reported missing -- a false positive that survived because
     #     nobody ever looked up the one name it produced. `(?![A-Za-z0-9])` ends the match.
-    pat = re.compile(r"\b((?:bench|tools|selfhost|docs|formal|seed)/[A-Za-z0-9_./-]+\.(?:sh|py|bp|md|lean|txt))(?![A-Za-z0-9])")
+    # `compiler/` since the 2026-09-29 split: the compiler's own files are citable, and checked.
+    pat = re.compile(r"\b((?:bench|tools|selfhost|docs|formal|seed|compiler)/[A-Za-z0-9_./-]+\.(?:sh|py|bp|md|lean|txt))(?![A-Za-z0-9])")
     # (ii) a design document NAMING A FILE IT PROPOSES TO BUILD is a plan, not a citation, and
     #     flagging it pushed a lane to DELETE the names -- `tools/perf_report.py` became "a Python
     #     dashboard tool", which satisfies the check and makes the design vaguer. The right answer
@@ -351,7 +367,7 @@ def check_cited_files_exist(r):
 # so a miscompile in it is invisible by construction. This check names those.
 def check_builtin_coverage(r):
     import glob as _g
-    src = open(os.path.join(ROOT, "bebop.bp"), errors="replace").read()
+    src = bp_src.text(ROOT)
     emitted = set(re.findall(r"^fn emit_(sys_\w+)\(", src, re.M))
     corpus = []
     for d in ("bench/parity_constructs", "bench/vs_rust/std_tests", "selfhost/std",
@@ -378,7 +394,7 @@ def check_builtin_coverage(r):
 # admission, the compiler emits codes the table does not carry (105, 106, 107). An
 # undocumented trap is a failure whose meaning has to be reverse-engineered at 2am.
 def check_traps_documented(r):
-    src = open(os.path.join(ROOT, "bebop.bp"), errors="replace").read()
+    src = bp_src.text(ROOT)
     codes = set(int(c) for c in re.findall(r"diag_exit\(\s*\w+\s*,\s*\w+\s*,\s*(\d+)\s*\)", src))
     traps = open(os.path.join(ROOT, "docs", "TRAPS.md"), errors="replace").read()
     documented = set(int(c) for c in re.findall(r"^\|\s*(\d+)\s*\|", traps, re.M))
@@ -482,14 +498,16 @@ def check_laws_have_enforcement(r):
 # A syscall emitter writes raw words; the register contract is the only thing that makes
 # them reviewable. L2 has required the table since the beginning and nothing checked it.
 def check_syscall_comments(r):
-    src = open(os.path.join(ROOT, "bebop.bp"), errors="replace").read().split("\n")
+    # the 12-line window stays inside one file: a register table is written above its fn
     bad = []
-    for i, line in enumerate(src):
-        m = re.match(r"^fn (emit_sys_\w+)\(", line)
-        if not m: continue
-        window = "\n".join(src[max(0, i - 12):i])
-        if not re.search(r"\bx[0-9]+\b", window):
-            bad.append("%s (bebop.bp:%d)" % (m.group(1), i + 1))
+    for rel in bp_src.files(ROOT):
+        src = open(os.path.join(ROOT, rel), errors="replace").read().split("\n")
+        for i, line in enumerate(src):
+            m = re.match(r"^fn (emit_sys_\w+)\(", line)
+            if not m: continue
+            window = "\n".join(src[max(0, i - 12):i])
+            if not re.search(r"\bx[0-9]+\b", window):
+                bad.append("%s (%s:%d)" % (m.group(1), rel, i + 1))
     worst = r.get("max_syscall_no_regtable", 0)
     if len(bad) > worst:
         fail("syscall-comment", "%d syscall emitter(s) with no register table in the 12 lines "
@@ -606,7 +624,7 @@ def check_no_dead_functions(r):
     # a parity construct may legitimately define helpers it does not call (c66_fncap.bp
     # defines a hundred functions on purpose, to test the fn cap). USES are counted over
     # the whole corpus, because a library function called only from a gate is alive.
-    owned = ("bebop.bp", "selfhost/prelude/", "selfhost/std/", "selfhost/tools/")
+    owned = ("bebop.bp", "compiler/", "selfhost/prelude/", "selfhost/std/", "selfhost/tools/")
     defs = {}
     for p in bp_sources():
         rel = os.path.relpath(p, ROOT)
@@ -814,7 +832,7 @@ def check_roadmap_matches_code(r):
         parts = rel.split(os.sep)
         if ".git" in parts or "tmp" in parts: continue
         for f in fn: basenames.setdefault(f, []).append(os.path.join(dp, f))
-    CITE = re.compile(r"\b((?:bench|tools|selfhost|docs|formal|seed)/[A-Za-z0-9_./-]+"
+    CITE = re.compile(r"\b((?:bench|tools|selfhost|docs|formal|seed|compiler)/[A-Za-z0-9_./-]+"
                       r"\.(?:sh|py|bp|md|lean|txt)|[A-Za-z0-9_-]+\.(?:bp|py|sh|lean)):"
                       r"(\d+)(?:-(\d+))?")
     unresolved = 0
