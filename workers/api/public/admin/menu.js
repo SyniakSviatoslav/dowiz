@@ -339,7 +339,7 @@ const TASTE_AXES = ['spicy', 'sweet', 'salty', 'sour', 'richness'];
 const TASTE_ICONS = { spicy: 'pepper', sweet: 'candy', salty: 'salt', sour: 'lemon-2', richness: 'flame' };
 const TASTE_LEVELS = [1, 2, 3];
 let tasteDraft = {};
-const KIND_ICON = { food_ingredient: 'meat', condiment: 'bottle', packaging: 'box', utensil: 'tool', resale: 'beer', prep: 'chef-hat' };
+const KIND_ICON = { food_ingredient: 'meat', condiment: 'bottle', packaging: 'box', utensil: 'tool', resale: 'beer', prep: 'tools-kitchen-2' };
 const isFoodKind = k => k === 'food_ingredient' || k === 'condiment' || k === 'prep';
 const basisOf = u => u === 'unit' ? 1 : 100;
 /// The stepper moves by ten grams or millilitres, by one piece.
@@ -383,7 +383,7 @@ function recipeMarkup(p){
       <div class="btn-row">${btn({ id: 'rcAdd', icon: 'plus', key: 'addSelected', tour: 'recipe.addLine' })}</div>
     </details>
     <div id="rcSum" class="rc-sum"></div>
-    ${p.id ? `<div class="btn-row">${btn({ id: 'rcTakes', variant: 'ghost', icon: 'scale', key: 'pf_takes' })}</div>` : ''}`;
+    ${p.id ? `<div class="btn-row">${btn({ id: 'rcTakes', variant: 'ghost', icon: 'receipt', key: 'pf_takes' })}</div>` : ''}`;
 }
 const step = l => l.unit === 'unit' ? STEP_PIECE : STEP_MASS;
 function drawRecipe(p){
@@ -424,6 +424,9 @@ async function bindRecipe(p){
   try { recipeDraft = (await storedBom(p.id)).map(l => ({ ...l })); recipeKnown = p.id; } catch { recipeKnown = null; }
   // Lines loaded from the dish are re-scaled from today's supply numbers, as the hub does on save.
   recipeDraft = recipeDraft.map(l => { const sup = book.find(s => s.id === l.supply); return sup ? lineOf(sup, l.qty, l.net ?? null, l.out ?? null) : l; });
+  // The sheet may have moved on while the book loaded (Delete tapped, a
+  // nudge reopened it): binding into a sheet that is gone threw (W-VERIFY).
+  if (!$('#rcQ')) return;
   drawRecipe(p);
   let kind = 'all';
   const drawBook = () => {

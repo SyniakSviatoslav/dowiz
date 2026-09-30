@@ -55,6 +55,10 @@ done
 
 run unreached python3 tools/gates/unreached.py
 run design-gate python3 scripts/design_gate.py
+# W-VERIFY 2026-09-30: browser senders vs the Worker's body structs, and icon names vs lib/icons.css.
+# body-fields parses the JS with TypeScript; TS_PATH overrides where it is found.
+run body-fields node tools/gates/body-fields.mjs
+run icons node tools/gates/icons.mjs
 # The live audits' own alarms, against stubs (the audits themselves need a venue and a token).
 for p in e2e/gates/*.prove.mjs; do run "$(basename "$p" .mjs)" node "$p"; done
 

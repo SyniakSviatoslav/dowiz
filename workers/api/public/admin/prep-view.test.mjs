@@ -40,7 +40,7 @@ test('the card: the four numbers, the lines with cost, where used with one-sale-
 
 test('editor lines and the live numbers', () => {
   const l = V.editorLine({ item: 'mitsukan', qty: 250, sup: { name: 'Mitsukan', unit: 'g', kind: 'prep' } }, 2);
-  assert.ok(l.includes('data-plq="2"') && l.includes('data-plx="2"') && l.includes('value="250"') && l.includes('chef-hat'));
+  assert.ok(l.includes('data-plq="2"') && l.includes('data-plx="2"') && l.includes('value="250"') && l.includes('tools-kitchen-2'));
   const live = V.liveMarkup({ k: 894, batch: 235, per: 112, unit: 'g' }, fmt);
   assert.ok(live.includes('<b>89.4%</b>') && live.includes('<b>L235</b>') && live.includes('<b>L112</b> [pf_costPerKg]'));
   const none = V.liveMarkup({ k: null, batch: null, per: null, unit: 'ml' }, fmt);

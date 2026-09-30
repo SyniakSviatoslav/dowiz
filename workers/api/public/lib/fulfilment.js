@@ -40,7 +40,7 @@ export const tableOf = o => {
 /// forget the other.
 export const badgeOf = o => {
   const kind = kindOf(o);
-  if (kind === 'dine_in') return { icon: 'utensils', key: 'dineIn', table: tableOf(o) };
+  if (kind === 'dine_in') return { icon: 'bowl-chopsticks', key: 'dineIn', table: tableOf(o) };
   if (kind === 'pickup') return { icon: 'walk', key: 'pickup', table: null };
   return { icon: 'bike', key: 'delivery', table: null };
 };

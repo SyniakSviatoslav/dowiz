@@ -134,3 +134,25 @@ fn text_is_bounded_and_the_signer_is_not_the_callers() {
     assert!(matches!(plan("received", body(&long), "p", NOW, TODAY, no_shelf), Err((400, _))));
     assert!(serde_json::from_str::<StockMoveIn>(r#"{"item":"rice","qty":1,"by":"p_boss"}"#).is_err());
 }
+
+// W-VERIFY (2026-09-30): THE CONSOLE PUT `location_id` IN THE BODY of
+// `stock/cooked` (admin/prep.js) and `stock/as-is` (admin/stock.js) through
+// `withLoc`. This struct denies unknown fields and the route parses it with
+// serde_json, so both answered 400 live; the probe never sent the field and
+// stayed green. The venue is the route's (query / token / Host), never the
+// body's. Gate: tools/gates/body-fields.mjs.
+#[test]
+fn a_movement_body_naming_its_venue_is_refused() {
+    for raw in [r#"{"location_id":"v1","item":"rice","qty":2100,"out":2050}"#, r#"{"location_id":"v1","products":["d1"]}"#] {
+        let e = crate::body::refusal::<StockMoveIn>(raw);
+        assert!(e.contains("unknown field `location_id`"), "{e}");
+    }
+}
+
+#[test]
+fn the_bodies_the_console_sends_now_are_accepted() {
+    let b = crate::body::from_text::<StockMoveIn>(r#"{"item":"rice","qty":2100,"out":2050,"expiry":"2026-10-01"}"#).expect("cooked");
+    assert_eq!((b.item.as_str(), b.qty, b.out), ("rice", Some(2100), Some(2050)));
+    let b = crate::body::from_text::<StockMoveIn>(r#"{"products":["d1","d2"]}"#).expect("as-is");
+    assert_eq!(b.products, Some(vec!["d1".to_string(), "d2".to_string()]));
+}

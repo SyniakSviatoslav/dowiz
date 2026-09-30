@@ -51,9 +51,16 @@ impl Carry {
     }
 
     /// The whole units to book for a draw of `uq` millionths of `item` now.
+    ///
+    /// NEVER NEGATIVE (W-VERIFY 2026-09-30). A `released` gives back the
+    /// exact `(uq, qty)` its order booked, so cancelling orders that booked 0
+    /// (0.4 g rounded down) walks the carry below -0.5 units; the next draw
+    /// then rounded to -1 or -2 and the ORDER WAS REFUSED ("-2 is not a
+    /// quantity"). Such a draw books 0 and the carry keeps the rest: the
+    /// following draws pay it back, and the total booked stays exact.
     pub fn book(&self, item: &str, uq: i64) -> Qty {
         let owed = i128::from(self.of(item)) + i128::from(uq);
-        ((owed + i128::from(MICRO) / 2).div_euclid(i128::from(MICRO))) as Qty
+        ((owed + i128::from(MICRO) / 2).div_euclid(i128::from(MICRO))).max(0) as Qty
     }
 
     fn shift(&mut self, item: &str, uq: i64, qty: Qty) {

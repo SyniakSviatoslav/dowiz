@@ -129,3 +129,84 @@ fn served_draws_carry_too_and_a_void_undoes_the_fraction() {
     assert_eq!(c.of("salt"), 2 * SALT - MICRO, "o0 and o2 remain: 1.55 booked as 1");
     assert_eq!(log.ledger().unwrap().level("salt").on_hand, 2000 - 1);
 }
+
+// ── W-VERIFY 2026-09-30: cancels that interleave with other orders ──────────
+
+fn held(log: &StockLog, order: &str) -> Vec<(String, Qty)> {
+    log.ledger().unwrap().stranded().into_iter().filter(|(o, _, _)| o == order).map(|(_, i, q)| (i, q)).collect()
+}
+fn cancel(log: &mut StockLog, order: &str) {
+    let led = log.ledger().unwrap();
+    log.append_all(&settle(&led, order, false)).unwrap();
+}
+fn reserved_qtys(log: &StockLog) -> Vec<Qty> {
+    log.events().iter().filter_map(|e| match e { StockEvent::Reserved { qty, .. } => Some(*qty), _ => None }).collect()
+}
+
+/// One place + cancel, a thousand times: the carry comes back to 0 every time
+/// and the shelf never moves.
+#[test]
+fn a_thousand_place_and_cancel_cycles_leave_carry_zero_and_stock_unchanged() {
+    let mut log = log();
+    for i in 0..1000 {
+        log.append_draws(&draw(i)).unwrap();
+        cancel(&mut log, &format!("o{i}"));
+        assert_eq!(log.fold_tail(false, false).unwrap().2, Carry::default(), "cycle {i}");
+    }
+    let l = log.ledger().unwrap().level("salt");
+    assert_eq!((l.on_hand, l.reserved), (2000, 0));
+}
+
+/// Ten orders of 0.4 g each book 1,0,1,0,... ; cancelling exactly the ones
+/// that booked 0 hands the carry back ten times 0.4 g it never booked. The
+/// next draw must still book a quantity the shelf can hold -- never a
+/// NEGATIVE reservation (which would put salt ON the shelf).
+#[test]
+fn cancelling_the_orders_that_booked_zero_never_books_a_negative_hold() {
+    let mut log = log();
+    let u = 400_000; // 0.4 g
+    for i in 0..10 {
+        log.append_draws(&[Draw { item: "salt".into(), uq: u, order_id: format!("z{i}"), via: None }]).unwrap();
+    }
+    let zeros: Vec<String> = (0..10).map(|i| format!("z{i}")).filter(|o| held(&log, o).iter().all(|(_, q)| *q == 0)).collect();
+    assert!(zeros.len() >= 5, "{zeros:?}");
+    for o in &zeros {
+        cancel(&mut log, o);
+    }
+    let c = log.fold_tail(false, false).unwrap().2.of("salt");
+    log.append_draws(&[Draw { item: "salt".into(), uq: u, order_id: "next".into(), via: None }]).unwrap();
+    let q = *reserved_qtys(&log).last().unwrap();
+    assert!(q >= 0, "carry {c} before the draw booked a reservation of {q} g");
+}
+
+/// Random interleavings of place / cook / cancel over two leaves: every hold
+/// is non-negative, and once every open order is cancelled the shelf holds
+/// exactly what the cooked orders left and the carry is what they owe.
+#[test]
+fn interleaved_place_cook_cancel_keeps_every_hold_non_negative() {
+    let mut log = StockLog::create_sized(1024 * 1024).unwrap();
+    log.append(&StockEvent::Received { item: "salt".into(), qty: 100_000 }).unwrap();
+    let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut rnd = |n: u64| { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; seed % n };
+    let mut open: Vec<String> = Vec::new();
+    for i in 0..600 {
+        match rnd(3) {
+            0 | 1 => {
+                let o = format!("r{i}");
+                let uq = 100_000 + (rnd(900_000) as i64);
+                log.append_draws(&[Draw { item: "salt".into(), uq, order_id: o.clone(), via: None }]).unwrap();
+                open.push(o);
+            }
+            _ if !open.is_empty() => {
+                let o = open.remove(rnd(open.len() as u64) as usize);
+                if rnd(2) == 0 { cancel(&mut log, &o) } else {
+                    let led = log.ledger().unwrap();
+                    log.append_all(&settle(&led, &o, true)).unwrap();
+                }
+            }
+            _ => {}
+        }
+    }
+    let neg: Vec<Qty> = reserved_qtys(&log).into_iter().filter(|q| *q < 0).collect();
+    assert!(neg.is_empty(), "negative reservations were written: {neg:?}");
+}

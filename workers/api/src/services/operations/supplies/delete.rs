@@ -124,6 +124,42 @@ pub fn remove_supplies(cat: &mut Catalog, ids: &[String]) -> Removal {
     Removal { deleted, dishes }
 }
 
+/// Why a delete was held back before anything changed.
+#[derive(Debug, PartialEq)]
+pub enum Held {
+    /// Where the ids are used (`uses_of`), for the owner to confirm.
+    InUse(Value),
+    /// Semi-finished products whose card would be left with NO line (and
+    /// which are not deleted in the same call), by id. Refused even when
+    /// confirmed (W-VERIFY 2026-09-30).
+    Emptied(Vec<String>),
+}
+
+/// The catalogue step of a delete, PURE on `cat`: where-used first unless the
+/// owner `confirmed`, then the removal.
+pub fn delete_in(cat: &mut Catalog, ids: &[String], confirmed: bool) -> std::result::Result<Removal, Held> {
+    if !confirmed {
+        let used = uses_of(cat, ids);
+        if !used.as_object().is_some_and(|m| m.is_empty()) {
+            return Err(Held::InUse(used));
+        }
+    }
+    // A card this would strip to NO line: its dishes would sell drawing
+    // nothing and cost 0 (a card `check_card` refuses on save).
+    let gone = |s: &str| ids.iter().any(|i| i == s);
+    let emptied: Vec<String> = cat
+        .supplies()
+        .into_iter()
+        .filter(|(sid, _)| !gone(sid))
+        .filter(|(_, j)| dowiz_hub::prep::card_of(j).is_some_and(|c| !c.lines.is_empty() && c.lines.iter().all(|l| gone(&l.item))))
+        .map(|(sid, _)| sid)
+        .collect();
+    if !emptied.is_empty() {
+        return Err(Held::Emptied(emptied));
+    }
+    Ok(remove_supplies(cat, ids))
+}
+
 /// `POST /api/owner/supplies/delete` -- see the module.
 pub async fn delete_supplies(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
@@ -156,13 +192,11 @@ pub async fn delete_supplies(mut req: Request, ctx: RouteContext<crate::Req>) ->
     let (removal, today) = match crate::hubstore::with_catalog(&place, move |cat| {
         // WHERE IT IS USED, FIRST (SPEC §e): a line leaves a card or a recipe
         // only after the owner has seen it named.
-        if !confirmed {
-            let used = uses_of(cat, &wanted);
-            if !used.as_object().is_some_and(|m| m.is_empty()) {
-                return Err(Error::RustError(format!("in-use: {used}")));
-            }
-        }
-        let r = remove_supplies(cat, &wanted);
+        let r = match delete_in(cat, &wanted, confirmed) {
+            Ok(r) => r,
+            Err(Held::InUse(used)) => return Err(Error::RustError(format!("in-use: {used}"))),
+            Err(Held::Emptied(ids)) => return Err(Error::RustError(format!("emptied: {}", json!(ids)))),
+        };
         if !r.dishes.is_empty() {
             crate::services::catalogue::import::bump_menu_version(cat);
         }
@@ -171,13 +205,19 @@ pub async fn delete_supplies(mut req: Request, ctx: RouteContext<crate::Req>) ->
     .await
     {
         Ok(v) => v,
-        Err(e) => match e.to_string().split_once("in-use: ") {
-            Some((_, used)) => {
+        Err(e) => {
+            let said = e.to_string();
+            if let Some((_, used)) = said.split_once("in-use: ") {
                 let uses: Value = serde_json::from_str(used).unwrap_or(Value::Null);
                 return Ok(Response::from_json(&json!({ "error": "in use", "uses": uses }))?.with_status(409));
             }
-            None => return Err(e),
-        },
+            if let Some((_, ids)) = said.split_once("emptied: ") {
+                let emptied: Value = serde_json::from_str(ids).unwrap_or(Value::Null);
+                let why = "a semi-finished product would be left with no lines: delete it too, or give its card another line first";
+                return Ok(Response::from_json(&json!({ "error": why, "emptied": emptied }))?.with_status(409));
+            }
+            return Err(e);
+        }
     };
     let input = crate::services::operations::stock::turn::StockTurnIn {
         kind: "removed".into(),
@@ -204,3 +244,5 @@ pub async fn delete_supplies(mut req: Request, ctx: RouteContext<crate::Req>) ->
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod combo_tests;

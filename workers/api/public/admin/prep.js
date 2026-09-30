@@ -61,7 +61,7 @@ export function openCook(p, ctx){
     if (!(qty > 0)) return toast(t('pf_yieldBad'));
     const b = { item: p.id, qty, ...(out ? { out: Math.round(Number(out)) } : {}), ...($('#ck-exp').value ? { expiry: $('#ck-exp').value } : {}) };
     try {
-      const r = await busy($('#ckSave'), () => post('/owner/stock/cooked', withLoc(b)));
+      const r = await busy($('#ckSave'), () => post('/owner/stock/cooked', b));
       $('#ckOut').innerHTML = cookResult(r, { money, t }); $('#ckSave').disabled = true; ctx.reload();
     } catch (e) { fail(e); }
   };
@@ -113,9 +113,10 @@ export function openPrepEditor(p, ctx, st = null){
     st.lines.forEach((l, i) => { const c = P.lineCost(l.sup, l.qty); const el = $(`[data-plc="${i}"]`); if (el) el.textContent = c != null && !l.sup?.untracked ? `${t('pf_lineCost')} ${money(c)}` : ''; });
   };
   const draw = () => {
+    for (const l of st.lines) delete l.typed; // the fields show l.qty again
     $('#pfLines').innerHTML = st.lines.length ? st.lines.map(editorLine).join('') : `<p class="hint" data-t="pf_noLines"></p>`;
     retranslate($('#pfLines'));
-    for (const inp of $$('[data-plq]', $('#pfLines'))) inp.oninput = () => { const l = st.lines[+inp.dataset.plq]; const r = P.readLines([{ item: l.item, qty: inp.value, unit: l.sup?.unit || 'g' }]); if (r.lines) l.qty = r.lines[0].qty; live(); };
+    for (const inp of $$('[data-plq]', $('#pfLines'))) inp.oninput = () => { const l = st.lines[+inp.dataset.plq]; l.typed = inp.value; const r = P.readLines([{ item: l.item, qty: inp.value, unit: l.sup?.unit || 'g' }]); if (r.lines) l.qty = r.lines[0].qty; live(); };
     for (const b of $$('[data-plx]', $('#pfLines'))) b.onclick = () => { st.lines.splice(+b.dataset.plx, 1); draw(); };
     live();
   };
@@ -126,7 +127,9 @@ export function openPrepEditor(p, ctx, st = null){
   $('#pfSave').onclick = async () => {
     typed();
     const id = st.id.trim().toLowerCase().replace(/\s+/g, '-'); if (!id) return toast(t('required'));
-    const read = P.readLines(st.lines.map(l => ({ item: l.item, qty: String(l.qty), unit: l.sup?.unit || 'g' })));
+    // WHAT IS TYPED, not the last number that parsed: a line typed as 0 (or
+    // "abc") saved its OLD quantity with "Saved" (W-VERIFY, live 2026-09-30).
+    const read = P.readLines(st.lines.map(l => ({ item: l.item, qty: l.typed ?? String(l.qty), unit: l.sup?.unit || 'g' })));
     if (read.error) return toast(t(read.error));
     const y = P.readYield(st.yield, st.unit); if (y == null) return toast(t('pf_yieldBad'));
     const b = P.body({ id, name: st.name.trim() || id, unit: st.unit, category: st.category.trim(), lines: read.lines, yield: y, weightPerUnit: Number(st.weightPerUnit) || null });

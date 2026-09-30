@@ -275,3 +275,5 @@ pub use uses::{uses_of, Uses};
 
 #[cfg(test)]
 pub(crate) mod tests;
+#[cfg(test)]
+mod verify_tests;

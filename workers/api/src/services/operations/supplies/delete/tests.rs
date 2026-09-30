@@ -129,3 +129,27 @@ fn a_prep_deleted_with_its_own_line_stays_deleted() {
     remove_supplies(&mut cat, &["salmon".into()]);
     assert!(cat.supply("mitsukan").is_some(), "a kept ПФ stays");
 }
+
+/// W-VERIFY 2026-09-30: the ONLY line of a ПФ card deleted (confirmed) left
+/// the ПФ with `lines: []` -- a card `check_card` refuses on save. Every dish
+/// through it then expanded to NO leaf: it sold drawing nothing and its cost
+/// fell to 0, silently. Refused now; deleting the ПФ in the same call is fine.
+#[test]
+fn a_delete_that_would_empty_a_card_is_refused_even_when_confirmed() {
+    let mut cat = catalogue();
+    cat.set_supply("brine", &json!({ "id": "brine", "name": "Brine", "unit": "g", "kind": "prep", "card": { "lines": [{ "item": "salmon", "qty": 50 }], "yield": 100 } }).to_string());
+    let before = cat.supply("brine");
+    assert_eq!(delete_in(&mut cat, &["salmon".into()], true).map(|_| ()), Err(Held::Emptied(vec!["brine".into()])));
+    assert_eq!(cat.supply("brine"), before, "nothing changed");
+    assert!(cat.supply("salmon").is_some(), "nothing changed");
+    // Twins: the ПФ deleted with its line, and a card that keeps a line.
+    assert!(delete_in(&mut cat, &["salmon".into(), "brine".into()], true).is_ok());
+    assert!(cat.supply("brine").is_none() && cat.supply("salmon").is_none());
+    let mut cat = catalogue();
+    cat.set_supply("brine", &json!({ "id": "brine", "name": "Brine", "unit": "g", "kind": "prep", "card": { "lines": [{ "item": "salmon", "qty": 50 }, { "item": "rice", "qty": 5 }], "yield": 100 } }).to_string());
+    assert!(delete_in(&mut cat, &["salmon".into()], true).is_ok());
+    assert_eq!(dowiz_hub::prep::card_of(&cat.supply("brine").unwrap()).unwrap().lines.len(), 1);
+    // Unconfirmed, the where-used answer still comes first.
+    let mut cat = catalogue();
+    assert!(matches!(delete_in(&mut cat, &["salmon".into()], false), Err(Held::InUse(_))));
+}

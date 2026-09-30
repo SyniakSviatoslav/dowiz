@@ -19,7 +19,7 @@ const pct = pm => (pm == null ? null : `${(pm / 10).toFixed(1)}%`);
 export function prepRow(p){
   const lines = (p.lines || []).map(l => `${esc(l.name || l.item)} ${esc(String(l.qty))}`).join(', ');
   const k = p.k != null ? ` · K ${pct(p.k)}` : '';
-  return rowDiv({ leading: icon('chef-hat'), title: p.name || p.id, sub: `<span class="mono">${esc(`${p.yield} ${p.unit || 'g'}${k}`)}</span><span class="muted">${lines}</span>`,
+  return rowDiv({ leading: icon('tools-kitchen-2'), title: p.name || p.id, sub: `<span class="mono">${esc(`${p.yield} ${p.unit || 'g'}${k}`)}</span><span class="muted">${lines}</span>`,
     trailing: pill(p.new ? 'ok' : 'info', { key: p.new ? 'bulkNew' : 'bulkPrepUpdate' }), data: { bkPrep: p.id } });
 }
 

@@ -22,9 +22,9 @@ export async function render(host){
   try { d = await api('/owner/staff'); S.staff = d.staff || []; } catch (e) { $('#slist', host).innerHTML = empty('alert-triangle', { key: 'loadFail', alert: true }); return; }
   const staff = d.staff || [], inv = d.invites || [];
   $('#slist', host).innerHTML = `
-    ${staff.length ? `<div class="rows">${staff.map(s => rowBtn({ cls: s.active ? '' : 'off', data: { s: s.id }, tour: 'staff.card', leading: icon('apron'),
+    ${staff.length ? `<div class="rows">${staff.map(s => rowBtn({ cls: s.active ? '' : 'off', data: { s: s.id }, tour: 'staff.card', leading: icon('user'),
       title: s.name, sub: esc(t('role-' + (s.role || 'unknown'))), trailing: icon('chevron-right', 'chev') })).join('')}</div>`
-      : empty('apron', { key: 'noStaff', bodyKey: 'staffHint' })}
+      : empty('user', { key: 'noStaff', bodyKey: 'staffHint' })}
     ${inv.length ? `<div class="group mt-3"><p class="eyebrow" data-t="inviteStaff"></p><div class="rows">${inv.map(i => rowDiv({ cls: i.expired ? 'off' : '', leading: icon('ticket'),
       title: i.name, sub: `${esc(t(i.expired ? 'inviteExpired' : 'inviteWaiting'))} · ${esc(new Date(i.untilMs).toLocaleDateString())}` })).join('')}</div></div>` : ''}`;
   host.onclick = async e => {
@@ -65,7 +65,7 @@ async function openStaff(id){
   // revokes the pending one), so there is no revoke route to call either.
   const staff = s;
   $('#sBody').innerHTML = `
-    <div class="fact">${icon('tag')}<span class="v"><span class="k" data-t="role"></span><span data-t="role-${esc(staff.role || 'unknown')}"></span></span></div>
+    <div class="fact">${icon('category')}<span class="v"><span class="k" data-t="role"></span><span data-t="role-${esc(staff.role || 'unknown')}"></span></span></div>
     ${switchEl('s-active', staff.active ?? s.active, 'active', null, 'staff.active')}
     ${select({ id: 's-role', key: 'role', value: staff.role || 'kitchen', options: ROLES, tour: 'staff.role' })}
     ${btn({ id: 'sGo', variant: 'primary', icon: 'check', key: 'save', cls: 'mt-3', tour: 'staff.save' })}

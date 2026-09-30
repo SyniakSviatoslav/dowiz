@@ -18,7 +18,7 @@ function body(d){
   const acc = d.accepted
     ? `<span class="mono">${esc(d.accepted.version)}${d.accepted.atMs ? ' · ' + esc(day(d.accepted.atMs)) : ''}</span>` : '';
   return `
-    <div class="rows">${rowDiv({ leading: icon('shield-check'), title: d.version, sub: acc, trailing: pill(tone[0], { key: tone[1] }), tour: 'dpa.state' })}</div>
+    <div class="rows">${rowDiv({ leading: icon('circle-check'), title: d.version, sub: acc, trailing: pill(tone[0], { key: tone[1] }), tour: 'dpa.state' })}</div>
     <div class="btn-row">${btn({ href: '/dpa?lang=' + encodeURIComponent(lang), target: '_blank', variant: 'ghost', icon: 'external-link', key: 'dpaRead', tour: 'dpa.read' })}</div>
     ${d.current ? '' : `${check({ id: 'dpaAgree', key: 'dpaAgree', tour: 'dpa.agree' })}
     <div class="btn-row">${btn({ id: 'dpaGo', variant: 'primary', icon: 'check', key: 'dpaAccept', disabled: true, tour: 'dpa.accept' })}</div>`}`;

@@ -11,7 +11,8 @@ import { shelfFact } from './pf2-view.js';
 
 const esc = ui.esc;
 const icon = name => `<i class="ti ti-${esc(name)}" aria-hidden="true"></i>`;
-export const PREP_ICON = 'chef-hat';
+// Every icon must be one /lib/icons.css draws: 'chef-hat' and 'scale' were not, and drew a grey square (W-VERIFY).
+export const PREP_ICON = 'tools-kitchen-2';
 const pct = pm => (pm == null ? null : `${Math.abs(pm) % 10 ? (pm / 10).toFixed(1) : pm / 10}%`);
 
 /// One ПФ in the list: yield, K, cost per kg, how many dishes use it.
@@ -42,7 +43,7 @@ export function usesMarkup(uses, t){
   const preps = uses?.preps || [], dishes = uses?.dishes || [];
   if (!preps.length && !dishes.length) return `<p class="hint" data-t="pf_usedNowhere"></p>`;
   const rows = (list, kind) => list.map(x => rowDiv({ title: x.name || x.id, leading: icon(kind === 'prep' ? PREP_ICON : 'bowl-chopsticks'),
-    trailing: kind === 'dish' ? btn({ variant: 'ghost', icon: 'scale', key: 'pf_takes', tour: 'pf.takes', data: { takes: x.id, tname: x.name || x.id } }) : '' })).join('');
+    trailing: kind === 'dish' ? btn({ variant: 'ghost', icon: 'receipt', key: 'pf_takes', tour: 'pf.takes', data: { takes: x.id, tname: x.name || x.id } }) : '' })).join('');
   return `${preps.length ? `<p class="ui-label">${esc(t('pf_preps'))} · ${preps.length}</p><div class="rows">${rows(preps, 'prep')}</div>` : ''}
     ${dishes.length ? `<p class="ui-label">${esc(t('pf_dishes'))} · ${dishes.length}</p><div class="rows">${rows(dishes, 'dish')}</div>` : ''}`;
 }

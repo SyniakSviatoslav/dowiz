@@ -129,7 +129,7 @@ function act(what, id){
 async function asIs(ids, el){
   if (!ids.length) return;
   try {
-    const r = await busy(el, () => post('/owner/stock/as-is', withLoc({ products: ids })));
+    const r = await busy(el, () => post('/owner/stock/as-is', { products: ids }));
     toast(`${(r.linked || []).length} ${t('inv_linked')}`);
     ctx.reload();
   } catch (e) { toast(String(e.message || e)); }

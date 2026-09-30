@@ -172,9 +172,15 @@ impl Rat {
     }
     /// This fraction in MILLIONTHS, rounded half up ONCE -- the one rounding a
     /// leaf of the tree gets. `None` when it does not fit an i64.
+    ///
+    /// The whole part is taken first, so `num × 10^6` is never formed: a leaf
+    /// six cards deep at the bounds (num ~ 10^35) overflowed here although the
+    /// answer (~10^11 millionths) fits an i64 (W-VERIFY 2026-09-30). Same
+    /// rounding: `num·10^6 = q·den·10^6 + r·10^6` with `0 <= r < den`.
     pub fn to_micro(self) -> Option<i64> {
-        let n = self.num.checked_mul(1_000_000)?;
-        i64::try_from((n + self.den / 2).div_euclid(self.den)).ok()
+        let (q, r) = (self.num.div_euclid(self.den), self.num.rem_euclid(self.den));
+        let frac = (r.checked_mul(1_000_000)? + self.den / 2).div_euclid(self.den);
+        i64::try_from(q.checked_mul(1_000_000)?.checked_add(frac)?).ok()
     }
     /// The whole number this is, or why it is not one.
     pub fn whole(self, base: Base, max: i64) -> Result<i64, String> {

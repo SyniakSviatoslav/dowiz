@@ -97,8 +97,11 @@ const prod = await own('/api/owner/products', { location_id: VENUE, category_id:
 PROD = prod.body?.id || prod.body?.product?.id;
 step('the dish is created', prod.status === 200 && !!PROD, `${prod.status} ${JSON.stringify(prod.body).slice(0, 200)}`);
 const bom = await own(`/api/owner/products/${PROD}`, { location_id: VENUE, bom: [{ supply: ids.rice, qty: 130 }], available: true, allergens: [] });
-const stored = bom.body?.product || bom.body || {};
-step('the dish stores 130 g of ПФ 2: cost 15, weight 130', bom.status === 200 && (stored.cost === 15 || stored.cost === undefined) , `${bom.status} cost=${stored.cost} weightG=${stored.weightG}`);
+// The update answers {id, ok}: the STORED numbers are read back from the owner
+// list (W-VERIFY 2026-09-30: this step passed on `cost === undefined`, so it
+// could not fail on the one thing it names).
+const listed = ((await own('/api/owner/products', undefined, 'GET')).body?.products || []).find(p => p.id === PROD) || {};
+step('the dish stores 130 g of ПФ 2: cost 15, weight 130', bom.status === 200 && listed.cost === 15 && listed.weightG === 130, `${bom.status} cost=${listed.cost} weightG=${listed.weightG}`);
 const tk = await own(`/api/owner/products/${PROD}/takes`, undefined, 'GET');
 const leaves = Object.fromEntries((tk.body?.leaves || []).map(l => [l.supply.slice(P.length), l.qty]));
 step('one sale takes rice 61.905, vinegar 12.381, salt 0.774, sugar 2.321, no water',
