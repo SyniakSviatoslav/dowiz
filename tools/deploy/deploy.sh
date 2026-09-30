@@ -74,6 +74,16 @@ if [ $MODE != verify ]; then
   took
 
   # ── 3 GATES ───────────────────────────────────────────────────────────────
+  # A commit whose gates AND cargo test already passed here is not re-gated: the copy was just re-hashed
+  # equal to HEAD, so it is the very tree that passed. It saves 20-50 min when only the upload failed
+  # (a slow uplink). DEPLOY_REGATE=1 runs them anyway.
+  PASSED=$WORK/passed/$SHA
+fi
+if [ $MODE != verify ] && [ -f "$PASSED" ] && [ -z "${DEPLOY_REGATE:-}" ]; then
+  step gates
+  echo "   already passed on $SHA at $(cat "$PASSED") -- not re-run (DEPLOY_REGATE=1 re-runs them)"
+  took
+elif [ $MODE != verify ]; then
   step gates
   $SLOT deploy sh "$SRC/tools/gates/run-all.sh" > "$WORK/logs/gates.log" 2>&1; rc=$?
   grep -E '^(FAIL|run-all:)' "$WORK/logs/gates.log" | tail -12 | sed 's/^/   /'
@@ -83,6 +93,7 @@ if [ $MODE != verify ]; then
   ( cd "$SRC/workers/api" && RUSTUP_TOOLCHAIN=$TOOLCHAIN $SLOT deploy $CARGO test --lib ) > "$WORK/logs/cargo-test.log" 2>&1; rc=$?
   grep -E '^test result:' "$WORK/logs/cargo-test.log" | tail -3 | sed 's/^/   /'
   [ $rc = 0 ] || fail 21 "cargo-test: workers/api cargo test --lib rc=$rc on $SHA (log $WORK/logs/cargo-test.log); nothing was uploaded"
+  mkdir -p "$WORK/passed" && date -u +%Y-%m-%dT%H:%M:%SZ > "$PASSED"
   took
 fi
 

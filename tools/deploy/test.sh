@@ -79,6 +79,15 @@ if [ $RC = 0 ] && has "deploy: OK $SHA" && [ "$(uploads)" = 1 ] && grep -q '^dep
    && [ "$(readlink "$T/work/src/workers/api/public/link.js")" = admin/app.js ] && has "verify args: --host https://qa-stub.invalid --commit $SHA" \
    && ! grep -rq 'stub-secret-9f3k' "$T/out" "$T/work/logs"; then ok "clean main deploys once (0), copy == HEAD, token never printed"; else no "happy path"; fi
 
+# ── a commit whose gates + cargo test passed is not re-gated; a failed one is; DEPLOY_REGATE forces ──
+rm -rf "$T/work/passed"; GATES_RC=1 run; [ $RC = 20 ] && [ ! -e "$T/work/passed/$SHA" ] || no "red gates leave no pass mark"
+CARGO_RC=1 run; [ $RC = 21 ] && [ ! -e "$T/work/passed/$SHA" ] || no "red cargo test leaves no pass mark"
+UPLOAD_ERR=1 run; [ $RC = 31 ] && [ -e "$T/work/passed/$SHA" ] && has 'run-all: stub' || no "green gates leave a pass mark"
+GATES_RC=1 run; [ $RC = 0 ] && has 'already passed on' && ! has 'run-all: stub' && ! has 'test result: ok. stub' \
+  && ok "same commit after an upload failure: gates + cargo test skipped (0)" || no "pass mark skip"
+GATES_RC=1 DEPLOY_REGATE=1 run; [ $RC = 20 ] && ok "DEPLOY_REGATE=1 re-runs the gates (red -> 20)" || no "regate"
+rm -rf "$T/work/passed"
+
 # ── upload: the box's connect timeout ("fetch failed") is retried, up to 3 tries; any other error is not ──
 FETCH_FAILS=2 run; [ $RC = 0 ] && [ "$(uploads)" = 3 ] && has 'upload try 2: fetch failed' && has "deploy: OK $SHA" \
   && ok "fetch failed twice, third upload lands (0), 3 uploads" || no "fetch-failed retry"
