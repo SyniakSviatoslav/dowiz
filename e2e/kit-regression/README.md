@@ -207,3 +207,11 @@ consequence: a reservation is taken at placement and released only on
 REJECTED or CANCELLED, so an order abandoned at CONFIRMED holds its
 ingredients for ever, and `available = onHand - reserved` drifts down with
 every one of them.
+
+## The deploy gate: `e2e/flows/` (2026-09-30)
+
+`bash tools/gates/flows.sh` walks F1 customer (storefront, pickup + cash, four
+languages), F2 owner (accept, rename a dish and back, stock and ПФ screens),
+F3 courier (claim, pick up, deliver) and F4 cleanup on **qa-durres only**, one
+Chromium at a time through `slot.sh`, asserting each step on the page AND via
+the API; it prints `flows: F1 ok F2 ok F3 ok F4 ok (NN s)` or the first FAIL.

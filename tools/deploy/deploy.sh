@@ -26,7 +26,7 @@
 # which is what stops the process-cap kill -- and every step prints its seconds.
 #
 # EXIT: 0 ok | 10 not main | 11 dirty tree | 12 copy | 20 run-all | 21 cargo test | 30 no previous version
-#       | 31 upload / no Version ID | 32 wasm lacks the commit | 40 live != HEAD | 41 probe_crud
+#       | 31 upload / no Version ID | 32 wasm lacks the commit | 40 live != HEAD | 41 probe_crud | 42 flows (only with FLOWS_BLOCKING=1)
 #
 # The token file is sourced ONLY inside the subshell that runs wrangler, and never printed.
 # Overrides (tests use them to stub every external): DEPLOY_REPO DEPLOY_WORK DEPLOY_SLOT DEPLOY_WRANGLER
@@ -139,5 +139,14 @@ step probe-crud
 HOST=$HOST $PROBE > "$WORK/logs/probe_crud.log" 2>&1; rc=$?
 tail -3 "$WORK/logs/probe_crud.log" | sed 's/^/   /'
 [ $rc = 0 ] || fail 41 "probe-crud: e2e/kit-regression/_probe_crud.mjs rc=$rc on $HOST (log $WORK/logs/probe_crud.log)"
+# Browser flows (W-FLOWS): ADVISORY until the dish-rename-back bug is fixed; then set FLOWS_BLOCKING=1 as the default.
+if [ "${DEPLOY_FLOWS:-1}" = 1 ]; then
+  bash "$SRC/tools/gates/flows.sh" > "$WORK/logs/flows.log" 2>&1; rc=$?
+  grep '^flows:' "$WORK/logs/flows.log" | tail -1 | sed 's/^/   /'
+  if [ $rc != 0 ]; then
+    [ "${FLOWS_BLOCKING:-0}" = 1 ] && fail 42 "flows: the browser flows gate is RED on $HOST (log $WORK/logs/flows.log)"
+    echo "   flows: ADVISORY red (rc=$rc), not blocking -- log $WORK/logs/flows.log"
+  fi
+fi
 took
 echo "deploy: OK $SHA live on $HOST${NEW:+ as $NEW}${PREV:+ (previous $PREV)} in $(( $(date +%s) - T0 )) s"
