@@ -1,0 +1,96 @@
+use "selfhost/std/block.bp"
+// bench/vs_rust/std_tests/block_rt.bp -- `gate block_rt` (row DG9, SPEC-DATALOG-AND-CODEC §B.6): the
+// bebop reader of the columnar block, the fourth of crates/bebop-wasm/gate.sh's readers.
+//
+//   block_rt.bin <list>  -- every block file named in <list> (one path per line) decoded,
+//                           re-encoded and printed as `block ...` lines (selfhost/std/block.bp
+//                           bk_line); returns how many it read. (Under seed argv[1] is the .bin.)
+//   block_rt.bin         -- std_golden: the twelve fixtures under crates/dowiz-hub/fixtures/blocks
+//                           (run from bebop-lang/), each folded acc*31 + n, nnz, vals, rt and the
+//                           K256's first 64 bits; -1 when any of them is refused or rt fails.
+
+module core { }
+
+fn rt_unreadable(o: [i64]) -> i64 {
+  let p = bk_puts(o, 0, "block unreadable");
+  let _ = o[p] = 10;
+  sys_write(1, o, p + 1)
+}
+
+// rt_one: read the file path[0..plen) into b and print its line; 1 = accepted with rt ok.
+fn rt_one(path: [i64], plen: i64, b: [i64], t: [i64], s: [i64], st: [i64], v: [i64], e: [i64], h: [i64], o: [i64]) -> i64 {
+  let len = bk_read(path, plen, b, 98305);
+  let _ = if len < 0 then rt_unreadable(o) else 0;
+  let _ = if len < 0 then return 0 else 0;
+  let rc = bk_line(b, len, t, s, st, v, e, h, o);
+  if rc == 0 then st[7] else 0
+}
+
+fn rt_list(list: str, b: [i64], t: [i64], s: [i64], st: [i64], v: [i64], e: [i64], h: [i64], o: [i64]) -> i64 {
+  let ln = str_len(list);
+  let lp = zeros(ln + 1);
+  let _ = bk_load(lp, 0, list);
+  let cap = 4194304;
+  let buf = zeros(cap + 8192);
+  let n = bk_read(lp, ln, buf, cap);
+  let _ = if n < 0 then return 0 - 1 else 0;
+  let path = zeros(4096);
+  let i = 0;
+  let count = 0;
+  while i < n {
+    let j = i;
+    while (j < n) & (buf[j] != 10) { let j = j + 1; 0 };
+    let k = 0;
+    while k < j - i {
+      let _ = path[k] = buf[i + k];
+      let k = k + 1;
+      0
+    };
+    let _ = if j > i then rt_one(path, j - i, b, t, s, st, v, e, h, o) else 0;
+    let count = if j > i then count + 1 else count;
+    let i = j + 1;
+    0
+  };
+  count
+}
+
+fn rt_fix(dir: [i64], dl: i64, name: str, b: [i64], t: [i64], s: [i64], st: [i64], v: [i64], e: [i64], h: [i64], o: [i64], acc: i64) -> i64 {
+  let pl = bk_load(dir, dl, name);
+  let ok = rt_one(dir, pl, b, t, s, st, v, e, h, o);
+  let _ = if ok != 1 then return 0 - 1 else 0;
+  let acc = acc * 31 + st[3];
+  let acc = acc * 31 + st[4];
+  let acc = acc * 31 + st[6];
+  let acc = acc * 31 + st[7];
+  acc * 31 + ((h[0] << 32) | h[1])
+}
+
+fn rt_golden(b: [i64], t: [i64], s: [i64], st: [i64], v: [i64], e: [i64], h: [i64], o: [i64]) -> i64 {
+  let dir = zeros(256);
+  let dl = bk_load(dir, 0, "../crates/dowiz-hub/fixtures/blocks/");
+  let a = rt_fix(dir, dl, "menu_prices.dwb", b, t, s, st, v, e, h, o, 0);
+  let a = if a == 0 - 1 then a else rt_fix(dir, dl, "bom.dwb", b, t, s, st, v, e, h, o, a);
+  let a = if a == 0 - 1 then a else rt_fix(dir, dl, "names.dwb", b, t, s, st, v, e, h, o, a);
+  let a = if a == 0 - 1 then a else rt_fix(dir, dl, "stock_levels.dwb", b, t, s, st, v, e, h, o, a);
+  let a = if a == 0 - 1 then a else rt_fix(dir, dl, "menu_prices_small.dwb", b, t, s, st, v, e, h, o, a);
+  let a = if a == 0 - 1 then a else rt_fix(dir, dl, "bom_small.dwb", b, t, s, st, v, e, h, o, a);
+  let a = if a == 0 - 1 then a else rt_fix(dir, dl, "names_small.dwb", b, t, s, st, v, e, h, o, a);
+  let a = if a == 0 - 1 then a else rt_fix(dir, dl, "stock_levels_small.dwb", b, t, s, st, v, e, h, o, a);
+  let a = if a == 0 - 1 then a else rt_fix(dir, dl, "menu_prices_empty.dwb", b, t, s, st, v, e, h, o, a);
+  let a = if a == 0 - 1 then a else rt_fix(dir, dl, "bom_empty.dwb", b, t, s, st, v, e, h, o, a);
+  let a = if a == 0 - 1 then a else rt_fix(dir, dl, "names_empty.dwb", b, t, s, st, v, e, h, o, a);
+  if a == 0 - 1 then a else rt_fix(dir, dl, "stock_levels_empty.dwb", b, t, s, st, v, e, h, o, a)
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let b = zeros(98305 + 8192 + 8);
+  let t = zeros(320);
+  let s = zeros(1024);
+  let st = zeros(128);
+  let v = zeros(98320);
+  let e = zeros(98320);
+  let h = zeros(8);
+  let o = zeros(512);
+  let _ = bk_table(t, s);
+  if argc > 2 then rt_list(argv[2], b, t, s, st, v, e, h, o) else rt_golden(b, t, s, st, v, e, h, o)
+}

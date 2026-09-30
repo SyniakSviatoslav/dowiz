@@ -255,13 +255,209 @@ def proj_mode(path):
     return say(0, len(recs), to_i64(h), get(out, 0))
 
 
+# --- the block codec (DG9, SPEC-DATALOG-AND-CODEC §B.2-B.6) ----------------------------------
+# A reader of its own, re-derived from the spec text: header, descriptors, canonical layout, the
+# offsets VALUES, UTF-8, and an encoder that writes the block again FROM THE DECODED COLUMNS.
+# `--block <file>... | @<list>` prints, per block, the line gate.sh compares across four readers:
+#   block <schema> n=<n> nnz=<nnz> vals=<fnv64 hex> rt=<ok|diff> k256=<sha256 of the re-encoding>
+#   block refused=<code> col=<column|->        (the check that refused, in Rust check()'s order)
+# `vals` = FNV-1a 64 over each column's element count, then its elements, each as 8 LE bytes.
+BLOCK_SCHEMAS = [
+    "menu_prices:v1(dish:i64:0,price:i64:1,tax_ppm:i64:5,mods_ptr:u32rp:0,mods_col:u32:0,mods_val:i64:1)",
+    "bom:v1(dish_ptr:u32rp:0,supply:u32:0,qty:i64:0)",
+    "stock_levels:v1(supply:i64:0,qty:i64:0,gen:i64:7)",
+    "names:v1(id:i64:0,bytes:u8:0,off:u32off:0)",
+]
+B_I64, B_I32, B_BYTES, B_OFF, B_RP, B_COL, B_VAL = 1, 2, 3, 4, 5, 6, 7
+B_TOK = {"i64": B_I64, "i32": B_I32, "u8": B_BYTES, "u32off": B_OFF, "u32rp": B_RP, "u32": B_COL}
+B_FIXED, B_DESC, B_MAX = 24, 16, 96 * 1024
+
+
+def k64_of(b):
+    return ((zlib.crc32(b) & 0xFFFFFFFF) << 32) | (len(b) & 0xFFFFFFFF)
+
+
+def block_parse(s):
+    """name, [(col, type, unit)], csr -- `i64` right after a CSR `u32` is the CSR val (type 7)."""
+    name, body = s.split(":v", 1)[0], s[s.index("(") + 1:-1]
+    cols = []
+    for part in body.split(","):
+        c, tok, unit = part.split(":")
+        t = B_VAL if tok == "i64" and cols and cols[-1][1] == B_COL else B_TOK[tok]
+        cols.append((c, t, int(unit)))
+    return name, cols, any(t == B_RP for _, t, _ in cols)
+
+
+BLOCK_TABLE = {k64_of(s.encode()): block_parse(s) for s in BLOCK_SCHEMAS}
+
+
+class Refused(Exception):
+    def __init__(self, code, col="-"):
+        super().__init__(code)
+        self.code, self.col = code, col
+
+
+def u16(b, a):
+    return struct.unpack_from("<H", b, a)[0]
+
+
+def u32(b, a):
+    return struct.unpack_from("<I", b, a)[0]
+
+
+def block_want(t, n, nnz):
+    return {B_I64: n * 8, B_I32: n * 4, B_OFF: (n + 1) * 4, B_RP: (n + 1) * 4, B_COL: nnz * 4, B_VAL: nnz * 8}.get(t)
+
+
+def block_check(b):
+    """The layout of `b` -- (name, cols, n, nnz, [(off, len)]) -- or Refused, in Rust check()'s order."""
+    ln = len(b)
+    if ln < B_FIXED + 4:
+        raise Refused("too_short")
+    if ln > B_MAX:
+        raise Refused("too_big")
+    if b[:4] != b"DWB1":
+        raise Refused("bad_magic")
+    if u16(b, 4) != 1:
+        raise Refused("bad_version")
+    end = ln - 4
+    if u32(b, end) != zlib.crc32(b[:end]) & 0xFFFFFFFF:
+        raise Refused("bad_crc")
+    known = BLOCK_TABLE.get(struct.unpack_from("<Q", b, 16)[0])
+    if known is None:
+        raise Refused("unknown_schema")
+    name, cols, csr = known
+    ncols = u16(b, 6)
+    if ncols > 4096 or ncols != len(cols):
+        raise Refused("bad_ncols")
+    if B_FIXED + B_DESC * ncols > end:
+        raise Refused("too_short")
+    n, nnz = u32(b, 8), u32(b, 12)
+    if nnz != 0 and not csr:
+        raise Refused("bad_nnz")
+    lay, prev = [], B_FIXED + B_DESC * ncols
+    for i, (c, t, unit) in enumerate(cols):
+        at = B_FIXED + B_DESC * i
+        if b[at] != t or b[at + 1] != 0:
+            raise Refused("bad_type", c)
+        if b[at + 2] != unit:
+            raise Refused("bad_unit", c)
+        if b[at + 3] != 0 or u32(b, at + 12) != 0:
+            raise Refused("bad_reserved", c)
+        clen, off = u32(b, at + 4), u32(b, at + 8)
+        if off % 8 != 0:
+            raise Refused("bad_alignment", c)
+        if off != (prev + 7) // 8 * 8 or off + clen > end:
+            raise Refused("bad_offsets", c)
+        w = block_want(t, n, nnz)
+        if w is not None and w != clen:
+            raise Refused("bad_length", c)
+        if any(b[prev:off]):
+            raise Refused("bad_padding", c)
+        lay.append((off, clen))
+        prev = off + clen
+    if prev != end:
+        raise Refused("bad_offsets", cols[-1][0] if cols else "")
+    for i, (c, t, _) in enumerate(cols):
+        if t == B_RP:
+            last = nnz
+        elif t == B_OFF:
+            if i == 0 or cols[i - 1][1] != B_BYTES:
+                raise Refused("bad_type", c)
+            last = lay[i - 1][1]
+        else:
+            continue
+        v = [u32(b, lay[i][0] + 4 * k) for k in range(n + 1)]
+        if v[0] != 0 or any(v[k] < v[k - 1] for k in range(1, n + 1)) or any(x > last for x in v) or v[-1] != last:
+            raise Refused("bad_offsets", c)
+        if t == B_OFF:
+            base = lay[i - 1][0]
+            for k in range(n):
+                s = b[base + v[k]:base + v[k + 1]]
+                try:
+                    s.decode("utf-8", "strict")
+                except UnicodeDecodeError:
+                    raise Refused("not_utf8", cols[i - 1][0])
+                if 0 in s:
+                    raise Refused("not_utf8", cols[i - 1][0])
+    return name, cols, n, nnz, lay
+
+
+def block_decode(b):
+    """(name, n, nnz, [column values]) -- each value a Python int (i64 signed, u32/byte unsigned)."""
+    name, cols, n, nnz, lay = block_check(b)
+    vals = []
+    for (c, t, _), (off, ln) in zip(cols, lay):
+        raw = b[off:off + ln]
+        if t in (B_I64, B_VAL):
+            vals.append(list(struct.unpack("<%dq" % (ln // 8), raw)))
+        elif t == B_I32:
+            vals.append(list(struct.unpack("<%di" % (ln // 4), raw)))
+        elif t == B_BYTES:
+            vals.append(list(raw))
+        else:
+            vals.append(list(struct.unpack("<%dI" % (ln // 4), raw)))
+    return name, n, nnz, vals
+
+
+def block_encode(name, n, nnz, vals):
+    """The canonical bytes of a decoded block (§B.2), written from the values alone."""
+    key = next(k for k, v in BLOCK_TABLE.items() if v[0] == name)
+    cols = BLOCK_TABLE[key][1]
+    out = bytearray(b"DWB1" + struct.pack("<HHIIQ", 1, len(cols), n, nnz, key))
+    out += bytes(B_DESC * len(cols))
+    for i, ((c, t, unit), v) in enumerate(zip(cols, vals)):
+        out += bytes(-len(out) % 8)
+        off = len(out)
+        fmt = {B_I64: "q", B_VAL: "q", B_I32: "i", B_BYTES: "B"}.get(t, "I")
+        out += struct.pack("<%d%s" % (len(v), fmt), *v)
+        struct.pack_into("<BBBBIII", out, B_FIXED + B_DESC * i, t, 0, unit, 0, len(out) - off, off, 0)
+    return bytes(out + struct.pack("<I", zlib.crc32(bytes(out)) & 0xFFFFFFFF))
+
+
+def block_line(b):
+    try:
+        name, n, nnz, vals = block_decode(b)
+    except Refused as r:
+        return "block refused=%s col=%s" % (r.code, r.col)
+    h = FNV_OFFSET
+    for v in vals:
+        for x in [len(v)] + v:
+            h = fnv(h, (x & M64).to_bytes(8, "little"))
+    again = block_encode(name, n, nnz, vals)
+    rt = "ok" if again == b else "diff"
+    return "block %s n=%d nnz=%d vals=%016x rt=%s k256=%s" % (name, n, nnz, h, rt, hashlib.sha256(again).hexdigest())
+
+
+def block_mode(args):
+    paths = open(args[0][1:]).read().split() if len(args) == 1 and args[0].startswith("@") else args
+    for p in paths:
+        try:
+            b = open(p, "rb").read()
+        except OSError as e:
+            print("block unreadable=%s" % e)
+            continue
+        print(block_line(b))
+    return 0
+
+
+def block_schemas_mode():
+    for s in BLOCK_SCHEMAS:
+        print("schema %s k64=%016x %s" % (block_parse(s)[0], k64_of(s.encode()), s))
+    return 0
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "--proj":
         sys.exit(proj_mode(sys.argv[2]))
     if len(sys.argv) == 3 and sys.argv[1] == "--key":
         sys.exit(key_mode(sys.argv[2]))
+    elif len(sys.argv) >= 3 and sys.argv[1] == "--block":
+        sys.exit(block_mode(sys.argv[2:]))
+    elif len(sys.argv) == 2 and sys.argv[1] == "--schemas":
+        sys.exit(block_schemas_mode())
     elif len(sys.argv) == 2:
         sys.exit(main(sys.argv[1]))
     else:
-        print("usage: oracle.py <image> | oracle.py --key compile|proj|empty", file=sys.stderr)
+        print("usage: oracle.py <image> | oracle.py --key compile|proj|empty | oracle.py --block <file>...|@<list> | oracle.py --schemas", file=sys.stderr)
         sys.exit(2)

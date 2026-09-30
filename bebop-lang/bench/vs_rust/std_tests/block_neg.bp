@@ -1,0 +1,52 @@
+use "selfhost/std/block.bp"
+// bench/vs_rust/std_tests/block_neg.bp -- `gate block_neg` (row DG9, SPEC-DATALOG-AND-CODEC B-1): one
+// flipped byte per header region of the 165-dish menu_prices fixture (read from bebop-lang/, crc
+// re-sealed except for the crc's own case) must be refused with the region's code AND column --
+// the codes and columns DG7's check() gives (crates/dowiz-hub/src/block/decode.rs) and gate.sh
+// --prove holds all four readers to. The untouched twin must decode with rt ok.
+// Returns pass * 1000 + fail: 15 cases, so 15000.
+
+module core { }
+
+// ng_case: flip b[at] ^= x (re-sealed when seal = 1), expect (code, col), restore b. 1 = as expected.
+fn ng_case(b: [i64], len: i64, t: [i64], st: [i64], v: [i64], e: [i64], at: i64, x: i64, seal: i64, code: i64, col: i64) -> i64 {
+  let old = b[at];
+  let crc = bk_u32(b, len - 4);
+  let _ = b[at] = old ^ x;
+  let _ = if seal == 1 then bk_put8(b, len - 4, crc32(b, len - 4), 4) else 0;
+  let rc = bk_block(b, len, t, st, v, e);
+  let _ = b[at] = old;
+  let _ = bk_put8(b, len - 4, crc, 4);
+  if (rc == code) & (st[1] == col) then 1 else 0
+}
+
+fn main() -> i64 {
+  let b = zeros(98305 + 8192 + 8);
+  let t = zeros(320);
+  let s = zeros(1024);
+  let st = zeros(128);
+  let v = zeros(98320);
+  let e = zeros(98320);
+  let path = zeros(256);
+  let _ = bk_table(t, s);
+  let pl = bk_load(path, 0, "../crates/dowiz-hub/fixtures/blocks/menu_prices.dwb");
+  let len = bk_read(path, pl, b, 98305);
+  let twin = if bk_block(b, len, t, st, v, e) == 0 then st[7] else 0;
+  let pad = st[8 + 2 * 4] + st[9 + 2 * 4];
+  let ok = twin;
+  let ok = ok + ng_case(b, len, t, st, v, e, 0, 1, 1, 3, 0 - 1);
+  let ok = ok + ng_case(b, len, t, st, v, e, 4, 1, 1, 4, 0 - 1);
+  let ok = ok + ng_case(b, len, t, st, v, e, len - 1, 1, 0, 5, 0 - 1);
+  let ok = ok + ng_case(b, len, t, st, v, e, 16, 1, 1, 6, 0 - 1);
+  let ok = ok + ng_case(b, len, t, st, v, e, 6, 1, 1, 7, 0 - 1);
+  let ok = ok + ng_case(b, len, t, st, v, e, 8, 1, 1, 14, 0);
+  let ok = ok + ng_case(b, len, t, st, v, e, 12, 1, 1, 14, 4);
+  let ok = ok + ng_case(b, len, t, st, v, e, 40, 1, 1, 9, 1);
+  let ok = ok + ng_case(b, len, t, st, v, e, 42, 1, 1, 10, 1);
+  let ok = ok + ng_case(b, len, t, st, v, e, 43, 1, 1, 11, 1);
+  let ok = ok + ng_case(b, len, t, st, v, e, 48, 1, 1, 12, 1);
+  let ok = ok + ng_case(b, len, t, st, v, e, 48, 8, 1, 13, 1);
+  let ok = ok + ng_case(b, len, t, st, v, e, 44, 8, 1, 14, 1);
+  let ok = ok + ng_case(b, len, t, st, v, e, pad, 1, 1, 15, 5);
+  ok * 1000 + (15 - ok)
+}

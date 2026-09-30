@@ -142,6 +142,17 @@ gate sha256 -4000131497313522475 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/nodekey.bp ${BEBOP_TMP:-/tmp/opencode}/nodekey_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/nodekey_test.bin | tail -1)
 gate nodekey 4527185576689197451 "$r"
 
+# ---- block codec (DG9, SPEC-DATALOG-AND-CODEC §B.6): selfhost/std/block.bp reads crates/dowiz-hub/fixtures/blocks ----
+# Goldens derived independently by the Python oracle (crates/bebop-wasm/oracle.py), not copied from this output.
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/block_rt.bp ${BEBOP_TMP:-/tmp/opencode}/block_rt_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/block_rt_test.bin | tail -1)
+gate block_rt -123229500962408692 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/block_neg.bp ${BEBOP_TMP:-/tmp/opencode}/block_neg_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/block_neg_test.bin | tail -1)
+gate block_neg 15000 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/block_money_neg.bp ${BEBOP_TMP:-/tmp/opencode}/block_money_neg_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/block_money_neg_test.bin | tail -1)
+gate block_money_neg 8870921012342020174 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/block_schema.bp ${BEBOP_TMP:-/tmp/opencode}/block_schema_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/block_schema_test.bin | tail -1)
+gate block_schema 6618652239314401093 "$r"
+
 # ---- qplan_cover (W-BATGREEN 2026-09-29: every function of selfhost/std/qplan.bp, B7 step 2's planner) ----
 # The golden is bench/oracles/qplan_cover.py's fold, derived from the cost model with a FULL
 # permutation search -- not copied from this program. Before this gate nothing ran the planner:

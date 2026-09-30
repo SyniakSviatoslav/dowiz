@@ -1,0 +1,537 @@
+use "selfhost/prelude/sha256.bp"
+// selfhost/std/block.bp -- the bebop twin of the columnar block (row DG9; docs/design/
+// SPEC-DATALOG-AND-CODEC-2026-09-28.md §B.2-B.6). The reference is DG7's Rust
+// (crates/dowiz-hub/src/block); crates/bebop-wasm/src/block.rs and oracle.py --block are the other
+// two readers, and crates/bebop-wasm/gate.sh compares the four line by line.
+//
+// ONE BYTE PER CELL everywhere: the block `b` (as sys_read unpacks it), the re-encoding `e`, the
+// schema strings `s`, the output line `o`. `str` cannot be built at runtime, so every writer takes a
+// caller-supplied buffer and a position and returns the next position.
+//
+//   t  -- the schema table, parsed from the §B.4 strings in `s` (bk_table): schema i at 64*i:
+//         +0 K64, +1 ncols, +2 has-a-row_ptr, +3/+4 name start/len in s; column c at +8+4c:
+//         type, unit, name start, name len. Type codes and units are DERIVED from the strings.
+//   st -- one block's state: 0 refusal code, 1 refusal column (-1 = none), 2 schema, 3 n, 4 nnz,
+//         5 ncols, 6 vals, 7 rt; 8+2c/9+2c column c's byte offset/len; 40+2c/41+2c its values'
+//         start/count in `v`; 100 the re-encoding's length. Size st as zeros(128).
+//   v  -- the decoded values, one i64 per element (u32 and bytes zero-extended).
+//
+// Refusal codes, in DG7 check()'s order: 1 too_short 2 too_big 3 bad_magic 4 bad_version 5 bad_crc
+// 6 unknown_schema 7 bad_ncols 8 bad_nnz 9 bad_type 10 bad_unit 11 bad_reserved 12 bad_alignment
+// 13 bad_offsets 14 bad_length 15 bad_padding 16 not_utf8; money (B-3): 17 overflow 18 bad_rate.
+// `>>` is LOGICAL here, `>>>` arithmetic.
+
+module core { }
+
+fn bk_u16(b: [i64], at: i64) -> i64 { b[at] | (b[at + 1] << 8) }
+fn bk_u32(b: [i64], at: i64) -> i64 { b[at] | (b[at + 1] << 8) | (b[at + 2] << 16) | (b[at + 3] << 24) }
+fn bk_i64(b: [i64], at: i64) -> i64 { bk_u32(b, at) | (bk_u32(b, at + 4) << 32) }
+
+// bk_put8: the low w bytes of v, little-endian, at e[at..at+w); returns at + w.
+fn bk_put8(e: [i64], at: i64, v: i64, w: i64) -> i64 {
+  let i = 0;
+  while i < w {
+    let _ = e[at + i] = (v >> (8 * i)) & 255;
+    let i = i + 1;
+    0
+  };
+  at + w
+}
+
+// ---- the schema table (§B.4) ---------------------------------------------------------------------
+fn bk_load(s: [i64], at: i64, x: str) -> i64 {
+  let n = str_len(x);
+  let i = 0;
+  while i < n {
+    let _ = s[at + i] = char(x, i);
+    let i = i + 1;
+    0
+  };
+  at + n
+}
+
+// bk_tok: a type token's §B.2 code; `i64` right after a CSR `u32` (6) is the CSR val (7).
+fn bk_tok(s: [i64], at: i64, l: i64, prev: i64) -> i64 {
+  if l == 2 then 3
+  else (if l == 5 then 5
+  else (if l == 6 then 4
+  else (if s[at] == 105 then (if s[at + 1] == 51 then 2 else (if prev == 6 then 7 else 1))
+  else 6)))
+}
+
+// bk_parse: schema i = the string s[st..en), `name:vN(col:type:unit,...)`. Returns ncols.
+fn bk_parse(t: [i64], i: i64, s: [i64], st: i64, en: i64) -> i64 {
+  let r = 64 * i;
+  let _ = t[r] = (crc32(s + st, en - st) << 32) | ((en - st) & 4294967295);
+  let _ = t[r + 3] = st;
+  let p = st;
+  while s[p] != 58 { let p = p + 1; 0 };
+  let _ = t[r + 4] = p - st;
+  while s[p] != 40 { let p = p + 1; 0 };
+  let p = p + 1;
+  let c = 0;
+  let csr = 0;
+  let prev = 0;
+  while p < en - 1 {
+    let q = r + 8 + 4 * c;
+    let _ = t[q + 2] = p;
+    while s[p] != 58 { let p = p + 1; 0 };
+    let _ = t[q + 3] = p - t[q + 2];
+    let p = p + 1;
+    let a = p;
+    while s[p] != 58 { let p = p + 1; 0 };
+    let typ = bk_tok(s, a, p - a, prev);
+    let p = p + 1;
+    let unit = 0;
+    while (s[p] >= 48) & (s[p] <= 57) {
+      let unit = unit * 10 + s[p] - 48;
+      let p = p + 1;
+      0
+    };
+    let _ = t[q] = typ;
+    let _ = t[q + 1] = unit;
+    let csr = if typ == 5 then 1 else csr;
+    let prev = typ;
+    let c = c + 1;
+    let p = p + 1;
+    0
+  };
+  let _ = t[r + 1] = c;
+  let _ = t[r + 2] = csr;
+  c
+}
+
+// bk_table: the four §B.4 strings (DG7's crates/dowiz-hub/src/block/schema.rs TABLE, in its order)
+// into s, parsed into t. Returns the number of schemas.
+fn bk_table(t: [i64], s: [i64]) -> i64 {
+  let a = bk_load(s, 0, "menu_prices:v1(dish:i64:0,price:i64:1,tax_ppm:i64:5,mods_ptr:u32rp:0,mods_col:u32:0,mods_val:i64:1)");
+  let _ = bk_parse(t, 0, s, 0, a);
+  let b = bk_load(s, a, "bom:v1(dish_ptr:u32rp:0,supply:u32:0,qty:i64:0)");
+  let _ = bk_parse(t, 1, s, a, b);
+  let c = bk_load(s, b, "stock_levels:v1(supply:i64:0,qty:i64:0,gen:i64:7)");
+  let _ = bk_parse(t, 2, s, b, c);
+  let d = bk_load(s, c, "names:v1(id:i64:0,bytes:u8:0,off:u32off:0)");
+  let _ = bk_parse(t, 3, s, c, d);
+  let _ = t[256] = d;
+  4
+}
+
+fn bk_find(t: [i64], key: i64) -> i64 {
+  let i = 0;
+  while i < 4 {
+    let _ = if t[64 * i] == key then return i else 0;
+    let i = i + 1;
+    0
+  };
+  0 - 1
+}
+
+// ---- check (B-1): refuse, never pad, never guess -------------------------------------------------
+fn bk_no(st: [i64], code: i64, col: i64) -> i64 {
+  let _ = st[0] = code;
+  let _ = st[1] = col;
+  code
+}
+
+fn bk_want(typ: i64, n: i64, nnz: i64) -> i64 {
+  if typ == 1 then n * 8
+  else (if typ == 2 then n * 4
+  else (if (typ == 4) | (typ == 5) then (n + 1) * 4
+  else (if typ == 6 then nnz * 4
+  else (if typ == 7 then nnz * 8 else 0 - 1))))
+}
+
+// bk_desc: column c's descriptor against its schema column; prev = where the previous column ended.
+fn bk_desc(b: [i64], t: [i64], st: [i64], r: i64, c: i64, prev: i64, end: i64) -> i64 {
+  let at = 24 + 16 * c;
+  let q = r + 8 + 4 * c;
+  let _ = if (b[at] != t[q]) | (b[at + 1] != 0) then return bk_no(st, 9, c) else 0;
+  let _ = if b[at + 2] != t[q + 1] then return bk_no(st, 10, c) else 0;
+  let _ = if (b[at + 3] != 0) | (bk_u32(b, at + 12) != 0) then return bk_no(st, 11, c) else 0;
+  let clen = bk_u32(b, at + 4);
+  let off = bk_u32(b, at + 8);
+  let _ = if (off & 7) != 0 then return bk_no(st, 12, c) else 0;
+  let _ = if (off != ((prev + 7) / 8) * 8) | ((off + clen) > end) then return bk_no(st, 13, c) else 0;
+  let want = bk_want(t[q], st[3], st[4]);
+  let _ = if (want >= 0) & (want != clen) then return bk_no(st, 14, c) else 0;
+  let k = prev;
+  while k < off {
+    let _ = if b[k] != 0 then return bk_no(st, 15, c) else 0;
+    let k = k + 1;
+    0
+  };
+  let _ = st[8 + 2 * c] = off;
+  let _ = st[9 + 2 * c] = clen;
+  0
+}
+
+// bk_mono: an offsets / row_ptr column's VALUES: start at 0, never fall, end at `last`.
+fn bk_mono(b: [i64], st: [i64], c: i64, n: i64, last: i64) -> i64 {
+  let off = st[8 + 2 * c];
+  let prev = 0;
+  let k = 0;
+  while k <= n {
+    let x = bk_u32(b, off + 4 * k);
+    let _ = if ((k == 0) & (x != 0)) | (x < prev) | (x > last) then return bk_no(st, 13, c) else 0;
+    let prev = x;
+    let k = k + 1;
+    0
+  };
+  if prev != last then bk_no(st, 13, c) else 0
+}
+
+// bk_utf8_tail: the continuation bytes of a sequence led at p (second byte in [lo, hi]).
+fn bk_utf8_tail(b: [i64], p: i64, need: i64, lo: i64, hi: i64) -> i64 {
+  let y = b[p + 1];
+  let z = b[p + 2];
+  let w = b[p + 3];
+  if need == 0 then 0
+  else (if (y < lo) | (y > hi) then 1
+  else (if need == 1 then 0
+  else (if (z < 128) | (z > 191) then 1
+  else (if need == 2 then 0
+  else (if (w < 128) | (w > 191) then 1 else 0)))))
+}
+
+// bk_utf8: 0 when b[p..e) is UTF-8 (Rust's str::from_utf8) with no NUL, else 1.
+fn bk_utf8(b: [i64], p: i64, e: i64) -> i64 {
+  let bad = 0;
+  while (p < e) & (bad == 0) {
+    let x = b[p];
+    let need = if x < 128 then 0 else (if x < 194 then 0 - 1 else (if x < 224 then 1 else (if x < 240 then 2 else (if x < 245 then 3 else 0 - 1))));
+    let lo = if x == 224 then 160 else (if x == 240 then 144 else 128);
+    let hi = if x == 237 then 159 else (if x == 244 then 143 else 191);
+    let bad = if (x == 0) | (need < 0) then 1 else (if (p + need) >= e then (if need == 0 then 0 else 1) else 0);
+    let bad = if bad == 1 then 1 else bk_utf8_tail(b, p, need, lo, hi);
+    let p = p + 1 + need;
+    0
+  };
+  bad
+}
+
+fn bk_text(b: [i64], st: [i64], c: i64, n: i64) -> i64 {
+  let boff = st[8 + 2 * (c - 1)];
+  let ooff = st[8 + 2 * c];
+  let k = 0;
+  while k < n {
+    let x = bk_utf8(b, boff + bk_u32(b, ooff + 4 * k), boff + bk_u32(b, ooff + 4 * k + 4));
+    let _ = if x != 0 then return bk_no(st, 16, c - 1) else 0;
+    let k = k + 1;
+    0
+  };
+  0
+}
+
+fn bk_values(b: [i64], t: [i64], st: [i64], r: i64) -> i64 {
+  let c = 0;
+  while c < st[5] {
+    let typ = t[r + 8 + 4 * c];
+    let before = if c > 0 then t[r + 4 + 4 * c] else 0;
+    let _ = if (typ == 4) & (before != 3) then return bk_no(st, 9, c) else 0;
+    let last = if typ == 5 then st[4] else (if c > 0 then st[7 + 2 * c] else 0);
+    let rc = if (typ == 4) | (typ == 5) then bk_mono(b, st, c, st[3], last) else 0;
+    let _ = if rc != 0 then return rc else 0;
+    let rc = if typ == 4 then bk_text(b, st, c, st[3]) else 0;
+    let _ = if rc != 0 then return rc else 0;
+    let c = c + 1;
+    0
+  };
+  0
+}
+
+// bk_check: 0 when the len-byte block b is one DG7's check() accepts, else the refusal code
+// (st[0], with the column in st[1]). The checks run in check()'s order, so every reader names
+// the same region.
+fn bk_check(b: [i64], len: i64, t: [i64], st: [i64]) -> i64 {
+  let _ = bk_no(st, 0, 0 - 1);
+  let _ = if len < 28 then return bk_no(st, 1, 0 - 1) else 0;
+  let _ = if len > 98304 then return bk_no(st, 2, 0 - 1) else 0;
+  let _ = if (b[0] != 68) | (b[1] != 87) | (b[2] != 66) | (b[3] != 49) then return bk_no(st, 3, 0 - 1) else 0;
+  let _ = if bk_u16(b, 4) != 1 then return bk_no(st, 4, 0 - 1) else 0;
+  let end = len - 4;
+  let _ = if bk_u32(b, end) != crc32(b, end) then return bk_no(st, 5, 0 - 1) else 0;
+  let si = bk_find(t, bk_i64(b, 16));
+  let _ = if si < 0 then return bk_no(st, 6, 0 - 1) else 0;
+  let r = 64 * si;
+  let ncols = bk_u16(b, 6);
+  let _ = if ncols != t[r + 1] then return bk_no(st, 7, 0 - 1) else 0;
+  let _ = if (24 + 16 * ncols) > end then return bk_no(st, 1, 0 - 1) else 0;
+  let _ = st[2] = si;
+  let _ = st[3] = bk_u32(b, 8);
+  let _ = st[4] = bk_u32(b, 12);
+  let _ = st[5] = ncols;
+  let _ = if (st[4] != 0) & (t[r + 2] == 0) then return bk_no(st, 8, 0 - 1) else 0;
+  let prev = 24 + 16 * ncols;
+  let c = 0;
+  while c < ncols {
+    let rc = bk_desc(b, t, st, r, c, prev, end);
+    let _ = if rc != 0 then return rc else 0;
+    let prev = st[8 + 2 * c] + st[9 + 2 * c];
+    let c = c + 1;
+    0
+  };
+  let _ = if prev != end then return bk_no(st, 13, ncols - 1) else 0;
+  bk_values(b, t, st, r)
+}
+
+// ---- decode and encode (B-6) ---------------------------------------------------------------------
+fn bk_width(typ: i64) -> i64 {
+  if (typ == 1) | (typ == 7) then 8 else (if typ == 3 then 1 else 4)
+}
+
+// bk_decode: every column of a CHECKED block out into v as values; returns how many.
+fn bk_decode(b: [i64], t: [i64], st: [i64], v: [i64]) -> i64 {
+  let r = 64 * st[2];
+  let at = 0;
+  let c = 0;
+  while c < st[5] {
+    let typ = t[r + 8 + 4 * c];
+    let w = bk_width(typ);
+    let off = st[8 + 2 * c];
+    let cnt = st[9 + 2 * c] / w;
+    let _ = st[40 + 2 * c] = at;
+    let _ = st[41 + 2 * c] = cnt;
+    let k = 0;
+    while k < cnt {
+      let x = if w == 8 then bk_i64(b, off + 8 * k) else (if w == 4 then bk_u32(b, off + 4 * k) else b[off + k]);
+      let y = if typ == 2 then (x << 32) >>> 32 else x;
+      let _ = v[at + k] = y;
+      let k = k + 1;
+      0
+    };
+    let at = at + cnt;
+    let c = c + 1;
+    0
+  };
+  at
+}
+
+// bk_encode: the canonical bytes of the decoded block (header from the table and st[3..5],
+// columns from v, 8-aligned, zero padding, crc32) into e; returns their length.
+fn bk_encode(t: [i64], st: [i64], v: [i64], e: [i64]) -> i64 {
+  let r = 64 * st[2];
+  let ncols = t[r + 1];
+  let p = bk_put8(e, 0, 68 | (87 << 8) | (66 << 16) | (49 << 24), 4);
+  let p = bk_put8(e, p, 1, 2);
+  let p = bk_put8(e, p, ncols, 2);
+  let p = bk_put8(e, p, st[3], 4);
+  let p = bk_put8(e, p, st[4], 4);
+  let p = bk_put8(e, p, t[r], 8);
+  let c = 0;
+  while c < ncols {
+    let q = r + 8 + 4 * c;
+    let _ = e[24 + 16 * c] = t[q];
+    let _ = e[25 + 16 * c] = 0;
+    let _ = e[26 + 16 * c] = t[q + 1];
+    let _ = e[27 + 16 * c] = 0;
+    let _ = bk_put8(e, 36 + 16 * c, 0, 4);
+    let c = c + 1;
+    0
+  };
+  let p = 24 + 16 * ncols;
+  let c = 0;
+  while c < ncols {
+    let w = bk_width(t[r + 8 + 4 * c]);
+    while (p & 7) != 0 {
+      let _ = e[p] = 0;
+      let p = p + 1;
+      0
+    };
+    let off = p;
+    let base = st[40 + 2 * c];
+    let k = 0;
+    while k < st[41 + 2 * c] {
+      let p = bk_put8(e, p, v[base + k], w);
+      let k = k + 1;
+      0
+    };
+    let _ = bk_put8(e, 28 + 16 * c, p - off, 4);
+    let _ = bk_put8(e, 32 + 16 * c, off, 4);
+    let c = c + 1;
+    0
+  };
+  bk_put8(e, p, crc32(e, p), 4)
+}
+
+// bk_vals: FNV-1a 64 over each column's count, then its values, as 8 little-endian bytes each.
+fn bk_fnv8(h: i64, x: i64) -> i64 {
+  let i = 0;
+  while i < 8 {
+    let h = (h ^ ((x >> (8 * i)) & 255)) * 1099511628211;
+    let i = i + 1;
+    0
+  };
+  h
+}
+
+fn bk_vals(st: [i64], v: [i64]) -> i64 {
+  let h = 0 - 3750763034362895579;
+  let c = 0;
+  while c < st[5] {
+    let base = st[40 + 2 * c];
+    let h = bk_fnv8(h, st[41 + 2 * c]);
+    let k = 0;
+    while k < st[41 + 2 * c] {
+      let h = bk_fnv8(h, v[base + k]);
+      let k = k + 1;
+      0
+    };
+    let c = c + 1;
+    0
+  };
+  h
+}
+
+// bk_block: check, decode, re-encode into e, compare. 0 = accepted (st[6] vals, st[7] rt:
+// 1 when encode(decode(b)) == b byte for byte), else the refusal code.
+fn bk_block(b: [i64], len: i64, t: [i64], st: [i64], v: [i64], e: [i64]) -> i64 {
+  let rc = bk_check(b, len, t, st);
+  let _ = if rc != 0 then return rc else 0;
+  let _ = bk_decode(b, t, st, v);
+  let _ = st[6] = bk_vals(st, v);
+  let m = bk_encode(t, st, v, e);
+  let same = if m == len then 1 else 0;
+  let i = 0;
+  while (i < m) & (same == 1) {
+    let same = if e[i] == b[i] then 1 else 0;
+    let i = i + 1;
+    0
+  };
+  let _ = st[7] = same;
+  let _ = st[100] = m;
+  0
+}
+
+// ---- money (B-3): one unit's gross price, CHECKED -------------------------------------------------
+// The twin of view::Catalogue::unit_gross: inclusive -> the price; else rate = own, or `dflt` when
+// own is NO_RATE (-1); a rate outside 0..=1,000,000 -> 18 bad_rate; tax = (price*rate + 500000)
+// / 1e6 in exact 128-bit arithmetic TRUNCATED toward zero (dowiz-core apply_tax_exclusive_int);
+// price + tax overflowing i64 -> 17 overflow. The value lands in st[6]; returns 0 or the code.
+fn bk_addov(a: i64, b: i64) -> i64 { if ((a ^ (a + b)) & (b ^ (a + b))) < 0 then 1 else 0 }
+
+fn bk_gross(price: i64, own: i64, dflt: i64, inclusive: i64, st: [i64]) -> i64 {
+  let _ = bk_no(st, 0, 0 - 1);
+  let _ = st[6] = price;
+  let _ = if inclusive == 1 then return 0 else 0;
+  let rate = if own == 0 - 1 then dflt else own;
+  let _ = if (rate < 0) | (rate > 1000000) then return bk_no(st, 18, 2) else 0;
+  let q = price / 1000000;
+  let q = if (price - q * 1000000) < 0 then q - 1 else q;
+  let rem = price - q * 1000000;
+  let lo = q * rate;
+  let _ = if smulh(q, rate) != (lo >>> 63) then return bk_no(st, 17, 1) else 0;
+  let m = rem * rate + 500000;
+  let _ = if bk_addov(lo, m / 1000000) == 1 then return bk_no(st, 17, 1) else 0;
+  let f = lo + m / 1000000;
+  let tax = if (f < 0) & ((m % 1000000) != 0) then f + 1 else f;
+  let _ = if bk_addov(price, tax) == 1 then return bk_no(st, 17, 1) else 0;
+  let _ = st[6] = price + tax;
+  0
+}
+
+// ---- the gate's line (crates/bebop-wasm/gate.sh compares it with the other three readers) -------
+//   block <schema> n=<n> nnz=<nnz> vals=<fnv64 hex> rt=<ok|diff> k256=<sha256 of the re-encoding>
+//   block refused=<code> col=<column|->
+fn bk_puts(o: [i64], p: i64, x: str) -> i64 { bk_load(o, p, x) }
+
+fn bk_putn(o: [i64], p: i64, x: i64) -> i64 {
+  let d = zeros(24);
+  let k = 0;
+  let y = x;
+  while (k == 0) | (y > 0) {
+    let _ = d[k] = 48 + y % 10;
+    let y = y / 10;
+    let k = k + 1;
+    0
+  };
+  let i = 0;
+  while i < k {
+    let _ = o[p + i] = d[k - 1 - i];
+    let i = i + 1;
+    0
+  };
+  p + k
+}
+
+fn bk_puthex(o: [i64], p: i64, x: i64, nib: i64) -> i64 {
+  let i = 0;
+  while i < nib {
+    let d = (x >> (4 * (nib - 1 - i))) & 15;
+    let _ = o[p + i] = if d < 10 then 48 + d else 87 + d;
+    let i = i + 1;
+    0
+  };
+  p + nib
+}
+
+fn bk_putcells(o: [i64], p: i64, s: [i64], at: i64, n: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = o[p + i] = s[at + i];
+    let i = i + 1;
+    0
+  };
+  p + n
+}
+
+fn bk_putcode(o: [i64], p: i64, c: i64) -> i64 {
+  if c == 1 then bk_puts(o, p, "too_short") else (if c == 2 then bk_puts(o, p, "too_big")
+  else (if c == 3 then bk_puts(o, p, "bad_magic") else (if c == 4 then bk_puts(o, p, "bad_version")
+  else (if c == 5 then bk_puts(o, p, "bad_crc") else (if c == 6 then bk_puts(o, p, "unknown_schema")
+  else (if c == 7 then bk_puts(o, p, "bad_ncols") else (if c == 8 then bk_puts(o, p, "bad_nnz")
+  else (if c == 9 then bk_puts(o, p, "bad_type") else (if c == 10 then bk_puts(o, p, "bad_unit")
+  else (if c == 11 then bk_puts(o, p, "bad_reserved") else (if c == 12 then bk_puts(o, p, "bad_alignment")
+  else (if c == 13 then bk_puts(o, p, "bad_offsets") else (if c == 14 then bk_puts(o, p, "bad_length")
+  else (if c == 15 then bk_puts(o, p, "bad_padding") else (if c == 16 then bk_puts(o, p, "not_utf8")
+  else (if c == 17 then bk_puts(o, p, "overflow") else (if c == 18 then bk_puts(o, p, "bad_rate")
+  else bk_puts(o, p, "unknown_code"))))))))))))))))))
+}
+
+// bk_line: decode the len-byte block b and write its line to fd 1. Returns bk_block's code.
+fn bk_line(b: [i64], len: i64, t: [i64], s: [i64], st: [i64], v: [i64], e: [i64], h: [i64], o: [i64]) -> i64 {
+  let rc = bk_block(b, len, t, st, v, e);
+  let p = bk_puts(o, 0, "block ");
+  let r = 64 * st[2];
+  let p = if rc != 0 then bk_putcode(o, bk_puts(o, p, "refused="), rc) else bk_putcells(o, p, s, t[r + 3], t[r + 4]);
+  let q = r + 8 + 4 * st[1];
+  let p = if rc != 0 then bk_puts(o, p, " col=") else p;
+  let p = if rc == 0 then p else (if st[1] < 0 then bk_puts(o, p, "-") else bk_putcells(o, p, s, t[q + 2], t[q + 3]));
+  let p = if rc == 0 then bk_line_ok(o, p, st, e, h) else p;
+  let _ = o[p] = 10;
+  let _ = sys_write(1, o, p + 1);
+  rc
+}
+
+fn bk_line_ok(o: [i64], p: i64, st: [i64], e: [i64], h: [i64]) -> i64 {
+  let p = bk_putn(o, bk_puts(o, p, " n="), st[3]);
+  let p = bk_putn(o, bk_puts(o, p, " nnz="), st[4]);
+  let p = bk_puthex(o, bk_puts(o, p, " vals="), st[6], 16);
+  let p = if st[7] == 1 then bk_puts(o, p, " rt=ok") else bk_puts(o, p, " rt=diff");
+  let _ = sha256_words(e, st[100], h);
+  let p = bk_puts(o, p, " k256=");
+  let i = 0;
+  while i < 8 {
+    let p = bk_puthex(o, p, h[i], 8);
+    let i = i + 1;
+    0
+  };
+  p
+}
+
+// bk_read: the file named by path[0..plen) (one byte per cell) into b, at most `cap` bytes plus
+// one 8 KiB read (sys_read unpacks at most 8192 bytes a call); -1 when it does not open.
+fn bk_read(path: [i64], plen: i64, b: [i64], cap: i64) -> i64 {
+  let _ = path[plen] = 0;
+  let fd = sys_open(path, plen, 0);
+  let _ = if fd < 0 then return 0 - 1 else 0;
+  let total = 0;
+  let go = 1;
+  while go == 1 {
+    let got = sys_read(fd, b + total, 8192);
+    let total = if got > 0 then total + got else total;
+    let go = if got > 0 then (if total < cap then 1 else 0) else 0;
+    0
+  };
+  let _ = sys_close(fd);
+  total
+}

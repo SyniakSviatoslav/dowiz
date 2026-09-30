@@ -40,6 +40,227 @@ fail=0
 say() { echo "bebop-wasm: $*"; }
 want() { awk -F= "/^$2=/{print \$2}" "fixtures/$1.expected"; }
 
+# ---- BLOCKS (DG9, SPEC-DATALOG-AND-CODEC §B.6): the machinery, used by step 7 and by --prove ----
+# Four readers of one block file, each DECODING it and printing what it decoded:
+#   block <schema> n=<n> nnz=<nnz> vals=<fnv64 of the decoded columns> rt=<ok|diff> k256=<sha256>
+#   block refused=<code> col=<column|->
+# `rt` is encode(decode(b)) == b byte for byte and `k256` is the sha256 of that RE-ENCODING, so
+# a reader that never decoded cannot print either. The readers:
+#   native    -- DG7's own decode/encode (crates/dowiz-hub/src/block), run on the file by
+#                crates/dowiz-hub/examples/block_read.rs
+#   wasm32    -- src/block.rs, a decoder/encoder of its own, built for wasm32 and run by node
+#   python    -- oracle.py --block, re-derived from the spec text
+#   bebop.bin -- bebop-lang/selfhost/std/block.bp via bench/vs_rust/std_tests/block_rt.bp
+#                (AArch64 only: elsewhere it is NOT MEASURED, said so, never counted)
+# A reader that is absent is NAMED absent and counts as a disagreement, never as a skip.
+HUB=../dowiz-hub
+BLOCKFIX=$(cd "$HUB/fixtures/blocks" && pwd)
+BLOCKSEED=${BLOCK_SEED:-2609300009}
+BLOCKCOUNT=${BLOCK_COUNT:-1000}
+BLOCKWASM=target/block/wasm32-unknown-unknown/release/bebop_wasm.wasm
+SEED=../../bebop-lang/seed/build/seed
+BIN=../../bebop-lang/bebop.bin
+BLOCKREADERS="native wasm32 python"
+HUBEX=""
+blocks_setup() {
+  if "$CARGO" build --offline --examples --target-dir "$(pwd)/target/hub" --manifest-path "$HUB/Cargo.toml" > "$SCRATCH/hubex.txt" 2>&1; then
+    HUBEX=target/hub/debug/examples
+  else
+    say "blocks native: dowiz-hub examples did not build rc=$? -- $(grep -m1 '^error' "$SCRATCH/hubex.txt")"
+    fail=1
+  fi
+  # The block reader's module: `bw_block` is exported only under `--cfg bw_block`, built apart
+  # like key/proj, so the Worker's module (and bytes.baseline) carry none of it.
+  if RUSTFLAGS="--cfg bw_block" "$CARGO" build --release --target wasm32-unknown-unknown --offline --target-dir target/block > "$SCRATCH/blockwasm.txt" 2>&1; then
+    say "wasm32 block: $(wc -c < "$BLOCKWASM" | tr -d ' ') bytes with bw_block exported (not in the ratchet)"
+  else
+    say "wasm32 block: build FAILED rc=$? -- $(grep -m1 'error' "$SCRATCH/blockwasm.txt")"
+    fail=1
+  fi
+  BRTBIN=""
+  if [ "$(uname -m)" = "aarch64" ] && [ -x "$SEED" ] && [ -f "$BIN" ]; then
+    BLOCKREADERS="$BLOCKREADERS bebop.bin"
+    if (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile bench/vs_rust/std_tests/block_rt.bp "$SCRATCH/block_rt.bin") > "$SCRATCH/brtc.txt" 2>&1 && [ -s "$SCRATCH/block_rt.bin" ]; then
+      BRTBIN="$SCRATCH/block_rt.bin"
+    else
+      say "blocks bebop.bin: block_rt.bp did not compile rc=$? -- $(tail -1 "$SCRATCH/brtc.txt")"
+    fi
+  else
+    say "blocks bebop.bin: box-only, NOT MEASURED here (uname -m = $(uname -m)) -- not counted as agreement"
+  fi
+  cat > "$SCRATCH/block.mjs" <<'EOFJS'
+// node block.mjs <module.wasm> <list>: one bw_block line per file of the list.
+import { readFileSync } from "node:fs";
+const [, , mod, list] = process.argv;
+const { instance } = await WebAssembly.instantiate(readFileSync(mod), {});
+const { memory, bw_alloc, bw_free, bw_block } = instance.exports;
+if (typeof bw_block !== "function") { console.log("wasm32 ABSENT: the module exports no bw_block"); process.exit(3); }
+const cap = 512;
+const out = bw_alloc(cap);
+for (const p of readFileSync(list, "utf8").split("\n").filter((x) => x)) {
+  const img = readFileSync(p);
+  const at = bw_alloc(Math.max(img.length, 1));
+  new Uint8Array(memory.buffer, at, img.length).set(img);
+  const n = bw_block(at, img.length, out, cap);
+  console.log(n < 0 ? `block status=${n}` : new TextDecoder().decode(new Uint8Array(memory.buffer, out, n)));
+  bw_free(at, Math.max(img.length, 1));
+}
+bw_free(out, cap);
+EOFJS
+}
+
+# blocks_run <tag> <list>: every reader over the list, into $SCRATCH/blk.<tag>.<reader>.
+blocks_run() {
+  for r in $BLOCKREADERS; do
+    o="$SCRATCH/blk.$1.$r"
+    case $r in
+      native) if [ -n "$HUBEX" ]; then "$HUBEX/block_read" "@$2" > "$o" 2>&1; else echo "native ABSENT: the dowiz-hub examples did not build" > "$o"; fi ;;
+      wasm32) if [ -f "$BLOCKWASM" ]; then node "$SCRATCH/block.mjs" "$BLOCKWASM" "$2" > "$o" 2>&1; else echo "wasm32 ABSENT: no block module" > "$o"; fi ;;
+      python) python3 oracle.py --block "@$2" > "$o" 2>&1 ;;
+      bebop.bin)
+        if [ -n "$BRTBIN" ]; then
+          "$SEED" "$BRTBIN" "$2" > "$o.raw" 2>&1
+          echo "rc=$?" >> "$o.raw"
+          grep '^block ' "$o.raw" > "$o"
+          # the program returns how many blocks it read: the seed prints it last, before our rc line
+          say "blocks $1 bebop.bin: returned '$(tail -2 "$o.raw" | head -1)', $(tail -1 "$o.raw")"
+        else
+          echo "bebop.bin ABSENT: block_rt.bp did not compile" > "$o"
+        fi ;;
+    esac
+  done
+}
+
+# blocks_judge <tag> <list> <mode> [expect]: compare the readers' lines, line i = block i.
+#   ok     -- every reader prints the SAME accepted `rt=ok` line (valid blocks)
+#   same   -- every reader prints the same line, accepted (rt=ok) or refused (corrupted blocks)
+#   refuse -- every reader prints exactly line i of <expect>, a named refusal
+# Names every reader that does not, with its first bad line; writes the agreeing count to
+# $SCRATCH/blk.<tag>.agree. A reader with fewer lines than blocks disagrees.
+blocks_judge() {
+  python3 - "$SCRATCH" "$1" "$2" "$3" "${4:-}" $BLOCKREADERS <<'EOFPY'
+import sys
+scratch, tag, lst, mode, expect, readers = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6:]
+paths = [p for p in open(lst).read().split("\n") if p]
+lines = {r: open("%s/blk.%s.%s" % (scratch, tag, r)).read().split("\n") for r in readers}
+want = [x for x in open(expect).read().split("\n") if x] if mode == "refuse" else None
+def at(r, i):
+    return lines[r][i] if i < len(lines[r]) else "<no line>"
+absent = [r for r in readers if " ABSENT" in at(r, 0)]
+present = [r for r in readers if r not in absent]
+agree, bad = [], []
+for r in present:
+    first = None
+    for i, p in enumerate(paths):
+        g = at(r, i)
+        if mode == "refuse":
+            ok, why = g == want[i], " (want '%s')" % want[i]
+        else:
+            others = [at(q, i) for q in present]
+            accepted = g.startswith("block ") and " n=" in g
+            ok = others.count(g) * 2 > len(present) and (" rt=ok " in g if accepted else mode == "same" and g.startswith("block refused="))
+            why = ""
+        if not ok:
+            first = "%s: '%s'%s" % (p.rsplit("/", 1)[-1], g, why)
+            break
+    (bad if first else agree).append((r, first))
+for r in absent:
+    print("bebop-wasm: blocks %s %s: ABSENT -- '%s'" % (tag, r, at(r, 0)))
+for r, f in bad:
+    print("bebop-wasm: blocks %s %s: DISAGREES -- first: %s" % (tag, r, f))
+print("bebop-wasm: blocks %s: %d blocks; readers agreeing on every line: %d of %d (%s)%s%s" % (
+    tag, len(paths), len(agree), len(readers), " ".join(r for r, _ in agree),
+    "" if not bad else " -- DISAGREE: " + " ".join(r for r, _ in bad),
+    "" if not absent else " -- ABSENT: " + " ".join(absent)))
+open("%s/blk.%s.agree" % (scratch, tag), "w").write("%d\n" % len(agree))
+sys.exit(1 if bad or absent else 0)
+EOFPY
+}
+
+# blocks_prove: one corrupted byte per header region of a COPY of a fixture (the crc re-sealed
+# except for the crc's own region, so the check under test is the one reached), each with the
+# refusal the spec names. Every reader must print exactly that line; a reader that accepts, or
+# names another region, FAILS. Then a sweep: every header byte of every fixture xor'd three
+# ways, sealed and not -- the readers must print the same line for each.
+blocks_prove() {
+  python3 - "$BLOCKFIX" "$SCRATCH/prove" <<'EOFPY'
+import os, struct, sys, zlib
+fix, out = sys.argv[1], sys.argv[2]
+os.makedirs(out, exist_ok=True)
+def rd(n):
+    return bytearray(open("%s/%s.dwb" % (fix, n), "rb").read())
+def seal(b):
+    struct.pack_into("<I", b, len(b) - 4, zlib.crc32(bytes(b[:-4])) & 0xFFFFFFFF)
+    return b
+def desc(b, i):
+    return 24 + 16 * i
+def coloff(b, i):
+    return struct.unpack_from("<I", b, desc(b, i) + 8)[0]
+cases = []
+def case(region, name, b, want, sealed=True):
+    cases.append((region, name, bytes(seal(b) if sealed else b), want))
+def flip(name, at, x, region, want, sealed=True):
+    b = rd(name); b[at] ^= x; case(region, name, b, want, sealed)
+M = "menu_prices"
+flip(M, 0, 0x01, "magic", "block refused=bad_magic col=-")
+flip(M, 4, 0x01, "version", "block refused=bad_version col=-")
+flip(M, len(rd(M)) - 1, 0x01, "crc", "block refused=bad_crc col=-", sealed=False)
+flip(M, 16, 0x01, "schema", "block refused=unknown_schema col=-")
+flip(M, 6, 0x01, "ncols", "block refused=bad_ncols col=-")
+flip(M, 8, 0x01, "n", "block refused=bad_length col=dish")
+flip(M, 12, 0x01, "nnz", "block refused=bad_length col=mods_col")
+flip(M, desc(0, 1) + 0, 0x01, "types", "block refused=bad_type col=price")
+flip(M, desc(0, 1) + 1, 0x01, "flags", "block refused=bad_type col=price")
+flip(M, desc(0, 1) + 2, 0x01, "units", "block refused=bad_unit col=price")
+flip(M, desc(0, 1) + 3, 0x01, "reserved", "block refused=bad_reserved col=price")
+flip(M, desc(0, 1) + 12, 0x01, "reserved2", "block refused=bad_reserved col=price")
+flip(M, desc(0, 1) + 8, 0x01, "alignment", "block refused=bad_alignment col=price")
+flip(M, desc(0, 1) + 8, 0x08, "offsets", "block refused=bad_offsets col=price")
+flip(M, desc(0, 1) + 4, 0x08, "length", "block refused=bad_length col=price")
+m = rd(M); pad = coloff(m, 4) + struct.unpack_from("<I", m, desc(m, 4) + 4)[0]
+assert pad % 8 != 0, "menu_prices fixture has no padding before mods_val"
+flip(M, pad, 0x01, "padding", "block refused=bad_padding col=mods_val")
+b = rd(M); struct.pack_into("<I", b, coloff(b, 3) + 4, 0xFFFFFFFF); case("row_ptr", M, b, "block refused=bad_offsets col=mods_ptr")
+case("too_short", M, rd(M)[:27], "block refused=too_short col=-", sealed=False)
+N = "names"
+b = rd(N); b[coloff(b, 1)] = 0xFF; case("utf8", N, b, "block refused=not_utf8 col=bytes")
+b = rd(N); b[coloff(b, 1)] = 0x00; case("nul", N, b, "block refused=not_utf8 col=bytes")
+b = rd(N); struct.pack_into("<I", b, coloff(b, 2) + 4, 0x7FFFFFFF); case("text_off", N, b, "block refused=bad_offsets col=off")
+flip("stock_levels", 12, 0x01, "nnz_no_csr", "block refused=bad_nnz col=-")
+case("too_big", M, bytearray(b"DWB1") + bytearray(96 * 1024 + 4), "block refused=too_big col=-", sealed=False)
+with open(out + "/list", "w") as L, open(out + "/expect", "w") as E, open(out + "/regions", "w") as R:
+    for i, (region, name, b, want) in enumerate(cases):
+        p = "%s/%02d_%s.dwb" % (out, i, region)
+        open(p, "wb").write(b)
+        L.write(p + "\n"); E.write(want + "\n"); R.write("%s %s\n" % (region, name))
+sw = []
+for f in sorted(os.listdir(fix)):
+    b0 = bytearray(open(os.path.join(fix, f), "rb").read())
+    hdr = 24 + 16 * struct.unpack_from("<H", b0, 6)[0]
+    for i in range(min(hdr, len(b0) - 4)):
+        for x in (0x01, 0x80, 0xFF):
+            for sealed in (False, True):
+                b = bytearray(b0); b[i] ^= x
+                p = "%s/sweep_%05d.dwb" % (out, len(sw)); open(p, "wb").write(seal(b) if sealed else b); sw.append(p)
+open(out + "/sweep", "w").write("\n".join(sw) + "\n")
+print("bebop-wasm: prove blocks: %d named regions, %d sweep blocks" % (len(cases), len(sw)))
+EOFPY
+  pf=0
+  blocks_run prove "$SCRATCH/prove/list"
+  i=0
+  while read -r region name; do
+    i=$((i + 1))
+    for r in $BLOCKREADERS; do
+      say "prove block $region ($name.dwb): $r -> '$(sed -n "${i}p" "$SCRATCH/blk.prove.$r")'"
+    done
+  done < "$SCRATCH/prove/regions"
+  blocks_judge prove "$SCRATCH/prove/list" refuse "$SCRATCH/prove/expect" || pf=1
+  blocks_run sweep "$SCRATCH/prove/sweep"
+  blocks_judge sweep "$SCRATCH/prove/sweep" same || pf=1
+  return $pf
+}
+
+
 # 1. native: one parity test per fixture, so a failure names the image ------
 # One cargo run (not --quiet, so every test prints its own `... ok` line).
 if "$CARGO" test --offline > "$SCRATCH/native.txt" 2>&1; then
@@ -107,7 +328,13 @@ EOF2
     esac
   done
   say "prove: the number moved on every fixture; the gate measures the bytes"
-  exit 0
+  blocks_setup
+  if blocks_prove && [ "$fail" -eq 0 ]; then
+    say "prove blocks: every reader refused every corrupted region by name, and the sweep agreed"
+    exit 0
+  fi
+  say "prove blocks: FAILED"
+  exit 1
 fi
 
 # 3. bebop.bin, compiled once -----------------------------------------------
@@ -287,6 +514,52 @@ else
 fi
 [ "$ran" -lt "$minran" ] && minran=$ran
 
+# 7. BLOCKS (DG9, SPEC-DATALOG-AND-CODEC §B.6) --------------------------------
+# The fixtures DG7's encoder wrote (the 165-dish catalogue, a 120-supply stock_levels, a small
+# and an EMPTY block of every type), then BLOCK_COUNT seeded random blocks per type written by
+# the same encoder (examples/generate_fixtures.rs; the seed is printed). Every reader decodes
+# every block; the gate compares the printed lines (blocks_judge above).
+blocks_setup
+ls "$BLOCKFIX"/*.dwb > "$SCRATCH/blk.fix.list"
+say "blocks fixtures: $(wc -l < "$SCRATCH/blk.fix.list" | tr -d ' ') files: $(cd "$BLOCKFIX" && ls | tr '\n' ' ')"
+blocks_run fix "$SCRATCH/blk.fix.list"
+blocks_judge fix "$SCRATCH/blk.fix.list" ok || fail=1
+if [ -n "$HUBEX" ] && "$HUBEX/generate_fixtures" random "$SCRATCH/rand" "$BLOCKSEED" "$BLOCKCOUNT" > "$SCRATCH/rand.txt" 2>&1; then
+  say "blocks $(head -1 "$SCRATCH/rand.txt"); $(tail -1 "$SCRATCH/rand.txt")"
+  blocks_run rand "$SCRATCH/rand/list"
+  blocks_judge rand "$SCRATCH/rand/list" ok || fail=1
+else
+  say "blocks random: the generator did not run -- $(tail -1 "$SCRATCH/rand.txt" 2>/dev/null)"
+  fail=1
+fi
+# B-2: DG7's schema table, oracle.py's and block.bp's print the same four `schema` lines (the
+# wasm32 reader's keys are pinned by src/block/tests.rs table_parses_and_keys_are_dg7s).
+[ -n "$HUBEX" ] && "$HUBEX/block_read" --schemas > "$SCRATCH/schema.native" 2>&1
+python3 oracle.py --schemas > "$SCRATCH/schema.python" 2>&1
+sran=0
+sbad=""
+for r in native python; do
+  if [ -s "$SCRATCH/schema.$r" ] && cmp -s "$SCRATCH/schema.$r" "$SCRATCH/schema.python"; then sran=$((sran + 1)); else sbad="$sbad $r"; fi
+done
+if [ -n "$BRTBIN" ]; then
+  if (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile bench/vs_rust/std_tests/block_schema.bp "$SCRATCH/block_schema.bin") > "$SCRATCH/bsc.txt" 2>&1; then
+    "$SEED" "$SCRATCH/block_schema.bin" 2>&1 | grep '^schema ' > "$SCRATCH/schema.bebop"
+    if cmp -s "$SCRATCH/schema.bebop" "$SCRATCH/schema.python"; then sran=$((sran + 1)); else sbad="$sbad bebop.bin"; fi
+  else
+    sbad="$sbad bebop.bin"
+  fi
+fi
+if [ -n "$sbad" ]; then
+  say "blocks schemas: identical schema tables: $sran -- DISAGREE:$sbad"
+  fail=1
+else
+  say "blocks schemas: identical schema tables: $sran ($(awk '{print $2"="$3}' "$SCRATCH/schema.python" | tr '\n' ' '))"
+fi
+for t in fix rand; do
+  a=$(cat "$SCRATCH/blk.$t.agree" 2>/dev/null || echo 0)
+  [ "$a" -lt "$minran" ] && minran=$a
+done
+
 if [ "$fail" -ne 0 ]; then
   say "RED"
   exit 1
@@ -295,5 +568,5 @@ if [ "$minran" -lt 3 ]; then
   say "RED -- fewer than three readers ran; that is not a parity check"
   exit 1
 fi
-say "GREEN ($minran readers on each of: $FIXTURES + key compile/proj/empty + proj memo; $bytes bytes)"
+say "GREEN ($minran readers on each of: $FIXTURES + key compile/proj/empty + proj memo + blocks (fixtures, $BLOCKCOUNT random per type, seed $BLOCKSEED); $bytes bytes)"
 exit 0

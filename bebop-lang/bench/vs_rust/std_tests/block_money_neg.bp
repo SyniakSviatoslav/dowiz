@@ -1,0 +1,32 @@
+use "selfhost/std/block.bp"
+// bench/vs_rust/std_tests/block_money_neg.bp -- `gate block_money_neg` (row DG9, SPEC-DATALOG-AND-CODEC
+// B-3): selfhost/std/block.bp bk_gross, the twin of crates/dowiz-hub/src/block/view.rs
+// Catalogue::unit_gross, on twelve cases: exact exclusive tax (128-bit, half-up, truncated toward
+// zero as dowiz-core apply_tax_exclusive_int), NO_RATE falling back to the default, the inclusive
+// pass-through, two out-of-range rates (18 bad_rate) and three overflows (17 overflow) beside the
+// largest price that still fits. Each case folds acc*31 + (gross, or -code); the expected value is
+// derived by the Python oracle in the DG9 hand-back (exact integers), not by this program.
+
+module core { }
+
+fn mn(st: [i64], acc: i64, price: i64, own: i64, dflt: i64, incl: i64) -> i64 {
+  let rc = bk_gross(price, own, dflt, incl, st);
+  acc * 31 + (if rc == 0 then st[6] else 0 - rc)
+}
+
+fn main() -> i64 {
+  let st = zeros(128);
+  let max = 9223372036854775807;
+  let a = mn(st, 0, 1200, 170000, 0, 0);
+  let a = mn(st, a, 999, 60000, 0, 0);
+  let a = mn(st, a, max, 200000, 0, 0);
+  let a = mn(st, a, 4611686018427387903, 1000000, 0, 0);
+  let a = mn(st, a, 4611686018427387904, 1000000, 0, 0);
+  let a = mn(st, a, 800, 0 - 1, 200000, 0);
+  let a = mn(st, a, 800, 1000001, 0, 0);
+  let a = mn(st, a, 800, 0 - 5, 0, 0);
+  let a = mn(st, a, 1500, 200000, 0, 1);
+  let a = mn(st, a, 0 - 1500, 200000, 0, 0);
+  let a = mn(st, a, 0 - max - 1, 1000000, 0, 0);
+  mn(st, a, 0 - 7, 71429, 0, 0)
+}

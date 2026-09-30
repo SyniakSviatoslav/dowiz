@@ -23,6 +23,11 @@
 //! `Truncated`, exactly as `dowiz_hub::Hub::load` refuses it.
 
 pub mod abi;
+/// DG9: the columnar block, decoded and re-encoded. Compiled only for tests and under
+/// `--cfg bw_block` (gate.sh's separate module, which exports `bw_block`): measured 2026-09-30,
+/// merely compiling it into the Worker's module moved `bytes.baseline` 31626 -> 31769.
+#[cfg(any(test, bw_block))]
+pub mod block;
 pub mod nodekey;
 /// DG5: a log image's projection memo, read (`bw_proj`, exported under the `proj` feature).
 pub mod proj;
