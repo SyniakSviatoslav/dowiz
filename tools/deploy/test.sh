@@ -20,6 +20,8 @@ cat > "$T/bin/wrangler" <<'EOF'
 echo "$* token=${CLOUDFLARE_API_TOKEN:+set}" >> "$STUB_CALLS"
 case "$1 $2" in
   "deployments status") [ -n "${NO_PREV:-}" ] && { echo "error: nope"; exit 1; }
+    if [ -n "${STATUS_TIMEOUTS:-}" ] && [ "$(grep -c '^deployments status' "$STUB_CALLS")" -le "$STATUS_TIMEOUTS" ]; then
+      echo "X [ERROR] The request to Cloudflare's API timed out."; exit 1; fi
     echo '{"versions":[{"version_id":"0ld00000-0000-4000-8000-000000000000","percentage":100}]}' ;;
   deploy*) mkdir -p build
     if [ -n "${FETCH_FAILS:-}" ] && [ "$(grep -c '^deploy ' "$STUB_CALLS")" -le "$FETCH_FAILS" ]; then echo "X [ERROR] fetch failed"; exit 1; fi
@@ -84,6 +86,10 @@ FETCH_FAILS=3 run; [ $RC = 31 ] && [ "$(uploads)" = 3 ] && has 'FAIL upload: wra
   && ok "fetch failed three times -> gives up (31) after 3 uploads" || no "fetch-failed give up"
 UPLOAD_ERR=1 run; [ $RC = 31 ] && [ "$(uploads)" = 1 ] && ! has 'retrying' \
   && ok "any other upload error fails at once (31), no retry" || no "no retry on other errors"
+
+STATUS_TIMEOUTS=2 run; [ $RC = 0 ] && [ "$(grep -c '^deployments status' "$T/calls")" = 3 ] && has 'previous try 2: Cloudflare API timed out' \
+  && ok "deployments status timed out twice, third read lands (0)" || no "status timeout retry"
+STATUS_TIMEOUTS=3 run; [ $RC = 30 ] && [ "$(uploads)" = 0 ] && ok "status timed out three times -> refused (30), no upload" || no "status timeout give up"
 
 # ── after the upload: a verifier or probe FAIL stops with the rollback command, and runs none ──
 VERIFY_RC=1 run; [ $RC = 40 ] && has 'FAIL live-is-not-head' && has 'rollback 0ld00000-0000-4000-8000-000000000000' \

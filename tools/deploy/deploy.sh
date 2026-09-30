@@ -86,6 +86,17 @@ if [ $MODE != verify ]; then
   took
 fi
 
+# The box's TCP connect to Cloudflare takes 5-16 s and wrangler's fetch (undici) gives up at 10 s, so any
+# wrangler call fails at random after a good build: "fetch failed" (upload) or "The request to Cloudflare's
+# API timed out" (deployments status). net_flake <log> says the log shows one of those two and nothing else
+# is retried: an auth or build error fails at once.
+net_flake() {
+  NET_ERR=
+  grep -q 'fetch failed' "$1" && NET_ERR="fetch failed (connect timeout)"
+  grep -q "request to Cloudflare's API timed out" "$1" && NET_ERR="Cloudflare API timed out"
+  [ -n "$NET_ERR" ]
+}
+
 wr() { # wr <wrangler args...> -- in the copy's workers/api, token sourced only in this subshell
   ( cd "$SRC/workers/api" && set -a && . "$TOKEN_FILE" && set +a && $WRANGLER "$@" )
 }
@@ -93,7 +104,11 @@ wr() { # wr <wrangler args...> -- in the copy's workers/api, token sourced only 
 if [ $MODE = deploy ]; then
   # ── 4 PREVIOUS ────────────────────────────────────────────────────────────
   step previous
-  wr deployments status --json > "$WORK/logs/previous.json" 2>&1; rc=$?
+  for try in 1 2 3; do
+    wr deployments status --json > "$WORK/logs/previous.json" 2>&1; rc=$?
+    [ $rc != 0 ] && [ $try -lt 3 ] && net_flake "$WORK/logs/previous.json" || break
+    echo "   previous try $try: $NET_ERR, retrying"
+  done
   PREV=$(python3 - "$WORK/logs/previous.json" <<'PY'
 import json, sys
 try: d = json.load(open(sys.argv[1]))
@@ -113,17 +128,15 @@ if [ $MODE != verify ]; then
   step upload
   BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   if [ $MODE = dry ]; then args="deploy --dry-run --outdir $WORK/dry"; else args=deploy; fi
-  # The box's TCP connect to Cloudflare takes 5-16 s and wrangler's fetch (undici) gives up at 10 s, so an
-  # upload fails at random with "fetch failed" after a good build. Only that failure, with no Version ID
-  # printed, is retried (the rebuild is cached); anything else fails at once.
+  # Retried only on net_flake with no Version ID printed (the rebuild is cached); anything else fails at once.
   for try in 1 2 3; do
     ( cd "$SRC/workers/api" && export RUSTUP_TOOLCHAIN=$TOOLCHAIN DOWIZ_COMMIT=$SHA DOWIZ_BUILT_AT=$BUILT_AT &&
       if [ $MODE = dry ]; then $SLOT deploy $WRANGLER $args
       else $SLOT deploy bash -c 'set -a && . "$0" && set +a && exec "$@"' "$TOKEN_FILE" $WRANGLER $args; fi
     ) > "$WORK/logs/upload.log" 2>&1; rc=$?
-    [ $rc != 0 ] && [ $try -lt 3 ] && grep -q 'fetch failed' "$WORK/logs/upload.log" \
+    [ $rc != 0 ] && [ $try -lt 3 ] && net_flake "$WORK/logs/upload.log" \
       && ! grep -q 'Current Version ID' "$WORK/logs/upload.log" || break
-    echo "   upload try $try: fetch failed (connect timeout), retrying"
+    echo "   upload try $try: $NET_ERR, retrying"
   done
   tail -6 "$WORK/logs/upload.log" | sed 's/^/   /'
   [ $rc = 0 ] || fail 31 "upload: wrangler rc=$rc (log $WORK/logs/upload.log)"
