@@ -248,7 +248,6 @@ fn hoist_mask(fntab: [i64]) -> i64 {
   m
 }
 
-
 // ---- ROADMAP A16 step 1 (2026-09-14) ----
 // Rotate the DEEPEST of the top `m` window entries to the TOP, shifting the other
 // m-1 down one place. COMPILE-TIME ONLY: it renumbers the entry list
@@ -2222,7 +2221,7 @@ fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [
   let is_eq = if ch == 61 then 1 else 0;
   let is_eq2 = if ch1 == 61 then 1 else 0;
   let is_set = is_eq * (1 - is_eq2);
-  let _ = if is_set == 1 then emit_array_set(s, pos, insns, n, stab, selfname, selfstart, fntab, w32) else emit_array_get(insns, n, fntab, stab, w32);
+  let _ = if is_set == 1 then (let _ = pure_store_check(s, npos, tw, fntab) in emit_array_set(s, pos, insns, n, stab, selfname, selfstart, fntab, w32)) else emit_array_get(insns, n, fntab, stab, w32);
   n[0]
 }
 
@@ -4319,6 +4318,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = pos[0] = pos[0] + 2;
   let _ = skip_ws(s, pos);
   let namepos = pos[0];
+  let _ = fn_class_set(s, fntab, fpos, namepos);  // DG6 RT §3.1: fntab[5544] class (E124), [5545] name
   let selfname = read_ident(s, pos);
   // T122 (D11-M, 2026-09-05): a fn named like a keyword or a builtin is REJECTED
   // (exit 99) -- `fn match` used to compile into a call of the match keyword

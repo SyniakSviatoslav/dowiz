@@ -1048,7 +1048,11 @@ cat bench/vs_rust/std_tests/gb_pool.bp >> "$GBT/gb_pool_build.bp"
 # so a re-run stops growing the pool at all) and gb_kernel_require (exit 107 rather than
 # dispatching a null Kernel).
 GBPOOL="$GBT/gb_pool_gate.$(md5sum < "${BEBOP_BIN:-bebop.bin}" | cut -c1-8).gbpool"
-r=$(need_file gb_pool "$GBT/gb_gen.store" && ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_pool_build.bp" "$GBT/gb_pool_test.bin" >/dev/null 2>&1 && run 60 "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBPOOL" | tail -1)
+# PRODUCER (2026-10-01, DG6 battery): this run WRITES "$GBPOOL", which gb_pool_reuse below reads, so it runs
+# DIRECTLY, never through the memo -- a memo HIT printed the cached golden without running the binary, left
+# "$GBPOOL" unwritten, and gb_pool_reuse failed PREREQ on the second battery over one $BEBOP_TMP (measured:
+# gates.txt `gb_pool_test 0 hit rc=0`, memo entry written 17:01 by the first run, replayed 17:30).
+r=$(need_file gb_pool "$GBT/gb_gen.store" && ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_pool_build.bp" "$GBT/gb_pool_test.bin" >/dev/null 2>&1 && { timeout 60 ./seed/build/seed "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBPOOL" > "$GBT/gb_pool.out" 2> "$GBT/gb_pool.err"; echo $? > "$BEBOP_TMP/last_rc"; tail -1 "$GBT/gb_pool.out"; })
 gate gb_pool -4783772994166464769 "$r"
 
 # ---- gb_pool_reuse (ROADMAP B3's OPEN DEFECT, closed 2026-09-08): the gate the defect never

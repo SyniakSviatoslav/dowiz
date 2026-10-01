@@ -1,0 +1,8 @@
+// c148_pure_sys (DG6, docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md §3.1 P-1, §3.2): a `pure` fn may
+// not read the clock -- `clock_ms` is io (the clock is an INPUT: a projection that needs time takes
+// `now_ms: i64` as a parameter, which is what the positive twin c148_pure_sys_ok does). The same rule
+// refuses any `sys_` name (the prefix, as for `kernel fn`, exit 102). Expected diagnostic:
+//   <l>:<c>: error[E124]: stamp is not pure -- names io builtin clock_ms
+// EXPECT COMPILEFAIL:124 from: pure fn reads the clock
+pure fn stamp(x: i64) -> i64 { x + clock_ms() }
+fn main() -> i64 { stamp(1) }

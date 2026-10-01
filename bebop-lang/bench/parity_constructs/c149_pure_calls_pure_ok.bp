@@ -1,0 +1,9 @@
+// c149_pure_calls_pure_ok (DG6, RT §3.1): the positive twin of neg/c149_pure_calls_io. A `pure` fn calls
+// a pure fn DEFINED AFTER it (the callee's class is read at its recorded srcpos, so a forward reference
+// resolves), a `sched` fn calls a pure fn (sched may call pure and sched), and the io main calls both.
+// fold2(2, 3) = sq(2) * 31 + 3 = 127; twice(127) = 254; 254 + 127 = 381.
+// EXPECT 381 from: hand: pure calls pure, sched calls pure
+pure fn fold2(a: i64, b: i64) -> i64 { sq(a) * 31 + b }
+pure fn sq(x: i64) -> i64 { x * x }
+sched fn twice(x: i64) -> i64 { fold2(0, x) + fold2(0, x) }
+fn main() -> i64 { twice(fold2(2, 3)) + fold2(2, 3) }

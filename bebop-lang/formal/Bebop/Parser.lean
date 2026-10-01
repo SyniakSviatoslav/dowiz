@@ -748,21 +748,24 @@ def pType (c : Ctx) (i : Nat) : Except ParseError (Ty × Nat) :=
 def pFn (c : Ctx) (fuel i : Nat) : Except ParseError (FnDecl × Nat) := do
   let (nm, i) ← c.expectIdent (i + 1)
   let i ← c.expectP i "("
-  let rec params (n : Nat) (j : Nat) (ns : Array Name) (ts : Array Ty)
-      : Except ParseError (Array Name × Array Ty × Nat) :=
+  -- DG6 (§3.2): `NAME : out TYPE` marks an output parameter; `outs` records which.
+  let rec params (n : Nat) (j : Nat) (ns : Array Name) (ts : Array Ty) (os : Array Bool)
+      : Except ParseError (Array Name × Array Ty × Array Bool × Nat) :=
     match n with
     | 0 => .error (.outOfFuel (c.line j) (c.col j))
     | n + 1 =>
-      if c.isP j ")" then .ok (ns, ts, j + 1)
+      if c.isP j ")" then .ok (ns, ts, os, j + 1)
       else do
         let (pn, j) ← c.expectIdent j
         let j ← c.expectP j ":"
+        let isOut := c.isI j "out"
+        let j := if isOut then j + 1 else j
         let (pt, j) ← pType c j
-        if c.isP j "," then params n (j + 1) (ns.push pn) (ts.push pt)
+        if c.isP j "," then params n (j + 1) (ns.push pn) (ts.push pt) (os.push isOut)
         else do
           let j ← c.expectP j ")"
-          .ok (ns.push pn, ts.push pt, j)
-  let (ns, tys, i) ← params fuel i #[] #[]
+          .ok (ns.push pn, ts.push pt, os.push isOut, j)
+  let (ns, tys, outs, i) ← params fuel i #[] #[] #[]
   let i ← c.expectP i "->"
   let (rt, i) ← pType c i
   -- CONTRACT CLAUSES. `fn add(x: i64, y: i64) -> i64 requires true ensures
@@ -788,9 +791,9 @@ def pFn (c : Ctx) (fuel i : Nat) : Except ParseError (FnDecl × Nat) := do
   -- input, so it is `invalid`, not `unsupported`.
   match body.back? with
   | some (.exprStmt _) => .ok ({ name := nm, params := ns, paramTypes := tys,
-                                 returnType := rt, body := body }, i)
+                                 returnType := rt, body := body, paramOut := outs }, i)
   | some (.ret _) => .ok ({ name := nm, params := ns, paramTypes := tys,
-                            returnType := rt, body := body }, i)
+                            returnType := rt, body := body, paramOut := outs }, i)
   | _ => .error (.refused 97 s!"fn `{nm}` has no tail expression (LANGUAGE.md:31-34, compiler exits 97)"
                    (c.line i) (c.col i))
 
@@ -881,6 +884,17 @@ def pProgramFrom (c : Ctx) (fuel i : Nat) (p : Program) : Except ParseError Prog
         (do let (f, j) ← pFn c fuel (i + 1)
             pProgramFrom c fuel j { p with fns := p.fns.push { f with isKernel := true } })
       else .error (c.err i "`kernel` must be followed by `fn`")
+  | .ident "pure" | .ident "sched" =>
+      -- DG6 (SPEC-BEBOP-DAG-RUNTIME §3.1): `pure fn` / `sched fn` / `pure kernel fn`. The class is
+      -- what Reject's rule 124 reads; evaluation is unchanged (a class is a static restriction).
+      let cls := if c.isI i "pure" then 1 else 2
+      if c.isI (i + 1) "fn" then
+        (do let (f, j) ← pFn c fuel (i + 1)
+            pProgramFrom c fuel j { p with fns := p.fns.push { f with cls := cls } })
+      else if c.isI (i + 1) "kernel" && c.isI (i + 2) "fn" then
+        (do let (f, j) ← pFn c fuel (i + 2)
+            pProgramFrom c fuel j { p with fns := p.fns.push { f with cls := cls, isKernel := true } })
+      else .error (c.err i "`pure` / `sched` must be followed by `fn`")
   | .ident "test" =>
       -- `test NAME { ... }` is SKIPPED by the compiler (c133_testblock's own
       -- header: "test block with string literal must be skipped during

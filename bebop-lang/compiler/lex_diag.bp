@@ -74,6 +74,12 @@ fn diag_span(buf: [i64], at: i64, s: str, from: i64, len: i64) -> i64 {
   at + len
 }
 fn diag_exit(s: str, p: i64, code: i64) -> i64 {
+  let buf = zeros(512);
+  let a2b = diag_str(buf, diag_pos(s, p, buf), "error[E");
+  diag_exit_text(buf, a2b, code)
+}
+// diag_pos(s, p, buf): `[path:]line:col: ` for source position p into buf; returns the next index.
+fn diag_pos(s: str, p: i64, buf: [i64]) -> i64 {
   let line = 1;
   let col = 1;
   let i = 0;
@@ -102,7 +108,6 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
     let mg = 1 - stop;
     0
   };
-  let buf = zeros(512);
   // The path prefix appears ONLY for a position inside an included file. A top-level
   // position keeps the bare `line:col:` form the CLI has always printed -- which is also
   // what keeps bench/vs_rust/diag_check.sh's `cut -d: -f1,2` reading line:col.
@@ -114,7 +119,9 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let a2 = put_num(buf, a1 + 1, col);
   let _ = buf[a2] = 58;
   let _ = buf[a2 + 1] = 32;
-  let a2b = diag_str(buf, a2 + 2, "error[E");
+  a2 + 2
+}
+fn diag_exit_text(buf: [i64], a2b: i64, code: i64) -> i64 {
   let a3 = put_num(buf, a2b, code);
   let at = diag_str(buf, a3, "]: ");
   let at1 = if code == 95 then diag_str(buf, at, "expected `)` or `in`") else at;
@@ -146,7 +153,8 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let at27 = if code == 123 then diag_str(buf, at, "call_packed takes a packed closure plus 0..12 arguments") else at26;
   let at28 = if code == 84 then diag_str(buf, at, "type error: a declared type does not match its use here (index / argument / return)") else at27;
   let at29 = if code == 126 then diag_str(buf, at, "memo image full -- delete <out>.dag or raise DAG_CAP") else at28;
-  let mtail = at29 - at;
+  let at30 = if code == 124 then diag_str(buf, at, "fn is not pure -- a sys_ builtin, clock_ms, a non-pure callee, or a store into an input array") else at29;
+  let mtail = at30 - at;
   let final_at = at + mtail;
   let _ = buf[final_at] = 10;
   let _ = sys_write(2, buf, final_at + 1);
@@ -183,6 +191,80 @@ fn kernel_marked(s: str, fpos: i64) -> i64 {
     0
   };
   if p[0] < 5 then 0 else kernel_word_at(s, p[0])
+}
+// DG6 (docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md §3.1): a fn's CLASS from the marker on its own
+// line -- `pure fn` 1, `sched fn` 2, anything else 0 (io, today's default). `pure kernel fn` is pure AND
+// kernel (kernel_marked reads the word right before `fn`; this reads past a `kernel`). Same backward scan
+// as kernel_marked: spaces and tabs only, never a newline, and a non-identifier byte before the word.
+fn mark_word_end(s: str, p: i64) -> i64 {
+  let q = [p - 1];
+  let done = if p < 1 then 1 else 0;
+  while done == 0 {
+    let c = char(s, q[0]);
+    let is_sp = (if c == 32 then 1 else 0) + (if c == 9 then 1 else 0);
+    let _ = q[0] = q[0] - is_sp;
+    let done = (if is_sp == 1 then 0 else 1) + (if q[0] < 0 then 1 else 0);
+    0
+  };
+  q[0]
+}
+fn mark_word_is(s: str, e: i64, w: str) -> i64 {
+  let n = str_len(w);
+  let b = e - n + 1;
+  let ok = [if b >= 0 then 1 else 0];
+  let i = 0;
+  while ok[0] * (if i < n then 1 else 0) == 1 {
+    let _ = ok[0] = if char(s, b + i) == char(w, i) then 1 else 0;
+    let i = i + 1;
+    0
+  };
+  let pc = if ok[0] * (if b > 0 then 1 else 0) == 1 then char(s, b - 1) else 0;
+  let idc = is_alpha(pc) + is_digit(pc) + (if pc == 95 then 1 else 0);
+  ok[0] * (if idc > 0 then 0 else 1)
+}
+// fn_class_set: compile_fn_at's per-fn state -- fntab[5544] = the class, fntab[5545] = the name position.
+fn fn_class_set(s: str, fntab: [i64], fpos: i64, namepos: i64) -> i64 {
+  let _ = fntab[5544] = fn_class_at(s, fpos);
+  let _ = fntab[5545] = namepos;
+  0
+}
+fn fn_class_at(s: str, fpos: i64) -> i64 {
+  let e1 = mark_word_end(s, fpos);
+  let k1 = if e1 >= 5 then mark_word_is(s, e1, "kernel") else 0;
+  let e = if k1 == 1 then mark_word_end(s, e1 - 5) else e1;
+  let pu = if e >= 3 then mark_word_is(s, e, "pure") else 0;
+  let sc = if e >= 4 then mark_word_is(s, e, "sched") else 0;
+  pu + 2 * sc
+}
+// diag_e124(s, p, fntab, why): `<line>:<col>: error[E124]: <fn> is not pure -- <reason> <name>` (P-1),
+// then exit 124. fntab[5545] = the offending fn's name position; the name at p is the call, the
+// builtin or the array. why: 1 names an io builtin, 2 calls a non-pure fn, 3 (a sched fn) calls an io
+// fn, 4 stores into an input array.
+fn diag_ident_len(s: str, p: i64) -> i64 {
+  let k = [0];
+  let go = 1;
+  while go == 1 {
+    let c = char(s, p + k[0]);
+    let idc = is_alpha(c) + is_digit(c) + (if c == 95 then 1 else 0);
+    let _ = k[0] = k[0] + (if idc > 0 then 1 else 0);
+    let go = if idc > 0 then (if k[0] < 64 then 1 else 0) else 0;
+    0
+  };
+  k[0]
+}
+fn diag_e124(s: str, p: i64, fntab: [i64], why: i64) -> i64 {
+  let buf = zeros(512);
+  let a = diag_str(buf, diag_pos(s, p, buf), "error[E124]: ");
+  let np = fntab[5545];
+  let a = diag_span(buf, a, s, np, diag_ident_len(s, np));
+  let a = if why == 3 then diag_str(buf, a, " is not sched -- calls io fn ") else diag_str(buf, a, " is not pure -- ");
+  let a = if why == 1 then diag_str(buf, a, "names io builtin ") else a;
+  let a = if why == 2 then diag_str(buf, a, "calls non-pure fn ") else a;
+  let a = if why == 4 then diag_str(buf, a, "writes input array (declare it `out`) ") else a;
+  let a = diag_span(buf, a, s, p, diag_ident_len(s, p));
+  let _ = buf[a] = 10;
+  let _ = sys_write(2, buf, a + 1);
+  sys_exit(124)
 }
 // sys_prefix_at(s, p, strn): 1 when the four bytes at p are `sys_`. The out-of-range case
 // reads index 0..3 instead and is multiplied out, so no byte past strn is ever touched.
@@ -366,6 +448,9 @@ fn param_type_word(s: str, from: i64, to: i64, strn: i64) -> i64 {
   let c0 = if q[0] >= to then 0 else char(s, q[0]);
   let is_colon = if c0 == 58 then 1 else 0;
   let _ = if is_colon == 1 then (let _ = q[0] = q[0] + 1 in (let _ = skip_ws(s, q) in 0)) else 0;
+  // DG6 (RT §3.2): `out` before the type marks an OUTPUT array a `pure` fn may write -- bit 10 (1024).
+  let isout = if q[0] + 3 >= to then 0 else ceq(s, q[0], 111) * ceq(s, q[0] + 1, 117) * ceq(s, q[0] + 2, 116) * ceq(s, q[0] + 3, 32);
+  let _ = if isout == 1 then (let _ = q[0] = q[0] + 4 in (let _ = skip_ws(s, q) in 0)) else 0;
   let c1 = if q[0] >= to then 0 else char(s, q[0]);
   let is_arr = if c1 == 91 then 1 else 0;
   let a1 = if q[0] + 1 >= to then 0 else char(s, q[0] + 1);
@@ -379,7 +464,7 @@ fn param_type_word(s: str, from: i64, to: i64, strn: i64) -> i64 {
   let ntag = (if nm == 1988825 then 2 else 0) + (if nm == 13474 then 6 else 0) + (if nm == 1969687 then 3 else 0);
   let tag = if is_arr == 1 then atag else ntag;
   let decl = if is_arr == 1 then 1 else known;
-  tag + decl * 768
+  tag + decl * 768 + isout * 1024
 }
 
 // A8: the declared type of the param whose NAME starts at npos. Deliberately re-derives

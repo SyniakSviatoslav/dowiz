@@ -23,6 +23,7 @@
     | builtin-named `fn`  | c113, c114             | every other `fn` in 121 files |
     | > 14 params         | c85_param15 (15)       | c92's `f0` has exactly 14   |
     | `sys_*` in kernel fn| c112_kernelsys         | c111_kernelfn               |
+    | class rules (124)   | c148, c149, c150 (neg) | c148/c149/c150 *_ok twins   |
     | `sys_mapb`          | c140_mapb_refused      | -- no positive calls it     |
     | > 8 syms at clone   | c141_clone9 (9)        | c142_clone8 (exactly 8)     |
     | unbound symbol      | c93, read_before_assign| c86, c90, c95 (assign to a
@@ -178,6 +179,68 @@ def checkKernelSyscall (p : Program) : Option Diag :=
   match bad[0]? with
   | some (fn, call) => some ⟨102, s!"`kernel fn {fn}` calls `{call}`; no `sys_` name may appear in a kernel fn (exit 102)"⟩
   | none => none
+
+-- ============================================================
+-- Rule: a `pure` / `sched` fn keeps its class (exit 124, DG6)
+-- ============================================================
+
+/-- Array names a body STORES through (`a[i] = v`, statement or expression form), when the base is a
+    plain name. A store through anything else (a call result, an index) has no name to check. -/
+partial def storesInExpr : Expr → Array Name
+  | .lit _ | .var _ | .strLit _ | .brkExpr => #[]
+  | .paren e | .unop _ e | .retExpr e => storesInExpr e
+  | .binop _ l r => storesInExpr l ++ storesInExpr r
+  | .arrLit es => es.flatMap storesInExpr
+  | .arrGet a i => storesInExpr a ++ storesInExpr i
+  | .arrSet a i v =>
+      (match a with | .var x => #[x] | _ => #[]) ++ storesInExpr a ++ storesInExpr i ++ storesInExpr v
+  | .call _ as | .builtin _ as => as.flatMap storesInExpr
+  | .ite c t f => storesInExpr c ++ storesInExpr t ++ storesInExpr f
+  | .letIn _ e b | .assignIn _ e b => storesInExpr e ++ storesInExpr b
+  | .matchExpr sc arms => storesInExpr sc ++ arms.flatMap (fun a => storesInExpr a.body)
+  | .structLit _ fs => fs.flatMap (fun p => storesInExpr p.2)
+  | .enumLit _ a => match a with | some e => storesInExpr e | none => #[]
+  | .fieldAcc e _ => storesInExpr e
+
+partial def storesInStmt : Stmt → Array Name
+  | .let_ _ e | .assign _ e | .drop e | .ret e | .exprStmt e | .compound _ _ e => storesInExpr e
+  | .arrStore a i v =>
+      (match a with | .var x => #[x] | _ => #[]) ++ storesInExpr a ++ storesInExpr i ++ storesInExpr v
+  | .while_ c b => storesInExpr c ++ b.flatMap storesInStmt
+  | .brk => #[]
+
+/-- SPEC-BEBOP-DAG-RUNTIME §3.1 P-1 / §3.2, the compiler's class_check and pure_store_check
+    (compiler/tables.bp). A `pure` fn may not name a `sys_*` builtin or `clock_ms`, may call only pure
+    fns, and may store only into parameters declared `out`; a `sched` fn may not call an io fn.
+    neg/c148_pure_sys, neg/c149_pure_calls_io, neg/c150_pure_writes_input must be refused; their twins
+    c148_pure_sys_ok, c149_pure_calls_pure_ok, c150_pure_out_ok must not. A store through a local alias
+    of an input parameter is refused by the compiler (the type word travels with the value) and NOT
+    here -- the AST has no types; no construct exercises it. -/
+def classOf (p : Program) (n : Name) : Option Nat :=
+  (p.fns.find? (fun g => g.name == n)).map (fun g => g.cls)
+
+def checkPure (p : Program) : Option Diag :=
+  p.fns.findSome? (fun f =>
+    let calls := f.body.flatMap callsInStmt
+    let ioB := calls.find? (fun n => n.startsWith "sys_" || n == "clock_ms")
+    let badCall := calls.find? (fun n =>
+      match classOf p n with
+      | some c => if f.cls == 1 then c != 1 else c == 0
+      | none => false)
+    let inputs := (f.params.zip (f.paramTypes.zip (f.paramOut ++ Array.replicate f.params.size false))).filterMap
+      (fun (x, t, o) => if t == Ty.arr && !o then some x else none)
+    let badStore := (f.body.flatMap storesInStmt).find? (fun n => inputs.contains n)
+    if f.cls == 1 then
+      match ioB, badCall, badStore with
+      | some n, _, _ => some ⟨124, s!"`{f.name}` is not pure -- names io builtin `{n}` (exit 124)"⟩
+      | none, some n, _ => some ⟨124, s!"`{f.name}` is not pure -- calls non-pure fn `{n}` (exit 124)"⟩
+      | none, none, some n => some ⟨124, s!"`{f.name}` is not pure -- writes input array `{n}` (exit 124)"⟩
+      | none, none, none => none
+    else if f.cls == 2 then
+      match badCall with
+      | some n => some ⟨124, s!"`{f.name}` is not sched -- calls io fn `{n}` (exit 124)"⟩
+      | none => none
+    else none)
 
 -- ============================================================
 -- Rule: `sys_mapb` is refused outright (exit 108)
@@ -383,9 +446,10 @@ def check (p : Program) : Option Diag :=
   (checkReservedFnName p).orElse (fun _ =>
   (checkParamCount p).orElse (fun _ =>
   (checkKernelSyscall p).orElse (fun _ =>
+  (checkPure p).orElse (fun _ =>
   (checkMapb p).orElse (fun _ =>
   (checkCloneSymbols p).orElse (fun _ =>
   (checkUnbound p).orElse (fun _ =>
-   checkStaticOob p))))))
+   checkStaticOob p)))))))
 
 end Bebop.Reject

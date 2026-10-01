@@ -207,6 +207,12 @@ def check_producers_not_memoised():
             # a consumer. Without this the guard added 2026-09-12 flags itself.
             w = produced.setdefault(m.group(1), [])
             if i not in w: w.append(i)
+    # DG6 2026-10-01: a producer named through a variable (`$GBPOOL`, the gb_pool block's .gbpool file)
+    # is the same hazard; it was missed by the `$GBT/<name>.store` pattern and was memo-replayed.
+    for i, line in enumerate(lines):
+        if not line.lstrip().startswith("#") and re.search(r'"\$GBPOOL"', line):
+            w = produced.setdefault("$GBPOOL", [])
+            if i not in w: w.append(i)
     for name, where in produced.items():
         if len(where) < 2: continue          # written and read in one place: self-test
         first = where[0]
@@ -259,7 +265,7 @@ def check_object_header_writes(r):
     for p in bp_sources():
         fn, params = None, set()
         for i, line in enumerate(open(p, errors="replace"), 1):
-            m = re.match(r"^fn\s+(\w+)\s*\(([^)]*)\)", line)
+            m = re.match(r"^(?:(?:pure|sched|kernel)\s+)*fn\s+(\w+)\s*\(([^)]*)\)", line)
             if m:
                 fn = m.group(1)
                 # only PARAMETERS can be an object offset handed in from an allocator;
@@ -630,12 +636,15 @@ def check_no_dead_functions(r):
         rel = os.path.relpath(p, ROOT)
         if not any(rel == o or rel.startswith(o) for o in owned): continue
         for i, line in enumerate(open(p, errors="replace").read().split("\n"), 1):
-            m = re.match(r"^fn\s+(\w+)\s*\(", line)
+            m = re.match(r"^(?:(?:pure|sched|kernel)\s+)*fn\s+(\w+)\s*\(", line)
             if m: defs.setdefault(m.group(1), []).append("%s:%d" % (rel, i))
     # USES over bp_call_sites(), which is what "the whole corpus" in the comment above
     # always meant -- see that function's docstring for the false positive this fixes.
     texts = [open(p, errors="replace").read() for p in bp_call_sites()]
     uses = collections.Counter(re.findall(r"\b(\w+)\s*\(", "\n".join(texts)))
+    # A16 fn VALUES: `&name` is a use (call_fn calls it). DG6 2026-10-01: the scheduler's node fns
+    # (sp_node, pool_part, pool_merge_part) are only ever passed as `&name`, and read as dead without this.
+    uses.update(re.findall(r"&(\w+)\b", "\n".join(texts)))
     entry = {"main", "kernel_main"}
     # `fn foo(` also matches the call pattern, so a function is dead when its only
     # occurrences in the whole corpus are its own definitions.
@@ -669,7 +678,7 @@ def check_clone_kept_symbols(r):
         lines = open(p, errors="replace").read().split("\n")
         fn_start, params = None, 0
         for i, line in enumerate(lines):
-            m = re.match(r"^fn\s+\w+\s*\(([^)]*)\)", line)
+            m = re.match(r"^(?:(?:pure|sched|kernel)\s+)*fn\s+\w+\s*\(([^)]*)\)", line)
             if m:
                 fn_start = i
                 params = len([q for q in m.group(1).split(",") if ":" in q])
@@ -694,6 +703,40 @@ def check_clone_kept_symbols(r):
              % (len(bad), cap, worst, "; ".join(bad[:6])))
     else:
         note("clone-symbols: every spawn site keeps <= %d symbols across it" % cap)
+
+
+# --- CHECK 26: every registered projection fn is `pure fn` (DG6, RT §3.1 P-3) -------
+# st_proj_eval memoises a fold in the store image, and a memo is only honest for a node whose output
+# is a function of its inputs. The run-time half is trap 124 (pj_registered refuses an unregistered fn
+# value); this is the source half: every fn the registry names (`&name` inside pj_registered) must be
+# DECLARED `pure fn`, which makes the compiler's E124 rules hold for it and everything it calls.
+def check_pure_class(r):
+    src = os.path.join(ROOT, "selfhost/prelude/proj.bp")
+    if not os.path.exists(src):
+        fail("pure-class", "selfhost/prelude/proj.bp missing -- the projection registry cannot be read")
+        return
+    text = open(src, errors="replace").read()
+    m = re.search(r"^fn pj_registered\([^)]*\)[^{]*\{(.*?)^\}", text, re.M | re.S)
+    if not m:
+        fail("pure-class", "fn pj_registered not found in selfhost/prelude/proj.bp -- the registry moved; re-point this check")
+        return
+    names = sorted(set(re.findall(r"&(\w+)", m.group(1))))
+    if not names:
+        fail("pure-class", "pj_registered names no fn value -- a registry of nothing is not a registry")
+        return
+    defs = {}
+    for p in bp_sources():
+        for line in open(p, errors="replace").read().split("\n"):
+            mm = re.match(r"^((?:pure |sched |kernel )*)fn\s+(\w+)\s*\(", line)
+            if mm and mm.group(2) in names: defs.setdefault(mm.group(2), []).append(mm.group(1))
+    bad = ["%s (%s)" % (n, "undefined" if n not in defs else "declared `%sfn`" % defs[n][0])
+           for n in names if n not in defs or not all("pure " in d for d in defs[n])]
+    if bad:
+        fail("pure-class", "%d of %d registered projection fn(s) are not `pure fn` -- a memo of an "
+             "impure node is a second account of the truth: %s" % (len(bad), len(names), ", ".join(bad)))
+    else:
+        note("pure-class: %d/%d registered projection fns are `pure fn` (%s)"
+             % (len(names), len(names), ", ".join(names)))
 
 
 def check_prereq_guarded(r):
@@ -1114,6 +1157,7 @@ def main():
     check_scripted_patch_assert(r)
     check_no_dead_functions(r)
     check_clone_kept_symbols(r)
+    check_pure_class(r)
     check_prereq_guarded(r)
     check_waits_are_bounded(r)
     check_ratchets_are_read(r)

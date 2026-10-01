@@ -19,7 +19,10 @@
 #   dagfull.sh datalog                DG8 arm (SPEC-DATALOG-AND-CODEC A.7): the five rule sets of dl_fix.bp,
 #                                     DL_EVENTS (10^4) seeded events each, incremental == from scratch.
 #                                     Prints `dagfull datalog <equal>/<rulesets> events <n>`.
-#   dagfull.sh store|sched            DG5/DG6 arms: NOT BUILT -- refused by name, exit 2.
+#   dagfull.sh sched                  DG6 arm (RT §7, §8.2): the scheduler probe shapes, W=0 vs W=3 twice in one
+#                                     process. Prints `dagfull sched <equal>/<shapes> wakes .. threshold .. report ..
+#                                     speedup_x100 ..` (details at the arm).
+#   dagfull.sh store                  DG5 arm: NOT BUILT -- refused by name, exit 2.
 #
 # env: BEBOP_BIN (candidate, default ./bebop.bin), BEBOP_TMP (scratch), DAG_HITS=1 is set by this script
 # for its warm compiles so the compiler prints `dag: hits <h>/<n>` on stderr (the hit count the mutation
@@ -78,7 +81,7 @@ compile)
 import re, sys
 s = open(sys.argv[1]).read()
 # inside the LAST fn's body: after its opening `{` (a one-line body gets the comment on its own line)
-m = [x.end() for x in re.finditer(r'^(?:kernel )?fn [^\n{]*\{', s, re.M)]
+m = [x.end() for x in re.finditer(r'^(?:(?:pure|sched|kernel) )*fn [^\n{]*\{', s, re.M)]
 if not m: sys.exit(1)
 open(sys.argv[2], 'w').write(s[:m[-1]] + '\n// dagfull\n' + s[m[-1]:])
 PY
@@ -148,7 +151,58 @@ datalog)
   echo "dagfull datalog $eq/$n events $EV"
   [ "$eq" = "$n" ]
   ;;
-store|sched)
-  echo "dagfull $arm: REFUSED -- arm not built (owned by DG5/DG6, BLUEPRINT §2-3); not counted as agreement"; exit 2 ;;
-*) echo "usage: dagfull.sh --sweep <frozen-dir> | compile [src.bp ...] | check | datalog | store | sched"; exit 2 ;;
+sched)
+  # DG6 (RT §7, §8.2): the R §3 probe shapes on selfhost/prelude/sched.bp via selfhost/std/sched_probe.bp.
+  # Each program runs W=0 twice and W=SCHED_W twice in ONE process (same-session control) and prints
+  # `sched N L K W serial_ms a b par_ms c d folds s1 s2 p1 p2 wakes x1 x2 par_levels y1 y2`.
+  #   sched_det        (T-1) all four folds equal, every shape
+  #   sched_wakes      (T-2) wakes == par_levels on every run, and the 8x4 shape ran all 4 levels parallel
+  #   sched_threshold  (T-4) 64x8x100000 routed serial (par_levels 0 0) and par wall <= 1.2x serial wall
+  #   report           (T-6) BEBOP_SCHED_REPORT=1 prints one `level ..` line per level per run (4 runs x L)
+  #   speedup_x100     serial/par wall on 8x4x5000000 (RT acceptance >= 230; printed, gated only with
+  #                    SCHED_SPEEDUP_GATE=1 -- a wall ratio on a shared phone is a measurement, not a law)
+  # SCHED_ROOT=<tree> evaluates a scratch copy of selfhost/ (dagfull.prove.sh step 5's mutation).
+  # SCHED_SHAPES="N:L:K ..." overrides the shape list (the prove step runs 24:1:2000000 only).
+  R0=$(realpath "${SCHED_ROOT:-.}"); W=$T/sched; rm -rf "$W"; mkdir -p "$W"; SW=${SCHED_W:-3}
+  for f in selfhost/prelude/sched.bp selfhost/std/sched_probe.bp; do
+    [ -f "$R0/$f" ] || { echo "dagfull sched: REFUSED -- $R0/$f missing (G-1)"; exit 2; }
+  done
+  shapes=${SCHED_SHAPES:-"8:4:5000000 3:4:20000000 64:8:100000 24:1:2000000 1:24:2000000"}
+  eq=0; n=0; wk=0; wn=0; bad=""; thr=none; spd=none; rep=none
+  for sh in $shapes; do
+    IFS=: read -r N L K <<< "$sh"; n=$((n + 1))
+    printf 'use "selfhost/std/sched_probe.bp"\nfn main() -> i64 { sp_probe(%d, %d, %d, %d) }\n' "$N" "$L" "$K" "$SW" > "$R0/.dagfull_sched$n.bp"
+    (cd "$R0" && "$SEED" "$BB" compile ".dagfull_sched$n.bp" "$W/s$n.bin" > /dev/null 2> "$W/s$n.cerr"); rc=$?
+    rm -f "$R0/.dagfull_sched$n.bp" "$R0/.dagfull_sched$n.bp.use"
+    [ "$rc" = 0 ] || { echo "dagfull sched: REFUSED -- shape $sh does not compile (rc $rc): $(tail -1 "$W/s$n.cerr")"; exit 2; }
+    rp=0; [ "$N:$L:$K" = "8:4:5000000" ] && rp=1
+    BEBOP_SCHED_REPORT=$rp timeout 600 "$SEED" "$W/s$n.bin" > "$W/s$n.out" 2> "$W/s$n.err"; rc=$?
+    v=$(tail -1 "$W/s$n.out"); ln=$(grep -m1 '^sched N ' "$W/s$n.out")
+    echo "dagfull sched: shape $sh rc $rc value $v | $ln"
+    set -- $ln   # sched N n L l K k W w serial_ms a b par_ms c d folds s1 s2 p1 p2 wakes x1 x2 par_levels y1 y2
+    if [ "$rc" = 0 ] && [ "$v" = 1 ] && [ $# = 26 ]; then eq=$((eq + 1)); else bad="$bad $sh(rc $rc value $v)"; fi
+    if [ $# = 26 ]; then
+      wn=$((wn + 1)); [ "${22}" = "${25}" ] && [ "${23}" = "${26}" ] && wk=$((wk + 1)) || bad="$bad $sh(wakes ${22},${23} != par_levels ${25},${26})"
+      if [ "$N:$L:$K" = "8:4:5000000" ]; then
+        [ "${25}" = "$L" ] && [ "${26}" = "$L" ] || bad="$bad $sh(par_levels ${25},${26} want $L)"
+        spd=$(( (${11} + ${12}) * 100 / ( (${14} + ${15}) > 0 ? (${14} + ${15}) : 1 ) ))
+        lv=$(grep -c '^level [0-9]* width [0-9]* est_us [0-9]* mode \(serial\|W=[0-9]*\) wall_us [0-9]*$' "$W/s$n.err")
+        [ "$lv" = $((4 * L)) ] && rep="$lv/$((4 * L))" || { rep="$lv/$((4 * L))"; bad="$bad report($lv lines want $((4 * L)))"; }
+      fi
+      if [ "$N:$L:$K" = "64:8:100000" ]; then
+        if [ "${25}" = 0 ] && [ "${26}" = 0 ] && [ $(( (${14} + ${15}) * 10 )) -le $(( (${11} + ${12}) * 12 + 20 )) ]; then thr=serial
+        else thr=RED; bad="$bad threshold(par_levels ${25},${26} par_ms ${14}+${15} serial_ms ${11}+${12})"; fi
+      fi
+    fi
+  done
+  [ -n "$bad" ] && echo "dagfull sched: RED:$bad" | cut -c1-2000
+  sg=ok; [ "$spd" != none ] && [ "$spd" -lt "${SCHED_MIN_SPEEDUP:-230}" ] && sg=low
+  echo "dagfull sched $eq/$n wakes $wk/$wn threshold $thr report $rep speedup_x100 $spd ($sg) W=$SW"
+  [ "$eq" = "$n" ] && [ "$wk" = "$wn" ] && [ "$wn" = "$n" ] && [ -z "$bad" ] || exit 1
+  [ "${SCHED_SPEEDUP_GATE:-0}" = 1 ] && [ "$sg" = low ] && exit 1
+  exit 0
+  ;;
+store)
+  echo "dagfull $arm: REFUSED -- arm not built (owned by DG5, BLUEPRINT §2-3); not counted as agreement"; exit 2 ;;
+*) echo "usage: dagfull.sh --sweep <frozen-dir> | compile [src.bp ...] | check | datalog | sched | store"; exit 2 ;;
 esac

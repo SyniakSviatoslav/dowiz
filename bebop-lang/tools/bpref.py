@@ -251,6 +251,13 @@ class Parser:
         while not self.at('<eof>'):
             v = self.peek()[1]
             kern = False
+            cls = 0  # DG6 (SPEC-BEBOP-DAG-RUNTIME §3.1): 1 `pure fn`, 2 `sched fn`, 0 io
+            if v in ('pure', 'sched'):
+                cls = 1 if v == 'pure' else 2
+                self.next()
+                v = self.peek()[1]
+                if v not in ('fn', 'kernel'):
+                    raise SyntaxError('`pure` / `sched` must be followed by `fn`')
             if v == 'kernel':
                 self.next()
                 kern = True
@@ -267,6 +274,8 @@ class Parser:
                 while not self.at(')'):
                     params.append(self.ident())
                     self.expect(':')
+                    if self.at('out'):  # DG6 §3.2: an output array of a pure fn; the type follows
+                        self.next()
                     if self.at('['):
                         self.next(); ptypes.append('[' + self.next()[1] + ']'); self.expect(']')
                     elif self.at('ref'):
@@ -292,6 +301,11 @@ class Parser:
                 if not body or body[-1][0] != 'expr' or self.t[self.p - 1][1] == ';':
                     raise SyntaxError('fn %s: body has no tail expression (bebop.bin exits 97)' % name)
                 self.expect('}')
+                if cls == 1:
+                    for tk in self.t[kstart:self.p]:
+                        if tk[0] == 'i' and (tk[1].startswith('sys_') or tk[1] == 'clock_ms'):
+                            raise SyntaxError('fn %s: `%s` inside a pure fn '
+                                              '(bebop.bin exits 124)' % (name, tk[1]))
                 if kern:
                     for tk in self.t[kstart:self.p]:
                         if tk[0] == 'i' and tk[1].startswith('sys_'):

@@ -1,0 +1,9 @@
+// c149_pure_calls_io (DG6, RT §3.1 P-1): a `pure` fn may call only pure fns. `log_it` is unmarked, so
+// it is io (today's default class) -- calling it from `fold2` is refused even though `log_it` itself
+// does nothing impure: the class is the DECLARATION, read from the callee's own `fn` line, so the rule
+// is checkable per call site without looking inside the callee. Expected diagnostic:
+//   <l>:<c>: error[E124]: fold2 is not pure -- calls non-pure fn log_it
+// EXPECT COMPILEFAIL:124 from: pure fn calls an io fn
+fn log_it(x: i64) -> i64 { x }
+pure fn fold2(a: i64, b: i64) -> i64 { log_it(a) * 31 + b }
+fn main() -> i64 { fold2(2, 3) }

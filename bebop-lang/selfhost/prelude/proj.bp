@@ -21,8 +21,10 @@ use "selfhost/prelude/nodekey.bp"
 // (S-2). Anything else: the whole fold, and the memo is rewritten. Kind 2 is never extended (S-3).
 //
 // PURITY (P-3): st_proj_eval refuses a fold fn value that is not REGISTERED with trap 124 at run time.
-// Until DG6 lands the `pure` class, the registry is an allowlist of the folds this file defines
-// (pj_log_step for kind 1, pj_kv_fold for kind 2) -- an honest stand-in, not the compiler's check.
+// The registry is an allowlist of the folds this file defines (pj_log_step for kind 1, pj_kv_fold for
+// kind 2). DG6 (2026-10-01): both are now `pure fn`, so the compiler's E124 rules hold for them and for
+// everything they call (st_get / st_len / st_ref in store.bp are `pure fn` for that reason), and
+// tools/arch_check.py CHECK 26 (pure-class) refuses a registered fn that is not `pure fn`.
 //
 // The event log (crates/bebop-store/src/evlog.rs is the layout's home): root {n, ref LAST, has_tip,
 // tip0..tip3, VERSION} (v2, 8 cells; 7 cells = v1), record {seq, plen, ref PREV, id0..id3, prev0..prev3,
@@ -40,9 +42,9 @@ fn pj_dig_out() -> i64 { 514297014 }
 fn pj_dig_evroot() -> i64 { 69 * 16777216 + 86 * 65536 + 76 * 256 + 71 }
 fn pj_dig_ev() -> i64 { 69 * 16777216 + 86 * 65536 + 95 * 256 + 82 }
 // FNV-1a 64: the offset basis 0xcbf29ce484222325 as its two's-complement i64 (kv.bp's fnv_offset).
-fn pj_fnv_offset() -> i64 { 0 - 3750763034362895579 }
-fn pj_fnv_byte(h: i64, b: i64) -> i64 { (h ^ b) * 1099511628211 }
-fn pj_fnv_u64(h: i64, v: i64) -> i64 {
+pure fn pj_fnv_offset() -> i64 { 0 - 3750763034362895579 }
+pure fn pj_fnv_byte(h: i64, b: i64) -> i64 { (h ^ b) * 1099511628211 }
+pure fn pj_fnv_u64(h: i64, v: i64) -> i64 {
   let x = h;
   let k = 0;
   while k < 8 {
@@ -63,10 +65,10 @@ fn pj_ref(base: [i64], obj: i64, i: i64) -> i64 {
 }
 // pj_rec_plen: the payload length a reader can honour -- the header's claim bounded by the cells the
 // object really holds (evlog.rs read_at: obj_cells, not obj_len), so every reader folds the same bytes.
-fn pj_rec_at(base: [i64], ev: i64, ver: i64) -> i64 {
+pure fn pj_rec_at(base: [i64], ev: i64, ver: i64) -> i64 {
   if ver >= 2 then (if (st_get(base, ev, 11) & 1) == 1 then (if st_len(base, ev) >= 16 then 16 else 12) else 12) else 15
 }
-fn pj_rec_plen(base: [i64], ev: i64, ver: i64) -> i64 {
+pure fn pj_rec_plen(base: [i64], ev: i64, ver: i64) -> i64 {
   let at = pj_rec_at(base, ev, ver);
   let have = st_len(base, ev) - at;
   let cap = if ver >= 2 then have * 8 else have;
@@ -74,7 +76,7 @@ fn pj_rec_plen(base: [i64], ev: i64, ver: i64) -> i64 {
   if p < 0 then 0 else (if p > cap then (if cap < 0 then 0 else cap) else p)
 }
 // pj_log_step: fold_step (S-2) -- ONE frame of the four-reader LOG fold, seq(8) || plen(8) || payload.
-fn pj_log_step(h: i64, base: [i64], ev: i64, ver: i64) -> i64 {
+pure fn pj_log_step(h: i64, base: [i64], ev: i64, ver: i64) -> i64 {
   let at = pj_rec_at(base, ev, ver);
   let n = pj_rec_plen(base, ev, ver);
   let x = pj_fnv_u64(pj_fnv_u64(h, st_get(base, ev, 0)), n);
@@ -214,10 +216,10 @@ fn pj_log_append(base: [i64], tx: [i64], seq: i64, pay: [i64], plen: i64, id0: i
 }
 
 // ---- the KV snapshot fold (kind 2; the fold kv.bp's `h` prints, moved here so it can be registered) -
-fn pj_kv_ver(base: [i64], g: i64) -> i64 {
+pure fn pj_kv_ver(base: [i64], g: i64) -> i64 {
   if st_len(base, g) < 6 then 1 else (if st_get(base, g, 5) > 0 then st_get(base, g, 5) else 1)
 }
-fn pj_kv_frame(h: i64, base: [i64], blob: ref Obj, off: i64, len: i64, ver: i64) -> i64 {
+pure fn pj_kv_frame(h: i64, base: [i64], blob: ref Obj, off: i64, len: i64, ver: i64) -> i64 {
   let x = pj_fnv_u64(h, len);
   let j = 0;
   while j < len {
@@ -230,7 +232,7 @@ fn pj_kv_frame(h: i64, base: [i64], blob: ref Obj, off: i64, len: i64, ver: i64)
   x
 }
 // pj_kv_fold: FNV-1a 64 over len||key||len||value in key order -- kv.bp's snapshot_root, byte for byte.
-fn pj_kv_fold(base: [i64], g: i64) -> i64 {
+pure fn pj_kv_fold(base: [i64], g: i64) -> i64 {
   let n = st_get(base, g, 0);
   let kidx = st_ref(base, g, 1);
   let kblob = st_ref(base, g, 2);

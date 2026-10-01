@@ -209,6 +209,10 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = if fntab[5543] == 1 then (if sys_prefix_at(s, npos, strn) == 1 then diag_exit(s, npos, 102) else 0) else 0;
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
   let is_lp = if ch == 40 then 1 else 0;
+  // DG6 P-1: inside a `pure` / `sched` fn (fntab[5544] = 1 / 2) the name is checked against the class
+  // rules (E124). DIAGNOSTIC ONLY, like the kernel bit above: an io fn has 5544 = 0 and emits the same
+  // words, so every existing program is byte-identical.
+  let _ = if fntab[5544] > 0 then class_check(s, name, npos, is_lp, fntab, strn) else 0;
   let is_br = if ch == 123 then 1 else 0;
   let is_lb = if ch == 91 then 1 else 0;
   // T43 rest: a bare `ident {` would eat a while/if body, so `NAME {` is a
@@ -247,6 +251,29 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
 }
 
 
+
+// class_check (RT §3.1 P-1): a `pure` fn may not name a sys_ builtin or clock_ms, and may call only
+// pure fns; a `sched` fn may not call an io fn. A callee's class is read from the marker on ITS `fn`
+// line (fn_class_at at the srcpos collect_fns recorded), so a forward reference resolves. A name with no
+// fn of that spelling (a builtin, a ctor, a local) has no class and is not a call to check.
+fn class_check(s: str, name: i64, npos: i64, is_lp: i64, fntab: [i64], strn: i64) -> i64 {
+  let cls = fntab[5544];
+  let io_b = sys_prefix_at(s, npos, strn) + (if name == 66094333908796503 then 1 else 0);
+  let _ = if cls == 1 then (if io_b > 0 then diag_e124(s, npos, fntab, 1) else 0) else 0;
+  let sp = if is_lp == 1 then ft_srcpos(fntab, name) else 0 - 1;
+  let cc = if sp >= 0 then fn_class_at(s, sp) else 0 - 1;
+  let _ = if cls == 1 then (if cc >= 0 then (if cc != 1 then diag_e124(s, npos, fntab, 2) else 0) else 0) else 0;
+  let _ = if cls == 2 then (if cc == 0 then diag_e124(s, npos, fntab, 3) else 0) else 0;
+  0
+}
+// pure_store_check (RT §3.2): a store through a SIGNATURE-declared array (a parameter, or a name bound
+// to one -- the type word travels with the value, bit 9) inside a `pure` fn needs the `out` bit (1024).
+fn pure_store_check(s: str, npos: i64, tw: i64, fntab: [i64]) -> i64 {
+  let tg = tw & 255;
+  let arr = (if tg == 1 then 1 else 0) + (if tg == 4 then 1 else 0) + (if tg == 5 then 1 else 0) + (if tg == 7 then 1 else 0);
+  let bad = (if fntab[5544] == 1 then 1 else 0) * ((tw / 512) & 1) * arr * (1 - ((tw / 1024) & 1));
+  if bad == 1 then diag_e124(s, npos, fntab, 4) else 0
+}
 
 // Skip over a struct field's type annotation up to the next ',' or '}'.
 fn skip_to_field_delim(s: str, pos: [i64]) -> i64 {

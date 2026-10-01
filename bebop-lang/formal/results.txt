@@ -11,16 +11,18 @@
 toolchain Lean (version 4.33.1, aarch64-unknown-linux-gnu, commit 819816b2e0a3bf405af45ae5c7af2491d8f5bee6, Release)
 eval_fuel 4000000
 call_depth_limit 131072
-lean_conformance 120/122
-lean_sources_sha256 f1ffede24adc675d571491b0848f98c3cb44f98ef8060148e6cb489776e70746
-lean_source_count 16
-ab56f6448bd37a70703484857736ac098687cc69d9f1ea9ce2538c6f8ed94952  formal/Bebop.lean
-fff4f8b733ae6c906091bd63d38ef1936684abc75ca48149bc753fa66b031731  formal/Bebop/Basic.lean
+lean_conformance 126/129
+lean_sources_sha256 f7674b8c18d70e406d9f0f9e10cecebded119f23e7f0a195ca8694c5ae954e30
+lean_source_count 18
+1b8345b9908119c82f1f21775e8b5d71ade1c21c3f035b12c63f22da97e1ddae  formal/Bebop.lean
+225cf322f2a91ecedebec98e287c97f46607ed7a08cad10914aaf84316835ad0  formal/Bebop/Basic.lean
 e65d395bd9262ca910da28d813196ca2e5a7fb4d4bdbc6b704c59480dabfb716  formal/Bebop/Builtins.lean
 4ca9ce6a2150ce65432760ca1eb12233fb2b36bda0520e7c6436e68beadba90b  formal/Bebop/Conformance.lean
+928c98e69c85df3bd3d00d2e0bc52854d86c5afdf5bd17c65cade10396b450be  formal/Bebop/Dag.lean
+4f227c03cad184ff3ca01e2165e562b16c89e1c43c2fc350d890bff2f8f3feb1  formal/Bebop/Datalog.lean
 179a1085bcb1152c224ac82289049b592ee985cf190a95c61d48072727321e61  formal/Bebop/Lexer.lean
-d3444b0482ddf3255bfa06ef55f3e7ef48b4aae28ca84dba0c11686b833e54a2  formal/Bebop/Parser.lean
-929fa442cff52c12ef090a5af7cfc2b91a87af15a5b236f02eae3cd4156dbae6  formal/Bebop/Reject.lean
+b8047c1b074adfe5b859d070232e4f2ac6cda1236098dae7d2096b0aa5ec1881  formal/Bebop/Parser.lean
+bd9038759e9fe2d7117326f0c1d6010e00d37adc1cf591c77803ae59562954b7  formal/Bebop/Reject.lean
 05fc8c4d1c8ca07e778f5c4ecd204950c7d158c304d6f1f5491b2b260481174a  formal/Bebop/Semantics.lean
 f0c74eddf82f5d575423f5aeac464e8688f2c9067019769b7a0264f73c5ac02a  formal/Bebop/Sha256.lean
 a3b8225a68ddf089581034e99939c58f22b542aeb6a06dfaee04079a7d1c734e  formal/Bebop/Syscalls.lean
@@ -60,7 +62,10 @@ positive/c144_contract_ok PASS 3
 positive/c145_fraction_ok PASS 1
 positive/c146_module_empty_nospace_ok PASS 7
 positive/c146_module_empty_ok PASS 7
+positive/c148_pure_sys_ok PASS 1
+positive/c149_pure_calls_pure_ok PASS 381
 positive/c14_string PASS 8
+positive/c150_pure_out_ok PASS 456
 positive/c15_bitwise PASS 27
 positive/c16_compound PASS 3
 positive/c17_neg PASS -103
@@ -141,6 +146,10 @@ negative/c141_clone9 PASS exit:109
 negative/c143_contract_garbage PASS unsupported:refused statically: LEX 8:39: cannot start a token: '@' (want exit 110; LEX names no code)
 negative/c145_fraction_garbage PASS unsupported:refused statically: INVALID 9:12: expected an identifier, found num(5) (want exit 111; this refusal names no code)
 negative/c146_module_contents_garbage PASS unsupported:refused statically: INVALID 6:11: expected '}', found ident(abc) (want exit 112; this refusal names no code)
+negative/c147_dag_full FAIL 42
+negative/c148_pure_sys PASS exit:124
+negative/c149_pure_calls_io PASS exit:124
+negative/c150_pure_writes_input PASS exit:124
 negative/c28_plusplus PASS unsupported:refused statically: INVALID 5:33: expected an expression, found '+' (want exit 96; this refusal names no code)
 negative/c29_emptybody PASS exit:97
 negative/c37_arenafull PASS exit:80

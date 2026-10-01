@@ -169,7 +169,9 @@ fn dag_ctx(s: str, ws: [i64], dm: [i64]) -> i64 {
   while i < cnt {
     let _ = pos[0] = fpos[i];
     let _ = skip_to(s, pos, 123);
-    let at = dag_piece(lc, at, srcc, fpos[i], pos[0]);
+    // DG6 P-2: from the fn's LINE start, so a `pure`/`sched` marker (a callee's class, which its callers'
+    // E124 checks read) is context -- reclassifying a callee invalidates every caller's memo.
+    let at = dag_piece(lc, at, srcc, dag_line_start(s, fpos[i]), pos[0]);
     let i = i + 1;
     0
   };

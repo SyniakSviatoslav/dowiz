@@ -27,3 +27,4 @@ import Bebop.Traps
 import Bebop.Conformance
 import Bebop.Theorems
 import Bebop.Datalog
+import Bebop.Dag

@@ -182,6 +182,11 @@ structure FnDecl where
       a `sys_*` inside one. The modifier used to be consumed and thrown away,
       which is why that refusal could not be modelled. -/
   isKernel : Bool := false
+  /-- DG6 (SPEC-BEBOP-DAG-RUNTIME §3.1): the fn's class -- 1 `pure fn`, 2 `sched fn`, 0 io (no
+      marker). `pure kernel fn` is pure and kernel. Read by Reject's rule 124. -/
+  cls : Nat := 0
+  /-- DG6 (§3.2): which parameters carry the `out` marker (a `pure` fn may write only those). -/
+  paramOut : Array Bool := #[]
   deriving Inhabited
 
 structure Program where

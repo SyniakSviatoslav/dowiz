@@ -1,0 +1,16 @@
+// c150_pure_writes_input (DG6, RT §3.2): a `[i64]` parameter a `pure` fn WRITES must be declared an
+// output with the `out` marker. `rec` is an input, so the store through it is refused -- a node that
+// mutated its input would make the memo of the node that produced it a lie. Expected diagnostic:
+//   <l>:<c>: error[E124]: step is not pure -- writes input array (declare it `out`) rec
+// EXPECT COMPILEFAIL:124 from: pure fn writes an input array
+pure fn step(acc: out [i64], rec: [i64]) -> i64 {
+  let _ = rec[0] = rec[0] + 1;
+  let _ = acc[0] = acc[0] + rec[0];
+  acc[0]
+}
+fn main() -> i64 {
+  let a = zeros(1);
+  let r = zeros(1);
+  let _ = r[0] = 4;
+  step(a, r)
+}

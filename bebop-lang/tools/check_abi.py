@@ -295,6 +295,9 @@ REGISTERED = {
     5402: "arm_base", 5403: "span_slots", 5404: "frame",
     5410: "arrlen",
     5540: "bank", 5541: "bank", 5542: "bank", 5543: "bank",
+    # DG6 (2026-10-01): per-fn class state set by fn_class_set in compile_fn_at -- 5544 = the fn's class
+    # (1 pure, 2 sched, 0 io; read by class_check / pure_store_check, E124), 5545 = its name position (diag_e124).
+    5544: "bank", 5545: "bank",
     5549: "literals", 5550: "literals", 5551: "literals", 5552: "literals",
     5600: "budget",
     6000: "lit_table",

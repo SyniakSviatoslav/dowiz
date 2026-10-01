@@ -1,140 +1,67 @@
-// selfhost/std/pool.bp — worker pool over the shared seed arena.
+use "selfhost/prelude/sched.bp"
+// selfhost/std/pool.bp — worker pool over the shared seed arena, a CLIENT of the DAG scheduler.
 //
-// M6: parallelism in pure .bp. Each worker is a clone'd thread (CLONE_VM |
-// CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD = 68864) with its
-// own 64 KiB stack carved from the arena above the cursor. Shared cells
-// live in frame-heap arrays (register-held base pointers — keep <= 8 live
-// symbols across a parallel region; spilled slots are per-thread stack
-// memory and are NOT shared).
-//
-// The publish/wait idiom uses real-branch guarded builtins so the
-// emitter's branchless speculation cannot race:
-//   sys_cond_set(cond, arr, idx, val)        — publish iff cond
-//   sys_futex_wait_guard(cond, arr, idx, v)  — FUTEX_WAIT iff cond == 0
-//   sys_futex_wake(arr, idx, n)              — FUTEX_WAKE (harmless both)
-// Workers PARK on a never-woken futex cell instead of exiting (raw svc 94
-// followed by another clone breaks under ptrace sandboxes; the parked
-// thread dies with the process's exit_group). Standard futex pattern:
-// wait on the CURRENT flag value, re-check in a loop (no lost wakeups).
-//
-// Interp mirror: sequential emulation — sys_clone returns 0 (the worker
-// path runs inline), futex waits mark the cell and return 0. The
-// deterministic work-split yields the identical result. Both engines
-// verified by the pool gate (bench/vs_rust/pool_parity.sh).
+// DG6 (docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md §7.1 T-5, 2026-10-01): the worker loop is
+// selfhost/prelude/sched.bp's -- persistent sys_clone workers (CLONE_VM | CLONE_FS | CLONE_FILES |
+// CLONE_SIGHAND | CLONE_THREAD = 68864) parked on a futex, nodes claimed by LDADDAL, the parent woken
+// once per level, outputs assembled in node-index order. This file used to carry its own three spawn
+// loops (one per entry point) with per-worker done flags and never-woken park cells; each entry point
+// is now ONE level of W nodes on the scheduler, and the same three values come out:
+//   par_sum(4, 1000) = 10000, par_merge(4, 1000) = 10000, par_tids(4) = 4  (bench/vs_rust/pool_parity.sh)
+// Every level here passes sch_always() as its estimate: these entry points exist to exercise the
+// threads, so they ask for the workers whatever T-4's 10 ms threshold would say about 1000-unit nodes.
+// W may exceed sch_w_max() (pool_parity runs W = 4 on the slot's three cores): T-3's cap is the
+// scheduler's DEFAULT for real work, and par_tids' evidence is "W workers got W tids".
 
 module core { }
 
-// par_sum(W, per): W workers; worker i contributes (i+1)*per into cells[i];
-// the merge phase sums cells[0..W) after every done flag is set. cells
-// holds W results + W done flags + 1 park cell. No allocations inside
-// loops (L8).
+// pool_part: node i of par_sum -- (i+1) * per, returned into out[i].
+pure fn pool_part(ctx: i64, i: i64) -> i64 {
+  let c = sch_h(ctx);
+  (i + 1) * c[0]
+}
+// pool_merge_part: node i of par_merge -- adds (i+1) * per into ONE shared cell with LDADDAL; real
+// threads race on it and the atomic merge must not lose an update.
+fn pool_merge_part(ctx: i64, i: i64) -> i64 {
+  let c = sch_h(ctx);
+  sys_atomic_add(c, 1, (i + 1) * c[0])
+}
+
+// par_sum(W, per): W nodes on W workers; the merge sums out[0..W) in node-index order.
 fn par_sum(W: i64, per: i64) -> i64 {
-  let cells = zeros(W * 2 + 1);
-  let base = sys_arena_base();
-  let i = 0;
-  while i < W {
-    let r = sys_clone(68864, base + 16384 + i * 8192);
-    let is_child = if r == 0 then 1 else 0;
-    let part = is_child * (i + 1) * per;
-    let _ = sys_atomic_add(cells, i, is_child * part);
-    let _ = sys_atomic_add(cells, W + i, is_child);
-    let _ = sys_futex_wake(cells, W + i, 64);
-    let parked = if is_child == 0 then 1 else 0;
-    while parked == 0 {
-      let w = sys_futex_wait_guard(1 - is_child, cells, W * 2, 0);
-      let parked = if sys_atomic_add(cells, W * 2, 0) == 1 then 1 else 0;
-      0
-    };
-    let i = i + 1;
-    0
-  };
+  let ctx = zeros(2);
+  let out = zeros(W + 1);
+  let _ = ctx[0] = per;
+  let e = sch_new(W);
+  let _ = sch_level(e, 0, W, sch_always(), &pool_part, sch_a(ctx), out);
+  let _ = sch_stop(e);
   let k = 0;
   let acc = 0;
   while k < W {
-    let d = 0;
-    while d == 0 {
-      let w = sys_futex_wait_guard(0, cells, W + k, 0);
-      let d = if sys_atomic_add(cells, W + k, 0) == 1 then 1 else 0;
-      0
-    };
-    let acc = acc + cells[k];
+    let acc = acc + out[k];
     let k = k + 1;
     0
   };
   acc
 }
 
-// par_merge(W, per): same work-split as par_sum, but workers publish into
-// ONE shared sum cell via sys_atomic_add (LDADDAL fetch-and-add) instead
-// of private result cells; per-worker done flags + park cell as in
-// par_sum. Real threads race on cells[W] — the atomic merge must not lose
-// updates; the interp runs the child paths sequentially (sys_clone==0) and
-// must reach the same total. Layout: sum=W, flags=W+1..2W, park=2W+1.
+// par_merge(W, per): the same split, published into ctx[1] by sys_atomic_add.
 fn par_merge(W: i64, per: i64) -> i64 {
-  let cells = zeros(W * 2 + 2);
-  let base = sys_arena_base();
-  let i = 0;
-  while i < W {
-    let r = sys_clone(68864, base + 16384 + i * 8192);
-    let is_child = if r == 0 then 1 else 0;
-    let part = is_child * (i + 1) * per;
-    let _ = sys_atomic_add(cells, W, part);
-    let _ = sys_atomic_add(cells, W + 1 + i, is_child);
-    let _ = sys_futex_wake(cells, W + 1 + i, 64);
-    let parked = if is_child == 0 then 1 else 0;
-    while parked == 0 {
-      let w = sys_futex_wait_guard(1 - is_child, cells, W * 2 + 1, 0);
-      let parked = if sys_atomic_add(cells, W * 2 + 1, 0) == 1 then 1 else 0;
-      0
-    };
-    let i = i + 1;
-    0
-  };
-  let k = 0;
-  while k < W {
-    let d = 0;
-    while d == 0 {
-      let w = sys_futex_wait_guard(0, cells, W + 1 + k, 0);
-      let d = if sys_atomic_add(cells, W + 1 + k, 0) == 1 then 1 else 0;
-      0
-    };
-    let k = k + 1;
-    0
-  };
-  cells[W]
+  let ctx = zeros(2);
+  let out = zeros(W + 1);
+  let _ = ctx[0] = per;
+  let e = sch_new(W);
+  let _ = sch_level(e, 0, W, sch_always(), &pool_merge_part, sch_a(ctx), out);
+  let _ = sch_stop(e);
+  ctx[1]
 }
 
-// par_tids(W): real-thread evidence without /proc. sys_clone returns the
-// child tid in the PARENT (0 in the child) — the parent records each r
-// into cells[W+i] via sys_cond_set(1 - is_child, ...), the dispatcher
-// counts nonzero entries. Real threads (seed): every iteration's clone
-// produces a kernel tid -> count == W. Sequential emulation (interp):
-// sys_clone always returns 0, the parent path never runs -> count == 0.
-// No done flags needed: the parent writes the tids inline during the
-// spawn loop, before the dispatcher counts.
+// par_tids(W): real-thread evidence without /proc. sys_clone returns the child tid in the PARENT
+// (0 in the child); sch_spawn records each one, sch_tids counts the nonzero entries. W real threads
+// -> W. A sequential emulation (sys_clone always 0) -> 0.
 fn par_tids(W: i64) -> i64 {
-  let cells = zeros(W * 2 + 1);
-  let base = sys_arena_base();
-  let i = 0;
-  while i < W {
-    let r = sys_clone(68864, base + 16384 + i * 8192);
-    let is_child = if r == 0 then 1 else 0;
-    let _ = sys_cond_set(1 - is_child, cells, W + i, r);
-    let parked = if is_child == 0 then 1 else 0;
-    while parked == 0 {
-      let w = sys_futex_wait_guard(1 - is_child, cells, W * 2, 0);
-      let parked = if cells[W * 2] == 1 then 1 else 0;
-      0
-    };
-    let i = i + 1;
-    0
-  };
-  let k = 0;
-  let cnt = 0;
-  while k < W {
-    let cnt = cnt + (if cells[W + k] != 0 then 1 else 0);
-    let k = k + 1;
-    0
-  };
-  cnt
+  let e = sch_new(W);
+  let c = sch_tids(e);
+  let _ = sch_stop(e);
+  c
 }

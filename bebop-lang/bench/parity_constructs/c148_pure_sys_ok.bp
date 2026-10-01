@@ -1,0 +1,10 @@
+// c148_pure_sys_ok (DG6, RT §3.2): the positive twin of neg/c148_pure_sys -- the clock enters the
+// `pure` fn as a PARAMETER, read by the io caller. `age` is a pure node; main (io) owns the clock.
+// The two reads are milliseconds apart, so the age is in [0, 1000) and the value is 1.
+// EXPECT 1 from: hand: pure fn with clock as input
+pure fn age(now_ms: i64, t0: i64) -> i64 { now_ms - t0 }
+fn main() -> i64 {
+  let t0 = clock_ms();
+  let a = age(clock_ms(), t0);
+  (if a >= 0 then 1 else 0) * (if a < 1000 then 1 else 0)
+}

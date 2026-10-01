@@ -1,0 +1,24 @@
+// c150_pure_out_ok (DG6, RT §3.2): the positive twin of neg/c150_pure_writes_input. `acc` is declared
+// `out` so the pure fn may write it; `rec` is only read; a LOCAL one-cell mutable (`t`, from zeros) is
+// node-local state and needs no marker. step folds rec[0..3) = 4, 5, 6 into acc[0] as acc*10 + r:
+// ((0*10+4)*10+5)*10+6 = 456.
+// EXPECT 456 from: hand: pure fn writes its out array
+pure fn step(acc: out [i64], rec: [i64]) -> i64 {
+  let t = zeros(1);
+  let i = 0;
+  while i < 3 {
+    let _ = t[0] = rec[i];
+    let _ = acc[0] = acc[0] * 10 + t[0];
+    let i = i + 1;
+    0
+  };
+  acc[0]
+}
+fn main() -> i64 {
+  let a = zeros(1);
+  let r = zeros(3);
+  let _ = r[0] = 4;
+  let _ = r[1] = 5;
+  let _ = r[2] = 6;
+  step(a, r)
+}

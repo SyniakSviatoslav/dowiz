@@ -1,0 +1,117 @@
+use "selfhost/prelude/sched.bp"
+// selfhost/std/sched_probe.bp -- the R §3 probe shape on the real scheduler (BLUEPRINT DG6 gates
+// sched_det / sched_wakes / sched_threshold; bench/vs_rust/dagfull.sh `sched` arm drives it).
+//
+// A levelled DAG of N nodes x L levels; node (l, j) is K iterations of an LCG in registers (compute-
+// bound, no memory traffic, no allocation) seeded from TWO nodes of level l-1 (j and (j+1) mod N),
+// so a level reads outputs other workers wrote in the previous level -- the barrier is exercised,
+// and a wrong assembly order changes every later level. The fold is order-sensitive.
+//
+// sp_probe(N, L, K, W) runs, in ONE process: the W = 0 control twice (the first is cold, which is
+// what fills the cost estimates), then W workers twice with the estimates of the run before. It
+// prints one line on stdout
+//   sched N <n> L <l> K <k> W <w> serial_ms <a> <b> par_ms <c> <d> folds <s1> <s2> <p1> <p2>
+//     wakes <x1> <x2> par_levels <y1> <y2>
+// and returns 1 when the four folds are equal, else 0.
+module core { }
+
+pure fn sp_lcg(x: i64, K: i64) -> i64 {
+  let k = 0;
+  while k < K {
+    let x = x * 6364136223846793005 + 1442695040888963407;
+    let k = k + 1;
+    0
+  };
+  x
+}
+// ctx cells: 0 N, 1 K, 2 out handle.
+pure fn sp_node(ctx: i64, i: i64) -> i64 {
+  let c = sch_h(ctx);
+  let N = c[0];
+  let lv = i / N;
+  let seed = if lv == 0 then i + 1 else sp_in(sch_h(c[2]), i - N, lv * N - N, N);
+  sp_lcg(seed, c[1])
+}
+// sp_in: the two inputs of node p + N, both on the previous level [b, b + N).
+pure fn sp_in(out: [i64], p: i64, b: i64, N: i64) -> i64 {
+  let q = b + (p - b + 1) % N;
+  out[p] * 3 + out[q]
+}
+pure fn sp_fold(out: [i64], n: i64) -> i64 {
+  let h = 0;
+  let i = 0;
+  while i < n {
+    let h = h * 1000003 + (out[i] >> 1);
+    let i = i + 1;
+    0
+  };
+  h & 1099511627775
+}
+pure fn sp_clear(out: out [i64], n: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = out[i] = 0;
+    let i = i + 1;
+    0
+  };
+  0
+}
+// sp_once(e, ...) -> res[0] fold, res[1] wall ms, res[2] wakes, res[3] parallel levels.
+sched fn sp_once(e: [i64], ctx: [i64], out: [i64], lvl: [i64], L: i64, cost: [i64], res: [i64]) -> i64 {
+  let n = lvl[L];
+  let _ = sp_clear(out, n);
+  let w0 = sch_wakes(e);
+  let t0 = clock_ms();
+  let p = sch_run(e, &sp_node, sch_a(ctx), out, lvl, L, cost);
+  let _ = res[1] = clock_ms() - t0;
+  let _ = res[0] = sp_fold(out, n);
+  let _ = res[2] = sch_wakes(e) - w0;
+  let _ = res[3] = p;
+  0
+}
+fn sp_probe(N: i64, L: i64, K: i64, W: i64) -> i64 {
+  let out = zeros(N * L + 1);
+  let cost = zeros(N * L + 1);
+  let lvl = zeros(L + 1);
+  let ctx = zeros(4);
+  let r = zeros(16);
+  let b = zeros(512);
+  let _ = ctx[0] = N;
+  let _ = ctx[1] = K;
+  let _ = ctx[2] = sch_a(out);
+  let l = 0;
+  while l <= L {
+    let _ = lvl[l] = l * N;
+    let l = l + 1;
+    0
+  };
+  let e0 = sch_new(0);
+  let ew = sch_new(W);
+  let _ = sp_once(e0, ctx, out, lvl, L, cost, r);
+  let _ = sp_once(e0, ctx, out, lvl, L, cost, sp_at(r, 4));
+  let _ = sp_once(ew, ctx, out, lvl, L, cost, sp_at(r, 8));
+  let _ = sp_once(ew, ctx, out, lvl, L, cost, sp_at(r, 12));
+  let _ = sch_stop(ew);
+  let _ = sp_line(b, N, L, K, W, r);
+  (if r[0] == r[4] then 1 else 0) * (if r[0] == r[8] then 1 else 0) * (if r[0] == r[12] then 1 else 0)
+}
+pure fn sp_at(r: [i64], k: i64) -> [i64] { sch_h(sch_a(r) + k) }
+fn sp_line(b: [i64], N: i64, L: i64, K: i64, W: i64, r: [i64]) -> i64 {
+  let a = sch_put(b, sch_lit(b, 0, "sched N "), N);
+  let a = sch_put(b, sch_lit(b, a, " L "), L);
+  let a = sch_put(b, sch_lit(b, a, " K "), K);
+  let a = sch_put(b, sch_lit(b, a, " W "), W);
+  let a = sp_pair(b, sch_lit(b, a, " serial_ms "), r[1], r[5]);
+  let a = sp_pair(b, sch_lit(b, a, " par_ms "), r[9], r[13]);
+  let a = sp_pair(b, sch_lit(b, a, " folds "), r[0], r[4]);
+  let a = sp_pair(b, sch_lit(b, a, " "), r[8], r[12]);
+  let a = sp_pair(b, sch_lit(b, a, " wakes "), r[10], r[14]);
+  let a = sp_pair(b, sch_lit(b, a, " par_levels "), r[11], r[15]);
+  let _ = b[a] = 10;
+  sys_write(1, b, a + 1)
+}
+pure fn sp_pair(b: out [i64], a: i64, x: i64, y: i64) -> i64 {
+  let a = sch_put(b, a, x);
+  let _ = b[a] = 32;
+  sch_put(b, a + 1, y)
+}

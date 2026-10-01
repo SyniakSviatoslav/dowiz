@@ -374,7 +374,7 @@ fn st_alloc(base: [i64], tx: [i64], len: i64, digest: i64) -> i64 {
   let _ = tx[3] = tx[3] + 2 + len;
   off
 }
-fn st_len(base: [i64], off: i64) -> i64 { base[off] & 4294967295 }
+pure fn st_len(base: [i64], off: i64) -> i64 { base[off] & 4294967295 }
 // st_h1(base, off): an object's second header cell, (payload crc << 32) | generation -- the
 // generation an object was written at (proj.bp reads its input root's).
 fn st_h1(base: [i64], off: i64) -> i64 { base[off + 1] }
@@ -918,13 +918,13 @@ fn st_root(base: [i64], tmp: [i64]) -> i64 {
   st_parttab_root(base, pt)
 }
 fn st_gen(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 2] }
-fn st_get(base: [i64], obj: i64, i: i64) -> i64 { base[obj + 2 + i] }
+pure fn st_get(base: [i64], obj: i64, i: i64) -> i64 { base[obj + 2 + i] }
 fn st_put(base: [i64], obj: i64, i: i64, v: i64) -> i64 {
   let _ = base[obj + 2 + i] = v;
   v
 }
 // st_ref(base, obj, i): deref field i of obj (an object-relative offset) -> target offset.
-fn st_ref(base: [i64], obj: i64, i: i64) -> i64 { obj + base[obj + 2 + i] }
+pure fn st_ref(base: [i64], obj: i64, i: i64) -> i64 { obj + base[obj + 2 + i] }
 fn st_link(base: [i64], obj: i64, i: i64, target: i64) -> i64 {
   let _ = base[obj + 2 + i] = target - obj;
   target - obj

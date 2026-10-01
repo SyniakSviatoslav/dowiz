@@ -1,0 +1,298 @@
+// selfhost/prelude/sched.bp -- the L3 scheduler of the DAG runtime (docs/design/SPEC-BEBOP-DAG-RUNTIME-
+// 2026-09-28.md §7, BLUEPRINT DG6). A levelled DAG of nodes on W persistent sys_clone workers.
+//
+//   T-1  outputs are assembled in NODE-INDEX order (out[i] for the node i that was claimed), never in
+//        completion order -- the one rule that makes W = 0 and W = 3 give the same fold.
+//   T-2  workers claim nodes with sys_atomic_add on a per-level counter (LDADDAL, returns the old
+//        value); the parent is woken ONCE per level, by the worker whose failed claim brings the
+//        level's exit counter to W. (The spec's "done == N" is the same barrier one step later: a
+//        worker only claims again after its node is written, so "all W workers saw the claim
+//        counter pass N" implies "all N nodes done" -- and it also proves no worker is still inside
+//        the old level when the parent resets the counter for the next one, which "done == N"
+//        alone does not: a worker that finished its last node could otherwise claim from the NEXT
+//        level's counter with the OLD level's bounds in its registers.) `wakes` counts those wakes.
+//   T-3  W <= 3 by default (sch_w_max: the slot's three A78 cores); persistent for the run, parked on
+//        the gen futex between levels. Every fn that spans sys_clone keeps <= 8 symbols (exit 109).
+//   T-4  a level goes to the workers only when its estimate (sum of the nodes' last cost_us) is
+//        >= 10 ms PER WORKER; below that the parent runs it serially -- the W = 0 path, the same
+//        sch_drain. A cold node costs 0, so a cold level is serial.
+//   T-6  BEBOP_SCHED_REPORT=1: one stderr line per level,
+//        `level <i> width <n> est_us <e> mode serial|W=<w> wall_us <t>` (clock_ms granularity).
+//
+// Node fns are called through a fn value: call_fn(fv, ctx, i) -> i64, written to out[i]. Nodes are
+// meant to be `pure` (§3): no allocation that escapes, no shared writes except their own out cell.
+//
+// env e (zeros(sch_cells_n())), every cell an i64; addresses are st_addr-style cell handles:
+//   0 W   1 gen (workers park here)   2 claim   3 exits in this level   4 level done (parent parks)
+//   5 wakes   6 quit   7 lo   8 width   9 fv   10 ctx   11 out   12 workers exited   13 report on
+//   14 stack base (cursor sampled before any spawn)   15 report buffer handle   16..23 worker tids
+// The parent allocates NOTHING after sch_new: the workers' stacks sit above the cursor it sampled.
+module core { }
+
+pure fn sch_cells_n() -> i64 { 32 }
+pure fn sch_w_max() -> i64 { 3 }
+pure fn sch_min_us_per_worker() -> i64 { 10000 }
+// sch_always: an estimate above any threshold -- the caller insists on the workers (pool.bp's evidence gates).
+pure fn sch_always() -> i64 { 1 << 40 }
+pure fn sch_h(a: i64) -> [i64] { a }
+pure fn sch_a(c: [i64]) -> i64 { c }
+
+// sch_new(W): the env, the report buffer, BEBOP_SCHED_REPORT, then W workers. W = 0: no thread.
+// W is clamped to 8: the tid cells are 16..23.
+sched fn sch_new(W: i64) -> [i64] {
+  let e = zeros(sch_cells_n());
+  let rb = zeros(256);
+  let _ = e[0] = if W > 8 then 8 else (if W < 0 then 0 else W);
+  let _ = e[15] = sch_a(rb);
+  let _ = e[13] = sch_env_report();
+  let _ = e[14] = sys_arena_base();
+  let _ = if e[0] > 0 then sch_spawn(e) else 0;
+  e
+}
+// sch_spawn: 4 symbols live at the clone (e, cur, w, r). The child never returns from sch_worker
+// into this loop's next iteration: it exits its thread right after.
+sched fn sch_spawn(e: [i64]) -> i64 {
+  let cur = e[14];
+  let w = 0;
+  while w < e[0] {
+    let r = sys_clone(68864, cur + 1048576 + w * 2097152);
+    let is_child = if r == 0 then 1 else 0;
+    let _ = if is_child == 1 then sch_worker(e) else 0;
+    let _ = sys_cond_set(1 - is_child, e, 16 + w, r);
+    let _ = sys_exit_thread_guard(is_child, 0);
+    let w = w + 1;
+    0
+  };
+  0
+}
+// sch_worker: park on gen, drain the level, count the exit; the W-th exit wakes the parent once.
+sched fn sch_worker(e: [i64]) -> i64 {
+  let seen = 0;
+  let go = 1;
+  while go == 1 {
+    let g = sys_atomic_add(e, 1, 0);
+    while g == seen {
+      let _ = sys_futex_wait_guard(0, e, 1, seen);
+      let g = sys_atomic_add(e, 1, 0);
+      0
+    };
+    let seen = g;
+    let go = if sys_atomic_add(e, 6, 0) == 1 then 0 else 1;
+    let _ = if go == 1 then sch_drain(e) else 0;
+    let _ = if go == 1 then sch_exit_level(e) else 0;
+    0
+  };
+  let _ = sys_atomic_add(e, 12, 1);
+  let _ = sys_futex_wake(e, 12, 1);
+  0
+}
+sched fn sch_exit_level(e: [i64]) -> i64 {
+  let x = sys_atomic_add(e, 3, 1) + 1;
+  let _ = if x == e[0] then sch_wake_parent(e) else 0;
+  0
+}
+sched fn sch_wake_parent(e: [i64]) -> i64 {
+  let _ = sys_atomic_add(e, 5, 1);
+  let _ = sys_atomic_add(e, 4, 1);
+  let _ = sys_futex_wake(e, 4, 1);
+  0
+}
+// sch_drain: claim, evaluate, assemble by node index (T-1). The parent's serial path is this fn too.
+sched fn sch_drain(e: [i64]) -> i64 {
+  let out = sch_h(e[11]);
+  let lo = e[7];
+  let n = e[8];
+  let fv = e[9];
+  let ctx = e[10];
+  let k = sys_atomic_add(e, 2, 1);
+  while k < n {
+    let v = call_fn(fv, ctx, lo + k);
+    let _ = out[lo + k] = v;
+    let k = sys_atomic_add(e, 2, 1);
+    0
+  };
+  0
+}
+// sch_level(e, lo, n, est_us, fv, ctx, out): one level; returns 1 when it ran on the workers.
+sched fn sch_level(e: [i64], lo: i64, n: i64, est_us: i64, fv: i64, ctx: i64, out: [i64]) -> i64 {
+  let W = e[0];
+  let par = if W > 0 then (if est_us >= sch_min_us_per_worker() * W then 1 else 0) else 0;
+  let _ = e[7] = lo;
+  let _ = e[8] = n;
+  let _ = e[9] = fv;
+  let _ = e[10] = ctx;
+  let _ = e[11] = sch_a(out);
+  let _ = e[2] = 0;
+  let _ = e[3] = 0;
+  let _ = e[4] = 0;
+  let _ = if par == 1 then sch_release(e) else sch_drain(e);
+  par
+}
+// sch_release: publish the level (LDADDAL on gen orders the plain stores above), wake the workers,
+// park until the W-th exit. No polling: FUTEX_WAIT on cell 4 while it reads 0.
+sched fn sch_release(e: [i64]) -> i64 {
+  let _ = sys_atomic_add(e, 1, 1);
+  let _ = sys_futex_wake(e, 1, 64);
+  let f = sys_atomic_add(e, 4, 0);
+  while f == 0 {
+    let _ = sys_futex_wait_guard(0, e, 4, 0);
+    let f = sys_atomic_add(e, 4, 0);
+    0
+  };
+  1
+}
+// sch_run(e, fv, ctx, out, lvl, nlev, cost): every level of the DAG. lvl[l] = first node of level l,
+// lvl[nlev] = the node count. cost[i] = node i's last cost_us (0 = cold). Each level's measured
+// wall is written back as cost (wall_us / width per node), so the NEXT run's estimate is "last".
+// Returns the number of levels that ran on the workers.
+sched fn sch_run(e: [i64], fv: i64, ctx: i64, out: [i64], lvl: [i64], nlev: i64, cost: [i64]) -> i64 {
+  let l = 0;
+  let pars = 0;
+  while l < nlev {
+    let pars = pars + sch_run_one(e, fv, ctx, out, lvl, l, cost);
+    let l = l + 1;
+    0
+  };
+  pars
+}
+sched fn sch_run_one(e: [i64], fv: i64, ctx: i64, out: [i64], lvl: [i64], l: i64, cost: [i64]) -> i64 {
+  let lo = lvl[l];
+  let n = lvl[l + 1] - lo;
+  let est = sch_sum(cost, lo, n);
+  let t0 = clock_ms();
+  let par = sch_level(e, lo, n, est, fv, ctx, out);
+  let us = (clock_ms() - t0) * 1000;
+  // the level's WORK, not its wall: a parallel level's wall is ~1/W of it (else the next estimate
+  // halves and the level flips serial -- measured 2026-10-01: 43000 -> 16000 est_us after one W=3 run).
+  let _ = sch_cost_put(cost, lo, n, if par == 1 then us * e[0] else us);
+  let _ = if e[13] == 1 then sch_report(e, l, n, est, par, us) else 0;
+  par
+}
+pure fn sch_sum(c: [i64], lo: i64, n: i64) -> i64 {
+  let s = 0;
+  let i = 0;
+  while i < n {
+    let s = s + c[lo + i];
+    let i = i + 1;
+    0
+  };
+  s
+}
+pure fn sch_cost_put(c: out [i64], lo: i64, n: i64, us: i64) -> i64 {
+  let each = if n > 0 then us / n else 0;
+  let i = 0;
+  while i < n {
+    let _ = c[lo + i] = each;
+    let i = i + 1;
+    0
+  };
+  0
+}
+// sch_stop(e): quit the workers and wait until every one has left its loop (the threads then exit).
+sched fn sch_stop(e: [i64]) -> i64 {
+  let W = e[0];
+  let _ = e[6] = 1;
+  let _ = if W > 0 then sch_join(e, W) else 0;
+  0
+}
+sched fn sch_join(e: [i64], W: i64) -> i64 {
+  let _ = sys_atomic_add(e, 1, 1);
+  let _ = sys_futex_wake(e, 1, 64);
+  let x = sys_atomic_add(e, 12, 0);
+  while x < W {
+    let _ = sys_futex_wait_guard(0, e, 12, x);
+    let x = sys_atomic_add(e, 12, 0);
+    0
+  };
+  0
+}
+pure fn sch_wakes(e: [i64]) -> i64 { e[5] }
+// sch_tids(e): how many workers the kernel gave a tid (real-thread evidence, pool.bp par_tids).
+pure fn sch_tids(e: [i64]) -> i64 {
+  let k = 0;
+  let c = 0;
+  while k < e[0] {
+    let c = c + (if e[16 + k] != 0 then 1 else 0);
+    let k = k + 1;
+    0
+  };
+  c
+}
+
+// ---- the level report (T-6) and the environment ----
+pure fn sch_put(b: out [i64], at: i64, v: i64) -> i64 {
+  let neg = if v < 0 then 1 else 0;
+  let _ = if neg == 1 then (let _ = b[at] = 45 in 0) else 0;
+  let x = if neg == 1 then 0 - v else v;
+  let a = at + neg;
+  let nd = 1;
+  let t = x / 10;
+  while t > 0 {
+    let nd = nd + 1;
+    let t = t / 10;
+    0
+  };
+  let i = nd - 1;
+  while i >= 0 {
+    let _ = b[a + i] = 48 + x - (x / 10) * 10;
+    let x = x / 10;
+    let i = i - 1;
+    0
+  };
+  a + nd
+}
+pure fn sch_lit(b: out [i64], at: i64, s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = b[at + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  at + n
+}
+sched fn sch_report(e: [i64], l: i64, n: i64, est: i64, par: i64, us: i64) -> i64 {
+  let b = sch_h(e[15]);
+  let a = sch_put(b, sch_lit(b, 0, "level "), l);
+  let a = sch_put(b, sch_lit(b, a, " width "), n);
+  let a = sch_put(b, sch_lit(b, a, " est_us "), est);
+  let a = sch_lit(b, a, " mode ");
+  let a = if par == 1 then sch_put(b, sch_lit(b, a, "W="), e[0]) else sch_lit(b, a, "serial");
+  let a = sch_put(b, sch_lit(b, a, " wall_us "), us);
+  let _ = b[a] = 10;
+  sys_write(2, b, a + 1)
+}
+// sch_env_report: 1 when /proc/self/environ holds BEBOP_SCHED_REPORT=1 (the seed passes argv only).
+sched fn sch_env_report() -> i64 {
+  let p = zeros(24);
+  let pl = sch_lit(p, 0, "/proc/self/environ");
+  let fd = sys_open(p, pl, 0);
+  let buf = zeros(65536);
+  let n = if fd >= 0 then sys_read(fd, buf, 65536) else 0;
+  let _ = if fd >= 0 then sys_close(fd) else 0;
+  let key = zeros(24);
+  let kl = sch_lit(key, 0, "BEBOP_SCHED_REPORT=1");
+  let hit = 0;
+  let i = 0;
+  while i < n {
+    let hit = if hit == 1 then 1 else sch_env_at(buf, i, n, key, kl);
+    let e = i;
+    while buf[e] != 0 {
+      let e = e + 1;
+      0
+    };
+    let i = e + 1;
+    0
+  };
+  hit
+}
+pure fn sch_env_at(buf: [i64], i: i64, n: i64, key: [i64], kl: i64) -> i64 {
+  let ok = if i + kl < n then 1 else 0;
+  let j = 0;
+  while j < kl {
+    let ok = ok * (if buf[i + j] == key[j] then 1 else 0);
+    let j = j + 1;
+    0
+  };
+  ok * (if buf[i + kl] == 0 then 1 else 0)
+}
