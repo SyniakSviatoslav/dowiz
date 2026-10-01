@@ -80,8 +80,9 @@ Standalone crates, wired by **path dependencies** — not a workspace:
 - **`web/`** — a zero-dependency Node shell that *only renders*; it consumes the kernel wasm glue and
   never re-implements math.
 - **`tools/`** — supporting Rust/py crates: `eqc-rs`/`eqc` (equation→Rust compiler),
-  `ci-truth` (CI re-execution/ledger binary), `native-spa-server` (native HTTP adapter over the
-  kernel's `json-api`), `telemetry` (bash telemetry bridge — the always-green CI job).
+  `ci-truth` (CI re-execution/ledger binary), `telemetry` (bash telemetry bridge — the always-green
+  CI job). The native twin server `native-spa-server` was deleted on 2026-10-01 (operator): the
+  Cloudflare Worker in `workers/api` is the only server.
 
 ## Kernel authority model (why edits here are load-bearing)
 

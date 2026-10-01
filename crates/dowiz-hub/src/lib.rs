@@ -46,7 +46,6 @@ pub mod room;
 pub mod settings;
 pub mod stock;
 pub mod prep;
-pub mod subs;
 pub mod voice;
 pub mod zone;
 pub mod logimage;

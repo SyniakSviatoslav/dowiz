@@ -306,7 +306,7 @@ There is no cargo workspace: each crate is standalone and is entered with `cd`.
 | `kernel/` | `dowiz-kernel`, the std facade over `dowiz-core`, with benches and examples |
 | `bebop-lang/` | the bebop language: self-hosting compiler, seed, standard modules, oracles |
 | `tools/gates/` | the code-quality gates and their mutation proofs; `run-all.sh` runs them all |
-| `tools/gen-vocab/`, `tools/native-spa-server/`, `tools/eqc-rs/` | vocabulary generator, native twin server, equation compiler |
+| `tools/gen-vocab/`, `tools/eqc-rs/` | vocabulary generator, equation compiler |
 | `tools/live-checks/` | read-only production probes (`health.sh`) |
 | `e2e/` | live audits (`gates/`), browser regression (`kit-regression/`), per-role live walks (`walk/`) |
 | `engine/`, `apps/courier/`, `bebop2/`, `mesh-adapter/` | render engine, native courier surface, mesh protocol: tested, not part of the live product |

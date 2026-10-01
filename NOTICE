@@ -14,7 +14,6 @@ PER-TOOL LICENSE CARVE-OUT (BLUEPRINT-P01 §6 operator note)
 The following internal utility crates are distributed under the MIT license,
 carved out from the AGPL-3.0-or-later project license:
   - tools/async-spool   (license = "MIT")
-  - tools/native-spa-server (license = "MIT")
 These are standalone, non-derivative build/serving helpers with no AGPL kernel
 code linked in; the carve-out is recorded here per the canonical suspension form
 (E53). If either later links AGPL-3.0-or-later project code, it must be

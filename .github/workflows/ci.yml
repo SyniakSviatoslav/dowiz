@@ -43,7 +43,6 @@ jobs:
             crates/dowiz-hub
             crates/bebop-wasm
             workers/api
-            tools/native-spa-server
             tools/gen-vocab
       - name: bebop-store (the image format)
         run: cd crates/bebop-store && cargo test
@@ -57,10 +56,6 @@ jobs:
         run: cd crates/bebop-wasm && cargo test --features decide
       - name: workers/api (every route's pure half)
         run: cd workers/api && cargo test
-      # The native twin of the owner/courier/storefront routes. Never tested before 2026-09-21,
-      # so two of its tests had been failing on developer boxes with nothing reporting it.
-      - name: native-spa-server
-        run: cd tools/native-spa-server && cargo test
       # Links dowiz-core and cross-checks FSM_GOLDEN_SIGNATURE, so a kernel change that moves the
       # FSM fails here before it reaches a browser.
       - name: gen-vocab

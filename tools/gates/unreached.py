@@ -42,11 +42,12 @@ Run: `python3 tools/gates/unreached.py`. Exit 1 when the count rises above
 import re, subprocess, collections, os
 os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # its OWN repo: a hard-coded /root/dowiz made every worktree run measure the main tree (2026-09-24)
 # WHERE CAPABILITIES ARE DECLARED, and WHERE ANY CONSUMER COULD CALL THEM.
-# The second list must be complete or the catalogue is a fiction: `dowiz-hub`
-# has TWO consumers, and leaving the twin server out would accuse the whole
-# roster subsystem of being dead.
+# The second list must be complete or the catalogue is a fiction. It held the
+# twin server (tools/native-spa-server) until that was deleted on 2026-10-01:
+# the Worker is now `dowiz-hub`'s only consumer, so what only the twin called
+# is dead and is reported here.
 DECL = ['crates/dowiz-hub/src', 'crates/bebop-store/src', 'workers/api/src']
-USE  = DECL + ['tools/native-spa-server/src']
+USE  = DECL
 dfiles = subprocess.check_output(['find']+DECL+['-name','*.rs']).decode().split()
 ufiles = subprocess.check_output(['find']+USE+['-name','*.rs']).decode().split()
 src = {f: open(f).read() for f in set(dfiles) | set(ufiles)}
