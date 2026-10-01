@@ -1,7 +1,7 @@
 #!/bin/sh
 # G1 — THE ORDER KINDS ARE ONE SET, IN RUST AND IN THE BROWSER.
 #
-# `EventKind::is_order` (crates/dowiz-hub/src/lib.rs) decides which log records
+# `EventKind::is_order` (crates/dowiz-hub/src/event.rs) decides which log records
 # fold into an order. The browser's replica (workers/api/public/lib/replica.js)
 # keeps a HAND COPY of that set as bytes, `ORDER_KINDS`, because the socket
 # carries a kind byte and the replica must fold exactly what the server folds.
@@ -18,7 +18,7 @@
 # copy with a kind added to one side only (must be RED) and to both (GREEN).
 set -eu
 cd "$(dirname "$0")/../.."
-RS=${EVENT_KINDS_RS:-crates/dowiz-hub/src/lib.rs}
+RS=${EVENT_KINDS_RS:-crates/dowiz-hub/src/event.rs}
 JS_DIR=${EVENT_KINDS_JS:-workers/api/public}
 
 if [ "${1:-}" = "--prove" ]; then
