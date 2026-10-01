@@ -1,0 +1,32 @@
+use "selfhost/std/dl_eval.bp"
+// dl_bound.bp -- `gate dl_bound` (row DG8, SPEC-DATALOG-AND-CODEC A-6): a rule set that escapes its
+// finite domain must stop LOUDLY, never hang --
+//   p(Y) :- p(X), two(T), mul(X, T, Y).     p = {1}, two = {2}, cap(p) = 8
+// derives 1, 2, 4, ... one new row per round; the ninth row does not fit p's declared domain ->
+// stderr `trap 125: datalog fixpoint bound exceeded`, exit 125. (The round guard, 1 + the IDB
+// capacities, is the second fence behind the capacity check: a round that adds no row ends the loop, so
+// rounds never outrun rows.) Oracle: bench/oracles/dl_bound.py.
+fn main() -> i64 {
+  let R = zeros(dl_rs_cells(8, 8, 16));
+  let _ = dl_rs_init(R, 8, 8, 16);
+  let u = 0 - 1;
+  let two = dl_pred(R, 1, 1, 0);
+  let mul = dl_bi(R, 4);
+  let p = dl_pred(R, 2, 1, 1);
+  let seed = dl_pred(R, 3, 1, 0);
+  let _ = dl_rule(R, p, 0, u, u, u);
+  let _ = dl_atom(R, seed, 0, 0, u, u, u);
+  let _ = dl_rule(R, p, 2, u, u, u);
+  let _ = dl_atom(R, p, 0, 0, u, u, u);
+  let _ = dl_atom(R, two, 0, 1, u, u, u);
+  let _ = dl_atom(R, mul, 0, 0, 1, 2, u);
+  let _ = dl_check(R);
+  let caps = [4, 0, 8, 4];
+  let db = zeros(dl_db_cells(R, caps));
+  let _ = dl_db_init(R, db, caps);
+  let _ = dl_put(db, two, dl_setrow(db, 2, 0, 0, 0));
+  let _ = dl_put(db, seed, dl_setrow(db, 1, 0, 0, 0));
+  let _ = dl_event_end(R, db);
+  let _ = dl_eval_all(R, db);
+  dl_n(db, p)
+}

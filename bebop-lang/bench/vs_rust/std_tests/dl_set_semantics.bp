@@ -1,0 +1,42 @@
+use "selfhost/std/dl_eval.bp"
+// dl_set_semantics.bp -- `gate dl_set_semantics` (row DG8, SPEC-DATALOG-AND-CODEC A-2): relations are
+// SETS. Inserting a fact that is already there changes nothing -- not n, not the fold (dl_fold, the
+// FNV-1a identity every gate compares; the spec's K256 block digest is DG9's codec, not this layer's) --
+// and a head two rules derive is one row.
+//   q(X,Y) EDB: put (1,2), (1,2) again, (1,3), (2,2)
+//   p(X) :- q(X,Y).      p(X) :- q(Y,X).       -> p = {1, 2, 3}
+// Prints: first put 1, second put 0, n(q) after the duplicate 1, fold unchanged 1, n(q) 3, n(p) 3,
+// incremental == scratch after retracting (1,3) 1, n(p) then 2 -- as decimal digits. Oracle: dl_set_semantics.py.
+fn main() -> i64 {
+  let R = zeros(dl_rs_cells(8, 8, 16));
+  let _ = dl_rs_init(R, 8, 8, 16);
+  let u = 0 - 1;
+  let q = dl_pred(R, 1, 2, 0);
+  let p = dl_pred(R, 2, 1, 1);
+  let _ = dl_rule(R, p, 0, u, u, u);
+  let _ = dl_atom(R, q, 0, 0, 1, u, u);
+  let _ = dl_rule(R, p, 0, u, u, u);
+  let _ = dl_atom(R, q, 0, 1, 0, u, u);
+  let _ = dl_check(R);
+  let caps = [16, 16];
+  let db = zeros(dl_db_cells(R, caps));
+  let sc = zeros(dl_db_cells(R, caps));
+  let _ = dl_db_init(R, db, caps);
+  let a = dl_put(db, q, dl_setrow(db, 1, 2, 0, 0));
+  let f1 = dl_fold(db, q);
+  let b = dl_put(db, q, dl_setrow(db, 1, 2, 0, 0));
+  let n1 = dl_n(db, q);
+  let same = if dl_fold(db, q) == f1 then 1 else 0;
+  let _ = dl_put(db, q, dl_setrow(db, 1, 3, 0, 0));
+  let _ = dl_put(db, q, dl_setrow(db, 2, 2, 0, 0));
+  let _ = dl_propagate(R, db);
+  let n2 = dl_n(db, q);
+  let np = dl_n(db, p);
+  let _ = dl_retract(db, q, dl_setrow(db, 1, 3, 0, 0));
+  let _ = dl_propagate(R, db);
+  let _ = dl_db_init(R, sc, caps);
+  let _ = dl_copy_rel(db, sc, q);
+  let _ = dl_eval_all(R, sc);
+  let eq = dl_same(db, sc, p);
+  ((((((a * 10 + b) * 10 + n1) * 10 + same) * 10 + n2) * 10 + np) * 10 + eq) * 10 + dl_n(db, p)
+}

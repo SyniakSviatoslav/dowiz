@@ -1,0 +1,556 @@
+use "selfhost/std/dl_fix.bp"
+// selfhost/std/gen_dl.bp -- the rule generator of row DG8 (SPEC-DATALOG-AND-CODEC A.1), in gen_gb.bp's
+// shape: write bebop SOURCE into a caller-owned buffer, write the file, compile it with bebop.bin. Library
+// only (no main). A rule set is REFUSED before any text is written: gen_dl calls dl_check, which exits 125
+// with the E125 line on an unsafe rule or a negation inside a cycle.
+//
+// What it writes, per rule r and per WALK VARIANT (first atom, mode, cand) the engine asks for --
+//   cold    (-1, collect, 0)  every atom from F                      dl_cold_rule
+//   exists  (-1, exists, 0)   head variables bound on entry           dl_exists_r (A-7 re-derivation)
+//   seed    (j, collect, 0)   atom j from a delta / inserted list     dl_seed (semi-naive, continuation)
+//   cand    (j, collect, 1)   atom j from a dirty list, the rest F or F u del, negations skipped
+// -- one function per plan depth with the plan, the access path of every atom (prefix binary search,
+// column perm, or scan), every constant and every equality check BAKED IN: no plan is built and no
+// argument is decoded at run time. `dlg_walk` dispatches on (r, first, mode, cand) and returns 1 when it
+// ran the walk, 0 for a variant it does not carry (the engine then interprets). dl_eval.bp's dl_run calls
+// it through `call_fn` when db[22] holds its function value (dlg_walk(_, _, -1, ...) first installs one
+// function value per variant into db's table, db[27], which dl_run then calls directly), so the
+// generated program keeps ONE runtime:
+// dl.bp's relations, strata, semi-naive loop and dirty set -- the generator replaces only the join.
+//
+// The generated program `use`s selfhost/std/dl_fix.bp; its main runs dl_gate_g with the generated walk
+// (no argument), dl_bench with it (one argument) or dl_bench interpreted (two), for the rule set it was
+// generated from (bench/vs_rust/dl_bench.sh reads the last two).
+
+// ---- text -----------------------------------------------------------------------------------------
+fn dlw_s(o: [i64], pos: [i64], s: str) -> i64 {
+  let _ = pos[0] = dl_puts(o, pos[0], s);
+  0
+}
+fn dlw_n(o: [i64], pos: [i64], x: i64) -> i64 {
+  let _ = pos[0] = dl_putn(o, pos[0], x);
+  0
+}
+// dlw_q: one double quote -- a bebop literal cannot hold one (gen_gb.bp wr_ch's note).
+fn dlw_q(o: [i64], pos: [i64]) -> i64 {
+  let at = pos[0];
+  let _ = o[at] = 34;
+  let _ = pos[0] = at + 1;
+  0
+}
+// dlw_name: dlg<r>_<first+1>_<mode><cand>_<depth>
+fn dlw_name(o: [i64], pos: [i64], r: i64, f: i64, m: i64, c: i64, k: i64) -> i64 {
+  let _ = dlw_s(o, pos, "dlg");
+  let _ = dlw_n(o, pos, r);
+  let _ = dlw_s(o, pos, "_");
+  let _ = dlw_n(o, pos, f + 1);
+  let _ = dlw_s(o, pos, "_");
+  let _ = dlw_n(o, pos, m * 10 + c);
+  let _ = dlw_s(o, pos, "_");
+  dlw_n(o, pos, k)
+}
+// dlw_arg: an argument's value in generated code -- a variable's env cell or a constant literal.
+fn dlw_arg(o: [i64], pos: [i64], v: i64) -> i64 {
+  let _ = if v >= 0 then (let _ = dlw_s(o, pos, "db[E + ") in let _ = dlw_n(o, pos, v) in dlw_s(o, pos, "]")) else 0;
+  let _ = if v == 0 - 1 then dlw_s(o, pos, "0") else 0;
+  let _ = if v < 0 - 1 then dlw_n(o, pos, 0 - v - 2) else 0;
+  0
+}
+// dlw_call_next: `NAME_(k+1)(R, db)`
+
+// ---- column classes of one atom under a bound mask ----------------------------------------------------
+// cls[c]: 0 free (unused), 1 bound (constant or a variable bound before this depth), 2 a variable bound
+// HERE (its first column), 3 the same variable again (rep[c] = the column that binds it).
+fn dlg_firstcol(R: [i64], a: i64, v: i64) -> i64 {
+  let at = 0 - 1;
+  let c = 3;
+  while c >= 0 {
+    let at = if dl_aa(R, a, 3 + c) == v then c else at;
+    let c = c - 1;
+    0
+  };
+  at
+}
+fn dlg_classify(R: [i64], a: i64, B: i64, cls: [i64], rep: [i64]) -> i64 {
+  let n = dl_aa(R, a, 2);
+  let seen = 0;
+  let c = 0;
+  while c < 4 {
+    let v = if c < n then dl_aa(R, a, 3 + c) else 0 - 1;
+    let isv = if v >= 0 then 1 else 0;
+    let vb = if isv == 1 then ((B >> v) & 1) else 0;
+    let vs = if isv == 1 then ((seen >> v) & 1) else 0;
+    let k = if v == 0 - 1 then 0 else (if isv == 0 then 1 else (if vb == 1 then 1 else (if vs == 1 then 3 else 2)));
+    let _ = cls[c] = k;
+    let fc = if k == 3 then dlg_firstcol(R, a, v) else 0;
+    let _ = rep[c] = fc;
+    let seen = if k == 2 then seen | (1 << v) else seen;
+    let c = c + 1;
+    0
+  };
+  n
+}
+// dlw_checks: `let ok = <product of equality tests>;` over the columns that are bound and NOT guaranteed
+// by the access path (skip = columns [0, pre) and, for a perm walk, column bc), plus repeated variables.
+fn dlw_checks(R: [i64], o: [i64], pos: [i64], a: i64, cls: [i64], rep: [i64], pre: i64, bc: i64) -> i64 {
+  let _ = dlw_s(o, pos, "    let ok = 1");
+  let c = 0;
+  while c < 4 {
+    let v = dl_aa(R, a, 3 + c);
+    let need = if cls[c] == 1 then (if c < pre then 0 else (if c == bc then 0 else 1)) else 0;
+    let _ = if need == 1 then (let _ = dlw_s(o, pos, " * (if db[w + ") in let _ = dlw_n(o, pos, c) in let _ = dlw_s(o, pos, "] == ") in let _ = dlw_arg(o, pos, v) in dlw_s(o, pos, " then 1 else 0)")) else 0;
+    let _ = if cls[c] == 3 then (let _ = dlw_s(o, pos, " * (if db[w + ") in let _ = dlw_n(o, pos, c) in let _ = dlw_s(o, pos, "] == db[w + ") in let _ = dlw_n(o, pos, rep[c]) in dlw_s(o, pos, "] then 1 else 0)")) else 0;
+    let c = c + 1;
+    0
+  };
+  dlw_s(o, pos, ";
+")
+}
+// gx: the variant being written -- 0 rule, 1 first atom (-1), 2 mode, 3 cand, 4 plan length L,
+// 8 + k the variables bound before depth k, 24 + k the atom at depth k.
+fn dlw_nm(o: [i64], pos: [i64], gx: [i64], k: i64) -> i64 { dlw_name(o, pos, gx[0], gx[1], gx[2], gx[3], k) }
+fn dlg_isrel(R: [i64], gx: [i64], k: i64) -> i64 {
+  let a = gx[24 + k];
+  let forced = if k == 0 then gx[3] else 0;
+  let neg = if forced == 1 then 0 else dl_aa(R, a, 1);
+  (1 - dl_isb(R, dl_aa(R, a, 0))) * (1 - neg)
+}
+// dlw_cont: the EXPRESSION that continues the walk at depth k -- builtins and negated atoms inline (no
+// call), a relational atom as a call to its depth function, the leaf inline (exists) or dl_leaf.
+fn dlw_cont(R: [i64], o: [i64], pos: [i64], gx: [i64], k: i64) -> i64 {
+  let _ = if k == gx[4] then return dlw_leaf(o, pos, gx) else 0;
+  let _ = if dlg_isrel(R, gx, k) == 1 then return dlw_relcall(o, pos, gx, k) else 0;
+  let a = gx[24 + k];
+  let p = dl_aa(R, a, 0);
+  let _ = if dl_isb(R, p) == 1 then return dlw_bi(R, o, pos, gx, k, a, p) else 0;
+  dlw_negx(R, o, pos, gx, k, a, p)
+}
+fn dlw_leaf(o: [i64], pos: [i64], gx: [i64]) -> i64 {
+  if gx[2] == 1 then dlw_s(o, pos, "(let _ = db[9] = 1 in 0)") else dlw_s(o, pos, "dl_leaf(R, db)")
+}
+fn dlw_relcall(o: [i64], pos: [i64], gx: [i64], k: i64) -> i64 {
+  let _ = dlw_nm(o, pos, gx, k);
+  dlw_s(o, pos, "(R, db)")
+}
+fn dlw_bi(R: [i64], o: [i64], pos: [i64], gx: [i64], k: i64, a: i64, p: i64) -> i64 {
+  let op = dl_pa(R, p, 0);
+  let z = dl_aa(R, a, 5);
+  let fresh = if z >= 0 then 1 - ((gx[8 + k] >> z) & 1) else 0;
+  let _ = if op == 4 then (if fresh == 1 then dlw_mulfresh(R, o, pos, gx, k, a, z) else dlw_mulchk(R, o, pos, gx, k, a, z)) else 0;
+  let _ = if op == 4 then return 0 else 0;
+  let _ = dlw_s(o, pos, "(if ");
+  let _ = dlw_arg(o, pos, dl_aa(R, a, 3));
+  let _ = if op == 1 then dlw_s(o, pos, " < ") else 0;
+  let _ = if op == 2 then dlw_s(o, pos, " <= ") else 0;
+  let _ = if op == 3 then dlw_s(o, pos, " == ") else 0;
+  let _ = dlw_arg(o, pos, dl_aa(R, a, 4));
+  let _ = dlw_s(o, pos, " then ");
+  let _ = dlw_cont(R, o, pos, gx, k + 1);
+  dlw_s(o, pos, " else 0)")
+}
+fn dlw_mulxy(R: [i64], o: [i64], pos: [i64], a: i64) -> i64 {
+  let _ = dlw_s(o, pos, "dl_mulck(");
+  let _ = dlw_arg(o, pos, dl_aa(R, a, 3));
+  let _ = dlw_s(o, pos, ", ");
+  let _ = dlw_arg(o, pos, dl_aa(R, a, 4));
+  dlw_s(o, pos, ")")
+}
+// dlw_mulfresh: z = x * y inline, CHECKED: the high word (smulh) must be the low word's sign, else
+// trap 125 (dl_trap_mul) -- the same check as dl_mulck, without the call.
+fn dlw_mulfresh(R: [i64], o: [i64], pos: [i64], gx: [i64], k: i64, a: i64, z: i64) -> i64 {
+  let _ = dlw_s(o, pos, "(let _ = db[E + ");
+  let _ = dlw_n(o, pos, z);
+  let _ = dlw_s(o, pos, "] = ");
+  let _ = dlw_xy(R, o, pos, a, " * ");
+  let _ = dlw_s(o, pos, " in if smulh(");
+  let _ = dlw_xy(R, o, pos, a, ", ");
+  let _ = dlw_s(o, pos, ") != (db[E + ");
+  let _ = dlw_n(o, pos, z);
+  let _ = dlw_s(o, pos, "] >>> 63) then dl_trap_mul() else ");
+  let _ = dlw_cont(R, o, pos, gx, k + 1);
+  dlw_s(o, pos, ")")
+}
+fn dlw_xy(R: [i64], o: [i64], pos: [i64], a: i64, sep: str) -> i64 {
+  let _ = dlw_arg(o, pos, dl_aa(R, a, 3));
+  let _ = dlw_s(o, pos, sep);
+  dlw_arg(o, pos, dl_aa(R, a, 4))
+}
+fn dlw_mulchk(R: [i64], o: [i64], pos: [i64], gx: [i64], k: i64, a: i64, z: i64) -> i64 {
+  let _ = dlw_s(o, pos, "(if ");
+  let _ = dlw_mulxy(R, o, pos, a);
+  let _ = dlw_s(o, pos, " == ");
+  let _ = dlw_arg(o, pos, z);
+  let _ = dlw_s(o, pos, " then ");
+  let _ = dlw_cont(R, o, pos, gx, k + 1);
+  dlw_s(o, pos, " else 0)")
+}
+// dlw_negx: a negated atom inline -- its probe row at db[db[6] + 4k], then not-in-F; skipped in cand mode.
+fn dlw_negx(R: [i64], o: [i64], pos: [i64], gx: [i64], k: i64, a: i64, p: i64) -> i64 {
+  let _ = if gx[3] == 1 then return dlw_cont(R, o, pos, gx, k + 1) else 0;
+  let _ = dlw_s(o, pos, "(");
+  let i = 0;
+  while i < 4 {
+    let v = if i < dl_aa(R, a, 2) then dl_aa(R, a, 3 + i) else 0 - 1;
+    let _ = dlw_s(o, pos, "let _ = db[db[6] + ");
+    let _ = dlw_n(o, pos, 4 * k + i);
+    let _ = dlw_s(o, pos, "] = ");
+    let _ = dlw_arg(o, pos, v);
+    let _ = dlw_s(o, pos, " in ");
+    let i = i + 1;
+    0
+  };
+  let _ = dlw_s(o, pos, "if dl_has(db, ");
+  let _ = dlw_n(o, pos, p);
+  let _ = dlw_s(o, pos, ", db[6] + ");
+  let _ = dlw_n(o, pos, 4 * k);
+  let _ = dlw_s(o, pos, ") == 0 then ");
+  let _ = dlw_cont(R, o, pos, gx, k + 1);
+  dlw_s(o, pos, " else 0)")
+}
+// dlw_bind_next: `let _ = if ok == 1 then (let _ = db[E + v] = db[w + c] in ... in CONT(k+1)) else 0;`
+fn dlw_bind_next(R: [i64], o: [i64], pos: [i64], gx: [i64], k: i64, cls: [i64]) -> i64 {
+  let a = gx[24 + k];
+  let _ = dlw_s(o, pos, "    let _ = if ok == 1 then (");
+  let c = 0;
+  while c < 4 {
+    let v = dl_aa(R, a, 3 + c);
+    let _ = if cls[c] == 2 then (let _ = dlw_s(o, pos, "let _ = db[E + ") in let _ = dlw_n(o, pos, v) in let _ = dlw_s(o, pos, "] = db[w + ") in let _ = dlw_n(o, pos, c) in dlw_s(o, pos, "] in ")) else 0;
+    let c = c + 1;
+    0
+  };
+  let _ = dlw_cont(R, o, pos, gx, k + 1);
+  dlw_s(o, pos, ") else 0;
+")
+}
+fn dlw_loop_tail(o: [i64], pos: [i64], hi: str) -> i64 {
+  let _ = dlw_s(o, pos, "    let i = if db[9] == 1 then ");
+  let _ = dlw_s(o, pos, hi);
+  dlw_s(o, pos, " else i + 1;
+    0
+  };
+  0
+}
+")
+}
+
+// ---- one relational depth -------------------------------------------------------------------------------
+// dlw_dense: lo/hi of the positions whose column c equals `v`, from the dense index read INLINE
+// (dl_dense only when it is stale, dl_range only when the column is not dense).
+fn dlw_dense(o: [i64], pos: [i64], p: i64, c: i64) -> i64 {
+  let _ = dlw_s(o, pos, "  let lim = if db[d + ");
+  let _ = dlw_n(o, pos, 24 + c);
+  let _ = dlw_s(o, pos, "] == db[d + ");
+  let _ = if c == 0 then dlw_n(o, pos, 22) else dlw_n(o, pos, 3);
+  let _ = dlw_s(o, pos, "] then db[d + ");
+  let _ = dlw_n(o, pos, 28 + c);
+  let _ = dlw_s(o, pos, "] else dl_dense(db, ");
+  let _ = dlw_n(o, pos, p);
+  let _ = dlw_s(o, pos, ", ");
+  let _ = dlw_n(o, pos, c);
+  let _ = dlw_s(o, pos, ");
+  let rp = db[d + 23] + ");
+  let _ = dlw_n(o, pos, c);
+  let _ = dlw_s(o, pos, " * (db[d + 1] + 2);
+  let inr = if lim >= 0 then (if v >= 0 then (if v < lim then 1 else 0) else 0) else 0;
+  let lo = if inr == 1 then db[rp + v] else (if lim >= 0 then 0 else dl_range(db, ");
+  let _ = dlw_n(o, pos, p);
+  let _ = dlw_s(o, pos, ", ");
+  let _ = dlw_n(o, pos, c);
+  dlw_s(o, pos, ", v));
+  let hi = if inr == 1 then db[rp + v + 1] else (if lim >= 0 then 0 else db[31]);
+")
+}
+// dlg_fscan: the walk of the atom at depth k over F with its static access path; sfx names it.
+fn dlg_fscan(R: [i64], o: [i64], pos: [i64], gx: [i64], k: i64, cls: [i64], rep: [i64], sfx: str) -> i64 {
+  let a = gx[24 + k];
+  let p = dl_aa(R, a, 0);
+  let _ = dlg_classify(R, a, gx[8 + k], cls, rep);
+  let pre = if cls[0] == 1 then 1 else 0;
+  let bc = if cls[0] == 1 then 0 else (if cls[1] == 1 then 1 else (if cls[2] == 1 then 2 else (if cls[3] == 1 then 3 else 0 - 1)));
+  let usep = if pre == 0 then (if bc >= 0 then 1 else 0) else 0;
+  let _ = dlw_s(o, pos, "fn ");
+  let _ = dlw_nm(o, pos, gx, k);
+  let _ = dlw_s(o, pos, sfx);
+  let _ = dlw_s(o, pos, "(R: [i64], db: [i64]) -> i64 {
+");
+  let _ = if gx[2] == 1 then dlw_s(o, pos, "  let _ = if db[9] == 1 then return 0 else 0;
+") else 0;
+  let _ = dlw_s(o, pos, "  let E = db[3];
+  let d = db[1] + ");
+  let _ = dlw_n(o, pos, 32 * p);
+  let _ = dlw_s(o, pos, ";
+  let off = db[d];
+");
+  let _ = if bc >= 0 then dlg_access(R, o, pos, a, p, bc) else 0;
+  let _ = if usep == 1 then (let _ = dlw_s(o, pos, "  let po = db[d + ") in let _ = dlw_n(o, pos, 4 + bc) in dlw_s(o, pos, "];
+")) else 0;
+  let _ = if bc < 0 then dlw_s(o, pos, "  let lo = 0;
+  let hi = db[d + 2];
+") else 0;
+  let _ = dlw_s(o, pos, "  let i = lo;
+  while i < hi {
+    let w = off + 4 * ");
+  let _ = if usep == 1 then dlw_s(o, pos, "db[po + i];
+") else dlw_s(o, pos, "i;
+");
+  let pbc = if usep == 1 then bc else 0 - 1;
+  let _ = dlw_checks(R, o, pos, a, cls, rep, pre, pbc);
+  let _ = dlw_bind_next(R, o, pos, gx, k, cls);
+  let _ = dlw_s(o, pos, "    let i = if db[9] == 1 then hi else i + 1;
+    0
+  };
+");
+  let _ = if gx[3] * (if k > 0 then 1 else 0) == 1 then dlg_delhalf(o, pos, gx, k) else 0;
+  dlw_s(o, pos, "  0
+}
+")
+}
+// dlg_delhalf: cand mode reads F u del -- after the F walk, the predicate's deleted rows.
+fn dlg_delhalf(o: [i64], pos: [i64], gx: [i64], k: i64) -> i64 {
+  let _ = dlw_s(o, pos, "  let _ = if db[d + 19] > 0 then ");
+  let _ = dlw_nm(o, pos, gx, k);
+  dlw_s(o, pos, "l(R, db, db[d + 18], db[d + 19]) else 0;
+")
+}
+fn dlg_access(R: [i64], o: [i64], pos: [i64], a: i64, p: i64, bc: i64) -> i64 {
+  let _ = dlw_s(o, pos, "  let v = ");
+  let _ = dlw_arg(o, pos, dl_aa(R, a, 3 + bc));
+  let _ = dlw_s(o, pos, ";
+");
+  dlw_dense(o, pos, p, bc)
+}
+// dlg_lscan: the walk over a row list -- every bound column checked. own = 1: the list is this depth's
+// own source (read from db[SRC]); own = 0: the `l` half of a cand-mode depth, list passed in.
+fn dlg_lscan(R: [i64], o: [i64], pos: [i64], gx: [i64], k: i64, cls: [i64], rep: [i64], own: i64) -> i64 {
+  let a = gx[24 + k];
+  let _ = dlg_classify(R, a, gx[8 + k], cls, rep);
+  let _ = dlw_s(o, pos, "fn ");
+  let _ = dlw_nm(o, pos, gx, k);
+  let _ = if own == 1 then dlw_s(o, pos, "(R: [i64], db: [i64]) -> i64 {
+  let si = db[5] + ") else dlw_s(o, pos, "l(R: [i64], db: [i64], lo: i64, hi2: i64) -> i64 {
+");
+  let apos = a - dl_ra(R, gx[0], 6);
+  let _ = if own == 1 then (let _ = dlw_n(o, pos, 3 * apos) in dlw_s(o, pos, ";
+  let lo = db[si + 1];
+  let hi2 = db[si + 2];
+")) else 0;
+  let _ = dlw_s(o, pos, "  let E = db[3];
+  let i = 0;
+  while i < hi2 {
+    let w = lo + 4 * i;
+");
+  let _ = dlw_checks(R, o, pos, a, cls, rep, 0, 0 - 1);
+  let _ = dlw_bind_next(R, o, pos, gx, k, cls);
+  dlw_loop_tail(o, pos, "hi2")
+}
+// dlg_depth: the function(s) of depth k -- a relational atom (or, at depth 0, any atom). In cand mode a
+// later atom reads F and then, when its predicate has deleted rows, its del list (the union view): the F
+// walk's function ends by calling the list walk (dlg_delhalf), so the common case costs no extra call.
+fn dlg_depth(R: [i64], o: [i64], pos: [i64], gx: [i64], k: i64, cls: [i64], rep: [i64]) -> i64 {
+  let _ = if dlg_isrel(R, gx, k) == 0 then return dlg_entry(R, o, pos, gx, k) else 0;
+  let lst = if k == 0 then (if gx[1] >= 0 then 1 else 0) else 0;
+  let both = if lst == 0 then gx[3] else 0;
+  let _ = if lst * gx[3] == 1 then return dlg_candlists(R, o, pos, gx, k, cls, rep) else 0;
+  let _ = if lst == 1 then return dlg_lscan(R, o, pos, gx, k, cls, rep, 1) else 0;
+  let _ = if both == 0 then return dlg_fscan(R, o, pos, gx, k, cls, rep, "") else 0;
+  let _ = dlg_fscan(R, o, pos, gx, k, cls, rep, "");
+  dlg_lscan(R, o, pos, gx, k, cls, rep, 0)
+}
+// dlg_candlists: cand mode's depth 0 reads the changed predicate's OWN dirty set -- its ins list, then its
+// del list (db[28] = 1 while it walks the deletions: dl_leaf files those heads apart), straight from its
+// descriptor (one engine call per dirty atom, no source setup).
+fn dlg_candlists(R: [i64], o: [i64], pos: [i64], gx: [i64], k: i64, cls: [i64], rep: [i64]) -> i64 {
+  let p = dl_aa(R, gx[24 + k], 0);
+  let _ = dlw_s(o, pos, "fn ");
+  let _ = dlw_nm(o, pos, gx, k);
+  let _ = dlw_s(o, pos, "(R: [i64], db: [i64]) -> i64 {
+  let d = db[1] + ");
+  let _ = dlw_n(o, pos, 32 * p);
+  let _ = dlw_s(o, pos, ";
+  let _ = if db[d + 17] > 0 then ");
+  let _ = dlw_nm(o, pos, gx, k);
+  let _ = dlw_s(o, pos, "l(R, db, db[d + 16], db[d + 17]) else 0;
+  let _ = db[28] = 1;
+  let _ = if db[d + 19] > 0 then ");
+  let _ = dlw_nm(o, pos, gx, k);
+  let _ = dlw_s(o, pos, "l(R, db, db[d + 18], db[d + 19]) else 0;
+  let _ = db[28] = 0;
+  0
+}
+");
+  dlg_lscan(R, o, pos, gx, k, cls, rep, 0)
+}
+// dlg_entry: depth 0 is a builtin or a negated atom (a filter on the head's variables), or the plan is
+// empty: one function holding the whole inline chain.
+fn dlg_entry(R: [i64], o: [i64], pos: [i64], gx: [i64], k: i64) -> i64 {
+  let _ = dlw_s(o, pos, "fn ");
+  let _ = dlw_nm(o, pos, gx, k);
+  let _ = dlw_s(o, pos, "(R: [i64], db: [i64]) -> i64 {
+  let E = db[3];
+  ");
+  let _ = dlw_cont(R, o, pos, gx, k);
+  dlw_s(o, pos, "
+}
+")
+}
+
+// ---- one variant, one rule set ------------------------------------------------------------------------
+fn dlg_headmask(R: [i64], r: i64) -> i64 {
+  let m = 0;
+  let k = 0;
+  while k < dl_ra(R, r, 1) {
+    let v = dl_ra(R, r, 2 + k);
+    let m = if v >= 0 then m | (1 << v) else m;
+    let k = k + 1;
+    0
+  };
+  m
+}
+// dlg_variant: every depth function of rule r walked as (first, m, c); gdb is a scratch db whose plan
+// buffer dl_plan fills (the SAME planner the interpreter uses, so both walk the same order). Only depth 0
+// and the relational depths get a function; builtins and negations are inline in their caller.
+fn dlg_variant(R: [i64], o: [i64], pos: [i64], gdb: [i64], r: i64, first: i64, m: i64, c: i64, cls: [i64], rep: [i64]) -> i64 {
+  let gx = zeros(64);
+  let mask0 = if m == 1 then dlg_headmask(R, r) else 0;
+  let L = dl_plan(R, gdb, r, first, mask0);
+  let _ = gx[0] = r;
+  let _ = gx[1] = first;
+  let _ = gx[2] = m;
+  let _ = gx[3] = c;
+  let _ = gx[4] = L;
+  let B = mask0;
+  let k = 0;
+  while k < L {
+    let a = gdb[gdb[4] + k];
+    let _ = gx[8 + k] = B;
+    let _ = gx[24 + k] = a;
+    let B = if k == 0 then (if first >= 0 then B | dl_amask(R, a) else B | dl_outmask(R, a)) else B | dl_outmask(R, a);
+    let k = k + 1;
+    0
+  };
+  let k = 0;
+  while k < L {
+    let emit = if k == 0 then 1 else dlg_isrel(R, gx, k);
+    let _ = if emit == 1 then dlg_depth(R, o, pos, gx, k, cls, rep) else 0;
+    let k = k + 1;
+    0
+  };
+  let _ = if L == 0 then dlg_entry(R, o, pos, gx, 0) else 0;
+  L
+}
+// dlg_each: call fn `what` (0 emit the variant, 1 emit its dispatch line) for every variant of rule r.
+fn dlg_each(R: [i64], o: [i64], pos: [i64], gdb: [i64], r: i64, what: i64, cls: [i64], rep: [i64]) -> i64 {
+  let _ = dlg_one(R, o, pos, gdb, r, 0 - 1, 0, 0, what, cls, rep);
+  let _ = dlg_one(R, o, pos, gdb, r, 0 - 1, 1, 0, what, cls, rep);
+  let a0 = dl_ra(R, r, 6);
+  let j = 0;
+  while j < dl_ra(R, r, 7) {
+    let p = dl_aa(R, a0 + j, 0);
+    let rel = 1 - dl_isb(R, p);
+    let pos1 = rel * (1 - dl_aa(R, a0 + j, 1));
+    let _ = if pos1 == 1 then dlg_one(R, o, pos, gdb, r, j, 0, 0, what, cls, rep) else 0;
+    let _ = if rel == 1 then dlg_one(R, o, pos, gdb, r, j, 0, 1, what, cls, rep) else 0;
+    let j = j + 1;
+    0
+  };
+  0
+}
+fn dlg_one(R: [i64], o: [i64], pos: [i64], gdb: [i64], r: i64, first: i64, m: i64, c: i64, what: i64, cls: [i64], rep: [i64]) -> i64 {
+  let _ = if what == 0 then dlg_variant(R, o, pos, gdb, r, first, m, c, cls, rep) else 0;
+  let _ = if what == 1 then dlg_dispatch_line(o, pos, r, first, m, c) else 0;
+  let _ = if what == 2 then dlg_install_line(o, pos, r, first, m, c) else 0;
+  0
+}
+fn dlg_dispatch_line(o: [i64], pos: [i64], r: i64, first: i64, m: i64, c: i64) -> i64 {
+  let _ = dlw_s(o, pos, "  let _ = if key == ");
+  let _ = dlw_n(o, pos, ((r * 16 + first + 1) * 2 + m) * 2 + c);
+  let _ = dlw_s(o, pos, " then return 1 + ");
+  let _ = dlw_name(o, pos, r, first, m, c, 0);
+  dlw_s(o, pos, "(R, db) else 0;
+")
+}
+// dlg_install_line: `let _ = db[t + KEY] = &NAME_0;` -- dl_run calls a variant through this table, one
+// load, instead of walking dlg_walk's if-chain.
+fn dlg_install_line(o: [i64], pos: [i64], r: i64, first: i64, m: i64, c: i64) -> i64 {
+  let _ = dlw_s(o, pos, "  let _ = db[t + ");
+  let _ = dlw_n(o, pos, ((r * 16 + first + 1) * 2 + m) * 2 + c);
+  let _ = dlw_s(o, pos, "] = &");
+  let _ = dlw_name(o, pos, r, first, m, c, 0);
+  dlw_s(o, pos, ";
+")
+}
+// gen_dl_text: the whole program for rule set `set` of dl_fix.bp into o; returns its length.
+fn gen_dl_text(R: [i64], set: i64, o: [i64]) -> i64 {
+  let pos = zeros(1);
+  let gdb = zeros(128);
+  let _ = gdb[4] = 64;
+  let cls = zeros(4);
+  let rep = zeros(4);
+  let _ = pos[0] = 0;
+  let _ = dlw_s(o, pos, "use ");
+  let _ = dlw_q(o, pos);
+  let _ = dlw_s(o, pos, "selfhost/std/dl_fix.bp");
+  let _ = dlw_q(o, pos);
+  let _ = dlw_s(o, pos, "
+// GENERATED by selfhost/std/gen_dl.bp for rule set ");
+  let _ = dlw_n(o, pos, set);
+  let _ = dlw_s(o, pos, " of selfhost/std/dl_fix.bp -- do not edit; re-generate.
+");
+  let r = 0;
+  while r < R[1] {
+    let _ = dlg_each(R, o, pos, gdb, r, 0, cls, rep);
+    let r = r + 1;
+    0
+  };
+  let _ = dlw_s(o, pos, "fn dlg_install(db: [i64]) -> i64 {
+  let t = db[27];
+");
+  let r = 0;
+  while r < R[1] {
+    let _ = dlg_each(R, o, pos, gdb, r, 2, cls, rep);
+    let r = r + 1;
+    0
+  };
+  let _ = dlw_s(o, pos, "  1
+}
+fn dlg_walk(R: [i64], db: [i64], r: i64, first: i64, mode: i64, cand: i64) -> i64 {
+  let _ = if r < 0 then return dlg_install(db) else 0;
+  let key = ((r * 16 + first + 1) * 2 + mode) * 2 + cand;
+");
+  let r = 0;
+  while r < R[1] {
+    let _ = dlg_each(R, o, pos, gdb, r, 1, cls, rep);
+    let r = r + 1;
+    0
+  };
+  let _ = dlw_s(o, pos, "  0
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  if argc > 3 then dl_bench(");
+  let _ = dlw_n(o, pos, set);
+  let _ = dlw_s(o, pos, ", 100000, 0) else (if argc > 2 then dl_bench(");
+  let _ = dlw_n(o, pos, set);
+  let _ = dlw_s(o, pos, ", 100000, &dlg_walk) else dl_gate_g(");
+  let _ = dlw_n(o, pos, set);
+  let _ = dlw_s(o, pos, ", 0, 2000, 100, &dlg_walk))
+}
+");
+  pos[0]
+}
+// gen_dl(set, dir): refuse or stratify the rule set, then write <dir>/dl_g<set>.bp. Returns its length.
+fn gen_dl(set: i64, dir: str) -> i64 {
+  let R = zeros(dl_rs_cells(16, 16, 64));
+  let _ = dl_rs_of(R, set);
+  let _ = dl_check(R);
+  let o = zeros(1048576);
+  let n = gen_dl_text(R, set, o);
+  let path = zeros(512);
+  let p = dl_puts(path, 0, dir);
+  let p = dl_puts(path, p, "/dl_g");
+  let p = dl_putn(path, p, set);
+  let p = dl_puts(path, p, ".bp");
+  let fd = sys_open(path, p, 578);
+  let _ = sys_export(fd, o, n);
+  let _ = sys_close(fd);
+  n
+}

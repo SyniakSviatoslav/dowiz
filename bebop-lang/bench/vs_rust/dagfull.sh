@@ -16,7 +16,10 @@
 #                                     edit_ms_med <ms> hits <h>` (edit_ms over bebop.bp: 5 one-line edits
 #                                     inside `fn em`, warm, median -- RT L-6's method).
 #   dagfull.sh check                  RT L-4: `check` leaves the source directory unchanged.
-#   dagfull.sh store|sched|datalog    DG5/DG6/DG8 arms: NOT BUILT by DG4 -- refused by name, exit 2.
+#   dagfull.sh datalog                DG8 arm (SPEC-DATALOG-AND-CODEC A.7): the five rule sets of dl_fix.bp,
+#                                     DL_EVENTS (10^4) seeded events each, incremental == from scratch.
+#                                     Prints `dagfull datalog <equal>/<rulesets> events <n>`.
+#   dagfull.sh store|sched            DG5/DG6 arms: NOT BUILT -- refused by name, exit 2.
 #
 # env: BEBOP_BIN (candidate, default ./bebop.bin), BEBOP_TMP (scratch), DAG_HITS=1 is set by this script
 # for its warm compiles so the compiler prints `dag: hits <h>/<n>` on stderr (the hit count the mutation
@@ -121,7 +124,31 @@ check)
   if cmp -s "$W/before" "$W/after"; then echo "dagfull check: source dir unchanged (rc $rc)"
   else echo "dagfull check: source dir CHANGED: $(ls "$W/src" | tr '\n' ' ')"; exit 1; fi
   ;;
-store|sched|datalog)
-  echo "dagfull $arm: REFUSED -- arm not built (owned by DG5/DG6/DG8, BLUEPRINT §2-3); not counted as agreement"; exit 2 ;;
-*) echo "usage: dagfull.sh --sweep <frozen-dir> | compile [src.bp ...] | check | store | sched | datalog"; exit 2 ;;
+datalog)
+  # DG8 (SPEC-DATALOG-AND-CODEC A.7): each of selfhost/std/dl_fix.bp's five rule sets (A.6) -- its fixture,
+  # DL_EVENTS (default 10^4) seeded EDB events each propagated through the dirty set, and every 100 events
+  # and after the last the incremental IDB compared with a from-scratch re-derivation (empty memo) cell for
+  # cell and by fold (dl_gate: -1 and a `stale` line naming predicate, row count and first row otherwise).
+  # DL_ROOT=<tree> evaluates a scratch copy of selfhost/std (dagfull.prove.sh step 4's mutation).
+  EV=${DL_EVENTS:-10000}; R0=$(realpath "${DL_ROOT:-.}"); W=$T/datalog; rm -rf "$W"; mkdir -p "$W"
+  [ -f "$R0/selfhost/std/dl_fix.bp" ] || { echo "dagfull datalog: REFUSED -- $R0/selfhost/std/dl_fix.bp missing"; exit 2; }
+  names=(- unavailable fsm_ok courier_may personal allergen); eq=0; n=0; bad=""
+  for s in 1 2 3 4 5; do
+    n=$((n + 1))
+    printf 'use "selfhost/std/dl_fix.bp"\nfn main() -> i64 { dl_gate(%d, 0, %d, 100) }\n' "$s" "$EV" > "$R0/.dagfull_dl$s.bp"
+    (cd "$R0" && "$SEED" "$BB" compile ".dagfull_dl$s.bp" "$W/dl$s.bin" > /dev/null 2> "$W/dl$s.err"); rc=$?
+    rm -f "$R0/.dagfull_dl$s.bp" "$R0/.dagfull_dl$s.bp.use"
+    [ "$rc" = 0 ] || { echo "dagfull datalog: REFUSED -- set $s does not compile (rc $rc): $(tail -1 "$W/dl$s.err")"; exit 2; }
+    timeout 600 "$SEED" "$W/dl$s.bin" > "$W/dl$s.out" 2>&1; rc=$?
+    v=$(tail -1 "$W/dl$s.out")
+    echo "dagfull datalog: set $s ${names[$s]} SEED $((12345 + 1000 * s)) events $EV rc $rc value $v $(grep -m1 '^dl: ' "$W/dl$s.out")"
+    case "$v" in ''|-1|*[!0-9-]*) bad="$bad ${names[$s]}" ;; *) [ "$rc" = 0 ] && eq=$((eq + 1)) || bad="$bad ${names[$s]}(rc $rc)" ;; esac
+  done
+  [ -n "$bad" ] && echo "dagfull datalog: incremental != scratch:$bad"
+  echo "dagfull datalog $eq/$n events $EV"
+  [ "$eq" = "$n" ]
+  ;;
+store|sched)
+  echo "dagfull $arm: REFUSED -- arm not built (owned by DG5/DG6, BLUEPRINT §2-3); not counted as agreement"; exit 2 ;;
+*) echo "usage: dagfull.sh --sweep <frozen-dir> | compile [src.bp ...] | check | datalog | store | sched"; exit 2 ;;
 esac

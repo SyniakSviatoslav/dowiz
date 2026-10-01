@@ -1,0 +1,6 @@
+use "selfhost/std/dl_fix.bp"
+// dl_fsm.bp -- `gate dl_fsm` (row DG8, SPEC-DATALOG-AND-CODEC A.6 rule set 2, A-9): the fixture of
+// selfhost/std/dl_fix.bp set 2, 2000 seeded events each propagated through the dirty set; the incremental
+// IDB must equal a from-scratch re-derivation every 100 events and at the end (else -1). Prints the IDB
+// fold. Oracle: bench/oracles/dl_fsm.py (direct set semantics in bench/oracles/dl_common.py).
+fn main() -> i64 { dl_gate(2, 0, 2000, 100) }

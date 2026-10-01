@@ -1,0 +1,552 @@
+use "selfhost/std/dl_eval.bp"
+use "selfhost/std/dl_sushi.bp"
+// selfhost/std/dl_fix.bp -- the five first rule sets of SPEC-DATALOG-AND-CODEC A.6 as data, their seeded
+// fixtures and event streams, and dl_gate, the driver every dl_* std_test calls. Library only.
+// bench/oracles/dl_common.py is the independent twin: it rebuilds each fixture from the SAME LCG and
+// re-derives every relation by direct set semantics (no semi-naive, no dirty set, no strata code).
+//
+// set 1 unavailable  unavailable(D) :- recipe(D,S,C), stock(S,Q), qmin(D,M), mul(C,M,CM), lt(Q,CM)
+//                    165 dishes, 120 supplies, 352 recipe lines over 70 dishes (R §12.3's fixture shape)
+// set 2 fsm_ok       fsm_ok(O,T) :- state(O,F), allowed(F,T)      allowed = FSM_ADJ's 14 edges
+// set 3 courier_may  ended(O) :- state(O,F), terminal(F)
+//                    courier_may(C,O) :- assigned(C,O), not ended(O)
+// set 4 personal     personal(N) :- holds_person(N);  personal(N) :- edge(N0,N), personal(N0)
+// set 5 allergen     carries(S,A) :- supply_allergen(S,A);  carries(S2,A) :- produced(S2,S), carries(S,A)
+//                    allergen(D,A) :- recipe(D,S,C), carries(S,A)
+//                    undeclared(D,A)  :- allergen(D,A), not declared(D,A)       (the printed diff:
+//                    unsupported(D,A) :- declared(D,A), not allergen(D,A)        a finding, never a fix)
+//                    vegclash(D,A)    :- veg(D), allergen(D,A), animal(A)
+// States are OrderStatus indexes (crates/dowiz-core/src/order_machine.rs:14-30); allergens are EU14
+// indexes (crates/dowiz-hub/src/allergens.rs:20).
+
+fn dl_lcg(s: i64) -> i64 { ((s * 1103515245) + 12345) & 2147483647 }
+fn dl_rnd(st: [i64]) -> i64 {
+  let _ = st[0] = dl_lcg(st[0]);
+  st[0] >> 8
+}
+fn dl_seed_of(set: i64) -> i64 { 12345 + 1000 * set }
+
+// ---- rule sets ----------------------------------------------------------------------------------
+fn dl_rs_unavail(R: [i64]) -> i64 {
+  let u = 0 - 1;
+  let recipe = dl_pred(R, 11, 3, 0);
+  let stock = dl_pred(R, 12, 2, 0);
+  let qmin = dl_pred(R, 13, 2, 0);
+  let mul = dl_bi(R, 4);
+  let lt = dl_bi(R, 1);
+  let unav = dl_pred(R, 14, 1, 1);
+  let _ = dl_rule(R, unav, 0, u, u, u);
+  let _ = dl_atom(R, recipe, 0, 0, 1, 2, u);
+  let _ = dl_atom(R, stock, 0, 1, 3, u, u);
+  let _ = dl_atom(R, qmin, 0, 0, 4, u, u);
+  let _ = dl_atom(R, mul, 0, 2, 4, 5, u);
+  let _ = dl_atom(R, lt, 0, 3, 5, u, u);
+  R[2]
+}
+fn dl_rs_fsm(R: [i64]) -> i64 {
+  let u = 0 - 1;
+  let state = dl_pred(R, 21, 2, 0);
+  let allowed = dl_pred(R, 22, 2, 0);
+  let ok = dl_pred(R, 23, 2, 1);
+  let _ = dl_rule(R, ok, 0, 2, u, u);
+  let _ = dl_atom(R, state, 0, 0, 1, u, u);
+  let _ = dl_atom(R, allowed, 0, 1, 2, u, u);
+  R[2]
+}
+fn dl_rs_courier(R: [i64]) -> i64 {
+  let u = 0 - 1;
+  let assigned = dl_pred(R, 31, 2, 0);
+  let state = dl_pred(R, 32, 2, 0);
+  let terminal = dl_pred(R, 33, 1, 0);
+  let ended = dl_pred(R, 34, 1, 1);
+  let may = dl_pred(R, 35, 2, 1);
+  let _ = dl_rule(R, ended, 0, u, u, u);
+  let _ = dl_atom(R, state, 0, 0, 1, u, u);
+  let _ = dl_atom(R, terminal, 0, 1, u, u, u);
+  let _ = dl_rule(R, may, 0, 1, u, u);
+  let _ = dl_atom(R, assigned, 0, 0, 1, u, u);
+  let _ = dl_atom(R, ended, 1, 1, u, u, u);
+  R[2]
+}
+fn dl_rs_personal(R: [i64]) -> i64 {
+  let u = 0 - 1;
+  let holds = dl_pred(R, 41, 1, 0);
+  let edge = dl_pred(R, 42, 2, 0);
+  let pers = dl_pred(R, 43, 1, 1);
+  let _ = dl_rule(R, pers, 0, u, u, u);
+  let _ = dl_atom(R, holds, 0, 0, u, u, u);
+  let _ = dl_rule(R, pers, 1, u, u, u);
+  let _ = dl_atom(R, edge, 0, 0, 1, u, u);
+  let _ = dl_atom(R, pers, 0, 0, u, u, u);
+  R[2]
+}
+fn dl_rs_allergen(R: [i64]) -> i64 {
+  let u = 0 - 1;
+  let recipe = dl_pred(R, 51, 3, 0);
+  let sa = dl_pred(R, 52, 2, 0);
+  let produced = dl_pred(R, 53, 2, 0);
+  let declared = dl_pred(R, 54, 2, 0);
+  let veg = dl_pred(R, 55, 1, 0);
+  let animal = dl_pred(R, 56, 1, 0);
+  let carries = dl_pred(R, 57, 2, 1);
+  let allergen = dl_pred(R, 58, 2, 1);
+  let und = dl_pred(R, 59, 2, 1);
+  let uns = dl_pred(R, 60, 2, 1);
+  let clash = dl_pred(R, 61, 2, 1);
+  let _ = dl_rule(R, carries, 0, 1, u, u);
+  let _ = dl_atom(R, sa, 0, 0, 1, u, u);
+  let _ = dl_rule(R, carries, 0, 1, u, u);
+  let _ = dl_atom(R, produced, 0, 0, 2, u, u);
+  let _ = dl_atom(R, carries, 0, 2, 1, u, u);
+  let _ = dl_rule(R, allergen, 0, 1, u, u);
+  let _ = dl_atom(R, recipe, 0, 0, 2, 3, u);
+  let _ = dl_atom(R, carries, 0, 2, 1, u, u);
+  let _ = dl_rule(R, und, 0, 1, u, u);
+  let _ = dl_atom(R, allergen, 0, 0, 1, u, u);
+  let _ = dl_atom(R, declared, 1, 0, 1, u, u);
+  let _ = dl_rule(R, uns, 0, 1, u, u);
+  let _ = dl_atom(R, declared, 0, 0, 1, u, u);
+  let _ = dl_atom(R, allergen, 1, 0, 1, u, u);
+  let _ = dl_rule(R, clash, 0, 1, u, u);
+  let _ = dl_atom(R, veg, 0, 0, u, u, u);
+  let _ = dl_atom(R, allergen, 0, 0, 1, u, u);
+  let _ = dl_atom(R, animal, 0, 1, u, u, u);
+  R[2]
+}
+fn dl_rs_of(R: [i64], set: i64) -> i64 {
+  let _ = dl_rs_init(R, 16, 16, 64);
+  let _ = if set == 1 then dl_rs_unavail(R) else 0;
+  let _ = if set == 2 then dl_rs_fsm(R) else 0;
+  let _ = if set == 3 then dl_rs_courier(R) else 0;
+  let _ = if set == 4 then dl_rs_personal(R) else 0;
+  let _ = if set == 5 then dl_rs_allergen(R) else 0;
+  R[2]
+}
+// dl_caps_of: rows each predicate may hold (its finite domain, A-6).
+fn dl_caps_of(caps: [i64], set: i64) -> i64 {
+  let p = 0;
+  while p < 16 {
+    let c = if set == 1 then 512 else (if set == 4 then 4096 else 1024);
+    let _ = caps[p] = c;
+    let p = p + 1;
+    0
+  };
+  0
+}
+
+// ---- fixtures -------------------------------------------------------------------------------------
+fn dl_put4(db: [i64], p: i64, a: i64, b: i64, c: i64) -> i64 { dl_put(db, p, dl_setrow(db, a, b, c, 0)) }
+fn dl_picked(pk: [i64], n: i64, s: i64) -> i64 {
+  let hit = 0;
+  let i = 0;
+  while i < n {
+    let hit = if pk[i] == s then 1 else hit;
+    let i = i + 1;
+    0
+  };
+  hit
+}
+fn dl_load_dish(db: [i64], st: [i64], pk: [i64], d: i64) -> i64 {
+  let k = if d < 2 then 6 else 5;
+  let j = 0;
+  while j < k {
+    let s = dl_rnd(st) % 120;
+    let dup = dl_picked(pk, j, s);
+    let _ = if dup == 0 then (let _ = pk[j] = s in let c = 1 + dl_rnd(st) % 200 in dl_put4(db, 0, d, s, c)) else 0;
+    let j = j + (1 - dup);
+    0
+  };
+  k
+}
+fn dl_load_unavail(db: [i64], st: [i64]) -> i64 {
+  let pk = zeros(8);
+  let d = 0;
+  while d < 70 {
+    let _ = dl_load_dish(db, st, pk, d);
+    let d = d + 1;
+    0
+  };
+  let s = 0;
+  while s < 120 {
+    let _ = dl_put4(db, 1, s, dl_rnd(st) % 1000, 0);
+    let s = s + 1;
+    0
+  };
+  let d = 0;
+  while d < 165 {
+    let m = if d % 5 == 0 then 2 else 1;
+    let _ = dl_put4(db, 2, d, m, 0);
+    let d = d + 1;
+    0
+  };
+  0
+}
+// FSM_ADJ (order_machine.rs allowed_next): 0 Pending 1 Confirmed 2 Preparing 3 Ready 4 InDelivery
+// 5 Delivered 6 Rejected 7 Cancelled 8 Scheduled 9 PickedUp 10 Refunding 11 CompensatedRefund.
+fn dl_load_allowed(db: [i64], p: i64) -> i64 {
+  let _ = dl_put4(db, p, 0, 1, 0);
+  let _ = dl_put4(db, p, 0, 6, 0);
+  let _ = dl_put4(db, p, 0, 7, 0);
+  let _ = dl_put4(db, p, 1, 2, 0);
+  let _ = dl_put4(db, p, 1, 4, 0);
+  let _ = dl_put4(db, p, 1, 10, 0);
+  let _ = dl_put4(db, p, 2, 3, 0);
+  let _ = dl_put4(db, p, 2, 10, 0);
+  let _ = dl_put4(db, p, 3, 4, 0);
+  let _ = dl_put4(db, p, 3, 9, 0);
+  let _ = dl_put4(db, p, 3, 10, 0);
+  let _ = dl_put4(db, p, 4, 5, 0);
+  let _ = dl_put4(db, p, 4, 10, 0);
+  dl_put4(db, p, 10, 11, 0)
+}
+fn dl_load_fsm(db: [i64], st: [i64]) -> i64 {
+  let _ = dl_load_allowed(db, 1);
+  let o = 0;
+  while o < 50 {
+    let _ = dl_put4(db, 0, o, dl_rnd(st) % 12, 0);
+    let o = o + 1;
+    0
+  };
+  0
+}
+// is_terminal (order_machine.rs:70): Delivered, PickedUp, Rejected, Cancelled, CompensatedRefund.
+fn dl_load_courier(db: [i64], st: [i64]) -> i64 {
+  let _ = dl_put4(db, 2, 5, 0, 0);
+  let _ = dl_put4(db, 2, 6, 0, 0);
+  let _ = dl_put4(db, 2, 7, 0, 0);
+  let _ = dl_put4(db, 2, 9, 0, 0);
+  let _ = dl_put4(db, 2, 11, 0, 0);
+  let o = 0;
+  while o < 40 {
+    let _ = dl_put4(db, 1, o, dl_rnd(st) % 12, 0);
+    let c = dl_rnd(st) % 8;
+    let x = dl_rnd(st) % 3;
+    let _ = if x != 0 then dl_put4(db, 0, c, o, 0) else 0;
+    let o = o + 1;
+    0
+  };
+  0
+}
+fn dl_load_personal(db: [i64], st: [i64]) -> i64 {
+  let i = 0;
+  while i < 5 {
+    let _ = dl_put4(db, 0, dl_rnd(st) % 60, 0, 0);
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < 90 {
+    let x = dl_rnd(st) % 60;
+    let y = dl_rnd(st) % 60;
+    let _ = dl_put4(db, 1, x, y, 0);
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn dl_load(db: [i64], st: [i64], set: i64) -> i64 {
+  let _ = if set == 1 then dl_load_unavail(db, st) else 0;
+  let _ = if set == 2 then dl_load_fsm(db, st) else 0;
+  let _ = if set == 3 then dl_load_courier(db, st) else 0;
+  let _ = if set == 4 then dl_load_personal(db, st) else 0;
+  let _ = if set == 5 then dl_sushi_load(db) else 0;
+  0
+}
+
+// ---- events ---------------------------------------------------------------------------------------
+// dl_pull: retract row (i mod n) of F_p (copied to the probe row first: a delete shifts F under it).
+fn dl_pull(db: [i64], p: i64, i: i64) -> i64 {
+  let n = dl_n(db, p);
+  let _ = if n == 0 then return 0 else 0;
+  let r = dl_row(db, p, i % n);
+  dl_retract(db, p, dl_setrow(db, db[r], db[r + 1], db[r + 2], db[r + 3]))
+}
+fn dl_ev_unavail(db: [i64], st: [i64]) -> i64 {
+  let s = dl_rnd(st) % 120;
+  let q = dl_rnd(st) % 1000;
+  dl_replace(db, 1, 1, dl_setrow(db, s, q, 0, 0))
+}
+fn dl_ev_fsm(db: [i64], st: [i64]) -> i64 {
+  let o = dl_rnd(st) % 50;
+  let f = dl_rnd(st) % 12;
+  dl_replace(db, 0, 1, dl_setrow(db, o, f, 0, 0))
+}
+fn dl_ev_courier(db: [i64], st: [i64]) -> i64 {
+  let k = dl_rnd(st) % 4;
+  let a = dl_rnd(st) % 40;
+  let b = dl_rnd(st) % 12;
+  let _ = if k < 2 then dl_replace(db, 1, 1, dl_setrow(db, a, b, 0, 0)) else 0;
+  let _ = if k == 2 then dl_put4(db, 0, b % 8, a, 0) else 0;
+  let _ = if k == 3 then dl_pull(db, 0, a + b) else 0;
+  0
+}
+fn dl_ev_personal(db: [i64], st: [i64]) -> i64 {
+  let k = dl_rnd(st) % 4;
+  let x = dl_rnd(st) % 60;
+  let y = dl_rnd(st) % 60;
+  let _ = if k == 0 then dl_put4(db, 1, x, y, 0) else 0;
+  let _ = if k == 1 then dl_pull(db, 1, x * 60 + y) else 0;
+  let _ = if k == 2 then dl_put4(db, 0, x, 0, 0) else 0;
+  let _ = if k == 3 then dl_pull(db, 0, x) else 0;
+  0
+}
+// allergen events: a recipe line out or in (the supply of another existing line), a supply's allergen
+// declared or withdrawn.
+fn dl_ev_allergen(db: [i64], st: [i64]) -> i64 {
+  let k = dl_rnd(st) % 4;
+  let x = dl_rnd(st) % 4096;
+  let y = dl_rnd(st) % 4096;
+  let _ = if k == 0 then dl_pull(db, 0, x) else 0;
+  let n0 = dl_n(db, 0);
+  let r = if n0 > 0 then dl_row(db, 0, y % n0) else 0;
+  let sup = if n0 > 0 then db[r + 1] else 0;
+  let _ = if k == 1 then dl_put4(db, 0, x % 59, sup, 1) else 0;
+  let n1 = dl_n(db, 1);
+  let r1 = if n1 > 0 then dl_row(db, 1, x % n1) else 0;
+  let s1 = if n1 > 0 then db[r1] else 0;
+  let _ = if k == 2 then dl_put4(db, 1, s1, y % 14, 0) else 0;
+  let _ = if k == 3 then dl_pull(db, 1, y) else 0;
+  0
+}
+fn dl_event(db: [i64], st: [i64], set: i64) -> i64 {
+  let _ = if set == 1 then dl_ev_unavail(db, st) else 0;
+  let _ = if set == 2 then dl_ev_fsm(db, st) else 0;
+  let _ = if set == 3 then dl_ev_courier(db, st) else 0;
+  let _ = if set == 4 then dl_ev_personal(db, st) else 0;
+  let _ = if set == 5 then dl_ev_allergen(db, st) else 0;
+  0
+}
+
+// ---- the gate driver ------------------------------------------------------------------------------
+// dl_idb_fold: acc*31 + dl_fold(p) over the IDB predicates, in index order.
+fn dl_idb_fold(R: [i64], db: [i64]) -> i64 {
+  let acc = 0;
+  let p = 0;
+  while p < R[2] {
+    let acc = if dl_isidb(R, p) == 1 then acc * 31 + dl_fold(db, p) else acc;
+    let p = p + 1;
+    0
+  };
+  acc
+}
+// dl_scratch: sc := the EDB of db, every IDB re-derived from scratch.
+fn dl_scratch(R: [i64], db: [i64], sc: [i64], caps: [i64]) -> i64 {
+  let _ = dl_db_init(R, sc, caps);
+  let p = 0;
+  while p < R[2] {
+    let _ = if dl_pa(R, p, 3) == 0 then dl_copy_rel(db, sc, p) else 0;
+    let p = p + 1;
+    0
+  };
+  dl_eval_all(R, sc)
+}
+// dl_stale: the lowest-stratum IDB predicate where db differs from sc -> p * 1000000 + (rows of db
+// missing from sc) * 1000 + the first such row's column 0; -1 when every IDB is identical.
+fn dl_stale(R: [i64], db: [i64], sc: [i64]) -> i64 {
+  let best = 0 - 1;
+  let bs = 1000;
+  let p = 0;
+  while p < R[2] {
+    let diff = if dl_isidb(R, p) == 1 then 1 - dl_same(db, sc, p) else 0;
+    let s = dl_pa(R, p, 2);
+    let take = if diff == 1 then (if s < bs then 1 else 0) else 0;
+    let best = if take == 1 then p else best;
+    let bs = if take == 1 then s else bs;
+    let p = p + 1;
+    0
+  };
+  if best < 0 then 0 - 1 else best * 1000000 + dl_extra(db, sc, best)
+}
+fn dl_extra(db: [i64], sc: [i64], p: i64) -> i64 {
+  let n = dl_n(db, p);
+  let d2 = dl_d(sc, p);
+  let cnt = 0;
+  let first = 0 - 1;
+  let i = 0;
+  while i < n {
+    let r = dl_row(db, p, i);
+    let miss = if dl_sfind2(db, r, sc, sc[d2], sc[d2 + 2]) < 0 then 1 else 0;
+    let first = if miss == 1 then (if first < 0 then db[r] else first) else first;
+    let cnt = cnt + miss;
+    let i = i + 1;
+    0
+  };
+  cnt * 1000 + (if first < 0 then 0 else first)
+}
+// dl_sfind2: dl_sfind for a key row that lives in ANOTHER array.
+fn dl_sfind2(a: [i64], key: i64, b: [i64], off: i64, n: i64) -> i64 {
+  let lo = 0;
+  let hi = n;
+  while lo < hi {
+    let mid = (lo + hi) / 2;
+    let c = dl_cmp2(b, off + 4 * mid, a, key);
+    let lo = if c < 0 then mid + 1 else lo;
+    let hi = if c < 0 then hi else mid;
+    0
+  };
+  if lo < n then (if dl_cmp2(b, off + 4 * lo, a, key) == 0 then lo else 0 - 1) else 0 - 1
+}
+fn dl_cmp2(b: [i64], x: i64, a: [i64], y: i64) -> i64 {
+  let c = 0;
+  let i = 0;
+  while i < 4 {
+    let u = b[x + i];
+    let v = a[y + i];
+    let c = if u < v then 0 - 1 else (if u > v then 1 else 0);
+    let i = if c != 0 then 4 else i + 1;
+    0
+  };
+  c
+}
+// dl_gate(set, neg, events): the fixture of `set`, evaluated from scratch, then `events` seeded events
+// each propagated through the dirty set. neg 0: after every `every`-th event and the last, the
+// incremental IDB must equal a from-scratch re-derivation cell for cell -- returns dl_idb_fold, or -1
+// (and prints the event) on the first difference. neg 1: head replacement dropped (db[21] = 1),
+// compared after EVERY event -- returns t * 10^9 + dl_stale at the first difference t, or -2 when the
+// mutation never showed (a negative twin that cannot fail proves nothing).
+fn dl_gate(set: i64, neg: i64, events: i64, every: i64) -> i64 { dl_gate_g(set, neg, events, every, 0) }
+// dl_gate_g: dl_gate with the join of the INCREMENTAL database run by g (a gen_dl.bp dlg_walk function
+// value; 0 = the interpreter). The scratch database always interprets, so a generated walk is checked
+// against the interpreter every `every` events as well as against the oracle's fold.
+fn dl_gate_g(set: i64, neg: i64, events: i64, every: i64, g: i64) -> i64 {
+  let R = zeros(dl_rs_cells(16, 16, 64));
+  let _ = dl_rs_of(R, set);
+  let _ = dl_check(R);
+  let caps = zeros(16);
+  let _ = dl_caps_of(caps, set);
+  let db = zeros(dl_db_cells(R, caps));
+  let sc = zeros(dl_db_cells(R, caps));
+  let st = zeros(1);
+  let _ = st[0] = dl_seed_of(set);
+  let _ = dl_db_init(R, db, caps);
+  let _ = dl_db_strata(R, db);
+  let _ = db[22] = g;
+  let _ = if g != 0 then call_fn(g, R, db, 0 - 1, 0, 0, 0) else 0;
+  let _ = dl_load(db, st, set);
+  let _ = dl_event_end(R, db);
+  let _ = dl_eval_all(R, db);
+  let _ = if set == 5 then dl_sushi_diff(R, db) else 0;
+  let _ = db[21] = neg;
+  let res = zeros(2);
+  let _ = res[0] = 0;
+  let t = 1;
+  while t <= events {
+    let _ = dl_event(db, st, set);
+    let _ = dl_propagate(R, db);
+    let chk = if neg == 1 then 1 else (if t % every == 0 then 1 else (if t == events then 1 else 0));
+    let _ = if chk == 1 then dl_scratch(R, db, sc, caps) else 0;
+    let bad = if chk == 1 then dl_stale(R, db, sc) else 0 - 1;
+    let _ = if bad >= 0 then (let _ = res[0] = t in let _ = res[1] = bad in 0) else 0;
+    let t = if bad >= 0 then events + 1 else t + 1;
+    0
+  };
+  let _ = if neg == 0 then (if res[0] > 0 then dl_say_diff(res[0], res[1]) else 0) else 0;
+  if neg == 1 then (if res[0] > 0 then res[0] * 1000000000 + res[1] else 0 - 2) else (if res[0] > 0 then 0 - 1 else dl_idb_fold(R, db))
+}
+fn dl_say_diff(t: i64, bad: i64) -> i64 {
+  let o = zeros(96);
+  let p = dl_puts(o, 0, "dl: incremental != scratch after event ");
+  let p = dl_putn(o, p, t);
+  let p = dl_puts(o, p, " stale ");
+  let p = dl_putn(o, p, bad);
+  let _ = o[p] = 10;
+  sys_write(1, o, p + 1)
+}
+// dl_sushi_diff: set 5's printed diff (A.6 "the gate prints the diff"): one line per row of undeclared
+// (8), unsupported (9) and vegclash (10) -- `allergen <kind> dish <D> <A>`, EU14 index -- then the counts.
+fn dl_sushi_diff(R: [i64], db: [i64]) -> i64 {
+  let o = zeros(128);
+  let _ = dl_diff_rows(db, o, 8, "undeclared");
+  let _ = dl_diff_rows(db, o, 9, "unsupported");
+  let _ = dl_diff_rows(db, o, 10, "vegclash");
+  let p = dl_puts(o, 0, "allergen diff undeclared ");
+  let p = dl_putn(o, p, dl_n(db, 8));
+  let p = dl_puts(o, p, " unsupported ");
+  let p = dl_putn(o, p, dl_n(db, 9));
+  let p = dl_puts(o, p, " vegclash ");
+  let p = dl_putn(o, p, dl_n(db, 10));
+  let _ = o[p] = 10;
+  sys_write(1, o, p + 1)
+}
+fn dl_diff_rows(db: [i64], o: [i64], q: i64, kind: str) -> i64 {
+  let n = dl_n(db, q);
+  let i = 0;
+  while i < n {
+    let r = dl_row(db, q, i);
+    let p = dl_puts(o, 0, "allergen ");
+    let p = dl_puts(o, p, kind);
+    let p = dl_puts(o, p, " dish ");
+    let p = dl_putn(o, p, db[r]);
+    let p = dl_puts(o, p, " ");
+    let p = dl_putn(o, p, db[r + 1]);
+    let _ = o[p] = 10;
+    let _ = sys_write(1, o, p + 1);
+    let i = i + 1;
+    0
+  };
+  n
+}
+// dl_bench_stream: set 1's event stream drawn BEFORE the clock starts (the same draws dl_ev_unavail makes,
+// in the same order), so the timed loop is the engine's work: the keyed replacement and its propagation.
+fn dl_bench_stream(st: [i64], set: i64, ev: [i64], events: i64) -> i64 {
+  let t = 0;
+  while t < events * (if set == 1 then 1 else 0) {
+    let _ = ev[2 * t] = dl_rnd(st) % 120;
+    let _ = ev[2 * t + 1] = dl_rnd(st) % 1000;
+    let t = t + 1;
+    0
+  };
+  t
+}
+// dl_bench(set, events, g): the fixture, then `events` seeded events each applied to the EDB and
+// propagated -- timed with clock_ms around the whole loop (set 1: event stream drawn before the clock,
+// dl_bench_stream; other sets draw inline). Prints
+// `dl_event_ns <ns> set <s> events <n> gen <0|1> equal <1|0>` (equal = the incremental IDB is cell for
+// cell the from-scratch one after the last event) and returns ns per event, or -1 when not equal.
+fn dl_bench(set: i64, events: i64, g: i64) -> i64 {
+  let R = zeros(dl_rs_cells(16, 16, 64));
+  let _ = dl_rs_of(R, set);
+  let _ = dl_check(R);
+  let caps = zeros(16);
+  let _ = dl_caps_of(caps, set);
+  let db = zeros(dl_db_cells(R, caps));
+  let sc = zeros(dl_db_cells(R, caps));
+  let st = zeros(1);
+  let _ = st[0] = dl_seed_of(set);
+  let _ = dl_db_init(R, db, caps);
+  let _ = dl_db_strata(R, db);
+  let _ = db[22] = g;
+  let _ = if g != 0 then call_fn(g, R, db, 0 - 1, 0, 0, 0) else 0;
+  let _ = dl_load(db, st, set);
+  let _ = dl_event_end(R, db);
+  let _ = dl_eval_all(R, db);
+  let ev = zeros(2 * events);
+  let _ = dl_bench_stream(st, set, ev, events);
+  let t0 = clock_ms();
+  let t = 0;
+  while t < events {
+    let _ = if set == 1 then dl_replace(db, 1, 1, dl_setrow(db, ev[2 * t], ev[2 * t + 1], 0, 0)) else dl_event(db, st, set);
+    let _ = dl_propagate(R, db);
+    let t = t + 1;
+    0
+  };
+  let t1 = clock_ms();
+  let _ = dl_scratch(R, db, sc, caps);
+  let eq = if dl_stale(R, db, sc) < 0 then 1 else 0;
+  let ns = ((t1 - t0) * 1000000) / events;
+  let o = zeros(128);
+  let p = dl_puts(o, 0, "dl_event_ns ");
+  let p = dl_putn(o, p, ns);
+  let p = dl_puts(o, p, " set ");
+  let p = dl_putn(o, p, set);
+  let p = dl_puts(o, p, " events ");
+  let p = dl_putn(o, p, events);
+  let p = dl_puts(o, p, " gen ");
+  let gg = if g != 0 then 1 else 0;
+  let p = dl_putn(o, p, gg);
+  let p = dl_puts(o, p, " equal ");
+  let p = dl_putn(o, p, eq);
+  let _ = o[p] = 10;
+  let _ = sys_write(1, o, p + 1);
+  if eq == 1 then ns else 0 - 1
+}

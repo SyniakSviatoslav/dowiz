@@ -1,0 +1,791 @@
+use "selfhost/std/dl.bp"
+use "selfhost/std/dl_index.bp"
+// selfhost/std/dl_eval.bp -- evaluation half of the Datalog layer (row DG8; SPEC-DATALOG-AND-CODEC Part A
+// A.5 and A-7). selfhost/std/dl.bp holds the rule set, the refusals, the strata and the relation store;
+// this file holds the join, the semi-naive loop and the event propagation. Split only for the 800-line cap.
+//
+// THE JOIN is one backtracking walk over a per-rule PLAN (an order of the rule's atoms): positive
+// relational atoms bind variables from rows, builtins and negated atoms run as soon as their inputs are
+// bound. A positive atom is read through its SOURCE: 0 = the full relation F (prefix binary search when
+// its leading columns are bound, else a column perm, else a scan), 1 = a row list (a delta or a dirty
+// set), 2 = F then a list (the "union view" F u del used to find the heads an event may touch).
+//
+// THE EVENT (A-7). An event changes EDB rows; each changed row lands in its predicate's ins or del list
+// (the dirty set). Strata run lowest first:
+//   non-recursive stratum: CANDIDATE heads = every head derivable with one changed row at one atom and
+//     the union view elsewhere (negated atoms skipped -- an over-approximation, so no head is missed);
+//     then each candidate is RE-DERIVED against the new F and its row REPLACED: inserted when it now
+//     holds, deleted when it no longer does (the column fan-out step of R §12.3).
+//   recursive stratum: inserts only (no delete, no change under a negation) -> semi-naive continuation
+//     seeded with the inserted rows; anything else -> the stratum is recomputed from its complete lower
+//     strata and diffed against a snapshot (correct, not fast: these rule sets change on schema or
+//     recipe edits, never on a stock event).
+// Every head change is appended to the head's own ins/del lists, which are the dirty set of the strata
+// above it. dl_event_end clears every list.
+
+// ---- plan -----------------------------------------------------------------------------------------
+// dl_ready: a builtin (inputs) or a negated atom (all args) whose variables m binds.
+fn dl_ready(R: [i64], a: i64, m: i64) -> i64 {
+  let p = dl_aa(R, a, 0);
+  let nin = if dl_isb(R, p) == 1 then 2 else dl_aa(R, a, 2);
+  let ok = 1;
+  let k = 0;
+  while k < nin {
+    let ok = ok * dl_argb(dl_aa(R, a, 3 + k), m);
+    let k = k + 1;
+    0
+  };
+  ok
+}
+fn dl_pick(R: [i64], a0: i64, na: i64, used: i64, m: i64) -> i64 {
+  let pick = 0 - 1;
+  let i = na - 1;
+  while i >= 0 {
+    let a = a0 + i;
+    let free = 1 - ((used >> i) & 1);
+    let filt = dl_isb(R, dl_aa(R, a, 0)) | dl_aa(R, a, 1);
+    let ok = if free * filt == 1 then dl_ready(R, a, m) else 0;
+    let pick = if ok == 1 then i else pick;
+    let i = i - 1;
+    0
+  };
+  let _ = if pick >= 0 then return pick else 0;
+  let best = 99;
+  let i = na - 1;
+  while i >= 0 {
+    let a = a0 + i;
+    let free = 1 - ((used >> i) & 1);
+    let rel = (1 - dl_isb(R, dl_aa(R, a, 0))) * (1 - dl_aa(R, a, 1));
+    let u = if free * rel == 1 then dl_unbound(R, a, m) else 99;
+    let take = if u <= best then (if u < 99 then 1 else 0) else 0;
+    let pick = if take == 1 then i else pick;
+    let best = if take == 1 then u else best;
+    let i = i - 1;
+    0
+  };
+  pick
+}
+// dl_unbound: how many distinct variables of atom a the mask m does not bind -- the planner walks the
+// relational atom with the fewest first (ties: the earlier atom), so a lookup fully keyed by the head
+// runs once, not once per row of a wider atom.
+fn dl_unbound(R: [i64], a: i64, m: i64) -> i64 {
+  let x = dl_amask(R, a) & (m ^ (0 - 1));
+  let c = 0;
+  while x != 0 {
+    let c = c + (x & 1);
+    let x = x >> 1;
+    0
+  };
+  c
+}
+fn dl_outmask(R: [i64], a: i64) -> i64 {
+  let p = dl_aa(R, a, 0);
+  let z = dl_aa(R, a, 5);
+  let mulz = if z >= 0 then (if z < 16 then 1 << z else 0) else 0;
+  if dl_isb(R, p) == 1 then (if dl_pa(R, p, 0) == 4 then mulz else 0) else (if dl_aa(R, a, 1) == 1 then 0 else dl_amask(R, a))
+}
+// dl_plan: the atom order for rule r -- `first` (an atom position, or -1) leads; mask0 = variables bound
+// before the walk starts (the head's, in exists mode). Sets db[15] = length, db[16] = r.
+fn dl_plan(R: [i64], db: [i64], r: i64, first: i64, mask0: i64) -> i64 {
+  let a0 = dl_ra(R, r, 6);
+  let na = dl_ra(R, r, 7);
+  let PL = db[4];
+  let _ = if first >= 0 then (let _ = db[PL] = a0 + first in 0) else 0;
+  let used = if first >= 0 then 1 << first else 0;
+  let m = if first >= 0 then mask0 | dl_amask(R, a0 + first) else mask0;
+  let len = if first >= 0 then 1 else 0;
+  let step = 0;
+  while step < na {
+    let pick = dl_pick(R, a0, na, used, m);
+    let _ = if pick >= 0 then (let _ = db[PL + len] = a0 + pick in 0) else 0;
+    let m = if pick >= 0 then m | dl_outmask(R, a0 + pick) else m;
+    let used = if pick >= 0 then used | (1 << pick) else used;
+    let len = if pick >= 0 then len + 1 else len;
+    let step = step + 1;
+    0
+  };
+  let _ = db[15] = len;
+  let _ = db[16] = r;
+  len
+}
+// sources: db[SRC + 3 i] for atom position i = kind, list off, list n.
+fn dl_src_set(db: [i64], i: i64, kind: i64, off: i64, n: i64) -> i64 {
+  let S = db[5] + 3 * i;
+  let _ = db[S] = kind;
+  let _ = db[S + 1] = off;
+  let _ = db[S + 2] = n;
+  0
+}
+// dl_src_all: every atom of r reads F; with udel = 1 a predicate that has deleted rows reads F u del.
+fn dl_src_all(R: [i64], db: [i64], r: i64, udel: i64) -> i64 {
+  let _ = if db[22] != 0 then return 0 else 0;
+  let a0 = dl_ra(R, r, 6);
+  let na = dl_ra(R, r, 7);
+  let i = 0;
+  while i < na {
+    let p = dl_aa(R, a0 + i, 0);
+    let d = dl_d(db, p);
+    let hasdel = if dl_isb(R, p) == 1 then 0 else (if db[d + 19] > 0 then 1 else 0);
+    let _ = if udel * hasdel == 1 then dl_src_set(db, i, 2, db[d + 18], db[d + 19]) else dl_src_set(db, i, 0, 0, 0);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+// ---- the walk ---------------------------------------------------------------------------------------
+fn dl_bt(R: [i64], db: [i64], d: i64) -> i64 {
+  let _ = if db[9] == 1 then return 0 else 0;
+  let _ = if d == db[15] then return dl_leaf(R, db) else 0;
+  let a = db[db[4] + d];
+  let p = dl_aa(R, a, 0);
+  let _ = if dl_isb(R, p) == 1 then return dl_bt_bi(R, db, d, a, p) else 0;
+  let forcepos = if d == 0 then db[10] else 0;
+  let neg = if forcepos == 1 then 0 else dl_aa(R, a, 1);
+  let _ = if neg == 1 then return dl_bt_neg(R, db, d, a, p) else 0;
+  let si = db[5] + 3 * (a - dl_ra(R, db[16], 6));
+  let kind = db[si];
+  let _ = if kind != 1 then dl_scan_f(R, db, d, a, p) else 0;
+  let _ = if kind >= 1 then dl_scan_l(R, db, d, a, db[si + 1], db[si + 2]) else 0;
+  0
+}
+fn dl_leaf(R: [i64], db: [i64]) -> i64 {
+  let _ = if db[8] == 1 then (let _ = db[9] = 1 in 0) else 0;
+  let _ = if db[8] == 1 then return 0 else 0;
+  let r = db[16];
+  let h = dl_ra(R, r, 0);
+  let nh = dl_ra(R, r, 1);
+  let T = db[7];
+  let k = 0;
+  while k < 4 {
+    let v = if k < nh then dl_ra(R, r, 2 + k) else 0 - 1;
+    let x = dl_val(db, v);
+    let _ = db[T + k] = x;
+    let k = k + 1;
+    0
+  };
+  let dd = dl_d(db, h);
+  let inF = if db[12] == 0 then (if dl_sfind(db, db[dd], db[dd + 2], T) >= 0 then 1 else 0) else 0;
+  let dp = if db[12] == 1 then db[28] else 0;
+  let _ = if inF + dp == 0 then dl_sins(db, db[dd + 14], dd + 15, db[dd + 1], T) else 0;
+  let _ = if dp == 1 then dl_sins(db, db[dd + 12], dd + 13, db[dd + 1], T) else 0;
+  0
+}
+// dl_mulck: a * b, or trap 125 when the product does not fit i64 (the high word must be the sign of the low).
+fn dl_mulck(x: i64, y: i64) -> i64 {
+  let lo = x * y;
+  let hi = smulh(x, y);
+  let _ = if hi != (lo >>> 63) then dl_trap_mul() else 0;
+  lo
+}
+fn dl_bt_bi(R: [i64], db: [i64], d: i64, a: i64, p: i64) -> i64 {
+  let op = dl_pa(R, p, 0);
+  let x = dl_val(db, dl_aa(R, a, 3));
+  let y = dl_val(db, dl_aa(R, a, 4));
+  let _ = if op == 4 then return dl_bt_mul(R, db, d, a, x, y) else 0;
+  let ok = if op == 1 then (if x < y then 1 else 0) else (if op == 2 then (if x <= y then 1 else 0) else (if x == y then 1 else 0));
+  if ok == 1 then dl_bt(R, db, d + 1) else 0
+}
+fn dl_bt_mul(R: [i64], db: [i64], d: i64, a: i64, x: i64, y: i64) -> i64 {
+  let z = dl_aa(R, a, 5);
+  let c = dl_mulck(x, y);
+  let m = dl_bind1(db, z, c);
+  let _ = if m >= 0 then (let _ = dl_bt(R, db, d + 1) in dl_unbind(db, m)) else 0;
+  0
+}
+fn dl_bt_neg(R: [i64], db: [i64], d: i64, a: i64, p: i64) -> i64 {
+  let _ = if db[10] == 1 then return dl_bt(R, db, d + 1) else 0;
+  let K = db[6] + 4 * d;
+  let n = dl_aa(R, a, 2);
+  let k = 0;
+  while k < 4 {
+    let v = if k < n then dl_aa(R, a, 3 + k) else 0 - 1;
+    let x = dl_val(db, v);
+    let _ = db[K + k] = x;
+    let k = k + 1;
+    0
+  };
+  if dl_rhas(db, p, K) == 0 then dl_bt(R, db, d + 1) else 0
+}
+fn dl_scan_l(R: [i64], db: [i64], d: i64, a: i64, off: i64, n: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let m = dl_bind(R, db, a, off + 4 * i);
+    let _ = if m >= 0 then (let _ = dl_bt(R, db, d + 1) in dl_unbind(db, m)) else 0;
+    let i = if db[9] == 1 then n else i + 1;
+    0
+  };
+  0
+}
+// dl_key: the probe row for atom a at depth d (bound args, 0 elsewhere); returns prefix * 8 + (bc + 1)
+// where prefix = leading bound columns and bc = the first bound column (-1 none).
+fn dl_key(R: [i64], db: [i64], d: i64, a: i64) -> i64 {
+  let K = db[6] + 4 * d;
+  let n = dl_aa(R, a, 2);
+  let pre = 0;
+  let inpre = 1;
+  let bc = 0 - 1;
+  let k = 0;
+  while k < 4 {
+    let v = if k < n then dl_aa(R, a, 3 + k) else 0 - 1;
+    let b = dl_isbnd(db, v);
+    let x = if b == 1 then dl_val(db, v) else 0;
+    let _ = db[K + k] = x;
+    let inpre = inpre * b;
+    let pre = pre + inpre;
+    let bc = if bc < 0 then (if b == 1 then k else bc) else bc;
+    let k = k + 1;
+    0
+  };
+  pre * 8 + bc + 1
+}
+fn dl_scan_f(R: [i64], db: [i64], d: i64, a: i64, p: i64) -> i64 {
+  let dd = dl_d(db, p);
+  let off = db[dd];
+  let n = db[dd + 2];
+  let K = db[6] + 4 * d;
+  let kk = dl_key(R, db, d, a);
+  let pre = kk / 8;
+  let bc = (kk % 8) - 1;
+  let usep = if pre == 0 then (if bc >= 0 then 1 else 0) else 0;
+  let po = if usep == 1 then dl_cidx(db, p, bc) else 0;
+  let v = if usep == 1 then db[K + bc] else 0;
+  let lo = if pre > 0 then dl_lb(db, off, n, K, pre, 0) else (if usep == 1 then dl_clb(db, off, po, n, bc, v, 0) else 0);
+  let hi = if pre > 0 then dl_lb(db, off, n, K, pre, 1) else (if usep == 1 then dl_clb(db, off, po, n, bc, v, 1) else n);
+  let i = lo;
+  while i < hi {
+    let ri = if usep == 1 then db[po + i] else i;
+    let m = dl_bind(R, db, a, off + 4 * ri);
+    let _ = if m >= 0 then (let _ = dl_bt(R, db, d + 1) in dl_unbind(db, m)) else 0;
+    let i = if db[9] == 1 then hi else i + 1;
+    0
+  };
+  0
+}
+// dl_run: walk rule r with plan (first, mask0) in mode 0 collect / 1 exists; candmode 1 skips negated
+// atoms and reads the leading atom positively. Returns db[9] (found, exists mode).
+// db[22] = a generated walk (selfhost/std/gen_dl.bp dlg_walk, called through call_fn), which carries
+// EVERY variant the engine asks for and reads its sources from the predicates' own lists -- so with it
+// dl_src_all does nothing, and a variant it does not carry is a loud trap, never a silent interpretation
+// over unset sources. With db[22] = 0 the walk is interpreted.
+fn dl_run(R: [i64], db: [i64], r: i64, first: i64, mask0: i64, mode: i64, cand: i64) -> i64 {
+  let _ = db[8] = mode;
+  let _ = db[9] = 0;
+  let _ = db[10] = cand;
+  let _ = db[16] = r;
+  let g = db[22];
+  let key = ((r * 16 + first + 1) * 2 + mode) * 2 + cand;
+  let fv = if g != 0 then (if key < 1024 then db[db[27] + key] else 0) else 0;
+  let done = if fv != 0 then 1 + call_fn(fv, R, db) else (if g != 0 then call_fn(g, R, db, r, first, mode, cand) else 0);
+  let _ = if done == 1 then return db[9] else 0;
+  let _ = if g != 0 then dl_trap_variant() else 0;
+  let _ = dl_plan(R, db, r, first, mask0);
+  let _ = dl_bt(R, db, 0);
+  db[9]
+}
+
+// ---- strata ---------------------------------------------------------------------------------------
+fn dl_hs(R: [i64], r: i64) -> i64 { dl_pa(R, dl_ra(R, r, 0), 2) }
+fn dl_ins_s(R: [i64], s: i64, p: i64) -> i64 {
+  (if dl_pa(R, p, 2) == s then 1 else 0) * dl_isidb(R, p)
+}
+fn dl_reset_s(R: [i64], db: [i64], s: i64) -> i64 {
+  let p = 0;
+  while p < R[2] {
+    let d = dl_d(db, p);
+    let _ = if dl_ins_s(R, s, p) == 1 then (let _ = db[d + 2] = 0 in let _ = db[d + 3] = db[d + 3] + 1 in let _ = db[d + 22] = db[d + 22] + 1 in let _ = db[d + 13] = 0 in let _ = db[d + 15] = 0 in 0) else 0;
+    let p = p + 1;
+    0
+  };
+  0
+}
+// dl_promote: new -> delta, F u= new (rec 1: and into ins); returns how many rows moved.
+fn dl_promote(R: [i64], db: [i64], s: i64, rec: i64) -> i64 {
+  let moved = 0;
+  let p = 0;
+  while p < R[2] {
+    let moved = moved + (if dl_ins_s(R, s, p) == 1 then dl_promote1(db, p, rec) else 0);
+    let p = p + 1;
+    0
+  };
+  moved
+}
+fn dl_promote1(db: [i64], p: i64, rec: i64) -> i64 {
+  let d = dl_d(db, p);
+  let nn = db[d + 15];
+  let no = db[d + 14];
+  let dlo = db[d + 12];
+  let i = 0;
+  while i < nn {
+    let _ = dl_cp4(db, dlo + 4 * i, no + 4 * i);
+    let _ = dl_rins(db, p, no + 4 * i);
+    let _ = if rec == 1 then dl_note(db, p, 0, no + 4 * i) else 0;
+    let i = i + 1;
+    0
+  };
+  let _ = db[d + 13] = nn;
+  let _ = db[d + 15] = 0;
+  nn
+}
+// dl_round: one semi-naive round of stratum s -- each same-stratum positive atom read from its delta.
+fn dl_round(R: [i64], db: [i64], s: i64) -> i64 {
+  let _ = db[13] = db[13] + 1;
+  let _ = if db[13] > db[14] then dl_trap_bound() else 0;
+  let r = 0;
+  while r < R[1] {
+    let _ = if dl_hs(R, r) == s then dl_round_rule(R, db, s, r) else 0;
+    let r = r + 1;
+    0
+  };
+  0
+}
+fn dl_round_rule(R: [i64], db: [i64], s: i64, r: i64) -> i64 {
+  let a0 = dl_ra(R, r, 6);
+  let na = dl_ra(R, r, 7);
+  let j = 0;
+  while j < na {
+    let q = dl_aa(R, a0 + j, 0);
+    let d = dl_d(db, q);
+    let go = dl_ins_s(R, s, q) * (1 - dl_aa(R, a0 + j, 1)) * (if db[d + 13] > 0 then 1 else 0);
+    let _ = if go == 1 then dl_seed(R, db, r, j, db[d + 12], db[d + 13]) else 0;
+    let j = j + 1;
+    0
+  };
+  0
+}
+// dl_seed: collect the heads of r with atom j read from the list (off, n), everything else from F.
+fn dl_seed(R: [i64], db: [i64], r: i64, j: i64, off: i64, n: i64) -> i64 {
+  let _ = dl_src_all(R, db, r, 0);
+  let _ = dl_src_set(db, j, 1, off, n);
+  let _ = db[12] = 0;
+  dl_run(R, db, r, j, 0, 0, 0)
+}
+fn dl_semi(R: [i64], db: [i64], s: i64, rec: i64) -> i64 {
+  let go = 1;
+  while go == 1 {
+    let moved = dl_promote(R, db, s, rec);
+    let go = if moved > 0 then 1 else 0;
+    let _ = if go == 1 then dl_round(R, db, s) else 0;
+    0
+  };
+  0
+}
+// dl_cold_s: stratum s from scratch (its lower strata complete): a naive round 0, then semi-naive.
+fn dl_cold_s(R: [i64], db: [i64], s: i64, rec: i64) -> i64 {
+  let _ = dl_reset_s(R, db, s);
+  let _ = db[13] = 0;
+  let r = 0;
+  while r < R[1] {
+    let _ = if dl_hs(R, r) == s then dl_cold_rule(R, db, r) else 0;
+    let r = r + 1;
+    0
+  };
+  dl_semi(R, db, s, rec)
+}
+fn dl_cold_rule(R: [i64], db: [i64], r: i64) -> i64 {
+  let _ = dl_src_all(R, db, r, 0);
+  let _ = db[12] = 0;
+  dl_run(R, db, r, 0 - 1, 0, 0, 0)
+}
+// dl_eval_all: every stratum from scratch -- the reference the incremental path must equal (A.7).
+fn dl_eval_all(R: [i64], db: [i64]) -> i64 {
+  let s = 1;
+  while s <= R[10] {
+    let _ = dl_cold_s(R, db, s, 0);
+    let s = s + 1;
+    0
+  };
+  0
+}
+
+// ---- events (A-7) ---------------------------------------------------------------------------------
+fn dl_note(db: [i64], p: i64, which: i64, row: i64) -> i64 {
+  let d = dl_d(db, p);
+  let _ = db[25] = db[25] | (1 << p);
+  dl_app(db, db[d + 16 + 2 * which], d + 17 + 2 * which, db[d + 1], row)
+}
+// dl_put / dl_retract: one EDB row in or out of F, noted in the dirty set when it changed anything.
+fn dl_put(db: [i64], p: i64, row: i64) -> i64 {
+  let r = dl_rins(db, p, row);
+  let _ = if r == 1 then dl_note(db, p, 0, row) else 0;
+  r
+}
+fn dl_retract(db: [i64], p: i64, row: i64) -> i64 {
+  let r = dl_rdel(db, p, row);
+  let _ = if r == 1 then dl_note(db, p, 1, row) else 0;
+  r
+}
+// dl_replace: the keyed replacement of A-7 -- the row of F_p whose first k columns equal row's is
+// replaced by row (in place when row sorts into the same slot, which it does when the key is unique).
+fn dl_replace(db: [i64], p: i64, k: i64, row: i64) -> i64 {
+  let d = dl_d(db, p);
+  let off = db[d];
+  let n = db[d + 2];
+  let i = if k == 1 then dl_range(db, p, 0, db[row]) else dl_lb(db, off, n, row, k, 0);
+  let k0 = db[row];
+  let has = if i < n then (if k == 1 then (if db[off + 4 * i] == k0 then 1 else 0) else (if dl_cmpk(db, off + 4 * i, row, k) == 0 then 1 else 0)) else 0;
+  let _ = if has == 0 then return dl_put(db, p, row) else 0;
+  let _ = if dl_cmpk(db, off + 4 * i, row, 4) == 0 then return 0 else 0;
+  let lok = if i > 0 then (if db[off + 4 * (i - 1)] < k0 then 1 else (if dl_cmpk(db, off + 4 * (i - 1), row, 4) < 0 then 1 else 0)) else 1;
+  let hok = if i + 1 < n then (if db[off + 4 * (i + 1)] > k0 then 1 else (if dl_cmpk(db, off + 4 * (i + 1), row, 4) > 0 then 1 else 0)) else 1;
+  let _ = dl_note(db, p, 1, off + 4 * i);
+  let _ = if lok * hok == 1 then dl_cp4(db, off + 4 * i, row) else 0;
+  let _ = if lok * hok == 1 then (let _ = db[d + 3] = db[d + 3] + 1 in 0) else 0;
+  let _ = if lok * hok == 0 then dl_rdel(db, p, db[d + 18] + 4 * (db[d + 19] - 1)) else 0;
+  let _ = if lok * hok == 0 then dl_rins(db, p, row) else 0;
+  let _ = dl_note(db, p, 0, row);
+  1
+}
+// dl_s_state: 0 clean, 1 inserts only through positive atoms, 2 anything else, over the inputs of s.
+fn dl_s_state(R: [i64], db: [i64], s: i64) -> i64 {
+  let st = 0;
+  let r = 0;
+  while r < R[1] {
+    let st = if dl_hs(R, r) == s then dl_rule_state(R, db, s, r, st) else st;
+    let r = r + 1;
+    0
+  };
+  st
+}
+fn dl_rule_state(R: [i64], db: [i64], s: i64, r: i64, st0: i64) -> i64 {
+  let a0 = dl_ra(R, r, 6);
+  let na = dl_ra(R, r, 7);
+  let st = st0;
+  let j = 0;
+  while j < na {
+    let q = dl_aa(R, a0 + j, 0);
+    let d = dl_d(db, q);
+    let inp = (1 - dl_isb(R, q)) * (if dl_pa(R, q, 2) == s then 0 else 1);
+    let neg = dl_aa(R, a0 + j, 1);
+    let ins = if inp == 1 then db[d + 17] else 0;
+    let del = if inp == 1 then db[d + 19] else 0;
+    let hard = if neg == 1 then (if ins + del > 0 then 1 else 0) else (if del > 0 then 1 else 0);
+    let st = if hard == 1 then 2 else (if ins > 0 then (if st == 0 then 1 else st) else st);
+    let j = j + 1;
+    0
+  };
+  st
+}
+fn dl_s_pred(R: [i64], s: i64) -> i64 {
+  let p0 = 0 - 1;
+  let p = R[2] - 1;
+  while p >= 0 {
+    let p0 = if dl_ins_s(R, s, p) == 1 then p else p0;
+    let p = p - 1;
+    0
+  };
+  p0
+}
+// dl_cand_rule: candidate heads of r from every dirty input atom, into the head's new list (no F filter).
+// A builtin is never dirty (only dl_note sets the mask), so the mask test alone selects the inputs.
+fn dl_cand_rule(R: [i64], db: [i64], r: i64) -> i64 {
+  let rb = R[4] + 8 * r;
+  let a0 = R[rb + 6];
+  let na = R[rb + 7];
+  let ab = R[5] + 7 * a0;
+  let j = 0;
+  while j < na {
+    let q = R[ab + 7 * j];
+    let d = db[1] + 32 * q;
+    let go = if ((db[25] >> q) & 1) == 0 then 0 else (if db[d + 17] + db[d + 19] > 0 then 1 else 0);
+    let gen = if db[22] != 0 then go else 0;
+    let _ = if gen == 1 then dl_cand_gen(R, db, r, j) else 0;
+    let itp = go - gen;
+    let _ = if itp == 1 then dl_cand_list(R, db, r, j, db[d + 16], db[d + 17]) else 0;
+    let _ = if itp == 1 then (let _ = db[28] = 1 in dl_cand_list(R, db, r, j, db[d + 18], db[d + 19])) else 0;
+    let _ = db[28] = 0;
+    let j = j + 1;
+    0
+  };
+  0
+}
+// dl_cand_gen: the generated cand walk reads atom j's predicate's ins and del lists itself.
+fn dl_cand_gen(R: [i64], db: [i64], r: i64, j: i64) -> i64 {
+  let _ = db[12] = 1;
+  let _ = dl_run(R, db, r, j, 0, 0, 1);
+  let _ = db[12] = 0;
+  0
+}
+fn dl_cand_list(R: [i64], db: [i64], r: i64, j: i64, off: i64, n: i64) -> i64 {
+  let _ = if n == 0 then return 0 else 0;
+  let _ = dl_src_all(R, db, r, 1);
+  let _ = dl_src_set(db, j, 1, off, n);
+  let _ = db[12] = 1;
+  let _ = dl_run(R, db, r, j, 0, 0, 1);
+  let _ = db[12] = 0;
+  0
+}
+// dl_exists: 1 when some rule with head p derives the row at db[row] from the current F.
+fn dl_exists(R: [i64], db: [i64], p: i64, row: i64) -> i64 {
+  let found = 0;
+  let r = 0;
+  while r < R[1] {
+    let hd = R[R[4] + 8 * r];
+    let hit = if found == 0 then (if hd == p then dl_exists_r(R, db, r, row) else 0) else 0;
+    let found = found | hit;
+    let r = r + 1;
+    0
+  };
+  found
+}
+fn dl_exists_r(R: [i64], db: [i64], r: i64, row: i64) -> i64 {
+  let m = dl_bindv(R, db, R[4] + 8 * r + 2, dl_ra(R, r, 1), row);
+  let _ = if m < 0 then return 0 else 0;
+  let _ = if db[22] == 0 then dl_src_all(R, db, r, 0) else 0;
+  let f = dl_run(R, db, r, 0 - 1, m, 1, 0);
+  let _ = dl_unbind(db, m);
+  let _ = db[9] = 0;
+  f
+}
+// dl_inc_nonrec: candidates, then re-derive and replace each (A-7).
+// Candidates found through an INSERTED row go to the head's new list, through a DELETED row to its delta
+// list (db[28] = 1 marks that pass). SIMPLE stratum (dl_db_strata bit 1: no negated atom, no predicate
+// twice in a rule) with ONE dirty input: an insert-pass head is derivable now (its other atoms read the
+// new F, nothing of theirs was deleted), and a delete-pass head that was not in F cannot have become
+// true (a new derivation needs an inserted row, so it is in the insert pass) -- only a delete-pass head
+// that was in F is re-derived. Otherwise every candidate is re-derived.
+fn dl_inc_nonrec(R: [i64], db: [i64], s: i64) -> i64 {
+  let p = if db[26] == 1 then (db[48 + s] >> 2) - 1 else dl_s_pred(R, s);
+  let d = dl_d(db, p);
+  let _ = db[d + 15] = 0;
+  let _ = db[d + 13] = 0;
+  let r = 0;
+  while r < R[1] {
+    let hd = R[R[4] + 8 * r];
+    let _ = if hd == p then dl_cand_rule(R, db, r) else 0;
+    let r = r + 1;
+    0
+  };
+  let x = if db[26] == 1 then db[32 + s] & db[25] else 0;
+  let simple = (if db[26] == 1 then (db[48 + s] >> 1) & 1 else 0) * (if x != 0 then (if (x & (x - 1)) == 0 then 1 else 0) else 0);
+  let co = db[d + 14];
+  let i = 0;
+  while i < db[d + 15] {
+    let _ = dl_recheck(R, db, p, co + 4 * i, simple);
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < db[d + 13] {
+    let rw = db[d + 12] + 4 * i;
+    let dup = if dl_sfind(db, co, db[d + 15], rw) >= 0 then 1 else 0;
+    let _ = if dup == 0 then dl_recheck(R, db, p, rw, 2 * simple) else 0;
+    let i = i + 1;
+    0
+  };
+  let _ = db[d + 15] = 0;
+  let _ = db[d + 13] = 0;
+  0
+}
+// dl_recheck(sure): 0 re-derive; 1 known derivable (simple insert pass); 2 simple delete pass -- only a
+// row that was in F is re-derived.
+fn dl_recheck(R: [i64], db: [i64], p: i64, row: i64, sure: i64) -> i64 {
+  let was = dl_has(db, p, row);
+  let _ = if sure * (1 - was) == 2 then return 0 else 0;
+  let now = if sure == 1 then 1 else dl_exists(R, db, p, row);
+  let _ = if now * (1 - was) == 1 then (let _ = dl_rins(db, p, row) in dl_note(db, p, 0, row)) else 0;
+  let drop = was * (1 - now) * (1 - db[21]);
+  let _ = if drop == 1 then (let _ = dl_rdel(db, p, row) in dl_note(db, p, 1, row)) else 0;
+  0
+}
+// dl_cont_s: a recursive stratum whose inputs only grew -- seed with the inserted rows, then semi-naive.
+fn dl_cont_s(R: [i64], db: [i64], s: i64) -> i64 {
+  let p = 0;
+  while p < R[2] {
+    let d = dl_d(db, p);
+    let _ = if dl_ins_s(R, s, p) == 1 then (let _ = db[d + 13] = 0 in let _ = db[d + 15] = 0 in 0) else 0;
+    let p = p + 1;
+    0
+  };
+  let _ = db[13] = 0;
+  let r = 0;
+  while r < R[1] {
+    let _ = if dl_hs(R, r) == s then dl_cont_rule(R, db, s, r) else 0;
+    let r = r + 1;
+    0
+  };
+  dl_semi(R, db, s, 1)
+}
+fn dl_cont_rule(R: [i64], db: [i64], s: i64, r: i64) -> i64 {
+  let a0 = dl_ra(R, r, 6);
+  let na = dl_ra(R, r, 7);
+  let j = 0;
+  while j < na {
+    let q = dl_aa(R, a0 + j, 0);
+    let d = dl_d(db, q);
+    let go = (1 - dl_isb(R, q)) * (1 - dl_aa(R, a0 + j, 1)) * (if dl_pa(R, q, 2) == s then 0 else 1) * (if db[d + 17] > 0 then 1 else 0);
+    let _ = if go == 1 then dl_seed(R, db, r, j, db[d + 16], db[d + 17]) else 0;
+    let j = j + 1;
+    0
+  };
+  0
+}
+// dl_recompute_s: snapshot, recompute, and note the difference as ins/del.
+fn dl_recompute_s(R: [i64], db: [i64], s: i64) -> i64 {
+  let p = 0;
+  while p < R[2] {
+    let _ = if dl_ins_s(R, s, p) == 1 then dl_snap(db, p) else 0;
+    let p = p + 1;
+    0
+  };
+  let _ = dl_cold_s(R, db, s, 0);
+  let p = 0;
+  while p < R[2] {
+    let _ = if dl_ins_s(R, s, p) == 1 then dl_diff(db, p) else 0;
+    let p = p + 1;
+    0
+  };
+  0
+}
+fn dl_snap(db: [i64], p: i64) -> i64 {
+  let d = dl_d(db, p);
+  let n = db[d + 2];
+  let i = 0;
+  while i < n {
+    let _ = dl_cp4(db, db[d + 20] + 4 * i, db[d] + 4 * i);
+    let i = i + 1;
+    0
+  };
+  let _ = db[d + 21] = n;
+  0
+}
+// dl_diff: both sides sorted -- one merge walk; a snapshot row missing from F was deleted, an F row
+// missing from the snapshot was inserted. With db[21] = 1 (the MUTATION of dagfull.prove step 4 and of
+// every dl_*_neg gate: head replacement dropped) a deleted row is not noted but put back into F after
+// the walk (dl_restore) -- a stale head. Not during the walk: an insertion shifts the rows it reads.
+fn dl_diff(db: [i64], p: i64) -> i64 {
+  let d = dl_d(db, p);
+  let so = db[d + 20];
+  let sn = db[d + 21];
+  let fo = db[d];
+  let fn2 = db[d + 2];
+  let keep = db[21];
+  let i = 0;
+  let j = 0;
+  while i + j < sn + fn2 {
+    let c = if i < sn then (if j < fn2 then dl_cmpk(db, so + 4 * i, fo + 4 * j, 4) else 0 - 1) else 1;
+    let _ = if c < 0 then (if keep == 0 then dl_note(db, p, 1, so + 4 * i) else 0) else 0;
+    let _ = if c > 0 then dl_note(db, p, 0, fo + 4 * j) else 0;
+    let i = if c <= 0 then i + 1 else i;
+    let j = if c >= 0 then j + 1 else j;
+    0
+  };
+  if keep == 1 then dl_restore(db, p) else 0
+}
+fn dl_restore(db: [i64], p: i64) -> i64 {
+  let d = dl_d(db, p);
+  let so = db[d + 20];
+  let sn = db[d + 21];
+  let i = 0;
+  while i < sn {
+    let _ = dl_rins(db, p, so + 4 * i);
+    let i = i + 1;
+    0
+  };
+  0
+}
+// dl_propagate: every stratum above the changed inputs, lowest first; then the dirty set is cleared.
+// With db[26] = 1 (dl_db_strata: at most 15 strata) a stratum none of whose inputs is in the dirty mask
+// db[25] is skipped outright, and its recursion flag is read, not recomputed.
+fn dl_propagate(R: [i64], db: [i64]) -> i64 {
+  let s = 1;
+  while s <= R[10] {
+    let quiet = if db[26] == 1 then (if (db[32 + s] & db[25]) == 0 then 1 else 0) else 0;
+    let _ = if quiet == 0 then dl_inc_s(R, db, s) else 0;
+    let s = s + 1;
+    0
+  };
+  dl_event_end(R, db)
+}
+fn dl_inc_s(R: [i64], db: [i64], s: i64) -> i64 {
+  let fast = db[26];
+  let st0 = if fast == 1 then 1 else dl_s_state(R, db, s);
+  let _ = if st0 == 0 then return 0 else 0;
+  let rec = if fast == 1 then db[48 + s] & 1 else dl_srec(R, s);
+  let _ = if rec == 0 then return dl_inc_nonrec(R, db, s) else 0;
+  let st = if fast == 1 then dl_s_state(R, db, s) else st0;
+  let _ = if st == 0 then return 0 else 0;
+  if st == 1 then dl_cont_s(R, db, s) else dl_recompute_s(R, db, s)
+}
+// dl_db_strata: per stratum s (1..15) the mask of its input predicates (db[32 + s]), and in db[48 + s]:
+// bit 0 recursive, bit 1 simple (dl_s_simple), its lowest IDB predicate + 1 above (>> 2); db[26] = 1 when
+// they cover every stratum. Call after dl_check and dl_db_init.
+fn dl_db_strata(R: [i64], db: [i64]) -> i64 {
+  let ok = if R[10] <= 15 then 1 else 0;
+  let s = 1;
+  while s <= R[10] * ok {
+    let _ = db[32 + s] = dl_s_inputs(R, s);
+    let _ = db[48 + s] = dl_srec(R, s) + 2 * dl_s_simple(R, s) + 4 * (dl_s_pred(R, s) + 1);
+    let s = s + 1;
+    0
+  };
+  let _ = db[26] = ok;
+  ok
+}
+fn dl_s_inputs(R: [i64], s: i64) -> i64 {
+  let m = 0;
+  let r = 0;
+  while r < R[1] {
+    let m = if dl_hs(R, r) == s then m | dl_rule_inputs(R, r, s) else m;
+    let r = r + 1;
+    0
+  };
+  m
+}
+fn dl_rule_inputs(R: [i64], r: i64, s: i64) -> i64 {
+  let a0 = dl_ra(R, r, 6);
+  let m = 0;
+  let j = 0;
+  while j < dl_ra(R, r, 7) {
+    let q = dl_aa(R, a0 + j, 0);
+    let inp = (1 - dl_isb(R, q)) * (if dl_pa(R, q, 2) == s then 0 else 1);
+    let m = if inp == 1 then m | (1 << q) else m;
+    let j = j + 1;
+    0
+  };
+  m
+}
+fn dl_event_end(R: [i64], db: [i64]) -> i64 {
+  let x = if db[26] == 1 then db[25] else 0 - 1;
+  let _ = db[25] = 0;
+  let p = 0;
+  while x != 0 {
+    let d = dl_d(db, p);
+    let _ = if (x & 1) == 1 then (let _ = db[d + 17] = 0 in let _ = db[d + 19] = 0 in 0) else 0;
+    let p = p + 1;
+    let x = if p < R[2] then x >> 1 else 0;
+    0
+  };
+  0
+}
+fn dl_trap_variant() -> i64 {
+  let o = zeros(64);
+  let p = dl_puts(o, 0, "trap 125: datalog generated walk lacks a variant");
+  dl_die(o, p)
+}
+// dl_s_simple: 1 when no rule of stratum s has a negated atom or names one predicate twice.
+fn dl_s_simple(R: [i64], s: i64) -> i64 {
+  let ok = 1;
+  let r = 0;
+  while r < R[1] {
+    let ok = if dl_hs(R, r) == s then ok * dl_rule_simple(R, r) else ok;
+    let r = r + 1;
+    0
+  };
+  ok
+}
+fn dl_rule_simple(R: [i64], r: i64) -> i64 {
+  let a0 = dl_ra(R, r, 6);
+  let seen = 0;
+  let ok = 1;
+  let j = 0;
+  while j < dl_ra(R, r, 7) {
+    let q = dl_aa(R, a0 + j, 0);
+    let twice = if dl_isb(R, q) == 1 then 0 else (seen >> q) & 1;
+    let ok = ok * (1 - dl_aa(R, a0 + j, 1)) * (1 - twice);
+    let seen = seen | (1 << q);
+    let j = j + 1;
+    0
+  };
+  ok
+}

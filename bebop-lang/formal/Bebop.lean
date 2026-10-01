@@ -26,3 +26,4 @@ import Bebop.Syscalls
 import Bebop.Traps
 import Bebop.Conformance
 import Bebop.Theorems
+import Bebop.Datalog

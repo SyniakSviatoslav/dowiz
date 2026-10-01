@@ -1,0 +1,8 @@
+use "selfhost/std/dl_fix.bp"
+// dl_allergen_neg.bp -- `gate dl_allergen_neg`, the negative twin of dl_allergen.bp (row DG8, A-9): the same fixture and
+// events with the head replacement of A-7 DROPPED (db[21] = 1, a derived row is never removed). The
+// incremental relation must go stale and the gate must SAY where: t * 10^9 + predicate * 10^6 + stale
+// rows * 10^3 + the first stale row's first column, at the first event t that differs from scratch; -2
+// if the mutation never showed. Oracle: bench/oracles/dl_allergen_neg.py (the first event whose correct
+// relation LOSES a row, in the lowest stratum).
+fn main() -> i64 { dl_gate(5, 1, 2000, 1) }

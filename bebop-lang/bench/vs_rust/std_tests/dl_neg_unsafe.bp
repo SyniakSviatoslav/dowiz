@@ -1,0 +1,22 @@
+use "selfhost/std/dl_eval.bp"
+// dl_neg_unsafe.bp -- `gate dl_neg_unsafe` (row DG8, SPEC-DATALOG-AND-CODEC A-3): a rule whose head
+// variable no positive atom binds must be REFUSED before anything runs --
+//   rule 0  s(X)   :- q(X).                 safe
+//   rule 1  p(X,Y) :- q(X), not r(Y).       Y (variable 1) is bound only under a negation
+// -> stderr `error[E125]: rule 1 unsafe -- variable 1 not bound by a positive atom`, exit 125.
+// Positive twin: dl_safe.bp (the same rule with q(Y) added). Oracle: bench/oracles/dl_neg_unsafe.py.
+fn main() -> i64 {
+  let R = zeros(dl_rs_cells(8, 8, 16));
+  let _ = dl_rs_init(R, 8, 8, 16);
+  let u = 0 - 1;
+  let q = dl_pred(R, 1, 1, 0);
+  let r = dl_pred(R, 2, 1, 0);
+  let s = dl_pred(R, 3, 1, 1);
+  let p = dl_pred(R, 4, 2, 1);
+  let _ = dl_rule(R, s, 0, u, u, u);
+  let _ = dl_atom(R, q, 0, 0, u, u, u);
+  let _ = dl_rule(R, p, 0, 1, u, u);
+  let _ = dl_atom(R, q, 0, 0, u, u, u);
+  let _ = dl_atom(R, r, 1, 1, u, u, u);
+  dl_check(R)
+}

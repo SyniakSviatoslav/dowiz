@@ -1,0 +1,17 @@
+use "selfhost/std/gen_dl.bp"
+// dl_gen.bp -- the producer of `gate dl_gen` (row DG8, SPEC-DATALOG-AND-CODEC A.1): selfhost/std/gen_dl.bp
+// writes <argv[2]>/dl_g<set>.bp for the five rule sets of dl_fix.bp (each refused with E125 first if it
+// were unsafe or unstratifiable). std_golden compiles and runs each generated program; each must print
+// its INTERPRETED gate's fold (dl_<set>.bp's golden) with every join run by generated code, checked
+// against the interpreter every 100 events. Returns the total generated length (not gated: a producer).
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dir = argv[2];
+  let n = 0;
+  let s = 1;
+  while s <= 5 {
+    let n = n + gen_dl(s, dir);
+    let s = s + 1;
+    0
+  };
+  n
+}

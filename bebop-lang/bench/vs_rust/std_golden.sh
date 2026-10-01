@@ -1202,5 +1202,67 @@ gate wlog_u 85000 "$r"
 r=$(timeout 120 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/wlog_test.bin q1 f | tail -1)
 gate wlog_u_q1 60734 "$r"
 
+# ---- Datalog rule layer (DG8, docs/design/SPEC-DATALOG-AND-CODEC-2026-09-28.md Part A) ----
+# selfhost/std/dl.bp + dl_eval.bp (engine), dl_fix.bp (the five rule sets of A.6, fixtures, events, dl_gate).
+# Every golden is printed by bench/oracles/<gate>.py, which re-derives it by direct set semantics in
+# bench/oracles/dl_common.py -- never copied from these programs. The three refusals are judged by their
+# EXIT CODE and stderr line, so they run outside the memo (a replay would report rc 0): `dlx` prints
+# `exit:<rc> <the E125 / trap 125 line>`.
+dlx() {
+  local b=${BEBOP_TMP:-/tmp/opencode}/$1_test.bin
+  ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/$1.bp "$b" >/dev/null 2>&1 || { echo "COMPILEFAIL(rc=$?)"; return; }
+  timeout 30 ./seed/build/seed "$b" > "$b.out" 2> "$b.err"; local rc=$?
+  echo "exit:$rc $(grep -m1 -E '^(error\[E125\]|trap 125)' "$b.err")"
+}
+r=$(dlx dl_neg_unsafe)
+gate dl_neg_unsafe "exit:125 error[E125]: rule 1 unsafe -- variable 1 not bound by a positive atom" "$r"
+r=$(dlx dl_neg_cycle)
+gate dl_neg_cycle "exit:125 error[E125]: negation inside a cycle -- 1 depends negatively on 1 in the same stratum" "$r"
+r=$(dlx dl_bound)
+gate dl_bound "exit:125 trap 125: datalog fixpoint bound exceeded" "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_safe.bp ${BEBOP_TMP:-/tmp/opencode}/dl_safe_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/dl_safe_test.bin | tail -1)
+gate dl_safe -8422843206397363489 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_strata.bp ${BEBOP_TMP:-/tmp/opencode}/dl_strata_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/dl_strata_test.bin | tail -1)
+gate dl_strata 10224653 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_set_semantics.bp ${BEBOP_TMP:-/tmp/opencode}/dl_set_semantics_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/dl_set_semantics_test.bin | tail -1)
+gate dl_set_semantics 10113312 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_unavail.bp ${BEBOP_TMP:-/tmp/opencode}/dl_unavail_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/dl_unavail_test.bin | tail -1)
+gate dl_unavail 6069655880869280380 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_unavail_neg.bp ${BEBOP_TMP:-/tmp/opencode}/dl_unavail_neg_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/dl_unavail_neg_test.bin | tail -1)
+gate dl_unavail_neg 1005001069 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_fsm.bp ${BEBOP_TMP:-/tmp/opencode}/dl_fsm_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/dl_fsm_test.bin | tail -1)
+gate dl_fsm 8944521050863087642 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_fsm_neg.bp ${BEBOP_TMP:-/tmp/opencode}/dl_fsm_neg_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/dl_fsm_neg_test.bin | tail -1)
+gate dl_fsm_neg 1002003036 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_courier.bp ${BEBOP_TMP:-/tmp/opencode}/dl_courier_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/dl_courier_test.bin | tail -1)
+gate dl_courier -8827668892031370174 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_courier_neg.bp ${BEBOP_TMP:-/tmp/opencode}/dl_courier_neg_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/dl_courier_neg_test.bin | tail -1)
+gate dl_courier_neg 1003001017 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_personal.bp ${BEBOP_TMP:-/tmp/opencode}/dl_personal_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/dl_personal_test.bin | tail -1)
+gate dl_personal -3201532720188262212 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_personal_neg.bp ${BEBOP_TMP:-/tmp/opencode}/dl_personal_neg_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/dl_personal_neg_test.bin | tail -1)
+gate dl_personal_neg 8002001014 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_allergen.bp ${BEBOP_TMP:-/tmp/opencode}/dl_allergen_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/dl_allergen_test.bin | tail -1)
+gate dl_allergen -7194953358355312332 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_allergen_neg.bp ${BEBOP_TMP:-/tmp/opencode}/dl_allergen_neg_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/dl_allergen_neg_test.bin | tail -1)
+gate dl_allergen_neg 1006008001 "$r"
+
+# ---- dl_gen (DG8, A.1): selfhost/std/gen_dl.bp writes one program per rule set whose every join is
+# generated code (dl_run -> call_fn -> dlg_walk); each must print its interpreted gate's fold, checked
+# against the interpreter every 100 events inside the program. Combined acc*31 + v in set order (bash
+# arithmetic wraps like i64). NOT through `run`: the driver is a PRODUCER of the files the loop compiles.
+DLT=${BEBOP_TMP:-/tmp/opencode}/dl_gen; rm -rf "$DLT"; mkdir -p "$DLT"
+r=0
+./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_gen.bp "$DLT/dl_gen.bin" >/dev/null 2>&1 || r="COMPILEFAIL(dl_gen.bp)"
+[ "$r" = 0 ] && { timeout 60 ./seed/build/seed "$DLT/dl_gen.bin" "$DLT" > "$DLT/gen.out" 2>&1 || r="GENFAIL(rc=$?: $(tail -1 "$DLT/gen.out"))"; }
+for s in 1 2 3 4 5; do
+  case "$r" in -*|[0-9]*) ;; *) break ;; esac
+  ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$DLT/dl_g$s.bp" "$DLT/dl_g$s.bin" >/dev/null 2>&1 || { r="COMPILEFAIL(dl_g$s.bp)"; break; }
+  v=$(timeout 120 ./seed/build/seed "$DLT/dl_g$s.bin" | tail -1)
+  case "$v" in ''|*[!0-9-]*) r="EMPTY(dl_g$s: '$v')"; break ;; esac
+  r=$(( r * 31 + v ))
+done
+gate dl_gen -3434207113808666148 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

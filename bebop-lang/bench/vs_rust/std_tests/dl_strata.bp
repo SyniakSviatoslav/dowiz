@@ -1,0 +1,53 @@
+use "selfhost/std/dl_eval.bp"
+// dl_strata.bp -- `gate dl_strata` (row DG8, SPEC-DATALOG-AND-CODEC A-4/A-5), the positive twin of
+// dl_neg_cycle.bp: the stratum vector of a rule set with a two-predicate cycle, a self-recursive
+// predicate, negation across strata, a builtin and an EDB declared late --
+//   0 e(X,Y) EDB   1 lt builtin   2 a(X,Y)   3 b(X,Y)   4 c(X)   5 d(X)   6 f(X,Y)   7 g(X) EDB
+//   a(X,Y) :- e(X,Y).          a(X,Z) :- b(X,Y), e(Y,Z).      b(X,Y) :- a(X,Y), lt(X,Y).
+//   c(X)   :- g(X), not a(X,X).                               d(X)   :- c(X), not f(X,X).
+//   f(X,Y) :- g(X), g(Y), not c(Y).                           f(X,Z) :- f(X,Y), f(Y,Z).
+// Prints the vector as one decimal digit per predicate, predicate 0 first. Oracle: dl_strata.py (Tarjan +
+// Kahn, written separately from dl.bp's closure-based SCCs).
+fn main() -> i64 {
+  let R = zeros(dl_rs_cells(8, 8, 32));
+  let _ = dl_rs_init(R, 8, 8, 32);
+  let u = 0 - 1;
+  let e = dl_pred(R, 1, 2, 0);
+  let lt = dl_bi(R, 1);
+  let a = dl_pred(R, 3, 2, 1);
+  let b = dl_pred(R, 4, 2, 1);
+  let c = dl_pred(R, 5, 1, 1);
+  let d = dl_pred(R, 6, 1, 1);
+  let f = dl_pred(R, 7, 2, 1);
+  let g = dl_pred(R, 8, 1, 0);
+  let _ = dl_rule(R, a, 0, 1, u, u);
+  let _ = dl_atom(R, e, 0, 0, 1, u, u);
+  let _ = dl_rule(R, a, 0, 2, u, u);
+  let _ = dl_atom(R, b, 0, 0, 1, u, u);
+  let _ = dl_atom(R, e, 0, 1, 2, u, u);
+  let _ = dl_rule(R, b, 0, 1, u, u);
+  let _ = dl_atom(R, a, 0, 0, 1, u, u);
+  let _ = dl_atom(R, lt, 0, 0, 1, u, u);
+  let _ = dl_rule(R, c, 0, u, u, u);
+  let _ = dl_atom(R, g, 0, 0, u, u, u);
+  let _ = dl_atom(R, a, 1, 0, 0, u, u);
+  let _ = dl_rule(R, d, 0, u, u, u);
+  let _ = dl_atom(R, c, 0, 0, u, u, u);
+  let _ = dl_atom(R, f, 1, 0, 0, u, u);
+  let _ = dl_rule(R, f, 0, 1, u, u);
+  let _ = dl_atom(R, g, 0, 0, u, u, u);
+  let _ = dl_atom(R, g, 0, 1, u, u, u);
+  let _ = dl_atom(R, c, 1, 1, u, u, u);
+  let _ = dl_rule(R, f, 0, 2, u, u);
+  let _ = dl_atom(R, f, 0, 0, 1, u, u);
+  let _ = dl_atom(R, f, 0, 1, 2, u, u);
+  let _ = dl_check(R);
+  let v = 0;
+  let p = 0;
+  while p < R[2] {
+    let v = v * 10 + dl_pa(R, p, 2);
+    let p = p + 1;
+    0
+  };
+  v
+}

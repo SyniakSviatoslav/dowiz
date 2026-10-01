@@ -1,0 +1,17 @@
+use "selfhost/std/dl_eval.bp"
+// dl_neg_cycle.bp -- `gate dl_neg_cycle` (row DG8, SPEC-DATALOG-AND-CODEC A-4): negation through
+// recursion has no stratification and must be REFUSED --
+//   p(X) :- q(X), not p(X).        (the `p :- q, not p` shape; q is predicate 0, p is predicate 1)
+// -> stderr `error[E125]: negation inside a cycle -- 1 depends negatively on 1 in the same stratum`,
+// exit 125. Positive twin: dl_strata.bp. Oracle: bench/oracles/dl_neg_cycle.py.
+fn main() -> i64 {
+  let R = zeros(dl_rs_cells(8, 8, 16));
+  let _ = dl_rs_init(R, 8, 8, 16);
+  let u = 0 - 1;
+  let q = dl_pred(R, 1, 1, 0);
+  let p = dl_pred(R, 2, 1, 1);
+  let _ = dl_rule(R, p, 0, u, u, u);
+  let _ = dl_atom(R, q, 0, 0, u, u, u);
+  let _ = dl_atom(R, p, 1, 0, u, u, u);
+  dl_check(R)
+}

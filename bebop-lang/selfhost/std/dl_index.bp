@@ -1,0 +1,186 @@
+use "selfhost/std/dl.bp"
+// selfhost/std/dl_index.bp -- the access paths of the Datalog layer (row DG8): column perms (row indexes
+// sorted by one column, stable merge sort, rebuilt when the relation's version moves) and the dense
+// column index the generated walks read (gen_dl.bp). Split from dl.bp / dl_eval.bp for the 800-line cap.
+
+// ---- column perms: row indexes sorted by one column (stable, bottom-up merge sort) -------------------
+fn dl_merge(db: [i64], po: i64, t: i64, off: i64, c: i64, lo: i64, mid: i64, hi: i64) -> i64 {
+  let i = lo;
+  let j = mid;
+  let k = lo;
+  while k < hi {
+    let ti = if i < mid then 1 else 0;
+    let tj = if j < hi then 1 else 0;
+    let vi = if ti == 1 then db[off + 4 * db[po + i] + c] else 0;
+    let vj = if tj == 1 then db[off + 4 * db[po + j] + c] else 0;
+    let takei = if ti == 1 then (if tj == 1 then (if vi <= vj then 1 else 0) else 1) else 0;
+    let _ = if takei == 1 then (let _ = db[t + k] = db[po + i] in 0) else (let _ = db[t + k] = db[po + j] in 0);
+    let i = i + takei;
+    let j = j + (1 - takei);
+    let k = k + 1;
+    0
+  };
+  0
+}
+fn dl_msort_pass(db: [i64], po: i64, t: i64, off: i64, c: i64, n: i64, w: i64) -> i64 {
+  let lo = 0;
+  while lo < n {
+    let mid = if lo + w < n then lo + w else n;
+    let hi = if lo + 2 * w < n then lo + 2 * w else n;
+    let _ = dl_merge(db, po, t, off, c, lo, mid, hi);
+    let lo = lo + 2 * w;
+    0
+  };
+  let i = 0;
+  while i < n {
+    let _ = db[po + i] = db[t + i];
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn dl_cidx(db: [i64], p: i64, c: i64) -> i64 {
+  let d = dl_d(db, p);
+  let po = db[d + 4 + c];
+  let _ = if db[d + 8 + c] == db[d + 3] then return po else 0;
+  let n = db[d + 2];
+  let off = db[d];
+  let i = 0;
+  while i < n {
+    let _ = db[po + i] = i;
+    let i = i + 1;
+    0
+  };
+  let w = 1;
+  while w < n {
+    let _ = dl_msort_pass(db, po, db[19], off, c, n, w);
+    let w = 2 * w;
+    0
+  };
+  let _ = db[d + 8 + c] = db[d + 3];
+  po
+}
+// dl_clb: first perm position whose row's column c is >= v (strict 0) or > v (strict 1).
+fn dl_clb(db: [i64], off: i64, po: i64, n: i64, c: i64, v: i64, strict: i64) -> i64 {
+  let lo = 0;
+  let hi = n;
+  while lo < hi {
+    let mid = (lo + hi) / 2;
+    let x = db[off + 4 * db[po + mid] + c];
+    let right = if strict == 1 then (if x <= v then 1 else 0) else (if x < v then 1 else 0);
+    let lo = if right == 1 then mid + 1 else lo;
+    let hi = if right == 1 then hi else mid;
+    0
+  };
+  lo
+}
+// ---- dense column index (the generated walk's access path) -------------------------------------------
+// For column c of F_p: positions (row indexes for c = 0, column-perm positions for c >= 1) sorted by
+// the column's value, and rp[v] = the first position whose value is >= v for v in 0..max+1 -- so the
+// rows with value v are positions rp[v] .. rp[v+1], one load each, no search. Column 0 is rebuilt only
+// when the KEY version moves (an in-place keyed replacement, A-7, keeps every key where it was), other
+// columns when the version moves. Values outside 0..cap make the column not dense: dl_range searches.
+fn dl_dense(db: [i64], p: i64, c: i64) -> i64 {
+  let d = dl_d(db, p);
+  let want = if c == 0 then db[d + 22] else db[d + 3];
+  let _ = if db[d + 24 + c] == want then return db[d + 28 + c] else 0;
+  let n = db[d + 2];
+  let off = db[d];
+  let po = if c == 0 then 0 else dl_cidx(db, p, c);
+  let rp = db[d + 23] + c * (db[d + 1] + 2);
+  let lo = if n > 0 then dl_posval(db, off, po, c, 0) else 0;
+  let mx = if n > 0 then dl_posval(db, off, po, c, n - 1) else 0;
+  let ok = (if lo >= 0 then 1 else 0) * (if mx <= db[d + 1] then 1 else 0);
+  let lim = if ok == 1 then mx + 1 else 0 - 1;
+  let _ = if ok == 1 then dl_fill_rp(db, off, po, c, n, rp, lim) else 0;
+  let _ = db[d + 24 + c] = want;
+  let _ = db[d + 28 + c] = lim;
+  lim
+}
+fn dl_posval(db: [i64], off: i64, po: i64, c: i64, i: i64) -> i64 {
+  let ri = if c == 0 then i else db[po + i];
+  db[off + 4 * ri + c]
+}
+fn dl_fill_rp(db: [i64], off: i64, po: i64, c: i64, n: i64, rp: i64, lim: i64) -> i64 {
+  let j = 0;
+  let v = 0;
+  while v <= lim {
+    let j = dl_skip_below(db, off, po, c, n, j, v);
+    let _ = db[rp + v] = j;
+    let v = v + 1;
+    0
+  };
+  0
+}
+fn dl_skip_below(db: [i64], off: i64, po: i64, c: i64, n: i64, j0: i64, v: i64) -> i64 {
+  let j = j0;
+  let go = if j < n then 1 else 0;
+  while go == 1 {
+    let below = if dl_posval(db, off, po, c, j) < v then 1 else 0;
+    let j = j + below;
+    let go = below * (if j < n then 1 else 0);
+    0
+  };
+  j
+}
+// dl_range: the positions of F_p whose column c equals v -- returns lo and leaves hi in db[31]. For
+// c >= 1 positions index dl_cidx(db, p, c); for c = 0 they are row indexes.
+fn dl_range(db: [i64], p: i64, c: i64, v: i64) -> i64 {
+  let d = dl_d(db, p);
+  let lim = dl_dense(db, p, c);
+  let _ = if lim >= 0 then return dl_range_dense(db, d, c, v, lim) else 0;
+  let n = db[d + 2];
+  let off = db[d];
+  let _ = if c == 0 then return dl_range_rows(db, off, n, v) else 0;
+  let po = dl_cidx(db, p, c);
+  let hi = dl_clb(db, off, po, n, c, v, 1);
+  let _ = db[31] = hi;
+  dl_clb(db, off, po, n, c, v, 0)
+}
+fn dl_range_dense(db: [i64], d: i64, c: i64, v: i64, lim: i64) -> i64 {
+  let rp = db[d + 23] + c * (db[d + 1] + 2);
+  let inr = if v >= 0 then (if v < lim then 1 else 0) else 0;
+  let hi = if inr == 1 then db[rp + v + 1] else 0;
+  let lo = if inr == 1 then db[rp + v] else 0;
+  let _ = db[31] = hi;
+  lo
+}
+// dl_range_rows: column 0 without a dense index -- two binary searches over the rows' first cells.
+fn dl_range_rows(db: [i64], off: i64, n: i64, v: i64) -> i64 {
+  let hi = dl_lb0(db, off, n, v, 1);
+  let _ = db[31] = hi;
+  dl_lb0(db, off, n, v, 0)
+}
+fn dl_lb0(db: [i64], off: i64, n: i64, v: i64, strict: i64) -> i64 {
+  let lo = 0;
+  let hi = n;
+  while lo < hi {
+    let mid = (lo + hi) / 2;
+    let x = db[off + 4 * mid];
+    let right = if strict == 1 then (if x <= v then 1 else 0) else (if x < v then 1 else 0);
+    let lo = if right == 1 then mid + 1 else lo;
+    let hi = if right == 1 then hi else mid;
+    0
+  };
+  lo
+}
+// dl_has: 1 when the row at db[key] is in F_p -- the first row whose column 0 is the key's, from the
+// dense index when it is CURRENT, else one inline binary search on column 0 (a relation that keeps
+// changing, like a derived head, would pay an index rebuild per lookup); then a 4-cell compare per row
+// while column 0 still matches.
+fn dl_has(db: [i64], p: i64, key: i64) -> i64 {
+  let d = dl_d(db, p);
+  let off = db[d];
+  let cur = if db[d + 24] == db[d + 22] then 1 else 0;
+  let lo = if cur == 1 then dl_range(db, p, 0, db[key]) else dl_lb0(db, off, db[d + 2], db[key], 0);
+  let hi = if cur == 1 then db[31] else db[d + 2];
+  let hit = 0;
+  let i = lo;
+  while i < hi {
+    let same0 = if db[off + 4 * i] == db[key] then 1 else 0;
+    let hit = if same0 == 1 then (if dl_cmpk(db, off + 4 * i, key, 4) == 0 then 1 else 0) else 0;
+    let i = if hit + (1 - same0) > 0 then hi else i + 1;
+    0
+  };
+  hit
+}

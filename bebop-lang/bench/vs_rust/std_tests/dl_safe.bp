@@ -1,0 +1,37 @@
+use "selfhost/std/dl_eval.bp"
+// dl_safe.bp -- `gate dl_safe`, the positive twin of dl_neg_unsafe.bp (row DG8, A-3): the same rule set
+// with Y bound by a positive atom --
+//   rule 0  s(X)   :- q(X).
+//   rule 1  p(X,Y) :- q(X), q(Y), not r(Y).
+// q = {0..5}, r = {1, 3}: s = q (6 rows), p = q x (q \ r) = 6 * 4 = 24 rows. Prints
+// strata * 1000000 + |s| * 1000 + |p| folded with dl_fold(p). Oracle: bench/oracles/dl_safe.py.
+fn main() -> i64 {
+  let R = zeros(dl_rs_cells(8, 8, 16));
+  let _ = dl_rs_init(R, 8, 8, 16);
+  let u = 0 - 1;
+  let q = dl_pred(R, 1, 1, 0);
+  let r = dl_pred(R, 2, 1, 0);
+  let s = dl_pred(R, 3, 1, 1);
+  let p = dl_pred(R, 4, 2, 1);
+  let _ = dl_rule(R, s, 0, u, u, u);
+  let _ = dl_atom(R, q, 0, 0, u, u, u);
+  let _ = dl_rule(R, p, 0, 1, u, u);
+  let _ = dl_atom(R, q, 0, 0, u, u, u);
+  let _ = dl_atom(R, q, 0, 1, u, u, u);
+  let _ = dl_atom(R, r, 1, 1, u, u, u);
+  let ns = dl_check(R);
+  let caps = [16, 16, 16, 64];
+  let db = zeros(dl_db_cells(R, caps));
+  let _ = dl_db_init(R, db, caps);
+  let i = 0;
+  while i < 6 {
+    let _ = dl_put(db, q, dl_setrow(db, i, 0, 0, 0));
+    let i = i + 1;
+    0
+  };
+  let _ = dl_put(db, r, dl_setrow(db, 1, 0, 0, 0));
+  let _ = dl_put(db, r, dl_setrow(db, 3, 0, 0, 0));
+  let _ = dl_event_end(R, db);
+  let _ = dl_eval_all(R, db);
+  (ns * 1000000 + dl_n(db, s) * 1000 + dl_n(db, p)) * 31 + dl_fold(db, p)
+}

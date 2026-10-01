@@ -1,0 +1,787 @@
+// selfhost/std/dl.bp -- the Datalog rule layer (row DG8; docs/design/SPEC-DATALOG-AND-CODEC-2026-09-28.md
+// Part A). Library only (no main). Rules are DATA (A.3), relations are sorted, deduplicated row blocks
+// (A.2), strata are the Kahn order over the SCC condensation of the predicate graph (A.4), evaluation is
+// semi-naive per stratum (A.5), and an event is propagated through the DIRTY SET (A-7).
+//
+// RULE SET R ([i64], A.3 byte-exact, offsets are cell indexes into R itself):
+//   R[0] version=1  R[1] n_rules  R[2] n_preds  R[3] PREDS  R[4] RULEV  R[5] ATOMS
+//   R[6] n_atoms (builder)  R[7..9] capacities (preds, rules, atoms)  R[10] n_strata (dl_check)
+//   PREDS  4 cells {name_key64, arity, stratum, kind 0 EDB | 1 IDB | 2 builtin}
+//   RULEV  8 cells {head_pred, n_head_args, head_args[4], atom_off, n_atoms}
+//   ATOMS  7 cells {pred, neg 0|1, n_args, args[4]}
+//   an arg is a variable v in 0..15, a constant c >= 0 written dl_c(c) = -(c) - 2, or -1 = unused.
+//   Builtins are predicates of kind 2 whose name_key is the op: 1 lt(A,B) 2 le 3 eq 4 mul(A,B,C) with
+//   C = A*B checked (overflow is trap 125, never a wrap). They are stratum 0 and never materialised.
+//
+// REFUSALS (exit 125, docs/TRAPS.md row 125):
+//   error[E125]: rule <i> unsafe -- variable <v> not bound by a positive atom             (A-3)
+//   error[E125]: negation inside a cycle -- <p> depends negatively on <q> in the same stratum (A-4)
+//   trap 125: datalog fixpoint bound exceeded   -- rounds > 1 + sum of IDB capacities, or a relation
+//                                                  past its declared capacity (its finite domain, A-6)
+//   trap 125: datalog mul overflow              -- mul(A,B,C) whose product does not fit i64
+//
+// DATABASE db ([i64], one flat heap; dl_db_cells sizes it, dl_db_init lays it out):
+//   header 64 cells: 0 P, 1 DESC, 2 free, 3 ENV (16 values + 16 bound flags), 4 PLAN (8), 5 SRC (3 x 8:
+//   kind 0 F | 1 list | 2 F+list, list off, list n), 6 KEY (4 x 8, one probe row per depth), 7 TMP (8),
+//   8 mode 0 collect | 1 exists, 9 found, 10 candmode, 12 collect-without-F-filter, 13 rounds, 14 round
+//   bound, 15 plan length, 16 current rule, 19 merge-sort scratch, 20 max capacity, 21 the mutation flag
+//   (1 = head replacement dropped: dl_*_neg and dagfull.prove step 4 only), 22 a generated walk (gen_dl.bp),
+//   25 the dirty-predicate mask, 26 = 1 when 32..47 / 48..63 hold each stratum's input mask / recursion
+//   flag (dl_eval.bp dl_db_strata, opt-in; 0 = recompute them per event), 27 the 1024-cell table of a
+//   generated walk's variants (key ((r*16 + first + 1)*2 + mode)*2 + cand; 0 = not installed), 28 = 1
+//   while a cand walk reads DELETED rows (its heads go to the delta list, dl_eval.bp dl_inc_nonrec).
+//   DESC 32 cells per predicate: 0 rows 1 cap 2 n 3 version, 4..7 column-index perm per column, 8..11 the
+//   version each perm was built at, 12/13 delta, 14/15 new, 16/17 ins (dirty), 18/19 del (dirty),
+//   20/21 snapshot, 22 key version (moves on insert/delete only, not on an in-place replacement),
+//   23 dense-index base (4 regions of cap + 2), 24..27 the version each was built at, 28..31 its value
+//   bound (-1 = column not dense). Each list is (offset, count); every region holds `cap` rows of 4 cells.
+//
+// Relations live in memory, not yet as store projection nodes: binding them to st_proj_eval needs DG6's
+// `pure` class for the rule fns (BLUEPRINT DG6), which is not built. See the DG8 verdict.
+
+// ---- rule set builder and accessors ----------------------------------------------------------------
+fn dl_rs_cells(maxp: i64, maxr: i64, maxa: i64) -> i64 { 16 + 4 * maxp + 8 * maxr + 7 * maxa }
+fn dl_rs_init(R: [i64], maxp: i64, maxr: i64, maxa: i64) -> i64 {
+  let _ = R[0] = 1;
+  let _ = R[1] = 0;
+  let _ = R[2] = 0;
+  let _ = R[3] = 16;
+  let _ = R[4] = 16 + 4 * maxp;
+  let _ = R[5] = 16 + 4 * maxp + 8 * maxr;
+  let _ = R[6] = 0;
+  let _ = R[7] = maxp;
+  let _ = R[8] = maxr;
+  let _ = R[9] = maxa;
+  let _ = R[10] = 0;
+  0
+}
+fn dl_c(c: i64) -> i64 { 0 - c - 2 }
+fn dl_pa(R: [i64], p: i64, k: i64) -> i64 {
+  let b = R[3];
+  R[b + 4 * p + k]
+}
+fn dl_ra(R: [i64], r: i64, k: i64) -> i64 {
+  let b = R[4];
+  R[b + 8 * r + k]
+}
+fn dl_aa(R: [i64], a: i64, k: i64) -> i64 {
+  let b = R[5];
+  R[b + 7 * a + k]
+}
+fn dl_pred(R: [i64], key: i64, arity: i64, kind: i64) -> i64 {
+  let p = R[2];
+  let b = R[3] + 4 * p;
+  let _ = R[b] = key;
+  let _ = R[b + 1] = arity;
+  let _ = R[b + 2] = 0;
+  let _ = R[b + 3] = kind;
+  let _ = R[2] = p + 1;
+  p
+}
+fn dl_bi(R: [i64], op: i64) -> i64 {
+  let ar = if op == 4 then 3 else 2;
+  dl_pred(R, op, ar, 2)
+}
+fn dl_rule(R: [i64], head: i64, h0: i64, h1: i64, h2: i64, h3: i64) -> i64 {
+  let r = R[1];
+  let b = R[4] + 8 * r;
+  let _ = R[b] = head;
+  let _ = R[b + 1] = dl_pa(R, head, 1);
+  let _ = R[b + 2] = h0;
+  let _ = R[b + 3] = h1;
+  let _ = R[b + 4] = h2;
+  let _ = R[b + 5] = h3;
+  let _ = R[b + 6] = R[6];
+  let _ = R[b + 7] = 0;
+  let _ = R[1] = r + 1;
+  r
+}
+fn dl_atom(R: [i64], pred: i64, neg: i64, a0: i64, a1: i64, a2: i64, a3: i64) -> i64 {
+  let a = R[6];
+  let b = R[5] + 7 * a;
+  let _ = R[b] = pred;
+  let _ = R[b + 1] = neg;
+  let _ = R[b + 2] = dl_pa(R, pred, 1);
+  let _ = R[b + 3] = a0;
+  let _ = R[b + 4] = a1;
+  let _ = R[b + 5] = a2;
+  let _ = R[b + 6] = a3;
+  let _ = R[6] = a + 1;
+  let rb = R[4] + 8 * (R[1] - 1);
+  let _ = R[rb + 7] = R[rb + 7] + 1;
+  a
+}
+fn dl_isb(R: [i64], p: i64) -> i64 { if dl_pa(R, p, 3) == 2 then 1 else 0 }
+fn dl_isidb(R: [i64], p: i64) -> i64 { if dl_pa(R, p, 3) == 1 then 1 else 0 }
+// dl_amask: the variables an atom mentions, as a bitmask.
+fn dl_amask(R: [i64], a: i64) -> i64 {
+  let n = dl_aa(R, a, 2);
+  let m = 0;
+  let k = 0;
+  while k < n {
+    let v = dl_aa(R, a, 3 + k);
+    let m = if v >= 0 then (if v < 16 then m | (1 << v) else m) else m;
+    let k = k + 1;
+    0
+  };
+  m
+}
+// dl_argb: 1 when an argument is bound under `bound` (constants and unused slots always are).
+fn dl_argb(v: i64, bound: i64) -> i64 {
+  if v >= 16 then 0 else (if v >= 0 then ((bound >> v) & 1) else 1)
+}
+
+// ---- messages ------------------------------------------------------------------------------------
+fn dl_puts(o: [i64], p: i64, s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = o[p + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  p + n
+}
+fn dl_putn(o: [i64], p: i64, x: i64) -> i64 {
+  let neg = if x < 0 then 1 else 0;
+  let _ = if neg == 1 then (let _ = o[p] = 45 in 0) else 0;
+  let q = p + neg;
+  let y = if x < 0 then 0 - x else x;
+  let k = 1;
+  let t = y / 10;
+  while t > 0 {
+    let t = t / 10;
+    let k = k + 1;
+    0
+  };
+  let i = k - 1;
+  let t = y;
+  while i >= 0 {
+    let _ = o[q + i] = 48 + (t % 10);
+    let t = t / 10;
+    let i = i - 1;
+    0
+  };
+  q + k
+}
+fn dl_die(o: [i64], p: i64) -> i64 {
+  let _ = o[p] = 10;
+  let _ = sys_write(2, o, p + 1);
+  sys_exit(125)
+}
+fn dl_refuse_unsafe(r: i64, v: i64) -> i64 {
+  let o = zeros(128);
+  let p = dl_puts(o, 0, "error[E125]: rule ");
+  let p = dl_putn(o, p, r);
+  let p = dl_puts(o, p, " unsafe -- variable ");
+  let p = dl_putn(o, p, v);
+  let p = dl_puts(o, p, " not bound by a positive atom");
+  dl_die(o, p)
+}
+fn dl_refuse_negcycle(hp: i64, q: i64) -> i64 {
+  let o = zeros(128);
+  let p = dl_puts(o, 0, "error[E125]: negation inside a cycle -- ");
+  let p = dl_putn(o, p, hp);
+  let p = dl_puts(o, p, " depends negatively on ");
+  let p = dl_putn(o, p, q);
+  let p = dl_puts(o, p, " in the same stratum");
+  dl_die(o, p)
+}
+fn dl_trap_bound() -> i64 {
+  let o = zeros(64);
+  let p = dl_puts(o, 0, "trap 125: datalog fixpoint bound exceeded");
+  dl_die(o, p)
+}
+fn dl_trap_mul() -> i64 {
+  let o = zeros(64);
+  let p = dl_puts(o, 0, "trap 125: datalog mul overflow");
+  dl_die(o, p)
+}
+
+// ---- safety (A-3) ------------------------------------------------------------------------------------
+// dl_pos_mask: variables bound by the positive relational atoms of rule r.
+fn dl_pos_mask(R: [i64], r: i64) -> i64 {
+  let a0 = dl_ra(R, r, 6);
+  let na = dl_ra(R, r, 7);
+  let m = 0;
+  let i = 0;
+  while i < na {
+    let a = a0 + i;
+    let p = dl_aa(R, a, 0);
+    let pos = (1 - dl_aa(R, a, 1)) * (1 - dl_isb(R, p));
+    let m = if pos == 1 then m | dl_amask(R, a) else m;
+    let i = i + 1;
+    0
+  };
+  m
+}
+// dl_mul_out: one pass over the mul atoms -- each whose inputs are bound binds its output.
+fn dl_mul_out(R: [i64], r: i64, bound: i64) -> i64 {
+  let a0 = dl_ra(R, r, 6);
+  let na = dl_ra(R, r, 7);
+  let m = bound;
+  let i = 0;
+  while i < na {
+    let a = a0 + i;
+    let p = dl_aa(R, a, 0);
+    let ismul = dl_isb(R, p) * (if dl_pa(R, p, 0) == 4 then 1 else 0) * (1 - dl_aa(R, a, 1));
+    let ok = ismul * dl_argb(dl_aa(R, a, 3), m) * dl_argb(dl_aa(R, a, 4), m);
+    let z = dl_aa(R, a, 5);
+    let m = if ok == 1 then (if z >= 0 then (if z < 16 then m | (1 << z) else m) else m) else m;
+    let i = i + 1;
+    0
+  };
+  m
+}
+// dl_first_unbound: the first variable among n args at R[base..] that `bound` does not bind, or -1.
+fn dl_first_unbound(R: [i64], base: i64, n: i64, bound: i64) -> i64 {
+  let bad = 0 - 1;
+  let k = 0;
+  while k < n {
+    let v = R[base + k];
+    let bad = if bad < 0 then (if dl_argb(v, bound) == 0 then v else bad) else bad;
+    let k = k + 1;
+    0
+  };
+  bad
+}
+// dl_safe_rule: 0 safe, else 1 with why[0] = rule, why[1] = the first unbound variable (head args first,
+// then each negated atom's args and each builtin's inputs, in atom order).
+fn dl_safe_rule(R: [i64], r: i64, why: [i64]) -> i64 {
+  let a0 = dl_ra(R, r, 6);
+  let na = dl_ra(R, r, 7);
+  let bound = dl_pos_mask(R, r);
+  let it = 0;
+  while it < na {
+    let bound = dl_mul_out(R, r, bound);
+    let it = it + 1;
+    0
+  };
+  let bad = dl_first_unbound(R, R[4] + 8 * r + 2, dl_ra(R, r, 1), bound);
+  let i = 0;
+  while i < na {
+    let a = a0 + i;
+    let p = dl_aa(R, a, 0);
+    let isb = dl_isb(R, p);
+    let nin = if isb == 1 then 2 else (if dl_aa(R, a, 1) == 1 then dl_aa(R, a, 2) else 0);
+    let b2 = dl_first_unbound(R, R[5] + 7 * a + 3, nin, bound);
+    let bad = if bad < 0 then b2 else bad;
+    let i = i + 1;
+    0
+  };
+  let _ = why[0] = r;
+  let _ = why[1] = bad;
+  if bad >= 0 then 1 else 0
+}
+
+// ---- strata (A-4): SCCs by transitive closure, Kahn over the condensation --------------------------------
+// tmp layout (4P cells): dep [0,P), reach [P,2P), rep [2P,3P), scc mask [3P,4P).
+fn dl_deps(R: [i64], tmp: [i64]) -> i64 {
+  let P = R[2];
+  let r = 0;
+  while r < R[1] {
+    let h = dl_ra(R, r, 0);
+    let a0 = dl_ra(R, r, 6);
+    let na = dl_ra(R, r, 7);
+    let i = 0;
+    while i < na {
+      let q = dl_aa(R, a0 + i, 0);
+      let _ = if dl_isb(R, q) == 0 then (let _ = tmp[h] = tmp[h] | (1 << q) in 0) else 0;
+      let i = i + 1;
+      0
+    };
+    let r = r + 1;
+    0
+  };
+  P
+}
+fn dl_close_one(tmp: [i64], P: i64, p: i64) -> i64 {
+  let m = tmp[P + p];
+  let acc = m;
+  let q = 0;
+  while q < P {
+    let acc = if ((m >> q) & 1) == 1 then acc | tmp[P + q] else acc;
+    let q = q + 1;
+    0
+  };
+  let _ = tmp[P + p] = acc;
+  0
+}
+fn dl_closure(tmp: [i64], P: i64) -> i64 {
+  let p = 0;
+  while p < P {
+    let _ = tmp[P + p] = tmp[p];
+    let p = p + 1;
+    0
+  };
+  let it = 0;
+  while it < P {
+    let p = 0;
+    while p < P {
+      let _ = dl_close_one(tmp, P, p);
+      let p = p + 1;
+      0
+    };
+    let it = it + 1;
+    0
+  };
+  0
+}
+fn dl_same_scc(tmp: [i64], P: i64, p: i64, q: i64) -> i64 {
+  if p == q then 1 else (((tmp[P + p] >> q) & 1) * ((tmp[P + q] >> p) & 1))
+}
+// dl_negcheck: 0, or 2 with why[0] = head, why[1] = the negated predicate in its SCC (rule/atom order).
+fn dl_negcheck(R: [i64], tmp: [i64], why: [i64]) -> i64 {
+  let P = R[2];
+  let bad = 0;
+  let r = 0;
+  while r < R[1] {
+    let h = dl_ra(R, r, 0);
+    let a0 = dl_ra(R, r, 6);
+    let na = dl_ra(R, r, 7);
+    let i = 0;
+    while i < na {
+      let a = a0 + i;
+      let q = dl_aa(R, a, 0);
+      let hit = (1 - dl_isb(R, q)) * dl_aa(R, a, 1) * dl_same_scc(tmp, P, h, q) * (1 - bad);
+      let _ = if hit == 1 then (let _ = why[0] = h in let _ = why[1] = q in 0) else 0;
+      let bad = if hit == 1 then 1 else bad;
+      let i = i + 1;
+      0
+    };
+    let r = r + 1;
+    0
+  };
+  if bad == 1 then 2 else 0
+}
+fn dl_rep_of(R: [i64], tmp: [i64], P: i64, p: i64) -> i64 {
+  let rp = p;
+  let j = P - 1;
+  while j >= 0 {
+    let rp = if dl_same_scc(tmp, P, p, j) == 1 then j else rp;
+    let j = j - 1;
+    0
+  };
+  rp
+}
+// dl_ready_scc: 1 when every dependency of the SCC represented by c lies in `done` or in the SCC itself.
+fn dl_ready_scc(tmp: [i64], P: i64, c: i64, done: i64) -> i64 {
+  let own = tmp[3 * P + c];
+  let ext = 0;
+  let p = 0;
+  while p < P {
+    let ext = if tmp[2 * P + p] == c then ext | tmp[p] else ext;
+    let p = p + 1;
+    0
+  };
+  let ok = done | own;
+  if (ext & ok) == ext then 1 else 0
+}
+fn dl_pick_scc(R: [i64], tmp: [i64], P: i64, done: i64) -> i64 {
+  let pick = 0 - 1;
+  let c = P - 1;
+  while c >= 0 {
+    let cand = (if tmp[2 * P + c] == c then 1 else 0) * (1 - dl_isb(R, c)) * (1 - ((done >> c) & 1));
+    let ok = if cand == 1 then dl_ready_scc(tmp, P, c, done) else 0;
+    let pick = if ok == 1 then c else pick;
+    let c = c - 1;
+    0
+  };
+  pick
+}
+// dl_strata: fills PREDS.stratum (builtins 0, every other predicate 1 + the Kahn position of its SCC;
+// ties go to the SCC with the smallest predicate index), sets R[10] = number of strata. 0 ok, 2 refused.
+fn dl_strata(R: [i64], why: [i64], tmp: [i64]) -> i64 {
+  let P = R[2];
+  let i = 0;
+  while i < 4 * P {
+    let _ = tmp[i] = 0;
+    let i = i + 1;
+    0
+  };
+  let _ = dl_deps(R, tmp);
+  let _ = dl_closure(tmp, P);
+  let rc = dl_negcheck(R, tmp, why);
+  let _ = if rc != 0 then return rc else 0;
+  let p = 0;
+  while p < P {
+    let rp = dl_rep_of(R, tmp, P, p);
+    let _ = tmp[2 * P + p] = rp;
+    let _ = tmp[3 * P + rp] = tmp[3 * P + rp] | (1 << p);
+    let pb = R[3] + 4 * p + 2;
+    let _ = R[pb] = 0;
+    let p = p + 1;
+    0
+  };
+  let done = 0;
+  let pos = 0;
+  let go = 1;
+  while go == 1 {
+    let c = dl_pick_scc(R, tmp, P, done);
+    let go = if c >= 0 then 1 else 0;
+    let m = if c >= 0 then tmp[3 * P + c] else 0;
+    let _ = if c >= 0 then dl_set_stratum(R, P, m, pos + 1) else 0;
+    let done = done | m;
+    let pos = pos + go;
+    0
+  };
+  let _ = R[10] = pos;
+  0
+}
+fn dl_set_stratum(R: [i64], P: i64, m: i64, s: i64) -> i64 {
+  let p = 0;
+  while p < P {
+    let pb = R[3] + 4 * p + 2;
+    let _ = if ((m >> p) & 1) == 1 then (let _ = R[pb] = s in 0) else 0;
+    let p = p + 1;
+    0
+  };
+  0
+}
+// dl_check: validate a rule set -- E125 (exit 125) on an unsafe rule or a negation inside a cycle --
+// and stratify it. Returns the number of strata.
+fn dl_check(R: [i64]) -> i64 {
+  let why = zeros(4);
+  let tmp = zeros(4 * R[2] + 4);
+  let r = 0;
+  while r < R[1] {
+    let _ = if dl_safe_rule(R, r, why) == 1 then dl_refuse_unsafe(why[0], why[1]) else 0;
+    let r = r + 1;
+    0
+  };
+  let rc = dl_strata(R, why, tmp);
+  let _ = if rc == 2 then dl_refuse_negcycle(why[0], why[1]) else 0;
+  R[10]
+}
+// dl_srec: 1 when stratum s is recursive (more than one predicate, or a rule whose body names its head).
+fn dl_srec(R: [i64], s: i64) -> i64 {
+  let cnt = 0;
+  let p = 0;
+  while p < R[2] {
+    let cnt = cnt + (if dl_pa(R, p, 2) == s then 1 else 0);
+    let p = p + 1;
+    0
+  };
+  let slf = 0;
+  let r = 0;
+  while r < R[1] {
+    let h = dl_ra(R, r, 0);
+    let hs = if dl_pa(R, h, 2) == s then 1 else 0;
+    let slf = slf | (hs * dl_rule_names(R, r, h));
+    let r = r + 1;
+    0
+  };
+  if cnt > 1 then 1 else slf
+}
+fn dl_rule_names(R: [i64], r: i64, q: i64) -> i64 {
+  let a0 = dl_ra(R, r, 6);
+  let na = dl_ra(R, r, 7);
+  let hit = 0;
+  let i = 0;
+  while i < na {
+    let hit = hit | (if dl_aa(R, a0 + i, 0) == q then 1 else 0);
+    let i = i + 1;
+    0
+  };
+  hit
+}
+
+// ---- the database: layout, sorted row regions, relations ------------------------------------------------
+fn dl_db_cells(R: [i64], caps: [i64]) -> i64 {
+  let P = R[2];
+  let t = 64 + 32 * P + 104;
+  let mx = 0;
+  let p = 0;
+  while p < P {
+    let t = t + 32 * caps[p] + 8;
+    let mx = if caps[p] > mx then caps[p] else mx;
+    let p = p + 1;
+    0
+  };
+  t + mx + 8 + 1024
+}
+fn dl_d(db: [i64], p: i64) -> i64 { db[1] + 32 * p }
+fn dl_db_desc(db: [i64], p: i64, at: i64, cap: i64) -> i64 {
+  let d = dl_d(db, p);
+  let _ = db[d] = at;
+  let _ = db[d + 1] = cap;
+  let _ = db[d + 2] = 0;
+  let _ = db[d + 3] = 0;
+  let c = 0;
+  while c < 4 {
+    let _ = db[d + 4 + c] = at + 4 * cap + c * cap;
+    let _ = db[d + 8 + c] = 0 - 1;
+    let c = c + 1;
+    0
+  };
+  let k = 0;
+  while k < 5 {
+    let _ = db[d + 12 + 2 * k] = at + (8 + 4 * k) * cap;
+    let _ = db[d + 13 + 2 * k] = 0;
+    let k = k + 1;
+    0
+  };
+  let _ = db[d + 22] = 0;
+  let _ = db[d + 23] = at + 28 * cap;
+  let c = 0;
+  while c < 4 {
+    let _ = db[d + 24 + c] = 0 - 1;
+    let _ = db[d + 28 + c] = 0 - 1;
+    let c = c + 1;
+    0
+  };
+  at + 32 * cap + 8
+}
+// dl_db_init: lay db out for rule set R with caps[p] rows per predicate (builtins: 0). The round bound
+// (A-6) is 1 + the sum of the IDB capacities -- each round adds at least one row to a finite domain.
+fn dl_db_init(R: [i64], db: [i64], caps: [i64]) -> i64 {
+  let P = R[2];
+  let _ = db[0] = P;
+  let _ = db[1] = 64;
+  let at = 64 + 32 * P;
+  let _ = db[3] = at;
+  let _ = db[4] = at + 32;
+  let _ = db[5] = at + 40;
+  let _ = db[6] = at + 64;
+  let _ = db[7] = at + 96;
+  let at = at + 104;
+  let bound = 1;
+  let mx = 0;
+  let p = 0;
+  while p < P {
+    let at = dl_db_desc(db, p, at, caps[p]);
+    let bound = bound + dl_isidb(R, p) * caps[p];
+    let mx = if caps[p] > mx then caps[p] else mx;
+    let p = p + 1;
+    0
+  };
+  let _ = db[19] = at;
+  let _ = db[20] = mx;
+  let _ = db[14] = bound;
+  let _ = db[25] = 0;
+  let _ = db[26] = 0;
+  let _ = db[28] = 0;
+  let _ = db[27] = at + mx + 8;
+  let _ = db[2] = at + mx + 8 + 1024;
+  0
+}
+// dl_cmpk: compare the first k cells of the rows at db[a] and db[b]: -1, 0, 1.
+fn dl_cmpk(db: [i64], a: i64, b: i64, k: i64) -> i64 {
+  let c = 0;
+  let i = 0;
+  while i < k {
+    let x = db[a + i];
+    let y = db[b + i];
+    let c = if x < y then 0 - 1 else (if x > y then 1 else 0);
+    let i = if c != 0 then k else i + 1;
+    0
+  };
+  c
+}
+// dl_lb: first row index in [0,n) of the region at off whose k-prefix is >= key's (strict 0) or > (strict 1).
+fn dl_lb(db: [i64], off: i64, n: i64, key: i64, k: i64, strict: i64) -> i64 {
+  let lo = 0;
+  let hi = n;
+  while lo < hi {
+    let mid = (lo + hi) / 2;
+    let c = dl_cmpk(db, off + 4 * mid, key, k);
+    let right = if strict == 1 then (if c <= 0 then 1 else 0) else (if c < 0 then 1 else 0);
+    let lo = if right == 1 then mid + 1 else lo;
+    let hi = if right == 1 then hi else mid;
+    0
+  };
+  lo
+}
+fn dl_sfind(db: [i64], off: i64, n: i64, key: i64) -> i64 {
+  let i = dl_lb(db, off, n, key, 4, 0);
+  if i < n then (if dl_cmpk(db, off + 4 * i, key, 4) == 0 then i else 0 - 1) else 0 - 1
+}
+fn dl_cp4(db: [i64], dst: i64, src: i64) -> i64 {
+  let _ = db[dst] = db[src];
+  let _ = db[dst + 1] = db[src + 1];
+  let _ = db[dst + 2] = db[src + 2];
+  let _ = db[dst + 3] = db[src + 3];
+  0
+}
+// dl_sins: insert the row at db[key] into the sorted region (off, count at db[nc], cap rows); 1 = new.
+fn dl_sins(db: [i64], off: i64, nc: i64, cap: i64, key: i64) -> i64 {
+  let n = db[nc];
+  let i = dl_lb(db, off, n, key, 4, 0);
+  let dup = if i < n then (if dl_cmpk(db, off + 4 * i, key, 4) == 0 then 1 else 0) else 0;
+  let _ = if dup == 1 then return 0 else 0;
+  let _ = if n >= cap then dl_trap_bound() else 0;
+  let j = 4 * n - 1;
+  while j >= 4 * i {
+    let _ = db[off + j + 4] = db[off + j];
+    let j = j - 1;
+    0
+  };
+  let _ = dl_cp4(db, off + 4 * i, key);
+  let _ = db[nc] = n + 1;
+  1
+}
+// dl_sdel: remove the row equal to db[key] from the sorted region; 1 = it was there.
+fn dl_sdel(db: [i64], off: i64, nc: i64, key: i64) -> i64 {
+  let n = db[nc];
+  let i = dl_sfind(db, off, n, key);
+  let _ = if i < 0 then return 0 else 0;
+  let j = 4 * i;
+  while j < 4 * (n - 1) {
+    let _ = db[off + j] = db[off + j + 4];
+    let j = j + 1;
+    0
+  };
+  let _ = db[nc] = n - 1;
+  1
+}
+// dl_app: append a row to an unsorted list (dirty sets).
+fn dl_app(db: [i64], off: i64, nc: i64, cap: i64, key: i64) -> i64 {
+  let n = db[nc];
+  let _ = if n >= cap then dl_trap_bound() else 0;
+  let _ = dl_cp4(db, off + 4 * n, key);
+  let _ = db[nc] = n + 1;
+  1
+}
+// relation F_p: insert / delete bump the version (which invalidates the column perms).
+fn dl_rins(db: [i64], p: i64, key: i64) -> i64 {
+  let d = dl_d(db, p);
+  let r = dl_sins(db, db[d], d + 2, db[d + 1], key);
+  let _ = db[d + 3] = db[d + 3] + r;
+  let _ = db[d + 22] = db[d + 22] + r;
+  r
+}
+fn dl_rdel(db: [i64], p: i64, key: i64) -> i64 {
+  let d = dl_d(db, p);
+  let r = dl_sdel(db, db[d], d + 2, key);
+  let _ = db[d + 3] = db[d + 3] + r;
+  let _ = db[d + 22] = db[d + 22] + r;
+  r
+}
+fn dl_rhas(db: [i64], p: i64, key: i64) -> i64 {
+  let d = dl_d(db, p);
+  if dl_sfind(db, db[d], db[d + 2], key) >= 0 then 1 else 0
+}
+fn dl_n(db: [i64], p: i64) -> i64 {
+  let d = dl_d(db, p);
+  db[d + 2]
+}
+// dl_row: the db offset of row i of F_p.
+fn dl_row(db: [i64], p: i64, i: i64) -> i64 {
+  let d = dl_d(db, p);
+  db[d] + 4 * i
+}
+// dl_setrow: write (x0..x3) into db's probe row TMP+4 and return its offset.
+fn dl_setrow(db: [i64], x0: i64, x1: i64, x2: i64, x3: i64) -> i64 {
+  let t = db[7] + 4;
+  let _ = db[t] = x0;
+  let _ = db[t + 1] = x1;
+  let _ = db[t + 2] = x2;
+  let _ = db[t + 3] = x3;
+  t
+}
+
+// dl_fold: FNV-1a 64 over (n, rows) of F_p -- the relation's identity for gates.
+fn dl_fold(db: [i64], p: i64) -> i64 {
+  let d = dl_d(db, p);
+  let n = db[d + 2];
+  let off = db[d];
+  let h = 0 - 3750763034362895579;
+  let h = (h ^ n) * 1099511628211;
+  let i = 0;
+  while i < 4 * n {
+    let h = (h ^ db[off + i]) * 1099511628211;
+    let i = i + 1;
+    0
+  };
+  h
+}
+// dl_same: 1 when F_p is cell-for-cell identical in two databases.
+fn dl_same(a: [i64], b: [i64], p: i64) -> i64 {
+  let da = dl_d(a, p);
+  let dbb = dl_d(b, p);
+  let n = a[da + 2];
+  let _ = if n != b[dbb + 2] then return 0 else 0;
+  let oa = a[da];
+  let ob = b[dbb];
+  let ok = 1;
+  let i = 0;
+  while i < 4 * n {
+    let ok = if a[oa + i] == b[ob + i] then ok else 0;
+    let i = i + 1;
+    0
+  };
+  ok
+}
+// dl_copy_rel: F_p of src into dst (same rule set, same caps).
+fn dl_copy_rel(src: [i64], dst: [i64], p: i64) -> i64 {
+  let ds = dl_d(src, p);
+  let dd = dl_d(dst, p);
+  let n = src[ds + 2];
+  let os = src[ds];
+  let od = dst[dd];
+  let i = 0;
+  while i < 4 * n {
+    let _ = dst[od + i] = src[os + i];
+    let i = i + 1;
+    0
+  };
+  let _ = dst[dd + 2] = n;
+  let _ = dst[dd + 3] = dst[dd + 3] + 1;
+  let _ = dst[dd + 22] = dst[dd + 22] + 1;
+  0
+}
+
+// ---- environment (the join's variable cells, db[3]) ----------------------------------------------------------------------------------
+fn dl_val(db: [i64], v: i64) -> i64 {
+  let E = db[3];
+  if v >= 0 then db[E + v] else (if v == 0 - 1 then 0 else 0 - v - 2)
+}
+fn dl_isbnd(db: [i64], v: i64) -> i64 {
+  let E = db[3];
+  if v >= 0 then db[E + 16 + v] else (if v == 0 - 1 then 0 else 1)
+}
+fn dl_unbind(db: [i64], m: i64) -> i64 {
+  let E = db[3];
+  let v = 0;
+  let x = m & 65535;
+  while x != 0 {
+    let _ = if (x & 1) == 1 then (let _ = db[E + 16 + v] = 0 in 0) else 0;
+    let v = v + 1;
+    let x = x >> 1;
+    0
+  };
+  0
+}
+// dl_bind1: one argument against one cell value; returns the bit it newly bound, 0, or -1 on mismatch.
+fn dl_bindc(v: i64, x: i64) -> i64 {
+  if v == 0 - 1 then 0 else (if x == 0 - v - 2 then 0 else 0 - 1)
+}
+fn dl_bind1(db: [i64], v: i64, x: i64) -> i64 {
+  let E = db[3];
+  let _ = if v < 0 then return dl_bindc(v, x) else 0;
+  let bd = db[E + 16 + v];
+  let same = if db[E + v] == x then 0 else 0 - 1;
+  let _ = if bd == 1 then return same else 0;
+  let _ = db[E + v] = x;
+  let _ = db[E + 16 + v] = 1;
+  1 << v
+}
+// dl_bindv: n args at R[base..] against the row at db[row..]; the mask it bound, or -1 (nothing left bound).
+fn dl_bindv(R: [i64], db: [i64], base: i64, n: i64, row: i64) -> i64 {
+  let m = 0;
+  let bad = 0;
+  let k = 0;
+  while k < n {
+    let b = dl_bind1(db, R[base + k], db[row + k]);
+    let bad = if b < 0 then 1 else bad;
+    let m = if b > 0 then m | b else m;
+    let k = if bad == 1 then n else k + 1;
+    0
+  };
+  let _ = if bad == 1 then dl_unbind(db, m) else 0;
+  if bad == 1 then 0 - 1 else m
+}
+fn dl_bind(R: [i64], db: [i64], a: i64, row: i64) -> i64 {
+  dl_bindv(R, db, R[5] + 7 * a + 3, dl_aa(R, a, 2), row)
+}
+
