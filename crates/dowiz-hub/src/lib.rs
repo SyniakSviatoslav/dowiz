@@ -55,6 +55,9 @@ pub mod tz;
 pub mod token;
 pub mod forget;
 pub mod lang;
+// DG10: crypto-shredding for new logs; off by default (see Cargo.toml `shred`).
+#[cfg(feature = "shred")]
+pub mod shred;
 #[cfg(test)] mod store_tests; // W-AUDIT S1/S2: named corrupted cells in the store beneath the hub
 
 // The order log itself, split by what each part is about. Private modules:

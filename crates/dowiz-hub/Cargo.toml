@@ -26,3 +26,17 @@ sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dowiz-core = { path = "../dowiz-core" }
+
+[features]
+# `shred` (DG10, default OFF): crypto-shredding for new logs -- `src/shred.rs`,
+# a per-person key table and `seal_field`/`open_field` over AES-256-GCM.
+# WHAT IT PULLS: no crate. The cipher is `dowiz_core::pq::aes_gcm` (hand-rolled,
+# KAT-gated against GCM spec TC15), and `dowiz-core` is already a dependency
+# above with zero dependencies of its own; it compiles `pq` unconditionally
+# (it has no `pq` feature to enable), so this feature only decides whether the
+# `shred` module is compiled. VERIFY the default graph stays clean:
+#   cargo tree -e no-dev > a; cargo tree -e no-dev --features shred > b; diff a b   # empty
+#   cargo tree -e no-dev | grep -c aes                                            # 0
+# (the second is 0 because no `aes*` crate exists anywhere in the graph; the
+# diff is the check that measures something.)
+shred = []
