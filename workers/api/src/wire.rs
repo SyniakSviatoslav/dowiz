@@ -13,53 +13,13 @@
 //! `Call::from_worker` in, `Reply::into_response` out, with the same status, headers and bytes
 //! the worker constructors would have produced (content types copied from worker 0.8.5).
 
+mod fields;
+mod upgrade;
+pub use fields::Fields;
+use upgrade::Upgrade;
+
 use serde::Serialize;
 use worker::{Error, Method, Result, Url};
-
-/// Header names are case-insensitive; stored lower-case, set replaces.
-#[derive(Clone, Debug, Default)]
-pub struct Fields(Vec<(String, String)>);
-
-impl Fields {
-    pub fn new() -> Self {
-        Self::default()
-    }
-    #[cfg(test)]
-    pub fn has(&self, name: &str) -> Result<bool> {
-        Ok(self.get(name)?.is_some())
-    }
-    pub fn append(&mut self, name: &str, value: &str) -> Result<()> {
-        self.0.push((name.to_ascii_lowercase(), value.to_string()));
-        Ok(())
-    }
-    #[cfg(test)]
-    pub fn delete(&mut self, name: &str) -> Result<()> {
-        let n = name.to_ascii_lowercase();
-        self.0.retain(|(k, _)| *k != n);
-        Ok(())
-    }
-    pub fn get(&self, name: &str) -> Result<Option<String>> {
-        let n = name.to_ascii_lowercase();
-        Ok(self.0.iter().find(|(k, _)| *k == n).map(|(_, v)| v.clone()))
-    }
-    pub fn set(&mut self, name: &str, value: &str) -> Result<()> {
-        let n = name.to_ascii_lowercase();
-        self.0.retain(|(k, _)| *k != n);
-        self.0.push((n, value.to_string()));
-        Ok(())
-    }
-    /// The platform's headers, for a response that leaves as a `worker::Response`.
-    pub fn into_worker(&self) -> Result<worker::Headers> {
-        let h = worker::Headers::new();
-        for (k, v) in &self.0 {
-            h.append(k, v)?;
-        }
-        Ok(h)
-    }
-    pub fn entries(&self) -> impl Iterator<Item = &(String, String)> {
-        self.0.iter()
-    }
-}
 
 /// An incoming request, owned and native.
 #[derive(Clone, Debug)]
@@ -194,24 +154,10 @@ pub struct Reply {
     headers: Fields,
     /// `None` is worker's `ResponseBody::Empty`, which is not the same as zero bytes.
     body: Option<Vec<u8>>,
-    /// A platform response that cannot be read into bytes and rebuilt: the
-    /// object's `101 Switching Protocols`, whose WebSocket lives on the JS
-    /// object itself. Rebuilding it from status + headers + body dropped the
-    /// socket and the runtime answered 500 to every `/api/live` upgrade
-    /// (live on b1f777b3, 2026-10-02, found by the flows gate). It is handed
-    /// back untouched by `into_response`.
+    /// A `101` from a Durable Object, kept untouched (see `upgrade.rs`).
     upgrade: Upgrade,
 }
 
-/// The untouched platform response of an upgrade (see `Reply::upgrade`).
-#[derive(Clone, Default)]
-pub struct Upgrade(std::rc::Rc<std::cell::RefCell<Option<worker::Response>>>);
-
-impl std::fmt::Debug for Upgrade {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(if self.0.borrow().is_some() { "Upgrade(socket)" } else { "Upgrade(none)" })
-    }
-}
 
 impl Reply {
     fn with(content_type: Option<&str>, body: Option<Vec<u8>>) -> Self {
