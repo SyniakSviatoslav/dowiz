@@ -194,6 +194,23 @@ pub struct Reply {
     headers: Fields,
     /// `None` is worker's `ResponseBody::Empty`, which is not the same as zero bytes.
     body: Option<Vec<u8>>,
+    /// A platform response that cannot be read into bytes and rebuilt: the
+    /// object's `101 Switching Protocols`, whose WebSocket lives on the JS
+    /// object itself. Rebuilding it from status + headers + body dropped the
+    /// socket and the runtime answered 500 to every `/api/live` upgrade
+    /// (live on b1f777b3, 2026-10-02, found by the flows gate). It is handed
+    /// back untouched by `into_response`.
+    upgrade: Upgrade,
+}
+
+/// The untouched platform response of an upgrade (see `Reply::upgrade`).
+#[derive(Clone, Default)]
+pub struct Upgrade(std::rc::Rc<std::cell::RefCell<Option<worker::Response>>>);
+
+impl std::fmt::Debug for Upgrade {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.borrow().is_some() { "Upgrade(socket)" } else { "Upgrade(none)" })
+    }
 }
 
 impl Reply {
@@ -202,7 +219,7 @@ impl Reply {
         if let Some(t) = content_type {
             let _ = headers.set("content-type", t);
         }
-        Reply { status: 200, headers, body }
+        Reply { status: 200, headers, body, upgrade: Upgrade::default() }
     }
     pub fn from_json<B: Serialize>(value: &B) -> Result<Self> {
         match serde_json::to_string(value) {
@@ -256,8 +273,11 @@ impl Reply {
             let _ = headers.append(&k, &v);
         }
         let status = res.status_code();
+        if status == 101 {
+            return Ok(Reply { status, headers, body: None, upgrade: Upgrade(std::rc::Rc::new(std::cell::RefCell::new(Some(res)))) });
+        }
         let body = Some(res.bytes().await?);
-        Ok(Reply { status, headers, body })
+        Ok(Reply { status, headers, body, upgrade: Upgrade::default() })
     }
     pub fn with_status(mut self, status: u16) -> Self {
         self.status = status;
@@ -287,6 +307,9 @@ impl Reply {
 
     /// The Workers edge: the response the worker constructors would have built.
     pub fn into_response(self) -> Result<worker::Response> {
+        if let Some(res) = self.upgrade.0.borrow_mut().take() {
+            return Ok(res);
+        }
         let mut b = worker::Response::builder().with_status(self.status);
         for (k, v) in self.headers.entries() {
             b = b.with_header(k, v)?;
