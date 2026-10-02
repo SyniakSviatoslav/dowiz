@@ -1,5 +1,8 @@
 # The six fundamental bottlenecks — every technique, numbers here, and where orders of magnitude are and are not
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** BN1-BN8 APPROVED by the operator on 2026-10-02 and copied as Wave BN into `docs/design/ROADMAP-2026-09-22.md` with their state: BN1A IN FLIGHT (dataflow 38 → 23 in its tree), BN7 IN FLIGHT (`kv_get_10k` 526 ns; the bebop-wasm size ratchet RED, control build owed), BN1B/BN2/BN3/BN4/BN5/BN6/BN8 QUEUED in the order §9 gives. Nothing below was changed.
+
+
 Lane W-BOTTLENECK, 2026-10-01 → 2026-10-02 (sessions 3e1fb658, 748e569d), model Fable. A RESEARCH lane: no product code changed,
 no deploys, no git writes. Tree read at `01783eb4` (`/root/dowiz`; the first session read `b29310c4`). Builds on
 `docs/research/2026-10-01-cloudflare-free-cost-and-rust-web.md` (the cost map — not redone here; its rows are cited as A1–A12, C0–C6, R1–R6),

@@ -1,5 +1,8 @@
 # Architecture evolution: where dowiz stands against the four post-microservice directions, and what to do about it
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** The plan's rows at `9ace8f28`: **P1** the command surface on `HubImages` — `one-image` fell 3 → 0 on 2026-09-22 (place/advance/assign in one turn); the full closed command enum with `fold_step` is live row **BN4** (QUEUED, approved 2026-10-02) · **P2 DONE** (IndexedDB outbox + `idempotency::guard`, 2026-09-22) · **P3 DONE** (`clock` 93 → 0) · **P4 DONE** (`tools/gen-vocab`) · **P5 DONE** (rebuild-and-diff law 8; the outbox drained by the object's alarm, `92f96221`) · **P6 CRDTs AGAINST** stands; the re-entry condition (an offline POS till) is now a row — **PRRO** (approved queue) — so the stack lane's re-examination is owed there · **P7 AGAINST** stands · **P8 DECIDED 2026-10-01: deleted** (`b1865597`, operator) · **P9 DONE** (D1 removed 2026-09-22; this banner continues the document fixes). Scores in §2 were measured on 2026-09-22 and not re-scored. Nothing below was changed.
+
+
 **Date:** 2026-09-22. **HEAD read:** `c5c640cc` ("extra.rs is gone", 2026-09-22).
 **Tree state at time of reading:** 15 files modified and uncommitted (`git status --short | wc -l` = 15;
 `git diff --stat` = 74 insertions, 135 deletions). Among them `workers/api/src/hubstore.rs` (+4/−14) and
@@ -252,7 +255,7 @@ Each item: the defect or capability, the change, the cost, the risk, the CHECK. 
 **AGAINST** are recommended against, with the reason. Costs are estimates (hypotheses) unless a number is
 cited; nothing below was timed.
 
-### P1. Move the order decision INTO the object — a command surface on `HubImages`
+### P1. Move the order decision INTO the object — a command surface on `HubImages` — **[2026-10-02: one-image 3 → 0 landed 09-22; the command enum = live row BN4, QUEUED]**
 
 - **Defect answered:** the promo/total defect (§2, row 2); the two-image saga with a logged-only
   compensation (`storefront.rs` "could NOT release … after a failed placement"); the `append_for` GET→
@@ -277,7 +280,7 @@ cited; nothing below was timed.
   reservation, no 500. (c) `stock::stranded()` empty after a forced failure of the log append
   (a chaos toggle behind a test-only header).
 
-### P2. An offline WRITE queue for the courier and the console, on the idempotency layer that exists
+### P2. An offline WRITE queue for the courier and the console, on the idempotency layer that exists — **[2026-10-02: DONE 09-22]**
 
 - **Capability unlocked:** a courier in a basement or a tram taps "picked up"; the tap survives. This is
   the operator's direction 1 where it is genuinely warranted, and it needs **no CRDT**: a courier's
@@ -300,7 +303,7 @@ cited; nothing below was timed.
   event in the log (read via `/api/owner/history`), no duplicate; a second replay of the same key answers
   the stored response (rule 1 of `idempotency.rs`).
 
-### P3. Inject the clock (and the id) into every handler — the `Ctx` from MODULAR §3, built small
+### P3. Inject the clock (and the id) into every handler — the `Ctx` from MODULAR §3, built small — **[2026-10-02: DONE, clock 93 → 0]**
 
 - **Defect answered:** `5b6c680f`, `486a5c38` (§2 row 3). Also the reason services cannot be tested at
   a chosen time.
@@ -311,7 +314,7 @@ cited; nothing below was timed.
 - **CHECK:** `tools/gates/clock.sh` — count of `Date::now` outside the allow-list, baseline 27,
   ratchet to 0.
 
-### P4. Generate the client vocabulary from the kernel — the cheap half of direction 4
+### P4. Generate the client vocabulary from the kernel — the cheap half of direction 4 — **[2026-10-02: DONE, tools/gen-vocab]**
 
 - **Defect answered:** `a18025d4` (fourteen copies), the kit's fourth money copy, every future copy.
 - **Change:** a build step (`tools/gen-vocab`, Rust, reads `dowiz_core::OrderStatus` and the money
@@ -321,7 +324,7 @@ cited; nothing below was timed.
 - **CHECK:** `tools/gates/vocab.sh` red when the generated file is stale; grep for hand-written
   `'DELIVERED'` string sets outside `vocab.js`, ratchet to 0.
 
-### P5. Make event-driven a property: rebuild-and-diff, and an outbox
+### P5. Make event-driven a property: rebuild-and-diff, and an outbox — **[2026-10-02: DONE; outbox on the DO alarm `92f96221`]**
 
 - **Defect answered:** the class `253e1ece` closed for bookings is still open across images (stock vs
   log); a notify failure after a landed append is lost (`storefront.rs:1238`, verified by reading only).
@@ -337,7 +340,7 @@ cited; nothing below was timed.
 - **CHECK:** F28 four-way fold (no-SQL §7) becomes a gate; a forced notify failure leaves one row in
   `outbox` and the next alarm drains it (native test of the pure drain decision + one live probe).
 
-### P6. CRDTs — **AGAINST**, except where named
+### P6. CRDTs — **AGAINST**, except where named — **[2026-10-02: AGAINST stands; re-entry condition = row PRRO]**
 
 - **Why against:** a Durable Object is one writer per venue (§1.4), so within a venue there are no
   concurrent writers to merge; `DECISIONS.md:369` already fences CRDT out of money and orders; the
@@ -354,7 +357,7 @@ cited; nothing below was timed.
   the rule when the merged fold drives stock negative (refuse-at-fold vs. compensate). That is a
   decision, not a library. Revisit at the first venue with a second writer; not before.
 
-### P7. A general effect system in Rust — **AGAINST**; the `services/` split plus P3 buys most of it
+### P7. A general effect system in Rust — **AGAINST**; the `services/` split plus P3 buys most of it — **[2026-10-02: AGAINST stands]**
 
 - **What it would cost here:** the Worker's I/O is `!Send` wasm-bindgen futures behind
   `worker::Request/Response`; an effect interpreter means either (a) an `async_trait` `Ports` object
@@ -373,7 +376,7 @@ cited; nothing below was timed.
   (`over=41, worst=1985`); add a `tests.rs`-per-area presence gate under `services/` and the `clock.sh`
   ratchet from P3.
 
-### P8. The twin server — decide, do not drift
+### P8. The twin server — decide, do not drift — **[DECIDED 2026-10-01: deleted, `b1865597`]**
 
 - **Defect:** 73 routes and 10,491 lines implement the same surface outside CI (§1.1). Every rule fixed
   in the Worker since `a18886d4` is either re-fixed there or silently wrong there.
@@ -383,7 +386,7 @@ cited; nothing below was timed.
   product line; that is the operator's, not this document's.
 - **CHECK:** a `ci.yml` line either way.
 
-### P9. Documents and leftovers — the "last commit" the gate promised
+### P9. Documents and leftovers — the "last commit" the gate promised — **[2026-10-02: DONE]**
 
 - Fix `CLAUDE.md`'s FSM path; correct no-SQL §6a's ratchet numbers to the baseline; either build the
   D1 removal the gate promised (`no-sql.sh:16-18`; 103 handles, `migrate.rs`, the binding, `migrations/`)

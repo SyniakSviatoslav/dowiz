@@ -1,5 +1,8 @@
 # Cloudflare Free: cost architecture, IndexedDB, server rendering, all-Rust web — research report
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Approved and placed on 2026-10-02: A1 = BN2, A5 = BN1, A7 = BN4 (Wave BN); A2+A3+A4+A6 one CRITICAL row, A8 gated on BN8, A9 and the code half of A10 approved (the zone rule is OPERATOR ACTION OA-2); A11 Workers Builds is subsumed by R3; R1 is the standing "stay Free" decision; R2 DONE `b1865597`; R3 waits for OA-1 (the CF token as a GitHub secret); R4 → R5 → R6 follow R3. All in `docs/design/ROADMAP-2026-09-22.md`. Nothing below was changed.
+
+
 Lane W-FRESEARCH, 2026-10-01, session 3e1fb658, model Fable. A research lane: no product code changed.
 
 Operator decisions this report is bound by (2026-10-01): stay on Workers FREE; `tools/native-spa-server`

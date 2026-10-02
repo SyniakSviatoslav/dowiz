@@ -1,5 +1,8 @@
 # BLUEPRINT: bebop onto the DAG runtime — lanes, rows, numbers, the switch (2026-09-28)
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Row status at `main 9ace8f28` (every commit checked with `git log` on 2026-10-02): **DG1 DONE** `0f745db5` (13.3 s → 0.79 s) · **DG2 DONE** `d36a32cb` · **DG3 DONE** `36f72b69` (4.25 MB → 543 KB) · **DG4 DONE** `9ac97c69` + `c4c9f1e9` (memo image, edit wall 124 ms) · **DG5 DONE** `64d2d5cd` (store projections); the dagfull store arm GREEN in W-DGSWITCH's tree (5/5 readers 4/4) · **DG6 DONE** `01783eb4` (`bebop.bin 8a0b4325`, `Dag.lean` `sorryAx` 0) · **DG7 DONE** `c496c2d9` (= DW7) · **DG8 DONE** `8300b51b`; the DG8 → `st_proj` binding is in W-DGSWITCH · **DG9 DONE** `9361706b`; hand-back (Cargo `block = []` feature instead of `--cfg bw_block`) = live row N0.2 · **DG10 hub side DONE** `b29310c4` (`shred`, default off); the Worker wiring = live row DG10w/DW8 (approved queue) · **§5 switch checklist IN FLIGHT** (W-DGSWITCH, 2026-10-02: s5a sweep 389/389 + compile 418/418 `edit_ms_med` 128, s5b store 5/5 GREEN; owed: bebop-wasm `gate.sh` s5c, Lean s5d, battery-post ×2; `typecheck census: 2 findings` new, unattributed) · **DG17 DONE** `c4c9f1e9` (124 ms) · **DG21 DONE** (AES-GCM KAT, w-dg10 step 2) · **DG22 DONE** `01783eb4` · **DG18, DG19, DG23 QUEUED** as live row WAVE-M (no lane yet) · **DG24** blocked (no board) · **DG20, DG25, DG26 WITHDRAWN** `7cdcf0ab` (C-1) · **DW1-DW5 QUEUED** (DW1 = BN3's second half; DW2's `personal` rule landed with DG8) · **DW6 DONE-UNMERGED** (W-TELEM) · **DW7 DONE** · **DW8** hub half done, Worker half queued · **DW9** = Wave M DG19, SIMD half withdrawn · **§9 `KEEP_GENS = 16`** measured under WAVE-M. The headings below carry the same marks; no text was removed.
+
+
 **Status.** Implementation blueprint, lane W-SPEC (docs only, tree `f334e5cb`). It turns
 `docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md` (**RT**) and `docs/design/SPEC-DATALOG-AND-CODEC-2026-09-28.md`
 (**DC**) into rows a coding lane (Opus or Haiku, ≤ ~200-600 lines each) executes without re-deciding
@@ -45,7 +48,7 @@ code, every refusal test has a positive twin, mutation proofs undone in the next
 
 ## 1. Wave 0 — foundations (independent lanes; can also land after the jump; none is a second runtime)
 
-### DG1 — O(1) fn-name table in the compiler (R §6 row 1)
+### DG1 — O(1) fn-name table in the compiler (R §6 row 1) — **[2026-10-02: DONE `0f745db5`]**
 
 - **Owns:** `bebop-lang/bebop.bp` (`find_fn` at `:6819`, `emit_bl_call` at `:1388`, the `fntab` name zone
   writers in `compile_program_offs` `:7490-7560`); `bebop-lang/tools/check_abi.py` (`--fntab` zone map, if a
@@ -66,7 +69,7 @@ code, every refusal test has a positive twin, mutation proofs undone in the next
 - **Gates:** `bebop-lang/tools/chain.sh` (no `--codegen`), `bebop-lang/bench/vs_rust/invariants.sh`,
   `bebop-lang/docs/PERF.md` rows. **Lines EST:** ~50. **Model:** Opus (compiler internals).
 
-### DG2 — one node key, four readers (RT §2; R §10 item 1)
+### DG2 — one node key, four readers (RT §2; R §10 item 1) — **[2026-10-02: DONE `d36a32cb`]**
 
 - **Owns:** `+bebop-lang/selfhost/prelude/nodekey.bp` (new: `key_frame`, `key64`, `key256`);
   `+crates/bebop-store/src/nodekey.rs` (new); `+crates/bebop-wasm/src/nodekey.rs` (new) + `oracle.py`
@@ -81,7 +84,7 @@ code, every refusal test has a positive twin, mutation proofs undone in the next
 - **Gates:** `crates/bebop-wasm/gate.sh`; `bebop-lang/bench/vs_rust/std_golden.sh` `gate nodekey`.
   **Lines EST:** ~60 × 4. **Model:** Haiku (mechanical, spec-exact).
 
-### DG3 — KV v2 byte packing across four readers (R §6 row 4; memory `dowiz-hub-seven-phases`, phase 4b)
+### DG3 — KV v2 byte packing across four readers (R §6 row 4; memory `dowiz-hub-seven-phases`, phase 4b) — **[2026-10-02: DONE `36f72b69`]**
 
 - **Owns:** `bebop-lang/selfhost/std/kv.bp` (`kv_snapshot :52`, a `VERSION` cell in the root as evlog v2 does
   at `crates/bebop-store/src/evlog.rs:24-33`); `crates/bebop-store/src/kv.rs` (`load :87`, `put :164`,
@@ -106,7 +109,7 @@ frozen sweep binaries committed under `bebop-lang/bench/golden/dag-pre-<rev>/` (
 compile(bebop.bp)`. Both L1 and L2 read RT §2 (the key) and RT §4 (the memo image) — the "40-line spec main
 writes first" of R §8.2 is those two sections.
 
-### DG4 — L1 compiler: per-fn nodes, PI emission, relocations, link, `<out>.dag` (RT §2.3, §4, §5)
+### DG4 — L1 compiler: per-fn nodes, PI emission, relocations, link, `<out>.dag` (RT §2.3, §4, §5) — **[2026-10-02: DONE `9ac97c69` + `c4c9f1e9`]**
 
 - **Owns:** `bebop-lang/bebop.bp` — `cli_compile :8545`, `cli_check :8676`, `compile_program_offs :7490`,
   `emit_bl :1023`, `emit_bl_call :1388`, the `FNVAL` pair emitter (A16, `:2106` `emit_call_fn` area) and the
@@ -130,7 +133,7 @@ writes first" of R §8.2 is those two sections.
   **Lines EST:** ~600 (replaces the ~250-line becache/driver block, touches three emitters; R §8.2).
   **Model:** Opus.
 
-### DG5 — L2 store: projection nodes, `fold_step`, anchor verify, Rust twin, wasm reader (RT §6)
+### DG5 — L2 store: projection nodes, `fold_step`, anchor verify, Rust twin, wasm reader (RT §6) — **[2026-10-02: DONE `64d2d5cd`; store arm in W-DGSWITCH]**
 
 - **Owns:** `bebop-lang/selfhost/prelude/store.bp` (`st_proj_eval`, `st_proj_put`, `PROJTAB` at superblock
   cell 12, `anc` at cell 9, `st_open_verify_all`; `st_reopen_verify :176`); `bebop-lang/selfhost/std/kv.bp`
@@ -151,7 +154,7 @@ writes first" of R §8.2 is those two sections.
   `+bebop-lang/bench/vs_rust/dagfull.sh store`, `cd crates/bebop-store && cargo test`, `cd crates/dowiz-hub && cargo test`.
   **Lines EST:** ~500 bebop + ~300 Rust. **Model:** Opus.
 
-### DG6 — L3 scheduler + `dagfull` + `pure` refusal + `Dag.lean` (RT §3, §7, §8, §9)
+### DG6 — L3 scheduler + `dagfull` + `pure` refusal + `Dag.lean` (RT §3, §7, §8, §9) — **[2026-10-02: DONE `01783eb4`]**
 
 - **Owns:** `+bebop-lang/selfhost/prelude/sched.bp` (new); `bebop-lang/selfhost/std/pool.bp` (becomes a client);
   `+bebop-lang/bench/vs_rust/dagfull.sh` + `dagfull.prove.sh` (new); `bebop-lang/tools/arch_check.py` (a
@@ -181,7 +184,7 @@ writes first" of R §8.2 is those two sections.
 
 ## 3. Wave 2 — rules and blocks (after the switch; three lanes)
 
-### DG7 — columnar catalogue block in `dowiz-hub` (R §6 row 5; DC §B.4) — dowiz row DW7 mirrors it
+### DG7 — columnar catalogue block in `dowiz-hub` (R §6 row 5; DC §B.4) — dowiz row DW7 mirrors it — **[2026-10-02: DONE `c496c2d9`]**
 
 - **Owns:** `+crates/dowiz-hub/src/block/{mod,schema,encode,decode,view,tests}.rs` (new, each ≤ 300 lines);
   `crates/dowiz-hub/src/stock.rs` (`bom_of :1393` reads the `bom` block when present; JSON path kept for
@@ -201,7 +204,7 @@ writes first" of R §8.2 is those two sections.
   `tools/gates/float-money.sh`, `tools/gates/dataflow.sh` (baseline 38 may only fall). **Lines EST:** ~250 Rust
   + tests. **Model:** Haiku (spec-exact codec) — Opus if the `bom_of` seam fights back.
 
-### DG8 — the Datalog rule layer (DC Part A; R §12.1, §12.3)
+### DG8 — the Datalog rule layer (DC Part A; R §12.1, §12.3) — **[2026-10-02: DONE `8300b51b`; `st_proj` binding in W-DGSWITCH]**
 
 - **Owns:** `+bebop-lang/selfhost/std/dl.bp` (new: relations, semi-naive engine, strata), `+bebop-lang/selfhost/std/gen_dl.bp`
   (new, generator in `gen_gb.bp`'s shape), `bebop-lang/bench/vs_rust/std_tests/dl_*.bp`, `bebop-lang/bench/oracles/dl_*.py`,
@@ -219,7 +222,7 @@ writes first" of R §8.2 is those two sections.
   `bebop-lang/tools/builtin_surface.py` unchanged (DC A-1). **Lines EST:** ~200 engine + ~150 generator + ~120
   Lean + oracles. **Model:** Opus.
 
-### DG9 — codec round-trip gate and the block twins (DC §B.6)
+### DG9 — codec round-trip gate and the block twins (DC §B.6) — **[2026-10-02: DONE `9361706b`; hand-back = row N0.2]**
 
 - **Owns:** `+bebop-lang/selfhost/std/block.bp` (new: reader/writer twin, `gate block_rt`, `block_neg`,
   `block_money_neg`, `block_schema`); `+crates/bebop-wasm/src/block.rs` (new) + `oracle.py` (`--block`,
@@ -238,7 +241,7 @@ writes first" of R §8.2 is those two sections.
 
 ## 4. Wave 3 — synergy rows (dowiz side unless said) and crypto-shredding
 
-### DG10 — crypto-shredding for new logs + AEAD KAT (R §11.1; RT §12 C-4)
+### DG10 — crypto-shredding for new logs + AEAD KAT (R §11.1; RT §12 C-4) — **[2026-10-02: hub DONE `b29310c4`; Worker = row DG10w]**
 
 - **Owns:** `+crates/dowiz-hub/src/shred.rs` (new: per-person key table object, `seal_field`/`open_field`,
   `forget = drop key + append Forgotten`); `crates/dowiz-core/src/pq/aes_gcm.rs` (REUSED, unchanged: AES-256-GCM,
@@ -259,7 +262,7 @@ writes first" of R §8.2 is those two sections.
   `tools/gates/float-money.sh`, `cargo tree -e no-dev | grep -c aes` == 0 on the default graph.
   **Lines EST:** ~200 Rust. **Model:** Opus (crypto seam; never fake a primitive — `CLAUDE.md`).
 
-### DW1 — browser replica as a graph subscriber (R §10 item 2)
+### DW1 — browser replica as a graph subscriber (R §10 item 2) — **[2026-10-02: QUEUED, = BN3 second half]**
 
 - **Owns:** `workers/api/public/lib/replica.js`, `workers/api/src/hubdo.rs` (`changes_since :120` answers
   changed NODE keys + blocks), `workers/api/src/hubdo/menu.rs` (block bodies), `crates/bebop-wasm/src/lib.rs`
@@ -271,7 +274,7 @@ writes first" of R §8.2 is those two sections.
   block). **Mutation proof:** the scratch corruption. **Gates:** `design` gate, `sw-shell`, `ui-reach`.
   **Lines EST:** ~200 Worker + ~120 JS. **Model:** Haiku.
 
-### DW2 — personal-data labels as the `personal(N)` rule (R §10 item 3; DC A.6 row 5)
+### DW2 — personal-data labels as the `personal(N)` rule (R §10 item 3; DC A.6 row 5) — **[2026-10-02: QUEUED; `personal` rule landed in DG8]**
 
 - **Owns:** `workers/api/src/privacy/registry.rs` (emits the `holds_person` EDB), `tools/gates/personal-data.sh`
   (+ `.prove.sh`, `.baseline`: the count becomes `personal(N) ∧ ¬registered(N)` over the declared-edge table),
@@ -284,7 +287,7 @@ writes first" of R §8.2 is those two sections.
   (companion Phase 4 gate). **Mutation proof:** the prove. **Gates:** `personal-data`, `unreached`.
   **Lines EST:** ~150. **Model:** Haiku.
 
-### DW3 — gates as graph queries (R §10 item 4)
+### DW3 — gates as graph queries (R §10 item 4) — **[2026-10-02: QUEUED]**
 
 - **Owns:** `tools/gates/dataflow.sh`, `tools/gates/one-image.sh`, `tools/gates/ui-reach.sh`,
   `tools/gates/unreached.py`, `tools/gates/learn.sh` — each rewritten to query `+workers/api/src/hubdo/edges.rs`'s table (via a
@@ -295,7 +298,7 @@ writes first" of R §8.2 is those two sections.
   baseline), and its `.prove.sh` fires; total gate shell falls (3,809 lines today, `wc -l tools/gates/*.sh`).
   **Mutation proof:** the proves. **Lines EST:** ~80 per gate. **Model:** Haiku.
 
-### DW4 — money conservation and stock-vs-orders as per-edge invariants (R §10 item 7)
+### DW4 — money conservation and stock-vs-orders as per-edge invariants (R §10 item 7) — **[2026-10-02: QUEUED after the switch]**
 
 - **Owns:** `workers/api/src/rebuild.rs` (`stale`, `stranded`, `unheld` as projection nodes whose output must
   be the empty set, evaluated on the dirty set, not nightly), `e2e/gates/conservation.mjs` (the nine laws
@@ -305,7 +308,7 @@ writes first" of R §8.2 is those two sections.
   nightly run unchanged as the cross-check. **Mutation proof:** skip one law → red. **Gates:** `conservation`.
   **Lines EST:** ~60 per law. **Model:** Haiku.
 
-### DW5 — provenance "why is this number X" (R §10 item 8)
+### DW5 — provenance "why is this number X" (R §10 item 8) — **[2026-10-02: QUEUED]**
 
 - **Owns:** `+workers/api/src/hubdo/provenance.rs` (new: walk the edge table backwards from a node, answer input
   node keys + generations), `workers/api/src/mcp.rs` (one read-only tool), `workers/api/public/admin/more.js`
@@ -313,7 +316,7 @@ writes first" of R §8.2 is those two sections.
   nodes (test); the MCP tool is in the catalogue (P16's `mcp-coverage` when it lands). **Lines EST:** ~80.
   **Model:** Haiku.
 
-### DW6 — per-node CPU/bytes accounting (R §10 item 9)
+### DW6 — per-node CPU/bytes accounting (R §10 item 9) — **[2026-10-02: DONE-UNMERGED, W-TELEM]**
 
 - **Owns:** `tools/evals/collect/cf.mjs` (+ `cf.test.mjs`): `cf.node_cpu_us` per `/fold/*` route from the
   analytics API where it splits; `workers/api/src/hubdo.rs` (a per-node `cost_us` counter in the health
@@ -322,7 +325,7 @@ writes first" of R §8.2 is those two sections.
 
 ---
 
-## 5. The switch checklist (RT §10; R §8.3-8.4) — commands, in order, on the merged Wave-1 tree
+## 5. The switch checklist (RT §10; R §8.3-8.4) — commands, in order, on the merged Wave-1 tree — **[2026-10-02: IN FLIGHT, W-DGSWITCH]**
 
 All heavy steps through the slot; `$PRE` = the pre-jump commit; `$OUT` = a scratch dir under the session
 scratchpad. Every step prints a NUMBER that goes in the merge commit message.
@@ -368,14 +371,14 @@ the verdict — R §8.3's "360" is re-derived, not copied (RT §12 C-5).
 
 | Row | Not verified (R §14) | Command that settles it | Acceptance = a number written into the row |
 |---|---|---|---|
-| **DG17** | the per-fn memo's real gain on `bebop.bp` | DG4's `+bebop-lang/bench/vs_rust/dagfull.sh compile` on `bebop.bp`: cold, one-line edit, cold again; `md5sum` equal; through `bebop-lang/tools/slot.sh` | `edit_ms_med` ≤ 200 and both outputs' md5 equal (this IS DG4's acceptance; the row exists so the number is recorded in `bebop-lang/docs/PERF.md` `selfcompile_edit_wall`) |
-| **DG18** | the cause of the superlinear compile (exponent 1.85 MEASURED, loop HYPOTHESIS) | instrument `compile_fn_at` with `clock_ms()` per fn in a scratch copy of `bebop.bp`; plot ms vs fn index and vs call count | a fitted exponent per phase quoted; DG1's acceptance confirms or refutes the `fntab` scan hypothesis |
-| **DG19** | the dowiz `orders_state` fold time on the live 5,830-cell log | `/fold/rebuild` wall on the QA hub (`qa-durres.dowiz.org`, Wave F F7) before and after R1 — R1 is landed; measure now | ms quoted, both arms |
-| **DG20** | wasm SIMD inside a real Worker (measured under node 22 only) | deploy the R §12.3 probe crate (the research lane's scratch crate bdag-kern, not in the tree) as an owner-gated `/fold/probe-simd` route on the QA hub; time with `performance.now()`; remove after | ns per kernel in the Worker vs node; the DG25 decision reads this |
-| **DG21** | AEAD for crypto-shredding | DG10: `cd crates/dowiz-core && cargo test --features pq aes_gcm` (KAT), then DG10's tests | KAT byte-exact; corrects R §14's "no AEAD" |
-| **DG22** | the Lean confluence theorem (designed, not written) | DG6: `cd bebop-lang/formal && lake build` through the slot; `grep -c sorryAx` | rc 0, count 0 |
-| **DG23** | B6's 1.00x scan | `bebop-lang/ROADMAP.md` B6 step 3 (a) as written; the DAG scheduler measured compute-bound tasks only | the number, whatever it is |
-| **DG24** | any number on the Box (Raspberry Pi class) | the same probes pinned `-C target-cpu=cortex-a76` when a board exists | none until a board exists (recorded so it is not forgotten) |
+| **DG17** | the per-fn memo's real gain on `bebop.bp` | DG4's `+bebop-lang/bench/vs_rust/dagfull.sh compile` on `bebop.bp`: cold, one-line edit, cold again; `md5sum` equal; through `bebop-lang/tools/slot.sh` | `edit_ms_med` ≤ 200 and both outputs' md5 equal (this IS DG4's acceptance; the row exists so the number is recorded in `bebop-lang/docs/PERF.md` `selfcompile_edit_wall`) | **[2026-10-02: DONE `c4c9f1e9`]**
+| **DG18** | the cause of the superlinear compile (exponent 1.85 MEASURED, loop HYPOTHESIS) | instrument `compile_fn_at` with `clock_ms()` per fn in a scratch copy of `bebop.bp`; plot ms vs fn index and vs call count | a fitted exponent per phase quoted; DG1's acceptance confirms or refutes the `fntab` scan hypothesis | **[2026-10-02: QUEUED, WAVE-M]**
+| **DG19** | the dowiz `orders_state` fold time on the live 5,830-cell log | `/fold/rebuild` wall on the QA hub (`qa-durres.dowiz.org`, Wave F F7) before and after R1 — R1 is landed; measure now | ms quoted, both arms | **[2026-10-02: QUEUED, WAVE-M]**
+| **DG20** | wasm SIMD inside a real Worker (measured under node 22 only) | deploy the R §12.3 probe crate (the research lane's scratch crate bdag-kern, not in the tree) as an owner-gated `/fold/probe-simd` route on the QA hub; time with `performance.now()`; remove after | ns per kernel in the Worker vs node; the DG25 decision reads this | **[2026-10-02: WITHDRAWN `7cdcf0ab`]**
+| **DG21** | AEAD for crypto-shredding | DG10: `cd crates/dowiz-core && cargo test --features pq aes_gcm` (KAT), then DG10's tests | KAT byte-exact; corrects R §14's "no AEAD" | **[2026-10-02: DONE]**
+| **DG22** | the Lean confluence theorem (designed, not written) | DG6: `cd bebop-lang/formal && lake build` through the slot; `grep -c sorryAx` | rc 0, count 0 | **[2026-10-02: DONE `01783eb4`]**
+| **DG23** | B6's 1.00x scan | `bebop-lang/ROADMAP.md` B6 step 3 (a) as written; the DAG scheduler measured compute-bound tasks only | the number, whatever it is | **[2026-10-02: QUEUED, WAVE-M]**
+| **DG24** | any number on the Box (Raspberry Pi class) | the same probes pinned `-C target-cpu=cortex-a76` when a board exists | none until a board exists (recorded so it is not forgotten) | **[2026-10-02: blocked, no board]**
 
 ---
 

@@ -1,5 +1,8 @@
 # The kitchen role (роль кухні): who, what screen, what permissions, what workflow
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Row status at `9ace8f28`: K0-K8, K10, K12 DONE (`2d652dfc` kitchen hub, `c9ccbfad` kitchen access, `yield` 45 hits); K11 = live row A3; **K9, K13, K14, K15 OPEN → approved 2026-10-02 as Wave N2-C** in `docs/design/ROADMAP-2026-09-22.md`. Nothing below was changed.
+
+
 Research, 2026-09-26. READ-ONLY; nothing in the tree was changed. Every code claim below was
 checked against `/root/dowiz` at HEAD `92219a57` (the working tree's half-finished `crates/dowiz-hub`
 split is ignored; `caps.rs` and `stock.rs` were read with `git show HEAD:`). The inventory DATA MODEL

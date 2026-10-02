@@ -1,5 +1,8 @@
 # CORE-ROADMAP INDEX — the one navigation root for all dowiz/bebop2 planning (2026-07-17)
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** This index points at `ROADMAP.md`, which has been history (not status) since 2026-09-22. The live entry point is `docs/design/ROADMAP-2026-09-22.md` (NEXT section dated 2026-10-02). Every P-number and blueprint this index cross-references is July-2026 planning for an architecture with no code on `main`; each of those blueprints now carries its own dated STATUS banner saying where its theme went. Kept unchanged (operator 2026-10-02: no deletions).
+
+
 > **Read [`ROADMAP.md`](ROADMAP.md) first** — the chronological master roadmap and canonical
 > "what's the status right now" entry point (2026-07-20). This file is the detail layer beneath
 > it: the full P-number/blueprint cross-reference table. `ROADMAP.md` tells you WHEN and WHAT

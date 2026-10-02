@@ -1,5 +1,8 @@
 # ebills.al → dowiz: what the fiscal platform exposes, read-only, and what it would take to bring the venue's dine-in orders into one hub with one inventory
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** B7: import eBills → dowiz is live; the write path was built (`docs/design/EBILLS-WRITE-PATH-2026-09-24.md`) and is **off** (`workers/api/src/fiscal/mod.rs` `SEND_ENABLED = false`, operator 2026-09-24 — do not flip without a new explicit instruction). Before it could ever be armed: D34 tips/comps as fiscal lines (`fiscal/ebills_body.rs`, Wave N1-B) and LE-19 the poller's narrowest role (N4.6). Nothing below was changed.
+
+
 **Date:** 2026-09-22. **HEAD read:** `b949528e` ("dine-in: an order placed at a table", 2026-09-22).
 **Account used:** the operator's own `ebills.al` login, from `/root/.ebills_account` (sourced; the password never
 left the shell's environment and appears in no command line, file or log). **Tenant:** one business, one point of

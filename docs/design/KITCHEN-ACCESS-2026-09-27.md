@@ -1,5 +1,8 @@
 # What the kitchen reaches in the hub (2026-09-27)
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Merged `c9ccbfad` (W-KACCESS); the kitchen hub itself `2d652dfc`. Open kitchen rows K9/K13/K14/K15 + ST-A3/ST-A9/ST-P3 are Wave N2-C in `docs/design/ROADMAP-2026-09-22.md`. Nothing below was changed.
+
+
 Lane W-KACCESS. Operator, 2026-09-26: "роль кухні має мати доступ до більшості ііч хаба, окрім тих
 які непотрібні, наприклад payments, загальна аналітика і тд" -- the kitchen role reaches MOST of
 the hub, except what it does not need: payments and money settings, the venue's general (revenue)

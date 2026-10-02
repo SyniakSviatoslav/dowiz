@@ -1,5 +1,8 @@
 # The top of the pyramid: forecasting, franchise, retention, fintech, academy — what exists, what crosses a red line, the shape that does not, and whether Albania is a dozen venues or a Balkan SaaS
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** A September-2026 blueprint whose rows were absorbed by the live roadmap: anything from it still open is a row in `docs/design/ROADMAP-2026-09-22.md` (NEXT, dated 2026-10-02 — Wave BN, the approved queue, Wave N0-N4), under the id the inventory `docs/research/2026-10-02-open-task-inventory.md` gave it. Nothing below was changed; nothing was archived.
+
+
 **Date:** 2026-09-23. **HEAD read:** `339f325f`. **Status:** research blueprint, read-only lane; no code
 was changed. Every code claim below names a file:line or the command that produced it; every market or
 legal number names a URL. Numbers that could not be read are in §8, not silently rounded.

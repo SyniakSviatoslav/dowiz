@@ -1,5 +1,8 @@
 # ebills.al — the write path: what `POST /api/sales` is, as the SPA builds it, from evidence
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Built, then switched off the same day by the operator (`SEND_ENABLED = false`; import-only). Standing decision in `docs/design/ROADMAP-2026-09-22.md`. D34 (tips as fiscal lines) must land before anyone asks to arm it. Nothing below was changed.
+
+
 **Date:** 2026-09-24. **Lane:** research, read-only. **Parent:** `BLUEPRINT-EBILLS-INTEGRATION-2026-09-22.md`
 (§1 platform, §2 the `close-shift` incident, §5 impossible-without-a-write, §6 risks, §8 the 2026-09-23
 corrections). This document exists so that a later build lane can implement a sender without guessing a

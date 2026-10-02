@@ -1,5 +1,8 @@
 # SPEC: semi-finished products (напівфабрикати / ПФ) — a tree of tech cards, 2026-09-29
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** LANDED: ПФ as a multi-level recipe tree `d24e6da2`, second pass `d4bff908` (importer creates real ПФ, batches), third `a7fcbd4d` (a sale from a ready batch stamped at what the ledger books); the rebuild path still re-folds the all-raw BOM only = live row LE-4 (N4.6). Nothing below was changed.
+
+
 **Status.** Design for lane W-PF (tree `/root/lanes/w-pf` at main `c62cebbe`), written BEFORE the code from the
 operator's request (verbatim in the lane card) and the code as it stands. Every path below exists in the tree
 unless written `+like/this.rs` (created by this lane). Numbers are MEASURED where a command is quoted, else DERIVED

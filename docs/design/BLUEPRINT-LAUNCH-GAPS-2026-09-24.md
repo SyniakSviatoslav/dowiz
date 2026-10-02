@@ -1,5 +1,8 @@
 # Seven launch gaps: what the tree says, what the world says, and what each one costs to close
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Wave F status at `9ace8f28` (the row table in `docs/design/ROADMAP-2026-09-22.md` carries a status column since 2026-10-02): **DONE** F1 `8a9995c6`, F3 `c0262881`, F6 `c25e4ae2`+`b965858f`, F7, F9 `4dcbc0e1`, F12, F14, F18 `92f96221`+`d7279037`, F19 · **PARTIAL** F2 (templates dir missing), F4 (manual Wolt entry `af80d9af`; webhook blocked externally, mock → N1-C), F20 (→ R6) · **OPEN, approved 2026-10-02** F5 (N1-C), F8/F10/F11/F13 (N1-A, after BN1), F15 (N3-A), F21 (N3-B) · **OPERATOR** F16 (OA-3: the keypair), F17 (waits for F15+F16; no PQ claim before). §6.4 is still the F16 runbook. Nothing below was changed.
+
+
 **Date:** 2026-09-24. **HEAD read:** `b154b97c` ("fix: the 7bd2881b..0dd8a6d3 features, walked as the owner and
 the waiter", 2026-09-24 10:52). **Method:** read-only on the code; no build, no login, no write to any live
 system. Every claim about the tree cites `file:line` as read at this HEAD; every external claim cites a URL read

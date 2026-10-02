@@ -1,5 +1,8 @@
 # Stack and dependencies: seven groups of proposed crates and patterns, and one claim about bebop, tested against this tree
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** D1 (this audit) DONE; D2-D5 DONE (sw-shell 0, `minor_units`, `KINDS`/gen-vocab, `unreached` 0 `827f7902`); D6 dead-code OPEN (61 hits on 2026-10-02 → Wave N3-B). Dependencies since: the offline `deps-audit` gate (`553abec7`), a dated ignore for wasmtime RUSTSEC-2026-0316 that **expires 2026-10-14** — live row N0.0 upgrades `agent-adapters` past it (URGENT), N4.3 upgrades the legacy crates' advisories (`kernel/`, `mesh-adapter/`, `llm-adapters/` are kept, operator 2026-10-02). Nothing below was changed.
+
+
 **Date:** 2026-09-22. **HEAD read:** `7b0c9871` ("roadmap: one short entry point", 2026-09-22 23:30).
 **Tree state at time of reading:** one untracked file in `docs/design/` (the ebills lane's blueprint); nothing
 else in `docs/design/` modified. The POS lane's `BLUEPRINT-POS-THE-ROOM-2026-09-22.md`, which

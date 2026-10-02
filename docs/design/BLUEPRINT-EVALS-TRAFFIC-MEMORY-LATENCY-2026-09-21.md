@@ -1,5 +1,8 @@
 # Blueprint — evals: traffic, memory, latency, and the quality of a prediction
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** §9 status: `evals-nightly.yml` exists and runs; the `traffic.mjs` baseline run and the ETA backtest were not found in the tree (live row LE-20, Wave N4.6); the nightly soak is live row R6 (approved queue, from a GitHub job). Nothing below was changed.
+
+
 **2026-09-21.** The document the [verification pyramid](./BLUEPRINT-VERIFICATION-PYRAMID-2026-09-21.md)
 §4 promised. The pyramid answers *is it correct*. This answers the other half:
 **is it affordable, is it fast, and are its predictions any good** — and it

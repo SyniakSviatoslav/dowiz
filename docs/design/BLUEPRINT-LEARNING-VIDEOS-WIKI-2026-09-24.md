@@ -1,5 +1,8 @@
 # In-app learning, lesson videos in three languages, and an internal wiki: what OpenMontage is, what this box can produce, and the plan
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Status: 13 lessons published, one **English** version only (operator 2026-09-27; no ru cuts); `44b33c9d` made the lessons filmable on the QA hub; 33 films still due and O22a/O22b not filmed = live row LE-3 (Wave N4.6). Nothing below was changed.
+
+
 **Date:** 2026-09-24. **HEAD read:** `5abeb0ac` ("bebop-wasm: the decide fixtures' .log images were eaten by
 *.log in .gitignore", 2026-09-24 17:50). **Tree state:** clean (`git status --short | wc -l` = 0, measured).
 **Method.** Read-only on the tree; no code edit, no git write, no deploy. `measured` means a command was run on

@@ -1,5 +1,8 @@
 # CRM, consent, loyalty and erasure: what a customer is in this tree, what may be written about them, what may be sent to them, and how they are forgotten
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Phase C is **LANDED**: C1/C2 `52df6b97`, C3 `c8e82907` (forget in one turn; the every-store half is P2 → DG10w), C4 aliases (142 hits), C5 the stamp card only (`no-scoring` 0; operator 2026-09-24), C6 campaigns (`send_now`). Open neighbours: P4/P5/P7 rights and export (N2-A), D24/D25 verify (N4.6). Nothing below was changed.
+
+
 **Date:** 2026-09-22. **HEAD read:** `7b0c9871` ("roadmap: one short entry point", 2026-09-22); the tree
 moved from `b949528e` to `7b0c9871` while this was written, by a commit that touches only
 `docs/design/ROADMAP.md` and its entry point.

@@ -1,3 +1,5 @@
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Superseded twice: on 2026-07-17 by the sovereign roadmap (its named successor `MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` no longer exists — it was inlined into `docs/design/ROADMAP.md` on 2026-07-20 per `docs/design/CORE-ROADMAP-INDEX.md`), and on 2026-09-22 by `docs/design/ROADMAP-2026-09-22.md`, which is the only entry point for status. The MVP it describes shipped in a different shape: one Worker + one Durable Object per venue on Cloudflare Free, no SQL (`no-sql` gate 0), Phases A-C of the live roadmap all LANDED by 2026-10-02. Kept unchanged below (operator 2026-10-02: no deletions, no archive move).
+
 > **SUPERSEDED (2026-07-17)** — see `docs/design/MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md`
 > (canonical roadmap, phases P01–P30) and `docs/design/CORE-ROADMAP-INDEX.md` +
 > `docs/design/CORE-ROADMAP-2026-07-17/` (the Layer A–I execution structure). This document is

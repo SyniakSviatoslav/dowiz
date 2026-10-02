@@ -1,5 +1,8 @@
 # Menu, ingredients, stock in/out, batches and consumption analytics — research and plan
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Row status: R4/R7 DONE `b6f42cbd` (cost at placement, stock checkpoint); A10 lots/expiry DONE; A2, A4-A8, A11-A14 analytics DONE in part (`93396cbf`, `d4bff908`) — per-row verification is live row N4.6; **A3 variance valued, A9 days of cover, P3 `set_clock` at the remaining writes → Wave N2-C** (approved 2026-10-02). Nothing below was changed.
+
+
 Date: 2026-09-26. Read-only analysis of `/root/dowiz` at HEAD (the uncommitted `crates/dowiz-hub/src/hub/` split does not touch
 `stock.rs`, `stock/cost.rs`, `recipe.rs` or the owner routes; every path below was read from the working copy, which equals
 HEAD for those files). Every claim marked **verified** was read in code at the cited line; anything else is marked

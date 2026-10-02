@@ -1,5 +1,8 @@
 # Blueprint — modular service architecture in one repository
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** A September-2026 blueprint whose rows were absorbed by the live roadmap: anything from it still open is a row in `docs/design/ROADMAP-2026-09-22.md` (NEXT, dated 2026-10-02 — Wave BN, the approved queue, Wave N0-N4), under the id the inventory `docs/research/2026-10-02-open-task-inventory.md` gave it. Nothing below was changed; nothing was archived.
+
+
 **2026-09-21.** A plan to restructure dowiz into services with contracts,
 inside the single repository it already has, and to put a hard ceiling on file
 size so that the decisions inside a file can be tested.

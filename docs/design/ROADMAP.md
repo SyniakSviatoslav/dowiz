@@ -1,5 +1,8 @@
 # dowiz — Master Roadmap (fully merged, single file)
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Second banner, two levels down from status now: the 2026-09-22 note below already says to read `docs/design/ROADMAP-2026-09-22.md` first; on 2026-10-02 that file gained a NEXT section with every open row (Wave BN, the approved queue, Wave N0-N4) and corrected status cells. The P01-P56 architecture narrated here (rusqlite nodes, dtn7/BPv7, QUIC, pgrust, Astro) has 0 code under `workers/` and `crates/` at `9ace8f28`; `tools/native-spa-server` was deleted on 2026-10-01 (`b1865597`). This 5,568-line file stays as the merged archive of the nineteen July documents — unchanged, not archived (operator 2026-10-02).
+
+
 > **SUPERSEDED FOR STATUS, 2026-09-22. Read `ROADMAP-2026-09-22.md` first.**
 >
 > This file's own "current live status" section is dated **2026-07-20**, and everything it says

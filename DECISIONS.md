@@ -1,5 +1,8 @@
 # DECISIONS — dowiz/bebop
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** The open sub-questions D0-D16 below rule on the July-2026 design; no live row names them, and the decisions that bind the product today (fiscal send off, no post-quantum claim, stay on Free, no deletions, Fable for every lane, one English film) are the "Standing decisions" table in `docs/design/ROADMAP-2026-09-22.md`. The CRDT fence at line 369 is still in force (re-entry: an offline POS till — now the PRRO row). Nothing below was changed.
+
+
 > Operator-confirmed red-line decisions. Source of truth alongside `MANIFESTO.md`.
 > Date: 2026-07-12. Status: AUTHORITATIVE.
 

@@ -1,5 +1,8 @@
 # Blueprint — no SQL: bebop, Rust, wasm and nothing else
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** DONE: D1, its binding, 9 migrations and `migrate.rs` were deleted on 2026-09-22 after the legacy seed was proved spent; the `no-sql` gate holds 0 (`.prepare(`, `.d1(`, bindings, migration files). bebop as the store: DG1-DG10 LANDED, the switch in W-DGSWITCH. Nothing below was changed.
+
+
 **2026-09-21, operator directive.** D1 is removed. Twenty-nine relational
 tables and roughly thirty indexes move into bebop-store images held in Durable
 Objects. Nothing in this system writes or reads SQL afterwards.

@@ -1,5 +1,8 @@
 # Blueprint: everything on the Cloudflare FREE plan — where it breaks, and what makes it fit
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Every FT row is now a live row under another id (inventory §4 duplicates), and the operator approved all of them on 2026-10-01/02: **FT13** instruments → **BN8** (QUEUED; the W-TELEM lab is done-unmerged) · **FT1** catalogue off the Worker → **BN1** (= A5; BN1A IN FLIGHT, dataflow 38 → 23 in its tree; BN1B QUEUED) · **FT2 DONE** (`92f96221`, `d7279037`: one cron left) · **FT3** photos to R2 → **BN2** (+ **A9** interim, approved) · **FT4/FT5** login + nightly in the object → **A8** (gated on BN8's probe) · **FT6/FT7/FT8** → **A3/A2/A4** (CRITICAL, after the DAG) · **FT9** static root → **BN2** · **FT10** stays deferred (durability) · **FT11** client cache → **BN3** · **FT12** nothing to do. The 10 ms kill numbers in §2 are from 2026-09-24/26 and have not been re-measured; BN8 is what will. Nothing below was changed; the headings carry the same marks.
+
+
 Date: 2026-09-26. Lane FREE (research, read-only: nothing built, deployed or committed).
 Question from the operator: make EVERYTHING work for free, now, on the Workers Free plan,
 instead of moving to Workers Paid.
@@ -196,7 +199,7 @@ adds to `tools/evals/collect/cf.mjs` (today: `cf.worker_requests_day`, `cf.worke
 `cf.do_response_bytes_day`). Rows are in priority order; FT13 is first in execution order
 because the instrument precedes the change.
 
-### FT13 — Instruments before changes (S)
+### FT13 — Instruments before changes (S) — **[2026-10-02: = BN8, QUEUED]**
 
 - **Problem.** No gate today distinguishes a cron kill from a traffic kill, counts KV writes,
   or reads the object split. `cf.worker_errors_day` folds kills into errors.
@@ -213,7 +216,7 @@ because the instrument precedes the change.
 - **Risk.** The 1-week query window on this account; the collector already handles it.
 - **Gate.** Each new metric appears in the next nightly eval with a baseline.
 
-### FT1 — Stop shipping the catalogue to the Worker (L, split in three lane-sized parts)
+### FT1 — Stop shipping the catalogue to the Worker (L, split in three lane-sized parts) — **[2026-10-02: = BN1; BN1A IN FLIGHT, BN1B QUEUED]**
 
 - **Problem (MEASURED).** ≈ 500 KB of object bytes per Worker request in every kill hour; p50
   10–13 ms in catalogue-heavy hours vs 1–4 ms otherwise (§2.2). ~40 `load_catalog` sites.
@@ -236,7 +239,7 @@ because the instrument precedes the change.
 - **Gate.** `cf.cpu_kills_day = 0` for 7 consecutive days; `cf.do_response_bytes_day ÷
   cf.do_requests_day < 20 KB`; `cf.cpu_p99_us` below 30,000 on a day with orders.
 
-### FT2 — Minute cron → per-object alarms (M)
+### FT2 — Minute cron → per-object alarms (M) — **[2026-10-02: DONE `92f96221` `d7279037`]**
 
 - **Problem (MEASURED).** 1440 × (3 + 3 V) object requests per day, 9.7 ms CPU p50 at V = 2
   (656/1,440 runs over 10 ms), growing with every venue whether or not anything is queued.
@@ -261,7 +264,7 @@ because the instrument precedes the change.
   absent (no such cron); `/api/owner/health` outbox depth and oldest entry unchanged in
   behaviour (the existing instrument).
 
-### FT3 — Photos out of KV, onto R2 behind a custom domain (M)
+### FT3 — Photos out of KV, onto R2 behind a custom domain (M) — **[2026-10-02: = BN2 (+A9 interim), QUEUED]**
 
 - **Problem (MEASURED).** A photo costs 2 KV writes (4 with the small variant); one venue's
   import wrote 822 keys on 09-18 against a 1,000/day cap, so onboarding is limited to 1–3
@@ -286,7 +289,7 @@ because the instrument precedes the change.
   Playwright cold-visit count: Worker requests per visit ≤ 3 (`tools/evals/collect/static.mjs`
   already counts responses).
 
-### FT4 — Login under the wall (M)
+### FT4 — Login under the wall (M) — **[2026-10-02: = A8, QUEUED, gated on BN8]**
 
 - **Problem (ESTIMATED).** argon2id m = 8 MiB t = 3 in wasm is 20–60 ms per verify; a miss
   costs the same by design; `upgrade_hash` may run a second hash. Every login is over 10 ms
@@ -307,7 +310,7 @@ because the instrument precedes the change.
   code, plus re-hash on next login — a change of primitive that needs its own decision.
 - **Gate.** `cf.cpu_kills_day = 0` on a day with ≥ 10 logins (count from `identity` sessions).
 
-### FT5 — Nightly cron fans out to the objects (M)
+### FT5 — Nightly cron fans out to the objects (M) — **[2026-10-02: = A8, QUEUED]**
 
 - **Problem (MEASURED).** 210 ms CPU at 2 venues in one cron invocation (21× the limit);
   ≥ 1 external S3 subrequest per venue against the 50-per-invocation cap; the whole log is
@@ -326,7 +329,7 @@ because the instrument precedes the change.
   the registry count; `dowiz-offsite` object count grows by one per venue per night
   (`r2StorageAdaptiveGroups`).
 
-### FT6 — Ping auto-response on the object (S)
+### FT6 — Ping auto-response on the object (S) — **[2026-10-02: = A3, QUEUED CRITICAL]**
 
 - **Problem (MEASURED).** The client pings every 25 s (`live.js:42`); each ping is a
   `hibernation`-type object invocation (107–321/day now, one per 25 s per open socket =
@@ -343,7 +346,7 @@ because the instrument precedes the change.
   behaviour is unchanged.
 - **Gate.** `cf.do_hibernation_day ≈ 0` while `activeWebsocketConnections > 0`.
 
-### FT7 — Socket-first polling on all three surfaces (S)
+### FT7 — Socket-first polling on all three surfaces (S) — **[2026-10-02: = A2, QUEUED CRITICAL]**
 
 - **Problem (MEASURED/EST).** With a live socket the surfaces already poll every 90 s
   (`QUIET_MS`); without it, the tracking sheet polls every 12 s (`track.js:37`), the courier
@@ -363,7 +366,7 @@ because the instrument precedes the change.
 - **Gate.** Playwright: requests during one tracked order ≤ 40; `cf.worker_requests_day` per
   order (from `/api/owner/health` order count) ≤ 150.
 
-### FT8 — The platform registry read once per minute, not once per request (S)
+### FT8 — The platform registry read once per minute, not once per request (S) — **[2026-10-02: = A4, QUEUED CRITICAL]**
 
 - **Problem (MEASURED).** The platform object served 37 % of all object requests on 09-25.
   `Place::of_slug` (every storefront request) and `owner_and_venue` (every console request)
@@ -381,7 +384,7 @@ because the instrument precedes the change.
   matters, so `with_identity` deletes the cache entry synchronously.
 - **Gate.** `cf.do_platform_share < 0.15`.
 
-### FT9 — The root page without the Worker (S)
+### FT9 — The root page without the Worker (S) — **[2026-10-02: = BN2]**
 
 - **Problem (DOC).** `run_worker_first = ["/"]` makes every storefront front door a Worker
   request, and on Free, over the cap, "these requests will receive a 429 instead of falling
@@ -395,7 +398,7 @@ because the instrument precedes the change.
 - **Risk.** One extra round trip on first paint if the shells differ; keep both shells small.
 - **Gate.** `tools/gates/sw-shell.sh` unchanged; Playwright root load shows 0 Worker requests.
 
-### FT10 — Batching object writes (operator idea 1): deferred, with the reason (—)
+### FT10 — Batching object writes (operator idea 1): deferred, with the reason (—) — **[2026-10-02: still deferred]**
 
 - **Measured.** Rows written: 3,126/day mean for 2 hubs, 11,315 on an import day; the cap is
   100k/day. Each append is already **one transaction and two `put`s** (chunk 0 + the tail,
@@ -410,7 +413,7 @@ because the instrument precedes the change.
   restart instead of written per event — that is blueprint P1 / `one-image.sh` reaching 0, and
   it saves ≈ 1 row per event. Revisit at ≈ 40 hubs.
 
-### FT11 — Client-side cache for read-only data (operator idea 4): small, honest (S)
+### FT11 — Client-side cache for read-only data (operator idea 4): small, honest (S) — **[2026-10-02: = BN3, QUEUED]**
 
 - **Facts.** Requests are counted when the Worker is invoked; an `If-None-Match` that
   answers 304 is still a request (pricing page, "Only requests that hit a Worker count"). The
@@ -423,7 +426,7 @@ because the instrument precedes the change.
   visit). Worth doing for feel; it does not move the capacity table.
 - **Gate.** Playwright revisit paints the menu in < 100 ms offline.
 
-### FT12 — Logs, assets, email: nothing to do (—)
+### FT12 — Logs, assets, email: nothing to do (—) — **[2026-10-02: nothing to do, unchanged]**
 
 `head_sampling_rate = 0.1` keeps Workers Logs at ≤ 10 % of requests (limit 200k/day, so fine
 to ≈ 2 M requests/day); note the **3-day retention** on Free when chasing a failure. Static

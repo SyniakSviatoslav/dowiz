@@ -1,5 +1,8 @@
 # Blueprint: the cheapest hub — where every byte and every request goes, and how to remove most of them
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Phases 1 → 7 (first step) are SHIPPED and deployed (commits `bcd7c45` … `9901d44` per memory `dowiz-hub-seven-phases-2026-09-21`, live since the 2026-09-22 deploy; the measured chain 28 KB → ≈ 1.2 KB per delivered order). What is still open from this file, as live rows: the rest of **phase 7** (device replica by hash) = **BN3/DW1**; the **W1 cart-as-indices** idea = **BN6**; the **phase 3a line codebook** is deliberately not done (standing, §6). The columnar catalogue block that replaced JSON on the wire is DG7/DW7 (`c496c2d9`). The 2026-09-26 cost correction (duration is not billed between polls; request COUNTS bind) is in memory `dowiz-hub-unit-costs`. Nothing below was changed.
+
+
 Date: 2026-09-20, revision 2 (after the operator's brainstorm request). Status: phase 1
 SHIPPED (af5b0fc), phase 1.5 items 1 (part), 3 and 4 SHIPPED, the rest of 1.5–7 DESIGNED.
 Numbers are MEASURED unless marked *estimate*.

@@ -1,5 +1,8 @@
 # Tax, price per channel, and the channel itself: what the order path carries today, what it must carry, and the seam a fiscal integration plugs into
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Phase B is **LANDED** (B1-B6: `tax_of` 65 hits, `channel` 93 hits, `channel-closed` gate literals=0; B8 `d8969b01`); B7's eBills sender was built (`EBILLS-WRITE-PATH-2026-09-24.md`) and then **switched off** by the operator on 2026-09-24 (`SEND_ENABLED = false`; import stays on) — a standing decision. Still open from this theme: D34 tips/comps as fiscal lines and O7 `rate_ppm` from the client (Wave N1-B), the ПРРО backend (approved queue). Nothing below was changed.
+
+
 **Date:** 2026-09-22. **HEAD read:** `b949528e` ("dine-in: an order placed at a table", 2026-09-22).
 **Tree state at time of reading:** `git status --short` = 12 lines — 6 modified (`crates/dowiz-hub/src/lib.rs`,
 `workers/api/src/booking.rs`, three `public/store/*` files, `.impeccable/config.json`) and 6 untracked, among them

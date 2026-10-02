@@ -1,5 +1,8 @@
 # Max-performance paths (brief C) against dowiz's real deployment: unikernels, kernel bypass, io_uring, native AOT
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Row status: P0 Workers Paid OBSOLETE (operator 2026-10-01: stay Free); P1 = BN1; P2 = F18 DONE; P3 = A4 and P4 = A3 (CRITICAL, after the DAG); P5 measured, keep `-O`. Nothing below was changed.
+
+
 Research, 2026-09-27. Lane W-RESEARCH, READ-ONLY. Tree `/root/lanes/w-research` at `5b77de64`; every code claim
 carries a file:line read on this date. Labels: **MEASURED** (a command here, or a dated measurement document
 quoted with its section), **DOC** (a vendor or standards page fetched 2026-09-27), **EST** (arithmetic on named

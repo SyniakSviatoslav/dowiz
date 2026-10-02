@@ -1,5 +1,8 @@
 # Audit — bugs, blind spots and the tests that would have caught them (2026-09-24)
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Status of the G/D rows at `9ace8f28` (inventory §1.6): **DONE** G1-G3 (idem-done / sw-shell / venue-clock baselines 0), G4/G5/G7/G9 `0fa5d37b`, D15, D5/D6/D17, D19 `d24e6da2`, D20, D23/D30 `b1d256a8`, D27/D29, G17 `c3f23373`, D36 `fa2e7ace`, D38/D35; **DONE (verify)** D18, D22, D33, D24/D25, D39/D40 → turned into tests under live row N4.6; **OPEN, approved 2026-10-02**: D13 (waiter debits any wallet), D34 (tips as fiscal lines) → Wave N1-B; D21 (WhatsApp `statuses`) → N1-C; D37 (reconcile before retry) PARTIAL → N1-B. Nothing below was changed.
+
+
 **Scope.** A read-only audit of `/root/dowiz` at HEAD `5abeb0ac`. It was re-checked at `1dbb181a`, which changed
 docs only (`git diff --stat 5abeb0ac 1dbb181a` touches 4 files under `docs/design/`). Nothing in the tree was edited,
 committed or deployed, and no one logged in to production.

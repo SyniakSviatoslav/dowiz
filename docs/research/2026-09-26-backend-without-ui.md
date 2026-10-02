@@ -1,5 +1,8 @@
 # Backend without UI — route audit, 2026-09-26
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** DONE: the 15 orphan routes have screens (`c3f23373`, `ui-reach` 0); the rule "no backend without UI" is a standing memory and binds row N4.2 (the 13 uncalled `dowiz-core` modules get a caller with a screen, or a header). Nothing below was changed.
+
+
 Read-only audit of `HEAD` = `5fa49ea6` ("stock: an ingredient nobody has counted never refuses an order").
 Committed code only (`git show HEAD:`); the working tree's half-split `crates/dowiz-hub` was not read.
 Operator rule under test: "усе що є на бекенді, має бути підключено, видно та мати змогу використовуватись на UI також".

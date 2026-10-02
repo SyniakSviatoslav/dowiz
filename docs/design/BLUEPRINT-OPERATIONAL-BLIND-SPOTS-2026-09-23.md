@@ -1,5 +1,8 @@
 # Operational blind spots: sixteen points from an outside critique, checked against the tree
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** A September-2026 blueprint whose rows were absorbed by the live roadmap: anything from it still open is a row in `docs/design/ROADMAP-2026-09-22.md` (NEXT, dated 2026-10-02 — Wave BN, the approved queue, Wave N0-N4), under the id the inventory `docs/research/2026-10-02-open-task-inventory.md` gave it. Nothing below was changed; nothing was archived.
+
+
 **Date:** 2026-09-23. **HEAD read:** `8a964dc1` ("room: pay, and the bill split across as many payments as it takes").
 **Method.** READ-ONLY on code; nothing was built or run except `grep`/`sed`/`git log`. Every "today" statement names a
 `file:line` or the grep that returned nothing. `measured` = a command was run here and its output quoted; `hypothesis` = it

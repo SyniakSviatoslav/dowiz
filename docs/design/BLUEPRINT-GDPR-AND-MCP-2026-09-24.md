@@ -1,5 +1,8 @@
 # Privacy (GDPR + Albania Law 124/2024) and MCP for every role: what exists, what is missing, what to build
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Wave P status at `9ace8f28`: **DONE** P1 `52df6b97` (`personal-data` 0), P3 (21 d, `reforget`), P8, P9 (operator 2026-09-24: ship the legal texts without a lawyer) · **PARTIAL** P2 (the law `chain.redacted == declared` → DG10w), P15 `85b1d1d7` (one protocol generation), P20 `92219a57` (snippets, no grants list) · **OPEN, all approved 2026-10-02**: P13 DPIA first, then P4, P5, P7, P10, P12, P11, P6 (Wave N2-A, ≈ 5 lane-days, legal date Law 124 Art. 31 ≈ Jan 2027); P15-P20 (Wave N2-B); P14 OAuth 2.1 (N4.1). Nothing below was changed.
+
+
 **Date:** 2026-09-24 · **HEAD read:** `5abeb0ac` · **Lane:** research + planning (Opus), read-only on code.
 **Roadmap rows:** `ROADMAP-2026-09-22.md` § "Wave P". Every claim about the tree cites `file:line` at that
 HEAD; every claim about law or a protocol cites a URL (list at the end). Nothing here was run against

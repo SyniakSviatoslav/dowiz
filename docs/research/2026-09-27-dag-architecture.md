@@ -1,5 +1,8 @@
 # dowiz as a DAG: what is already dataflow, where the cycles are, and how to recompute only what changed
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Its recommendations became the DG/DW rows; their status is the 2026-10-02 banner of `docs/design/BLUEPRINT-BEBOP-DAG-2026-09-28.md` (DG1-DG10 DONE, the switch in flight, DW1-DW5 queued). Nothing below was changed.
+
+
 Research, 2026-09-27. Lane W-RESEARCH, READ-ONLY: nothing in the tree was changed, built or deployed.
 Every code claim was checked against `/root/lanes/w-research` (worktree at `5b77de64`) by `sed`/`grep` on this
 date; the line numbers are from that tree. Labels: **MEASURED** = a command run here or a number quoted from a

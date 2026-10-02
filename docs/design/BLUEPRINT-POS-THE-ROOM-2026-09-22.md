@@ -1,5 +1,8 @@
 # POS, the room: a waiter, an open check, a bill that can be amended and split, a till that is audited, and what to refuse
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Phase A is **all LANDED**: A2/A3 `7496e129` (floor as a fold, `booking/` split), A4 `Principal::Staff` + `/room/`, A5-A7 Wave G `0fa5d37b` (`command/transfer.rs`, `command/till.rs`), A8 `1fb88ab5` (a station per Telegram group), A9 `b1d256a8` (table QR). The live roadmap's Phase A table carries each commit. Open neighbours: K9/K13/K14/K15 kitchen rows (N2-C), D13 wallet guard (N1-B). Nothing below was changed.
+
+
 **Date:** 2026-09-22. **HEAD read:** `b949528e` ("dine-in: an order placed at a table", 2026-09-22).
 **Tree state at time of reading:** 9 paths in `git status --short` (7 modified, 613 insertions / 28 deletions;
 `crates/dowiz-hub/src/tables.rs` and `workers/api/src/ebills/` untracked). Those belong to the table-booking

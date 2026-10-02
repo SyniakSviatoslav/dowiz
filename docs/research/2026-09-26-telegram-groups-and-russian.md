@@ -1,5 +1,8 @@
 # Telegram bots in groups with configurable routing, and Russian as the 4th language — research and plan
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Row status: TG-A0..A4 DONE (`0801fb8d`, `c3f23373`, `1fb88ab5`, `digest_rail.rs`); **TG-A5 inline actions and TG-A6 pacing/auto-mute → Wave N1-C** (approved 2026-10-02); RU-B0..B6 DONE `a3cc8f86`; RU-B4 Russian film cuts OBSOLETE (operator 2026-09-27: one English version). Nothing below was changed.
+
+
 Date 2026-09-26. Read-only research; nothing below was built. Every file:line was read in the working tree at this date
 (HEAD `git show` used where the tree is mid-split). Items marked **unverified** were not proved by a command or a
 primary source. Sibling documents: `2026-09-26-menu-ingredients-stock.md` (stock events, lots, analytics — its event

@@ -1,5 +1,8 @@
 # Extreme binary size (brief D) and the standard measures: what the Worker's 4.85 MB is made of and a ranked list of cuts
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** Row status: BS-1/BS-2 DONE (`b6f42cbd`, `96c2b790`), BS-3 `-Oz` measured and rejected, BS-6 DONE (`9fa24c24`, `e6ab7182`); **BS-7 = BN5** (approved queue), **BS-5 = F10** (Wave N1-A), **BS-4 `opt-level="s"` probe and BS-8 `wasm-snip` → Wave N3-B** (approved 2026-10-02; their numbers are to be appended to §7 here); BS-9/BS-10 deferred on the toolchain pin. Nothing below was changed.
+
+
 Research, 2026-09-27. Lane W-RESEARCH, READ-ONLY. Tree `/root/lanes/w-research` at `5b77de64`; the artefacts
 measured are the main tree's `/root/dowiz/workers/api/build/index_bg.wasm` (built 2026-09-27 01:07) and
 `/root/dowiz/workers/api/target/wasm32-unknown-unknown/release/dowiz_api_worker.wasm` (01:06). Labels:

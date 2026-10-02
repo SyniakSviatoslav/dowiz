@@ -1,5 +1,8 @@
 # Optimization audit and an evals system for every indicator
 
+> **STATUS 2026-10-02 (lane W-ROADMAP, applying the operator's decision of 2026-10-02 — "усе в роадмап, усе потрібно, ніяких видалень, усе обновити": everything into the roadmap, nothing deleted, everything updated).** A September-2026 blueprint whose rows were absorbed by the live roadmap: anything from it still open is a row in `docs/design/ROADMAP-2026-09-22.md` (NEXT, dated 2026-10-02 — Wave BN, the approved queue, Wave N0-N4), under the id the inventory `docs/research/2026-10-02-open-task-inventory.md` gave it. Nothing below was changed; nothing was archived.
+
+
 **Date:** 2026-09-24. **HEAD read:** `5abeb0ac` (2026-09-24 17:50; the tree moved from `017532fc` to `5abeb0ac`
 while this was being written — other lanes commit here — so every `file:line` is as read from the working tree
 during the afternoon). **Method:** read-only. No build was run; the wasm numbers are from the artifact
