@@ -1,3 +1,2 @@
 # Dated ignores for tools/deps/rustsec.py (read by tools/gates/deps-audit.sh).
 # ID  LOCK_DIR  UNTIL  reason. Past UNTIL, or matching nothing, the gate REFUSES.
-RUSTSEC-2026-0316 agent-adapters 2026-10-14 wasmtime 46.x has no fix (patched >=48.0.3 = two majors); dep is optional (feature wasmtime-fuel, off by default); W-DEPS handed the major bump back to main 2026-09-30

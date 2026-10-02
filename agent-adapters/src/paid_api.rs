@@ -10,9 +10,10 @@
 //! The [`BudgetToken`] returned by [`BudgetGate::acquire`] is a zero-sized proof
 //! witness: the type system carries the proof that a grant was obtained before
 //! any request is sent. [`PaidApiClient::request`] takes `&self` **and**
-//! `BudgetToken` — without the token the call site cannot compile. The token
-//! is consumed on `drop` (returned to the gate) so the grant is scoped to the
-//! lifetime of the proof witness.
+//! `BudgetToken` — without the token the call site cannot compile. A grant is
+//! a SPEND, like a fuel tranche (`fuel.rs`): dropping the token does NOT return
+//! the unit to the bucket (operator 2026-10-02, option b) — the kernel
+//! `TokenBucket` has no refund, and a paid call that was granted is paid for.
 //!
 //! # Compile firewall
 //! Zero network / HTTP / serde in this module's public surface. The concrete
@@ -35,18 +36,10 @@ use crate::transport::RpcChannel;
 
 /// A budget grant — the type-level proof that a call may proceed.
 ///
-/// Zero-sized at runtime; the *type* carries the guarantee. Dropping the token
-/// returns the grant to the gate (scoped spend, no leak).
+/// Zero-sized at runtime; the *type* carries the guarantee. The grant is
+/// spent when `acquire` succeeds; dropping the token returns nothing.
 #[derive(Debug)]
 pub struct BudgetToken;
-
-impl Drop for BudgetToken {
-    fn drop(&mut self) {
-        // The grant is consumed on drop: the token is the proof, and its
-        // destruction returns the unit to the bucket. No explicit release
-        // call site can be forgotten — the type system enforces it.
-    }
-}
 
 /// A fail-closed budget gate wrapping a `TokenBucket`.
 ///
@@ -191,6 +184,7 @@ impl<C: RpcChannel> AgentBridge for PaidApiClient<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dowiz_kernel::ports::agent::AgentTask;
     use std::sync::Mutex;
 
     struct MockChannel {
@@ -249,7 +243,7 @@ mod tests {
         );
         drop(token);
         let token3 = gate.acquire();
-        assert!(token3.is_some(), "after drop, grant is reusable");
+        assert!(token3.is_none(), "a grant is a spend: dropping the token refunds nothing");
     }
 
     #[test]
@@ -273,7 +267,8 @@ mod tests {
         let client = make_client(channel, gate);
         let inv = AgentInvocation {
             task: AgentTask::InvokeTool {
-                tool: "pay".to_string(),
+                name: "pay".to_string(),
+                args: vec![],
             },
             cost_units: 1,
             invoke_depth: 0,
