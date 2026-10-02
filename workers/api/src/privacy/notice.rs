@@ -21,6 +21,7 @@ mod tests;
 
 use serde_json::Value;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use super::registry::{self, Data, Eraser, Home, Processor, Retention, Store, Subject, Switch, BROWSER, PROCESSORS};
 use words::Words;

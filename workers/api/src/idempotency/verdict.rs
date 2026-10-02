@@ -21,6 +21,7 @@
 use dowiz_hub::table::Table;
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use super::{Guard, IDEMPOTENCY_BYTES, IMAGE_IDEMPOTENCY, KIND};
 use crate::hubstore::Place;
@@ -116,11 +117,8 @@ pub fn release(t: &mut Table, key: &str) {
 /// `Response::error` answer is). A stream cannot be recorded without being
 /// consumed, so it gives the claim back instead.
 fn body_text(res: &Response) -> Option<String> {
-    match res.body() {
-        ResponseBody::Body(b) => String::from_utf8(b.clone()).ok(),
-        ResponseBody::Empty => Some(String::new()),
-        ResponseBody::Stream(_) => None,
-    }
+    // A `Reply` is always whole bytes (W-COV C2): no stream to be unable to read.
+    String::from_utf8(res.body().to_vec()).ok()
 }
 
 impl Guard {

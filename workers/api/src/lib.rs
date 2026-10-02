@@ -10,6 +10,27 @@
 //! `place_order_at`. A process-local counter is unsound here by construction:
 //! Workers recycles isolates constantly and runs many at once.
 
+/// `log_error!` / `log_line!`: the platform's console (`worker::console_error!`/`console_log!`) on
+/// wasm32, stderr natively. Worker's own macros call a wasm-bindgen import, which PANICS in a native
+/// test, so no code path that logged could run under `cargo test` (W-COV C2). A crate-local NAME,
+/// because a `macro_rules!` of the same name is ambiguous against `use worker::*`'s glob.
+#[cfg(target_arch = "wasm32")]
+macro_rules! log_error {
+    ($($t:tt)*) => { worker::console_error!($($t)*) };
+}
+#[cfg(not(target_arch = "wasm32"))]
+macro_rules! log_error {
+    ($($t:tt)*) => { eprintln!($($t)*) };
+}
+#[cfg(target_arch = "wasm32")]
+macro_rules! log_line {
+    ($($t:tt)*) => { worker::console_log!($($t)*) };
+}
+#[cfg(not(target_arch = "wasm32"))]
+macro_rules! log_line {
+    ($($t:tt)*) => { eprintln!($($t)*) };
+}
+
 mod booking;
 mod eta;
 mod live_eta;
@@ -46,6 +67,10 @@ mod ebills;
 mod catalog_edit;
 /// The request body, parsed so `deny_unknown_fields` means it (gate: strict-body).
 mod body;
+/// A request and a response in plain Rust, so route code runs under `cargo test` (W-COV C2).
+mod wire;
+/// The platform bindings behind enums a test can fill (W-COV C2).
+mod edge;
 mod rebuild;
 mod recipe;
 mod services;
@@ -62,6 +87,7 @@ mod privacy;
 mod learn;
 mod version;
 
+#[cfg(target_arch = "wasm32")]
 use worker::wasm_bindgen::{JsCast, JsValue};
 use worker::*;
 
@@ -73,12 +99,24 @@ use worker::*;
 /// request rather than fall back to a weaker source. An order id that can repeat
 /// is a primary-key collision between two customers, which is exactly the defect
 /// the kernel's old `AtomicU64` counter produced once it left a single process.
+#[cfg(target_arch = "wasm32")]
 pub fn edge_id() -> Option<String> {
     let global = js_sys::global();
     let crypto = js_sys::Reflect::get(&global, &JsValue::from_str("crypto")).ok()?;
     let f = js_sys::Reflect::get(&crypto, &JsValue::from_str("randomUUID")).ok()?;
     let f = f.dyn_ref::<js_sys::Function>()?;
     f.call0(&crypto).ok()?.as_string()
+}
+
+/// Natively (tests), the same shape from the OS CSPRNG -- still fail-closed (W-COV C2).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn edge_id() -> Option<String> {
+    let mut b = [0u8; 16];
+    getrandom::getrandom(&mut b).ok()?;
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
+    Some(format!("{}-{}-{}-{}-{}", &h[0..8], &h[8..12], &h[12..16], &h[16..20], &h[20..32]))
 }
 
 #[event(fetch)]
@@ -88,7 +126,7 @@ pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
     // tracing costs the customer nothing in latency.
     let method = req.method().to_string();
     let path = req.path();
-    let mut trace = otel::Trace::begin(&req, &format!("{method} {path}"));
+    let mut trace = otel::Trace::begin(req.headers().get("traceparent").ok().flatten().as_deref(), &format!("{method} {path}"));
     trace.attr(0, "http.request.method", serde_json::json!(method));
     trace.attr(0, "url.path", serde_json::json!(path));
 
@@ -119,7 +157,7 @@ pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
         // an unattributed failure honestly belongs.
         if let Ok(ns) = env.durable_object("HUB") {
             crate::errlog::record(
-                &ns,
+                &edge::ObjectNamespace::Live(ns),
                 None,
                 "worker.500",
                 &format!("{method} {path} [trace {}]: {e}", trace.id()),
@@ -137,7 +175,7 @@ pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
         let _ = r.headers_mut().set("x-trace-id", trace.id());
         r
     });
-    ctx.wait_until(async move { trace.export(&env, status).await });
+    ctx.wait_until(async move { trace.export(&edge::Env::Live(env), status).await });
     out
 }
 
@@ -252,24 +290,34 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
     }
     // THE ONE CLOCK READ ON THE REQUEST PATH. `tools/gates/clock.sh` allows
     // this line by name; everything below is handed the answer.
-    Router::with_data(Req { now_ms: Date::now().as_millis() as i64 })
-        .get("/healthz", |_, _| Response::ok("ok"))
+    router(Router::with_data(Req { now_ms: Date::now().as_millis() as i64 })).run(req, env).await
+}
+
+#[cfg(test)]
+#[path = "routes_table/tests.rs"]
+mod router_tests;
+
+/// THE ROUTE TABLE, apart from the request (W-COV C2): a test builds it natively, which is where
+/// two routes that conflict are found -- the router refuses such a pair when it is built, and on
+/// the Worker that is every request's first line.
+pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
+    r.get("/healthz", |_, _| Response::ok("ok"))
         // W-DEPLOY: which commit this build is; tools/deploy/deploy.sh reads it back after a rollout.
         .get("/api/version", version::serve)
         // ── public storefront ──
-        .get_async("/api/public/locations/:slug/menu", storefront::menu)
-        .get_async("/manifest.webmanifest", storefront::manifest)
+        .get_async("/api/public/locations/:slug/menu", |r, c| edge::run(r, c, storefront::menu))
+        .get_async("/manifest.webmanifest", |r, c| edge::run(r, c, storefront::manifest))
         // P8/P9: the venue's privacy notice (venue from the Host) and the DPA text.
-        .get_async("/privacy", privacy::notice::serve)
-        .get_async("/dpa", privacy::dpa::page)
-        .post_async("/api/public/locations/:slug/orders", storefront::place)
+        .get_async("/privacy", |r, c| edge::run(r, c, privacy::notice::serve))
+        .get_async("/dpa", |r, c| edge::run(r, c, privacy::dpa::page))
+        .post_async("/api/public/locations/:slug/orders", |r, c| edge::run(r, c, storefront::place))
         // ── reservations: the transport for `dowiz_kernel::reservation` ──
-        .get_async("/api/public/locations/:slug/reservations", booking::list)
-        .post_async("/api/public/locations/:slug/reservations", booking::create)
-        .get_async("/api/public/locations/:slug/reservations/:id", booking::detail)
-        .post_async("/api/public/locations/:slug/reservations/:id/action", booking::action)
-        .get_async("/api/public/locations/:slug/reservations/:id/pass", booking::issue_pass)
-        .post_async("/api/public/locations/:slug/pass/verify", booking::verify_pass)
+        .get_async("/api/public/locations/:slug/reservations", |r, c| edge::run(r, c, booking::list))
+        .post_async("/api/public/locations/:slug/reservations", |r, c| edge::run(r, c, booking::create))
+        .get_async("/api/public/locations/:slug/reservations/:id", |r, c| edge::run(r, c, booking::detail))
+        .post_async("/api/public/locations/:slug/reservations/:id/action", |r, c| edge::run(r, c, booking::action))
+        .get_async("/api/public/locations/:slug/reservations/:id/pass", |r, c| edge::run(r, c, booking::issue_pass))
+        .post_async("/api/public/locations/:slug/pass/verify", |r, c| edge::run(r, c, booking::verify_pass))
         // ── THE FLOOR: which tables are free FOR A SLOT ──
         //
         // PUBLIC, DELIBERATELY. It is the venue's own furniture and the "is
@@ -277,300 +325,231 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         // no party and no reservation id. It REFUSES without `slotMin`,
         // because a table is free or taken only for a slot and a plan drawn
         // without one is a picture of a lie.
-        .get_async("/api/public/locations/:slug/tables", booking::availability)
+        .get_async("/api/public/locations/:slug/tables", |r, c| edge::run(r, c, booking::availability))
         // ── threads: the transport for `dowiz_kernel::thread` ──
-        .get_async("/api/public/locations/:slug/threads/:id", social::messages)
-        .post_async("/api/public/locations/:slug/threads/:id/messages", social::send)
+        .get_async("/api/public/locations/:slug/threads/:id", |r, c| edge::run(r, c, social::messages))
+        .post_async("/api/public/locations/:slug/threads/:id/messages", |r, c| edge::run(r, c, social::send))
         // ── the wallet journal: `dowiz_kernel::ledger_account` ──
-        .get_async("/api/public/locations/:slug/wallet", wallet::balance)
-        .get_async("/api/public/locations/:slug/wallet/statement", wallet::statement)
-        .post_async("/api/public/locations/:slug/wallet/topup", wallet::top_up)
+        .get_async("/api/public/locations/:slug/wallet", |r, c| edge::run(r, c, wallet::balance))
+        .get_async("/api/public/locations/:slug/wallet/statement", |r, c| edge::run(r, c, wallet::statement))
+        .post_async("/api/public/locations/:slug/wallet/topup", |r, c| edge::run(r, c, wallet::top_up))
         // ── the delivery estimate: `dowiz_kernel::eta` ──
-        .post_async("/api/public/locations/:slug/eta", eta::quote)
-        .post_async("/api/promo/check", services::ordering::preview::promo_check)
-        .get_async("/api/public/reach", services::venue::zones::reach)
-        .get_async("/api/public/rates", services::ordering::rates::rates)
-        .post_async("/api/voice", services::engagement::voice::voice)
-        .post_async("/api/owner/zones", services::venue::zones::set_zones)
+        .post_async("/api/public/locations/:slug/eta", |r, c| edge::run(r, c, eta::quote))
+        .post_async("/api/promo/check", |r, c| edge::run(r, c, services::ordering::preview::promo_check))
+        .get_async("/api/public/reach", |r, c| edge::run(r, c, services::venue::zones::reach))
+        .get_async("/api/public/rates", |r, c| edge::run(r, c, services::ordering::rates::rates))
+        .post_async("/api/voice", |r, c| edge::run(r, c, services::engagement::voice::voice))
+        .post_async("/api/owner/zones", |r, c| edge::run(r, c, services::venue::zones::set_zones))
         // The room as DATA an owner can edit, beside the delivery zones it
         // sits next to in the catalogue. Refused on write when it does not
         // parse back, naming the zone, the table and the rule.
-        .post_async("/api/owner/floorplan", booking::set_plan)
+        .post_async("/api/owner/floorplan", |r, c| edge::run(r, c, booking::set_plan))
         // The console's floor editor opens the plan as stored.
-        .get_async("/api/owner/floorplan", booking::get_plan)
+        .get_async("/api/owner/floorplan", |r, c| edge::run(r, c, booking::get_plan))
         // The console's Bookings: the day's list, and the venue's moves on
         // one (confirm, decline, seat, no-show, cancel -- all FSM events).
-        .get_async("/api/owner/reservations", booking::venue_day)
-        .post_async("/api/owner/reservations/:id/action", booking::venue_action)
-        .post_async("/api/owner/branding/extract", services::venue::brand_extract::extract_branding)
-        .post_async("/api/order/:id/feedback", services::orders::feedback::feedback)
+        .get_async("/api/owner/reservations", |r, c| edge::run(r, c, booking::venue_day))
+        .post_async("/api/owner/reservations/:id/action", |r, c| edge::run(r, c, booking::venue_action))
+        .post_async("/api/owner/branding/extract", |r, c| edge::run(r, c, services::venue::brand_extract::extract_branding))
+        .post_async("/api/order/:id/feedback", |r, c| edge::run(r, c, services::orders::feedback::feedback))
         // ── accounts ──
-        .post_async("/api/bootstrap", bootstrap::seed)
+        .post_async("/api/bootstrap", |r, c| edge::run(r, c, bootstrap::seed))
         // The waiting list: the landing page's one form. Public to write,
         // administrators only to read -- see `waitlist`.
-        .post_async("/api/waitlist", waitlist::join)
-        .get_async("/api/platform/waitlist", waitlist::list)
+        .post_async("/api/waitlist", |r, c| edge::run(r, c, waitlist::join))
+        .get_async("/api/platform/waitlist", |r, c| edge::run(r, c, waitlist::list))
         // The main hub. Platform administrators only -- see `platform`.
-        .get_async("/api/platform/errors", platform::errors)
-        .get_async("/api/platform/hubs", platform::hubs)
-        .post_async("/api/platform/hubs", platform::create_hub)
-        .post_async("/api/webhooks/stripe", stripe::webhook)
-        .post_async("/api/auth/login", accounts::owner_login)
-        .post_async("/api/auth/refresh", accounts::owner_refresh)
-        .post_async("/api/auth/logout", accounts::owner_logout)
-        .post_async("/api/courier/auth/login", accounts::courier_login)
-        .post_async("/api/courier/auth/claim", accounts::courier_claim)
+        .get_async("/api/platform/errors", |r, c| edge::run(r, c, platform::errors))
+        .get_async("/api/platform/hubs", |r, c| edge::run(r, c, platform::hubs))
+        .post_async("/api/platform/hubs", |r, c| edge::run(r, c, platform::create_hub))
+        .post_async("/api/webhooks/stripe", |r, c| edge::run(r, c, stripe::webhook))
+        .post_async("/api/auth/login", |r, c| edge::run(r, c, accounts::owner_login))
+        .post_async("/api/auth/refresh", |r, c| edge::run(r, c, accounts::owner_refresh))
+        .post_async("/api/auth/logout", |r, c| edge::run(r, c, accounts::owner_logout))
+        .post_async("/api/courier/auth/login", |r, c| edge::run(r, c, accounts::courier_login))
+        .post_async("/api/courier/auth/claim", |r, c| edge::run(r, c, accounts::courier_claim))
         // THE ROOM (docs/design/BLUEPRINT-POS-THE-ROOM-2026-09-22.md).
-        .post_async("/api/staff/login", services::identity::staff::staff_login)
-        .post_async("/api/staff/claim", services::identity::staff::staff_claim)
-        .post_async("/api/staff/password", services::identity::staff::staff_password)
-        .get_async("/api/owner/staff", services::identity::staff_admin::list_staff)
-        .post_async("/api/owner/staff/invite", services::identity::staff_admin::invite_staff)
-        .post_async("/api/owner/staff/:id", services::identity::staff_admin::set_staff)
-        .post_async("/api/owner/staff/:id/password", services::identity::staff::password::owner_reset)
-        .get_async("/api/staff/room", services::orders::room::handlers::room_view)
-        .post_async("/api/staff/orders/:id/amend", services::orders::room::handlers::amend)
-        .post_async("/api/staff/orders/:id/pay", services::orders::room::pay::pay)
-        .post_async("/api/staff/orders/:id/kitchen-ack", services::orders::kitchen_ack::kitchen_ack)
-        .get_async("/api/staff/kitchen", services::orders::kitchen_ack::board::kitchen_orders)
-        .post_async("/api/staff/assist", services::engagement::assist::kitchen::kitchen_assist)
-        .post_async("/api/print/poll", services::orders::print::poll)
-        .get_async("/api/print/job/:token", services::orders::print::job)
-        .delete_async("/api/print/job/:token", services::orders::print::ack)
-        .get_async("/api/owner/print/jobs", services::orders::print::jobs)
-        .get_async("/api/owner/wallet/legs", services::orders::legs::audit)
-        .post_async("/api/owner/wallet/legs/repair", services::orders::legs::repair)
-        .post_async("/api/staff/orders/aggregator", services::orders::aggregator::enter)
-        .post_async("/api/staff/orders/:id/refund", services::orders::refund::refund)
-        .post_async("/api/staff/orders/:id/returned", services::orders::refund::returned)
-        .post_async("/api/staff/orders/:id/transfer", services::orders::room::transfer::transfer)
-        .post_async("/api/staff/sittings/:id/move", services::orders::room::transfer::move_sitting)
-        .post_async("/api/staff/till/open", services::orders::room::till::open)
-        .post_async("/api/staff/till/count", services::orders::room::till::count)
-        .post_async("/api/staff/till/close", services::orders::room::till::close)
-        .post_async("/api/staff/till/pay_in", services::orders::room::till::pay_in)
-        .post_async("/api/staff/till/pay_out", services::orders::room::till::pay_out)
-        .get_async("/api/staff/till/tips", services::orders::room::till::tips)
-        .get_async("/api/staff/floor", services::orders::room::floor::get)
-        .post_async("/api/staff/floor/:sitting/cleared", services::orders::room::floor::post_cleared)
+        .post_async("/api/staff/login", |r, c| edge::run(r, c, services::identity::staff::staff_login))
+        .post_async("/api/staff/claim", |r, c| edge::run(r, c, services::identity::staff::staff_claim))
+        .post_async("/api/staff/password", |r, c| edge::run(r, c, services::identity::staff::staff_password))
+        .get_async("/api/owner/staff", |r, c| edge::run(r, c, services::identity::staff_admin::list_staff))
+        .post_async("/api/owner/staff/invite", |r, c| edge::run(r, c, services::identity::staff_admin::invite_staff))
+        .post_async("/api/owner/staff/:id", |r, c| edge::run(r, c, services::identity::staff_admin::set_staff))
+        .post_async("/api/owner/staff/:id/password", |r, c| edge::run(r, c, services::identity::staff::password::owner_reset))
+        .get_async("/api/staff/room", |r, c| edge::run(r, c, services::orders::room::handlers::room_view))
+        .post_async("/api/staff/orders/:id/amend", |r, c| edge::run(r, c, services::orders::room::handlers::amend))
+        .post_async("/api/staff/orders/:id/pay", |r, c| edge::run(r, c, services::orders::room::pay::pay))
+        .post_async("/api/staff/orders/:id/kitchen-ack", |r, c| edge::run(r, c, services::orders::kitchen_ack::kitchen_ack))
+        .get_async("/api/staff/kitchen", |r, c| edge::run(r, c, services::orders::kitchen_ack::board::kitchen_orders))
+        .post_async("/api/staff/assist", |r, c| edge::run(r, c, services::engagement::assist::kitchen::kitchen_assist))
+        .post_async("/api/print/poll", |r, c| edge::run(r, c, services::orders::print::poll))
+        .get_async("/api/print/job/:token", |r, c| edge::run(r, c, services::orders::print::job))
+        .delete_async("/api/print/job/:token", |r, c| edge::run(r, c, services::orders::print::ack))
+        .get_async("/api/owner/print/jobs", |r, c| edge::run(r, c, services::orders::print::jobs))
+        .get_async("/api/owner/wallet/legs", |r, c| edge::run(r, c, services::orders::legs::audit))
+        .post_async("/api/owner/wallet/legs/repair", |r, c| edge::run(r, c, services::orders::legs::repair))
+        .post_async("/api/staff/orders/aggregator", |r, c| edge::run(r, c, services::orders::aggregator::enter))
+        .post_async("/api/staff/orders/:id/refund", |r, c| edge::run(r, c, services::orders::refund::refund))
+        .post_async("/api/staff/orders/:id/returned", |r, c| edge::run(r, c, services::orders::refund::returned))
+        .post_async("/api/staff/orders/:id/transfer", |r, c| edge::run(r, c, services::orders::room::transfer::transfer))
+        .post_async("/api/staff/sittings/:id/move", |r, c| edge::run(r, c, services::orders::room::transfer::move_sitting))
+        .post_async("/api/staff/till/open", |r, c| edge::run(r, c, services::orders::room::till::open))
+        .post_async("/api/staff/till/count", |r, c| edge::run(r, c, services::orders::room::till::count))
+        .post_async("/api/staff/till/close", |r, c| edge::run(r, c, services::orders::room::till::close))
+        .post_async("/api/staff/till/pay_in", |r, c| edge::run(r, c, services::orders::room::till::pay_in))
+        .post_async("/api/staff/till/pay_out", |r, c| edge::run(r, c, services::orders::room::till::pay_out))
+        .get_async("/api/staff/till/tips", |r, c| edge::run(r, c, services::orders::room::till::tips))
+        .get_async("/api/staff/floor", |r, c| edge::run(r, c, services::orders::room::floor::get))
+        .post_async("/api/staff/floor/:sitting/cleared", |r, c| edge::run(r, c, services::orders::room::floor::post_cleared))
         // A9: a table's QR code, a guest's round answered by the room, and the
         // guest's read-only view of the table's bill.
-        .get_async("/api/owner/tables/qr", services::orders::room::table_qr::list)
-        .get_async("/api/owner/tables/:zone/:n/qr.svg", services::orders::room::table_qr::one)
-        .post_async("/api/staff/orders/:id/guest", services::orders::room::guest_round::confirm)
-        .get_async("/api/order/:id/sitting", services::orders::room::guest_round::sitting_bill)
-        .get_async("/api/order/:id/stamps", services::loyalty::handlers::order_stamps)
+        .get_async("/api/owner/tables/qr", |r, c| edge::run(r, c, services::orders::room::table_qr::list))
+        .get_async("/api/owner/tables/:zone/:n/qr.svg", |r, c| edge::run(r, c, services::orders::room::table_qr::one))
+        .post_async("/api/staff/orders/:id/guest", |r, c| edge::run(r, c, services::orders::room::guest_round::confirm))
+        .get_async("/api/order/:id/sitting", |r, c| edge::run(r, c, services::orders::room::guest_round::sitting_bill))
+        .get_async("/api/order/:id/stamps", |r, c| edge::run(r, c, services::loyalty::handlers::order_stamps))
         // ── owner ──
-        .get_async("/api/owner/orders", owner::orders)
-        .post_async("/api/owner/orders/:id/action", owner::order_action)
-        .post_async("/api/owner/orders/:id/assign", owner::assign_courier)
-        .get_async("/api/owner/couriers/:id", services::courier::console::courier_detail)
-        .get_async("/api/owner/dashboard", owner::dashboard)
-        .post_async("/api/owner/products", catalog_edit::create_product)
-        .post_async("/api/owner/products/:id/delete", catalog_edit::delete_product)
-        .get_async("/api/owner/categories", catalog_edit::list_categories)
-        .post_async("/api/owner/categories", catalog_edit::set_category)
-        .post_async("/api/owner/categories/:id/delete", catalog_edit::delete_category)
-        .post_async("/api/owner/products/:id", owner::update_product)
-        .post_async("/api/owner/location", owner::update_location)
-        .post_async("/api/owner/i18n", owner::write_translations)
+        .get_async("/api/owner/orders", |r, c| edge::run(r, c, owner::orders))
+        .post_async("/api/owner/orders/:id/action", |r, c| edge::run(r, c, owner::order_action))
+        .post_async("/api/owner/orders/:id/assign", |r, c| edge::run(r, c, owner::assign_courier))
+        .get_async("/api/owner/couriers/:id", |r, c| edge::run(r, c, services::courier::console::courier_detail))
+        .get_async("/api/owner/dashboard", |r, c| edge::run(r, c, owner::dashboard))
+        .post_async("/api/owner/products", |r, c| edge::run(r, c, catalog_edit::create_product))
+        .post_async("/api/owner/products/:id/delete", |r, c| edge::run(r, c, catalog_edit::delete_product))
+        .get_async("/api/owner/categories", |r, c| edge::run(r, c, catalog_edit::list_categories))
+        .post_async("/api/owner/categories", |r, c| edge::run(r, c, catalog_edit::set_category))
+        .post_async("/api/owner/categories/:id/delete", |r, c| edge::run(r, c, catalog_edit::delete_category))
+        .post_async("/api/owner/products/:id", |r, c| edge::run(r, c, owner::update_product))
+        .post_async("/api/owner/location", |r, c| edge::run(r, c, owner::update_location))
+        .post_async("/api/owner/i18n", |r, c| edge::run(r, c, owner::write_translations))
         // ── ported from the native adapter, on the SAME dowiz-hub logic ──
-        .get_async("/api/owner/analytics", services::analytics::analytics)
-        .get_async("/api/owner/analytics/kitchen", services::analytics::kitchen::kitchen)
-        .get_async("/api/owner/exceptions", exceptions::exceptions)
-        .get_async("/api/owner/promotions", services::ordering::promotions::promotions)
-        .post_async("/api/owner/promotions", services::ordering::promotions::set_promotion)
-        .post_async("/api/owner/promotions/:code/delete", services::ordering::promotions::delete_promotion)
-        .get_async("/api/owner/activation", services::venue::activation::activation)
-        .get_async("/api/owner/branding", services::venue::brand::branding)
-        .post_async("/api/owner/branding", services::venue::brand::set_branding)
-        .post_async("/api/owner/branding/preset", services::venue::brand::set_preset)
+        .get_async("/api/owner/analytics", |r, c| edge::run(r, c, services::analytics::analytics))
+        .get_async("/api/owner/analytics/kitchen", |r, c| edge::run(r, c, services::analytics::kitchen::kitchen))
+        .get_async("/api/owner/exceptions", |r, c| edge::run(r, c, exceptions::exceptions))
+        .get_async("/api/owner/promotions", |r, c| edge::run(r, c, services::ordering::promotions::promotions))
+        .post_async("/api/owner/promotions", |r, c| edge::run(r, c, services::ordering::promotions::set_promotion))
+        .post_async("/api/owner/promotions/:code/delete", |r, c| edge::run(r, c, services::ordering::promotions::delete_promotion))
+        .get_async("/api/owner/activation", |r, c| edge::run(r, c, services::venue::activation::activation))
+        .get_async("/api/owner/branding", |r, c| edge::run(r, c, services::venue::brand::branding))
+        .post_async("/api/owner/branding", |r, c| edge::run(r, c, services::venue::brand::set_branding))
+        .post_async("/api/owner/branding/preset", |r, c| edge::run(r, c, services::venue::brand::set_preset))
         // C6 campaigns: segment, preview the count, queue through the outbox.
-        .get_async("/api/owner/campaigns", services::campaigns::handlers::list)
-        .post_async("/api/owner/campaigns", services::campaigns::handlers::define)
-        .get_async("/api/owner/campaigns/:id", services::campaigns::handlers::report)
-        .post_async("/api/owner/campaigns/:id/preview", services::campaigns::handlers::preview)
-        .post_async("/api/owner/campaigns/:id/send", services::campaigns::handlers::send_now)
-        .get_async("/api/owner/customers", services::customers::handlers::customers)
-        .post_async("/api/owner/customers/:key/reveal", services::customers::handlers::reveal_customer)
-        .post_async("/api/owner/customers/:key/forget", services::customers::forget::forget_customer)
-        .get_async("/api/owner/customers/reveals", services::customers::handlers::reveals)
-        .put_async("/api/owner/customers/:key/record", services::customers::record_routes::put_record)
-        .post_async("/api/owner/customers/rekey", services::customers::record_routes::rekey)
-        .post_async("/api/owner/customers/reforget", services::customers::forget::run::reforget)
-        .post_async("/api/owner/customers/:key/consent", services::customers::consent_routes::owner_act)
-        .post_async("/api/owner/customers/:key/link", services::customers::alias_routes::link)
-        .post_async("/api/owner/customers/:key/unlink", services::customers::alias_routes::unlink)
-        .get_async("/api/public/consent/wordings", services::customers::consent_routes::wordings)
-        .get_async("/api/owner/stock", services::operations::stock::stock)
-        .post_async("/api/owner/stock/:kind", services::operations::stock::stock_move)
-        .get_async("/api/owner/stock/waste", services::operations::waste::waste_report)
-        .post_async("/api/owner/supplies", services::operations::supplies::set_supply)
-        .post_async("/api/owner/supplies/:id/retire", services::operations::supplies::retire_supply)
-        .post_async("/api/owner/supplies/bulk", services::operations::supplies::quick::add_supplies)
-        .post_async("/api/owner/supplies/delete", services::operations::supplies::delete::delete_supplies)
-        .post_async("/api/owner/preps", services::operations::preps::set_prep)
-        .get_async("/api/owner/preps", services::operations::preps::list_preps)
-        .get_async("/api/owner/supplies/:id/uses", services::operations::preps::uses)
-        .get_async("/api/owner/products/:id/takes", services::operations::preps::takes_of)
-        .post_async("/api/owner/products/delete", catalog_edit::delete_products)
-        .post_async("/api/owner/ingredients/reset", services::operations::ingredients_reset::reset_ingredients)
+        .get_async("/api/owner/campaigns", |r, c| edge::run(r, c, services::campaigns::handlers::list))
+        .post_async("/api/owner/campaigns", |r, c| edge::run(r, c, services::campaigns::handlers::define))
+        .get_async("/api/owner/campaigns/:id", |r, c| edge::run(r, c, services::campaigns::handlers::report))
+        .post_async("/api/owner/campaigns/:id/preview", |r, c| edge::run(r, c, services::campaigns::handlers::preview))
+        .post_async("/api/owner/campaigns/:id/send", |r, c| edge::run(r, c, services::campaigns::handlers::send_now))
+        .get_async("/api/owner/customers", |r, c| edge::run(r, c, services::customers::handlers::customers))
+        .post_async("/api/owner/customers/:key/reveal", |r, c| edge::run(r, c, services::customers::handlers::reveal_customer))
+        .post_async("/api/owner/customers/:key/forget", |r, c| edge::run(r, c, services::customers::forget::forget_customer))
+        .get_async("/api/owner/customers/reveals", |r, c| edge::run(r, c, services::customers::handlers::reveals))
+        .put_async("/api/owner/customers/:key/record", |r, c| edge::run(r, c, services::customers::record_routes::put_record))
+        .post_async("/api/owner/customers/rekey", |r, c| edge::run(r, c, services::customers::record_routes::rekey))
+        .post_async("/api/owner/customers/reforget", |r, c| edge::run(r, c, services::customers::forget::run::reforget))
+        .post_async("/api/owner/customers/:key/consent", |r, c| edge::run(r, c, services::customers::consent_routes::owner_act))
+        .post_async("/api/owner/customers/:key/link", |r, c| edge::run(r, c, services::customers::alias_routes::link))
+        .post_async("/api/owner/customers/:key/unlink", |r, c| edge::run(r, c, services::customers::alias_routes::unlink))
+        .get_async("/api/public/consent/wordings", |r, c| edge::run(r, c, services::customers::consent_routes::wordings))
+        .get_async("/api/owner/stock", |r, c| edge::run(r, c, services::operations::stock::stock))
+        .post_async("/api/owner/stock/:kind", |r, c| edge::run(r, c, services::operations::stock::stock_move))
+        .get_async("/api/owner/stock/waste", |r, c| edge::run(r, c, services::operations::waste::waste_report))
+        .post_async("/api/owner/supplies", |r, c| edge::run(r, c, services::operations::supplies::set_supply))
+        .post_async("/api/owner/supplies/:id/retire", |r, c| edge::run(r, c, services::operations::supplies::retire_supply))
+        .post_async("/api/owner/supplies/bulk", |r, c| edge::run(r, c, services::operations::supplies::quick::add_supplies))
+        .post_async("/api/owner/supplies/delete", |r, c| edge::run(r, c, services::operations::supplies::delete::delete_supplies))
+        .post_async("/api/owner/preps", |r, c| edge::run(r, c, services::operations::preps::set_prep))
+        .get_async("/api/owner/preps", |r, c| edge::run(r, c, services::operations::preps::list_preps))
+        .get_async("/api/owner/supplies/:id/uses", |r, c| edge::run(r, c, services::operations::preps::uses))
+        .get_async("/api/owner/products/:id/takes", |r, c| edge::run(r, c, services::operations::preps::takes_of))
+        .post_async("/api/owner/products/delete", |r, c| edge::run(r, c, catalog_edit::delete_products))
+        .post_async("/api/owner/ingredients/reset", |r, c| edge::run(r, c, services::operations::ingredients_reset::reset_ingredients))
         // F1: supplies and recipes in bulk, dry run first; the dishes as stored.
-        .post_async("/api/owner/supplies/import", services::catalogue::import::bulk::import_supplies)
-        .post_async("/api/owner/recipes/import", services::catalogue::import::bulk::import_recipes)
-        .get_async("/api/owner/products", services::catalogue::import::bulk::owner_products)
-        .get_async("/api/owner/features", services::venue::settings::features)
-        .post_async("/api/owner/features", services::venue::settings::set_feature)
-        .get_async("/api/owner/settings", services::venue::settings::settings)
-        .post_async("/api/owner/settings", services::venue::settings::set_setting)
-        .post_async("/api/owner/notify/test", notify::test)
-        .post_async("/api/webhooks/telegram", notify::hook::webhook)
-        .get_async("/api/owner/telegram", notify::hook::owner::state)
-        .post_async("/api/owner/telegram/connect", notify::hook::owner::connect)
-        .post_async("/api/owner/telegram/link", notify::hook::owner::link)
-        .post_async("/api/owner/telegram/group", notify::hook::owner::group)
-        .post_async("/api/owner/telegram/test", notify::hook::owner::test)
-        .post_async("/api/owner/telegram/unlink", notify::hook::owner::unlink)
-        .get_async("/api/owner/inbox", channels::inbox)
-        .get_async("/api/owner/threads", social::inbox::list)
-        .get_async("/api/owner/inbox/:peer", channels::thread)
-        .post_async("/api/owner/inbox/:peer", channels::reply)
-        .get_async("/api/owner/backup/cloud", cloud::status)
-        .post_async("/api/owner/backup/cloud", cloud::push)
-        .get_async("/api/webhooks/meta", channels::webhook_verify)
-        .post_async("/api/webhooks/meta", channels::webhook)
-        .get_async("/api/owner/integrations", integrations::status)
-        .get_async("/api/owner/dpa", privacy::dpa::read)
-        .post_async("/api/owner/dpa/accept", privacy::dpa::accept)
+        .post_async("/api/owner/supplies/import", |r, c| edge::run(r, c, services::catalogue::import::bulk::import_supplies))
+        .post_async("/api/owner/recipes/import", |r, c| edge::run(r, c, services::catalogue::import::bulk::import_recipes))
+        .get_async("/api/owner/products", |r, c| edge::run(r, c, services::catalogue::import::bulk::owner_products))
+        .get_async("/api/owner/features", |r, c| edge::run(r, c, services::venue::settings::features))
+        .post_async("/api/owner/features", |r, c| edge::run(r, c, services::venue::settings::set_feature))
+        .get_async("/api/owner/settings", |r, c| edge::run(r, c, services::venue::settings::settings))
+        .post_async("/api/owner/settings", |r, c| edge::run(r, c, services::venue::settings::set_setting))
+        .post_async("/api/owner/notify/test", |r, c| edge::run(r, c, notify::test))
+        .post_async("/api/webhooks/telegram", |r, c| edge::run(r, c, notify::hook::webhook))
+        .get_async("/api/owner/telegram", |r, c| edge::run(r, c, notify::hook::owner::state))
+        .post_async("/api/owner/telegram/connect", |r, c| edge::run(r, c, notify::hook::owner::connect))
+        .post_async("/api/owner/telegram/link", |r, c| edge::run(r, c, notify::hook::owner::link))
+        .post_async("/api/owner/telegram/group", |r, c| edge::run(r, c, notify::hook::owner::group))
+        .post_async("/api/owner/telegram/test", |r, c| edge::run(r, c, notify::hook::owner::test))
+        .post_async("/api/owner/telegram/unlink", |r, c| edge::run(r, c, notify::hook::owner::unlink))
+        .get_async("/api/owner/inbox", |r, c| edge::run(r, c, channels::inbox))
+        .get_async("/api/owner/threads", |r, c| edge::run(r, c, social::inbox::list))
+        .get_async("/api/owner/inbox/:peer", |r, c| edge::run(r, c, channels::thread))
+        .post_async("/api/owner/inbox/:peer", |r, c| edge::run(r, c, channels::reply))
+        .get_async("/api/owner/backup/cloud", |r, c| edge::run(r, c, cloud::status))
+        .post_async("/api/owner/backup/cloud", |r, c| edge::run(r, c, cloud::push))
+        .get_async("/api/webhooks/meta", |r, c| edge::run(r, c, channels::webhook_verify))
+        .post_async("/api/webhooks/meta", |r, c| edge::run(r, c, channels::webhook))
+        .get_async("/api/owner/integrations", |r, c| edge::run(r, c, integrations::status))
+        .get_async("/api/owner/dpa", |r, c| edge::run(r, c, privacy::dpa::read))
+        .post_async("/api/owner/dpa/accept", |r, c| edge::run(r, c, privacy::dpa::accept))
         // L7: lesson videos from R2 `dowiz-learn`, staff/owner/courier Bearer only, Range-aware.
-        .get_async("/api/learn/manifest", learn::manifest)
+        .get_async("/api/learn/manifest", |r, c| edge::run(r, c, learn::manifest))
         .get_async("/api/learn/media/*key", learn::media)
-        .post_async("/api/owner/integrations/check", integrations::check)
-        .get_async("/api/owner/ebills", ebills::routes::status)
-        .post_async("/api/owner/ebills/config", ebills::routes::config)
-        .post_async("/api/owner/ebills/map", ebills::routes::map)
-        .get_async("/api/owner/fiscal", fiscal::routes::status)
-        .post_async("/api/owner/fiscal/ebills", fiscal::routes::set)
-        .get_async("/api/owner/orders/:id/receipt", fiscal::routes::receipt)
-        .get_async("/api/mcp", mcp::describe)
-        .post_async("/api/mcp", mcp::rpc)
+        .post_async("/api/owner/integrations/check", |r, c| edge::run(r, c, integrations::check))
+        .get_async("/api/owner/ebills", |r, c| edge::run(r, c, ebills::routes::status))
+        .post_async("/api/owner/ebills/config", |r, c| edge::run(r, c, ebills::routes::config))
+        .post_async("/api/owner/ebills/map", |r, c| edge::run(r, c, ebills::routes::map))
+        .get_async("/api/owner/fiscal", |r, c| edge::run(r, c, fiscal::routes::status))
+        .post_async("/api/owner/fiscal/ebills", |r, c| edge::run(r, c, fiscal::routes::set))
+        .get_async("/api/owner/orders/:id/receipt", |r, c| edge::run(r, c, fiscal::routes::receipt))
+        .get_async("/api/mcp", |r, c| edge::run(r, c, mcp::describe))
+        .post_async("/api/mcp", |r, c| edge::run(r, c, mcp::rpc))
         // A person's own agent key (mcp/keys.rs): minted in their app, seen and ended by the owner.
-        .get_async("/api/staff/mcp/keys", mcp::staff_list)
-        .post_async("/api/staff/mcp/keys", mcp::staff_mint)
-        .post_async("/api/staff/mcp/keys/revoke", mcp::staff_revoke)
-        .get_async("/api/courier/mcp/keys", mcp::courier_list)
-        .post_async("/api/courier/mcp/keys", mcp::courier_mint)
-        .post_async("/api/courier/mcp/keys/revoke", mcp::courier_revoke)
-        .get_async("/api/owner/mcp/keys", mcp::owner_list)
-        .post_async("/api/owner/mcp/keys/revoke", mcp::owner_revoke)
-        .post_async("/api/owner/menu/import", services::catalogue::import::import_menu)
-        .get_async("/api/owner/couriers", services::courier::console::couriers)
-        .post_async("/api/owner/couriers/invite", services::courier::hiring::invite_courier)
-        .post_async("/api/owner/couriers/:id/uninvite", services::courier::hiring::uninvite_courier)
-        .post_async("/api/owner/couriers/:id/active", services::courier::hiring::set_courier_active)
-        .get_async("/api/owner/posts", services::engagement::posts::posts)
-        .post_async("/api/owner/posts/draft", services::engagement::posts::draft_post)
-        .post_async("/api/owner/posts/:id/approve", services::engagement::verdict::approve_post)
-        .post_async("/api/owner/posts/:id/reject", services::engagement::verdict::reject_post)
-        .get_async("/api/owner/graph", services::engagement::assist::graph)
-        .get_async("/api/live", live::connect)
-        .get_async("/api/owner/health", services::operations::health)
-        .get_async("/api/owner/history", services::operations::history)
-        .post_async("/api/owner/hub/rotate", services::operations::rotate_now)
-        .get_async("/api/owner/backup", services::operations::backup)
-        .post_async("/api/owner/restore", services::operations::restore)
-        .post_async("/api/owner/assist", services::engagement::assist::owner_assist)
-        .post_async("/api/courier/assist", services::engagement::assist::courier_assist)
-        .get_async("/api/owner/apikeys", services::identity::keys::list_api_keys)
-        .post_async("/api/owner/apikeys", services::identity::keys::create_api_key)
-        .post_async("/api/owner/apikeys/revoke", services::identity::keys::revoke_api_key)
-        .post_async("/api/owner/products/:id/image", services::catalogue::media::set_product_image)
-        .post_async("/api/owner/products/:id/image/clear", services::catalogue::media::clear_product_image)
+        .get_async("/api/staff/mcp/keys", |r, c| edge::run(r, c, mcp::staff_list))
+        .post_async("/api/staff/mcp/keys", |r, c| edge::run(r, c, mcp::staff_mint))
+        .post_async("/api/staff/mcp/keys/revoke", |r, c| edge::run(r, c, mcp::staff_revoke))
+        .get_async("/api/courier/mcp/keys", |r, c| edge::run(r, c, mcp::courier_list))
+        .post_async("/api/courier/mcp/keys", |r, c| edge::run(r, c, mcp::courier_mint))
+        .post_async("/api/courier/mcp/keys/revoke", |r, c| edge::run(r, c, mcp::courier_revoke))
+        .get_async("/api/owner/mcp/keys", |r, c| edge::run(r, c, mcp::owner_list))
+        .post_async("/api/owner/mcp/keys/revoke", |r, c| edge::run(r, c, mcp::owner_revoke))
+        .post_async("/api/owner/menu/import", |r, c| edge::run(r, c, services::catalogue::import::import_menu))
+        .get_async("/api/owner/couriers", |r, c| edge::run(r, c, services::courier::console::couriers))
+        .post_async("/api/owner/couriers/invite", |r, c| edge::run(r, c, services::courier::hiring::invite_courier))
+        .post_async("/api/owner/couriers/:id/uninvite", |r, c| edge::run(r, c, services::courier::hiring::uninvite_courier))
+        .post_async("/api/owner/couriers/:id/active", |r, c| edge::run(r, c, services::courier::hiring::set_courier_active))
+        .get_async("/api/owner/posts", |r, c| edge::run(r, c, services::engagement::posts::posts))
+        .post_async("/api/owner/posts/draft", |r, c| edge::run(r, c, services::engagement::posts::draft_post))
+        .post_async("/api/owner/posts/:id/approve", |r, c| edge::run(r, c, services::engagement::verdict::approve_post))
+        .post_async("/api/owner/posts/:id/reject", |r, c| edge::run(r, c, services::engagement::verdict::reject_post))
+        .get_async("/api/owner/graph", |r, c| edge::run(r, c, services::engagement::assist::graph))
+        .get_async("/api/live", |r, c| edge::run(r, c, live::connect))
+        .get_async("/api/owner/health", |r, c| edge::run(r, c, services::operations::health))
+        .get_async("/api/owner/history", |r, c| edge::run(r, c, services::operations::history))
+        .post_async("/api/owner/hub/rotate", |r, c| edge::run(r, c, services::operations::rotate_now))
+        .get_async("/api/owner/backup", |r, c| edge::run(r, c, services::operations::backup))
+        .post_async("/api/owner/restore", |r, c| edge::run(r, c, services::operations::restore))
+        .post_async("/api/owner/assist", |r, c| edge::run(r, c, services::engagement::assist::owner_assist))
+        .post_async("/api/courier/assist", |r, c| edge::run(r, c, services::engagement::assist::courier_assist))
+        .get_async("/api/owner/apikeys", |r, c| edge::run(r, c, services::identity::keys::list_api_keys))
+        .post_async("/api/owner/apikeys", |r, c| edge::run(r, c, services::identity::keys::create_api_key))
+        .post_async("/api/owner/apikeys/revoke", |r, c| edge::run(r, c, services::identity::keys::revoke_api_key))
+        .post_async("/api/owner/products/:id/image", |r, c| edge::run(r, c, services::catalogue::media::set_product_image))
+        .post_async("/api/owner/products/:id/image/clear", |r, c| edge::run(r, c, services::catalogue::media::clear_product_image))
         // The venue's own mark, stored the way its dishes' photographs are.
-        .post_async("/api/owner/place", services::venue::place::set_place)
-        .post_async("/api/owner/logo", services::catalogue::media::set_venue_logo)
-        .post_async("/api/owner/logo/clear", services::catalogue::media::clear_venue_logo)
-        .get_async("/media/:name", services::catalogue::media::media)
+        .post_async("/api/owner/place", |r, c| edge::run(r, c, services::venue::place::set_place))
+        .post_async("/api/owner/logo", |r, c| edge::run(r, c, services::catalogue::media::set_venue_logo))
+        .post_async("/api/owner/logo/clear", |r, c| edge::run(r, c, services::catalogue::media::clear_venue_logo))
+        .get_async("/media/:name", |r, c| edge::run(r, c, services::catalogue::media::media))
         // ── courier ──
-        .get_async("/api/courier/tasks", courier::tasks)
-        .post_async("/api/courier/shift", courier::shift)
-        .post_async("/api/courier/orders/:id/accept", courier::accept)
-        .post_async("/api/courier/orders/:id/pickup", courier::pickup)
-        .post_async("/api/courier/orders/:id/deliver", courier::deliver)
-        .post_async("/api/courier/orders/:id/refused", courier::refused)
-        .post_async("/api/courier/position", courier::position)
-        .get_async("/api/courier/earnings", courier::earnings)
-        .get_async("/api/courier/history", services::courier::history::courier_history)
-        .get_async("/api/order/:id", |req, ctx| async move {
-            let Some(id) = ctx.param("id").cloned() else {
-                return Response::error("missing order id", 400);
-            };
-            // ── AN ORDER IS NOT READABLE BY WHOEVER KNOWS ITS ID ──
-            //
-            // This route was public. An id is not a secret -- it appears in a
-            // URL, a browser history, a shared screenshot -- and behind it sat
-            // the customer's name, phone and street address. That is
-            // capability-by-obscurity, and it was live.
-            //
-            // Three principals may read one order, and each is checked against
-            // THIS order rather than against a role: the customer holding the
-            // key minted with it, the venue's owner, and the courier whose run
-            // it actually is. A courier is not entitled to every customer's
-            // address in the venue.
-            let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-            let Some(order_json) = hubstore::order(&place, &id).await? else {
-                return Response::error("order not found", 404);
-            };
-            let envelope: serde_json::Value =
-                serde_json::from_str(&order_json).unwrap_or(serde_json::json!({}));
-
-            // Only the venue's own people see what a dish costs the kitchen
-            // (W-PERF P1's stamp); the customer and the courier read the order
-            // without it.
-            let mut insider = false;
-            let allowed = match auth::authenticate(&req, &ctx.env, ctx.data.now_ms).await {
-                Ok(auth::Principal::Customer { order_id, .. }) => order_id == id,
-                // AN OWNER OF THIS VENUE, not an owner of any venue.
-                //
-                // `authenticate`'s owner check asks "is this user an owner
-                // somewhere", because that is all a role needs. Here the
-                // question is about a VENUE: a platform-admin token carries no
-                // location at all and this route used to answer `true` for it,
-                // so it read any venue's orders -- name, phone and address --
-                // on the venue's own host, which `accounts.rs` states in as
-                // many words that it cannot do. The claim has to name THIS
-                // hub.
-                Ok(auth::Principal::Owner { active_location_id, .. }) => {
-                    insider = active_location_id.as_deref() == Some(place.venue.as_str());
-                    insider
-                }
-                Ok(auth::Principal::Courier { courier_id, .. }) => {
-                    envelope.get("courier_id").and_then(|c| c.as_str()) == Some(courier_id.as_str())
-                }
-                // Staff of THIS venue who may move or take orders read them.
-                Ok(auth::Principal::Staff { active_location_id, caps, .. }) => {
-                    insider = active_location_id == place.venue
-                        && (caps.allows(auth::Cap::Advance) || caps.allows(auth::Cap::TakeOrders));
-                    insider
-                }
-                Err(_) => false,
-            };
-            if !allowed {
-                return Response::error("this order needs the link you were given", 401);
-            }
-            // The order as it stands NOW: the time that is left rides with it.
-            let mut live = envelope.clone();
-            if !insider {
-                crate::command::place::cost::strip(&mut live);
-            }
-            live_eta::attach_one(&place, &mut live, ctx.data.now_ms).await;
-            let mut res = Response::ok(serde_json::to_string(&live).unwrap_or(order_json))?;
-            res.headers_mut().set("content-type", "application/json; charset=utf-8")?;
-            // Never cached by anything between here and the browser: it holds
-            // an address.
-            res.headers_mut().set("cache-control", "private, no-store")?;
-            Ok(res)
-        })
+        .get_async("/api/courier/tasks", |r, c| edge::run(r, c, courier::tasks))
+        .post_async("/api/courier/shift", |r, c| edge::run(r, c, courier::shift))
+        .post_async("/api/courier/orders/:id/accept", |r, c| edge::run(r, c, courier::accept))
+        .post_async("/api/courier/orders/:id/pickup", |r, c| edge::run(r, c, courier::pickup))
+        .post_async("/api/courier/orders/:id/deliver", |r, c| edge::run(r, c, courier::deliver))
+        .post_async("/api/courier/orders/:id/refused", |r, c| edge::run(r, c, courier::refused))
+        .post_async("/api/courier/position", |r, c| edge::run(r, c, courier::position))
+        .get_async("/api/courier/earnings", |r, c| edge::run(r, c, courier::earnings))
+        .get_async("/api/courier/history", |r, c| edge::run(r, c, services::courier::history::courier_history))
+        .get_async("/api/order/:id", |r, c| edge::run(r, c, services::orders::read::order))
         // ── TWO LEGACY WRITE ROUTES, DELETED 2026-09-21 ──
         //
         // `POST /api/order` and `POST /api/order/:id/advance` took NO
@@ -591,8 +570,6 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         // weaker authentication is not a convenience, it is the hole.
         //
         // `scripts/smoke.sh` used them and now speaks the authenticated ones.
-        .run(req, env)
-        .await
 }
 
 /// The cron in wrangler.toml (`cloud::NIGHTLY_CRON`): every venue with a
@@ -608,11 +585,12 @@ pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     // has parts. `tools/gates/clock.sh` allows this line and the router's, and
     // nothing else on either entry point.
     let now_ms = Date::now().as_millis() as i64;
+    let env = edge::Env::Live(env);
     if event.cron() == cloud::NIGHTLY_CRON {
         cloud::nightly(&env, now_ms).await;
         // THE SAFETY NET: a venue with work due and no alarm is re-armed.
         cron::nightly(&env, now_ms).await;
     } else {
-        console_error!("scheduled: unknown cron {:?} -- nothing run", event.cron());
+        log_error!("scheduled: unknown cron {:?} -- nothing run", event.cron());
     }
 }

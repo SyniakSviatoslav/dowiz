@@ -4,6 +4,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::owner::{owner_and_venue};
 
@@ -55,7 +56,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
         (_, true) => (PostState::Failed, Some("no channel is set".to_string())),
         (Some(token), false) => {
             let url = format!("https://api.telegram.org/bot{token}/sendMessage");
-            let headers = Headers::new();
+            let mut headers = Headers::new();
             headers.set("content-type", "application/json")?;
             let payload =
                 json!({ "chat_id": channel, "text": p.text, "disable_web_page_preview": true });
@@ -66,7 +67,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
                     .with_headers(headers)
                     .with_body(Some(payload.to_string().into())),
             )?;
-            let mut res = Fetch::Request(r).send().await?;
+            let mut res = crate::edge::fetch(r).await?;
             if res.status_code() < 400 {
                 (PostState::Published, None)
             } else {

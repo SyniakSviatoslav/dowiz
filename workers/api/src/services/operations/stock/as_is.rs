@@ -72,9 +72,9 @@ pub fn link(cat: &mut Catalog, ids: &[String]) -> Value {
 
 /// `POST /api/owner/stock/as-is` `{products:[..]}`, after the route's owner
 /// check: ONE catalogue write for the whole list.
-pub async fn write(place: &crate::hubstore::Place, ids: Vec<String>) -> worker::Result<worker::Response> {
+pub async fn write(place: &crate::hubstore::Place, ids: Vec<String>) -> worker::Result<crate::wire::Reply> {
     let out = crate::hubstore::with_catalog(place, move |cat| Ok(link(cat, &ids))).await?;
-    worker::Response::from_json(&out)
+    crate::wire::Reply::from_json(&out)
 }
 
 /// Every dish that takes NOTHING off the shelf, with its category: what the

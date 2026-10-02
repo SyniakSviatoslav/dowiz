@@ -14,6 +14,8 @@ use crate::print_rail::{self as pr, AckIn, Change, JobIn, PollIn};
 use dowiz_hub::table::Table;
 use serde_json::{json, Value};
 use worker::*;
+// The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
+use crate::wire::{Call as Request, Reply as Response};
 
 impl HubImages {
     /// `POST /fold/print/<what>` — the Worker has resolved the venue from the

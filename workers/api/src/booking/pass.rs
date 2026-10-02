@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 use worker::wasm_bindgen::JsCast;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use dowiz_kernel::pass::{self, PassClaims, PassWindow};
 use dowiz_kernel::reservation::ReservationStatus;
@@ -52,6 +53,11 @@ async fn pass_key(place: &crate::hubstore::Place) -> Result<Vec<u8>> {
 }
 
 fn getrandom_fill(buf: &mut [u8]) -> Result<()> {
+    // Natively (a test) the OS CSPRNG, through the crate the Worker already links for the same
+    // job on wasm (`getrandom` with `js`); wasm keeps the Web Crypto call below (W-COV C2).
+    if !cfg!(target_arch = "wasm32") {
+        return getrandom::getrandom(buf).map_err(|e| Error::RustError(format!("no CSPRNG: {e}")));
+    }
     // The Workers runtime exposes the Web Crypto CSPRNG.
     let crypto = worker::js_sys::global()
         .dyn_into::<worker::js_sys::Object>()

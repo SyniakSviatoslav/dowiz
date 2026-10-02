@@ -18,6 +18,7 @@ mod tests;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// The agreement's version. A new text is a new version, and every venue
 /// shows as not having accepted it until its owner does.

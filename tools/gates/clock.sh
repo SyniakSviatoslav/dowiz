@@ -69,12 +69,16 @@ BASELINE_FILE=tools/gates/clock.baseline
 # `owner.rs` is NOT exempt as a file -- only the one-line body of `now_ms` is.
 # The rest of it is counted, which is the point: `owner.rs:1382` stamps a record
 # from the wall clock inside a handler, and that is the shape P3 removes.
+# W-COV (2026-09-30): `edge.rs`'s `Date` is the platform clock BEHIND the name every handler
+# already read (`Date::now()`), so a native test can run them; its one wasm32 read is allowed by
+# its exact text, and every caller's own `Date::now()` is still counted where it is.
 hits() {
   for f in $(find workers/api/src -name '*.rs' | sort); do
     sed 's,//.*,,' "$f" | grep -nE 'Date::now\(\)|now_ms\(\)' | sed "s|^|$f:|"
   done \
     | grep -v -e '^workers/api/src/otel\.rs:' \
         -e '^workers/api/src/hubdo\.rs:' \
+        -e '^workers/api/src/edge\.rs:[0-9]*: *Date(worker::Date::now()\.as_millis())$' \
         -e 'Router::with_data(Req { now_ms:' \
         -e '^workers/api/src/lib\.rs:[0-9]*: *let now_ms = Date::now()\.as_millis() as i64;$' \
         -e '^workers/api/src/errlog\.rs:[0-9]*: *"atMs": Date::now()\.as_millis() as i64,$'

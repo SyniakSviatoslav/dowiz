@@ -13,6 +13,8 @@ use super::HubImages;
 use crate::notify::route::produce;
 use crate::services::operations::stock::turn::{self, StockTurnIn};
 use worker::*;
+// The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
+use crate::wire::Reply as Response;
 
 impl HubImages {
     /// THE OWNER'S INGREDIENTS RESET (`/fold/stock_reset`): the stock image is

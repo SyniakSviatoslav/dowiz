@@ -23,6 +23,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::Sha256;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::owner::owner_and_venue;
 
@@ -104,7 +105,7 @@ pub fn instagram_cfg(s: &dowiz_hub::settings::Settings) -> Option<Instagram> {
 /// fix ("(#131030) Recipient phone number not in allowed list" tells a venue
 /// still in sandbox exactly what to do).
 async fn graph_post(token: &str, path: &str, payload: Value) -> std::result::Result<Value, String> {
-    let headers = Headers::new();
+    let mut headers = Headers::new();
     headers.set("content-type", "application/json").map_err(|e| e.to_string())?;
     headers.set("authorization", &format!("Bearer {token}")).map_err(|e| e.to_string())?;
     let r = Request::new_with_init(
@@ -112,7 +113,7 @@ async fn graph_post(token: &str, path: &str, payload: Value) -> std::result::Res
         RequestInit::new().with_method(Method::Post).with_headers(headers).with_body(Some(payload.to_string().into())),
     )
     .map_err(|e| e.to_string())?;
-    let mut res = Fetch::Request(r).send().await.map_err(|e| e.to_string())?;
+    let mut res = crate::edge::fetch(r).await.map_err(|e| e.to_string())?;
     let body = res.text().await.unwrap_or_default();
     let v: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
     if res.status_code() < 400 {
@@ -395,7 +396,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     let place = match crate::hubstore::Place::of_any(&req, &ctx).await {
         Ok(p) => p,
         Err(e) => {
-            console_log!("channels.webhook: no venue in this URL: {e}");
+            log_line!("channels.webhook: no venue in this URL: {e}");
             return Response::from_json(
                 &json!({ "stored": 0, "ignored": "this URL does not name a venue" }),
             );
@@ -410,7 +411,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
         // up Meta, not a failure of this delivery, and an unauthenticated
         // caller must not be able to write a row per request into the errors
         // table by pointing at such a venue.
-        console_log!("channels.webhook: a delivery was dropped, {} has no Meta app secret", place.venue);
+        log_line!("channels.webhook: a delivery was dropped, {} has no Meta app secret", place.venue);
         return Response::from_json(&json!({ "stored": 0, "ignored": "no app secret is set" }));
     };
     if !signature_ok(secret.trim(), signature, &raw) {
@@ -687,3 +688,8 @@ mod tests {
         assert!(!signature_ok("s", None, b"body"));
     }
 }
+
+/// The channel routes, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "channels/routes/tests.rs"]
+mod route_tests;

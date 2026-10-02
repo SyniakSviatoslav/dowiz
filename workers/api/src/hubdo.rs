@@ -35,7 +35,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use worker::wasm_bindgen::{JsCast, JsValue};
 use worker::*;
 
 /// Under the Durable Object's 128 KiB per-value ceiling with room for the key
@@ -76,6 +75,9 @@ mod menu; // the catalogue projection's routes (R2), `hubdo/menu.rs`
 mod preps; // the ПФ reads, answered here (R3), `hubdo/preps.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
 mod timer; // the venue's alarm: timed work without the minute cron (DAG Phase 2), `hubdo/timer.rs`
+/// Where the object lives: the platform, or (tests) memory (W-COV C2), `hubdo/host.rs`.
+pub(crate) mod host;
+use crate::wire::{Call, Reply};
 
 /// The catalogue image, which holds the venue's own record as well as its
 /// dishes. Named here because `/fold/venue` reads it and nothing else does.
@@ -196,7 +198,8 @@ struct AppendIn {
 
 #[durable_object]
 pub struct HubImages {
-    state: State,
+    /// The platform's `State` and `Env` (or, in tests, memory): `hubdo/host.rs`.
+    state: host::Host,
     /// The images this object has in hand. THE WHOLE POINT: a Durable Object
     /// outlives a request, so this survives between them and the storage below
     /// is touched only when the object is cold or something is written.
@@ -218,9 +221,6 @@ pub struct HubImages {
     /// An `alarm()` run is under way: the writes it causes do not re-arm,
     /// its end does (`hubdo/timer.rs`).
     in_alarm: std::cell::Cell<bool>,
-    /// The Worker's bindings, for the one route that calls OTHER objects:
-    /// `/fold/cron`, answered only by a `cron~<venue>` runner (`crate::cron`).
-    env: Env,
 }
 
 /// A stored chunk comes back as whatever the platform decided to hand us —
@@ -247,124 +247,33 @@ fn changed_chunks(old: Option<&[u8]>, new: &[u8], chunk: usize) -> Vec<usize> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{changed_chunks, OrderView};
-
-    /// A CLIENT THAT WAS AWAY IS TOLD WHAT IT MISSED, or told to ask again --
-    /// and the difference matters more than either answer. An empty list where
-    /// the window does not reach is a lie shaped exactly like "nothing has
-    /// changed", and a console would believe it for as long as it stayed open.
-    #[test]
-    fn a_catch_up_says_what_changed_or_says_it_cannot() {
-        let mk = |g: i64| super::Change {
-            generation: g,
-            kind: dowiz_hub::EventKind::Advanced as u8,
-            order_id: format!("ord_{g}"),
-            payload: String::new(),
-        };
-        let window: Vec<super::Change> = (10..=14).map(mk).collect();
-
-        // Inside the window: only what is newer.
-        let got = super::changes_since(&window, 12).expect("the window covers 12");
-        assert_eq!(got.len(), 2);
-        assert_eq!(got[0].generation, 13);
-        assert_eq!(got[1].generation, 14);
-
-        // The exact edge: a client at 9 has seen everything before 10.
-        assert!(super::changes_since(&window, 9).is_some());
-        assert_eq!(super::changes_since(&window, 9).unwrap().len(), 5);
-
-        // Before the edge: the window cannot say, and says so.
-        assert!(super::changes_since(&window, 8).is_none());
-        assert!(super::changes_since(&window, 0).is_none());
-
-        // Up to date: nothing changed, which is a real answer.
-        assert_eq!(super::changes_since(&window, 14).unwrap().len(), 0);
-
-        // A cold object has no window at all.
-        assert!(super::changes_since(&[], 14).is_none());
-    }
-
-    /// The projection crosses a boundary as JSON, so its shape is a contract.
-    /// `kind` travels as the byte the log itself stores, because the enum
-    /// cannot cross and a name could drift from the number.
-    #[test]
-    fn an_order_view_survives_the_json_it_crosses_on() {
-        let view = OrderView {
-            order_id: "ord_1".into(),
-            kind: dowiz_hub::EventKind::Advanced as u8,
-            seq: 1789000000000,
-            order_json: r#"{"id":"ord_1","status":"COOKING"}"#.into(),
-        };
-        let wire = serde_json::to_string(&view).expect("serialise");
-        let back: OrderView = serde_json::from_str(&wire).expect("parse");
-        assert_eq!(back.order_id, view.order_id);
-        assert_eq!(back.seq, view.seq);
-        assert_eq!(back.order_json, view.order_json);
-        assert_eq!(
-            dowiz_hub::EventKind::from_u8(back.kind),
-            Some(dowiz_hub::EventKind::Advanced),
-            "the byte has to name the same kind on the other side"
-        );
-    }
-
-
-    #[test]
-    fn without_an_old_image_every_chunk_is_written() {
-        assert_eq!(changed_chunks(None, &[1u8; 250], 100), vec![0, 1, 2]);
-        assert_eq!(changed_chunks(None, &[], 100), vec![0]);
-    }
-
-    #[test]
-    fn an_identical_image_writes_nothing() {
-        let img = [7u8; 250];
-        assert_eq!(changed_chunks(Some(&img), &img, 100), Vec::<usize>::new());
-    }
-
-    #[test]
-    fn an_append_touches_the_front_and_the_tail_only() {
-        let mut old = vec![0u8; 250];
-        old[3] = 1;
-        let mut new = old.clone();
-        new[3] = 2; // the superblock moved
-        new[249] = 9; // the tail moved
-        assert_eq!(changed_chunks(Some(&old), &new, 100), vec![0, 2]);
-    }
-
-    #[test]
-    fn growth_writes_the_new_chunks_and_the_last_old_one_it_extends() {
-        let old = vec![0u8; 250];
-        let mut new = vec![0u8; 420];
-        new[300] = 1;
-        // chunk 2 is now [200,300) where before it was [200,250): a longer
-        // slice than storage holds, so it is written; chunks 3 and 4 are
-        // wholly new; chunks 0 and 1 are untouched.
-        assert_eq!(changed_chunks(Some(&old), &new, 100), vec![2, 3, 4]);
-    }
-
-    #[test]
-    fn a_shorter_image_rewrites_the_chunk_that_got_shorter() {
-        let old = vec![5u8; 420];
-        let new = vec![5u8; 250];
-        // chunks 0 and 1 are the same 100 bytes; chunk 2 is now 50 bytes
-        // where storage holds 100, so it MUST be written even though those
-        // 50 bytes match -- the reviewer's case: skip it and the next cold
-        // load assembles 300 bytes under a meta that says 250.
-        assert_eq!(changed_chunks(Some(&old), &new, 100), vec![2]);
-    }
-}
-
-fn chunk_bytes(v: &JsValue) -> Option<Vec<u8>> {
-    if let Some(a) = v.dyn_ref::<js_sys::Uint8Array>() {
-        return Some(a.to_vec());
-    }
-    if let Some(b) = v.dyn_ref::<js_sys::ArrayBuffer>() {
-        return Some(js_sys::Uint8Array::new(b).to_vec());
-    }
-    None
-}
+mod tests;
 
 impl HubImages {
+    /// The object's clock: the platform's, or a test's fixed one. The only
+    /// place this file reads it for a write (`clock.sh` exempts `hubdo.rs`).
+    fn now_ms(&self) -> i64 {
+        self.state.fixed_clock().unwrap_or_else(|| Date::now().as_millis() as i64)
+    }
+
+    /// The object over memory, for tests (`hubdo/host/mem.rs`).
+    #[cfg(test)]
+    pub(crate) fn in_memory(host: std::rc::Rc<host::mem::MemHost>) -> Self {
+        Self::with_host(host::Host::Mem(host))
+    }
+
+    fn with_host(state: host::Host) -> Self {
+        Self {
+            state,
+            mem: RefCell::new(HashMap::new()),
+            recent: RefCell::new(Vec::new()),
+            positions: RefCell::new(HashMap::new()),
+            folded: RefCell::new(None),
+            menu: RefCell::new(None),
+            in_alarm: std::cell::Cell::new(false),
+        }
+    }
+
     fn meta_key(id: &str) -> String {
         format!("m:{id}")
     }
@@ -402,11 +311,10 @@ impl HubImages {
         // the round-trip-per-chunk shape that made the D1 version slow, on a
         // store where the calls are cheaper but not free.
         let keys: Vec<String> = (0..meta.chunks).map(|n| Self::chunk_key(id, n)).collect();
-        let got = store.get_multiple(keys.clone()).await?;
+        let got = store.get_chunks(&keys).await?;
         let mut bytes = Vec::with_capacity(meta.len);
-        for key in &keys {
-            let v = got.get(&JsValue::from_str(key));
-            let Some(part) = chunk_bytes(&v) else {
+        for (key, part) in keys.iter().zip(got) {
+            let Some(part) = part else {
                 // A meta record whose chunks are not all there is not an image.
                 // Refusing names it; assembling what IS there would hand the
                 // kernel a truncated arena.
@@ -529,7 +437,12 @@ impl HubImages {
     /// is billed only while the object is actually running. A socket held by
     /// the object itself would keep it awake and turn a free connection into a
     /// billed one.
-    fn accept(&self, tag: &str, protocol: Option<&str>) -> Result<Response> {
+    fn accept(&self, tag: &str, protocol: Option<&str>) -> Result<worker::Response> {
+        let state = match &self.state {
+            host::Host::Live { state, .. } => state,
+            #[cfg(test)]
+            host::Host::Mem(_) => return worker::Response::error("no sockets in memory", 500),
+        };
         let pair = WebSocketPair::new()?;
         // A COURIER GETS TWO TAGS: `courier`, which the queue broadcast fans
         // out to, and `courier:<id>`, which says whose socket this is. The
@@ -538,9 +451,9 @@ impl HubImages {
         if let Some(id) = tag.strip_prefix("courier:") {
             let both = [TAG_COURIER, tag];
             let _ = id;
-            self.state.accept_websocket_with_tags(&pair.server, &both);
+            state.accept_websocket_with_tags(&pair.server, &both);
         } else {
-            self.state.accept_websocket_with_tags(&pair.server, &[tag]);
+            state.accept_websocket_with_tags(&pair.server, &[tag]);
         }
         // ── THE SUBPROTOCOL IS ECHOED WHERE THE RESPONSE IS BUILT ──
         //
@@ -551,7 +464,7 @@ impl HubImages {
         // immutable headers, so that threw and the handshake answered 500.
         // Here the response has not been built yet, so the header is part of
         // its construction.
-        let res = Response::from_websocket(pair.client)?;
+        let res = worker::Response::from_websocket(pair.client)?;
         match protocol {
             Some(p) => {
                 let headers = Headers::new();
@@ -719,7 +632,7 @@ impl HubImages {
                 // LOUD, AND THE ORDER IS NAMED. The order exists and its
                 // ingredients are not held; that is the recoverable direction
                 // (see the header) but it is not a silent one.
-                console_error!(
+                log_error!(
                     "stock: order {} was placed and its reservations were NOT written",
                     input.order_id
                 );
@@ -746,7 +659,7 @@ impl HubImages {
             // The stored lines carry each dish's `station` (`bell_route`).
             let lines = crate::bell_route::lines_of(&stored);
             if let Err(e) = self.enqueue_bell(&input.order_id, text, &lines, None, input.now_ms).await {
-                console_error!("outbox: order {} was placed and the bell was NOT queued: {e}", input.order_id);
+                log_error!("outbox: order {} was placed and the bell was NOT queued: {e}", input.order_id);
             }
         }
 
@@ -754,10 +667,10 @@ impl HubImages {
         // `hubdo/fiscal.rs`), at a venue with `fiscal.since_ms` set; loud, never fatal.
         match self.enqueue_fiscal(&stored, input.now_ms).await {
             Ok(crate::fiscal::wire::AtPlacement::Refused(r)) => {
-                console_error!("fiscal: order {} owes a document and none was built: {r:?}", input.order_id)
+                log_error!("fiscal: order {} owes a document and none was built: {r:?}", input.order_id)
             }
             Ok(_) => {}
-            Err(e) => console_error!("fiscal: order {} was placed and its document was NOT queued: {e}", input.order_id),
+            Err(e) => log_error!("fiscal: order {} was placed and its document was NOT queued: {e}", input.order_id),
         }
 
         // THE GROUPS (W0a/W0b): a crossing of a low threshold, and orders now late.
@@ -836,7 +749,7 @@ impl HubImages {
                 .await?
                 .is_none()
         {
-            console_error!(
+            log_error!(
                 "stock: order {} advanced to {} and the settlement was NOT written",
                 input.order_id,
                 input.next
@@ -914,7 +827,7 @@ impl HubImages {
             .to_bytes()
             .map_err(|e| Error::RustError(format!("ops image will not serialise: {e:?}")))?;
         if self.put_image(ops_image, ops_generation, &ops_bytes).await?.is_none() {
-            console_error!(
+            log_error!(
                 "ops: order {} names courier {} and the assignment was NOT written",
                 input.order_id,
                 input.courier_id
@@ -1125,8 +1038,7 @@ impl HubImages {
             for n in changed {
                 let at = n * CHUNK;
                 let end = (at + CHUNK).min(bytes.len());
-                let part = js_sys::Uint8Array::from(&bytes[at..end]);
-                store.put_raw(&Self::chunk_key(id, n), part).await?;
+                store.put_bytes(&Self::chunk_key(id, n), &bytes[at..end]).await?;
             }
             // META LAST. Between the chunks and this line the old meta still
             // describes the old image, so an interruption leaves the previous
@@ -1159,12 +1071,16 @@ impl HubImages {
         self.mem.borrow_mut().insert(id.to_string(), (meta, bytes.to_vec()));
         // TIMED WORK ARMS THE ALARM in the write that makes it due (DAG Phase 2).
         if crate::cron::timer::TIMED.contains(&id) {
-            self.timer_after_write(Date::now().as_millis() as i64).await;
+            self.timer_after_write(self.now_ms()).await;
         }
         // THE PROJECTION IS DERIVED FROM THIS IMAGE, so it moves with the
         // write: stepped over the events an append or a command added, dropped
         // by any other write (`fold::projection::after_log_write`).
         if id == LOG_IMAGE {
+            // AN APPEND IS NOT A GAP (W-COV BUG-1): it adds exactly the one
+            // event `append` broadcasts next, into the window. Only a write
+            // that adds events nobody broadcast one by one is a gap.
+            let gap = !matches!(how, crate::fold::projection::Written::Appended(_));
             crate::fold::projection::after_log_write(&mut self.folded.borrow_mut(), expected, next, how);
             // ── A WHOLE-IMAGE WRITE IS A GAP, AND IT HAS TO BE ONE ──
             //
@@ -1180,11 +1096,13 @@ impl HubImages {
             // So the window is CLEARED, which makes `changes_since` answer
             // `None` -- "ask for the list" -- and the sockets are told the log
             // moved so they ask now rather than in ninety seconds.
-            self.recent.borrow_mut().clear();
-            let msg = serde_json::json!({ "t": "moved", "generation": next }).to_string();
-            for tag in [TAG_CONSOLE, TAG_COURIER, crate::services::orders::kitchen_ack::board::TAG_KITCHEN] {
-                for ws in self.state.get_websockets_with_tag(tag) {
-                    let _ = ws.send_with_str(&msg);
+            if gap {
+                self.recent.borrow_mut().clear();
+                let msg = serde_json::json!({ "t": "moved", "generation": next }).to_string();
+                for tag in [TAG_CONSOLE, TAG_COURIER, crate::services::orders::kitchen_ack::board::TAG_KITCHEN] {
+                    for ws in self.state.get_websockets_with_tag(tag) {
+                        let _ = ws.send_with_str(&msg);
+                    }
                 }
             }
         }
@@ -1192,83 +1110,64 @@ impl HubImages {
     }
 }
 
-impl DurableObject for HubImages {
-    fn new(state: State, env: Env) -> Self {
-        Self {
-            state,
-            mem: RefCell::new(HashMap::new()),
-            recent: RefCell::new(Vec::new()),
-            positions: RefCell::new(HashMap::new()),
-            folded: RefCell::new(None),
-            menu: RefCell::new(None),
-            in_alarm: std::cell::Cell::new(false),
-            env,
+impl HubImages {
+    /// One text frame from a socket (`websocket_message`): the answer to send
+    /// back, if any. `tags` is the socket's, asked for only by a GPS frame.
+    fn on_message(&self, text: &str, tags: impl FnOnce() -> Vec<String>) -> Option<&'static str> {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(text) else { return None };
+        match v.get("t").and_then(serde_json::Value::as_str) {
+            Some("ping") => return Some(r#"{"t":"pong"}"#),
+            Some("gps") => {
+                // WHOSE POSITION THIS IS COMES FROM THE TAG. It used to come
+                // from the frame, so one courier's socket could move another
+                // courier's pin on the venue's map -- and through it every
+                // customer's estimate. The tag was attached by the Worker from
+                // a verified claim; the frame is whatever was typed into it.
+                let Some(courier) = courier_of(&tags()) else {
+                    return None;
+                };
+                let (Some(lat), Some(lng)) = (
+                    v.get("lat_e6").and_then(serde_json::Value::as_i64),
+                    v.get("lng_e6").and_then(serde_json::Value::as_i64),
+                ) else {
+                    return None;
+                };
+                // MICRO-DEGREES, as integers, exactly as an order carries them:
+                // a float crossing into this system is what MANIFESTO C2
+                // forbids, and a position is not an exception.
+                if !(-90_000_000..=90_000_000).contains(&lat)
+                    || !(-180_000_000..=180_000_000).contains(&lng)
+                {
+                    return None;
+                }
+                self.positions.borrow_mut().insert(
+                    courier,
+                    Fix { lat_e6: lat, lng_e6: lng, at_ms: self.now_ms() },
+                );
+            }
+            _ => {}
         }
+        None
     }
 
-    /// The object's whole surface. NOT REACHABLE FROM THE INTERNET: a Durable
-    /// Object is addressable only through a stub held by a Worker that has the
-    /// binding, so these paths need no authentication of their own — the
-    /// handlers that call them have already done it.
-    ///
-    /// TWO KINDS OF ROUTE, and the difference is phase 2. `/img/...` hands over
-    /// BYTES: the catalogue, the settings, a backup, anything whose reader is
-    /// not this object. `/fold/...` hands over ANSWERS: the queue, one order,
-    /// an append. The bytes route stays because an image still has to be
-    /// exportable and importable; the fold route exists so that asking what is
-    /// in the queue stops costing the whole history of the venue.
-    async fn fetch(&self, req: Request) -> Result<Response> {
+    /// Every route but the two that need the platform itself (the runner's
+    /// cron and the socket upgrade, which stay in `fetch`), over a `Call` so
+    /// the whole surface runs under `cargo test` (W-COV C2, `crate::wire`).
+    pub(crate) async fn route(&self, req: Call) -> Result<Reply> {
+        use Reply as Response;
         let path = req.path();
         let mut seg = path.split('/').filter(|s| !s.is_empty());
         let head = seg.next().unwrap_or("");
         if head == "fold" {
             let what = seg.next().unwrap_or("");
             return match (req.method(), what) {
-                // ── THE MINUTE CRON, for one venue (`crate::cron`) ──
-                //
-                // Only a runner object is asked this: the Worker addresses
-                // `cron~<venue>`, never a venue's own hub, so the jobs below
-                // call the venue's object as a different instance and never
-                // wait on themselves.
-                (Method::Post, "cron") => {
-                    let url = req.url()?;
-                    let Some((venue, now_ms)) = crate::cron::parse_runner_query(
-                        url.query_pairs().map(|(k, v)| (k.to_string(), v.to_string())),
-                    ) else {
-                        return Response::error("cron needs a venue and a clock", 400);
-                    };
-                    crate::cron::run(&self.env, &venue, now_ms).await;
-                    Response::ok("done")
-                }
                 // The nightly's safety net: re-arm a lost alarm (`hubdo/timer.rs`).
                 (Method::Post, "timer") => self.timer_route(req).await,
-                // ── THE SOCKET ──
-                //
-                // The Worker has already decided WHO this is and which topic
-                // they may hear; the tag it sends is that decision. This object
-                // is not reachable from the internet, so the tag arriving here
-                // is the Worker's word, not a client's.
-                (Method::Get, "socket") => {
-                    let url = req.url()?;
-                    let tag = url
-                        .query_pairs()
-                        .find(|(k, _)| k == "tag")
-                        .map(|(_, v)| v.to_string())
-                        .unwrap_or_default();
-                    if tag.is_empty() {
-                        return Response::error("a socket needs a tag", 400);
-                    }
-                    let protocol = url
-                        .query_pairs()
-                        .find(|(k, _)| k == "proto")
-                        .map(|(_, v)| v.to_string());
-                    self.accept(&tag, protocol.as_deref())
-                }
                 // Where the couriers are, as they last said over their sockets.
                 // Empty after a hibernation, which is honest: a position whose
                 // meaning expires in minutes should not survive a sleep.
                 (Method::Get, "positions") => {
-                    let now = Date::now().as_millis() as i64;
+                    let now = self.now_ms();
                     let fresh: HashMap<String, Fix> = self
                         .positions
                         .borrow()
@@ -1559,6 +1458,78 @@ impl DurableObject for HubImages {
             _ => Response::error("method not allowed", 405),
         }
     }
+}
+
+impl DurableObject for HubImages {
+    fn new(state: State, env: worker::Env) -> Self {
+        Self::with_host(host::Host::Live { state, env })
+    }
+
+    /// The object's whole surface. NOT REACHABLE FROM THE INTERNET: a Durable
+    /// Object is addressable only through a stub held by a Worker that has the
+    /// binding, so these paths need no authentication of their own — the
+    /// handlers that call them have already done it.
+    ///
+    /// TWO KINDS OF ROUTE, and the difference is phase 2. `/img/...` hands over
+    /// BYTES: the catalogue, the settings, a backup, anything whose reader is
+    /// not this object. `/fold/...` hands over ANSWERS: the queue, one order,
+    /// an append. The bytes route stays because an image still has to be
+    /// exportable and importable; the fold route exists so that asking what is
+    /// in the queue stops costing the whole history of the venue.
+    async fn fetch(&self, req: worker::Request) -> Result<worker::Response> {
+        let path = req.path();
+        let mut seg = path.split('/').filter(|s| !s.is_empty());
+        if seg.next() == Some("fold") {
+            let platform: Option<Result<worker::Response>> = match (req.method(), seg.next().unwrap_or("")) {
+                // ── THE MINUTE CRON, for one venue (`crate::cron`) ──
+                //
+                // Only a runner object is asked this: the Worker addresses
+                // `cron~<venue>`, never a venue's own hub, so the jobs below
+                // call the venue's object as a different instance and never
+                // wait on themselves.
+                (Method::Post, "cron") => {
+                    let url = req.url()?;
+                    let Some((venue, now_ms)) = crate::cron::parse_runner_query(
+                        url.query_pairs().map(|(k, v)| (k.to_string(), v.to_string())),
+                    ) else {
+                        return worker::Response::error("cron needs a venue and a clock", 400);
+                    };
+                    let Some(env) = self.state.env() else {
+                        return worker::Response::error("no runner outside the platform", 500);
+                    };
+                    crate::cron::run(&crate::edge::Env::Live(env.clone()), &venue, now_ms).await;
+                    Some(worker::Response::ok("done"))
+                }
+                // ── THE SOCKET ──
+                //
+                // The Worker has already decided WHO this is and which topic
+                // they may hear; the tag it sends is that decision. This object
+                // is not reachable from the internet, so the tag arriving here
+                // is the Worker's word, not a client's.
+                (Method::Get, "socket") => {
+                    let url = req.url()?;
+                    let tag = url
+                        .query_pairs()
+                        .find(|(k, _)| k == "tag")
+                        .map(|(_, v)| v.to_string())
+                        .unwrap_or_default();
+                    if tag.is_empty() {
+                        return worker::Response::error("a socket needs a tag", 400);
+                    }
+                    let protocol = url
+                        .query_pairs()
+                        .find(|(k, _)| k == "proto")
+                        .map(|(_, v)| v.to_string());
+                    Some(self.accept(&tag, protocol.as_deref()))
+                }
+                _ => None,
+            };
+            if let Some(answer) = platform {
+                return answer;
+            }
+        }
+        self.route(Call::from_worker(req).await?).await?.into_response()
+    }
 
     /// What a client may say over its socket.
     ///
@@ -1585,40 +1556,14 @@ impl DurableObject for HubImages {
             // handling: answering would teach a client to send more.
             return Ok(());
         };
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return Ok(()) };
-        match v.get("t").and_then(serde_json::Value::as_str) {
-            Some("ping") => {
-                let _ = ws.send_with_str(r#"{"t":"pong"}"#);
-            }
-            Some("gps") => {
-                // WHOSE POSITION THIS IS COMES FROM THE TAG. It used to come
-                // from the frame, so one courier's socket could move another
-                // courier's pin on the venue's map -- and through it every
-                // customer's estimate. The tag was attached by the Worker from
-                // a verified claim; the frame is whatever was typed into it.
-                let Some(courier) = courier_of(&self.state.get_tags(&ws)) else {
-                    return Ok(());
-                };
-                let (Some(lat), Some(lng)) = (
-                    v.get("lat_e6").and_then(serde_json::Value::as_i64),
-                    v.get("lng_e6").and_then(serde_json::Value::as_i64),
-                ) else {
-                    return Ok(());
-                };
-                // MICRO-DEGREES, as integers, exactly as an order carries them:
-                // a float crossing into this system is what MANIFESTO C2
-                // forbids, and a position is not an exception.
-                if !(-90_000_000..=90_000_000).contains(&lat)
-                    || !(-180_000_000..=180_000_000).contains(&lng)
-                {
-                    return Ok(());
-                }
-                self.positions.borrow_mut().insert(
-                    courier,
-                    Fix { lat_e6: lat, lng_e6: lng, at_ms: Date::now().as_millis() as i64 },
-                );
-            }
-            _ => {}
+        // The tags are asked for only when a frame needs them (`on_message`).
+        let tags = || match &self.state {
+            host::Host::Live { state, .. } => state.get_tags(&ws),
+            #[cfg(test)]
+            host::Host::Mem(_) => Vec::new(),
+        };
+        if let Some(answer) = self.on_message(&text, tags) {
+            let _ = ws.send_with_str(answer);
         }
         Ok(())
     }
@@ -1640,14 +1585,14 @@ impl DurableObject for HubImages {
     /// is worth seeing, and not turned into an error that would take the
     /// object down with it.
     async fn websocket_error(&self, _ws: WebSocket, error: Error) -> Result<()> {
-        console_log!("hub socket error: {error}");
+        log_line!("hub socket error: {error}");
         Ok(())
     }
 
     /// THE VENUE'S TIMED WORK, due now (`hubdo/timer.rs`): the outbox drain,
     /// the till link's poll and the fiscal firing, in place of the minute cron.
     /// The object's own clock read, as `append` stamps an event with one.
-    async fn alarm(&self) -> Result<Response> {
-        self.timer_alarm(Date::now().as_millis() as i64).await
+    async fn alarm(&self) -> Result<worker::Response> {
+        self.timer_alarm(Date::now().as_millis() as i64).await?.into_response()
     }
 }

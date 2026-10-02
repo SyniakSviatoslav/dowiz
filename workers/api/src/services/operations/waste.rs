@@ -23,6 +23,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// One binned thing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

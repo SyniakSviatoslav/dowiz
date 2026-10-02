@@ -57,8 +57,8 @@ else
 fi
 
 copy
-edit "$SCRATCH/r/workers/api/src/lib.rs" 'Ok(auth::Principal::Customer { order_id, .. }) => order_id == id,' 'Ok(auth::Principal::Customer { .. }) => true,'
-want 1 "lib.rs /api/order/:id customer arm answers true"
+edit "$SCRATCH/r/workers/api/src/services/orders/read.rs" 'Ok(crate::auth::Principal::Customer { order_id, .. }) => order_id == id,' 'Ok(crate::auth::Principal::Customer { .. }) => true,'
+want 1 "orders/read.rs /api/order/:id customer arm answers true"
 
 copy
 edit "$SCRATCH/r/workers/api/src/social.rs" '    if let Err((code, why)) = party::thread_party(&p, &id, false) {

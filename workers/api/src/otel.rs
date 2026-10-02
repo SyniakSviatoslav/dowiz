@@ -37,6 +37,7 @@
 
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// One span, held until the request ends.
 pub struct Span {
@@ -75,9 +76,10 @@ fn hex(bytes: usize) -> String {
 
 impl Trace {
     /// Continue an incoming trace, or start one.
-    pub fn begin(req: &Request, name: &str) -> Self {
-        let tp = req.headers().get("traceparent").ok().flatten();
-        let (trace_id, parent) = match tp.as_deref().and_then(parse_traceparent) {
+    /// `traceparent` is the incoming header's value, read by the caller (`lib.rs`): the span
+    /// needs nothing else from the request, and so it can be begun natively (W-COV C2).
+    pub fn begin(traceparent: Option<&str>, name: &str) -> Self {
+        let (trace_id, parent) = match traceparent.and_then(parse_traceparent) {
             Some((t, p)) => (t, Some(p)),
             None => (hex(16), None),
         };
@@ -177,7 +179,7 @@ impl Trace {
         };
         let url = format!("{}/v1/traces", endpoint.to_string().trim_end_matches('/'));
 
-        let headers = Headers::new();
+        let mut headers = Headers::new();
         let _ = headers.set("content-type", "application/json");
         if let Ok(h) = env.secret("OTEL_EXPORTER_OTLP_HEADERS") {
             // `key=value,key=value`, the OTLP convention.
@@ -194,7 +196,7 @@ impl Trace {
         if let Ok(req) = Request::new_with_init(&url, &init) {
             // Errors are deliberately dropped. A collector being down must not
             // turn into a failed order.
-            let _ = Fetch::Request(req).send().await;
+            let _ = crate::edge::fetch(req).await;
         }
     }
 
@@ -234,3 +236,6 @@ fn to_any(v: &Value) -> Value {
         other => json!({ "stringValue": other.to_string() }),
     }
 }
+
+#[cfg(test)]
+mod tests;

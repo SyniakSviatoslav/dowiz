@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 pub use dowiz_hub::caps::{Cap, Caps};

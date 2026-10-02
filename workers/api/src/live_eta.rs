@@ -25,7 +25,6 @@
 //! position unknown" than by nothing.
 
 use serde_json::{json, Value};
-use worker::*;
 
 use dowiz_kernel::eta::{self, BasketItem, KitchenProfile};
 
@@ -107,7 +106,7 @@ async fn fixes_from_store(place: &crate::hubstore::Place, now_ms: i64) -> Vec<Co
     {
         Ok(l) => l.table,
         Err(e) => {
-            console_error!("live_eta: courier positions unreadable: {e}");
+            log_error!("live_eta: courier positions unreadable: {e}");
             return Vec::new();
         }
     };

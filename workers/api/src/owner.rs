@@ -9,6 +9,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::auth::{self, Principal};
 
@@ -1503,3 +1504,8 @@ where
 
 #[cfg(test)]
 mod tests;
+
+/// The routes themselves, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "owner/routes/tests.rs"]
+mod route_tests;

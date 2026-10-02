@@ -6,6 +6,7 @@
 
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::owner::owner_and_venue;
 
@@ -46,14 +47,12 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<crate::Req>) 
     let key = url.trim_start_matches("/media/").to_string();
 
     let kv = ctx.kv("MEDIA")?;
-    kv.put_bytes(&key, &bytes)?
-        // No expiry. A dish photo is referenced by orders that are already
-        // placed; letting it lapse would blank the picture on a receipt.
-        .execute()
-        .await?;
+    // No expiry. A dish photo is referenced by orders that are already
+    // placed; letting it lapse would blank the picture on a receipt.
+    kv.put_bytes(&key, &bytes).await?;
     // The media type is stored beside the blob rather than guessed at read
     // time: sniffing twice is two chances to disagree.
-    kv.put(&format!("{key}#type"), stored.kind.mime())?.execute().await?;
+    kv.put_text(&format!("{key}#type"), stored.kind.mime()).await?;
 
     // WHICH PICTURE OF THE DISH THIS IS. `?variant=small` is the grid's card --
     // about 480 px, a tenth of the bytes -- and the sheet's photograph is
@@ -149,8 +148,8 @@ pub async fn set_venue_logo(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     let kv = ctx.kv("MEDIA")?;
     // No expiry, for the reason a dish photo has none: a receipt printed last
     // week still names this mark.
-    kv.put_bytes(&key, &bytes)?.execute().await?;
-    kv.put(&format!("{key}#type"), stored.kind.mime())?.execute().await?;
+    kv.put_bytes(&key, &bytes).await?;
+    kv.put_text(&format!("{key}#type"), stored.kind.mime()).await?;
 
     let u = url.clone();
     crate::hubstore::with_catalog(&place, move |cat| {
@@ -229,16 +228,15 @@ pub async fn media(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
     // `immutable` below was a promise kept only by browsers: every new device
     // paid two KV reads per photograph. Content-addressed and immutable is the
     // easiest thing in the world to cache, so cache it.
-    let cache = Cache::default();
     let key = req.url()?.to_string();
-    if let Some(hit) = cache.get(&key, false).await? {
+    if let Some(hit) = crate::edge::cache_get(&ctx.env, &key).await? {
         return Ok(hit);
     }
     let kv = ctx.kv("MEDIA")?;
-    let Some(bytes) = kv.get(&name).bytes().await? else {
+    let Some(bytes) = kv.get_bytes(&name).await? else {
         return Response::error("not found", 404);
     };
-    let kind = kv.get(&format!("{name}#type")).text().await?;
+    let kind = kv.get_text(&format!("{name}#type")).await?;
     let mut res = Response::from_bytes(bytes)?;
     let h = res.headers_mut();
     h.set("content-type", kind.as_deref().unwrap_or("application/octet-stream"))?;
@@ -250,7 +248,12 @@ pub async fn media(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
     // Stored after the response is built, so a store that fails cannot fail
     // the image.
     if let Ok(copy) = res.cloned() {
-        let _ = cache.put(&key, copy).await;
+        let _ = crate::edge::cache_put(&ctx.env, &key, &copy).await;
     }
     Ok(res)
 }
+
+/// The routes themselves, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "media/routes/tests.rs"]
+mod route_tests;

@@ -91,9 +91,23 @@ hits = []
 CONST = re.compile(r'\bconst\s+([A-Z][A-Z0-9_]*)\s*:\s*&(?:\'static\s+)?str\s*=\s*"([^"]*)"')
 NAME = re.compile(r'^(IMAGE\w*|\w+_IMAGE|K_\w+|KIND)$')
 HOST = re.compile(r'(?:https|wss)://([A-Za-z0-9.*{}_-]+)')
+# Files compiled only under `cargo test`: a parent declares them `#[cfg(test)] mod x;`
+# (the route seam's in-memory platform, edge/site.rs, hubdo/host/mem.rs). Their
+# hosts and constants never ship, the same as a `#[cfg(test)]` block in a file.
+TEST_MOD = re.compile(r'#\[cfg\(test\)\]\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*;')
+test_only = set()
+for f in glob.glob(os.path.join(SRC, '**/*.rs'), recursive=True):
+    base = f[:-3] if not f.endswith(('/lib.rs', '/mod.rs')) else os.path.dirname(f)
+    for m in TEST_MOD.finditer(open(f, encoding='utf-8').read()):
+        for cand in (os.path.join(base, m.group(1) + '.rs'), os.path.join(base, m.group(1), 'mod.rs')):
+            if os.path.exists(cand):
+                test_only.add(cand)
+def is_test_only(f):
+    return any(f == t or f.startswith(t[:-3] + '/') for t in test_only)
+
 for f in sorted(glob.glob(os.path.join(SRC, '**/*.rs'), recursive=True)):
     rel = os.path.relpath(f, ROOT)
-    if f.endswith('tests.rs') or '/privacy/registry' in f:
+    if f.endswith('tests.rs') or '/privacy/registry' in f or is_test_only(f):
         continue
     s = no_tests(strip(open(f, encoding='utf-8').read(), True))
     for m in CONST.finditer(s):

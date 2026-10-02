@@ -15,6 +15,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::platform::admin_only;
 
@@ -169,7 +170,7 @@ pub async fn join(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
     // administrator reading the log knows why the mailbox is quiet.
     let to = ctx.var("WAITLIST_TO").map(|v| v.to_string()).unwrap_or_default();
     let from = ctx.var("WAITLIST_FROM").map(|v| v.to_string()).unwrap_or_default();
-    match (ctx.env.send_email("WAITLIST_MAIL"), to.is_empty() || from.is_empty()) {
+    match (ctx.env.live().and_then(|e| e.send_email("WAITLIST_MAIL")), to.is_empty() || from.is_empty()) {
         (Ok(mailer), false) => {
             let raw = mail_raw(&from, &to, &email, &venue, lang, &source, now);
             let sent = match EmailMessage::new(&from, &to, &raw) {
@@ -196,10 +197,10 @@ pub async fn join(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
                     )
                     .await?;
                 }
-                Err(e) => console_error!("waitlist: row written, mail to {to} refused: {e}"),
+                Err(e) => log_error!("waitlist: row written, mail to {to} refused: {e}"),
             }
         }
-        _ => console_log!("waitlist: row written for {email}; no WAITLIST_MAIL binding, mail not sent"),
+        _ => log_line!("waitlist: row written for {email}; no WAITLIST_MAIL binding, mail not sent"),
     }
 
     Response::empty().map(|r| r.with_status(204))

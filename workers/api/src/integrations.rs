@@ -11,6 +11,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::owner::{owner_and_venue};
 
@@ -72,11 +73,11 @@ pub async fn status(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
 }
 
 async fn graph_get(token: &str, path: &str) -> std::result::Result<Value, String> {
-    let headers = Headers::new();
+    let mut headers = Headers::new();
     headers.set("authorization", &format!("Bearer {token}")).map_err(|e| e.to_string())?;
     let r = Request::new_with_init(&format!("{GRAPH}/{path}"), RequestInit::new().with_method(Method::Get).with_headers(headers))
         .map_err(|e| e.to_string())?;
-    let mut res = Fetch::Request(r).send().await.map_err(|e| e.to_string())?;
+    let mut res = crate::edge::fetch(r).await.map_err(|e| e.to_string())?;
     let body = res.text().await.unwrap_or_default();
     let v: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
     if res.status_code() < 400 {
@@ -87,7 +88,7 @@ async fn graph_get(token: &str, path: &str) -> std::result::Result<Value, String
 
 async fn telegram_get_me(token: &str) -> std::result::Result<Value, String> {
     let r = Request::new(&format!("https://api.telegram.org/bot{token}/getMe"), Method::Get).map_err(|e| e.to_string())?;
-    let mut res = Fetch::Request(r).send().await.map_err(|e| e.to_string())?;
+    let mut res = crate::edge::fetch(r).await.map_err(|e| e.to_string())?;
     let body = res.text().await.unwrap_or_default();
     let v: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
     if v["ok"].as_bool().unwrap_or(false) {
@@ -149,12 +150,12 @@ pub async fn check(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
                     "{origin}/api/webhooks/meta?hub.mode=subscribe&hub.verify_token={}&hub.challenge={CHALLENGE}",
                     crate::mcp::enc(want.trim())
                 );
-                let headers = Headers::new();
+                let mut headers = Headers::new();
                 if let Ok(Some(h)) = req.headers().get("host") {
                     headers.set("host", &h)?;
                 }
                 let probe = Request::new_with_init(&url, RequestInit::new().with_method(Method::Get).with_headers(headers))?;
-                match crate::route(probe, ctx.env.clone()).await {
+                match crate::route(probe.into_worker()?, ctx.env.live()?.clone()).await {
                     Ok(mut r) => {
                         let status = r.status_code();
                         let echoed = r.text().await.unwrap_or_default();
@@ -194,10 +195,10 @@ pub async fn check(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
                 if base.trim().is_empty() {
                     return Response::from_json(&json!({ "ok": false, "which": "ai", "code": "no_endpoint", "error": "no endpoint is set" })).map(|r| r.with_status(502));
                 }
-                let headers = Headers::new();
+                let mut headers = Headers::new();
                 if let Some(tok) = s.get("ai.token") { headers.set("authorization", &format!("Bearer {}", tok.trim()))?; }
                 let r = Request::new_with_init(&format!("{}/models", base.trim_end_matches('/')), RequestInit::new().with_method(Method::Get).with_headers(headers))?;
-                match Fetch::Request(r).send().await {
+                match crate::edge::fetch(r).await {
                     Ok(mut res) if res.status_code() < 400 => {
                         let v: Value = res.json().await.unwrap_or(Value::Null);
                         let n = v["data"].as_array().map(|a| a.len()).unwrap_or(0);

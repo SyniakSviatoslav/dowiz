@@ -27,6 +27,7 @@ pub(crate) use tools::enc;
 
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::auth::{self, Claims, Principal};
 use tools::Role;
@@ -91,7 +92,7 @@ async fn call_tool(caller: &Caller<'_>, name: &str, args: Value) -> std::result:
         return Err(format!("unknown tool: {name}"));
     };
     let p = tools::plan(tool, args, &caller.location_id, &caller.slug, &caller.origin)?;
-    let headers = Headers::new();
+    let mut headers = Headers::new();
     headers.set("authorization", &format!("Bearer {}", caller.token)).map_err(|e| e.to_string())?;
     headers.set("accept", "application/json").map_err(|e| e.to_string())?;
     let mut init = RequestInit::new();
@@ -105,7 +106,7 @@ async fn call_tool(caller: &Caller<'_>, name: &str, args: Value) -> std::result:
         }
     }
     let r = Request::new_with_init(&p.url, &init).map_err(|e| e.to_string())?;
-    let mut res = crate::route(r, caller.env.clone()).await.map_err(|e| e.to_string())?;
+    let mut res = crate::route(r.into_worker().map_err(|e| e.to_string())?, caller.env.live().map_err(|e| e.to_string())?.clone()).await.map_err(|e| e.to_string())?;
     let status = res.status_code();
     let text = res.text().await.unwrap_or_default();
     let mut v: Value = serde_json::from_str(&text).unwrap_or(json!({ "text": text }));
@@ -277,3 +278,8 @@ pub async fn rpc(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
         }
     }
 }
+
+/// The MCP routes, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "mcp/routes/tests.rs"]
+mod route_tests;

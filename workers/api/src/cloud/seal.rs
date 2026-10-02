@@ -53,7 +53,7 @@ pub fn state_from(text: Option<&str>) -> SealState {
 }
 
 /// Read the var (a plain var first, then a secret of the same name).
-pub fn state(env: &worker::Env) -> SealState {
+pub fn state(env: &crate::edge::Env) -> SealState {
     let text = env
         .var(PK_VAR)
         .map(|v| v.to_string())

@@ -14,6 +14,8 @@ use crate::command::till::Cmd;
 use crate::command::Refused;
 use serde::Serialize;
 use worker::*;
+// The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
+use crate::wire::{Call as Request, Reply as Response};
 
 mod till;
 
@@ -101,7 +103,7 @@ impl HubImages {
         };
         if let Some((gen, s)) = stock {
             if self.put_image(crate::hubstore::IMAGE_STOCK, gen, &s.to_bytes_trimmed()).await?.is_none() {
-                console_error!("stock: {what} was written and its shelf was NOT");
+                log_error!("stock: {what} was written and its shelf was NOT");
             }
         }
         Ok(Ok(next))
@@ -143,7 +145,7 @@ impl HubImages {
         if !added.is_empty() {
             let head = crate::bell_route::amend_header(&input.order_id, &round);
             if let Err(e) = self.enqueue_bell(&input.order_id, &head, &added, Some(seq), input.now_ms).await {
-                console_error!("outbox: order {} was amended and the bell was NOT queued: {e}", input.order_id);
+                log_error!("outbox: order {} was amended and the bell was NOT queued: {e}", input.order_id);
             }
         }
         Ok(Ok(crate::command::amend::AmendOut { merged: round.to_string(), seq, generation: next }))
@@ -220,19 +222,19 @@ impl HubImages {
         let plan = match crate::command::pay::legs::repair(std::slice::from_ref(round), &rows, &input.location_id, currency) {
             Ok(p) => p,
             Err(r) => {
-                console_error!("wallet: order {} was paid and its debit {tx_id} was NOT written ({})", input.order_id, r.message());
+                log_error!("wallet: order {} was paid and its debit {tx_id} was NOT written ({})", input.order_id, r.message());
                 return Ok(());
             }
         };
         for (leg, why) in &plan.refused {
-            console_error!("wallet: order {} was paid and its debit {} is REFUSED on retry: {why}", leg.order_id, leg.tx_id);
+            log_error!("wallet: order {} was paid and its debit {} is REFUSED on retry: {why}", leg.order_id, leg.tx_id);
         }
         if plan.write.is_empty() {
             return Ok(());
         }
         let appended = plan.write.iter().all(|d| log.append(crate::wallet::K_TX, &d.tx_id, &d.record).is_ok());
         if !appended || self.put_image(crate::wallet::IMAGE_LEDGER, gen, &log.to_bytes()).await?.is_none() {
-            console_error!("wallet: order {} was paid and its debit {tx_id} was NOT written after one retry", input.order_id);
+            log_error!("wallet: order {} was paid and its debit {tx_id} was NOT written after one retry", input.order_id);
         }
         Ok(())
     }

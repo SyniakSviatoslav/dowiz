@@ -58,14 +58,14 @@ async fn queued(place: &crate::hubstore::Place, cfg: &Config, now_ms: i64) -> Va
 /// in the venue's error log; none is read as "sent".
 /// One venue's minute of fiscal sending (run inside a Durable Object by
 /// `crate::cron`; see `outbox::rails::drain_venue` for why).
-pub async fn venue_minute(env: &worker::Env, venue: &str, now_ms: i64) {
+pub async fn venue_minute(env: &crate::edge::Env, venue: &str, now_ms: i64) {
     if !super::SEND_ENABLED {
         return;
     }
     use super::ebills_cmd::{AnswerIn, PlanIn, PlanOut};
     use super::ebills_sender::Outcome;
     {
-        let Ok(ns) = env.durable_object("HUB") else { return worker::console_error!("fiscal sweep: no HUB binding") };
+        let Ok(ns) = env.durable_object("HUB") else { return log_error!("fiscal sweep: no HUB binding") };
         let venue = venue.to_string();
         let place = crate::hubstore::Place { ns, venue: venue.clone() };
         let plan: PlanOut = match crate::command::send(&place, "ebills/fiscal_plan", &PlanIn { now_ms }).await {
@@ -90,7 +90,7 @@ pub async fn venue_minute(env: &worker::Env, venue: &str, now_ms: i64) {
                     crate::loud!(&place.ns, Some(&venue), "fiscal.ebills", "order {}: {}", x["order_id"].as_str().unwrap_or("?"), x["reason"].as_str().unwrap_or(""));
                 }
                 if v["sent"].as_u64().unwrap_or(0) > 0 {
-                    worker::console_log!("fiscal {venue}: {} registered at ebills", v["sent"]);
+                    log_line!("fiscal {venue}: {} registered at ebills", v["sent"]);
                 }
             }
             // THE SENDS HAPPENED AND THEIR ANSWERS WERE NOT RECORDED: the

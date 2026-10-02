@@ -38,7 +38,7 @@ impl HubImages {
         match crate::notify::route::groups_of(&s, "en") {
             Ok(g) => Some((s, g.list)),
             Err(e) => {
-                console_error!("telegram groups unreadable, nothing routed: {e}");
+                log_error!("telegram groups unreadable, nothing routed: {e}");
                 None
             }
         }
@@ -58,7 +58,7 @@ impl HubImages {
             return;
         }
         if let Err(e) = self.write_owed(&owed).await {
-            console_error!("outbox: {what} happened and its group messages were NOT queued: {e}");
+            log_error!("outbox: {what} happened and its group messages were NOT queued: {e}");
         }
     }
 

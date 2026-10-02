@@ -17,7 +17,7 @@
 //! site keeps its own `match`/`?` and its own error text; only the parser changes.
 
 use serde::de::DeserializeOwned;
-use worker::{Error, Request, Response, Result};
+use worker::{Error, Request, Result};
 
 /// The text as `T`, or serde_json's reason -- which names the field
 /// (`unknown field \`nmae\`, expected one of ...`). The one place the rule lives;
@@ -28,14 +28,30 @@ pub(crate) fn from_text<T: DeserializeOwned>(text: &str) -> std::result::Result<
 
 /// The body as `T`. A drop-in for `req.json().await`: the error is a
 /// `worker::Error` whose `Display` is serde_json's message.
-pub(crate) async fn parse<T: DeserializeOwned>(req: &mut Request) -> Result<T> {
-    let text = req.text().await?;
+/// A request whose body can be read as text: the platform's, or the plain-Rust
+/// `wire::Call` a Durable Object route runs on under `cargo test` (W-COV C2).
+pub(crate) trait Body {
+    async fn body_text(&mut self) -> Result<String>;
+}
+impl Body for Request {
+    async fn body_text(&mut self) -> Result<String> {
+        self.text().await
+    }
+}
+impl Body for crate::wire::Call {
+    async fn body_text(&mut self) -> Result<String> {
+        self.text().await
+    }
+}
+
+pub(crate) async fn parse<T: DeserializeOwned>(req: &mut impl Body) -> Result<T> {
+    let text = req.body_text().await?;
     from_text(&text).map_err(Error::RustError)
 }
 
 /// The body as `T`, or the 400 that names what was wrong with it.
-pub(crate) async fn strict<T: DeserializeOwned>(req: &mut Request) -> std::result::Result<T, Response> {
-    parse(req).await.map_err(|e| Response::error(format!("bad request body: {e}"), 400).unwrap())
+pub(crate) async fn strict<T: DeserializeOwned>(req: &mut impl Body) -> std::result::Result<T, crate::wire::Reply> {
+    parse(req).await.map_err(|e| crate::wire::Reply::error(format!("bad request body: {e}"), 400).unwrap())
 }
 
 /// Test aid: the reason `text` is refused as `T` (panics if it was accepted).

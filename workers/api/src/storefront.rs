@@ -10,6 +10,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::auth;
 use dowiz_kernel::json_api;
@@ -182,14 +183,13 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
     // sale reaching a customer half a minute late is a cost the venue can
     // absorb. Anything derived from the CLOCK -- whether the venue is open --
     // moves in minutes, not seconds, so thirty is inside its resolution too.
-    let cache = Cache::default();
     let key = req.url()?.to_string();
     // `fresh` is the console's word: an owner who just saved a dish reads the
     // catalogue as it is, not as the edge remembers it. Neither read nor
     // written to the cache, so customers keep the thirty-second window.
     let fresh = req.url()?.query_pairs().any(|(k, _)| k == "fresh");
     if !fresh {
-        if let Some(hit) = cache.get(&key, false).await? {
+        if let Some(hit) = crate::edge::cache_get(&ctx.env, &key).await? {
             return Ok(hit);
         }
     }
@@ -222,7 +222,7 @@ pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
     // the request: a cache that breaks a page is worse than no cache.
     if let Ok(copy) = res.cloned() {
         if !fresh {
-            let _ = cache.put(&key, copy).await;
+            let _ = crate::edge::cache_put(&ctx.env, &key, &copy).await;
         }
     }
     Ok(res)
@@ -307,7 +307,7 @@ pub async fn manifest(req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
     if let Some(logo) = raw.get("logo_url").and_then(Value::as_str) {
         if let Some(key) = logo.strip_prefix("/media/") {
             let kv = ctx.kv("MEDIA")?;
-            if let Some(bytes) = kv.get(key).bytes().await? {
+            if let Some(bytes) = kv.get_bytes(key).await? {
                 if let Some((w, h)) = png_size(&bytes) {
                     icons.push(json!({ "src": logo, "sizes": format!("{w}x{h}"), "type": "image/png", "purpose": "any maskable" }));
                 }
@@ -863,7 +863,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // to reserve the ingredients; `with_hub` to read the WHOLE log, count the
     // promo's uses, redeem it and append `Placed`; and if that second write
     // failed, `with_stock` AGAIN to release what the first had held -- with a
-    // `console_error!` and nothing else if the release failed too. A stranded
+    // `log_error!` and nothing else if the release failed too. A stranded
     // reservation makes a kitchen believe it is out of something it has, and a
     // sampled trace was the only thing that knew.
     //
@@ -1056,7 +1056,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         // the waiting, and it is the only thing it does.
         match crate::rail::admit(&place, crate::rail::Rail::Stripe, created_at_ms).await {
             crate::rail::Gate::Tripped { since_ms } => {
-                console_error!("stripe rail open for {since_ms} ms; offering cash immediately");
+                log_error!("stripe rail open for {since_ms} ms; offering cash immediately");
                 out["payment_error"] = json!("the card provider could not be reached");
             }
             crate::rail::Gate::Go => {
@@ -1110,3 +1110,8 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
 
 #[cfg(test)]
 mod tests;
+
+/// The routes themselves, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "storefront/routes/tests.rs"]
+pub(crate) mod route_tests;

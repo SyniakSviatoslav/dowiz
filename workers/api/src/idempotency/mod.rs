@@ -32,6 +32,7 @@
 //! bytes are rather than as a check somebody has to write.
 
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::hubstore::Place;
 
@@ -121,7 +122,7 @@ pub async fn begin(
         // RULE 5: fail open. The call proceeds unrecorded rather than being
         // refused by the layer that exists to protect it.
         Err(e) => {
-            console_error!("idempotency unavailable for {route}: {e}");
+            log_error!("idempotency unavailable for {route}: {e}");
             Decision::NoKey
         }
         Ok(verdict::Seen::Claimed) => Decision::Proceed { key },

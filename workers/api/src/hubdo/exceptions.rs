@@ -14,7 +14,7 @@
 //!
 //! AN ALERT THAT CANNOT BE QUEUED DOES NOT UNDO THE EVENT. The amendment or
 //! pay-out has landed; the alert is evidence about it. A failure is said out
-//! loud (`console_error!`) and the report still lists the rows.
+//! loud (`log_error!`) and the report still lists the rows.
 
 use super::HubImages;
 use crate::exceptions::{alert, fold, legs};
@@ -27,7 +27,7 @@ impl HubImages {
     /// Queue the exception alerts this turn owes. Never fails the caller.
     pub(super) async fn exceptions_after(&self, venue: &str, now_ms: i64) {
         if let Err(e) = self.exceptions_alert(venue, now_ms).await {
-            console_error!("exceptions alert for {venue} not queued: {e}");
+            log_error!("exceptions alert for {venue} not queued: {e}");
         }
     }
 
@@ -71,7 +71,7 @@ impl HubImages {
         // A ledger that does not replay is said out loud and does not silence
         // the count alerts; the report refuses it in the owner's face.
         let legs = self.leg_rows(venue, &currency).await.unwrap_or_else(|e| {
-            console_error!("exceptions: the wallet legs of {venue} do not fold: {e}");
+            log_error!("exceptions: the wallet legs of {venue} do not fold: {e}");
             Vec::new()
         });
         let (generation, mut table) = match self.image(IMAGE_OUTBOX).await? {

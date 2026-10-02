@@ -128,7 +128,7 @@ impl HubImages {
             match note(&mut hub, current, *sale_id, codes, input.now_ms) {
                 Ok(Some((body, _))) => written.push((order_id, body)),
                 Ok(None) => {}
-                Err(r) => console_error!("fiscal: order {order_id} registered as ebills sale {sale_id} and NOT noted: {}", r.message()),
+                Err(r) => log_error!("fiscal: order {order_id} registered as ebills sale {sale_id} and NOT noted: {}", r.message()),
             }
         }
         if !written.is_empty() {
@@ -170,7 +170,7 @@ impl HubImages {
         }
         if let (Some(s), (egen, Some(mut et))) = (input.session, self.table_of(eb::IMAGE, eb::CEILING).await?) {
             if crate::ebills::glue::keep_session(&mut et, s).is_ok() && !self.save_table(eb::IMAGE, egen, &mut et).await? {
-                console_error!("fiscal: the rotated ebills session was not kept (generation moved)");
+                log_error!("fiscal: the rotated ebills session was not kept (generation moved)");
             }
         }
         let exceptions: Vec<Value> = drained.exceptions.iter().map(|r| json!({ "order_id": r.order_id, "kind": r.kind, "reason": r.reason })).collect();

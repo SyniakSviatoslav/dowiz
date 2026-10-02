@@ -14,6 +14,7 @@ use hmac::{Hmac, Mac};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 pub mod seal;
 
@@ -107,7 +108,7 @@ pub async fn put(s3: &S3, object_key: &str, body: Vec<u8>, content_type: &str, n
     // and in the URL sent, or a space in a prefix is a SignatureDoesNotMatch.
     let path = format!("/{}/{}", crate::mcp::enc(&s3.bucket), object_key.split('/').map(crate::mcp::enc).collect::<Vec<_>>().join("/"));
     let payload_hash = hex(&Sha256::digest(&body));
-    let (headers, _) = sign(s3, "PUT", &path, "", &payload_hash, now_ms);
+    let (mut headers, _) = sign(s3, "PUT", &path, "", &payload_hash, now_ms);
     headers.set("content-type", content_type).map_err(|e| e.to_string())?;
     let url = format!("{}{path}", s3.endpoint);
     let r = Request::new_with_init(
@@ -115,7 +116,7 @@ pub async fn put(s3: &S3, object_key: &str, body: Vec<u8>, content_type: &str, n
         RequestInit::new().with_method(Method::Put).with_headers(headers).with_body(Some(body.into())),
     )
     .map_err(|e| e.to_string())?;
-    let mut res = Fetch::Request(r).send().await.map_err(|e| e.to_string())?;
+    let mut res = crate::edge::fetch(r).await.map_err(|e| e.to_string())?;
     if res.status_code() < 300 {
         return Ok(res.headers().get("etag").ok().flatten().unwrap_or_default());
     }
@@ -159,7 +160,7 @@ fn sign(
         "{ALGORITHM} Credential={}/{scope}, SignedHeaders={SIGNED_HEADERS}, Signature={signature}",
         s3.key
     );
-    let headers = Headers::new();
+    let mut headers = Headers::new();
     let _ = headers.set("authorization", &authorization);
     let _ = headers.set("x-amz-date", &amz_date);
     let _ = headers.set("x-amz-content-sha256", payload_hash);
@@ -183,7 +184,7 @@ async fn list(s3: &S3, prefix: &str, now_ms: i64) -> std::result::Result<Vec<Str
     let url = format!("{}{path}?{query}", s3.endpoint);
     let req = Request::new_with_init(&url, RequestInit::new().with_method(Method::Get).with_headers(headers))
         .map_err(|e| e.to_string())?;
-    let mut res = Fetch::Request(req).send().await.map_err(|e| e.to_string())?;
+    let mut res = crate::edge::fetch(req).await.map_err(|e| e.to_string())?;
     if res.status_code() >= 300 {
         let text = res.text().await.unwrap_or_default();
         return Err(format!("{} {}", res.status_code(), text.chars().take(ERROR_SHOWN).collect::<String>()));
@@ -216,7 +217,7 @@ async fn delete(s3: &S3, object_key: &str, now_ms: i64) -> std::result::Result<(
     let req =
         Request::new_with_init(&url, RequestInit::new().with_method(Method::Delete).with_headers(headers))
             .map_err(|e| e.to_string())?;
-    let mut res = Fetch::Request(req).send().await.map_err(|e| e.to_string())?;
+    let mut res = crate::edge::fetch(req).await.map_err(|e| e.to_string())?;
     if res.status_code() < 300 {
         return Ok(());
     }
@@ -337,6 +338,11 @@ pub async fn rotate(s3: &S3, venue: &str, now_ms: i64) -> std::result::Result<Ve
 async fn gzip(body: &[u8]) -> Option<Vec<u8>> {
     use worker::js_sys::{Array, Function, Reflect, Uint8Array};
     use worker::wasm_bindgen::JsCast;
+    // Natively (a test) there is no runtime to ask: "absent", as the header says, rather than a
+    // panic in a wasm-bindgen import (W-COV C2). A compile-time constant; wasm is unchanged.
+    if !cfg!(target_arch = "wasm32") {
+        return None;
+    }
     let global = worker::js_sys::global();
     let cs_ctor: Function = Reflect::get(&global, &"CompressionStream".into()).ok()?.dyn_into().ok()?;
     let response_ctor: Function = Reflect::get(&global, &"Response".into()).ok()?.dyn_into().ok()?;
@@ -581,7 +587,7 @@ pub async fn nightly(env: &Env, now: i64) {
             .into_iter()
             .map(|(id, _)| Row { id })
             .collect(),
-        Err(e) => { console_error!("nightly backup: registry unreadable: {e}"); return }
+        Err(e) => { log_error!("nightly backup: registry unreadable: {e}"); return }
     };
     // The error log is now per venue, in that venue's own object, so pruning
     // it happens inside the per-venue loop below rather than as one statement
@@ -598,8 +604,8 @@ pub async fn nightly(env: &Env, now: i64) {
         // per order for ever.
         match crate::idempotency::sweep(&place, now).await {
             Ok(0) => {}
-            Ok(n) => console_log!("nightly sweep {}: {n} idempotency keys", r.id),
-            Err(e) => console_error!("nightly sweep {}: keys refused: {e}", r.id),
+            Ok(n) => log_line!("nightly sweep {}: {n} idempotency keys", r.id),
+            Err(e) => log_error!("nightly sweep {}: keys refused: {e}", r.id),
         }
 
         // The venue's own failure log: anything older than a week, and
@@ -609,10 +615,10 @@ pub async fn nightly(env: &Env, now: i64) {
         match place.stub() {
             Ok(s) => match crate::errlog::prune_at(&s, Some(&r.id), now).await {
                 Ok(0) => {}
-                Ok(n) => console_log!("nightly prune {}: {n} error records", r.id),
-                Err(e) => console_error!("nightly prune {}: errors refused: {e}", r.id),
+                Ok(n) => log_line!("nightly prune {}: {n} error records", r.id),
+                Err(e) => log_error!("nightly prune {}: errors refused: {e}", r.id),
             },
-            Err(e) => console_error!("nightly prune {}: no object: {e}", r.id),
+            Err(e) => log_error!("nightly prune {}: no object: {e}", r.id),
         }
 
         // THE CHAIN AND THE WITNESS, BEFORE ANYTHING TOUCHES THE LOG.
@@ -648,7 +654,7 @@ pub async fn nightly(env: &Env, now: i64) {
             Ok((l, s)) => {
                 let c = l.hub.chain_check();
                 if c.intact() {
-                    console_log!(
+                    log_line!(
                         "nightly chain {}: {} records, {} chained, {} legacy",
                         r.id, c.records, c.chained, c.legacy
                     );
@@ -662,7 +668,7 @@ pub async fn nightly(env: &Env, now: i64) {
                     );
                 }
                 match crate::witness::nightly(&place, &l.hub, &s.settings, now).await {
-                    Ok((w, found)) if found.is_empty() => console_log!(
+                    Ok((w, found)) if found.is_empty() => log_line!(
                         "nightly witness {}: {} records, {} archived, tip {}",
                         r.id, w.records, w.archived(), w.tip.as_deref().unwrap_or("-")
                     ),
@@ -692,14 +698,14 @@ pub async fn nightly(env: &Env, now: i64) {
         match crate::hubstore::rotate(&place, now).await {
             Ok(v) => {
                 if v.get("rotated").and_then(serde_json::Value::as_bool) == Some(true) {
-                    console_log!("nightly rotate {}: {}", r.id, v);
+                    log_line!("nightly rotate {}: {}", r.id, v);
                 }
             }
             Err(e) => crate::loud!(&place.ns, Some(&r.id), "hub.rotate", "nightly: {e}"),
         }
         if !configured { continue }
         match push_place(&place, now, &seal_state).await {
-            Ok(v) => console_log!("nightly backup {}: {}", r.id, v),
+            Ok(v) => log_line!("nightly backup {}: {}", r.id, v),
             Err(e) => {
                 crate::loud!(&place.ns, Some(&r.id), "cloud.nightly", "backup refused: {e}")
             }
@@ -719,10 +725,10 @@ pub async fn nightly(env: &Env, now: i64) {
         match ns.id_from_name(crate::platform_store::PLATFORM).and_then(|id| id.get_stub()) {
             Ok(s) => match crate::errlog::prune_at(&s, None, now).await {
                 Ok(0) => {}
-                Ok(n) => console_log!("nightly prune platform: {n} error records"),
-                Err(e) => console_error!("nightly prune platform: errors refused: {e}"),
+                Ok(n) => log_line!("nightly prune platform: {n} error records"),
+                Err(e) => log_error!("nightly prune platform: errors refused: {e}"),
             },
-            Err(e) => console_error!("nightly prune platform: no object: {e}"),
+            Err(e) => log_error!("nightly prune platform: no object: {e}"),
         }
     }
 }

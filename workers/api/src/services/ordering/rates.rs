@@ -6,6 +6,7 @@
 
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 use dowiz_core::money::Currency;
 
 /// Build a decimals map from the supported currencies.
@@ -41,7 +42,7 @@ fn decimals_map() -> serde_json::Map<String, Value> {
 /// IT NEVER FAILS THE PAGE. If the upstream is unreachable the answer is the
 /// identity rate and `stale: true`, because a storefront that cannot render a
 /// price because a currency API is down is worse than one that shows lek.
-pub async fn rates(req: Request, _ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub async fn rates(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let base = req
         .url()
         .ok()
@@ -55,8 +56,7 @@ pub async fn rates(req: Request, _ctx: RouteContext<crate::Req>) -> Result<Respo
     }
 
     let key = format!("https://rates.dowiz/{base}");
-    let cache = Cache::default();
-    if let Some(hit) = cache.get(&key, false).await? {
+    if let Some(hit) = crate::edge::cache_get(&ctx.env, &key).await? {
         return Ok(hit);
     }
 
@@ -72,13 +72,7 @@ pub async fn rates(req: Request, _ctx: RouteContext<crate::Req>) -> Result<Respo
         resp
     };
 
-    let fetched = Fetch::Url(
-        format!("https://open.er-api.com/v6/latest/{base}")
-            .parse()
-            .map_err(|e| Error::RustError(format!("rate url: {e}")))?,
-    )
-    .send()
-    .await;
+    let fetched = crate::edge::fetch(Request::new(&format!("https://open.er-api.com/v6/latest/{base}"), Method::Get)?).await;
 
     let body = match fetched {
         Ok(mut r) if r.status_code() == 200 => r.json::<Value>().await.ok(),
@@ -118,6 +112,6 @@ pub async fn rates(req: Request, _ctx: RouteContext<crate::Req>) -> Result<Respo
     let mut res = Response::from_json(&out)?;
     res.headers_mut().set("cache-control", "public, max-age=3600")?;
     let to_cache = res.cloned()?;
-    cache.put(&key, to_cache).await?;
+    crate::edge::cache_put(&ctx.env, &key, &to_cache).await?;
     Ok(res)
 }

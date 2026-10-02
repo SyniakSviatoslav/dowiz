@@ -20,6 +20,7 @@
 use serde::Deserialize;
 use serde_json::json;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use dowiz_kernel::thread::{self, Body, Message, Party, Thread};
 
@@ -338,3 +339,8 @@ mod text_tests {
         assert_eq!(stored_text("", "on my way"), "on my way");
     }
 }
+
+/// The routes themselves, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "social/routes/tests.rs"]
+mod route_tests;

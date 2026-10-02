@@ -13,6 +13,8 @@
 use super::{HubImages, CATALOG_IMAGE};
 use crate::fold::menu::{Answer, Gens, Memo, Rails};
 use worker::*;
+// The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
+use crate::wire::{Call as Request, Reply as Response};
 
 /// The images the menu is folded from. A write to any of them drops the memo.
 pub(super) const MENU_INPUTS: [&str; 3] = [CATALOG_IMAGE, crate::hubstore::IMAGE_I18N, crate::hubstore::IMAGE_SETTINGS];
@@ -51,8 +53,8 @@ impl HubImages {
         let gen = |i: &Option<(super::Meta, Vec<u8>)>| i.as_ref().map_or(0, |(m, _)| m.generation);
         let gens = Gens { catalog: gen(&catalog), i18n: gen(&i18n), settings: gen(&settings) };
         let rails = Rails {
-            stripe_key: self.env.secret("STRIPE_PUBLISHABLE_KEY").ok().map(|v| v.to_string()),
-            telegram_bot: self.env.secret("TELEGRAM_BOT_USERNAME").ok().map(|v| v.to_string()),
+            stripe_key: self.state.secret("STRIPE_PUBLISHABLE_KEY"),
+            telegram_bot: self.state.secret("TELEGRAM_BOT_USERNAME"),
         };
         let memo = Memo::from_images(gens, bytes_of(&catalog), bytes_of(&i18n), bytes_of(&settings), rails)
             .map_err(Error::RustError)?;

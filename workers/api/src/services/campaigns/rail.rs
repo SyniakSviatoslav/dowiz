@@ -12,6 +12,7 @@
 use dowiz_hub::consent::Consented;
 use dowiz_hub::logimage::Entry as LogEntry;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use super::campaign::{gone_row, IMAGE_CAMPAIGN, KIND_GONE};
 use super::send::{any_campaign, parse_id};
@@ -26,7 +27,7 @@ pub async fn acts_if_due(place: &Place, due: &[&Entry]) -> Option<Vec<LogEntry>>
     match crate::hubstore::load_log(place, image).await {
         Ok(l) => Some(l.log.entries()),
         Err(e) => {
-            console_error!("campaign drain {}: consent unreadable, campaign entries wait: {e}", place.venue);
+            log_error!("campaign drain {}: consent unreadable, campaign entries wait: {e}", place.venue);
             None
         }
     }

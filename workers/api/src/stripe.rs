@@ -16,6 +16,7 @@
 
 use serde::Deserialize;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::auth::sha256_hex;
 
@@ -72,7 +73,7 @@ pub async fn create_intent(
         urlencode(order_id)
     );
 
-    let headers = Headers::new();
+    let mut headers = Headers::new();
     headers
         .set("authorization", &format!("Bearer {sk}"))
         .map_err(|e| PayError::Upstream(e.to_string()))?;
@@ -89,8 +90,7 @@ pub async fn create_intent(
         .with_body(Some(body.into()));
     let req = Request::new_with_init(&format!("{API}/payment_intents"), &init)
         .map_err(|e| PayError::Upstream(e.to_string()))?;
-    let mut res = Fetch::Request(req)
-        .send()
+    let mut res = crate::edge::fetch(req)
         .await
         .map_err(|e| PayError::Upstream(e.to_string()))?;
 
@@ -262,7 +262,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     let place = match crate::hubstore::Place::of_any(&req, &ctx).await {
         Ok(p) => p,
         Err(e) => {
-            console_log!("stripe.webhook: no venue in this URL: {e}");
+            log_line!("stripe.webhook: no venue in this URL: {e}");
             return Response::from_json(
                 &serde_json::json!({ "ok": true, "ignored": "this URL does not name a venue" }),
             );
@@ -320,3 +320,8 @@ pub fn ack(applied: &std::result::Result<bool, String>, order_id: &str) -> (u16,
 #[cfg(test)]
 #[path = "stripe/tests.rs"]
 mod tests;
+
+/// The card routes, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "stripe/routes/tests.rs"]
+mod route_tests;

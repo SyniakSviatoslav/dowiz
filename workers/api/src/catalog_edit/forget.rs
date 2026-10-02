@@ -18,6 +18,7 @@
 //! down with it.
 
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// The translation keys of `entity` records whose ids are in `ids`. PURE:
 /// the key is `<locale>/<entity>/<id>/<field>` (`hubstore::i18n_key`).
@@ -58,7 +59,7 @@ pub async fn forget_or_log(place: &crate::hubstore::Place, entity: &str, ids: &[
     match forget_translations(place, entity, ids).await {
         Ok(n) => n,
         Err(e) => {
-            console_error!("translations of {} deleted {entity}(s) were not swept: {e}", ids.len());
+            log_error!("translations of {} deleted {entity}(s) were not swept: {e}", ids.len());
             0
         }
     }

@@ -116,16 +116,17 @@ pub fn send_body(t: &Target, text: &str) -> Value {
 
 /// One Bot API call. `Ok` is Telegram's `result`.
 pub async fn call(token: &str, method: &str, payload: &Value) -> Result<Value, Fail> {
-    use worker::*;
+    use crate::wire::{Call as Request, Fields as Headers, RequestInit};
+    use worker::Method;
     let url = format!("https://api.telegram.org/bot{token}/{method}");
-    let headers = Headers::new();
+    let mut headers = Headers::new();
     headers.set("content-type", "application/json").map_err(|e| Fail::Other(e.to_string()))?;
     let r = Request::new_with_init(
         &url,
         RequestInit::new().with_method(Method::Post).with_headers(headers).with_body(Some(payload.to_string().into())),
     )
     .map_err(|e| Fail::Other(e.to_string()))?;
-    let mut res = Fetch::Request(r).send().await.map_err(|e| Fail::Other(e.to_string()))?;
+    let mut res = crate::edge::fetch(r).await.map_err(|e| Fail::Other(e.to_string()))?;
     let status = res.status_code();
     let body = res.text().await.unwrap_or_default();
     if status < 400 {

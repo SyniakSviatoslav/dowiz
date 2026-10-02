@@ -34,3 +34,18 @@ pub mod ordering;
 pub mod operations;
 pub mod orders;
 pub mod venue;
+
+/// The console's settings and operations routes, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "console_routes/tests.rs"]
+mod console_routes;
+
+/// Money-touching routes, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "money_routes/tests.rs"]
+mod money_routes;
+
+/// Public and platform routes, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "public_routes/tests.rs"]
+mod public_routes;

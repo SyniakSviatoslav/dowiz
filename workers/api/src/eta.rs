@@ -18,6 +18,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use dowiz_kernel::eta::{self, BasketItem, KitchenProfile, QueuedOrder};
 
@@ -205,3 +206,6 @@ pub async fn quote(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         Err(err) => Response::error(err.message(), 422),
     }
 }
+
+#[cfg(test)]
+mod tests;

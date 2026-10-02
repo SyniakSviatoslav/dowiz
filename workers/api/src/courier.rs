@@ -10,6 +10,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 // `now_ms` WAS DEFINED HERE, and identically in `accounts.rs` and `owner.rs` --
 // three copies of `Date::now().as_millis() as i64`. Three identical clock
@@ -834,3 +835,8 @@ pub async fn earnings(req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
         "expectedCash": open_cash
     }))
 }
+
+/// The routes themselves, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "courier/routes/tests.rs"]
+mod route_tests;

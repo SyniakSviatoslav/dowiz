@@ -187,3 +187,8 @@ fn events_of(t: &dowiz_hub::table::Table, reservation_id: &str) -> Vec<EventRow>
 
 #[cfg(test)]
 mod tests;
+
+/// The routes themselves, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "booking/routes/tests.rs"]
+mod route_tests;

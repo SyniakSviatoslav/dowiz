@@ -17,3 +17,8 @@ pub mod transfer;
 
 #[cfg(test)]
 mod tests;
+
+/// The room's routes, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "routes/tests.rs"]
+mod route_tests;

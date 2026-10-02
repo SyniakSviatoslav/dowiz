@@ -18,6 +18,9 @@ async fn send(w: &Wire) -> std::result::Result<Answer, Fail> {
         return Err(Fail::NotAllowed(w.url().to_string()));
     }
     let net = |e: Error| Fail::Network(e.to_string());
+    #[cfg(test)]
+    return native(w).await.map_err(net);
+    #[allow(unreachable_code)]
     let headers = Headers::new();
     for (k, v) in w.headers() {
         headers.set(k, v).map_err(net)?;
@@ -46,6 +49,34 @@ async fn send(w: &Wire) -> std::result::Result<Answer, Fail> {
     };
     a.body = res.text().await.map_err(net)?;
     Ok(a)
+}
+
+/// THE TEST TRANSPORT (W-COV C2): the same `Wire`, sent through the outbound hook every other
+/// provider's test answers (`edge::mem::outbound`), and read into the same `Answer`. Only the
+/// transport differs -- the allow-list check above has already run, and `judge.rs` reads the
+/// answer exactly as it reads the platform's.
+#[cfg(test)]
+async fn native(w: &Wire) -> Result<Answer> {
+    let method = if w.verb() == Verb::Post { Method::Post } else { Method::Get };
+    let mut call = crate::wire::Call::new(w.url(), method)?;
+    for (k, v) in w.headers() {
+        call = call.with_header(k, v);
+    }
+    if let Some(b) = w.body() {
+        call = call.with_body(b.as_bytes().to_vec());
+    }
+    let res = crate::edge::fetch(call).await?;
+    let h = res.headers();
+    let one = |k: &str| h.get(k).ok().flatten();
+    Ok(Answer {
+        status: res.status_code(),
+        content_type: one("content-type").unwrap_or_default(),
+        set_cookies: h.entries().filter(|(k, _)| k == "set-cookie").map(|(_, v)| v.clone()).collect(),
+        tenant: one("x-tenant-identifier"),
+        tenant_needed: one("x-tenant-identifier-needed").is_some(),
+        shift_error: one("x-shift-error"),
+        body: String::from_utf8_lossy(res.body()).into_owned(),
+    })
 }
 
 /// A logged-in reader for one firing: the session it started with (from the

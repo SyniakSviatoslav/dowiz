@@ -52,6 +52,12 @@ for g in tools/gates/*.sh; do
     */vocab.sh)
       if [ $CARGO = 1 ]; then run vocab sh "$g"; else skip vocab "compiles Rust; pass --cargo"; fi
       continue ;;
+    # Two instrumented builds and both test suites (~15 min cold on the dev box, ~3 min warm):
+    # its own CI job (`coverage` in ci.yml), never a row here. Run it by hand with
+    #   bash bebop-lang/tools/slot.sh cov sh tools/gates/coverage.sh
+    */coverage.sh)
+      skip coverage "instrumented builds; its own CI job"
+      continue ;;
   esac
   run "$(basename "$g" .sh)" sh "$g"
 done

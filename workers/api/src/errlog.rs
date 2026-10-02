@@ -14,6 +14,7 @@
 //! `WHERE venue = ?` somebody has to remember.
 
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// How long a record is kept. The nightly cron prunes the rest.
 pub const KEEP_MS: i64 = 7 * 24 * 60 * 60 * 1000;
@@ -85,7 +86,7 @@ pub async fn record(ns: &ObjectNamespace, venue: Option<&str>, place: &str, mess
     let stub = match ns.id_from_name(object).and_then(|id| id.get_stub()) {
         Ok(s) => s,
         Err(e) => {
-            console_log!("errlog: no object for {object}: {e}");
+            log_line!("errlog: no object for {object}: {e}");
             return;
         }
     };
@@ -104,21 +105,21 @@ pub async fn record(ns: &ObjectNamespace, venue: Option<&str>, place: &str, mess
     })
     .await
     {
-        console_log!("errlog: could not record {place}: {e}");
+        log_line!("errlog: could not record {place}: {e}");
     }
 }
 
 /// Log it AND record it, in the caller's own words.
 ///
 /// `loud!(&place.ns, Some(&place.venue), "notify.telegram", "refused: {e}")`
-/// prints exactly what `console_error!` printed before and adds the record.
+/// prints exactly what `log_error!` printed before and adds the record.
 /// Only usable in an async function, on purpose: a fire-and-forget write is the
 /// one that gets dropped when the isolate goes away.
 #[macro_export]
 macro_rules! loud {
     ($ns:expr, $venue:expr, $place:expr, $($arg:tt)*) => {{
         let __msg = format!($($arg)*);
-        worker::console_error!("{}: {}", $place, __msg);
+        log_error!("{}: {}", $place, __msg);
         $crate::errlog::record($ns, $venue, $place, &__msg).await;
     }};
 }

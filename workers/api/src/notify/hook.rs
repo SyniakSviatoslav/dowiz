@@ -10,6 +10,7 @@
 
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::notify::route::groups::{self, Group};
 
@@ -60,7 +61,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     let place = match crate::hubstore::Place::of_any(&req, &ctx).await {
         Ok(p) => p,
         Err(e) => {
-            console_log!("telegram.webhook: no venue in this URL: {e}");
+            log_line!("telegram.webhook: no venue in this URL: {e}");
             return Response::from_json(&json!({ "ignored": "this URL does not name a venue" }));
         }
     };
@@ -101,7 +102,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
             if let (Some((to, text)), Some(token)) = (e.reply, crate::notify::bot_token(&ctx.env, &settings)) {
                 // One line back, best effort: the link is already written.
                 if let Err(f) = crate::notify::tg::send(&token, &to, &text).await {
-                    console_log!("telegram.webhook: reply refused: {}", f.words());
+                    log_line!("telegram.webhook: reply refused: {}", f.words());
                 }
             }
         }
@@ -112,3 +113,8 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
 
 #[cfg(test)]
 mod tests;
+
+/// The bot's routes, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "hook/routes/tests.rs"]
+mod route_tests;

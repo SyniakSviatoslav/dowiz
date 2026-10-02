@@ -94,13 +94,13 @@ pub fn of_venue(t: &Table, venue: &str) -> (Vec<Entry>, usize) {
 }
 
 /// File one entry in the platform object.
-pub async fn file(env: &worker::Env, e: Entry) -> worker::Result<Entry> {
+pub async fn file(env: &crate::edge::Env, e: Entry) -> worker::Result<Entry> {
     use crate::platform_store::{with, ERASURES};
     with(env, ERASURES, move |t| put(t, e.clone()).map_err(worker::Error::RustError)).await
 }
 
 /// The venue's entries, and how many records could not be read.
-pub async fn of(env: &worker::Env, venue: &str) -> worker::Result<(Vec<Entry>, usize)> {
+pub async fn of(env: &crate::edge::Env, venue: &str) -> worker::Result<(Vec<Entry>, usize)> {
     let loaded = crate::platform_store::load(env, crate::platform_store::ERASURES).await?;
     Ok(of_venue(&loaded.table, venue))
 }

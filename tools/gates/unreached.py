@@ -68,8 +68,25 @@ def prod(s):
         if j < 0:
             out.append(s[i:]); break
         out.append(s[i:j])
-        k = s.find('{', j)
-        if k < 0: break
+        # THE SECOND CUT BUG (W-COV, 2026-09-30): a brace-less test item --
+        # `#[cfg(test)] mod tests;` or a `#[cfg(test)] Host::Mem(_) => x,`
+        # match arm -- has no `{` of its own, so `find('{')` landed on the NEXT
+        # item and removed it whole. hubdo.rs's `mod tests;` swallowed the
+        # entire `impl HubImages` below it and the gate called two live calls
+        # (`fixed_clock`, `get_websockets_with_tag`) test-only. The item ends
+        # at the first `;` or `,` outside ()/[] -- or, if a `{` comes first,
+        # at its matching `}`.
+        k, pd = j + len('#[cfg(test)]'), 0
+        while k < len(s):
+            c = s[k]
+            if c in '([': pd += 1
+            elif c in ')]': pd -= 1
+            elif pd == 0 and c in ';,': break
+            elif pd == 0 and c == '{': break
+            k += 1
+        if k >= len(s): break
+        if s[k] in ';,':
+            i = k + 1; continue
         depth, m = 0, k
         while m < len(s):
             if s[m] == '{': depth += 1

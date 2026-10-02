@@ -14,7 +14,7 @@
 //! order) is none of this module's business and is left alone, as before.
 
 use crate::auth::{self, Cap, Claims};
-use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// A round placed by a person in the room.
 #[derive(Debug, Clone, PartialEq, Eq)]

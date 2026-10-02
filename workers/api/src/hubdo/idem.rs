@@ -13,7 +13,7 @@ impl HubImages {
     pub(super) async fn commit_claim(&self, claim: Option<&commit::Claim>, output: &str) {
         let Some(claim) = claim else { return };
         if let Err(e) = self.try_commit(claim, output).await {
-            console_error!("idempotency: a command ran and its claim was NOT marked committed: {e}");
+            log_error!("idempotency: a command ran and its claim was NOT marked committed: {e}");
         }
     }
 

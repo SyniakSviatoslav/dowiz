@@ -25,6 +25,7 @@
 //! That is named here and deliberately not built.
 
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use dowiz_hub::logimage::LogImage;
 use dowiz_hub::table::Table;

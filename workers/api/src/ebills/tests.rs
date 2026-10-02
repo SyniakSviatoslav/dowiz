@@ -20,7 +20,7 @@ fn raw(text: &str) -> Value {
 
 /// A course rung up at table 12: `summaryInvoice:false` + `saleUnitOrder`,
 /// one line of 2 × 250 lek. Exactly the record of §1.5.
-fn course() -> Value {
+pub(crate) fn course() -> Value {
     raw(&format!(
         r#"{{
         "id": 8602, "invOrdNum": 8598, "uuid": "{UUID_COURSE}", "fic": "{FIC}",
@@ -52,7 +52,7 @@ fn course() -> Value {
 
 /// The bill that closed table 14: `summaryInvoice:true`, no `saleUnitOrder`,
 /// two lines of 80 lek. As the LIST returns it: `saleRecords: null`.
-fn bill_listed() -> Value {
+pub(crate) fn bill_listed() -> Value {
     raw(&format!(
         r#"{{
         "id": 8601, "invOrdNum": 8597, "uuid": "{UUID_BILL}", "fic": "{FIC}",
@@ -70,7 +70,7 @@ fn bill_listed() -> Value {
     ))
 }
 
-fn wrapped(sale: Value) -> String {
+pub(crate) fn wrapped(sale: Value) -> String {
     json!({ "sale": sale, "saleModified": [], "reason": null, "saleType": null,
             "withoutfiscalization": null, "includeClosingTheTable": false, "id": null })
     .to_string()

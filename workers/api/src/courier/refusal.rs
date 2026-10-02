@@ -8,7 +8,7 @@
 //! isolate. Every code it returns today is 4xx; this makes that a property of
 //! the code, not of the table's current rows.
 
-use worker::{Response, ResponseBuilder};
+use crate::wire::Reply as Response;
 
 /// The status a refusal is sent with: its own when it is an error status,
 /// 500 otherwise -- a refusal that claims success is itself the fault.
@@ -22,7 +22,8 @@ pub(crate) fn status(s: u16) -> u16 {
 
 /// `Response::error`, with no `Result` left to unwrap.
 pub(crate) fn of(text: &str, s: u16) -> Response {
-    ResponseBuilder::new().with_status(status(s)).fixed(text.as_bytes().to_vec())
+    // Same bytes and status as worker's `fixed` (no content type), native (W-COV C2).
+    Response::error(text, status(s)).unwrap_or_else(|_| Response::empty().unwrap().with_status(500))
 }
 
 #[cfg(test)]

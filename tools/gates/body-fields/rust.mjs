@@ -66,7 +66,9 @@ export function structsOf(src){
 /// The router: [{method, path, handler}] from lib.rs.
 export function routesOf(libSrc){
   const out = [];
-  for (const m of stripComments(libSrc).matchAll(/\.(post|put|patch)_async\(\s*"([^"]+)"\s*,\s*([\w:]+)/g))
+  // W-COV (2026-09-30): a route is also `|r, c| edge::run(r, c, handler)` -- the route seam's
+  // adapter (`workers/api/src/edge.rs`); the handler is the third argument.
+  for (const m of stripComments(libSrc).matchAll(/\.(post|put|patch)_async\(\s*"([^"]+)"\s*,\s*(?:\|\s*\w+\s*,\s*\w+\s*\|\s*edge::run\(\s*\w+\s*,\s*\w+\s*,\s*)?([\w:]+)/g))
     out.push({ method: m[1].toUpperCase(), path: m[2], handler: m[3] });
   return out;
 }

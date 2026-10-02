@@ -20,6 +20,7 @@
 //! which RFC 9110 allows); an unsatisfiable one is 416 with `Content-Range: bytes */size`.
 use crate::auth::{self, Principal};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// Every key the Worker serves is under this prefix in the bucket.
 pub const PREFIX: &str = "learn/";
@@ -178,26 +179,37 @@ pub async fn manifest(req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
 }
 
 /// GET /api/learn/media/*key
-pub async fn media(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub async fn media(req: worker::Request, ctx: worker::RouteContext<crate::Req>) -> Result<worker::Response> {
+    // A STREAMED BODY (R2, ranges) is the one answer a `Reply` cannot carry, so this route keeps
+    // the platform's response and runs the rest over the native request (W-COV C2).
+    let req = Request::from_worker(req).await?;
+    let ctx = RouteContext::from_worker(ctx);
+    match media_at(req, ctx).await? {
+        Ok(streamed) => Ok(streamed),
+        Err(refused) => refused.into_response(),
+    }
+}
+
+async fn media_at(req: Request, ctx: RouteContext<crate::Req>) -> Result<std::result::Result<worker::Response, Response>> {
     let a = match who(&req, &ctx).await {
         Ok(a) => a,
-        Err(r) => return Ok(r),
+        Err(r) => return Ok(Err(r)),
     };
     let raw = ctx.param("key").cloned().unwrap_or_default();
     let Some((lesson, key)) = media_key(&raw).filter(|(id, _)| may_see(a, id)) else {
-        return Response::error("not found", 404);
+        return Ok(Err(Response::error("not found", 404)?));
     };
     let _ = lesson;
     let b = match bucket(&ctx) {
         Ok(b) => b,
-        Err(r) => return Ok(r),
+        Err(r) => return Ok(Err(r)),
     };
     let Some(head) = b.head(&key).await? else {
-        return Response::error("not found", 404);
+        return Ok(Err(Response::error("not found", 404)?));
     };
     let size = head.size();
     let ext = key.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
-    let headers = Headers::new();
+    let mut headers = Headers::new();
     headers.set("content-type", content_type(ext).unwrap_or("application/octet-stream"))?;
     headers.set("accept-ranges", "bytes")?;
     headers.set("cache-control", "private, max-age=3600")?;
@@ -208,7 +220,7 @@ pub async fn media(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
         Some(r) => match resolve(r, size) {
             None => {
                 headers.set("content-range", &format!("bytes */{size}"))?;
-                return Ok(Response::empty()?.with_status(416).with_headers(headers));
+                return Ok(Err(Response::empty()?.with_status(416).with_headers(headers)));
             }
             Some((first, last)) => {
                 headers.set("content-range", &format!("bytes {first}-{last}/{size}"))?;
@@ -217,13 +229,13 @@ pub async fn media(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
         },
     };
     let Some(obj) = get.execute().await? else {
-        return Response::error("not found", 404);
+        return Ok(Err(Response::error("not found", 404)?));
     };
     let Some(body) = obj.body() else {
-        return Response::error("not found", 404);
+        return Ok(Err(Response::error("not found", 404)?));
     };
     let stream = body.stream()?;
-    Ok(Response::from_stream(stream)?.with_status(status).with_headers(headers))
+    Ok(Ok(worker::Response::from_stream(stream)?.with_status(status).with_headers(headers.into_worker()?)))
 }
 
 #[cfg(test)]

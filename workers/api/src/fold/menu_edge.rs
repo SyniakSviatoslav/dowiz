@@ -5,6 +5,7 @@
 
 use crate::hubstore::Place;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// The storefront's menu, FOLDED IN THE OBJECT (R2, `hubdo/menu.rs`): the
 /// body as bytes, to be passed through, or the status the object refused with

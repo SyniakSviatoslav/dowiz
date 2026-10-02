@@ -3,6 +3,7 @@
 
 use serde_json::json;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use super::handlers::{customer_key, signing_secret};
 use super::record::{self, Card, KIND};

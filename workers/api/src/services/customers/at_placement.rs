@@ -4,6 +4,7 @@
 //! and tested natively; this file fetches the card and files the result.
 
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use super::allergy;
 use super::record::{touch, KIND};

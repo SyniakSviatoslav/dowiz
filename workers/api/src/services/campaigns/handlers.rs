@@ -12,6 +12,7 @@
 use serde::Deserialize;
 use serde_json::json;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use super::audience::{recipients, Recipient};
 use super::campaign::{self, DefIn, IMAGE_CAMPAIGN, KIND_DEF};
@@ -212,7 +213,7 @@ pub async fn send_now(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
     })
     .await
     {
-        console_error!("campaign.send {id}: marks not pruned yet: {e}");
+        log_error!("campaign.send {id}: marks not pruned yet: {e}");
     }
     Response::from_json(&json!({ "queued": fresh, "already": plan.already, "left": plan.left }))
 }

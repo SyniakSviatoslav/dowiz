@@ -7,7 +7,7 @@
 //!   2. `with_hub` — read the WHOLE log image, count the promo's uses, redeem
 //!      it, append `Placed`, write it.
 //!   3. if (2) failed, `with_stock` again to release what (1) held — and if
-//!      THAT failed, `console_error!` and nothing else.
+//!      THAT failed, `log_error!` and nothing else.
 //!
 //! Three things were wrong with it and each cost something real:
 //!

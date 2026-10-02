@@ -25,6 +25,7 @@
 //! check, and it is keyed by both sides.
 
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::platform_store::{self, COURIERS, IDENTITY, REGISTRY, SESSIONS};
 use dowiz_hub::table::Table;

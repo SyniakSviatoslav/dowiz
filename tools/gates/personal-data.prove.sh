@@ -10,6 +10,8 @@
 #   6. the same host inside a #[cfg(test)] module          -> GREEN (tests stripped)
 #   7. a new `dw_*` key written to localStorage            -> RED naming it
 #   8. a host added to the CSP in public/_headers          -> RED naming it
+#   9. a host in a file its parent declares `#[cfg(test)] mod` -> GREEN
+#  10. the same file once the parent ships it               -> RED naming it
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
@@ -58,6 +60,12 @@ rc=$(run); expect "a new browser key" 1 "dw_secret_note"
 copy
 sed -i 's#connect-src #connect-src https://beacon.example.org #' "$R/workers/api/public/_headers"
 rc=$(run); expect "a host added to the CSP" 1 "beacon.example.org"
+
+copy
+printf '\npub fn ping() -> String { "https://probe.example.com/x".into() }\n' >> "$R/workers/api/src/edge/site.rs"
+rc=$(run); expect "a host in a #[cfg(test)] mod file (edge/site.rs)" 0 "personal-data 0"
+sed -i 's/^#\[cfg(test)\]$//' "$R/workers/api/src/edge.rs"
+rc=$(run); expect "the same file once edge.rs ships it" 1 "probe.example.com"
 
 [ $fail -eq 0 ] && echo "personal-data.prove: the gate fires in every direction" || echo "personal-data.prove: FAILED"
 exit $fail

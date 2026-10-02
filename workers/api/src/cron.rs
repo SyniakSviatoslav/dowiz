@@ -22,6 +22,7 @@
 //! has work due and no alarm -- a lost alarm -- and re-arms it.
 
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// The runner object's name for a venue. Never a venue id itself: `~` is not
 /// in any location id, so a runner can never be mistaken for a venue's hub.
@@ -57,10 +58,10 @@ pub fn parse_runner_query(pairs: impl Iterator<Item = (String, String)>) -> Opti
 pub async fn nightly(env: &Env, now_ms: i64) {
     let registry = match crate::identity_store::registry(env).await {
         Ok(t) => t,
-        Err(e) => return console_error!("timers: registry unreadable: {e}"),
+        Err(e) => return log_error!("timers: registry unreadable: {e}"),
     };
     let Ok(ns) = env.durable_object("HUB") else {
-        return console_error!("timers: no HUB binding");
+        return log_error!("timers: no HUB binding");
     };
     let mut tally = timer::Tally::default();
     for (venue, _) in registry.all(crate::identity_store::K_LOC) {
@@ -80,7 +81,7 @@ pub async fn nightly(env: &Env, now_ms: i64) {
         }
         tally.add(&venue, seen);
     }
-    console_log!("{}", tally.line());
+    log_line!("{}", tally.line());
 }
 
 /// The path a venue's own object answers the nightly on (`hubdo/timer.rs`).
@@ -106,3 +107,8 @@ pub mod timer;
 
 #[cfg(test)]
 mod tests;
+
+/// The night and the runner, natively (W-COV C2).
+#[cfg(test)]
+#[path = "cron/routes/tests.rs"]
+mod route_tests;

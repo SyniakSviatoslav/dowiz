@@ -21,8 +21,8 @@
 
 use dowiz_hub::catalog::Catalog;
 use dowiz_hub::Hub;
-use worker::wasm_bindgen::JsValue;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// Two images, one hub. A bebop store has ONE root, and the event log's root and
 /// the KV root are different layouts -- they cannot share an image. The split
@@ -923,7 +923,7 @@ pub async fn append_blind(
             "https://hub/fold/append",
             RequestInit::new()
                 .with_method(Method::Post)
-                .with_body(Some(JsValue::from_str(&body.to_string()))),
+                .with_body(Some(body.to_string().into_bytes())),
         )?;
         write.headers_mut()?.set("x-generation", &generation.to_string())?;
         write.headers_mut()?.set("content-type", "application/json")?;

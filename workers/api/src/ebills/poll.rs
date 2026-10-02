@@ -19,7 +19,7 @@ use super::walk::{Step, Walker, BUDGET};
 use super::{classify, whole, parse_detail, parse_items, parse_list, parse_tables, Kind};
 use crate::hubstore::Place;
 use serde_json::Value;
-use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// The largest page the list honours (measured: `size=500`, §1.3).
 const PAGE: u32 = 500;
@@ -34,7 +34,7 @@ async fn hub<I: serde::Serialize, O: serde::de::DeserializeOwned>(place: &Place,
 /// `crate::cron`; see `outbox::rails::drain_venue` for why).
 pub(crate) async fn tick_venue(env: &Env, venue: &str, now_ms: i64) {
     {
-        let Ok(ns) = env.durable_object("HUB") else { return console_error!("ebills sweep: no HUB binding") };
+        let Ok(ns) = env.durable_object("HUB") else { return log_error!("ebills sweep: no HUB binding") };
         let venue = venue.to_string();
         let place = Place { ns, venue: venue.clone() };
         let plan: Plan = match hub(&place, "ebills/tick", &TickIn { now_ms }).await {
@@ -55,7 +55,7 @@ pub(crate) async fn tick_venue(env: &Env, venue: &str, now_ms: i64) {
                 drop_session: f.is_auth(),
             };
             if let Err(g) = hub::<_, Value>(&place, "ebills/report", &report).await {
-                console_error!("ebills {venue}: the failure could not be recorded: {}", g.line());
+                log_error!("ebills {venue}: the failure could not be recorded: {}", g.line());
             }
             crate::loud!(&place.ns, Some(&venue), "ebills.poll", "{}", f.line());
         }
@@ -150,7 +150,7 @@ async fn run(place: &Place, plan: &Plan, now_ms: i64) -> std::result::Result<(),
     }
     let out: ImportOut = hub(place, "ebills/import", &input).await?;
     if out.placed + out.noted + out.paid > 0 || !out.refused.is_empty() {
-        console_log!(
+        log_line!(
             "ebills {}: {} placed, {} noted, {} paid, {} unchanged, {} bills waiting, {} refused",
             place.venue, out.placed, out.noted, out.paid, out.unchanged, out.pending, out.refused.len()
         );
@@ -290,3 +290,8 @@ async fn recheck(c: &mut Client, pos: i64, (from, until): (i64, i64), input: &mu
     input.recheck = Some(if id > until { (0, 0) } else { (id, until) });
     result
 }
+
+/// The link end to end against a fake ebills.al (W-COV C2).
+#[cfg(test)]
+#[path = "flow/tests.rs"]
+mod flow_tests;

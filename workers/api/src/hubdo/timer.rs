@@ -24,6 +24,8 @@ use super::{HubImages, CATALOG_IMAGE};
 use crate::cron::timer::{self, Arm, Seen};
 use dowiz_hub::table::Table;
 use worker::*;
+// The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
+use crate::wire::{Call as Request, Reply as Response};
 
 /// Where the learned name is kept.
 const VENUE_KEY: &str = "timer~venue";
@@ -87,7 +89,7 @@ impl HubImages {
     async fn timer_apply(&self, arm: Arm) -> Result<()> {
         let store = self.state.storage();
         match arm {
-            Arm::Set(at) => store.set_alarm(ScheduledTime::new(js_sys::Date::new(&(at as f64).into()))).await,
+            Arm::Set(at) => store.set_alarm_ms(at).await,
             Arm::Clear => store.delete_alarm().await,
             Arm::Keep => Ok(()),
         }
@@ -95,8 +97,7 @@ impl HubImages {
 
     /// Is `venue` this object's name? `id_from_name` says, and nothing else.
     fn is_me(&self, venue: &str) -> bool {
-        let Ok(ns) = self.env.durable_object("HUB") else { return false };
-        !venue.is_empty() && ns.id_from_name(venue).is_ok_and(|id| id.to_string() == self.state.id().to_string())
+        self.state.is_me(venue)
     }
 
     /// This object's venue: the stored name, the one it was just `told`, the
@@ -114,7 +115,7 @@ impl HubImages {
                 None => None,
             }
         };
-        let mut found = [stored.clone(), told.map(str::to_string), self.state.id().name()]
+        let mut found = [stored.clone(), told.map(str::to_string), self.state.own_name()]
             .into_iter()
             .flatten()
             .find(|v| self.is_me(v));
@@ -147,7 +148,7 @@ impl HubImages {
         }
         .await;
         if let Err(e) = armed {
-            console_error!("timer: the alarm was not set after a write: {e}");
+            log_error!("timer: the alarm was not set after a write: {e}");
         }
     }
 
@@ -157,18 +158,12 @@ impl HubImages {
     pub(super) async fn timer_alarm(&self, now_ms: i64) -> Result<Response> {
         let Some(venue) = self.own_venue(None).await else {
             // Nothing can be run without the name; the nightly tells it.
-            console_error!("timer: an alarm fired in an object that does not know its venue");
+            log_error!("timer: an alarm fired in an object that does not know its venue");
             return Response::ok("no venue");
         };
         self.in_alarm.set(true);
         let ran = async {
-            let ns = self.env.durable_object("HUB")?;
-            let stub = ns.id_from_name(&crate::cron::runner_name(&venue))?.get_stub()?;
-            let req = Request::new_with_init(
-                &crate::cron::runner_path(&venue, now_ms),
-                RequestInit::new().with_method(Method::Post),
-            )?;
-            match stub.fetch_with_request(req).await?.status_code() {
+            match self.state.call_runner(&venue, now_ms).await? {
                 200 => Ok(()),
                 s => Err(bad(format!("the runner answered {s}"))),
             }
@@ -180,7 +175,7 @@ impl HubImages {
             Ok(want) => timer::after_run(want, now_ms),
             // UNREADABLE IS NOT IDLE: try again in a minute rather than never.
             Err(e) => {
-                console_error!("timer {venue}: {e}");
+                log_error!("timer {venue}: {e}");
                 Arm::Set(now_ms + timer::RUN_GAP_MS)
             }
         };

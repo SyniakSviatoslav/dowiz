@@ -107,7 +107,7 @@ pub fn acts_for(
 
 /// THE HOOK `channels::webhook` calls for each fresh inbound message.
 /// A failure is loud in `consent_log::file`; the webhook still answers 200.
-pub async fn heard(place: &crate::hubstore::Place, env: &worker::Env, thread: &str, peer: &str, text: &str, via: &str, at_ms: i64) {
+pub async fn heard(place: &crate::hubstore::Place, env: &crate::edge::Env, thread: &str, peer: &str, text: &str, via: &str, at_ms: i64) {
     if !is_stop(text) {
         return;
     }

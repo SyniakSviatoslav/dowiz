@@ -26,3 +26,8 @@ pub mod view;
 
 #[cfg(test)]
 mod tests;
+
+/// The customer routes, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "routes/tests.rs"]
+mod route_tests;

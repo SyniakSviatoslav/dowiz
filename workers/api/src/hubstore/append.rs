@@ -12,8 +12,8 @@
 
 use super::Place;
 use crate::idempotency::commit::{Claim, Marked};
-use worker::wasm_bindgen::JsValue;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// Append one event, retrying if another writer moved the log first.
 ///
@@ -82,7 +82,7 @@ where
             "https://hub/fold/append",
             RequestInit::new()
                 .with_method(Method::Post)
-                .with_body(Some(JsValue::from_str(&body.to_string()))),
+                .with_body(Some(body.to_string().into_bytes())),
         )?;
         write.headers_mut()?.set("x-generation", &generation.to_string())?;
         write.headers_mut()?.set("content-type", "application/json")?;

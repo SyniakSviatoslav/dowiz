@@ -23,6 +23,7 @@
 
 use serde::{Deserialize, Serialize};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// What one rebuild found.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

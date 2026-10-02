@@ -9,7 +9,7 @@
 //!
 //! * `storefront::place` reserved the ingredients, appended the order, and on
 //!   failure wrote the stock image a third time to release them. If THAT
-//!   failed, a `console_error!`. A stranded reservation makes a kitchen believe
+//!   failed, a `log_error!`. A stranded reservation makes a kitchen believe
 //!   it is out of something it has.
 //! * `owner::order_action` advanced the order and then settled the shelf, with
 //!   the settlement's failure logged and deliberately not failing the
@@ -33,8 +33,8 @@
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use worker::wasm_bindgen::JsValue;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 pub mod advance;
 pub mod aggregator;
@@ -79,7 +79,7 @@ pub(crate) async fn send<I: Serialize, O: DeserializeOwned>(
     let body = serde_json::to_string(input).map_err(|e| (500, format!("{what}: {e}")))?;
     let mut req = Request::new_with_init(
         &format!("https://hub/fold/{what}"),
-        RequestInit::new().with_method(Method::Post).with_body(Some(JsValue::from_str(&body))),
+        RequestInit::new().with_method(Method::Post).with_body(Some(body.into_bytes())),
     )
     .map_err(|e| (500, format!("{what}: {e}")))?;
     req.headers_mut()

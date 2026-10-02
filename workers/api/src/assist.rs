@@ -17,6 +17,7 @@
 
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 pub const SYSTEM_OWNER: &str = "\
 You help the owner of one restaurant read their own live order data and stock. \
@@ -109,7 +110,7 @@ pub async fn ask(
         "max_tokens": 400,
         "stream": false,
     });
-    let headers = Headers::new();
+    let mut headers = Headers::new();
     headers.set("content-type", "application/json")?;
     if let Some(tok) = s.get("ai.token").filter(|t| !t.trim().is_empty()) {
         headers.set("authorization", &format!("Bearer {}", tok.trim()))?;
@@ -121,7 +122,7 @@ pub async fn ask(
             .with_headers(headers)
             .with_body(Some(payload.to_string().into())),
     )?;
-    let mut res = Fetch::Request(req).send().await?;
+    let mut res = crate::edge::fetch(req).await?;
     if res.status_code() >= 400 {
         // The provider's own words, truncated. "The assistant failed" sends an
         // owner to a forum; "401 invalid api key" sends them to the settings.

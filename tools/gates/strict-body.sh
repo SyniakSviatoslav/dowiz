@@ -9,7 +9,8 @@
 # native unit tests (serde_json) refused the same body and stayed green.
 #
 # THE RULE. Inside any function that binds a `Request` parameter (`req: Request`,
-# `mut req: Request`, `req: &mut Request`), that parameter's `.json(` is never
+# `mut req: Request`, `req: &mut Request`, or the route seam's `Call`, which
+# handler files import AS `Request`), that parameter's `.json(` is never
 # called. Bodies come through `crate::body::parse` / `crate::body::strict`
 # (workers/api/src/body.rs): `req.text()` + `serde_json`, the parser the tests
 # use, so what a test proves is what the Worker does. The rule covers structs
@@ -37,7 +38,7 @@ found=$(ROOT="$ROOT" python3 - <<'PY'
 import os, re, glob
 
 ROOT = os.environ['ROOT']
-PARAM = re.compile(r'(?:\bmut\s+)?(\w+)\s*:\s*(?:&\s*(?:mut\s+)?)?(?:worker::)?Request\b')
+PARAM = re.compile(r'(?:\bmut\s+)?(\w+)\s*:\s*(?:&\s*(?:mut\s+)?)?(?:worker::|crate::wire::|wire::)?(?:Request|Call)\b')
 
 def blank(src):
     """Comments and string/char literals become spaces; offsets are kept."""

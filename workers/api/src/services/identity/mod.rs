@@ -7,3 +7,8 @@ pub mod keys;
 pub mod staff;
 pub mod staff_admin;
 pub mod staff_rules;
+
+/// Staff administration routes, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "routes/tests.rs"]
+mod route_tests;

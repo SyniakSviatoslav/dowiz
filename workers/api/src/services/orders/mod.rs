@@ -6,9 +6,16 @@ pub mod kitchen_ack;
 pub mod legs;
 pub mod mine;
 pub mod print;
+/// `GET /api/order/:id` (moved out of `lib.rs`, W-COV C2).
+pub mod read;
 pub mod refund;
 pub mod room;
 pub mod status;
 
 #[cfg(test)]
 mod tests;
+
+/// The printer routes, through the route seam (W-COV C2).
+#[cfg(test)]
+#[path = "print_routes/tests.rs"]
+mod print_routes;

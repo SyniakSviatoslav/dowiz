@@ -64,7 +64,7 @@ impl HubImages {
         let back = match crate::command::refund::wallet::reversals(order, &input.location_id, &rows, input.now_ms) {
             Ok(b) => b,
             Err(r) => {
-                console_error!("wallet: order {} was refunded and its wallet was NOT credited ({})", input.order_id, r.message());
+                log_error!("wallet: order {} was refunded and its wallet was NOT credited ({})", input.order_id, r.message());
                 return Ok(());
             }
         };
@@ -73,7 +73,7 @@ impl HubImages {
         }
         let appended = back.iter().all(|d| log.append(crate::wallet::K_TX, &d.tx_id, &d.record).is_ok());
         if !appended || self.put_image(crate::wallet::IMAGE_LEDGER, gen, &log.to_bytes()).await?.is_none() {
-            console_error!("wallet: order {} was refunded and its wallet credit was NOT written", input.order_id);
+            log_error!("wallet: order {} was refunded and its wallet credit was NOT written", input.order_id);
         }
         Ok(())
     }

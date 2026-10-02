@@ -16,6 +16,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::auth::{hash_password, sha256_hex};
 
@@ -82,6 +83,9 @@ pub(crate) fn secret_ok(given: &str, want: &str) -> bool {
 }
 
 /// `POST /api/bootstrap` — seed the catalogue, and optionally the first owner.
+/// The marker a refused venue record travels under, out of the catalogue's write guard.
+const INCOMPLETE: &str = "bundle-incomplete: ";
+
 pub async fn seed(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     // No secret configured => the route does not exist. 404, not 401: a 401
     // confirms there is something here to guess at.
@@ -139,6 +143,14 @@ pub async fn seed(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
         } else {
             merged = loc.clone();
         }
+        // THE RECORD MUST BE ONE THE STOREFRONT CAN READ (W-COV, found by its test): a NEW
+        // venue seeded with only `{id, slug, name}` was accepted, and every menu read after it
+        // answered 500 "catalogue location unreadable: missing field `phone`". Refused here,
+        // by name, before anything is written; a partial bundle over an existing venue still
+        // merges, because the merged record is what is checked.
+        if let Err(e) = serde_json::from_value::<crate::storefront::LocRow>(merged.clone()) {
+            return Err(Error::RustError(format!("{INCOMPLETE}{e}")));
+        }
         cat.set_location(&serde_json::to_string(&merged).unwrap_or_else(|_| "{}".into()));
 
         // ── REPLACE, when the caller asks for it ──
@@ -184,6 +196,11 @@ pub async fn seed(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
     .await;
     let (n_cat, n_prod) = match seeded {
         Ok(v) => v,
+        Err(e) if e.to_string().contains(INCOMPLETE) => {
+            let why = e.to_string();
+            let why = why.split(INCOMPLETE).nth(1).unwrap_or("").to_string();
+            return Response::error(format!("the venue record is incomplete: {why}"), 400);
+        }
         Err(e) => return Response::error(format!("catalogue seed failed: {e}"), 500),
     };
 

@@ -11,6 +11,7 @@
 
 use super::*;
 use worker::*;
+#[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use super::{digest, digest_rail, lease, tgrail};
 
@@ -271,12 +272,12 @@ pub async fn drain_venue(env: &Env, venue: &str, now_ms: i64) {
             // this sweep promises to say out loud.
             Ok((0, 0, gone)) if gone.is_empty() => {}
             Ok((sent, kept, gone)) => {
-                console_log!("outbox {venue}: {sent} sent, {kept} waiting");
+                log_line!("outbox {venue}: {sent} sent, {kept} waiting");
                 for what in gone {
                     crate::loud!(&place.ns, Some(&venue), "outbox.abandoned", "{what}");
                 }
             }
-            Err(e) => console_error!("outbox {venue}: drain refused: {e}"),
+            Err(e) => log_error!("outbox {venue}: drain refused: {e}"),
         }
     }
 }

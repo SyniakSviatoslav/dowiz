@@ -11,6 +11,8 @@
 use super::{HubImages, CATALOG_IMAGE};
 use dowiz_hub::catalog::Catalog;
 use worker::*;
+// The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
+use crate::wire::{Call as Request, Reply as Response};
 
 impl HubImages {
     /// See the module. A venue with no catalogue yet answers from an empty
