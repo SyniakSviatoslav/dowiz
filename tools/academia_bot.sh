@@ -5,11 +5,20 @@
 # Zero-trace: кожен запуск = новий IP
 # Jitter: випадкові затримки
 # Chaff: шумові запити  
-# PQ: ML-DSA-65 signing
+# (was: "PQ: ML-DSA-65 signing" -- false; see the LEGACY note below)
 #
 # Потрібен тільки HF_TOKEN (або буде згенерований guest token)
 
 set -euo pipefail
+
+# LEGACY, REFUSED 2026-10-02 (operator: "так, виправ"). This is the bot that
+# .github/workflows/academia_full_cron.yml piped into bash from a Hugging Face dataset. It hides
+# itself (jitter, chaff requests, spoofed headers), keeps only 8-byte title hashes, and its "PQ
+# signature" was sha3(random key + data) with the key thrown away -- not a signature at all; that
+# line is now an honestly named SHA3-256 digest. Kept, not deleted (nothing is deleted). The honest
+# harvester is tools/research-extract.sh --oai (tools/research_oai.py).
+echo "academia_bot.sh: REFUSED -- use tools/research-extract.sh --oai SET --from D --until D --output F" >&2
+exit 1
 
 # ─── Jitter ─────────────────────────────────────────────────────────────
 JITTER=$((RANDOM % 300))
@@ -98,19 +107,18 @@ if [ "$COUNT" -eq 0 ]; then
     exit 0
 fi
 
-# ─── Build chunk + PQ sign ──────────────────────────────────────────────
+# ─── Build chunk + SHA3-256 digest (NOT a signature) ──────────────────────────────────────────────
 CHUNK=$(mktemp)
 python3 -c "
 import struct, hashlib, sys
 sigs=[int(l.strip()) for l in open('${PAPERS}') if l.strip()]
 hdr=struct.pack('<I', len(sigs))
 chunk=hdr+b''.join(struct.pack('<Q', s) for s in sigs)
-pq_key=hashlib.sha3_256(b'${RANDOM}').digest()
-pq_sig=hashlib.sha3_256(pq_key+chunk).hexdigest()
+digest=hashlib.sha3_256(chunk).hexdigest()  # an integrity digest; nobody's key, no signature
 with open('${CHUNK}', 'wb') as f:
     f.write(chunk)
-    f.write(pq_sig.encode())
-print(f'   PQ sig: {pq_sig[:16]}...')
+    f.write(digest.encode())
+print(f'   sha3-256: {digest[:16]}...')
 "
 
 # ─── Upload to HF ───────────────────────────────────────────────────────
