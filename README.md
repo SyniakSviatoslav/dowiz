@@ -386,9 +386,10 @@ until the wildcard route is restored. Production is probed every 15 minutes by
   id alone is not a key: `GET /api/order/:id` without the guest's token answers 401 or 404.
 - **Tokens** are HMAC-SHA256 with the algorithm fixed in code (`crates/dowiz-hub/src/token.rs`,
   `workers/api/src/auth.rs`).
-- **Signatures.** `crates/dowiz-core/src/pq/` holds an ML-DSA-65 (FIPS 204) implementation verified
-  byte-exact against the vendored NIST ACVP vectors. It is behind the kernel's off-by-default `pq`
-  feature and is not on the live request path.
+- **Post-quantum primitives.** `crates/dowiz-core/src/pq/` holds ML-KEM-768 (FIPS 203) and ML-DSA-65
+  (FIPS 204) implementations verified byte-exact against the vendored NIST ACVP vectors in CI, with no
+  third-party crypto crates. The module is compiled into the kernel crate, but nothing on the live
+  request path calls it.
 - **Off-site copies.** The nightly copy to the venue's bucket carries a manifest with each image's
   SHA-256. A sealing path for those copies exists in `workers/api/src/cloud/seal.rs` and is switched
   off: it seals nothing until the operator sets `BACKUP_SEAL_PK`. dowiz makes no claim of

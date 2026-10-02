@@ -128,7 +128,7 @@
     <div class="wide">
       <div class="adv-head">
         <h2 id="h-adv" class="mask-lines" data-reveal data-i18n="advH">Усе, що входить. Без зірочок.</h2>
-        <p data-i18n="advP">Двадцять речей, за які агрегатор бере відсоток, а dowiz — ні. Кожна з них уже працює в живому закладі.</p>
+        <p data-i18n="advP">Двадцять речей, за які агрегатор бере відсоток, а dowiz — ні. Дев'ятнадцять уже працюють у живому закладі; двадцята зібрана, перевірена й чекає на один ключ.</p>
       </div>
       <ol class="adv-list" id="advList">
         <li class="adv-item">
@@ -192,8 +192,8 @@
           <p data-i18n="a15p">Залишки списуються з кожного замовлення; закінчується — страва ховається сама.</p>
         </li>
         <li class="adv-item">
-          <h3 data-i18n="a16t">Постквантове шифрування</h3>
-          <p data-i18n="a16p">X25519 + ML-KEM-768 у каналі, ML-DSA-65 на кожному пакеті, AES-256-GCM локально.</p>
+          <h3 data-i18n="a16t">Постквантова готовність</h3>
+          <p data-i18n="a16p">ML-KEM-768 і ML-DSA-65 проходять тест-вектори NIST ACVP у CI. Ще не в живому шляху: токени — HMAC-SHA256, транспорт — TLS.</p>
         </li>
         <li class="adv-item">
           <h3 data-i18n="a17t">Гроші без округлень</h3>
@@ -218,7 +218,7 @@
   <section class="engine on-ink" id="engine" aria-labelledby="h-engine">
     <div class="wide engine-head">
       <h2 id="h-engine" class="mask-lines" data-reveal data-i18n="engineH">Рушій, якому не потрібен посередник</h2>
-      <p data-i18n="engineP">Під додатком — відкритий протокол доставки: один журнал замовлень, постквантове шифрування, локальний ШІ і жодного сервера, без якого все зупиниться.</p>
+      <p data-i18n="engineP">Під додатком — відкритий протокол доставки: один журнал замовлень, постквантово готова криптографія, локальний ШІ і жодного сервера, без якого все зупиниться.</p>
     </div>
     <div class="track" id="track">
       <article class="panel" id="p-hub">
@@ -244,9 +244,9 @@
           <rect class="draw late" pathLength="1" x="22" y="44" width="52" height="38" rx="6"/>
           <circle class="fill" cx="48" cy="62" r="4"/>
         </svg>
-        <h3 data-i18n="p3h">Постквантовий захист</h3>
-        <p data-i18n="p3p">Канал узгоджується гібридом X25519 + ML-KEM-768, кожен пакет підписано ML-DSA-65. Дані закладу й клієнтів зашифровано локально і в дорозі; класичного «запасного» шляху немає.</p>
-        <span class="spec">FIPS 203 · FIPS 204 · AES-256-GCM</span>
+        <h3 data-i18n="p3h">Постквантовий захист: що є насправді</h3>
+        <p data-i18n="p3p">У dowiz є власні реалізації ML-KEM-768 (FIPS 203) та ML-DSA-65 (FIPS 204), які проходять офіційні тест-вектори NIST ACVP у CI без сторонніх криптобібліотек. Вони ще не працюють у живому шляху: токени — HMAC-SHA256, транспорт — TLS від Cloudflare, а запечатування нічних резервних копій гібридом X25519 + ML-KEM-768 з AES-256-GCM зібране й вимкнене, доки оператор не встановить відкритий ключ.</p>
+        <span class="spec">FIPS 203 · FIPS 204 · NIST ACVP</span>
       </article>
       <article class="panel" id="p-ai">
         <svg class="glyph" viewBox="0 0 96 96" aria-hidden="true">
@@ -325,7 +325,7 @@
           <li><a href="/platform/hub.html" data-i18n="fSignin">Вхід</a></li>
           <li><a href="#p-pq" data-i18n="fSecurity">Безпека</a></li>
         </ul>
-        <small data-i18n="fNote">© 2026 dowiz · відкритий код, AGPL-3.0 · децентралізований, локальний, постквантовий протокол доставки</small>
+        <small data-i18n="fNote">© 2026 dowiz · відкритий код, AGPL-3.0 · децентралізований, локальний, постквантово готовий протокол доставки</small>
       </div>
       <div class="wordmark" id="wordmark" aria-hidden="true">dowiz<b>.</b></div>
     </footer>

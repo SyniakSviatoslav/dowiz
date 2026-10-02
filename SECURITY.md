@@ -53,9 +53,10 @@ Each line names the code or gate that holds it, so it can be checked rather than
 
 ## Cryptography, stated precisely
 
-- `crates/dowiz-core/src/pq/` contains an ML-DSA-65 (FIPS 204) implementation verified byte-exact
-  against the vendored NIST ACVP vectors. It sits behind the kernel's off-by-default `pq` feature
-  and is not on the live request path.
+- `crates/dowiz-core/src/pq/` contains ML-KEM-768 (FIPS 203) and ML-DSA-65 (FIPS 204) implementations
+  verified byte-exact against the vendored NIST ACVP vectors (`cargo test` in `crates/dowiz-core`, run by
+  CI), with no third-party crypto crates. The module is compiled into the kernel crate, but nothing on the
+  live request path calls it: tokens are HMAC-SHA256 and transport is Cloudflare TLS.
 - A sealing path for the nightly off-site copies exists (`workers/api/src/cloud/seal.rs`) and is
   switched off until the operator sets `BACKUP_SEAL_PK`.
 - dowiz does not claim post-quantum encryption of any live traffic or stored data.

@@ -111,8 +111,11 @@ sends every reader who trusts it to the wrong place.
 - **Generated code is parity-pinned.** `kernel/src/eqc_gen.rs` is emitted by `tools/eqc-rs`
   ("GENERATED — do not hand-edit") and a test asserts *exact integer equality* against the
   hand-written money law, so the law and its compiled organ cannot silently diverge.
-- **PQ crypto is real and KAT-gated** (`kernel/src/pq/`): byte-exact ML-DSA-65 vs NIST ACVP,
-  X25519+ML-KEM-768 hybrid with no classical-only fallback. Never fake/stub a crypto primitive.
+- **PQ crypto is real and KAT-gated, but NOT on any live path** (`crates/dowiz-core/src/pq/`; `kernel/src/pq/`
+  is a drifted shim): ML-KEM-768 and ML-DSA-65 pass the NIST ACVP vectors in CI. Live tokens are HMAC-SHA256,
+  transport is Cloudflare TLS, and the hybrid X25519+ML-KEM-768 backup seal is built and OFF until
+  `BACKUP_SEAL_PK` is installed (2026-10-02, `docs/research/2026-10-02-system-integration-check.md` §3).
+  Public text may say only that — `tools/gates/pq-words.sh` refuses the rest. Never fake/stub a crypto primitive.
 
 ## Feature discipline (repo-specific rule)
 
