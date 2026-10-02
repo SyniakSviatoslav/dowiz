@@ -10,7 +10,7 @@
 // The cache is named by the deploy's own version line below; a new deploy
 // with a new line drops the old shell on activation.
 
-const SHELL_CACHE = 'dowiz-shell-2026-09-27-ru';
+const SHELL_CACHE = 'dowiz-shell-2026-10-02-cdn';
 /// THE WHOLE MODULE GRAPH, not just its entry.
 ///
 /// This list used to hold the document, `/app.js` and the three stylesheets,
@@ -60,6 +60,8 @@ const SHELL_CACHE_MODULES = [
   // The basket attempt's Idempotency-Key (W-AUDIT F1, 2026-09-27).
   '/store/order-key.js',
   '/store/sea.js',
+  // The published-menu reader (BN2): app.js imports it statically.
+  '/store/shell.js',
   '/store/state.js',
   '/store/storage.js',
   '/store/table.js',
@@ -96,6 +98,42 @@ const SHELL = [
 /// Paths that are never cached: the hub speaks, the media is immutable already.
 const NEVER = [/^\/api\//, /^\/media\//];
 
+// ── THE PUBLISHED MENU (BN2, store/shell.js) ────────────────────────────────
+//
+// The venue's object publishes the menu to the CDN as CONTENT-ADDRESSED,
+// IMMUTABLE objects under `/v/<slug>/` plus one root, `manifest.json`. The
+// rule at the top of this file -- network first, always -- is about MUTABLE
+// URLs: a hash-named object can never carry a stale price, so it is served
+// from here first and fetched once. The ROOT stays network first; when the
+// network is gone the last root is served, and the menu it names is here too,
+// so a return visit without a connection shows the venue's last published
+// menu rather than the offline line. Freshness lives in the root's 30 s.
+const CDN_CACHE = 'dowiz-cdn-2026-10-02';
+/// How many published objects to keep per device; the oldest go first.
+const CDN_KEEP = 240;
+const isCdn = url => url.hostname.startsWith('cdn.') && /^\/v\/[^/]+\//.test(url.pathname);
+async function fromCdn(req, url) {
+  const c = await caches.open(CDN_CACHE);
+  const root = url.pathname.endsWith('/manifest.json');
+  if (!root) {
+    const hit = await c.match(req);
+    if (hit) return hit;
+  }
+  try {
+    const res = await fetch(req);
+    if (res.ok) c.put(req, res.clone()).then(() => prune(c)).catch(() => {});
+    return res;
+  } catch (e) {
+    const hit = await c.match(req);
+    if (hit) return hit;
+    throw e;
+  }
+}
+async function prune(c) {
+  const keys = await c.keys();
+  for (const k of keys.slice(0, Math.max(0, keys.length - CDN_KEEP))) await c.delete(k);
+}
+
 self.addEventListener('install', ev => {
   // ONE MISSING FILE MUST NOT EMPTY THE WHOLE SHELL. `addAll` is
   // all-or-nothing, and the `.catch(() => {})` around it turned any single 404
@@ -111,12 +149,17 @@ self.addEventListener('install', ev => {
   self.skipWaiting();
 });
 self.addEventListener('activate', ev => {
-  ev.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== SHELL_CACHE).map(k => caches.delete(k)))));
+  // The published objects survive a deploy: they are named by content, not by the shell's version.
+  ev.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== SHELL_CACHE && k !== CDN_CACHE).map(k => caches.delete(k)))));
   self.clients.claim();
 });
 self.addEventListener('fetch', ev => {
   const url = new URL(ev.request.url);
-  if (ev.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (ev.request.method !== 'GET') return;
+  if (url.origin !== self.location.origin) {
+    if (isCdn(url)) ev.respondWith(fromCdn(ev.request, url));
+    return;
+  }
   if (NEVER.some(re => re.test(url.pathname))) return;
   ev.respondWith(
     fetch(ev.request).then(res => {

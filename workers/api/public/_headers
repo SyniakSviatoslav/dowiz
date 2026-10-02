@@ -57,6 +57,10 @@
   # media-src `blob:`: the wiki's lesson videos and caption tracks are gated
   #   (/api/learn/media, Bearer), and a <video> or <track> cannot send a header,
   #   so wiki.js fetches them and plays blob: URLs. 'self' keeps the landing film.
+  # cdn.dowiz.org (connect-src, img-src): the platform's own R2 bucket behind a
+  #   custom domain, where each venue's object publishes its menu and photos
+  #   (BN2, store/shell.js). Reads carry no identity; without this origin the
+  #   shell's fetch is blocked and every visit reads through the Worker again.
   # base-uri 'none': a `<base>` injected into the page would silently re-point
   #   every relative fetch, including the API ones.
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; font-src 'self'; media-src 'self' blob:; connect-src 'self' wss://*.dowiz.org https://tiles.openfreemap.org https://api.stripe.com https://nominatim.openstreetmap.org; worker-src 'self' blob:; frame-src 'self' https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://cdn.dowiz.org https://tiles.openfreemap.org; font-src 'self'; media-src 'self' blob:; connect-src 'self' wss://*.dowiz.org https://cdn.dowiz.org https://tiles.openfreemap.org https://api.stripe.com https://nominatim.openstreetmap.org; worker-src 'self' blob:; frame-src 'self' https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; upgrade-insecure-requests

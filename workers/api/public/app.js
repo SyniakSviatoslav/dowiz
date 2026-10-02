@@ -6,8 +6,8 @@
 // which is what makes a category tap instant and a language switch a change
 // of words rather than a change of screen.
 
-import { readAgain } from '/lib/retry.js';
-import { state, API, SLUG, indexProducts, applyTheme, applyStage, resolveCurrency, repaintMoney, tokenFor, fetchRemembered } from '/store/state.js';
+import { fetchMenuIn } from '/store/shell.js';
+import { state, SLUG, indexProducts, applyTheme, applyStage, resolveCurrency, repaintMoney, tokenFor, fetchRemembered } from '/store/state.js';
 import { t, lang, LANGS, setLang, retranslate } from '/store/i18n.js';
 import { $, esc, icon, bindSheetChrome } from '/store/ui.js';
 import { safeGet, safeSet } from '/store/storage.js';
@@ -66,19 +66,8 @@ const loader = ({ name, seal, motif }) => `
 function bootRecord(){ try { return JSON.parse(safeGet(BOOT_KEY) || 'null') || {}; } catch { return {}; } }
 function rememberBoot(L){ safeSet(BOOT_KEY, JSON.stringify({ name: L.name, theme: L.theme, stage: L.stage, logoUrl: L.logoUrl })); }
 
+// The menu: from the CDN the venue's object publishes to, or through the hub (store/shell.js, BN2).
 const fetchMenu = () => fetchMenuIn(lang);
-async function fetchMenuIn(locale){
-  // A platform 503 is asked again before the customer is told the menu did not load (lib/retry.js).
-  const r = await readAgain(fetch, `${API}/public/locations/${encodeURIComponent(SLUG)}/menu?locale=${locale}`);
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  const d = await r.json();
-  // The key rides beside the location in the payload; the checkout reads it
-  // off the location. Carried across once, here, so no module has to know.
-  if (d.location && d.stripePublishableKey) d.location.stripePublishableKey = d.stripePublishableKey;
-  // A degraded answer says so on the console, where a developer looks.
-  if (Array.isArray(d.warnings) && d.warnings.length) console.warn('menu:', d.warnings.join('; '));
-  return d;
-}
 
 function paintHeader(L){
   document.title = L.name;

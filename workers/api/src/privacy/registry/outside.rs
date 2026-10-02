@@ -98,6 +98,8 @@ pub const HOSTS: &[Host] = &[
     Host { host: "open.er-api.com", recipient: NotARecipient("exchange rates: the request carries a currency code and nothing else") },
     Host { host: "rates.dowiz", recipient: NotARecipient("a cache key in this Worker's own cache; never fetched") },
     Host { host: "hub", recipient: NotARecipient("the internal URL of a Durable Object stub; it never leaves Cloudflare") },
+    // BN2 (hubdo/publish.rs, store/shell.js): the platform's own R2 bucket behind a custom domain.
+    Host { host: "cdn.dowiz.org", recipient: NotARecipient("the venue's published menu and photos, read by every customer's browser; a read carries no identity and nothing about a person is written there") },
     Host { host: "cron", recipient: NotARecipient("the internal URL of the minute cron's runner object (cron.rs); it never leaves Cloudflare") },
     Host { host: "{host}", recipient: NotARecipient("the venue's own storefront address, printed on a table's QR code") },
     Host { host: "{slug}.{platform}", recipient: NotARecipient("the venue's own addresses on this platform") },

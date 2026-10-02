@@ -71,7 +71,7 @@ mod exceptions; // the exception alert (P1-5), `hubdo/exceptions.rs`
 mod fiscal; // the fiscal document queued at placement (B6/B8), `hubdo/fiscal.rs`
 mod routed; // the groups' messages written in the turn (W0a/W0b), `hubdo/routed.rs`
 mod stock_turn; // a stock movement as one turn (W0a), `hubdo/stock_turn.rs`
-mod menu; // the catalogue projection's routes (R2), `hubdo/menu.rs`
+mod menu; mod publish; // the catalogue projection's routes (R2) and its publish to R2 on every menu write (BN2): `hubdo/{menu,publish}.rs`
 mod preps; // the ПФ reads, answered here (R3), `hubdo/preps.rs`
 mod basket; // the basket's catalogue nodes and the room's recipes, answered here (BN1), `hubdo/basket.rs`
 mod reads; // the owner's and the kitchen's folds over the images, answered here (BN1), `hubdo/reads.rs`
@@ -1016,12 +1016,8 @@ impl HubImages {
         }
         let next = current + 1;
         let store = self.state.storage();
-        // The menu memo is DROPPED BEFORE a write to what it was folded from,
-        // so a failed write cannot leave one standing over bytes it no longer
-        // describes (R2, `hubdo/menu.rs`).
-        if menu::MENU_INPUTS.contains(&id) {
-            *self.menu.borrow_mut() = None;
-        }
+        // The menu memo is DROPPED BEFORE a write to what it was folded from, so a failed write cannot leave one standing over bytes it no longer describes (R2, `hubdo/menu.rs`).
+        if menu::MENU_INPUTS.contains(&id) { *self.menu.borrow_mut() = None; }
 
         let chunks = bytes.len().div_ceil(CHUNK).max(1);
         // ONLY THE CHUNKS THAT MOVED. The log is append-only: an append touches
@@ -1071,6 +1067,8 @@ impl HubImages {
             let _ = store.delete(&Self::chunk_key(id, n)).await;
         }
         self.mem.borrow_mut().insert(id.to_string(), (meta, bytes.to_vec()));
+        // THE STOREFRONT'S READ PATH IS PUBLISHED by the write that moved it (BN2, `hubdo/publish.rs`); it never fails the write.
+        if menu::MENU_INPUTS.contains(&id) { self.publish_after_write().await; }
         // TIMED WORK ARMS THE ALARM in the write that makes it due (DAG Phase 2).
         if crate::cron::timer::TIMED.contains(&id) {
             self.timer_after_write(self.now_ms()).await;
@@ -1213,10 +1211,10 @@ impl HubImages {
                 // guard used to ask for the orders and throw them away, which
                 // on a venue with a thousand of them is a list built for a
                 // number.
-                // THE STOREFRONT'S MENU AND THE PRODUCTS AN ESTIMATE NEEDS,
-                // folded here once per catalogue generation and answered as
-                // bytes (R2, `hubdo/menu.rs`), instead of the catalogue image.
+                // THE STOREFRONT'S MENU AND THE PRODUCTS AN ESTIMATE NEEDS, folded here once per catalogue
+                // generation and answered as bytes (R2, `hubdo/menu.rs`), instead of the catalogue image.
                 (Method::Get, "menu") => self.fold_menu(&req).await,
+                (_, "publish") => self.publish_route(&req).await, // what R2 holds, or publish now (BN2, `hubdo/publish.rs`)
                 (Method::Get, "products") => self.fold_products(&req).await,
                 (Method::Get, "preps") => self.fold_preps(&req).await,
                 // THE CATALOGUE READS OF BN1, answered from the images here (`hubdo/reads.rs`).

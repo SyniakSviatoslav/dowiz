@@ -26,7 +26,7 @@ fn json_body(body: String) -> Result<Response> {
 }
 
 /// §B.4 blocks travel as their own media type; the JSON stays for the browser.
-const BLOCK_TYPE: &str = "application/vnd.dowiz.block";
+pub(super) const BLOCK_TYPE: &str = "application/vnd.dowiz.block";
 
 fn bytes_of(image: &Option<(super::Meta, Vec<u8>)>) -> Option<&[u8]> {
     image.as_ref().map(|(_, b)| b.as_slice())
@@ -34,7 +34,7 @@ fn bytes_of(image: &Option<(super::Meta, Vec<u8>)>) -> Option<&[u8]> {
 
 impl HubImages {
     /// The input generations as this object holds them, without a storage call.
-    fn menu_gens_in_memory(&self) -> Gens {
+    pub(super) fn menu_gens_in_memory(&self) -> Gens {
         let mem = self.mem.borrow();
         let g = |id: &str| mem.get(id).map_or(0, |(m, _)| m.generation);
         Gens { catalog: g(MENU_INPUTS[0]), i18n: g(MENU_INPUTS[1]), settings: g(MENU_INPUTS[2]) }
@@ -104,6 +104,38 @@ impl HubImages {
         }
     }
 
+    /// The menu body for `locale` (None: the venue's own) at `now_ms`, or why
+    /// not -- what `publish.rs` renders the published set from.
+    pub(super) async fn menu_body(&self, slug: &str, locale: Option<&str>, now_ms: i64) -> Result<Option<String>> {
+        self.menu_memo().await?;
+        let answer = match self.menu.borrow_mut().as_mut() {
+            Some(m) => m.menu_as(slug, locale, false, now_ms),
+            None => Answer::Broken("the menu memo is missing".into()),
+        };
+        match answer {
+            Answer::Body(b) => Ok(Some(b)),
+            Answer::NotFound => Ok(None),
+            Answer::Broken(e) => Err(Error::RustError(e)),
+        }
+    }
+
+    /// The venue's record as the memo holds it (`/fold/venue`'s answer), parsed.
+    pub(super) async fn menu_venue(&self) -> Result<Option<serde_json::Value>> {
+        self.menu_memo().await?;
+        let raw = self.menu.borrow().as_ref().map(|m| m.venue().to_string());
+        Ok(raw.and_then(|r| serde_json::from_str(&r).ok()).filter(|v: &serde_json::Value| v.is_object()))
+    }
+
+    /// One published block's bytes (`menu_prices` or `names`), from the memo.
+    pub(super) async fn menu_block(&self, name: &str) -> Result<Option<Vec<u8>>> {
+        self.menu_memo().await?;
+        let found = match self.menu.borrow().as_ref() {
+            Some(m) => m.block(name).map(|b| b.map(|(bytes, _)| bytes.to_vec())),
+            None => Err("the menu memo is missing".into()),
+        };
+        found.map_err(Error::RustError)
+    }
+
     /// `GET /fold/products?ids=a&ids=b`: the venue record and the products asked
     /// for, as stored -- what the live estimate needs, not the catalogue.
     pub(super) async fn fold_products(&self, req: &Request) -> Result<Response> {
@@ -120,3 +152,101 @@ impl HubImages {
         }
     }
 }
+
+// ── THE PUBLISHED SHAPE (BN2, `hubdo/publish.rs`) ──────────────────────────
+//
+// What the object writes to R2 is derived from the SAME body `/fold/menu`
+// answers, so the storefront reads the same object from the CDN as it did from
+// the Worker. Two cuts are made, and both are about what a cache may keep:
+//
+//   * the FRAGMENT is the venue's own-language body WITHOUT THE CLOCK. `status`,
+//     `nextOpen` and `closedReason` move with the time of day; an immutable
+//     object cannot carry them, so the shell derives them from `hours`, `tz`,
+//     `ownerStatus` and `deliveryPaused`, which the body already has
+//     (`fold::menu_venue::at` is the law; `store/shell.js` mirrors it).
+//   * the WORDS of another locale are ONLY the fields that differ from the
+//     fragment -- name, description, ingredients per product or category -- so
+//     a price edit rewrites the fragment and not one object per language.
+
+/// The `location` fields the clock decides. Stripped from the fragment.
+pub(super) const CLOCK_FIELDS: [&str; 3] = ["status", "nextOpen", "closedReason"];
+/// The fields a translation can change (`fold::menu_venue::render`'s `said`).
+const WORD_FIELDS: [&str; 3] = ["name", "description", "ingredients"];
+
+/// The content address of published bytes: the first 16 hex digits of
+/// sha256. Sixty-four bits, like the block schema's `K64`, but a HASH of the
+/// content rather than crc32+len: a collision here would pin a stale price
+/// into an immutable URL, and 2^-32 per edit is not a rate to publish on.
+pub(super) fn k64(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    let d = sha2::Sha256::digest(bytes);
+    d[..8].iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The fragment: `body` (a `/fold/menu` answer) with the clock taken out of
+/// `location`, re-serialised canonically so equal menus are equal bytes.
+pub(super) fn fragment_of(body: &str) -> std::result::Result<String, String> {
+    let mut v: serde_json::Value = serde_json::from_str(body).map_err(|e| format!("menu body is not JSON: {e}"))?;
+    let Some(loc) = v.get_mut("location").and_then(serde_json::Value::as_object_mut) else {
+        return Err("menu body has no location".into());
+    };
+    for f in CLOCK_FIELDS {
+        loc.remove(f);
+    }
+    serde_json::to_string(&v).map_err(|e| e.to_string())
+}
+
+/// The words of one locale: for every category and product in `other`, the
+/// WORD_FIELDS whose value differs from the same id in `fragment`, plus that
+/// locale's `warnings`. `{"words":{id:{field:value}},"warnings":[..]}`.
+pub(super) fn words_of(fragment: &str, other: &str) -> std::result::Result<String, String> {
+    let base: serde_json::Value = serde_json::from_str(fragment).map_err(|e| format!("fragment is not JSON: {e}"))?;
+    let them: serde_json::Value = serde_json::from_str(other).map_err(|e| format!("menu body is not JSON: {e}"))?;
+    let mut said: std::collections::BTreeMap<String, serde_json::Value> = Default::default();
+    for (id, fields) in named(&base) {
+        said.insert(id, fields);
+    }
+    let mut words = serde_json::Map::new();
+    for (id, fields) in named(&them) {
+        let mine = said.get(&id);
+        let mut diff = serde_json::Map::new();
+        for (k, v) in fields.as_object().into_iter().flatten() {
+            if mine.and_then(|m| m.get(k)) != Some(v) {
+                diff.insert(k.clone(), v.clone());
+            }
+        }
+        if !diff.is_empty() {
+            words.insert(id, serde_json::Value::Object(diff));
+        }
+    }
+    let warnings = them.get("warnings").cloned().unwrap_or_else(|| serde_json::json!([]));
+    serde_json::to_string(&serde_json::json!({ "words": words, "warnings": warnings })).map_err(|e| e.to_string())
+}
+
+/// Every category and product of a body, by id, reduced to its WORD_FIELDS.
+fn named(body: &serde_json::Value) -> Vec<(String, serde_json::Value)> {
+    let mut out = Vec::new();
+    let pick = |v: &serde_json::Value| {
+        let mut m = serde_json::Map::new();
+        for f in WORD_FIELDS {
+            if let Some(x) = v.get(f) {
+                m.insert(f.to_string(), x.clone());
+            }
+        }
+        serde_json::Value::Object(m)
+    };
+    for cat in body.get("categories").and_then(serde_json::Value::as_array).into_iter().flatten() {
+        if let Some(id) = cat.get("id").and_then(serde_json::Value::as_str) {
+            out.push((id.to_string(), pick(cat)));
+        }
+        for p in cat.get("products").and_then(serde_json::Value::as_array).into_iter().flatten() {
+            if let Some(id) = p.get("id").and_then(serde_json::Value::as_str) {
+                out.push((id.to_string(), pick(p)));
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+pub(super) mod tests; // the fixtures are shared with `hubdo/publish/tests.rs`

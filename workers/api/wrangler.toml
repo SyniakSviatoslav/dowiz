@@ -118,6 +118,25 @@ id = "0af8bfcd828e4802a4ec7f5bb399666f"
 binding = "LEARN"
 bucket_name = "dowiz-learn"
 
+# THE PUBLISHED STOREFRONT (BN2, src/hubdo/publish.rs). Every write to a venue's
+# catalogue, translations or settings makes its object write the menu to this
+# bucket as immutable, content-addressed objects under `v/<slug>/` plus one
+# `manifest.json`; the storefront reads them from `https://cdn.dowiz.org`
+# (store/shell.js) and the Worker is not in the read path at all. Read
+# `https://cdn.dowiz.org/v/<slug>/manifest.json` to see a venue's publish.
+#
+# COMMENTED UNTIL THE BUCKET EXISTS, because a binding to a bucket that does
+# not exist FAILS THE DEPLOY, and the code treats the missing binding as
+# "publish off" (nothing written, nothing fails, the shell reads through the
+# Worker). THE ONE OPERATOR STEP, from the box, with the deploy token (which
+# has Workers R2 Storage:Edit since 2026-09-26):
+#   bash tools/platform/attach-host.sh --cdn        # bucket, cdn.dowiz.org, CORS
+# then uncomment the three lines below, deploy, and `POST /fold/publish?all=1`
+# per venue once (or make any menu edit) to write the first generation.
+# [[r2_buckets]]
+# binding = "CDN"
+# bucket_name = "dowiz-cdn"
+
 [observability]
 enabled = true
 # One request in ten is logged. Unsampled, this is the biggest line on the bill
