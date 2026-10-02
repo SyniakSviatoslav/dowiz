@@ -26,7 +26,7 @@
 # which is what stops the process-cap kill -- and every step prints its seconds.
 #
 # EXIT: 0 ok | 10 not main | 11 dirty tree | 12 copy | 20 run-all | 21 cargo test | 30 no previous version
-#       | 31 upload / no Version ID | 32 wasm lacks the commit | 40 live != HEAD | 41 probe_crud | 42 flows (only with FLOWS_BLOCKING=1)
+#       | 31 upload / no Version ID | 32 wasm lacks the commit | 40 live != HEAD | 41 probe_crud | 42 flows (FLOWS_BLOCKING=0 makes it advisory)
 #
 # The token file is sourced ONLY inside the subshell that runs wrangler, and never printed.
 # Overrides (tests use them to stub every external): DEPLOY_REPO DEPLOY_WORK DEPLOY_SLOT DEPLOY_WRANGLER
@@ -171,12 +171,17 @@ step probe-crud
 HOST=$HOST $PROBE > "$WORK/logs/probe_crud.log" 2>&1; rc=$?
 tail -3 "$WORK/logs/probe_crud.log" | sed 's/^/   /'
 [ $rc = 0 ] || fail 41 "probe-crud: e2e/kit-regression/_probe_crud.mjs rc=$rc on $HOST (log $WORK/logs/probe_crud.log)"
-# Browser flows (W-FLOWS): ADVISORY until the dish-rename-back bug is fixed; then set FLOWS_BLOCKING=1 as the default.
+# Browser flows (W-FLOWS): BLOCKING since 2026-10-02 (the rename-back bug was fixed in 4d2d4f33, and on 2026-10-02
+# the advisory run found a live 500 on /api/live that every other step passed). FLOWS_BLOCKING=0 makes it advisory.
 if [ "${DEPLOY_FLOWS:-1}" = 1 ]; then
+  # probe_crud has just created and deleted a dish; the public menu is edge-cached for 30 s
+  # (storefront.rs `max-age=30`), so F1 started at once counted the deleted dish (6 cards vs
+  # 5 on sale, twice on 2026-10-02) and never reached the status page's socket. Let it expire.
+  sleep "${FLOWS_SETTLE_S:-40}"
   bash "$SRC/tools/gates/flows.sh" > "$WORK/logs/flows.log" 2>&1; rc=$?
   grep '^flows:' "$WORK/logs/flows.log" | tail -1 | sed 's/^/   /'
   if [ $rc != 0 ]; then
-    [ "${FLOWS_BLOCKING:-0}" = 1 ] && fail 42 "flows: the browser flows gate is RED on $HOST (log $WORK/logs/flows.log)"
+    [ "${FLOWS_BLOCKING:-1}" = 1 ] && fail 42 "flows: the browser flows gate is RED on $HOST (log $WORK/logs/flows.log)"
     echo "   flows: ADVISORY red (rc=$rc), not blocking -- log $WORK/logs/flows.log"
   fi
 fi
