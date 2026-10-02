@@ -453,8 +453,14 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
 
     // The slug is not the id — see `Place::of_slug`.
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    let loaded = crate::hubstore::load_catalog(&place).await?;
-    let Some(loc_json) = loaded.catalog.location() else {
+    // THE CATALOGUE'S PART OF A PLACEMENT, from the object (`/fold/basket`,
+    // BN1): the venue's record, the dishes in the basket, what the shelf
+    // reserves for each, and the code typed -- never the catalogue image
+    // they sit in. Asked once, before anything is decided.
+    let promo_asked = body.promo.as_deref().map(dowiz_hub::promo::normalise).filter(|c| !c.is_empty());
+    let ids: Vec<String> = body.items.iter().map(|it| it.product_id.clone()).collect();
+    let nodes = crate::services::ordering::basket::ask(&place, &ids, promo_asked.as_deref()).await?;
+    let Some(loc_json) = nodes.venue_json() else {
         return Response::error("not found", 404);
     };
     let loc: LocRow = serde_json::from_str(&loc_json)
@@ -504,7 +510,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // negative delta must not make a line pay the customer; and an unknown,
     // unavailable or unpriced dish fails CLOSED rather than at zero.
     let basket = match crate::services::ordering::pricing::price_basket(
-        |id| loaded.catalog.product(id),
+        |id| nodes.product(id),
         body.items.iter().map(|it| crate::services::ordering::pricing::Want {
             product_id: &it.product_id,
             modifier_ids: &it.modifier_ids,
@@ -579,7 +585,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             .items
             .iter()
             .filter_map(|it| {
-                let json = loaded.catalog.product(&it.product_id)?;
+                let json = nodes.product(&it.product_id)?;
                 Some((names.get(&it.product_id).cloned().unwrap_or_else(|| it.product_id.clone()), json))
             })
             .collect();
@@ -745,7 +751,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     let (promo_code, promo_raw) = match body.promo.as_deref().map(dowiz_hub::promo::normalise) {
         None => (None, None),
         Some(code) if code.is_empty() => (None, None),
-        Some(code) => match loaded.catalog.promo(&code) {
+        Some(code) => match nodes.promo.clone() {
             Some(raw) if dowiz_hub::promo::Promo::parse(&raw).is_some() => {
                 (Some(code), Some(raw))
             }
@@ -885,7 +891,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     let bom_lines: Vec<(String, i64)> = body
         .items
         .iter()
-        .filter_map(|it| Some((dowiz_hub::prep::for_ledger(&|s| loaded.catalog.supply(s), &loaded.catalog.product(&it.product_id)?).0, it.quantity)))
+        .filter_map(|it| Some((nodes.ledger.get(&it.product_id)?.clone(), it.quantity)))
         .collect();
     // THE ONE WRITE OF THE SOURCE before the only `Placed` append: whatever
     // the envelope carried is overwritten, and a word outside the set is

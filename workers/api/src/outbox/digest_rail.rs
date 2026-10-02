@@ -14,32 +14,44 @@ use crate::notify::tg::{self, Fail};
 /// The orders and names, read once per drain and only when a summary is due.
 #[derive(Default)]
 pub struct Folded {
-    loaded: bool,
-    orders: Vec<Value>,
-    names: BTreeMap<String, String>,
-    currency: String,
+    pub(crate) loaded: bool,
+    pub(crate) orders: Vec<Value>,
+    pub(crate) names: BTreeMap<String, String>,
+    pub(crate) currency: String,
 }
 
-async fn fold(place: &crate::hubstore::Place, f: &mut Folded) -> Result<()> {
-    if f.loaded {
-        return Ok(());
-    }
-    let (listed, cat) = futures_util::future::try_join(crate::hubstore::orders(place), crate::hubstore::load_catalog(place)).await?;
-    let cat = cat.catalog;
-    f.orders = crate::services::orders::mine::of_venue(listed, &place.venue);
-    for o in &f.orders {
+/// The product ids the summary's lines name, each once, in order of first sight.
+pub(crate) fn products_named(orders: &[Value]) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    for o in orders {
         for it in o.get("items").and_then(Value::as_array).into_iter().flatten() {
             if let Some(id) = it.get("product_id").and_then(Value::as_str) {
-                let name = cat
-                    .product(id)
-                    .and_then(|j| serde_json::from_str::<Value>(&j).ok())
-                    .and_then(|p| p.get("name").and_then(Value::as_str).map(str::to_string))
-                    .unwrap_or_else(|| id.to_string());
-                f.names.insert(id.to_string(), name);
+                if !ids.iter().any(|x| x == id) {
+                    ids.push(id.to_string());
+                }
             }
         }
     }
-    f.currency = crate::services::venue::currency_of(&cat);
+    ids
+}
+
+pub(crate) async fn fold(place: &crate::hubstore::Place, f: &mut Folded) -> Result<()> {
+    if f.loaded {
+        return Ok(());
+    }
+    f.orders = crate::services::orders::mine::of_venue(crate::hubstore::orders(place).await?, &place.venue);
+    // The names and the currency from the records named (`/fold/products`,
+    // R2), never the catalogue image they sit in (BN1).
+    let ids = products_named(&f.orders);
+    let (record, products) = crate::fold::menu_edge::products(place, &ids).await?;
+    for id in ids {
+        let name = products
+            .get(&id)
+            .and_then(|p| p.get("name").and_then(Value::as_str).map(str::to_string))
+            .unwrap_or_else(|| id.clone());
+        f.names.insert(id, name);
+    }
+    f.currency = crate::services::venue::currency_of_record(record.as_ref());
     f.loaded = true;
     Ok(())
 }

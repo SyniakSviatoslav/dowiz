@@ -1,8 +1,9 @@
 //! `POST /api/promo/check` — what a code would take off this basket.
 //!
-//! ORCHESTRATION ONLY. It loads the two images, prices the basket with the
-//! shared pricer and asks the hub's promo rules; every number in the answer is
-//! decided somewhere that has tests.
+//! ORCHESTRATION ONLY. It asks the object for the folded orders and the
+//! basket's catalogue nodes, prices the basket with the shared pricer and asks
+//! the hub's promo rules; every number in the answer is decided somewhere that
+//! has tests.
 
 use serde::Deserialize;
 use serde_json::json;
@@ -35,17 +36,18 @@ pub async fn promo_check(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
     // behind by the cutover. A binding that is opened and not read is what
     // makes "remove the D1 binding" look harder than it is.
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    // TWO IMAGES, one hub: the log and the catalogue have different roots and
-    // cannot share one, so a route that reads both loads both.
-    // ONE ROUND TRIP for both images: see `load_both`.
-    let (listed, cat) = futures_util::future::try_join(
+    // TWO DERIVED ANSWERS from the object, together: the folded orders
+    // (`/fold/orders`) and the basket's catalogue nodes -- the dishes named
+    // and the code's record (`/fold/basket`, BN1). The catalogue image does
+    // not cross the hop.
+    let code = dowiz_hub::promo::normalise(&body.code);
+    let ids: Vec<String> = body.items.iter().map(|it| it.product_id.clone()).collect();
+    let (listed, basket) = futures_util::future::try_join(
         crate::hubstore::orders(&place),
-        crate::hubstore::load_catalog(&place),
+        super::basket::ask(&place, &ids, Some(&code)),
     )
     .await?;
-    let cat = cat.catalog;
-    let code = dowiz_hub::promo::normalise(&body.code);
-    let Some(p) = cat.promo(&code).as_deref().and_then(dowiz_hub::promo::Promo::parse)
+    let Some(p) = basket.promo.as_deref().and_then(dowiz_hub::promo::Promo::parse)
     else {
         return Response::error(dowiz_hub::promo::Refusal::Unknown.as_str(), 400);
     };
@@ -57,7 +59,7 @@ pub async fn promo_check(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
     // A preview that prices a basket the order will not accept is worse than
     // no preview.
     let basket = match price_basket(
-        |id| cat.product(id),
+        |id| basket.product(id),
         body.items.iter().map(|it| Want {
             product_id: &it.product_id,
             modifier_ids: &it.modifier_ids,

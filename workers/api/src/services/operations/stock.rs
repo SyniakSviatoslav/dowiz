@@ -52,33 +52,38 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
-    // Two images, and they do not depend on each other either.
-    let (_, _loc, (cat, log)) = match crate::services::identity::staff::guard::staff_beside(
+    // THE READ IS THE OBJECT'S (BN1, `/fold/stock`, `hubdo/reads.rs`): the
+    // catalogue and the stock log are both there, `shelf` folds them there,
+    // and the screen's answer alone crosses the hop.
+    let url = format!("https://hub/fold/stock?now={}", ctx.data.now_ms);
+    let (_, _loc, (status, text)) = match crate::services::identity::staff::guard::staff_beside(
         &req,
         &ctx,
         &place,
         &crate::services::identity::staff::guard::SHELF,
-        async {
-            let (c, s) = futures_util::future::join(
-                crate::hubstore::load_catalog(&place),
-                crate::hubstore::load_stock(&place),
-            )
-            .await;
-            Ok((c?.catalog, s?.stock))
-        },
+        crate::fold::ask::text(&place, &url),
     )
     .await
     {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
+    if status != 200 {
+        return Response::error(text, status);
+    }
+    let mut out = Response::ok(text)?;
+    out.headers_mut().set("content-type", "application/json")?;
+    Ok(out)
+}
+
+/// What the Stock screen shows, from the catalogue and the stock log. PURE:
+/// the venue's object calls this (`/fold/stock`) with the images it holds;
+/// a log that does not fold is the 500's text.
+pub fn shelf(cat: &dowiz_hub::catalog::Catalog, log: &dowiz_hub::stock::StockLog, now_ms: i64) -> std::result::Result<Value, String> {
     // ONE PASS: shelf, cost, lots and history from a single walk of the log.
-    let journal = match log.journal() {
-        Ok(j) => j,
-        Err(e) => return Response::error(e.to_string(), 500),
-    };
+    let journal = log.journal().map_err(|e| e.to_string())?;
     let led = &journal.ledger;
-    let today = today_of(&cat, ctx.data.now_ms);
+    let today = today_of(cat, now_ms);
     let rows: Vec<Value> = cat
         .supplies()
         .into_iter()
@@ -135,12 +140,12 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
         .into_iter()
         .map(|(order, item, qty)| json!({ "order": order, "item": item, "qty": qty }))
         .collect();
-    Response::from_json(&json!({
+    Ok(json!({
         "supplies": rows, "stranded": stranded, "today": dowiz_hub::stock::meta::show_day(today),
         "recent": recent, "suppliers": suppliers, "sessions": view::sessions(&journal, 5),
         "expiryWarnDays": view::EXPIRY_WARN_DAYS,
         // I0c: every dish that takes nothing off the shelf yet.
-        "noRecipe": as_is::without_recipe(&cat),
+        "noRecipe": as_is::without_recipe(cat),
     }))
 }
 
@@ -211,19 +216,20 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Resu
         }
         return as_is::write(&place, ids).await;
     }
-    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
     // THE MOVEMENT IS THE OBJECT'S TURN (W0a): the stock image and the
     // groups' messages about it are written there together, so this handler
-    // writes no image of its own.
-    let supplies = cook::supplies_for(&kind, cat.supplies());
+    // writes no image of its own. THE CATALOGUE'S PART -- the supplies, the
+    // venue's day and its currency -- is read there too (BN1,
+    // `hubdo/stock_turn.rs`, `turn::from_catalogue`), so nothing of the
+    // catalogue crosses the hop in either direction.
     let input = turn::StockTurnIn {
         kind,
         body: raw,
         by,
         now_ms: now,
-        today: today_of(&cat, now),
-        supplies,
-        currency: crate::services::venue::currency_of(&cat),
+        today: 0,
+        supplies: Default::default(),
+        currency: String::new(),
     };
     match crate::command::send::<_, Value>(&place, "stock_move", &input).await {
         Ok(shown) => Response::from_json(&shown),

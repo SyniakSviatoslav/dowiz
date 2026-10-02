@@ -217,14 +217,17 @@ pub async fn tips(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
         return Ok(r);
     }
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
-    // The venue's own day, in the venue's own zone (never the phone's).
-    let zone = crate::hubstore::zone_of(crate::hubstore::venue_record(&place).await?.as_ref());
+    // The venue's own day, in the venue's own zone (never the phone's), and
+    // its currency: both from the venue's record (`/fold/venue`), never the
+    // catalogue image it sits in (BN1).
+    let record = crate::hubstore::venue_record(&place).await?;
+    let zone = crate::hubstore::zone_of(record.as_ref());
     let today = dowiz_hub::tz::start_of_local_day_ms(zone, ctx.data.now_ms);
     let (from_ms, to_ms) = match tips_period(q("from_ms").as_deref(), q("to_ms").as_deref(), ctx.data.now_ms, today) {
         Ok(p) => p,
         Err(e) => return Response::error(e, 400),
     };
-    let currency = crate::services::venue::currency_of(&crate::hubstore::load_catalog(&place).await?.catalog);
+    let currency = crate::services::venue::currency_of_record(record.as_ref());
     let orders: Vec<Value> = crate::hubstore::orders(&place)
         .await?
         .iter()

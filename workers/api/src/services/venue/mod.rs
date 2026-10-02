@@ -18,8 +18,15 @@ use serde_json::Value;
 /// prices have no unit. A blank unit on a price is the kind of thing that gets
 /// a number read as euros.
 pub fn currency_of(cat: &dowiz_hub::catalog::Catalog) -> String {
-    cat.location()
-        .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+    currency_of_record(cat.location().and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref())
+}
+
+/// The same rule over the venue's record alone -- what `/fold/venue` answers
+/// (`hubstore::venue_record`) -- for a reader that does not hold the
+/// catalogue (BN1: the tips and the wallet legs asked for 538 KB to read
+/// this one field).
+pub fn currency_of_record(record: Option<&Value>) -> String {
+    record
         .and_then(|l| {
             l.get("currency_code")
                 .or_else(|| l.get("currency"))

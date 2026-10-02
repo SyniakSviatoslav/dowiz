@@ -49,3 +49,9 @@ mod money_routes;
 #[cfg(test)]
 #[path = "public_routes/tests.rs"]
 mod public_routes;
+
+/// The fifteen catalogue readers of BN1, pinned before and after their move
+/// into the object (`/fold/*`, lane W-BN1A).
+#[cfg(test)]
+#[path = "catalogue_routes/tests.rs"]
+mod catalogue_routes;

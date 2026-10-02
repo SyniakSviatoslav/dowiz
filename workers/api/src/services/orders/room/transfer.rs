@@ -1,13 +1,13 @@
 //! Lines between rounds, and a sitting to another table (BLUEPRINT-POS-THE-ROOM
 //! §2.9). The same shape as every room handler (`handlers.rs`): authorise the
-//! signer, read the catalogue for the shelf, send ONE command to the object.
+//! signer, send ONE command to the object, which reads the catalogue for the
+//! shelf itself (BN1).
 
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
-use super::handlers::recipes;
 use crate::auth::Cap;
 use crate::command::transfer::sitting::{MoveIn, MoveOut};
 use crate::command::transfer::{TransferIn, TransferOut};
@@ -46,10 +46,6 @@ pub async fn transfer(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
         Ok(g) => g,
         Err(r) => return Ok(r),
     };
-    let loaded = match crate::hubstore::load_catalog(&place).await {
-        Ok(l) => l,
-        Err(e) => return idem.answered(&place, Err(e)).await,
-    };
     let input = TransferIn {
         from_order_id: from_id,
         to_order_id: body.to_order_id,
@@ -58,7 +54,9 @@ pub async fn transfer(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
         to_base_seq: body.to_base_seq,
         lines: body.lines,
         by,
-        boms: recipes(&loaded.catalog),
+        // The object reads the recipes from the catalogue it holds (BN1,
+        // `hubdo/basket.rs`): nothing of the catalogue crosses the hop.
+        boms: Vec::new(),
         now_ms: ctx.data.now_ms,
     };
     let out: TransferOut = match crate::command::send(&place, "room/transfer", &input).await {

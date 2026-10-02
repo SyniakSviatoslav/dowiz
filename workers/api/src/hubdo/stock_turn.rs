@@ -32,6 +32,10 @@ impl HubImages {
     }
 
     pub(super) async fn stock_move(&self, input: StockTurnIn) -> Result<Response> {
+        // THE CATALOGUE'S PART IS READ HERE (BN1): the supplies, the venue's
+        // day and its currency come from the image this object holds, never
+        // across the hop (`turn::from_catalogue`).
+        let input = input.from_catalogue(&self.catalogue().await?);
         let (gen, mut log) = self.stock_log().await?;
         let before = log.len();
         let routing = self.routing_groups().await.map(|(_, g)| g);

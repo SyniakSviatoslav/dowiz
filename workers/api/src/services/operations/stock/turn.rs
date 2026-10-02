@@ -37,14 +37,29 @@ pub struct StockTurnIn {
     /// The AUTHENTICATED signer.
     pub by: String,
     pub now_ms: i64,
-    /// The venue's local day, `yyyymmdd`.
+    /// The venue's local day, `yyyymmdd`. FILLED BY THE OBJECT from the
+    /// catalogue it holds (`from_catalogue`, BN1); the Worker sends 0.
     pub today: i64,
     /// Every supply of the catalogue, retired ones too (history keeps them).
+    /// FILLED BY THE OBJECT (`from_catalogue`); the Worker sends none.
     pub supplies: BTreeMap<String, SupplyIn>,
     /// The venue's currency code, for the words of a production act's cost
-    /// (`stock.cooked`, W-PF3 T2). Empty: none is shown.
+    /// (`stock.cooked`, W-PF3 T2). Empty: none is shown. FILLED BY THE OBJECT
+    /// (`from_catalogue`); the Worker sends none.
     #[serde(default)]
     pub currency: String,
+}
+
+impl StockTurnIn {
+    /// The catalogue's part of the turn -- the supplies for this kind of act,
+    /// the venue's day at `now_ms`, its currency -- read from the catalogue
+    /// the object holds (BN1), whatever the Worker sent. PURE.
+    pub fn from_catalogue(mut self, cat: &dowiz_hub::catalog::Catalog) -> Self {
+        self.supplies = super::cook::supplies_for(&self.kind, cat.supplies());
+        self.today = super::today_of(cat, self.now_ms);
+        self.currency = crate::services::venue::currency_of(cat);
+        self
+    }
 }
 
 /// The supplies of a catalogue, as the turn reads them. PURE.

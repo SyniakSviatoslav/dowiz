@@ -30,6 +30,8 @@ pub mod projection;
 pub mod menu;
 pub mod menu_venue;
 pub mod menu_edge;
+/// One GET of a `/fold/*` route, as the moves of BN1 read it: `(status, body)`.
+pub mod ask;
 
 #[cfg(test)]
 use serde_json::Value;

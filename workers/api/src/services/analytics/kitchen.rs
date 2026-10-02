@@ -4,9 +4,10 @@
 //! value; raw -> cooked losses; measured yields against the defaults; supplier
 //! prices; days of cover and a reorder hint.
 //!
-//! ORCHESTRATION ONLY: it reads three images (orders, catalogue, stock) and
-//! writes none; every number is decided in `sales`, `shelf` and `report`,
-//! where it has a test.
+//! ORCHESTRATION ONLY on the Worker: it authorises the reader and asks the
+//! venue's object, which folds the three images it holds (orders, catalogue,
+//! stock) through `answer` and writes none; every number is decided in
+//! `sales`, `shelf` and `report`, where it has a test.
 //!
 //! CPU, bounded by construction rather than by a timer: one pass over the
 //! stock log (`StockLog::journal`), one over the venue's orders, and per sold
@@ -128,28 +129,46 @@ pub async fn kitchen(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let url = req.url()?;
     let q = |k: &str| url.query_pairs().find(|(key, _)| key == k).map(|(_, v)| v.to_string());
-    let (listed, cat) =
-        futures_util::future::try_join(crate::hubstore::orders(&place), crate::hubstore::load_catalog(&place)).await?;
-    let cat = cat.catalog;
-    let stock = crate::hubstore::load_stock(&place).await?.stock;
+    // DERIVED IN THE OBJECT (BN1, `/fold/kitchen`, `hubdo/reads.rs`): the
+    // three images are there; `answer` folds them and the report alone crosses.
+    let enc = crate::mcp::enc;
+    let mut ask = format!("https://hub/fold/kitchen?venue={}&now={}", enc(&loc), ctx.data.now_ms);
+    for k in ["from", "to", "days"] {
+        if let Some(v) = q(k) {
+            ask.push_str(&format!("&{k}={}", enc(&v)));
+        }
+    }
+    let (status, text) = crate::fold::ask::text(&place, &ask).await?;
+    if status != 200 {
+        return Response::error(text, status);
+    }
+    let out: Value = serde_json::from_str(&text).map_err(|e| Error::RustError(format!("kitchen: unreadable answer: {e}")))?;
+    let out = if who.is_staff() { access::numbers_for_kitchen(out) } else { out };
+    Response::from_json(&out)
+}
+
+/// The kitchen's numbers over the venue's orders, catalogue and stock log.
+/// PURE: the venue's object calls this (`/fold/kitchen`) with the images it
+/// holds. A window that is not one is the 400's text.
+pub fn answer(
+    listed: Vec<crate::hubdo::OrderView>,
+    cat: &dowiz_hub::catalog::Catalog,
+    stock: &dowiz_hub::stock::StockLog,
+    loc: &str,
+    now: i64,
+    (from, to, days): (Option<&str>, Option<&str>, Option<&str>),
+) -> std::result::Result<Value, (u16, String)> {
     let zone = crate::hubstore::zone_of(cat.location().and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref());
-    let w = match window(zone, ctx.data.now_ms, q("from").as_deref(), q("to").as_deref(), q("days").as_deref()) {
-        Ok(w) => w,
-        Err(why) => return Response::error(why, 400),
-    };
+    let w = window(zone, now, from, to, days).map_err(|why| (400, why))?;
     // From the newest checkpoint older than the window, not the first record (R7).
-    let journal = match stock.journal_since(w.starts.first().copied().unwrap_or(i64::MIN)) {
-        Ok(j) => j,
-        Err(e) => return Response::error(e.to_string(), 500),
-    };
-    let orders = crate::services::orders::mine::of_venue(listed, &loc);
-    let (dishes, supplies) = (dishes_of(&cat), supplies_of(&cat));
+    let journal = stock.journal_since(w.starts.first().copied().unwrap_or(i64::MIN)).map_err(|e| (500, e.to_string()))?;
+    let orders = crate::services::orders::mine::of_venue(listed, loc);
+    let (dishes, supplies) = (dishes_of(cat), supplies_of(cat));
     let sold = sales::fold(&orders, &dishes, &w);
     let moved = shelf::fold_journal(&journal, &supplies, &sold.placed_at, &w);
     let mut out = report::report(&sold, &moved, &dishes, &supplies, &journal, &w);
-    out["currency"] = serde_json::json!(crate::services::venue::currency_of(&cat));
-    let out = if who.is_staff() { access::numbers_for_kitchen(out) } else { out };
-    Response::from_json(&out)
+    out["currency"] = serde_json::json!(crate::services::venue::currency_of(cat));
+    Ok(out)
 }
 
 #[cfg(test)]

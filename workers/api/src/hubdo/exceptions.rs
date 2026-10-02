@@ -22,8 +22,39 @@ use crate::outbox::{IMAGE_OUTBOX, KIND, OUTBOX_BYTES};
 use dowiz_hub::logimage::LogImage;
 use dowiz_hub::table::Table;
 use worker::*;
+// The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
+use crate::wire::{Call as Request, Reply as Response};
 
 impl HubImages {
+    /// THE OWNER'S REPORT, ANSWERED HERE (BN1, `/fold/exceptions?venue=&now=
+    /// [&from=&to=&period=]`): the five images it reads are in this object's
+    /// memory; `crate::exceptions::answer` folds them and the report alone
+    /// crosses the hop. The Worker adds the names and keeps the owner check.
+    pub(super) async fn fold_exceptions(&self, req: &Request) -> Result<Response> {
+        let url = req.url()?;
+        let q: Vec<(String, String)> = url.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned())).collect();
+        let get = |k: &str| q.iter().find(|(a, _)| a == k).map(|(_, v)| v.clone());
+        let (Some(venue), Some(now)) = (get("venue"), get("now").and_then(|n| n.parse::<i64>().ok())) else {
+            return Response::error("the report needs a venue and a clock", 400);
+        };
+        let (_, hub) = self.log_hub().await?;
+        let till = match self.image(crate::command::till::IMAGE_TILL).await? {
+            Some((_, b)) => LogImage::load(&b).map_err(|_| Error::RustError("till image is unreadable".into()))?,
+            None => LogImage::create().map_err(|_| Error::RustError("cannot create till image".into()))?,
+        };
+        let settings = match self.image(crate::hubstore::IMAGE_SETTINGS).await? {
+            Some((_, b)) => dowiz_hub::settings::Settings::load(&b).map_err(|_| Error::RustError("settings image is unreadable".into()))?,
+            None => dowiz_hub::settings::Settings::create().map_err(|_| Error::RustError("cannot create settings".into()))?,
+        };
+        let (_, ledger) = self.ledger_log().await?;
+        let (_, listed) = self.orders_view().await?;
+        let currency = crate::services::venue::currency_of(&self.catalogue().await?);
+        match crate::exceptions::answer(&hub, &till, &settings, &ledger, &listed, &currency, &venue, &q, now) {
+            Ok(v) => Response::from_json(&v),
+            Err((status, why)) => Response::error(why, status),
+        }
+    }
+
     /// Queue the exception alerts this turn owes. Never fails the caller.
     pub(super) async fn exceptions_after(&self, venue: &str, now_ms: i64) {
         if let Err(e) = self.exceptions_alert(venue, now_ms).await {

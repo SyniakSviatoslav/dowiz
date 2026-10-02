@@ -32,9 +32,9 @@ impl HubImages {
     /// checked the capability; what arrives here is that decision.
     pub(super) async fn room(&self, what: &str, mut req: Request) -> Result<Response> {
         match what {
-            "amend" => reply(self.amend(crate::body::parse(&mut req).await?).await?),
+            "amend" => reply(self.amend(self.amend_with_recipes(crate::body::parse(&mut req).await?).await?).await?),
             "pay" => reply(self.pay(crate::body::parse(&mut req).await?).await?),
-            "transfer" => reply(self.transfer(crate::body::parse(&mut req).await?).await?),
+            "transfer" => reply(self.transfer(self.transfer_with_recipes(crate::body::parse(&mut req).await?).await?).await?),
             "move_sitting" => reply(self.move_sitting(crate::body::parse(&mut req).await?).await?),
             // THE TILL (`room/till.rs`). One segment each: `/fold/room/till_open`.
             "till_open" => reply(self.till(Cmd::Open(crate::body::parse(&mut req).await?)).await?),

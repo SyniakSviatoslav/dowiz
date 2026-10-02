@@ -3,6 +3,8 @@
 //! The pricer is here because BOTH the checkout and the promo preview need it
 //! and used to have one each.
 
+/// The basket's catalogue nodes, answered by the venue's object (BN1, `/fold/basket`).
+pub mod basket;
 pub mod channel;
 pub mod fulfilment;
 pub mod preview;

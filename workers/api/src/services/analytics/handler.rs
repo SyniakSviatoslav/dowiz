@@ -1,8 +1,9 @@
 //! `GET /api/owner/analytics?location_id=&days=7|30`
 //!
-//! ORCHESTRATION ONLY. It reads the two images, hands the orders to `fold`,
-//! and puts the catalogue's names and currency on the answer. Every number in
-//! it is decided in `fold`, where it has a test.
+//! ORCHESTRATION ONLY on the Worker: it authorises the owner and asks the
+//! venue's object for the answer. The object builds it with `answer` (pure):
+//! the orders through `fold`, the catalogue's names and currency on top.
+//! Every number in it is decided in `fold`, where it has a test.
 
 use serde_json::{json, Value};
 use worker::*;
@@ -27,25 +28,36 @@ pub async fn analytics(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             .as_deref(),
     );
 
-    // The folded orders and the catalogue, fetched together: neither answer
-    // depends on the other, and the analytics need a product's name.
-    let (listed, cat) = futures_util::future::try_join(
-        crate::hubstore::orders(&place),
-        crate::hubstore::load_catalog(&place),
-    )
-    .await?;
-    let cat = cat.catalog;
-    // AFTER the catalogue, because the venue's own record is in it and the day
-    // boundary needs its time zone. This used to be computed first, from a
-    // constant; reading it from bytes already in hand costs nothing.
+    // DERIVED IN THE OBJECT (BN1, `/fold/analytics`, `hubdo/reads.rs`): the
+    // folded orders and the catalogue's names and currency are both there, so
+    // the answer is built there by `answer` and only the answer crosses.
+    let url = format!(
+        "https://hub/fold/analytics?venue={}&days={days}&now={}",
+        crate::mcp::enc(&loc),
+        ctx.data.now_ms
+    );
+    let (status, text) = crate::fold::ask::text(&place, &url).await?;
+    if status != 200 {
+        return Response::error(text, status);
+    }
+    let mut out = Response::ok(text)?;
+    out.headers_mut().set("content-type", "application/json")?;
+    Ok(out)
+}
+
+/// The owner's numbers over the venue's orders and catalogue. PURE: the
+/// venue's object calls this (`/fold/analytics`) with the images it holds.
+/// `days` is the window as `fold::window` read it.
+pub fn answer(listed: Vec<crate::hubdo::OrderView>, cat: &dowiz_hub::catalog::Catalog, loc: &str, now: i64, days: i64) -> Value {
+    // The venue's own record is in the catalogue and the day boundary needs
+    // its time zone. This used to be computed first, from a constant.
     let zone = crate::hubstore::zone_of(
         cat.location().and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref(),
     );
-    let now = ctx.data.now_ms;
     let starts = fold::day_starts(zone, now, days);
-    let r = fold::fold(&crate::services::orders::mine::of_venue(listed, &loc), zone, &starts, now);
+    let r = fold::fold(&crate::services::orders::mine::of_venue(listed, loc), zone, &starts, now);
 
-    Response::from_json(&json!({
+    json!({
         "days": days,
         "orders": r.orders,
         "revenue": r.revenue,
@@ -67,6 +79,6 @@ pub async fn analytics(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
                 .unwrap_or(json!(d.id)),
             "quantity": d.quantity, "revenue": d.revenue
         })).collect::<Vec<_>>(),
-        "currency": crate::services::venue::currency_of(&cat),
-    }))
+        "currency": crate::services::venue::currency_of(cat),
+    })
 }

@@ -176,7 +176,7 @@ mod rails;
 pub use rails::{drain_venue, enqueue, waiting};
 /// Summaries as recurring entries (W-TG).
 pub mod digest;
-mod digest_rail;
+pub(crate) mod digest_rail;
 /// One drain at a time per venue (W-FIX O4).
 mod lease;
 /// The drain's Telegram bookkeeping: fan-out, pacing, refusals (W-TG).

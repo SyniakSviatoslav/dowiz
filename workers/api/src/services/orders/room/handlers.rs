@@ -2,9 +2,10 @@
 //!
 //! EVERY HANDLER HERE HAS ONE SHAPE: authorise the signer for a capability at
 //! the venue the request names (`courier::staff_at`), do the part that belongs
-//! to the Worker — pricing, the catalogue — and send ONE command to the
-//! venue's object, which decides and writes in one turn. No handler here
-//! writes an image itself (`tools/gates/one-image.sh`).
+//! to the Worker — pricing, from the records the object answers
+//! (`/fold/basket`, BN1) — and send ONE command to the venue's object, which
+//! decides and writes in one turn, reading the recipes from the catalogue it
+//! holds. No handler here writes an image itself (`tools/gates/one-image.sh`).
 
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -61,14 +62,15 @@ struct AmendBody {
 }
 
 /// Price one added line with THE pricer, exactly as a basket line is priced.
+/// `product`: the dish's record by id, as the catalogue stores it.
 fn priced_line(
-    catalog: &dowiz_hub::catalog::Catalog,
+    product: impl Fn(&str) -> Option<String>,
     product_id: &str,
     modifier_ids: &[String],
     quantity: i64,
 ) -> std::result::Result<Value, (u16, String)> {
     use crate::services::ordering::pricing::{price_basket, Want};
-    let basket = price_basket(|id| catalog.product(id), [Want { product_id, modifier_ids, quantity }])
+    let basket = price_basket(product, [Want { product_id, modifier_ids, quantity }])
         .map_err(|r| (r.status(), r.text()))?;
     let l = basket.lines.into_iter().next().ok_or((400, "nothing priced".to_string()))?;
     let mut line = json!({
@@ -114,15 +116,29 @@ pub async fn amend(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         Ok(g) => g,
         Err(r) => return Ok(r),
     };
-    let loaded = match crate::hubstore::load_catalog(&place).await {
-        Ok(l) => l,
-        Err(e) => return idem.answered(&place, Err(e)).await,
+    // The dishes added, as stored (`/fold/basket`, BN1) -- never the catalogue
+    // image they sit in. A round that adds nothing asks for nothing.
+    let added: Vec<String> = body
+        .ops
+        .iter()
+        .filter_map(|w| match w {
+            WireOp::Add { product_id, .. } => Some(product_id.clone()),
+            _ => None,
+        })
+        .collect();
+    let basket = if added.is_empty() {
+        crate::services::ordering::basket::Basket::default()
+    } else {
+        match crate::services::ordering::basket::ask(&place, &added, None).await {
+            Ok(b) => b,
+            Err(e) => return idem.answered(&place, Err(e)).await,
+        }
     };
     let mut ops = Vec::with_capacity(body.ops.len());
     for w in body.ops {
         ops.push(match w {
             WireOp::Add { product_id, modifier_ids, quantity } => {
-                match priced_line(&loaded.catalog, &product_id, &modifier_ids, quantity) {
+                match priced_line(|id| basket.product(id), &product_id, &modifier_ids, quantity) {
                     Ok(line) => Op::Add { line },
                     Err((s, m)) => return idem.refused(&place, s, &m).await,
                 }
@@ -141,7 +157,9 @@ pub async fn amend(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         by,
         reason: body.reason,
         may_void: caps.allows(Cap::Void),
-        boms: recipes(&loaded.catalog),
+        // The object reads the recipes from the catalogue it holds (BN1,
+        // `hubdo/basket.rs`): nothing of the catalogue crosses the hop.
+        boms: Vec::new(),
         now_ms: ctx.data.now_ms,
     };
     let out: AmendOut = match crate::command::send(&place, "room/amend", &input).await {

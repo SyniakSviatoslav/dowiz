@@ -26,15 +26,16 @@ use crate::wallet::{IMAGE_LEDGER, K_TX};
 
 /// The venue's orders (the log is read BEFORE the ledger: a leg is written
 /// after its `Paid`, so a `Paid` seen here has had its chance to land) and
-/// its currency.
+/// its currency -- from the venue's record (`/fold/venue`), never the
+/// catalogue image it sits in (BN1).
 async fn read(place: &crate::hubstore::Place) -> Result<(Vec<Value>, String)> {
     let orders: Vec<Value> = crate::hubstore::orders(place)
         .await?
         .into_iter()
         .filter_map(|o| serde_json::from_str(&o.order_json).ok())
         .collect();
-    let cat = crate::hubstore::load_catalog(place).await?;
-    Ok((orders, crate::services::venue::currency_of(&cat.catalog)))
+    let record = crate::hubstore::venue_record(place).await?;
+    Ok((orders, crate::services::venue::currency_of_record(record.as_ref())))
 }
 
 /// The ledger's records, oldest first.

@@ -73,6 +73,8 @@ mod routed; // the groups' messages written in the turn (W0a/W0b), `hubdo/routed
 mod stock_turn; // a stock movement as one turn (W0a), `hubdo/stock_turn.rs`
 mod menu; // the catalogue projection's routes (R2), `hubdo/menu.rs`
 mod preps; // the ПФ reads, answered here (R3), `hubdo/preps.rs`
+mod basket; // the basket's catalogue nodes and the room's recipes, answered here (BN1), `hubdo/basket.rs`
+mod reads; // the owner's and the kitchen's folds over the images, answered here (BN1), `hubdo/reads.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
 mod timer; // the venue's alarm: timed work without the minute cron (DAG Phase 2), `hubdo/timer.rs`
 /// Where the object lives: the platform, or (tests) memory (W-COV C2), `hubdo/host.rs`.
@@ -1217,6 +1219,8 @@ impl HubImages {
                 (Method::Get, "menu") => self.fold_menu(&req).await,
                 (Method::Get, "products") => self.fold_products(&req).await,
                 (Method::Get, "preps") => self.fold_preps(&req).await,
+                // THE CATALOGUE READS OF BN1, answered from the images here (`hubdo/reads.rs`).
+                (Method::Get, "basket" | "analytics" | "kitchen" | "stock" | "exceptions") => self.fold_read(what, &req).await,
                 (Method::Get, "generation") => {
                     let generation =
                         self.image(LOG_IMAGE).await?.map(|(m, _)| m.generation).unwrap_or(0);

@@ -1,7 +1,7 @@
 //! `POST /api/staff/orders/aggregator` — a marketplace order typed in from the
 //! platform's tablet (§2.9, no partner API). The rules are `command::aggregator`;
-//! this handler authenticates, reads the catalogue for the dishes' names and
-//! recipes, and hands the object one `PlaceIn`.
+//! this handler authenticates, asks the object for the dishes' names and
+//! recipes (`/fold/basket`), and hands it one `PlaceIn`.
 
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -50,14 +50,18 @@ pub async fn enter(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         // EVERY DISH IS THE VENUE'S: the kitchen cooks from it and the ledger
         // reserves its recipe. A platform product id this catalogue does not have
         // is refused, not guessed at.
-        let catalog = crate::hubstore::load_catalog(&place).await?.catalog;
-        let loc = catalog.location().and_then(|l| serde_json::from_str::<Value>(&l).ok()).unwrap_or(Value::Null);
+        // The venue's record, the dishes named and what the shelf reserves for
+        // each: the object answers them (`/fold/basket`, BN1), never the
+        // catalogue image they sit in.
+        let ids: Vec<String> = body.entry.lines.iter().map(|l| l.product_id.clone()).collect();
+        let basket = crate::services::ordering::basket::ask(&place, &ids, None).await?;
+        let loc = basket.venue.clone().unwrap_or(Value::Null);
         let currency = loc.get("currencyCode").and_then(Value::as_str).unwrap_or("ALL").to_string();
         let venue = loc.get("name").and_then(Value::as_str).unwrap_or("").to_string();
         let mut names = Vec::new();
         let mut bom_lines = Vec::new();
         for l in &body.entry.lines {
-            let Some(rec) = catalog.product(&l.product_id) else {
+            let Some(rec) = basket.product(&l.product_id) else {
                 return Response::error(format!("{} is not on this venue's menu", l.product_id), 400);
             };
             let name = serde_json::from_str::<Value>(&rec)
@@ -65,7 +69,7 @@ pub async fn enter(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
                 .and_then(|p| p.get("name").and_then(Value::as_str).map(String::from))
                 .unwrap_or_default();
             names.push((l.product_id.clone(), name));
-            bom_lines.push((dowiz_hub::prep::for_ledger(&|s| catalog.supply(s), &rec).0, l.quantity));
+            bom_lines.push((basket.ledger.get(&l.product_id).cloned().unwrap_or(rec), l.quantity));
         }
         let (order_id, mut env, subtotal) = match envelope(&body.entry, &body.location_id, &currency, &names, now) {
             Ok(v) => v,

@@ -92,11 +92,13 @@ pub async fn quote(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     }
 
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    let loaded = crate::hubstore::load_catalog(&place).await?;
-    let Some(loc_json) = loaded.catalog.location() else {
+    // The venue's record and the dishes named, as stored (`/fold/products`,
+    // R2) -- never the catalogue image they sit in (BN1).
+    let ids: Vec<String> = body.items.iter().filter_map(|l| l.id.clone()).collect();
+    let (record, products) = crate::fold::menu_edge::products(&place, &ids).await?;
+    let Some(loc) = record else {
         return Response::error("not found", 404);
     };
-    let loc: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
     let k = profile_of(&loc);
 
     // Each line's cooking time: the caller's, else the venue's own for that
@@ -104,10 +106,8 @@ pub async fn quote(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     let mut items = Vec::with_capacity(body.items.len());
     for line in &body.items {
         let from_catalogue = line.id.as_deref().and_then(|id| {
-            loaded
-                .catalog
-                .product(id)
-                .and_then(|pj| serde_json::from_str::<Value>(&pj).ok())
+            products
+                .get(id)
                 .and_then(|p| p.get("cookingMin").and_then(|v| v.as_u64()))
                 .map(|n| n as u16)
         });
