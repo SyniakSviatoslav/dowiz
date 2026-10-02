@@ -156,7 +156,9 @@ fn refuse(key: &str, lang: &str) -> Out {
     Out::Refuse(say::line(key, lang).to_string())
 }
 
-/// A supply as the matcher sees it, with its unit.
+/// A supply as the matcher sees it, with its unit. Serialised because the
+/// venue's object answers the list (`/fold/catalogue?q=supplies`, BN1).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Supply {
     pub dish: Dish,
     pub unit: String,
@@ -226,7 +228,7 @@ pub fn order(cmd: &Command, caps: &Caps, pool: &[Value], lang: &str) -> Out {
 pub async fn hear(place: &crate::hubstore::Place, loc: &str, transcript: &str, lang: &str, caps: Caps) -> worker::Result<Out> {
     if let Some(s) = stock_said(transcript) {
         let shelf = match s {
-            Said::Receive { .. } | Said::Waste { .. } => supplies(&crate::hubstore::load_catalog(place).await?.catalog.supplies()),
+            Said::Receive { .. } | Said::Waste { .. } => shelf(place).await?,
             _ => Vec::new(),
         };
         return Ok(decide(&s, &caps, lang, &shelf));
@@ -249,7 +251,15 @@ pub async fn hear(place: &crate::hubstore::Place, loc: &str, transcript: &str, l
     Ok(order(&cmd, &caps, &pool, lang))
 }
 
-/// The catalogue's supplies as the matcher sees them.
+/// The venue's supplies as the matcher sees them, from its object (BN1,
+/// `/fold/catalogue?q=supplies`, which answers `supplies` of the catalogue it
+/// holds) -- never the catalogue itself.
+pub async fn shelf(place: &crate::hubstore::Place) -> worker::Result<Vec<Supply>> {
+    let mut v = crate::fold::ask::catalogue(place, "q=supplies").await?;
+    serde_json::from_value(v["supplies"].take()).map_err(|e| worker::Error::RustError(format!("supplies: {e}")))
+}
+
+/// The catalogue's supplies as the matcher sees them. PURE.
 pub fn supplies(rows: &[(String, String)]) -> Vec<Supply> {
     rows.iter()
         .filter_map(|(id, j)| {

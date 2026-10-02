@@ -20,8 +20,8 @@
 mod decide;
 mod dish;
 mod grammar;
-mod kitchen;
-mod menu;
+pub(crate) mod kitchen; // `supplies` is also the object's (`hubdo/catalogue.rs`, BN1)
+pub(crate) mod menu; // `dishes` is also the object's (`hubdo/catalogue.rs`, BN1)
 mod room;
 mod say;
 mod scope;
@@ -213,8 +213,9 @@ pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // ── THE OWNER'S SHELF, SCREENS, STOP-LIST AND VENUE STATE ──
     if speaker == Speaker::Owner && gate.is_none() {
         if let Some(s) = kitchen::stock_said(&body.transcript) {
-            let rows = match s { kitchen::Said::Receive { .. } | kitchen::Said::Waste { .. } => crate::hubstore::load_catalog(&place).await?.catalog.supplies(), _ => Vec::new() };
-            return Response::from_json(&answer(kitchen::decide(&s, &dowiz_hub::caps::Preset::Owner.caps(), &lang, &kitchen::supplies(&rows))));
+            // The supplies as the matcher sees them, from the object (BN1): only for a movement.
+            let shelf = match s { kitchen::Said::Receive { .. } | kitchen::Said::Waste { .. } => kitchen::shelf(&place).await?, _ => Vec::new() };
+            return Response::from_json(&answer(kitchen::decide(&s, &dowiz_hub::caps::Preset::Owner.caps(), &lang, &shelf)));
         }
         if let Some(said) = grammar::owner(&body.transcript) {
             let dishes = match said {

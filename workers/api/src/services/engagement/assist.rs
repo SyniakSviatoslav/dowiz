@@ -61,11 +61,11 @@ struct AskIn {
 /// A stock level is not a person. "salmon: 4 on hand, 1 reserved" is exactly
 /// what turns "which dishes use salmon" into "and here is what running out
 /// costs you", which is the question an owner actually asks.
-async fn shelf_labels(place: &crate::hubstore::Place) -> std::collections::HashMap<String, String> {
-    let Ok(loaded) = crate::hubstore::load_stock(place).await else {
-        return std::collections::HashMap::new();
-    };
-    let Ok(ledger) = loaded.stock.ledger() else {
+///
+/// PURE over the stock ledger: the venue's object builds the labels from the
+/// ledger it holds (`hubdo/facts.rs`). An unreadable ledger labels nothing.
+pub(crate) fn shelf_labels_of(stock: &dowiz_hub::stock::StockLog) -> std::collections::HashMap<String, String> {
+    let Ok(ledger) = stock.ledger() else {
         return std::collections::HashMap::new();
     };
     ledger
@@ -80,7 +80,7 @@ async fn shelf_labels(place: &crate::hubstore::Place) -> std::collections::HashM
         .collect()
 }
 
-fn graph_facts(
+pub(crate) fn graph_facts(
     hub: &dowiz_hub::Hub,
     cat: &dowiz_hub::catalog::Catalog,
     labels: &std::collections::HashMap<String, String>,
@@ -120,9 +120,6 @@ fn graph_facts(
         .collect();
     json!({ "nodes": g.len(), "relations": g.edge_count(), "found": found })
 }
-
-
-
 
 /// EVERYTHING THE OWNER'S ASSISTANT IS SHOWN, as one value: what is sent to
 /// the model is exactly this, so a test of this is a test of the payload.
@@ -215,12 +212,6 @@ pub fn courier_run_fact(o: &Value, now: i64) -> Value {
 /// the cheapest way to see that the fold is working at all.
 pub async fn graph(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (_, _loc, (loaded, loaded_cat)) =
-        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load_both(&place)).await
-        {
-            Ok(v) => v,
-            Err(r) => return Ok(r),
-        };
     let q = req
         .url()
         .ok()
@@ -233,8 +224,15 @@ pub async fn graph(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(12)
         .clamp(1, 50);
-    let labels = shelf_labels(&place).await;
-    Response::from_json(&graph_facts(&loaded.hub, &loaded_cat.catalog, &labels, &q, limit))
+    // DERIVED IN THE OBJECT (BN1, `/fold/graph`, `hubdo/facts.rs`): the log,
+    // the catalogue and the shelf are all there; `graph_facts` runs there and
+    // the retrieval alone crosses the hop.
+    let url = format!("https://hub/fold/graph?q={}&limit={limit}", crate::mcp::enc(&q));
+    let (_, _loc, found) = match crate::owner::owner_beside(&req, &ctx, &place, crate::fold::ask::json(&place, &url)).await {
+        Ok(v) => v,
+        Err(r) => return Ok(r),
+    };
+    Response::from_json(&found)
 }
 
 pub async fn owner_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
@@ -248,17 +246,21 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
     // either is issued -- see it for why that order matters.
     // THE IMAGE, not the projection, and for once that is right: `graph_facts`
     // walks the hub itself -- reveals, stock, the shape of the log -- to answer
-    // a question in words. The orders are folded out of the same image rather
-    // than asked for a second time.
-    let (_, loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load(&place)).await {
-            Ok(v) => v,
-            Err(r) => return Ok(r),
-        };
-    let now = ctx.data.now_ms;
-    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
-    let labels = shelf_labels(&place).await;
-    let facts = owner_facts(&loaded.hub, &cat, &labels, &loc, &body.question, now);
+    // a question in words. IT WALKS IT IN THE OBJECT (BN1, `/fold/assist`,
+    // `hubdo/facts.rs`): `owner_facts` runs where the log, the catalogue and
+    // the shelf already are, and the facts alone cross the hop. The venue is
+    // authorised first, because the facts are asked about it by name.
+    let (_, loc, ()) = match crate::owner::owner_beside(&req, &ctx, &place, std::future::ready(Ok(()))).await {
+        Ok(v) => v,
+        Err(r) => return Ok(r),
+    };
+    let url = format!(
+        "https://hub/fold/assist?venue={}&now={}&q={}",
+        crate::mcp::enc(&loc),
+        ctx.data.now_ms,
+        crate::mcp::enc(&body.question)
+    );
+    let facts = crate::fold::ask::json(&place, &url).await?;
     crate::assist::ask(&place, crate::assist::SYSTEM_OWNER, facts, &body.question).await
 }
 

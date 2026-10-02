@@ -40,11 +40,17 @@ pub async fn import_recipes(req: Request, ctx: RouteContext<crate::Req>) -> Resu
     bulk(req, ctx, Kind::Recipes).await
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum Kind {
     Supplies,
     Recipes,
 }
+
+/// The whole import as one PURE function, run by the venue's object in one
+/// turn (`bulk/turn.rs`, `hubdo/bulk.rs`).
+pub(crate) mod turn;
+pub(crate) use turn::{turn, BulkIn, Turn};
 
 async fn bulk(mut req: Request, ctx: RouteContext<crate::Req>, kind: Kind) -> Result<Response> {
     let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
@@ -57,52 +63,20 @@ async fn bulk(mut req: Request, ctx: RouteContext<crate::Req>, kind: Kind) -> Re
     let q = |name: &str| url.query_pairs().find(|(k, _)| k == name).map(|(_, v)| v.to_string());
     let flag = |name: &str| q(name).is_some_and(|v| v == "1" || v == "true");
     let (apply, retire) = (flag("apply"), flag("retire"));
-    let scale = if q("cost").as_deref() == Some("hundredths") { CostScale::Hundredths } else { CostScale::Major };
+    let hundredths = q("cost").as_deref() == Some("hundredths");
     let text = req.text().await?;
     if too_big(text.len()) {
         return Response::error("the file is larger than a spreadsheet of supplies or recipes", 413);
     }
-    // Everything the draft is judged against is read SERVER-SIDE, now.
-    let mut cat = crate::hubstore::load_catalog(&place).await?.catalog;
-    let (mut draft, preview) = read(&cat, &text, kind, scale, ctx.data.now_ms);
-    let room = projected(&mut cat, &draft, kind, retire);
-    let no_room = room::refusal(&room, &mut draft.warnings);
-    let mut summary = json!({
-        "applied": apply,
-        "supplies": draft.supplies.len(),
-        "recipes": draft.recipes.len(),
-        "withoutRecipe": draft.without_recipe,
-        "notInFile": draft.retired,
-        "retired": if apply && retire { draft.retired.len() } else { 0 },
-        "flattened": draft.flattened,
-        "preps": preps::rows(&cat, &draft),
-        "warnings": draft.warnings,
-        "rows": preview,
-        "catalogue": room,
-    });
-    if !apply {
-        return Response::from_json(&summary);
+    // ONE OBJECT TURN (BN1, `hubdo/bulk.rs`): the file goes to the venue's
+    // object, which judges it against the catalogue it holds -- and applies it
+    // there, when asked. The catalogue never crosses the hop; a refusal comes
+    // back in the object's own words and status.
+    let input = BulkIn { text, kind, hundredths, apply, retire, now_ms: ctx.data.now_ms };
+    match crate::command::send::<_, Value>(&place, "bulk", &input).await {
+        Ok(summary) => Response::from_json(&summary),
+        Err((status, why)) => Response::error(why, status),
     }
-    // A file that produced nothing is refused: applying it is a wrong
-    // separator or a missing header, not an intent.
-    if draft.supplies.is_empty() && draft.recipes.is_empty() {
-        return Response::error(format!("nothing to import: {}", draft.warnings.join("; ")), 400);
-    }
-    // The dry run's answer, given again BEFORE the write rather than as a
-    // failed save after it.
-    if let Some(why) = no_room {
-        return Response::error(why, 413);
-    }
-    let written = crate::hubstore::with_catalog(&place, move |cat| {
-        let n = match kind {
-            Kind::Supplies => apply_supplies(cat, &draft, retire),
-            Kind::Recipes => apply_recipes(cat, &draft),
-        };
-        n.map_err(Error::RustError)
-    })
-    .await?;
-    summary["written"] = json!(written);
-    Response::from_json(&summary)
 }
 
 /// The draft and its preview rows, against the catalogue as it is. PURE.
@@ -155,14 +129,19 @@ fn products_of(cat: &Catalog) -> Vec<(String, String)> {
 /// and so does `e2e/gates/recipes.mjs`.
 pub async fn owner_products(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (_, _loc, cat) =
-        match crate::services::identity::staff::guard::staff_beside(&req, &ctx, &place, &crate::services::identity::staff::guard::MENU, crate::hubstore::load_catalog(&place)).await {
+    let want = req.url()?.query_pairs().find(|(k, _)| k == "id").map(|(_, v)| v.to_string());
+    // DERIVED IN THE OBJECT (BN1, `/fold/catalogue?q=owner_products`): the
+    // dishes as the owner reads them, built there by `owner_view`.
+    let query = match &want {
+        Some(id) => format!("q=owner_products&id={}", crate::mcp::enc(id)),
+        None => "q=owner_products".to_string(),
+    };
+    let (_, _loc, products) =
+        match crate::services::identity::staff::guard::staff_beside(&req, &ctx, &place, &crate::services::identity::staff::guard::MENU, crate::fold::ask::catalogue(&place, &query)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
-    let want = req.url()?.query_pairs().find(|(k, _)| k == "id").map(|(_, v)| v.to_string());
-    let products = owner_view(&cat.catalog, want.as_deref());
-    let mut res = Response::from_json(&json!({ "products": products }))?;
+    let mut res = Response::from_json(&products)?;
     // Costs and recipes are the venue's; nothing between here and the owner keeps a copy.
     res.headers_mut().set("cache-control", "private, no-store")?;
     Ok(res)

@@ -430,7 +430,8 @@ pub async fn seed(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
         "ownerId": owner_id,
         // The catalogue's content fingerprint. Two hubs seeded from the same
         // bundle produce the same root, which makes a mirror checkable.
-        "catalogRoot": crate::hubstore::load_catalog(&place).await?.catalog.root(),
+        // Answered by the object (`/fold/catalogue?q=root`, BN1): the fingerprint, not the image.
+        "catalogRoot": crate::fold::ask::catalogue(&place, "q=root").await?.get("root").cloned().unwrap_or(serde_json::Value::Null),
         "secretHash": sha256_hex(&want)[..8].to_string()
     }))
 }

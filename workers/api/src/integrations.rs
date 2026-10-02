@@ -40,13 +40,9 @@ pub async fn status(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let s = crate::hubstore::load_settings(&place).await?.settings;
     let origin = req.url()?.origin().ascii_serialization();
-    // The venue's raw record lives in the catalogue image, wallets included.
-    let loc_json: Value = crate::hubstore::load_catalog(&place)
-        .await
-        .ok()
-        .and_then(|c| c.catalog.location())
-        .and_then(|j| serde_json::from_str(&j).ok())
-        .unwrap_or(Value::Null);
+    // The venue's raw record lives in the catalogue image, wallets included;
+    // the object answers the record alone (`/fold/venue`, BN1).
+    let loc_json: Value = crate::hubstore::venue_record(&place).await.ok().flatten().unwrap_or(Value::Null);
     let _ = loc;
     let wallets = crate::storefront::payment_wallets(&loc_json).len();
     let last_webhook = s.get(WEBHOOK_LAST_KEY).and_then(|v| v.trim().parse::<i64>().ok());

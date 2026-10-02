@@ -19,30 +19,16 @@ pub async fn activation(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
-    let (_, _loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load_catalog(&place)).await {
+    // THE CATALOGUE'S PART, from the object (BN1, `/fold/catalogue?q=activation`,
+    // `catalogue_facts`): the venue's record and how many dishes are sellable,
+    // never the catalogue they are counted in.
+    let (_, _loc, mut facts) =
+        match crate::owner::owner_beside(&req, &ctx, &place, crate::fold::ask::catalogue(&place, "q=activation")).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
-    let raw: Value = loaded
-        .catalog
-        .location()
-        .and_then(|j| serde_json::from_str(&j).ok())
-        .unwrap_or(json!({}));
-    let sellable = loaded
-        .catalog
-        .products()
-        .into_iter()
-        .filter(|(_, pj)| {
-            serde_json::from_str::<Value>(pj)
-                .ok()
-                .map(|p| {
-                    p.get("available").and_then(Value::as_bool).unwrap_or(false)
-                        && p.get("price").and_then(Value::as_i64).unwrap_or(0) > 0
-                })
-                .unwrap_or(false)
-        })
-        .count();
+    let raw: Value = facts["venue"].take();
+    let sellable = facts["sellable"].as_u64().unwrap_or(0) as usize;
     let settings = crate::hubstore::load_settings(&place).await?.settings;
     let phone = raw.get("phone").and_then(Value::as_str).unwrap_or("");
     let f = dowiz_hub::activation::Facts {
@@ -67,6 +53,27 @@ pub async fn activation(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
             "pickupEnabled": f.pickup_enabled,
         }
     }))
+}
+
+/// The catalogue's part of the activation check: the venue's record (`{}`
+/// when it has none) and how many dishes are on sale at a price. PURE: the
+/// venue's object answers `/fold/catalogue?q=activation` with it.
+pub(crate) fn catalogue_facts(cat: &dowiz_hub::catalog::Catalog) -> Value {
+    let venue: Value = cat.location().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
+    let sellable = cat
+        .products()
+        .into_iter()
+        .filter(|(_, pj)| {
+            serde_json::from_str::<Value>(pj)
+                .ok()
+                .map(|p| {
+                    p.get("available").and_then(Value::as_bool).unwrap_or(false)
+                        && p.get("price").and_then(Value::as_i64).unwrap_or(0) > 0
+                })
+                .unwrap_or(false)
+        })
+        .count();
+    json!({ "venue": venue, "sellable": sellable })
 }
 
 /// WOULD `/api/public/reach` RESTRICT ANYTHING? The storefront's

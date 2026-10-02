@@ -50,17 +50,13 @@ pub fn dishes(products: &[(String, String)], i18n: &[(String, String)], lang: &s
         .collect()
 }
 
-/// The venue's dishes, read from its image. A translation table that cannot
-/// be read leaves the venue's own names, which are still a menu.
+/// The venue's dishes, from its object (BN1, `/fold/catalogue?q=dishes`,
+/// which runs `dishes` over the catalogue and the translation table it holds).
+/// A translation table that cannot be read leaves the venue's own names,
+/// which are still a menu.
 pub async fn load(place: &crate::hubstore::Place, lang: &str) -> worker::Result<Vec<Dish>> {
-    let catalog = crate::hubstore::load_catalog(place).await?;
-    let products = catalog.catalog.products();
-    let i18n: Vec<(String, String)> =
-        match crate::hubstore::load_table(place, crate::hubstore::IMAGE_I18N, crate::hubstore::I18N_BYTES).await {
-            Ok(l) => l.table.all(crate::hubstore::I18N_KIND).into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
-            Err(_) => Vec::new(),
-        };
-    Ok(dishes(&products, &i18n, lang))
+    let mut v = crate::fold::ask::catalogue(place, &format!("q=dishes&lang={}", crate::mcp::enc(lang))).await?;
+    serde_json::from_value(v["dishes"].take()).map_err(|e| worker::Error::RustError(format!("dishes: {e}")))
 }
 
 #[cfg(test)]

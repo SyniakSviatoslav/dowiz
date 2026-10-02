@@ -263,10 +263,17 @@ pub async fn list_categories(req: Request, ctx: RouteContext<crate::Req>) -> Res
     };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
-    let loaded = crate::hubstore::load_catalog(&place).await?;
-    let products: Vec<Value> = loaded.catalog.products().iter().filter_map(|(_, j)| serde_json::from_str(j).ok()).collect();
-    let mut cats: Vec<Value> = loaded
-        .catalog
+    // DERIVED IN THE OBJECT (BN1, `/fold/catalogue?q=categories`): the list is
+    // built there by `categories_view` and the list alone crosses the hop.
+    Response::from_json(&crate::fold::ask::catalogue(&place, "q=categories").await?)
+}
+
+/// Every category with its dish count, EMPTY ONES INCLUDED, sorted as the
+/// owner ordered them. PURE: the venue's object answers
+/// `/fold/catalogue?q=categories` with it.
+pub(crate) fn categories_view(cat: &dowiz_hub::catalog::Catalog) -> Value {
+    let products: Vec<Value> = cat.products().iter().filter_map(|(_, j)| serde_json::from_str(j).ok()).collect();
+    let mut cats: Vec<Value> = cat
         .categories()
         .iter()
         .filter_map(|(id, j)| {
@@ -276,5 +283,5 @@ pub async fn list_categories(req: Request, ctx: RouteContext<crate::Req>) -> Res
         })
         .collect();
     cats.sort_by_key(|c| c.get("sortOrder").and_then(Value::as_i64).unwrap_or(0));
-    Response::from_json(&json!({ "categories": cats }))
+    json!({ "categories": cats })
 }

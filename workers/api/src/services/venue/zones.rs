@@ -75,10 +75,10 @@ pub async fn reach(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
     };
     let point = q("lat_udeg").zip(q("lon_udeg"));
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
-    let zones = cat
-        .location()
-        .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+    // The venue's record alone (`/fold/venue`, BN1): the zones are in it, and
+    // nothing else of the catalogue is read here.
+    let zones = crate::hubstore::venue_record(&place)
+        .await?
         .and_then(|l| l.get("delivery_zones").cloned())
         .map(|z| dowiz_hub::zone::from_json(&z.to_string()))
         .unwrap_or_default();

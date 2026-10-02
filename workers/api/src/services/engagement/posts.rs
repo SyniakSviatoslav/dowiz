@@ -43,6 +43,26 @@ pub async fn posts(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
     }))
 }
 
+/// What a draft is derived from: every dish as `(id, name, on sale)` -- a dish
+/// with no name is not news -- and the venue's record (`{}` when it has none).
+/// PURE: the venue's object answers `/fold/catalogue?q=posts` with it.
+pub(crate) fn menu_state(cat: &dowiz_hub::catalog::Catalog) -> Value {
+    let current: Vec<(String, String, bool)> = cat
+        .products()
+        .into_iter()
+        .filter_map(|(id, j)| {
+            let v: Value = serde_json::from_str(&j).ok()?;
+            Some((
+                id,
+                v.get("name")?.as_str()?.to_string(),
+                v.get("available").and_then(Value::as_bool).unwrap_or(false),
+            ))
+        })
+        .collect();
+    let venue: Value = cat.location().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
+    json!({ "current": current, "venue": venue })
+}
+
 /// `POST /api/owner/posts/draft` — look for something worth saying, and say it.
 ///
 /// THE SUBJECTS ARE DERIVED FROM FACTS, never invented: a dish that came back,
@@ -65,21 +85,13 @@ pub async fn draft_post(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
         return Response::error("social drafting is switched off", 409);
     }
 
-    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
-    let current: Vec<(String, String, bool)> = cat
-        .products()
-        .into_iter()
-        .filter_map(|(id, j)| {
-            let v: Value = serde_json::from_str(&j).ok()?;
-            Some((
-                id,
-                v.get("name")?.as_str()?.to_string(),
-                v.get("available").and_then(Value::as_bool).unwrap_or(false),
-            ))
-        })
-        .collect();
-    let venue: Value =
-        cat.location().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
+    // WHAT A DRAFT IS DERIVED FROM, answered by the object (BN1,
+    // `/fold/catalogue?q=posts`, `menu_state`): every dish's name and whether
+    // it is on sale, and the venue's record -- never the catalogue they sit in.
+    let mut state = crate::fold::ask::catalogue(&place, "q=posts").await?;
+    let current: Vec<(String, String, bool)> =
+        serde_json::from_value(state["current"].take()).map_err(|e| Error::RustError(format!("menu state: {e}")))?;
+    let venue: Value = state["venue"].take();
     let venue_name = venue.get("name").and_then(Value::as_str).unwrap_or("the restaurant");
     let is_open = venue.get("status").and_then(Value::as_str) == Some("open");
     let lang = venue.get("default_locale").and_then(Value::as_str).unwrap_or("sq").to_string();

@@ -33,8 +33,8 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<crate::Req>) 
     };
     // The product must exist BEFORE a blob is written, or a typo in an id
     // leaves an orphan nothing will ever reference or clean up.
-    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
-    if cat.product(&id).is_none() {
+    // Asked of the object (`/fold/catalogue?q=product`, BN1): the one record, never the catalogue.
+    if crate::fold::ask::catalogue(&place, &format!("q=product&id={}", crate::mcp::enc(&id))).await?["product"].is_null() {
         return Response::error("not found", 404);
     }
 

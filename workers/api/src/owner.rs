@@ -1190,17 +1190,16 @@ pub async fn write_translations(mut req: Request, ctx: RouteContext<crate::Req>)
     // (migration 0002), so this id check is the only thing keeping a
     // translation in its own venue.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    let loaded = crate::hubstore::load_catalog(&place).await?;
-    let products: std::collections::BTreeSet<String> =
-        loaded.catalog.products().into_iter().map(|(id, _)| id).collect();
-    let categories: std::collections::BTreeSet<String> =
-        loaded.catalog.categories().into_iter().map(|(id, _)| id).collect();
+    // THE IDS ALONE (BN1, `/fold/catalogue?q=ids`, `catalogue_ids`), not the
+    // catalogue they sit in.
+    let ids = crate::fold::ask::catalogue(&place, "q=ids").await?;
+    let has = |list: &str, id: &str| ids[list].as_array().is_some_and(|a| a.iter().any(|x| x.as_str() == Some(id)));
     let mut refused: Vec<Value> = Vec::new();
     let mut batch = Vec::new();
     for e in &body.entries {
         let known = match e.entity.as_str() {
-            "product" => products.contains(&e.id),
-            "category" => categories.contains(&e.id),
+            "product" => has("products", &e.id),
+            "category" => has("categories", &e.id),
             _ => false,
         };
         if !known {
@@ -1224,6 +1223,16 @@ pub async fn write_translations(mut req: Request, ctx: RouteContext<crate::Req>)
     let written = batch.len();
     apply_i18n(&place, batch).await?;
     Response::from_json(&json!({ "ok": refused.is_empty(), "written": written, "refused": refused }))
+}
+
+/// The ids the catalogue has, sorted: `{products: [..], categories: [..]}`.
+/// PURE: the venue's object answers `/fold/catalogue?q=ids` with it, so a
+/// translation is checked against the venue's own ids without the catalogue
+/// crossing the hop.
+pub(crate) fn catalogue_ids(cat: &dowiz_hub::catalog::Catalog) -> Value {
+    let products: std::collections::BTreeSet<String> = cat.products().into_iter().map(|(id, _)| id).collect();
+    let categories: std::collections::BTreeSet<String> = cat.categories().into_iter().map(|(id, _)| id).collect();
+    json!({ "products": products, "categories": categories })
 }
 
 /// `PATCH /api/owner/location` — open, close, go busy, pause delivery.

@@ -55,3 +55,9 @@ mod public_routes;
 #[cfg(test)]
 #[path = "catalogue_routes/tests.rs"]
 mod catalogue_routes;
+
+/// The twenty-three remaining catalogue (and order-log) readers of BN1,
+/// pinned before and after their move into the object (lane W-BN1B).
+#[cfg(test)]
+#[path = "catalogue_reads/tests.rs"]
+mod catalogue_reads;

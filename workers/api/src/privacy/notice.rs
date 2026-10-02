@@ -265,9 +265,9 @@ pub async fn serve(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
         return html(render_platform(&lang_of(&req, "en")));
     };
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    let loc: Value = match crate::hubstore::load_catalog(&place).await?.catalog.location() {
-        Some(j) => serde_json::from_str(&j).unwrap_or(Value::Null),
-        None => return Response::error("not found", 404),
+    // The venue's record alone (`/fold/venue`, BN1), never the catalogue it sits in.
+    let Some(loc) = crate::hubstore::venue_record(&place).await? else {
+        return Response::error("not found", 404);
     };
     let s = crate::hubstore::load_settings(&place).await?.settings;
     let text = |k: &str| loc.get(k).and_then(Value::as_str).map(str::trim).filter(|x| !x.is_empty()).map(str::to_string);

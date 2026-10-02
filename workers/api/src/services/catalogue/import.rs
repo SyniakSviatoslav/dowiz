@@ -37,27 +37,15 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
     }
     let mut draft = dowiz_hub::import::from_csv(&text);
 
-    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
-    let existing: Vec<(String, String)> = cat
-        .products()
-        .into_iter()
-        .filter_map(|(id, j)| {
-            let v: Value = serde_json::from_str(&j).ok()?;
-            Some((id, v.get("name")?.as_str()?.to_string()))
-        })
-        .collect();
+    // THE DISHES' NAMES ALONE (BN1, `/fold/catalogue?q=owned`, `owned_dishes`),
+    // never the catalogue they sit in; Apply below reads that where it is.
+    let mut named = crate::fold::ask::catalogue(&place, "q=owned").await?;
+    let owned: Vec<(String, String, String)> =
+        serde_json::from_value(named["owned"].take()).map_err(|e| Error::RustError(format!("owned dishes: {e}")))?;
+    let existing: Vec<(String, String)> = owned.iter().map(|(id, name, _)| (id.clone(), name.clone())).collect();
     // ONE DISH, ONE ID, BEFORE ANYTHING IS COMPARED (audit D6): a dish the
     // console made is found by its name, so the file updates it rather than
     // adding a twin -- and `retire` does not stop the original.
-    let owned: Vec<(String, String, String)> = cat
-        .products()
-        .into_iter()
-        .filter_map(|(id, j)| {
-            let v: Value = serde_json::from_str(&j).ok()?;
-            let c = v.get("categoryId").and_then(Value::as_str).unwrap_or("").to_string();
-            Some((id, v.get("name")?.as_str()?.to_string(), c))
-        })
-        .collect();
     resolve_ids(&mut draft, &owned);
     // What is on the menu now but not in the file. Reported either way, so the
     // owner sees the consequence before choosing to act on it.
@@ -215,6 +203,21 @@ pub fn resolve_ids(draft: &mut dowiz_hub::import::MenuDraft, existing: &[(String
             draft.products[i].id = id;
         }
     }
+}
+
+/// Every dish as `(id, name, category)`, what `resolve_ids` and the
+/// "not in file" list are judged against. PURE: the venue's object answers
+/// `/fold/catalogue?q=owned` with it. A dish with no name is not one a file
+/// can name, so it is left out, as it always was.
+pub(crate) fn owned_dishes(cat: &dowiz_hub::catalog::Catalog) -> Vec<(String, String, String)> {
+    cat.products()
+        .into_iter()
+        .filter_map(|(id, j)| {
+            let v: Value = serde_json::from_str(&j).ok()?;
+            let c = v.get("categoryId").and_then(Value::as_str).unwrap_or("").to_string();
+            Some((id, v.get("name")?.as_str()?.to_string(), c))
+        })
+        .collect()
 }
 
 /// Any catalogue write moves the menu version, which is how a client notices

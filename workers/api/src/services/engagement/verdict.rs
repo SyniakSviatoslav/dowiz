@@ -22,6 +22,20 @@ impl Default for ApproveIn {
     }
 }
 
+/// The photograph of the dish a post is about -- `subject` is its id or its
+/// name -- as stored (`imageUrl`, relative or absolute). PURE: the venue's
+/// object answers `/fold/catalogue?q=photo&subject=` with it.
+pub(crate) fn photo_of(cat: &dowiz_hub::catalog::Catalog, subject: &str) -> Option<String> {
+    cat.products().into_iter().find_map(|(id, pj)| {
+        let v: Value = serde_json::from_str(&pj).ok()?;
+        let name = v.get("name").and_then(Value::as_str).unwrap_or("");
+        if id != subject && name != subject {
+            return None;
+        }
+        v.get("imageUrl").and_then(Value::as_str).map(str::to_string)
+    })
+}
+
 /// `POST /api/owner/posts/:id/approve` — publish it, in the owner's words.
 pub async fn approve_post(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     use dowiz_hub::post::State as PostState;
@@ -90,17 +104,14 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
         Some(ig) => {
             let subject = p.subject_key.split_once(':').map(|(_, v)| v).unwrap_or(&p.subject_key).to_string();
             let origin = req.url().map(|u| u.origin().ascii_serialization()).unwrap_or_default();
-            let photo = crate::hubstore::load_catalog(&place).await.ok().and_then(|c| {
-                c.catalog.products().into_iter().find_map(|(id, pj)| {
-                    let v: Value = serde_json::from_str(&pj).ok()?;
-                    let name = v.get("name").and_then(Value::as_str).unwrap_or("");
-                    if id != subject && name != subject {
-                        return None;
-                    }
-                    let url = v.get("imageUrl").and_then(Value::as_str)?;
-                    Some(if url.starts_with("http") { url.to_string() } else { format!("{origin}{url}") })
-                })
-            });
+            // THE ONE PHOTO, from the object (BN1, `/fold/catalogue?q=photo`,
+            // `photo_of`), never the catalogue it is named in. An object that
+            // cannot answer is a dish with no photo, as a failed read was.
+            let photo = crate::fold::ask::catalogue(&place, &format!("q=photo&subject={}", crate::mcp::enc(&subject)))
+                .await
+                .ok()
+                .and_then(|v| v["photo"].as_str().map(str::to_string))
+                .map(|url| if url.starts_with("http") { url } else { format!("{origin}{url}") });
             let ig_result = match photo {
                 None => Err("Instagram: the post's dish has no photo".to_string()),
                 Some(url) => crate::channels::instagram_publish(&ig, &url, &p.text).await.map_err(|e| format!("Instagram: {e}")),

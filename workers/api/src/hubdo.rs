@@ -75,6 +75,9 @@ mod menu; mod publish; // the catalogue projection's routes (R2) and its publish
 mod preps; // the ПФ reads, answered here (R3), `hubdo/preps.rs`
 mod basket; // the basket's catalogue nodes and the room's recipes, answered here (BN1), `hubdo/basket.rs`
 mod reads; // the owner's and the kitchen's folds over the images, answered here (BN1), `hubdo/reads.rs`
+mod catalogue; // the catalogue's derived nodes and the venue's record, answered here (BN1), `hubdo/catalogue.rs`
+mod facts; // the folds over the log and the catalogue together, answered here (BN1), `hubdo/facts.rs`
+mod bulk; // a supplies / recipes spreadsheet as one turn (BN1, BN4's shape), `hubdo/bulk.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
 mod timer; // the venue's alarm: timed work without the minute cron (DAG Phase 2), `hubdo/timer.rs`
 /// Where the object lives: the platform, or (tests) memory (W-COV C2), `hubdo/host.rs`.
@@ -1177,36 +1180,8 @@ impl HubImages {
                         .collect();
                     Response::from_json(&fresh)
                 }
-                // THE VENUE'S OWN RECORD, and nothing else in the catalogue.
-                //
-                // The owner's dashboard needs one field from it -- the time
-                // zone, so "today" starts at the venue's midnight rather than
-                // UTC's. Reaching that through `load_catalog` would pull the
-                // whole catalogue image, which on a venue with a real menu is
-                // half a megabyte, on every poll. The object already holds
-                // those bytes; parsing them HERE and answering with the ~1 KB
-                // that was asked for is the same move phase 2 made for the log.
-                //
-                // A venue with no catalogue yet answers `null`, which is not an
-                // error: the caller falls back to the default zone and says so.
-                (Method::Get, "venue") => {
-                    let rec = match self.image(CATALOG_IMAGE).await? {
-                        Some((_, bytes)) => dowiz_hub::catalog::Catalog::load(&bytes)
-                            .ok()
-                            .and_then(|c| c.location()),
-                        None => None,
-                    };
-                    match rec {
-                        Some(json) => Response::ok(json).map(|mut r| {
-                            let _ = r.headers_mut().set("content-type", "application/json");
-                            r
-                        }),
-                        None => Response::ok("null").map(|mut r| {
-                            let _ = r.headers_mut().set("content-type", "application/json");
-                            r
-                        }),
-                    }
-                }
+                // THE VENUE'S OWN RECORD, and nothing else in the catalogue (`hubdo/catalogue.rs`).
+                (Method::Get, "venue") => self.fold_venue().await,
                 // THE GENERATION ALONE. A writer that needs nothing but the
                 // guard used to ask for the orders and throw them away, which
                 // on a venue with a thousand of them is a list built for a
@@ -1219,6 +1194,14 @@ impl HubImages {
                 (Method::Get, "preps") => self.fold_preps(&req).await,
                 // THE CATALOGUE READS OF BN1, answered from the images here (`hubdo/reads.rs`).
                 (Method::Get, "basket" | "analytics" | "kitchen" | "stock" | "exceptions") => self.fold_read(what, &req).await,
+                // THE CATALOGUE'S DERIVED NODES (`hubdo/catalogue.rs`) and the folds over the log and the catalogue together (`hubdo/facts.rs`).
+                (Method::Get, "catalogue") => self.fold_catalogue(&req).await,
+                (Method::Get, "reveals" | "assist" | "graph" | "kitchen_facts" | "waste") => self.fold_facts(what, &req).await,
+                // A SUPPLIES / RECIPES SPREADSHEET, judged and applied in one turn (`hubdo/bulk.rs`).
+                (Method::Post, "bulk") => {
+                    let mut req = req;
+                    self.bulk_import(crate::body::parse(&mut req).await?).await
+                }
                 (Method::Get, "generation") => {
                     let generation =
                         self.image(LOG_IMAGE).await?.map(|(m, _)| m.generation).unwrap_or(0);

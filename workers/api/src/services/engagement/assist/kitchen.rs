@@ -109,20 +109,11 @@ pub async fn kitchen_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         Err(r) => return Ok(r),
     };
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
-    let (listed, cat, stock) = futures_util::future::join3(
-        crate::hubstore::orders(&place),
-        crate::hubstore::load_catalog(&place),
-        crate::hubstore::load_stock(&place),
-    )
-    .await;
-    let orders: Vec<(String, String)> = listed?.into_iter().map(|o| (o.order_id, o.order_json)).collect();
-    let cat = cat?.catalog;
-    let shelf: Vec<(String, i64, i64)> = stock?
-        .stock
-        .ledger()
-        .map(|l| l.items().into_iter().map(|(i, lv)| (i, lv.on_hand, lv.reserved)).collect())
-        .unwrap_or_default();
-    let facts = kitchen_facts(&orders, &cat.products(), &cat.supplies(), &shelf, &loc, ctx.data.now_ms);
+    // DERIVED IN THE OBJECT (BN1, `/fold/kitchen_facts`, `hubdo/facts.rs`):
+    // the tickets, the menu and the shelf are all there; `kitchen_facts` runs
+    // there and the facts alone cross the hop.
+    let url = format!("https://hub/fold/kitchen_facts?venue={}&now={}", crate::mcp::enc(&loc), ctx.data.now_ms);
+    let facts = crate::fold::ask::json(&place, &url).await?;
     crate::assist::ask(&place, SYSTEM_KITCHEN, facts, &body.question).await
 }
 

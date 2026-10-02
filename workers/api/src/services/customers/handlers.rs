@@ -10,7 +10,7 @@ use worker::*;
 
 use crate::owner::{owner_and_venue};
 use crate::services::orders::mine::of_venue as orders_of;
-use crate::services::venue::currency_of;
+use crate::services::venue::currency_of_record;
 
 
 /// A stable, non-reversible handle for a phone. The audit entry must not carry
@@ -59,13 +59,15 @@ pub async fn customers(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // `owner_beside` runs them together. Measured against this very handler
     // before it was converted: 293 ms of server time against the dashboard's
     // 235 for the same 655 KB, on the same deployment at the same minute.
-    let (_, loc, (listed, loaded_cat, people, consent)) = match crate::owner::owner_beside(
+    let (_, loc, (listed, record, people, consent)) = match crate::owner::owner_beside(
         &req,
         &ctx,
         &place,
         futures_util::future::try_join4(
             crate::hubstore::orders(&place),
-            crate::hubstore::load_catalog(&place),
+            // The venue's record alone (`/fold/venue`, BN1): its currency is
+            // all this screen needs of the catalogue.
+            crate::hubstore::venue_record(&place),
             // THE CARD, joined on by key (§3.1). Read beside the other two,
             // so the row gaining its note costs no extra round trip in series.
             crate::hubstore::load_table(
@@ -102,7 +104,6 @@ pub async fn customers(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         redact::phone,
         roll::Sort::of(sort.as_deref()),
     );
-    let cat = loaded_cat.catalog;
     let acts = consent.log.entries();
     use dowiz_hub::consent::{CHANNEL_WHATSAPP, PURPOSE_MARKETING};
     use crate::services::customers::consent_log::circle_state;
@@ -118,7 +119,7 @@ pub async fn customers(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
                 &members,
             )
         }).collect::<Vec<_>>(),
-        "currency": currency_of(&cat),
+        "currency": currency_of_record(record.as_ref()),
     }))
 }
 
@@ -218,15 +219,21 @@ pub async fn reveals(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
     // THE AUDIT TRAIL IS NOT A PROJECTION. `reveals()` reads the events the
-    // fold deliberately skips, so this route still reads the image.
-    let (_, _loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load(&place)).await {
+    // fold deliberately skips, so this read is of the image -- IN THE OBJECT
+    // (BN1, `/fold/reveals`, `hubdo/facts.rs`), by `reveals_view`; the list
+    // alone crosses the hop.
+    let (_, _loc, out) =
+        match crate::owner::owner_beside(&req, &ctx, &place, crate::fold::ask::json(&place, "https://hub/fold/reveals")).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
-    let out: Vec<Value> = loaded
-        .hub
-        .reveals()
+    Response::from_json(&out)
+}
+
+/// Who has been looking, newest first, at most 200. PURE over the log: the
+/// venue's object answers `/fold/reveals` with it.
+pub(crate) fn reveals_view(hub: &dowiz_hub::Hub) -> Vec<Value> {
+    hub.reveals()
         .into_iter()
         .take(200)
         .filter_map(|e| {
@@ -241,7 +248,6 @@ pub async fn reveals(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
                 "act": v.get("act").cloned().unwrap_or(Value::Null),
             }))
         })
-        .collect();
-    Response::from_json(&json!({ "reveals": out }))
+        .collect()
 }
 

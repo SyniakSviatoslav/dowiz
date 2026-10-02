@@ -202,25 +202,32 @@ pub fn totals(rows: &[WasteRow]) -> Value {
     json!({ "byReason": by_reason, "bySigner": by_signer, "valueByReason": value_by_reason, "value": value, "unvalued": unvalued })
 }
 
+/// The report as the route answers it: the rows and their totals, named for
+/// the venue. PURE: the venue's object answers `/fold/waste?venue=` with it.
+pub fn report(stock: &[Entry], orders: &[dowiz_hub::Event], venue: &str) -> Value {
+    let rows = fold_entries(stock, orders);
+    let totals = totals(&rows);
+    json!({ "venue": venue, "rows": rows, "totals": totals })
+}
+
 /// `GET /api/owner/stock/waste` — every binned thing, with its signer.
 pub async fn waste_report(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (_, loc, (stock, hub)) = match crate::services::identity::staff::guard::staff_beside(&req, &ctx, &place, &crate::services::identity::staff::guard::SHELF, async {
-        let (s, h) = futures_util::future::join(crate::hubstore::load_stock(&place), crate::hubstore::load(&place)).await;
-        Ok((s?.stock, h?.hub))
-    })
-    .await
-    {
+    // The venue first: the report is asked about it by name.
+    let (_, loc, ()) = match crate::services::identity::staff::guard::staff_beside(&req, &ctx, &place, &crate::services::identity::staff::guard::SHELF, std::future::ready(Ok(()))).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    let journal = match stock.journal() {
-        Ok(j) => j,
-        Err(e) => return Response::error(e.to_string(), 500),
-    };
-    let rows = fold_entries(&journal.entries, &hub.events_oldest_first());
-    let totals = totals(&rows);
-    Response::from_json(&json!({ "venue": loc, "rows": rows, "totals": totals }))
+    // DERIVED IN THE OBJECT (BN1, `/fold/waste`, `hubdo/facts.rs`): the stock
+    // journal and the order log are both there; `report` runs there and the
+    // report alone crosses the hop, with the object's own status and words.
+    let (status, text) = crate::fold::ask::text(&place, &format!("https://hub/fold/waste?venue={}", crate::mcp::enc(&loc))).await?;
+    if status != 200 {
+        return Response::error(text, status);
+    }
+    let mut out = Response::ok(text)?;
+    out.headers_mut().set("content-type", "application/json")?;
+    Ok(out)
 }
 
 #[cfg(test)]

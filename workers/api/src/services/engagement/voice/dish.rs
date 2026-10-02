@@ -15,8 +15,9 @@
 
 use super::words::{norm, words};
 
-/// One dish as the matcher sees it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One dish as the matcher sees it. Serialised because the venue's object
+/// answers the list (`/fold/catalogue?q=dishes`, BN1).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Dish {
     pub id: String,
     /// Every name, in any language, as written on the menu.

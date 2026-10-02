@@ -42,17 +42,14 @@ pub async fn branding(req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
-    let (_, _loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load_catalog(&place)).await {
+    // The venue's record alone (`/fold/venue`, BN1): the theme is in it, and
+    // nothing else of the catalogue is read here.
+    let (_, _loc, record) =
+        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::venue_record(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
-    let stored = loaded
-        .catalog
-        .location()
-        .and_then(|j| serde_json::from_str::<Value>(&j).ok())
-        .and_then(|l| l.get("theme").cloned())
-        .unwrap_or(Value::Null);
+    let stored = record.and_then(|l| l.get("theme").cloned()).unwrap_or(Value::Null);
     let b = match &stored {
         Value::Null => Brand::shipped(),
         v => Brand::parse(&v.to_string()),
