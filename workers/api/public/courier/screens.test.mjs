@@ -160,3 +160,37 @@ test('order refs: a courier reads #01234567, never the storage prefix #ord_...',
   // positive twin: an id that has no prefix is drawn as it is
   assert.ok(screens.pickList([order({ id: 'A7B8C9' })], 'A7B8C9', () => null, ctx).includes('#A7B8C9'));
 });
+
+test('an order for later says its hour on the pool row, the offer and the run; one for now says nothing', () => {
+  const seven = Date.UTC(2026, 9, 2, 17, 0);
+  const later = order({ scheduled_for_ms: seven });
+  const hhmm = new Date(seven).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+  for (const h of [screens.pickList([later], later.id, () => null, ctx), screens.offer(later, 120, ctx), screens.active(later, { waiting: null, eta: '' }, ctx)]) {
+    assert.ok(h.includes(`«forTime» ${hhmm}`), h.slice(0, 200));
+  }
+  assert.ok(!screens.active(order(), { waiting: null, eta: '' }, ctx).includes('«forTime»'));
+  assert.deepEqual(injected(screens.active(order({ scheduled_for_ms: XSS }), { eta: '' }, ctx)), [], 'a poisoned instant draws nothing');
+});
+
+test('claim: a code off an invite link is already in its field, escaped; without one the field is empty', () => {
+  const { root } = render(screens.claim(null, { code: 'ABCDEFGH23456789' }));
+  assert.equal(root.querySelector('#cod').getAttribute('value'), 'ABCDEFGH23456789');
+  assert.equal(render(screens.claim(null)).root.querySelector('#cod').getAttribute('value'), null);
+  assert.deepEqual(injected(screens.claim(null, { code: XSS })), []);
+});
+
+test('chat: the lines are escaped, the input exists only while open, and the run carries the button with its count', () => {
+  const d = { state: 'open', messages: [{ id: 'a', from: 'CUSTOMER', text: XSS, atMs: Date.UTC(2026, 9, 2, 17, 0) }, { id: 'b', from: 'COURIER', text: 'two minutes', atMs: Date.UTC(2026, 9, 2, 17, 1) }] };
+  const open = screens.chat(d, ctx);
+  has(open, 'chatList', 'chatText', 'chatSend');
+  assert.deepEqual(injected(open), [], 'a poisoned line draws nothing');
+  assert.ok(open.includes('«chatYou»') && open.includes('«chatCustomer»'));
+  const closed = screens.chat({ ...d, state: 'closed' }, ctx);
+  assert.ok(!closed.includes('id="chatText"') && closed.includes('«chatClosed»'));
+  assert.ok(screens.chat({ state: 'open', messages: [] }, ctx).includes('«chatEmpty»'));
+  const run = screens.active(order(), { waiting: null, eta: '', unread: 3 }, ctx);
+  has(run, 'chat');
+  assert.ok(run.includes('«chatOpen» (3)'), run.slice(0, 300));
+  assert.ok(screens.active(order(), { waiting: null, eta: '' }, ctx).includes('«chatOpen»'));
+  assert.equal(primaries(run), 1, 'the chat button is not a second main action');
+});

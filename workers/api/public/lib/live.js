@@ -70,8 +70,9 @@ export function live({ token, onEvent, onState } = {}) {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       // `event` names an order; `moved` says only that the log changed -- a
       // placement, a rotation, anything that did not come through the append
-      // path. Both mean "ask", which is all a caller does with either.
-      if (m.t === 'event' || m.t === 'moved') onEvent?.(m);
+      // path; `chat` says the order's courier chat has a new line. All three
+      // mean "ask", which is all a caller does with any of them.
+      if (m.t === 'event' || m.t === 'moved' || m.t === 'chat') onEvent?.(m);
     };
     ws.onerror = () => { /* onclose follows, and that is where we recover */ };
     ws.onclose = () => { ws = null; clearInterval(heart); heart = null; set('polling'); schedule(); };

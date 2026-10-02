@@ -9,7 +9,8 @@
 // The ids are a CONTRACT: app.js binds them and the e2e journeys drive them
 // (#em #pw #go #toClaim #cph #cod #cpw #cgo #toLogin #retry #openShift #askBox
 // #askGo #answer #earn #hist #endShift #take #takeOffer #offerClock #pick #done
-// #slide #slideFill #refused #got #confirm #back #rnote #rgo #pback #etaLine #learn).
+// #slide #slideFill #refused #got #confirm #back #rnote #rgo #pback #etaLine #learn
+// #chat #chatList #chatText #chatSend).
 //
 // `data-tour` marks the controls the lessons point at (docs/learn/lessons/
 // courier/*.yaml). Each is a LITERAL '<module>.<control>' string, never built
@@ -23,6 +24,11 @@ import { mcpButton } from './mcp.js';
 const k = key => ({ t: key });
 const ref = id => ui.orderRef(id, 8); // `#0123` from `ord_0123...`: never the storage prefix
 const block = { size: 'lg', block: true };
+/// ORDER FOR LATER (N4.4): "for 19:00" when the customer chose the hour; nothing otherwise.
+/// Pure: the instant is the order's, the locale the courier's. Not exported: an export of
+/// this file is a SCREEN to the learn gate, and a lesson would be asked for it.
+const forTime = (o, ctx) => Number(o && o.scheduled_for_ms) > 0
+  ? `${ctx.t('forTime')} ${new Date(Number(o.scheduled_for_ms)).toLocaleTimeString(ctx.lang, { hour: '2-digit', minute: '2-digit' })}` : '';
 
 export function login(err, ctx){
   return `<form class="login" id="loginForm" novalidate>
@@ -38,11 +44,13 @@ export function login(err, ctx){
   </form>`;
 }
 
-export function claim(err){
+/// `prefill.code`: the code off an invite LINK (admin couriers.js), already in
+/// its field, so the courier types their phone and a password and nothing else.
+export function claim(err, prefill = null){
   return `<form class="login" id="claimForm" novalidate>
     ${ui.section({ title: k('claimTitle'), sub: k('claimHint') })}
     ${ui.field({ id: 'cph', label: k('yourPhone'), placeholder: k('ex_phone'), type: 'tel', inputmode: 'tel', autocomplete: 'tel', enterkeyhint: 'next' })}
-    ${ui.field({ id: 'cod', label: k('code'), autocomplete: 'one-time-code', autocapitalize: 'characters', spellcheck: false, maxlength: 16, enterkeyhint: 'next' })}
+    ${ui.field({ id: 'cod', label: k('code'), value: prefill && prefill.code ? String(prefill.code) : null, autocomplete: 'one-time-code', autocapitalize: 'characters', spellcheck: false, maxlength: 16, enterkeyhint: 'next' })}
     ${ui.field({ id: 'cpw', label: k('choosePassword'), type: 'password', autocomplete: 'new-password', minlength: 8, enterkeyhint: 'go', hint: k('passwordHint') })}
     ${err ? ui.alert({ label: err }) : ''}
     ${ui.button({ id: 'cgo', type: 'submit', variant: 'primary', icon: 'check', label: k('start'), ...block })}
@@ -86,7 +94,7 @@ export function waiting(){
 export function pickList(available, sel, queued, ctx){
   const chosen = available.find(o => o.id === sel) || available[0];
   const rows = available.map(o => ui.row({ select: true, pressed: o.id === chosen.id, data: { sel: o.id }, attrs: { data: { tour: 'pick.row' } },
-    title: ref(o.id), sub: o.address?.line || '—', trailing: ui.amount(ctx.money(o.total), { strong: true }) }));
+    title: ref(o.id), sub: `${forTime(o, ctx) ? forTime(o, ctx) + ' · ' : ''}${o.address?.line || '—'}`, trailing: ui.amount(ctx.money(o.total), { strong: true }) }));
   const q = queued(chosen.id);
   return `${ui.section({ title: k('readyForPickup'), sub: `${available.length} ${ctx.t('pcs')} · ${ctx.t('pickOne')}` })}
     ${ui.list(rows, { label: ctx.t('readyForPickup') })}
@@ -100,7 +108,7 @@ export function orderHead(o, picked, eta, ctx){
   const cash = o.payment === 'cash' ? o.total : 0;
   return `${ui.section({ title: k(picked ? 'delivering' : 'pickUpOrder') })}
     <p class="sub">${ui.status({ label: k(picked ? 'onTheWay' : 'ready'), status: picked ? 'IN_DELIVERY' : 'READY', pulse: picked })}
-      <span>${ui.esc(ref(o.id))} · ${ui.esc(o.items)} ${ui.esc(ctx.t('items'))}</span></p>
+      <span>${ui.esc(ref(o.id))} · ${ui.esc(o.items)} ${ui.esc(ctx.t('items'))}${forTime(o, ctx) ? ` · <b>${ui.esc(forTime(o, ctx))}</b>` : ''}</span></p>
     <p class="eta" id="etaLine" data-tour="run.eta">${ui.esc(eta || '')}</p>
     <div class="addr" data-tour="run.address">${ui.icon('map-pin')}<span>${ui.esc(o.address?.line || '—')}</span></div>
     ${o.address?.note ? `<p class="note">${ui.esc(o.address.note)}</p>` : ''}
@@ -113,7 +121,21 @@ export function orderHead(o, picked, eta, ctx){
 
 /// A run in hand. A tap this phone is still holding REPLACES the control and
 /// leaves the status (the hub's answer) alone.
-export function active(o, { waiting: held, eta }, ctx){
+/// THE CHAT WITH THE CUSTOMER (W-URGENT): the lines, oldest first, and one
+/// input while the chat is open (`d.state`: waiting | open | closed).
+export function chat(d, ctx){
+  const ms = d.messages || [];
+  const rows = ms.map(m => ui.row({ title: m.text,
+    sub: `${m.from === 'COURIER' ? ctx.t('chatYou') : ctx.t('chatCustomer')} · ${new Date(m.atMs).toLocaleTimeString(ctx.lang, { hour: '2-digit', minute: '2-digit' })}` }));
+  const list = rows.length ? ui.list(rows, { inset: true, id: 'chatList' }) : ui.emptyState({ icon: 'message-2', title: k('chatEmpty') });
+  const input = d.state === 'open'
+    ? ui.inputRow({ id: 'chatText', label: k('chatPlaceholder'), placeholder: k('chatPlaceholder'), enterkeyhint: 'send', attrs: { maxlength: 500 },
+        action: ui.iconButton({ id: 'chatSend', icon: 'send', ariaLabel: k('chatSend') }) })
+    : `<p class="ui-hint">${ui.esc(ctx.t('chatClosed'))}</p>`;
+  return `${list}${input}`;
+}
+
+export function active(o, { waiting: held, eta, unread = 0 }, ctx){
   const picked = o.status === 'IN_DELIVERY';
   const addr = o.address?.line || '';
   const control = held
@@ -132,6 +154,7 @@ export function active(o, { waiting: held, eta }, ctx){
         variant: 'secondary', icon: 'external-link', label: k('inMaps'), block: true, attrs: { data: { tour: 'run.maps' } } }) : ''}
       ${o.contact?.phone ? ui.button({ href: `tel:${o.contact.phone}`, variant: 'secondary', icon: 'phone', label: k('call'), block: true, attrs: { data: { tour: 'run.call' } } }) : ''}
     </div>
+    ${ui.button({ id: 'chat', variant: 'secondary', icon: 'message-2', label: unread > 0 ? `${ctx.t('chatOpen')} (${Number(unread)})` : k('chatOpen'), block: true })}
     ${picked && !held ? ui.button({ id: 'refused', variant: 'ghost', icon: 'x', label: k('refusedAtDoor'), block: true, attrs: { data: { tour: 'run.refused' } } }) : ''}`;
 }
 
@@ -161,7 +184,7 @@ export function offer(o, left, ctx){
       ${ui.badge({ label: k('offered'), tone: 'accent', dot: true })}
       <b class="oid">${ui.esc(ref(o.id))}</b>
       ${ui.amount(ctx.money(o.total), { size: 'lg', strong: true })}
-      <p class="note">${ui.esc(o.address?.line || '—')}</p>
+      <p class="note">${forTime(o, ctx) ? ui.esc(forTime(o, ctx)) + ' · ' : ''}${ui.esc(o.address?.line || '—')}</p>
       <p class="ui-hint" id="offerLeft" data-tour="offer.clock">${clock}</p>` })}
     ${ui.button({ id: 'takeOffer', variant: 'primary', icon: 'package', label: k('take'), ...block, attrs: { data: { tour: 'offer.take' } } })}
     ${endShift()}`;

@@ -203,3 +203,82 @@ fn a_closed_venue_an_empty_basket_and_an_unknown_kind_are_refused_before_anythin
     assert_eq!(closed.status_code(), 409, "a new venue is closed: {}", closed.body_str());
     assert_eq!(site.fold("alpha", "/fold/generation").body_value(), before, "no order was logged");
 }
+
+/// A basket with `scheduled_for_ms` and the fields it needs; the hour is the venue's wall.
+pub(crate) fn place_later(site: &Site, slug: &str, dish: &str, scheduled_for_ms: i64) -> crate::wire::Reply {
+    site.run(
+        crate::storefront::place,
+        post(
+            &at(slug, &format!("/api/public/locations/{slug}/orders")),
+            &json!({
+                "items": [{"product_id": dish, "quantity": 1}],
+                "contact": {"name": "Guest", "phone": "+355690000001"},
+                "fulfilment": {"kind": "pickup"},
+                "payment": "cash",
+                "scheduled_for_ms": scheduled_for_ms,
+            }),
+        )
+        .on(slug),
+        &[("slug", slug)],
+    )
+}
+
+/// N4.4 -- "order for later" was SILENTLY DROPPED at the door: checkout.js sent
+/// `scheduled_for_ms`, `PlaceIn` had no such field, and the order was placed
+/// for now. The field must come back out of the folded order.
+#[test]
+fn an_order_for_later_keeps_the_time_the_customer_chose() {
+    let site = Site::new();
+    let (_t, dish) = open_venue(&site, "alpha", "a@x.test");
+    let later = crate::edge::site::T0 + 2 * 60 * 60 * 1000;
+    let placed = place_later(&site, "alpha", &dish, later);
+    assert_eq!(placed.status_code(), 200, "{}", placed.body_str());
+    let id = order_id(&placed);
+    let stored = site.fold("alpha", &format!("/fold/order?id={id}")).body_value();
+    let state: Value = serde_json::from_str(stored["order_json"].as_str().unwrap_or("{}")).unwrap();
+    assert_eq!(state["scheduled_for_ms"], json!(later), "the time was dropped at the door: {state}");
+    // And the customer reads it back on their own order.
+    let key = placed.body_value()["access_token"].as_str().unwrap().to_string();
+    let r = site.run(crate::services::orders::read::order, get(&at("alpha", &format!("/api/order/{id}"))).bearer(&key).on("alpha"), &[("id", &id)]);
+    assert_eq!(r.body_value()["scheduled_for_ms"], json!(later), "{}", r.body_str());
+}
+
+/// The three refusals, through the route, each with the key the storefront
+/// translates; and a field nobody declared is refused by name now.
+#[test]
+fn a_time_in_the_past_too_far_or_while_shut_is_refused_before_anything_is_written() {
+    let site = Site::new();
+    let (t, dish) = open_venue(&site, "alpha", "a@x.test");
+    let before = site.fold("alpha", "/fold/generation").body_value();
+    let t0 = crate::edge::site::T0;
+    let past = place_later(&site, "alpha", &dish, t0 + 60_000);
+    assert_eq!(past.status_code(), 400, "{}", past.body_str());
+    assert!(past.body_str().starts_with("scheduled_for: past"), "{}", past.body_str());
+    let far = place_later(&site, "alpha", &dish, t0 + 8 * 24 * 60 * 60 * 1000);
+    assert_eq!((far.status_code(), far.body_str().starts_with("scheduled_for: far")), (400, true), "{}", far.body_str());
+    // Shut at that hour: Tirane, open 11:00-23:00 every day; T0 + 2 h is 01:13 there.
+    let day = json!([{"open": 660, "close": 1380}]);
+    let r = site.run(
+        crate::services::venue::place::set_place,
+        post(&at("alpha", "/api/owner/place"), &json!({"hours": [day, day, day, day, day, day, day]})).bearer(&t).on("alpha"),
+        &[],
+    );
+    assert_eq!(r.status_code(), 200, "hours: {}", r.body_str());
+    let shut = place_later(&site, "alpha", &dish, t0 + 2 * 60 * 60 * 1000);
+    assert_eq!((shut.status_code(), shut.body_str().starts_with("scheduled_for: closed")), (400, true), "{}", shut.body_str());
+    assert_eq!(site.fold("alpha", "/fold/generation").body_value(), before, "no order was logged");
+    // The twin: 12 h on is 11:13 in Tirane, open.
+    let ok = place_later(&site, "alpha", &dish, t0 + 12 * 60 * 60 * 1000);
+    assert_eq!(ok.status_code(), 200, "{}", ok.body_str());
+    // A field this handler has no name for is a 400 that names it, not a drop.
+    let r = site.run(
+        crate::storefront::place,
+        post(&at("alpha", "/api/public/locations/alpha/orders"), &json!({
+            "items": [{"product_id": dish, "quantity": 1, "unit_price": 1}],
+            "contact": {"name": "Guest", "phone": "+355690000001"},
+            "fulfilment": {"kind": "pickup"}, "payment": "cash", "scheduled_at": t0 })).on("alpha"),
+        &[("slug", "alpha")],
+    );
+    assert_eq!(r.status_code(), 400, "{}", r.body_str());
+    assert!(r.body_str().contains("scheduled_at"), "the unknown field is named: {}", r.body_str());
+}

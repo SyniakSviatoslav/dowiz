@@ -17,13 +17,14 @@
 // credits keep their place. The title changes only when the status does.
 
 import { state, tokenFor, moneyEl, on, API } from '/store/state.js';
-import { t, lang } from '/store/i18n.js';
+import { t, lang, intlLocale } from '/store/i18n.js';
 import { scriptLang } from '../lib/langs.js';
 import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses, stars } from '/store/ui.js';
 import { openOcean, phaseOf, seaRest } from '/store/sea.js';
 import * as trackMap from '/store/track-map.js';
 import { billMarkup, mountBill } from '/store/table.js';
 import { stampsMarkup, mountStamps } from '/store/stamps.js';
+import { chatMarkup, mountChat } from '/store/chat.js';
 // Generated from the kernel's `OrderStatus::took_money` -- see `/lib/vocab.js`.
 // The hand copy this replaces was `new Set(['REJECTED', 'CANCELLED'])`, missing
 // the state a refund ends in.
@@ -57,6 +58,19 @@ const PAY_KEY = { cash: 'cash', card: 'card', apple_pay: 'applePay', google_pay:
 
 let lastStatus = null;
 let reel = null;
+
+/// ORDER FOR LATER (N4.4): the hour the customer chose, on the VENUE'S wall --
+/// a phone in Kyiv reads Durrës 19:00 as 19:00 -- with the day when it is not today.
+export function forWall(ms, tz = state.loc?.tz || 'Europe/Tirane', nowMs = Date.now()){
+  const opts = { hour: '2-digit', minute: '2-digit', timeZone: tz };
+  try {
+    const day = at => new Date(at).toLocaleDateString(intlLocale(), { timeZone: tz });
+    const sameDay = day(ms) === day(nowMs);
+    return new Date(ms).toLocaleString(intlLocale(), sameDay ? opts : { ...opts, day: 'numeric', month: 'short' });
+  } catch {
+    return new Date(ms).toLocaleString(intlLocale(), { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+  }
+}
 
 function sayBlock(order){
   const over = order.status === 'DELIVERED' || DEAD.has(order.status);
@@ -168,6 +182,7 @@ function episodeMarkup(order, eta){
     ${!dead ? `<p class="ep-step mono"><span data-t="stepOf"></span> ${i + 1} <span data-t="ofSteps"></span> ${FLOW.length}${!done && i + 1 < FLOW.length ? ` · <span data-t="nextUp"></span>: <span data-t-st="${FLOW[i + 1]}"></span>` : ''}</p>` : ''}
     <div class="ep-line" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(phase * 100)}"><i id="epBar"></i></div>
     <div class="ep-facts">
+      ${order.scheduled_for_ms && !dead ? `<span>${icon('history')}<b><span data-t="forTime"></span> ${esc(forWall(order.scheduled_for_ms))}</b></span>` : ''}
       ${eta && !dead && !done ? `<span class="${eta.live ? 'live' : ''}" data-tour="track.eta">${icon('clock')}<b>${esc(eta.text)} <span data-t="etaMin"></span></b>${eta.live ? `<i class="dot-live" aria-hidden="true"></i>` : ''}</span>` : ''}
       <span>${icon('coin-hole')}<b>${moneyEl(order.total ?? order.subtotal ?? 0)}</b></span>
       ${PAY_KEY[order.payment] ? `<span>${icon(order.payment === 'cash' ? 'cash' : order.payment === 'crypto' ? 'currency-bitcoin' : 'credit-card')}<b data-t="${PAY_KEY[order.payment]}"></b></span>` : ''}
@@ -196,6 +211,8 @@ function ensureSocket(order){
       onEvent: m => {
         if (m.orderId !== order.id) return;
         if ($('#sheet').dataset.name !== 'track') return;
+        // A chat line moves the chat, not the order.
+        if (m.t === 'chat') { mountChat(order, tok); return; }
         refreshNow(order.id);
       },
     });
@@ -221,7 +238,8 @@ export function openTracking(order){
   // kitchen's remaining minutes and the courier's real road -- re-read with
   // every poll. The checkout's quote is only the first frame's fallback.
   const live = order.eta && typeof order.eta === 'object' && order.eta.range ? { text: order.eta.range, live: true, parts: order.eta.parts, known: order.eta.known } : null;
-  const eta = live || state.lastEta;
+  // An order for later never shows the checkout's "35-45 min": that quote was for now.
+  const eta = live || (order.scheduled_for_ms ? null : state.lastEta);
   const follow = (bot && !dead && st !== 'DELIVERED') ? `
     <a class="btn btn-ghost mb-1" href="https://t.me/${encodeURIComponent(bot)}?start=${encodeURIComponent(order.id)}" target="_blank" rel="noopener noreferrer">
       ${icon('brand-telegram')}<span data-t="notify"></span></a>` : '';
@@ -239,6 +257,7 @@ export function openTracking(order){
         ${trackMap.markup(order)}
         ${billMarkup(order)}
         ${stampsMarkup(order)}
+        ${chatMarkup(order)}
         ${goodReviews().length ? `<section class="credits-wrap"><p class="eyebrow" data-t="whatTheySay"></p><div class="credits" id="credits"></div></section>` : ''}
         <div class="ep-more">
           ${cryptoBlock(order)}
@@ -261,6 +280,7 @@ export function openTracking(order){
   bindCopy();
   mountBill(order, tokenFor(order.id));
   mountStamps(order, tokenFor(order.id));
+  mountChat(order, tokenFor(order.id));
   $('#closeTrack').onclick = closeSheet;
   clearTimeout(openTracking._t);
   // THE HUB TELLS US, and the poll is what catches what the socket missed.

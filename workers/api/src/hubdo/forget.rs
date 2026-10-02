@@ -57,6 +57,9 @@ pub struct ForgetOut {
     /// Waiting outbox entries about them, dropped (G8).
     #[serde(default)]
     pub queued: usize,
+    /// Messages of their orders' threads, courier chat and venue chat, dropped.
+    #[serde(default)]
+    pub threads: usize,
 }
 
 fn unreadable(what: &str) -> Error {
@@ -153,6 +156,25 @@ impl HubImages {
             }
         }
 
+        // 2d. THE THREADS (W-URGENT 2026-10-02): what the person said to the
+        // courier and to the venue about these orders goes with the person.
+        // A rebuild, since the image is append-only; nothing counts it.
+        let mut threads = 0;
+        {
+            let img = crate::social::IMAGE_THREADS;
+            if let Some((meta, bytes)) = self.image(img).await? {
+                let log = dowiz_hub::logimage::LogImage::load(&bytes).map_err(|_| unreadable(img))?;
+                let (next, dropped) =
+                    crate::services::orders::chat::store::without_orders(&log, &order_set).map_err(Error::RustError)?;
+                if let (Some(next), n) = (next, dropped) {
+                    threads = n;
+                    if let Err(r) = self.put_or_refuse(img, meta.generation, &next.to_bytes()).await? {
+                        return Ok(Err(r));
+                    }
+                }
+            }
+        }
+
         // 3. THE LOG, and the archives. What earlier runs declared joins the
         // scope, because their phones are gone and no fold finds them again.
         let (log_gen, mut hot) = self.log_hub().await?;
@@ -194,6 +216,7 @@ impl HubImages {
             consent_withdrawn: forgot.withdrawn,
             bookings,
             queued,
+            threads,
         }))
     }
 }

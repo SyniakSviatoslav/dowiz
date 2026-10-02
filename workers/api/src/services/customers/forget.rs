@@ -274,6 +274,8 @@ pub async fn forget_customer(mut req: Request, ctx: RouteContext<crate::Req>) ->
         "people": out.people,
         "bookings": out.bookings,
         "queued": out.queued,
+        // Lines of their orders' threads -- the courier chat and the venue's -- gone (W-URGENT).
+        "threads": out.threads,
         "consent": { "redacted": out.consent_redacted, "withdrawn": out.consent_withdrawn },
         "notice": notice(lang),
     }))

@@ -133,6 +133,7 @@ function row(o){
       <span>${(b => `${icon(b.icon)}<span data-t="${b.key}"></span>${b.table ? ' ' + esc(b.table) : ''}`)(badgeOf(o))}</span>
       ${paidWith(o).length ? `<span>${icon(paidIcon(paidWith(o)))}${esc(paidWith(o).map(payName).join(' + '))}</span>` : ''}
       ${o.eta?.range ? `<span class="live">${icon('clock')}<b>${esc(o.eta.range)}</b> ${t('etaMin')}</span>` : ''}
+      ${o.scheduled_for_ms ? `<span class="later">${icon('history')}<span data-t="forTime"></span> ${esc(clock(o.scheduled_for_ms))}${day(o.scheduled_for_ms) !== day(Date.now()) ? ' ' + esc(day(o.scheduled_for_ms)) : ''}</span>` : ''}
       ${o.courier_id ? `<span>${icon('bike')}${esc(courierName(o.courier_id))}</span>` : ''}
       ${seenAt(o) ? `<span>${icon('eye')}<span data-t="seenAt"></span> ${esc(clock(seenAt(o)))}</span>` : ''}
       ${printState(o) ? `<span class="${printState(o) === 'failed' ? 'warn' : ''}">${icon(printState(o) === 'failed' ? 'alert-triangle' : 'receipt')}<span data-t="print_${printState(o)}"></span>${printState(o) === 'printed' ? ' ' + esc(clock(o.kitchen.printed.at)) : ''}</span>` : ''}
@@ -263,6 +264,7 @@ export function openOrder(id){
   const step = nextOf(o);
   sheet(`
     <p class="eyebrow">${esc(ref(o.id))} · ${esc(clock(o.created_at_ms || Date.now()))} · ${esc(day(o.created_at_ms || Date.now()))}</p>
+    ${o.scheduled_for_ms ? `<div class="fact">${icon('history')}<span class="v"><span class="k" data-t="forTime"></span><b>${esc(clock(o.scheduled_for_ms))} · ${esc(day(o.scheduled_for_ms))}</b></span></div>` : ''}
     <h2 data-t-st="${esc(o.status)}" data-tour="order.sheet"></h2>
     ${!dead ? `<div class="steps" data-tour="order.steps">${FLOW.map((f, n) => `<i class="${n < i ? 'done' : n === i ? 'now' : ''}"></i>`).join('')}</div>` : ''}
     ${o.eta?.range && !dead ? (() => { const parts = [o.eta.parts?.prepLeftMin ? `${t('cookingMin')} ${o.eta.parts.prepLeftMin}` : '', o.eta.parts?.courierToVenueMin ? `${t('courier')} → ${o.eta.parts.courierToVenueMin}` : '', o.eta.parts?.toDoorMin ? `→ ${t('address')} ${o.eta.parts.toDoorMin}` : ''].filter(Boolean); return `<div class="fact">${icon('clock')}<span class="v"><span class="k" data-t="etaRange"></span><b>${esc(o.eta.range)} min</b>${parts.length ? `<small class="muted"> · ${parts.join(' · ')}</small>` : ''}</span></div>`; })() : ''}
@@ -274,6 +276,7 @@ export function openOrder(id){
     ${(o.fulfilment?.note || addr?.note) ? `<div class="fact">${icon('note')}<span class="v"><span class="k" data-t="note"></span>${esc(o.fulfilment?.note || addr?.note)}</span></div>` : ''}
     <div class="fact">${icon(paidIcon(paidWith(o)))}<span class="v"><span class="k" data-t="payment"></span>${esc(paidWith(o).map(payName).join(' + ') || '—')}${o.tip ? ` · ${t('tip')} ${money(o.tip)}` : ''}${o.crypto?.wallet ? ` · ${esc(o.crypto.wallet.symbol)}` : ''}</span></div>
     ${o.courier_id ? `<div class="fact">${icon('bike')}<span class="v"><span class="k" data-t="courier"></span>${esc(courierName(o.courier_id))}</span></div>` : ''}
+    ${o.courier_id ? `<div id="oChat" class="mt-3"></div>` : ''}
     <p class="eyebrow mt-3" data-t="items"></p>
     ${(o.items || []).map(it => `<div class="line"><span class="q">${it.quantity}×</span><span class="n">${esc(it.name || it.product_id)}${it.modifier_ids?.length ? `<small>${esc(it.modifier_ids.join(', '))}</small>` : ''}</span>${moneyEl((it.unit_price ?? 0) * (it.quantity || 1))}</div>`).join('')}
     ${o.delivery_fee ? `<div class="line"><span class="n" data-t="delivery"></span>${moneyEl(o.delivery_fee)}</div>` : ''}
@@ -304,4 +307,20 @@ export function openOrder(id){
     const mb = e.target.closest('[data-moneyback]'); if (mb) return moneyBack(mb.dataset.moneyback, mb, () => reload(mb.dataset.moneyback));
   };
   $('#oCopy').onclick = async () => { try { await navigator.clipboard.writeText(orderText(o)); toast(t('copied')); } catch { toast(orderText(o)); } };
+  if (o.courier_id) loadChat(o.id);
+}
+
+// THE COURIER'S CHAT WITH THE CUSTOMER, read-only (operator 2026-10-02): the
+// owner sees it for a dispute and never writes in it; the hub refuses a post
+// from an owner token, so there is no field here to refuse. Silent when the
+// hub will not answer: the order sheet is the page, this is a section on it.
+async function loadChat(id){
+  const box = $('#oChat'); if (!box) return;
+  let d;
+  try { d = await api(`/order/${encodeURIComponent(id)}/chat?since=0`); } catch { return; }
+  const ms = d.messages || [];
+  box.innerHTML = `<p class="eyebrow" data-t="chatTitle"></p><p class="muted small" data-t="chatReadOnly"></p>
+    ${ms.length ? ms.map(m => `<div class="fact">${icon('message-2')}<span class="v"><span class="k">${esc(m.from === 'CUSTOMER' ? t('chatCustomer') : t('chatCourier'))} · ${esc(clock(m.atMs))}</span>${esc(m.text)}</span></div>`).join('')
+      : `<p class="muted small" data-t="chatEmpty"></p>`}`;
+  for (const el of $$('[data-t]', box)) el.textContent = t(el.dataset.t);
 }

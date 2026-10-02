@@ -45,12 +45,14 @@ pub const STORES: &[Store] = &[
         retention: Retention::NoLimitYet("bounded by count by the prune in channels.rs, not by age; P6"),
         erase: Eraser::Missing("P2"),
         export: NO_EXPORT },
-    // Guest <-> staff messages about a table or an order.
-    Store { image: "threads", kinds: &["m"], home: Venue,
-        holds: &[Messages], subjects: &[Customer, Staff],
+    // Guest <-> staff messages about a table or an order ("m"), and the
+    // customer <-> courier chat of one order ("cc", W-URGENT 2026-10-02):
+    // text and a server time, under the order id; never a phone number.
+    Store { image: "threads", kinds: &["m", "cc"], home: Venue,
+        holds: &[Messages], subjects: &[Customer, Staff, Courier],
         purpose: P::TableChat, basis: Basis::Contract,
-        retention: Retention::NoLimitYet("not pruned; P6"),
-        erase: Eraser::Missing("P2"),
+        retention: Retention::Ms(crate::services::orders::chat::store::KEEP_MS, "courier chat: 30 days after the message, pruned nightly (chat::store::prune_at); the venue's own thread is not pruned yet (P6)"),
+        erase: Eraser::Remove("hubdo/forget.rs: the threads image is rebuilt without the forgotten orders' messages (chat::store::without_orders)"),
         export: NO_EXPORT },
     // Rendered kitchen tickets waiting to be sent (Telegram, WhatsApp).
     // W-TG: "route" (an event waiting to be fanned out to the groups),

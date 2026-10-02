@@ -550,6 +550,9 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .get_async("/api/courier/earnings", |r, c| edge::run(r, c, courier::earnings))
         .get_async("/api/courier/history", |r, c| edge::run(r, c, services::courier::history::courier_history))
         .get_async("/api/order/:id", |r, c| edge::run(r, c, services::orders::read::order))
+        // The customer <-> courier chat of one order (W-URGENT 2026-10-02): the two parties, the owner read-only.
+        .get_async("/api/order/:id/chat", |r, c| edge::run(r, c, services::orders::chat::read))
+        .post_async("/api/order/:id/chat", |r, c| edge::run(r, c, services::orders::chat::send))
         // ── TWO LEGACY WRITE ROUTES, DELETED 2026-09-21 ──
         //
         // `POST /api/order` and `POST /api/order/:id/advance` took NO

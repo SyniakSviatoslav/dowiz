@@ -65,7 +65,7 @@ export const T = {
     mcp:'Agjentët (MCP)', mcpHint:'Çdo agjent që flet MCP (Claude, Cursor…) lidhet me këtë URL me një çelës API si Bearer dhe merr veglat: porositë, menynë, magazinën, mesazhet.', tools:'vegla', telegramOn:'Telegram lidhur',
     street:'Rruga', house:'Nr.', apartment:'Ap.', entrance:'Hyrja', floor:'Kati', hoursAgo:'orë më parë', daysAgo:'ditë më parë',
     // added 2026-09-19: promos, live eta, address parts, stock, notifications
-    cash:'Para në dorë', discount:'Zbritje', maxUses:'Përdorime maks.', promo:'Kodi', until:'Deri më', etaMin:'min', etaRange:'Koha e mbërritjes', onMap:'Në hartë', privateHouse:'Shtëpi private', reserved:'rezervuar',
+    cash:'Para në dorë', discount:'Zbritje', maxUses:'Përdorime maks.', promo:'Kodi', until:'Deri më', etaMin:'min', forTime:'Për orën', chatTitle:'Biseda korrier–klient', chatReadOnly:'Vetëm lexim, për mosmarrëveshje. Fshihet 30 ditë pas mesazhit.', chatEmpty:'Ende asnjë mesazh', chatCustomer:'Klienti', chatCourier:'Korrieri', etaRange:'Koha e mbërritjes', onMap:'Në hartë', privateHouse:'Shtëpi private', reserved:'rezervuar',
     tgToken:'Tokeni i botit', tgTokenHint:'Krijoni një bot te @BotFather dhe ngjisni tokenin. Boti ju shkruan për çdo porosi të re.', tgChatHint:'ID e bisedës: shkruajini botit një herë, pastaj shtypni provën.', tokenSet:'tokeni është ruajtur', testOk:'Mesazhi mbërriti',
     // shell
     console:'Paneli i pronarit', signIn:'Hyni', signingIn:'Duke hyrë…', email:'Email', password:'Fjalëkalimi', signOut:'Dilni',
@@ -109,6 +109,8 @@ export const T = {
     inviteStaff:'Fto punonjës', deactivateStaff:'Çaktivizo punonjësin', noStaff:'Ende asnjë punonjës',
     // couriers
     invite:'Fto korrier', inviteHint:'Kodi vlen 7 ditë; korrieri e shkruan në aplikacionin e vet.', phone:'Telefoni', inviteCode:'Kodi', onShift:'Në turn', offShift:'Jashtë turnit',
+    inviteLink:'Lidhja e ftesës', inviteLinkHint:'Dërgojani korrierit: hap aplikacionin me kodin të plotësuar. Kodi është brenda lidhjes, ndajeni vetëm me atë person.', inviteShare:'Ndaj', inviteUntil:'Vlen deri më',
+    inviteShareText:'Ftesë për të dërguar porosi për ne. Hapni lidhjen dhe zgjidhni një fjalëkalim.', viaWhatsApp:'WhatsApp', viaTelegram:'Telegram', viaSms:'SMS',
     activeC:'Aktiv', deactivate:'Çaktivizo', activate:'Aktivizo', noCouriers:'Ende asnjë korrier', deliveries:'Dorëzime', lastSeen:'Parë së fundi', uninvite:'Anulo ftesën', noStaff:'Ende asnjë punonjës',
     // more
     marketing:'Marketing', promos:'Kodet e zbritjes', posts:'Postimet', analytics:'Analitika', customers:'Klientët', settings:'Cilësimet', health:'Gjendja e sistemit',
@@ -192,7 +194,7 @@ export const T = {
     mcp:'Agents (MCP)', mcpHint:'Any MCP-speaking agent (Claude, Cursor…) connects to this URL with an API key as Bearer and gets the tools: orders, menu, stock, messages.', tools:'tools', telegramOn:'Telegram connected',
     street:'Street', house:'No.', apartment:'Apt', entrance:'Entrance', floor:'Floor', hoursAgo:'h ago', daysAgo:'d ago',
     // added 2026-09-19: promos, live eta, address parts, stock, notifications
-    cash:'Cash', discount:'Discount', maxUses:'Max uses', promo:'Code', until:'Until', etaMin:'min', etaRange:'Arrives in', onMap:'On the map', privateHouse:'Private house', reserved:'held',
+    cash:'Cash', discount:'Discount', maxUses:'Max uses', promo:'Code', until:'Until', etaMin:'min', forTime:'For', chatTitle:'Courier and customer chat', chatReadOnly:'Read-only, for disputes. Erased 30 days after the message.', chatEmpty:'No messages yet', chatCustomer:'Customer', chatCourier:'Courier', etaRange:'Arrives in', onMap:'On the map', privateHouse:'Private house', reserved:'held',
     tgToken:'Bot token', tgTokenHint:'Make a bot with @BotFather and paste its token. It messages you about every new order.', tgChatHint:'Chat id: write to the bot once, then press test.', tokenSet:'token is saved', testOk:'The message arrived',
     console:'Owner console', signIn:'Sign in', signingIn:'Signing in…', email:'Email', password:'Password', signOut:'Sign out',
     language:'Language', retry:'Try again', loading:'Loading…', sendReply:'Send', deliveryArea:'Delivery area', learnGroup:'Learn', learn:'Lessons', learnSub:'Tours of the console, with videos', learnNew:'New', learnDone:'Done', learnPaused:'Paused', learnWatch:'Watch the video', learnWrites:'changes real data', learnSteps:'{n} steps', learnEmpty:'That lesson was not found', learnOffline:'Lessons need a connection', save:'Save', saved:'Saved', cancel:'Cancel', done:'Done',
@@ -227,6 +229,8 @@ export const T = {
     tabStaff:'Staff', staffHint:'Who works: kitchen, waiter, counter-manager. Invite by code.', staff:'Staff', role:'Role', kitchen:'Kitchen', waiter:'Waiter', counterManager:'Counter manager', 'role-kitchen':'Kitchen', 'role-waiter':'Waiter', 'role-counter-manager':'Counter manager',
     inviteStaff:'Invite staff member', deactivateStaff:'Deactivate staff member', noStaff:'No staff yet',
     invite:'Invite courier', inviteHint:'The code is valid for 7 days; the courier types it in their app.', phone:'Phone', inviteCode:'Code', onShift:'On shift', offShift:'Off shift',
+    inviteLink:'Invite link', inviteLinkHint:'Send it to the courier: it opens their app with the code filled in. The code is inside the link, so share it with that person only.', inviteShare:'Share', inviteUntil:'Valid until',
+    inviteShareText:'An invitation to deliver for us. Open the link and choose a password.', viaWhatsApp:'WhatsApp', viaTelegram:'Telegram', viaSms:'SMS',
     activeC:'Active', deactivate:'Deactivate', activate:'Activate', noCouriers:'No couriers yet', noStaff:'No staff yet', deliveries:'Deliveries', lastSeen:'Last seen', uninvite:'Cancel invite',
     marketing:'Marketing', promos:'Promo codes', posts:'Posts', analytics:'Analytics', customers:'Customers', settings:'Settings', health:'System health',
     notifications:'Notifications', channels:'Order channels', integrations:'Integrations', branding:'Brand', hours:'Hours', timezone:'Time zone', timezoneHint:'The summer change is applied automatically; there is nothing to set twice a year.', deliveryTerms:'Delivery', payments:'Payments',
@@ -302,7 +306,7 @@ export const T = {
     mcp:'Агенти (MCP)', mcpHint:'Будь-який агент із MCP (Claude, Cursor…) підключається до цієї URL з API-ключем як Bearer і отримує інструменти: замовлення, меню, склад, повідомлення.', tools:'інструментів', telegramOn:'Telegram підключено',
     street:'Вулиця', house:'Буд.', apartment:'Кв.', entrance:'Під’їзд', floor:'Поверх', hoursAgo:'год тому', daysAgo:'дн тому',
     // added 2026-09-19: promos, live eta, address parts, stock, notifications
-    cash:'Готівка', discount:'Знижка', maxUses:'Макс. використань', promo:'Код', until:'До', etaMin:'хв', etaRange:'Прибуде за', onMap:'На мапі', privateHouse:'Приватний будинок', reserved:'зарезервовано',
+    cash:'Готівка', discount:'Знижка', maxUses:'Макс. використань', promo:'Код', until:'До', etaMin:'хв', forTime:'На', chatTitle:'Чат кур’єра з клієнтом', chatReadOnly:'Лише читання, для спірних випадків. Стирається через 30 днів після повідомлення.', chatEmpty:'Повідомлень ще немає', chatCustomer:'Клієнт', chatCourier:'Кур’єр', etaRange:'Прибуде за', onMap:'На мапі', privateHouse:'Приватний будинок', reserved:'зарезервовано',
     tgToken:'Токен бота', tgTokenHint:'Створіть бота у @BotFather і вставте токен. Бот писатиме вам про кожне нове замовлення.', tgChatHint:'ID чату: напишіть боту один раз, потім натисніть перевірку.', tokenSet:'токен збережено', testOk:'Повідомлення дійшло',
     console:'Панель власника', signIn:'Увійти', signingIn:'Входимо…', email:'Email', password:'Пароль', signOut:'Вийти',
     language:'Мова', retry:'Спробувати ще', loading:'Завантажуємо…', sendReply:'Надіслати', deliveryArea:'Зона доставки', learnGroup:'Навчання', learn:'Уроки', learnSub:'Тури консоллю, з відео', learnNew:'Новий', learnDone:'Пройдено', learnPaused:'На паузі', learnWatch:'Дивитися відео', learnWrites:'змінює реальні дані', learnSteps:'кроків: {n}', learnEmpty:'Такого уроку не знайдено', learnOffline:'Для уроків потрібен інтернет', save:'Зберегти', saved:'Збережено', cancel:'Скасувати', done:'Готово',
@@ -335,6 +339,8 @@ export const T = {
     supplies:'Постачання', ingredient:'Інгредієнт', level:'Залишок', unit:'Одиниця', low:'Мало', out:'Закінчилось', received:'Прийнято', wasted:'Списано', counted:'Перераховано',
     move:'Рух', addSupply:'Додати позицію', minLevel:'Мінімум', noStock:'Склад ще не змодельовано', stockHint:'Додайте інгредієнти, які відстежуєте; замовлення саме відхилиться, коли щось закінчиться.',
     invite:'Запросити кур’єра', inviteHint:'Код дійсний 7 днів; кур’єр вводить його у своєму застосунку.', phone:'Телефон', inviteCode:'Код', onShift:'На зміні', offShift:'Не на зміні',
+    inviteLink:'Посилання-запрошення', inviteLinkHint:'Надішліть його кур’єру: воно відкриває застосунок із уже введеним кодом. Код усередині посилання, тож діліться ним лише з цією людиною.', inviteShare:'Поділитися', inviteUntil:'Діє до',
+    inviteShareText:'Запрошення доставляти замовлення для нас. Відкрийте посилання та придумайте пароль.', viaWhatsApp:'WhatsApp', viaTelegram:'Telegram', viaSms:'SMS',
     activeC:'Активний', deactivate:'Деактивувати', activate:'Активувати', noCouriers:'Кур’єрів ще немає', deliveries:'Доставок', lastSeen:'Востаннє', uninvite:'Скасувати запрошення',
     marketing:'Маркетинг', promos:'Промокоди', posts:'Публікації', analytics:'Аналітика', customers:'Клієнти', settings:'Налаштування', health:'Стан системи',
     notifications:'Сповіщення', channels:'Канали замовлень', integrations:'Інтеграції', branding:'Бренд', hours:'Години роботи', timezone:'Часовий пояс', timezoneHint:'Перехід на літній час застосовується автоматично — двічі на рік нічого міняти не треба.', deliveryTerms:'Доставка', payments:'Оплата',

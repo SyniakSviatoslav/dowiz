@@ -2,6 +2,8 @@
 
 pub mod feedback;
 pub mod aggregator;
+/// The customer <-> courier chat of one order (operator 2026-10-02).
+pub mod chat;
 pub mod kitchen_ack;
 pub mod legs;
 pub mod mine;

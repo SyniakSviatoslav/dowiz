@@ -24,6 +24,7 @@ pub struct LineIn {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ContactIn {
     #[serde(default)]
     pub name: Option<String>,
@@ -40,6 +41,7 @@ pub struct ContactIn {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AddressIn {
     pub line: String,
     #[serde(default)]
@@ -83,6 +85,7 @@ fn clean_address_parts(v: &Value) -> Value {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FulfilmentIn {
     pub kind: String,
     #[serde(default)]
@@ -99,7 +102,14 @@ pub struct FulfilmentIn {
     pub table: Option<String>,
 }
 
+/// STRICT (W-URGENT, 2026-10-02). `scheduled_for_ms` was sent by the
+/// storefront for weeks and dropped here without a word; with
+/// `deny_unknown_fields` the NEXT field somebody sends and nobody declares is a
+/// 400 that names it, not an order quietly missing something. `LineIn` stays
+/// open on purpose: the basket sends `unit_price` on every line and this
+/// handler discards it by design (the catalogue prices the order).
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PlaceIn {
     pub items: Vec<LineIn>,
     pub contact: ContactIn,
@@ -138,6 +148,13 @@ pub struct PlaceIn {
     /// the basket typed.
     #[serde(default)]
     pub table_link: Option<String>,
+    /// ORDER FOR LATER (N4.4): the instant the customer wants it, chosen on
+    /// the venue's wall (`lib/booking-time.js` `venueWallMs`). Checked by
+    /// `services::ordering::later` -- ahead of now, within a week, inside the
+    /// venue's opening hours in the venue's zone -- and stored on the order,
+    /// where `carry.rs` has carried it all along and the kitchen board lists it.
+    #[serde(default)]
+    pub scheduled_for_ms: Option<i64>,
 }
 
 // `LocationOut` WAS HERE: the menu's `location` block is rendered in the
@@ -471,6 +488,19 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     if loc.delivery_paused == 1 || loc.status == "closed" {
         return Response::error("venue is closed", 409);
     }
+    // The venue's own record as stored: its zone and its hours here, its
+    // wallets further down.
+    let raw_loc: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
+    // ── ORDER FOR LATER (N4.4) ──
+    //
+    // Refused BEFORE anything exists, in the venue's zone, with a sentence the
+    // storefront translates (`later::Refusal::as_str`). This field used to be
+    // dropped on the way in, and the order was cooked at once.
+    let scheduled_for_ms =
+        match crate::services::ordering::later::check(body.scheduled_for_ms, ctx.data.now_ms, &raw_loc) {
+            Ok(v) => v,
+            Err(why) => return Response::error(why.as_str(), 400),
+        };
     // THE ROOM: a round placed by a waiter carries its signer and its sitting.
     let staffed = match crate::services::orders::room::placer::placer(
         &req, &ctx, &loc.id, &body.fulfilment.kind, body.sitting_id.as_deref(),
@@ -765,6 +795,11 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // a saving and watched the total go up is right to distrust the number.
     let total = subtotal + fee + tip;
     envelope["delivery_fee"] = json!(fee);
+    // WHEN THE CUSTOMER WANTS IT, when they said. Absent for an order for now,
+    // so every reader's `scheduled_for_ms ?` stays a question with two answers.
+    if let Some(at) = scheduled_for_ms {
+        envelope["scheduled_for_ms"] = json!(at);
+    }
     envelope["tip"] = json!(tip);
     envelope["total"] = json!(total);
     envelope["location_id"] = json!(loc.id);
@@ -812,7 +847,6 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // A rail the venue does not have is refused BEFORE the order exists, so a
     // crypto order at a venue with no wallet never sits in the queue waiting
     // for money that has nowhere to go.
-    let raw_loc: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
     let wallets = payment_wallets(&raw_loc);
     let stripe_on = ctx.env.secret("STRIPE_PUBLISHABLE_KEY").is_ok();
     match payment_kind.as_str() {

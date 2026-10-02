@@ -78,6 +78,9 @@ pub(crate) fn profile_of(loc: &Value) -> KitchenProfile {
     }
 }
 
+/// A scheduled order further ahead than this is not in the kitchen's queue yet.
+const LATER_QUEUE_HORIZON_MS: i64 = 60 * 60 * 1000;
+
 /// `POST /api/public/locations/:slug/eta`
 pub async fn quote(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
@@ -137,6 +140,11 @@ pub async fn quote(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         match v.get("status").and_then(|x| x.as_str()).unwrap_or("") {
             "CONFIRMED" | "PREPARING" => {}
             _ => continue,
+        }
+        // ORDER FOR LATER (N4.4): a ticket the kitchen will not start for an
+        // hour holds nobody up now; one due within the hour is in the queue.
+        if v.get("scheduled_for_ms").and_then(Value::as_i64).is_some_and(|s| s - ctx.data.now_ms > LATER_QUEUE_HORIZON_MS) {
+            continue;
         }
         let lines: Vec<BasketItem> = v
             .get("items")

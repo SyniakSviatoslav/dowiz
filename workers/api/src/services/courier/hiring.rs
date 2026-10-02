@@ -11,6 +11,7 @@ use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::owner::{owner_and_venue};
+use super::invite_link;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -84,7 +85,19 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         return Response::error("that phone already has an account or an open invitation", 409);
     }
 
-    Response::from_json(&json!({ "code": code, "expiresMs": now + TTL_MS }))
+    // ── THE LINK (operator 2026-10-02; `invite_link.rs`) ──
+    //
+    // On the VENUE'S host, from the registry's slug for this venue -- never
+    // from the request's Host, which on the apex or `*.workers.dev` names no
+    // venue, and never from the body. The code rides in the fragment.
+    let platform = ctx.var("PLATFORM_HOST").map(|v| v.to_string()).unwrap_or_else(|_| "dowiz.org".to_string());
+    let registry = crate::identity_store::registry(&ctx.env).await?;
+    let url = crate::identity_store::rec(&registry, crate::identity_store::K_LOC, &loc)
+        .map(|r| crate::identity_store::s_of(&r, "slug"))
+        .filter(|s| !s.is_empty())
+        .map(|slug| invite_link::invite_url(&slug, &platform, &code));
+
+    Response::from_json(&json!({ "code": code, "expiresMs": now + TTL_MS, "url": url }))
 }
 
 /// A week. Long enough for a courier who starts next Monday, short enough

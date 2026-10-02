@@ -290,7 +290,9 @@ fn the_privacy_notice_answers_the_same_bytes() {
     let r = site.run(crate::privacy::notice::serve, get(&at("alpha", "/privacy?lang=en")).on("alpha"), &[]);
     pin("privacy", pinned_digest(&r), PIN_PRIVACY);
 }
-const PIN_PRIVACY: &str = r##"200 sha256:0f7845e31973599d8b7e49b642224d19fc8185deea1be7d1a607d43c68569851"##;
+// Re-pinned 2026-10-02 at the W-URGENT merge: the notice now declares the courier chat (threads kind "cc",
+// 30-day retention, erased by forget). Control: the OLD registry still gives 0f7845e3... (the pin BN1B recorded).
+const PIN_PRIVACY: &str = r##"200 sha256:5ae015b877e942b4c8b3d7ed87cb75d11884670642dad6d324f7fba346b93a00"##;
 
 fn csv_call(owner: &str, path: &str, body: &str) -> Call {
     Call::new(&at("alpha", path), worker::Method::Post).unwrap().with_body(body.as_bytes().to_vec()).bearer(owner).on("alpha")

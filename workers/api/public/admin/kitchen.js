@@ -40,12 +40,14 @@ function lineOf(l){
 
 function ticket(o, now, th){
   const where = K.whereOf(o);
-  const age = K.ageMin(o.created_at_ms, now);
+  const age = K.ageMin(K.startOf(o), now);
   const seen = !!(o.kitchen && o.kitchen.seen);
-  const head = `#${K.shortId(o.id)} · ${t(where.key)}${where.table ? ' ' + where.table : ''} · ${age} ${t('kMin')} · ${t(seen ? 'kSeen' : 'kUnseen')}`;
+  // A ticket for later says its hour instead of an age it has not started.
+  const when = K.isAhead(o, now) ? `${t('forTime')} ${new Date(o.scheduled_for_ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : `${age} ${t('kMin')}`;
+  const head = `#${K.shortId(o.id)} · ${t(where.key)}${where.table ? ' ' + where.table : ''} · ${when} · ${t(seen ? 'kSeen' : 'kUnseen')}`;
   const bump = K.bumpFor(o), stop = K.stopFor(o);
   const note = o.fulfilment && o.fulfilment.note ? `<p class="kds-onote">${icon('note')} ${esc(o.fulfilment.note)}</p>` : '';
-  return `<article class="kds-ticket kds-age-${K.ageClass(o.created_at_ms, now, th.warn, th.late)}${seen ? ' kds-seen' : ''}" data-o="${esc(o.id)}">
+  return `<article class="kds-ticket kds-age-${K.ageClass(K.startOf(o), now, th.warn, th.late)}${seen ? ' kds-seen' : ''}" data-o="${esc(o.id)}">
     ${btn({ variant: 'ghost', block: true, cls: 'kds-head', label: head, data: { seen: o.id }, tour: 'kitchen.seen', pressed: seen })}
     <ul class="kds-lines">${o.items.map(lineOf).join('')}</ul>${note}
     ${bump ? btn({ variant: bump === 'ready' ? 'success' : 'primary', size: 'lg', block: true, cls: 'kds-bump', key: 'bump_' + bump, data: { bump: o.id, act: bump }, tour: 'kitchen.bump' }) : ''}

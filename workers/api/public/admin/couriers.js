@@ -8,6 +8,7 @@
 
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, busy, ago, switchEl, money, confirm } from '/admin/core.js';
 import { loadCouriers, rerender } from '/admin/app.js';
+import { intlLocale } from '/admin/i18n.js';
 import { btn, iconBtn, field, pill, empty, loading, rowBtn, rowDiv } from '/admin/parts.js';
 
 /// A courier's last fix is shown as a map link at this zoom.
@@ -36,6 +37,22 @@ export async function render(host){
   };
 }
 
+// ── THE INVITE AS A LINK (operator 2026-10-02) ──
+//
+// The hub answers a URL on this venue's host with the code in its fragment
+// (`services/courier/invite_link.rs`); the owner hands it over with the
+// phone's own share sheet, or -- where there is none, a desktop -- by
+// WhatsApp, Telegram or SMS deep link, or copies it. The platform sends
+// nothing itself and the code is in no server log: a fragment stays on the phone.
+/// The sentence in the owner's language, then the link: what every share app receives.
+export const shareText = url => `${t('inviteShareText')} ${url}`;
+/// The three deep links a courier's phone is likely to answer.
+export const deepLinks = url => ({
+  wa: `https://wa.me/?text=${encodeURIComponent(shareText(url))}`,
+  tg: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(t('inviteShareText'))}`,
+  sms: `sms:?body=${encodeURIComponent(shareText(url))}`,
+});
+
 function openInvite(){
   sheet(`<p class="eyebrow" data-t="tabCouriers"></p><h2 data-t="invite"></h2><p class="muted small" data-t="inviteHint"></p>
     ${field({ id: 'i-name', key: 'name', autocomplete: 'off', tour: 'couriers.inviteName' })}
@@ -45,10 +62,25 @@ function openInvite(){
   $('#iGo').onclick = async () => {
     try {
       const d = await busy($('#iGo'), () => post('/owner/couriers/invite', { phone: $('#i-phone').value.trim(), name: $('#i-name').value.trim() }));
-      $('#iOut').innerHTML = `<p class="eyebrow mt-3" data-t="inviteCode"></p><div class="code" id="iCode">${esc(d.code)}</div><p class="hint" data-t="keyOnce"></p>
-        ${btn({ id: 'iCopy', variant: 'ghost', icon: 'copy', key: 'copy', cls: 'mt-2', tour: 'couriers.inviteCopy' })}`;
+      const until = new Date(d.expiresMs).toLocaleDateString(intlLocale(), { day: 'numeric', month: 'long' });
+      const links = d.url ? deepLinks(d.url) : null;
+      $('#iOut').innerHTML = `<p class="eyebrow mt-3" data-t="inviteCode"></p><div class="code" id="iCode">${esc(d.code)}</div>
+        <p class="hint">${esc(t('inviteUntil'))} ${esc(until)} · ${esc(t('keyOnce'))}</p>
+        ${links ? `<p class="eyebrow mt-3" data-t="inviteLink"></p><div class="code small" id="iLink">${esc(d.url)}</div><p class="hint" data-t="inviteLinkHint"></p>
+          <div class="btn-row">${btn({ id: 'iShare', variant: 'primary', icon: 'share', key: 'inviteShare' })}${btn({ id: 'iCopy', variant: 'ghost', icon: 'copy', key: 'copy', tour: 'couriers.inviteCopy' })}</div>
+          <div class="btn-row" id="iApps" hidden>${btn({ href: links.wa, target: '_blank', icon: 'brand-whatsapp', key: 'viaWhatsApp' })}${btn({ href: links.tg, target: '_blank', icon: 'brand-telegram', key: 'viaTelegram' })}${btn({ href: links.sms, icon: 'send', key: 'viaSms' })}</div>`
+        : btn({ id: 'iCopy', variant: 'ghost', icon: 'copy', key: 'copy', cls: 'mt-2', tour: 'couriers.inviteCopy' })}`;
       for (const el of $$('[data-t]', $('#iOut'))) el.textContent = t(el.dataset.t);
-      $('#iCopy').onclick = async () => { try { await navigator.clipboard.writeText(d.code); toast(t('copied')); } catch {} };
+      // The link when there is one, the bare code when there is not; the toast carries the text if the clipboard refuses.
+      $('#iCopy').onclick = async () => { try { await navigator.clipboard.writeText(d.url || d.code); toast(t('copied')); } catch { toast(d.url || d.code); } };
+      if (links) $('#iShare').onclick = async () => {
+        if (navigator.share) {
+          try { await navigator.share({ text: shareText(d.url), url: d.url }); return; }
+          catch (err) { if (err && err.name === 'AbortError') return; }
+        }
+        // No system sheet (a desktop, an old browser): the three apps, as links.
+        $('#iApps').hidden = false;
+      };
       loadCouriers().then(rerender);
     } catch (e) { toast(String(e.message || e)); }
   };

@@ -621,6 +621,19 @@ pub async fn nightly(env: &Env, now: i64) {
             Err(e) => log_error!("nightly prune {}: no object: {e}", r.id),
         }
 
+        // THE COURIER CHAT OF ORDERS LONG OVER (operator 2026-10-02): a line
+        // older than thirty days goes with the order's personal data
+        // (`services/orders/chat/store.rs` KEEP_MS). The venue's own thread in
+        // the same image is not this prune's.
+        match place.stub() {
+            Ok(s) => match crate::services::orders::chat::store::prune_at(&s, now).await {
+                Ok(0) => {}
+                Ok(n) => log_line!("nightly prune {}: {n} courier chat lines", r.id),
+                Err(e) => log_error!("nightly prune {}: chat refused: {e}", r.id),
+            },
+            Err(e) => log_error!("nightly prune {}: no object: {e}", r.id),
+        }
+
         // THE CHAIN AND THE WITNESS, BEFORE ANYTHING TOUCHES THE LOG.
         //
         // ONE LOAD FOR BOTH. The image is the largest thing this job reads and

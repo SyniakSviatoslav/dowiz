@@ -37,6 +37,14 @@ const PHONE_MIN_DIGITS = 8;
 /// "Later" opens an hour from now, rounded up to the half hour.
 const LATER_LEAD_MS = 60 * 60 * 1000;
 const LATER_ROUND_MIN = 30;
+/// The hub refuses a time closer than this (`services/ordering/later.rs` LEAD_MS); said here first.
+const LATER_MIN_LEAD_MS = 15 * 60 * 1000;
+/// The hub's refusal of a chosen time starts `scheduled_for: <key>`; the key picks the sentence.
+const LATER_ERR = { past: 'laterPast', far: 'laterFar', closed: 'laterClosed' };
+export function sayError(msg){
+  const m = /^scheduled_for: (\w+)/.exec(String(msg || ''));
+  return m && LATER_ERR[m[1]] ? t(LATER_ERR[m[1]]) : String(msg || '');
+}
 /// The venue's zone NAME, as the hub sends it on the menu's location.
 const venueTz = () => state.loc?.tz || 'Europe/Tirane';
 /// A saved address is cut to this many characters on its chip.
@@ -352,6 +360,9 @@ async function place(pay, wallet){
   if (phone && phone.replace(/\D/g, '').length < PHONE_MIN_DIGITS) errs.push(t('badPhone'));
   const collecting = state.how === 'pickup' && state.loc?.pickup;
   if (!collecting && !TABLE && !addr) errs.push(t('address') + ': ' + t('required'));
+  // ORDER FOR LATER: a time already too close is said here, before the hub says it.
+  const when = scheduledAt();
+  if (when !== null && when < Date.now() + LATER_MIN_LEAD_MS) errs.push(t('laterPast'));
   $('#f-err').innerHTML = errs.map(e => `<div class="err">${esc(e)}</div>`).join('');
   if (errs.length) { $('#f-err').scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
 
@@ -394,7 +405,7 @@ async function place(pay, wallet){
     seaEvent('order_created', SEA_ORDER_PLACED);
     openTracking({ ...d, eta });
   } catch (e) {
-    $('#f-err').innerHTML = `<div class="err">${esc(String(e.message || e))}</div>`;
+    $('#f-err').innerHTML = `<div class="err">${esc(sayError(e.message || e))}</div>`;
   } finally {
     state.placing = false;
     const b = $('#place'); if (b) { b.disabled = false; b.innerHTML = `<span data-t="place">${esc(t('place'))}</span>${icon('chevron-right')}`; }

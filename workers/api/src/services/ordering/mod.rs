@@ -7,6 +7,8 @@
 pub mod basket;
 pub mod channel;
 pub mod fulfilment;
+/// "Order for later": the chosen time, checked in the venue's zone (N4.4).
+pub mod later;
 pub mod preview;
 pub mod promo_fields;
 pub mod promotions;

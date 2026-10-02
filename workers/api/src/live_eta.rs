@@ -286,8 +286,23 @@ pub fn estimate(
     // later is when the food leaves.
     let wait_for_food = if matches!(status, "IN_DELIVERY") { 0 } else { prep_left.max(to_venue) };
     let expected = confirm_wait + wait_for_food + to_door + overhead;
-    let high = expected + expected * RANGE_STRETCH_PCT / 100 + RANGE_STRETCH_MIN;
+    // ── ORDER FOR LATER (N4.4) ──
+    //
+    // The customer chose the hour, so the estimate is anchored to it: never
+    // earlier than the time they asked for, and the spread is the handover's,
+    // not a quarter of a six-hour wait. Once the hour has come the order is an
+    // ordinary one and the kitchen's clock applies.
+    let scheduled = order.get("scheduled_for_ms").and_then(Value::as_i64).filter(|s| *s > now_ms);
+    let (expected, high) = match scheduled {
+        Some(s) => {
+            let until = minutes_since(s, now_ms);
+            let e = expected.max(until);
+            (e, e + RANGE_STRETCH_MIN)
+        }
+        None => (expected, expected + expected * RANGE_STRETCH_PCT / 100 + RANGE_STRETCH_MIN),
+    };
     Some(json!({
+        "scheduledForMs": scheduled,
         "minMin": expected,
         "maxMin": high,
         "range": format!("{expected}–{high}"),

@@ -6,7 +6,7 @@ id: C3
 role: courier
 module: run
 order: 3
-covers: [orderHead, active]
+covers: [orderHead, active, chat]
 title:
   sq: "Rruga"
   en: "The run"

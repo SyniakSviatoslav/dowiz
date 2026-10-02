@@ -80,6 +80,39 @@ fn an_estimate_is_quoted_for_a_basket() {
     assert!(empty.status_code() < 500, "{}", empty.body_str());
 }
 
+/// ORDER FOR LATER (N4.4): a confirmed order for tomorrow is not ahead of a
+/// basket quoted now; one for now is.
+#[test]
+fn an_order_for_tomorrow_is_not_in_the_queue_an_estimate_is_quoted_against() {
+    use crate::storefront::route_tests::{place_later, place_pickup};
+    let site = Site::new();
+    let (owner, dish) = open_venue(&site, "alpha", "a@x.test");
+    let confirm = |id: &str| {
+        let r = site.run(
+            crate::owner::order_action,
+            post(&at(&format!("/api/owner/orders/{id}/action")), &json!({"location_id": "alpha", "action": "confirm"})).bearer(&owner).on("alpha"),
+            &[("id", id)],
+        );
+        assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    };
+    let quote = || {
+        let r = site.run(
+            crate::eta::quote,
+            post(&at("/api/public/locations/alpha/eta"), &json!({"items": [{"id": dish, "quantity": 1, "cookingMin": 10}], "pickup": true})).on("alpha"),
+            &[("slug", "alpha")],
+        );
+        assert_eq!(r.status_code(), 200, "{}", r.body_str());
+        r.body_value()["ordersAhead"].as_u64().unwrap()
+    };
+    let tomorrow = place_later(&site, "alpha", &dish, crate::edge::site::T0 + 24 * 60 * 60 * 1000);
+    assert_eq!(tomorrow.status_code(), 200, "{}", tomorrow.body_str());
+    confirm(tomorrow.body_value()["id"].as_str().unwrap());
+    assert_eq!(quote(), 0, "an order for tomorrow holds nobody up today");
+    let now = place_pickup(&site, "alpha", &dish, 1);
+    confirm(now.body_value()["id"].as_str().unwrap());
+    assert_eq!(quote(), 1, "an order for now is in the queue");
+}
+
 #[test]
 fn a_top_up_is_recorded_by_the_venue_only_and_read_back_on_the_balance() {
     let site = Site::new();

@@ -153,7 +153,10 @@ pub async fn tasks(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
             "payment": v.get("payment").cloned().unwrap_or(json!("cash")),
             "contact": v.get("contact").cloned().unwrap_or(Value::Null),
             "address": f.get("address").cloned().unwrap_or(Value::Null),
-            "items": v.get("items").and_then(|i| i.as_array()).map(|a| a.len()).unwrap_or(0)
+            "items": v.get("items").and_then(|i| i.as_array()).map(|a| a.len()).unwrap_or(0),
+            // ORDER FOR LATER (N4.4): the pool and the run say "for 19:00" and
+            // do not count a ride the customer asked for later as late.
+            "scheduled_for_ms": v.get("scheduled_for_ms").cloned().unwrap_or(Value::Null)
         });
         // ── THE FIVE-MINUTE OFFER WINDOW ──
         //

@@ -521,18 +521,29 @@ function renderLogin(err){
 // The courier has no account yet: the code stands in for one, once. They choose
 // their own password here, which is the point -- an owner who typed it for them
 // would know it, and a shared password is not a password.
-function renderClaim(err){
+// THE INVITE LINK (admin couriers.js, `services/courier/invite_link.rs`): the
+// code rides in the fragment -- `/courier/#claim=CODE` -- which never leaves
+// the phone. Read once, taken off the address bar, and put in its field.
+function claimFromHash(){
+  const m = /(?:^#|[#&])claim=([A-Za-z0-9]+)/.exec(location.hash || '');
+  if (!m) return null;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+  return m[1].toUpperCase();
+}
+
+function renderClaim(err, code = null){
   $('#sheet').classList.add('tall');
-  $('#app').innerHTML = screens.claim(err);
+  $('#app').innerHTML = screens.claim(err, code ? { code } : null);
   $('#toLogin').onclick = () => renderLogin();
   $('#claimForm').onsubmit = async ev => {
     ev.preventDefault();
     ui.setBusy($('#cgo'), t('checking'));
+    const typed = $('#cod').value.trim().toUpperCase();
     try {
       const r = await fetch(API + '/courier/auth/claim', { method:'POST',
         headers:{ 'content-type':'application/json' },
         body: JSON.stringify({ phone: $('#cph').value.trim(),
-                               code: $('#cod').value.trim().toUpperCase(),
+                               code: typed,
                                password: $('#cpw').value }) });
       // A refusal is plain text: `r.json()` threw and showed a parse error (lib/body.js).
       const d = await bodyOf(r);
@@ -540,7 +551,7 @@ function renderClaim(err){
       // Signed in on the spot: they set the password ten seconds ago and
       // re-typing it proves nothing.
       store.t = d.jwt; boot();
-    } catch (e) { renderClaim(String(e.message || e)); }
+    } catch (e) { renderClaim(String(e.message || e), typed); }
   };
 }
 
@@ -566,6 +577,10 @@ async function load(){
     // back to the queue mid-read. The chip still updates; the panel stays
     // until a job actually arrives or the shift ends.
     if ($('#pback') && S.onShift && !S.mine.length) { setShiftTag(); return; }
+    // The chat's unread count rides with the run; an open chat panel is
+    // refreshed in place, not replaced by the run screen.
+    await pollChat();
+    if (CHAT.open && $('#pback') && S.mine[0] && CHAT.for === S.mine[0].id) { setShiftTag(); return openChat(S.mine[0]); }
     render();
   } catch (e) {
     if (String(e.message) === 'unauthorised') return;
@@ -907,6 +922,50 @@ function renderOffer(o){
   }, 1000);
 }
 
+// ── the chat with the customer (W-URGENT 2026-10-02) ──
+//
+// No phone number needed to say "I am at the gate". The thread is the hub's
+// (`/api/order/:id/chat`); it is read with every poll of the run so the
+// button on the run screen carries the unread count, and the panel over the
+// run is refreshed in place rather than thrown back to the run by the poll.
+// What the courier has seen lives here for the session, never on the device.
+const CHAT = { for: null, seenMs: 0, unread: 0, open: false, last: null };
+async function pollChat(){
+  const o = S.mine[0];
+  if (!o) { CHAT.unread = 0; CHAT.open = false; return; }
+  if (CHAT.for !== o.id) { CHAT.for = o.id; CHAT.seenMs = 0; CHAT.open = false; }
+  try {
+    const d = await api(`/order/${encodeURIComponent(o.id)}/chat?since=0`);
+    CHAT.last = d;
+    CHAT.unread = (d.messages || []).filter(m => m.from === 'CUSTOMER' && m.atMs > CHAT.seenMs).length;
+  } catch { /* the button keeps its last count; the next poll tries again */ }
+}
+async function openChat(o){
+  if (!CHAT.last || CHAT.for !== o.id) {
+    await panel(t('chatTitle'), screens.panelLoading(ctx()));
+    await pollChat();
+    if (!CHAT.last) return panel(t('chatTitle'), screens.panelError(t('chatFail')));
+  }
+  const d = CHAT.last;
+  CHAT.open = true;
+  CHAT.seenMs = Math.max(CHAT.seenMs, ...(d.messages || []).map(m => m.atMs || 0));
+  CHAT.unread = 0;
+  await panel(t('chatTitle'), screens.chat(d, ctx()));
+  $('#pback').onclick = () => { CHAT.open = false; render(); };
+  const send = async () => {
+    const field = $('#chatText');
+    const text = (field?.value || '').trim();
+    if (!text) return;
+    const go = $('#chatSend'); if (go) go.disabled = true;
+    try {
+      await api(`/order/${encodeURIComponent(o.id)}/chat`, { method: 'POST', body: JSON.stringify({ text, clientId: newKey() }) });
+      await pollChat(); openChat(o);
+    } catch (e) { toast(String(e.message || e), 'alert-circle'); if (go) go.disabled = false; }
+  };
+  if ($('#chatSend')) $('#chatSend').onclick = send;
+  if ($('#chatText')) $('#chatText').onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); send(); } };
+}
+
 function renderActive(o){
   const cash = o.payment === 'cash' ? o.total : 0;
   // A TAP THIS PHONE IS STILL HOLDING REPLACES THE CONTROL, and it does not
@@ -914,7 +973,8 @@ function renderActive(o){
   // has not answered yet. Offering the same button again would invite a second
   // tap for a job whose first tap is already saved.
   const waiting = queuedFor(o.id);
-  $('#app').innerHTML = screens.active(o, { waiting, eta: etaText(o) }, ctx());
+  $('#app').innerHTML = screens.active(o, { waiting, eta: etaText(o), unread: CHAT.unread }, ctx());
+  if ($('#chat')) $('#chat').onclick = () => openChat(o);
 
   // THE DESTINATION ON THE MAP. Micro-degrees back to degrees here and nowhere
   // else: the wire and the store hold integers, and this is the single boundary
@@ -1180,7 +1240,9 @@ function openSocket(){
 
 document.documentElement.lang = lang; document.title = t('appTitle'); retranslate(document);
 applyTheme(); bindLangChrome();
-store.t ? boot() : renderLogin();
+// Signed in: the shift. An invite link: the claim screen with its code. Else: sign in.
+const linkCode = store.t ? null : claimFromHash();
+store.t ? boot() : (linkCode ? renderClaim(null, linkCode) : renderLogin());
 
 // The shell that lets this page open with no network (`/courier/sw.js`).
 if ('serviceWorker' in navigator) {

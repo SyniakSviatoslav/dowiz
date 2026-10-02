@@ -96,6 +96,13 @@ export const stopFor = o => (o && o.status === 'PENDING' ? 'reject' : o && o.sta
 /// Whole minutes a ticket has waited. Integer arithmetic; never negative.
 export const ageMin = (createdMs, nowMs) => Math.max(0, Math.floor((Number(nowMs) - Number(createdMs ?? nowMs)) / MIN_MS));
 
+/// ORDER FOR LATER (N4.4): the instant a ticket's clock starts. A scheduled
+/// ticket is measured from the hour the customer chose, so it is not "late"
+/// at noon for a 19:00 pickup; its time come, it ages like any other.
+export const startOf = o => (o && Number(o.scheduled_for_ms) > 0 ? Number(o.scheduled_for_ms) : o && o.created_at_ms);
+/// Is the ticket's hour still ahead?
+export const isAhead = (o, nowMs) => !!(o && Number(o.scheduled_for_ms) > Number(nowMs));
+
 /// `ok` / `warn` / `late` by age.
 export function ageClass(createdMs, nowMs, warn = WARN_MIN, late = LATE_MIN){
   const m = ageMin(createdMs, nowMs);

@@ -7,6 +7,8 @@
 
 pub mod console;
 pub mod hiring;
+/// The invitation as a link the owner shares (operator 2026-10-02).
+pub mod invite_link;
 pub mod history;
 pub mod offer;
 pub mod record;

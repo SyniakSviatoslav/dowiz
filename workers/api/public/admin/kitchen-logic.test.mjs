@@ -124,3 +124,15 @@ test('a bump and a stop are the console\'s own request; a blank reason is not se
   assert.deepEqual(K.actionRequest('o', 'cancel', 'v', '   ').body, { location_id: 'v', action: 'cancel' });
   assert.deepEqual(K.WASTE_REASONS, ['spoiled', 'dropped', 'unsold', 'returned', 'staff_meal']);
 });
+
+test('an order for later is measured from its hour, not from when it was placed', () => {
+  const noon = 1_700_000_000_000, seven = noon + 7 * 60 * 60 * 1000;
+  const later = { ...T('o1', 'CONFIRMED', noon, [L('Maki', 1)]), scheduled_for_ms: seven };
+  assert.equal(K.startOf(later), seven);
+  assert.equal(K.startOf(T('o2', 'CONFIRMED', noon, [])), noon, 'an order for now starts when placed');
+  assert.equal(K.ageClass(K.startOf(later), noon + 60 * 60 * 1000), 'ok', 'an hour after placing, six before its hour');
+  assert.equal(K.isAhead(later, noon + 60 * 60 * 1000), true);
+  assert.equal(K.ageClass(K.startOf(later), seven + 25 * 60 * 1000), 'late', 'its hour come and 25 minutes gone, it is late like any other');
+  assert.equal(K.isAhead(later, seven + 1), false);
+  assert.equal(K.ageClass(noon, noon + 25 * 60 * 1000), 'late', 'the plain ticket is unchanged');
+});

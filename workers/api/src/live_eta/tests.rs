@@ -44,3 +44,30 @@ fn the_estimate_takes_the_answered_products_time() {
     let without = estimate(&order, &loc, &k, &|_: &str| None, &[], &[], 0).unwrap();
     assert!(with["parts"]["prepLeftMin"].as_u64() > without["parts"]["prepLeftMin"].as_u64(), "{with} vs {without}");
 }
+
+/// ORDER FOR LATER (N4.4): an order for 19:00 placed at noon is not "18-24
+/// minutes". The estimate is anchored to the chosen hour, and the hour once
+/// come, the kitchen's own arithmetic takes over.
+#[test]
+fn an_order_for_later_is_estimated_at_its_hour_and_not_before() {
+    let now = 1_000_000_000;
+    let in_six_hours = now + 6 * 60 * 60 * 1000;
+    let order = json!({"status": "CONFIRMED", "created_at_ms": now, "fulfilment": {"kind": "pickup"},
+        "scheduled_for_ms": in_six_hours, "items": [{"product_id": "p", "cookingMin": 10, "quantity": 1}]});
+    let loc = json!({});
+    let k = crate::eta::profile_of(&loc);
+    let e = estimate(&order, &loc, &k, &|_: &str| None, &[], &[], now).unwrap();
+    assert_eq!(e["scheduledForMs"], json!(in_six_hours), "{e}");
+    assert!(e["arriveAtMs"].as_i64().unwrap() >= in_six_hours, "not before the hour: {e}");
+    assert_eq!(e["minMin"], json!(360), "{e}");
+    assert!(e["maxMin"].as_u64().unwrap() <= 360 + 5, "the spread is the handover's, not 25% of six hours: {e}");
+    // Its hour come, the same order is estimated like any other.
+    let due = estimate(&order, &loc, &k, &|_: &str| None, &[], &[], in_six_hours + 1).unwrap();
+    assert!(due["scheduledForMs"].is_null(), "{due}");
+    assert!(due["minMin"].as_u64().unwrap() < 60, "{due}");
+    // An order for now is untouched by the rule.
+    let plain = json!({"status": "CONFIRMED", "created_at_ms": now, "fulfilment": {"kind": "pickup"},
+        "items": [{"product_id": "p", "cookingMin": 10, "quantity": 1}]});
+    let p = estimate(&plain, &loc, &k, &|_: &str| None, &[], &[], now).unwrap();
+    assert!(p["scheduledForMs"].is_null() && p["minMin"].as_u64().unwrap() < 60, "{p}");
+}

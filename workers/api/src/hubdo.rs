@@ -80,6 +80,7 @@ mod facts; // the folds over the log and the catalogue together, answered here (
 mod bulk; // a supplies / recipes spreadsheet as one turn (BN1, BN4's shape), `hubdo/bulk.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
 mod timer; // the venue's alarm: timed work without the minute cron (DAG Phase 2), `hubdo/timer.rs`
+mod chat; // the courier chat nudge to the two parties' sockets (W-URGENT), `hubdo/chat.rs`
 /// Where the object lives: the platform, or (tests) memory (W-COV C2), `hubdo/host.rs`.
 pub(crate) mod host;
 use crate::wire::{Call, Reply};
@@ -1279,6 +1280,8 @@ impl HubImages {
                     let cmd = seg.next().unwrap_or("").to_string();
                     self.room(&cmd, req).await
                 }
+                // THE CHAT NUDGE (`hubdo/chat.rs`): the two parties' sockets, never the console or the kitchen.
+                (Method::Post, "chat") => self.chat_nudge(&req),
                 // FORGET A CUSTOMER: `/fold/forget`
                 (Method::Post, "forget") => {
                     let mut req = req;
