@@ -28,6 +28,8 @@
   <button class="ui-iconbtn ui-iconbtn--plain" id="mcpBtn" type="button" data-tour="hud.agent" data-t-attr="aria-label:agent title:agent" hidden><i class="ti ti-cube-3d-sphere ui-i" aria-hidden="true"></i></button>
   <button class="ui-iconbtn ui-iconbtn--plain" id="learnBtn" type="button" data-tour="hud.learn" data-t-attr="aria-label:learn title:learn"><i class="ti ti-info-circle ui-i" aria-hidden="true"></i></button>
 </header>
+<!-- OFFLINE (W-OFFSALE): cash sales only. `hidden` is the state, set by app.js hud(). -->
+<div class="ui-alert ui-alert--warning offline-banner" id="offlineBanner" role="status" aria-live="polite" data-tour="hud.offline" hidden><i class="ti ti-wifi-off ui-i" aria-hidden="true"></i><span data-t="offlineBanner"></span></div>
 <main id="app"></main>
 <div class="ui-toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <script type="module" src="/room/app.js"></script>

@@ -1,0 +1,111 @@
+{
+ "id": "feature-offline-sale",
+ "name": "offline-sale",
+ "contract_version": "1.0.0",
+ "contract_name": "till.offline-sale.v1",
+ "class": "LIVE-AFTER-DEPLOY",
+ "description": {
+  "en": "A room tablet with no network sells QA Water for cash: priced locally from the cached menu (the pricer's rule, pinned by services/orders/offline_sale/parity.json), kept in IndexedDB and the outbox under the key minted at the tap, a receipt saying 'pa NIVF - do te fiskalizohet brenda 48 oreve'. On reconnect the outbox replays it exactly once into the venue's object as a PICKED_UP cash order with its original time; the fiscal queue holds it with a deadline 48 h from the sale; sending stays OFF (fiscal::SEND_ENABLED=false).",
+  "uk": "Планшет залу без мережі продає QA Water за готівку; після підключення продаж потрапляє в хаб рівно один раз із часом продажу, а фіскальна черга тримає його зі строком 48 год від продажу; надсилання до податкової вимкнено."
+ },
+ "producer": {
+  "file": "workers/api/public/room/sell.js",
+  "line": 126,
+  "what": "send(): POST /api/staff/offline_sales under Idempotency-Key = sale_key, or OUT.queue with the same key"
+ },
+ "consumer": {
+  "file": "workers/api/src/services/orders/offline_sale/handler.rs",
+  "line": 22,
+  "what": "sell(): staff_at(Cap::TakePayment) -> idempotency guard staff.offline_sale -> basket::ask -> room/offline_sync (hubdo/room/offline.rs)"
+ },
+ "readback": {
+  "file": "workers/api/src/services/orders/offline_sale/handler.rs",
+  "line": 65,
+  "what": "GET /api/owner/offline_sales (ledger::Pane), drawn by workers/api/public/admin/offline.js:52"
+ },
+ "routes": {
+  "lib_rs": ["workers/api/src/lib.rs:402 POST /api/staff/offline_sales", "workers/api/src/lib.rs:505 GET /api/owner/offline_sales"]
+ },
+ "transport": { "method": "POST", "path": "/api/staff/offline_sales" },
+ "external": null,
+ "external_note": "No external API: the fiscal sender (eBills) is OFF by the platform switch fiscal::SEND_ENABLED=false (workers/api/src/fiscal/mod.rs:40); nothing on this path reaches the network (test sending_stays_off_and_nothing_on_the_offline_path_can_reach_the_network).",
+ "auth": {
+  "secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"],
+  "where": "/root/.dowiz_owner",
+  "how": "the owner's token signs the room app (courier::staff_at accepts an owner token for Cap::TakePayment); no waiter credential is needed"
+ },
+ "request_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["location_id", "sale_key", "sold_at_ms", "currency", "method", "lines", "total"],
+  "properties": {
+   "location_id": { "type": "string", "minLength": 1 },
+   "sale_key": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,64}$" },
+   "sold_at_ms": { "type": "integer" },
+   "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+   "method": { "const": "cash" },
+   "lines": {
+    "type": "array", "minItems": 1, "maxItems": 50,
+    "items": {
+     "type": "object", "additionalProperties": false,
+     "required": ["product_id", "quantity", "unit_price"],
+     "properties": {
+      "product_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+      "quantity": { "type": "integer", "minimum": 1, "maximum": 99 },
+      "unit_price": { "type": "integer", "minimum": 0 },
+      "name": { "type": "string", "maxLength": 120 }
+     }
+    }
+   },
+   "total": { "type": "integer", "minimum": 1 },
+   "menu_version": { "type": ["integer", "null"] }
+  }
+ },
+ "response_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["order_id", "replayed", "sold_at_ms", "fiscal_deadline_ms", "fiscal", "conflicts"],
+  "properties": {
+   "order_id": { "type": "string", "pattern": "^offline:" },
+   "replayed": { "type": "boolean" },
+   "sold_at_ms": { "type": "integer" },
+   "fiscal_deadline_ms": { "type": "integer" },
+   "fiscal": { "type": "string" },
+   "conflicts": { "type": "array", "items": { "type": "object", "required": ["kind"], "properties": { "kind": { "type": "string" } } } }
+  }
+ },
+ "readback_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["count", "oldest_sold_at_ms", "overdue", "conflicted", "send_enabled", "items"],
+  "properties": {
+   "count": { "type": "integer", "minimum": 0 },
+   "oldest_sold_at_ms": { "type": ["integer", "null"] },
+   "overdue": { "type": "integer", "minimum": 0 },
+   "conflicted": { "type": "integer", "minimum": 0 },
+   "send_enabled": { "const": false },
+   "items": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "required": ["order_id", "sold_at_ms", "synced_at_ms", "total", "currency", "by", "deadline_ms", "fiscal", "overdue", "alerted", "conflicts"],
+     "properties": {
+      "order_id": { "type": "string", "pattern": "^offline:" },
+      "sold_at_ms": { "type": "integer" },
+      "deadline_ms": { "type": "integer" },
+      "total": { "type": "integer" },
+      "fiscal": { "enum": ["queued", "registered", "not_queued"] },
+      "overdue": { "type": "boolean" },
+      "alerted": { "type": "boolean" },
+      "conflicts": { "type": "array" }
+     }
+    }
+   }
+  }
+ },
+ "schema_status": "draft from the Rust types (offline_sale::SaleIn deny_unknown_fields, SyncOut, ledger::Pane); tighten from the first live answer",
+ "probe": "tools/live-proof/probes/feature-offline-sale.mjs: Chromium on qa-durres /room/ signed with the owner token; context.setOffline(true); sell QA Water cash; the receipt shows 'pa NIVF'; reload OFFLINE (the room service worker serves the shell); setOffline(false); the sale lands ONCE in /api/owner/orders (offline:<key>, PICKED_UP, created_at_ms = sold_at); a direct replay under the same key answers replayed=true and still one order; /api/owner/offline_sales lists it with deadline = sold_at + 172800000; then the TEST sale is ended by the refund route.",
+ "run": "node tools/live-proof/probes/feature-offline-sale.mjs   (LIVE_HOST defaults to https://qa-durres.dowiz.org; a non-qa host is refused by e2e/flows/lib.mjs)",
+ "last_verified": null
+}

@@ -620,3 +620,7 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
    word "Fotografia" into four lines */
 #photoRow{flex-wrap:wrap}
 #photoRow .ui-row-trail{flex-basis:100%;justify-content:flex-start;padding-left:calc(52px + var(--space-3))}
+
+/* ── W-OFFSALE: an offline sale (or any fiscal document) past its 48 h is RED (offline.js, fiscal.js) ── */
+.of-overdue{box-shadow:inset 3px 0 0 var(--ui-danger-ink)}
+.of-overdue .ui-row-title{color:var(--ui-danger-ink)}

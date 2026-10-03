@@ -41,6 +41,11 @@ async function load(){
   let r;
   try { r = await api(`/owner/analytics/kitchen?${q}`); } catch (e) { $('#kaOut').innerHTML = empty('alert-triangle', { key: 'loadFail', body: String(e.message || e), alert: true }); return; }
   $('#ka-from').value = r.from; $('#ka-to').value = r.to;
-  $('#kaOut').innerHTML = draw(r, { money, t });
+  $('#kaOut').innerHTML = `<div id="kaExplain"></div>${draw(r, { money, t })}`;
   retranslate($('#kaOut')); hydrate($('#kaOut')); repaintMoney($('#kaOut'));
+  // "What the numbers say" (W-AI): the owner's only; the hub refuses staff and the card stays empty.
+  // The explain route answers 1, 7 or 30 days; another range keeps the nearest.
+  const utc = s => { const [y, m, dd] = String(s).split('-').map(Number); return Date.UTC(y, m - 1, dd); }; // calendar days, not the phone's zone (venue-clock b)
+  const d = range.from ? Math.max(1, Math.round((utc(r.to) - utc(r.from)) / 86400000) + 1) : range.days;
+  import('/admin/ai.js').then(m => m.explainCard($('#kaExplain'), 'kitchen', d >= 30 ? 30 : d <= 1 ? 1 : 7)).catch(() => {});
 }

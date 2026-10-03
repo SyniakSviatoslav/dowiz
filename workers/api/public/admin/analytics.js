@@ -56,10 +56,12 @@ export async function open(p = view.p){
   };
   let a; try { a = await api(`/owner/analytics?${L.query(p)}`); } catch (e) { return fail(e); }
   view.a = a;
-  $('#anBody').innerHTML = body(a);
+  $('#anBody').innerHTML = `<div id="anExplain"></div>${body(a)}`;
   paint();
   bind(a);
   matrix(p, a);
+  // "What the numbers say" (W-AI): templates from this answer; AI only rewords on the owner's tap.
+  import('/admin/ai.js').then(m => m.explainCard($('#anExplain'), 'analytics', (p.days || 7) >= 30 ? 30 : 7)).catch(() => {});
 }
 
 function stat(key, value, delta, extra = ''){

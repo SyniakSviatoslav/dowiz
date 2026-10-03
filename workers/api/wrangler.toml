@@ -175,3 +175,8 @@ new_sqlite_classes = ["HubImages"]
 # now sets the venue object's alarm (src/hubdo/timer.rs), and an idle venue
 # sets none.
 crons = ["17 3 * * *"]
+
+# Workers AI (W-AI, operator 2026-10-03 "вмикай"): absent = the hub answers "workers-ai-unavailable".
+# Free: 10,000 neurons/day ACCOUNT-WIDE; each venue gets AI_VENUE_NEURONS (default 300, budget.rs).
+[ai]
+binding = "AI"

@@ -63,17 +63,24 @@ pub fn redact(facts: &Value) -> Value {
     scrub(facts)
 }
 
-/// Ask the configured model one question about a set of facts.
+/// Ask the venue's model one question about a set of facts.
 ///
-/// The OpenAI chat-completions shape, because Ollama, vLLM, OpenRouter, Groq
-/// and the managed APIs all speak it -- so a venue can move between them
-/// without anything here changing.
+/// THE ROUTES ARE `services::engagement::ai`'s (W-AI, 2026-10-03): the
+/// owner's own OpenAI-compatible endpoint first (the chat-completions shape
+/// Ollama, vLLM, OpenRouter, Groq and the managed APIs all speak, so a venue
+/// moves between them without anything here changing), then Cloudflare Workers
+/// AI on the venue's daily share, then a refusal that says why. The facts are
+/// redacted before either sees them. The answer's shape is unchanged; which
+/// route gave it is the `x-ai-provider` header.
 pub async fn ask(
+    env: &Env,
+    now: i64,
     place: &crate::hubstore::Place,
     system: &str,
     facts: Value,
     question: &str,
 ) -> Result<Response> {
+    use crate::services::engagement::ai::{call, provider::Off};
     let question = question.trim();
     if question.is_empty() {
         return Response::error("no question", 400);
@@ -82,68 +89,31 @@ pub async fn ask(
         return Response::error("question too long", 400);
     }
 
-    let s = crate::hubstore::load_settings(&place).await?.settings;
+    let s = crate::hubstore::load_settings(place).await?.settings;
     if !s.flag("ai.enabled") {
         // REFUSED, not broken. The console reads this to tell the owner the
         // assistant is off rather than that something failed.
         return Response::error("the assistant is off for this venue", 409);
     }
-    let endpoint = s.known("ai.endpoint").trim_end_matches('/').to_string();
-    if !endpoint.starts_with("https://") {
+    let p = call::Prompt {
+        system: system.to_string(),
+        user: format!("FACTS:\n{}\n\nQUESTION:\n{question}", redact(&facts)),
+        max_tokens: 400,
+    };
+    let out = call::complete(env, place, &s, &p, now).await?;
+    if let Some(said) = &out.said {
+        let mut res = Response::from_json(&json!({ "answer": said.text.clone(), "redacted": true }))?;
+        res.headers_mut().set("x-ai-provider", said.route)?;
+        return Ok(res);
+    }
+    // The provider's own words, already cut and scrubbed of the key: "401
+    // invalid api key" sends an owner to the settings, "the assistant failed"
+    // sends them to a forum.
+    if let Some(f) = out.failed.first() {
+        return Response::error(format!("the model refused: {} {}", f.status, f.why), 502);
+    }
+    if out.skipped.iter().any(|(_, o)| *o == Off::NotHttps) {
         return Response::error("ai.endpoint must be https from a Worker", 400);
     }
-    let model = s.known("ai.model");
-    if model.trim().is_empty() {
-        return Response::error("ai.model is not set", 400);
-    }
-
-    let payload = json!({
-        "model": model,
-        "messages": [
-            { "role": "system", "content": system },
-            { "role": "user",
-              "content": format!("FACTS:\n{}\n\nQUESTION:\n{question}", redact(&facts)) }
-        ],
-        // Short and deterministic-ish: this answers a question about data the
-        // system already computed, not a creative brief.
-        "temperature": 0.2,
-        "max_tokens": 400,
-        "stream": false,
-    });
-    let mut headers = Headers::new();
-    headers.set("content-type", "application/json")?;
-    if let Some(tok) = s.get("ai.token").filter(|t| !t.trim().is_empty()) {
-        headers.set("authorization", &format!("Bearer {}", tok.trim()))?;
-    }
-    let req = Request::new_with_init(
-        &format!("{endpoint}/chat/completions"),
-        RequestInit::new()
-            .with_method(Method::Post)
-            .with_headers(headers)
-            .with_body(Some(payload.to_string().into())),
-    )?;
-    let mut res = crate::edge::fetch(req).await?;
-    if res.status_code() >= 400 {
-        // The provider's own words, truncated. "The assistant failed" sends an
-        // owner to a forum; "401 invalid api key" sends them to the settings.
-        let body = res.text().await.unwrap_or_default();
-        return Response::error(
-            format!("the model refused: {} {}", res.status_code(), &body[..body.len().min(200)]),
-            502,
-        );
-    }
-    let v: Value = res.json().await?;
-    let answer = v
-        .get("choices")
-        .and_then(|c| c.get(0))
-        .and_then(|c| c.get("message"))
-        .and_then(|m| m.get("content"))
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    if answer.is_empty() {
-        return Response::error("the model answered with nothing", 502);
-    }
-    Response::from_json(&json!({ "answer": answer, "redacted": true }))
+    Response::error(format!("the assistant has no model to ask: {}", out.why_off()), 409)
 }

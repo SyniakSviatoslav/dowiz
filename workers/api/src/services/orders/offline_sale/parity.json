@@ -1,0 +1,32 @@
+{
+  "_": "ONE FIXTURE, TWO PRICERS (W-OFFSALE). services/orders/offline_sale/tests.rs runs services::ordering::pricing::price_basket over it; public/room/offline-sale.test.mjs runs the room tablet's priceOffline over it. Both must answer `expect`. Products are in the shape the menu read draws and the catalogue stores (price, available, modifierGroups).",
+  "products": {
+    "p_miso": { "id": "p_miso", "name": "Miso", "price": 400, "available": true },
+    "p_maki": { "id": "p_maki", "name": "Maki", "price": 900, "available": true, "vat_ppm": 100000 },
+    "p_nigiri": { "id": "p_nigiri", "name": "Nigiri", "price": 700, "available": false },
+    "p_water": { "id": "p_water", "name": "QA Water", "price": 150, "available": true },
+    "p_refill": { "id": "p_refill", "name": "Refill", "price": 0, "available": true },
+    "p_ghost": { "id": "p_ghost", "name": "Ghost", "available": true },
+    "p_neg": { "id": "p_neg", "name": "Broken", "price": -5, "available": true },
+    "p_bare": { "id": "p_bare", "name": "Unfinished", "price": 300 },
+    "p_poke": { "id": "p_poke", "name": "Poke", "price": 1100, "available": true,
+      "modifierGroups": [{ "id": "g_size", "name": "Size", "min": 1, "max": 1, "options": [{ "id": "o_s", "name": "S", "priceDelta": 0 }, { "id": "o_l", "name": "L", "priceDelta": 300 }] }] },
+    "p_tea": { "id": "p_tea", "name": "Tea", "price": 250, "available": true,
+      "modifierGroups": [{ "id": "g_sugar", "name": "Sugar", "min": 0, "max": 1, "options": [{ "id": "o_sugar", "name": "Sugar", "priceDelta": 0 }] }] }
+  },
+  "baskets": [
+    { "name": "two dishes", "lines": [["p_miso", 2], ["p_maki", 1]], "expect": { "ok": true, "units": [400, 900], "total": 1700 } },
+    { "name": "QA Water", "lines": [["p_water", 1]], "expect": { "ok": true, "units": [150], "total": 150 } },
+    { "name": "a free line", "lines": [["p_refill", 3], ["p_water", 2]], "expect": { "ok": true, "units": [0, 150], "total": 300 } },
+    { "name": "the quantity ceiling", "lines": [["p_maki", 99]], "expect": { "ok": true, "units": [900], "total": 89100 } },
+    { "name": "an optional group", "lines": [["p_tea", 2]], "expect": { "ok": true, "units": [250], "total": 500 } },
+    { "name": "off sale", "lines": [["p_miso", 1], ["p_nigiri", 1]], "expect": { "ok": false, "refusal": "off_sale" } },
+    { "name": "no available field", "lines": [["p_bare", 1]], "expect": { "ok": false, "refusal": "off_sale" } },
+    { "name": "unknown dish", "lines": [["p_gone", 1]], "expect": { "ok": false, "refusal": "unknown" } },
+    { "name": "no price", "lines": [["p_ghost", 1]], "expect": { "ok": false, "refusal": "no_price" } },
+    { "name": "a negative price", "lines": [["p_neg", 1]], "expect": { "ok": false, "refusal": "no_price" } },
+    { "name": "a required group", "lines": [["p_poke", 1]], "expect": { "ok": false, "refusal": "options" } },
+    { "name": "quantity zero", "lines": [["p_miso", 0]], "expect": { "ok": false, "refusal": "quantity" } },
+    { "name": "quantity 100", "lines": [["p_miso", 100]], "expect": { "ok": false, "refusal": "quantity" } }
+  ]
+}

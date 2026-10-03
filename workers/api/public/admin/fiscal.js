@@ -28,7 +28,7 @@ export async function open(){
   const lost = a.sale_unit && !(d.floor || []).includes(a.sale_unit) ? [{ value: a.sale_unit, label: a.sale_unit }] : [];
   const items = (d.items || []).map(i => ({ value: i.code, label: `${i.code} - ${i.name}` }));
   const words = (k, rest = '') => `<span data-t="${k}">${esc(t(k))}</span>${rest}`;
-  const waiting = (d.waiting || []).map(w => rowDiv({ leading: icon(w.overdue ? 'alert-triangle' : 'receipt'), title: w.order_id, data: { order: w.order_id }, tour: 'fiscal.stage',
+  const waiting = (d.waiting || []).map(w => rowDiv({ cls: w.overdue ? 'of-overdue' : '', leading: icon(w.overdue ? 'alert-triangle' : 'receipt'), title: w.order_id, data: { order: w.order_id }, tour: 'fiscal.stage',
       sub: `${words('fx_stage_' + w.stage)} · ${words('fx_deadline')} ${esc(when(w.deadline))}${w.sale_id ? ' · #' + esc(w.sale_id) : ''}${w.why ? ' · ' + esc(w.why) : ''}`,
       trailing: btn({ cls: 'fx-receipt', variant: 'ghost', icon: 'receipt', key: 'fx_receipt', tour: 'fiscal.receipt' }) })).join('');
   const body = `

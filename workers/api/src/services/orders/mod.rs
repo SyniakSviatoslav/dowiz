@@ -7,6 +7,8 @@ pub mod chat;
 pub mod kitchen_ack;
 pub mod legs;
 pub mod mine;
+/// The offline cash sale and its 48 h fiscal queue (W-OFFSALE, OF3).
+pub mod offline_sale;
 pub mod print;
 /// `GET /api/order/:id` (moved out of `lib.rs`, W-COV C2).
 pub mod read;

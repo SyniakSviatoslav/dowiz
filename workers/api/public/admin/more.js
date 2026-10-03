@@ -561,42 +561,11 @@ async function openHealth(){
   $('#hBackup').onclick = async e => { e.preventDefault(); try { const r = await fetch('/api/owner/backup', { headers: { authorization: 'Bearer ' + store.t } }); const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `dowiz-${store.loc}-${new Date().toISOString().slice(0, 10)}.json`; a.click(); } catch (err) { fail(err); } };
 }
 
-/// The owner's assistant: a question about the venue's own live data, answered
-/// by the model the venue chose (a local Ollama by default, a hosted one by
-/// token), with the provenance line the old console printed.
-async function openAssistant(){
-  let s = { values: {} }; try { s = await api('/owner/settings'); } catch {}
-  const v = s.values || {};
-  sheet(`${head('settings', 'assistant')}<p class="muted small" data-t="askHint"></p>
-    ${field({ id: 'as-q', key: 'ask', rows: 2, tour: 'assistant.question' })}
-    <div class="btn-row">${saveBtn('asGo', 'assistant.ask', 'ask', 'sparkles')}</div>
-    <div id="asOut"></div>
-    <p class="eyebrow mt-3" data-t="aiSettings"></p>
-    ${switchEl('ai-on', v['ai.enabled'] === '1', 'aiEnabled', 'aiEnabledHint', 'assistant.enabled')}
-    ${v['ai.enabled'] === '1' && !String(v['ai.endpoint'] || '').startsWith('https://')
-      ? `<p class="warn small" data-t="aiNotHttps"></p>` : ''}
-    ${field({ id: 'ai-endpoint', key: 'aiEndpoint', inputmode: 'url', value: v['ai.endpoint'] || '', placeholder: 'https://…/v1', tour: 'assistant.endpoint' })}
-    <div class="grid2">${field({ id: 'ai-model', key: 'aiModel', value: v['ai.model'] || '', tour: 'assistant.model' })}${field({ id: 'ai-token', key: 'aiToken', autocomplete: 'off', placeholder: v['ai.token'] === SECRET_SET_MARK ? SECRET_SET_MARK : '', tour: 'assistant.token' })}</div>
-    <div class="btn-row">${btn({ id: 'aiSave', icon: 'check', key: 'save', tour: 'assistant.save' })}</div>`, { name: 'assistant' });
-  $('#asGo').onclick = async () => {
-    const question = $('#as-q').value.trim(); if (!question) return;
-    try {
-      const r = await busy($('#asGo'), () => post('/owner/assist', withLoc({ question })));
-      $('#asOut').innerHTML = `<div class="answer mt-3">${esc(r.answer || '')}</div><p class="hint" data-t="${r.local ? 'localModel' : 'cloudModel'}"></p>`; paint();
-    } catch (e) { fail(e); }
-  };
-  $('#aiSave').onclick = async () => {
-    try {
-      await busy($('#aiSave'), async () => {
-        await post('/owner/settings', { key: 'ai.enabled', value: $('#ai-on').checked ? '1' : '0' });
-        await post('/owner/settings', { key: 'ai.endpoint', value: $('#ai-endpoint').value.trim() });
-        await post('/owner/settings', { key: 'ai.model', value: $('#ai-model').value.trim() });
-        const tok = $('#ai-token').value.trim(); if (tok) await post('/owner/settings', { key: 'ai.token', value: tok });
-      });
-      toast(t('saved'));
-    } catch (e) { fail(e); }
-  };
-}
+/// The owner's AI (W-AI, 2026-10-03): questions answered from the venue's own
+/// numbers, and the connection -- the owner's own key (OpenRouter's free
+/// models by default) or the platform's Workers AI within a daily share.
+/// /admin/ai.js.
+async function openAssistant(){ (await import('/admin/ai.js')).openAi(); }
 
 /// Every outside connection, its state, and a proof button. The proof is the
 /// provider's own answer (a bot's username, a number's verified name, an

@@ -1,0 +1,856 @@
+{
+  "id": "ai.owner.v1",
+  "version": "1.0.0",
+  "description": {
+    "en": "The owner's AI (W-AI). Provider layer: the owner's own OpenAI-compatible endpoint + key (OpenRouter free models are the documented default, each owner pastes THEIR key; the platform holds none) -> Cloudflare Workers AI through the Worker's [ai] binding within a per-venue daily share of the account's 10,000 free neurons (ai.spent, cap AI_VENUE_NEURONS, default 300) -> 'AI is off' with the reason. Nothing is sent while ai.enabled is off; the test button sends only 'OK?'. Q&A: a question becomes ONE query from a closed list of 16 kinds (lexicon in sq/en/uk/ru, else the model picks and query::validate refuses anything else); the number is read from /fold/analytics or /fold/kitchen -- the same answers /api/owner/analytics[?/kitchen] serve -- and every number carries its source route, the JSON pointers it sums and the days whose records it covers. Sentences are templates; a model rewording is shown only if it keeps every number and adds none. Explain cards for the analytics and kitchen screens. No person is ever a query (no scoring); facts to /api/owner/assist stay redacted. The key is never in any response body (keySet only; provider errors scrubbed).",
+    "uk": "ШІ власника: власний ключ (OpenRouter безкоштовно) -> Workers AI у межах денної частки закладу -> вимкнено; числа лише з фолдів аналітики, кожне з джерелом і записами; ключ ніколи не повертається."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/services/engagement/ai.rs",
+      "line": 58,
+      "what": "status"
+    },
+    {
+      "file": "workers/api/src/services/engagement/ai.rs",
+      "line": 91,
+      "what": "test"
+    },
+    {
+      "file": "workers/api/src/services/engagement/ai.rs",
+      "line": 150,
+      "what": "ask"
+    },
+    {
+      "file": "workers/api/src/services/engagement/ai.rs",
+      "line": 239,
+      "what": "explain"
+    },
+    {
+      "file": "workers/api/src/services/engagement/ai/provider.rs",
+      "line": 187,
+      "what": "plan (fallback order)"
+    },
+    {
+      "file": "workers/api/src/services/engagement/ai/call.rs",
+      "line": 93,
+      "what": "run (own endpoint, Workers AI binding, budget charge)"
+    },
+    {
+      "file": "workers/api/src/services/engagement/ai/query.rs",
+      "line": 101,
+      "what": "validate (closed list)"
+    },
+    {
+      "file": "workers/api/src/services/engagement/ai/answer.rs",
+      "line": 125,
+      "what": "answer (numbers from the fold)"
+    },
+    {
+      "file": "workers/api/src/assist.rs",
+      "line": 75,
+      "what": "ask (the assistant through the same chain)"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/admin/ai.js",
+      "line": 19,
+      "what": "openAi (settings card, Q&A box, budget meter)"
+    },
+    {
+      "file": "workers/api/public/admin/ai.js",
+      "line": 112,
+      "what": "explainCard (AI sheet, kitchen numbers; analytics.js by hand-back)"
+    },
+    {
+      "file": "tools/live-proof/probes/feature-ai.mjs",
+      "line": 1,
+      "what": "probe"
+    }
+  ],
+  "external_api_version": "workers-ai/@cf/qwen/qwen3-30b-a3b-fp8 + openrouter/api/v1/chat/completions",
+  "external": {
+    "workers_ai": {
+      "binding": "AI",
+      "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+      "pricing_read": "2026-10-03",
+      "neurons_per_million_tokens": {
+        "input": 4625,
+        "output": 30475
+      },
+      "free_neurons_per_day_per_account": 10000,
+      "source": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+      "input": "{messages:[{role,content}], max_tokens}",
+      "output": "{response} or OpenAI {choices[0].message.content}, usage{prompt_tokens,completion_tokens}"
+    },
+    "openrouter": {
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "shape": "OpenAI chat-completions, Authorization: Bearer <the owner's key>",
+      "free_model": "google/gemma-4-26b-a4b-it:free",
+      "model_listed": "2026-10-03 via GET https://openrouter.ai/api/v1/models",
+      "keys": "https://openrouter.ai/keys",
+      "free_limits": {
+        "requests_per_minute": 20,
+        "requests_per_day_without_credits": 50,
+        "requests_per_day_after_10usd_credits": 1000,
+        "source": "https://openrouter.ai/docs/api-reference/limits (read 2026-10-03)"
+      },
+      "errors": {
+        "401": "{error:{code:401,message:'Invalid credentials'}} -> state needs-key when no key is saved",
+        "429": "rate limited (Retry-After); reported as failed with the provider's words"
+      }
+    }
+  },
+  "routes": {
+    "status": {
+      "request": {
+        "method": "GET",
+        "path": "/api/owner/ai",
+        "auth": "owner bearer"
+      },
+      "request_schema": null,
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "contract",
+          "enabled",
+          "mode",
+          "endpoint",
+          "model",
+          "keySet",
+          "workersAi",
+          "budget",
+          "plan",
+          "skipped"
+        ],
+        "properties": {
+          "contract": {
+            "const": "ai.owner.v1"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": [
+              "auto",
+              "own",
+              "workers"
+            ]
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "keySet": {
+            "type": "boolean"
+          },
+          "workersAi": {
+            "type": "object",
+            "required": [
+              "available",
+              "model"
+            ],
+            "properties": {
+              "available": {
+                "type": "boolean"
+              },
+              "model": {
+                "const": "@cf/qwen/qwen3-30b-a3b-fp8"
+              }
+            }
+          },
+          "budget": {
+            "type": "object",
+            "required": [
+              "used",
+              "cap",
+              "left",
+              "account",
+              "resetsAtUtcDay"
+            ],
+            "properties": {
+              "used": {
+                "type": "integer"
+              },
+              "cap": {
+                "type": "integer"
+              },
+              "left": {
+                "type": "integer"
+              },
+              "account": {
+                "const": 10000
+              },
+              "resetsAtUtcDay": {
+                "type": "integer"
+              }
+            }
+          },
+          "plan": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "own",
+                "workers-ai"
+              ]
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "route",
+                "why"
+              ],
+              "properties": {
+                "route": {
+                  "enum": [
+                    "all",
+                    "own",
+                    "workers-ai"
+                  ]
+                },
+                "why": {
+                  "enum": [
+                    "disabled",
+                    "needs-key",
+                    "not-https",
+                    "workers-ai-unavailable",
+                    "budget-spent",
+                    "not-chosen"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "test": {
+      "request": {
+        "method": "POST",
+        "path": "/api/owner/ai/test",
+        "auth": "owner bearer"
+      },
+      "request_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "provider": {
+            "enum": [
+              "auto",
+              "own",
+              "workers"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "allOf": [
+          {
+            "type": "object",
+            "required": [
+              "provider",
+              "model",
+              "neurons",
+              "skipped",
+              "failed",
+              "budget"
+            ],
+            "properties": {
+              "provider": {
+                "enum": [
+                  null,
+                  "own",
+                  "workers-ai"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "neurons": {
+                "type": "integer"
+              },
+              "skipped": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "route",
+                    "why"
+                  ],
+                  "properties": {
+                    "route": {
+                      "enum": [
+                        "all",
+                        "own",
+                        "workers-ai"
+                      ]
+                    },
+                    "why": {
+                      "enum": [
+                        "disabled",
+                        "needs-key",
+                        "not-https",
+                        "workers-ai-unavailable",
+                        "budget-spent",
+                        "not-chosen"
+                      ]
+                    }
+                  }
+                }
+              },
+              "failed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "route",
+                    "status",
+                    "why"
+                  ]
+                }
+              },
+              "budget": {
+                "type": "object",
+                "required": [
+                  "used",
+                  "cap",
+                  "left",
+                  "account",
+                  "resetsAtUtcDay"
+                ],
+                "properties": {
+                  "used": {
+                    "type": "integer"
+                  },
+                  "cap": {
+                    "type": "integer"
+                  },
+                  "left": {
+                    "type": "integer"
+                  },
+                  "account": {
+                    "const": 10000
+                  },
+                  "resetsAtUtcDay": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "type": "object",
+        "required": [
+          "contract",
+          "ok",
+          "state",
+          "said",
+          "provider",
+          "model",
+          "neurons",
+          "skipped",
+          "failed",
+          "budget"
+        ],
+        "properties": {
+          "contract": {
+            "const": "ai.owner.v1"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "needs-key",
+              "workers-ai-unavailable",
+              "budget-spent",
+              "not-https",
+              "disabled",
+              "failed",
+              "off",
+              "not-chosen"
+            ]
+          },
+          "said": {
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              null,
+              "own",
+              "workers-ai"
+            ]
+          },
+          "budget": {
+            "type": "object",
+            "required": [
+              "used",
+              "cap",
+              "left",
+              "account",
+              "resetsAtUtcDay"
+            ],
+            "properties": {
+              "used": {
+                "type": "integer"
+              },
+              "cap": {
+                "type": "integer"
+              },
+              "left": {
+                "type": "integer"
+              },
+              "account": {
+                "const": 10000
+              },
+              "resetsAtUtcDay": {
+                "type": "integer"
+              }
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "route",
+                "why"
+              ],
+              "properties": {
+                "route": {
+                  "enum": [
+                    "all",
+                    "own",
+                    "workers-ai"
+                  ]
+                },
+                "why": {
+                  "enum": [
+                    "disabled",
+                    "needs-key",
+                    "not-https",
+                    "workers-ai-unavailable",
+                    "budget-spent",
+                    "not-chosen"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ask": {
+      "request": {
+        "method": "POST",
+        "path": "/api/owner/ai/ask",
+        "auth": "owner bearer"
+      },
+      "request_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "lang": {
+            "enum": [
+              "sq",
+              "en",
+              "uk",
+              "ru"
+            ]
+          },
+          "reword": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "contract",
+          "understood",
+          "lang",
+          "pickedBy",
+          "answer",
+          "ai"
+        ],
+        "properties": {
+          "contract": {
+            "const": "ai.owner.v1"
+          },
+          "understood": {
+            "type": "boolean"
+          },
+          "lang": {
+            "enum": [
+              "sq",
+              "en",
+              "uk",
+              "ru"
+            ]
+          },
+          "pickedBy": {
+            "enum": [
+              "lexicon",
+              "model"
+            ]
+          },
+          "answer": {
+            "type": "string"
+          },
+          "template": {
+            "type": "string"
+          },
+          "reworded": {
+            "type": "boolean"
+          },
+          "why": {
+            "type": "string"
+          },
+          "query": {
+            "type": "object",
+            "required": [
+              "query",
+              "days",
+              "weekday",
+              "dish"
+            ],
+            "properties": {
+              "query": {
+                "enum": [
+                  "revenue",
+                  "orders",
+                  "average_order",
+                  "rejected",
+                  "best_dish",
+                  "worst_dish",
+                  "dish_sold",
+                  "busiest_hour",
+                  "quietest_hour",
+                  "best_day",
+                  "worst_day",
+                  "food_cost",
+                  "waste",
+                  "low_stock",
+                  "worst_margin",
+                  "channels"
+                ]
+              },
+              "days": {
+                "enum": [
+                  1,
+                  7,
+                  30
+                ]
+              },
+              "weekday": {
+                "enum": [
+                  null,
+                  "mon",
+                  "tue",
+                  "wed",
+                  "thu",
+                  "fri",
+                  "sat",
+                  "sun"
+                ]
+              },
+              "dish": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "source": {
+            "type": "string"
+          },
+          "numbers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "value",
+                "unit",
+                "source",
+                "pointers",
+                "trace"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "pointers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "trace": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "ai": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "provider",
+                "model",
+                "neurons",
+                "skipped",
+                "failed",
+                "budget"
+              ],
+              "properties": {
+                "provider": {
+                  "enum": [
+                    null,
+                    "own",
+                    "workers-ai"
+                  ]
+                },
+                "model": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "neurons": {
+                  "type": "integer"
+                },
+                "skipped": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "route",
+                      "why"
+                    ],
+                    "properties": {
+                      "route": {
+                        "enum": [
+                          "all",
+                          "own",
+                          "workers-ai"
+                        ]
+                      },
+                      "why": {
+                        "enum": [
+                          "disabled",
+                          "needs-key",
+                          "not-https",
+                          "workers-ai-unavailable",
+                          "budget-spent",
+                          "not-chosen"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "failed": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "route",
+                      "status",
+                      "why"
+                    ]
+                  }
+                },
+                "budget": {
+                  "type": "object",
+                  "required": [
+                    "used",
+                    "cap",
+                    "left",
+                    "account",
+                    "resetsAtUtcDay"
+                  ],
+                  "properties": {
+                    "used": {
+                      "type": "integer"
+                    },
+                    "cap": {
+                      "type": "integer"
+                    },
+                    "left": {
+                      "type": "integer"
+                    },
+                    "account": {
+                      "const": 10000
+                    },
+                    "resetsAtUtcDay": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "explain": {
+      "request": {
+        "method": "GET",
+        "path": "/api/owner/ai/explain",
+        "query": "screen=analytics|kitchen & days=1|7|30 & lang=sq|en|uk|ru & reword=1 (optional, needs ai.enabled)",
+        "auth": "owner bearer (staff 403)"
+      },
+      "request_schema": null,
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "contract",
+          "screen",
+          "days",
+          "lang",
+          "ai",
+          "cards"
+        ],
+        "properties": {
+          "contract": {
+            "const": "ai.owner.v1"
+          },
+          "screen": {
+            "enum": [
+              "analytics",
+              "kitchen"
+            ]
+          },
+          "days": {
+            "enum": [
+              1,
+              7,
+              30
+            ]
+          },
+          "lang": {
+            "enum": [
+              "sq",
+              "en",
+              "uk",
+              "ru"
+            ]
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "text",
+                "template",
+                "reworded",
+                "source",
+                "numbers"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "trend",
+                    "hours",
+                    "food_cost",
+                    "waste",
+                    "low_stock",
+                    "menu",
+                    "star",
+                    "plowhorse",
+                    "puzzle",
+                    "dog"
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                },
+                "template": {
+                  "type": "string"
+                },
+                "reworded": {
+                  "type": "boolean"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "numbers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "value",
+                      "unit",
+                      "source",
+                      "pointers",
+                      "trace"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "integer"
+                      },
+                      "unit": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string"
+                      },
+                      "pointers": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "trace": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

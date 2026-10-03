@@ -40,7 +40,7 @@ export const READ_ONLY = ['bookings', 'floorPlan', 'hours'];
 /// W-WIRE tiles: the words that open each to a member of staff.
 export const TILE_CAPS = {
   messages: OWNER, wallets: OWNER, history: OWNER, tax: OWNER,
-  catWords: MENU, brand: OWNER, safety: OWNER, graph: OWNER,
+  catWords: MENU, brand: OWNER, safety: OWNER, graph: OWNER, offlineSales: OWNER,
 };
 
 const opens = (p, words) => !p.staff || (words || OWNER).some(w => p.caps.has(w));

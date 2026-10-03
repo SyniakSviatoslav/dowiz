@@ -128,3 +128,15 @@ ul{list-style:none;margin:0;padding:0}
 .floor-legend{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-4);margin-bottom:var(--space-6)}
 .floor-legend li{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm)}
 .floor-clear{margin:var(--space-4) 0}
+
+/* ── the offline cash sale (W-OFFSALE, sell.js) ── */
+.offline-banner{margin:0 var(--space-3) var(--space-2)}
+.sale-lines{margin:var(--space-2) 0 var(--space-3)}
+.sale-lines .sale-line{display:flex;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--ui-hairline);font-variant-numeric:tabular-nums}
+.receipt{white-space:pre-wrap;font:var(--text-sm)/1.5 ui-monospace,monospace;background:var(--ui-surface);color:var(--ui-fg);padding:var(--space-4);border-radius:var(--ui-radius-card);max-width:420px}
+/* A PRINTED RECEIPT IS ONLY THE RECEIPT: no header, no buttons, black on white. */
+@media print{
+  .hud,.offline-banner,.acts,.ui-toast,h2{display:none !important}
+  body{background:Canvas}
+  .receipt{background:Canvas;color:CanvasText;box-shadow:none;padding:0;max-width:none}
+}

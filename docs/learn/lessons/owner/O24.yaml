@@ -1,0 +1,70 @@
+# Lesson O24 (owner). The ONE source for the in-app tour and the recorder.
+# W-OFFSALE (2026-10-03): the room tablet's offline cash sales, their 48 h fiscal
+# deadline (red when passed) and what changed while the tablet was offline.
+id: O24
+role: owner
+module: offlineSales
+order: 40
+covers: [offlineSales]
+title:
+  sq: "Shitjet pa rrjet"
+  en: "Offline sales"
+  uk: "Продажі без мережі"
+  ru: "Продажи без сети"
+goal:
+  sq: "Shihni shitjet me kesh pa rrjet dhe fiskalizojini brenda 48 orëve."
+  en: "See the cash sales made with no network and fiscalise them within 48 hours."
+  uk: "Побачити продажі за готівку без мережі й фіскалізувати їх протягом 48 годин."
+  ru: "Увидеть продажи за наличные без сети и фискализировать их в течение 48 часов."
+steps:
+  - key: 1
+    anchor: offline.summary
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="offline.summary"]'
+    title:
+      sq: "Përmbledhja"
+      en: "Summary"
+      uk: "Підсумок"
+      ru: "Итог"
+    caption:
+      sq: "Sa shitje, më e vjetra, sa kanë kaluar afatin 48 orë (me të kuqe)."
+      en: "How many sales, the oldest, how many passed the 48 h deadline (in red)."
+      uk: "Скільки продажів, найстаріший, скільки пропустили 48 годин (червоним)."
+      ru: "Сколько продаж, самая старая, сколько пропустили 48 часов (красным)."
+  - key: 2
+    anchor: offline.list
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="offline.list"]'
+    title:
+      sq: "Shitjet"
+      en: "The sales"
+      uk: "Продажі"
+      ru: "Продажи"
+    caption:
+      sq: "Secila me kohën e shitjes, afatin dhe gjendjen fiskale."
+      en: "Each with its sale time, deadline and fiscal state."
+      uk: "Кожен із часом продажу, строком і фіскальним станом."
+      ru: "Каждая со временем продажи, сроком и фискальным статусом."
+  - key: 3
+    anchor: offline.sale
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="offline.sale"]'
+    title:
+      sq: "Një shitje"
+      en: "One sale"
+      uk: "Один продаж"
+      ru: "Одна продажа"
+    caption:
+      sq: "Shitja mban çmimin që pagoi mysafiri; një ndryshim tregohet këtu."
+      en: "The sale keeps the price the guest paid; a change is shown here."
+      uk: "Продаж зберігає ціну, яку сплатив гість; зміну показано тут."
+      ru: "Продажа сохраняет цену, которую заплатил гость; изменение показано здесь."

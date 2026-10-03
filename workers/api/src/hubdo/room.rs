@@ -17,7 +17,7 @@ use worker::*;
 // The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
 use crate::wire::{Call as Request, Reply as Response};
 
-mod till;
+mod till; mod offline; // the offline cash sale (W-OFFSALE), reached by the default arm below
 
 /// A command's answer on the wire: its value, or its refusal with its status.
 fn reply<T: Serialize>(r: std::result::Result<T, Refused>) -> Result<Response> {
@@ -43,7 +43,7 @@ impl HubImages {
             "till_count" => reply(self.till(Cmd::Count(crate::body::parse(&mut req).await?)).await?),
             "till_close" => reply(self.till(Cmd::Close(crate::body::parse(&mut req).await?)).await?),
             "till_report" => reply(self.till_report(crate::body::parse(&mut req).await?).await?),
-            _ => Response::error("no such room command", 404),
+            _ => self.offline(what, req).await, // `room/offline.rs`, whose own default is the 404
         }
     }
 

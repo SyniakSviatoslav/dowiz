@@ -33,6 +33,14 @@ impl HubImages {
                 .map_err(|_| Error::RustError("settings image is unreadable".into()))?,
             None => wire::Config::Off,
         };
+        self.enqueue_fiscal_with(cfg, stored, now_ms).await
+    }
+
+    /// `enqueue_fiscal` under a given configuration: the offline sale's turn
+    /// (`room/offline.rs`) passes `From(0)` -- its paper receipt promised a
+    /// document at every venue -- and its SALE's instant as `now_ms`, so the
+    /// entry's 48 h run from the sale (`fiscal::queue`).
+    pub(super) async fn enqueue_fiscal_with(&self, cfg: wire::Config, stored: &str, now_ms: i64) -> Result<AtPlacement> {
         if !matches!(cfg, wire::Config::From(_)) {
             return Ok(AtPlacement::NotConfigured);
         }

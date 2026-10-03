@@ -261,7 +261,7 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
         crate::mcp::enc(&body.question)
     );
     let facts = crate::fold::ask::json(&place, &url).await?;
-    crate::assist::ask(&place, crate::assist::SYSTEM_OWNER, facts, &body.question).await
+    crate::assist::ask(&ctx.env, ctx.data.now_ms, &place, crate::assist::SYSTEM_OWNER, facts, &body.question).await
 }
 
 /// `POST /api/courier/assist` — a question about this courier's own run.
@@ -293,7 +293,7 @@ pub async fn courier_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         .map(|o| courier_run_fact(&o, now))
         .collect();
     let facts = json!({ "now_ms": now, "my_runs": mine });
-    crate::assist::ask(&place, crate::assist::SYSTEM_COURIER, facts, &body.question).await
+    crate::assist::ask(&ctx.env, now, &place, crate::assist::SYSTEM_COURIER, facts, &body.question).await
 }
 
 #[cfg(test)]

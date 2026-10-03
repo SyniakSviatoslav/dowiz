@@ -12,6 +12,7 @@ import { principalOf } from '/admin/kitchen-logic.js';
 import { tilesFor, canTile } from '/admin/access.js';
 import { rowBtn, pill } from '/admin/parts.js';
 import { paint } from '/admin/wire-core.js';
+import '/admin/offline-i18n.js';
 
 /// key: the i18n title; sub: its one-line hint; mod/fn: what a tap opens.
 export const TILES = [
@@ -23,6 +24,8 @@ export const TILES = [
   { id: 'brand', icon: 'photo', key: 'w_brandExtra', sub: 'w_brandExtraSub', mod: '/admin/brand-extra.js', fn: 'openBrandExtra' },
   { id: 'safety', icon: 'key', key: 'w_safety', sub: 'w_safetySub', mod: '/admin/safety.js', fn: 'openSafety' },
   { id: 'graph', icon: 'sparkles', key: 'w_assistSources', sub: 'w_assistSourcesSub', mod: '/admin/assist-sources.js', fn: 'openAssistSources' },
+  // W-OFFSALE: the room tablet's offline cash sales and their 48 h fiscal deadline.
+  { id: 'offlineSales', icon: 'receipt', key: 'of_title', sub: 'of_sub', mod: '/admin/offline.js', fn: 'openOfflineSales' },
 ];
 
 /// The tiles the signed-in person opens: all for an owner; for a member of

@@ -150,7 +150,7 @@ pub async fn draft_post(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
     let mut written = Vec::new();
     for subject in &subjects {
         let prompt = post::prompt_for(subject, venue_name, &lang);
-        let mut res = crate::assist::ask(&place, post::SYSTEM_POST, json!({}), &prompt).await?;
+        let mut res = crate::assist::ask(&ctx.env, ctx.data.now_ms, &place, post::SYSTEM_POST, json!({}), &prompt).await?;
         if res.status_code() >= 400 {
             let why = res.text().await.unwrap_or_default();
             return Response::error(

@@ -12,8 +12,19 @@
 // tablet is not built yet (see the lane's OPEN list).
 import { money } from './logic.js';
 import { ui, k, act, backBar, actionRow, amt, loading } from './parts.js';
+import { safeGet, safeSet } from '../store/storage.js';
 
-/// Fetch and keep the menu. Sets `S.menu` (categories) and `S.currency`.
+/// THE LAST MENU THIS TABLET READ, with WHEN (W-OFFSALE): an offline cash
+/// sale is priced from it (`offline-sale.js`), and the screen says its age.
+/// One venue's: a different slug is not this venue's menu.
+const MENU_KEY = 'dw_room_menu';
+export const cachedMenu = {
+  get(slug) { try { const v = JSON.parse(safeGet(MENU_KEY) || 'null'); return v && v.slug === slug ? v : null; } catch { return null; } },
+  set(v) { safeSet(MENU_KEY, JSON.stringify(v)); },
+};
+
+/// Fetch and keep the menu. Sets `S.menu` (categories) and `S.currency`;
+/// offline, the cached copy is drawn with `S.menuAt` saying how old it is.
 export async function loadMenu(c) {
   const { S } = c;
   if (!S.slug) { S.menuError = 'noSlug'; return; }
@@ -23,8 +34,15 @@ export async function loadMenu(c) {
     const cur = d?.location?.currencyCode;
     if (cur) { S.currency = cur; c.remember({ currency: cur }); }
     S.menuError = null;
+    S.menuAt = Date.now(); S.menuVersion = d?.location?.menuVersion ?? null; S.venueName = d?.location?.name || '';
+    cachedMenu.set({ slug: S.slug, at: S.menuAt, categories: S.menu, currency: cur || S.currency, version: S.menuVersion, name: S.venueName });
   } catch (e) {
     S.menuError = e.offline ? 'offline' : 'menuFailed';
+    const was = e.offline ? cachedMenu.get(S.slug) : null;
+    if (was && !S.menu) {
+      Object.assign(S, { menu: was.categories, menuAt: was.at, menuVersion: was.version, venueName: was.name || '', menuError: null });
+      if (was.currency && !S.currency) S.currency = was.currency;
+    }
   }
 }
 
@@ -43,7 +61,7 @@ function dish(c, p, n) {
 /// The picker: categories, a search, a basket of taps, one send. `title` is
 /// the heading key (`addItem` on a round, `openTable` when opening one) and
 /// `lead` is markup drawn under it (open.js's table field).
-export function renderAdd(c, title = 'addItem', lead = '') {
+export function renderAdd(c, title = 'addItem', lead = '', sendKey = 'addN') {
   const { S, t } = c;
   const q = (S.menuQ || '').trim().toLowerCase();
   const basket = S.basket || {};
@@ -65,7 +83,7 @@ export function renderAdd(c, title = 'addItem', lead = '') {
     ${ui.inputRow({ type: 'search', label: k('search'), placeholder: k('search'), cls: 'search',
       attrs: { value: S.menuQ || '', data: { in: 'q', tour: 'menu.search' } } })}
     ${body}
-    <div class="dock">${ui.button({ variant: 'primary', size: 'lg', block: true, icon: 'send', label: t('addN').replace('{n}', n), disabled: !n, attrs: act('send', {}, 'menu.send') })}</div>`;
+    <div class="dock">${ui.button({ variant: 'primary', size: 'lg', block: true, icon: 'send', label: t(sendKey).replace('{n}', n), disabled: !n, attrs: act('send', {}, 'menu.send') })}</div>`;
 }
 
 export function bindAdd(c, root, round, amend) {

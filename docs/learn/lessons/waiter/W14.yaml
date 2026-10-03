@@ -1,0 +1,190 @@
+# Lesson W14 (waiter). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder.
+# W-OFFSALE (2026-10-03, operator decision D8): a cash sale with no network, its receipt
+# without the NIVF, and the 48 h fiscal rule. The tablet must be OFFLINE for room.sell to show.
+id: W14
+role: waiter
+module: sell
+order: 14
+covers: [sell, sellConfirm, receipt]
+title:
+  sq: "Shitje me kesh pa rrjet"
+  en: "A cash sale with no network"
+  uk: "Продаж за готівку без мережі"
+  ru: "Продажа за наличные без сети"
+goal:
+  sq: "Shisni me kesh kur bie rrjeti, jepni faturën pa NIVF dhe lereni tabletin ta dërgojë."
+  en: "Sell for cash when the network is down, hand over the receipt without NIVF, and let the tablet send it."
+  uk: "Продати за готівку, коли немає мережі, видати чек без NIVF і дати планшету його надіслати."
+  ru: "Продать за наличные, когда нет сети, выдать чек без NIVF и дать планшету его отправить."
+steps:
+  - key: 1
+    anchor: hud.offline
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="hud.offline"]'
+    title:
+      sq: "Pa rrjet"
+      en: "Offline"
+      uk: "Офлайн"
+      ru: "Офлайн"
+    caption:
+      sq: "Kur bie rrjeti, shiriti thotë: vetëm shitje me kesh."
+      en: "When the network drops, the banner says: cash sales only."
+      uk: "Коли зникає мережа, банер каже: лише продаж за готівку."
+      ru: "Когда пропадает сеть, баннер говорит: только продажа за наличные."
+  - key: 2
+    anchor: room.sell
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="room.sell"]'
+    title:
+      sq: "Shitje me kesh"
+      en: "Cash sale"
+      uk: "Продаж за готівку"
+      ru: "Продажа за наличные"
+    caption:
+      sq: "Hapni shitjen me kesh nga salla."
+      en: "Open the cash sale from the room."
+      uk: "Відкрийте продаж за готівку із залу."
+      ru: "Откройте продажу за наличные из зала."
+  - key: 3
+    anchor: menu.dish
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.dish"]'
+    title:
+      sq: "Pjata"
+      en: "A dish"
+      uk: "Страва"
+      ru: "Блюдо"
+    caption:
+      sq: "Çmimet janë nga menyja e ruajtur në tablet."
+      en: "The prices come from the menu saved on the tablet."
+      uk: "Ціни — з меню, збереженого на планшеті."
+      ru: "Цены — из меню, сохранённого на планшете."
+  - key: 4
+    anchor: menu.send
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.send"]'
+    title:
+      sq: "Shit"
+      en: "Sell"
+      uk: "Продати"
+      ru: "Продать"
+    caption:
+      sq: "Kontrolloni shportën."
+      en: "Check the basket."
+      uk: "Перевірте кошик."
+      ru: "Проверьте корзину."
+  - key: 5
+    anchor: sale.lines
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="sale.lines"]'
+    title:
+      sq: "Rreshtat"
+      en: "The lines"
+      uk: "Рядки"
+      ru: "Строки"
+    caption:
+      sq: "Çdo pjatë me sasinë dhe shumën e saj."
+      en: "Each dish with its quantity and amount."
+      uk: "Кожна страва з кількістю та сумою."
+      ru: "Каждое блюдо с количеством и суммой."
+  - key: 6
+    anchor: sale.total
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="sale.total"]'
+    title:
+      sq: "Totali"
+      en: "The total"
+      uk: "Разом"
+      ru: "Итого"
+    caption:
+      sq: "Merrni këtë shumë me kesh. Karta kërkon rrjet."
+      en: "Take this amount in cash. A card needs the network."
+      uk: "Візьміть цю суму готівкою. Картка потребує мережі."
+      ru: "Возьмите эту сумму наличными. Карте нужна сеть."
+  - key: 7
+    anchor: sale.commit
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="sale.commit"]'
+    title:
+      sq: "Paratë u morën"
+      en: "Cash taken"
+      uk: "Готівку отримано"
+      ru: "Наличные получены"
+    caption:
+      sq: "Shitja ruhet në tablet dhe dërgohet kur kthehet rrjeti, një herë."
+      en: "The sale is kept on the tablet and sent once when the network returns."
+      uk: "Продаж зберігається на планшеті й надсилається один раз, коли повернеться мережа."
+      ru: "Продажа сохраняется на планшете и отправляется один раз, когда вернётся сеть."
+  - key: 8
+    anchor: sale.receipt
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="sale.receipt"]'
+    title:
+      sq: "Fatura"
+      en: "The receipt"
+      uk: "Чек"
+      ru: "Чек"
+    caption:
+      sq: "Fatura thotë: pa NIVF, do të fiskalizohet brenda 48 orëve."
+      en: "The receipt says: no NIVF, to be fiscalised within 48 hours."
+      uk: "Чек каже: без NIVF, буде фіскалізовано протягом 48 годин."
+      ru: "Чек говорит: без NIVF, будет фискализировано в течение 48 часов."
+  - key: 9
+    anchor: sale.print
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="sale.print"]'
+    title:
+      sq: "Printo"
+      en: "Print"
+      uk: "Друк"
+      ru: "Печать"
+    caption:
+      sq: "Printoni faturën për mysafirin."
+      en: "Print the receipt for the guest."
+      uk: "Надрукуйте чек для гостя."
+      ru: "Распечатайте чек для гостя."
+  - key: 10
+    anchor: sale.done
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="sale.done"]'
+    title:
+      sq: "Mbaroi"
+      en: "Done"
+      uk: "Готово"
+      ru: "Готово"
+    caption:
+      sq: "Mos dilni nga tableti derisa shitjet të dërgohen."
+      en: "Do not sign out until the sales are sent."
+      uk: "Не виходьте з планшета, доки продажі не надіслано."
+      ru: "Не выходите из планшета, пока продажи не отправлены."

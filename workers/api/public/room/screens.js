@@ -7,7 +7,7 @@
 // waiter.mjs, a-room-open.mjs, c-room-clear.mjs):
 //   form[data-form="login"], input[name="email"|"code"|"password"],
 //   its button[type="submit"], [data-act="claimToggle"], the `.bar` with
-//   [data-act="open"|"till"|"floor"|"refresh"], `.tables` of
+//   [data-act="open"|"till"|"floor"|"refresh"|"sell" (offline only, W-OFFSALE)], `.tables` of
 //   [data-act="sit"][data-id] / [data-act="round"][data-id], [data-act="back"],
 //   [data-act="moveSit"], [data-act="signout"].
 //
@@ -52,7 +52,8 @@ export function renderRoom(c) {
     : S.at ? ui.emptyState({ icon: 'receipt', title: k('noOrders') })
     : loading(t, 'card', 2);
   return `<div class="bar">${ui.badge({ icon: 'user', label: t(S.role || 'waiter'), attrs: { data: { tour: 'room.role' } } })}<span class="sp"></span>
-      ${orders ? ui.button({ variant: 'primary', icon: 'plus', label: k('openTable'), attrs: act('open', {}, 'room.open') }) : ''}
+      ${orders ? ui.button({ variant: S.offline ? undefined : 'primary', icon: 'plus', label: k('openTable'), attrs: act('open', {}, 'room.open') }) : ''}
+      ${S.offline && S.caps.has('take_payment') ? ui.button({ variant: 'primary', icon: 'cash', label: k('cashSale'), attrs: act('sell', {}, 'room.sell') }) : ''}
       ${canTill(S.caps) ? ui.button({ icon: 'cash', label: k('till'), attrs: act('till', {}, 'room.till') }) : ''}
       ${orders ? ui.button({ icon: 'map-pin', label: k('floor'), attrs: act('floor', {}, 'room.floor') }) + ui.button({ icon: 'ticket', label: k('pass'), attrs: act('pass', {}, 'room.pass') }) : ''}
       ${ui.iconButton({ icon: 'refresh', ariaLabel: k('refresh'), variant: 'plain', attrs: act('refresh', {}, 'room.refresh') })}</div>

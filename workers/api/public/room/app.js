@@ -28,6 +28,8 @@ import { createGuide } from '/lib/guide.js';
 import { createLearn, loadLessons } from '/lib/learn.js';
 import { openMcp } from './mcp.js';
 import { renderPass, bindPass } from './pass.js';
+// THE OFFLINE CASH SALE (W-OFFSALE): `sell.js` screens, `offline-sale.js` rules.
+import { renderSell, bindSell, renderSellConfirm, bindSellConfirm, renderReceipt, bindReceipt, resync, settled } from './sell.js';
 
 const $ = s => document.querySelector(s);
 const POLL_MS = 20000;
@@ -38,6 +40,7 @@ const S = {
   currency: safeGet('dw_room_currency') || null,
   sittings: [], at: 0, live: false, sittingId: null, roundId: null,
   known: {}, queued: [], till: null, menu: null, floor: null, floorPick: null,
+  offline: false, unsentSales: 0,
 };
 
 const c = {
@@ -79,7 +82,7 @@ async function onLogin(ev) {
     const d = await api(S.claiming ? '/staff/claim' : '/staff/login', { method: 'POST', body });
     session.set(d); adopt(d);
     S.view = 'room';
-    render(); loadRoom(); loadMenu(c);
+    render(); loadRoom(); loadMenu(c); resync(c);
   } catch (e) {
     toast(e.offline ? t('offline') : e.message || t('error'));
     restore();
@@ -91,10 +94,10 @@ async function loadRoom() {
   if (!S.loc || S.role === 'kitchen') return;
   try {
     const d = await api(`/staff/room?location_id=${encodeURIComponent(S.loc)}`, { signedOut });
-    S.sittings = carry(d?.sittings || []); S.at = Date.now(); S.live = true;
+    S.sittings = carry(d?.sittings || []); S.at = Date.now(); S.live = true; S.offline = false;
     lastRoom.set(S.loc, S.sittings, S.at);
   } catch (e) {
-    S.live = false;
+    S.live = false; S.offline = !!e.offline;
     if (!e.offline) toast(e.message || t('error'));
     if (!S.at) { const was = lastRoom.get(S.loc); if (was) { S.sittings = was.sittings; S.at = was.at; } }
   }
@@ -128,6 +131,8 @@ function hud() {
   $('#langBtn').textContent = lang().toUpperCase();
   const mic = $('#voiceBtn'); if (mic) mic.hidden = !session.get();
   $('#mcpBtn').hidden = !session.get();
+  // OFFLINE: cash sales only (W-OFFSALE); the banner is in index.html from the first paint.
+  $('#offlineBanner').hidden = !(session.get() && S.offline);
 }
 
 function render() {
@@ -147,6 +152,10 @@ function render() {
   if (S.view === 'open' && S.caps.has('take_orders')) { root.innerHTML = renderOpen(c); return bindOpen(c, root, () => { S.view = 'room'; render(); }); }
   if (S.view === 'till' && canTill(S.caps)) { root.innerHTML = renderTillScreen(c); return bindTill(c, root); }
   if (S.view === 'pass' && S.caps.has('take_orders')) { root.innerHTML = renderPass(c); return bindPass(c, root, () => { S.view = 'room'; render(); }); }
+  const pays = S.caps.has('take_payment');
+  if (S.view === 'sell' && pays) { root.innerHTML = renderSell(c); return bindSell(c, root); }
+  if (S.view === 'sellConfirm' && pays) { root.innerHTML = renderSellConfirm(c); return bindSellConfirm(c, root); }
+  if (S.view === 'receipt' && pays && S.lastSale) { root.innerHTML = renderReceipt(c); return bindReceipt(c, root); }
   if (S.view === 'floor' && S.caps.has('take_orders')) { root.innerHTML = renderFloor(S.floor, t, S.caps, S.floorPick); return bindFloor(c, root, () => { S.view = 'room'; render(); }); }
   if (S.view === 'login') { root.innerHTML = renderLogin(c); }
   else if (S.view === 'sitting') root.innerHTML = renderSitting(c, s);
@@ -158,7 +167,9 @@ function render() {
     const act = b.dataset.act, id = b.dataset.id;
     if (act === 'claimToggle') { S.claiming = !S.claiming; return render(); }
     if (act === 'refresh') return loadRoom();
-    if (act === 'signout') return signedOut();
+    // UNSENT CASH SALES KEEP THE TABLET SIGNED IN: the money is in the drawer.
+    if (act === 'signout') return S.unsentSales ? toast(t('saleUnsentSignOut')) : signedOut();
+    if (act === 'sell') { S.view = 'sell'; S.basket = {}; if (!S.menu) loadMenu(c).then(render); return render(); }
     if (act === 'till') { S.view = 'till'; return render(); }
     if (act === 'floor') { S.view = 'floor'; S.floorPick = null; render(); return loadFloor(c); }
     if (act === 'open') { S.view = 'open'; S.basket = {}; return render(); }
@@ -178,10 +189,11 @@ function render() {
 // ── the outbox, told to the screen ──────────────────────────────────────────
 hooks.onChange = rows => { S.queued = rows; hud(); };
 hooks.onSent = (entry, payload) => {
+  if (entry.tag && entry.tag.startsWith('sale:')) { settled(c, entry, true).then(hud); return loadRoom(); }
   if (entry.tag && entry.tag.startsWith('till:') && payload) { S.till = visible(payload); keepTill(S.loc, payload); }
   loadRoom();
 };
-hooks.onDropped = (entry, reason) => { toast(t(reason === 'changed' ? 'queuedChanged' : 'queuedRefused')); loadRoom(); };
+hooks.onDropped = (entry, reason, status, detail) => { if (entry.tag && entry.tag.startsWith('sale:')) return void settled(c, entry, false, status, detail); toast(t(reason === 'changed' ? 'queuedChanged' : 'queuedRefused')); loadRoom(); };
 
 // ── chrome ──────────────────────────────────────────────────────────────────
 function applyTheme() {
@@ -236,4 +248,9 @@ if (s0) {
 render();
 learnHash();
 OUT.start();
+if (s0) resync(c).then(render);
+// The browser's own word on the network: a dead link draws the banner before
+// the next read fails, and its return reads the room (which drains the outbox).
+addEventListener('offline', () => { S.offline = true; S.live = false; render(); });
+addEventListener('online', () => { loadRoom(); });
 setInterval(() => { if (document.visibilityState === 'visible' && session.get() && (S.view === 'room' || S.view === 'sitting')) loadRoom(); else if (document.visibilityState === 'visible' && session.get() && S.view === 'floor') loadFloor(c); else hud(); }, POLL_MS);

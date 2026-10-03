@@ -63,6 +63,9 @@ pub const KNOWN: &[Known] = &[
         hint: "Off by default. Nothing is sent anywhere until this is on.",
         default: "0",
     },
+    // W-AI: which model answers (`services::engagement::ai::provider`).
+    Known { key: "ai.provider", label: "AI provider", default: "auto",
+        hint: "auto: your own endpoint, then Workers AI within your daily share. own / workers: only that one." },
     // ── owner notifications ──
     //
     // The bot is the VENUE'S, not the platform's: an owner makes one with

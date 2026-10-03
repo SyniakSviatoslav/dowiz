@@ -55,7 +55,10 @@ impl HubImages {
             _ => 0,
         };
         let fiscal = timer::fiscal_next(crate::fiscal::SEND_ENABLED, fiscal, now_ms);
-        Ok(timer::next_due(&[timer::outbox_next(&outbox), ebills, fiscal]))
+        // An offline sale past its 48 h is said once (`room/offline.rs`).
+        // Its failure never stops the outbox's alarm: said, and read as nothing due.
+        let overdue = self.offline_overdue_next().await.unwrap_or_else(|e| { log_error!("timer: offline overdue unreadable: {e}"); None });
+        Ok(timer::next_due(&[timer::outbox_next(&outbox), ebills, fiscal, overdue]))
     }
 
     /// The till link's next firing (`timer::ebills_next`), with the venue's
@@ -162,6 +165,8 @@ impl HubImages {
             return Response::ok("no venue");
         };
         self.in_alarm.set(true);
+        // BEFORE the runner, so the alert it queues is drained in this run.
+        self.offline_overdue(&venue, now_ms).await;
         let ran = async {
             match self.state.call_runner(&venue, now_ms).await? {
                 200 => Ok(()),

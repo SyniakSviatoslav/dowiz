@@ -188,6 +188,10 @@ pub const BROWSER: &[DeviceKey] = &[
     key("dw_room_theme", &[], "room"),
     key("dw_room_currency", &[], "room"),
     key("dowiz.room.outbox", &[OrderContent], "room"),
+    // W-OFFSALE: the tablet's journal of its offline cash sales (lines, totals, no
+    // customer), and the cached public menu they are priced from.
+    key("dowiz.room.sales", &[OrderContent], "room"),
+    key("dw_room_menu", &[], "room"),
     // The wiki (wiki/): the language the reader last chose, nothing personal.
     key("dw_wiki_lang", &[], "wiki"),
 ];

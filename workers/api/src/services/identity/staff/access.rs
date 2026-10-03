@@ -120,7 +120,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/staff/orders/:id/returned", Staff(&VOID), No),
     ("post", "/api/staff/orders/:id/transfer", Staff(&TAKE), No),
     ("post", "/api/staff/sittings/:id/move", Staff(&TAKE), No),
-    ("post", "/api/staff/till/open", Staff(&TILL), No),
+    ("post", "/api/staff/till/open", Staff(&TILL), No), ("post", "/api/staff/offline_sales", Staff(&PAY), No), // W-OFFSALE
     ("post", "/api/staff/till/count", Staff(&TILL), No),
     ("post", "/api/staff/till/close", Staff(&TILL), No),
     ("post", "/api/staff/till/pay_in", Staff(&TILL), No),
@@ -194,7 +194,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("get", "/api/owner/ebills", Owner, No),
     ("post", "/api/owner/ebills/config", Owner, No),
     ("post", "/api/owner/ebills/map", Owner, No),
-    ("get", "/api/owner/fiscal", Owner, No),
+    ("get", "/api/owner/fiscal", Owner, No), ("get", "/api/owner/offline_sales", Owner, No), // W-OFFSALE
     ("post", "/api/owner/fiscal/ebills", Owner, No),
     ("get", "/api/owner/orders/:id/receipt", Owner, No),
     ("get", "/api/owner/mcp/keys", Owner, No),
@@ -213,7 +213,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/hub/rotate", Owner, No),
     ("get", "/api/owner/backup", Owner, No),
     ("post", "/api/owner/restore", Owner, No),
-    ("post", "/api/owner/assist", Owner, No),
+    ("post", "/api/owner/assist", Owner, No), ("get", "/api/owner/ai", Owner, No), ("post", "/api/owner/ai/test", Owner, No), ("post", "/api/owner/ai/ask", Owner, No), ("get", "/api/owner/ai/explain", Owner, No),
     ("get", "/api/owner/apikeys", Owner, No),
     ("post", "/api/owner/apikeys", Owner, No),
     ("post", "/api/owner/apikeys/revoke", Owner, No),

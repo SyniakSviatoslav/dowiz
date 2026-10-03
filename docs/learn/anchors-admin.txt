@@ -25,11 +25,11 @@ agg.platform workers/api/public/admin/aggregator.js:28
 agg.save workers/api/public/admin/aggregator.js:37
 agg.total workers/api/public/admin/aggregator.js:35
 analytics.window workers/api/public/admin/more.js:190
-assistant.endpoint workers/api/public/admin/more.js:559
-assistant.model workers/api/public/admin/more.js:560
-assistant.question workers/api/public/admin/more.js:552
-assistant.save workers/api/public/admin/more.js:561
-assistant.token workers/api/public/admin/more.js:560
+assistant.endpoint workers/api/public/admin/ai.js:36
+assistant.model workers/api/public/admin/ai.js:37
+assistant.question workers/api/public/admin/ai.js:26
+assistant.save workers/api/public/admin/ai.js:39
+assistant.token workers/api/public/admin/ai.js:38
 bookings.book workers/api/public/admin/bookings.js:132
 bookings.confirm workers/api/public/admin/bookings.js:82
 bookings.day workers/api/public/admin/bookings.js:92
@@ -396,7 +396,7 @@ venue.phone workers/api/public/admin/more.js:259
 # control with a real anchor, passed positionally (switchEl's 5th argument, a
 # helper's argument), which tools/gates/learn.sh's WRITE regex does not read.
 # ai.enabled workers/api/public/admin/more.js:556
-# assistant.enabled workers/api/public/admin/more.js:556
+assistant.enabled workers/api/public/admin/ai.js:31
 # bulk.retire workers/api/public/admin/bulk.js:16
 # couriers.active workers/api/public/admin/couriers.js:73
 # customers.allergens workers/api/public/admin/customers.js:61
@@ -419,3 +419,13 @@ venue.phone workers/api/public/admin/more.js:259
 # state.pauseDelivery workers/api/public/admin/app.js:130
 # supply.confirmed workers/api/public/admin/stock.js:99
 # venue.pickup workers/api/public/admin/more.js:261
+# W-AI 2026-10-03 (lesson O16k): the owner's AI sheet, /admin/ai.js
+ai.starter workers/api/public/admin/ai.js:25
+ai.provider workers/api/public/admin/ai.js:32
+ai.openrouter workers/api/public/admin/ai.js:33
+ai.test workers/api/public/admin/ai.js:39
+ai.budget workers/api/public/admin/ai.js:42
+ai.number workers/api/public/admin/ai.js:77
+ai.explain workers/api/public/admin/ai.js:120
+ai.reword workers/api/public/admin/ai.js:123
+assistant.ask workers/api/public/admin/ai.js:27

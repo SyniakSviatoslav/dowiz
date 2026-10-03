@@ -114,7 +114,7 @@ pub async fn kitchen_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     // there and the facts alone cross the hop.
     let url = format!("https://hub/fold/kitchen_facts?venue={}&now={}", crate::mcp::enc(&loc), ctx.data.now_ms);
     let facts = crate::fold::ask::json(&place, &url).await?;
-    crate::assist::ask(&place, SYSTEM_KITCHEN, facts, &body.question).await
+    crate::assist::ask(&ctx.env, ctx.data.now_ms, &place, SYSTEM_KITCHEN, facts, &body.question).await
 }
 
 #[cfg(test)]

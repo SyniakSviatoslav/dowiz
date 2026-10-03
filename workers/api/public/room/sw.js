@@ -15,7 +15,7 @@
 
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-room-shell-2026-09-27-ru';
+const SHELL_CACHE = 'dowiz-room-shell-2026-10-03-push-offsale';
 const SHELL = [
   '/room/',
   '/room/app.js',
@@ -35,6 +35,10 @@ const SHELL = [
   '/room/guest.js',
   '/room/screens.js',
   '/room/parts.js',
+  '/room/sell.js',
+  '/room/offline-sale.js',
+  '/room/sale-i18n.js',
+  '/room/sales-db.js',
   // Voice (2026-09-25): the mic in the header and the browser half it drives.
   '/room/voice.js',
   '/lib/voice.js',

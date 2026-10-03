@@ -107,6 +107,9 @@ export function bindTill(c, root) {
       Object.assign(body, { currency, amount, reason });
     } else if (kind === 'close') {
       if (!f.elements.sure.checked) return;
+      // UNSENT OFFLINE CASH SALES ARE IN THIS DRAWER (W-OFFSALE): closing before
+      // they reach the hub would count cash the close cannot explain.
+      if (S.unsentSales) return c.toast(t('saleUnsentClose'));
       path = 'close';
     } else return;
     const btn = f.querySelector('button[type="submit"]');

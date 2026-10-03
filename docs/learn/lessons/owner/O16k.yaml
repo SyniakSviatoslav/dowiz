@@ -1,0 +1,226 @@
+# Lesson O16k (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-AI (2026-10-03): the owner's AI -- questions answered from the numbers, and the connection.
+id: O16k
+role: owner
+module: assistant
+order: 40
+covers: [assistant]
+title:
+  sq: "Pyetni numrat me AI"
+  en: "Ask your numbers with AI"
+  uk: "Питайте цифри зі ШІ"
+  ru: "Спрашивайте цифры с ИИ"
+goal:
+  sq: "Bëni një pyetje për shitjet, shihni nga vjen numri dhe lidhni çelësin tuaj të AI."
+  en: "Ask about your sales, see where the number comes from, and connect your own AI key."
+  uk: "Запитати про продажі, побачити, звідки число, і підключити власний ключ ШІ."
+  ru: "Спросить о продажах, увидеть, откуда число, и подключить свой ключ ИИ."
+steps:
+  - key: 1
+    anchor: more.tile.assistant
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.assistant"]'
+    title:
+      sq: "Asistenti"
+      en: "Assistant"
+      uk: "Асистент"
+      ru: "Ассистент"
+    caption:
+      sq: "Pyetjet dhe lidhja me AI janë këtu."
+      en: "Questions and the AI connection live here."
+      uk: "Тут питання і підключення ШІ."
+      ru: "Здесь вопросы и подключение ИИ."
+  - key: 2
+    anchor: ai.starter
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ai.starter"]'
+    title:
+      sq: "Pyetje të gatshme"
+      en: "Ready questions"
+      uk: "Готові питання"
+      ru: "Готовые вопросы"
+    caption:
+      sq: "Një prekje e bën pyetjen në gjuhën tuaj."
+      en: "One tap asks it in your language."
+      uk: "Один дотик ставить питання вашою мовою."
+      ru: "Одно касание задаёт вопрос на вашем языке."
+  - key: 3
+    anchor: assistant.question
+    pending: no
+    writes: no
+    action:
+      do: type
+      selector: '[data-tour="assistant.question"]'
+      value: "What sold worst on Monday?"
+    title:
+      sq: "Pyetja juaj"
+      en: "Your question"
+      uk: "Ваше питання"
+      ru: "Ваш вопрос"
+    caption:
+      sq: "Në shqip, anglisht, ukrainisht ose rusisht."
+      en: "In Albanian, English, Ukrainian or Russian."
+      uk: "Албанською, англійською, українською чи російською."
+      ru: "По-албански, по-английски, по-украински или по-русски."
+  - key: 4
+    anchor: assistant.ask
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="assistant.ask"]'
+    title:
+      sq: "Pyet"
+      en: "Ask"
+      uk: "Запитати"
+      ru: "Спросить"
+    caption:
+      sq: "Numri vjen nga regjistrat tuaj, jo nga modeli."
+      en: "The number comes from your records, not from a model."
+      uk: "Число береться з ваших записів, а не з моделі."
+      ru: "Число берётся из ваших записей, а не из модели."
+  - key: 5
+    anchor: ai.number
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ai.number"]'
+    title:
+      sq: "Nga vjen numri"
+      en: "Where a number comes from"
+      uk: "Звідки число"
+      ru: "Откуда число"
+    caption:
+      sq: "Prekeni: shihni qelizat dhe regjistrat e ditës."
+      en: "Tap it: see the cells and the day's records."
+      uk: "Торкніться: побачите клітинки і записи дня."
+      ru: "Коснитесь: увидите ячейки и записи дня."
+  - key: 6
+    anchor: ai.explain
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ai.explain"]'
+    title:
+      sq: "Çfarë thonë numrat"
+      en: "What the numbers say"
+      uk: "Що кажуть цифри"
+      ru: "Что говорят цифры"
+    caption:
+      sq: "Trendi dhe orët, me fjali të gatshme."
+      en: "The trend and the hours, in ready sentences."
+      uk: "Тренд і години готовими реченнями."
+      ru: "Тренд и часы готовыми предложениями."
+  - key: 7
+    anchor: ai.reword
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ai.reword"]'
+    title:
+      sq: "Me fjalët e AI"
+      en: "In AI's words"
+      uk: "Словами ШІ"
+      ru: "Словами ИИ"
+    caption:
+      sq: "AI vetëm i riformulon; numrat kontrollohen."
+      en: "AI only rewords; the numbers are checked."
+      uk: "ШІ лише переформулює; числа перевіряються."
+      ru: "ИИ только переформулирует; числа проверяются."
+  - key: 8
+    anchor: assistant.enabled
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="assistant.enabled"]'
+    title:
+      sq: "AI ndezur"
+      en: "AI on"
+      uk: "ШІ увімкнено"
+      ru: "ИИ включён"
+    caption:
+      sq: "Pa këtë, asgjë nuk dërgohet askund."
+      en: "Without it, nothing is sent anywhere."
+      uk: "Без цього нічого нікуди не надсилається."
+      ru: "Без этого ничего никуда не отправляется."
+  - key: 9
+    anchor: ai.provider
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ai.provider"]'
+    title:
+      sq: "Kush përgjigjet"
+      en: "Who answers"
+      uk: "Хто відповідає"
+      ru: "Кто отвечает"
+    caption:
+      sq: "Çelësi juaj, pastaj Workers AI."
+      en: "Your key, then Workers AI."
+      uk: "Ваш ключ, потім Workers AI."
+      ru: "Ваш ключ, затем Workers AI."
+  - key: 10
+    anchor: ai.openrouter
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ai.openrouter"]'
+    title:
+      sq: "OpenRouter falas"
+      en: "Free OpenRouter"
+      uk: "Безкоштовний OpenRouter"
+      ru: "Бесплатный OpenRouter"
+    caption:
+      sq: "Plotëson adresën dhe modelin; çelësi është i juaji."
+      en: "Fills in the address and model; the key is yours."
+      uk: "Заповнює адресу й модель; ключ ваш."
+      ru: "Заполняет адрес и модель; ключ ваш."
+  - key: 11
+    anchor: ai.test
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ai.test"]'
+    title:
+      sq: "Provo"
+      en: "Test"
+      uk: "Перевірити"
+      ru: "Проверить"
+    caption:
+      sq: "Tregon nëse lidhja punon ose i duhet një çelës."
+      en: "Shows whether it works or needs a key."
+      uk: "Показує, чи працює, чи потрібен ключ."
+      ru: "Показывает, работает ли или нужен ключ."
+  - key: 12
+    anchor: ai.budget
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="ai.budget"]'
+    title:
+      sq: "Pjesa e sotme"
+      en: "Today's share"
+      uk: "Частка на сьогодні"
+      ru: "Доля на сегодня"
+    caption:
+      sq: "Workers AI falas ndahet mes lokaleve."
+      en: "Free Workers AI is shared between venues."
+      uk: "Безкоштовний Workers AI ділиться між закладами."
+      ru: "Бесплатный Workers AI делится между заведениями."
