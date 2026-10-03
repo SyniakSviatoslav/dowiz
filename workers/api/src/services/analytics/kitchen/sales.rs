@@ -125,8 +125,53 @@ pub struct Sales {
     pub unmodelled: i64,
 }
 
-/// Fold the venue's orders over the window.
+/// Fold the venue's orders over the window, with no archived day: the hot
+/// log alone. The object always reads `fold_with`; this is the tests' door.
+#[cfg(test)]
 pub fn fold(orders: &[Value], dishes: &HashMap<String, Dish>, w: &Window) -> Sales {
+    fold_with(orders, &BTreeMap::new(), dishes, w)
+}
+
+/// `q` portions of `pid`, `money` of them, `stamp` = (stamped portions,
+/// their stamped cost), sold on day `d`: the dish's row and the recipe's draw.
+fn sell(s: &mut Sales, dishes: &HashMap<String, Dish>, d: usize, pid: &str, q: i64, money: i64, stamp: (i64, i64)) {
+    let n = s.days.len();
+    s.days[d].revenue += money;
+    let row = s.dishes.entry(pid.to_string()).or_insert_with(|| DishRow {
+        by_day: vec![0; n], stamped_by_day: vec![0; n], stamped_cogs_by_day: vec![0; n], ..DishRow::default()
+    });
+    row.sold += q;
+    row.revenue += money;
+    row.by_day[d] += q;
+    row.stamped += stamp.0;
+    row.stamped_cogs += stamp.1;
+    row.stamped_by_day[d] += stamp.0;
+    row.stamped_cogs_by_day[d] += stamp.1;
+    let Some(dish) = dishes.get(pid).filter(|x| !x.lines.is_empty()) else {
+        s.unmodelled += q;
+        return;
+    };
+    for (item, uq) in &dish.leaves {
+        let u = s.uses.entry(item.clone()).or_insert_with(|| Use { by_day: vec![0; n], micro_by_day: vec![0; n], ..Use::default() });
+        u.micro += uq * q;
+        u.micro_by_day[d] += uq * q;
+    }
+    for l in dish.lines.iter().filter(|_| dish.leaves.is_empty()) {
+        let u = s.uses.entry(l.supply.clone()).or_insert_with(|| Use { by_day: vec![0; n], micro_by_day: vec![0; n], ..Use::default() });
+        u.by_day[d] += l.qty * q;
+        u.qty += l.qty * q;
+        u.gross_g += l.gross_g.unwrap_or(0) * q;
+        u.net_g += l.net_g.unwrap_or(0) * q;
+        u.out_g += l.out_g.unwrap_or(0) * q;
+    }
+}
+
+/// The hot log's orders AND the cube's rows (`cube.rs`, keyed `yyyymmdd`)
+/// over the window (W-HIST P2a). The hot log keeps thirty days and the
+/// window allows sixty-two: without `cold`, days 31-62 read as no sales
+/// while the stock log beside them still drew. The two are disjoint (an
+/// order is in the hot log or in a row, never both), so they add.
+pub fn fold_with(orders: &[Value], cold: &BTreeMap<i64, super::super::cube::DayCube>, dishes: &HashMap<String, Dish>, w: &Window) -> Sales {
     let n = w.starts.len();
     let mut s = Sales { days: vec![DayRow::default(); n], ..Sales::default() };
     for o in orders {
@@ -144,36 +189,15 @@ pub fn fold(orders: &[Value], dishes: &HashMap<String, Dish>, w: &Window) -> Sal
             let Some(pid) = it.get("product_id").and_then(Value::as_str).filter(|p| !p.is_empty()) else { continue };
             let q = it.get("quantity").and_then(Value::as_i64).unwrap_or(0).max(0);
             let money = it.get("unit_price").and_then(Value::as_i64).unwrap_or(0) * q;
-            s.days[d].revenue += money;
-            let row = s.dishes.entry(pid.to_string()).or_insert_with(|| DishRow {
-                by_day: vec![0; n], stamped_by_day: vec![0; n], stamped_cogs_by_day: vec![0; n], ..DishRow::default()
-            });
-            row.sold += q;
-            row.revenue += money;
-            row.by_day[d] += q;
-            if let Some(c) = crate::command::place::cost::line_cost(it, q) {
-                row.stamped += q;
-                row.stamped_cogs += c;
-                row.stamped_by_day[d] += q;
-                row.stamped_cogs_by_day[d] += c;
-            }
-            let Some(dish) = dishes.get(pid).filter(|x| !x.lines.is_empty()) else {
-                s.unmodelled += q;
-                continue;
-            };
-            for (item, uq) in &dish.leaves {
-                let u = s.uses.entry(item.clone()).or_insert_with(|| Use { by_day: vec![0; n], micro_by_day: vec![0; n], ..Use::default() });
-                u.micro += uq * q;
-                u.micro_by_day[d] += uq * q;
-            }
-            for l in dish.lines.iter().filter(|_| dish.leaves.is_empty()) {
-                let u = s.uses.entry(l.supply.clone()).or_insert_with(|| Use { by_day: vec![0; n], micro_by_day: vec![0; n], ..Use::default() });
-                u.by_day[d] += l.qty * q;
-                u.qty += l.qty * q;
-                u.gross_g += l.gross_g.unwrap_or(0) * q;
-                u.net_g += l.net_g.unwrap_or(0) * q;
-                u.out_g += l.out_g.unwrap_or(0) * q;
-            }
+            let stamp = crate::command::place::cost::line_cost(it, q).map_or((0, 0), |c| (q, c));
+            sell(&mut s, dishes, d, pid, q, money, stamp);
+        }
+    }
+    for (d, day) in w.days.iter().enumerate() {
+        let Some(r) = cold.get(day) else { continue };
+        s.days[d].orders += r.o - r.x;
+        for (pid, v) in &r.m {
+            sell(&mut s, dishes, d, pid, v[0].max(0), v[1], (v[2], v[3]));
         }
     }
     // The leaves' millionths, rounded once over the window. Grams through a

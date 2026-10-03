@@ -103,6 +103,25 @@ The per-link live proof (62 links, contracts in `tools/live-proof/contracts/`) i
 `docs/research/2026-10-03-live-proof-plan.md`. Its workflow secrets are listed there and get a row here
 when the workflow lands.
 
+### What the workflows read (owner step: GitHub, Settings, Secrets and variables, Actions)
+
+`tools/gates/ci-refs.py` refuses a workflow that reads a secret or variable this table does not
+name, or whose `run:` step names a file the repo does not have. Whether a run is GREEN on GitHub
+is not readable from here (`gh` is not installed): that half is the Actions tab.
+
+| Name | Kind | Read by | What |
+|---|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | secret | health-cron, heartbeat-monitor | the ops bot that reports a failing probe |
+| `OPS_TELEGRAM_CHAT_ID` | variable | health-cron | the ops chat |
+| `WATCH_URL` | variable | health-cron, heartbeat-monitor | overrides the dowiz-watch URL (default its workers.dev host) |
+| `HEALTH_VENUES` | variable | health-cron | venues the probes visit (default: all live) |
+| `WALK_HOST` | secret | key-flows | the QA host the role walks run against (never production) |
+| `WALK_LOC` | secret | key-flows | that host's venue id |
+| `WALK_OWNER_EMAIL`, `WALK_OWNER_PASSWORD` | secret | key-flows | the QA venue's owner |
+| `WALK_COURIER_PHONE`, `WALK_COURIER_PASSWORD` | secret | key-flows | the QA venue's courier |
+| `EVALS_OWNER_EMAIL`, `EVALS_OWNER_PASSWORD` | secret | evals-nightly | an owner of the evaluated venue |
+| `CF_ANALYTICS_ACCOUNT_ID`, `CF_ANALYTICS_TOKEN` | secret | evals-nightly | read-only Cloudflare analytics |
+
 ## Crons
 
 From `workers/api/wrangler.toml` and `scheduled` in `workers/api/src/lib.rs`:

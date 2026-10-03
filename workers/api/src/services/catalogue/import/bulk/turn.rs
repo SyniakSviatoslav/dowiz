@@ -5,7 +5,7 @@
 //! object runs it in one turn (`hubdo/bulk.rs`, `POST /fold/bulk`) and the
 //! catalogue never crosses.
 
-use super::{apply_recipes, apply_supplies, preps, projected, read, room, Kind};
+use super::{apply_recipes, apply_supplies_with, extras, preps, projected, read, room, Kind};
 use dowiz_hub::catalog::Catalog;
 use dowiz_hub::import::recipes::CostScale;
 use serde_json::{json, Value};
@@ -38,7 +38,17 @@ pub(crate) enum Turn {
 /// nothing refuses. See the module.
 pub(crate) fn turn(cat: &mut Catalog, input: &BulkIn) -> Turn {
     let scale = if input.hundredths { CostScale::Hundredths } else { CostScale::Major };
-    let (mut draft, preview) = read(cat, &input.text, input.kind, scale, input.now_ms);
+    let (mut draft, mut preview) = read(cat, &input.text, input.kind, scale, input.now_ms);
+    // The columns the hub's parser does not read: losses and the pack (W-STOCK P1).
+    let more = if input.kind == Kind::Supplies { extras::read(&input.text) } else { Default::default() };
+    draft.warnings.extend(more.1.iter().cloned());
+    for row in preview.iter_mut() {
+        if let Some(x) = row["id"].as_str().and_then(|id| more.0.get(id)) {
+            row["cleanPm"] = json!(x.clean_pm);
+            row["cookPm"] = json!(x.cook_pm);
+            row["pack"] = json!(x.pack.as_ref().map(|p| json!({ "name": p.name, "qty": p.qty })));
+        }
+    }
     let room = projected(cat, &draft, input.kind, input.retire);
     let no_room = room::refusal(&room, &mut draft.warnings);
     let mut summary = json!({
@@ -68,7 +78,7 @@ pub(crate) fn turn(cat: &mut Catalog, input: &BulkIn) -> Turn {
         return Turn::Refused(413, why);
     }
     let written = match input.kind {
-        Kind::Supplies => apply_supplies(cat, &draft, input.retire),
+        Kind::Supplies => apply_supplies_with(cat, &draft, input.retire, &more.0),
         Kind::Recipes => apply_recipes(cat, &draft),
     };
     match written {

@@ -925,3 +925,8 @@ mod tests {
     }
 
 }
+
+/// The nightly over a fixture venue: retention prune and the chain check (W-INT2 #24/#28).
+#[cfg(test)]
+#[path = "cloud/nightly/tests.rs"]
+mod nightly_tests;

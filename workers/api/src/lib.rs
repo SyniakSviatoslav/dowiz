@@ -425,6 +425,7 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         // ── ported from the native adapter, on the SAME dowiz-hub logic ──
         .get_async("/api/owner/analytics", |r, c| edge::run(r, c, services::analytics::analytics))
         .get_async("/api/owner/analytics/kitchen", |r, c| edge::run(r, c, services::analytics::kitchen::kitchen))
+        .post_async("/api/owner/analytics/history", |r, c| edge::run(r, c, services::analytics::handler::history))
         .get_async("/api/owner/exceptions", |r, c| edge::run(r, c, exceptions::exceptions))
         .get_async("/api/owner/promotions", |r, c| edge::run(r, c, services::ordering::promotions::promotions))
         .post_async("/api/owner/promotions", |r, c| edge::run(r, c, services::ordering::promotions::set_promotion))

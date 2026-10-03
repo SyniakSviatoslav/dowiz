@@ -184,3 +184,8 @@ mod tgrail;
 
 #[cfg(test)]
 mod tests;
+
+/// The outbox end to end through the routes and the runner (W-INT2 #5/#7).
+#[cfg(test)]
+#[path = "outbox/flow/tests.rs"]
+mod flow_tests;

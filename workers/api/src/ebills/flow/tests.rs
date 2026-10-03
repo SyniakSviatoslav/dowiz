@@ -199,3 +199,35 @@ fn a_page_instead_of_data_is_named_and_counted_as_a_failure() {
     assert!(s["state"]["last_error"].to_string().contains("a page, not data"), "{s}");
     assert_eq!(s["state"]["halted"], false, "a page is worth trying again, after the backoff");
 }
+
+/// W-INT2 #13: the till link through the DAG path -- saving the link arms the venue's alarm, the
+/// runner's job (`cron::run`, what the alarm asks `cron~alpha` for) ticks the poll against the
+/// fake till, and the imported course is an order in the OWNER's list.
+#[test]
+fn the_alarm_path_imports_a_till_sale_into_the_owners_orders() {
+    let site = Site::new();
+    let (t, _) = open_venue(&site, "alpha", "a@x.test");
+    let host = site.world.host("alpha");
+    assert!(host.alarm.get().is_none(), "no link, nothing to wake for");
+    configure(&site, &t);
+    let at = host.alarm.get().expect("saving the link armed the alarm");
+    let till = Till::default();
+    till.serve();
+    let uuid = "00000000-0000-4000-8000-000000008602"; // `ebills::tests::course()`
+    let owner_sees = |site: &Site| {
+        let r = site.run(crate::owner::orders, get(&at_path("/api/owner/orders")).bearer(&t).on("alpha"), &[]);
+        assert_eq!(r.status_code(), 200, "{}", r.body_str());
+        r.body_str().contains(uuid)
+    };
+    assert!(!owner_sees(&site), "imported before any tick");
+    // Three firings, six minutes apart: the walk reaches the listed course within its budget.
+    for n in 0..3 {
+        block_on(crate::cron::run(&site.env(), "alpha", at + n * 6 * 60_000));
+    }
+    assert!(till.logins.get() >= 1, "the runner never reached the till");
+    assert!(owner_sees(&site), "the till's course is not in the owner's orders: {}", status(&site, &t));
+}
+
+fn at_path(path: &str) -> String {
+    at(path)
+}

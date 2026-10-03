@@ -4,6 +4,12 @@
 //! thing that can disagree with the orders, and at one restaurant the fold is
 //! a loop over a few hundred envelopes.
 //!
+//! ONE EXCEPTION, APPROVED BY THE OPERATOR ON 2026-10-03: the daily sales
+//! cube (`cube.rs`), for the days the hot log no longer holds. It is a cache
+//! with a verifier, never a source; its header says how it keeps this law.
+//! This fold stays the reference: `history/tests.rs` pins the cube's numbers
+//! to it over the same orders.
+//!
 //! EVERY NUMBER HERE IS A NUMBER AN OWNER MAKES DECISIONS WITH, and none of
 //! them had a test, because the fold lived inside a handler that needs two
 //! Durable Objects to run.
@@ -53,9 +59,13 @@ pub struct Report {
     pub top_products: Vec<Dish>,
 }
 
-/// The window an owner asked for: seven days or thirty, and nothing else.
+/// The window an owner asked for: 7, 30, 90 or 365 days, and nothing else
+/// (W-HIST: the cube, `cube.rs`, holds what the hot log no longer does). A
+/// number between two is the shorter; anything that is not one is a week.
 pub fn window(days: Option<&str>) -> i64 {
     match days.and_then(|d| d.parse::<i64>().ok()) {
+        Some(d) if d >= 365 => 365,
+        Some(d) if d >= 90 => 90,
         Some(d) if d >= 30 => 30,
         _ => 7,
     }
@@ -69,6 +79,7 @@ pub fn window(days: Option<&str>) -> i64 {
 /// and an order placed at 00:30 on the day after the change falls into the
 /// day before. Each boundary is asked for separately, from an instant an hour
 /// inside the previous day, so the zone's own rule decides every one of them.
+#[cfg(test)] // the live path folds the cube's days (history.rs); the reference fold stays for tests
 pub fn day_starts(zone: Zone, now: i64, days: i64) -> Vec<i64> {
     let mut out = Vec::with_capacity(days.max(0) as usize);
     let mut at = dowiz_hub::tz::start_of_local_day_ms(zone, now);

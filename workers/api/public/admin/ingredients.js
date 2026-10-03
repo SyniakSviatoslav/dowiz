@@ -13,8 +13,25 @@ import * as C from '/admin/ingredients-calc.js';
 import { KINDS, cardMarkup } from '/admin/ingredients-view.js';
 import { packsMarkup, packChips, bindPacks, deleteSupplies, N } from '/admin/nom.js';
 import { me } from '/admin/app.js';
+import { T } from '/admin/i18n.js';
+import { WORDS as STOCK_WORDS } from '/admin/start-stock-i18n.js';
 
 export { KINDS };
+
+// W-STOCK (P1/P4/P5): its words into the console's table, and the tools row's
+// four sheets (`ingredients-view.js` toolsMarkup), each loaded on first open.
+for (const [l, w] of Object.entries(STOCK_WORDS)) if (T[l]) Object.assign(T[l], w);
+const STOCKX = {
+  start: () => import('/admin/start-stock.js'),
+  losses: () => import('/admin/ingredients-loss.js'),
+  suppliers: () => import('/admin/suppliers.js'),
+  orders: () => import('/admin/order-list.js'),
+};
+document.addEventListener('click', e => {
+  const b = e.target?.closest?.('[data-stockx]');
+  const load = b && STOCKX[b.dataset.stockx];
+  if (load) load().then(m => m.open()).catch(err => toast(String(err.message || err)));
+});
 const isFood = k => k === 'food_ingredient' || k === 'condiment';
 /// The movements an owner makes by hand, their words and icons.
 const MOVES = [['received', 'received', 'download'], ['wasted', 'wasted', 'trash'], ['stocktake', 'counted', 'check']];

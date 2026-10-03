@@ -263,3 +263,47 @@ fn each_integration_check_asks_its_provider_and_answers_in_the_providers_words()
         assert!(v["error"].as_str().unwrap_or("").contains(words), "{which}: {v}");
     }
 }
+
+/// W-INT2 #9: Meta's delivery states reach the reply they answer, and the owner's thread shows
+/// them; a forged status delivery is refused and marks nothing.
+#[test]
+fn a_whatsapp_delivery_state_marks_the_owners_reply_in_the_thread() {
+    let site = Site::new();
+    let t = site.venue("alpha", "a@x.test");
+    for (k, v) in [("notify.meta.secret", "meta-secret"), ("notify.whatsapp.token", "wa-token"), ("notify.whatsapp.phone_id", "1234")] {
+        setting(&site, &t, k, v);
+    }
+    answer_outbound(|_| Reply::from_json(&json!({"messages": [{"id": "wamid.out"}]})));
+    let r = site.run(
+        crate::channels::reply,
+        post(&at("/api/owner/inbox/355691234567"), &json!({"channel": "whatsapp", "text": "yes, 8pm"})).bearer(&t).on("alpha"),
+        &[("peer", "355691234567")],
+    );
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    let states = |list: serde_json::Value| {
+        json!({"object": "whatsapp_business_account", "entry": [{"changes": [{"value": {"messaging_product": "whatsapp", "statuses": list}}]}]})
+            .to_string()
+    };
+    let thread = || {
+        let th = site.run(crate::channels::thread, get(&at("/api/owner/inbox/355691234567?channel=whatsapp")).bearer(&t).on("alpha"), &[("peer", "355691234567")]);
+        assert_eq!(th.status_code(), 200, "{}", th.body_str());
+        th.body_value()["messages"][0].clone()
+    };
+    assert!(thread()["status"].is_null(), "no state before Meta says one: {}", thread());
+
+    let read = states(json!([
+        {"id": "wamid.out", "status": "delivered", "timestamp": "1700000100", "recipient_id": "355691234567"},
+        {"id": "wamid.out", "status": "read", "timestamp": "1700000200", "recipient_id": "355691234567"},
+        {"id": "wamid.someone-else", "status": "read", "timestamp": "1700000200", "recipient_id": "355691234567"}
+    ]));
+    assert_eq!(deliver(&site, &read, Some(sign("wrong", &read))).status_code(), 401, "forged");
+    assert!(thread()["status"].is_null(), "a forged delivery marked the reply: {}", thread());
+    let r = deliver(&site, &read, Some(sign("meta-secret", &read)));
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    assert_eq!(r.body_value()["statuses"], 2, "two forward steps of our reply, the stranger dropped: {}", r.body_str());
+    assert_eq!(thread()["status"], "read", "{}", thread());
+    // Meta repeats itself and reorders: an older state neither moves the mark back nor grows the log.
+    let late = states(json!([{"id": "wamid.out", "status": "sent", "timestamp": "1700000050", "recipient_id": "355691234567"}]));
+    assert_eq!(deliver(&site, &late, Some(sign("meta-secret", &late))).body_value()["statuses"], 0);
+    assert_eq!(thread()["status"], "read");
+}

@@ -1,0 +1,341 @@
+{
+  "id": "analytics.owner.v2",
+  "version": "2.0.0",
+  "description": {
+    "en": "The owner's numbers over any period (7, 30, 90 or 365 days, or a from/to range of at most 366 days): orders, takings, average check, refusals, by day / hour / weekday x hour / channel / dish, the previous period and the same weekday a week before and over four weeks, each dish's trend, repeat customers as counts only, and where every day came from (hot log or archived cube). v1 fields are kept unchanged. ?trace=yyyy-mm-dd answers the records behind one day; ?verify=1 the newest archived day, refolded from its archive and compared byte for byte.",
+    "uk": "Аналітика власника за будь-який період з порівнянням, трендами страв і трасуванням кожного числа до замовлень."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/services/analytics/history.rs",
+      "line": 171,
+      "what": "report"
+    },
+    {
+      "file": "workers/api/src/services/analytics/handler.rs",
+      "line": 132,
+      "what": "answer_with"
+    },
+    {
+      "file": "workers/api/src/hubdo/reads.rs",
+      "line": 55,
+      "what": "fold_analytics"
+    },
+    {
+      "file": "workers/api/src/hubdo/cube.rs",
+      "line": 163,
+      "what": "cube_trace"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/admin/analytics.js",
+      "line": 44,
+      "what": "open / trace"
+    },
+    {
+      "file": "tools/live-proof/probes/analytics-history.mjs",
+      "line": 1,
+      "what": "probe"
+    }
+  ],
+  "external_api_version": null,
+  "request": {
+    "method": "GET",
+    "path": "/api/owner/analytics",
+    "auth": "owner bearer token",
+    "query_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "days": {
+          "type": "string",
+          "enum": [
+            "7",
+            "30",
+            "90",
+            "365"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "trace": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "verify": {
+          "type": "string"
+        },
+        "v": {
+          "const": "2",
+          "description": "v2 shape; without it the v1 bytes are answered unchanged"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "v"
+      ]
+    }
+  },
+  "request_schema": null,
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "contract",
+      "days",
+      "from",
+      "to",
+      "orders",
+      "revenue",
+      "rejected",
+      "averageOrder",
+      "delivery",
+      "pickup",
+      "dineIn",
+      "byChannel",
+      "byDay",
+      "byHour",
+      "topProducts",
+      "compare",
+      "byWeekdayHour",
+      "hourRevenue",
+      "hours",
+      "channels",
+      "trend",
+      "repeat",
+      "history",
+      "currency"
+    ],
+    "properties": {
+      "contract": {
+        "const": "analytics.owner.v2"
+      },
+      "days": {
+        "type": "integer"
+      },
+      "from": {
+        "type": "string"
+      },
+      "to": {
+        "type": "string"
+      },
+      "orders": {
+        "type": "integer"
+      },
+      "revenue": {
+        "type": "integer"
+      },
+      "rejected": {
+        "type": "integer"
+      },
+      "averageOrder": {
+        "type": "integer"
+      },
+      "byChannel": {
+        "type": "object"
+      },
+      "byDay": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "at",
+            "day",
+            "orders",
+            "revenue",
+            "hot",
+            "archived"
+          ],
+          "properties": {
+            "at": {
+              "type": "integer"
+            },
+            "day": {
+              "type": "string"
+            },
+            "orders": {
+              "type": "integer"
+            },
+            "revenue": {
+              "type": "integer"
+            },
+            "hot": {
+              "type": "integer"
+            },
+            "archived": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "byHour": {
+        "type": "array",
+        "minItems": 24,
+        "maxItems": 24,
+        "items": {
+          "type": "integer"
+        }
+      },
+      "topProducts": {
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "quantity",
+            "revenue"
+          ]
+        }
+      },
+      "compare": {
+        "type": "object",
+        "required": [
+          "prev",
+          "weekday"
+        ],
+        "properties": {
+          "prev": {
+            "type": "object",
+            "required": [
+              "from",
+              "to",
+              "orders",
+              "revenue",
+              "averageOrder",
+              "delta",
+              "deltaPm"
+            ]
+          },
+          "weekday": {
+            "type": "object",
+            "required": [
+              "day",
+              "weekday",
+              "orders",
+              "revenue",
+              "lastWeek",
+              "average"
+            ]
+          }
+        }
+      },
+      "byWeekdayHour": {
+        "type": "array",
+        "minItems": 7,
+        "maxItems": 7,
+        "items": {
+          "type": "array",
+          "minItems": 24,
+          "maxItems": 24,
+          "items": {
+            "type": "integer"
+          }
+        }
+      },
+      "hourRevenue": {
+        "type": "array",
+        "minItems": 24,
+        "maxItems": 24,
+        "items": {
+          "type": "integer"
+        }
+      },
+      "hours": {
+        "type": "object",
+        "required": [
+          "best",
+          "worst"
+        ]
+      },
+      "channels": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "channel",
+            "orders",
+            "revenue"
+          ]
+        }
+      },
+      "trend": {
+        "type": "object",
+        "required": [
+          "buckets",
+          "dishes"
+        ]
+      },
+      "repeat": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "customers",
+          "repeatCustomers",
+          "orders",
+          "repeatOrders",
+          "sharePm"
+        ]
+      },
+      "history": {
+        "type": "object",
+        "required": [
+          "archivedDays",
+          "folded",
+          "pending"
+        ]
+      }
+    }
+  },
+  "trace_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "day",
+      "archived",
+      "hot",
+      "records"
+    ],
+    "properties": {
+      "archived": {
+        "type": "object",
+        "required": [
+          "stored",
+          "refolded",
+          "equal",
+          "src"
+        ],
+        "properties": {
+          "equal": {
+            "type": "boolean"
+          }
+        }
+      },
+      "records": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "at",
+            "hour",
+            "status",
+            "from",
+            "took",
+            "channel",
+            "kind",
+            "items"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -26,6 +26,10 @@ pub struct SupplyIn {
     /// card and every card under it are read in the object: `cook`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub record: Option<String>,
+    /// A recipe names it, directly or under a semi-finished card: its loss
+    /// between counts is tracked (`digest`). Filled for a count only.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub linked: bool,
 }
 
 /// What the Worker decided and the object executes.
@@ -56,10 +60,33 @@ impl StockTurnIn {
     /// the object holds (BN1), whatever the Worker sent. PURE.
     pub fn from_catalogue(mut self, cat: &dowiz_hub::catalog::Catalog) -> Self {
         self.supplies = super::cook::supplies_for(&self.kind, cat.supplies());
+        if is_count(&self.kind) {
+            for id in linked_of(cat) {
+                if let Some(s) = self.supplies.get_mut(&id) {
+                    s.linked = true;
+                }
+            }
+        }
         self.today = super::today_of(cat, self.now_ms);
         self.currency = crate::services::venue::currency_of(cat);
         self
     }
+}
+
+/// A count: one line or a session.
+pub fn is_count(kind: &str) -> bool {
+    kind == "count" || kind == "stocktake"
+}
+
+/// Every supply a dish's recipe names, directly or through a semi-finished
+/// card (its raw leaves). PURE.
+pub fn linked_of(cat: &dowiz_hub::catalog::Catalog) -> std::collections::BTreeSet<String> {
+    let mut out = std::collections::BTreeSet::new();
+    for (_, j) in cat.products() {
+        out.extend(dowiz_hub::stock::bom_of(&j).into_iter().map(|l| l.supply));
+        out.extend(crate::services::analytics::kitchen::leaves_of(cat, &j).into_iter().map(|(s, _)| s));
+    }
+    out
 }
 
 /// The supplies of a catalogue, as the turn reads them. PURE.
@@ -73,6 +100,7 @@ pub fn supplies_of(list: Vec<(String, String)>) -> BTreeMap<String, SupplyIn> {
                 low_at: v.get("lowAt").and_then(Value::as_i64).unwrap_or(0),
                 shelf_days: v.get("shelfDays").and_then(Value::as_i64),
                 record: None,
+                linked: false,
             };
             (id, s)
         })
@@ -89,6 +117,10 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn, expiring_due: bool) -> Resul
     // A BATCH COOKED AHEAD (W-PF2 R2): its own door, the card read here.
     if input.kind == super::cook::KIND {
         return super::cook::run(log, input);
+    }
+    // A SUPPLIER'S CARD, OR AN ORDER SENT (W-STOCK P5): notes, never a movement.
+    if input.kind == super::suppliers::CARD || input.kind == super::suppliers::ORDERED {
+        return super::suppliers::run(log, input);
     }
     let body: moves::StockMoveIn = serde_json::from_value(input.body.clone()).map_err(|e| (400, format!("bad request body: {e}")))?;
     let shelf = |id: &str| input.supplies.get(id).and_then(|s| s.shelf_days);
@@ -107,7 +139,14 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn, expiring_due: bool) -> Resul
     let now = |id: &str| Shelf { free: after.ledger.available(id), counted: after.ledger.is_counted(id) };
     let open = after.lots.open();
     let expiring = expiring_due.then_some((open.as_slice(), input.today));
-    let told = tell::events(&plan, &shown, &was, &now, &supply, expiring);
+    let mut told = tell::events(&plan, &shown, &was, &now, &supply, expiring);
+    // THE WEEKLY LOSS DIGEST rides on a count (W-STOCK P4, `digest`).
+    if is_count(&input.kind) {
+        let named = |id: &str| input.supplies.get(id).map(|s| (s.name.clone(), s.unit.clone(), s.linked));
+        if let Some(d) = super::digest::owe(log, &after, input.now_ms, &named, &input.currency) {
+            told.push((super::digest::EVENT, d));
+        }
+    }
     Ok((shown, told))
 }
 

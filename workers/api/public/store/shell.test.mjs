@@ -10,6 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 // The screens import by absolute URL and touch `location`; give node both.
 globalThis.location = { search: '', hostname: 'dubin.dowiz.org' };
@@ -19,9 +20,11 @@ const here = new URL('.', import.meta.url);
 const src = readFileSync(new URL('./shell.js', here), 'utf8')
   .replace("'/lib/retry.js'", JSON.stringify(new URL('../lib/retry.js', here).href))
   .replace("'/lib/booking-time.js'", JSON.stringify(new URL('../lib/booking-time.js', here).href))
+  .replace("'/lib/blocks.js'", JSON.stringify(new URL('../lib/blocks.js', here).href))
   .replace("import { API, SLUG } from '/store/state.js';", "const API = '/api'; const SLUG = 'dubin';");
 const shell = await import('data:text/javascript;base64,' + Buffer.from(src).toString('base64'));
-const { cdnOrigin, schedule, isOpenAt, nextOpen, clockAt, assemble, fromCdn, fetchMenuIn } = shell;
+const { cdnOrigin, schedule, isOpenAt, nextOpen, clockAt, assemble, fromCdn, fetchMenuIn, lastRead } = shell;
+const { memoryBackend, blockStore } = await import(new URL('../lib/blocks.js', here).href);
 
 const NOON = 1_782_900_000_000;
 const NIGHT = 1_782_867_600_000;
@@ -112,8 +115,9 @@ function cdn(objects, { manifest = true } = {}) {
   const fetchFn = async url => {
     asked.push(url);
     const key = url.startsWith(BASE) ? url.slice(BASE.length) : url;
-    if (!(key in objects) || (key === 'manifest.json' && !manifest)) return { ok: false, status: 404, json: async () => ({}) };
-    return { ok: true, status: 200, json: async () => JSON.parse(JSON.stringify(objects[key])) };
+    if (!(key in objects) || objects[key] === undefined || (key === 'manifest.json' && !manifest)) return { ok: false, status: 404, json: async () => ({}) };
+    const body = typeof objects[key] === 'string' ? objects[key] : JSON.stringify(objects[key]);
+    return { ok: true, status: 200, json: async () => JSON.parse(body), text: async () => body, arrayBuffer: async () => new TextEncoder().encode(body).buffer };
   };
   return { asked, fetchFn };
 }
@@ -168,4 +172,93 @@ test('fetchMenuIn: the CDN answer carries the Stripe key onto the location; with
   const h = await fetchMenuIn('en', { origin: null, slug: 'dubin', fetchFn: hubFetch });
   assert.deepEqual(hub, ['/api/public/locations/dubin/menu?locale=en']);
   assert.equal(h.location.slug, 'dubin');
+});
+
+// ── the device copy (BN3): real k64 names, the Map backend ──────────────────
+const k64 = s => createHash('sha256').update(s).digest('hex').slice(0, 16) + '.json';
+function generation(price) {
+  const f = fragment();
+  f.categories[1].products[1].price = price;
+  const [fb, wb, mb] = [JSON.stringify(f), JSON.stringify(words), JSON.stringify(['aaa.jpg'])];
+  const root = { v: 1, slug: 'dubin', default: 'sq', locales: ['sq', 'en'], fragment: k64(fb), words: { en: k64(wb) }, blocks: {}, media: k64(mb) };
+  return { 'manifest.json': JSON.stringify(root), [k64(fb)]: fb, [k64(wb)]: wb, [k64(mb)]: mb };
+}
+const ORIGIN = 'https://cdn.dowiz.org';
+const objectsAsked = c => c.asked.map(u => u.slice(BASE.length)).filter(k => k !== 'manifest.json');
+
+test('device copy: a second visit inside the root\'s 30 s asks NOTHING; after it, the root alone', async () => {
+  const store = blockStore(memoryBackend());
+  let t = 1_000_000;
+  const opts = (c) => ({ origin: ORIGIN, slug: 'dubin', now: NOON, wall: () => t, fetchFn: c.fetchFn, store });
+  const g = generation(900);
+  const first = cdn(g);
+  const a = await fromCdn('sq', opts(first));
+  assert.equal(first.asked.length, 3, 'root + fragment + list, as before');
+  assert.equal(store.stats.stored, 2, 'both objects kept');
+  t += 5_000;
+  const warm = cdn(g);
+  const b = await fromCdn('sq', opts(warm));
+  assert.equal(warm.asked.length, 0, 'zero requests inside max-age');
+  assert.deepEqual(b, a, 'the same menu');
+  assert.equal(lastRead.root, 'device');
+  t += 60_000;
+  const later = cdn(g);
+  await fromCdn('sq', opts(later));
+  assert.deepEqual(later.asked.map(u => u.slice(BASE.length)), ['manifest.json'], 'an unchanged root: no object is asked');
+  assert.deepEqual([lastRead.root, lastRead.device, lastRead.network], ['network', 2, 0]);
+});
+
+test('device copy: OFFLINE renders the last published menu; a 404 root is never revived', async () => {
+  const store = blockStore(memoryBackend());
+  let t = 1_000_000;
+  const g = generation(900);
+  await fromCdn('sq', { origin: ORIGIN, slug: 'dubin', now: NOON, wall: () => t, fetchFn: cdn(g).fetchFn, store });
+  t += 3_600_000;
+  const asked = [];
+  const offline = async url => { asked.push(url); throw new TypeError('Failed to fetch'); };
+  const d = await fromCdn('sq', { origin: ORIGIN, slug: 'dubin', now: NOON, wall: () => t, fetchFn: offline, store });
+  assert.equal(d.categories[1].products[1].price, 900);
+  assert.equal(lastRead.root, 'offline');
+  assert.equal(asked.length, 1, 'the root was tried, nothing else');
+  const w = console.warn; console.warn = () => {};
+  try {
+    const gone = cdn(g, { manifest: false });
+    assert.equal(await fromCdn('sq', { origin: ORIGIN, slug: 'dubin', wall: () => t, fetchFn: gone.fetchFn, store }), null, 'unpublished: the hub answers');
+  } finally { console.warn = w; }
+});
+
+test('device copy: a new generation fetches only the names it has not seen', async () => {
+  const store = blockStore(memoryBackend());
+  let t = 1_000_000;
+  const g1 = generation(900), g2 = generation(950);
+  await fromCdn('sq', { origin: ORIGIN, slug: 'dubin', now: NOON, wall: () => t, fetchFn: cdn(g1).fetchFn, store });
+  t += 60_000;
+  const next = cdn(g2);
+  const d = await fromCdn('sq', { origin: ORIGIN, slug: 'dubin', now: NOON, wall: () => t, fetchFn: next.fetchFn, store });
+  const changed = JSON.parse(g2['manifest.json']).fragment;
+  assert.deepEqual(objectsAsked(next), [changed], 'the fragment moved; the photo list did not');
+  assert.equal(d.categories[1].products[1].price, 950);
+});
+
+test('device copy: a tampered blob is refused and read again; a CDN object that is not its name is refused too', async () => {
+  const be = memoryBackend();
+  const store = blockStore(be);
+  let t = 1_000_000;
+  const g = generation(900);
+  await fromCdn('sq', { origin: ORIGIN, slug: 'dubin', now: NOON, wall: () => t, fetchFn: cdn(g).fetchFn, store });
+  const fkey = JSON.parse(g['manifest.json']).fragment;
+  new Uint8Array(be.raw.objects.get(`dubin/${fkey}`).bytes)[10] ^= 1;
+  t += 60_000;
+  const again = cdn(g);
+  const w = console.warn; console.warn = () => {};
+  try {
+    const d = await fromCdn('sq', { origin: ORIGIN, slug: 'dubin', now: NOON, wall: () => t, fetchFn: again.fetchFn, store });
+    assert.equal(d.categories[1].products[1].price, 900);
+    assert.equal(store.stats.refused, 1);
+    assert.deepEqual(objectsAsked(again), [fkey], 'only the refused object is read again');
+    const lying = cdn({ ...generation(900), [fkey]: generation(950)[JSON.parse(generation(950)['manifest.json']).fragment] });
+    const fb = memoryBackend();
+    assert.equal(await fromCdn('sq', { origin: ORIGIN, slug: 'dubin', wall: () => t, fetchFn: lying.fetchFn, store: blockStore(fb) }), null, 'the hub answers instead');
+    assert.equal(fb.raw.objects.has(`dubin/${fkey}`), false, 'the lying object was not kept');
+  } finally { console.warn = w; }
 });

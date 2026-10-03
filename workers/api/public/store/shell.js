@@ -20,11 +20,18 @@
 // `dowiz_hub::hours`). The two are pinned to the same instants
 // (`shell.test.mjs`, `hubdo/menu/tests.rs`). The price a customer pays is
 // re-derived by the kernel at placement; what is read here is a VIEW.
+//
+// THE DEVICE COPY (BN3, menu half; `lib/blocks.js`). The root and the objects it
+// names are kept in IndexedDB, each object VERIFIED against its k64 name on
+// every read. A return visit inside the root's 30 s asks nothing; after it, the
+// root alone; offline, the device's last root and its objects; a new
+// generation fetches only the names it has not seen. No order is kept (AX7).
 // ASCII QUOTES ONLY (DOWIZ-COMMON-RULES rule 11).
 
 import { readAgain } from '/lib/retry.js';
 import { API, SLUG } from '/store/state.js';
 import { venueClock } from '/lib/booking-time.js';
+import { openBlocks, k64Key, verified, FRESH_MS } from '/lib/blocks.js';
 
 /// A day is 1440 minutes; `dowiz_hub::hours::DAY`.
 const DAY = 1440;
@@ -122,16 +129,71 @@ export function assemble(fragment, words, media, { base, now = Date.now() }) {
   return d;
 }
 
-/// The menu in `locale` from the CDN, or `null` when the CDN has nothing usable.
-export async function fromCdn(locale, { origin = cdnOrigin(), slug = SLUG, now = Date.now(), fetchFn = fetch } = {}) {
+// ── the device copy (BN3, lib/blocks.js) ────────────────────────────────────
+/// A root this shell can read for `slug`, or null.
+const usable = (m, slug) => m && m.v === 1 && m.slug === slug && typeof m.fragment === 'string';
+/// The keys a root names: what `prune` must keep.
+function named(m) {
+  const keys = [m.fragment, m.media, ...Object.values(m.words || {}), ...Object.values(m.blocks || {})];
+  return new Set(keys.filter(k => typeof k === 'string'));
+}
+
+/// The root: from the device inside its 30 s (no request), else the network
+/// (stored), else -- the network is GONE, not answering 404 -- the device's last.
+/// A 404 or a root for another venue is null: an unpublished menu is never revived.
+async function readRoot(base, slug, fetchFn, blocks, wall) {
+  const saved = blocks ? await blocks.root(slug).catch(() => null) : null;
+  let was = null;
+  try { was = saved ? JSON.parse(saved.text) : null; } catch { /* a damaged root is no root */ }
+  const age = saved ? wall() - saved.at : Infinity;
+  if (usable(was, slug) && age >= 0 && age < FRESH_MS) return { m: was, seq: saved.seq, from: 'device' };
+  let r;
+  try {
+    r = await fetchFn(base + 'manifest.json');
+  } catch (e) {
+    if (usable(was, slug)) return { m: was, seq: saved.seq, from: 'offline' };
+    throw e;
+  }
+  if (!r.ok) return null;
+  const text = await r.text();
+  const m = JSON.parse(text);
+  if (!usable(m, slug)) return null;
+  const seq = blocks ? await blocks.putRoot(slug, text, wall()).catch(() => 0) : 0;
+  return { m, seq, from: 'network' };
+}
+
+/// What the last `fromCdn` did, for the console and the gate (`storefront-replica.mjs`).
+export const lastRead = { root: null, device: 0, network: 0, ms: 0 };
+
+/// The menu in `locale` from the device or the CDN, or `null` when neither has
+/// anything usable. `store` is the device copy (`lib/blocks.js`), null for none.
+export async function fromCdn(locale, { origin = cdnOrigin(), slug = SLUG, now = Date.now(), wall = Date.now, fetchFn = fetch, store = openBlocks() } = {}) {
   if (!origin) return null;
   const base = `${origin}/v/${encodeURIComponent(slug)}/`;
+  const t0 = globalThis.performance ? performance.now() : 0;
   try {
-    const mr = await fetchFn(base + 'manifest.json');
-    if (!mr.ok) return null;
-    const m = await mr.json();
-    if (m.v !== 1 || m.slug !== slug || typeof m.fragment !== 'string') return null;
-    const get = async key => { const r = await fetchFn(base + key); if (!r.ok) throw new Error(`cdn ${r.status} for ${key}`); return r.json(); };
+    const blocks = await store;
+    const root = await readRoot(base, slug, fetchFn, blocks, wall);
+    if (!root) return null;
+    const { m, seq } = root;
+    Object.assign(lastRead, { root: root.from, device: 0, network: 0 });
+    // Each object: the device's verified copy, else the CDN's -- checked against its
+    // own name before it is believed or kept (a key that is not a k64 is used, never kept).
+    const get = async key => {
+      let bytes = blocks ? await blocks.get(slug, key, seq).catch(() => null) : null;
+      if (bytes) lastRead.device++;
+      else {
+        const r = await fetchFn(base + key);
+        if (!r.ok) throw new Error(`cdn ${r.status} for ${key}`);
+        bytes = new Uint8Array(await r.arrayBuffer());
+        lastRead.network++;
+        if (k64Key(key) && globalThis.crypto && globalThis.crypto.subtle) {
+          if (!(await verified(key, bytes))) throw new Error(`cdn object ${key} is not what its name says`);
+          if (blocks) await blocks.put(slug, key, bytes, seq).catch(() => false);
+        }
+      }
+      return JSON.parse(new TextDecoder().decode(bytes));
+    };
     const want = locale || m.default;
     const wordsKey = want !== m.default && m.words ? m.words[want] : null;
     const [fragment, words, media] = await Promise.all([
@@ -139,7 +201,12 @@ export async function fromCdn(locale, { origin = cdnOrigin(), slug = SLUG, now =
       wordsKey ? get(wordsKey) : null,
       typeof m.media === 'string' ? get(m.media).catch(() => []) : [],
     ]);
-    return assemble(fragment, words, media, { base, now });
+    if (blocks) blocks.prune(slug, named(m)).catch(() => {});
+    const menu = assemble(fragment, words, media, { base, now });
+    // The read's own cost (root + objects + verify + assemble), apart from the shell's load.
+    lastRead.ms = globalThis.performance ? performance.now() - t0 : 0;
+    try { performance.measure('dowiz:menu-read', { start: t0 }); } catch { /* an old browser, or node */ }
+    return menu;
   } catch (e) {
     // Said on the console, where a developer looks; the customer gets the hub's answer.
     console.warn('shell: the published menu was not readable, reading through the hub:', e && e.message ? e.message : e);

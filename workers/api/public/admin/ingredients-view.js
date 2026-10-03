@@ -35,7 +35,17 @@ export function alertsMarkup(all, noRecipe, flag, t){
   const word = { needsCount: 'inv_needsCount', low: 'low', expiring: 'inv_expiring', noRecipe: 'inv_noStockLink' };
   const tone = { needsCount: 'info', low: 'warning', expiring: 'warning', noRecipe: 'neutral' };
   return `<div class="chips filters" role="group">${FLAGS.filter(f => n[f]).map(f => ui.chip({ as: 'button', selected: flag === f, tone: tone[f],
-    label: `${n[f]} ${t(word[f])}`, attrs: { data: { flag: f } } })).join('')}</div>`;
+    label: `${n[f]} ${t(word[f])}`, attrs: { data: { flag: f } } })).join('')}</div>${toolsMarkup(all)}`;
+}
+
+/// W-STOCK's four sheets (P1 / P4 / P5): Start stock (first, and primary, on a
+/// shelf of fewer than ten things), Losses, Suppliers, the Order list. Opened by
+/// `data-stockx` (ingredients.js), never by the Stock screen's own handler.
+export const TOOLS = [{ id: 'start', ic: 'sparkles', word: 'ss_start' }, { id: 'losses', ic: 'chart-bar', word: 'ls_title' },
+  { id: 'suppliers', ic: 'building', word: 'su_title' }, { id: 'orders', ic: 'receipt', word: 'ol_title' }];
+export function toolsMarkup(all){
+  const fresh = (all || []).length < 10;
+  return `<div class="btn-row inv-tools">${TOOLS.map(x => btn({ variant: x.id === 'start' && fresh ? 'primary' : 'ghost', icon: x.ic, key: x.word, data: { stockx: x.id } })).join('')}</div>`;
 }
 
 /// One ingredient: its facts, its levels, its state and its four actions.

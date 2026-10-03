@@ -22,14 +22,18 @@ fn order(at: i64, total: i64, tip: i64, status: &str, kind: &str) -> Value {
 
 // ── the window ──────────────────────────────────────────────────────────────
 
-/// SEVEN OR THIRTY, and nothing else. A console with a stale or hostile query
-/// string gets the useful answer rather than a fold over a number it named.
+/// 7, 30, 90 OR 365, and nothing else (W-HIST: a year since the cube). A
+/// console with a stale or hostile query string gets the useful answer rather
+/// than a fold over a number it named.
 #[test]
-fn the_window_is_seven_days_or_thirty() {
+fn the_window_is_a_week_a_month_a_quarter_or_a_year() {
     assert_eq!(window(None), 7);
     assert_eq!(window(Some("7")), 7);
     assert_eq!(window(Some("30")), 30);
-    assert_eq!(window(Some("365")), 30, "clamped, not honoured");
+    assert_eq!(window(Some("89")), 30, "between two is the shorter");
+    assert_eq!(window(Some("90")), 90);
+    assert_eq!(window(Some("365")), 365);
+    assert_eq!(window(Some("100000")), 365, "clamped, not honoured");
     assert_eq!(window(Some("0")), 7);
     assert_eq!(window(Some("-1")), 7);
     assert_eq!(window(Some("all")), 7);

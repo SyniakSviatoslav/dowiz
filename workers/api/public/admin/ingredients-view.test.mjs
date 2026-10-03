@@ -40,6 +40,14 @@ test('the alarms count and filter, and the dishes that reduce no stock group by 
   assert.equal(V.noRecipeMarkup([], fmt.t), '');
 });
 
+test('W-STOCK: the tools row opens the four sheets; Start stock leads on a near-empty shelf', () => {
+  const few = V.alertsMarkup([salmon, nori], [], '', fmt.t);
+  for (const id of ['start', 'losses', 'suppliers', 'orders']) assert.ok(few.includes(`data-stockx="${id}"`), id);
+  assert.ok(/ui-btn--primary[^>]*data-stockx="start"|data-stockx="start"[^>]*ui-btn--primary/.test(few), 'fewer than ten supplies: Start stock is the primary button');
+  const many = V.toolsMarkup(Array.from({ length: 12 }, (_, i) => ({ id: `s${i}` })));
+  assert.ok(!/ui-btn--primary[^>]*data-stockx="start"|data-stockx="start"[^>]*ui-btn--primary/.test(many), 'a filled shelf: it steps back');
+});
+
 test('the card: losses with the measured yield to adopt, lots, prices and movements', () => {
   const html = V.cardMarkup(salmon, fmt);
   assert.ok(html.includes('1000 g') && html.includes('550 g') && html.includes('45%'), 'gross -> net -> out at the supply losses');

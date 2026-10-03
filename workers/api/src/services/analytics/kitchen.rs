@@ -22,6 +22,8 @@ use worker::*;
 use dowiz_hub::stock::meta::{day_number, day_of_local_ms, parse_day};
 use dowiz_hub::tz::Zone;
 
+/// The menu-engineering matrix (W-HIST P3).
+pub mod menu;
 pub mod report;
 pub mod sales;
 pub mod shelf;
@@ -133,7 +135,7 @@ pub async fn kitchen(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
     // three images are there; `answer` folds them and the report alone crosses.
     let enc = crate::mcp::enc;
     let mut ask = format!("https://hub/fold/kitchen?venue={}&now={}", enc(&loc), ctx.data.now_ms);
-    for k in ["from", "to", "days"] {
+    for k in ["from", "to", "days", "v"] {
         if let Some(v) = q(k) {
             ask.push_str(&format!("&{k}={}", enc(&v)));
         }
@@ -143,20 +145,37 @@ pub async fn kitchen(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
         return Response::error(text, status);
     }
     let out: Value = serde_json::from_str(&text).map_err(|e| Error::RustError(format!("kitchen: unreadable answer: {e}")))?;
-    let out = if who.is_staff() { access::numbers_for_kitchen(out) } else { out };
+    // THE MATRIX IS MARGINS, the owner's alone: the kitchen keeps cost and usage.
+    let out = if who.is_staff() {
+        let mut o = access::numbers_for_kitchen(out);
+        if let Some(m) = o.as_object_mut() {
+            m.remove("menu");
+        }
+        o
+    } else {
+        out
+    };
     Response::from_json(&out)
 }
 
-/// The kitchen's numbers over the venue's orders, catalogue and stock log.
-/// PURE: the venue's object calls this (`/fold/kitchen`) with the images it
-/// holds. A window that is not one is the 400's text.
-pub fn answer(
+/// The cube's rows from `yyyymmdd` to `yyyymmdd`, as the venue's object reads
+/// them (`hubdo/cube.rs`); `Err` is the reason the history is unreadable.
+pub type ColdRows<'a> = &'a dyn Fn(i64, i64) -> std::result::Result<std::collections::BTreeMap<i64, super::cube::DayCube>, String>;
+
+/// The kitchen's numbers over the venue's orders, catalogue and stock log --
+/// and the cube's rows for the days the hot log no longer holds (W-HIST
+/// P2a): the sales side of days 31-62 is the cube's, not a zero. A cube that
+/// cannot be read is said (`history.error`), never a silent zero. PURE: the
+/// venue's object calls this (`/fold/kitchen`) with the images it holds. A
+/// window that is not one is the 400's text.
+pub fn answer_with(
     listed: Vec<crate::hubdo::OrderView>,
     cat: &dowiz_hub::catalog::Catalog,
     stock: &dowiz_hub::stock::StockLog,
     loc: &str,
     now: i64,
     (from, to, days): (Option<&str>, Option<&str>, Option<&str>),
+    cold: ColdRows,
 ) -> std::result::Result<Value, (u16, String)> {
     let zone = crate::hubstore::zone_of(cat.location().and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref());
     let w = window(zone, now, from, to, days).map_err(|why| (400, why))?;
@@ -164,9 +183,15 @@ pub fn answer(
     let journal = stock.journal_since(w.starts.first().copied().unwrap_or(i64::MIN)).map_err(|e| (500, e.to_string()))?;
     let orders = crate::services::orders::mine::of_venue(listed, loc);
     let (dishes, supplies) = (dishes_of(cat), supplies_of(cat));
-    let sold = sales::fold(&orders, &dishes, &w);
+    let (rows, unread) = match cold(w.days[0], w.days[w.days.len() - 1]) {
+        Ok(r) => (r, None),
+        Err(why) => (std::collections::BTreeMap::new(), Some(why)),
+    };
+    let sold = sales::fold_with(&orders, &rows, &dishes, &w);
     let moved = shelf::fold_journal(&journal, &supplies, &sold.placed_at, &w);
     let mut out = report::report(&sold, &moved, &dishes, &supplies, &journal, &w);
+    out["menu"] = menu::matrix(&menu::inputs(&sold, &dishes, &supplies, &journal.book));
+    out["history"] = serde_json::json!({ "archivedDays": rows.len(), "error": unread });
     out["currency"] = serde_json::json!(crate::services::venue::currency_of(cat));
     Ok(out)
 }

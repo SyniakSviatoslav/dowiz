@@ -447,6 +447,41 @@ def block_schemas_mode():
     return 0
 
 
+# --- the published menu (BN3, src/block_view.rs `menu_line`) -------------------------------
+# `--menu <menu_prices.dwb> <names.dwb>`: the hub's `Catalogue::row_of` over the two PUBLISHED
+# blocks -- a dish found by its K64 and CONFIRMED by its bytes in `names` -- folded as
+#   menu rows=<n> resolved=<k> fold=<fnv64: per resolved row, len(id) 8 LE, id, price, rate>
+#   menu refused=<code> col=<column|->
+def menu_line(pb, nb):
+    try:
+        p = block_decode(pb)
+        n = block_decode(nb)
+    except Refused as r:
+        return "menu refused=%s col=%s" % (r.code, r.col)
+    if p[0] != "menu_prices" or n[0] != "names":
+        return "menu refused=mismatch col=-"
+    if any(r < 0 or r >= n[1] for r in p[3][4][:p[2]]):
+        return "menu refused=bad_offsets col=mods_col"
+    off, text = n[3][2], bytes(n[3][1])
+    dish_rows = {k: r for r, k in enumerate(p[3][0])}
+    name_rows = {k: r for r, k in enumerate(n[3][0])}
+    def named(key):
+        r = name_rows.get(key)
+        if r is None:
+            return None
+        s = text[off[r]:off[r + 1]]
+        return s if to_i64(k64_of(s)) == key else None
+    resolved, h = 0, FNV_OFFSET
+    for r, key in enumerate(p[3][0]):
+        s = named(key)
+        if s is None or dish_rows.get(to_i64(k64_of(s))) != r:
+            continue
+        resolved += 1
+        for x in (len(s).to_bytes(8, "little"), s, (p[3][1][r] & M64).to_bytes(8, "little"), (p[3][2][r] & M64).to_bytes(8, "little")):
+            h = fnv(h, x)
+    return "menu rows=%d resolved=%d fold=%016x" % (p[1], resolved, h)
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "--proj":
         sys.exit(proj_mode(sys.argv[2]))
@@ -454,10 +489,13 @@ if __name__ == "__main__":
         sys.exit(key_mode(sys.argv[2]))
     elif len(sys.argv) >= 3 and sys.argv[1] == "--block":
         sys.exit(block_mode(sys.argv[2:]))
+    elif len(sys.argv) == 4 and sys.argv[1] == "--menu":
+        print(menu_line(open(sys.argv[2], "rb").read(), open(sys.argv[3], "rb").read()))
+        sys.exit(0)
     elif len(sys.argv) == 2 and sys.argv[1] == "--schemas":
         sys.exit(block_schemas_mode())
     elif len(sys.argv) == 2:
         sys.exit(main(sys.argv[1]))
     else:
-        print("usage: oracle.py <image> | oracle.py --key compile|proj|empty | oracle.py --block <file>...|@<list> | oracle.py --schemas", file=sys.stderr)
+        print("usage: oracle.py <image> | oracle.py --key compile|proj|empty | oracle.py --block <file>...|@<list> | oracle.py --menu <prices> <names> | oracle.py --schemas", file=sys.stderr)
         sys.exit(2)

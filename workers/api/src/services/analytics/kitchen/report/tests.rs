@@ -43,21 +43,25 @@ fn a_day_a_dish_and_an_ingredient_add_up() {
     let i = &r["ingredients"][0];
     assert_eq!((i["used"].clone(), i["grossG"].clone(), i["netG"].clone(), i["cleanLossG"].clone()), (json!(300), json!(300), json!(165), json!(135)));
     assert_eq!((i["cost"].clone(), i["wasted"].clone(), i["wastedValue"].clone(), i["received"].clone()), (json!(600), json!(50), json!(100), json!(1000)));
-    // 300 g over 2 days = 150 a day; 950 on the shelf = 6 days; no reorder.
-    assert_eq!((i["adu"].clone(), i["daysCover"].clone(), i["reorder"].clone()), (json!(150), json!(6), Value::Null));
+    // 300 g over 2 days = 150 a day; 950 on the shelf = 6 days; the par of a
+    // day's lead + a week is 150 x 8 = 1200, so 250 to order (W-STOCK P5).
+    assert_eq!((i["adu"].clone(), i["daysCover"].clone(), i["reorder"].clone()), (json!(150), json!(6), json!(250)));
     let t = &r["totals"];
     assert_eq!((t["revenue"].clone(), t["cogs"].clone(), t["foodCostPm"].clone(), t["wasteValue"].clone()), (json!(3000), json!(600), json!(200), json!(100)));
     assert_eq!(r["waste"], json!([{ "reason": "dropped", "rows": 1, "value": 100 }]));
     assert_eq!((r["from"].clone(), r["to"].clone()), (json!("2026-09-25"), json!("2026-09-26")));
 }
 
-/// Days of cover: rounded-up daily use, a hint only under three days, and
-/// nothing for an ingredient nobody counted (its zero is unknown).
+/// Days of cover: rounded-up daily use; the hint is the PAR (a day's lead and
+/// a week between deliveries) less what is free -- not "under three days" --
+/// and nothing for an ingredient nobody counted (its zero is unknown).
 #[test]
 fn days_of_cover_and_the_reorder_hint() {
-    assert_eq!(cover(950, 300, 2, true), (Some(150), Some(6), None));
-    assert_eq!(cover(200, 300, 2, true), (Some(150), Some(1), Some(850)), "7 days of 150, minus the 200 there");
-    assert_eq!(cover(0, 301, 2, true), (Some(151), Some(0), Some(1057)));
+    assert_eq!(cover(950, 300, 2, true), (Some(150), Some(6), Some(250)), "par 150 x 8 = 1200, 950 free");
+    assert_eq!(cover(200, 300, 2, true), (Some(150), Some(1), Some(1000)));
+    assert_eq!(cover(0, 301, 2, true), (Some(151), Some(0), Some(1208)));
+    assert_eq!(cover(1200, 300, 2, true), (Some(150), Some(8), None), "at par: nothing to order");
+    assert_eq!(cover(-40, 300, 2, true), (Some(150), Some(0), Some(1200)), "a minus is an empty shelf, not a debt");
     assert_eq!(cover(200, 300, 2, false), (Some(150), None, None), "uncounted: no cover claimed");
     assert_eq!(cover(200, 0, 2, true), (None, None, None), "unused: nothing to say");
 }

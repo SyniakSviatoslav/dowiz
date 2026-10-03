@@ -1,0 +1,233 @@
+{
+  "id": "feature-stock-avt",
+  "name": "analytics.avt",
+  "contract_version": "1.0.0",
+  "class": "LIVE-NOW",
+  "description": {
+    "en": "Unexplained loss between two counts (W-STOCK P4): per supply a recipe names, between its last two counts, actual = opening + came in - closing, theoretical = the sales' recipe draws, explained = write-offs + prep; unexplained = actual - theoretical - explained, which equals minus the closing count's drift, valued in minor units at the average cost of that count and as per mille of the window's food sales. Top 5 losses lead; a supply counted once is 'count twice'; a supply no recipe names is 'not tracked', never a loss.",
+    "uk": "Непояснені втрати між двома інвентаризаціями, у леках, топ-5 із записами; без техкарти - не відстежується, ніколи не втрата."
+  },
+  "producer": {
+    "file": "workers/api/src/services/analytics/kitchen/avt.rs",
+    "line": 154,
+    "what": "report(): the avt block, added to the kitchen numbers by kitchen/report.rs avt_of"
+  },
+  "consumer": {
+    "file": "workers/api/public/admin/ingredients-loss.js",
+    "line": 12,
+    "what": "open(): the Losses sheet (Ingredients > Losses), drawn by ingredients-loss-view.js"
+  },
+  "transport": {
+    "method": "GET",
+    "path": "/api/owner/analytics/kitchen?days=1..62"
+  },
+  "external": null,
+  "auth": {
+    "secrets": [
+      "OWNER_EMAIL",
+      "OWNER_PASSWORD"
+    ],
+    "where": "/root/.dowiz_owner"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "days": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 62
+      },
+      "from": {
+        "type": "string"
+      },
+      "to": {
+        "type": "string"
+      }
+    }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "avt"
+    ],
+    "properties": {
+      "avt": {
+        "type": "object",
+        "required": [
+          "rows",
+          "top",
+          "countTwice",
+          "notTracked",
+          "revenue",
+          "thresholdPm"
+        ],
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/row"
+            }
+          },
+          "top": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "countTwice": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/named"
+            }
+          },
+          "notTracked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/named"
+            }
+          },
+          "revenue": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "thresholdPm": {
+            "const": 30
+          }
+        }
+      }
+    },
+    "$defs": {
+      "named": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "row": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "unit",
+          "opening",
+          "received",
+          "sold",
+          "wasted",
+          "prep",
+          "closing",
+          "actual",
+          "unexplained",
+          "value",
+          "revenuePm",
+          "flags",
+          "records"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "from": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "to": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "opening": {
+            "type": "integer"
+          },
+          "received": {
+            "type": "integer"
+          },
+          "sold": {
+            "type": "integer"
+          },
+          "wasted": {
+            "type": "integer"
+          },
+          "prep": {
+            "type": "integer"
+          },
+          "closing": {
+            "type": "integer"
+          },
+          "actual": {
+            "type": "integer"
+          },
+          "unexplained": {
+            "type": "integer"
+          },
+          "value": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "revenuePm": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "over30pm",
+                "unusual"
+              ]
+            }
+          },
+          "windowsBefore": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "qty"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "qty": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "probe": "node tools/live-proof/probes/stock-avt.mjs (main runs it on qa-durres after deploy)",
+  "last_verified": null
+}

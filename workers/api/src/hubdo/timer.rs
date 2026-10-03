@@ -202,3 +202,7 @@ impl HubImages {
         Response::from_json(&Seen::of(arm, have))
     }
 }
+
+/// The alarm, the runner and the re-arm, natively (W-INT2 #44).
+#[cfg(test)]
+mod tests;

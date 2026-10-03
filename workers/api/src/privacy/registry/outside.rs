@@ -135,6 +135,7 @@ pub const BROWSER: &[DeviceKey] = &[
     key("dw_install_hide", &[], "store"),
     prefix("dw_boot_", &[], "store"),
     key("dowiz.currency", &[], "store"),
+    key("dowiz.blocks.v1", &[], "store"),
     // The customer kit (kit/).
     key("dowiz.kit.contact", &[Name, Phone], "kit"),
     key("dowiz.kit.address", &[Address], "kit"),

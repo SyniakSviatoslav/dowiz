@@ -1,0 +1,108 @@
+{
+  "id": "analytics.cube.v1",
+  "version": "1.0.0",
+  "description": {
+    "en": "The durable daily sales cube: one row per venue-day of the orders that LEFT the hot log at a rotation (orders, refusals, takings, food sales, kinds, orders and takings by hour, channels, and per dish portions, food sales and the cost stamped at sale). A cache with a verifier, never a source (operator approved 2026-10-03, against fold.rs 'NO ANALYTICS STORE'). POST folds every archive not yet folded (the back-fill; the rotation calls the same catch-up); on the QA hub only, rotateAsOf first rotates as of that instant.",
+    "uk": "Довговічний денний куб продажів: історія понад 30 днів, перевірювана проти архівів байт у байт."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/services/analytics/handler.rs",
+      "line": 51,
+      "what": "history"
+    },
+    {
+      "file": "workers/api/src/hubdo/cube.rs",
+      "line": 131,
+      "what": "cube_catch_up"
+    },
+    {
+      "file": "workers/api/src/services/analytics/cube.rs",
+      "line": 119,
+      "what": "fold_orders / Cube::absorb"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/admin/analytics.js",
+      "line": 112,
+      "what": "(anFold button)"
+    },
+    {
+      "file": "workers/api/src/hubdo/reads.rs",
+      "line": 55,
+      "what": "fold_analytics / fold_kitchen (rows_of)"
+    },
+    {
+      "file": "workers/api/src/hubstore.rs",
+      "line": 986,
+      "what": "rotate (hand-back hook: handler::after_rotation)"
+    },
+    {
+      "file": "tools/live-proof/probes/analytics-history.mjs",
+      "line": 1,
+      "what": "probe"
+    }
+  ],
+  "external_api_version": null,
+  "image_format": "head line {\"v\":1,\"folded\":[archive ids]} then one JSON line per day {\"d\":yyyymmdd,\"o\",\"x\",\"t\",\"f\",\"k\":[3],\"h\":[24],\"ht\":[24],\"c\":{channel:[orders,took]},\"m\":{dish:[qty,food,stamped_qty,stamped_cost]},\"src\":[archive ids]}, oldest first; integer minor units; no person",
+  "request": {
+    "method": "POST",
+    "path": "/api/owner/analytics/history",
+    "auth": "owner bearer token"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "rotateAsOf": {
+        "type": "integer",
+        "description": "QA hub only (403 elsewhere): rotate as if it were this instant (ms) before folding"
+      },
+      "rebuild": {
+        "type": "boolean",
+        "description": "start from an empty cube and fold every archive again"
+      }
+    },
+    "additionalProperties": false
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "folded",
+      "added",
+      "days",
+      "listed",
+      "rotated"
+    ],
+    "properties": {
+      "folded": {
+        "type": "integer"
+      },
+      "added": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "archive",
+            "orders",
+            "days"
+          ]
+        }
+      },
+      "days": {
+        "type": "integer"
+      },
+      "listed": {
+        "type": "integer"
+      },
+      "rotated": {
+        "type": [
+          "object",
+          "null"
+        ]
+      }
+    }
+  }
+}

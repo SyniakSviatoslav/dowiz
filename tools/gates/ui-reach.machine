@@ -9,3 +9,6 @@ GET /api/print/job/:token  the kitchen printer fetches its ticket with a venue A
 DELETE /api/print/job/:token  the kitchen printer acknowledges a printed ticket; the queue shows on the Printer sheet
 GET /media/:name  image bytes; the URLs arrive inside the menu JSON and are drawn by <img> on every surface
 GET /api/version  build identity {commit, built_at}; tools/deploy/deploy.sh reads it after a rollout to prove the live code is the commit
+POST /api/print/poll  the kitchen printer polls with a venue API key minted on the Printer sheet; admin/printer.js only SHOWS this path to type into the printer (W-INT1: it passed the scan by that display string)
+GET /api/webhooks/meta  Meta's subscription handshake (hub.challenge) when the venue registers its webhook; no screen calls it
+POST /api/webhooks/meta  Meta signs it (x-hub-signature-256); its effect (a WhatsApp/Instagram message) shows in the owner's Inbox

@@ -74,6 +74,30 @@ fn an_empty_signer_is_refused_at_the_write_door() {
     assert!(log.append(&ev).is_ok());
 }
 
+/// W-STOCK P5: the Stock screen's answer carries the supplier cards and the
+/// order list from the same fold; a supply's `supplier` text names its card.
+#[test]
+fn the_screen_carries_the_cards_and_the_order_list() {
+    use serde_json::json;
+    let mut cat = dowiz_hub::catalog::Catalog::create().unwrap();
+    cat.set_supply("rice", &json!({ "id": "rice", "name": "Rice", "unit": "g", "kind": "food_ingredient", "supplier": "Sea", "packs": [{ "name": "5 kg", "qty": 5000 }] }).to_string());
+    cat.set_supply("nori", &json!({ "id": "nori", "name": "Nori", "unit": "unit" }).to_string());
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    let now = 1_790_000_000_000;
+    log.set_clock(now - 1000);
+    log.append(&StockEvent::Received { item: "rice".into(), qty: 10_000 }).unwrap();
+    log.append(&StockEvent::Wasted { item: "rice".into(), qty: 2800, reason: WasteReason::Spoiled, by: "p".into() }).unwrap();
+    log.append_note(suppliers::CARD, &json!({ "card": { "id": "sea", "name": "Sea", "days": [1, 4], "leadDays": 1 } }).to_string()).unwrap();
+    let v = shelf(&cat, &log, now).unwrap();
+    assert_eq!(v["supplierCards"][0]["id"], "sea");
+    let g = &v["orderList"]["groups"][0];
+    assert_eq!(g["supplier"]["id"], "sea");
+    // 2800 used in its one day; par 2800 x (1 lead + 4 days between Monday and Thursday) = 14 000; 7200 free; two 5 kg sacks.
+    assert_eq!((g["lines"][0]["id"].clone(), g["lines"][0]["suggest"].clone()), (json!("rice"), json!(10_000)));
+    assert_eq!(v["orderList"]["groups"].as_array().unwrap().len(), 1, "nori: nothing used, nothing on order -- not listed");
+    assert_eq!(v["supplies"].as_array().unwrap().len(), 2, "a note is not a supply");
+}
+
 /// The order lifecycle's three are not a human's to write, and the rest is 400.
 #[test]
 fn only_three_movements_exist() {

@@ -5,12 +5,17 @@
 //! here with the same pure function its handler is built on, and the answer
 //! alone crosses. The Worker keeps the owner / staff checks.
 //!
-//!   GET /fold/analytics?venue=&now=&days=7|30
+//!   GET /fold/analytics?venue=&now=[&days=7|30|90|365 | &from=&to=]
+//!       [&op=trace[&trace=] | &op=catch_up[&rebuild=1]]   (W-HIST, `cube.rs`)
 //!   GET /fold/kitchen?venue=&now=[&from=&to=&days=]
 //!   GET /fold/stock?now=
 
 use super::HubImages;
 use worker::*;
+
+/// The cube's image in this object: catch-up, trace, rows (W-HIST P2b).
+#[path = "cube.rs"]
+mod cube;
 // The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
 use crate::wire::{Call as Request, Reply as Response};
 
@@ -43,16 +48,38 @@ impl HubImages {
         }
     }
 
-    /// See the module: `services::analytics::handler::answer`.
+    /// See the module: `services::analytics::handler::answer_with`, over the
+    /// hot log and the cube (W-HIST). `op=catch_up` folds the archives the
+    /// cube lacks; `op=trace` answers the records behind one day
+    /// (`hubdo/cube.rs`). Only the Worker's two analytics handlers send `op`.
     pub(super) async fn fold_analytics(&self, req: &Request) -> Result<Response> {
         let (venue, now) = match venue_and_now(req)? {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
-        let days = crate::services::analytics::fold::window(query(req, "days")?.as_deref());
-        let (_, listed) = self.orders_view().await?;
         let cat = self.catalogue().await?;
-        Response::from_json(&crate::services::analytics::handler::answer(listed, &cat, &venue, now, days))
+        let zone = crate::services::analytics::handler::zone_of(&cat);
+        match query(req, "op")?.as_deref() {
+            Some("catch_up") => return self.cube_catch_up(&venue, zone, query(req, "rebuild")?.is_some()).await,
+            Some("trace") => return self.cube_trace(&venue, zone, now, query(req, "trace")?.as_deref()).await,
+            _ => {}
+        }
+        let q = (query(req, "days")?, query(req, "from")?, query(req, "to")?);
+        let (_, listed) = self.orders_view().await?;
+        let (_, bytes) = self.cube_image().await?;
+        let parsed = cube::parsed(&bytes);
+        let (folded, pending) = self.cube_progress(&parsed).await?;
+        let cold = cube::rows_of(&parsed);
+        match crate::services::analytics::handler::answer_with(listed, &cat, &venue, now, (q.0.as_deref(), q.1.as_deref(), q.2.as_deref()), &cold) {
+            Ok(mut v) => {
+                v["history"]["folded"] = serde_json::json!(folded);
+                v["history"]["pending"] = serde_json::json!(pending);
+                // v1 unless the caller asked for v2: the old shape stays byte for byte.
+                let v2 = query(req, "v")?.as_deref() == Some("2");
+                Response::from_json(&if v2 { v } else { crate::services::analytics::handler::v1_of(v) })
+            }
+            Err((status, why)) => Response::error(why, status),
+        }
     }
 
     /// See the module: `services::analytics::kitchen::answer`.
@@ -65,8 +92,21 @@ impl HubImages {
         let (_, listed) = self.orders_view().await?;
         let cat = self.catalogue().await?;
         let (_, stock) = self.stock_log().await?;
-        match crate::services::analytics::kitchen::answer(listed, &cat, &stock, &venue, now, (from.as_deref(), to.as_deref(), days.as_deref())) {
-            Ok(v) => Response::from_json(&v),
+        // THE DAYS THE HOT LOG NO LONGER HOLDS come from the cube (W-HIST P2a).
+        let (_, bytes) = self.cube_image().await?;
+        let parsed = cube::parsed(&bytes);
+        let cold = cube::rows_of(&parsed);
+        match crate::services::analytics::kitchen::answer_with(listed, &cat, &stock, &venue, now, (from.as_deref(), to.as_deref(), days.as_deref()), &cold) {
+            Ok(mut v) => {
+                // `menu` and `history` are v2 (analytics.kitchen.v2); v1 keeps its bytes.
+                if query(req, "v")?.as_deref() != Some("2") {
+                    if let Some(m) = v.as_object_mut() {
+                        m.remove("menu");
+                        m.remove("history");
+                    }
+                }
+                Response::from_json(&v)
+            }
             Err((status, why)) => Response::error(why, status),
         }
     }

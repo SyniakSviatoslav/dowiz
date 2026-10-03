@@ -36,8 +36,6 @@ export const SECTIONS = GROUPS.map(([g, rows]) => [g, rows.map(([key, ic]) => [k
 /// it; a deep link or the sidebar could still name it).
 export function openSection(key){ if (!canOpen(me(), key)) return; for (const [, rows] of GROUPS) for (const [key2, , fn] of rows) if (key2 === key) return fn(); }
 const view = { q: '' };
-/// The analytics windows the hub answers, in days.
-const WINDOWS = [7, 30];
 /// The hours grid: minutes of a day, and the minute steps a venue picks from.
 const DAY_MIN = 24 * 60;
 /// Promo kinds the hub knows.
@@ -222,24 +220,9 @@ async function openSocial(){
 }
 
 // ── analytics, customers ────────────────────────────────────────────────────
-async function openAnalytics(days = WINDOWS[0]){
-  sheet(`${head('analytics', 'analytics', 'ap_h_analytics')}
-    ${chips({ values: WINDOWS.map(w => ({ value: w, key: w === 7 ? 'week' : 'month' })), value: days, attr: 'days', tour: 'analytics.window' })}
-    <div id="anBody">${loading(2)}</div>`, { name: 'analytics' });
-  for (const b of $$('[data-days]', $('#sheetIn'))) b.onclick = () => openAnalytics(Number(b.dataset.days));
-  let a; try { a = await api(`/owner/analytics?days=${days}`); } catch (e) { return fail(e); }
-  const byDay = a.byDay || [], maxRev = Math.max(1, ...byDay.map(d => d.revenue || 0));
-  const byHour = a.byHour || [], maxH = Math.max(1, ...byHour);
-  $('#anBody').innerHTML = `
-    <div class="stats"><div class="stat"><small data-t="orders7"></small><b>${a.orders ?? 0}</b></div><div class="stat"><small data-t="revenue7"></small><b>${money(a.revenue || 0)}</b></div>
-      <div class="stat"><small data-t="avgCheck"></small><b>${money(a.averageOrder || 0)}</b></div><div class="stat ${a.rejected ? 'warn' : ''}"><small data-t="rejected"></small><b>${a.rejected ?? 0}</b></div></div>
-    <div class="rows">${info('bike', { title: k('delivery'), trailing: `<b class="mono">${a.delivery ?? 0}</b>` })}${info('walk', { title: k('pickup'), trailing: `<b class="mono">${a.pickup ?? 0}</b>` })}</div>
-    <p class="eyebrow mt-3" data-t="byDay"></p><div class="bars" role="img" aria-label="${esc(t('byDay'))} · max ${esc(money(maxRev))}">${byDay.map(d => `<i data-h="${Math.round(100 * (d.revenue || 0) / maxRev)}" title="${esc(day(d.at))} · ${esc(money(d.revenue || 0))}"></i>`).join('')}</div>
-    <div class="axis"><span>${byDay.length ? day(byDay[0].at) : ''}</span><span>${byDay.length ? day(byDay[byDay.length - 1].at) : ''}</span></div>
-    <p class="eyebrow mt-3" data-t="byHour"></p><div class="bars" role="img" aria-label="${esc(t('byHour'))} · max ${maxH}">${byHour.map((n, h) => `<i class="${n === maxH ? 'hi' : ''}" data-h="${Math.round(100 * n / maxH)}" title="${String(h).padStart(2, '0')}:00 · ${n}"></i>`).join('')}</div><div class="axis"><span>00</span><span>12</span><span>23</span></div>
-    <p class="eyebrow mt-3" data-t="topDishes"></p><div class="rows">${(a.topProducts || []).slice(0, 8).map(p => info('bowl-chopsticks', { title: p.name || p.id, sub: `<span class="mono">${p.quantity ?? 0} ${esc(t('portions'))}</span>`, trailing: ui.amount(money(p.revenue || 0)) })).join('')}</div>`;
-  paint();
-}
+// Any period, comparisons, trends, the menu matrix, and every number opening
+// its records (W-HIST): /admin/analytics.js.
+async function openAnalytics(){ (await import('/admin/analytics.js')).open(); }
 /// Customers are MASKED by default; a name and phone are revealed one at a
 /// time, for a written reason, and every reveal is in a log the owner can read.
 const CUSTOMER_SORTS = ['spent', 'orders', 'recent'];
@@ -501,7 +484,7 @@ async function openThread(channel, peer, name){
   retranslate($('#sheetIn'));
   const draw = async () => {
     let d; try { d = await api(`/owner/inbox/${encodeURIComponent(peer)}?channel=${encodeURIComponent(channel)}`); } catch (e) { return fail(e); }
-    $('#thread').innerHTML = (d.messages || []).map(m => `<div class="msg ${m.fromThem ? 'them' : 'me'}"><span>${esc(m.text)}</span><small>${esc(clock(m.atMs))}</small></div>`).join('') || empty('message-2', { key: 'noMessages' });
+    $('#thread').innerHTML = (d.messages || []).map(m => `<div class="msg ${m.fromThem ? 'them' : 'me'}"><span>${esc(m.text)}</span><small>${esc(clock(m.atMs))}${m.status ? ` · <span data-wa="${esc(m.status)}">${esc(t('wa_' + m.status))}</span>` : ''}</small></div>`).join('') || empty('message-2', { key: 'noMessages' });
     paint(); $('#thread').scrollTop = $('#thread').scrollHeight;
   };
   draw();

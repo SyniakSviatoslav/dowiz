@@ -27,6 +27,9 @@ use worker::*;
 
 use crate::owner::owner_and_venue;
 
+/// WhatsApp delivery states (`value.statuses[]`), recorded against the reply they answer (W-INT2 #9).
+mod status;
+
 /// The Graph API version every call pins. Meta retires a version two years on.
 const GRAPH: &str = "https://graph.facebook.com/v21.0";
 /// WhatsApp refuses a text body longer than this.
@@ -375,6 +378,28 @@ async fn store(place: &crate::hubstore::Place, direction: &str, m: &Inbound) -> 
 /// `POST /api/webhooks/meta` — a delivery. Stored, then the owner is told
 /// on Telegram when that bell is set, so a WhatsApp question does not wait for
 /// the next glance at the console.
+/// DELIVERY STATES (W-INT2 #9): sent/delivered/read/failed for a reply this
+/// venue sent, recorded in the same inbox log the reply is in. Its own body, like
+/// `store`: ONE image (the inbox log); the webhook's settings stamp beside it is
+/// a best-effort "last heard" marker, not part of any transaction (one-image gate).
+async fn record_statuses(place: &crate::hubstore::Place, body: &Value, now_ms: i64) -> usize {
+    let states = status::statuses_of(body, now_ms);
+    if states.is_empty() {
+        return 0;
+    }
+    match crate::hubstore::with_log(place, IMAGE_INBOX, move |log| {
+        status::record(log, &states, |p| conv(Channel::WhatsApp.as_str(), p), K_MSG).map_err(Error::RustError)
+    })
+    .await
+    {
+        Ok(n) => n,
+        Err(e) => {
+            crate::loud!(&place.ns, Some(&place.venue), "channels.status", "delivery states not recorded: {e}");
+            0
+        }
+    }
+}
+
 pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     // ── WHAT AN UNSIGNED REQUEST IS ALLOWED TO COST ──
     //
@@ -452,11 +477,12 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
             }
         }
     }
+    let marked = record_statuses(&place, &body, ctx.data.now_ms).await;
     // The moment of the last delivery, for the integrations screen: "Meta
     // reached this hub at …" is the fact an owner wants when nothing arrives.
     let stamp = ctx.data.now_ms.to_string();
     let _ = crate::hubstore::with_settings(&place, move |s| { s.set(crate::integrations::WEBHOOK_LAST_KEY, &stamp); Ok(()) }).await;
-    Response::from_json(&json!({ "stored": stored }))
+    Response::from_json(&json!({ "stored": stored, "statuses": marked }))
 }
 
 // ── the owner's inbox ───────────────────────────────────────────────────────
@@ -550,11 +576,10 @@ pub async fn thread(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     // Oldest first, which is how a conversation reads. `about` is newest first
     // -- the order every one of these tables was indexed in -- so it is
     // reversed here rather than stored twice.
-    let mut msgs = crate::hubstore::load_log(&place, IMAGE_INBOX)
-        .await?
-        .log
-        .about(K_MSG, Some(&subject), THREAD_ROWS);
+    let log = crate::hubstore::load_log(&place, IMAGE_INBOX).await?.log;
+    let mut msgs = log.about(K_MSG, Some(&subject), THREAD_ROWS);
     msgs.reverse();
+    let states = status::latest(&log.about(status::K_STATUS, Some(&subject), usize::MAX));
     let rows: Vec<Value> = msgs
         .iter()
         .filter_map(|e| serde_json::from_str::<Value>(&e.json).ok())
@@ -593,6 +618,7 @@ pub async fn thread(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
             "fromThem": r.get("direction").and_then(Value::as_str) == Some("in"),
             "text": r.get("text").and_then(Value::as_str).unwrap_or(""),
             "atMs": r.get("atMs").and_then(Value::as_i64).unwrap_or(0),
+            "status": r.get("externalId").and_then(Value::as_str).and_then(|w| states.get(w)),
         })).collect::<Vec<_>>(),
     }))
 }

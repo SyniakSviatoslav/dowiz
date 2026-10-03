@@ -103,6 +103,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/stock/:kind", Staff(&BIN), Yes),
     ("get", "/api/owner/stock/waste", Staff(&SHELF), Read),
     ("get", "/api/owner/analytics/kitchen", Staff(&NUMBERS), Read),
+    ("post", "/api/owner/analytics/history", Owner, No),
     // ── the person's own door ──
     ("post", "/api/staff/login", Own, Yes),
     ("post", "/api/staff/claim", Own, Yes),

@@ -1,0 +1,150 @@
+{
+  "id": "feature-stock-start",
+  "name": "stock.start",
+  "contract_version": "1.0.0",
+  "class": "LIVE-NOW",
+  "description": {
+    "en": "Start stock (W-STOCK P1): the sushi starter pack (41 supplies with unit, kind, category, nutrition and loss defaults, names in sq/en/uk/ru) goes in through the existing supplies importer, dry run first, then ?apply=1; a recipe skeleton per menu dish is proposed from its name, grams empty until the owner types them, and only complete dishes go through the recipes importer. Stable ids (pack-*): a second run updates, never duplicates.",
+    "uk": "Заповнення складу: стартовий набір суші-кухні та чернетки техкарт з меню, через наявні імпортери, спершу перевірка, потім застосування."
+  },
+  "producer": {
+    "file": "workers/api/src/services/catalogue/import/bulk/turn.rs",
+    "line": 39,
+    "what": "turn(): the CSV judged against the catalogue; the extra columns clean_pm, cook_pm, pack, pack_qty read by bulk/extras.rs and applied through supplies::check + record"
+  },
+  "consumer": {
+    "file": "workers/api/public/admin/start-stock.js",
+    "line": 40,
+    "what": "open(): step 1 posts suppliesCsv (start-stock-logic.js), step 2 posts recipesCsv of the READY drafts"
+  },
+  "transport": [
+    {
+      "method": "POST",
+      "path": "/api/owner/supplies/import[?apply=1]",
+      "content_type": "text/csv"
+    },
+    {
+      "method": "POST",
+      "path": "/api/owner/recipes/import[?apply=1]",
+      "content_type": "text/csv"
+    },
+    {
+      "method": "GET",
+      "path": "/api/owner/products",
+      "why": "the dishes and their bom, for the skeletons"
+    }
+  ],
+  "external": null,
+  "auth": {
+    "secrets": [
+      "OWNER_EMAIL",
+      "OWNER_PASSWORD"
+    ],
+    "where": "/root/.dowiz_owner"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "string",
+    "description": "A CSV. Supplies: header id,name,unit,kind,category,kcal,protein,fat,carbs,weight_per_unit,clean_pm,cook_pm,pack,pack_qty. Recipes: header dish,ingredient,qty with qty as '<whole number> <g|ml|unit>'."
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "applied",
+      "supplies",
+      "recipes",
+      "warnings",
+      "rows"
+    ],
+    "properties": {
+      "applied": {
+        "type": "boolean"
+      },
+      "supplies": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "recipes": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "written": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "withoutRecipe": {
+        "type": "array"
+      },
+      "rows": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "supplies_row_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "id",
+      "name",
+      "unit",
+      "new"
+    ],
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "unit": {
+        "enum": [
+          "g",
+          "ml",
+          "unit"
+        ]
+      },
+      "new": {
+        "type": "boolean"
+      },
+      "cleanPm": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "cookPm": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pack": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "qty": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  },
+  "probe": "node tools/live-proof/probes/stock-start.mjs (main runs it on qa-durres after deploy)",
+  "last_verified": null
+}

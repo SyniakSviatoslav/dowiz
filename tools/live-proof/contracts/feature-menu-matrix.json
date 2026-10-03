@@ -1,0 +1,122 @@
+{
+  "id": "analytics.kitchen.v2",
+  "version": "2.0.0",
+  "description": {
+    "en": "The kitchen numbers gain `menu`, the menu-engineering matrix (Kasavana-Smith): popular = share of portions >= 70% of an even share; profitable = contribution margin per portion >= the portion-weighted average over costed dishes; star / plowhorse / puzzle / dog, with one action each worded from 4-language templates (no model). A cost is the stamp at sale, else the recipe cost today (costBasis says which); a dish with neither is costUnknown and in no quadrant -- no cost is ever invented. The kitchen's sales side now reads the cube for days the hot log no longer holds (`history.archivedDays`), fixing the 31-62-day zeros. Staff get no `menu` (margins are the owner's).",
+    "uk": "Матриця меню-інжинірингу (зірки, конячки, загадки, собаки) за собівартістю, зафіксованою при продажу; без вигаданих собівартостей."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/services/analytics/kitchen/menu.rs",
+      "line": 89,
+      "what": "matrix / inputs"
+    },
+    {
+      "file": "workers/api/src/services/analytics/kitchen.rs",
+      "line": 171,
+      "what": "answer_with"
+    },
+    {
+      "file": "workers/api/src/hubdo/reads.rs",
+      "line": 86,
+      "what": "fold_kitchen"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/admin/analytics.js",
+      "line": 171,
+      "what": "matrix"
+    },
+    {
+      "file": "tools/live-proof/probes/analytics-history.mjs",
+      "line": 1,
+      "what": "probe"
+    }
+  ],
+  "external_api_version": null,
+  "request": {
+    "method": "GET",
+    "path": "/api/owner/analytics/kitchen",
+    "query": "v=2 & (days=1..62 | from=&to= yyyy-mm-dd); without v=2 the v1 bytes (no menu, no history)",
+    "auth": "owner bearer token (staff: no menu)"
+  },
+  "request_schema": null,
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "totals",
+      "byDay",
+      "dishes",
+      "menu",
+      "history"
+    ],
+    "properties": {
+      "history": {
+        "type": "object",
+        "required": [
+          "archivedDays"
+        ]
+      },
+      "menu": {
+        "type": "object",
+        "required": [
+          "dishes",
+          "portions",
+          "count",
+          "popularPm",
+          "averageMarginPortion",
+          "unknown"
+        ],
+        "properties": {
+          "dishes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "sold",
+                "popular",
+                "costUnknown",
+                "quadrant",
+                "action"
+              ],
+              "properties": {
+                "quadrant": {
+                  "enum": [
+                    "star",
+                    "plowhorse",
+                    "puzzle",
+                    "dog",
+                    null
+                  ]
+                },
+                "action": {
+                  "enum": [
+                    "star",
+                    "plowhorse",
+                    "puzzle",
+                    "dog",
+                    "cost_unknown"
+                  ]
+                },
+                "costBasis": {
+                  "enum": [
+                    "stamped",
+                    "mixed",
+                    "today"
+                  ]
+                },
+                "costUnknown": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

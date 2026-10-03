@@ -73,3 +73,22 @@ fn stamped_lines_keep_their_cost_and_old_ones_fall_back_to_today() {
     let bare = DishRow { sold: 1, by_day: vec![1], ..DishRow::default() };
     assert_eq!(cogs_of(&bare, Some(5)), (Some(5), vec![5]));
 }
+
+/// W-HIST P2a: A DAY THE HOT LOG NO LONGER HOLDS is the cube's row, folded
+/// exactly as its orders would have been -- portions, money, stamps and the
+/// recipe's draw. Twin: the same orders hot give the same Sales.
+#[test]
+fn an_archived_day_from_the_cube_folds_like_its_orders() {
+    let orders = vec![
+        order("a", 10, "DELIVERED", json!([{ "product_id": "sake", "quantity": 2, "unit_price": 900, "unit_cost": 300 }, { "product_id": "cola", "quantity": 1, "unit_price": 200 }])),
+        order("r", 20, "REJECTED", json!([{ "product_id": "sake", "quantity": 5, "unit_price": 900 }])),
+    ];
+    let hot = fold(&orders, &dishes(), &w());
+    let mut row = crate::services::analytics::cube::DayCube::new(20260924);
+    (row.o, row.x, row.f) = (2, 1, 2000);
+    row.m.insert("sake".into(), [2, 1800, 2, 600]);
+    row.m.insert("cola".into(), [1, 200, 0, 0]);
+    let cold = fold_with(&[], &BTreeMap::from([(20260924, row)]), &dishes(), &w());
+    assert_eq!((cold.days, cold.dishes, cold.uses, cold.unmodelled), (hot.days, hot.dishes, hot.uses, hot.unmodelled));
+    assert!(cold.placed_at.is_empty(), "an archived order dates no draw: the shelf says undated, not today");
+}

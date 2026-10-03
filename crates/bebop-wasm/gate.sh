@@ -107,6 +107,48 @@ for (const p of readFileSync(list, "utf8").split("\n").filter((x) => x)) {
 }
 bw_free(out, cap);
 EOFJS
+  cat > "$SCRATCH/view.mjs" <<'EOFJS'
+// node view.mjs <module.wasm> view <list>            : one bw_view line per file of the list
+// node view.mjs <module.wasm> menu <prices> <names>  : the bw_menu line of the pair
+import { readFileSync } from "node:fs";
+const [, , mod, mode, a, b] = process.argv;
+const { instance } = await WebAssembly.instantiate(readFileSync(mod), {});
+const { memory, bw_alloc, bw_free, bw_view, bw_menu } = instance.exports;
+if (typeof bw_view !== "function" || typeof bw_menu !== "function") { console.log("wasm32 ABSENT: the module exports no bw_view/bw_menu"); process.exit(3); }
+const cap = 512;
+const out = bw_alloc(cap);
+const put = (img) => { const at = bw_alloc(Math.max(img.length, 1)); new Uint8Array(memory.buffer, at, img.length).set(img); return at; };
+const say = (n) => console.log(n < 0 ? `status=${n}` : new TextDecoder().decode(new Uint8Array(memory.buffer, out, n)));
+if (mode === "view") {
+  for (const p of readFileSync(a, "utf8").split("\n").filter((x) => x)) {
+    const img = readFileSync(p);
+    const at = put(img);
+    say(bw_view(at, img.length, out, cap));
+    bw_free(at, Math.max(img.length, 1));
+  }
+} else {
+  const [pi, ni] = [readFileSync(a), readFileSync(b)];
+  say(bw_menu(put(pi), pi.length, put(ni), ni.length, out, cap));
+}
+EOFJS
+}
+
+# view_judge <tag> <list> (BN3, src/block_view.rs): the IN-PLACE view over every block of the list,
+# held line by line against the decode readers' agreed line minus its ` rt=.. k256=..` half (taken
+# from the python reader, which blocks_judge has just held to the others). A view that reads one
+# element wrong moves `vals`; one that refuses differently names another check.
+view_judge() {
+  if [ ! -f "$BLOCKWASM" ]; then say "view $1: ABSENT -- no block module"; fail=1; return; fi
+  node "$SCRATCH/view.mjs" "$BLOCKWASM" view "$2" > "$SCRATCH/view.$1" 2>&1
+  sed 's/ rt=.*$//' "$SCRATCH/blk.$1.python" > "$SCRATCH/view.$1.want"
+  total=$(grep -c . "$2")
+  same=$(paste -d '\n' "$SCRATCH/view.$1" "$SCRATCH/view.$1.want" | awk 'NR % 2 { a = $0; next } a == $0 { n++ } END { print n + 0 }')
+  if [ "$same" -eq "$total" ] && [ "$(grep -c . "$SCRATCH/view.$1")" -eq "$total" ]; then
+    say "view $1: $total blocks; the in-place view (wasm32 bw_view) prints the decode readers' line on $same of $total"
+  else
+    say "view $1: DISAGREES on $((total - same)) of $total -- first: $(paste -d '|' "$SCRATCH/view.$1" "$SCRATCH/view.$1.want" | awk -F'|' '$1 != $2 { print; exit }')"
+    fail=1
+  fi
 }
 
 # blocks_run <tag> <list>: every reader over the list, into $SCRATCH/blk.<tag>.<reader>.
@@ -257,6 +299,8 @@ EOFPY
   blocks_judge prove "$SCRATCH/prove/list" refuse "$SCRATCH/prove/expect" || pf=1
   blocks_run sweep "$SCRATCH/prove/sweep"
   blocks_judge sweep "$SCRATCH/prove/sweep" same || pf=1
+  view_judge prove "$SCRATCH/prove/list"
+  view_judge sweep "$SCRATCH/prove/sweep"
   return $pf
 }
 
@@ -524,10 +568,12 @@ ls "$BLOCKFIX"/*.dwb > "$SCRATCH/blk.fix.list"
 say "blocks fixtures: $(wc -l < "$SCRATCH/blk.fix.list" | tr -d ' ') files: $(cd "$BLOCKFIX" && ls | tr '\n' ' ')"
 blocks_run fix "$SCRATCH/blk.fix.list"
 blocks_judge fix "$SCRATCH/blk.fix.list" ok || fail=1
+view_judge fix "$SCRATCH/blk.fix.list"
 if [ -n "$HUBEX" ] && "$HUBEX/generate_fixtures" random "$SCRATCH/rand" "$BLOCKSEED" "$BLOCKCOUNT" > "$SCRATCH/rand.txt" 2>&1; then
   say "blocks $(head -1 "$SCRATCH/rand.txt"); $(tail -1 "$SCRATCH/rand.txt")"
   blocks_run rand "$SCRATCH/rand/list"
   blocks_judge rand "$SCRATCH/rand/list" ok || fail=1
+  view_judge rand "$SCRATCH/rand/list"
 else
   say "blocks random: the generator did not run -- $(tail -1 "$SCRATCH/rand.txt" 2>/dev/null)"
   fail=1
@@ -555,6 +601,42 @@ if [ -n "$sbad" ]; then
 else
   say "blocks schemas: identical schema tables: $sran ($(awk '{print $2"="$3}' "$SCRATCH/schema.python" | tr '\n' ' '))"
 fi
+# 8. THE PUBLISHED MENU (BN3): the two blocks a venue publishes (`menu_prices`, `names`), read as the
+# hub's `Catalogue::row_of` reads them -- a dish by its K64, CONFIRMED by its bytes in `names`.
+# Readers: wasm32 (bw_menu), python (oracle.py --menu), native (src/block_view/tests.rs pins the
+# fixture lines). Pairs: the 165-dish catalogue, the small and the empty one, a names block whose
+# first string lost its bytes (must resolve one dish fewer), and the blocks swapped (refused).
+python3 - "$BLOCKFIX/names.dwb" "$SCRATCH/names_moved.dwb" <<'EOFPY'
+import struct, sys, zlib
+b = bytearray(open(sys.argv[1], "rb").read())
+off = struct.unpack_from("<I", b, 24 + 16 * 1 + 8)[0]
+b[off] = ord("y") if b[off] == ord("x") else ord("x")
+struct.pack_into("<I", b, len(b) - 4, zlib.crc32(bytes(b[:-4])) & 0xFFFFFFFF)
+open(sys.argv[2], "wb").write(b)
+EOFPY
+mbad=""
+mn=0
+for pair in "menu_prices.dwb names.dwb" "menu_prices_small.dwb names_small.dwb" "menu_prices_empty.dwb names_empty.dwb" "menu_prices.dwb @moved" "names.dwb menu_prices.dwb"; do
+  set -- $pair
+  pf="$BLOCKFIX/$1"
+  nf="$BLOCKFIX/$2"
+  [ "$2" = "@moved" ] && nf="$SCRATCH/names_moved.dwb"
+  w=$( [ -f "$BLOCKWASM" ] && node "$SCRATCH/view.mjs" "$BLOCKWASM" menu "$pf" "$nf" 2>&1 || echo "wasm32 ABSENT")
+  p=$(python3 oracle.py --menu "$pf" "$nf" 2>&1)
+  say "menu $1 + $2: wasm32 -> '$w'; python -> '$p'"
+  mn=$((mn + 1))
+  [ "$w" = "$p" ] || mbad="$mbad $1+$2"
+done
+set --
+mran=2
+if grep -q "test block_view::tests::menu_lines_are_the_oracles ... ok" "$SCRATCH/native.txt"; then mran=3; else mbad="$mbad native"; fi
+if [ -n "$mbad" ]; then
+  say "menu: DISAGREE on:$mbad"
+  fail=1
+else
+  say "menu: $mn pairs; readers agreeing on every pair: $mran of 3 (wasm32 python native; bebop.bin has no menu reader)"
+fi
+
 for t in fix rand; do
   a=$(cat "$SCRATCH/blk.$t.agree" 2>/dev/null || echo 0)
   [ "$a" -lt "$minran" ] && minran=$a

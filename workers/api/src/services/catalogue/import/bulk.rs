@@ -219,10 +219,22 @@ fn recipe_row(cat: &Catalog, r: &DraftRecipe) -> Value {
 
 /// Write every supply of the draft, and retire what the file left out when
 /// asked. Answers how many records were written. PURE over the catalogue.
+/// A file with no extra columns (the room projection; the turn calls `_with`).
 pub(crate) fn apply_supplies(cat: &mut Catalog, draft: &RecipeDraft, retire: bool) -> std::result::Result<usize, String> {
+    apply_supplies_with(cat, draft, retire, &extras::Extras::new())
+}
+
+/// [`apply_supplies`] with the file's extra columns (`extras`, W-STOCK P1):
+/// a row's losses and pack ride on the same `check` + `record` as the form's.
+pub(crate) fn apply_supplies_with(cat: &mut Catalog, draft: &RecipeDraft, retire: bool, more: &extras::Extras) -> std::result::Result<usize, String> {
     let mut n = 0;
     for s in &draft.supplies {
-        let body = supply_in(s);
+        let mut body = supply_in(s);
+        if let Some(x) = more.get(&s.id) {
+            body.clean_pm = x.clean_pm.or(body.clean_pm);
+            body.cook_pm = x.cook_pm.or(body.cook_pm);
+            body.packs = x.pack.clone().map(|p| vec![p]).or(body.packs);
+        }
         let id = check(&body).map_err(|e| format!("{}: {e}", s.name))?;
         let existing: Value = cat.supply(&id).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
         cat.set_supply(&id, &record(&id, &body, &existing).to_string());
@@ -261,6 +273,7 @@ pub(crate) fn apply_recipes(cat: &mut Catalog, draft: &RecipeDraft) -> std::resu
     Ok(n)
 }
 
+pub(crate) mod extras;
 pub(crate) mod preps;
 pub(crate) mod room;
 pub(crate) use room::projected;

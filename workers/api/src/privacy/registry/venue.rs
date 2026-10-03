@@ -18,6 +18,12 @@ pub const STORES: &[Store] = &[
         retention: Retention::NoLimitYet("the log and its archives are never pruned; P6 adds contact redaction by age"),
         erase: Eraser::Redact("hubdo/forget.rs: Hub::redact over the log and every archive, declared as Forgotten"),
         export: NO_EXPORT },
+    // The daily sales cube (W-HIST P2b): a cache of the archives, verified against them.
+    Store { image: "cube", kinds: &[], home: Venue, holds: &[], subjects: &[],
+        purpose: P::Operations, basis: Basis::NotPersonal,
+        retention: Retention::NoLimitYet("derived from the archives and rebuildable (rebuild: true); never pruned"),
+        erase: Eraser::NotPersonal("per day: counts, money and dish ids; no contact, no customer key"),
+        export: Exporter::NotPersonal },
     // The customer card (note, tags, allergens, usual table, birthday MM-DD).
     Store { image: "people", kinds: &["cust", "alias"], home: Venue,
         holds: &[CustomerCard, Name], subjects: &[Customer],
@@ -39,7 +45,8 @@ pub const STORES: &[Store] = &[
         erase: Eraser::Redact("booking::forget::redact, called by hubdo/forget.rs (G8)"),
         export: NO_EXPORT },
     // WhatsApp / Instagram conversations with the venue.
-    Store { image: "inbox", kinds: &["m", "r"], home: Venue,
+    // "s" = a WhatsApp delivery state (sent/delivered/read/failed) of an owner reply (W-INT2 #9).
+    Store { image: "inbox", kinds: &["m", "r", "s"], home: Venue,
         holds: &[Phone, Messages], subjects: &[Customer],
         purpose: P::CustomerCare, basis: Basis::LegitimateInterest,
         retention: Retention::NoLimitYet("bounded by count by the prune in channels.rs, not by age; P6"),
@@ -153,11 +160,13 @@ pub const STORES: &[Store] = &[
         export: Exporter::NotPersonal },
     // Ingredient movements (received, wasted, counted, cooked, ...) carry the
     // id of the staff member who signed them (`by`), like the cash drawer.
+    // Since W-STOCK P5 the same log holds supplier cards as NOTE records
+    // (stock/notes.rs): the supplier's contact name, phone and Telegram handle.
     Store { image: "stock", kinds: &["cooked"], home: Venue,
-        holds: &[StaffId], subjects: &[Staff],
+        holds: &[StaffId, Name, Phone], subjects: &[Staff, Supplier],
         purpose: P::Operations, basis: Basis::LegitimateInterest,
-        retention: Retention::NoLimitYet("the ingredient ledger"),
-        erase: Eraser::Retain("the venue's stock records; they carry a staff id of who moved an ingredient, not a customer"),
+        retention: Retention::NoLimitYet("the ingredient ledger; a supplier card stays until the owner edits it"),
+        erase: Eraser::Retain("the venue's stock records: a staff id of who moved an ingredient, and the supplier contacts the owner typed; no customer"),
         export: NO_EXPORT },
     Store { image: "i18n", kinds: &["t"], home: Venue,
         holds: &[], subjects: &[],

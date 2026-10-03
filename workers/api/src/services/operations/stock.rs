@@ -22,6 +22,12 @@ pub mod turn;
 pub mod removed;
 /// A batch of a semi-finished product cooked ahead (W-PF2 R2).
 pub mod cook;
+/// Supplier cards and orders sent, as notes on the log (W-STOCK P5).
+pub mod suppliers;
+/// Par levels and the order list, pure (W-STOCK P5).
+pub mod order_list;
+/// The weekly loss digest to the groups, pure (W-STOCK P4).
+pub mod digest;
 pub use moves::StockMoveIn;
 #[cfg(test)]
 use moves::movement;
@@ -132,6 +138,22 @@ pub fn shelf(cat: &dowiz_hub::catalog::Catalog, log: &dowiz_hub::stock::StockLog
             Some(row)
         })
         .collect();
+    // W-STOCK P5: the supplier cards and the order list, from the same fold.
+    let cards = suppliers::cards(log);
+    // A supply whose card names no supplier is bought from whoever its last delivery named.
+    let mut last_from: std::collections::BTreeMap<&str, &str> = std::collections::BTreeMap::new();
+    for e in &journal.entries {
+        if let (dowiz_hub::stock::StockEvent::Received { item, .. }, Some(s)) = (&e.ev, e.meta.supplier.as_deref()) {
+            last_from.insert(item.as_str(), s);
+        }
+    }
+    let items: Vec<order_list::Item> = rows
+        .iter()
+        .filter(|r| r["kind"] != dowiz_hub::prep::KIND)
+        .map(|r| item_of(r, r["id"].as_str().and_then(|id| last_from.get(id).copied())))
+        .collect();
+    let open = suppliers::on_order(&log.notes(suppliers::ORDERED), &journal, now_ms);
+    let list = order_list::list(&items, &journal, &cards, &open, now_ms);
     let (recent, suppliers) = view::recent_and_suppliers(&journal);
     // Reservations whose order never settled. Surfaced rather than swept: a
     // stranded hold makes a kitchen believe it is out of something it has.
@@ -146,7 +168,21 @@ pub fn shelf(cat: &dowiz_hub::catalog::Catalog, log: &dowiz_hub::stock::StockLog
         "expiryWarnDays": view::EXPIRY_WARN_DAYS,
         // I0c: every dish that takes nothing off the shelf yet.
         "noRecipe": as_is::without_recipe(cat),
+        "supplierCards": cards, "orderList": list,
     }))
+}
+
+/// A Stock screen row as the order list reads it (its first pack is how it is
+/// bought; its supplier its own field, else `last_from`).
+fn item_of(r: &Value, last_from: Option<&str>) -> order_list::Item {
+    let s = |k: &str| r[k].as_str().unwrap_or("").trim().to_string();
+    let pack = r["packs"].get(0).and_then(|p| Some((p["name"].as_str()?.to_string(), p["qty"].as_i64()?)));
+    let own = s("supplier");
+    order_list::Item {
+        id: s("id"), name: s("name"), unit: s("unit"),
+        supplier: if own.is_empty() { last_from.unwrap_or("").to_string() } else { own },
+        available: r["available"].as_i64().unwrap_or(0), counted: r["counted"] == true, pack,
+    }
 }
 
 /// Who may record a movement, and at which venue: `(signer, venue)`.

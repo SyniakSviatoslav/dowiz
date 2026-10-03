@@ -1,0 +1,131 @@
+{
+  "id": "feature-stock-suppliers",
+  "name": "stock.suppliers",
+  "contract_version": "1.0.0",
+  "class": "LIVE-NOW",
+  "description": {
+    "en": "Supplier cards (W-STOCK P5): name, phone, Telegram, delivery weekdays (1 = Monday .. 7), lead days (0-30), order cutoff HH:MM, order language; written through the existing stock door as a note on the stock log (never a movement: shelf, cost and checkpoints unchanged); the newest card of an id is the card, gone:true takes it off; read back in GET /api/owner/stock supplierCards.",
+    "uk": "Картки постачальників: телефон, дні доставки, термін, мова замовлення; зберігаються як нотатки в журналі складу."
+  },
+  "producer": {
+    "file": "workers/api/src/services/operations/stock/suppliers.rs",
+    "line": 201,
+    "what": "run(): kind supplier, check() then append_note"
+  },
+  "consumer": {
+    "file": "workers/api/public/admin/suppliers.js",
+    "line": 15,
+    "what": "open() lists supplierCards; edit() posts the card and each ingredient's supplier"
+  },
+  "transport": [
+    {
+      "method": "POST",
+      "path": "/api/owner/stock/supplier",
+      "body": "{card: {...}}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/owner/stock",
+      "field": "supplierCards"
+    }
+  ],
+  "external": null,
+  "auth": {
+    "secrets": [
+      "OWNER_EMAIL",
+      "OWNER_PASSWORD"
+    ],
+    "where": "/root/.dowiz_owner"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "card"
+    ],
+    "properties": {
+      "card": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "telegram": {
+            "type": "string"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            }
+          },
+          "leadDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30
+          },
+          "cutoff": {
+            "type": "string"
+          },
+          "lang": {
+            "enum": [
+              "",
+              "sq",
+              "en",
+              "uk",
+              "ru"
+            ]
+          },
+          "gone": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "ok",
+      "kind",
+      "card"
+    ],
+    "properties": {
+      "ok": {
+        "const": true
+      },
+      "kind": {
+        "const": "supplier"
+      },
+      "card": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "telegram",
+          "days",
+          "leadDays",
+          "cutoff",
+          "lang",
+          "gone"
+        ]
+      }
+    }
+  },
+  "probe": "node tools/live-proof/probes/stock-order-list.mjs (main runs it on qa-durres after deploy)",
+  "last_verified": null
+}

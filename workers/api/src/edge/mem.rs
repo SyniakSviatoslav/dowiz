@@ -31,6 +31,13 @@ impl World {
     pub fn host(&self, name: &str) -> Rc<MemHost> {
         self.entry(name).0
     }
+    /// A NEW object over the SAME storage (what an eviction leaves): nothing it held in memory
+    /// survives, so its next read is of the bytes a test may have changed.
+    pub fn restart(&self, name: &str) {
+        let host = self.entry(name).0;
+        let obj = Rc::new(HubImages::in_memory(host.clone()));
+        self.objects.borrow_mut().insert(name.to_string(), (host, obj));
+    }
     /// The names of every object a test caused to exist.
     pub fn names(&self) -> Vec<String> {
         let mut n: Vec<String> = self.objects.borrow().keys().cloned().collect();

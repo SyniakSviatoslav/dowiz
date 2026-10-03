@@ -1066,7 +1066,7 @@ pub async fn rotate(place: &Place, now_ms: i64) -> Result<serde_json::Value> {
         Ok(())
     })
     .await;
-
+    crate::services::analytics::handler::after_rotation(place, now_ms).await;
     Ok(serde_json::json!({
         "rotated": true,
         "archive": archive_id,

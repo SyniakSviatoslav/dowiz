@@ -78,6 +78,11 @@ pub struct StockMoveIn {
     /// `removed`: the supplies deleted from the nomenclature (`removed`).
     #[serde(default)]
     pub items: Option<Vec<String>>,
+    /// `supplier` / `ordered`: a supplier's card or an order sent (`suppliers`, W-STOCK P5).
+    /// Declared so the strict parse admits it; `suppliers::run` reads it off the raw body.
+    #[allow(dead_code)]
+    #[serde(default)]
+    pub card: Option<Value>,
 }
 
 /// A movement, decided but not yet applied: `expected` and `value` are the

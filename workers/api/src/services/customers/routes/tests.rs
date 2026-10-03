@@ -150,3 +150,79 @@ fn a_forgotten_customer_is_gone_from_the_orders_and_the_list() {
     assert_eq!(r.status_code(), 200, "{}", r.body_str());
 }
 
+
+/// W-INT2 #23: after a forget, EVERY read of that customer -- the owner's list, the owner's
+/// order list, the order itself as the owner and as the customer's own key -- answers without
+/// their name or phone; a second forget and a re-forget change nothing they already removed.
+#[test]
+fn a_forgotten_customer_is_absent_from_every_read_and_forgetting_again_changes_nothing() {
+    let site = Site::new();
+    let (t, dish) = open_venue(&site, "alpha", "a@x.test");
+    let r = site.run(
+        crate::storefront::place,
+        crate::edge::site::post(
+            &at("alpha", "/api/public/locations/alpha/orders"),
+            &json!({"items": [{"product_id": dish, "quantity": 1}], "contact": {"name": "Ana Hoxha", "phone": "+355691112228"},
+                    "fulfilment": {"kind": "pickup"}, "payment": "cash"}),
+        )
+        .on("alpha"),
+        &[("slug", "alpha")],
+    );
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    let (id, own) = (r.body_value()["id"].as_str().unwrap().to_string(), r.body_value()["access_token"].as_str().unwrap().to_string());
+    let key = keys(&site, &t)[0].0.clone();
+    let other = order_as(&site, &dish, "+355691112229");
+    assert_eq!(keys(&site, &t).len(), 2);
+    for oid in [&id, &other] {
+        let r = site.run(
+            crate::owner::order_action,
+            post(&at("alpha", &format!("/api/owner/orders/{oid}/action")), &json!({"location_id": "alpha", "action": "reject", "reason": "closed"})).bearer(&t).on("alpha"),
+            &[("id", oid)],
+        );
+        assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    }
+    let reads = |site: &Site| -> Vec<(&'static str, String)> {
+        let order_url = at("alpha", &format!("/api/order/{id}"));
+        vec![
+            ("owner list", site.run(crate::services::customers::handlers::customers, get(&at("alpha", "/api/owner/customers")).bearer(&t).on("alpha"), &[]).body_str()),
+            ("owner orders", site.run(crate::owner::orders, get(&at("alpha", "/api/owner/orders")).bearer(&t).on("alpha"), &[]).body_str()),
+            ("owner order", site.run(crate::services::orders::read::order, get(&order_url).bearer(&t).on("alpha"), &[("id", &id)]).body_str()),
+            ("customer order", site.run(crate::services::orders::read::order, get(&order_url).bearer(&own).on("alpha"), &[("id", &id)]).body_str()),
+        ]
+    };
+    for (what, body) in reads(&site) {
+        assert!(body.contains("1112228") || body.contains("Ana") || what == "owner list" || what == "customer order", "{what} never named her: {body}");
+    }
+    let forget = || {
+        site.run(
+            crate::services::customers::forget::forget_customer,
+            post(&at("alpha", &format!("/api/owner/customers/{key}/forget")), &json!({"reason": "asked by email", "lang": "en"})).bearer(&t).on("alpha"),
+            &[("key", &key)],
+        )
+    };
+    let r = forget();
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    let after = reads(&site);
+    // `order_as` names the OTHER customer "Ana Hoxha" too, so on the owner's order list her
+    // name is judged on HER order; every other read is about her alone.
+    for (what, body) in &after {
+        assert!(!body.contains("1112228"), "{what} still has her phone: {body}");
+        assert!(*what == "owner orders" || !body.contains("Hoxha"), "{what} still names her: {body}");
+    }
+    let listed: Value = serde_json::from_str(&after[1].1).unwrap();
+    let hers = listed["orders"].as_array().unwrap().iter().find(|o| o["id"].as_str() == Some(id.as_str())).expect("her order is still listed");
+    assert_eq!((hers["contact"]["name"].as_str(), hers["contact"]["phone"].as_str()), (Some(""), Some("")), "her order still names her: {hers}");
+    assert!(after[1].1.contains("1112229") || after[1].1.contains(&other), "the other customer went too: {}", after[1].1);
+    let log = |site: &Site| site.fold("alpha", &format!("/fold/order?id={id}")).body_str();
+    let once = log(&site);
+    // AGAIN, and the restore path's re-forget: nothing they already removed comes back or moves.
+    let again = forget();
+    assert!(again.status_code() < 500, "{}", again.body_str());
+    for _ in 0..2 {
+        let r = site.run(crate::services::customers::forget::run::reforget, post(&at("alpha", "/api/owner/customers/reforget"), &json!({})).bearer(&t).on("alpha"), &[]);
+        assert_eq!(r.status_code(), 200, "{}", r.body_str());
+        assert_eq!(r.body_value()["reforgotten"]["failed"], 0, "{}", r.body_str());
+    }
+    assert_eq!(log(&site), once, "forgetting again changed the order");
+    assert_eq!(reads(&site), after, "forgetting again changed a read");
+}

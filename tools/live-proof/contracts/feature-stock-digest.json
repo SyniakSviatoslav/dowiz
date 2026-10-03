@@ -1,0 +1,116 @@
+{
+  "id": "feature-stock-digest",
+  "name": "telegram.stock_digest",
+  "contract_version": "1.0.0",
+  "class": "NEEDS-KEY",
+  "description": {
+    "en": "The weekly loss digest (W-STOCK P4): a count session that closes at least one tracked window, at most once in 6.5 days (a `digest` note on the stock log remembers), owes `stock.digest` -- the top 5 unexplained losses, valued -- to every venue group that chose it, rendered in each group's language by the router (notify/route.rs fan_out -> render::event). Read back through the Bot API needs a QA bot and group the box does not hold.",
+    "uk": "Щотижневий дайджест непояснених втрат у Telegram-групи закладу, мовою кожної групи."
+  },
+  "producer": {
+    "file": "workers/api/src/services/operations/stock/digest.rs",
+    "line": 74,
+    "what": "owe(): the data and its note, from the count's turn (stock/turn.rs run)"
+  },
+  "consumer": {
+    "file": "workers/api/src/notify/route/render.rs",
+    "line": 0,
+    "what": "HAND-BACK: render::event needs the arm \"stock.digest\" => digest::text(d, lang); events.rs needs the catalogue row; telegram-words.js the label. line 0 = absent until main applies the hand-back"
+  },
+  "transport": {
+    "method": "POST",
+    "path": "https://api.telegram.org/bot{TOKEN}/sendMessage"
+  },
+  "external": {
+    "service": "Telegram Bot API",
+    "api_version": "Bot API (unversioned URL; sendMessage)",
+    "doc": "https://core.telegram.org/bots/api#sendmessage"
+  },
+  "auth": {
+    "secrets": [
+      "notify.telegram.token (venue setting on qa-durres)",
+      "LIVE_TG_CHAT"
+    ],
+    "where": "MISSING: operator creates a TEST bot + group (same ask as W-LIVE row 5)"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "items",
+      "currency",
+      "more",
+      "checked"
+    ],
+    "properties": {
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "name",
+            "qty",
+            "unit"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "qty": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "unit": {
+              "type": "string"
+            },
+            "value": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "currency": {
+        "type": "string"
+      },
+      "more": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "checked": {
+        "type": "integer",
+        "minimum": 1
+      }
+    }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "ok",
+      "result"
+    ],
+    "properties": {
+      "ok": {
+        "const": true
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "message_id",
+          "chat",
+          "text"
+        ],
+        "properties": {
+          "message_id": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "probe": "node tools/live-proof/probes/stock-avt.mjs (main runs it on qa-durres after deploy)",
+  "last_verified": null
+}

@@ -63,6 +63,9 @@ pub enum Subject {
     Staff,
     Owner,
     Prospect,
+    /// A venue's supplier as the owner wrote them on a supplier card (W-STOCK P5):
+    /// a contact name, a phone, a Telegram handle. B2B contact data, still personal.
+    Supplier,
 }
 
 /// Why it is kept. One purpose per row; the notice groups rows by it.

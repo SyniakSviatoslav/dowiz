@@ -104,3 +104,52 @@ fn the_manifest_is_narrowed_to_the_callers_track() {
     let odd = serde_json::json!({ "version": 1 });
     assert_eq!(filter_manifest(odd.clone(), Audience::Staff), odd);
 }
+
+/// W-INT2 #31: the writer's manifest (`tools/learn/publish.mjs` -> the repo copy the R2 upload
+/// carries) and this reader agree: every file the wiki will ask for is a key `media_key` serves,
+/// under the lesson that lists it, and the narrowing keeps exactly the caller's track.
+#[test]
+fn every_file_the_published_manifest_names_is_a_key_this_route_serves() {
+    let m: serde_json::Value = serde_json::from_str(include_str!("../../public/learn/media/manifest.json")).unwrap();
+    let lessons = m["lessons"].as_object().expect("lessons");
+    assert!(!lessons.is_empty());
+    let mut files = 0;
+    for (id, l) in lessons {
+        for (_, cut) in l["cuts"].as_object().into_iter().flatten() {
+            let mut urls: Vec<&str> = ["video", "poster", "chapters"].iter().filter_map(|k| cut[*k].as_str()).collect();
+            urls.extend(cut["subs"].as_object().into_iter().flatten().filter_map(|(_, u)| u.as_str()));
+            for u in urls {
+                let raw = u.strip_prefix("/api/learn/media/").unwrap_or_else(|| panic!("{u} is not the gated route"));
+                let (lesson, key) = media_key(raw).unwrap_or_else(|| panic!("{u} is not a key the route serves"));
+                assert_eq!(&lesson, id, "{u}");
+                assert_eq!(key, format!("{PREFIX}{raw}"));
+                files += 1;
+            }
+        }
+    }
+    assert!(files >= lessons.len(), "{files}");
+    let all = filter_manifest(m.clone(), Audience::Owner);
+    assert_eq!(all["lessons"].as_object().unwrap().len(), lessons.len(), "the owner sees every published lesson");
+    let rider = filter_manifest(m, Audience::Courier);
+    assert!(rider["lessons"].as_object().unwrap().keys().all(|id| id.starts_with('C') || id.starts_with('G')));
+}
+
+/// The route itself, natively: the caller is judged before the bucket is touched, and a
+/// deployment without the `LEARN` binding says so (503) instead of answering an empty list.
+#[test]
+fn the_manifest_route_judges_the_caller_and_names_a_missing_bucket() {
+    use crate::edge::site::{get, As, Site, PLATFORM_HOST};
+    let site = Site::new();
+    let t = site.venue("alpha", "a@x.test");
+    let url = format!("https://alpha.{PLATFORM_HOST}/api/learn/manifest");
+    let r = site.run(super::manifest, get(&url).on("alpha"), &[]);
+    assert_eq!(r.status_code(), 401, "{}", r.body_str());
+    // A platform token that owns no venue is refused by `auth::authenticate` itself (401, the
+    // membership check) before `audience` is asked; `audience`'s own 403 for a token naming no
+    // venue is `audience_admits_the_venues_people_and_refuses_the_rest`.
+    let r = site.run(super::manifest, get(&url).bearer(&site.admin_token()).on("alpha"), &[]);
+    assert_eq!(r.status_code(), 401, "a platform token: {}", r.body_str());
+    assert!(r.body_str().contains("owner membership"), "{}", r.body_str());
+    let r = site.run(super::manifest, get(&url).bearer(&t).on("alpha"), &[]);
+    assert_eq!(r.status_code(), 503, "{}", r.body_str());
+}

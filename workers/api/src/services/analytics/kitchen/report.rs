@@ -13,10 +13,11 @@ use dowiz_hub::stock::meta::show_day;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-/// Days of cover under which a reorder is suggested, and how many days the
-/// suggestion buys.
-pub const REORDER_BELOW_DAYS: i64 = 3;
-pub const REORDER_FOR_DAYS: i64 = 7;
+use crate::services::operations::stock::order_list::{self, CYCLE_DEFAULT_DAYS, DEFAULT_LEAD_DAYS};
+
+/// Unexplained loss between two counts (W-STOCK P4): the `avt` block.
+#[path = "avt.rs"]
+pub mod avt;
 
 /// ‰ of `part` in `whole`; `None` when there is no whole.
 fn pm(part: i64, whole: i64) -> Option<i64> {
@@ -24,14 +25,33 @@ fn pm(part: i64, whole: i64) -> Option<i64> {
 }
 
 /// Days of cover and a reorder hint from the average daily use.
+///
+/// THE HINT IS A PAR (W-STOCK P5): what one supplier cycle needs -- the
+/// average daily use x (a day's lead + a week between deliveries) -- less
+/// what is free. It replaced "under three days of cover, buy seven", which
+/// said nothing until the shelf was nearly empty. The order list
+/// (`GET /api/owner/stock` `orderList`) takes each supplier's own lead time,
+/// delivery days and packs; this one, with no supplier, takes the defaults.
 pub fn cover(available: i64, used: i64, days: i64, counted: bool) -> (Option<i64>, Option<i64>, Option<i64>) {
-    if days <= 0 || used <= 0 {
+    let Some(adu) = order_list::adu(used, days) else {
         return (None, None, None);
-    }
-    let adu = (used + days - 1) / days; // rounded up: a kitchen runs out, it does not run over
+    };
     let cover = counted.then(|| available.max(0) / adu);
-    let reorder = cover.filter(|c| *c < REORDER_BELOW_DAYS).map(|_| (adu * REORDER_FOR_DAYS - available.max(0)).max(0));
+    let par = order_list::par(adu, DEFAULT_LEAD_DAYS, CYCLE_DEFAULT_DAYS);
+    let reorder = counted.then(|| order_list::suggest(par, available, 0, None)).filter(|q| *q > 0);
     (Some(adu), cover, reorder)
+}
+
+/// The `avt` block over the journal's rows: a supply a recipe names (directly
+/// or under a semi-finished card) is tracked, every other one is not.
+fn avt_of(j: &Journal, dishes: &HashMap<String, Dish>, supplies: &HashMap<String, Supply>, revenue: i64, w: &Window) -> Value {
+    let linked = |id: &str| dishes.values().any(|d| d.lines.iter().any(|l| l.supply == id) || d.leaves.iter().any(|(s, _)| s == id));
+    let name = |id: &str| supplies.get(id).map(|s| (s.name.clone(), s.unit.clone()));
+    let list_value = |id: &str, q: i64| supplies.get(id).and_then(|s| s.list_cost.and_then(|c| dowiz_hub::stock::journal::priced(q, c, s.basis)));
+    let in_window = |at: i64| w.bucket(at).is_some();
+    let record = |e: &dowiz_hub::stock::journal::Entry| crate::services::operations::stock::view::movement_row(e);
+    let cx = avt::Ctx { linked: &linked, name: &name, list_value: &list_value, revenue: Some(revenue), in_window: &in_window, record: &record };
+    avt::report(&j.entries, &cx)
 }
 
 pub fn report(
@@ -129,6 +149,7 @@ pub fn report(
         },
         "byDay": by_day, "dishes": dish_rows, "ingredients": ingredients, "waste": waste,
         "yields": shelf.yields, "prices": prices,
+        "avt": avt_of(j, dishes, supplies, revenue, w),
     })
 }
 

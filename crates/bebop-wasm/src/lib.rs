@@ -28,6 +28,10 @@ pub mod abi;
 /// merely compiling it into the Worker's module moved `bytes.baseline` 31626 -> 31769.
 #[cfg(any(test, bw_block))]
 pub mod block;
+/// BN3: the block read IN PLACE (DG7's `view` twin) and the published menu's price lookup;
+/// gated exactly like `block` (`bw_view` / `bw_menu` live in the same separate module).
+#[cfg(any(test, bw_block))]
+pub mod block_view;
 pub mod nodekey;
 /// DG5: a log image's projection memo, read (`bw_proj`, exported under the `proj` feature).
 pub mod proj;

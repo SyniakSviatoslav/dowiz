@@ -61,3 +61,9 @@ mod catalogue_routes;
 #[cfg(test)]
 #[path = "catalogue_reads/tests.rs"]
 mod catalogue_reads;
+
+/// The links between systems, each driven producer -> consumer; named by row in
+/// `tools/integrations/matrix.json` (lane W-INT1).
+#[cfg(test)]
+#[path = "links/tests.rs"]
+mod links;

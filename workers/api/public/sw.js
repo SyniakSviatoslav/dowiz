@@ -10,7 +10,7 @@
 // The cache is named by the deploy's own version line below; a new deploy
 // with a new line drops the old shell on activation.
 
-const SHELL_CACHE = 'dowiz-shell-2026-10-02-cdn';
+const SHELL_CACHE = 'dowiz-shell-2026-10-02-blocks';
 /// THE WHOLE MODULE GRAPH, not just its entry.
 ///
 /// This list used to hold the document, `/app.js` and the three stylesheets,
@@ -62,6 +62,8 @@ const SHELL_CACHE_MODULES = [
   '/store/sea.js',
   // The published-menu reader (BN2): app.js imports it statically.
   '/store/shell.js',
+  // Its device copy of the published menu (BN3): shell.js imports it statically.
+  '/lib/blocks.js',
   '/store/state.js',
   '/store/storage.js',
   '/store/table.js',
@@ -98,36 +100,28 @@ const SHELL = [
 /// Paths that are never cached: the hub speaks, the media is immutable already.
 const NEVER = [/^\/api\//, /^\/media\//];
 
-// ── THE PUBLISHED MENU (BN2, store/shell.js) ────────────────────────────────
+// ── THE PUBLISHED MENU'S PHOTOS (BN2; BN3 split the layers) ──────────────────
 //
-// The venue's object publishes the menu to the CDN as CONTENT-ADDRESSED,
-// IMMUTABLE objects under `/v/<slug>/` plus one root, `manifest.json`. The
-// rule at the top of this file -- network first, always -- is about MUTABLE
-// URLs: a hash-named object can never carry a stale price, so it is served
-// from here first and fetched once. The ROOT stays network first; when the
-// network is gone the last root is served, and the menu it names is here too,
-// so a return visit without a connection shows the venue's last published
-// menu rather than the offline line. Freshness lives in the root's 30 s.
-const CDN_CACHE = 'dowiz-cdn-2026-10-02';
-/// How many published objects to keep per device; the oldest go first.
+// The venue's object publishes the menu to the CDN under `/v/<slug>/`: one
+// root, `manifest.json`, naming CONTENT-ADDRESSED, immutable objects. Since BN3
+// the root and the `<k64>` objects are kept by the page itself, in IndexedDB,
+// verified against their names on every read (`lib/blocks.js`, used by
+// `store/shell.js`) -- so this worker no longer touches them, and nothing is
+// kept twice. What it keeps is what an <img> asks for and IndexedDB cannot
+// answer: the photos, `m/<sha256>.<ext>`, immutable, served from here first
+// and fetched once. The rule at the top of this file -- network first -- is
+// about MUTABLE URLs; a hash-named photo can never be stale.
+const CDN_CACHE = 'dowiz-cdn-photos-2026-10-02';
+/// How many photos to keep per device; the oldest go first.
 const CDN_KEEP = 240;
-const isCdn = url => url.hostname.startsWith('cdn.') && /^\/v\/[^/]+\//.test(url.pathname);
-async function fromCdn(req, url) {
+const isCdnPhoto = url => url.hostname.startsWith('cdn.') && /^\/v\/[^/]+\/m\//.test(url.pathname);
+async function fromCdn(req) {
   const c = await caches.open(CDN_CACHE);
-  const root = url.pathname.endsWith('/manifest.json');
-  if (!root) {
-    const hit = await c.match(req);
-    if (hit) return hit;
-  }
-  try {
-    const res = await fetch(req);
-    if (res.ok) c.put(req, res.clone()).then(() => prune(c)).catch(() => {});
-    return res;
-  } catch (e) {
-    const hit = await c.match(req);
-    if (hit) return hit;
-    throw e;
-  }
+  const hit = await c.match(req);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res.ok) c.put(req, res.clone()).then(() => prune(c)).catch(() => {});
+  return res;
 }
 async function prune(c) {
   const keys = await c.keys();
@@ -149,7 +143,8 @@ self.addEventListener('install', ev => {
   self.skipWaiting();
 });
 self.addEventListener('activate', ev => {
-  // The published objects survive a deploy: they are named by content, not by the shell's version.
+  // The photos survive a deploy: they are named by content, not by the shell's version.
+  // The BN2 cache (`dowiz-cdn-2026-10-02`, which also held the root and the k64 objects) is dropped here.
   ev.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== SHELL_CACHE && k !== CDN_CACHE).map(k => caches.delete(k)))));
   self.clients.claim();
 });
@@ -157,7 +152,7 @@ self.addEventListener('fetch', ev => {
   const url = new URL(ev.request.url);
   if (ev.request.method !== 'GET') return;
   if (url.origin !== self.location.origin) {
-    if (isCdn(url)) ev.respondWith(fromCdn(ev.request, url));
+    if (isCdnPhoto(url)) ev.respondWith(fromCdn(ev.request));
     return;
   }
   if (NEVER.some(re => re.test(url.pathname))) return;

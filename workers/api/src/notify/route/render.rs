@@ -172,6 +172,7 @@ pub fn event(ev: &str, d: &Value, lang: &str) -> String {
         }
         "stock.wasted" => format!("🗑 {}: {} {} · {}", w.wasted, s(d, "name"), qty(d, "qty"), s(d, "reason")),
         "stock.cooked" => cooked(d, w),
+        "stock.digest" => crate::services::operations::stock::digest::text(d, lang),
         "stocktake.variance" => {
             let rows: Vec<String> = items()
                 .iter()

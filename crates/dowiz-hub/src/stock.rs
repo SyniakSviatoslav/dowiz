@@ -229,6 +229,8 @@ pub use carry::{draws_for, Draw};
 pub mod basket;
 /// The production act: a batch of a semi-finished product cooked ahead.
 pub mod act;
+/// Records in the chain that never move the shelf: supplier cards, orders sent (W-STOCK P5).
+pub mod notes;
 
 /// W-AUDIT S7 (2026-09-27): the recipe is read through brackets inside names
 /// and never from the next array in the record.
