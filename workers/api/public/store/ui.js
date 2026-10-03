@@ -137,7 +137,11 @@ document.addEventListener('error', e => {
   const img = e.target;
   if (!(img instanceof HTMLImageElement) || !img.dataset.fb) return;
   const holder = img.parentNode; if (!holder) return;
-  holder.innerHTML = fallbackArt(img.dataset.fb);
+  // Only the IMAGE is swapped: its holder also carries the card's price and flags
+  // (menu.js `.card-media`), and replacing the holder erased the price of every dish
+  // whose photo failed -- every dish with a photo, offline (BN3 storefront-replica.mjs).
+  img.insertAdjacentHTML('afterend', fallbackArt(img.dataset.fb));
+  img.remove();
   paintFallbacks(holder);
 }, true);
 
