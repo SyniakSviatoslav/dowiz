@@ -1,0 +1,14 @@
+{
+  "id": 13, "name": "ebills-import", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "Sales rung up on the venue's ebills.al till are polled by the venue's alarm and imported as orders.", "uk": "Продажі з каси ebills.al опитуються будильником закладу та імпортуються як замовлення."},
+  "producer": {"file": "workers/api/src/ebills/client.rs", "line": 26, "what": "ORIGIN https://www.ebills.al (allow-listed client)"},
+  "consumer": {"file": "workers/api/src/ebills/poll.rs", "line": 1, "what": "tick_venue via the DO alarm -> import"},
+  "transport": {"method": "GET", "path": "https://www.ebills.al (allow-listed sale list/detail calls)"},
+  "external": {"service": "ebills.al", "api_version": "JSON API as measured 2026-09-22 (ebills/wire.rs)", "doc": "docs/design/BLUEPRINT-EBILLS-INTEGRATION-2026-09-22.md"},
+  "auth": {"secrets": ["ebills link credentials (venue ebills image)"], "where": "MISSING: an ebills.al TEST account with a sale"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Configure qa-durres to a TEST ebills.al account; one alarm poll; /api/owner/ebills lastPoll advanced without error; imported sale in owner orders.",
+  "last_verified": null
+}

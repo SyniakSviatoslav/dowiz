@@ -1,0 +1,14 @@
+{
+  "id": 16, "name": "courier-claim-app", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "A READY order reaches the courier through the pool; the courier takes and picks it up, and the owner sees each step.", "uk": "Готове замовлення доходить до кур'єра через пул; кур'єр бере його і забирає, власник бачить кожен крок."},
+  "producer": {"file": "workers/api/public/courier/app.js", "line": 508, "what": "take / pickup taps"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 546, "what": "/api/courier/tasks, /orders/:id/accept, /pickup, /refused"},
+  "transport": {"method": "POST", "path": "/api/courier/orders/{id}/accept"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD", "QA_HUB_COURIER_PHONE", "QA_HUB_COURIER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["id", "status"], "properties": {"id": {"type": "string"}, "status": {"type": "string"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "TEST pickup->READY; shift on; take from pool; pickup; refused+returned (never DELIVERED); Chromium /courier/ counts /api/live socket opens.",
+  "last_verified": null
+}

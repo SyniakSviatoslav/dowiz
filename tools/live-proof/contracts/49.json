@@ -1,0 +1,14 @@
+{
+  "id": 49, "name": "dg8-datalog", "contract_version": "0.1.0", "class": "NEEDS-CODE",
+  "description": {"en": "The bebop Datalog has goldens and a proof but no caller in the Worker or hub.", "uk": "Datalog bebop має еталони й доказ, але жодного виклику у Worker чи хабі."},
+  "producer": {"file": "bebop-lang/selfhost/std/dl.bp", "line": 1, "what": "Datalog"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 0, "what": "0 refs (DW2/DGSW)"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "no live consumer exists; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a: no consumer",
+  "probe": "Reports NOT-LIVE: no caller (DW2/DGSW).",
+  "last_verified": null
+}

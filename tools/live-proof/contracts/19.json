@@ -1,0 +1,14 @@
+{
+  "id": 19, "name": "wallet-threads", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "A customer reads their wallet and writes in a thread; the owner reads the message.", "uk": "Клієнт бачить гаманець і пише в тред; власник читає повідомлення."},
+  "producer": {"file": "workers/api/public/kit/data.js", "line": 242, "what": "wallet / threads calls"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 486, "what": "GET /api/owner/threads"},
+  "transport": {"method": "POST", "path": "/api/public/locations/{slug}/threads/{id}/messages"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "array"]},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "With row 1's customer token: wallet + statement 200; post a TEST message; owner threads shows it.",
+  "last_verified": null
+}

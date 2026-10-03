@@ -1,0 +1,14 @@
+{
+  "id": 12, "name": "fiscal-send", "contract_version": "0.1.0", "class": "NOT-LIVE-BY-DESIGN",
+  "description": {"en": "Fiscal sending to eBills is switched off by the operator's decision; arming must stay refused and the queue empty.", "uk": "Надсилання фіскальних чеків вимкнене рішенням оператора; увімкнення має відмовляти, черга має бути порожня."},
+  "producer": {"file": "workers/api/src/hubdo/fiscal.rs", "line": 29, "what": "enqueue_fiscal"},
+  "consumer": {"file": "workers/api/src/fiscal/mod.rs", "line": 40, "what": "SEND_ENABLED = false; arm route 409"},
+  "transport": {"method": "POST", "path": "/api/owner/fiscal/ebills"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["fiscal"], "properties": {"fiscal": {"type": "object"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Arm answers 409; health.fiscal configured false and 0 queued; anything else FAILED.",
+  "last_verified": null
+}

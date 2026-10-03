@@ -1,0 +1,14 @@
+{
+  "id": 37, "name": "auth-tokens", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "An owner's HMAC-SHA256 token opens owner routes; a tampered or missing token is refused.", "uk": "Токен власника HMAC-SHA256 відкриває маршрути власника; підроблений або відсутній токен відхиляється."},
+  "producer": {"file": "workers/api/src/lib.rs", "line": 366, "what": "POST /api/auth/login"},
+  "consumer": {"file": "workers/api/src/auth.rs", "line": 161, "what": "verify HMAC-SHA256 (JWT_SECRET)"},
+  "transport": {"method": "POST", "path": "/api/auth/login"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["access_token"], "properties": {"access_token": {"type": "string", "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Login; owner orders 200; flipped payload byte 401; no token 401.",
+  "last_verified": null
+}

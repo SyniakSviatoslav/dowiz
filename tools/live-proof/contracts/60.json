@@ -1,0 +1,14 @@
+{
+  "id": 60, "name": "map-tiles", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "The storefront and courier maps load OpenFreeMap's style, TileJSON and vector tiles, and the CSP allows them.", "uk": "Карти вітрини й кур'єра завантажують стиль, TileJSON і векторні тайли OpenFreeMap, і CSP їх дозволяє."},
+  "producer": {"file": "workers/api/public/store/address.js", "line": 31, "what": "TILES = https://tiles.openfreemap.org/styles/liberty (also positron, bright, dark)"},
+  "consumer": {"file": "workers/api/public/lib/map/maplibre-gl.js", "line": 1, "what": "MapLibre GL renders the style"},
+  "transport": {"method": "GET", "path": "https://tiles.openfreemap.org/styles/liberty"},
+  "external": {"service": "OpenFreeMap", "api_version": "MapLibre style spec v8; TileJSON 3.0.0; OpenMapTiles vector schema; planet build 20260927_080001_pt (MEASURED)", "doc": "https://openfreemap.org/"},
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["version", "sources", "layers"], "properties": {"version": {"const": 8}, "sources": {"type": "object"}, "layers": {"type": "array", "minItems": 1}, "glyphs": {"type": "string"}, "sprite": {"type": "string"}}},
+  "schema_status": "pinned from the live answer 2026-10-03",
+  "probe": "Style v8; TileJSON 3.0.0 from sources url; Durres tile z14/9076/6122 200 application/vnd.mapbox-vector-tile > 1 KB; live CSP names tiles.openfreemap.org. MEASURED: style 43079 B, tile 55980 B.",
+  "last_verified": null
+}

@@ -1,0 +1,14 @@
+{
+  "id": 11, "name": "card-refund", "contract_version": "0.1.0", "class": "NEEDS-CODE",
+  "description": {"en": "A refunded card order should return the money through Stripe; no code calls /v1/refunds.", "uk": "Повернення за карткове замовлення мало б іти через Stripe; коду, що викликає /v1/refunds, немає."},
+  "producer": {"file": "workers/api/src/lib.rs", "line": 392, "what": "POST /api/staff/orders/:id/refund"},
+  "consumer": {"file": "workers/api/src/hubdo/refund.rs", "line": 1, "what": "log + stock only; no Stripe call (W-REFUND/FA-6)"},
+  "transport": {"method": "POST", "path": "https://api.stripe.com/v1/refunds"},
+  "external": {"service": "Stripe", "api_version": "UNPINNED", "doc": "https://docs.stripe.com/api/refunds"},
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "no live consumer exists; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a: no consumer",
+  "probe": "Reports NOT-LIVE: disconnected in code (W-REFUND).",
+  "last_verified": null
+}

@@ -1,0 +1,14 @@
+{
+  "id": 2, "name": "order-for-later", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "A guest who chooses a later time sends scheduled_for_ms; the venue must store and show that time instead of making the order 'now'.", "uk": "Замовлення на пізніше має зберегти час scheduled_for_ms, а не стати замовленням «на зараз»."},
+  "producer": {"file": "workers/api/public/store/checkout.js", "line": 373, "what": "writes scheduled_for_ms"},
+  "consumer": {"file": "workers/api/src/storefront.rs", "line": 157, "what": "PlaceIn.scheduled_for_ms (fd777995; absent in the deployed e7d11a55)"},
+  "transport": {"method": "POST", "path": "/api/public/locations/{slug}/orders", "readback": ["GET /api/owner/orders", "GET /api/staff/kitchen"]},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["items", "contact", "fulfilment", "scheduled_for_ms"], "properties": {"scheduled_for_ms": {"type": "integer", "minimum": 1700000000000}}},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["id", "access_token"], "properties": {"id": {"type": "string"}, "access_token": {"type": "string"}}},
+  "readback_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["id", "scheduled_for_ms"], "properties": {"scheduled_for_ms": {"type": "integer"}}},
+  "probe": "Place with scheduled_for_ms = now+3h on a slot; owner order must carry the same value; reject. Expected FAILED on e7d11a55.",
+  "last_verified": null
+}

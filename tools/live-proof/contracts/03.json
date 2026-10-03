@@ -1,0 +1,14 @@
+{
+  "id": 3, "name": "kitchen-ack", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "The kitchen says it saw a ticket; the order records kitchen.seen and the owner's health stops listing it as unseen.", "uk": "Кухня підтверджує, що бачила квиток; замовлення отримує kitchen.seen, і здоров'я закладу більше не показує його як непобачене."},
+  "producer": {"file": "workers/api/public/admin/kitchen.js", "line": 118, "what": "kitchen-ack button"},
+  "consumer": {"file": "workers/api/src/command/kitchen_ack.rs", "line": 85, "what": "order /kitchen/seen/at, read by health unconfirmed_in"},
+  "transport": {"method": "POST", "path": "/api/staff/orders/{id}/kitchen-ack", "readback": ["GET /api/owner/orders", "GET /api/owner/health"]},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner; the kitchen member is a TEST invite made and suspended by the probe"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "readback_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["kitchen"], "properties": {"kitchen": {"type": "object", "required": ["unseenAfterMs", "unseen"], "properties": {"unseenAfterMs": {"type": "integer"}, "unseen": {"type": "array"}}}}},
+  "probe": "Order; TEST kitchen invite+claim+login; kitchen-ack; owner order has kitchen.seen.at and health.kitchen.unseen excludes it; reject; suspend staff.",
+  "last_verified": null
+}

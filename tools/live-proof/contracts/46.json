@@ -1,0 +1,14 @@
+{
+  "id": 46, "name": "dw1-browser-replica", "contract_version": "0.1.0", "class": "NEEDS-CODE",
+  "description": {"en": "bebop-wasm is built by CI only and shipped nowhere.", "uk": "bebop-wasm збирається лише в CI і нікуди не постачається."},
+  "producer": {"file": "crates/bebop-wasm/src/lib.rs", "line": 1, "what": "wasm replica"},
+  "consumer": {"file": "workers/api/public/sw.js", "line": 0, "what": "0 .wasm in public (DW1)"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "no live consumer exists; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a: no consumer",
+  "probe": "Reports NOT-LIVE: not shipped (DW1).",
+  "last_verified": null
+}

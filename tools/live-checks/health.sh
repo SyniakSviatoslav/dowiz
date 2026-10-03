@@ -42,6 +42,17 @@ get() { # get <url> <outfile> -> prints the status code ("000" when unreachable)
   curl -sS -o "$2" -D "$2.h" -w '%{http_code}' --max-time 20 --retry 2 --retry-delay 5 \
     -H 'user-agent: dowiz-health-cron' "$1" 2>"$2.err" || true
 }
+# snip <outfile> -> WHY a FAIL row failed, from what actually came back (W-LIVE, 2026-10-03).
+# Measured: from GitHub's runners (ASN 8075) every request got Cloudflare Bot Fight Mode's
+# managed_challenge, a 403 HTML page with a `cf-mitigated: challenge` header, while the same probes
+# passed 20/20 from the box. A row that says only "403" hid that; it now names the challenge.
+snip() {
+  m=""
+  if grep -qi '^cf-mitigated:' "$1.h" 2>/dev/null; then
+    m="CHALLENGED by Cloudflare ($(grep -i '^cf-mitigated:' "$1.h" | head -1 | tr -d '\r')); "
+  fi
+  printf '%sbody: %s' "$m" "$(head -c 80 "$1" 2>/dev/null | tr -d '\r\n' | tr -c '[:print:]' '?')"
+}
 
 for slug in $VENUES; do
   base="https://$slug.$DOMAIN"
@@ -49,46 +60,46 @@ for slug in $VENUES; do
 
   c=$(get "$base/healthz" "$f.hz")
   if [ "$c" = 200 ] && [ "$(cat "$f.hz")" = ok ]; then row ok "$slug healthz" "200 ok"
-  else row FAIL "$slug healthz" "$c $(head -c 80 "$f.hz" 2>/dev/null) $(cat "$f.hz.err" 2>/dev/null)"; fi
+  else row FAIL "$slug healthz" "$c $(snip "$f.hz") $(cat "$f.hz.err" 2>/dev/null)"; fi
 
   c=$(get "$base/" "$f.root")
   if [ "$c" = 200 ] && grep -qi '^content-type: text/html' "$f.root.h" \
      && grep -qi '^content-security-policy:' "$f.root.h"; then row ok "$slug storefront" "200 html, CSP present"
-  else row FAIL "$slug storefront" "$c (needs 200, text/html and a CSP header)"; fi
+  else row FAIL "$slug storefront" "$c (needs 200, text/html and a CSP header) -- $(snip "$f.root")"; fi
 
   c=$(get "$base/api/public/locations/$slug/menu" "$f.menu")
   n=$(python3 -c 'import json,sys
 d=json.load(open(sys.argv[1]))
 print(sum(len(c.get("products") or []) for c in (d.get("categories") or [])))' "$f.menu" 2>/dev/null || echo 0)
   if [ "$c" = 200 ] && [ "${n:-0}" -gt 0 ]; then row ok "$slug menu" "200, $n dishes"
-  else row FAIL "$slug menu" "$c, dishes=${n:-0}"; fi
+  else row FAIL "$slug menu" "$c, dishes=${n:-0} -- $(snip "$f.menu")"; fi
 
-  c=$(curl -sS -o "$f.eta" -w '%{http_code}' --max-time 20 --retry 2 --retry-delay 5 \
+  c=$(curl -sS -o "$f.eta" -D "$f.eta.h" -w '%{http_code}' --max-time 20 --retry 2 --retry-delay 5 \
     -H 'user-agent: dowiz-health-cron' -H 'content-type: application/json' -X POST \
     -d '{"items":[{"quantity":1}],"pickup":true}' \
     "$base/api/public/locations/$slug/eta" 2>/dev/null || true)
   if [ "$c" = 200 ] && grep -q '"range"' "$f.eta"; then row ok "$slug quote (kernel ETA)" "200 $(grep -o '"range":"[^"]*"' "$f.eta")"
-  else row FAIL "$slug quote (kernel ETA)" "$c $(head -c 80 "$f.eta" 2>/dev/null)"; fi
+  else row FAIL "$slug quote (kernel ETA)" "$c -- $(snip "$f.eta")"; fi
 
   c=$(get "$base/api/order/ord_health_probe" "$f.ord")
   case "$c" in
     401|404) row ok "$slug order id alone refused" "$c" ;;
-    *) row FAIL "$slug order id alone refused" "$c -- an id must not be a key" ;;
+    *) row FAIL "$slug order id alone refused" "$c -- an id must not be a key -- $(snip "$f.ord")" ;;
   esac
 
   for app in admin courier room; do
     c=$(get "$base/$app/" "$f.$app")
-    if [ "$c" = 200 ]; then row ok "$slug /$app/" "200"; else row FAIL "$slug /$app/" "$c"; fi
+    if [ "$c" = 200 ]; then row ok "$slug /$app/" "200"; else row FAIL "$slug /$app/" "$c -- $(snip "$f.$app")"; fi
   done
 
   c=$(get "$base/manifest.webmanifest" "$f.mf")
-  if [ "$c" = 200 ]; then row ok "$slug manifest" "200"; else row FAIL "$slug manifest" "$c"; fi
+  if [ "$c" = 200 ]; then row ok "$slug manifest" "200"; else row FAIL "$slug manifest" "$c -- $(snip "$f.mf")"; fi
 done
 
 c=$(get "$PLATFORM/" "$TMP/platform")
-if [ "$c" = 200 ]; then row ok "platform landing" "200"; else row FAIL "platform landing" "$c"; fi
+if [ "$c" = 200 ]; then row ok "platform landing" "200"; else row FAIL "platform landing" "$c -- $(snip "$TMP/platform")"; fi
 c=$(get "$PLATFORM/healthz" "$TMP/platform.hz")
-if [ "$c" = 200 ]; then row ok "platform healthz" "200"; else row FAIL "platform healthz" "$c"; fi
+if [ "$c" = 200 ]; then row ok "platform healthz" "200"; else row FAIL "platform healthz" "$c -- $(snip "$TMP/platform.hz")"; fi
 
 echo
 if [ $fail = 0 ]; then echo "HEALTH: all $rows probes passed ($(date -u +%FT%TZ))"

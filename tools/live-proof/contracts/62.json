@@ -1,0 +1,16 @@
+{
+  "id": 62, "name": "order-aggregator", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "Orders from a marketplace (Wolt-type) should arrive by the partner's signed webhook and be fetched, accepted and marked ready through its Order API. Today staff type them in from the platform's tablet; the hand-entry half is probed on qa-durres, the partner half needs a partner account.", "uk": "Замовлення з маркетплейсу (типу Wolt) мали б приходити підписаним вебхуком партнера; сьогодні персонал вводить їх вручну, і лише цю половину можна перевірити на qa-durres."},
+  "producer": {"file": "workers/api/src/lib.rs", "line": 391, "what": "POST /api/staff/orders/aggregator (hand entry; the partner webhook does not exist yet)"},
+  "consumer": {"file": "workers/api/src/command/aggregator.rs", "line": 1, "what": "order id <channel>-<external id>, idempotent, price_trusted false, born CONFIRMED"},
+  "transport": {"method": "POST", "path": "/api/staff/orders/aggregator", "partner": {"webhook": "POST <our endpoint>", "fetch": "GET /orders/{id} | GET /v2/orders/{id}", "actions": "PUT /orders/{id}/accept|reject|ready|delivered|confirm-preorder"}},
+  "external": {"service": "Wolt Order API (POS integration)", "api_version": "Order API v1 paths + GET /v2/orders/{id} (OrderV2); base https://pos-integration-service.wolt.com, test https://pos-integration-service.development.dev.woltapi.com; fetched from developer.wolt.com/docs/webhook and /docs/api/order on 2026-10-03", "doc": "https://developer.wolt.com/docs/webhook", "auth": "Authorization: Bearer <JWT from the OAuth 2.0 flow>; webhook header WOLT-SIGNATURE = HEX HMAC-SHA256(body, client secret); 3 retries at 5 s; ack with 200", "glovo": "Glovo partner API not fetched: UNVERIFIED"},
+  "auth": {"secrets": ["WOLT_CLIENT_ID", "WOLT_CLIENT_SECRET", "a Wolt test venue id"], "where": "MISSING: operator needs a Wolt partner (POS integration) account"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "$comment": "the partner's webhook body (developer.wolt.com/docs/webhook)", "type": "object", "required": ["id", "type", "order", "created_at"],
+    "properties": {"id": {"type": "string"}, "type": {"const": "order.notification"}, "created_at": {"type": "string", "format": "date-time"},
+      "order": {"type": "object", "required": ["id", "venue_id", "status", "resource_url"], "properties": {"id": {"type": "string"}, "venue_id": {"type": "string"}, "status": {"type": "string"}, "resource_url": {"type": "string", "format": "uri"}}}}},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "$comment": "our hand-entry route's answer: the order as stored and whether it already was", "type": "object"},
+  "schema_status": "partner side from the vendor doc; hand-entry side draft",
+  "probe": "Hand-entry half on qa-durres: enter wolt-LIVE<run> twice -> the first order both times; a different basket -> 409; end the order. Partner half NEEDS-KEY.",
+  "last_verified": null
+}

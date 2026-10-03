@@ -1,0 +1,14 @@
+{
+  "id": 24, "name": "retention-prune", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "The nightly job prunes error records older than 7 days and chat lines older than 30 days.", "uk": "Нічна задача видаляє записи помилок старші 7 днів і рядки чату старші 30 днів."},
+  "producer": {"file": "workers/api/src/cloud.rs", "line": 616, "what": "errlog::prune_at / chat prune_at"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 362, "what": "GET /api/platform/errors (platform admin only)"},
+  "transport": {"method": "GET", "path": "/api/platform/errors"},
+  "external": {"service": "Cloudflare GraphQL Analytics", "api_version": "workersInvocationsAdaptive (scheduled)", "doc": "https://developers.cloudflare.com/analytics/graphql-api/"},
+  "auth": {"secrets": ["LIVE_CF_ANALYTICS_TOKEN", "platform-admin login"], "where": "analytics token exists (/root/.cf_analytics_token); platform-admin login MISSING"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "array"},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "CF analytics: yesterday 03:17Z scheduled run succeeded; oldest errlog record younger than 7 d + 26 h (needs platform admin).",
+  "last_verified": null
+}

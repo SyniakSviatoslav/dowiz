@@ -1,0 +1,14 @@
+{
+  "id": 55, "name": "ci-heartbeat", "contract_version": "0.1.0", "class": "NOT-LIVE-BY-DESIGN",
+  "description": {"en": "The heartbeat's old target, the dead Hetzner tunnel, is retired; the heartbeat now probes the four /healthz (row 58 covers it).", "uk": "Стара ціль heartbeat (мертвий тунель Hetzner) виведена; heartbeat тепер перевіряє чотири /healthz (покриває ряд 58)."},
+  "producer": {"file": ".github/workflows/heartbeat-monitor.yml", "line": 28, "what": "PROBE_TARGETS"},
+  "consumer": {"file": "https://webhook.dowiz.org/", "line": 0, "what": "530 (tunnel deleted b1865597)"},
+  "transport": {"method": "GET", "path": "https://webhook.dowiz.org/"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "not live by design; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a",
+  "probe": "Reports NOT-LIVE by design; the retargeted heartbeat is checked by row 58.",
+  "last_verified": null
+}

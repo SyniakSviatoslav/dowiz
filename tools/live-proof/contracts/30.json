@@ -1,0 +1,14 @@
+{
+  "id": 30, "name": "mcp-server", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "An MCP client with an owner API key lists the tools and reads the venue's orders, the same as the console.", "uk": "MCP-клієнт із ключем власника бачить інструменти і читає замовлення закладу так само, як консоль."},
+  "producer": {"file": "workers/api/src/lib.rs", "line": 507, "what": "POST /api/mcp"},
+  "consumer": {"file": "workers/api/src/mcp.rs", "line": 9, "what": "role keys -> tools"},
+  "transport": {"method": "POST", "path": "/api/mcp"},
+  "external": {"service": "Model Context Protocol (the probe is the client)", "api_version": "MCP protocolVersion 2025-06-18 (MEASURED GET /api/mcp)", "doc": "https://modelcontextprotocol.io/specification/2025-06-18"},
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["jsonrpc", "id"], "properties": {"jsonrpc": {"const": "2.0"}, "result": {"type": "object"}, "error": {"type": "object"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Mint owner key; initialize; tools/list; orders tool equals /api/owner/orders; revoke; call after revoke 401.",
+  "last_verified": null
+}

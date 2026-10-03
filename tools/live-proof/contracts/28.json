@@ -1,0 +1,14 @@
+{
+  "id": 28, "name": "witness-chain-check", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "The nightly writes a witness of each log's tip beside the copy; the bucket's witness matches the venue's log.", "uk": "Нічна задача пише свідка вершини кожного журналу поруч із копією; свідок у бакеті збігається з журналом закладу."},
+  "producer": {"file": "workers/api/src/cloud.rs", "line": 456, "what": "witness::last -> *.witness.json"},
+  "consumer": {"file": "workers/api/src/cloud.rs", "line": 540, "what": "status.witness"},
+  "transport": {"method": "GET", "path": "/api/owner/backup/cloud"},
+  "external": {"service": "Cloudflare R2 S3-compatible API", "api_version": "AWS S3 REST, SigV4", "doc": "https://developers.cloudflare.com/r2/api/s3/api/"},
+  "auth": {"secrets": ["cloud.s3.* as row 26"], "where": "as row 26"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["witness"], "properties": {"witness": {"type": ["object", "null"], "properties": {"found": {"type": "boolean"}, "tip": {}, "records": {"type": "integer"}}}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "After row 26: status.witness.found; witnessKey object from R2 has the same tip/records.",
+  "last_verified": null
+}

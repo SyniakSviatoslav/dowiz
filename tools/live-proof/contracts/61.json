@@ -1,0 +1,14 @@
+{
+  "id": 61, "name": "address-geocoder", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "The storefront turns the pin a guest drops into a street address with Nominatim, within its usage policy.", "uk": "Вітрина перетворює точку, яку ставить гість, на адресу через Nominatim у межах його правил використання."},
+  "producer": {"file": "workers/api/public/store/address.js", "line": 96, "what": "fetch NOMINATIM/reverse?format=jsonv2&zoom=18"},
+  "consumer": {"file": "workers/api/public/store/address.js", "line": 30, "what": "NOMINATIM = https://nominatim.openstreetmap.org/reverse"},
+  "transport": {"method": "GET", "path": "https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={lat}&lon={lng}&zoom=18&accept-language={lang}"},
+  "external": {"service": "Nominatim (OpenStreetMap)", "api_version": "Nominatim API /reverse, format=jsonv2; usage policy: max 1 req/s, identifying User-Agent, no bulk", "doc": "https://operations.osmfoundation.org/policies/nominatim/"},
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["place_id", "licence", "display_name", "address", "lat", "lon"], "properties": {"place_id": {"type": "integer"}, "licence": {"type": "string", "pattern": "OpenStreetMap"}, "display_name": {"type": "string", "minLength": 1}, "address": {"type": "object"}}},
+  "schema_status": "pinned from the live answer 2026-10-03",
+  "probe": "One reverse lookup per run, identifying UA, <= 3 req/run at <= 1/s; licence names OSM; display_name present; live CSP connect-src names nominatim. MEASURED: 200, place_id 57009419.",
+  "last_verified": null
+}

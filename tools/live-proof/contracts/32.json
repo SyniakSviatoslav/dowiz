@@ -1,0 +1,14 @@
+{
+  "id": 32, "name": "waitlist-mail", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "A visitor joins the waitlist on dowiz.org; the entry is stored and a mail is sent.", "uk": "Відвідувач записується в лист очікування на dowiz.org; запис зберігається, лист надсилається."},
+  "producer": {"file": "workers/api/public/platform/landing.js", "line": 342, "what": "waitlist form"},
+  "consumer": {"file": "workers/api/src/waitlist.rs", "line": 147, "what": "DO __platform + WAITLIST_MAIL send_email"},
+  "transport": {"method": "POST", "path": "https://dowiz.org/api/waitlist"},
+  "external": {"service": "Cloudflare Email Routing (send_email binding)", "api_version": "Workers send_email binding", "doc": "https://developers.cloudflare.com/email-routing/email-workers/send-email-workers/"},
+  "auth": {"secrets": ["platform-admin login", "a readable TEST mailbox"], "where": "MISSING; also needs operator permission to write outside qa-durres"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "One TEST entry per run; mail read from a test mailbox; entry in /api/platform/waitlist.",
+  "last_verified": null
+}

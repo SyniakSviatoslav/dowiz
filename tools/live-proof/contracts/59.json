@@ -1,0 +1,14 @@
+{
+  "id": 59, "name": "currency-rates", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "Prices in lek are shown in EUR/USD from a daily reference rate; the Worker's integer ppm equals the upstream rate of the same day.", "uk": "Ціни в леках показуються в EUR/USD за щоденним курсом; цілі ppm Worker дорівнюють курсу джерела того ж дня."},
+  "producer": {"file": "workers/api/src/services/ordering/rates.rs", "line": 75, "what": "fetch open.er-api.com/v6/latest/{base}, round(rate*1e6)"},
+  "consumer": {"file": "workers/api/public/lib/money.js", "line": 94, "what": "GET /api/public/rates?base="},
+  "transport": {"method": "GET", "path": "/api/public/rates?base=ALL"},
+  "external": {"service": "ExchangeRate-API open access", "api_version": "v6 (https://open.er-api.com/v6/latest/{base}); daily update; attribution required by its terms", "doc": "https://www.exchangerate-api.com/docs/free"},
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["base", "ppm", "stale", "decimals"], "properties": {"base": {"type": "string", "pattern": "^[A-Z]{3}$"}, "ppm": {"type": "object", "required": ["ALL", "EUR", "USD"], "additionalProperties": {"type": "integer", "minimum": 1}}, "stale": {"const": false}, "asOf": {"type": "string"}, "decimals": {"type": "object"}}},
+  "schema_status": "pinned from the live answer 2026-10-03",
+  "probe": "Worker ppm equals round(er-api rate*1e6) for EUR and USD; stale false; asOf younger than 48 h. er-api down -> Worker answers identity + stale true (cached 1 h) = FAILED (degraded). MEASURED 2026-10-03: EUR 10861, USD 12295, equal.",
+  "last_verified": null
+}

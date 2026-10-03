@@ -1,0 +1,14 @@
+{
+  "id": 51, "name": "agent-loop", "contract_version": "0.1.0", "class": "NOT-LIVE-BY-DESIGN",
+  "description": {"en": "The agent-loop HTTP service has no caller.", "uk": "HTTP-сервіс agent-loop не має викликачів."},
+  "producer": {"file": "agent-loop/src/main.rs", "line": 1, "what": "service"},
+  "consumer": {"file": "scripts/lint-gate.sh", "line": 44, "what": "only non-product refs"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "not live by design; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a",
+  "probe": "Reports NOT-LIVE by design (LEGACY-MARK).",
+  "last_verified": null
+}

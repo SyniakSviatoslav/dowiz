@@ -1,0 +1,18 @@
+{
+  "id": 1, "name": "storefront-ordering", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "A guest's checkout places an order through the Worker into the venue's Durable Object; the owner and the guest read the same order back.", "uk": "Гість оформлює замовлення на вітрині, воно потрапляє в об'єкт закладу, і власник та гість бачать те саме замовлення."},
+  "producer": {"file": "workers/api/public/kit/data.js", "line": 267, "what": "storefront checkout POST"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 313, "what": "POST /api/public/locations/:slug/orders -> storefront::place -> DO hubdo.rs"},
+  "transport": {"method": "POST", "path": "/api/public/locations/{slug}/orders", "readback": ["GET /api/order/{id} (customer token)", "GET /api/owner/orders"]},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["items", "contact", "fulfilment"],
+    "properties": {"items": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["product_id", "modifier_ids", "quantity"], "properties": {"product_id": {"type": "string"}, "modifier_ids": {"type": "array", "items": {"type": "string"}}, "quantity": {"type": "integer", "minimum": 1}}}},
+      "contact": {"type": "object", "required": ["phone"], "properties": {"name": {"type": ["string", "null"]}, "phone": {"type": "string"}}},
+      "fulfilment": {"type": "object", "required": ["kind"], "properties": {"kind": {"enum": ["pickup", "delivery", "table"]}}},
+      "payment": {"type": ["string", "null"]}}},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["id", "access_token"], "properties": {"id": {"type": "string", "minLength": 1}, "access_token": {"type": "string", "minLength": 16}, "status": {"type": "string"}}},
+  "readback_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["id", "status"], "properties": {"id": {"type": "string"}, "status": {"const": "PENDING"}}},
+  "probe": "Chromium checkout of QA Water (pickup, cash, contact LIVE-<run>); read back as customer and owner; owner rejects.",
+  "last_verified": null
+}

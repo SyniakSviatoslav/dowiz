@@ -12,6 +12,16 @@ name: Production health
 #
 # Replaces heartbeat-monitor.yml, which probed a Cloudflare tunnel to a box the product no longer
 # runs on (it answered 530 on 2026-09-24).
+#
+# 2026-10-03 (W-LIVE), DECISION: FROM GITHUB THIS JOB READS dowiz-watch's /status, NOT dowiz.org.
+# Bot Fight Mode on dowiz.org answers every request from GitHub's runners (ASN 8075) with
+# `managed_challenge` (measured, Cloudflare firewallEventsAdaptive), which is why this job failed on
+# every run from 2026-10-01T18:30Z on while health.sh passed 20/20 from the box. The operator keeps
+# Bot Fight Mode on. dowiz-watch (workers/watch/) runs the SAME rows (healthz, storefront + CSP, menu
+# dishes, ETA quote) from inside Cloudflare every 5 minutes; this job prints its full table and fails
+# when it is not ok. heartbeat-monitor.yml reads the same watcher every 10 minutes as the minimal
+# dead-man switch; this job is the detailed report. health.sh stays the box/laptop copy, and a manual
+# run with `direct: true` still runs it from GitHub (to see the challenge for yourself).
 
 on:
   schedule:
@@ -19,8 +29,12 @@ on:
   workflow_dispatch:
     inputs:
       venues:
-        description: 'Space-separated venue slugs (default: sushi-durres dubin-sushi)'
+        description: 'direct mode only: space-separated venue slugs (default: sushi-durres dubin-sushi)'
         required: false
+      direct:
+        description: 'Run tools/live-checks/health.sh from GitHub instead of reading the watcher (expect CHALLENGED rows)'
+        required: false
+        default: 'false'
 
 permissions:
   contents: read
@@ -41,10 +55,26 @@ jobs:
         id: probe
         env:
           HEALTH_VENUES: ${{ github.event.inputs.venues || vars.HEALTH_VENUES || 'sushi-durres dubin-sushi' }}
+          DIRECT: ${{ github.event.inputs.direct || 'false' }}
+          WATCH_URL: ${{ vars.WATCH_URL || 'https://dowiz-watch.sviatoslavsyniak.workers.dev' }}
         run: |
           set +e
-          bash tools/live-checks/health.sh > health.txt 2>&1
-          rc=$?
+          if [ "$DIRECT" = true ]; then
+            bash tools/live-checks/health.sh > health.txt 2>&1
+            rc=$?
+          else
+            code=$(curl -sS -o status.json -w '%{http_code}' --max-time 20 --retry 3 --retry-delay 5 \
+              -H 'user-agent: dowiz-health-cron' "$WATCH_URL/status")
+            if [ "$code" = 200 ] && jq -e .targets status.json >/dev/null 2>&1; then
+              jq -r '.targets | to_entries[] | (if .value.status == "up" then "ok  " else "FAIL" end) + " " + .key + " -- " + .value.status + ": " + .value.detail + " (for \(.value.forMinutes) min)"' status.json > health.txt
+              jq -r '"watcher \(.watcher.version) @ \(.watcher.commit); last tick \(.tickAgeSeconds) s ago; stale=\(.stale)"' status.json >> health.txt
+              if [ "$(jq -r .stale status.json)" = true ]; then echo "FAIL watcher stale: no tick for over 15 min" >> health.txt; fi
+              if [ "$(jq -r .ok status.json)" = true ]; then rc=0; else rc=1; fi
+            else
+              echo "FAIL watcher /status unreadable: ${code:-000} $(head -c 120 status.json 2>/dev/null | tr -d '\r\n')" > health.txt
+              rc=1
+            fi
+          fi
           cat health.txt
           {
             echo '### Production health'

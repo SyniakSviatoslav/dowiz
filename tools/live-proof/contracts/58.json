@@ -1,0 +1,14 @@
+{
+  "id": 58, "name": "ci-workflows", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "The scheduled workflows that watch production run on time and pass; a red or silent one is a failure.", "uk": "Воркфлоу за розкладом, що стежать за продакшеном, запускаються вчасно і проходять; червоний або мовчазний — це провал."},
+  "producer": {"file": ".github/workflows/health-cron.yml", "line": 1, "what": "health-cron, heartbeat-monitor, key-flows, evals-nightly, live-proof"},
+  "consumer": {"file": ".github/workflows/health-cron.yml", "line": 69, "what": "alert step (TELEGRAM_BOT_TOKEN + OPS_TELEGRAM_CHAT_ID)"},
+  "transport": {"method": "GET", "path": "https://api.github.com/repos/SyniakSviatoslav/dowiz/actions/workflows/{file}/runs?per_page=5"},
+  "external": {"service": "GitHub REST API", "api_version": "X-GitHub-Api-Version 2022-11-28", "doc": "https://docs.github.com/en/rest/actions/workflow-runs"},
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["total_count", "workflow_runs"], "properties": {"total_count": {"type": "integer"}, "workflow_runs": {"type": "array", "items": {"type": "object", "required": ["id", "status", "conclusion", "created_at"], "properties": {"conclusion": {"type": ["string", "null"]}, "created_at": {"type": "string", "format": "date-time"}}}}}},
+  "schema_status": "pinned from the live answer 2026-10-03",
+  "probe": "Latest run per watched workflow: conclusion success and age within its schedule; failures quote check-run annotations. Expected FAILED today (health-cron 8/8 red, BFM).",
+  "last_verified": null
+}

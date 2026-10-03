@@ -1,0 +1,14 @@
+{
+  "id": 48, "name": "offline-shell", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "The storefront shell loads offline from its service worker, and API answers are never cached.", "uk": "Оболонка вітрини завантажується офлайн із service worker, а відповіді API ніколи не кешуються."},
+  "producer": {"file": "workers/api/public/sw.js", "line": 1, "what": "SHELL_CACHE"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 206, "what": "private, no-store default"},
+  "transport": {"method": "GET", "path": "/sw.js"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "string"},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Chromium: SW activated; offline reload renders the shell; /api/* not from cache; sw.js equals the deployed file.",
+  "last_verified": null
+}

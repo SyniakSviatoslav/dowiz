@@ -1,0 +1,14 @@
+{
+  "id": 39, "name": "bootstrap", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "The bootstrap route seeds a venue only with the right secret and is idempotent.", "uk": "Маршрут bootstrap наповнює заклад лише з правильним секретом і є ідемпотентним."},
+  "producer": {"file": "workers/api/src/lib.rs", "line": 356, "what": "POST /api/bootstrap"},
+  "consumer": {"file": "workers/api/src/bootstrap.rs", "line": 92, "what": "BOOTSTRAP_SECRET check"},
+  "transport": {"method": "POST", "path": "/api/bootstrap"},
+  "external": null,
+  "auth": {"secrets": ["BOOTSTRAP_SECRET"], "where": "/root/.dowiz_owner; BOX ONLY, never in GitHub (CI runs only the refusal half)"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "string"]},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Box: correct secret on qa-durres -> idempotent, catalogue generation unchanged; wrong secret -> refused.",
+  "last_verified": null
+}

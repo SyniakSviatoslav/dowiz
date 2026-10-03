@@ -1,0 +1,14 @@
+{
+  "id": 34, "name": "ml-dsa-live-signer", "contract_version": "0.1.0", "class": "NEEDS-CODE",
+  "description": {"en": "No live path signs or verifies with ML-DSA-65.", "uk": "Жоден живий шлях не підписує і не перевіряє ML-DSA-65."},
+  "producer": {"file": "crates/dowiz-core/src/pq/dsa.rs", "line": 1, "what": "ML-DSA-65"},
+  "consumer": {"file": "kernel/src/span_metrics/instrument.rs", "line": 31, "what": "only caller, behind features the Worker lacks (SEL4-4)"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "no live consumer exists; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a: no consumer",
+  "probe": "Reports NOT-LIVE: disconnected in code (SEL4-4).",
+  "last_verified": null
+}

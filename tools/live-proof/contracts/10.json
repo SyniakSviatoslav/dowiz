@@ -1,0 +1,14 @@
+{
+  "id": 10, "name": "stripe-payment", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "A card order creates a Stripe PaymentIntent; Stripe's signed webhook marks the order paid.", "uk": "Оплата карткою створює PaymentIntent у Stripe; підписаний вебхук Stripe позначає замовлення оплаченим."},
+  "producer": {"file": "workers/api/src/stripe.rs", "line": 60, "what": "/v1/payment_intents with metadata.order_id"},
+  "consumer": {"file": "workers/api/src/stripe.rs", "line": 231, "what": "webhook payment_intent.succeeded -> order paid"},
+  "transport": {"method": "POST", "path": "https://api.stripe.com/v1/payment_intents"},
+  "external": {"service": "Stripe", "api_version": "UNPINNED: no Stripe-Version header is sent (account default); pin when keys exist", "doc": "https://docs.stripe.com/api/payment_intents"},
+  "auth": {"secrets": ["STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET"], "where": "MISSING and PLATFORM-WIDE: test keys would affect every venue; needs QA isolation"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["id", "object", "status", "metadata"], "properties": {"object": {"const": "payment_intent"}, "status": {"const": "succeeded"}, "metadata": {"type": "object", "required": ["order_id"]}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Order with payment card; confirm with pm_card_visa (TEST); Stripe webhook arrives; order paid; PI succeeded with metadata.order_id.",
+  "last_verified": null
+}

@@ -1,0 +1,14 @@
+{
+  "id": 33, "name": "landing-pq-copy", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "The public landing's words are the deployed source's words and contain none of the forbidden post-quantum claims.", "uk": "Текст лендінгу збігається із задеплоєним джерелом і не містить заборонених постквантових тверджень."},
+  "producer": {"file": "workers/api/public/platform/landing-words.js", "line": 1, "what": "landing copy, 4 languages"},
+  "consumer": {"file": "tools/gates/pq-words.sh", "line": 1, "what": "forbidden phrases"},
+  "transport": {"method": "GET", "path": "https://dowiz.org/platform/landing-words.js"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "string", "minLength": 1000},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Served file equals the deployed commit's file; forbidden phrases count 0 (MEASURED 'every packet' 0).",
+  "last_verified": null
+}

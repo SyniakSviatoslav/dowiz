@@ -1,0 +1,14 @@
+{
+  "id": 38, "name": "customer-phone-mask", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "The owner sees customers' phones masked with a secret key, not with the code's public fallback constant.", "uk": "Власник бачить телефони клієнтів замаскованими секретним ключем, а не публічною константою з коду."},
+  "producer": {"file": "workers/api/src/services/customers/handlers.rs", "line": 46, "what": "signing_secret (fallback dowiz-unconfigured)"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 442, "what": "GET /api/owner/customers"},
+  "transport": {"method": "GET", "path": "/api/owner/customers"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD", "AUTH_SIGNING_KEY (Worker secret; whether set is what the probe measures)"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "array"]},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Order with a TEST phone; compute the mask with the fallback key via the code's own function; equal = FAILED (secret unset), different = LIVE-PROVEN.",
+  "last_verified": null
+}

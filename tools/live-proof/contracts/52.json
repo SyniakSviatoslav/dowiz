@@ -1,0 +1,14 @@
+{
+  "id": 52, "name": "legacy-dirs", "contract_version": "0.1.0", "class": "NOT-LIVE-BY-DESIGN",
+  "description": {"en": "About 300 files in legacy directories are built by nothing.", "uk": "Близько 300 файлів у застарілих каталогах ніщо не збирає."},
+  "producer": {"file": "engine/Cargo.toml", "line": 1, "what": "legacy trees (last touched 2026-09-06)"},
+  "consumer": {"file": "tools/deploy/deploy.sh", "line": 1, "what": "0 refs"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "not live by design; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a",
+  "probe": "Reports NOT-LIVE by design (LEGACY-MARK, no deletions).",
+  "last_verified": null
+}

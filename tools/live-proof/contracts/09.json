@@ -1,0 +1,14 @@
+{
+  "id": 9, "name": "whatsapp-statuses", "contract_version": "0.1.0", "class": "NEEDS-CODE",
+  "description": {"en": "Meta's delivered/read receipts should update the message's state; nothing reads them today.", "uk": "Квитанції Meta про доставку/прочитання мали б оновлювати стан повідомлення; сьогодні їх ніхто не читає."},
+  "producer": {"file": "workers/api/src/channels.rs", "line": 250, "what": "Meta value.statuses[] (produced by Meta)"},
+  "consumer": {"file": "workers/api/src/channels.rs", "line": 263, "what": "reads value.messages[] only (D21/N1-C)"},
+  "transport": {"method": "POST", "path": "/api/webhooks/meta"},
+  "external": {"service": "Meta WhatsApp Cloud API webhooks", "api_version": "Graph v21.0 statuses[]", "doc": "https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components"},
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "no live consumer exists; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a: no consumer",
+  "probe": "Reports NOT-LIVE: disconnected in code (D21/N1-C).",
+  "last_verified": null
+}

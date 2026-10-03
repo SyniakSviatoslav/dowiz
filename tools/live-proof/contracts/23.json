@@ -1,0 +1,14 @@
+{
+  "id": 23, "name": "privacy-forget", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "Forgetting a customer removes their phone from what the owner can reveal and adds tombstones.", "uk": "Забування клієнта прибирає його телефон з того, що власник може відкрити, і додає надгробки."},
+  "producer": {"file": "workers/api/src/lib.rs", "line": 444, "what": "POST /api/owner/customers/:key/forget"},
+  "consumer": {"file": "workers/api/src/services/operations/mod.rs", "line": 165, "what": "health.redacted / declared"},
+  "transport": {"method": "POST", "path": "/api/owner/customers/{key}/forget"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Order with a fresh TEST phone; forget; customers no longer reveals it; health.redacted grows.",
+  "last_verified": null
+}

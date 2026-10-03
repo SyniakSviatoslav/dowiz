@@ -1,28 +1,38 @@
 name: Heartbeat Monitor
 
-# External dead-man's-switch for the Hetzner box (dowiz-dev). Runs on GitHub's
-# infrastructure — fully decoupled from Hetzner/Cloudflare, so it still fires
-# if the box or its Cloudflare Tunnel is completely down. Complements the
-# on-box ops-gatus monitor (docs/design/ops-reliability/, OPS-10) and the
-# on-box `tools/ops-alert deadman-check` cron (P45-W2, §4a.2 item 2) — the two
-# watchers use different infrastructure AND different send paths, so one
-# compromised/successful-silent lane cannot mute both.
+# WATCH THE WATCHER (W-LIVE, 2026-10-03). Production is probed every 5 minutes from INSIDE Cloudflare
+# by dowiz-watch (workers/watch/), which mails on every down/up transition. This job is the layer
+# above it: from GitHub, every 10 minutes, it reads the watcher on its workers.dev URL and goes red
+# when the watcher has stopped ticking OR reports any target not up. GitHub's own failure e-mail is
+# the third layer.
 #
-# Requires repo secret TELEGRAM_BOT_TOKEN (bot @dowizbot_bot). Chat id is not
-# a secret (already present in /root/.bashrc + cloud env per project memory).
+# WHY NOT PROBE dowiz.org DIRECTLY (measured 2026-10-03, Cloudflare GraphQL firewallEventsAdaptive,
+# zone dowiz.org): Bot Fight Mode answers every request from GitHub's runners (ASN 8075) with
+# `managed_challenge`. The operator keeps Bot Fight Mode ON ("найкраще обходити, щоб реальний захист
+# лишався"). The watcher's workers.dev host is outside the dowiz.org zone, so the challenge does not
+# apply to this job. The direct targets are kept here as a comment, not deleted:
+#   platform=https://dowiz.org/healthz sushi-durres=https://sushi-durres.dowiz.org/healthz
+#   dubin-sushi=https://dubin-sushi.dowiz.org/healthz qa-durres=https://qa-durres.dowiz.org/healthz
+#   tunnel=https://webhook.dowiz.org/   (dead tunnel; 530 from the box)
+# The old job called anything below 500 "up", so a 403 challenge page made six of six runs green.
+# Here "up" is: watcher /healthz answers 200 "ok" (last tick younger than 15 min) AND /status says
+# ok:true. A `cf-mitigated` header anywhere is CHALLENGED and fails.
 #
-# P45-W2 §4a.2 item 1: probe list is a workflow-level env matrix
-# (PROBE_TARGETS) — retargeting at P37 is a one-line diff (MASTER DoD-2).
-# Format: space-separated "name=url" pairs.
+# ALERT: repo secret TELEGRAM_BOT_TOKEN + repo variable OPS_TELEGRAM_CHAT_ID (the pair health-cron.yml
+# uses); the chat id that used to be hard-coded here is the fallback. Without the token the red run and
+# GitHub's failure e-mail are the alert. The watcher itself mails the operator on transitions.
 
 env:
-  PROBE_TARGETS: "tunnel=https://webhook.dowiz.org/"
+  WATCH_URL: ${{ vars.WATCH_URL || 'https://dowiz-watch.sviatoslavsyniak.workers.dev' }}
   OPS_ALERTS_TOPIC: "257"
 
 on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch: {}
+
+permissions:
+  contents: read
 
 concurrency:
   group: heartbeat-monitor
@@ -33,23 +43,40 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe targets (dead-man's-switch targets)
+      - name: Read the watcher (dowiz-watch on workers.dev)
         id: probe
         run: |
           set +e
           down_list=""
-          for entry in $PROBE_TARGETS; do
-            name="${entry%%=*}"
-            url="${entry#*=}"
-            code=$(curl -sS -o /dev/null -w "%{http_code}" \
-              --max-time 10 --retry 3 --retry-delay 5 --retry-connrefused "$url")
-            if [ -z "$code" ] || [ "$code" -ge 500 ] || [ "$code" = "000" ]; then
-              down_list="${down_list}${name}(${url}:${code}) "
+          get() { curl -sS -o "$2" -D "$2.h" -w '%{http_code}' -H 'user-agent: dowiz-heartbeat' \
+                    --max-time 15 --retry 3 --retry-delay 5 --retry-connrefused "$1"; }
+          hz=$(get "$WATCH_URL/healthz" hz.txt)
+          hzbody=$(head -c 80 hz.txt 2>/dev/null | tr -d '\r\n')
+          if grep -qi '^cf-mitigated:' hz.txt.h 2>/dev/null; then down_list="watcher-healthz(CHALLENGED) "
+          elif [ "$hz" != 200 ] || [ "$hzbody" != ok ]; then down_list="watcher-healthz(${hz:-000}:${hzbody}) "; fi
+          echo "watcher /healthz -> ${hz:-000} \"$hzbody\""
+          st=$(get "$WATCH_URL/status" status.json)
+          echo "watcher /status -> ${st:-000}"
+          {
+            echo '### Heartbeat (via dowiz-watch)'; echo
+            echo "watcher \`/healthz\`: ${hz:-000} \`$hzbody\`"; echo
+            echo '| target | status | for (min) | detail |'; echo '|---|---|---|---|'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$st" = 200 ] && jq -e . status.json >/dev/null 2>&1; then
+            jq -r '.targets | to_entries[] | "| \(.key) | \(.value.status) | \(.value.forMinutes) | \(.value.detail) |"' status.json >> "$GITHUB_STEP_SUMMARY"
+            jq -r '"watcher \(.watcher.version) @ \(.watcher.commit); last tick \(.tickAgeSeconds) s ago; ok=\(.ok)"' status.json
+            jq -r '.targets | to_entries[] | "\(.value.status) \(.key) -- \(.value.detail)"' status.json
+            if [ "$(jq -r .ok status.json)" != true ]; then
+              down_list="${down_list}$(jq -r '[.notUp[]] | join(" ")' status.json) $(jq -r 'if .stale then "STALE" else "" end' status.json) "
             fi
-          done
+          else
+            down_list="${down_list}watcher-status(${st:-000}:$(head -c 80 status.json 2>/dev/null | tr -d '\r\n')) "
+          fi
+          down_list=$(echo "$down_list" | tr -s ' ')
           echo "down_list=${down_list}" >> "$GITHUB_OUTPUT"
-          if [ -n "$down_list" ]; then
+          if [ -n "${down_list// /}" ]; then
             echo "status=down" >> "$GITHUB_OUTPUT"
+            echo "::error title=Heartbeat::not up: ${down_list}"
           else
             echo "status=up" >> "$GITHUB_OUTPUT"
           fi
@@ -58,18 +85,23 @@ jobs:
         if: steps.probe.outputs.status == 'down'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: "-1003901655568"
+          TELEGRAM_CHAT_ID: ${{ vars.OPS_TELEGRAM_CHAT_ID || '-1003901655568' }}
           OPS_ALERTS_TOPIC: ${{ env.OPS_ALERTS_TOPIC }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set +e
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "::warning::heartbeat NOT UP; no TELEGRAM_BOT_TOKEN secret, so the red run is the only alert"
+            exit 0
+          fi
           down="${{ steps.probe.outputs.down_list }}"
-          msg="heartbeat-monitor: target(s) DOWN — ${down}. Box or Cloudflare Tunnel may be down."
+          msg="heartbeat-monitor: not up: ${down} ${RUN_URL}"
           for attempt in 1 2 3; do
             resp=$(curl -sS --max-time 10 \
               "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
               --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
               --data-urlencode "message_thread_id=${OPS_ALERTS_TOPIC}" \
-              --data-urlencode "text=🔴 S0 ${msg}")
+              --data-urlencode "text=S0 ${msg}")
             if echo "$resp" | grep -q '"ok":true'; then
               echo "Telegram S0 alert sent (attempt $attempt)"
               exit 0
@@ -77,14 +109,13 @@ jobs:
             echo "Telegram send failed (attempt $attempt, resp: $resp), retrying..."
             sleep 5
           done
-          echo "Telegram primary alert failed after 3 attempts — check bot token + network"
-          # P45-W0 §4a.2 item 4: nested-pager fallback — alert a secondary forum
-          # topic (same bot) so someone is ALWAYS paged about the pager failing.
-          curl -sS --max-time 10 \
-            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "message_thread_id=257" \
-            --data-urlencode "text=🔴 heartbeat-MONITOR PAGER FAILURE after 3 attempts — targets=${down} — root alert unverified — check TELEGRAM_BOT_TOKEN secret" \
-            >/dev/null || true
-          echo "::error::Telegram alert failed after 3 attempts — fallback to OPS_ALERTS-topic sent; verify manually"
+          echo "::error::Telegram alert failed after 3 attempts; check the TELEGRAM_BOT_TOKEN secret and OPS_TELEGRAM_CHAT_ID"
+          exit 1
+
+      # A run whose targets are not up is RED whether or not the alert went out: the old job ended
+      # green after a successful alert, which made "success" mean two opposite things.
+      - name: Fail when any target is not up
+        if: steps.probe.outputs.status == 'down'
+        run: |
+          echo "not up: ${{ steps.probe.outputs.down_list }}"
           exit 1

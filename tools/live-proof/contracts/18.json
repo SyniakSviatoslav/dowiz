@@ -1,0 +1,14 @@
+{
+  "id": 18, "name": "booking", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "A guest books a table without an account; the owner sees it; the share link and pass work; the guest cancels.", "uk": "Гість бронює стіл без акаунта; власник бачить бронь; посилання й пропуск працюють; гість скасовує."},
+  "producer": {"file": "workers/api/src/lib.rs", "line": 316, "what": "POST /api/public/locations/:slug/reservations"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 351, "what": "GET /api/owner/reservations"},
+  "transport": {"method": "POST", "path": "/api/public/locations/{slug}/reservations"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["id"], "properties": {"id": {"type": "string"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "tables?slotMin -> free slot; reserve TEST; owner list shows it; detail + pass verify; guest cancels.",
+  "last_verified": null
+}

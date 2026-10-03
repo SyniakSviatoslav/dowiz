@@ -1,0 +1,14 @@
+{
+  "id": 7, "name": "outbox-whatsapp", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "An order or campaign message leaves the outbox through WhatsApp Cloud API to a verified test recipient.", "uk": "Повідомлення про замовлення чи кампанію йде через WhatsApp Cloud API тестовому отримувачу."},
+  "producer": {"file": "workers/api/src/hubdo.rs", "line": 935, "what": "outbox entry (whatsapp rail)"},
+  "consumer": {"file": "workers/api/src/channels.rs", "line": 31, "what": "whatsapp_text -> Graph v21.0 /{phone_id}/messages"},
+  "transport": {"method": "POST", "path": "https://graph.facebook.com/v21.0/{phone_id}/messages"},
+  "external": {"service": "Meta WhatsApp Cloud API", "api_version": "Graph v21.0", "doc": "https://developers.facebook.com/docs/whatsapp/cloud-api/reference/messages"},
+  "auth": {"secrets": ["notify.whatsapp.token", "notify.whatsapp.phone_id", "notify.whatsapp.to"], "where": "MISSING: Meta app + test number + permanent token + recipient"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["messages"], "properties": {"messaging_product": {"const": "whatsapp"}, "messages": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id"], "properties": {"id": {"type": "string", "pattern": "^wamid\\."}}}}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Set qa-durres whatsapp settings to the TEST number; order; Graph returns a wamid; delivery read-back needs row 9.",
+  "last_verified": null
+}

@@ -1,0 +1,14 @@
+{
+  "id": 50, "name": "core-modules-unused", "contract_version": "0.1.0", "class": "NOT-LIVE-BY-DESIGN",
+  "description": {"en": "Thirteen dowiz-core modules have no reference from the Worker or hub.", "uk": "Тринадцять модулів dowiz-core не мають посилань із Worker чи хабу."},
+  "producer": {"file": "crates/dowiz-core/src/lib.rs", "line": 1, "what": "13 modules"},
+  "consumer": {"file": "kernel/src/lib.rs", "line": 57, "what": "re-export only (N4.2)"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "not live by design; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a",
+  "probe": "Reports NOT-LIVE by design (N4.2, no deletions).",
+  "last_verified": null
+}

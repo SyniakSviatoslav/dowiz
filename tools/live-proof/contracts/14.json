@@ -1,0 +1,14 @@
+{
+  "id": 14, "name": "courier-invite", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "An owner invites a courier; the code is claimed on the venue's host and the courier appears in the owner's list.", "uk": "Власник запрошує кур'єра; код активується на хості закладу, і кур'єр з'являється у списку власника."},
+  "producer": {"file": "workers/api/src/lib.rs", "line": 519, "what": "POST /api/owner/couriers/invite (hiring.rs)"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 370, "what": "POST /api/courier/auth/claim"},
+  "transport": {"method": "POST", "path": "/api/owner/couriers/invite"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["code", "expiresMs"], "properties": {"code": {"type": "string", "minLength": 4}, "expiresMs": {"type": "integer"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Invite; claim with a TEST phone on the qa host; login; owner couriers lists it; /api/courier/tasks 200; uninvite. Rail delivery of the code is still DISC (F5).",
+  "last_verified": null
+}

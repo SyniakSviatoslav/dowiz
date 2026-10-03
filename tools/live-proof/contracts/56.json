@@ -1,0 +1,14 @@
+{
+  "id": 56, "name": "ci-visual", "contract_version": "0.1.0", "class": "NOT-LIVE-BY-DESIGN",
+  "description": {"en": "visual.yml describes the removed pnpm/Postgres stack.", "uk": "visual.yml описує видалений стек pnpm/Postgres."},
+  "producer": {"file": ".github/workflows/visual.yml", "line": 6, "what": "PR paths apps/web, packages/ui"},
+  "consumer": {"file": "apps/web", "line": 0, "what": "absent"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "not live by design; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a",
+  "probe": "Reports NOT-LIVE by design (CI-DEAD).",
+  "last_verified": null
+}

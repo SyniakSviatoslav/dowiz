@@ -1,0 +1,14 @@
+{
+  "id": 17, "name": "live-eta-positions", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "The courier's position reaches the customer's tracking view.", "uk": "Позиція кур'єра доходить до відстеження клієнта."},
+  "producer": {"file": "workers/api/src/courier.rs", "line": 364, "what": "POST /api/courier/position stamp"},
+  "consumer": {"file": "workers/api/src/hubstore.rs", "line": 1087, "what": "position folded into the order the customer reads"},
+  "transport": {"method": "POST", "path": "/api/courier/position"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD", "QA_HUB_COURIER_PHONE", "QA_HUB_COURIER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["id", "status"], "properties": {"id": {"type": "string"}, "status": {"type": "string"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "During row 16 post a Durres point; GET /api/order/:id with the customer token carries it.",
+  "last_verified": null
+}

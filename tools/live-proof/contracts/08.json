@@ -1,0 +1,14 @@
+{
+  "id": 8, "name": "meta-webhook-inbound", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "A real WhatsApp/Instagram message from a customer arrives through Meta's signed webhook into the venue's inbox.", "uk": "Справжнє вхідне повідомлення WhatsApp/Instagram через підписаний вебхук Meta потрапляє у вхідні закладу."},
+  "producer": {"file": "workers/api/src/lib.rs", "line": 492, "what": "POST /api/webhooks/meta (Meta is the producer)"},
+  "consumer": {"file": "workers/api/src/channels.rs", "line": 194, "what": "webhook -> inbox (channels.rs:194-288)"},
+  "transport": {"method": "POST", "path": "/api/webhooks/meta"},
+  "external": {"service": "Meta Webhooks (WhatsApp Business Account, Instagram)", "api_version": "Graph v21.0; x-hub-signature-256 = sha256 HMAC of the body with the app secret", "doc": "https://developers.facebook.com/docs/graph-api/webhooks/getting-started"},
+  "auth": {"secrets": ["notify.meta.secret (app secret)", "notify.whatsapp.verify"], "where": "MISSING: as row 7 plus a second WhatsApp number A that messages B"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["object", "entry"], "properties": {"object": {"enum": ["whatsapp_business_account", "instagram"]}, "entry": {"type": "array"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Number A sends to number B whose webhook is qa-durres; GET /api/owner/inbox shows the text. A self-signed POST is not counted.",
+  "last_verified": null
+}

@@ -1,0 +1,14 @@
+{
+  "id": 15, "name": "courier-login-venue", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "A courier's session belongs to the venue whose host they signed in on; a body naming another venue is refused.", "uk": "Сесія кур'єра належить закладу, на хості якого він увійшов; тіло з іншим закладом відхиляється."},
+  "producer": {"file": "workers/api/src/lib.rs", "line": 369, "what": "POST /api/courier/auth/login"},
+  "consumer": {"file": "workers/api/src/accounts.rs", "line": 593, "what": "venue_for_courier_login / venue_of_host"},
+  "transport": {"method": "POST", "path": "/api/courier/auth/login"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD", "QA_HUB_COURIER_PHONE", "QA_HUB_COURIER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["access_token"], "properties": {"access_token": {"type": "string"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "QA_HUB_COURIER logs in on qa-durres -> token venue qa-durres; with body location_id of another venue -> refused. No other host is touched.",
+  "last_verified": null
+}

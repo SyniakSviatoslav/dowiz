@@ -1,0 +1,14 @@
+{
+  "id": 5, "name": "outbox-telegram", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "An order's bell and the daily digest leave the venue's outbox and arrive as a Telegram message in the venue's group.", "uk": "Сповіщення про замовлення і дайджест доходять у Telegram-групу закладу."},
+  "producer": {"file": "workers/api/src/notify/route.rs", "line": 64, "what": "outbox entry for the bell/digest"},
+  "consumer": {"file": "workers/api/src/notify/tg.rs", "line": 140, "what": "tg::send -> Bot API sendMessage (message_id discarded today)"},
+  "transport": {"method": "POST", "path": "https://api.telegram.org/bot{TOKEN}/sendMessage"},
+  "external": {"service": "Telegram Bot API", "api_version": "Bot API (unversioned URL; methods getMe, sendMessage, forwardMessage, deleteMessage)", "doc": "https://core.telegram.org/bots/api"},
+  "auth": {"secrets": ["notify.telegram.token (venue setting)", "LIVE_TG_TOKEN", "LIVE_TG_CHAT"], "where": "MISSING: operator creates a TEST bot + group"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["ok", "result"], "properties": {"ok": {"const": true}, "result": {"type": "object", "required": ["message_id", "chat", "text"], "properties": {"message_id": {"type": "integer"}, "text": {"type": "string"}}}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Connect TEST bot on qa-durres; order; outbox drains by alarm; forwardMessage of the stored message_id must return text with the order id; delete both. Needs message_id kept (F-D).",
+  "last_verified": null
+}

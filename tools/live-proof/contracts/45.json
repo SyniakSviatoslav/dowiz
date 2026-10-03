@@ -1,0 +1,14 @@
+{
+  "id": 45, "name": "dw7-block", "contract_version": "0.1.0", "class": "NEEDS-CODE",
+  "description": {"en": "The menu's columnar block is produced but nothing reads it.", "uk": "Колонковий блок меню виробляється, але ніхто його не читає."},
+  "producer": {"file": "workers/api/src/hubdo/menu.rs", "line": 65, "what": "serves ?block="},
+  "consumer": {"file": "workers/api/public/lib/replica.js", "line": 0, "what": "no reader (DW1/BN1)"},
+  "transport": {"method": "GET", "path": "/api/public/locations/{slug}/menu?block=menu_prices"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "no live consumer exists; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a: no consumer",
+  "probe": "Reports NOT-LIVE: no reader (DW1/BN1).",
+  "last_verified": null
+}

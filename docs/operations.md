@@ -55,6 +55,54 @@ HEALTH_VENUES="sushi-durres" bash tools/live-checks/health.sh
 When the workflow fails it writes the failing rows into the run summary and, if the repository has a
 `TELEGRAM_BOT_TOKEN` secret and an `OPS_TELEGRAM_CHAT_ID` variable, sends them to the ops chat.
 
+### Live proof and alerting (W-LIVE, 2026-10-03)
+
+**From GitHub, every probe sees only a challenge page today.** Measured with Cloudflare's
+`firewallEventsAdaptive` for zone dowiz.org (token `/root/.cf_token`; the analytics token cannot read
+zone events): every request from GitHub's runners (ASN 8075) gets `managed_challenge` from **Bot Fight
+Mode**. That is why `health-cron` failed on every run from 2026-10-01T18:30Z to 2026-10-03T02:11Z
+(8 of 8) while `health.sh` passes from the box. It is also why the old heartbeat was green: it read the
+403 challenge as "up". A failing row in `health.sh` now says `CHALLENGED by Cloudflare (cf-mitigated: …)`
+and quotes 80 bytes of the body.
+
+**Bot Fight Mode stays on** (operator, 2026-10-03), so production is watched from inside Cloudflare:
+
+| layer | what | how often | alert |
+|---|---|---|---|
+| 1 | **dowiz-watch** (`workers/watch/`, its own Worker, cron, SQLite Durable Object; no code shared with `workers/api`): platform `/healthz`, and per venue `/healthz`, the storefront with its CSP, the menu's dish count, the ETA quote -- the rows of `health.sh`. Up = expected status + body and no `cf-mitigated` | every 5 min | mail to the verified Email Routing address on every down/up transition |
+| 2 | `heartbeat-monitor.yml` reads the watcher's `/healthz` (red when the last tick is older than 15 min) and `/status` (`ok:false` when any target is not up) at `https://dowiz-watch.sviatoslavsyniak.workers.dev`, outside the dowiz.org zone | every 10 min | Telegram if configured |
+| 2b | `health-cron.yml` prints the watcher's full table into the run summary (decision: it reads `/status`; `health.sh` from GitHub only on a manual run with `direct: true`) | every 15 min | Telegram if configured |
+| 3 | GitHub's own failure e-mail for a red run | per run | always |
+
+```sh
+curl -s https://dowiz-watch.sviatoslavsyniak.workers.dev/status     # per target: status, detail, since, last tick, watcher commit
+curl -s https://dowiz-watch.sviatoslavsyniak.workers.dev/healthz    # "ok", or 503 "stale: ..."
+```
+
+Deploy (main): `cd workers/watch && . /root/.cf_deploy_token && npx wrangler@4 deploy --var WATCH_COMMIT:$(git rev-parse --short HEAD)`.
+Free-plan cost: 288 cron invocations/day, 13 subrequests each (limit 50), about 290 Durable Object
+requests and rows written per day (limits 100,000 each), and one mail per transition. A repo variable
+`WATCH_URL` overrides the URL if the Worker ever moves.
+
+How to see the challenges yourself:
+
+```sh
+. /root/.cf_token; curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'content-type: application/json' \
+  https://api.cloudflare.com/client/v4/graphql --data '{"query":"{ viewer { zones(filter:{zoneTag:\"2929a252ceafe79f0bc52e9b9f0b92ee\"}) { firewallEventsAdaptive(limit: 20, filter:{datetime_gt:\"2026-10-03T00:00:00Z\", clientAsn:\"8075\"}, orderBy:[datetime_DESC]) { datetime action source clientRequestHTTPHost clientRequestPath userAgent } } } }"}'
+```
+
+Repository settings the alerting needs (Settings -> Secrets and variables -> Actions). None is set by
+a lane:
+
+| name | kind | used by | what |
+|---|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | secret | health-cron, heartbeat-monitor, live-proof | the ops bot's token; without it the red run and GitHub's e-mail are the only alert |
+| `OPS_TELEGRAM_CHAT_ID` | variable | health-cron, heartbeat-monitor (falls back to the old hard-coded chat), live-proof | the chat the alerts go to |
+
+The per-link live proof (62 links, contracts in `tools/live-proof/contracts/`) is planned in
+`docs/research/2026-10-03-live-proof-plan.md`. Its workflow secrets are listed there and get a row here
+when the workflow lands.
+
 ## Crons
 
 From `workers/api/wrangler.toml` and `scheduled` in `workers/api/src/lib.rs`:

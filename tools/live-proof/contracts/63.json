@@ -1,0 +1,19 @@
+{
+  "id": 63, "name": "dowiz-watch", "contract_version": "0.1.0", "class": "LIVE-NOW (after main deploys workers/watch)",
+  "description": {"en": "An independent Worker probes production from inside Cloudflare every 5 minutes, keeps the last result per target, mails the operator on down/up transitions, and serves /status and /healthz on workers.dev, where GitHub's heartbeat reads it outside Bot Fight Mode.", "uk": "Незалежний Worker кожні 5 хвилин перевіряє продакшен зсередини Cloudflare, пише листа оператору на кожну зміну стану і віддає /status та /healthz на workers.dev, де їх читає heartbeat з GitHub."},
+  "producer": {"file": "workers/watch/src/index.js", "line": 19, "what": "tick(): probes -> WatchState.record -> mail on transitions"},
+  "consumer": {"file": ".github/workflows/heartbeat-monitor.yml", "line": 46, "what": "reads /healthz and /status every 10 min; health-cron.yml prints the table every 15 min"},
+  "transport": {"method": "GET", "path": "https://dowiz-watch.sviatoslavsyniak.workers.dev/status", "also": ["GET /healthz", "cron */5 * * * *", "send_email ALERT_MAIL"]},
+  "external": {"service": "Cloudflare Workers (cron trigger, SQLite Durable Object, Email Routing send_email)", "api_version": "compatibility_date 2026-09-15; wrangler 4", "doc": "https://developers.cloudflare.com/email-routing/email-workers/send-email-workers/"},
+  "auth": {"secrets": [], "where": "no secret: the mail binding's destination is the address already verified for the waitlist (syniaksviatoslav@proton.me)"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "null"},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["ok", "stale", "lastTickMs", "tickAgeSeconds", "notUp", "targets", "lastMail", "watcher"],
+    "properties": {"ok": {"type": "boolean"}, "stale": {"type": "boolean"}, "lastTickMs": {"type": ["integer", "null"]}, "tickAgeSeconds": {"type": ["integer", "null"]},
+      "notUp": {"type": "array", "items": {"type": "string"}},
+      "targets": {"type": "object", "additionalProperties": {"type": "object", "required": ["status", "detail", "url", "lastCheckMs", "sinceMs", "forMinutes"], "properties": {"status": {"enum": ["up", "down", "challenged"]}, "detail": {"type": "string"}, "url": {"type": "string"}, "lastCheckMs": {"type": ["integer", "null"]}, "sinceMs": {"type": "integer"}, "forMinutes": {"type": "integer"}, "latencyMs": {"type": ["integer", "null"]}}}},
+      "lastMail": {"type": ["object", "null"], "properties": {"atMs": {"type": "integer"}, "changes": {"type": "array"}, "ok": {"type": "boolean"}, "error": {"type": "string"}}},
+      "watcher": {"type": "object", "required": ["version", "commit", "staleAfterMs"]}}},
+  "schema_status": "from the code; validate against the first live answer",
+  "probe": "After deploy: one real tick (lastTickMs set, 13 targets); /status read from the box and from one heartbeat workflow_dispatch run; RED: deploy with EXTRA_TARGETS qa-404=https://qa-durres.dowiz.org/healthz-404, next tick shows lastMail {changes:['qa-404: unknown -> down'], ok:true|false+error}; redeploy without it.",
+  "last_verified": null
+}

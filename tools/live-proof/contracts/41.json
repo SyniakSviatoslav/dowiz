@@ -1,0 +1,14 @@
+{
+  "id": 41, "name": "telemetry-lab", "contract_version": "0.1.0", "class": "NEEDS-CODE",
+  "description": {"en": "The telemetry lab (W-TELEM, DW6) is not merged.", "uk": "Лабораторія телеметрії (W-TELEM, DW6) не злита."},
+  "producer": {"file": "/root/lanes/w-telem", "line": 0, "what": "uncommitted lane work"},
+  "consumer": {"file": "crates/dowiz-hub/src/lib.rs", "line": 1, "what": "no cost_us on main"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "no live consumer exists; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a: no consumer",
+  "probe": "Reports NOT-LIVE: not merged (W-TELEM/DW6).",
+  "last_verified": null
+}

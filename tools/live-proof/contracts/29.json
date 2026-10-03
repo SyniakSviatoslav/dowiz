@@ -1,0 +1,14 @@
+{
+  "id": 29, "name": "seal-open", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "The off-platform opener turns a sealed copy back into a gzip the restore path accepts.", "uk": "Інструмент поза платформою відкриває запечатану копію назад у gzip, який приймає відновлення."},
+  "producer": {"file": "workers/api/src/cloud/seal.rs", "line": 26, "what": "backup_seal"},
+  "consumer": {"file": "tools/seal-open/src/main.rs", "line": 1, "what": "open with the secret key"},
+  "transport": {"method": "NONE", "path": "box-only: tools/seal-open open"},
+  "external": null,
+  "auth": {"secrets": ["/root/.dowiz_backup_seal.sk"], "where": "exists on the box; never copied to GitHub"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Box only: fetch row 27's sealed object; seal-open with the .sk; gunzip -t accepts.",
+  "last_verified": null
+}

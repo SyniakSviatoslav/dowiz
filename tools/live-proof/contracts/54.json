@@ -1,0 +1,14 @@
+{
+  "id": 54, "name": "project-rs", "contract_version": "0.1.0", "class": "NOT-LIVE-BY-DESIGN",
+  "description": {"en": "project.rs is an 11-line doc stub with no references.", "uk": "project.rs — заглушка документації з 11 рядків без посилань."},
+  "producer": {"file": "workers/api/src/project.rs", "line": 1, "what": "doc stub"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 0, "what": "0 refs"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "not live by design; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a",
+  "probe": "Reports NOT-LIVE by design (LEGACY-MARK).",
+  "last_verified": null
+}

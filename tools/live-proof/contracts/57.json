@@ -1,0 +1,14 @@
+{
+  "id": 57, "name": "ci-academia", "contract_version": "0.1.0", "class": "NOT-LIVE-BY-DESIGN",
+  "description": {"en": "The academia workflows are dispatch-only and refuse to run (0206f5dc).", "uk": "Воркфлоу academia запускаються лише вручну і відмовляються працювати (0206f5dc)."},
+  "producer": {"file": ".github/workflows/academia_full_cron.yml", "line": 1, "what": "LEGACY, switched off 2026-10-02"},
+  "consumer": {"file": ".github/workflows/academia-extract.yml", "line": 21, "what": "workflow_dispatch only"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "not live by design; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a",
+  "probe": "Reports NOT-LIVE by design (CI-DEAD).",
+  "last_verified": null
+}

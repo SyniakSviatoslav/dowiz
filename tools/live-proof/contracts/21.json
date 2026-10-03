@@ -1,0 +1,14 @@
+{
+  "id": 21, "name": "recipes-import", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "A recipe imported for a dish is what the dish's takes list shows.", "uk": "Імпортована рецептура страви збігається з її списком складників."},
+  "producer": {"file": "workers/api/src/lib.rs", "line": 468, "what": "POST /api/owner/recipes/import"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 463, "what": "GET /api/owner/products/:id/takes"},
+  "transport": {"method": "POST", "path": "/api/owner/recipes/import"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Dry run; apply on a QA dish; takes lists the lines; restore the old lines from the pending file.",
+  "last_verified": null
+}

@@ -1,0 +1,14 @@
+{
+  "id": 27, "name": "backup-seal", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "Every nightly copy is sealed with hybrid X25519 + ML-KEM-768 + AES-256-GCM to a public key whose secret half is off-platform.", "uk": "Кожна нічна копія запечатана гібридом X25519 + ML-KEM-768 + AES-256-GCM на відкритий ключ, секретна половина якого поза платформою."},
+  "producer": {"file": "workers/api/src/cloud.rs", "line": 580, "what": "seal before PUT"},
+  "consumer": {"file": "workers/api/src/cloud/seal.rs", "line": 40, "what": "state(): Off when BACKUP_SEAL_PK absent"},
+  "transport": {"method": "GET", "path": "/api/owner/health"},
+  "external": null,
+  "auth": {"secrets": ["BACKUP_SEAL_PK (Worker secret, platform-wide)"], "where": "key pair on the box /root/.dowiz_backup_seal.pk (2026-09-23); secret NOT installed per the 10-02 report"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["backupSeal"]},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "health.backupSeal says sealed; row 26 push yields *.sealed.",
+  "last_verified": null
+}

@@ -1,0 +1,14 @@
+{
+  "id": 25, "name": "crypto-shredding", "contract_version": "0.1.0", "class": "NEEDS-CODE",
+  "description": {"en": "Per-customer keys would let an erasure destroy data cryptographically; the feature is not compiled into the Worker.", "uk": "Ключі на клієнта дозволили б криптографічне стирання; функція не скомпільована у Worker."},
+  "producer": {"file": "crates/dowiz-hub/src/shred.rs", "line": 44, "what": "shred (feature off)"},
+  "consumer": {"file": "workers/api/Cargo.toml", "line": 1, "what": "no hub features enabled (DG10w/DW8)"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "no live consumer exists; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a: no consumer",
+  "probe": "Reports NOT-LIVE: disconnected in code (DG10w/DW8).",
+  "last_verified": null
+}

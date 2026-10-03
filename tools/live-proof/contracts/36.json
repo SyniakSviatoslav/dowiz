@@ -1,0 +1,14 @@
+{
+  "id": 36, "name": "kernel-pq-shim", "contract_version": "0.1.0", "class": "NEEDS-CODE",
+  "description": {"en": "The kernel's pq module is a drifted shim not built into the Worker.", "uk": "Модуль pq у ядрі — розбіжна обгортка, не зібрана у Worker."},
+  "producer": {"file": "kernel/src/lib.rs", "line": 28, "what": "pq behind a feature"},
+  "consumer": {"file": "workers/api/Cargo.toml", "line": 1, "what": "features json-api only (CLEAN-PQ)"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "no live consumer exists; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a: no consumer",
+  "probe": "Reports NOT-LIVE: disconnected in code (CLEAN-PQ).",
+  "last_verified": null
+}

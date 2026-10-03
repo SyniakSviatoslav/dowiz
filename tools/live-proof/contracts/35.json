@@ -1,0 +1,14 @@
+{
+  "id": 35, "name": "event-chain-signature", "contract_version": "0.1.0", "class": "NEEDS-CODE",
+  "description": {"en": "Every log record carries an actor_pubkey slot that is written as zeros and never verified.", "uk": "Кожен запис журналу має поле actor_pubkey, яке пишеться нулями і ніколи не перевіряється."},
+  "producer": {"file": "crates/dowiz-hub/src/log.rs", "line": 91, "what": "append(.., actor_pubkey)"},
+  "consumer": {"file": "workers/api/src/hubdo.rs", "line": 513, "what": "passes [0u8;32]; no verifier (SEL4-4)"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "no live consumer exists; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a: no consumer",
+  "probe": "Reports NOT-LIVE: disconnected in code (SEL4-4).",
+  "last_verified": null
+}

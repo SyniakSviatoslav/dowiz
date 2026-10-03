@@ -1,0 +1,14 @@
+{
+  "id": 40, "name": "otel-export", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "The Worker exports traces to an OTLP collector where a probe can find its own trace.", "uk": "Worker експортує траси в OTLP-колектор, де перевірка знаходить свою трасу."},
+  "producer": {"file": "workers/api/src/otel.rs", "line": 160, "what": "span export"},
+  "consumer": {"file": "workers/api/src/otel.rs", "line": 180, "what": "POST {OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces"},
+  "transport": {"method": "POST", "path": "{OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces"},
+  "external": {"service": "OTLP/HTTP collector", "api_version": "OTLP 1.x HTTP/JSON /v1/traces", "doc": "https://opentelemetry.io/docs/specs/otlp/"},
+  "auth": {"secrets": ["OTEL_EXPORTER_OTLP_ENDPOINT (Worker secret, platform-wide)", "collector query token"], "where": "MISSING"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Request with the probe's traceparent; collector query API returns that trace id.",
+  "last_verified": null
+}

@@ -1,0 +1,14 @@
+{
+  "id": 47, "name": "console-replica", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "The console asks only for what changed since its generation and gets the new order.", "uk": "Консоль просить лише зміни з її покоління й отримує нове замовлення."},
+  "producer": {"file": "workers/api/src/owner.rs", "line": 276, "what": "?since=<generation> -> changes_since"},
+  "consumer": {"file": "workers/api/public/lib/replica.js", "line": 35, "what": "apply changes, numeric generation"},
+  "transport": {"method": "GET", "path": "/api/owner/orders?since={generation}"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["changes", "generation"], "properties": {"changes": {"type": "array"}, "generation": {"type": "integer"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Read generation g; order; since=g returns the order with generation > g.",
+  "last_verified": null
+}

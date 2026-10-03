@@ -1,0 +1,14 @@
+{
+  "id": 4, "name": "print-rail", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "A placed order becomes a print job the venue's printer pulls with its API key, reads and acknowledges.", "uk": "Замовлення стає завданням друку: принтер забирає його своїм ключем, читає і підтверджує."},
+  "producer": {"file": "workers/api/src/hubdo.rs", "line": 945, "what": "enqueue print job"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 385, "what": "POST /api/print/poll, GET/DELETE /api/print/job/:token (services/orders/print.rs)"},
+  "transport": {"method": "POST", "path": "/api/print/poll", "then": ["GET /api/print/job/{token}", "DELETE /api/print/job/{token}"], "readback": ["GET /api/owner/print/jobs"]},
+  "external": {"service": "kitchen printer (hardware)", "api_version": "dowiz print rail v1 (no vendor protocol)", "note": "the probe plays the printer; a physical printer is not covered"},
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner; printer key minted and revoked by the probe (POST /api/owner/apikeys)"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "array"]},
+  "readback_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "array"]},
+  "probe": "Mint key; order; poll; get job (ticket names the dishes); ack; owner jobs shows acked; revoke; reject.",
+  "last_verified": null
+}

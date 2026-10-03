@@ -1,0 +1,14 @@
+{
+  "id": 42, "name": "ai-assistant", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "The owner's assistant asks an OpenAI-compatible endpoint with redacted facts and answers about the venue.", "uk": "Асистент власника питає OpenAI-сумісний ендпоінт із відредагованими фактами і відповідає про заклад."},
+  "producer": {"file": "workers/api/src/assist.rs", "line": 86, "what": "ai.enabled + ai.endpoint"},
+  "consumer": {"file": "workers/api/src/integrations.rs", "line": 190, "what": "GET {ai.endpoint}/models"},
+  "transport": {"method": "POST", "path": "{ai.endpoint}/chat/completions"},
+  "external": {"service": "OpenAI-compatible chat API", "api_version": "OpenAI Chat Completions shape (/models, /chat/completions)", "doc": "https://platform.openai.com/docs/api-reference/chat"},
+  "auth": {"secrets": ["ai.endpoint", "ai.token", "ai.model"], "where": "MISSING (e.g. Cloudflare Workers AI OpenAI-compatible endpoint + scoped token)"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Set ai.* on qa-durres; integrations/check ai lists models; assist answers naming a QA dish.",
+  "last_verified": null
+}

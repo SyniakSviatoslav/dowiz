@@ -1,0 +1,14 @@
+{
+  "id": 6, "name": "customer-telegram-link", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "The storefront offers the platform's customer bot; the public menu names it and the name is a real bot.", "uk": "Вітрина показує клієнтського бота; меню називає його, і це справжній бот."},
+  "producer": {"file": "workers/api/src/hubdo/menu.rs", "line": 57, "what": "telegramBot from TELEGRAM_BOT_USERNAME"},
+  "consumer": {"file": "workers/api/public/store/track.js", "line": 236, "what": "storefront Telegram link from state.loc.telegramBot"},
+  "transport": {"method": "GET", "path": "/api/public/locations/{slug}/menu"},
+  "external": {"service": "Telegram Bot API", "api_version": "Bot API getMe", "doc": "https://core.telegram.org/bots/api#getme"},
+  "auth": {"secrets": ["TELEGRAM_BOT_USERNAME (Worker secret, platform-wide)"], "where": "MISSING: MEASURED telegramBot null"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["telegramBot"], "properties": {"telegramBot": {"type": "string", "pattern": "^[A-Za-z0-9_]{5,32}$"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "menu.telegramBot equals getMe.username; https://t.me/<name> answers 200.",
+  "last_verified": null
+}

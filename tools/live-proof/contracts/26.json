@@ -1,0 +1,14 @@
+{
+  "id": 26, "name": "nightly-s3-copy", "contract_version": "0.1.0", "class": "NEEDS-KEY",
+  "description": {"en": "The venue's off-site copy is written to an S3 bucket (R2's S3 API) and can be read back from it.", "uk": "Позамісцева копія закладу пишеться в S3-бакет (S3 API R2) і читається звідти назад."},
+  "producer": {"file": "workers/api/src/cloud.rs", "line": 410, "what": "push_place: SigV4 PUT"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 489, "what": "GET/POST /api/owner/backup/cloud"},
+  "transport": {"method": "PUT", "path": "https://{account}.r2.cloudflarestorage.com/{bucket}/{prefix}/{venue}/{stamp}.json.gz"},
+  "external": {"service": "Cloudflare R2 S3-compatible API", "api_version": "AWS S3 REST, SigV4 (service s3, region auto)", "doc": "https://developers.cloudflare.com/r2/api/s3/api/"},
+  "auth": {"secrets": ["cloud.s3.endpoint", "cloud.s3.region", "cloud.s3.bucket", "cloud.s3.key", "cloud.s3.secret", "cloud.s3.prefix"], "where": "UNKNOWN: /root/.dowiz_offsite_s3 exists (324 B) but could not be inspected; else operator creates a QA bucket + scoped keys"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["configured"], "properties": {"configured": {"type": "boolean"}, "last": {"type": ["object", "null"], "properties": {"atMs": {"type": "integer"}, "key": {"type": "string"}, "bytes": {"type": "integer"}}}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Set cloud.s3.* to a QA R2 bucket; POST backup; SigV4 GET the key; gunzip; venue qa-durres; order count = health.orders; delete; clear settings.",
+  "last_verified": null
+}

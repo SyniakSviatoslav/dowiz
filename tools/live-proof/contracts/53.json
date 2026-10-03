@@ -1,0 +1,14 @@
+{
+  "id": 53, "name": "apps-courier", "contract_version": "0.1.0", "class": "NOT-LIVE-BY-DESIGN",
+  "description": {"en": "apps/courier is tested in CI and never shipped; the shipping courier app is public/courier.", "uk": "apps/courier тестується в CI, але не постачається; справжній застосунок кур'єра — public/courier."},
+  "producer": {"file": "apps/courier/Cargo.toml", "line": 1, "what": "Rust courier app"},
+  "consumer": {"file": ".github/workflows/ci.yml", "line": 189, "what": "tests only"},
+  "transport": {"method": "NONE", "path": "n/a"},
+  "external": null,
+  "auth": {"secrets": [], "where": "none"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "description": "not live by design; the runner reports NOT-LIVE with the reason"},
+  "schema_status": "n/a",
+  "probe": "Reports NOT-LIVE by design (LEGACY-MARK).",
+  "last_verified": null
+}

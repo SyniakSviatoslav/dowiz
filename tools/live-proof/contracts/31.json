@@ -1,0 +1,14 @@
+{
+  "id": 31, "name": "learn-lessons", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "Lessons published to R2 are listed in the manifest and their media bytes are served to a signed-in owner.", "uk": "Уроки, опубліковані в R2, є в маніфесті, а їхні медіа віддаються власнику."},
+  "producer": {"file": "tools/learn/publish.sh", "line": 1, "what": "writer: --r2 to bucket dowiz-learn"},
+  "consumer": {"file": "workers/api/src/lib.rs", "line": 497, "what": "GET /api/learn/manifest, /api/learn/media/*key"},
+  "transport": {"method": "GET", "path": "/api/learn/manifest"},
+  "external": {"service": "Cloudflare R2 (binding LEARN; read via the API for the size check)", "api_version": "Cloudflare API v4 R2 objects", "doc": "https://developers.cloudflare.com/api/"},
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD", "CLOUDFLARE_API_TOKEN (deploy token, read)"], "where": "/root/.dowiz_owner, /root/.cf_deploy_token"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Owner token; manifest; first media key; bytes > 0, video/* or image/*, length equals the R2 object size.",
+  "last_verified": null
+}

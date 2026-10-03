@@ -1,0 +1,14 @@
+{
+  "id": 22, "name": "analytics", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "An order moves the owner's and the kitchen's analytics by exactly that order.", "uk": "Замовлення змінює аналітику власника й кухні рівно на це замовлення."},
+  "producer": {"file": "workers/api/src/services/analytics/mod.rs", "line": 1, "what": "analytics fold"},
+  "consumer": {"file": "workers/api/public/admin/kitchen-analytics.js", "line": 42, "what": "kitchen analytics screen"},
+  "transport": {"method": "GET", "path": "/api/owner/analytics"},
+  "external": null,
+  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "Read; order to READY; read; count and revenue delta equal the order; same for /analytics/kitchen.",
+  "last_verified": null
+}
