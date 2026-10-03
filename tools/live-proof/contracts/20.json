@@ -1,14 +1,49 @@
 {
-  "id": 20, "name": "stock-ledger", "contract_version": "0.1.0", "class": "LIVE-NOW",
-  "description": {"en": "An order of a dish with a recipe takes its ingredients off the shelf; a refund puts them back.", "uk": "Замовлення страви з рецептурою списує інгредієнти; повернення їх повертає."},
-  "producer": {"file": "workers/api/src/storefront.rs", "line": 891, "what": "bom_lines"},
-  "consumer": {"file": "workers/api/src/lib.rs", "line": 453, "what": "GET /api/owner/stock"},
-  "transport": {"method": "GET", "path": "/api/owner/stock"},
-  "external": null,
-  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
-  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
-  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "array"]},
-  "schema_status": "draft: tighten from the first live answer",
-  "probe": "Reuse e2e/walk/q5-stock.mjs: stock before; QA Salmon roll to READY; salmon -80 g, rice -120 g exactly; refund restores.",
-  "last_verified": null
+ "id": 20,
+ "name": "stock-ledger",
+ "contract_version": "0.2.0",
+ "class": "LIVE-NOW",
+ "description": {
+  "en": "An order of a dish with a recipe takes its ingredients off the shelf; a refund puts them back.",
+  "uk": "Замовлення страви з рецептурою списує інгредієнти; повернення їх повертає."
+ },
+ "producer": {
+  "file": "workers/api/src/storefront.rs",
+  "line": 891,
+  "what": "bom_lines"
+ },
+ "consumer": {
+  "file": "workers/api/src/lib.rs",
+  "line": 453,
+  "what": "GET /api/owner/stock"
+ },
+ "transport": {
+  "method": "GET",
+  "path": "/api/owner/stock"
+ },
+ "external": null,
+ "auth": {
+  "secrets": [
+   "OWNER_EMAIL",
+   "OWNER_PASSWORD"
+  ],
+  "where": "/root/.dowiz_owner"
+ },
+ "request_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": [
+   "object",
+   "null"
+  ]
+ },
+ "response_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": [
+   "object",
+   "array"
+  ]
+ },
+ "schema_status": "draft: tighten from the first live answer",
+ "probe": "Stock before; one QA Salmon roll placed: reserved +80 g salmon, +120 g rice; to READY: taken or held exactly; refund: reservation released, onHand stays down by exactly the recipe (cooked food is consumed at PREPARING, owner.rs). MEASURED 2026-10-03. OPEN QUESTION (finding): the refunded cooked portion is not recorded as waste, so the AvT/waste view sees it as sold-and-refunded only.",
+ "last_verified": null
 }
