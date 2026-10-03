@@ -245,6 +245,7 @@ more.tile.notifications workers/api/public/admin/more.js:41
 more.tile.payments workers/api/public/admin/more.js:41
 more.tile.posts workers/api/public/admin/more.js:41
 more.tile.preview workers/api/public/admin/more.js:41
+more.tile.pubMenu workers/api/public/admin/more.js:41
 more.tile.printer workers/api/public/admin/more.js:41
 more.tile.promos workers/api/public/admin/more.js:41
 more.tile.social workers/api/public/admin/more.js:41

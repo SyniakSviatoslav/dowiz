@@ -6,7 +6,7 @@ id: O16b
 role: owner
 module: branding
 order: 31
-covers: [branding, preview]
+covers: [branding, preview, pubMenu]
 title:
   sq: "Marka dhe pamja"
   en: "Branding and preview"
@@ -239,3 +239,20 @@ steps:
       en: "In a new tab."
       uk: "У новій вкладці."
       ru: "В новой вкладке."
+  - key: 14
+    anchor: more.tile.pubMenu
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.pubMenu"]'
+    title:
+      sq: "Menyja e publikuar"
+      en: "Published menu"
+      uk: "Опубліковане меню"
+      ru: "Опубликованное меню"
+    caption:
+      sq: "Vitrina në CDN hapet edhe pa serverin; publikojeni pas një ndryshimi."
+      en: "The storefront on the CDN opens even without the server; publish it after a change."
+      uk: "Вітрина на CDN відкривається навіть без сервера; публікуйте її після зміни."
+      ru: "Витрина на CDN открывается даже без сервера; публикуйте её после изменения."
