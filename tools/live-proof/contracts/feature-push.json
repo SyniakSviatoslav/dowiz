@@ -1,0 +1,65 @@
+{
+  "id": "feature-push",
+  "name": "push",
+  "contract_version": "1.0.0",
+  "class": "LIVE-AFTER-DEPLOY",
+  "description": {
+    "en": "Web Push (W-PUSH): a customer (order token), a courier and the venue's owner/kitchen subscribe a browser push endpoint through /api/push/subscribe; the venue's object queues one outbox entry per (event, device) in the turn that changes the order (new order -> staff, a status -> that order's customer, an assignment or READY -> that courier); the drain seals the message with RFC 8291 aes128gcm, signs RFC 8292 VAPID ES256 and posts it to the browser's push service. 404/410 removes the device; a customer's devices are removed when the order ends.",
+    "uk": "Push-сповіщення: клієнт, кур'єр і власник/кухня підписують браузер; при зміні замовлення хаб шифрує повідомлення (RFC 8291), підписує VAPID (RFC 8292) і надсилає його через push-сервіс браузера."
+  },
+  "producer": [
+    { "file": "workers/api/src/notify/push/plan.rs", "line": 52, "what": "owed(): which devices an order event owes, written into the outbox by hubdo/push_turn.rs in the same object turn" },
+    { "file": "workers/api/src/notify/push/rail.rs", "line": 130, "what": "deliver(): encrypt (ece.rs), sign (vapid.rs), POST to the endpoint; classify 2xx/404/410/400/413/other" }
+  ],
+  "consumer": [
+    { "file": "workers/api/public/lib/push-sw.js", "line": 27, "what": "the service worker's 'push' handler shows {title, body}; 'notificationclick' opens url" },
+    { "file": "workers/api/public/lib/push.js", "line": 85, "what": "turnOn(): permission on the tap, pushManager.subscribe with the VAPID key, POST /api/push/subscribe" }
+  ],
+  "transport": [
+    { "method": "GET", "path": "/api/push/key", "auth": "none", "lib_rs_line": 478 },
+    { "method": "POST", "path": "/api/push/subscribe", "auth": "Bearer: customer (order) | courier | staff | owner", "lib_rs_line": 479 },
+    { "method": "POST", "path": "/api/push/unsubscribe", "auth": "Bearer, same", "lib_rs_line": 480 },
+    { "method": "POST", "path": "/api/push/state", "auth": "Bearer, same", "lib_rs_line": 481 },
+    { "method": "POST", "path": "{endpoint} (the push service)", "headers": ["Content-Encoding: aes128gcm", "TTL: 1800", "Urgency: high", "Topic: <order><kind>", "Authorization: vapid t=<ES256 JWT>, k=<public key>"] }
+  ],
+  "external": "Web Push Protocol RFC 8030 + RFC 8291 + RFC 8292; push services FCM/Mozilla autopush/Apple",
+  "external_version": { "rfc8030": "2016-12", "rfc8291": "2017-11", "rfc8292": "2017-11", "autopush_websocket": "messageType hello/register/notification/ack, use_webpush:true" },
+  "auth": { "secrets": ["VAPID_PRIVATE_KEY (Worker secret; the pair of notify/push/vapid.rs PUBLIC_KEY, kept on the box in /root/.dowiz_vapid)", "OWNER_EMAIL", "OWNER_PASSWORD", "QA_HUB_COURIER_PHONE", "QA_HUB_COURIER_PASSWORD"], "where": "/root/.dowiz_owner" },
+  "key_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["key"], "additionalProperties": false,
+    "properties": { "key": { "type": "string", "pattern": "^B[A-Za-z0-9_-]{86}$" } }
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["endpoint", "keys"], "additionalProperties": false,
+    "properties": {
+      "endpoint": { "type": "string", "pattern": "^https://", "maxLength": 1024 },
+      "expirationTime": { "type": ["integer", "null"] },
+      "keys": { "type": "object", "required": ["p256dh", "auth"], "additionalProperties": false,
+        "properties": { "p256dh": { "type": "string" }, "auth": { "type": "string" } } },
+      "lang": { "enum": ["sq", "en", "uk", "ru"] }
+    }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["ok", "on"], "additionalProperties": false,
+    "properties": { "ok": { "const": true }, "on": { "type": "boolean" }, "removed": { "type": "boolean" } }
+  },
+  "state_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["on"], "additionalProperties": false,
+    "properties": { "on": { "type": "boolean" } }
+  },
+  "message_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "the DECRYPTED push payload the device receives",
+    "type": "object", "required": ["title", "body", "url", "tag"], "additionalProperties": false,
+    "properties": {
+      "title": { "type": "string" }, "body": { "type": "string" },
+      "url": { "type": "string" }, "tag": { "type": "string" }
+    }
+  },
+  "probe": "tools/live-proof/probes/feature-push.mjs: a REAL Mozilla autopush subscription (WebSocket hello/register with our VAPID key) is subscribed as the owner and as the customer of a TEST order (LIVE-<run>) on qa-durres; placing it must deliver 'New order' to the owner device and confirming it 'Confirmed' to the customer device, read back DECRYPTED with the probe's own key; optionally the QA hub courier hears an assignment; the order is cancelled and the owner device unsubscribed at the end. A probe that receives nothing is FAILED.",
+  "last_verified": null
+}

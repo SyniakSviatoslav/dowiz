@@ -99,6 +99,7 @@ export async function render(host){
     <section class="kds-stop" data-tour="kitchen.stoplist"><p class="eyebrow" data-t="kStopList"></p><p class="muted small" data-t="kStopHint"></p>
       ${ui.inputRow({ id: 'kdsQ', type: 'search', label: { t: 'kSearchDish' }, placeholder: { t: 'kSearchDish' }, attrs: { value: view.q, data: { tour: 'kitchen.dishSearch' } } })}
       <div class="rows" id="kdsDishes" role="list">${stopRows()}</div></section>`;
+  import('/lib/push.js').then(p => p.mount(host, { token: store.t, lang: document.documentElement.lang || 'en', sw: '/admin/sw.js', scope: '/admin/', why: 'pushWhyStaff', tour: 'kitchen.push', toast })).catch(() => {});
   const q = $('#kdsQ', host);
   if (q) q.oninput = e => { view.q = e.target.value; const r = $('#kdsDishes', host); if (r) r.innerHTML = stopRows(); };
   host.onclick = e => act(e.target, host);

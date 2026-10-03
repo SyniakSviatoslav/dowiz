@@ -80,6 +80,8 @@ fn processor(id: &str) -> Option<(&'static str, &'static str)> {
             "shfletuesi juaj e pyet në cilën rrugë është një gjilpërë në hartë, vetëm kur e vendosni vetë"),
         "openfreemap" => ("nuk deklarohet nga ofruesi",
             "merr vetëm adresën e internetit të pajisjes suaj dhe cila pjesë e hartës vizatohet; asnjë porosi, emër apo telefon"),
+        "webpush" => ("Shtetet e Bashkuara dhe BE, sipas prodhuesit të shfletuesit tuaj",
+            "vetëm kur aktivizoni njoftimet. Mesazhi është i enkriptuar deri te pajisja juaj, kështu që shërbimi i njoftimeve sheh adresën e pajisjes dhe orën, asnjëherë tekstin"),
         _ => return None,
     })
 }

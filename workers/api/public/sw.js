@@ -10,7 +10,9 @@
 // The cache is named by the deploy's own version line below; a new deploy
 // with a new line drops the old shell on activation.
 
-const SHELL_CACHE = 'dowiz-shell-2026-10-02-blocks';
+// Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
+importScripts('/lib/push-sw.js');
+const SHELL_CACHE = 'dowiz-shell-2026-10-03-blocks-push';
 /// THE WHOLE MODULE GRAPH, not just its entry.
 ///
 /// This list used to hold the document, `/app.js` and the three stylesheets,

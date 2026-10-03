@@ -640,7 +640,7 @@ function render(){
 
   if (!S.onShift) {
     stopTracking(); keepAwake(false); S.cashFor = null;
-    $('#app').innerHTML = screens.offShift();
+    $('#app').innerHTML = screens.offShift(); pushHere();
     $('#openShift').onclick = () => setShift(true);
     $('#learn').onclick = openLearn;
     $('#mcpOpen').onclick = openAgent;
@@ -664,7 +664,7 @@ function render(){
     // on purpose, and a text field on a live delivery screen would compete with
     // the address and the call button for a thumb that is on a handlebar. This
     // is the one state where the courier is standing still.
-    $('#app').innerHTML = screens.waiting();
+    $('#app').innerHTML = screens.waiting(); pushHere();
     $('#endShift').onclick = () => setShift(false);
     $('#earn').onclick = openEarnings;
     $('#hist').onclick = openHistory;
@@ -862,6 +862,9 @@ function bindAsk(){
 //
 // `sheet()` is the app's existing panel; these replace its content and put a
 // back button on it rather than introducing a second navigation model.
+/// "Tell me when an order is mine" (W-PUSH, /lib/push.js), on the screens where the courier stands still.
+function pushHere(){ import('/lib/push.js').then(p => p.mount($('#app'), { token: store.t, lang, sw: '/courier/sw.js', scope: '/courier/', why: 'pushWhyCourier', tour: 'courier.push', toast })).catch(() => {}); }
+
 async function panel(title, bodyHtml){
   $('#app').innerHTML = screens.panel(title, bodyHtml);
   $('#pback').onclick = () => render();

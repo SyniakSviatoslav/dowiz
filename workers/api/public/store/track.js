@@ -262,6 +262,7 @@ export function openTracking(order){
         <div class="ep-more">
           ${cryptoBlock(order)}
           ${follow}
+          ${!dead && st !== 'DELIVERED' && tokenFor(order.id) ? '<div id="pushHere"></div>' : ''}
           ${sayBlock(order)}
           ${ghost({ id: 'closeTrack', cls: 'mb-2', label: k('done'), tour: 'track.done' })}
         </div>
@@ -281,6 +282,7 @@ export function openTracking(order){
   mountBill(order, tokenFor(order.id));
   mountStamps(order, tokenFor(order.id));
   mountChat(order, tokenFor(order.id));
+  if ($('#pushHere')) import('/lib/push.js').then(p => p.mount($('#pushHere'), { token: tokenFor(order.id), lang, sw: '/sw.js', scope: '/', why: 'pushWhyCustomer', tour: 'track.push', toast })).catch(() => {});
   $('#closeTrack').onclick = closeSheet;
   clearTimeout(openTracking._t);
   // THE HUB TELLS US, and the poll is what catches what the socket missed.

@@ -1,0 +1,39 @@
+# Lesson C8 (courier). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-PUSH: the "turn on notifications" control. The step WAITS on it: a tap asks the browser for
+# permission, which a recording must not answer for the learner.
+id: C8
+role: courier
+module: notify
+order: 8
+covers: []
+title:
+  sq: "Njoftime për porositë tuaja"
+  en: "Notifications about your runs"
+  uk: "Сповіщення про ваші доставки"
+  ru: "Уведомления о ваших доставках"
+goal:
+  sq: "Aktivizoni njoftimet që të dini kur ju caktohet një porosi."
+  en: "Turn notifications on to know when an order is assigned to you."
+  uk: "Увімкніть сповіщення, щоб знати, коли вам призначили замовлення."
+  ru: "Включите уведомления, чтобы знать, когда вам назначили заказ."
+steps:
+  - key: 1
+    anchor: courier.push
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="courier.push"]'
+    title:
+      sq: "Njoftime në telefon"
+      en: "Phone notifications"
+      uk: "Сповіщення на телефон"
+      ru: "Уведомления на телефон"
+    caption:
+      sq: "Telefoni bie kur ju caktohet një porosi dhe kur ajo është gati."
+      en: "The phone rings when an order is assigned to you and when it is ready."
+      uk: "Телефон дзвонить, коли вам призначили замовлення і коли воно готове."
+      ru: "Телефон звонит, когда вам назначили заказ и когда он готов."

@@ -378,6 +378,7 @@ async function openNotifications(){
     <div class="rows">
       ${rowBtn({ leading: icon('brand-telegram'), title: k('telegram'), sub: `<span data-t="${tokenSet ? 'tgHow' : 'tgNotSet'}"></span>`, trailing: icon('chevron-right', 'chev'), data: { go: 'telegram' }, tour: 'notify.telegram' })}
     </div>
+    <div id="pushHere"></div>
     <p class="eyebrow mt-3" data-t="whatsapp"></p>
     <div class="rows">${info('phone', { cls: waOn ? '' : 'off', title: k('whatsapp'), sub: `<span data-t="${waOn ? 'whatsappOn' : 'waNotYet'}"></span>`, trailing: onOff(waOn), tour: 'notify.whatsappState' })}</div>
     <p class="hint" data-t="whatsappHint"></p>
@@ -394,6 +395,7 @@ async function openNotifications(){
   const test = async b => { try { const r = await busy(b, async () => { await save(); return post('/owner/notify/test', withLoc()); }); toast(`WhatsApp: ${verdict(r.whatsapp)}`); } catch (e) { fail(e); } };
   // Telegram has its own screen now: groups, the matrix, per-group tests (admin/telegram.js).
   $('[data-go="telegram"]').onclick = openTelegram;
+  import('/lib/push.js').then(p => p.mount($('#pushHere'), { token: store.t, lang, sw: '/admin/sw.js', scope: '/admin/', why: 'pushWhyStaff', tour: 'notify.push', toast })).catch(() => {});
   for (const id of ['nSave2']) $('#' + id).onclick = async () => { try { await busy($('#' + id), save); toast(t('saved')); openNotifications(); } catch (e) { fail(e); } };
   for (const id of ['nTest2']) $('#' + id).onclick = () => test($('#' + id));
 }

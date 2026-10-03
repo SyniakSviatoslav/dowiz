@@ -1,0 +1,39 @@
+# Lesson G6 (guest). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-PUSH: the "turn on notifications" control. The step WAITS on it: a tap asks the browser for
+# permission, which a recording must not answer for the learner.
+id: G6
+role: guest
+module: track
+order: 7
+covers: []
+title:
+  sq: "Njoftime për porosinë"
+  en: "Notifications about your order"
+  uk: "Сповіщення про замовлення"
+  ru: "Уведомления о заказе"
+goal:
+  sq: "Aktivizoni njoftimet që telefoni t'ju tregojë kur porosia ndryshon."
+  en: "Turn notifications on so your phone tells you when the order changes."
+  uk: "Увімкніть сповіщення, щоб телефон повідомляв, коли замовлення змінюється."
+  ru: "Включите уведомления, чтобы телефон сообщал, когда заказ меняется."
+steps:
+  - key: 1
+    anchor: track.push
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="track.push"]'
+    title:
+      sq: "Njoftime në telefon"
+      en: "Phone notifications"
+      uk: "Сповіщення на телефон"
+      ru: "Уведомления на телефон"
+    caption:
+      sq: "Prekni për t'i aktivizuar. Në iPhone, shtoni më parë faqen në ekranin kryesor."
+      en: "Tap to turn them on. On an iPhone, add the page to the Home Screen first."
+      uk: "Торкніться, щоб увімкнути. На iPhone спершу додайте сторінку на початковий екран."
+      ru: "Нажмите, чтобы включить. На iPhone сначала добавьте страницу на экран «Домой»."

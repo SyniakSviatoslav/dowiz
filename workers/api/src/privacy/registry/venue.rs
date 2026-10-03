@@ -67,8 +67,9 @@ pub const STORES: &[Store] = &[
     // summary, rendered at the group's personal-data level), "h" (a target's
     // last success and Telegram's last refusal: a chat id and an error, no person).
     // W-FIX O4: "drain" (the one drain lease: an expiry time, no person).
+    // W-PUSH: a "push" entry carries one device's endpoint and keys until it is sent.
     Store { image: "outbox", kinds: &["o", "print", "route", "digest", "dg", "h", "drain"], home: Venue,
-        holds: &[Name, Phone, Address, OrderContent, Messages], subjects: &[Customer],
+        holds: &[Name, Phone, Address, OrderContent, Messages, Device], subjects: &[Customer, Courier, Staff, Owner],
         purpose: P::Kitchen, basis: Basis::Contract,
         retention: Retention::UntilDone("removed once delivered (outbox/rails.rs); given up after six tries"),
         erase: Eraser::Remove("services/customers/forget/queued.rs: drop_queued (G8)"),
@@ -174,6 +175,15 @@ pub const STORES: &[Store] = &[
         retention: Retention::NoLimitYet("translations"),
         erase: Eraser::NotPersonal("dish translations"),
         export: Exporter::NotPersonal },
+    // W-PUSH: a device's Web Push subscription -- the push service's endpoint
+    // URL and the browser's RFC 8291 keys (p256dh, auth) -- and the language to
+    // write in, under the order (pc), the courier (pk) or the staff member (ps).
+    Store { image: "push", kinds: &["pc", "pk", "ps"], home: Venue,
+        holds: &[Device], subjects: &[Customer, Courier, Staff, Owner],
+        purpose: P::Order, basis: Basis::Consent,
+        retention: Retention::UntilDone("a customer's: removed when the order ends, and in any case after two days (notify/push/subs.rs CUSTOMER_KEEP_MS); anyone's: on 'turn off', or when the push service answers 404/410; at most five devices a person"),
+        erase: Eraser::Remove("POST /api/push/unsubscribe (the person's own 'turn off'); hubdo/push_turn.rs at the order's end; notify/push/rail.rs on a 404/410"),
+        export: NO_EXPORT },
     Store { image: "rails", kinds: &["rail"], home: Venue,
         holds: &[], subjects: &[],
         purpose: P::Operations, basis: Basis::NotPersonal,

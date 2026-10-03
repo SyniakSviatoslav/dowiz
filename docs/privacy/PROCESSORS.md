@@ -26,6 +26,7 @@ controller only for owner/staff platform accounts and the waiting list.
 | `tax` | e-fiskalizimi (`efiskalizimi-app.tatime.gov.al`) | staff operator codes, amounts | public authority, legal obligation | **never today**: `fiscal::SEND_ENABLED = false` | Albania | Law 124/2024 Art. 7(1)(c) |
 | `osm` | OpenStreetMap Foundation (Nominatim) | a map pin's coordinates, IP — from the diner's browser | recipient (browser-direct) | the diner places an address pin | United Kingdom (EU adequacy) | used only when the diner places the pin |
 | `openfreemap` | OpenFreeMap tiles | IP and which map area is drawn — from the browser | recipient (browser-direct) | a map is shown | not stated by the provider | no order, name or phone |
+| `webpush` | the browser's push service (Google FCM, Mozilla autopush, Apple Push, Microsoft WNS) | the device's push endpoint and an end-to-end encrypted message (RFC 8291) — from the Worker | independent controller (the browser maker's service) | the person turns notifications on (W-PUSH) | US / EU, by browser maker | sees no text: the payload is sealed to the device; the order number and a status are all it carries |
 
 ## Hosts that receive nothing about a person
 

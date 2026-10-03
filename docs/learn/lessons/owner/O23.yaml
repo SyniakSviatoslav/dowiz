@@ -1,0 +1,73 @@
+# Lesson O23 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-PUSH: the "turn on notifications" control. The step WAITS on it: a tap asks the browser for
+# permission, which a recording must not answer for the learner.
+id: O23
+role: owner
+module: notifications
+order: 40
+covers: []
+title:
+  sq: "Njoftime për porositë e reja"
+  en: "Notifications for new orders"
+  uk: "Сповіщення про нові замовлення"
+  ru: "Уведомления о новых заказах"
+goal:
+  sq: "Aktivizoni njoftimet në telefonin e pronarit dhe të kuzhinës."
+  en: "Turn notifications on for the owner's and the kitchen's phones."
+  uk: "Увімкнути сповіщення на телефоні власника та кухні."
+  ru: "Включить уведомления на телефоне владельца и кухни."
+steps:
+  - key: 1
+    anchor: more.tile.notifications
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.notifications"]'
+    title:
+      sq: "Njoftimet"
+      en: "Notifications"
+      uk: "Сповіщення"
+      ru: "Уведомления"
+    caption:
+      sq: "Ku zgjidhni si mësoni për çdo porosi të re."
+      en: "Where you choose how you hear about each new order."
+      uk: "Тут ви обираєте, як дізнаватися про кожне нове замовлення."
+      ru: "Здесь вы выбираете, как узнавать о каждом новом заказе."
+  - key: 2
+    anchor: notify.push
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="notify.push"]'
+    title:
+      sq: "Njoftime në telefon"
+      en: "Phone notifications"
+      uk: "Сповіщення на телефон"
+      ru: "Уведомления на телефон"
+    caption:
+      sq: "Prekni për t'i aktivizuar në këtë pajisje. Në iPhone, shtoni më parë faqen në ekranin kryesor."
+      en: "Tap to turn them on for this device. On an iPhone, add the page to the Home Screen first."
+      uk: "Торкніться, щоб увімкнути на цьому пристрої. На iPhone спершу додайте сторінку на початковий екран."
+      ru: "Нажмите, чтобы включить на этом устройстве. На iPhone сначала добавьте страницу на экран «Домой»."
+  - key: 3
+    anchor: kitchen.push
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="kitchen.push"]'
+    title:
+      sq: "Edhe në kuzhinë"
+      en: "In the kitchen too"
+      uk: "І на кухні"
+      ru: "И на кухне"
+    caption:
+      sq: "Në ekranin e kuzhinës, i njëjti buton njofton telefonin e kuzhinierit."
+      en: "On the kitchen screen the same button tells the cook's phone."
+      uk: "На екрані кухні та сама кнопка сповіщає телефон кухаря."
+      ru: "На экране кухни та же кнопка уведомляет телефон повара."

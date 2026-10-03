@@ -1,14 +1,14 @@
 # Learning anchors in the courier app (/courier/), 2026-09-24.
 # One `data-tour` id per line: "<module>.<control> <file>:<line>" (the line that
 # writes it). docs/design/BLUEPRINT-LEARNING-VIDEOS-WIKI-2026-09-24.md §4.3 / §5.1.
-# Lessons (docs/learn/lessons/courier/): C1 hud.shift hud.sheet hud.mic help.open |
+# Lessons (docs/learn/lessons/courier/): C1 hud.shift hud.sheet hud.mic help.open | C8 courier.push |
 # C2 shift.open pick.* offer.* | C3 run.eta run.address run.maps run.call run.picked |
 # C4 run.slide cash.* run.refused refused.* | C5 hud.outbox hud.sheet hud.shift hud.gps |
 # C6 hud.mic voice.yes ask.* panel.* shift.end.
 # Every id is a LITERAL string in its file (never built from parts), so grep
 # finds it. courier/learn.test.mjs fails when a listed id or its line moves, or
 # when the tree gains an id this list does not carry; it prints which one.
-help.open workers/api/public/courier/app.js:1094
+help.open workers/api/public/courier/app.js:1157
 hud.shift workers/api/public/courier/index.html:49
 hud.gps workers/api/public/courier/index.html:51
 hud.outbox workers/api/public/courier/index.html:57
@@ -52,3 +52,5 @@ agent.clients workers/api/public/courier/mcp.js:15
 agent.snippet workers/api/public/courier/mcp.js:16
 agent.copySnippet workers/api/public/courier/mcp.js:16
 panel.agent workers/api/public/courier/mcp.js:20
+# C8 (lib/push.js via app.js pushHere): the notifications control (W-PUSH)
+courier.push workers/api/public/courier/app.js:866

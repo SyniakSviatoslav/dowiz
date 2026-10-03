@@ -61,6 +61,15 @@ pub const PROCESSORS: &[Processor] = &[
         location: "Albania",
         safeguard: "a legal obligation (Law 124/2024 Art. 7(1)(c)). Sending is switched OFF in this build (`fiscal::SEND_ENABLED = false`), so nothing reaches it today",
         terms: "Albanian fiscalisation law" },
+    // W-PUSH: the Worker posts a sealed message to the push service the
+    // subscriber's own browser chose (notify/push/rail.rs); the endpoint
+    // allowlist is notify/push/subs.rs `push_host`.
+    Processor { id: "webpush", name: "Your browser's push service (Google FCM, Mozilla autopush, Apple Push, Microsoft WNS)",
+        receives: &[Device],
+        role: IndependentController, switch: Switch::Always,
+        location: "the United States and the EU, depending on the browser's maker",
+        safeguard: "only when you turn notifications on; the message is end-to-end encrypted to your device (RFC 8291), so the push service sees the device's address and the time, never the text",
+        terms: "the browser maker's own terms (Google, Mozilla, Apple, Microsoft)" },
     // Contacted by the diner's own browser, not by the Worker.
     Processor { id: "osm", name: "OpenStreetMap Foundation (Nominatim address lookup)",
         receives: &[Coordinates, Ip],
@@ -99,6 +108,7 @@ pub const HOSTS: &[Host] = &[
     Host { host: "rates.dowiz", recipient: NotARecipient("a cache key in this Worker's own cache; never fetched") },
     Host { host: "hub", recipient: NotARecipient("the internal URL of a Durable Object stub; it never leaves Cloudflare") },
     // BN2 (hubdo/publish.rs, store/shell.js): the platform's own R2 bucket behind a custom domain.
+    Host { host: "dowiz.org", recipient: NotARecipient("the contact (`sub`) named inside a push token (notify/push/vapid.rs SUBJECT); never fetched") },
     Host { host: "cdn.dowiz.org", recipient: NotARecipient("the venue's published menu and photos, read by every customer's browser; a read carries no identity and nothing about a person is written there") },
     Host { host: "cron", recipient: NotARecipient("the internal URL of the minute cron's runner object (cron.rs); it never leaves Cloudflare") },
     Host { host: "{host}", recipient: NotARecipient("the venue's own storefront address, printed on a table's QR code") },

@@ -24,6 +24,8 @@
 // Bumped 2026-09-24 (b): courier.css changed (the --st-* status colours were
 // restored) and the lessons engine (/lib/learn.js + its sheet) joined the graph;
 // a cache under the old name would keep serving the old sheet offline.
+// Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
+importScripts('/lib/push-sw.js');
 const SHELL_CACHE = 'dowiz-courier-shell-2026-09-27-ru';
 const SHELL = [
   '/courier/',

@@ -74,6 +74,8 @@ pub mod tg;
 pub mod route;
 /// The bot's webhook and the console's Telegram routes.
 pub mod hook;
+/// Web Push to the customer, courier and staff PWAs (W-PUSH).
+pub mod push;
 
 /// The order as a message. Plain text on purpose: Markdown escaping of dish
 /// names and street names is where a notification silently stops arriving.

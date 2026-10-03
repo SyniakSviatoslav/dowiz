@@ -45,6 +45,16 @@ argon2 = { version = "0.5", default-features = false, features = ["alloc", "pass
 password-hash = { version = "0.5", features = ["alloc", "getrandom"] }
 # getrandom on wasm32 has to be told to use the platform RNG explicitly.
 getrandom = { version = "0.2", features = ["js"] }
+# WEB PUSH (W-PUSH, `notify/push/`): RFC 8291 payload encryption (ECDH P-256 ->
+# HKDF-SHA256 -> AES-128-GCM) and the RFC 8292 VAPID ES256 JWT. DECART: pure-Rust
+# RustCrypto, MIT OR Apache-2.0, wasm32-clean, no C. `p256` pulls elliptic-curve,
+# primeorder, ecdsa, rfc6979, crypto-bigint, ff, group, sec1, base16ct (all
+# RustCrypto); `aes-gcm` pulls aes, ctr, ghash, polyval, aead, cipher, inout.
+# NOT WebCrypto: `cargo test --lib` is native, and the RFC 8291 vector must run
+# there against the code the Worker ships.
+p256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdh", "ecdsa", "std"] }
+hkdf = "0.12"
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
 # A table's QR code, drawn server-side (A9, `table_qr`). MIT, ZERO dependencies,
 # pure Rust -- builds for wasm32 like the rest.
 qrcodegen = "1.8"

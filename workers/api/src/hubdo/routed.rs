@@ -88,6 +88,7 @@ impl HubImages {
     /// every open order that has waited past the venue's late threshold and
     /// was not told yet. `orders` are the orders as this turn left them.
     pub(super) async fn tell_orders(&self, status: Option<(&str, &str)>, orders: &[(String, String)], now_ms: i64) {
+        self.tell_push_orders(status, orders, now_ms).await; // W-PUSH: the phones first (`hubdo/push_turn.rs`)
         let Some((settings, groups)) = self.routing_groups().await else { return };
         let mut owed = Owed::default();
         if let (Some((id, next)), true) = (status, produce::wants(&groups, "order.status")) {

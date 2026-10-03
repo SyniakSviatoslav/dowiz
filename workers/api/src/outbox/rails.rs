@@ -142,6 +142,7 @@ async fn held(
     let acts = crate::services::campaigns::rail::acts_if_due(place, &due_now).await;
     let mut withdrawn: Vec<String> = Vec::new();
     let mut summaries = digest_rail::Folded::default();
+    let mut push = crate::notify::push::rail::Rail::default();
     for e in due_now {
         let ok = match e.kind.as_str() {
             // THE PRINTER PULLS ITS OWN (`print_rail.rs`, LAST-MILE §3.1):
@@ -171,6 +172,15 @@ async fn held(
                 abandoned.extend(line);
                 continue;
             }
+            // WEB PUSH (W-PUSH): no VAPID secret = waits; a gone device = dropped.
+            crate::notify::push::plan::KIND => match push.send(env, e, now_ms).await {
+                crate::notify::push::rail::Push::Wait => continue,
+                crate::notify::push::rail::Push::Done(ok) => ok,
+                crate::notify::push::rail::Push::Drop => {
+                    verdicts.push((e.id.clone(), Verdict::Abandon { after: 0 }));
+                    continue;
+                }
+            },
             "whatsapp" => match &wa {
                 Some(cfg) => crate::channels::whatsapp_text(cfg, &e.to, &e.text).await.is_ok(),
                 None => continue,
@@ -226,6 +236,7 @@ async fn held(
     for (chat, _) in &ops.gone.clone() {
         ops.put(tgrail::gone_notice(chat, &groups, now_ms));
     }
+    abandoned.append(&mut push.said);
     let nothing = ops.puts.is_empty() && ops.removes.is_empty() && ops.records.is_empty();
     if nothing {
         return Ok((0, entries.len(), abandoned));
@@ -245,6 +256,7 @@ async fn held(
         }
     }
     crate::services::campaigns::rail::record_gone(place, &verdicts, &withdrawn, now_ms).await;
+    abandoned.extend(push.finish(place).await);
     Ok((sent, kept, abandoned))
 }
 

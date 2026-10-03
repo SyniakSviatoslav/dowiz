@@ -42,8 +42,8 @@ test('anchors: every data-tour the courier writes is listed with its file:line, 
   assert.ok(ids.length >= 30, `only ${ids.length} anchors`);
 });
 
-test('lessons: C1..C7, and every step anchor is a listed courier anchor (none pending)', () => {
-  assert.deepEqual(LESSONS.map(l => l.id), ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']);
+test('lessons: C1..C8, and every step anchor is a listed courier anchor (none pending)', () => {
+  assert.deepEqual(LESSONS.map(l => l.id), ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8']);
   const ids = new Set(listed.map(([id]) => id));
   for (const l of LESSONS) for (const s of l.steps) {
     if (!s.anchor) continue;
