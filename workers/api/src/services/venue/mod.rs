@@ -5,6 +5,7 @@ pub mod activation;
 pub mod brand;
 pub mod brand_extract;
 pub mod place;
+pub mod publish;
 pub mod settings;
 pub mod where_when;
 pub mod zones;

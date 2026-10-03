@@ -12,6 +12,7 @@ import { openCard, cardLine } from '/admin/customers.js';
 import { ui, k, btn, iconBtn, field, input, select, check, pill, pillBtn, empty, loading, rowBtn, rowDiv, chips, press } from '/admin/parts.js';
 import { openMcp as openMcpSheet } from '/admin/mcp.js';
 import { filter, count } from '/admin/more-find.js';
+import '/admin/publish-i18n.js';
 
 /// The rows, in groups, with the sheet each opens (HUB-UX-2026-09-26 §3.3:
 /// most used first). Every icon is a name /lib/icons.css draws -- `apron`
@@ -23,7 +24,7 @@ const GROUPS = [
   ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers], ['staff', 'user-plus', openStaff], ['exceptions', 'alert-triangle', openExceptions]]],
   ['learnGroup', [['learn', 'player-play', openLearn]]],
   ['settingsVenue', [['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['deliveryArea', 'map-pin', openZones], ['payments', 'coin-hole', openPayments],
-                     ['branding', 'fan', openBranding], ['features', 'tools-kitchen-2', openFeatures], ['preview', 'eye', openPreview]]],
+                     ['branding', 'fan', openBranding], ['features', 'tools-kitchen-2', openFeatures], ['preview', 'eye', openPreview], ['pubMenu', 'cloud-upload', openPubMenu]]],
   ['settingsLinks', [['integrations', 'plug-connected-x', openIntegrations], ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['ebills', 'receipt', openEbills],
                      ['printer', 'receipt', openPrinter], ['assistant', 'sparkles', openAssistant], ['mcp', 'cube-3d-sphere', openMcp], ['apiKeys', 'key', openKeys], ['cloud', 'cloud-upload', openCloud]]],
   ['settingsData', [['activation', 'check', openActivation], ['health', 'radar-2', openHealth], ['dpa', 'circle-check', openDpa]]],
@@ -110,6 +111,8 @@ async function openExceptions(){ (await import('/admin/exceptions.js')).open(); 
 async function openCampaigns(){ (await import('/admin/campaigns.js')).open(); }
 
 // ── the kitchen printer (print.kitchen): the setting had no control ─────────
+// ── the published menu (BN2's R2 read path): publish.js ─────────────────────
+async function openPubMenu(){ (await import('/admin/publish.js')).open(); }
 async function openPrinter(){ (await import('/admin/printer.js')).open({ staff: me().staff }); }
 
 // ── table QR codes (A9): order at the table, a waiter confirms ──────────────

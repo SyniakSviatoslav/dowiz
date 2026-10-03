@@ -172,6 +172,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/customers/:key/unlink", Owner, No),
     ("get", "/api/owner/features", Owner, No),
     ("post", "/api/owner/features", Owner, No),
+    ("get", "/api/owner/publish", Owner, No), ("post", "/api/owner/publish", Owner, No), // BN2's published menu
     ("post", "/api/owner/notify/test", Owner, No),
     ("get", "/api/owner/telegram", Owner, No),
     ("post", "/api/owner/telegram/connect", Owner, No),
@@ -277,9 +278,7 @@ pub(crate) fn bookings_for_kitchen(rows: Vec<Value>) -> Vec<Value> {
 /// kitchen printer's name. Nothing else -- every secret lives in this space.
 pub(crate) const KITCHEN_SETTINGS: [&str; 1] = ["print.kitchen"];
 
-pub(crate) fn kitchen_may_set(key: &str) -> bool {
-    KITCHEN_SETTINGS.contains(&key)
-}
+pub(crate) fn kitchen_may_set(key: &str) -> bool { KITCHEN_SETTINGS.contains(&key) }
 
 /// `GET /api/owner/settings` for staff: only `KITCHEN_SETTINGS`, values and
 /// declarations alike.

@@ -471,6 +471,9 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .post_async("/api/owner/features", |r, c| edge::run(r, c, services::venue::settings::set_feature))
         .get_async("/api/owner/settings", |r, c| edge::run(r, c, services::venue::settings::settings))
         .post_async("/api/owner/settings", |r, c| edge::run(r, c, services::venue::settings::set_setting))
+        // BN2: what the venue's object put on the CDN for the storefront, and publish now (W-PUBUI).
+        .get_async("/api/owner/publish", |r, c| edge::run(r, c, services::venue::publish::status))
+        .post_async("/api/owner/publish", |r, c| edge::run(r, c, services::venue::publish::publish_now))
         .post_async("/api/owner/notify/test", |r, c| edge::run(r, c, notify::test))
         .post_async("/api/webhooks/telegram", |r, c| edge::run(r, c, notify::hook::webhook))
         .get_async("/api/owner/telegram", |r, c| edge::run(r, c, notify::hook::owner::state))

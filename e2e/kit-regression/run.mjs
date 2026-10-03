@@ -2,7 +2,7 @@
 //
 // HOST      which hub to point at (default https://dubin-sushi.dowiz.org)
 // RETRIES   how many times an edge transient is retried (default 2)
-// ONLY      render|domains|mobile|pwa|interact, to run one of them
+// ONLY      a gate's name below (render, domains, storefront-r2, ...), to run one of them
 import { run as render } from './render.mjs';
 import { run as domains } from './domains.mjs';
 import { run as mobile } from './mobile.mjs';
@@ -10,6 +10,7 @@ import { run as pwa } from './pwa.mjs';
 import { run as interact } from './interact.mjs';
 import { run as outbox } from './outbox.mjs';
 import { run as courierCold } from './courier-cold.mjs';
+import { run as storefrontR2 } from './storefront-r2.mjs';
 
 const GATES = [
   ['render',   'render gate — real Chromium at 375x812',        () => render(null)],
@@ -23,6 +24,8 @@ const GATES = [
   ['outbox',   'offline writes — a tap survives a dead network',  outbox],
   // Also from disk, with the server really closed for the reopen.
   ['courier-cold', 'cold start — the app reopens underground',   courierCold],
+  // From disk too (BN2): /api/* blocked, the CDN a fixture; LIVE= adds one read-only browse.
+  ['storefront-r2', 'published menu — Worker requests per cold browse', storefrontR2],
 ];
 
 const only = process.env.ONLY;
