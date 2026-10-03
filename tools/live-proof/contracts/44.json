@@ -1,14 +1,119 @@
 {
-  "id": 44, "name": "dag-timers-cron", "contract_version": "0.1.0", "class": "LIVE-NOW",
-  "description": {"en": "Work is driven by each venue's DO alarm plus one nightly cron; an outbox entry drains with no further request.", "uk": "Роботу виконують будильники об'єктів закладів плюс один нічний cron; черга спорожняється без додаткових запитів."},
-  "producer": {"file": "workers/api/src/hubdo/timer.rs", "line": 92, "what": "set alarm when work is due"},
-  "consumer": {"file": "workers/api/src/cron.rs", "line": 54, "what": "runner + nightly re-arm"},
-  "transport": {"method": "POST", "path": "https://api.cloudflare.com/client/v4/graphql"},
-  "external": {"service": "Cloudflare GraphQL Analytics", "api_version": "workersInvocationsAdaptive", "doc": "https://developers.cloudflare.com/analytics/graphql-api/"},
-  "auth": {"secrets": ["LIVE_CF_ANALYTICS_TOKEN", "LIVE_CF_ACCOUNT_ID", "OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.cf_analytics_token, /root/.dowiz_owner"},
-  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
-  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["data"]},
-  "schema_status": "draft: tighten from the first live answer",
-  "probe": "CF analytics: 1 scheduled run/day, last within 26 h, success; an outbox entry on qa-durres drains to 0 within 2 min by alarm alone.",
-  "last_verified": null
+ "id": 44,
+ "name": "dag-timers-cron",
+ "contract_version": "0.2.0",
+ "class": "LIVE-NOW",
+ "description": {
+  "en": "Work is driven by each venue's DO alarm plus one nightly cron; an outbox entry drains with no further request.",
+  "uk": "Роботу виконують будильники об'єктів закладів плюс один нічний cron; черга спорожняється без додаткових запитів."
+ },
+ "producer": {
+  "file": "workers/api/src/hubdo/timer.rs",
+  "line": 92,
+  "what": "set alarm when work is due"
+ },
+ "consumer": {
+  "file": "workers/api/src/cron.rs",
+  "line": 54,
+  "what": "runner + nightly re-arm"
+ },
+ "transport": {
+  "method": "POST",
+  "path": "https://api.cloudflare.com/client/v4/graphql"
+ },
+ "external": {
+  "service": "Cloudflare GraphQL Analytics",
+  "api_version": "workersInvocationsAdaptive",
+  "doc": "https://developers.cloudflare.com/analytics/graphql-api/"
+ },
+ "auth": {
+  "secrets": [
+   "LIVE_CF_ANALYTICS_TOKEN",
+   "LIVE_CF_ACCOUNT_ID",
+   "OWNER_EMAIL",
+   "OWNER_PASSWORD"
+  ],
+  "where": "/root/.cf_analytics_token, /root/.dowiz_owner"
+ },
+ "request_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": [
+   "object",
+   "null"
+  ]
+ },
+ "response_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+   "data"
+  ],
+  "properties": {
+   "data": {
+    "type": "object",
+    "required": [
+     "viewer"
+    ],
+    "properties": {
+     "viewer": {
+      "type": "object",
+      "required": [
+       "accounts"
+      ],
+      "properties": {
+       "accounts": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+         "type": "object",
+         "required": [
+          "s",
+          "d"
+         ],
+         "properties": {
+          "s": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "required": [
+             "cron",
+             "datetime",
+             "status"
+            ],
+            "properties": {
+             "cron": {
+              "type": "string"
+             },
+             "datetime": {
+              "type": "string",
+              "format": "date-time"
+             },
+             "status": {
+              "type": "string"
+             }
+            }
+           }
+          },
+          "d": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "required": [
+             "sum",
+             "dimensions"
+            ]
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "schema_status": "pinned from the live answer 2026-10-03",
+ "probe": "CF GraphQL over 26 h: the crons wrangler.toml declares ran, the last with status success, no run of an undeclared cron; Durable Object alarms > 0. NOT in this probe: an outbox entry draining by alarm alone (needs a rail key to create one; it rides on row 5).",
+ "last_verified": null
 }

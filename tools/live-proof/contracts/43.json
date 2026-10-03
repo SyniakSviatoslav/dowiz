@@ -1,14 +1,83 @@
 {
-  "id": 43, "name": "voice-parser", "contract_version": "0.1.0", "class": "LIVE-NOW",
-  "description": {"en": "A spoken order's transcript is parsed into dishes and quantities the console shows.", "uk": "Розшифровка голосового замовлення розбирається на страви й кількості, які показує консоль."},
-  "producer": {"file": "workers/api/public/admin/voice.js", "line": 1, "what": "voice screen"},
-  "consumer": {"file": "workers/api/src/lib.rs", "line": 341, "what": "POST /api/voice -> dowiz_hub::voice"},
-  "transport": {"method": "POST", "path": "/api/voice"},
-  "external": null,
-  "auth": {"secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner"},
-  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": ["object", "null"]},
-  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
-  "schema_status": "draft: tighten from the first live answer",
-  "probe": "Post 'two QA salmon rolls'; parsed intent names QA Salmon roll x2.",
-  "last_verified": null
+ "id": 43,
+ "name": "voice-parser",
+ "contract_version": "0.2.0",
+ "class": "LIVE-NOW",
+ "description": {
+  "en": "A spoken order's transcript is parsed into dishes and quantities the console shows.",
+  "uk": "Розшифровка голосового замовлення розбирається на страви й кількості, які показує консоль."
+ },
+ "producer": {
+  "file": "workers/api/public/admin/voice.js",
+  "line": 1,
+  "what": "voice screen"
+ },
+ "consumer": {
+  "file": "workers/api/src/lib.rs",
+  "line": 341,
+  "what": "POST /api/voice -> dowiz_hub::voice"
+ },
+ "transport": {
+  "method": "POST",
+  "path": "/api/voice"
+ },
+ "external": null,
+ "auth": {
+  "secrets": [
+   "OWNER_EMAIL",
+   "OWNER_PASSWORD"
+  ],
+  "where": "/root/.dowiz_owner"
+ },
+ "request_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": [
+   "object",
+   "null"
+  ]
+ },
+ "response_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+   "understood",
+   "needsConfirmation",
+   "verb",
+   "orderId",
+   "readback",
+   "token"
+  ],
+  "properties": {
+   "understood": {
+    "const": true
+   },
+   "needsConfirmation": {
+    "const": true
+   },
+   "verb": {
+    "enum": [
+     "confirm",
+     "reject",
+     "preparing",
+     "ready",
+     "cancel",
+     "collected"
+    ]
+   },
+   "orderId": {
+    "type": "string"
+   },
+   "readback": {
+    "type": "string",
+    "minLength": 1
+   },
+   "token": {
+    "type": "string",
+    "minLength": 8
+   }
+  }
+ },
+ "schema_status": "pinned from the live answer 2026-10-03",
+ "probe": "TEST order; say 'confirm order <last 4 of its id>'; the answer PROPOSES confirm on exactly that order with a confirmation token, and the order is still PENDING (nothing done on a transcript); reject. 0.1.0 asked for a basket parse ('two QA salmon rolls') the voice line does not do: it moves orders and shifts (crates/dowiz-hub/src/voice.rs).",
+ "last_verified": null
 }

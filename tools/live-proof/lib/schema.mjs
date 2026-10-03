@@ -9,7 +9,7 @@
 // (memory gates-that-measure-their-own-epitaph).
 const KNOWN = new Set(['$schema', '$id', '$defs', '$ref', 'type', 'const', 'enum', 'required', 'properties',
   'additionalProperties', 'items', 'minItems', 'maxItems', 'minLength', 'maxLength', 'pattern', 'minimum', 'maximum',
-  'description', 'title', 'examples']);
+  'description', 'title', 'examples', 'format']);
 
 const typeOf = v => Array.isArray(v) ? 'array' : v === null ? 'null' : Number.isInteger(v) ? 'integer' : typeof v;
 
@@ -35,6 +35,9 @@ export function validate(v, s, root = s, at = '$') {
     if (s.minLength != null && v.length < s.minLength) out.push(`${at}: length ${v.length} < ${s.minLength}`);
     if (s.maxLength != null && v.length > s.maxLength) out.push(`${at}: length ${v.length} > ${s.maxLength}`);
     if (s.pattern && !new RegExp(s.pattern, 'u').test(v)) out.push(`${at}: does not match /${s.pattern}/`);
+    // `format` is asserted, not annotated: date-time only; any other format is reported.
+    if (s.format === 'date-time' && !(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d/.test(v) && !Number.isNaN(Date.parse(v)))) out.push(`${at}: not a date-time`);
+    else if (s.format && s.format !== 'date-time') out.push(`${at}: format "${s.format}" is not checked by tools/live-proof/lib/schema.mjs`);
   }
   if (Array.isArray(v)) {
     if (s.minItems != null && v.length < s.minItems) out.push(`${at}: ${v.length} items < ${s.minItems}`);
