@@ -35,14 +35,14 @@ serde_json = "1"
 # Auth primitives, all wasm32-clean and pure Rust -- no WebCrypto plumbing and no
 # native C. HMAC-SHA256 signs the tokens; see auth.rs for why the old service's
 # RS256 was deliberately NOT carried over to a Worker.
-hmac = "0.12"
-sha2 = "0.10"
-base64 = "0.22"
+hmac = "0.13"
+sha2 = "0.11"
+base64 = "0.23"
 subtle = "2"
 # Password hashing. argon2id is the old service's choice and it is kept: this is
 # the one place slowness is the point.
-argon2 = { version = "0.5", default-features = false, features = ["alloc", "password-hash"] }
-password-hash = { version = "0.5", features = ["alloc", "getrandom"] }
+argon2 = { version = "0.6", default-features = false, features = ["alloc", "password-hash"] }
+password-hash = { version = "0.6", features = ["alloc", "getrandom"] }
 # getrandom on wasm32 has to be told to use the platform RNG explicitly.
 getrandom = { version = "0.2", features = ["js"] }
 # A table's QR code, drawn server-side (A9, `table_qr`). MIT, ZERO dependencies,
