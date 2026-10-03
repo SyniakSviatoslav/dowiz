@@ -34,15 +34,30 @@ export async function reject({ lib, must }, id) {
   writePending(lib.LOC, readPending(lib.LOC).filter(x => x !== id));
 }
 
+/// End a TEST order from wherever it is: PENDING -> reject; past PENDING the
+/// kernel's only exit is the refund route (REFUNDING -> COMPENSATED_REFUND,
+/// e2e/flows/f4-cleanup.mjs), which ends it in one turn when no money was taken.
+export async function close({ lib, run, must }, id) {
+  const o = await lib.ownerOrder(id);
+  if (!o || lib.TERMINAL.has(o.status)) { writePending(lib.LOC, readPending(lib.LOC).filter(x => x !== id)); return o?.status; }
+  if (o.status === 'PENDING') { await reject({ lib, must }, id); return 'REJECTED'; }
+  const r = await lib.api(`/api/staff/orders/${encodeURIComponent(id)}/refund`, { method: 'POST', token: await lib.owner(),
+    headers: { 'idempotency-key': `${run}-refund-${id}` }, body: { location_id: lib.LOC, reason: 'venue_cancelled', note: 'live-proof cleanup' } });
+  must(r.status === 200, `refund ${id} from ${o.status}: ${r.status} ${r.text.slice(0, 120)}`);
+  const after = (await lib.ownerOrder(id))?.status;
+  must(lib.TERMINAL.has(after), `closing ${id} from ${o.status} left it ${after}`);
+  writePending(lib.LOC, readPending(lib.LOC).filter(x => x !== id));
+  return after;
+}
+
 /// Close every TEST order an earlier run left open. Answers what it did.
 export async function sweep(lib) {
   const left = [];
   for (const id of readPending(lib.LOC)) {
     const o = await lib.ownerOrder(id);
     if (o && !lib.TERMINAL.has(o.status)) {
-      const action = o.status === 'PENDING' ? 'reject' : 'cancel';
-      const r = await lib.own(`/api/owner/orders/${encodeURIComponent(id)}/action`, { action, location_id: lib.LOC });
-      if (r.status !== 200) { left.push(id); continue; }
+      try { await close({ lib, run: lib.RUN, must: (ok, why) => { if (!ok) throw new Error(why); } }, id); }
+      catch { left.push(id); continue; }
     }
   }
   writePending(lib.LOC, left);
