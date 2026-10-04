@@ -2,7 +2,7 @@
 //! the proof that the venue stopped is there, and the chain says so honestly.
 
 use super::*;
-use crate::consent::{state, wording_id, CHANNEL_WHATSAPP, PURPOSE_MARKETING};
+use crate::consent::{state, wording_id, CHANNELS, CHANNEL_WHATSAPP, PURPOSE_MARKETING};
 
 const KEY: &str = "a1b2c3d4e5f60718";
 const OTHER: &str = "ffffffffffffffff";
@@ -50,7 +50,7 @@ fn the_persons_words_and_thread_leave_the_bytes_and_the_proof_stays() {
     assert!(tip_before.holds());
 
     let got = forget(&mut l, KEY, 99).unwrap();
-    assert_eq!(got, Forgot { redacted: 2, withdrawn: 3 }, "two acts scrubbed, one withdrawal per channel");
+    assert_eq!(got, Forgot { redacted: 2, withdrawn: 4 }, "two acts scrubbed, one withdrawal per purpose and channel (PAIRS)");
 
     let bytes = l.to_bytes();
     assert!(!has(&bytes, PHONE), "the phone the owner typed is still in the image");
@@ -90,7 +90,7 @@ fn a_second_erasure_writes_nothing() {
 #[test]
 fn a_person_with_no_acts_still_gets_the_withdrawals_and_no_declaration() {
     let mut l = LogImage::create().unwrap();
-    assert_eq!(forget(&mut l, KEY, 5).unwrap(), Forgot { redacted: 0, withdrawn: 3 });
+    assert_eq!(forget(&mut l, KEY, 5).unwrap(), Forgot { redacted: 0, withdrawn: 4 });
     assert!(l.about(KIND_FORGOTTEN, None, 9).is_empty());
     assert!(chain_check(&l).holds());
 }

@@ -51,7 +51,8 @@ ROOT = os.environ['ROOT']
 # `instagram_publish` is not here: it posts to the venue's own feed.
 # `whatsapp_template` is the campaign door (business-initiated, outside the
 # 24-hour window): the one send whose recipient is never a thread's peer.
-SEND = re.compile(r'\b(whatsapp_text|whatsapp_template|instagram_text|telegram)\s*\(')
+# `sms_text` (W-SMS) is the order-status text to a customer's own number.
+SEND = re.compile(r'\b(whatsapp_text|whatsapp_template|instagram_text|telegram|sms_text)\s*\(')
 
 # Recipients that are the venue's own, or a thread the customer opened.
 ALLOWED = {'&wa.to', 'chat.trim()', '&e.to', '&peer', 'peer', '&peer.clone()'}

@@ -53,3 +53,18 @@ fn one_key_alone_misses_the_linked_spelling() {
     assert_eq!(drop_queued(&mut t, &BTreeSet::new(), &keys), 0);
     assert!(ids(&t).contains(&entry_id("c1", "k_national")));
 }
+
+/// W-SMS: a ticked order's SMS text and its stamp (the number) go with the order.
+#[test]
+fn the_persons_sms_text_and_stamp_go_and_a_strangers_stay() {
+    use crate::notify::sms::checkout::STAMP_KIND;
+    let mut t = outbox();
+    let e = entry("o1/sms/confirmed", crate::notify::sms::plan::KIND, "+355691111111");
+    t.put(KIND, &e.id, &serde_json::to_string(&e).unwrap(), &[], &[]).unwrap();
+    t.put(STAMP_KIND, "o1", r#"{"to":"+355691111111"}"#, &[], &[]).unwrap();
+    t.put(STAMP_KIND, "o2", r#"{"to":"+355692222222"}"#, &[], &[]).unwrap();
+    drop_queued(&mut t, &BTreeSet::from(["o1".to_string()]), &BTreeSet::new());
+    assert!(!ids(&t).contains(&"o1/sms/confirmed".to_string()));
+    assert!(t.get(STAMP_KIND, "o1").is_none(), "the forgotten person's number is still kept");
+    assert!(t.get(STAMP_KIND, "o2").is_some(), "a stranger's stamp went");
+}

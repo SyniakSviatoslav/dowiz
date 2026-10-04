@@ -142,7 +142,7 @@ async fn held(
     let acts = crate::services::campaigns::rail::acts_if_due(place, &due_now).await;
     let mut withdrawn: Vec<String> = Vec::new();
     let mut summaries = digest_rail::Folded::default();
-    let mut push = crate::notify::push::rail::Rail::default();
+    let mut push = crate::notify::push::rail::Rail::default(); let mut sms = crate::notify::sms::rail::Rail::default(); // W-SMS
     for e in due_now {
         let ok = match e.kind.as_str() {
             // THE PRINTER PULLS ITS OWN (`print_rail.rs`, LAST-MILE §3.1):
@@ -181,6 +181,8 @@ async fn held(
                     continue;
                 }
             },
+            // SMS (W-SMS): consent re-asked, budget, health -- `notify/sms/rail.rs`.
+            crate::notify::sms::plan::KIND => match sms.send(place, &settings, &image, e, now_ms, &mut verdicts).await { Some(ok) => ok, None => continue },
             "whatsapp" => match &wa {
                 Some(cfg) => crate::channels::whatsapp_text(cfg, &e.to, &e.text).await.is_ok(),
                 None => continue,
@@ -236,7 +238,7 @@ async fn held(
     for (chat, _) in &ops.gone.clone() {
         ops.put(tgrail::gone_notice(chat, &groups, now_ms));
     }
-    abandoned.append(&mut push.said);
+    abandoned.append(&mut push.said); sms.finish(&mut ops.records, &mut abandoned);
     let nothing = ops.puts.is_empty() && ops.removes.is_empty() && ops.records.is_empty();
     if nothing {
         return Ok((0, entries.len(), abandoned));

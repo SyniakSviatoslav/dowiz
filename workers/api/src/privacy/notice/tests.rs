@@ -16,7 +16,7 @@ fn named(html: &str, id: &str) -> bool {
 /// Switching Telegram off makes it disappear.
 #[test]
 fn a_processor_is_named_exactly_when_it_is_switched_on() {
-    let all = On { telegram: true, meta: true, cloud: true, stripe: true, ai: true };
+    let all = On { telegram: true, meta: true, cloud: true, stripe: true, ai: true, sms: true };
     let none = On::default();
     for lang in words::LANGS {
         let on = render_venue(&venue(), &all, lang);
@@ -37,7 +37,7 @@ fn a_processor_is_named_exactly_when_it_is_switched_on() {
 /// fiscal sending switched off in this build).
 #[test]
 fn ebills_and_the_tax_authority_are_not_customer_recipients_today() {
-    let all = On { telegram: true, meta: true, cloud: true, stripe: true, ai: true };
+    let all = On { telegram: true, meta: true, cloud: true, stripe: true, ai: true, sms: true };
     let ids: Vec<&str> = recipients(&all).iter().map(|p| p.id).collect();
     assert!(!ids.contains(&"ebills"));
     assert_eq!(ids.contains(&"tax"), crate::fiscal::SEND_ENABLED);

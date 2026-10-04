@@ -240,6 +240,8 @@ pub enum Switch {
     FiscalSend,
     EbillsLink,
     Map,
+    /// W-SMS: the venue switched order-status texts on (`notify.sms.on`).
+    Sms,
 }
 
 /// A host named in this crate or in the storefront's CSP, and what it is.

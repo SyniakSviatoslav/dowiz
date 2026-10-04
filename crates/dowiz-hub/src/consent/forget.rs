@@ -21,7 +21,7 @@
 //!
 //! PURE. The instant is the caller's.
 
-use super::{subject_of, Act, Method, State, CHANNELS, KIND_ACT, PURPOSES};
+use super::{subject_of, Act, Method, State, KIND_ACT, PAIRS};
 use crate::logimage::LogImage;
 use crate::minijson::int_field;
 use crate::{content_id_chained, HubError};
@@ -54,25 +54,23 @@ pub fn forget(log: &mut LogImage, key: &str, at_ms: i64) -> Result<Forgot, Strin
     }
     let entries = log.entries();
     let mut withdrawn = 0;
-    for purpose in PURPOSES {
-        for channel in CHANNELS {
-            if newest_is_erasure(&entries, key, purpose, channel) {
-                continue;
-            }
-            let act = Act {
-                key: key.to_string(),
-                purpose: purpose.into(),
-                channel: channel.into(),
-                state: State::Withdrawn,
-                at_ms,
-                method: Method::Erasure,
-                evidence: String::new(),
-                wording_id: String::new(),
-                via: String::new(),
-            };
-            super::log::write(log, &act)?;
-            withdrawn += 1;
+    for (purpose, channel) in PAIRS {
+        if newest_is_erasure(&entries, key, purpose, channel) {
+            continue;
         }
+        let act = Act {
+            key: key.to_string(),
+            purpose: purpose.into(),
+            channel: channel.into(),
+            state: State::Withdrawn,
+            at_ms,
+            method: Method::Erasure,
+            evidence: String::new(),
+            wording_id: String::new(),
+            via: String::new(),
+        };
+        super::log::write(log, &act)?;
+        withdrawn += 1;
     }
     Ok(Forgot { redacted, withdrawn })
 }

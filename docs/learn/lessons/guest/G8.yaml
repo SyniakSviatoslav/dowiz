@@ -1,0 +1,38 @@
+# Lesson G8 (guest). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-SMS: the unticked SMS box under the phone field (store/sms-box.js). It appears only when the venue has SMS on.
+id: G8
+role: guest
+module: checkout
+order: 8
+covers: []
+title:
+  sq: "SMS për porosinë"
+  en: "SMS about your order"
+  uk: "SMS про замовлення"
+  ru: "SMS о заказе"
+goal:
+  sq: "Zgjidhni kutinë që lokali t'ju dërgojë SMS kur porosia ndryshon."
+  en: "Tick the box so the venue texts you when the order changes."
+  uk: "Позначте поле, щоб заклад надсилав SMS, коли замовлення змінюється."
+  ru: "Отметьте поле, чтобы заведение присылало SMS, когда заказ меняется."
+steps:
+  - key: 1
+    anchor: checkout.sms
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="checkout.sms"]'
+    title:
+      sq: "Kutia SMS"
+      en: "The SMS box"
+      uk: "Поле SMS"
+      ru: "Поле SMS"
+    caption:
+      sq: "E pazgjedhur; zgjidheni vetëm nëse doni SMS. Mund ta ndalni duke i thënë lokalit STOP."
+      en: "Unticked; tick it only if you want texts. Stop them by telling the venue STOP."
+      uk: "Не позначене; позначте, лише якщо хочете SMS. Зупиніть, сказавши закладу STOP."
+      ru: "Не отмечено; отметьте, только если хотите SMS. Остановите, сказав заведению STOP."

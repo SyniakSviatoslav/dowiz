@@ -15,8 +15,8 @@
 #  12. `live` a probe with its contract                           -> pass (0), live=1
 #  13. the live baseline above the live count                     -> refuse (1)
 #  14. a row without the `live` key                               -> refuse (1)
-#  15. row 59 appended (W-LIVE's rows continue the numbering)     -> pass (0)
-#  16. row 60 appended with 59 missing                            -> refuse (1)
+#  15. the next row appended (rows continue the numbering)          -> pass (0)
+#  16. a row two past the end, one id missing                       -> refuse (1)
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
@@ -55,7 +55,7 @@ n=$(sed -n 's/^tested_inmem=//p' "$S/base"); printf 'tested_inmem=%s\nlive=0\n' 
 want 1 "the tested_inmem baseline above the count"
 edit 'first["proof"] = None'
 want 1 "a TESTED-INMEM row with no proof"
-edit 'L.pop()'
+edit 'del L[57:]'
 want 1 "57 rows"
 edit 'L[0]["status"] = "WORKS_PROBABLY"'
 want 1 "a status outside the six"
@@ -84,10 +84,10 @@ m=$(sed -n 's/^tested_inmem=//p' "$S/base"); printf 'tested_inmem=%s\nlive=1\n' 
 want 1 "the live baseline above the live count"
 edit 'del first["live"]'
 want 1 "a row without the live key"
-edit 'L.append(dict(L[-1], id=59, status="CONNECTED_UNPROVEN", proof=None))'
-want 0 "row 59 appended"
-edit 'L.append(dict(L[-1], id=60, status="CONNECTED_UNPROVEN", proof=None))'
-want 1 "row 60 with 59 missing"
+edit 'L.append(dict(L[-1], id=len(L) + 1, status="CONNECTED_UNPROVEN", proof=None))'
+want 0 "the next row appended"
+edit 'L.append(dict(L[-1], id=len(L) + 2, status="CONNECTED_UNPROVEN", proof=None))'
+want 1 "a row two past the end (one missing)"
 
 [ "$fail" -eq 0 ] && echo "integration-matrix.prove: the gate refuses a missing proof, a lost row, a bad status, a comment, a red run and a mock passed off as live" || echo "integration-matrix.prove: FAILED"
 exit "$fail"

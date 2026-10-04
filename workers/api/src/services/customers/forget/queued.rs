@@ -42,6 +42,10 @@ pub fn drop_queued(t: &mut Table, orders: &BTreeSet<String>, keys: &BTreeSet<Str
         .into_iter()
         .filter_map(|(id, j)| serde_json::from_str::<Entry>(&j).ok().filter(|e| is_theirs(e, orders, keys)).map(|_| id))
         .collect();
+    // W-SMS: a ticked order's SMS stamp (its number) goes with the order.
+    for o in orders {
+        t.remove(crate::notify::sms::checkout::STAMP_KIND, o);
+    }
     ids.iter().filter(|id| t.remove(KIND, id)).count()
 }
 

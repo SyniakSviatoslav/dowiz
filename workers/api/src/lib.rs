@@ -506,6 +506,9 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .get_async("/api/owner/ebills", |r, c| edge::run(r, c, ebills::routes::status))
         .post_async("/api/owner/ebills/config", |r, c| edge::run(r, c, ebills::routes::config))
         .post_async("/api/owner/ebills/map", |r, c| edge::run(r, c, ebills::routes::map))
+        .get_async("/api/owner/sms", |r, c| edge::run(r, c, notify::sms::routes::status)).post_async("/api/owner/sms", |r, c| edge::run(r, c, notify::sms::routes::set)) // W-SMS
+        .post_async("/api/owner/sms/test", |r, c| edge::run(r, c, notify::sms::routes::test)).post_async("/api/owner/sms/stop", |r, c| edge::run(r, c, notify::sms::routes::stop))
+        .get_async("/api/public/locations/:slug/sms", |r, c| edge::run(r, c, notify::sms::routes::box_for))
         .get_async("/api/owner/fiscal", |r, c| edge::run(r, c, fiscal::routes::status))
         .get_async("/api/owner/offline_sales", |r, c| edge::run(r, c, services::orders::offline_sale::handler::pane))
         .post_async("/api/owner/fiscal/ebills", |r, c| edge::run(r, c, fiscal::routes::set))

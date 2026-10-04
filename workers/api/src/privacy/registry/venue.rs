@@ -68,7 +68,12 @@ pub const STORES: &[Store] = &[
     // last success and Telegram's last refusal: a chat id and an error, no person).
     // W-FIX O4: "drain" (the one drain lease: an expiry time, no person).
     // W-PUSH: a "push" entry carries one device's endpoint and keys until it is sent.
-    Store { image: "outbox", kinds: &["o", "print", "route", "digest", "dg", "h", "drain"], home: Venue,
+    // W-SMS: an "sms" entry carries the customer's number and the rendered text
+    // until it is sent; "sms_o" the ticked order's stamp (number, consent key),
+    // removed when the order ends and in any case after two days
+    // (notify/sms/checkout.rs STAMP_TTL_MS); "sms_h" the venue's SMS counts and
+    // last failure, no person.
+    Store { image: "outbox", kinds: &["o", "print", "route", "digest", "dg", "h", "drain", "sms", "sms_o", "sms_h"], home: Venue,
         holds: &[Name, Phone, Address, OrderContent, Messages, Device], subjects: &[Customer, Courier, Staff, Owner],
         purpose: P::Kitchen, basis: Basis::Contract,
         retention: Retention::UntilDone("removed once delivered (outbox/rails.rs); given up after six tries"),

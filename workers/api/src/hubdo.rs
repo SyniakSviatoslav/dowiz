@@ -80,7 +80,7 @@ mod facts; // the folds over the log and the catalogue together, answered here (
 mod bulk; // a supplies / recipes spreadsheet as one turn (BN1, BN4's shape), `hubdo/bulk.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
 mod timer; // the venue's alarm: timed work without the minute cron (DAG Phase 2), `hubdo/timer.rs`
-mod push_turn; mod chat; // push_turn: the phones' messages in the turn (W-PUSH); chat: the courier chat nudge to the two parties' sockets (W-URGENT), `hubdo/chat.rs`
+mod push_turn; mod chat; mod sms_turn; // sms_turn: the customer's order-status text in the turn (W-SMS); push_turn: the phones' messages in the turn (W-PUSH); chat: the courier chat nudge to the two parties' sockets (W-URGENT), `hubdo/chat.rs`
 /// Where the object lives: the platform, or (tests) memory (W-COV C2), `hubdo/host.rs`.
 pub(crate) mod host;
 use crate::wire::{Call, Reply};
@@ -526,7 +526,7 @@ impl HubImages {
                 // an event that was not persisted would be told the truth about
                 // a log that does not say it.
                 self.broadcast(ev.kind, &ev.order_id, &ev.payload, next);
-                self.tell_push_appended(ev.kind, &ev.order_id, &ev.payload, self.now_ms()).await; // W-PUSH
+                self.tell_push_appended(ev.kind, &ev.order_id, &ev.payload, self.now_ms()).await; self.tell_sms_appended(ev.kind, &ev.order_id, &ev.payload, self.now_ms()).await; // W-PUSH, W-SMS
                 Ok(Some((next, len)))
             }
             // Cannot happen inside a serialised object -- the generation was

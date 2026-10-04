@@ -76,6 +76,8 @@ pub mod route;
 pub mod hook;
 /// Web Push to the customer, courier and staff PWAs (W-PUSH).
 pub mod push;
+/// Order-status SMS to the customer, from the venue's own phone (W-SMS).
+pub mod sms;
 
 /// The order as a message. Plain text on purpose: Markdown escaping of dish
 /// names and street names is where a notification silently stops arriving.

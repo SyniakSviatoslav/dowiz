@@ -30,6 +30,7 @@
 
 pub mod forget;
 pub mod log;
+pub mod sms_wordings;
 pub mod wordings;
 pub use wordings::{wording_id, wording_json, wording_of, LANGS, WORDINGS};
 
@@ -44,14 +45,21 @@ pub const KIND_WORDING: &str = "w";
 /// another, and an unknown purpose is refused rather than treated as marketing
 /// -- a permission with a name nobody defined is a permission for anything.
 pub const PURPOSE_MARKETING: &str = "marketing";
-pub const PURPOSES: [&str; 1] = [PURPOSE_MARKETING];
+/// ORDER STATUS BY SMS (W-SMS): the unticked checkout box. Not marketing, but a phone number is personal data: ASKED.
+pub const PURPOSE_ORDER_STATUS: &str = "order_status";
+pub const PURPOSES: [&str; 2] = [PURPOSE_MARKETING, PURPOSE_ORDER_STATUS];
 
 /// AND PER CHANNEL, because Meta's opt-in is: a WhatsApp consent is not a
 /// Telegram one, and this venue's customers reach it on three.
 pub const CHANNEL_WHATSAPP: &str = "whatsapp";
 pub const CHANNEL_TELEGRAM: &str = "telegram";
 pub const CHANNEL_INSTAGRAM: &str = "instagram";
-pub const CHANNELS: [&str; 3] = [CHANNEL_WHATSAPP, CHANNEL_TELEGRAM, CHANNEL_INSTAGRAM];
+pub const CHANNEL_SMS: &str = "sms";
+pub const CHANNELS: [&str; 4] = [CHANNEL_WHATSAPP, CHANNEL_TELEGRAM, CHANNEL_INSTAGRAM, CHANNEL_SMS];
+
+/// THE PAIRS THAT MEAN SOMETHING: marketing on the messengers, order status on SMS. [`check`] refuses the rest; `forget` withdraws these.
+pub const PAIRS: [(&str, &str); 4] =
+    [(PURPOSE_MARKETING, CHANNEL_WHATSAPP), (PURPOSE_MARKETING, CHANNEL_TELEGRAM), (PURPOSE_MARKETING, CHANNEL_INSTAGRAM), (PURPOSE_ORDER_STATUS, CHANNEL_SMS)];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
@@ -218,6 +226,9 @@ pub fn check(act: &Act) -> Result<(), String> {
     }
     if !CHANNELS.contains(&act.channel.as_str()) {
         return Err(format!("unknown channel {:?}", act.channel));
+    }
+    if !PAIRS.contains(&(act.purpose.as_str(), act.channel.as_str())) {
+        return Err(format!("{:?} is not asked on {:?}", act.purpose, act.channel));
     }
     // THE INSTANT IS THE ONE COMPARISON THIS LOG EXISTS TO MAKE -- which came
     // last, the grant or the withdrawal. A record with no clock cannot be

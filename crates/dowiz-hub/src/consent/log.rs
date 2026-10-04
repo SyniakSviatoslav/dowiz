@@ -25,11 +25,16 @@ pub fn lang_of_wording(id: &str) -> Option<&'static str> {
 pub fn write(log: &mut LogImage, act: &Act) -> Result<(), String> {
     check(act)?;
     if act.state == State::Given {
-        let Some(lang) = lang_of_wording(&act.wording_id) else {
+        // EACH BOX PROVES ITS OWN PROMISE (W-SMS): an order-status grant must
+        // name the SMS sentence, a marketing grant the offers sentence.
+        let sms = act.purpose == super::PURPOSE_ORDER_STATUS;
+        let lang = if sms { super::sms_wordings::lang_of_sms_wording(&act.wording_id) } else { lang_of_wording(&act.wording_id) };
+        let Some(lang) = lang else {
             return Err(format!("unknown wording {:?}: no sentence to show for it", act.wording_id));
         };
+        let words = if sms { super::sms_wordings::sms_wording_json(lang) } else { wording_json(lang) };
         if log.about(KIND_WORDING, Some(&act.wording_id), 1).is_empty() {
-            log.append(KIND_WORDING, &act.wording_id, &wording_json(lang))
+            log.append(KIND_WORDING, &act.wording_id, &words)
                 .map_err(|e| format!("consent image refused the wording: {e:?}"))?;
         }
     }

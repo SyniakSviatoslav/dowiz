@@ -22,6 +22,7 @@ import { totalsBlock, refreshTotals, refreshBar } from '/store/cart.js';
 import { quoteEta } from '/store/eta.js';
 import { seaCalm, seaEvent } from '/store/sea.js';
 import { consentMarkup, wireConsent, consentBody } from '/store/consent.js';
+import { smsMarkup, wireSms, smsBody } from '/store/sms-box.js'; // W-SMS
 import { TABLE, tableBanner, tableBody } from '/store/table.js';
 import { venueWallMs, laterPrefill } from '/lib/booking-time.js';
 import { ui, k, cta, ghost, seg } from '/store/parts.js';
@@ -187,7 +188,7 @@ export function openCheckout(){
     <h3 class="fsec" data-t="contact"></h3>
     ${ui.field({ id: 'f-name', label: k('name'), placeholder: k('ex_name'), autocomplete: 'name', value: safeGet('dw_name') || '', attrs: { data: { tour: 'checkout.name' } } })}
     ${ui.field({ id: 'f-phone', label: `${t('phone')} ${t('optional')}`, type: 'tel', inputmode: 'tel', autocomplete: 'tel', placeholder: '+355…', value: safeGet('dw_phone') || '', attrs: { data: { tour: 'checkout.phone' } } })}
-    ${consentMarkup()}
+    ${smsMarkup()}${consentMarkup()}
 
     <h3 class="fsec" data-t="pay"></h3>
     ${railMarkup()}
@@ -222,7 +223,7 @@ export function openCheckout(){
     wallet = b.dataset.wallet;
   };
   $('#place').onclick = () => place(pay, wallet);
-  wireConsent();
+  wireConsent(); wireSms();
 
   const etaLine = async () => {
     const collecting = state.how === 'pickup' && L?.pickup;
@@ -376,7 +377,7 @@ async function place(pay, wallet){
     const body = JSON.stringify({ items, contact: { name, phone },
         fulfilment: collecting ? { kind: 'pickup', note: note || null }
                                : { kind: 'delivery', address: { line: addr, note: note || null, parts, ...geo } },
-        payment: pay, locale: lang, ...consentBody(phone),
+        payment: pay, locale: lang, ...consentBody(phone), ...smsBody(phone),
         ...(pay === 'crypto' && wallet ? { crypto_symbol: wallet } : {}),
         ...(state.promo ? { promo: state.promo.code } : {}),
         ...(state.tip && !collecting && !TABLE ? { tip: state.tip } : {}),

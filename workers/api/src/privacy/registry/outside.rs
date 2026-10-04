@@ -70,6 +70,15 @@ pub const PROCESSORS: &[Processor] = &[
         location: "the United States and the EU, depending on the browser's maker",
         safeguard: "only when you turn notifications on; the message is end-to-end encrypted to your device (RFC 8291), so the push service sees the device's address and the time, never the text",
         terms: "the browser maker's own terms (Google, Mozilla, Apple, Microsoft)" },
+    // W-SMS: order-status texts, only to a customer who ticked the SMS box.
+    // The default is the venue's OWN Android phone through SMSGate's cloud
+    // relay; textbee or Twilio only with the venue's own account.
+    Processor { id: "sms", name: "The venue's SMS gateway: its own Android phone through SMSGate (sms-gate.app), or textbee or Twilio with the venue's own account, and the mobile network that carries the text",
+        receives: &[Phone],
+        role: VenueProcessor, switch: Switch::Sms,
+        location: "SMSGate's relay: not stated by the provider; Twilio: the United States; the SIM's mobile network: the venue's country",
+        safeguard: "only when you tick the SMS box at checkout; the text carries the order number and the venue's name, never your name, address or order, and you can stop it by telling the venue STOP",
+        terms: "the gateway the venue chooses (sms-gate.app, textbee.dev or twilio.com)" },
     // Contacted by the diner's own browser, not by the Worker.
     Processor { id: "osm", name: "OpenStreetMap Foundation (Nominatim address lookup)",
         receives: &[Coordinates, Ip],
@@ -95,6 +104,10 @@ pub const HOSTS: &[Host] = &[
     Host { host: "*.js.stripe.com", recipient: To("stripe") },
     Host { host: "hooks.stripe.com", recipient: To("stripe") },
     Host { host: "api.telegram.org", recipient: To("telegram") },
+    // W-SMS (notify/sms/config.rs): the three gateways a venue can choose.
+    Host { host: "api.sms-gate.app", recipient: To("sms") },
+    Host { host: "api.textbee.dev", recipient: To("sms") },
+    Host { host: "api.twilio.com", recipient: To("sms") },
     // W-TG: the `startgroup` deep link the owner's console shows; the hub never calls it.
     Host { host: "t.me", recipient: NotARecipient("a link the owner opens to pick a group; the hub never calls it and sends it nothing") },
     Host { host: "graph.facebook.com", recipient: To("meta") },

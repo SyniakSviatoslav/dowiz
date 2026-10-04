@@ -25,7 +25,7 @@ const GROUPS = [
   ['learnGroup', [['learn', 'player-play', openLearn]]],
   ['settingsVenue', [['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['deliveryArea', 'map-pin', openZones], ['payments', 'coin-hole', openPayments],
                      ['branding', 'fan', openBranding], ['features', 'tools-kitchen-2', openFeatures], ['preview', 'eye', openPreview], ['pubMenu', 'cloud-upload', openPubMenu]]],
-  ['settingsLinks', [['integrations', 'plug-connected-x', openIntegrations], ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['ebills', 'receipt', openEbills],
+  ['settingsLinks', [['integrations', 'plug-connected-x', openIntegrations], ['notifications', 'brand-telegram', openNotifications], ['sms', 'phone', openSms], ['channels', 'scroll', openChannels], ['ebills', 'receipt', openEbills],
                      ['printer', 'receipt', openPrinter], ['assistant', 'sparkles', openAssistant], ['mcp', 'cube-3d-sphere', openMcp], ['apiKeys', 'key', openKeys], ['cloud', 'cloud-upload', openCloud]]],
   ['settingsData', [['activation', 'check', openActivation], ['health', 'radar-2', openHealth], ['dpa', 'circle-check', openDpa]]],
 ];
@@ -401,6 +401,8 @@ async function openNotifications(){
 }
 /// The Telegram screen (admin/telegram.js, W-TG): bot, groups, what goes where.
 async function openTelegram(){ (await import('/admin/telegram.js')).open(); }
+/// Order-status SMS from the venue's own phone (admin/sms.js, W-SMS).
+async function openSms(){ (await import('/admin/sms.js')).open(); }
 /// A channel's verdict from /owner/notify/test, as one word or Meta's/Telegram's reason.
 const verdict = v => v === 'ok' ? t('testOk') : v === 'unset' ? t('off') : (v && v.error) || String(v);
 async function openChannels(){
@@ -558,6 +560,7 @@ async function openHealth(){
   $('#hBody').innerHTML = `<div class="rows">${entries.map(([x, im]) => info('cube-3d-sphere', { title: t('img_' + x) === 'img_' + x ? x : t('img_' + x), tour: 'health.image', sub: `<span class="mono">${Math.round((im.usedPerMille || 0) / 10)}% · ${im.usedCells}/${im.ceilingCells} · gen ${im.generation}${im.grows ? ` · ${esc(t('grows'))}` : ''}</span><span class="gauge"><i class="${tone(im)}" data-w="${Math.round((im.usedPerMille || 0) / 10)}"></i></span>` })).join('')}</div>
     <div class="rows mt-3">${info(h.verdict === 'ok' ? 'check' : 'alert-circle', { title: k('verdict_' + (h.verdict || 'ok')), sub: `<span class="mono">${h.orders ?? ''} · ${esc(t('orders7'))}</span>`, tour: 'health.verdict', trailing: pill(h.verdict === 'ok' ? 'ok' : h.verdict === 'watch' ? 'warn' : 'bad', { label: h.verdict || '' }) })}</div>`;
   paint();
+  if (h.sms?.on) import('/admin/sms.js').then(m => m.healthRow($('#hBody'), h.sms)).catch(() => {}); // W-SMS
   $('#hBackup').onclick = async e => { e.preventDefault(); try { const r = await fetch('/api/owner/backup', { headers: { authorization: 'Bearer ' + store.t } }); const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `dowiz-${store.loc}-${new Date().toISOString().slice(0, 10)}.json`; a.click(); } catch (err) { fail(err); } };
 }
 

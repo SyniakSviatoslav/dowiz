@@ -139,6 +139,9 @@ pub struct PlaceIn {
     /// The checkout's UNTICKED offers box, present only when ticked (§3.2).
     #[serde(default)]
     pub consent: Option<crate::services::customers::consent_log::ConsentIn>,
+    /// The checkout's UNTICKED SMS box, present only when ticked (W-SMS, `notify::sms::checkout`).
+    #[serde(default)]
+    pub sms: Option<crate::notify::sms::checkout::SmsIn>,
     /// THE CHECK A WAITER'S ROUND JOINS. Only read when a room token placed it
     /// (`services::orders::room::placer`); a guest's basket cannot name one.
     #[serde(default)]
@@ -648,6 +651,8 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             Err(why) => return Response::error(why, 400),
         }
     };
+    // THE SMS BOX (W-SMS): refused by name here, stamped on the order below, filed after it.
+    let sms_tick = match crate::notify::sms::checkout::at_placement(body.sms.as_ref(), phone, &loc.currency_code, &loc.name, ctx.data.now_ms, |n| crate::services::customers::handlers::customer_key(&crate::services::customers::handlers::signing_secret(&ctx.env), n)) { Ok(t) => t, Err(why) => return Response::error(why, 400) };
 
     // ── IS THIS A RETRY? ──
     //
@@ -1034,6 +1039,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         act.via = id.clone();
         let _ = crate::services::customers::consent_log::file(&place, &act).await;
     }
+    if let Some(t) = sms_tick { crate::notify::sms::checkout::keep(&place, &id, t).await; } // W-SMS: the act filed, the stamp kept
 
     // ── THE CUSTOMER'S KEY TO THEIR OWN ORDER ──
     //

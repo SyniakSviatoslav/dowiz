@@ -31,8 +31,13 @@ const shown = () => (wordings || []).find(w => w.lang === lang) || null;
 export const privacyLink = () =>
   `<p class="privacy-link"><a href="/privacy?lang=${esc(lang)}" target="_blank" rel="noopener" data-t="privacy"></a></p>`;
 
-export const consentMarkup = () =>
-  `<label class="consent" id="offersBox" hidden><input type="checkbox" id="f-offers"><span id="f-offers-text"></span></label>${privacyLink()}`;
+/// ONE consent checkbox for every box the checkout asks (offers here, SMS in
+/// sms-box.js): unticked, hidden until its sentence is known. /lib/ui has no
+/// checkbox yet; until it does, this is the one hand-rolled copy.
+export const consentBox = (boxId, inputId, extra = '') =>
+  `<label class="consent" id="${boxId}" hidden${extra}><input type="checkbox" id="${inputId}"><span id="${inputId}-text"></span></label>`;
+
+export const consentMarkup = () => `${consentBox('offersBox', 'f-offers')}${privacyLink()}`;
 
 /// Fill the sentence and follow the phone field. Called once per render.
 export async function wireConsent(){

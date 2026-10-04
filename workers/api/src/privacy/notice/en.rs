@@ -82,6 +82,8 @@ fn processor(id: &str) -> Option<(&'static str, &'static str)> {
             "it receives only your device's internet address and which part of the map is drawn; no order, name or phone"),
         "webpush" => ("the United States and the EU, depending on your browser's maker",
             "only when you turn notifications on. The message is encrypted end to end to your device, so the push service sees your device's address and the time, never the text"),
+        "sms" => ("the venue's own phone in Albania, or the United States (textbee, Twilio) when the venue uses its own account there",
+            "only when you tick the SMS box at checkout. The text carries your phone number, the order number and the venue name, nothing else; tell the venue STOP to end it"),
         _ => return None,
     })
 }

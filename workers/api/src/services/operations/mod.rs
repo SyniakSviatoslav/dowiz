@@ -180,6 +180,7 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         "kitchen": kitchen,
         "ebills": ebills,
         "fiscal": fiscal,
+        "sms": crate::notify::sms::routes::health(&place, settings.as_ref().ok().map(|s| &s.settings), ctx.data.now_ms).await, // W-SMS
     }))
 }
 

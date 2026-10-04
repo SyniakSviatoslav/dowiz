@@ -1,0 +1,293 @@
+# Lesson O26 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-SMS: the order-status SMS screen (admin/sms.js). Steps WAIT: a recording must not save credentials or send a real SMS.
+id: O26
+role: owner
+module: sms
+order: 41
+covers: [sms]
+title:
+  sq: "SMS për klientët, falas"
+  en: "Customer SMS, for free"
+  uk: "SMS клієнтам безкоштовно"
+  ru: "SMS клиентам бесплатно"
+goal:
+  sq: "Dërgoni gjendjen e porosisë me SMS nga telefoni juaj Android."
+  en: "Text customers their order status from your own Android phone."
+  uk: "Надсилайте клієнтам стан замовлення через SMS з вашого Android-телефону."
+  ru: "Отправляйте клиентам статус заказа по SMS с вашего Android-телефона."
+steps:
+  - key: 1
+    anchor: more.tile.sms
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.sms"]'
+    title:
+      sq: "SMS"
+      en: "SMS"
+      uk: "SMS"
+      ru: "SMS"
+    caption:
+      sq: "Ku lidhni telefonin që dërgon SMS."
+      en: "Where you connect the phone that sends the texts."
+      uk: "Тут ви підключаєте телефон, що надсилає SMS."
+      ru: "Здесь вы подключаете телефон, который отправляет SMS."
+  - key: 2
+    anchor: sms.status
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="sms.status"]'
+    title:
+      sq: "Gjendja"
+      en: "Status"
+      uk: "Стан"
+      ru: "Состояние"
+    caption:
+      sq: "Sa SMS sot, sa në pritje dhe gabimi i fundit."
+      en: "How many texts today, how many wait, and the last error."
+      uk: "Скільки SMS сьогодні, скільки в черзі й остання помилка."
+      ru: "Сколько SMS сегодня, сколько в очереди и последняя ошибка."
+  - key: 3
+    anchor: sms.setup
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="sms.setup"]'
+    title:
+      sq: "Falas me Android"
+      en: "Free with Android"
+      uk: "Безкоштовно з Android"
+      ru: "Бесплатно с Android"
+    caption:
+      sq: "Instaloni SMSGate në një telefon me SIM dhe ndizni Cloud server."
+      en: "Install SMSGate on a phone with a SIM and switch Cloud server on."
+      uk: "Встановіть SMSGate на телефон із SIM і увімкніть Cloud server."
+      ru: "Установите SMSGate на телефон с SIM и включите Cloud server."
+  - key: 4
+    anchor: sms.provider
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="sms.provider"]'
+    title:
+      sq: "Mënyra"
+      en: "How"
+      uk: "Спосіб"
+      ru: "Способ"
+    caption:
+      sq: "Telefoni juaj është falas; Twilio paguhet me llogarinë tuaj."
+      en: "Your phone is free; Twilio is paid with your own account."
+      uk: "Ваш телефон безкоштовний; Twilio платний, з вашим акаунтом."
+      ru: "Ваш телефон бесплатный; Twilio платный, с вашим аккаунтом."
+  - key: 5
+    anchor: sms.url
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="sms.url"]'
+    title:
+      sq: "Adresa"
+      en: "Address"
+      uk: "Адреса"
+      ru: "Адрес"
+    caption:
+      sq: "Lëreni bosh për cloud-in e SMSGate."
+      en: "Leave it empty for the SMSGate cloud."
+      uk: "Залиште порожнім для хмари SMSGate."
+      ru: "Оставьте пустым для облака SMSGate."
+  - key: 6
+    anchor: sms.user
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="sms.user"]'
+    title:
+      sq: "Përdoruesi"
+      en: "Username"
+      uk: "Логін"
+      ru: "Логин"
+    caption:
+      sq: "Kopjojeni nga aplikacioni."
+      en: "Copy it from the app."
+      uk: "Скопіюйте із застосунку."
+      ru: "Скопируйте из приложения."
+  - key: 7
+    anchor: sms.secret
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="sms.secret"]'
+    title:
+      sq: "Fjalëkalimi"
+      en: "Password"
+      uk: "Пароль"
+      ru: "Пароль"
+    caption:
+      sq: "Ruhet i fshehur; nuk shfaqet më."
+      en: "Kept hidden; never shown again."
+      uk: "Зберігається прихованим; більше не показується."
+      ru: "Хранится скрытым; больше не показывается."
+  - key: 8
+    anchor: sms.from
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="sms.from"]'
+    title:
+      sq: "Numri dërgues"
+      en: "Sender number"
+      uk: "Номер відправника"
+      ru: "Номер отправителя"
+    caption:
+      sq: "Vetëm për Twilio."
+      en: "Twilio only."
+      uk: "Лише для Twilio."
+      ru: "Только для Twilio."
+  - key: 9
+    anchor: sms.daily
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="sms.daily"]'
+    title:
+      sq: "Kufiri ditor"
+      en: "Daily limit"
+      uk: "Денний ліміт"
+      ru: "Дневной лимит"
+    caption:
+      sq: "Mbron SIM-in nga bllokimi."
+      en: "Keeps the SIM from being blocked."
+      uk: "Захищає SIM від блокування."
+      ru: "Защищает SIM от блокировки."
+  - key: 10
+    anchor: sms.on
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="sms.on"]'
+    title:
+      sq: "Ndizni SMS"
+      en: "Turn texts on"
+      uk: "Увімкніть SMS"
+      ru: "Включите SMS"
+    caption:
+      sq: "Vetëm klientët që zgjodhën kutinë marrin SMS."
+      en: "Only customers who ticked the box get texts."
+      uk: "SMS отримують лише клієнти, які позначили поле."
+      ru: "SMS получают только клиенты, отметившие поле."
+  - key: 11
+    anchor: sms.save
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="sms.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+      ru: "Сохранить"
+    caption:
+      sq: "Hub-i kontrollon që asgjë nuk mungon."
+      en: "The hub checks that nothing is missing."
+      uk: "Хаб перевіряє, що нічого не бракує."
+      ru: "Хаб проверяет, что ничего не упущено."
+  - key: 12
+    anchor: sms.testPhone
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="sms.testPhone"]'
+    title:
+      sq: "Numri i provës"
+      en: "Test number"
+      uk: "Номер для тесту"
+      ru: "Номер для теста"
+    caption:
+      sq: "Numri juaj, i plotë: +355..."
+      en: "Your own number, in full: +355..."
+      uk: "Ваш номер повністю: +380..."
+      ru: "Ваш номер полностью: +380..."
+  - key: 13
+    anchor: sms.test
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="sms.test"]'
+    title:
+      sq: "Provë"
+      en: "Test"
+      uk: "Тест"
+      ru: "Тест"
+    caption:
+      sq: "Një SMS tani, dhe përgjigja e gateway-t."
+      en: "One text now, and the gateway's answer."
+      uk: "Одне SMS зараз і відповідь шлюзу."
+      ru: "Одно SMS сейчас и ответ шлюза."
+  - key: 14
+    anchor: sms.stopPhone
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="sms.stopPhone"]'
+    title:
+      sq: "Klienti tha STOP"
+      en: "A customer said STOP"
+      uk: "Клієнт сказав STOP"
+      ru: "Клиент сказал STOP"
+    caption:
+      sq: "Shkruani numrin e tij."
+      en: "Type their number."
+      uk: "Введіть його номер."
+      ru: "Введите его номер."
+  - key: 15
+    anchor: sms.stop
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="sms.stop"]'
+    title:
+      sq: "Ndalo"
+      en: "Stop"
+      uk: "Зупинити"
+      ru: "Остановить"
+    caption:
+      sq: "Asnjë SMS tjetër nuk shkon, as ato në pritje."
+      en: "No more texts go, not even the waiting ones."
+      uk: "Більше жодного SMS, навіть із черги."
+      ru: "Больше ни одного SMS, даже из очереди."
+  - key: 16
+    anchor: health.sms
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="health.sms"]'
+    title:
+      sq: "SMS në Shëndet"
+      en: "SMS in Health"
+      uk: "SMS у Стані"
+      ru: "SMS в Здоровье"
+    caption:
+      sq: "Nëse dërgimi dështon, e shihni këtu."
+      en: "If sending fails, you see it here."
+      uk: "Якщо надсилання не вдається, ви побачите це тут."
+      ru: "Если отправка не удаётся, вы увидите это здесь."

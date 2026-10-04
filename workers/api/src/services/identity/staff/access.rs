@@ -181,6 +181,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/telegram/group", Owner, No),
     ("post", "/api/owner/telegram/test", Owner, No),
     ("post", "/api/owner/telegram/unlink", Owner, No),
+    ("get", "/api/owner/sms", Owner, No), ("post", "/api/owner/sms", Owner, No), ("post", "/api/owner/sms/test", Owner, No), ("post", "/api/owner/sms/stop", Owner, No),
     ("get", "/api/owner/inbox", Owner, No),
     ("get", "/api/owner/threads", Owner, No),
     ("get", "/api/owner/inbox/:peer", Owner, No),
@@ -222,9 +223,8 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/logo/clear", Owner, No),
 ];
 
-/// Rows whose `lib.rs` line is handed back to the main session (a lane does
-/// not edit `lib.rs`). Until it lands, the row may name a route `lib.rs` does
-/// not have yet; once it lands the entry here is dead and may go.
+/// Rows whose `lib.rs` line is handed back to the main session (a lane does not edit `lib.rs`). Until it
+/// lands, the row may name a route `lib.rs` does not have yet; once it lands the entry here is dead and may go.
 #[allow(dead_code)]
 pub(crate) const HANDED_BACK: &[(&str, &str)] = &[];
 

@@ -28,7 +28,7 @@ export const SECTION_CAPS = {
   learn: KITCHEN,
   venue: OWNER, hours: KITCHEN, deliveryTerms: OWNER, deliveryArea: OWNER, payments: OWNER,
   branding: OWNER, features: OWNER, preview: KITCHEN, pubMenu: OWNER,
-  integrations: OWNER, notifications: OWNER, channels: OWNER, ebills: OWNER,
+  integrations: OWNER, notifications: OWNER, sms: OWNER, channels: OWNER, ebills: OWNER,
   printer: PASS, assistant: OWNER, mcp: OWNER, apiKeys: OWNER, cloud: OWNER,
   activation: OWNER, health: OWNER, dpa: OWNER,
 };

@@ -82,6 +82,8 @@ fn processor(id: &str) -> Option<(&'static str, &'static str)> {
             "merr vetëm adresën e internetit të pajisjes suaj dhe cila pjesë e hartës vizatohet; asnjë porosi, emër apo telefon"),
         "webpush" => ("Shtetet e Bashkuara dhe BE, sipas prodhuesit të shfletuesit tuaj",
             "vetëm kur aktivizoni njoftimet. Mesazhi është i enkriptuar deri te pajisja juaj, kështu që shërbimi i njoftimeve sheh adresën e pajisjes dhe orën, asnjëherë tekstin"),
+        "sms" => ("telefoni i vetë lokalit në Shqipëri, ose Shtetet e Bashkuara (textbee, Twilio) kur lokali përdor llogarinë e vet atje",
+            "vetëm kur shënoni kutinë SMS në porosi. Mesazhi mban numrin tuaj të telefonit, numrin e porosisë dhe emrin e lokalit, asgjë tjetër; thuajini lokalit STOP për ta ndalur"),
         _ => return None,
     })
 }

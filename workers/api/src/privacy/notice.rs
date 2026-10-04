@@ -48,6 +48,8 @@ pub struct On {
     pub cloud: bool,
     pub stripe: bool,
     pub ai: bool,
+    /// W-SMS: order-status texts are on here.
+    pub sms: bool,
 }
 
 impl On {
@@ -63,6 +65,7 @@ impl On {
             // Import-only: the venue's own login goes there, no customer data.
             // `recipients` drops it by what it receives; this says the same.
             Switch::EbillsLink => false,
+            Switch::Sms => self.sms,
         }
     }
 }
@@ -278,6 +281,7 @@ pub async fn serve(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
         cloud: crate::cloud::cfg(&s).is_some(),
         stripe: ctx.env.secret("STRIPE_PUBLISHABLE_KEY").is_ok(),
         ai: s.flag("ai.enabled") && s.known("ai.endpoint").starts_with("https://"),
+        sms: crate::notify::sms::config::of(&s).is_ok(),
     };
     let lang = lang_of(&req, loc.get("default_locale").and_then(Value::as_str).unwrap_or("sq"));
     html(render_venue(&venue, &on, &lang))
