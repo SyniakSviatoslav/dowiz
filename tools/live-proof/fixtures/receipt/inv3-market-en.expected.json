@@ -1,0 +1,35 @@
+{
+ "supplier": "fresh-market",
+ "nipt": "M23456789C",
+ "doc": "INV-2041",
+ "lines": [
+  {
+   "text": "Avocado Hass",
+   "item": "avocado",
+   "qty": 24,
+   "unit_price": 120,
+   "total": 2880
+  },
+  {
+   "text": "Cucumber",
+   "item": "cucumber",
+   "qty": 5.5,
+   "unit_price": 90,
+   "total": 495
+  },
+  {
+   "text": "Cream cheese 1,5 kg",
+   "item": "cream-cheese",
+   "qty": 4,
+   "unit_price": 1450,
+   "total": 5800
+  },
+  {
+   "text": "Sushi rice 10 kg bag",
+   "item": "rice",
+   "qty": 3,
+   "unit_price": 2100,
+   "total": 6300
+  }
+ ]
+}

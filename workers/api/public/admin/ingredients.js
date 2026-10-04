@@ -15,17 +15,21 @@ import { packsMarkup, packChips, bindPacks, deleteSupplies, N } from '/admin/nom
 import { me } from '/admin/app.js';
 import { T } from '/admin/i18n.js';
 import { WORDS as STOCK_WORDS } from '/admin/start-stock-i18n.js';
+import { WORDS as RP_WORDS } from '/admin/receipt-photo-i18n.js';
 
 export { KINDS };
 
 // W-STOCK (P1/P4/P5): its words into the console's table, and the tools row's
 // four sheets (`ingredients-view.js` toolsMarkup), each loaded on first open.
 for (const [l, w] of Object.entries(STOCK_WORDS)) if (T[l]) Object.assign(T[l], w);
+// W-OCR: the invoice sheet's words, and the sheet itself as a fifth tool.
+for (const [l, w] of Object.entries(RP_WORDS)) if (T[l]) Object.assign(T[l], w);
 const STOCKX = {
   start: () => import('/admin/start-stock.js'),
   losses: () => import('/admin/ingredients-loss.js'),
   suppliers: () => import('/admin/suppliers.js'),
   orders: () => import('/admin/order-list.js'),
+  invoice: () => import('/admin/receipt-photo.js'),
 };
 document.addEventListener('click', e => {
   const b = e.target?.closest?.('[data-stockx]');

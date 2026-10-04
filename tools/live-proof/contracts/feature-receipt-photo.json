@@ -1,0 +1,97 @@
+{
+  "contract": "stock.receipt_from_photo.v1",
+  "version": "1.0.0",
+  "description": {
+    "en": "An invoice photo becomes a goods receipt: the owner's browser reads the photo with tesseract.js (sqi+eng, vendored under /lib/ocr, no network), the owner confirms each line, each confirmed line is written through the existing receipt door POST /api/owner/stock/received (qty in the supply's base unit, the invoice total in whole lek, supplier, invoice number), and the line-text -> supply matches are remembered on the supplier's card through POST /api/owner/stock/alias, so the next invoice from that supplier arrives matched. The OCR is client-side; this contract covers the requests built from it and the read-back on GET /api/owner/stock.",
+    "uk": "Фото накладної стає прийманням товару: браузер власника читає фото (tesseract.js, sqi+eng, локально), власник підтверджує кожен рядок, рядки пишуться через наявний POST /api/owner/stock/received, а відповідності назв запамʼятовуються на картці постачальника (POST /api/owner/stock/alias)."
+  },
+  "external_api_version": "tesseract.js 7.0.0 / tesseract.js-core 7.0.0 / tessdata_best_int 4.0.0 (sqi, eng) -- client-side only, no remote API",
+  "producer": [
+    "workers/api/src/services/operations/stock/moves.rs:200 (plan, kind \"received\")",
+    "workers/api/src/services/operations/stock/aliases.rs:157 (run, kind \"alias\")",
+    "workers/api/src/services/operations/stock.rs:175 (view field supplierAliases)"
+  ],
+  "consumer": [
+    "workers/api/public/admin/receipt-photo.js:135 (confirm: received per line, then alias)",
+    "workers/api/public/admin/receipt-photo-logic.js:179 (receivedBody), :192 (aliasBody)"
+  ],
+  "requests": {
+    "POST /api/owner/stock/received": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item", "qty", "total"],
+      "properties": {
+        "item": { "type": "string", "minLength": 1, "description": "supply id the owner confirmed" },
+        "qty": { "type": "integer", "minimum": 1, "description": "base unit of the supply: g, ml or pieces" },
+        "total": { "type": "integer", "minimum": 0, "description": "the invoice line amount, whole lek" },
+        "supplier": { "type": "string", "description": "the supplier card's name" },
+        "doc": { "type": "string", "description": "the invoice number" }
+      }
+    },
+    "POST /api/owner/stock/alias": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["card"],
+      "properties": {
+        "card": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["supplier"],
+          "properties": {
+            "supplier": { "type": "string", "description": "supplier card id" },
+            "nipt": { "type": "string", "pattern": "^[A-Za-z][0-9]{8}[A-Za-z]$", "description": "the supplier BUSINESS tax number" },
+            "lines": {
+              "type": "array", "maxItems": 100,
+              "items": {
+                "type": "object", "additionalProperties": false, "required": ["text", "item"],
+                "properties": {
+                  "text": { "type": "string", "minLength": 1, "maxLength": 120, "description": "the line's words, numbers dropped; stored lower-cased, single-spaced" },
+                  "item": { "type": "string", "description": "supply id, or empty to forget the alias" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "responses": {
+    "POST /api/owner/stock/alias 200": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["ok", "kind", "written", "known"],
+      "properties": {
+        "ok": { "const": true },
+        "kind": { "const": "alias" },
+        "written": { "type": "integer", "minimum": 0, "description": "notes appended: only what changed" },
+        "known": { "$ref": "#/$defs/known" }
+      },
+      "$defs": {
+        "known": {
+          "type": "object", "required": ["nipt", "lines"],
+          "properties": { "nipt": { "type": "string" }, "lines": { "type": "object", "additionalProperties": { "type": "string" } } }
+        }
+      }
+    },
+    "GET /api/owner/stock 200 (fields this feature reads)": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["supplierAliases", "supplierCards", "supplies"],
+      "properties": {
+        "supplierAliases": { "type": "object", "additionalProperties": { "type": "object", "required": ["nipt", "lines"] } },
+        "supplierCards": { "type": "array" },
+        "supplies": { "type": "array" }
+      }
+    }
+  },
+  "errors": {
+    "400": "body not {card}, unknown field (strict), a line's words empty or over 120 characters, more than 100 lines, a NIPT that is not letter+8 digits+letter, over 500 aliases for one supplier",
+    "404": "no supplier card with that id, or a supply id that does not exist",
+    "401/403": "not the venue's owner or staff"
+  },
+  "personal_data": "none: line text is a product name as printed, item a supply id, the NIPT a business's public tax number; the card's contact person stays on the card (registry/venue.rs, image stock)",
+  "probe": "tools/live-proof/probes/receipt-photo.mjs",
+  "limits": "OCR accuracy is measured on SYNTHETIC images only (tools/live-proof/fixtures/receipt); real phone photos of real invoices are unmeasured."
+}

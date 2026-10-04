@@ -1,0 +1,141 @@
+# Lesson O27 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-OCR (P10/P11): an invoice photo or an e-invoice file into stock. The photo and file steps
+# WAIT: they open the phone's camera or file picker, which a recording must not answer.
+id: O27
+role: owner
+module: stock
+order: 41
+covers: []
+title:
+  sq: "Fatura në magazinë"
+  en: "An invoice into stock"
+  uk: "Накладна на склад"
+  ru: "Накладная на склад"
+goal:
+  sq: "Merrni një dorëzim nga fotoja e faturës ose nga e-fatura, duke konfirmuar çdo rresht."
+  en: "Receive a delivery from a photo of its invoice or from the e-invoice, confirming every line."
+  uk: "Прийняти поставку з фото накладної або з е-фактури, підтверджуючи кожен рядок."
+  ru: "Принять поставку с фото накладной или из э-фактуры, подтверждая каждую строку."
+steps:
+  - key: 1
+    anchor: nav.stock
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.stock"]'
+    title:
+      sq: "Magazina"
+      en: "Stock"
+      uk: "Склад"
+      ru: "Склад"
+    caption:
+      sq: "Mjetet e magazinës janë poshtë listës."
+      en: "The stock tools are under the list."
+      uk: "Інструменти складу під списком."
+      ru: "Инструменты склада под списком."
+  - key: 2
+    anchor: stock.invoice
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.invoice"]'
+    title:
+      sq: "Nga fatura"
+      en: "From an invoice"
+      uk: "З накладної"
+      ru: "Из накладной"
+    caption:
+      sq: "Hap fletën ku një faturë bëhet marrje në magazinë."
+      en: "Opens the sheet where an invoice becomes a delivery."
+      uk: "Відкриває аркуш, де накладна стає прийманням."
+      ru: "Открывает лист, где накладная становится приёмкой."
+  - key: 3
+    anchor: receipt.supplier
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="receipt.supplier"]'
+    title:
+      sq: "Furnitori"
+      en: "The supplier"
+      uk: "Постачальник"
+      ru: "Поставщик"
+    caption:
+      sq: "Zgjidhni furnitorin: kartela e tij mban mend si i quan ai produktet."
+      en: "Choose the supplier: their card remembers what they call each product."
+      uk: "Оберіть постачальника: його картка памʼятає, як він називає кожен товар."
+      ru: "Выберите поставщика: его карточка помнит, как он называет каждый товар."
+  - key: 4
+    anchor: receipt.photo
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="receipt.photo"]'
+    title:
+      sq: "Nga një foto"
+      en: "From a photo"
+      uk: "З фото"
+      ru: "С фото"
+    caption:
+      sq: "Fotografoni faturën. Lexohet në telefon; herën e parë ngarkohen rreth 5 MB."
+      en: "Photograph the invoice. It is read on the phone; the first time loads about 5 MB."
+      uk: "Сфотографуйте накладну. Вона читається на телефоні; уперше завантажується близько 5 МБ."
+      ru: "Сфотографируйте накладную. Она читается на телефоне; в первый раз загружается около 5 МБ."
+  - key: 5
+    anchor: receipt.einvoice
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="receipt.einvoice"]'
+    title:
+      sq: "Ose e-fatura"
+      en: "Or the e-invoice"
+      uk: "Або е-фактура"
+      ru: "Или э-фактура"
+    caption:
+      sq: "Ngarkoni XML-në e e-faturës që ju dërgoi furnitori: lexohet saktë, pa foto."
+      en: "Upload the e-invoice XML the supplier sent you: it is read exactly, no photo needed."
+      uk: "Завантажте XML е-фактури від постачальника: вона читається точно, без фото."
+      ru: "Загрузите XML э-фактуры от поставщика: она читается точно, без фото."
+  - key: 6
+    anchor: receipt.match
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="receipt.match"]'
+    title:
+      sq: "Çdo rresht, një përbërës"
+      en: "Each line, one ingredient"
+      uk: "Кожен рядок, один інгредієнт"
+      ru: "Каждая строка, один ингредиент"
+    caption:
+      sq: "Kontrolloni përbërësin dhe shenjat e kuqe: sasia x çmimi që nuk jep vlerën."
+      en: "Check the ingredient and the red marks: a qty x price that is not the amount."
+      uk: "Перевірте інгредієнт і червоні позначки: кількість x ціна, що не дає суму."
+      ru: "Проверьте ингредиент и красные отметки: количество x цена, не дающие сумму."
+  - key: 7
+    anchor: receipt.confirm
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="receipt.confirm"]'
+    title:
+      sq: "Konfirmo"
+      en: "Confirm"
+      uk: "Підтвердити"
+      ru: "Подтвердить"
+    caption:
+      sq: "Çdo rresht hyn në magazinë me çmimin e faturës; fatura tjetër e këtij furnitori vjen e përputhur."
+      en: "Each line goes into stock at the invoice price; the next invoice from this supplier arrives matched."
+      uk: "Кожен рядок іде на склад за ціною накладної; наступна накладна цього постачальника прийде зіставленою."
+      ru: "Каждая строка идёт на склад по цене накладной; следующая накладная этого поставщика придёт сопоставленной."

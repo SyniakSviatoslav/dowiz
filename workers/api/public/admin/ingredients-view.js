@@ -42,10 +42,12 @@ export function alertsMarkup(all, noRecipe, flag, t){
 /// shelf of fewer than ten things), Losses, Suppliers, the Order list. Opened by
 /// `data-stockx` (ingredients.js), never by the Stock screen's own handler.
 export const TOOLS = [{ id: 'start', ic: 'sparkles', word: 'ss_start' }, { id: 'losses', ic: 'chart-bar', word: 'ls_title' },
-  { id: 'suppliers', ic: 'building', word: 'su_title' }, { id: 'orders', ic: 'receipt', word: 'ol_title' }];
+  { id: 'suppliers', ic: 'building', word: 'su_title' }, { id: 'orders', ic: 'receipt', word: 'ol_title' },
+  // W-OCR (P10/P11): an invoice photo or e-invoice file into stock.
+  { id: 'invoice', ic: 'camera-plus', word: 'rp_tool', tour: 'stock.invoice' }];
 export function toolsMarkup(all){
   const fresh = (all || []).length < 10;
-  return `<div class="btn-row inv-tools">${TOOLS.map(x => btn({ variant: x.id === 'start' && fresh ? 'primary' : 'ghost', icon: x.ic, key: x.word, data: { stockx: x.id } })).join('')}</div>`;
+  return `<div class="btn-row inv-tools">${TOOLS.map(x => btn({ variant: x.id === 'start' && fresh ? 'primary' : 'ghost', icon: x.ic, key: x.word, data: { stockx: x.id }, tour: x.tour })).join('')}</div>`;
 }
 
 /// One ingredient: its facts, its levels, its state and its four actions.

@@ -429,3 +429,9 @@ ai.number workers/api/public/admin/ai.js:77
 ai.explain workers/api/public/admin/ai.js:120
 ai.reword workers/api/public/admin/ai.js:123
 assistant.ask workers/api/public/admin/ai.js:27
+receipt.confirm workers/api/public/admin/receipt-photo.js:78
+receipt.einvoice workers/api/public/admin/receipt-photo.js:74
+receipt.match workers/api/public/admin/receipt-photo.js:96
+receipt.photo workers/api/public/admin/receipt-photo.js:74
+receipt.supplier workers/api/public/admin/receipt-photo.js:71
+stock.invoice workers/api/public/admin/ingredients-view.js:47

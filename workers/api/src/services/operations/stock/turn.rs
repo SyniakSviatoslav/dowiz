@@ -122,6 +122,10 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn, expiring_due: bool) -> Resul
     if input.kind == super::suppliers::CARD || input.kind == super::suppliers::ORDERED {
         return super::suppliers::run(log, input);
     }
+    // WHAT A SUPPLIER'S INVOICES CALL OUR SUPPLIES (W-OCR): notes, never a movement.
+    if input.kind == super::aliases::KIND {
+        return super::aliases::run(log, input);
+    }
     let body: moves::StockMoveIn = serde_json::from_value(input.body.clone()).map_err(|e| (400, format!("bad request body: {e}")))?;
     let shelf = |id: &str| input.supplies.get(id).and_then(|s| s.shelf_days);
     let plan = moves::plan(&input.kind, body, &input.by, input.now_ms, input.today, shelf)?;

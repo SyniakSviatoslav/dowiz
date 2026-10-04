@@ -44,6 +44,10 @@
   # script-src: self, plus Stripe, which cannot be self-hosted — its script is
   #   versioned by Stripe and pinning a copy is how a payment integration ends
   #   up running last year's fraud checks.
+  #   'wasm-unsafe-eval' (W-OCR, 2026-10-04): lets a page or worker COMPILE
+  #   WebAssembly -- the invoice reader's tesseract core under /lib/ocr, all
+  #   self-hosted. It allows no JavaScript eval and no other origin's code;
+  #   without it the owner's "From a photo" tap fails with a CSP error.
   # img-src: `data:` for the inline SVG masks in icons.css, `blob:` for a photo
   #   the owner has chosen but not yet uploaded.
   # worker-src `blob:`: MapLibre builds its tile workers from blob URLs. Without
@@ -63,4 +67,4 @@
   #   shell's fetch is blocked and every visit reads through the Worker again.
   # base-uri 'none': a `<base>` injected into the page would silently re-point
   #   every relative fetch, including the API ones.
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://cdn.dowiz.org https://tiles.openfreemap.org; font-src 'self'; media-src 'self' blob:; connect-src 'self' wss://*.dowiz.org https://cdn.dowiz.org https://tiles.openfreemap.org https://api.stripe.com https://nominatim.openstreetmap.org; worker-src 'self' blob:; frame-src 'self' https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://cdn.dowiz.org https://tiles.openfreemap.org; font-src 'self'; media-src 'self' blob:; connect-src 'self' wss://*.dowiz.org https://cdn.dowiz.org https://tiles.openfreemap.org https://api.stripe.com https://nominatim.openstreetmap.org; worker-src 'self' blob:; frame-src 'self' https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; upgrade-insecure-requests

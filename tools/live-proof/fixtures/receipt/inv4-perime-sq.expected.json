@@ -1,0 +1,35 @@
+{
+ "supplier": "perime-durresi",
+ "nipt": "L34567890D",
+ "doc": "77",
+ "lines": [
+  {
+   "text": "Avokado",
+   "item": "avocado",
+   "qty": 12,
+   "unit_price": 130,
+   "total": 1560
+  },
+  {
+   "text": "Kastravec",
+   "item": "cucumber",
+   "qty": 3,
+   "unit_price": 80,
+   "total": 240
+  },
+  {
+   "text": "Limon",
+   "item": "lemon",
+   "qty": 30,
+   "unit_price": 25,
+   "total": 750
+  },
+  {
+   "text": "Xhenxhefil",
+   "item": "ginger",
+   "qty": 0.5,
+   "unit_price": 900,
+   "total": 450
+  }
+ ]
+}

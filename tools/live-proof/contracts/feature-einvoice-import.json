@@ -1,0 +1,56 @@
+{
+  "contract": "stock.einvoice_import.v1",
+  "version": "1.0.0",
+  "description": {
+    "en": "The owner uploads the e-invoice file a supplier sent (UBL 2.1 Invoice XML, as exchanged through Albania's CIS, or a PDF that embeds it). The console parses it exactly in the browser (no OCR, no network), finds the supplier card by the NIPT an earlier import remembered (else by name), pre-matches lines by the supplier's aliases, and after the owner confirms writes the same requests as stock.receipt_from_photo.v1: POST /api/owner/stock/received per line and POST /api/owner/stock/alias with the NIPT. No CIS or e-Fatura call is made; the ebills client is unchanged.",
+    "uk": "Власник завантажує файл е-фактури постачальника (UBL 2.1 XML або PDF з ним); консоль точно розбирає його в браузері, знаходить картку постачальника за NIPT, і після підтвердження пише ті самі запити, що й прийом із фото. Жодного виклику CIS."
+  },
+  "external_api_version": "UBL 2.1 / AL CIS",
+  "external_reference": "OASIS UBL 2.1, Invoice schema xsd/maindoc/UBL-Invoice-2.1.xsd, http://docs.oasis-open.org/ubl/os-UBL-2.1/UBL-2.1.html (accessed 2026-10-04)",
+  "producer": [
+    "workers/api/src/services/operations/stock/moves.rs:200 (plan, kind \"received\")",
+    "workers/api/src/services/operations/stock/aliases.rs:157 (run, kind \"alias\", nipt)"
+  ],
+  "consumer": [
+    "workers/api/public/admin/einvoice-logic.js:88 (parseInvoice)",
+    "workers/api/public/admin/receipt-photo.js:123 (file chosen -> parseInvoice -> the same confirm)"
+  ],
+  "input_file": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "What parseInvoice returns from the UBL file (the request bodies are those of stock.receipt_from_photo.v1).",
+    "type": "object",
+    "required": ["supplier", "nipt", "doc", "date", "lines"],
+    "properties": {
+      "supplier": { "type": "string", "description": "cac:AccountingSupplierParty/cac:Party PartyName/Name or PartyLegalEntity/RegistrationName" },
+      "nipt": { "type": "string", "description": "PartyTaxScheme/CompanyID or PartyIdentification/ID" },
+      "doc": { "type": "string", "description": "cbc:ID" },
+      "date": { "type": "string", "description": "cbc:IssueDate" },
+      "lines": {
+        "type": "array", "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["text", "key", "qty", "unit", "unit_price", "total", "flags"],
+          "properties": {
+            "text": { "type": "string" }, "key": { "type": "string" },
+            "qty": { "type": "object", "required": ["v", "d"], "properties": { "v": { "type": "integer" }, "d": { "type": "integer" } }, "description": "exact decimal v / 10^d" },
+            "unit": { "type": "string", "description": "from @unitCode, UN/ECE Rec 20: KGM kg, GRM g, LTR l, MLT ml, H87/C62/XPP/EA/PCE piece" },
+            "unit_price": { "type": ["integer", "null"] },
+            "total": { "type": "integer", "description": "cbc:LineExtensionAmount, whole lek" },
+            "flags": { "type": "array", "items": { "enum": ["rounded", "unit"] } }
+          }
+        }
+      }
+    }
+  },
+  "refusals": {
+    "ei_bad": "not well-formed XML, or a DOCTYPE with an internal subset (no entity expansion)",
+    "ei_notInvoice": "root is not a UBL Invoice",
+    "ei_credit": "a CreditNote",
+    "ei_currency": "DocumentCurrencyCode is not ALL",
+    "ei_line": "no lines, or a line without quantity, amount or name",
+    "ei_pdfNoXml": "a PDF with no embedded e-invoice: use the photo"
+  },
+  "personal_data": "none written: the NIPT is the supplier business's tax number; the buyer party is read past and never stored",
+  "probe": "tools/live-proof/probes/einvoice-import.mjs",
+  "limits": "Tested on a SELF-MADE UBL 2.1 sample only (tools/live-proof/fixtures/receipt/einvoice-peshku.xml): no real CIS-issued e-invoice was available (needs a real NIPT; operator declined). A real e-invoice may carry extensions this reader ignores."
+}

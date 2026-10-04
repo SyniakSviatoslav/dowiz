@@ -28,6 +28,8 @@ pub mod suppliers;
 pub mod order_list;
 /// The weekly loss digest to the groups, pure (W-STOCK P4).
 pub mod digest;
+/// What a supplier's invoices call our supplies, as notes on the log (W-OCR P10/P11).
+pub mod aliases;
 pub use moves::StockMoveIn;
 #[cfg(test)]
 use moves::movement;
@@ -169,6 +171,8 @@ pub fn shelf(cat: &dowiz_hub::catalog::Catalog, log: &dowiz_hub::stock::StockLog
         // I0c: every dish that takes nothing off the shelf yet.
         "noRecipe": as_is::without_recipe(cat),
         "supplierCards": cards, "orderList": list,
+        // W-OCR: what each supplier's invoices are known to say (`aliases`).
+        "supplierAliases": aliases::fold(log),
     }))
 }
 

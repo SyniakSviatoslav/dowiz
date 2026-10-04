@@ -1,0 +1,42 @@
+{
+ "supplier": "peshku-i-detit",
+ "nipt": "K12345678A",
+ "doc": "131/2026",
+ "lines": [
+  {
+   "text": "Salmon fileto Norvegjeze",
+   "item": "salmon",
+   "qty": 3,
+   "unit_price": 1800,
+   "total": 5400
+  },
+  {
+   "text": "Ton i freskët",
+   "item": "tuna",
+   "qty": 0.8,
+   "unit_price": 3250,
+   "total": 2600
+  },
+  {
+   "text": "Karkaleca deti",
+   "item": "shrimp",
+   "qty": 2,
+   "unit_price": 2400,
+   "total": 4800
+  },
+  {
+   "text": "Fletë nori",
+   "item": "nori",
+   "qty": 40,
+   "unit_price": 150,
+   "total": 6000
+  },
+  {
+   "text": "Xhenxhefil turshi",
+   "item": "ginger",
+   "qty": 1,
+   "unit_price": 900,
+   "total": 900
+  }
+ ]
+}
