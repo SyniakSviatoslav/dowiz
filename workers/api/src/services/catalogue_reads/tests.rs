@@ -292,7 +292,10 @@ fn the_privacy_notice_answers_the_same_bytes() {
 }
 // Re-pinned 2026-10-02 at the W-URGENT merge: the notice now declares the courier chat (threads kind "cc",
 // 30-day retention, erased by forget). Control: the OLD registry still gives 0f7845e3... (the pin BN1B recorded).
-const PIN_PRIVACY: &str = r##"200 sha256:3185e88fbdef586f82866b3bfde113adfd9707a4c055f3b37c80261297809b72"##;
+// Re-pinned 2026-10-04 by W-MR0: the notice now declares the guest's taste profile (image "taste", purpose
+// Personalisation, basis legitimate interest, 12-month retention, objection in one tap) and its purpose
+// sentence in four languages. The pin before this row was 3185e88f... (W-URGENT, 2026-10-02).
+const PIN_PRIVACY: &str = r##"200 sha256:640eb9a7cbb15531ae88d18577f54236fcb9be5c2a4c688c9e9db76f2166d4ad"##;
 
 fn csv_call(owner: &str, path: &str, body: &str) -> Call {
     Call::new(&at("alpha", path), worker::Method::Post).unwrap().with_body(body.as_bytes().to_vec()).bearer(owner).on("alpha")

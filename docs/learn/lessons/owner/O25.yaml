@@ -1,0 +1,108 @@
+# Lesson O25 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-MR0 (2026-10-04): what the menu may claim. The undeclared-allergen count on the menu screen,
+# declaring a dish's allergens (the fourteen, or "none of the 14"), and the storefront's
+# "most ordered this week" number on the analytics pane. Declaring WRITES, so those steps wait.
+id: O25
+role: owner
+module: menu
+order: 41
+covers: []
+title:
+  sq: "Çfarë thotë menyja: alergjenët dhe më e porositura"
+  en: "What the menu claims: allergens and most ordered"
+  uk: "Що каже меню: алергени й найчастіше замовляють"
+  ru: "Что говорит меню: аллергены и чаще всего заказывают"
+goal:
+  sq: "Deklaroni alergjenët e çdo pjate dhe shihni numrin që vitrina tregon si më të porositurën."
+  en: "Declare every dish's allergens and see the number the storefront shows as most ordered."
+  uk: "Заявити алергени кожної страви й побачити число, яке вітрина показує як найчастіше замовлене."
+  ru: "Заявить аллергены каждого блюда и увидеть число, которое витрина показывает как чаще всего заказываемое."
+steps:
+  - key: 1
+    anchor: menu.undeclared
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.undeclared"]'
+    title:
+      sq: "Pjatat pa deklaratë"
+      en: "Dishes without a declaration"
+      uk: "Страви без заяви"
+      ru: "Блюда без заявления"
+    caption:
+      sq: "Numri dhe lista e pjatave për të cilat askush nuk ka thënë çfarë alergjenësh kanë."
+      en: "How many dishes nobody has declared allergens for, and which."
+      uk: "Скільки страв ніхто не заявив щодо алергенів, і які саме."
+      ru: "Сколько блюд никто не заявил по аллергенам, и какие именно."
+  - key: 2
+    anchor: menu.undeclaredDish
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="menu.undeclaredDish"]'
+    title:
+      sq: "Hapni një pjatë"
+      en: "Open a dish"
+      uk: "Відкрийте страву"
+      ru: "Откройте блюдо"
+    caption:
+      sq: "Prekni një rresht: hapet karta e pjatës."
+      en: "Tap a row: the dish's sheet opens."
+      uk: "Торкніться рядка: відкриється картка страви."
+      ru: "Нажмите на строку: откроется карточка блюда."
+  - key: 3
+    anchor: dish.allergen
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="dish.allergen"]'
+    title:
+      sq: "Çfarë përmban"
+      en: "What it contains"
+      uk: "Що містить"
+      ru: "Что содержит"
+    caption:
+      sq: "Prekni alergjenët e pjatës nga 14 të BE-së, pastaj Ruaj."
+      en: "Tap the dish's allergens from the EU fourteen, then Save."
+      uk: "Позначте алергени страви з 14 ЄС, потім Зберегти."
+      ru: "Отметьте аллергены блюда из 14 ЕС, затем Сохранить."
+  - key: 4
+    anchor: dish.allergenNone
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="dish.allergenNone"]'
+    title:
+      sq: "Asnjë nga 14"
+      en: "None of the 14"
+      uk: "Жодного з 14"
+      ru: "Ни одного из 14"
+    caption:
+      sq: "Edhe kjo është përgjigje. Një fushë e paprekur nuk është: pjata nuk del në shitje kur filtri është ndezur."
+      en: "That is an answer too. An untouched field is not: with the filter on, the dish cannot go on sale."
+      uk: "Це теж відповідь. Незаповнене поле — ні: з увімкненим фільтром страва не піде в продаж."
+      ru: "Это тоже ответ. Незаполненное поле — нет: с включённым фильтром блюдо не пойдёт в продажу."
+  - key: 5
+    anchor: analytics.weekTop
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="analytics.weekTop"]'
+    title:
+      sq: "Më e porositura këtë javë"
+      en: "Most ordered this week"
+      uk: "Найчастіше замовляють цього тижня"
+      ru: "Чаще всего заказывают на этой неделе"
+    caption:
+      sq: "Në Analitikë: i njëjti numër që tregon shenja në vitrinë, pa porositë TEST."
+      en: "In Analytics: the same number the storefront badge shows, without TEST orders."
+      uk: "В Аналітиці: те саме число, що й позначка на вітрині, без TEST-замовлень."
+      ru: "В Аналитике: то же число, что и значок на витрине, без TEST-заказов."

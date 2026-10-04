@@ -155,6 +155,9 @@ pub fn answer_with(
     };
     let mut out = history::report(zone, s, &rows, &hot, &name);
     out["repeat"] = history::repeat(&hot_orders, zone, s);
+    // "Most ordered this week" (W-MR0): the storefront badge's own fold over the
+    // same hot orders, so the pane and the badge cannot disagree. v2 only.
+    out["weekTop"] = super::week_top::owner(&hot_orders, zone, now, &name);
     out["history"] = json!({ "archivedDays": rows.len(), "error": unread });
     out["currency"] = json!(crate::services::venue::currency_of(cat));
     Ok(out)

@@ -53,6 +53,9 @@ pub enum Data {
     Device,
     Ip,
     Photo,
+    /// A guest's taste and menu behaviour, scored (W-MR0, D0 amendment 2026-10-04): on the
+    /// device always opt-in, on the server only under the `personalisation` consent.
+    Taste,
 }
 
 /// Whose data it is.
@@ -88,6 +91,8 @@ pub enum Purpose {
     Prospect,
     Erasure,
     Operations,
+    /// The guest's taste, scored to suggest dishes, under its own consent (W-MR0 MR8, D0 2026-10-04).
+    Personalisation,
 }
 
 /// The lawful basis, Law 124/2024 Art. 7(1) (GDPR Art. 6(1)).
@@ -143,6 +148,8 @@ pub enum Exporter {
     Missing(&'static str),
     /// Nothing to export.
     NotPersonal,
+    /// The route that hands the person their copy (W-MR0: the taste profile).
+    Route(&'static str),
 }
 
 /// Which object the image lives in.

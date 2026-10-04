@@ -370,3 +370,60 @@ fn every_language_has_a_wording() {
     }
     assert_eq!(&LANGS[..], &crate::lang::LANGS[..], "the consent set is the language set");
 }
+
+// ── personalisation (W-MR0 row MR8, D0 amendment 2026-10-04) ──────────────────
+fn personal(state: State, at_ms: i64) -> Act {
+    Act {
+        purpose: PURPOSE_PERSONALISATION.to_string(),
+        channel: CHANNEL_STOREFRONT.to_string(),
+        wording_id: personalisation_wording_id("en"),
+        ..act(state, at_ms)
+    }
+}
+
+#[test]
+fn personalisation_is_its_own_purpose_on_the_storefront_channel_only() {
+    assert!(check(&personal(State::Given, 10)).is_ok());
+    let on_whatsapp = Act { channel: CHANNEL_WHATSAPP.into(), ..personal(State::Given, 10) };
+    assert!(check(&on_whatsapp).is_err(), "personalisation is not a message channel");
+    let offers_on_storefront = Act { channel: CHANNEL_STOREFRONT.into(), ..act(State::Given, 10) };
+    assert!(check(&offers_on_storefront).is_err(), "offers may not be filed on the storefront channel");
+    let l = log(&[act(State::Given, 10), personal(State::Withdrawn, 20)]);
+    assert!(state(&l, KEY, PURPOSE_MARKETING, CHANNEL_WHATSAPP).is_some(), "withdrawing personalisation leaves the offers consent");
+    assert!(state(&l, KEY, PURPOSE_PERSONALISATION, CHANNEL_STOREFRONT).is_none());
+}
+
+#[test]
+fn a_purposes_grant_must_name_one_of_its_own_sentences() {
+    for l in LANGS {
+        assert!(lang_of_personalisation(&personalisation_wording_id(l)) == Some(l), "{l}");
+        assert!(log::lang_of_wording(&personalisation_wording_id(l)).is_none(), "a personalisation id is not an offers id ({l})");
+        assert_ne!(personalisation_wording_id(l), wording_id(l));
+    }
+    let mut img = crate::logimage::LogImage::create().unwrap();
+    assert!(log::write(&mut img, &personal(State::Given, 10)).is_ok());
+    let crossed = Act { wording_id: wording_id("en"), ..personal(State::Given, 11) };
+    assert!(log::write(&mut img, &crossed).is_err(), "the offers sentence cannot prove a personalisation grant");
+    let w = img.about(KIND_WORDING, Some(&personalisation_wording_id("en")), 1);
+    assert_eq!(w.len(), 1, "the sentence is filed with the first grant");
+    assert!(w[0].json.contains("Never for prices"), "{}", w[0].json);
+}
+
+/// OPERATOR RULING 2026-10-04: personalisation is ON unless the guest objected. No act is not an
+/// objection; the guest's one tap is; turning it back on (a grant naming its sentence) undoes it;
+/// an erasure is one too; and nobody else's objection counts.
+#[test]
+fn personalisation_is_on_until_the_guest_objects() {
+    let objection = |at| Act { method: Method::Objection, wording_id: String::new(), ..personal(State::Withdrawn, at) };
+    assert!(check(&objection(5)).is_ok(), "an objection needs no sentence");
+    assert!(!objected(&log(&[]), KEY), "no act at all: on (legitimate interest), not objected");
+    assert!(!objected(&log(&[act(State::Withdrawn, 9)]), KEY), "stopping offers is not objecting to personalisation");
+    assert!(objected(&log(&[objection(10)]), KEY));
+    assert!(!objected(&log(&[objection(10)]), OTHER), "one guest's objection is theirs alone");
+    assert!(!objected(&log(&[objection(10), personal(State::Given, 20)]), KEY), "turned back on");
+    assert!(objected(&log(&[personal(State::Given, 10), objection(10)]), KEY), "a tie goes to the objection");
+    let erased = Act { method: Method::Erasure, wording_id: String::new(), ..personal(State::Withdrawn, 30) };
+    assert!(objected(&log(&[personal(State::Given, 20), erased]), KEY), "an erasure stops it too");
+    assert_eq!(Method::of("objection"), Some(Method::Objection));
+    assert_eq!(Method::Objection.as_str(), "objection");
+}

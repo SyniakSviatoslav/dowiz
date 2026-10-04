@@ -12,7 +12,7 @@
 
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-shell-2026-10-04-bag';
+const SHELL_CACHE = 'dowiz-shell-2026-10-04-bag-taste';
 /// THE WHOLE MODULE GRAPH, not just its entry.
 ///
 /// This list used to hold the document, `/app.js` and the three stylesheets,
@@ -46,11 +46,14 @@ const SHELL_CACHE_MODULES = [
   '/lib/vocab.js',
   // The menu read's bounded retry (W-QA 2026-09-26): app.js imports it statically.
   '/lib/retry.js',
+  '/store/avoid.js',
   '/store/cart.js',
   // The privacy-notice link (P8): menu.js and booking.js import it statically.
   '/store/consent.js',
   '/store/dish.js',
   '/store/eta.js',
+  // W-MR0: the allergen filter, the week badge and the guest's taste memory (menu.js imports them).
+  '/store/flags.js',
   '/store/i18n.js',
   '/store/i18n-ru.js',
   '/store/install.js',
@@ -72,6 +75,9 @@ const SHELL_CACHE_MODULES = [
   '/store/bag.js',
   '/store/bag-core.js',
   '/store/bag-words.js',
+  '/store/taste.js',
+  '/store/taste-device.js',
+  '/store/taste-words.js',
   '/store/ui.js',
   '/store/venue.js',
   // The design system: `index.js` re-exports every component module, so the

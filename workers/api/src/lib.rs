@@ -306,6 +306,7 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .get("/api/version", version::serve)
         // ── public storefront ──
         .get_async("/api/public/locations/:slug/menu", |r, c| edge::run(r, c, storefront::menu))
+        .get_async("/api/public/locations/:slug/menu/week", |r, c| edge::run(r, c, services::analytics::week_route::week))
         .get_async("/manifest.webmanifest", |r, c| edge::run(r, c, storefront::manifest))
         // P8/P9: the venue's privacy notice (venue from the Host) and the DPA text.
         .get_async("/privacy", |r, c| edge::run(r, c, privacy::notice::serve))
@@ -409,6 +410,8 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .post_async("/api/staff/orders/:id/guest", |r, c| edge::run(r, c, services::orders::room::guest_round::confirm))
         .get_async("/api/order/:id/sitting", |r, c| edge::run(r, c, services::orders::room::guest_round::sitting_bill))
         .get_async("/api/order/:id/stamps", |r, c| edge::run(r, c, services::loyalty::handlers::order_stamps))
+        .get_async("/api/order/:id/taste", |r, c| edge::run(r, c, services::customers::taste_routes::guest_view))
+        .post_async("/api/order/:id/taste/withdraw", |r, c| edge::run(r, c, services::customers::taste_routes::guest_withdraw))
         // ── owner ──
         .get_async("/api/owner/orders", |r, c| edge::run(r, c, owner::orders))
         .post_async("/api/owner/orders/:id/action", |r, c| edge::run(r, c, owner::order_action))
@@ -444,6 +447,8 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .get_async("/api/owner/customers", |r, c| edge::run(r, c, services::customers::handlers::customers))
         .post_async("/api/owner/customers/:key/reveal", |r, c| edge::run(r, c, services::customers::handlers::reveal_customer))
         .post_async("/api/owner/customers/:key/forget", |r, c| edge::run(r, c, services::customers::forget::forget_customer))
+        .get_async("/api/owner/customers/:key/taste", |r, c| edge::run(r, c, services::customers::taste_routes::owner_view))
+        .get_async("/api/owner/customers/taste/segments", |r, c| edge::run(r, c, services::customers::taste_routes::owner_segments))
         .get_async("/api/owner/customers/reveals", |r, c| edge::run(r, c, services::customers::handlers::reveals))
         .put_async("/api/owner/customers/:key/record", |r, c| edge::run(r, c, services::customers::record_routes::put_record))
         .post_async("/api/owner/customers/rekey", |r, c| edge::run(r, c, services::customers::record_routes::rekey))

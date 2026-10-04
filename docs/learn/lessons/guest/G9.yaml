@@ -1,0 +1,124 @@
+# Lesson G9 (guest). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-MR0 (2026-10-04, DECISIONS.md D0 amendment + operator ruling): the guest's taste, scored on the
+# phone and by the venue, ON by default, off in one tap (an objection). Never a price, never hidden dishes.
+id: G9
+role: guest
+module: menu
+order: 9
+covers: []
+title:
+  sq: "Shija juaj: në telefon dhe te lokali"
+  en: "Your taste: on the phone and at the venue"
+  uk: "Ваш смак: на телефоні й у закладі"
+  ru: "Ваш вкус: на телефоне и в заведении"
+goal:
+  sq: "Ndizni ose fikni kujtesën e shijes, shihni çfarë mbahet mend dhe fshijeni me një prekje."
+  en: "Turn the taste memory on or off, see what is remembered, and delete it in one tap."
+  uk: "Увімкніть або вимкніть памʼять смаку, перегляньте, що збережено, і видаліть одним дотиком."
+  ru: "Включите или выключите память вкуса, посмотрите, что сохранено, и удалите одним касанием."
+steps:
+  - key: 1
+    anchor: menu.taste
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.taste"]'
+    title:
+      sq: "Shija juaj"
+      en: "Your taste"
+      uk: "Ваш смак"
+      ru: "Ваш вкус"
+    caption:
+      sq: "Butoni hap çfarë mban mend ky telefon."
+      en: "The button opens what this phone remembers."
+      uk: "Кнопка відкриває, що памʼятає цей телефон."
+      ru: "Кнопка открывает, что помнит этот телефон."
+  - key: 2
+    anchor: taste.switch
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="taste.switch"]'
+    title:
+      sq: "Ndizni ose fikni"
+      en: "On or off"
+      uk: "Увімкнути чи вимкнути"
+      ru: "Включить или выключить"
+    caption:
+      sq: "Ndezur si parazgjedhje; një prekje e fik."
+      en: "On by default; one tap turns it off."
+      uk: "Типово увімкнено; один дотик вимикає."
+      ru: "По умолчанию включено; одно касание выключает."
+  - key: 3
+    anchor: taste.forget
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="taste.forget"]'
+    title:
+      sq: "Harroji të gjitha"
+      en: "Forget it all"
+      uk: "Забути все"
+      ru: "Забыть всё"
+    caption:
+      sq: "Një prekje fshin gjithçka nga telefoni."
+      en: "One tap wipes it all from the phone."
+      uk: "Один дотик стирає все з телефона."
+      ru: "Одно касание стирает всё с телефона."
+  - key: 4
+    anchor: menu.forYou
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="menu.forYou"]'
+    title:
+      sq: "Për ju"
+      en: "For you"
+      uk: "Для вас"
+      ru: "Для вас"
+    caption:
+      sq: "Disa pjata sipër sipas shijes suaj; asnjë nuk fshihet."
+      en: "A few dishes on top by your taste; none is hidden."
+      uk: "Кілька страв нагорі за вашим смаком; жодна не схована."
+      ru: "Несколько блюд наверху по вашему вкусу; ни одно не скрыто."
+  - key: 5
+    anchor: menu.tasteOff
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="menu.tasteOff"]'
+    title:
+      sq: "Ne mbajmë mend shijen tuaj · fike"
+      en: "We remember your taste · turn off"
+      uk: "Ми памʼятаємо ваш смак · вимкнути"
+      ru: "Мы помним ваш вкус · выключить"
+    caption:
+      sq: "Rreshti në fund të menysë: një prekje dhe lokali ndalon dhe fshin çfarë mbante."
+      en: "The line at the foot of the menu: one tap and the venue stops and deletes what it kept."
+      uk: "Рядок унизу меню: один дотик — і заклад зупиняється й видаляє те, що зберігав."
+      ru: "Строка внизу меню: одно касание — и заведение останавливается и удаляет то, что хранило."
+  - key: 6
+    anchor: track.tasteWithdraw
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="track.tasteWithdraw"]'
+    title:
+      sq: "Ndalo dhe fshi"
+      en: "Stop and delete"
+      uk: "Зупинити й видалити"
+      ru: "Остановить и удалить"
+    caption:
+      sq: "Në faqen e porosisë shihni çfarë di lokali dhe e fshini me një prekje."
+      en: "On the order page you see what the venue knows and delete it in one tap."
+      uk: "На сторінці замовлення видно, що знає заклад, і це видаляється одним дотиком."
+      ru: "На странице заказа видно, что знает заведение, и это удаляется одним касанием."

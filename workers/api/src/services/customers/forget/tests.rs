@@ -261,3 +261,17 @@ fn the_backup_promise_matches_the_rotation_in_every_language() {
     assert!(!notice("ru").contains("месяц"));
     assert_eq!(notice("xx"), notice("sq"), "an unknown language answers in the venue's own");
 }
+
+/// W-MR0 MR8: forgetting a person deletes their taste profile (its own image, `hubdo/forget.rs`
+/// step 1b), and nobody else's; a second run removes nothing.
+#[test]
+fn the_taste_image_loses_the_persons_profile_and_nobody_elses() {
+    let mut t = dowiz_hub::table::Table::create(1 << 20).unwrap();
+    let taste = crate::services::customers::taste::KIND;
+    t.put(taste, &key(), r#"{"v":1}"#, &[], &[]).unwrap();
+    t.put(taste, "0123456789abcdef", r#"{"v":1}"#, &[], &[]).unwrap();
+    assert_eq!(crate::services::customers::taste::forget(&mut t, &[key()]), 1);
+    assert_eq!(crate::services::customers::taste::forget(&mut t, &[key()]), 0, "idempotent");
+    assert!(t.get(taste, &key()).is_none());
+    assert!(t.get(taste, "0123456789abcdef").is_some(), "a stranger's profile went");
+}

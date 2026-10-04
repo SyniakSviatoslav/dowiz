@@ -60,8 +60,12 @@ pub const FEATURES: &[Feature] = &[
     Feature {
         key: "feature.allergen_filter",
         label: "Фільтр за алергенами",
-        hint: "Ховає фільтр у меню. Самі заяви про алергени лишаються на стравах — \
-               їх приховати не можна.",
+        // W-MR0 2026-10-04: the old hint ("the declarations stay on the dishes, they cannot be
+        // hidden") was false -- the storefront printed no allergen anywhere, and the hub's
+        // sale gate (owner.rs, catalog_edit.rs) runs only while this is on.
+        hint: "Увімкнено: гість бачить алергени кожної страви (або «не заявлено») і може сховати \
+               страви з ними, а страву без заяви не можна поставити в продаж. Вимкнено: вітрина \
+               алергенів не показує — тоді гостю про них кажуть усно.",
         default_on: true,
         surface: "storefront",
     },

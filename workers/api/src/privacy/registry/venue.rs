@@ -31,6 +31,15 @@ pub const STORES: &[Store] = &[
         retention: Retention::NoLimitYet("kept while the venue keeps the card; P6"),
         erase: Eraser::Remove("services/customers/forget.rs: forget_people"),
         export: NO_EXPORT },
+    // W-MR0 MR8 (D0 amendment 2026-10-04, operator ruling): the guest's taste profile, beside the card,
+    // automatic under LEGITIMATE INTEREST (balancing test: docs/privacy/DPIA-personalisation.md), stopped
+    // and deleted by one objection (Art. 21); never read to set a sum (tools/gates/no-scoring.sh).
+    Store { image: "taste", kinds: &["taste"], home: Venue,
+        holds: &[Taste, OrderContent], subjects: &[Customer],
+        purpose: P::Personalisation, basis: Basis::LegitimateInterest,
+        retention: Retention::Ms(crate::services::customers::taste::KEEP_MS, "12 months after the last order (GUESS 2026-10-04): an older profile reads as absent and is replaced on the next write (taste.rs::expired); no nightly sweep yet"),
+        erase: Eraser::Remove("services/customers/hubdo/forget.rs step 1b: taste::forget; taste_routes.rs: the objection (guest_withdraw, or taste_off at checkout) deletes it"),
+        export: Exporter::Route("GET /api/order/:id/taste (the guest's own link)") },
     // Proof of consent: pseudonymous key, channel, the exact wording, the time.
     Store { image: "consent", kinds: &[], home: Venue,
         holds: &[Consent], subjects: &[Customer],

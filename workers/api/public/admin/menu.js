@@ -22,6 +22,7 @@ import { me } from '/admin/app.js';
 import '/admin/crud-i18n.js';
 import { translationBoxes, baseEdits } from '/admin/menu-edit.js';
 import '/admin/prep-i18n.js';
+import { tagLabel, undeclaredPanel, allergenMarkup, bindAllergens, allergenEdits, refusesSale, gateOn } from '/admin/menu-flags.js';
 /// W-NOM: the dishes ticked for a bulk delete (the owner's).
 const sel = selection();
 /// A filter chip whose data-* the screen's click handler reads.
@@ -68,6 +69,7 @@ export async function render(host){
     <div class="screen-h"><div><h1 data-t="tabMenu"></h1></div>
       <div class="screen-acts">${me().staff ? '' : btn({ id: 'mSel', variant: 'ghost', icon: 'check', key: sel.on ? 'nom_selectDone' : 'nom_select' })}${btn({ id: 'mCats', icon: 'adjustments', key: 'categories', tour: 'menu.categories' })}${iconBtn({ id: 'mImport', icon: 'download', ariaKey: 'importMenu', tour: 'menu.import' })}${iconBtn({ id: 'mRecipes', icon: 'tools-kitchen-2', ariaKey: 'importRecipes', tour: 'menu.importRecipes' })}${btn({ id: 'mNew', variant: 'primary', icon: 'plus', key: 'addDish', tour: 'menu.addDish' })}</div></div>
     <p class="screen-hint" data-t="menuHint"></p>
+    ${undeclaredPanel(S.products)}
     ${search('mq', view.q, 'menu.search')}
     <div class="chips filters" role="group">
       ${fchip(!view.cat, { fc: '' }, k('allDishes'), 'menu.filterCategory')}
@@ -184,7 +186,9 @@ export async function openDish(id){
     </div>
     ${select({ id: 'd-station', key: 'station', value: p.station || 'kitchen', options: STATIONS.map(s => ({ value: s, key: 'station_' + s })), tour: 'dish.station' })}<p class="hint" data-t="stationHint"></p>
     <p class="ui-label" data-t="tags"></p>
-    <div class="chips" id="tagPick" role="group">${TAGS.map(tg => ui.chip({ as: 'button', selected: tags.has(tg), label: tg, attrs: { data: { tag: tg, tour: 'dish.tag' } } })).join('')}</div>
+    <div class="chips" id="tagPick" role="group">${TAGS.map(tg => ui.chip({ as: 'button', selected: tags.has(tg), label: tagLabel(tg), attrs: { data: { tag: tg, tour: 'dish.tag' } } })).join('')}</div>
+    <p class="hint" data-t="mf_tagsHint"></p>
+    ${allergenMarkup(p)}
     ${recipeMarkup(p)}
     ${tasteMarkup(p)}
     ${field({ id: 'd-ings', key: 'ingredients', rows: 2, value: (p.ingredients || []).join(', '), tour: 'dish.ingredients' })}
@@ -221,7 +225,7 @@ export async function openDish(id){
   // What the owner changes in THIS sheet; the rest follows the recipe (audit D19).
   const edited = new Set();
   for (const f of FIELDS) $(BOX[f]).addEventListener('input', () => edited.add(f));
-  bindRecipe(p); bindTaste(p);
+  bindRecipe(p); bindTaste(p); bindAllergens();
   for (const b of $$('[data-tag]', $('#sheetIn'))) b.onclick = () => b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
   $('#photoPick').onclick = () => $('#photoFile').click();
   $('#photoFile').onchange = async e => {
@@ -246,6 +250,8 @@ export async function openDish(id){
     // Never "Saved" for a recipe change that cannot be sent (belt to bindRecipe's braces).
     if (recipeDirty && recipeKnown !== id) return toast(t('recipeUnread'));
     const avail = $('#d-avail').checked;
+    // W-MR0: an undeclared dish is not put on sale where the hub refuses it; the console says why first.
+    if (refusesSale(p, avail)) return toast(t('mf_needDeclare'));
     const values = Object.fromEntries(FIELDS.map(f => [f, $(BOX[f]).value]));
     const translations = {};
     for (const l of LANGS) { const nm = $(`#d-name-${l}`), ds = $(`#d-desc-${l}`); if (nm || ds) translations[l] = { ...(nm ? { name: nm.value.trim() } : {}), ...(ds ? { description: ds.value.trim() } : {}) }; }
@@ -267,6 +273,7 @@ export async function openDish(id){
       // A line typed down to 0 is a line taken out.
       ...(recipeKnown === id ? { bom: recipeDraft.filter(l => l.qty > 0).map(l => ({ supply: l.supply, qty: l.qty, ...(l.net != null ? { net: l.net } : {}), ...(l.out != null ? { out: l.out } : {}) })) } : {}),
       taste: tasteDraft,
+      ...allergenEdits(),
       translations,
     });
     for (const k of Object.keys(body)) if (body[k] === null) delete body[k];
@@ -293,7 +300,8 @@ async function openNewDish(){
     if (!name || price == null) return toast(t('required'));
     try {
       const r = await busy($('#ndGo'), () => post('/owner/products', withLoc({ name, category_id: $('#nd-cat').value, price, description: $('#nd-desc').value.trim() })));
-      toast(t('saved')); await loadVenue();
+      // W-MR0: the hub holds an undeclared new dish off sale where the filter is on; say so.
+      toast(r.available === false && gateOn() ? t('mf_heldUndeclared') : t('saved')); await loadVenue();
       // The public menu may lag a write by its cache; the editor opens on the
       // record the hub just returned, not on what the menu shows yet.
       if (!S.products.some(x => x.id === r.id)) { const cat = cats.find(c => c.id === r.categoryId); S.products.push({ ...r, categoryId: r.categoryId, categoryName: cat?.name || '', translations: {} }); }

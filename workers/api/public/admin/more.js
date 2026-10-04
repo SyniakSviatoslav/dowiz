@@ -232,9 +232,10 @@ const REVEAL_REASON_MIN = 3;
 async function openCustomers(sort = CUSTOMER_SORTS[0]){
   sheet(`${head('analytics', 'customers', 'ap_h_customers')}
     ${chips({ values: CUSTOMER_SORTS.map(x => ({ value: x, key: 'sort_' + x })), value: sort, attr: 'sort', tour: 'customers.sort' })}
-    <div id="cuBody">${loading()}</div>
+    <div id="cuSegments"></div><div id="cuBody">${loading()}</div>
     <div class="btn-row">${btn({ id: 'cuCsv', icon: 'download', key: 'exportCsv', tour: 'customers.csv' })}${btn({ id: 'cuLog', icon: 'eye', key: 'revealLog', tour: 'customers.revealLog' })}</div>`, { name: 'customers' });
   for (const b of $$('[data-sort]', $('#sheetIn'))) b.onclick = () => openCustomers(b.dataset.sort);
+  import('/admin/taste.js').then(m => m.mountSegments()).catch(() => {});
   let d; try { d = await api(`/owner/customers?sort=${sort}`); } catch (e) { return fail(e); }
   const list = d.customers || [];
   $('#cuBody').innerHTML = list.length ? `<div class="rows">${list.map(c => rowBtn({ leading: icon('user'), title: c.name || c.phone || c.key, data: { key: c.key }, tour: 'customers.row', sub: `<span class="mono">${esc(c.phone || '')} · ${c.orders} · ${money(c.spent || 0)}</span>${cardLine(c) ? `<br>${esc(cardLine(c))}` : ''}`,

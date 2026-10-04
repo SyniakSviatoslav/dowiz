@@ -105,6 +105,21 @@ impl HubImages {
             }
         }
 
+        // 1b. TASTE (W-MR0 MR8): the guest's taste profile, its own image, gone with the card.
+        let taste_img = crate::services::customers::taste::IMAGE_TASTE;
+        if let Some((meta, bytes)) = self.image(taste_img).await? {
+            let mut t = dowiz_hub::table::Table::load(&bytes, crate::services::customers::taste::TASTE_BYTES)
+                .map_err(|_| unreadable(taste_img))?;
+            let gone = crate::services::customers::taste::forget(&mut t, &circle);
+            if gone > 0 {
+                let out = t.to_bytes().map_err(|e| Error::RustError(format!("taste: {e:?}")))?;
+                if let Err(r) = self.put_or_refuse(taste_img, meta.generation, &out).await? {
+                    return Ok(Err(r));
+                }
+            }
+            people += gone;
+        }
+
         // 2. CONSENT. Redacted in place and stopped on every channel.
         let consent_img = crate::services::customers::consent_log::IMAGE_CONSENT;
         let (cgen, mut consent) = match self.image(consent_img).await? {

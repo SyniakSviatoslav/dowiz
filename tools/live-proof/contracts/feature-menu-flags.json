@@ -1,0 +1,72 @@
+{
+  "id": "feature-menu-flags",
+  "name": "menu-flags",
+  "contract_version": "1.0.0",
+  "class": "LIVE-AFTER-DEPLOY",
+  "description": {
+    "en": "What the menu claims (W-MR0 rows MR0 + MR4). (i) The owner-typed `popular` tag is shown as \"Venue's pick\" in sq/en/uk/ru; the data key stays `popular`, so old menus render. (ii) The owner's menu screen counts and lists the dishes with UNDECLARED allergens (no `allergens` array: absent is undeclared, [] is 'none of the 14'); with feature.allergen_filter on, the hub refuses a NEW dish asked on sale undeclared and an update that puts an undeclared dish on sale (409). (iii) The guest's `dw_avoid` filter hides a dish only on the guest's explicit chip; an inferred allergy only warns (FIC 1169/2011). (iv) 'Most ordered this week: N' is a 7-day count of portions over orders that took money (rejected/cancelled/refunded out), TEST orders (contact name LIVE-/FLOWS-) out, shown only from n >= threshold, with n printed, and equal to the analytics pane's weekTop for the same window (one fold, week_top::counts).",
+    "uk": "Що каже меню: тег «Вибір закладу» замість «популярне», лічильник страв без заявлених алергенів, фільтр алергенів лише за вибором гостя, і чесне «найчастіше замовляють цього тижня: N» без тестових замовлень, рівне числу в аналітиці."
+  },
+  "producer": [
+    { "file": "workers/api/src/services/analytics/week_top.rs", "line": 61, "what": "counts(): the 7-day fold, took_money only, TEST orders counted apart" },
+    { "file": "workers/api/src/services/analytics/week_top.rs", "line": 101, "what": "public(): the badged dishes only (n >= THRESHOLD, at most MAX_BADGES)" },
+    { "file": "workers/api/src/services/analytics/week_top.rs", "line": 113, "what": "owner(): every dish, its test portions, badge flag -- the analytics pane's weekTop" },
+    { "file": "workers/api/src/services/analytics/week_route.rs", "line": 17, "what": "GET /api/public/locations/:slug/menu/week, edge-cached MAX_AGE_S" },
+    { "file": "workers/api/src/owner.rs", "line": 965, "what": "update_product: available=true on an undeclared dish -> 409 while feature.allergen_filter is on" },
+    { "file": "workers/api/src/catalog_edit.rs", "line": 112, "what": "create_product: a new undeclared dish is held off sale; asked on sale -> 409" }
+  ],
+  "consumer": [
+    { "file": "workers/api/public/store/flags.js", "line": 25, "what": "the storefront badge: fetch menu/week, draw 'Most ordered this week N' on each badged card" },
+    { "file": "workers/api/public/store/avoid.js", "line": 23, "what": "hiddenBecause(): only the guest's chosen allergens hide; undeclared hides only under an explicit choice" },
+    { "file": "workers/api/public/admin/menu-flags.js", "line": 43, "what": "undeclaredPanel(): the count + list on the owner's menu screen" },
+    { "file": "workers/api/public/admin/menu-flags.js", "line": 96, "what": "weekTopCard(): the analytics pane's card, the same numbers as the badge" }
+  ],
+  "transport": [
+    { "method": "GET", "path": "/api/public/locations/:slug/menu/week", "auth": "none", "cache": "public, max-age=300" },
+    { "method": "GET", "path": "/api/owner/analytics?v=2", "auth": "Bearer owner", "field": "weekTop" },
+    { "method": "GET", "path": "/api/owner/products", "auth": "Bearer owner" },
+    { "method": "POST", "path": "/api/owner/products", "auth": "Bearer owner" },
+    { "method": "POST", "path": "/api/owner/products/:id", "auth": "Bearer owner" },
+    { "method": "POST", "path": "/api/owner/products/:id/delete", "auth": "Bearer owner" },
+    { "method": "GET|POST", "path": "/api/owner/features", "auth": "Bearer owner", "key": "feature.allergen_filter" }
+  ],
+  "external": "Regulation (EU) No 1169/2011 (FIC) Art. 9(1)(c), Art. 44 and Annex II: the 14 allergens a non-prepacked food must declare",
+  "external_version": { "fic": "1169/2011 consolidated 2018-01-01" },
+  "auth": { "secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"], "where": "/root/.dowiz_owner" },
+  "week_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["contract", "days", "from", "to", "threshold", "dishes"], "additionalProperties": false,
+    "properties": {
+      "contract": { "const": "menu.week-top.v1" },
+      "days": { "const": 7 },
+      "from": { "type": "string" }, "to": { "type": "string" },
+      "threshold": { "type": "integer", "minimum": 1 },
+      "dishes": { "type": "array", "items": { "type": "object", "required": ["id", "n"], "additionalProperties": false,
+        "properties": { "id": { "type": "string" }, "n": { "type": "integer", "minimum": 1 } } } }
+    }
+  },
+  "owner_week_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["contract", "days", "from", "to", "threshold", "dishes"], "additionalProperties": false,
+    "properties": {
+      "contract": { "const": "menu.week-top.v1" },
+      "days": { "const": 7 },
+      "from": { "type": "string" }, "to": { "type": "string" },
+      "threshold": { "type": "integer", "minimum": 1 },
+      "dishes": { "type": "array", "items": { "type": "object", "required": ["id", "name", "n", "test", "badge"], "additionalProperties": false,
+        "properties": { "id": { "type": "string" }, "name": {}, "n": { "type": "integer", "minimum": 0 }, "test": { "type": "integer", "minimum": 0 }, "badge": { "type": "boolean" } } } }
+    }
+  },
+  "product_request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "the subset of POST /api/owner/products/:id this feature uses",
+    "type": "object", "required": ["location_id"],
+    "properties": {
+      "location_id": { "type": "string" },
+      "available": { "type": "boolean" },
+      "allergens": { "type": "array", "items": { "enum": ["gluten", "crustaceans", "eggs", "fish", "peanuts", "soy", "milk", "nuts", "celery", "mustard", "sesame", "sulphites", "lupin", "molluscs"] } }
+    }
+  },
+  "probe": "tools/live-proof/probes/feature-menu-flags.mjs: on qa-durres, with feature.allergen_filter switched ON for the run (and restored), a QA dish LIVE-<run> is created off sale without allergens: the owner's product list counts it undeclared, putting it on sale is a 409, declaring ['fish'] lets it on sale and the storefront menu (?fresh=1) shows allergens ['fish'] on it; then N TEST orders of it are placed and ended: menu/week never shows it (TEST orders are out) and the analytics pane's weekTop shows test >= N and n unchanged for it; every badged dish's n on menu/week equals the pane's n. The dish is deleted at the end. A step that cannot run is FAILED, never skipped.",
+  "last_verified": null
+}

@@ -8,6 +8,10 @@ pub mod handler;
 pub mod history;
 /// The kitchen's numbers: ingredients, dishes, losses, by day (card I7).
 pub mod kitchen;
+/// "Most ordered this week: N": the storefront badge and the owner's same number (W-MR0).
+pub mod week_top;
+/// Its public route, `GET /api/public/locations/:slug/menu/week`.
+pub mod week_route;
 
 pub use handler::analytics;
 

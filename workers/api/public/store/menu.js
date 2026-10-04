@@ -18,16 +18,19 @@
 // THE SEARCH BAR IS A SEARCH BAR, with one more way in: the microphone. A
 // customer who says "two Philadelphia" gets the dish shown back with its
 // price and adds it with one tap (store/voice-order.js). Sold-out dishes are
-// marked on the card and need no second control; allergens are not this
-// storefront's to declare (operator decision, 2026-09-18).
+// marked on the card and need no second control. Allergens are the venue's to
+// declare; the GUEST's filter over them shows only where the venue has the
+// filter on (`feature.allergen_filter`, store/flags.js + store/avoid.js, W-MR0).
 
-import { state, findProduct, normalise, moneyEl } from '/store/state.js';
-import { t, tagName, lang } from '/store/i18n.js';
+import { state, findProduct, normalise, moneyEl, API } from '/store/state.js';
+import { t, tagName, lang, retranslate } from '/store/i18n.js';
 import { $, $$, esc, icon, fallbackArt, paintFallbacks, spread, debounce } from '/store/ui.js';
 import { morph } from '/store/motion.js';
 import { heroMarkup } from '/store/venue.js';
 import { privacyLink } from '/store/consent.js';
 import { ui, k, ghost } from '/store/parts.js';
+import { paintWeek, initAvoid, avoidButton, openAvoid, avoidHides } from '/store/flags.js';
+import { isOn as tasteOn, wireTaste, tasteButton, paintStrip, openTaste, noteSeen, rememberLine, wireRememberLine, loadPrior, newestLink } from '/store/taste-device.js';
 
 // The venue's tags → an icon each. A tag with no icon still gets a chip, with
 // a dot; the venue wrote it down and it filters just the same.
@@ -148,13 +151,17 @@ function filtersMarkup(cats){
         ${icon('fan')}<span data-t="all"></span></button>
       ${tags.map(tg => `<button type="button" class="tag ${state.tag === tg ? 'on' : ''}" data-tag="${esc(tg)}" aria-pressed="${state.tag === tg}">
         ${TAG_ICON[tg] ? icon(TAG_ICON[tg]) : '<span class="tag-dot"></span>'}<span data-t-tag="${esc(tg)}"></span></button>`).join('')}
+      ${avoidButton()}
+      ${tasteButton()}
     </div>
   </div>`;
 }
 
 export function buildMenu(cats){
+  initAvoid();
   const app = $('#app');
   app.innerHTML = `${heroMarkup()}${filtersMarkup(cats)}${railMarkup(cats)}
+    <section class="for-you" id="forYou" hidden></section>
     <div id="sections">${cats.map((c, ci) => `
       <section class="sec" id="c-${esc(c.id)}" data-cat="${esc(c.id)}">
         <h2 class="sec-h"><span class="sec-idx" aria-hidden="true">${String(ci + 1).padStart(FOLIO_DIGITS, '0')}</span><span class="sec-name">${esc(c.name)}</span><i class="sec-rule" aria-hidden="true"></i><span class="sec-n muted">${(c.products || []).length}</span></h2>
@@ -163,11 +170,17 @@ export function buildMenu(cats){
     </div>
     ${ui.emptyState({ id: 'noHits', icon: 'search-off', title: k('noHits'), attrs: { hidden: true },
       action: ghost({ id: 'qreset', block: false, cls: 'w-cap', label: k('clear') }) })}
-    <footer class="foot-legal">${privacyLink()}</footer>
+    <footer class="foot-legal">${rememberLine()}${privacyLink()}</footer>
     <div class="tail-gap"></div>`;
   paintFallbacks(app);
   bind();
   applyFilters({ animate: true });
+  paintWeek(app);
+  if (tasteOn()) wireTaste();
+  wireRememberLine();
+  paintStrip((d, el) => openDishFn?.(d, el));
+  // A returning guest, recognised by the order link they hold: the venue's profile ranks the strip too.
+  if (tasteOn()) loadPrior(newestLink(), API).then(p => { if (p) paintStrip((d, el) => openDishFn?.(d, el)); });
   spy();
   arrive();
 }
@@ -204,6 +217,8 @@ export function applyFilters({ animate = false } = {}){
         const hay = `${el.dataset.search} ${normalise(sec.querySelector('.sec-name')?.textContent)}`;
         ok = terms.every(x => hay.includes(x));
       }
+      // The guest's own allergen choice (`store/avoid.js`): never a guess, and the undeclared too.
+      if (ok && avoidHides(el)) ok = false;
       el.hidden = !ok;
       if (ok) n++;
     }
@@ -242,6 +257,7 @@ function spy(){
     let best = null, top = Infinity;
     for (const [id, y] of visible) if (y < top) { top = y; best = id; }
     if (best && !spyPaused) light(best);
+    if (best) noteSeen(best);
   }, { rootMargin: '-140px 0px -60% 0px', threshold: [0, 0.1] });
   for (const s of $$('.sec')) spyIO.observe(s);
 }
@@ -265,6 +281,20 @@ function bind(){
       // re-diffusion, not a page swap.
       spread($$('.card:not([hidden])', sec).slice(0, SPREAD_ON_TAP));
       setTimeout(() => { spyPaused = false; }, SPY_PAUSE_MS);
+      return;
+    }
+    if (e.target.closest('#tasteOpen')) {
+      openTaste(() => {
+        paintStrip((d, el) => openDishFn?.(d, el));
+        const b = $('#tasteOpen'); if (b) { b.outerHTML = tasteButton(); retranslate($('#tags')); }
+      });
+      return;
+    }
+    if (e.target.closest('#avoidOpen')) {
+      openAvoid(() => {
+        applyFilters();
+        const b = $('#avoidOpen'); if (b) { b.outerHTML = avoidButton(); retranslate($('#tags')); }
+      });
       return;
     }
     const tag = e.target.closest('[data-tag]');

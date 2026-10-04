@@ -18,6 +18,8 @@ import { t, tagName } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, fallbackArt, toast } from '/store/ui.js';
 import { seaEvent } from '/store/sea.js';
 import { ui, k, ghost, stepper } from '/store/parts.js';
+import { allergenLine } from '/store/flags.js';
+import { noteOpen } from '/store/taste-device.js';
 
 /// The Sea's answer to a dish being added: a small pulse from the sheet, a
 /// smaller one from a card. Numbers are particle counts, not milliseconds.
@@ -88,6 +90,7 @@ function tasteMarkup(p){
 }
 
 export function openDish(p){
+  noteOpen(p.id); // the guest's own taste memory, when they turned it on (store/taste-device.js)
   const groups = Array.isArray(p.modifierGroups) ? p.modifierGroups : [];
   const tags = Array.isArray(p.tags) ? p.tags : [];
   const ingredients = Array.isArray(p.ingredients) ? p.ingredients.filter(Boolean) : [];
@@ -105,6 +108,7 @@ export function openDish(p){
         ${p.description && !ingredients.length ? `<p class="muted ddesc">${esc(p.description)}</p>` : ''}
         ${ingredients.length ? `<h3 class="dsec" data-t="ingredients"></h3>
           <ul class="ings">${ingredients.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
+        ${allergenLine(p)}
         ${factsMarkup(p)}
         ${groups.map(groupMarkup).join('')}
         <p id="derr" class="err" hidden></p>

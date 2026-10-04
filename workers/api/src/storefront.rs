@@ -142,6 +142,13 @@ pub struct PlaceIn {
     /// The checkout's UNTICKED SMS box, present only when ticked (W-SMS, `notify::sms::checkout`).
     #[serde(default)]
     pub sms: Option<crate::notify::sms::checkout::SmsIn>,
+    /// The guest's "turn off" for the venue's taste profile, kept by the phone and sent with the next
+    /// order (W-MR0 MR8; operator ruling 2026-10-04: automatic, objection not consent).
+    #[serde(default)]
+    pub taste_off: bool,
+    /// The device's aggregated taste vector, sent by default unless the guest objected (`taste_routes::prepare`).
+    #[serde(default)]
+    pub taste_sync: Option<crate::services::customers::taste::SyncIn>,
     /// THE CHECK A WAITER'S ROUND JOINS. Only read when a room token placed it
     /// (`services::orders::room::placer`); a guest's basket cannot name one.
     #[serde(default)]
@@ -658,6 +665,24 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     };
     // THE SMS BOX (W-SMS): refused by name here, stamped on the order below, filed after it.
     let sms_tick = match crate::notify::sms::checkout::at_placement(body.sms.as_ref(), phone, &loc.currency_code, &loc.name, ctx.data.now_ms, |n| crate::services::customers::handlers::customer_key(&crate::services::customers::handlers::signing_secret(&ctx.env), n)) { Ok(t) => t, Err(why) => return Response::error(why, 400) };
+    // ── THE GUEST'S TASTE: THE DEVICE'S VECTOR OR THE OBJECTION (W-MR0 MR8) ── refused by name here,
+    // folded into the guest's profile after the order exists (`taste_routes`).
+    let taste_key = (!phone.is_empty()).then(|| {
+        crate::services::customers::handlers::customer_key(&crate::services::customers::handlers::signing_secret(&ctx.env), phone)
+    });
+    let taste_prep = match crate::services::customers::taste_routes::prepare(
+        &place, taste_key, body.taste_off, body.taste_sync.as_ref(), ctx.data.now_ms,
+    )
+    .await?
+    {
+        Ok(p) => p,
+        Err(why) => return Response::error(why, 400),
+    };
+    let taste_lines: Vec<crate::services::customers::taste::Line> = body
+        .items
+        .iter()
+        .filter_map(|it| Some(crate::services::customers::taste::line_of(&nodes.product(&it.product_id)?, i64::from(it.quantity))))
+        .collect();
 
     // ── IS THIS A RETRY? ──
     //
@@ -1050,6 +1075,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         let _ = crate::services::customers::consent_log::file(&place, &act).await;
     }
     if let Some(t) = sms_tick { crate::notify::sms::checkout::keep(&place, &id, t).await; } // W-SMS: the act filed, the stamp kept
+    crate::services::customers::taste_routes::after(&place, taste_prep, taste_lines, &id, created_at_ms).await;
 
     // ── THE CUSTOMER'S KEY TO THEIR OWN ORDER ──
     //

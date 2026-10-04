@@ -24,6 +24,7 @@ import { seaCalm, seaEvent } from '/store/sea.js';
 import { consentMarkup, wireConsent, consentBody } from '/store/consent.js';
 import { smsMarkup, wireSms, smsBody } from '/store/sms-box.js'; // W-SMS
 import { bagLine, bagBody, bagPlaced } from '/store/bag.js'; // W-QR
+import { tasteBody } from '/store/taste-device.js';
 import { TABLE, tableBanner, tableBody } from '/store/table.js';
 import { venueWallMs, laterPrefill } from '/lib/booking-time.js';
 import { ui, k, cta, ghost, seg } from '/store/parts.js';
@@ -375,10 +376,11 @@ async function place(pay, wallet){
   const eta = state.lastEta;
   try {
     const items = cartLines().map(l => ({ product_id: l.p.id, modifier_ids: l.m, quantity: l.q, unit_price: lineUnit(l.p, l.m) }));
+    const personal = await tasteBody(phone);
     const body = JSON.stringify({ items, contact: { name, phone },
         fulfilment: collecting ? { kind: 'pickup', note: note || null }
                                : { kind: 'delivery', address: { line: addr, note: note || null, parts, ...geo } },
-        payment: pay, locale: lang, ...consentBody(phone), ...smsBody(phone),
+        payment: pay, locale: lang, ...consentBody(phone), ...smsBody(phone), ...personal,
         ...(pay === 'crypto' && wallet ? { crypto_symbol: wallet } : {}),
         ...(state.promo ? { promo: state.promo.code } : {}),
         ...(state.tip && !collecting && !TABLE ? { tip: state.tip } : {}),

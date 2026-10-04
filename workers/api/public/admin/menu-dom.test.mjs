@@ -52,7 +52,9 @@ Object.defineProperty(Element.prototype, 'checked', {
 const tick = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(r => setTimeout(r, 0)); };
 
 const SUPPLIES = [{ id: 'tuna', name: 'Tuna', unit: 'g', kind: 'food_ingredient' }, { id: 'rice', name: 'Rice', unit: 'g', kind: 'food_ingredient' }];
-const dish = (id, name) => ({ id, name, price: 1000, categoryId: 'c1', categoryName: 'Rolls', available: true, translations: {} });
+// Declared "none of the 14" (W-MR0): an UNDECLARED dish on sale is refused by the hub where the
+// allergen filter is on, and now by the console before the round trip (tests at the end).
+const dish = (id, name, allergens = []) => ({ id, name, price: 1000, categoryId: 'c1', categoryName: 'Rolls', available: true, translations: {}, ...(allergens ? { allergens } : {}) });
 
 /// A console whose hub answers `routes[METHOD path-prefix]`; every call is kept.
 function page(routes){
@@ -134,4 +136,92 @@ test('a recipe that could not be read cannot be edited, and says so; the save se
   assert.ok(box.querySelector('#rcLines [data-t="recipeLoadFail"]'), 'the sheet says the recipe could not be read');
   await box.querySelector('#dSave').onclick(); await tick();
   assert.equal('bom' in saved(f, 'd1')[0], false);
+});
+
+// ── W-MR0: the menu's claims ────────────────────────────────────────────────
+const undeclaredPage = (features) => {
+  const p = page(BASE);
+  p.f.S.products = [dish('d1', 'Tuna roll', null), dish('d2', 'Rice roll')];
+  if (features) p.f.S.venue.features = features;
+  return p;
+};
+
+test('the menu screen counts and lists the dishes nobody declared allergens for', async () => {
+  const { f } = undeclaredPage();
+  const MF = await import('/admin/menu-flags.js');
+  const html = MF.undeclaredPanel(f.S.products);
+  assert.match(html, /id="mfUndeclaredN">1</, 'one undeclared dish counted');
+  assert.match(html, /data-p="d1"/, 'and listed, opening its sheet');
+  assert.doesNotMatch(html, /data-p="d2"/, '"none of the 14" is a declaration');
+  assert.match(MF.undeclaredPanel([dish('d2', 'Rice roll')]), /mf_allDeclared/);
+});
+
+test('an undeclared dish is not put on sale where the filter is on: the console refuses before the hub', async () => {
+  const { box, f } = undeclaredPage();
+  await M.openDish('d1'); await tick();
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.equal(saved(f, 'd1').length, 0, 'nothing sent');
+  assert.deepEqual(f.toast, ['<mf_needDeclare>']);
+});
+
+test('"none of the 14" tapped: the save declares it and goes through', async () => {
+  const { box, f } = undeclaredPage();
+  await M.openDish('d1'); await tick();
+  box.querySelector('#alNone').onclick();
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.deepEqual(saved(f, 'd1')[0].allergens, []);
+});
+
+test('chips tapped: the save carries exactly them; untapping all is NOT "none"', async () => {
+  const { box, f } = undeclaredPage();
+  await M.openDish('d1'); await tick();
+  const chip = c => box.querySelector(`[data-al="${c}"]`);
+  chip('fish').onclick(); chip('soy').onclick();
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.deepEqual(saved(f, 'd1')[0].allergens, ['fish', 'soy']);
+  await M.openDish('d1'); await tick();
+  chip('fish').onclick(); chip('fish').onclick();
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.equal(saved(f, 'd1').length, 1, 'emptied chips leave it undeclared, so the second save is refused');
+});
+
+test('with the storefront filter off the hub does not gate, and neither does the console; nothing is declared for the owner', async () => {
+  const { box, f } = undeclaredPage({ allergen_filter: false });
+  await M.openDish('d1'); await tick();
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.equal(saved(f, 'd1').length, 1);
+  assert.equal('allergens' in saved(f, 'd1')[0], false, 'an untouched field sends no claim');
+});
+
+test("the owner's tag says what it is: Venue's pick, not Popular", async () => {
+  const { box } = undeclaredPage();
+  await import('/admin/menu-flags.js');
+  await M.openDish('d2'); await tick();
+  const pop = box.querySelector('[data-tag="popular"]');
+  assert.ok(pop && /mtag_popular/.test(pop.innerHTML), pop?.innerHTML);
+});
+
+// ── W-MR0 MR8: the guest's taste on the customer card and the segment counts ──────────────────
+test("the card shows the venue's taste profile, its segment and why, and never a price", async () => {
+  const TA = await import('/admin/taste.js');
+  const html = TA.tasteMarkup({ taste: { segment: 'regular', why: '3 orders, the last 2 days ago (at most 30)', orders: 3,
+    tags: [{ key: 'salmon', w: 3000 }, { key: 'hot', w: 1000 }], cats: [{ key: 'rolls', w: 3000 }], device: { tags: {}, cats: {} } } });
+  assert.match(html, /data-t="seg_regular"/);
+  assert.match(TA.tasteMarkup({ taste: { segment: '<img onerror=x>', why: '', orders: 1 } }), /data-t="seg_new"/, 'an unknown segment never reaches the markup');
+  assert.match(html, /3 orders, the last 2 days ago/);
+  assert.match(html, /salmon, hot/);
+  assert.match(html, /data-t="tasteFromDevice"/, 'what it was built from, including the phone summary');
+  assert.match(html, /data-t="tasteNever"/);
+  assert.doesNotMatch(html, /price|discount|lek/i);
+  assert.match(TA.tasteMarkup({ taste: null }), /data-t="tasteNone"/, 'no consent: the card says so, nothing invented');
+});
+
+test('the segment counts draw all four, zero included, and fetch the venue route', async () => {
+  const { box, f } = page({ 'GET /owner/customers/taste/segments': { segments: { new: 2, regular: 5, at_risk: 0, lapsed: 1 } } });
+  box.innerHTML = '<div id="cuSegments"></div>';
+  const TA = await import('/admin/taste.js');
+  await TA.mountSegments();
+  const html = box.innerHTML;
+  for (const [k, n] of [['new', 2], ['regular', 5], ['at_risk', 0], ['lapsed', 1]]) assert.match(html, new RegExp(`data-t="seg_${k}"[^]*?</span> <b class="mono">${n}</b>`));
+  assert.deepEqual(f.calls.map(c => c[1]), ['/owner/customers/taste/segments']);
 });

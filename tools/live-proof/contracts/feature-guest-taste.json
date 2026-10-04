@@ -1,0 +1,358 @@
+{
+  "id": "feature-guest-taste",
+  "name": "guest-taste",
+  "contract_version": "2.0.0",
+  "class": "LIVE-AFTER-DEPLOY",
+  "description": {
+    "en": "Guest taste scoring, on the device and on the server, AUTOMATIC (W-MR0 rows MR7 + MR8; DECISIONS.md D0 amendment and operator ruling 2026-10-04: no checkbox, basis legitimate interest GDPR 6(1)(f), one-tap objection Art. 21). DEVICE: store/taste.js keeps a per-venue IndexedDB `dowiz.taste.v1`, ON by default (dw_taste_on='0' is off); it re-orders a 'For you' strip, never hides a dish, never touches a price. SERVER: for a guest who gave a phone, each order folds the dishes' tags and categories (60-day half-life) and, if sent, the device's aggregated vector `taste_sync` (<= 12 keys per map, integers 0..1000, no events, no dish ids) into a profile beside the customer card in the venue's `people` image; a segment new/regular/at_risk/lapsed is derived from recency and frequency with its rule in words. Recognition only by the phone typed at checkout or an order link the phone holds, never by fingerprinting. 'We remember your taste · turn off' (menu footer, order page) files an objection in the consent log (purpose personalisation, Method::Objection) and deletes the profile; after it nothing is stored and taste_sync is refused 400; a phone without an order link sends taste_off with its next order. Never read to set a price, a discount, an eligibility or a refusal (tools/gates/no-scoring.sh). Retention 12 months after the last order (GUESS).",
+    "uk": "Оцінка смаку гостя на телефоні й на сервері — автоматично, без галочки (законний інтерес); «Ми памʼятаємо ваш смак · вимкнути» — заперечення одним дотиком, профіль видаляється, taste_sync після цього відхиляється (400); ніколи не впливає на ціну."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/services/customers/taste.rs",
+      "line": 122,
+      "what": "apply_order(): the profile after one order (fade, add, keep the device vector)"
+    },
+    {
+      "file": "workers/api/src/services/customers/taste.rs",
+      "line": 178,
+      "what": "segment(): new/regular/at_risk/lapsed and the rule, in words"
+    },
+    {
+      "file": "workers/api/src/services/customers/taste_routes.rs",
+      "line": 65,
+      "what": "judge(): the closed shape; no phone, nothing kept; taste_off wins over a vector"
+    },
+    {
+      "file": "workers/api/src/services/customers/taste_routes.rs",
+      "line": 78,
+      "what": "prepare(): taste_sync from a guest who objected -> 400 by name"
+    },
+    {
+      "file": "workers/api/src/services/customers/taste_routes.rs",
+      "line": 106,
+      "what": "after(): file the objection and delete, or fold the order in unless objected"
+    },
+    {
+      "file": "workers/api/src/storefront.rs",
+      "line": 663,
+      "what": "order placement calls prepare (400 on refusal) and after"
+    },
+    {
+      "file": "crates/dowiz-hub/src/consent.rs",
+      "line": 299,
+      "what": "objected(): the newest personalisation act is a withdrawal; no act is not an objection"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/store/taste-device.js",
+      "line": 167,
+      "what": "tasteBody(): taste_sync behind notObjected(), or taste_off; rememberLine/wireRememberLine: the footer 'turn off'; loadPrior(): the venue's profile through the newest order link ranks the strip"
+    },
+    {
+      "file": "workers/api/public/store/taste-venue.js",
+      "line": 39,
+      "what": "the order page's 'We remember your taste' section with Turn off and delete"
+    },
+    {
+      "file": "workers/api/public/admin/taste.js",
+      "line": 36,
+      "what": "the owner's customer card section and the segment counts"
+    },
+    {
+      "file": "workers/api/public/store/taste.js",
+      "line": 182,
+      "what": "syncVector(): the only thing that may leave the phone; strip(..., {prior})"
+    }
+  ],
+  "transport": [
+    {
+      "method": "POST",
+      "path": "/api/public/locations/:slug/orders",
+      "auth": "none",
+      "fields": [
+        "taste_sync",
+        "taste_off"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/order/:id/taste",
+      "auth": "Bearer: customer (order token)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/order/:id/taste/withdraw",
+      "auth": "Bearer: customer (order token)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/owner/customers/:key/taste",
+      "auth": "Bearer owner"
+    },
+    {
+      "method": "GET",
+      "path": "/api/owner/customers/taste/segments",
+      "auth": "Bearer owner"
+    },
+    {
+      "method": "POST",
+      "path": "/api/owner/customers/:key/forget",
+      "auth": "Bearer owner"
+    }
+  ],
+  "external": "GDPR Art. 6(1)(f) + Recital 47, Art. 13, 15, 17, 21, 22, 35; EDPB Guidelines 1/2024 (legitimate interest); ePrivacy Directive 2002/58/EC Art. 5(3) (residual risk, DPIA §2); Omnibus Directive (EU) 2019/2161 (personalised pricing -- not used)",
+  "external_version": {
+    "gdpr": "2016/679",
+    "edpb_li": "1/2024 v1.0",
+    "eprivacy": "2002/58/EC as amended 2009/136/EC",
+    "omnibus": "2019/2161"
+  },
+  "auth": {
+    "secrets": [
+      "OWNER_EMAIL",
+      "OWNER_PASSWORD"
+    ],
+    "where": "/root/.dowiz_owner"
+  },
+  "order_request_fields_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "the two fields this feature adds to the order body; every other field is the ordering contract's",
+    "type": "object",
+    "properties": {
+      "taste_off": {
+        "type": "boolean"
+      },
+      "taste_sync": {
+        "$ref": "#/$defs/sync"
+      }
+    },
+    "$defs": {
+      "sync": {
+        "type": "object",
+        "required": [
+          "v"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "v": {
+            "const": 1
+          },
+          "tags": {
+            "type": "object",
+            "maxProperties": 12,
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            }
+          },
+          "cats": {
+            "type": "object",
+            "maxProperties": 12,
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            }
+          }
+        }
+      }
+    }
+  },
+  "guest_view_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "objected",
+      "taste"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "objected": {
+        "type": "boolean"
+      },
+      "taste": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/$defs/view"
+          }
+        ]
+      }
+    },
+    "$defs": {
+      "row": {
+        "type": "object",
+        "required": [
+          "key",
+          "w"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "w": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "view": {
+        "type": "object",
+        "required": [
+          "contract",
+          "segment",
+          "why",
+          "orders",
+          "portions",
+          "firstDay",
+          "lastDay",
+          "daysSince",
+          "tags",
+          "cats",
+          "device",
+          "keptUntilDay"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "contract": {
+            "const": "customers.taste.v1"
+          },
+          "segment": {
+            "enum": [
+              "new",
+              "regular",
+              "at_risk",
+              "lapsed"
+            ]
+          },
+          "why": {
+            "type": "string"
+          },
+          "orders": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "portions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "firstDay": {
+            "type": "integer"
+          },
+          "lastDay": {
+            "type": "integer"
+          },
+          "daysSince": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/row"
+            }
+          },
+          "cats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/row"
+            }
+          },
+          "device": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "keptUntilDay": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  },
+  "withdraw_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "objected",
+      "deleted"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "objected": {
+        "const": true
+      },
+      "deleted": {
+        "type": "boolean"
+      }
+    }
+  },
+  "segments_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "contract",
+      "segments",
+      "rules"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "contract": {
+        "const": "customers.taste-segments.v1"
+      },
+      "segments": {
+        "type": "object",
+        "required": [
+          "new",
+          "regular",
+          "at_risk",
+          "lapsed"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "new": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "regular": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "at_risk": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lapsed": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "rules": {
+        "type": "object",
+        "required": [
+          "atRiskDays",
+          "lapsedDays"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "atRiskDays": {
+            "type": "integer"
+          },
+          "lapsedDays": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  },
+  "probe": "tools/live-proof/probes/feature-guest-taste.mjs: on qa-durres, (1) a TEST order with a phone and a taste_sync, no box: the guest view says objected false with a profile (orders >= 1, device present); the owner's card for that guest's key shows the same; the segment counts validate; (2) a malformed taste_sync is refused 400; (3) the guest taps turn off (withdraw): objected true, deleted true; the view reads taste null; the next order keeps nothing and its taste_sync is refused 400 by name; (4) a second guest sends taste_off with an order: the profile from their first order is gone; (5) a third guest is forgotten by the owner: their profile is gone. Every TEST order is ended. A step that cannot run is FAILED.",
+  "last_verified": null
+}

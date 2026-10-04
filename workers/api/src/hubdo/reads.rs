@@ -9,6 +9,7 @@
 //!       [&op=trace[&trace=] | &op=catch_up[&rebuild=1]]   (W-HIST, `cube.rs`)
 //!   GET /fold/kitchen?venue=&now=[&from=&to=&days=]
 //!   GET /fold/stock?now=
+//!   GET /fold/week_top?venue=&now=   the storefront's "most ordered this week" (W-MR0)
 
 use super::HubImages;
 use worker::*;
@@ -44,6 +45,7 @@ impl HubImages {
             "kitchen" => self.fold_kitchen(req).await,
             "stock" => self.fold_stock(req).await,
             "exceptions" => self.fold_exceptions(req).await,
+            "week_top" => self.fold_week_top(req).await,
             _ => Response::error("no such fold", 404),
         }
     }
@@ -122,5 +124,19 @@ impl HubImages {
             Ok(v) => Response::from_json(&v),
             Err(why) => Response::error(why, 500),
         }
+    }
+
+    /// See `services::analytics::week_top::public`: the badged dishes of the
+    /// venue's last seven days, over the hot log (it keeps thirty).
+    pub(super) async fn fold_week_top(&self, req: &Request) -> Result<Response> {
+        let (venue, now) = match venue_and_now(req)? {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
+        let cat = self.catalogue().await?;
+        let zone = crate::services::analytics::handler::zone_of(&cat);
+        let (_, listed) = self.orders_view().await?;
+        let orders = crate::services::orders::mine::of_venue(listed, &venue);
+        Response::from_json(&crate::services::analytics::week_top::public(&orders, zone, now))
     }
 }

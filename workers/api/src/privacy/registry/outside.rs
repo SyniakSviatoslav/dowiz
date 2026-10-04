@@ -150,6 +150,13 @@ pub const BROWSER: &[DeviceKey] = &[
     key("dw_last_order", &[OrderContent], "store"),
     key("dw_bookings", &[Booking], "store"),
     key("dw_avoid", &[Note], "store"),
+    // W-MR7: the guest's taste and menu behaviour, scored on the phone, ON by default, off in one tap
+    // (operator ruling 2026-10-04; store/taste.js). IndexedDB.
+    key("dowiz.taste.v1", &[OrderContent, Taste, Device], "store"),
+    // The switch itself, '0' (off) or absent/'1' (on): nothing personal.
+    key("dw_taste_on", &[], "store"),
+    // The guest's objection to the venue's profile, '1' or absent: nothing personal (W-MR0 MR8).
+    key("dw_taste_objected", &[], "store"),
     prefix("dw_cart_", &[OrderContent], "store"),
     prefix("dowiz.rev.", &[Coordinates, Address], "store"),
     key("dw_lang", &[], "store"),

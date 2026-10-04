@@ -49,6 +49,63 @@ pub const WORDINGS: [(&str, &str); LANGS.len()] = [
     ),
 ];
 
+/// THE SECOND PURPOSE'S SENTENCES (W-MR0 row MR8, operator 2026-10-04: guest taste is scored on the
+/// server too, under its OWN consent). Separate from the offers box: one tick, one purpose. Same
+/// content addressing, so these ids can never collide with an offers id (the bytes differ).
+/// DRAFT, not legally reviewed; the operator is the reviewer, as for the offers sentences.
+pub const PERSONALISATION_WORDINGS: [(&str, &str); LANGS.len()] = [
+    (
+        "sq",
+        "{venue} mund të mbajë mend çfarë porosis dhe çfarë më pëlqen në meny, për të më sugjeruar pjata. \
+         Kurrë për çmimet. Mund ta tërheq dhe ta fshij në çdo kohë nga faqja e porosisë.",
+    ),
+    (
+        "en",
+        "{venue} may remember what I order and what I like on the menu, to suggest dishes to me. \
+         Never for prices. I can withdraw and delete it at any time from the order page.",
+    ),
+    (
+        "uk",
+        "{venue} може запам\u{2bc}ятовувати, що я замовляю і що мені смакує в меню, щоб пропонувати мені страви. \
+         Ніколи для цін. Я можу відкликати це й видалити будь-коли зі сторінки замовлення.",
+    ),
+    (
+        "ru",
+        "{venue} может запоминать, что я заказываю и что мне нравится в меню, чтобы предлагать мне блюда. \
+         Никогда для цен. Я могу отозвать это и удалить в любой момент со страницы заказа.",
+    ),
+];
+
+fn id_of(lang: &str, text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(lang.as_bytes());
+    h.update(b"\n");
+    h.update(text.as_bytes());
+    crate::crypto::hex(&h.finalize()[..8])
+}
+
+/// The personalisation sentence for a language, and its id.
+pub fn personalisation_wording_of(lang: &str) -> Option<(&'static str, &'static str)> {
+    PERSONALISATION_WORDINGS.iter().find(|(l, _)| *l == lang).copied()
+}
+pub fn personalisation_wording_id(lang: &str) -> String {
+    personalisation_wording_of(lang).map(|(l, t)| id_of(l, t)).unwrap_or_default()
+}
+/// The language of a PERSONALISATION sentence id, or `None` (an offers id is not one).
+pub fn lang_of_personalisation(id: &str) -> Option<&'static str> {
+    PERSONALISATION_WORDINGS.iter().find(|(l, t)| id_of(l, t) == id).map(|(l, _)| *l)
+}
+
+/// The `w` record for ANY sentence this build knows, by its id (both purposes).
+pub fn wording_json_of_id(id: &str) -> Option<String> {
+    WORDINGS
+        .iter()
+        .chain(PERSONALISATION_WORDINGS.iter())
+        .find(|(l, t)| id_of(l, t) == id)
+        .map(|(l, t)| format!("{{\"lang\":\"{}\",\"text\":\"{}\",\"id\":\"{}\"}}", esc(l), esc(t), id))
+}
+
 /// The sentence for a language, or nothing.
 pub fn wording_of(lang: &str) -> Option<(&'static str, &'static str)> {
     WORDINGS.iter().find(|(l, _)| *l == lang).copied()
@@ -60,12 +117,7 @@ pub fn wording_of(lang: &str) -> Option<(&'static str, &'static str)> {
 /// silently changing what every past consent claims to have said.
 pub fn wording_id(lang: &str) -> String {
     let Some((l, text)) = wording_of(lang) else { return String::new() };
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update(l.as_bytes());
-    h.update(b"\n");
-    h.update(text.as_bytes());
-    crate::crypto::hex(&h.finalize()[..8])
+    id_of(l, text)
 }
 
 /// The `w` record: the sentence, written once under its own id, so the act

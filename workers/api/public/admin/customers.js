@@ -11,6 +11,7 @@ import { $, $$, esc, icon, t, lang, api, post, toast, sheet, busy, hydrate, conf
 import { T, LANGS, retranslate } from '/admin/i18n.js';
 import * as ui from '/lib/ui/index.js';
 import { btn, field, select, rowBtn, rowDiv } from '/admin/parts.js';
+import { mountTaste } from '/admin/taste.js';
 
 ui.useTranslator(t);
 
@@ -68,10 +69,11 @@ export function openCard(c, done, forgotten){
     ${select({ id: 'cd-lang', key: 'cardLang', value: c.lang || '', options: [{ value: '', label: '' }, ...LANGS.map(l => ({ value: l, label: l }))], tour: 'customers.lang' })}
     ${field({ id: 'cd-bd', key: 'cardBirthday', inputmode: 'numeric', placeholder: 'MM-DD', maxlength: 5, value: c.birthdayMd || '', autocomplete: 'off', tour: 'customers.birthday' })}
     <div class="btn-row">${btn({ id: 'cdGo', variant: 'primary', icon: 'check', key: 'cardSave', tour: 'customers.save' })}</div>
-    ${linksHtml(c)}${privacyHtml()}`, { name: 'card' });
+    <div id="cdTaste"></div>${linksHtml(c)}${privacyHtml()}`, { name: 'card' });
   retranslate($('#sheetIn')); hydrate($('#sheetIn'));
   wireLinks(c);
   wirePrivacy(c, forgotten);
+  mountTaste(c.key);
   for (const b of $$('[data-al],[data-tag]', $('#sheetIn'))) b.onclick = () => b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
   $('#cdGo').onclick = async () => {
     const picked = k => $$(`[data-${k}]`, $('#sheetIn')).filter(i => i.getAttribute('aria-pressed') === 'true').map(i => i.dataset[k]);

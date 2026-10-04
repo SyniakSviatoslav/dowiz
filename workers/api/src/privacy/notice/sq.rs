@@ -25,6 +25,7 @@ fn data(d: Data) -> &'static str {
         Data::Device => "të dhëna të pajisjes",
         Data::Ip => "adresa e internetit e pajisjes suaj",
         Data::Photo => "një foto që zgjidhni vetë",
+        Data::Taste => "çfarë ju pëlqen në meny, nga porositë dhe mënyra si e shfletoni",
     }
 }
 
@@ -37,6 +38,7 @@ fn purpose(p: Purpose) -> &'static str {
         Purpose::TableChat => "mesazhet në tavolinën tuaj",
         Purpose::Kitchen => "për të njoftuar kuzhinën për porosinë tuaj",
         Purpose::Crm => "që lokali t'ju kujtojë si mysafir",
+        Purpose::Personalisation => "për t'ju sugjeruar pjata që mund t'ju pëlqejnë, në interesin legjitim të lokalit; e fikni me një prekje («fike») dhe fshihet (kurrë për çmimin)",
         Purpose::ConsentProof => "për të provuar se për çfarë keni rënë dakord",
         Purpose::Marketing => "ofertat që keni pranuar të merrni",
         Purpose::StoredValue => "bilanci juaj i parapaguar",

@@ -1,0 +1,73 @@
+# Lesson G7 (guest). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-MR0 (2026-10-04): the guest's own allergen filter, shown only where the venue has it on
+# (`feature.allergen_filter`). Only the guest's tap hides; the choice stays on the phone.
+id: G7
+role: guest
+module: menu
+order: 8
+covers: []
+title:
+  sq: "Fshihni pjatat me alergjenët tuaj"
+  en: "Hide dishes with your allergens"
+  uk: "Сховайте страви з вашими алергенами"
+  ru: "Скройте блюда с вашими аллергенами"
+goal:
+  sq: "Zgjidhni alergjenët që shmangni; menyja fsheh pjatat që i përmbajnë dhe ato pa deklaratë."
+  en: "Choose the allergens you avoid; the menu hides dishes that contain them and dishes nobody declared."
+  uk: "Оберіть алергени, яких уникаєте; меню сховає страви з ними та страви без заяви."
+  ru: "Выберите аллергены, которых избегаете; меню скроет блюда с ними и блюда без заявления."
+steps:
+  - key: 1
+    anchor: menu.avoid
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="menu.avoid"]'
+    title:
+      sq: "Alergjenët"
+      en: "Allergens"
+      uk: "Алергени"
+      ru: "Аллергены"
+    caption:
+      sq: "Butoni shfaqet kur lokali e ka ndezur filtrin."
+      en: "The button shows where the venue has the filter on."
+      uk: "Кнопка з'являється, коли заклад увімкнув фільтр."
+      ru: "Кнопка появляется, когда заведение включило фильтр."
+  - key: 2
+    anchor: avoid.chip
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="avoid.chip"]'
+    title:
+      sq: "Prekni çfarë shmangni"
+      en: "Tap what you avoid"
+      uk: "Позначте, чого уникаєте"
+      ru: "Отметьте, чего избегаете"
+    caption:
+      sq: "Zgjedhja mbetet në telefonin tuaj dhe nuk dërgohet askund."
+      en: "The choice stays on your phone and is sent nowhere."
+      uk: "Вибір лишається на вашому телефоні й нікуди не надсилається."
+      ru: "Выбор остаётся на вашем телефоне и никуда не отправляется."
+  - key: 3
+    anchor: avoid.clear
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="avoid.clear"]'
+    title:
+      sq: "Shfaqni të gjitha"
+      en: "Show everything"
+      uk: "Показати все"
+      ru: "Показать всё"
+    caption:
+      sq: "Një prekje e kthen menynë e plotë."
+      en: "One tap brings the whole menu back."
+      uk: "Один дотик повертає все меню."
+      ru: "Одно касание возвращает всё меню."

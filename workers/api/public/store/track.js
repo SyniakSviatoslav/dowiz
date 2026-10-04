@@ -24,6 +24,7 @@ import { openOcean, phaseOf, seaRest } from '/store/sea.js';
 import * as trackMap from '/store/track-map.js';
 import { billMarkup, mountBill } from '/store/table.js';
 import { stampsMarkup, mountStamps } from '/store/stamps.js';
+import { venueTastePlace, mountVenueTaste } from '/store/taste-venue.js';
 import { chatMarkup, mountChat } from '/store/chat.js';
 // Generated from the kernel's `OrderStatus::took_money` -- see `/lib/vocab.js`.
 // The hand copy this replaces was `new Set(['REJECTED', 'CANCELLED'])`, missing
@@ -257,6 +258,7 @@ export function openTracking(order){
         ${trackMap.markup(order)}
         ${billMarkup(order)}
         ${stampsMarkup(order)}
+        ${venueTastePlace(order)}
         ${chatMarkup(order)}
         ${goodReviews().length ? `<section class="credits-wrap"><p class="eyebrow" data-t="whatTheySay"></p><div class="credits" id="credits"></div></section>` : ''}
         <div class="ep-more">
@@ -281,6 +283,7 @@ export function openTracking(order){
   bindCopy();
   mountBill(order, tokenFor(order.id));
   mountStamps(order, tokenFor(order.id));
+  mountVenueTaste(order, tokenFor(order.id));
   mountChat(order, tokenFor(order.id));
   if ($('#pushHere')) import('/lib/push.js').then(p => p.mount($('#pushHere'), { token: tokenFor(order.id), lang, sw: '/sw.js', scope: '/', why: 'pushWhyCustomer', tour: 'track.push', toast })).catch(() => {});
   $('#closeTrack').onclick = closeSheet;

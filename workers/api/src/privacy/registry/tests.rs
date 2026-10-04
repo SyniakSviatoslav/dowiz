@@ -145,6 +145,7 @@ fn a_personal_store_says_how_it_will_be_exported() {
     for s in stores().filter(|s| s.personal()) {
         match s.export {
             Exporter::Missing(row) => assert!(row.starts_with('P'), "{}: {row}", s.image),
+            Exporter::Route(r) => assert!(r.contains("/api/"), "{}: {r}", s.image),
             Exporter::NotPersonal => assert!(
                 matches!(s.erase, Eraser::Expires(_) | Eraser::Retain(_)),
                 "{}: only a pseudonymous or expiring store may skip the export", s.image

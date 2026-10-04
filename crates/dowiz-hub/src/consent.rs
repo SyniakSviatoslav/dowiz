@@ -32,7 +32,10 @@ pub mod forget;
 pub mod log;
 pub mod sms_wordings;
 pub mod wordings;
-pub use wordings::{wording_id, wording_json, wording_of, LANGS, WORDINGS};
+pub mod personal;
+pub use personal::{channels_of, objected, CHANNEL_STOREFRONT, PURPOSE_PERSONALISATION};
+pub use wordings::{lang_of_personalisation, personalisation_wording_id, personalisation_wording_of, PERSONALISATION_WORDINGS};
+pub use wordings::{wording_id, wording_json, wording_json_of_id, wording_of, LANGS, WORDINGS};
 
 use crate::logimage::Entry;
 use crate::minijson::{esc, int_field, str_field};
@@ -47,7 +50,7 @@ pub const KIND_WORDING: &str = "w";
 pub const PURPOSE_MARKETING: &str = "marketing";
 /// ORDER STATUS BY SMS (W-SMS): the unticked checkout box. Not marketing, but a phone number is personal data: ASKED.
 pub const PURPOSE_ORDER_STATUS: &str = "order_status";
-pub const PURPOSES: [&str; 2] = [PURPOSE_MARKETING, PURPOSE_ORDER_STATUS];
+pub const PURPOSES: [&str; 3] = [PURPOSE_MARKETING, PURPOSE_ORDER_STATUS, PURPOSE_PERSONALISATION];
 
 /// AND PER CHANNEL, because Meta's opt-in is: a WhatsApp consent is not a
 /// Telegram one, and this venue's customers reach it on three.
@@ -57,9 +60,10 @@ pub const CHANNEL_INSTAGRAM: &str = "instagram";
 pub const CHANNEL_SMS: &str = "sms";
 pub const CHANNELS: [&str; 4] = [CHANNEL_WHATSAPP, CHANNEL_TELEGRAM, CHANNEL_INSTAGRAM, CHANNEL_SMS];
 
-/// THE PAIRS THAT MEAN SOMETHING: marketing on the messengers, order status on SMS. [`check`] refuses the rest; `forget` withdraws these.
-pub const PAIRS: [(&str, &str); 4] =
-    [(PURPOSE_MARKETING, CHANNEL_WHATSAPP), (PURPOSE_MARKETING, CHANNEL_TELEGRAM), (PURPOSE_MARKETING, CHANNEL_INSTAGRAM), (PURPOSE_ORDER_STATUS, CHANNEL_SMS)];
+/// THE PAIRS THAT MEAN SOMETHING: marketing on the messengers, order status on SMS, personalisation on the
+/// venue's own storefront (W-MR0). [`check`] refuses the rest; `forget` withdraws these.
+pub const PAIRS: [(&str, &str); 5] = [(PURPOSE_MARKETING, CHANNEL_WHATSAPP), (PURPOSE_MARKETING, CHANNEL_TELEGRAM),
+    (PURPOSE_MARKETING, CHANNEL_INSTAGRAM), (PURPOSE_ORDER_STATUS, CHANNEL_SMS), (PURPOSE_PERSONALISATION, CHANNEL_STOREFRONT)];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
@@ -95,6 +99,8 @@ pub enum Method {
     OwnerEntered,
     /// The person was forgotten (§3.3 step 2): a withdrawal, never a grant.
     Erasure,
+    /// The guest's one tap "turn off" (Art. 21, `personal.rs`): a withdrawal, never a grant.
+    Objection,
 }
 
 impl Method {
@@ -104,6 +110,7 @@ impl Method {
             Method::WhatsappKeyword => "whatsapp_keyword",
             Method::OwnerEntered => "owner_entered",
             Method::Erasure => "erasure",
+            Method::Objection => "objection",
         }
     }
     pub fn of(s: &str) -> Option<Method> {
@@ -112,6 +119,7 @@ impl Method {
             "whatsapp_keyword" => Some(Method::WhatsappKeyword),
             "owner_entered" => Some(Method::OwnerEntered),
             "erasure" => Some(Method::Erasure),
+            "objection" => Some(Method::Objection),
             _ => None,
         }
     }
@@ -224,8 +232,8 @@ pub fn check(act: &Act) -> Result<(), String> {
     if !PURPOSES.contains(&act.purpose.as_str()) {
         return Err(format!("unknown purpose {:?}", act.purpose));
     }
-    if !CHANNELS.contains(&act.channel.as_str()) {
-        return Err(format!("unknown channel {:?}", act.channel));
+    if !channels_of(&act.purpose).contains(&act.channel.as_str()) {
+        return Err(format!("unknown channel {:?} for {:?}", act.channel, act.purpose));
     }
     if !PAIRS.contains(&(act.purpose.as_str(), act.channel.as_str())) {
         return Err(format!("{:?} is not asked on {:?}", act.purpose, act.channel));
@@ -262,27 +270,7 @@ pub fn check(act: &Act) -> Result<(), String> {
 /// wins -- the only safe direction for a rule whose failure sends a stranger a
 /// message they refused.
 pub fn state(entries: &[Entry], key: &str, purpose: &str, channel: &str) -> Option<Consented> {
-    let mut best: Option<Act> = None;
-    for e in entries.iter().filter(|e| e.kind == KIND_ACT) {
-        let Some(act) = Act::parse(&e.json) else { continue };
-        if act.key != key || act.purpose != purpose || act.channel != channel {
-            continue;
-        }
-        if check(&act).is_err() {
-            continue;
-        }
-        let takes = match &best {
-            None => true,
-            Some(b) => {
-                act.at_ms > b.at_ms
-                    || (act.at_ms == b.at_ms && act.state == State::Withdrawn)
-            }
-        };
-        if takes {
-            best = Some(act);
-        }
-    }
-    let act = best?;
+    let act = personal::newest(entries, key, purpose, channel)?;
     if act.state != State::Given {
         return None;
     }

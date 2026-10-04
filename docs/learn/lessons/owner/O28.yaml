@@ -1,0 +1,56 @@
+# Lesson O28 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-MR0 (2026-10-04, DECISIONS.md D0 amendment + operator ruling): the guest's taste and segment,
+# automatic for every guest who gave a phone, unless they turned it off. A segment is when a guest last came, never a price.
+id: O28
+role: owner
+module: customers
+order: 43
+covers: []
+title:
+  sq: "Shija e klientit dhe segmentet"
+  en: "A guest's taste and the segments"
+  uk: "Смак гостя й сегменти"
+  ru: "Вкус гостя и сегменты"
+goal:
+  sq: "Shihni sa klientë janë në çdo segment dhe shijen e një klienti me arsyen."
+  en: "See how many guests are in each segment, and one guest's taste with the reason."
+  uk: "Побачити, скільки гостей у кожному сегменті, і смак одного гостя з поясненням."
+  ru: "Увидеть, сколько гостей в каждом сегменте, и вкус одного гостя с объяснением."
+steps:
+  - key: 1
+    anchor: customers.segments
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="customers.segments"]'
+    title:
+      sq: "Segmentet"
+      en: "Segments"
+      uk: "Сегменти"
+      ru: "Сегменты"
+    caption:
+      sq: "I ri, i rregullt, nuk ka ardhur prej kohësh, nuk vjen më: pa ata që e fikën."
+      en: "New, regular, not seen for a while, no longer coming: not those who turned it off."
+      uk: "Новий, постійний, давно не був, більше не приходить: без тих, хто вимкнув."
+      ru: "Новый, постоянный, давно не был, больше не приходит: без тех, кто выключил."
+  - key: 2
+    anchor: customers.taste
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="customers.taste"]'
+    title:
+      sq: "Shija në kartelë"
+      en: "Taste on the card"
+      uk: "Смак у картці"
+      ru: "Вкус в карточке"
+    caption:
+      sq: "Shijet kryesore, segmenti dhe pse. Kurrë për çmime apo zbritje."
+      en: "Top tastes, the segment and why. Never for prices or discounts."
+      uk: "Головні смаки, сегмент і чому. Ніколи для цін чи знижок."
+      ru: "Главные вкусы, сегмент и почему. Никогда для цен или скидок."

@@ -27,7 +27,7 @@ export const RU = { ex_name:'напр. Арта', ex_note:'напр. без лу
         chatTitle:'Чат с курьером', chatWaiting:'Откроется, когда курьер возьмёт ваш заказ', chatClosed:'Чат закрыт; читать можно ещё 30 дней', chatEmpty:'Сообщений пока нет',
         chatPlaceholder:'Написать курьеру…', chatSend:'Отправить', chatYou:'Вы', chatCourier:'Курьер',
         inArea:'Сюда доставляем', outArea:'Вне зоны доставки', noGeo:'Не удалось определить место',
-        notDeclared:'Аллергены не заявлены', noneOf14:'Ни одного из 14 аллергенов',
+        weekTop:'Чаще всего заказывают на этой неделе', notDeclared:'Аллергены не заявлены', noneOf14:'Ни одного из 14 аллергенов',
         tip:'Чаевые курьеру', tipNo:'Без чаевых', tipOther:'Другая сумма',
         sayHow:'Как вам?', sayHint:'Читает только заведение. Без звёзд и оценок.',
         sayGo:'Отправить', saidIt:'Спасибо',
@@ -59,7 +59,7 @@ export const RU = { ex_name:'напр. Арта', ex_note:'напр. без лу
         stateLbl:'Статус', ratingLbl:'Рейтинг', timeLbl:'Время доставки', feeLbl:'Доставка',
         mapLegend:'Путь заказа', mapVenue:'заведение', mapYou:'вы', mapCourier:'курьер', taste:'Вкус', taste_spicy:'острый', taste_sweet:'сладкий', taste_salty:'солёный', taste_sour:'кислый', taste_richness:'насыщенный', episode:'Заказ', stepOf:'шаг', ofSteps:'из', whatTheySay:'Что говорят гости', nextUp:'Далее', preparingTitle:'Готовится для вас',
         installBody:'Меню открывается одним касанием, даже без сети; заказ отслеживается с главного экрана.', installNow:'Установить', installLater:'Позже', installNever:'Больше не показывать', installApp:'Установить как приложение', installHint:'В Safari: Поделиться → На экран «Домой»', installed:'Установлено',
-        tags:{ salmon:'Лосось', tuna:'Тунец', shrimp:'Креветка', vegetarian:'Вегетарианское', hot:'Горячее', popular:'Популярное',
+        tags:{ salmon:'Лосось', tuna:'Тунец', shrimp:'Креветка', vegetarian:'Вегетарианское', hot:'Горячее', popular:'Выбор заведения',
                sets:'Сеты', bowls:'Боулы', soups:'Супы', drinks:'Напитки', freskuese:'Безалкогольное', kafeteria:'Кофе', alkool:'Алкоголь',
                birra:'Пиво', 'lengje-frutash':'Соки' },
         // ── the table-booking surface (store/booking.js) ──

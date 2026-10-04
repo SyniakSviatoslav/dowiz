@@ -44,26 +44,73 @@
 # VENUE, by the public, which is the opposite direction of gaze.
 set -eu
 cd "$(dirname "$0")/../.."
-BASELINE_FILE=tools/gates/no-scoring.baseline
+# NO_SCORING_ROOT points the whole scan at a scratch tree (the proof); unset, the product.
+R=${NO_SCORING_ROOT:-.}
+BASELINE_FILE=${NO_SCORING_BASELINE:-tools/gates/no-scoring.baseline}
 
-hits() {
+# ── GATE-1, AND WHERE A GUEST MAY BE SCORED (W-MR0, 2026-10-04) ──────────────────────────────
+# OPERATOR DECISION 2026-10-04, verbatim: "смак і поведінку гостя треба оцінювати ... на пристрої
+# і сервері" -- the guest's TASTE and BEHAVIOUR are scored, on the device and on the server,
+# automatically, stopped by the guest's one-tap objection (ruling of the same day; DECISIONS.md D0). That decision is a scope, and
+# this gate is where the scope is written down. Three classes of name:
+#
+#   1. OD-8, UNCHANGED, EVERYWHERE ON THE SERVER: a participant rated, ranked, tiered, given a
+#      reputation or a VIP flag (`courier_score`, `customer_tier`, `vip`). A taste profile is not a
+#      verdict on a person; a tier is. Staff and courier rules are untouched (the staff
+#      personal-KPI amendment is a separate row).
+#   2. GUEST TASTE/BEHAVIOUR (`guest_taste`, `customer_affinity`, `guest_segment`, `customer_ltv`...):
+#      ALLOWED in the guest's own browser (workers/api/public/store/**, never scanned for these) and
+#      in the ONE server module that computes the profile, `$SCORER_RS` below. REFUSED in every other
+#      server file: a score computed anywhere else escapes the objection and the DPIA.
+#   3. PRICING BY PERSON, REFUSED EVERYWHERE, the browser included: `price_sensitivity`,
+#      `willingness_to_pay`, `wtp`. The operator asked for scoring, not pricing. A price, a discount,
+#      an eligibility or a refusal set from a guest's score is personalised pricing, which EU
+#      Omnibus Directive 2019/2161 (art. 6(1)(ea) of 2011/83/EU) requires to be disclosed to every
+#      guest, and a refusal from a score is an Art. 22 GDPR decision. So the two scorer files may
+#      not even NAME a price, a discount, a promo, an eligibility or a refusal (`MONEY_WORDS`).
+#
+# Matched case-insensitively, so `GUEST_AFFINITY` or `Guest_Ltv` counts too (a CamelCase
+# `GuestAffinity` has no underscore and is not matched; the snake field it serialises is).
+# Comments are stripped first, as before.
+PERSON_JUDGED='(courier|customer|client|venue|staff|waiter|user|diner|guest|partner)_(score|rating|rank|tier|reputation)|(score|rating|rank|tier|reputation)_of_(courier|customer|venue|staff)|\breputation\b|\bvip\b'
+GUEST_SCORED='(guest|customer|client|user|diner)_(taste|affinity|propensity|segment|cohort|ltv|spend|profile)'
+PRICED_BY_PERSON='price_sensitivity|willingness_to_pay|\bwtp\b'
+MONEY_WORDS='price|discount|promo|eligib|refus'
+# The ONE server module allowed to hold class 2 (and its tests directory), and the device scorer.
+SCORER_RS=workers/api/src/services/customers/taste
+SCORER_JS=workers/api/public/store/taste.js
+
+server_files() {
   # THE PRODUCT'S OWN PATH, not the research modules. `crates/dowiz-core` also
   # holds agent orchestration, retrieval and P2P work whose scores are of
   # candidates and chunks; the decision path is what OD-8 governs.
-  for f in $(find crates/dowiz-core/src/decision crates/dowiz-core/src/domain.rs \
-               crates/dowiz-core/src/order_machine.rs kernel/src/decision \
-               crates/dowiz-hub/src workers/api/src tools/native-spa-server/src \
-               -name '*.rs' 2>/dev/null | sort); do
-    sed 's,//.*,,' "$f" \
-      | grep -nE '(courier|customer|client|venue|staff|waiter|user|diner|guest|partner)_(score|rating|rank|tier|reputation)|(score|rating|rank|tier|reputation)_of_(courier|customer|venue|staff)|\breputation\b|\bvip\b|\bVIP\b' \
-      | sed "s|^|$f:|"
-  done \
-    | grep -v 'google' \
-    | grep -v 'reviewCount' || true
+  for d in crates/dowiz-core/src/decision crates/dowiz-core/src/domain.rs crates/dowiz-core/src/order_machine.rs \
+           kernel/src/decision crates/dowiz-hub/src workers/api/src; do
+    [ -e "$R/$d" ] && find "$R/$d" -name '*.rs'
+  done | sort
 }
+browser_files() { [ -d "$R/workers/api/public" ] && find "$R/workers/api/public" -name '*.js' ! -name '*.test.*' | sort; }
+code() { sed 's,//.*,,' "$1"; }   # comments out (a `//` inside a string is cut too: a gate may over-count, never under)
 
-n=$(hits | grep -c . || true)
-echo "no-scoring: $n site(s) that rate a participant"
+hits() {
+  for f in $(server_files); do
+    rel=${f#"$R"/}
+    code "$f" | grep -niE "$PERSON_JUDGED|$PRICED_BY_PERSON" | sed "s|^|$rel:|"
+    case "$rel" in
+      "$SCORER_RS".rs|"$SCORER_RS"/*) code "$f" | grep -niE "$MONEY_WORDS" | sed "s|^|$rel: (a guest scorer naming money) |" ;;
+      *) code "$f" | grep -niE "$GUEST_SCORED" | sed "s|^|$rel: (a guest score outside $SCORER_RS) |" ;;
+    esac
+  done
+  for f in $(browser_files); do
+    rel=${f#"$R"/}
+    code "$f" | grep -niE "$PRICED_BY_PERSON" | sed "s|^|$rel:|"
+    [ "$rel" = "$SCORER_JS" ] && code "$f" | grep -niE "$MONEY_WORDS" | sed "s|^|$rel: (a guest scorer naming money) |"
+  done
+} 2>/dev/null
+filtered() { hits | grep -v 'google' | grep -v 'reviewCount' || true; }
+
+n=$(filtered | grep -c . || true)
+echo "no-scoring: $n site(s) that rate a participant, price by person, or score a guest outside the one scorer"
 if [ ! -f "$BASELINE_FILE" ]; then
   echo "$n" > "$BASELINE_FILE"
   echo "no-scoring: baseline recorded at $n"
@@ -72,13 +119,13 @@ fi
 baseline=$(cat "$BASELINE_FILE")
 if [ "$n" -gt "$baseline" ]; then
   echo "no-scoring: FAILED — $((n - baseline)) more than the baseline of $baseline."
-  echo "no-scoring: trust is a signed capability, never a score (DECISIONS.md OD-8)."
-  hits | sed 's|^|  |'
+  echo "no-scoring: trust is a signed capability, never a score (DECISIONS.md OD-8); a guest is scored only in $SCORER_RS and $SCORER_JS, never to set a price (D0)."
+  filtered | sed 's|^|  |'
   exit 1
 fi
 if [ "$n" -lt "$baseline" ]; then
   echo "$n" > "$BASELINE_FILE"
   echo "no-scoring: ratchet lowered $baseline -> $n. Commit the baseline with the change."
 fi
-[ "$n" -gt 0 ] && hits | sed 's|^|  |'
+[ "$n" -gt 0 ] && filtered | sed 's|^|  |'
 exit 0

@@ -25,14 +25,25 @@ pub fn lang_of_wording(id: &str) -> Option<&'static str> {
 pub fn write(log: &mut LogImage, act: &Act) -> Result<(), String> {
     check(act)?;
     if act.state == State::Given {
-        // EACH BOX PROVES ITS OWN PROMISE (W-SMS): an order-status grant must
-        // name the SMS sentence, a marketing grant the offers sentence.
+        // EACH BOX PROVES ITS OWN PROMISE (W-SMS, W-MR0): an order-status grant must name the SMS
+        // sentence, a personalisation grant a personalisation sentence, a marketing grant the offers one.
         let sms = act.purpose == super::PURPOSE_ORDER_STATUS;
-        let lang = if sms { super::sms_wordings::lang_of_sms_wording(&act.wording_id) } else { lang_of_wording(&act.wording_id) };
+        let personal = act.purpose == super::PURPOSE_PERSONALISATION;
+        let lang = if sms {
+            super::sms_wordings::lang_of_sms_wording(&act.wording_id)
+        } else if personal {
+            super::lang_of_personalisation(&act.wording_id)
+        } else {
+            lang_of_wording(&act.wording_id)
+        };
         let Some(lang) = lang else {
             return Err(format!("unknown wording {:?}: no sentence to show for it", act.wording_id));
         };
-        let words = if sms { super::sms_wordings::sms_wording_json(lang) } else { wording_json(lang) };
+        let words = if sms {
+            super::sms_wordings::sms_wording_json(lang)
+        } else {
+            super::wording_json_of_id(&act.wording_id).unwrap_or_else(|| wording_json(lang))
+        };
         if log.about(KIND_WORDING, Some(&act.wording_id), 1).is_empty() {
             log.append(KIND_WORDING, &act.wording_id, &words)
                 .map_err(|e| format!("consent image refused the wording: {e:?}"))?;

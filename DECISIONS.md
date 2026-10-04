@@ -14,6 +14,28 @@ If a change breaks any of these, it is rejected. They outrank roadmap sequencing
 feature requests, and "MVP-first" pragmatism (C8/YAGNI still applies to *scope*, not to
 these invariants — the invariants are non-negotiable; only their *machinery depth* is phased).
 
+**D0 amendment — guest taste and behaviour are scored, automatically, stoppable in one tap, never to price (operator, 2026-10-04).**
+Verbatim: "смак і поведінку гостя треба оцінювати ... на пристрої і сервері, і це має бути включено в лейн зараз".
+Ruling of the same day (supersedes a consent-checkbox design): personalisation is AUTOMATIC, no checkbox,
+lawful basis legitimate interest (GDPR Art. 6(1)(f), Recital 47), stopped by an objection (Art. 21).
+"Trust is a signed capability, never a score" (OD-8) keeps its meaning for every PARTICIPANT's standing: no
+rating, rank, tier, reputation or VIP flag of a courier, a guest, a venue or staff. What is amended is the
+guest's TASTE and BEHAVIOUR on the menu:
+1. ON THE DEVICE it is scored ON BY DEFAULT, off in one tap, shown in full and forgotten in one tap
+   (`workers/api/public/store/taste.js`, `dowiz.taste.v1`).
+2. ON THE SERVER it is scored, ON BY DEFAULT, for a guest who gave a phone, only in one module
+   (`workers/api/src/services/customers/taste.rs`); the device sends at most one aggregated field,
+   `taste_sync`. One tap ("We remember your taste · turn off", footer and order page) files an objection in
+   the consent log and deletes the profile; after it, nothing is stored and `taste_sync` is refused.
+   The balancing test is `docs/privacy/DPIA-personalisation.md`.
+3. A guest is recognised only by what they gave (the phone at checkout, an order link they hold), NEVER by
+   fingerprinting the device (`tools/gates/no-tracking.sh` rule 5).
+4. NEVER to set a price, a discount, an eligibility or a refusal: personalised pricing would have to be
+   disclosed to every guest (EU Omnibus 2019/2161), and a refusal from a score is an Art. 22 GDPR decision.
+   It may re-order and suggest; it never hides a dish (FIC 1169/2011).
+Enforced by `tools/gates/no-scoring.sh` (the scope in its header) and `tools/gates/no-tracking.sh`.
+Staff personal KPIs (operator 2026-10-03) are NOT covered by this amendment; they need their own.
+
 ## D1. Drop the centralized server (ENFORCED, 2026-07-12)
 - `server/` (axum + rusqlite centralized deploy) is **DROPPED**. Not refactored, not kept
   as "single-node mode" — removed from the build.

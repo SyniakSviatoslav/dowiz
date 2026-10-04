@@ -9,6 +9,7 @@
 // renders: a module that owns the truth must not also own the screen, or the
 // screen re-renders every time the truth moves.
 
+import { hiddenBecause as hiddenBy } from '/store/avoid.js';
 import * as Money from '/lib/money.js';
 import { venueClock } from '/lib/booking-time.js';
 import { safeGet, safeSet } from '/store/storage.js';
@@ -319,12 +320,8 @@ export function loadAvoid(){
 }
 export const saveAvoid = () => safeSet('dw_avoid', JSON.stringify(state.avoid || []));
 /// Why this dish is hidden by the allergen filter, or null.
-export function hiddenBecause(p){
-  const avoid = state.avoid || [];
-  if (!avoid.length) return null;
-  if (!Array.isArray(p.allergens)) return 'undeclared';
-  return p.allergens.some(c => avoid.includes(c)) ? 'contains' : null;
-}
+/// The rule itself is `store/avoid.js` (pure, node-tested): only the guest's explicit choice hides.
+export const hiddenBecause = p => hiddenBy(p, state.avoid);
 
 // ── text ────────────────────────────────────────────────────────────────────
 /// Accent- and case-insensitive: "cmimi" must find "çmimi".
