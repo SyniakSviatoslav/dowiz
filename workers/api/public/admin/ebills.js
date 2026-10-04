@@ -35,6 +35,7 @@ export async function open(){
   const body = `
     <div class="rows">
       ${rowDiv({ leading: icon('receipt'), title: { t: 'ebills' }, sub: `<span class="mono">${cfg.user ? esc(cfg.user) + ' · POS ' + esc(cfg.pos_id) : ''}</span>`, trailing: pill(status[0], { key: status[1] }), tour: 'ebills.status' })}
+      ${cfg.enabled ? row('clock-hour-4', 'eb_cadence', esc(t('eb_cadenceNow')), 'ebills.cadence') : ''}
       ${row('clock', 'eb_lastOk', st.last_ok_ms ? esc(ago(st.last_ok_ms)) : esc(t('eb_never')))}
       ${st.last_error ? row('alert-triangle', 'eb_lastError', `${esc(ago(st.last_error.at_ms))} · ${esc(st.last_error.why)}`) : ''}
       ${row('download', 'eb_imported', `${st.placed || 0} ${esc(t('eb_placed'))} · ${st.paid || 0} ${esc(t('eb_paid'))} · ${st.noted || 0} ${esc(t('eb_noted'))} · #${esc(st.watermark || 0)}`)}

@@ -11,6 +11,12 @@
 use crate::wire::{Call, Reply};
 use worker::{Error, Result};
 
+/// `Own`: a venue's object answering its own name inside its alarm (W-LOOP).
+mod own;
+pub use own::Own;
+/// `Kv`: the KV store the media routes use.
+mod kv;
+pub use kv::Kv;
 #[cfg(test)]
 pub(crate) mod mem;
 /// A platform in memory for route tests (`Site`).
@@ -21,6 +27,9 @@ pub(crate) mod site;
 #[derive(Clone)]
 pub enum Env {
     Live(worker::Env),
+    /// A venue's object running its OWN timed work (W-LOOP): calls to that venue's object are
+    /// answered in process (`Stub::Own`); everything else is the `base` it wraps.
+    Own(std::rc::Rc<Own>),
     #[cfg(test)]
     Mem(std::rc::Rc<mem::World>),
 }
@@ -34,6 +43,7 @@ impl Env {
     pub fn secret(&self, binding: &str) -> Result<String> {
         match self {
             Env::Live(e) => e.secret(binding).map(|s| s.to_string()),
+            Env::Own(o) => o.base.secret(binding),
             #[cfg(test)]
             Env::Mem(w) => w.secrets.get(binding).cloned().ok_or_else(|| not_here(binding)),
         }
@@ -41,6 +51,7 @@ impl Env {
     pub fn var(&self, binding: &str) -> Result<String> {
         match self {
             Env::Live(e) => e.var(binding).map(|s| s.to_string()),
+            Env::Own(o) => o.base.var(binding),
             #[cfg(test)]
             Env::Mem(w) => w.vars.get(binding).cloned().ok_or_else(|| not_here(binding)),
         }
@@ -48,6 +59,8 @@ impl Env {
     pub fn durable_object(&self, binding: &str) -> Result<ObjectNamespace> {
         match self {
             Env::Live(e) => e.durable_object(binding).map(ObjectNamespace::Live),
+            Env::Own(o) if binding == "HUB" => Ok(ObjectNamespace::Own(o.clone())),
+            Env::Own(o) => o.base.durable_object(binding),
             #[cfg(test)]
             Env::Mem(w) => Ok(ObjectNamespace::Mem(w.clone())),
         }
@@ -56,6 +69,7 @@ impl Env {
     pub fn live(&self) -> Result<&worker::Env> {
         match self {
             Env::Live(e) => Ok(e),
+            Env::Own(o) => o.base.live(),
             #[cfg(test)]
             Env::Mem(_) => Err(not_here("the platform Env")),
         }
@@ -63,6 +77,7 @@ impl Env {
     pub fn kv(&self, binding: &str) -> Result<Kv> {
         match self {
             Env::Live(e) => e.kv(binding).map(Kv::Live).map_err(|e| Error::RustError(e.to_string())),
+            Env::Own(o) => o.base.kv(binding),
             #[cfg(test)]
             Env::Mem(w) => Ok(Kv::Mem(w.clone())),
         }
@@ -76,6 +91,7 @@ impl Env {
 #[derive(Clone)]
 pub enum ObjectNamespace {
     Live(worker::ObjectNamespace),
+    Own(std::rc::Rc<Own>),
     #[cfg(test)]
     Mem(std::rc::Rc<mem::World>),
 }
@@ -100,6 +116,10 @@ impl std::fmt::Display for ObjectId {
                 Ok(id) => write!(f, "{id}"),
                 Err(_) => write!(f, "{}", self.name),
             },
+            ObjectNamespace::Own(o) => match o.base.durable_object("HUB").and_then(|ns| ns.id_from_name(&self.name)) {
+                Ok(id) => write!(f, "{id}"),
+                Err(_) => write!(f, "{}", self.name),
+            },
             #[cfg(test)]
             ObjectNamespace::Mem(_) => write!(f, "{}", self.name),
         }
@@ -110,6 +130,8 @@ impl ObjectId {
     pub fn get_stub(&self) -> Result<Stub> {
         match &self.ns {
             ObjectNamespace::Live(ns) => ns.id_from_name(&self.name)?.get_stub().map(Stub::Live),
+            ObjectNamespace::Own(o) if o.venue == self.name => Ok(Stub::Own(o.me)),
+            ObjectNamespace::Own(o) => o.base.durable_object("HUB")?.id_from_name(&self.name)?.get_stub(),
             #[cfg(test)]
             ObjectNamespace::Mem(w) => Ok(Stub::Mem(w.object(&self.name))),
         }
@@ -119,6 +141,8 @@ impl ObjectId {
 /// `worker::Stub`: a call to one venue's object.
 pub enum Stub {
     Live(worker::Stub),
+    /// The venue's own object, called in process from its own alarm (`Own`): NOT a request.
+    Own(&'static crate::hubdo::HubImages),
     #[cfg(test)]
     Mem(std::rc::Rc<crate::hubdo::HubImages>),
 }
@@ -130,8 +154,12 @@ impl Stub {
     pub async fn fetch_with_request(&self, req: Call) -> Result<Reply> {
         match self {
             Stub::Live(s) => Reply::from_worker(s.fetch_with_request(req.into_worker()?).await?).await,
+            Stub::Own(o) => o.route(req).await,
             #[cfg(test)]
-            Stub::Mem(o) => o.route(req).await,
+            Stub::Mem(o) => {
+                mem::count_object_request();
+                o.route(req).await
+            }
         }
     }
 }
@@ -176,51 +204,6 @@ impl<D> Ctx<D> {
     }
     pub fn kv(&self, binding: &str) -> Result<Kv> {
         self.env.kv(binding)
-    }
-}
-
-/// `worker::kv::KvStore`, over the four calls the media routes make (W-COV C2): the Live arm is
-/// the platform's builder chain, unchanged; in a test the World holds the bytes.
-pub enum Kv {
-    Live(worker::kv::KvStore),
-    #[cfg(test)]
-    Mem(std::rc::Rc<mem::World>),
-}
-
-impl Kv {
-    pub async fn put_bytes(&self, key: &str, value: &[u8]) -> Result<()> {
-        match self {
-            Kv::Live(k) => Ok(k.put_bytes(key, value)?.execute().await?),
-            #[cfg(test)]
-            Kv::Mem(w) => {
-                w.kv.borrow_mut().insert(key.to_string(), value.to_vec());
-                Ok(())
-            }
-        }
-    }
-    pub async fn put_text(&self, key: &str, value: &str) -> Result<()> {
-        match self {
-            Kv::Live(k) => Ok(k.put(key, value)?.execute().await?),
-            #[cfg(test)]
-            Kv::Mem(w) => {
-                w.kv.borrow_mut().insert(key.to_string(), value.as_bytes().to_vec());
-                Ok(())
-            }
-        }
-    }
-    pub async fn get_bytes(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        match self {
-            Kv::Live(k) => Ok(k.get(key).bytes().await?),
-            #[cfg(test)]
-            Kv::Mem(w) => Ok(w.kv.borrow().get(key).cloned()),
-        }
-    }
-    pub async fn get_text(&self, key: &str) -> Result<Option<String>> {
-        match self {
-            Kv::Live(k) => Ok(k.get(key).text().await?),
-            #[cfg(test)]
-            Kv::Mem(w) => Ok(w.kv.borrow().get(key).map(|b| String::from_utf8_lossy(b).into_owned())),
-        }
     }
 }
 

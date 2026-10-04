@@ -32,7 +32,7 @@ const FALLBACK: Window = Window { open: 11 * 60, close: 23 * 60 };
 
 /// The schedule the storefront draws from: the venue's seven days when it
 /// filed seven, else the fallback window every day.
-pub(super) fn schedule_of(hours_field: Option<&Value>) -> Schedule {
+pub(crate) fn schedule_of(hours_field: Option<&Value>) -> Schedule {
     match hours_field {
         Some(h) if h.as_array().is_some_and(|a| a.len() == 7) => hours::from_json(&h.to_string()),
         _ => Schedule { days: std::array::from_fn(|_| vec![FALLBACK]) },

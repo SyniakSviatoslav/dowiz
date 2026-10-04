@@ -1,20 +1,26 @@
-//! THE VENUE'S ALARM: the object that holds the work says when it is due.
+//! THE VENUE'S ALARM: the object that holds the work says when it is due, and
+//! does the work IN ITS OWN TURN.
 //!
 //! The rules are `cron::timer` (pure); this file reads the object's own images
 //! for them and sets, runs and re-arms the one alarm a Durable Object has.
 //!
-//! WHY THE ALARM LIVES HERE AND THE WORK IN THE RUNNER. This object holds the
-//! outbox, the till link's state and the fiscal queue in memory, so it can say
-//! when work is due from a write it is already making -- no request, no
-//! registry read. But the jobs (`cron::run`) talk to the venue through its
-//! object like every other caller does, so running them HERE would have this
-//! object call itself; the runner `cron~<venue>` exists so that it never does
-//! (`crate::cron`'s header). So `alarm()` asks the runner for one run -- one
-//! request -- and the lease (`outbox/lease.rs`) still guarantees one drain at a
-//! time, alarm or retry.
+//! NO RUNNER ANY MORE (W-LOOP, docs/research/2026-10-03-hub-cost-recomputed.md
+//! §1.3). The jobs (`cron::run`) talk to the venue through `Place`, as every
+//! caller does, and a second object (`cron~<venue>`) used to run them so that
+//! this one never called itself: alarm -> runner -> about ten reads back = 11.9
+//! billed object requests a firing, measured. `alarm()` now hands the jobs an
+//! `Env` that answers this venue's name with THIS object, in process
+//! (`edge::Own`), so a firing is one alarm and the jobs' reads are function
+//! calls. The lease (`outbox/lease.rs`) still guarantees one drain at a time,
+//! alarm or retry.
+//!
+//! THE NIGHT, FANNED OUT (W-LOOP row 3, `timer/night.rs`). The nightly cron
+//! asks the platform object once; it pings the venues a batch per alarm, and
+//! each venue does its own night in its own alarm -- the cron invocation makes
+//! one request whatever the number of venues.
 //!
 //! THE VENUE'S NAME. An object is addressed by `id_from_name(venue)` but is not
-//! reliably told that name, and the alarm needs it to address the runner. It
+//! reliably told that name, and the alarm needs it to answer its own calls. It
 //! is LEARNED -- from the nightly's question, the platform's `id.name`, or the
 //! catalogue's own record -- and every candidate is CHECKED: its
 //! `id_from_name` must be this object's id, so a catalogue that named another
@@ -26,6 +32,8 @@ use dowiz_hub::table::Table;
 use worker::*;
 // The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
 use crate::wire::{Call as Request, Reply as Response};
+
+mod night; // the nightly fan-out and the venue's own night (W-LOOP row 3), `hubdo/timer/night.rs`
 
 /// Where the learned name is kept.
 const VENUE_KEY: &str = "timer~venue";
@@ -58,13 +66,15 @@ impl HubImages {
         // An offline sale past its 48 h is said once (`room/offline.rs`).
         // Its failure never stops the outbox's alarm: said, and read as nothing due.
         let overdue = self.offline_overdue_next().await.unwrap_or_else(|e| { log_error!("timer: offline overdue unreadable: {e}"); None });
-        Ok(timer::next_due(&[timer::outbox_next(&outbox), ebills, fiscal, overdue]))
+        let night = self.night_next().await?;
+        Ok(timer::next_due(&[timer::outbox_next(&outbox), ebills, fiscal, overdue, night]))
     }
 
     /// The till link's next firing (`timer::ebills_next`), with the venue's
-    /// opening hours from its catalogue record.
+    /// polling hours (`ebills::cadence`) and the latest change it has seen:
+    /// the floor image's `at_ms` is written only when a table moved.
     async fn ebills_next(&self, now_ms: i64) -> Result<Option<i64>> {
-        use crate::ebills::state::{self, Config, State, K_CONFIG, K_STATE, ONE};
+        use crate::ebills::state::{self, Config, State, FLOOR_IMAGE, K_CONFIG, K_STATE, ONE};
         let Some((_, b)) = self.image(state::IMAGE).await? else { return Ok(None) };
         let t = Table::load(&b, state::CEILING).map_err(|_| bad("the ebills image is unreadable"))?;
         let cfg: Option<Config> = state::get(&t, K_CONFIG, ONE).map_err(bad)?;
@@ -80,13 +90,14 @@ impl HubImages {
                 .unwrap_or_default(),
             None => serde_json::Value::Null,
         };
-        let sched = loc.get("hours").map(|h| dowiz_hub::hours::from_json(&h.to_string())).unwrap_or_default();
-        let zone = crate::hubstore::zone_of(Some(&loc));
-        let open_at = |t: i64| {
-            let (weekday, minute) = dowiz_hub::tz::local_weekday_minute(zone, t);
-            sched.is_empty() || sched.is_open_at(weekday, minute)
+        let floor_at = match self.image(FLOOR_IMAGE).await? {
+            Some((_, b)) => serde_json::from_slice::<serde_json::Value>(&b).ok().and_then(|v| v["at_ms"].as_i64()).unwrap_or(0),
+            None => 0,
         };
-        Ok(timer::ebills_next(true, &st, now_ms, &open_at))
+        let sched = crate::ebills::cadence::schedule(&loc);
+        let zone = crate::hubstore::zone_of(Some(&loc));
+        let open_at = |t: i64| crate::ebills::cadence::open_at(&sched, zone, t);
+        Ok(timer::ebills_next(true, &st, now_ms, &open_at, floor_at))
     }
 
     async fn timer_apply(&self, arm: Arm) -> Result<()> {
@@ -155,23 +166,40 @@ impl HubImages {
         }
     }
 
-    /// `alarm()`: one run of the venue's jobs in its runner, then the next
-    /// alarm -- or none. AN ERROR IS RETURNED, not swallowed: the platform
-    /// retries a failed alarm (at-least-once), and every job is idempotent.
+    /// `alarm()` on the platform: its `Env` is the one the jobs get.
     pub(super) async fn timer_alarm(&self, now_ms: i64) -> Result<Response> {
+        let Some(env) = self.state.env() else {
+            return Response::error("an alarm outside the platform", 500);
+        };
+        self.timer_alarm_in(&crate::edge::Env::Live(env.clone()), now_ms).await
+    }
+
+    /// One run of the venue's jobs IN THIS OBJECT'S TURN, then the next alarm
+    /// -- or none. `base` is the platform (or, in tests, memory); the jobs get
+    /// it wrapped so that this venue's own name is answered in process. An
+    /// error is returned, not swallowed: the platform retries a failed alarm
+    /// (at-least-once), and every job is idempotent.
+    pub(crate) async fn timer_alarm_in(&self, base: &crate::edge::Env, now_ms: i64) -> Result<Response> {
+        // THE PLATFORM OBJECT'S NIGHT: a batch of venues pinged (`timer/night.rs`).
+        if self.night_fan_pending().await? {
+            return self.night_fan(base, now_ms).await;
+        }
         let Some(venue) = self.own_venue(None).await else {
             // Nothing can be run without the name; the nightly tells it.
             log_error!("timer: an alarm fired in an object that does not know its venue");
             return Response::ok("no venue");
         };
+        let env = self.own_env(base, &venue);
         self.in_alarm.set(true);
         // BEFORE the runner, so the alert it queues is drained in this run.
         self.offline_overdue(&venue, now_ms).await;
         let ran = async {
-            match self.state.call_runner(&venue, now_ms).await? {
-                200 => Ok(()),
-                s => Err(bad(format!("the runner answered {s}"))),
+            if self.night_due().await? {
+                crate::cloud::night_venue(&env, &venue, now_ms).await;
+                self.night_done().await?;
             }
+            crate::cron::run(&env, &venue, now_ms).await;
+            Ok::<(), Error>(())
         }
         .await;
         self.in_alarm.set(false);
@@ -188,26 +216,52 @@ impl HubImages {
         Response::ok("ran")
     }
 
-    /// `POST /fold/timer?venue=&now=`: the nightly's safety net. Re-arms a
-    /// lost alarm; answers what it found (`timer::Seen`).
+    /// `base`, with this venue's own name answered by this object (`edge::Own`).
+    fn own_env(&self, base: &crate::edge::Env, venue: &str) -> crate::edge::Env {
+        // SAFETY: the `'static` the platform's own dispatch already takes for
+        // every `alarm()` and `fetch()` (worker-macros `durable_object.rs`: "Durable
+        // Object will never be destroyed while there is still a running promise
+        // inside of it"). The `Env` built here lives in this call's future only:
+        // nothing it reaches is spawned past it.
+        let me: &'static super::HubImages = unsafe { &*(self as *const super::HubImages) };
+        crate::edge::Env::Own(std::rc::Rc::new(crate::edge::Own { me, venue: venue.to_string(), base: base.clone() }))
+    }
+
+    /// `POST /fold/timer?venue=&now=[&night=1|&fan=1]`: the nightly's safety
+    /// net. Re-arms a lost alarm; answers what it found (`timer::Seen`).
+    /// `night=1` (from the platform's fan-out) also books this venue's night
+    /// and brings the alarm forward to it; `fan=1`, asked of the platform
+    /// object by the cron, starts the fan-out (`timer/night.rs`).
     pub(super) async fn timer_route(&self, req: Request) -> Result<Response> {
         let url = req.url()?;
-        let Some((venue, now_ms)) = crate::cron::parse_runner_query(url.query_pairs().map(|(k, v)| (k.to_string(), v.to_string())))
-        else {
+        let pairs: Vec<(String, String)> = url.query_pairs().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        let Some((venue, now_ms)) = crate::cron::parse_runner_query(pairs.iter().cloned()) else {
             return Response::error("timer needs a venue and a clock", 400);
         };
         if !self.is_me(&venue) {
             return Response::error("that venue is not this object", 409);
+        }
+        let flag = |k: &str| pairs.iter().any(|(a, b)| a == k && b == "1");
+        if flag("fan") {
+            return self.night_fan_start(now_ms).await;
         }
         let _ = self.own_venue(Some(&venue)).await;
         let want = self.timer_next(now_ms).await?;
         let have = self.state.storage().get_alarm().await?;
         let arm = timer::rearm(have, want, now_ms);
         self.timer_apply(arm).await?;
-        Response::from_json(&Seen::of(arm, have))
+        // The answer is about the work that was due BEFORE the night was booked:
+        // a lost alarm is still named as one.
+        let seen = Seen::of(arm, have);
+        if flag("night") {
+            self.night_book(now_ms).await?;
+            let have = self.state.storage().get_alarm().await?;
+            self.timer_apply(timer::on_write(have, Some(now_ms), now_ms)).await?;
+        }
+        Response::from_json(&seen)
     }
 }
 
-/// The alarm, the runner and the re-arm, natively (W-INT2 #44).
+/// The alarm, the jobs in its own turn and the re-arm, natively (W-INT2 #44, W-LOOP).
 #[cfg(test)]
 mod tests;

@@ -55,7 +55,7 @@ fn the_night_prunes_old_keys_and_old_errors_and_keeps_the_new() {
     assert!(said(&site, "an old failure") && said(&site, "a new failure"));
 
     answer_outbound(|_| Reply::from_json(&json!({})));
-    block_on(crate::cloud::nightly(&site.env(), night));
+    site.night(night);
     assert!(!said(&site, "an old failure"), "a week-old error survived the night: {:?}", errors(&site));
     assert!(said(&site, "a new failure"), "the prune took a young error");
     assert!(answered(&site, "new-key", night), "the prune took a key inside its window");
@@ -71,7 +71,7 @@ fn the_night_names_a_log_with_one_edited_cell_and_is_quiet_about_a_good_one() {
     }
     answer_outbound(|_| Reply::from_json(&json!({})));
     let chain = |site: &Site| errors(site).into_iter().filter(|e| e["place"] == "hub.chain").collect::<Vec<_>>();
-    block_on(crate::cloud::nightly(&site.env(), site.now_ms + DAY));
+    site.night(site.now_ms + DAY);
     assert!(chain(&site).is_empty(), "a good log was reported: {:?}", chain(&site));
 
     // ONE CELL: the last digit of the guest's phone, inside the order log's stored bytes.
@@ -89,7 +89,7 @@ fn the_night_names_a_log_with_one_edited_cell_and_is_quiet_about_a_good_one() {
     };
     assert!(edited);
     site.world.restart("alpha");
-    block_on(crate::cloud::nightly(&site.env(), site.now_ms + 2 * DAY));
+    site.night(site.now_ms + 2 * DAY);
     let said = chain(&site);
     assert_eq!(said.len(), 1, "{said:?}");
     let msg = said[0]["message"].as_str().unwrap_or("");

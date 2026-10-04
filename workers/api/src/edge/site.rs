@@ -189,6 +189,15 @@ impl Site {
         self.world.object(venue)
     }
 
+    /// THE NIGHT AS THE PLATFORM RUNS IT (W-LOOP row 3): the cron's one request, then every
+    /// alarm it causes, fired in order up to `at` -- the fan-out's batches and each venue's own
+    /// night. The alarms fired, in order.
+    pub fn night(&self, at: i64) -> Vec<(String, i64, usize)> {
+        block_on(crate::cron::nightly(&self.env(), at));
+        // The fan-out's later batches are a second apart: ten minutes covers any test's fleet.
+        self.world.fire_alarms(at + 10 * 60_000)
+    }
+
     /// GET a fold route of a venue's object, directly.
     pub fn fold(&self, venue: &str, path: &str) -> Reply {
         block_on(self.object(venue).route(get(&format!("https://hub{path}")))).expect("fold")

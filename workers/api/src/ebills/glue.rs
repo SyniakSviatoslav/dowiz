@@ -20,10 +20,9 @@ fn io(e: String) -> Refused {
 pub(crate) fn plan_for(t: &Table, loc: &Value, now_ms: i64) -> Result<Plan, Refused> {
     let cfg: Option<Config> = state::get(t, K_CONFIG, ONE).map_err(io)?;
     let st: State = state::get(t, K_STATE, ONE).map_err(io)?.unwrap_or_default();
-    let sched = loc.get("hours").map(|h| dowiz_hub::hours::from_json(&h.to_string())).unwrap_or_default();
+    // NO HOURS ON FILE IS NOT "ALWAYS OPEN" (W-LOOP): the storefront's window (`cadence`).
     let zone = crate::hubstore::zone_of(Some(loc));
-    let (weekday, minute) = dowiz_hub::tz::local_weekday_minute(zone, now_ms);
-    let open = sched.is_empty() || sched.is_open_at(weekday, minute);
+    let open = super::cadence::open_at(&super::cadence::schedule(loc), zone, now_ms);
     Ok(state::plan(cfg.as_ref(), &st, now_ms, open, dowiz_hub::tz::local_ms(zone, now_ms)))
 }
 
@@ -109,6 +108,10 @@ pub(crate) fn record_import(t: &mut Table, input: &ImportIn, out: &Outcome, shor
         (st.last_error, st.failures) = (None, 0);
     }
     (st.placed, st.noted, st.paid) = (st.placed + out.placed, st.noted + out.noted, st.paid + out.paid);
+    // SOMETHING NEW resets the quiet backoff (`cadence`).
+    if out.placed + out.noted + out.paid > 0 {
+        st.last_new_ms = input.now_ms;
+    }
     // A SALE TAKEN NOW is no longer refused (`state::transient`'s retry), and
     // a refusal already on the list is not added again by the daily re-read.
     let taken = |id: i64| input.sales.iter().any(|m| matches!(m, Mapped::Order { sale_id, .. } | Mapped::Bill { sale_id, .. } if *sale_id == id));

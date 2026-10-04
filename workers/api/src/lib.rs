@@ -604,8 +604,8 @@ pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     let now_ms = Date::now().as_millis() as i64;
     let env = edge::Env::Live(env);
     if event.cron() == cloud::NIGHTLY_CRON {
-        cloud::nightly(&env, now_ms).await;
-        // THE SAFETY NET: a venue with work due and no alarm is re-armed.
+        // ONE request: the platform object fans the night out to every venue's
+        // own alarm and re-arms a venue with work due and no alarm (W-LOOP).
         cron::nightly(&env, now_ms).await;
     } else {
         log_error!("scheduled: unknown cron {:?} -- nothing run", event.cron());

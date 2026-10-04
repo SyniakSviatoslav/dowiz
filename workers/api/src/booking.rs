@@ -36,7 +36,7 @@ mod floor;
 /// G8: the guest's contact emptied out of their bookings on forget.
 pub(crate) mod forget;
 mod guest;
-mod hours;
+pub(crate) mod hours;
 mod pass;
 mod reservations;
 mod store;

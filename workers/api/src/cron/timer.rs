@@ -33,6 +33,11 @@ pub const RUN_GAP_MS: i64 = 60_000;
 /// forty sends leave room, and what is left waits `RUN_GAP_MS`.
 pub const SEND_CAP: usize = 40;
 
+/// Venues the platform's night fan-out pings per alarm turn (`hubdo/timer/night.rs`): one
+/// object request each, half the Free plan's 50 subrequests per invocation, with room for the
+/// turn's own reads and a lost alarm's loud line.
+pub const FAN_BATCH: usize = 25;
+
 /// What to do with the object's alarm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Arm {
@@ -57,24 +62,32 @@ pub fn outbox_next(entries: &[Entry]) -> Option<i64> {
 /// is not usable or is halted (nothing unattended fires then; the owner saving
 /// the link writes the `ebills` image, which re-arms).
 ///
-/// THE POLL'S OWN CADENCE (`ebills::state::plan`): every minute while open (the
-/// floor), and while closed only when the sales list is due -- but never later
-/// than the minute the venue opens, found by asking `open_at` minute by minute
-/// over the closed wait. A backlog or a re-check pass under way fires a minute
-/// on. A backing-off link waits out its backoff.
+/// THE POLL'S OWN CADENCE (`ebills::state::plan`, `ebills::cadence`): while
+/// open, a minute after something new and then 2, 5 and 15 minutes as the till
+/// stays quiet (`last_new_ms` is the latest change the object knows of: a sale
+/// imported, a table's total moved); while closed only when the sales list is
+/// due -- but never later than the minute the venue opens, found by asking
+/// `open_at` minute by minute over the closed wait. "Open" is the venue's hours,
+/// or the storefront's fallback window when none are on file -- NEVER "always"
+/// (W-LOOP: that reading polled one venue 1,440 times a day). A backlog, a
+/// re-check pass under way or a list never read fires a minute on. A
+/// backing-off link waits out its backoff.
 pub fn ebills_next(
     usable: bool,
     st: &crate::ebills::state::State,
     now_ms: i64,
     open_at: &dyn Fn(i64) -> bool,
+    last_new_ms: i64,
 ) -> Option<i64> {
     use crate::ebills::state::{backoff_ms, MINUTE, SALES_CLOSED_MS};
     if !usable || st.halted {
         return None;
     }
-    let busy = st.backlog || (st.recheck_from > 0 && st.recheck_from <= st.recheck_until);
-    let base = if busy || open_at(now_ms) {
+    let busy = st.backlog || (st.recheck_from > 0 && st.recheck_from <= st.recheck_until) || st.last_sales_ms == 0;
+    let base = if busy {
         now_ms + MINUTE
+    } else if open_at(now_ms) {
+        now_ms + crate::ebills::cadence::quiet_gap_ms(now_ms.saturating_sub(last_new_ms.max(st.last_new_ms)))
     } else {
         let sales = (st.last_sales_ms + SALES_CLOSED_MS).clamp(now_ms + MINUTE, now_ms + SALES_CLOSED_MS);
         (1..=SALES_CLOSED_MS / MINUTE)

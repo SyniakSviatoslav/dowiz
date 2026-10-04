@@ -116,8 +116,11 @@ fn tick(site: &Site, at_ms: i64) {
 fn a_configured_link_logs_in_reads_the_till_and_the_venue_imports_it() {
     let site = Site::new();
     let (t, _) = open_venue(&site, "alpha", "a@x.test");
+    // INSIDE THE HOURS: alpha filed none, so it polls in the storefront's 11:00-23:00 (W-LOOP,
+    // `ebills::cadence`); T0 is 23:13 in Tirane, closed, and a closed venue's floor is not read.
+    let noon = site.now_ms + 13 * 3_600_000;
     // Not configured: a tick reads nothing.
-    tick(&site, site.now_ms);
+    tick(&site, noon);
     assert!(sent().is_empty(), "no link, no call");
     configure(&site, &t);
     let s = status(&site, &t);
@@ -126,7 +129,7 @@ fn a_configured_link_logs_in_reads_the_till_and_the_venue_imports_it() {
 
     let till = Till::default();
     till.serve();
-    tick(&site, site.now_ms);
+    tick(&site, noon);
     assert_eq!(till.logins.get(), 1, "one login per firing");
     let s = status(&site, &t);
     assert_eq!(s["state"]["session_live"], true, "the session was written back: {s}");
@@ -143,14 +146,14 @@ fn a_configured_link_logs_in_reads_the_till_and_the_venue_imports_it() {
 
     // The next firing reuses the session: no second login; nothing new, nothing written twice.
     let before = status(&site, &t)["state"].clone();
-    tick(&site, site.now_ms + 6 * 60_000);
+    tick(&site, noon + 6 * 60_000);
     assert_eq!(till.logins.get(), 1, "a live session is reused");
     let after = status(&site, &t)["state"].clone();
     assert_eq!((after["placed"].clone(), after["paid"].clone()), (before["placed"].clone(), before["paid"].clone()), "{after}");
 
     // The session lapses: re-established ONCE, and the read retried.
     till.lapse.set(true);
-    tick(&site, site.now_ms + 12 * 60_000);
+    tick(&site, noon + 12 * 60_000);
     assert_eq!(till.logins.get(), 2, "a refused session logs in again once");
     assert!(status(&site, &t)["state"]["last_error"].is_null());
 }

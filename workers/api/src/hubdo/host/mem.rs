@@ -31,8 +31,6 @@ pub struct MemHost {
     pub reads_fail: Cell<bool>,
     /// Every storage write, in order (key only).
     pub writes: RefCell<Vec<String>>,
-    pub runner_status: Cell<u16>,
-    pub runner_calls: RefCell<Vec<(String, i64)>>,
 }
 
 impl MemHost {
@@ -40,7 +38,6 @@ impl MemHost {
         Rc::new(MemHost {
             name: Some(venue.to_string()),
             clock: Cell::new(clock),
-            runner_status: Cell::new(200),
             ..Default::default()
         })
     }

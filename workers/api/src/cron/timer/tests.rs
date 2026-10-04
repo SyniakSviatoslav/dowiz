@@ -15,7 +15,7 @@ fn entry(id: &str, kind: &str, next: i64) -> Entry {
 /// fiscal queue -- no alarm, and a run that finds it so deletes the one it had.
 #[test]
 fn an_idle_venue_schedules_nothing() {
-    let want = next_due(&[outbox_next(&[]), ebills_next(false, &State::default(), NOW, &|_| true), fiscal_next(true, 0, NOW)]);
+    let want = next_due(&[outbox_next(&[]), ebills_next(false, &State::default(), NOW, &|_| true, 0), fiscal_next(true, 0, NOW)]);
     assert_eq!(want, None);
     assert_eq!(after_run(want, NOW), Arm::Clear);
     assert_eq!(on_write(None, want, NOW), Arm::Keep, "a write that made nothing due arms nothing");
@@ -73,17 +73,17 @@ fn the_outbox_is_due_at_its_earliest_entry_that_the_drain_acts_on() {
 #[test]
 fn the_till_link_fires_a_minute_on_while_open_and_not_at_all_when_halted() {
     let st = State::default();
-    assert_eq!(ebills_next(false, &st, NOW, &|_| true), None, "not configured");
-    assert_eq!(ebills_next(true, &State { halted: true, ..State::default() }, NOW, &|_| true), None, "halted");
-    assert_eq!(ebills_next(true, &st, NOW, &|_| true), Some(NOW + MINUTE));
+    assert_eq!(ebills_next(false, &st, NOW, &|_| true, 0), None, "not configured");
+    assert_eq!(ebills_next(true, &State { halted: true, ..State::default() }, NOW, &|_| true, 0), None, "halted");
+    assert_eq!(ebills_next(true, &st, NOW, &|_| true, 0), Some(NOW + MINUTE));
     let failing = State {
         failures: 3,
         last_error: Some(Noted { at_ms: NOW, sale_id: 0, why: "down".into() }),
         ..State::default()
     };
-    assert_eq!(ebills_next(true, &failing, NOW, &|_| true), Some(NOW + 4 * MINUTE));
+    assert_eq!(ebills_next(true, &failing, NOW, &|_| true, 0), Some(NOW + 4 * MINUTE));
     // A failure count with no recorded error has nothing to wait from.
-    assert_eq!(ebills_next(true, &State { failures: 3, ..State::default() }, NOW, &|_| true), Some(NOW + MINUTE));
+    assert_eq!(ebills_next(true, &State { failures: 3, ..State::default() }, NOW, &|_| true, 0), Some(NOW + MINUTE));
 }
 
 /// CLOSED, IT WAITS FOR THE SALES LIST -- but never past the minute it opens,
@@ -91,16 +91,35 @@ fn the_till_link_fires_a_minute_on_while_open_and_not_at_all_when_halted() {
 #[test]
 fn the_till_link_while_closed_waits_for_the_sales_list_or_the_opening() {
     let st = State { last_sales_ms: NOW - 5 * MINUTE, ..State::default() };
-    assert_eq!(ebills_next(true, &st, NOW, &|_| false), Some(NOW + SALES_CLOSED_MS - 5 * MINUTE));
+    assert_eq!(ebills_next(true, &st, NOW, &|_| false, 0), Some(NOW + SALES_CLOSED_MS - 5 * MINUTE));
     let opens = NOW + 7 * MINUTE;
-    assert_eq!(ebills_next(true, &st, NOW, &|t| t >= opens), Some(opens));
+    assert_eq!(ebills_next(true, &st, NOW, &|t| t >= opens, 0), Some(opens));
     // A list never read is due a minute on.
-    assert_eq!(ebills_next(true, &State::default(), NOW, &|_| false), Some(NOW + MINUTE));
-    assert_eq!(ebills_next(true, &State { backlog: true, ..st.clone() }, NOW, &|_| false), Some(NOW + MINUTE));
+    assert_eq!(ebills_next(true, &State::default(), NOW, &|_| false, 0), Some(NOW + MINUTE));
+    assert_eq!(ebills_next(true, &State { backlog: true, ..st.clone() }, NOW, &|_| false, 0), Some(NOW + MINUTE));
     let pass = State { recheck_from: 5, recheck_until: 9, ..st.clone() };
-    assert_eq!(ebills_next(true, &pass, NOW, &|_| false), Some(NOW + MINUTE));
+    assert_eq!(ebills_next(true, &pass, NOW, &|_| false, 0), Some(NOW + MINUTE));
     let over = State { recheck_from: 10, recheck_until: 9, ..st };
-    assert_eq!(ebills_next(true, &over, NOW, &|_| false), Some(NOW + SALES_CLOSED_MS - 5 * MINUTE));
+    assert_eq!(ebills_next(true, &over, NOW, &|_| false, 0), Some(NOW + SALES_CLOSED_MS - 5 * MINUTE));
+}
+
+/// W-LOOP: OPEN AND QUIET, the link backs off 1 -> 2 -> 5 -> 15 minutes from the last thing new,
+/// and is back to a minute once something lands. (The state has read its list before: a list
+/// never read is due a minute on, above.)
+#[test]
+fn the_till_link_while_open_backs_off_from_the_last_thing_new() {
+    let st = State { last_sales_ms: NOW - MINUTE, ..State::default() };
+    let open = |_: i64| true;
+    assert_eq!(ebills_next(true, &st, NOW, &open, NOW), Some(NOW + MINUTE), "something just landed");
+    assert_eq!(ebills_next(true, &st, NOW, &open, NOW - MINUTE), Some(NOW + 2 * MINUTE));
+    assert_eq!(ebills_next(true, &st, NOW, &open, NOW - 3 * MINUTE), Some(NOW + 5 * MINUTE));
+    assert_eq!(ebills_next(true, &st, NOW, &open, NOW - 8 * MINUTE), Some(NOW + 15 * MINUTE));
+    assert_eq!(ebills_next(true, &st, NOW, &open, 0), Some(NOW + 15 * MINUTE), "never anything new");
+    // The state's own record of a sale counts as much as the floor's.
+    let sold = State { last_new_ms: NOW, ..st.clone() };
+    assert_eq!(ebills_next(true, &sold, NOW, &open, 0), Some(NOW + MINUTE));
+    // A backlog is not quiet.
+    assert_eq!(ebills_next(true, &State { backlog: true, ..st }, NOW, &open, 0), Some(NOW + MINUTE));
 }
 
 /// FISCAL: a minute on while documents are queued, and never while sending is off.

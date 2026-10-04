@@ -11,7 +11,8 @@
 # THE RULE: every `hubstore::load(` and `load_catalog(` call site outside the
 # allowlist is counted, and the count may only fall. The allowlist is the
 # writers, the export and the nightly: `hubstore.rs` itself (the door and its
-# `with_catalog`), `cloud.rs` (the nightly copy), and any function named
+# `with_catalog`), `cloud.rs` and `cloud/night.rs` (the nightly copy; W-LOOP moved
+# one venue's night into its own file, run in that venue's own alarm), and any function named
 # `with_catalog*`, `seed_*` or `export*`. Tests are not request paths.
 #
 # COMMENTS ARE STRIPPED FIRST, strings kept (a `//` inside "https://" is not a
@@ -46,7 +47,7 @@ hits = []
 for f in sorted(glob.glob(src_dir + '/**/*.rs', recursive=True)):
     rel = os.path.relpath(f, src_dir)
     base = os.path.basename(f)
-    if base in ALLOW_FILES and os.path.dirname(rel) == '' or base == 'tests.rs' or '/tests/' in '/' + rel:
+    if base in ALLOW_FILES and os.path.dirname(rel) == '' or rel == 'cloud/night.rs' or base == 'tests.rs' or '/tests/' in '/' + rel:
         continue
     src = strip(open(f, encoding='utf-8').read())
     for m in CALL.finditer(src):

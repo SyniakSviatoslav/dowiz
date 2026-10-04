@@ -1,0 +1,53 @@
+{
+  "id": "feature-alarm-cadence",
+  "name": "alarm-cadence",
+  "contract_version": "1.0.0",
+  "class": "LIVE-AFTER-DEPLOY",
+  "description": {
+    "en": "W-LOOP: a venue's Durable Object alarm runs its timed work (outbox drain, till-link poll, fiscal) IN ITS OWN TURN -- no runner object, no reads back (11.9 -> 1 object request per firing, counted in memory: 11 -> 1). The till link polls only inside the venue's opening hours, or the storefront's 11:00-23:00 when none are filed (no longer 'always open'), backing off 1 -> 2 -> 5 -> 15 min while nothing new arrives; an idle linked venue went from 1,440 alarms a day to 76 (in memory). The nightly cron makes ONE request to the platform object, which fans the night out to the venues FAN_BATCH (25) per alarm turn; each venue runs its own night (retention, prunes, chain + witness, rotation, backup) in its own alarm.",
+    "uk": "Будильник закладу виконує роботу у власному ході (без runner-об'єкта), каса опитується лише в години роботи з паузами 1-2-5-15 хв, а нічний cron робить один запит, і кожен заклад проходить ніч у власному будильнику."
+  },
+  "producer": [
+    { "file": "workers/api/src/hubdo/timer.rs", "line": 179, "what": "timer_alarm_in(): the venue's jobs in its own alarm turn, with an Env that answers its own name in process (edge::Own)" },
+    { "file": "workers/api/src/cron/timer.rs", "line": 75, "what": "ebills_next(): polling hours + quiet backoff" },
+    { "file": "workers/api/src/ebills/cadence.rs", "line": 40, "what": "quiet_gap_ms(): 1, 2, 5, 15 minutes" },
+    { "file": "workers/api/src/cron.rs", "line": 46, "what": "nightly(): the cron's ONE request to the platform object (/fold/timer?fan=1)" },
+    { "file": "workers/api/src/hubdo/timer/night.rs", "line": 88, "what": "night_fan(): FAN_BATCH venues pinged per platform alarm turn (/fold/timer?night=1)" }
+  ],
+  "consumer": [
+    { "file": "workers/api/public/admin/ebills.js", "line": 38, "what": "the till-link sheet's 'Polling' row (eb_cadence / eb_cadenceNow, sq/en/uk/ru), tour anchor ebills.cadence" },
+    { "file": "tools/live-proof/probes/feature-alarm-cadence.mjs", "line": 1, "what": "Cloudflare's own count of alarms per object and of the scheduled run" }
+  ],
+  "transport": [
+    { "method": "POST", "path": "https://hub/fold/timer?venue=__platform&now=<ms>&fan=1", "auth": "none: Durable Object binding, not reachable from the internet", "who": "the scheduled handler (lib.rs) -> cron::nightly" },
+    { "method": "POST", "path": "https://hub/fold/timer?venue=<id>&now=<ms>&night=1", "auth": "binding", "who": "the platform object's alarm -> each venue's object" },
+    { "method": "POST", "path": "https://api.cloudflare.com/client/v4/graphql", "auth": "Bearer: Account Analytics:Read", "who": "the probe" }
+  ],
+  "external": { "service": "Cloudflare GraphQL Analytics", "api_version": "durableObjectsInvocationsAdaptiveGroups (dimensions objectId, type), workersInvocationsScheduled", "doc": "https://developers.cloudflare.com/analytics/graphql-api/" },
+  "limits_cited": {
+    "page": "https://developers.cloudflare.com/workers/platform/limits/ (Last updated Sep 5, 2026; read 2026-10-03)",
+    "quote": "A subrequest is any request a Worker makes using the Fetch API or to Cloudflare services like R2 , KV , or D1 . ... Subrequests per invocation: Workers Free 50 ... Subrequests to internal services: 1,000",
+    "consequence": "R2/KV/D1 calls DO count; Durable Object stub calls are not named on the page (hypothesis: the 1,000 internal-services counter). The old nightly spent >= 4-6 of them per venue in one invocation; the new cron spends 1."
+  },
+  "bounds": { "alarm_invocations_per_object_day_max": 150, "idle_linked_venue_in_memory": 76, "scheduled_runs_per_day": 1, "fan_batch": 25 },
+  "auth": { "secrets": ["CLOUDFLARE_API_TOKEN (Account Analytics:Read)", "CLOUDFLARE_ACCOUNT_ID"], "where": "/root/.cf_analytics_token (LIVE_CF_ANALYTICS_FILE), never printed" },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["query", "variables"],
+    "properties": { "query": { "type": "string" }, "variables": { "type": "object", "required": ["a", "s", "e"] } }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["data"],
+    "properties": { "data": { "type": "object", "required": ["viewer"], "properties": { "viewer": { "type": "object", "required": ["accounts"], "properties": {
+      "accounts": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["o", "s"], "properties": {
+        "o": { "type": "array", "items": { "type": "object", "required": ["sum", "dimensions"], "properties": {
+          "sum": { "type": "object", "required": ["requests"], "properties": { "requests": { "type": "integer", "minimum": 0 } } },
+          "dimensions": { "type": "object", "required": ["objectId", "type"], "properties": { "objectId": { "type": "string" }, "type": { "type": "string" } } } } } },
+        "s": { "type": "array", "items": { "type": "object", "required": ["cron", "datetime", "status"], "properties": {
+          "cron": { "type": "string" }, "datetime": { "type": "string" }, "status": { "type": "string" } } } } } } } } } } } }
+  },
+  "schema_status": "written from the dataset fields the 2026-10-03 cost report queried (objectId, type, requests); pin it from the first live answer",
+  "probe": "tools/live-proof/probes/feature-alarm-cadence.mjs: over the last complete UTC day, after the deploy: every object's alarm invocations <= 150 (was 1,449 for one object), exactly one scheduled run of the nightly cron with status success. Exit 0 / 1 FAILED / 3 NEEDS-KEY.",
+  "last_verified": null
+}

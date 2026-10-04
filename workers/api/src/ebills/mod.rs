@@ -37,6 +37,7 @@
 //!   `state.rs` / `status.rs` -- the venue's
 //!   `ebills` image and what the owner is shown; `routes.rs` -- the owner's.
 
+pub(crate) mod cadence; // when the link is polled: the hours and the quiet backoff (W-LOOP)
 pub(crate) mod cmd;
 pub(crate) mod client;
 pub(crate) mod fetch;

@@ -129,6 +129,9 @@ pub(crate) struct State {
     /// The daily re-check of closed courses: the next id, and the last.
     pub(crate) recheck_from: i64,
     pub(crate) recheck_until: i64,
+    /// The last firing that brought something NEW (a sale placed, noted or paid): the quiet
+    /// backoff counts from here (`cadence::quiet_gap_ms`). 0: never.
+    pub(crate) last_new_ms: i64,
 }
 
 impl State {

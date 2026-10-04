@@ -184,25 +184,6 @@ impl Host {
             Host::Mem(_) => None,
         }
     }
-    /// POST the venue's runner (`cron~<venue>`) and answer its status.
-    pub async fn call_runner(&self, venue: &str, now_ms: i64) -> Result<u16> {
-        match self {
-            Host::Live { env, .. } => {
-                let ns = env.durable_object("HUB")?;
-                let stub = ns.id_from_name(&crate::cron::runner_name(venue))?.get_stub()?;
-                let req = Request::new_with_init(
-                    &crate::cron::runner_path(venue, now_ms),
-                    RequestInit::new().with_method(Method::Post),
-                )?;
-                Ok(stub.fetch_with_request(req).await?.status_code())
-            }
-            #[cfg(test)]
-            Host::Mem(m) => {
-                m.runner_calls.borrow_mut().push((venue.to_string(), now_ms));
-                Ok(m.runner_status.get())
-            }
-        }
-    }
 }
 
 #[cfg(test)]
