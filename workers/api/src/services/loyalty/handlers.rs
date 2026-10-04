@@ -16,7 +16,7 @@ use crate::services::customers::handlers::customer_key;
 
 /// `mine` for the Worker: every order whose phone's key is in `circle`. One
 /// HMAC per distinct spelling, not per order.
-fn in_circle<'a>(secret: &'a [u8], circle: &'a [String]) -> impl Fn(&str) -> bool + 'a {
+pub(super) fn in_circle<'a>(secret: &'a [u8], circle: &'a [String]) -> impl Fn(&str) -> bool + 'a {
     let memo = std::cell::RefCell::new(BTreeMap::<String, bool>::new());
     move |p: &str| {
         if let Some(hit) = memo.borrow().get(p) {

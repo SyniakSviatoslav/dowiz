@@ -158,6 +158,10 @@ pub struct PlaceIn {
     /// where `carry.rs` has carried it all along and the kitchen board lists it.
     #[serde(default)]
     pub scheduled_for_ms: Option<i64>,
+    /// THE BAG CARD'S LANDING (W-QR): `{src:"bag", c?}`, kept by the storefront in
+    /// sessionStorage until checkout (`store/bag.js`). Recorded as `referral`.
+    #[serde(default)]
+    pub src: Option<crate::services::loyalty::bag::SrcIn>,
 }
 
 // `LocationOut` WAS HERE: the menu's `location` block is rendered in the
@@ -435,6 +439,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     if body.items.is_empty() {
         return Response::error("empty order", 400);
     }
+    let bag = match crate::services::loyalty::bag::source(body.src.as_ref()) { Ok(b) => b, Err(e) => return Response::error(e, 400) }; // W-QR
     // A number that IS given must still look like one -- a half-typed number is
     // worse than none, because the courier will try it. An EMPTY one is now
     // accepted: see `ContactIn::phone`.
@@ -945,6 +950,10 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     } else {
         crate::services::loyalty::handlers::at_placement(&place, &secret, &loc.id, &body.contact.phone).await
     };
+    // W-QR: a guest from a bag card -- the landing recorded, the welcome asked for (a phone is the key).
+    let bag = bag.filter(|_| staffed.is_none());
+    if let Some(c) = &bag { crate::services::loyalty::bag::stamp(&mut envelope, c.as_deref()); }
+    let welcome = match &bag { Some(c) if !phone.is_empty() => crate::services::loyalty::bag_routes::at_placement(&place, &secret, &loc.id, &body.contact.phone, c.clone()).await, _ => None };
     let input = crate::command::place::PlaceIn {
         order_id: id.clone(),
         envelope: serde_json::to_string(&envelope).unwrap_or_else(|_| order_json.clone()),
@@ -972,6 +981,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             &loc.name,
         )),
         stamps,
+        welcome,
     };
     // THE ORDER MAY ALREADY EXIST (W-FIX O2): the first try's reply was lost
     // after the object wrote it, and the object marked this key committed in

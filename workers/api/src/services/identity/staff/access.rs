@@ -181,7 +181,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/telegram/group", Owner, No),
     ("post", "/api/owner/telegram/test", Owner, No),
     ("post", "/api/owner/telegram/unlink", Owner, No),
-    ("get", "/api/owner/sms", Owner, No), ("post", "/api/owner/sms", Owner, No), ("post", "/api/owner/sms/test", Owner, No), ("post", "/api/owner/sms/stop", Owner, No),
+    ("get", "/api/owner/sms", Owner, No), ("post", "/api/owner/sms", Owner, No), ("post", "/api/owner/sms/test", Owner, No), ("post", "/api/owner/sms/stop", Owner, No), ("get", "/api/owner/bag", Owner, No), ("post", "/api/owner/bag", Owner, No), ("get", "/api/owner/bag/qr.svg", Owner, No), // W-QR
     ("get", "/api/owner/inbox", Owner, No),
     ("get", "/api/owner/threads", Owner, No),
     ("get", "/api/owner/inbox/:peer", Owner, No),

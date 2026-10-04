@@ -1,0 +1,276 @@
+# Lesson O30 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-QR: the bag insert (admin/bag.js). Steps WAIT: a recording must not change the venue's offer.
+id: O30
+role: owner
+module: bagQr
+order: 51
+covers: [bagQr]
+title:
+  sq: "Klientet e Wolt, direkt te ju"
+  en: "Wolt guests, direct to you"
+  uk: "Гості з Wolt - напряму до вас"
+  ru: "Гости из Wolt - напрямую к вам"
+goal:
+  sq: "Nje kod QR ne qeset e dergesave: porosia e dyte vjen pa komision."
+  en: "A QR card in delivery bags: the second order comes without commission."
+  uk: "QR-картка в пакетах доставки: друге замовлення приходить без комісії."
+  ru: "QR-карточка в пакетах доставки: второй заказ приходит без комиссии."
+steps:
+  - key: 1
+    anchor: more.tile.bagQr
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.bagQr"]'
+    title:
+      sq: "Sillni klientet direkt"
+      en: "Bring guests direct"
+      uk: "Гості напряму"
+      ru: "Гости напрямую"
+    caption:
+      sq: "Karta per qeset e Wolt/Glovo."
+      en: "The card for your Wolt/Glovo bags."
+      uk: "Картка для пакетів Wolt/Glovo."
+      ru: "Карточка для пакетов Wolt/Glovo."
+  - key: 2
+    anchor: bag.warn
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="bag.warn"]'
+    title:
+      sq: "Kontrata juaj"
+      en: "Your contract"
+      uk: "Ваш договір"
+      ru: "Ваш договор"
+    caption:
+      sq: "Disa kontrata ndalojne fletepalosjet; kontrolloni te tuajen."
+      en: "Some contracts forbid inserts; check yours."
+      uk: "Деякі договори забороняють вкладення; перевірте свій."
+      ru: "Некоторые договоры запрещают вложения; проверьте свой."
+  - key: 3
+    anchor: bag.kind
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="bag.kind"]'
+    title:
+      sq: "Oferta"
+      en: "The offer"
+      uk: "Пропозиція"
+      ru: "Предложение"
+    caption:
+      sq: "Zbritje, pjate falas ose vule e dyfishte."
+      en: "An amount off, a dish on the house or a double stamp."
+      uk: "Знижка, страва в подарунок або подвійний штамп."
+      ru: "Скидка, блюдо в подарок или двойной штамп."
+  - key: 4
+    anchor: bag.value
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="bag.value"]'
+    title:
+      sq: "Zbritja"
+      en: "Amount off"
+      uk: "Знижка"
+      ru: "Скидка"
+    caption:
+      sq: "Ne lek te plote."
+      en: "In whole lek."
+      uk: "У цілих леках."
+      ru: "В целых леках."
+  - key: 5
+    anchor: bag.min
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="bag.min"]'
+    title:
+      sq: "Shporta minimale"
+      en: "Minimum basket"
+      uk: "Мінімальний кошик"
+      ru: "Минимальная корзина"
+    caption:
+      sq: "0 = cdo shporte."
+      en: "0 = any basket."
+      uk: "0 = будь-який кошик."
+      ru: "0 = любая корзина."
+  - key: 6
+    anchor: bag.gift
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="bag.gift"]'
+    title:
+      sq: "Pjata falas"
+      en: "Dish on the house"
+      uk: "Страва в подарунок"
+      ru: "Блюдо в подарок"
+    caption:
+      sq: "Falas kur eshte ne shporte."
+      en: "Free when it is in the basket."
+      uk: "Безкоштовно, коли вона в кошику."
+      ru: "Бесплатно, когда оно в корзине."
+  - key: 7
+    anchor: bag.pct
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="bag.pct"]'
+    title:
+      sq: "Komisioni"
+      en: "Commission"
+      uk: "Комісія"
+      ru: "Комиссия"
+    caption:
+      sq: "Vetem per vleresimin e kursimit."
+      en: "Only for the saving estimate."
+      uk: "Лише для оцінки економії."
+      ru: "Только для оценки экономии."
+  - key: 8
+    anchor: bag.save
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="bag.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+      ru: "Сохранить"
+    caption:
+      sq: "Nje here per numer; cmimet nuk ndryshojne."
+      en: "Once per phone; prices do not change."
+      uk: "Раз на номер; ціни не змінюються."
+      ru: "Раз на номер; цены не меняются."
+  - key: 9
+    anchor: bag.campaign
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="bag.campaign"]'
+    title:
+      sq: "Fushata"
+      en: "Campaign"
+      uk: "Кампанія"
+      ru: "Кампания"
+    caption:
+      sq: "Nje fjale per te ndare kartat."
+      en: "A word to tell print runs apart."
+      uk: "Слово, щоб розрізняти тиражі."
+      ru: "Слово, чтобы различать тиражи."
+  - key: 10
+    anchor: bag.qr
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="bag.qr"]'
+    title:
+      sq: "Kodi"
+      en: "The code"
+      uk: "Код"
+      ru: "Код"
+    caption:
+      sq: "Hap faqen tuaj, jo platformen."
+      en: "Opens your own site, not a platform."
+      uk: "Відкриває ваш сайт, не платформу."
+      ru: "Открывает ваш сайт, не платформу."
+  - key: 11
+    anchor: bag.card
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="bag.card"]'
+    title:
+      sq: "Karta A6"
+      en: "A6 card"
+      uk: "Картка A6"
+      ru: "Карточка A6"
+    caption:
+      sq: "Printoni dhe prisni."
+      en: "Print and cut."
+      uk: "Надрукуйте й виріжте."
+      ru: "Напечатайте и вырежьте."
+  - key: 12
+    anchor: bag.stickers
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="bag.stickers"]'
+    title:
+      sq: "Ngjitese"
+      en: "Stickers"
+      uk: "Наліпки"
+      ru: "Наклейки"
+    caption:
+      sq: "8 ne nje flete."
+      en: "8 on one sheet."
+      uk: "8 на аркуші."
+      ru: "8 на листе."
+  - key: 13
+    anchor: bag.svg
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="bag.svg"]'
+    title:
+      sq: "SVG"
+      en: "SVG"
+      uk: "SVG"
+      ru: "SVG"
+    caption:
+      sq: "Per shtypshkronjen."
+      en: "For a print shop."
+      uk: "Для друкарні."
+      ru: "Для типографии."
+  - key: 14
+    anchor: bag.png
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="bag.png"]'
+    title:
+      sq: "PNG"
+      en: "PNG"
+      uk: "PNG"
+      ru: "PNG"
+    caption:
+      sq: "Per rrjetet sociale."
+      en: "For social posts."
+      uk: "Для соцмереж."
+      ru: "Для соцсетей."
+  - key: 15
+    anchor: bag.stats
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="bag.stats"]'
+    title:
+      sq: "Rezultati"
+      en: "What came of it"
+      uk: "Результат"
+      ru: "Результат"
+    caption:
+      sq: "Porosi, kliente, porosi te perseritura."
+      en: "Orders, guests, repeat orders."
+      uk: "Замовлення, гості, повторні замовлення."
+      ru: "Заказы, гости, повторные заказы."

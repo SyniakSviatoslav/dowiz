@@ -23,6 +23,7 @@ import { quoteEta } from '/store/eta.js';
 import { seaCalm, seaEvent } from '/store/sea.js';
 import { consentMarkup, wireConsent, consentBody } from '/store/consent.js';
 import { smsMarkup, wireSms, smsBody } from '/store/sms-box.js'; // W-SMS
+import { bagLine, bagBody, bagPlaced } from '/store/bag.js'; // W-QR
 import { TABLE, tableBanner, tableBody } from '/store/table.js';
 import { venueWallMs, laterPrefill } from '/lib/booking-time.js';
 import { ui, k, cta, ghost, seg } from '/store/parts.js';
@@ -156,7 +157,7 @@ export function openCheckout(){
   sheet(`
     <p class="eyebrow" data-t="checkout"></p>
     <h2 data-t="summary"></h2>
-    ${tableBanner()}
+    ${tableBanner()}${bagLine()}
     <p class="geo" id="ckEta" hidden></p>
 
     ${L?.pickup && !TABLE ? `<h3 class="fsec" data-t="how"></h3>
@@ -382,7 +383,7 @@ async function place(pay, wallet){
         ...(state.promo ? { promo: state.promo.code } : {}),
         ...(state.tip && !collecting && !TABLE ? { tip: state.tip } : {}),
         ...(TABLE ? tableBody(note) : {}),
-        ...(scheduledAt() ? { scheduled_for_ms: scheduledAt() } : {}) });
+        ...(scheduledAt() ? { scheduled_for_ms: scheduledAt() } : {}), ...bagBody() });
     // THE SAME BASKET SENT AGAIN IS THE SAME ORDER (order-key.js): the Worker
     // replays its first answer instead of cooking twice.
     const idem = keyFor(orderKeys, body);
@@ -398,6 +399,7 @@ async function place(pay, wallet){
     state.cart = {}; saveCart(); refreshBar();
     safeSet('dw_last_order', d.id);
     remember(d);
+    bagPlaced(d); // W-QR
     dispatchEvent(new Event('dw:ordered'));
     if (d.payment_error) toast(String(d.payment_error));
     const { openTracking } = await import('/store/track.js');

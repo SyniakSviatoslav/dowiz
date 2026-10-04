@@ -13,6 +13,7 @@ import { ui, k, btn, iconBtn, field, input, select, check, pill, pillBtn, empty,
 import { openMcp as openMcpSheet } from '/admin/mcp.js';
 import { filter, count } from '/admin/more-find.js';
 import '/admin/publish-i18n.js';
+import '/admin/bag-i18n.js'; // W-QR: the row's own words
 
 /// The rows, in groups, with the sheet each opens (HUB-UX-2026-09-26 §3.3:
 /// most used first). Every icon is a name /lib/icons.css draws -- `apron`
@@ -20,7 +21,7 @@ import '/admin/publish-i18n.js';
 const GROUPS = [
   ['inbox', [['inbox', 'message-2', openInbox]]],
   ['roomGroup', [['bookings', 'tools-kitchen-2', openBookings], ['floorPlan', 'category', openFloorPlan], ['tableQr', 'photo', openTableQr]]],
-  ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['campaigns', 'brand-whatsapp', openCampaigns], ['social', 'sparkles', openSocial]]],
+  ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['campaigns', 'brand-whatsapp', openCampaigns], ['social', 'sparkles', openSocial], ['bagQr', 'shopping-bag', openBag]]],
   ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers], ['staff', 'user-plus', openStaff], ['exceptions', 'alert-triangle', openExceptions]]],
   ['learnGroup', [['learn', 'player-play', openLearn]]],
   ['settingsVenue', [['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['deliveryArea', 'map-pin', openZones], ['payments', 'coin-hole', openPayments],
@@ -107,6 +108,7 @@ async function openExceptions(){ (await import('/admin/exceptions.js')).open(); 
 
 // ── campaigns (C6): segment, preview the count, send only to the consented ───
 async function openCampaigns(){ (await import('/admin/campaigns.js')).open(); }
+async function openBag(){ (await import('/admin/bag.js')).open(); } // W-QR
 
 // ── the kitchen printer (print.kitchen): the setting had no control ─────────
 // ── the published menu (BN2's R2 read path): publish.js ─────────────────────

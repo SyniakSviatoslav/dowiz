@@ -29,7 +29,7 @@ fn input(id: &str, lines: &[(&str, &str, i64)]) -> PlaceIn {
         tip: 0,
         now_ms: 1_790_000_000_000,
         notify_text: None,
-        stamps: None,
+        stamps: None, welcome: None,
     }
 }
 

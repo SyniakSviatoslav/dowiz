@@ -10,6 +10,7 @@ import { t, retranslate } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, toast, fallbackArt, paintFallbacks } from '/store/ui.js';
 import { quoteEta } from '/store/eta.js';
 import { TABLE, tableBanner } from '/store/table.js';
+import { bagLine } from '/store/bag.js'; // W-QR: imported here so the bag landing is read on the first paint
 import { k, cta, stepper, emptySheet } from '/store/parts.js';
 
 export function refreshBar(){
@@ -68,7 +69,7 @@ export function openCart(){
   sheet(`
     <p class="eyebrow" data-t="yourOrder"></p>
     <h2 data-t="cart"></h2>
-    ${tableBanner()}
+    ${tableBanner()}${bagLine()}
     <div class="clines">${lines.map(l => `<div class="cline">
       <span class="cthumb">${l.p.imageUrl ? `<img src="${esc(l.p.imageUrl)}" alt="" loading="lazy" data-fb="${esc(l.p.name)}">` : fallbackArt(l.p.name)}</span>
       <span class="cmain"><b>${esc(l.p.name)}</b>

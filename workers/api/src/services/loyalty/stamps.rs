@@ -177,7 +177,8 @@ pub fn count(listed: &[OrderView], mine: impl Fn(&Value) -> bool) -> i64 {
                 e.0 |= me;
                 e.1.push(Round { view: *v, order: o.clone() });
             }
-            None if me && had_it(o) => events.push((at_ms(o), 1, 1)),
+            // A bag guest's `stamps` welcome counts two (W-QR, `welcome::stamp_weight`).
+            None if me && had_it(o) => events.push((at_ms(o), 1, super::welcome::stamp_weight(o))),
             None => {}
         }
     }

@@ -157,7 +157,7 @@ fn place_in(id: &str, stamps: Option<StampIn>) -> PlaceIn {
     PlaceIn {
         order_id: id.into(), envelope: env.to_string(), seq: u64::from(id.as_bytes()[0]), bom_lines: Vec::new(),
         promo: None, promo_code: None, subtotal: 3000, fee: 500, tip: 0, now_ms: NOW,
-        notify_text: None, stamps,
+        notify_text: None, stamps, welcome: None,
     }
 }
 

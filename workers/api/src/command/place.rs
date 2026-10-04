@@ -93,6 +93,11 @@ pub struct PlaceIn {
     /// no card, no phone, or a basket from somewhere the card does not run.
     #[serde(default)]
     pub stamps: Option<crate::services::loyalty::stamps::StampIn>,
+    /// THE BAG INSERT'S WELCOME (W-QR): the venue's one public offer for a
+    /// guest who landed from a bag card, and every spelling of their phone.
+    /// Granted once per phone, in this turn, over `listed` (`loyalty::welcome`).
+    #[serde(default)]
+    pub welcome: Option<crate::services::loyalty::welcome::WelcomeIn>,
 }
 
 /// What the object answers with.
@@ -173,6 +178,10 @@ pub fn decide(
         crate::services::loyalty::stamps::apply(
             &mut envelope, listed, s, input.subtotal, input.fee, input.tip, input.now_ms,
         );
+    }
+    // ── THE BAG GUEST'S WELCOME, ONCE PER PHONE, IN THE SAME TURN (W-QR) ──
+    if let Some(w) = &input.welcome {
+        crate::services::loyalty::welcome::apply(&mut envelope, listed, w, input.subtotal, input.fee, input.tip, input.now_ms);
     }
 
     // ── THE TAX, ONCE, AFTER THE CUT (G2) ──

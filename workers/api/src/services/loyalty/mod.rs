@@ -18,5 +18,8 @@
 //! ONE PERSON, SPELLED TWO WAYS, IS ONE CARD: the customer key goes through
 //! the C4 resolver (`customers::alias::Aliases::circle`).
 
+pub mod bag;
+pub mod bag_routes;
 pub mod handlers;
 pub mod stamps;
+pub mod welcome;

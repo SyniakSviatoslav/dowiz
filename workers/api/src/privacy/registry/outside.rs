@@ -154,6 +154,7 @@ pub const BROWSER: &[DeviceKey] = &[
     prefix("dowiz.rev.", &[Coordinates, Address], "store"),
     key("dw_lang", &[], "store"),
     key("dw_table", &[], "store"),
+    key("dw_src", &[], "store"), // W-QR: `{src:"bag", c}` until checkout, sessionStorage only
     key("dw_install_asked", &[], "store"),
     key("dw_install_hide", &[], "store"),
     prefix("dw_boot_", &[], "store"),

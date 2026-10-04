@@ -99,7 +99,7 @@ pub async fn enter(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             // THE BELL, as a placed order rings it: Telegram and the print rail.
             notify_text: Some(bell(&env, &body.entry, &names, &currency, &venue)),
             // An aggregator's customer is the platform's, not the venue's card.
-            stamps: None,
+            stamps: None, welcome: None,
         };
         let out: AggregatorOut = match crate::command::send(&place, "aggregator", &input).await {
             Ok(v) => v,

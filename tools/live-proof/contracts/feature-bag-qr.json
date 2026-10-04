@@ -1,0 +1,504 @@
+{
+ "id": "feature-bag-qr",
+ "name": "bag-qr",
+ "contract_version": "1.0.0",
+ "class": "LIVE-AFTER-DEPLOY",
+ "description": {
+  "en": "Bag insert QR (W-QR): the owner prints an A6 card / 8 stickers for delivery bags whose QR (drawn by the Worker with the table codes' encoder, qrcodegen MIT) opens exactly https://<venue-host>/?src=bag[&c=<campaign>]. The storefront keeps the landing in sessionStorage only (key dw_src) and sends it once, as the order body's `src` member, at checkout; the order records `referral`. The owner's ONE public welcome offer (fixed amount off a minimum basket, a named dish on the house, or a double stamp) is applied inside the venue object's placement turn, once per phone (the stamp card's alias circle): a second use places the order at full price with `welcome_refused: used`. Menu prices never change; the bonus is a discount recorded on the order. The owner card counts bag orders, guests, repeat orders, and a commission-saved estimate only from a percent the owner typed. Scans are NOT counted (nothing is written before an order).",
+  "uk": "QR-картка в пакети доставки: відкриває сайт закладу з ?src=bag; вітальна пропозиція один раз на номер телефону, ціни меню не змінюються; атрибуція лише першої сторони (sessionStorage до оформлення)."
+ },
+ "producer": [
+  {
+   "file": "workers/api/src/services/loyalty/bag_routes.rs",
+   "line": 54,
+   "what": "card(): GET /api/owner/bag -- link, QR svg, offer, commission, stats"
+  },
+  {
+   "file": "workers/api/src/services/loyalty/bag_routes.rs",
+   "line": 87,
+   "what": "set(): POST /api/owner/bag -- strict body, offer checked by welcome::check, gift must be on the menu"
+  },
+  {
+   "file": "workers/api/src/services/loyalty/bag_routes.rs",
+   "line": 127,
+   "what": "qr(): GET /api/owner/bag/qr.svg -- the code alone"
+  },
+  {
+   "file": "workers/api/src/services/loyalty/bag_routes.rs",
+   "line": 142,
+   "what": "public(): GET /api/public/locations/:slug/welcome -- the public offer, no write"
+  },
+  {
+   "file": "workers/api/src/services/loyalty/welcome.rs",
+   "line": 209,
+   "what": "apply(): once per phone, inside command::place::decide (command/place.rs:182)"
+  },
+  {
+   "file": "workers/api/src/services/loyalty/bag.rs",
+   "line": 101,
+   "what": "stats(): the owner card's fold"
+  },
+  {
+   "file": "workers/api/src/storefront.rs",
+   "line": 442,
+   "what": "the body's src checked (bag::source); referral stamped and the welcome asked at :953"
+  }
+ ],
+ "consumer": [
+  {
+   "file": "workers/api/public/admin/bag.js",
+   "line": 82,
+   "what": "the owner sheet: offer form, campaign, A6/stickers print, SVG/PNG, the card"
+  },
+  {
+   "file": "workers/api/public/store/bag.js",
+   "line": 29,
+   "what": "the storefront: public offer banner and cart line; bagBody() at checkout; bagPlaced() forgets the landing and says the hub's answer"
+  },
+  {
+   "file": "workers/api/public/store/bag-core.js",
+   "line": 1,
+   "what": "sessionStorage-only landing (dw_src)"
+  }
+ ],
+ "transport": [
+  {
+   "method": "GET",
+   "path": "/api/owner/bag?location_id=&c=",
+   "auth": "Bearer owner",
+   "lib_rs_line": 512
+  },
+  {
+   "method": "POST",
+   "path": "/api/owner/bag?location_id=",
+   "auth": "Bearer owner",
+   "lib_rs_line": 512
+  },
+  {
+   "method": "GET",
+   "path": "/api/owner/bag/qr.svg?location_id=&c=",
+   "auth": "Bearer owner",
+   "lib_rs_line": 513
+  },
+  {
+   "method": "GET",
+   "path": "/api/public/locations/:slug/welcome",
+   "auth": "none",
+   "lib_rs_line": 514
+  },
+  {
+   "method": "POST",
+   "path": "/api/public/locations/:slug/orders (field src)",
+   "auth": "none"
+  }
+ ],
+ "external": "none (first-party only; the QR is drawn by qrcodegen 1.8, MIT, inside the Worker)",
+ "external_version": {
+  "qrcodegen": "1.8.0 (crate)"
+ },
+ "auth": {
+  "secrets": [
+   "OWNER_EMAIL",
+   "OWNER_PASSWORD"
+  ],
+  "where": "/root/.dowiz_owner"
+ },
+ "card_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+   "host",
+   "url",
+   "c",
+   "svg",
+   "offer",
+   "commission_pct",
+   "stamps_on",
+   "stats"
+  ],
+  "additionalProperties": false,
+  "properties": {
+   "host": {
+    "type": "string"
+   },
+   "url": {
+    "type": "string",
+    "pattern": "^https://[a-z0-9.-]+/\\?src=bag(&c=[a-z0-9-]{1,24})?$"
+   },
+   "c": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "svg": {
+    "type": "string",
+    "pattern": "^<svg "
+   },
+   "offer": {
+    "anyOf": [
+     {
+      "type": "null"
+     },
+     {
+      "$ref": "#/$defs/offer"
+     }
+    ]
+   },
+   "commission_pct": {
+    "type": [
+     "integer",
+     "null"
+    ],
+    "minimum": 1,
+    "maximum": 60
+   },
+   "stamps_on": {
+    "type": "boolean"
+   },
+   "stats": {
+    "type": "object",
+    "required": [
+     "orders",
+     "guests",
+     "repeat",
+     "direct_total",
+     "saved",
+     "by_campaign",
+     "scans"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "orders": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "guests": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "repeat": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "direct_total": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "saved": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "scans": {
+      "type": "null"
+     },
+     "by_campaign": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "c",
+        "orders"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "c": {
+         "type": "string"
+        },
+        "orders": {
+         "type": "integer",
+         "minimum": 0
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "$defs": {
+   "offer": {
+    "oneOf": [
+     {
+      "type": "object",
+      "required": [
+       "kind",
+       "value",
+       "min"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "kind": {
+        "const": "fixed"
+       },
+       "value": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100000
+       },
+       "min": {
+        "type": "integer",
+        "minimum": 0
+       }
+      }
+     },
+     {
+      "type": "object",
+      "required": [
+       "kind",
+       "product"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "kind": {
+        "const": "gift"
+       },
+       "product": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       }
+      }
+     },
+     {
+      "type": "object",
+      "required": [
+       "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "kind": {
+        "const": "stamps"
+       }
+      }
+     }
+    ]
+   }
+  }
+ },
+ "edit_request_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+   "offer"
+  ],
+  "additionalProperties": false,
+  "properties": {
+   "offer": {
+    "type": "object",
+    "required": [
+     "kind"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "enum": [
+       "off",
+       "fixed",
+       "gift",
+       "stamps"
+      ]
+     },
+     "value": {
+      "type": "integer"
+     },
+     "min": {
+      "type": "integer"
+     },
+     "product": {
+      "type": "string"
+     }
+    }
+   },
+   "commission_pct": {
+    "type": "string",
+    "pattern": "^([1-9]|[1-5][0-9]|60)?$"
+   }
+  }
+ },
+ "public_response_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+   {
+    "type": "object",
+    "required": [
+     "on"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "on": {
+      "const": false
+     }
+    }
+   },
+   {
+    "type": "object",
+    "required": [
+     "on",
+     "kind",
+     "value",
+     "min"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "on": {
+      "const": true
+     },
+     "kind": {
+      "const": "fixed"
+     },
+     "value": {
+      "type": "integer",
+      "minimum": 1
+     },
+     "min": {
+      "type": "integer",
+      "minimum": 0
+     }
+    }
+   },
+   {
+    "type": "object",
+    "required": [
+     "on",
+     "kind",
+     "gift"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "on": {
+      "const": true
+     },
+     "kind": {
+      "const": "gift"
+     },
+     "gift": {
+      "type": "object",
+      "required": [
+       "id",
+       "name",
+       "price"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "name": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "price": {
+        "type": [
+         "integer",
+         "null"
+        ]
+       }
+      }
+     }
+    }
+   },
+   {
+    "type": "object",
+    "required": [
+     "on",
+     "kind"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "on": {
+      "const": true
+     },
+     "kind": {
+      "const": "stamps"
+     }
+    }
+   }
+  ]
+ },
+ "order_field_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "the `src` member of the order body; absent unless the guest landed from a bag card in this browser session",
+  "type": "object",
+  "required": [
+   "src"
+  ],
+  "additionalProperties": false,
+  "properties": {
+   "src": {
+    "const": "bag"
+   },
+   "c": {
+    "type": "string",
+    "pattern": "^[a-z0-9-]{1,24}$"
+   }
+  }
+ },
+ "order_record_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "what the placed order carries (any of)",
+  "type": "object",
+  "properties": {
+   "referral": {
+    "type": "object",
+    "required": [
+     "src",
+     "c"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "src": {
+      "const": "bag"
+     },
+     "c": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   },
+   "welcome": {
+    "type": "object",
+    "required": [
+     "kind",
+     "discount",
+     "c"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "enum": [
+       "fixed",
+       "gift",
+       "stamps"
+      ]
+     },
+     "discount": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "c": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   },
+   "welcome_refused": {
+    "enum": [
+     "used",
+     "below_minimum",
+     "gift_missing",
+     "nothing_left"
+    ]
+   }
+  }
+ },
+ "probe": "tools/live-proof/probes/feature-bag-qr.mjs: reads the owner card (schema), sets a 1-lek fixed offer, reads the public offer (schema, no Set-Cookie), checks the QR svg route and that card.url's host is the venue's own host, places a TEST order with src=bag from a fresh phone (welcome granted, referral recorded, line prices untouched) and a second one from the same phone (welcome_refused=used, full price), checks stats.orders rose by 2; then rejects both and restores the owner's original offer.",
+ "last_verified": null
+}

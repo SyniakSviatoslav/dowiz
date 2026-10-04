@@ -12,7 +12,7 @@
 
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-shell-2026-10-03-blocks-push';
+const SHELL_CACHE = 'dowiz-shell-2026-10-04-bag';
 /// THE WHOLE MODULE GRAPH, not just its entry.
 ///
 /// This list used to hold the document, `/app.js` and the three stylesheets,
@@ -69,6 +69,9 @@ const SHELL_CACHE_MODULES = [
   '/store/state.js',
   '/store/storage.js',
   '/store/table.js',
+  '/store/bag.js',
+  '/store/bag-core.js',
+  '/store/bag-words.js',
   '/store/ui.js',
   '/store/venue.js',
   // The design system: `index.js` re-exports every component module, so the

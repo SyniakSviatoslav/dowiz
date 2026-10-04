@@ -435,3 +435,19 @@ receipt.match workers/api/public/admin/receipt-photo.js:96
 receipt.photo workers/api/public/admin/receipt-photo.js:74
 receipt.supplier workers/api/public/admin/receipt-photo.js:71
 stock.invoice workers/api/public/admin/ingredients-view.js:47
+# W-QR (O30): Bring guests direct, admin/bag.js
+more.tile.bagQr workers/api/public/admin/more.js:58
+bag.campaign workers/api/public/admin/bag.js:101
+bag.card workers/api/public/admin/bag.js:103
+bag.gift workers/api/public/admin/bag.js:90
+bag.kind workers/api/public/admin/bag.js:87
+bag.min workers/api/public/admin/bag.js:89
+bag.pct workers/api/public/admin/bag.js:91
+bag.png workers/api/public/admin/bag.js:106
+bag.qr workers/api/public/admin/bag.js:102
+bag.save workers/api/public/admin/bag.js:92
+bag.stats workers/api/public/admin/bag.js:107
+bag.stickers workers/api/public/admin/bag.js:104
+bag.svg workers/api/public/admin/bag.js:105
+bag.value workers/api/public/admin/bag.js:88
+bag.warn workers/api/public/admin/bag.js:98
