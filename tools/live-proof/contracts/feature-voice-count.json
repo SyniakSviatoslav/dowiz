@@ -1,0 +1,113 @@
+{
+  "id": "feature-voice-count",
+  "name": "voice.kitchen_count",
+  "contract_version": "1.0.0",
+  "class": "LIVE-WRITE",
+  "description": {
+    "en": "A stock count said aloud (W-VOICE, P14 of docs/research/2026-10-03-depth-stock-analytics-models.md). POST /api/voice with a transcript such as 'count salmon two kilo three hundred' / 'count salmon 2,3 kg' / 'рахую лосось два кіло триста' / 'numero losos dy kile e treqind' (sq/en/uk/ru; number words compose, digits take a decimal comma or point, units kg/g/l/ml/pcs/copë) answers ONE signed proposal in the supply's integer base unit (g, ml or unit): {understood, needsConfirmation:true, verb:'count', readback, token, itemId, observed}. NOTHING IS WRITTEN by the proposal. Sending {confirm: token} back to /api/voice (within 90 s, same principal) answers {action:'do', verb:'count', args:{itemId, observed}}; the console then posts that ONE line to the EXISTING count route POST /api/owner/stock/count {session, lines:[{item, observed}]} with a client-held session id (vc_<ms>, kept while lines arrive less than 2 hours apart (COUNT_IDLE_MS)). A QUESTION, NEVER A GUESS: two supplies that fit, no supply, a missing unit (except zero), a unit of another kind than the supply's, an ambiguous '2,300' or two numbers that do not compose all answer {understood:false, say} and no token. Allowed to the owner and to staff holding the stock capability.",
+    "uk": "Інвентаризація голосом: «рахую лосось два кіло триста» дає підписану пропозицію 2300 г; один дотик додає рядок у відкриту сесію перерахунку; неоднозначність - питання, ніколи не здогад."
+  },
+  "producer": [
+    { "file": "workers/api/src/services/engagement/voice.rs", "line": 104, "what": "voice (route POST /api/voice; owner path line 215, kitchen staff path line 187)" },
+    { "file": "workers/api/src/services/engagement/voice/count.rs", "line": 217, "what": "said (PURE parser: verb, supply words, quantity -> integer base unit, or a question)" },
+    { "file": "workers/api/src/services/engagement/voice/count/propose.rs", "line": 20, "what": "line (supply match, unit check, signed proposal `count:<item>|<qty>`)" },
+    { "file": "workers/api/src/services/engagement/voice/kitchen.rs", "line": 115, "what": "stock_said asks count::said first" },
+    { "file": "workers/api/src/services/engagement/voice/scope.rs", "line": 76, "what": "decode count -> {itemId, observed}" },
+    { "file": "workers/api/src/services/engagement/voice/say.rs", "line": 147, "what": "count read-back in 4 languages; questions at line 56" }
+  ],
+  "consumer": [
+    { "file": "workers/api/public/admin/voice-plan.js", "line": 38, "what": "planOf count -> POST /owner/stock/count {session, lines:[{item, observed}]}" },
+    { "file": "workers/api/public/admin/voice-plan.js", "line": 58, "what": "countSessionNow (the open spoken count's id)" },
+    { "file": "workers/api/public/admin/voice.js", "line": 24, "what": "header mic: proposal sheet + one-tap confirm" },
+    { "file": "workers/api/public/admin/assistant.js", "line": 114, "what": "assistant: the same proposal + confirm" },
+    { "file": "workers/api/src/services/operations/stock/moves.rs", "line": 180, "what": "the EXISTING count route (W-STORE's, not edited)" },
+    { "file": "tools/live-proof/probes/voice-count.mjs", "line": 1, "what": "probe" }
+  ],
+  "transport": { "method": "POST", "path": "/api/voice" },
+  "external": null,
+  "external_api_version": null,
+  "auth": {
+    "secrets": ["QA_OWNER_EMAIL / QA_OWNER_PASSWORD (or OWNER_* of /root/.dowiz_owner naming qa-durres)"],
+    "where": "/root/.dowiz_owner"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "transcript": { "type": "string", "maxLength": 600 },
+      "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+      "is_final": { "type": "boolean" },
+      "lang": { "enum": ["sq", "en", "uk", "ru"] },
+      "confirm": { "type": "string", "minLength": 1 },
+      "draft": { "type": "object" }
+    }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+      "proposal": {
+        "type": "object",
+        "required": ["understood", "needsConfirmation", "verb", "readback", "token", "itemId", "observed"],
+        "properties": {
+          "understood": { "const": true },
+          "needsConfirmation": { "const": true },
+          "verb": { "const": "count" },
+          "readback": { "type": "string", "minLength": 1 },
+          "token": { "type": "string", "minLength": 16 },
+          "itemId": { "type": "string", "minLength": 1 },
+          "observed": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+        }
+      },
+      "confirmed": {
+        "type": "object",
+        "required": ["understood", "needsConfirmation", "action", "verb", "args"],
+        "properties": {
+          "understood": { "const": true },
+          "needsConfirmation": { "const": false },
+          "action": { "const": "do" },
+          "verb": { "const": "count" },
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["itemId", "observed"],
+            "properties": {
+              "itemId": { "type": "string", "minLength": 1 },
+              "observed": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+            }
+          }
+        }
+      },
+      "question": {
+        "type": "object",
+        "required": ["understood", "say"],
+        "properties": {
+          "understood": { "const": false },
+          "say": { "type": "string", "minLength": 1 },
+          "heard": { "type": "string" }
+        }
+      }
+    },
+    "type": "object",
+    "required": ["understood"],
+    "properties": { "understood": { "type": "boolean" } }
+  },
+  "count_route": {
+    "path": "POST /api/owner/stock/count?location_id=...",
+    "body_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["session", "lines"],
+      "properties": {
+        "session": { "type": "string", "pattern": "^vc_[0-9]+$" },
+        "lines": {
+          "type": "array", "minItems": 1, "maxItems": 1,
+          "items": { "type": "object", "additionalProperties": false, "required": ["item", "observed"],
+            "properties": { "item": { "type": "string", "minLength": 1 }, "observed": { "type": "integer", "minimum": 0 } } }
+        }
+      }
+    }
+  },
+  "probe": "node tools/live-proof/probes/voice-count.mjs (main runs it on qa-durres after deploy; VOICE_COUNT_WRITE=1 adds the one confirmed line)",
+  "last_verified": null
+}

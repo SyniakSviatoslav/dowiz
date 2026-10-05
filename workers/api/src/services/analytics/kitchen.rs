@@ -24,9 +24,13 @@ use dowiz_hub::tz::Zone;
 
 /// The menu-engineering matrix (W-HIST P3).
 pub mod menu;
+/// Orders lost to stock-outs, per dish per day, in lek (A13, W-LOST).
+pub mod lost;
 pub mod report;
 pub mod sales;
 pub mod shelf;
+/// What guests' notes are about, per dish per week (P16b).
+pub mod topics;
 
 use sales::{Dish, DishLine, Supply, Window};
 
@@ -191,8 +195,10 @@ pub fn answer_with(
     let moved = shelf::fold_journal(&journal, &supplies, &sold.placed_at, &w);
     let mut out = report::report(&sold, &moved, &dishes, &supplies, &journal, &w);
     out["menu"] = menu::matrix(&menu::inputs(&sold, &dishes, &supplies, &journal.book));
+    out["topics"] = topics::fold(&orders, &dishes, &w);
     out["history"] = serde_json::json!({ "archivedDays": rows.len(), "error": unread });
     out["currency"] = serde_json::json!(crate::services::venue::currency_of(cat));
+    out["lost"] = lost::report(&stock.lost_rows(), &dishes, &w);
     Ok(out)
 }
 

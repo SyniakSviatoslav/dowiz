@@ -42,3 +42,4 @@ export function baseEdits(before, typed) {
   if (cat && cat !== String(before.categoryId ?? '')) out.category_id = cat;
   return out;
 }
+if (typeof document !== 'undefined') import('/admin/option-bom.js').then(m => m.watch()).catch(() => {}); // W-LOST R13: option recipes in the dish sheet; a no-op under node

@@ -258,3 +258,6 @@ mod bom_audit_tests {
 #[cfg(test)]
 #[path = "stock/oldimage_tests.rs"]
 mod oldimage_tests;
+
+/// Lost sales: a basket the shelf refused, as a note that moves nothing (A13, W-LOST).
+pub mod refused;

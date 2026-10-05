@@ -11,7 +11,7 @@
 import { t, lang, api, post, store, toast } from '/admin/core.js';
 import * as ui from '/lib/ui/index.js';
 import { create, speak, supported, tagFor } from '/lib/voice.js';
-import { planOf, needsReason, lineOf, assistPath } from '/admin/voice-plan.js';
+import { planOf, needsReason, lineOf, assistPath, countSessionNow } from '/admin/voice-plan.js';
 import { principalOf } from '/admin/kitchen-logic.js';
 
 /// The header's mic, from the design system. `aria-pressed` says it is listening.
@@ -21,7 +21,7 @@ export const micButton = () => ui.iconButton({ id: 'voiceBtn', icon: 'microphone
 const say = line => { toast(line); speak(line, tagFor(lang)); };
 
 async function run(done, reason, refresh) {
-  const p = planOf(done, store.loc, reason);
+  const p = planOf(done, store.loc, reason, done?.verb === 'count' ? countSessionNow() : '');
   if (!p) return toast(t('voiceFailed'));
   try { await post(p.path, p.body); toast(t('saved')); navigator.vibrate?.(12); await refresh(); }
   catch (e) { toast(String(e.message || e)); }

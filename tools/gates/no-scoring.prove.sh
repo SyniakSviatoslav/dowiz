@@ -15,6 +15,8 @@
 #  10. a `customer_tier` even inside the one scorer               -> refuse (a tier is a verdict)
 #  11. the words only in a `//` comment on the server                   -> pass
 #  12. the product tree with its own baseline                           -> pass
+#  13. feedback topics folded per courier on the server (P16b)          -> refuse
+#  14. feedback topics per dish on the server (P16b)                    -> pass
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
@@ -45,7 +47,9 @@ plant $RS/x.rs 'const CUSTOMER_LTV: u64 = 0;';                                  
 plant $RS/x.rs 'fn courier_score() -> u32 { 0 }';                                           scan 1 "courier_score on the server"
 plant $RS/services/customers/taste.rs 'pub enum customer_tier { Gold }';                    scan 1 "a tier inside the scorer"
 plant $RS/x.rs '// never a guest_taste or a willingness_to_pay here';                       scan 0 "words only in a comment"
+plant $RS/services/analytics/kitchen/topics.rs 'pub fn topics_by_courier() -> u32 { 0 }';    scan 1 "topics per courier"
+plant $RS/services/analytics/kitchen/topics.rs 'pub fn dish_topics() -> u32 { 0 }';            scan 0 "topics per dish"
 cp "$REPO/tools/gates/no-scoring.baseline" "$S/real-base"
 want 0 "product tree" NO_SCORING_BASELINE="$S/real-base"
-[ "$fail" -eq 0 ] && echo "no-scoring.prove: GREEN -- 12 of 12 cases" || echo "no-scoring.prove: RED"
+[ "$fail" -eq 0 ] && echo "no-scoring.prove: GREEN -- 14 of 14 cases" || echo "no-scoring.prove: RED"
 exit "$fail"

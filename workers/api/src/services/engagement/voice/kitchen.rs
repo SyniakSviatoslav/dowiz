@@ -60,6 +60,8 @@ pub enum Said {
     Receive { item: String, qty: i64, unit: Option<&'static str> },
     /// "write off 300 g salmon spoiled".
     Waste { item: String, qty: i64, unit: Option<&'static str>, reason: Option<&'static str> },
+    /// "count salmon 2,3 kg": one line of the open count session (P14, `count.rs`).
+    Count { item: String, qty: i64, unit: Option<&'static str> },
     /// "show me the stock": navigate, write nothing.
     Show(&'static str),
     Unclear(&'static str),
@@ -108,6 +110,12 @@ pub fn stock_said(transcript: &str) -> Option<Said> {
     let t = norm(transcript);
     let ws = words(&t);
     let (rec, waste, show) = (has(&ws, RECEIVE), has(&ws, WASTE), has(&ws, SHOW));
+    match super::count::said(transcript) {
+        Some(_) if rec || waste => return Some(Said::Unclear("more_than_one")),
+        Some(super::count::Heard::Count { item, qty, unit }) => return Some(Said::Count { item, qty, unit }),
+        Some(super::count::Heard::Unclear(k)) => return Some(Said::Unclear(k)),
+        None => {}
+    }
     if show && !rec && !waste {
         let hits: Vec<&'static str> = SCREENS.iter().filter(|(_, w, _)| has(&ws, w)).map(|(s, ..)| *s).collect();
         return match hits.as_slice() {
@@ -172,6 +180,7 @@ pub fn decide(said: &Said, caps: &Caps, lang: &str, shelf: &[Supply]) -> Out {
             let open = SCREENS.iter().find(|(s, ..)| s == screen).is_some_and(|(.., c)| c.iter().any(|c| caps.allows(*c)));
             return if open { Out::Now(json!({ "action": "show", "screen": screen })) } else { refuse("cap_kitchen", lang) };
         }
+        Said::Count { item, qty, unit } => return super::count::propose::line(item, *qty, *unit, caps, lang, shelf),
         Said::Receive { item, qty, unit } => (item, *qty, *unit, None),
         Said::Waste { item, qty, unit, reason } => (item, *qty, *unit, Some(*reason)),
     };
@@ -228,7 +237,7 @@ pub fn order(cmd: &Command, caps: &Caps, pool: &[Value], lang: &str) -> Out {
 pub async fn hear(place: &crate::hubstore::Place, loc: &str, transcript: &str, lang: &str, caps: Caps) -> worker::Result<Out> {
     if let Some(s) = stock_said(transcript) {
         let shelf = match s {
-            Said::Receive { .. } | Said::Waste { .. } => shelf(place).await?,
+            Said::Receive { .. } | Said::Waste { .. } | Said::Count { .. } => shelf(place).await?,
             _ => Vec::new(),
         };
         return Ok(decide(&s, &caps, lang, &shelf));

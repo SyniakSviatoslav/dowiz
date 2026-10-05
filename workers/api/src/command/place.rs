@@ -42,6 +42,10 @@ use serde::{Deserialize, Serialize};
 
 /// Each line's cost of goods at placement, and the read a guest gets (R4).
 pub mod cost;
+/// A13/R13 through the real `decide`: one lost-sale row, and an option's recipe reserved (W-LOST).
+#[cfg(test)]
+#[path = "place/lost/tests.rs"]
+mod lost_tests;
 
 /// Everything the object needs to place an order, and nothing it can look up
 /// itself.
@@ -142,7 +146,15 @@ pub fn decide(
     let draws = dowiz_hub::stock::draws_for(&input.order_id, &input.bom_lines);
     let costed = match draws.is_empty() {
         true => None,
-        false => Some(stock.append_draws_split(&draws).map_err(|e| Refused::Stock(format!("{e}")))?),
+        // A STOCK-OUT IS A LOST SALE (A13, W-LOST): the refusal leaves one
+        // `refused` note in `stock` (rate-limited, no person); the caller
+        // writes the stock image on that refusal and on no other.
+        false => Some(
+            stock
+                .append_draws_split(&draws)
+                .map_err(|e| dowiz_hub::stock::refused::on_refusal(stock, &input.bom_lines, e))
+                .map_err(|e| Refused::Stock(format!("{e}")))?,
+        ),
     };
 
     // ── THE DISCOUNT, IN THE SAME BREATH AS THE APPEND THAT MAKES IT REAL ──

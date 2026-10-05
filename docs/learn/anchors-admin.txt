@@ -452,6 +452,7 @@ bag.svg workers/api/public/admin/bag.js:105
 bag.value workers/api/public/admin/bag.js:88
 bag.warn workers/api/public/admin/bag.js:98
 prepList.open workers/api/public/admin/stock.js:43
+stock.numbers workers/api/public/admin/stock.js:43
 # W-STORE (2026-10-05, P12/P13): lessons O32 (store.* move.store) and O33 (haccp.* move.treated); haccp.<kind> written out.
 stock.storages workers/api/public/admin/ingredients-view.js:49
 stock.haccp workers/api/public/admin/ingredients-view.js:49
@@ -482,3 +483,8 @@ haccp.to workers/api/public/admin/stock-haccp.js:38
 haccp.lots workers/api/public/admin/stock-haccp.js:39
 haccp.orders workers/api/public/admin/stock-haccp.js:39
 haccp.freezing workers/api/public/admin/stock-haccp.js:39
+# W-VOICE (2026-10-05, P14/P16b): lesson O34 names kitchen.topics (and hud.voice/voice.* again); stock.numbers added by main at merge.
+kitchen.topics workers/api/public/admin/kitchen-topics.js:26
+kitchen.lost workers/api/public/admin/lost-sales-view.js:28
+dish.optionBom workers/api/public/admin/option-bom-logic.js:28
+dish.optionBomSave workers/api/public/admin/option-bom-logic.js:34

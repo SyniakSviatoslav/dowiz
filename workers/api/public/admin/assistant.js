@@ -12,7 +12,7 @@
 // ASCII QUOTES ONLY in this file (DOWIZ-COMMON-RULES rule 11).
 import { $, $$, esc, t, lang, api, post, store, toast, sheet } from '/admin/core.js';
 import * as ui from '/lib/ui/index.js';
-import { planOf, lineOf, assistPath } from '/admin/voice-plan.js';
+import { planOf, lineOf, assistPath, countSessionNow } from '/admin/voice-plan.js';
 import { principalOf } from '/admin/kitchen-logic.js';
 import * as A from '/admin/assistant-logic.js';
 import '/admin/assistant-i18n.js';
@@ -111,7 +111,7 @@ export async function confirmAt(i){
   if (m.reason && !why) return toast(t('kReasonNeeded'));
   try {
     const done = await post('/voice', { confirm: m.token, lang });
-    const p = done && done.understood ? planOf(done, store.loc, why) : null;
+    const p = done && done.understood ? planOf(done, store.loc, why, done.verb === 'count' ? countSessionNow() : '') : null;
     if (!p) { log = A.settle(log, i, 'failed'); draw(); return toast((done && done.say) || t('asFailed')); }
     await post(p.path, p.body);
     log = A.settle(log, i, 'done'); draw();

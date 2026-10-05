@@ -17,7 +17,7 @@ export const needsReason = verb => verb === 'reject' || verb === 'cancel';
 
 /// `{ path, body }` for a confirmed instruction, or null for one this console
 /// does not act on (a courier's, or a malformed one).
-export function planOf(done, loc, reason = '') {
+export function planOf(done, loc, reason = '', session = '') {
   if (!done || !done.verb) return null;
   const v = done.verb, a = done.args || {};
   if (ORDER_VERBS.has(v) && done.orderId) {
@@ -33,7 +33,31 @@ export function planOf(done, loc, reason = '') {
   const q = `?location_id=${encodeURIComponent(loc)}`;
   if (v === 'receive' && a.itemId && Number.isInteger(a.qty)) return { path: `/owner/stock/received${q}`, body: { item: a.itemId, qty: a.qty } };
   if (v === 'waste' && a.itemId && Number.isInteger(a.qty) && a.reason) return { path: `/owner/stock/wasted${q}`, body: { item: a.itemId, qty: a.qty, reason: a.reason } };
+  // A SPOKEN COUNT (P14): one line added to the OPEN count session -- the same
+  // route and body the count sheet posts (ingredients-count.js), one line at a time.
+  if (v === 'count' && a.itemId && Number.isInteger(a.observed) && a.observed >= 0 && session) {
+    return { path: `/owner/stock/count${q}`, body: { session, lines: [{ item: a.itemId, observed: a.observed }] } };
+  }
   return null;
+}
+
+/// How long a spoken count stays one session: a shelf counted aloud is one
+/// walk, and a pause longer than this is the next count.
+export const COUNT_IDLE_MS = 2 * 60 * 60 * 1000;
+
+/// The open count session after a line at `now`: the same id while lines keep
+/// coming, a new one after `COUNT_IDLE_MS` of silence. `{ id, at }`.
+export function countSession(open, now) {
+  if (open && open.id && now - open.at < COUNT_IDLE_MS) return { id: open.id, at: now };
+  return { id: `vc_${now}`, at: now };
+}
+
+// The one open spoken count, shared by the header mic and the assistant.
+let openCount = null;
+/// The id a confirmed spoken count line joins now (the only state here).
+export function countSessionNow(now = Date.now()) {
+  openCount = countSession(openCount, now);
+  return openCount.id;
 }
 
 /// Where a question goes: the kitchen's assistant (no customer data) for a

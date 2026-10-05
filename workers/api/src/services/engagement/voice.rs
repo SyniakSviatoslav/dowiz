@@ -17,6 +17,7 @@
 //! (open, add, send, paid). They resolve against `dish` (the menu), `room` (the open
 //! sittings) and `decide` (who may).
 
+mod count;
 mod decide;
 mod dish;
 mod grammar;
@@ -214,7 +215,7 @@ pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     if speaker == Speaker::Owner && gate.is_none() {
         if let Some(s) = kitchen::stock_said(&body.transcript) {
             // The supplies as the matcher sees them, from the object (BN1): only for a movement.
-            let shelf = match s { kitchen::Said::Receive { .. } | kitchen::Said::Waste { .. } => kitchen::shelf(&place).await?, _ => Vec::new() };
+            let shelf = match s { kitchen::Said::Receive { .. } | kitchen::Said::Waste { .. } | kitchen::Said::Count { .. } => kitchen::shelf(&place).await?, _ => Vec::new() };
             return Response::from_json(&answer(kitchen::decide(&s, &dowiz_hub::caps::Preset::Owner.caps(), &lang, &shelf)));
         }
         if let Some(said) = grammar::owner(&body.transcript) {

@@ -1,0 +1,71 @@
+# Lesson O35 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder.
+# `pending: yes` = the anchor is named but not yet in the markup (tools/gates/learn.sh).
+# W-LOST (P8 A13): orders lost to stock-outs, on the kitchen numbers (admin/lost-sales.js).
+id: O35
+role: owner
+module: stock
+order: 55
+covers: []
+title:
+  sq: "Porositë e humbura"
+  en: "Orders lost to stock-outs"
+  uk: "Втрачені замовлення"
+  ru: "Потерянные заказы"
+goal:
+  sq: "Shihni sa porosi humbën sepse mbaroi një përbërës, dhe sa vlenin."
+  en: "See how many orders were lost because an ingredient ran out, and what they were worth."
+  uk: "Побачити, скільки замовлень втрачено через брак інгредієнта і на яку суму."
+  ru: "Увидеть, сколько заказов потеряно из-за нехватки ингредиента и на какую сумму."
+steps:
+  - key: 1
+    anchor: nav.stock
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.stock"]'
+    title:
+      sq: "Magazina"
+      en: "Stock"
+      uk: "Склад"
+      ru: "Склад"
+    caption:
+      sq: "Numrat e kuzhinës janë te magazina."
+      en: "The kitchen numbers are under Stock."
+      uk: "Цифри кухні - у розділі Склад."
+      ru: "Цифры кухни - в разделе Склад."
+  - key: 2
+    anchor: stock.numbers
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.numbers"]'
+    title:
+      sq: "Numrat"
+      en: "Numbers"
+      uk: "Цифри"
+      ru: "Цифры"
+    caption:
+      sq: "Hap numrat e kuzhinës."
+      en: "Opens the kitchen numbers."
+      uk: "Відкриває цифри кухні."
+      ru: "Открывает цифры кухни."
+  - key: 3
+    anchor: kitchen.lost
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="kitchen.lost"]'
+    title:
+      sq: "Porositë e humbura"
+      en: "Orders lost"
+      uk: "Втрачені замовлення"
+      ru: "Потерянные заказы"
+    caption:
+      sq: "Për çdo pjatë dhe ditë: refuzime, porcione dhe lekë. Minimumi: një herë për përbërës në 10 minuta."
+      en: "Per dish and day: refusals, portions and lek. A lower bound: once per ingredient per 10 minutes."
+      uk: "По стравах і днях: відмови, порції й леки. Нижня межа: раз на інгредієнт за 10 хвилин."
+      ru: "По блюдам и дням: отказы, порции и леки. Нижняя граница: раз на ингредиент за 10 минут."

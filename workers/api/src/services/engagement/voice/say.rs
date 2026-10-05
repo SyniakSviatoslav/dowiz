@@ -52,6 +52,10 @@ const LINES: &[(&str, Said)] = &[
     ("not_yours", ["Ky konfirmim nuk është i juaji", "That confirmation is not yours", "Це підтвердження не ваше", "Это подтверждение не ваше"]),
     ("bad_answer", ["Përgjigje e gabuar", "That is not the right answer", "Не та відповідь", "Не тот ответ"]),
     ("answer_expired", ["Kjo përgjigje nuk vlen më — thoni përsëri", "That answer has expired — say it again", "Та відповідь уже не дійсна — скажіть ще раз", "Этот ответ уже недействителен — скажите ещё раз"]),
+    // A spoken count (P14, voice/count.rs): every question it asks instead of guessing.
+    ("count_unit", ["Në çfarë njësie? kg, g, l, ml apo copë", "In what unit? kg, g, l, ml or pieces", "В якій одиниці? кг, г, л, мл чи штуки", "В какой единице? кг, г, л, мл или штуки"]),
+    ("decimal_unclear", ["Thoni numrin përsëri, p.sh. 2,3 kg", "Say the number again, e.g. 2.3 kg", "Скажіть число ще раз, напр. 2,3 кг", "Скажите число ещё раз, напр. 2,3 кг"]),
+    ("many_supplies", ["Disa përbërës përshtaten:", "Several ingredients fit:", "Підходить кілька інгредієнтів:", "Подходит несколько ингредиентов:"]),
     ("waste_reason", ["Pse hidhet? I prishur, i rënë, i pashitur, i kthyer apo për stafin", "Why? Spoiled, dropped, unsold, returned or staff meal", "Чому? Зіпсувалось, впало, непродане, повернули чи для персоналу", "Почему? Испортилось, упало, не продано, вернули или для персонала"]),
 ];
 
@@ -138,6 +142,16 @@ pub fn receive(lang: &str, qty: i64, unit: &str, what: &str) -> String {
         2 => format!("прихід на склад: {a}"),
         3 => format!("приход на склад: {a}"),
         _ => format!("received onto the shelf: {a}"),
+    }
+}
+/// One counted line, read back before it joins the open count session.
+pub fn count(lang: &str, qty: i64, unit: &str, what: &str) -> String {
+    let a = amount(qty, unit, what);
+    match pick(lang) {
+        0 => format!("numëruar: {a}"),
+        2 => format!("пораховано: {a}"),
+        3 => format!("посчитано: {a}"),
+        _ => format!("counted: {a}"),
     }
 }
 pub fn waste(lang: &str, qty: i64, unit: &str, what: &str, reason: &str) -> String {

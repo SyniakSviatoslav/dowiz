@@ -962,6 +962,9 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         .iter()
         .filter_map(|it| Some((nodes.ledger.get(&it.product_id)?.clone(), it.quantity)))
         .collect();
+    // AN OPTION THAT DRAWS STOCK (R13, W-LOST): each line's chosen options
+    // add one basket line (`modifiers::bom::option_line`), reserved with the dish.
+    let bom_lines: Vec<(String, i64)> = bom_lines.into_iter().chain(body.items.iter().filter_map(|it| dowiz_hub::modifiers::bom::option_line(&it.product_id, &nodes.product(&it.product_id)?, &it.modifier_ids, it.quantity))).collect();
     // THE ONE WRITE OF THE SOURCE before the only `Placed` append: whatever
     // the envelope carried is overwritten, and a word outside the set is
     // refused here rather than stored (G4 (b)).

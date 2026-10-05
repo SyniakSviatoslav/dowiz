@@ -80,7 +80,7 @@ mod facts; // the folds over the log and the catalogue together, answered here (
 mod bulk; // a supplies / recipes spreadsheet as one turn (BN1, BN4's shape), `hubdo/bulk.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
 mod timer; // the venue's alarm: timed work without the minute cron (DAG Phase 2), `hubdo/timer.rs`
-mod push_turn; mod chat; mod sms_turn; // sms_turn: the customer's order-status text in the turn (W-SMS); push_turn: the phones' messages in the turn (W-PUSH); chat: the courier chat nudge to the two parties' sockets (W-URGENT), `hubdo/chat.rs`
+mod push_turn; mod chat; mod sms_turn; mod lost; // sms_turn: the customer's order-status text in the turn (W-SMS); push_turn: the phones' messages in the turn (W-PUSH); chat: the courier chat nudge to the two parties' sockets (W-URGENT), `hubdo/chat.rs`
 /// Where the object lives: the platform, or (tests) memory (W-COV C2), `hubdo/host.rs`.
 pub(crate) mod host;
 use crate::wire::{Call, Reply};
@@ -610,8 +610,8 @@ impl HubImages {
         let low_before = self.low_watch(&stock).await;
         let stored = match crate::command::place::decide(&mut hub, &mut stock, &listed, &venue_tax, &input) {
             Ok(v) => v,
-            // NOTHING HAS BEEN WRITTEN. Both images go out of scope here.
-            Err(r) => return Ok(Err(r)),
+            // NOTHING ELSE IS WRITTEN: only a stock-out's `refused` note (A13, `hubdo/lost.rs`).
+            Err(r) => return Ok(Err(self.keep_lost(stock_image, stock_generation, &stock, reserved_before, r).await)),
         };
 
         let events = hub.len();

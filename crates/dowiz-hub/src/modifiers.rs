@@ -289,3 +289,6 @@ pub fn price(groups: &[Group], chosen_ids: &[String]) -> Result<Priced, ModError
 
 #[cfg(test)]
 mod tests;
+
+/// Options that draw stock: `optionBom` on the dish (R13, W-LOST).
+pub mod bom;

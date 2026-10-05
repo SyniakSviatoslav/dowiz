@@ -78,7 +78,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/products/:id/delete", Staff(&MENU), Yes),
     ("post", "/api/owner/products/:id", Staff(&MENU), Yes),
     ("post", "/api/owner/products/:id/image", Staff(&MENU), Yes),
-    ("post", "/api/owner/products/:id/image/clear", Staff(&MENU), Yes),
+    ("post", "/api/owner/products/:id/image/clear", Staff(&MENU), Yes), ("get", "/api/owner/products/:id/option-bom", Staff(&MENU), Read), ("post", "/api/owner/products/:id/option-bom", Staff(&MENU), Yes), // W-LOST
     ("get", "/api/owner/products", Staff(&MENU), Read),
     ("get", "/api/owner/categories", Staff(&MENU), Read),
     ("post", "/api/owner/categories", Staff(&MENU), Yes),

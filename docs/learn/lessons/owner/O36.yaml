@@ -1,0 +1,88 @@
+# Lesson O36 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder.
+# `pending: yes` = the anchor is named but not yet in the markup (tools/gates/learn.sh).
+# W-LOST (P8 R13): an option's recipe in the dish sheet (admin/option-bom.js).
+id: O36
+role: owner
+module: menu
+order: 56
+covers: []
+title:
+  sq: "Receta e opsioneve"
+  en: "Option recipes"
+  uk: "Техкарта опцій"
+  ru: "Техкарта опций"
+goal:
+  sq: "Bëni që një opsion, p.sh. salmon shtesë, të marrë përbërësit e vet nga rafti."
+  en: "Make an option, e.g. extra salmon, take its own ingredients off the shelf."
+  uk: "Зробити так, щоб опція, напр. додатковий лосось, брала свої інгредієнти з полиці."
+  ru: "Сделать так, чтобы опция, напр. дополнительный лосось, брала свои ингредиенты с полки."
+steps:
+  - key: 1
+    anchor: nav.menu
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.menu"]'
+    title:
+      sq: "Menuja"
+      en: "Menu"
+      uk: "Меню"
+      ru: "Меню"
+    caption:
+      sq: "Pjatat e lokalit."
+      en: "The venueʼs dishes."
+      uk: "Страви закладу."
+      ru: "Блюда заведения."
+  - key: 2
+    anchor: menu.dish
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.dish"]'
+    title:
+      sq: "Një pjatë"
+      en: "A dish"
+      uk: "Страва"
+      ru: "Блюдо"
+    caption:
+      sq: "Hap një pjatë me opsione."
+      en: "Open a dish with options."
+      uk: "Відкрийте страву з опціями."
+      ru: "Откройте блюдо с опциями."
+  - key: 3
+    anchor: dish.optionBom
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="dish.optionBom"]'
+    title:
+      sq: "Receta e opsioneve"
+      en: "Option recipes"
+      uk: "Техкарта опцій"
+      ru: "Техкарта опций"
+    caption:
+      sq: "Çdo opsion: përbërësi dhe sasia që merr nga rafti."
+      en: "Each option: the ingredient and the quantity it takes off the shelf."
+      uk: "Кожна опція: інгредієнт і кількість, яку вона бере з полиці."
+      ru: "Каждая опция: ингредиент и количество, которое она берёт с полки."
+  - key: 4
+    anchor: dish.optionBomSave
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="dish.optionBomSave"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+      ru: "Сохранить"
+    caption:
+      sq: "Salmoni shtesë 20 g rezervohet bashkë me pjatën."
+      en: "Extra salmon 20 g is reserved with the dish."
+      uk: "Додатковий лосось 20 г резервується разом зі стравою."
+      ru: "Дополнительный лосось 20 г резервируется вместе с блюдом."

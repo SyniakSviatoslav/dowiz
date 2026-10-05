@@ -9,9 +9,11 @@
 // range picker sends dates as typed and draws the dates the server answers.
 
 import '/admin/ingredients-i18n.js';
+import '/admin/kitchen-topics-i18n.js';
 import { $, $$, esc, t, api, sheet, money, retranslate, hydrate, repaintMoney } from '/admin/core.js';
 import { btn, input, chips, press, empty, loading } from '/admin/parts.js';
 import { draw } from '/admin/kitchen-view.js';
+import { topicsCard } from '/admin/kitchen-topics.js';
 
 const range = { from: '', to: '', days: 7 };
 
@@ -41,9 +43,11 @@ async function load(){
   let r;
   try { r = await api(`/owner/analytics/kitchen?${q}`); } catch (e) { $('#kaOut').innerHTML = empty('alert-triangle', { key: 'loadFail', body: String(e.message || e), alert: true }); return; }
   $('#ka-from').value = r.from; $('#ka-to').value = r.to;
-  $('#kaOut').innerHTML = `<div id="kaPrep"></div><div id="kaExplain"></div>${draw(r, { money, t })}`;
+  // WHAT THE NOTES SAY (P16b): per dish per week, appended under the numbers.
+  $('#kaOut').innerHTML = `<div id="kaPrep"></div><div id="kaExplain"></div>${draw(r, { money, t })}${topicsCard(r.topics)}`;
   // TODAY'S PREP (W-PREP): the forecast's card; the list opens from it.
   import('/admin/prep-list.js').then(m => m.fillCard($('#kaPrep'))).catch(() => {});
+  import('/admin/lost-sales.js').then(m => m.fill($('#kaOut'), r)).catch(() => {}); // W-LOST: orders lost to stock-outs (A13)
   retranslate($('#kaOut')); hydrate($('#kaOut')); repaintMoney($('#kaOut'));
   // "What the numbers say" (W-AI): the owner's only; the hub refuses staff and the card stays empty.
   // The explain route answers 1, 7 or 30 days; another range keeps the nearest.

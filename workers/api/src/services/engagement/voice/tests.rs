@@ -58,3 +58,29 @@ fn a_refused_confirmation_is_said_in_the_readers_language() {
     let bad = claims("u1", Role::Owner, "order:o1");
     assert_eq!(confirmed(&bad, "u1", Role::Owner, "en")["say"], "That is not the right answer");
 }
+
+/// P14: a counted line reaches the count session ONLY through a proposal the
+/// hub signed -- its `{itemId, observed}` are the token's, never the screen's.
+/// A token edited to count more, or minted under another key, is refused
+/// before anything in it is read.
+#[test]
+fn a_count_line_comes_back_only_from_a_signed_proposal() {
+    let key: &[u8] = b"voice-count-test-key-0123456789abcdef";
+    let c = Claims { expires_ms: 90_000, ..claims("k1", Role::Staff, "voice:count:salmon|2300") };
+    let tok = dowiz_hub::token::mint(key, &c);
+    let back = dowiz_hub::token::verify(key, &tok, 1).expect("the hub's own proposal");
+    let out = confirmed(&back, "k1", Role::Staff, "en");
+    assert_eq!(out["verb"], "count");
+    assert_eq!(out["args"], json!({ "itemId": "salmon", "observed": 2300 }));
+    // The same line, counted higher, under the original signature: refused.
+    let more = Claims { scope: "voice:count:salmon|9300".into(), ..c.clone() };
+    let forged_payload = dowiz_hub::token::mint(b"another-key", &more);
+    let forged = format!("{}.{}", forged_payload.split_once('.').unwrap().0, tok.split_once('.').unwrap().1);
+    assert!(dowiz_hub::token::verify(key, &forged, 1).is_err(), "an edited count is not the proposal");
+    assert!(dowiz_hub::token::verify(b"another-key", &tok, 1).is_err());
+    // Somebody else's count proposal, and a count that does not decode.
+    assert_eq!(confirmed(&back, "k2", Role::Staff, "en")["understood"], false);
+    for scope in ["voice:count:salmon", "voice:count:salmon|lots", "voice:count:salmon|1|2"] {
+        assert_eq!(confirmed(&claims("k1", Role::Staff, scope), "k1", Role::Staff, "en")["understood"], false, "{scope}");
+    }
+}

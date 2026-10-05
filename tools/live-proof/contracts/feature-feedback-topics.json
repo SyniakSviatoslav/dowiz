@@ -1,0 +1,68 @@
+{
+  "id": "feature-feedback-topics",
+  "name": "analytics.feedback_topics",
+  "contract_version": "1.0.0",
+  "class": "LIVE-READ",
+  "description": {
+    "en": "What guests' notes are about, per dish per week (W-VOICE, P16 second half of docs/research/2026-10-03-depth-stock-analytics-models.md). The kitchen numbers GET /api/owner/analytics/kitchen?from&to gain `topics`: a 4-language lexicon (sq/en/uk/ru; cold, late, salty, small_portion, not_tasty, stale, spicy, packaging, tasty, fresh; stems for uk/ru, Albanian folded ë->e) read over every order's `feedback.text` (POST /api/order/:id/feedback) inside the window, negation turns tasty->not_tasty and fresh->stale, and the hits are counted ONCE per (week, dish, topic): the dishes the note names, or every dish of the order when it names none. NEVER per order, per guest, per courier or per member of staff: no such id is in the key or in the answer (tools/gates/no-scoring.sh class 4 PERSON_TOPICS refuses a per-person topic fold). At most 2 example phrases per row, at most 12 words each, REDACTED: a word with a digit or '@' (phone, flat, order number), a capitalised word past the first (a name) and the word after courier/name cues become '…'. No score, no sentiment number; deterministic, no model. Shown as a card on the kitchen numbers (Stock -> Numbers) in 4 languages.",
+    "uk": "Про що пишуть гості, по страві за тиждень: холодне, пізно, солоне, мала порція, смачно...; лише страва x тиждень, ніколи людина; приклади фраз без телефонів та імен."
+  },
+  "producer": [
+    { "file": "workers/api/src/services/analytics/kitchen.rs", "line": 196, "what": "out[topics] in the kitchen numbers answer (route GET /api/owner/analytics/kitchen, line 126)" },
+    { "file": "workers/api/src/services/analytics/kitchen/topics.rs", "line": 135, "what": "fold (PURE: per week x dish x topic)" },
+    { "file": "workers/api/src/services/analytics/kitchen/topics.rs", "line": 70, "what": "topics_of (the lexicon, with negation)" },
+    { "file": "workers/api/src/services/analytics/kitchen/topics.rs", "line": 89, "what": "example (redaction of digits, '@', names)" },
+    { "file": "workers/api/src/services/orders/feedback.rs", "line": 26, "what": "where feedback.text is written (not edited)" }
+  ],
+  "consumer": [
+    { "file": "workers/api/public/admin/kitchen-topics.js", "line": 22, "what": "topicsCard (pure markup, anchor kitchen.topics)" },
+    { "file": "workers/api/public/admin/kitchen-analytics.js", "line": 47, "what": "appends the card under the kitchen numbers" },
+    { "file": "workers/api/public/admin/kitchen-topics-i18n.js", "line": 1, "what": "ft_* words in sq/en/uk/ru" },
+    { "file": "tools/live-proof/probes/feedback-topics.mjs", "line": 1, "what": "probe" }
+  ],
+  "transport": { "method": "GET", "path": "/api/owner/analytics/kitchen?from=yyyy-mm-dd&to=yyyy-mm-dd" },
+  "external": null,
+  "external_api_version": null,
+  "auth": {
+    "secrets": ["QA_OWNER_EMAIL / QA_OWNER_PASSWORD (or OWNER_* of /root/.dowiz_owner naming qa-durres)"],
+    "where": "/root/.dowiz_owner"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "from": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+      "to": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+      "location_id": { "type": "string" }
+    }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": ["topics"],
+    "properties": {
+      "topics": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["week", "dish", "name", "topic", "count", "examples"],
+          "properties": {
+            "week": { "type": "integer", "minimum": 20000101, "maximum": 99991231 },
+            "dish": { "type": "string", "minLength": 1 },
+            "name": { "type": "string" },
+            "topic": { "enum": ["cold", "late", "salty", "small_portion", "not_tasty", "stale", "spicy", "packaging", "tasty", "fresh"] },
+            "count": { "type": "integer", "minimum": 1 },
+            "examples": {
+              "type": "array",
+              "maxItems": 2,
+              "items": { "type": "string", "pattern": "^[^0-9@]*$" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "probe": "node tools/live-proof/probes/feedback-topics.mjs (main runs it on qa-durres after deploy; it places one TEST pickup order and leaves one note)",
+  "last_verified": null
+}

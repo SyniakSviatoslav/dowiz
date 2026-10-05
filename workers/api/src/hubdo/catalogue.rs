@@ -18,6 +18,7 @@
 //!   GET /fold/catalogue?q=posts                 `posts::menu_state`
 //!   GET /fold/catalogue?q=activation            `activation::catalogue_facts`
 //!   GET /fold/catalogue?q=product&id=
+//!   GET /fold/catalogue?q=option_bom&id=        `option_bom::fold` (R13, W-LOST)
 //!   GET /fold/catalogue?q=owned                 `import::owned_dishes`
 //!   GET /fold/catalogue?q=owner_products[&id=]  `import::bulk::owner_view`
 //!   GET /fold/venue                             the venue's own record (moved here from `hubdo.rs`)
@@ -66,6 +67,7 @@ impl HubImages {
             "posts" => crate::services::engagement::posts::menu_state(&cat),
             "activation" => crate::services::venue::activation::catalogue_facts(&cat),
             "product" => json!({ "product": cat.product(&q("id").unwrap_or_default()) }),
+            "option_bom" => crate::services::catalogue::option_bom::fold(&cat, &q("id").unwrap_or_default()),
             "owned" => json!({ "owned": crate::services::catalogue::import::owned_dishes(&cat) }),
             "owner_products" => json!({ "products": crate::services::catalogue::import::bulk::owner_view(&cat, q("id").as_deref()) }),
             _ => return Response::error("no such catalogue fold", 404),

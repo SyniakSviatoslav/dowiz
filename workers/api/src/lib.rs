@@ -561,6 +561,9 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .post_async("/api/owner/apikeys/revoke", |r, c| edge::run(r, c, services::identity::keys::revoke_api_key))
         .post_async("/api/owner/products/:id/image", |r, c| edge::run(r, c, services::catalogue::media::set_product_image))
         .post_async("/api/owner/products/:id/image/clear", |r, c| edge::run(r, c, services::catalogue::media::clear_product_image))
+        // R13 (W-LOST): an option's recipe -- what "extra salmon" takes off the shelf.
+        .get_async("/api/owner/products/:id/option-bom", |r, c| edge::run(r, c, services::catalogue::option_bom::read))
+        .post_async("/api/owner/products/:id/option-bom", |r, c| edge::run(r, c, services::catalogue::option_bom::write))
         // The venue's own mark, stored the way its dishes' photographs are.
         .post_async("/api/owner/place", |r, c| edge::run(r, c, services::venue::place::set_place))
         .post_async("/api/owner/logo", |r, c| edge::run(r, c, services::catalogue::media::set_venue_logo))

@@ -1,0 +1,243 @@
+{
+  "id": "feature-stock-refused",
+  "name": "stock.refused",
+  "contract_version": "1.0.0",
+  "class": "LIVE-NOW",
+  "description": {
+    "en": "Lost sales (research 2026-10-03 P8, A13, W-LOST). Every OutOfStock refusal at checkout (storefront placement, the venue object's `place` turn) appends ONE non-shelf note to the stock log: {k:'note', note:'refused', item, dish, qty, price, at} -- the supply that ran out, the dish (catalogue id) whose line needed it, portions, the dish's unit price then (integer lek, chosen options' deltas included) and the request clock. NO personal data: no phone, order id, guest or name (the only writer takes a 4-field type). Fold-neutral by construction: a note never decodes as a stock event, so ledger, cost book, lots, carry, storages and checkpoints are byte-equal with or without refusals; an image written before this feature folds the same. Rate-limited to one record per supply per 10 minutes, so the count is a lower bound. Reported in GET /api/owner/analytics/kitchen as the `lost` block: per dish and per venue day, refusals, portions and `revenue` (lek); a kitchen-staff token gets the block without any `revenue` key. Drawn as the 'Orders lost to stock-outs' card on the kitchen numbers (sq/en/uk/ru).",
+    "uk": "Втрачені продажі: кожна відмова каси через брак продукту залишає в журналі складу одну нотатку без персональних даних (не більше однієї на інгредієнт за 10 хвилин), яка не змінює залишків; звіт кухні показує втрачені замовлення по стравах і днях у леках."
+  },
+  "producer": [
+    {
+      "file": "crates/dowiz-hub/src/stock/refused.rs",
+      "line": 61,
+      "what": "StockLog::append_lost (rate limit, 4-field LostSale)"
+    },
+    {
+      "file": "crates/dowiz-hub/src/stock/refused.rs",
+      "line": 153,
+      "what": "on_refusal (OutOfStock -> the note; the dish and price from the basket lines)"
+    },
+    {
+      "file": "workers/api/src/command/place.rs",
+      "line": 155,
+      "what": "decide: the reservation's refusal path"
+    },
+    {
+      "file": "workers/api/src/hubdo/lost.rs",
+      "line": 23,
+      "what": "keep_lost: the stock image written on a stock-out only"
+    },
+    {
+      "file": "workers/api/src/services/analytics/kitchen/lost.rs",
+      "line": 28,
+      "what": "report: the `lost` block"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/admin/lost-sales.js",
+      "line": 12,
+      "what": "fill: the card appended to the kitchen numbers"
+    },
+    {
+      "file": "workers/api/public/admin/lost-sales-view.js",
+      "line": 23,
+      "what": "drawLost (pure)"
+    },
+    {
+      "file": "tools/live-proof/probes/stock-lost.mjs",
+      "line": 1,
+      "what": "probe"
+    }
+  ],
+  "transport": [
+    {
+      "method": "POST",
+      "path": "/api/public/locations/:slug/orders",
+      "note": "a basket the shelf cannot cover answers 409 and leaves the note"
+    },
+    {
+      "method": "GET",
+      "path": "/api/owner/analytics/kitchen",
+      "field": "lost"
+    }
+  ],
+  "external": null,
+  "external_api_version": null,
+  "auth": {
+    "secrets": [
+      "OWNER_EMAIL",
+      "OWNER_PASSWORD"
+    ],
+    "where": "/root/.dowiz_owner"
+  },
+  "record_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "k",
+      "note",
+      "item",
+      "dish",
+      "qty",
+      "price",
+      "at"
+    ],
+    "properties": {
+      "k": {
+        "const": "note"
+      },
+      "note": {
+        "const": "refused"
+      },
+      "item": {
+        "type": "string",
+        "minLength": 1
+      },
+      "dish": {
+        "type": "string",
+        "minLength": 1
+      },
+      "qty": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "price": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "at": {
+        "type": "integer"
+      }
+    },
+    "additionalProperties": false
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "lost"
+    ],
+    "properties": {
+      "lost": {
+        "type": "object",
+        "required": [
+          "contract",
+          "rows",
+          "portions",
+          "rateLimitedMinutes",
+          "dishes",
+          "byDay"
+        ],
+        "properties": {
+          "contract": {
+            "const": "stock.refused.v1"
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "portions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "revenue": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rateLimitedMinutes": {
+            "const": 10
+          },
+          "dishes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "rows",
+                "portions",
+                "byDay"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "portions": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "revenue": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "byDay": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "rows"
+                    ],
+                    "properties": {
+                      "rows": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "revenue": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "byDay": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "day",
+                "rows",
+                "portions"
+              ],
+              "properties": {
+                "day": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "portions": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "revenue": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "probe": "node tools/live-proof/probes/stock-lost.mjs (main runs it on qa-durres after deploy)",
+  "last_verified": null
+}

@@ -1,0 +1,125 @@
+# Lesson O34 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-VOICE (P14 + P16b): a stock count said aloud, and what guests' notes say per dish per week.
+# The spoken phrases below are rows of the count grammar's test table
+# (workers/api/src/services/engagement/voice/count/tests.rs english/ukrainian/russian/albanian_counts).
+id: O34
+role: owner
+module: stock
+order: 54
+covers: []
+title:
+  sq: "Numërim me zë & çfarë thonë mysafirët"
+  en: "Count by voice & what guests say"
+  uk: "Перерахунок голосом і що пишуть гості"
+  ru: "Пересчёт голосом и что пишут гости"
+goal:
+  sq: "Numëroni raftin me zë, një rresht me një prekje, dhe shihni për çfarë ankohen mysafirët për çdo pjatë."
+  en: "Count the shelf aloud, one line per tap, and see what guests' notes say about each dish."
+  uk: "Перерахувати склад голосом, рядок за дотиком, і побачити, що гості пишуть про кожну страву."
+  ru: "Пересчитать склад голосом, строка за касанием, и увидеть, что гости пишут о каждом блюде."
+steps:
+  - key: 1
+    anchor: hud.voice
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="hud.voice"]'
+    title:
+      sq: "Thoni numërimin"
+      en: "Say the count"
+      uk: "Скажіть перерахунок"
+      ru: "Скажите пересчёт"
+    caption:
+      sq: "«numëro losos dy kile e treqind» ose «numëro losos 2,3 kg». Njësia duhet: kg, g, l, ml ose copë."
+      en: "«count salmon two kilo three hundred» or «count salmon 2.3 kg». Say the unit: kg, g, l, ml or pieces."
+      uk: "«рахую лосось два кіло триста» або «рахую лосось 2,3 кг». Одиницю кажіть: кг, г, л, мл чи штуки."
+      ru: "«считаю лосось два кило триста» или «считаю лосось 2,3 кг». Единицу говорите: кг, г, л, мл или штуки."
+  - key: 2
+    anchor: voice.readback
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="voice.readback"]'
+    title:
+      sq: "Çfarë u dëgjua"
+      en: "What was heard"
+      uk: "Що почуто"
+      ru: "Что услышано"
+    caption:
+      sq: "«numëruar: 2300 g Losos». Dy përbërës që përshtaten, ose pa njësi — pyet, nuk hamendëson."
+      en: "«counted: 2300 g Salmon». Two ingredients that fit, or no unit, is a question, never a guess."
+      uk: "«пораховано: 2300 g Лосось». Два інгредієнти, що підходять, чи без одиниці — питання, а не здогад."
+      ru: "«посчитано: 2300 g Лосось». Два подходящих ингредиента или без единицы — вопрос, а не догадка."
+  - key: 3
+    anchor: voice.confirm
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="voice.confirm"]'
+    title:
+      sq: "Një prekje"
+      en: "One tap"
+      uk: "Один дотик"
+      ru: "Одно касание"
+    caption:
+      sq: "Rreshti shkon te numërimi i hapur; rreshtat e radhës i bashkohen të njëjtit numërim."
+      en: "The line joins the open count; the next lines you say join the same count."
+      uk: "Рядок іде у відкритий перерахунок; наступні рядки додаються до того ж перерахунку."
+      ru: "Строка идёт в открытый пересчёт; следующие строки добавляются в тот же пересчёт."
+  - key: 4
+    anchor: nav.stock
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.stock"]'
+    title:
+      sq: "Magazina"
+      en: "Stock"
+      uk: "Склад"
+      ru: "Склад"
+    caption:
+      sq: "Numrat e kuzhinës janë te mjetet poshtë listës."
+      en: "The kitchen numbers are in the tools under the list."
+      uk: "Цифри кухні — в інструментах під списком."
+      ru: "Цифры кухни — в инструментах под списком."
+  - key: 5
+    anchor: stock.numbers
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.numbers"]'
+    title:
+      sq: "Numrat"
+      en: "Numbers"
+      uk: "Цифри"
+      ru: "Цифры"
+    caption:
+      sq: "Konsumi, kostoja dhe shënimet e mysafirëve."
+      en: "Use, cost and the guests' notes."
+      uk: "Витрата, собівартість і нотатки гостей."
+      ru: "Расход, себестоимость и заметки гостей."
+  - key: 6
+    anchor: kitchen.topics
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="kitchen.topics"]'
+    title:
+      sq: "Çfarë thonë mysafirët"
+      en: "What guests say"
+      uk: "Що пишуть гості"
+      ru: "Что пишут гости"
+    caption:
+      sq: "I ftohtë, vonë, i kripur, porcion i vogël… për pjatë dhe javë. Asnjëherë për person; pa telefona e emra."
+      en: "Cold, late, salty, small portion… per dish and week. Never per person; no phones or names."
+      uk: "Холодне, пізно, солоне, мала порція… по страві й тижню. Ніколи по людині; без телефонів та імен."
+      ru: "Холодное, поздно, солёное, маленькая порция… по блюду и неделе. Никогда по человеку; без телефонов и имён."

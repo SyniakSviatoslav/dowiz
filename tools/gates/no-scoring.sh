@@ -76,6 +76,11 @@ PERSON_JUDGED='(courier|customer|client|venue|staff|waiter|user|diner|guest|part
 GUEST_SCORED='(guest|customer|client|user|diner)_(taste|affinity|propensity|segment|cohort|ltv|spend|profile)'
 PRICED_BY_PERSON='price_sensitivity|willingness_to_pay|\bwtp\b'
 MONEY_WORDS='price|discount|promo|eligib|refus'
+# 4. WHAT GUESTS' NOTES ARE ABOUT, BY PERSON (W-VOICE P16b, 2026-10-05): the topics of
+#    `feedback.text` are folded per DISH per WEEK only (`services/analytics/kitchen/topics.rs`).
+#    "late" counted per courier is a courier's record; "rude" per waiter is a waiter's. So a
+#    topic, a sentiment or a complaint keyed by a person or an order is refused on the server.
+PERSON_TOPICS='(courier|customer|client|guest|staff|waiter|user|diner|person|order|phone)_(topics?|sentiment|mood|complaints?)|(topics?|sentiment|mood|complaints?)_(by|per|of)_(courier|customer|client|guest|staff|waiter|user|diner|person|order|phone)'
 # The ONE server module allowed to hold class 2 (and its tests directory), and the device scorer.
 SCORER_RS=workers/api/src/services/customers/taste
 SCORER_JS=workers/api/public/store/taste.js
@@ -95,7 +100,7 @@ code() { sed 's,//.*,,' "$1"; }   # comments out (a `//` inside a string is cut 
 hits() {
   for f in $(server_files); do
     rel=${f#"$R"/}
-    code "$f" | grep -niE "$PERSON_JUDGED|$PRICED_BY_PERSON" | sed "s|^|$rel:|"
+    code "$f" | grep -niE "$PERSON_JUDGED|$PRICED_BY_PERSON|$PERSON_TOPICS" | sed "s|^|$rel:|"
     case "$rel" in
       "$SCORER_RS".rs|"$SCORER_RS"/*) code "$f" | grep -niE "$MONEY_WORDS" | sed "s|^|$rel: (a guest scorer naming money) |" ;;
       *) code "$f" | grep -niE "$GUEST_SCORED" | sed "s|^|$rel: (a guest score outside $SCORER_RS) |" ;;

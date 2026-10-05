@@ -1,0 +1,211 @@
+{
+  "id": "feature-modifier-bom",
+  "name": "catalog.modifier_bom",
+  "contract_version": "1.0.0",
+  "class": "LIVE-NOW",
+  "description": {
+    "en": "Option recipes (research 2026-10-03 P8, R13, W-LOST). A modifier option gains an optional recipe, stored on the dish record as the top-level key optionBom {<option id>: [{supply, qty}]} -- never inside modifierGroups, so the public menu (which passes modifierGroups as stored) shows no recipe, and stock::bom_of (which reads the first \"bom\" array of a record) can never take an option's lines for the dish's. Old-image-safe: a dish without optionBom reserves exactly what it did, and clearing the last line removes the key. At placement each line's chosen options add one basket line {of, delta, bom} that joins the order's reservation, its later draw (consumed at PREPARING from the ledger's holds) and the all-or-nothing refusal check: 'extra salmon' 20 g reserves 20 g more. Lines name raw supplies, whole base units, at most 8 per option. Edited in the dish sheet (the 'Option recipes' section, admin/option-bom.js, sq/en/uk/ru) through GET/POST /api/owner/products/:id/option-bom.",
+    "uk": "Техкарта опції: опція страви (напр. додатковий лосось 20 г) має власні рядки сировини, які резервуються і списуються разом зі стравою; гість рецепта не бачить, старі страви без змін."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/services/catalogue/option_bom.rs",
+      "line": 89,
+      "what": "write (POST): strict body, MENU door, raw supplies only"
+    },
+    {
+      "file": "workers/api/src/services/catalogue/option_bom.rs",
+      "line": 76,
+      "what": "read (GET)"
+    },
+    {
+      "file": "crates/dowiz-hub/src/modifiers/bom.rs",
+      "line": 84,
+      "what": "set_option_bom (stored form, old-image rule)"
+    },
+    {
+      "file": "crates/dowiz-hub/src/modifiers/bom.rs",
+      "line": 43,
+      "what": "option_line (the basket line that joins the reservation)"
+    },
+    {
+      "file": "workers/api/src/storefront.rs",
+      "line": 967,
+      "what": "placement: option lines chained into bom_lines"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/admin/option-bom.js",
+      "line": 19,
+      "what": "watch: the section in the dish sheet, save per option (line 54)"
+    },
+    {
+      "file": "workers/api/public/admin/option-bom-logic.js",
+      "line": 25,
+      "what": "section (pure)"
+    },
+    {
+      "file": "tools/live-proof/probes/stock-lost.mjs",
+      "line": 1,
+      "what": "probe (second half)"
+    }
+  ],
+  "transport": [
+    {
+      "method": "GET",
+      "path": "/api/owner/products/:id/option-bom"
+    },
+    {
+      "method": "POST",
+      "path": "/api/owner/products/:id/option-bom",
+      "body": "{location_id, option, bom:[{supply, qty}]}"
+    }
+  ],
+  "external": null,
+  "external_api_version": null,
+  "auth": {
+    "secrets": [
+      "OWNER_EMAIL",
+      "OWNER_PASSWORD"
+    ],
+    "where": "/root/.dowiz_owner"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "location_id",
+      "option",
+      "bom"
+    ],
+    "properties": {
+      "location_id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "option": {
+        "type": "string",
+        "minLength": 1
+      },
+      "bom": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "supply",
+            "qty"
+          ],
+          "properties": {
+            "supply": {
+              "type": "string",
+              "minLength": 1
+            },
+            "qty": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "additionalProperties": false
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "contract",
+      "product",
+      "options",
+      "supplies"
+    ],
+    "properties": {
+      "contract": {
+        "const": "catalog.modifier_bom.v1"
+      },
+      "product": {
+        "type": "string"
+      },
+      "options": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "group",
+            "groupName",
+            "id",
+            "name",
+            "bom"
+          ],
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "groupName": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string"
+            },
+            "bom": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "supply",
+                  "qty"
+                ],
+                "properties": {
+                  "supply": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "qty": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "supplies": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "name",
+            "unit"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "unit": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "additionalProperties": false
+  },
+  "probe": "node tools/live-proof/probes/stock-lost.mjs (main runs it on qa-durres after deploy)",
+  "last_verified": null
+}

@@ -72,6 +72,8 @@ pub fn decode(verb: &str, rest: &str) -> Option<Value> {
         ("dish_off" | "dish_on", [product]) => Some(json!({ "productId": product })),
         ("venue", [state]) => Some(json!({ "state": state })),
         ("receive", [item, qty]) => Some(json!({ "itemId": item, "qty": num(qty)? })),
+        // P14: one counted line; the confirmation adds it to the open session.
+        ("count", [item, qty]) => Some(json!({ "itemId": item, "observed": num(qty)? })),
         ("waste", [item, qty, reason]) => Some(json!({ "itemId": item, "qty": num(qty)?, "reason": reason })),
         _ => None,
     }
@@ -80,7 +82,7 @@ pub fn decode(verb: &str, rest: &str) -> Option<Value> {
 /// The verbs `decode` owns. A confirmation for one of them that does not
 /// decode is refused, never passed through as an order id.
 pub fn is_ours(verb: &str) -> bool {
-    matches!(verb, "add" | "place" | "pay" | "dish_off" | "dish_on" | "venue" | "receive" | "waste")
+    matches!(verb, "add" | "place" | "pay" | "dish_off" | "dish_on" | "venue" | "receive" | "waste" | "count")
 }
 
 #[cfg(test)]
