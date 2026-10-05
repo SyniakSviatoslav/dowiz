@@ -671,7 +671,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         crate::services::customers::handlers::customer_key(&crate::services::customers::handlers::signing_secret(&ctx.env), phone)
     });
     let taste_prep = match crate::services::customers::taste_routes::prepare(
-        &place, taste_key, body.taste_off, body.taste_sync.as_ref(), ctx.data.now_ms,
+        &place, &ctx.env, &raw_loc, taste_key, body.taste_off, body.taste_sync.as_ref(), ctx.data.now_ms,
     )
     .await?
     {

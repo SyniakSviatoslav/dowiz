@@ -128,6 +128,10 @@ pub const HOSTS: &[Host] = &[
     Host { host: "{slug}.{platform}", recipient: NotARecipient("the venue's own addresses on this platform") },
     Host { host: "{}.{}", recipient: NotARecipient("the venue's own addresses on this platform") },
     Host { host: "*.dowiz.org", recipient: NotARecipient("this platform's own live-update sockets") },
+    // W-SENSE (services/venue/context.rs): the weather AT THE VENUE, asked by the Worker at most hourly.
+    Host { host: "api.open-meteo.com", recipient: NotARecipient("the weather at the venue: the request carries the venue's own coordinates (two decimals) and nothing about a guest; the Worker asks, never the guest's browser") },
+    Host { host: "weather.dowiz", recipient: NotARecipient("a cache key in this Worker's own cache; never fetched") },
+    Host { host: "context.dowiz", recipient: NotARecipient("a cache key in this Worker's own cache; never fetched") },
 ];
 
 const fn key(key: &'static str, holds: &'static [super::Data], surface: &'static str) -> DeviceKey {

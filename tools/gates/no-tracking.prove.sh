@@ -17,6 +17,10 @@
 #  14. navigator.userAgent sent as a value                            -> refuse (1)
 #  15. /iPhone/.test(navigator.userAgent), a yes/no                   -> pass (0)
 #  16. hardwareConcurrency read                                       -> refuse (1)
+#  17. the mood inside a request body (W-SENSE)                       -> refuse (1)
+#  18. the mood held in memory and used to rank                       -> pass (0)
+#  19. the context asked with the guest's coordinates                 -> refuse (1)
+#  20. geolocation read in a sense file                               -> refuse (1)
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
@@ -46,5 +50,9 @@ fresh; printf 'fetch("/api/o", { method: "POST", body: JSON.stringify({ ua: navi
 fresh; printf 'const IOS2 = /iPhone|iPad/.test(navigator.userAgent);\n' > "$D/zz.js"; want 0 "userAgent as a yes/no"
 fresh; printf 'const cores = navigator.hardwareConcurrency;\n' > "$D/zz.js"; want 1 "hardwareConcurrency read"
 fresh; printf 'const guest_taste = { maki: 3 };\nlocalStorage.setItem("x", JSON.stringify(guest_taste));\n' > "$D/zz.js"; want 0 "guest_taste on the device"
-[ "$fail" -eq 0 ] && echo "no-tracking.prove: GREEN -- 16 of 16 cases" || echo "no-tracking.prove: RED"
+fresh; printf 'let mood = "cosy";\nfetch("/api/o", { method: "POST", body: JSON.stringify({ items: [], mood }) });\n' > "$D/zz.js"; want 1 "mood in a request body"
+fresh; printf 'let mood = "cosy";\nconst rank = d => score(d, MOODS[mood]);\n' > "$D/zz.js"; want 0 "mood kept in memory"
+fresh; printf 'navigator.geolocation.getCurrentPosition(p => fetch(`/api/public/locations/x/context?lat=${p.coords.latitude}`));\n' > "$D/zz.js"; want 1 "context with the guest's coordinates"
+fresh; printf 'navigator.geolocation.getCurrentPosition(() => {});\n' > "$D/sense-zz.js"; want 1 "geolocation in a sense file"
+[ "$fail" -eq 0 ] && echo "no-tracking.prove: GREEN -- 20 of 20 cases" || echo "no-tracking.prove: RED"
 exit "$fail"

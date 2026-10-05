@@ -69,6 +69,7 @@ impl HubImages {
             "product" => json!({ "product": cat.product(&q("id").unwrap_or_default()) }),
             "option_bom" => crate::services::catalogue::option_bom::fold(&cat, &q("id").unwrap_or_default()),
             "owned" => json!({ "owned": crate::services::catalogue::import::owned_dishes(&cat) }),
+            "sense_plan" => json!({ "plan": crate::services::customers::taste_builder::plan_of(&cat, &q("key").unwrap_or_default()) }), // W-SENSE
             "owner_products" => json!({ "products": crate::services::catalogue::import::bulk::owner_view(&cat, q("id").as_deref()) }),
             _ => return Response::error("no such catalogue fold", 404),
         };

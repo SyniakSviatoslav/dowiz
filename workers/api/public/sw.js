@@ -12,7 +12,7 @@
 
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-shell-2026-10-04-bag-taste';
+const SHELL_CACHE = 'dowiz-shell-2026-10-05-sense-voice-lost';
 /// THE WHOLE MODULE GRAPH, not just its entry.
 ///
 /// This list used to hold the document, `/app.js` and the three stylesheets,
@@ -78,6 +78,12 @@ const SHELL_CACHE_MODULES = [
   '/store/taste.js',
   '/store/taste-device.js',
   '/store/taste-words.js',
+  // W-SENSE: taste, texture and aroma; the wallet order at checkout (menu.js, dish.js, checkout.js import them).
+  '/store/sense.js',
+  '/store/sense-view.js',
+  '/store/sense-ui.js',
+  '/store/paydetect.js',
+  '/lib/sense-words.js',
   '/store/ui.js',
   '/store/venue.js',
   // The design system: `index.js` re-exports every component module, so the

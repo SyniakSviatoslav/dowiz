@@ -25,6 +25,7 @@ import { consentMarkup, wireConsent, consentBody } from '/store/consent.js';
 import { smsMarkup, wireSms, smsBody } from '/store/sms-box.js'; // W-SMS
 import { bagLine, bagBody, bagPlaced } from '/store/bag.js'; // W-QR
 import { tasteBody } from '/store/taste-device.js';
+import { orderRails, support as payOn } from '/store/paydetect.js';
 import { TABLE, tableBanner, tableBody } from '/store/table.js';
 import { venueWallMs, laterPrefill } from '/lib/booking-time.js';
 import { ui, k, cta, ghost, seg } from '/store/parts.js';
@@ -75,12 +76,13 @@ const PAYMENT_ELEMENT_OPTIONS = { layout: 'tabs', wallets: { applePay: 'auto', g
 function rails(){
   const L = state.loc || {};
   const p = L.payments || { cash: true, card: !!L.stripePublishableKey, applePay: false, googlePay: false, crypto: [] };
-  return RAILS.filter(([kind]) => {
+  // W-SENSE row 8: the wallet this browser offers goes first (store/paydetect.js); none added or hidden.
+  return orderRails(RAILS.filter(([kind]) => {
     const flag = RAIL_FLAG[kind];
     if (!flag) return true;
     const v = p[flag];
     return Array.isArray(v) ? v.length > 0 : !!v;
-  });
+  }), payOn());
 }
 const wallets = () => (state.loc?.payments?.crypto) || [];
 

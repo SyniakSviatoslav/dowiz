@@ -4,6 +4,8 @@
 pub mod activation;
 pub mod brand;
 pub mod brand_extract;
+/// W-SENSE: the moment at the venue -- band, weekday, weather (Open-Meteo) -- for ranking.
+pub mod context;
 pub mod place;
 pub mod publish;
 pub mod settings;

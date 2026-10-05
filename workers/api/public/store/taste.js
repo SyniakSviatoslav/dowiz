@@ -19,6 +19,8 @@
 //   * THE VENUE'S OWN PROFILE of this guest (recognised by the order link they hold, never by the
 //     device) may be passed back in as `prior`: it adds to the weights, like the phone's own.
 
+import { senseOf, vectorOf, cosine, topScaled, monthOf, MOODS, because } from './sense.js';
+
 export const VERSION = 1;
 /// Days for a signal to count half (the spec's 60-day half-life).
 export const HALF_LIFE_DAYS = 60;
@@ -78,6 +80,11 @@ export function record(profile, ev, day){
   switch (ev.kind) {
     case 'order':
       for (const it of ev.items || []) if (it?.id && it.qty > 0) dish(it.id).order = bump(dish(it.id).order, day, it.qty | 0);
+      // W-SENSE: the moment AT THE VENUE it was ordered in (`band:evening`, `wx:rain`), per dish.
+      for (const c of Array.isArray(ev.ctx) ? ev.ctx.filter(c => typeof c === 'string' && c.length <= 24).slice(0, 4) : []) {
+        p.ctx ||= {};
+        for (const it of ev.items || []) if (it?.id && it.qty > 0) (p.ctx[c] ||= {})[it.id] = bump(p.ctx[c][it.id], day, it.qty | 0);
+      }
       break;
     case 'open': case 'add': case 'drop':
       if (ev.id) dish(ev.id)[ev.kind] = bump(dish(ev.id)[ev.kind], day, 1);
@@ -148,20 +155,64 @@ export function withPrior(w, prior){
   }
   return w;
 }
-export function strip(products, profile, day, { avoidGuess = [], prior = null } = {}){
+export function strip(products, profile, day, { avoidGuess = [], prior = null, ctx = null, mood = null } = {}){
   const on = (products || []).filter(p => p && p.available !== false);
   const w = withPrior(weights(profile, on, day), prior);
+  const guest = senseVec(profile, on, day);
+  for (const r of Array.isArray(prior?.sense) ? prior.sense : []) { const x = Number(r?.w); if (typeof r?.key === 'string' && x > 0) guest[r.key] = (guest[r.key] || 0) + x / PRIOR_UNIT; }
+  const moment = ctx ? senseVec(profile, on, day, { ctx }) : null;
+  const total = p => score(p, w) + senseScore(p, { guest, moment, mood });
   const ordered = id => sum(profile?.dishes?.[id]?.order, day);
   const guessed = p => Array.isArray(p.allergens) && p.allergens.some(c => avoidGuess.includes(c));
   const again = on.filter(p => ordered(p.id) > 0).sort((a, b) => ordered(b.id) - ordered(a.id) || String(a.id).localeCompare(String(b.id)))
     .slice(0, AGAIN_MAX).map(p => ({ id: p.id, why: 'again' }));
   const taken = new Set(again.map(x => x.id));
-  const rest = on.filter(p => !taken.has(p.id)).map(p => ({ p, s: score(p, w) })).filter(x => x.s > 0)
+  const rest = on.filter(p => !taken.has(p.id)).map(p => ({ p, s: total(p) })).filter(x => x.s > 0)
     .sort((a, b) => b.s - a.s || String(a.p.id).localeCompare(String(b.p.id)))
     .map(x => ({ id: x.p.id, why: 'taste', guessed: guessed(x.p) }));
   const ranked = [...rest.filter(x => !x.guessed), ...rest.filter(x => x.guessed)];
   return [...again, ...ranked].slice(0, STRIP_MAX);
 }
+
+// ── W-SENSE: the guest on the dish's taste, texture and aroma ──────────────────
+/// How much the dish's own axes count beside the tags (a never-ordered dish is predicted from them),
+/// the current context's, and the session's mood.
+export const SENSE_W = 2, CTX_W = 1, MOOD_W = 1.5;
+export const MONTHS_KEEP = 13, SNAP_TOP = 12;
+
+/// The guest's vector over the menu's declared axes: each dish's weight x its vector.
+export function senseVec(profile, products, day, { ctx = null } = {}){
+  const w = weights(profile, products, day).dish;
+  if (ctx) {
+    w.clear();
+    for (const c of ctx) for (const [id, list] of Object.entries(profile?.ctx?.[c] || {})) w.set(id, (w.get(id) || 0) + sum(list, day));
+  }
+  const vec = {};
+  for (const p of products || []) {
+    const x = w.get(p.id); if (!(x > 0)) continue;
+    for (const [k, v] of Object.entries(vectorOf(senseOf(p)))) vec[k] = (vec[k] || 0) + x * v / 1000;
+  }
+  return vec;
+}
+
+/// What the axes add to a dish's score: its match with the guest, with the moment, with the mood.
+export function senseScore(p, { guest = null, moment = null, mood = null } = {}){
+  const v = vectorOf(senseOf(p));
+  if (!Object.keys(v).length) return 0;
+  return SENSE_W * Math.max(0, cosine(guest, v)) + CTX_W * Math.max(0, cosine(moment, v)) + MOOD_W * cosine(mood ? MOODS[mood] : null, v);
+}
+
+/// The month's snapshot of the vector, kept beside the profile (the newest MONTHS_KEEP).
+export function snapshot(profile, products, day){
+  if (!profile || profile.v !== VERSION) return profile;
+  const vec = senseVec(profile, products, day);
+  if (!Object.keys(vec).length) return profile;
+  const p = structuredClone(profile);
+  p.months = { ...(p.months || {}), [monthOf(day)]: topScaled(vec, SNAP_TOP) };
+  for (const m of Object.keys(p.months).sort().slice(0, -MONTHS_KEEP)) delete p.months[m];
+  return p;
+}
+export { because };
 
 /// "What this phone remembers", as plain counts the guest can read.
 export function remembered(profile){
@@ -186,5 +237,5 @@ export function syncVector(profile, products, day){
     const max = rows.length ? rows[0][1] : 1;
     return Object.fromEntries(rows.map(([k, v]) => [String(k).slice(0, 32), Math.round(SYNC_SCALE * v / max)]));
   };
-  return { v: VERSION, tags: top(w.tag), cats: top(w.cat) };
+  return { v: VERSION, tags: top(w.tag), cats: top(w.cat), sense: topScaled(senseVec(profile, products, day), 27) };
 }

@@ -19,6 +19,8 @@
 pub mod audience;
 pub mod campaign;
 pub mod handlers;
+/// W-SENSE: a personalised offer's words, composed by the server at the public figure.
+pub mod offer;
 pub mod rail;
 pub mod segment;
 pub mod send;

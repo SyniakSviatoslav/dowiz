@@ -79,7 +79,8 @@ test('what may leave (only with consent): integer tag and category weights, noth
   const p = fold([{ kind: 'order', items: [{ id: 'maki', qty: 3 }] }, { kind: 'open', id: 'ramen' }, { kind: 'visit', hour: 20 }]);
   p.first = T.firstVisit('https://ref.example/a', '?utm_source=x');
   const v = T.syncVector(p, menu, D);
-  assert.deepEqual(Object.keys(v).sort(), ['cats', 'tags', 'v']);
+  assert.deepEqual(Object.keys(v).sort(), ['cats', 'sense', 'tags', 'v'], 'W-SENSE adds the aggregated sense vector, closed keys');
+  assert.deepEqual(v.sense, {}, 'a menu that declares no taste, texture or aroma sends none');
   assert.equal(v.tags.salmon, T.SYNC_SCALE);
   for (const n of [...Object.values(v.tags), ...Object.values(v.cats)]) assert.ok(Number.isInteger(n) && n >= 0 && n <= T.SYNC_SCALE);
   const s = JSON.stringify(v);

@@ -36,6 +36,13 @@ pub struct Prepared {
     /// The objection to file (the phone's "turn off", sent as `taste_off`).
     pub objection: Option<Act>,
     pub sync: Option<SyncIn>,
+    /// W-SENSE: the moment at the venue the order was placed in (band, day, weather), or none.
+    pub at: Option<super::taste::senses::At>,
+}
+
+/// PURE. The venue's moment as the profile files it.
+pub fn at_of(b: &crate::services::venue::context::Bucket) -> super::taste::senses::At {
+    super::taste::senses::At { keys: b.keys(), when: b.when() }
 }
 
 /// PURE. The guest's objection: a personalisation withdrawal by their own tap, no sentence needed.
@@ -70,22 +77,32 @@ pub fn judge(key: Option<String>, taste_off: bool, sync: Option<&SyncIn>, now_ms
     let objection = taste_off.then(|| objection_of(&k, now_ms, ""));
     // An objection in the same body wins: the vector is not kept.
     let sync = if taste_off { None } else { sync.cloned() };
-    Ok(Prepared { key: Some(k), objection, sync })
+    Ok(Prepared { key: Some(k), objection, sync, at: None })
 }
 
 /// BEFORE THE ORDER. `Ok(Err(why))` is a 400 the caller answers by name: a `taste_sync` that is not
 /// the closed shape, or one from a guest who objected (the phone should have stopped sending).
 pub async fn prepare(
     place: &Place,
+    env: &Env,
+    record: &serde_json::Value,
     key: Option<String>,
     taste_off: bool,
     sync: Option<&SyncIn>,
     now_ms: i64,
 ) -> Result<std::result::Result<Prepared, String>> {
-    let prep = match judge(key, taste_off, sync, now_ms) {
+    let mut prep = match judge(key, taste_off, sync, now_ms) {
         Ok(p) => p,
         Err(why) => return Ok(Err(why)),
     };
+    // The VENUE's clock and the VENUE's weather, from the cache only: a placement never waits on
+    // a provider, and a cold cache is simply no weather (`venue::context`).
+    // Only a guest whose profile will be written gets a moment: no phone or an objection, no read.
+    if prep.key.is_some() && prep.objection.is_none() {
+        let weather = crate::services::venue::context::weather(env, record, false).await;
+        let b = crate::services::venue::context::Bucket::at(crate::hubstore::zone_of(Some(record)), now_ms, weather);
+        prep.at = Some(at_of(&b));
+    }
     if let (Some(k), Some(_)) = (&prep.key, &prep.sync) {
         if objected(place, k).await? {
             return Ok(Err("taste_sync is refused: this guest turned personalisation off".into()));
@@ -124,9 +141,10 @@ pub async fn after(place: &Place, prep: Prepared, lines: Vec<Line>, order_id: &s
     }
     let day = day_of(now_ms);
     let sync = prep.sync;
+    let at = prep.at;
     let wrote = crate::hubstore::with_table(place, IMAGE_TASTE, TASTE_BYTES, move |t| {
         let prev = t.get(KIND, &key).as_deref().and_then(taste::parse);
-        let p = taste::apply_order(prev, &lines, sync.as_ref(), day);
+        let p = taste::apply_order_at(prev, &lines, sync.as_ref(), day, at.as_ref());
         let json = serde_json::to_string(&p).map_err(|e| Error::RustError(format!("taste: {e}")))?;
         t.put(KIND, &key, &json, &[], &[]).map_err(|e| Error::RustError(format!("taste: {e:?}")))?;
         Ok(())

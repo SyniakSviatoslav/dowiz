@@ -25,6 +25,8 @@ pub mod roll;
 /// The guest's taste, scored with their consent (W-MR0 MR8; the one server scorer, no-scoring.sh).
 pub mod taste;
 pub mod taste_routes;
+/// W-SENSE row 7: the owner's segment builder route (the rule is `taste/builder.rs`).
+pub mod taste_builder;
 pub mod view;
 
 #[cfg(test)]

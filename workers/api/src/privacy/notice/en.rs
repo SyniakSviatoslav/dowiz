@@ -25,7 +25,7 @@ fn data(d: Data) -> &'static str {
         Data::Device => "device details",
         Data::Ip => "your device's internet address",
         Data::Photo => "a picture you choose",
-        Data::Taste => "what you like on the menu, from your orders and how you browse it",
+        Data::Taste => "what you like on the menu -- taste, texture and aroma -- from your orders and how you browse it, with the time of day and the weather at the venue (never your location)",
     }
 }
 
@@ -40,7 +40,7 @@ fn purpose(p: Purpose) -> &'static str {
         Purpose::Crm => "so the venue remembers you as a guest",
         Purpose::Personalisation => "to suggest dishes you may like, on the venue's legitimate interest; one tap (\"turn off\") stops it and deletes it (never to set a price)",
         Purpose::ConsentProof => "to prove what you agreed to",
-        Purpose::Marketing => "offers you agreed to receive",
+        Purpose::Marketing => "offers you agreed to receive; one chosen for your taste says \"Personalised offer\" and carries the menu price, the same for everyone",
         Purpose::StoredValue => "your stored-value balance",
         Purpose::Dispatch => "to dispatch couriers",
         Purpose::Security => "to find and fix errors and misuse",

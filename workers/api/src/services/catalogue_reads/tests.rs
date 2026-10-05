@@ -295,7 +295,7 @@ fn the_privacy_notice_answers_the_same_bytes() {
 // Re-pinned 2026-10-04 by W-MR0: the notice now declares the guest's taste profile (image "taste", purpose
 // Personalisation, basis legitimate interest, 12-month retention, objection in one tap) and its purpose
 // sentence in four languages. The pin before this row was 3185e88f... (W-URGENT, 2026-10-02).
-const PIN_PRIVACY: &str = r##"200 sha256:640eb9a7cbb15531ae88d18577f54236fcb9be5c2a4c688c9e9db76f2166d4ad"##;
+const PIN_PRIVACY: &str = r##"200 sha256:e0678f3b9a3be7fd12f49507d2a125330cf5015d32b55e6e2f847912c1f36c47"##; // W-SENSE: Data::Taste + Purpose::Marketing words x4
 
 fn csv_call(owner: &str, path: &str, body: &str) -> Call {
     Call::new(&at("alpha", path), worker::Method::Post).unwrap().with_body(body.as_bytes().to_vec()).bearer(owner).on("alpha")

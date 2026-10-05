@@ -1,0 +1,491 @@
+{
+  "id": "feature-sense",
+  "name": "sense",
+  "contract_version": "1.0.0",
+  "class": "LIVE-AFTER-DEPLOY",
+  "description": {
+    "en": "A dish's TASTE (sweet, sour, salty, bitter, umami, spicy at 0..5), TEXTURE (9 tags at 1..3) and AROMA (12 tags at 1..3), owner-declared and optional (W-SENSE, operator ask 2026-10-04). Stored on the catalogue product as `sense` (dowiz_hub::sense validates; any write moves menuVersion; the old 5-axis `taste` reads at x5/3 and is cleared when `sense` is saved). The public menu serves it as stored; the storefront card and dish sheet draw only what is declared (bars with their figures as text, texture and aroma chips) and filter offline (spicy, not spicy, crispy, creamy, smoky ...). 'Suggest' answers a DRAFT from the dish's words and the sushi starter defaults and never writes. The guest is profiled on the same axes on the phone (store/taste.js) and on the server (services/customers/taste/senses.rs: sense weights, per-context weights, weekday x band counts, monthly snapshots), so a never-ordered dish is ranked by its axes and the strip says why. The moment at the VENUE (band, weekday, weather from Open-Meteo for the venue's own coordinates, cached 1 h, failure = no weather) ranks by context; the route takes no query, so the guest's place cannot reach it. Session mood stays on the phone. The owner's segment builder answers counts, a six-month trend, the busiest weekday x band and what to stock; a personalised offer is a campaign (segment `taste`) whose words the server writes from the dish's public price, labelled 'Personalised offer', with no code, reaching only guests with marketing consent on the campaign's channel.",
+    "uk": "Смак (6 осей 0–5), текстура й аромат (1–3) кожної страви: власник заповнює, вітрина показує лише заповнене, фільтри офлайн; гість профілюється на тих самих осях (телефон і сервер), контекст — погода в закладі (Open-Meteo, лише координати закладу), настрій лише на телефоні; сегменти для власника й персоналізована пропозиція лише за ціною з меню і лише тим, хто дав згоду на канал."
+  },
+  "producer": [
+    {
+      "file": "crates/dowiz-hub/src/sense.rs",
+      "line": 126,
+      "what": "validate(): the closed vocabulary, integers only, ranges by name; of_product(): sense, else the old taste at x5/3; vector(); from_model()"
+    },
+    {
+      "file": "crates/dowiz-hub/src/sense/lexicon.rs",
+      "line": 1,
+      "what": "suggest(): starter defaults by dish name + description/ingredient words in sq/en/uk/ru, with the word that gave each value"
+    },
+    {
+      "file": "workers/api/src/owner.rs",
+      "line": 866,
+      "what": "update_product: `sense` validated (400 by name), stored, old `taste` cleared"
+    },
+    {
+      "file": "workers/api/src/fold/menu_venue.rs",
+      "line": 178,
+      "what": "the public menu passes `sense` through as stored"
+    },
+    {
+      "file": "workers/api/src/services/catalogue/sense.rs",
+      "line": 28,
+      "what": "draft()/suggest(): POST /api/owner/products/:id/sense/suggest, never writes"
+    },
+    {
+      "file": "workers/api/src/services/venue/context.rs",
+      "line": 30,
+      "what": "band(), Bucket::at(), weather_url() (venue coordinates, 2 decimals), weather_of(), context(): GET /api/public/locations/:slug/context, no query accepted"
+    },
+    {
+      "file": "workers/api/src/services/customers/taste/senses.rs",
+      "line": 66,
+      "what": "fold(): sense weights, ctx per bucket, when, monthly snapshot; share(); because(); main_band()"
+    },
+    {
+      "file": "workers/api/src/services/customers/taste/builder.rs",
+      "line": 76,
+      "what": "Filter::check() (vocabulary keys only), matches(), report(): count, trend, busiest"
+    },
+    {
+      "file": "workers/api/src/services/customers/taste_builder.rs",
+      "line": 75,
+      "what": "GET /api/owner/customers/taste/builder + plan(): dishes that carry the key strongly and their supplies"
+    },
+    {
+      "file": "workers/api/src/services/campaigns/offer.rs",
+      "line": 51,
+      "what": "compose(): label + dish + public figure; campaign.rs refuses a promo code on a taste offer; handlers.rs writes the text from the catalogue and joins the taste profile"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/store/sense.js",
+      "line": 1,
+      "what": "senseOf/vectorOf/cosine/filterChips/passes/MOODS (pure)"
+    },
+    {
+      "file": "workers/api/public/store/sense-view.js",
+      "line": 1,
+      "what": "cardSense, sheetSense, filterRow, moodRow, becauseLine, yearMarkup (pure)"
+    },
+    {
+      "file": "workers/api/public/store/sense-ui.js",
+      "line": 1,
+      "what": "filters, mood (memory only), loadMoment(): GET .../context"
+    },
+    {
+      "file": "workers/api/public/store/taste.js",
+      "line": 1,
+      "what": "senseVec, senseScore, snapshot; strip(..., {ctx, mood}); syncVector.sense"
+    },
+    {
+      "file": "workers/api/public/admin/sense.js",
+      "line": 1,
+      "what": "the dish sheet's editor and Suggest; the menu row's compact line"
+    },
+    {
+      "file": "workers/api/public/admin/sense-builder.js",
+      "line": 1,
+      "what": "the segment builder and 'Make an offer' in the customers sheet"
+    },
+    {
+      "file": "workers/api/public/admin/taste.js",
+      "line": 1,
+      "what": "the guest card: sense keys, because, weekday x band, the year"
+    }
+  ],
+  "transport": [
+    {
+      "method": "POST",
+      "path": "/api/owner/products/:id",
+      "auth": "Bearer owner or staff with catalog",
+      "fields": [
+        "sense"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/owner/products/:id/sense/suggest",
+      "auth": "Bearer owner or staff with catalog"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/locations/:slug/menu",
+      "auth": "none",
+      "fields": [
+        "categories[].products[].sense"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/locations/:slug/context",
+      "auth": "none"
+    },
+    {
+      "method": "POST",
+      "path": "/api/public/locations/:slug/orders",
+      "auth": "none",
+      "fields": [
+        "taste_sync.sense"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/order/:id/taste",
+      "auth": "Bearer: customer (order token)",
+      "fields": [
+        "taste.sense",
+        "taste.because",
+        "taste.history",
+        "taste.contexts",
+        "taste.when"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/owner/customers/taste/builder",
+      "auth": "Bearer owner"
+    },
+    {
+      "method": "POST",
+      "path": "/api/owner/campaigns",
+      "auth": "Bearer owner",
+      "fields": [
+        "segment.kind=taste"
+      ]
+    }
+  ],
+  "external": "Open-Meteo Forecast API (https://api.open-meteo.com/v1/forecast, `current=temperature_2m,precipitation,weather_code`, no key, CC BY 4.0); EU Omnibus Directive 2019/2161 (personalised offers labelled; prices never personalised); GDPR 6(1)(f), 21, 22",
+  "external_api_version": {
+    "open_meteo": "v1 /forecast (current block, WMO weather codes)",
+    "omnibus": "2019/2161"
+  },
+  "auth": {
+    "secrets": [
+      "OWNER_EMAIL",
+      "OWNER_PASSWORD"
+    ],
+    "where": "/root/.dowiz_owner"
+  },
+  "sense_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "a product's stored `sense` (or null)",
+    "anyOf": [
+      {
+        "type": "null"
+      },
+      {
+        "type": "object",
+        "required": [
+          "v",
+          "taste",
+          "texture",
+          "aroma"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "v": {
+            "const": 1
+          },
+          "taste": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "sweet": {
+                "$ref": "#/$defs/axis"
+              },
+              "sour": {
+                "$ref": "#/$defs/axis"
+              },
+              "salty": {
+                "$ref": "#/$defs/axis"
+              },
+              "bitter": {
+                "$ref": "#/$defs/axis"
+              },
+              "umami": {
+                "$ref": "#/$defs/axis"
+              },
+              "spicy": {
+                "$ref": "#/$defs/axis"
+              }
+            }
+          },
+          "texture": {
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "crispy",
+                "crunchy",
+                "tender",
+                "creamy",
+                "chewy",
+                "soft",
+                "juicy",
+                "silky",
+                "flaky"
+              ]
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/tag"
+            }
+          },
+          "aroma": {
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "smoky",
+                "citrus",
+                "herbal",
+                "floral",
+                "nutty",
+                "toasty",
+                "marine",
+                "fermented",
+                "fruity",
+                "earthy",
+                "buttery",
+                "spice-warm"
+              ]
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/tag"
+            }
+          }
+        }
+      }
+    ],
+    "$defs": {
+      "axis": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "tag": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 3
+      }
+    }
+  },
+  "suggest_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "contract",
+      "id",
+      "draft",
+      "why",
+      "current",
+      "source",
+      "saved"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "contract": {
+        "const": "menu.sense-suggest.v1"
+      },
+      "id": {
+        "type": "string"
+      },
+      "draft": {
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "current": {
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "why": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "key",
+            "from"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^[txa]:[a-z-]+$"
+            },
+            "from": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "source": {
+        "const": "lexicon"
+      },
+      "saved": {
+        "const": false
+      }
+    }
+  },
+  "context_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "contract",
+      "band",
+      "weekday",
+      "keys",
+      "weather",
+      "source"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "contract": {
+        "const": "venue.context.v1"
+      },
+      "band": {
+        "enum": [
+          "morning",
+          "midday",
+          "afternoon",
+          "evening",
+          "night"
+        ]
+      },
+      "weekday": {
+        "enum": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri",
+          "sat",
+          "sun"
+        ]
+      },
+      "keys": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^(band|day|wx):[a-z]+$"
+        }
+      },
+      "weather": {
+        "enum": [
+          "rain",
+          "cold",
+          "hot",
+          "mild",
+          null
+        ]
+      },
+      "source": {
+        "type": "object",
+        "required": [
+          "weather",
+          "at"
+        ],
+        "properties": {
+          "weather": {
+            "const": "open-meteo.com"
+          },
+          "at": {
+            "const": "venue"
+          }
+        }
+      }
+    }
+  },
+  "builder_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "contract",
+      "filter",
+      "count",
+      "of",
+      "trend",
+      "when",
+      "busiest",
+      "plan"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "contract": {
+        "const": "customers.taste-builder.v1"
+      },
+      "filter": {
+        "type": "object"
+      },
+      "count": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "of": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "trend": {
+        "type": "array",
+        "minItems": 6,
+        "maxItems": 6,
+        "items": {
+          "type": "object",
+          "required": [
+            "month",
+            "count"
+          ],
+          "properties": {
+            "month": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      },
+      "when": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "slot",
+            "orders"
+          ]
+        }
+      },
+      "busiest": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "plan": {
+        "type": "object",
+        "required": [
+          "dishes",
+          "supplies"
+        ],
+        "properties": {
+          "dishes": {
+            "type": "array"
+          },
+          "supplies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "probe": "tools/live-proof/probes/feature-sense.mjs: on qa-durres, (1) the owner saves a sense on qa-water and the public menu (fresh) serves it, schema-valid, menuVersion moved; (2) a 6 on an axis, an unknown axis and an allergen as an aroma are refused 400; (3) Suggest answers a draft (schema) and the menu did not move; (4) the context route answers the venue's moment (schema), and a query with lat/lon is refused 400; (5) a TEST order with a phone and taste_sync.sense -> the guest's view carries sense/because/history; the builder counts at least one a:smoky guest (schema); an allergen key is refused 400; (6) a taste offer campaign is filed: its text starts 'Personalised offer' and names qa-water's public price; with a promo code it is refused 400 (the campaign is left as an UNSENT draft named LIVE-...); (7) qa-water's sense is restored. Every TEST order is ended. A step that cannot run is FAILED.",
+  "last_verified": null
+}

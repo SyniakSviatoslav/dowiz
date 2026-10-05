@@ -57,6 +57,8 @@ pub mod tz;
 pub mod token;
 pub mod forget;
 pub mod lang;
+/// W-SENSE 2026-10-04: a dish's taste, texture and aroma -- the vocabulary and its ranges.
+pub mod sense;
 // DG10: crypto-shredding for new logs; off by default (see Cargo.toml `shred`).
 #[cfg(feature = "shred")]
 pub mod shred;

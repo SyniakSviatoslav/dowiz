@@ -14,7 +14,7 @@ use serde_json::json;
 use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
-use super::audience::{recipients, Recipient};
+use super::audience::{recipients_where, Recipient};
 use super::campaign::{self, DefIn, IMAGE_CAMPAIGN, KIND_DEF};
 use super::segment::Now;
 use super::send;
@@ -48,14 +48,14 @@ pub async fn list(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
         .collect();
     Response::from_json(&json!({
         "campaigns": out,
-        "segments": ["everyone_consented", "not_seen_since", "tag", "birthday_this_week"],
+        "segments": ["everyone_consented", "not_seen_since", "tag", "birthday_this_week", "taste"],
         "tags": TAGS,
     }))
 }
 
 /// `POST /api/owner/campaigns` — define a campaign, or edit one not yet sent.
 pub async fn define(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let body: DefIn = match crate::body::parse(&mut req).await {
+    let mut body: DefIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return bad(format!("bad request body: {e}"), 400),
     };
@@ -65,6 +65,22 @@ pub async fn define(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
     };
     let place = Place::of_authorised(&ctx, &loc)?;
     let now = ctx.data.now_ms;
+    // W-SENSE: A TASTE OFFER'S WORDS ARE THE SERVER'S. Whatever text was sent, the message is the
+    // label, the dish and its public figure from the catalogue (`offer::compose`).
+    if let super::segment::Segment::Taste { dish, lang, .. } = &body.segment {
+        // One product and the venue's record, answered by the object (dataflow.sh: no image across the hop).
+        let got = crate::fold::ask::catalogue(&place, &format!("q=product&id={}", crate::mcp::enc(dish))).await?;
+        let Some(p) = got["product"].as_str().and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()) else {
+            return bad("a taste offer names a dish of this menu", 400);
+        };
+        let name = p.get("name").and_then(serde_json::Value::as_str).unwrap_or("");
+        // No figure, no offer: a "0 ALL" would be a price nobody else is shown.
+        let Some(figure) = p.get("price").and_then(serde_json::Value::as_i64).filter(|f| *f > 0) else {
+            return bad("a taste offer names a dish with a menu price", 400);
+        };
+        let currency = crate::services::venue::currency_of_record(crate::hubstore::venue_record(&place).await?.as_ref());
+        body.text = super::offer::compose(lang, name, figure, &currency);
+    }
     // THE CHECK READS THE LOG IT WRITES, under its guard: an edit racing the
     // first send cannot slip in after the `sent` row lands.
     let filed = crate::hubstore::with_log(&place, IMAGE_CAMPAIGN, move |log| {
@@ -106,7 +122,22 @@ async fn load(place: &Place, ctx: &RouteContext<crate::Req>, loc: &str, id: &str
     let zone = crate::hubstore::zone_of(venue.as_ref());
     let utc = ctx.data.now_ms;
     let now = Now { utc_ms: utc, local_ms: dowiz_hub::tz::local_ms(zone, utc) };
-    let people = recipients(
+    // W-SENSE: a taste segment reads the venue's taste image, only for this request.
+    let tastes = match &def.segment {
+        super::segment::Segment::Taste { .. } => Some(
+            crate::hubstore::load_table(place, crate::services::customers::taste::IMAGE_TASTE, crate::services::customers::taste::TASTE_BYTES).await?,
+        ),
+        _ => None,
+    };
+    let today = crate::services::customers::taste_routes::day_of(utc);
+    let in_taste = |keys: &[String]| match (&def.segment, &tastes) {
+        (super::segment::Segment::Taste { filter, .. }, Some(t)) => keys.iter().any(|k| {
+            t.table.get(crate::services::customers::taste::KIND, k).as_deref().and_then(crate::services::customers::taste::parse)
+                .is_some_and(|p| crate::services::customers::taste::builder::matches(&p, filter, today))
+        }),
+        _ => false,
+    };
+    let people = recipients_where(
         &orders_of(listed, loc),
         |phone| customer_key(&secret, phone),
         |k| aliases.resolve(k),
@@ -115,6 +146,7 @@ async fn load(place: &Place, ctx: &RouteContext<crate::Req>, loc: &str, id: &str
         &consent.log.entries(),
         &def.segment,
         now,
+        in_taste,
     );
     Ok(Some(Loaded { def, camp, people }))
 }

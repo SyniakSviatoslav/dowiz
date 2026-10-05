@@ -124,3 +124,40 @@ the open risk.
    could type a neighbour's number and read their taste. Recognition uses the order link instead
    (see the lane verdict).
 6. Staff and courier personal KPIs need their own D0 amendment. This lane did not do them.
+
+## W-SENSE addendum (2026-10-04): taste, texture, aroma, context, mood, history, offers
+
+Operator ask of 2026-10-04: dishes describe their taste (six axes 0-5), texture and aroma; guests are
+profiled on the same axes. What changes in this assessment, and what does not:
+
+| | Device | Server |
+|---|---|---|
+| New inputs | the declared axes of the dishes already counted (no new behaviour signal); the venue's moment at order time (band, weekday/weekend, weather AT THE VENUE) | the same axes of the guest's own orders; the venue's moment at placement; the device may add `taste_sync.sense` (closed vocabulary, integers 0..1000) |
+| New outputs | ranking by match with the guest's axes, with the moment, with the session's mood; "because you often pick smoky + crispy"; "your taste over the year" | `sense`, `because`, `contexts`, `when` (weekday x band counts), `history` (12 monthly snapshots) in the guest's own view and on the owner's card |
+| Mood | one-tap chips, held in page memory only; never stored, never sent (`tools/gates/no-tracking.mjs` rule 6) | none |
+| Location | none: the context route takes no query; the weather is asked for the VENUE's coordinates, rounded to ~1 km (`tools/gates/no-tracking.mjs` rule 7; `services/venue/context.rs` tests) | none |
+| Device context | which wallet the browser offers (Apple Pay / Payment Request), to order the pay buttons; a yes/no, never stored or sent; no fingerprint surface is read | none |
+
+**Owner analytics.** The segment builder answers COUNTS, a six-month trend and the busiest
+weekday x band, never a list of people (`services/customers/taste/builder.rs`). Its keys are the
+closed sensory vocabulary only: no allergen, no health word can be a segment (tested), so no
+special-category inference is targeted. Allergens only ever filter or warn for the guest's own safety.
+
+**Personalised offers (Omnibus 2019/2161, GDPR 21/22).** An offer to a taste segment is a campaign
+(segment `taste`): (1) it reaches only guests with a MARKETING consent on the campaign's channel
+(today WhatsApp; the consent fold mints the witness, `campaigns/audience.rs`); (2) its words are
+written by the server -- "Personalised offer", the dish, the dish's PUBLIC menu price -- and the
+owner's own text and numbers are discarded; (3) a taste offer carries no promo code (a code is a
+reduction; a reduction chosen by taste would be personalised pricing) -- refused 400; (4) nothing
+reads a segment to set a price, a fee or a refusal (`tools/gates/no-scoring.sh`; the order total of
+a guest in a segment equals the public price, tested). A loyalty reward on top is allowed by the
+operator but is not built.
+
+**Retention, rights.** Unchanged: the new fields live inside the one `taste` record (12 months after
+the last order; objection, export via `GET /api/order/:id/taste`, erasure with the card).
+
+**Residual risks added.** (a) Monthly snapshots make a year of taste visible to the owner on the
+guest card -- mitigated by the one-tap objection deleting all of it and by showing the guest the
+same history; (b) the weather call reveals the venue's location to Open-Meteo (public anyway; no
+guest data in the call); (c) the sushi starter defaults are typical public profiles, not the
+venue's recipe -- shown as a draft the owner must review and save.

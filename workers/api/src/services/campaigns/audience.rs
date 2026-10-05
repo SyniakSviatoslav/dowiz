@@ -65,6 +65,7 @@ pub fn address(phone: &str) -> String {
 /// decides (`consent_log::circle_state`). Consent filed under either spelling
 /// is the person's consent -- and the message goes to the spelling that gave
 /// it, the number they said yes on.
+#[cfg_attr(not(test), allow(dead_code))] // W-SENSE: the request paths call the `_where`/`_at` form; tests keep this one
 pub fn recipients(
     orders: &[Value],
     key_of: impl Fn(&str) -> String,
@@ -74,6 +75,23 @@ pub fn recipients(
     acts: &[Entry],
     seg: &Segment,
     now: Now,
+) -> Vec<Recipient> {
+    recipients_where(orders, key_of, resolve, members, card, acts, seg, now, |_| true)
+}
+
+/// [`recipients`], and for a `taste` segment only those whose taste profile (looked up across the
+/// person's keys by `in_taste`) falls in it. Consent is still asked first and still decides.
+#[allow(clippy::too_many_arguments)]
+pub fn recipients_where(
+    orders: &[Value],
+    key_of: impl Fn(&str) -> String,
+    resolve: impl Fn(&str) -> String,
+    members: impl Fn(&str) -> Vec<String>,
+    card: impl Fn(&str) -> Option<String>,
+    acts: &[Entry],
+    seg: &Segment,
+    now: Now,
+    in_taste: impl Fn(&[String]) -> bool,
 ) -> Vec<Recipient> {
     let phones = phones_by_key(orders, &key_of);
     let rows: Vec<Row> = roll(orders, &key_of, resolve, |n| n.to_string(), |p| p.to_string(), Sort::Recent);
@@ -89,6 +107,9 @@ pub fn recipients(
         let rec = Record::of_cards(cards.iter().map(String::as_str));
         let given = ConsentState { given: witness.is_some() };
         if !matches(seg, row, &rec, &given, now) {
+            continue;
+        }
+        if matches!(seg, Segment::Taste { .. }) && !in_taste(&keys) {
             continue;
         }
         let Some(witness) = witness else { continue };

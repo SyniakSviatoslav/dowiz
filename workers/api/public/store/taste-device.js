@@ -19,6 +19,9 @@ import { safeGet, safeSet } from '/store/storage.js';
 import * as T from '/store/taste.js';
 import { ui } from '/store/parts.js';
 import '/store/taste-words.js';
+import { currentMood, momentKeys, moodMarkup, wireMood } from '/store/sense-ui.js';
+import { becauseLine, yearMarkup } from '/store/sense-view.js';
+import { senseOf } from '/store/sense.js';
 
 const SWITCH = 'dw_taste_on';
 /// The guest said "turn off" to the VENUE's profile (Art. 21). Kept here so the phone stops sending
@@ -60,10 +63,21 @@ function save(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => { tx('readwrite', s => s.put(profile, SLUG)).catch(e => console.warn('taste: not saved:', String(e?.message || e))); }, SAVE_AFTER_MS);
 }
+const menuNow = () => [...(state.products?.values?.() || [])];
 async function note(ev){
   if (!isOn()) return;
   profile = T.record(await load(), ev, today());
+  // W-SENSE: an order re-takes this month's snapshot of the taste vector ("your taste over the year").
+  if (ev.kind === 'order') profile = T.snapshot(profile, menuNow(), today());
   save();
+}
+/// The vector as the strip last saw it (sync, for the dish sheet); null while off.
+let guestCache = null;
+export const guestNow = () => (isOn() ? guestCache : null);
+/// The guest's taste/texture/aroma vector on this phone, for the dish sheet's "you may like it".
+export async function guestVec(){
+  if (!isOn()) return null;
+  return T.senseVec(await load(), menuNow(), today());
 }
 export async function forget(){
   profile = null; clearTimeout(saveTimer);
@@ -89,7 +103,7 @@ function cartMoved(){
   setTimeout(() => {
     const now = portions();
     if (ordered) {
-      note({ kind: 'order', items: Object.entries(before).map(([id, qty]) => ({ id, qty })) });
+      note({ kind: 'order', items: Object.entries(before).map(([id, qty]) => ({ id, qty })), ctx: momentKeys() || [] });
       ordered = false;
     } else {
       for (const id of new Set([...Object.keys(before), ...Object.keys(now)])) {
@@ -123,15 +137,18 @@ export async function paintStrip(onOpen){
   if (!isOn()) { host.hidden = true; host.innerHTML = ''; return; }
   const p = await load();
   const products = [...(state.products?.values?.() || [])];
-  const items = T.strip(products, p, today(), { prior }).map(x => ({ ...x, p: findProduct(x.id) })).filter(x => x.p);
-  host.hidden = !items.length;
-  if (!items.length) { host.innerHTML = ''; return; }
+  const items = T.strip(products, p, today(), { prior, ctx: momentKeys(), mood: currentMood() }).map(x => ({ ...x, p: findProduct(x.id) })).filter(x => x.p);
+  const senses = products.some(d => senseOf(d));
+  host.hidden = !items.length && !senses;
+  if (host.hidden) { host.innerHTML = ''; return; }
   const cart = Object.values(state.cart || {});
   const it = T.intent({ cartLines: cart.length, cartQty: cart.reduce((a, l) => a + (l.q | 0), 0), adds: session.adds, opens: session.opens });
   host.innerHTML = `<h2 class="sec-h"><span class="sec-name" data-t="forYou"></span><small class="muted" data-t="intent_${it.kind}"></small></h2>
     <div class="fy-row">${items.map(x => ui.chip({ as: 'button', icon: x.why === 'again' ? 'history' : 'sparkles', label: x.p.name, cls: 'fy',
-      ariaLabel: `${t(x.why === 'again' ? 'again' : 'yourTaste')} ${x.p.name}`, attrs: { data: { fy: x.id, tour: 'menu.forYou' } } })).join('')}</div>`;
+      ariaLabel: `${t(x.why === 'again' ? 'again' : 'yourTaste')} ${x.p.name}`, attrs: { data: { fy: x.id, tour: 'menu.forYou' } } })).join('')}</div>
+    ${becauseLine(T.because(guestCache = T.senseVec(p, products, today())))}${senses ? moodMarkup() : ''}`;
   retranslate(host);
+  wireMood(host.querySelector('.sx-mood'), () => paintStrip(onOpen));
   for (const b of $$('[data-fy]', host)) b.onclick = () => { const d = findProduct(b.dataset.fy); if (d && d.available !== false) onOpen?.(d, null); };
 }
 
@@ -147,6 +164,7 @@ export async function openTaste(onChange){
     <p class="muted small" data-t="tasteHint"></p>
     <h3 class="dsec" data-t="tasteRemembers"></h3>
     ${rows.length ? `<dl class="tr-list">${rows.map(([k, v]) => `<dt data-t="${k}"></dt><dd class="mono">${esc(String(v))}</dd>`).join('')}</dl>` : `<p class="muted small" data-t="tasteNothing"></p>`}
+    ${on ? yearMarkup((await load()).months) : ''}
     ${ui.button({ variant: 'ghost', label: { t: 'tasteForget' }, id: 'tasteForget', cls: 'linky', attrs: { data: { tour: 'taste.forget' } } })}`, { name: 'taste' });
   retranslate($('#sheetIn'));
   $('#tasteOn').onclick = async () => {

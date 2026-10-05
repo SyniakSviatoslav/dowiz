@@ -78,7 +78,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/products/:id/delete", Staff(&MENU), Yes),
     ("post", "/api/owner/products/:id", Staff(&MENU), Yes),
     ("post", "/api/owner/products/:id/image", Staff(&MENU), Yes),
-    ("post", "/api/owner/products/:id/image/clear", Staff(&MENU), Yes), ("get", "/api/owner/products/:id/option-bom", Staff(&MENU), Read), ("post", "/api/owner/products/:id/option-bom", Staff(&MENU), Yes), // W-LOST
+    ("post", "/api/owner/products/:id/image/clear", Staff(&MENU), Yes), ("get", "/api/owner/products/:id/option-bom", Staff(&MENU), Read), ("post", "/api/owner/products/:id/option-bom", Staff(&MENU), Yes), ("post", "/api/owner/products/:id/sense/suggest", Staff(&MENU), Yes), // W-LOST, W-SENSE
     ("get", "/api/owner/products", Staff(&MENU), Read),
     ("get", "/api/owner/categories", Staff(&MENU), Read),
     ("post", "/api/owner/categories", Staff(&MENU), Yes),
@@ -164,7 +164,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("get", "/api/owner/customers", Owner, No),
     ("post", "/api/owner/customers/:key/reveal", Owner, No),
     ("post", "/api/owner/customers/:key/forget", Owner, No), ("get", "/api/owner/customers/:key/taste", Owner, No),
-    ("get", "/api/owner/customers/taste/segments", Owner, No), ("get", "/api/owner/customers/reveals", Owner, No),
+    ("get", "/api/owner/customers/taste/segments", Owner, No), ("get", "/api/owner/customers/reveals", Owner, No), ("get", "/api/owner/customers/taste/builder", Owner, No),
     ("put", "/api/owner/customers/:key/record", Owner, No),
     ("post", "/api/owner/customers/rekey", Owner, No),
     ("post", "/api/owner/customers/reforget", Owner, No),

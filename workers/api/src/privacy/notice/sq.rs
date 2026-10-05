@@ -25,7 +25,7 @@ fn data(d: Data) -> &'static str {
         Data::Device => "të dhëna të pajisjes",
         Data::Ip => "adresa e internetit e pajisjes suaj",
         Data::Photo => "një foto që zgjidhni vetë",
-        Data::Taste => "çfarë ju pëlqen në meny, nga porositë dhe mënyra si e shfletoni",
+        Data::Taste => "çfarë ju pëlqen në meny -- shija, struktura dhe aroma -- nga porositë dhe mënyra si e shfletoni, me orën e ditës dhe motin te lokali (kurrë vendndodhjen tuaj)",
     }
 }
 
@@ -40,7 +40,7 @@ fn purpose(p: Purpose) -> &'static str {
         Purpose::Crm => "që lokali t'ju kujtojë si mysafir",
         Purpose::Personalisation => "për t'ju sugjeruar pjata që mund t'ju pëlqejnë, në interesin legjitim të lokalit; e fikni me një prekje («fike») dhe fshihet (kurrë për çmimin)",
         Purpose::ConsentProof => "për të provuar se për çfarë keni rënë dakord",
-        Purpose::Marketing => "ofertat që keni pranuar të merrni",
+        Purpose::Marketing => "ofertat që keni pranuar të merrni; një e zgjedhur për shijen tuaj thotë «Ofertë e personalizuar» dhe ka çmimin e menysë, të njëjtin për të gjithë",
         Purpose::StoredValue => "bilanci juaj i parapaguar",
         Purpose::Dispatch => "për të dërguar korrierët",
         Purpose::Security => "për të gjetur dhe rregulluar gabimet dhe keqpërdorimet",

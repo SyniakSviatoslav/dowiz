@@ -624,3 +624,11 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 /* ── W-OFFSALE: an offline sale (or any fiscal document) past its 48 h is RED (offline.js, fiscal.js) ── */
 .of-overdue{box-shadow:inset 3px 0 0 var(--ui-danger-ink)}
 .of-overdue .ui-row-title{color:var(--ui-danger-ink)}
+
+/* W-SENSE: the compact taste line on a menu row (store/sense-view.js cardSense). */
+.card-sense{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px}
+.sx-mini{display:inline-flex;gap:6px;align-items:center}
+.sx-m{display:inline-flex;align-items:center;gap:2px;font-size:var(--text-xs)}
+.sx-bar{display:inline-block;width:14px;height:5px;border-radius:999px;background:color-mix(in srgb,currentColor 18%,transparent);overflow:hidden;vertical-align:middle}
+.sx-bar b{display:block;height:100%;width:calc(var(--v) * 100%);background:currentColor;border-radius:inherit}
+.sx-tag{font-size:var(--text-xs);border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:999px;padding:0 6px}

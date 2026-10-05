@@ -8,15 +8,15 @@ module: menu
 order: 9
 covers: []
 title:
-  sq: "Receta dhe shija e një pjate"
-  en: "A dish’s recipe and taste profile"
-  uk: "Рецепт і смак страви"
-  ru: "Рецепт и вкус блюда"
+  sq: "Receta, shija, struktura dhe aroma e një pjate"
+  en: "A dish’s recipe, taste, texture and aroma"
+  uk: "Рецепт, смак, текстура й аромат страви"
+  ru: "Рецепт, вкус, текстура и аромат блюда"
 goal:
-  sq: "Lidhni një recetë dhe vendosni pesë boshtet e shijes."
-  en: "Attach a recipe and set the five taste axes."
-  uk: "Прив’язати рецепт і задати п’ять осей смаку."
-  ru: "Привязать рецепт и задать пять осей вкуса."
+  sq: "Lidhni një recetë dhe përshkruani shijen (gjashtë boshte), strukturën dhe aromën."
+  en: "Attach a recipe and describe the taste (six axes), the texture and the aroma."
+  uk: "Прив’язати рецепт і описати смак (шість осей), текстуру й аромат."
+  ru: "Привязать рецепт и описать вкус (шесть осей), текстуру и аромат."
 steps:
   - key: 1
     anchor: recipe.kind
@@ -139,87 +139,70 @@ steps:
       uk: "Коли інгредієнт більше не входить."
       ru: "Когда ингредиент больше не входит."
   - key: 8
-    anchor: taste.spicy
+    anchor: sense.suggest
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="sense.suggest"]'
+    title:
+      sq: "Sugjero"
+      en: "Suggest"
+      uk: "Підказати"
+      ru: "Подсказать"
+    caption:
+      sq: "Një draft nga përshkrimi dhe pjatat e zakonshme të sushit. Asgjë nuk ruhet pa shtypur Ruaj."
+      en: "A draft from the description and the usual sushi dishes. Nothing is saved until you press Save."
+      uk: "Чернетка з опису та типових страв суші. Нічого не зберігається, доки не натиснете «Зберегти»."
+      ru: "Черновик из описания и типичных блюд суши. Ничего не сохраняется, пока не нажмёте «Сохранить»."
+  - key: 9
+    anchor: sense.taste
     pending: no
     writes: yes
     action:
       do: click
-      selector: '[data-tour="taste.spicy"]'
+      selector: '[data-tour="sense.taste"]'
     title:
-      sq: "Pikant"
-      en: "Spicy"
-      uk: "Гостре"
-      ru: "Острое"
+      sq: "Shija"
+      en: "Taste"
+      uk: "Смак"
+      ru: "Вкус"
     caption:
-      sq: "Pesë boshte shije; klienti zgjedh sipas tyre."
-      en: "Five taste axes; customers choose by them."
-      uk: "П’ять осей смаку; клієнти обирають за ними."
-      ru: "Пять осей вкуса; клиенты выбирают по ним."
-  - key: 9
-    anchor: taste.sweet
-    pending: no
-    writes: no
-    action:
-      do: click
-      selector: '[data-tour="taste.sweet"]'
-    title:
-      sq: "I ëmbël"
-      en: "Sweet"
-      uk: "Солодке"
-      ru: "Сладкое"
-    caption:
-      sq: "Sa i ëmbël."
-      en: "How sweet."
-      uk: "Наскільки солодке."
-      ru: "Насколько сладкое."
+      sq: "Gjashtë boshte nga 0 në 5: i ëmbël, i thartë, i kripur, i hidhur, umami, djegës. Prekni sërish për ta hequr."
+      en: "Six axes from 0 to 5: sweet, sour, salty, bitter, umami, spicy. Tap again to clear."
+      uk: "Шість осей від 0 до 5: солодкий, кислий, солоний, гіркий, умамі, гострий. Торкніться ще раз, щоб зняти."
+      ru: "Шесть осей от 0 до 5: сладкий, кислый, солёный, горький, умами, острый. Нажмите ещё раз, чтобы снять."
   - key: 10
-    anchor: taste.salty
+    anchor: sense.texture
     pending: no
     writes: no
     action:
       do: click
-      selector: '[data-tour="taste.salty"]'
+      selector: '[data-tour="sense.texture"]'
     title:
-      sq: "I kripur"
-      en: "Salty"
-      uk: "Солоне"
-      ru: "Солёное"
+      sq: "Struktura"
+      en: "Texture"
+      uk: "Текстура"
+      ru: "Текстура"
     caption:
-      sq: "Sa i kripur."
-      en: "How salty."
-      uk: "Наскільки солоне."
-      ru: "Насколько солёное."
+      sq: "Krokant, kremoz, i butë e të tjera, 1 deri 3. Klientët filtrojnë sipas tyre."
+      en: "Crispy, creamy, tender and more, 1 to 3. Guests filter by them."
+      uk: "Хрусткий, кремовий, ніжний тощо, від 1 до 3. Гості фільтрують за ними."
+      ru: "Хрустящий, кремовый, нежный и другие, от 1 до 3. Гости фильтруют по ним."
   - key: 11
-    anchor: taste.sour
+    anchor: sense.aroma
     pending: no
     writes: no
     action:
       do: click
-      selector: '[data-tour="taste.sour"]'
+      selector: '[data-tour="sense.aroma"]'
     title:
-      sq: "I thartë"
-      en: "Sour"
-      uk: "Кисле"
-      ru: "Кислое"
+      sq: "Aroma"
+      en: "Aroma"
+      uk: "Аромат"
+      ru: "Аромат"
     caption:
-      sq: "Sa i thartë."
-      en: "How sour."
-      uk: "Наскільки кисле."
-      ru: "Насколько кислое."
-  - key: 12
-    anchor: taste.richness
-    pending: no
-    writes: no
-    action:
-      do: click
-      selector: '[data-tour="taste.richness"]'
-    title:
-      sq: "I rëndë"
-      en: "Rich"
-      uk: "Ситне"
-      ru: "Сытное"
-    caption:
-      sq: "Sa i yndyrshëm dhe i ngopshëm."
-      en: "How rich and filling."
-      uk: "Наскільки жирне й ситне."
-      ru: "Насколько жирное и сытное."
+      sq: "I tymosur, agrume, barishte e të tjera. Çfarë nuk prekni nuk shfaqet."
+      en: "Smoky, citrus, herbal and more. What you leave untouched is not shown."
+      uk: "Копчений, цитрусовий, трав’яний тощо. Чого не торкалися, не показується."
+      ru: "Копчёный, цитрусовый, травяной и другие. Что не трогали, не показывается."

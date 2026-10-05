@@ -1,10 +1,10 @@
 {
   "id": "feature-guest-taste",
   "name": "guest-taste",
-  "contract_version": "2.0.0",
+  "contract_version": "2.1.0",
   "class": "LIVE-AFTER-DEPLOY",
   "description": {
-    "en": "Guest taste scoring, on the device and on the server, AUTOMATIC (W-MR0 rows MR7 + MR8; DECISIONS.md D0 amendment and operator ruling 2026-10-04: no checkbox, basis legitimate interest GDPR 6(1)(f), one-tap objection Art. 21). DEVICE: store/taste.js keeps a per-venue IndexedDB `dowiz.taste.v1`, ON by default (dw_taste_on='0' is off); it re-orders a 'For you' strip, never hides a dish, never touches a price. SERVER: for a guest who gave a phone, each order folds the dishes' tags and categories (60-day half-life) and, if sent, the device's aggregated vector `taste_sync` (<= 12 keys per map, integers 0..1000, no events, no dish ids) into a profile beside the customer card in the venue's `people` image; a segment new/regular/at_risk/lapsed is derived from recency and frequency with its rule in words. Recognition only by the phone typed at checkout or an order link the phone holds, never by fingerprinting. 'We remember your taste · turn off' (menu footer, order page) files an objection in the consent log (purpose personalisation, Method::Objection) and deletes the profile; after it nothing is stored and taste_sync is refused 400; a phone without an order link sends taste_off with its next order. Never read to set a price, a discount, an eligibility or a refusal (tools/gates/no-scoring.sh). Retention 12 months after the last order (GUESS).",
+    "en": "Guest taste scoring, on the device and on the server, AUTOMATIC (W-MR0 rows MR7 + MR8; DECISIONS.md D0 amendment and operator ruling 2026-10-04: no checkbox, basis legitimate interest GDPR 6(1)(f), one-tap objection Art. 21). DEVICE: store/taste.js keeps a per-venue IndexedDB `dowiz.taste.v1`, ON by default (dw_taste_on='0' is off); it re-orders a 'For you' strip, never hides a dish, never touches a price. SERVER: for a guest who gave a phone, each order folds the dishes' tags and categories (60-day half-life) and, if sent, the device's aggregated vector `taste_sync` (<= 12 keys per map, integers 0..1000, no events, no dish ids) into a profile beside the customer card in the venue's `people` image; a segment new/regular/at_risk/lapsed is derived from recency and frequency with its rule in words. Recognition only by the phone typed at checkout or an order link the phone holds, never by fingerprinting. 'We remember your taste · turn off' (menu footer, order page) files an objection in the consent log (purpose personalisation, Method::Objection) and deletes the profile; after it nothing is stored and taste_sync is refused 400; a phone without an order link sends taste_off with its next order. Never read to set a price, a discount, an eligibility or a refusal (tools/gates/no-scoring.sh). Retention 12 months after the last order (GUESS). W-SENSE (2.1.0, additive): taste_sync may carry `sense` (keys of the closed taste/texture/aroma vocabulary, 0..1000); the view adds sense, because, history (monthly snapshots), contexts and when (feature-sense.json).",
     "uk": "Оцінка смаку гостя на телефоні й на сервері — автоматично, без галочки (законний інтерес); «Ми памʼятаємо ваш смак · вимкнути» — заперечення одним дотиком, профіль видаляється, taste_sync після цього відхиляється (400); ніколи не впливає на ціну."
   },
   "producer": [
@@ -156,6 +156,17 @@
               "minimum": 0,
               "maximum": 1000
             }
+          },
+          "sense": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[txa]:[a-z-]+$"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            }
           }
         }
       }
@@ -216,7 +227,12 @@
           "tags",
           "cats",
           "device",
-          "keptUntilDay"
+          "keptUntilDay",
+          "sense",
+          "because",
+          "history",
+          "contexts",
+          "when"
         ],
         "additionalProperties": false,
         "properties": {
@@ -272,6 +288,27 @@
           },
           "keptUntilDay": {
             "type": "integer"
+          },
+          "sense": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/row"
+            }
+          },
+          "because": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "history": {
+            "type": "object"
+          },
+          "contexts": {
+            "type": "object"
+          },
+          "when": {
+            "type": "object"
           }
         }
       }

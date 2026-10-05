@@ -127,6 +127,11 @@ pub fn define(body: DefIn, existing: &[Entry], by: &str, now_ms: i64) -> Result<
             Some(code)
         }
     };
+    // W-SENSE: A TASTE OFFER CARRIES NO CODE. A code is a reduction, and a reduction chosen by a
+    // guest's taste is a personalised price (EU Omnibus 2019/2161); the offer is the public figure.
+    if matches!(body.segment, Segment::Taste { .. }) && promo.is_some() {
+        return Err("a taste offer carries no promo code: it offers the menu's own price, the same for everyone".into());
+    }
     let id = match body.id {
         // TWO CAMPAIGNS IN ONE MILLISECOND would share an id and the second
         // would silently become an edit of the first.

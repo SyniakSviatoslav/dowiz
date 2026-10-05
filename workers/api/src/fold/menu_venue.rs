@@ -175,7 +175,7 @@ pub fn render(
                 });
                 // Passed through AS STORED, null included: null and [] are different claims.
                 for k in ["unavailableNote", "imageUrl", "imageUrlSmall", "allergens", "modifierGroups", "sizeCm",
-                    "cookingMin", "tags", "weightG", "nutrition", "nutritionDerived", "taste", "station", "calories"]
+                    "cookingMin", "tags", "weightG", "nutrition", "nutritionDerived", "taste", "sense", "station", "calories"]
                 {
                     item[k] = field(p, k);
                 }

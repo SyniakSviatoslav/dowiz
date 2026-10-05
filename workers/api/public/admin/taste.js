@@ -10,6 +10,9 @@
 import { $, esc, api, retranslate } from '/admin/core.js';
 import { T, LANGS } from '/admin/i18n.js';
 import * as ui from '/lib/ui/index.js';
+import '/admin/sense.js'; // W-SENSE: the sensory words, merged into the console's table
+import { yearMarkup, becauseLine } from '/store/sense-view.js';
+import { wordKey } from '/lib/sense-words.js';
 
 const SEGMENTS = ['new', 'regular', 'at_risk', 'lapsed'];
 
@@ -44,6 +47,10 @@ export function tasteMarkup(d){
     <p class="small"><span data-t="tasteWhy"></span>: ${esc(p.why)}</p>
     <p class="small"><span data-t="tasteTags"></span>: ${list(p.tags)}</p>
     <p class="small"><span data-t="tasteCats"></span>: ${list(p.cats)}</p>
+    ${(p.sense || []).length ? `<p class="small"><span data-t="sx_taste"></span>/<span data-t="sx_texture"></span>/<span data-t="sx_aroma"></span>: ${(p.sense || []).slice(0, 6).map(r => `<span data-t="${wordKey(r.key)}"></span>`).join(', ')}</p>` : ''}
+    ${becauseLine(p.because)}
+    ${Object.keys(p.when || {}).length ? `<p class="small muted mono">${Object.entries(p.when).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${esc(k)} ${Number(n) | 0}`).join(' · ')}</p>` : ''}
+    ${yearMarkup(p.history)}
     <p class="small muted"><span data-t="tasteFrom"></span>: ${from}</p>
     <p class="muted small" data-t="tasteNever"></p>`;
 }

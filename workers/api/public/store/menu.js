@@ -30,6 +30,7 @@ import { heroMarkup } from '/store/venue.js';
 import { privacyLink } from '/store/consent.js';
 import { ui, k, ghost } from '/store/parts.js';
 import { paintWeek, initAvoid, avoidButton, openAvoid, avoidHides } from '/store/flags.js';
+import { cardData, cardLine, senseFilters, senseHides, wireSenseFilters, clearSenseFilters, loadMoment } from '/store/sense-ui.js';
 import { isOn as tasteOn, wireTaste, tasteButton, paintStrip, openTaste, noteSeen, rememberLine, wireRememberLine, loadPrior, newestLink } from '/store/taste-device.js';
 
 // The venue's tags → an icon each. A tag with no icon still gets a chip, with
@@ -103,7 +104,7 @@ function card(p, catId, shape = 'plate'){
   if (kcal) facts.push(`${icon('flame')}${kcal} <span data-t="kcal"></span>`);
   if (Number.isFinite(p.cookingMin)) facts.push(`${icon('clock')}${p.cookingMin} <span data-t="etaMin"></span>`);
   return `<article class="card ${shape} ${out ? 'sold-out' : ''}" data-p="${esc(p.id)}" data-cat="${esc(catId)}"
-      data-price="${p.price | 0}" data-avail="${out ? 0 : 1}" data-tags="${esc(tags.join(' '))}"
+      data-price="${p.price | 0}" data-avail="${out ? 0 : 1}" data-tags="${esc(tags.join(' '))}" data-sense="${esc(cardData(p))}"
       data-search="${esc(normalise(`${p.name} ${p.description || ''}`))}" data-sort="${p.sortOrder | 0}">
     <button type="button" class="card-hit" data-open="${esc(p.id)}" data-tour="menu.dish" ${out ? 'aria-disabled="true"' : ''}
             aria-label="${esc(p.name)}">
@@ -118,6 +119,7 @@ function card(p, catId, shape = 'plate'){
         <span class="card-name">${esc(p.name)}</span>
         ${p.description ? `<span class="card-desc">${esc(p.description)}</span>` : ''}
         ${facts.length ? `<span class="card-facts">${facts.map(f => `<span>${f}</span>`).join('')}</span>` : ''}
+        ${cardLine(p)}
       </span>
     </button>
     ${out ? '' : ui.iconButton({ icon: 'plus', ariaLabel: `${t('add')}: ${p.name}`, title: t('add'), cls: 'card-add', attrs: { data: { add: p.id, tour: 'menu.quickAdd' } } })}
@@ -154,6 +156,7 @@ function filtersMarkup(cats){
       ${avoidButton()}
       ${tasteButton()}
     </div>
+    ${senseFilters(cats.flatMap(c => c.products || []))}
   </div>`;
 }
 
@@ -178,7 +181,9 @@ export function buildMenu(cats){
   paintWeek(app);
   if (tasteOn()) wireTaste();
   wireRememberLine();
+  wireSenseFilters(() => refilter({ animate: true }));
   paintStrip((d, el) => openDishFn?.(d, el));
+  loadMoment().then(m => { if (m) paintStrip((d, el) => openDishFn?.(d, el)); });
   // A returning guest, recognised by the order link they hold: the venue's profile ranks the strip too.
   if (tasteOn()) loadPrior(newestLink(), API).then(p => { if (p) paintStrip((d, el) => openDishFn?.(d, el)); });
   spy();
@@ -219,6 +224,7 @@ export function applyFilters({ animate = false } = {}){
       }
       // The guest's own allergen choice (`store/avoid.js`): never a guess, and the undeclared too.
       if (ok && avoidHides(el)) ok = false;
+      if (ok && senseHides(el)) ok = false; // W-SENSE: the guest's taste chips, offline from the cached menu
       el.hidden = !ok;
       if (ok) n++;
     }
@@ -308,7 +314,7 @@ function bind(){
     if (e.target.closest('#qmic')) { import('/store/voice-order.js').then(m => m.openVoice()); return; }
     if (e.target.closest('#qsort')) { openSort(); return; }
     if (e.target.closest('#qreset')) {
-      state.q = ''; state.tag = null; state.sort = SORTS[0];
+      state.q = ''; state.tag = null; state.sort = SORTS[0]; clearSenseFilters();
       $('#q').value = ''; $('#qx').hidden = true; $('#qsort')?.classList.remove('on');
       for (const b of $$('[data-tag]')) { const onn = !b.dataset.tag; b.classList.toggle('on', onn); b.setAttribute('aria-pressed', String(onn)); }
       refilter({ animate: true });

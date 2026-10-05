@@ -22,6 +22,7 @@ import { me } from '/admin/app.js';
 import '/admin/crud-i18n.js';
 import { translationBoxes, baseEdits } from '/admin/menu-edit.js';
 import '/admin/prep-i18n.js';
+import { senseEditor, bindSenseEditor, senseEdits, rowSense } from '/admin/sense.js';
 import { tagLabel, undeclaredPanel, allergenMarkup, bindAllergens, allergenEdits, refusesSale, gateOn } from '/admin/menu-flags.js';
 /// W-NOM: the dishes ticked for a bulk delete (the owner's).
 const sel = selection();
@@ -57,7 +58,7 @@ function dishRow(p){
   const q = norm(view.q).trim();
   if (q && !norm(`${p.name} ${p.description || ''}`).includes(q)) return '';
   if (sel.on) return pickRow(p.id, p.name, `${ui.amount(String(money(p.price)))}`, sel.ids.has(p.id));
-  return rowBtn({ cls: p.available ? '' : 'off', data: { p: p.id }, tour: 'menu.dish', title: p.name, sub: esc(p.description || ''),
+  return rowBtn({ cls: p.available ? '' : 'off', data: { p: p.id }, tour: 'menu.dish', title: p.name, sub: esc(p.description || '') + rowSense(p),
     leading: p.imageUrl ? `<img class="thumb" src="${esc(p.imageUrl)}" alt="" loading="lazy">` : `<span class="thumb"></span>`,
     trailing: `${ui.amount(String(money(p.price)))}${pill(p.available ? 'ok' : 'bad', { key: p.available ? 'onSale' : 'stopList' })}` });
 }
@@ -190,7 +191,7 @@ export async function openDish(id){
     <p class="hint" data-t="mf_tagsHint"></p>
     ${allergenMarkup(p)}
     ${recipeMarkup(p)}
-    ${tasteMarkup(p)}
+    ${senseEditor(p)}
     ${field({ id: 'd-ings', key: 'ingredients', rows: 2, value: (p.ingredients || []).join(', '), tour: 'dish.ingredients' })}
     <p class="ui-label" data-t="nutrition"></p>${p.nutritionDerived ? `<p class="hint" data-t="nutritionFromRecipe"></p>` : ''}
     <div class="grid3">
@@ -225,7 +226,7 @@ export async function openDish(id){
   // What the owner changes in THIS sheet; the rest follows the recipe (audit D19).
   const edited = new Set();
   for (const f of FIELDS) $(BOX[f]).addEventListener('input', () => edited.add(f));
-  bindRecipe(p); bindTaste(p); bindAllergens();
+  bindRecipe(p); bindSenseEditor(p); bindAllergens();
   for (const b of $$('[data-tag]', $('#sheetIn'))) b.onclick = () => b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
   $('#photoPick').onclick = () => $('#photoFile').click();
   $('#photoFile').onchange = async e => {
@@ -272,7 +273,7 @@ export async function openDish(id){
       // not an empty one, and sending [] would clear it.
       // A line typed down to 0 is a line taken out.
       ...(recipeKnown === id ? { bom: recipeDraft.filter(l => l.qty > 0).map(l => ({ supply: l.supply, qty: l.qty, ...(l.net != null ? { net: l.net } : {}), ...(l.out != null ? { out: l.out } : {}) })) } : {}),
-      taste: tasteDraft,
+      ...senseEdits(),
       ...allergenEdits(),
       translations,
     });
@@ -352,10 +353,6 @@ let recipeDirty = false;
 let supplyBook = null;
 /// The dishes that reduce no stock, from the same answer.
 let noRecipeIds = null;
-const TASTE_AXES = ['spicy', 'sweet', 'salty', 'sour', 'richness'];
-const TASTE_ICONS = { spicy: 'pepper', sweet: 'candy', salty: 'salt', sour: 'lemon-2', richness: 'flame' };
-const TASTE_LEVELS = [1, 2, 3];
-let tasteDraft = {};
 const KIND_ICON = { food_ingredient: 'meat', condiment: 'bottle', packaging: 'box', utensil: 'tool', resale: 'beer', prep: 'tools-kitchen-2' };
 const isFoodKind = k => k === 'food_ingredient' || k === 'condiment' || k === 'prep';
 const basisOf = u => u === 'unit' ? 1 : 100;
@@ -514,17 +511,3 @@ async function bindRecipe(p){
   drawBook();
 }
 
-// ── taste: five axes, three levels, authored by the kitchen ─────────────────
-function tasteMarkup(p){
-  tasteDraft = { ...(p.taste || {}) };
-  return `<p class="eyebrow mt-3" data-t="taste"></p><p class="muted small" data-t="tasteHint"></p>
-    <div class="taste" id="tasteBox">${TASTE_AXES.map(a => `<div class="taste-row"><span class="taste-ax">${icon(TASTE_ICONS[a])}<span data-t="taste_${a}"></span></span>
-      <span class="taste-lv">${TASTE_LEVELS.map(l => ui.chip({ as: 'button', selected: tasteDraft[a] === l, label: k('tlevel_' + l), attrs: { data: { ta: a, tl: l, tour: 'taste.' + a } } })).join('')}</span></div>`).join('')}</div>`;
-}
-function bindTaste(){
-  for (const b of $$('[data-ta]', $('#tasteBox'))) b.onclick = () => {
-    const a = b.dataset.ta, l = +b.dataset.tl;
-    if (tasteDraft[a] === l) delete tasteDraft[a]; else tasteDraft[a] = l;   // re-tapping the level clears the axis, as the old console did
-    for (const x of $$(`[data-ta="${a}"]`, $('#tasteBox'))) x.setAttribute('aria-pressed', String(tasteDraft[a] === +x.dataset.tl));
-  };
-}

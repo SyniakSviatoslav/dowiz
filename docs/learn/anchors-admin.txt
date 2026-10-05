@@ -13,6 +13,35 @@
 # has seated / completed / no_show / cancelled_by_venue, and features.<key> is one per
 # feature the hub lists (more.js:498) -- neither is enumerable here.
 # Written by the lane's anchors-admin.py (scratchpad); every id is grep-able in its file.
+#
+# IN THE MARKUP, NAMED BY NO LESSON STEP YET (2026-09-24). Commented out so the
+# learn gate does not count them until the lessons lane decides: each is a real
+# control with a real anchor, passed positionally (switchEl's 5th argument, a
+# helper's argument), which tools/gates/learn.sh's WRITE regex does not read.
+# ai.enabled workers/api/public/admin/more.js:556
+# assistant.enabled workers/api/public/admin/more.js:556
+# bulk.retire workers/api/public/admin/bulk.js:16
+# couriers.active workers/api/public/admin/couriers.js:73
+# customers.allergens workers/api/public/admin/customers.js:61
+# customers.tags workers/api/public/admin/customers.js:62
+# dish.onSale workers/api/public/admin/menu.js:135
+# ebills.enabled workers/api/public/admin/ebills.js:56
+# import.retire workers/api/public/admin/menu.js:100
+# menu.filterCategory workers/api/public/admin/menu.js:61
+# menu.filterNoPhoto workers/api/public/admin/menu.js:67
+# menu.filterOnSale workers/api/public/admin/menu.js:65
+# menu.filterStopList workers/api/public/admin/menu.js:66
+# menu.search workers/api/public/admin/menu.js:59
+# notify.save2 workers/api/public/admin/more.js:361
+# notify.test2 workers/api/public/admin/more.js:361
+# recipe.search workers/api/public/admin/menu.js:300
+# social.autopost workers/api/public/admin/more.js:163
+# social.enabled workers/api/public/admin/more.js:163
+# staff.active workers/api/public/admin/staff.js:69
+# stamps.on workers/api/public/admin/stamps.js:23
+# state.pauseDelivery workers/api/public/admin/app.js:130
+# supply.confirmed workers/api/public/admin/stock.js:99
+# venue.pickup workers/api/public/admin/more.js:261
 activation.fulfilment workers/api/public/admin/more.js:525
 activation.menu workers/api/public/admin/more.js:525
 activation.notifications workers/api/public/admin/more.js:525
@@ -51,6 +80,12 @@ branding.sage workers/api/public/admin/more.js:496
 branding.seal workers/api/public/admin/more.js:495
 branding.typePair workers/api/public/admin/more.js:492
 branding.warm workers/api/public/admin/more.js:496
+builder.band workers/api/public/admin/sense-builder.js:79
+builder.key workers/api/public/admin/sense-builder.js:75
+builder.offer workers/api/public/admin/sense-builder.js:88
+builder.offerDish workers/api/public/admin/sense-builder.js:85
+builder.offerLang workers/api/public/admin/sense-builder.js:86
+builder.weather workers/api/public/admin/sense-builder.js:80
 bulk.apply workers/api/public/admin/bulk.js:17
 bulk.dryRun workers/api/public/admin/bulk.js:17
 bulk.file workers/api/public/admin/bulk.js:15
@@ -117,6 +152,7 @@ customers.revealReason workers/api/public/admin/more.js:233
 customers.revealRow workers/api/public/admin/more.js:250
 customers.row workers/api/public/admin/more.js:218
 customers.save workers/api/public/admin/customers.js:66
+customers.senseBuilder workers/api/public/admin/sense-builder.js:73
 customers.sort workers/api/public/admin/more.js:212
 customers.table workers/api/public/admin/customers.js:63
 customers.unlink workers/api/public/admin/customers.js:93
@@ -245,9 +281,9 @@ more.tile.notifications workers/api/public/admin/more.js:41
 more.tile.payments workers/api/public/admin/more.js:41
 more.tile.posts workers/api/public/admin/more.js:41
 more.tile.preview workers/api/public/admin/more.js:41
-more.tile.pubMenu workers/api/public/admin/more.js:41
 more.tile.printer workers/api/public/admin/more.js:41
 more.tile.promos workers/api/public/admin/more.js:41
+more.tile.pubMenu workers/api/public/admin/more.js:41
 more.tile.social workers/api/public/admin/more.js:41
 more.tile.staff workers/api/public/admin/more.js:41
 more.tile.tableQr workers/api/public/admin/more.js:41
@@ -341,6 +377,10 @@ recipe.removeLine workers/api/public/admin/menu.js:313
 refund.go workers/api/public/admin/refund.js:40
 refund.note workers/api/public/admin/refund.js:39
 refund.reason workers/api/public/admin/refund.js:38
+sense.aroma workers/api/public/admin/sense.js:35
+sense.suggest workers/api/public/admin/sense.js:51
+sense.taste workers/api/public/admin/sense.js:35
+sense.texture workers/api/public/admin/sense.js:35
 social.channel workers/api/public/admin/more.js:164
 social.igToken workers/api/public/admin/more.js:168
 social.igUser workers/api/public/admin/more.js:169
@@ -382,11 +422,6 @@ supply.unit workers/api/public/admin/stock.js:94
 tableqr.download workers/api/public/admin/tableqr.js:38
 tableqr.grid workers/api/public/admin/tableqr.js:80
 tableqr.print workers/api/public/admin/tableqr.js:78
-taste.richness workers/api/public/admin/menu.js:364
-taste.salty workers/api/public/admin/menu.js:364
-taste.sour workers/api/public/admin/menu.js:364
-taste.spicy workers/api/public/admin/menu.js:364
-taste.sweet workers/api/public/admin/menu.js:364
 venue.address workers/api/public/admin/more.js:260
 venue.name workers/api/public/admin/more.js:258
 venue.phone workers/api/public/admin/more.js:259

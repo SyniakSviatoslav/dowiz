@@ -1,0 +1,140 @@
+# Lesson O37 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-SENSE (2026-10-04): the segment builder over the guests’ taste, and a personalised offer at the menu price.
+id: O37
+role: owner
+module: customers
+order: 29
+covers: []
+title:
+  sq: "Segmentet sipas shijes dhe një ofertë"
+  en: "Taste segments and an offer"
+  uk: "Сегменти за смаком і пропозиція"
+  ru: "Сегменты по вкусу и предложение"
+goal:
+  sq: "Numëroni klientët sipas shijes, shihni kur porosisin dhe çfarë të keni gati, dhe ofroni një pjatë me çmimin e menysë."
+  en: "Count guests by taste, see when they order and what to stock, and offer a dish at its menu price."
+  uk: "Порахуйте гостей за смаком, подивіться, коли вони замовляють і що мати напоготові, і запропонуйте страву за ціною з меню."
+  ru: "Посчитайте гостей по вкусу, посмотрите, когда они заказывают и что держать наготове, и предложите блюдо по цене из меню."
+steps:
+  - key: 1
+    anchor: customers.senseBuilder
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="customers.senseBuilder"]'
+    title:
+      sq: "Segment sipas shijes"
+      en: "Segment by taste"
+      uk: "Сегмент за смаком"
+      ru: "Сегмент по вкусу"
+    caption:
+      sq: "Vetëm numra, kurrë një listë njerëzish."
+      en: "Counts only, never a list of people."
+      uk: "Лише кількість, ніколи не список людей."
+      ru: "Только количество, никогда не список людей."
+  - key: 2
+    anchor: builder.key
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="builder.key"]'
+    title:
+      sq: "Shija"
+      en: "The taste"
+      uk: "Смак"
+      ru: "Вкус"
+    caption:
+      sq: "Një shije, strukturë ose aromë. Alergjenet nuk janë këtu."
+      en: "A taste, texture or aroma. Allergens are not here."
+      uk: "Смак, текстура чи аромат. Алергенів тут немає."
+      ru: "Вкус, текстура или аромат. Аллергенов здесь нет."
+  - key: 3
+    anchor: builder.band
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="builder.band"]'
+    title:
+      sq: "Kur porositin"
+      en: "When they order"
+      uk: "Коли замовляють"
+      ru: "Когда заказывают"
+    caption:
+      sq: "Mëngjes, drekë, mbrëmje... sipas orës së lokalit."
+      en: "Morning, midday, evening... on the venue’s clock."
+      uk: "Ранок, обід, вечір... за годинником закладу."
+      ru: "Утро, обед, вечер... по часам заведения."
+  - key: 4
+    anchor: builder.weather
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="builder.weather"]'
+    title:
+      sq: "Moti"
+      en: "The weather"
+      uk: "Погода"
+      ru: "Погода"
+    caption:
+      sq: "Moti te lokali, kurrë vendi i klientit."
+      en: "The weather at the venue, never the guest’s place."
+      uk: "Погода біля закладу, ніколи не місце гостя."
+      ru: "Погода у заведения, никогда не место гостя."
+  - key: 5
+    anchor: builder.offerDish
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="builder.offerDish"]'
+    title:
+      sq: "Pjata"
+      en: "The dish"
+      uk: "Страва"
+      ru: "Блюдо"
+    caption:
+      sq: "Pjatat që e kanë këtë shije fort."
+      en: "The dishes that carry this taste strongly."
+      uk: "Страви, у яких цей смак сильний."
+      ru: "Блюда, в которых этот вкус сильный."
+  - key: 6
+    anchor: builder.offerLang
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="builder.offerLang"]'
+    title:
+      sq: "Gjuha"
+      en: "The language"
+      uk: "Мова"
+      ru: "Язык"
+    caption:
+      sq: "Gjuha e mesazhit."
+      en: "The message’s language."
+      uk: "Мова повідомлення."
+      ru: "Язык сообщения."
+  - key: 7
+    anchor: builder.offer
+    pending: no
+    writes: yes
+    action:
+      do: click
+      selector: '[data-tour="builder.offer"]'
+    title:
+      sq: "Bëj një ofertë"
+      en: "Make an offer"
+      uk: "Зробити пропозицію"
+      ru: "Сделать предложение"
+    caption:
+      sq: "Shënohet si ofertë e personalizuar, me çmimin e menysë dhe pa kod. Dërgohet nga fushatat, vetëm te kush pranoi."
+      en: "Labelled as a personalised offer, at the menu price, with no code. Sent from campaigns, only to guests who agreed."
+      uk: "Позначена як персоналізована пропозиція, за ціною з меню, без коду. Надсилається з кампаній, лише тим, хто погодився."
+      ru: "Помечено как персонализированное предложение, по цене из меню, без кода. Отправляется из кампаний, только тем, кто согласился."

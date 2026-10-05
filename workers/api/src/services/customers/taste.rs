@@ -56,6 +56,9 @@ pub struct SyncIn {
     pub tags: BTreeMap<String, i64>,
     #[serde(default)]
     pub cats: BTreeMap<String, i64>,
+    /// W-SENSE: the device's taste/texture/aroma vector, keys of the closed vocabulary only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sense: BTreeMap<String, i64>,
 }
 
 impl SyncIn {
@@ -75,6 +78,14 @@ impl SyncIn {
                 if !(0..=SYNC_SCALE).contains(w) {
                     return Err(format!("taste_sync.{name}.{k} = {w}; 0..={SYNC_SCALE}"));
                 }
+            }
+        }
+        for (k, w) in &self.sense {
+            if !dowiz_hub::sense::key_ok(k) {
+                return Err(format!("taste_sync.sense: {k:?} is not a key of the vocabulary"));
+            }
+            if !(0..=SYNC_SCALE).contains(w) {
+                return Err(format!("taste_sync.sense.{k} = {w}; 0..={SYNC_SCALE}"));
             }
         }
         Ok(())
@@ -98,14 +109,26 @@ pub struct Profile {
     pub device: Option<SyncIn>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_day: Option<i64>,
+    /// W-SENSE (`taste/senses.rs`): the taste/texture/aroma weights, the same per context, the
+    /// weekday x band counts and the monthly snapshots. Absent in a record written before.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sense: BTreeMap<String, i64>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub ctx: BTreeMap<String, BTreeMap<String, i64>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub when: BTreeMap<String, i64>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub months: BTreeMap<String, BTreeMap<String, i64>>,
 }
 
-/// One line of an order, as this module needs it: the dish's tags, its category, how many.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One line of an order, as this module needs it: the dish's tags, its category, how many, and
+/// its declared sensory vector (`dowiz_hub::sense::vector`; empty when the dish declares none).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Line {
     pub tags: Vec<String>,
     pub category: Option<String>,
     pub qty: i64,
+    pub sense: BTreeMap<String, i64>,
 }
 
 fn fade(w: i64, days: i64) -> i64 {
@@ -124,7 +147,13 @@ fn trim(m: BTreeMap<String, i64>) -> BTreeMap<String, i64> {
 
 /// The profile after one order on `day`: the old weights faded to today, this order's dishes added,
 /// the device's vector kept when it came with the order. `prev` past `KEEP_DAYS` starts afresh.
+#[cfg_attr(not(test), allow(dead_code))] // W-SENSE: the request paths call the `_where`/`_at` form; tests keep this one
 pub fn apply_order(prev: Option<Profile>, lines: &[Line], sync: Option<&SyncIn>, day: i64) -> Profile {
+    apply_order_at(prev, lines, sync, day, None)
+}
+
+/// [`apply_order`] with the context the order was placed in (`senses::At`).
+pub fn apply_order_at(prev: Option<Profile>, lines: &[Line], sync: Option<&SyncIn>, day: i64, at: Option<&senses::At>) -> Profile {
     let mut p = match prev.filter(|p| p.v == VERSION && !expired(p, day)) {
         Some(p) => p,
         None => Profile { v: VERSION, first_day: day, last_day: day, ..Profile::default() },
@@ -143,6 +172,7 @@ pub fn apply_order(prev: Option<Profile>, lines: &[Line], sync: Option<&SyncIn>,
     }
     p.tags = trim(p.tags);
     p.cats = trim(p.cats);
+    senses::fold(&mut p, lines, gap, day, at);
     p.orders += 1;
     p.last_day = p.last_day.max(day);
     if let Some(s) = sync {
@@ -212,6 +242,11 @@ pub fn view(p: &Profile, today: i64) -> serde_json::Value {
         "tags": top(&p.tags, 8), "cats": top(&p.cats, 8),
         "device": p.device.as_ref().map(|d| serde_json::json!({ "tags": d.tags, "cats": d.cats, "day": p.device_day })),
         "keptUntilDay": p.last_day + KEEP_DAYS,
+        "sense": top(&senses::snapshot(&p.sense, usize::MAX), 12),
+        "because": senses::because(p),
+        "history": p.months,
+        "contexts": p.ctx.iter().map(|(c, m)| (c.clone(), senses::snapshot(m, 6))).collect::<BTreeMap<_, _>>(),
+        "when": p.when,
     })
 }
 
@@ -241,9 +276,20 @@ pub fn line_of(product_json: &str, qty: i64) -> Line {
         tags: v.get("tags").and_then(|t| t.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default(),
         category: v.get("categoryId").and_then(|c| c.as_str()).map(str::to_string),
         qty,
+        sense: dowiz_hub::sense::of_product(&v).map(|s| dowiz_hub::sense::vector(&s)).unwrap_or_default(),
     }
 }
+
+/// W-SENSE: the guest on the dish's axes, per context, per month.
+#[path = "taste/senses.rs"]
+pub mod senses;
+/// W-SENSE row 7: the owner's segment builder over the profiles.
+#[path = "taste/builder.rs"]
+pub mod builder;
 
 #[cfg(test)]
 #[path = "taste/tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "taste/senses_tests.rs"]
+mod senses_tests;

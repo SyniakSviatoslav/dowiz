@@ -37,6 +37,10 @@ pub enum Segment {
     Tag { tag: String },
     /// Their card's MM-DD falls in the next seven days, today included.
     BirthdayThisWeek,
+    /// W-SENSE: their taste profile falls in the owner's segment (`customers::taste::builder`),
+    /// and they are offered ONE dish at the menu's public figure, in words the server composes
+    /// (`offer.rs`). The profile is read by the audience join, never stored with the campaign.
+    Taste { filter: crate::services::customers::taste::builder::Filter, dish: String, lang: String },
 }
 
 impl Segment {
@@ -49,6 +53,16 @@ impl Segment {
             }
             Segment::Tag { tag } if !crate::services::customers::record::TAGS.contains(&tag.as_str()) => {
                 Err(format!("tag {tag:?} is not in the closed list"))
+            }
+            Segment::Taste { filter, dish, lang } => {
+                filter.check()?;
+                if dish.trim().is_empty() || dish.len() > 64 {
+                    return Err("a taste offer names one dish of the menu".into());
+                }
+                if !super::offer::LANGS.contains(&lang.as_str()) {
+                    return Err(format!("a taste offer is written in one of {:?}", super::offer::LANGS));
+                }
+                Ok(())
             }
             _ => Ok(()),
         }
@@ -114,6 +128,8 @@ pub fn matches(seg: &Segment, row: &Row, rec: &Record, consent: &ConsentState, n
         Segment::BirthdayThisWeek => {
             rec.birthday_md.as_deref().and_then(md).is_some_and(|b| birthday_within(b, now.local_ms))
         }
+        // The profile is the audience join's to read (`audience::recipients_where`): consent first.
+        Segment::Taste { .. } => true,
     }
 }
 

@@ -70,7 +70,7 @@ fn fragment_bytes_pinned() {
     let fragment = fragment_of(&body(&mut m, None, NOON)).expect("the own-language body renders");
     let golden = std::fs::read_to_string(GOLDEN).unwrap_or_else(|e| panic!("no golden at {GOLDEN}: {e}\nactual fragment:\n{fragment}"));
     assert_eq!(fragment, golden.trim_end(), "the fragment's bytes moved; re-derive the golden and store/shell.js together");
-    assert_eq!(k64(fragment.as_bytes()), "2e227551754217ff", "the content address of the golden");
+    assert_eq!(k64(fragment.as_bytes()), "aa4fbb2c720a052a", "the content address of the golden"); // W-SENSE: + "sense"
     let v: Value = serde_json::from_str(&fragment).unwrap();
     for f in CLOCK_FIELDS {
         assert!(v["location"].get(f).is_none(), "{f} is the clock's and is not in the fragment");

@@ -307,6 +307,7 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         // ── public storefront ──
         .get_async("/api/public/locations/:slug/menu", |r, c| edge::run(r, c, storefront::menu))
         .get_async("/api/public/locations/:slug/menu/week", |r, c| edge::run(r, c, services::analytics::week_route::week))
+        .get_async("/api/public/locations/:slug/context", |r, c| edge::run(r, c, services::venue::context::context)) // W-SENSE
         .get_async("/manifest.webmanifest", |r, c| edge::run(r, c, storefront::manifest))
         // P8/P9: the venue's privacy notice (venue from the Host) and the DPA text.
         .get_async("/privacy", |r, c| edge::run(r, c, privacy::notice::serve))
@@ -425,6 +426,7 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .post_async("/api/owner/categories", |r, c| edge::run(r, c, catalog_edit::set_category))
         .post_async("/api/owner/categories/:id/delete", |r, c| edge::run(r, c, catalog_edit::delete_category))
         .post_async("/api/owner/products/:id", |r, c| edge::run(r, c, owner::update_product))
+        .post_async("/api/owner/products/:id/sense/suggest", |r, c| edge::run(r, c, services::catalogue::sense::suggest)) // W-SENSE
         .post_async("/api/owner/location", |r, c| edge::run(r, c, owner::update_location))
         .post_async("/api/owner/i18n", |r, c| edge::run(r, c, owner::write_translations))
         // ── ported from the native adapter, on the SAME dowiz-hub logic ──
@@ -450,6 +452,7 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .post_async("/api/owner/customers/:key/forget", |r, c| edge::run(r, c, services::customers::forget::forget_customer))
         .get_async("/api/owner/customers/:key/taste", |r, c| edge::run(r, c, services::customers::taste_routes::owner_view))
         .get_async("/api/owner/customers/taste/segments", |r, c| edge::run(r, c, services::customers::taste_routes::owner_segments))
+        .get_async("/api/owner/customers/taste/builder", |r, c| edge::run(r, c, services::customers::taste_builder::builder)) // W-SENSE
         .get_async("/api/owner/customers/reveals", |r, c| edge::run(r, c, services::customers::handlers::reveals))
         .put_async("/api/owner/customers/:key/record", |r, c| edge::run(r, c, services::customers::record_routes::put_record))
         .post_async("/api/owner/customers/rekey", |r, c| edge::run(r, c, services::customers::record_routes::rekey))

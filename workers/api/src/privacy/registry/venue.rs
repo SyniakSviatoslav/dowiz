@@ -34,6 +34,11 @@ pub const STORES: &[Store] = &[
     // W-MR0 MR8 (D0 amendment 2026-10-04, operator ruling): the guest's taste profile, beside the card,
     // automatic under LEGITIMATE INTEREST (balancing test: docs/privacy/DPIA-personalisation.md), stopped
     // and deleted by one objection (Art. 21); never read to set a sum (tools/gates/no-scoring.sh).
+    // W-SENSE (2026-10-04): the same record also holds the guest's taste/texture/aroma weights, the
+    // same per CONTEXT AT THE VENUE (band, weekday or weekend, weather -- never the guest's place),
+    // weekday x band order counts and 12 monthly snapshots; the objection, the export and the
+    // erasure cover them with the record. No new store: the venue's weather is an edge-cache entry
+    // keyed by the venue's own coordinates and holds no personal data.
     Store { image: "taste", kinds: &["taste"], home: Venue,
         holds: &[Taste, OrderContent], subjects: &[Customer],
         purpose: P::Personalisation, basis: Basis::LegitimateInterest,

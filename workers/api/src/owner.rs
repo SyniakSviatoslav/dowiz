@@ -786,6 +786,10 @@ pub(crate) struct ProductEdit {
     /// Five axes, levels 1…3; absent = not declared.
     #[serde(default)]
     taste: Option<serde_json::Map<String, Value>>,
+    /// W-SENSE: six taste axes 0..5, texture and aroma tags 1..3 (`dowiz_hub::sense`). Saving it
+    /// clears the old `taste`; `{}` clears both.
+    #[serde(default)]
+    sense: Option<Value>,
     /// Where the dish is made, `kitchen | bar` (`bell_route`); refused otherwise.
     #[serde(default)]
     station: Option<String>,
@@ -858,6 +862,11 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
             Ok(t) => Some(t),
             Err(e) => return Response::error(e, 400),
         },
+    };
+    let sense = match body.sense.as_ref().map(dowiz_hub::sense::validate) {
+        None => None,
+        Some(Ok(s)) => Some(s.json()),
+        Some(Err(e)) => return Response::error(e, 400),
     };
     let station = match body.station.as_deref().map(crate::bell_route::Station::from_wire) {
         None => None,
@@ -938,6 +947,10 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         }
         if let Some(t) = &taste {
             p["taste"] = if t.is_empty() { Value::Null } else { Value::Object(t.clone()) };
+        }
+        if let Some(s) = &sense {
+            p["sense"] = s.clone();
+            p["taste"] = Value::Null; // one answer per dish: the new one
         }
         crate::bell_route::edit_station(&mut p, station);
         // ── THE RECIPE, AND WHAT FOLLOWS FROM IT ──

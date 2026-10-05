@@ -1108,3 +1108,22 @@ a.vsrc{text-decoration:underline}
 .fy-name{font-weight:var(--weight-bold)}
 .tr-list{display:grid;grid-template-columns:1fr auto;gap:4px var(--space-3);margin:0}
 .tr-list dd{margin:0;text-align:right}
+/* W-SENSE: a dish's taste, texture and aroma (store/sense-view.js). Both themes read the brand tokens. */
+.card-sense{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin-top:var(--space-2)}
+.sx-mini{display:inline-flex;gap:6px;align-items:center}
+.sx-m{display:inline-flex;align-items:center;gap:2px;font-size:var(--text-xs);color:var(--brand-text-muted)}
+.sx-bar{display:inline-block;width:28px;height:5px;border-radius:var(--radius-full);background:color-mix(in srgb,var(--brand-text) 16%,transparent);overflow:hidden;vertical-align:middle}
+.sx-m .sx-bar{width:14px}
+.sx-bar b{display:block;height:100%;width:calc(var(--v) * 100%);background:var(--brand-primary);border-radius:inherit}
+.sx-tag{font-size:var(--text-xs);color:var(--brand-text-muted);border:1px solid var(--glass-border);border-radius:var(--radius-full);padding:1px var(--space-2)}
+.sx-axes{display:grid;grid-template-columns:1fr;gap:var(--space-2);margin:0}
+.sx-ax{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
+.sx-ax dt{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm)}
+.sx-ax dd{display:inline-flex;align-items:center;gap:var(--space-2);margin:0}
+.sx-ax .sx-bar{width:96px;height:6px}
+.sx-n{font-size:var(--text-xs);color:var(--brand-text-muted);min-width:2.5em;text-align:right}
+.sx-chips{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.sx-like,.sx-because{margin:var(--space-2) 0 0}
+.sx-filters{margin-top:var(--space-2)}
+.sx-filters .tag,.sx-mood .fy{min-height:var(--tap)}
+.sx-mood{margin-top:var(--space-3)}

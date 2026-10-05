@@ -23,6 +23,11 @@
 //      `navigator.plugins`, `navigator.platform`, `navigator.keyboard`, `screen.colorDepth`,
 //      `getBattery`). `navigator.userAgent` is allowed ONLY as `/regex/.test(navigator.userAgent)`
 //      (a yes/no such as "is this iOS", which cannot tell two phones apart); any other read is refused.
+//   6. THE SESSION'S MOOD (W-SENSE 2026-10-04): `mood`, `currentMood`, `MOODS` inside the arguments
+//      of a network call or of a `JSON.stringify(`. The mood is this page's only, never sent;
+//   7. THE GUEST'S PLACE IN THE CONTEXT (W-SENSE): the venue's moment is asked with no query
+//      (services/venue/context.rs); `geolocation` anywhere in store/sense*.js, and a line that asks
+//      `/context` while naming a coordinate (`geolocation`, `latitude`, `lat=`, `lon`), are refused.
 // What stays refused whatever the guest chose: beacons and scroll/visibility telemetry (rules 1-2),
 // the raw profile under its storage key (rule 3) and fingerprinting (rule 5).
 // It is a static gate, so it is a floor, not a proof of innocence: a value read from the profile
@@ -37,6 +42,8 @@ const NET = /\bfetch\w*\s*\(|\bsendBeacon\b|\bXMLHttpRequest\b|\bnew\s+WebSocket
 const PROFILE = /dowiz\.taste|dw_profile/;
 const NOT_OBJECTED = /\bnotObjected\s*\(\s*\)/;
 const FINGERPRINT = /\btoDataURL\s*\(|\bgetImageData\s*\(|\bOfflineAudioContext\b|\bhardwareConcurrency\b|\bdeviceMemory\b|\bnavigator\.(plugins|platform|keyboard)\b|\bscreen\.colorDepth\b|\bgetBattery\s*\(/g;
+const MOOD = /\bmood\b|\bcurrentMood\b|\bMOODS\b/;
+const GEO = /\bgeolocation\b|\blatitude\b|\blat=|\blon(gitude)?\b/;
 const UA_READ = /\bnavigator\.userAgent\b/g;
 const UA_TEST = /\/[^/\n]+\/[a-z]*\.test\(\s*navigator\.userAgent\s*\)/g;
 const WATCH = /\bnew\s+IntersectionObserver\s*\(|\baddEventListener\s*\(\s*['"`](scroll|scrollend|wheel|touchmove)['"`]\s*,|\bonscroll\s*=/g;
@@ -113,12 +120,15 @@ for (const f of files(dir)) {
   s.split('\n').forEach((line, i) => {
     if (/\btaste_sync\b/.test(line) && !NOT_OBJECTED.test(line)) refusals.push(`${rel}:${i + 1}: taste_sync without notObjected() on its line (rule 4)`);
     for (const x of line.matchAll(FINGERPRINT)) refusals.push(`${rel}:${i + 1}: ${x[0].replace(/\s*\($/, '')} reads a device fingerprint surface (rule 5)`);
+    if (/\/context\b/.test(line) && GEO.test(line)) refusals.push(`${rel}:${i + 1}: a coordinate beside the context request (rule 7)`);
+    if (/\/sense[^/]*\.m?js$/.test(f) && /\bgeolocation\b/.test(line)) refusals.push(`${rel}:${i + 1}: geolocation in a sense file (rule 7)`);
     const uaAll = [...line.matchAll(UA_READ)].length, uaOk = [...line.matchAll(UA_TEST)].length;
     if (uaAll > uaOk) refusals.push(`${rel}:${i + 1}: navigator.userAgent read other than /re/.test(navigator.userAgent) (rule 5)`);
   });
   for (const x of s.matchAll(/\bfetch\w*\s*\(|\bsendBeacon\s*\(|\.send\s*\(|\bJSON\.stringify\s*\(/g)) {
     const args = balanced(s, x.index + x[0].length - 1);
     if (PROFILE.test(args)) refusals.push(`${rel}:${lineOf(s, x.index)}: an on-device profile key inside a request body (rule 3)`);
+    if (MOOD.test(args)) refusals.push(`${rel}:${lineOf(s, x.index)}: the session's mood inside a request (rule 6)`);
   }
 }
 if (scanned === 0) { console.log(`no-tracking: REFUSED -- no .js under ${relative(root, dir) || dir}; a gate that read nothing proves nothing`); process.exit(2); }

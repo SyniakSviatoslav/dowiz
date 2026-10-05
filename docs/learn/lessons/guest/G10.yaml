@@ -1,0 +1,72 @@
+# Lesson G10 (guest). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-SENSE (2026-10-04): taste, texture and aroma on the menu; the mood stays on the phone.
+id: G10
+role: guest
+module: menu
+order: 10
+covers: []
+title:
+  sq: "Shija, struktura dhe aroma"
+  en: "Taste, texture and aroma"
+  uk: "Смак, текстура й аромат"
+  ru: "Вкус, текстура и аромат"
+goal:
+  sq: "Lexoni si shijon një pjatë, filtroni sipas shijes dhe zgjidhni humorin e kësaj vizite."
+  en: "Read how a dish tastes, filter by taste and pick the mood of this visit."
+  uk: "Подивіться, який смак у страви, відфільтруйте за смаком і оберіть настрій цього візиту."
+  ru: "Посмотрите, какой вкус у блюда, отфильтруйте по вкусу и выберите настроение этого визита."
+steps:
+  - key: 1
+    anchor: menu.senseFilter
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.senseFilter"]'
+    title:
+      sq: "Sipas shijes"
+      en: "By taste"
+      uk: "За смаком"
+      ru: "По вкусу"
+    caption:
+      sq: "Djegës, jo djegës, krokant, kremoz, i tymosur... Punon edhe pa internet."
+      en: "Spicy, not spicy, crispy, creamy, smoky... It works offline too."
+      uk: "Гостре, не гостре, хрустке, кремове, копчене... Працює й без інтернету."
+      ru: "Острое, не острое, хрустящее, кремовое, копчёное... Работает и без интернета."
+  - key: 2
+    anchor: dish.sense
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="dish.sense"]'
+    title:
+      sq: "Si shijon"
+      en: "How it tastes"
+      uk: "Який на смак"
+      ru: "Какое на вкус"
+    caption:
+      sq: "Shiritat me numrin e tyre, struktura dhe aroma, siç i përshkroi kuzhina."
+      en: "Bars with their figures, the texture and the aroma, as the kitchen described them."
+      uk: "Смужки з цифрами, текстура й аромат — як їх описала кухня."
+      ru: "Полоски с цифрами, текстура и аромат — как их описала кухня."
+  - key: 3
+    anchor: menu.mood
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="menu.mood"]'
+    title:
+      sq: "Humori"
+      en: "The mood"
+      uk: "Настрій"
+      ru: "Настроение"
+    caption:
+      sq: "Vetëm për këtë vizitë dhe vetëm në këtë telefon: nuk ruhet, nuk dërgohet."
+      en: "For this visit and this phone only: not kept, not sent."
+      uk: "Лише на цей візит і на цьому телефоні: не зберігається й не надсилається."
+      ru: "Только на этот визит и на этом телефоне: не хранится и не отправляется."

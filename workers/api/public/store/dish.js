@@ -19,7 +19,8 @@ import { $, $$, esc, icon, sheet, closeSheet, fallbackArt, toast } from '/store/
 import { seaEvent } from '/store/sea.js';
 import { ui, k, ghost, stepper } from '/store/parts.js';
 import { allergenLine } from '/store/flags.js';
-import { noteOpen } from '/store/taste-device.js';
+import { noteOpen, guestNow } from '/store/taste-device.js';
+import { sheetLine } from '/store/sense-ui.js';
 
 /// The Sea's answer to a dish being added: a small pulse from the sheet, a
 /// smaller one from a card. Numbers are particle counts, not milliseconds.
@@ -78,16 +79,9 @@ function factsMarkup(p){
     ${approx ? `<p class="fact-note muted" data-t="approx"></p>` : ''}${taste}`;
 }
 
-/// The kitchen's taste profile: five axes, three levels, drawn as filled dots.
-const TASTE_AXES = ['spicy', 'sweet', 'salty', 'sour', 'richness'];
-const TASTE_ICON = { spicy: 'pepper', sweet: 'candy', salty: 'salt', sour: 'lemon-2', richness: 'flame' };
-const TASTE_LEVELS = 3;
-function tasteMarkup(p){
-  const tz = p.taste && typeof p.taste === 'object' ? p.taste : null;
-  const axes = tz ? TASTE_AXES.filter(a => Number(tz[a]) >= 1) : [];
-  if (!axes.length) return '';
-  return `<h3 class="dsec" data-t="taste"></h3><div class="taste-row-s">${axes.map(a => `<span class="taste-s">${icon(TASTE_ICON[a])}<span data-t="taste_${a}"></span><i class="tdots" aria-hidden="true">${Array.from({ length: TASTE_LEVELS }, (_, i) => `<b class="${i < Number(tz[a]) ? 'on' : ''}"></b>`).join('')}</i></span>`).join('')}</div>`;
-}
+/// The kitchen's taste, texture and aroma (W-SENSE): bars with their figures, chips, and "you may
+/// like it" against the guest's own vector on this phone. Nothing when nothing is declared.
+const tasteMarkup = p => sheetLine(p, guestNow());
 
 export function openDish(p){
   noteOpen(p.id); // the guest's own taste memory, when they turned it on (store/taste-device.js)
