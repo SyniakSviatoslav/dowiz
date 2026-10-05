@@ -137,7 +137,7 @@ fn one_seed(seed: u64, done: &mut Done) {
             _ => {
                 let complete = o["status"] == "REFUNDING";
                 let i = RefundIn { order_id: "r1".into(), location_id: "v1".into(), by: "p1".into(),
-                    reason: "venue_cancelled".into(), complete, now_ms: at, at_door: false, note: None };
+                    reason: "venue_cancelled".into(), complete, now_ms: at, at_door: false, note: None, card_amount: None, stripe_on: false };
                 let landed = refund::decide(&mut h, &mut stock, Some(&v), &i, "ALL").is_ok();
                 if landed && complete {
                     // What the object does after the log (`hubdo::refund`).

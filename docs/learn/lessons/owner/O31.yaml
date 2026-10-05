@@ -1,0 +1,107 @@
+# Lesson O31 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-REFUND: money back to a CARD through Stripe, whole or in parts. The card steps WAIT: they
+# need a card-paid order, and a recording must never send a real refund.
+id: O31
+role: owner
+module: refund
+order: 6
+covers: []
+title:
+  sq: "Kthim ne karte"
+  en: "Money back to a card"
+  uk: "Повернення на картку"
+  ru: "Возврат на карту"
+goal:
+  sq: "Ktheni ne karte nje porosi te paguar me karte, te gjithen ose nje pjese, dhe ndiqni pergjigjen e Stripe."
+  en: "Send a card-paid order's money back to the card, all of it or a part, and follow Stripe's answer."
+  uk: "Повернути гроші за оплачене карткою замовлення на картку, повністю або частково, і стежити за відповіддю Stripe."
+  ru: "Вернуть деньги за оплаченный картой заказ на карту, полностью или частично, и следить за ответом Stripe."
+steps:
+  - key: 1
+    anchor: order.refund
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="order.refund"]'
+    title:
+      sq: "Kthe parate"
+      en: "Refund"
+      uk: "Повернути кошти"
+      ru: "Вернуть деньги"
+    caption:
+      sq: "Fleta tregon sa u pagua me karte, sa me para ne dore dhe sa eshte kthyer."
+      en: "The sheet shows what the card paid, what was paid in cash and what already went back."
+      uk: "Аркуш показує, скільки сплачено карткою, скільки готівкою і скільки вже повернуто."
+      ru: "Лист показывает, сколько оплачено картой, сколько наличными и сколько уже возвращено."
+  - key: 2
+    anchor: refund.amount
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="refund.amount"]'
+    title:
+      sq: "Sa kthehet ne karte"
+      en: "How much goes back to the card"
+      uk: "Скільки повернути на картку"
+      ru: "Сколько вернуть на карту"
+    caption:
+      sq: "Parazgjedhur eshte gjithcka; shkruani me pak per nje kthim te pjesshem."
+      en: "Everything by default; type less for a partial refund."
+      uk: "За замовчуванням усе; введіть менше для часткового повернення."
+      ru: "По умолчанию всё; введите меньше для частичного возврата."
+  - key: 3
+    anchor: refund.go
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="refund.go"]'
+    title:
+      sq: "Dergo ne Stripe"
+      en: "Send to Stripe"
+      uk: "Надіслати в Stripe"
+      ru: "Отправить в Stripe"
+    caption:
+      sq: "Porosia shkon ne kthim dhe Stripe merr kerkesen; nje perseritje nuk kthen dy here."
+      en: "The order starts its refund and Stripe gets the request; a retry never refunds twice."
+      uk: "Замовлення переходить у повернення, і Stripe отримує запит; повтор ніколи не поверне двічі."
+      ru: "Заказ переходит в возврат, и Stripe получает запрос; повтор никогда не вернёт дважды."
+  - key: 4
+    anchor: order.cardAmount
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="order.cardAmount"]'
+    title:
+      sq: "Pjesa tjeter"
+      en: "The rest"
+      uk: "Решта"
+      ru: "Остаток"
+    caption:
+      sq: "Pas nje kthimi te pjesshem ose nje deshtimi, porosia tregon sa mbetet ne karte."
+      en: "After a partial refund or a failure, the order shows what is still on the card."
+      uk: "Після часткового повернення або збою замовлення показує, скільки ще на картці."
+      ru: "После частичного возврата или сбоя заказ показывает, сколько ещё на карте."
+  - key: 5
+    anchor: order.cardMore
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="order.cardMore"]'
+    title:
+      sq: "Kthe ne karte / Provo perseri"
+      en: "Refund to card / Try again"
+      uk: "Повернути на картку / Спробувати ще"
+      ru: "Вернуть на карту / Попробовать снова"
+    caption:
+      sq: "Kur Stripe konfirmon gjithe pjesen e kartes, porosia mbyllet vete si e rimbursuar."
+      en: "When Stripe confirms the whole card part, the order closes as refunded by itself."
+      uk: "Коли Stripe підтверджує всю частину картки, замовлення закривається як повернене саме."
+      ru: "Когда Stripe подтверждает всю часть карты, заказ закрывается как возвращённый сам."

@@ -182,6 +182,7 @@ async fn held(
                 }
             },
             // SMS (W-SMS): consent re-asked, budget, health -- `notify/sms/rail.rs`.
+            crate::stripe::refund::KIND => match crate::stripe::refund_io::send(env, place, e, now_ms, &mut verdicts).await { Some(ok) => ok, None => continue }, // W-REFUND
             crate::notify::sms::plan::KIND => match sms.send(place, &settings, &image, e, now_ms, &mut verdicts).await { Some(ok) => ok, None => continue },
             "whatsapp" => match &wa {
                 Some(cfg) => crate::channels::whatsapp_text(cfg, &e.to, &e.text).await.is_ok(),

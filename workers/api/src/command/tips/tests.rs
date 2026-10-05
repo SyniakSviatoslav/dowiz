@@ -127,7 +127,7 @@ fn refund(order: &Value, complete: bool, at: i64) -> Value {
         let view = OrderView { order_id: id.clone(), kind: 3, seq: (at - 1) as u64, order_json: o.to_string() };
         let input = RefundIn {
             order_id: id.clone(), location_id: "v1".into(), by: "owner".into(),
-            reason: "customer_request".into(), complete, now_ms: at, at_door: false, note: None,
+            reason: "customer_request".into(), complete, now_ms: at, at_door: false, note: None, card_amount: None, stripe_on: false,
         };
         refund_decide(hub, shelf, Some(&view), &input, "ALL").expect("the refund lands").0
     };

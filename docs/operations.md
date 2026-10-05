@@ -191,7 +191,8 @@ fixing, it is idempotent.
 
 An order past `PENDING` ends through a refund (`REFUNDING` to `COMPENSATED_REFUND`); a delivery
 refused at the door ends the courier's run the same way. `DELIVERED` and `PICKED_UP` are final by
-design. `e2e/kit-regression/drain-stuck-orders.mjs` is the caretaker's tool for test orders.
+design. Test orders are ended the same way, through the refund route (the old caretaker script that walked
+them to DELIVERED was deleted on 2026-10-04).
 
 ### The fiscal sender
 

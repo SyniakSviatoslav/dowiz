@@ -18,6 +18,9 @@ struct RefundBody {
     complete: bool,
     #[serde(default)]
     note: Option<String>,
+    /// W-REFUND: the card's share through Stripe; on a REFUNDING order, one more card refund.
+    #[serde(default)]
+    card_amount: Option<i64>,
 }
 
 /// `POST /api/staff/orders/:id/refund` — `{location_id, reason}` starts a
@@ -59,6 +62,8 @@ pub async fn refund(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
         now_ms: ctx.data.now_ms,
         at_door: false,
         note: body.note,
+        card_amount: body.card_amount,
+        stripe_on: ctx.env.secret("STRIPE_SECRET_KEY").is_ok(),
     };
     let out: RefundOut = match crate::command::send(&place, "refund", &input).await {
         Ok(v) => v,

@@ -23,7 +23,7 @@ const ref = id => ui.orderRef(id, ORDER_ID_SHOWN);
 // `new Set(['REJECTED', 'CANCELLED'])` here, and the same set again in the
 // storefront, the sea and the kit -- all four short by `COMPENSATED_REFUND`.
 import { REFUSED as DEAD } from '/lib/vocab.js';
-import { openRefund, moneyBack, REFUNDABLE } from '/admin/refund.js';
+import { openRefund, moneyBack, REFUNDABLE, cardLine, refundToCard } from '/admin/refund.js';
 import { ui, k, btn, iconBtn, empty, choice, chips } from '/admin/parts.js';
 /// After a refund step: the list, then the order's own sheet again.
 async function reload(id){ await loadOrders(); await rerender(); openOrder(id); }
@@ -284,6 +284,7 @@ export function openOrder(id){
     <div class="line total"><span class="n" data-t="total"></span>${moneyEl(o.total ?? 0)}</div>
     ${o.rejection_reason ? `<p class="err">${esc(o.rejection_reason)}</p>` : ''}
     ${o.feedback?.text ? `<div class="fact">${icon('message-2')}<span class="v">${esc(o.feedback.text)}</span></div>` : ''}
+    ${cardLine(o)}
     ${o.refund?.note ? `<div class="fact">${icon('note')}<span class="v"><span class="k" data-t="refusedNote"></span>${esc(o.refund.note)}</span></div>` : ''}
     ${foodBack(o) ? `<p class="eyebrow mt-3" data-t="foodBack"></p><p class="muted" data-t="foodBackHint"></p>
     <div class="btn-row">${btn({ variant: 'primary', icon: 'refresh', key: 'resell', data: { ret: 'resell', o: o.id }, tour: 'order.resell' })}
@@ -305,6 +306,7 @@ export function openOrder(id){
     const ret = e.target.closest('[data-ret]'); if (ret) return chooseFoodBack(ret.dataset.o, ret.dataset.ret, ret);
     const rf = e.target.closest('[data-refund]'); if (rf) return openRefund(rf.dataset.refund, () => reload(rf.dataset.refund));
     const mb = e.target.closest('[data-moneyback]'); if (mb) return moneyBack(mb.dataset.moneyback, mb, () => reload(mb.dataset.moneyback));
+    const cm = e.target.closest('[data-cardmore]'); if (cm) return refundToCard(cm.dataset.cardmore, cm, () => reload(cm.dataset.cardmore));
   };
   $('#oCopy').onclick = async () => { try { await navigator.clipboard.writeText(orderText(o)); toast(t('copied')); } catch { toast(orderText(o)); } };
   if (o.courier_id) loadChat(o.id);

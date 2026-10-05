@@ -23,7 +23,7 @@ fn view(o: &Value) -> OrderView {
 fn input(reason: &str) -> RefundIn {
     RefundIn {
         order_id: "o1".into(), location_id: "v1".into(), by: "p1".into(),
-        reason: reason.into(), complete: false, now_ms: NOW, at_door: false, note: None,
+        reason: reason.into(), complete: false, now_ms: NOW, at_door: false, note: None, card_amount: None, stripe_on: false,
     }
 }
 

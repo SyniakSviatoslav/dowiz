@@ -30,7 +30,6 @@
 
 use super::amend::next_seq;
 use super::pay::settles;
-use super::room_rules::OTHER_MAX_CHARS;
 use super::Refused;
 use crate::hubdo::OrderView;
 use dowiz_hub::EventKind;
@@ -38,43 +37,8 @@ use dowiz_kernel::order_machine::{assert_transition, OrderStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-/// Why an order was refunded: a word the owner can count, as `VoidReason`.
-/// `refused_at_door` is the one the blueprint names (P1-4); the rest are the
-/// memo's abandoned orders (customer rang off, venue closed, no courier).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RefundReason {
-    RefusedAtDoor,
-    VenueCancelled,
-    CustomerRequest,
-    PaymentError,
-    Other(String),
-}
-
-impl RefundReason {
-    pub fn parse(s: &str) -> Option<RefundReason> {
-        match s.trim() {
-            "refused_at_door" => Some(RefundReason::RefusedAtDoor),
-            "venue_cancelled" => Some(RefundReason::VenueCancelled),
-            "customer_request" => Some(RefundReason::CustomerRequest),
-            "payment_error" => Some(RefundReason::PaymentError),
-            other => {
-                let text = other.strip_prefix("other:")?.trim();
-                (!text.is_empty() && text.chars().count() <= OTHER_MAX_CHARS)
-                    .then(|| RefundReason::Other(text.to_string()))
-            }
-        }
-    }
-
-    pub fn word(&self) -> String {
-        match self {
-            RefundReason::RefusedAtDoor => "refused_at_door".into(),
-            RefundReason::VenueCancelled => "venue_cancelled".into(),
-            RefundReason::CustomerRequest => "customer_request".into(),
-            RefundReason::PaymentError => "payment_error".into(),
-            RefundReason::Other(t) => format!("other:{t}"),
-        }
-    }
-}
+/// The reason words (moved to `refund/reason.rs` when the card half landed).
+pub use reason::RefundReason;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefundIn {
@@ -101,6 +65,15 @@ pub struct RefundIn {
     /// "said they never ordered". Optional, never required; bounded.
     #[serde(default)]
     pub note: Option<String>,
+    /// THE CARD'S SHARE (W-REFUND, `refund/card.rs`): how much goes back to the
+    /// card through Stripe, in the order's units; `None` = all of it. On an
+    /// order already REFUNDING it asks for one more card refund.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card_amount: Option<i64>,
+    /// The Worker holds a Stripe secret key (`stripe::key`), read by the
+    /// route from its own env: a card refund is queued, not by hand.
+    #[serde(default)]
+    pub stripe_on: bool,
 }
 
 /// A note is a sentence, not a document.
@@ -295,6 +268,9 @@ pub fn decide(
 /// The food a refused delivery brought back; the wallet's share (D12).
 pub mod returned;
 pub mod wallet;
+/// The card's share through Stripe (W-REFUND).
+pub mod card;
+pub mod reason;
 
 #[cfg(test)]
 mod tests;

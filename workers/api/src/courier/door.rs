@@ -69,6 +69,8 @@ pub async fn refused(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
             at_door: true,
             // `{note?}`: what the courier saw. An unreadable body is no note.
             note: serde_json::from_str::<Value>(&raw).ok().and_then(|b| b.get("note").and_then(Value::as_str).map(String::from)),
+            card_amount: None,
+            stripe_on: false,
         };
         let claim = idem.claim();
         let claimed = crate::idempotency::commit::Claimed { input: &input, idem: claim };

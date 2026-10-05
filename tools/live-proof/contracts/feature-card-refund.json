@@ -1,0 +1,112 @@
+{
+  "id": "feature-card-refund",
+  "name": "card-refund",
+  "contract_version": "1.0.0",
+  "class": "NEEDS-KEY",
+  "description": {
+    "en": "The Stripe half of a refund (W-REFUND). When an order the card paid for is refunded (POST /api/staff/orders/:id/refund, owner or staff holding `void`), the venue's object records a card attempt on the order (`refund.card.attempts[n]`: amount in the order's units, status `queued`, the Idempotency-Key sha256(venue|order|n)) and queues ONE outbox entry of kind `stripe_refund` in the same turn. The venue's drain (its alarm) sends POST https://api.stripe.com/v1/refunds with payment_intent = the PI the payment webhook recorded, amount = the card part converted to Stripe's units (a lek is 100 of them: ALL is two-decimal to Stripe), metadata {order_id, venue, key, attempt}, `Idempotency-Key` and `Stripe-Version: 2024-06-20`; retries are the outbox's (six over ~30 min, same key), a 4xx is final. Stripe's answer and its signed refund.* / charge.refunded webhooks write the refund id and status onto the attempt (de-duplicated by event fingerprint); when Stripe says `succeeded` for the WHOLE card part and the card was all the money taken, the order moves REFUNDING -> COMPENSATED_REFUND by itself. A refund event naming another venue or another payment is refused (200, never applied). Partial refunds: amount <= card paid - succeeded - in flight. The guest's order page says how much went back once Stripe confirms. Without STRIPE_SECRET_KEY the record says `manual` and the person refunds by hand in Stripe, then marks it refunded (`complete: true`). Also fixed on the way: create_intent sent lek unconverted (1/100 of the price) and the webhook wrote Stripe's units back as lek.",
+    "uk": "Повернення на картку через Stripe: замовлення, оплачене карткою, повертається повністю або частинами з ключем ідемпотентності; вебхук Stripe закриває замовлення, коли вся карткова частина повернена."
+  },
+  "producer": [
+    { "file": "workers/api/src/command/refund/card.rs", "line": 129, "what": "decide_card(): the card attempt planned (plan(), line 80) before any append, recorded on the order in the refund's turn; idem_key() line 38" },
+    { "file": "workers/api/src/hubdo/refund.rs", "line": 25, "what": "the object turn: STRIPE_SECRET_KEY present -> the job; enqueue_card() writes the outbox entry after the log" },
+    { "file": "workers/api/src/stripe/refund_io.rs", "line": 91, "what": "send(): the drain's arm; post() line 21 (POST /v1/refunds); record() line 56 writes Stripe's word and closes the order" },
+    { "file": "workers/api/src/stripe/refund.rs", "line": 90, "what": "form(): the request body; classify() line 117; to_stripe()/from_stripe() the units" },
+    { "file": "workers/api/src/outbox/rails.rs", "line": 185, "what": "the drain routes kind stripe_refund to refund_io::send" }
+  ],
+  "consumer": [
+    { "file": "workers/api/src/stripe.rs", "line": 234, "what": "webhook(): refund events, past the same signature check, to stripe/refund_hook.rs handle()" },
+    { "file": "workers/api/src/command/refund/card.rs", "line": 209, "what": "apply(): venue + payment checks, fingerprint de-dup, status rank; close() line 281: COMPENSATED_REFUND only when covered" },
+    { "file": "workers/api/public/admin/refund.js", "line": 58, "what": "openRefund(): card part / cash part / already refunded, amount field; cardLine() line 94: pending / refunded / failed: <reason> - try again; refundToCard() line 109" },
+    { "file": "workers/api/public/store/refund-note.js", "line": 26, "what": "the guest's order page: refunded N, 5-10 days to reach the card" }
+  ],
+  "transport": [
+    { "method": "POST", "path": "/api/staff/orders/:id/refund", "auth": "Bearer owner | staff with cap void", "lib_rs_line": 392 },
+    { "method": "POST", "path": "/api/webhooks/stripe", "auth": "Stripe-Signature (STRIPE_WEBHOOK_SECRET)", "lib_rs_line": 365 },
+    { "method": "POST", "path": "https://api.stripe.com/v1/refunds", "headers": ["Authorization: Bearer STRIPE_SECRET_KEY", "Idempotency-Key: dowiz-rf-<40 hex>", "Stripe-Version: 2024-06-20", "Content-Type: application/x-www-form-urlencoded"], "body": "payment_intent, amount (Stripe units), metadata[order_id|venue|key|attempt]" }
+  ],
+  "external": { "service": "Stripe", "doc": "https://docs.stripe.com/api/refunds", "currencies": "https://docs.stripe.com/currencies (ALL is not zero-decimal)" },
+  "external_api_version": "2024-06-20 (Stripe-Version pinned on POST /v1/refunds only; create_intent sends none; webhook bodies follow the endpoint's version set in the Stripe dashboard)",
+  "auth": {
+    "secrets": ["STRIPE_SECRET_KEY (Worker secret, ONE for the whole platform: there is no per-venue key today)", "STRIPE_WEBHOOK_SECRET", "STRIPE_PUBLISHABLE_KEY", "QA_STRIPE_TEST_SECRET_KEY (sk_test_..., the SAME test account, for the probe to confirm the PI with pm_card_visa and read refunds back)", "OWNER_EMAIL", "OWNER_PASSWORD"],
+    "where": "/root/.dowiz_owner (probe); wrangler secrets (Worker). The probe REFUSES a key that is not sk_test_."
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["location_id"], "additionalProperties": false,
+    "properties": {
+      "location_id": { "type": "string" },
+      "reason": { "type": "string" },
+      "note": { "type": ["string", "null"] },
+      "complete": { "type": "boolean" },
+      "card_amount": { "type": "integer", "minimum": 1 }
+    }
+  },
+  "card_record_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["pi", "paid", "currency"],
+    "properties": {
+      "pi": { "type": "string" }, "paid": { "type": "integer", "minimum": 1 }, "currency": { "type": "string" },
+      "manual": { "type": "boolean" },
+      "seen": { "type": "array", "items": { "type": "string" } },
+      "attempts": { "type": "array", "items": { "$ref": "#/$defs/attempt" } }
+    },
+    "$defs": {
+      "attempt": {
+        "type": "object", "required": ["n", "amount", "status", "by", "at"],
+        "properties": {
+          "n": { "type": "integer", "minimum": 1 }, "amount": { "type": "integer", "minimum": 0 },
+          "key": { "type": "string" }, "id": { "type": "string" },
+          "status": { "enum": ["queued", "pending", "requires_action", "succeeded", "failed", "canceled"] },
+          "failure": { "type": "string" }, "by": { "type": "string" }, "at": { "type": "integer" }, "told_at": { "type": "integer" }
+        }
+      }
+    }
+  },
+  "stripe_refund_request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "the form fields of POST /v1/refunds, as an object",
+    "type": "object", "required": ["payment_intent", "amount", "metadata"],
+    "properties": {
+      "payment_intent": { "type": "string" }, "amount": { "type": "integer", "minimum": 1 },
+      "metadata": { "type": "object", "required": ["order_id", "venue", "key", "attempt"],
+        "properties": { "order_id": { "type": "string" }, "venue": { "type": "string" }, "key": { "type": "string" }, "attempt": { "type": "string" } } }
+    }
+  },
+  "stripe_refund_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["id", "object", "amount", "currency", "status", "payment_intent", "metadata"],
+    "properties": {
+      "id": { "type": "string" }, "object": { "const": "refund" }, "amount": { "type": "integer", "minimum": 1 },
+      "currency": { "type": "string" }, "payment_intent": { "type": "string" },
+      "status": { "enum": ["pending", "requires_action", "succeeded", "failed", "canceled"] },
+      "failure_reason": { "type": ["string", "null"] },
+      "metadata": { "type": "object", "required": ["order_id", "venue", "key"] }
+    }
+  },
+  "webhook_event_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["id", "type", "data"],
+    "properties": {
+      "id": { "type": "string" },
+      "type": { "enum": ["refund.created", "refund.updated", "refund.failed", "charge.refund.updated", "charge.refunded"] },
+      "data": { "type": "object", "required": ["object"], "properties": { "object": { "type": "object" } } }
+    }
+  },
+  "webhook_ack_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object", "required": ["ok"],
+    "properties": {
+      "ok": { "type": "boolean" }, "ignored": { "type": "string" },
+      "refunds": { "type": "array", "items": { "type": "object", "required": ["order"] } }
+    }
+  },
+  "matrix": "TESTED-INMEM",
+  "tests_inmem": [
+    "workers/api/src/command/refund/card/tests.rs (8 tests: key stability, amount bound, foreign venue/payment, close only on covered succeeded, failure + try again, dashboard refund, no key, cash order)",
+    "workers/api/src/stripe/refund/tests.rs (5 tests: units ALL x100, refusals, form, entry, classify)",
+    "workers/api/src/stripe/refund_hook/tests.rs (3 end-to-end in memory: half then rest via route/outbox/drain/fake Stripe/webhook; a 4xx refusal; no key)"
+  ],
+  "probe": "tools/live-proof/probes/feature-card-refund.mjs: Stripe TEST mode only on qa-durres: card order -> PI confirmed with pm_card_visa -> webhook marks paid -> refund half -> Stripe refund read back -> the rest -> COMPENSATED_REFUND -> charge.amount_refunded == the whole; rc 3 NEEDS-KEY without QA_STRIPE_TEST_SECRET_KEY.",
+  "last_verified": null
+}

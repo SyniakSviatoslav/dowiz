@@ -82,7 +82,9 @@ pub const STORES: &[Store] = &[
     // removed when the order ends and in any case after two days
     // (notify/sms/checkout.rs STAMP_TTL_MS); "sms_h" the venue's SMS counts and
     // last failure, no person.
-    Store { image: "outbox", kinds: &["o", "print", "route", "digest", "dg", "h", "drain", "sms", "sms_o", "sms_h"], home: Venue,
+    // W-REFUND: a "stripe_refund" entry carries an order id, the venue, the
+    // PaymentIntent id and an amount until Stripe answers; no name, no card.
+    Store { image: "outbox", kinds: &["o", "print", "route", "digest", "dg", "h", "drain", "sms", "sms_o", "sms_h", "stripe_refund"], home: Venue,
         holds: &[Name, Phone, Address, OrderContent, Messages, Device], subjects: &[Customer, Courier, Staff, Owner],
         purpose: P::Kitchen, basis: Basis::Contract,
         retention: Retention::UntilDone("removed once delivered (outbox/rails.rs); given up after six tries"),

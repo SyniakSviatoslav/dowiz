@@ -80,6 +80,9 @@ fn a_card_order_is_paid_once_by_a_signed_webhook() {
     let r = hook(&site, &ghost, &signed(&ghost, now_s));
     assert_eq!(r.status_code(), 200);
     assert!(r.body_value()["unapplied"].is_string(), "{}", r.body_str());
-    let other = json!({"id": "evt_3", "type": "charge.refunded", "data": {"object": {}}}).to_string();
-    assert_eq!(hook(&site, &other, &signed(&other, now_s)).body_value()["ignored"], "charge.refunded");
+    let other = json!({"id": "evt_3", "type": "customer.created", "data": {"object": {}}}).to_string();
+    assert_eq!(hook(&site, &other, &signed(&other, now_s)).body_value()["ignored"], "customer.created");
+    // W-REFUND: a refund event is the refund hook's now; one naming no order is acknowledged.
+    let bare = json!({"id": "evt_4", "type": "charge.refunded", "data": {"object": {}}}).to_string();
+    assert_eq!(hook(&site, &bare, &signed(&bare, now_s)).body_value()["ignored"], "no order named");
 }

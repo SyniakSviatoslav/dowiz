@@ -26,6 +26,7 @@ import { billMarkup, mountBill } from '/store/table.js';
 import { stampsMarkup, mountStamps } from '/store/stamps.js';
 import { venueTastePlace, mountVenueTaste } from '/store/taste-venue.js';
 import { chatMarkup, mountChat } from '/store/chat.js';
+import { cardRefundMarkup } from '/store/refund-note.js';
 // Generated from the kernel's `OrderStatus::took_money` -- see `/lib/vocab.js`.
 // The hand copy this replaces was `new Set(['REJECTED', 'CANCELLED'])`, missing
 // the state a refund ends in.
@@ -262,6 +263,7 @@ export function openTracking(order){
         ${chatMarkup(order)}
         ${goodReviews().length ? `<section class="credits-wrap"><p class="eyebrow" data-t="whatTheySay"></p><div class="credits" id="credits"></div></section>` : ''}
         <div class="ep-more">
+          ${cardRefundMarkup(order)}
           ${cryptoBlock(order)}
           ${follow}
           ${!dead && st !== 'DELIVERED' && tokenFor(order.id) ? '<div id="pushHere"></div>' : ''}

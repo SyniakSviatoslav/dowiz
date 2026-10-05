@@ -67,6 +67,9 @@ pub async fn create_intent(
         return Err(PayError::Upstream("amount must be positive".into()));
     }
     let sk = key(env)?;
+    // In Stripe's units (`stripe/refund.rs`: a lek is 100 of them).
+    let amount_minor = refund::to_stripe(amount_minor, currency)
+        .ok_or_else(|| PayError::Upstream(format!("{currency} cannot be charged through Stripe")))?;
     let body = format!(
         "amount={amount_minor}&currency={}&automatic_payment_methods[enabled]=true&metadata[order_id]={}",
         currency.to_lowercase(),
@@ -226,6 +229,10 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
         Err(e) => return Response::error(format!("unreadable event: {e}"), 400),
     };
 
+    // A REFUND'S EVENT (W-REFUND): `stripe/refund_hook.rs`, past the same signature.
+    if refund_hook::is_refund_event(&ev.kind) {
+        return refund_hook::handle(&req, &ctx, &ev.id, &ev.kind, &ev.data.object).await;
+    }
     // Anything else is acknowledged and ignored: an unhandled type is not an
     // error, and answering non-200 would make Stripe retry it forever.
     if ev.kind != "payment_intent.succeeded" {
@@ -248,6 +255,14 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
         .get("amount_received")
         .and_then(|x| x.as_i64())
         .unwrap_or(0);
+    // Back into the order's units; an event without a currency is read as before.
+    let amount = match ev.data.object.get("currency").and_then(|c| c.as_str()) {
+        Some(c) => refund::from_stripe(amount, c).unwrap_or_else(|| {
+            log_error!("stripe.webhook: {amount} {c} is not a whole amount dowiz can hold; recorded as sent");
+            amount
+        }),
+        None => amount,
+    };
     let intent_id = ev
         .data
         .object
@@ -316,6 +331,11 @@ pub fn ack(applied: &std::result::Result<bool, String>, order_id: &str) -> (u16,
         Err(e) => (503, serde_json::json!({ "ok": false, "retry": e })),
     }
 }
+
+/// The card half of a refund (W-REFUND): units and form, the send, the webhook.
+pub mod refund;
+pub mod refund_hook;
+pub mod refund_io;
 
 #[cfg(test)]
 #[path = "stripe/tests.rs"]
