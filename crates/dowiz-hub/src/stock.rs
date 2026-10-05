@@ -231,6 +231,10 @@ pub mod basket;
 pub mod act;
 /// Records in the chain that never move the shelf: supplier cards, orders sent (W-STOCK P5).
 pub mod notes;
+/// Where a supply is -- kitchen, bar, freezer -- and transfers between them (P12).
+pub mod storages;
+/// Raw-fish freezing records and the HACCP traceability export (P13).
+pub mod haccp;
 
 /// W-AUDIT S7 (2026-09-27): the recipe is read through brackets inside names
 /// and never from the next array in the record.
@@ -249,3 +253,8 @@ mod bom_audit_tests {
         assert_eq!(nested.len(), 2, "a nested array inside a line does not end the recipe: {nested:?}");
     }
 }
+
+/// P12's old-image rule as a golden (W-STORE).
+#[cfg(test)]
+#[path = "stock/oldimage_tests.rs"]
+mod oldimage_tests;

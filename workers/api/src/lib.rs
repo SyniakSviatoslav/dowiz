@@ -461,6 +461,7 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .get_async("/api/owner/stock", |r, c| edge::run(r, c, services::operations::stock::stock))
         .post_async("/api/owner/stock/:kind", |r, c| edge::run(r, c, services::operations::stock::stock_move))
         .get_async("/api/owner/stock/waste", |r, c| edge::run(r, c, services::operations::waste::waste_report))
+        .get_async("/api/owner/stock/haccp", |r, c| edge::run(r, c, services::operations::stock::haccp::export))
         .post_async("/api/owner/supplies", |r, c| edge::run(r, c, services::operations::supplies::set_supply))
         .post_async("/api/owner/supplies/:id/retire", |r, c| edge::run(r, c, services::operations::supplies::retire_supply))
         .post_async("/api/owner/supplies/bulk", |r, c| edge::run(r, c, services::operations::supplies::quick::add_supplies))

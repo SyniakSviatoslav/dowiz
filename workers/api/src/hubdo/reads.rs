@@ -11,6 +11,7 @@
 //!   GET /fold/stock?now=
 //!   GET /fold/week_top?venue=&now=   the storefront's "most ordered this week" (W-MR0)
 //!   GET /fold/prep?venue=&now=[&day=]   (W-PREP, `forecast.rs`)
+//!   GET /fold/haccp?kind=&from=&to=  the HACCP CSV (P13, W-STORE, `stock/haccp.rs`)
 
 use super::HubImages;
 use worker::*;
@@ -51,6 +52,7 @@ impl HubImages {
             "prep" => self.fold_prep(req).await,
             "exceptions" => self.fold_exceptions(req).await,
             "week_top" => self.fold_week_top(req).await,
+            "haccp" => self.fold_haccp(req).await,
             _ => Response::error("no such fold", 404),
         }
     }
@@ -143,5 +145,17 @@ impl HubImages {
         let (_, listed) = self.orders_view().await?;
         let orders = crate::services::orders::mine::of_venue(listed, &venue);
         Response::from_json(&crate::services::analytics::week_top::public(&orders, zone, now))
+    }
+
+    /// See `services::operations::stock::haccp::fold`: one replay of the
+    /// stock log, the CSV alone crosses.
+    pub(super) async fn fold_haccp(&self, req: &Request) -> Result<Response> {
+        let (kind, from, to) = (query(req, "kind")?.unwrap_or_default(), query(req, "from")?, query(req, "to")?);
+        let cat = self.catalogue().await?;
+        let (_, stock) = self.stock_log().await?;
+        match crate::services::operations::stock::haccp::fold(&cat, &stock, &kind, from.as_deref(), to.as_deref()) {
+            Ok(csv) => Response::ok(csv),
+            Err((status, why)) => Response::error(why, status),
+        }
     }
 }

@@ -61,6 +61,8 @@ fn every_key_round_trips_and_the_movement_is_untouched() {
         value: Some(-12),
         by: Some("p_anna".into()),
         uq: Some(773_810),
+        store: Some(r#"freezer","store":"bar"#.into()),
+        treated: Some("CERT-1".into()),
     };
     let mut log = StockLog::create_sized(64 * 1024).unwrap();
     log.append_with(&recv("salmon", 500), &meta).unwrap();

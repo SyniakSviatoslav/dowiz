@@ -126,6 +126,10 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn, expiring_due: bool) -> Resul
     if input.kind == super::aliases::KIND {
         return super::aliases::run(log, input);
     }
+    // STORAGES, TRANSFERS, FREEZING RECORDS (P12/P13, W-STORE): notes, never a movement.
+    if super::storages::is_mine(&input.kind) {
+        return super::storages::run(log, input);
+    }
     let body: moves::StockMoveIn = serde_json::from_value(input.body.clone()).map_err(|e| (400, format!("bad request body: {e}")))?;
     let shelf = |id: &str| input.supplies.get(id).and_then(|s| s.shelf_days);
     let plan = moves::plan(&input.kind, body, &input.by, input.now_ms, input.today, shelf)?;

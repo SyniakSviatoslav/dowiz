@@ -1,0 +1,240 @@
+{
+  "id": "feature-stock-storages",
+  "name": "stock.storages",
+  "contract_version": "1.0.0",
+  "class": "LIVE-NOW",
+  "description": {
+    "en": "Named storages per venue (P12, W-STORE): kitchen, bar and freezer built in, more named by the owner; a storage is renamed or archived (never deleted, refused while it holds stock). A transfer {item, qty, from, to} is a NOTE on the stock log: it never makes or destroys stock (ledger, cost, lots, carry and old checkpoints byte-equal); per-storage levels are a fold of each record's on_hand delta into the record's `store` key, else the storage that last received the item (Poster's rule), else kitchen -- so the storages always sum to onHand. Every record written before storages is the kitchen's. A delivery, write-off, prep or count may name its storage (`store`); a count in one storage tells the shelf that storage plus every other one. Read back in GET /api/owner/stock: `storages` and each supply's `byStore {stores, home}`.",
+    "uk": "Склади закладу (кухня, бар, морозильник і свої): переміщення ніколи не створює і не знищує залишок; залишок по складах — згортка журналу, старі образи без змін."
+  },
+  "producer": {
+    "file": "workers/api/src/services/operations/stock/storages.rs",
+    "line": 78,
+    "what": "run(): kinds storage / moved -> dowiz_hub StockLog::put_storage / move_stock (crates/dowiz-hub/src/stock/storages.rs)"
+  },
+  "consumer": {
+    "file": "workers/api/public/admin/stock-storages.js",
+    "line": 14,
+    "what": "open(): storage filter, per-storage rows, Move sheet (openMove line 47), count of one storage, storage cards; ingredients.js openMove sends `store` and `treated`"
+  },
+  "transport": [
+    {
+      "method": "POST",
+      "path": "/api/owner/stock/moved",
+      "body": "{item, qty, from, to}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/owner/stock/storage",
+      "body": "{card: {id?, name, archived?}}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/owner/stock/received|wasted|stocktake|count|produced",
+      "body": "... plus store?: <storage id>, received also treated?: <paper no.>"
+    },
+    {
+      "method": "GET",
+      "path": "/api/owner/stock",
+      "field": "storages, supplies[].byStore"
+    }
+  ],
+  "external": null,
+  "auth": {
+    "secrets": [
+      "OWNER_EMAIL",
+      "OWNER_PASSWORD"
+    ],
+    "where": "/root/.dowiz_owner"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "item": {
+        "type": "string",
+        "minLength": 1
+      },
+      "qty": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "from": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32
+      },
+      "to": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32
+      },
+      "store": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32
+      },
+      "lot": {
+        "type": "string"
+      },
+      "expiry": {
+        "type": "string"
+      },
+      "treated": {
+        "type": "string",
+        "maxLength": 80
+      },
+      "card": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "moved_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "ok",
+      "kind",
+      "item",
+      "qty",
+      "from",
+      "to"
+    ],
+    "properties": {
+      "ok": {
+        "const": true
+      },
+      "kind": {
+        "const": "moved"
+      },
+      "item": {
+        "type": "string"
+      },
+      "qty": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "from": {
+        "type": "string"
+      },
+      "to": {
+        "type": "string"
+      }
+    }
+  },
+  "storage_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "ok",
+      "kind",
+      "id",
+      "archived"
+    ],
+    "properties": {
+      "ok": {
+        "const": true
+      },
+      "kind": {
+        "const": "storage"
+      },
+      "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32
+      },
+      "archived": {
+        "type": "boolean"
+      }
+    }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "supplies",
+      "storages"
+    ],
+    "properties": {
+      "storages": {
+        "type": "array",
+        "minItems": 3,
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "name",
+            "archived",
+            "builtIn",
+            "default"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            },
+            "name": {
+              "type": "string"
+            },
+            "archived": {
+              "type": "boolean"
+            },
+            "builtIn": {
+              "type": "boolean"
+            },
+            "default": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "supplies": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "onHand",
+            "byStore"
+          ],
+          "properties": {
+            "onHand": {
+              "type": "integer"
+            },
+            "byStore": {
+              "type": "object",
+              "required": [
+                "stores",
+                "home"
+              ],
+              "properties": {
+                "stores": {
+                  "type": "object"
+                },
+                "home": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "probe": "node tools/live-proof/probes/stock-storages.mjs (main runs it on qa-durres after deploy)",
+  "last_verified": null
+}

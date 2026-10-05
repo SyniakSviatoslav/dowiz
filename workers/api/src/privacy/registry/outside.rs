@@ -195,6 +195,8 @@ pub const BROWSER: &[DeviceKey] = &[
     prefix("dw_guide_", &[], "admin"),
     // Lesson progress (lib/learn.js), one index per app: lesson ids and done/paused, nothing personal.
     prefix("dw_learn_", &[], "admin"),
+    // W-STORE: the storage this device sends deliveries to (admin/stock-storages-logic.js), a storage id, nothing personal.
+    key("dowiz.recvStore", &[], "admin"),
     // The courier app (courier/).
     key("dw_c_jwt", &[Session], "courier"),
     key("dw_c_last", &[Address, OrderContent], "courier"),

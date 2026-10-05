@@ -30,6 +30,10 @@ pub mod order_list;
 pub mod digest;
 /// What a supplier's invoices call our supplies, as notes on the log (W-OCR P10/P11).
 pub mod aliases;
+/// Storages, transfers and raw-fish freezing records, as notes on the log (P12/P13, W-STORE).
+pub mod storages;
+/// The HACCP traceability export: lot -> orders, order -> lots, the freezing log (P13, W-STORE).
+pub mod haccp;
 pub use moves::StockMoveIn;
 #[cfg(test)]
 use moves::movement;
@@ -173,6 +177,8 @@ pub fn shelf(cat: &dowiz_hub::catalog::Catalog, log: &dowiz_hub::stock::StockLog
         "supplierCards": cards, "orderList": list,
         // W-OCR: what each supplier's invoices are known to say (`aliases`).
         "supplierAliases": aliases::fold(log),
+        // P12 (W-STORE): the venue's storages; each row carries its levels per storage.
+        "storages": storages::list(log),
     }))
 }
 

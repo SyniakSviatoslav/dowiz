@@ -128,6 +128,8 @@ pub fn extras(id: &str, basis: i64, j: &Journal, today: i64) -> Value {
         "measuredCookPm": last_pm("cook"),
         "lastCount": last_count,
         "moves": tail(moves, HISTORY),
+        // P12: where it is, per storage, and where the next sale draws from.
+        "byStore": super::storages::levels(j, id),
     })
 }
 

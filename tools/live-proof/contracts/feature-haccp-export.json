@@ -1,0 +1,152 @@
+{
+  "id": "feature-haccp-export",
+  "name": "stock.haccp_export",
+  "contract_version": "1.0.0",
+  "class": "LIVE-NOW",
+  "description": {
+    "en": "Raw-fish freezing and traceability (P13, W-STORE). In-house: POST frozen {item, lot, hours, tempC, store?} writes a note on the stock log and answers which EU Regulation 853/2004 Annex III Section VIII rule it meets (-20C/24h or -35C/15h, else null) -- it never blocks a sale. Supplier-treated: the delivery's `treated` paper number. GET /api/owner/stock/haccp?kind=lots|orders|freezing&from=yyyy-mm-dd&to=yyyy-mm-dd (OWNER only; the venue's local days, inclusive, at most 400 days) answers text/csv derived from one replay of the stock log: lot -> orders, order -> lots (each draw's effect on the FEFO lots) and the freezing log. Integer quantities in the supply's base unit; rows recorded before records were dated have an empty date and are always included; text cells starting with = + - @ are prefixed with '.",
+    "uk": "Журнал заморожування сирої риби (правила ЄС 853/2004) і CSV-експорт простежуваності партія -> замовлення, замовлення -> партії для інспектора; лише власник."
+  },
+  "producer": {
+    "file": "workers/api/src/services/operations/stock/haccp.rs",
+    "line": 117,
+    "what": "fold(): StockLog::trace (crates/dowiz-hub/src/stock/haccp.rs:152) -> csv(); the route export() line 136; the frozen kind in stock/storages.rs run()"
+  },
+  "consumer": {
+    "file": "workers/api/public/admin/stock-haccp.js",
+    "line": 18,
+    "what": "open(): freezing form with the live rule pill, export buttons (download() line 61)"
+  },
+  "transport": [
+    {
+      "method": "POST",
+      "path": "/api/owner/stock/frozen",
+      "body": "{item, lot, hours, tempC, store?}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/owner/stock/haccp?kind=&from=&to=",
+      "content_type": "text/csv; charset=utf-8"
+    }
+  ],
+  "external": {
+    "name": "EU Regulation (EC) No 853/2004 Annex III Section VIII Chapter III D",
+    "version": "consolidated text; -20 C >= 24 h or -35 C >= 15 h"
+  },
+  "auth": {
+    "secrets": [
+      "OWNER_EMAIL",
+      "OWNER_PASSWORD"
+    ],
+    "where": "/root/.dowiz_owner"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "item",
+      "lot",
+      "hours",
+      "tempC"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "item": {
+        "type": "string",
+        "minLength": 1
+      },
+      "lot": {
+        "type": "string",
+        "minLength": 1
+      },
+      "hours": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2000
+      },
+      "tempC": {
+        "type": "integer",
+        "minimum": -80,
+        "maximum": 0
+      },
+      "store": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32
+      }
+    }
+  },
+  "frozen_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "ok",
+      "kind",
+      "item",
+      "lot",
+      "hours",
+      "tempC",
+      "rule"
+    ],
+    "properties": {
+      "ok": {
+        "const": true
+      },
+      "kind": {
+        "const": "frozen"
+      },
+      "item": {
+        "type": "string"
+      },
+      "lot": {
+        "type": "string"
+      },
+      "hours": {
+        "type": "integer"
+      },
+      "tempC": {
+        "type": "integer"
+      },
+      "rule": {
+        "enum": [
+          "-20C/24h",
+          "-35C/15h",
+          null
+        ]
+      }
+    }
+  },
+  "csv_headers": {
+    "lots": [
+      "item",
+      "name",
+      "lot",
+      "date",
+      "order",
+      "qty"
+    ],
+    "orders": [
+      "order",
+      "date",
+      "item",
+      "name",
+      "lot",
+      "qty"
+    ],
+    "freezing": [
+      "date",
+      "item",
+      "name",
+      "lot",
+      "how",
+      "hours",
+      "temp_c",
+      "rule",
+      "doc",
+      "storage",
+      "by"
+    ]
+  },
+  "probe": "node tools/live-proof/probes/stock-storages.mjs (main runs it on qa-durres after deploy)",
+  "last_verified": null
+}

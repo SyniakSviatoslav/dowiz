@@ -111,6 +111,22 @@ pub(in crate::stock) fn body(j: &Journal) -> String {
             w.n(q);
         }
     }
+    // THE STORAGES (P12), written ONLY once a record named one: an old
+    // venue's checkpoint stays byte-identical (`oldimage_tests.rs`).
+    if j.stores.used {
+        w.n("P");
+        w.n(j.stores.levels.len());
+        for ((i, s), q) in &j.stores.levels {
+            w.s(i);
+            w.s(s);
+            w.n(q);
+        }
+        w.n(j.stores.last.len());
+        for (i, s) in &j.stores.last {
+            w.s(i);
+            w.s(s);
+        }
+    }
     w.0
 }
 
@@ -211,6 +227,17 @@ pub(in crate::stock) fn parse(payload: &[u8]) -> Option<(Journal, Option<i64>)> 
         for _ in 0..r.n::<usize>()? {
             let (o, i) = (r.s()?, r.s()?);
             j.carry.open.insert((o, i), (r.n()?, r.n()?));
+        }
+    }
+    if r.0.starts_with(" P") {
+        j.stores.used = true;
+        for _ in 0..r.tag("P")? {
+            let (i, s) = (r.s()?, r.s()?);
+            j.stores.levels.insert((i, s), r.n()?);
+        }
+        for _ in 0..r.n::<usize>()? {
+            let i = r.s()?;
+            j.stores.last.insert(i, r.s()?);
         }
     }
     if !r.0.is_empty() {

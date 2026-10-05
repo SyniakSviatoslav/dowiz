@@ -1,0 +1,327 @@
+# Lesson O32 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-STORE (P12): storages and transfers (admin/stock-storages.js, the Delivery sheet). Steps WAIT on writes.
+id: O32
+role: owner
+module: stock
+order: 52
+covers: []
+title:
+  sq: "Kuzhina, bari, ngrirësi"
+  en: "Kitchen, bar, freezer"
+  uk: "Кухня, бар, морозильник"
+  ru: "Кухня, бар, морозильник"
+goal:
+  sq: "Shihni ku është çdo përbërës dhe zhvendoseni nga një magazinë në tjetrën."
+  en: "See where each ingredient is and move it from one storage to another."
+  uk: "Бачити, де лежить кожен інгредієнт, і переміщати його між складами."
+  ru: "Видеть, где лежит каждый ингредиент, и перемещать его между складами."
+steps:
+  - key: 1
+    anchor: nav.stock
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.stock"]'
+    title:
+      sq: "Magazina"
+      en: "Stock"
+      uk: "Склад"
+      ru: "Склад"
+    caption:
+      sq: "Mjetet e magazinës janë poshtë listës."
+      en: "The stock tools are under the list."
+      uk: "Інструменти складу під списком."
+      ru: "Инструменты склада под списком."
+  - key: 2
+    anchor: stock.storages
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.storages"]'
+    title:
+      sq: "Magazinat"
+      en: "Storages"
+      uk: "Склади"
+      ru: "Склады"
+    caption:
+      sq: "Hap pamjen sipas magazinës."
+      en: "Opens the view by storage."
+      uk: "Відкриває вигляд по складах."
+      ru: "Открывает вид по складам."
+  - key: 3
+    anchor: store.filter
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="store.filter"]'
+    title:
+      sq: "Filtri"
+      en: "Filter"
+      uk: "Фільтр"
+      ru: "Фильтр"
+    caption:
+      sq: "Të gjitha, ose vetëm një magazinë."
+      en: "All, or one storage only."
+      uk: "Усі або лише один склад."
+      ru: "Все или только один склад."
+  - key: 4
+    anchor: store.move
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="store.move"]'
+    title:
+      sq: "Zhvendos"
+      en: "Move"
+      uk: "Перемістити"
+      ru: "Переместить"
+    caption:
+      sq: "Nga ngrirësi në kuzhinë, për shembull."
+      en: "From the freezer to the kitchen, for example."
+      uk: "Наприклад, з морозильника на кухню."
+      ru: "Например, из морозильника на кухню."
+  - key: 5
+    anchor: store.recv
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.recv"]'
+    title:
+      sq: "Furnizimet shkojnë te"
+      en: "Deliveries go to"
+      uk: "Поставки йдуть на"
+      ru: "Поставки идут на"
+    caption:
+      sq: "Ku shkon një furnizim pa zgjedhje."
+      en: "Where a delivery goes when nobody picks."
+      uk: "Куди йде поставка без вибору."
+      ru: "Куда идёт поставка без выбора."
+  - key: 6
+    anchor: store.add
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.add"]'
+    title:
+      sq: "Magazinë e re"
+      en: "A new storage"
+      uk: "Новий склад"
+      ru: "Новый склад"
+    caption:
+      sq: "Për një dhomë që e emërtoni ju."
+      en: "For a room you name."
+      uk: "Для приміщення, яке ви назвете."
+      ru: "Для помещения, которое вы назовёте."
+  - key: 7
+    anchor: store.count
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.count"]'
+    title:
+      sq: "Numëro një magazinë"
+      en: "Count one storage"
+      uk: "Порахувати один склад"
+      ru: "Посчитать один склад"
+    caption:
+      sq: "Vetëm sa ka atje; pjesa tjetër mbetet."
+      en: "Only what is there; the rest stays."
+      uk: "Лише те, що там; решта лишається."
+      ru: "Только то, что там; остальное остаётся."
+  - key: 8
+    anchor: store.rename
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.rename"]'
+    title:
+      sq: "Riemërto"
+      en: "Rename"
+      uk: "Перейменувати"
+      ru: "Переименовать"
+    caption:
+      sq: "Emri ndryshon, historia mbetet."
+      en: "The name changes, the history stays."
+      uk: "Назва змінюється, історія лишається."
+      ru: "Название меняется, история остаётся."
+  - key: 9
+    anchor: store.archive
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.archive"]'
+    title:
+      sq: "Arkivo"
+      en: "Archive"
+      uk: "В архів"
+      ru: "В архив"
+    caption:
+      sq: "Vetëm kur është bosh."
+      en: "Only when it is empty."
+      uk: "Лише коли він порожній."
+      ru: "Только когда он пуст."
+  - key: 10
+    anchor: store.name
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.name"]'
+    title:
+      sq: "Emri"
+      en: "Name"
+      uk: "Назва"
+      ru: "Название"
+    caption:
+      sq: "Si e thërrasin në kuzhinë."
+      en: "What the kitchen calls it."
+      uk: "Як її називають на кухні."
+      ru: "Как её называют на кухне."
+  - key: 11
+    anchor: store.save
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+      ru: "Сохранить"
+    caption:
+      sq: "Magazina shfaqet në filtër."
+      en: "The storage appears in the filter."
+      uk: "Склад з’являється у фільтрі."
+      ru: "Склад появляется в фильтре."
+  - key: 12
+    anchor: store.moveItem
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.moveItem"]'
+    title:
+      sq: "Përbërësi"
+      en: "Ingredient"
+      uk: "Інгредієнт"
+      ru: "Ингредиент"
+    caption:
+      sq: "Çfarë zhvendosni."
+      en: "What you move."
+      uk: "Що переміщуєте."
+      ru: "Что перемещаете."
+  - key: 13
+    anchor: store.moveQty
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.moveQty"]'
+    title:
+      sq: "Sasia"
+      en: "Quantity"
+      uk: "Кількість"
+      ru: "Количество"
+    caption:
+      sq: "Gramë, ml ose copë të plota."
+      en: "Whole grams, ml or pieces."
+      uk: "Цілі грами, мл або штуки."
+      ru: "Целые граммы, мл или штуки."
+  - key: 14
+    anchor: store.moveFrom
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.moveFrom"]'
+    title:
+      sq: "Nga"
+      en: "From"
+      uk: "Звідки"
+      ru: "Откуда"
+    caption:
+      sq: "Më shumë se sa ka refuzohet."
+      en: "More than is there is refused."
+      uk: "Більше, ніж є, не прийме."
+      ru: "Больше, чем есть, не примет."
+  - key: 15
+    anchor: store.moveTo
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.moveTo"]'
+    title:
+      sq: "Te"
+      en: "To"
+      uk: "Куди"
+      ru: "Куда"
+    caption:
+      sq: "Shitja e radhës merr që këtu."
+      en: "The next sale takes from here."
+      uk: "Наступний продаж списує звідси."
+      ru: "Следующая продажа списывает отсюда."
+  - key: 16
+    anchor: store.moveSave
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.moveSave"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+      ru: "Сохранить"
+    caption:
+      sq: "Gjithsej nuk ndryshon asgjë."
+      en: "The total does not change."
+      uk: "Загальний залишок не змінюється."
+      ru: "Общий остаток не меняется."
+  - key: 17
+    anchor: store.countSave
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.countSave"]'
+    title:
+      sq: "Ruaj numërimin"
+      en: "Save the count"
+      uk: "Зберегти підрахунок"
+      ru: "Сохранить подсчёт"
+    caption:
+      sq: "Një numërim, një vendim."
+      en: "One count, one decision."
+      uk: "Один підрахунок, одне рішення."
+      ru: "Один подсчёт, одно решение."
+  - key: 18
+    anchor: move.store
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="move.store"]'
+    title:
+      sq: "Magazina e furnizimit"
+      en: "Where it goes"
+      uk: "Куди йде"
+      ru: "Куда идёт"
+    caption:
+      sq: "Në fletën e furnizimit zgjidhni magazinën."
+      en: "In the Delivery sheet, pick the storage."
+      uk: "В аркуші поставки виберіть склад."
+      ru: "В листе поставки выберите склад."

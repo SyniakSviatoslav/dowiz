@@ -1,0 +1,242 @@
+# Lesson O33 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+# W-STORE (P13): raw-fish freezing and the HACCP export (admin/stock-haccp.js). Downloads WAIT.
+id: O33
+role: owner
+module: stock
+order: 53
+covers: []
+title:
+  sq: "Peshk i gjallë & HACCP"
+  en: "Raw fish & HACCP"
+  uk: "Сира риба і HACCP"
+  ru: "Сырая рыба и HACCP"
+goal:
+  sq: "Regjistroni ngrirjen e një partie dhe shkarkoni gjurmimin për inspektorin."
+  en: "Record a lot's freezing and download the trace for the inspector."
+  uk: "Записати заморожування партії й завантажити простежуваність для інспектора."
+  ru: "Записать заморозку партии и скачать прослеживаемость для инспектора."
+steps:
+  - key: 1
+    anchor: nav.stock
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.stock"]'
+    title:
+      sq: "Magazina"
+      en: "Stock"
+      uk: "Склад"
+      ru: "Склад"
+    caption:
+      sq: "Mjetet e magazinës janë poshtë listës."
+      en: "The stock tools are under the list."
+      uk: "Інструменти складу під списком."
+      ru: "Инструменты склада под списком."
+  - key: 2
+    anchor: stock.haccp
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="stock.haccp"]'
+    title:
+      sq: "Peshk i gjallë"
+      en: "Raw fish"
+      uk: "Сира риба"
+      ru: "Сырая рыба"
+    caption:
+      sq: "Hap regjistrin e ngrirjes."
+      en: "Opens the freezing record."
+      uk: "Відкриває журнал заморожування."
+      ru: "Открывает журнал заморозки."
+  - key: 3
+    anchor: haccp.item
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="haccp.item"]'
+    title:
+      sq: "Përbërësi"
+      en: "Ingredient"
+      uk: "Інгредієнт"
+      ru: "Ингредиент"
+    caption:
+      sq: "Peshku që hahet i gjallë."
+      en: "The fish eaten raw."
+      uk: "Риба, яку їдять сирою."
+      ru: "Рыба, которую едят сырой."
+  - key: 4
+    anchor: haccp.lot
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="haccp.lot"]'
+    title:
+      sq: "Partia"
+      en: "Lot"
+      uk: "Партія"
+      ru: "Партия"
+    caption:
+      sq: "Kodi i etiketës."
+      en: "The label's code."
+      uk: "Код з етикетки."
+      ru: "Код с этикетки."
+  - key: 5
+    anchor: haccp.hours
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="haccp.hours"]'
+    title:
+      sq: "Orë"
+      en: "Hours"
+      uk: "Години"
+      ru: "Часы"
+    caption:
+      sq: "Sa gjatë qëndroi në ngrirës."
+      en: "How long it stayed frozen."
+      uk: "Скільки пробула замороженою."
+      ru: "Сколько пробыла замороженной."
+  - key: 6
+    anchor: haccp.temp
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="haccp.temp"]'
+    title:
+      sq: "Temperatura"
+      en: "Temperature"
+      uk: "Температура"
+      ru: "Температура"
+    caption:
+      sq: "-20 °C për 24 orë ose -35 °C për 15."
+      en: "-20 °C for 24 h or -35 °C for 15."
+      uk: "-20 °C 24 год або -35 °C 15."
+      ru: "-20 °C 24 ч или -35 °C 15."
+  - key: 7
+    anchor: haccp.save
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="haccp.save"]'
+    title:
+      sq: "Ruaj"
+      en: "Save"
+      uk: "Зберегти"
+      ru: "Сохранить"
+    caption:
+      sq: "Thuhet cilin rregull plotëson; shitja nuk bllokohet."
+      en: "It says which rule it meets; sales are never blocked."
+      uk: "Показує, якому правилу відповідає; продаж не блокується."
+      ru: "Показывает, какому правилу соответствует; продажа не блокируется."
+  - key: 8
+    anchor: haccp.from
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="haccp.from"]'
+    title:
+      sq: "Nga"
+      en: "From"
+      uk: "З"
+      ru: "С"
+    caption:
+      sq: "Ditët e lokalit tuaj."
+      en: "Your venue's days."
+      uk: "Дні вашого закладу."
+      ru: "Дни вашего заведения."
+  - key: 9
+    anchor: haccp.to
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="haccp.to"]'
+    title:
+      sq: "Deri"
+      en: "To"
+      uk: "По"
+      ru: "По"
+    caption:
+      sq: "Përfshirë."
+      en: "Included."
+      uk: "Включно."
+      ru: "Включительно."
+  - key: 10
+    anchor: haccp.lots
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="haccp.lots"]'
+    title:
+      sq: "Partia → porositë"
+      en: "Lot → orders"
+      uk: "Партія → замовлення"
+      ru: "Партия → заказы"
+    caption:
+      sq: "Cilat porosi hëngrën një parti."
+      en: "Which orders ate a lot."
+      uk: "Які замовлення з’їли партію."
+      ru: "Какие заказы съели партию."
+  - key: 11
+    anchor: haccp.orders
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="haccp.orders"]'
+    title:
+      sq: "Porosia → partitë"
+      en: "Order → lots"
+      uk: "Замовлення → партії"
+      ru: "Заказ → партии"
+    caption:
+      sq: "Cilat parti hëngri një porosi."
+      en: "Which lots one order ate."
+      uk: "Які партії з’їло замовлення."
+      ru: "Какие партии съел заказ."
+  - key: 12
+    anchor: haccp.freezing
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="haccp.freezing"]'
+    title:
+      sq: "Regjistri i ngrirjes"
+      en: "Freezing log"
+      uk: "Журнал заморожування"
+      ru: "Журнал заморозки"
+    caption:
+      sq: "Çdo ngrirje dhe çdo dokument furnitori."
+      en: "Every freezing and every supplier paper."
+      uk: "Кожне заморожування й кожен документ постачальника."
+      ru: "Каждая заморозка и каждый документ поставщика."
+  - key: 13
+    anchor: move.treated
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="move.treated"]'
+    title:
+      sq: "E ngrirë nga furnitori"
+      en: "Frozen by the supplier"
+      uk: "Заморожено постачальником"
+      ru: "Заморожено поставщиком"
+    caption:
+      sq: "Nr. i dokumentit, në fletën e furnizimit."
+      en: "The paper's number, in the Delivery sheet."
+      uk: "Номер документа, в аркуші поставки."
+      ru: "Номер документа, в листе поставки."

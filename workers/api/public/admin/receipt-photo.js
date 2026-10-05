@@ -23,6 +23,8 @@ import { $, $$, esc, t, api, post, sheet, closeSheet, busy, toast } from '/admin
 import { btn, field, select, input, pill, rowDiv, empty, loading } from '/admin/parts.js';
 import * as R from '/admin/receipt-photo-logic.js';
 import * as E from '/admin/einvoice-logic.js';
+// W-STORE (P12) hook: a delivery goes to the storage chosen under Storages -> "Deliveries go to".
+import { withStore } from './stock-storages-logic.js';
 
 const fail = e => toast(t(String(e.message || e)));
 /// wasm-feature-detect's SIMD probe (a module using v128); no SIMD -> the plain core.
@@ -148,7 +150,7 @@ export async function open(){
       await busy($('#rpGo'), async () => {
         // ONE LINE AT A TIME through the receipt door; a refusal stops here
         // and says how many went in, so a retry does not receive twice.
-        for (const b of bodies) { await post('/owner/stock/received', b); done++; }
+        for (const b of bodies) { await post('/owner/stock/received', withStore(b)); done++; }
         if (card) await post('/owner/stock/alias', R.aliasBody(card.id, nipt, chosen, known()));
       });
       toast(`${t('rp_wrote')} ${done}`); closeSheet();

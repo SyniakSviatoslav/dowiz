@@ -16,6 +16,8 @@ import { me } from '/admin/app.js';
 import { T } from '/admin/i18n.js';
 import { WORDS as STOCK_WORDS } from '/admin/start-stock-i18n.js';
 import { WORDS as RP_WORDS } from '/admin/receipt-photo-i18n.js';
+import { WORDS as STORE_WORDS } from '/admin/stock-storages-i18n.js';
+import * as SL from './stock-storages-logic.js';
 
 export { KINDS };
 
@@ -24,12 +26,16 @@ export { KINDS };
 for (const [l, w] of Object.entries(STOCK_WORDS)) if (T[l]) Object.assign(T[l], w);
 // W-OCR: the invoice sheet's words, and the sheet itself as a fifth tool.
 for (const [l, w] of Object.entries(RP_WORDS)) if (T[l]) Object.assign(T[l], w);
+// W-STORE (P12/P13): storages, transfers, raw-fish freezing and the HACCP export.
+for (const [l, w] of Object.entries(STORE_WORDS)) if (T[l]) Object.assign(T[l], w);
 const STOCKX = {
   start: () => import('/admin/start-stock.js'),
   losses: () => import('/admin/ingredients-loss.js'),
   suppliers: () => import('/admin/suppliers.js'),
   orders: () => import('/admin/order-list.js'),
   invoice: () => import('/admin/receipt-photo.js'),
+  storages: () => import('/admin/stock-storages.js'),
+  haccp: () => import('/admin/stock-haccp.js'),
 };
 document.addEventListener('click', e => {
   const b = e.target?.closest?.('[data-stockx]');
@@ -145,16 +151,19 @@ export function openMove(sup, first, ctx){
       <div class="grid2"><div>${field({ id: 'm-sup', key: 'inv_supplier', value: sup.supplier || '', autocomplete: 'off', attrs: { list: 'supList' } })}<datalist id="supList">${sups.map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
         <div>${field({ id: 'm-doc', key: 'inv_doc', autocomplete: 'off' })}</div></div>
       <div class="grid2 pair"><div>${field({ id: 'm-lot', key: 'inv_lot', autocomplete: 'off' })}</div><div>${input({ id: 'm-exp', type: 'date', key: 'inv_expiry' })}</div></div>
+      ${field({ id: 'm-treated', key: 'hc_treated', hintKey: 'hc_treatedHint', autocomplete: 'off', tour: 'move.treated' })}
     </div>
+    <p class="ui-label" data-t="sto_storage"></p>${chips({ values: [{ value: '', key: 'sto_home' }, ...SL.open(ctx.data?.storages).map(x => ({ value: x.id, label: SL.nameOf(x, t) }))], value: first === 'received' ? SL.recvStore() : '', attr: 'mst', tour: 'move.store' })}
     <div id="mReasons"><p class="ui-label" data-t="reason"></p>${chips({ values: WASTE_REASONS.map(r => ({ value: r, key: r })), attr: 'r', labelKey: 'reason', tour: 'move.wasteReason' })}
       ${(sup.lots || []).length > 1 ? `<p class="ui-label" data-t="inv_lot"></p>${chips({ values: sup.lots.map(l => ({ value: l.code, label: `${l.code} · ${l.left}${l.expiry ? ' · ' + l.expiry : ''}` })), attr: 'lot' })}` : ''}
       ${field({ id: 'm-reason', key: 'reason', tour: 'move.reason', attrs: { readonly: true } })}</div>
     <p class="hint" id="mOut"></p>
     <div class="btn-row">${btn({ id: 'mEdit', variant: 'ghost', icon: 'tools-kitchen-2', key: 'edit', tour: 'move.edit' })}${btn({ id: 'mGo', variant: 'primary', icon: 'check', key: 'save', tour: 'move.save' })}</div>`, { name: 'move' });
-  let kind = first, mode = 'per', lot = null;
+  let kind = first, mode = 'per', lot = null, mst = first === 'received' ? SL.recvStore() : '';
+  for (const b of $$('[data-mst]', $('#sheetIn'))) b.onclick = () => { mst = b.dataset.mst; press($$('[data-mst]', $('#sheetIn')), b); };
   const show = () => { $('#mRecv').hidden = kind !== 'received'; $('#mReasons').hidden = kind !== 'wasted'; };
   show();
-  for (const b of $$('[data-k]', $('#sheetIn'))) b.onclick = () => { kind = b.dataset.k; press($$('[data-k]', $('#sheetIn')), b); show(); };
+  for (const b of $$('[data-k]', $('#sheetIn'))) b.onclick = () => { kind = b.dataset.k; press($$('[data-k]', $('#sheetIn')), b); show(); mst = kind === 'received' ? SL.recvStore() : ''; press($$('[data-mst]', $('#sheetIn')), $$('[data-mst]', $('#sheetIn')).find(x => x.dataset.mst === mst)); };
   for (const b of $$('[data-mode]', $('#sheetIn'))) b.onclick = () => { mode = b.dataset.mode; press($$('[data-mode]', $('#sheetIn')), b); };
   for (const b of $$('[data-r]', $('#sheetIn'))) b.onclick = () => { $('#m-reason').value = b.dataset.r; press($$('[data-r]', $('#sheetIn')), b); };
   for (const b of $$('[data-lot]', $('#sheetIn'))) b.onclick = () => { lot = lot === b.dataset.lot ? null : b.dataset.lot; press($$('[data-lot]', $('#sheetIn')), lot ? b : null); };
@@ -169,8 +178,9 @@ export function openMove(sup, first, ctx){
     if (kind === 'received') {
       const price = C.amount($('#m-price').value, 'unit');
       body = { ...body, ...C.priceBody(sup.unit, price, mode) };
-      for (const [f, kk] of [['m-sup', 'supplier'], ['m-doc', 'doc'], ['m-lot', 'lot'], ['m-exp', 'expiry']]) { const v = $('#' + f).value.trim(); if (v) body[kk] = v; }
+      for (const [f, kk] of [['m-sup', 'supplier'], ['m-doc', 'doc'], ['m-lot', 'lot'], ['m-exp', 'expiry'], ['m-treated', 'treated']]) { const v = $('#' + f).value.trim(); if (v) body[kk] = v; }
     }
+    if (mst) body.store = mst;
     try {
       const r = await busy($('#mGo'), () => post(`/owner/stock/${kind}`, body));
       const line = (r.lines || [])[0] || {};

@@ -43,6 +43,12 @@ pub struct Meta {
     /// (`stock::carry`); absent on a whole-unit line and on every record
     /// written before semi-finished cards existed.
     pub uq: Option<i64>,
+    /// P12: the storage this record happened in (`storages.rs`). Absent on
+    /// every record written before storages: the default storage's.
+    pub store: Option<String>,
+    /// P13: a receipt the SUPPLIER already treated against parasites (frozen
+    /// at source), and the paper that says so. Absent: nothing claimed.
+    pub treated: Option<String>,
 }
 
 impl Meta {
@@ -71,6 +77,8 @@ impl Meta {
             ("doc", &self.doc),
             ("session", &self.session),
             ("by_", &self.by),
+            ("store", &self.store),
+            ("treated", &self.treated),
         ] {
             if let Some(v) = v.as_ref().filter(|v| !v.trim().is_empty()) {
                 s.push_str(&format!(r#","{k}":"{}""#, esc(v.trim())));
@@ -109,6 +117,8 @@ pub fn meta_of(rec: &str) -> Meta {
         value: int_field(rec, "value"),
         by: str_field(rec, "by_"),
         uq: int_field(rec, "uq").filter(|u| *u > 0),
+        store: str_field(rec, "store").filter(|s| !s.trim().is_empty()),
+        treated: str_field(rec, "treated").filter(|s| !s.trim().is_empty()),
     }
 }
 

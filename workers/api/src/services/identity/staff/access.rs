@@ -101,7 +101,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     // ── the shelf, and the kitchen's numbers ──
     ("get", "/api/owner/stock", Staff(&SHELF), Read),
     ("post", "/api/owner/stock/:kind", Staff(&BIN), Yes),
-    ("get", "/api/owner/stock/waste", Staff(&SHELF), Read),
+    ("get", "/api/owner/stock/waste", Staff(&SHELF), Read), ("get", "/api/owner/stock/haccp", Owner, No), // W-STORE P13
     ("get", "/api/owner/analytics/kitchen", Staff(&NUMBERS), Read), ("get", "/api/staff/kitchen/prep", Staff(&NUMBERS), Read), // W-PREP
     ("post", "/api/owner/analytics/history", Owner, No),
     // ── the person's own door ──

@@ -1,0 +1,68 @@
+// W-STORE's words (P12 storages and transfers, P13 raw-fish freezing and the
+// HACCP export). One dictionary with NO import, so a node test reads it as it
+// is; `ingredients.js` merges it into the console's T on import.
+//
+// ASCII QUOTES ONLY as string delimiters; an apostrophe inside a word is U+02BC.
+
+export const WORDS = {
+  en: {
+    sto_tool: 'Storages', sto_hint: 'Where each ingredient is: kitchen, bar, freezer or a room you name. A move never adds or removes stock.',
+    sto_all: 'All', sto_kitchen: 'Kitchen', sto_bar: 'Bar', sto_freezer: 'Freezer', sto_storage: 'Storage', sto_where: 'By storage',
+    sto_home: 'next sale takes from', sto_empty: 'Nothing here.', sto_move: 'Move', sto_moveHint: 'From one storage to another. More than is there is refused.',
+    sto_item: 'Ingredient', sto_from: 'From', sto_to: 'To', sto_moved: 'Moved', sto_add: 'Add a storage', sto_name: 'Name',
+    sto_rename: 'Rename', sto_archive: 'Archive', sto_unarchive: 'Restore', sto_archived: 'archived', sto_archiveHint: 'A storage with stock in it cannot be archived: move it out or count it to zero first.',
+    sto_count: 'Count this storage', sto_countHint: 'Type what is in this storage only. The rest of the venue stays as it is.',
+    sto_recv: 'Deliveries go to', sto_recvHint: 'A delivery, also from an invoice photo, goes here unless you pick another. Without a choice it goes where the ingredient was last received.',
+    hc_tool: 'Raw fish & HACCP', hc_hint: 'Fish eaten raw is frozen first: -20 °C for 24 h or -35 °C for 15 h (EU 853/2004), unless the supplier did it and says so on the paper. A record never blocks a sale.',
+    hc_freeze: 'Freezing record', hc_lot: 'Lot', hc_lotPick: 'Choose a lot', hc_hours: 'Hours', hc_temp: 'Temperature, °C',
+    hc_rule20: 'Meets -20 °C / 24 h', hc_rule35: 'Meets -35 °C / 15 h', hc_ruleNone: 'Meets no rule yet: -20 °C for 24 h, or -35 °C for 15 h',
+    hc_saved: 'Freezing recorded', hc_export: 'Export for the inspector', hc_from: 'From', hc_to: 'To',
+    hc_lots: 'Lot → orders', hc_orders: 'Order → lots', hc_freezing: 'Freezing log', hc_ownerOnly: 'Only the owner downloads the export.',
+    hc_treated: 'Supplier already froze it (paper no.)', hc_treatedHint: 'Fill only when the supplierʼs paper says the fish was treated against parasites.',
+  },
+  sq: {
+    sto_tool: 'Magazinat', sto_hint: 'Ku është çdo përbërës: kuzhinë, bar, ngrirës ose një dhomë që e emërtoni ju. Një zhvendosje nuk shton e nuk heq gjë.',
+    sto_all: 'Të gjitha', sto_kitchen: 'Kuzhina', sto_bar: 'Bari', sto_freezer: 'Ngrirësi', sto_storage: 'Magazina', sto_where: 'Sipas magazinës',
+    sto_home: 'shitja e radhës merr nga', sto_empty: 'Asgjë këtu.', sto_move: 'Zhvendos', sto_moveHint: 'Nga një magazinë në tjetrën. Më shumë se sa ka refuzohet.',
+    sto_item: 'Përbërësi', sto_from: 'Nga', sto_to: 'Te', sto_moved: 'U zhvendos', sto_add: 'Shto magazinë', sto_name: 'Emri',
+    sto_rename: 'Riemërto', sto_archive: 'Arkivo', sto_unarchive: 'Rikthe', sto_archived: 'arkivuar', sto_archiveHint: 'Një magazinë me mall nuk arkivohet: zhvendoseni mallin ose numërojeni në zero më parë.',
+    sto_count: 'Numëro këtë magazinë', sto_countHint: 'Shkruani vetëm sa ka në këtë magazinë. Pjesa tjetër mbetet siç është.',
+    sto_recv: 'Furnizimet shkojnë te', sto_recvHint: 'Një furnizim, edhe nga fotoja e faturës, shkon këtu nëse nuk zgjidhni tjetër. Pa zgjedhje shkon ku u pranua herën e fundit.',
+    hc_tool: 'Peshk i gjallë & HACCP', hc_hint: 'Peshku që hahet i gjallë ngrihet më parë: -20 °C për 24 orë ose -35 °C për 15 orë (BE 853/2004), përveç kur furnitori e ka bërë dhe e shkruan në dokument. Regjistrimi nuk bllokon kurrë shitjen.',
+    hc_freeze: 'Regjistrim ngrirjeje', hc_lot: 'Partia', hc_lotPick: 'Zgjidhni partinë', hc_hours: 'Orë', hc_temp: 'Temperatura, °C',
+    hc_rule20: 'Plotëson -20 °C / 24 orë', hc_rule35: 'Plotëson -35 °C / 15 orë', hc_ruleNone: 'Ende nuk plotëson asnjë rregull: -20 °C për 24 orë, ose -35 °C për 15 orë',
+    hc_saved: 'Ngrirja u regjistrua', hc_export: 'Eksport për inspektorin', hc_from: 'Nga', hc_to: 'Deri',
+    hc_lots: 'Partia → porositë', hc_orders: 'Porosia → partitë', hc_freezing: 'Regjistri i ngrirjes', hc_ownerOnly: 'Vetëm pronari e shkarkon eksportin.',
+    hc_treated: 'Furnitori e ka ngrirë (nr. i dokumentit)', hc_treatedHint: 'Plotësojeni vetëm kur dokumenti i furnitorit thotë se peshku u trajtua kundër parazitëve.',
+  },
+  uk: {
+    sto_tool: 'Склади', sto_hint: 'Де лежить кожен інгредієнт: кухня, бар, морозильник або приміщення, яке ви назвете. Переміщення нічого не додає і не списує.',
+    sto_all: 'Усі', sto_kitchen: 'Кухня', sto_bar: 'Бар', sto_freezer: 'Морозильник', sto_storage: 'Склад', sto_where: 'По складах',
+    sto_home: 'наступний продаж списує з', sto_empty: 'Тут нічого.', sto_move: 'Перемістити', sto_moveHint: 'З одного складу на інший. Більше, ніж є, не прийме.',
+    sto_item: 'Інгредієнт', sto_from: 'Звідки', sto_to: 'Куди', sto_moved: 'Переміщено', sto_add: 'Додати склад', sto_name: 'Назва',
+    sto_rename: 'Перейменувати', sto_archive: 'В архів', sto_unarchive: 'Повернути', sto_archived: 'в архіві', sto_archiveHint: 'Склад із залишком не можна архівувати: спершу перемістіть товар або порахуйте до нуля.',
+    sto_count: 'Порахувати цей склад', sto_countHint: 'Вкажіть лише те, що на цьому складі. Решта закладу не зміниться.',
+    sto_recv: 'Поставки йдуть на', sto_recvHint: 'Поставка, також із фото накладної, йде сюди, якщо не вибрати інший. Без вибору - туди, куди інгредієнт приймали востаннє.',
+    hc_tool: 'Сира риба і HACCP', hc_hint: 'Рибу, яку їдять сирою, спершу заморожують: -20 °C 24 год або -35 °C 15 год (ЄС 853/2004), якщо постачальник цього не зробив і не вказав у документі. Запис ніколи не блокує продаж.',
+    hc_freeze: 'Запис заморожування', hc_lot: 'Партія', hc_lotPick: 'Виберіть партію', hc_hours: 'Годин', hc_temp: 'Температура, °C',
+    hc_rule20: 'Відповідає -20 °C / 24 год', hc_rule35: 'Відповідає -35 °C / 15 год', hc_ruleNone: 'Ще не відповідає жодному правилу: -20 °C 24 год або -35 °C 15 год',
+    hc_saved: 'Заморожування записано', hc_export: 'Експорт для інспектора', hc_from: 'З', hc_to: 'По',
+    hc_lots: 'Партія → замовлення', hc_orders: 'Замовлення → партії', hc_freezing: 'Журнал заморожування', hc_ownerOnly: 'Експорт завантажує лише власник.',
+    hc_treated: 'Постачальник уже заморозив (№ документа)', hc_treatedHint: 'Заповнюйте лише тоді, коли в документі постачальника сказано, що рибу оброблено від паразитів.',
+  },
+  ru: {
+    sto_tool: 'Склады', sto_hint: 'Где лежит каждый ингредиент: кухня, бар, морозильник или помещение, которое вы назовёте. Перемещение ничего не добавляет и не списывает.',
+    sto_all: 'Все', sto_kitchen: 'Кухня', sto_bar: 'Бар', sto_freezer: 'Морозильник', sto_storage: 'Склад', sto_where: 'По складам',
+    sto_home: 'следующая продажа списывает с', sto_empty: 'Здесь ничего.', sto_move: 'Переместить', sto_moveHint: 'С одного склада на другой. Больше, чем есть, не примет.',
+    sto_item: 'Ингредиент', sto_from: 'Откуда', sto_to: 'Куда', sto_moved: 'Перемещено', sto_add: 'Добавить склад', sto_name: 'Название',
+    sto_rename: 'Переименовать', sto_archive: 'В архив', sto_unarchive: 'Вернуть', sto_archived: 'в архиве', sto_archiveHint: 'Склад с остатком нельзя архивировать: сначала переместите товар или посчитайте до нуля.',
+    sto_count: 'Посчитать этот склад', sto_countHint: 'Укажите только то, что на этом складе. Остальное в заведении не изменится.',
+    sto_recv: 'Поставки идут на', sto_recvHint: 'Поставка, в том числе с фото накладной, идёт сюда, если не выбрать другой. Без выбора - туда, куда ингредиент принимали в последний раз.',
+    hc_tool: 'Сырая рыба и HACCP', hc_hint: 'Рыбу, которую едят сырой, сначала замораживают: -20 °C 24 ч или -35 °C 15 ч (ЕС 853/2004), если поставщик этого не сделал и не указал в документе. Запись никогда не блокирует продажу.',
+    hc_freeze: 'Запись заморозки', hc_lot: 'Партия', hc_lotPick: 'Выберите партию', hc_hours: 'Часов', hc_temp: 'Температура, °C',
+    hc_rule20: 'Соответствует -20 °C / 24 ч', hc_rule35: 'Соответствует -35 °C / 15 ч', hc_ruleNone: 'Пока не соответствует ни одному правилу: -20 °C 24 ч или -35 °C 15 ч',
+    hc_saved: 'Заморозка записана', hc_export: 'Экспорт для инспектора', hc_from: 'С', hc_to: 'По',
+    hc_lots: 'Партия → заказы', hc_orders: 'Заказ → партии', hc_freezing: 'Журнал заморозки', hc_ownerOnly: 'Экспорт скачивает только владелец.',
+    hc_treated: 'Поставщик уже заморозил (№ документа)', hc_treatedHint: 'Заполняйте только если в документе поставщика сказано, что рыба обработана от паразитов.',
+  },
+};

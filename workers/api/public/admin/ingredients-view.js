@@ -44,7 +44,9 @@ export function alertsMarkup(all, noRecipe, flag, t){
 export const TOOLS = [{ id: 'start', ic: 'sparkles', word: 'ss_start' }, { id: 'losses', ic: 'chart-bar', word: 'ls_title' },
   { id: 'suppliers', ic: 'building', word: 'su_title' }, { id: 'orders', ic: 'receipt', word: 'ol_title' },
   // W-OCR (P10/P11): an invoice photo or e-invoice file into stock.
-  { id: 'invoice', ic: 'camera-plus', word: 'rp_tool', tour: 'stock.invoice' }];
+  { id: 'invoice', ic: 'camera-plus', word: 'rp_tool', tour: 'stock.invoice' },
+  // W-STORE (P12/P13): where things are, transfers; raw-fish freezing and the HACCP export.
+  { id: 'storages', ic: 'package', word: 'sto_tool', tour: 'stock.storages' }, { id: 'haccp', ic: 'fish', word: 'hc_tool', tour: 'stock.haccp' }];
 export function toolsMarkup(all){
   const fresh = (all || []).length < 10;
   return `<div class="btn-row inv-tools">${TOOLS.map(x => btn({ variant: x.id === 'start' && fresh ? 'primary' : 'ghost', icon: x.ic, key: x.word, data: { stockx: x.id }, tour: x.tour })).join('')}</div>`;
@@ -107,6 +109,7 @@ export function cardMarkup(sup, { money, t, when, warnDays }){
       <div class="stat"><b>${sup.available ?? 0}</b><small data-t="inv_available"></small></div><div class="stat money"><b>${price.perBasis != null ? money(price.perBasis) : '-'}</b><small>${esc(t(price.from === 'wac' ? 'inv_avgPrice' : 'inv_listPrice'))}${esc(per)}</small></div></div>
     <div class="btn-row">${ACTIONS
       .map(([a, ic, word]) => btn({ icon: ic, key: word, data: { cact: a }, tour: 'card.' + a })).join('')}</div>
+    ${Object.keys(sup.byStore?.stores || {}).length ? `<p class="mono small">${esc(t('sto_where'))}: ${Object.entries(sup.byStore.stores).map(([k, q]) => `${esc(['kitchen', 'bar', 'freezer'].includes(k) ? t('sto_' + k) : k)} ${q}`).join(' · ')}</p>` : ''}
     <p class="eyebrow mt-3" data-t="inv_losses"></p>
     <p class="mono">${esc(t('inv_gross'))} ${w.gross ?? '-'} g → ${esc(t('inv_net'))} ${w.net ?? '-'} g → ${esc(t('inv_out'))} ${w.out ?? '-'} g · ${esc(t('inv_loss'))} ${C.pct(C.lossPm(w))}</p>
     <p class="hint">${esc(t('inv_stage_clean'))}: ${C.pct(w.cleanPm)} ${adopt('clean', sup.measuredCleanPm)}</p>

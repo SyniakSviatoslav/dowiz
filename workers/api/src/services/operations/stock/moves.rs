@@ -14,76 +14,12 @@
 
 use dowiz_hub::stock::meta::{day_number, day_of_number, parse_day, Meta};
 use dowiz_hub::stock::{PrepStage, StockError, StockEvent, StockLog, WasteReason};
-use serde::Deserialize;
 use serde_json::{json, Value};
 
-/// One counted line of a session.
-#[derive(Deserialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct CountLineIn {
-    pub item: String,
-    pub observed: i64,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct StockMoveIn {
-    #[serde(default)]
-    pub item: String,
-    #[serde(default)]
-    pub qty: Option<i64>,
-    /// For a stocktake: what was actually counted.
-    #[serde(default)]
-    pub observed: Option<i64>,
-    /// For waste: one of `WasteReason::allowed_words()`. Required.
-    #[serde(default)]
-    pub reason: Option<String>,
-    // NO `by`. THE SIGNER IS WHO AUTHENTICATED, never a field the caller
-    // fills in: a body that could name its signer is a write-off anybody can
-    // put on somebody else. `deny_unknown_fields` turns a `by` into a 400.
-    /// A delivery's price: minor units per `per` base units ...
-    #[serde(default)]
-    pub unit_cost: Option<i64>,
-    #[serde(default)]
-    pub per: Option<i64>,
-    /// ... or the invoice line's total for the whole `qty`.
-    #[serde(default)]
-    pub total: Option<i64>,
-    #[serde(default)]
-    pub supplier: Option<String>,
-    /// The invoice / delivery note number.
-    #[serde(default)]
-    pub doc: Option<String>,
-    #[serde(default)]
-    pub lot: Option<String>,
-    /// `yyyy-mm-dd`, the label's date.
-    #[serde(default)]
-    pub expiry: Option<String>,
-    /// A session's lines.
-    #[serde(default)]
-    pub lines: Option<Vec<CountLineIn>>,
-    #[serde(default)]
-    pub session: Option<String>,
-    /// Prep: what came off the board, and after which stage.
-    #[serde(default)]
-    pub out: Option<i64>,
-    #[serde(default)]
-    pub stage: Option<String>,
-    /// Prep into ANOTHER stocked supply (whole fish -> fillet).
-    #[serde(default)]
-    pub into: Option<String>,
-    /// `as-is`: the dishes to link to their own piece (`as_is`).
-    #[serde(default)]
-    pub products: Option<Vec<String>>,
-    /// `removed`: the supplies deleted from the nomenclature (`removed`).
-    #[serde(default)]
-    pub items: Option<Vec<String>>,
-    /// `supplier` / `ordered`: a supplier's card or an order sent (`suppliers`, W-STOCK P5).
-    /// Declared so the strict parse admits it; `suppliers::run` reads it off the raw body.
-    #[allow(dead_code)]
-    #[serde(default)]
-    pub card: Option<Value>,
-}
+/// The request body, split out of this file at the 300-line line (W-STORE).
+#[path = "moves/input.rs"]
+mod input;
+pub use input::StockMoveIn;
 
 /// A movement, decided but not yet applied: `expected` and `value` are the
 /// ledger's to fill in, at the moment of the write.
@@ -175,7 +111,11 @@ pub fn plan(
     if kind == "removed" {
         return super::removed::plan(&body, by, now_ms);
     }
-    let base = Meta { at: Some(now_ms), lot: text(&body.lot)?, ..Meta::default() };
+    let store = text(&body.store)?;
+    if let Some(st) = store.as_deref().filter(|st| !dowiz_hub::stock::storages::valid_id(st)) {
+        return Err((400, format!("{st:?} is not a storage id")));
+    }
+    let base = Meta { at: Some(now_ms), lot: text(&body.lot)?, store, ..Meta::default() };
     let lines = match kind {
         "count" => {
             let lines = body.lines.clone().unwrap_or_default();
@@ -202,6 +142,7 @@ pub fn plan(
             let meta = Meta {
                 supplier: text(&body.supplier)?,
                 doc: text(&body.doc)?,
+                treated: text(&body.treated)?,
                 expiry: expiry(&body, today, shelf_days(body.item.trim()))?,
                 unit_cost,
                 per,
@@ -250,6 +191,15 @@ impl Plan {
         let led = log.ledger()?;
         let book = log.cost_book();
         let mut lines = self.lines.clone();
+        // P12: a named storage is one this venue has, open; a count IN a
+        // storage is that storage's level, so the shelf's total is told the
+        // counted storage plus every other one (`storages::Stores`).
+        let rooms = super::storages::Rooms::of(log, &lines)?;
+        for (ev, meta) in lines.iter_mut() {
+            if let (StockEvent::Stocktake { item, observed, .. }, Some(st)) = (ev, meta.store.as_deref()) {
+                *observed = rooms.total_for(item, st, *observed);
+            }
+        }
         let mut shown = Vec::new();
         let mut total: i64 = 0;
         for (ev, meta) in lines.iter_mut() {
