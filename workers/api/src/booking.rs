@@ -32,6 +32,8 @@ use serde::Deserialize;
 use dowiz_kernel::reservation::{self, ReservationStatus};
 
 mod create;
+/// Tonight's guests for the prep list (W-PREP, K14).
+pub(crate) mod covers;
 mod floor;
 /// G8: the guest's contact emptied out of their bookings on forget.
 pub(crate) mod forget;

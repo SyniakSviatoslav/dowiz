@@ -68,3 +68,14 @@ fn a_production_act_says_what_came_out_the_loss_and_the_cost() {
     // Twin: no weight on the card and no price -- only what came out.
     assert_eq!(event("stock.cooked", &json!({ "name": "Sauce", "out": 3, "unit": "pc" }), "ru"), "🍳 приготовлена партия: Sauce 3 pc");
 }
+
+/// P7 (W-PREP, telegram.stock_expiring.v2): a lot the forecast will not use
+/// in time says by how much; its twin without a surplus reads as v1 did.
+#[test]
+fn an_expiring_lot_with_a_surplus_says_what_will_not_be_used_in_time() {
+    let d = json!({ "items": [{ "item": "salmon", "name": "Salmon", "qty": 1000, "unit": "g", "expiry": "2026-10-05", "surplus": 700 },
+                              { "item": "rice", "name": "Rice", "qty": 2, "unit": "g", "expiry": "2026-10-05" }], "forecast": "ok" });
+    assert_eq!(event("stock.expiring", &d, "en"),
+        "⏳ expiring soon\n- Salmon: 1000 g · 2026-10-05 · ⚠ won't be used in time: 700 g → use first / special\n- Rice: 2 g · 2026-10-05");
+    assert!(event("stock.expiring", &d, "ru").contains("не успеют использовать: 700 g"));
+}

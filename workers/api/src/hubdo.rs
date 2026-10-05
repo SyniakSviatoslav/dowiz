@@ -1196,7 +1196,7 @@ impl HubImages {
                 (Method::Get, "products") => self.fold_products(&req).await,
                 (Method::Get, "preps") => self.fold_preps(&req).await,
                 // THE CATALOGUE READS OF BN1, answered from the images here (`hubdo/reads.rs`).
-                (Method::Get, "basket" | "analytics" | "kitchen" | "stock" | "exceptions" | "week_top") => self.fold_read(what, &req).await,
+                (Method::Get, "basket" | "analytics" | "kitchen" | "stock" | "exceptions" | "week_top" | "prep") => self.fold_read(what, &req).await,
                 // THE CATALOGUE'S DERIVED NODES (`hubdo/catalogue.rs`) and the folds over the log and the catalogue together (`hubdo/facts.rs`).
                 (Method::Get, "catalogue") => self.fold_catalogue(&req).await,
                 (Method::Get, "reveals" | "assist" | "graph" | "kitchen_facts" | "waste") => self.fold_facts(what, &req).await,

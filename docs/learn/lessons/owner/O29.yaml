@@ -1,0 +1,121 @@
+# Lesson O29 (owner). The ONE source for the in-app tour and the recorder.
+# W-PREP (2026-10-04): the kitchen's forecast and prep list (P6) -- the day's
+# orders and portions, the measured error, and what to prepare from the shelf.
+id: O29
+role: owner
+module: stock
+order: 50
+covers: []
+title:
+  sq: "Lista e përgatitjes"
+  en: "The prep list"
+  uk: "Список заготовок"
+  ru: "Список заготовок"
+goal:
+  sq: "Shihni sa pritet të shitet sot dhe çfarë duhet përgatitur."
+  en: "See what the day should sell and what to prepare for it."
+  uk: "Побачити, скільки продасться сьогодні, і що заготувати."
+  ru: "Увидеть, сколько продастся сегодня, и что заготовить."
+steps:
+  - key: 1
+    anchor: nav.stock
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="nav.stock"]'
+    title:
+      sq: "Stoku"
+      en: "Stock"
+      uk: "Запаси"
+      ru: "Запасы"
+    caption:
+      sq: "Lista e përgatitjes është te stoku."
+      en: "The prep list lives on the Stock screen."
+      uk: "Список заготовок на екрані запасів."
+      ru: "Список заготовок на экране запасов."
+  - key: 2
+    anchor: prepList.open
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="prepList.open"]'
+    title:
+      sq: "Përgatitja e ditës"
+      en: "Today's prep"
+      uk: "Заготовки на день"
+      ru: "Заготовки на день"
+    caption:
+      sq: "Hapni parashikimin e ditës."
+      en: "Open the day's forecast."
+      uk: "Відкрийте прогноз на день."
+      ru: "Откройте прогноз на день."
+  - key: 3
+    anchor: prepList.day
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="prepList.day"]'
+    title:
+      sq: "Dita"
+      en: "The day"
+      uk: "День"
+      ru: "День"
+    caption:
+      sq: "Sot ose deri në 6 ditë përpara."
+      en: "Today, or up to 6 days ahead."
+      uk: "Сьогодні або до 6 днів наперед."
+      ru: "Сегодня или до 6 дней вперёд."
+  - key: 4
+    anchor: prepList.summary
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="prepList.summary"]'
+    title:
+      sq: "Sa porosi dhe porcione"
+      en: "How many orders and portions"
+      uk: "Скільки замовлень і порцій"
+      ru: "Сколько заказов и порций"
+    caption:
+      sq: "Mesatarja e së njëjtës ditë të javës; me më pak se 3 javë: po mëson."
+      en: "The same weekday's median; under 3 weeks of history it says learning."
+      uk: "Медіана того ж дня тижня; менше 3 тижнів історії: навчається."
+      ru: "Медиана того же дня недели; меньше 3 недель истории: обучается."
+  - key: 5
+    anchor: prepList.error
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="prepList.error"]'
+    title:
+      sq: "Sa gabon"
+      en: "How far off"
+      uk: "Наскільки помиляється"
+      ru: "Насколько ошибается"
+    caption:
+      sq: "E matur në 4 javët e fundit, pranë numrit të javës së kaluar."
+      en: "Measured over the last 4 weeks, beside last week's number."
+      uk: "Виміряно за останні 4 тижні, поруч із числом минулого тижня."
+      ru: "Измерено за последние 4 недели, рядом с числом прошлой недели."
+  - key: 6
+    anchor: prepList.preps
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="prepList.preps"]'
+    title:
+      sq: "Çfarë të përgatitet"
+      en: "What to prepare"
+      uk: "Що заготувати"
+      ru: "Что заготовить"
+    caption:
+      sq: "Nevoja e gjysmëprodukteve minus ajo që është gati, me lëndën e parë."
+      en: "Semi-finished need minus what is ready, with the raw it takes."
+      uk: "Потреба в напівфабрикатах мінус готове, із сировиною."
+      ru: "Потребность в полуфабрикатах минус готовое, с сырьём."

@@ -6,7 +6,13 @@
 //!   stock.wasted       {name, qty, unit, reason}
 //!   stocktake.variance {items: [{name, expected, observed, unit}]}  (drift only)
 //!   stock.low          {items: [{name, on_hand, low_at, unit}]}      (crossings)
-//!   stock.expiring     {items: [{name, qty, unit, expiry}]}          (once a day)
+//!   stock.expiring     {items: [{item, name, qty, unit, expiry, surplus?}],
+//!                       forecast?}                                   (once a day)
+//!
+//! `telegram.stock_expiring.v2` (W-PREP, P7): each row names its `item`, and
+//! `surplus` is what the kitchen's forecast will NOT use before the date
+//! ("won't be used in time: N g -> use first / special"); `forecast` says why
+//! there is no surplus at all (still learning, or the history unreadable).
 //!
 //! None of them names a customer.
 
@@ -80,9 +86,18 @@ pub fn events(
     out
 }
 
+/// The event's name.
+pub const EXPIRING: &str = "stock.expiring";
+
 /// The lots still on the shelf whose date is within the warning window
 /// (or past it), soonest first. `None` when there are none.
 pub fn soon(lots: &[&Lot], today: i64, supply: &dyn Fn(&str) -> Option<Supply>) -> Option<Value> {
+    soon_with(lots, today, supply, None)
+}
+
+/// `soon`; with `surplus` (P7, v2) each row also names its `item` and, when
+/// there is more than nothing, its `surplus`. Without it the rows are v1's.
+pub fn soon_with(lots: &[&Lot], today: i64, supply: &dyn Fn(&str) -> Option<Supply>, surplus: Option<&dyn Fn(&Lot) -> Option<i64>>) -> Option<Value> {
     let mut near: Vec<&&Lot> =
         lots.iter().filter(|l| l.left > 0 && l.expiry.is_some_and(|e| day_number(e) - day_number(today) <= EXPIRY_WARN_DAYS)).collect();
     near.sort_by_key(|l| l.expiry);
@@ -90,12 +105,88 @@ pub fn soon(lots: &[&Lot], today: i64, supply: &dyn Fn(&str) -> Option<Supply>) 
         .iter()
         .map(|l| {
             let (name, unit) = named(supply, &l.item);
-            json!({ "name": name, "qty": l.left, "unit": unit, "expiry": l.expiry.map(show_day) })
+            let mut row = json!({ "name": name, "qty": l.left, "unit": unit, "expiry": l.expiry.map(show_day) });
+            if let Some(f) = surplus {
+                row["item"] = json!(l.item);
+                if let Some(n) = f(l).filter(|n| *n > 0) {
+                    row["surplus"] = json!(n);
+                }
+            }
+            row
         })
         .collect();
     (!rows.is_empty()).then(|| json!({ "items": rows }))
 }
 
+/// P7, per lot: what is left of it after the forecast's use from today
+/// through its date, the item's lots taken first-expiry-first (an earlier
+/// lot absorbs the use before a later one). `None`: no date, already past,
+/// or an item the forecast says nothing about. Aligned with `lots`.
+pub fn surpluses(lots: &[&Lot], today: i64, use_until: &dyn Fn(&str, i64) -> Option<i64>) -> Vec<Option<i64>> {
+    let mut order: Vec<usize> = (0..lots.len()).collect();
+    order.sort_by_key(|i| (lots[*i].item.as_str(), lots[*i].expiry.is_none(), lots[*i].expiry.unwrap_or(0), lots[*i].seq));
+    let mut given: std::collections::BTreeMap<&str, i64> = std::collections::BTreeMap::new();
+    let mut out = vec![None; lots.len()];
+    for i in order {
+        let l = lots[i];
+        let Some(e) = l.expiry.filter(|e| day_number(*e) >= day_number(today)) else { continue };
+        let Some(u) = use_until(&l.item, e) else { continue };
+        let before = given.entry(l.item.as_str()).or_insert(0);
+        let used = (u - *before).max(0).min(l.left.max(0));
+        *before += used;
+        out[i] = Some(l.left - used);
+    }
+    out
+}
+
+/// P7: the day's `stock.expiring`, rewritten with each lot's surplus.
+/// `use_until` is `None` while the forecast cannot say (`why`: learning, or
+/// the history unreadable) -- then the event carries `forecast: why` and no
+/// surplus, rather than a guess.
+pub fn with_surplus(
+    told: &mut [(&'static str, Value)],
+    lots: &[&Lot],
+    today: i64,
+    supply: &dyn Fn(&str) -> Option<Supply>,
+    use_until: Option<&dyn Fn(&str, i64) -> Option<i64>>,
+    why: Option<String>,
+) {
+    for (_, d) in told.iter_mut().filter(|(e, _)| *e == EXPIRING) {
+        let Some(f) = use_until else {
+            d["forecast"] = json!(why.clone().unwrap_or_else(|| "learning".into()));
+            continue;
+        };
+        let s = surpluses(lots, today, f);
+        let of = |l: &Lot| lots.iter().position(|x| std::ptr::eq(*x, l)).and_then(|i| s[i]);
+        if let Some(nd) = soon_with(lots, today, supply, Some(&of)) {
+            *d = nd;
+        }
+        d["forecast"] = json!(why.clone().unwrap_or_else(|| "ok".into()));
+    }
+}
+
+/// The words of a surplus, in the group's language.
+pub fn surplus_words(lang: &str) -> (&'static str, &'static str) {
+    match lang {
+        "sq" => ("nuk do të përdoret në kohë", "përdoreni të parin / ofertë speciale"),
+        "uk" => ("не встигнуть використати", "пустити першим / спецпропозиція"),
+        "ru" => ("не успеют использовать", "пустить первым / спецпредложение"),
+        "en" => ("won't be used in time", "use first / special"),
+        _ => ("won't be used in time", "use first / special"),
+    }
+}
+
+/// A row's surplus as the message says it, or nothing.
+pub fn surplus_line(row: &Value, lang: &str) -> String {
+    let Some(n) = row.get("surplus").and_then(Value::as_i64).filter(|n| *n > 0) else { return String::new() };
+    let (head, act) = surplus_words(lang);
+    format!(" · ⚠ {head}: {n} {} → {act}", row.get("unit").and_then(Value::as_str).unwrap_or(""))
+}
+
 #[cfg(test)]
 #[path = "tell/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tell/surplus_tests.rs"]
+mod surplus_tests;

@@ -46,6 +46,8 @@ pub mod room;
 pub mod settings;
 pub mod stock;
 pub mod prep;
+/// The kitchen's forecast: median, TSB, MASE (W-PREP, P6).
+pub mod forecast;
 pub mod voice;
 pub mod zone;
 pub mod logimage;

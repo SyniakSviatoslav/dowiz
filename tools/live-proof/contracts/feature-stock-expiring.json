@@ -1,0 +1,127 @@
+{
+  "id": "feature-stock-expiring",
+  "name": "telegram.stock_expiring",
+  "contract_version": "2.0.0",
+  "class": "NEEDS-KEY",
+  "description": {
+    "en": "The daily expiring-lots message (W0a), v2 (W-PREP P7): on the venue's first stock movement of the day, stock.expiring lists every open lot within EXPIRY_WARN_DAYS (2) of its best-before date; v2 adds, whenever the forecast could be applied (forecast: ok), each row's `item` and `surplus` = the lot's quantity minus the kitchen forecast's raw use from today through its date (inclusive), the item's lots taken first-expiry-first. Rendered as '... · ⚠ won't be used in time: N g → use first / special' in the group's language (sq/en/uk/ru). `forecast` says 'ok', 'learning' (under 3 weeks: no surplus, never a guess) or why the history could not be read. Acceptance (tested in-memory): 1 kg expiring tomorrow, forecast 150 g/day = 300 g -> 700 g. v1 readers: every v1 field is unchanged.",
+    "uk": "Щоденне повідомлення про партії, що спливають, тепер каже, скільки не встигнуть використати за прогнозом кухні (1 кг завтра, прогноз 300 г -> 700 г)."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/services/operations/stock/tell.rs",
+      "line": 142,
+      "what": "with_surplus (rewrites the day's stock.expiring)"
+    },
+    {
+      "file": "workers/api/src/services/operations/stock/tell.rs",
+      "line": 121,
+      "what": "surpluses (FEFO per item)"
+    },
+    {
+      "file": "workers/api/src/hubdo/forecast.rs",
+      "line": 61,
+      "what": "expiring_surplus (called from hubdo/stock_turn.rs:57)"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/src/notify/route/render.rs",
+      "line": 169,
+      "what": "event: stock.expiring rows + tell::surplus_line"
+    }
+  ],
+  "transport": {
+    "method": "POST",
+    "path": "https://api.telegram.org/bot{TOKEN}/sendMessage"
+  },
+  "external": {
+    "service": "Telegram Bot API",
+    "api_version": "Bot API (unversioned URL; sendMessage)",
+    "doc": "https://core.telegram.org/bots/api#sendmessage"
+  },
+  "auth": {
+    "secrets": [
+      "notify.telegram.token (venue setting on qa-durres)",
+      "LIVE_TG_CHAT"
+    ],
+    "where": "MISSING: operator creates a TEST bot + group (same ask as feature-stock-digest)"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "items"
+    ],
+    "properties": {
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "name",
+            "qty",
+            "unit",
+            "expiry"
+          ],
+          "properties": {
+            "item": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "qty": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "unit": {
+              "type": "string"
+            },
+            "expiry": {
+              "type": "string"
+            },
+            "surplus": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      },
+      "forecast": {
+        "type": "string"
+      }
+    }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "ok",
+      "result"
+    ],
+    "properties": {
+      "ok": {
+        "const": true
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "message_id",
+          "chat",
+          "text"
+        ],
+        "properties": {
+          "message_id": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "probe": "node tools/live-proof/probes/prep-forecast.mjs --expiring (the read-back half needs the QA bot: NEEDS-KEY until then)",
+  "last_verified": null
+}

@@ -451,3 +451,4 @@ bag.stickers workers/api/public/admin/bag.js:104
 bag.svg workers/api/public/admin/bag.js:105
 bag.value workers/api/public/admin/bag.js:88
 bag.warn workers/api/public/admin/bag.js:98
+prepList.open workers/api/public/admin/stock.js:43

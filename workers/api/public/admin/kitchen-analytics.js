@@ -41,7 +41,9 @@ async function load(){
   let r;
   try { r = await api(`/owner/analytics/kitchen?${q}`); } catch (e) { $('#kaOut').innerHTML = empty('alert-triangle', { key: 'loadFail', body: String(e.message || e), alert: true }); return; }
   $('#ka-from').value = r.from; $('#ka-to').value = r.to;
-  $('#kaOut').innerHTML = `<div id="kaExplain"></div>${draw(r, { money, t })}`;
+  $('#kaOut').innerHTML = `<div id="kaPrep"></div><div id="kaExplain"></div>${draw(r, { money, t })}`;
+  // TODAY'S PREP (W-PREP): the forecast's card; the list opens from it.
+  import('/admin/prep-list.js').then(m => m.fillCard($('#kaPrep'))).catch(() => {});
   retranslate($('#kaOut')); hydrate($('#kaOut')); repaintMoney($('#kaOut'));
   // "What the numbers say" (W-AI): the owner's only; the hub refuses staff and the card stays empty.
   // The explain route answers 1, 7 or 30 days; another range keeps the nearest.

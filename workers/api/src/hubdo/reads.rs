@@ -10,6 +10,7 @@
 //!   GET /fold/kitchen?venue=&now=[&from=&to=&days=]
 //!   GET /fold/stock?now=
 //!   GET /fold/week_top?venue=&now=   the storefront's "most ordered this week" (W-MR0)
+//!   GET /fold/prep?venue=&now=[&day=]   (W-PREP, `forecast.rs`)
 
 use super::HubImages;
 use worker::*;
@@ -17,6 +18,9 @@ use worker::*;
 /// The cube's image in this object: catch-up, trace, rows (W-HIST P2b).
 #[path = "cube.rs"]
 mod cube;
+/// The kitchen's forecast and prep list, and P7's surplus (W-PREP).
+#[path = "forecast.rs"]
+mod forecast;
 // The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
 use crate::wire::{Call as Request, Reply as Response};
 
@@ -44,6 +48,7 @@ impl HubImages {
             "analytics" => self.fold_analytics(req).await,
             "kitchen" => self.fold_kitchen(req).await,
             "stock" => self.fold_stock(req).await,
+            "prep" => self.fold_prep(req).await,
             "exceptions" => self.fold_exceptions(req).await,
             "week_top" => self.fold_week_top(req).await,
             _ => Response::error("no such fold", 404),

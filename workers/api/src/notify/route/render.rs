@@ -142,7 +142,7 @@ fn qty(d: &Value, k: &str) -> String {
 /// are the hand-back contract for the stock producers (W-INV):
 ///   stock.low          {items: [{name, on_hand, low_at, unit}]}
 ///   stock.received     {name, qty, unit, lot?, expiry?}
-///   stock.expiring     {items: [{name, qty, unit, expiry}]}
+///   stock.expiring     {items: [{name, qty, unit, expiry, surplus?}]}  (v2: P7)
 ///   stock.wasted       {name, qty, unit, reason}
 ///   stock.cooked       {name, out, unit, lossG?, lossPm?, value?, currency?}
 ///   stocktake.variance {items: [{name, expected, observed, unit}]}
@@ -167,7 +167,9 @@ pub fn event(ev: &str, d: &Value, lang: &str) -> String {
             t
         }
         "stock.expiring" => {
-            let rows: Vec<String> = items().iter().map(|i| format!("- {}: {} · {}", s(i, "name"), qty(i, "qty"), s(i, "expiry"))).collect();
+            // P7 (W-PREP): what the forecast will not use in time, per lot.
+            let tail = |i: &Value| crate::services::operations::stock::tell::surplus_line(i, lang);
+            let rows: Vec<String> = items().iter().map(|i| format!("- {}: {} · {}{}", s(i, "name"), qty(i, "qty"), s(i, "expiry"), tail(i))).collect();
             format!("⏳ {}\n{}", w.expiring, rows.join("\n"))
         }
         "stock.wasted" => format!("🗑 {}: {} {} · {}", w.wasted, s(d, "name"), qty(d, "qty"), s(d, "reason")),

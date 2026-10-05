@@ -45,7 +45,7 @@ impl HubImages {
             _ => None,
         };
         let due = expiring_marks.as_ref().is_some_and(|m| !m.contains(&day));
-        let (shown, told) = match turn::run(&mut log, &input, due) {
+        let (shown, mut told) = match turn::run(&mut log, &input, due) {
             Ok(v) => v,
             // NOTHING HAS BEEN WRITTEN: the log copy is dropped here.
             Err((status, said)) => return Response::error(said, status),
@@ -53,6 +53,8 @@ impl HubImages {
         if log.len() != before && self.put_image(crate::hubstore::IMAGE_STOCK, gen, &log.to_bytes_trimmed()).await?.is_none() {
             return Response::error("the stock generation moved during a movement", 409);
         }
+        // P7 (W-PREP): what the forecast will not use before each lot's date.
+        self.expiring_surplus(&mut told, &log, &input).await;
         if let Some(groups) = routing {
             let base = format!("stock/{}", log.len());
             let heard: Vec<_> = told.into_iter().filter(|(ev, _)| produce::wants(&groups, ev)).collect();

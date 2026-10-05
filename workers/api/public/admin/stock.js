@@ -26,6 +26,7 @@ import { KINDS, matches, alertsMarkup, rowMarkup, noRecipeMarkup } from '/admin/
 import { openCount, openWaste, openDelivery } from '/admin/ingredients-count.js';
 import * as N from '/admin/nom-logic.js';
 import { openKitchen, ensureCss } from '/admin/kitchen-analytics.js';
+import { openPrepList } from '/admin/prep-list.js';
 import { drawHealth } from '/admin/stock-health.js';
 import { selection, pickRow, barMarkup, bindBar, tapDelete, deleteSupplies, openQuickAdd, ensureNomCss } from '/admin/nom.js';
 import { show } from '/admin/app.js';
@@ -39,7 +40,7 @@ export const basisOf = C.basisOf;
 
 /// The five things a kitchen does with its shelf, as tiles.
 const TILES = [['delivery', 'package', 'inv_delivery'], ['count', 'check', 'inv_count'], ['prep', 'tools-kitchen-2', 'inv_prep'],
-  ['waste', 'trash', 'inv_waste'], ['numbers', 'chart-bar', 'inv_numbers']];
+  ['waste', 'trash', 'inv_waste'], ['numbers', 'chart-bar', 'inv_numbers'], ['prepList', 'note', 'pl_tile', 'prepList.open']];
 
 let stock = null;
 /// The semi-finished products, hydrated (`GET /api/owner/preps`), by id.
@@ -65,7 +66,7 @@ export async function render(host){
   host.innerHTML = `<div class="screen-h"><div><h1 data-t="inv_title"></h1></div>
     <div class="screen-acts">${me().staff ? '' : iconBtn({ id: 'resetIngredients', icon: 'trash', ariaKey: 'inv_reset' })}${iconBtn({ id: 'importSupplies', icon: 'download', ariaKey: 'importSupplies', tour: 'stock.import' })}${owner ? btn({ id: 'nomSel', variant: 'ghost', icon: 'check', key: sel.on ? 'nom_selectDone' : 'nom_select' }) : ''}${btn({ id: 'addMany', icon: 'note', key: 'nom_addMany' })}${btn({ id: 'addPrep', icon: PREP_ICON, key: 'pf_add', tour: 'pf.add' })}${btn({ id: 'addSupply', variant: 'primary', icon: 'plus', key: 'addSupply', tour: 'stock.addSupply' })}</div></div>
     <p class="screen-hint" data-t="inv_hint"></p>
-    <div class="tiles">${TILES.map(([id, ic, word]) => rowBtn({ cls: 'tile', leading: `<span class="tile-ic">${icon(ic)}</span>`, title: key(word), data: { tile: id } })).join('')}</div>
+    <div class="tiles">${TILES.map(([id, ic, word, tour]) => rowBtn({ cls: 'tile', leading: `<span class="tile-ic">${icon(ic)}</span>`, title: key(word), data: { tile: id }, tour })).join('')}</div>
     <div id="invAlerts" class="inv-alerts"></div>
     <div class="srch">${icon('search')}${ui.inputRow({ id: 'sq', type: 'search', label: key('search'), placeholder: key('search'), attrs: { value: view.q, data: { tour: 'stock.search' } } })}</div>
     ${chips({ values: KIND_CHIPS(), value: view.kind, attr: 'k', labelKey: 'kind', tour: 'stock.filter' }).replace('class="chips"', 'class="chips filters"')}
@@ -116,6 +117,7 @@ function openTile(id){
   if (id === 'prep') return openPrep(null, ctx);
   if (id === 'waste') return openWaste(ctx);
   if (id === 'numbers') return openKitchen();
+  if (id === 'prepList') return openPrepList();
 }
 
 /// The four actions under an ingredient.

@@ -382,6 +382,7 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .post_async("/api/staff/orders/:id/pay", |r, c| edge::run(r, c, services::orders::room::pay::pay))
         .post_async("/api/staff/orders/:id/kitchen-ack", |r, c| edge::run(r, c, services::orders::kitchen_ack::kitchen_ack))
         .get_async("/api/staff/kitchen", |r, c| edge::run(r, c, services::orders::kitchen_ack::board::kitchen_orders))
+        .get_async("/api/staff/kitchen/prep", |r, c| edge::run(r, c, services::analytics::forecast::prep)) // W-PREP P6
         .post_async("/api/staff/assist", |r, c| edge::run(r, c, services::engagement::assist::kitchen::kitchen_assist))
         .post_async("/api/print/poll", |r, c| edge::run(r, c, services::orders::print::poll))
         .get_async("/api/print/job/:token", |r, c| edge::run(r, c, services::orders::print::job))

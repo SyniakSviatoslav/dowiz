@@ -1,0 +1,528 @@
+{
+  "id": "feature-prep-forecast",
+  "name": "kitchen.prep_forecast",
+  "contract_version": "1.0.0",
+  "class": "LIVE-READ",
+  "description": {
+    "en": "The kitchen's forecast and prep list (W-PREP, P6 of docs/research/2026-10-03-depth-stock-analytics-models.md; K14). GET /api/staff/kitchen/prep?day=yyyy-mm-dd (today..today+6, strict query: day, location_id), opened to the owner and to staff holding stock or catalog (guard::NUMBERS). The venue object folds the daily sales cube (W-HIST) plus the hot log: per weekday x hour band (opening-14:00, 14:00-18:00, 18:00-close, cut by the venue's hours), the median of the last 3..8 same weekdays (fewer than 3: learning, value null, never a number); a dish whose samples are more than a third zeros uses TSB. The error is measured: each of the 28 days before today forecast as of that day vs what sold, beside the seasonal-naive guess (same weekday a week before): offBy = mean absolute error in portions, masePm = model error / naive error per mille. Dish portions + tonight's bookings x the usual basket are expanded through the recipes (dowiz_hub::prep::expand) into ПФ need, ПФ ready on the shelf (stock::basket::ready_micro, read only), ПФ to make with its raw components, and the day's raw total. No money and no person in the answer.",
+    "uk": "Прогноз кухні та список заготовок: медіана того ж дня тижня (менше 3 тижнів - навчається), похибка виміряна за 4 тижні поруч із наївним прогнозом, напівфабрикати мінус готове на полиці плюс бронювання."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/services/analytics/forecast.rs",
+      "line": 52,
+      "what": "prep (route, strict query, door)"
+    },
+    {
+      "file": "workers/api/src/services/analytics/forecast.rs",
+      "line": 138,
+      "what": "answer_with (pure)"
+    },
+    {
+      "file": "workers/api/src/services/analytics/forecast/plan.rs",
+      "line": 130,
+      "what": "answer (JSON shape)"
+    },
+    {
+      "file": "workers/api/src/hubdo/forecast.rs",
+      "line": 24,
+      "what": "fold_prep (in the venue object)"
+    },
+    {
+      "file": "crates/dowiz-hub/src/forecast.rs",
+      "line": 1,
+      "what": "median, TSB, MASE backtest, bands"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/admin/prep-list.js",
+      "line": 18,
+      "what": "openPrepList (Stock tile 'Today's prep')"
+    },
+    {
+      "file": "workers/api/public/admin/prep-list.js",
+      "line": 40,
+      "what": "fillCard (card on the kitchen numbers)"
+    },
+    {
+      "file": "tools/live-proof/probes/prep-forecast.mjs",
+      "line": 1,
+      "what": "probe"
+    }
+  ],
+  "transport": {
+    "method": "GET",
+    "path": "/api/staff/kitchen/prep?day=yyyy-mm-dd"
+  },
+  "external": null,
+  "external_api_version": null,
+  "auth": {
+    "secrets": [
+      "QA_OWNER_EMAIL / QA_OWNER_PASSWORD (or OWNER_* of /root/.dowiz_owner naming qa-durres)"
+    ],
+    "where": "/root/.dowiz_owner"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "day": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+      },
+      "location_id": {
+        "type": "string"
+      }
+    }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "contract",
+      "day",
+      "today",
+      "weekday",
+      "hours",
+      "orders",
+      "portions",
+      "bands",
+      "dishes",
+      "bookings",
+      "preps",
+      "raw",
+      "unmodelled",
+      "refused",
+      "samples",
+      "history"
+    ],
+    "properties": {
+      "contract": {
+        "const": "kitchen.prep_forecast.v1"
+      },
+      "day": {
+        "type": "string"
+      },
+      "today": {
+        "type": "string"
+      },
+      "weekday": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 6
+      },
+      "hours": {
+        "type": "object",
+        "required": [
+          "known",
+          "open"
+        ],
+        "properties": {
+          "known": {
+            "type": "boolean"
+          },
+          "open": {
+            "type": "boolean"
+          }
+        }
+      },
+      "orders": {
+        "type": "object",
+        "required": [
+          "value",
+          "learning",
+          "weeks",
+          "method"
+        ],
+        "properties": {
+          "value": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "learning": {
+            "type": "boolean"
+          },
+          "weeks": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8
+          },
+          "method": {
+            "enum": [
+              "median",
+              "tsb",
+              null
+            ]
+          }
+        }
+      },
+      "portions": {
+        "type": "object",
+        "required": [
+          "value",
+          "learning",
+          "weeks",
+          "offBy",
+          "naiveOffBy",
+          "masePm",
+          "checkedDays"
+        ],
+        "properties": {
+          "value": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "learning": {
+            "type": "boolean"
+          },
+          "weeks": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8
+          },
+          "method": {
+            "enum": [
+              "median",
+              "tsb",
+              null
+            ]
+          },
+          "offBy": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "naiveOffBy": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "masePm": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "checkedDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 28
+          }
+        }
+      },
+      "bands": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "band",
+            "from",
+            "to",
+            "value",
+            "learning"
+          ],
+          "properties": {
+            "band": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            },
+            "value": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "learning": {
+              "type": "boolean"
+            },
+            "weeks": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8
+            },
+            "method": {
+              "enum": [
+                "median",
+                "tsb",
+                null
+              ]
+            }
+          }
+        }
+      },
+      "dishes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "name",
+            "value",
+            "learning",
+            "weeks",
+            "offBy",
+            "fromBookings"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {},
+            "fromBookings": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "value": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "learning": {
+              "type": "boolean"
+            },
+            "weeks": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8
+            },
+            "method": {
+              "enum": [
+                "median",
+                "tsb",
+                null
+              ]
+            },
+            "offBy": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "naiveOffBy": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "masePm": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "checkedDays": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 28
+            }
+          }
+        }
+      },
+      "bookings": {
+        "type": "object",
+        "required": [
+          "covers",
+          "portions"
+        ],
+        "properties": {
+          "covers": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "portions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "preps": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "name",
+            "unit",
+            "need",
+            "onHand",
+            "make",
+            "from"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {},
+            "unit": {
+              "type": "string"
+            },
+            "need": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "onHand": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "make": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "from": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "unit",
+                  "qty"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {},
+                  "unit": {
+                    "type": "string"
+                  },
+                  "qty": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            },
+            "error": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "raw": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "name",
+            "unit",
+            "qty"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {},
+            "unit": {
+              "type": "string"
+            },
+            "qty": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      },
+      "unmodelled": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "refused": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "dish",
+            "why"
+          ]
+        }
+      },
+      "samples": {
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+          "type": "object",
+          "required": [
+            "day",
+            "placed",
+            "orders",
+            "portions"
+          ],
+          "properties": {
+            "day": {
+              "type": "string"
+            },
+            "placed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "orders": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "portions": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      },
+      "history": {
+        "type": "object",
+        "required": [
+          "archivedDays",
+          "error"
+        ],
+        "properties": {
+          "archivedDays": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "probe": "node tools/live-proof/probes/prep-forecast.mjs (main runs it on qa-durres after deploy)",
+  "last_verified": null
+}

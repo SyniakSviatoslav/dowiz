@@ -93,3 +93,7 @@ export function draw(r, { money, t }){
   return totals(r, money) + sec('ka_byDay', byDay(r, m)) + sec('ka_byDish', byDish(r, m)) + sec('ka_ingredients', byIngredient(r, m)) + sec('ka_waste', waste(r, m, t))
     + sec('ka_yields', yields(r, t)) + sec('ka_prices', prices(r, money));
 }
+
+/// The prep forecast's card (W-PREP), drawn beside these numbers by
+/// `kitchen-analytics.js`; it lives with the list it opens.
+export { card as prepCard } from './prep-list-view.js';
