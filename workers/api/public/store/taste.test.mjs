@@ -24,8 +24,9 @@ test('every stored time is a day; an hour is a 24-slot count only', () => {
 });
 
 test('a signal fades by half in sixty days, and a year-old day is dropped on the next write', () => {
-  assert.equal(T.decay(D, D), 1);
-  assert.equal(T.decay(D, D + T.HALF_LIFE_DAYS), 0.5);
+  assert.equal(T.fade(2000, 0), 2000);
+  assert.equal(T.fade(2000, T.HALF_LIFE_DAYS), 1000, 'sixty days is exactly half, in integers');
+  assert.equal(T.fade(2000, 2 * T.HALF_LIFE_DAYS), 500);
   let p = fold([{ kind: 'order', items: [{ id: 'maki', qty: 2 }] }], D);
   p = T.record(p, { kind: 'order', items: [{ id: 'maki', qty: 1 }] }, D + T.KEEP_DAYS + 1);
   assert.deepEqual(p.dishes.maki.order, [[D + T.KEEP_DAYS + 1, 1]]);
@@ -36,7 +37,8 @@ test('behaviour counts: opens, dwell (capped), adds; an add then a remove counts
   const w = T.weights(p, menu, D);
   assert.equal(p.dishes.ramen.dwell[0][1], T.DWELL_CAP_S);
   assert.ok(w.dish.get('ramen') > 0);
-  assert.ok(Math.abs(w.dish.get('udon') - (T.W.add + T.W.drop)) < 1e-9);
+  assert.equal(w.dish.get('udon'), T.W.add + T.W.drop, 'integer weights: an add then a remove is exactly 100');
+  for (const m of [w.dish, w.tag, w.cat]) for (const x of m.values()) assert.ok(Number.isInteger(x), `${x} is an integer`);
   assert.ok(w.tag.get('hot') > 0 && w.cat.get('soups') > 0, 'a dish passes its weight to its tags and category');
 });
 
@@ -101,4 +103,21 @@ test("the venue's profile (prior) adds to the phone's weights and ranks the stri
   assert.ok(s.every(x => x.why === 'taste'));
   assert.ok(!s.some(x => x.id === 'cola'), 'never an unavailable dish');
   assert.deepEqual(T.strip(menu, p, D, { prior: { tags: [{ key: 'hot', w: 'x' }, null, { w: 5 }], cats: 'no' } }), []);
+});
+
+test('W-TASTE: an old device record (dowiz.taste.v1) still loads and ranks; it is migrated, never wiped', () => {
+  // As the float build wrote it: the same v1 shape, plus what an older build or a hand edit could leave.
+  const old = { v: 1, since: D - 30, device: 'phone', first: null, hours: Array(24).fill(0),
+    dishes: { maki: { order: [[D - 30, 2]], dwell: [[D - 2, 37.6]] }, ramen: { open: [[D - 1, 1], ['x', 1], [D]] } },
+    cats: { soups: { seen: [[D - 3, 1]] } } };
+  const m = T.migrate(old);
+  assert.deepEqual(m.dishes.maki.dwell, [[D - 2, 38]], 'a fractional count is rounded');
+  assert.deepEqual(m.dishes.ramen.open, [[D - 1, 1]], 'a malformed entry is left out of the copy');
+  assert.equal(old.dishes.ramen.open.length, 3, 'the stored record itself is untouched');
+  const s = T.scored(menu, m, D);
+  assert.equal(s[0].id, 'maki');
+  assert.equal(s[0].why, 'again');
+  for (const x of s) assert.ok(Number.isInteger(x.s), `score ${x.s} is an integer`);
+  assert.equal(T.migrate({ v: 2 }), null, 'another version is not read as this one');
+  assert.equal(T.migrate(null), null);
 });

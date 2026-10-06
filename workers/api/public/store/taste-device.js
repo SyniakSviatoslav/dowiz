@@ -20,7 +20,7 @@ import * as T from '/store/taste.js';
 import { ui } from '/store/parts.js';
 import '/store/taste-words.js';
 import { currentMood, momentKeys, moodMarkup, wireMood } from '/store/sense-ui.js';
-import { becauseLine, yearMarkup } from '/store/sense-view.js';
+import { becauseLine, yearMarkup, weatherCredit } from '/store/sense-view.js';
 import { senseOf } from '/store/sense.js';
 
 const SWITCH = 'dw_taste_on';
@@ -55,8 +55,10 @@ async function load(){
   if (profile) return profile;
   let got = null;
   try { got = await tx('readonly', s => s.get(SLUG)); } catch (e) { console.warn('taste: the record could not be read:', String(e?.message || e)); }
-  profile = got && got.v === T.VERSION ? got
-    : T.empty({ day: today(), device: T.deviceClass(innerWidth, matchMedia('(pointer: coarse)').matches), first: T.firstVisit(document.referrer, location.search) });
+  // W-TASTE: a record of an older build is read through `migrate` (integers, malformed entries
+  // left out of the copy); it is never wiped for being old.
+  profile = T.migrate(got)
+    || T.empty({ day: today(), device: T.deviceClass(innerWidth, matchMedia('(pointer: coarse)').matches), first: T.firstVisit(document.referrer, location.search) });
   return profile;
 }
 function save(){
@@ -146,7 +148,7 @@ export async function paintStrip(onOpen){
   host.innerHTML = `<h2 class="sec-h"><span class="sec-name" data-t="forYou"></span><small class="muted" data-t="intent_${it.kind}"></small></h2>
     <div class="fy-row">${items.map(x => ui.chip({ as: 'button', icon: x.why === 'again' ? 'history' : 'sparkles', label: x.p.name, cls: 'fy',
       ariaLabel: `${t(x.why === 'again' ? 'again' : 'yourTaste')} ${x.p.name}`, attrs: { data: { fy: x.id, tour: 'menu.forYou' } } })).join('')}</div>
-    ${becauseLine(T.because(guestCache = T.senseVec(p, products, today())))}${senses ? moodMarkup() : ''}`;
+    ${becauseLine(T.because(guestCache = T.senseVec(p, products, today())))}${senses ? moodMarkup() : ''}${weatherCredit(momentKeys())}`;
   retranslate(host);
   wireMood(host.querySelector('.sx-mood'), () => paintStrip(onOpen));
   for (const b of $$('[data-fy]', host)) b.onclick = () => { const d = findProduct(b.dataset.fy); if (d && d.available !== false) onOpen?.(d, null); };

@@ -269,3 +269,17 @@ fn the_memo_answers_the_catalogue_blocks_beside_the_json() {
     assert_eq!(cat.bom_of("p_b"), Some(vec![]), "a product with no recipe has an empty one");
     assert_eq!(m.block("json").unwrap(), None, "an unknown block is not an empty one");
 }
+
+#[test]
+fn the_memo_answers_the_taste_block_and_it_ranks_as_the_json_does() {
+    use dowiz_hub::block::{taste, view::View};
+    let m = memo();
+    let (bytes, _) = m.block("taste").unwrap().expect("W-TASTE: taste is a block of the projection");
+    let v = View::new(bytes).expect("the taste block validates");
+    assert_eq!(v.n(), 3, "one row per product");
+    let listed = catalog(None).products();
+    for (k, w) in dowiz_hub::sense::all_keys().into_iter().map(|k| (k, 1000)) {
+        let want: std::collections::BTreeMap<String, i64> = [(k, w)].into_iter().collect();
+        assert_eq!(taste::top_k(&v, &want, 0, 5).unwrap(), taste::top_k_json(&listed, &want, 0, 5), "{want:?}");
+    }
+}

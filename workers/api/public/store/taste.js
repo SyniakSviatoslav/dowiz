@@ -18,8 +18,13 @@
 //     guest objected (`notObjected()`, store/taste-device.js; tools/gates/no-tracking.sh rule 4).
 //   * THE VENUE'S OWN PROFILE of this guest (recognised by the order link they hold, never by the
 //     device) may be passed back in as `prior`: it adds to the weights, like the phone's own.
+//   * INTEGERS ONLY (W-TASTE, 2026-10-05): every weight is in the server's UNIT (1000 = one
+//     portion), faded by the shared half-life table and compared by a per-mille cosine
+//     (store/taste-int.js = crates/dowiz-hub/src/rank.rs), so the phone, the hub and any other
+//     phone rank the same menu for the same record IDENTICALLY (taste-int.test.mjs, 1000/1000).
 
-import { senseOf, vectorOf, cosine, topScaled, monthOf, MOODS, because } from './sense.js';
+import { senseOf, vectorOf, topScaled, monthOf, MOODS, because } from './sense.js';
+import { UNIT, fade, perMille, cosPm, byId } from './taste-int.js';
 
 export const VERSION = 1;
 /// Days for a signal to count half (the spec's 60-day half-life).
@@ -29,8 +34,8 @@ export const KEEP_DAYS = 365;
 /// The strip: at most this many dishes, of which at most `AGAIN_MAX` are "Again?".
 export const STRIP_MAX = 6;
 export const AGAIN_MAX = 2;
-/// Weights of one event of each kind (an order of one portion is 1).
-export const W = { order: 1, open: 0.2, dwellPerMin: 0.3, add: 0.5, drop: -0.4, seen: 0.05 };
+/// Weights of one event of each kind, in UNIT (an order of one portion is 1000; was 1, 0.2, 0.3/min ...).
+export const W = { order: UNIT, open: 200, dwellPerSec: 5, add: 500, drop: -400, seen: 50 };
 /// A dish sheet held open longer than this counts as this long (a phone left on a table).
 export const DWELL_CAP_S = 120;
 /// What the server may receive: this many tags and categories, integer weights 0..SYNC_SCALE.
@@ -60,6 +65,23 @@ export function firstVisit(referrer, search){
 
 export function empty({ day, device = null, first = null } = {}){
   return { v: VERSION, since: day, device, first, dishes: {}, cats: {}, hours: Array(24).fill(0) };
+}
+
+/// A record as IndexedDB returned it (`dowiz.taste.v1`), made safe to rank: v1 is read as it is,
+/// a count that is not an integer is rounded, a malformed entry is dropped. NEVER WIPES: anything
+/// unreadable is left out of the copy, the stored record is untouched until the next write.
+export function migrate(rec){
+  if (!rec || rec.v !== VERSION || typeof rec !== 'object') return null;
+  const p = structuredClone(rec);
+  const fix = list => (Array.isArray(list) ? list.filter(e => Array.isArray(e) && Number.isFinite(e[0]) && Number.isFinite(e[1]))
+    .map(([d, n]) => [Math.round(d), Math.round(n)]) : undefined);
+  const each = (m, f) => { for (const e of Object.values(m && typeof m === 'object' ? m : {})) if (e && typeof e === 'object') f(e); };
+  each(p.dishes, e => { for (const k of Object.keys(e)) { const l = fix(e[k]); if (l) e[k] = l; else delete e[k]; } });
+  each(p.cats, e => { const l = fix(e.seen); if (l) e.seen = l; else delete e.seen; });
+  each(p.ctx, m => { for (const id of Object.keys(m)) { const l = fix(m[id]); if (l) m[id] = l; else delete m[id]; } });
+  p.dishes ||= {}; p.cats ||= {};
+  p.hours = Array.from({ length: 24 }, (_, h) => Math.max(0, Math.round(Number(p.hours?.[h]) || 0)));
+  return p;
 }
 
 /// Add `n` to the [day, n] list `list`, merging today's entry.
@@ -103,34 +125,35 @@ export function record(profile, ev, day){
   return p;
 }
 
-/// 1 today, 1/2 after HALF_LIFE_DAYS, never more than 1.
-export const decay = (from, day) => Math.pow(0.5, Math.max(0, day - from) / HALF_LIFE_DAYS);
-const sum = (list, day) => (list || []).reduce((a, [d, n]) => a + n * decay(d, day), 0);
+/// A [day, n] list, each entry `n * w` faded to `day` (rank.rs strip::sum). Non-integers add nothing.
+const sum = (list, day, w = UNIT) => (Array.isArray(list) ? list : [])
+  .reduce((a, e) => (Array.isArray(e) && Number.isInteger(e[0]) && Number.isInteger(e[1]) ? a + fade(e[1] * w, day - e[0]) : a), 0);
+const strs = v => (Array.isArray(v) ? v.filter(x => typeof x === 'string') : []);
+const add = (m, k, w) => m.set(k, (m.get(k) || 0) + w);
 
 /// Weights per dish, per tag and per category, from the profile and today's menu.
 export function weights(profile, products, day){
   const dish = new Map(), tag = new Map(), cat = new Map();
   if (!profile || profile.v !== VERSION) return { dish, tag, cat };
   for (const [id, e] of Object.entries(profile.dishes || {})) {
-    const w = W.order * sum(e.order, day) + W.open * sum(e.open, day) + W.dwellPerMin * sum(e.dwell, day) / 60
-            + W.add * sum(e.add, day) + W.drop * sum(e.drop, day);
+    const w = sum(e?.order, day, W.order) + sum(e?.open, day, W.open) + sum(e?.dwell, day, W.dwellPerSec) + sum(e?.add, day, W.add) + sum(e?.drop, day, W.drop);
     if (w) dish.set(id, w);
   }
   for (const p of products || []) {
     const w = dish.get(p.id) || 0;
     if (!w) continue;
-    for (const t of Array.isArray(p.tags) ? p.tags : []) tag.set(t, (tag.get(t) || 0) + w);
-    if (p.categoryId) cat.set(p.categoryId, (cat.get(p.categoryId) || 0) + w);
+    for (const t of strs(p.tags)) add(tag, t, w);
+    if (typeof p.categoryId === 'string' && p.categoryId) add(cat, p.categoryId, w);
   }
-  for (const [c, e] of Object.entries(profile.cats || {})) cat.set(c, (cat.get(c) || 0) + W.seen * sum(e.seen, day));
+  for (const [c, e] of Object.entries(profile.cats || {})) add(cat, c, sum(e?.seen, day, W.seen));
   return { dish, tag, cat };
 }
 
-/// A dish's score: its own weight, its tags', half its category's.
+/// A dish's score: its own weight, its tags', half its category's (truncated).
 export function score(p, w){
   let s = w.dish.get(p.id) || 0;
-  for (const t of Array.isArray(p.tags) ? p.tags : []) s += w.tag.get(t) || 0;
-  return s + 0.5 * (w.cat.get(p.categoryId) || 0);
+  for (const t of strs(p.tags)) s += w.tag.get(t) || 0;
+  return s + Math.trunc((typeof p.categoryId === 'string' ? w.cat.get(p.categoryId) || 0 : 0) / 2);
 }
 
 /// What the guest seems to be doing NOW, from this visit only, with the rule that decided it.
@@ -140,66 +163,69 @@ export function intent({ cartLines = 0, cartQty = 0, adds = 0, opens = 0 } = {})
   return { kind: 'browsing', why: opens > 0 ? 'opens' : 'none' };
 }
 
-/// The "For you" strip: up to AGAIN_MAX dishes ordered before ("again"), then the best-scored rest
-/// ("taste"), only dishes on sale, never more than STRIP_MAX. `avoidGuess` (an INFERRED allergy)
-/// only moves a dish to the end of the strip -- it never removes one.
 /// The venue's view of this guest (`GET /api/order/:id/taste` -> `taste`), as weights added to the
-/// phone's: the server keeps `PRIOR_UNIT` per portion, the phone 1. Unknown shapes add nothing.
-export const PRIOR_UNIT = 1000;
+/// phone's: both keep PRIOR_UNIT (= UNIT) per portion. Unknown shapes and non-integers add nothing.
+export const PRIOR_UNIT = UNIT;
+const priorRows = rows => (Array.isArray(rows) ? rows : []).filter(r => r && typeof r.key === 'string' && Number.isInteger(r.w) && r.w > 0);
 export function withPrior(w, prior){
-  for (const [rows, m] of [[prior?.tags, w.tag], [prior?.cats, w.cat]]) {
-    for (const r of Array.isArray(rows) ? rows : []) {
-      const k = r && typeof r.key === 'string' ? r.key : null, x = Number(r?.w);
-      if (k && Number.isFinite(x) && x > 0) m.set(k, (m.get(k) || 0) + x / PRIOR_UNIT);
-    }
-  }
+  for (const [rows, m] of [[prior?.tags, w.tag], [prior?.cats, w.cat]]) for (const r of priorRows(rows)) add(m, r.key, r.w);
   return w;
 }
-export function strip(products, profile, day, { avoidGuess = [], prior = null, ctx = null, mood = null } = {}){
-  const on = (products || []).filter(p => p && p.available !== false);
+
+/// Every dish of the strip with the integer it was ranked by (`s`): up to AGAIN_MAX dishes ordered
+/// before ("again"), then the best-scored rest ("taste"), only dishes on sale, never more than
+/// STRIP_MAX. `avoidGuess` (an INFERRED allergy) only moves a dish to the end -- it never removes one.
+export function scored(products, profile, day, { avoidGuess = [], prior = null, ctx = null, mood = null } = {}){
+  const on = (products || []).filter(p => p && typeof p === 'object' && p.available !== false && typeof p.id === 'string');
   const w = withPrior(weights(profile, on, day), prior);
-  const guest = senseVec(profile, on, day);
-  for (const r of Array.isArray(prior?.sense) ? prior.sense : []) { const x = Number(r?.w); if (typeof r?.key === 'string' && x > 0) guest[r.key] = (guest[r.key] || 0) + x / PRIOR_UNIT; }
-  const moment = ctx ? senseVec(profile, on, day, { ctx }) : null;
+  const raw = senseVec(profile, on, day);
+  for (const r of priorRows(prior?.sense)) raw[r.key] = (raw[r.key] || 0) + r.w;
+  const guest = perMille(raw);
+  const moment = ctx ? perMille(senseVec(profile, on, day, { ctx })) : null;
   const total = p => score(p, w) + senseScore(p, { guest, moment, mood });
-  const ordered = id => sum(profile?.dishes?.[id]?.order, day);
-  const guessed = p => Array.isArray(p.allergens) && p.allergens.some(c => avoidGuess.includes(c));
-  const again = on.filter(p => ordered(p.id) > 0).sort((a, b) => ordered(b.id) - ordered(a.id) || String(a.id).localeCompare(String(b.id)))
-    .slice(0, AGAIN_MAX).map(p => ({ id: p.id, why: 'again' }));
+  const ordered = id => sum(profile?.dishes?.[id]?.order, day, W.order);
+  const guessed = p => strs(p.allergens).some(c => avoidGuess.includes(c));
+  const again = on.map(p => ({ p, s: ordered(p.id) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s || byId(a.p.id, b.p.id))
+    .slice(0, AGAIN_MAX).map(x => ({ id: x.p.id, why: 'again', s: x.s }));
   const taken = new Set(again.map(x => x.id));
-  const rest = on.filter(p => !taken.has(p.id)).map(p => ({ p, s: total(p) })).filter(x => x.s > 0)
-    .sort((a, b) => b.s - a.s || String(a.p.id).localeCompare(String(b.p.id)))
-    .map(x => ({ id: x.p.id, why: 'taste', guessed: guessed(x.p) }));
+  const rest = on.filter(p => !taken.has(p.id)).map(p => ({ p, s: total(p) + 0 })).filter(x => x.s > 0)
+    .sort((a, b) => b.s - a.s || byId(a.p.id, b.p.id))
+    .map(x => ({ id: x.p.id, why: 'taste', guessed: guessed(x.p), s: x.s }));
   const ranked = [...rest.filter(x => !x.guessed), ...rest.filter(x => x.guessed)];
   return [...again, ...ranked].slice(0, STRIP_MAX);
 }
+/// The "For you" strip as the page draws it: `scored` without the numbers.
+export const strip = (products, profile, day, opts) =>
+  scored(products, profile, day, opts).map(({ s, ...x }) => x);
 
 // ── W-SENSE: the guest on the dish's taste, texture and aroma ──────────────────
 /// How much the dish's own axes count beside the tags (a never-ordered dish is predicted from them),
-/// the current context's, and the session's mood.
-export const SENSE_W = 2, CTX_W = 1, MOOD_W = 1.5;
+/// the current context's, and the session's mood: x2, x1, x3/2 of a per-mille cosine.
+export const SENSE_W = 2, CTX_W = 1, MOOD_W = [3, 2];
 export const MONTHS_KEEP = 13, SNAP_TOP = 12;
 
-/// The guest's vector over the menu's declared axes: each dish's weight x its vector.
+/// The guest's vector over the menu's declared axes: each dish's weight x its vector / 1000.
 export function senseVec(profile, products, day, { ctx = null } = {}){
   const w = weights(profile, products, day).dish;
   if (ctx) {
     w.clear();
-    for (const c of ctx) for (const [id, list] of Object.entries(profile?.ctx?.[c] || {})) w.set(id, (w.get(id) || 0) + sum(list, day));
+    for (const c of ctx) for (const [id, list] of Object.entries(profile?.ctx?.[c] || {})) add(w, id, sum(list, day, W.order));
   }
   const vec = {};
   for (const p of products || []) {
     const x = w.get(p.id); if (!(x > 0)) continue;
-    for (const [k, v] of Object.entries(vectorOf(senseOf(p)))) vec[k] = (vec[k] || 0) + x * v / 1000;
+    for (const [k, v] of Object.entries(vectorOf(senseOf(p)))) vec[k] = (vec[k] || 0) + Math.trunc(x * v / 1000);
   }
   return vec;
 }
 
 /// What the axes add to a dish's score: its match with the guest, with the moment, with the mood.
+/// `guest` and `moment` are per mille of their top (perMille); a mood is a constant of sense.js.
 export function senseScore(p, { guest = null, moment = null, mood = null } = {}){
   const v = vectorOf(senseOf(p));
   if (!Object.keys(v).length) return 0;
-  return SENSE_W * Math.max(0, cosine(guest, v)) + CTX_W * Math.max(0, cosine(moment, v)) + MOOD_W * cosine(mood ? MOODS[mood] : null, v);
+  return SENSE_W * Math.max(0, cosPm(guest, v)) + CTX_W * Math.max(0, cosPm(moment, v))
+    + Math.trunc(MOOD_W[0] * cosPm(mood ? MOODS[mood] : null, v) / MOOD_W[1]);
 }
 
 /// The month's snapshot of the vector, kept beside the profile (the newest MONTHS_KEEP).
@@ -212,7 +238,7 @@ export function snapshot(profile, products, day){
   for (const m of Object.keys(p.months).sort().slice(0, -MONTHS_KEEP)) delete p.months[m];
   return p;
 }
-export { because };
+export { because, fade };
 
 /// "What this phone remembers", as plain counts the guest can read.
 export function remembered(profile){
@@ -229,13 +255,14 @@ export function remembered(profile){
 }
 
 /// The ONE thing that may leave the phone, and only with consent: the strongest tags and
-/// categories as integers 0..SYNC_SCALE. No dish ids, no events, no days, no referrer, no device.
+/// categories as integers 0..SYNC_SCALE (rounded half up). No dish ids, no events, no days, no
+/// referrer, no device.
 export function syncVector(profile, products, day){
   const w = weights(profile, products, day);
   const top = m => {
-    const rows = [...m.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, SYNC_TOP);
+    const rows = [...m.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1] || byId(a[0], b[0])).slice(0, SYNC_TOP);
     const max = rows.length ? rows[0][1] : 1;
-    return Object.fromEntries(rows.map(([k, v]) => [String(k).slice(0, 32), Math.round(SYNC_SCALE * v / max)]));
+    return Object.fromEntries(rows.map(([k, v]) => [String(k).slice(0, 32), Math.floor((2 * SYNC_SCALE * v + max) / (2 * max))]));
   };
   return { v: VERSION, tags: top(w.tag), cats: top(w.cat), sense: topScaled(senseVec(profile, products, day), 27) };
 }

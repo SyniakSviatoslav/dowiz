@@ -12,7 +12,8 @@
 
 import { chip } from '../lib/ui/chip.js';
 import { esc } from '../lib/ui/core.js';
-import { senseOf, vectorOf, cosine, because, TASTE_MAX, TAG_MAX, MOOD_IDS } from './sense.js';
+import { senseOf, vectorOf, because, TASTE_MAX, TAG_MAX, MOOD_IDS } from './sense.js';
+import { cosPm, perMille } from './taste-int.js';
 import { wordKey } from '../lib/sense-words.js';
 
 /// Icons that exist in lib/icons.css; a key with none gets a dot.
@@ -50,12 +51,12 @@ export function sheetSense(p, guest = null){
 }
 
 /// "You may like it: smoky, crispy" -- the dish's keys among the guest's two strongest, when the
-/// dish is close to the guest's vector (cosine 0.5 or more).
-export const MAY_LIKE_COS = 0.5;
+/// dish is close to the guest's vector (cosine 500 per mille or more, integer: store/taste-int.js).
+export const MAY_LIKE_PM = 500;
 function mayLike(s, guest){
   if (!guest || !Object.keys(guest).length) return '';
   const v = vectorOf(s);
-  if (cosine(guest, v) < MAY_LIKE_COS) return '';
+  if (cosPm(perMille(guest), v) < MAY_LIKE_PM) return '';
   const keys = because(guest, 3).filter(k => k in v).slice(0, 2);
   return keys.length ? `<p class="sx-like small"><span data-t="sx_mayLike"></span> ${keys.map(k => `<b data-t="${wordKey(k)}"></b>`).join(', ')}</p>` : '';
 }
@@ -75,6 +76,13 @@ export function moodRow(mood = null){
     chip({ as: 'button', selected: mood === m, cls: `fy${mood === m ? ' on' : ''}`, label: { t: 'sx_mood_' + m }, attrs: { data: { mood: m } } })).join('')}</div>
     <p class="small muted" data-t="sx_moodHint"></p></div>`;
 }
+
+/// "weather: open-meteo.com" under anything the venue's weather shaped (W-TASTE row 3b). The data
+/// is Open-Meteo's under CC BY 4.0, which REQUIRES the credit wherever it is used; `keys` is the
+/// venue's moment (sense-ui.js momentKeys), and the credit is drawn exactly when a `wx:` key is in it.
+export const WEATHER_SOURCE = 'https://open-meteo.com/';
+export const weatherCredit = keys => (Array.isArray(keys) && keys.some(k => typeof k === 'string' && k.startsWith('wx:'))
+  ? `<p class="sx-wx small muted"><span data-t="sx_weather"></span> <a href="${WEATHER_SOURCE}" target="_blank" rel="noopener">open-meteo.com</a></p>` : '');
 
 /// "Because you often pick smoky + crispy", or ''.
 export const becauseLine = keys => (keys && keys.length ? `<p class="sx-because small muted"><span data-t="sx_because"></span> ${keys.map(k => `<b data-t="${wordKey(k)}"></b>`).join(' + ')}</p>` : '');

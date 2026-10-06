@@ -104,6 +104,8 @@ const SHELL_CACHE_MODULES = [
   '/lib/ui/money.js',
   '/lib/ui/card.js',
   '/lib/ui/time.js',
+  // W-TASTE: the integer arithmetic of the "For you" strip (taste.js and sense-view.js import it).
+  '/store/taste-int.js',
 ];
 const SHELL = [
   '/',

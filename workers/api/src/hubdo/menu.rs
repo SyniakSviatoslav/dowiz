@@ -62,7 +62,7 @@ impl HubImages {
         Ok(())
     }
 
-    /// `?block=menu_prices|bom|names` on either route: that block of the
+    /// `?block=menu_prices|bom|names|taste` on either route: that block of the
     /// catalogue projection (row DG7), from the same memo as the JSON.
     async fn fold_block(&self, name: &str) -> Result<Response> {
         self.menu_memo().await?;
@@ -77,7 +77,7 @@ impl HubImages {
                 res.headers_mut().set("x-dwb-skipped", &skipped.to_string())?;
                 Ok(res)
             }
-            Ok(None) => Response::error("no such block: menu_prices, bom or names", 404),
+            Ok(None) => Response::error("no such block: menu_prices, bom, names or taste", 404),
             Err(e) => Response::error(e, 500),
         }
     }

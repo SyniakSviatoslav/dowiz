@@ -1,11 +1,11 @@
 {
   "id": "feature-sense",
   "name": "sense",
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "class": "LIVE-AFTER-DEPLOY",
   "description": {
-    "en": "A dish's TASTE (sweet, sour, salty, bitter, umami, spicy at 0..5), TEXTURE (9 tags at 1..3) and AROMA (12 tags at 1..3), owner-declared and optional (W-SENSE, operator ask 2026-10-04). Stored on the catalogue product as `sense` (dowiz_hub::sense validates; any write moves menuVersion; the old 5-axis `taste` reads at x5/3 and is cleared when `sense` is saved). The public menu serves it as stored; the storefront card and dish sheet draw only what is declared (bars with their figures as text, texture and aroma chips) and filter offline (spicy, not spicy, crispy, creamy, smoky ...). 'Suggest' answers a DRAFT from the dish's words and the sushi starter defaults and never writes. The guest is profiled on the same axes on the phone (store/taste.js) and on the server (services/customers/taste/senses.rs: sense weights, per-context weights, weekday x band counts, monthly snapshots), so a never-ordered dish is ranked by its axes and the strip says why. The moment at the VENUE (band, weekday, weather from Open-Meteo for the venue's own coordinates, cached 1 h, failure = no weather) ranks by context; the route takes no query, so the guest's place cannot reach it. Session mood stays on the phone. The owner's segment builder answers counts, a six-month trend, the busiest weekday x band and what to stock; a personalised offer is a campaign (segment `taste`) whose words the server writes from the dish's public price, labelled 'Personalised offer', with no code, reaching only guests with marketing consent on the campaign's channel.",
-    "uk": "Смак (6 осей 0–5), текстура й аромат (1–3) кожної страви: власник заповнює, вітрина показує лише заповнене, фільтри офлайн; гість профілюється на тих самих осях (телефон і сервер), контекст — погода в закладі (Open-Meteo, лише координати закладу), настрій лише на телефоні; сегменти для власника й персоналізована пропозиція лише за ціною з меню і лише тим, хто дав згоду на канал."
+    "en": "A dish's TASTE (sweet, sour, salty, bitter, umami, spicy at 0..5), TEXTURE (9 tags at 1..3) and AROMA (12 tags at 1..3), owner-declared and optional (W-SENSE, operator ask 2026-10-04). Stored on the catalogue product as `sense` (dowiz_hub::sense validates; any write moves menuVersion; the old 5-axis `taste` reads at x5/3 and is cleared when `sense` is saved). The public menu serves it as stored; the storefront card and dish sheet draw only what is declared (bars with their figures as text, texture and aroma chips) and filter offline (spicy, not spicy, crispy, creamy, smoky ...). 'Suggest' answers a DRAFT from the dish's words and the sushi starter defaults and never writes. The guest is profiled on the same axes on the phone (store/taste.js) and on the server (services/customers/taste/senses.rs: sense weights, per-context weights, weekday x band counts, monthly snapshots), so a never-ordered dish is ranked by its axes and the strip says why. The moment at the VENUE (band, weekday, weather from Open-Meteo for the venue's own coordinates, cached 1 h, failure = no weather) ranks by context; the route takes no query, so the guest's place cannot reach it. Session mood stays on the phone. The owner's segment builder answers counts, a six-month trend, the busiest weekday x band and what to stock; a personalised offer is a campaign (segment `taste`) whose words the server writes from the dish's public price, labelled 'Personalised offer', with no code, reaching only guests with marketing consent on the campaign's channel. 1.1.0 (W-TASTE 2026-10-05): 'Suggest' also asks the venue's own AI chain (W-AI routes, only when ai.enabled) for a draft; the answer goes through dowiz_hub::sense::from_model and is merged UNDER the lexicon (the lexicon wins on every id it set, model ids are marked from=model); a model failure is the lexicon draft alone; the response adds `ai` (provenance, never the text) and source lexicon+model. The storefront credits the weather 'weather: open-meteo.com' (CC BY 4.0) under the For-you strip whenever a wx: key shaped it, in sq/en/uk/ru.",
+    "uk": "Смак (6 осей 0–5), текстура й аромат (1–3) кожної страви: власник заповнює, вітрина показує лише заповнене, фільтри офлайн; гість профілюється на тих самих осях (телефон і сервер), контекст — погода в закладі (Open-Meteo, лише координати закладу), настрій лише на телефоні; сегменти для власника й персоналізована пропозиція лише за ціною з меню і лише тим, хто дав згоду на канал. 1.1.0: «Підказати» також питає AI-модель закладу (лише якщо AI увімкнено), відповідь проходить from_model і лягає ПІД лексикон; збій моделі = лише лексикон; вітрина підписує «погода: open-meteo.com» (CC BY 4.0)."
   },
   "producer": [
     {
@@ -30,7 +30,7 @@
     },
     {
       "file": "workers/api/src/services/catalogue/sense.rs",
-      "line": 28,
+      "line": 39,
       "what": "draft()/suggest(): POST /api/owner/products/:id/sense/suggest, never writes"
     },
     {
@@ -57,6 +57,21 @@
       "file": "workers/api/src/services/campaigns/offer.rs",
       "line": 51,
       "what": "compose(): label + dish + public figure; campaign.rs refuses a promo code on a taste offer; handlers.rs writes the text from the catalogue and joins the taste profile"
+    },
+    {
+      "file": "workers/api/src/services/catalogue/sense/model.rs",
+      "line": 1,
+      "what": "prompt()/read()/merge(): the model's draft through sense::from_model, under the lexicon"
+    },
+    {
+      "file": "workers/api/src/services/catalogue/sense.rs",
+      "line": 45,
+      "what": "draft_with(); suggest() calls engagement::ai::call::complete only when ai.enabled, failure = lexicon alone"
+    },
+    {
+      "file": "workers/api/public/store/sense-view.js",
+      "line": 84,
+      "what": "weatherCredit(keys): 'weather: open-meteo.com' when a wx: key is in the venue's moment"
     }
   ],
   "consumer": [
@@ -82,7 +97,7 @@
     },
     {
       "file": "workers/api/public/admin/sense.js",
-      "line": 1,
+      "line": 77,
       "what": "the dish sheet's editor and Suggest; the menu row's compact line"
     },
     {
@@ -94,6 +109,16 @@
       "file": "workers/api/public/admin/taste.js",
       "line": 1,
       "what": "the guest card: sense keys, because, weekday x band, the year"
+    },
+    {
+      "file": "workers/api/public/admin/sense.js",
+      "line": 77,
+      "what": "the draft note says when the AI model added to it (sxSuggestedAi)"
+    },
+    {
+      "file": "workers/api/public/store/taste-device.js",
+      "line": 151,
+      "what": "the For-you strip draws weatherCredit(momentKeys())"
     }
   ],
   "transport": [
@@ -280,7 +305,8 @@
       "why",
       "current",
       "source",
-      "saved"
+      "saved",
+      "ai"
     ],
     "additionalProperties": false,
     "properties": {
@@ -323,10 +349,59 @@
         }
       },
       "source": {
-        "const": "lexicon"
+        "enum": [
+          "lexicon",
+          "lexicon+model"
+        ],
+        "description": "lexicon+model when the venue's AI model added at least one id the lexicon left empty (W-TASTE 3a)"
       },
       "saved": {
         "const": false
+      },
+      "ai": {
+        "description": "the AI chain's provenance (engagement::ai::call::Outcome::json) when the venue's AI is on and a route was tried; null otherwise. Never the model's text.",
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "required": [
+              "provider",
+              "model",
+              "neurons",
+              "skipped",
+              "failed",
+              "budget"
+            ],
+            "properties": {
+              "provider": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "neurons": {
+                "type": "integer"
+              },
+              "skipped": {
+                "type": "array"
+              },
+              "failed": {
+                "type": "array"
+              },
+              "budget": {
+                "type": "object"
+              }
+            }
+          }
+        ]
       }
     }
   },

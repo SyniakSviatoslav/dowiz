@@ -17,13 +17,13 @@ import { cardSense } from '/store/sense-view.js';
 
 const WORDS = {
   sq: { sxEdit: 'Shija, struktura dhe aroma', sxEditHint: 'Gjithçka me dëshirë. Prekni një nivel; prekeni sërish për ta hequr. Çfarë nuk prekni nuk shfaqet te klienti.',
-        sxSuggest: 'Sugjero nga përshkrimi', sxSuggested: 'Draft: kontrollojeni dhe ruajeni. Asgjë nuk u ruajt ende.', sxSuggestNone: 'Asnjë fjalë e njohur në përshkrim.', sxLevel: 'Niveli' },
+        sxSuggest: 'Sugjero nga përshkrimi', sxSuggested: 'Draft: kontrollojeni dhe ruajeni. Asgjë nuk u ruajt ende.', sxSuggestNone: 'Asnjë fjalë e njohur në përshkrim.', sxLevel: 'Niveli', sxSuggestedAi: 'Draft nga fjalët dhe modeli juaj AI: kontrollojeni dhe ruajeni. Asgjë nuk u ruajt ende.' },
   en: { sxEdit: 'Taste, texture and aroma', sxEditHint: 'All optional. Tap a level; tap it again to clear. What you leave untouched is not shown to guests.',
-        sxSuggest: 'Suggest from the description', sxSuggested: 'A draft: check it, then save. Nothing was saved yet.', sxSuggestNone: 'No word in the description it knows.', sxLevel: 'Level' },
+        sxSuggest: 'Suggest from the description', sxSuggested: 'A draft: check it, then save. Nothing was saved yet.', sxSuggestNone: 'No word in the description it knows.', sxLevel: 'Level', sxSuggestedAi: 'A draft from the words and your AI model: check it, then save. Nothing was saved yet.' },
   uk: { sxEdit: 'Смак, текстура й аромат', sxEditHint: 'Усе за бажанням. Торкніться рівня; торкніться ще раз, щоб зняти. Чого не торкалися, гостям не показується.',
-        sxSuggest: 'Підказати з опису', sxSuggested: 'Чернетка: перевірте й збережіть. Нічого ще не збережено.', sxSuggestNone: 'В описі немає знайомих слів.', sxLevel: 'Рівень' },
+        sxSuggest: 'Підказати з опису', sxSuggested: 'Чернетка: перевірте й збережіть. Нічого ще не збережено.', sxSuggestNone: 'В описі немає знайомих слів.', sxLevel: 'Рівень', sxSuggestedAi: 'Чернетка зі слів і вашої AI-моделі: перевірте й збережіть. Нічого ще не збережено.' },
   ru: { sxEdit: 'Вкус, текстура и аромат', sxEditHint: 'Всё по желанию. Нажмите уровень; нажмите ещё раз, чтобы снять. Что не трогали, гостям не показывается.',
-        sxSuggest: 'Подсказать из описания', sxSuggested: 'Черновик: проверьте и сохраните. Ничего ещё не сохранено.', sxSuggestNone: 'В описании нет знакомых слов.', sxLevel: 'Уровень' },
+        sxSuggest: 'Подсказать из описания', sxSuggested: 'Черновик: проверьте и сохраните. Ничего ещё не сохранено.', sxSuggestNone: 'В описании нет знакомых слов.', sxLevel: 'Уровень', sxSuggestedAi: 'Черновик из слов и вашей AI-модели: проверьте и сохраните. Ничего ещё не сохранено.' },
 };
 for (const l of LANGS) Object.assign(T[l], SENSE_WORDS[l], WORDS[l]);
 
@@ -73,7 +73,8 @@ export function bindSenseEditor(p){
       if (!got) { note.hidden = false; note.dataset.t = 'sxSuggestNone'; retranslate(note.parentElement); return; }
       // The draft fills what is empty; what the owner already set stays theirs.
       for (const dim of ['taste', 'texture', 'aroma']) for (const [id, n] of Object.entries(got[dim] || {})) if (!(id in draft[dim])) draft[dim][id] = n;
-      note.hidden = false; note.dataset.t = 'sxSuggested'; retranslate(note.parentElement);
+      // W-TASTE: say when the venue's AI model added to the draft (it is held to the vocabulary server-side).
+      note.hidden = false; note.dataset.t = d.source === 'lexicon+model' ? 'sxSuggestedAi' : 'sxSuggested'; retranslate(note.parentElement);
       redraw();
     } catch (e) { toast(String(e.message || e)); }
   };

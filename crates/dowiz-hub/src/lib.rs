@@ -59,6 +59,8 @@ pub mod forget;
 pub mod lang;
 /// W-SENSE 2026-10-04: a dish's taste, texture and aroma -- the vocabulary and its ranges.
 pub mod sense;
+/// W-TASTE 2026-10-05: the integer ranking arithmetic the phone and the hub share.
+pub mod rank;
 // DG10: crypto-shredding for new logs; off by default (see Cargo.toml `shred`).
 #[cfg(feature = "shred")]
 pub mod shred;

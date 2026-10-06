@@ -22,6 +22,8 @@
 pub mod decode;
 pub mod encode;
 pub mod schema;
+/// W-TASTE: the dishes' sense as integer columns (`schema::TASTE`) and an exact top-k over them.
+pub mod taste;
 pub mod view;
 
 #[cfg(test)]

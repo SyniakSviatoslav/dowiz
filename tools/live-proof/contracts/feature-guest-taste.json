@@ -1,11 +1,11 @@
 {
   "id": "feature-guest-taste",
   "name": "guest-taste",
-  "contract_version": "2.1.0",
+  "contract_version": "2.2.0",
   "class": "LIVE-AFTER-DEPLOY",
   "description": {
-    "en": "Guest taste scoring, on the device and on the server, AUTOMATIC (W-MR0 rows MR7 + MR8; DECISIONS.md D0 amendment and operator ruling 2026-10-04: no checkbox, basis legitimate interest GDPR 6(1)(f), one-tap objection Art. 21). DEVICE: store/taste.js keeps a per-venue IndexedDB `dowiz.taste.v1`, ON by default (dw_taste_on='0' is off); it re-orders a 'For you' strip, never hides a dish, never touches a price. SERVER: for a guest who gave a phone, each order folds the dishes' tags and categories (60-day half-life) and, if sent, the device's aggregated vector `taste_sync` (<= 12 keys per map, integers 0..1000, no events, no dish ids) into a profile beside the customer card in the venue's `people` image; a segment new/regular/at_risk/lapsed is derived from recency and frequency with its rule in words. Recognition only by the phone typed at checkout or an order link the phone holds, never by fingerprinting. 'We remember your taste · turn off' (menu footer, order page) files an objection in the consent log (purpose personalisation, Method::Objection) and deletes the profile; after it nothing is stored and taste_sync is refused 400; a phone without an order link sends taste_off with its next order. Never read to set a price, a discount, an eligibility or a refusal (tools/gates/no-scoring.sh). Retention 12 months after the last order (GUESS). W-SENSE (2.1.0, additive): taste_sync may carry `sense` (keys of the closed taste/texture/aroma vocabulary, 0..1000); the view adds sense, because, history (monthly snapshots), contexts and when (feature-sense.json).",
-    "uk": "Оцінка смаку гостя на телефоні й на сервері — автоматично, без галочки (законний інтерес); «Ми памʼятаємо ваш смак · вимкнути» — заперечення одним дотиком, профіль видаляється, taste_sync після цього відхиляється (400); ніколи не впливає на ціну."
+    "en": "Guest taste scoring, on the device and on the server, AUTOMATIC (W-MR0 rows MR7 + MR8; DECISIONS.md D0 amendment and operator ruling 2026-10-04: no checkbox, basis legitimate interest GDPR 6(1)(f), one-tap objection Art. 21). DEVICE: store/taste.js keeps a per-venue IndexedDB `dowiz.taste.v1`, ON by default (dw_taste_on='0' is off); it re-orders a 'For you' strip, never hides a dish, never touches a price. SERVER: for a guest who gave a phone, each order folds the dishes' tags and categories (60-day half-life) and, if sent, the device's aggregated vector `taste_sync` (<= 12 keys per map, integers 0..1000, no events, no dish ids) into a profile beside the customer card in the venue's `people` image; a segment new/regular/at_risk/lapsed is derived from recency and frequency with its rule in words. Recognition only by the phone typed at checkout or an order link the phone holds, never by fingerprinting. 'We remember your taste · turn off' (menu footer, order page) files an objection in the consent log (purpose personalisation, Method::Objection) and deletes the profile; after it nothing is stored and taste_sync is refused 400; a phone without an order link sends taste_off with its next order. Never read to set a price, a discount, an eligibility or a refusal (tools/gates/no-scoring.sh). Retention 12 months after the last order (GUESS). W-SENSE (2.1.0, additive): taste_sync may carry `sense` (keys of the closed taste/texture/aroma vocabulary, 0..1000); the view adds sense, because, history (monthly snapshots), contexts and when (feature-sense.json). 2.2.0 (W-TASTE 2026-10-05): the server's 60-day fade is now the INTEGER half-life shared with the phone (dowiz_hub::rank::fade, a Q16 table from a Q32 chain; it was f64 powf().round()), so stored weights may differ by 1 unit from the float build at non-multiple-of-60 gaps; shapes unchanged. The phone ranks in the same integers (store/taste-int.js, store/taste.js scored()), equal to dowiz_hub::rank::strip on 1000/1000 fixture guests; old IndexedDB records (dowiz.taste.v1) are read through migrate(), never wiped.",
+    "uk": "Оцінка смаку гостя на телефоні й на сервері — автоматично, без галочки (законний інтерес); «Ми памʼятаємо ваш смак · вимкнути» — заперечення одним дотиком, профіль видаляється, taste_sync після цього відхиляється (400); ніколи не впливає на ціну. 2.2.0: згасання на сервері й на телефоні — одна ЦІЛОЧИСЕЛЬНА таблиця (rank::fade); телефон ранжує цілими, 1000/1000 рівно з Rust; старі записи телефону мігрують при читанні, не стираються."
   },
   "producer": [
     {
@@ -42,6 +42,16 @@
       "file": "crates/dowiz-hub/src/consent.rs",
       "line": 299,
       "what": "objected(): the newest personalisation act is a withdrawal; no act is not an objection"
+    },
+    {
+      "file": "crates/dowiz-hub/src/rank.rs",
+      "line": 1,
+      "what": "fade/isqrt/per_mille/cos_pm: the integer arithmetic both sides use"
+    },
+    {
+      "file": "crates/dowiz-hub/src/rank/strip.rs",
+      "line": 1,
+      "what": "strip(): the hub's twin of the phone's strip"
     }
   ],
   "consumer": [
@@ -64,6 +74,11 @@
       "file": "workers/api/public/store/taste.js",
       "line": 182,
       "what": "syncVector(): the only thing that may leave the phone; strip(..., {prior})"
+    },
+    {
+      "file": "workers/api/public/store/taste-int.js",
+      "line": 1,
+      "what": "the JS twin of rank.rs"
     }
   ],
   "transport": [

@@ -31,7 +31,7 @@ pub const TASTE_BYTES: usize = dowiz_hub::CEILING_BYTES;
 pub const KIND: &str = "taste";
 pub const VERSION: u8 = 1;
 /// A signal counts half after this many days (the device's half-life, store/taste.js).
-pub const HALF_LIFE_DAYS: f64 = 60.0;
+pub const HALF_LIFE_DAYS: i64 = dowiz_hub::rank::HALF_LIFE_DAYS;
 /// One portion, as an integer weight.
 pub const UNIT: i64 = 1000;
 /// Tags and categories kept per profile, strongest first; the rest fade out.
@@ -131,11 +131,10 @@ pub struct Line {
     pub sense: BTreeMap<String, i64>,
 }
 
+/// W-TASTE: the ONE integer half-life the phone uses too (`dowiz_hub::rank::fade`, a Q16 table;
+/// it was `f64::powf().round()`, which no second machine was bound to reproduce).
 fn fade(w: i64, days: i64) -> i64 {
-    if days <= 0 {
-        return w;
-    }
-    (w as f64 * 0.5f64.powf(days as f64 / HALF_LIFE_DAYS)).round() as i64
+    dowiz_hub::rank::fade(w, days)
 }
 
 /// The strongest `KEEP` entries, faded entries at zero dropped.

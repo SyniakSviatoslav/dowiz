@@ -63,6 +63,9 @@ pub struct Blocks {
     pub menu_prices: Vec<u8>,
     pub bom: Vec<u8>,
     pub names: Vec<u8>,
+    /// W-TASTE: the dishes' sense as integer columns (`dowiz_hub::block::taste`); `None` when the
+    /// catalogue does not fit one block (the JSON path still answers).
+    pub taste: Option<Vec<u8>>,
     /// Products the projection could not read (the readers fall back to JSON).
     pub skipped: Vec<String>,
 }
@@ -71,7 +74,8 @@ fn blocks_of(listed: &[(String, String)]) -> Result<Blocks, String> {
     use dowiz_hub::block::encode::{encode, project};
     let p = project(listed).map_err(|e| e.to_string())?;
     let enc = |b: &dowiz_hub::block::Block| encode(b).map_err(|e| e.to_string());
-    Ok(Blocks { menu_prices: enc(&p.menu_prices)?, bom: enc(&p.bom)?, names: enc(&p.names)?, skipped: p.skipped })
+    let taste = dowiz_hub::block::taste::project(listed).ok().and_then(|(t, _)| encode(&t).ok());
+    Ok(Blocks { menu_prices: enc(&p.menu_prices)?, bom: enc(&p.bom)?, names: enc(&p.names)?, taste, skipped: p.skipped })
 }
 
 /// What `/fold/menu` answers.
@@ -237,6 +241,10 @@ impl Memo {
             "menu_prices" => &b.menu_prices,
             "bom" => &b.bom,
             "names" => &b.names,
+            "taste" => match &b.taste {
+                Some(t) => t,
+                None => return Ok(None),
+            },
             _ => return Ok(None),
         };
         Ok(Some((bytes.as_slice(), b.skipped.len())))

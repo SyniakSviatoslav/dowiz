@@ -15,6 +15,7 @@ export const SENSE_WORDS = {
     sx_filters: 'Sipas shijes', sx_because: 'Sepse shpesh zgjidhni', sx_mayLike: 'Mund t\'ju pëlqejë:',
     sx_mood: 'Si jeni sot?', sx_mood_quick: 'Energji e shpejtë', sx_mood_cosy: 'Ngrohtësi', sx_mood_light: 'E lehtë dhe e shëndetshme', sx_mood_treat: 'Një kënaqësi',
     sx_moodHint: 'Vetëm për këtë vizitë, në këtë telefon. Nuk ruhet dhe nuk dërgohet.',
+    sx_weather: 'moti:',
     sx_year: 'Shija juaj gjatë vitit', sx_none: 'Kuzhina nuk e ka përshkruar ende këtë pjatë.',
   },
   en: {
@@ -27,6 +28,7 @@ export const SENSE_WORDS = {
     sx_filters: 'By taste', sx_because: 'Because you often pick', sx_mayLike: 'You may like it:',
     sx_mood: 'How are you today?', sx_mood_quick: 'Quick energy', sx_mood_cosy: 'Cosy', sx_mood_light: 'Light & healthy', sx_mood_treat: 'A treat',
     sx_moodHint: 'For this visit only, on this phone. Not kept, not sent.',
+    sx_weather: 'weather:',
     sx_year: 'Your taste over the year', sx_none: 'The kitchen has not described this dish yet.',
   },
   uk: {
@@ -39,6 +41,7 @@ export const SENSE_WORDS = {
     sx_filters: 'За смаком', sx_because: 'Бо ви часто обираєте', sx_mayLike: 'Вам може сподобатися:',
     sx_mood: 'Який у вас настрій?', sx_mood_quick: 'Швидка енергія', sx_mood_cosy: 'Затишок', sx_mood_light: 'Легко й корисно', sx_mood_treat: 'Побалувати себе',
     sx_moodHint: 'Лише на цей візит, на цьому телефоні. Не зберігається й не надсилається.',
+    sx_weather: 'погода:',
     sx_year: 'Ваш смак протягом року', sx_none: 'Кухня ще не описала цю страву.',
   },
   ru: {
@@ -51,6 +54,7 @@ export const SENSE_WORDS = {
     sx_filters: 'По вкусу', sx_because: 'Потому что вы часто выбираете', sx_mayLike: 'Вам может понравиться:',
     sx_mood: 'Какое у вас настроение?', sx_mood_quick: 'Быстрая энергия', sx_mood_cosy: 'Уют', sx_mood_light: 'Легко и полезно', sx_mood_treat: 'Побаловать себя',
     sx_moodHint: 'Только на этот визит, на этом телефоне. Не хранится и не отправляется.',
+    sx_weather: 'погода:',
     sx_year: 'Ваш вкус за год', sx_none: 'Кухня ещё не описала это блюдо.',
   },
 };

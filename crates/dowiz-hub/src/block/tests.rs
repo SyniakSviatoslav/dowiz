@@ -237,7 +237,7 @@ fn schema_table_agrees() {
     }
     keys.sort_unstable();
     keys.dedup();
-    assert_eq!(keys.len(), schema::TABLE.len(), "every schema has its own K64");
+    assert_eq!(keys.len(), schema::TABLE.len() + schema::HUB_ONLY.len(), "every schema has its own K64");
     let names: Vec<&str> = schema::of(&schema::MENU_PRICES).unwrap().cols.iter().map(|c| c.name).collect();
     assert_eq!(names, ["dish", "price", "tax_ppm", "mods_ptr", "mods_col", "mods_val"]);
     // The slice-by-8 crc IS bebop_store::crc32, on every fixture and on seeded noise of every length.

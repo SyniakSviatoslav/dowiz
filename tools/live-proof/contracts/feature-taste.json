@@ -1,0 +1,110 @@
+{
+  "id": "feature-taste",
+  "name": "taste",
+  "contract_version": "1.0.0",
+  "class": "LIVE-AFTER-DEPLOY",
+  "description": {
+    "en": "W-TASTE (2026-10-05; report D.1 #6, #7). (1) INTEGER TASTE ON THE DEVICE: the storefront's For-you strip ranks in integers with the server's UNIT=1000, the integer half-life table and a per-mille cosine (store/taste-int.js = crates/dowiz-hub/src/rank.rs), so the phone and the hub rank the same record identically (1000/1000 on the shared fixture crates/dowiz-hub/fixtures/rank/strip.json). The deployed /store/taste-int.js must carry the same half-life table as the hub. (2) taste.dwb: a DG7 columnar block (schema `taste:v1`, hub-only table, not yet in oracle.py/block.bp/bebop-wasm) folded with the menu memo per catalogue generation: per dish the six taste axes 0..5, texture and aroma intensities as two bit planes each, EU14 allergens as a mask (bit 15 = undeclared), on-sale flag, id K64 + bytes; read zero-copy through View; top_k(view, want, avoid, k) is exact, deterministic and byte-equal with the JSON path (top_k_json). It is answered on the Durable Object's internal `GET /fold/menu?block=taste` (Worker <-> DO only); no public route and no server ranking site uses it yet (the server ranks no dishes for a guest today).",
+    "uk": "Телефон ранжує «Для вас» цілими числами, як сервер (1000/1000 рівно); taste.dwb — колонковий блок смаків страв для точного top-k (внутрішній маршрут обʼєкта)."
+  },
+  "producer": [
+    {
+      "file": "crates/dowiz-hub/src/rank.rs",
+      "line": 1,
+      "what": "HALF/fade/isqrt/per_mille/cos_pm"
+    },
+    {
+      "file": "crates/dowiz-hub/src/block/schema.rs",
+      "line": 49,
+      "what": "TASTE schema string, HUB_ONLY table"
+    },
+    {
+      "file": "crates/dowiz-hub/src/block/taste.rs",
+      "line": 73,
+      "what": "project(): products -> taste block; top_k(): exact top-k over View; top_k_json(): the oracle"
+    },
+    {
+      "file": "workers/api/src/fold/menu.rs",
+      "line": 244,
+      "what": "Memo::block(\"taste\") from the same fold as the JSON"
+    },
+    {
+      "file": "workers/api/public/store/taste-int.js",
+      "line": 1,
+      "what": "the phone's twin of rank.rs"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/store/taste.js",
+      "line": 178,
+      "what": "scored()/strip(): the For-you strip in integers"
+    },
+    {
+      "file": "workers/api/src/hubdo/menu.rs",
+      "line": 67,
+      "what": "fold_block(): ?block=taste, content-type application/vnd.dowiz.block"
+    }
+  ],
+  "transport": [
+    {
+      "method": "GET",
+      "path": "/store/taste-int.js",
+      "auth": "none",
+      "what": "the device's integer arithmetic, static asset"
+    },
+    {
+      "method": "GET",
+      "path": "/fold/menu?block=taste",
+      "auth": "internal (Worker -> venue Durable Object only)",
+      "what": "taste.dwb bytes; 404 'no such block' when the catalogue does not fit one block"
+    }
+  ],
+  "external": "none",
+  "external_api_version": {},
+  "auth": {
+    "secrets": [],
+    "where": "public static assets only"
+  },
+  "block_layout": {
+    "schema": "taste:v1(dish:i64:0,ids:u8:0,ids_off:u32off:0,sweet:i64:0,sour:i64:0,salty:i64:0,bitter:i64:0,umami:i64:0,spicy:i64:0,tex_lo:i64:0,tex_hi:i64:0,aro_lo:i64:0,aro_hi:i64:0,allergens:i64:0,flags:i64:0)",
+    "format": "DG7 DWB1 v1 (crates/dowiz-hub/src/block/mod.rs): 24-byte header, 16-byte column descriptors, 8-aligned columns, crc32 trailer, <= 96 KiB",
+    "bits": {
+      "tex_lo/tex_hi": "bit i = level bit 0 / bit 1 of sense::TEXTURE[i] (1..3)",
+      "aro_lo/aro_hi": "same over sense::AROMA",
+      "allergens": "bit i = allergens::EU14[i]; bit 15 = undeclared",
+      "flags": "bit 0 = on sale"
+    }
+  },
+  "device_asset_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "what the probe extracts from the deployed /store/taste-int.js after importing it",
+    "type": "object",
+    "required": [
+      "half",
+      "fade_60",
+      "step"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "half": {
+        "type": "array",
+        "minItems": 60,
+        "maxItems": 60,
+        "items": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536
+        }
+      },
+      "fade_60": {
+        "const": 1000
+      },
+      "step": {
+        "const": "4245635389"
+      }
+    }
+  },
+  "probe": "tools/live-proof/probes/feature-taste.mjs: on qa-durres, (1) /store/taste-int.js is served and, imported, carries the hub's half-life table (equal to crates/dowiz-hub/fixtures/rank/strip.json `half`), fade(2000,60)=1000 and ranks the fixture's first 50 guests as the file says; (2) /store/sense-view.js and /lib/sense-words.js carry the open-meteo credit in four languages; (3) Suggest on qa-water validates against feature-sense 1.1.0 (ai provenance, source lexicon or lexicon+model) and writes nothing. The DO-internal ?block=taste is NOT reachable from outside: proven in-memory only (fold/menu tests).",
+  "last_verified": null
+}

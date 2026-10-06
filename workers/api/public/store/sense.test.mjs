@@ -2,6 +2,7 @@
 // A dish's taste, texture and aroma on the storefront, and the guest on the same axes (W-SENSE).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import * as S from './sense.js';
 import * as V from './sense-view.js';
 import * as T from './taste.js';
@@ -150,4 +151,16 @@ test('measured on 300 synthetic guests: a new dish built on the guest\'s axes ra
   }
   console.log(`MEASURED sense ranking (300 guests, 40-dish menu, 4 dishes ordered each): the new dish is in the strip's top 3 for ${top3}/${N} (${(100 * top3 / N).toFixed(1)}%), first for ${top1}/${N}; top 3 among never-ordered dishes for ${fresh3}/${N} (${(100 * fresh3 / N).toFixed(1)}%)`);
   assert.ok(top3 / N >= 0.8, `${top3}/${N}`);
+});
+
+test('W-TASTE: the weather is credited to open-meteo.com (CC BY 4.0) exactly where it shaped the strip', () => {
+  const h = V.weatherCredit(['band:evening', 'wx:rain']);
+  assert.match(h, /data-t="sx_weather"/);
+  assert.match(h, /href="https:\/\/open-meteo\.com\/"[^>]*>open-meteo\.com<\/a>/);
+  assert.equal(V.weatherCredit(['band:evening', 'day:weekday']), '', 'no weather key, no weather credit');
+  assert.equal(V.weatherCredit(null), '');
+  for (const l of ['sq', 'en', 'uk', 'ru']) assert.ok(SENSE_WORDS[l].sx_weather, l);
+  // The strip itself carries it: taste-device.js appends weatherCredit(momentKeys()).
+  const dev = readFileSync(new URL('./taste-device.js', import.meta.url), 'utf8');
+  assert.match(dev, /\$\{weatherCredit\(momentKeys\(\)\)\}/, 'the "For you" strip draws the credit');
 });

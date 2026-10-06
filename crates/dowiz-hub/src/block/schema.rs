@@ -40,6 +40,24 @@ pub const NAMES: Schema = Schema { name: "names", string: "names:v1(id:i64:0,byt
 /// Every shipped schema. A reader refuses a block whose schema is not here.
 pub const TABLE: [&Schema; 4] = [&MENU_PRICES, &BOM, &STOCK_LEVELS, &NAMES];
 
+/// W-TASTE (report D.1 #7): the dishes' taste, texture, aroma, allergens and availability as
+/// integer columns -- the "dish sense tensor" (`block::taste`). Six taste axes 0..=5 in
+/// `sense::TASTE` order; texture and aroma intensities 1..=3 as two bit planes each (`lo` = bit 0,
+/// `hi` = bit 1 of the level, bit i = the i-th word of `sense::TEXTURE` / `sense::AROMA`);
+/// `allergens` bit i = `allergens::EU14[i]`, bit 15 = undeclared; `flags` bit 0 = on sale. The
+/// dish's id is its `K64` (`dish`) and its bytes (`ids` + `ids_off`), so the block stands alone.
+pub const TASTE: Schema = Schema {
+    name: "taste",
+    string: "taste:v1(dish:i64:0,ids:u8:0,ids_off:u32off:0,sweet:i64:0,sour:i64:0,salty:i64:0,bitter:i64:0,umami:i64:0,spicy:i64:0,tex_lo:i64:0,tex_hi:i64:0,aro_lo:i64:0,aro_hi:i64:0,allergens:i64:0,flags:i64:0)",
+};
+
+/// Schemas only THIS reader knows (W-TASTE, 2026-10-05). `TABLE` is the set every implementation
+/// carries -- `block_read --schemas` prints it and the bebop-wasm gate (B-2) holds it equal to
+/// `oracle.py` and `block.bp` -- so a new kind starts here, where the other readers never meet it
+/// (it is served on its own route, `?block=taste`, never mixed into their fixtures), and moves to
+/// `TABLE` in the commit that teaches the mirrors.
+pub const HUB_ONLY: [&Schema; 1] = [&TASTE];
+
 /// One column as the schema string declares it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColSpec {
@@ -104,6 +122,7 @@ pub fn known() -> &'static [Known] {
     KNOWN.get_or_init(|| {
         TABLE
             .iter()
+            .chain(HUB_ONLY.iter())
             .map(|s| {
                 let cols = parse(s.string).unwrap_or_else(|e| panic!("schema {}: {e}", s.name));
                 let csr = cols.iter().any(|c| c.typ == super::ty::ROW_PTR);
