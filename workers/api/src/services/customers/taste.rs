@@ -119,6 +119,7 @@ pub struct Profile {
     pub when: BTreeMap<String, i64>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub months: BTreeMap<String, BTreeMap<String, i64>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub snn_held: Option<dowiz_hub::snn::quality::Held>, // W-SNN: the two top-3s, until the next order
 }
 
 /// One line of an order, as this module needs it: the dish's tags, its category, how many, and
@@ -129,6 +130,7 @@ pub struct Line {
     pub category: Option<String>,
     pub qty: i64,
     pub sense: BTreeMap<String, i64>,
+    pub id: String, // W-SNN: the product id (`line_of`), for the quality check at the next order
 }
 
 /// W-TASTE: the ONE integer half-life the phone uses too (`dowiz_hub::rank::fade`, a Q16 table;
@@ -268,16 +270,10 @@ pub fn parse(json: &str) -> Option<Profile> {
     serde_json::from_str::<Profile>(json).ok().filter(|p| p.v == VERSION)
 }
 
-/// The dish's tags and category from its catalogue JSON.
-pub fn line_of(product_json: &str, qty: i64) -> Line {
-    let v: serde_json::Value = serde_json::from_str(product_json).unwrap_or_default();
-    Line {
-        tags: v.get("tags").and_then(|t| t.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default(),
-        category: v.get("categoryId").and_then(|c| c.as_str()).map(str::to_string),
-        qty,
-        sense: dowiz_hub::sense::of_product(&v).map(|s| dowiz_hub::sense::vector(&s)).unwrap_or_default(),
-    }
-}
+/// The dish's tags and category from its catalogue JSON (`taste/line.rs`).
+#[path = "taste/line.rs"]
+mod line;
+pub use line::line_of;
 
 /// W-SENSE: the guest on the dish's axes, per context, per month.
 #[path = "taste/senses.rs"]
@@ -285,11 +281,13 @@ pub mod senses;
 /// W-SENSE row 7: the owner's segment builder over the profiles.
 #[path = "taste/builder.rs"]
 pub mod builder;
-/// W-TASTE2 row 2: "For you" on the order page, from this profile and the taste block.
+/// W-TASTE2 row 2 ("For you" on the order page) and W-SNN (the sheaf network beside the ranker, in shadow).
 #[path = "taste/foryou.rs"]
 pub mod foryou;
 #[path = "taste/agreement.rs"]
 pub mod agreement;
+#[path = "taste/snn.rs"]
+pub mod snn;
 
 #[cfg(test)]
 #[path = "taste/tests.rs"]

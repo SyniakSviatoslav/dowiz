@@ -8,11 +8,11 @@ use super::*;
 const D: i64 = 20_000; // 2024-10-04
 fn smoky_crispy(qty: i64) -> Line {
     let s = dowiz_hub::sense::validate(&serde_json::json!({"taste": {"salty": 3}, "texture": {"crispy": 3}, "aroma": {"smoky": 3}})).unwrap();
-    Line { tags: vec![], category: Some("rolls".into()), qty, sense: dowiz_hub::sense::vector(&s) }
+    Line { tags: vec![], category: Some("rolls".into()), qty, sense: dowiz_hub::sense::vector(&s), id: String::new() }
 }
 fn sweet_soft(qty: i64) -> Line {
     let s = dowiz_hub::sense::validate(&serde_json::json!({"taste": {"sweet": 5}, "texture": {"soft": 3}})).unwrap();
-    Line { tags: vec![], category: Some("desserts".into()), qty, sense: dowiz_hub::sense::vector(&s) }
+    Line { tags: vec![], category: Some("desserts".into()), qty, sense: dowiz_hub::sense::vector(&s), id: String::new() }
 }
 fn at(keys: &[&str], when: &str) -> At {
     At { keys: keys.iter().map(|s| s.to_string()).collect(), when: when.into() }

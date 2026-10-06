@@ -211,4 +211,11 @@ pub const STORES: &[Store] = &[
         retention: Retention::Latest,
         erase: Eraser::NotPersonal("delivery-rail health counters"),
         export: Exporter::NotPersonal },
+    // W-SNN: the sheaf network's shadow -- ONE aggregate per venue (comparisons, agreements, model id).
+    Store { image: "snn", kinds: &["tally"], home: Venue,
+        holds: &[], subjects: &[],
+        purpose: P::Operations, basis: Basis::NotPersonal,
+        retention: Retention::Latest,
+        erase: Eraser::NotPersonal("per-venue ranking agreement counters, no guest in them"),
+        export: Exporter::NotPersonal },
 ];

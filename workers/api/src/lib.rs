@@ -455,6 +455,8 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .get_async("/api/owner/customers/:key/taste", |r, c| edge::run(r, c, services::customers::taste_routes::owner_view))
         .get_async("/api/owner/customers/taste/segments", |r, c| edge::run(r, c, services::customers::taste_routes::owner_segments))
         .get_async("/api/owner/customers/taste/builder", |r, c| edge::run(r, c, services::customers::taste_builder::builder)) // W-SENSE
+        .get_async("/api/owner/snn", |r, c| edge::run(r, c, services::customers::snn_routes::owner_view)) // W-SNN
+        .post_async("/api/owner/snn", |r, c| edge::run(r, c, services::customers::snn_routes::owner_set)) // W-SNN
         .get_async("/api/owner/customers/reveals", |r, c| edge::run(r, c, services::customers::handlers::reveals))
         .put_async("/api/owner/customers/:key/record", |r, c| edge::run(r, c, services::customers::record_routes::put_record))
         .post_async("/api/owner/customers/rekey", |r, c| edge::run(r, c, services::customers::record_routes::rekey))

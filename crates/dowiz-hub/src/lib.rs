@@ -61,6 +61,8 @@ pub mod lang;
 pub mod sense;
 /// W-TASTE 2026-10-05: the integer ranking arithmetic the phone and the hub share.
 pub mod rank;
+/// W-SNN 2026-10-06: a sheaf neural network ranker, integer inference, shipped in shadow.
+pub mod snn;
 // DG10: crypto-shredding for new logs; off by default (see Cargo.toml `shred`).
 #[cfg(feature = "shred")]
 pub mod shred;

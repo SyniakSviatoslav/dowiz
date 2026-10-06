@@ -1,0 +1,301 @@
+{
+  "id": "feature-snn",
+  "name": "snn.shadow",
+  "contract_version": "1.2.0",
+  "class": "LIVE-AFTER-DEPLOY",
+  "description": {
+    "en": "W-SNN (operator 2026-10-06: sheaf neural networks now, built honestly). A cellular-sheaf neural network (stalk dim 8, two Neural-Sheaf-Diffusion layers over dish-category/tag/ingredient groups, learned diagonal restriction maps, a learned per-axis residual cosine) ranks a guest's dishes from what the server profile already holds (sense vector, category and tag weights). Trained offline in floats (scratchpad snn-train/train.py), inferred in Q16 INTEGERS (crates/dowiz-hub/src/snn), bit-identical to a python-int reference on 60/60 golden cases, weights one 1712-byte blob with a zlib crc32 (refused by name when wrong; the current ranker keeps serving). SHADOW by default: when a guest with a server profile (and no objection) opens their order page, GET /api/order/:id/taste runs the network beside the current server ranker (block::taste top-k cosine) and adds ONE per-venue aggregate (comparisons, first-dish agreement, top-3 overlap, unusable count, model id) to the venue's own image 'snn' -- no guest key, no dish list. The page's bytes do not change. Switch per venue: settings key snn = shadow|on|off (default shadow); off loads and runs nothing; on is for after the A/B shows a win (nothing shows either list until the server 'For you' lands). Never a price, a discount or an eligibility. 1.1.0 (operator 2026-10-06, quality): the order-page read also HOLDS both top-3s (current server ranker, network) in the guest's server profile (`snn_held`; only beside a profile that exists, so an objecting guest stores nothing; removed with the profile on forget-me or objection); at that guest's next order the hold is checked against the dishes ordered, counted per venue (settled, currentHitPm, snnHitPm) and cleared. 1.2.0 (main's Art. 15 decision 2026-10-06): the guest's own export GET /api/order/:id/taste lists the hold under taste.held (both top-3s by id and name, temporary: true, deletedAt: next_order) while it is held; the order page's taste strip is untouched, and the export with taste.held removed is byte-identical between shadow and off.",
+    "uk": "Нейромережа пучків ранжує страви для гостя в тіні: рахує поруч із нинішнім ранжуванням, гостю нічого не змінює, власник бачить лише відсоток збігу по закладу; перемикач тінь/увімк./вимк., за замовчуванням тінь. 1.1.0: якість — два топ-3 тримаються в профілі гостя до його наступного замовлення, потім рахується по закладу, чи замовлена страва потрапила в кожен топ-3, і утримане стирається; гість, що заперечив, не зберігає нічого. 1.2.0: експорт гостя («що ми зберігаємо») показує утримані топ-3 як тимчасову перевірку, що стирається при наступному замовленні."
+  },
+  "producer": [
+    {
+      "file": "crates/dowiz-hub/src/snn.rs",
+      "line": 161,
+      "what": "rank(): the network's top-k (score > 0, ties by id bytes)"
+    },
+    {
+      "file": "crates/dowiz-hub/src/snn/infer.rs",
+      "line": 134,
+      "what": "scores(): Q16 integer inference"
+    },
+    {
+      "file": "crates/dowiz-hub/src/snn/blob.rs",
+      "line": 79,
+      "what": "decode(): the weight blob, crc first, refused by name"
+    },
+    {
+      "file": "crates/dowiz-hub/src/snn/shadow.rs",
+      "line": 60,
+      "what": "decide(): what is shown per mode; off never calls the network"
+    },
+    {
+      "file": "workers/api/src/services/customers/taste/snn.rs",
+      "line": 41,
+      "what": "compare(): current server ranker vs the network"
+    },
+    {
+      "file": "workers/api/src/services/customers/taste/snn.rs",
+      "line": 63,
+      "what": "observe(): mode, catalogue, compare, count (never fails the page)"
+    },
+    {
+      "file": "workers/api/src/services/customers/taste_routes.rs",
+      "line": 221,
+      "what": "guest_view calls observe after the objection check"
+    },
+    {
+      "file": "workers/api/src/services/customers/snn_routes.rs",
+      "line": 28,
+      "what": "GET /api/owner/snn"
+    },
+    {
+      "file": "workers/api/src/services/customers/snn_routes.rs",
+      "line": 44,
+      "what": "POST /api/owner/snn {mode}"
+    },
+    {
+      "file": "workers/api/src/services/operations/mod.rs",
+      "line": 184,
+      "what": "/api/owner/health -> snn"
+    },
+    {
+      "file": "workers/api/src/services/customers/taste_routes.rs",
+      "line": 147,
+      "what": "after(): settle the hold inside the profile write, then count it"
+    },
+    {
+      "file": "crates/dowiz-hub/src/snn/quality.rs",
+      "line": 1,
+      "what": "Held / settle: one check per hold, cleared"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/admin/snn.js",
+      "line": 16,
+      "what": "mountSnn(): More -> Customers, the shadow line and the three-way switch"
+    },
+    {
+      "file": "workers/api/public/admin/snn-view.js",
+      "line": 31,
+      "what": "snnMarkup(): counts as percentages, sq/en/uk/ru"
+    },
+    {
+      "file": "workers/api/public/admin/more.js",
+      "line": 239,
+      "what": "the customers sheet mounts it under the segments"
+    },
+    {
+      "file": "workers/api/public/store/taste-held.js",
+      "line": 1,
+      "what": "heldLine(): the export's held top-3s, by name, in the guest's 'what we store'"
+    }
+  ],
+  "transport": {
+    "method": "GET",
+    "path": "/api/owner/snn",
+    "also": [
+      "POST /api/owner/snn",
+      "GET /api/owner/health (snn)",
+      "GET /api/order/:id/taste (side effect: one count)"
+    ]
+  },
+  "external": null,
+  "external_api_version": null,
+  "auth": {
+    "secrets": [
+      "OWNER_EMAIL / OWNER_PASSWORD of /root/.dowiz_owner naming qa-durres"
+    ],
+    "where": "/root/.dowiz_owner"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "mode"
+    ],
+    "properties": {
+      "mode": {
+        "enum": [
+          "shadow",
+          "on",
+          "off"
+        ]
+      }
+    }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "mode",
+      "model",
+      "compared",
+      "unusable",
+      "top1Pm",
+      "overlapPm",
+      "k",
+      "sinceDay",
+      "lastDay",
+      "settled",
+      "currentHitPm",
+      "snnHitPm"
+    ],
+    "properties": {
+      "mode": {
+        "enum": [
+          "shadow",
+          "on",
+          "off"
+        ]
+      },
+      "model": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "compared": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "unusable": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "top1Pm": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 1000
+      },
+      "overlapPm": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 1000
+      },
+      "k": {
+        "const": 3
+      },
+      "sinceDay": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "lastDay": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "settled": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "currentHitPm": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 1000
+      },
+      "snnHitPm": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 1000
+      }
+    }
+  },
+  "set_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "ok",
+      "mode"
+    ],
+    "properties": {
+      "ok": {
+        "const": true
+      },
+      "mode": {
+        "enum": [
+          "shadow",
+          "on",
+          "off"
+        ]
+      }
+    }
+  },
+  "model": {
+    "id": 20261006,
+    "blob_bytes": 1712,
+    "params": 420,
+    "format": 1,
+    "stalk_dim": 8,
+    "layers": 2
+  },
+  "probe": "node tools/live-proof/probes/snn.mjs (main runs it on qa-durres after deploy; SNN_WRITE=1 also flips the switch off and back to shadow)",
+  "last_verified": null,
+  "export_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "GET /api/order/:id/taste -> taste.held, present only while a hold exists",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "current",
+      "network",
+      "day",
+      "temporary",
+      "deletedAt"
+    ],
+    "properties": {
+      "current": {
+        "type": "array",
+        "maxItems": 3,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "network": {
+        "type": "array",
+        "maxItems": 3,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "day": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "temporary": {
+        "const": true
+      },
+      "deletedAt": {
+        "const": "next_order"
+      }
+    }
+  }
+}

@@ -27,6 +27,8 @@ pub mod taste;
 pub mod taste_routes;
 /// W-SENSE row 7: the owner's segment builder route (the rule is `taste/builder.rs`).
 pub mod taste_builder;
+/// W-SNN: the owner's view and switch of the sheaf network's shadow (the rule is `taste/snn.rs`).
+pub mod snn_routes;
 pub mod view;
 
 #[cfg(test)]

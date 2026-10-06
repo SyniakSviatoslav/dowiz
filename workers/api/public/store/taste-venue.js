@@ -13,6 +13,7 @@ import { esc, toast } from '/store/ui.js';
 import { objectVenue } from '/store/taste-device.js';
 import { ui } from '/store/parts.js';
 import '/store/taste-words.js';
+import { heldLine } from '/store/taste-held.js'; // W-SNN
 
 const seen = new Map();
 const fySeen = new Map();
@@ -29,7 +30,7 @@ export function venueTasteMarkup(d){
     <p class="small"><span data-t="vk_tags"></span> ${list(p.tags)}</p>
     <p class="small"><span data-t="vk_cats"></span> ${list(p.cats)}</p>
     ${p.device ? `<p class="small muted" data-t="vk_device"></p>` : ''}
-    <p class="small muted"><span data-t="vk_kept"></span> ${Number(p.daysSince) | 0}</p>`
+    <p class="small muted"><span data-t="vk_kept"></span> ${Number(p.daysSince) | 0}</p>${heldLine(p.held)}`
     : `<p class="small muted" data-t="vk_none"></p>`;
   return `<p class="eyebrow" data-t="vk_title"></p>${body}
     <p class="small muted" data-t="vk_never"></p>

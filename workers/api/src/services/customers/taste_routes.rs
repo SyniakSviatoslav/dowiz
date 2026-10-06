@@ -143,13 +143,17 @@ pub async fn after(place: &Place, prep: Prepared, lines: Vec<Line>, order_id: &s
     let sync = prep.sync;
     let at = prep.at;
     let wrote = crate::hubstore::with_table(place, IMAGE_TASTE, TASTE_BYTES, move |t| {
-        let prev = t.get(KIND, &key).as_deref().and_then(taste::parse);
+        let mut prev = t.get(KIND, &key).as_deref().and_then(taste::parse);
+        let settled = prev.as_mut().and_then(|p| taste::snn::settle_profile(p, &lines)); // W-SNN quality
         let p = taste::apply_order_at(prev, &lines, sync.as_ref(), day, at.as_ref());
         let json = serde_json::to_string(&p).map_err(|e| Error::RustError(format!("taste: {e}")))?;
         t.put(KIND, &key, &json, &[], &[]).map_err(|e| Error::RustError(format!("taste: {e:?}")))?;
-        Ok(())
+        Ok(settled)
     })
     .await;
+    if let Ok(Some(s)) = wrote {
+        taste::snn::count_settled(place, s, day).await;
+    }
     if let Err(e) = wrote {
         crate::loud!(&place.ns, Some(&place.venue), "customers.taste", "not filed: {e}");
     }
@@ -217,7 +221,16 @@ pub async fn guest_view(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
     let people = crate::hubstore::load_table(&place, IMAGE_TASTE, TASTE_BYTES).await?;
     let today = day_of(ctx.data.now_ms);
     let p = people.table.get(KIND, &key).as_deref().and_then(taste::parse).filter(|p| !taste::expired(p, today));
-    Response::from_json(&json!({ "objected": off, "taste": p.map(|p| taste::view(&p, today)) }))
+    if let (false, Some(p)) = (off, p.as_ref()) {
+        taste::snn::observe(&place, &key, p, today).await; // W-SNN shadow: counted per venue, shows nothing
+    }
+    let held = match p.as_ref().and_then(|p| p.snn_held.as_ref()) {
+        Some(h) => Some(taste::snn::held_export(&place, h).await), // W-SNN: Art. 15, the temporary hold
+        None => None,
+    };
+    let mut out = json!({ "objected": off, "taste": p.map(|p| taste::view(&p, today)) });
+    if let Some(h) = held { out["taste"]["held"] = h; }
+    Response::from_json(&out)
 }
 
 /// `POST /api/order/:id/taste/withdraw` -- the guest objects (Art. 21) and the profile is deleted, in
@@ -271,19 +284,10 @@ pub async fn for_you(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
     }
 }
 
-/// W-TASTE2 S7a: the consistency radius between the phones' vectors and the venue's profiles, for
-/// the owner's health page (a figure, never an alarm) and the log. An unreadable image says so.
-pub async fn radius_health(place: &Place) -> serde_json::Value {
-    match crate::hubstore::load_table(place, IMAGE_TASTE, TASTE_BYTES).await {
-        Ok(held) => {
-            let all: Vec<taste::Profile> = held.table.all(KIND).iter().filter_map(|(_, j)| taste::parse(j)).collect();
-            let s = taste::agreement::summary(&all);
-            log_line!("sheaf.radius venue={} cover=phone|venue compared={} max_pm={} median_pm={} over_half={}", place.venue, s.compared, s.max_pm, s.median_pm, s.over_half);
-            json!({ "taste": s.json(), "stock": "needs S0 glue (not built)" })
-        }
-        Err(e) => json!({ "error": e.to_string() }),
-    }
-}
+/// W-TASTE2 S7a, the consistency radius on owner health (`taste_routes/health.rs`).
+#[path = "taste_routes/health.rs"]
+mod health;
+pub use health::radius_health;
 
 #[cfg(test)]
 #[path = "taste_routes/tests.rs"]

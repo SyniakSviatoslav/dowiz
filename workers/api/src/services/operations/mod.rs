@@ -182,15 +182,15 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         "fiscal": fiscal,
         "sms": crate::notify::sms::routes::health(&place, settings.as_ref().ok().map(|s| &s.settings), ctx.data.now_ms).await, // W-SMS
         "sheaf": crate::services::customers::taste_routes::radius_health(&place).await, // W-TASTE2 S7a
+        "snn": crate::services::customers::snn_routes::health(&place, settings.as_ref().ok().map(|s| &s.settings)).await, // W-SNN
     }))
 }
 
 /// `GET /api/owner/history` — what has been archived, and what is in one.
 ///
-/// THE HOT LOG IS NOT THE WHOLE HISTORY ANY MORE. Without a route that reads
-/// the archives, rotation would be deletion with extra steps: the bytes would
-/// exist and nothing could reach them. `?archive=log@<n>` returns that
-/// archive's orders, folded exactly as the live ones are.
+/// THE HOT LOG IS NOT THE WHOLE HISTORY ANY MORE. Without a route that reads the archives,
+/// rotation would be deletion with extra steps: the bytes would exist and nothing could reach
+/// them. `?archive=log@<n>` returns that archive's orders, folded exactly as the live ones are.
 pub async fn history(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (_, _loc, settings) = match crate::owner::owner_beside(

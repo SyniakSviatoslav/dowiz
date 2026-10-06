@@ -165,7 +165,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/customers/:key/reveal", Owner, No),
     ("post", "/api/owner/customers/:key/forget", Owner, No), ("get", "/api/owner/customers/:key/taste", Owner, No),
     ("get", "/api/owner/customers/taste/segments", Owner, No), ("get", "/api/owner/customers/reveals", Owner, No), ("get", "/api/owner/customers/taste/builder", Owner, No),
-    ("put", "/api/owner/customers/:key/record", Owner, No),
+    ("put", "/api/owner/customers/:key/record", Owner, No), ("get", "/api/owner/snn", Owner, No), ("post", "/api/owner/snn", Owner, No), // W-SNN
     ("post", "/api/owner/customers/rekey", Owner, No),
     ("post", "/api/owner/customers/reforget", Owner, No),
     ("post", "/api/owner/customers/:key/consent", Owner, No),

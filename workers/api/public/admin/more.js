@@ -232,10 +232,11 @@ const REVEAL_REASON_MIN = 3;
 async function openCustomers(sort = CUSTOMER_SORTS[0]){
   sheet(`${head('analytics', 'customers', 'ap_h_customers')}
     ${chips({ values: CUSTOMER_SORTS.map(x => ({ value: x, key: 'sort_' + x })), value: sort, attr: 'sort', tour: 'customers.sort' })}
-    <div id="cuSegments"></div><div id="cuBuilder"></div><div id="cuBody">${loading()}</div>
+    <div id="cuSegments"></div><div id="cuSnn"></div><div id="cuBuilder"></div><div id="cuBody">${loading()}</div>
     <div class="btn-row">${btn({ id: 'cuCsv', icon: 'download', key: 'exportCsv', tour: 'customers.csv' })}${btn({ id: 'cuLog', icon: 'eye', key: 'revealLog', tour: 'customers.revealLog' })}</div>`, { name: 'customers' });
   for (const b of $$('[data-sort]', $('#sheetIn'))) b.onclick = () => openCustomers(b.dataset.sort);
   import('/admin/taste.js').then(m => m.mountSegments()).catch(() => {});
+  import('/admin/snn.js').then(m => m.mountSnn()).catch(() => {}); // W-SNN
   import('/admin/sense-builder.js').then(m => m.mountBuilder()).catch(() => {}); // W-SENSE row 7
   let d; try { d = await api(`/owner/customers?sort=${sort}`); } catch (e) { return fail(e); }
   const list = d.customers || [];

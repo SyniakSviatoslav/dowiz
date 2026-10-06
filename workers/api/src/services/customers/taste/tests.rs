@@ -81,5 +81,5 @@ fn the_view_shows_everything_held_and_round_trips() {
 #[test]
 fn a_line_reads_its_dish_tags_and_category() {
     let l = line_of(r#"{"id":"maki","categoryId":"rolls","tags":["salmon","hot"]}"#, 2);
-    assert_eq!(l, Line { tags: vec!["salmon".into(), "hot".into()], category: Some("rolls".into()), qty: 2, ..Line::default() });
+    assert_eq!(l, Line { tags: vec!["salmon".into(), "hot".into()], category: Some("rolls".into()), qty: 2, id: "maki".into(), ..Line::default() });
 }
