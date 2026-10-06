@@ -62,11 +62,37 @@ pub struct Frozen {
     /// The storage it was frozen in; the freezer unless the owner said.
     pub store: String,
     pub by: String,
+    /// W-STORE2: ms, when the freezing STARTED (the owner types it in the
+    /// venue's local time). With it the rule is decided by `started..at`,
+    /// not by the typed hours; `None` on every record written before.
+    pub started: Option<i64>,
+    /// W-STORE2 (operator 2026-10-05): ms, when the freezing ENDED, when the
+    /// owner records it later than that. With a start, the rule is decided by
+    /// `started..ended`, so a late record cannot add hours. `None`: the end is
+    /// the record's own time (`at`).
+    pub ended: Option<i64>,
 }
 
+/// One hour in ms.
+const HOUR_MS: i64 = 3_600_000;
+
 impl Frozen {
+    /// When the freezing ended: the recorded end, else the record's time.
+    pub fn end(&self) -> i64 {
+        self.ended.unwrap_or(self.at)
+    }
+
+    /// The hours the rule is decided on: whole hours of `started..end` when
+    /// the start was recorded, else the typed hours.
+    pub fn effective_hours(&self) -> i64 {
+        match self.started {
+            Some(s) => self.end().saturating_sub(s).div_euclid(HOUR_MS),
+            None => self.hours,
+        }
+    }
+
     fn body(&self) -> String {
-        format!(
+        let b = format!(
             r#"{{"item":"{}","lot":"{}","from":{},"hours":{},"temp_c":{},"store":"{}","by":"{}"}}"#,
             esc(&self.item),
             esc(&self.lot),
@@ -75,7 +101,16 @@ impl Frozen {
             self.temp_c,
             esc(&self.store),
             esc(&self.by)
-        )
+        );
+        // Appended only when given: every record without it keeps its bytes.
+        let mut b = match self.started {
+            Some(st) => format!("{},\"started\":{st}}}", b.strip_suffix('}').unwrap_or(&b)),
+            None => b,
+        };
+        if let Some(en) = self.ended {
+            b = format!("{},\"ended\":{en}}}", b.strip_suffix('}').unwrap_or(&b));
+        }
+        b
     }
 
     /// The record a raw note is, or `None` for any other record.
@@ -91,6 +126,8 @@ impl Frozen {
             temp_c: int_field(rec, "temp_c")?,
             store: str_field(rec, "store").unwrap_or_default(),
             by: str_field(rec, "by").unwrap_or_default(),
+            started: int_field(rec, "started"),
+            ended: int_field(rec, "ended"),
         })
     }
 }
@@ -112,6 +149,10 @@ pub struct FreezeRow {
     pub doc: Option<String>,
     pub store: String,
     pub by: String,
+    /// W-STORE2: ms, when an in-house freezing started; `None` otherwise.
+    pub started: Option<i64>,
+    /// W-STORE2: ms, the recorded end of an in-house freezing; `None` otherwise.
+    pub ended: Option<i64>,
 }
 
 /// One draw of one order from one lot.
@@ -147,6 +188,14 @@ impl StockLog {
         if !(1..=HOURS_MAX).contains(&f.hours) || !(TEMP_MIN..=0).contains(&f.temp_c) {
             return Err(StockError::Linkage(format!("hours are 1 to {HOURS_MAX}, the temperature {TEMP_MIN} to 0 C")));
         }
+        // W-STORE2: a start is before the end, at most HOURS_MAX before it.
+        if f.started.is_some() && !(1..=HOURS_MAX).contains(&f.effective_hours()) {
+            return Err(StockError::Linkage(format!("the freezing started 1 to {HOURS_MAX} hours before it ended")));
+        }
+        // An end is not after the record that tells it.
+        if f.ended.is_some_and(|e| e > f.at) {
+            return Err(StockError::Linkage("the freezing ended before it was recorded, not after".into()));
+        }
         self.append_note(FROZEN, &f.body())
     }
 
@@ -156,13 +205,16 @@ impl StockLog {
         let mut t = Trace::default();
         for rec in self.raw() {
             if let Some(f) = Frozen::of(&rec) {
+                let eff = f.effective_hours();
                 t.freezing.push(FreezeRow {
                     at: Some(f.at),
-                    rule: rule(f.temp_c, f.hours),
+                    rule: rule(f.temp_c, eff),
+                    started: f.started,
+                    ended: f.ended,
                     item: f.item,
                     lot: f.lot,
                     how: "in_house",
-                    hours: Some(f.hours),
+                    hours: Some(eff),
                     temp_c: Some(f.temp_c),
                     doc: None,
                     store: f.store,
@@ -193,6 +245,8 @@ impl StockLog {
                     doc: Some(doc),
                     store: meta.store.clone().unwrap_or_default(),
                     by: meta.by.clone().unwrap_or_default(),
+                    started: None,
+                    ended: None,
                 });
             }
             let Some(order) = order else { continue };

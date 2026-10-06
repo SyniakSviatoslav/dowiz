@@ -58,13 +58,37 @@ export function ruleKey(hours, temp){
   return 'hc_ruleNone';
 }
 
-/// A freezing record's body, or `{error}`.
-export function freezeBody(item, lot, hours, temp, store){
-  const h = Number(String(hours).trim()), c = Number(String(temp).trim().replace(',', '.'));
+/// A freezing record's body, or `{error}`. `started` (W-STORE2): the venue's
+/// local `yyyy-mm-ddThh:mm` the freezing began, optional; with it the hours
+/// may be left empty -- the hub decides the rule by start..now.
+export function freezeBody(item, lot, hours, temp, store, started = '', ended = ''){
+  const st = String(started || '').trim(), en = String(ended || '').trim();
+  const hs = String(hours ?? '').trim();
+  const h = Number(hs), c = Number(String(temp).trim().replace(',', '.'));
   if (!item || !String(lot || '').trim()) return { error: 'hc_lotPick' };
-  if (!Number.isInteger(h) || h < 1 || h > 2000 || !Number.isInteger(c) || c < -80 || c > 0) return { error: 'required' };
-  return { body: { item, lot: String(lot).trim(), hours: h, tempC: c, ...(store ? { store } : {}) } };
+  if (st && !LOCAL.test(st)) return { error: 'hc_started' };
+  if (en && (!st || !LOCAL.test(en) || en <= st)) return { error: 'hc_ended' };
+  const noHours = st && hs === '';
+  if ((!noHours && (!Number.isInteger(h) || h < 1 || h > 2000)) || !Number.isInteger(c) || c < -80 || c > 0) return { error: 'required' };
+  return { body: { item, lot: String(lot).trim(), ...(noHours ? {} : { hours: h }), tempC: c, ...(store ? { store } : {}), ...(st ? { started: st } : {}), ...(en ? { ended: en } : {}) } };
 }
+
+const LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+/// Whole hours from a local start to `nowMs`, or to a local `ended` when
+/// one is given (the preview; the hub decides).
+export function hoursSince(started, nowMs, ended = ''){
+  if (!LOCAL.test(String(started || ''))) return null;
+  const t = new Date(started).getTime();
+  const e = LOCAL.test(String(ended || '')) ? new Date(ended).getTime() : nowMs;
+  return Number.isFinite(t) && Number.isFinite(e) ? Math.floor((e - t) / 3600000) : null;
+}
+
+/// W-STORE2: the kitchen stations a storage can serve (a dish's `station`).
+export const STATIONS = ['kitchen', 'sushi', 'bar'];
+/// The storage `station` is bound to, if any (`storages[].stations`).
+export const boundTo = (storages, station) => (storages || []).find(s => (s.stations || []).includes(station));
+/// Tapping a station on storage `store`: bind it here, or unbind it if it is.
+export const bindBody = (station, store, here) => ({ station, store: here ? '' : store });
 
 /// The export's API path for `kind` over local days `from`..`to` (yyyy-mm-dd).
 export const exportPath = (kind, from, to) => `/owner/stock/haccp?kind=${encodeURIComponent(kind)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;

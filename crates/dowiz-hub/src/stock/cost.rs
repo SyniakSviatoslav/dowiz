@@ -234,7 +234,7 @@ impl StockLog {
     /// fields `StockEvent` does not carry.
     pub(super) fn raw(&self) -> Vec<String> {
         let mut out: Vec<String> =
-            EvLog::walk(&self.store).into_iter().map(|r| String::from_utf8_lossy(&r.payload).into_owned()).collect();
+            EvLog::walk(&self.store).into_iter().filter(|r| !self.is_bad(&r.id)).map(|r| String::from_utf8_lossy(&r.payload).into_owned()).collect();
         out.reverse();
         out
     }

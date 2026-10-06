@@ -1,4 +1,4 @@
-// LIVE PROBE stock.storages.v1 + stock.haccp_export.v1 (W-STORE, P12/P13) on
+// LIVE PROBE stock.storages 1.1.0 + stock.haccp_export 1.1.0 (W-STORE, P12/P13) on
 // qa-durres -- main runs it after the deploy; a lane never runs it against
 // production. WRITTEN, NOT RUN by the lane.
 //
@@ -17,6 +17,17 @@
 // 6. the three CSV files for the venue's today: the order is found under the
 //    lot (lots), the lot under the order (orders), both freezing rows and the
 //    supplier paper in the freezing log; without a token, 401.
+// W-STORE2 (stock.storages 1.1.0, stock.haccp_export 1.1.0):
+// 7. the KITCHEN station (the QA roll has no `station`, so it is the
+//    kitchen's) bound to the freezer: listed on the freezer's `stations`, the
+//    next roll draws from the FREEZER although the kitchen received last;
+//    unbound again (also in `finally`), the next roll draws from the kitchen.
+//    A binding to an unknown or archived storage is a 400 naming it;
+// 8. a freezing record with a START 20 h ago (venue time, Europe/Tirane) typed
+//    as 24 h meets no rule; one started 25 h ago with no hours meets -20C/24h;
+//    started 30 h ago and ended 10 h ago meets no rule (20 h);
+// 9. the freezing CSV has the 1.1.0 header (by_name, started appended) and the
+//    started row's last cell is a local minute.
 import * as lib from '../../../e2e/flows/lib.mjs';
 import { LOC, RUN, own, reporter, contract, shelf } from './stock-lib.mjs';
 import { place, close } from './_order.mjs';
@@ -32,7 +43,21 @@ const levels = async () => {
   const row = s.supplies.find(x => x.id === ITEM);
   return { s, row, at: id => row?.byStore?.stores?.[id] || 0, home: row?.byStore?.home };
 };
-let order = null, cellarId = null;
+let order = null, cellarId = null, order2 = null, order3 = null, bound = false;
+/// `yyyy-mm-ddThh:mm` in the venue's zone, `h` hours before now.
+const localAgo = h => {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Tirane', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .formatToParts(new Date(Date.now() - h * 3600000)).map(x => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+};
+const sellRoll = async () => {
+  const id = (await place({ lib, run: RUN, must }, { items: [{ product_id: 'qa-salmon-roll', modifier_ids: [], quantity: 1 }] })).id;
+  for (const a of ['confirm', 'preparing', 'ready']) {
+    const x = await own(`/api/owner/orders/${id}/action`, { action: a, location_id: LOC });
+    must(x.status === 200, `${a} ${x.status} ${x.text.slice(0, 100)}`);
+  }
+  return id;
+};
 
 try {
   // ── 1. into the freezer ──
@@ -103,9 +128,59 @@ try {
   step('without a token the export is refused (401)', anon.status === 401, `${anon.status}`);
   const badRange = await csv('lots').then(() => own(`/api/owner/stock/haccp?kind=lots&from=${day}&to=2000-01-01&location_id=${LOC}`));
   step('a range that ends before it starts is a 400', badRange.status === 400, `${badRange.status} ${badRange.text.slice(0, 80)}`);
+
+  // ── 7. W-STORE2: a station bound to a storage ──
+  const bind = { station: 'kitchen', store: 'freezer' };
+  schema('the binding matches the contract', bind, CS.request_schema);
+  const bd = await own('/api/owner/stock/bound', bind);
+  bound = bd.status === 200;
+  step('the kitchen station is bound to the freezer', bound, `${bd.status} ${bd.text.slice(0, 100)}`);
+  schema('the binding answer validates', bd.body, CS.bound_response_schema);
+  const s3 = await levels();
+  schema('GET /api/owner/stock (1.1.0, storages[].stations) validates', s3.s.body, CS.response_schema);
+  step('the freezer lists the kitchen station', (s3.s.body?.storages || []).find(x => x.id === 'freezer')?.stations?.includes('kitchen'), JSON.stringify(s3.s.body?.storages));
+  order2 = await sellRoll();
+  const s4 = await levels();
+  step('the bound roll drew from the FREEZER, the kitchen untouched', s3.at('freezer') - s4.at('freezer') > 0 && s4.at('kitchen') === s3.at('kitchen'),
+    JSON.stringify({ freezer: [s3.at('freezer'), s4.at('freezer')], kitchen: [s3.at('kitchen'), s4.at('kitchen')] }));
+  const un = await own('/api/owner/stock/bound', { station: 'kitchen', store: '' });
+  bound = un.status !== 200;
+  step('unbound', un.status === 200, `${un.status} ${un.text.slice(0, 100)}`);
+  order3 = await sellRoll();
+  const s5 = await levels();
+  step('unbound, the roll draws from the kitchen again', s5.at('freezer') === s4.at('freezer') && s4.at('kitchen') - s5.at('kitchen') > 0,
+    JSON.stringify({ freezer: [s4.at('freezer'), s5.at('freezer')], kitchen: [s4.at('kitchen'), s5.at('kitchen')] }));
+  const sum5 = Object.values(s5.row?.byStore?.stores || {}).reduce((a, q) => a + q, 0);
+  step('the storages still sum to the shelf', sum5 === s5.row?.onHand, `${sum5} vs ${s5.row?.onHand}`);
+  const ghost = await own('/api/owner/stock/bound', { station: 'bar', store: `${RUN}-attic` });
+  step('a binding to an unknown storage is a 400 naming it', ghost.status === 400 && ghost.text.includes(`${RUN}-attic`), `${ghost.status} ${ghost.text.slice(0, 100)}`);
+  const arch = cellarId ? await own('/api/owner/stock/bound', { station: 'bar', store: cellarId }) : { status: 0, text: 'no cellar' };
+  step('a binding to an archived storage is a 400 naming it', arch.status === 400 && arch.text.includes(String(cellarId)), `${arch.status} ${arch.text.slice(0, 100)}`);
+
+  // ── 8. W-STORE2: a freezing record with its start ──
+  const f20 = { item: ITEM, lot: LOT, hours: 24, tempC: -20, started: localAgo(20) };
+  schema('the started record matches the contract', f20, CH.request_schema);
+  const c20 = await own('/api/owner/stock/frozen', f20);
+  step('started 20 h ago, typed 24 h: meets no rule (decided by the start)', c20.status === 200 && c20.body?.rule === null && c20.body?.hours === 20 && c20.body?.typedHours === 24, `${c20.status} ${c20.text.slice(0, 160)}`);
+  schema('the started answer validates', c20.body, CH.frozen_response_schema);
+  const c25 = await own('/api/owner/stock/frozen', { item: ITEM, lot: LOT, tempC: -20, started: localAgo(25) });
+  step('started 25 h ago, no hours: meets -20C/24h', c25.status === 200 && c25.body?.rule === '-20C/24h' && c25.body?.hours === 25, `${c25.status} ${c25.text.slice(0, 160)}`);
+  const fe = { item: ITEM, lot: LOT, tempC: -20, started: localAgo(30), ended: localAgo(10) };
+  schema('the started+ended record matches the contract', fe, CH.request_schema);
+  const ce = await own('/api/owner/stock/frozen', fe);
+  step('started 30 h ago, ended 10 h ago: 20 h, meets no rule (a late record adds no hours)', ce.status === 200 && ce.body?.hours === 20 && ce.body?.rule === null && Number.isInteger(ce.body?.ended), `${ce.status} ${ce.text.slice(0, 160)}`);
+  const bad = await own('/api/owner/stock/frozen', { item: ITEM, lot: LOT, tempC: -20, started: 'soon' });
+  step('a start that is not a local time is a 400', bad.status === 400, `${bad.status} ${bad.text.slice(0, 100)}`);
+
+  // ── 9. W-STORE2: the CSV's name and start columns ──
+  const frz2 = await csv('freezing');
+  step('freezing.csv has the 1.1.0 header (by_name, started, ended appended)', frz2.status === 200 && rows(frz2)[0] === CH.csv_headers.freezing.join(','), `${frz2.status} ${rows(frz2)[0]}`);
+  step('the started rows end in a local minute', rows(frz2).filter(l => l.includes(`,${LOT},in_house,`) && /,\d{4}-\d{2}-\d{2} \d{2}:\d{2},(\d{4}-\d{2}-\d{2} \d{2}:\d{2})?$/.test(l)).length >= 2,
+    rows(frz2).filter(l => l.includes(LOT)).join(' | ').slice(0, 400));
 } catch (e) {
   step('the probe ran to the end', false, e.stack?.slice(0, 300));
 } finally {
-  if (order) { try { await close({ lib, run: RUN, must }, order); step('the TEST order is closed', true); } catch (e) { step('the TEST order is closed', false, e.message); } }
+  if (bound) { const u = await own('/api/owner/stock/bound', { station: 'kitchen', store: '' }).catch(e => ({ status: String(e) })); step('the kitchen station is left unbound', u.status === 200, `${u.status}`); }
+  for (const o of [order, order2, order3].filter(Boolean)) { try { await close({ lib, run: RUN, must }, o); step(`the TEST order ${o} is closed`, true); } catch (e) { step(`the TEST order ${o} is closed`, false, e.message); } }
   verdict();
 }

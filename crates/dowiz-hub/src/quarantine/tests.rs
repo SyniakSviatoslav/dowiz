@@ -127,3 +127,29 @@ fn logimage_quarantines_a_changed_record_byte() {
     let q = l.quarantined();
     assert_eq!((q.len(), q[0].reason, q[0].at), (1, "crc", 0));
 }
+
+/// "FORGET ME" ERASES A QUARANTINED RECORD WHOLE (operator 2026-10-06). Two records are
+/// corrupted (ord-1, ord-3); ord-3's person is forgotten: that record becomes a tombstone
+/// holding nothing of it ({"erased":"crc"}), re-sealed, out of the quarantine; ord-1, not
+/// theirs, stays quarantined and verbatim.
+#[test]
+fn forget_me_erases_a_quarantined_record_of_that_person_whole() {
+    // Cell 15 lies inside the JSON, so the record still reads as ord-3 / ord-1.
+    let (once, _) = flipped(&hub_bytes(5, 20), 1, 15); // newest first: at 1 = ord-3
+    let (twice, _) = flipped(&once, 3, 15); // at 3 = ord-1
+    let mut hub = Hub::load(&twice).unwrap();
+    assert_eq!(hub.quarantined().len(), 2);
+    let n = hub.redact(|ev| (ev.order_id == "ord-3").then(|| r#"{"status":"new"}"#.to_string())).unwrap();
+    assert_eq!(n, 1, "only the forgotten person's record");
+    let again = Hub::load(&hub.to_bytes_trimmed()).unwrap();
+    let q = again.quarantined();
+    assert_eq!(q.len(), 1, "ord-1 (not theirs) stays quarantined: {q:?}");
+    assert_eq!(again.len(), 5, "the chain keeps every link");
+    let erased: Vec<_> = again.events().into_iter().filter(|e| e.order_id == "ord-3").collect();
+    assert_eq!(erased.len(), 1);
+    assert_eq!(erased[0].order_json, crate::forget::ERASED_WHOLE, "nothing of the corrupted record is kept");
+    // The tombstone holds by LINK; ord-1 (still quarantined, not theirs) is the one record that
+    // fails both id schemes -- chain_check reads quarantined records unfiltered (W-CRC limit).
+    let c = again.chain_check();
+    assert_eq!((c.redacted, c.broken), (1, 1), "{c:?}");
+}

@@ -6,6 +6,10 @@
 
 export const WORDS = {
   en: {
+    hc_ended: 'Freezing ended', hc_endedHint: 'Only when you record it later than it ended. Needs the start.',
+    sto_stations: 'Stations', sto_stationsHint: 'A station here takes its dishesʼ ingredients from this storage. Not bound: from where each ingredient was received last.',
+    sto_st_kitchen: 'Kitchen', sto_st_sushi: 'Sushi', sto_st_bar: 'Bar', sto_bound: 'Station bound', sto_unbound: 'Station unbound',
+    hc_started: 'Freezing started', hc_startedHint: 'Venue time. With a start the rule counts the hours from it to now, not the typed hours.',
     sto_tool: 'Storages', sto_hint: 'Where each ingredient is: kitchen, bar, freezer or a room you name. A move never adds or removes stock.',
     sto_all: 'All', sto_kitchen: 'Kitchen', sto_bar: 'Bar', sto_freezer: 'Freezer', sto_storage: 'Storage', sto_where: 'By storage',
     sto_home: 'next sale takes from', sto_empty: 'Nothing here.', sto_move: 'Move', sto_moveHint: 'From one storage to another. More than is there is refused.',
@@ -21,6 +25,10 @@ export const WORDS = {
     hc_treated: 'Supplier already froze it (paper no.)', hc_treatedHint: 'Fill only when the supplierʼs paper says the fish was treated against parasites.',
   },
   sq: {
+    hc_ended: 'Ngrirja mbaroi', hc_endedHint: 'Vetëm kur e regjistroni më vonë se mbaroi. Kërkon fillimin.',
+    sto_stations: 'Stacionet', sto_stationsHint: 'Një stacion këtu merr përbërësit e pjatave të tij nga kjo magazinë. Pa lidhje: nga ku u pranua përbërësi herën e fundit.',
+    sto_st_kitchen: 'Kuzhina', sto_st_sushi: 'Sushi', sto_st_bar: 'Bari', sto_bound: 'Stacioni u lidh', sto_unbound: 'Stacioni u shkëput',
+    hc_started: 'Ngrirja filloi', hc_startedHint: 'Ora e lokalit. Me fillim, rregulli numëron orët prej tij deri tani, jo orët e shkruara.',
     sto_tool: 'Magazinat', sto_hint: 'Ku është çdo përbërës: kuzhinë, bar, ngrirës ose një dhomë që e emërtoni ju. Një zhvendosje nuk shton e nuk heq gjë.',
     sto_all: 'Të gjitha', sto_kitchen: 'Kuzhina', sto_bar: 'Bari', sto_freezer: 'Ngrirësi', sto_storage: 'Magazina', sto_where: 'Sipas magazinës',
     sto_home: 'shitja e radhës merr nga', sto_empty: 'Asgjë këtu.', sto_move: 'Zhvendos', sto_moveHint: 'Nga një magazinë në tjetrën. Më shumë se sa ka refuzohet.',
@@ -36,6 +44,10 @@ export const WORDS = {
     hc_treated: 'Furnitori e ka ngrirë (nr. i dokumentit)', hc_treatedHint: 'Plotësojeni vetëm kur dokumenti i furnitorit thotë se peshku u trajtua kundër parazitëve.',
   },
   uk: {
+    hc_ended: 'Кінець заморожування', hc_endedHint: 'Лише якщо записуєте пізніше, ніж закінчили. Потрібен початок.',
+    sto_stations: 'Станції', sto_stationsHint: 'Станція тут бере інгредієнти своїх страв із цього складу. Без привʼязки - звідти, куди інгредієнт приймали востаннє.',
+    sto_st_kitchen: 'Кухня', sto_st_sushi: 'Суші', sto_st_bar: 'Бар', sto_bound: 'Станцію привʼязано', sto_unbound: 'Станцію відвʼязано',
+    hc_started: 'Початок заморожування', hc_startedHint: 'Час закладу. З початком правило рахує години від нього до зараз, а не введені години.',
     sto_tool: 'Склади', sto_hint: 'Де лежить кожен інгредієнт: кухня, бар, морозильник або приміщення, яке ви назвете. Переміщення нічого не додає і не списує.',
     sto_all: 'Усі', sto_kitchen: 'Кухня', sto_bar: 'Бар', sto_freezer: 'Морозильник', sto_storage: 'Склад', sto_where: 'По складах',
     sto_home: 'наступний продаж списує з', sto_empty: 'Тут нічого.', sto_move: 'Перемістити', sto_moveHint: 'З одного складу на інший. Більше, ніж є, не прийме.',
@@ -51,6 +63,10 @@ export const WORDS = {
     hc_treated: 'Постачальник уже заморозив (№ документа)', hc_treatedHint: 'Заповнюйте лише тоді, коли в документі постачальника сказано, що рибу оброблено від паразитів.',
   },
   ru: {
+    hc_ended: 'Конец заморозки', hc_endedHint: 'Только если записываете позже, чем закончили. Нужно начало.',
+    sto_stations: 'Станции', sto_stationsHint: 'Станция здесь берёт ингредиенты своих блюд с этого склада. Без привязки - оттуда, куда ингредиент принимали в последний раз.',
+    sto_st_kitchen: 'Кухня', sto_st_sushi: 'Суши', sto_st_bar: 'Бар', sto_bound: 'Станция привязана', sto_unbound: 'Станция отвязана',
+    hc_started: 'Начало заморозки', hc_startedHint: 'Время заведения. С началом правило считает часы от него до сейчас, а не введённые часы.',
     sto_tool: 'Склады', sto_hint: 'Где лежит каждый ингредиент: кухня, бар, морозильник или помещение, которое вы назовёте. Перемещение ничего не добавляет и не списывает.',
     sto_all: 'Все', sto_kitchen: 'Кухня', sto_bar: 'Бар', sto_freezer: 'Морозильник', sto_storage: 'Склад', sto_where: 'По складам',
     sto_home: 'следующая продажа списывает с', sto_empty: 'Здесь ничего.', sto_move: 'Переместить', sto_moveHint: 'С одного склада на другой. Больше, чем есть, не примет.',

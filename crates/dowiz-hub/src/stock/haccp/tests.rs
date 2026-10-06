@@ -8,7 +8,7 @@ use crate::stock::{reservations_for, settle, StockLog};
 const ROLL: &str = r#"{"id":"r","bom":[{"supply":"salmon","qty":100}]}"#;
 
 fn frozen(hours: i64, temp_c: i64) -> Frozen {
-    Frozen { item: "salmon".into(), lot: "L1".into(), at: 1_000, hours, temp_c, store: "freezer".into(), by: "p1".into() }
+    Frozen { item: "salmon".into(), lot: "L1".into(), at: 1_000, hours, temp_c, store: "freezer".into(), by: "p1".into(), started: None, ended: None }
 }
 
 /// 853/2004 Annex III VIII: -20 C for 24 h, or -35 C for 15 h. One hour or
@@ -61,4 +61,58 @@ fn the_trace_finds_an_order_under_its_lot() {
     assert_eq!(mine, vec![("o-7", "L-soon", 150, Some(9_000)), ("o-7", "#1", 50, Some(9_000))], "200 g: L-soon first, then the unlabelled lot");
     assert_eq!(t.freezing.len(), 1);
     assert_eq!((t.freezing[0].how, t.freezing[0].doc.as_deref(), t.freezing[0].lot.as_str()), ("supplier", Some("CERT-77"), "L-soon"));
+}
+
+/// W-STORE2: with a START the rule is decided by started..ended, not by the
+/// typed hours: a freeze typed as 24 h that ran 20 h meets nothing; one that
+/// ran 24 h meets -20 C/24 h. A record without a start reads as before, and
+/// is written with the bytes it always had.
+#[test]
+fn started_to_ended_decides_the_rule() {
+    const H: i64 = 3_600_000;
+    let end = 100 * H;
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    let short = Frozen { at: end, started: Some(end - 20 * H), ..frozen(24, -20) };
+    let full = Frozen { at: end, started: Some(end - 24 * H - 59 * 60_000), ..frozen(24, -20) };
+    assert_eq!(short.effective_hours(), 20);
+    assert_eq!(full.effective_hours(), 24, "whole hours: 24 h 59 min is 24");
+    log.record_frozen(&short).unwrap();
+    log.record_frozen(&full).unwrap();
+    log.record_frozen(&frozen(24, -20)).unwrap();
+    let n = log.len();
+    assert!(log.record_frozen(&Frozen { at: end, started: Some(end), ..frozen(24, -20) }).is_err(), "a start at the end is not a freeze");
+    assert!(log.record_frozen(&Frozen { at: end, started: Some(end + H), ..frozen(24, -20) }).is_err(), "a start after the end");
+    assert!(log.record_frozen(&Frozen { at: end, started: Some(i64::MIN), ..frozen(24, -20) }).is_err(), "no overflow panic");
+    assert_eq!(log.len(), n);
+    let t = log.trace().unwrap();
+    let got: Vec<_> = t.freezing.iter().map(|r| (r.started, r.rule)).collect();
+    assert_eq!(got, vec![(Some(end - 20 * H), None), (Some(end - 24 * H - 59 * 60_000), Some(RULE_20)), (None, Some(RULE_20))]);
+    // THE OLD BYTES: a record with no start is the pre-W-STORE2 body.
+    assert_eq!(
+        frozen(24, -20).body(),
+        r#"{"item":"salmon","lot":"L1","from":1000,"hours":24,"temp_c":-20,"store":"freezer","by":"p1"}"#
+    );
+    assert!(Frozen::of(&log.notes(FROZEN)[2]).unwrap().started.is_none());
+}
+
+/// OPERATOR 2026-10-05: a recorded END decides with the start -- a freeze
+/// that ran 20 h and was written down 10 h later meets nothing; an end after
+/// the record is refused; without an end the record's time is the end.
+#[test]
+fn a_late_record_cannot_inflate_the_hours() {
+    const H: i64 = 3_600_000;
+    let at = 100 * H;
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    let late = Frozen { at, started: Some(at - 30 * H), ended: Some(at - 10 * H), ..frozen(24, -20) };
+    assert_eq!(late.effective_hours(), 20);
+    log.record_frozen(&late).unwrap();
+    let n = log.len();
+    assert!(log.record_frozen(&Frozen { at, started: Some(at - 30 * H), ended: Some(at + H), ..frozen(24, -20) }).is_err(), "an end after the record");
+    assert!(log.record_frozen(&Frozen { at, started: Some(at - 10 * H), ended: Some(at - 10 * H), ..frozen(24, -20) }).is_err(), "an end at the start");
+    assert_eq!(log.len(), n);
+    let t = log.trace().unwrap();
+    assert_eq!((t.freezing[0].hours, t.freezing[0].rule, t.freezing[0].ended), (Some(20), None, Some(at - 10 * H)));
+    assert!(log.notes(FROZEN)[0].contains(&format!(r#""started":{},"ended":{}"#, at - 30 * H, at - 10 * H)), "{}", log.notes(FROZEN)[0]);
+    // No end given: none written, and the record's time is the end.
+    assert!(!Frozen { at, started: Some(at - 30 * H), ..frozen(24, -20) }.body().contains("ended"));
 }

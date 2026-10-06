@@ -68,6 +68,11 @@ impl StockTurnIn {
             }
         }
         self.today = super::today_of(cat, self.now_ms);
+        // W-STORE2: a freezing's start, typed in the venue's local time.
+        if self.kind == super::storages::FROZEN {
+            let zone = crate::hubstore::zone_of(cat.location().and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref());
+            super::storages::bind::stamp_started(&mut self.body, zone);
+        }
         self.currency = crate::services::venue::currency_of(cat);
         self
     }

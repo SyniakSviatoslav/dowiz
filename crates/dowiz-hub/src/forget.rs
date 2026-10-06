@@ -54,6 +54,9 @@ pub(crate) fn tombstone_holds(walked: &[Record], at: usize, tip: Option<[u8; 32]
     }
 }
 
+/// What a quarantined record of the forgotten person becomes: nothing of it.
+pub(crate) const ERASED_WHOLE: &str = r#"{"erased":"crc"}"#;
+
 impl Hub {
     /// Redact every record `redact` answers for, in place. Returns how many.
     ///
@@ -71,13 +74,17 @@ impl Hub {
         records.reverse();
         let mut n = 0usize;
         for (r, bad) in records.iter_mut() {
-            // A QUARANTINED record (failed crc, W-CRC) is not rewritten: its bytes are not
-            // the ones that were written, and a rebuild carries it verbatim as evidence.
-            if bad.is_some() || r.payload.first().map_or(true, |k| k & REDACTED_BIT != 0) {
+            if r.payload.first().map_or(true, |k| k & REDACTED_BIT != 0) {
                 continue;
             }
             let Some(ev) = decode(r) else { continue };
             let Some(json) = redact(&ev) else { continue };
+            // A QUARANTINED record (failed crc, W-CRC) that still reads as this person's is
+            // ERASED WHOLE (operator 2026-10-06, "стирай повністю"): its bytes are not the ones
+            // written, so nothing of it is kept -- not even the redacted remainder. It leaves
+            // the quarantine as an ordinary tombstone. One that does not decode cannot be shown
+            // to be theirs and stays carried verbatim.
+            let json = if bad.take().is_some() { ERASED_WHOLE.to_string() } else { json };
             let id = ev.order_id.as_bytes();
             let mut payload = Vec::with_capacity(2 + id.len() + json.len());
             payload.push(ev.kind as u8 | REDACTED_BIT);

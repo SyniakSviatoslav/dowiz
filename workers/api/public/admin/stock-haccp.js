@@ -2,7 +2,11 @@
 // how long, how cold, and which EU 853/2004 rule that meets (never a block on
 // a sale) -- and the three CSV files an inspector asks for, over the venue's
 // local days: lot -> orders, order -> lots, the freezing log.
-//   POST /api/owner/stock/frozen  {item, lot, hours, tempC, store?}
+//   POST /api/owner/stock/frozen  {item, lot, hours?, tempC, store?, started?, ended?}
+//   W-STORE2: `started` is when the freezing began (venue local time); the
+//   hub then decides the rule by start..now (or start..`ended`, when the end
+//   is recorded later), and the CSV shows both, with the
+//   staff member's name beside the id.
 //   GET  /api/owner/stock/haccp?kind=lots|orders|freezing&from=&to=  (owner only)
 // A delivery the SUPPLIER already treated is recorded on the delivery itself
 // (the Delivery sheet's "Supplier already froze it" field, `treated`).
@@ -28,6 +32,8 @@ export async function open(){
     ${select({ id: 'hcItem', key: 'sto_item', value: '', options: [{ value: '', key: 'inv_pick' }, ...sups.map(s => ({ value: s.id, label: s.name || s.id }))], tour: 'haccp.item' })}
     <div id="hcLots"></div>
     ${field({ id: 'hcLot', key: 'hc_lot', autocomplete: 'off', tour: 'haccp.lot' })}
+    <div class="grid2 pair"><div>${input({ id: 'hcStarted', type: 'datetime-local', key: 'hc_started', hintKey: 'hc_startedHint', tour: 'haccp.started' })}</div>
+      <div>${input({ id: 'hcEnded', type: 'datetime-local', key: 'hc_ended', hintKey: 'hc_endedHint', tour: 'haccp.ended' })}</div></div>
     <div class="grid2 pair"><div>${field({ id: 'hcHours', key: 'hc_hours', inputmode: 'numeric', value: '24', tour: 'haccp.hours' })}</div>
       <div>${field({ id: 'hcTemp', key: 'hc_temp', inputmode: 'numeric', value: '-20', tour: 'haccp.temp' })}</div></div>
     <p class="ui-label" data-t="sto_storage"></p>${chips({ values: live.map(s => ({ value: s.id, label: L.nameOf(s, t) })), value: 'freezer', attr: 'hcs' })}
@@ -39,7 +45,8 @@ export async function open(){
       <div class="btn-row">${['lots', 'orders', 'freezing'].map(k => btn({ icon: 'file-spreadsheet', key: 'hc_' + k, data: { hcx: k }, tour: 'haccp.' + k })).join('')}</div>`
       : `<p class="hint" data-t="hc_ownerOnly"></p>`}`;
   let where = 'freezer';
-  const rule = () => { const k = L.ruleKey($('#hcHours').value.trim(), $('#hcTemp').value.trim()); $('#hcRule').innerHTML = pill(TONE[k], { key: k }); };
+  const hours = () => { const st = $('#hcStarted').value; return st ? L.hoursSince(st, Date.now(), $('#hcEnded').value) : $('#hcHours').value.trim(); };
+  const rule = () => { const k = L.ruleKey(hours(), $('#hcTemp').value.trim()); $('#hcRule').innerHTML = pill(TONE[k], { key: k }); };
   const lots = () => {
     const s = sups.find(x => x.id === $('#hcItem').value);
     $('#hcLots').innerHTML = (s?.lots || []).length ? `<p class="ui-label" data-t="hc_lotPick"></p>${chips({ values: s.lots.map(l => ({ value: l.code, label: `${l.code} · ${l.left} ${s.unit}${l.expiry ? ' · ' + l.expiry : ''}` })), attr: 'hcl' })}` : '';
@@ -47,10 +54,11 @@ export async function open(){
   };
   rule();
   $('#hcItem').onchange = lots;
-  $('#hcHours').oninput = rule; $('#hcTemp').oninput = rule;
+  $('#hcHours').oninput = rule; $('#hcTemp').oninput = rule; $('#hcStarted').oninput = rule; $('#hcEnded').oninput = rule;
   for (const b of $$('[data-hcs]', $('#sheetIn'))) b.onclick = () => { where = b.dataset.hcs; press($$('[data-hcs]', $('#sheetIn')), b); };
   $('#hcGo').onclick = async () => {
-    const r = L.freezeBody($('#hcItem').value, $('#hcLot').value, $('#hcHours').value, $('#hcTemp').value, where);
+    const st = $('#hcStarted').value;
+    const r = L.freezeBody($('#hcItem').value, $('#hcLot').value, st ? '' : $('#hcHours').value, $('#hcTemp').value, where, st, $('#hcEnded').value);
     if (r.error) return toast(t(r.error));
     try { const out = await busy($('#hcGo'), () => post('/owner/stock/frozen', r.body)); toast(`${t('hc_saved')} · ${t(L.ruleKey(out.hours, out.tempC))}`); } catch (e) { fail(e); }
   };

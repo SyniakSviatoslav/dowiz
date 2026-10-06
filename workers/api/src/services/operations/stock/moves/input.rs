@@ -93,5 +93,18 @@ pub struct StockMoveIn {
     #[allow(dead_code)]
     #[serde(default)]
     pub temp_c: Option<i64>,
+    /// W-STORE2 `frozen`: when the freezing started, the venue's local
+    /// `yyyy-mm-ddThh:mm`; `storages::run` reads it off the raw body.
+    #[allow(dead_code)]
+    #[serde(default)]
+    pub started: Option<String>,
+    /// W-STORE2 `frozen`: when the freezing ended, the same local text.
+    #[allow(dead_code)]
+    #[serde(default)]
+    pub ended: Option<String>,
+    /// W-STORE2 `bound`: the kitchen station bound to `store`.
+    #[allow(dead_code)]
+    #[serde(default)]
+    pub station: Option<String>,
 }
 

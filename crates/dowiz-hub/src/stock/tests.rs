@@ -198,7 +198,7 @@ fn a_truncated_stock_image_is_refused_not_folded_short() {
     let mut st = bebop_store::Store::from_bytes(&bytes);
     let newest = st.follow(st.root().unwrap(), 1).unwrap();
     st.cells[newest + 2 + 2] = 1 << 40;
-    st.seal(newest);
+    st.seal(newest); // W-CRC hand-back: re-seal so the load still answers Corrupt, not BadCrc
     assert!(matches!(StockLog::load(&st.to_bytes()), Err(crate::HubError::Corrupt { .. })));
 }
 
@@ -221,4 +221,45 @@ fn measure_served_fold() {
     let dt = t.elapsed();
     assert_eq!(led.served_of("o19999"), vec![("rice".to_string(), 90)]);
     println!("served fold: {} records in {dt:?}", log.len());
+}
+
+/// W-CRC policy (operator 2026-10-05: append logs QUARANTINE a bad-crc record and
+/// serve the rest), for the stock log. Spec (W-STORE2), body by main at merge:
+///   1. 10 deliveries of salmon (10 g each) into a fresh StockLog;
+///   2. flip ONE payload byte of the 5th record in the image (store cells,
+///      NOT re-sealed), reload: `StockLog::load` is Ok (not BadCrc);
+///   3. `events().len() == 9`, the quarantined count is 1, and
+///      `len() == events + quarantined`;
+///   4. `ledger().level("salmon").on_hand == 90` -- the shelf folds from the
+///      rest -- and `journal()`, `raw()` and `trace()` agree with it;
+///   5. a further append works and survives a `grow` with the bad record
+///      still bad (copy_chain_bytes, never re-sealed).
+#[test]
+fn a_changed_stock_record_is_quarantined_and_the_shelf_folds_from_the_rest() {
+    let mut log = StockLog::create_sized(16 * 1024).unwrap();
+    for _ in 0..10 {
+        log.append(&StockEvent::Received { item: "salmon".into(), qty: 10 }).unwrap();
+    }
+    // One payload byte of the 5th record (newest first), flipped and NOT re-sealed.
+    let mut st = bebop_store::Store::from_bytes(&log.to_bytes());
+    let mut o = st.follow(st.root().unwrap(), 1).unwrap();
+    for _ in 0..4 {
+        o = st.follow(o, 2).unwrap();
+    }
+    st.cells[o + 2 + 12] ^= 0x100;
+    let mut log = StockLog::load(&st.to_bytes()).expect("a bad stock record must not refuse the shelf");
+    assert_eq!(log.events().len(), 9, "the changed record is not served");
+    assert_eq!(log.quarantined(), 1);
+    assert_eq!(log.len(), log.events().len() + log.quarantined(), "len == events + quarantined");
+    assert_eq!(log.raw().len(), 9, "raw() skips the same record as events()");
+    assert_eq!(log.ledger().unwrap().level("salmon").on_hand, 90, "the shelf folds from the rest");
+    // Writes go on, and the bad record stays bad through a grow (never re-sealed).
+    let before = log.to_bytes().len();
+    for _ in 0..200 {
+        log.append(&StockEvent::Received { item: "salmon".into(), qty: 1 }).unwrap();
+    }
+    assert!(log.to_bytes().len() > before, "the log grew");
+    let again = StockLog::load(&log.to_bytes()).unwrap();
+    assert_eq!(again.quarantined(), 1, "the grow carried the failed crc");
+    assert_eq!(again.ledger().unwrap().level("salmon").on_hand, 290);
 }

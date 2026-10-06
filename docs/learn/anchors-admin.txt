@@ -523,3 +523,8 @@ kitchen.topics workers/api/public/admin/kitchen-topics.js:26
 kitchen.lost workers/api/public/admin/lost-sales-view.js:28
 dish.optionBom workers/api/public/admin/option-bom-logic.js:28
 dish.optionBomSave workers/api/public/admin/option-bom-logic.js:34
+# W-STORE2 (2026-10-05): O32 step 19 store.station (a storage's Stations row), O33 step 14 haccp.started (freezing start).
+# The W-STORE lines above for stock-storages.js / stock-haccp.js moved (+2..+19 / +3..+4); the lane's verdict lists the new numbers.
+store.station workers/api/public/admin/stock-storages.js:60
+haccp.started workers/api/public/admin/stock-haccp.js:35
+haccp.ended workers/api/public/admin/stock-haccp.js:36

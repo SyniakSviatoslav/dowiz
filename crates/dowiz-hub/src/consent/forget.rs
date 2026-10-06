@@ -115,16 +115,16 @@ fn redact_acts(log: &mut LogImage, key: &str) -> Result<usize, HubError> {
     let subject = subject_of(key);
     let mut n = 0;
     for (r, bad) in records.iter_mut() {
-        // Quarantined (failed crc, W-CRC): carried verbatim, never rewritten.
-        if bad.is_some() {
-            continue;
-        }
         let Some((k, s, j)) = split(&r.payload) else { continue };
         if k != KIND_ACT.as_bytes() || s != subject.as_bytes() {
             continue;
         }
         let Some(act) = Act::parse(&String::from_utf8_lossy(j)) else { continue };
         let Some(clean) = scrubbed(&act).filter(|a| a.key == key) else { continue };
+        // A quarantined (failed crc, W-CRC) act that still reads as this person's is
+        // scrubbed and re-sealed like any other (operator 2026-10-06, "стирай повністю");
+        // one that does not parse cannot be shown to be theirs and stays verbatim.
+        bad.take();
         let json = clean.to_json();
         let mut p = Vec::with_capacity(2 + k.len() + s.len() + json.len());
         p.push(k.len() as u8);

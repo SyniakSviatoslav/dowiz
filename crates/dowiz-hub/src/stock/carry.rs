@@ -123,6 +123,10 @@ pub struct Draw {
     /// ahead first, and these draws (the all-raw answer) are replaced. The
     /// same `Arc` on every draw of the basket; `None` for every other order.
     pub via: Option<std::sync::Arc<super::basket::Basket>>,
+    /// W-STORE2: this draw's share per kitchen station, `(station, uq)`, from
+    /// each dish's `"station"` (`storages::bind`). Empty: no station known
+    /// (the draw goes where it always went).
+    pub stations: Vec<(String, i64)>,
 }
 
 /// What one order's lines draw, exactly: `lines` is `(product JSON, quantity
@@ -132,17 +136,28 @@ pub struct Draw {
 /// sorted so two hubs replaying one basket write the same records.
 pub fn draws_for(order_id: &str, lines: &[(String, i64)]) -> Vec<Draw> {
     let mut totals: BTreeMap<String, i64> = BTreeMap::new();
+    let mut by_station: BTreeMap<String, BTreeMap<&'static str, i64>> = BTreeMap::new();
     for (product_json, ordered) in lines {
         if *ordered <= 0 {
             continue;
         }
+        let station = super::storages::bind::station_of(product_json);
         for BomLine { supply, uq, .. } in super::bom_of(product_json) {
+            let need = uq.saturating_mul(*ordered);
+            let s = by_station.entry(supply.clone()).or_default().entry(station).or_insert(0);
+            *s = s.saturating_add(need);
             let e = totals.entry(supply).or_insert(0);
-            *e = e.saturating_add(uq.saturating_mul(*ordered));
+            *e = e.saturating_add(need);
         }
     }
     let via = super::basket::of(lines).map(std::sync::Arc::new);
-    totals.into_iter().map(|(item, uq)| Draw { item, uq, order_id: order_id.to_string(), via: via.clone() }).collect()
+    totals
+        .into_iter()
+        .map(|(item, uq)| {
+            let stations = by_station.remove(&item).unwrap_or_default().into_iter().map(|(s, u)| (s.to_string(), u)).collect();
+            Draw { item, uq, order_id: order_id.to_string(), via: via.clone(), stations }
+        })
+        .collect()
 }
 
 impl StockLog {
@@ -173,7 +188,8 @@ impl StockLog {
         make: fn(String, Qty, String) -> StockEvent,
     ) -> Result<(CostBook, usize, Shelf), StockError> {
         let via = draws.first().and_then(|d| d.via.clone());
-        let (led, _, carry, _) = self.fold_tail(via.is_some(), false)?;
+        let (led, _, carry, _, bound) = self.fold_tail_bound(via.is_some(), false)?;
+        let asked = draws;
         // A batch kept ready is taken first (R2); the rest as the tree says.
         let planned;
         let mut shelf = Shelf::new();
@@ -194,7 +210,14 @@ impl StockLog {
             let ev = make(d.item.clone(), qty, d.order_id.clone());
             trial.apply(&ev, Some(d.uq));
             let whole = d.uq % MICRO == 0;
-            evs.push((ev, Meta { uq: (!whole).then_some(d.uq), ..Meta::default() }));
+            // W-STORE2: a bound station's share lands in its storage. A batch
+            // cooked ahead (`planned`) keeps the asked draw's stations.
+            let stations = match d.stations.is_empty() {
+                true => asked.iter().find(|a| a.item == d.item).map(|a| a.stations.as_slice()).unwrap_or(&[]),
+                false => d.stations.as_slice(),
+            };
+            let drawn = super::storages::bind::resolve(&bound, stations);
+            evs.push((ev, Meta { uq: (!whole).then_some(d.uq), drawn, ..Meta::default() }));
         }
         self.commit(&evs, true).map(|(b, at)| (b, at, shelf))
     }

@@ -187,7 +187,23 @@ pub fn restock(
     if evs.is_empty() {
         return Ok(());
     }
-    stock.append_all(&evs).map_err(|e| Refused::Stock(e.to_string()))
+    // W-STORE2: a re-reserved line of a BOUND station keeps drawing from its
+    // storage (`stock::storages::bind`). Nothing bound: no key, and the
+    // records are the bytes `append_all` wrote (it is this with default metas).
+    use crate::stock::storages::bind;
+    let bound = stock.bindings().map_err(|e| Refused::Stock(e.to_string()))?;
+    let shares = bind::station_shares(&lines);
+    let with: Vec<(crate::stock::StockEvent, crate::stock::meta::Meta)> = evs
+        .into_iter()
+        .map(|ev| {
+            let drawn = match &ev {
+                crate::stock::StockEvent::Reserved { item, .. } => shares.get(item).and_then(|s| bind::resolve(&bound, s)),
+                _ => None,
+            };
+            (ev, crate::stock::meta::Meta { drawn, ..Default::default() })
+        })
+        .collect();
+    stock.append_all_with(&with).map_err(|e| Refused::Stock(e.to_string()))
 }
 
 #[cfg(test)]

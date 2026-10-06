@@ -6,9 +6,16 @@
 //!            the default storage, or one that still holds stock.
 //!   moved    {item, qty, from, to}          -- a transfer: never makes or
 //!            destroys stock; refused past what `from` holds.
-//!   frozen   {item, lot, hours, tempC, store?} -- an in-house freezing of a
-//!            lot (853/2004 Annex III VIII): written whatever rule it meets,
-//!            and the answer says which one (`rule`), never blocking a sale.
+//!   frozen   {item, lot, hours?, tempC, store?, started?} -- an in-house
+//!            freezing of a lot (853/2004 Annex III VIII): written whatever
+//!            rule it meets, and the answer says which one (`rule`), never
+//!            blocking a sale. `started` (W-STORE2) is the VENUE'S local time
+//!            `yyyy-mm-ddThh:mm`; the object turns it into ms (`stamp_started`)
+//!            and the rule is then decided by started..now, not the hours.
+//!            `ended` (operator 2026-10-05), the same local text: the rule is
+//!            then decided by started..ended, so a late record adds no hours.
+//!   bound    {station, store} -- W-STORE2: a kitchen station (kitchen, sushi,
+//!            bar) draws from `store`; `store` "" unbinds (`storages/bind.rs`).
 //!
 //! All three are NOTES on the stock log (`dowiz_hub::stock::{storages,
 //! haccp}`): the shelf, the cost, the lots and every checkpoint of an old
@@ -27,11 +34,16 @@ use super::turn::{StockTurnIn, Told};
 pub const STORAGE: &str = "storage";
 pub const MOVED: &str = "moved";
 pub const FROZEN: &str = "frozen";
+pub use bind::BOUND;
 
 /// Is `kind` one of this file's?
 pub fn is_mine(kind: &str) -> bool {
-    kind == STORAGE || kind == MOVED || kind == FROZEN
+    kind == STORAGE || kind == MOVED || kind == FROZEN || kind == BOUND
 }
+
+/// W-STORE2: a station bound to a storage, and the freezing's start.
+#[path = "storages/bind.rs"]
+pub mod bind;
 
 /// A storage card as the console sends it.
 #[derive(Deserialize, Debug, Default)]
@@ -80,6 +92,9 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn) -> Result<(Value, Told), Bad
     let b = &input.body;
     let s = |k: &str| b.get(k).and_then(Value::as_str).unwrap_or("").trim().to_string();
     let item = s("item");
+    if input.kind == BOUND {
+        return bind::run(log, input);
+    }
     if input.kind != STORAGE && !input.supplies.contains_key(&item) {
         return Err((404, format!("not found: {item}")));
     }
@@ -102,11 +117,20 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn) -> Result<(Value, Told), Bad
         }
         _ => {
             let int = |k: &str| b.get(k).and_then(Value::as_i64).ok_or((400, format!("{k}?")));
-            let (hours, temp_c) = (int("hours")?, int("tempC")?);
+            let temp_c = int("tempC")?;
+            let started = bind::started_of(b)?;
+            let ended = bind::ended_of(b)?;
+            // With a start the hours may be left out: they are started..now.
+            let hours = match (b.get("hours").and_then(Value::as_i64), started) {
+                (Some(h), _) => h,
+                (None, Some(st)) => ended.unwrap_or(input.now_ms).saturating_sub(st).div_euclid(3_600_000),
+                (None, None) => return Err((400, "hours?".to_string())),
+            };
             let store = Some(s("store")).filter(|x| !x.is_empty()).unwrap_or_else(|| FREEZER.to_string());
-            let f = Frozen { item: item.clone(), lot: s("lot"), at: input.now_ms, hours, temp_c, store, by: input.by.clone() };
+            let f = Frozen { item: item.clone(), lot: s("lot"), at: input.now_ms, hours, temp_c, store, by: input.by.clone(), started, ended };
             log.record_frozen(&f).map_err(refused)?;
-            json!({ "ok": true, "kind": FROZEN, "item": item, "lot": f.lot, "hours": hours, "tempC": temp_c, "rule": rule(temp_c, hours) })
+            let eff = f.effective_hours();
+            json!({ "ok": true, "kind": FROZEN, "item": item, "lot": f.lot, "hours": eff, "typedHours": hours, "started": started, "ended": ended, "tempC": temp_c, "rule": rule(temp_c, eff) })
         }
     };
     Ok((shown, Vec::new()))
@@ -146,12 +170,23 @@ impl Rooms {
     }
 }
 
-/// The venue's storages for the Stock screen. PURE.
+/// The venue's storages for the Stock screen, each with the kitchen
+/// stations bound to it (W-STORE2, `stations`; ABSENT when none). PURE.
 pub fn list(log: &StockLog) -> Value {
+    let bound = log.bindings().unwrap_or_default();
     let all: Vec<Value> = log
         .storages()
         .into_iter()
-        .map(|s| json!({ "id": s.id, "name": s.name, "archived": s.archived, "builtIn": DEFAULTS.contains(&s.id.as_str()), "default": s.id == DEFAULT }))
+        .map(|s| {
+            let stations: Vec<&str> = bound.iter().filter(|(_, st)| **st == s.id).map(|(k, _)| k.as_str()).collect();
+            let mut v = json!({ "id": s.id, "name": s.name, "archived": s.archived, "builtIn": DEFAULTS.contains(&s.id.as_str()), "default": s.id == DEFAULT });
+            // Only when a station is bound here: an unbound venue's answer
+            // keeps its bytes (the BN1 pin `catalogue_routes::PIN_STOCK`).
+            if !stations.is_empty() {
+                v["stations"] = json!(stations);
+            }
+            v
+        })
         .collect();
     Value::Array(all)
 }

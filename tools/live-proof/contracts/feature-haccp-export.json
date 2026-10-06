@@ -1,11 +1,11 @@
 {
   "id": "feature-haccp-export",
   "name": "stock.haccp_export",
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "class": "LIVE-NOW",
   "description": {
-    "en": "Raw-fish freezing and traceability (P13, W-STORE). In-house: POST frozen {item, lot, hours, tempC, store?} writes a note on the stock log and answers which EU Regulation 853/2004 Annex III Section VIII rule it meets (-20C/24h or -35C/15h, else null) -- it never blocks a sale. Supplier-treated: the delivery's `treated` paper number. GET /api/owner/stock/haccp?kind=lots|orders|freezing&from=yyyy-mm-dd&to=yyyy-mm-dd (OWNER only; the venue's local days, inclusive, at most 400 days) answers text/csv derived from one replay of the stock log: lot -> orders, order -> lots (each draw's effect on the FEFO lots) and the freezing log. Integer quantities in the supply's base unit; rows recorded before records were dated have an empty date and are always included; text cells starting with = + - @ are prefixed with '.",
-    "uk": "Журнал заморожування сирої риби (правила ЄС 853/2004) і CSV-експорт простежуваності партія -> замовлення, замовлення -> партії для інспектора; лише власник."
+    "en": "Raw-fish freezing and traceability (P13, W-STORE). In-house: POST frozen {item, lot, hours, tempC, store?} writes a note on the stock log and answers which EU Regulation 853/2004 Annex III Section VIII rule it meets (-20C/24h or -35C/15h, else null) -- it never blocks a sale. Supplier-treated: the delivery's `treated` paper number. GET /api/owner/stock/haccp?kind=lots|orders|freezing&from=yyyy-mm-dd&to=yyyy-mm-dd (OWNER only; the venue's local days, inclusive, at most 400 days) answers text/csv derived from one replay of the stock log: lot -> orders, order -> lots (each draw's effect on the FEFO lots) and the freezing log. Integer quantities in the supply's base unit; rows recorded before records were dated have an empty date and are always included; text cells starting with = + - @ are prefixed with '. W-STORE2 (1.1.0): POST frozen also takes `started` (the venue's LOCAL time yyyy-mm-ddThh:mm, minutes; converted to UTC ms in the venue's object with its zone); with a start, `hours` may be omitted and the rule is decided by whole hours of started..now (a 20 h freeze typed as 24 h meets nothing); the answer's `hours` is the hours the rule used, `typedHours` what was sent, `started` the ms. Records without a start read as before. The freezing CSV APPENDS two columns, old positions unchanged: `by_name` (the staff member's current display name from the venue's members, resolved at export time; a removed member prints the id and an empty name, never a failed export) and `started` (venue local yyyy-mm-dd hh:mm, empty when not recorded). The Worker sends the names to the object as names=<json>. Also (operator 2026-10-05) an optional `ended` (same local text, needs `started`): the rule is then decided by started..ended, so a late record cannot inflate the hours; an end after the record is refused; the answer carries `ended` (ms or null); the freezing CSV appends an `ended` column (venue local, empty when not recorded).",
+    "uk": "Журнал заморожування сирої риби (правила ЄС 853/2004) і CSV-експорт простежуваності партія -> замовлення, замовлення -> партії для інспектора; лише власник. 1.1.0: час початку заморожування (правило рахується від початку до кінця) і в CSV — ім'я працівника поруч з ID. Також необов'язковий кінець заморожування: правило рахується від початку до кінця, пізній запис не додає годин."
   },
   "producer": {
     "file": "workers/api/src/services/operations/stock/haccp.rs",
@@ -21,12 +21,13 @@
     {
       "method": "POST",
       "path": "/api/owner/stock/frozen",
-      "body": "{item, lot, hours, tempC, store?}"
+      "body": "{item, lot, hours?, tempC, store?, started?, ended?}"
     },
     {
       "method": "GET",
       "path": "/api/owner/stock/haccp?kind=&from=&to=",
-      "content_type": "text/csv; charset=utf-8"
+      "content_type": "text/csv; charset=utf-8",
+      "note": "Worker -> object: /fold/haccp?kind=&from=&to=&names=<{id:name} json>"
     }
   ],
   "external": {
@@ -46,7 +47,6 @@
     "required": [
       "item",
       "lot",
-      "hours",
       "tempC"
     ],
     "additionalProperties": false,
@@ -73,7 +73,32 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 32
+      },
+      "started": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$"
+      },
+      "ended": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$"
       }
+    },
+    "anyOf": [
+      {
+        "required": [
+          "hours"
+        ]
+      },
+      {
+        "required": [
+          "started"
+        ]
+      }
+    ],
+    "dependentRequired": {
+      "ended": [
+        "started"
+      ]
     }
   },
   "frozen_response_schema": {
@@ -86,7 +111,10 @@
       "lot",
       "hours",
       "tempC",
-      "rule"
+      "rule",
+      "typedHours",
+      "started",
+      "ended"
     ],
     "properties": {
       "ok": {
@@ -112,6 +140,21 @@
           "-20C/24h",
           "-35C/15h",
           null
+        ]
+      },
+      "typedHours": {
+        "type": "integer"
+      },
+      "started": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "ended": {
+        "type": [
+          "integer",
+          "null"
         ]
       }
     }
@@ -144,7 +187,10 @@
       "rule",
       "doc",
       "storage",
-      "by"
+      "by",
+      "by_name",
+      "started",
+      "ended"
     ]
   },
   "probe": "node tools/live-proof/probes/stock-storages.mjs (main runs it on qa-durres after deploy)",

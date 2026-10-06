@@ -42,3 +42,34 @@ test('rows per storage, the export path, the date range', () => {
   assert.deepEqual(L.withStore({ item: 'x', qty: 1, store: 'bar' }, 'freezer'), { item: 'x', qty: 1, store: 'bar' });
   assert.deepEqual(L.withStore({ item: 'x' }, ''), { item: 'x' });
 });
+
+test('W-STORE2: a freezing start in local time, hours then optional', () => {
+  assert.deepEqual(L.freezeBody('salmon', 'L1', '', '-20', 'freezer', '2026-10-05T14:30'),
+    { body: { item: 'salmon', lot: 'L1', tempC: -20, store: 'freezer', started: '2026-10-05T14:30' } });
+  assert.deepEqual(L.freezeBody('salmon', 'L1', '24', '-20', '', '2026-10-05T14:30'),
+    { body: { item: 'salmon', lot: 'L1', hours: 24, tempC: -20, started: '2026-10-05T14:30' } });
+  assert.equal(L.freezeBody('salmon', 'L1', '24', '-20', '', '5 oct').error, 'hc_started');
+  assert.equal(L.freezeBody('salmon', 'L1', '', '-20').error, 'required', 'no start: the hours are required');
+  const start = '2026-10-05T10:00', at = new Date(start).getTime();
+  assert.equal(L.hoursSince(start, at + 20 * 3600000 + 59 * 60000), 20);
+  assert.equal(L.hoursSince('nonsense', at), null);
+  assert.equal(L.ruleKey(L.hoursSince(start, at + 20 * 3600000), -20), 'hc_ruleNone', 'a 20 h freeze typed as 24 h meets nothing');
+});
+
+test('W-STORE2: a station is bound here, elsewhere, or not at all', () => {
+  const all = [{ id: 'kitchen', stations: [] }, { id: 'freezer', stations: ['sushi'] }, { id: 'bar' }];
+  assert.equal(L.boundTo(all, 'sushi')?.id, 'freezer');
+  assert.equal(L.boundTo(all, 'bar'), undefined);
+  assert.deepEqual(L.bindBody('sushi', 'freezer', true), { station: 'sushi', store: '' }, 'tapping a bound station unbinds it');
+  assert.deepEqual(L.bindBody('bar', 'freezer', false), { station: 'bar', store: 'freezer' });
+  assert.deepEqual(L.STATIONS, ['kitchen', 'sushi', 'bar']);
+});
+
+test('W-STORE2: a recorded end needs the start and decides with it', () => {
+  assert.deepEqual(L.freezeBody('salmon', 'L1', '', '-20', '', '2026-10-04T08:00', '2026-10-05T04:00'),
+    { body: { item: 'salmon', lot: 'L1', tempC: -20, started: '2026-10-04T08:00', ended: '2026-10-05T04:00' } });
+  assert.equal(L.freezeBody('salmon', 'L1', '24', '-20', '', '', '2026-10-05T04:00').error, 'hc_ended', 'an end without a start');
+  assert.equal(L.freezeBody('salmon', 'L1', '', '-20', '', '2026-10-05T04:00', '2026-10-05T04:00').error, 'hc_ended', 'an end at the start');
+  const later = new Date('2026-10-05T14:00').getTime();
+  assert.equal(L.hoursSince('2026-10-04T08:00', later, '2026-10-05T04:00'), 20, 'a late record adds no hours');
+});

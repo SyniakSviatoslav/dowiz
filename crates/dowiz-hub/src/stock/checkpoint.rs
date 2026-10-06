@@ -28,6 +28,7 @@
 //! name inside the body says.
 
 use super::carry::Carry;
+use super::storages::bind::Bound;
 use super::cost::CostBook;
 use super::journal::Journal;
 use super::meta::{with_meta, Meta};
@@ -59,6 +60,10 @@ impl StockLog {
     pub(super) fn tail(&self, accept: impl Fn(&Journal, Option<i64>) -> bool) -> Tail {
         let mut base = None;
         let mut recs: Vec<String> = EvLog::walk_until(&self.store, |r| {
+            // A quarantined record is never a base (W-CRC): its bytes are not the ones written.
+            if self.is_bad(&r.id) {
+                return false;
+            }
             let Some((j, at)) = parse(&r.payload) else { return false };
             let newest = at.map(|a| a.max(j.max_at.unwrap_or(a)));
             let take = accept(&j, newest);
@@ -68,6 +73,7 @@ impl StockLog {
             take
         })
         .into_iter()
+        .filter(|r| !self.is_bad(&r.id))
         .map(|r| String::from_utf8_lossy(&r.payload).into_owned())
         .collect();
         if base.is_some() {
@@ -81,9 +87,19 @@ impl StockLog {
     /// carry (always: it is one integer read per record), and how many
     /// records follow the checkpoint.
     pub(super) fn fold_tail(&self, ledger: bool, book: bool) -> Result<(StockLedger, CostBook, Carry, usize), StockError> {
+        self.fold_tail_bound(ledger, book).map(|(l, b, c, n, _)| (l, b, c, n))
+    }
+
+    /// [`StockLog::fold_tail`], and the stations bound to storages now
+    /// (W-STORE2) -- read off the same walk, no second one.
+    pub(super) fn fold_tail_bound(&self, ledger: bool, book: bool) -> Result<(StockLedger, CostBook, Carry, usize, Bound), StockError> {
         let t = self.tail(|_, _| true);
-        let (mut led, mut b, mut c) = t.base.map(|j| (j.ledger, j.book, j.carry)).unwrap_or_default();
+        let (mut led, mut b, mut c, mut bound) = t.base.map(|j| (j.ledger, j.book, j.carry, j.stores.bound)).unwrap_or_default();
         for rec in &t.recs {
+            if let Some((station, store)) = super::storages::bind::bound_of(rec) {
+                super::storages::bind::set(&mut bound, &station, &store);
+                continue;
+            }
             let Some(ev) = decode(rec) else { continue };
             if ledger {
                 led.apply(&ev)?;
@@ -93,7 +109,7 @@ impl StockLog {
             }
             c.apply(&ev, crate::minijson::int_field(rec, "uq").filter(|u| *u > 0));
         }
-        Ok((led, b, c, t.recs.len()))
+        Ok((led, b, c, t.recs.len(), bound))
     }
 
     /// THE WRITE DOOR: signed, decided against the shelf as a batch, written,

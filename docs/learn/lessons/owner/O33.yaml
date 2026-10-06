@@ -240,3 +240,37 @@ steps:
       en: "The paper's number, in the Delivery sheet."
       uk: "Номер документа, в аркуші поставки."
       ru: "Номер документа, в листе поставки."
+  - key: 14
+    anchor: haccp.started
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="haccp.started"]'
+    title:
+      sq: "Kur filloi ngrirja"
+      en: "When freezing started"
+      uk: "Коли почали заморожувати"
+      ru: "Когда начали замораживать"
+    caption:
+      sq: "Ora e lokalit. Me fillim, rregulli numëron orët prej tij deri tani."
+      en: "Venue time. With a start, the rule counts the hours from it to now."
+      uk: "Час закладу. З початком правило рахує години від нього до зараз."
+      ru: "Время заведения. С началом правило считает часы от него до сейчас."
+  - key: 15
+    anchor: haccp.ended
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="haccp.ended"]'
+    title:
+      sq: "Kur mbaroi ngrirja"
+      en: "When freezing ended"
+      uk: "Коли закінчили заморожувати"
+      ru: "Когда закончили замораживать"
+    caption:
+      sq: "Vetëm kur e shkruani më vonë: rregulli numëron nga fillimi deri në mbarim, jo deri tani."
+      en: "Only when you write it down later: the rule counts from start to end, not to now."
+      uk: "Лише коли записуєте пізніше: правило рахує від початку до кінця, а не до зараз."
+      ru: "Только если записываете позже: правило считает от начала до конца, а не до сейчас."

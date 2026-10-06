@@ -11,7 +11,7 @@
 //!   GET /fold/stock?now=
 //!   GET /fold/week_top?venue=&now=   the storefront's "most ordered this week" (W-MR0)
 //!   GET /fold/prep?venue=&now=[&day=]   (W-PREP, `forecast.rs`)
-//!   GET /fold/haccp?kind=&from=&to=  the HACCP CSV (P13, W-STORE, `stock/haccp.rs`)
+//!   GET /fold/haccp?kind=&from=&to=&names=  the HACCP CSV (P13, W-STORE, `stock/haccp.rs`)
 
 use super::HubImages;
 use worker::*;
@@ -151,9 +151,11 @@ impl HubImages {
     /// stock log, the CSV alone crosses.
     pub(super) async fn fold_haccp(&self, req: &Request) -> Result<Response> {
         let (kind, from, to) = (query(req, "kind")?.unwrap_or_default(), query(req, "from")?, query(req, "to")?);
+        let names = query(req, "names")?; // W-STORE2: the signers' names, from the Worker
+
         let cat = self.catalogue().await?;
         let (_, stock) = self.stock_log().await?;
-        match crate::services::operations::stock::haccp::fold(&cat, &stock, &kind, from.as_deref(), to.as_deref()) {
+        match crate::services::operations::stock::haccp::fold(&cat, &stock, &kind, from.as_deref(), to.as_deref(), names.as_deref()) {
             Ok(csv) => Response::ok(csv),
             Err((status, why)) => Response::error(why, status),
         }

@@ -60,6 +60,10 @@ impl StockLog {
             if let Some((item, q)) = held.first() {
                 return Err(StockError::Linkage(format!("{}: still holds {q} of {item}; move it out or count it first", s.id)));
             }
+            // W-STORE2: a station's storage stays open while it is bound.
+            if let Some((station, _)) = j.stores.bound().iter().find(|(_, st)| **st == s.id) {
+                return Err(StockError::Linkage(format!("{}: the {station} station draws from it; unbind the station first", s.id)));
+            }
         }
         let body = format!(r#"{{"id":"{}","name":"{}","archived":{}}}"#, esc(&s.id), esc(name), i64::from(s.archived));
         self.append_note(STORAGE, &body)

@@ -49,6 +49,10 @@ pub struct Meta {
     /// P13: a receipt the SUPPLIER already treated against parasites (frozen
     /// at source), and the paper that says so. Absent: nothing claimed.
     pub treated: Option<String>,
+    /// W-STORE2: a draw's share per storage of a BOUND station
+    /// (`storages/bind.rs`), `store=uq;store=uq` ("" = the unbound home).
+    /// Absent on every record of a venue that never bound a station.
+    pub drawn: Option<String>,
 }
 
 impl Meta {
@@ -79,6 +83,7 @@ impl Meta {
             ("by_", &self.by),
             ("store", &self.store),
             ("treated", &self.treated),
+            ("drawn", &self.drawn),
         ] {
             if let Some(v) = v.as_ref().filter(|v| !v.trim().is_empty()) {
                 s.push_str(&format!(r#","{k}":"{}""#, esc(v.trim())));
@@ -119,6 +124,7 @@ pub fn meta_of(rec: &str) -> Meta {
         uq: int_field(rec, "uq").filter(|u| *u > 0),
         store: str_field(rec, "store").filter(|s| !s.trim().is_empty()),
         treated: str_field(rec, "treated").filter(|s| !s.trim().is_empty()),
+        drawn: str_field(rec, "drawn").filter(|s| !s.trim().is_empty()),
     }
 }
 

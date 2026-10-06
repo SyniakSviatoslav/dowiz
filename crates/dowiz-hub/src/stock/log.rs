@@ -34,7 +34,7 @@ impl StockLog {
     pub fn create_sized(bytes: usize) -> Result<Self, crate::HubError> {
         let mut store = Store::create_bytes(bytes)?;
         EvLog::init_bytes(&mut store)?;
-        Ok(StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false })
+        Ok(StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false, bad: Vec::new() })
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, crate::HubError> {
@@ -49,8 +49,15 @@ impl StockLog {
         // `append` re-folds the whole log first -- a `Consumed` whose
         // `Reserved` was in the lost tail turned every later stock write into
         // a `Linkage` refusal. Refusing here is what a caller can act on.
-        crate::chain_is_whole(&store)?;
-        Ok(StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false })
+        // An append log QUARANTINES a bad-crc record and serves the rest (W-CRC, operator
+        // 2026-10-05); what breaks the walk itself (root, count, a link) still refuses.
+        let quarantined = crate::chain_is_whole_quarantining(&store)?;
+        let bad = if quarantined.is_empty() {
+            Vec::new()
+        } else {
+            EvLog::walk_marked(&store).into_iter().filter(|(_, c)| c.is_some()).map(|(r, _)| r.id).collect()
+        };
+        Ok(StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false, bad })
     }
 
     /// FULL CAPACITY: `grow()` doubles from this length, so it keeps the
@@ -76,13 +83,26 @@ impl StockLog {
     ///
     /// A fold is defined over time moving forwards. The reversal belongs here,
     /// once, rather than at each of the three call sites.
+    /// A record quarantined at load (failed crc) is left out here, in `raw()` and in
+    /// `tail()` alike, so every fold agrees and `len == events + quarantined`.
     pub fn events(&self) -> Vec<StockEvent> {
         let mut out: Vec<StockEvent> = EvLog::walk(&self.store)
             .into_iter()
+            .filter(|r| !self.is_bad(&r.id))
             .filter_map(|r| decode(&String::from_utf8_lossy(&r.payload)))
             .collect();
         out.reverse();
         out
+    }
+
+    /// A record quarantined at load for a failed crc (W-CRC).
+    pub(super) fn is_bad(&self, id: &[u8; 32]) -> bool {
+        !self.bad.is_empty() && self.bad.contains(id)
+    }
+
+    /// How many records the load quarantined for a failed crc (owner health).
+    pub fn quarantined(&self) -> usize {
+        self.bad.len()
     }
 
     /// One record, chained to the previous. The chain is what makes the log
@@ -145,19 +165,12 @@ impl StockLog {
     /// order leaves every `prev` pointing at a record that does not exist yet,
     /// which is a heap of orphans that still looks like a log.
     fn grow(&mut self) -> Result<(), crate::HubError> {
-        let mut records = EvLog::walk(&self.store);
-        records.reverse();
         let bigger = self.store.to_bytes().len().saturating_mul(2).max(64 * 1024);
         let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
-        let mut last = None;
-        for r in &records {
-            EvLog::append_bytes(&mut fresh, r)?;
-            last = Some(r.id);
-        }
-        if let Some(id) = last {
-            EvLog::set_tip_bytes(&mut fresh, &id)?;
-        }
+        // The chain's BYTES, failed crcs carried: a quarantined record is never re-sealed
+        // into one that verifies again (W-CRC).
+        EvLog::copy_chain_bytes(&self.store, &mut fresh)?;
         // Swapped in only once the whole copy succeeded: a partial grow that
         // replaced the store would lose the ledger to save space.
         self.store = fresh;

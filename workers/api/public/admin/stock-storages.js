@@ -2,7 +2,9 @@
 // or a room the owner names -- with a storage filter, a Move sheet, a count of
 // one storage, and the storage cards. Every number is a field of
 // `GET /api/owner/stock` (`byStore` per supply, `storages`); every save is one
-// `POST /api/owner/stock/:kind` -- `moved`, `count` with `store`, `storage`.
+// `POST /api/owner/stock/:kind` -- `moved`, `count` with `store`, `storage`,
+// and (W-STORE2) `bound` {station, store}: a storage's "Stations" row binds a
+// kitchen station to it, so that station's dishes draw from it.
 // A transfer never adds or removes stock: the hub refuses more than is there.
 
 import { $, $$, esc, t, api, post, sheet, closeSheet, busy, toast } from '/admin/core.js';
@@ -30,6 +32,7 @@ export async function open(store = 'all'){
     <p class="ui-label mt-3" data-t="sto_recv"></p>
     ${chips({ id: 'stoRecv', values: [{ value: '', key: 'sto_home' }, ...live.map(s => ({ value: s.id, label: L.nameOf(s, t) }))], value: L.recvStore(), attr: 'recv', tour: 'store.recv' })}
     <p class="hint" data-t="sto_recvHint"></p>
+    ${cur && !cur.archived ? stationsRow(all, cur) : ''}
     ${cur ? `<div class="btn-row">${btn({ id: 'stoRename', variant: 'ghost', icon: 'note', key: 'sto_rename', tour: 'store.rename' })}
       ${cur.default ? '' : btn({ id: 'stoArchive', variant: 'ghost', icon: cur.archived ? 'history' : 'box', key: cur.archived ? 'sto_unarchive' : 'sto_archive', tour: 'store.archive' })}</div>
       <p class="hint" data-t="sto_archiveHint"></p>` : ''}
@@ -41,6 +44,22 @@ export async function open(store = 'all'){
   $('#stoAdd').onclick = () => editCard(null);
   const ren = $('#stoRename'); if (ren) ren.onclick = () => editCard(cur);
   const arc = $('#stoArchive'); if (arc) arc.onclick = () => saveCard({ id: cur.id, name: cur.name || named(cur.id), archived: !cur.archived }, arc, cur.id);
+  for (const b of $$('[data-stb]', $('#sheetIn'))) b.onclick = async () => {
+    const here = b.getAttribute('aria-pressed') === 'true';
+    try { await busy(b, () => post('/owner/stock/bound', L.bindBody(b.dataset.stb, cur.id, here))); toast(t(here ? 'sto_unbound' : 'sto_bound')); open(cur.id); } catch (e) { fail(e); }
+  };
+}
+
+/// W-STORE2: the kitchen stations this storage serves. Pressed: bound here;
+/// a station bound elsewhere says where. One tap binds here, or unbinds.
+function stationsRow(all, cur){
+  const named = s => L.nameOf(s, t);
+  return `<p class="ui-label mt-3" data-t="sto_stations"></p>
+    <div class="btn-row">${L.STATIONS.map(st => {
+      const at = L.boundTo(all, st), here = at?.id === cur.id;
+      return btn({ variant: 'ghost', icon: here ? 'check' : undefined, label: t('sto_st_' + st) + (at && !here ? ` · ${named(at)}` : ''), pressed: here, data: { stb: st }, tour: 'store.station' });
+    }).join('')}</div>
+    <p class="hint" data-t="sto_stationsHint"></p>`;
 }
 
 /// The Move sheet: ingredient, quantity, from, to.

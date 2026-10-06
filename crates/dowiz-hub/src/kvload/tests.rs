@@ -85,16 +85,20 @@ fn roster_load_refuses_a_flipped_value_byte_by_name() {
     named(Roster::load(&bad), obj, "Roster");
 }
 
+/// The stock log is an APPEND log: since the W-STORE2 merge it quarantines a bad-crc
+/// record and folds the rest (operator 2026-10-05), like the order log.
 #[test]
-fn stocklog_load_refuses_a_flipped_record_byte_by_name() {
+fn stocklog_load_quarantines_a_flipped_record_byte() {
     let mut log = StockLog::create_sized(64 * 1024).unwrap();
     for q in [100, 50] {
         log.append(&StockEvent::Received { item: "rice".into(), qty: q }).unwrap();
     }
     let b = log.to_bytes_trimmed();
     assert_eq!(StockLog::load(&b).unwrap().events().len(), 2);
-    let (bad, obj) = flip_newest_record(&b);
-    named(StockLog::load(&bad), obj, "StockLog");
+    let (bad, _) = flip_newest_record(&b);
+    let log = StockLog::load(&bad).expect("a bad stock record must not refuse the shelf");
+    assert_eq!((log.events().len(), log.quarantined()), (1, 1));
+    assert_eq!(log.ledger().unwrap().level("rice").on_hand, 100, "folds from the record that is still good");
 }
 
 /// D.1 #4 through the gauge: a hub log's dead figure rises with every append (one 10-cell

@@ -95,7 +95,7 @@ impl Basket {
         let quiet = |id: &str| self.untracked.contains(id);
         let ready = |id: &str| ready_micro(led, carry, id);
         let (leaves, shelf) = plan_split(&self.roots, &World { card: &card, untracked: &quiet, ready: &ready }).map_err(|r| StockError::Linkage(r.to_string()))?;
-        Ok((leaves.into_iter().map(|l| Draw { item: l.item, uq: l.uq, order_id: order_id.to_string(), via: None }).collect(), shelf))
+        Ok((leaves.into_iter().map(|l| Draw { item: l.item, uq: l.uq, order_id: order_id.to_string(), via: None, stations: Vec::new() }).collect(), shelf))
     }
 
     /// THE COST THE LEDGER BOOKS for this basket (one portion of one dish,

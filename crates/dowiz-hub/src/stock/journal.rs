@@ -135,11 +135,16 @@ impl Journal {
             self.stores.apply_move(&m, &self.ledger);
             return Ok(());
         }
+        // A STATION BOUND TO A STORAGE (W-STORE2): the storages' fold only.
+        if let Some((station, store)) = super::storages::bind::bound_of(rec) {
+            self.stores.bind(&station, &store);
+            return Ok(());
+        }
         let Some(ev) = decode(rec) else { return Ok(()) };
         let meta = meta_of(rec);
         let before = self.ledger.level(ev.item()).on_hand;
         let value = self.value_of(&ev, &meta, before);
-        if meta.store.is_some() {
+        if meta.store.is_some() || meta.drawn.is_some() {
             self.stores.materialise(&self.ledger);
         }
         let to = match &ev {
@@ -148,7 +153,7 @@ impl Journal {
         };
         let before_to = to.as_deref().map_or(0, |t| self.ledger.level(t).on_hand);
         self.ledger.apply(&ev)?;
-        self.stores.step(&ev, meta.store.as_deref(), before, before_to, &self.ledger);
+        self.stores.step(&ev, meta.store.as_deref(), meta.drawn.as_deref(), before, before_to, &self.ledger);
         self.book.apply_event(&ev, rec);
         self.carry.apply(&ev, meta.uq);
         let entry = Entry { seq: self.seen, ev, meta, before, value };

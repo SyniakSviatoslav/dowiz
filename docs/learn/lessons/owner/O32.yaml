@@ -325,3 +325,20 @@ steps:
       en: "In the Delivery sheet, pick the storage."
       uk: "В аркуші поставки виберіть склад."
       ru: "В листе поставки выберите склад."
+  - key: 19
+    anchor: store.station
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="store.station"]'
+    title:
+      sq: "Stacionet e magazinës"
+      en: "The storage's stations"
+      uk: "Станції складу"
+      ru: "Станции склада"
+    caption:
+      sq: "Lidhni një stacion (kuzhinë, sushi, bar) me këtë magazinë: pjatat e tij marrin përbërësit prej saj. Prekni sërish për ta shkëputur."
+      en: "Bind a station (kitchen, sushi, bar) to this storage: its dishes take their ingredients from here. Tap again to unbind."
+      uk: "Прив'яжіть станцію (кухня, суші, бар) до цього складу: її страви беруть інгредієнти звідси. Торкніться ще раз, щоб відв'язати."
+      ru: "Привяжите станцию (кухня, суши, бар) к этому складу: её блюда берут ингредиенты отсюда. Нажмите ещё раз, чтобы отвязать."

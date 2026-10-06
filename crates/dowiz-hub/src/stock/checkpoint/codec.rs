@@ -127,6 +127,30 @@ pub(in crate::stock) fn body(j: &Journal) -> String {
             w.s(s);
         }
     }
+    // THE BINDINGS AND THE BOUND RESERVATIONS (W-STORE2), each written ONLY
+    // when non-empty: every checkpoint of a venue that never bound a station
+    // keeps its bytes.
+    if !j.stores.bound.is_empty() {
+        w.n("K");
+        w.n(j.stores.bound.len());
+        for (st, s) in &j.stores.bound {
+            w.s(st);
+            w.s(s);
+        }
+    }
+    if !j.stores.held.is_empty() {
+        w.n("B");
+        w.n(j.stores.held.len());
+        for ((o, i), shares) in &j.stores.held {
+            w.s(o);
+            w.s(i);
+            w.n(shares.len());
+            for (s, u) in shares {
+                w.s(s);
+                w.n(u);
+            }
+        }
+    }
     w.0
 }
 
@@ -238,6 +262,22 @@ pub(in crate::stock) fn parse(payload: &[u8]) -> Option<(Journal, Option<i64>)> 
         for _ in 0..r.n::<usize>()? {
             let i = r.s()?;
             j.stores.last.insert(i, r.s()?);
+        }
+    }
+    if r.0.starts_with(" K") {
+        for _ in 0..r.tag("K")? {
+            let st = r.s()?;
+            j.stores.bound.insert(st, r.s()?);
+        }
+    }
+    if r.0.starts_with(" B") {
+        for _ in 0..r.tag("B")? {
+            let key = (r.s()?, r.s()?);
+            let mut shares = Vec::new();
+            for _ in 0..r.n::<usize>()? {
+                shares.push((r.s()?, r.n()?));
+            }
+            j.stores.held.insert(key, shares);
         }
     }
     if !r.0.is_empty() {

@@ -139,6 +139,9 @@ pub struct StockLog {
     every: usize,
     /// The image was rewritten (`grow`) since the last checkpoint.
     grew: bool,
+    /// Ids of the records quarantined for a failed crc at load (W-CRC policy: an append
+    /// log serves the rest). Empty on every healthy image, so no reader pays for it.
+    bad: Vec<[u8; 32]>,
 }
 
 /// Room for roughly a year of a single venue's stock events.

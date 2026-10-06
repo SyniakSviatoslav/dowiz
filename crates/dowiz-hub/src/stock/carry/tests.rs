@@ -12,7 +12,7 @@ fn log() -> StockLog {
     log
 }
 fn draw(i: usize) -> Vec<Draw> {
-    vec![Draw { item: "salt".into(), uq: SALT, order_id: format!("o{i}"), via: None }]
+    vec![Draw { item: "salt".into(), uq: SALT, order_id: format!("o{i}"), via: None, stations: Vec::new() }]
 }
 
 #[test]
@@ -77,14 +77,14 @@ fn a_cancel_undoes_its_own_fraction_exactly() {
 fn whole_lines_and_every_old_record_leave_the_carry_at_zero() {
     let mut log = log();
     log.append(&StockEvent::Reserved { item: "salt".into(), qty: 50, order_id: "o1".into() }).unwrap();
-    log.append_draws(&[Draw { item: "salt".into(), uq: 100 * MICRO, order_id: "o2".into(), via: None }]).unwrap();
+    log.append_draws(&[Draw { item: "salt".into(), uq: 100 * MICRO, order_id: "o2".into(), via: None, stations: Vec::new() }]).unwrap();
     let c = log.fold_tail(false, false).unwrap().2;
     assert_eq!(c, Carry::default(), "no fractional draw: both maps empty, so old checkpoints keep their bytes");
     assert!(!log.raw()[2].contains("uq"), "a whole draw writes no uq: {}", log.raw()[2]);
     assert_eq!(log.ledger().unwrap().level("salt").reserved, 150);
     let d = draws_for("o3", &[(r#"{"bom":[{"supply":"salt","qty":2},{"supply":"x","uq":1500000}]}"#.into(), 3), (r#"{"bom":[{"supply":"x","qty":1}]}"#.into(), 1)]);
-    assert_eq!(d, vec![Draw { item: "salt".into(), uq: 6 * MICRO, order_id: "o3".into(), via: None }, Draw { item: "x".into(), uq: 5_500_000, order_id: "o3".into(), via: None }]);
-    assert!(log.append_draws(&[Draw { item: "salt".into(), uq: 0, order_id: "o4".into(), via: None }]).is_err(), "a zero draw is not a draw");
+    assert_eq!(d, vec![Draw { item: "salt".into(), uq: 6 * MICRO, order_id: "o3".into(), via: None, stations: vec![("kitchen".into(), 6 * MICRO)] }, Draw { item: "x".into(), uq: 5_500_000, order_id: "o3".into(), via: None, stations: vec![("kitchen".into(), 5_500_000)] }]);
+    assert!(log.append_draws(&[Draw { item: "salt".into(), uq: 0, order_id: "o4".into(), via: None, stations: Vec::new() }]).is_err(), "a zero draw is not a draw");
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn the_carry_survives_a_checkpoint_and_a_short_shelf_still_refuses() {
     assert_eq!(through, genesis, "fold = checkpoint + tail");
     assert_eq!(log.ledger().unwrap(), StockLedger::fold(&log.events()).unwrap());
     // The shelf still decides: 2000 g on hand, a draw of 3 kg is refused whole.
-    assert!(log.append_draws(&[Draw { item: "salt".into(), uq: 3000 * MICRO, order_id: "big".into(), via: None }]).is_err());
+    assert!(log.append_draws(&[Draw { item: "salt".into(), uq: 3000 * MICRO, order_id: "big".into(), via: None, stations: Vec::new() }]).is_err());
 }
 
 /// A till import's sales go through the same door as `served`, and a void
@@ -166,7 +166,7 @@ fn cancelling_the_orders_that_booked_zero_never_books_a_negative_hold() {
     let mut log = log();
     let u = 400_000; // 0.4 g
     for i in 0..10 {
-        log.append_draws(&[Draw { item: "salt".into(), uq: u, order_id: format!("z{i}"), via: None }]).unwrap();
+        log.append_draws(&[Draw { item: "salt".into(), uq: u, order_id: format!("z{i}"), via: None, stations: Vec::new() }]).unwrap();
     }
     let zeros: Vec<String> = (0..10).map(|i| format!("z{i}")).filter(|o| held(&log, o).iter().all(|(_, q)| *q == 0)).collect();
     assert!(zeros.len() >= 5, "{zeros:?}");
@@ -174,7 +174,7 @@ fn cancelling_the_orders_that_booked_zero_never_books_a_negative_hold() {
         cancel(&mut log, o);
     }
     let c = log.fold_tail(false, false).unwrap().2.of("salt");
-    log.append_draws(&[Draw { item: "salt".into(), uq: u, order_id: "next".into(), via: None }]).unwrap();
+    log.append_draws(&[Draw { item: "salt".into(), uq: u, order_id: "next".into(), via: None, stations: Vec::new() }]).unwrap();
     let q = *reserved_qtys(&log).last().unwrap();
     assert!(q >= 0, "carry {c} before the draw booked a reservation of {q} g");
 }
@@ -194,7 +194,7 @@ fn interleaved_place_cook_cancel_keeps_every_hold_non_negative() {
             0 | 1 => {
                 let o = format!("r{i}");
                 let uq = 100_000 + (rnd(900_000) as i64);
-                log.append_draws(&[Draw { item: "salt".into(), uq, order_id: o.clone(), via: None }]).unwrap();
+                log.append_draws(&[Draw { item: "salt".into(), uq, order_id: o.clone(), via: None, stations: Vec::new() }]).unwrap();
                 open.push(o);
             }
             _ if !open.is_empty() => {

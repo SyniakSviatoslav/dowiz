@@ -1,21 +1,21 @@
 {
   "id": "feature-stock-storages",
   "name": "stock.storages",
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "class": "LIVE-NOW",
   "description": {
-    "en": "Named storages per venue (P12, W-STORE): kitchen, bar and freezer built in, more named by the owner; a storage is renamed or archived (never deleted, refused while it holds stock). A transfer {item, qty, from, to} is a NOTE on the stock log: it never makes or destroys stock (ledger, cost, lots, carry and old checkpoints byte-equal); per-storage levels are a fold of each record's on_hand delta into the record's `store` key, else the storage that last received the item (Poster's rule), else kitchen -- so the storages always sum to onHand. Every record written before storages is the kitchen's. A delivery, write-off, prep or count may name its storage (`store`); a count in one storage tells the shelf that storage plus every other one. Read back in GET /api/owner/stock: `storages` and each supply's `byStore {stores, home}`.",
-    "uk": "Склади закладу (кухня, бар, морозильник і свої): переміщення ніколи не створює і не знищує залишок; залишок по складах — згортка журналу, старі образи без змін."
+    "en": "Named storages per venue (P12, W-STORE): kitchen, bar and freezer built in, more named by the owner; a storage is renamed or archived (never deleted, refused while it holds stock). A transfer {item, qty, from, to} is a NOTE on the stock log: it never makes or destroys stock (ledger, cost, lots, carry and old checkpoints byte-equal); per-storage levels are a fold of each record's on_hand delta into the record's `store` key, else the storage that last received the item (Poster's rule), else kitchen -- so the storages always sum to onHand. Every record written before storages is the kitchen's. A delivery, write-off, prep or count may name its storage (`store`); a count in one storage tells the shelf that storage plus every other one. Read back in GET /api/owner/stock: `storages` and each supply's `byStore {stores, home}`. W-STORE2 (1.1.0): a kitchen station (kitchen, sushi, bar -- the dish's `station`) may be BOUND to a storage: POST /api/owner/stock/bound {station, store} (store \"\" unbinds), a note on the stock log; an unknown or archived storage is a 400 naming it, and a bound storage cannot be archived (409). A dish of a bound station draws (reserved->consumed, and the till's served) from that storage, split by what each dish used when one order mixes stations; an unbound venue writes byte-identical records (no `drawn` key). Lack of stock is decided on the whole shelf as before; a bound storage short of stock goes negative there, never falling through. Read back: storages[].stations (present only on a storage a station is bound to, so an unbound venue's answer keeps its bytes). An amended room round (released and reserved again) follows the same bindings (operator 2026-10-05).",
+    "uk": "Склади закладу (кухня, бар, морозильник і свої): переміщення ніколи не створює і не знищує залишок; залишок по складах — згортка журналу, старі образи без змін. 1.1.0: станцію (кухня/суші/бар) можна прив'язати до складу — її страви списуються з нього; без прив'язки все як раніше."
   },
   "producer": {
     "file": "workers/api/src/services/operations/stock/storages.rs",
     "line": 78,
-    "what": "run(): kinds storage / moved -> dowiz_hub StockLog::put_storage / move_stock (crates/dowiz-hub/src/stock/storages.rs)"
+    "what": "run(): kinds storage / moved -> dowiz_hub StockLog::put_storage / move_stock (crates/dowiz-hub/src/stock/storages.rs); W-STORE2: kind bound -> storages/bind.rs run() -> StockLog::bind_station (crates/dowiz-hub/src/stock/storages/bind.rs); draws: carry.rs commit_drawn writes `drawn`"
   },
   "consumer": {
     "file": "workers/api/public/admin/stock-storages.js",
     "line": 14,
-    "what": "open(): storage filter, per-storage rows, Move sheet (openMove line 47), count of one storage, storage cards; ingredients.js openMove sends `store` and `treated`"
+    "what": "open(): storage filter, per-storage rows, Move sheet (openMove line 47), count of one storage, storage cards; ingredients.js openMove sends `store` and `treated`; W-STORE2: stationsRow() (Stations row per storage, bind/unbind)"
   },
   "transport": [
     {
@@ -27,6 +27,11 @@
       "method": "POST",
       "path": "/api/owner/stock/storage",
       "body": "{card: {id?, name, archived?}}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/owner/stock/bound",
+      "body": "{station: kitchen|sushi|bar, store: <storage id> | \"\"}"
     },
     {
       "method": "POST",
@@ -71,7 +76,6 @@
       },
       "store": {
         "type": "string",
-        "minLength": 1,
         "maxLength": 32
       },
       "lot": {
@@ -99,6 +103,13 @@
             "type": "boolean"
           }
         }
+      },
+      "station": {
+        "enum": [
+          "kitchen",
+          "sushi",
+          "bar"
+        ]
       }
     }
   },
@@ -198,6 +209,17 @@
             },
             "default": {
               "type": "boolean"
+            },
+            "stations": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "kitchen",
+                  "sushi",
+                  "bar"
+                ]
+              },
+              "uniqueItems": true
             }
           }
         }
@@ -236,5 +258,34 @@
     }
   },
   "probe": "node tools/live-proof/probes/stock-storages.mjs (main runs it on qa-durres after deploy)",
-  "last_verified": null
+  "last_verified": null,
+  "bound_response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "ok",
+      "kind",
+      "station",
+      "store"
+    ],
+    "properties": {
+      "ok": {
+        "const": true
+      },
+      "kind": {
+        "const": "bound"
+      },
+      "station": {
+        "enum": [
+          "kitchen",
+          "sushi",
+          "bar"
+        ]
+      },
+      "store": {
+        "type": "string",
+        "maxLength": 32
+      }
+    }
+  }
 }

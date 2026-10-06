@@ -59,6 +59,12 @@ pub struct Stores {
     /// The storage that last received each item (a delivery, a batch made,
     /// a prep's output, a transfer's `to`).
     pub(super) last: BTreeMap<String, String>,
+    /// W-STORE2: station -> the storage it is bound to (`storages/bind.rs`).
+    /// Empty for a venue that never bound one: nothing below changes.
+    pub(super) bound: BTreeMap<String, String>,
+    /// W-STORE2: `(order, item)` -> the storages a bound reservation's later
+    /// `consumed` takes from, `(storage, uq)`; "" is the unbound home.
+    pub(super) held: BTreeMap<(String, String), Vec<(String, i64)>>,
 }
 
 /// A transfer: `qty` of `item` from one storage to another, signed.
@@ -127,7 +133,7 @@ impl Stores {
         }
     }
 
-    fn add(&mut self, item: &str, store: &str, d: Qty) {
+    pub(super) fn add(&mut self, item: &str, store: &str, d: Qty) {
         if d == 0 {
             return;
         }
@@ -164,7 +170,7 @@ impl Stores {
 
     /// Fold one event that the ledger has JUST applied. `before`: the item's
     /// `on_hand` before it; `before_to`: a prep's output's.
-    pub(super) fn step(&mut self, ev: &StockEvent, store: Option<&str>, before: Qty, before_to: Qty, led: &StockLedger) {
+    pub(super) fn step(&mut self, ev: &StockEvent, store: Option<&str>, drawn: Option<&str>, before: Qty, before_to: Qty, led: &StockLedger) {
         if !self.used {
             return;
         }
@@ -172,10 +178,15 @@ impl Stores {
         if let StockEvent::Removed { .. } = ev {
             self.levels.retain(|(i, _), _| *i != item);
             self.last.remove(&item);
+            self.held.retain(|(_, i), _| *i != item);
+            return;
+        }
+        let d = led.level(&item).on_hand - before;
+        // W-STORE2: a draw of a bound station lands in its storage.
+        if self.drawn_step(ev, drawn, d) {
             return;
         }
         let here = store.map(str::to_string).unwrap_or_else(|| self.home(&item).to_string());
-        let d = led.level(&item).on_hand - before;
         match ev {
             StockEvent::Received { qty, .. } | StockEvent::Made { qty, .. } => {
                 let rest = self.forgive(&item, d - qty);
@@ -243,6 +254,15 @@ pub fn valid_id(id: &str) -> bool {
 #[path = "storages/write.rs"]
 mod write;
 
+/// W-STORE2: a station bound to a storage, and the draws that follow it.
+#[path = "storages/bind.rs"]
+pub mod bind;
+
 #[cfg(test)]
 #[path = "storages/tests.rs"]
 mod tests;
+
+/// W-STORE2's golden: an unbound venue writes the pre-W-STORE2 bytes.
+#[cfg(test)]
+#[path = "storages/golden_tests.rs"]
+mod golden_tests;
