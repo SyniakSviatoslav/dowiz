@@ -243,9 +243,14 @@ impl Kv {
         Some(Kv { entries })
     }
 
-    /// Fetch a value by key.
+    /// Fetch a value by key: BINARY SEARCH (W-ZC), since every writer keeps the keys
+    /// sorted. A miss falls back to the old linear scan, so an image whose keys are not
+    /// sorted (none is written here; `zc::KvIn` checks) still answers what it holds.
     pub fn get(&self, key: &str) -> Option<Vec<u8>> {
-        self.entries.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
+        match self.entries.binary_search_by(|(k, _)| k.as_str().cmp(key)) {
+            Ok(i) => Some(self.entries[i].1.clone()),
+            Err(_) => self.entries.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone()),
+        }
     }
 
     /// All keys, in the sorted order the store holds them in.
@@ -437,6 +442,9 @@ impl Kv {
         }
     }
 }
+
+/// The zero-copy reader (W-ZC): one value straight from the image cells.
+pub mod zc;
 
 #[cfg(test)]
 mod tests;

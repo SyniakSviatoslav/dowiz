@@ -53,20 +53,30 @@ impl HubImages {
         let url = req.url()?;
         let q = |k: &str| url.query_pairs().find(|(n, _)| n == k).map(|(_, v)| v.to_string());
         let what = q("q").unwrap_or_default();
+        // THE READS THAT NEED ONLY VALUES answer from the image in place (W-ZC, `hubdo/catview.rs`).
+        let in_place: Option<Value> = match what.as_str() {
+            "root" => Some(self.with_catalog(|c| json!({ "root": c.root() })).await?),
+            "supplies" => Some(self.with_catalog(|c| json!({ "supplies": crate::services::engagement::voice::kitchen::supplies(&c.supplies()) })).await?),
+            "dishes" => {
+                let (i18n, lang) = (self.i18n_rows().await, q("lang").unwrap_or_default());
+                Some(self.with_catalog(|c| json!({ "dishes": crate::services::engagement::voice::menu::dishes(&c.products(), &i18n, &lang) })).await?)
+            }
+            "product" => {
+                let id = q("id").unwrap_or_default();
+                Some(self.with_catalog(|c| json!({ "product": c.product(&id) })).await?)
+            }
+            _ => None,
+        };
+        if let Some(body) = in_place {
+            return Response::from_json(&body);
+        }
         let cat = self.catalogue().await?;
         let body: Value = match what.as_str() {
-            "root" => json!({ "root": cat.root() }),
             "categories" => crate::catalog_edit::categories_view(&cat),
             "ids" => crate::owner::catalogue_ids(&cat),
             "photo" => json!({ "photo": crate::services::engagement::verdict::photo_of(&cat, &q("subject").unwrap_or_default()) }),
-            "supplies" => json!({ "supplies": crate::services::engagement::voice::kitchen::supplies(&cat.supplies()) }),
-            "dishes" => {
-                let i18n = self.i18n_rows().await;
-                json!({ "dishes": crate::services::engagement::voice::menu::dishes(&cat.products(), &i18n, &q("lang").unwrap_or_default()) })
-            }
             "posts" => crate::services::engagement::posts::menu_state(&cat),
             "activation" => crate::services::venue::activation::catalogue_facts(&cat),
-            "product" => json!({ "product": cat.product(&q("id").unwrap_or_default()) }),
             "option_bom" => crate::services::catalogue::option_bom::fold(&cat, &q("id").unwrap_or_default()),
             "owned" => json!({ "owned": crate::services::catalogue::import::owned_dishes(&cat) }),
             "sense_plan" => json!({ "plan": crate::services::customers::taste_builder::plan_of(&cat, &q("key").unwrap_or_default()) }), // W-SENSE
@@ -88,10 +98,12 @@ impl HubImages {
     /// A venue with no catalogue yet answers `null`, which is not an error:
     /// the caller falls back to the default zone and says so.
     pub(super) async fn fold_venue(&self) -> Result<Response> {
-        let rec = match self.image(CATALOG_IMAGE).await? {
-            Some((_, bytes)) => dowiz_hub::catalog::Catalog::load(&bytes).ok().and_then(|c| c.location()),
-            None => None,
-        };
+        // In place (W-ZC). A storage error still propagates (the `?` on the cold read);
+        // an unreadable image still answers `null`, as the `.ok()` here always did.
+        if !self.mem.borrow().contains_key(CATALOG_IMAGE) {
+            self.image(CATALOG_IMAGE).await?;
+        }
+        let rec = self.with_catalog(|c| c.location()).await.ok().flatten();
         json_body(rec.unwrap_or_else(|| "null".to_string()))
     }
 }

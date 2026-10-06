@@ -32,8 +32,8 @@ impl HubImages {
         let url = req.url()?;
         let ids: Vec<String> = url.query_pairs().filter(|(k, _)| k == "ids").map(|(_, v)| v.to_string()).collect();
         let promo = url.query_pairs().find(|(k, _)| k == "promo").map(|(_, v)| v.to_string());
-        let cat = self.catalogue().await?;
-        Response::from_json(&crate::services::ordering::basket::answer(&cat, &ids, promo.as_deref()))
+        // In place (W-ZC, `hubdo/catview.rs`): every placement asks this.
+        Response::from_json(&self.with_catalog(|cat| crate::services::ordering::basket::answer(cat, &ids, promo.as_deref())).await?)
     }
 
     /// Every product with a recipe, for a room command's shelf movements

@@ -10,7 +10,7 @@
 //!
 //!   GET /fold/basket?ids=<product id>&ids=...[&promo=<normalised code>]
 
-use dowiz_hub::catalog::Catalog;
+use dowiz_hub::catalog::CatalogRead;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use worker::*;
@@ -22,7 +22,8 @@ use worker::*;
 /// asked for that exist; `ledger`: per existing id, the record the shelf
 /// reserves against for one sale of it (`prep::for_ledger`, the semi-finished
 /// products expanded); `promo`: the code's record as stored, or `null`.
-pub fn answer(cat: &Catalog, ids: &[String], promo: Option<&str>) -> Value {
+/// Any `CatalogRead`: the object answers from the image in place (W-ZC, `hubdo/catview.rs`).
+pub fn answer<C: CatalogRead + ?Sized>(cat: &C, ids: &[String], promo: Option<&str>) -> Value {
     let venue: Value = cat.location().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(Value::Null);
     let mut products = serde_json::Map::new();
     let mut ledger = serde_json::Map::new();

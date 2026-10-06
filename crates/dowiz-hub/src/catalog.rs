@@ -18,6 +18,9 @@ use bebop_store::Store;
 use crate::HubError;
 
 pub mod bom;
+/// The catalogue read in place, without decoding it (W-ZC).
+pub mod view;
+pub use view::{CatalogRead, CatalogView};
 
 /// How large an image `projected` may build to measure a catalogue that does
 /// NOT fit: two ceilings (20 MiB of Worker memory at worst), so an import that
@@ -212,16 +215,14 @@ impl Catalog {
         self.entries_with_prefix(P_CATEGORY)
     }
 
+    /// One pass over the entries (W-ZC): this was `keys()` and then a linear `get` per
+    /// key, O(n^2) for every `products()`.
     fn entries_with_prefix(&self, prefix: &str) -> Vec<(String, String)> {
         self.kv
-            .keys()
-            .into_iter()
-            .filter(|k| k.starts_with(prefix))
-            .filter_map(|k| {
-                let id = k[prefix.len()..].to_string();
-                let v = self.kv.get(&k)?;
-                Some((id, String::from_utf8(v).ok()?))
-            })
+            .entries
+            .iter()
+            .filter(|(k, _)| k.starts_with(prefix))
+            .filter_map(|(k, v)| Some((k[prefix.len()..].to_string(), String::from_utf8(v.clone()).ok()?)))
             .collect()
     }
 }

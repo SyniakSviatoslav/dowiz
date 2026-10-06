@@ -1,0 +1,50 @@
+{
+  "id": "zc.catalogue.v1",
+  "version": "1.0.0",
+  "description": {
+    "en": "The catalogue read in place (W-ZC, R-BEBOPDB D.1 #1). The venue object answers /fold/catalogue (root, supplies, dishes, product), /fold/venue and /fold/basket by reading the catalogue image it already holds through bebop-store's zero-copy KV reader (KvIn: binary search over the sorted key index, linear fallback for an unsorted old image; every offset/length bounded by the image size), instead of Catalog::load (copy the bytes, crc all five objects, decode every entry). The crc of all five objects runs once per image generation when the bytes enter the object (CatalogView::open); later reads of the same bytes reopen without a crc; a cold read or a write forgets the memo. No route, request or response shape changes: the public placement, the manifest and the bootstrap fingerprint answer byte-for-byte what they answered before. Measured (release, 165 dishes x 2.5 KB, median of 21): product(id) 1.5 us in place vs 1888 us Catalog::load+product; first read of a generation 369.7 us.",
+    "uk": "Каталог читається на місці в об'єкті закладу: двійковий пошук по ключах, crc один раз на покоління; маршрути й відповіді не змінились."
+  },
+  "producer": [
+    { "file": "crates/bebop-store/src/kv/zc.rs", "line": 76, "what": "KvIn::open (full check: crc of the five objects, index bounds, sortedness)" },
+    { "file": "crates/bebop-store/src/kv/zc.rs", "line": 90, "what": "KvIn::reopen (O(1) bounds, no crc, for a holder that checked these bytes)" },
+    { "file": "crates/bebop-store/src/kv/zc.rs", "line": 233, "what": "KvIn::get (binary search, value borrowed)" },
+    { "file": "crates/bebop-store/src/kv/zc.rs", "line": 285, "what": "kv_get_in / kv_prefix_in" },
+    { "file": "crates/dowiz-hub/src/catalog/view.rs", "line": 31, "what": "CatalogRead (Catalog and CatalogView)" },
+    { "file": "crates/dowiz-hub/src/catalog/view.rs", "line": 88, "what": "CatalogView::open / reopen" },
+    { "file": "workers/api/src/hubdo/catview.rs", "line": 30, "what": "HubImages::with_catalog (crc once per generation)" },
+    { "file": "workers/api/src/hubdo/catalogue.rs", "line": 52, "what": "fold_catalogue / fold_venue through with_catalog" },
+    { "file": "workers/api/src/hubdo/basket.rs", "line": 31, "what": "fold_basket through with_catalog" }
+  ],
+  "consumer": [
+    { "file": "workers/api/src/services/ordering/basket.rs", "line": 68, "what": "ask (the placement's catalogue part)" },
+    { "file": "workers/api/src/storefront.rs", "line": 488, "what": "place (POST /api/public/locations/:slug/orders)" },
+    { "file": "workers/api/src/storefront.rs", "line": 326, "what": "manifest (/fold/venue)" },
+    { "file": "workers/api/src/bootstrap.rs", "line": 434, "what": "catalogRoot (/fold/catalogue?q=root)" },
+    { "file": "tools/live-proof/probes/feature-zc-catalogue.mjs", "line": 1, "what": "probe" }
+  ],
+  "external_api_version": null,
+  "on_disk_format": "unchanged (bebop-store KV image, five objects, KIDX sorted)",
+  "routes": {
+    "manifest": {
+      "request": { "method": "GET", "path": "/manifest.webmanifest", "auth": "none (venue host)" },
+      "request_schema": null,
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "place": {
+      "request": { "method": "POST", "path": "/api/public/locations/:slug/orders", "auth": "none" },
+      "request_schema": null,
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["id", "total"],
+        "properties": { "id": { "type": "string" }, "total": { "type": "integer", "minimum": 0 } }
+      }
+    }
+  }
+}

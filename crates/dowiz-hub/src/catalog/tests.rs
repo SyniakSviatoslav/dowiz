@@ -84,7 +84,7 @@ const REST: usize = 7_200;
 /// 92 are drinks and snacks without (246 B), so the menu's mean is the live
 /// 348 B. `recipe` replaces the typed ingredient list with what the Worker's
 /// `set_bom` stores.
-fn live_dish(i: usize, recipe: Option<String>) -> String {
+pub(super) fn live_dish(i: usize, recipe: Option<String>) -> String {
     let head = format!(
         r#"{{"allergens":null,"available":true,"categoryId":"futomaki","id":"item-{i:03}","imageUrl":"/media/{:064x}.jpg","name":"Sake Futomaki {i}","price":1000,"sortOrder":{i},"weightG":243"#,
         i * 7919
@@ -99,7 +99,7 @@ fn live_dish(i: usize, recipe: Option<String>) -> String {
 
 /// A supply record with every key the Worker's form writes when the file
 /// gives it (no `supplier`, no `weightPerUnit`: those are left out).
-fn live_supply(i: usize) -> String {
+pub(super) fn live_supply(i: usize) -> String {
     format!(
         r#"{{"active":true,"carbsPer100":32.0,"category":"Peshk","costPerBasis":180,"fatPer100":0.3,"id":"supply-{i:02}x","kcalPer100":145.0,"kind":"food_ingredient","lowAt":3000,"name":"Supply {i:02}x","nutritionConfirmed":false,"proteinPer100":2.6,"unit":"g"}}"#
     )
@@ -107,7 +107,7 @@ fn live_supply(i: usize) -> String {
 
 /// The 165 dishes and the rest of the live catalogue: 513 per mille before
 /// any recipe, as `/api/owner/health` reported it.
-fn dubin() -> Catalog {
+pub(super) fn dubin() -> Catalog {
     let mut c = Catalog::create().unwrap();
     c.set_location(&format!(r#"{{"id":"v1","currency_code":"ALL","rest":"{}"}}"#, "x".repeat(REST)));
     for i in 1..=165 {
@@ -118,7 +118,7 @@ fn dubin() -> Catalog {
 
 /// Six lines of a dish as the catalogue stores them, and what the Worker's
 /// `set_bom` stores beside them (derived names, cost, the four marks).
-fn recipe_keys(d: usize) -> String {
+pub(super) fn recipe_keys(d: usize) -> String {
     let lines: Vec<crate::stock::BomLine> = (0..6)
         .map(|l| crate::stock::BomLine::whole(format!("supply-{:02}x", (d * 5 + l) % 72), 20 + 7 * l as i64))
         .collect();

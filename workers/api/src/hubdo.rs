@@ -76,6 +76,7 @@ mod preps; // the ПФ reads, answered here (R3), `hubdo/preps.rs`
 mod basket; // the basket's catalogue nodes and the room's recipes, answered here (BN1), `hubdo/basket.rs`
 mod reads; // the owner's and the kitchen's folds over the images, answered here (BN1), `hubdo/reads.rs`
 mod catalogue; // the catalogue's derived nodes and the venue's record, answered here (BN1), `hubdo/catalogue.rs`
+mod catview; mod chunks; use chunks::changed_chunks; // the catalogue read in place, crc once per generation (W-ZC); the chunk diff
 mod facts; // the folds over the log and the catalogue together, answered here (BN1), `hubdo/facts.rs`
 mod bulk; // a supplies / recipes spreadsheet as one turn (BN1, BN4's shape), `hubdo/bulk.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
@@ -227,29 +228,8 @@ pub struct HubImages {
     /// An `alarm()` run is under way: the writes it causes do not re-arm,
     /// its end does (`hubdo/timer.rs`).
     in_alarm: std::cell::Cell<bool>,
-}
-
-/// A stored chunk comes back as whatever the platform decided to hand us —
-/// `Uint8Array` or the `ArrayBuffer` behind one. Accept both rather than assume,
-/// because assuming is a corrupt image reported a long way from here.
-/// Which chunks of `new` differ from `old`, by index. Without an old image
-/// every chunk is new. A chunk past the end of the old image is new. A chunk
-/// is unchanged only when the STORED chunk has the same length as the new
-/// slice and the same bytes: a stored chunk that is longer (the image shrank
-/// and the new tail is a prefix of the old one) must be rewritten, or the
-/// meta's `len` and the bytes on disk disagree on the next cold load.
-fn changed_chunks(old: Option<&[u8]>, new: &[u8], chunk: usize) -> Vec<usize> {
-    let chunks = new.len().div_ceil(chunk).max(1);
-    (0..chunks)
-        .filter(|&n| {
-            let at = n * chunk;
-            let end = (at + chunk).min(new.len());
-            match old {
-                Some(o) if (at + chunk).min(o.len()) == end => o[at..end] != new[at..end],
-                _ => true,
-            }
-        })
-        .collect()
+    /// The catalogue image in `mem` passed the full crc check at this generation (W-ZC, `hubdo/catview.rs`).
+    cat_checked: std::cell::Cell<Option<(i64, dowiz_hub::catalog::view::Checked)>>,
 }
 
 #[cfg(test)]
@@ -277,6 +257,7 @@ impl HubImages {
             folded: RefCell::new(None),
             menu: RefCell::new(None),
             in_alarm: std::cell::Cell::new(false),
+            cat_checked: std::cell::Cell::new(None),
         }
     }
 
@@ -336,6 +317,7 @@ impl HubImages {
             )));
         }
         let entry = (meta, bytes);
+        self.catview_forget(id);
         self.mem.borrow_mut().insert(id.to_string(), entry.clone());
         Ok(Some(entry))
     }
@@ -1072,6 +1054,7 @@ impl HubImages {
         for n in chunks..old_chunks {
             let _ = store.delete(&Self::chunk_key(id, n)).await;
         }
+        self.catview_forget(id);
         self.mem.borrow_mut().insert(id.to_string(), (meta, bytes.to_vec()));
         // THE STOREFRONT'S READ PATH IS PUBLISHED by the write that moved it (BN2, `hubdo/publish.rs`); it never fails the write.
         if menu::MENU_INPUTS.contains(&id) { self.publish_after_write().await; }
