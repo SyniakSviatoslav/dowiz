@@ -53,14 +53,10 @@ impl Hub {
     /// `Revealed` record names who read a customer's details, and its payload
     /// is an audit fact rather than an order. Folded into an order it would add
     /// fields no consumer expects to a record that is served to customers.
+    /// READS ONLY THIS ORDER'S RECORDS (W-OCHAIN): `read/history.rs`, held equal to
+    /// `events()` filtered by `read::history::tests`.
     pub fn history(&self, order_id: &str) -> Vec<Event> {
-        let mut out: Vec<Event> = self
-            .events()
-            .into_iter()
-            .filter(|e| e.order_id == order_id && e.kind.is_order())
-            .collect();
-        out.reverse();
-        out
+        self.history_scan(order_id)
     }
 
     /// Every event, OLDEST FIRST. One pass for a caller that folds them all.
@@ -132,3 +128,6 @@ impl Hub {
 
 #[cfg(test)]
 mod tests;
+
+// One order's history reading only that order's records (W-OCHAIN): `read/history.rs`.
+mod history;
