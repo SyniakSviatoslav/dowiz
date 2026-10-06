@@ -181,6 +181,7 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         "ebills": ebills,
         "fiscal": fiscal,
         "sms": crate::notify::sms::routes::health(&place, settings.as_ref().ok().map(|s| &s.settings), ctx.data.now_ms).await, // W-SMS
+        "sheaf": crate::services::customers::taste_routes::radius_health(&place).await, // W-TASTE2 S7a
     }))
 }
 

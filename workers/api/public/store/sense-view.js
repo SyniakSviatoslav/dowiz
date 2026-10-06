@@ -81,8 +81,10 @@ export function moodRow(mood = null){
 /// is Open-Meteo's under CC BY 4.0, which REQUIRES the credit wherever it is used; `keys` is the
 /// venue's moment (sense-ui.js momentKeys), and the credit is drawn exactly when a `wx:` key is in it.
 export const WEATHER_SOURCE = 'https://open-meteo.com/';
-export const weatherCredit = keys => (Array.isArray(keys) && keys.some(k => typeof k === 'string' && k.startsWith('wx:'))
-  ? `<p class="sx-wx small muted"><span data-t="sx_weather"></span> <a href="${WEATHER_SOURCE}" target="_blank" rel="noopener">open-meteo.com</a></p>` : '');
+/// The credit line itself (CC BY 4.0), wherever weather data is shown or chosen (W-TASTE2: also the
+/// owner's segment builder, beside its weather filter).
+export const weatherSourceLine = () => `<p class="sx-wx small muted"><span data-t="sx_weather"></span> <a href="${WEATHER_SOURCE}" target="_blank" rel="noopener">open-meteo.com</a></p>`;
+export const weatherCredit = keys => (Array.isArray(keys) && keys.some(k => typeof k === 'string' && k.startsWith('wx:')) ? weatherSourceLine() : '');
 
 /// "Because you often pick smoky + crispy", or ''.
 export const becauseLine = keys => (keys && keys.length ? `<p class="sx-because small muted"><span data-t="sx_because"></span> ${keys.map(k => `<b data-t="${wordKey(k)}"></b>`).join(' + ')}</p>` : '');

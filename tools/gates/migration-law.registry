@@ -1,0 +1,25 @@
+# The migration-law register (tools/gates/migration-law.sh). One line per VERSION of a format:
+#   <format> <version> <fingerprint> <law test>
+# A format change = a NEW line (version + 1) with the new fingerprint and a NEW test that holds the
+# two laws for it (Delta o Sigma = id on the old records; readers agree). v1 lines name the base
+# round-trip test. Fingerprints: the field names `encode` writes (stock) or the schema string (block).
+stock.received   1 item,qty                               stock::migration_tests::every_kind_round_trips
+stock.reserved   1 item,qty,order                         stock::migration_tests::every_kind_round_trips
+stock.consumed   1 item,qty,order                         stock::migration_tests::every_kind_round_trips
+stock.released   1 item,qty,order                         stock::migration_tests::every_kind_round_trips
+stock.wasted     1 item,qty,reason                        stock::migration_tests::every_kind_round_trips
+stock.wasted     2 item,qty,reason,by                     stock::migration_tests::wasted_gained_by_and_the_laws_hold
+stock.stocktake  1 item,observed,id                       stock::migration_tests::every_kind_round_trips
+stock.stocktake  2 item,observed,id,by                    stock::migration_tests::stocktake_gained_by_and_the_laws_hold
+stock.served     1 item,qty,order                         stock::migration_tests::every_kind_round_trips
+stock.unserved   1 item,qty,order                         stock::migration_tests::every_kind_round_trips
+stock.returned   1 item,qty,order,resell,by,chosen_by     stock::migration_tests::every_kind_round_trips
+stock.produced   1 item,qty,out,stage,into,by             stock::migration_tests::every_kind_round_trips
+stock.removed    1 item,by                                stock::migration_tests::every_kind_round_trips
+stock.cooked     1 item,qty,into,act,by                   stock::migration_tests::every_kind_round_trips
+stock.made       1 item,qty,planned,gross,act,by          stock::migration_tests::every_kind_round_trips
+block.menu_prices  1 menu_prices:v1(dish:i64:0,price:i64:1,tax_ppm:i64:5,mods_ptr:u32rp:0,mods_col:u32:0,mods_val:i64:1)  block::tests::roundtrip_menu_prices
+block.bom          1 bom:v1(dish_ptr:u32rp:0,supply:u32:0,qty:i64:0)  block::tests::roundtrip_bom
+block.stock_levels 1 stock_levels:v1(supply:i64:0,qty:i64:0,gen:i64:7)  block::tests::roundtrip_bom
+block.names        1 names:v1(id:i64:0,bytes:u8:0,off:u32off:0)  block::tests::roundtrip_bom
+block.taste        1 taste:v1(dish:i64:0,ids:u8:0,ids_off:u32off:0,sweet:i64:0,sour:i64:0,salty:i64:0,bitter:i64:0,umami:i64:0,spicy:i64:0,tex_lo:i64:0,tex_hi:i64:0,aro_lo:i64:0,aro_hi:i64:0,allergens:i64:0,flags:i64:0)  block::taste::tests::the_taste_block_round_trips_and_is_pinned

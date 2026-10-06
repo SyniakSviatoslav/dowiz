@@ -1,0 +1,296 @@
+{
+ "id": "feature-taste2",
+ "name": "taste2",
+ "contract_version": "1.0.0",
+ "class": "LIVE-AFTER-DEPLOY",
+ "description": {
+  "en": "W-TASTE2 (operator 2026-10-06). (1) AI ON BY DEFAULT: settings key ai.enabled defaults to 1 (dowiz_hub::settings::known, features::FEATURES default_on true); an owner's stored 0 stays off and sends nothing; with no route (no own https endpoint, no [ai] binding, or the venue's daily Workers AI share spent) every caller fails soft -- Suggest answers the lexicon draft (200, ai.provider null), Q&A answers from the folds. /api/owner/integrations reports ai.enabled truthfully and ai.usable = the provider plan has a route. (2) SERVER 'FOR YOU' on the order-tracking page: GET /api/order/:id/taste/for-you with the order's own link token answers up to 3 dish ids from dowiz_hub::block::taste::top_k over the venue's taste.dwb against the venue's own profile of the guest (its decayed sense weights, else the phone's last taste_sync.sense); only for a guest with a server profile; state off after the one-tap objection (nothing read), no-profile, no-taste; the guest card's allergens excluded by mask before ranking, the dishes of this order left out; ids and taste words only, never a number, never a price; 404 for an order with no phone. The phone's own strip is unchanged. (3) The open-meteo.com credit (CC BY 4.0) is drawn in the owner's segment builder beside its weather filter (store/sense-view.js weatherSourceLine). (4) S7 (R-S7 research 2026-10-06): S7a the consistency radius (L-inf per mille between the phone's vector and the venue's profile, over guests with both) on GET /api/owner/health as `sheaf.taste` {compared,maxPm,medianPm,overHalf,acts:false}, a neutral row on the health sheet and a `sheaf.radius` log line -- never an alarm, nothing acts on it; the stock cover waits for S0 glue. S7b the Suggest answer adds `recipe`: the harmonic extension (Q16 Gauss-Seidel, <= 60 sweeps) of the declared dishes' taste over the dish-supply graph from the blocks taste/menu_prices/bom/names; state no-recipes | no-recipe | no-neighbours | faint | drafted (draft + why from=recipe + neighbours + passes) | no-block | unreadable; never merged, never written. S7c tools/gates/migration-law.sh: every stock record kind and block schema must have its newest version registered with a law test that exists.",
+  "uk": "ШІ увімкнено типово (власник може вимкнути); «Для вас» на сторінці замовлення з серверного профілю (лише з профілем, заперечення поважається, без цін); подяка open-meteo у конструкторі сегментів; радіус узгодженості в здоровʼї закладу, підказка смаку з рецепта, гейт законів міграції."
+ },
+ "producer": [
+  {
+   "file": "crates/dowiz-hub/src/settings/known.rs",
+   "line": 61,
+   "what": "ai.enabled default 1"
+  },
+  {
+   "file": "crates/dowiz-hub/src/features.rs",
+   "line": 97,
+   "what": "ai.enabled default_on true"
+  },
+  {
+   "file": "workers/api/src/integrations.rs",
+   "line": 64,
+   "what": "ai.usable = plan has a route (ai_usable)"
+  },
+  {
+   "file": "workers/api/src/services/customers/taste/foryou.rs",
+   "line": 1,
+   "what": "answer(): the For-you rules"
+  },
+  {
+   "file": "workers/api/src/services/customers/taste_routes.rs",
+   "line": 245,
+   "what": "for_you(), radius_health()"
+  },
+  {
+   "file": "crates/dowiz-hub/src/sense/radius.rs",
+   "line": 1,
+   "what": "radius_pm, summarise"
+  },
+  {
+   "file": "crates/dowiz-hub/src/sense/harmonic.rs",
+   "line": 1,
+   "what": "extend, to_sense, dishes_of"
+  },
+  {
+   "file": "workers/api/src/services/catalogue/sense/recipe.rs",
+   "line": 1,
+   "what": "the Suggest answer's recipe field"
+  },
+  {
+   "file": "tools/gates/migration-law.sh",
+   "line": 1,
+   "what": "S7c gate + migration-law.registry"
+  }
+ ],
+ "consumer": [
+  {
+   "file": "workers/api/public/store/taste-venue.js",
+   "line": 1,
+   "what": "mountForYou on the order-tracking sheet"
+  },
+  {
+   "file": "workers/api/public/store/foryou-view.js",
+   "line": 1,
+   "what": "forYouMarkup"
+  },
+  {
+   "file": "workers/api/public/admin/ai.js",
+   "line": 22,
+   "what": "the AI switch shows status.enabled (on by default)"
+  },
+  {
+   "file": "workers/api/public/admin/sense-builder.js",
+   "line": 81,
+   "what": "weatherSourceLine beside the weather filter"
+  },
+  {
+   "file": "workers/api/public/admin/sheaf-health.js",
+   "line": 1,
+   "what": "the radius row on the health sheet"
+  },
+  {
+   "file": "workers/api/public/admin/sense.js",
+   "line": 75,
+   "what": "the recipe draft beside Suggest, Use it fills what is empty"
+  }
+ ],
+ "transport": [
+  {
+   "method": "GET",
+   "path": "/api/order/:id/taste/for-you",
+   "auth": "Bearer <the order's access_token>",
+   "what": "for_you_response_schema"
+  },
+  {
+   "method": "GET",
+   "path": "/api/owner/health",
+   "auth": "owner bearer",
+   "what": "health_sheaf_schema at .sheaf"
+  },
+  {
+   "method": "POST",
+   "path": "/api/owner/products/:id/sense/suggest",
+   "auth": "owner/staff with Catalog",
+   "what": "recipe_schema at .recipe (beside feature-sense 1.1.0)"
+  },
+  {
+   "method": "GET",
+   "path": "/api/owner/integrations",
+   "auth": "owner bearer",
+   "what": "ai_status_schema at .ai"
+  }
+ ],
+ "external": "Cloudflare Workers AI through the [ai] binding (only when ai.enabled and a route exists); open-meteo.com is credited, not called by this feature",
+ "external_api_version": {
+  "workers_ai_model": "@cf/qwen/qwen3-30b-a3b-fp8"
+ },
+ "auth": {
+  "secrets": [],
+  "where": "order link token; owner bearer"
+ },
+ "for_you_response_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+   "contract",
+   "state",
+   "items",
+   "because"
+  ],
+  "properties": {
+   "contract": {
+    "const": "order.for-you.v1"
+   },
+   "state": {
+    "enum": [
+     "off",
+     "no-profile",
+     "no-taste",
+     "shown"
+    ]
+   },
+   "items": {
+    "type": "array",
+    "maxItems": 3,
+    "items": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "id"
+     ],
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "because": {
+    "type": "array",
+    "maxItems": 2,
+    "items": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "health_sheaf_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+   "taste",
+   "stock"
+  ],
+  "properties": {
+   "taste": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "contract",
+     "compared",
+     "maxPm",
+     "medianPm",
+     "overHalf",
+     "acts"
+    ],
+    "properties": {
+     "contract": {
+      "const": "sheaf.radius.v1"
+     },
+     "compared": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "maxPm": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+     },
+     "medianPm": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+     },
+     "overHalf": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "acts": {
+      "const": false
+     }
+    }
+   },
+   "stock": {
+    "type": "string"
+   }
+  }
+ },
+ "recipe_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+   "state"
+  ],
+  "properties": {
+   "state": {
+    "enum": [
+     "no-recipes",
+     "no-recipe",
+     "no-neighbours",
+     "faint",
+     "drafted",
+     "no-block",
+     "unreadable"
+    ]
+   },
+   "draft": {
+    "type": "object"
+   },
+   "why": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "required": [
+      "key",
+      "from"
+     ],
+     "properties": {
+      "key": {
+       "type": "string"
+      },
+      "from": {
+       "const": "recipe"
+      }
+     }
+    }
+   },
+   "neighbours": {
+    "type": "integer",
+    "minimum": 0
+   },
+   "passes": {
+    "type": "integer",
+    "minimum": 0,
+    "maximum": 60
+   },
+   "error": {
+    "type": "string"
+   }
+  }
+ },
+ "ai_status_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+   "enabled",
+   "endpoint",
+   "usable"
+  ],
+  "properties": {
+   "enabled": {
+    "type": "boolean"
+   },
+   "endpoint": {
+    "type": "string"
+   },
+   "usable": {
+    "type": "boolean"
+   }
+  }
+ }
+}

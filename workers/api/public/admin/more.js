@@ -565,6 +565,7 @@ async function openHealth(){
     <div class="rows mt-3">${info(h.verdict === 'ok' ? 'check' : 'alert-circle', { title: k('verdict_' + (h.verdict || 'ok')), sub: `<span class="mono">${h.orders ?? ''} · ${esc(t('orders7'))}</span>`, tour: 'health.verdict', trailing: pill(h.verdict === 'ok' ? 'ok' : h.verdict === 'watch' ? 'warn' : 'bad', { label: h.verdict || '' }) })}</div>`;
   paint();
   if (h.sms?.on) import('/admin/sms.js').then(m => m.healthRow($('#hBody'), h.sms)).catch(() => {}); // W-SMS
+  if (h.sheaf) import('/admin/sheaf-health.js').then(m => m.healthRow($('#hBody'), h.sheaf)).catch(() => {}); // W-TASTE2 S7a
   $('#hBackup').onclick = async e => { e.preventDefault(); try { const r = await fetch('/api/owner/backup', { headers: { authorization: 'Bearer ' + store.t } }); const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `dowiz-${store.loc}-${new Date().toISOString().slice(0, 10)}.json`; a.click(); } catch (err) { fail(err); } };
 }
 

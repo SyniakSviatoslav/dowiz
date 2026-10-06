@@ -198,7 +198,8 @@ fn each_integration_check_asks_its_provider_and_answers_in_the_providers_words()
         (r.status_code(), r.body_value())
     };
     // Nothing set: each says what is missing, by code.
-    for (which, code) in [("webhook", "no_verify"), ("cloud", "no_bucket"), ("stripe", "no_stripe"), ("ai", "ai_off")] {
+    // AI is ON by default (2026-10-06): with nothing set its check names the missing endpoint.
+    for (which, code) in [("webhook", "no_verify"), ("cloud", "no_bucket"), ("stripe", "no_stripe"), ("ai", "no_endpoint")] {
         let (s, v) = check(which);
         assert_eq!((s, v["code"].as_str()), (502, Some(code)), "{which}: {v}");
     }

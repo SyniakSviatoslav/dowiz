@@ -256,3 +256,20 @@ steps:
       en: "Download a copy of your data now."
       uk: "Завантажте копію своїх даних зараз."
       ru: "Скачайте копию своих данных сейчас."
+  - key: 15
+    anchor: health.radius
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="health.radius"]'
+    title:
+      sq: "Telefoni dhe lokali për shijet"
+      en: "Phone and venue on tastes"
+      uk: "Телефон і заклад про смаки"
+      ru: "Телефон и заведение о вкусах"
+    caption:
+      sq: "Sa ndryshojnë shijet që mban telefoni i klientit nga ato që mban lokali. Vetëm informacion."
+      en: "How far the guests' phones and the venue disagree on tastes. Information only."
+      uk: "Наскільки телефони гостей і заклад розходяться щодо смаків. Лише для інформації."
+      ru: "Насколько телефоны гостей и заведение расходятся во вкусах. Только для информации."

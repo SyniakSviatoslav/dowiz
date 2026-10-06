@@ -60,12 +60,21 @@ pub async fn status(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         // what let this screen say the assistant was on while every question
         // answered 400. A Worker can only call https, so an endpoint that is
         // not https is a switch with nothing behind it.
+        // W-TASTE2 (2026-10-06): AI is ON by default, and Workers AI needs no endpoint, so
+        // "usable" is the provider plan having a route at all (own https endpoint, or the binding).
         "ai": {
             "enabled": s.flag("ai.enabled"),
             "endpoint": s.known("ai.endpoint"),
-            "usable": s.flag("ai.enabled") && s.known("ai.endpoint").starts_with("https://"),
+            "usable": ai_usable(&s, crate::services::engagement::ai::call::has_binding(&ctx.env)),
         },
     }))
+}
+
+/// PURE. The venue's AI has a route to try: the switch is on and the plan holds one (the owner's
+/// https endpoint, or Workers AI through the binding). A spent daily share is the status screen's.
+pub fn ai_usable(s: &dowiz_hub::settings::Settings, binding: bool) -> bool {
+    use crate::services::engagement::ai::provider::{plan, Cfg};
+    !plan(&Cfg::of(s), binding, true).routes.is_empty()
 }
 
 async fn graph_get(token: &str, path: &str) -> std::result::Result<Value, String> {

@@ -415,6 +415,7 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .get_async("/api/order/:id/stamps", |r, c| edge::run(r, c, services::loyalty::handlers::order_stamps))
         .get_async("/api/order/:id/taste", |r, c| edge::run(r, c, services::customers::taste_routes::guest_view))
         .post_async("/api/order/:id/taste/withdraw", |r, c| edge::run(r, c, services::customers::taste_routes::guest_withdraw))
+        .get_async("/api/order/:id/taste/for-you", |r, c| edge::run(r, c, services::customers::taste_routes::for_you)) // W-TASTE2
         // ── owner ──
         .get_async("/api/owner/orders", |r, c| edge::run(r, c, owner::orders))
         .post_async("/api/owner/orders/:id/action", |r, c| edge::run(r, c, owner::order_action))

@@ -36,6 +36,26 @@ fn the_plan_tries_the_owners_key_then_workers_ai_then_says_why_off() {
     assert_eq!((names(&p), p.skipped.clone()), (vec!["own"], vec![("workers-ai", Off::Budget)]));
 }
 
+/// W-TASTE2 (operator 2026-10-06): a venue that never touched the switch has AI ON; the owner's
+/// stored "0" is OFF and sends nothing; with no endpoint and no binding the plan is empty and the
+/// callers fall back (lexicon draft, deterministic answer) instead of failing.
+#[test]
+fn ai_is_on_by_default_an_owners_off_stays_off_and_no_route_is_not_an_error() {
+    let mut s = dowiz_hub::settings::Settings::create().unwrap();
+    let on = Cfg::of(&s);
+    assert!(on.enabled, "unset = on");
+    assert_eq!(names(&provider::plan(&on, true, true)), vec!["workers-ai"], "on by default: Workers AI through the binding");
+    let bare = provider::plan(&on, false, false);
+    assert!(bare.routes.is_empty(), "no binding, share spent: nothing to try");
+    assert!(!bare.skipped.iter().any(|(_, o)| *o == Off::Disabled), "and it is NOT reported as switched off: {bare:?}");
+    assert!(crate::integrations::ai_usable(&s, true) && !crate::integrations::ai_usable(&s, false));
+    s.set("ai.enabled", "0");
+    let off = Cfg::of(&s);
+    assert!(!off.enabled, "the owner's off");
+    assert_eq!(provider::plan(&off, true, true).skipped, vec![("all", Off::Disabled)]);
+    assert!(!crate::integrations::ai_usable(&s, true), "off is never usable, binding or not");
+}
+
 #[test]
 fn switched_off_tries_nothing_at_all() {
     let p = provider::plan(&cfg(false, Mode::Auto, "https://x.example/v1", Some("sk-1")), true, true);

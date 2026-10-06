@@ -59,7 +59,7 @@ fn known_keys_fall_back_to_their_declared_defaults() {
     // it is a second opinion nobody asked for.
     assert_eq!(s.known("ai.endpoint"), "", "not configured is the honest default");
     assert_eq!(s.known("ai.model"), "llama3.2");
-    assert!(!s.flag("ai.enabled"), "the assistant must be OFF until switched on");
+    assert!(s.flag("ai.enabled"), "the assistant is ON until the owner switches it off (2026-10-06)");
 
     s.set("ai.model", "qwen2.5");
     assert_eq!(s.known("ai.model"), "qwen2.5");
@@ -84,6 +84,8 @@ fn clearing_a_setting_restores_its_default() {
 #[test]
 fn a_hostile_value_cannot_forge_a_setting() {
     let mut s = Settings::create().expect("create");
+    // AI is on by default (2026-10-06): the owner's off is what a forged value would have to undo.
+    s.set("ai.enabled", "0");
     s.set("ai.model", r#"x","ai.enabled":"1"#);
     let json = s.as_json();
     assert!(json.contains(r#"\"ai.enabled\""#), "must be escaped, not structural: {json}");

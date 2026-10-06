@@ -12,6 +12,7 @@ import { $, $$, post, withLoc, toast, retranslate } from '/admin/core.js';
 import { T, LANGS } from '/admin/i18n.js';
 import * as ui from '/lib/ui/index.js';
 import { SENSE_WORDS, wordKey } from '/lib/sense-words.js';
+import { RECIPE_WORDS, recipeMarkup, fillEmpty } from '/admin/sense-recipe-view.js';
 import { senseOf, TASTE, TEXTURE, AROMA, TASTE_MAX, TAG_MAX } from '/store/sense.js';
 import { cardSense } from '/store/sense-view.js';
 
@@ -25,7 +26,7 @@ const WORDS = {
   ru: { sxEdit: 'Вкус, текстура и аромат', sxEditHint: 'Всё по желанию. Нажмите уровень; нажмите ещё раз, чтобы снять. Что не трогали, гостям не показывается.',
         sxSuggest: 'Подсказать из описания', sxSuggested: 'Черновик: проверьте и сохраните. Ничего ещё не сохранено.', sxSuggestNone: 'В описании нет знакомых слов.', sxLevel: 'Уровень', sxSuggestedAi: 'Черновик из слов и вашей AI-модели: проверьте и сохраните. Ничего ещё не сохранено.' },
 };
-for (const l of LANGS) Object.assign(T[l], SENSE_WORDS[l], WORDS[l]);
+for (const l of LANGS) Object.assign(T[l], SENSE_WORDS[l], WORDS[l], RECIPE_WORDS[l]);
 
 let draft = { taste: {}, texture: {}, aroma: {} };
 let start = '';
@@ -50,6 +51,7 @@ export function senseEditor(p){
   return `<p class="eyebrow mt-3" data-t="sxEdit"></p><p class="muted small" data-t="sxEditHint"></p>
     ${ui.button({ variant: 'ghost', icon: 'sparkles', label: { t: 'sxSuggest' }, id: 'sxSuggest', attrs: { data: { tour: 'sense.suggest' } } })}
     <p class="small muted" id="sxNote" hidden></p>
+    <div id="sxRecipe" hidden></div>
     <div class="taste" id="sxBox">${body()}</div>`;
 }
 
@@ -70,6 +72,9 @@ export function bindSenseEditor(p){
       const d = await post(`/owner/products/${encodeURIComponent(p.id)}/sense/suggest`, withLoc({}));
       const got = d?.draft;
       const note = $('#sxNote');
+      // W-TASTE2 S7b: the recipe's draft, beside this one; "Use it" fills only what is empty.
+      const rb = $('#sxRecipe'), rh = recipeMarkup(d?.recipe);
+      if (rb) { rb.innerHTML = rh; rb.hidden = !rh; retranslate(rb); const u = $('#srUse'); if (u) u.onclick = () => { draft = fillEmpty(draft, d.recipe); redraw(); }; }
       if (!got) { note.hidden = false; note.dataset.t = 'sxSuggestNone'; retranslate(note.parentElement); return; }
       // The draft fills what is empty; what the owner already set stays theirs.
       for (const dim of ['taste', 'texture', 'aroma']) for (const [id, n] of Object.entries(got[dim] || {})) if (!(id in draft[dim])) draft[dim][id] = n;

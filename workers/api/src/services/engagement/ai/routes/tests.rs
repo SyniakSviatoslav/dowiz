@@ -25,6 +25,12 @@ fn ai_on(site: &Site, t: &str) {
     assert_eq!(r.status_code(), 200, "{}", r.body_str());
 }
 
+/// AI is ON by default since 2026-10-06; the tests about "AI off" switch it off as an owner would.
+fn ai_off(site: &Site, t: &str) {
+    let r = site.run(crate::services::venue::settings::set_feature, post(&at("/api/owner/features"), &json!({"key": "ai.enabled", "on": false})).bearer(t).on("alpha"), &[]);
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+}
+
 /// A venue with one pickup order of two Futomaki (1800).
 fn venue(site: &Site) -> String {
     let (t, dish) = open_venue(site, "alpha", "a@x.test");
@@ -65,6 +71,7 @@ fn equals_the_route(answer: &Value, route: &Value) {
 fn a_question_is_answered_from_the_fold_with_no_model_and_ai_off() {
     let site = Site::new();
     let t = venue(&site);
+    ai_off(&site, &t);
     let r = ask(&site, &t, json!({"question": "скільки виручки за тиждень?"}));
     assert_eq!(r.status_code(), 200, "{}", r.body_str());
     let v = r.body_value();
@@ -89,6 +96,7 @@ fn a_question_is_answered_from_the_fold_with_no_model_and_ai_off() {
 fn an_unknown_question_with_ai_off_lists_what_can_be_asked_and_sends_nothing() {
     let site = Site::new();
     let t = venue(&site);
+    ai_off(&site, &t);
     let v = ask(&site, &t, json!({"question": "tell me a joke"})).body_value();
     assert_eq!(v["understood"], false, "{v}");
     assert!(v["why"].as_str().unwrap().contains("disabled"), "{v}");

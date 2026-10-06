@@ -20,6 +20,10 @@ use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 
 pub mod lexicon;
+/// W-TASTE2 S7b: a dish's taste drafted from its recipe (harmonic extension, integers).
+pub mod harmonic;
+/// W-TASTE2 S7a: the consistency radius of two sections (shown, never acted on).
+pub mod radius;
 
 pub const VERSION: i64 = 1;
 /// The six taste axes, 0 (none) ..= 5 (very).

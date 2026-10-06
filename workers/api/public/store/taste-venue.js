@@ -6,7 +6,8 @@
 //
 // ASCII QUOTES ONLY in this file: a typographic quote is a syntax error.
 
-import { API } from '/store/state.js';
+import { API, findProduct } from '/store/state.js';
+import { forYouMarkup } from '/store/foryou-view.js';
 import { t, retranslate } from '/store/i18n.js';
 import { esc, toast } from '/store/ui.js';
 import { objectVenue } from '/store/taste-device.js';
@@ -14,6 +15,7 @@ import { ui } from '/store/parts.js';
 import '/store/taste-words.js';
 
 const seen = new Map();
+const fySeen = new Map();
 
 /// The markup from `GET /api/order/:id/taste`, or '' when the venue keeps nothing.
 export function venueTasteMarkup(d){
@@ -34,11 +36,35 @@ export function venueTasteMarkup(d){
     ${ui.button({ variant: 'ghost', label: { t: 'vk_withdraw' }, id: 'vkWithdraw', cls: 'linky', attrs: { data: { tour: 'track.tasteWithdraw' } } })}`;
 }
 
-export const venueTastePlace = order => order?.id ? `<section class="credits-wrap" id="venueTaste" hidden></section>` : '';
+export const venueTastePlace = order => order?.id ? `<section class="credits-wrap" id="forYouOrder" hidden></section><section class="credits-wrap" id="venueTaste" hidden></section>` : '';
+
+/// W-TASTE2: "For you" from the venue's profile (store/foryou-view.js). Silent on failure and on
+/// every answer that is not `shown`: nothing is drawn for a guest the venue keeps nothing about.
+async function mountForYou(order, tok){
+  const el = document.getElementById('forYouOrder'); if (!el) return;
+  // Once per order per page: the tracking sheet redraws on every poll.
+  let d = fySeen.get(order.id);
+  if (d === undefined) {
+    try {
+      const r = await fetch(`${API}/order/${encodeURIComponent(order.id)}/taste/for-you`, { headers: { authorization: 'Bearer ' + tok } });
+      d = r.ok ? await r.json() : null;
+    } catch { d = null; }
+    fySeen.set(order.id, d);
+  }
+  const html = forYouMarkup(d, id => findProduct(id)?.name || null);
+  el.innerHTML = html; el.hidden = !html;
+  if (!html) return;
+  retranslate(el);
+  for (const b of el.querySelectorAll('[data-fy-order]')) b.onclick = () => {
+    const p = findProduct(b.dataset.fyOrder);
+    if (p && p.available !== false) import('/store/dish.js').then(m => m.openDish(p)).catch(() => {});
+  };
+}
 
 /// Fill it with the order's own token; silent on failure (the order is the page).
 export async function mountVenueTaste(order, tok){
   if (!document.getElementById('venueTaste') || !tok) return;
+  mountForYou(order, tok);
   const k = order.id;
   let d = seen.get(k);
   if (!d) {
@@ -60,6 +86,8 @@ export async function mountVenueTaste(order, tok){
     const ok = await objectVenue([{ id: order.id, token: tok }], API);
     if (!ok) return toast(t('vk_failed'));
     seen.set(k, { objected: true, taste: null });
+    fySeen.set(k, { state: 'off', items: [] });
+    const fy = document.getElementById('forYouOrder'); if (fy) { fy.innerHTML = ''; fy.hidden = true; }
     el.innerHTML = venueTasteMarkup(seen.get(k));
     retranslate(el);
     toast(t('vk_withdrawn'));

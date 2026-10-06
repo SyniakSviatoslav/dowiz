@@ -122,3 +122,20 @@ steps:
       en: "On the order page you see what the venue knows and delete it in one tap."
       uk: "На сторінці замовлення видно, що знає заклад, і це видаляється одним дотиком."
       ru: "На странице заказа видно, что знает заведение, и это удаляется одним касанием."
+  - key: 7
+    anchor: track.forYou
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="track.forYou"]'
+    title:
+      sq: "Herën tjetër, për ju"
+      en: "Next time, for you"
+      uk: "Наступного разу, для вас"
+      ru: "В следующий раз, для вас"
+    caption:
+      sq: "Në faqen e porosisë lokali sugjeron disa pjata sipas porosive tuaja; kurrë një çmim tjetër."
+      en: "On the order page the venue suggests a few dishes from your orders; never a different price."
+      uk: "На сторінці замовлення заклад пропонує кілька страв за вашими замовленнями; ніколи інша ціна."
+      ru: "На странице заказа заведение предлагает несколько блюд по вашим заказам; никогда другая цена."

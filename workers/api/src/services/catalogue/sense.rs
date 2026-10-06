@@ -97,8 +97,29 @@ pub async fn suggest(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     }
     let mut v = draft_with(&id, &p, said.as_deref());
     v["ai"] = ai;
+    // W-TASTE2 S7b: the recipe graph's draft, beside (never inside) the main one.
+    // A block the object refused is said (`unreadable`), never taken for "no recipes".
+    let mut b = Vec::new();
+    let mut failed = None;
+    for name in ["taste", "menu_prices", "bom", "names"] {
+        match crate::fold::ask::block(&place, name).await {
+            Ok(x) => b.push(x),
+            Err(e) => {
+                failed = Some(e.to_string());
+                b.push(None);
+            }
+        }
+    }
+    v["recipe"] = match failed {
+        Some(why) => serde_json::json!({ "state": "unreadable", "error": why }),
+        None => recipe::of_blocks(b[0].as_deref(), b[1].as_deref(), b[2].as_deref(), b[3].as_deref(), &id),
+    };
     Response::from_json(&v)
 }
+
+/// W-TASTE2 S7b: the dish's taste drafted from its recipe.
+#[path = "sense/recipe.rs"]
+pub mod recipe;
 
 /// W-TASTE row 3a: the model's draft, held to the vocabulary and merged under the lexicon.
 #[path = "sense/model.rs"]

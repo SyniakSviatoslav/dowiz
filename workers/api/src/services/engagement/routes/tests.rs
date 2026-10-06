@@ -29,7 +29,21 @@ fn ask(site: &Site, t: &str) -> Reply {
 fn the_owner_assistant_is_off_until_configured_and_then_asks_the_venues_model() {
     let site = Site::new();
     let (t, _) = open_venue(&site, "alpha", "a@x.test");
-    assert!(ask(&site, &t).status_code() >= 400, "switched off by default");
+    // W-TASTE2 (2026-10-06): ON by default, but with no endpoint and no binding there is no route,
+    // and the refusal says WHY (not "off"); the owner's own off says "off".
+    let r = ask(&site, &t);
+    assert_eq!(r.status_code(), 409, "{}", r.body_str());
+    assert!(r.body_str().contains("workers-ai-unavailable") && !r.body_str().contains("is off"), "{}", r.body_str());
+    let r = site.run(
+        crate::services::venue::settings::set_feature,
+        post(&at("/api/owner/features"), &json!({"key": "ai.enabled", "on": false})).bearer(&t).on("alpha"),
+        &[],
+    );
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    let r = ask(&site, &t);
+    assert_eq!(r.status_code(), 409, "{}", r.body_str());
+    assert!(r.body_str().contains("is off"), "the owner's off: {}", r.body_str());
+    assert!(sent().is_empty(), "nothing was sent while off or without a route");
     let r = site.run(
         crate::services::venue::settings::set_feature,
         post(&at("/api/owner/features"), &json!({"key": "ai.enabled", "on": true})).bearer(&t).on("alpha"),

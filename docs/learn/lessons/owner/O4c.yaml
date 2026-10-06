@@ -206,3 +206,20 @@ steps:
       en: "Smoky, citrus, herbal and more. What you leave untouched is not shown."
       uk: "Копчений, цитрусовий, трав’яний тощо. Чого не торкалися, не показується."
       ru: "Копчёный, цитрусовый, травяной и другие. Что не трогали, не показывается."
+  - key: 12
+    anchor: sense.recipe
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="sense.recipe"]'
+    title:
+      sq: "Nga receta"
+      en: "From the recipe"
+      uk: "З рецепта"
+      ru: "Из рецепта"
+    caption:
+      sq: "Kur pjatat kanë receta, shija sugjerohet edhe nga përbërësit e përbashkët. Kontrollojeni dhe ruajeni."
+      en: "Once dishes have recipes, the taste is also suggested from the supplies they share. Check it, then save."
+      uk: "Коли страви мають рецепти, смак підказується й зі спільних продуктів. Перевірте й збережіть."
+      ru: "Когда у блюд есть рецепты, вкус подсказывается и по общим продуктам. Проверьте и сохраните."

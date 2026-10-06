@@ -31,3 +31,16 @@ pub async fn json(place: &Place, url: &str) -> Result<serde_json::Value> {
 pub async fn catalogue(place: &Place, query: &str) -> Result<serde_json::Value> {
     json(place, &format!("https://hub/fold/catalogue?{query}")).await
 }
+
+/// One §B.4 block of the catalogue projection (`/fold/menu?block=<name>`, row DG7), as bytes;
+/// `None` when the object has no such block (404: e.g. the catalogue does not fit one). Any other
+/// refusal is an error. W-TASTE2: the order page's "For you" and the recipe draft read these.
+pub async fn block(place: &Place, name: &str) -> Result<Option<Vec<u8>>> {
+    let url = format!("https://hub/fold/menu?block={name}");
+    let mut res = place.stub()?.fetch_with_request(Request::new(&url, Method::Get)?).await?;
+    match res.status_code() {
+        200 => Ok(Some(res.bytes().await?)),
+        404 => Ok(None),
+        s => Err(Error::RustError(format!("hub object refused {url}: {s} {}", res.text().await.unwrap_or_default()))),
+    }
+}

@@ -285,6 +285,11 @@ pub mod senses;
 /// W-SENSE row 7: the owner's segment builder over the profiles.
 #[path = "taste/builder.rs"]
 pub mod builder;
+/// W-TASTE2 row 2: "For you" on the order page, from this profile and the taste block.
+#[path = "taste/foryou.rs"]
+pub mod foryou;
+#[path = "taste/agreement.rs"]
+pub mod agreement;
 
 #[cfg(test)]
 #[path = "taste/tests.rs"]

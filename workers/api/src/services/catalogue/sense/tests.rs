@@ -168,8 +168,20 @@ fn suggest_asks_the_venues_model_when_ai_is_on_and_a_failure_is_the_lexicon_alon
     use crate::services::engagement::ai::call::hook;
     let site = Site::new();
     let (t, dish) = open_venue(&site, "alpha", "a@x.test");
+    // W-TASTE2: AI is ON by default; with no binding and no endpoint the answer is the lexicon,
+    // 200, never an error (fail soft).
+    let bare = suggest(&site, &t, &dish);
+    assert_eq!(bare["source"], "lexicon", "on by default, no route: the lexicon draft ({bare})");
+    assert_eq!(bare["ai"]["provider"], Value::Null, "no model answered: {bare}");
+    // W-TASTE2 S7b: the venue has no recipe, and the recipe source says exactly that.
+    assert_eq!(bare["recipe"], json!({"state": "no-recipes"}), "no fabricated values: {bare}");
+    let r = site.run(crate::services::venue::settings::set_feature, post(&at("/api/owner/features"), &json!({"key": "ai.enabled", "on": false})).bearer(&t).on("alpha"), &[]);
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    hook::answer(|_, _| Ok(json!({ "response": MODEL_SAYS })));
     let off = suggest(&site, &t, &dish);
-    assert_eq!(off["source"], "lexicon", "AI off: the model is not asked ({off})");
+    assert_eq!(off["source"], "lexicon", "the owner's off: the model is not asked ({off})");
+    assert_eq!(off["ai"], Value::Null, "nothing was sent: {off}");
+    assert!(hook::seen().is_empty(), "off sends nothing anywhere");
     ai_on(&site, &t);
     hook::answer(|_, _| Ok(json!({ "response": MODEL_SAYS })));
     let before = version(&menu(&site));

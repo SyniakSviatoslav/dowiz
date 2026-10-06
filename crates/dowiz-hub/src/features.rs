@@ -96,8 +96,9 @@ pub const FEATURES: &[Feature] = &[
     Feature {
         key: "ai.enabled",
         label: "AI-помічник",
-        hint: "Поки вимкнено, нікуди нічого не надсилається.",
-        default_on: false,
+        // Operator 2026-10-06: on for every venue unless its owner switched it off.
+        hint: "Увімкнено типово. Вимкніть — і нікуди нічого не надсилається.",
+        default_on: true,
         surface: "staff",
     },
     Feature {
@@ -141,8 +142,8 @@ mod tests {
         let s = Settings::create().unwrap();
         assert!(is_on(&s, "feature.tips"));
         assert!(is_on(&s, "feature.promo"));
-        // The two that send data somewhere are off until asked for.
-        assert!(!is_on(&s, "ai.enabled"));
+        // AI is ON for a venue that touched nothing (operator 2026-10-06); posts stay off.
+        assert!(is_on(&s, "ai.enabled"));
         assert!(!is_on(&s, "social.enabled"));
         assert!(!is_on(&s, "feature.voice"));
     }
@@ -166,6 +167,16 @@ mod tests {
         let back = Settings::load(&bytes).unwrap();
         assert!(!is_on(&back, "feature.tips"));
         assert!(is_on(&back, "ai.enabled"));
+    }
+
+    /// The owner's "off" is a stored value and outlives a reload; only an UNSET key is on.
+    #[test]
+    fn ai_is_on_by_default_and_an_owners_off_stays_off() {
+        let mut s = Settings::create().unwrap();
+        assert!(is_on(&s, "ai.enabled") && s.flag("ai.enabled"), "unset = on, by both readers");
+        s.set("ai.enabled", "0");
+        let back = Settings::load(&s.to_bytes().unwrap()).unwrap();
+        assert!(!is_on(&back, "ai.enabled") && !back.flag("ai.enabled"), "the owner's off survives a reload");
     }
 
     #[test]

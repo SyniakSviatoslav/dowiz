@@ -60,8 +60,9 @@ pub const KNOWN: &[Known] = &[
     Known {
         key: "ai.enabled",
         label: "AI assistant",
-        hint: "Off by default. Nothing is sent anywhere until this is on.",
-        default: "0",
+        // ON BY DEFAULT (operator 2026-10-06); an owner's stored "0" stays off; callers fail soft.
+        hint: "On by default. Turn it off and nothing is sent anywhere.",
+        default: "1",
     },
     // W-AI: which model answers (`services::engagement::ai::provider`).
     Known { key: "ai.provider", label: "AI provider", default: "auto",

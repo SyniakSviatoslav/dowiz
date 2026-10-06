@@ -164,3 +164,14 @@ test('W-TASTE: the weather is credited to open-meteo.com (CC BY 4.0) exactly whe
   const dev = readFileSync(new URL('./taste-device.js', import.meta.url), 'utf8');
   assert.match(dev, /\$\{weatherCredit\(momentKeys\(\)\)\}/, 'the "For you" strip draws the credit');
 });
+
+test('W-TASTE2: the owner segment builder credits open-meteo.com beside its weather filter', () => {
+  const line = V.weatherSourceLine();
+  assert.match(line, /data-t="sx_weather"/);
+  assert.match(line, /href="https:\/\/open-meteo\.com\/"[^>]*>open-meteo\.com<\/a>/);
+  assert.equal(V.weatherCredit(['wx:rain']), line, 'the storefront credit is the same line');
+  const b = readFileSync(new URL('../admin/sense-builder.js', import.meta.url), 'utf8');
+  const at = b.indexOf("sel('sbWx'");
+  assert.ok(at > 0, 'the builder has its weather filter');
+  assert.match(b.slice(at, at + 400), /\$\{weatherSourceLine\(\)\}/, 'the credit is drawn right after the weather filter');
+});

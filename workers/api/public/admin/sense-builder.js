@@ -14,6 +14,7 @@ import * as ui from '/lib/ui/index.js';
 import '/admin/sense.js';
 import { wordKey } from '/lib/sense-words.js';
 import { TASTE, TEXTURE, AROMA } from '/store/sense.js';
+import { weatherSourceLine } from '/store/sense-view.js';
 
 const WORDS = {
   sq: { sbTitle: 'Segment sipas shijes', sbKey: 'Shija', sbMin: 'Sa fort (nga 1000)', sbNotSeen: 'Pa ardhur të paktën (ditë)', sbOrders: 'Të paktën porosi',
@@ -77,6 +78,7 @@ function formMarkup(){
       ${ui.field({ id: 'sbOrders', type: 'number', label: { t: 'sbOrders' }, attrs: { min: 1, max: 1000 } })}
       <label><span data-t="sbBand"></span> ${sel('sbBand', opt('', 'sbAny', true) + BANDS.map(b => opt(b, 'band_' + b)).join(''), 'builder.band')}</label>
       <label><span data-t="sbWeather"></span> ${sel('sbWx', opt('', 'sbAny', true) + WX.map(w => opt(w, 'wx_' + w)).join(''), 'builder.weather')}</label>
+      ${weatherSourceLine()}
     </div>
     <div id="sbOut" aria-live="polite"></div>
     <p class="small muted" data-t="sbNever"></p>

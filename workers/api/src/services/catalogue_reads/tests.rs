@@ -281,7 +281,9 @@ fn the_integrations_screen_answers_the_same_bytes() {
     let r = site.run(crate::integrations::status, get(&at("alpha", "/api/owner/integrations")).bearer(&v.owner).on("alpha"), &[]);
     pin("integrations", pinned(&r, &v.ids()), PIN_INTEGRATIONS);
 }
-const PIN_INTEGRATIONS: &str = r##"200 {"ai":{"enabled":false,"endpoint":"","usable":false},"cloud":{"bucket":"","configured":false},"crypto":{"wallets":0},"instagram":{"configured":false},"mcp":{"tools":18,"url":"https://alpha.dowiz.org/api/mcp"},"stripe":{"configured":false},"telegram":{"configured":false},"webhook":{"lastMs":null,"secretSet":false,"url":"https://alpha.dowiz.org/api/webhooks/meta","verifySet":false},"whatsapp":{"configured":false,"notifies":false}}"##;
+// Re-pinned 2026-10-06 by W-TASTE2: ai.enabled is ON by default (operator); still not usable here
+// (no endpoint, no binding in the harness). Before: "enabled":false.
+const PIN_INTEGRATIONS: &str = r##"200 {"ai":{"enabled":true,"endpoint":"","usable":false},"cloud":{"bucket":"","configured":false},"crypto":{"wallets":0},"instagram":{"configured":false},"mcp":{"tools":18,"url":"https://alpha.dowiz.org/api/mcp"},"stripe":{"configured":false},"telegram":{"configured":false},"webhook":{"lastMs":null,"secretSet":false,"url":"https://alpha.dowiz.org/api/webhooks/meta","verifySet":false},"whatsapp":{"configured":false,"notifies":false}}"##;
 
 #[test]
 fn the_privacy_notice_answers_the_same_bytes() {

@@ -236,6 +236,55 @@ pub async fn guest_withdraw(req: Request, ctx: RouteContext<crate::Req>) -> Resu
     Response::from_json(&json!({ "objected": true, "deleted": removed }))
 }
 
+/// `GET /api/order/:id/taste/for-you` -- W-TASTE2: up to three dishes for the guest behind THIS
+/// order's link, from the venue's own profile and the taste block (`taste::foryou`). Nothing after
+/// an objection, nothing without a profile; the card's allergens and this order's dishes left out;
+/// ids and taste words only. A block that cannot be read is logged and shows nothing.
+pub async fn for_you(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    use super::taste::foryou;
+    let place = Place::of_any(&req, &ctx).await?;
+    let (key, id) = match guest_key(&req, &ctx, &place).await? {
+        Ok(v) => v,
+        Err(r) => return Ok(r),
+    };
+    if objected(&place, &key).await? {
+        return Response::from_json(&foryou::answer(true, None, None, &[], &[]).map_err(Error::RustError)?);
+    }
+    let today = day_of(ctx.data.now_ms);
+    let held = crate::hubstore::load_table(&place, IMAGE_TASTE, TASTE_BYTES).await?;
+    let p = held.table.get(KIND, &key).as_deref().and_then(taste::parse).filter(|p| !taste::expired(p, today));
+    let (mut card, mut this_order, mut block) = (Vec::new(), Vec::new(), None);
+    if p.is_some() {
+        let people = crate::hubstore::load_table(&place, crate::hubstore::IMAGE_PEOPLE, crate::hubstore::PEOPLE_BYTES).await?;
+        card = super::alias::allergens_of(&people.table, &key, None);
+        let o: serde_json::Value = crate::hubstore::order(&place, &id).await?.and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default();
+        this_order = o["items"].as_array().map(|a| a.iter().filter_map(|l| l["product_id"].as_str().map(str::to_string)).collect()).unwrap_or_default();
+        // The DO's own fold; `None` = the catalogue does not fit one block.
+        block = crate::fold::ask::block(&place, "taste").await?;
+    }
+    match foryou::answer(false, p.as_ref(), block.as_deref(), &card, &this_order) {
+        Ok(v) => Response::from_json(&v),
+        Err(why) => {
+            crate::loud!(&place.ns, Some(&place.venue), "customers.for_you", "order {id}: {why}");
+            Response::from_json(&foryou::answer(false, None, None, &[], &[]).map_err(Error::RustError)?)
+        }
+    }
+}
+
+/// W-TASTE2 S7a: the consistency radius between the phones' vectors and the venue's profiles, for
+/// the owner's health page (a figure, never an alarm) and the log. An unreadable image says so.
+pub async fn radius_health(place: &Place) -> serde_json::Value {
+    match crate::hubstore::load_table(place, IMAGE_TASTE, TASTE_BYTES).await {
+        Ok(held) => {
+            let all: Vec<taste::Profile> = held.table.all(KIND).iter().filter_map(|(_, j)| taste::parse(j)).collect();
+            let s = taste::agreement::summary(&all);
+            log_line!("sheaf.radius venue={} cover=phone|venue compared={} max_pm={} median_pm={} over_half={}", place.venue, s.compared, s.max_pm, s.median_pm, s.over_half);
+            json!({ "taste": s.json(), "stock": "needs S0 glue (not built)" })
+        }
+        Err(e) => json!({ "error": e.to_string() }),
+    }
+}
+
 #[cfg(test)]
 #[path = "taste_routes/tests.rs"]
 mod tests;

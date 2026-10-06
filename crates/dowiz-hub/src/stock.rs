@@ -111,6 +111,10 @@ mod ledger;
 
 mod codec;
 pub use codec::{decode, encode};
+/// W-TASTE2 S7c: the record format's migration laws (`tools/gates/migration-law.sh` names them).
+#[cfg(test)]
+#[path = "stock/migration_tests.rs"]
+mod migration_tests;
 
 #[cfg(test)]
 #[path = "stock/fold/tests.rs"]

@@ -23,6 +23,7 @@ const WORDS = {
     tasteVenueLine: 'Ne mbajmë mend shijen tuaj',
     tasteVenueOff: 'fike',
     tasteVenueOffDone: 'U fik; lokali fshiu çfarë mbante',
+    fy_title: 'Herën tjetër, për ju', fy_hint: 'Nga porositë tuaja këtu. Kurrë çmim tjetër; fikeni më poshtë.',
   },
   en: {
     forYou: 'For you', again: 'Again?', yourTaste: 'Your taste',
@@ -41,6 +42,7 @@ const WORDS = {
     tasteVenueLine: 'We remember your taste',
     tasteVenueOff: 'turn off',
     tasteVenueOffDone: 'Turned off; the venue deleted what it kept',
+    fy_title: 'Next time, for you', fy_hint: 'From your orders here. Never a different price; turn it off below.',
   },
   uk: {
     forYou: 'Для вас', again: 'Ще раз?', yourTaste: 'Ваш смак',
@@ -59,6 +61,7 @@ const WORDS = {
     tasteVenueLine: 'Ми памʼятаємо ваш смак',
     tasteVenueOff: 'вимкнути',
     tasteVenueOffDone: 'Вимкнено; заклад видалив те, що зберігав',
+    fy_title: 'Наступного разу, для вас', fy_hint: 'З ваших замовлень тут. Ніколи інша ціна; вимкнути можна нижче.',
   },
   ru: {
     forYou: 'Для вас', again: 'Ещё раз?', yourTaste: 'Ваш вкус',
@@ -77,6 +80,7 @@ const WORDS = {
     tasteVenueLine: 'Мы помним ваш вкус',
     tasteVenueOff: 'выключить',
     tasteVenueOffDone: 'Выключено; заведение удалило то, что хранило',
+    fy_title: 'В следующий раз, для вас', fy_hint: 'Из ваших заказов здесь. Никогда другая цена; выключить можно ниже.',
   },
 };
 for (const l of LANGS) Object.assign(T[l], WORDS[l]);
