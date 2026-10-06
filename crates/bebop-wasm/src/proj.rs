@@ -43,6 +43,7 @@ fn status_of(r: Refusal) -> i32 {
         Refusal::NotAKv => crate::abi::NOT_A_KV,
         Refusal::NotALog => crate::abi::NOT_A_LOG,
         Refusal::Truncated { .. } => crate::abi::TRUNCATED,
+        Refusal::BadCrc { .. } => crate::abi::BAD_CRC,
     }
 }
 

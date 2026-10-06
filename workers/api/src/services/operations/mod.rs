@@ -29,9 +29,9 @@ pub mod waste;
 /// EVERY IMAGE, not just the log, because they fill for different reasons: the
 /// log grows with orders, settings with writes, posts with drafts.
 ///
-/// THERE IS NO `dead` FIGURE. The superblock has a `superseded_cells` column
-/// and nothing on this write path ever writes it, so a ratio built on it would
-/// read 0 forever while looking like a measurement. See `dowiz_hub::Usage`.
+/// NO `dead` FIGURE IN THE JSON. Since W-CRC (2026-10-05) `Usage::dead_per_mille` is real,
+/// but a compacted image reads 0 at rest and a pre-W-CRC log undercounts, so no owner
+/// action follows from it yet (D.1 #3 will compact by it). See `dowiz_hub::Usage`.
 pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (_, loc, (hub, cat)) =

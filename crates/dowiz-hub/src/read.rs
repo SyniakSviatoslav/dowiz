@@ -22,11 +22,13 @@ impl Hub {
     /// A non-zero count is a FAILING GATE, not a warning: `/api/owner/health`
     /// carries it, and a quarantine nobody notices is a data-loss feature.
     pub fn quarantined(&self) -> Vec<Quarantined> {
-        EvLog::walk(&self.store)
+        EvLog::walk_marked(&self.store)
             .iter()
             .enumerate()
-            .filter_map(|(at, r)| {
-                decode_or_reason(r).err().map(|reason| Quarantined { id: hex32(&r.id), at, reason })
+            .filter_map(|(at, (r, bad))| {
+                // A failed crc first (W-CRC): its payload is not the one that was written.
+                let ok = if bad.is_some() { Err("crc") } else { decode_or_reason(r).map(|_| ()) };
+                ok.err().map(|reason| Quarantined { id: hex32(&r.id), at, reason })
             })
             .collect()
     }
@@ -34,9 +36,9 @@ impl Hub {
     /// Every event, newest first. A record that cannot be read is left out and
     /// appears in `quarantined()` instead — never dropped silently.
     pub fn events(&self) -> Vec<Event> {
-        EvLog::walk(&self.store)
+        EvLog::walk_marked(&self.store)
             .into_iter()
-            .filter_map(|r| decode(&r))
+            .filter_map(|(r, bad)| bad.is_none().then(|| decode(&r)).flatten())
             .collect()
     }
 

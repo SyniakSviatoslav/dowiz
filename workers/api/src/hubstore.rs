@@ -370,7 +370,7 @@ pub async fn load_both(place: &Place) -> Result<(Loaded, LoadedCatalog)> {
     let hub = match images.remove(IMAGE_LOG) {
         Some((bytes, generation)) => Loaded {
             hub: Hub::load(&bytes)
-                .map_err(|_| Error::RustError("hub image is unreadable".into()))?,
+                .map(crate::image_err::hub_loaded).map_err(|e| crate::image_err::unreadable("hub", e))?,
             generation,
         },
         None => Loaded {
@@ -382,7 +382,7 @@ pub async fn load_both(place: &Place) -> Result<(Loaded, LoadedCatalog)> {
     let catalog = match images.remove(IMAGE_CATALOG) {
         Some((bytes, generation)) => LoadedCatalog {
             catalog: Catalog::load(&bytes)
-                .map_err(|_| Error::RustError("catalogue image is unreadable".into()))?,
+                .map_err(|e| crate::image_err::unreadable("catalogue", e))?,
             generation,
         },
         None => LoadedCatalog {
@@ -413,7 +413,7 @@ pub async fn load(place: &Place) -> Result<Loaded> {
             let hub = Hub::load(&r.image)
                 // A corrupt image must not be silently replaced with an empty
                 // one: that would present a hub with no orders as a healthy hub.
-                .map_err(|_| Error::RustError("hub image is unreadable".into()))?;
+                .map(crate::image_err::hub_loaded).map_err(|e| crate::image_err::unreadable("hub", e))?;
             Ok(Loaded { hub, generation: r.generation })
         }
         None => {
@@ -482,7 +482,7 @@ pub async fn load_catalog(place: &Place) -> Result<LoadedCatalog> {
     match row {
         Some(r) => {
             let catalog = Catalog::load(&r.image)
-                .map_err(|_| Error::RustError("catalogue image is unreadable".into()))?;
+                .map_err(|e| crate::image_err::unreadable("catalogue", e))?;
             Ok(LoadedCatalog { catalog, generation: r.generation })
         }
         None => {
@@ -502,7 +502,7 @@ pub async fn load_settings(place: &Place) -> Result<LoadedSettings> {
     match load_bytes(place, IMAGE_SETTINGS).await? {
         Some((image, generation)) => {
             let settings = dowiz_hub::settings::Settings::load(&image)
-                .map_err(|_| Error::RustError("settings image is unreadable".into()))?;
+                .map_err(|e| crate::image_err::unreadable("settings", e))?;
             Ok(LoadedSettings { settings, generation })
         }
         None => Ok(LoadedSettings {
@@ -540,7 +540,7 @@ pub async fn load_posts(place: &Place) -> Result<LoadedPosts> {
     match load_bytes(place, IMAGE_POSTS).await? {
         Some((image, generation)) => {
             let posts = dowiz_hub::post::Posts::load(&image)
-                .map_err(|_| Error::RustError("posts image is unreadable".into()))?;
+                .map_err(|e| crate::image_err::unreadable("posts", e))?;
             Ok(LoadedPosts { posts, generation })
         }
         None => Ok(LoadedPosts {
@@ -578,7 +578,7 @@ pub async fn load_stock(place: &Place) -> Result<LoadedStock> {
     match load_bytes(place, IMAGE_STOCK).await? {
         Some((image, generation)) => {
             let stock = dowiz_hub::stock::StockLog::load(&image)
-                .map_err(|_| Error::RustError("stock image is unreadable".into()))?;
+                .map_err(|e| crate::image_err::unreadable("stock", e))?;
             Ok(LoadedStock { stock, generation })
         }
         None => Ok(LoadedStock {
@@ -1130,7 +1130,7 @@ pub async fn archive_seal(place: &Place, archive_id: &str) -> Result<Option<(usi
     }
     let Some((bytes, _)) = load_bytes(place, archive_id).await? else { return Ok(None) };
     let hub =
-        Hub::load(&bytes).map_err(|_| Error::RustError("archive image is unreadable".into()))?;
+        Hub::load(&bytes).map_err(|e| crate::image_err::unreadable("archive", e))?;
     Ok(Some((hub.len(), hub.tip())))
 }
 
@@ -1144,7 +1144,7 @@ pub async fn archive_holds(place: &Place, archive_id: &str, id_hex: &str) -> Res
     }
     let Some((bytes, _)) = load_bytes(place, archive_id).await? else { return Ok(false) };
     let hub =
-        Hub::load(&bytes).map_err(|_| Error::RustError("archive image is unreadable".into()))?;
+        Hub::load(&bytes).map_err(|e| crate::image_err::unreadable("archive", e))?;
     Ok(hub.holds(id_hex))
 }
 
@@ -1155,7 +1155,7 @@ pub async fn archive_orders(place: &Place, archive_id: &str) -> Result<Option<Ve
     }
     let Some((bytes, _)) = load_bytes(place, archive_id).await? else { return Ok(None) };
     let hub =
-        Hub::load(&bytes).map_err(|_| Error::RustError("archive image is unreadable".into()))?;
+        Hub::load(&bytes).map_err(|e| crate::image_err::unreadable("archive", e))?;
     Ok(Some(orders_state(&hub).into_iter().map(crate::hubdo::OrderView::of_event).collect()))
 }
 

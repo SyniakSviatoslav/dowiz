@@ -72,6 +72,10 @@ fn a_flipped_length_bit_is_a_refusal_not_a_panic() {
     let root = st.root().expect("root");
     let kidx = st.follow(root, 1).expect("key index");
     st.cells[kidx + 2 + 1] |= 1 << 33;
+    // W-CRC: the changed cell is refused by its crc first, by name...
+    assert_eq!(kv_view(&st.to_bytes()), Err(Refusal::BadCrc { obj: kidx }));
+    // ...and re-sealed (the length is a lie the writer itself sealed), the bound refuses it.
+    st.seal(kidx);
     assert_eq!(kv_view(&st.to_bytes()), Err(Refusal::NotAKv));
 }
 
@@ -133,19 +137,24 @@ fn the_log_fold_is_stable_across_a_trim_and_sensitive_to_a_byte() {
     let trimmed = log_view(&st.to_bytes_trimmed()).expect("a trimmed log reads");
     assert_eq!(full, trimmed, "the fold is over records, not over zeros");
 
-    // Change one payload byte in place: same length, same CRC field untouched,
-    // so only the fold notices -- which is the point of having one.
+    // Change one payload byte in place: same length, CRC field untouched. Until W-CRC
+    // only the fold noticed; now the crc refuses it by name. Re-sealed (a different
+    // record, honestly written), the fold moves -- which is the point of having one.
     let root = st.root().unwrap();
     let newest = st.follow(root, 1).unwrap();
     st.cells[newest + 2 + 12] ^= 1;
+    assert_eq!(log_view(&st.to_bytes()), Err(Refusal::BadCrc { obj: newest }));
+    st.seal(newest);
     let moved = log_view(&st.to_bytes()).expect("still a log");
     assert_ne!(moved.fold, full.fold, "one byte must move the fold");
     st.cells[newest + 2 + 12] ^= 1;
+    st.seal(newest);
 
     // A root that claims three while the chain is cut to two: refused, with
     // both numbers, the way `Hub::load` refuses it.
     let second = st.follow(newest, 2).unwrap();
     st.cells[second + 2 + 2] = 0;
+    st.seal(second);
     assert_eq!(
         log_view(&st.to_bytes()),
         Err(Refusal::Truncated { claimed: 3, chained: Some(2) })

@@ -60,7 +60,7 @@ pub(super) fn fold_text(j: &Journal) -> String {
     format!("{:?}|{:?}|{:?}|{:?}", j.ledger.items(), j.book, j.lots.open(), j.carry)
 }
 
-const IMAGE_SHA: &str = "d1eecfdc655319eff2271ff7754efbd2d5edbeaf4b9c82a7b8c95a8d7e2e5a34";
+const IMAGE_SHA: &str = "863594c18677f41cc278f66e8021f8eafa63b92451f97cf131abbd1229e9031d";
 const FOLD_SHA: &str = "d83a1bd5b0e1f7940cfa78141b3bba92f2777e229d0f14ea7e38636dc45a2a9f";
 
 #[test]

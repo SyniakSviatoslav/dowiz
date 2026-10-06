@@ -6,9 +6,9 @@
 //! refused. These are the figures that make that a thing the owner sees coming
 //! rather than a thing that happens to them.
 //!
-//! THERE IS NO `dead` FIGURE. The superblock has a `superseded_cells` column
-//! and nothing on this write path ever writes it, so a ratio built on it would
-//! read 0 forever while looking like a measurement. See `dowiz_hub::Usage`.
+//! NO `dead` FIGURE IN THE JSON. Since W-CRC (2026-10-05) `Usage::dead_per_mille` is real,
+//! but a compacted image reads 0 at rest and a pre-W-CRC log undercounts, so no owner
+//! action follows from it yet (D.1 #3 will compact by it). See `dowiz_hub::Usage`.
 //!
 //! LIFTED OUT OF `extra.rs`, which is under a size ratchet, and these were the
 //! two pieces of that handler that are pure functions of an image's usage —

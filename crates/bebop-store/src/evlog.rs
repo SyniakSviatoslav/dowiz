@@ -309,7 +309,7 @@ impl EvLog {
     /// A record occupies its two object-header cells plus at least a v2
     /// header, so an image of `n` cells cannot hold more than `n / 14` of
     /// them. Past that the chain is not long, it is looping.
-    fn step_cap(st: &Store) -> usize {
+    pub(crate) fn step_cap(st: &Store) -> usize {
         st.cells.len() / (2 + HEAD_V2 as usize) + 1
     }
 
@@ -436,6 +436,8 @@ impl EvLog {
 
         let root_cells = if version >= 2 { ROOT_V2 } else { ROOT_V1 };
         let root = st.alloc(&mut tx, root_cells, DIGEST_EVLOG_ROOT)?;
+        // The old root is dead from this generation on (W-CRC, D.1 #4); records never are.
+        tx.sup_delta += 2 + st.obj_cells(old_root) as i64;
         st.put_cell(root, 0, n + 1);
         st.link(root, 1, ev);
         match tip {
@@ -457,6 +459,11 @@ impl EvLog {
         }
         st.seal(root);
         Ok((tx, root))
+    }
+
+    /// `stage_append` without a tip move, for `verify::append_carry_bytes`.
+    pub(crate) fn stage_append_pub(st: &mut Store, rec: &Record) -> Result<(crate::Tx, usize), StoreError> {
+        Self::stage_append(st, rec, None)
     }
 
     /// Append one record and commit. Allocates a SINGLE object and relinks the
@@ -492,6 +499,7 @@ impl EvLog {
         let mut tx = st.begin()?;
         let root_cells = if version >= 2 { ROOT_V2 } else { ROOT_V1 };
         let root = st.alloc(&mut tx, root_cells, DIGEST_EVLOG_ROOT)?;
+        tx.sup_delta += 2 + st.obj_cells(old_root) as i64;
         st.put_cell(root, 0, n);
         match last {
             Some(o) => st.link(root, 1, o),

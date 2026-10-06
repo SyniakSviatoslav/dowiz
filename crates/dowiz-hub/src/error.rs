@@ -25,6 +25,10 @@ pub enum HubError {
     /// `chained` is `None` when the chain never ended -- a corrupted `next` ref
     /// can point backwards, and a reader that followed it would walk for ever.
     Corrupt { claimed: usize, chained: Option<usize> },
+    /// AN OBJECT'S PAYLOAD DOES NOT MATCH THE CRC ITS HEADER CARRIES (W-CRC, 2026-10-05):
+    /// one changed byte of a value or a record, which used to load and be served as the
+    /// truth. Names the object (its cell index) and both numbers; see `bebop_store::verify`.
+    BadCrc(bebop_store::BadCrc),
 }
 
 impl HubError {

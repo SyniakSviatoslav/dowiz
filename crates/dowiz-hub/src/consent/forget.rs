@@ -110,11 +110,15 @@ fn scrubbed(act: &Act) -> Option<Act> {
 fn redact_acts(log: &mut LogImage, key: &str) -> Result<usize, HubError> {
     let store = Store::from_bytes(&log.to_bytes());
     let tip = EvLog::tip(&store);
-    let mut records: Vec<Record> = EvLog::walk(&store);
+    let mut records: Vec<(Record, Option<u32>)> = EvLog::walk_marked(&store);
     records.reverse();
     let subject = subject_of(key);
     let mut n = 0;
-    for r in records.iter_mut() {
+    for (r, bad) in records.iter_mut() {
+        // Quarantined (failed crc, W-CRC): carried verbatim, never rewritten.
+        if bad.is_some() {
+            continue;
+        }
         let Some((k, s, j)) = split(&r.payload) else { continue };
         if k != KIND_ACT.as_bytes() || s != subject.as_bytes() {
             continue;

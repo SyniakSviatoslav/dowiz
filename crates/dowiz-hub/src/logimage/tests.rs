@@ -69,6 +69,8 @@ fn a_record_this_build_cannot_read_is_quarantined_and_the_log_still_answers() {
     // Byte 0 is the kind's LENGTH, and 255 runs off the end of a payload
     // this short -- the framing damage a truncated write would leave.
     st.cells[newest + 2 + at] = (cell & !0xFF) | 0xFF;
+    // SEALED (W-CRC): see `tests::a_record_this_build_cannot_read_is_quarantined...`.
+    st.seal(newest);
 
     let broken = LogImage::load(&st.to_bytes()).expect("one bad record must not refuse the image");
     assert_eq!(broken.len(), 6, "the image still holds six records");
@@ -100,6 +102,7 @@ fn a_chain_ref_that_leaves_the_image_is_refused() {
     let newest = st.follow(root, 1).expect("newest");
     // Payload cell 2 of a record is the ref to the next (older) one.
     st.cells[newest + 2 + 2] = 1 << 40;
+    st.seal(newest); // W-CRC: only the chain lies, not the crc
     let broken = st.to_bytes();
     assert!(
         matches!(LogImage::load(&broken), Err(HubError::Corrupt { claimed: 6, .. })),

@@ -198,6 +198,7 @@ fn a_truncated_stock_image_is_refused_not_folded_short() {
     let mut st = bebop_store::Store::from_bytes(&bytes);
     let newest = st.follow(st.root().unwrap(), 1).unwrap();
     st.cells[newest + 2 + 2] = 1 << 40;
+    st.seal(newest);
     assert!(matches!(StockLog::load(&st.to_bytes()), Err(crate::HubError::Corrupt { .. })));
 }
 

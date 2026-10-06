@@ -86,6 +86,7 @@ mod fiscal;
 mod privacy;
 mod learn;
 mod version;
+mod image_err;
 
 #[cfg(target_arch = "wasm32")]
 use worker::wasm_bindgen::{JsCast, JsValue};

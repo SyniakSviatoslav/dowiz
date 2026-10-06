@@ -82,7 +82,9 @@ impl Hub {
 /// record must not close the restaurant. See `Hub::quarantined`.
 pub(crate) fn chain_is_whole(store: &Store) -> Result<(), HubError> {
     let claimed = EvLog::len(store);
-    let Some(chained) = EvLog::chain_len(store) else {
+    // AND EVERY RECORD'S CRC (W-CRC): the same walk, hashing the root and each record it
+    // counts, so a changed byte is refused here by name instead of folded into an answer.
+    let Some(chained) = EvLog::chain_crc(store).map_err(HubError::BadCrc)? else {
         return Err(HubError::Corrupt { claimed, chained: None });
     };
     if chained != claimed {

@@ -67,11 +67,13 @@ impl Hub {
         F: Fn(&Event) -> Option<String>,
     {
         let tip = EvLog::tip(&self.store);
-        let mut records = EvLog::walk(&self.store);
+        let mut records = EvLog::walk_marked(&self.store);
         records.reverse();
         let mut n = 0usize;
-        for r in records.iter_mut() {
-            if r.payload.first().map_or(true, |k| k & REDACTED_BIT != 0) {
+        for (r, bad) in records.iter_mut() {
+            // A QUARANTINED record (failed crc, W-CRC) is not rewritten: its bytes are not
+            // the ones that were written, and a rebuild carries it verbatim as evidence.
+            if bad.is_some() || r.payload.first().map_or(true, |k| k & REDACTED_BIT != 0) {
                 continue;
             }
             let Some(ev) = decode(r) else { continue };
@@ -141,11 +143,11 @@ impl Hub {
 
 /// The same chain, oldest first, in a fresh store of `size` bytes. The ids and
 /// `prev` links are copied, never recomputed: that is what "in place" means.
-pub(crate) fn rebuilt(records: &[Record], tip: Option<[u8; 32]>, size: usize) -> Result<Store, HubError> {
+pub(crate) fn rebuilt(records: &[(Record, Option<u32>)], tip: Option<[u8; 32]>, size: usize) -> Result<Store, HubError> {
     let mut fresh = Store::create_bytes(size)?;
     EvLog::init_bytes(&mut fresh)?;
-    for r in records {
-        EvLog::append_bytes(&mut fresh, r)?;
+    for (r, carry) in records {
+        EvLog::append_carry_bytes(&mut fresh, r, *carry)?;
     }
     if let Some(t) = tip {
         EvLog::set_tip_bytes(&mut fresh, &t)?;

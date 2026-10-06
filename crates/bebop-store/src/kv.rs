@@ -152,7 +152,8 @@ impl Kv {
         Ok(st.commit_bytes(&tx, root))
     }
 
-    /// Read all entries out of a store.
+    /// Read all entries out of a store, believing every payload cell: the CRC is checked
+    /// by `load` / `load_checked` (verify.rs, W-CRC) before this runs, and nothing else calls it.
     ///
     /// EVERY NUMBER IN HERE CAME OUT OF THE IMAGE, and an image arrives over a
     /// network from a Durable Object. The count, the four offsets and the four
@@ -167,7 +168,7 @@ impl Kv {
     /// at the caller -- a refusal it can report, which is the answer a caller
     /// can act on. Truncating to what fits would be the other failure this
     /// crate keeps finding: a shorter image that still looks valid.
-    pub fn load(st: &Store) -> Option<Kv> {
+    pub(crate) fn decode(st: &Store) -> Option<Kv> {
         let root = st.root()?;
         let ver = Self::version(st);
         if ver > VERSION {
@@ -296,7 +297,8 @@ impl Kv {
     /// root, mirroring what wlog.bp's update phase does. A tiered append is ROADMAP B4.
     fn stage_commit_into(&self, st: &mut Store) -> Result<(crate::Tx, usize), StoreError> {
         let old_root = st.root().ok_or(StoreError::NoSuperblock)?;
-        let arr_dig = st.obj_digest(st.follow(old_root, 1).unwrap());
+        let kidx = st.follow(old_root, 1).ok_or(StoreError::Corrupt("KV root names no key index"))?;
+        let arr_dig = st.obj_digest(kidx);
         let root_dig = st.obj_digest(old_root);
         // THE ROOT'S OWN VERSION, never this module's: a v1 image keeps being written as
         // v1 (a mixed image would be unreadable), a fresh one is v2.
@@ -304,7 +306,22 @@ impl Kv {
         if ver > VERSION {
             return Err(StoreError::Corrupt("KV root names a version this code does not know"));
         }
+        // SUPERSEDED (W-CRC, D.1 #4): this commit rewrites the root and all four arrays, so
+        // the old five objects -- header cells included -- are dead from the new generation
+        // on. `stage_commit` moves them from `live_cells` to `superseded_cells`.
+        let mut dead = 2 + st.obj_cells(old_root) as i64;
+        for i in 1..=4 {
+            if let Some(a) = st.follow(old_root, i) {
+                dead += 2 + st.obj_cells(a) as i64;
+            }
+        }
+        let (mut tx, root) = self.stage_write(st, ver, arr_dig, root_dig)?;
+        tx.sup_delta += dead;
+        Ok((tx, root))
+    }
 
+    /// Write the entries as a new root and four new arrays, superseding nothing.
+    fn stage_write(&self, st: &mut Store, ver: i64, arr_dig: i64, root_dig: i64) -> Result<(crate::Tx, usize), StoreError> {
         let n = self.entries.len();
         let kbytes: usize = self.entries.iter().map(|(k, _)| k.len()).sum();
         let vbytes: usize = self.entries.iter().map(|(_, v)| v.len()).sum();
@@ -379,8 +396,12 @@ impl Kv {
     /// purpose and is not this.
     pub fn compacted_bytes(&self, capacity: usize) -> Result<Vec<u8>, StoreError> {
         let mut fresh = Store::create_bytes(capacity)?;
-        Kv::init_bytes(&mut fresh)?;
-        let (tx, root) = self.stage_commit_into(&mut fresh)?;
+        // STRAIGHT INTO THE EMPTY STORE, no `init_bytes` first (W-CRC): the empty schema
+        // that init wrote is superseded by the very next commit -- 20 cells dead in every
+        // compacted image, and, now that superseded cells are counted, a dead figure that
+        // could never return to 0 after a compaction. Same
+        // digests and version `init` uses, so the image reads exactly as before.
+        let (tx, root) = self.stage_write(&mut fresh, VERSION, DIGEST_ARR_I64, DIGEST_KV_ROOT)?;
         fresh.commit_bytes(&tx, root);
         // TRIMMED. The fresh image was sized by doubling until the content
         // fitted, so most of the arena it ended up with is untouched zeros --

@@ -136,7 +136,8 @@ impl LogImage {
         // is a venue quietly losing thirty-eight of its errors, messages or
         // ledger postings, and the one place it can still be said out loud is
         // here. See `crate::chain_is_whole`.
-        crate::chain_is_whole(&store)?;
+        // A record whose crc fails is QUARANTINED, not refused (`crate::quarantine`).
+        crate::chain_is_whole_quarantining(&store)?;
         Ok(LogImage { store })
     }
 
@@ -177,12 +178,12 @@ impl LogImage {
     /// Every record, NEWEST FIRST, which is the order every one of the tables
     /// this replaces was indexed in.
     pub fn entries(&self) -> Vec<Entry> {
-        let walked = EvLog::walk(&self.store);
+        let walked = EvLog::walk_marked(&self.store);
         let n = walked.len();
         walked
             .into_iter()
             .enumerate()
-            .filter_map(|(i, r)| decode(&r.payload, (n - 1 - i) as u64))
+            .filter_map(|(i, (r, bad))| bad.is_none().then(|| decode(&r.payload, (n - 1 - i) as u64)).flatten())
             .collect()
     }
 
@@ -190,14 +191,13 @@ impl LogImage {
     /// The same law as the order log's: `len() == entries().len() +
     /// quarantined().len()`, and a non-zero count is a failing gate.
     pub fn quarantined(&self) -> Vec<crate::Quarantined> {
-        let walked = EvLog::walk(&self.store);
+        let walked = EvLog::walk_marked(&self.store);
         walked
             .iter()
             .enumerate()
-            .filter_map(|(at, r)| {
-                decode_or_reason(&r.payload, 0)
-                    .err()
-                    .map(|reason| crate::Quarantined { id: crate::hex32(&r.id), at, reason })
+            .filter_map(|(at, (r, bad))| {
+                let ok = if bad.is_some() { Err("crc") } else { decode_or_reason(&r.payload, 0).map(|_| ()) };
+                ok.err().map(|reason| crate::Quarantined { id: crate::hex32(&r.id), at, reason })
             })
             .collect()
     }
@@ -270,8 +270,6 @@ impl LogImage {
 
     /// Double the image and copy the chain into it, oldest first.
     fn grow(&mut self) -> Result<(), HubError> {
-        let mut records = EvLog::walk(&self.store);
-        records.reverse();
         // DOUBLE, do not jump to the default: a log born small that went
         // straight to 64 KiB on its first overflow would cost that on every
         // read for the rest of its life. The floor is only there so a corrupt
@@ -279,14 +277,8 @@ impl LogImage {
         let bigger = self.store.to_bytes().len().saturating_mul(2).max(MIN_LOG_BYTES);
         let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
-        let mut last = None;
-        for r in &records {
-            EvLog::append_bytes(&mut fresh, r)?;
-            last = Some(r.id);
-        }
-        if let Some(id) = last {
-            EvLog::set_tip_bytes(&mut fresh, &id)?;
-        }
+        // Verbatim, a failed crc CARRIED (W-CRC): a re-seal would launder it.
+        EvLog::copy_chain_bytes(&self.store, &mut fresh)?;
         // Swapped in only once the whole copy succeeded. A partial grow that
         // replaced the store would lose history to save space.
         self.store = fresh;

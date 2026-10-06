@@ -34,7 +34,8 @@ impl Hub {
         F: Fn(&str) -> bool,
     {
         let archived = self.store.to_bytes_trimmed();
-        let mut records = EvLog::walk(&self.store);
+        // MARKED (W-CRC): a quarantined record is carried with its failed crc, never re-sealed.
+        let mut records = EvLog::walk_marked(&self.store);
         records.reverse();
 
         let tip = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
@@ -65,7 +66,7 @@ impl Hub {
         )?;
 
         let mut last = check_id;
-        for r in &records {
+        for (r, bad) in &records {
             let Some(ev) = decode(r) else { continue };
             // A checkpoint from an EARLIER rotation is not carried forward: the
             // new one names the image that holds it, so the chain of
@@ -87,14 +88,14 @@ impl Hub {
             // They are small (one short record per read of a phone number) and
             // they stay.
             if !ev.kind.is_order() {
-                EvLog::append_bytes(&mut fresh, r)?;
+                EvLog::append_carry_bytes(&mut fresh, r, *bad)?;
                 last = r.id;
                 continue;
             }
             if !keep(&ev.order_id) {
                 continue;
             }
-            EvLog::append_bytes(&mut fresh, r)?;
+            EvLog::append_carry_bytes(&mut fresh, r, *bad)?;
             last = r.id;
         }
         EvLog::set_tip_bytes(&mut fresh, &last)?;

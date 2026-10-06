@@ -84,6 +84,10 @@ pub(crate) use chain::{chain_is_whole, content_id_chained, hex32};
 pub(crate) use error::e_is_full;
 pub(crate) use event::{decode, decode_or_reason};
 pub(crate) use usage::{ceiling_cells, usage_of, usage_of_kind};
+mod kvload;
+pub(crate) use kvload::kv_load;
+mod quarantine;
+pub(crate) use quarantine::chain_is_whole_quarantining;
 
 use bebop_store::Store;
 

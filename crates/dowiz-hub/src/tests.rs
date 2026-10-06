@@ -76,6 +76,9 @@ fn load_refuses_a_hub_that_cannot_deliver_the_orders_it_claims() {
     let root = st.root().unwrap();
     let newest = st.follow(root, 1).unwrap();
     st.cells[newest + 2 + 2] = 1 << 40;
+    // RE-SEALED (W-CRC): a ref edited without its crc is now refused as BadCrc first;
+    // sealed, only the chain lies, which is what this test is about.
+    st.seal(newest);
     assert!(
         matches!(Hub::load(&st.to_bytes()), Err(HubError::Corrupt { claimed: 12, .. })),
         "a chain that stops early must be refused, not served short"
@@ -111,6 +114,10 @@ fn a_record_this_build_cannot_read_is_quarantined_and_the_venue_still_serves() {
     let cell = st.get(newest, at);
     // Byte 0 of the payload is the event kind, and 9 is not one of the six.
     st.cells[newest + 2 + at] = (cell & !0xFF) | 9;
+    // SEALED (W-CRC): a record this build cannot read was WRITTEN, crc and all, by a
+    // build that could. An unsealed edit is a changed byte, and that is refused by name
+    // (`kvload::tests::hub_load_refuses_a_flipped_record_byte_by_name`).
+    st.seal(newest);
 
     let broken = Hub::load(&st.to_bytes()).expect("one bad record must not refuse the image");
     assert_eq!(broken.len(), 6, "the log still holds six records");

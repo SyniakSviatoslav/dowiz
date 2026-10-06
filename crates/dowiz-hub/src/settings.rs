@@ -69,7 +69,7 @@ impl Settings {
         if store.pick().is_none() {
             return Err(HubError::NotAHub);
         }
-        let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
+        let kv = crate::kv_load(&store)?;
         Ok(Settings { store, kv })
     }
 

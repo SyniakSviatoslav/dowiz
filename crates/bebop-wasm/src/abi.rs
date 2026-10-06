@@ -29,6 +29,8 @@ pub const NOT_A_LOG: i32 = 3;
 pub const TRUNCATED: i32 = 4;
 /// The pointer or the output cells were null.
 pub const NULL_ARG: i32 = 5;
+/// An object failed its crc (W-CRC, 2026-10-05). 10, not 6: `nodekey` uses 6 and `proj` 7-9.
+pub const BAD_CRC: i32 = 10;
 
 fn status_of(r: &Refusal) -> i32 {
     match r {
@@ -36,6 +38,7 @@ fn status_of(r: &Refusal) -> i32 {
         Refusal::NotAKv => NOT_A_KV,
         Refusal::NotALog => NOT_A_LOG,
         Refusal::Truncated { .. } => TRUNCATED,
+        Refusal::BadCrc { .. } => BAD_CRC,
     }
 }
 

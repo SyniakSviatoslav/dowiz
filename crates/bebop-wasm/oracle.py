@@ -160,6 +160,18 @@ def main(path):
         return 2
     kidx, kblob, vidx, vblob = arrays
 
+    # W-CRC: the root and the four arrays must match their header crc (bebop_store
+    # Kv::load_checked; abi BAD_CRC = 10).
+    def crc_ok(o):
+        ln = obj_len(o)
+        if o + 2 + ln > n:
+            return False
+        return zlib.crc32(struct.pack("<%dq" % ln, *cells[o + 2 : o + 2 + ln])) == (cells[o + 1] >> 32) & 0xFFFFFFFF
+
+    if not all(crc_ok(o) for o in [root] + arrays):
+        print("kv status=10 n=0 root=0")
+        return 10
+
     def slice_of(idx, blob, i):
         off, ln = cells[idx + 2 + 2 * i], cells[idx + 2 + 2 * i + 1]
         if off < 0 or ln < 0 or off + ln > obj_len(blob) * per_cell:
@@ -228,6 +240,9 @@ def proj_mode(path):
         cur = follow(cur, 2)
     if len(recs) != get(root, 0):
         return say(4)
+    # W-CRC: the log root and every record match their header crc (EvLog::chain_crc).
+    if not all(crc_ok(o) for o in [root] + recs):
+        return say(10)
     h = FNV_OFFSET
     for r in reversed(recs):
         at = (16 if olen(r) >= 16 and get(r, 11) & 1 else 12) if ver >= 2 else 15

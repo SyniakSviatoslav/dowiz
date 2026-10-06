@@ -60,7 +60,13 @@ fn overlapping_records_cannot_read_more_than_the_image() {
     }
     assert_eq!(n, 6, "the six records were found by following the chain");
     let lying = Store::from_bytes(&st.to_bytes());
-    assert!(Hub::load(&st.to_bytes()).is_ok(), "the chain is still whole; only the lengths lie");
+    // W-CRC: `Hub::load` now REFUSES this image -- a header claiming the rest of the
+    // image does not fit it, so `chain_crc` names the record. The walk bound below is
+    // still the guard for a reader with no loader above it.
+    assert!(
+        matches!(Hub::load(&st.to_bytes()), Err(HubError::BadCrc(_) | HubError::Corrupt { .. })),
+        "lengths that lie are refused at load"
+    );
     let read: usize = EvLog::walk(&lying).iter().map(|r| r.payload.len()).sum();
     assert!(read <= bytes.len(), "a walk read {read} bytes out of an image of {}", bytes.len());
     // Twin: an honest image's records read back whole.

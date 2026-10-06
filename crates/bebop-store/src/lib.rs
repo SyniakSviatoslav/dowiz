@@ -38,17 +38,10 @@ pub const ARENA: usize = 1024;
 /// on `n - ARENA`, and only `LogImage` had a floor of its own.
 pub const MIN_BYTES: usize = (ARENA + 1) * 8;
 
-/// One step of zlib CRC-32 (table-free, bitwise): the running register over more bytes.
-/// Streaming, so a CRC over cells never stages them in a buffer.
-fn crc32_step(mut c: u32, bytes: &[u8]) -> u32 {
-    for &b in bytes {
-        c ^= b as u32;
-        for _ in 0..8 {
-            let m = (c & 1).wrapping_neg();
-            c = (c >> 1) ^ (0xEDB8_8320 & m);
-        }
-    }
-    c
+/// One step of zlib CRC-32: the running register over more bytes. Streaming, so a CRC over
+/// cells never stages them in a buffer. TABLE-DRIVEN since W-CRC (`crc.rs`), byte-identical.
+fn crc32_step(c: u32, bytes: &[u8]) -> u32 {
+    crc::step_bytes(c, bytes)
 }
 
 /// zlib CRC-32 over raw bytes.
@@ -58,7 +51,7 @@ pub fn crc32(bytes: &[u8]) -> u32 {
 
 /// CRC-32 over `n` cells starting at `off`, taken as little-endian bytes.
 pub fn crc32_cells(cells: &[i64], off: usize, n: usize) -> u32 {
-    !cells[off..off + n].iter().fold(0xFFFF_FFFF, |c, v| crc32_step(c, &v.to_le_bytes()))
+    !cells[off..off + n].iter().fold(0xFFFF_FFFF, |c, &v| crc::step_cell(c, v))
 }
 
 /// A bebop store file loaded into memory as cells.
@@ -161,7 +154,7 @@ impl Cells for View<'_> {
 /// CRC-32 over `n` cells from `off`, little-endian, through `Cells` (a cell past the end reads 0,
 /// as everywhere else; callers bound `n` first).
 pub fn crc32_in<C: Cells + ?Sized>(c: &C, off: usize, n: usize) -> u32 {
-    !(0..n).fold(0xFFFF_FFFF, |h, i| crc32_step(h, &c.cell_at(off + i).to_le_bytes()))
+    !(0..n).fold(0xFFFF_FFFF, |h, i| crc::step_cell(h, c.cell_at(off + i)))
 }
 
 /// `Store::sb_valid`: magic, and cell 15 = CRC-32 of cells 0..14.
@@ -869,6 +862,9 @@ impl Store {
         f.write_all(&buf)
     }
 }
+mod crc;
+pub mod verify;
+pub use verify::BadCrc;
 pub mod kv;
 pub mod evlog;
 pub mod nodekey;

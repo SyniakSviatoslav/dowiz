@@ -32,13 +32,18 @@ use bebop_store::Store;
 /// image to the write it will refuse — and `capacity_cells` is kept beside it
 /// as the raw fact, not as the denominator.
 ///
-/// THERE IS NO `dead` FIGURE HERE ON PURPOSE. The superblock carries a
-/// `superseded_cells` column and this write path never writes it: `Tx::sup_delta`
-/// is initialised to zero in `Store::begin` and nothing increments it, so
-/// `live_cells` is really "every cell ever allocated" and superseded is flatly 0
-/// in every image this crate produces. A `dead_per_mille` built on it would
-/// return 0 forever while reading like a measurement. It is left out rather
-/// than shipped as a column that cannot move.
+/// THE `dead` FIGURE (W-CRC, 2026-10-05, D.1 #4). Until then nothing on this write path
+/// wrote the superblock's `superseded_cells` (`Tx::sup_delta` stayed 0), and the figure was
+/// left out rather than shipped as a column that could not move. Now a KV commit counts the
+/// root and four arrays it replaces, and a log append counts the root it replaces, so
+/// `dead_cells` is the arena a compaction would give back. What it means per kind:
+///   - KV images are COMPACTED on every save (`compacted_bytes_fit`), so an image read
+///     back from storage reads 0 -- truthfully: there is nothing to reclaim. It rises only
+///     between commits made in place (`commit_into`), which dowiz does not persist.
+///   - Logs never compact; each append retires one 10-cell root. An image written before
+///     W-CRC carries 0 here for all its old roots -- an UNDERCOUNT until it is rebuilt by
+///     `grow`. It is not exposed in `/api/owner/health` for that reason (and because no
+///     owner action follows from it until the KV delta chain, D.1 #3, compacts by it).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Usage {
     pub used_cells: i64,
@@ -62,6 +67,8 @@ pub struct Usage {
     /// emergency and says "compact" about an image that cannot be compacted.
     pub grows: bool,
     pub generation: i64,
+    /// Arena cells the image's own commits have superseded (superblock cell 8). See above.
+    pub dead_cells: i64,
 }
 
 impl Usage {
@@ -71,6 +78,14 @@ impl Usage {
             return 0;
         }
         (self.used_cells * 1000) / self.ceiling_cells
+    }
+
+    /// Tenths of a percent of the SPENT arena that is dead -- what a compaction reclaims.
+    pub fn dead_per_mille(&self) -> i64 {
+        if self.used_cells <= 0 {
+            return 0;
+        }
+        (self.dead_cells.clamp(0, self.used_cells) * 1000) / self.used_cells
     }
 }
 
@@ -94,6 +109,7 @@ pub(crate) fn usage_of_kind(store: &Store, ceiling_cells: i64, grows: bool) -> U
             ceiling_cells,
             grows,
             generation: sb.generation,
+            dead_cells: sb.superseded_cells.max(0),
         },
         None => Usage {
             used_cells: 0,
@@ -101,6 +117,7 @@ pub(crate) fn usage_of_kind(store: &Store, ceiling_cells: i64, grows: bool) -> U
             ceiling_cells,
             grows,
             generation: 0,
+            dead_cells: 0,
         },
     }
 }

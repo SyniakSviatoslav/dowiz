@@ -56,6 +56,8 @@ pub enum Refusal {
     /// The log's root claims `claimed` records; the chain delivers `chained`
     /// (`None` = the chain never ends).
     Truncated { claimed: usize, chained: Option<usize> },
+    /// An object's payload does not match its header crc (W-CRC): `obj` is its cell.
+    BadCrc { obj: usize },
 }
 
 /// A KV image, folded.
@@ -92,7 +94,10 @@ fn open(bytes: &[u8]) -> Result<Store, Refusal> {
 /// Read a KV image to its count and root.
 pub fn kv_view(bytes: &[u8]) -> Result<KvView, Refusal> {
     let st = open(bytes)?;
-    let kv = Kv::load(&st).ok_or(Refusal::NotAKv)?;
+    let kv = Kv::load_checked(&st).map_err(|e| match e {
+        bebop_store::verify::KvError::NotKv => Refusal::NotAKv,
+        bebop_store::verify::KvError::BadCrc(b) => Refusal::BadCrc { obj: b.obj },
+    })?;
     Ok(KvView {
         n: kv.entries.len() as i64,
         root: kv.snapshot_root_u64() as i64,
@@ -110,7 +115,8 @@ pub fn log_view(bytes: &[u8]) -> Result<LogView, Refusal> {
         return Err(Refusal::NotALog);
     }
     let claimed = EvLog::len(&st);
-    let chained = EvLog::chain_len(&st);
+    // The count and every record's crc in one walk (W-CRC), as `dowiz_hub::chain_is_whole`.
+    let chained = EvLog::chain_crc(&st).map_err(|b| Refusal::BadCrc { obj: b.obj })?;
     if chained != Some(claimed) {
         return Err(Refusal::Truncated { claimed, chained });
     }

@@ -353,8 +353,8 @@ impl HubImages {
         };
         let view = crate::fold::projection::read(&mut self.folded.borrow_mut(), meta.generation, || {
             dowiz_hub::Hub::load(&bytes)
-                .map(|hub| hub.events())
-                .map_err(|_| Error::RustError("hub image is unreadable".into()))
+                .map(|hub| crate::image_err::hub_loaded(hub).events())
+                .map_err(|e| crate::image_err::unreadable("hub", e))
         })?;
         Ok((meta.generation, view))
     }
@@ -498,7 +498,7 @@ impl HubImages {
         }
         let mut hub = match bytes {
             Some(b) => dowiz_hub::Hub::load(&b)
-                .map_err(|_| Error::RustError("hub image is unreadable".into()))?,
+                .map_err(|e| crate::image_err::unreadable("hub", e))?,
             // BORN SMALL, as `hubstore::load` does it: a hub created at 4 MiB
             // made the third order of the day exceed the isolate's limit.
             None => dowiz_hub::Hub::create_sized(64 * 1024)
@@ -575,7 +575,7 @@ impl HubImages {
         let (log_generation, listed) = self.orders_view().await?;
         let mut hub = match self.image(LOG_IMAGE).await? {
             Some((_, bytes)) => dowiz_hub::Hub::load(&bytes)
-                .map_err(|_| Error::RustError("hub image is unreadable".into()))?,
+                .map_err(|e| crate::image_err::unreadable("hub", e))?,
             // BORN SMALL, as `append` does it: a hub created at 4 MiB made the
             // third order of the day exceed the isolate's limit.
             None => dowiz_hub::Hub::create_sized(64 * 1024)
@@ -586,7 +586,7 @@ impl HubImages {
             Some((meta, bytes)) => (
                 meta.generation,
                 dowiz_hub::stock::StockLog::load(&bytes)
-                    .map_err(|_| Error::RustError("stock image is unreadable".into()))?,
+                    .map_err(|e| crate::image_err::unreadable("stock", e))?,
             ),
             None => (
                 0,
@@ -713,13 +713,13 @@ impl HubImages {
             return Ok(Err(crate::command::Refused::NotFound));
         };
         let mut hub = dowiz_hub::Hub::load(&log_bytes)
-            .map_err(|_| Error::RustError("hub image is unreadable".into()))?;
+            .map_err(|e| crate::image_err::unreadable("hub", e))?;
         let stock_image = crate::hubstore::IMAGE_STOCK;
         let (stock_generation, mut stock) = match self.image(stock_image).await? {
             Some((meta, bytes)) => (
                 meta.generation,
                 dowiz_hub::stock::StockLog::load(&bytes)
-                    .map_err(|_| Error::RustError("stock image is unreadable".into()))?,
+                    .map_err(|e| crate::image_err::unreadable("stock", e))?,
             ),
             None => (
                 0,
@@ -800,7 +800,7 @@ impl HubImages {
             return Ok(Err(crate::command::Refused::NotFound));
         };
         let mut hub = dowiz_hub::Hub::load(&log_bytes)
-            .map_err(|_| Error::RustError("hub image is unreadable".into()))?;
+            .map_err(|e| crate::image_err::unreadable("hub", e))?;
         let ops_image = crate::hubstore::IMAGE_OPS;
         let ceiling = crate::hubstore::OPS_BYTES;
         let (ops_generation, mut ops) = match self.image(ops_image).await? {
@@ -809,7 +809,7 @@ impl HubImages {
                 // A CORRUPT IMAGE IS NOT AN EMPTY ONE: reading it as empty here
                 // would hand out an order that already has a courier.
                 dowiz_hub::table::Table::load(&bytes, ceiling)
-                    .map_err(|_| Error::RustError("ops image is unreadable".into()))?,
+                    .map_err(|e| crate::image_err::unreadable("ops", e))?,
             ),
             None => (
                 0,
@@ -873,12 +873,12 @@ impl HubImages {
         // `orders_state` replays the chain (`rebuild::of_log`); neither
         // consults the memo.
         let hub = dowiz_hub::Hub::load(&bytes)
-            .map_err(|_| Error::RustError("hub image is unreadable".into()))?;
+            .map_err(|e| crate::image_err::unreadable("hub", e))?;
 
         let (held, modelled) = match self.image(crate::hubstore::IMAGE_STOCK).await? {
             Some((_, b)) => {
                 let log = dowiz_hub::stock::StockLog::load(&b)
-                    .map_err(|_| Error::RustError("stock image is unreadable".into()))?;
+                    .map_err(|e| crate::image_err::unreadable("stock", e))?;
                 let modelled = log.len() > 0;
                 let led = log
                     .ledger()
@@ -927,7 +927,7 @@ impl HubImages {
     ) -> Result<()> {
         let settings = match self.image(crate::hubstore::IMAGE_SETTINGS).await? {
             Some((_, bytes)) => dowiz_hub::settings::Settings::load(&bytes)
-                .map_err(|_| Error::RustError("settings image is unreadable".into()))?,
+                .map_err(|e| crate::image_err::unreadable("settings", e))?,
             None => return Ok(()),
         };
         let mut queued: Vec<crate::outbox::Entry> = crate::notify::route::bell(&settings, order_id, text, lines, amend_seq, now_ms);
@@ -961,7 +961,7 @@ impl HubImages {
             Some((meta, bytes)) => (
                 meta.generation,
                 dowiz_hub::table::Table::load(&bytes, crate::outbox::OUTBOX_BYTES)
-                    .map_err(|_| Error::RustError("outbox image is unreadable".into()))?,
+                    .map_err(|e| crate::image_err::unreadable("outbox", e))?,
             ),
             None => (
                 0,

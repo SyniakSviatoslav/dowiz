@@ -7,7 +7,7 @@
 
 use bebop_store::{evlog::{EvLog, Record}, Store};
 
-use crate::{chain_is_whole, content_id_chained, e_is_full, usage_of_kind};
+use crate::{content_id_chained, e_is_full, usage_of_kind};
 use crate::{EventKind, Hub, HubError, Usage, DEFAULT_IMAGE_BYTES};
 
 impl Hub {
@@ -33,7 +33,9 @@ impl Hub {
         // survives a truncation -- it is fifteen cells at the front of the
         // image -- so "the superblock is valid" was never the same statement
         // as "the log is all here". See `chain_is_whole`.
-        chain_is_whole(&store)?;
+        // A record whose crc fails is QUARANTINED, served around and counted, not
+        // refused (operator 2026-10-05); a broken link still refuses. `crate::quarantine`.
+        crate::chain_is_whole_quarantining(&store)?;
         Ok(Hub { store })
     }
 
@@ -158,8 +160,6 @@ impl Hub {
     /// would leave every `prev` pointing at a record that does not exist yet,
     /// and the copy would be a chain of orphans that still LOOKS like a log.
     fn grow(&mut self) -> Result<(), HubError> {
-        let mut records = EvLog::walk(&self.store);
-        records.reverse();
         // DOUBLE, DO NOT JUMP TO THE DEFAULT. `.max(DEFAULT_IMAGE_BYTES)` was
         // here and it meant a hub born at 64 KiB went straight to 4 MiB on its
         // first overflow -- which on a Worker is five D1 rows read and written
@@ -169,14 +169,9 @@ impl Hub {
         let bigger = self.store.to_bytes().len().saturating_mul(2).max(64 * 1024);
         let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
-        let mut last: Option<[u8; 32]> = None;
-        for r in &records {
-            EvLog::append_bytes(&mut fresh, r)?;
-            last = Some(r.id);
-        }
-        if let Some(id) = last {
-            EvLog::set_tip_bytes(&mut fresh, &id)?;
-        }
+        // VERBATIM INCLUDING A FAILED CRC (W-CRC): re-sealing a quarantined record
+        // would launder its changed byte into a record that verifies.
+        EvLog::copy_chain_bytes(&self.store, &mut fresh)?;
         // Swapped in only once the whole copy succeeded. A partial grow that
         // replaced the store would lose history to save space.
         self.store = fresh;
