@@ -1,0 +1,140 @@
+# S7 arXiv survey 2026-10-06 (lane s7). API: https://export.arxiv.org/api/query?search_query=<q>&start=<n>&max_results=200 ; 3 s between calls; cap 3000/query; harvested 11:03-11:17 UTC+2 2026-10-06.
+# tag<TAB>search_query (URL-encoded as sent). Per-query API totals in the trailing table.
+sheaf_cs	abs:sheaf+AND+%28cat:cs.*+OR+cat:stat.*+OR+cat:eess.*%29
+sheaves_cs	abs:sheaves+AND+%28cat:cs.*+OR+cat:stat.*+OR+cat:eess.*%29
+sheaf_theory_cs	abs:%22sheaf+theory%22+AND+%28cat:cs.*+OR+cat:stat.*+OR+cat:eess.*+OR+cat:math.OC+OR+cat:q-bio.*%29
+sheaf_hypergraph	abs:sheaf+AND+abs:hypergraph
+sheaf_hypergraphs	abs:sheaf+AND+abs:hypergraphs
+sheaf_hypergraph_phrase	abs:%22sheaf+hypergraph%22
+sheaf_neural	abs:%22sheaf+neural%22
+sheaf_and_nn	abs:sheaf+AND+abs:%22neural+network%22
+sheaf_and_gnn	abs:sheaf+AND+abs:%22graph+neural%22
+nsd	abs:%22neural+sheaf+diffusion%22
+sheaf_diffusion	abs:%22sheaf+diffusion%22
+sheaf_heterophily	abs:sheaf+AND+abs:heterophily
+sheaf_oversmoothing	abs:sheaf+AND+%28abs:oversmoothing+OR+abs:over-smoothing%29
+sheaf_ml	abs:sheaf+AND+abs:%22machine+learning%22
+sheaf_learning	abs:%22sheaf+learning%22
+cellular_sheaf	abs:%22cellular+sheaf%22
+cellular_sheaves	abs:%22cellular+sheaves%22
+sheaf_laplacian	abs:%22sheaf+laplacian%22
+sheaf_laplacians	abs:%22sheaf+laplacians%22
+sheaf_hodge	abs:sheaf+AND+abs:hodge
+discrete_hodge	abs:%22discrete+hodge%22
+sheaf_signal	abs:sheaf+AND+abs:%22signal+processing%22
+sheaf_tda	abs:sheaf+AND+abs:%22topological+data+analysis%22
+sheaf_cohom_cs	abs:%22sheaf+cohomology%22+AND+%28cat:cs.*+OR+cat:stat.*+OR+cat:eess.*+OR+cat:math.OC+OR+cat:q-bio.*+OR+cat:physics.data-an%29
+sheaf_cohom_applied	abs:%22sheaf+cohomology%22+AND+%28abs:applied+OR+abs:computational+OR+abs:algorithm+OR+abs:network+OR+abs:sensor+OR+abs:data%29
+persistent_sheaf	abs:%22persistent+sheaf%22
+persistent_sheaves	abs:%22persistent+sheaves%22
+sheaf_database	abs:sheaf+AND+abs:database
+sheaves_database	abs:sheaves+AND+abs:database
+sheaf_databases	abs:sheaf+AND+abs:databases
+categorical_database	abs:%22categorical+database%22
+categorical_databases	abs:%22categorical+databases%22
+functorial_migration	abs:%22functorial+data+migration%22
+data_migration_functor	abs:%22data+migration%22+AND+%28abs:functor+OR+abs:functorial+OR+abs:category%29
+category_theory_db	abs:%22category+theory%22+AND+%28abs:database+OR+abs:databases%29
+sheaf_semantics	abs:%22sheaf+semantics%22
+sheaf_and_semantics	abs:sheaf+AND+abs:semantics
+topos_db	abs:topos+AND+%28abs:database+OR+abs:databases+OR+abs:%22data+integration%22+OR+abs:%22knowledge+representation%22%29
+topos_cs	abs:topos+AND+%28cat:cs.*+OR+cat:stat.*%29
+sheaf_type_theory	abs:sheaf+AND+abs:%22type+theory%22
+sheaf_query	abs:sheaf+AND+%28abs:query+OR+abs:queries%29
+sheaf_consistency	abs:sheaf+AND+abs:consistency
+consistency_radius	abs:%22consistency+radius%22
+sheaf_fusion	abs:sheaf+AND+abs:fusion
+sheaf_sensor	abs:sheaf+AND+%28abs:sensor+OR+abs:sensors%29
+sheaf_distributed	abs:sheaf+AND+abs:distributed
+sheaf_consensus	abs:sheaf+AND+abs:consensus
+sheaf_crdt	abs:sheaf+AND+%28abs:CRDT+OR+abs:%22conflict-free%22+OR+abs:replicated+OR+abs:replication%29
+sheaf_ledger	abs:sheaf+AND+%28abs:blockchain+OR+abs:ledger+OR+abs:%22distributed+systems%22%29
+sheaf_lattice	abs:sheaf+AND+abs:lattice+AND+%28cat:cs.*+OR+cat:math.CO+OR+cat:math.AT+OR+cat:eess.*%29
+opinion_sheaf	abs:sheaf+AND+abs:%22opinion+dynamics%22
+opinion_sheaves	abs:sheaves+AND+abs:opinion
+sheaf_recommend	abs:sheaf+AND+%28abs:recommendation+OR+abs:recommender+OR+abs:recommendations%29
+sheaf_kg	abs:sheaf+AND+abs:%22knowledge+graph%22
+sheaf_attention	abs:sheaf+AND+abs:attention
+sheaf_transformer	abs:sheaf+AND+%28abs:transformer+OR+abs:transformers%29
+sheaf_link_pred	abs:sheaf+AND+abs:%22link+prediction%22
+sheaf_calculus	abs:%22sheaf+calculus%22
+sheaf_and_calculus	abs:sheaf+AND+abs:calculus
+cosheaf	abs:cosheaf
+cosheaves	abs:cosheaves
+sheaf_poset	abs:sheaf+AND+%28abs:poset+OR+abs:posets%29+AND+%28cat:cs.*+OR+cat:math.AT+OR+cat:math.CO+OR+cat:eess.*%29
+contextuality_sheaf	abs:sheaf+AND+abs:contextuality
+contextuality_sheaves	abs:sheaves+AND+abs:contextuality
+sheaf_abramsky	au:abramsky+AND+%28abs:sheaf+OR+abs:sheaves%29
+sheaf_robinson	au:robinson+AND+%28abs:sheaf+OR+abs:sheaves%29
+sheaf_ghrist	au:ghrist+AND+%28abs:sheaf+OR+abs:sheaves%29
+sheaf_curry	au:curry+AND+%28abs:sheaf+OR+abs:sheaves%29
+# --- per-query totals (api_total = opensearch:totalResults, fetched = rows written) ---
+# tag	api_total	fetched
+# sheaf_cs	239	239
+# sheaves_cs	112	112
+# sheaf_theory_cs	45	45
+# sheaf_hypergraph	14	14
+# sheaf_hypergraphs	14	14
+# sheaf_hypergraph_phrase	3	3
+# sheaf_neural	35	35
+# sheaf_and_nn	52	52
+# sheaf_and_gnn	29	29
+# nsd	7	7
+# sheaf_diffusion	24	24
+# sheaf_heterophily	5	5
+# sheaf_oversmoothing	362	362
+# sheaf_ml	12	12
+# sheaf_learning	2	2
+# cellular_sheaf	40	40
+# cellular_sheaves	42	42
+# sheaf_laplacian	52	52
+# sheaf_laplacians	52	52
+# sheaf_hodge	158	158
+# discrete_hodge	44	44
+# sheaf_signal	6	6
+# sheaf_tda	17	17
+# sheaf_cohom_cs	17	17
+# sheaf_cohom_applied	91	91
+# persistent_sheaf	11	11
+# persistent_sheaves	2	2
+# sheaf_database	2	2
+# sheaves_database	2	2
+# sheaf_databases	2	2
+# categorical_database	12	12
+# categorical_databases	12	12
+# functorial_migration	5	5
+# data_migration_functor	11	11
+# category_theory_db	13	13
+# sheaf_semantics	8	8
+# sheaf_and_semantics	48	48
+# topos_db	8	8
+# topos_cs	192	192
+# sheaf_type_theory	12	12
+# sheaf_query	8	8
+# sheaf_consistency	175	175
+# consistency_radius	5	5
+# sheaf_fusion	11	11
+# sheaf_sensor	10	10
+# sheaf_distributed	107	107
+# sheaf_consensus	10	10
+# sheaf_crdt	0	0
+# sheaf_ledger	8	8
+# sheaf_lattice	14	14
+# opinion_sheaf	5	5
+# opinion_sheaves	4	4
+# sheaf_recommend	3	3
+# sheaf_kg	3	3
+# sheaf_attention	25	25
+# sheaf_transformer	169	169
+# sheaf_link_pred	2	2
+# sheaf_calculus	0	0
+# sheaf_and_calculus	36	36
+# cosheaf	50	50
+# cosheaves	54	54
+# sheaf_poset	26	26
+# contextuality_sheaf	62	62
+# contextuality_sheaves	11	11
+# sheaf_abramsky	12	12
+# sheaf_robinson	19	19
+# sheaf_ghrist	12	12
+# sheaf_curry	6	6
