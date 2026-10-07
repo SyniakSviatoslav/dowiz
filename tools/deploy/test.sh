@@ -47,7 +47,7 @@ ln -s admin/app.js "$T/repo/workers/api/public/link.js"
 g add -A; g commit -m one
 SHA=$(git -C "$T/repo" rev-parse HEAD)
 
-export PATH="$T/bin:$PATH" STUB_CALLS="$T/calls" DEPLOY_REPO="$T/repo" DEPLOY_WORK="$T/work" \
+export ROLLBACK_PIN_MARK="$T/kv-pinned-none" PATH="$T/bin:$PATH" STUB_CALLS="$T/calls" DEPLOY_REPO="$T/repo" DEPLOY_WORK="$T/work" \
   DEPLOY_SLOT="$T/bin/slot" DEPLOY_WRANGLER=wrangler DEPLOY_TOKEN_FILE="$T/token" DEPLOY_CARGO="$T/bin/cargo" \
   DEPLOY_VERIFY="$T/bin/verify" DEPLOY_PROBE="$T/bin/probe" DEPLOY_HOST=https://qa-stub.invalid FLOWS_SETTLE_S=0
 run() { : > "$T/calls"; bash "$HERE/deploy.sh" "$@" > "$T/out" 2>&1; RC=$?; }
@@ -102,10 +102,10 @@ STATUS_TIMEOUTS=2 run; [ $RC = 0 ] && [ "$(grep -c '^deployments status' "$T/cal
 STATUS_TIMEOUTS=3 run; [ $RC = 30 ] && [ "$(uploads)" = 0 ] && ok "status timed out three times -> refused (30), no upload" || no "status timeout give up"
 
 # ── after the upload: a verifier or probe FAIL stops with the rollback command, and runs none ──
-VERIFY_RC=1 run; [ $RC = 40 ] && has 'FAIL live-is-not-head' && has 'rollback 0ld00000-0000-4000-8000-000000000000' \
+VERIFY_RC=1 run; [ $RC = 40 ] && has 'FAIL live-is-not-head' && has 'rollback.sh 0ld00000-0000-4000-8000-000000000000' \
   && ! grep -q rollback "$T/calls" && ok "live != HEAD fails (40), prints rollback to the previous id, runs none" || no "verify fail"
-PROBE_RC=1 run; [ $RC = 41 ] && has 'FAIL probe-crud' && has 'rollback 0ld00000' && ! grep -q rollback "$T/calls" && ok "probe_crud red fails (41) with the rollback command" || no "probe fail"
-FLOWS_RC=1 run; [ $RC = 42 ] && has 'FAIL flows' && has 'rollback 0ld00000' && ok "browser flows red fails (42) by default, with the rollback command" || no "flows blocking"
+PROBE_RC=1 run; [ $RC = 41 ] && has 'FAIL probe-crud' && has 'rollback.sh 0ld00000' && ! grep -q rollback "$T/calls" && ok "probe_crud red fails (41) with the rollback command" || no "probe fail"
+FLOWS_RC=1 run; [ $RC = 42 ] && has 'FAIL flows' && has 'rollback.sh 0ld00000' && ok "browser flows red fails (42) by default, with the rollback command" || no "flows blocking"
 FLOWS_RC=1 FLOWS_BLOCKING=0 run; [ $RC = 0 ] && has 'flows: ADVISORY red' && ok "FLOWS_BLOCKING=0 keeps a red flows run advisory (0)" || no "flows advisory"
 WASM_NO_COMMIT=1 run; [ $RC = 32 ] && has 'FAIL wasm-commit' && ok "a wasm without the commit fails (32)" || no "wasm lacks commit"
 

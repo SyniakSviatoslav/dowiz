@@ -129,7 +129,8 @@ print(v[0] if len(v) == 1 else "")
 PY
 )
   [ $rc = 0 ] && [ -n "$PREV" ] || fail 30 "previous: could not read the version serving 100 % (rc=$rc, $WORK/logs/previous.json); refusing to deploy without a rollback target"
-  ROLLBACK="( cd $REPO/workers/api && set -a && . $TOKEN_FILE && set +a && $WRANGLER rollback $PREV -m 'deploy.sh: $SHA failed verification' )"
+  # rollback.sh compacts every venue's KV images back to v2 BEFORE it switches (an older Worker refuses v3; W-ATOMIC).
+  ROLLBACK="bash $REPO/tools/deploy/rollback.sh $PREV 'deploy.sh: $SHA failed verification'"
   echo "   serving now: $PREV"
   took
 fi
@@ -186,4 +187,11 @@ if [ "${DEPLOY_FLOWS:-1}" = 1 ]; then
   fi
 fi
 took
+# A rollback pinned every venue's KV images to v2 (tools/deploy/rollback.sh); this build reads v3, so lift it.
+# Advisory: a failure leaves the pin (catalogue saves stay compacted, slower, never wrong) and says so.
+if [ $MODE != verify ] && [ -f "${ROLLBACK_PIN_MARK:-/root/.cache/dowiz-deploy/kv-pinned}" ]; then
+  step unpin
+  bash "$HERE/rollback.sh" --unpin 2>&1 | sed 's/^/   /'
+  [ "${PIPESTATUS[0]}" = 0 ] || echo "   unpin: FAILED -- venues stay pinned v2; run 'bash tools/deploy/rollback.sh --unpin'"
+fi
 echo "deploy: OK $SHA live on $HOST${NEW:+ as $NEW}${PREV:+ (previous $PREV)} in $(( $(date +%s) - T0 )) s"

@@ -1,0 +1,28 @@
+[package]
+name = "dowiz-canvas"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "The zero-DOM scene engine (Wave CV0 core): scene tree, integer layout, measured text, hit-test and a command buffer one small loader replays on Canvas2D. First surface: the room/kitchen board at /room/canvas/ (CV1)."
+
+# WHAT THIS IS (docs/research/2026-10-06-canvas-rust-webgl-ui.md §5.1, operator 2026-10-06 "ніде немає
+# бути DOM"). One <canvas>; Rust owns state, layout, strings, hit-test and what is drawn; the host
+# (workers/api/public/room/canvas/loader.js) only measures text, replays the command buffer and
+# forwards input. ZERO dependencies and NO allocator: every pool is a fixed array, so the module is
+# a few KB and a frame allocates nothing. `no_std` on wasm32 (host builds and tests keep std).
+#
+# Build the shipped module: sh crates/dowiz-canvas/build.sh (wasm32, toolchain 1.96.1 by explicit
+# path -- memory wasm32-needs-upstream-toolchain). The digest of the sources it was built from is
+# written beside it; tools/gates/canvas-wire.sh refuses a module older than its source.
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

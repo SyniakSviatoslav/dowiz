@@ -59,6 +59,32 @@ fn chunk_bytes(v: &JsValue) -> Option<Vec<u8>> {
     None
 }
 
+/// THE PLATFORM'S CEILING ON ONE `put(entries)`: "Supports up to 128 key-value pairs at a time."
+/// https://developers.cloudflare.com/durable-objects/api/storage-api/ (read 2026-10-06, W-ATOMIC).
+pub(super) const MAX_KEYS: usize = 128;
+
+/// One `put(entries)`: chunk keys with their bytes, and the meta when this call carries it.
+/// The SAME page: puts issued "without performing any `await` in the meantime ... will
+/// automatically be combined and submitted atomically", and on a machine failure "either all
+/// of the writes will have been stored to disk or none" -- so one call lands whole or not at all.
+pub(super) struct Batch<'a, T> {
+    pub chunks: Vec<(String, &'a [u8])>,
+    pub value: Option<(String, &'a T)>,
+}
+
+impl<T> Batch<'_, T> {
+    pub fn keys(&self) -> usize {
+        self.chunks.len() + usize::from(self.value.is_some())
+    }
+}
+
+fn over_limit<T>(batches: &[Batch<'_, T>]) -> Result<()> {
+    match batches.iter().find(|b| b.keys() > MAX_KEYS) {
+        Some(b) => Err(Error::RustError(format!("one storage put of {} keys; the platform takes {MAX_KEYS}", b.keys()))),
+        None => Ok(()),
+    }
+}
+
 impl Store {
     pub async fn get<T: serde::de::DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
         match self {
@@ -78,11 +104,49 @@ impl Store {
             Store::Mem(m) => m.get_chunks(keys),
         }
     }
-    pub async fn put_bytes(&self, key: &str, bytes: &[u8]) -> Result<()> {
+    /// ONE `put(entries)`, so it lands whole or not at all; refused unsent above `MAX_KEYS`.
+    pub async fn put_batch<T: serde::Serialize>(&self, batch: &Batch<'_, T>) -> Result<()> {
+        self.put_together(std::slice::from_ref(batch)).await
+    }
+    /// Several `put(entries)` ISSUED IN ONE TURN, no await between them, which the platform
+    /// combines into one atomic write (the page above). Every call's size is checked BEFORE any
+    /// is issued: a refusal half-way would be exactly the partial write this exists to prevent.
+    pub async fn put_together<T: serde::Serialize>(&self, batches: &[Batch<'_, T>]) -> Result<()> {
+        over_limit(batches)?;
         match self {
-            Store::Live(s) => s.put_raw(key, js_sys::Uint8Array::from(bytes)).await,
+            Store::Live(s) => {
+                let mut objs = Vec::with_capacity(batches.len());
+                for b in batches {
+                    let obj = js_sys::Object::new();
+                    for (k, bytes) in &b.chunks {
+                        js_sys::Reflect::set(&obj, &JsValue::from_str(k), &js_sys::Uint8Array::from(*bytes))?;
+                    }
+                    if let Some((k, v)) = &b.value {
+                        // A plain object, as `put(key, value)` stores one: `get::<Meta>` reads either.
+                        let json = serde_json::to_string(v).map_err(|e| Error::RustError(e.to_string()))?;
+                        js_sys::Reflect::set(&obj, &JsValue::from_str(k), &js_sys::JSON::parse(&json)?)?;
+                    }
+                    objs.push(obj);
+                }
+                // `join_all` polls every future once, in order, before it yields: each call reaches
+                // `storage.put` in that first poll, so no await separates them.
+                let done = futures_util::future::join_all(objs.into_iter().map(|o| s.put_multiple_raw(o))).await;
+                done.into_iter().collect::<Result<Vec<()>>>().map(|_| ())
+            }
             #[cfg(test)]
-            Store::Mem(m) => m.put_bytes(key, bytes),
+            Store::Mem(m) => {
+                let mut all = Vec::new();
+                for b in batches {
+                    for (k, bytes) in &b.chunks {
+                        all.push((k.clone(), mem::Stored::Bytes(bytes.to_vec())));
+                    }
+                    if let Some((k, v)) = &b.value {
+                        let v = serde_json::to_value(v).map_err(|e| Error::RustError(e.to_string()))?;
+                        all.push((k.clone(), mem::Stored::Json(v)));
+                    }
+                }
+                m.put_all(all)
+            }
         }
     }
     pub async fn put<T: serde::Serialize>(&self, key: &str, value: T) -> Result<()> {

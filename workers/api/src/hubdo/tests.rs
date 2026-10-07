@@ -226,7 +226,7 @@ fn a_write_that_fails_part_way_is_an_error_and_the_old_generation_still_reads() 
     let mut new = old.clone();
     new[0] = 4;
     new[super::CHUNK] = 4;
-    h.host.puts_left.set(Some(1)); // chunk 0 lands, chunk 1 does not, meta never
+    h.host.puts_left.set(Some(1)); // cut after one key: the one atomic call lands nothing (W-ATOMIC, `atomic/tests.rs`)
     let failed = h.try_call(
         Call::new("https://hub/img/catalog", Method::Put).unwrap().with_header("x-generation", "1").with_body(new.clone()),
     );
@@ -235,8 +235,8 @@ fn a_write_that_fails_part_way_is_an_error_and_the_old_generation_still_reads() 
     // The same object -- memory evicted -- reads storage: generation 1 still.
     let r = h.get("/img/catalog");
     assert_eq!(Harness::gen_of(&r), 1);
-    // The retry diffs against what storage HOLDS (chunk 0 landed, chunk 1 is
-    // old), writes the one that differs, and lands.
+    // The retry diffs against what storage HOLDS (the old image, nothing of
+    // the cut write), writes both chunks, and lands.
     assert_eq!(h.put("catalog", 1, &new).status_code(), 200);
     assert_eq!(h.cold().get("/img/catalog").body(), &new[..]);
 }

@@ -58,6 +58,10 @@ for g in tools/gates/*.sh; do
     */coverage.sh)
       skip coverage "instrumented builds; its own CI job"
       continue ;;
+    # The canvas gates (W-CANVAS1, Wave CV7) run HERE: canvas-wire.sh needs nothing, and
+    # canvas-{dom,frame,ctxloss}.sh start ONE local headless Chromium each against a 127.0.0.1
+    # server (no network, no deployed build) -- the flows.sh problem above does not apply.
+    # A missing playwright answers exit 2 (never a pass). Their proofs ran in the loop above.
   esac
   run "$(basename "$g" .sh)" sh "$g"
 done

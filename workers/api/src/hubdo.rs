@@ -76,7 +76,7 @@ mod preps; // the ПФ reads, answered here (R3), `hubdo/preps.rs`
 mod basket; // the basket's catalogue nodes and the room's recipes, answered here (BN1), `hubdo/basket.rs`
 mod reads; // the owner's and the kitchen's folds over the images, answered here (BN1), `hubdo/reads.rs`
 mod catalogue; // the catalogue's derived nodes and the venue's record, answered here (BN1), `hubdo/catalogue.rs`
-mod catview; mod chunks; use chunks::changed_chunks; // the catalogue read in place, crc once per generation (W-ZC); the chunk diff
+mod catview; mod chunks; use chunks::changed_chunks; mod atomic; pub(crate) mod compact; // the catalogue read in place, crc once per generation (W-ZC); the chunk diff; one atomic write per image and the v2 pin for a rollback (W-ATOMIC)
 mod facts; // the folds over the log and the catalogue together, answered here (BN1), `hubdo/facts.rs`
 mod bulk; // a supplies / recipes spreadsheet as one turn (BN1, BN4's shape), `hubdo/bulk.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
@@ -1003,6 +1003,7 @@ impl HubImages {
             return Ok(None);
         }
         let next = current + 1;
+        let pinned = self.v2_when_pinned(id, bytes).await?; let bytes = pinned.as_deref().unwrap_or(bytes); // a KV image while pinned for a rollback (`hubdo/compact.rs`)
         let store = self.state.storage();
         // The menu memo is DROPPED BEFORE a write to what it was folded from, so a failed write cannot leave one standing over bytes it no longer describes (R2, `hubdo/menu.rs`).
         if menu::MENU_INPUTS.contains(&id) { *self.menu.borrow_mut() = None; }
@@ -1020,20 +1021,9 @@ impl HubImages {
             changed_chunks(mem.get(id).map(|(_, b)| b.as_slice()), bytes, CHUNK)
         };
         let meta = Meta { generation: next, chunks, len: bytes.len() };
-        let written = async {
-            for n in changed {
-                let at = n * CHUNK;
-                let end = (at + CHUNK).min(bytes.len());
-                store.put_bytes(&Self::chunk_key(id, n), &bytes[at..end]).await?;
-            }
-            // META LAST. Between the chunks and this line the old meta still
-            // describes the old image, so an interruption leaves the previous
-            // generation readable rather than a head pointing at a tail that
-            // has not landed.
-            store.put(&Self::meta_key(id), meta).await
-        }
-        .await;
-        if let Err(e) = written {
+        // THE CHUNKS AND THE META IN ONE ATOMIC STORAGE WRITE (W-ATOMIC, `hubdo/atomic.rs`): a cut write leaves the previous generation, never a mix.
+        let old_chunks = self.mem.borrow().get(id).map(|(m, _)| m.chunks).unwrap_or(0);
+        if let Err(e) = self.write_chunks_then_meta(id, bytes, &changed, old_chunks, &meta).await {
             // STORAGE IS THE ONLY TRUTH AFTER A FAILED WRITE. Some chunks may
             // have landed and some not; the copy in memory no longer says
             // what is on disk, and the next write's diff would trust it and
@@ -1050,7 +1040,6 @@ impl HubImages {
         // storage call leaves a window in which any re-entry that borrows
         // mutably -- `image()` on a cold key -- panics the whole object. The
         // number is copied out first; it is a `usize`.
-        let old_chunks = self.mem.borrow().get(id).map(|(m, _)| m.chunks).unwrap_or(0);
         for n in chunks..old_chunks {
             let _ = store.delete(&Self::chunk_key(id, n)).await;
         }
@@ -1152,6 +1141,7 @@ impl HubImages {
             return match (req.method(), what) {
                 // The nightly's safety net: re-arm a lost alarm (`hubdo/timer.rs`).
                 (Method::Post, "timer") => self.timer_route(req).await,
+                (Method::Post, "compact") => self.compact_route(&req).await, // KV images back to v2 before a rollback (W-ATOMIC, `hubdo/compact.rs`)
                 // Where the couriers are, as they last said over their sockets.
                 // Empty after a hibernation, which is honest: a position whose
                 // meaning expires in minutes should not survive a sleep.

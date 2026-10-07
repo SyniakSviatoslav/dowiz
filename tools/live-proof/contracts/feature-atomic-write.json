@@ -1,0 +1,204 @@
+{
+  "id": "atomic.write.v1",
+  "version": "1.1.0",
+  "description": {
+    "en": "One image write is one atomic Durable Object storage write (W-ATOMIC). The venue object used to put an image's changed 96 KiB chunks one awaited put at a time, then the meta; chunk 0 and the tail are rewritten in place, so a write cut between them left an image the next cold read refused, or (same length) assembled from two generations. Now the changed chunks and the meta go in ONE storage.put(entries) (at most 128 keys, all-or-nothing per https://developers.cloudflare.com/durable-objects/api/storage-api/). A compacted image (<= CEILING_BYTES 10 MiB = 107 chunks + meta) is always one call; a log past 127 changed chunks is split so that only chunks the OLD meta does not name go ahead, and every chunk the old meta names lands with the meta (several calls issued with no await between them when more than 127, which the platform coalesces atomically). Rollback safety for W-DELTA's v3 KV images: POST /api/platform/compact (platform administrators only) asks every venue object to compact its KV images back to v2 and PIN v2 (later KV writes compacted in the object), and tools/deploy/rollback.sh runs it before wrangler rollback; ?pin=0 lifts the pin. No owner-visible change: no new UI. ROW 4 (operator 2026-10-07): POST /api/platform/admins creates ONE platform administrator {email, password} behind BOOTSTRAP_SECRET, gated exactly as /api/bootstrap (no secret configured or a wrong/missing x-dowiz-bootstrap header -> 404; a secret under 32 bytes -> 503); argon2 via auth::hash_password; an address already held -> 409 (never promoted); the password is never echoed or logged.",
+    "uk": "Запис образу тепер один атомарний запис сховища; перед відкатом Worker усі KV-образи закладів стискаються до v2 і закріплюються. Перший адміністратор платформи створюється лише з BOOTSTRAP_SECRET (без нього маршрут відповідає 404)."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/hubdo/host.rs",
+      "line": 64,
+      "what": "MAX_KEYS = 128 (Cloudflare put(entries) limit, cited)"
+    },
+    {
+      "file": "workers/api/src/hubdo/host.rs",
+      "line": 114,
+      "what": "Store::put_together (one put(entries) per batch, sizes checked before any is issued)"
+    },
+    {
+      "file": "workers/api/src/hubdo/atomic.rs",
+      "line": 43,
+      "what": "plan (ahead = only chunks past the old meta; the rest with the meta)"
+    },
+    {
+      "file": "workers/api/src/hubdo/atomic.rs",
+      "line": 56,
+      "what": "HubImages::write_chunks_then_meta"
+    },
+    {
+      "file": "workers/api/src/hubdo.rs",
+      "line": 1026,
+      "what": "put_image_as calls it"
+    },
+    {
+      "file": "workers/api/src/hubdo/compact.rs",
+      "line": 73,
+      "what": "POST /fold/compact[?pin=0] (pin + compact every KV image)"
+    },
+    {
+      "file": "workers/api/src/hubdo/compact.rs",
+      "line": 65,
+      "what": "v2_when_pinned (the write-path hook)"
+    },
+    {
+      "file": "workers/api/src/hubdo/compact.rs",
+      "line": 45,
+      "what": "to_v2 (main wires W-DELTA's Catalog::compact here)"
+    },
+    {
+      "file": "workers/api/src/hubdo/compact/fan.rs",
+      "line": 27,
+      "what": "POST /api/platform/compact (admin_only fan-out; 502 when any venue failed)"
+    },
+    {
+      "file": "workers/api/src/platform_admins.rs",
+      "line": 32,
+      "what": "POST /api/platform/admins (BOOTSTRAP_SECRET-gated, one admin, 409 on a held address)"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "tools/deploy/rollback.sh",
+      "line": 44,
+      "what": "signs the administrator in (ADMIN_EMAIL/ADMIN_PASSWORD in /root/.dowiz_admin) to call compact"
+    },
+    {
+      "file": "tools/deploy/rollback.sh",
+      "line": 1,
+      "what": "compact + pin every venue, then wrangler rollback; refuses the switch on anything but 200"
+    },
+    {
+      "file": "tools/deploy/deploy.sh",
+      "line": 133,
+      "what": "the printed ROLLBACK command is rollback.sh"
+    },
+    {
+      "file": "tools/live-proof/probes/feature-atomic-write.mjs",
+      "line": 1,
+      "what": "probe"
+    }
+  ],
+  "external_api_version": "Cloudflare Durable Objects Storage API (SQLite-backed), docs read 2026-10-06; workers-rs 0.8.5 Storage::put_multiple_raw",
+  "on_disk_format": "unchanged (m:<id> meta, c:<id>:<n> 96 KiB chunks); new key pin:kv-v2 (bool) per venue object",
+  "routes": {
+    "place": {
+      "request": {
+        "method": "POST",
+        "path": "/api/public/locations/:slug/orders",
+        "auth": "none"
+      },
+      "request_schema": null,
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "id",
+          "total"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "compact": {
+      "request": {
+        "method": "POST",
+        "path": "/api/platform/compact",
+        "query": "pin=0 to lift the pin",
+        "auth": "Bearer, a platform administrator (else 401 without a token, 404 for any other caller)"
+      },
+      "request_schema": null,
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "venues",
+          "failed",
+          "pinned"
+        ],
+        "properties": {
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "venues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "venue",
+                "status",
+                "answer"
+              ],
+              "properties": {
+                "venue": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "integer"
+                },
+                "answer": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "admins": {
+      "request": {
+        "method": "POST",
+        "path": "/api/platform/admins",
+        "auth": "header x-dowiz-bootstrap = BOOTSTRAP_SECRET (else 404)"
+      },
+      "request_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8
+          }
+        }
+      },
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "ok",
+          "userId",
+          "email"
+        ],
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "userId": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

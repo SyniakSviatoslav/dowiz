@@ -41,6 +41,7 @@ mod auth;
 mod bootstrap;
 mod platform;
 mod platform_store;
+mod platform_admins; // the first platform administrator, behind BOOTSTRAP_SECRET (W-ATOMIC row 4)
 mod rail;
 mod idempotency;
 mod identity_store;
@@ -365,6 +366,8 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .get_async("/api/platform/errors", |r, c| edge::run(r, c, platform::errors))
         .get_async("/api/platform/hubs", |r, c| edge::run(r, c, platform::hubs))
         .post_async("/api/platform/hubs", |r, c| edge::run(r, c, platform::create_hub))
+        .post_async("/api/platform/admins", |r, c| edge::run(r, c, platform_admins::create))
+        .post_async("/api/platform/compact", |r, c| edge::run(r, c, hubdo::compact::fan::platform_compact))
         .post_async("/api/webhooks/stripe", |r, c| edge::run(r, c, stripe::webhook))
         .post_async("/api/auth/login", |r, c| edge::run(r, c, accounts::owner_login))
         .post_async("/api/auth/refresh", |r, c| edge::run(r, c, accounts::owner_refresh))

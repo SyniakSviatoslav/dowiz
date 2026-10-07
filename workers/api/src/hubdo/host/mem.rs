@@ -99,16 +99,29 @@ impl MemHost {
             .collect())
     }
 
-    pub(super) fn put_bytes(&self, key: &str, bytes: &[u8]) -> Result<()> {
-        self.write_ok(key)?;
-        self.kv.borrow_mut().insert(key.to_string(), Stored::Bytes(bytes.to_vec()));
-        Ok(())
-    }
-
     pub(super) fn put<T: serde::Serialize>(&self, key: &str, value: &T) -> Result<()> {
         self.write_ok(key)?;
         let v = serde_json::to_value(value).map_err(|e| Error::RustError(e.to_string()))?;
         self.kv.borrow_mut().insert(key.to_string(), Stored::Json(v));
+        Ok(())
+    }
+
+    /// Every entry or none (`Store::put_together`): an injected failure anywhere in the call
+    /// leaves storage exactly as it was, as the platform's atomic `put(entries)` does.
+    pub(super) fn put_all(&self, entries: Vec<(String, Stored)>) -> Result<()> {
+        if let Some(n) = self.puts_left.get() {
+            if n < entries.len() {
+                self.puts_left.set(Some(0));
+                let at = &entries[n].0;
+                return Err(Error::RustError(format!("mem: atomic write failed at {at} (injected); nothing landed")));
+            }
+            self.puts_left.set(Some(n - entries.len()));
+        }
+        let mut kv = self.kv.borrow_mut();
+        for (k, v) in entries {
+            self.writes.borrow_mut().push(k.clone());
+            kv.insert(k, v);
+        }
         Ok(())
     }
 

@@ -1,0 +1,72 @@
+{
+ "id": "feature-canvas-room",
+ "name": "canvas-room",
+ "contract_version": "1.0.0",
+ "contract_name": "room.canvas-board.v1",
+ "class": "LIVE-AFTER-DEPLOY",
+ "description": {
+  "en": "The room/kitchen board drawn on ONE <canvas> by Rust (crates/dowiz-canvas, Wave CV row CV1) at /room/canvas/, beside the old room page. With the room's own session it reads the pass (GET /api/staff/kitchen) and the floor (GET /api/staff/room), listens on /api/live, and a tap on a ticket's bump button sends the console's own action (POST /api/owner/orders/:id/action). The page body holds exactly one element at rest; the site's CSP lets it compile the wasm.",
+  "uk": "Дошка зали й кухні, намальована Rust на одному <canvas> за адресою /room/canvas/: ті самі дані й дії, що й у персоналу; у body рівно один елемент."
+ },
+ "producer": {
+  "file": "workers/api/public/room/canvas/board.js",
+  "line": 105,
+  "what": "onIntent kind 1 (bump): POST /api/owner/orders/:id/action {location_id, action}; the intent comes from crates/dowiz-canvas/src/board/mod.rs Board::tap (Act::Bump)"
+ },
+ "consumer": {
+  "file": "workers/api/src/owner.rs",
+  "line": 505,
+  "what": "owner::order_action (lib.rs POST /api/owner/orders/:id/action), Staff(&PASS) door, the kernel FSM decides the edge"
+ },
+ "readback": {
+  "file": "workers/api/src/services/orders/kitchen_ack/board.rs",
+  "line": 153,
+  "what": "kitchen_orders(): GET /api/staff/kitchen -- the board's own read shows the ticket in its new status"
+ },
+ "routes": {
+  "lib_rs": ["workers/api/src/lib.rs:386 GET /api/staff/kitchen", "workers/api/src/lib.rs:382 GET /api/staff/room", "workers/api/src/lib.rs:421 POST /api/owner/orders/:id/action", "workers/api/src/lib.rs:552 GET /api/live"]
+ },
+ "transport": { "method": "POST", "path": "/api/owner/orders/{id}/action", "readback": ["GET /api/staff/kitchen", "GET /api/owner/orders"] },
+ "external": null,
+ "external_note": "No external API. The page is static assets (index.html, loader.js, board.js, feed.js, board.wasm) served by the edge under workers/api/public/_headers; its CSP must carry script-src 'wasm-unsafe-eval'.",
+ "auth": {
+  "secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"],
+  "where": "/root/.dowiz_owner",
+  "how": "the owner's token signs the room session (staff_at accepts an owner for Cap::Advance and Cap::TakeOrders), exactly as feature-offline-sale does"
+ },
+ "request_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false, "required": ["location_id", "action"],
+  "properties": { "location_id": { "type": "string", "minLength": 1 }, "action": { "enum": ["confirm", "preparing", "ready", "collected"] } }
+ },
+ "response_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "required": ["orders", "generation", "full"],
+  "properties": {
+   "generation": { "type": "integer" }, "full": { "const": true },
+   "orders": { "type": "array", "items": { "type": "object", "required": ["id", "status", "items"],
+     "properties": { "id": { "type": "string" }, "status": { "enum": ["PENDING", "CONFIRMED", "PREPARING", "READY"] },
+       "created_at_ms": { "type": "integer" }, "items": { "type": "array", "items": { "type": "object", "required": ["quantity"],
+         "properties": { "quantity": { "type": "integer" }, "name": { "type": "string" }, "station": { "type": "string" } } } } } } }
+  }
+ },
+ "page_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "required": ["bodyElements", "csp", "wasmType", "tickets", "tooSmall", "transient"],
+  "properties": {
+   "bodyElements": { "const": 1 },
+   "csp": { "type": "string", "pattern": "'wasm-unsafe-eval'" },
+   "wasmType": { "const": "application/wasm" },
+   "tickets": { "type": "integer", "minimum": 1 },
+   "tooSmall": { "const": 0 },
+   "transient": { "const": 0 }
+  }
+ },
+ "readback_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "required": ["id", "status"],
+  "properties": { "id": { "type": "string" }, "status": { "const": "CONFIRMED" } }
+ },
+ "probe": "tools/live-proof/probes/feature-canvas-room.mjs: place a TEST order; open /room/canvas/ signed in with the owner token; body has 1 element; the page's CSP and the wasm's content-type; find the TEST ticket's Accept button in the scene (bump_rect), click it with a real mouse; GET /api/staff/kitchen and the owner's order show CONFIRMED; body still 1 element; close the order.",
+ "last_verified": null
+}

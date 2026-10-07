@@ -12,3 +12,5 @@ GET /api/version  build identity {commit, built_at}; tools/deploy/deploy.sh read
 POST /api/print/poll  the kitchen printer polls with a venue API key minted on the Printer sheet; admin/printer.js only SHOWS this path to type into the printer (W-INT1: it passed the scan by that display string)
 GET /api/webhooks/meta  Meta's subscription handshake (hub.challenge) when the venue registers its webhook; no screen calls it
 POST /api/webhooks/meta  Meta signs it (x-hub-signature-256); its effect (a WhatsApp/Instagram message) shows in the owner's Inbox
+POST /api/platform/admins  BOOTSTRAP_SECRET-gated: creates the first platform administrator once, from a script (operator 2026-10-07: no screen); 404 without the secret
+POST /api/platform/compact  platform administrators only; tools/deploy/rollback.sh calls it before switching the Worker back (operator: owner-invisible, no button)

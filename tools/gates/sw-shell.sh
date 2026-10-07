@@ -55,7 +55,9 @@ def read(p):
     if p.endswith('/'):
         f = os.path.join(f, 'index.html')
     try:
-        return open(f, encoding='utf-8').read()
+        # Bytes, decoded leniently: a shell may list a binary (room/sw.js lists the canvas
+        # board's board.wasm), and reading it as strict utf-8 crashed this gate.
+        return open(f, 'rb').read().decode('utf-8', 'replace')
     except OSError:
         return None
 

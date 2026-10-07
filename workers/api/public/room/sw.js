@@ -15,7 +15,7 @@
 
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-room-shell-2026-10-03-push-offsale';
+const SHELL_CACHE = 'dowiz-room-shell-2026-10-06-canvas';
 const SHELL = [
   '/room/',
   '/room/app.js',
@@ -83,6 +83,14 @@ const SHELL = [
   '/lib/ui/money.js',
   '/lib/ui/card.js',
   '/lib/ui/time.js',
+  // THE CANVAS BOARD (W-CANVAS1, /room/canvas/): its page, its wasm and every module it imports
+  // that the list above does not already hold, so it reopens offline as itself, not as /room/.
+  '/room/canvas/',
+  '/room/canvas/board.js',
+  '/room/canvas/loader.js',
+  '/room/canvas/feed.js',
+  '/room/canvas/board.wasm',
+  '/lib/live.js',
 ];
 const NEVER = [/^\/api\//, /^\/media\//];
 
@@ -108,12 +116,12 @@ self.addEventListener('fetch', ev => {
   const url = new URL(ev.request.url);
   if (ev.request.method !== 'GET' || url.origin !== self.location.origin) return;
   if (NEVER.some(re => re.test(url.pathname))) return;
-  const key = url.pathname === '/room/index.html' ? '/room/' : url.pathname;
+  const key = url.pathname === '/room/index.html' ? '/room/' : url.pathname === '/room/canvas/index.html' ? '/room/canvas/' : url.pathname;
   ev.respondWith(
     fetch(ev.request).then(res => {
       if (res.ok && SHELL.includes(key)) caches.open(SHELL_CACHE).then(c => c.put(key, res.clone())).catch(() => {});
       return res;
     }).catch(() => caches.match(key).then(hit =>
-      hit || (ev.request.mode === 'navigate' ? caches.match('/room/') : undefined)))
+      hit || (ev.request.mode === 'navigate' ? caches.match(key.startsWith('/room/canvas/') ? '/room/canvas/' : '/room/') : undefined)))
   );
 });
