@@ -1,0 +1,64 @@
+// R-SPIKE: K1H by closed form in bebop -- the 3x3 affine-state matrix power over wrapping i64.
+// state (s, i, 1): s' = 3s + i; i' = i - 1.  M = [[3,1,0],[0,1,-1],[0,0,1]], s_N = (M^N (0, N, 1))[0].
+// REPS=20000 closed-form evaluations carried through s (so no rep is dead); main returns TOTAL ms.
+fn mmul(a: [i64], b: [i64], r: [i64]) -> i64 {
+  let i = 0;
+  while i < 3 {
+    let j = 0;
+    while j < 3 {
+      let _ = r[i * 3 + j] = a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j];
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn copy9(src: [i64], dst: [i64]) -> i64 {
+  let i = 0;
+  while i < 9 { let _ = dst[i] = src[i]; let i = i + 1; 0 };
+  0
+}
+fn ident9(r: [i64]) -> i64 {
+  let i = 0;
+  while i < 9 { let _ = r[i] = 0; let i = i + 1; 0 };
+  let _ = r[0] = 1; let _ = r[4] = 1; let _ = r[8] = 1;
+  0
+}
+fn setm(m: [i64]) -> i64 {
+  let _ = m[0] = 3; let _ = m[1] = 1; let _ = m[2] = 0;
+  let _ = m[3] = 0; let _ = m[4] = 1; let _ = m[5] = 0 - 1;
+  let _ = m[6] = 0; let _ = m[7] = 0; let _ = m[8] = 1;
+  0
+}
+fn step_r(r: [i64], m: [i64], t: [i64]) -> i64 { let _ = mmul(r, m, t); copy9(t, r) }
+// closed(s0, n) = s after n steps of s = 3s + i, i = n..1
+fn closed(s0: i64, n: i64, m: [i64], r: [i64], t: [i64]) -> i64 {
+  let _ = setm(m);
+  let _ = ident9(r);
+  let e = n;
+  while e > 0 {
+    let odd = e & 1;
+    let _ = if odd == 1 then step_r(r, m, t) else 0;
+    let _ = mmul(m, m, t);
+    let _ = copy9(t, m);
+    let e = e >> 1;
+    0
+  };
+  r[0] * s0 + r[1] * n + r[2]
+}
+fn main() -> i64 {
+  let t0 = clock_ms();
+  let m = zeros(9);
+  let r = zeros(9);
+  let t = zeros(9);
+  let s = 0;
+  let rep = 20000;
+  while rep > 0 {
+    let s = closed(s, 1000000, m, r, t);
+    let rep = rep - 1;
+    0
+  };
+  (clock_ms() - t0) + s * 0
+}
