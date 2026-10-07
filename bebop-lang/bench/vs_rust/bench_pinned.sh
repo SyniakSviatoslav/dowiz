@@ -67,7 +67,11 @@ def words_per_iter(binpath):
 
 rows=[]
 res={}
-for k in ['k0','k1','k2','k3','k4','k1h','k2h','k3h']:
+# 2026-10-07: the h kernels left the process-wall table. kernels/k*h.bp run ONE rep, while
+# rust_once/k*h.rs run kernel_reps.txt reps (100/500/1500), so the rows printed MISMATCH and a
+# 0.08-0.12x "ratio" that compared one rep against hundreds. Their honest numbers are honest.sh's.
+WALL=['k0','k1','k2','k3','k4']
+for k in WALL:
     bp=[SEED, f'{T}/{k}.bin']; ru=[f'{T}/rust/{k}']
     bpin=series(bp,PIN,R); bun=series(bp,'',R); rpin=series(ru,PIN,R); run_=series(ru,'',R)
     e=EXPECT[k]
@@ -105,7 +109,7 @@ L.append('- wall = whole process (seed load+mmap+run / rust start+run), perf_cou
 L.append('- ratio = bebop pinned median / rust pinned median (process wall, includes both startup floors)\n')
 L.append('| kernel | bebop pinned med/p95 ms | bebop unpinned med/p95 ms | rust pinned med/p95 ms | rust unpinned med ms | ratio | RSS bebop KB | RSS rust KB | fold ok |')
 L.append('|---|---|---|---|---|---|---|---|---|')
-for k in ['k0','k1','k2','k3','k4','k1h','k2h','k3h']:
+for k in WALL:
     bpin,bun,rpin,run_,ok,same=res[k]
     L.append(f'| {k.upper()} | {bpin[0]:.2f} / {bpin[1]:.2f} | {bun[0]:.2f} / {bun[1]:.2f} | {rpin[0]:.2f} / {rpin[1]:.2f} | {run_[0]:.2f} | {bpin[0]/rpin[0]:.2f}x | {bpin[2]} | {rpin[2]} | {"ok" if ok and same else ("SAME-but-unexpected" if same else "MISMATCH "+bpin[3]+" vs "+rpin[3])} |')
 L.append('\n## In-process clock_ms (bench630/k*t.bp, D3 primary column), ms\n')

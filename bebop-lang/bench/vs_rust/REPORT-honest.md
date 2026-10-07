@@ -171,3 +171,33 @@ csel rather than a mispredicted branch -- so what is left is real ALU/memory wor
 constant hoisting or csel can remove) and possibly REPS-loop/clock_ms overhead LLVM's Rust twin does not pay the
 same way; per the task's "one variable" scope (constant hoisting at loop entry only, no other codegen change) this
 is not chased further this round -- reported honestly rather than widened.
+
+## Hot vs cold row (2026-10-07, main session 4384f304), bebop.bin 8a0b4325 (self-compile reproduces it byte-for-byte)
+
+Box NOT quiet: three coding lanes + a research agent alive, procs 33/26 at one point (one rc=137 retry); the slot serialised compute.
+
+HOT — in-process ms per rep, pinned core 4, R=11 (honest.sh, two runs; the ratio moved ≤ 0.1x between them):
+
+| kernel | bebop | Rust -O honest twin | bebop / Rust |
+|---|---|---|---|
+| K1H | 0.920 / 1.030 | 0.980 / 1.074 | 0.9-1.0x |
+| K2H (calls, fib) | 0.576 / 0.642 | 0.299 / 0.316 | 1.9-2.0x |
+| K3H (nested loop) | 0.161 / 0.160 | 0.118 / 0.119 | 1.3-1.4x |
+| K4 | 3.53 / 3.86 | 2.63 / 2.93 | 1.3x |
+| K8H | 0.024 / 0.028 | 0.022 / 0.026 | 1.1x |
+
+COLD — source to first result, new process each time, every sidecar removed, pinned core 4, median of 5 (scratchpad c2s.py); outputs equal in both languages:
+
+| kernel | bebop compile | bebop run | bebop total | rustc -O | rust run | rust total | bebop / Rust |
+|---|---|---|---|---|---|---|---|
+| K1 | 42 ms | 21 ms | 63 ms | 750 ms | 23 ms | 773 ms | 0.08x |
+| K2 | 47 ms | 25 ms | 73 ms | 804 ms | 17 ms | 821 ms | 0.09x |
+| K3 | 31 ms | 18 ms | 49 ms | 998 ms | 16 ms | 1015 ms | 0.05x |
+| K4 | 61 ms | 43 ms | 103 ms | 773 ms | 35 ms | 808 ms | 0.13x |
+
+Process wall (bench_pinned.sh, run only): K0 empty program bebop 9.6 ms vs Rust 25 ms pinned / 10.9 ms unpinned. That row is noise-dominated today: Rust's p95 was 251 ms.
+K5 self-compile of bebop.bp: cold 0.84 s (honest.sh) and 0.84-0.97 s (direct), warm via the .dag/.becache memo 0.04 s.
+
+Two instruments were fixed today:
+1. honest.sh K5 left the new `.dag` sidecar between runs, so the "cold" row read 0.09 s (a replay); it now removes every `k5.bin*` and refuses a failed compile.
+2. bench_pinned.sh compared the one-rep kernels/k*h.bp against the N-rep rust_once/k*h.rs in the process-wall table: MISMATCH and a fake 0.08-0.12x. The h rows are out of that table.

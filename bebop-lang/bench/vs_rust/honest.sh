@@ -49,14 +49,16 @@ import re
 try:
     k6=re.search(r'\| bebop scan nn\.bp \(Q=20\) \| ([0-9.]+) ms', open('bench/tq_sqlite/RESULT.md').read()).group(1)
 except Exception: k6='?'
-# K5 (2026-09-06): measured here, COLD (the .becache replay is removed before every run), 3 runs, median
+# K5 (2026-09-06): measured here, COLD (every k5.bin* sidecar is removed before every run), 3 runs, median
 import time
 k5v=[]
 for _ in range(3):
-    for f in (f'{T}/k5.bin', f'{T}/k5.bin.becache', f'{T}/k5.bin.use'):
-        try: os.remove(f)
-        except FileNotFoundError: pass
-    t=time.time(); subprocess.run(['taskset','-c',PIN,'./seed/build/seed',BB,'compile','bebop.bp',f'{T}/k5.bin'],capture_output=True); k5v.append(time.time()-t)
+    # 2026-10-07: every k5.bin* sidecar goes (the .dag memo added later made runs 2-3 a 0.04 s
+    # replay and the row read 0.09 s), and a failed compile refuses instead of timing an error.
+    import glob
+    for f in glob.glob(f'{T}/k5.bin*'): os.remove(f)
+    t=time.time(); r=subprocess.run(['taskset','-c',PIN,'./seed/build/seed',BB,'compile','bebop.bp',f'{T}/k5.bin'],capture_output=True); k5v.append(time.time()-t)
+    if r.returncode != 0: raise SystemExit(f'K5 COMPILE FAILED rc={r.returncode}')
 k5=sorted(k5v)[1]
 print(f'| K5 self-compile of bebop.bp (cold, pinned, median of 3) | {k5:.2f} s | (no twin: rustc is not a fair twin of a 200 KB one-pass compiler) | |')
 print(f'| K6 nnidx scan 1M (bench/tq_sqlite/RESULT.md, Q=20) | {k6} ms | sqlite scan 183 ms python / ~158 ms native (T100) | store faster |')
