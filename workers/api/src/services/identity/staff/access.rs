@@ -84,7 +84,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/categories", Staff(&MENU), Yes),
     ("post", "/api/owner/categories/:id/delete", Staff(&MENU), Yes),
     ("post", "/api/owner/i18n", Staff(&MENU), Yes),
-    ("post", "/api/owner/menu/import", Staff(&MENU), Yes),
+    ("post", "/api/owner/menu/import", Staff(&MENU), Yes), ("get", "/api/owner/menu/history", Staff(&MENU), Read), ("post", "/api/owner/menu/history/restore", Staff(&MENU), Yes), // W-PITR: the menu's edit history
     // W-NOM: menu OR shelf names the nomenclature; deleting for good is the owner's.
     ("post", "/api/owner/supplies", Staff(&crate::services::operations::supplies::quick::ADD), Yes),
     ("post", "/api/owner/supplies/bulk", Staff(&crate::services::operations::supplies::quick::ADD), Yes),

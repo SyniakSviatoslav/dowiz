@@ -67,7 +67,7 @@ pub async fn venue_minute(env: &crate::edge::Env, venue: &str, now_ms: i64) {
     {
         let Ok(ns) = env.durable_object("HUB") else { return log_error!("fiscal sweep: no HUB binding") };
         let venue = venue.to_string();
-        let place = crate::hubstore::Place { ns, venue: venue.clone() };
+        let place = crate::hubstore::Place { ns, venue: venue.clone(), edit: Default::default() };
         let plan: PlanOut = match crate::command::send(&place, "ebills/fiscal_plan", &PlanIn { now_ms }).await {
             Ok(p) => p,
             Err((s, m)) => {

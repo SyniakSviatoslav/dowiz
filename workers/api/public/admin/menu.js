@@ -22,6 +22,7 @@ import { me } from '/admin/app.js';
 import '/admin/crud-i18n.js';
 import { translationBoxes, baseEdits } from '/admin/menu-edit.js';
 import '/admin/prep-i18n.js';
+import '/admin/menu-history-i18n.js'; // the history button's label (W-PITR)
 import { senseEditor, bindSenseEditor, senseEdits, rowSense } from '/admin/sense.js';
 import { tagLabel, undeclaredPanel, allergenMarkup, bindAllergens, allergenEdits, refusesSale, gateOn } from '/admin/menu-flags.js';
 /// W-NOM: the dishes ticked for a bulk delete (the owner's).
@@ -68,7 +69,7 @@ export async function render(host){
   const q = norm(view.q).trim();
   host.innerHTML = `
     <div class="screen-h"><div><h1 data-t="tabMenu"></h1></div>
-      <div class="screen-acts">${me().staff ? '' : btn({ id: 'mSel', variant: 'ghost', icon: 'check', key: sel.on ? 'nom_selectDone' : 'nom_select' })}${btn({ id: 'mCats', icon: 'adjustments', key: 'categories', tour: 'menu.categories' })}${iconBtn({ id: 'mImport', icon: 'download', ariaKey: 'importMenu', tour: 'menu.import' })}${iconBtn({ id: 'mRecipes', icon: 'tools-kitchen-2', ariaKey: 'importRecipes', tour: 'menu.importRecipes' })}${btn({ id: 'mNew', variant: 'primary', icon: 'plus', key: 'addDish', tour: 'menu.addDish' })}</div></div>
+      <div class="screen-acts">${me().staff ? '' : btn({ id: 'mSel', variant: 'ghost', icon: 'check', key: sel.on ? 'nom_selectDone' : 'nom_select' })}${btn({ id: 'mCats', icon: 'adjustments', key: 'categories', tour: 'menu.categories' })}${iconBtn({ id: 'mImport', icon: 'download', ariaKey: 'importMenu', tour: 'menu.import' })}${iconBtn({ id: 'mRecipes', icon: 'tools-kitchen-2', ariaKey: 'importRecipes', tour: 'menu.importRecipes' })}${iconBtn({ id: 'mHist', icon: 'history', ariaKey: 'mh_title' })}${btn({ id: 'mNew', variant: 'primary', icon: 'plus', key: 'addDish', tour: 'menu.addDish' })}</div></div>
     <p class="screen-hint" data-t="menuHint"></p>
     ${undeclaredPanel(S.products)}
     ${search('mq', view.q, 'menu.search')}
@@ -107,6 +108,7 @@ export async function render(host){
   const mq = $('#mq', host); mq.oninput = () => { view.q = mq.value; rerender().then(() => $('#mq')?.focus()); };
   ensureCss(); markNoStock(host);
   $('#mImport', host).onclick = openImport;
+  const mh = $('#mHist', host); if (mh) mh.onclick = () => import('/admin/menu-history.js').then(m => m.openHistory()); // W-PITR: the menu's edit history
   $('#mRecipes', host).onclick = () => openBulk('recipes', async () => { await loadVenue(); rerender(); });
 }
 

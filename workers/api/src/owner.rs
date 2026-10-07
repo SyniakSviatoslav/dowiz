@@ -815,9 +815,11 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
     // see `Place::of_authorised`.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
-        return Ok(r);
-    }
+    // The signer is journaled as the editor (W-PITR, `catalog_history.rs`).
+    let place = match crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
+        Ok((who, _)) => place.by(&who),
+        Err(r) => return Ok(r),
+    };
     if let Some(p) = body.price {
         // Money is integer minor units and never negative. Refuse rather than clamp.
         if p < 0 {

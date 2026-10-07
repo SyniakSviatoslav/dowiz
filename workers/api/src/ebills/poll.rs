@@ -36,7 +36,7 @@ pub(crate) async fn tick_venue(env: &Env, venue: &str, now_ms: i64) {
     {
         let Ok(ns) = env.durable_object("HUB") else { return log_error!("ebills sweep: no HUB binding") };
         let venue = venue.to_string();
-        let place = Place { ns, venue: venue.clone() };
+        let place = Place { ns, venue: venue.clone(), edit: Default::default() };
         let plan: Plan = match hub(&place, "ebills/tick", &TickIn { now_ms }).await {
             Ok(p) => p,
             Err(f) => {

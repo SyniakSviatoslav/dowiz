@@ -13,7 +13,8 @@ import { register } from 'node:module';
 import { Document, Element } from '../lib/ui/dom-shim.mjs';
 
 // THE BROWSER SEAM (as wire-dom.test.mjs): core, i18n and app are fakes
-// reading globalThis.__md; every other /admin/ or /lib/ path is the real file.
+// reading globalThis.__md; every other /admin/, /lib/ or /store/ path is the real file
+// (admin/sense.js imports /store/sense.js, served beside it: W-PITR2 found the test red on it).
 const PUBLIC = new URL('../', import.meta.url).href;
 const FAKES = {
   '/admin/core.js': `const F = () => globalThis.__md;
@@ -41,7 +42,7 @@ const FAKES = {
 register('data:text/javascript,' + encodeURIComponent(`const F = ${JSON.stringify(FAKES)}, P = ${JSON.stringify(PUBLIC)};
   export async function resolve(spec, ctx, next){
     if (F[spec]) return { url: 'data:text/javascript,' + encodeURIComponent(F[spec]), shortCircuit: true };
-    if (/^\\/(admin|lib)\\//.test(spec)) return { url: P + spec.slice(1), shortCircuit: true };
+    if (/^\\/(admin|lib|store)\\//.test(spec)) return { url: P + spec.slice(1), shortCircuit: true };
     return next(spec, ctx);
   }`));
 

@@ -85,6 +85,7 @@ impl HubImages {
         let Some(v2) = compactor()(id, &bytes).map_err(|e| Error::RustError(format!("compact {id}: {e}")))? else {
             return Ok(json!({ "id": id, "generation": meta.generation, "compacted": false }));
         };
+        // W-PITR: content unchanged -- the same keys and values, so the journal records nothing.
         match self.put_image(id, meta.generation, &v2).await? {
             Some(generation) => Ok(json!({ "id": id, "generation": generation, "compacted": true, "bytes": v2.len() })),
             None => Err(Error::RustError(format!("compact {id}: the generation moved"))),

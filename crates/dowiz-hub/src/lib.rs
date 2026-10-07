@@ -51,6 +51,8 @@ pub mod forecast;
 pub mod voice;
 pub mod zone;
 pub mod logimage;
+/// Is last night's off-site copy a venue? (W-PITR restore drill)
+pub mod drill;
 pub mod table;
 pub mod tables;
 pub mod tz;

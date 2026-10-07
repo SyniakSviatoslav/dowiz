@@ -74,9 +74,11 @@ pub async fn create_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     // See `Place::of_authorised`: these differ for an owner of two venues, and
     // the write used to land in the other one.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
-        return Ok(r);
-    }
+    // The signer is journaled as the editor (W-PITR, `catalog_history.rs`).
+    let place = match crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
+        Ok((who, _)) => place.by(&who),
+        Err(r) => return Ok(r),
+    };
     let name = body.name.trim().to_string();
     if name.is_empty() || name.chars().count() > NAME_MAX {
         return Response::error("a dish needs a name", 400);
@@ -144,9 +146,11 @@ pub async fn delete_product(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     // See `Place::of_authorised`: these differ for an owner of two venues, and
     // the write used to land in the other one.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
-        return Ok(r);
-    }
+    // The signer is journaled as the editor (W-PITR, `catalog_history.rs`).
+    let place = match crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
+        Ok((who, _)) => place.by(&who),
+        Err(r) => return Ok(r),
+    };
     let pid = id.clone();
     let removed = crate::hubstore::with_catalog(&place, move |cat| {
         let was = cat.remove_product(&pid);
@@ -193,9 +197,11 @@ pub async fn set_category(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
     // See `Place::of_authorised`: these differ for an owner of two venues, and
     // the write used to land in the other one.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
-        return Ok(r);
-    }
+    // The signer is journaled as the editor (W-PITR, `catalog_history.rs`).
+    let place = match crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
+        Ok((who, _)) => place.by(&who),
+        Err(r) => return Ok(r),
+    };
     let name = body.name.trim().to_string();
     if name.is_empty() || name.chars().count() > NAME_MAX {
         return Response::error("a category needs a name", 400);

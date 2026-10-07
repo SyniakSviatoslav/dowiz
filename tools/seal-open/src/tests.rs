@@ -86,3 +86,16 @@ fn a_tampered_truncated_or_foreign_file_refuses_and_writes_nothing() {
     // Positive twin of every case above: the untouched file opens.
     assert_eq!(open_file(&sk, &d.join("good.in"), &d.join("o3")), Ok(1));
 }
+
+/// W-PITR2: `PITR_SEAL_FIXTURE=<dir>` seals `<dir>/plain.json.gz` (a real nightly bundle, gzipped)
+/// to a fresh key in `<dir>/fixture.sk`, as `<dir>/sealed`, so `tools/restore-drill/weekly.sh
+/// --local` runs its seal-open branch on a real copy. Without the variable it does nothing.
+#[test]
+fn writes_a_sealed_restore_drill_fixture_when_asked() {
+    let Ok(d) = std::env::var("PITR_SEAL_FIXTURE") else { return };
+    let d = PathBuf::from(d);
+    let sk = d.join("fixture.sk");
+    let _ = fs::remove_file(&sk);
+    let pk = keygen_to(&sk, &[3u8; 64]).unwrap();
+    fs::write(d.join("sealed"), sealed_to(&pk, &fs::read(d.join("plain.json.gz")).unwrap())).unwrap();
+}

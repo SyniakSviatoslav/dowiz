@@ -280,7 +280,7 @@ pub async fn drain_venue(env: &Env, venue: &str, now_ms: i64) {
     {
         let Ok(ns) = env.durable_object("HUB") else { return };
         let venue = venue.to_string();
-        let place = crate::hubstore::Place { ns, venue: venue.clone() };
+        let place = crate::hubstore::Place { ns, venue: venue.clone(), edit: Default::default() };
         match drain(env, &place, now_ms).await {
             // NOT `(0, 0, _)`: an entry abandoned on its own is neither sent
             // nor kept, and that pattern swallowed its line -- the one thing

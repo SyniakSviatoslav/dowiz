@@ -53,8 +53,8 @@ pub(crate) mod turn;
 pub(crate) use turn::{turn, BulkIn, Turn};
 
 async fn bulk(mut req: Request, ctx: RouteContext<crate::Req>, kind: Kind) -> Result<Response> {
-    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
-        Ok((_, l)) => l,
+    let (by, loc) = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
+        Ok(v) => v,
         Err(r) => return Ok(r),
     };
     // The venue this caller was authorised for, and no other.
@@ -72,7 +72,7 @@ async fn bulk(mut req: Request, ctx: RouteContext<crate::Req>, kind: Kind) -> Re
     // object, which judges it against the catalogue it holds -- and applies it
     // there, when asked. The catalogue never crosses the hop; a refusal comes
     // back in the object's own words and status.
-    let input = BulkIn { text, kind, hundredths, apply, retire, now_ms: ctx.data.now_ms };
+    let input = BulkIn { text, kind, hundredths, apply, retire, now_ms: ctx.data.now_ms, by };
     match crate::command::send::<_, Value>(&place, "bulk", &input).await {
         Ok(summary) => Response::from_json(&summary),
         Err((status, why)) => Response::error(why, status),

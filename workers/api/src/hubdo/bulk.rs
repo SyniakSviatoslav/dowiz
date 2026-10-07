@@ -36,7 +36,9 @@ impl HubImages {
             Turn::Refused(status, why) => Response::error(why, status),
             Turn::Written(summary) => {
                 let bytes = cat.to_bytes().map_err(|e| Error::RustError(format!("catalogue serialise failed: {e:?}")))?;
-                if self.put_image(CATALOG_IMAGE, gen, &bytes).await?.is_none() {
+                // Journaled by the object in the same write, as this signer's (W-PITR2, `hubdo/journal.rs`).
+                let by = Some(crate::hubstore::Edited { by: input.by.clone(), at_ms: input.now_ms });
+                if self.put_image_stamped(CATALOG_IMAGE, gen, &bytes, by).await?.is_none() {
                     return Response::error("the catalogue generation moved during the import", 409);
                 }
                 Response::from_json(&summary)

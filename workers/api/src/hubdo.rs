@@ -76,7 +76,7 @@ mod preps; // the ПФ reads, answered here (R3), `hubdo/preps.rs`
 mod basket; // the basket's catalogue nodes and the room's recipes, answered here (BN1), `hubdo/basket.rs`
 mod reads; // the owner's and the kitchen's folds over the images, answered here (BN1), `hubdo/reads.rs`
 mod catalogue; // the catalogue's derived nodes and the venue's record, answered here (BN1), `hubdo/catalogue.rs`
-mod catview; mod chunks; use chunks::changed_chunks; mod atomic; pub(crate) mod compact; // the catalogue read in place, crc once per generation (W-ZC); the chunk diff; one atomic write per image and the v2 pin for a rollback (W-ATOMIC)
+mod catview; mod chunks; use chunks::changed_chunks; mod atomic; pub(crate) mod compact; mod journal; // the catalogue read in place, crc once per generation (W-ZC); the chunk diff; one atomic write per image and the v2 pin for a rollback (W-ATOMIC); the menu's edit journal in the same write (W-PITR2)
 mod facts; // the folds over the log and the catalogue together, answered here (BN1), `hubdo/facts.rs`
 mod bulk; // a supplies / recipes spreadsheet as one turn (BN1, BN4's shape), `hubdo/bulk.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
@@ -230,6 +230,8 @@ pub struct HubImages {
     in_alarm: std::cell::Cell<bool>,
     /// The catalogue image in `mem` passed the full crc check at this generation (W-ZC, `hubdo/catview.rs`).
     cat_checked: std::cell::Cell<Option<(i64, dowiz_hub::catalog::view::Checked)>>,
+    /// Who signed the catalogue write under way, for its journal record (W-PITR2, `hubdo/journal.rs`).
+    edit: RefCell<Option<crate::hubstore::Edited>>,
 }
 
 #[cfg(test)]
@@ -258,6 +260,7 @@ impl HubImages {
             menu: RefCell::new(None),
             in_alarm: std::cell::Cell::new(false),
             cat_checked: std::cell::Cell::new(None),
+            edit: RefCell::new(None),
         }
     }
 
@@ -1023,7 +1026,7 @@ impl HubImages {
         let meta = Meta { generation: next, chunks, len: bytes.len() };
         // THE CHUNKS AND THE META IN ONE ATOMIC STORAGE WRITE (W-ATOMIC, `hubdo/atomic.rs`): a cut write leaves the previous generation, never a mix.
         let old_chunks = self.mem.borrow().get(id).map(|(m, _)| m.chunks).unwrap_or(0);
-        if let Err(e) = self.write_chunks_then_meta(id, bytes, &changed, old_chunks, &meta).await {
+        if let Err(e) = self.write_image(id, bytes, &changed, old_chunks, &meta, current, self.now_ms()).await { // + the catalogue's journal, same batch (W-PITR2, `hubdo/journal.rs`)
             // STORAGE IS THE ONLY TRUTH AFTER A FAILED WRITE. Some chunks may
             // have landed and some not; the copy in memory no longer says
             // what is on disk, and the next write's diff would trust it and
@@ -1394,19 +1397,13 @@ impl HubImages {
                 }
             },
             Method::Put => {
-                let expected: i64 = req
-                    .headers()
-                    .get("x-generation")
-                    .ok()
-                    .flatten()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(-1);
+                let expected: i64 = req.headers().get("x-generation").ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(-1);
                 if expected < 0 {
                     return Response::error("x-generation is required on a write", 400);
                 }
                 let mut req = req;
                 let bytes = req.bytes().await?;
-                match self.put_image(&id, expected, &bytes).await? {
+                match self.put_image_stamped(&id, expected, &bytes, crate::catalog_history::stamp_of(req.headers())).await? {
                     Some(next) => {
                         let mut res = Response::empty()?;
                         res.headers_mut().set("x-generation", &next.to_string())?;

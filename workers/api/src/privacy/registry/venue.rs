@@ -174,6 +174,13 @@ pub const STORES: &[Store] = &[
         retention: Retention::NoLimitYet("the menu"),
         erase: Eraser::NotPersonal("the menu and the venue record"),
         export: Exporter::NotPersonal },
+    // The menu's edit journal (W-PITR): who changed which dish, when, and to what.
+    Store { image: "catalog.edits", kinds: &["catalog.edit"], home: Venue,
+        holds: &[StaffId], subjects: &[Staff],
+        purpose: P::Operations, basis: Basis::LegitimateInterest,
+        retention: Retention::NoLimitYet("count-bounded: past 600 records it is folded to a baseline plus the newest 300 (catalog::edits::MAX_RECORDS)"),
+        erase: Eraser::Retain("the accountability record of menu changes; a staff id, never a customer (forget-me has nothing to reach here)"),
+        export: NO_EXPORT },
     Store { image: "posts", kinds: &[], home: Venue,
         holds: &[], subjects: &[],
         purpose: P::Operations, basis: Basis::NotPersonal,

@@ -18,7 +18,7 @@ pub async fn night_venue(env: &Env, venue: &str, now: i64) {
     // Read once a night: every venue's copy is sealed to the same platform key.
     let seal_state = seal::state(env);
     let Ok(ns) = env.durable_object("HUB") else { return log_error!("night {venue}: no HUB binding") };
-    let place = crate::hubstore::Place { ns, venue: venue.to_string() };
+    let place = crate::hubstore::Place { ns, venue: venue.to_string(), edit: crate::hubstore::Edited { by: String::new(), at_ms: now } };
     let r = Row { id: venue.to_string() };
     let configured = match crate::hubstore::load_settings(&place).await {
         Ok(l) => cfg(&l.settings).is_some(),

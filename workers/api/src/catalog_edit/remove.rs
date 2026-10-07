@@ -75,8 +75,8 @@ pub async fn delete_products(mut req: Request, ctx: RouteContext<crate::Req>) ->
         #[serde(rename = "location_id")]
         _location_id: Option<String>,
     }
-    let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
-        Ok((_, l)) => l,
+    let (who, loc) = match crate::owner::owner_and_venue(&req, &ctx).await {
+        Ok(v) => v,
         Err(r) => return Ok(r),
     };
     let body: In = match crate::body::strict(&mut req).await {
@@ -86,7 +86,7 @@ pub async fn delete_products(mut req: Request, ctx: RouteContext<crate::Req>) ->
     if body.ids.iter().all(|s| s.trim().is_empty()) || body.ids.len() > IDS_MAX {
         return Response::error(format!("1 to {IDS_MAX} dishes at once"), 400);
     }
-    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?.by(&who);
     let gone = crate::hubstore::with_catalog(&place, move |cat| Ok(remove_products(cat, &body.ids))).await?;
     if gone.is_empty() {
         return Response::error("unknown product", 404);
@@ -113,9 +113,11 @@ pub async fn delete_category(mut req: Request, ctx: RouteContext<crate::Req>) ->
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing category id", 400) };
     // THE PLACE IS THE VENUE THAT WAS AUTHORISED, not the one in the token.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
-        return Ok(r);
-    }
+    // The signer is journaled as the editor (W-PITR, `catalog_history.rs`).
+    let place = match crate::courier::staff_at(&req, &ctx, &body.location_id, crate::auth::Cap::Catalog).await {
+        Ok((who, _)) => place.by(&who),
+        Err(r) => return Ok(r),
+    };
     // Its dishes with it: the owner's act, at this same venue.
     if body.with_dishes.is_some_and(|n| n > 0) {
         match crate::owner::owner_and_venue(&req, &ctx).await {

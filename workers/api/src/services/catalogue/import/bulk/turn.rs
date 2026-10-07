@@ -21,6 +21,9 @@ pub(crate) struct BulkIn {
     pub apply: bool,
     pub retire: bool,
     pub now_ms: i64,
+    /// Who signed it, for the menu's edit journal (W-PITR); `""` from an older Worker.
+    #[serde(default)]
+    pub by: String,
 }
 
 /// What one turn of an import decides. `Written` means `cat` now holds the

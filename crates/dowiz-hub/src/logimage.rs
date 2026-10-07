@@ -175,6 +175,12 @@ impl LogImage {
         }
     }
 
+    /// The newest record alone, unpacking no other (W-PITR2: the journal's in-step check).
+    pub fn newest(&self) -> Option<Entry> {
+        let n = self.len() as u64;
+        EvLog::walk_until(&self.store, |_| true).first().and_then(|r| decode(&r.payload, n.saturating_sub(1)))
+    }
+
     /// Every record, NEWEST FIRST, which is the order every one of the tables
     /// this replaces was indexed in.
     pub fn entries(&self) -> Vec<Entry> {

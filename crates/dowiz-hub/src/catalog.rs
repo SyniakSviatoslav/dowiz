@@ -21,6 +21,8 @@ use bebop_store::Store;
 use crate::HubError;
 
 pub mod bom;
+/// The edit journal: every change, replayable to any moment (W-PITR).
+pub mod edits;
 /// The catalogue read in place, without decoding it (W-ZC).
 pub mod view;
 pub use view::{CatalogRead, CatalogView};

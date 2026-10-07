@@ -36,7 +36,7 @@ fn the_import_turn_previews_then_writes_the_extras() {
     let mut cat = Catalog::create().unwrap();
     cat.set_location(&serde_json::json!({ "id": "v1", "currency_code": "ALL" }).to_string());
     let text = "id,name,unit,kind,clean_pm,cook_pm,pack,pack_qty\npack-rice,Sushi rice,g,food_ingredient,,2200,10 kg,10000\npack-salmon,Salmon,g,food_ingredient,900,,,\n";
-    let input = |apply| BulkIn { text: text.into(), kind: Kind::Supplies, hundredths: false, apply, retire: false, now_ms: 1_790_000_000_000 };
+    let input = |apply| BulkIn { text: text.into(), kind: Kind::Supplies, hundredths: false, apply, retire: false, now_ms: 1_790_000_000_000, by: String::new() };
     let Turn::Shown(dry) = turn(&mut cat, &input(false)) else { panic!("a dry run shows") };
     let rice = dry["rows"].as_array().unwrap().iter().find(|r| r["id"] == "pack-rice").unwrap().clone();
     assert_eq!((rice["cookPm"].clone(), rice["pack"]["qty"].clone()), (serde_json::json!(2200), serde_json::json!(10000)));

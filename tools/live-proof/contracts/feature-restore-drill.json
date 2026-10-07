@@ -1,0 +1,112 @@
+{
+  "id": "restore.drill.v1",
+  "version": "1.0.0",
+  "description": {
+    "en": "The restore drill (W-PITR, R-BEBOPDB D.1 #10). Input: one nightly copy as the venue's bucket holds it (`cloud::push_place`: <prefix>/<venue>/<stamp>.json[.gz][.sealed], format dowiz-hub-backup/1) after seal-open and gunzip, and the census uploaded beside it (<stamp>.witness.json). Every image is base64-decoded strictly, checked against its manifest sha256 and length, and loaded through the loader the venue object uses (Hub::load, Catalog::load = Kv::load_checked with crc, Settings/Posts/StockLog/LogImage::load); a quarantined record is a refusal. The order log's chain is walked (chain_check) and its tip compared with the witness's: EQUAL, HELD (in the log or an archive of the copy) or MISSING (refused). The menu journal is replayed against the copy's catalogue. Writes nothing. The restore direction is hubstore::import (POST /api/owner/restore), into a venue with no images only.",
+    "uk": "Перевірка нічної копії: кожен образ завантажується тими самими перевіреними завантажувачами, що й в об'єкті венуї, ланцюжок перевіряється, кінчик логу порівнюється з опублікованим свідком."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/cloud.rs",
+      "line": 410,
+      "what": "push_place: the bundle and the witness the bucket receives"
+    },
+    {
+      "file": "workers/api/src/hubstore/backup.rs",
+      "line": 68,
+      "what": "export: the bundle format"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "crates/dowiz-hub/src/drill.rs",
+      "line": 108,
+      "what": "drill::run"
+    },
+    {
+      "file": "crates/dowiz-hub/src/bin/restore_drill.rs",
+      "line": 1,
+      "what": "the CLI main points at a downloaded copy"
+    },
+    {
+      "file": "workers/api/src/catalog_history/drill/tests.rs",
+      "line": 1,
+      "what": "the drill over a copy the real nightly path produced, in process"
+    },
+    {
+      "file": "workers/api/src/hubstore/backup.rs",
+      "line": 139,
+      "what": "import: the restore direction"
+    }
+  ],
+  "external_api_version": "S3 PutObject (SigV4), any S3-compatible store",
+  "routes": {},
+  "cli": {
+    "command": "cd crates/dowiz-hub && cargo run --release --bin restore_drill -- <copy.json> [<stamp>.witness.json]",
+    "exit": {
+      "0": "PASS",
+      "1": "REFUSED (each reason printed)",
+      "2": "the files could not be read (or the copy is still gzip)"
+    }
+  },
+  "bundle_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "format",
+      "venue",
+      "taken_at_ms",
+      "images"
+    ],
+    "properties": {
+      "format": {
+        "const": "dowiz-hub-backup/1"
+      },
+      "venue": {
+        "type": "string"
+      },
+      "taken_at_ms": {
+        "type": "integer"
+      },
+      "images": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/$defs/image"
+        }
+      },
+      "archives": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/$defs/image"
+        }
+      }
+    },
+    "$defs": {
+      "image": {
+        "type": "object",
+        "required": [
+          "generation",
+          "bytes",
+          "sha256",
+          "image"
+        ],
+        "properties": {
+          "generation": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "image": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

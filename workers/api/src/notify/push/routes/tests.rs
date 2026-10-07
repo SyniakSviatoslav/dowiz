@@ -70,13 +70,13 @@ fn act(site: &Site, slug: &str, owner: &str, id: &str, action: &str) {
 fn drain(site: &Site, slug: &str) -> Vec<crate::outbox::Entry> {
     let env = site.env();
     block_on(crate::outbox::drain_venue(&env, slug, site.now_ms + 60_000));
-    let place = crate::hubstore::Place { ns: env.durable_object("HUB").unwrap(), venue: slug.into() };
+    let place = crate::hubstore::Place { ns: env.durable_object("HUB").unwrap(), venue: slug.into(), edit: Default::default() };
     block_on(crate::outbox::waiting(&place)).unwrap().into_iter().filter(|e| e.kind == crate::notify::push::plan::KIND).collect()
 }
 
 fn records(site: &Site, slug: &str, kind: &str) -> Vec<String> {
     let env = site.env();
-    let place = crate::hubstore::Place { ns: env.durable_object("HUB").unwrap(), venue: slug.into() };
+    let place = crate::hubstore::Place { ns: env.durable_object("HUB").unwrap(), venue: slug.into(), edit: Default::default() };
     block_on(crate::hubstore::load_table(&place, subs::IMAGE_PUSH, subs::PUSH_BYTES)).unwrap().table.all(kind).into_iter().map(|(id, _)| id).collect()
 }
 

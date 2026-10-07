@@ -1,0 +1,235 @@
+{
+  "id": "menu.history.v1",
+  "version": "1.0.0",
+  "description": {
+    "en": "The menu's edit journal = point-in-time recovery for the catalogue KV image (W-PITR, R-BEBOPDB D.1 #11). Every catalogue write that lands (hubstore::with_catalog, seed_catalog, and the bulk import in the venue object's own turn) appends one record per changed key to the append image `catalog.edits` (LogImage kind `catalog.edit`): {v:1, at, by (staff/owner id, never a customer), key, old (sha256 of the replaced value or null), new (value or null = removed), mark (on the last record of a write: a fingerprint of the whole catalogue after it)}. Replay checks every record's `old` against the state so far, so a missing or edited record stops it by name. Replay to time T rebuilds the catalogue of T, byte-equal in its COMPACTED form. A write whose `before` does not match the journal's mark first records the difference as by='?' (unseen). Past 600 records the journal folds to a baseline plus the newest 300. GET lists the newest edits; POST restores one dish to what it held just before an edit (removing it if that edit created it), itself journaled. The console's Menu screen has a history button ('Історія змін меню').",
+    "uk": "Кожна зміна меню записується в журнал catalog.edits (хто, коли, ключ, хеш старого значення, нове значення); відтворення до моменту T дає меню того моменту байт-у-байт; власник бачить історію і може повернути страву як було до зміни."
+  },
+  "producer": [
+    {
+      "file": "crates/dowiz-hub/src/catalog/edits.rs",
+      "line": 244,
+      "what": "journal (mark check, unseen diff, the write's diff, compaction)"
+    },
+    {
+      "file": "crates/dowiz-hub/src/catalog/edits.rs",
+      "line": 138,
+      "what": "decode (the kind's decoder, before any writer)"
+    },
+    {
+      "file": "crates/dowiz-hub/src/catalog/edits.rs",
+      "line": 202,
+      "what": "replay (old-digest checked)"
+    },
+    {
+      "file": "crates/dowiz-hub/src/catalog/edits/history.rs",
+      "line": 37,
+      "what": "before (what a key held just before an edit)"
+    },
+    {
+      "file": "workers/api/src/hubstore.rs",
+      "line": 635,
+      "what": "with_catalog journals after the write landed"
+    },
+    {
+      "file": "workers/api/src/hubstore.rs",
+      "line": 726,
+      "what": "seed_catalog journals the born venue from nothing"
+    },
+    {
+      "file": "workers/api/src/hubdo/bulk.rs",
+      "line": 53,
+      "what": "journal_turn: the bulk import journals in the object's turn"
+    },
+    {
+      "file": "workers/api/src/catalog_history.rs",
+      "line": 78,
+      "what": "GET /api/owner/menu/history"
+    },
+    {
+      "file": "workers/api/src/catalog_history.rs",
+      "line": 107,
+      "what": "POST /api/owner/menu/history/restore"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/public/admin/menu-history.js",
+      "line": 16,
+      "what": "openHistory: the sheet, the restore confirm"
+    },
+    {
+      "file": "workers/api/public/admin/menu-history-view.js",
+      "line": 40,
+      "what": "drawHistory (pure)"
+    },
+    {
+      "file": "workers/api/public/admin/menu.js",
+      "line": 72,
+      "what": "the Menu screen's history button (#mHist)"
+    },
+    {
+      "file": "crates/dowiz-hub/src/drill.rs",
+      "line": 108,
+      "what": "the restore drill replays the journal against the copy's catalogue"
+    },
+    {
+      "file": "tools/live-proof/probes/feature-menu-history.mjs",
+      "line": 1,
+      "what": "probe"
+    }
+  ],
+  "external_api_version": null,
+  "on_disk_format": "LogImage (append, chained, crc) image `catalog.edits`; records kind `catalog.edit` v1 (crates/dowiz-hub/src/catalog/edits.rs header). Included in the nightly backup bundle (hubstore::IMAGES).",
+  "routes": {
+    "list": {
+      "request": {
+        "method": "GET",
+        "path": "/api/owner/menu/history?location_id=&limit=",
+        "auth": "owner, or staff with the catalog capability"
+      },
+      "request_schema": null,
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "version",
+          "total",
+          "edits"
+        ],
+        "properties": {
+          "version": {
+            "const": 1
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "edits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/edit"
+            }
+          }
+        },
+        "$defs": {
+          "edit": {
+            "type": "object",
+            "required": [
+              "seq",
+              "at",
+              "by",
+              "key",
+              "kind",
+              "id",
+              "added",
+              "removed",
+              "restorable"
+            ],
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "at": {
+                "type": "integer"
+              },
+              "by": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "product",
+                  "category",
+                  "supply",
+                  "promo",
+                  "location"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {},
+              "price": {},
+              "available": {},
+              "added": {
+                "type": "boolean"
+              },
+              "removed": {
+                "type": "boolean"
+              },
+              "restorable": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "restore": {
+      "request": {
+        "method": "POST",
+        "path": "/api/owner/menu/history/restore",
+        "auth": "owner, or staff with the catalog capability"
+      },
+      "request_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "location_id",
+          "seq",
+          "key"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "location_id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^product:"
+          }
+        }
+      },
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "version",
+          "ok",
+          "key",
+          "removed",
+          "price"
+        ],
+        "properties": {
+          "version": {
+            "const": 1
+          },
+          "ok": {
+            "const": true
+          },
+          "key": {
+            "type": "string"
+          },
+          "removed": {
+            "type": "boolean"
+          },
+          "price": {}
+        }
+      },
+      "refusals": {
+        "404": "no record at seq",
+        "409": "the record at seq has another key (the journal was compacted since it was shown)",
+        "400": "not a dish's edit, or a baseline/unseen record that created the dish",
+        "500": "the journal does not replay (named)"
+      }
+    }
+  }
+}

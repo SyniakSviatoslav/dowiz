@@ -66,6 +66,7 @@ mod mcp;
 mod integrations;
 mod ebills;
 mod catalog_edit;
+mod catalog_history; // W-PITR: the menu's edit journal, its history screen and restore
 /// The request body, parsed so `deny_unknown_fields` means it (gate: strict-body).
 mod body;
 /// A request and a response in plain Rust, so route code runs under `cargo test` (W-COV C2).
@@ -545,6 +546,8 @@ pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
         .get_async("/api/owner/mcp/keys", |r, c| edge::run(r, c, mcp::owner_list))
         .post_async("/api/owner/mcp/keys/revoke", |r, c| edge::run(r, c, mcp::owner_revoke))
         .post_async("/api/owner/menu/import", |r, c| edge::run(r, c, services::catalogue::import::import_menu))
+        .get_async("/api/owner/menu/history", |r, c| edge::run(r, c, catalog_history::list)) // W-PITR
+        .post_async("/api/owner/menu/history/restore", |r, c| edge::run(r, c, catalog_history::restore)) // W-PITR
         .get_async("/api/owner/couriers", |r, c| edge::run(r, c, services::courier::console::couriers))
         .post_async("/api/owner/couriers/invite", |r, c| edge::run(r, c, services::courier::hiring::invite_courier))
         .post_async("/api/owner/couriers/:id/uninvite", |r, c| edge::run(r, c, services::courier::hiring::uninvite_courier))
