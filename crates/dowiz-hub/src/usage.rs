@@ -37,9 +37,11 @@ use bebop_store::Store;
 /// left out rather than shipped as a column that could not move. Now a KV commit counts the
 /// root and four arrays it replaces, and a log append counts the root it replaces, so
 /// `dead_cells` is the arena a compaction would give back. What it means per kind:
-///   - KV images are COMPACTED on every save (`compacted_bytes_fit`), so an image read
-///     back from storage reads 0 -- truthfully: there is nothing to reclaim. It rises only
-///     between commits made in place (`commit_into`), which dowiz does not persist.
+///   - KV images were COMPACTED on every save (`compacted_bytes_fit`), so an image read
+///     back from storage read 0. Since W-DELTA (2026-10-06) the CATALOGUE appends a delta
+///     record per changed key instead, and each append adds the root it retires plus the
+///     cells the edit shadows (bebop_store::kv::delta); it returns to 0 when the writer
+///     compacts at a quarter of live cells or 32 records. Settings/posts still compact.
 ///   - Logs never compact; each append retires one 10-cell root. An image written before
 ///     W-CRC carries 0 here for all its old roots -- an UNDERCOUNT until it is rebuilt by
 ///     `grow`. It is not exposed in `/api/owner/health` for that reason (and because no

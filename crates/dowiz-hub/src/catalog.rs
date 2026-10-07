@@ -12,6 +12,9 @@
 //! be the wrong shape for a platform, and that is what the hub-per-tenant
 //! architecture makes irrelevant rather than what it ignores.
 
+use std::collections::BTreeSet;
+
+use bebop_store::kv::delta::{self, Appended, Op};
 use bebop_store::kv::Kv;
 use bebop_store::Store;
 
@@ -58,6 +61,10 @@ const P_PROMO: &str = "promo:";
 pub struct Catalog {
     store: Store,
     kv: Kv,
+    /// W-DELTA: the keys changed since this catalogue was LOADED from bytes, so `to_bytes`
+    /// can append them to `store` instead of rewriting it. `None` = created fresh: the
+    /// first `to_bytes` compacts, as every write did before.
+    dirty: Option<BTreeSet<String>>,
 }
 
 impl Catalog {
@@ -75,7 +82,7 @@ impl Catalog {
         let mut store = Store::create_bytes(DEFAULT_CATALOG_BYTES)?;
         Kv::init_bytes(&mut store)?;
         let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
-        Ok(Catalog { store, kv })
+        Ok(Catalog { store, kv, dirty: None })
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, HubError> {
@@ -84,7 +91,7 @@ impl Catalog {
             return Err(HubError::NotAHub);
         }
         let kv = crate::kv_load(&store)?;
-        Ok(Catalog { store, kv })
+        Ok(Catalog { store, kv, dirty: Some(BTreeSet::new()) })
     }
 
     /// Flush the in-memory entries into the image and hand back the bytes. The
@@ -102,8 +109,63 @@ impl Catalog {
     /// as large as its content rather than as large as its history. See
     /// `Kv::compacted_bytes` for what that gives up (nothing anything here
     /// reads).
+    ///
+    /// W-DELTA (2026-10-06): a catalogue LOADED from bytes appends what changed -- one record
+    /// per changed key and a new root (`bebop_store::kv::delta`) -- so the image changes only
+    /// in its superblock page and at its tail. It compacts exactly as above when it was
+    /// created fresh, when the chain or the dead cells pass the trigger, when the image is
+    /// v1, or when the arena is full. The entries in memory are the truth either way.
+    /// Nothing changed since the load: the image as it is (no new generation).
     pub fn to_bytes(&mut self) -> Result<Vec<u8>, HubError> {
-        Ok(self.kv.compacted_bytes_fit(DEFAULT_CATALOG_BYTES)?)
+        if let Some(dirty) = &self.dirty {
+            if dirty.is_empty() {
+                return Ok(self.store.to_bytes_trimmed());
+            }
+            let vals: Vec<(&String, Option<Vec<u8>>)> = dirty.iter().map(|k| (k, self.kv.get(k))).collect();
+            let ops: Vec<Op> = vals
+                .iter()
+                .map(|(k, v)| match v {
+                    Some(v) => Op::Put(k, v),
+                    None => Op::Remove(k),
+                })
+                .collect();
+            // ANY failure of the append falls back to compaction: the entries are the truth,
+            // and compacting them is what every write did before this existed.
+            if let Ok(Appended::Delta(_)) = delta::append_delta(&mut self.store, &ops) {
+                self.dirty = Some(BTreeSet::new());
+                return Ok(self.store.to_bytes_trimmed());
+            }
+        }
+        self.compact()
+    }
+
+    /// Rewrite the image whole (v2, no chain), and carry on appending onto THAT. Public so
+    /// an operator path can force it (a rollback to a build that predates v3 needs it).
+    pub fn compact(&mut self) -> Result<Vec<u8>, HubError> {
+        let bytes = self.kv.compacted_bytes_fit(DEFAULT_CATALOG_BYTES)?;
+        self.store = Store::from_bytes(&bytes);
+        self.dirty = Some(BTreeSet::new());
+        Ok(bytes)
+    }
+
+    /// Record a changed key for the next `to_bytes`.
+    fn touch(&mut self, key: String) {
+        if let Some(d) = &mut self.dirty {
+            d.insert(key);
+        }
+    }
+
+    fn put(&mut self, key: String, json: &str) {
+        self.kv.put(&key, json.as_bytes());
+        self.touch(key);
+    }
+
+    fn del(&mut self, key: String) -> bool {
+        let gone = self.kv.remove(&key);
+        if gone {
+            self.touch(key);
+        }
+        gone
     }
 
     /// What [`Self::to_bytes`] would spend, measured by compacting a copy, and
@@ -128,7 +190,7 @@ impl Catalog {
     }
 
     pub fn set_location(&mut self, json: &str) {
-        self.kv.put(K_LOCATION, json.as_bytes());
+        self.put(K_LOCATION.to_string(), json);
     }
 
     pub fn location(&self) -> Option<String> {
@@ -136,7 +198,7 @@ impl Catalog {
     }
 
     pub fn set_product(&mut self, id: &str, json: &str) {
-        self.kv.put(&format!("{P_PRODUCT}{id}"), json.as_bytes());
+        self.put(format!("{P_PRODUCT}{id}"), json);
     }
 
     pub fn product(&self, id: &str) -> Option<String> {
@@ -146,7 +208,7 @@ impl Catalog {
     }
 
     pub fn set_category(&mut self, id: &str, json: &str) {
-        self.kv.put(&format!("{P_CATEGORY}{id}"), json.as_bytes());
+        self.put(format!("{P_CATEGORY}{id}"), json);
     }
 
     /// Every product, in key order. Keys are kept sorted by the layout, so this
@@ -156,7 +218,7 @@ impl Catalog {
     }
 
     pub fn set_supply(&mut self, id: &str, json: &str) {
-        self.kv.put(&format!("{P_SUPPLY}{id}"), json.as_bytes());
+        self.put(format!("{P_SUPPLY}{id}"), json);
     }
 
     pub fn supply(&self, id: &str) -> Option<String> {
@@ -170,7 +232,7 @@ impl Catalog {
     }
 
     pub fn set_promo(&mut self, code: &str, json: &str) {
-        self.kv.put(&format!("{P_PROMO}{code}"), json.as_bytes());
+        self.put(format!("{P_PROMO}{code}"), json);
     }
 
     pub fn promo(&self, code: &str) -> Option<String> {
@@ -186,14 +248,14 @@ impl Catalog {
     /// Removing a promo is a real delete, not a flag. A code the owner deleted
     /// must stop working; `active: false` is the separate, reversible thing.
     pub fn remove_promo(&mut self, code: &str) -> bool {
-        self.kv.remove(&format!("{P_PROMO}{code}"))
+        self.del(format!("{P_PROMO}{code}"))
     }
 
     /// Removing a supply is a real delete, used only by the owner's
     /// ingredients reset: `active: false` (retire) keeps the row and its id,
     /// and a supply re-created under the same id would inherit its old shelf.
     pub fn remove_supply(&mut self, id: &str) -> bool {
-        self.kv.remove(&format!("{P_SUPPLY}{id}"))
+        self.del(format!("{P_SUPPLY}{id}"))
     }
 
     /// Removing a dish is a real delete, for the same reason removing a promo
@@ -204,11 +266,11 @@ impl Catalog {
     /// sitting beside the real one, which is how a venue ends up selling
     /// eighteen dishes it does not make.
     pub fn remove_product(&mut self, id: &str) -> bool {
-        self.kv.remove(&format!("{P_PRODUCT}{id}"))
+        self.del(format!("{P_PRODUCT}{id}"))
     }
 
     pub fn remove_category(&mut self, id: &str) -> bool {
-        self.kv.remove(&format!("{P_CATEGORY}{id}"))
+        self.del(format!("{P_CATEGORY}{id}"))
     }
 
     pub fn categories(&self) -> Vec<(String, String)> {
@@ -229,3 +291,5 @@ impl Catalog {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod delta_tests;

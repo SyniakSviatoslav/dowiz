@@ -23,3 +23,6 @@ pub(super) fn changed_chunks(old: Option<&[u8]>, new: &[u8], chunk: usize) -> Ve
         .collect()
 }
 
+
+#[cfg(test)]
+mod tests;

@@ -157,4 +157,4 @@ impl CatalogRead for CatalogView<'_> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

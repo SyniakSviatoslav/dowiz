@@ -1,0 +1,11 @@
+# What every reader of fixtures/kv3.store must answer (W-DELTA 2026-10-06). RE-DERIVED, not copied:
+#   Rust native: crates/bebop-store `mkdelta fixtures/kv2.store fixtures/kv3.store` -> n 5,
+#                snapshot_root_i64 -4092201869538170098 (keys order/0001,order/0002,order/0003,zone/north,zone/south)
+#   oracle.py  : kv status=0 n=5 root=-4092201869538170098 (its own replay, from the bytes)
+#   bebop.bin  : selfhost/std/kv.bp kv3_fold (`kv.bin n` / `kv.bin h`) -- measured by gate.sh
+# The image: kv2.store (v2, generation 2) + three delta commits through kv::delta::append_delta_with
+# (dead-cell trigger off: the fixture pins the FORMAT): order/0002 -> "cancelled", zone/south added,
+# courier/alpha removed. v3 root (8 cells), D = 3, 9200 bytes trimmed. Same entry count as kv2, a
+# different root -- the chain changed what the image says.
+n=5
+root=-4092201869538170098

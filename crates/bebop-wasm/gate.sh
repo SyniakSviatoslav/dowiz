@@ -31,7 +31,9 @@ cd "$(dirname "$0")"
 CARGO="${CARGO:-$HOME/.cargo/bin/cargo}"
 WASM=target/wasm32-unknown-unknown/release/bebop_wasm.wasm
 BASELINE=bytes.baseline
-FIXTURES="kv kv2"
+# kv3 (W-DELTA 2026-10-06): a v2 base + a delta chain (a changed value, a new key, a removal).
+# Every reader REPLAYS it (kv.bp: kv3_fold; native/wasm32: Kv::load_checked; oracle.py) -- four again.
+FIXTURES="kv kv2 kv3"
 SCRATCH="${BEBOP_WASM_SCRATCH:-${TMPDIR:-/tmp}/bebop-wasm-gate.$$}"
 mkdir -p "$SCRATCH"
 trap 'rm -rf "$SCRATCH"' EXIT

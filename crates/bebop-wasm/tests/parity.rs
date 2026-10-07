@@ -64,6 +64,17 @@ fn kv2_fixture_reads_to_what_bebop_bin_printed() {
     assert_eq!(bebop_store::kv::Kv::version(&Store::from_bytes(&fixture())), 1, "kv.store is not v1");
 }
 
+/// The v3 image (W-DELTA): kv2.store's entries + a delta chain (order/0002 changed, zone/south
+/// added, courier/alpha removed). bebop.bin replays it too (kv.bp kv3_fold).
+#[test]
+fn kv3_fixture_reads_to_what_bebop_bin_printed() {
+    let (n, root) = expected_named("kv3");
+    let v = kv_view(&fixture_named("kv3")).expect("a v3 KV image must read here");
+    assert_eq!((v.n, v.root), (n, root), "kv3.expected (re-derived by oracle.py)");
+    assert_ne!(root, expected().1, "the chain changed nothing");
+    assert_eq!(bebop_store::kv::Kv::version(&Store::from_bytes(&fixture_named("kv3"))), 3, "kv3.store is not v3");
+}
+
 /// THE BIT THAT ABORTED A PROCESS: bit 33 of a key's length. `bebop-store`
 /// refuses it; this layer must say so as a refusal, not a trap.
 #[test]

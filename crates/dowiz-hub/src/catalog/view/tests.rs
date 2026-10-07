@@ -39,7 +39,25 @@ fn images() -> Vec<(&'static str, Vec<u8>)> {
         ("165 x 2.5 KB", big_165().to_bytes().unwrap()),
         ("kv.store v1 fixture", include_bytes!("../../../../bebop-wasm/fixtures/kv.store").to_vec()),
         ("kv2.store v2 fixture", include_bytes!("../../../../bebop-wasm/fixtures/kv2.store").to_vec()),
+        ("165 x 2.5 KB + 3 delta writes (v3)", with_deltas()),
     ]
+}
+
+/// W-DELTA: a v3 image -- an edit, a new dish (sorts last), a removal (the first dish).
+fn with_deltas() -> Vec<u8> {
+    let mut b = big_165().to_bytes().unwrap();
+    for step in 0..3 {
+        let mut c = Catalog::load(&b).unwrap();
+        match step {
+            0 => c.set_product("item-042", r#"{"id":"item-042","price":600}"#),
+            1 => c.set_product("item-999", r#"{"id":"item-999","price":1}"#),
+            _ => {
+                c.remove_product("item-000");
+            }
+        }
+        b = c.to_bytes().unwrap();
+    }
+    b
 }
 
 /// THE EQUALITY WALK: every read `Catalog` offers, on every image, byte for byte --

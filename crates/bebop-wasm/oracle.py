@@ -148,10 +148,10 @@ def main(path):
     ver = 1
     if obj_len(root) >= 6 and root + 2 + 5 < n and cells[root + 2 + 5] > 0:
         ver = cells[root + 2 + 5]
-    if ver > 2:
+    if ver > 3:
         print("kv status=3 n=0 root=0")
         return 3
-    per_cell = 8 if ver == 2 else 1
+    per_cell = 8 if ver >= 2 else 1
 
     count = cells[root + 2]
     arrays = [follow(root, i) for i in (1, 2, 3, 4)]
@@ -172,6 +172,39 @@ def main(path):
         print("kv status=10 n=0 root=0")
         return 10
 
+    # W-DELTA (v3): the chain, newest first, every claim checked (crates/bebop-store/src/kv/delta.rs
+    # chain_in), re-derived here from the format, not from the Rust.
+    chain = []
+    if ver == 3:
+        if obj_len(root) < 8 or root + 2 + 8 > n:
+            print("kv status=2 n=0 root=0")
+            return 2
+        d = cells[root + 2 + 7]
+        budget = n
+        cur = follow(root, 6)
+        while cur is not None:
+            ln = obj_len(cur)
+            if len(chain) >= d or ln < 4 or cur + 2 + ln > n or budget < ln + 2:
+                print("kv status=2 n=0 root=0")
+                return 2
+            budget -= ln + 2
+            op, kl, vl = cells[cur + 3], cells[cur + 4], cells[cur + 5]
+            if op not in (1, 2) or kl < 0 or vl < 0 or (op == 2 and vl != 0) or 4 + (kl + 7) // 8 + (vl + 7) // 8 != ln:
+                print("kv status=2 n=0 root=0")
+                return 2
+            chain.append((cur, op, kl, vl))
+            cur = follow(cur, 0)
+        if len(chain) != d:
+            print("kv status=2 n=0 root=0")
+            return 2
+        # the crcs AFTER the whole shape held, as Kv::load_checked orders it (chain_in, then check_chain)
+        if not all(crc_ok(o) for o, _, _, _ in chain):
+            print("kv status=10 n=0 root=0")
+            return 10
+
+    def packed(o, at, ln):
+        return bytes((cells[o + 2 + at + (b >> 3)] >> (8 * (b & 7))) & 0xFF for b in range(ln))
+
     def slice_of(idx, blob, i):
         off, ln = cells[idx + 2 + 2 * i], cells[idx + 2 + 2 * i + 1]
         if off < 0 or ln < 0 or off + ln > obj_len(blob) * per_cell:
@@ -188,17 +221,32 @@ def main(path):
     if 2 * count > min(obj_len(kidx), obj_len(vidx)):
         print("kv status=2 n=0 root=0")
         return 2
-    h = FNV_OFFSET
+    entries = []
     for i in range(count):
         k, v = slice_of(kidx, kblob, i), slice_of(vidx, vblob, i)
         if k is None or v is None:
             print("kv status=2 n=0 root=0")
             return 2
+        entries.append((k, v))
+    if chain:
+        if any(entries[i][0] >= entries[i + 1][0] for i in range(len(entries) - 1)):
+            print("kv status=2 n=0 root=0")  # a chain on an unsorted base is refused
+            return 2
+        m = dict(entries)
+        for o, op, kl, vl in reversed(chain):  # oldest first
+            k = packed(o, 4, kl)
+            if op == 1:
+                m[k] = packed(o, 4 + (kl + 7) // 8, vl)
+            else:
+                m.pop(k, None)
+        entries = sorted(m.items())
+    h = FNV_OFFSET
+    for k, v in entries:
         h = fnv(h, struct.pack("<Q", len(k)))
         h = fnv(h, k)
         h = fnv(h, struct.pack("<Q", len(v)))
         h = fnv(h, v)
-    print(f"kv status=0 n={count} root={to_i64(h)}")
+    print(f"kv status=0 n={len(entries)} root={to_i64(h)}")
     return 0
 
 

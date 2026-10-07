@@ -24,6 +24,10 @@
 //! hub's image becomes v2 the next time it is compacted. A version this code does not know
 //! is refused, not guessed at.
 //!
+//! v3 (W-DELTA, 2026-10-06) is a v2 base plus a chain of delta records, 8-cell root
+//! `{.. v2 .., VERSION=3, ref DELTA, D}`: a write appends instead of rewriting. Only
+//! `delta::append_delta` writes it; compaction writes v2. See `kv/delta.rs`.
+//!
 //! bebop creates the schema (the layout digests come from sha256, which stays on that side);
 //! this module reads and writes the data through the documented pointer-free format.
 
@@ -171,9 +175,12 @@ impl Kv {
     pub(crate) fn decode(st: &Store) -> Option<Kv> {
         let root = st.root()?;
         let ver = Self::version(st);
-        if ver > VERSION {
+        if ver > delta::VERSION_DELTA {
             return None;
         }
+        // v3 (W-DELTA): the base below, then the chain replayed. The chain is walked FIRST so
+        // a chain that does not hold refuses the image before anything is decoded.
+        let chain = delta::chain_in(st, root)?;
         // A blob of c cells holds c bytes in v1 and 8c in v2; every slice below is a
         // BYTE slice and is bounded by this.
         let bytes_of = |cells: usize| -> Option<usize> {
@@ -240,7 +247,14 @@ impl Kv {
             let v: Vec<u8> = (0..vl).map(|j| blob_byte(st, vblob, ver, vo + j)).collect();
             entries.push((k, v));
         }
-        Some(Kv { entries })
+        // A chain merges into SORTED keys only (zc/overlay.rs says why); none is written onto
+        // any other base, so an image that has one is refused rather than guessed at.
+        if !chain.is_empty() && !entries.windows(2).all(|w| w[0].0 < w[1].0) {
+            return None;
+        }
+        let mut kv = Kv { entries };
+        kv.replay(st, &chain);
+        Some(kv)
     }
 
     /// Fetch a value by key: BINARY SEARCH (W-ZC), since every writer keeps the keys
@@ -308,9 +322,13 @@ impl Kv {
         // THE ROOT'S OWN VERSION, never this module's: a v1 image keeps being written as
         // v1 (a mixed image would be unreadable), a fresh one is v2.
         let ver = Self::version(st);
-        if ver > VERSION {
+        if ver > delta::VERSION_DELTA {
             return Err(StoreError::Corrupt("KV root names a version this code does not know"));
         }
+        // A v3 image rewritten whole is a v2 image (W-DELTA): the rewrite holds every entry,
+        // so its chain is dead with the rest of the old generation.
+        let chain = delta::chain_in(st, old_root).ok_or(StoreError::Corrupt("the KV delta chain does not hold"))?;
+        let ver = ver.min(VERSION);
         // SUPERSEDED (W-CRC, D.1 #4): this commit rewrites the root and all four arrays, so
         // the old five objects -- header cells included -- are dead from the new generation
         // on. `stage_commit` moves them from `live_cells` to `superseded_cells`.
@@ -320,6 +338,7 @@ impl Kv {
                 dead += 2 + st.obj_cells(a) as i64;
             }
         }
+        dead += chain.iter().map(|r| 2 + st.obj_cells(r.obj) as i64).sum::<i64>();
         let (mut tx, root) = self.stage_write(st, ver, arr_dig, root_dig)?;
         tx.sup_delta += dead;
         Ok((tx, root))
@@ -445,6 +464,11 @@ impl Kv {
 
 /// The zero-copy reader (W-ZC): one value straight from the image cells.
 pub mod zc;
+/// The delta chain (W-DELTA): a write appends one record per key and a new root.
+pub mod delta;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod golden_tests;

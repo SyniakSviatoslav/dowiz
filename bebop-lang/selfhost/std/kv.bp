@@ -41,6 +41,186 @@ fn kv_version(base: [i64], g: i64) -> i64 { pj_kv_ver(base, g) }
 
 fn kv_root(base: [i64], tmp: [i64]) -> i64 { st_root(base, tmp) }
 
+// ---- v3: a v2 base + a delta chain (W-DELTA 2026-10-06, crates/bebop-store/src/kv/delta.rs) ----
+// root {n, KIDX, KBLOB, VIDX, VBLOB, 3, ref DELTA (newest), D}; record {ref NEXT (older), OP 1 put |
+// 2 remove, KLEN, VLEN, key packed from payload cell 4, value packed after it}. pj_kv_frame reads any
+// ver != 2 as one byte per cell, so a v3 image must never reach pj_kv_fold: `h`/`n` fold it HERE, by
+// replay -- the merged key order (base keys and new keys interleaved, removed keys dropped, the
+// NEWEST record of a key winning), without a map: O((n + D) * D) key compares, D <= 32 by the writer.
+// byte b of an object's payload, bytes packed eight to a cell (`>>` is LOGICAL: the masks are exact)
+fn kv3_byte(base: [i64], obj: i64, b: i64) -> i64 { (st_get(base, obj, b >> 3) >> (8 * (b & 7))) & 255 }
+// -1 / 0 / 1: key (ao, aoff, alen) against key (bo, boff, blen), bytes unsigned, shorter first on a tie
+fn kv3_cmp(base: [i64], ao: i64, aoff: i64, alen: i64, bo: i64, boff: i64, blen: i64) -> i64 {
+  let n = if alen < blen then alen else blen;
+  let j = 0;
+  let r = 0;
+  while j < n {
+    let x = kv3_byte(base, ao, aoff + j);
+    let y = kv3_byte(base, bo, boff + j);
+    let r = if r == 0 then (if x < y then 0 - 1 else (if x > y then 1 else 0)) else r;
+    let j = j + 1;
+    0
+  };
+  if r != 0 then r else (if alen < blen then 0 - 1 else (if alen > blen then 1 else 0))
+}
+fn kv3_head(base: [i64], root: i64) -> i64 { if st_get(base, root, 6) == 0 then 0 else st_ref(base, root, 6) }
+fn kv3_next(base: [i64], r: i64) -> i64 { if st_get(base, r, 0) == 0 then 0 else st_ref(base, r, 0) }
+// the byte offset of a record's value: payload cell 4 + ceil(KLEN / 8)
+fn kv3_vat(base: [i64], r: i64) -> i64 { 8 * (4 + ((st_get(base, r, 2) + 7) >> 3)) }
+fn kv3_rcmp(base: [i64], a: i64, b: i64) -> i64 { kv3_cmp(base, a, 32, st_get(base, a, 2), b, 32, st_get(base, b, 2)) }
+// 1 when no NEWER record (nearer the head) has r's key
+fn kv3_newest(base: [i64], root: i64, r: i64) -> i64 {
+  let cur = kv3_head(base, root);
+  let ok = 1;
+  while cur != r {
+    let ok = if kv3_rcmp(base, cur, r) == 0 then 0 else ok;
+    let cur = kv3_next(base, cur);
+    0
+  };
+  ok
+}
+// the newest record whose key equals (ko, koff, klen), or 0
+fn kv3_find(base: [i64], root: i64, ko: i64, koff: i64, klen: i64) -> i64 {
+  let cur = kv3_head(base, root);
+  let hit = 0;
+  while cur != 0 {
+    let hit = if hit == 0 then (if kv3_cmp(base, cur, 32, st_get(base, cur, 2), ko, koff, klen) == 0 then cur else 0) else hit;
+    let cur = kv3_next(base, cur);
+    0
+  };
+  hit
+}
+// the smallest NEW key strictly between w[0..3] (lo: obj, off, len, has) and w[4..7] (hi), whose
+// newest record is a put; 0 when there is none. Strictly between consecutive base keys = not in base.
+fn kv3_pick(base: [i64], root: i64, w: [i64]) -> i64 {
+  let cur = kv3_head(base, root);
+  let best = 0;
+  while cur != 0 {
+    let kl = st_get(base, cur, 2);
+    let above = if w[3] == 0 then 1 else (if kv3_cmp(base, cur, 32, kl, w[0], w[1], w[2]) > 0 then 1 else 0);
+    let below = if w[7] == 0 then 1 else (if kv3_cmp(base, cur, 32, kl, w[4], w[5], w[6]) < 0 then 1 else 0);
+    let better = if best == 0 then 1 else (if kv3_rcmp(base, cur, best) < 0 then 1 else 0);
+    let cand = if above + below + better == 3 then (if st_get(base, cur, 1) == 1 then kv3_newest(base, root, cur) else 0) else 0;
+    let best = if cand == 1 then cur else best;
+    let cur = kv3_next(base, cur);
+    0
+  };
+  best
+}
+// kv_vkind: 0 = foldable by pj_kv_fold (v1/v2), 3 = replay below, 4 = refuse (-3).
+fn kv_vkind(base: [i64], tmp: [i64]) -> i64 {
+  let root = kv_root(base, tmp);
+  let v = kv_version(base, root);
+  if v < 3 then 0 else (if v == 3 then (if kv3_ok(base, root) == 1 then 3 else 4) else 4)
+}
+// kv3_ok: the claims the replay walks are honest -- an 8-cell root, a chain that ends after
+// EXACTLY D records, and base keys strictly ascending (the merge needs them; Rust refuses the same
+// image). The walk takes at most min(D, 4096) + 1 steps, so a cyclic NEXT cannot loop (the Rust
+// writer compacts at 32; Rust readers bound by the image's cells instead). 0 = refuse (-3).
+fn kv3_ok(base: [i64], root: i64) -> i64 {
+  let d = st_get(base, root, 7);
+  let cur = if st_len(base, root) < 8 then 0 else kv3_head(base, root);
+  let k = 0;
+  while (if cur == 0 then 0 else (if k <= d then (if k <= 4096 then 1 else 0) else 0)) == 1 {
+    let k = k + 1;
+    let cur = kv3_next(base, cur);
+    0
+  };
+  let ok = if st_len(base, root) < 8 then 0 else (if d < 0 then 0 else (if cur == 0 then (if k == d then 1 else 0) else 0));
+  let n = st_get(base, root, 0);
+  let kidx = st_ref(base, root, 1);
+  let kblob = st_ref(base, root, 2);
+  let i = 1;
+  while i < n {
+    let c = kv3_cmp(base, kblob, st_get(base, kidx, 2 * i - 2), st_get(base, kidx, 2 * i - 1), kblob, st_get(base, kidx, 2 * i), st_get(base, kidx, 2 * i + 1));
+    let ok = if c < 0 then ok else 0;
+    let i = i + 1;
+    0
+  };
+  ok
+}
+fn kv3_frame(h: i64, base: [i64], obj: i64, off: i64, len: i64) -> i64 {
+  let x = pj_fnv_u64(h, len);
+  let j = 0;
+  while j < len {
+    let x = pj_fnv_byte(x, kv3_byte(base, obj, off + j));
+    let j = j + 1;
+    0
+  };
+  x
+}
+// fold one (key, value) pair into s[0], count it in s[1]
+fn kv3_pair(s: [i64], base: [i64], ko: i64, koff: i64, kl: i64, vo: i64, voff: i64, vl: i64) -> i64 {
+  let _ = s[0] = kv3_frame(s[0], base, ko, koff, kl);
+  let _ = s[0] = kv3_frame(s[0], base, vo, voff, vl);
+  let _ = s[1] = s[1] + 1;
+  0
+}
+fn kv3_take_rec(base: [i64], r: i64, w: [i64], s: [i64]) -> i64 {
+  let _ = kv3_pair(s, base, r, 32, st_get(base, r, 2), r, kv3_vat(base, r), st_get(base, r, 3));
+  let _ = w[0] = r;
+  let _ = w[1] = 32;
+  let _ = w[2] = st_get(base, r, 2);
+  let _ = w[3] = 1;
+  0
+}
+// base key i: its newest record decides (put: the record's value, remove: dropped), else the base value
+fn kv3_take_base(base: [i64], root: i64, i: i64, w: [i64], s: [i64]) -> i64 {
+  let kidx = st_ref(base, root, 1);
+  let kblob = st_ref(base, root, 2);
+  let vidx = st_ref(base, root, 3);
+  let vblob = st_ref(base, root, 4);
+  let ko = st_get(base, kidx, 2 * i);
+  let kl = st_get(base, kidx, 2 * i + 1);
+  let hit = kv3_find(base, root, kblob, ko, kl);
+  let _ = if hit == 0 then kv3_pair(s, base, kblob, ko, kl, vblob, st_get(base, vidx, 2 * i), st_get(base, vidx, 2 * i + 1))
+          else (if st_get(base, hit, 1) == 1 then kv3_pair(s, base, kblob, ko, kl, hit, kv3_vat(base, hit), st_get(base, hit, 3)) else 0);
+  let _ = w[0] = kblob;
+  let _ = w[1] = ko;
+  let _ = w[2] = kl;
+  let _ = w[3] = 1;
+  let _ = s[2] = i + 1;
+  0
+}
+fn kv3_end(s: [i64]) -> i64 {
+  let _ = s[3] = 1;
+  0
+}
+// one step: the next new key below the bound if there is one, else base key i, else the end
+fn kv3_step(base: [i64], root: i64, w: [i64], s: [i64]) -> i64 {
+  let n = st_get(base, root, 0);
+  let kidx = st_ref(base, root, 1);
+  let i = s[2];
+  let _ = w[7] = if i < n then 1 else 0;
+  let _ = w[4] = st_ref(base, root, 2);
+  let _ = w[5] = if i < n then st_get(base, kidx, 2 * i) else 0;
+  let _ = w[6] = if i < n then st_get(base, kidx, 2 * i + 1) else 0;
+  let r = kv3_pick(base, root, w);
+  if r != 0 then kv3_take_rec(base, r, w, s) else (if i < n then kv3_take_base(base, root, i, w, s) else kv3_end(s))
+}
+// the fold of a v3 image (s[0]) and its entry count (s[1]): kv.bp's `h` and `n`
+fn kv3_fold(base: [i64], root: i64, s: [i64]) -> i64 {
+  let w = zeros(8);
+  let _ = s[0] = pj_fnv_offset();
+  let _ = s[1] = 0;
+  let _ = s[2] = 0;
+  let _ = s[3] = 0;
+  while s[3] == 0 {
+    let _ = kv3_step(base, root, w, s);
+    0
+  };
+  s[0]
+}
+fn kv3_n(base: [i64], tmp: [i64]) -> i64 {
+  let s = zeros(4);
+  let _ = kv3_fold(base, kv_root(base, tmp), s);
+  s[1]
+}
+fn kv3_h(base: [i64], tmp: [i64]) -> i64 {
+  let s = zeros(4);
+  kv3_fold(base, kv_root(base, tmp), s)
+}
+
 fn kv_snapshot(base: [i64], tmp: [i64]) -> i64 { pj_kv_fold(base, kv_root(base, tmp)) }
 
 // kv_memo: the snapshot through the projection memo; how[0] says how it was answered.
@@ -84,13 +264,13 @@ fn main(argc: i64, argv: [str]) -> i64 {
     let _ = st_seal(base, root, tmp) in
     let _ = st_commit(base, tx, root, tmp) in
     0
-  ) else (if ph == 110 then st_get(base, kv_root(base, tmp), 0)
-  else (if ph == 104 then kv_snapshot(base, tmp)
+  ) else (if ph == 110 then (let k = kv_vkind(base, tmp) in if k == 0 then st_get(base, kv_root(base, tmp), 0) else (if k == 3 then kv3_n(base, tmp) else 0 - 3))
+  else (if ph == 104 then (let k = kv_vkind(base, tmp) in if k == 0 then kv_snapshot(base, tmp) else (if k == 3 then kv3_h(base, tmp) else 0 - 3))
   else (if ph == 103 then st_gen(base, tmp)
   else (if ph == 100 then st_get(base, st_ref(base, kv_root(base, tmp), 1), 0)
   else (if ph == 118 then kv_version(base, kv_root(base, tmp))
-  else (if ph == 109 then kv_memo(base, pj_code(argv[1]), zeros(3), tmp)
-  else (if ph == 77 then (let how = zeros(3) in let _ = kv_memo(base, pj_code(argv[1]), how, tmp) in how[0])
+  else (if ph == 109 then (if kv_vkind(base, tmp) == 0 then kv_memo(base, pj_code(argv[1]), zeros(3), tmp) else 0 - 3)
+  else (if ph == 77 then (if kv_vkind(base, tmp) == 0 then (let how = zeros(3) in let _ = kv_memo(base, pj_code(argv[1]), how, tmp) in how[0]) else 0 - 3)
   else 0)))))));
 
   let _ = sys_munmap(st_addr(base), size);

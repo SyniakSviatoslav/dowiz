@@ -87,6 +87,13 @@ impl Kv {
                 st.check_obj(arr).map_err(KvError::BadCrc)?;
             }
         }
+        // W-DELTA: every record on the chain is checked too, before any is replayed -- after a
+        // version this code does not know is refused, so it never surfaces as a crc failure.
+        if Kv::version(st) > crate::kv::delta::VERSION_DELTA {
+            return Err(KvError::NotKv);
+        }
+        let chain = crate::kv::delta::chain_in(st, root).ok_or(KvError::NotKv)?;
+        crate::kv::delta::check_chain(st, &chain).map_err(KvError::BadCrc)?;
         Kv::decode(st).ok_or(KvError::NotKv)
     }
 

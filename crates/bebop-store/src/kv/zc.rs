@@ -33,12 +33,15 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 
-use super::{FNV_OFFSET, ROOT_V2, VERSION};
+use super::delta::{self, Rec};
+use super::{FNV_OFFSET, ROOT_V2};
 use crate::verify::KvError;
 use crate::{follow_in, get_in, obj_cells_in, root_in};
 
 mod image;
 pub use image::{check_obj_in, Image};
+/// The delta chain read in place (W-DELTA): `get`, `len`, `key`, `value`, `prefix_range`.
+mod overlay;
 
 /// Proof that `KvIn::open` passed on some bytes, and what it learned (the key order).
 /// The field is private: only `open` makes one.
@@ -60,6 +63,11 @@ pub struct KvIn<C: Image> {
     kbytes: usize,
     vbytes: usize,
     sorted: bool,
+    /// W-DELTA: every record of a v3 chain (newest first), the newest op per key sorted by
+    /// key, and the merged order (empty when there is no chain: then index i IS base i).
+    chain: Vec<Rec>,
+    ov: Vec<(Vec<u8>, Rec)>,
+    merged: Vec<overlay::Slot>,
 }
 
 /// One entry's (offset, len), bounded by the blob: `None` is a slice the image does not hold.
@@ -82,13 +90,18 @@ impl<C: Image> KvIn<C> {
             }
         }
         let mut kv = Self::shape(c, true)?;
+        delta::check_chain(&kv.c, &kv.chain).map_err(KvError::BadCrc)?;
         kv.sorted = kv.index_pass()?;
+        kv.finish()?;
         Ok(kv)
     }
 
-    /// For bytes this holder already `open`ed. See the module.
+    /// For bytes this holder already `open`ed. See the module. A v3 chain is walked again
+    /// (O(D) cells, no crc) -- the `Checked` names no generation, only the key order.
     pub fn reopen(c: C, checked: Checked) -> Result<Self, KvError> {
-        Self::shape(c, checked.sorted)
+        let mut kv = Self::shape(c, checked.sorted)?;
+        kv.finish()?;
+        Ok(kv)
     }
 
     /// What `open` learned, for `reopen`.
@@ -101,23 +114,15 @@ impl<C: Image> KvIn<C> {
         self.sorted
     }
 
-    /// Entries in the image.
-    pub fn len(&self) -> usize {
-        self.n
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.n == 0
-    }
-
     /// Root, version, count and the four arrays, every number bounded by the image --
     /// the O(1) half of `Kv::decode`'s checks.
     fn shape(c: C, sorted: bool) -> Result<Self, KvError> {
         let root = root_in(&c).ok_or(KvError::NotKv)?;
         let ver = if obj_cells_in(&c, root) >= ROOT_V2 && get_in(&c, root, 5) > 0 { get_in(&c, root, 5) } else { 1 };
-        if ver > VERSION {
+        if ver > delta::VERSION_DELTA {
             return Err(KvError::NotKv);
         }
+        let chain = delta::chain_in(&c, root).ok_or(KvError::NotKv)?;
         let n = get_in(&c, root, 0);
         let arr = |i| follow_in(&c, root, i).ok_or(KvError::NotKv);
         let (kidx, kblob, vidx, vblob) = (arr(1)?, arr(2)?, arr(3)?, arr(4)?);
@@ -129,7 +134,8 @@ impl<C: Image> KvIn<C> {
         if n < 0 || (n as usize).checked_mul(2).is_none_or(|t| t > obj_cells_in(&c, kidx).min(obj_cells_in(&c, vidx))) {
             return Err(KvError::NotKv);
         }
-        Ok(KvIn { ver, n: n as usize, kidx, kblob, vidx, vblob, kbytes, vbytes, sorted, c })
+        let ov = overlay::build(&c, &chain);
+        Ok(KvIn { ver, n: n as usize, kidx, kblob, vidx, vblob, kbytes, vbytes, sorted, chain, ov, merged: Vec::new(), c })
     }
 
     /// Every slice bounded, the budget (entries together no larger than the blobs:
@@ -217,29 +223,21 @@ impl<C: Image> KvIn<C> {
         Ok(None)
     }
 
-    /// Key `i`'s bytes.
-    pub fn key(&self, i: usize) -> Result<Cow<'_, [u8]>, KvError> {
+    /// BASE key `i`'s bytes (the merged view is `key`, overlay.rs).
+    fn base_key(&self, i: usize) -> Result<Cow<'_, [u8]>, KvError> {
         let (o, l) = self.key_slice(i)?;
         Ok(self.blob(self.kblob, o, l))
     }
 
-    /// Value `i`'s bytes.
-    pub fn value(&self, i: usize) -> Result<Cow<'_, [u8]>, KvError> {
+    /// BASE value `i`'s bytes.
+    fn base_value(&self, i: usize) -> Result<Cow<'_, [u8]>, KvError> {
         let (o, l) = self.val_slice(i)?;
         Ok(self.blob(self.vblob, o, l))
     }
 
-    /// The value under `key`: O(log n) keys and the one value are read.
-    pub fn get(&self, key: &[u8]) -> Result<Option<Cow<'_, [u8]>>, KvError> {
-        match self.find(key)? {
-            Some(i) => self.value(i).map(Some),
-            None => Ok(None),
-        }
-    }
-
-    /// The indices of every key starting with `prefix`, in stored order. On a sorted
+    /// The BASE indices of every key starting with `prefix`, in stored order. On a sorted
     /// image: a lower-bound search, then a walk while the prefix holds.
-    pub fn prefix_range(&self, prefix: &[u8]) -> Result<Vec<usize>, KvError> {
+    fn base_prefix_range(&self, prefix: &[u8]) -> Result<Vec<usize>, KvError> {
         let starts = |i: usize| -> Result<bool, KvError> {
             let (ko, kl) = self.key_slice(i)?;
             Ok(kl >= prefix.len() && (0..prefix.len()).all(|j| self.byte(self.kblob, ko + j) == prefix[j]))
@@ -270,7 +268,7 @@ impl<C: Image> KvIn<C> {
     /// without building the entries.
     pub fn snapshot_root_u64(&self) -> Result<u64, KvError> {
         let mut h = FNV_OFFSET;
-        for i in 0..self.n {
+        for i in 0..self.len() {
             let (k, v) = (self.key(i)?, self.value(i)?);
             h = super::fnv1a(h, &(k.len() as u64).to_le_bytes());
             h = super::fnv1a(h, &k);

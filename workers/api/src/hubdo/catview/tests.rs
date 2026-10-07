@@ -67,3 +67,35 @@ fn a_reread_after_eviction_is_crc_checked_again() {
     // A cold object over the same storage refuses too.
     assert!(h.cold().try_call(crate::wire::Call::new("https://hub/fold/catalogue?q=product&id=p05", worker::Method::Get).unwrap()).is_err());
 }
+
+/// W-DELTA THROUGH THE OBJECT: a 165 x 2.5 KB catalogue, then ONE price edit and one removal
+/// written as a delta (v3) by `Catalog::to_bytes`. The next in-place read answers the edit
+/// (the previous generation's `Checked` never serves it), a cold object over the same storage
+/// answers the same, and the write sent the chunk holding the superblocks and the tail chunk
+/// only -- counted on the storage the object wrote to, not computed.
+#[test]
+fn a_delta_write_is_read_next_and_writes_two_chunks() {
+    let h = Harness::new();
+    let mut big = Catalog::create().unwrap();
+    for i in 0..165 {
+        big.set_product(&format!("p{i:03}"), &json!({"id": format!("p{i:03}"), "price": 500 + i, "d": "x".repeat(2400)}).to_string());
+    }
+    let base = big.to_bytes().unwrap();
+    h.put("catalog", 0, &base);
+    assert!(product(&h, "p005").as_str().unwrap().contains("\"price\":505"));
+    let mut c = Catalog::load(&base).unwrap();
+    c.set_product("p005", &json!({"id": "p005", "price": 777}).to_string());
+    c.remove_product("p006");
+    let after = c.to_bytes().unwrap();
+    assert!(after.len() > base.len() && after.len() - base.len() < 1024, "{} -> {} B: not an append", base.len(), after.len());
+    h.host.writes.borrow_mut().clear();
+    h.put("catalog", 1, &after);
+    let chunks: Vec<String> = h.host.writes.borrow().iter().filter(|k| k.starts_with("c:catalog:")).cloned().collect();
+    println!("delta write through the object: {} B image, chunks written {chunks:?}", after.len());
+    assert!(chunks.len() <= 2 && chunks.contains(&"c:catalog:0".to_string()), "{chunks:?}");
+    assert!(product(&h, "p005").as_str().unwrap().contains("\"price\":777"), "the edit was not read");
+    assert_eq!(product(&h, "p006"), Value::Null, "the removal was not read");
+    assert_eq!(h.get("/fold/catalogue?q=root").body_value()["root"], c.root());
+    let cold = h.cold();
+    assert!(cold.get("/fold/catalogue?q=product&id=p005").body_value()["product"].as_str().unwrap().contains("777"), "a cold object");
+}
