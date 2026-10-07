@@ -251,7 +251,8 @@ def check(metric, value, binm, hist):
 def selfcompile(binpath, base=None, n=5):
     os.makedirs(T, exist_ok=True)
     def one(b):
-        for f in (f"{T}/x.bin", f"{T}/x.bin.becache", f"{T}/x.bin.use"):
+        # 2026-10-07: x.bin.dag too -- kept, every run after the warmup was a memo replay (~10x low).
+        for f in (f"{T}/x.bin", f"{T}/x.bin.becache", f"{T}/x.bin.use", f"{T}/x.bin.dag"):
             try: os.remove(f)
             except FileNotFoundError: pass
         return run1([SEED, b, "compile", "bebop.bp", f"{T}/x.bin"])
