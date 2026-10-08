@@ -7,7 +7,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const ts = require(process.env.TS_PATH || '/root/dowiz/marketing/promo-30s/node_modules/typescript');
+// TS_PATH, else the repo root's node_modules (CI installs it there), else the box's promo-30s copy.
+const ts = (() => {
+  const tries = [process.env.TS_PATH, path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../node_modules/typescript'),
+    '/root/dowiz/marketing/promo-30s/node_modules/typescript'].filter(Boolean);
+  for (const t of tries) { try { return require(t); } catch {} }
+  throw new Error(`body-fields: typescript not found (tried ${tries.join(', ')}); set TS_PATH or npm install typescript`);
+})();
 
 const K = ts.SyntaxKind;
 const POSTERS = new Set(['post', 'write', 'tapped', 'send', 'postJson', 'postJSON']);

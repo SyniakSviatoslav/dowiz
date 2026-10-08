@@ -33,7 +33,7 @@ run() { # run <name> <command...>
   last=$(grep "^$name: " "$OUT/$n.log" | tail -1)
   [ -n "$last" ] || last=$(grep -v '^[[:space:]]*$' "$OUT/$n.log" | tail -1)
   last=$(printf '%s' "$last" | cut -c1-110)
-  mark=ok; [ "$rc" -eq 0 ] || { mark=FAIL; fail=1; }
+  mark=ok; [ "$rc" -eq 0 ] || { mark=FAIL; fail=1; reds="${reds:-}${reds:+ }$name"; }
   printf '%-4s %-26s rc=%-3s %s\n' "$mark" "$name" "$rc" "$last"
   if [ "$rc" -ne 0 ]; then
     sed 's/^/       | /' "$OUT/$n.log" | tail -15
@@ -91,4 +91,7 @@ fi
 
 echo
 if [ $fail = 0 ]; then echo "run-all: $n gate(s), all exit 0"; else echo "run-all: FAILURES above ($n run)"; fi
+# GitHub shows at most 10 error annotations per step, so the full list goes out once more as a warning
+# (a separate quota): 2026-10-08 four red gates hid behind the first ten.
+[ -n "${GITHUB_ACTIONS:-}" ] && [ $fail != 0 ] && printf '::warning title=run-all red gates::%s\n' "${reds:-}"
 exit $fail

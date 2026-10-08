@@ -42,8 +42,12 @@
 // the order named -- a gate whose failure cannot be chased is a dashboard.
 import fs from 'node:fs';
 
+// The owner file exists on the box only. Read it when present: without it a live run's logins fail loudly
+// (every venue red), and the proof, whose fetch is stubbed, still runs on a CI runner (2026-10-08: all 49 of
+// its cases died on ENOENT there).
+const OWNER_FILE = process.env.DOWIZ_OWNER_FILE || '/root/.dowiz_owner';
 const creds = Object.fromEntries(
-  fs.readFileSync('/root/.dowiz_owner', 'utf8')
+  (fs.existsSync(OWNER_FILE) ? fs.readFileSync(OWNER_FILE, 'utf8') : '')
     .split('\n').filter(l => l.startsWith('export '))
     .map(l => l.slice(7).split('=')));
 
