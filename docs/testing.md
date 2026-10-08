@@ -157,8 +157,8 @@ Other workflows in `.github/workflows/`, as of this release:
 |---|---|
 | `safety-floor.yml` | kept: runs `.claude/hooks/verify-safety-floor.sh`, which exits 0 on the tree |
 | `skill-security.yml` | kept: scans agent-skill directories a pull request adds or changes |
-| `visual.yml` | obsolete, to be deleted: its path filter watches `apps/web/` and `packages/ui/`, which were removed on 2026-07-15, so it never runs |
-| `heartbeat-monitor.yml` | obsolete, to be deleted: a dead-man's switch for a Hetzner box that no longer serves production; `health-cron.yml` replaces it |
+| `visual.yml` | manual only (2026-10-08): it boots the legacy pnpm/Postgres stack removed on 2026-07-15; its PR trigger still fired when a PR edited the file (Dependabot PR #48 went red at `setup-node` with `cache: pnpm`). Kept, not deleted; a dispatch fails at once naming the missing stack |
+| `heartbeat-monitor.yml` | kept (rewritten 2026-10-03): reads dowiz-watch's `/healthz` and `/status` on workers.dev every 10 minutes; red when the watcher is stale or any target is not up |
 | `academia-extract.yml`, `academia_full_cron.yml` | obsolete, to be deleted: unrelated scraping jobs, and neither file parses as YAML |
 
 ## On the development box

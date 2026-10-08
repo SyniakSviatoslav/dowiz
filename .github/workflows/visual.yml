@@ -1,16 +1,16 @@
-name: Visual Regression Net
+name: Visual Regression Net (legacy stack, manual)
 
-# Run only when something that can change rendering changes. Critical-path
-# screens live in apps/web; shared atoms/theme in packages/ui; the suite itself
-# in e2e/visual.
+# MANUAL ONLY SINCE 2026-10-08 (W-CIMON). This job boots the LEGACY Node stack -- pnpm workspace,
+# apps/web, packages/ui, Postgres + pg-boss, Redis, playwright.visual.config.ts -- which was removed
+# from the repo on 2026-07-15: there is no package.json, no pnpm-lock.yaml and no apps/web here
+# (docs/testing.md lists this file as obsolete). Its pull_request trigger still fired whenever a PR
+# touched this file, so Dependabot's actions bump (PR #48, run 37735950974) went red at
+# `actions/setup-node@v6` with `cache: pnpm` -- a pnpm cache needs pnpm-lock.yaml, which is gone.
+# The action versions were valid; the target is not. Nothing is deleted (operator, 2026-10-02):
+# the steps and e2e/visual/ stay as the record and the starting point if the suite is ported to
+# the current surfaces. A dispatch fails at once, by name, while the stack is absent.
 on:
-  pull_request:
-    paths:
-      - 'apps/web/**'
-      - 'packages/ui/**'
-      - 'e2e/visual/**'
-      - 'playwright.visual.config.ts'
-      - '.github/workflows/visual.yml'
+  workflow_dispatch:
 
 # A newer push to the same PR cancels the older in-flight run.
 concurrency:
@@ -56,6 +56,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: The legacy stack this job boots must exist
+        run: |
+          for p in package.json pnpm-lock.yaml apps/web packages/ui playwright.visual.config.ts; do
+            [ -e "$p" ] || { echo "::error title=visual::$p is absent: the legacy Node stack was removed on 2026-07-15; port e2e/visual to the current surfaces first"; exit 1; }
+          done
 
       - uses: pnpm/action-setup@v3
         with:
