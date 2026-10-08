@@ -273,3 +273,20 @@ steps:
       en: "How far the guests' phones and the venue disagree on tastes. Information only."
       uk: "Наскільки телефони гостей і заклад розходяться щодо смаків. Лише для інформації."
       ru: "Насколько телефоны гостей и заведение расходятся во вкусах. Только для информации."
+  - key: 16
+    anchor: health.counters
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="health.counters"]'
+    title:
+      sq: "Serveri i lokalit"
+      en: "The venue server"
+      uk: "Сервер закладу"
+      ru: "Сервер заведения"
+    caption:
+      sq: "Sa lexoi dhe shkroi që kur u zgjua. Vetëm informacion."
+      en: "How much it read and wrote since it woke. Information only."
+      uk: "Скільки він прочитав і записав від пробудження. Лише для інформації."
+      ru: "Сколько он прочитал и записал с пробуждения. Только для информации."

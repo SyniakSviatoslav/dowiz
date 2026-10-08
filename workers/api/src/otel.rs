@@ -237,5 +237,21 @@ fn to_any(v: &Value) -> Value {
     }
 }
 
+/// THE INSTRUMENTS' WALL CLOCK in µs (AX0, `hubdo/counters.rs`): elapsed time, never a decision.
+/// On wasm32 it is the platform's `Date.now()` -- ms resolution, and FROZEN while code runs: "APIs
+/// that return timers, including `performance.now()` and `Date.now()`, only advance or increment after
+/// I/O occurs" (developers.cloudflare.com/workers/runtime-apis/performance, Apr 23 2026). So a live
+/// span over pure CPU (a decode) reads 0 and a span over storage reads the I/O. Natively: µs.
+pub fn wall_us() -> u64 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        Date::now().as_millis() * 1000
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_micros() as u64)
+    }
+}
+
 #[cfg(test)]
 mod tests;

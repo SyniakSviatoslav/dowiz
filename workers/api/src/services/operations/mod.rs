@@ -16,7 +16,6 @@ pub mod stock;
 pub mod supplies;
 pub mod waste;
 
-
 /// `GET /api/owner/health` — what this venue is spending, and how close to a limit.
 ///
 /// THE ARENA IS THE LIMIT NOBODY SEES UNTIL IT BITES. A bebop store never
@@ -183,6 +182,7 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         "sms": crate::notify::sms::routes::health(&place, settings.as_ref().ok().map(|s| &s.settings), ctx.data.now_ms).await, // W-SMS
         "sheaf": crate::services::customers::taste_routes::radius_health(&place).await, // W-TASTE2 S7a
         "snn": crate::services::customers::snn_routes::health(&place, settings.as_ref().ok().map(|s| &s.settings)).await, // W-SNN
+        "counters": crate::hubdo::counters::ask(&place, req.url().is_ok_and(|u| u.query_pairs().any(|(k, v)| k == "counters" && v == "flush"))).await, // AX0
     }))
 }
 

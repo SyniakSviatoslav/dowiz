@@ -1,0 +1,271 @@
+{
+  "id": "ax0.counters.v1",
+  "version": "1.0.0",
+  "description": {
+    "en": "AX0-COUNTERS (docs/research/2026-10-02-ax-implementation-plan.md §A0, + card W-AX0 (e)). Each venue's Durable Object counts, in memory, for the life of one wake: (a) ?since= catch-ups and how many the window could not answer (since_total/since_none); (b) whether this window holds the wake and the wake has written nothing yet (wakes_total/wakes_readonly), plus the wake's own reads/writes (never flushed); (c) the wall of each orders fold from bytes (cold_folds, cold_fold_us, up to 16 samples, the first after the wake); (d) chunks stored per write (proj_rows/writes); (e) per catalogue write: bytes of the two Catalog::load decodes, the edit journal's bytes, and the wall of each part. GET /api/owner/health returns them as `counters`; ?counters=flush (the nightly) answers AND zeroes, so summed nights count nothing twice. Nothing is stored: a hibernation erases an unflushed window, and the next window says cause=wake so the collector sees the gap. CLOCK: on the platform Date.now only advances after I/O (developers.cloudflare.com/workers/runtime-apis/performance, Apr 23 2026), so a live cat_decode_us is ~0 by construction and only the byte counts and the I/O spans are real; natively the µs are real (clock=native-us).",
+    "uk": "Лічильники об'єкта закладу (AX0): опитування ?since= без відповіді, пробудження лише з читанням, холодна згортка, рядки на запис і вартість запису каталогу; /api/owner/health -> counters, ?counters=flush обнуляє."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/hubdo/counters.rs",
+      "line": 71,
+      "what": "Counters::woke (the constructor's hook)"
+    },
+    {
+      "file": "workers/api/src/hubdo/counters.rs",
+      "line": 91,
+      "what": "since (a)"
+    },
+    {
+      "file": "workers/api/src/hubdo/counters.rs",
+      "line": 106,
+      "what": "wrote (b)+(d)"
+    },
+    {
+      "file": "workers/api/src/hubdo/counters.rs",
+      "line": 113,
+      "what": "cold_fold (c)"
+    },
+    {
+      "file": "workers/api/src/hubdo/counters.rs",
+      "line": 126,
+      "what": "catalogue_write (e)"
+    },
+    {
+      "file": "workers/api/src/hubdo/counters.rs",
+      "line": 135,
+      "what": "snapshot(flush)"
+    },
+    {
+      "file": "workers/api/src/hubdo/counters.rs",
+      "line": 169,
+      "what": "GET /fold/counters[?flush=1]"
+    },
+    {
+      "file": "workers/api/src/hubdo.rs",
+      "line": 223,
+      "what": "constructor hook"
+    },
+    {
+      "file": "workers/api/src/hubdo.rs",
+      "line": 305,
+      "what": "orders_view cold hook"
+    },
+    {
+      "file": "workers/api/src/hubdo.rs",
+      "line": 1000,
+      "what": "put_image_as write hook"
+    },
+    {
+      "file": "workers/api/src/hubdo.rs",
+      "line": 1170,
+      "what": "/fold/changes hook"
+    },
+    {
+      "file": "workers/api/src/hubdo/journal.rs",
+      "line": 109,
+      "what": "write_image's journal path (e)"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "workers/api/src/hubdo/counters.rs",
+      "line": 177,
+      "what": "ask (the Worker side)"
+    },
+    {
+      "file": "workers/api/src/services/operations/mod.rs",
+      "line": 185,
+      "what": "GET /api/owner/health -> counters"
+    },
+    {
+      "file": "tools/evals/collect/health.mjs",
+      "line": 105,
+      "what": "the nightly flushes and stashes ctx.healths"
+    },
+    {
+      "file": "tools/evals/collect/cf.mjs",
+      "line": 75,
+      "what": "cf.since_none_share, cf.wakes_readonly_share, cf.cold_fold_us_p50, cf.proj_rows_per_write, cf.catalog_write_us, cf.catalog_write_journal_bytes"
+    },
+    {
+      "file": "tools/live-proof/probes/feature-ax0-counters.mjs",
+      "line": 1,
+      "what": "probe"
+    }
+  ],
+  "external_api_version": null,
+  "on_disk_format": "unchanged (nothing stored)",
+  "routes": {
+    "health": {
+      "request": {
+        "method": "GET",
+        "path": "/api/owner/health[?counters=flush]",
+        "auth": "owner bearer, venue host"
+      },
+      "request_schema": null,
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "counters"
+        ],
+        "properties": {
+          "counters": {
+            "$ref": "#/$defs/counters"
+          }
+        },
+        "$defs": {
+          "counters": {
+            "type": "object",
+            "required": [
+              "since_total",
+              "since_none",
+              "reads",
+              "writes",
+              "proj_rows",
+              "cold_folds",
+              "cold_fold_us",
+              "cat_writes",
+              "cat_decode_us",
+              "cat_decoded_bytes",
+              "journal_us",
+              "journal_bytes",
+              "wakes_total",
+              "wakes_readonly",
+              "cold_fold_samples",
+              "cold_fold_first_us",
+              "clock",
+              "window",
+              "wake"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "since_total": {
+                "$ref": "#/$defs/u"
+              },
+              "since_none": {
+                "$ref": "#/$defs/u"
+              },
+              "reads": {
+                "$ref": "#/$defs/u"
+              },
+              "writes": {
+                "$ref": "#/$defs/u"
+              },
+              "proj_rows": {
+                "$ref": "#/$defs/u"
+              },
+              "cold_folds": {
+                "$ref": "#/$defs/u"
+              },
+              "cold_fold_us": {
+                "$ref": "#/$defs/u"
+              },
+              "cat_writes": {
+                "$ref": "#/$defs/u"
+              },
+              "cat_decode_us": {
+                "$ref": "#/$defs/u"
+              },
+              "cat_decoded_bytes": {
+                "$ref": "#/$defs/u"
+              },
+              "journal_us": {
+                "$ref": "#/$defs/u"
+              },
+              "journal_bytes": {
+                "$ref": "#/$defs/u"
+              },
+              "wakes_total": {
+                "$ref": "#/$defs/u"
+              },
+              "wakes_readonly": {
+                "$ref": "#/$defs/u"
+              },
+              "cold_fold_samples": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "$ref": "#/$defs/u"
+                }
+              },
+              "cold_fold_first_us": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "clock": {
+                "enum": [
+                  "platform-ms-advances-on-io-only",
+                  "native-us"
+                ]
+              },
+              "window": {
+                "type": "object",
+                "required": [
+                  "fromMs",
+                  "toMs",
+                  "wokeAtMs",
+                  "cause",
+                  "flushes",
+                  "flushed"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "fromMs": {
+                    "$ref": "#/$defs/u"
+                  },
+                  "toMs": {
+                    "$ref": "#/$defs/u"
+                  },
+                  "wokeAtMs": {
+                    "$ref": "#/$defs/u"
+                  },
+                  "cause": {
+                    "enum": [
+                      "wake",
+                      "flush"
+                    ]
+                  },
+                  "flushes": {
+                    "$ref": "#/$defs/u"
+                  },
+                  "flushed": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "wake": {
+                "type": "object",
+                "required": [
+                  "atMs",
+                  "reads",
+                  "writes"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "atMs": {
+                    "$ref": "#/$defs/u"
+                  },
+                  "reads": {
+                    "$ref": "#/$defs/u"
+                  },
+                  "writes": {
+                    "$ref": "#/$defs/u"
+                  }
+                }
+              }
+            }
+          },
+          "u": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}

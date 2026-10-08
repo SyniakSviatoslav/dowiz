@@ -567,6 +567,7 @@ async function openHealth(){
   paint();
   if (h.sms?.on) import('/admin/sms.js').then(m => m.healthRow($('#hBody'), h.sms)).catch(() => {}); // W-SMS
   if (h.sheaf) import('/admin/sheaf-health.js').then(m => m.healthRow($('#hBody'), h.sheaf)).catch(() => {}); // W-TASTE2 S7a
+  if (h.counters) import('/admin/counters-health.js').then(m => m.healthRow($('#hBody'), h.counters)).catch(() => {}); // AX0
   $('#hBackup').onclick = async e => { e.preventDefault(); try { const r = await fetch('/api/owner/backup', { headers: { authorization: 'Bearer ' + store.t } }); const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `dowiz-${store.loc}-${new Date().toISOString().slice(0, 10)}.json`; a.click(); } catch (err) { fail(err); } };
 }
 

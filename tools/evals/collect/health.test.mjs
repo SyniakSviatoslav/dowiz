@@ -104,3 +104,16 @@ test('the platform error list may be a bare object; the global fetch is the defa
     assert.equal(r['health.a.image.log.headroom_days'], undefined, 'no previous reading, no growth');
   } finally { globalThis.fetch = saved; }
 });
+
+test('AX0: only the nightly flushes the counters, and every venue\'s window is stashed for cf.mjs', async () => {
+  const seen = [];
+  const f = async (url, o) => { seen.push(url); return router({ login: true, '/api/owner/health': () => J({ ...H, counters: { since_total: 3 } }) })(url, o); };
+  const creds = { OWNER_EMAIL: 'e', OWNER_PASSWORD: 'p' };
+  const night = { hosts: ['https://a.dowiz.org'], creds, fetch: f, suite: 'nightly' };
+  await collect(night);
+  assert.ok(seen.includes('https://a.dowiz.org/api/owner/health?counters=flush'), seen.join(' '));
+  assert.deepEqual(night.healths, [{ venue: 'a', counters: { since_total: 3 } }]);
+  seen.length = 0;
+  await collect({ hosts: ['https://a.dowiz.org'], creds, fetch: f, suite: 'live' });
+  assert.ok(seen.includes('https://a.dowiz.org/api/owner/health'), 'a live run looks without erasing the nightly\'s window');
+});

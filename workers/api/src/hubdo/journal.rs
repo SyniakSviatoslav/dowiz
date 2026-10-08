@@ -100,19 +100,24 @@ impl HubImages {
     async fn journal_append(&self, bytes: &[u8], gens: (i64, i64), at: i64, by: &str) -> Option<Appended> {
         let img = crate::catalog_history::IMAGE;
         // BEFORE: the catalogue this object holds (`put_image_as` read it just now); none = empty.
-        let before = match self.mem.borrow().get(CATALOG_IMAGE) {
-            None => Ok(edits::State::new()),
-            Some((_, b)) => Catalog::load(b).map(|c| edits::state_of(&c)),
+        let t0 = crate::otel::wall_us(); // AX0 (e): the two decodes, then the journal's load + append
+        let (before, held) = match self.mem.borrow().get(CATALOG_IMAGE) {
+            None => (Ok(edits::State::new()), 0),
+            Some((_, b)) => (Catalog::load(b).map(|c| edits::state_of(&c)), b.len()),
         };
-        let (before, after) = match (before, Catalog::load(bytes).map(|c| edits::state_of(&c))) {
+        let after = Catalog::load(bytes).map(|c| edits::state_of(&c));
+        let (t1, decoded, jlen) = (crate::otel::wall_us(), held + bytes.len(), std::cell::Cell::new(0));
+        let cost = || self.counters.catalogue_write(t1.saturating_sub(t0), decoded, crate::otel::wall_us().saturating_sub(t1), jlen.get());
+        let (before, after) = match (before, after) {
             (Ok(b), Ok(a)) => (b, a),
             (b, a) => {
                 log_error!("menu.journal: a catalogue does not load ({:?} / {:?}); not journaled", b.err(), a.err());
+                cost();
                 return None;
             }
         };
         let (jmeta, mut log) = match self.image(img).await {
-            Ok(Some((m, b))) => match LogImage::load(&b) {
+            Ok(Some((m, b))) => match { jlen.set(b.len()); LogImage::load(&b) } {
                 Ok(l) => (Some(m), l),
                 Err(e) => {
                     log_error!("menu.journal: unreadable ({e:?}); not journaled");
@@ -125,7 +130,7 @@ impl HubImages {
                 return None;
             }
         };
-        match edits::journal(&mut log, &before, &after, at, by, gens) {
+        let out = match edits::journal(&mut log, &before, &after, at, by, gens) {
             Ok(j) if j.edits + j.unseen + j.baseline == 0 && !j.compacted => None,
             Ok(j) => {
                 if j.unseen > 0 {
@@ -141,7 +146,9 @@ impl HubImages {
                 log_error!("menu.journal: does not replay ({e:?}); not journaled");
                 None
             }
-        }
+        };
+        cost();
+        out
     }
 }
 

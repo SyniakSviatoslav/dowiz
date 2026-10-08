@@ -65,8 +65,50 @@ export async function analytics(fetchFn, env, end) {
 
 export const WHY_NO_TOKEN = 'no Account Analytics:Read token (set CF_ANALYTICS_FILE or create /root/.cf_analytics_token)';
 
-/** The measured indicators, or each one UNVERIFIED with the same reason. */
+export const WHY_NO_HEALTH = 'no venue health read this run (the nightly health collector stashes counters; owner credentials /root/.dowiz_owner)';
+export const COUNTER_IDS = [['cf.since_none_share', 'permille'], ['cf.wakes_readonly_share', 'permille'], ['cf.cold_fold_us_p50', 'µs'],
+  ['cf.proj_rows_per_write', 'rows'], ['cf.catalog_write_us', 'µs'], ['cf.catalog_write_journal_bytes', 'bytes']];
+
+/** AX0-COUNTERS (plan §A0): the objects' own counts, from each venue's `health.counters` window.
+ * Hibernation erases an unflushed window, so `samples=` and the windows that began at a WAKE are in
+ * every note: a share over one sample, or over windows that lost their start, is visibly weak. */
+export function counters(healths) {
+  const src = 'GET /api/owner/health -> counters (the object\'s own window, flushed nightly)';
+  if (!healths?.length) return COUNTER_IDS.map(([id, unit]) => unverified(id, unit, 'trend', src, WHY_NO_HEALTH));
+  const ok = healths.filter(h => h.counters && !h.counters.error);
+  const bad = healths.length - ok.length;
+  const sum = k => ok.reduce((n, h) => n + (Number(h.counters[k]) || 0), 0);
+  const woke = ok.filter(h => h.counters.window?.cause === 'wake').length;
+  const note = `samples=${ok.length} venue window(s), ${woke} began at a wake (counts before it are lost)${bad ? `, ${bad} unreadable` : ''}`;
+  const share = (id, num, den, what) => (den > 0
+    ? ind(id, Math.round((1000 * num) / den), 'permille', 'trend', src, { note: `${num}/${den}; ${note}` })
+    : unverified(id, 'permille', 'trend', src, `no ${what} in the window; ${note}`));
+  const samples = ok.flatMap(h => h.counters.cold_fold_samples || []).sort((x, y) => x - y);
+  const writes = sum('writes');
+  const cat = sum('cat_writes');
+  const clock = [...new Set(ok.map(h => h.counters.clock))].join(',');
+  return [
+    share('cf.since_none_share', sum('since_none'), sum('since_total'), '?since= poll'),
+    share('cf.wakes_readonly_share', sum('wakes_readonly'), sum('wakes_total'), 'wake'),
+    samples.length ? ind('cf.cold_fold_us_p50', samples[Math.floor(samples.length / 2)], 'µs', 'trend', src, { note: `${samples.length} fold(s); clock ${clock}; ${note}` })
+      : unverified('cf.cold_fold_us_p50', 'µs', 'trend', src, `no fold from bytes in the window; ${note}`),
+    writes ? ind('cf.proj_rows_per_write', Math.round((100 * sum('proj_rows')) / writes) / 100, 'rows', 'trend', src, { note: `${sum('proj_rows')} chunks / ${writes} writes; ${note}` })
+      : unverified('cf.proj_rows_per_write', 'rows', 'trend', src, `no write in the window; ${note}`),
+    cat ? ind('cf.catalog_write_us', Math.round((sum('cat_decode_us') + sum('journal_us')) / cat), 'µs', 'trend', src,
+      { note: `per catalogue write: decode ${Math.round(sum('cat_decode_us') / cat)} µs over ${Math.round(sum('cat_decoded_bytes') / cat)} B + journal ${Math.round(sum('journal_us') / cat)} µs; clock ${clock} (live: advances on I/O only); ${note}` })
+      : unverified('cf.catalog_write_us', 'µs', 'trend', src, `no catalogue write in the window; ${note}`),
+    cat ? ind('cf.catalog_write_journal_bytes', Math.round(sum('journal_bytes') / cat), 'bytes', 'trend', src, { note: `journal bytes loaded per catalogue write; ${note}` })
+      : unverified('cf.catalog_write_journal_bytes', 'bytes', 'trend', src, `no catalogue write in the window; ${note}`),
+  ];
+}
+
+/** The measured indicators, or each one UNVERIFIED with the same reason; the AX0 counters beside them. */
 export async function measure(ctx) {
+  const r = await analyticsMeasure(ctx);
+  return { m: r.m, out: [...r.out, ...counters(ctx.healths)] };
+}
+
+async function analyticsMeasure(ctx) {
   const env = readCfEnv(ctx.env?.CF_ANALYTICS_FILE || FILE);
   const src = `Cloudflare GraphQL analytics, ${SCRIPT}, the 24 h before the run`;
   const ids = [['cf.worker_requests_day', 'requests'], ['cf.worker_errors_day', 'errors'], ['cf.cpu_p99_us', 'µs'], ['cf.do_requests_day', 'requests']];

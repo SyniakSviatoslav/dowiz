@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readCfEnv, fold, analytics, measure, QUERY, ENDPOINT, WHY_NO_TOKEN, FILE, SCHEDULED_LIMIT, NO_ORDER_DAY_DO_TARGET } from './cf.mjs';
+import { readCfEnv, fold, analytics, measure, counters, QUERY, ENDPOINT, WHY_NO_TOKEN, WHY_NO_HEALTH, COUNTER_IDS, FILE, SCHEDULED_LIMIT, NO_ORDER_DAY_DO_TARGET } from './cf.mjs';
 
 const byId = xs => Object.fromEntries(xs.map(x => [x.id, x]));
 const ACC = {
@@ -92,6 +92,51 @@ test('the token path defaults to /root/.cf_analytics_token when the environment 
   const seen = [];
   const r = await measure({ now: () => 0, fetch: async () => { seen.push(1); return new Response('{}', { status: 500 }); } });
   assert.equal(r.m, null);
-  assert.equal(r.out.length, 4);
+  assert.equal(r.out.length, 4 + COUNTER_IDS.length, 'the four analytics ids and the AX0 counters, each said');
   assert.ok(seen.length <= 1, 'one query at most, whether the default file exists or not');
+});
+
+// AX0-COUNTERS (plan §A0): the four indicators the plan names, plus the catalogue write's cost.
+const W = (o = {}) => ({ since_total: 0, since_none: 0, wakes_total: 0, wakes_readonly: 0, writes: 0, proj_rows: 0, cat_writes: 0,
+  cat_decode_us: 0, cat_decoded_bytes: 0, journal_us: 0, journal_bytes: 0, cold_fold_samples: [], clock: 'platform-ms-advances-on-io-only',
+  window: { cause: 'flush' }, ...o });
+
+test('counters: every indicator prints a number from the venues\' windows, with samples= and the wake windows', () => {
+  const r = byId(counters([
+    { venue: 'a', counters: W({ since_total: 8, since_none: 2, wakes_total: 1, wakes_readonly: 1, writes: 2, proj_rows: 5, cold_fold_samples: [3000, 1000],
+      cat_writes: 1, cat_decode_us: 0, cat_decoded_bytes: 1096208, journal_us: 4000, journal_bytes: 2155928, window: { cause: 'wake' } }) },
+    { venue: 'b', counters: W({ since_total: 2, since_none: 0, wakes_total: 1, wakes_readonly: 0, writes: 2, proj_rows: 3, cold_fold_samples: [2000] }) },
+    { venue: 'c', counters: { error: 'the object answered 500' } },
+  ]));
+  assert.equal(r['cf.since_none_share'].value, 200);
+  assert.equal(r['cf.wakes_readonly_share'].value, 500);
+  assert.equal(r['cf.cold_fold_us_p50'].value, 2000);
+  assert.equal(r['cf.proj_rows_per_write'].value, 2);
+  assert.equal(r['cf.catalog_write_us'].value, 4000);
+  assert.equal(r['cf.catalog_write_journal_bytes'].value, 2155928);
+  for (const [id] of COUNTER_IDS) {
+    assert.match(r[id].note, /samples=2 venue window\(s\), 1 began at a wake .*1 unreadable/, id);
+    assert.equal(r[id].rule, 'trend');
+  }
+  assert.match(r['cf.catalog_write_us'].note, /advances on I\/O only/);
+});
+
+test('counters: no health is UNVERIFIED with the reason, an empty window names what it lacked (fail loud, never 0)', () => {
+  for (const x of [counters(undefined), counters([])]) {
+    assert.equal(x.length, COUNTER_IDS.length);
+    for (const i of x) assert.equal(i.unverified, WHY_NO_HEALTH);
+  }
+  const quiet = byId(counters([{ venue: 'a', counters: W() }]));
+  assert.match(quiet['cf.since_none_share'].unverified, /no \?since= poll in the window; samples=1/);
+  assert.match(quiet['cf.wakes_readonly_share'].unverified, /no wake/);
+  assert.match(quiet['cf.cold_fold_us_p50'].unverified, /no fold from bytes/);
+  assert.match(quiet['cf.proj_rows_per_write'].unverified, /no write/);
+  assert.match(quiet['cf.catalog_write_us'].unverified, /no catalogue write/);
+  for (const i of Object.values(quiet)) assert.equal(i.value, null, i.id);
+});
+
+test('measure carries the counters from ctx.healths beside the analytics', async () => {
+  const got = byId((await measure({ env: { CF_ANALYTICS_FILE: '/no/such' }, now: () => 0, healths: [{ venue: 'a', counters: W({ since_total: 4, since_none: 1 }) }] })).out);
+  assert.equal(got['cf.since_none_share'].value, 250);
+  assert.equal(got['cf.cpu_p99_us'].unverified, WHY_NO_TOKEN);
 });

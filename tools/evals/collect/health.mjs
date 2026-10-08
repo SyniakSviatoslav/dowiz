@@ -100,8 +100,11 @@ export async function collect(ctx) {
     const { token, why } = await ownerToken(f, host, ctx.creds);
     if (!token) { out.push(unverified(`health.${v}.verdict_ok`, 'bool', 'min', `GET ${host}/api/owner/health`, why)); continue; }
     anyToken = anyToken || { host, token };
-    const h = await getJson(f, `${host}/api/owner/health`, token);
+    // AX0: the NIGHTLY flushes the object's counters (cf.mjs reads them after), so summed nights
+    // never count a poll twice; a `live` run only looks, or it would erase what the nightly sums.
+    const h = await getJson(f, `${host}/api/owner/health${ctx.suite === 'nightly' ? '?counters=flush' : ''}`, token);
     if (h.status !== 200 || !h.json) { out.push(ind(`health.${v}.reachable`, 0, 'bool', 'min', `GET ${host}/api/owner/health`, { limit: 1, note: `answered ${h.status}` })); continue; }
+    (ctx.healths ||= []).push({ venue: v, counters: h.json.counters ?? null }); // read by cf.mjs (cost runs after health)
     out.push(...venueIndicators(v, h.json, ctx.previous || {}, ctx.now ? ctx.now() : Date.now()));
   }
   const admin = ctx.platformToken ? { host: ctx.hosts[0], token: ctx.platformToken } : anyToken;
