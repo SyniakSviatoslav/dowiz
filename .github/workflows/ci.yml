@@ -84,6 +84,16 @@ jobs:
       # vocab.sh runs `cargo run --offline`; a cold runner has nothing to be offline with.
       - name: fetch gen-vocab's dependencies
         run: cd tools/gen-vocab && cargo fetch
+      # 2026-10-08: three gates REFUSED on the runner for want of their inputs, which the box has and the
+      # runner did not: deps-audit (no RustSec checkout), ci-refs (no python yaml), canvas-* (no playwright).
+      - name: the RustSec advisory checkout deps-audit reads
+        run: sh tools/deps/refresh.sh
+      - name: python yaml for ci-refs
+        run: python3 -m pip install --quiet pyyaml
+      - name: playwright for the canvas gates
+        run: |
+          npm install --no-save --no-package-lock playwright@1.63.0
+          npx playwright install --with-deps chromium
       - name: every gate, with its proof
         run: sh tools/gates/run-all.sh --cargo
 

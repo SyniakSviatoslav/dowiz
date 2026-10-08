@@ -47,6 +47,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT="${1:-$(cd "$HERE/../.." && pwd)}"
 cd "$ROOT"
 
+# 2026-10-08: ONE locale everywhere. In the C locale `grep -i` does not fold Cyrillic case, so the box passed
+# "Постквантове шифрування" (capital П) in platform/index.html while CI's UTF-8 runner refused it.
+export LC_ALL=C.UTF-8
 PUBLIC=workers/api/public
 WORDS=$PUBLIC/platform/landing-words.js
 [ -f "$WORDS" ] || { echo "pq-words: $WORDS is missing — the landing moved, not the words; update this gate"; exit 1; }
