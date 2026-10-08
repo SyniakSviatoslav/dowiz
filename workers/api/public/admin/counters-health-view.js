@@ -8,20 +8,30 @@ import { esc } from '../lib/ui/core.js';
 
 export const WORDS = {
   sq: { cnt_title: 'Serveri i lokalit që kur u zgjua', cnt_sub: 'lexime · shkrime · përditësime pa përgjigje / gjithsej · ruajtje menuje',
-        cnt_note: 'Vetëm informacion: numrat fillojnë nga zero sa herë serveri fle.' },
+        cnt_note: 'Vetëm informacion: numrat fillojnë nga zero sa herë serveri fle.',
+        cnt_ae: 'ruajtur në analitikën e Cloudflare · gabime' },
   en: { cnt_title: 'The venue server since it woke', cnt_sub: 'reads · writes · catch-ups unanswered / total · menu saves',
-        cnt_note: 'For information only: the counts start from zero each time the server sleeps.' },
+        cnt_note: 'For information only: the counts start from zero each time the server sleeps.',
+        cnt_ae: 'saved to Cloudflare analytics · errors' },
   uk: { cnt_title: 'Сервер закладу від пробудження', cnt_sub: 'читань · записів · оновлень без відповіді / усього · збережень меню',
-        cnt_note: 'Лише для інформації: лічба починається з нуля щоразу, як сервер засинає.' },
+        cnt_note: 'Лише для інформації: лічба починається з нуля щоразу, як сервер засинає.',
+        cnt_ae: 'збережено в аналітиці Cloudflare · помилок' },
   ru: { cnt_title: 'Сервер заведения с пробуждения', cnt_sub: 'чтений · записей · обновлений без ответа / всего · сохранений меню',
-        cnt_note: 'Только для информации: счёт начинается с нуля каждый раз, когда сервер засыпает.' },
+        cnt_note: 'Только для информации: счёт начинается с нуля каждый раз, когда сервер засыпает.',
+        cnt_ae: 'сохранено в аналитике Cloudflare · ошибок' },
 };
 
-/// PURE. The row's subtitle from `counters`; '' when the answer is missing.
+/// PURE. The row's subtitle from `counters`; '' when the answer is missing. W-AE: the points this
+/// wake saved to Cloudflare Analytics Engine and the refusals, when the object reports them.
 export function countersSub(c){
   if (!c || typeof c !== 'object') return '';
   if (c.error) return esc(String(c.error));
   const n = k => Number(c[k]) | 0;
   const w = c.wake || {};
-  return `<span class="mono">${Number(w.reads) | 0} · ${Number(w.writes) | 0} · ${n('since_none')}/${n('since_total')} · ${n('cat_writes')}</span> <span class="muted" data-t="cnt_sub"></span><br><span class="small muted" data-t="cnt_note"></span>`;
+  return `<span class="mono">${Number(w.reads) | 0} · ${Number(w.writes) | 0} · ${n('since_none')}/${n('since_total')} · ${n('cat_writes')}</span> <span class="muted" data-t="cnt_sub"></span>${aeLine(c.ae)}<br><span class="small muted" data-t="cnt_note"></span>`;
+}
+
+function aeLine(ae){
+  if (!ae || typeof ae !== 'object') return '';
+  return `<br><span class="mono">${Number(ae.points) | 0} · ${Number(ae.errors) | 0}</span> <span class="muted" data-t="cnt_ae"></span>`;
 }

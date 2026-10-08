@@ -20,7 +20,14 @@ test('an error is said, no answer is nothing', () => {
 });
 
 test('four languages, and the health sheet mounts the row', () => {
-  for (const l of ['sq', 'en', 'uk', 'ru']) for (const k of ['cnt_title', 'cnt_sub', 'cnt_note']) assert.ok(WORDS[l][k], `${l}.${k}`);
+  for (const l of ['sq', 'en', 'uk', 'ru']) for (const k of ['cnt_title', 'cnt_sub', 'cnt_note', 'cnt_ae']) assert.ok(WORDS[l][k], `${l}.${k}`);
   const more = readFileSync(new URL('./more.js', import.meta.url), 'utf8');
   assert.match(more, /import\('\/admin\/counters-health\.js'\)\.then\(m => m\.healthRow\(\$\('#hBody'\), h\.counters\)\)/);
+});
+
+test('W-AE: the points saved to Cloudflare analytics and the refusals, only when the object reports them', () => {
+  const h = countersSub({ since_total: 0, wake: {}, ae: { binding: 'COUNTERS', points: 4, errors: 1, lastError: 'x' } });
+  assert.match(h, /4 · 1<\/span> <span class="muted" data-t="cnt_ae">/);
+  assert.doesNotMatch(h, /bad|warn|alert/, 'a refusal is a number, never an alarm');
+  assert.doesNotMatch(countersSub({ wake: {} }), /cnt_ae/, 'an older object without `ae` shows no line');
 });

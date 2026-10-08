@@ -180,3 +180,13 @@ crons = ["17 3 * * *"]
 # Free: 10,000 neurons/day ACCOUNT-WIDE; each venue gets AI_VENUE_NEURONS (default 300, budget.rs).
 [ai]
 binding = "AI"
+
+# AX0's counters, kept past a hibernation (W-AE, operator 2026-10-07 "підключай уже"). Each venue's
+# object writes ONE point per counters window through its own `env`: at the nightly flush and every
+# 16th stored write, at most 48 of those a day per object (src/hubdo/counters/ae.rs) -- 1,000 hubs x
+# 49 = 49,000 points/day against the Free plan's 100,000 (analytics-engine/pricing, read 2026-10-07).
+# The dataset is created by the first write; nothing to set up first. A missing binding fails nothing.
+# Read with the SQL API and an Account Analytics:Read token: tools/evals/collect/cf.mjs.
+[[analytics_engine_datasets]]
+binding = "COUNTERS"
+dataset = "dowiz_counters"

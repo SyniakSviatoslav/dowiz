@@ -997,7 +997,7 @@ impl HubImages {
             self.mem.borrow_mut().remove(id);
             return Err(e);
         }
-        self.counters.wrote(changed.len()); // AX0 (b) + (d): the wake wrote; `changed.len()` rows
+        self.count_write(changed.len()); // AX0 (b) + (d) + W-AE every NTH point (`hubdo/counters.rs`)
         // Chunks past the end of the new image are unreachable now that the
         // meta describes a shorter one, and only now.
         //

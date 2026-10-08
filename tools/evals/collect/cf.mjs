@@ -72,8 +72,8 @@ export const COUNTER_IDS = [['cf.since_none_share', 'permille'], ['cf.wakes_read
 /** AX0-COUNTERS (plan §A0): the objects' own counts, from each venue's `health.counters` window.
  * Hibernation erases an unflushed window, so `samples=` and the windows that began at a WAKE are in
  * every note: a share over one sample, or over windows that lost their start, is visibly weak. */
-export function counters(healths) {
-  const src = 'GET /api/owner/health -> counters (the object\'s own window, flushed nightly)';
+export function counters(healths, fallback) {
+  const src = `GET /api/owner/health -> counters (the object's own window, flushed nightly)${fallback ? `; FALLBACK, Analytics Engine: ${fallback}` : ''}`;
   if (!healths?.length) return COUNTER_IDS.map(([id, unit]) => unverified(id, unit, 'trend', src, WHY_NO_HEALTH));
   const ok = healths.filter(h => h.counters && !h.counters.error);
   const bad = healths.length - ok.length;
@@ -102,14 +102,72 @@ export function counters(healths) {
   ];
 }
 
-/** The measured indicators, or each one UNVERIFIED with the same reason; the AX0 counters beside them. */
-export async function measure(ctx) {
-  const r = await analyticsMeasure(ctx);
-  return { m: r.m, out: [...r.out, ...counters(ctx.healths)] };
+// W-AE: THE SAME SIX from Workers Analytics Engine, which keeps what a hibernation erases. Each
+// venue's object writes one point per window (workers/api/src/hubdo/counters/ae.rs): at the nightly
+// flush and every 16th stored write. A point is a DELTA since the previous one, so SUM over a day
+// counts every event once. SQL API (analytics-engine/sql-api, read 2026-10-07): POST the query as
+// the body, `Authorization: Bearer`, the token needs Account Analytics Read; sampled rows are
+// weighted by `_sample_interval`. The health windows stay the FALLBACK, and say so in `source`.
+export const AE_DATASET = 'dowiz_counters';
+/** double1..double15, the order `ae.rs` DOUBLES writes. */
+export const AE_DOUBLES = ['since_total', 'since_none', 'wakes_total', 'wakes_writing', 'reads', 'writes', 'proj_rows',
+  'cold_folds', 'cold_fold_us', 'cold_fold_p50_us', 'cat_writes', 'cat_decode_us', 'cat_decoded_bytes', 'journal_us', 'journal_bytes'];
+export const aeEndpoint = account => `https://api.cloudflare.com/client/v4/accounts/${account}/analytics_engine/sql`;
+const col = n => `double${AE_DOUBLES.indexOf(n) + 1}`;
+/** One query, the 24 h before it: the sums, the cold-fold p50 (each point's own p50, weighted by its folds), venues, points. */
+export const AE_SQL = `SELECT ${AE_DOUBLES.filter(n => n !== 'cold_fold_p50_us').map(n => `SUM(_sample_interval * ${col(n)}) AS ${n}`).join(', ')}, `
+  + `quantileWeighted(0.5, ${col('cold_fold_p50_us')}, ${col('cold_folds')}) AS cold_fold_p50_us, count(DISTINCT index1) AS venues, `
+  + `SUM(_sample_interval) AS points FROM ${AE_DATASET} WHERE timestamp > NOW() - INTERVAL '1' DAY FORMAT JSON`;
+
+/** The day's sums, or a throw with the answer. */
+export async function aeSums(fetchFn, env) {
+  const r = await fetchFn(aeEndpoint(env.CLOUDFLARE_ACCOUNT_ID), { method: 'POST', headers: { authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` }, body: AE_SQL });
+  const text = await r.text().catch(() => '');
+  let j = null;
+  try { j = JSON.parse(text); } catch { /* said below */ }
+  const row = j?.data?.[0];
+  if (r.status !== 200 || !row) throw new Error(`analytics engine answered ${r.status}: ${text.slice(0, 200)}`);
+  return Object.fromEntries(Object.entries(row).map(([k, v]) => [k, Number(v) || 0]));
 }
 
-async function analyticsMeasure(ctx) {
+/** The six counters from the day's sums; null when no point was written (nothing to say yet). */
+export function aeCounters(t) {
+  if (!t.points) return null;
+  const src = `Workers Analytics Engine ${AE_DATASET} (SQL API), the 24 h before the run`;
+  const note = `points=${t.points} from ${t.venues} venue object(s); a point is a delta, written at each flush and every 16th write`;
+  const share = (id, num, den, what) => (den > 0 ? ind(id, Math.round((1000 * num) / den), 'permille', 'trend', src, { note: `${num}/${den}; ${note}` })
+    : unverified(id, 'permille', 'trend', src, `no ${what} in the day; ${note}`));
+  const per = (id, num, den, unit, what, scale = 1) => (den > 0 ? ind(id, Math.round((scale * num) / den) / scale, unit, 'trend', src, { note: `${num} / ${den}; ${note}` })
+    : unverified(id, unit, 'trend', src, `no ${what} in the day; ${note}`));
+  return [
+    share('cf.since_none_share', t.since_none, t.since_total, '?since= poll'),
+    share('cf.wakes_readonly_share', t.wakes_total - t.wakes_writing, t.wakes_total, 'wake'),
+    t.cold_folds > 0 ? ind('cf.cold_fold_us_p50', Math.round(t.cold_fold_p50_us), 'µs', 'trend', src, { note: `${t.cold_folds} fold(s), p50 of each point's own p50 weighted by its folds; ${note}` })
+      : unverified('cf.cold_fold_us_p50', 'µs', 'trend', src, `no fold from bytes in the day; ${note}`),
+    per('cf.proj_rows_per_write', t.proj_rows, t.writes, 'rows', 'write', 100),
+    per('cf.catalog_write_us', t.cat_decode_us + t.journal_us, t.cat_writes, 'µs', 'catalogue write'),
+    per('cf.catalog_write_journal_bytes', t.journal_bytes, t.cat_writes, 'bytes', 'catalogue write'),
+  ];
+}
+
+/** Analytics Engine first; the health windows when it cannot answer, with the reason in `source`. */
+async function countersMeasure(ctx, env) {
+  if (!(env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID)) return counters(ctx.healths, WHY_NO_TOKEN);
+  try {
+    return aeCounters(await aeSums(ctx.fetch ?? globalThis.fetch, env)) ?? counters(ctx.healths, 'no point written in the 24 h');
+  } catch (e) {
+    return counters(ctx.healths, e.message);
+  }
+}
+
+/** The measured indicators, or each one UNVERIFIED with the same reason; the AX0 counters beside them. */
+export async function measure(ctx) {
   const env = readCfEnv(ctx.env?.CF_ANALYTICS_FILE || FILE);
+  const r = await analyticsMeasure(ctx, env);
+  return { m: r.m, out: [...r.out, ...(await countersMeasure(ctx, env))] };
+}
+
+async function analyticsMeasure(ctx, env) {
   const src = `Cloudflare GraphQL analytics, ${SCRIPT}, the 24 h before the run`;
   const ids = [['cf.worker_requests_day', 'requests'], ['cf.worker_errors_day', 'errors'], ['cf.cpu_p99_us', 'µs'], ['cf.do_requests_day', 'requests']];
   let m = null;

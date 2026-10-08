@@ -1,44 +1,44 @@
 {
   "id": "ax0.counters.v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": {
-    "en": "AX0-COUNTERS (docs/research/2026-10-02-ax-implementation-plan.md §A0, + card W-AX0 (e)). Each venue's Durable Object counts, in memory, for the life of one wake: (a) ?since= catch-ups and how many the window could not answer (since_total/since_none); (b) whether this window holds the wake and the wake has written nothing yet (wakes_total/wakes_readonly), plus the wake's own reads/writes (never flushed); (c) the wall of each orders fold from bytes (cold_folds, cold_fold_us, up to 16 samples, the first after the wake); (d) chunks stored per write (proj_rows/writes); (e) per catalogue write: bytes of the two Catalog::load decodes, the edit journal's bytes, and the wall of each part. GET /api/owner/health returns them as `counters`; ?counters=flush (the nightly) answers AND zeroes, so summed nights count nothing twice. Nothing is stored: a hibernation erases an unflushed window, and the next window says cause=wake so the collector sees the gap. CLOCK: on the platform Date.now only advances after I/O (developers.cloudflare.com/workers/runtime-apis/performance, Apr 23 2026), so a live cat_decode_us is ~0 by construction and only the byte counts and the I/O spans are real; natively the µs are real (clock=native-us).",
+    "en": "AX0-COUNTERS (docs/research/2026-10-02-ax-implementation-plan.md §A0, + card W-AX0 (e)). Each venue's Durable Object counts, in memory, for the life of one wake: (a) ?since= catch-ups and how many the window could not answer (since_total/since_none); (b) whether this window holds the wake and the wake has written nothing yet (wakes_total/wakes_readonly), plus the wake's own reads/writes (never flushed); (c) the wall of each orders fold from bytes (cold_folds, cold_fold_us, up to 16 samples, the first after the wake); (d) chunks stored per write (proj_rows/writes); (e) per catalogue write: bytes of the two Catalog::load decodes, the edit journal's bytes, and the wall of each part. GET /api/owner/health returns them as `counters`; ?counters=flush (the nightly) answers AND zeroes, so summed nights count nothing twice. Nothing is stored: a hibernation erases an unflushed window, and the next window says cause=wake so the collector sees the gap. CLOCK: on the platform Date.now only advances after I/O (developers.cloudflare.com/workers/runtime-apis/performance, Apr 23 2026), so a live cat_decode_us is ~0 by construction and only the byte counts and the I/O spans are real; natively the µs are real (clock=native-us). v1.1.0 (W-AE, 2026-10-07): adds the optional `ae` object -- the Analytics Engine writer's own state for this wake (binding name, points accepted, refusals, the last refusal's text); the points themselves are contract feature-ae-counters.json.",
     "uk": "Лічильники об'єкта закладу (AX0): опитування ?since= без відповіді, пробудження лише з читанням, холодна згортка, рядки на запис і вартість запису каталогу; /api/owner/health -> counters, ?counters=flush обнуляє."
   },
   "producer": [
     {
       "file": "workers/api/src/hubdo/counters.rs",
-      "line": 71,
+      "line": 79,
       "what": "Counters::woke (the constructor's hook)"
     },
     {
       "file": "workers/api/src/hubdo/counters.rs",
-      "line": 91,
+      "line": 103,
       "what": "since (a)"
     },
     {
       "file": "workers/api/src/hubdo/counters.rs",
-      "line": 106,
+      "line": 119,
       "what": "wrote (b)+(d)"
     },
     {
       "file": "workers/api/src/hubdo/counters.rs",
-      "line": 113,
+      "line": 127,
       "what": "cold_fold (c)"
     },
     {
       "file": "workers/api/src/hubdo/counters.rs",
-      "line": 126,
+      "line": 141,
       "what": "catalogue_write (e)"
     },
     {
       "file": "workers/api/src/hubdo/counters.rs",
-      "line": 135,
+      "line": 150,
       "what": "snapshot(flush)"
     },
     {
       "file": "workers/api/src/hubdo/counters.rs",
-      "line": 169,
+      "line": 191,
       "what": "GET /fold/counters[?flush=1]"
     },
     {
@@ -54,7 +54,7 @@
     {
       "file": "workers/api/src/hubdo.rs",
       "line": 1000,
-      "what": "put_image_as write hook"
+      "what": "put_image_as write hook (count_write, W-AE)"
     },
     {
       "file": "workers/api/src/hubdo.rs",
@@ -70,7 +70,7 @@
   "consumer": [
     {
       "file": "workers/api/src/hubdo/counters.rs",
-      "line": 177,
+      "line": 236,
       "what": "ask (the Worker side)"
     },
     {
@@ -255,6 +255,33 @@
                   },
                   "writes": {
                     "$ref": "#/$defs/u"
+                  }
+                }
+              },
+              "ae": {
+                "type": "object",
+                "required": [
+                  "binding",
+                  "points",
+                  "errors",
+                  "lastError"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "binding": {
+                    "const": "COUNTERS"
+                  },
+                  "points": {
+                    "$ref": "#/$defs/u"
+                  },
+                  "errors": {
+                    "$ref": "#/$defs/u"
+                  },
+                  "lastError": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 }
               }

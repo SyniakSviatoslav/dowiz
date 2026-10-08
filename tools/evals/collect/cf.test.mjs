@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readCfEnv, fold, analytics, measure, counters, QUERY, ENDPOINT, WHY_NO_TOKEN, WHY_NO_HEALTH, COUNTER_IDS, FILE, SCHEDULED_LIMIT, NO_ORDER_DAY_DO_TARGET } from './cf.mjs';
+import { readCfEnv, fold, analytics, measure, counters, aeSums, aeCounters, aeEndpoint, AE_SQL, AE_DOUBLES, AE_DATASET, QUERY, ENDPOINT, WHY_NO_TOKEN, WHY_NO_HEALTH, COUNTER_IDS, FILE, SCHEDULED_LIMIT, NO_ORDER_DAY_DO_TARGET } from './cf.mjs';
 
 const byId = xs => Object.fromEntries(xs.map(x => [x.id, x]));
 const ACC = {
@@ -93,7 +93,7 @@ test('the token path defaults to /root/.cf_analytics_token when the environment 
   const r = await measure({ now: () => 0, fetch: async () => { seen.push(1); return new Response('{}', { status: 500 }); } });
   assert.equal(r.m, null);
   assert.equal(r.out.length, 4 + COUNTER_IDS.length, 'the four analytics ids and the AX0 counters, each said');
-  assert.ok(seen.length <= 1, 'one query at most, whether the default file exists or not');
+  assert.ok(seen.length <= 2, 'GraphQL + Analytics Engine at most, whether the default file exists or not');
 });
 
 // AX0-COUNTERS (plan §A0): the four indicators the plan names, plus the catalogue write's cost.
@@ -139,4 +139,64 @@ test('measure carries the counters from ctx.healths beside the analytics', async
   const got = byId((await measure({ env: { CF_ANALYTICS_FILE: '/no/such' }, now: () => 0, healths: [{ venue: 'a', counters: W({ since_total: 4, since_none: 1 }) }] })).out);
   assert.equal(got['cf.since_none_share'].value, 250);
   assert.equal(got['cf.cpu_p99_us'].unverified, WHY_NO_TOKEN);
+});
+
+// W-AE: the six counters from Workers Analytics Engine, the health windows as the labelled fallback.
+const SUMS = { since_total: 10, since_none: 1, wakes_total: 4, wakes_writing: 1, reads: 50, writes: 20, proj_rows: 30, cold_folds: 3,
+  cold_fold_us: 9000, cold_fold_p50_us: 2500, cat_writes: 2, cat_decode_us: 100, cat_decoded_bytes: 4000, journal_us: 300, journal_bytes: 8000, venues: 2, points: 5 };
+
+test('AE: the SQL reads double1..15 in the order ae.rs writes them, weighted by _sample_interval, over one day', () => {
+  assert.equal(AE_DOUBLES.length, 15);
+  assert.deepEqual([AE_DOUBLES[0], AE_DOUBLES[3], AE_DOUBLES[9], AE_DOUBLES[14]], ['since_total', 'wakes_writing', 'cold_fold_p50_us', 'journal_bytes']);
+  assert.match(AE_SQL, /SUM\(_sample_interval \* double1\) AS since_total/);
+  assert.match(AE_SQL, /SUM\(_sample_interval \* double15\) AS journal_bytes/);
+  assert.match(AE_SQL, /quantileWeighted\(0\.5, double10, double8\) AS cold_fold_p50_us/);
+  assert.match(AE_SQL, new RegExp(`FROM ${AE_DATASET} WHERE timestamp > NOW\\(\\) - INTERVAL '1' DAY FORMAT JSON$`));
+  assert.equal(aeEndpoint('A'), 'https://api.cloudflare.com/client/v4/accounts/A/analytics_engine/sql');
+});
+
+test('AE: one POST with the bearer and the SQL as the body; a refusal throws with the answer', async () => {
+  const seen = [];
+  const ok = async (u, o) => { seen.push([u, o]); return new Response(JSON.stringify({ meta: [], data: [{ ...SUMS, writes: '20' }], rows: 1 })); };
+  const t = await aeSums(ok, { CLOUDFLARE_API_TOKEN: 'T', CLOUDFLARE_ACCOUNT_ID: 'A' });
+  assert.equal(t.writes, 20, 'numbers that come back as strings are numbers');
+  assert.equal(seen[0][0], aeEndpoint('A'));
+  assert.equal(seen[0][1].headers.authorization, 'Bearer T');
+  assert.equal(seen[0][1].body, AE_SQL);
+  await assert.rejects(aeSums(async () => new Response('Authorization error', { status: 403 }), {}), /analytics engine answered 403: Authorization error/);
+  await assert.rejects(aeSums(async () => new Response('{"data":[]}'), {}), /analytics engine answered 200/);
+});
+
+test('AE: the six indicators from the sums, sourced to Analytics Engine; no point at all is null (not zeros)', () => {
+  const r = byId(aeCounters(SUMS));
+  assert.equal(r['cf.since_none_share'].value, 100);
+  assert.equal(r['cf.wakes_readonly_share'].value, 750, '(4 - 1) / 4 wakes wrote nothing');
+  assert.equal(r['cf.cold_fold_us_p50'].value, 2500);
+  assert.equal(r['cf.proj_rows_per_write'].value, 1.5);
+  assert.equal(r['cf.catalog_write_us'].value, 200);
+  assert.equal(r['cf.catalog_write_journal_bytes'].value, 4000);
+  for (const [id] of COUNTER_IDS) {
+    assert.match(r[id].source, /^Workers Analytics Engine dowiz_counters/, id);
+    assert.match(r[id].note, /points=5 from 2 venue object\(s\)/, id);
+  }
+  assert.equal(aeCounters({ ...SUMS, points: 0 }), null);
+  const quiet = byId(aeCounters({ ...SUMS, since_total: 0, wakes_total: 0, cold_folds: 0, writes: 0, cat_writes: 0 }));
+  for (const i of Object.values(quiet)) assert.equal(i.value, null, i.id);
+});
+
+test('AE first, health as the LABELLED fallback: a refusal, no point, and no token each name themselves in source', async () => {
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'evals-cf-')), 't');
+  fs.writeFileSync(f, 'CLOUDFLARE_ACCOUNT_ID=a\nCLOUDFLARE_API_TOKEN=b\n');
+  const healths = [{ venue: 'a', counters: W({ since_total: 4, since_none: 1 }) }];
+  const route = ae => async u => (u.endsWith('/analytics_engine/sql') ? ae() : new Response(JSON.stringify({ data: { viewer: { accounts: [ACC] } } })));
+  const live = byId((await measure({ env: { CF_ANALYTICS_FILE: f }, now: () => 0, healths, fetch: route(() => new Response(JSON.stringify({ data: [SUMS] }))) })).out);
+  assert.equal(live['cf.since_none_share'].value, 100, 'AE wins over the health window');
+  assert.match(live['cf.since_none_share'].source, /Analytics Engine/);
+  const refused = byId((await measure({ env: { CF_ANALYTICS_FILE: f }, now: () => 0, healths, fetch: route(() => new Response('Authorization error', { status: 403 })) })).out);
+  assert.equal(refused['cf.since_none_share'].value, 250);
+  assert.match(refused['cf.since_none_share'].source, /^GET \/api\/owner\/health .*FALLBACK, Analytics Engine: analytics engine answered 403/);
+  const empty = byId((await measure({ env: { CF_ANALYTICS_FILE: f }, now: () => 0, healths, fetch: route(() => new Response(JSON.stringify({ data: [{ ...SUMS, points: 0 }] }))) })).out);
+  assert.match(empty['cf.since_none_share'].source, /FALLBACK, Analytics Engine: no point written in the 24 h/);
+  const none = byId((await measure({ env: { CF_ANALYTICS_FILE: '/no/such' }, now: () => 0, healths })).out);
+  assert.match(none['cf.since_none_share'].source, /FALLBACK, Analytics Engine: no Account Analytics:Read token/);
 });

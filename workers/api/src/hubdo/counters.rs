@@ -23,6 +23,9 @@
 //! THE CLOCK: `otel::wall_us`, which on the platform only advances after I/O (Spectre). A live
 //! `cat_decode_us` is therefore ~0 by construction and `journal_us` is the journal's storage read;
 //! natively they are real µs. `clock` in the snapshot says which.
+//!
+//! W-AE: every count is ALSO kept as a delta for Workers Analytics Engine (`counters/ae.rs`), written
+//! at each flush and every `ae::NTH` stored writes, so the platform keeps what a hibernation erases.
 
 use super::HubImages;
 use crate::wire::{Call, Reply};
@@ -64,6 +67,11 @@ pub(crate) struct Counters {
     wake_reads: Cell<u64>,
     wake_writes: Cell<u64>,
     first_fold_us: Cell<Option<u64>>,
+    /// W-AE: the delta since the last Analytics Engine point (`counters/ae.rs`).
+    ae: ae::Pending,
+    /// Tests: the fake dataset; `None` = the binding is absent.
+    #[cfg(test)]
+    pub(crate) fake_ae: RefCell<Option<Vec<ae::Point>>>,
 }
 
 impl Counters {
@@ -79,12 +87,16 @@ impl Counters {
             wake_reads: Cell::new(0),
             wake_writes: Cell::new(0),
             first_fold_us: Cell::new(None),
+            ae: ae::Pending::woke(),
+            #[cfg(test)]
+            fake_ae: RefCell::new(Some(Vec::new())),
         }
     }
 
     pub(crate) fn bump(&self, k: Kind, n: u64) {
         let mut c = self.cells.borrow_mut();
         c[k as usize] = c[k as usize].saturating_add(n);
+        self.ae.bump(k as usize, n);
     }
 
     /// (a): a catch-up's answer, counted and handed straight back.
@@ -103,10 +115,12 @@ impl Counters {
     }
 
     /// (b) + (d): a stored write of `rows` chunks. The first one ends the wake's read-only run.
-    pub(crate) fn wrote(&self, rows: usize) {
+    /// True when an Analytics Engine point is due (`ae::NTH`).
+    pub(crate) fn wrote(&self, rows: usize) -> bool {
         self.bump(Kind::Writes, 1);
         self.bump(Kind::ProjRows, rows as u64);
         self.wake_writes.set(self.wake_writes.get() + 1);
+        self.ae.wrote(self.wake_writes.get() == 1, crate::otel::wall_us())
     }
 
     /// (c): one fold from bytes, `us` from the start of `orders_view`.
@@ -120,6 +134,7 @@ impl Counters {
         if s.len() < SAMPLES {
             s.push(us);
         }
+        self.ae.sample(us);
     }
 
     /// (e): one catalogue write's decode and journal cost.
@@ -153,7 +168,10 @@ impl Counters {
         out.insert("wake".into(), json!({
             "atMs": self.woke_at_us / 1000, "reads": self.wake_reads.get(), "writes": self.wake_writes.get(),
         }));
-        out.insert("clock".into(), json!(if cfg!(target_arch = "wasm32") { "platform-ms-advances-on-io-only" } else { "native-us" }));
+        out.insert("clock".into(), json!(clock()));
+        out.insert("ae".into(), json!({
+            "binding": ae::BINDING, "points": self.ae.sent.get(), "errors": self.ae.errors.get(), "lastError": *self.ae.last_error.borrow(),
+        }));
         if flush {
             *self.cells.borrow_mut() = [0; NAMES.len()];
             self.samples.borrow_mut().clear();
@@ -164,11 +182,52 @@ impl Counters {
     }
 }
 
+fn clock() -> &'static str {
+    if cfg!(target_arch = "wasm32") { "platform-ms-advances-on-io-only" } else { "native-us" }
+}
+
 impl HubImages {
-    /// `GET /fold/counters[?flush=1]`.
+    /// `GET /fold/counters[?flush=1]`. A flush writes the window's Analytics Engine point first.
     pub(super) fn counters_route(&self, req: &Call) -> Result<Reply> {
         let flush = req.url()?.query_pairs().any(|(k, v)| k == "flush" && v == "1");
+        if flush {
+            self.ae_point("flush");
+        }
         Reply::from_json(&self.counters.snapshot(flush))
+    }
+
+    /// AX0 (b) + (d) for a stored write, and every `ae::NTH`th one's Analytics Engine point.
+    pub(super) fn count_write(&self, rows: usize) {
+        if self.counters.wrote(rows) {
+            self.ae_point("nth");
+        }
+    }
+
+    /// W-AE: write what is pending as ONE point. A refusal (no binding, a platform error) is logged
+    /// and kept in memory; it never fails the request that caused it.
+    fn ae_point(&self, cause: &str) {
+        let venue = self.state.own_name().or_else(|| self.test_name()).unwrap_or_default();
+        let Some(point) = self.counters.ae.point(&venue, cause, clock()) else { return };
+        let sink = match self.state.env() {
+            Some(env) => ae::Sink::Live(env),
+            #[cfg(test)]
+            None => ae::Sink::Mem(&self.counters.fake_ae),
+            #[cfg(not(test))]
+            None => return,
+        };
+        match ae::send(sink, &point) {
+            Ok(()) => self.counters.ae.accepted(cause == "nth"),
+            Err(why) => self.counters.ae.refused(why),
+        }
+    }
+
+    /// The test host's venue name (the live one is the platform's `ctx.id.name`).
+    fn test_name(&self) -> Option<String> {
+        #[cfg(test)]
+        if let super::host::Host::Mem(m) = &self.state {
+            return m.name.clone();
+        }
+        None
     }
 }
 
@@ -185,6 +244,8 @@ pub async fn ask(place: &crate::hubstore::Place, flush: bool) -> Value {
     };
     got.await.unwrap_or_else(|e| json!({ "error": e.to_string() }))
 }
+
+pub(crate) mod ae;
 
 #[cfg(test)]
 mod tests;

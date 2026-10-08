@@ -1,0 +1,219 @@
+{
+  "id": "ae.counters.v1",
+  "version": "1.0.0",
+  "description": {
+    "en": "W-AE (operator 2026-10-07 'підключай уже'): AX0's counters written to Workers Analytics Engine, dataset dowiz_counters, binding COUNTERS, so a hibernation no longer erases them. Each venue's Durable Object writes ONE data point through its own env: at every flush (/fold/counters?flush=1, the nightly's /api/owner/health?counters=flush) and every 16th stored write, at most 48 NTH-points per object per UTC day (the flush is not capped). A point is a DELTA since the previous accepted point, so SUM(_sample_interval * doubleN) over any span counts each event once. A refused write (no binding, platform error) is logged, counted in health counters.ae.errors, KEPT in memory and carried by the next point; it never fails a request. The card's 'write when an object wakes while the previous window holds unflushed data' cannot exist: the counters are memory-only, so at a wake the previous window is already gone; every-16th-write bounds the loss to < 16 writes' worth per eviction. Budget at 1,000 hubs: 1,000 x (48 + 1) = 49,000 points/day of the Free plan's 100,000. No personal data: venue object name, cause, clock label, counts.",
+    "uk": "Лічильники об'єкта закладу (AX0) пишуться в Workers Analytics Engine (набір dowiz_counters): одна точка на кожен flush і на кожен 16-й запис, не більше 48 на день на заклад; без персональних даних."
+  },
+  "producer": [
+    {
+      "file": "workers/api/src/hubdo/counters/ae.rs",
+      "line": 45,
+      "what": "DOUBLES: the order of double1..double15"
+    },
+    {
+      "file": "workers/api/src/hubdo/counters/ae.rs",
+      "line": 109,
+      "what": "Pending::point (the delta as one point)"
+    },
+    {
+      "file": "workers/api/src/hubdo/counters/ae.rs",
+      "line": 160,
+      "what": "send: writeDataPoint through env.COUNTERS; an absent binding is Err, never a panic"
+    },
+    {
+      "file": "workers/api/src/hubdo/counters.rs",
+      "line": 191,
+      "what": "counters_route: a flush writes the point first"
+    },
+    {
+      "file": "workers/api/src/hubdo/counters.rs",
+      "line": 200,
+      "what": "count_write: every NTH stored write"
+    },
+    {
+      "file": "workers/api/src/hubdo/counters.rs",
+      "line": 208,
+      "what": "ae_point: venue = ctx.id.name; refusal logged + kept"
+    },
+    {
+      "file": "workers/api/src/hubdo.rs",
+      "line": 1000,
+      "what": "put_image_as -> count_write"
+    },
+    {
+      "file": "workers/api/wrangler.toml",
+      "line": 190,
+      "what": "[[analytics_engine_datasets]] COUNTERS -> dowiz_counters"
+    }
+  ],
+  "consumer": [
+    {
+      "file": "tools/evals/collect/cf.mjs",
+      "line": 118,
+      "what": "AE_SQL: the day's sums, weighted by _sample_interval"
+    },
+    {
+      "file": "tools/evals/collect/cf.mjs",
+      "line": 123,
+      "what": "aeSums: POST to the SQL API"
+    },
+    {
+      "file": "tools/evals/collect/cf.mjs",
+      "line": 134,
+      "what": "aeCounters: the six cf.* indicators"
+    },
+    {
+      "file": "tools/evals/collect/cf.mjs",
+      "line": 154,
+      "what": "countersMeasure: AE first, health windows as the labelled fallback"
+    },
+    {
+      "file": "tools/live-proof/probes/feature-ae-counters.mjs",
+      "line": 1,
+      "what": "probe"
+    }
+  ],
+  "external_api_version": {
+    "name": "Workers Analytics Engine (writeDataPoint + SQL API)",
+    "read": "2026-10-07",
+    "sources": [
+      {
+        "url": "https://developers.cloudflare.com/analytics/analytics-engine/pricing/",
+        "updated": "2026-04-23",
+        "says": "Workers Free: 100,000 data points written/day, 10,000 read queries/day; Paid: 10M / 1M per month; not billed yet"
+      },
+      {
+        "url": "https://developers.cloudflare.com/analytics/analytics-engine/limits/",
+        "updated": "2026-04-23",
+        "says": "20 blobs, 20 doubles, 1 index (<= 96 bytes) per writeDataPoint; blobs <= 16 KB per point; 250 points per invocation; 3 months retention"
+      },
+      {
+        "url": "https://developers.cloudflare.com/analytics/analytics-engine/get-started/",
+        "updated": "2026-04-23",
+        "says": "[[analytics_engine_datasets]] binding/dataset; SQL endpoint; token permission Account Analytics Read"
+      },
+      {
+        "url": "https://developers.cloudflare.com/analytics/analytics-engine/sql-api/",
+        "updated": "2026-10-02",
+        "says": "POST, Authorization: Bearer, columns dataset/timestamp/_sample_interval/index1/blob1..20/double1..20, FORMAT JSON"
+      },
+      {
+        "url": "https://developers.cloudflare.com/durable-objects/api/base/",
+        "updated": "2026-06-15",
+        "says": "env contains the environment bindings available to this Durable Object"
+      },
+      {
+        "url": "https://developers.cloudflare.com/durable-objects/api/id/",
+        "updated": "2026-05-27",
+        "says": "name is available on ctx.id inside the Durable Object when the caller uses idFromName()"
+      }
+    ],
+    "rust": "worker 0.8.5 src/analytics_engine.rs (AnalyticsEngineDataPointBuilder, Env::analytics_engine)"
+  },
+  "on_disk_format": "unchanged (nothing stored in the object)",
+  "point": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "One data point as written (index1, blob1..3, double1..15).",
+    "type": "object",
+    "required": [
+      "index",
+      "blobs",
+      "doubles"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "index": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 96,
+        "description": "the venue (the object's idFromName name)"
+      },
+      "blobs": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 3,
+        "prefixItems": [
+          {
+            "type": "string",
+            "description": "blob1: venue"
+          },
+          {
+            "enum": [
+              "flush",
+              "nth"
+            ],
+            "description": "blob2: cause"
+          },
+          {
+            "enum": [
+              "platform-ms-advances-on-io-only",
+              "native-us"
+            ],
+            "description": "blob3: clock"
+          }
+        ]
+      },
+      "doubles": {
+        "type": "array",
+        "minItems": 15,
+        "maxItems": 15,
+        "items": {
+          "type": "number",
+          "minimum": 0
+        },
+        "description": "double1..double15 = since_total, since_none, wakes_total, wakes_writing, reads, writes, proj_rows, cold_folds, cold_fold_us, cold_fold_p50_us, cat_writes, cat_decode_us, cat_decoded_bytes, journal_us, journal_bytes"
+      }
+    }
+  },
+  "doubles": [
+    "since_total",
+    "since_none",
+    "wakes_total",
+    "wakes_writing",
+    "reads",
+    "writes",
+    "proj_rows",
+    "cold_folds",
+    "cold_fold_us",
+    "cold_fold_p50_us",
+    "cat_writes",
+    "cat_decode_us",
+    "cat_decoded_bytes",
+    "journal_us",
+    "journal_bytes"
+  ],
+  "routes": {
+    "sql": {
+      "request": {
+        "method": "POST",
+        "path": "https://api.cloudflare.com/client/v4/accounts/{account_id}/analytics_engine/sql",
+        "auth": "Bearer token with Account Analytics Read",
+        "body": "SQL text (cf.mjs AE_SQL), FORMAT JSON"
+      },
+      "request_schema": null,
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "meta": {
+            "type": "array"
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}
