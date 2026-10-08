@@ -55,13 +55,13 @@ jobs:
       REDIS_URL: redis://127.0.0.1:6379
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: 'pnpm'
@@ -163,7 +163,7 @@ jobs:
       # and the raw diff PNGs so the reviewer can see exactly what moved.
       - name: Upload Playwright HTML report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: visual-report
           path: e2e/artifacts/visual-report
@@ -171,7 +171,7 @@ jobs:
 
       - name: Upload diff images + results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: visual-diffs
           path: e2e/artifacts/visual-results
@@ -179,7 +179,7 @@ jobs:
 
       - name: Upload API log
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: visual-api-log
           path: /tmp/visual-api.log
