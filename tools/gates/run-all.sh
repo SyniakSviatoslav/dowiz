@@ -74,6 +74,9 @@ run body-fields node tools/gates/body-fields.mjs
 run icons node tools/gates/icons.mjs
 # The live audits' own alarms, against stubs (the audits themselves need a venue and a token).
 for p in e2e/gates/*.prove.mjs; do run "$(basename "$p" .mjs)" node "$p"; done
+# 2026-10-08: the same command as CI's browser-units job. No gate ran these, so a red one (the storefront
+# anchor list, 42 lines stale) sat on main for days while every local run-all was green.
+run browser-units sh -c "node --test \$(find workers/api/public -name '*.test.mjs' | sort)"
 
 if [ $CARGO = 1 ]; then
   run bebop-wasm sh crates/bebop-wasm/gate.sh
