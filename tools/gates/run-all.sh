@@ -35,7 +35,12 @@ run() { # run <name> <command...>
   last=$(printf '%s' "$last" | cut -c1-110)
   mark=ok; [ "$rc" -eq 0 ] || { mark=FAIL; fail=1; }
   printf '%-4s %-26s rc=%-3s %s\n' "$mark" "$name" "$rc" "$last"
-  if [ "$rc" -ne 0 ]; then sed 's/^/       | /' "$OUT/$n.log" | tail -15; fi
+  if [ "$rc" -ne 0 ]; then
+    sed 's/^/       | /' "$OUT/$n.log" | tail -15
+    # On GitHub, name the red gate in an annotation: annotations are public without a token, job logs are not,
+    # and "Process completed with exit code 1" hid which gate was red for 100+ runs (2026-10-06..08).
+    [ -n "${GITHUB_ACTIONS:-}" ] && printf '::error title=gate %s (rc=%s)::%s\n' "$name" "$rc" "$(printf '%s' "$last" | tr -d '\r')"
+  fi
 }
 skip() { printf '%-4s %-26s %-6s %s\n' skip "$1" "" "$2"; }
 
