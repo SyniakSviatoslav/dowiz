@@ -120,7 +120,8 @@ fn evlog_a_looping_chain_is_none_not_a_quadratic_hash() {
 
 /// EVERY FROZEN IMAGE IN THE TREE STILL LOADS. Written by bebop (kv.bp, store.bp) and by
 /// the hub on 2026-09-23/24, long before this check existed: a crc check that refused one
-/// would be a venue outage on deploy.
+/// would be a venue outage on deploy. The hub's three are frozen copies (`fixtures/frozen/`):
+/// `fixtures/decide/` is re-blessed whenever the hub's writer changes, these never are.
 #[test]
 fn the_frozen_fixtures_pass_the_check() {
     for (name, b) in [
@@ -134,9 +135,9 @@ fn the_frozen_fixtures_pass_the_check() {
     }
     for (name, b, n) in [
         ("proj.store (bebop store.bp)", &include_bytes!("../../../bebop-wasm/fixtures/proj.store")[..], Some(9)),
-        ("decide/amend.log", &include_bytes!("../../../bebop-wasm/fixtures/decide/amend.log")[..], None),
-        ("decide/amend.stock", &include_bytes!("../../../bebop-wasm/fixtures/decide/amend.stock")[..], None),
-        ("decide/pay.log", &include_bytes!("../../../bebop-wasm/fixtures/decide/pay.log")[..], None::<usize>),
+        ("decide/amend.log", &include_bytes!("../../../bebop-wasm/fixtures/frozen/hub-2026-09-24-amend-log.img")[..], None),
+        ("decide/amend.stock", &include_bytes!("../../../bebop-wasm/fixtures/frozen/hub-2026-09-24-amend-stock.img")[..], None),
+        ("decide/pay.log", &include_bytes!("../../../bebop-wasm/fixtures/frozen/hub-2026-09-24-pay-log.img")[..], None::<usize>),
     ] {
         let st = Store::from_bytes(b);
         let len = EvLog::len(&st);

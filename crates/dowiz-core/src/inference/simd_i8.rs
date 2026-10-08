@@ -125,7 +125,7 @@ pub fn dot_i8(a: &[i8], w: &[i8]) -> i32 {
 
 /// AVX2 matmul: `out[i][j] = Σ_k A[i][k] · W[k][j]`, i8 in, i32 out.
 ///
-/// For each output element we gather weight column `j` into a contiguous stack buffer (stride
+/// For each output element we gather weight column `j` into a contiguous `k`-long buffer (stride
 /// `n`) and run the contiguous [`dot_i8_avx2`] over the A row (contiguous) — keeps the inner
 /// kernel on unaligned contiguous loads. The dot result is bit-exact to the oracle's matmul.
 ///
@@ -134,8 +134,9 @@ pub fn dot_i8(a: &[i8], w: &[i8]) -> i32 {
 #[target_feature(enable = "avx2")]
 unsafe fn matmul_i8_avx2(a: *const i8, w: *const i8, m: usize, k: usize, n: usize, out: *mut i32) {
     use core::arch::x86_64::*;
-    debug_assert!(k <= MAX_K, "simd_i8: k exceeds column-gather buffer");
-    let mut col = [0i8; MAX_K];
+    // Column-gather buffer sized to THIS call's `k` (heap: `matmul_i8` accepts any `k` the
+    // overflow lemma admits, so a fixed stack array would either cap it or index out of range).
+    let mut col: Vec<i8> = alloc::vec![0i8; k];
     for i in 0..m {
         let arow = a.add(i * k);
         for j in 0..n {
@@ -298,7 +299,7 @@ mod tests {
         let mut rng: u64 = 0xA53C9E3779B97F4A;
         for _ in 0..3000 {
             let m = 1 + (lcg(&mut rng) as usize) % 4; // 1..4
-            let k = 1 + (lcg(&mut rng) as usize) % 12; // 1..12 (≤ MAX_K)
+            let k = 1 + (lcg(&mut rng) as usize) % 12; // 1..12
             let n = 1 + (lcg(&mut rng) as usize) % 6; // 1..6
             let mut a = vec![0i8; m * k];
             let mut w = vec![0i8; k * n];

@@ -291,78 +291,8 @@ fn main() {
 }
 
 fn run_golden_probe() {
-    let nodes: usize = 5;
-    let base = vec![
-        TopoEdge {
-            from: 0,
-            to: 1,
-            weight: 1.0,
-        },
-        TopoEdge {
-            from: 1,
-            to: 2,
-            weight: 1.0,
-        },
-        TopoEdge {
-            from: 2,
-            to: 3,
-            weight: 1.0,
-        },
-        TopoEdge {
-            from: 3,
-            to: 4,
-            weight: 1.0,
-        },
-        TopoEdge {
-            from: 4,
-            to: 0,
-            weight: 1.0,
-        },
-    ];
-    let mut cl = HydraClosedLoop::new(MemEventStore::new(), nodes, base.clone(), 1.0, None);
-
-    eprintln!(
-        "AUTONOMOUS LOOP START state={:?} rho={:.6}",
-        cl.state(),
-        cl.baseline_rho()
-    );
-
-    let cycles = 4usize;
-    for c in 0..cycles {
-        let i = c % base.len();
-        let delta = vec![TopoEdge {
-            from: base[i].from,
-            to: base[i].to,
-            weight: 0.3 + (c as f64 % 5.0),
-        }];
-
-        let result = run_cycle(&mut cl, &delta);
-        let state = cl.state();
-        let organism_state = if matches!(state, dowiz_kernel::hydra::OrganismState::Live) {
-            "Live"
-        } else {
-            "Locked"
-        };
-        let drift = match result.drift_class {
-            dowiz_kernel::spectral::DriftClass::Damped => "Damped",
-            dowiz_kernel::spectral::DriftClass::Resonant => "Resonant",
-            dowiz_kernel::spectral::DriftClass::Unstable => "Unstable",
-        };
-
-        println!(
-            "cycle={} accepted={} drift={} rho={:.6} state={}",
-            c,
-            result.accepted,
-            drift,
-            result.rho,
-            organism_state
-        );
-    }
-
-    let end_state = cl.state();
-    let end_rho = cl.baseline_rho();
-    eprintln!(
-        "AUTONOMOUS LOOP END cycles={} state={:?} rho={:.6}",
-        cycles, end_state, end_rho
-    );
+    // The transcript is built in the library so the kernel's SHA3-256 KAT hashes the
+    // exact bytes printed here (hydra_closed_loop::golden_probe_transcript).
+    let out = dowiz_kernel::hydra_closed_loop::golden_probe_transcript(4, &mut |l| eprintln!("{l}"));
+    print!("{out}");
 }

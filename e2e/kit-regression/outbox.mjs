@@ -452,13 +452,17 @@ export async function run() {
     await page.waitForSelector('#outboxTag:not([hidden])', { timeout: 10_000 });
     const tagText = (await page.textContent('#outboxText'))?.trim();
     const pickupsOffline = api.seen.filter(r => r.path.endsWith('/pickup')).length;
-    const stillSaysReady = await page.evaluate(() => !!document.querySelector('.status.st-ready'));
+    // The chip is /lib/ui's `status()` since b1da25c6 (2026-09-25): `.ui-status[data-status]`.
+    // The old `.status.st-ready` matched nothing after that, so this check failed on every run.
+    const stillSaysReady = await page.evaluate(() =>
+      !!document.querySelector('.ui-status[data-status="READY"]')
+      && !document.querySelector('.ui-status[data-status="IN_DELIVERY"]'));
     const ctaGone = await page.evaluate(() => !document.querySelector('#pick'));
     check('offline, a real tap on the courier screen is kept and COUNTED, and nothing reaches the hub',
       pickupsOffline === 0 && !!tagText && ctaGone,
       `pickups_at_hub=${pickupsOffline} hud="${tagText}" cta_replaced=${ctaGone}`);
     check('a queued tap does not look like a landed one — the status chip is still the hub\'s answer',
-      stillSaysReady, `st-ready still on screen: ${stillSaysReady}`);
+      stillSaysReady, `READY chip still on screen (and no IN_DELIVERY): ${stillSaysReady}`);
 
     await ctx.setOffline(false);
     let pickups = [];

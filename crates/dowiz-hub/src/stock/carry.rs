@@ -7,7 +7,9 @@
 //! ARE BOOKED: a `reserved`/`served` record for such a leaf carries `"uq"`,
 //! its exact draw in millionths, and this fold keeps per item
 //!
-//!     carry = Σ uq − 10^6 · Σ qty          over the draws it has seen,
+//! ```text
+//! carry = Σ uq − 10^6 · Σ qty          over the draws it has seen,
+//! ```
 //!
 //! so the next draw books `round_half_up((carry + uq) / 10^6)` whole units:
 //! after N sales the booked total is `round(N·uq/10^6)`, exactly, with the
