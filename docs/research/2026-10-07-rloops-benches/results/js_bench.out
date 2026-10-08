@@ -1,0 +1,7 @@
+JSBENCH node v22.22.1 reps=9
+B11a EQUIV ok n=100 (50 history, 50 live): CURRENT 387 us | REPLACE 19 us | 20.3x
+B11a EQUIV ok n=300 (150 history, 150 live): CURRENT 3844 us | REPLACE 36 us | 105.6x
+B11a EQUIV ok n=1000 (500 history, 500 live): CURRENT 21605 us | REPLACE 75 us | 286.5x
+B11a EQUIV ok n=3000 (1500 history, 1500 live): CURRENT 167270 us | REPLACE 252 us | 663.5x
+B11b EQUIV ok dishes=165: CURRENT 1026 us | REPLACE 226 us (flatMap base 19 us) | loop-only 4.9x
+B11b EQUIV ok dishes=500: CURRENT 7972 us | REPLACE 687 us (flatMap base 40 us) | loop-only 12.3x

@@ -1,0 +1,7 @@
+RBENCH profile=release reps=9 cpu4_mhz=2054
+B6 EQUIV ok: days=7, 1200 probes agree (927 in window)
+B6 days=7: CURRENT 3.3 ns/call | REPLACE 4.6 ns/call | 0.7x | per 1200 calls 4.0 us -> 5.5 us
+B6 EQUIV ok: days=30, 1200 probes agree (1123 in window)
+B6 days=30: CURRENT 9.5 ns/call | REPLACE 8.5 ns/call | 1.1x | per 1200 calls 11.4 us -> 10.2 us
+B6 EQUIV ok: days=62, 1200 probes agree (1167 in window)
+B6 days=62: CURRENT 19.1 ns/call | REPLACE 9.7 ns/call | 2.0x | per 1200 calls 22.9 us -> 11.6 us

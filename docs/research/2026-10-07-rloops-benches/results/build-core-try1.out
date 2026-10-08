@@ -1,0 +1,23 @@
+slot 1 BUSY ae-lib pid=16664 started=08:55:56 cores=4,5,6
+procs 20/26 (android phantom cap 32)  memavail 2785MB
+    |
+304 |     let mut i = 0;
+    |         ----^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> /root/dowiz/crates/dowiz-core/src/simd.rs:362:9
+    |
+362 |     let mut i = 0;
+    |         ----^
+    |         |
+    |         help: remove this `mut`
+
+/root/dowiz/bebop-lang/tools/slot.sh: line 137: 27766 Killed                     taskset -c "$CORES" nice -n "${SLOT_NICE:-5}" "$@"
+
+real	77m24.189s
+user	0m0.236s
+sys	0m0.759s
+
+[exited with code 0]

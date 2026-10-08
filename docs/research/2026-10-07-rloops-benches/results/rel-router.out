@@ -1,0 +1,6 @@
+RBENCH profile=release reps=9 cpu4_mhz=2054
+B1 router: 257 routes, 14 probes
+B1 EQUIV ok: 14 probes agree (12 hit, 2 miss)
+B1 CURRENT  build+match per request: median 200.9 us (min 200.1, max 231.8)
+B1 REPLACE  match only per request:  median 0.189 us (min 0.187, max 0.261)
+B1 RATIO 1063x; build alone = 200.7 us = 2.01% of the 10 ms Free cap

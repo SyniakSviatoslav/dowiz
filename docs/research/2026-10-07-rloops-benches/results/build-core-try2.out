@@ -1,0 +1,5 @@
+slot: REFUSED -- 28 procs still above the 26 ceiling after 300s (Android kills past 32); run tools/reap.sh kill
+
+real	20m14.943s
+user	0m0.015s
+sys	0m0.081s

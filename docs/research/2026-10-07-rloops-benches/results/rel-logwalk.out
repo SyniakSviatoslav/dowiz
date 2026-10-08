@@ -1,0 +1,13 @@
+RBENCH profile=release reps=9 cpu4_mhz=2208
+B7a EQUIV ok: 200 events, log 159 KB
+B7a events=200: Hub::load(crc) 715 us | CURRENT events() 334 us | walk only 178 us | REPLACE walk+decode 220 us | 1.5x on events(); load+events 1049 -> 935 us (10.5% -> 9.4% of 10 ms)
+B7b EQUIV ok: about(wallet.leg, acct_28, 1) -> seq Some(176); stopped after 24 of 200 records
+B7b records=200: CURRENT about(..,1) 122 us | REPLACE walk_until 9.5 us | 13x
+B7a EQUIV ok: 600 events, log 463 KB
+B7a events=600: Hub::load(crc) 1008 us | CURRENT events() 961 us | walk only 530 us | REPLACE walk+decode 647 us | 1.5x on events(); load+events 1969 -> 1655 us (19.7% -> 16.6% of 10 ms)
+B7b EQUIV ok: about(wallet.leg, acct_28, 1) -> seq Some(472); stopped after 128 of 600 records
+B7b records=600: CURRENT about(..,1) 363 us | REPLACE walk_until 48.0 us | 8x
+B7a EQUIV ok: 2000 events, log 1527 KB
+B7a events=2000: Hub::load(crc) 1908 us | CURRENT events() 3254 us | walk only 1776 us | REPLACE walk+decode 2244 us | 1.4x on events(); load+events 5162 -> 4152 us (51.6% -> 41.5% of 10 ms)
+B7b EQUIV ok: about(wallet.leg, acct_28, 1) -> seq Some(1952); stopped after 48 of 2000 records
+B7b records=2000: CURRENT about(..,1) 1201 us | REPLACE walk_until 19.2 us | 62x

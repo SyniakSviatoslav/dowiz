@@ -1,0 +1,7 @@
+RBENCH profile=release reps=9 cpu4_mhz=2208
+B9 EQUIV ok: n=554 nodes, 1890 edges, 0 dangling, 554 ranked
+B9 dangling=0: CURRENT 96 us | REPLACE 95 us | 1.0x
+B9 EQUIV ok: n=564 nodes, 1890 edges, 10 dangling, 554 ranked
+B9 dangling=10: CURRENT 253 us | REPLACE 96 us | 2.6x
+B9 EQUIV ok: n=654 nodes, 1890 edges, 100 dangling, 554 ranked
+B9 dangling=100: CURRENT 1936 us | REPLACE 109 us | 17.7x

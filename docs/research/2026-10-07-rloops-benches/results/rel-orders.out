@@ -1,0 +1,16 @@
+RBENCH profile=release reps=9 cpu4_mhz=2054
+B3/B4 fixture: n=100 orders (127 KB JSON), 20 sittings, 0 of them today
+B3 EQUIV ok (n=100): 20 sittings, 100 rounds
+B3 n=100 S=20: CURRENT 32453 us | REPLACE 1454 us | 22.3x | share of 10 ms cap 325% -> 15%
+B4 EQUIV ok (n=100): tiles (0, 0, 0, 0)
+B4 n=100 today=0: CURRENT 1427 us | REPLACE 0 us | 5489.0x | share of 10 ms cap 14.3% -> 0.0%
+B3/B4 fixture: n=300 orders (382 KB JSON), 60 sittings, 50 of them today
+B3 EQUIV ok (n=300): 60 sittings, 300 rounds
+B3 n=300 S=60: CURRENT 278974 us | REPLACE 4570 us | 61.0x | share of 10 ms cap 2790% -> 46%
+B4 EQUIV ok (n=300): tiles (50, 152250, 8, 16)
+B4 n=300 today=50: CURRENT 4614 us | REPLACE 754 us | 6.1x | share of 10 ms cap 46.1% -> 7.5%
+B3/B4 fixture: n=1000 orders (1277 KB JSON), 150 sittings, 750 of them today
+B3 EQUIV ok (n=1000): 150 sittings, 1000 rounds
+B3 n=1000 S=150: CURRENT 2177489 us | REPLACE 13045 us | 166.9x | share of 10 ms cap 21775% -> 130%
+B4 EQUIV ok (n=1000): tiles (750, 2252250, 125, 250)
+B4 n=1000 today=750: CURRENT 14599 us | REPLACE 10840 us | 1.3x | share of 10 ms cap 146.0% -> 108.4%

@@ -1,0 +1,1098 @@
+slot: acquired 1 (cores 4,5,6) for 'rloops-build-rel' at 11:00:38
+   Compiling dowiz-core v0.1.0 (/root/dowiz/crates/dowiz-core)
+warning: unused import: `StampPolicy`
+  --> /root/dowiz/crates/dowiz-core/src/fdr/cost_oracle.rs:18:32
+   |
+18 | use crate::fdr::schema::{Kind, StampPolicy};
+   |                                ^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Absence`
+  --> /root/dowiz/crates/dowiz-core/src/fdr/pmu.rs:14:26
+   |
+14 | use crate::fdr::schema::{Absence, Reading};
+   |                          ^^^^^^^
+
+warning: unused import: `alloc::string::ToString`
+ --> /root/dowiz/crates/dowiz-core/src/penecho.rs:9:5
+  |
+9 | use alloc::string::ToString;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::vec::Vec`
+  --> /root/dowiz/crates/dowiz-core/src/spool.rs:25:5
+   |
+25 | use alloc::vec::Vec;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::string::ToString`
+  --> /root/dowiz/crates/dowiz-core/src/swarm.rs:27:5
+   |
+27 | use alloc::string::ToString;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::collections::VecDeque`
+  --> /root/dowiz/crates/dowiz-core/src/telemetry_aggregator.rs:28:5
+   |
+28 | use alloc::collections::VecDeque;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::boxed::Box`
+  --> /root/dowiz/crates/dowiz-core/src/optical.rs:34:5
+   |
+34 | use alloc::boxed::Box;
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `BTreeMap`, `BTreeSet`, and `VecDeque`
+  --> /root/dowiz/crates/dowiz-core/src/optical.rs:35:26
+   |
+35 | use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
+   |                          ^^^^^^^^  ^^^^^^^^  ^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeMap`
+  --> /root/dowiz/crates/dowiz-core/src/crystal.rs:44:5
+   |
+44 | use alloc::collections::BTreeMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Hash` and `Hasher`
+  --> /root/dowiz/crates/dowiz-core/src/crystal.rs:45:18
+   |
+45 | use core::hash::{Hash, Hasher};
+   |                  ^^^^  ^^^^^^
+
+warning: unused import: `alloc::string::ToString`
+  --> /root/dowiz/crates/dowiz-core/src/json.rs:22:5
+   |
+22 | use alloc::string::ToString;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `decompose`
+  --> /root/dowiz/crates/dowiz-core/src/delta.rs:23:33
+   |
+23 | use crate::eigen::{EigenDecomp, decompose};
+   |                                 ^^^^^^^^^
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/delta.rs:110:42
+    |
+110 |                 else { crate::math::acos((dot / (crate::math::sqrt(na) * crate::math::sqrt(nb)))) }
+    |                                          ^                                                     ^
+    |
+    = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+    |
+110 -                 else { crate::math::acos((dot / (crate::math::sqrt(na) * crate::math::sqrt(nb)))) }
+110 +                 else { crate::math::acos(dot / (crate::math::sqrt(na) * crate::math::sqrt(nb))) }
+    |
+
+warning: unnecessary parentheses around function argument
+  --> /root/dowiz/crates/dowiz-core/src/geo.rs:20:48
+   |
+20 |     let h = crate::math::powi(crate::math::sin((dlat / 2.0)), 2)
+   |                                                ^          ^
+   |
+help: remove these parentheses
+   |
+20 -     let h = crate::math::powi(crate::math::sin((dlat / 2.0)), 2)
+20 +     let h = crate::math::powi(crate::math::sin(dlat / 2.0), 2)
+   |
+
+warning: unnecessary parentheses around function argument
+  --> /root/dowiz/crates/dowiz-core/src/geo.rs:21:94
+   |
+21 |         + crate::math::cos(la1) * crate::math::cos(la2) * crate::math::powi(crate::math::sin((dlng / 2.0)), 2);
+   |                                                                                              ^          ^
+   |
+help: remove these parentheses
+   |
+21 -         + crate::math::cos(la1) * crate::math::cos(la2) * crate::math::powi(crate::math::sin((dlng / 2.0)), 2);
+21 +         + crate::math::cos(la1) * crate::math::cos(la2) * crate::math::powi(crate::math::sin(dlng / 2.0), 2);
+   |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/geo.rs:105:39
+    |
+105 |         let dist2 = crate::math::powi((px - cx), 2) + crate::math::powi((py - cy), 2);
+    |                                       ^       ^
+    |
+help: remove these parentheses
+    |
+105 -         let dist2 = crate::math::powi((px - cx), 2) + crate::math::powi((py - cy), 2);
+105 +         let dist2 = crate::math::powi(px - cx, 2) + crate::math::powi((py - cy), 2);
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/geo.rs:105:73
+    |
+105 |         let dist2 = crate::math::powi((px - cx), 2) + crate::math::powi((py - cy), 2);
+    |                                                                         ^       ^
+    |
+help: remove these parentheses
+    |
+105 -         let dist2 = crate::math::powi((px - cx), 2) + crate::math::powi((py - cy), 2);
+105 +         let dist2 = crate::math::powi((px - cx), 2) + crate::math::powi(py - cy, 2);
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/geo.rs:137:49
+    |
+137 |     let seg_rem = (1.0 - t) * crate::math::sqrt((dx * dx + dy * dy));
+    |                                                 ^                 ^
+    |
+help: remove these parentheses
+    |
+137 -     let seg_rem = (1.0 - t) * crate::math::sqrt((dx * dx + dy * dy));
+137 +     let seg_rem = (1.0 - t) * crate::math::sqrt(dx * dx + dy * dy);
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/geo.rs:372:37
+    |
+372 |     let d = crate::math::rem_euclid((a - b), 360.0);
+    |                                     ^     ^
+    |
+help: remove these parentheses
+    |
+372 -     let d = crate::math::rem_euclid((a - b), 360.0);
+372 +     let d = crate::math::rem_euclid(a - b, 360.0);
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/geo.rs:381:29
+    |
+381 |     crate::math::rem_euclid((facing_deg - view_rotation_deg), 360.0)
+    |                             ^                              ^
+    |
+help: remove these parentheses
+    |
+381 -     crate::math::rem_euclid((facing_deg - view_rotation_deg), 360.0)
+381 +     crate::math::rem_euclid(facing_deg - view_rotation_deg, 360.0)
+    |
+
+warning: unused import: `alloc::vec::Vec`
+  --> /root/dowiz/crates/dowiz-core/src/online.rs:21:5
+   |
+21 | use alloc::vec::Vec;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/online.rs:149:39
+    |
+149 |         1.0 / (1.0 + crate::math::exp((-t)))
+    |                                       ^  ^
+    |
+help: remove these parentheses
+    |
+149 -         1.0 / (1.0 + crate::math::exp((-t)))
+149 +         1.0 / (1.0 + crate::math::exp(-t))
+    |
+
+warning: unused imports: `String` and `ToString`
+  --> /root/dowiz/crates/dowiz-core/src/retrieval/diffusion.rs:20:21
+   |
+20 | use alloc::string::{String, ToString};
+   |                     ^^^^^^  ^^^^^^^^
+
+warning: unused import: `alloc::string::String`
+  --> /root/dowiz/crates/dowiz-core/src/retrieval/pattern.rs:79:5
+   |
+79 | use alloc::string::String;
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `String` and `ToString`
+  --> /root/dowiz/crates/dowiz-core/src/retrieval/ppr.rs:18:21
+   |
+18 | use alloc::string::{String, ToString};
+   |                     ^^^^^^  ^^^^^^^^
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/entropy_budget.rs:240:72
+    |
+240 |         let variance = branch_values.iter().map(|&x| crate::math::powi((x - mean), 2)).sum::<f64>() / (n as f64);
+    |                                                                        ^        ^
+    |
+help: remove these parentheses
+    |
+240 -         let variance = branch_values.iter().map(|&x| crate::math::powi((x - mean), 2)).sum::<f64>() / (n as f64);
+240 +         let variance = branch_values.iter().map(|&x| crate::math::powi(x - mean, 2)).sum::<f64>() / (n as f64);
+    |
+
+warning: unnecessary parentheses around function argument
+  --> /root/dowiz/crates/dowiz-core/src/math_guard.rs:25:51
+   |
+25 |         let omega = omega_min * crate::math::powf((omega_max / omega_min), i as f64 / n as f64);
+   |                                                   ^                     ^
+   |
+help: remove these parentheses
+   |
+25 -         let omega = omega_min * crate::math::powf((omega_max / omega_min), i as f64 / n as f64);
+25 +         let omega = omega_min * crate::math::powf(omega_max / omega_min, i as f64 / n as f64);
+   |
+
+warning: unnecessary parentheses around function argument
+  --> /root/dowiz/crates/dowiz-core/src/math_guard.rs:91:33
+   |
+91 |     let mag = crate::math::sqrt((re * re + im * im));
+   |                                 ^                 ^
+   |
+help: remove these parentheses
+   |
+91 -     let mag = crate::math::sqrt((re * re + im * im));
+91 +     let mag = crate::math::sqrt(re * re + im * im);
+   |
+
+warning: unnecessary parentheses around function argument
+  --> /root/dowiz/crates/dowiz-core/src/numerical_guard.rs:46:31
+   |
+46 |         *x = crate::math::exp((*x - max));
+   |                               ^        ^
+   |
+help: remove these parentheses
+   |
+46 -         *x = crate::math::exp((*x - max));
+46 +         *x = crate::math::exp(*x - max);
+   |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/gboost.rs:130:58
+    |
+130 |         p.iter().zip(y).map(|(pi, yi)| crate::math::powi((pi - yi), 2)).sum::<f64>() / n
+    |                                                          ^       ^
+    |
+help: remove these parentheses
+    |
+130 -         p.iter().zip(y).map(|(pi, yi)| crate::math::powi((pi - yi), 2)).sum::<f64>() / n
+130 +         p.iter().zip(y).map(|(pi, yi)| crate::math::powi(pi - yi, 2)).sum::<f64>() / n
+    |
+
+warning: unnecessary parentheses around function argument
+  --> /root/dowiz/crates/dowiz-core/src/glyph_dashboard.rs:40:42
+   |
+40 |             let idx = crate::math::floor(((v - min) / step)) as usize;
+   |                                          ^                ^
+   |
+help: remove these parentheses
+   |
+40 -             let idx = crate::math::floor(((v - min) / step)) as usize;
+40 +             let idx = crate::math::floor((v - min) / step) as usize;
+   |
+
+warning: unused import: `alloc::vec::Vec`
+  --> /root/dowiz/crates/dowiz-core/src/parse/mod.rs:12:5
+   |
+12 | use alloc::vec::Vec;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::vec::Vec`
+  --> /root/dowiz/crates/dowiz-core/src/eta.rs:33:5
+   |
+33 | use alloc::vec::Vec;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:510:42
+    |
+510 |             let angle = crate::math::sin((idx as f64 * 2.0 * core::f64::consts::PI / 7.0));
+    |                                          ^                                              ^
+    |
+help: remove these parentheses
+    |
+510 -             let angle = crate::math::sin((idx as f64 * 2.0 * core::f64::consts::PI / 7.0));
+510 +             let angle = crate::math::sin(idx as f64 * 2.0 * core::f64::consts::PI / 7.0);
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:511:42
+    |
+511 |             coords[i] = crate::math::sin((angle * (i as f64 + 1.0))) * 10.0;
+    |                                          ^                        ^
+    |
+help: remove these parentheses
+    |
+511 -             coords[i] = crate::math::sin((angle * (i as f64 + 1.0))) * 10.0;
+511 +             coords[i] = crate::math::sin(angle * (i as f64 + 1.0)) * 10.0;
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:654:35
+    |
+654 |         let n = crate::math::sqrt((alpha.norm_sq() + beta.norm_sq()));
+    |                                   ^                                ^
+    |
+help: remove these parentheses
+    |
+654 -         let n = crate::math::sqrt((alpha.norm_sq() + beta.norm_sq()));
+654 +         let n = crate::math::sqrt(alpha.norm_sq() + beta.norm_sq());
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:731:35
+    |
+731 | ...:math::sqrt((crate::math::powi(self.omega_x, 2) + crate::math::powi(self.omega_y, 2) + crate::math::powi(self.omega_z, 2)));
+    |                ^                                                                                                            ^
+    |
+help: remove these parentheses
+    |
+731 -         let w = crate::math::sqrt((crate::math::powi(self.omega_x, 2) + crate::math::powi(self.omega_y, 2) + crate::math::powi(self.omega_z, 2)));
+731 +         let w = crate::math::sqrt(crate::math::powi(self.omega_x, 2) + crate::math::powi(self.omega_y, 2) + crate::math::powi(self.omega_z, 2));
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:753:37
+    |
+753 |         let r = (crate::math::fract((self.shots as f64 * 1.618033988749895)) + 0.5) % 1.0;
+    |                                     ^                                     ^
+    |
+help: remove these parentheses
+    |
+753 -         let r = (crate::math::fract((self.shots as f64 * 1.618033988749895)) + 0.5) % 1.0;
+753 +         let r = (crate::math::fract(self.shots as f64 * 1.618033988749895) + 0.5) % 1.0;
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:835:37
+    |
+835 |         let r = (crate::math::fract((seed as f64 * 1.618033988749895)) + 0.5) % 1.0;
+    |                                     ^                               ^
+    |
+help: remove these parentheses
+    |
+835 -         let r = (crate::math::fract((seed as f64 * 1.618033988749895)) + 0.5) % 1.0;
+835 +         let r = (crate::math::fract(seed as f64 * 1.618033988749895) + 0.5) % 1.0;
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:848:55
+    |
+848 | ...   let phase = Complex::new(crate::math::cos((bs.time_offset * core::f64::consts::TAU)), crate::math::sin((bs.time_offset * core::f64:...
+    |                                                 ^                                       ^
+    |
+help: remove these parentheses
+    |
+848 -             let phase = Complex::new(crate::math::cos((bs.time_offset * core::f64::consts::TAU)), crate::math::sin((bs.time_offset * core::f64::consts::TAU)));
+848 +             let phase = Complex::new(crate::math::cos(bs.time_offset * core::f64::consts::TAU), crate::math::sin((bs.time_offset * core::f64::consts::TAU)));
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:848:116
+    |
+848 | ... * core::f64::consts::TAU)), crate::math::sin((bs.time_offset * core::f64::consts::TAU)));
+    |                                                  ^                                       ^
+    |
+help: remove these parentheses
+    |
+848 -             let phase = Complex::new(crate::math::cos((bs.time_offset * core::f64::consts::TAU)), crate::math::sin((bs.time_offset * core::f64::consts::TAU)));
+848 +             let phase = Complex::new(crate::math::cos((bs.time_offset * core::f64::consts::TAU)), crate::math::sin(bs.time_offset * core::f64::consts::TAU));
+    |
+
+warning: unnecessary parentheses around function argument
+   --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:893:83
+    |
+893 |         crate::math::powi(self.amplitude, 2) * crate::math::powi(crate::math::cos((self.phase * 0.5)), 2)
+    |                                                                                   ^                ^
+    |
+help: remove these parentheses
+    |
+893 -         crate::math::powi(self.amplitude, 2) * crate::math::powi(crate::math::cos((self.phase * 0.5)), 2)
+893 +         crate::math::powi(self.amplitude, 2) * crate::math::powi(crate::math::cos(self.phase * 0.5), 2)
+    |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3086:45
+     |
+3086 |             .map(|(a, b)| crate::math::powi((a - b), 2)).sum();
+     |                                             ^     ^
+     |
+help: remove these parentheses
+     |
+3086 -             .map(|(a, b)| crate::math::powi((a - b), 2)).sum();
+3086 +             .map(|(a, b)| crate::math::powi(a - b, 2)).sum();
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3134:93
+     |
+3134 |                 coords[j] = self.radius * crate::math::sin(angle) * 0.5 / crate::math::sqrt((n_dims as f64));
+     |                                                                                             ^             ^
+     |
+help: remove these parentheses
+     |
+3134 -                 coords[j] = self.radius * crate::math::sin(angle) * 0.5 / crate::math::sqrt((n_dims as f64));
+3134 +                 coords[j] = self.radius * crate::math::sin(angle) * 0.5 / crate::math::sqrt(n_dims as f64);
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3137:62
+     |
+3137 |                 let spread = self.radius / crate::math::sqrt((n_dims as f64));
+     |                                                              ^             ^
+     |
+help: remove these parentheses
+     |
+3137 -                 let spread = self.radius / crate::math::sqrt((n_dims as f64));
+3137 +                 let spread = self.radius / crate::math::sqrt(n_dims as f64);
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3139:59
+     |
+3139 |                     coords[j] = spread * crate::math::sin((theta * (j as f64)));
+     |                                                           ^                  ^
+     |
+help: remove these parentheses
+     |
+3139 -                     coords[j] = spread * crate::math::sin((theta * (j as f64)));
+3139 +                     coords[j] = spread * crate::math::sin(theta * (j as f64));
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3150:53
+     |
+3150 |             .skip(1).map(|(a, b)| crate::math::powi((a - b), 2)).sum::<f64>());
+     |                                                     ^     ^
+     |
+help: remove these parentheses
+     |
+3150 -             .skip(1).map(|(a, b)| crate::math::powi((a - b), 2)).sum::<f64>());
+3150 +             .skip(1).map(|(a, b)| crate::math::powi(a - b, 2)).sum::<f64>());
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3243:42
+     |
+3243 |         let dilation = crate::math::sqrt((1.0 + 2.0 * potential / (c * c))).max(0.1).min(1.0);
+     |                                          ^                               ^
+     |
+help: remove these parentheses
+     |
+3243 -         let dilation = crate::math::sqrt((1.0 + 2.0 * potential / (c * c))).max(0.1).min(1.0);
+3243 +         let dilation = crate::math::sqrt(1.0 + 2.0 * potential / (c * c)).max(0.1).min(1.0);
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3282:49
+     |
+3282 |                 .map(|(a, b)| crate::math::powi((a - b), 2)).sum::<f64>());
+     |                                                 ^     ^
+     |
+help: remove these parentheses
+     |
+3282 -                 .map(|(a, b)| crate::math::powi((a - b), 2)).sum::<f64>());
+3282 +                 .map(|(a, b)| crate::math::powi(a - b, 2)).sum::<f64>());
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3337:49
+     |
+3337 |                 lt.dilation = crate::math::sqrt((1.0 + 2.0 * lt.potential / (c * c))).max(0.1).min(1.0);
+     |                                                 ^                                  ^
+     |
+help: remove these parentheses
+     |
+3337 -                 lt.dilation = crate::math::sqrt((1.0 + 2.0 * lt.potential / (c * c))).max(0.1).min(1.0);
+3337 +                 lt.dilation = crate::math::sqrt(1.0 + 2.0 * lt.potential / (c * c)).max(0.1).min(1.0);
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3675:30
+     |
+3675 |             crate::math::sin((time * freq))
+     |                              ^           ^
+     |
+help: remove these parentheses
+     |
+3675 -             crate::math::sin((time * freq))
+3675 +             crate::math::sin(time * freq)
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3788:49
+     |
+3788 |                 .map(|(a, b)| crate::math::powi((a - b), 2)).sum::<f64>());
+     |                                                 ^     ^
+     |
+help: remove these parentheses
+     |
+3788 -                 .map(|(a, b)| crate::math::powi((a - b), 2)).sum::<f64>());
+3788 +                 .map(|(a, b)| crate::math::powi(a - b, 2)).sum::<f64>());
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3794:49
+     |
+3794 |                 .map(|(a, b)| crate::math::powi((a - b), 2)).sum::<f64>());
+     |                                                 ^     ^
+     |
+help: remove these parentheses
+     |
+3794 -                 .map(|(a, b)| crate::math::powi((a - b), 2)).sum::<f64>());
+3794 +                 .map(|(a, b)| crate::math::powi(a - b, 2)).sum::<f64>());
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3800:49
+     |
+3800 |                 .map(|(a, b)| crate::math::powi((a - b), 2)).sum::<f64>());
+     |                                                 ^     ^
+     |
+help: remove these parentheses
+     |
+3800 -                 .map(|(a, b)| crate::math::powi((a - b), 2)).sum::<f64>());
+3800 +                 .map(|(a, b)| crate::math::powi(a - b, 2)).sum::<f64>());
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3942:37
+     |
+3942 |         let r = (crate::math::fract((seed as f64 * 1.618033988749895)) + 0.5) % 1.0;
+     |                                     ^                               ^
+     |
+help: remove these parentheses
+     |
+3942 -         let r = (crate::math::fract((seed as f64 * 1.618033988749895)) + 0.5) % 1.0;
+3942 +         let r = (crate::math::fract(seed as f64 * 1.618033988749895) + 0.5) % 1.0;
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:4112:46
+     |
+4112 |                 let qty = crate::math::floor((self.budget / price));
+     |                                              ^                   ^
+     |
+help: remove these parentheses
+     |
+4112 -                 let qty = crate::math::floor((self.budget / price));
+4112 +                 let qty = crate::math::floor(self.budget / price);
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:4189:37
+     |
+4189 |         let r = (crate::math::fract((seed as f64 * 1.618033988749895)) + 0.5) % 1.0;
+     |                                     ^                               ^
+     |
+help: remove these parentheses
+     |
+4189 -         let r = (crate::math::fract((seed as f64 * 1.618033988749895)) + 0.5) % 1.0;
+4189 +         let r = (crate::math::fract(seed as f64 * 1.618033988749895) + 0.5) % 1.0;
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:4500:119
+     |
+4500 | ...   self.delta_past_present = crate::math::sqrt(self.past.iter().zip(&self.present).map(|(a,b)| crate::math::powi((a-b), 2)).sum::<f64>...
+     |                                                                                                                     ^   ^
+     |
+help: remove these parentheses
+     |
+4500 -         self.delta_past_present = crate::math::sqrt(self.past.iter().zip(&self.present).map(|(a,b)| crate::math::powi((a-b), 2)).sum::<f64>());
+4500 +         self.delta_past_present = crate::math::sqrt(self.past.iter().zip(&self.present).map(|(a,b)| crate::math::powi(a-b, 2)).sum::<f64>());
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:4501:123
+     |
+4501 | ...   self.delta_present_future = crate::math::sqrt(self.present.iter().zip(&self.future).map(|(a,b)| crate::math::powi((a-b), 2)).sum::<...
+     |                                                                                                                         ^   ^
+     |
+help: remove these parentheses
+     |
+4501 -         self.delta_present_future = crate::math::sqrt(self.present.iter().zip(&self.future).map(|(a,b)| crate::math::powi((a-b), 2)).sum::<f64>());
+4501 +         self.delta_present_future = crate::math::sqrt(self.present.iter().zip(&self.future).map(|(a,b)| crate::math::powi(a-b, 2)).sum::<f64>());
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:4502:110
+     |
+4502 |         self.delta_full = crate::math::sqrt(self.past.iter().zip(&self.future).map(|(a,b)| crate::math::powi((a-b), 2)).sum::<f64>());
+     |                                                                                                              ^   ^
+     |
+help: remove these parentheses
+     |
+4502 -         self.delta_full = crate::math::sqrt(self.past.iter().zip(&self.future).map(|(a,b)| crate::math::powi((a-b), 2)).sum::<f64>());
+4502 +         self.delta_full = crate::math::sqrt(self.past.iter().zip(&self.future).map(|(a,b)| crate::math::powi(a-b, 2)).sum::<f64>());
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:4546:87
+     |
+4546 |             let err: f64 = action.iter().zip(expected).map(|(a, e)| crate::math::powi((a - e), 2)).sum();
+     |                                                                                       ^     ^
+     |
+help: remove these parentheses
+     |
+4546 -             let err: f64 = action.iter().zip(expected).map(|(a, e)| crate::math::powi((a - e), 2)).sum();
+4546 +             let err: f64 = action.iter().zip(expected).map(|(a, e)| crate::math::powi(a - e, 2)).sum();
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:5079:62
+     |
+5079 |         for i in 0..n_dims { embedding[i] = crate::math::sin((i as f64 * 1.618)) * 10.0; }
+     |                                                              ^                ^
+     |
+help: remove these parentheses
+     |
+5079 -         for i in 0..n_dims { embedding[i] = crate::math::sin((i as f64 * 1.618)) * 10.0; }
+5079 +         for i in 0..n_dims { embedding[i] = crate::math::sin(i as f64 * 1.618) * 10.0; }
+     |
+
+warning: unused import: `SignatureVerifier`
+  --> /root/dowiz/crates/dowiz-core/src/bebop_bridge.rs:24:57
+   |
+24 | use crate::ports::agent::cap::{HybridPolicy, RefSigner, SignatureVerifier, Capability, NodeId};
+   |                                                         ^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Action`, `Resource`, and `Scope`
+  --> /root/dowiz/crates/dowiz-core/src/bebop_bridge.rs:25:34
+   |
+25 | use crate::ports::agent::scope::{Action, Resource, Scope};
+   |                                  ^^^^^^  ^^^^^^^^  ^^^^^
+
+warning: unused import: `alloc::collections::BTreeMap`
+  --> /root/dowiz/crates/dowiz-core/src/storefront.rs:33:5
+   |
+33 | use alloc::collections::BTreeMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeSet`
+  --> /root/dowiz/crates/dowiz-core/src/mesh.rs:28:5
+   |
+28 | use alloc::collections::BTreeSet;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeSet`
+  --> /root/dowiz/crates/dowiz-core/src/foodcourt.rs:30:5
+   |
+30 | use alloc::collections::BTreeSet;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeMap`
+  --> /root/dowiz/crates/dowiz-core/src/hub_provisioning.rs:30:5
+   |
+30 | use alloc::collections::BTreeMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::boxed::Box`
+  --> /root/dowiz/crates/dowiz-core/src/ports/payment_provider.rs:33:5
+   |
+33 | use alloc::boxed::Box;
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `assert_non_negative`
+  --> /root/dowiz/crates/dowiz-core/src/ports/payment_provider.rs:36:20
+   |
+36 | use crate::money::{assert_non_negative, Currency, Money};
+   |                    ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeMap`
+  --> /root/dowiz/crates/dowiz-core/src/ports/llm.rs:14:5
+   |
+14 | use alloc::collections::BTreeMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::boxed::Box`
+  --> /root/dowiz/crates/dowiz-core/src/ports/mcp.rs:46:5
+   |
+46 | use alloc::boxed::Box;
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `ToString`
+  --> /root/dowiz/crates/dowiz-core/src/ports/notification.rs:20:29
+   |
+20 | use alloc::string::{String, ToString};
+   |                             ^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeSet`
+  --> /root/dowiz/crates/dowiz-core/src/ports/tool.rs:23:5
+   |
+23 | use alloc::collections::BTreeSet;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `BTreeMap` and `BTreeSet`
+  --> /root/dowiz/crates/dowiz-core/src/ports/owner_surface.rs:32:26
+   |
+32 | use alloc::collections::{BTreeMap, BTreeSet};
+   |                          ^^^^^^^^  ^^^^^^^^
+
+warning: unused import: `alloc::vec`
+  --> /root/dowiz/crates/dowiz-core/src/ports/agent_browser.rs:18:5
+   |
+18 | use alloc::vec;
+   |     ^^^^^^^^^^
+
+warning: unnecessary parentheses around block return value
+   --> /root/dowiz/crates/dowiz-core/src/ktg2/fractal_manchester.rs:782:21
+    |
+782 |                     (rising as f32 / total as f32)
+    |                     ^                            ^
+    |
+help: remove these parentheses
+    |
+782 -                     (rising as f32 / total as f32)
+782 +                     rising as f32 / total as f32
+    |
+
+warning: unused import: `alloc::vec::Vec`
+  --> /root/dowiz/crates/dowiz-core/src/inference/fixed.rs:30:5
+   |
+30 | use alloc::vec::Vec;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::vec::Vec`
+  --> /root/dowiz/crates/dowiz-core/src/inference/spec.rs:36:5
+   |
+36 | use alloc::vec::Vec;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `ToString`
+  --> /root/dowiz/crates/dowiz-core/src/landing/claim_client.rs:13:29
+   |
+13 | use alloc::string::{String, ToString};
+   |                             ^^^^^^^^
+
+warning: unused import: `ToString`
+  --> /root/dowiz/crates/dowiz-core/src/landing/form.rs:14:29
+   |
+14 | use alloc::string::{String, ToString};
+   |                             ^^^^^^^^
+
+warning: unused imports: `String` and `ToString`
+  --> /root/dowiz/crates/dowiz-core/src/wallet/mod.rs:20:21
+   |
+20 | use alloc::string::{String, ToString};
+   |                     ^^^^^^  ^^^^^^^^
+
+warning: unused import: `alloc::vec::Vec`
+  --> /root/dowiz/crates/dowiz-core/src/wallet/mod.rs:21:5
+   |
+21 | use alloc::vec::Vec;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeMap`
+  --> /root/dowiz/crates/dowiz-core/src/wallet/record.rs:12:5
+   |
+12 | use alloc::collections::BTreeMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::string::String`
+  --> /root/dowiz/crates/dowiz-core/src/wallet/transfer.rs:17:5
+   |
+17 | use alloc::string::String;
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::boxed::Box`
+  --> /root/dowiz/crates/dowiz-core/src/agent/loop.rs:29:5
+   |
+29 | use alloc::boxed::Box;
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `ToString`
+  --> /root/dowiz/crates/dowiz-core/src/agent/model_pair.rs:31:29
+   |
+31 | use alloc::string::{String, ToString};
+   |                             ^^^^^^^^
+
+warning: unused import: `MemEventStore`
+  --> /root/dowiz/crates/dowiz-core/src/hydra_closed_loop.rs:39:35
+   |
+39 | use crate::event_log::{MeshEvent, MemEventStore, EventStore};
+   |                                   ^^^^^^^^^^^^^
+
+warning: unused import: `alloc::string::String`
+ --> /root/dowiz/crates/dowiz-core/src/pq/keccak.rs:8:5
+  |
+8 | use alloc::string::String;
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::pq::envelope::ENTROPY_LEN`
+  --> /root/dowiz/crates/dowiz-core/src/pq/hybrid_signing.rs:31:5
+   |
+31 | use crate::pq::envelope::ENTROPY_LEN;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unnecessary parentheses around block return value
+  --> /root/dowiz/crates/dowiz-core/src/turbofieldfare.rs:81:13
+   |
+81 |             (self.active_us / self.activations)
+   |             ^                                 ^
+   |
+help: remove these parentheses
+   |
+81 -             (self.active_us / self.activations)
+81 +             self.active_us / self.activations
+   |
+
+warning: unused import: `Currency`
+  --> /root/dowiz/crates/dowiz-core/src/catalog.rs:96:41
+   |
+96 | use crate::money::{assert_non_negative, Currency, Money};
+   |                                         ^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeMap`
+  --> /root/dowiz/crates/dowiz-core/src/dynamic_actions.rs:18:5
+   |
+18 | use alloc::collections::BTreeMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Priority`
+  --> /root/dowiz/crates/dowiz-core/src/dynamic_actions.rs:22:58
+   |
+22 | use crate::orchestrator::{ActionCategory, PidController, Priority, ScheduledTask};
+   |                                                          ^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeMap`
+  --> /root/dowiz/crates/dowiz-core/src/parallel_search.rs:19:5
+   |
+19 | use alloc::collections::BTreeMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeMap`
+  --> /root/dowiz/crates/dowiz-core/src/skill_extractor.rs:11:5
+   |
+11 | use alloc::collections::BTreeMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeMap`
+  --> /root/dowiz/crates/dowiz-core/src/visual_index.rs:12:5
+   |
+12 | use alloc::collections::BTreeMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused attribute
+  --> /root/dowiz/crates/dowiz-core/src/numerical_guard.rs:64:1
+   |
+64 | #[inline]
+   | ^^^^^^^^^ help: remove this attribute
+   |
+note: attribute also specified here
+  --> /root/dowiz/crates/dowiz-core/src/numerical_guard.rs:62:1
+   |
+62 | #[inline]
+   | ^^^^^^^^^
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+   = note: `#[warn(unused_attributes)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused attribute
+  --> /root/dowiz/crates/dowiz-core/src/numerical_guard.rs:66:1
+   |
+66 | #[inline]
+   | ^^^^^^^^^ help: remove this attribute
+   |
+note: attribute also specified here
+  --> /root/dowiz/crates/dowiz-core/src/numerical_guard.rs:64:1
+   |
+64 | #[inline]
+   | ^^^^^^^^^
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+
+warning: unused attribute
+  --> /root/dowiz/crates/dowiz-core/src/numerical_guard.rs:68:1
+   |
+68 | #[inline]
+   | ^^^^^^^^^ help: remove this attribute
+   |
+note: attribute also specified here
+  --> /root/dowiz/crates/dowiz-core/src/numerical_guard.rs:66:1
+   |
+66 | #[inline]
+   | ^^^^^^^^^
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+
+warning: unused import: `ToString`
+  --> /root/dowiz/crates/dowiz-core/src/fdr/schema.rs:16:29
+   |
+16 | use alloc::string::{String, ToString};
+   |                             ^^^^^^^^
+
+warning: unused import: `ToString`
+  --> /root/dowiz/crates/dowiz-core/src/retrieval/bm25.rs:27:29
+   |
+27 | use alloc::string::{String, ToString};
+   |                             ^^^^^^^^
+
+warning: unused import: `EventStore`
+  --> /root/dowiz/crates/dowiz-core/src/hub_supervisor.rs:29:49
+   |
+29 | use crate::event_log::{AppendOutcome, EventLog, EventStore, MemEventStore, MeshEvent};
+   |                                                 ^^^^^^^^^^
+
+warning: unused import: `ToString`
+  --> /root/dowiz/crates/dowiz-core/src/ports/tool.rs:25:29
+   |
+25 | use alloc::string::{String, ToString};
+   |                             ^^^^^^^^
+
+warning: unused variable: `j`
+   --> /root/dowiz/crates/dowiz-core/src/krylov.rs:158:9
+    |
+158 |     for j in 0..m {
+    |         ^
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+help: you might have meant to pattern match on the similarly named constant `D`
+    |
+158 -     for j in 0..m {
+158 +     for hypervector::D in 0..m {
+    |
+help: if this is intentional, prefix it with an underscore
+    |
+158 |     for _j in 0..m {
+    |         +
+
+warning: unused variable: `n`
+   --> /root/dowiz/crates/dowiz-core/src/krylov.rs:190:9
+    |
+190 |     let n = b.len();
+    |         ^
+    |
+help: you might have meant to pattern match on the similarly named constant `N`
+    |
+190 -     let n = b.len();
+190 +     let retrieval::diffusion::N = b.len();
+    |
+help: if this is intentional, prefix it with an underscore
+    |
+190 |     let _n = b.len();
+    |         +
+
+warning: variable does not need to be mutable
+   --> /root/dowiz/crates/dowiz-core/src/reconstruction_memory.rs:241:13
+    |
+241 |         let mut group: Vec<&MemoryEntry> = self.entries.iter()
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `k`
+  --> /root/dowiz/crates/dowiz-core/src/spherical.rs:93:9
+   |
+93 |     let k = l - am;
+   |         ^
+   |
+help: you might have meant to pattern match on the similarly named constant `K`
+   |
+93 -     let k = l - am;
+93 +     let retrieval::diffusion::K = l - am;
+   |
+help: if this is intentional, prefix it with an underscore
+   |
+93 |     let _k = l - am;
+   |         +
+
+warning: unused variable: `n`
+   --> /root/dowiz/crates/dowiz-core/src/landmark.rs:121:9
+    |
+121 |     let n = src.len() as f64;
+    |         ^ help: if this is intentional, prefix it with an underscore: `_n`
+
+warning: variable does not need to be mutable
+  --> /root/dowiz/crates/dowiz-core/src/pixel_snapshot.rs:62:9
+   |
+62 |     let mut row_pairs = rows.collect::<Vec<_>>();
+   |         ----^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: unused variable: `a`
+  --> /root/dowiz/crates/dowiz-core/src/numerical_guard.rs:73:27
+   |
+73 | pub fn condition_estimate(a: &[Vec<f64>]) -> f64 {
+   |                           ^ help: if this is intentional, prefix it with an underscore: `_a`
+
+warning: variable does not need to be mutable
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:3755:13
+     |
+3755 |         let mut current = state.clone();
+     |             ----^^^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: unused variable: `idx`
+    --> /root/dowiz/crates/dowiz-core/src/academia_p2p.rs:5181:30
+     |
+5181 |         results.iter().map(|(idx, score, label)| (label.clone(), *score as f64)).collect()
+     |                              ^^^ help: if this is intentional, prefix it with an underscore: `_idx`
+
+warning: unused variable: `decoded_bits`
+   --> /root/dowiz/crates/dowiz-core/src/ktg2/fractal_manchester.rs:748:21
+    |
+748 |                 let decoded_bits = signal.decode_manchester(received_transitions);
+    |                     ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_decoded_bits`
+
+warning: unused variable: `token_id`
+   --> /root/dowiz/crates/dowiz-core/src/turbofieldfare.rs:477:9
+    |
+477 |         token_id: u64,
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_token_id`
+
+warning: variable does not need to be mutable
+   --> /root/dowiz/crates/dowiz-core/src/simd.rs:167:9
+    |
+167 |     let mut i = 0;
+    |         ----^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> /root/dowiz/crates/dowiz-core/src/simd.rs:304:9
+    |
+304 |     let mut i = 0;
+    |         ----^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> /root/dowiz/crates/dowiz-core/src/simd.rs:362:9
+    |
+362 |     let mut i = 0;
+    |         ----^
+    |         |
+    |         help: remove this `mut`
+
+warning: `dowiz-core` (lib) generated 118 warnings (run `cargo fix --lib -p dowiz-core` to apply 114 suggestions)
+   Compiling dowiz-hub v0.1.0 (/root/dowiz/crates/dowiz-hub)
+warning: unused import: `encode`
+  --> /root/dowiz/crates/dowiz-hub/src/stock/meta.rs:16:13
+   |
+16 | use super::{encode, StockError, StockEvent, StockLog};
+   |             ^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `chain_is_whole`
+  --> /root/dowiz/crates/dowiz-hub/src/lib.rs:89:24
+   |
+89 | pub(crate) use chain::{chain_is_whole, content_id_chained, hex32};
+   |                        ^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+  --> /root/dowiz/crates/dowiz-hub/src/graph/build.rs:38:13
+   |
+38 |         let mut ensure = |nodes: &mut Vec<Node>,
+   |             ----^^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `chain_is_whole` is never used
+  --> /root/dowiz/crates/dowiz-hub/src/chain.rs:83:15
+   |
+83 | pub(crate) fn chain_is_whole(store: &Store) -> Result<(), HubError> {
+   |               ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `dowiz-hub` (lib) generated 4 warnings (run `cargo fix --lib -p dowiz-hub` to apply 3 suggestions)
+   Compiling rbench v0.1.0 (/tmp/claude-0/-root/4384f304-d791-40f9-ae45-2e35de9584c7/scratchpad/rloops/benches/rbench)
+    Finished `release` profile [optimized] target(s) in 5m 57s
+slot: released 1 after 358 s, rc=0
+
+real	6m27.475s
+user	5m39.910s
+sys	0m3.245s

@@ -1,0 +1,20 @@
+[package]
+name = "rbench"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dowiz-hub = { path = "/root/dowiz/crates/dowiz-hub" }
+bebop-store = { path = "/root/dowiz/crates/bebop-store" }
+serde_json = "1"
+matchit = "=0.7.3"
+
+[profile.release]
+opt-level = 3
+debug = false
+
+# dowiz-core is only linked for dowiz-hub's tax/money; nothing timed here runs in it.
+# A cheap compile shortens the window in which Android's phantom-process killer can SIGKILL rustc.
+[profile.release.package.dowiz-core]
+opt-level = 1
+codegen-units = 16

@@ -1,0 +1,82 @@
+slot: acquired 1 (cores 4,5,6) for 'rloops-run-rel' at 11:23:18
+== router 11:23:18 mhz=2054400
+rc=0
+RBENCH profile=release reps=9 cpu4_mhz=2054
+B1 router: 257 routes, 14 probes
+B1 EQUIV ok: 14 probes agree (12 hit, 2 miss)
+B1 CURRENT  build+match per request: median 200.9 us (min 200.1, max 231.8)
+B1 REPLACE  match only per request:  median 0.189 us (min 0.187, max 0.261)
+B1 RATIO 1063x; build alone = 200.7 us = 2.01% of the 10 ms Free cap
+== bucket 11:23:18 mhz=2054400
+rc=0
+RBENCH profile=release reps=9 cpu4_mhz=2054
+B6 EQUIV ok: days=7, 1200 probes agree (927 in window)
+B6 days=7: CURRENT 3.3 ns/call | REPLACE 4.6 ns/call | 0.7x | per 1200 calls 4.0 us -> 5.5 us
+B6 EQUIV ok: days=30, 1200 probes agree (1123 in window)
+B6 days=30: CURRENT 9.5 ns/call | REPLACE 8.5 ns/call | 1.1x | per 1200 calls 11.4 us -> 10.2 us
+B6 EQUIV ok: days=62, 1200 probes agree (1167 in window)
+B6 days=62: CURRENT 19.1 ns/call | REPLACE 9.7 ns/call | 2.0x | per 1200 calls 22.9 us -> 11.6 us
+== orders 11:23:18 mhz=2054400
+rc=0
+RBENCH profile=release reps=9 cpu4_mhz=2054
+B3/B4 fixture: n=100 orders (127 KB JSON), 20 sittings, 0 of them today
+B3 EQUIV ok (n=100): 20 sittings, 100 rounds
+B3 n=100 S=20: CURRENT 32453 us | REPLACE 1454 us | 22.3x | share of 10 ms cap 325% -> 15%
+B4 EQUIV ok (n=100): tiles (0, 0, 0, 0)
+B4 n=100 today=0: CURRENT 1427 us | REPLACE 0 us | 5489.0x | share of 10 ms cap 14.3% -> 0.0%
+B3/B4 fixture: n=300 orders (382 KB JSON), 60 sittings, 50 of them today
+B3 EQUIV ok (n=300): 60 sittings, 300 rounds
+B3 n=300 S=60: CURRENT 278974 us | REPLACE 4570 us | 61.0x | share of 10 ms cap 2790% -> 46%
+B4 EQUIV ok (n=300): tiles (50, 152250, 8, 16)
+B4 n=300 today=50: CURRENT 4614 us | REPLACE 754 us | 6.1x | share of 10 ms cap 46.1% -> 7.5%
+B3/B4 fixture: n=1000 orders (1277 KB JSON), 150 sittings, 750 of them today
+B3 EQUIV ok (n=1000): 150 sittings, 1000 rounds
+B3 n=1000 S=150: CURRENT 2177489 us | REPLACE 13045 us | 166.9x | share of 10 ms cap 21775% -> 130%
+B4 EQUIV ok (n=1000): tiles (750, 2252250, 125, 250)
+B4 n=1000 today=750: CURRENT 14599 us | REPLACE 10840 us | 1.3x | share of 10 ms cap 146.0% -> 108.4%
+== ppr 11:23:44 mhz=2208000
+rc=0
+RBENCH profile=release reps=9 cpu4_mhz=2208
+B9 EQUIV ok: n=554 nodes, 1890 edges, 0 dangling, 554 ranked
+B9 dangling=0: CURRENT 96 us | REPLACE 95 us | 1.0x
+B9 EQUIV ok: n=564 nodes, 1890 edges, 10 dangling, 554 ranked
+B9 dangling=10: CURRENT 253 us | REPLACE 96 us | 2.6x
+B9 EQUIV ok: n=654 nodes, 1890 edges, 100 dangling, 554 ranked
+B9 dangling=100: CURRENT 1936 us | REPLACE 109 us | 17.7x
+== logwalk 11:23:44 mhz=2208000
+rc=0
+RBENCH profile=release reps=9 cpu4_mhz=2208
+B7a EQUIV ok: 200 events, log 159 KB
+B7a events=200: Hub::load(crc) 715 us | CURRENT events() 334 us | walk only 178 us | REPLACE walk+decode 220 us | 1.5x on events(); load+events 1049 -> 935 us (10.5% -> 9.4% of 10 ms)
+B7b EQUIV ok: about(wallet.leg, acct_28, 1) -> seq Some(176); stopped after 24 of 200 records
+B7b records=200: CURRENT about(..,1) 122 us | REPLACE walk_until 9.5 us | 13x
+B7a EQUIV ok: 600 events, log 463 KB
+B7a events=600: Hub::load(crc) 1008 us | CURRENT events() 961 us | walk only 530 us | REPLACE walk+decode 647 us | 1.5x on events(); load+events 1969 -> 1655 us (19.7% -> 16.6% of 10 ms)
+B7b EQUIV ok: about(wallet.leg, acct_28, 1) -> seq Some(472); stopped after 128 of 600 records
+B7b records=600: CURRENT about(..,1) 363 us | REPLACE walk_until 48.0 us | 8x
+B7a EQUIV ok: 2000 events, log 1527 KB
+B7a events=2000: Hub::load(crc) 1908 us | CURRENT events() 3254 us | walk only 1776 us | REPLACE walk+decode 2244 us | 1.4x on events(); load+events 5162 -> 4152 us (51.6% -> 41.5% of 10 ms)
+B7b EQUIV ok: about(wallet.leg, acct_28, 1) -> seq Some(1952); stopped after 48 of 2000 records
+B7b records=2000: CURRENT about(..,1) 1201 us | REPLACE walk_until 19.2 us | 62x
+== journal 11:23:45 mhz=2208000
+rc=0
+RBENCH profile=release reps=9 cpu4_mhz=2208
+B2 fixture: 165 dishes, catalogue 159152 B, journal 278 records = 358072 B = 4 chunks of 96 KiB
+B2 EQUIV ok (n=100): bytes 359416 B identical, changed chunks [0, 3] identical
+B2 CURRENT n=100 medians us: p1 clone 35 | p2 before(decode+state_of) 460 | p3 after(decode+state_of) 463 | p4 LogImage::load 334 | p5 journal 127 | p6 to_bytes 44 | p7 changed_chunks 19 | TOTAL 1482
+B2 CURRENT n=100 journal-only (p1+p4+p5+p6+p7) = 559 us; with decodes = 1482 us
+B2 REPLACE-A n=100 medians us: p3 after 470 | p5 journal 116 | p6 to_bytes 44 | p7 changed_chunks 17 | journal-only (p5+p6+p7) 177 | with one decode 646
+B2 REPLACE-B n=100 (A + kept `before`, drops p2): with one decode = 646 us vs CURRENT 1482 us
+B2 RATIO n=100: journal-only 3.2x (559 -> 177 us); whole write path 2.3x (1482 -> 646 us); share of a 10 ms cap: 14.8% -> 6.5% (object-side, 30 s DO cap applies)
+B2 fixture: 165 dishes, catalogue 187280 B, journal 522 records = 688200 B = 8 chunks of 96 KiB
+B2 EQUIV ok (n=590): bytes 689544 B identical, changed chunks [0, 7] identical
+B2 CURRENT n=590 medians us: p1 clone 87 | p2 before(decode+state_of) 605 | p3 after(decode+state_of) 574 | p4 LogImage::load 652 | p5 journal 141 | p6 to_bytes 95 | p7 changed_chunks 111 | TOTAL 2265
+B2 CURRENT n=590 journal-only (p1+p4+p5+p6+p7) = 1086 us; with decodes = 2265 us
+B2 REPLACE-A n=590 medians us: p3 after 607 | p5 journal 118 | p6 to_bytes 98 | p7 changed_chunks 102 | journal-only (p5+p6+p7) 318 | with one decode 925
+B2 REPLACE-B n=590 (A + kept `before`, drops p2): with one decode = 925 us vs CURRENT 2265 us
+B2 RATIO n=590: journal-only 3.4x (1086 -> 318 us); whole write path 2.4x (2265 -> 925 us); share of a 10 ms cap: 22.6% -> 9.3% (object-side, 30 s DO cap applies)
+slot: released 1 after 28 s, rc=0
+
+real	16m55.066s
+user	0m27.572s
+sys	0m0.631s

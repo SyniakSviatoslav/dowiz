@@ -1,0 +1,15 @@
+RBENCH profile=release reps=9 cpu4_mhz=2208
+B2 fixture: 165 dishes, catalogue 159152 B, journal 278 records = 358072 B = 4 chunks of 96 KiB
+B2 EQUIV ok (n=100): bytes 359416 B identical, changed chunks [0, 3] identical
+B2 CURRENT n=100 medians us: p1 clone 35 | p2 before(decode+state_of) 460 | p3 after(decode+state_of) 463 | p4 LogImage::load 334 | p5 journal 127 | p6 to_bytes 44 | p7 changed_chunks 19 | TOTAL 1482
+B2 CURRENT n=100 journal-only (p1+p4+p5+p6+p7) = 559 us; with decodes = 1482 us
+B2 REPLACE-A n=100 medians us: p3 after 470 | p5 journal 116 | p6 to_bytes 44 | p7 changed_chunks 17 | journal-only (p5+p6+p7) 177 | with one decode 646
+B2 REPLACE-B n=100 (A + kept `before`, drops p2): with one decode = 646 us vs CURRENT 1482 us
+B2 RATIO n=100: journal-only 3.2x (559 -> 177 us); whole write path 2.3x (1482 -> 646 us); share of a 10 ms cap: 14.8% -> 6.5% (object-side, 30 s DO cap applies)
+B2 fixture: 165 dishes, catalogue 187280 B, journal 522 records = 688200 B = 8 chunks of 96 KiB
+B2 EQUIV ok (n=590): bytes 689544 B identical, changed chunks [0, 7] identical
+B2 CURRENT n=590 medians us: p1 clone 87 | p2 before(decode+state_of) 605 | p3 after(decode+state_of) 574 | p4 LogImage::load 652 | p5 journal 141 | p6 to_bytes 95 | p7 changed_chunks 111 | TOTAL 2265
+B2 CURRENT n=590 journal-only (p1+p4+p5+p6+p7) = 1086 us; with decodes = 2265 us
+B2 REPLACE-A n=590 medians us: p3 after 607 | p5 journal 118 | p6 to_bytes 98 | p7 changed_chunks 102 | journal-only (p5+p6+p7) 318 | with one decode 925
+B2 REPLACE-B n=590 (A + kept `before`, drops p2): with one decode = 925 us vs CURRENT 2265 us
+B2 RATIO n=590: journal-only 3.4x (1086 -> 318 us); whole write path 2.4x (2265 -> 925 us); share of a 10 ms cap: 22.6% -> 9.3% (object-side, 30 s DO cap applies)
