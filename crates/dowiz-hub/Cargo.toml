@@ -16,7 +16,7 @@ bebop-store = { path = "../bebop-store" }
 # pulled in, because `hmac` and `argon2` are outside native-spa-server's
 # zero-dep allowlist and that gate may only shrink. See that module's header
 # for what the choice costs.
-sha2 = "0.10"
+sha2 = "0.11"
 # THE ROOM'S DECIDERS (`src/room`, D7 phase 1): amend and pay moved here from
 # the Worker so a wasm32 host runs the same code. Neither crate is new to the
 # build that links this one -- the Worker already had all three -- and
