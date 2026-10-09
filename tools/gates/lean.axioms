@@ -1,0 +1,43 @@
+# tools/gates/lean.axioms -- every axiom a Bebop.* declaration may rest on (tools/gates/lean.sh check 2).
+# DERIVED, not typed: `sh tools/gates/lean.sh --census | awk '/^AXIOM/{print $2}'` (Lean.collectAxioms,
+# what `#print axioms` reports, over every constant in every Bebop.* module). Census 2026-10-09,
+# W-LEANCI, Lean 4.33.1: "lean-axioms: 32 axiom(s) over 1981 constant(s) in 14 module(s)".
+# A new line here is a new trusted assumption: say in the commit what it assumes and why it is true.
+# A line nothing uses any more is red too -- delete it. `sorryAx` is never allowed.
+#
+# Lean's three standard axioms.
+# 26 syscall specifications (Bebop/Syscalls.lean): what a sys_* builtin does is the OS's, not the model's.
+# fp_mul_correct (Theorems.lean): NOT proved -- the 64x64 product is beyond bv_decide, the limb argument unwritten.
+# Two bv_decide certificates checked by native code (Lean compiler + CaDiCaL in the trust root, not kernel-only).
+Bebop.Syscalls.sys_arena_base_spec
+Bebop.Syscalls.sys_arena_end_spec
+Bebop.Syscalls.sys_atomic_add_spec
+Bebop.Syscalls.sys_clone_spec
+Bebop.Syscalls.sys_close_spec
+Bebop.Syscalls.sys_cond_set_spec
+Bebop.Syscalls.sys_exit_spec
+Bebop.Syscalls.sys_exit_thread_guard_spec
+Bebop.Syscalls.sys_export_spec
+Bebop.Syscalls.sys_fsync_spec
+Bebop.Syscalls.sys_ftruncate_spec
+Bebop.Syscalls.sys_futex_wait_guard_spec
+Bebop.Syscalls.sys_futex_wake_spec
+Bebop.Syscalls.sys_mmap_spec
+Bebop.Syscalls.sys_mprotect_spec
+Bebop.Syscalls.sys_msync_spec
+Bebop.Syscalls.sys_munmap_spec
+Bebop.Syscalls.sys_open_spec
+Bebop.Syscalls.sys_read_spec
+Bebop.Syscalls.sys_readbuf_spec
+Bebop.Syscalls.sys_rename_spec
+Bebop.Syscalls.sys_run_spec
+Bebop.Syscalls.sys_setaffinity_spec
+Bebop.Syscalls.sys_slurp_spec
+Bebop.Syscalls.sys_wait4_spec
+Bebop.Syscalls.sys_write_spec
+Bebop.Theorems.addov_correct._native.bv_decide.ax_1_6
+Bebop.Theorems.fp_mul_correct
+Bebop.Theorems.st_len_masks_digest._native.bv_decide.ax_1_5
+Classical.choice
+Quot.sound
+propext

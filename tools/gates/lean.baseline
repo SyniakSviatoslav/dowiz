@@ -1,0 +1,14 @@
+# tools/gates/lean.baseline -- the conformance floor of tools/gates/lean.sh (parityrun over
+# bebop-lang/bench/parity_constructs). The pass count may only go UP: `LEAN_WRITE=1 sh
+# tools/gates/lean.sh` raises `floor` when a run beats it; nobody lowers it to make a run green.
+#
+# Every construct the Lean model fails is NAMED below with its reason. A FAIL not listed here is red,
+# and so is a listed one that starts passing (delete its line), so this list is exactly the model's
+# known gaps -- never a place a regression can hide behind a count.
+#
+# MEASURED 2026-10-09 (W-LEANCI, clean copy of 5cb8b9af, Lean 4.33.1, aarch64):
+#   "lean: RED (3 finding(s)); conformance 126/129, floor 0" with no expect-fail lines; the three are below.
+floor 126
+expect-fail positive/c77_u32 the Lean parser knows only `[i64]` arrays; the compiler has the u32 element tag (Parser.lean lags the language)
+expect-fail positive/c84_run sys_wait4 is unmodelled: sys_run executes aarch64 code, outside the language semantics (Bebop/Syscalls.lean default arm)
+expect-fail negative/c147_dag_full E126 is the compile-node memo running out of DAG_CAP cells (compiler/dagdrv.bp:680, `// ENV DAG_CAP=64`), a compiler capacity limit the model does not represent, so the model COMPUTES 42 where the compiler must refuse. Fix = model the memo image (index + root + one entry per memoised node vs DAG_CAP) or classify `// ENV` constructs separately in ParityRun.lean

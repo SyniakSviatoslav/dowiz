@@ -52,6 +52,8 @@ printf '%-4s %-26s %-6s %s\n' "" "gate" "exit" "last line"
 # Proofs first, then every shell gate. vocab.sh compiles tools/gen-vocab.
 for p in tools/gates/*.prove.sh; do
   # x86-check's proof compiles dowiz-core for x86_64 twice: with the gate, behind --cargo.
+  # The Lean gate's proof rebuilds a scratch copy of bebop-lang/formal: its own CI job (`lean`).
+  case "$p" in */lean.prove.sh) skip lean.prove "needs the Lean toolchain; its own CI job"; continue ;; esac
   case "$p" in */x86-check.prove.sh) [ $CARGO = 1 ] || { skip x86-check.prove "compiles Rust; pass --cargo"; continue; } ;; esac
   run "$(basename "$p" .sh)" sh "$p"
 done
@@ -72,6 +74,12 @@ for g in tools/gates/*.sh; do
     # Two instrumented builds and both test suites (~15 min cold on the dev box, ~3 min warm):
     # its own CI job (`coverage` in ci.yml), never a row here. Run it by hand with
     #   bash bebop-lang/tools/slot.sh cov sh tools/gates/coverage.sh
+    # lake build (~11 min cold on the dev box) + the axiom census + parityrun over every construct:
+    # its own CI job (`lean` in ci.yml), never a row here. By hand:
+    #   PATH=<lean 4.33.1 bin>:$PATH bash bebop-lang/tools/slot.sh lean sh tools/gates/lean.sh
+    */lean.sh)
+      skip lean "needs the Lean toolchain; its own CI job"
+      continue ;;
     */coverage.sh)
       skip coverage "instrumented builds; its own CI job"
       continue ;;

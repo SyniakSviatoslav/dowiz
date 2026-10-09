@@ -173,6 +173,45 @@ jobs:
       - name: the courier app reopens with no network
         run: sh tools/gates/ci-annotate.inc courier-cold node e2e/kit-regression/courier-cold.mjs
 
+  # THE LEAN MODEL OF BEBOP, CHECKED. Until 2026-10-09 nothing ran bebop-lang/formal: `lake build`
+  # passed by hand, no gate saw it, and formal/results.txt went stale under source changes. The gate
+  # (tools/gates/lean.sh) builds, refuses any `sorry` or axiom missing from tools/gates/lean.axioms,
+  # and runs parityrun over every construct against tools/gates/lean.baseline (named expected
+  # failures, a floor that only rises, results.txt equal to a fresh run). Its proof runs first.
+  # elan is pinned by release tag (its init script would fetch `latest`); the Lean toolchain by
+  # bebop-lang/formal/lean-toolchain. The model has no lake dependencies (lake-manifest.json lists
+  # none), so the only downloads are elan and the toolchain.
+  lean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      LC_ALL: C.UTF-8
+      ELAN_VERSION: v4.2.4
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.elan
+            bebop-lang/formal/.lake
+          key: lean-${{ runner.os }}-${{ hashFiles('bebop-lang/formal/lean-toolchain', 'bebop-lang/formal/lake-manifest.json') }}-${{ hashFiles('bebop-lang/formal/**/*.lean') }}
+          restore-keys: |
+            lean-${{ runner.os }}-${{ hashFiles('bebop-lang/formal/lean-toolchain', 'bebop-lang/formal/lake-manifest.json') }}-
+      - name: elan (pinned) and the toolchain lean-toolchain names
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL "https://github.com/leanprover/elan/releases/download/$ELAN_VERSION/elan-x86_64-unknown-linux-gnu.tar.gz" | tar -xz -C "$RUNNER_TEMP"
+            "$RUNNER_TEMP/elan-init" -y --no-modify-path --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          cd bebop-lang/formal && "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)" && "$HOME/.elan/bin/lean" --version
+      - name: lake build
+        run: cd bebop-lang/formal && sh ../../tools/gates/ci-annotate.inc lake-build lake build
+      - name: the Lean gate's proof (each check fires on a scratch copy)
+        run: sh tools/gates/lean.prove.sh
+      - name: the Lean gate (sorry/axioms, conformance floor, results.txt fresh)
+        run: sh tools/gates/lean.sh
+
   # deny.toml bans yanked crates, wildcards and disallowed licences. A config is not a gate; this is.
   supply-chain:
     runs-on: ubuntu-latest
