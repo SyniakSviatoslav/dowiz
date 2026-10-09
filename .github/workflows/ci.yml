@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with: { toolchain: '${{ env.RUST_TOOLCHAIN }}' }
       - uses: Swatinem/rust-cache@v2
@@ -69,12 +69,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with: { toolchain: '${{ env.RUST_TOOLCHAIN }}', targets: wasm32-unknown-unknown }
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with: { node-version: '22' }
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with: { python-version: '3.12' }
       - uses: Swatinem/rust-cache@v2
         with:
@@ -104,8 +104,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with: { node-version: '22' }
       - name: node --test over every browser module test
         run: node --test $(find workers/api/public -name '*.test.mjs' | sort)
@@ -121,8 +121,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with: { node-version: '22' }
       - name: ffmpeg (assemble.sh + check.sh run for real in assemble.test.mjs)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
@@ -141,7 +141,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with: { toolchain: '${{ env.RUST_TOOLCHAIN }}', targets: wasm32-unknown-unknown }
       - uses: Swatinem/rust-cache@v2
@@ -158,9 +158,9 @@ jobs:
     steps:
       # NOT fetch-depth 1: the RED half serves the courier app as it was BEFORE the outbox, out of
       # the commit that last shipped it, and clicks the real button on it.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with: { node-version: '22' }
       # There is no root package.json; the library is installed where node's resolution finds it
       # from e2e/, pinned to the version the tree was written against.
@@ -178,7 +178,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with: { toolchain: '${{ env.RUST_TOOLCHAIN }}' }
       - name: install cargo-deny
@@ -191,7 +191,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with: { toolchain: '${{ env.RUST_TOOLCHAIN }}' }
       - uses: Swatinem/rust-cache@v2
