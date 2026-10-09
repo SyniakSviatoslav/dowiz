@@ -84,6 +84,8 @@ if [ -n "${X86_CHECK_RUN:-}" ] && [ "$host" != x86_64 ]; then
   export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc QEMU_LD_PREFIX=/usr/x86_64-linux-gnu \
          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="qemu-x86_64 -cpu max"
 fi
+# --color never: CI exports CARGO_TERM_COLOR=always, and coloured lines never match the error grep
+# below (the proof's defect case printed a RED with no error lines on the runner, 2026-10-09).
 LOG=$(mktemp)
 trap 'rm -f "$LOG"' EXIT
 n=0; red=0; reds=""; ran=0
@@ -93,14 +95,14 @@ for c in $crates; do
   files=$(grep -rlE "$PAT" "$c/src" 2>/dev/null | wc -l)
   t0=$(date +%s)
   (cd "$c" && CARGO_TARGET_DIR="$TD" PATH="$TC/bin:$PATH" \
-     cargo check --tests --target "$TRIPLE" --message-format short) > "$LOG" 2>&1
+     cargo check --color never --tests --target "$TRIPLE" --message-format short) > "$LOG" 2>&1
   rc=$?
   dt=$(( $(date +%s) - t0 ))
   if [ "$rc" -eq 0 ]; then
     echo "  ok   $name ($files x86 file(s), ${dt}s)"
     [ -n "${X86_CHECK_RUN:-}" ] || continue
     (cd "$c" && CARGO_TARGET_DIR="$TD" PATH="$TC/bin:$PATH" \
-       cargo test --lib --target "$TRIPLE" -- "$X86_CHECK_RUN") > "$LOG" 2>&1
+       cargo test --color never --lib --target "$TRIPLE" -- "$X86_CHECK_RUN") > "$LOG" 2>&1
     rc=$?; res=$(grep 'test result:' "$LOG" | tail -1)
     k=$(printf '%s' "$res" | sed -n 's/.* \([0-9]*\) passed.*/\1/p'); ran=$((ran + ${k:-0}))
     echo "  run  $name '$X86_CHECK_RUN' rc=$rc: ${res:-no test result line}"

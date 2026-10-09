@@ -150,6 +150,8 @@ fn an_empty_set_is_still_javascript() {
         edges: 0,
         currencies: vec!["ALL"],
         money_scale_micro: 1,
+        fulfilment_kinds: vec![],
+        minor_units: vec![],
     };
     let js = emit::render(&v);
     assert!(js.contains("export const TERMINAL = new Set();"));

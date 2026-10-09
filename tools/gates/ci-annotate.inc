@@ -16,6 +16,9 @@ out="$(mktemp)"
 rc=$?
 cat "$out"
 if [ "$rc" != 0 ] && [ -n "${GITHUB_ACTIONS:-}" ]; then
+  # CI sets CARGO_TERM_COLOR=always: strip the colour codes first, or `^error` never matches
+  # (gen-vocab's E0063 went unannotated on be1ed8e1).
+  sed 's/\x1b\[[0-9;]*[A-Za-z]//g' "$out" > "$out.plain"; mv "$out.plain" "$out"
   grep -E -A1 'panicked at|\.\.\. FAILED|^error(\[|:)|^FAIL |^[A-Za-z]*Error: ' "$out" | grep -v '^--$' | head -20 | while IFS= read -r line; do
     printf '::error title=%s (rc=%s)::%s\n' "$title" "$rc" "$(printf '%s' "$line" | tr -d '\r')"
   done
