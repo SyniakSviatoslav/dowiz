@@ -7,7 +7,7 @@ name: Evals nightly
 # collector, Chromium = the ux collector) and it stays ON. The zone collectors (live -> edge.*,
 # health, product) run inside Cloudflare in dowiz-watch (workers/watch/src/evals.js, the SAME
 # collector code) at 03:10 UTC; this job reads GET <WATCH_URL>/evals/latest on workers.dev and
-# FAILS when that result is missing, unfinished or older than 6 h (watch.evals_fresh), or when the
+# FAILS when that result is missing, unfinished or older than 12 h (watch.evals_fresh), or when the
 # deployed watcher probes other boot files than this checkout (watch.boot_files_match). ux needs a
 # browser on the zone: one loud UNVERIFIED row here (tools/evals/run.mjs UX_ELSEWHERE), measured
 # only by `--suite nightly` on the box. order, cost and cf stay here (no zone request: a file and

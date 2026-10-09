@@ -15,8 +15,10 @@ import { slugOf, key } from './http.mjs';
 import { ind, unverified } from '../rules.mjs';
 
 export const DEFAULT_URL = 'https://dowiz-watch.sviatoslavsyniak.workers.dev';
-/** The watcher measures at 03:10 UTC, this job reads at 03:41; six hours absorbs GitHub's cron lag, not a missed night. */
-export const MAX_AGE_MS = 6 * 3600_000;
+/** The watcher measures at 03:10 UTC; this job is scheduled at 03:41 but GitHub STARTED it at 10:04-10:55 on all six
+ *  runs 10-04..10-09 (6.4-7.75 h after the measurement; six hours failed every one). Twelve hours absorbs that lag
+ *  and still catches a missed night, which is >= 24 h old. */
+export const MAX_AGE_MS = 12 * 3600_000;
 
 const fail = (id, src, note) => ind(id, 0, 'bool', 'min', src, { limit: 1, note });
 

@@ -14,7 +14,7 @@ Bot Fight Mode on dowiz.org challenges every request from GitHub's runners, so `
 runs `--suite nightly-cf`: no request to *.dowiz.org. The zone collectors (live, health, product)
 run inside Cloudflare in dowiz-watch (`workers/watch/src/evals.js`, the SAME collector code) at
 03:10 UTC; `collect/watch.mjs` reads `GET <WATCH_URL>/evals/latest` and FAILS the run
-(`watch.evals_fresh` = 0) when the result is missing, unfinished or older than 6 h. The watcher's
+(`watch.evals_fresh` = 0) when the result is missing, unfinished or older than 12 h. The watcher's
 live timings are `edge.*` (from inside Cloudflare), the box's stay `live.*`; each group has its own
 baseline file. ux needs a browser on the zone and is one UNVERIFIED row (`ux.measured_here`) there;
 the box's `--suite nightly` still measures it.
