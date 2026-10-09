@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: the notes exist for this tag
         run: |
           notes="docs/releases/${GITHUB_REF_NAME}.md"

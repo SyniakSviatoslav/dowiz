@@ -65,7 +65,7 @@ jobs:
       HOST: ${{ secrets.WALK_HOST }}
       OUT: ${{ github.workspace }}/walk-out
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: install the playwright library (the browsers are in the image)
         run: npm install --no-save --no-package-lock playwright@1.63.0
       - name: credentials file
@@ -127,7 +127,7 @@ jobs:
           [ $fails -eq 0 ]
       - name: keep the logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: walk-logs
           path: walk-out/

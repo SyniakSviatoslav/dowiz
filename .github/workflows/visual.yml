@@ -55,7 +55,7 @@ jobs:
       REDIS_URL: redis://127.0.0.1:6379
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: The legacy stack this job boots must exist
         run: |
@@ -63,11 +63,11 @@ jobs:
             [ -e "$p" ] || { echo "::error title=visual::$p is absent: the legacy Node stack was removed on 2026-07-15; port e2e/visual to the current surfaces first"; exit 1; }
           done
 
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: 'pnpm'
@@ -169,7 +169,7 @@ jobs:
       # and the raw diff PNGs so the reviewer can see exactly what moved.
       - name: Upload Playwright HTML report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: visual-report
           path: e2e/artifacts/visual-report
@@ -177,7 +177,7 @@ jobs:
 
       - name: Upload diff images + results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: visual-diffs
           path: e2e/artifacts/visual-results
@@ -185,7 +185,7 @@ jobs:
 
       - name: Upload API log
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: visual-api-log
           path: /tmp/visual-api.log
