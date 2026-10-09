@@ -3,6 +3,7 @@
 # what `#print axioms` reports, over every constant in every Bebop.* module). Census 2026-10-09,
 # W-LEANCI, Lean 4.33.1: "lean-axioms: 32 axiom(s) over 1981 constant(s) in 14 module(s)";
 # Re-derived 2026-10-09, W-FPMUL (fp_mul_correct now a theorem): "lean-axioms: 31 axiom(s) over 2047 constant(s) in 14 module(s)".
+# Re-derived 2026-10-09, W-DELTALEAN (Bebop.KvDelta, kernel-only): "lean-axioms: 31 axiom(s) over 2185 constant(s) in 15 module(s)"; names unchanged.
 # A new line here is a new trusted assumption: say in the commit what it assumes and why it is true.
 # A line nothing uses any more is red too -- delete it. `sorryAx` is never allowed.
 #

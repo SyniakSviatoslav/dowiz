@@ -186,3 +186,6 @@ pub use write::{append_delta, append_delta_with};
 
 #[cfg(test)]
 mod tests;
+/// The Lean model's theorems (formal/Bebop/KvDelta.lean) asserted on the real writer + compactor.
+#[cfg(test)]
+mod lean_tests;

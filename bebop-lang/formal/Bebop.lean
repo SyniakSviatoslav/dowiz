@@ -28,3 +28,4 @@ import Bebop.Conformance
 import Bebop.Theorems
 import Bebop.Datalog
 import Bebop.Dag
+import Bebop.KvDelta
