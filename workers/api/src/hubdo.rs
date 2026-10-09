@@ -1013,8 +1013,8 @@ impl HubImages {
         // THE STOREFRONT'S READ PATH IS PUBLISHED by the write that moved it (BN2, `hubdo/publish.rs`); it never fails the write.
         if menu::MENU_INPUTS.contains(&id) { self.publish_after_write().await; }
         // TIMED WORK ARMS THE ALARM in the write that makes it due (DAG Phase 2).
-        if crate::cron::timer::TIMED.contains(&id) {
-            self.timer_after_write(self.now_ms()).await;
+        if crate::cron::timer::TIMED.contains(&id) || id == crate::hubstore::IMAGE_SETTINGS { // settings: a rail set up (`outbox/park.rs`)
+            self.timer_after_write(id, self.now_ms()).await;
         }
         // THE PROJECTION IS DERIVED FROM THIS IMAGE, so it moves with the
         // write: stepped over the events an append or a command added, dropped

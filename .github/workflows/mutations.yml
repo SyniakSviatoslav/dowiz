@@ -8,6 +8,10 @@ name: Mutations
 # The gates' own mutation proofs (tools/gates/*.prove.sh) run on every push in ci.yml's `gates`.
 
 on:
+  # the job also runs when this file changes, so a fix to it is proved on the runner the same day
+  push:
+    branches: [main]
+    paths: ['.github/workflows/mutations.yml']
   schedule:
     - cron: '41 4 * * 1'
   workflow_dispatch:
@@ -24,4 +28,4 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with: { toolchain: '1.96.1' }
       - run: cargo install --locked cargo-mutants
-      - run: cd kernel && cargo mutants --in-package dowiz-kernel --file src/trinary.rs --file src/pid.rs --timeout 30
+      - run: cd kernel && cargo mutants --in-place -p dowiz-kernel --file src/trinary.rs --file src/pid.rs --timeout 30

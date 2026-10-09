@@ -28,6 +28,8 @@ pub async fn promotions(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
         };
     let cat = cat.catalog;
     let now = ctx.data.now_ms;
+    // ONE fold of the log for every code (W-LOOPA row 9), not one per promo.
+    let uses = crate::services::ordering::promo_fields::promo_uses_all(&loaded.hub);
     let mut rows: Vec<Value> = cat
         .promos()
         .into_iter()
@@ -36,7 +38,7 @@ pub async fn promotions(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
             // Status is DERIVED, never stored: a stored one goes stale the
             // moment the clock passes the window, and the owner would be
             // reading a label that no longer describes the code.
-            let used = crate::services::ordering::promo_fields::promo_uses(&loaded.hub, &p.code);
+            let used = uses.get(&p.code).copied().unwrap_or(0);
             json!({
                 "code": p.code, "kind": p.kind.as_str(), "value": p.value,
                 "minOrder": p.min_order, "fromMs": p.from_ms, "untilMs": p.until_ms,
@@ -111,3 +113,6 @@ pub async fn delete_promotion(req: Request, ctx: RouteContext<crate::Req>) -> Re
     }
     Response::from_json(&json!({ "ok": true }))
 }
+
+#[cfg(test)]
+mod tests;

@@ -13,6 +13,7 @@ fn entry(id: &str, queued: i64, tries: u32, next: i64) -> Entry {
         next_at_ms: next,
         handed_ms: None,
         code: None,
+        parked_ms: None,
     }
 }
 
@@ -125,4 +126,27 @@ fn the_same_event_enqueued_twice_is_one_message() {
     assert_eq!(a.id, b.id, "the second write replaces the first rather than adding to it");
     assert_eq!(a.tries, 0);
     assert_eq!(a.next_at_ms, a.queued_at_ms, "a fresh entry is due at once");
+}
+
+/// W-EVALFIX (`park.rs`): a due entry the drain neither tried nor paced is PARKED once; a
+/// paced one is busy, not parked; an attempted one is never left parked.
+#[test]
+fn untouched_due_entries_are_parked_once_and_attempted_ones_never() {
+    let now = 1_000_000;
+    let work = vec![entry("a", 0, 0, now), entry("b", 0, 0, now), entry("c", 0, 0, now), entry("later", 0, 0, now + 1)];
+    let mut ops = super::tgrail::Ops::default();
+    ops.deferred.push("b".into());
+    let mut retried = entry("c", 0, 0, now);
+    retried.parked_ms = Some(now - 5);
+    ops.put(Entry { tries: 1, next_at_ms: now + 10_000, ..retried });
+    let verdicts = vec![("c".to_string(), Verdict::Retry { tries: 1, next_at_ms: now + 10_000 })];
+    park::park(&mut ops, &work, &verdicts, now);
+    assert_eq!(ops.puts["a"].parked_ms, Some(now), "no rail: parked");
+    assert!(!ops.puts.contains_key("b"), "paced: still busy, not parked");
+    assert_eq!(ops.puts["c"].parked_ms, None, "attempted: the stamp is cleared");
+    assert!(!ops.puts.contains_key("later"), "not due: untouched");
+    // Already parked and untouched: no second write.
+    let mut again = super::tgrail::Ops::default();
+    park::park(&mut again, &[ops.puts["a"].clone()], &[], now + 60_000);
+    assert!(again.puts.is_empty(), "{:?}", again.puts.keys());
 }

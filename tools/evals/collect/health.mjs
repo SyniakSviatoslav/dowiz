@@ -4,7 +4,7 @@
 //
 // MEMORY. A venue's "memory" is its images: usedCells of ceilingCells per image. Growth per
 // day needs two readings, so it is derived from the previous run's JSON when one is given.
-import { getJson, ownerToken, slugOf, key } from './net.mjs';
+import { getJson, ownerToken, slugOf, key } from './http.mjs';
 import { ind, unverified } from '../rules.mjs';
 
 export const DAY_MS = 86_400_000;

@@ -3,20 +3,30 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readCfEnv, fold, analytics, measure, counters, aeSums, aeCounters, aeEndpoint, AE_SQL, AE_DOUBLES, AE_DATASET, QUERY, ENDPOINT, WHY_NO_TOKEN, WHY_NO_HEALTH, COUNTER_IDS, FILE, SCHEDULED_LIMIT, NO_ORDER_DAY_DO_TARGET } from './cf.mjs';
+import { readCfEnv, fold, analytics, measure, counters, aeSums, aeCounters, aeEndpoint, AE_SQL, AE_DOUBLES, AE_DATASET, QUERY, ENDPOINT, WHY_NO_TOKEN, WHY_NO_HEALTH, COUNTER_IDS, FILE, SCHEDULED_LIMIT, NO_ORDER_DAY_DO_TARGET, DO_ROWS } from './cf.mjs';
 
 const byId = xs => Object.fromEntries(xs.map(x => [x.id, x]));
 const ACC = {
   w: [
-    { dimensions: { scriptName: 'dowiz-api', status: 'success' }, sum: { requests: 10, errors: 0, subrequests: 4 }, quantiles: { cpuTimeP50: 7, cpuTimeP99: 40 } },
-    { dimensions: { scriptName: 'dowiz-api', status: 'scriptThrewException' }, sum: { requests: 2, errors: 2 }, quantiles: { cpuTimeP50: 9, cpuTimeP99: 30 } },
+    { dimensions: { scriptName: 'dowiz-api', status: 'success' }, sum: { requests: 10, errors: 0, subrequests: 4 } },
+    { dimensions: { scriptName: 'dowiz-api', status: 'scriptThrewException' }, sum: { requests: 2, errors: 2 } },
     { dimensions: { scriptName: 'dowiz-api', status: 'clientDisconnected' }, sum: { requests: 0 } },
     { dimensions: { scriptName: 'other', status: 'success' }, sum: { requests: 999 } },
   ],
+  // The quantiles over EVERY invocation of a script (no status dimension).
+  q: [
+    { dimensions: { scriptName: 'dowiz-api' }, quantiles: { cpuTimeP50: 7, cpuTimeP90: 20, cpuTimeP99: 40 } },
+    { dimensions: { scriptName: 'other' }, quantiles: { cpuTimeP50: 999, cpuTimeP90: 999, cpuTimeP99: 999 } },
+  ],
   d: [
-    { dimensions: { scriptName: 'dowiz-api', type: 'http' }, sum: { requests: 26, errors: 1, responseBodySize: 500 } },
-    { dimensions: { scriptName: 'dowiz-api', type: 'alarm' }, sum: { requests: 4, errors: 0, responseBodySize: 0 } },
-    { dimensions: { scriptName: 'x', type: 'alarm' }, sum: { requests: 1 } },
+    { dimensions: { scriptName: 'dowiz-api', name: 'alpha', type: 'http', status: 'success' }, sum: { requests: 20, errors: 0, responseBodySize: 500 } },
+    { dimensions: { scriptName: 'dowiz-api', name: 'alpha', type: 'http', status: 'scriptThrewException' }, sum: { requests: 1, errors: 1, responseBodySize: 0 } },
+    { dimensions: { scriptName: 'dowiz-api', name: 'beta', type: 'http', status: 'clientDisconnected' }, sum: { requests: 3, errors: 3 } },
+    { dimensions: { scriptName: 'dowiz-api', name: 'beta', type: 'http', status: 'responseStreamDisconnected' }, sum: { requests: 2, errors: 2 } },
+    { dimensions: { scriptName: 'dowiz-api', name: 'beta', type: 'alarm', status: 'success' }, sum: { requests: 3, errors: 0, responseBodySize: 0 } },
+    { dimensions: { scriptName: 'dowiz-api', name: 'beta', type: 'alarm', status: 'clientDisconnected' }, sum: { requests: 1, errors: 1 } },
+    { dimensions: { scriptName: 'dowiz-api', name: '__platform', type: 'http', status: 'success' }, sum: { requests: 0, errors: 0 } },
+    { dimensions: { scriptName: 'x', name: 'gamma', type: 'alarm', status: 'success' }, sum: { requests: 1 } },
   ],
   s: [
     { scriptName: 'dowiz-api', cron: '17 3 * * *' },
@@ -34,13 +44,30 @@ test('the token file: export lines, quotes stripped; absent is empty', () => {
   assert.equal(FILE, '/root/.cf_analytics_token');
 });
 
-test('fold sums one script over its status rows and takes the worst quantile', () => {
-  assert.deepEqual(fold(ACC), { workerRequests: 12, workerErrors: 2, subrequests: 4, cpuP50Us: 9, cpuP99Us: 40, doRequests: 30, doErrors: 1, doResponseBytes: 500, doAlarms: 4, cronRuns: 3, cronMinute: 2 });
-  assert.deepEqual(fold({}), { workerRequests: 0, workerErrors: 0, subrequests: 0, cpuP50Us: 0, cpuP99Us: 0, doRequests: 0, doErrors: 0, doResponseBytes: 0, doAlarms: 0, cronRuns: 0, cronMinute: 0 });
+test('fold sums one script over its rows; CPU quantiles over every invocation; a caller gone is not an error', () => {
+  assert.deepEqual(fold(ACC), { workerRequests: 12, workerErrors: 2, subrequests: 4, cpuP50Us: 7, cpuP90Us: 20, cpuP99Us: 40,
+    doRequests: 30, doErrors: 2, doDisconnects: 5, doResponseBytes: 500, doAlarms: 4, venueObjects: 2, doRowsCapped: false, cronRuns: 3, cronMinute: 2 });
+  assert.deepEqual(fold({}), { workerRequests: 0, workerErrors: 0, subrequests: 0, cpuP50Us: null, cpuP90Us: null, cpuP99Us: null,
+    doRequests: 0, doErrors: 0, doDisconnects: 0, doResponseBytes: 0, doAlarms: 0, venueObjects: 0, doRowsCapped: false, cronRuns: 0, cronMinute: 0 });
+});
+
+// W-EVALFIX, LIVE 2026-10-08: the worst per-status p50 read 12,406 µs (ten stream disconnects)
+// as the median of 1,077 invocations whose p50 over all of them was 3,625 µs.
+test('the median is not the worst group\'s median: a slow minority status does not move it', () => {
+  const live = {
+    w: [{ dimensions: { scriptName: 'dowiz-api', status: 'success' }, sum: { requests: 1059 } },
+      { dimensions: { scriptName: 'dowiz-api', status: 'responseStreamDisconnected' }, sum: { requests: 10 } }],
+    q: [{ dimensions: { scriptName: 'dowiz-api' }, quantiles: { cpuTimeP50: 3625, cpuTimeP90: 13452, cpuTimeP99: 24365 } }],
+  };
+  assert.equal(fold(live).cpuP50Us, 3625);
+  assert.equal(fold(live).cpuP99Us, 24365);
 });
 
 test('the query asks for the object type and every scheduled firing, bounded', () => {
-  assert.match(QUERY, /dimensions\{scriptName type\}/);
+  assert.match(QUERY, /dimensions\{scriptName name type status\}/);
+  assert.match(QUERY, /q: workersInvocationsAdaptive\(limit:100, filter:\{datetime_geq:\$s, datetime_lt:\$e\}\)\{ quantiles\{cpuTimeP50 cpuTimeP90 cpuTimeP99\} dimensions\{scriptName\} \}/);
+  assert.doesNotMatch(QUERY, /quantiles[^}]*\}[^}]*dimensions\{scriptName status\}/, 'no quantile grouped by status');
+  assert.match(QUERY, new RegExp(`durableObjectsInvocationsAdaptiveGroups\\(limit:${DO_ROWS},`));
   assert.match(QUERY, new RegExp(`workersInvocationsScheduled\\(limit:${SCHEDULED_LIMIT},`));
   assert.ok(SCHEDULED_LIMIT > 1441, 'a whole day of the old minute cron fits, so its disappearance is measured');
   assert.equal(NO_ORDER_DAY_DO_TARGET, 1000);
@@ -72,6 +99,10 @@ test('measure: the indicators, an error as the reason, and no token as the reaso
   assert.equal(r['cf.do_response_bytes_day'].value, 500);
   assert.equal(r['cf.worker_requests_day'].note, '4 subrequests');
   assert.equal(r['cf.do_alarms_day'].value, 4);
+  assert.equal(r['cf.do_errors_day'].value, 2, 'the thrown exception and the alarm whose run was cut; not the closed sockets');
+  assert.equal(r['cf.do_disconnects_day'].value, 5);
+  assert.equal(r['cf.venue_objects_day'].value, 2);
+  assert.equal(r['cf.cpu_p50_us'].value, 7);
   assert.equal(r['cf.cron_runs_day'].value, 3);
   assert.equal(r['cf.cron_runs_day'].note, '2 of the removed * * * * *');
   assert.match(r['cf.do_requests_day'].note, /no orders: < 1000/);

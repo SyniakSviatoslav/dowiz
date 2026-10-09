@@ -186,3 +186,15 @@ fn the_nightly_tally_counts_and_names() {
 fn the_timed_images_are_the_outbox_the_till_link_and_fiscal() {
     assert_eq!(TIMED, ["outbox", "ebills", "fiscal"]);
 }
+
+/// W-EVALFIX: AN ENTRY PARKED FOR A RAIL THAT IS NOT SET UP WAKES NOTHING (`outbox/park.rs`):
+/// asking again a minute later cannot configure a bot. qa-durres paid 1,440 alarms a day for it.
+#[test]
+fn a_parked_entry_schedules_no_alarm() {
+    let mut parked = entry("t", "telegram", NOW - 60_000);
+    parked.parked_ms = Some(NOW - 60_000);
+    assert_eq!(outbox_next(&[parked.clone()]), None);
+    assert_eq!(after_run(outbox_next(&[parked.clone()]), NOW), Arm::Clear);
+    // Beside a live entry, the live one alone sets the instant.
+    assert_eq!(outbox_next(&[parked, entry("r", "telegram", NOW + 30_000)]), Some(NOW + 30_000));
+}

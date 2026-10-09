@@ -16,6 +16,10 @@ worker = "0.8"
 # dependency of `worker` at this exact version, so declaring it direct adds no
 # code to the build -- it only makes `join` nameable from here.
 futures-util = { version = "0.3", default-features = false }
+# THE SAME `matchit` `worker` 0.8.5 matches with, pinned to the lock's 0.7.3 so the
+# route table built once per isolate (`routes_table/dispatch.rs`, W-LOOPA row 2)
+# matches exactly as the per-request `worker::Router` did. No new crate in the graph.
+matchit = "=0.7.3"
 
 worker-macros = "0.8"
 # The kernel: the SOLE order/FSM/money authority. `json-api` is the string

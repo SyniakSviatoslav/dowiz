@@ -1,16 +1,24 @@
 name: Evals nightly
 
-# THE NIGHTLY SUITE (BLUEPRINT-OPTIMIZATION-AND-EVALS-2026-09-24 §B.3): GET-only probes of the live
-# venues (median of three for every clock), each venue's health and product aggregates, the four
-# surfaces in a headless Chromium at 360 and 1280 px, and the cost model priced from Cloudflare's
-# own request counts. It places NO order: the order suite reads a traffic.mjs report only when one
-# is handed to it (collect/order.mjs says why). Never writes to a venue.
+# THE NIGHTLY SUITE (BLUEPRINT-OPTIMIZATION-AND-EVALS-2026-09-24 §B.3), GitHub's half.
+#
+# 2026-10-08 (W-EVALSCF, operator decision "option b"): NOTHING HERE TOUCHES *.dowiz.org. Bot Fight
+# Mode managed-challenged 33 of this job's probes in run 37766665168 (user agent `node` = the live
+# collector, Chromium = the ux collector) and it stays ON. The zone collectors (live -> edge.*,
+# health, product) run inside Cloudflare in dowiz-watch (workers/watch/src/evals.js, the SAME
+# collector code) at 03:10 UTC; this job reads GET <WATCH_URL>/evals/latest on workers.dev and
+# FAILS when that result is missing, unfinished or older than 6 h (watch.evals_fresh), or when the
+# deployed watcher probes other boot files than this checkout (watch.boot_files_match). ux needs a
+# browser on the zone: one loud UNVERIFIED row here (tools/evals/run.mjs UX_ELSEWHERE), measured
+# only by `--suite nightly` on the box. order, cost and cf stay here (no zone request: a file and
+# api.cloudflare.com). It places NO order and never writes to a venue.
 #
 # Secrets (all optional; a missing one turns its indicators UNVERIFIED, never green):
-#   EVALS_OWNER_EMAIL / EVALS_OWNER_PASSWORD   owner sign-in for /api/owner/{health,orders,reservations}
+#   EVALS_READ_TOKEN   the watcher's bearer token: the venues' aggregates (health, product, counters)
 #   CF_ANALYTICS_ACCOUNT_ID / CF_ANALYTICS_TOKEN   Account Analytics:Read only
+# The owner credentials now live in the watcher (wrangler secrets EVALS_OWNER_EMAIL/PASSWORD).
 #
-# The box runs the same suite without GitHub (docs/measurements/evals/README.md).
+# The box runs the full suite without GitHub (docs/measurements/evals/README.md).
 
 on:
   schedule:
@@ -27,17 +35,17 @@ concurrency:
 jobs:
   nightly:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - name: a headless Chromium
-        run: npm install --no-save playwright@1 && npx playwright install --with-deps chromium
-      - name: the nightly suite
+      - name: the harness's own tests (the collectors and the watcher's evals code)
+        run: node --test tools/evals/*.test.mjs tools/evals/collect/*.test.mjs workers/watch/test/*.test.mjs
+      - name: the nightly suite (reads dowiz-watch; no request to the dowiz.org zone)
         env:
-          OWNER_EMAIL: ${{ secrets.EVALS_OWNER_EMAIL }}
-          OWNER_PASSWORD: ${{ secrets.EVALS_OWNER_PASSWORD }}
+          WATCH_URL: ${{ vars.WATCH_URL || 'https://dowiz-watch.sviatoslavsyniak.workers.dev' }}
+          EVALS_READ_TOKEN: ${{ secrets.EVALS_READ_TOKEN }}
           CF_ACCOUNT: ${{ secrets.CF_ANALYTICS_ACCOUNT_ID }}
           CF_TOKEN: ${{ secrets.CF_ANALYTICS_TOKEN }}
         run: |
@@ -45,10 +53,11 @@ jobs:
             printf 'CLOUDFLARE_ACCOUNT_ID=%s\nCLOUDFLARE_API_TOKEN=%s\n' "$CF_ACCOUNT" "$CF_TOKEN" > "$RUNNER_TEMP/cf"
             export CF_ANALYTICS_FILE="$RUNNER_TEMP/cf"
           fi
-          node tools/evals/run.mjs --suite nightly --no-baseline-write
+          echo "::warning title=ux not measured here::the ux collector needs a browser on *.dowiz.org (Bot Fight Mode); see ux.measured_here in the report"
+          node tools/evals/run.mjs --suite nightly-cf --no-baseline-write
       - name: the report, in the job summary
         if: always()
-        run: cat docs/measurements/evals/*-nightly.md >> "$GITHUB_STEP_SUMMARY" || true
+        run: cat docs/measurements/evals/*-nightly-cf.md >> "$GITHUB_STEP_SUMMARY" || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

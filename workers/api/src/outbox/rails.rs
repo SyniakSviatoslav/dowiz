@@ -156,6 +156,7 @@ async fn held(
                 // token leaves the entry waiting, visible on the health pane.
                 let Some(t) = token.as_deref() else { continue };
                 if !pace.admit(&e.to) {
+                    ops.deferred.push(e.id.clone());
                     continue;
                 }
                 let r = crate::notify::tg::send(t, &e.to, &e.text).await;
@@ -233,6 +234,7 @@ async fn held(
             }
         }
     }
+    super::park::park(&mut ops, &work, &verdicts, now_ms); // W-EVALFIX: no rail, no alarm
     for (to, h) in &pace.health {
         ops.records.push((crate::notify::route::HEALTH_KIND, to.clone(), Some(serde_json::to_string(h).unwrap_or_default())));
     }

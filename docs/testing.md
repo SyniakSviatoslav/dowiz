@@ -31,6 +31,7 @@ wrong target graph and pass as exit 0 (see `CLAUDE.md`, "Build model").
 | `tools/gen-vocab` | `cargo test` | the vocabulary generator agrees with the kernel's golden signature |
 | `tools/native-spa-server` | `cargo test` | the native twin of the owner, courier and storefront routes |
 | `kernel`, `engine`, `apps/courier` | `cargo test --lib` / `cargo test` | the std facade and the non-product crates |
+| every crate with x86_64-only code (`dowiz-core`, `kernel`) | `sh tools/gates/x86-check.sh` (run-all `--cargo`) | the AVX2/SHA/rdtsc paths compile for `x86_64-unknown-linux-gnu` on the aarch64 box (CI was red two days over one); to RUN them: `cargo test --no-run --target x86_64-unknown-linux-gnu` with `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc`, then `QEMU_LD_PREFIX=/usr/x86_64-linux-gnu qemu-x86_64 -cpu max <bin> <filter>` |
 
 `bash scripts/verify-hub.sh` runs the four product crates and the SQL and file-size ratchets in one
 go.

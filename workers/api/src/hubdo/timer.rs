@@ -70,6 +70,18 @@ impl HubImages {
         Ok(timer::next_due(&[timer::outbox_next(&outbox), ebills, fiscal, overdue, night]))
     }
 
+    /// Does the outbox hold an entry parked for a rail that was not set up?
+    async fn outbox_parked(&self) -> Result<bool> {
+        Ok(match self.image(crate::outbox::IMAGE_OUTBOX).await? {
+            Some((_, b)) => Table::load(&b, crate::outbox::OUTBOX_BYTES)
+                .map_err(|_| bad("the outbox image is unreadable"))?
+                .all(crate::outbox::KIND)
+                .into_iter()
+                .any(|(_, j)| serde_json::from_str::<crate::outbox::Entry>(&j).is_ok_and(|e| e.parked_ms.is_some())),
+            None => false,
+        })
+    }
+
     /// The till link's next firing (`timer::ebills_next`), with the venue's
     /// polling hours (`ebills::cadence`) and the latest change it has seen:
     /// the floor image's `at_ms` is written only when a table moved.
@@ -146,13 +158,19 @@ impl HubImages {
 
     /// After a write to a `timer::TIMED` image: bring the alarm forward to the
     /// work. Never fails the write it follows -- a lost arm is the nightly's
-    /// to find (`timer::rearm`), and it is said here.
-    pub(super) async fn timer_after_write(&self, now_ms: i64) {
+    /// to find (`timer::rearm`), and it is said here. A write to the SETTINGS
+    /// may have set a rail up: an entry parked for one is due now
+    /// (`outbox/park.rs`), and a venue with none parked is not woken.
+    pub(super) async fn timer_after_write(&self, image: &str, now_ms: i64) {
         if self.in_alarm.get() {
             return; // the run re-arms when it ends (`timer_alarm`)
         }
         let armed = async {
-            let want = self.timer_next(now_ms).await?;
+            let want = if image == crate::hubstore::IMAGE_SETTINGS {
+                self.outbox_parked().await?.then_some(now_ms)
+            } else {
+                self.timer_next(now_ms).await?
+            };
             if want.is_some() {
                 // Learned while a request is here, so the alarm has it later.
                 let _ = self.own_venue(None).await;

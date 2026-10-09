@@ -86,6 +86,11 @@ pub struct Entry {
     pub handed_ms: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
+    /// PARKED (`outbox/park.rs`): when a drain found this entry due and its
+    /// rail not set up. A parked entry wakes no alarm; it is tried on the
+    /// venue's next wake for any reason, and a settings write wakes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parked_ms: Option<i64>,
 }
 
 impl Entry {
@@ -100,6 +105,7 @@ impl Entry {
             next_at_ms: now_ms,
             handed_ms: None,
             code: None,
+            parked_ms: None,
         }
     }
 }
@@ -179,6 +185,8 @@ pub mod digest;
 pub(crate) mod digest_rail;
 /// One drain at a time per venue (W-FIX O4).
 mod lease;
+/// Entries whose rail is not set up wait without an alarm (W-EVALFIX).
+pub(crate) mod park;
 /// The drain's Telegram bookkeeping: fan-out, pacing, refusals (W-TG).
 mod tgrail;
 

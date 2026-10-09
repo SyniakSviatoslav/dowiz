@@ -13,10 +13,19 @@
 # PLAIN JS, NO BUILD STEP. A Rust Worker needs worker-build, a wasm toolchain and a cargo slot on
 # the box; this is ~300 lines of fetch-and-compare with no dependency, and `wrangler deploy` uploads
 # it as it stands. Nothing in it is money, order state or crypto, which is what the repo keeps in Rust.
+# The nightly evals (src/evals.js) import tools/evals' pure collector modules (no node:*); wrangler's
+# bundler pulls them in, so the deployed probes are the repo's collectors, not a copy.
 #
 # DEPLOY (main only; account id comes from the token file, never committed):
 #   cd workers/watch && . /root/.cf_deploy_token && npx wrangler@4 deploy \
 #     --var WATCH_COMMIT:$(git -C /root/dowiz rev-parse --short HEAD)
+# NIGHTLY EVALS (W-EVALSCF, 2026-10-08; src/evals.js): the zone-touching evals collectors run HERE
+# at EVALS_AT (UTC) and tools/evals' GitHub nightly reads GET /evals/latest. Two optional secrets
+# (a missing one turns its rows UNVERIFIED, never green); set once, before or after a deploy:
+#   . /root/.dowiz_owner && printf %s "$OWNER_EMAIL" | npx wrangler@4 secret put EVALS_OWNER_EMAIL
+#   . /root/.dowiz_owner && printf %s "$OWNER_PASSWORD" | npx wrangler@4 secret put EVALS_OWNER_PASSWORD
+#   openssl rand -hex 32 | tee /root/.dowiz_evals_read_token | npx wrangler@4 secret put EVALS_READ_TOKEN
+#     (the SAME value is the GitHub secret EVALS_READ_TOKEN; it guards the venues' aggregates and POST /evals/run)
 # RED TEST (one deploy, then the plain deploy again to undo it):
 #   ... npx wrangler@4 deploy --var WATCH_COMMIT:<sha> --var EXTRA_TARGETS:"qa-404=https://qa-durres.dowiz.org/healthz-404"
 name = "dowiz-watch"
@@ -33,6 +42,10 @@ WATCH_DOMAIN = "dowiz.org"
 WATCH_VENUES = "sushi-durres dubin-sushi qa-durres"
 # Extra "name=url" pairs probed as /healthz-style targets. Empty in production; the RED test sets it.
 EXTRA_TARGETS = ""
+# The nightly evals: the 5-minute tick at this UTC time starts them (the GitHub job reads at 03:41),
+# and the venues they probe (the edge.* timings use the first).
+EVALS_AT = "03:10"
+EVALS_HOSTS = "sushi-durres dubin-sushi"
 # The watcher's own public URL, quoted in alert mails. Set at deploy once workers.dev names it:
 # (account workers.dev subdomain MEASURED 2026-10-03 via GET /accounts/<a>/workers/subdomain)
 WATCH_URL = "https://dowiz-watch.sviatoslavsyniak.workers.dev"
@@ -46,7 +59,8 @@ MAIL_TO = "syniaksviatoslav@proton.me"
 name = "ALERT_MAIL"
 destination_address = "syniaksviatoslav@proton.me"
 
-# The last result per target, the last tick, and the last mail's result. One SQLite-backed Durable
+# The last result per target, the last tick, the last mail's result, and the nightly evals (one run
+# in flight + the last finished one; one alarm per phase, ~6 writes a night). One SQLite-backed Durable
 # Object (available on the Free plan). Writes: one row per tick (288/day) plus one per changed
 # target and per mail sent, against the Free plan's 100,000 rows written per day.
 [[durable_objects.bindings]]

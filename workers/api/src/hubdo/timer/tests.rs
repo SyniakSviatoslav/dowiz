@@ -43,18 +43,22 @@ fn a_due_write_arms_the_alarm_and_the_alarm_drains_in_its_own_turn_until_the_wor
     let at = host.alarm.get().expect("the write that made work due armed the alarm");
     assert!(at <= now + RUN_GAP_MS, "{at}");
 
-    // THE ALARM FIRES while the rail is not configured (no bot token): the entry waits, and
-    // the alarm is back one gap on. The run asked NO object for anything: its reads were calls.
+    // THE ALARM FIRES while the rail is not configured (no bot token): the entry waits, PARKED,
+    // and NO alarm is left set -- a rail that is not set up cannot be fixed by asking again a
+    // minute later (W-EVALFIX: qa-durres fired 1,440 alarms a day for eight such entries, the
+    // day's largest object cost). The run asked NO object for anything: its reads were calls.
     let before = object_requests();
     block_on(site.object("alpha").timer_alarm_in(&site.env(), at)).expect("the alarm ran");
     assert_eq!(object_requests() - before, 0, "the venue's own reads are answered in process");
-    assert_eq!(host.alarm.get(), Some(at + RUN_GAP_MS), "still due: re-armed one gap later");
+    assert_eq!(host.alarm.get(), None, "parked: an unconfigured rail schedules nothing");
     assert_eq!(sends(), 0);
 
-    // The owner sets the token; the next firing sends the line once, and the alarm CLEARS.
+    // The owner sets the token: THAT write wakes the parked entry; the firing sends the line
+    // once, and the alarm CLEARS.
     token(&site, &t);
+    let wake = host.alarm.get().expect("setting the rail up woke what was parked for it");
     answer_outbound(|_| Reply::from_json(&json!({"ok": true, "result": {"message_id": 1}})));
-    block_on(site.object("alpha").timer_alarm_in(&site.env(), at + RUN_GAP_MS)).expect("the alarm ran");
+    block_on(site.object("alpha").timer_alarm_in(&site.env(), wake.max(at + RUN_GAP_MS))).expect("the alarm ran");
     assert_eq!(sends(), 1);
     assert_eq!(host.alarm.get(), None, "idle: no alarm left set");
     // A late duplicate firing (at-least-once) sends nothing more.

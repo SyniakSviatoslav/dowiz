@@ -3,7 +3,7 @@
 // The orders the console already reads (GET /api/owner/orders) are folded into DISTRIBUTIONS and
 // dropped: the report holds p50/p90 seconds and counts, never an id, a name, a phone or a courier.
 // Booking conversion is counts by status over the last seven days (GET /api/owner/reservations).
-import { getJson, ownerToken, slugOf, key } from './net.mjs';
+import { getJson, ownerToken, slugOf, key } from './http.mjs';
 import { ind, pct, unverified } from '../rules.mjs';
 
 export const TERMINAL = ['DELIVERED', 'PICKED_UP', 'REJECTED', 'CANCELLED', 'COMPENSATED_REFUND'];

@@ -55,7 +55,7 @@ pub enum Arm {
 /// (`print_rail.rs`), and the drain skips it. Counted, one ticket waiting for
 /// a printer that is switched off would wake the venue every minute for ever.
 pub fn outbox_next(entries: &[Entry]) -> Option<i64> {
-    entries.iter().filter(|e| e.kind != crate::print_rail::KIND).map(|e| e.next_at_ms).min()
+    entries.iter().filter(|e| e.kind != crate::print_rail::KIND && e.parked_ms.is_none()).map(|e| e.next_at_ms).min()
 }
 
 /// The earliest instant the till link's poll is due, or `None` when the link

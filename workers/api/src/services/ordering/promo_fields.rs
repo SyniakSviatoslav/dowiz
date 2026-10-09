@@ -85,8 +85,29 @@ pub fn to_promo(body: &PromoIn) -> Result<Promo, &'static str> {
 /// disagree it is always the tally that is wrong. A rejected or cancelled order
 /// gives its use back -- the venue never took the money, so holding a use
 /// against the customer would charge them for a refusal.
-pub fn promo_uses(hub: &Hub, code: &str) -> i64 {
-    promo_uses_in(&crate::hubstore::orders_state(hub).into_iter().map(crate::hubdo::OrderView::of_event).collect::<Vec<_>>(), code)
+///
+/// EVERY CODE AT ONCE (W-LOOPA row 9): the promotions page asked this per promo,
+/// and each ask refolded the whole log (`orders_state`) and parsed every order
+/// -- P refolds for P codes. One fold, one parse per order, a count per code;
+/// `promotions/tests.rs` holds the per-code answer as the oracle.
+pub fn promo_uses_all(hub: &Hub) -> std::collections::HashMap<String, i64> {
+    uses_by_code(&crate::hubstore::orders_state(hub).into_iter().map(crate::hubdo::OrderView::of_event).collect::<Vec<_>>())
+}
+
+/// [`promo_uses_in`] for every code in one pass: the same two rules (an
+/// unreadable order and one that took no money spend nothing).
+pub fn uses_by_code(listed: &[crate::hubdo::OrderView]) -> std::collections::HashMap<String, i64> {
+    let mut out = std::collections::HashMap::new();
+    for ev in listed {
+        let Ok(o) = serde_json::from_str::<serde_json::Value>(&ev.order_json) else { continue };
+        if !crate::services::orders::status::took_money(o.get("status").and_then(|s| s.as_str()).unwrap_or("")) {
+            continue;
+        }
+        if let Some(c) = o.get("promo").and_then(|p| p.get("code")).and_then(|c| c.as_str()) {
+            *out.entry(c.to_string()).or_insert(0) += 1;
+        }
+    }
+    out
 }
 
 /// The same count over a PROJECTION, for a caller that already has one and

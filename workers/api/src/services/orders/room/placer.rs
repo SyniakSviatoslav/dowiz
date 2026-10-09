@@ -149,16 +149,13 @@ pub async fn guest(
     // Only read the log when there IS a table: a delivery pays nothing for this.
     let live = match &table {
         Some(((zone, n), plan)) => {
-            let listed: Vec<_> = crate::hubstore::orders(place)
-                .await
-                .map_err(|e| refuse(&e.to_string(), 500))?
-                .into_iter()
-                .filter(|o| {
-                    serde_json::from_str::<serde_json::Value>(&o.order_json)
-                        .is_ok_and(|v| v.get("location_id").and_then(|l| l.as_str()) == Some(loc_id))
-                })
-                .collect();
-            super::table_link::live_sitting(plan, &listed, zone, *n)
+            let all = crate::hubstore::orders(place).await.map_err(|e| refuse(&e.to_string(), 500))?;
+            // This venue's orders, grouped by sitting, each order parsed ONCE (W-LOOPA row 1):
+            // the filter parsed every order and `live_sitting` parsed them all again per sitting.
+            let mine = crate::command::sitting::sittings_where(&all, |v| {
+                v.get("location_id").and_then(|l| l.as_str()) == Some(loc_id)
+            });
+            super::table_link::live_in(plan, &mine, zone, *n)
         }
         None => None,
     };

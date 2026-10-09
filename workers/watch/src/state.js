@@ -3,6 +3,7 @@
 // (the tick time is the thing /healthz must be able to read after an eviction).
 import { DurableObject } from 'cloudflare:workers';
 import { transitions } from './fold.js';
+import { newRun, step, canStart } from './evals.js';
 
 
 export class WatchState extends DurableObject {
@@ -37,6 +38,36 @@ export class WatchState extends DurableObject {
 
   async noteMail(entry) {
     await this.ctx.storage.put('mail', entry);
+  }
+
+  // THE NIGHTLY EVALS (evals.js): one run = one alarm per phase, so each phase has its own
+  // invocation's subrequest budget. `evals_run` is the run in flight; `evals` the last finished one.
+  async startEvals(atMs, cause) {
+    const running = await this.ctx.storage.get('evals_run');
+    if (!canStart(running, atMs)) return { started: false, running: { startedAtMs: running.startedAtMs, phase: running.phase } };
+    await this.ctx.storage.put('evals_run', newRun(atMs, cause));
+    await this.ctx.storage.setAlarm(Date.now());
+    return { started: true };
+  }
+
+  async alarm() {
+    const run = await this.ctx.storage.get('evals_run');
+    if (!run) return;
+    // A phase that throws is retried by the runtime (alarms retry with backoff); the collectors
+    // themselves turn their own failures into collector_ok=0 rows, so a throw here is the runtime's.
+    const r = await step(run, this.env, fetch, await this.ctx.storage.get('evals'));
+    if (r.run) {
+      await this.ctx.storage.put('evals_run', r.run);
+      await this.ctx.storage.setAlarm(Date.now() + 1000);
+      return;
+    }
+    await this.ctx.storage.put('evals', r.done);
+    await this.ctx.storage.delete('evals_run');
+  }
+
+  async readEvals() {
+    const [latest, running] = await Promise.all([this.ctx.storage.get('evals'), this.ctx.storage.get('evals_run')]);
+    return { latest: latest || null, running: running || null };
   }
 
   async read() {

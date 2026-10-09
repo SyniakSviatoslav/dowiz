@@ -302,6 +302,21 @@ export async function loadStats(){ if (me().staff) return; try { S.stats = await
 /// restored from a bundle may carry a different one).
 const HOST_LABELS_OF_A_VENUE = 3;
 const venueSlug = () => { const h = location.hostname.split('.'); return h.length >= HOST_LABELS_OF_A_VENUE ? h[0] : store.loc; };
+/// THE OTHER LANGUAGES' WORDS onto the console's dishes: `rest[i]` is the menu
+/// read in `others[i]` (null = that read failed). One Map id -> dish, built
+/// once: it was `products.find` inside languages x categories x dishes
+/// (R-LOOPS row 8: 1.03 -> 0.23 ms at 165 dishes). A dish listed twice keeps
+/// the FIRST, as `find` did.
+export function addTranslations(products, others, rest){
+  const byId = new Map();
+  for (const x of products) if (!byId.has(x.id)) byId.set(x.id, x);
+  for (const [i, r] of rest.entries()) {
+    if (!r) continue;
+    for (const c of r.categories || []) for (const p of c.products || []) {
+      const mine = byId.get(p.id); if (mine) mine.translations[others[i]] = { name: p.name, description: p.description || '' };
+    }
+  }
+}
 export async function loadVenue(){
   try {
     const slug = venueSlug();
@@ -313,12 +328,7 @@ export async function loadVenue(){
     // read of the catalogue this console has.
     const others = LANGS.filter(l => l !== lang);
     const rest = await Promise.all(others.map(l => api(`/public/locations/${encodeURIComponent(slug)}/menu?locale=${l}&fresh=1`).catch(() => null)));
-    for (const [i, r] of rest.entries()) {
-      if (!r) continue;
-      for (const c of r.categories || []) for (const p of c.products || []) {
-        const mine = S.products.find(x => x.id === p.id); if (mine) mine.translations[others[i]] = { name: p.name, description: p.description || '' };
-      }
-    }
+    addTranslations(S.products, others, rest);
     for (const p of S.products) p.translations[lang] = { name: p.name, description: p.description || '' };
     await setCurrency(d.location?.currencyCode || 'ALL', safeGet('dw_admin_cur') || d.location?.currencyCode || 'ALL');
   } catch {}

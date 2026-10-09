@@ -292,10 +292,13 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         }
     }
     // THE ONE CLOCK READ ON THE REQUEST PATH. `tools/gates/clock.sh` allows
-    // this line by name; everything below is handed the answer.
-    router(Router::with_data(Req { now_ms: Date::now().as_millis() as i64 })).run(req, env).await
+    // this line by name; everything below is handed the answer. The table itself
+    // is built once per isolate (`routes_table/dispatch.rs`, W-LOOPA row 2).
+    routes_dispatch::dispatch(Router::with_data(Req { now_ms: Date::now().as_millis() as i64 }), req, env).await
 }
 
+#[path = "routes_table/dispatch.rs"]
+mod routes_dispatch;
 #[cfg(test)]
 #[path = "routes_table/tests.rs"]
 mod router_tests;
@@ -303,7 +306,7 @@ mod router_tests;
 /// THE ROUTE TABLE, apart from the request (W-COV C2): a test builds it natively, which is where
 /// two routes that conflict are found -- the router refuses such a pair when it is built, and on
 /// the Worker that is every request's first line.
-pub(crate) fn router(r: Router<'static, Req>) -> Router<'static, Req> {
+pub(crate) fn router<R: routes_dispatch::Routes>(r: R) -> R {
     r.get("/healthz", |_, _| Response::ok("ok"))
         // W-DEPLOY: which commit this build is; tools/deploy/deploy.sh reads it back after a rollout.
         .get("/api/version", version::serve)

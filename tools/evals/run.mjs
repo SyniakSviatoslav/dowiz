@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { judge, parseBaseline, formatBaseline, groupOf, ind } from './rules.mjs';
+import { judge, parseBaseline, formatBaseline, groupOf, ind, unverified } from './rules.mjs';
 import { readCreds } from './collect/net.mjs';
 import { render } from './report.mjs';
 
@@ -21,7 +21,15 @@ export const SUITES = {
   ci: ['static', 'i18n', 'wasm', 'gates', 'tests'],
   nightly: ['live', 'order', 'health', 'product', 'ux', 'cost'],
   live: ['health'],
+  // The GitHub nightly (W-EVALSCF, 2026-10-08): no request to *.dowiz.org from a runner, because Bot
+  // Fight Mode challenges them. The zone collectors run in dowiz-watch and `watch` reads them; ux
+  // cannot run there (UX_ELSEWHERE says why) and is one loud UNVERIFIED row, never a pass.
+  'nightly-cf': ['watch', 'order', 'ux-elsewhere', 'cost'],
 };
+export const UX_ELSEWHERE = 'NOT MEASURED HERE: the ux collector opens *.dowiz.org in a headless Chromium. From GitHub Bot Fight Mode '
+  + 'challenges it (run 37766665168); inside Cloudflare, Browser Run exists on Workers Free (10 browser-minutes a day) but is not wired: '
+  + 'its requests carry Cloudflare bot ids, Bot Fight Mode cannot be skipped by a WAF rule, and it needs @cloudflare/playwright. '
+  + 'Measured only by `--suite nightly` on the box.';
 /** GET-only venues; the order suite never runs by itself (see collect/order.mjs). */
 export const HOSTS = ['https://sushi-durres.dowiz.org', 'https://dubin-sushi.dowiz.org'];
 
@@ -36,7 +44,7 @@ export function parseArgs(argv) {
     else if (k === '--no-baseline-write') a.writeBaselines = false;
     else throw new Error(`unknown argument ${k}`);
   }
-  if (!SUITES[a.suite]) throw new Error(`unknown suite ${a.suite} (ci, nightly, live)`);
+  if (!SUITES[a.suite]) throw new Error(`unknown suite ${a.suite} (${Object.keys(SUITES).join(', ')})`);
   if (!a.hosts.length) a.hosts = [...HOSTS];
   return a;
 }
@@ -54,6 +62,7 @@ export function wasmCollector(exec = spawnSync) {
 
 export async function loadCollector(name) {
   if (name === 'wasm') return wasmCollector();
+  if (name === 'ux-elsewhere') return { collect: async () => [unverified('ux.measured_here', 'bool', 'min', 'collect/ux.mjs', UX_ELSEWHERE)] };
   return import(pathToFileURL(path.join(HERE, 'collect', `${name}.mjs`)).href);
 }
 

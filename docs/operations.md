@@ -73,6 +73,7 @@ and quotes 80 bytes of the body.
 | 2 | `heartbeat-monitor.yml` reads the watcher's `/healthz` (red when the last tick is older than 15 min) and `/status` (`ok:false` when any target is not up) at `https://dowiz-watch.sviatoslavsyniak.workers.dev`, outside the dowiz.org zone | every 10 min | Telegram if configured |
 | 2b | `health-cron.yml` prints the watcher's full table into the run summary (decision: it reads `/status`; `health.sh` from GitHub only on a manual run with `direct: true`) | every 15 min | Telegram if configured |
 | 3 | GitHub's own failure e-mail for a red run | per run | always |
+| 4 | **the nightly evals' zone probes** (W-EVALSCF, 2026-10-08): dowiz-watch runs tools/evals' live (as `edge.*`), health and product collectors -- the same code -- at 03:10 UTC, one Durable Object alarm per phase (Free: 50 subrequests per invocation; each phase <= 25), and serves `GET /evals/latest`. `evals-nightly.yml` reads it at 03:41 and goes red when it is missing, unfinished or older than 6 h (`watch.evals_fresh`). The venues' aggregates need the bearer `EVALS_READ_TOKEN`; the edge timings are public | nightly | the red evals run |
 
 ```sh
 curl -s https://dowiz-watch.sviatoslavsyniak.workers.dev/status     # per target: status, detail, since, last tick, watcher commit
@@ -119,7 +120,8 @@ is not readable from here (`gh` is not installed): that half is the Actions tab.
 | `WALK_LOC` | secret | key-flows | that host's venue id |
 | `WALK_OWNER_EMAIL`, `WALK_OWNER_PASSWORD` | secret | key-flows | the QA venue's owner |
 | `WALK_COURIER_PHONE`, `WALK_COURIER_PASSWORD` | secret | key-flows | the QA venue's courier |
-| `EVALS_OWNER_EMAIL`, `EVALS_OWNER_PASSWORD` | secret | evals-nightly | an owner of the evaluated venue |
+| `EVALS_READ_TOKEN` | secret | evals-nightly | the bearer dowiz-watch asks for before it serves the venues' aggregates (`/evals/latest`) or starts a run (`POST /evals/run`); the SAME value is the watcher's wrangler secret `EVALS_READ_TOKEN` |
+| `EVALS_OWNER_EMAIL`, `EVALS_OWNER_PASSWORD` | wrangler secret on dowiz-watch (no longer a GitHub secret since 2026-10-08) | dowiz-watch's nightly evals | an owner of the evaluated venues; the GitHub copies can be deleted |
 | `CF_ANALYTICS_ACCOUNT_ID`, `CF_ANALYTICS_TOKEN` | secret | evals-nightly | read-only Cloudflare analytics |
 
 ## Crons

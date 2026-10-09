@@ -14,9 +14,21 @@ export const ENDPOINT = 'https://api.cloudflare.com/client/v4/graphql';
 export const SCHEDULED_LIMIT = 2000;
 /** DAG Phase 2 / FT2's gate: object requests on a day with no orders, once the minute cron is gone. */
 export const NO_ORDER_DAY_DO_TARGET = 1000;
+/** Object groups (script x name x type x status) one query returns; a day that fills it is said (`doRowsCapped`). */
+export const DO_ROWS = 1000;
+/** The object the platform keeps its registry in (`platform_store::PLATFORM`): not a venue. */
+export const PLATFORM_OBJECT = '__platform';
+/** An HTTP invocation whose CALLER went away: a console socket or a stream the browser closed (W-EVALFIX
+ * 2026-10-08: every one of the day's 11 was on dubin-durres, the object holding the console's sockets, after
+ * 812-2,111 s of wall time on average). Not an error of ours; counted apart as `cf.do_disconnects_day`. */
+export const DISCONNECTS = ['clientDisconnected', 'responseStreamDisconnected'];
+// CPU QUANTILES OVER EVERY INVOCATION (`q`, W-EVALFIX): grouped by status, a quantile is the
+// quantile of that status's rows only, and "the worst p50 of the groups" read ten stream
+// disconnects' 12,406 µs as the median of 1,077 invocations whose true p50 was 3,625 µs.
 export const QUERY = `query($a:String!,$s:Time!,$e:Time!){viewer{accounts(filter:{accountTag:$a}){
- w: workersInvocationsAdaptive(limit:100, filter:{datetime_geq:$s, datetime_lt:$e}){ sum{requests errors subrequests cpuTimeUs} quantiles{cpuTimeP50 cpuTimeP99} dimensions{scriptName status} }
- d: durableObjectsInvocationsAdaptiveGroups(limit:100, filter:{datetime_geq:$s, datetime_lt:$e}){ sum{requests errors wallTime responseBodySize} dimensions{scriptName type} }
+ w: workersInvocationsAdaptive(limit:100, filter:{datetime_geq:$s, datetime_lt:$e}){ sum{requests errors subrequests cpuTimeUs} dimensions{scriptName status} }
+ q: workersInvocationsAdaptive(limit:100, filter:{datetime_geq:$s, datetime_lt:$e}){ quantiles{cpuTimeP50 cpuTimeP90 cpuTimeP99} dimensions{scriptName} }
+ d: durableObjectsInvocationsAdaptiveGroups(limit:${DO_ROWS}, filter:{datetime_geq:$s, datetime_lt:$e}){ sum{requests errors wallTime responseBodySize} dimensions{scriptName name type status} }
  s: workersInvocationsScheduled(limit:${SCHEDULED_LIMIT}, filter:{datetime_geq:$s, datetime_lt:$e}){ cron scriptName }
 }}}`;
 
@@ -32,20 +44,28 @@ export function readCfEnv(file) {
   return out;
 }
 
-/** The three groups for one script, summed over their status (and, for objects, type) rows.
+/** The groups for one script, summed over their status (and, for objects, name/type) rows.
+ * The CPU quantiles are the script's own row of `q` (every invocation), null when absent.
  * `doAlarms` is the object invocations of type `alarm` (each venue's own timer, DAG Phase 2);
+ * `doErrors` leaves out an HTTP caller that went away (`DISCONNECTS`), counted in `doDisconnects`;
+ * `venueObjects` counts the venue objects invoked (every registered venue is, by its nightly);
  * `cronRuns` counts scheduled firings, `cronMinute` the ones of the removed `* * * * *`. */
 export function fold(account, script = SCRIPT) {
   const w = (account.w || []).filter(r => r.dimensions.scriptName === script);
   const d = (account.d || []).filter(r => r.dimensions.scriptName === script);
+  const q = (account.q || []).find(r => r.dimensions.scriptName === script)?.quantiles || {};
   const sum = (rows, k) => rows.reduce((n, r) => n + (r.sum[k] || 0), 0);
-  const worst = (rows, k) => rows.reduce((n, r) => Math.max(n, r.quantiles?.[k] || 0), 0);
   const s = (account.s || []).filter(r => r.scriptName === script);
+  const gone = r => r.dimensions.type === 'http' && DISCONNECTS.includes(r.dimensions.status);
+  const cpu = k => (Number.isFinite(q[k]) ? q[k] : null);
   return {
     workerRequests: sum(w, 'requests'), workerErrors: sum(w, 'errors'), subrequests: sum(w, 'subrequests'),
-    cpuP50Us: worst(w, 'cpuTimeP50'), cpuP99Us: worst(w, 'cpuTimeP99'),
-    doRequests: sum(d, 'requests'), doErrors: sum(d, 'errors'), doResponseBytes: sum(d, 'responseBodySize'),
+    cpuP50Us: cpu('cpuTimeP50'), cpuP90Us: cpu('cpuTimeP90'), cpuP99Us: cpu('cpuTimeP99'),
+    doRequests: sum(d, 'requests'), doErrors: sum(d.filter(r => !gone(r)), 'errors'), doDisconnects: sum(d.filter(gone), 'errors'),
+    doResponseBytes: sum(d, 'responseBodySize'),
     doAlarms: sum(d.filter(r => r.dimensions.type === 'alarm'), 'requests'),
+    venueObjects: new Set(d.map(r => r.dimensions.name).filter(n => n && n !== PLATFORM_OBJECT)).size,
+    doRowsCapped: (account.d || []).length >= DO_ROWS,
     cronRuns: s.length, cronMinute: s.filter(r => r.cron === '* * * * *').length,
   };
 }
@@ -181,11 +201,14 @@ async function analyticsMeasure(ctx, env) {
     out: [
       ind('cf.worker_requests_day', m.workerRequests, 'requests', 'trend', src, { note: `${m.subrequests} subrequests` }),
       ind('cf.worker_errors_day', m.workerErrors, 'errors', 'zero', src),
-      ind('cf.cpu_p50_us', m.cpuP50Us, 'µs', 'plus25', src),
-      ind('cf.cpu_p99_us', m.cpuP99Us, 'µs', 'plus25', src, { note: 'CPU per invocation (not memory: no analytics dataset reports isolate memory)' }),
+      ind('cf.cpu_p50_us', m.cpuP50Us, 'µs', 'plus25', src, { note: `over every invocation, all statuses; p90 ${m.cpuP90Us} µs` }),
+      ind('cf.cpu_p99_us', m.cpuP99Us, 'µs', 'plus25', src, { note: 'CPU per invocation, all statuses (memory: workers report it as a quantile, not judged here)' }),
       ind('cf.do_requests_day', m.doRequests, 'requests', 'trend', src,
         { note: `target on a day with no orders: < ${NO_ORDER_DAY_DO_TARGET} (DAG Phase 2; 19,839 on 2026-09-27 with the minute cron)` }),
-      ind('cf.do_errors_day', m.doErrors, 'errors', 'zero', src),
+      ind('cf.do_errors_day', m.doErrors, 'errors', 'zero', src,
+        { note: `every status but success, except an HTTP caller that went away (${DISCONNECTS.join(', ')}): those are cf.do_disconnects_day${m.doRowsCapped ? `; CAPPED at ${DO_ROWS} groups` : ''}` }),
+      ind('cf.do_disconnects_day', m.doDisconnects, 'invocations', 'trend', `${src}: HTTP object invocations whose caller went away (a closed console socket or stream)`),
+      ind('cf.venue_objects_day', m.venueObjects, 'objects', 'trend', `${src}: venue objects invoked (every registered venue is, by its nightly)`),
       ind('cf.do_alarms_day', m.doAlarms, 'invocations', 'trend', `${src}: object invocations of type alarm (each venue's timer)`),
       ind('cf.cron_runs_day', m.cronRuns, 'firings', 'trend', `${src}: scheduled firings (1 a day: the nightly)`,
         { note: `${m.cronMinute} of the removed * * * * *${m.cronRuns >= SCHEDULED_LIMIT ? `; capped at ${SCHEDULED_LIMIT} rows` : ''}` }),

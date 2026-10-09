@@ -24,6 +24,8 @@ pub struct Ops {
     pub gone: Vec<(String, String)>,
     /// Chats that moved (old, new): every entry to the old one is re-aimed.
     pub moved: Vec<(String, String)>,
+    /// Due entries held back by pacing this run: busy, not parked (`park.rs`).
+    pub deferred: Vec<String>,
 }
 
 impl Ops {

@@ -38,6 +38,11 @@ pub const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 /// FNV-1a 64-bit prime.
 pub const FNV_PRIME: u64 = 0x100_0000_01b3;
 
+/// FNV-1a, one byte per step. W-KVDEC tried eight bytes per step (one cell's worth) and
+/// MEASURED no gain: release 721.5 us vs 721.7 us over the 548 KB catalogue, and 3.5x
+/// SLOWER in debug (14,370 vs 4,077 us). FNV-1a is a serial xor-multiply chain, so the
+/// multiply's latency is the floor and loop overhead was never the cost. The root is
+/// stored, so any rewrite must stay bit-identical (kv/decode/tests.rs pins it).
 fn fnv1a(mut h: u64, bytes: &[u8]) -> u64 {
     for &b in bytes {
         h ^= b as u64;
@@ -70,15 +75,6 @@ const ROOT_V2: usize = 6;
 fn blob_cells(v: i64, bytes: usize) -> usize {
     let c = if v >= 2 { bytes.div_ceil(8) } else { bytes };
     c.max(1)
-}
-
-/// Byte `b` of a blob, in version `v`.
-fn blob_byte(st: &Store, blob: usize, v: i64, b: usize) -> u8 {
-    if v >= 2 {
-        (st.get(blob, b >> 3) >> (8 * (b & 7))) as u8
-    } else {
-        st.get(blob, b) as u8
-    }
 }
 
 /// Write a whole blob -- every cell of it, including v2's zero-filled tail and the one
@@ -154,107 +150,6 @@ impl Kv {
     pub fn init_bytes(st: &mut Store) -> Result<i64, StoreError> {
         let (tx, root) = Self::stage_init(st)?;
         Ok(st.commit_bytes(&tx, root))
-    }
-
-    /// Read all entries out of a store, believing every payload cell: the CRC is checked
-    /// by `load` / `load_checked` (verify.rs, W-CRC) before this runs, and nothing else calls it.
-    ///
-    /// EVERY NUMBER IN HERE CAME OUT OF THE IMAGE, and an image arrives over a
-    /// network from a Durable Object. The count, the four offsets and the four
-    /// lengths are all claims; none of them was checked, and one flipped bit in
-    /// a key's length -- 9 with bit 33 set is 8589934601 -- turned the collect
-    /// below into `memory allocation of 8589934601 bytes failed`. An allocation
-    /// that large does not return an error: the process ABORTS. On a Worker
-    /// that is the isolate, for every tenant sharing it, from one corrupt byte.
-    ///
-    /// So a slice that does not fit the array it names is not a slice, and an
-    /// image holding one is not a KV image. `None` here is `HubError::NotAHub`
-    /// at the caller -- a refusal it can report, which is the answer a caller
-    /// can act on. Truncating to what fits would be the other failure this
-    /// crate keeps finding: a shorter image that still looks valid.
-    pub(crate) fn decode(st: &Store) -> Option<Kv> {
-        let root = st.root()?;
-        let ver = Self::version(st);
-        if ver > delta::VERSION_DELTA {
-            return None;
-        }
-        // v3 (W-DELTA): the base below, then the chain replayed. The chain is walked FIRST so
-        // a chain that does not hold refuses the image before anything is decoded.
-        let chain = delta::chain_in(st, root)?;
-        // A blob of c cells holds c bytes in v1 and 8c in v2; every slice below is a
-        // BYTE slice and is bounded by this.
-        let bytes_of = |cells: usize| -> Option<usize> {
-            if ver >= 2 { cells.checked_mul(8) } else { Some(cells) }
-        };
-        let n = st.get(root, 0);
-        let kidx = st.follow(root, 1)?;
-        let kblob = st.follow(root, 2)?;
-        let vidx = st.follow(root, 3)?;
-        let vblob = st.follow(root, 4)?;
-        // Each entry owns two cells in each index, so the count is bounded by
-        // the index arrays that are really there -- not by the root's word.
-        let (kidx_cells, vidx_cells) = (st.obj_cells(kidx), st.obj_cells(vidx));
-        let (kblob_cells, vblob_cells) = (bytes_of(st.obj_cells(kblob))?, bytes_of(st.obj_cells(vblob))?);
-        if n < 0 {
-            return None;
-        }
-        let n = n as usize;
-        if n.checked_mul(2)? > kidx_cells.min(vidx_cells) {
-            return None;
-        }
-        let fits = |off: i64, len: i64, cells: usize| -> Option<usize> {
-            if off < 0 || len < 0 {
-                return None;
-            }
-            let end = (off as usize).checked_add(len as usize)?;
-            if end > cells {
-                return None;
-            }
-            Some(len as usize)
-        };
-        let mut entries = Vec::with_capacity(n);
-        // EVERY ENTRY OWNS ITS OWN BYTES, so the entries together cannot be
-        // larger than the two blobs (W-AUDIT S2, 2026-09-27). Each entry was
-        // bounded by its blob; n entries that all name the whole blob read
-        // n × blob, and a crafted index made one `load` allocate quadratically
-        // in the image. An index that over-claims the blobs is refused.
-        let mut budget = kblob_cells.checked_add(vblob_cells)?;
-        for i in 0..n {
-            let ko = st.get(kidx, 2 * i);
-            let kl = st.get(kidx, 2 * i + 1);
-            let vo = st.get(vidx, 2 * i);
-            let vl = st.get(vidx, 2 * i + 1);
-            let kl = fits(ko, kl, kblob_cells)?;
-            let vl = fits(vo, vl, vblob_cells)?;
-            budget = budget.checked_sub(kl.checked_add(vl)?)?;
-            let (ko, vo) = (ko as usize, vo as usize);
-            // KEYS ARE UTF-8 BYTES AND MUST BE DECODED AS UTF-8. This read
-            // `(byte as char)`, which is not a decode at all -- in Rust that
-            // maps a `u8` to the code point of the same value, which is exactly
-            // Latin-1. The write side has always been `k.as_bytes()`, so every
-            // non-ASCII key was stored correctly and read back wrong, and the
-            // wrong string was then written back as ITS OWN UTF-8 -- so the
-            // damage COMPOUNDED on every round trip: `ujë` became `ujÃ«`, then
-            // `ujÃÂ«`, then `ujÃÂÃÂ«`, and the dish it identified became a
-            // new dish each time. It reached production as duplicate products on
-            // an Albanian menu, which is the whole product's alphabet.
-            //
-            // Lossy rather than strict: a key that is already damaged must still
-            // be readable, or this fix would make an affected image unopenable
-            // instead of repairable.
-            let kb: Vec<u8> = (0..kl).map(|j| blob_byte(st, kblob, ver, ko + j)).collect();
-            let k: String = String::from_utf8_lossy(&kb).into_owned();
-            let v: Vec<u8> = (0..vl).map(|j| blob_byte(st, vblob, ver, vo + j)).collect();
-            entries.push((k, v));
-        }
-        // A chain merges into SORTED keys only (zc/overlay.rs says why); none is written onto
-        // any other base, so an image that has one is refused rather than guessed at.
-        if !chain.is_empty() && !entries.windows(2).all(|w| w[0].0 < w[1].0) {
-            return None;
-        }
-        let mut kv = Kv { entries };
-        kv.replay(st, &chain);
-        Some(kv)
     }
 
     /// Fetch a value by key: BINARY SEARCH (W-ZC), since every writer keeps the keys
@@ -466,6 +361,8 @@ impl Kv {
 pub mod zc;
 /// The delta chain (W-DELTA): a write appends one record per key and a new root.
 pub mod delta;
+/// `decode`'s blob copy, a cell at a time (W-KVDEC).
+mod decode;
 
 #[cfg(test)]
 mod tests;

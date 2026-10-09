@@ -19,6 +19,7 @@ use subtle::ConstantTimeEq;
 
 use crate::command::floor::table_of;
 use crate::command::sitting;
+#[cfg(test)]
 use crate::hubdo::OrderView;
 use dowiz_hub::tables::Plan;
 use serde_json::Value;
@@ -103,32 +104,33 @@ pub fn verify_table(key: &[u8], loc: &str, plan: &Plan, t: &str) -> Result<(Stri
 /// table text places on `(zone, n)` and which are still open
 /// (`sitting::open` — a round cooking, or a bill not yet paid), the one with
 /// the newest round. A paid-up sitting is history: the next guest opens a new one.
+/// The Worker path is [`live_in`] over the placer's venue-filtered grouping; this
+/// whole-listing form is what the tests and the W-LOOPA oracle read.
+#[cfg(test)]
 pub fn live_sitting(plan: &Plan, listed: &[OrderView], zone: &str, n: i64) -> Option<String> {
-    let mut best: Option<(i64, String)> = None;
-    let mut seen: Vec<String> = Vec::new();
-    for v in listed {
-        let Ok(o) = serde_json::from_str::<Value>(&v.order_json) else { continue };
-        let Some(sid) = o.get("sitting_id").and_then(Value::as_str) else { continue };
-        if seen.iter().any(|s| s == sid) {
-            continue;
-        }
-        seen.push(sid.to_string());
-        let rounds = sitting::rounds(listed, sid);
+    live_in(plan, &sitting::sittings_of(listed), zone, n)
+}
+
+/// [`live_sitting`] over sittings already grouped (`sitting::sittings_of` /
+/// `sittings_where`): every order parsed ONCE, not once per sitting (W-LOOPA row 1).
+pub fn live_in(plan: &Plan, sittings: &[(String, Vec<sitting::Round<'_>>)], zone: &str, n: i64) -> Option<String> {
+    let mut best: Option<(i64, &str)> = None;
+    for (sid, rounds) in sittings {
         let here = rounds
             .iter()
             .rev()
             .find_map(|r| r.order.pointer("/fulfilment/table").and_then(Value::as_str))
             .and_then(|t| table_of(plan, t))
             .is_some_and(|(z, k)| z == zone && k == n);
-        if !here || !sitting::open(&rounds) {
+        if !here || !sitting::open(rounds) {
             continue;
         }
         let newest = rounds.iter().map(|r| r.int("created_at_ms")).max().unwrap_or(0);
-        if best.as_ref().is_none_or(|(at, _)| newest > *at) {
-            best = Some((newest, sid.to_string()));
+        if best.is_none_or(|(at, _)| newest > at) {
+            best = Some((newest, sid));
         }
     }
-    best.map(|(_, s)| s)
+    best.map(|(_, s)| s.to_string())
 }
 
 #[cfg(test)]

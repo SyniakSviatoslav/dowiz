@@ -12,6 +12,7 @@ use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::auth::{self, Principal};
+mod dashboard;
 
 // `now_ms()` WAS HERE, and nothing calls it any more.
 //
@@ -656,46 +657,8 @@ pub async fn dashboard(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     let now = ctx.data.now_ms;
     let day_start = dowiz_hub::tz::start_of_local_day_ms(zone, now);
 
-    let (mut count, mut revenue, mut pending, mut active) = (0i64, 0i64, 0i64, 0i64);
-    for e in listed {
-        let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
-        // THE SAME TENANCY RULE THE ANALYTICS USE. This was `!= Some(loc)`,
-        // which drops an order whose `location_id` is absent, while
-        // `orders_of` kept it -- so the takings tile and the analytics pane on
-        // the same screen could disagree about the same order. One rule now,
-        // in `services::orders::mine`, with a test saying which way it goes
-        // and why.
-        if !crate::services::orders::mine::belongs_to(&v, &loc) {
-            continue;
-        }
-        if (e.seq as i64) < day_start {
-            continue;
-        }
-        count += 1;
-        let status = v.get("status").and_then(|x| x.as_str()).unwrap_or("");
-        if status == "PENDING" {
-            pending += 1;
-        } else if crate::services::orders::status::is_active(status) {
-            active += 1;
-        }
-        // ── ONE DEFINITION OF TODAY'S TAKINGS ──
-        //
-        // This counted DELIVERED only while the native adapter and the
-        // analytics count every order that was not REFUSED -- so the same
-        // product showed an owner two different numbers depending on which
-        // deployment they opened, and the dashboard disagreed with its own
-        // analytics pane on the same screen. The rule is the analytics one,
-        // because that is what the copy on both panes describes: money the
-        // venue took, and a rejected order is not that.
-        //
-        // The tip is subtracted wherever the venue's money is counted: it is
-        // the courier's, passing through.
-        revenue += crate::services::orders::status::venue_took(
-            v.get("total").and_then(|t| t.as_i64()).unwrap_or(0),
-            v.get("tip").and_then(|t| t.as_i64()).unwrap_or(0),
-            status,
-        );
-    }
+    // The tally is `owner::dashboard::tiles` (W-LOOPA row 3): seq tested before any parse.
+    let dashboard::Tiles { count, revenue, pending, active } = dashboard::tiles(&listed, &loc, day_start);
     Response::from_json(&json!({
         "todayOrders": count, "todayRevenue": revenue,
         "pending": pending, "active": active, "dayStartMs": day_start

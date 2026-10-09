@@ -40,6 +40,48 @@ impl Round<'_> {
     }
 }
 
+/// EVERY SITTING AT ONCE, each with its rounds oldest first, in the order its
+/// first round appears in `listed` (W-LOOPA row 1). ONE parse per order: the
+/// floor, the room and the QR placement used to collect the sitting ids and
+/// then call [`rounds`] per sitting, which parsed every order AGAIN -- S x N
+/// parses, 32 ms at 100 open orders and 279 ms at 300 (R-LOOPS B3), three to
+/// twenty-eight times the Worker's 10 ms cap on every staff floor poll. The
+/// grouping is the same as [`rounds`]': same skip of an unparsable envelope or
+/// a missing `sitting_id`, same stable sort by `created_at_ms`
+/// (`sitting/tests/equiv.rs` holds the old code as the oracle).
+pub fn sittings_of(listed: &[OrderView]) -> Vec<(String, Vec<Round<'_>>)> {
+    sittings_where(listed, |_| true)
+}
+
+/// [`sittings_of`] over the orders `keep` admits, judged on the order already
+/// parsed -- so a caller that filters (the QR placer, by venue) parses once too.
+pub fn sittings_where<'a>(listed: &'a [OrderView], keep: impl Fn(&Value) -> bool) -> Vec<(String, Vec<Round<'a>>)> {
+    let mut at: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut out: Vec<(String, Vec<Round<'a>>)> = Vec::new();
+    for v in listed {
+        let Ok(order) = serde_json::from_str::<Value>(&v.order_json) else { continue };
+        if !keep(&order) {
+            continue;
+        }
+        let i = {
+            let Some(s) = order.get("sitting_id").and_then(Value::as_str) else { continue };
+            match at.get(s) {
+                Some(&i) => i,
+                None => {
+                    at.insert(s.to_string(), out.len());
+                    out.push((s.to_string(), Vec::new()));
+                    out.len() - 1
+                }
+            }
+        };
+        out[i].1.push(Round { view: v, order });
+    }
+    for (_, rs) in &mut out {
+        rs.sort_by_key(|r| r.int("created_at_ms"));
+    }
+    out
+}
+
 /// Every round of one sitting, oldest first.
 pub fn rounds<'a>(listed: &'a [OrderView], sitting_id: &str) -> Vec<Round<'a>> {
     let mut out: Vec<Round<'a>> = listed
@@ -105,22 +147,11 @@ pub fn card(sitting_id: &str, rounds: &[Round<'_>]) -> Value {
 /// THE ROOM: every OPEN sitting, grouped from one pass over the projection the
 /// console already reads (`orders_view`, memoised per generation).
 pub fn room(listed: &[OrderView]) -> Vec<Value> {
-    let mut ids: Vec<String> = Vec::new();
-    for v in listed {
-        let Ok(o) = serde_json::from_str::<Value>(&v.order_json) else { continue };
-        if let Some(s) = o.get("sitting_id").and_then(Value::as_str) {
-            if !ids.iter().any(|x| x == s) {
-                ids.push(s.to_string());
-            }
-        }
-    }
-    ids.iter()
-        .filter_map(|s| {
-            let rs = rounds(listed, s);
-            open(&rs).then(|| card(s, &rs))
-        })
-        .collect()
+    sittings_of(listed).into_iter().filter_map(|(s, rs)| open(&rs).then(|| card(&s, &rs))).collect()
 }
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+#[path = "sitting/tests/equiv.rs"]
+mod equiv;

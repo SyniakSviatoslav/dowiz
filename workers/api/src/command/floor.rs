@@ -150,17 +150,9 @@ pub fn table_of(p: &Plan, text: &str) -> Option<(String, i64)> {
 
 /// Every sitting in this venue's listed orders, with facts. `listed` is the
 /// object's `orders_view`, already filtered to the venue.
+/// One parse per order (`sitting::sittings_of`, W-LOOPA row 1).
 pub fn sittings(listed: &[OrderView]) -> Vec<Seated> {
-    let mut ids: Vec<String> = Vec::new();
-    for v in listed {
-        let Ok(o) = serde_json::from_str::<Value>(&v.order_json) else { continue };
-        if let Some(s) = o.get("sitting_id").and_then(Value::as_str) {
-            if !ids.iter().any(|x| x == s) {
-                ids.push(s.to_string());
-            }
-        }
-    }
-    ids.iter().filter_map(|s| seated(s, &sitting::rounds(listed, s))).collect()
+    sitting::sittings_of(listed).iter().filter_map(|(s, rs)| seated(s, rs)).collect()
 }
 
 /// THE FLOOR: the plan, every table with its state, and the sittings whose

@@ -89,14 +89,38 @@ const PLATFORM = { wolt: 'Wolt', glovo: 'Glovo', baboon: 'Baboon' };
 const platformOf = o => PLATFORM[o.channel] ? `${PLATFORM[o.channel]}${o.external?.order_id ? ' ' + o.external.order_id : ''}` : '';
 
 const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-function matching(){
-  const all = view.mode === 'history' ? S.orders.filter(o => !liveOrders().includes(o)) : liveOrders();
-  const q = norm(view.q).trim(); if (!q) return all;
-  // Every term must match somewhere: id, name, phone, street, status word, a dish.
-  const terms = q.split(/\s+/).filter(Boolean);
-  return all.filter(o => { const hay = norm([o.id.slice(0, ORDER_ID_SHOWN), o.contact?.name, o.contact?.phone, o.fulfilment?.address?.line, o.status, st(o.status), o.promo?.code, ...(o.items || []).map(i => i.name)].join(' ')); return terms.every(tm => hay.includes(tm)); });
+/// HISTORY = every order that is not live, in the list's own order. The live
+/// set is built ONCE per call: it was `liveOrders()` rebuilt inside the filter
+/// callback and then a linear `includes`, O(n^2) with n arrays per render and
+/// per keystroke (R-LOOPS row 7: 3.8 ms -> 36 us at 300 orders). Identity, not
+/// id: the live list holds the very objects of `S.orders`.
+export function historyOf(orders, live){ const on = new Set(live); return orders.filter(o => !on.has(o)); }
+/// THE SEARCHABLE TEXT OF AN ORDER, normalised once and kept while the order
+/// is the same object and its status word reads the same. An order that moves
+/// is a NEW object (`/lib/replica.js` copies on write; a full read replaces
+/// all of them), so the WeakMap forgets it; a language switch changes the
+/// status word, so the entry is rebuilt. Was: NFD + a regex per order per key.
+const hays = new WeakMap();
+function hayOf(o){
+  const word = st(o.status), have = hays.get(o);
+  if (have && have.status === o.status && have.word === word) return have.hay;
+  const hay = norm([o.id.slice(0, ORDER_ID_SHOWN), o.contact?.name, o.contact?.phone, o.fulfilment?.address?.line, o.status, word, o.promo?.code, ...(o.items || []).map(i => i.name)].join(' '));
+  hays.set(o, { status: o.status, word, hay });
+  return hay;
 }
-const historyAll = () => S.orders.filter(o => !liveOrders().includes(o));
+/// Every term must match somewhere: id, name, phone, street, status word, a dish.
+export function search(all, query){
+  const q = norm(query).trim(); if (!q) return all;
+  const terms = q.split(/\s+/).filter(Boolean);
+  return all.filter(o => { const hay = hayOf(o); return terms.every(tm => hay.includes(tm)); });
+}
+/// The list a view shows: live or history, then the search.
+export function listFor(mode, query){
+  const live = liveOrders();
+  return search(mode === 'history' ? historyOf(S.orders, live) : live, query);
+}
+const matching = () => listFor(view.mode, view.q);
+const historyAll = () => historyOf(S.orders, liveOrders());
 
 /// The current view as a spreadsheet: one row per order, money as integers in
 /// the venue's currency (never a formatted string, which Excel would mangle).
