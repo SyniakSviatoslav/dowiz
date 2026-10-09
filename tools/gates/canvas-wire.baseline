@@ -1,0 +1,5 @@
+# CANVAS WIRE, the lazy half (tools/gates/canvas-wire.sh, W-CV2P 2026-10-07): one row per module the
+# canvas surfaces fetch only on a tap, in B gzip -9: its size at adoption + 25%. A RATCHET: lower a
+# row by hand when the gate says it may fall; only main raises one. The first frame's 61440 is not here.
+# table.js: the table sheet (CV1b), 5239 B at adoption -> 6548.
+lazy /room/canvas/table.js=6548

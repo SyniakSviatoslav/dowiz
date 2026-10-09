@@ -21,7 +21,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 
 [profile.release]
-opt-level = "z"
+# "s", not "z": measured 2026-10-07 (W-CV1B) on this crate, s = 27476 B gzip, z = 28313 B --
+# z refuses to inline the tiny bounds-checked index helpers, and the outlined copies cost more.
+opt-level = "s"
 lto = true
 codegen-units = 1
 panic = "abort"

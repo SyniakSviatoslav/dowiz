@@ -189,7 +189,21 @@ fn staff_settings_are_the_printer_and_nothing_else() {
     assert!(!kitchen_may_set("ai.token"));
     assert!(!kitchen_may_set("tax.default_ppm"));
     // Every kitchen setting is a declared one.
-    for k in KITCHEN_SETTINGS {
-        assert!(dowiz_hub::settings::KNOWN.iter().any(|x| x.key == k), "{k} is not a declared setting");
+    for k in KITCHEN_SETTINGS.iter().chain(KITCHEN_READS.iter()) {
+        assert!(dowiz_hub::settings::KNOWN.iter().any(|x| x.key == *k), "{k} is not a declared setting");
     }
+}
+
+/// W-CV1B: the pass READS the venue's "order late after" (the canvas board's ticket ages) and
+/// nothing else new; it still may not WRITE it.
+#[test]
+fn staff_read_the_late_minutes_but_may_not_set_them() {
+    let values = json!({ "print.kitchen": "pass-1", "notify.order.late_min": "8", "ai.token": "sk-secret" });
+    let known = vec![json!({ "key": "notify.order.late_min" }), json!({ "key": "ai.token", "secret": true })];
+    let out = settings_for_kitchen(&values, known);
+    assert_eq!(out["values"]["notify.order.late_min"], "8");
+    assert_eq!(out["known"].as_array().map(Vec::len), Some(1));
+    assert!(!out.to_string().contains("sk-secret"));
+    assert!(!kitchen_may_set("notify.order.late_min"), "reading is not writing");
+    assert_eq!(KITCHEN_READS.len(), 2, "a new staff-readable setting is a decision: say why here");
 }

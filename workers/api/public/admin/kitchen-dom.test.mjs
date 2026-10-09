@@ -18,7 +18,8 @@ const FAKES = {
     export const t = k => '<' + k + '>';
     export const S = new Proxy({}, { get: (_, k) => F().S[k], set: (_, k, v) => { F().S[k] = v; return true; } });
     export const toast = m => F().toast.push(m);
-    export const post = (path, body) => F().call(path, body);`,
+    export const post = (path, body) => F().call(path, body);
+    export const api = async path => { F().reads.push(path); if (F().settings instanceof Error) throw F().settings; return F().settings; };`,
   '/admin/app.js': `const F = () => globalThis.__kf;
     export const rerender = async () => { F().rerendered++; };
     export const loadOrders = async () => { F().loaded++; };
@@ -46,7 +47,7 @@ function page({ orders = [], products = [], answers = [] } = {}){
   Object.defineProperty(globalThis, 'navigator', { value: { vibrate(){} }, configurable: true, writable: true });
   const now = Date.now();
   globalThis.__kf = { S: { tab: 'kitchen', orders: orders.map(o => ({ ...o, created_at_ms: now - (o.age || 0) * MIN })), products, venue: null },
-    toast: [], calls: [], rerendered: 0, loaded: 0, venue: 0,
+    toast: [], calls: [], rerendered: 0, loaded: 0, venue: 0, reads: [], settings: { values: {} },
     call: async (path, body) => { globalThis.__kf.calls.push([path, body]); const a = answers.shift(); if (a instanceof Error) throw a; return a || {}; } };
   const host = doc.createElement('div'); doc.body.appendChild(host);
   return { doc, host, f: globalThis.__kf };
@@ -176,4 +177,33 @@ test('kitchen dom: the stop list search narrows the dishes in place', async () =
   const q = p.host.querySelector('#kdsQ');
   q.oninput({ target: { value: 'drag' } });
   assert.deepEqual(p.host.querySelectorAll('.kds-dish').length, 1);
+});
+
+test('kitchen dom: the venue\'s notify.order.late_min colours the tickets (amber at half), read once', async () => {
+  const p = page({ orders: [ticket('ord_ok00', 'PENDING', 3, [line('Miso', 1)]), ticket('ord_warn', 'PENDING', 5, [line('Miso', 1)]),
+    ticket('ord_late', 'PREPARING', 9, [line('Miso', 1)])] });
+  p.f.settings = { values: { 'notify.order.late_min': '8' }, known: [], scope: 'kitchen' };
+  K.forgetLate();
+  await K.render(p.host);
+  await tick();
+  assert.deepEqual(p.f.reads, ['/owner/settings?location_id=V1']);
+  assert.equal(p.f.rerendered, 1, 'a new late minute redraws the board');
+  await K.render(p.host);
+  assert.equal(p.f.reads.length, 1, 'read once, not on every draw');
+  const age = id => p.host.querySelector(`article[data-o="${id}"]`).className.match(/kds-age-(\w+)/)[1];
+  assert.deepEqual([age('ord_ok00'), age('ord_warn'), age('ord_late')], ['ok', 'warn', 'late']);
+});
+
+test('kitchen dom: unset, 0, nonsense or a refused read keep 10/20', async () => {
+  for (const settings of [{ values: {} }, { values: { 'notify.order.late_min': '0' } }, { values: { 'notify.order.late_min': 'soon' } }, new Error('HTTP 403')]) {
+    const p = page({ orders: [ticket('ord_nine', 'PENDING', 9, [line('Miso', 1)]), ticket('ord_ten0', 'PENDING', 10, [line('Miso', 1)]),
+      ticket('ord_twen', 'PREPARING', 20, [line('Miso', 1)])] });
+    p.f.settings = settings;
+    K.forgetLate();
+    await K.render(p.host);
+    await tick();
+    await K.render(p.host);
+    const age = id => p.host.querySelector(`article[data-o="${id}"]`).className.match(/kds-age-(\w+)/)[1];
+    assert.deepEqual([age('ord_nine'), age('ord_ten0'), age('ord_twen')], ['ok', 'warn', 'late'], JSON.stringify(String(settings.message || JSON.stringify(settings))));
+  }
 });

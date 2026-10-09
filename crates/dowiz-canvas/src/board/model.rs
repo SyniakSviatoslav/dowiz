@@ -30,27 +30,22 @@ impl Status {
 
     /// The console's word (admin/i18n.js / i18n-ru.js `st`; `board/tests.rs` holds them equal).
     pub fn word(self, l: Lang) -> &'static str {
-        let p = |sq, en, uk, ru| match l {
-            Lang::Sq => sq,
-            Lang::En => en,
-            Lang::Uk => uk,
-            Lang::Ru => ru,
+        let w: &[&str; 4] = match self {
+            Status::Pending => &["E re", "New", "Нове", "Новый"],
+            Status::Confirmed => &["Pranuar", "Accepted", "Прийнято", "Принят"],
+            Status::Preparing => &["Po gatuhet", "Cooking", "Готується", "Готовится"],
+            Status::Ready => &["Gati", "Ready", "Готове", "Готов"],
+            Status::InDelivery => &["Në rrugë", "On the way", "У дорозі", "В пути"],
+            Status::Delivered => &["Dorëzuar", "Delivered", "Доставлено", "Доставлен"],
+            Status::Rejected => &["Refuzuar", "Rejected", "Відхилено", "Отклонён"],
+            Status::Cancelled => &["Anuluar", "Cancelled", "Скасовано", "Отменён"],
+            Status::Scheduled => &["Planifikuar", "Scheduled", "Заплановано", "Запланирован"],
+            Status::PickedUp => &["Marrë", "Picked up", "Забрано", "Забран"],
+            Status::Refunding => &["Po kthehet", "Refunding", "Повертаємо", "Возвращаем"],
+            Status::CompensatedRefund => &["U kthye", "Refunded", "Повернено", "Возвращено"],
+            Status::Other => &["", "", "", ""],
         };
-        match self {
-            Status::Pending => p("E re", "New", "Нове", "Новый"),
-            Status::Confirmed => p("Pranuar", "Accepted", "Прийнято", "Принят"),
-            Status::Preparing => p("Po gatuhet", "Cooking", "Готується", "Готовится"),
-            Status::Ready => p("Gati", "Ready", "Готове", "Готов"),
-            Status::InDelivery => p("Në rrugë", "On the way", "У дорозі", "В пути"),
-            Status::Delivered => p("Dorëzuar", "Delivered", "Доставлено", "Доставлен"),
-            Status::Rejected => p("Refuzuar", "Rejected", "Відхилено", "Отклонён"),
-            Status::Cancelled => p("Anuluar", "Cancelled", "Скасовано", "Отменён"),
-            Status::Scheduled => p("Planifikuar", "Scheduled", "Заплановано", "Запланирован"),
-            Status::PickedUp => p("Marrë", "Picked up", "Забрано", "Забран"),
-            Status::Refunding => p("Po kthehet", "Refunding", "Повертаємо", "Возвращаем"),
-            Status::CompensatedRefund => p("U kthye", "Refunded", "Повернено", "Возвращено"),
-            Status::Other => "",
-        }
+        w[l as usize]
     }
 
     /// The board column (kitchen-logic.js `COLUMNS`), or None when it is off the pass.
@@ -182,11 +177,18 @@ pub fn age_min(start_ms: i64, now_ms: i64) -> i64 {
     ((now_ms - start_ms) / 60_000).max(0)
 }
 
-/// 0 ok, 1 warn, 2 late (kitchen-logic.js `ageClass` with its default 10 / 20 minutes).
-pub fn age_class(m: i64) -> u8 {
-    if m >= 20 {
+/// The minutes a ticket turns amber and red when the venue has not said (kitchen-logic.js
+/// `WARN_MIN` / `LATE_MIN`).
+pub const WARN_MIN: i64 = 10;
+pub const LATE_MIN: i64 = 20;
+
+/// 0 ok, 1 warn, 2 late (kitchen-logic.js `ageClass`), against the VENUE's thresholds
+/// (`Board::warn_min` / `late_min`, set by the host from the venue's own "order late after"
+/// setting -- board.js `ages`; WARN_MIN / LATE_MIN when it has none).
+pub fn age_class(m: i64, warn: i64, late: i64) -> u8 {
+    if m >= late {
         2
-    } else if m >= 10 {
+    } else if m >= warn {
         1
     } else {
         0

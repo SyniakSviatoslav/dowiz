@@ -1,16 +1,16 @@
 {
  "id": "feature-canvas-room",
  "name": "canvas-room",
- "contract_version": "1.0.0",
+ "contract_version": "1.1.0",
  "contract_name": "room.canvas-board.v1",
  "class": "LIVE-AFTER-DEPLOY",
  "description": {
-  "en": "The room/kitchen board drawn on ONE <canvas> by Rust (crates/dowiz-canvas, Wave CV row CV1) at /room/canvas/, beside the old room page. With the room's own session it reads the pass (GET /api/staff/kitchen) and the floor (GET /api/staff/room), listens on /api/live, and a tap on a ticket's bump button sends the console's own action (POST /api/owner/orders/:id/action). The page body holds exactly one element at rest; the site's CSP lets it compile the wasm.",
-  "uk": "Дошка зали й кухні, намальована Rust на одному <canvas> за адресою /room/canvas/: ті самі дані й дії, що й у персоналу; у body рівно один елемент."
+  "en": "The room/kitchen board drawn on ONE <canvas> by Rust (crates/dowiz-canvas, Wave CV row CV1) at /room/canvas/, beside the old room page. With the room's own session it reads the pass (GET /api/staff/kitchen) and the floor (GET /api/staff/room), listens on /api/live, and a tap on a ticket's bump button sends the console's own action (POST /api/owner/orders/:id/action). The page body holds exactly one element at rest; the site's CSP lets it compile the wasm. CV1b (W-CV1B): a tap on an open table opens its TABLE SHEET on the same canvas -- its rounds, lines, money and the old room page's actions (amend, pay, move lines, move the sitting, guest confirm/reject, add from the menu) through the same routes and room/net.js write path -- and a theme button stores dw_room_theme (as the phone / dark / light); the body still holds one element.",
+  "uk": "Дошка зали й кухні, намальована Rust на одному <canvas> за адресою /room/canvas/: ті самі дані й дії, що й у персоналу; у body рівно один елемент. CV1b: дотик до столу відкриває його картку на тому ж canvas (раунди, позиції, оплата, дії старої сторінки), кнопка теми зберігає dw_room_theme; у body і далі один елемент."
  },
  "producer": {
   "file": "workers/api/public/room/canvas/board.js",
-  "line": 105,
+  "line": 96,
   "what": "onIntent kind 1 (bump): POST /api/owner/orders/:id/action {location_id, action}; the intent comes from crates/dowiz-canvas/src/board/mod.rs Board::tap (Act::Bump)"
  },
  "consumer": {
@@ -24,49 +24,296 @@
   "what": "kitchen_orders(): GET /api/staff/kitchen -- the board's own read shows the ticket in its new status"
  },
  "routes": {
-  "lib_rs": ["workers/api/src/lib.rs:386 GET /api/staff/kitchen", "workers/api/src/lib.rs:382 GET /api/staff/room", "workers/api/src/lib.rs:421 POST /api/owner/orders/:id/action", "workers/api/src/lib.rs:552 GET /api/live"]
+  "lib_rs": [
+   "workers/api/src/lib.rs:389 GET /api/staff/kitchen",
+   "workers/api/src/lib.rs:385 GET /api/staff/room",
+   "workers/api/src/lib.rs:424 POST /api/owner/orders/:id/action",
+   "workers/api/src/lib.rs:557 GET /api/live"
+  ],
+  "sheet": [
+   "POST /api/staff/orders/:id/amend",
+   "POST /api/staff/orders/:id/pay",
+   "POST /api/staff/orders/:id/transfer",
+   "POST /api/staff/sittings/:id/move",
+   "POST /api/staff/orders/:id/guest",
+   "GET /api/public/locations/:slug/menu",
+   "GET /api/owner/settings (the pass reads notify.order.late_min; access.rs KITCHEN_READS)"
+  ]
  },
- "transport": { "method": "POST", "path": "/api/owner/orders/{id}/action", "readback": ["GET /api/staff/kitchen", "GET /api/owner/orders"] },
+ "transport": {
+  "method": "POST",
+  "path": "/api/owner/orders/{id}/action",
+  "readback": [
+   "GET /api/staff/kitchen",
+   "GET /api/owner/orders"
+  ]
+ },
  "external": null,
  "external_note": "No external API. The page is static assets (index.html, loader.js, board.js, feed.js, board.wasm) served by the edge under workers/api/public/_headers; its CSP must carry script-src 'wasm-unsafe-eval'.",
  "auth": {
-  "secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"],
+  "secrets": [
+   "OWNER_EMAIL",
+   "OWNER_PASSWORD"
+  ],
   "where": "/root/.dowiz_owner",
   "how": "the owner's token signs the room session (staff_at accepts an owner for Cap::Advance and Cap::TakeOrders), exactly as feature-offline-sale does"
  },
  "request_schema": {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object", "additionalProperties": false, "required": ["location_id", "action"],
-  "properties": { "location_id": { "type": "string", "minLength": 1 }, "action": { "enum": ["confirm", "preparing", "ready", "collected"] } }
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+   "location_id",
+   "action"
+  ],
+  "properties": {
+   "location_id": {
+    "type": "string",
+    "minLength": 1
+   },
+   "action": {
+    "enum": [
+     "confirm",
+     "preparing",
+     "ready",
+     "collected"
+    ]
+   }
+  }
  },
  "response_schema": {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object", "required": ["orders", "generation", "full"],
+  "type": "object",
+  "required": [
+   "orders",
+   "generation",
+   "full"
+  ],
   "properties": {
-   "generation": { "type": "integer" }, "full": { "const": true },
-   "orders": { "type": "array", "items": { "type": "object", "required": ["id", "status", "items"],
-     "properties": { "id": { "type": "string" }, "status": { "enum": ["PENDING", "CONFIRMED", "PREPARING", "READY"] },
-       "created_at_ms": { "type": "integer" }, "items": { "type": "array", "items": { "type": "object", "required": ["quantity"],
-         "properties": { "quantity": { "type": "integer" }, "name": { "type": "string" }, "station": { "type": "string" } } } } } } }
+   "generation": {
+    "type": "integer"
+   },
+   "full": {
+    "const": true
+   },
+   "orders": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "required": [
+      "id",
+      "status",
+      "items"
+     ],
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "status": {
+       "enum": [
+        "PENDING",
+        "CONFIRMED",
+        "PREPARING",
+        "READY"
+       ]
+      },
+      "created_at_ms": {
+       "type": "integer"
+      },
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "required": [
+         "quantity"
+        ],
+        "properties": {
+         "quantity": {
+          "type": "integer"
+         },
+         "name": {
+          "type": "string"
+         },
+         "station": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
   }
  },
  "page_schema": {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object", "required": ["bodyElements", "csp", "wasmType", "tickets", "tooSmall", "transient"],
+  "type": "object",
+  "required": [
+   "bodyElements",
+   "csp",
+   "wasmType",
+   "tickets",
+   "tooSmall",
+   "transient"
+  ],
   "properties": {
-   "bodyElements": { "const": 1 },
-   "csp": { "type": "string", "pattern": "'wasm-unsafe-eval'" },
-   "wasmType": { "const": "application/wasm" },
-   "tickets": { "type": "integer", "minimum": 1 },
-   "tooSmall": { "const": 0 },
-   "transient": { "const": 0 }
+   "bodyElements": {
+    "const": 1
+   },
+   "csp": {
+    "type": "string",
+    "pattern": "'wasm-unsafe-eval'"
+   },
+   "wasmType": {
+    "const": "application/wasm"
+   },
+   "tickets": {
+    "type": "integer",
+    "minimum": 1
+   },
+   "tooSmall": {
+    "const": 0
+   },
+   "transient": {
+    "const": 0
+   }
   }
  },
  "readback_schema": {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object", "required": ["id", "status"],
-  "properties": { "id": { "type": "string" }, "status": { "const": "CONFIRMED" } }
+  "type": "object",
+  "required": [
+   "id",
+   "status"
+  ],
+  "properties": {
+   "id": {
+    "type": "string"
+   },
+   "status": {
+    "const": "CONFIRMED"
+   }
+  }
  },
- "probe": "tools/live-proof/probes/feature-canvas-room.mjs: place a TEST order; open /room/canvas/ signed in with the owner token; body has 1 element; the page's CSP and the wasm's content-type; find the TEST ticket's Accept button in the scene (bump_rect), click it with a real mouse; GET /api/staff/kitchen and the owner's order show CONFIRMED; body still 1 element; close the order.",
- "last_verified": null
+ "probe": "tools/live-proof/probes/feature-canvas-room.mjs: place a TEST order; open /room/canvas/ signed in with the owner token; body has 1 element; the page's CSP and the wasm's content-type; find the TEST ticket's Accept button in the scene (bump_rect), click it with a real mouse; GET /api/staff/kitchen and the owner's order show CONFIRMED; body still 1 element; close the order. CV1b: place a dine_in TEST round at a LIVE- table with the owner's room token; GET /api/staff/room has its sitting; click the Tables tab and that table's card (table_rect); the sheet opens (stats rows > 0, no refused row, no control under 44 px, anchors nav.back + round.pay), body still 1 element; click hud.theme: dw_room_theme = dark, the frame hash moved, body 1; close both orders.",
+ "last_verified": null,
+ "producer_sheet": {
+  "file": "workers/api/public/room/canvas/table.js",
+  "line": 19,
+  "what": "rows() (line 19): the sheet rows from room/logic.js rules; act() (line 178): each tapped row's request through room/net.js write (Idempotency-Key, outbox)"
+ },
+ "consumer_sheet": {
+  "file": "crates/dowiz-canvas/src/board/tsheet.rs",
+  "line": 113,
+  "what": "TSheet::apply reads the rows; draw lays them out and registers each control (Act::Sheet) for the hit-test and the learn anchors"
+ },
+ "room_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+   "sitting_id",
+   "table",
+   "rounds"
+  ],
+  "properties": {
+   "sitting_id": {
+    "type": "string",
+    "minLength": 1
+   },
+   "table": {
+    "type": "string"
+   },
+   "rounds": {
+    "type": "array",
+    "minItems": 1,
+    "items": {
+     "type": "object",
+     "required": [
+      "id",
+      "status",
+      "total"
+     ],
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "status": {
+       "type": "string"
+      },
+      "total": {
+       "type": "integer"
+      },
+      "seq": {
+       "type": "integer"
+      },
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "required": [
+         "quantity"
+        ],
+        "properties": {
+         "quantity": {
+          "type": "integer"
+         },
+         "unit_price": {
+          "type": "integer"
+         },
+         "name": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "sheet_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+   "bodyElements",
+   "rows",
+   "refused",
+   "tooSmall",
+   "anchors",
+   "theme",
+   "themeBodyElements",
+   "redrawn"
+  ],
+  "properties": {
+   "bodyElements": {
+    "const": 1
+   },
+   "rows": {
+    "type": "integer",
+    "minimum": 3
+   },
+   "refused": {
+    "const": 0
+   },
+   "tooSmall": {
+    "const": 0
+   },
+   "anchors": {
+    "const": [
+     "nav.back",
+     "round.pay",
+     "hud.theme"
+    ]
+   },
+   "theme": {
+    "const": "dark"
+   },
+   "themeBodyElements": {
+    "const": 1
+   },
+   "redrawn": {
+    "const": true
+   }
+  }
+ }
 }

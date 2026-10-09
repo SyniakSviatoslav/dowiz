@@ -46,7 +46,7 @@ static mut READY: bool = false;
 static mut CMD: Cmd = Cmd::new();
 static mut WIDTHS: Widths = Widths::new();
 static mut INTENT: [i32; 8] = [0; 8];
-static mut STATS: [u32; 10] = [0; 10];
+static mut STATS: [u32; 12] = [0; 12];
 
 unsafe fn ready() {
     if !READY {
@@ -65,7 +65,7 @@ unsafe fn sc() -> &'static mut Scene {
 }
 
 unsafe fn input(len: u32) -> &'static [u8] {
-    &INBUF[..(len as usize).min(IN)]
+    crate::head(&INBUF, len as usize)
 }
 
 #[no_mangle]
@@ -84,6 +84,18 @@ pub unsafe extern "C" fn init(w: i32, h: i32, dark: u32, lang: u32) {
     bd().h = h;
     bd().dark = dark != 0;
     bd().lang = Lang::ALL[(lang & 3) as usize];
+}
+/// The language to start in: `inbuf()[..len]` is the stored choice, then the browser's
+/// languages, one per line (lib/langs.js `pickLang`: a stored code exactly, else the first
+/// browser tag whose first two letters name one; else sq). Its index (0 sq, 1 en, 2 uk, 3 ru).
+#[no_mangle]
+pub unsafe extern "C" fn lang_pick(len: u32) -> u32 {
+    Lang::pick(input(len)).index()
+}
+/// The two ASCII letters of language `i`'s code.
+#[no_mangle]
+pub extern "C" fn lang_code(i: u32) -> *const u8 {
+    Lang::ALL[(i & 3) as usize].code().as_ptr()
 }
 #[no_mangle]
 pub unsafe extern "C" fn resize(w: i32, h: i32) {
@@ -129,6 +141,28 @@ pub unsafe extern "C" fn set_sync(s: u32) {
 pub unsafe extern "C" fn feed(len: u32) -> u32 {
     bd().feed(input(len)) as u32
 }
+/// The open table's sheet rows in `inbuf()[..len]` (board/tsheet.rs); 0 closes it. Returns the
+/// rows read.
+#[no_mangle]
+pub unsafe extern "C" fn sheet(len: u32) -> u32 {
+    bd().sheet(input(len)) as u32
+}
+/// The stored theme (0 as the phone, 1 dark, 2 light) and whether it draws dark now.
+#[no_mangle]
+pub unsafe extern "C" fn set_theme(mode: u32, dark: u32) {
+    bd().theme = (mode as u8).min(2);
+    bd().dark = dark != 0;
+}
+/// The stored sound choice (1 on, 0 off; the host's default is on).
+#[no_mangle]
+pub unsafe extern "C" fn set_sound(on: u32) {
+    bd().sound = on != 0;
+}
+/// The venue's ticket-age thresholds, minutes (amber, red); nonsense keeps 10 / 20.
+#[no_mangle]
+pub unsafe extern "C" fn set_ages(warn: u32, late: u32) {
+    bd().set_ages(warn as i64, late as i64);
+}
 #[no_mangle]
 pub unsafe extern "C" fn field_set(f: u32, len: u32) -> u32 {
     bd().fields.get_mut(f as usize).is_some_and(|x| x.set(input(len))) as u32
@@ -154,14 +188,11 @@ pub unsafe extern "C" fn blur() {
 pub unsafe extern "C" fn toast(len: u32) {
     bd().set_toast(input(len));
 }
-/// A toast in the board's own words: 1 saved, 2 error, 3 offline (the host never holds words).
+/// A toast in the board's own words: `k` is the word's number in `Str::ALL` (the host never
+/// holds words; room/canvas/feed.js `W` names them).
 #[no_mangle]
 pub unsafe extern "C" fn toast_word(k: u32) {
-    let w = match k {
-        1 => crate::lang::Str::Saved,
-        3 => crate::lang::Str::Offline,
-        _ => crate::lang::Str::Error,
-    };
+    let w = crate::lang::Str::at(k as usize).unwrap_or(crate::lang::Str::Error);
     let s = bd().lang.s(w);
     bd().set_toast(s.as_bytes());
 }
@@ -203,7 +234,9 @@ pub unsafe extern "C" fn key_enter() {
 /// 1 bump (a: 0 confirm 1 preparing 2 ready 3 collected; ptr/len: the order id), 2 seen (id),
 /// 3 lang (ptr/len: code), 4 refresh, 5 sign out, 6 focus (a: field; x..h its rect;
 /// ptr: field kind), 7 blur, 8 submit (a: 1 claim), 9 table (ptr/len: sitting id),
-/// 10 stop (a: 0 reject 1 cancel; ptr/len: the order id; the reason is field 3).
+/// 10 stop (a: 0 reject 1 cancel; ptr/len: the order id; the reason is field 3),
+/// 11 sheet act (a: the row's act code; ptr/len: its argument), 12 Enter in sheet field a,
+/// 13 theme, 14 sound.
 #[no_mangle]
 pub unsafe extern "C" fn intent() -> *const i32 {
     INTENT = [0; 8];
@@ -233,7 +266,7 @@ pub unsafe extern "C" fn intent() -> *const i32 {
         Some(Intent::SignOut) => INTENT[0] = 5,
         Some(Intent::Focus(f)) => {
             let r = board.field_rect(sc(), f).unwrap_or_default();
-            let k = board.fields[(f as usize).min(3)].kind.host_code();
+            let k = board.fields[(f as usize).min(crate::board::FIELDS - 1)].kind.host_code();
             INTENT = [6, f as i32, k, 0, r.x, r.y, r.w, r.h];
         }
         Some(Intent::Blur) => INTENT[0] = 7,
@@ -242,6 +275,13 @@ pub unsafe extern "C" fn intent() -> *const i32 {
             let (p, n) = span(sitting);
             INTENT[..4].copy_from_slice(&[9, 0, p, n]);
         }
+        Some(Intent::Sheet { act, arg }) => {
+            let t = board.ts.str(arg);
+            INTENT[..4].copy_from_slice(&[11, act as i32, t.as_ptr() as usize as i32, t.len() as i32]);
+        }
+        Some(Intent::SheetEnter(f)) => INTENT[..2].copy_from_slice(&[12, f as i32]),
+        Some(Intent::Theme) => INTENT[0] = 13,
+        Some(Intent::Sound) => INTENT[0] = 14,
         Some(Intent::Stop { cancel }) => {
             let id = board.ask_id();
             INTENT[..4].copy_from_slice(&[10, cancel as i32, id.as_ptr() as usize as i32, id.len() as i32]);
@@ -250,30 +290,23 @@ pub unsafe extern "C" fn intent() -> *const i32 {
     INTENT.as_ptr()
 }
 
-/// The rectangle of a tour anchor in the last frame: [found, x, y, w, h].
+/// Where a thing is in the last frame, as [found, x, y, w, h]; `inbuf()[..len]` names it.
+/// kind 0: the first node with that learn anchor (`tour`); 1: the bump button of the ticket with
+/// that order id; 2: the card of the open table with that sitting id. The live probe taps exactly
+/// its own TEST order / TEST table with these, and the gates find controls by anchor.
 #[no_mangle]
-pub unsafe extern "C" fn tour_rect(len: u32) -> *const i32 {
-    let want = core::str::from_utf8(input(len)).unwrap_or("");
-    INTENT = [0; 8];
-    if let Some(n) = sc().find_tour(want) {
-        INTENT[..5].copy_from_slice(&[1, n.rect.x, n.rect.y, n.rect.w, n.rect.h]);
-    }
-    INTENT.as_ptr()
-}
-/// Where the bump button of the ticket whose id is `inbuf()[..len]` is in the last frame:
-/// [found, x, y, w, h]. The live probe taps exactly its own TEST order with it.
-#[no_mangle]
-pub unsafe extern "C" fn bump_rect(len: u32) -> *const i32 {
+pub unsafe extern "C" fn rect_of(kind: u32, len: u32) -> *const i32 {
     let want = input(len);
     INTENT = [0; 8];
-    for n in sc().nodes() {
-        if let crate::scene::Act::Bump(i) = n.act {
-            let t = bd().data.tickets[(i as usize).min(crate::board::feed::MAX_TICKETS - 1)];
-            if bd().data.str(t.id).as_bytes() == want {
-                INTENT[..5].copy_from_slice(&[1, n.rect.x, n.rect.y, n.rect.w, n.rect.h]);
-                break;
-            }
-        }
+    let d = &bd().data;
+    let hit = sc().nodes().iter().find(|n| match (kind, n.act) {
+        (0, _) => !n.tour.is_empty() && n.tour.as_bytes() == want,
+        (1, crate::scene::Act::Bump(i)) => d.tickets.get(i as usize).is_some_and(|t| d.str(t.id).as_bytes() == want),
+        (2, crate::scene::Act::Table(i)) => d.tables.get(i as usize).is_some_and(|t| d.str(t.sitting).as_bytes() == want),
+        _ => false,
+    });
+    if let Some(n) = hit {
+        INTENT[..5].copy_from_slice(&[1, n.rect.x, n.rect.y, n.rect.w, n.rect.h]);
     }
     INTENT.as_ptr()
 }
@@ -286,20 +319,21 @@ pub unsafe extern "C" fn tour_list() -> u32 {
         if t.is_empty() || n + t.len() + 1 > IN {
             continue;
         }
-        INBUF[n..n + t.len()].copy_from_slice(t);
-        INBUF[n + t.len()] = b'\n';
+        crate::put_at(&mut INBUF, n, t);
+        crate::put_at(&mut INBUF, n + t.len(), b"\n");
         n += t.len() + 1;
     }
     n as u32
 }
 
 /// [nodes, cmd words, width misses, cmd overflow, scene dropped, data dropped, data bad,
-///  nodes under 44 px, tickets, tables]
+///  nodes under 44 px, tickets, tables, sheet rows (0 = closed), sheet dropped + bad]
 #[no_mangle]
 pub unsafe extern "C" fn stats() -> *const u32 {
     STATS = [
         sc().len() as u32, CMD.len as u32, WIDTHS.misses, CMD.overflow, sc().dropped, bd().data.dropped,
         bd().data.bad, sc().too_small(crate::ui::TAP) as u32, bd().data.nt as u32, bd().data.ntab as u32,
+        if bd().ts.open { bd().ts.n as u32 } else { 0 }, bd().ts.dropped + bd().ts.bad,
     ];
     STATS.as_ptr()
 }

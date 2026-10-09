@@ -11,7 +11,11 @@
 //
 // THRESHOLDS (docs/research/2026-10-06-canvas-rust-webgl-ui.md §5.3; the card's CV7 subset):
 //   dom      body has exactly 1 element at rest (signed out AND signed in); focusing a field with
-//            EditContext forced off (?noec=1) adds exactly 1 transient element and blur removes it
+//            EditContext forced off (?noec=1) adds exactly 1 transient element and blur removes it;
+//            a table's sheet open (CV1b) and the theme button tapped: still exactly 1;
+//            no lazy module (tools/gates/canvas-wire.baseline rows) is requested before the first
+//            tap, and table.js is requested once a table is tapped (CV2P: the runtime half of
+//            canvas-wire's first-frame / lazy split)
 //   frame    first frame <= 300 ms from navigation at dpr 2 (median of 3 fresh contexts); 120 wheel frames p99 CPU <= 8 ms;
 //            backing store == innerWidth x dpr after 5 resizes and 30 frames (no doubling);
 //            something is drawn (pixels that are not the page colour)
@@ -35,6 +39,7 @@ const opt = k => { const i = args.indexOf(k); return i > 0 ? args[i + 1] : null;
 const CANVAS = resolve(opt('--canvas-dir') || join(PUB, 'room/canvas'));
 const OUT = opt('--out');
 const DPR = Number(opt('--dpr') || 2);
+const BASELINE = resolve(opt('--baseline') || join(ROOT, 'tools/gates/canvas-wire.baseline'));
 
 function playwright() {
   for (const base of [ROOT, '/root/dowiz']) {
@@ -54,7 +59,9 @@ function fixture(now) {
       items: [{ name: 'Salmon nigiri', quantity: 2, station: 'sushi' }, { name: 'Supë miso', quantity: 1, note: 'pa qepë' }, { name: 'Limonadë', quantity: 1, station: 'bar' }] });
   }
   const sittings = [];
-  for (let i = 0; i < 6; i++) sittings.push({ sitting_id: `sit_${i}`, table: String(i + 1), rounds: [{ id: `r${i}`, status: 'PREPARING', total: 1500 + i * 100, payment_status: 'unpaid' }] });
+  for (let i = 0; i < 6; i++) sittings.push({ sitting_id: `sit_${i}`, table: String(i + 1), rounds: [{ id: `r${i}`, seq: 1, status: i % 2 ? 'PREPARING' : 'PENDING',
+    total: 1500 + i * 100, subtotal: 1500 + i * 100, payment_status: 'unpaid',
+    items: [{ name: 'Salmon nigiri', quantity: 2, unit_price: 600 }, { name: 'Supë miso', quantity: 1, unit_price: 300 + i * 100 }] }] });
   return { orders, sittings };
 }
 
@@ -65,7 +72,8 @@ function serve() {
     const path = decodeURIComponent(q.url.split('?')[0]);
     if (path.startsWith('/api/')) {
       const body = path === '/api/staff/kitchen' ? { orders: fx.orders, generation: 1, full: true }
-        : path === '/api/staff/room' ? { sittings: fx.sittings } : { ok: true };
+        : path === '/api/staff/room' ? { sittings: fx.sittings }
+        : path === '/api/owner/settings' ? { values: { 'notify.order.late_min': '8' }, known: [], scope: 'kitchen' } : { ok: true };
       res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); return;
     }
     const rel = path.endsWith('/') ? path + 'index.html' : path;
@@ -83,14 +91,15 @@ async function page(browser, base, { signed, qs = '' }) {
   if (signed) await ctx.addInitScript(s => { try { localStorage.setItem('dw_room_session', s); localStorage.setItem('dw_room_lang', 'sq'); } catch {} }, SESSION);
   else await ctx.addInitScript(() => { try { localStorage.removeItem('dw_room_session'); localStorage.setItem('dw_room_lang', 'sq'); } catch {} });
   const p = await ctx.newPage();
-  const logs = [];
+  const logs = [], reqs = [];
+  p.on('request', r => { try { reqs.push(new URL(r.url()).pathname); } catch {} });   // the page's own; a service worker's are not here
   p.on('pageerror', e => logs.push('ERR ' + e.message));
   p.on('console', m => { if (m.type() === 'error') logs.push('console.error ' + m.text().slice(0, 160)); });
   await p.goto(`${base}/room/canvas/${qs}`, { waitUntil: 'load' });
   const ok = await p.evaluate(() => window.__ready);
   if (!ok) throw new Error('board did not start: ' + (await p.evaluate(() => window.__err)) + ' ' + logs.join(' | '));
   if (signed) await p.waitForFunction(() => window.__canvas.stats()[8] > 0, null, { timeout: 15000 });
-  return { p, ctx, logs };
+  return { p, ctx, logs, reqs };
 }
 
 const count = p => p.evaluate(() => ({ n: document.body.querySelectorAll('*').length, tags: [...document.body.querySelectorAll('*')].map(e => e.tagName).join(',') }));
@@ -118,10 +127,29 @@ async function dom(b, base) {
   }
   const s = await page(b, base, { signed: true });
   res.signedInRest = await count(s.p);
+  // CV2P: what the board fetched with no tap at all must hold no lazy module.
+  const lazy = (await readFile(BASELINE, 'utf8')).split('\n').map(l => l.match(/^lazy\s+(\S+)=\d+\s*$/)).filter(Boolean).map(m => m[1]);
+  await s.p.waitForTimeout(300);
+  res.lazyRows = lazy;
+  res.lazyEarly = lazy.filter(m => s.reqs.includes(m));
+  const beforeTap = s.reqs.length;
+  // CV1b: a table's sheet is drawn, not built -- open one and count again.
+  res.tablesTab = await tap(s.p, 'board.tables');
+  await s.p.waitForTimeout(50);
+  res.tableTapped = await tap(s.p, 'room.table');
+  await s.p.waitForFunction(() => window.__canvas.stats()[10] > 0, null, { timeout: 15000 }).catch(() => {});
+  res.sheetRows = await s.p.evaluate(() => window.__canvas.stats()[10]);
+  res.tableOnTap = s.reqs.slice(beforeTap).includes('/room/canvas/table.js');
+  res.sheetOpen = await count(s.p);
+  res.themeTapped = await tap(s.p, 'hud.theme');
+  await s.p.waitForTimeout(50);
+  res.themeStored = await s.p.evaluate(() => localStorage.getItem('dw_room_theme'));
+  res.themed = await count(s.p);
   res.logs = [...a.logs, ...s.logs];
   await s.ctx.close();
   res.pass = res.signedOutRest.n === 1 && res.signedInRest.n === 1 && res.focused.n === 2 && /INPUT/.test(res.focused.tags)
-    && res.blurred.n === 1 && (!res.editContext || res.focusedEditContext.n === 1);
+    && res.blurred.n === 1 && (!res.editContext || res.focusedEditContext.n === 1)
+    && res.sheetRows > 0 && res.sheetOpen.n === 1 && lazy.length > 0 && res.lazyEarly.length === 0 && res.tableOnTap && res.themeTapped && res.themeStored === 'dark' && res.themed.n === 1;
   return res;
 }
 

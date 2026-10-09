@@ -29,7 +29,7 @@ fn col_of(tab: u8) -> Col {
 
 /// Does this ticket have a line made at station `s` (0 = every station)?
 fn at_station(b: &Board, t: &Ticket, s: u8) -> bool {
-    s == 0 || line_range(b, t).any(|k| b.data.lines[k].station == s)
+    s == 0 || line_range(b, t).any(|k| b.data.lines.get(k).is_some_and(|l| l.station == s))
 }
 
 fn line_range(b: &Board, t: &Ticket) -> core::ops::Range<usize> {
@@ -39,19 +39,19 @@ fn line_range(b: &Board, t: &Ticket) -> core::ops::Range<usize> {
 
 /// Open tickets at station `s`, in any column (the station chips' counts).
 pub fn station_count(b: &Board, s: u8) -> usize {
-    b.data.tickets[..b.data.nt].iter().filter(|t| t.status.column().is_some() && at_station(b, t, s)).count()
+    crate::head(&b.data.tickets, b.data.nt).iter().filter(|t| t.status.column().is_some() && at_station(b, t, s)).count()
 }
 
 /// Tickets in a tab's column under the current station filter.
 pub fn count(b: &Board, tab: u8) -> usize {
     let c = col_of(tab);
-    b.data.tickets[..b.data.nt].iter().filter(|t| t.status.column() == Some(c) && at_station(b, t, b.station)).count()
+    crate::head(&b.data.tickets, b.data.nt).iter().filter(|t| t.status.column() == Some(c) && at_station(b, t, b.station)).count()
 }
 
 fn shown_lines(b: &Board, t: &Ticket) -> (i32, i32) {
     let (mut n, mut notes) = (0, 0);
     for k in line_range(b, t) {
-        let ln = &b.data.lines[k];
+        let Some(ln) = b.data.lines.get(k) else { continue };
         if b.station == 0 || ln.station == b.station {
             n += 1;
             if ln.note.len > 0 {
@@ -91,7 +91,7 @@ fn grid(b: &mut Board, ui: &mut Ui, list: Rect, heights: &[i32], paint: &mut dyn
         total += row.iter().copied().max().unwrap_or(0) + GAP;
     }
     b.content_h = total - GAP + PAD + if b.data.dropped > 0 { 40 } else { 0 };
-    let tab = b.tab as usize & 3;
+    let tab = b.si();
     b.scroll[tab] = b.scroll[tab].clamp(0, b.max_scroll());
     let mut y = list.y + PAD - b.scroll[tab];
     ui.cmd.clip(list.x, list.y, list.w, list.h);
@@ -99,13 +99,14 @@ fn grid(b: &mut Board, ui: &mut Ui, list: Rect, heights: &[i32], paint: &mut dyn
         let rh = row.iter().copied().max().unwrap_or(0);
         if y + rh >= list.y && y <= list.bottom() {
             for (c, &h) in row.iter().enumerate() {
-                paint(b, ui, r * cols + c, Rect::new(cells[c].x, y, cells[c].w, h));
+                let cell = cells.get(c).copied().unwrap_or_default();
+                paint(b, ui, r * cols + c, Rect::new(cell.x, y, cell.w, h));
             }
         }
         y += rh + GAP;
     }
     if b.data.dropped > 0 {
-        let mut s: Buf<48> = Buf::new();
+        let mut s: Buf = Buf::new();
         s.push("+").num(b.data.dropped as u64).push(" ").push(b.lang.s(Str::More));
         ui.line(s.as_str(), Rect::new(inner.x, y, inner.w, 32), 15, 600, ui.pal.muted, 2);
     }
@@ -124,10 +125,12 @@ pub fn tickets(b: &mut Board, ui: &mut Ui, root: u16, list: Rect) {
     let mut idx = [0u16; super::feed::MAX_TICKETS];
     let mut hs = [0i32; super::feed::MAX_TICKETS];
     let mut n = 0;
-    for (i, t) in b.data.tickets[..b.data.nt].iter().enumerate() {
+    for (i, t) in crate::head(&b.data.tickets, b.data.nt).iter().enumerate() {
         if t.status.column() == Some(c) && at_station(b, t, b.station) {
-            idx[n] = i as u16;
-            hs[n] = ticket_h(b, t);
+            if let (Some(x), Some(h)) = (idx.get_mut(n), hs.get_mut(n)) {
+                *x = i as u16;
+                *h = ticket_h(b, t);
+            }
             n += 1;
         }
     }
@@ -135,22 +138,25 @@ pub fn tickets(b: &mut Board, ui: &mut Ui, root: u16, list: Rect) {
         b.content_h = 0;
         return empty(b, ui, list, Str::NoTickets);
     }
-    grid(b, ui, list, &hs[..n], &mut |b, ui, k, r| ticket(b, ui, holder, idx[k], r));
+    grid(b, ui, list, crate::head(&hs, n), &mut |b, ui, k, r| ticket(b, ui, holder, idx.get(k).copied().unwrap_or(0), r));
 }
 
 fn ticket(b: &Board, ui: &mut Ui, parent: u16, i: u16, r: Rect) {
-    let t = b.data.tickets[i as usize];
+    let Some(t) = b.data.tickets.get(i as usize).copied() else { return };
     let l = b.lang;
     ui.fill(r, 14, ui.pal.surface);
     ui.cmd.stroke(r.x, r.y, r.w, r.h, 14, ui.pal.line, 1);
     let age = age_min(t.start_ms, b.now_ms);
-    let cls = if b.data.str(t.when).is_empty() { age_class(age) } else { 0 };
-    if cls > 0 {
-        let c = if cls == 2 { ui.pal.danger } else { ui.pal.warning };
+    if let Some(cls) = heat_of(b, &t) {
+        let c = match cls {
+            0 => ui.pal.success,
+            1 => ui.pal.warning,
+            _ => ui.pal.danger,
+        };
         ui.fill(Rect::new(r.x, r.y + 14, 5, r.h - 28), 2, c);
     }
     let card = ui.scene.push(parent, "", r, Act::None);
-    let mut head: Buf<160> = Buf::new();
+    let mut head: Buf = Buf::new();
     head.push("#").push(short_id(b.data.str(t.id), &mut [0u8; 4])).push(" · ");
     match t.kind {
         Where::Table => head.push(l.s(Str::KTable)).push(" ").push(b.data.str(t.table)),
@@ -170,11 +176,11 @@ fn ticket(b: &Board, ui: &mut Ui, parent: u16, i: u16, r: Rect) {
     let x = r.x + PAD;
     let w = r.w - 2 * PAD;
     for k in line_range(b, &t) {
-        let ln = b.data.lines[k];
+        let Some(ln) = b.data.lines.get(k).copied() else { continue };
         if b.station != 0 && ln.station != b.station {
             continue;
         }
-        let mut q: Buf<16> = Buf::new();
+        let mut q: Buf = Buf::new();
         q.num(ln.qty as u64).push("×");
         let qw = ui.text(q.as_str(), x, y + 3, 17, 700, ui.pal.fg) + 8;
         let tag = if b.station == 0 && ln.station != 2 { l.s(super::model::STATIONS[ln.station as usize & 3]) } else { "" };
@@ -203,16 +209,22 @@ fn ticket(b: &Board, ui: &mut Ui, parent: u16, i: u16, r: Rect) {
     }
 }
 
+/// CV8a: the ticket's heat (0 fresh, 1 warn, 2 late) -- its age against the venue's own amber and
+/// red minutes -- or None while its hour is still ahead (a scheduled ticket is not yet hot).
+pub fn heat_of(b: &Board, t: &Ticket) -> Option<u8> {
+    b.data.str(t.when).is_empty().then(|| age_class(age_min(t.start_ms, b.now_ms), b.warn_min, b.late_min))
+}
+
 /// The last four characters of an id, upper-cased (kitchen-logic.js `shortId`).
 pub(super) fn short_id<'a>(id: &str, out: &'a mut [u8; 4]) -> &'a str {
     let b = id.as_bytes();
-    let tail = &b[b.len().saturating_sub(4)..];
+    let tail = b.get(b.len().saturating_sub(4)..).unwrap_or(&[]);
     if !tail.is_ascii() {
         return "";
     }
-    out[..tail.len()].copy_from_slice(tail);
-    out[..tail.len()].make_ascii_uppercase();
-    core::str::from_utf8(&out[..tail.len()]).unwrap_or("")
+    crate::put_at(out, 0, tail);
+    out.make_ascii_uppercase();
+    core::str::from_utf8(crate::head(out, tail.len())).unwrap_or("")
 }
 
 pub fn tables(b: &mut Board, ui: &mut Ui, root: u16, list: Rect) {
@@ -223,26 +235,26 @@ pub fn tables(b: &mut Board, ui: &mut Ui, root: u16, list: Rect) {
         return empty(b, ui, list, Str::NoTables);
     }
     let hs = [TABLE_H; super::feed::MAX_TABLES];
-    grid(b, ui, list, &hs[..n], &mut |b, ui, k, r| table(b, ui, holder, k, r));
+    grid(b, ui, list, crate::head(&hs, n), &mut |b, ui, k, r| table(b, ui, holder, k, r));
 }
 
 fn table(b: &Board, ui: &mut Ui, parent: u16, i: usize, r: Rect) {
-    let t = b.data.tables[i];
+    let Some(t) = b.data.tables.get(i).copied() else { return };
     let l = b.lang;
     ui.fill(r, 14, ui.pal.surface);
     ui.cmd.stroke(r.x, r.y, r.w, r.h, 14, ui.pal.line, 1);
     let inner = r.inset(PAD);
     let due = b.data.str(t.due);
-    let mut d: Buf<64> = Buf::new();
+    let mut d: Buf = Buf::new();
     d.push(l.s(Str::Due)).push(" ").push(due);
     let dw = ui.width(d.as_str(), 16, 700).min(inner.w / 2);
-    let mut title: Buf<64> = Buf::new();
+    let mut title: Buf = Buf::new();
     title.push(l.s(Str::KTable)).push(" ").push(b.data.str(t.table));
     ui.line(title.as_str(), Rect::new(inner.x, inner.y, inner.w - dw - 8, 26), 18, 700, ui.pal.fg, 0);
     ui.line(d.as_str(), Rect::new(inner.right() - dw, inner.y, dw, 26), 16, 700, ui.pal.fg, 1);
-    let mut sub: Buf<160> = Buf::new();
+    let mut sub: Buf = Buf::new();
     sub.num(t.rounds as u64).push(" ").push(l.s(Str::Rounds));
-    for s in &t.st[..t.nst as usize] {
+    for s in crate::head(&t.st, t.nst as usize) {
         if *s != Status::Other {
             sub.push(" · ").push(s.word(l));
         }

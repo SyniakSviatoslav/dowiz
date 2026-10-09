@@ -84,7 +84,7 @@ impl Cmd {
             self.overflow += ws.len() as u32;
             return false;
         }
-        self.words[self.len..self.len + ws.len()].copy_from_slice(ws);
+        crate::put_at(&mut self.words, self.len, ws);
         self.len += ws.len();
         true
     }
@@ -116,14 +116,14 @@ impl Cmd {
             return;
         }
         let at = self.slen;
-        self.strs[at..at + s.len()].copy_from_slice(s.as_bytes());
+        crate::put_at(&mut self.strs, at, s.as_bytes());
         self.slen += s.len();
-        let ptr = self.strs[at..].as_ptr() as usize as i32;
+        let ptr = self.strs.as_ptr() as usize as i32 + at as i32;
         let ws = [OP_TEXT, ptr, s.len() as i32, x, y, px, weight, rgba as i32];
         if self.push(&ws) {
             self.mix(OP_TEXT);
             self.mix_bytes(s.as_bytes());
-            for w in &ws[3..] {
+            for w in ws.iter().skip(3) {
                 self.mix(*w);
             }
             #[cfg(test)]

@@ -1,27 +1,10 @@
-// THE CANVAS LOADER (Wave CV, crates/dowiz-canvas): the only JavaScript between a surface's
-// wasm and the browser. It owns exactly five things and nothing else:
-//   1. the ONE <canvas>: its backing store is innerWidth x innerHeight x devicePixelRatio, set
-//      from the WINDOW, never from the element's own size (memory sea-canvas-doubles-every-frame:
-//      a size read back from the element and multiplied again grew a canvas to 3.3e7 px);
-//   2. text widths for Rust (`txt_measure`, Canvas2D measureText, system fonts);
-//   3. replaying the command buffer on Canvas2D (cmd.rs is the format; `replay` its one reader);
-//   4. input: pointer, wheel and Enter go to wasm; a tap's consequence comes back as an intent;
-//   5. the keyboard for a focused text field: EditContext where the browser has it (zero
-//      elements), else ONE transient input element that exists only while the field is focused
-//      (operator 2026-10-06; the dom-count gate counts it).
-// Styles are set through CSSOM, which the page's CSP (`style-src 'self'`) does not govern; there
-// is no inline <style> (memory dowiz-csp-blocked-every-stylesheet).
-//
-// WebGL2 (?gl=1) is NOT built in CV1: this box's headless Chromium rasterises nothing on WebGL
-// (memory webgl-renders-nothing-on-the-box), so a GL path could not be verified here. ?gl=1 says
-// so on the console and draws with Canvas2D.
-//
-// ASCII QUOTES ONLY (DOWIZ-COMMON-RULES rule 11).
+// THE CANVAS LOADER (Wave CV): wasm <-> browser. Why each part is the way it is: crates/dowiz-canvas
+// src/lib.rs `THE HOST FILES`. ASCII QUOTES ONLY (DOWIZ-COMMON-RULES rule 11).
 
 const FONT = 'system-ui, -apple-system, Roboto, "Segoe UI", sans-serif';
-const KIND = { 1: ['email', 'username'], 2: ['password', 'current-password'], 3: ['text', 'one-time-code'], 4: ['text', 'off'] };
+const KIND = { 1: ['email', 'username'], 2: ['password', 'current-password'], 3: ['text', 'one-time-code'], 4: ['text', 'off'], 5: ['text', 'off', 'decimal'] };
 
-export async function start(canvas, wasmUrl, { lang = 0, dark = 1, restoring = 0, onIntent = () => {} } = {}) {
+export async function start(canvas, wasmUrl, { langs = [], dark = 1, restoring = 0, onIntent = () => {}, onInput = () => {} } = {}) {
   const t0 = performance.now();
   const q = new URL(location.href).searchParams;
   const dbg = { t0, frames: [], backend: '2d', transient: 0 };
@@ -43,13 +26,11 @@ export async function start(canvas, wasmUrl, { lang = 0, dark = 1, restoring = 0
   const env = {
     txt_measure(p, n, px, wt) { setFont(px, wt); return ctx.measureText(str(p, n)).width; },
   };
-  // `wasmUrl`: a URL, or a WebAssembly.Module promise (board.js compiles it early).
   const instance = typeof wasmUrl === 'string' ? (await WebAssembly.instantiateStreaming(fetch(wasmUrl), { env })).instance
     : await WebAssembly.instantiate(await wasmUrl, { env });
   ex = instance.exports; mem = ex.memory;
   dbg.t_instantiate_ms = performance.now() - t0;
 
-  /// Write a string into wasm's input buffer; its byte length.
   const put = s => enc.encodeInto(String(s ?? ''), u8().subarray(ex.inbuf(), ex.inbuf() + ex.inbuf_cap())).written;
 
   function size() {
@@ -89,7 +70,6 @@ export async function start(canvas, wasmUrl, { lang = 0, dark = 1, restoring = 0
   }
 
   let raf = 0, lastNow = Date.now();
-  /// One frame now. `now` defaults to the wall clock (ticket ages); a restore passes the old one.
   function draw(now = Date.now()) {
     lastNow = now;
     const a = performance.now();
@@ -99,11 +79,10 @@ export async function start(canvas, wasmUrl, { lang = 0, dark = 1, restoring = 0
   }
   const ask = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; draw(); }); };
 
-  // ── the keyboard ───────────────────────────────────────────────────────────
   const useEC = 'EditContext' in window && !q.get('noec');
   let ec = null, input = null;
   const fieldValue = f => str(ex.field_ptr(f), ex.field_len(f));
-  const setField = (f, v) => { ex.field_set(f, put(v)); ask(); };
+  const setField = (f, v) => { ex.field_set(f, put(v)); ask(); onInput(f); };
   function dropInput() { if (input) { const el = input; input = null; el.remove(); } }
   function focusField(f, kind, rect) {
     const v = fieldValue(f);
@@ -121,7 +100,7 @@ export async function start(canvas, wasmUrl, { lang = 0, dark = 1, restoring = 0
     dropInput();
     const el = document.createElement('input');
     const [type, ac] = KIND[kind] || KIND[3];
-    el.type = type; el.autocomplete = ac; el.value = v; el.setAttribute('autocapitalize', 'off'); el.spellcheck = false;
+    el.type = type; el.autocomplete = ac; el.value = v; if (KIND[kind]?.[2]) el.inputMode = KIND[kind][2]; el.setAttribute('autocapitalize', 'off'); el.spellcheck = false;
     for (const [k, val] of [['position', 'fixed'], ['left', rect[0] + 'px'], ['top', rect[1] + 'px'], ['width', rect[2] + 'px'],
       ['height', rect[3] + 'px'], ['fontSize', '16px'], ['opacity', '0'], ['border', '0'], ['padding', '0']]) el.style[k] = val;
     el.addEventListener('input', () => setField(f, el.value));
@@ -132,7 +111,6 @@ export async function start(canvas, wasmUrl, { lang = 0, dark = 1, restoring = 0
   }
   function blurField() { dropInput(); if (ec && document.activeElement === canvas) canvas.blur(); }
 
-  // ── intents: what a tap asked for ──────────────────────────────────────────
   function drain() {
     for (let k = 0; k < 8; k++) {
       const I = new Int32Array(mem.buffer, ex.intent(), 8);
@@ -155,27 +133,24 @@ export async function start(canvas, wasmUrl, { lang = 0, dark = 1, restoring = 0
   canvas.addEventListener('keydown', e => { if (e.key === 'Enter') { ex.key_enter(); drain(); } });
   addEventListener('resize', () => { size(); draw(); });
 
-  // ── context loss: the scene lives in Rust, so a restore is one frame ──────
-  // Canvas2D can lose its backing store (Chrome fires contextlost/contextrestored on a 2D
-  // canvas); everything drawn is gone and the context's state is reset. Rust still holds the
-  // whole scene, so a restore re-sizes and redraws the SAME frame (same `now`): the
-  // context-loss gate compares its hash and pixels with the frame before the loss.
   canvas.addEventListener('contextlost', e => { e.preventDefault(); dbg.lost = (dbg.lost || 0) + 1; });
   canvas.addEventListener('contextrestored', () => { dbg.restored = (dbg.restored || 0) + 1; size(); draw(lastNow); });
 
+  const lang = ex.lang_pick(put(langs.map(v => String(v || '')).join('\n')));
+  dbg.code = str(ex.lang_code(lang), 2);
   ex.init(1, 1, dark ? 1 : 0, lang);
   if (restoring) ex.session(2, 0, 0, 0);   // "Loading", not the login form
   size();
   draw();
   dbg.t_first_frame_ms = performance.now() - t0;
+  const rect = (k, v) => { const r = new Int32Array(mem.buffer, ex.rect_of(k, put(v)), 5); return r[0] ? { x: r[1], y: r[2], w: r[3], h: r[4] } : null; };
   Object.assign(dbg, {
     ex, ask, draw, put, drain,
     redraw: () => draw(lastNow),
     hash: () => ex.frame_hash() >>> 0,
-    stats: () => Array.from(new Uint32Array(mem.buffer, ex.stats(), 10)),
+    stats: () => Array.from(new Uint32Array(mem.buffer, ex.stats(), 12)),
     tours: () => str(ex.inbuf(), ex.tour_list()).split('\n').filter(Boolean),
-    bumpRect: id => { const r = new Int32Array(mem.buffer, ex.bump_rect(put(id)), 5); return r[0] ? { x: r[1], y: r[2], w: r[3], h: r[4] } : null; },
-    tourRect: name => { const r = new Int32Array(mem.buffer, ex.tour_rect(put(name)), 5); return r[0] ? { x: r[1], y: r[2], w: r[3], h: r[4] } : null; },
+    tourRect: n => rect(0, n), bumpRect: id => rect(1, id), tableRect: id => rect(2, id),
   });
   return dbg;
 }

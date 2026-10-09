@@ -14,7 +14,7 @@
 // FSM decides whether an edge is legal.
 //
 // ASCII QUOTES ONLY in this file (DOWIZ-COMMON-RULES rule 11).
-import { $, $$, esc, icon, t, S, store, post, toast } from '/admin/core.js';
+import { $, $$, api, esc, icon, t, S, store, post, toast } from '/admin/core.js';
 import { ui, btn, chips, empty } from '/admin/parts.js';
 import * as K from '/admin/kitchen-logic.js';
 import '/admin/kitchen-i18n.js';
@@ -24,6 +24,18 @@ import { rerender, loadOrders, loadVenue } from '/admin/app.js';
 const TICK_MS = 30_000;
 const view = { station: 'all', q: '' };
 let ticker = null;
+/// The venue's settings as the pass may read them (notify.order.late_min), re-read every 5 min.
+const venueLate = { at: 0, settings: null };
+const LATE_EVERY_MS = 300_000;
+function readLate(){
+  if (Date.now() - venueLate.at < LATE_EVERY_MS) return;
+  venueLate.at = Date.now();
+  api(`/owner/settings?location_id=${encodeURIComponent(store.loc || '')}`).then(d => {
+    const was = K.lateMin(venueLate.settings);
+    venueLate.settings = d;
+    if (K.lateMin(d) !== was && S.tab === 'kitchen') rerender();
+  }, () => {});
+}
 
 /// The stylesheet is this screen's own, linked once on first draw.
 function linkStyle(){
@@ -87,7 +99,8 @@ function stopRows(){
 export async function render(host){
   linkStyle();
   const now = Date.now();
-  const th = K.thresholds(S.venue);
+  readLate();
+  const th = K.thresholds(S.venue, venueLate.settings);
   const counts = K.stationCounts(S.orders);
   const stations = [{ value: 'all', label: `${t('kAll')} ${counts.all}` }, ...K.STATIONS.map(s => ({ value: s, label: `${t('st_' + s)} ${counts[s]}` }))];
   const open = counts.all > 0;
@@ -158,6 +171,9 @@ function askReason(orderId, action){
   const input = s.el.querySelector('#kdsWhy');
   if (input) input.oninput = () => { why = input.value; };
 }
+
+/// For the tests: forget the venue's late minutes so the next draw reads them again.
+export const forgetLate = () => { venueLate.at = 0; venueLate.settings = null; };
 
 /// For the shell's tests and the assistant's "show me": the station in view.
 export const station = () => view.station;

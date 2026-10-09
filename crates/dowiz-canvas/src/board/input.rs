@@ -54,7 +54,7 @@ impl Board {
     }
 
     fn scroll_by(&mut self, dy: i32) {
-        let t = self.tab as usize & 3;
+        let t = self.si();
         self.scroll[t] = (self.scroll[t] + dy).clamp(0, self.max_scroll());
     }
 
@@ -62,18 +62,20 @@ impl Board {
         (self.content_h - self.list.h).max(0)
     }
 
-    /// Enter on the keyboard: submit the sign-in form, or send the reason.
+    /// Enter on the keyboard: submit the sign-in form, send the reason, or a sheet field's form.
     pub fn key_enter(&mut self) {
         if !self.signed_in {
             self.emit(Intent::Submit { claim: self.claiming });
         } else if self.ask.is_some() {
             self.send_stop();
+        } else if let Some(f) = self.focus.filter(|&f| self.ts.open && f >= super::F_SHEET) {
+            self.emit(Intent::SheetEnter(f));
         }
     }
 
     fn send_stop(&mut self) {
         let Some(cancel) = self.ask else { return };
-        if self.fields[F_REASON as usize].value().trim().is_empty() {
+        if self.fields[F_REASON as usize].value().trim_ascii().is_empty() {
             let w = self.lang.s(Str::KReasonNeeded);
             self.set_toast(w.as_bytes());
             return;
@@ -90,7 +92,7 @@ impl Board {
             self.focus = None;
             self.emit(Intent::Blur);
         }
-        let ticket = |b: &Board, i: u16| b.data.tickets[..b.data.nt].get(i as usize).copied();
+        let ticket = |b: &Board, i: u16| crate::head(&b.data.tickets, b.data.nt).get(i as usize).copied();
         match act {
             Act::None | Act::Block => {}
             Act::Tab(t) if self.tab_allowed(t) => self.tab = t,
@@ -119,11 +121,11 @@ impl Board {
                         _ => None,
                     };
                     if let Some(c) = cancel {
-                        let id = self.data.str(t.id).as_bytes();
                         let mut buf = [0u8; 64];
-                        let n = id.len().min(64);
-                        buf[..n].copy_from_slice(&id[..n]);
-                        self.set_ask_id(&buf[..n]);
+                        let id = crate::head(self.data.str(t.id).as_bytes(), 64);
+                        crate::put_at(&mut buf, 0, id);
+                        let n = id.len();
+                        self.set_ask_id(crate::head(&buf, n));
                         self.fields[F_REASON as usize].clear();
                         self.ask = Some(c);
                     }
@@ -136,8 +138,16 @@ impl Board {
                 }
             }
             Act::SheetSend => self.send_stop(),
+            Act::Sheet(i) => {
+                let r = crate::head(&self.ts.rows, self.ts.n).get(i as usize).copied();
+                if let Some(r) = r.filter(|r| matches!(r.kind, b'b' | b'B' | b'H')) {
+                    self.emit(Intent::Sheet { act: r.act, arg: r.aux });
+                }
+            }
+            Act::Theme => self.emit(Intent::Theme),
+            Act::Sound => self.emit(Intent::Sound),
             Act::Table(i) => {
-                if let Some(t) = self.data.tables[..self.data.ntab].get(i as usize).copied() {
+                if let Some(t) = crate::head(&self.data.tables, self.data.ntab).get(i as usize).copied() {
                     self.emit(Intent::Table { sitting: t.sitting });
                 }
             }

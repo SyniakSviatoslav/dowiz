@@ -15,7 +15,7 @@
 
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-room-shell-2026-10-06-canvas';
+const SHELL_CACHE = 'dowiz-room-shell-2026-10-09-cv8a';
 const SHELL = [
   '/room/',
   '/room/app.js',
@@ -89,6 +89,10 @@ const SHELL = [
   '/room/canvas/board.js',
   '/room/canvas/loader.js',
   '/room/canvas/feed.js',
+  // W-CV1B: the table sheet host, loaded when a table is tapped (offline too).
+  '/room/canvas/table.js',
+  // W-CV8a: the new-ticket chime the board imports (the kitchen hears an order offline too).
+  '/room/canvas/chime.js',
   '/room/canvas/board.wasm',
   '/lib/live.js',
 ];

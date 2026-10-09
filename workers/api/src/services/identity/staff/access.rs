@@ -278,19 +278,19 @@ pub(crate) fn bookings_for_kitchen(rows: Vec<Value>) -> Vec<Value> {
 /// The venue settings a member of staff at the pass may read and write: the
 /// kitchen printer's name. Nothing else -- every secret lives in this space.
 pub(crate) const KITCHEN_SETTINGS: [&str; 1] = ["print.kitchen"];
-
+/// What the pass may READ: those + "order late after" (canvas ticket ages, W-CV1B); never set.
+pub(crate) const KITCHEN_READS: [&str; 2] = ["print.kitchen", "notify.order.late_min"];
 pub(crate) fn kitchen_may_set(key: &str) -> bool { KITCHEN_SETTINGS.contains(&key) }
 
-/// `GET /api/owner/settings` for staff: only `KITCHEN_SETTINGS`, values and
-/// declarations alike.
+/// `GET /api/owner/settings` for staff: only `KITCHEN_READS`, values and declarations alike.
 pub(crate) fn settings_for_kitchen(values: &Value, known: Vec<Value>) -> Value {
-    let values: serde_json::Map<String, Value> = KITCHEN_SETTINGS
+    let values: serde_json::Map<String, Value> = KITCHEN_READS
         .iter()
         .filter_map(|k| values.get(*k).map(|v| (k.to_string(), v.clone())))
         .collect();
     let known: Vec<Value> = known
         .into_iter()
-        .filter(|k| k.get("key").and_then(Value::as_str).is_some_and(kitchen_may_set))
+        .filter(|k| k.get("key").and_then(Value::as_str).is_some_and(|k| KITCHEN_READS.contains(&k)))
         .collect();
     json!({ "values": values, "known": known, "scope": "kitchen" })
 }

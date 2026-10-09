@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as K from './kitchen-logic.js';
+import { ages } from '../room/canvas/feed.js';
 
 const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
 const jwt = claims => `h.${b64(claims)}.s`;
@@ -83,6 +84,23 @@ test('ticket age colours by whole minutes, and the venue\'s own cooking time', (
   assert.equal(K.ageMin(undefined, 5), 0);
   assert.deepEqual(K.thresholds({ kitchen: { defaultCookingMin: 12 } }), { warn: 12, late: 24 });
   assert.deepEqual(K.thresholds(null), { warn: K.WARN_MIN, late: K.LATE_MIN });
+});
+
+test('the venue\'s notify.order.late_min sets the thresholds: amber at half, the same rule as the canvas board', () => {
+  const set = v => ({ values: { 'notify.order.late_min': v } });
+  assert.deepEqual(K.thresholds(null, set('8')), { warn: 4, late: 8 });
+  assert.deepEqual(K.thresholds(null, set(' 25 ')), { warn: 12, late: 25 });
+  assert.deepEqual(K.thresholds({ kitchen: { defaultCookingMin: 12 } }, set('30')), { warn: 15, late: 30 }, 'the owner\'s setting wins');
+  for (const v of [undefined, '', '0', '1', 'soon', '-5', '7.5', '12345', null]) {
+    assert.deepEqual(K.thresholds(null, set(v)), { warn: K.WARN_MIN, late: K.LATE_MIN }, `late_min ${JSON.stringify(v)} keeps 10/20`);
+  }
+  assert.deepEqual(K.thresholds(null, null), { warn: K.WARN_MIN, late: K.LATE_MIN });
+  assert.deepEqual(K.thresholds(null, { values: {} }), { warn: K.WARN_MIN, late: K.LATE_MIN });
+  // Parity with room/canvas/feed.js ages(): one rule, two boards.
+  for (const v of ['8', '20', '3', '2', '0', 'x', '9999']) {
+    const a = ages(set(v)), th = K.thresholds(null, set(v));
+    assert.deepEqual(a ? { warn: a[0], late: a[1] } : { warn: K.WARN_MIN, late: K.LATE_MIN }, th, `late_min ${v}`);
+  }
 });
 
 test('a station filter shows only its lines, and a ticket with none of them is hidden', () => {

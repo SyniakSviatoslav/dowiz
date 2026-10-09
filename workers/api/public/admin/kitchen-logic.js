@@ -109,8 +109,21 @@ export function ageClass(createdMs, nowMs, warn = WARN_MIN, late = LATE_MIN){
   return m >= late ? 'late' : m >= warn ? 'warn' : 'ok';
 }
 
-/// The venue's thresholds: its own cooking minutes when it names them.
-export function thresholds(venue){
+/// The venue's own "late": settings key notify.order.late_min (the minutes after
+/// which the owner is told an order is late; 0 = off), read from
+/// GET /api/owner/settings. The SAME rule as room/canvas/feed.js ages():
+/// whole minutes, 2 or more; unset, 0, 1 or nonsense is null (defaults stand).
+export function lateMin(settings){
+  const v = settings && settings.values ? settings.values['notify.order.late_min'] : undefined;
+  const late = /^\d{1,4}$/.test(String(v ?? '').trim()) ? Number(v) : 0;
+  return late >= 2 ? late : null;
+}
+
+/// The venue's thresholds: its late minutes (amber at half, red at late), else
+/// its own cooking minutes when it names them, else 10/20.
+export function thresholds(venue, settings){
+  const late = lateMin(settings);
+  if (late) return { warn: Math.floor(late / 2), late };
   const cook = Number(venue && venue.kitchen && venue.kitchen.defaultCookingMin) || 0;
   return cook > 0 ? { warn: cook, late: cook * 2 } : { warn: WARN_MIN, late: LATE_MIN };
 }

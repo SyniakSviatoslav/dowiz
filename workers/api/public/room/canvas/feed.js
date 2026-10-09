@@ -1,18 +1,13 @@
-// THE BOARD'S FEED, pure (node-tested in feed.test.mjs): the hub's two reads flattened into the
-// tab-separated lines crates/dowiz-canvas src/board/feed.rs reads. Money is formatted HERE with the
-// room's one formatter (logic.js -> lib/money.js); Rust never does money arithmetic.
-// ASCII QUOTES ONLY (DOWIZ-COMMON-RULES rule 11).
+// THE BOARD'S FEED, pure (feed.test.mjs): the hub's reads as the lines src/board/feed.rs reads;
+// money formatted here (logic.js -> lib/money.js), never in Rust. ASCII QUOTES ONLY (rule 11).
 import { parseCaps, sittingDue, money, guestWaiting } from '../logic.js';
 
 const STATION = { sushi: 1, kitchen: 2, bar: 3 };
 export const ROLE = { waiter: 0, 'counter-manager': 1, kitchen: 2, owner: 3 };
 export const BUMPS = ['confirm', 'preparing', 'ready', 'collected'];
 
-/// A value as one feed field: no tab, no newline.
 export const clean = v => String(v ?? '').replace(/[\t\n\r]+/g, ' ');
 
-/// The kitchen's tickets and the room's sittings as the feed Rust reads. PURE (node-tested).
-/// `when(ms)` formats a scheduled hour for the screen; money goes through the room's `money`.
 export function toFeed({ orders = [], sittings = [], currency = null, locale = 'sq', now = Date.now(), when = () => '' } = {}) {
   const out = [];
   for (const o of orders || []) {
@@ -34,7 +29,25 @@ export function toFeed({ orders = [], sittings = [], currency = null, locale = '
   return out.join('\n') + '\n';
 }
 
-/// What the session's caps open: [pass, floor].
+const WORDS = ('Live Offline Polling LoginLine Email Password ClaimCode SignIn Claim HaveCode HaveAccount ColNew ColPreparing ' +
+  'ColReady Tables All StSushi StKitchen StBar KTable KPickup KDelivery KMin BumpConfirm BumpPreparing BumpReady BumpCollected KSeen ' +
+  'KUnseen NoTickets NoTables NoAccess Rounds Due Refresh SignOut Saved Error Loading More Waiter CounterManager Kitchen Owner ' +
+  'GuestWaiting Room ForTime StopReject StopCancel KReason KReasonHint KReasonNeeded Close ThemeSystem ThemeDark ThemeLight Back Send ' +
+  'NoLines Subtotal Discount Total Owed AddItem AddN Search NoMatch SoldOut Remove Comp Comped MoveTable Move WhyRemove WhyComp ' +
+  'RMistake RGuestChanged RUnavailable RDropped ROther OtherText NeedReason ChangedReload Take TakeN Amount Method Currency Rate ' +
+  'MCash MCard MCheque MTransfer MGiftCard MWallet RateNeeded OffTheBill FillOwed Taken PaidInFull BadAmount BadRate BadTip Tip ' +
+  'WalletCode NeedWallet WalletNoTip MoveLines MoveLinesTo PickLines PickRound NoTargets NotAllLines MoveSitting MoveSittingHint ' +
+  'Moved KitchenHasIt RoundPaid AlreadyThere NotHere GuestRound GuestConfirm GuestConfirmed GuestRejected QueuedSaved QueueFull ' +
+  'QueueNoStore MenuFailed NoSlug').split(' ');
+export { WORDS };
+export const W = name => { const i = WORDS.indexOf(name); return i < 0 ? '' : i; };
+
+export function ages(settings) {
+  const v = settings?.values?.['notify.order.late_min'];
+  const late = /^\d{1,4}$/.test(String(v ?? '').trim()) ? Number(v) : 0;
+  return late >= 2 ? [Math.floor(late / 2), late] : null;
+}
+
 export function opens(s) {
   const caps = parseCaps(s?.staff?.caps);
   return [caps.has('advance'), caps.has('take_orders')];

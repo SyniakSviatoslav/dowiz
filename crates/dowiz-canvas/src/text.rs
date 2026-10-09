@@ -89,19 +89,24 @@ pub fn fit<'a>(w: &mut Widths, host: &mut dyn Measure, s: &'a str, px: i32, weig
     let ell = w.get(host, "…", px, weight);
     // Binary search over CHARACTER counts (widths are monotone in the prefix length); `lo` chars
     // always fit, `hi` is the most that might.
-    let (mut lo, mut hi) = (0usize, s.chars().count());
+    // Characters = bytes that do not continue one (`chars().count()` links core's counting
+    // routines: a kilobyte of wasm for this one call).
+    let (mut lo, mut hi) = (0usize, s.bytes().filter(|b| b & 0xC0 != 0x80).count());
     while lo < hi {
         let mid = (lo + hi).div_ceil(2);
-        if w.get(host, &s[..byte_at(s, mid)], px, weight) + ell <= max {
+        if w.get(host, head(s, mid), px, weight) + ell <= max {
             lo = mid;
         } else {
             hi = mid - 1;
         }
     }
-    (&s[..byte_at(s, lo)], true)
+    (head(s, lo), true)
 }
 
-/// The byte offset of the `n`-th character (the length when past the end).
-fn byte_at(s: &str, n: usize) -> usize {
-    s.char_indices().nth(n).map_or(s.len(), |(i, _)| i)
+/// The first `n` characters of `s` (all of it when shorter). `get`, never `&s[..i]`: a str index
+/// links core's char-boundary panic message and its Unicode tables -- kilobytes of wasm for a
+/// path that cannot run (the offset comes from `char_indices`).
+fn head(s: &str, n: usize) -> &str {
+    let i = s.char_indices().nth(n).map_or(s.len(), |(i, _)| i);
+    s.get(..i).unwrap_or("")
 }

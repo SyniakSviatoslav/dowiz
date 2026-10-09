@@ -213,6 +213,8 @@ pub const BROWSER: &[DeviceKey] = &[
     key("dw_room_till", &[], "room"),
     key("dw_room_lang", &[], "room"),
     key("dw_room_theme", &[], "room"),
+    // W-CV8a: the board's new-ticket chime on/off for this device ('0' = off), nothing personal.
+    key("dw_room_sound", &[], "room"),
     key("dw_room_currency", &[], "room"),
     key("dowiz.room.outbox", &[OrderContent], "room"),
     // W-OFFSALE: the tablet's journal of its offline cash sales (lines, totals, no

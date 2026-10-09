@@ -124,12 +124,15 @@ pub const fn line_h(px: i32) -> i32 {
 
 /// A label composed from pieces without an allocator ("#AB12 · Table 4 · 12 min"). Too long is cut
 /// on a character boundary; the command buffer copies the result, so a stack Buf is safe to draw.
-pub struct Buf<const N: usize> {
+pub struct Buf {
     b: [u8; N],
     n: usize,
 }
 
-impl<const N: usize> Buf<N> {
+/// One capacity for every label: each distinct `N` was its own copy of `push` in the wasm.
+const N: usize = 256;
+
+impl Buf {
     pub const fn new() -> Self {
         Buf { b: [0; N], n: 0 }
     }
@@ -138,7 +141,7 @@ impl<const N: usize> Buf<N> {
         while k > 0 && !s.is_char_boundary(k) {
             k -= 1;
         }
-        self.b[self.n..self.n + k].copy_from_slice(&s.as_bytes()[..k]);
+        crate::put_at(&mut self.b, self.n, crate::head(s.as_bytes(), k));
         self.n += k;
         self
     }
@@ -148,7 +151,7 @@ impl<const N: usize> Buf<N> {
         self.push(s)
     }
     pub fn as_str(&self) -> &str {
-        core::str::from_utf8(&self.b[..self.n]).unwrap_or("")
+        core::str::from_utf8(crate::head(&self.b, self.n)).unwrap_or("")
     }
     pub fn is_empty(&self) -> bool {
         self.n == 0
@@ -157,15 +160,25 @@ impl<const N: usize> Buf<N> {
 
 /// Greedy word wrap of `s` inside `r`, each line centred when `center`; returns the height used.
 pub fn para(ui: &mut Ui, s: &str, r: Rect, px: i32, weight: i32, rgba: u32, center: bool) -> i32 {
+    wrap(ui, s, r, px, weight, rgba, center, true)
+}
+
+/// `para`, or only its height when `draw` is false (the table sheet lays a row out before it
+/// knows whether the row is on screen).
+#[allow(clippy::too_many_arguments)]
+pub fn wrap(ui: &mut Ui, s: &str, r: Rect, px: i32, weight: i32, rgba: u32, center: bool, draw: bool) -> i32 {
     let lh = line_h(px) + 4;
     let space = ui.width(" ", px, weight);
     let mut y = r.y;
-    let mut line: Buf<256> = Buf::new();
+    let mut line: Buf = Buf::new();
     let mut lw = 0;
+    let align = if center { 2 } else { 0 };
     for word in s.split(' ').filter(|w| !w.is_empty()) {
         let ww = ui.width(word, px, weight);
         if !line.is_empty() && lw + space + ww > r.w {
-            ui.line(line.as_str(), Rect::new(r.x, y, r.w, lh), px, weight, rgba, if center { 2 } else { 0 });
+            if draw {
+                ui.line(line.as_str(), Rect::new(r.x, y, r.w, lh), px, weight, rgba, align);
+            }
             y += lh;
             line = Buf::new();
             lw = 0;
@@ -178,7 +191,9 @@ pub fn para(ui: &mut Ui, s: &str, r: Rect, px: i32, weight: i32, rgba: u32, cent
         lw += ww;
     }
     if !line.is_empty() {
-        ui.line(line.as_str(), Rect::new(r.x, y, r.w, lh), px, weight, rgba, if center { 2 } else { 0 });
+        if draw {
+            ui.line(line.as_str(), Rect::new(r.x, y, r.w, lh), px, weight, rgba, align);
+        }
         y += lh;
     }
     y - r.y

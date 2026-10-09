@@ -174,7 +174,8 @@ fn scrolling_is_clamped_to_the_content() {
 
 #[test]
 fn ages_turn_warn_then_late() {
-    assert_eq!((model::age_class(9), model::age_class(10), model::age_class(20)), (0, 1, 2));
+    let d = |m| model::age_class(m, model::WARN_MIN, model::LATE_MIN);
+    assert_eq!((d(9), d(10), d(20)), (0, 1, 2), "the defaults are kitchen-logic.js's 10 / 20");
     assert_eq!(model::age_min(NOW + 5, NOW), 0, "a clock behind the ticket is not a negative age");
 }
 
@@ -244,4 +245,65 @@ fn a_stored_session_is_restored_without_the_login_form() {
     out.b.session(false, false, false, Role::Waiter);
     out.frame();
     assert!(!out.b.restoring && out.scene.find_tour("login.email").is_some(), "an expired session falls back to the login form");
+}
+
+/// The stripe colours the frame drew, in order: every RECT 5 px wide (a ticket's heat stripe).
+fn heat_stripes(cmd: &crate::cmd::Cmd) -> Vec<u32> {
+    let (mut i, mut out) = (0usize, Vec::new());
+    while i < cmd.len {
+        match cmd.words[i] {
+            crate::cmd::OP_RECT => {
+                if cmd.words[i + 3] == 5 && cmd.words[i + 4] > 20 {
+                    out.push(cmd.words[i + 6] as u32);
+                }
+                i += 8;
+            }
+            crate::cmd::OP_TEXT | crate::cmd::OP_STROKE => i += 8,
+            crate::cmd::OP_CLIP => i += 5,
+            _ => i += 1,
+        }
+    }
+    out
+}
+
+/// CV8a pass mark 1: three tickets of three ages draw three different heat colours (fresh =
+/// success, warn = warning, late = danger), each from the venue's own amber and red minutes.
+#[test]
+fn three_ages_are_three_heat_colours_on_the_board() {
+    let mut r = Rig::new(390, 844).signed(true, true);
+    r.b.lang = Lang::En;
+    let mut seen = Vec::new();
+    for tab in [TAB_NEW, TAB_PREPARING, TAB_READY] {
+        r.b.tab = tab;
+        r.frame();
+        seen.extend(heat_stripes(&r.cmd));
+    }
+    let pal = if r.b.dark { DARK } else { LIGHT };
+    // Four tickets in the feed: 2 min (New), 12 min (Preparing), then on Ready 25 min and 1 min.
+    assert_eq!(seen.len(), 4, "one stripe per ticket: {seen:x?}");
+    assert_eq!(seen, vec![pal.success, pal.warning, pal.danger, pal.success], "2 min, 12 min, 25 min, 1 min");
+    assert_eq!(model::age_class(0, 10, 20), 0);
+    assert_eq!(model::age_class(10, 10, 20), 1);
+    assert_eq!(model::age_class(20, 10, 20), 2);
+}
+
+/// CV8a: a scheduled ticket whose hour is still ahead is not hot yet -- no stripe at all.
+#[test]
+fn a_scheduled_ticket_has_no_heat_until_its_hour() {
+    let mut r = Rig::new(390, 844).signed(true, true);
+    r.b.lang = Lang::En;
+    r.b.feed(format!("T\tord_sch00001\tPENDING\t{}\t0\tp\t\t\t19:00\n", NOW - 90 * 60_000).as_bytes());
+    r.b.tab = TAB_NEW;
+    r.frame();
+    assert!(heat_stripes(&r.cmd).is_empty(), "{:?}", heat_stripes(&r.cmd));
+}
+
+/// CV8a: the chime is on by default, and the sound button asks the host for the change.
+#[test]
+fn the_sound_is_on_by_default_and_its_button_toggles_it() {
+    let mut r = Rig::new(390, 844).signed(true, true);
+    assert!(r.b.sound, "a new ticket rings until the staff turns it off");
+    r.frame();
+    r.tap_tour("hud.sound");
+    assert_eq!(r.b.take_intent(), Some(Intent::Sound));
 }

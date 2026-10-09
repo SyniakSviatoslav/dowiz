@@ -39,7 +39,7 @@ pub struct Data {
 
 fn num(b: &[u8]) -> Option<i64> {
     let (neg, d) = match b.first() {
-        Some(b'-') => (true, &b[1..]),
+        Some(b'-') => (true, b.get(1..).unwrap_or(&[])),
         _ => (false, b),
     };
     if d.is_empty() || d.len() > 18 || !d.iter().all(u8::is_ascii_digit) {
@@ -47,6 +47,21 @@ fn num(b: &[u8]) -> Option<i64> {
     }
     let v = d.iter().fold(0i64, |a, &c| a * 10 + (c - b'0') as i64);
     Some(if neg { -v } else { v })
+}
+
+/// One record's tab-separated fields (the first nine) and how many it had -- the one splitter
+/// both feeds use (this one and the table sheet's, `tsheet.rs`).
+#[inline(never)]
+pub fn fields(rec: &[u8]) -> ([&[u8]; 9], usize) {
+    let mut f: [&[u8]; 9] = [&[]; 9];
+    let mut n = 0;
+    for part in rec.split(|&c| c == b'\t') {
+        if let Some(x) = f.get_mut(n) {
+            *x = part;
+        }
+        n += 1;
+    }
+    (f, n)
 }
 
 impl Data {
@@ -63,7 +78,7 @@ impl Data {
         if b > self.used {
             return "";
         }
-        core::str::from_utf8(&self.arena[a..b]).unwrap_or("")
+        core::str::from_utf8(self.arena.get(a..b).unwrap_or(&[])).unwrap_or("")
     }
 
     fn put(&mut self, b: &[u8]) -> Span {
@@ -76,7 +91,7 @@ impl Data {
             return Span::default();
         }
         let s = Span { off: self.used as u32, len: b.len() as u32 };
-        self.arena[self.used..self.used + b.len()].copy_from_slice(b);
+        crate::put_at(&mut self.arena, self.used, b);
         self.used += b.len();
         s
     }
@@ -94,14 +109,7 @@ impl Data {
             if rec.is_empty() {
                 continue;
             }
-            let mut f: [&[u8]; 9] = [&[]; 9];
-            let mut n = 0;
-            for part in rec.split(|&c| c == b'\t') {
-                if n < f.len() {
-                    f[n] = part;
-                }
-                n += 1;
-            }
+            let (f, n) = fields(rec);
             match f[0] {
                 b"T" if n == 9 => self.ticket(&f),
                 b"L" if n == 5 => self.line(&f),
@@ -129,7 +137,9 @@ impl Data {
             id: self.put(f[1]), status: Status::parse(f[2]), start_ms: start, seen: f[4] == b"1", kind,
             table: self.put(f[6]), note: self.put(f[7]), when: self.put(f[8]), line0: self.nl as u16, nlines: 0,
         };
-        self.tickets[self.nt] = t;
+        if let Some(x) = self.tickets.get_mut(self.nt) {
+            *x = t;
+        }
         self.nt += 1;
     }
 
@@ -144,9 +154,13 @@ impl Data {
             return;
         }
         let l = Line { qty: qty.clamp(0, 9999) as i32, station: st.clamp(1, 3) as u8, name: self.put(f[3]), note: self.put(f[4]) };
-        self.lines[self.nl] = l;
+        if let Some(x) = self.lines.get_mut(self.nl) {
+            *x = l;
+        }
         self.nl += 1;
-        self.tickets[self.nt - 1].nlines += 1;
+        if let Some(t) = self.tickets.get_mut(self.nt - 1) {
+            t.nlines += 1;
+        }
     }
 
     fn table(&mut self, f: &[&[u8]; 9]) {
@@ -161,11 +175,15 @@ impl Data {
         };
         for s in f[6].split(|&c| c == b',').filter(|s| !s.is_empty()) {
             if (t.nst as usize) < ROUND_ST {
-                t.st[t.nst as usize] = Status::parse(s);
+                if let Some(x) = t.st.get_mut(t.nst as usize) {
+                    *x = Status::parse(s);
+                }
                 t.nst += 1;
             }
         }
-        self.tables[self.ntab] = t;
+        if let Some(x) = self.tables.get_mut(self.ntab) {
+            *x = t;
+        }
         self.ntab += 1;
     }
 }

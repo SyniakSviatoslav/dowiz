@@ -32,8 +32,14 @@ pub enum Act {
     SheetSend,
     /// Swallows a tap (a sheet's panel, so a tap on it does not reach the scrim below).
     Block,
-    /// An open table: hand over to the full room page.
+    /// An open table: open its sheet (CV1b).
     Table(u16),
+    /// A control of the table sheet: the row it was drawn from (`board::tsheet`).
+    Sheet(u16),
+    /// The theme button: system -> dark -> light -> system (room/app.js `themeBtn`).
+    Theme,
+    /// The new-ticket sound toggle (CV8a): on by default; the host keeps the choice.
+    Sound,
     /// Focus a text field.
     Field(u8),
     Submit,
@@ -94,7 +100,7 @@ impl Scene {
         self.len == 0
     }
     pub fn nodes(&self) -> &[Node] {
-        &self.nodes[..self.len]
+        crate::head(&self.nodes, self.len)
     }
 
     /// Add a node; its id, or `ROOT` when the pool is full.
@@ -104,7 +110,9 @@ impl Scene {
             return ROOT;
         }
         let id = self.len as u16;
-        self.nodes[self.len] = Node { id, parent, tour, rect, act };
+        if let Some(n) = self.nodes.get_mut(self.len) {
+            *n = Node { id, parent, tour, rect, act };
+        }
         self.len += 1;
         id
     }
@@ -115,7 +123,7 @@ impl Scene {
         let mut p = n.parent;
         let mut hops = 0;
         while p != ROOT && (p as usize) < self.len && hops < 32 {
-            let a = &self.nodes[p as usize];
+            let Some(a) = self.nodes.get(p as usize) else { break };
             if !a.rect.contains(x, y) {
                 return false;
             }

@@ -22,7 +22,7 @@ pub fn draw(b: &Board, ui: &mut Ui, root: u16) {
     let w = b.w - 2 * x;
     let mut y = panel.y + 16;
     let word = l.s(if cancel { Str::StopCancel } else { Str::StopReject });
-    let mut title: Buf<96> = Buf::new();
+    let mut title: Buf = Buf::new();
     title.push(word).push(" · #").push(super::cards::short_id(b.ask_id(), &mut [0u8; 4]));
     let fg = ui.pal.fg;
     ui.line(title.as_str(), Rect::new(x, y, w, 28), 20, 700, fg, 0);

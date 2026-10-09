@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { toFeed, clean, opens, ROLE, BUMPS } from './feed.js';
+import { toFeed, clean, opens, ROLE, BUMPS, WORDS, W, ages } from './feed.js';
 
 const NOW = 1_800_000_000_000;
 const orders = [
@@ -47,7 +47,7 @@ async function board() {
   const { instance } = await WebAssembly.instantiate(bytes, { env });
   const ex = instance.exports;
   const put = s => new TextEncoder().encodeInto(s, new Uint8Array(ex.memory.buffer, ex.inbuf(), ex.inbuf_cap())).written;
-  const stats = () => Array.from(new Uint32Array(ex.memory.buffer, ex.stats(), 10));
+  const stats = () => Array.from(new Uint32Array(ex.memory.buffer, ex.stats(), 12));
   const tours = () => new TextDecoder().decode(new Uint8Array(ex.memory.buffer, ex.inbuf(), ex.tour_list())).split('\n').filter(Boolean);
   return { ex, put, stats, tours };
 }
@@ -74,4 +74,31 @@ test('the room lessons\' anchors are scene nodes (learn W1, W2; the kitchen boar
   ex.frame(NOW);
   const inn = tours();
   for (const a of ['hud.sync', 'hud.lang', 'room.refresh', 'room.signout', 'room.role', 'kitchen.station', 'kitchen.board', 'kitchen.seen', 'kitchen.bump', 'kitchen.reject']) assert.ok(inn.includes(a), a);
+});
+
+test('the word numbers are lang.rs Str::ALL, in order (the host names words by number)', async () => {
+  const rs = await readFile(new URL('../../../../../crates/dowiz-canvas/src/lang.rs', import.meta.url), 'utf8');
+  const all = /pub const ALL: \[Str; (\d+)\] = \[([^\]]*)\]/.exec(rs);
+  const names = [...all[2].matchAll(/Str::(\w+)/g)].map(m => m[1]);
+  assert.equal(names.length, Number(all[1]));
+  assert.deepEqual(WORDS, names);
+  assert.equal(W('Saved'), names.indexOf('Saved'));
+  assert.equal(W('NoSuchWord'), '');
+});
+
+test('ticket ages: the venue\'s "order late after", amber at half; unset or 0 keeps 10 / 20', () => {
+  assert.deepEqual(ages({ values: { 'notify.order.late_min': '8' } }), [4, 8]);
+  assert.deepEqual(ages({ values: { 'notify.order.late_min': '20' } }), [10, 20], 'the default ratio');
+  for (const v of [undefined, '', '0', '1', 'x', '-5', '99999']) assert.equal(ages({ values: { 'notify.order.late_min': v } }), null, String(v));
+  assert.equal(ages(null), null);
+});
+
+test('the module picks the language as lib/langs.js pickLang does', async () => {
+  const { ex, put } = await board();
+  const pick = (...l) => ex.lang_pick(put(l.join('\n')));
+  assert.equal(pick('uk', 'en-GB'), 2, 'a stored choice wins');
+  assert.equal(pick('', 'ru-RU', 'en'), 3, 'else the first browser language we speak');
+  assert.equal(pick('xx', 'de-DE', 'EN-us'), 1, 'case-folded, first two letters');
+  assert.equal(pick('', 'de'), 0, 'else sq');
+  assert.equal(new TextDecoder().decode(new Uint8Array(ex.memory.buffer, ex.lang_code(2), 2)), 'uk');
 });

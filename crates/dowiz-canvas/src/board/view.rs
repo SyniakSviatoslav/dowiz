@@ -24,7 +24,9 @@ pub fn draw(b: &mut Board, ui: &mut Ui) {
     let root = ui.scene.push(ROOT, "", full, Act::None);
     let (top, rest) = full.split_top(HUD);
     hud(b, ui, root, top);
-    if b.signed_in {
+    if b.signed_in && b.ts.open {
+        super::tsheet::draw(b, ui, root, rest);
+    } else if b.signed_in {
         board(b, ui, root, rest);
     } else {
         login(b, ui, root, rest);
@@ -53,6 +55,26 @@ fn hud(b: &Board, ui: &mut Ui, root: u16, r: Rect) {
         place(ui, TAP, "↻", "room.refresh", Act::Refresh);
     }
     place(ui, TAP, l.badge(), "hud.lang", Act::Lang);
+    // THE THEME BUTTON (room/app.js `themeBtn`, the same `dw_room_theme`): drawn, not a glyph
+    // from a font -- a half disc as the phone, a crescent dark, a full disc light.
+    let tr = Rect::new(right - TAP, row.y, TAP, TAP);
+    ui.button(root, tr, "", "hud.theme", Act::Theme, Look::Plain);
+    right -= TAP + 6;
+    let d = Rect::new(tr.x + 13, tr.y + 13, 18, 18);
+    let (fg, sf) = (ui.pal.fg, ui.pal.surface2);
+    ui.cmd.stroke(d.x, d.y, d.w, d.h, 9, fg, 2);
+    match b.theme {
+        1 => {
+            ui.fill(d, 9, fg);
+            ui.fill(Rect::new(d.x + 6, d.y - 3, 16, 16), 8, sf);
+        }
+        2 => ui.fill(d.inset(4), 5, fg),
+        _ => {
+            ui.cmd.clip(d.x, d.y, 9, 18);
+            ui.fill(d, 9, fg);
+            ui.cmd.unclip();
+        }
+    }
     let (word, tone) = match b.sync {
         Sync::Live => (Str::Live, ui.pal.success),
         Sync::Polling => (Str::Polling, ui.pal.warning),
@@ -117,7 +139,7 @@ pub(super) fn field_box(b: &Board, ui: &mut Ui, parent: u16, f: u8, r: Rect, tou
     let (c, lw) = if focused { (ui.pal.accent, 2) } else { (ui.pal.line, 1) };
     ui.cmd.stroke(r.x, r.y, r.w, r.h, 12, c, lw);
     let mut buf = [0u8; MAX * 3];
-    let shown = b.fields[f as usize].shown(&mut buf);
+    let shown = b.fields.get(f as usize).map_or("", |x| x.shown(&mut buf));
     let inner = r.inset(14);
     ui.line(shown, inner, 17, 400, ui.pal.fg, 0);
     if focused {
@@ -138,23 +160,26 @@ fn board(b: &mut Board, ui: &mut Ui, root: u16, area: Rect) {
     let mut n = 0;
     for t in [TAB_NEW, TAB_PREPARING, TAB_READY, TAB_TABLES] {
         if b.tab_allowed(t) {
-            tabs[n] = t;
+            if let Some(x) = tabs.get_mut(n) {
+                *x = t;
+            }
             n += 1;
         }
     }
     let (row, rest) = area.split_top(TAP + 2 * 8);
     let mut cells = [Rect::ZERO; 4];
     layout::columns(row.inset(8), n, 6, &mut cells);
-    for (k, &t) in tabs[..n].iter().enumerate() {
+    for (&t, &cell) in crate::head(&tabs, n).iter().zip(cells.iter()) {
         let (word, count) = match t {
             TAB_NEW => (Str::ColNew, cards::count(b, t)),
             TAB_PREPARING => (Str::ColPreparing, cards::count(b, t)),
             TAB_READY => (Str::ColReady, cards::count(b, t)),
             _ => (Str::Tables, b.data.ntab),
         };
-        let mut label: Buf<64> = Buf::new();
+        let mut label: Buf = Buf::new();
         label.push(l.s(word)).push(" ").num(count as u64);
-        ui.button(root, cells[k], label.as_str(), "", Act::Tab(t), Look::Chip(b.tab == t));
+        let tour = if t == TAB_TABLES { "board.tables" } else { "" };
+        ui.button(root, cell, label.as_str(), tour, Act::Tab(t), Look::Chip(b.tab == t));
     }
     let list = if b.tab == TAB_TABLES {
         rest
@@ -173,13 +198,27 @@ fn board(b: &mut Board, ui: &mut Ui, root: u16, area: Rect) {
 
 fn stations(b: &Board, ui: &mut Ui, root: u16, r: Rect) {
     let row = Rect::new(r.x + 8, r.y, r.w - 16, TAP);
-    let holder = ui.scene.push(root, "kitchen.station", row, Act::None);
+    // CV8a: the sound button sits at the row's end, beside the station chips (the HUD has no room:
+    // the role chip needs its 30 px). It rings for the pass only, so it lives on the pass.
+    let sr = Rect::new(row.right() - TAP, row.y, TAP, TAP);
+    let stations = Rect::new(row.x, row.y, row.w - TAP - 6, TAP);
+    let holder = ui.scene.push(root, "kitchen.station", stations, Act::None);
     let mut cells = [Rect::ZERO; 4];
-    layout::columns(row, 4, 6, &mut cells);
-    for (s, word) in super::model::STATIONS.iter().enumerate() {
-        let mut label: Buf<48> = Buf::new();
+    layout::columns(stations, 4, 6, &mut cells);
+    for ((s, word), &cell) in super::model::STATIONS.iter().enumerate().zip(cells.iter()) {
+        let mut label: Buf = Buf::new();
         label.push(b.lang.s(*word)).push(" ").num(cards::station_count(b, s as u8) as u64);
-        ui.button(holder, cells[s], label.as_str(), "", Act::Station(s as u8), Look::Chip(b.station == s as u8));
+        ui.button(holder, cell, label.as_str(), "", Act::Station(s as u8), Look::Chip(b.station == s as u8));
+    }
+    // THE SOUND BUTTON: a speaker; its waves are drawn only while the new-ticket chime is on.
+    ui.button(root, sr, "", "hud.sound", Act::Sound, Look::Plain);
+    let (x, y) = (sr.x + 12, sr.y + 13);
+    let on = if b.sound { ui.pal.fg } else { ui.pal.muted };
+    ui.fill(Rect::new(x, y + 6, 5, 6), 1, on);
+    ui.fill(Rect::new(x + 5, y + 2, 4, 14), 1, on);
+    if b.sound {
+        ui.fill(Rect::new(x + 12, y + 4, 3, 10), 1, on);
+        ui.fill(Rect::new(x + 17, y + 1, 2, 16), 1, on);
     }
 }
 

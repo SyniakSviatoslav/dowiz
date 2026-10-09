@@ -1,0 +1,112 @@
+{
+  "id": "feature-kitchen-late",
+  "name": "kitchen-late",
+  "contract_version": "1.0.0",
+  "contract_name": "admin.kitchen-late.v1",
+  "class": "LIVE-AFTER-DEPLOY",
+  "description": {
+    "en": "The console's kitchen board (/admin/, tab Kitchen) colours each ticket by the venue's own notify.order.late_min: amber (kds-age-warn) at half of it, red (kds-age-late) at it -- the same rule as the canvas board (room/canvas/feed.js ages()). The board reads GET /api/owner/settings?location_id once per 5 minutes; unset, 0, 1 or a non-number keeps 10/20. The owner sets the value in the Wire pane (admin/tax.js), POST /api/owner/settings.",
+    "uk": "Кухонна дошка в консолі фарбує квиток за налаштуванням закладу notify.order.late_min: жовтий на половині, червоний на ньому; без значення лишається 10/20."
+  },
+  "producer": {
+    "file": "workers/api/src/services/venue/settings.rs",
+    "line": 23,
+    "what": "settings(): GET /api/owner/settings -- the owner gets every value; staff at the pass get KITCHEN_READS only (access.rs:286 settings_for_kitchen), which carries notify.order.late_min"
+  },
+  "consumer": {
+    "file": "workers/api/public/admin/kitchen.js",
+    "line": 30,
+    "what": "readLate(): reads the settings once per 5 min and redraws on a change; render() line 103 passes them to kitchen-logic.js:124 thresholds(venue, settings), whose rule is lateMin() (line 116)"
+  },
+  "writer": {
+    "file": "workers/api/src/services/venue/settings.rs",
+    "line": 53,
+    "what": "set_setting(): POST /api/owner/settings {key, value}, the owner's own write (admin/tax.js Wire pane)"
+  },
+  "routes": {
+    "lib_rs": [
+      "workers/api/src/lib.rs:491 GET /api/owner/settings",
+      "workers/api/src/lib.rs:492 POST /api/owner/settings"
+    ]
+  },
+  "transport": {
+    "method": "GET",
+    "path": "/api/owner/settings",
+    "query": {
+      "location_id": "the venue slug"
+    }
+  },
+  "external": null,
+  "external_note": "No external API.",
+  "auth": {
+    "secrets": [
+      "OWNER_EMAIL",
+      "OWNER_PASSWORD"
+    ],
+    "where": "/root/.dowiz_owner",
+    "how": "the owner's token: it reads and writes the setting and signs the console (sessionStorage dw_at, localStorage dw_loc)"
+  },
+  "request_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "key",
+      "value"
+    ],
+    "properties": {
+      "key": {
+        "const": "notify.order.late_min"
+      },
+      "value": {
+        "type": "string",
+        "pattern": "^\\d{0,4}$"
+      }
+    }
+  },
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "values"
+    ],
+    "properties": {
+      "values": {
+        "type": "object",
+        "properties": {
+          "notify.order.late_min": {
+            "type": "string"
+          }
+        }
+      },
+      "known": {
+        "type": "array"
+      },
+      "scope": {
+        "type": "string"
+      }
+    }
+  },
+  "page_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "settingsRead",
+      "ageClass",
+      "uncaught"
+    ],
+    "properties": {
+      "settingsRead": {
+        "const": true
+      },
+      "ageClass": {
+        "const": "warn"
+      },
+      "uncaught": {
+        "const": 0
+      }
+    }
+  },
+  "probe": "tools/live-proof/probes/feature-kitchen-late.mjs: owner reads late_min, sets it to 8, places a TEST order, opens /admin/ Kitchen with the owner token, moves the page clock ~5 min: the TEST ticket is kds-age-warn (10/20 would be ok) and the page read /api/owner/settings; finally restores late_min and ends the order.",
+  "last_verified": null
+}

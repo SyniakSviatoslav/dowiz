@@ -11,8 +11,10 @@ pub enum Kind {
     Email,
     Password,
     Code,
-    /// Free text (a reason).
+    /// Free text (a reason, a table, a search).
     Text,
+    /// An amount or a rate: the keyboard offers digits and a separator (`inputmode=decimal`).
+    Decimal,
 }
 
 impl Kind {
@@ -23,6 +25,7 @@ impl Kind {
             Kind::Password => 2,
             Kind::Code => 3,
             Kind::Text => 4,
+            Kind::Decimal => 5,
         }
     }
 }
@@ -42,7 +45,7 @@ impl Field {
     }
 
     pub fn value(&self) -> &str {
-        core::str::from_utf8(&self.bytes[..self.len]).unwrap_or("")
+        core::str::from_utf8(crate::head(&self.bytes, self.len)).unwrap_or("")
     }
 
     pub fn is_empty(&self) -> bool {
@@ -57,7 +60,7 @@ impl Field {
         while n > 0 && !s.is_char_boundary(n) {
             n -= 1;
         }
-        self.bytes[..n].copy_from_slice(&s.as_bytes()[..n]);
+        crate::put_at(&mut self.bytes, 0, crate::head(s.as_bytes(), n));
         self.len = n;
         true
     }
@@ -76,9 +79,9 @@ impl Field {
             if n + 3 > buf.len() {
                 break;
             }
-            buf[n..n + 3].copy_from_slice("•".as_bytes());
+            crate::put_at(buf, n, "•".as_bytes());
             n += 3;
         }
-        core::str::from_utf8(&buf[..n]).unwrap_or("")
+        core::str::from_utf8(crate::head(buf, n)).unwrap_or("")
     }
 }
