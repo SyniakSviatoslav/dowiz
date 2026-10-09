@@ -6,6 +6,10 @@ name: Mutations
 # The file list was pruned on 2026-09-24: `eigen.rs`, `numerical_guard.rs` and `delta.rs` no longer
 # exist under kernel/src/, and a --file that names nothing mutates nothing (a job that cannot fail).
 # The gates' own mutation proofs (tools/gates/*.prove.sh) run on every push in ci.yml's `gates`.
+#
+# 2026-10-09: the first --in-place run (37946011374) found 8 survivors in trinary.rs's telemetry seams
+# (success `> 0.0`, mul's cost product); 2858c33d's tests kill all 8. A fix to a survivor lives in kernel/,
+# which does not trigger this job: dispatch it, or touch this file with a note like this one.
 
 on:
   # the job also runs when this file changes, so a fix to it is proved on the runner the same day
