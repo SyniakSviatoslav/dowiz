@@ -55,9 +55,15 @@ fn has_vmx_or_svm() -> bool {
 mod tests {
     use super::*;
 
+    // r1/r4 once asserted "this host has no KVM": true on the aarch64 dev box, false on GitHub's
+    // x86_64 runners, which expose /dev/kvm (legacy-crates red, 2026-10-09). The contract is the
+    // fail-closed rule, which holds on every host: no device or no vmx/svm -> no KVM.
     #[test]
-    fn r1_kvm_unavailable_on_this_host() {
-        assert!(!kvm_available(), "this host is expected to have NO /dev/kvm and NO vmx/svm; fail-closed posture requires false");
+    fn r1_kvm_needs_device_and_cpu_flags() {
+        assert_eq!(kvm_available(), has_kvm_device() && has_vmx_or_svm());
+        if !has_kvm_device() || !has_vmx_or_svm() {
+            assert!(!kvm_available(), "fail-closed: no /dev/kvm or no vmx/svm must read as no KVM");
+        }
     }
 
     #[test]
@@ -81,7 +87,10 @@ mod tests {
 
     #[test]
     fn r4_cannot_accept_native_adapter_without_kvm() {
-        assert!(!can_accept_native_adapter());
+        assert_eq!(can_accept_native_adapter(), kvm_available());
+        if !kvm_available() {
+            assert!(!can_accept_native_adapter());
+        }
     }
 
     #[test]

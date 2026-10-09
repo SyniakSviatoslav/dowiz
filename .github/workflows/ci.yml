@@ -169,9 +169,9 @@ jobs:
           npm install --no-save --no-package-lock playwright@1.63.0
           npx playwright install --with-deps chromium
       - name: the outbox replays a queued tap once
-        run: node e2e/kit-regression/outbox.mjs
+        run: sh tools/gates/ci-annotate.inc outbox node e2e/kit-regression/outbox.mjs
       - name: the courier app reopens with no network
-        run: node e2e/kit-regression/courier-cold.mjs
+        run: sh tools/gates/ci-annotate.inc courier-cold node e2e/kit-regression/courier-cold.mjs
 
   # deny.toml bans yanked crates, wildcards and disallowed licences. A config is not a gate; this is.
   supply-chain:

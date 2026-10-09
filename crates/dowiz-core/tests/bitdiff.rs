@@ -56,7 +56,16 @@ fn sqrt_bit_exact() {
         total += 1;
         let mine = sqrt(x);
         let stdv = x.sqrt();
-        if mine.to_bits() != stdv.to_bits() {
+        // A negative input is NaN on both sides, but IEEE 754 leaves the NaN's sign to the
+        // hardware: aarch64 answers 0x7ff8.., x86_64's sqrtsd the "indefinite" 0xfff8.. (a quarter
+        // of these inputs failed on the CI runner, 2026-10-09). Ours is the canonical quiet NaN on
+        // every target; that, not the host's sign bit, is the contract.
+        let same = if stdv.is_nan() {
+            mine.to_bits() == f64::NAN.to_bits()
+        } else {
+            mine.to_bits() == stdv.to_bits()
+        };
+        if !same {
             mismatches += 1;
             if first {
                 println!(
