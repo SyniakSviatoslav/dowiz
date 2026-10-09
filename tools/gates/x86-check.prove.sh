@@ -35,7 +35,7 @@ want() { # want <rc> <label> <must-mention> [env...]
     sh "$G" "$C" > "$SCRATCH/out" 2>&1; rc=$?
   echo "prove: $label -> rc=$rc (want $exp): $(tail -1 "$SCRATCH/out")"
   [ "$rc" -eq "$exp" ] || { tail -8 "$SCRATCH/out"; fail=1; }
-  grep -q -- "$needle" "$SCRATCH/out" || { echo "prove: $label: output does not mention '$needle'"; fail=1; }
+  grep -q -- "$needle" "$SCRATCH/out" || { echo "prove: $label: output does not mention '$needle'"; tail -12 "$SCRATCH/out"; fail=1; }
 }
 copy; want 0 "clean" "GREEN"
 copy; mutate src/inference/simd_i8.rs 'unsafe fn dot_i8_avx2(a: *const i8, w: *const i8, k: usize) -> i32 {
