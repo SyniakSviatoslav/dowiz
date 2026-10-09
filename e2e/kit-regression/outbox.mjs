@@ -287,6 +287,10 @@ export async function run() {
     await ctx.setOffline(true);
     await page.evaluate(([b]) =>
       window.ob.queue(b + '/api/courier/orders/o1b/pickup', { body: '{}', tag: 'pickup:o1b' }), [base]);
+    // The page being left must not drain it first: its `online` listener (or its retry timer) raced
+    // the reload and sent the tap too, so the server saw 2 (CI, 2026-10-09; 1 of 4 runs). This check
+    // is about the NEW page; the online-event path is step 3's.
+    await page.evaluate(() => window.ob.stop());
     await ctx.setOffline(false);
     await page.goto(`${base}/harness.html`);
     await page.waitForFunction(() => window.ready === true);
