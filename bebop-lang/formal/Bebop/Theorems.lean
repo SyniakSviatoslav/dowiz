@@ -1,8 +1,10 @@
 /-
-  Bebop.Theorems -- F9 first theorems. 6 PROVED, 1 still an axiom.
+  Bebop.Theorems -- F9 first theorems. 7 PROVED, 0 axioms (fp_mul_correct proved 2026-10-09).
 
   MEASURED 2026-09-14 (`grep -c '^theorem'` / `grep -c '^axiom'`): 6 `theorem`,
-  1 `axiom`, 0 `sorry`. `#print axioms` is run on every one of them at the
+  1 `axiom`, 0 `sorry`. 2026-10-09 (W-FPMUL): the one axiom, fp_mul_correct,
+  is now a theorem; `grep -c '^axiom'` = 0 and its `#print axioms` line reads
+  [propext, Classical.choice, Quot.sound] -- kernel-only. `#print axioms` is run on every one of them at the
   bottom of this file, so `lake build`'s own output states what each depends
   on. Quoting that output, because two of the lines are NOT the plain answer:
 
@@ -45,7 +47,8 @@
 
   This file proves, about Bebop programs:
   1. fp_mul(a,b) = sign * floor(|a|*|b|/2^32) -- Q32 fixed-point multiply
-     -- STILL AN AXIOM, the only one. See `fp_mul_correct`.
+     -- PROVED 2026-10-09 in two forms: `fp_mul_correct` (mod 2^64, all a b)
+     and `fp_mul_exact` (in Z, for results representable in i64)  [THEOREM x2]
   2. isqrt(s)^2 <= s < (isqrt(s)+1)^2 -- integer square root      [THEOREM]
   3. Money laws (B8) -- addov exactness, mulov totality           [THEOREM x2]
   4. Store invariants -- st_len, cursor monotone, crc consistency [THEOREM x3]
@@ -58,7 +61,8 @@
   `0` stub. They are marked as such below; do not cite them as content.
 
   F9 gate: theorems >= 3, each with a kernel-checked term and an LRAT certificate.
-  Status against that gate: 6 of 7 proved; 1 (`addov_correct`) via LRAT.
+  Status against that gate: 7 of 7 proved; 2 (`addov_correct`,
+  `st_len_masks_digest`) via bv_decide's native LRAT check.
   Dependencies: F7 (kernel) for certified proofs; specifications stated here.
 
   References:
@@ -177,28 +181,219 @@ def fp_mul_impl (a b : Val) : Val :=
   let p := if flip == 1 then 0 - p else p
   p
 
-/-- AXIOM (NOT PROVED -- the only unproved statement left in this file).
-    `fp_mul_impl a b = fp_mul_spec a b` for all a, b : Val.
+-- ------------------------------------------------------------
+-- fp_mul_correct: PROVED 2026-10-09 (lane W-FPMUL). Was the file's one
+-- substantive axiom since 2026-09-14. Kernel-checked over the three
+-- standard axioms only (no bv_decide, no native_decide): see the
+-- `#print axioms` lines at the bottom of this file.
+--
+-- The argument is the limb decomposition the old docstring named:
+--   * every Int64 op is pushed to `toBitVec.toNat` (`fpm_*_toNat`);
+--   * `fpm_low_spec`: the 16-bit inner limbs give EXACTLY
+--     floor(A0*B0 / 2^32) for A0, B0 < 2^32 (all products < 2^32, the
+--     carry word < 2^34, so no step wraps and `>>` is exact);
+--   * `fpm_core_spec`: the 32-bit limbs give floor(X*Y / 2^32) mod 2^64
+--     for ANY unsigned X, Y < 2^64 (`fpm_expand` is the ring identity,
+--     closed by `grind`; the rest is `omega` with the products as atoms);
+--   * `fpm_abs_le` / `fpm_natAbs_of_le`: fp.bp's |a| is <= 2^63 as an
+--     unsigned word (i64::MIN maps to itself = 2^63), so the spec's
+--     `toInt.natAbs` and the impl's unsigned reading of the same word agree.
+-- The old statement was TRUE as written because `fp_mul_spec` WRAPS
+-- (`Int64.ofNat`): both sides are mod 2^64. The unbounded-Z statement
+-- (ROADMAP F9) is FALSE without a representability precondition --
+-- `#guard`ed below at MIN * (2^32+1) -- and is proved WITH it as
+-- `fp_mul_exact`.
+-- ------------------------------------------------------------
 
-    Why it is still an axiom, measured 2026-09-14:
-    * `bv_decide` cannot take it. The spec side multiplies two 64-bit
-      magnitudes in UNBOUNDED `Nat` (`aa.toInt.natAbs * ab.toInt.natAbs`) and
-      then shifts right by 32, i.e. it names the high half of a 128-bit
-      product. Bit-blasting a 64x64 multiplier is the classic hard case for
-      SAT, and the `Nat`-to-`BitVec 128` bridge is not in the goal language.
-    * The honest proof is a limb-decomposition argument
-      (a = a1*2^32 + a0, b = b1*2^32 + b0, and likewise 16-bit inside a0*b0)
-      plus a carry bound on `ll_m + (ll_l >>> 16)`. That is real work, not a
-      tactic call, and is deliberately NOT faked here with `sorry`.
+theorem fpm_lsr_toNat32 (x : Val) : (lsr x 32).toBitVec.toNat = x.toBitVec.toNat / 2^32 := by
+  simp [lsr, Nat.shiftRight_eq_div_pow]
+theorem fpm_lsr_toNat16 (x : Val) : (lsr x 16).toBitVec.toNat = x.toBitVec.toNat / 2^16 := by
+  simp [lsr, Nat.shiftRight_eq_div_pow]
+theorem fpm_shl_toNat32 (x : Val) : (x <<< 32).toBitVec.toNat = x.toBitVec.toNat * 2^32 % 2^64 := by
+  simp [Nat.shiftLeft_eq]
+theorem fpm_shl_toNat16 (x : Val) : (x <<< 16).toBitVec.toNat = x.toBitVec.toNat * 2^16 % 2^64 := by
+  simp [Nat.shiftLeft_eq]
+theorem fpm_add_toNat (x y : Val) : (x + y).toBitVec.toNat = (x.toBitVec.toNat + y.toBitVec.toNat) % 2^64 := by
+  simp
+theorem fpm_mul_toNat (x y : Val) : (x * y).toBitVec.toNat = (x.toBitVec.toNat * y.toBitVec.toNat) % 2^64 := by
+  simp
+theorem fpm_sub_toNat (x y : Val) : (x - y).toBitVec.toNat = (2^64 - y.toBitVec.toNat + x.toBitVec.toNat) % 2^64 := by
+  simp [BitVec.toNat_sub]
+theorem fpm_ofNat_toNat (n : Nat) : (Int64.ofNat n).toBitVec.toNat = n % 2^64 := by
+  simp
+/-- lines a1..p of fp_mul_impl: the unsigned 64x64 -> high-64 limb product. -/
+def fp_mul_core (aa ab : Val) : Val :=
+  let a1 := lsr aa 32
+  let a0 := aa - (a1 <<< 32)
+  let b1 := lsr ab 32
+  let b0 := ab - (b1 <<< 32)
+  let hi := a1 * b1
+  let mid := a1 * b0 + a0 * b1
+  let ah := lsr a0 16
+  let al := a0 - (ah <<< 16)
+  let bh := lsr b0 16
+  let bl := b0 - (bh <<< 16)
+  let ll_h := ah * bh
+  let ll_m := ah * bl + al * bh
+  let ll_l := al * bl
+  let low := ll_h + (lsr (ll_m + (lsr ll_l 16)) 16)
+  (hi <<< 32) + mid + low
 
-    Evidence that the statement is at least not false: `f9_fp_mul` below
-    checks impl == spec on 13 hand-picked pairs including i64::MIN, and
-    `fp_mul_sweep` checks 1024 more from a deterministic LCG. A passing
-    differential is not a proof; it only rules out the cheap refutation. -/
-axiom fp_mul_correct (a b : Val) :
-  fp_mul_impl a b = fp_mul_spec a b
+theorem fpm_expand (A1 A0 B1 B0 : Nat) :
+    (A1 * 2^32 + A0) * (B1 * 2^32 + B0)
+      = A1 * B1 * 2^64 + (A1 * B0 + A0 * B1) * 2^32 + A0 * B0 := by
+  grind
 
-/-- Deterministic differential sweep for the ONE remaining axiom. An LCG
+theorem fpm_expand16 (A1 A0 B1 B0 : Nat) :
+    (A1 * 2^16 + A0) * (B1 * 2^16 + B0)
+      = A1 * B1 * 2^32 + (A1 * B0 + A0 * B1) * 2^16 + A0 * B0 := by
+  grind
+
+theorem fpm_split32 (x : Val) :
+    (x - (lsr x 32 <<< 32)).toBitVec.toNat = x.toBitVec.toNat % 2^32 := by
+  rw [fpm_sub_toNat, fpm_shl_toNat32, fpm_lsr_toNat32]; have := x.toBitVec.isLt; omega
+
+theorem fpm_split16 (x : Val) :
+    (x - (lsr x 16 <<< 16)).toBitVec.toNat = x.toBitVec.toNat % 2^16 := by
+  rw [fpm_sub_toNat, fpm_shl_toNat16, fpm_lsr_toNat16]; have := x.toBitVec.isLt; omega
+
+/-- the 16-bit inner product: low = floor(A0*B0 / 2^32) exactly, for A0, B0 < 2^32. -/
+theorem fpm_low_spec (a0 b0 : Val) (ha : a0.toBitVec.toNat < 2^32) (hb : b0.toBitVec.toNat < 2^32) :
+    (lsr a0 16 * lsr b0 16
+      + lsr ((lsr a0 16 * (b0 - (lsr b0 16 <<< 16)) + (a0 - (lsr a0 16 <<< 16)) * lsr b0 16)
+              + lsr ((a0 - (lsr a0 16 <<< 16)) * (b0 - (lsr b0 16 <<< 16))) 16) 16).toBitVec.toNat
+      = a0.toBitVec.toNat * b0.toBitVec.toNat / 2^32 := by
+  simp only [fpm_add_toNat, fpm_mul_toNat, fpm_lsr_toNat16, fpm_split16]
+  generalize hA : a0.toBitVec.toNat = A at *
+  generalize hB : b0.toBitVec.toNat = B at *
+  have eA : A = A / 2^16 * 2^16 + A % 2^16 := by omega
+  have eB : B = B / 2^16 * 2^16 + B % 2^16 := by omega
+  have hX := fpm_expand16 (A / 2^16) (A % 2^16) (B / 2^16) (B % 2^16)
+  rw [← eA, ← eB] at hX
+  have hAH : A / 2^16 < 2^16 := by omega
+  have hAL : A % 2^16 < 2^16 := by omega
+  have hBH : B / 2^16 < 2^16 := by omega
+  have hBL : B % 2^16 < 2^16 := by omega
+  generalize A / 2^16 = AH at *
+  generalize A % 2^16 = AL at *
+  generalize B / 2^16 = BH at *
+  generalize B % 2^16 = BL at *
+  have p1 := Nat.mul_le_mul (Nat.le_of_lt_succ hAH) (Nat.le_of_lt_succ hBH)
+  have p2 := Nat.mul_le_mul (Nat.le_of_lt_succ hAH) (Nat.le_of_lt_succ hBL)
+  have p3 := Nat.mul_le_mul (Nat.le_of_lt_succ hAL) (Nat.le_of_lt_succ hBH)
+  have p4 := Nat.mul_le_mul (Nat.le_of_lt_succ hAL) (Nat.le_of_lt_succ hBL)
+  simp (disch := omega) only [Nat.mod_eq_of_lt]
+  omega
+
+theorem fpm_core_spec (x y : Val) :
+    fp_mul_core x y = Int64.ofNat (x.toBitVec.toNat * y.toBitVec.toNat / 2^32) := by
+  apply Int64.toBitVec_inj.mp
+  apply BitVec.eq_of_toNat_eq
+  rw [fpm_ofNat_toNat]
+  simp only [fp_mul_core]
+  rw [fpm_add_toNat ((lsr x 32 * lsr y 32) <<< 32 + _)]
+  rw [fpm_low_spec _ _ (by rw [fpm_split32]; omega) (by rw [fpm_split32]; omega)]
+  simp only [fpm_add_toNat, fpm_mul_toNat, fpm_shl_toNat32, fpm_lsr_toNat32, fpm_split32]
+  have hx := x.toBitVec.isLt
+  have hy := y.toBitVec.isLt
+  generalize x.toBitVec.toNat = X at *
+  generalize y.toBitVec.toNat = Y at *
+  have eX : X = X / 2^32 * 2^32 + X % 2^32 := by omega
+  have eY : Y = Y / 2^32 * 2^32 + Y % 2^32 := by omega
+  have hXY := fpm_expand (X / 2^32) (X % 2^32) (Y / 2^32) (Y % 2^32)
+  rw [← eX, ← eY] at hXY
+  have h1 : X / 2^32 < 2^32 := by omega
+  have h0 : X % 2^32 < 2^32 := by omega
+  have k1 : Y / 2^32 < 2^32 := by omega
+  have k0 : Y % 2^32 < 2^32 := by omega
+  generalize X / 2^32 = A1 at *
+  generalize X % 2^32 = A0 at *
+  generalize Y / 2^32 = B1 at *
+  generalize Y % 2^32 = B0 at *
+  have p1 := Nat.mul_le_mul (Nat.le_of_lt_succ h1) (Nat.le_of_lt_succ k1)
+  have p2 := Nat.mul_le_mul (Nat.le_of_lt_succ h1) (Nat.le_of_lt_succ k0)
+  have p3 := Nat.mul_le_mul (Nat.le_of_lt_succ h0) (Nat.le_of_lt_succ k1)
+  simp (disch := omega) only [Nat.mod_eq_of_lt (a := A1 * B1), Nat.mod_eq_of_lt (a := A1 * B0),
+    Nat.mod_eq_of_lt (a := A0 * B1)]
+  omega
+
+/-- `|a|` as fp.bp computes it is at most 2^63 as an unsigned word (MIN maps to itself = 2^63). -/
+theorem fpm_abs_le (a : Val) :
+    (if (if a < 0 then 1 else 0) == 1 then 0 - a else a).toBitVec.toNat ≤ 2^63 := by
+  have ha := a.toBitVec.isLt
+  have hlt : a < 0 ↔ a.toInt < 0 := Int64.lt_iff_toInt_lt
+  rw [Int64.toInt, BitVec.toInt_eq_toNat_cond] at hlt
+  by_cases h : a < 0
+  · simp only [if_pos h, beq_self_eq_true, ↓reduceIte]
+    rw [fpm_sub_toNat]
+    have h2 := hlt.mp h
+    have h0 : (0 : Val).toBitVec.toNat = 0 := rfl
+    rw [h0]
+    split at h2 <;> omega
+  · rw [if_neg h, if_neg (by decide)]
+    have h2 : ¬ _ := fun hh => h (hlt.mpr hh)
+    split at h2 <;> omega
+
+theorem fpm_natAbs_of_le (v : Val) (h : v.toBitVec.toNat ≤ 2^63) :
+    v.toInt.natAbs = v.toBitVec.toNat := by
+  rw [Int64.toInt, BitVec.toInt_eq_toNat_cond]
+  split <;> omega
+
+theorem fpm_impl_eq_core (a b : Val) : fp_mul_impl a b =
+    (let na := if a < 0 then 1 else 0
+     let aa := if na == 1 then 0 - a else a
+     let nb := if b < 0 then 1 else 0
+     let ab := if nb == 1 then 0 - b else b
+     let p := fp_mul_core aa ab
+     let flip := na + nb
+     let flip := flip - (flip / 2) * 2
+     if flip == 1 then 0 - p else p) := rfl
+
+theorem fp_mul_correct (a b : Val) : fp_mul_impl a b = fp_mul_spec a b := by
+  rw [fpm_impl_eq_core]
+  simp only [fp_mul_spec, fpm_core_spec, fpm_natAbs_of_le _ (fpm_abs_le a), fpm_natAbs_of_le _ (fpm_abs_le b),
+    ite_self, Nat.shiftRight_eq_div_pow]
+
+/-- `|a|` as fp.bp computes it has the magnitude of `a`, MIN included. -/
+theorem fpm_abs_natAbs (a : Val) :
+    (if (if a < 0 then 1 else 0) == 1 then 0 - a else a).toInt.natAbs = a.toInt.natAbs := by
+  rw [fpm_natAbs_of_le _ (fpm_abs_le a)]
+  have ha := a.toBitVec.isLt
+  have hlt : a < 0 ↔ a.toInt < 0 := Int64.lt_iff_toInt_lt
+  rw [Int64.toInt, BitVec.toInt_eq_toNat_cond] at hlt ⊢
+  by_cases h : a < 0
+  · simp only [if_pos h, beq_self_eq_true, ↓reduceIte]
+    rw [fpm_sub_toNat]
+    have h2 := hlt.mp h
+    have h0 : (0 : Val).toBitVec.toNat = 0 := rfl
+    rw [h0]
+    split at h2 <;> split <;> omega
+  · rw [if_neg h, if_neg (by decide)]
+    have h2 : ¬ _ := fun hh => h (hlt.mpr hh)
+    split at h2 <;> split <;> omega
+
+/-- THE F9 STATEMENT WITH ITS PRECONDITION. Over unbounded Z: if the true Q32 product
+    `v = sign * floor(|a|*|b| / 2^32)` is representable in i64, fp_mul returns exactly v. -/
+theorem fp_mul_exact (a b : Val)
+    (h : -2^63 ≤ (if (a < 0) = (b < 0) then (1 : Int) else -1)
+                  * ((a.toInt.natAbs * b.toInt.natAbs / 2^32 : Nat) : Int)
+       ∧ (if (a < 0) = (b < 0) then (1 : Int) else -1)
+                  * ((a.toInt.natAbs * b.toInt.natAbs / 2^32 : Nat) : Int) < 2^63) :
+    (fp_mul_impl a b).toInt = (if (a < 0) = (b < 0) then (1 : Int) else -1)
+                  * ((a.toInt.natAbs * b.toInt.natAbs / 2^32 : Nat) : Int) := by
+  rw [fp_mul_correct]
+  simp only [fp_mul_spec, fpm_abs_natAbs, ite_self, Nat.shiftRight_eq_div_pow]
+  generalize a.toInt.natAbs * b.toInt.natAbs / 2^32 = Q at *
+  by_cases ha : a < 0 <;> by_cases hb : b < 0 <;> simp [ha, hb] at h ⊢
+  all_goals exact Int.bmod_eq_of_le (by simp [Int64.size] <;> omega) (by simp [Int64.size] <;> omega)
+
+/- the unbounded statement WITHOUT the precondition is false: MIN * (2^32 + 1). -/
+#guard (fp_mul_impl (-9223372036854775808) 4294967297).toInt != -9223372039002259456
+#guard (fp_mul_impl (-9223372036854775808) 4294967297).toInt > 0
+
+/-- Deterministic differential sweep, kept from when `fp_mul_correct` was an
+    axiom (it is a theorem since 2026-10-09; the sweep now guards the
+    definitions against an edit that the proof would catch only at build). An LCG
     (the 64-bit Knuth/MMIX constants, reduced into Int64) generates 1024
     operand pairs and checks `fp_mul_impl == fp_mul_spec` on each. This is a
     TEST, not a proof: it can only refute `fp_mul_correct`, never establish
@@ -597,18 +792,18 @@ def f9_store : Bool :=
 
 /-- How many of the F9 statements are PROVED (`theorem`, kernel-checked term,
     no `sorry`). Counted 2026-09-14, one per declaration:
-    - fp_mul: 0 of 1. `fp_mul_correct` is still an `axiom`.
+    - fp_mul: 1 of 1. `fp_mul_correct` (2026-10-09; plus `fp_mul_exact`).
     - isqrt:  1 of 1. `isqrt_correct`.
     - money:  2 of 2. `addov_correct` (bv_decide/LRAT), `mulov_total`.
     - store:  3 of 3. `st_len_invariant` (vacuous, rfl), `cursor_monotone`,
               `crc_consistent` (vacuous, rfl), plus the non-vacuous
               `st_len_masks_digest` which is extra, not one of the seven.
-    Total: 6 of 7 proved. Keep this number equal to `grep -c '^theorem'` over
+    Total: 7 of 7 proved. Keep this number equal to `grep -c '^theorem'` over
     the seven F9 names; it is not derived, so it can rot. -/
-def f9_proved_count : Nat := 6
+def f9_proved_count : Nat := 7
 
 /-- How many of the F9 statements remain unproved assumptions. -/
-def f9_axiom_count : Nat := 1
+def f9_axiom_count : Nat := 0
 
 /-- Total F9 statements (proved + still-axiom). -/
 def f9_theorem_count : Nat :=
@@ -629,17 +824,17 @@ def f9_verdict : String :=
   if f9_gate_pass then
     "PASS: F9 first theorems — "
     ++ toString f9_proved_count ++ " of " ++ toString f9_theorem_count
-    ++ " PROVED (0 sorry; 4 of them kernel-only, 2 via bv_decide's NATIVE "
+    ++ " PROVED (0 sorry; 5 of them kernel-only, 2 via bv_decide's NATIVE "
     ++ "LRAT check so the Lean compiler is in their trust root), "
-    ++ toString f9_axiom_count ++ " still axiom. "
-    ++ "PROVED: isqrt_correct (integer sqrt, in Z, for 0 < s); "
+    ++ toString f9_axiom_count ++ " axioms. "
+    ++ "PROVED: fp_mul_correct (Q32 multiply, mod 2^64, all inputs; "
+    ++ "fp_mul_exact gives it in Z for results representable in i64); "
+    ++ "isqrt_correct (integer sqrt, in Z, for 0 < s); "
     ++ "addov_correct (exact i64 add-overflow iff, via bv_decide/LRAT); "
     ++ "mulov_total (mulov is 0-or-1); "
     ++ "cursor_monotone (arena advance in Z, for 0 <= len); "
     ++ "st_len_invariant and crc_consistent (rfl — VACUOUS, see their docs); "
     ++ "st_len_masks_digest (non-vacuous, via bv_decide). "
-    ++ "AXIOM: fp_mul_correct (Q32 fixed-point; 64x64 product is out of "
-    ++ "bv_decide's reach, the limb argument is unwritten). "
     ++ "Two former axioms (isqrt_correct, cursor_monotone) were FALSE as "
     ++ "stated and are now theorems with the hypotheses that make them true; "
     ++ "their counterexamples are kept as #guards."
@@ -654,6 +849,8 @@ def f9_verdict : String :=
 --    measured 2026-09-14, none of them mention it.
 -- ============================================================
 
+#print axioms fp_mul_correct
+#print axioms fp_mul_exact
 #print axioms isqrt_correct
 #print axioms addov_correct
 #print axioms mulov_total

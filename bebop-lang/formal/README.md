@@ -268,10 +268,17 @@ once. `.lake/` is the build directory and is not part of the source.
   at old = i64::MAX). A false axiom proves anything, so nothing in the file or
   in any importer was safe. Both are now theorems over `Int64.toInt` with the
   needed hypotheses, and their counterexamples are kept as `#guard`s.
-- STILL OPEN -- `fp_mul_correct` is the one remaining `axiom`. 64x64
-  multiplication is out of `bv_decide`'s reach and the limb argument is
-  unwritten; `sorry` was deliberately NOT used. A 1024-pair LCG differential
-  (`fp_mul_sweep`) agrees, which refutes nothing and proves nothing.
+- FIXED 2026-10-09 (W-FPMUL) -- `fp_mul_correct`, the one remaining
+  substantive `axiom`, is a THEOREM, kernel-checked over the three standard
+  axioms only (`#print axioms fp_mul_correct` = `[propext, Classical.choice,
+  Quot.sound]`; no `bv_decide`). The proof is the limb argument: 16-bit inner
+  limbs give floor(A0*B0/2^32) exactly, 32-bit limbs give floor(X*Y/2^32)
+  mod 2^64, and fp.bp's |a| is <= 2^63 as an unsigned word (MIN included).
+  The old statement was TRUE because `fp_mul_spec` wraps. The unbounded-Z
+  form (ROADMAP F9) is FALSE without a representability precondition --
+  `#guard`ed at MIN * (2^32+1), whose true value -9223372039002259456 is out of
+  i64 and fp_mul returns a POSITIVE word -- and is proved WITH it as
+  `fp_mul_exact`.
 - STILL OPEN -- `addov_correct` and `st_len_masks_digest` are proved by
   `bv_decide`, which in Lean v4.33.1 checks its LRAT certificate by COMPILED
   evaluation (`nativeEqTrue`) and records a generated axiom
