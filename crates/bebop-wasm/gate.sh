@@ -29,6 +29,13 @@
 set -u
 cd "$(dirname "$0")"
 CARGO="${CARGO:-$HOME/.cargo/bin/cargo}"
+# Every wasm32 build maps the checkout's path to /dowiz. bebop-store is a path dependency outside
+# this crate, so rustc writes its ABSOLUTE source path into each panic location: the module was
+# 44749 bytes in /root/dowiz, 44913 in a scratch export, and grew past the ratchet on the CI
+# runner's /home/runner/work/dowiz/dowiz with no source change (2026-10-09). Mapped, the byte count
+# is a property of the code, the same on every host.
+REPO=$(cd ../.. && pwd)
+WFLAGS="--remap-path-prefix=$REPO=/dowiz"
 WASM=target/wasm32-unknown-unknown/release/bebop_wasm.wasm
 BASELINE=bytes.baseline
 # kv3 (W-DELTA 2026-10-06): a v2 base + a delta chain (a changed value, a new key, a removal).
@@ -73,7 +80,7 @@ blocks_setup() {
   fi
   # The block reader's module: `bw_block` is exported only under `--cfg bw_block`, built apart
   # like key/proj, so the Worker's module (and bytes.baseline) carry none of it.
-  if RUSTFLAGS="--cfg bw_block" "$CARGO" build --release --target wasm32-unknown-unknown --offline --target-dir target/block > "$SCRATCH/blockwasm.txt" 2>&1; then
+  if RUSTFLAGS="$WFLAGS --cfg bw_block" "$CARGO" build --release --target wasm32-unknown-unknown --offline --target-dir target/block > "$SCRATCH/blockwasm.txt" 2>&1; then
     say "wasm32 block: $(wc -c < "$BLOCKWASM" | tr -d ' ') bytes with bw_block exported (not in the ratchet)"
   else
     say "wasm32 block: build FAILED rc=$? -- $(grep -m1 'error' "$SCRATCH/blockwasm.txt")"
@@ -317,7 +324,7 @@ else
 fi
 
 # 2. wasm32 ---------------------------------------------------------------
-if ! "$CARGO" build --release --target wasm32-unknown-unknown --offline > "$SCRATCH/wasm.txt" 2>&1; then
+if ! RUSTFLAGS="$WFLAGS" "$CARGO" build --release --target wasm32-unknown-unknown --offline > "$SCRATCH/wasm.txt" 2>&1; then
   say "wasm32: build FAILED rc=$? -- $(grep -m1 'error' "$SCRATCH/wasm.txt")"
   say "wasm32: the target lives in the rustup toolchain, not /usr/bin/cargo; CARGO=$CARGO"
   exit 1
@@ -340,7 +347,7 @@ fi
 # The node-key reader's module (DG2): the same crate with `bw_key` exported,
 # built apart so the ratchet above measures the Worker's reader and nothing else.
 KEYWASM=target/key/wasm32-unknown-unknown/release/bebop_wasm.wasm
-if "$CARGO" build --release --target wasm32-unknown-unknown --offline --features key --target-dir target/key > "$SCRATCH/keywasm.txt" 2>&1; then
+if RUSTFLAGS="$WFLAGS" "$CARGO" build --release --target wasm32-unknown-unknown --offline --features key --target-dir target/key > "$SCRATCH/keywasm.txt" 2>&1; then
   kb=$(wc -c < "$KEYWASM" | tr -d ' ')
   say "wasm32 key: $kb bytes with bw_key exported (+$((kb - bytes)) over the reader; not in the ratchet)"
 else
@@ -349,7 +356,7 @@ else
 fi
 # The projection reader's module (DG5): `bw_proj` exported, built apart like the key's.
 PROJWASM=target/proj/wasm32-unknown-unknown/release/bebop_wasm.wasm
-if "$CARGO" build --release --target wasm32-unknown-unknown --offline --features proj --target-dir target/proj > "$SCRATCH/projwasm.txt" 2>&1; then
+if RUSTFLAGS="$WFLAGS" "$CARGO" build --release --target wasm32-unknown-unknown --offline --features proj --target-dir target/proj > "$SCRATCH/projwasm.txt" 2>&1; then
   pb=$(wc -c < "$PROJWASM" | tr -d ' ')
   say "wasm32 proj: $pb bytes with bw_proj exported (+$((pb - bytes)) over the reader; not in the ratchet)"
 else

@@ -2,7 +2,7 @@
 # EVERY GATE, ONE TABLE, EVERY EXIT CODE.
 #
 #   sh tools/gates/run-all.sh            # the gates that need no compiler (seconds to minutes)
-#   sh tools/gates/run-all.sh --cargo    # also vocab.sh and the bebop-wasm four-reader gate
+#   sh tools/gates/run-all.sh --cargo    # also vocab.sh, x86-check and the bebop-wasm four-reader gate
 #
 # On the dev box, anything that compiles goes through the slot, in the foreground:
 #   bash bebop-lang/tools/slot.sh gates sh tools/gates/run-all.sh --cargo
@@ -39,7 +39,10 @@ run() { # run <name> <command...>
     sed 's/^/       | /' "$OUT/$n.log" | tail -15
     # On GitHub, name the red gate in an annotation: annotations are public without a token, job logs are not,
     # and "Process completed with exit code 1" hid which gate was red for 100+ runs (2026-10-06..08).
-    [ -n "${GITHUB_ACTIONS:-}" ] && printf '::error title=gate %s (rc=%s)::%s\n' "$name" "$rc" "$(printf '%s' "$last" | tr -d '\r')"
+    # The body carries the log's last 15 lines (%0A is an annotation newline): a verdict line alone
+    # ("bebop-wasm: RED") still left the cause in the token-only log.
+    [ -n "${GITHUB_ACTIONS:-}" ] && printf '::error title=gate %s (rc=%s)::%s\n' "$name" "$rc" \
+      "$(grep -v '^[[:space:]]*$' "$OUT/$n.log" | tail -15 | tr -d '\r' | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
   fi
 }
 skip() { printf '%-4s %-26s %-6s %s\n' skip "$1" "" "$2"; }
@@ -47,7 +50,11 @@ skip() { printf '%-4s %-26s %-6s %s\n' skip "$1" "" "$2"; }
 printf '%-4s %-26s %-6s %s\n' "" "gate" "exit" "last line"
 
 # Proofs first, then every shell gate. vocab.sh compiles tools/gen-vocab.
-for p in tools/gates/*.prove.sh; do run "$(basename "$p" .sh)" sh "$p"; done
+for p in tools/gates/*.prove.sh; do
+  # x86-check's proof compiles dowiz-core for x86_64 twice: with the gate, behind --cargo.
+  case "$p" in */x86-check.prove.sh) [ $CARGO = 1 ] || { skip x86-check.prove "compiles Rust; pass --cargo"; continue; } ;; esac
+  run "$(basename "$p" .sh)" sh "$p"
+done
 for g in tools/gates/*.sh; do
   case "$g" in
     *.prove.sh|*/run-all.sh) continue ;;
@@ -56,6 +63,11 @@ for g in tools/gates/*.sh; do
     */flows.sh) skip flows "live browser gate; run by tools/deploy/deploy.sh after the upload"; continue ;;
     */vocab.sh)
       if [ $CARGO = 1 ]; then run vocab sh "$g"; else skip vocab "compiles Rust; pass --cargo"; fi
+      continue ;;
+    # The x86_64-only code (AVX2, SHA-NI, rdtsc) compiled on an aarch64 box: CI was red two days over
+    # a const that only the x86 runner ever compiled (2026-10-06..08). Native x86_64 answers 0 at once.
+    */x86-check.sh)
+      if [ $CARGO = 1 ]; then run x86-check sh "$g"; else skip x86-check "compiles Rust (x86_64); pass --cargo"; fi
       continue ;;
     # Two instrumented builds and both test suites (~15 min cold on the dev box, ~3 min warm):
     # its own CI job (`coverage` in ci.yml), never a row here. Run it by hand with

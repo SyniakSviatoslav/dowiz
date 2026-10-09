@@ -45,21 +45,21 @@ jobs:
             workers/api
             tools/gen-vocab
       - name: bebop-store (the image format)
-        run: cd crates/bebop-store && cargo test
+        run: cd crates/bebop-store && sh ../../tools/gates/ci-annotate.inc bebop-store cargo test
       - name: dowiz-core (the kernel)
-        run: cd crates/dowiz-core && cargo test
+        run: cd crates/dowiz-core && sh ../../tools/gates/ci-annotate.inc dowiz-core cargo test
       - name: dowiz-hub (one venue's images as pure logic)
-        run: cd crates/dowiz-hub && cargo test
+        run: cd crates/dowiz-hub && sh ../../tools/gates/ci-annotate.inc dowiz-hub cargo test
       # The room's amend and pay deciders built into the wasm32 module: the browser and the
       # server must produce the same bytes (D7 phase 1).
       - name: bebop-wasm with the room deciders
-        run: cd crates/bebop-wasm && cargo test --features decide
+        run: cd crates/bebop-wasm && sh ../../tools/gates/ci-annotate.inc bebop-wasm cargo test --features decide
       - name: workers/api (every route's pure half)
-        run: cd workers/api && cargo test
+        run: cd workers/api && sh ../../tools/gates/ci-annotate.inc workers-api cargo test
       # Links dowiz-core and cross-checks FSM_GOLDEN_SIGNATURE, so a kernel change that moves the
       # FSM fails here before it reaches a browser.
       - name: gen-vocab
-        run: cd tools/gen-vocab && cargo test
+        run: cd tools/gen-vocab && sh ../../tools/gates/ci-annotate.inc gen-vocab cargo test
 
   # EVERY GATE, ONE TABLE. run-all.sh discovers tools/gates/*.sh by glob, so a gate added to that
   # directory runs here without editing this file -- three gates once sat committed and ran
@@ -200,6 +200,6 @@ jobs:
             kernel
             engine
             apps/courier
-      - run: cd kernel && cargo test --lib
-      - run: cd engine && cargo test --lib
-      - run: cd apps/courier && cargo test
+      - run: cd kernel && sh ../tools/gates/ci-annotate.inc kernel cargo test --lib
+      - run: cd engine && sh ../tools/gates/ci-annotate.inc engine cargo test --lib
+      - run: cd apps/courier && sh ../../tools/gates/ci-annotate.inc courier cargo test

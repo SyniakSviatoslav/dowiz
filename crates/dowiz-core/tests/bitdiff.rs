@@ -72,12 +72,24 @@ fn sqrt_bit_exact() {
     assert_eq!(mismatches, 0, "sqrt must be correctly rounded (bit-exact vs libm)");
 }
 
+/// FNV-1a over 64-bit words: one number standing for every output bit of a run.
+fn fold_bits(h: u64, bits: u64) -> u64 {
+    (h ^ bits).wrapping_mul(0x0000_0100_0000_01b3)
+}
+
+/// The digest of all 4M `hypot` outputs below, measured on aarch64, where the live libm
+/// comparison proves each one equals glibc's FMA path (the golden-signature contract).
+/// x86_64 glibc takes its non-FMA path and differs by an ulp on some inputs, so there the
+/// libm comparison is not the contract and only this digest is checked.
+const HYPOT_DIGEST: u64 = 0x55c1_aaec_1018_7ce5;
+
 #[test]
 fn hypot_bit_exact() {
     let mut rng = SplitMix64(0xfeed_face_cafe_beef);
     let mut total = 0usize;
     let mut mismatches = 0usize;
     let mut first = true;
+    let mut digest = 0xcbf2_9ce4_8422_2325u64;
     for _ in 0..4_000_000 {
         let a = rng.next_f64();
         let b = rng.next_f64();
@@ -86,6 +98,10 @@ fn hypot_bit_exact() {
         }
         total += 1;
         let mine = hypot(a, b);
+        digest = fold_bits(digest, mine.to_bits());
+        if !cfg!(target_arch = "aarch64") {
+            continue;
+        }
         let stdv = a.hypot(b);
         if mine.to_bits() != stdv.to_bits() {
             mismatches += 1;
@@ -100,7 +116,9 @@ fn hypot_bit_exact() {
         }
     }
     report("hypot", total, mismatches);
+    println!("hypot digest {digest:#018x}");
     assert_eq!(mismatches, 0, "hypot must be bit-exact vs libm");
+    assert_eq!(digest, HYPOT_DIGEST, "hypot outputs moved from the aarch64-glibc-verified bits");
 }
 
 #[test]

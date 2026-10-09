@@ -826,8 +826,19 @@ mod tests {
 
     #[test]
     fn hypot_matches_std() {
-        for (x, y) in [(3.0, 4.0), (1.0, 1.0), (1e-8, 1e-8), (1e8, 1e8)] {
-            assert_eq!(hypot(x, y).to_bits(), x.hypot(y).to_bits(), "hypot({x},{y})");
+        // Pinned bits of aarch64 glibc's FMA path (the golden-signature contract). x86_64 glibc
+        // takes its non-FMA path and rounds (1e-8, 1e-8) to ...53ec, one ulp away, so the live
+        // std comparison holds only on aarch64; the pinned bits are checked on every target.
+        let golden: [(f64, f64, u64); 4] = [
+            (3.0, 4.0, 0x4014_0000_0000_0000),
+            (1.0, 1.0, 0x3ff6_a09e_667f_3bcd),
+            (1e-8, 1e-8, 0x3e4e_5eb8_a5cd_53ed),
+            (1e8, 1e8, 0x41a0_dbd6_5879_80a2),
+        ];
+        for (x, y, bits) in golden {
+            assert_eq!(hypot(x, y).to_bits(), bits, "hypot({x},{y})");
+            #[cfg(target_arch = "aarch64")]
+            assert_eq!(hypot(x, y).to_bits(), x.hypot(y).to_bits(), "std hypot({x},{y})");
         }
         assert_eq!(hypot(3.0, 4.0).to_bits(), 5.0f64.to_bits());
     }
