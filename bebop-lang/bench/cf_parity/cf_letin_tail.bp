@@ -1,0 +1,7 @@
+// W-CFVAL F2 variant: the let-in continues after the loop (`; 5)`), so a check on the token after `}`
+// would not refuse it -- the paren depth does. CF-EXPECT rc=101 out=- touched=0
+fn main() -> i64 {
+  let s = 1;
+  let r = (let i = 0; while i < 4 { let s = s * 2; let i = i + 1; 0 }; 5);
+  s * 100 + r
+}

@@ -1,0 +1,10 @@
+// R-CF positive, RUNTIME path (symbolic start, helper cf__p0 powers when N >= 1024; calls with N = 4999, 1000, 1024).
+// CF-EXPECT rc=0 out=-914797143391065347 touched=1
+fn g(n: i64, a: i64) -> i64 {
+  let s = a;
+  let t = 1;
+  let i = n;
+  while i < 5000 { let s = s * 5 + t + a; let t = t - s; let i = i + 1; 0 };
+  s * 3 + t
+}
+fn main() -> i64 { g(1, 7) + g(4000, 3) + g(3976, 11) }

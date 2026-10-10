@@ -1,0 +1,455 @@
+// compiler/affine_gen.bp -- R-CF emission (lane rfast-lsr, 2026-10-08): the folded `let`s, the
+// runtime prefix + its generated helper, the 9x9 matrix power, and the splice back into the
+// use-expanded text. Recognition and the rules are in compiler/affine.bp.
+
+// ---- writers into a cell buffer b at wl[0] ----
+fn cf_pc(b: [i64], wl: [i64], c: i64) -> i64 {
+  let _ = b[wl[0]] = c;
+  let _ = wl[0] = wl[0] + 1;
+  0
+}
+// `~` in a literal writes a newline (the helper text is the only multi-line output)
+fn cf_ps(b: [i64], wl: [i64], s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let c = char(s, i);
+    let _ = cf_pc(b, wl, if c == 126 then 10 else c);
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn cf_pdec(b: [i64], wl: [i64], v: i64) -> i64 {
+  let _ = if v >= 10 then cf_pdec(b, wl, v / 10) else 0;
+  cf_pc(b, wl, 48 + v % 10)
+}
+// 0 or 0x<hex>: every 64-bit value as one literal (read_num_val wraps hex)
+fn cf_phex(b: [i64], wl: [i64], v: i64) -> i64 {
+  let _ = if v == 0 then cf_pc(b, wl, 48) else (let _ = cf_pc(b, wl, 48) in cf_pc(b, wl, 120));
+  let k = if v == 0 then 0 - 1 else 15;
+  let st = 0;
+  while k >= 0 {
+    let nb = (v >> (4 * k)) & 15;
+    let st = if nb != 0 then 1 else st;
+    let ch = if nb < 10 then 48 + nb else 87 + nb;
+    let _ = if st == 1 then cf_pc(b, wl, ch) else 0;
+    let k = k - 1;
+    0
+  };
+  0
+}
+// the spelling of site symbol i
+fn cf_pnm(b: [i64], wl: [i64], a: [i64], sy: [i64], i: i64) -> i64 {
+  let s = sy[3 * i + 1];
+  let k = 0;
+  while k < sy[3 * i + 2] {
+    let _ = cf_pc(b, wl, a[s + k]);
+    let k = k + 1;
+    0
+  };
+  0
+}
+// <pfx><i>_<j>, or <pfx><i> when j < 0
+fn cf_pij(b: [i64], wl: [i64], pfx: str, i: i64, j: i64) -> i64 {
+  let _ = cf_ps(b, wl, pfx);
+  let _ = cf_pdec(b, wl, i);
+  let _ = if j >= 0 then (let _ = cf_pc(b, wl, 95) in cf_pdec(b, wl, j)) else 0;
+  0
+}
+
+// ---- 9x9 matrices over Z/2^64 ----
+fn cf_mmul(x: [i64], y: [i64]) -> [i64] {
+  let r = zeros(81);
+  let i = 0;
+  while i < 9 {
+    let j = 0;
+    while j < 9 {
+      let k = 0;
+      let s = 0;
+      while k < 9 {
+        let s = s + x[i * 9 + k] * y[k * 9 + j];
+        let k = k + 1;
+        0
+      };
+      let _ = r[i * 9 + j] = s;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  r
+}
+fn cf_mpow(m: [i64], n0: i64) -> [i64] {
+  let r = zeros(81);
+  let i = 0;
+  while i < 9 {
+    let _ = r[i * 10] = 1;
+    let i = i + 1;
+    0
+  };
+  let b = m;
+  let n = n0;
+  while n > 0 {
+    let r = if (n & 1) == 1 then cf_mmul(r, b) else r;
+    let b = if n > 1 then cf_mmul(b, b) else b;
+    let n = n >> 1;
+    0
+  };
+  r
+}
+// 1 iff row r of m is the identity row
+fn cf_idrow(m: [i64], r: i64) -> i64 {
+  let j = 0;
+  let z = 1;
+  while j < 9 {
+    let z = if m[r * 9 + j] == (if j == r then 1 else 0) then z else 0;
+    let j = j + 1;
+    0
+  };
+  z
+}
+fn cf_wcount(m: [i64], nsym: i64) -> i64 {
+  let i = 0;
+  let k = 0;
+  while i < nsym {
+    let k = k + 1 - cf_idrow(m, i);
+    let i = i + 1;
+    0
+  };
+  k
+}
+// row r of P as text: c0 * n0 + n1 + ... + const (the constant is always written, so the
+// right-hand side is never a bare name -- T43's loop_alloc_safe treats a bare one as a pointer)
+fn cf_rhs(b: [i64], wl: [i64], m: [i64], r: i64, a: [i64], sy: [i64], nsym: i64) -> i64 {
+  let j = 0;
+  while j < nsym {
+    let c = m[r * 9 + j];
+    let _ = if c != 0 then (let _ = if c != 1 then (let _ = cf_phex(b, wl, c) in cf_ps(b, wl, " * ")) else 0 in (let _ = cf_pnm(b, wl, a, sy, j) in cf_ps(b, wl, " + "))) else 0;
+    let j = j + 1;
+    0
+  };
+  cf_phex(b, wl, m[r * 9 + 8])
+}
+
+// ---- literal start: the loop becomes P = M^N's changed rows, newline count kept ----
+// Order: a row is written only after every other pending row that READS it (P[r'][r] != 0);
+// a cycle writes all pending rows through temps cf__t<r>.
+fn cf_emit_fold(a: [i64], p: i64, end: i64, cur: [i64], n: i64, sy: [i64], nsym: i64, cx: [i64], rb: [i64], pre: [i64]) -> i64 {
+  let m = cf_mpow(cur, n);
+  let lok = if pre[11] == 1 then 1 else cf_localok(m, nsym, pre, n);
+  let r = if lok == 1 then cf_fold_text(a, p, end, m, sy, nsym, cx, rb) else 0;
+  r
+}
+// a body-local j (not bound before the loop) is safe to fold iff the loop runs (n >= 1) and
+// column j of P is zero: no final value reads j's pre-loop (unbound) register
+fn cf_localok(m: [i64], nsym: i64, pre: [i64], n: i64) -> i64 {
+  let ok = if n >= 1 then 1 else 0;
+  let j = 0;
+  while j < nsym {
+    let r = 0;
+    while r < nsym * (1 - pre[3 + j]) {
+      let ok = if m[r * 9 + j] == 0 then ok else 0;
+      let r = r + 1;
+      0
+    };
+    let j = j + 1;
+    0
+  };
+  ok
+}
+fn cf_fold_text(a: [i64], p: i64, end: i64, m: [i64], sy: [i64], nsym: i64, cx: [i64], rb: [i64]) -> i64 {
+  let off0 = cx[1];
+  let wl = [off0];
+  let done = zeros(8);
+  let i = 0;
+  while i < nsym {
+    let _ = done[i] = cf_idrow(m, i);
+    let i = i + 1;
+    0
+  };
+  let _ = cf_pc(rb, wl, 32);
+  let go = 1;
+  while go == 1 {
+    let pick = cf_pick(m, done, nsym);
+    let left = cf_left(done, nsym);
+    let _ = if pick >= 0 then cf_let1(rb, wl, m, pick, a, sy, nsym, done) else 0;
+    let _ = if (pick < 0) * (left > 0) == 1 then cf_temps(rb, wl, m, a, sy, nsym, done) else 0;
+    let go = if pick >= 0 then 1 else 0;
+    0
+  };
+  let q = p;
+  while q < end {
+    let _ = if a[q] == 10 then cf_pc(rb, wl, 10) else 0;
+    let q = q + 1;
+    0
+  };
+  let _ = cf_site_rec(cx, p, end, off0, wl[0] - off0);
+  let _ = cx[2] = cx[2] + 1;
+  end
+}
+fn cf_left(done: [i64], nsym: i64) -> i64 {
+  let i = 0;
+  let k = 0;
+  while i < nsym {
+    let k = k + 1 - done[i];
+    let i = i + 1;
+    0
+  };
+  k
+}
+fn cf_pick(m: [i64], done: [i64], nsym: i64) -> i64 {
+  let r = 0;
+  let pick = 0 - 1;
+  while r < nsym {
+    let q = 0;
+    let free = 1 - done[r];
+    while q < nsym {
+      let rd = (1 - done[q]) * (if q != r then 1 else 0) * (if m[q * 9 + r] != 0 then 1 else 0);
+      let free = free * (1 - rd);
+      let q = q + 1;
+      0
+    };
+    let pick = if (pick < 0) * free == 1 then r else pick;
+    let r = r + 1;
+    0
+  };
+  pick
+}
+fn cf_let1(rb: [i64], wl: [i64], m: [i64], r: i64, a: [i64], sy: [i64], nsym: i64, done: [i64]) -> i64 {
+  let _ = cf_ps(rb, wl, "let ");
+  let _ = cf_pnm(rb, wl, a, sy, r);
+  let _ = cf_ps(rb, wl, " = ");
+  let _ = cf_rhs(rb, wl, m, r, a, sy, nsym);
+  let _ = cf_ps(rb, wl, "; ");
+  let _ = done[r] = 1;
+  0
+}
+fn cf_temps(rb: [i64], wl: [i64], m: [i64], a: [i64], sy: [i64], nsym: i64, done: [i64]) -> i64 {
+  let r = 0;
+  while r < nsym {
+    let _ = if done[r] == 0 then (let _ = cf_pij(rb, wl, "let cf__t", r, 0 - 1) in (let _ = cf_ps(rb, wl, " = ") in (let _ = cf_rhs(rb, wl, m, r, a, sy, nsym) in cf_ps(rb, wl, "; ")))) else 0;
+    let r = r + 1;
+    0
+  };
+  let r = 0;
+  while r < nsym {
+    let _ = if done[r] == 0 then (let _ = cf_ps(rb, wl, "let ") in (let _ = cf_pnm(rb, wl, a, sy, r) in (let _ = cf_pij(rb, wl, " = cf__t", r, 0 - 1) in cf_ps(rb, wl, " + 0; ")))) else 0;
+    let _ = done[r] = 1;
+    let r = r + 1;
+    0
+  };
+  0
+}
+fn cf_site_rec(cx: [i64], st: i64, end: i64, off: i64, ln: i64) -> i64 {
+  let i = cx[0];
+  let _ = cx[8 + 4 * i] = st;
+  let _ = cx[9 + 4 * i] = end;
+  let _ = cx[10 + 4 * i] = off;
+  let _ = cx[11 + 4 * i] = ln;
+  let _ = cx[0] = i + 1;
+  let _ = cx[1] = off + ln;
+  0
+}
+
+// ---- symbolic start: `let (W..) = cf__pK(W.., R..); ` before the kept loop + the helper ----
+// Helper columns: v0..v(k-1) = W (written), q0..q(r-1) = R (read only), then the constant.
+// b<i>_<j> = M's W rows; each round applies B to v when the exponent bit is set and squares
+// B (R and the constant keep identity rows, so B*B's R/constant columns add B's own).
+fn cf_emit_rt(a: [i64], p: i64, cur: [i64], sy: [i64], nsym: i64, ci: i64, op: i64, lv: i64, d: i64, cx: [i64], rb: [i64], hb: [i64]) -> i64 {
+  let w = zeros(8);
+  let q = zeros(8);
+  let k = 0;
+  let r = 0;
+  let cw = 0;
+  let i = 0;
+  while i < nsym {
+    let isw = 1 - cf_idrow(cur, i);
+    let _ = if isw == 1 then (let _ = w[k] = i in 0) else (let _ = q[r] = i in 0);
+    let cw = if i == ci then k else cw;
+    let k = k + isw;
+    let r = r + 1 - isw;
+    let i = i + 1;
+    0
+  };
+  let id = cx[4];
+  let _ = cx[4] = id + 1;
+  let off0 = cx[1];
+  let wl = [off0];
+  let _ = if k > 1 then cf_ps(rb, wl, "let (") else cf_ps(rb, wl, "let ");
+  let _ = cf_names(rb, wl, a, sy, w, k, 0);
+  let _ = if k > 1 then cf_ps(rb, wl, ") = cf__p") else cf_ps(rb, wl, " = cf__p");
+  let _ = cf_pdec(rb, wl, id);
+  let _ = cf_pc(rb, wl, 40);
+  let _ = cf_names(rb, wl, a, sy, w, k, 0);
+  let _ = cf_names(rb, wl, a, sy, q, r, k);
+  let _ = cf_ps(rb, wl, "); ");
+  let _ = cf_site_rec(cx, p, p, off0, wl[0] - off0);
+  let hl = [cx[6]];
+  let _ = cf_helper(hb, hl, cur, w, k, q, r, cw, cf_adjop(op), cf_adjl(op, lv), d, id);
+  let _ = cx[6] = hl[0];
+  p + 5
+}
+fn cf_adjop(op: i64) -> i64 { if op == 2 then 1 else if op == 4 then 3 else op }
+// n0, n1, ... (a leading ", " when lead > 0)
+fn cf_names(b: [i64], wl: [i64], a: [i64], sy: [i64], ix: [i64], n: i64, lead: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = if i + lead > 0 then cf_ps(b, wl, ", ") else 0;
+    let _ = cf_pnm(b, wl, a, sy, ix[i]);
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn cf_col(c: i64, w: [i64], k: i64, q: [i64], r: i64) -> i64 { if c < k then w[c] else if c < k + r then q[c - k] else 8 }
+fn cf_helper(b: [i64], wl: [i64], m: [i64], w: [i64], k: i64, q: [i64], r: i64, cw: i64, op: i64, l: i64, d: i64, id: i64) -> i64 {
+  let dd = k + r + 1;
+  let _ = cf_pij(b, wl, "~fn cf__p", id, 0 - 1);
+  let _ = cf_pc(b, wl, 40);
+  let i = 0;
+  while i < k + r {
+    let _ = if i > 0 then cf_ps(b, wl, ", ") else 0;
+    let _ = if i < k then cf_pij(b, wl, "v", i, 0 - 1) else cf_pij(b, wl, "q", i - k, 0 - 1);
+    let _ = cf_ps(b, wl, ": i64");
+    let i = i + 1;
+    0
+  };
+  let _ = if k > 1 then cf_ps(b, wl, ") -> (i64") else cf_ps(b, wl, ") -> i64");
+  let i = 1;
+  while i < k {
+    let _ = cf_ps(b, wl, ", i64");
+    let i = i + 1;
+    0
+  };
+  let _ = if k > 1 then cf_ps(b, wl, ") {~") else cf_ps(b, wl, " {~");
+  // the trip count: dd = distance toward the limit, e = dd / |d| when exact and positive
+  let s = if d < 0 then 0 - d else d;
+  let fwd = (op == 3) + (op == 5) * (d > 0);
+  let _ = cf_ps(b, wl, "  let dd = ");
+  let _ = if fwd == 1 then (let _ = cf_phex(b, wl, l) in cf_pij(b, wl, " - v", cw, 0 - 1)) else (let _ = cf_pij(b, wl, "v", cw, 0 - 1) in (let _ = cf_ps(b, wl, " - ") in cf_phex(b, wl, l)));
+  let _ = cf_ps(b, wl, ";~  let e = ");
+  let _ = if op != 5 then (let _ = cf_pij(b, wl, "(if v", cw, 0 - 1) in (let _ = (if op == 1 then cf_ps(b, wl, " > ") else cf_ps(b, wl, " < ")) in (let _ = cf_phex(b, wl, l) in cf_ps(b, wl, " then 1 else 0) * ")))) else 0;
+  let _ = cf_ps(b, wl, "(if dd > 0 then 1 else 0) * (if dd % ");
+  let _ = cf_phex(b, wl, s);
+  let _ = cf_ps(b, wl, " == 0 then 1 else 0) * (dd / ");
+  let _ = cf_phex(b, wl, s);
+  let _ = cf_ps(b, wl, ");~  let e = if e >= 1024 then e else 0;~");
+  let i = 0;
+  while i < k * dd {
+    let _ = cf_pij(b, wl, "  let b", i / dd, i % dd);
+    let _ = cf_ps(b, wl, " = ");
+    let _ = cf_phex(b, wl, m[w[i / dd] * 9 + cf_col(i % dd, w, k, q, r)]);
+    let _ = cf_ps(b, wl, ";~");
+    let i = i + 1;
+    0
+  };
+  let _ = cf_ps(b, wl, "  while e > 0 {~    let o = e & 1;~");
+  let i = 0;
+  while i < k {
+    let _ = cf_pij(b, wl, "    let t", i, 0 - 1);
+    let _ = cf_ps(b, wl, " = ");
+    let j = 0;
+    while j < dd - 1 {
+      let _ = cf_pij(b, wl, "b", i, j);
+      let _ = if j < k then cf_pij(b, wl, " * v", j, 0 - 1) else cf_pij(b, wl, " * q", j - k, 0 - 1);
+      let _ = cf_ps(b, wl, " + ");
+      let j = j + 1;
+      0
+    };
+    let _ = cf_pij(b, wl, "b", i, dd - 1);
+    let _ = cf_ps(b, wl, ";~");
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < k {
+    let _ = cf_pij(b, wl, "    let v", i, 0 - 1);
+    let _ = cf_pij(b, wl, " = if o == 1 then t", i, 0 - 1);
+    let _ = cf_pij(b, wl, " else v", i, 0 - 1);
+    let _ = cf_ps(b, wl, ";~");
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < k * dd {
+    let ii = i / dd;
+    let jj = i % dd;
+    let _ = cf_pij(b, wl, "    let u", ii, jj);
+    let _ = cf_ps(b, wl, " = ");
+    let mm = 0;
+    while mm < k {
+      let _ = if mm > 0 then cf_ps(b, wl, " + ") else 0;
+      let _ = cf_pij(b, wl, "b", ii, mm);
+      let _ = cf_pij(b, wl, " * b", mm, jj);
+      let mm = mm + 1;
+      0
+    };
+    let _ = if jj >= k then cf_pij(b, wl, " + b", ii, jj) else 0;
+    let _ = cf_ps(b, wl, ";~");
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < k * dd {
+    let _ = cf_pij(b, wl, "    let b", i / dd, i % dd);
+    let _ = cf_pij(b, wl, " = u", i / dd, i % dd);
+    let _ = cf_ps(b, wl, " + 0;~");
+    let i = i + 1;
+    0
+  };
+  let _ = cf_ps(b, wl, "    let e = e >> 1;~    0~  };~  ");
+  let _ = if k > 1 then cf_pc(b, wl, 40) else 0;
+  let i = 0;
+  while i < k {
+    let _ = if i > 0 then cf_ps(b, wl, ", ") else 0;
+    let _ = cf_pij(b, wl, "v", i, 0 - 1);
+    let i = i + 1;
+    0
+  };
+  let _ = if k > 1 then cf_pc(b, wl, 41) else 0;
+  cf_ps(b, wl, "~}~")
+}
+
+// ---- splice: the pass's sites (app 0) or the helpers at the end (app 1) into buf ----
+fn cf_splice(buf: [i64], total: [i64], cx: [i64], rb: [i64], hb: [i64], app: i64) -> i64 {
+  let n = cx[0] * (1 - app);
+  let t = total[0];
+  let i = 0;
+  let nl = t + app * cx[6];
+  while i < n {
+    let nl = nl + cx[11 + 4 * i] - (cx[9 + 4 * i] - cx[8 + 4 * i]);
+    let i = i + 1;
+    0
+  };
+  let doit = (if nl < 1590000 then 1 else 0) * (if n + app > 0 then 1 else 0);
+  if doit == 1 then cf_build(buf, total, cx, rb, hb, n, nl) else 0
+}
+fn cf_copy(dst: [i64], at: i64, src: [i64], from: i64, to: i64) -> i64 {
+  let i = from;
+  while i < to {
+    let _ = dst[at + i - from] = src[i];
+    let i = i + 1;
+    0
+  };
+  at + to - from
+}
+fn cf_build(buf: [i64], total: [i64], cx: [i64], rb: [i64], hb: [i64], n: i64, nl: i64) -> i64 {
+  let out = zeros(nl + 1);
+  let o = 0;
+  let sp = 0;
+  let i = 0;
+  while i < n {
+    let o = cf_copy(out, o, buf, sp, cx[8 + 4 * i]);
+    let o = cf_copy(out, o, rb, cx[10 + 4 * i], cx[10 + 4 * i] + cx[11 + 4 * i]);
+    let sp = cx[9 + 4 * i];
+    let i = i + 1;
+    0
+  };
+  let o = cf_copy(out, o, buf, sp, total[0]);
+  let o = if n == 0 then cf_copy(out, o, hb, 0, cx[6]) else o;
+  let _ = cf_copy(buf, 0, out, 0, o);
+  let _ = total[0] = o;
+  1
+}

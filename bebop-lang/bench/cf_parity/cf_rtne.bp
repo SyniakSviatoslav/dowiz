@@ -1,0 +1,9 @@
+// R-CF positive, RUNTIME path with `!=` and d = -3 (N = 2001 and 1002).
+// CF-EXPECT rc=0 out=6008934791156592609 touched=1
+fn g(n: i64) -> i64 {
+  let s = 1;
+  let i = n;
+  while i != -3 { let s = s * 7 + 1; let i = i - 3; 0 };
+  s
+}
+fn main() -> i64 { g(6000) + g(3003) }

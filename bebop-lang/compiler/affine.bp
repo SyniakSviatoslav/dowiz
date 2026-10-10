@@ -1,0 +1,614 @@
+// compiler/affine.bp -- R-CF closed-form elimination of affine loops (lane rfast-lsr, 2026-10-08).
+// docs/research/2026-10-07-bebop-fastest-runtime.md + R-SPIKE §8: a `while` whose body is a
+// sequence of `let x = <affine form>;` over Z/2^64 and whose exit is a counted test computes
+// v_N = M^N v_0 for a constant (k+1)x(k+1) matrix M. This file recognises such loops and
+// rewrites the PROGRAM TEXT (use_expand_at's export+slurp round trip, the same one `use` takes):
+// symbols are bound to source positions (sym_lookup -> ident_eq), so emit_while_stmt cannot
+// compile synthesised text, but the text pass can hand the ordinary compiler ordinary code.
+//   ACCEPTED body statements: `let NAME = E;` (sequential: one composed matrix per statement)
+//   and a trailing literal. E: + - unary- ( ) integer literals, `*` with a constant side,
+//   `<< c` with a constant c in 0..63, and names. REFUSED (the loop is left alone, byte for
+//   byte): any other operator (sym*sym, ^ & | >> >>> / % comparisons && ||), if/match/let-in,
+//   calls, `[`, `.`, strings, `_` lets, typed lets, return/break, a nested `while` (it is
+//   rewritten first; the outer loop is looked at again in the next pass, so nests compose).
+//   EXIT: `CTR OP LIT {` with OP in > >= < <= !=, and CTR's composed update CTR + d, d != 0
+//   literal, moving toward the limit. N = distance / |d| must be EXACT, else the loop stays.
+//   Every name the loop touches must already be bound before it in the same fn.
+//   LITERAL START (the statement right before the loop is `let CTR = LIT;`): N is known, so
+//   P = M^N is folded here and the loop becomes k straight `let`s (temps only for a cycle).
+//   SYMBOLIC START: `let (W..) = cf__pK(W.., R..);` is inserted before the KEPT loop; the
+//   generated helper (affine_gen.bp) applies M^N by binary powering in scalars (no arena
+//   allocation) only when N >= 1024 and exact, else returns the state unchanged and the
+//   original loop runs. Either way every carried name, the counter included, ends equal to
+//   what the loop gives. A replaced loop keeps its newline count (diag line numbers).
+// BEBOP_NO_CF=1 in the environment turns the pass off (honest.sh's "kept loop" rows).
+
+// ---- tokens over a cell buffer: tk = [kind, start, end, value] ----
+// kinds: 0 end, 1 identifier (value = read_ident's 131-hash), 2 integer, 3 punctuation
+// (value c, c1*256+c2 for the two-char operators, >>> = 62*65793), 4 string/char, 5 number+`.`
+fn cf_eol(a: [i64], p0: i64, lim: i64) -> i64 {
+  let p = p0;
+  let go = 1;
+  while go == 1 {
+    let c = if p < lim then a[p] else 10;
+    let go = if c == 10 then 0 else 1;
+    let p = p + go;
+    0
+  };
+  p
+}
+fn cf_skip(a: [i64], p0: i64, lim: i64) -> i64 {
+  let p = p0;
+  let go = 1;
+  while go == 1 {
+    let c = if p < lim then a[p] else 0;
+    let c1 = if p + 1 < lim then a[p + 1] else 0;
+    let ws = (c == 32) + (c == 9) + (c == 10) + (c == 13);
+    let cm = (c == 47) * (c1 == 47);
+    let p = if ws == 1 then p + 1 else if cm == 1 then cf_eol(a, p, lim) else p;
+    let go = ws + cm;
+    0
+  };
+  p
+}
+fn cf_idc(c: i64) -> i64 { is_alpha(c) + is_digit(c) + (c == 95) }
+fn cf_idend(a: [i64], p0: i64, lim: i64) -> i64 {
+  let p = p0;
+  let go = 1;
+  while go == 1 {
+    let c = if p < lim then a[p] else 0;
+    let go = if cf_idc(c) > 0 then 1 else 0;
+    let p = p + go;
+    0
+  };
+  p
+}
+fn cf_qend(a: [i64], p0: i64, lim: i64, q: i64) -> i64 {
+  let p = p0 + 1;
+  let go = 1;
+  while go == 1 {
+    let c = if p < lim then a[p] else q;
+    let p = if c == 92 then p + 2 else p + 1;
+    let go = if c == q then 0 else 1;
+    0
+  };
+  if p > lim then lim else p
+}
+fn cf_hash(a: [i64], p0: i64, e: i64) -> i64 {
+  let p = p0;
+  let h = 0;
+  while p < e {
+    let h = h * 131 + a[p];
+    let p = p + 1;
+    0
+  };
+  h
+}
+// number token end + wrapping value (read_num_val's rules: decimal, or 0x hex)
+fn cf_num(a: [i64], p0: i64, lim: i64, val: [i64]) -> i64 {
+  let c1 = if p0 + 1 < lim then a[p0 + 1] else 0;
+  let hx = (a[p0] == 48) * (c1 == 120);
+  let base = if hx == 1 then 16 else 10;
+  let p = p0 + 2 * hx;
+  let v = 0;
+  let go = 1;
+  while go == 1 {
+    let c = if p < lim then a[p] else 0;
+    let hv = hex_val(c);
+    let dg = (hv >= 0) * (hv < base);
+    let v = if dg == 1 then v * base + hv else v;
+    let p = p + dg;
+    let go = dg;
+    0
+  };
+  let _ = val[0] = v;
+  p
+}
+fn cf_tok(a: [i64], p0: i64, lim: i64, tk: [i64]) -> i64 {
+  let p = cf_skip(a, p0, lim);
+  let c = if p < lim then a[p] else 0;
+  let c1 = if p + 1 < lim then a[p + 1] else 0;
+  let c2 = if p + 2 < lim then a[p + 2] else 0;
+  let eof = if p >= lim then 1 else 0;
+  let isid = (is_alpha(c) + (c == 95)) * (1 - eof);
+  let isnum = is_digit(c) * (1 - eof);
+  let isq = ((c == 34) + (c == 39)) * (1 - eof);
+  let two = (c == 60) * (c1 == 60) + (c == 62) * (c1 == 62) + (c == 60) * (c1 == 61) + (c == 62) * (c1 == 61) + (c == 61) * (c1 == 61) + (c == 33) * (c1 == 61) + (c == 38) * (c1 == 38) + (c == 124) * (c1 == 124) + (c == 45) * (c1 == 62);
+  let three = (c == 62) * (c1 == 62) * (c2 == 62);
+  let plen = if three == 1 then 3 else if two > 0 then 2 else 1;
+  let nv = [0];
+  let e = if eof == 1 then p
+    else if isid == 1 then cf_idend(a, p, lim)
+    else if isnum == 1 then cf_num(a, p, lim, nv)
+    else if isq == 1 then cf_qend(a, p, lim, c)
+    else p + plen;
+  let dot = if e < lim then (if a[e] == 46 then 1 else 0) else 0;
+  let _ = tk[0] = if eof == 1 then 0 else if isid == 1 then 1 else if isnum == 1 then 2 + 3 * dot else if isq == 1 then 4 else 3;
+  let _ = tk[1] = p;
+  let _ = tk[2] = e;
+  let _ = tk[3] = if isid == 1 then cf_hash(a, p, e) else if isnum == 1 then nv[0]
+    else if plen == 3 then 4079166 else if plen == 2 then c * 256 + c1 else c;
+  e
+}
+// punctuation test: 1 iff tk is the punct token v
+fn cf_isp(tk: [i64], v: i64) -> i64 { (tk[0] == 3) * (tk[3] == v) }
+// the reserved words a name can never be: let if then else in match while return break fn true false
+fn cf_kw(h: i64) -> i64 {
+  (h == 1866735) + (h == 13857) + (h == 262576641) + (h == 228925745) + (h == 13865) + (h == 32320559965)
+    + (h == 35281108217) + (h == 4428069113672) + (h == 29119020707) + (h == 13472) + (h == 262750338) + (h == 30258925323)
+}
+fn cf_same(a: [i64], s1: i64, s2: i64, n: i64) -> i64 {
+  let k = 0;
+  let eq = 1;
+  while k < n {
+    let eq = if a[s1 + k] == a[s2 + k] then eq else 0;
+    let k = k + 1;
+    0
+  };
+  eq
+}
+
+// ---- the site: parser state ps = [pos, lim, fail, nsym], sy = (hash, start, len) x 8,
+// cur = 9x9 composed matrix (row r = the current value of symbol r as a form over the
+// iteration-start values; column/row 8 = the constant 1) ----
+fn cf_adv(a: [i64], ps: [i64], tk: [i64]) -> i64 {
+  let _ = ps[0] = cf_tok(a, ps[0], ps[1], tk);
+  0
+}
+fn cf_fail(ps: [i64]) -> i64 {
+  let _ = ps[2] = 1;
+  0
+}
+// symbol index of the identifier token tk (registered on first sight); -1 on overflow
+fn cf_sym(a: [i64], ps: [i64], sy: [i64], tk: [i64]) -> i64 {
+  let n = ps[3];
+  let ln = tk[2] - tk[1];
+  let i = 0;
+  let hit = 0 - 1;
+  while i < n {
+    let m = (sy[3 * i] == tk[3]) * (sy[3 * i + 2] == ln);
+    let m = if m == 1 then cf_same(a, sy[3 * i + 1], tk[1], ln) else 0;
+    let hit = if m * (hit < 0) == 1 then i else hit;
+    let i = i + 1;
+    0
+  };
+  let room = (hit < 0) * (n < 8);
+  let _ = if room == 1 then (let _ = sy[3 * n] = tk[3] in (let _ = sy[3 * n + 1] = tk[1] in (let _ = sy[3 * n + 2] = ln in (let _ = ps[3] = n + 1 in 0)))) else 0;
+  let r = if hit >= 0 then hit else if room == 1 then n else 0 - 1;
+  let _ = if r < 0 then cf_fail(ps) else 0;
+  r
+}
+fn cf_row(cur: [i64], r: i64) -> [i64] {
+  let f = zeros(9);
+  let j = 0;
+  while j < 9 {
+    let _ = f[j] = if r >= 0 then cur[r * 9 + j] else 0;
+    let j = j + 1;
+    0
+  };
+  f
+}
+fn cf_lin(x: [i64], y: [i64], cx: i64, cy: i64) -> [i64] {
+  let f = zeros(9);
+  let j = 0;
+  while j < 9 {
+    let _ = f[j] = cx * x[j] + cy * y[j];
+    let j = j + 1;
+    0
+  };
+  f
+}
+fn cf_isconst(f: [i64]) -> i64 {
+  let j = 0;
+  let z = 1;
+  while j < 8 {
+    let z = if f[j] == 0 then z else 0;
+    let j = j + 1;
+    0
+  };
+  z
+}
+// factor = - factor | ( shift ) | integer | name   (anything else refuses the loop)
+fn cf_factor(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> [i64] {
+  let isneg = cf_isp(tk, 45);
+  let ispar = cf_isp(tk, 40);
+  let isnum = if tk[0] == 2 then 1 else 0;
+  let isid = (tk[0] == 1) * (1 - cf_kw(tk[3]));
+  let v = tk[3];
+  let idt = [tk[0], tk[1], tk[2], tk[3]];
+  let _ = if isneg + ispar + isnum + isid == 0 then cf_fail(ps) else 0;
+  let _ = if ps[2] == 0 then cf_adv(a, ps, tk) else 0;
+  let f = if ps[2] == 1 then zeros(9)
+    else if isneg == 1 then cf_lin(cf_factor(a, ps, tk, sy, cur), zeros(9), 0 - 1, 0)
+    else if ispar == 1 then cf_paren(a, ps, tk, sy, cur)
+    else if isnum == 1 then cf_constf(v)
+    else cf_row(cur, cf_sym(a, ps, sy, idt));
+  // a name followed by ( [ . { is a call, an index, a field or a constructor
+  let bad = isid * (cf_isp(tk, 40) + cf_isp(tk, 91) + cf_isp(tk, 46) + cf_isp(tk, 123));
+  let _ = if bad > 0 then cf_fail(ps) else 0;
+  f
+}
+fn cf_constf(v: i64) -> [i64] {
+  let f = zeros(9);
+  let _ = f[8] = v;
+  f
+}
+fn cf_paren(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> [i64] {
+  let f = cf_shift(a, ps, tk, sy, cur);
+  let _ = if cf_isp(tk, 41) == 1 then cf_adv(a, ps, tk) else cf_fail(ps);
+  f
+}
+// term = factor ('*' factor)*  -- one side constant; / and % refuse
+fn cf_term(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> [i64] {
+  let f = [cf_factor(a, ps, tk, sy, cur)];
+  let go = 1;
+  while go * (1 - ps[2]) == 1 {
+    let ism = cf_isp(tk, 42);
+    let _ = if cf_isp(tk, 47) + cf_isp(tk, 37) > 0 then cf_fail(ps) else 0;
+    let _ = if ism == 1 then cf_adv(a, ps, tk) else 0;
+    let g = if ism == 1 then cf_factor(a, ps, tk, sy, cur) else zeros(9);
+    let l = f[0];
+    let lc = cf_isconst(l);
+    let gc = cf_isconst(g);
+    let _ = if ism * (1 - lc) * (1 - gc) == 1 then cf_fail(ps) else 0;
+    let _ = if ism == 1 then (let _ = f[0] = if lc == 1 then cf_lin(g, g, l[8], 0) else cf_lin(l, l, g[8], 0) in 0) else 0;
+    let go = ism;
+    0
+  };
+  f[0]
+}
+// expr = term (('+'|'-') term)*
+fn cf_expr(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> [i64] {
+  let f = [cf_term(a, ps, tk, sy, cur)];
+  let go = 1;
+  while go * (1 - ps[2]) == 1 {
+    let isp = cf_isp(tk, 43);
+    let ism = cf_isp(tk, 45);
+    let op = isp + ism;
+    let _ = if op == 1 then cf_adv(a, ps, tk) else 0;
+    let g = if op == 1 then cf_term(a, ps, tk, sy, cur) else zeros(9);
+    let _ = if op == 1 then (let _ = f[0] = cf_lin(f[0], g, 1, isp - ism) in 0) else 0;
+    let go = op;
+    0
+  };
+  f[0]
+}
+// shift = expr ('<<' expr)*  -- bebop binds shifts LOOSER than + (emit_shift); >> >>> refuse
+fn cf_shift(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> [i64] {
+  let f = [cf_expr(a, ps, tk, sy, cur)];
+  let go = 1;
+  while go * (1 - ps[2]) == 1 {
+    let isl = cf_isp(tk, 15420);
+    let _ = if cf_isp(tk, 15934) + cf_isp(tk, 4079166) > 0 then cf_fail(ps) else 0;
+    let _ = if isl == 1 then cf_adv(a, ps, tk) else 0;
+    let g = if isl == 1 then cf_expr(a, ps, tk, sy, cur) else zeros(9);
+    let c = g[8];
+    let okc = cf_isconst(g) * (c >= 0) * (c < 64);
+    let _ = if isl * (1 - okc) == 1 then cf_fail(ps) else 0;
+    let _ = if isl * okc == 1 then (let _ = f[0] = cf_lin(f[0], f[0], 1 << c, 0) in 0) else 0;
+    let go = isl;
+    0
+  };
+  f[0]
+}
+// body statements up to the closing `}`: `let NAME = shift ;` ... [LIT]
+fn cf_body(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> i64 {
+  let go = 1;
+  while go * (1 - ps[2]) == 1 {
+    let isend = cf_isp(tk, 125);
+    let islet = (tk[0] == 1) * (tk[3] == 1866735);
+    let islit = if tk[0] == 2 then 1 else 0;
+    let _ = if isend + islet + islit == 0 then cf_fail(ps) else 0;
+    let _ = if islit == 1 then cf_adv(a, ps, tk) else 0;
+    let _ = if islit * (1 - cf_isp(tk, 125)) == 1 then cf_fail(ps) else 0;
+    let _ = if islet * (1 - ps[2]) == 1 then cf_let(a, ps, tk, sy, cur) else 0;
+    let go = 1 - isend - islit;
+    0
+  };
+  0
+}
+fn cf_let(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> i64 {
+  let _ = cf_adv(a, ps, tk);
+  let nm = [tk[0], tk[1], tk[2], tk[3]];
+  let okn = (tk[0] == 1) * (1 - cf_kw(tk[3])) * (1 - (tk[3] == 95));
+  let _ = if okn == 0 then cf_fail(ps) else cf_adv(a, ps, tk);
+  let _ = if cf_isp(tk, 61) * (1 - ps[2]) == 0 then cf_fail(ps) else cf_adv(a, ps, tk);
+  let f = if ps[2] == 0 then cf_shift(a, ps, tk, sy, cur) else zeros(9);
+  let _ = if cf_isp(tk, 59) * (1 - ps[2]) == 0 then cf_fail(ps) else cf_adv(a, ps, tk);
+  let r = if ps[2] == 0 then cf_sym(a, ps, sy, nm) else 0 - 1;
+  let j = 0;
+  while j < 9 * (r >= 0) {
+    let _ = cur[r * 9 + j] = f[j];
+    let j = j + 1;
+    0
+  };
+  0
+}
+
+// ---- the trip count N from the start value (compile time); -1 = refuse ----
+// op: 1 >  2 >=  3 <  4 <=  5 !=.  >= / <= become > / < against L + d (refused on overflow).
+fn cf_trip(c0: i64, op: i64, l0: i64, d: i64) -> i64 {
+  let l = cf_adjl(op, l0);
+  let gt = (op == 1) + (op == 2);
+  let lt = (op == 3) + (op == 4);
+  let s = if d < 0 then 0 - d else d;
+  let dist = if gt == 1 then c0 - l else if lt == 1 then l - c0 else if d > 0 then l - c0 else c0 - l;
+  let runs = gt * (c0 > l) + lt * (c0 < l) + (1 - gt - lt) * (c0 != l);
+  let exact = if s > 0 then (if dist > 0 then (if dist % s == 0 then 1 else 0) else 0) else 0;
+  let n = if runs == 0 then 0 else if exact == 1 then dist / s else 0 - 1;
+  if (1 - cf_adjok(op, l0)) + (1 - cf_dirok(op, d)) + (s <= 0) > 0 then 0 - 1 else n
+}
+// `c >= L` is `c > L - 1` and `c <= L` is `c < L + 1` over the integers (refused on overflow)
+fn cf_adjl(op: i64, l0: i64) -> i64 { if op == 2 then l0 - 1 else if op == 4 then l0 + 1 else l0 }
+fn cf_adjok(op: i64, l0: i64) -> i64 { 1 - (op == 2) * (l0 - 1 >= l0) - (op == 4) * (l0 + 1 <= l0) }
+
+// ---- the pass over the whole text ----
+// cx: [0] sites, [1] rb length, [2] folds this pass, [3] runtime-eligible sites seen,
+// [4] helper counter, [5] mode (0 fold only, 1 runtime too), [6] hb length, [7] env checked/off.
+// sites at cx[8 + 4i] = start, end, rb offset, rb length (an insertion has end == start).
+fn cf_pass(a: [i64], lim: i64, cx: [i64], rb: [i64], hb: [i64]) -> i64 {
+  let p = 0;
+  let pc = 10;
+  let depth = 0;
+  let fnstart = 0;
+  while p < lim {
+    let c = a[p];
+    let c1 = if p + 1 < lim then a[p + 1] else 0;
+    let bnd = 1 - cf_idc(pc);
+    let isq = (c == 34) + (c == 39) * bnd;
+    let iscm = (c == 47) * (c1 == 47);
+    let isfn = bnd * (c == 102) * (c1 == 110) * (if p + 2 < lim then 1 - cf_idc(a[p + 2]) else 1) * (depth == 0);
+    let isw = bnd * (c == 119) * (if p + 5 < lim then (c1 == 104) * (a[p + 2] == 105) * (a[p + 3] == 108) * (a[p + 4] == 101) * (1 - cf_idc(a[p + 5])) else 0) * (depth > 0);
+    let fnstart = if isfn == 1 then p else fnstart;
+    let e = if isw * (cx[0] < 900) * (cx[1] < 200000) * (cx[6] < 200000) == 1 then cf_site(a, p, lim, fnstart, cx, rb, hb) else 0;
+    let depth = depth + (c == 123) - (c == 125);
+    let np = if e > p then e else if isq > 0 then cf_qend(a, p, lim, c) else if iscm == 1 then cf_eol(a, p, lim) else if isw == 1 then p + 5 else p + 1;
+    // a folded loop's text is skipped whole; its braces never reach `depth`
+    let pc = if np > p + 1 then 32 else c;
+    let p = np;
+    0
+  };
+  cx[0]
+}
+
+// cf_site: analyse the `while` at p. Returns the end of the text it consumed (> p) when the
+// loop was folded, p + 5 when a runtime prefix was inserted, 0 when refused.
+fn cf_site(a: [i64], p: i64, lim: i64, fnstart: i64, cx: [i64], rb: [i64], hb: [i64]) -> i64 {
+  let tk = zeros(4);
+  let ps = [p + 5, lim, 0, 0];
+  let sy = zeros(24);
+  let cur = zeros(81);
+  let i = 0;
+  while i < 9 {
+    let _ = cur[i * 10] = 1;
+    let i = i + 1;
+    0
+  };
+  let _ = cf_adv(a, ps, tk);
+  let ctr = [tk[0], tk[1], tk[2], tk[3]];
+  let _ = if (tk[0] == 1) * (1 - cf_kw(tk[3])) == 0 then cf_fail(ps) else cf_adv(a, ps, tk);
+  let op = cf_isp(tk, 62) + 2 * cf_isp(tk, 15933) + 3 * cf_isp(tk, 60) + 4 * cf_isp(tk, 15421) + 5 * cf_isp(tk, 8509);
+  let _ = if op == 0 then cf_fail(ps) else cf_adv(a, ps, tk);
+  let neg = cf_isp(tk, 45);
+  let _ = if neg == 1 then cf_adv(a, ps, tk) else 0;
+  let lv = if tk[0] == 2 then (if neg == 1 then 0 - tk[3] else tk[3]) else 0;
+  let _ = if tk[0] == 2 then cf_adv(a, ps, tk) else cf_fail(ps);
+  let _ = if cf_isp(tk, 123) == 0 then cf_fail(ps) else cf_adv(a, ps, tk);
+  let ci = if ps[2] == 0 then cf_sym(a, ps, sy, ctr) else 0;
+  let _ = if ps[2] == 0 then cf_body(a, ps, tk, sy, cur) else 0;
+  // ps[0] is past the closing `}` now; an optional `;` belongs to the statement
+  let rb_end = ps[0];
+  let _ = if ps[2] == 0 then cf_adv(a, ps, tk) else 0;
+  let end = if cf_isp(tk, 59) == 1 then ps[0] else rb_end;
+  let ok = 1 - ps[2];
+  // the counter: identity on itself plus a nonzero constant step
+  let d = cur[ci * 9 + 8];
+  let j = 0;
+  let cok = if d != 0 then 1 else 0;
+  while j < 8 {
+    let cok = if cur[ci * 9 + j] == (if j == ci then 1 else 0) then cok else 0;
+    let j = j + 1;
+    0
+  };
+  let ok = ok * cok;
+  let pre = zeros(12);
+  let ok = if ok == 1 then cf_prefix(a, fnstart, p, ps[3], sy, pre, ctr) else 0;
+  // pre: [0] start literal known, [1] its value, [2] kernel fn, [3..10] bound before the
+  // loop per symbol, [11] all bound. An unbound name is a BODY-LOCAL: only a fold may take it,
+  // and only when nothing reads its value from before the loop (cf_emit_fold checks P).
+  let n = if ok * pre[0] == 1 then cf_trip(pre[1], op, lv, d) else 0 - 1;
+  let fold = ok * pre[0] * (n >= 0);
+  let k = cf_wcount(cur, ps[3]);
+  let rt = ok * pre[11] * (1 - pre[0]) * (1 - pre[2]) * cf_dirok(op, d) * cf_adjok(op, lv) * (k <= 3) * (ps[3] <= 7);
+  let _ = cx[3] = cx[3] + rt * (cx[5] == 0);
+  let off = if fold + rt * cx[5] > 0 then cf_envoff(cx) else 0;
+  let r = if off == 1 then 0
+    else if fold == 1 then cf_emit_fold(a, p, end, cur, n, sy, ps[3], cx, rb, pre)
+    else if rt * cx[5] == 1 then cf_emit_rt(a, p, cur, sy, ps[3], ci, op, lv, d, cx, rb, hb)
+    else 0;
+  r
+}
+fn cf_dirok(op: i64, d: i64) -> i64 {
+  let gt = (op == 1) + (op == 2);
+  let lt = (op == 3) + (op == 4);
+  gt * (d < 0) + lt * (d > 0) + (1 - gt - lt)
+}
+
+// cf_prefix: tokenise the fn text [fnstart, p) once. Every symbol must be DECLARED before the
+// loop (`let NAME`, `let (.., NAME, ..)`, a parameter); the last tokens decide the literal
+// start (`let CTR = [-]LIT ;`) and that the `while` stands at statement level.
+fn cf_prefix(a: [i64], fnstart: i64, p: i64, nsym: i64, sy: [i64], pre: [i64], ctr: [i64]) -> i64 {
+  let tk = zeros(4);
+  let bound = zeros(8);
+  let rk = zeros(7);
+  let rv = zeros(7);
+  let rs = zeros(7);
+  let q = fnstart;
+  let pend = 0 - 1;
+  let plet = 0;
+  let tup = 0;
+  let pd = 0;
+  let go = 1;
+  let _ = pre[2] = cf_kernel(a, fnstart);
+  // literal start: the LAST `let CTR = [-]LIT ;` before the loop, with CTR not named again
+  // after it and the loop in the same block (the brace depth never drops below the let's)
+  let lo = 0;
+  let ld = 0;
+  let dp = 0;
+  let lv = [0];
+  while go == 1 {
+    let q = cf_tok(a, q, p, tk);
+    let go = if tk[0] != 0 then 1 else 0;
+    // a symbol is bound only where the compiler declares it (E101): right after `let`, inside
+    // `let ( .. )`, or a parameter (`NAME :` before the fn's `{`). W-CFVAL F1: a MENTION (a field
+    // `p.x`, `P { x: .. }`) is not a binding; it let the runtime prefix read an undeclared name.
+    let sx = if tk[0] == 1 then cf_symat(a, sy, nsym, tk) else 0 - 1;
+    let _ = if pend >= 0 then (if cf_isp(tk, 58) == 1 then (let _ = bound[pend] = 1 in 0) else 0) else 0;
+    let _ = if sx >= 0 then (if plet + tup > 0 then (let _ = bound[sx] = 1 in 0) else 0) else 0;
+    let pend = if dp == 0 then sx else 0 - 1;
+    let tup = if plet * cf_isp(tk, 40) == 1 then 1 else if cf_isp(tk, 41) == 1 then 0 else tup;
+    let plet = (tk[0] == 1) * (tk[3] == 1866735);
+    // W-CFVAL F2: inside ( .. ) a `;` is let-in's `in`, so a `while` there is no statement
+    let pd = pd + cf_isp(tk, 40) - cf_isp(tk, 41);
+    let k = 0;
+    while k < 6 * go {
+      let _ = rk[k] = rk[k + 1];
+      let _ = rv[k] = rv[k + 1];
+      let _ = rs[k] = rs[k + 1];
+      let k = k + 1;
+      0
+    };
+    let _ = if go == 1 then (let _ = rk[6] = tk[0] in (let _ = rv[6] = tk[3] in (let _ = rs[6] = tk[1] in 0))) else 0;
+    let isc = if tk[0] == 1 then cf_isname(a, tk, ctr) else 0;
+    let lo = if isc == 1 then 0 else lo;
+    let dp = dp + cf_isp(tk, 123) - cf_isp(tk, 125);
+    let lo = if dp < ld then 0 else lo;
+    let m = if go * cf_isp(tk, 59) == 1 then cf_litpat(a, rk, rv, rs, ctr, lv) else 0;
+    let lo = if m == 1 then 1 else lo;
+    let ld = if m == 1 then dp else ld;
+    0
+  };
+  let i = 0;
+  let allb = 1;
+  while i < nsym {
+    let allb = allb * bound[i];
+    let _ = pre[3 + i] = bound[i];
+    let i = i + 1;
+    0
+  };
+  let _ = pre[11] = allb;
+  let stmt = (rk[6] == 3) * ((rv[6] == 59) + (rv[6] == 123) + (rv[6] == 125)) * (pd == 0);
+  let _ = pre[0] = lo * (dp == ld);
+  let _ = pre[1] = lv[0];
+  stmt
+}
+// the ring ends `let CTR = LIT ;` or `let CTR = - LIT ;` (value into lv[0])
+fn cf_litpat(a: [i64], rk: [i64], rv: [i64], rs: [i64], ctr: [i64], lv: [i64]) -> i64 {
+  let f5 = (rk[2] == 1) * (rv[2] == 1866735) * (rk[3] == 1) * (rv[3] == ctr[3]) * (rk[4] == 3) * (rv[4] == 61) * (rk[5] == 2) * (rk[6] == 3) * (rv[6] == 59);
+  let f6 = (rk[1] == 1) * (rv[1] == 1866735) * (rk[2] == 1) * (rv[2] == ctr[3]) * (rk[3] == 3) * (rv[3] == 61) * (rk[4] == 3) * (rv[4] == 45) * (rk[5] == 2) * (rk[6] == 3) * (rv[6] == 59);
+  let nmpos = if f5 == 1 then rs[3] else rs[2];
+  let ln = ctr[2] - ctr[1];
+  let same = if f5 + f6 > 0 then cf_same(a, nmpos, ctr[1], ln) * (1 - cf_idc(a[nmpos + ln])) else 0;
+  let _ = if same == 1 then (let _ = lv[0] = if f5 == 1 then rv[5] else 0 - rv[5] in 0) else 0;
+  same
+}
+// 1 iff identifier token tk spells the name n (a token record)
+fn cf_isname(a: [i64], tk: [i64], n: [i64]) -> i64 {
+  let ln = n[2] - n[1];
+  let m = (tk[3] == n[3]) * (tk[2] - tk[1] == ln);
+  if m == 1 then cf_same(a, tk[1], n[1], ln) else 0
+}
+// the site symbol index of identifier token tk, or -1
+fn cf_symat(a: [i64], sy: [i64], nsym: i64, tk: [i64]) -> i64 {
+  let ln = tk[2] - tk[1];
+  let i = 0;
+  let hit = 0 - 1;
+  while i < nsym {
+    let m = (sy[3 * i] == tk[3]) * (sy[3 * i + 2] == ln);
+    let m = if m == 1 then cf_same(a, sy[3 * i + 1], tk[1], ln) else 0;
+    let hit = if m == 1 then i else hit;
+    let i = i + 1;
+    0
+  };
+  hit
+}
+// 1 iff the word right before the `fn` at q (same line) is `kernel`
+fn cf_kernel(a: [i64], q: i64) -> i64 {
+  let p = q - 1;
+  let go = 1;
+  while go == 1 {
+    let c = if p >= 0 then a[p] else 0;
+    let go = (c == 32) + (c == 9);
+    let p = p - go;
+    0
+  };
+  let ok = if p >= 5 then 1 else 0;
+  if ok == 1 then (a[p - 5] == 107) * (a[p - 4] == 101) * (a[p - 3] == 114) * (a[p - 2] == 110) * (a[p - 1] == 101) * (a[p] == 108) else 0
+}
+// BEBOP_NO_CF=1 -> 1 (read /proc/self/environ once per compile, at the first site)
+fn cf_envoff(cx: [i64]) -> i64 {
+  let _ = if cx[7] == 0 then (let _ = cx[7] = 1 + cf_envscan() in 0) else 0;
+  cx[7] - 1
+}
+fn cf_envscan() -> i64 {
+  let p = zeros(24);
+  let pl = str_to_cells(p, "/proc/self/environ") - 1;
+  let fd = sys_open(p, pl, 0);
+  let buf = zeros(65536);
+  let n = if fd >= 0 then sys_read(fd, buf, 65536) else 0;
+  let _ = if fd >= 0 then sys_close(fd) else 0;
+  let key = zeros(16);
+  let kl = str_to_cells(key, "BEBOP_NO_CF=1") - 1;
+  let i = 0;
+  let bol = 1;
+  let hit = 0;
+  while i < n {
+    let m = if bol == 1 then (if i + kl < n then cf_same2(buf, i, key, kl) * (buf[i + kl] == 0) else 0) else 0;
+    let hit = hit + m;
+    let bol = if buf[i] == 0 then 1 else 0;
+    let i = i + 1;
+    0
+  };
+  if hit > 0 then 1 else 0
+}
+fn cf_same2(a: [i64], s: i64, b: [i64], n: i64) -> i64 {
+  let k = 0;
+  let eq = 1;
+  while k < n {
+    let eq = if a[s + k] == b[k] then eq else 0;
+    let k = k + 1;
+    0
+  };
+  eq
+}
+
+// cf_apply: the hook (use_expand_at). Rewrites buf[0 .. off[0]) in place; 1 iff it changed.
+// Fold passes repeat while a pass folded something (inner loops first, so nests compose);
+// the runtime prefixes go in one last pass, and their helpers are appended at the end.
+fn cf_apply(buf: [i64], off: [i64]) -> i64 {
+  let cx = zeros(3608);
+  let rb = zeros(262144);
+  let hb = zeros(262144);
+  let total = [off[0]];
+  let changed = 0;
+  let round = 0;
+  let go = 1;
+  while go == 1 {
+    let _ = cx[0] = 0;
+    let _ = cx[1] = 0;
+    let _ = cx[3] = 0;
+    let _ = cf_pass(buf, total[0], cx, rb, hb);
+    let did = cf_splice(buf, total, cx, rb, hb, 0);
+    let changed = changed + did;
+    let last = cx[5];
+    // a fold round that folded goes again; a fold round that did not hands over to ONE
+    // runtime round when a site asked for it; the runtime round is always the last
+    let _ = cx[5] = if did == 0 then (if cx[3] > 0 then 1 else 0) else 0;
+    let round = round + 1;
+    let go = (1 - last) * (did + (1 - did) * cx[5]) * (if round < 8 then 1 else 0);
+    0
+  };
+  let ap = if cx[6] > 0 then cf_splice(buf, total, cx, rb, hb, 1) else 0;
+  let _ = off[0] = total[0];
+  if changed + ap > 0 then 1 else 0
+}

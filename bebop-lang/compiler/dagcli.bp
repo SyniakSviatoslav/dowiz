@@ -10,7 +10,7 @@ fn emit_words_offs(src: str, offs: [i64]) -> [i64] {
 // dag_words_offs: [n, words...] of the whole program, through the memo named by dm (dm[29] = 1: none).
 fn dag_words_offs(src: str, sidx: i64, offs: [i64], dm: [i64]) -> [i64] {
   let insns = zeros(262144);
-  let n = [0, 262144];
+  let n = [0, 262144, 0];
   let _ = dag_program(src, sidx, insns, n, offs, dm);
   let out = zeros(n[0] + 1);
   let _ = out[0] = n[0];

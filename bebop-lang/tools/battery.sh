@@ -41,6 +41,7 @@ mkdir -p "$T"/{std,cp,pd,pool,bpp}; sw() { [ "$SERIAL" = 1 ] && wait; :; }; [ "$
 ( BEBOP_TMP=$T/cp BEBOP_BIN=$BIN bash bench/vs_rust/construct_parity.sh > "$T/cp.log" 2>&1;
   BEBOP_TMP=$T/pd BEBOP_BIN=$BIN bash bench/vs_rust/parity_driver.sh > "$T/pd.log" 2>&1 ) & sw
 ( BEBOP_TMP=$T/pool BEBOP_BIN=$BIN bash bench/vs_rust/pool_parity.sh > "$T/pool.log" 2>&1 ) & sw
+( BEBOP_TMP=$T/cfp BEBOP_BIN=$BIN bash bench/vs_rust/cf_parity.sh > "$T/cfp.log" 2>&1 ) & sw  # W-CFVAL 2026-10-09: R-CF on vs BEBOP_NO_CF=1 on named programs (field-name binding, let-in while) + fold/runtime positives
 ( bash bench/oracles/run_all.sh > "$T/oracles.log" 2>&1 ) & sw  # little cores, memoized
 ( BEBOP_TMP=$T/bpp BEBOP_BIN=$BIN bash bench/vs_rust/bpref_parity.sh > "$T/bpp.log" 2>&1 ) & sw  # A23 differential lane: bpref's evaluator ran in no battery lane until 2026-09-13
 ( TKERNEL_BIN=./tkernel.bin python3 tools/kcheck.py --corpus bench/kernel_neg > "$T/f7_kcheck.log" 2>&1 ) & sw  # F7: kernel certificate checker vs twin
@@ -64,6 +65,7 @@ line cp.log '^construct parity:' '^construct parity: pass=[1-9][0-9]* fail=0'
 line diag.log '^diag:' '^diag: [1-9][0-9]* pass, 0 fail'
 line pd.log '^parity:' '^parity: pass=[1-9][0-9]* fail=0'  # 2026-09-13 audit: an empty kernels dir printed `pass=0 fail=0 skip=1` and matched the old 'fail=0'
 line pool.log '^pool_parity:' '^pool_parity: [1-9][0-9]* pass, 0 fail'
+line cfp.log '^cf_parity:' '^cf_parity: [1-9][0-9]*/[1-9][0-9]* pass, 0 fail'  # the script itself requires pass == number of bench/cf_parity programs
 line braille.log '^braille_check:' '^braille_check: 7 PASS 0 FAIL$'  # pinned at 7, not [1-9]+: a check that silently disappears must not read green
 line traps.log '^trap_verify' '^trap_verify traps=1[0-9] match=1[0-9] mismatch=0 not_triggered=0$'  # a probe that stops triggering must not read green
 line oracles.log '^SUMMARY' '^SUMMARY ok=[1-9][0-9]* self-frozen=0 mismatch=0 missing=0'

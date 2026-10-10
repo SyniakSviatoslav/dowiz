@@ -1,0 +1,10 @@
+// R-CF positive: fold with a body-local that shares a field's spelling (column-zero rule).
+// CF-EXPECT rc=0 out=384038 touched=1
+struct P { x: i64, y: i64 }
+fn main() -> i64 {
+  let p = P { x: 4, y: 5 };
+  let s = p.x;
+  let i = 0;
+  while i < 20 { let x = i * 2; let s = s + x; let i = i + 1; 0 };
+  s * 1000 + x
+}

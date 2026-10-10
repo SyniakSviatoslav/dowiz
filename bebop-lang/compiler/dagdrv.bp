@@ -22,7 +22,8 @@ fn w_adr_base(p: i64) -> i64 { 268435456 + ((524288 - p - 1) & 524287) * 32 + 16
 // ---- the relocation recorder (RT §5.2). fntab cells: 7111 buffer (st_addr, 0 = off),
 // 7112 count, 7113 capacity (pairs), 7114 this fn cannot be memoised (1). Kinds: 1 BL (target =
 // callee fn index), 2 FNVAL (fn index; the movz/movk pair at w, w+1), 3 LIT (global literal
-// ordinal), 4 BASE. The planning table and every other fntab have 7111 = 0: nothing recorded.
+// ordinal), 4 BASE, 5 SELF (a self call's bl, emit1.bp: re-aimed and dropped at the fn tail). Only
+// the emission table records (7111 != 0).
 fn dag_rel(fntab: [i64], w: i64, kind: i64, t: i64) -> i64 {
   let on = if fntab[7111] == 0 then 0 else 1;
   let c = fntab[7112];
@@ -54,7 +55,7 @@ fn dag_nomemo(fntab: [i64]) -> i64 {
 //  0 cnt  1 fnames  2 fpos  3 sizes  4 starts  5 facts  6 ptab  7 fntab  8 hit entry (0 = miss)
 //  9 hit IDX position  10 span cell offset  11 span len  12 span cells  13 key  14 nlits
 // 15 reloc lo  16 reloc hi  17 reloc buffer  18 literal ordinal at fn start  19 source cells
-// 20 strn  21 bad (do not store)  22 code words  23 fn line starts
+// 20 strn  21 bad (do not store)  22 code words  23 fn line starts  24 offs
 
 fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   let dm = zeros(48);
@@ -62,13 +63,12 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   dag_program(s, 0, insns, n, offs, dm)
 }
 // dag_program: the one whole-program compile. dm[29] != 0 = no memo (every fn compiled, nothing
-// recorded or written) -- the path every in-process caller (gb_run, pool_compile) takes.
+// read or written; relocations are recorded either way -- the single pass links through them) -- the path every in-process caller (gb_run, pool_compile) takes.
 fn dag_program(s: str, sidx: i64, insns: [i64], n: [i64], offs: [i64], dm: [i64]) -> i64 {
   let ws = zeros(32);
   let _ = ws[19] = sidx;
   let _ = dag_tables(s, ws, offs);
   let _ = if dm[29] == 0 then dag_probe(s, ws, dm) else 0;
-  let _ = dag_plan(s, ws, dm);
   let _ = dag_layout(s, ws, offs);
   let _ = dag_emit(s, ws, dm, insns, n);
   let _ = dag_litdata(s, ws, insns, n);
@@ -134,7 +134,7 @@ fn dag_tables(s: str, ws: [i64], offs: [i64]) -> i64 {
 // What a fn's words read OUTSIDE its own span (audited 2026-09-30 over the emitters): other fns'
 // HEADERS (arity, param and return types via ft_srcpos -> fn_*_at), the enum declaration
 // (collect_ctors / ft_ctor_tag), the struct declarations (st_find -> collect_structs), the fn
-// LAYOUT (bl / &f / literal / image-base words: relocated, dag_patch) and the literal ORDER
+// LAYOUT (bl / &f / literal / image-base words: relocated, e1_link) and the literal ORDER
 // (relocated by ordinal). The first three are the context bytes; the text before the first fn is
 // added whole. A fn span runs from the start of its `fn` line to the start of the next fn's line
 // (a `kernel` marker is on the fn's own line; comments ABOVE a fn belong to the fn before it).
@@ -280,57 +280,19 @@ fn dag_keys(ws: [i64], dm: [i64]) -> i64 {
   0
 }
 
-// ---- planning (misses only; a hit's size and facts come from its entry) ----
-fn dag_plan(s: str, ws: [i64], dm: [i64]) -> i64 {
-  let cnt = ws[0];
-  let fpos = wsa(ws, 2);
-  let sizes = wsa(ws, 3);
-  let facts = wsa(ws, 5);
-  let ptab = wsa(ws, 6);
-  let hit = wsa(ws, 8);
-  let stk_a = zeros(1088);
-  let tmp = zeros(65536);
-  let tn = [0, 65536];
-  let i = 0;
-  while i < cnt {
-    let e = hit[i];
-    let _ = tn[0] = 0;
-    let _ = tn[1] = 65536;
-    let _ = if e == 0 then compile_fn_at(s, fpos[i], 0, ptab, tmp, tn, stk_a, 0) else 0;
-    let _ = sizes[i] = if e == 0 then tn[0] else st_get(dag_base(dm), e, 3);
-    let _ = facts[i] = if e == 0 then ptab[3670] else st_get(dag_base(dm), e, 5);
-    let i = i + 1;
-    0
-  };
-  0
-}
-
-// ---- layout: starts (prefix sums, source order -- RT L-3), the emission table ----
+// ---- layout: the emission table. R-FAST L4 (compiler/emit1.bp): no planning pass -- every start
+// is learned while the fns are emitted in source order (RT L-3) and patched in by e1_link ----
 fn dag_layout(s: str, ws: [i64], offs: [i64]) -> i64 {
   let cnt = ws[0];
   let fnames = wsa(ws, 1);
   let fpos = wsa(ws, 2);
-  let sizes = wsa(ws, 3);
-  let starts = wsa(ws, 4);
-  let facts = wsa(ws, 5);
   let ptab = wsa(ws, 6);
-  let acc = 0;
-  let k = 0;
-  while k < cnt {
-    let _ = starts[k] = acc;
-    let _ = offs[1 + k] = acc;
-    let acc = acc + sizes[k];
-    let k = k + 1;
-    0
-  };
   let fntab = zeros(8192);
   let _ = fntab[0] = cnt;
-  let _ = scan_literals(s, fntab, acc);
+  let _ = scan_literals(s, fntab, 0);
   let m = 0;
   while m < cnt {
     let _ = fntab[1 + m] = fnames[m];
-    let _ = fntab[1 + cnt + m] = starts[m];
-    let _ = fntab[2900 + m] = facts[m];  // B1: publish planning's facts for emission
     let m = m + 1;
     0
   };
@@ -351,8 +313,8 @@ fn dag_layout(s: str, ws: [i64], offs: [i64]) -> i64 {
   };
   let _ = dag_share(ptab, fntab);
   let _ = ws[7] = st_addr(fntab);
-  let _ = ws[22] = acc;
-  acc
+  let _ = ws[24] = st_addr(offs);
+  cnt
 }
 
 // dag_share: the lazily built whole-source tables the planning table already holds -- the struct
@@ -370,12 +332,15 @@ fn dag_share(ptab: [i64], fntab: [i64]) -> i64 {
   0
 }
 
-// ---- emission: a hit is copied and linked, a miss is compiled in place and recorded ----
+// ---- emission: ONE walk in source order. A hit is copied, a miss is compiled in place (emit1.bp);
+// both record every layout-dependent word as a relocation, and e1_link patches them all at the end.
+// The buffer holds one pair per code word at most (a relocation sits on its own word), so it can
+// never fill: n[1] pairs.
 fn dag_emit(s: str, ws: [i64], dm: [i64], insns: [i64], n: [i64]) -> i64 {
   let cnt = ws[0];
-  let fpos = wsa(ws, 2);
   let sizes = wsa(ws, 3);
   let starts = wsa(ws, 4);
+  let facts = wsa(ws, 5);
   let fntab = wsa(ws, 7);
   let hit = wsa(ws, 8);
   let nlit = wsa(ws, 14);
@@ -383,30 +348,37 @@ fn dag_emit(s: str, ws: [i64], dm: [i64], insns: [i64], n: [i64]) -> i64 {
   let rhi = wsa(ws, 16);
   let li0 = wsa(ws, 18);
   let bad = wsa(ws, 21);
-  let rec = if dm[29] == 0 then 1 else 0;
-  let rb = zeros(if rec == 1 then 262144 else 2);
+  let offs = wsa(ws, 24);
+  let rb = zeros(n[1] * 2 + 2);
   let _ = ws[17] = st_addr(rb);
-  let _ = fntab[7111] = if rec == 1 then st_addr(rb) else 0;
+  let _ = fntab[7111] = st_addr(rb);
   let _ = fntab[7112] = 0;
-  let _ = fntab[7113] = 131072;
+  let _ = fntab[7113] = n[1];
   let stk_b = zeros(1088);
   let q = 0;
   while q < cnt {
+    let _ = starts[q] = n[0];
     let _ = li0[q] = fntab[5552];
     let _ = rlo[q] = fntab[7112];
     let _ = fntab[7114] = 0;
     let e = hit[q];
-    let _ = if e > 0 then dag_link_fn(ws, dm, q, insns, n) else compile_fn_at(s, fpos[q], starts[q], fntab, insns, n, stk_b, 1);
+    let _ = if e > 0 then dag_link_fn(ws, dm, q, insns, n) else e1_compile(s, ws, q, fntab, insns, n, stk_b);
     let _ = rhi[q] = fntab[7112];
     let _ = nlit[q] = fntab[5552] - li0[q];
-    let _ = bad[q] = fntab[7114] + (if n[0] - starts[q] == sizes[q] then 0 else 1);
+    let _ = sizes[q] = n[0] - starts[q];
+    let _ = facts[q] = if e > 0 then st_get(dag_base(dm), e, 5) else fntab[3670];
+    let _ = fntab[1 + cnt + q] = starts[q];
+    let _ = offs[1 + q] = starts[q];
+    let _ = bad[q] = fntab[7114];
     let q = q + 1;
     0
   };
+  let _ = e1_link(s, ws, fntab, insns, n);
   let _ = fntab[7111] = 0;
   0
 }
-// dag_link_fn: copy hit fn q's WORDS to its start, patch its relocations, advance the literal cursor.
+// dag_link_fn: copy hit fn q's WORDS to its start and record its relocations (a literal's ordinal
+// made global) for e1_link; advance the literal cursor.
 fn dag_link_fn(ws: [i64], dm: [i64], q: i64, insns: [i64], n: [i64]) -> i64 {
   let base = dag_base(dm);
   let hit = wsa(ws, 8);
@@ -431,22 +403,12 @@ fn dag_link_fn(ws: [i64], dm: [i64], q: i64, insns: [i64], n: [i64]) -> i64 {
   let r = 0;
   while r < nr {
     let kt = st_get(base, ro, r * 2 + 1);
-    let _ = dag_patch(insns, st + st_get(base, ro, r * 2), kt >> 56, kt & 72057594037927935, ws, fntab);
+    let lit = if (kt >> 56) == 3 then fntab[5552] else 0;
+    let _ = dag_rel(fntab, st + st_get(base, ro, r * 2), kt >> 56, (kt & 72057594037927935) + lit);
     let r = r + 1;
     0
   };
   let _ = fntab[5552] = fntab[5552] + st_get(base, e, 12);
-  0
-}
-// dag_patch: one relocation at absolute word p (RT §5.2); every word is re-derived from the
-// current layout through the SAME w_* formula the emitter used, the register kept from the word.
-fn dag_patch(insns: [i64], p: i64, kind: i64, t: i64, ws: [i64], fntab: [i64]) -> i64 {
-  let starts = wsa(ws, 4);
-  let d = insns[p] & 31;
-  let _ = if kind == 1 then (let _ = insns[p] = w_bl(starts[t] - p) in 0) else 0;
-  let _ = if kind == 2 then (let _ = insns[p] = w_fnlo(starts[t] + 1, d) in (let _ = insns[p + 1] = w_fnhi(starts[t] + 1, insns[p + 1] & 31) in 0)) else 0;
-  let _ = if kind == 3 then (let _ = insns[p] = w_adr(fntab[6000 + fntab[5552] + t] - p, d) in 0) else 0;
-  let _ = if kind == 4 then (let _ = insns[p] = w_adr_base(p) in 0) else 0;
   0
 }
 

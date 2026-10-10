@@ -1,0 +1,11 @@
+// W-CFVAL F1 control: cf_fieldname with the body-local spelled `z` (no field z): never rewritten.
+// CF-EXPECT rc=0 out=3998004 touched=0
+struct P { x: i64, y: i64 }
+fn h(n: i64) -> i64 {
+  let p = P { x: 4, y: n };
+  let s = p.x;
+  let i = n - n;
+  while i < 2000 { let z = i * 2; let s = s + z; let i = i + 1; 0 };
+  s
+}
+fn main() -> i64 { h(3) }

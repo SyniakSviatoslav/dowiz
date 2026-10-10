@@ -208,7 +208,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if name == 34703554765 then emit_umulh(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if tag >= 0 then emit_enum_ctor(s, tag, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == selfname then emit_self_call(s, pos, insns, n, stab, selfname, selfstart, fntab)
-  else if tgt >= 0 then emit_bl_call(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if tgt >= 0 then emit_bl_call(s, name, pos, insns, n, stab, selfname, selfstart, fntab, 0)
   else emit_call(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
 }
 
@@ -511,11 +511,14 @@ fn skip_ws(s: str, pos: [i64]) -> i64 {
 
 // Append one instruction word and advance the count.
 // The stream counter is [n, cap]: em traps 83 BEFORE the write that would cross cap
-// (planning tmp 65536 words per fn, program buffers 262144; roadmap 1b, 2026-09-06).
+// (65536 words per fn, program buffers 262144; roadmap 1b, 2026-09-06).
+// n[2] is the base the printed cap is counted from: 0 for a whole buffer; the fn's start while
+// R-FAST's single pass (emit1.bp e1_compile) holds n[1] at start + 65536 (the per-fn cap the
+// planning pass's 65536-word tmp buffer used to enforce). Every [n, cap] stream has 3 cells.
 fn cap_exit(n: [i64]) -> i64 {
   let buf = zeros(64);
   let a1 = diag_str(buf, 0, "code buffer exhausted at ");
-  let a2 = put_num(buf, a1, n[1]);
+  let a2 = put_num(buf, a1, n[1] - n[2]);
   let _ = buf[a2] = 32;
   let a3 = diag_str(buf, a2 + 1, "words (one fn or the program)");
   let _ = buf[a3] = 10;

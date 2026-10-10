@@ -1,0 +1,362 @@
+// compiler/tre.bp -- R2 tail-recursion elimination (lane rfast-lsr, 2026-10-07); used by calls.bp.
+// ---- R2 (lane rfast-lsr, 2026-10-07): TAIL-RECURSION ELIMINATION ----
+// docs/research/2026-10-07-bebop-fastest-runtime.md §4: K2H's 1.9x against rustc -O was
+// LLVM's TailRecursionElimination turning the second call of `fib(n-1) + fib(n-2)` into a
+// loop with an accumulator, not the cost of a call. Two shapes, both SELF calls in TAIL
+// position of the fn (through if-arms, let-in bodies and parens -- tre_scan below):
+//   kind 1  `f(args)`             -> args to x0.., `b` to the param-move block (no frame)
+//   kind 2  `f(a) + f(b)`         -> the left value joins an ACCUMULATOR register, then the
+//                                    right call becomes kind 1. Every return adds the
+//                                    accumulator (compile_fn_at, at the fn tail).
+// Wrapping i64 `+` is associative and commutative, so acc + (f(a) + f(b)) == (acc + f(a)) +
+// f(b) holds bit-for-bit. The accumulator is a hidden stab entry (name hash 1, which no
+// identifier produces, spelled at the body's `{`, which ident_eq never matches) bound right
+// after the params, so it is an ordinary callee-saved register to every other piece of the
+// compiler (prologue save, vc, hoist floors). Tables (fntab, zone "tre" 5250..5262):
+//   5250 mode (0 none, 1 kind-1 only, 2 accumulator)   5251 the param-move block's word
+//   5252 accumulator register   5253 the fn name's source position (scan only)
+//   5254..5261 sites, pos*4 + kind   5262 site count (8 at most -- a 9th site just stays a
+//   real call, which is always safe)   5263 the source length (scan only).
+// The call side is emit_bl_call's `tk` (calls.bp): kind 2 adds the left value to the
+// accumulator before the args are placed, and both kinds emit `b` instead of `bl`.
+// Both passes run the same scan and emit the same word counts (b = 1, mov = 1, add = 1), so
+// the planning pass's size arithmetic is untouched; a site emits no `bl`, so it does not
+// count toward fntab[3668] either.
+fn tre_kind_at(fntab: [i64], q: i64) -> i64 {
+  let i = 0;
+  let k = 0;
+  while i < fntab[5262] {
+    let v = fntab[5254 + i];
+    let k = if v / 4 == q then v - (v / 4) * 4 else k;
+    let i = i + 1;
+    0
+  };
+  k
+}
+
+fn tre_acc_add(insns: [i64], n: [i64], fntab: [i64], stab: [i64], li: i64) -> i64 {
+  let r = vs_reg(insns, n, fntab, stab, li);
+  let k = vs_entry_kind(fntab, li);
+  let a = fntab[5252];
+  // add xa, xa, xr (as+objdump: 8b1002b5 = add x21,x21,x16), then the entry gives its
+  // register back and becomes CONST 0, so the dead `+` after the branch owns nothing.
+  let _ = em(insns, n, 2332033024 + r * 65536 + a * 32 + a);
+  let _ = if k == 2 then (if r < 8 then vs_mask_free(fntab, r, 42) else 0) else 0;
+  let _ = if k == 4 then vs_cs_free(fntab, r, 34) else 0;
+  vs_set_entry(fntab, li, 1, 0, 0)
+}
+
+// One lexical token at p: kind + 16 * length. Kinds: 0 end, 1 whitespace/comment, 2 other
+// (string/char literal, punctuation), 3 ( [ {, 4 ) ] }, 5 `;`, 6 let, 7 in, 8 if, 9 then,
+// 10 else, 12 other identifier or number, 13 a lone `+` (not ++ or +=), 15 while. Keywords
+// are read_ident hashes (the same ones compile_fn_at's reserved-word table uses).
+fn tre_tok(s: str, p: i64, strn: i64) -> i64 {
+  let ch = if p >= strn then 0 else char(s, p);
+  let c1 = if p + 1 >= strn then 0 else char(s, p + 1);
+  let q = [p, strn];
+  let is_id = is_alpha(ch) + is_digit(ch) + (ch == 95);
+  let is_cm = (ch == 47) * (c1 == 47);
+  let h = if is_id > 0 then read_ident(s, q)
+    else if is_cm == 1 then skip_line_comment_n(s, q, strn)
+    else if ch == 34 then skip_string_n(s, q, strn)
+    else if ch == 39 then skip_char_lit(s, q)
+    else (let _ = q[0] = p + 1 in 0);
+  let k = if p >= strn then 0
+    else if (ch == 32) + (ch == 9) + (ch == 10) + (ch == 13) + is_cm > 0 then 1
+    else if (ch == 40) + (ch == 91) + (ch == 123) > 0 then 3
+    else if (ch == 41) + (ch == 93) + (ch == 125) > 0 then 4
+    else if ch == 59 then 5
+    else if is_id == 0 then (if (ch == 43) * (c1 != 43) * (c1 != 61) == 1 then 13 else 2)
+    else if h == 1866735 then 6
+    else if h == 13865 then 7
+    else if h == 13857 then 8
+    else if h == 262576641 then 9
+    else if h == 228925745 then 10
+    else if h == 35281108217 then 15
+    else 12;
+  k + 16 * (q[0] - p)
+}
+fn tre_adv(t: i64) -> i64 { if t / 16 < 1 then 1 else t / 16 }
+fn tre_skip_ws(s: str, a: i64, b: i64, strn: i64) -> i64 {
+  let p = a;
+  let go = p < b;
+  while go == 1 {
+    let t = tre_tok(s, p, strn);
+    let isw = t - (t / 16) * 16 == 1;
+    let p = p + isw * tre_adv(t);
+    let go = isw * (p < b);
+    0
+  };
+  p
+}
+// p0 is on an opener; the position of its matching closer (strn if the text ends first).
+fn tre_close(s: str, p0: i64, strn: i64) -> i64 {
+  let p = p0;
+  let depth = 0;
+  let found = 0 - 1;
+  while found < 0 {
+    let t = tre_tok(s, p, strn);
+    let k = t - (t / 16) * 16;
+    let depth = depth + (k == 3) - (k == 4);
+    let found = if (k == 4) * (depth == 0) == 1 then p else (if k == 0 then strn else found);
+    let p = p + tre_adv(t);
+    0
+  };
+  found
+}
+// Past a `while COND { BODY }` statement starting at p, and its optional `;`. Token-based on
+// purpose: find_body_end / skip_while_cond reach skip_string / skip_line_comment, which call
+// str_len(s) per literal or comment -- over a whole self-compile that cost 0.9 s (measured).
+fn tre_while_end(s: str, p: i64, strn: i64) -> i64 {
+  let q = p + 5;
+  let go = 1;
+  while go == 1 {
+    let t = tre_tok(s, q, strn);
+    let k = t - (t / 16) * 16;
+    let isb = char(s, q) == 123;
+    let q = if isb == 1 then q else (if k == 3 then tre_close(s, q, strn) + 1 else q + tre_adv(t));
+    let go = (1 - isb) * (k != 0);
+    0
+  };
+  let r = tre_skip_ws(s, tre_close(s, q, strn) + 1, strn, strn);
+  if r >= strn then r else r + (char(s, r) == 59)
+}
+// Start of the fn body's FINAL item (its tail expression) in [b0, b1), or -1. A `;` at depth 0
+// ends a statement unless it closes a `let` that began mid-statement (`else let c = e; ...` is
+// one expression whose `;` means `in`, the T42 synonym emit_let_plain accepts).
+fn tre_tail_start(s: str, b0: i64, b1: i64, strn: i64) -> i64 {
+  let p = b0;
+  let st = 0 - 1;
+  let at0 = 1;
+  let nlet = 0;
+  let depth = 0;
+  while p < b1 {
+    let t = tre_tok(s, p, strn);
+    let k = t - (t / 16) * 16;
+    let d0 = depth == 0;
+    let start = (k != 1) * at0 * d0;
+    let st = if start == 1 then p else st;
+    let isw = start * (k == 15);
+    let at0 = at0 * (1 - start);
+    let depth = depth + (k == 3) - (k == 4);
+    let nlet = nlet + d0 * (1 - start) * (k == 6);
+    let semi = d0 * (k == 5);
+    let close_let = d0 * ((k == 7) + semi) * (nlet > 0);
+    let at0 = if semi * (nlet == 0) + isw > 0 then 1 else at0;
+    let nlet = nlet - close_let;
+    let p = if isw == 1 then tre_while_end(s, p, strn) else p + tre_adv(t);
+    0
+  };
+  if at0 == 1 then 0 - 1 else st
+}
+// [a, b) is an expression in TAIL position: record every tail self-call site in it.
+fn tre_scan(s: str, fntab: [i64], a: i64, b: i64) -> i64 {
+  let strn = fntab[5263];
+  let p = tre_skip_ws(s, a, b, strn);
+  let t = if p < b then tre_tok(s, p, strn) else 0;
+  let k = t - (t / 16) * 16;
+  let pc = if (k == 3) * (char(s, p) == 40) == 1 then tre_close(s, p, strn) else 0;
+  let par_all = if pc > 0 then tre_skip_ws(s, pc + 1, b, strn) >= b else 0;
+  if par_all == 1 then tre_scan(s, fntab, p + 1, pc)
+  else if k == 8 then tre_scan_if(s, fntab, p + 2, b)
+  else if k == 6 then (let f = tre_find(s, p + 3, b, strn, 6, 7, 5) in if f >= 0 then tre_scan(s, fntab, f + 1 + (char(s, f) == 105), b) else 0)
+  else if k == 12 then tre_scan_call(s, fntab, p, b)
+  else 0
+}
+// The first token of kind kc or kc2 at depth 0 in [p0, b) that is not claimed by a nested
+// opener of kind ko (each opener claims one terminator), or -1. One scanner serves both tail
+// constructs: `if`'s then (8 / 9), `if`'s else after it (8 / 10) and `let`'s in-or-; (6 / 7, 5).
+fn tre_find(s: str, p0: i64, b: i64, strn: i64, ko: i64, kc: i64, kc2: i64) -> i64 {
+  let p = p0;
+  let depth = 0;
+  let nest = 0;
+  let found = 0 - 1;
+  while (p < b) * (found < 0) == 1 {
+    let t = tre_tok(s, p, strn);
+    let k = t - (t / 16) * 16;
+    let d0 = depth == 0;
+    let depth = depth + (k == 3) - (k == 4);
+    let term = d0 * ((k == kc) + (k == kc2) > 0);
+    let found = if term * (nest == 0) == 1 then p else found;
+    let nest = nest + d0 * (k == ko) - term * (nest > 0);
+    let p = p + tre_adv(t);
+    0
+  };
+  found
+}
+// `if C then A else B`: both arms are tail.
+fn tre_scan_if(s: str, fntab: [i64], p0: i64, b: i64) -> i64 {
+  let th = tre_find(s, p0, b, fntab[5263], 8, 9, 9);
+  let el = if th >= 0 then tre_find(s, th + 4, b, fntab[5263], 8, 10, 10) else 0 - 1;
+  if el >= 0 then (let _ = tre_scan(s, fntab, th + 4, el) in tre_scan(s, fntab, el + 4, b)) else 0
+}
+// The `(` of a SELF call whose name starts at p, or -1.
+fn tre_selfcall(s: str, fntab: [i64], p: i64, b: i64) -> i64 {
+  let strn = fntab[5263];
+  let t = if p < b then tre_tok(s, p, strn) else 0;
+  let q = if t - (t / 16) * 16 == 12 then (if ident_eq(s, p, fntab[5253]) == 1 then tre_skip_ws(s, p + t / 16, b, strn) else b) else b;
+  if q < b then (if char(s, q) == 40 then q else 0 - 1) else 0 - 1
+}
+// `self(..)` filling the tail -> kind 1; `self(..) + self(..)` filling it -> kind 2 on the
+// SECOND call's `(`. Anything else after the first call (another operator, a field) -> none.
+fn tre_scan_call(s: str, fntab: [i64], p: i64, b: i64) -> i64 {
+  let strn = fntab[5263];
+  let q = tre_selfcall(s, fntab, p, b);
+  let r = if q >= 0 then tre_skip_ws(s, tre_close(s, q, strn) + 1, b, strn) else 0;
+  let t = if q >= 0 then (if r < b then tre_tok(s, r, strn) else 0) else 0;
+  let q2 = if t - (t / 16) * 16 == 13 then tre_selfcall(s, fntab, tre_skip_ws(s, r + 1, b, strn), b) else 0 - 1;
+  let r2 = if q2 >= 0 then tre_skip_ws(s, tre_close(s, q2, strn) + 1, b, strn) else 0;
+  if q < 0 then 0
+  else if r >= b then tre_mark(fntab, q, 1)
+  else if q2 >= 0 then (if r2 >= b then tre_mark(fntab, q2, 2) else 0)
+  else 0
+}
+fn tre_mark(fntab: [i64], q: i64, kind: i64) -> i64 {
+  let cnt = fntab[5262];
+  let _ = if cnt < 8 then (let _ = fntab[5254 + cnt] = q * 4 + kind in (let _ = fntab[5262] = cnt + 1 in (if fntab[5250] < kind then fntab[5250] = kind else 0))) else 0;
+  0
+}
+// ONE char pass over the body from b0 (just past its `{`): returns end * 2 + hit, where end is
+// the matching `}` and hit says whether the fn's own name occurs in the body as a whole
+// identifier (strings, char literals and comments skipped; the _n skippers, never the ones
+// that call str_len -- see tre_while_end). Only a fn with a hit pays for the token scan.
+fn tre_body(s: str, b0: i64, strn: i64, namepos: i64) -> i64 {
+  let c0 = char(s, namepos);
+  let q = [b0, strn];
+  let depth = 1;
+  let hit = 0;
+  while depth > 0 {
+    let p = q[0];
+    let ch = if p >= strn then 0 else char(s, p);
+    let depth = if p >= strn then 0 else depth + (ch == 123) - (ch == 125);
+    let isc = (ch == c0) * (hit == 0);
+    let cb = if isc == 1 then char(s, p - 1) else 0;
+    let hit = if isc * (is_alpha(cb) + is_digit(cb) + (cb == 95) == 0) == 1 then ident_eq(s, p, namepos) else hit;
+    let _ = if ch == 34 then skip_string_n(s, q, strn)
+      else if (ch == 47) * (char(s, p + 1) == 47) == 1 then skip_line_comment_n(s, q, strn)
+      else if ch == 39 then skip_char_lit(s, q)
+      else (let _ = q[0] = p + 1 in 0);
+    0
+  };
+  (q[0] - 1) * 2 + hit
+}
+// compile_fn_at, after the params are bound and before the prologue: clear the tables, scan
+// the body (b0 = just past its `{`), and bind the accumulator when kind 2 was found. A
+// tuple-returning fn is left alone (x1.. would bypass the accumulator), and a kind-2 fn
+// whose params already fill x19..x26 gets no TRE at all (no register for the accumulator).
+fn tre_setup(s: str, fntab: [i64], stab: [i64], b0: i64, strn: i64, namepos: i64, selfname: i64) -> i64 {
+  let k = 0;
+  while k < 14 {
+    let _ = fntab[5250 + k] = 0;
+    let k = k + 1;
+    0
+  };
+  let _ = fntab[5253] = namepos;
+  let _ = fntab[5263] = strn;
+  let bh = tre_body(s, b0, strn, namepos);
+  let b1 = bh / 2;
+  let ok = if bh - b1 * 2 == 1 then (if unit_has_tuple_fn(s, fntab, strn) == 1 then fn_ret_arity(s, selfname, fntab, strn) < 2 else 1) else 0;
+  let ts = if ok == 1 then tre_tail_start(s, b0, b1, strn) else 0 - 1;
+  let _ = if ts >= 0 then tre_scan(s, fntab, ts, b1) else 0;
+  let cnt = stab[0];
+  let _ = if fntab[5250] == 2 then (if cnt < 8 then tre_bind_acc(fntab, stab, b0 - 1) else fntab[5250] = 0) else 0;
+  fntab[5250]
+}
+fn tre_bind_acc(fntab: [i64], stab: [i64], brace: i64) -> i64 {
+  let cnt = stab[0];
+  let _ = stab[1 + 4 * cnt] = 1;
+  let _ = stab[2 + 4 * cnt] = 19 + cnt;
+  let _ = stab[3 + 4 * cnt] = brace;
+  let _ = stab[4 + 4 * cnt] = 0;
+  let _ = stab[0] = cnt + 1;
+  fntab[5252] = 19 + cnt
+}
+
+// compile_fn_at's two hooks (bebop.bp wraps two existing lines, so the line ratchet does not
+// move). tre_entry runs right after the prologue is emitted (`pro`, its value, is unused): the
+// scan and the accumulator bind happen here, before the param moves and the body -- the hidden
+// symbol still reaches the planning pass's vc fact, which is read at the END of compile_fn_at.
+// The accumulator starts at 0 ONCE per activation (mov xacc, xzr = aa1f03e0 + r); every tail
+// site branches to the param-move block right after it (fntab[5251]).
+fn tre_entry(s: str, pos: [i64], namepos: i64, selfname: i64, fntab: [i64], stab: [i64], insns: [i64], n: [i64], g: i64, pro: i64) -> i64 {
+  let _ = tre_setup(s, fntab, stab, pos[0], slen(s, pos), namepos, selfname);
+  let _ = if fntab[5250] == 2 then em(insns, n, 2854159328 + fntab[5252]) else 0;
+  fntab[5251] = n[0]
+}
+// After the return jumps are patched to land HERE (`pj` is patch_jumps' value): every return
+// path -- the tail and each `return` -- adds the accumulator: add x0, x0, xacc (8b000000 + r<<16).
+fn tre_exit(insns: [i64], n: [i64], fntab: [i64], pj: i64) -> i64 {
+  if fntab[5250] == 2 then em(insns, n, 2332033024 + fntab[5252] * 65536) else 0
+}
+
+// ---- R2b (lane rfast-lsr, 2026-10-07): the BASE-CASE GUARD before the prologue ----
+// A fn whose whole body is `if P OP NUM then A else ...` -- P a parameter arriving in x0..x7,
+// NUM 0..4095, A a parameter or a literal 0..65535 -- returns A without a frame when the test
+// holds: `cmp xP,#NUM; b.<not OP> full; [mov x0, xA | movz x0,#A]; ret`, then the ordinary
+// prologue. The guard reads only argument registers and touches neither sp nor x19..x30, so the
+// frame-free path is exactly the caller's view of a returned call. It is emitted at fn ENTRY
+// only: a self call's `bl` lands on it, a TRE branch (fntab[5251], after the prologue) does not,
+// so an accumulator is always 0 on the guard path. Same words in both passes (the shape is a
+// text decision). fib's leaf goes 17 instructions -> 4 (research 2026-10-07 §4, LLVM's 9).
+// `g` in tre_entry's argument list is this fn's value: compile_fn_at evaluates it BEFORE the
+// prologue argument, which is the whole ordering trick. Returns the words emitted.
+fn sw_guard(s: str, pos: [i64], pparpos: [i64], np: i64, insns: [i64], n: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  let b0 = pos[0];
+  let p = tre_skip_ws(s, b0, strn, strn);
+  let t = tre_tok(s, p, strn);
+  if t - (t / 16) * 16 != 8 then 0 else sw_guard_if(s, b0, p, strn, pparpos, np, insns, n)
+}
+// index of the parameter spelled at q, or -1 (only x0..x7 arrivals)
+fn sw_param(s: str, q: i64, pparpos: [i64], np: i64) -> i64 {
+  let j = 0;
+  let f = 0 - 1;
+  while j < np {
+    let f = if (f < 0) * (j < 8) * (ident_eq(s, q, pparpos[j]) == 1) == 1 then j else f;
+    let j = j + 1;
+    0
+  };
+  f
+}
+fn sw_guard_if(s: str, b0: i64, p: i64, strn: i64, pparpos: [i64], np: i64, insns: [i64], n: [i64]) -> i64 {
+  // the if must BE the body's tail (no statement before or after it)
+  let b1 = tre_body(s, b0, strn, b0) / 2;
+  let istail = tre_tail_start(s, b0, b1, strn) == p;
+  let q = tre_skip_ws(s, p + 2, b1, strn);
+  let t1 = tre_tok(s, q, strn);
+  let pj = if t1 - (t1 / 16) * 16 == 12 then sw_param(s, q, pparpos, np) else 0 - 1;
+  let o = tre_skip_ws(s, q + t1 / 16, b1, strn);
+  let c0 = char(s, o);
+  let c1 = char(s, o + 1);
+  let two = c1 == 61;
+  // inverse condition codes (signed): < -> ge 10, <= -> gt 12, > -> le 13, >= -> lt 11, == -> ne 1, != -> eq 0
+  let cc = if c0 == 60 then (if two == 1 then 12 else 10) else if c0 == 62 then (if two == 1 then 11 else 13)
+    else if (c0 == 61) * two == 1 then 1 else if (c0 == 33) * two == 1 then 0 else 0 - 1;
+  let npos = [tre_skip_ws(s, o + 1 + two, b1, strn), strn];
+  let isnum = is_digit(char(s, npos[0]));
+  let lit = if isnum == 1 then read_num_val(s, npos) else 0 - 1;
+  let th = tre_skip_ws(s, npos[0], b1, strn);
+  let t2 = tre_tok(s, th, strn);
+  let a = tre_skip_ws(s, th + 4, b1, strn);
+  let t3 = tre_tok(s, a, strn);
+  let apar = if t3 - (t3 / 16) * 16 == 12 then sw_param(s, a, pparpos, np) else 0 - 1;
+  let anum = is_digit(char(s, a));
+  let apos = [a, strn];
+  let aval = if anum == 1 then read_num_val(s, apos) else 0 - 1;
+  let el = tre_skip_ws(s, a + t3 / 16, b1, strn);
+  let t4 = tre_tok(s, el, strn);
+  let ok = istail * (pj >= 0) * (cc >= 0) * isnum * (lit >= 0) * (lit < 4096) * (t2 - (t2 / 16) * 16 == 9)
+    * ((apar >= 0) + anum * (aval >= 0) * (aval < 65536) > 0) * (t4 - (t4 / 16) * 16 == 10);
+  if ok == 1 then sw_emit(insns, n, pj, lit, cc, apar, aval) else 0
+}
+fn sw_emit(insns: [i64], n: [i64], pj: i64, lit: i64, cc: i64, apar: i64, aval: i64) -> i64 {
+  let mv = if apar >= 0 then (apar != 0) else 1;
+  // cmp xP,#NUM (f100001f + imm<<10 + P<<5; as+objdump f1000a7f = cmp x19,#2)
+  let _ = em(insns, n, 4043309087 + lit * 1024 + pj * 32);
+  // b.<cc> over the mov and the ret (54000000 + off<<5 + cc)
+  let _ = em(insns, n, 1409286144 + (2 + mv) * 32 + cc);
+  // mov x0, xA (aa0003e0 + A<<16) or movz x0,#A (d2800000 + A<<5)
+  let _ = if mv == 1 then em(insns, n, if apar >= 0 then 2852127712 + apar * 65536 else 3531603968 + aval * 32) else 0;
+  let _ = em(insns, n, 3596551104);
+  3 + mv
+}

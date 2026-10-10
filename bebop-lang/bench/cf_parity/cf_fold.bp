@@ -1,0 +1,7 @@
+// R-CF positive: literal start, fold (P = M^10). CF-EXPECT rc=0 out=428100 touched=1
+fn main() -> i64 {
+  let s = 7;
+  let i = 0;
+  while i < 10 { let s = s * 3 + i; let i = i + 1; 0 };
+  s
+}

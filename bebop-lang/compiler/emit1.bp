@@ -1,0 +1,243 @@
+// compiler/emit1.bp -- R-FAST L4 (lane rfast-emit, 2026-10-08): SINGLE-PASS EMISSION.
+// The planning pass (dag_plan: a full throwaway compile of every fn) existed to learn two things
+// before emission: every fn's word count (for `bl` / `&f` / literal addresses) and every fn's OWN
+// facts (vc, alloc, cs_hi, tsp, marks: compile_fn_at_total_saved). The first is deferred with
+// relocations (dagdrv.bp, kinds 1-4, patched once every start is known). The second cannot be
+// deferred by a relocation -- facts change the fn's own word count -- so the single pass:
+//   1. reserves the largest prologue (8 words) and emits the body after it;
+//   2. computes the real facts at the fn tail, emits the epilogue from them, writes the real
+//      prologue into the reservation and slides the rest of the fn down (e1_close);
+//   3. the body still reads two facts while it is emitted -- the call-site save flag
+//      (fntab[3669]) and the temp-slot base s0 (fntab[5393]). They are GUESSED from the text
+//      (e1_est_vc) and VERIFIED at the tail; a wrong guess re-emits the fn with the real facts
+//      (facts do not depend on the guess: measured equal for all 641 fns of bebop.bp).
+// Measured 2026-10-08 on e1fa8a6f: the planning pass was 668 of 1428 ms of a cold self-compile.
+
+// ---- the guess: symbols compile_fn_at will end with, read from the text ----
+// The symbols bound so far (params, TRE accumulator) plus every distinct name a `let` binds in the
+// body that starts at b (just past its `{`). Misses (inlined callees' params, match payloads) only
+// cost a re-emission.
+fn e1_est_vc(s: str, b: i64, strn: i64, stab: [i64]) -> i64 {
+  let seen = zeros(132);
+  let ns = [0];
+  let p = b;
+  let depth = 1;
+  while depth > 0 {
+    let t = tre_tok(s, p, strn);
+    let k = t - (t / 16) * 16;
+    let depth = if k == 0 then 0 else depth + (k == 3) - (k == 4);
+    let _ = if k == 6 then e1_let(s, p + t / 16, strn, stab, seen, ns) else 0;
+    let p = p + tre_adv(t);
+    0
+  };
+  stab[0] + ns[0]
+}
+fn e1_let(s: str, q0: i64, strn: i64, stab: [i64], seen: [i64], ns: [i64]) -> i64 {
+  let q = tre_skip_ws(s, q0, strn, strn);
+  let t = tre_tok(s, q, strn);
+  let k = t - (t / 16) * 16;
+  if k == 12 then e1_name(s, q, t / 16, stab, seen, ns) else (if k == 3 then e1_tuple(s, q + 1, strn, stab, seen, ns) else 0)
+}
+fn e1_tuple(s: str, q0: i64, strn: i64, stab: [i64], seen: [i64], ns: [i64]) -> i64 {
+  let q = q0;
+  let go = 1;
+  while go == 1 {
+    let t = tre_tok(s, q, strn);
+    let k = t - (t / 16) * 16;
+    let _ = if k == 12 then e1_name(s, q, t / 16, stab, seen, ns) else 0;
+    let go = (k != 4) * (k != 0);
+    let q = q + tre_adv(t);
+    0
+  };
+  0
+}
+fn e1_name(s: str, q: i64, len: i64, stab: [i64], seen: [i64], ns: [i64]) -> i64 {
+  let disc = (len == 1) * (char(s, q) == 95);
+  let dup = if disc == 1 then 1 else e1_seen(s, q, stab, seen, ns[0]);
+  let room = ns[0] < 128;
+  let _ = if (1 - dup) * room == 1 then (let _ = seen[ns[0]] = q in (let _ = ns[0] = ns[0] + 1 in 0)) else 0;
+  0
+}
+fn e1_seen(s: str, q: i64, stab: [i64], seen: [i64], m: i64) -> i64 {
+  let hit = 0;
+  let i = 0;
+  while i < stab[0] {
+    let hit = hit + ident_eq(s, q, stab[3 + 4 * i]);
+    let i = i + 1;
+    0
+  };
+  let j = 0;
+  while j < m {
+    let hit = hit + ident_eq(s, q, seen[j]);
+    let j = j + 1;
+    0
+  };
+  if hit > 0 then 1 else 0
+}
+
+// ---- the per-fn half, called from compile_fn_at. fntab zone "emit1" 5264..5267: 5264 forced
+// fact word + 1 (0 = guess from the text), 5265 the prologue reservation's word, 5266 the first
+// E89 fn's name position + 1 (reported after the walk, as the two passes reported it: after every
+// other diagnostic), 5267 1 = the guess missed and the fn must be emitted again.
+fn e1_reserve(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let _ = fntab[5265] = n[0];
+  let k = 0;
+  while k < 8 {
+    let _ = em(insns, n, 0);
+    let k = k + 1;
+    0
+  };
+  n[0]
+}
+// The two facts the body reads while it is emitted: fntab[3669] (1 = the fn never needs x15 kept
+// across a call) and fntab[5393] (s0, the first temp slot past the spilled symbols).
+fn e1_guess(s: str, pos: [i64], fntab: [i64], stab: [i64]) -> i64 {
+  let f = fntab[5264];
+  let vc = if f > 0 then fw_vc(f - 1) else e1_est_vc(s, pos[0], pos[1], stab);
+  let tsp = if f > 0 then fw_tsp(f - 1) else 0;
+  let ns = if vc > 8 then 1 else (if tsp > 0 then 1 else 0);
+  let _ = fntab[3669] = 1 - ns;
+  let _ = fntab[5393] = if vc > 8 then vc - 8 else 0;
+  0
+}
+// The fn tail: real facts (fntab[3670]); a missed guess asks for a second emission, a right one
+// gets its epilogue, its prologue in the reservation, and the rest of the fn slid down onto it.
+fn e1_close(s: str, insns: [i64], n: [i64], fntab: [i64], stab: [i64], pbase: i64, namepos: i64, selfstart: i64) -> i64 {
+  let _ = compile_fn_at_total_saved(insns, n, fntab, stab, pbase, 1);
+  let fw = fntab[3670];
+  let vc = fw_vc(fw);
+  let tsp = fw_tsp(fw);
+  let ns = if vc > 8 then 1 else (if tsp > 0 then 1 else 0);
+  let s0 = if vc > 8 then vc - 8 else 0;
+  let ok = (ns == 1 - fntab[3669]) * (s0 == fntab[5393]);
+  let _ = fntab[5267] = 1 - ok;
+  let _ = fntab[5264] = fw + 1;
+  if ok == 1 then e1_finish(insns, n, fntab, fw, s0 + tsp > 256, namepos, selfstart) else 0
+}
+fn e1_finish(insns: [i64], n: [i64], fntab: [i64], fw: i64, e89: i64, namepos: i64, selfstart: i64) -> i64 {
+  let _ = if e89 * (fntab[5266] == 0) == 1 then (let _ = fntab[5266] = namepos + 1 in 0) else 0;
+  let _ = emit_epilogue_sized(insns, n, fw_vc(fw), fw_cshi(fw), fw_tsp(fw), fw_marks(fw));
+  let pro = zeros(8);
+  let pn = [0, 8, 0];
+  let _ = emit_prologue_sized(pro, pn, fw_vc(fw), fw_alloc(fw), fw_cshi(fw), fw_tsp(fw), fw_marks(fw));
+  let r = fntab[5265];
+  let d = 8 - pn[0];
+  let k = 0;
+  while k < pn[0] {
+    let _ = insns[r + k] = pro[k];
+    let k = k + 1;
+    0
+  };
+  let j = r + 8;
+  while j < n[0] {
+    let _ = insns[j - d] = insns[j];
+    let j = j + 1;
+    0
+  };
+  let _ = n[0] = n[0] - d;
+  let _ = e1_zero(insns, n[0], n[0] + d);
+  e1_relocs(insns, fntab, r + 8, d, selfstart)
+}
+// Words past the end of the code must read 0: write_lit_cells ORs literal bytes into the cells
+// after the last fn (found by dagfull: a slid tail left 5 stale words under a literal).
+fn e1_zero(insns: [i64], a: i64, b: i64) -> i64 {
+  let k = a;
+  while k < b {
+    let _ = insns[k] = 0;
+    let k = k + 1;
+    0
+  };
+  0
+}
+// This fn's relocations sit at the top of the buffer (every one of them is past the reservation):
+// each moves down by d; a SELF call (kind 5, recorded by emit_bl_call) is re-aimed at the fn's own
+// start here and dropped -- relative inside the fn from now on, as a memo entry stores it.
+fn e1_relocs(insns: [i64], fntab: [i64], from: i64, d: i64, selfstart: i64) -> i64 {
+  let rb = st_cells(fntab[7111]);
+  let c = fntab[7112];
+  let k = c;
+  let go = if k > 0 then (rb[(k - 1) * 2] >= from) else 0;
+  while go == 1 {
+    let k = k - 1;
+    let go = if k > 0 then (rb[(k - 1) * 2] >= from) else 0;
+    0
+  };
+  let j = k;
+  let i = k;
+  while i < c {
+    let p = rb[i * 2] - d;
+    let kt = rb[i * 2 + 1];
+    let isself = (kt >> 56) == 5;
+    let _ = if isself == 1 then (let _ = insns[p] = w_bl(selfstart - p) in 0) else (let _ = rb[j * 2] = p in (let _ = rb[j * 2 + 1] = kt in 0));
+    let j = j + 1 - isself;
+    let i = i + 1;
+    0
+  };
+  let _ = fntab[7112] = j;
+  0
+}
+
+// ---- the program half, called from dag_emit ----
+// One miss: emitted once on the guess, again on the real facts when the guess missed.
+fn e1_compile(s: str, ws: [i64], q: i64, fntab: [i64], insns: [i64], n: [i64], stk: [i64]) -> i64 {
+  let fpos = wsa(ws, 2);
+  let st = n[0];
+  let li = fntab[5552];
+  let rc = fntab[7112];
+  let _ = fntab[5264] = 0;
+  // the per-fn cap (65536 words, trap 83 -- diag d99_cap): held in n[1] while the fn is emitted,
+  // counted from st (n[2]) so the message names the fn cap; the program cap when that is nearer.
+  let cap = n[1];
+  let per = st + 65536 < cap;
+  let _ = if per == 1 then (let _ = n[1] = st + 65536 in (let _ = n[2] = st in 0)) else 0;
+  let _ = compile_fn_at(s, fpos[q], st, fntab, insns, n, stk, 1);
+  let miss = fntab[5267];
+  let _ = if miss == 1 then e1_rewind(insns, fntab, n, st, li, rc) else 0;
+  let _ = if miss == 1 then compile_fn_at(s, fpos[q], st, fntab, insns, n, stk, 1) else 0;
+  let _ = if (miss * fntab[5267]) == 1 then selfcheck_exit(9, 1) else 0;
+  let _ = n[1] = cap;
+  let _ = n[2] = 0;
+  miss
+}
+fn e1_rewind(insns: [i64], fntab: [i64], n: [i64], st: i64, li: i64, rc: i64) -> i64 {
+  let _ = e1_zero(insns, st, n[0]);
+  let _ = n[0] = st;
+  let _ = fntab[5552] = li;
+  let _ = fntab[7112] = rc;
+  let _ = fntab[7114] = 0;
+  0
+}
+// After the walk: the deferred E89, the literal table moved past the code (it was laid out at
+// code length 0), and every relocation patched now that every start is known.
+fn e1_link(s: str, ws: [i64], fntab: [i64], insns: [i64], n: [i64]) -> i64 {
+  let _ = if fntab[5266] > 0 then diag_exit(s, fntab[5266] - 1, 89) else 0;
+  let L = n[0];
+  let i = 0;
+  while i < fntab[5550] {
+    let _ = fntab[6000 + i] = fntab[6000 + i] + L;
+    let i = i + 1;
+    0
+  };
+  let _ = fntab[5551] = L;
+  let _ = ws[22] = L;
+  let rb = st_cells(fntab[7111]);
+  let starts = wsa(ws, 4);
+  let k = 0;
+  while k < fntab[7112] {
+    let kt = rb[k * 2 + 1];
+    let _ = e1_patch(insns, rb[k * 2], kt >> 56, kt & 72057594037927935, starts, fntab);
+    let k = k + 1;
+    0
+  };
+  0
+}
+// One relocation at absolute word p (RT §5.2), re-derived through the SAME w_* formula the emitter
+// used, the register kept from the word. Kind 3's t is the literal's GLOBAL ordinal here.
+fn e1_patch(insns: [i64], p: i64, kind: i64, t: i64, starts: [i64], fntab: [i64]) -> i64 {
+  let d = insns[p] & 31;
+  let _ = if kind == 1 then (let _ = insns[p] = w_bl(starts[t] - p) in 0) else 0;
+  let _ = if kind == 2 then (let _ = insns[p] = w_fnlo(starts[t] + 1, d) in (let _ = insns[p + 1] = w_fnhi(starts[t] + 1, insns[p + 1] & 31) in 0)) else 0;
+  let _ = if kind == 3 then (let _ = insns[p] = w_adr(fntab[6000 + t] - p, d) in 0) else 0;
+  let _ = if kind == 4 then (let _ = insns[p] = w_adr_base(p) in 0) else 0;
+  0
+}

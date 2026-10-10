@@ -72,8 +72,8 @@ fn fnh_build(fntab: [i64]) -> i64 {
 // How many fns in the table carry this name? A8 will not type-check a call whose callee is
 // AMBIGUOUS, and the reason is concrete: `ft_srcpos` returns the LAST match while
 // `fntab_lookup` picks the `bl` target, so with two definitions the checker can be reading
-// a different signature from the one the call actually reaches. `fntab_fact_lookup`'s own
-// comment records the same hazard for B1's facts. Silence, not a guess.
+// a different signature from the one the call actually reaches. `fntab_fact_lookup` (retired
+// 2026-10-08, R-FAST L4) recorded the same hazard for B1 facts. Silence, not a guess.
 // FOUND BY THIS GUARD, 2026-09-14: selfhost/std/qdsl.bp declares `qdsl_explain` TWICE --
 // :371 as (i64, [i64], [i64], [i64]) -> i64 and :537 as (str) -> str -- so its own
 // recursive call at :382 passes FOUR arguments to whichever the table resolves. See the
@@ -669,43 +669,6 @@ fn fntab_lookup(fntab: [i64], name: i64) -> i64 {
     0
   };
   start
-}
-
-// B1 (2026-09-06): look up a function's PUBLISHED planning-pass facts (packed
-// as vc*2+has_alloc, vc = final symbol count incl. params, has_alloc = body
-// allocates on x14) from fntab[2900+i]. 0 if absent (harmless default: a
-// caller with no lookup hit behaves as if vc=0/has_alloc=0, i.e. does not
-// need x15/x14 -- only used during the emission pass, where every fn's own
-// source position is guaranteed to have been published by the planning pass
-// first). A2 step 0 (2026-09-06/07) relayout: indices 2200..2763 are free
-// (fn cap raised 300 -> 512; the ctor/name/start/fpos zones + ft_cache top
-// out at 2046 worst case, cnt=511/ecnt=255), and 4410+ is claimed by
-// unrelated per-fn scratch (loop/mask/struct/literal cells, window moved to
-// fntab[3700+3i]).
-//
-// Keyed by SOURCE POSITION (srcpos, zone 3: fntab[1+2*cnt+i]), not by name:
-// two `fn` DEFINITIONS CAN share a spelling (bench/vs_rust/std_tests/cache.bp
-// has two differently-shaped `cache_lookup`s) and fntab_lookup's own
-// name-keyed "last match wins" is harmless there (every caller ends up
-// resolved to the same one implementation either way). Facts are NOT
-// interchangeable across two same-named-but-different-bodied definitions --
-// a name-keyed lookup silently handed instance A instance B's vc, dropping a
-// callee-saved pair instance A genuinely used (wrong "needs save" -> a
-// clobbered register survives past a `ret`, corrupting the caller). Source
-// position is unique per `fn` keyword, so this cannot alias.
-fn fntab_fact_lookup(fntab: [i64], srcpos: i64) -> i64 {
-  let cnt = fntab[0];
-  let i = 0;
-  let val = 0;
-  while i < cnt {
-    let sp = fntab[1 + cnt + cnt + i];
-    let is_match = if sp == srcpos then 1 else 0;
-    let fv = fntab[2900 + i];
-    let val = if is_match == 1 then fv else val;
-    let i = i + 1;
-    0
-  };
-  val
 }
 
 // Source-position ab over a 3-zone table [cnt, names..., offsets..., srcpos...]:

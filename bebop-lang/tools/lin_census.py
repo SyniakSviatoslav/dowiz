@@ -420,6 +420,267 @@ def walk(path, verbose, matrix, forced_k, stats):
         rec(body, set(params))
 
 
+# ---------------------------------------------------------------- R1/R2 coverage census
+# 2026-10-07, lane rfast-lsr (docs/research/2026-10-07-bebop-fastest-runtime.md §12 L1
+# STEP 0). The A3 rule: a loop transform that covers 0 loops of the real corpus is refused
+# however green it is. `--lsr` answers, BEFORE any emitter change, how many `while` loops
+# carry (a) `NAME * LIT` / `LIT * NAME` / `NAME << LIT` with NAME bound before the loop
+# and never rebound anywhere in its body (LICM candidate), (b) `IND * LIT` / `IND << LIT`
+# with IND the loop counter (`cond` tests IND, the body's own level has exactly one
+# `let IND = IND +/- LIT`) -- the LSR candidate, (c) a literal 1..65535 in the body (any
+# use, and the narrower "operand of * / %" use that costs a `mov` every trip), and (d)
+# self-recursive fns whose TAIL is `f(..)` or `f(..) + f(..)` (TRE candidates; `x + f(..)`
+# reported separately). Each loop is counted against its OWN body; a nested `while` is its
+# own loop (the depth-0 rule of hoist_scan). A loop or fn reached through several `use`
+# expansions is counted once (key = fn name + AST).
+def _kids(node):
+    for x in node[1:] if isinstance(node, tuple) else node:
+        if isinstance(x, (tuple, list)):
+            yield x
+
+
+def _walk_own(node, out, skip_while=True):
+    """Every expression node of a loop body, not descending into nested whiles."""
+    if isinstance(node, list):
+        for it in node:
+            if isinstance(it, tuple) and it and it[0] == 'while' and skip_while:
+                continue
+            _walk_own(it, out, skip_while)
+        return
+    if not isinstance(node, tuple):
+        return
+    out.append(node)
+    for k in _kids(node):
+        _walk_own(k, out, skip_while)
+
+
+def _rebinds(body):
+    """Names (re)bound anywhere in body, nested whiles included."""
+    nodes = []
+    _walk_own(body, nodes, skip_while=False)
+    s = set()
+    for nd in nodes:
+        if nd[0] in ('let', 'letin', 'assign') and isinstance(nd[1], str):
+            s.add(nd[1])
+    return s
+
+
+def _counter(cond, body):
+    if cond[0] != 'bin' or cond[2][0] != 'var':
+        return None
+    ctr = cond[2][1]
+    ups = [it for it in body if it[0] == 'let' and it[1] == ctr]
+    if len(ups) != 1:
+        return None
+    r = ups[0][2]
+    if r[0] == 'bin' and r[1] in ('+', '-') and r[2] == ('var', ctr) and r[3][0] == 'num':
+        return ctr
+    return None
+
+
+def _tails(e):
+    t = e[0]
+    if t == 'if':
+        return _tails(e[2]) + _tails(e[3])
+    if t == 'letin':
+        return _tails(e[3])
+    if t == 'block':
+        return _tails(e[1][-1]) if e[1] else []
+    if t == 'match':
+        out = []
+        for arm in e[2]:
+            out += _tails(arm[2])
+        return out
+    return [e]
+
+
+def lsr_census(files):
+    loops = {}
+    fns = {}
+    skipped = []
+    for path in files:
+        try:
+            src = expand_uses(path)
+            p = bpref.Parser(src)
+            p.program()
+        except BaseException as ex:  # bpref sys.exit(3)s on UNSUPPORTED
+            skipped.append((path, str(ex)[:60]))
+            continue
+        for fnname in p.fns:
+            params, body = p.fns[fnname]
+            fns.setdefault((fnname, repr(body)), (path, fnname, body))
+
+            def rec(items, outer):
+                for it in items:
+                    if it[0] == 'while':
+                        loops.setdefault((fnname, repr(it)), (path, fnname, it, frozenset(outer)))
+                        rec(it[2], set(outer) | outer_syms(it[2]))
+                    elif it[0] == 'let':
+                        outer = set(outer) | set([it[1]])
+            rec(body, set(params))
+    n = len(loops)
+    ca = cb = cab = cc = ccm = 0
+    ex_a = []
+    ex_b = []
+    for key, (path, fnname, w, outer) in loops.items():
+        cond, body = w[1], w[2]
+        reb = _rebinds(body)
+        ctr = _counter(cond, body)
+        nodes = []
+        _walk_own(body, nodes)
+        ha = hb = hc = hcm = 0
+        for nd in nodes:
+            if nd[0] == 'bin' and nd[1] in ('*', '<<'):
+                a, b = nd[2], nd[3]
+                pairs = [(a, b)] + ([(b, a)] if nd[1] == '*' else [])
+                for v, l in pairs:
+                    if v[0] == 'var' and l[0] == 'num':
+                        if ctr is not None and v[1] == ctr:
+                            hb = 1
+                        elif v[1] in outer and v[1] not in reb:
+                            ha = 1
+            if nd[0] == 'num' and 1 <= nd[1] <= 65535:
+                hc = 1
+            if nd[0] == 'bin' and nd[1] in ('*', '/', '%') and (nd[2][0] == 'num' or nd[3][0] == 'num'):
+                lit = nd[2] if nd[2][0] == 'num' else nd[3]
+                if 1 <= lit[1] <= 65535 and lit[1] & (lit[1] - 1) != 0:
+                    hcm = 1  # a power of two is a shift; anything else is mov+mul every trip
+        ca += ha
+        cb += hb
+        cab += 1 if (ha or hb) else 0
+        cc += hc
+        ccm += hcm
+        if ha and len(ex_a) < 12:
+            ex_a.append('%s:%s' % (path, fnname))
+        if hb and len(ex_b) < 12:
+            ex_b.append('%s:%s' % (path, fnname))
+    d_tail = []
+    d_two = []
+    d_acc = []
+    for key, (path, fnname, body) in fns.items():
+        if not body or body[-1][0] != 'expr':
+            continue
+        for t in _tails(body[-1][1]):
+            if t[0] == 'call' and t[1] == fnname:
+                d_tail.append('%s:%s' % (path, fnname))
+            elif t[0] == 'bin' and t[1] == '+':
+                l = t[2][0] == 'call' and t[2][1] == fnname
+                r = t[3][0] == 'call' and t[3][1] == fnname
+                if l and r:
+                    d_two.append('%s:%s' % (path, fnname))
+                elif l or r:
+                    d_acc.append('%s:%s' % (path, fnname))
+    d_tail = sorted(set(d_tail))
+    d_two = sorted(set(d_two))
+    d_acc = sorted(set(d_acc))
+    pct = lambda x: 100.0 * x / n if n else 0.0
+    print('lsr census: %d files read, %d skipped (bpref cannot parse), %d distinct while loops, %d distinct fns'
+          % (len(files) - len(skipped), len(skipped), n, len(fns)))
+    print('  (a) NAME*LIT / NAME<<LIT, NAME invariant  : %4d loops  %5.1f %%' % (ca, pct(ca)))
+    print('  (b) IND*LIT / IND<<LIT, IND the counter   : %4d loops  %5.1f %%' % (cb, pct(cb)))
+    print('  (a) or (b)  [R1 GO needs >= 20 %%]          : %4d loops  %5.1f %%  -> R1 %s'
+          % (cab, pct(cab), 'GO' if pct(cab) >= 20.0 else 'NO-GO'))
+    print('  (c) literal 1..65535 anywhere in the body  : %4d loops  %5.1f %%' % (cc, pct(cc)))
+    print('  (c\') non-pow2 literal 1..65535 as * / %% operand: %4d loops  %5.1f %%' % (ccm, pct(ccm)))
+    print('  (d) self-recursive tail f(..)              : %4d fns' % len(d_tail))
+    print('  (d) self-recursive tail f(..) + f(..)      : %4d fns' % len(d_two))
+    print('  (d) [R2 GO needs >= 3]                     : %4d fns  -> R2 %s'
+          % (len(d_tail) + len(d_two), 'GO' if len(d_tail) + len(d_two) >= 3 else 'NO-GO'))
+    print('  (info) tail x + f(..) (accumulator form)    : %4d fns' % len(d_acc))
+    for x in ex_a:
+        print('    a-example %s' % x)
+    for x in ex_b:
+        print('    b-example %s' % x)
+    for x in d_tail + d_two:
+        print('    d-fn %s' % x)
+    for x in d_acc:
+        print('    d-acc %s' % x)
+    for pth, why in skipped:
+        print('    skip %s (%s)' % (pth, why))
+
+
+# ---------------------------------------------------------------- R2b shrink-wrap census
+# 2026-10-07, lane rfast-lsr (R2b). `--leaf`: per distinct fn, does a CALL-FREE RETURN PATH exist
+# (a path from entry to return that executes no user-fn call; builtins do not count as calls)?
+#   leaf   -- no user call anywhere in the body (a frame-free fn candidate)
+#   mixed  -- calls exist, but some return path makes none (the shrink-wrap case proper)
+#   guard  -- the narrow shape R2b builds: the body is ONE `if P OP NUM then (P|NUM) else ...`,
+#             P a parameter, NUM 0..4095 (the base-case guard that runs before the prologue)
+def _nocall(e, fns):
+    nodes = []
+    _walk_own(e if isinstance(e, list) else [e], nodes, skip_while=False)
+    return not any(nd[0] == 'call' and nd[1] in fns for nd in nodes)
+
+
+def _cf(e, fns):
+    t = e[0]
+    if t == 'if':
+        return _nocall(e[1], fns) and (_cf(e[2], fns) or _cf(e[3], fns))
+    if t == 'letin':
+        return _cf(e[2], fns) and _cf(e[3], fns)
+    if t == 'match':
+        return any(_cf(a[2], fns) for a in e[2])
+    if t == 'block':
+        return all(_cf(x, fns) for x in e[1])
+    return _nocall(e, fns)
+
+
+def _cf_items(items, fns):
+    for it in items:
+        if it[0] == 'return':
+            return _cf(it[1], fns)
+        if it[0] == 'while':
+            if not (_nocall(it[1], fns) and _nocall(it[2], fns)):
+                return False
+        elif it[0] in ('let', 'expr'):
+            if not _cf(it[2] if it[0] == 'let' else it[1], fns):
+                return False
+    return True
+
+
+def leaf_census(files):
+    fns = {}
+    skipped = 0
+    for path in files:
+        try:
+            p = bpref.Parser(expand_uses(path))
+            p.program()
+        except BaseException:
+            skipped += 1
+            continue
+        for nm in p.fns:
+            params, body = p.fns[nm]
+            fns.setdefault((nm, repr(body)), (path, nm, params, body, set(p.fns)))
+    n = len(fns)
+    leaf = mixed = guard = gmixed = 0
+    ex = []
+    for key, (path, nm, params, body, allf) in fns.items():
+        anycall = not _nocall(body, allf)
+        cf = _cf_items(body, allf)
+        if not anycall:
+            leaf += 1
+        elif cf:
+            mixed += 1
+        if len(body) == 1 and body[0][0] == 'expr' and body[0][1][0] == 'if':
+            c, a = body[0][1][1], body[0][1][2]
+            ok = (c[0] == 'bin' and c[1] in ('<', '<=', '>', '>=', '==', '!=') and c[2][0] == 'var'
+                  and c[2][1] in params and c[3][0] == 'num' and 0 <= c[3][1] <= 4095
+                  and ((a[0] == 'var' and a[1] in params) or (a[0] == 'num' and 0 <= a[1] <= 65535)))
+            if ok:
+                guard += 1
+                gmixed += 1 if anycall else 0
+                if len(ex) < 12:
+                    ex.append('%s:%s' % (path, nm))
+    pct = lambda x: 100.0 * x / n if n else 0.0
+    print('leaf census: %d files read, %d skipped, %d distinct fns' % (len(files) - skipped, skipped, n))
+    print('  leaf  (no user call at all)                 : %4d  %5.1f %%' % (leaf, pct(leaf)))
+    print('  mixed (calls, but a call-free return path)  : %4d  %5.1f %%' % (mixed, pct(mixed)))
+    print('  any call-free return path (leaf + mixed)    : %4d  %5.1f %%' % (leaf + mixed, pct(leaf + mixed)))
+    print('  guard shape R2b builds (all / with calls)   : %4d / %d  %5.1f %% / %5.1f %%' % (guard, gmixed, pct(guard), pct(gmixed)))
+    for x in ex:
+        print('    guard-example %s' % x)
+
+
 def main():
     args = sys.argv[1:]
     verbose = '-v' in args
@@ -432,6 +693,12 @@ def main():
         forced_k = int(args[i + 1])
         del args[i:i + 2]
     files = [a for a in args if not a.startswith('-')]
+    if '--leaf' in args:
+        leaf_census(files)
+        return
+    if '--lsr' in args:
+        lsr_census(files)
+        return
     stats = dict(seen=0, fold=0, emit=0, rej=0, skip=0, why={})
     for f in files:
         walk(f, verbose, matrix, forced_k, stats)

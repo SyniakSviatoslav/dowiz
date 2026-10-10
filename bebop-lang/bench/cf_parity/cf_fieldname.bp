@@ -1,0 +1,13 @@
+// W-CFVAL F1 (2026-10-09): a body-local `x` that shares its spelling with a struct FIELD. cf_prefix counted
+// the field token as a binding, so R-CF's runtime prefix read `x` before any `let x` and the compile was
+// REFUSED (rc 84) where BEBOP_NO_CF=1 compiles and prints 3998004. The fixed gate leaves the loop alone.
+// CF-EXPECT rc=0 out=3998004 touched=0
+struct P { x: i64, y: i64 }
+fn h(n: i64) -> i64 {
+  let p = P { x: 4, y: n };
+  let s = p.x;
+  let i = n - n;
+  while i < 2000 { let x = i * 2; let s = s + x; let i = i + 1; 0 };
+  s
+}
+fn main() -> i64 { h(3) }

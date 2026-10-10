@@ -278,7 +278,7 @@ fn parse_operands(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 }
 
 // A real cross-function call via bl: eval args -> x0..x(n-1), bl target, push.
-fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], tk: i64) -> i64 {
   let strn = slen(s, pos);
   // A21 step 1: a fn declared with k > 1 return values may only be called as the
   // whole RHS of a destructuring `let`, which publishes its name in fntab[7102].
@@ -294,6 +294,11 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
   // then a parallel move places the args into x0..x(nargs-1) (params 9-14
   // arrive in x8..x13, so target register == argument index uniformly).
   let base = fntab[5387] - nargs;
+  // R2 kind 2 (tre_kind_at): window entry base-1 is the LEFT value of `f(a) + f(b)` (nothing
+  // is pushed between the left operand and this call); it joins the accumulator BEFORE the
+  // park, so it is read where it already is instead of being parked into a callee-saved
+  // register first (a park would cost a mov and, in fib, a whole saved pair).
+  let _ = if tk == 2 then tre_acc_add(insns, n, fntab, stab, base - 1) else 0;
   let _ = vs_park(insns, n, fntab, stab, nargs);
   let _ = vs_place_args(insns, n, fntab, stab, base, nargs);
   let i = [nargs - 1];
@@ -308,11 +313,14 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
   // counter and skip-save flag (0 = save, matches the pre-B1 unconditional
   // behaviour and is the default in any fntab this mechanism never touches;
   // 1 = the caller's own facts say it never needs x15/x14 preserved).
-  let _ = fntab[3668] = fntab[3668] + 1;
-  // DG4: a call to ANOTHER fn is a BL relocation (RT L-2); a self-call stays relative. The bl
-  // word follows emit_bl's optional `str x15`, hence the has_spills offset.
-  let _ = if name == selfname then 0 else dag_rel_fn(fntab, n[0] + 1 - fntab[3669], 1, name);
-  let _ = emit_bl(insns, n, target, 1 - fntab[3669]);
+  // R2: a tail site (tk > 0) emits ONE `b` to the param-move block in both passes and no `bl`,
+  // so it is not a call site for the planning pass's save arithmetic either. The branch is
+  // always backward, so imm26 borrows 2^26 (as+objdump: 17ffffff = b .-4).
+  let _ = fntab[3668] = fntab[3668] + (tk == 0);
+  // DG4: a call to ANOTHER fn is a BL relocation (RT L-2); a self-call is relative (kind 5 only
+  // until emit1.bp's e1_relocs re-aims it). The bl follows emit_bl's optional `str x15`.
+  let _ = if name == selfname then (if tk > 0 then 0 else dag_rel(fntab, n[0] + 1 - fntab[3669], 5, 0)) else dag_rel_fn(fntab, n[0] + 1 - fntab[3669], 1, name);
+  let _ = if tk > 0 then em(insns, n, 402653184 + fntab[5251] - n[0]) else emit_bl(insns, n, target, 1 - fntab[3669]);
   // x1..x7 are free (parked); x0 holds the result. `bl` has no destination
   // field to retarget, so p = -1.
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
@@ -411,8 +419,9 @@ fn vs_deliver(insns: [i64], n: [i64], fntab: [i64], stab: [i64], nops: i64) -> i
 // strand pos on the first `,` -- every multi-arg recursion (gcd, ackermann)
 // silently returned garbage; only 1-arg recursion (c09 factorial) was right).
 fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  emit_bl_call(s, selfname, pos, insns, n, stab, selfname, selfstart, fntab)
+  emit_bl_call(s, selfname, pos, insns, n, stab, selfname, selfstart, fntab, if fntab[5250] > 0 then tre_kind_at(fntab, pos[0]) else 0)
 }
+
 
 // hvham(a, b, n): NEON popcount of a^b over floor(n/8)*8 words.
 // Single-path loop form (works for any n%8==0). Dossier: BUGFIXES.md.

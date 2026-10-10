@@ -48,7 +48,7 @@ printf 'fn main() -> i64 {\n  let a = zeros(40000000);\n  a[0]\n}\n' > "$T/t80.b
 # aggregate-volume coverage the program gave moved to the (now positive) construct
 # bench/parity_constructs/c38_frameheap.bp, EXPECT=2559; overflow of the ARENA is
 # still covered here by t80 and by neg/c37_arenafull.
-printf 'fn r(n: i64) -> i64 {\n  r(n + 1)\n}\nfn main() -> i64 {\n  r(0)\n}\n' > "$T/t82.bp"
+printf 'fn r(n: i64) -> i64 {\n  r(n + 1) + 1\n}\nfn main() -> i64 {\n  r(0)\n}\n' > "$T/t82.bp"
 printf 'fn main() -> i64 {\n  nosuch(1)\n}\n' > "$T/t87.bp"
 while read -r code text; do
   ./seed/build/seed "$BIN" compile "$T/t$code.bp" "$T/t$code.bin" >/dev/null 2>&1 || { echo "FAIL trap $code: compile failed"; fail=$((fail+1)); continue; }

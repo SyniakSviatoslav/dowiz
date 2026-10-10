@@ -1,0 +1,12 @@
+// K2H2 bench (lane rfast-lsr, 2026-10-07): fib(25) in the TWO-REAL-CALLS form -- the tail is
+// `a + b` over two let-bound calls, not `fib(..) + fib(..)`, so no tail-recursion elimination
+// applies and every logical call is a real `bl`. Twin: rust_once/k2h_2call.rs (black_box on the
+// second call). REPS=500 (kernel_reps.txt k2h), main returns the TOTAL ms (honest.sh / REPS).
+fn fib(n: i64) -> i64 { if n < 2 then n else (let a = fib(n - 1) in let b = fib(n - 2) in a + b) }
+fn main() -> i64 {
+  let t0 = clock_ms();
+  let r = 0;
+  let rep = 500;
+  while rep > 0 { let r = r + fib(25); let rep = rep - 1; 0 };
+  (clock_ms() - t0) + r * 0
+}

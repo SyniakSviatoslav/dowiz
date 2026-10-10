@@ -29,6 +29,12 @@ for k in k1h k2h k3h k4 k8h; do
   ./seed/build/seed "$BEBOP_BIN" compile bench/vs_rust/bench630/${k}t.bp "$T/${k}t.bin" >/dev/null 2>&1 || { echo "COMPILEFAIL ${k}t"; exit 1; }
   rustc -O -o "$T/rust/$k" bench/vs_rust/rust_once/$([ $k = k4 ] && echo k4h || echo $k).rs 2>/dev/null || { echo "RUSTC FAIL $k"; exit 1; }
 done
+# R-CF (lane rfast-lsr, 2026-10-08): the compiler now eliminates K1H/K3H/K4's affine loops (closed
+# form, compiler/affine.bp), so those rows are "loop eliminated" and NOT a codegen comparison; the
+# codegen claim is carried by the "kept loop" twins, compiled with BEBOP_NO_CF=1 (pass off).
+for k in k1h k3h k4; do
+  BEBOP_NO_CF=1 ./seed/build/seed "$BEBOP_BIN" compile bench/vs_rust/bench630/${k}t.bp "$T/${k}t_kept.bin" >/dev/null 2>&1 || { echo "COMPILEFAIL ${k}t kept"; exit 1; }
+done
 T="$T" R="$R" PIN="$PIN" BB="$BEBOP_BIN" python3 - <<'PY'
 import os, subprocess, statistics, hashlib
 T=os.environ['T']; R=int(os.environ['R']); PIN=os.environ['PIN']; BB=os.environ['BB']
@@ -62,6 +68,7 @@ print(f'# honest twins (D11-C), in-process pinned core {PIN}, R={R}, reps per ru
 print(f'# core {PIN} governor {rd("scaling_governor")}; a row whose scaling_cur_freq moved > 10 % between its before/after reads prints ? after the ratio')
 print('| kernel | bebop med / p95 ms per rep | Rust honest med / p95 ms per rep | bebop / Rust | ratio p05..p95 range | core MHz before -> after | gate <= 2.0x (TG-DONE 1) | 1.0x (D1(a) long target) | bebop RSS MB |')
 print('|---|---|---|---|---|---|---|---|---|')
+ELIM={'k1h','k3h','k4'}
 for k,(bm,bp),(rm,rp) in rows:
     ratio = bm/rm if rm==rm and rm>0 else float('nan')
     (bl,rl),(f0,f1) = lo05[k], fq[k]
@@ -69,7 +76,33 @@ for k,(bm,bp),(rm,rp) in rows:
     moved = f0<=0 or f1<=0 or abs(f1-f0) > 0.10*f0
     fcol = 'NOT MEASURED' if f0<=0 or f1<=0 else f'{f0//1000} -> {f1//1000}'
     q = ' ?' if moved else ''
-    print(f'| {k.upper()} | {bm:.3f} / {bp:.3f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x{q} | {rng} | {fcol} | {"MET" if ratio <= 2.0 else "UNMET"} | {ratio:.1f}x | {rss.get(k,0)/1024:.1f} |')
+    lab = k.upper() + (' loop eliminated (R-CF; not codegen)' if k in ELIM else '')
+    print(f'| {lab} | {bm:.4f} / {bp:.3f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x{q} | {rng} | {fcol} | {"MET" if ratio <= 2.0 else "UNMET"} | {ratio:.1f}x | {rss.get(k,0)/1024:.1f} |')
+# the kept-loop twins: same kernels, BEBOP_NO_CF=1, same pin/reps, interleaved with a fresh Rust run
+for k in ['k1h','k3h','k4']:
+    bb=[]; rs=[]
+    for _ in range(R):
+        v=subprocess.run(['taskset','-c',PIN,'./seed/build/seed',f'{T}/{k}t_kept.bin'],capture_output=True,text=True).stdout.strip().split('\n')[-1]
+        bb.append(int(v)/float(REPS[k]))
+        rs.append(float(subprocess.run(['taskset','-c',PIN,f'{T}/rust/{k}'],capture_output=True,text=True).stderr.strip().split('\n')[-1]))
+    (bm,bp),(rm,rp)=med(bb),med(rs); ratio=bm/rm
+    print(f'| {k.upper()} kept loop (BEBOP_NO_CF=1) | {bm:.3f} / {bp:.3f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x | | | {"MET" if ratio <= 2.0 else "UNMET"} | {ratio:.1f}x | |')
+# --- K2H2 row (lane rfast-lsr, 2026-10-07, operator Q3: K2H shown BOTH ways). K2H above lets
+# both compilers eliminate the second recursive call (LLVM's TRE; bebop's when the compiler has
+# it); K2H2 forbids it on both sides: bench630/k2h2t.bp binds both calls with `let` (no
+# `f(..) + f(..)` tail) and rust_once/k2h_2call.rs puts black_box on the second call (objdump:
+# two `bl fib` per node). Same reps as k2h, same pin, same interleaving. A compile failure
+# REFUSES the row rather than printing a number for nothing.
+if subprocess.run(['./seed/build/seed',BB,'compile','bench/vs_rust/bench630/k2h2t.bp',f'{T}/k2h2t.bin'],capture_output=True).returncode!=0 or \
+   subprocess.run(['rustc','-O','-o',f'{T}/rust/k2h2','bench/vs_rust/rust_once/k2h_2call.rs'],capture_output=True).returncode!=0:
+    raise SystemExit('K2H2 COMPILE FAILED')
+bb=[]; rs=[]
+for _ in range(R):
+    v=subprocess.run(['taskset','-c',PIN,'./seed/build/seed',f'{T}/k2h2t.bin'],capture_output=True,text=True).stdout.strip().split('\n')[-1]
+    bb.append(int(v)/float(REPS['k2h']))
+    rs.append(float(subprocess.run(['taskset','-c',PIN,f'{T}/rust/k2h2'],capture_output=True,text=True).stderr.strip().split('\n')[-1]))
+(bm,bp),(rm,rp)=med(bb),med(rs); ratio=bm/rm
+print(f'| K2H2 (no TRE either side) | {bm:.3f} / {bp:.3f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x | | | {"MET" if ratio <= 2.0 else "UNMET"} | {ratio:.1f}x | |')
 import re
 try:
     k6=re.search(r'\| bebop scan nn\.bp \(Q=20\) \| ([0-9.]+) ms', open('bench/tq_sqlite/RESULT.md').read()).group(1)

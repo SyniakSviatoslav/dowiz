@@ -246,6 +246,14 @@ ZONES = [(0, 1, "fntab"), (2900, 3667, "b1_facts"), (3668, 3670, "b1_scratch"),
          # reloc buffer (st_addr, 0 = not recording -- the planning table and every other fntab),
          # 7112 = pairs recorded, 7113 = capacity, 7114 = "this fn cannot be memoised".
          (7111, 7114, "dag_reloc"),
+         # R2 TRE (lane rfast-lsr 2026-10-07, compiler/tre.bp tre_setup): per-fn tail-call
+         # state, inside the 5247..5284 run A18 freed. 5250 mode, 5251 param-move word, 5252
+         # accumulator register, 5253 name pos, 5254..5261 sites, 5262 count, 5263 strn.
+         (5250, 5263, "tre"),
+         # R-FAST L4 single-pass emission (lane rfast-emit 2026-10-08, compiler/emit1.bp): 5264 the
+         # forced fact word + 1 (0 = guess from the text), 5265 the prologue reservation's word,
+         # 5266 the first E89 fn's name position + 1, 5267 1 = the guess missed (emit again).
+         (5264, 5267, "emit1"),
          (7168, 8191, "fnhash")]
 # A16 prerequisite RELAYOUT (2026-09-09): the fn cap is 768, so the FLOATING fn zone
 # (3*cnt + ecnt + 258 cells = 0..2816 at cnt=768, ecnt=255) needs everything above it
@@ -283,6 +291,8 @@ REGISTERED = {
     # said it was (that is the F3 fntab[4810] defect this dict was added to prevent).
     7000: "struct_table", 7001: "struct_table",
     7111: "dag_reloc", 7112: "dag_reloc", 7113: "dag_reloc", 7114: "dag_reloc",
+    5250: "tre", 5251: "tre", 5252: "tre", 5253: "tre", 5254: "tre", 5262: "tre", 5263: "tre",
+    5264: "emit1", 5265: "emit1", 5266: "emit1", 5267: "emit1",
     7002: "struct_table", 7034: "struct_table",
     # A21 steps 1+2.
     7100: "tuple_abi", 7101: "tuple_abi", 7102: "tuple_abi",

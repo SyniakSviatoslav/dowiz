@@ -29,3 +29,4 @@ import Bebop.Theorems
 import Bebop.Datalog
 import Bebop.Dag
 import Bebop.KvDelta
+import Bebop.Affine

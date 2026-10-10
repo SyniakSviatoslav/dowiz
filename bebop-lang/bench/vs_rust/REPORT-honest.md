@@ -201,3 +201,78 @@ K5 self-compile of bebop.bp: cold 0.84 s (honest.sh) and 0.84-0.97 s (direct), w
 Two instruments were fixed today:
 1. honest.sh K5 left the new `.dag` sidecar between runs, so the "cold" row read 0.09 s (a replay); it now removes every `k5.bin*` and refuses a failed compile.
 2. bench_pinned.sh compared the one-rep kernels/k*h.bp against the N-rep rust_once/k*h.rs in the process-wall table: MISMATCH and a fake 0.08-0.12x. The h rows are out of that table.
+
+## R2 TRE row (2026-10-07, lane rfast-lsr), candidate 0cc4c5c5 vs control 8a0b4325 (fixpoint gen3 == gen4 0cc4c5c5; NOT promoted)
+
+What changed: tail-recursion elimination for SELF calls in tail position (compiler/tre.bp, emit_bl_call `tk`):
+`f(args)` in tail -> args to x0.., `b` back to the param-move block; `f(a) + f(b)` in tail -> the left value
+joins an accumulator register (one hidden stab entry), the right call becomes the branch, every return adds the
+accumulator. LLVM's TailRecursionElimination shape. R1 (LSR/LICM) was NOT built: STEP 0 census 11.2 % of 1707
+loops (A3 rule needs >= 20 %). Coverage of R2: 3 corpus fns (census) / 11 of 439 sweep programs change bytes,
+all 11 print the same output and exit code as the control.
+
+Box BUSY (procs 30 before the candidate run, 26 before the control; DVFS cap 1.9 GHz, cpu4 dipped to 0.69-0.96 GHz
+between kernels) -- candidate then control back to back in ONE slot, honest.sh R=11, pinned core 4:
+
+| kernel | candidate 0cc4c5c5 bebop / Rust | ratio | control 8a0b4325 bebop / Rust | ratio |
+|---|---|---|---|---|
+| K1H | 1.120 / 1.083 | 1.0x | 1.080 / 1.081 | 1.0x |
+| K2H (fib, TRE on both sides) | 0.464 / 0.327 | 1.4x | 0.648 / 0.340 | 1.9x |
+| K2H2 (fib, no TRE either side, new twin) | 0.632 / 0.369 | 1.7x | 0.630 / 0.368 | 1.7x |
+| K3H | 0.193 / 0.143 | 1.3x | 0.193 / 0.145 | 1.3x |
+| K4 | 4.280 / 3.225 | 1.3x | 4.280 / 3.180 | 1.3x |
+| K8H | 0.028 / 0.026 | 1.1x | 0.029 / 0.027 | 1.1x |
+| K5 self-compile (cold, median of 3) | 1.10 s | | 1.06 s | |
+
+A quiet-box run of the same kernel code (compiler d6acf93a emits byte-identical kernels; procs 22, 1.9 GHz flat):
+K2H 0.464 / 0.323 = 1.4x, control 0.648 / 0.322 = 2.0x. K2H bebop -28 %; the K2H <= 1.1x gate is UNMET.
+
+Why K2H stops at 1.4x (objdump): half of fib's nodes are leaves, and a bebop leaf is 17 instructions against
+LLVM's 9 -- `sub sp,#0x60` / `add sp` (frame) and a second saved pair x21/x22 that exists only because every
+call inside an if-arm parks the arm's join register (`mov x21, x0`, pre-existing, every program). An internal node
+is 11 instructions (mov x19,x0 / cmp / b.ge / sub / mov x21,x0 / mov x0,x1 / bl / sub / add acc / mov / b) against
+LLVM's 8. Closing the rest is shrink-wrapping (base case
+before the prologue), not TRE. K2H2 (no TRE anywhere) is 1.7x on both compilers: the cost of a real bebop call,
+not the 5.7-cycle "LLVM level" the research report inferred from K2H.
+Compiler cost: census words 65307 -> 67175 (+1868, +2.9 %), bcond 1962 -> 2040 (+78), cbz 193 -> 193; K5 cold
+self-compile 1.060 -> 1.110 s median / 1.059 -> 1.066 s min (interleaved x3).
+
+## R2b shrink-wrap guard row (2026-10-07, lane rfast-lsr), candidate bc2aa59b on top of R2 0cc4c5c5 (NOT promoted)
+
+A fn whose whole body is `if P OP NUM then (P|NUM) else ...` (P a parameter in x0..x7) now starts with
+`cmp xP,#NUM; b.<not OP> full; [mov x0,..]; ret` BEFORE the prologue (compiler/tre.bp sw_guard). fib's leaf:
+17 instructions -> 3 (`cmp x0,#2; b.ge; ret`; LLVM 9). Coverage: 23 of 2338 distinct fns have that shape (1.0 %;
+7 of them also call); 31.7 % have SOME call-free return path (28.6 % no calls at all, 3.0 % mixed). The
+if-join park (`mov x21,x0` + the x21/x22 pair) was NOT changed: the guard removes it from every leaf activation.
+
+honest.sh was SIGKILLed by procguard 3 times (procs 30-33) -> NOT MEASURED. SUBSTITUTE, same slot, core 4,
+interleaved x7, k2ht total ms / 500 reps (median): control 8a0b4325 0.564, R2 0cc4c5c5 0.406, R2b bc2aa59b 0.334;
+Rust k2h.rs 0.284 -> K2H 1.99x / 1.43x / **1.18x**. Spread: R2b 149-193 ms of 500 reps (wider than R2's 199-208).
+
+## R-CF row (2026-10-08, lane rfast-lsr), candidate e1fa8a6f on top of R2b bc2aa59b (NOT promoted)
+
+R-CF eliminates affine `while` loops in closed form (compiler/affine.bp + affine_gen.bp, a text pass in
+use_expand_at): a body of `let x = <affine form>;` statements over Z/2^64 with a counted exit becomes v_N = M^N v_0.
+Literal start -> P = M^N folded at compile time (nested loops compose: K1H/K3H/K4 become straight-line code);
+symbolic start -> a generated helper applies M^N by binary powering when N >= 1024 and exact, else the loop runs.
+`BEBOP_NO_CF=1` turns it off. The "loop eliminated" rows are NOT a codegen comparison: Rust keeps its loop. The codegen
+claim is carried by the "kept loop" rows, which must equal the R2b numbers.
+
+honest.sh R=11, core 4, procs 26-28 (box busy: p95s and K5 are inflated; the ratios are the claim):
+
+| kernel | bebop med / p95 ms per rep | Rust med / p95 | bebop / Rust |
+|---|---|---|---|
+| K1H loop eliminated | 0.0000 / 0.0000 (whole 100-rep kernel < 1 ms clock_ms tick) | 1.067 / 1.097 | 0.0000x |
+| K3H loop eliminated | 0.0000 / 0.0000 | 0.145 / 0.238 | 0.0000x |
+| K4 loop eliminated | 0.0000 / 0.0000 | 3.776 / 10.791 | 0.0000x |
+| K1H kept loop | 1.130 / 2.170 | 1.127 / 1.812 | 1.0x (R2b control 1.0x) |
+| K3H kept loop | 0.292 / 0.445 | 0.215 / 0.241 | 1.4x (R2b control 1.3x; Rust row inflated too, box busy) |
+| K4 kept loop | 4.370 / 6.710 | 3.271 / 5.485 | 1.3x (R2b control 1.3x) |
+| K2H / K2H2 / K8H (untouched) | 0.384 / 0.642 / 0.0383 | 0.325 / 0.559 / 0.031 | 1.18x / 1.1x / 1.24x |
+
+Bit-exactness against the R-SPIKE C values: K1H 1M x 20 reps -12017413204599424 (= 18434726660504952192),
+K4 10 reps -1871081701536519807 (= 16575662372173031809), K3H 200 reps 2875824312501384256 -- folded, kept and
+bc2aa59b binaries all print them. Crossover (symbolic start, 40M iterations, cf / kept ms): N=256 43/44,
+512 44/43, 1023 43/43, 1024 7/44, 2048 2/43, 4096 1/43 -- the 1024 guard holds and is conservative.
+Compiler cost: census words 67771 -> 74817 (+7046), bcond 2058 -> 2345 (+287), cbz 193 -> 224; K5 interleaved x7
+1.400 -> 1.418 s median (+1.3 %), 1.379 -> 1.410 s min.
