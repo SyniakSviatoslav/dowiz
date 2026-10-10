@@ -39,7 +39,7 @@ impl HubImages {
         };
         let (_, hub) = self.log_hub().await?;
         let till = match self.image(crate::command::till::IMAGE_TILL).await? {
-            Some((_, b)) => LogImage::load(&b).map_err(|_| Error::RustError("till image is unreadable".into()))?,
+            Some((m, b)) => self.load_entries(crate::command::till::IMAGE_TILL, m.generation, &b).map_err(|_| Error::RustError("till image is unreadable".into()))?,
             None => LogImage::create().map_err(|_| Error::RustError("cannot create till image".into()))?,
         };
         let settings = match self.image(crate::hubstore::IMAGE_SETTINGS).await? {
@@ -75,7 +75,7 @@ impl HubImages {
         }
         let (_, hub) = self.log_hub().await?;
         let till = match self.image(crate::command::till::IMAGE_TILL).await? {
-            Some((_, b)) => LogImage::load(&b).map_err(|_| Error::RustError("till image is unreadable".into()))?.entries(),
+            Some((m, b)) => self.load_entries(crate::command::till::IMAGE_TILL, m.generation, &b).map_err(|_| Error::RustError("till image is unreadable".into()))?.entries(),
             None => Vec::new(),
         };
         let periods = crate::command::till::periods(&till).map_err(Error::RustError)?;
@@ -132,8 +132,8 @@ impl HubImages {
     /// error, said by the caller, never "no findings".
     async fn leg_rows(&self, venue: &str, currency: &str) -> Result<Vec<fold::Row>> {
         let rows: Vec<String> = match self.image(crate::wallet::IMAGE_LEDGER).await? {
-            Some((_, b)) => {
-                let log = LogImage::load(&b).map_err(|_| Error::RustError("ledger image is unreadable".into()))?;
+            Some((m, b)) => {
+                let log = self.load_entries(crate::wallet::IMAGE_LEDGER, m.generation, &b).map_err(|_| Error::RustError("ledger image is unreadable".into()))?;
                 let mut es = log.about(crate::wallet::K_TX, None, usize::MAX);
                 es.reverse();
                 es.into_iter().map(|e| e.json).collect()

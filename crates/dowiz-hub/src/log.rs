@@ -8,7 +8,7 @@
 use bebop_store::{evlog::{EvLog, Record}, Store};
 
 use crate::{content_id_chained, e_is_full, usage_of_kind};
-use crate::{EventKind, Hub, HubError, Usage, DEFAULT_IMAGE_BYTES};
+use crate::{EventKind, Hub, HubError, LogMark, Usage, DEFAULT_IMAGE_BYTES};
 
 impl Hub {
     /// A brand-new hub: a fresh image with the log schema created.
@@ -25,6 +25,16 @@ impl Hub {
     /// Load an existing image. Refuses one with no valid superblock rather than
     /// carrying on against a store that will answer nonsense.
     pub fn load(bytes: &[u8]) -> Result<Self, HubError> {
+        Self::load_since(bytes, None).map(|(hub, _)| hub)
+    }
+
+    /// `load`, not re-hashing the records `mark` covers -- for a holder that keeps the
+    /// bytes in its own memory between turns (the DO, `workers/api/src/hubdo/logmark.rs`).
+    /// `None` is `load` exactly: every record hashed. Hands back the mark for these bytes,
+    /// to pass on the next load of them or of what this hub appends to them (none for a
+    /// log with a quarantined record, `quarantine::chain_is_whole_since`).
+    /// `bebop_store::verify::since` says what a mark trusts.
+    pub fn load_since(bytes: &[u8], mark: Option<&LogMark>) -> Result<(Self, Option<LogMark>), HubError> {
         let store = Store::from_bytes(bytes);
         if store.pick().is_none() {
             return Err(HubError::NotAHub);
@@ -36,8 +46,8 @@ impl Hub {
         // A record whose crc fails is QUARANTINED, served around and counted, not
         // refused (operator 2026-10-05); a broken link still refuses. `crate::quarantine`.
         // The scan's findings are kept (`crate::Seen`): `events()` reads them instead of hashing again.
-        let seen = crate::chain_is_whole_seen(&store)?;
-        Ok(Hub { store, seen: Some(seen) })
+        let (seen, next) = crate::chain_is_whole_seen(&store, mark)?;
+        Ok((Hub { store, seen: Some(seen) }, next))
     }
 
     /// The image to persist. The caller writes this wherever the hub lives.

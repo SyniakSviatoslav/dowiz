@@ -153,3 +153,137 @@ fn forget_me_erases_a_quarantined_record_of_that_person_whole() {
     let c = again.chain_check();
     assert_eq!((c.redacted, c.broken), (1, 1), "{c:?}");
 }
+
+// ── W-HUBCRC: the same policy through `Hub::load_since` (the DO's per-turn load) ──
+
+/// What the DO holds after one turn: five events loaded (and their mark), one appended,
+/// the bytes it writes back. Returns those bytes and the mark of the five.
+fn appended_after_mark() -> (Vec<u8>, crate::LogMark) {
+    let (mut hub, mark) = Hub::load_since(&hub_bytes(5, 20), None).unwrap();
+    hub.append(EventKind::Placed, "ord-new", r#"{"status":"new"}"#, 9, [0u8; 32]).unwrap();
+    (hub.to_bytes_trimmed(), mark.expect("five records have a mark"))
+}
+
+/// POSITIVE TWIN: through the mark, the appended log loads as `Hub::load` loads it, and
+/// the mark it hands back covers the new record too.
+#[test]
+fn load_since_after_an_append_reads_as_load() {
+    let (bytes, mark) = appended_after_mark();
+    let (hub, next) = Hub::load_since(&bytes, Some(&mark)).expect("a clean append loads");
+    let cold = Hub::load(&bytes).unwrap();
+    assert_eq!((hub.len(), hub.events()), (cold.len(), cold.events()));
+    let next = next.expect("a mark for the six");
+    assert_ne!(next, mark, "the mark moved to the appended record");
+    assert_eq!(Hub::load_since(&bytes, Some(&next)).unwrap().0.len(), 6);
+}
+
+/// THE NAMED CELL FOR THE MARKED PATH: one byte of payload cell 12 of the APPENDED record,
+/// changed. Loaded through the mark it is QUARANTINED -- named, counted, not served -- exactly
+/// as a cold `Hub::load` quarantines it: records newer than the mark are always hashed.
+#[test]
+fn a_changed_byte_in_the_appended_record_is_quarantined_through_the_mark() {
+    let (bytes, mark) = appended_after_mark();
+    let (bad, obj) = flipped(&bytes, 0, 12);
+    let (hub, _) = Hub::load_since(&bad, Some(&mark)).expect("a bad record must not refuse the log");
+    assert_eq!((hub.len(), hub.events().len()), (6, 5), "the changed record is not served");
+    assert_eq!(hub.crc_quarantined().iter().map(|b| b.obj).collect::<Vec<_>>(), vec![obj], "named");
+    assert_eq!(hub.events(), Hub::load(&bad).unwrap().events(), "same as the cold load");
+}
+
+/// A CHANGED `prev` (payload cell 7) IN THE APPENDED RECORD REFUSES through the mark, with
+/// the same `BadCrc` the cold load refuses with.
+#[test]
+fn a_changed_prev_in_the_appended_record_refuses_through_the_mark() {
+    let (bytes, mark) = appended_after_mark();
+    let (bad, obj) = flipped(&bytes, 0, 7);
+    let marked = Hub::load_since(&bad, Some(&mark)).map(|_| ()).unwrap_err();
+    assert!(matches!(marked, HubError::BadCrc(b) if b.obj == obj), "{marked:?}");
+    assert_eq!(format!("{marked:?}"), format!("{:?}", Hub::load(&bad).map(|_| ()).unwrap_err()));
+}
+
+/// THE COUNT IS STILL CHECKED through the mark: the appended record's `next` ref (payload
+/// cell 2) cut to null ends the walk after one record where the root says six -- refused
+/// as `Corrupt`, as the cold load refuses it.
+#[test]
+fn a_cut_chain_refuses_through_the_mark() {
+    let (bytes, mark) = appended_after_mark();
+    let mut st = Store::from_bytes(&bytes);
+    let newest = record(&st, 0);
+    st.cells[newest + 2 + 2] = 0;
+    let marked = Hub::load_since(&st.to_bytes(), Some(&mark)).map(|_| ()).unwrap_err();
+    assert!(matches!(marked, HubError::Corrupt { claimed: 6, chained: Some(1) }), "{marked:?}");
+}
+
+// ── W-HUBCRC follow-up: the same marked path for `LogImage` and `StockLog` ──
+
+fn ledger_appended_after_mark() -> (Vec<u8>, crate::LogMark) {
+    let mut log = LogImage::create_sized(64 * 1024).unwrap();
+    for i in 0..4 {
+        log.append("tx", &format!("s{i}"), r#"{"msg":"a message long enough"}"#).unwrap();
+    }
+    let (mut log, mark) = LogImage::load_since(&log.to_bytes(), None).unwrap();
+    log.append("tx", "s4", r#"{"msg":"the turn's own record"}"#).unwrap();
+    (log.to_bytes(), mark.expect("four records have a mark"))
+}
+
+/// POSITIVE TWIN (LogImage): through the mark, the appended log reads as `load` reads it.
+#[test]
+fn logimage_load_since_after_an_append_reads_as_load() {
+    let (bytes, mark) = ledger_appended_after_mark();
+    let (log, next) = LogImage::load_since(&bytes, Some(&mark)).unwrap();
+    assert_eq!(log.entries(), LogImage::load(&bytes).unwrap().entries());
+    assert_eq!(log.len(), 5);
+    assert!(next.is_some_and(|n| n != mark), "the mark moved to the appended record");
+}
+
+/// THE NAMED CELL FOR LogImage's MARKED PATH: payload cell 12 of the APPENDED record,
+/// changed. Quarantined through the mark exactly as a cold load quarantines it.
+#[test]
+fn logimage_a_changed_byte_in_the_appended_record_is_quarantined_through_the_mark() {
+    let (bytes, mark) = ledger_appended_after_mark();
+    let (bad, _) = flipped(&bytes, 0, 12);
+    let (log, _) = LogImage::load_since(&bad, Some(&mark)).expect("not refused");
+    assert_eq!((log.len(), log.entries().len()), (5, 4));
+    let q = log.quarantined();
+    assert_eq!((q.len(), q[0].reason, q[0].at), (1, "crc", 0));
+    assert_eq!(log.entries(), LogImage::load(&bad).unwrap().entries(), "same as the cold load");
+}
+
+fn stock_appended_after_mark() -> (Vec<u8>, crate::LogMark) {
+    use crate::stock::{StockEvent, StockLog};
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    for q in [100, 50] {
+        log.append(&StockEvent::Received { item: "rice".into(), qty: q }).unwrap();
+    }
+    let (mut log, mark) = StockLog::load_since(&log.to_bytes_trimmed(), None).unwrap();
+    log.append(&StockEvent::Received { item: "rice".into(), qty: 7 }).unwrap();
+    (log.to_bytes_trimmed(), mark.expect("a clean log has a mark"))
+}
+
+/// POSITIVE TWIN (StockLog): through the mark, the shelf folds as a cold load folds it.
+#[test]
+fn stocklog_load_since_after_an_append_reads_as_load() {
+    use crate::stock::StockLog;
+    let (bytes, mark) = stock_appended_after_mark();
+    let (log, next) = StockLog::load_since(&bytes, Some(&mark)).unwrap();
+    assert_eq!(log.events(), StockLog::load(&bytes).unwrap().events());
+    assert_eq!(log.ledger().unwrap().level("rice").on_hand, 157);
+    assert!(next.is_some_and(|n| n != mark), "a clean log hands back a new mark");
+}
+
+/// THE NAMED CELL FOR StockLog's MARKED PATH: payload cell 12 of the APPENDED record
+/// (the 7 rice), changed. Quarantined through the mark as by a cold load -- the shelf folds
+/// from the other two -- and the log now gets NO mark: `bad` must list every bad record,
+/// which a later marked scan could not see.
+#[test]
+fn stocklog_a_changed_byte_in_the_appended_record_is_quarantined_through_the_mark() {
+    use crate::stock::StockLog;
+    let (bytes, mark) = stock_appended_after_mark();
+    let (bad, _) = flipped(&bytes, 0, 12);
+    let (log, next) = StockLog::load_since(&bad, Some(&mark)).expect("a bad stock record must not refuse the shelf");
+    assert_eq!((log.events().len(), log.quarantined()), (2, 1));
+    assert_eq!(log.ledger().unwrap().level("rice").on_hand, 150);
+    assert_eq!(log.events(), StockLog::load(&bad).unwrap().events(), "same as the cold load");
+    assert_eq!(next, None, "a quarantined stock log is never marked");
+    assert_eq!(StockLog::load_since(&bad, None).unwrap().1, None, "nor on a full load");
+}

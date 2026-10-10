@@ -31,6 +31,9 @@ use crate::evlog::{EvLog, Record};
 use crate::kv::Kv;
 use crate::{crc32_cells, Store, StoreError};
 
+mod since;
+pub use since::ChainMark;
+
 /// An object whose payload does not hash to the crc its header carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BadCrc {
@@ -150,34 +153,8 @@ impl EvLog {
     /// `quarantined` lists the bad records newest first, as `BadCrc`s; their positions
     /// in a newest-first walk are what `walk_marked` reports.
     pub fn chain_scan(st: &Store) -> Result<ChainScan, BadCrc> {
-        let Some(root) = st.root() else { return Ok(ChainScan { chained: Some(0), quarantined: Vec::new() }) };
-        st.check_obj(root)?;
-        let cap = Self::step_cap(st);
-        let mut budget = st.cells.len();
-        let mut out = ChainScan { chained: None, quarantined: Vec::new() };
-        let mut n = 0usize;
-        let mut cur = st.follow(root, 1);
-        while let Some(obj) = cur {
-            n += 1;
-            let cost = st.obj_cells(obj).saturating_add(2);
-            if n > cap || cost > budget {
-                return Ok(out);
-            }
-            budget -= cost;
-            let next = st.follow(obj, 2);
-            if let Err(bad) = st.check_obj(obj) {
-                if let Some(older) = next {
-                    let linked = (0..4).all(|i| st.get(obj, 7 + i) == st.get(older, 3 + i));
-                    if !linked {
-                        return Err(bad);
-                    }
-                }
-                out.quarantined.push(bad);
-            }
-            cur = next;
-        }
-        out.chained = Some(n);
-        Ok(out)
+        // THE SAME WALK `chain_scan_since` takes, with no mark: one body for both (W-HUBCRC).
+        Self::chain_scan_since(st, None).map(|(scan, _)| scan)
     }
 
     /// `walk`, each record with `Some(stored crc)` when its crc FAILS (a quarantined

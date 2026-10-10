@@ -85,7 +85,7 @@ impl HubImages {
             return Ok(());
         }
         let appended = back.iter().all(|d| log.append(crate::wallet::K_TX, &d.tx_id, &d.record).is_ok());
-        if !appended || self.put_image(crate::wallet::IMAGE_LEDGER, gen, &log.to_bytes()).await?.is_none() {
+        if !appended || self.put_derived(crate::wallet::IMAGE_LEDGER, gen, &log.to_bytes()).await?.is_none() {
             log_error!("wallet: order {} was refunded and its wallet credit was NOT written", input.order_id);
         }
         Ok(())
@@ -119,7 +119,7 @@ impl HubImages {
             // NOTHING HAS BEEN WRITTEN.
             Err(r) => return Ok(Err(r)),
         };
-        if self.put_image(crate::hubstore::IMAGE_STOCK, stock_gen, &stock.to_bytes_trimmed()).await?.is_none() {
+        if self.put_derived(crate::hubstore::IMAGE_STOCK, stock_gen, &stock.to_bytes_trimmed()).await?.is_none() {
             return Ok(Err(Refused::Append("the stock generation moved during the returned-food choice".into())));
         }
         Ok(Ok(out))

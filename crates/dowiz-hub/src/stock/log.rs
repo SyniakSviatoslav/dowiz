@@ -38,6 +38,14 @@ impl StockLog {
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, crate::HubError> {
+        Self::load_since(bytes, None).map(|(log, _)| log)
+    }
+
+    /// `load`, not re-hashing the records `mark` covers (W-HUBCRC, `Hub::load_since`).
+    /// A MARK ONLY FOR A CLEAN LOG: `bad` must name EVERY quarantined record, and a marked
+    /// scan sees only the newer ones -- so a log with any quarantined record gets no mark
+    /// back, and its next load hashes everything, as this one did.
+    pub fn load_since(bytes: &[u8], mark: Option<&crate::LogMark>) -> Result<(Self, Option<crate::LogMark>), crate::HubError> {
         let store = Store::from_bytes(bytes);
         if store.pick().is_none() {
             return Err(crate::HubError::NotAHub);
@@ -51,13 +59,13 @@ impl StockLog {
         // a `Linkage` refusal. Refusing here is what a caller can act on.
         // An append log QUARANTINES a bad-crc record and serves the rest (W-CRC, operator
         // 2026-10-05); what breaks the walk itself (root, count, a link) still refuses.
-        let quarantined = crate::chain_is_whole_quarantining(&store)?;
-        let bad = if quarantined.is_empty() {
-            Vec::new()
+        let (scan, next) = crate::quarantine::chain_is_whole_since(&store, mark)?;
+        let (bad, next) = if scan.quarantined.is_empty() {
+            (Vec::new(), next)
         } else {
-            EvLog::walk_marked(&store).into_iter().filter(|(_, c)| c.is_some()).map(|(r, _)| r.id).collect()
+            (EvLog::walk_marked(&store).into_iter().filter(|(_, c)| c.is_some()).map(|(r, _)| r.id).collect(), None)
         };
-        Ok(StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false, bad })
+        Ok((StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false, bad }, next))
     }
 
     /// FULL CAPACITY: `grow()` doubles from this length, so it keeps the

@@ -27,7 +27,7 @@ impl HubImages {
         let (gen, log) = match self.image(IMAGE_TILL).await? {
             Some((meta, bytes)) => (
                 meta.generation,
-                LogImage::load(&bytes).map_err(|_| Error::RustError("till image is unreadable".into()))?,
+                self.load_entries(IMAGE_TILL, meta.generation, &bytes).map_err(|_| Error::RustError("till image is unreadable".into()))?,
             ),
             None => (
                 0,
@@ -95,7 +95,7 @@ impl HubImages {
         if let Err(e) = log.append(kind, &subject, &rec.to_string()) {
             return Ok(Err(Refused::Append(format!("the till would not take {kind}: {e:?}"))));
         }
-        let Some(next) = self.put_image(IMAGE_TILL, gen, &log.to_bytes()).await? else {
+        let Some(next) = self.put_derived(IMAGE_TILL, gen, &log.to_bytes()).await? else {
             return Ok(Err(Refused::Append(format!("the till generation moved during {kind}"))));
         };
         // THE EXCEPTION ALERT (P1-5), after the record landed; it never

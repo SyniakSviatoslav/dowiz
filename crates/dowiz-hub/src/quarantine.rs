@@ -18,17 +18,30 @@
 //! ref cannot be told from a changed `prev`, so both refuse).
 
 use bebop_store::evlog::EvLog;
+use bebop_store::verify::{ChainMark, ChainScan};
 use bebop_store::{BadCrc, Store};
 
 use crate::{Hub, HubError};
 
 /// `chain_is_whole` for an append log under the quarantine policy: refuses what breaks
-/// the walk, and hands back the records it quarantines (newest first).
-pub(crate) fn chain_is_whole_quarantining(store: &Store) -> Result<Vec<BadCrc>, HubError> {
+/// the walk, and hands back the scan (its records quarantined, newest first) and the mark
+/// for these bytes. With a `mark` (W-HUBCRC, `bebop_store::verify::since`) the records it
+/// covers are not hashed again; the root, the walk, the count and every NEWER record are.
+/// Every loader of an append log (`Hub`, `LogImage`, `StockLog`) comes through here.
+///
+/// A MARK ONLY FOR A CLEAN LOG (W-HUBCRC3): a marked scan lists only the records NEWER than
+/// the mark, so a mark over a quarantined record would let the next load forget it --
+/// `Seen.bad` (W-LOOPB) and `StockLog`'s `bad` must name EVERY failed record. So a scan
+/// that quarantines anything hands back no mark, and the next load hashes everything.
+/// By induction every mark covers only records that hashed clean.
+pub(crate) fn chain_is_whole_since(store: &Store, mark: Option<&ChainMark>) -> Result<(ChainScan, Option<ChainMark>), HubError> {
     let claimed = EvLog::len(store);
-    let scan = EvLog::chain_scan(store).map_err(HubError::BadCrc)?;
+    let (scan, next) = EvLog::chain_scan_since(store, mark).map_err(HubError::BadCrc)?;
     match scan.chained {
-        Some(c) if c == claimed => Ok(scan.quarantined),
+        Some(c) if c == claimed => {
+            let next = if scan.quarantined.is_empty() { next } else { None };
+            Ok((scan, next))
+        }
         chained => Err(HubError::Corrupt { claimed, chained }),
     }
 }
@@ -58,9 +71,13 @@ impl Seen {
     }
 }
 
-/// `chain_is_whole_quarantining`, keeping what it found as a `Seen`.
-pub(crate) fn chain_is_whole_seen(store: &Store) -> Result<Seen, HubError> {
-    let quarantined = chain_is_whole_quarantining(store)?;
+/// `chain_is_whole_since`, keeping what it found as a `Seen` -- ONE walk for both (W-HUBCRC3):
+/// the scan that hashes (all records, or only those newer than `mark`) is the scan whose
+/// findings `Seen` carries. Through a mark the older records are clean (a mark is only
+/// handed out for a clean log), so the newer ones' verdicts are the whole bad set.
+pub(crate) fn chain_is_whole_seen(store: &Store, mark: Option<&ChainMark>) -> Result<(Seen, Option<ChainMark>), HubError> {
+    let (scan, next) = chain_is_whole_since(store, mark)?;
+    let quarantined = scan.quarantined;
     let at = EvLog::len(store);
     let mut bad = Vec::with_capacity(quarantined.len());
     if !quarantined.is_empty() {
@@ -76,7 +93,7 @@ pub(crate) fn chain_is_whole_seen(store: &Store) -> Result<Seen, HubError> {
         }
         bad.reverse();
     }
-    Ok(Seen { at, bad })
+    Ok((Seen { at, bad }, next))
 }
 
 impl Hub {

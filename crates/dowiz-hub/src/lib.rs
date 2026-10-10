@@ -86,6 +86,8 @@ pub use chain::ChainCheck;
 pub use error::HubError;
 pub use event::{Event, EventKind, Quarantined};
 pub use usage::Usage;
+/// What a log load proved, for the next load of the same bytes (W-HUBCRC, `Hub::load_since`).
+pub use bebop_store::verify::ChainMark as LogMark;
 pub(crate) use chain::{chain_is_whole, content_id_chained, hex32};
 pub(crate) use error::e_is_full;
 pub(crate) use event::{decode, decode_or_reason};
@@ -93,7 +95,7 @@ pub(crate) use usage::{ceiling_cells, usage_of, usage_of_kind};
 mod kvload;
 pub(crate) use kvload::kv_load;
 mod quarantine;
-pub(crate) use quarantine::{chain_is_whole_quarantining, chain_is_whole_seen, Seen};
+pub(crate) use quarantine::{chain_is_whole_seen, Seen};
 
 use bebop_store::Store;
 

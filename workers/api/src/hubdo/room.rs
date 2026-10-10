@@ -52,7 +52,7 @@ impl HubImages {
         Ok(match self.image(LOG_IMAGE).await? {
             Some((meta, bytes)) => (
                 meta.generation,
-                dowiz_hub::Hub::load(&bytes).map_err(|_| Error::RustError("hub image is unreadable".into()))?,
+                self.load_log(meta.generation, &bytes).map_err(|_| Error::RustError("hub image is unreadable".into()))?,
             ),
             None => (0, dowiz_hub::Hub::create_sized(64 * 1024).map_err(|_| Error::RustError("cannot create hub image".into()))?),
         })
@@ -63,7 +63,7 @@ impl HubImages {
         Ok(match self.image(crate::wallet::IMAGE_LEDGER).await? {
             Some((meta, bytes)) => (
                 meta.generation,
-                dowiz_hub::logimage::LogImage::load(&bytes).map_err(|_| Error::RustError("ledger image is unreadable".into()))?,
+                self.load_entries(crate::wallet::IMAGE_LEDGER, meta.generation, &bytes).map_err(|_| Error::RustError("ledger image is unreadable".into()))?,
             ),
             None => (0, dowiz_hub::logimage::LogImage::create().map_err(|_| Error::RustError("cannot create ledger image".into()))?),
         })
@@ -74,7 +74,7 @@ impl HubImages {
         Ok(match self.image(crate::hubstore::IMAGE_STOCK).await? {
             Some((meta, bytes)) => (
                 meta.generation,
-                dowiz_hub::stock::StockLog::load(&bytes).map_err(|_| Error::RustError("stock image is unreadable".into()))?,
+                self.load_stock(meta.generation, &bytes).map_err(|_| Error::RustError("stock image is unreadable".into()))?,
             ),
             None => (0, dowiz_hub::stock::StockLog::create_sized(64 * 1024).map_err(|_| Error::RustError("cannot create stock image".into()))?),
         })
@@ -102,7 +102,7 @@ impl HubImages {
             return Ok(Err(Refused::Append(format!("the log generation moved during {what}"))));
         };
         if let Some((gen, s)) = stock {
-            if self.put_image(crate::hubstore::IMAGE_STOCK, gen, &s.to_bytes_trimmed()).await?.is_none() {
+            if self.put_derived(crate::hubstore::IMAGE_STOCK, gen, &s.to_bytes_trimmed()).await?.is_none() {
                 log_error!("stock: {what} was written and its shelf was NOT");
             }
         }
@@ -193,7 +193,7 @@ impl HubImages {
         // statement and this console line both show.
         if let (Some(d), Some((gen, mut log))) = (debit, ledger) {
             let wrote = match log.append(crate::wallet::K_TX, &d.tx_id, &d.record) {
-                Ok(()) => self.put_image(crate::wallet::IMAGE_LEDGER, gen, &log.to_bytes()).await?.is_some(),
+                Ok(()) => self.put_derived(crate::wallet::IMAGE_LEDGER, gen, &log.to_bytes()).await?.is_some(),
                 Err(_) => false,
             };
             if !wrote {
@@ -233,7 +233,7 @@ impl HubImages {
             return Ok(());
         }
         let appended = plan.write.iter().all(|d| log.append(crate::wallet::K_TX, &d.tx_id, &d.record).is_ok());
-        if !appended || self.put_image(crate::wallet::IMAGE_LEDGER, gen, &log.to_bytes()).await?.is_none() {
+        if !appended || self.put_derived(crate::wallet::IMAGE_LEDGER, gen, &log.to_bytes()).await?.is_none() {
             log_error!("wallet: order {} was paid and its debit {tx_id} was NOT written after one retry", input.order_id);
         }
         Ok(())

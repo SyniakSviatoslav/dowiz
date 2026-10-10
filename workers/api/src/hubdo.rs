@@ -76,7 +76,7 @@ mod preps; // the ПФ reads, answered here (R3), `hubdo/preps.rs`
 mod basket; // the basket's catalogue nodes and the room's recipes, answered here (BN1), `hubdo/basket.rs`
 mod reads; // the owner's and the kitchen's folds over the images, answered here (BN1), `hubdo/reads.rs`
 mod catalogue; // the catalogue's derived nodes and the venue's record, answered here (BN1), `hubdo/catalogue.rs`
-mod catview; mod chunks; use chunks::changed_chunks; mod atomic; pub(crate) mod compact; mod journal; // the catalogue read in place, crc once per generation (W-ZC); the chunk diff; one atomic write per image and the v2 pin for a rollback (W-ATOMIC); the menu's edit journal in the same write (W-PITR2)
+mod catview; mod logmark; mod chunks; use chunks::changed_chunks; mod atomic; pub(crate) mod compact; mod journal; // the catalogue read in place, crc once per generation (W-ZC); the log's crc once per record (W-HUBCRC); the chunk diff; one atomic write per image and the v2 pin for a rollback (W-ATOMIC); the menu's edit journal in the same write (W-PITR2)
 mod facts; // the folds over the log and the catalogue together, answered here (BN1), `hubdo/facts.rs`
 mod bulk; // a supplies / recipes spreadsheet as one turn (BN1, BN4's shape), `hubdo/bulk.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
@@ -187,6 +187,7 @@ pub struct HubImages {
     in_alarm: std::cell::Cell<bool>,
     /// The catalogue image in `mem` passed the full crc check at this generation (W-ZC, `hubdo/catview.rs`).
     cat_checked: std::cell::Cell<Option<(i64, dowiz_hub::catalog::view::Checked)>>,
+    log_marks: RefCell<HashMap<String, (i64, dowiz_hub::LogMark)>>, // what each append log's last scan proved, per image at its generation (W-HUBCRC, `hubdo/logmark.rs`)
     /// Who signed the catalogue write under way, for its journal record (W-PITR2, `hubdo/journal.rs`).
     edit: RefCell<journal::Desk>, // + the journal kept in hand between writes (W-LOOPB, `hubdo/journal/desk.rs`)
     /// AX0: what this wake served, read by `/api/owner/health` (`hubdo/counters.rs`).
@@ -218,7 +219,7 @@ impl HubImages {
             folded: RefCell::new(None),
             menu: RefCell::new(None),
             in_alarm: std::cell::Cell::new(false),
-            cat_checked: std::cell::Cell::new(None),
+            cat_checked: std::cell::Cell::new(None), log_marks: RefCell::new(HashMap::new()),
             edit: RefCell::new(journal::Desk::default()),
             counters: counters::Counters::woke(),
         }
@@ -280,7 +281,7 @@ impl HubImages {
             )));
         }
         let entry = (meta, bytes);
-        self.catview_forget(id);
+        self.catview_forget(id); self.logmark_forget(id);
         self.mem.borrow_mut().insert(id.to_string(), entry.clone());
         Ok(Some(entry))
     }
@@ -298,7 +299,7 @@ impl HubImages {
             return Ok((0, Vec::new()));
         };
         let view = crate::fold::projection::read(&mut self.folded.borrow_mut(), meta.generation, || {
-            cold.set(true); dowiz_hub::Hub::load(&bytes)
+            cold.set(true); self.load_log(meta.generation, &bytes)
                 .map(|hub| crate::image_err::hub_loaded(hub).events())
                 .map_err(|e| crate::image_err::unreadable("hub", e))
         })?;
@@ -444,8 +445,7 @@ impl HubImages {
             return Ok(None);
         }
         let mut hub = match bytes {
-            Some(b) => dowiz_hub::Hub::load(&b)
-                .map_err(|e| crate::image_err::unreadable("hub", e))?,
+            Some(b) => self.load_log(generation, &b).map_err(|e| crate::image_err::unreadable("hub", e))?,
             // BORN SMALL, as `hubstore::load` does it: a hub created at 4 MiB
             // made the third order of the day exceed the isolate's limit.
             None => dowiz_hub::Hub::create_sized(64 * 1024)
@@ -521,8 +521,7 @@ impl HubImages {
         // code's uses does not fold the log a second time.
         let (log_generation, listed) = self.orders_view().await?;
         let mut hub = match self.image(LOG_IMAGE).await? {
-            Some((_, bytes)) => dowiz_hub::Hub::load(&bytes)
-                .map_err(|e| crate::image_err::unreadable("hub", e))?,
+            Some((meta, bytes)) => self.load_log(meta.generation, &bytes).map_err(|e| crate::image_err::unreadable("hub", e))?,
             // BORN SMALL, as `append` does it: a hub created at 4 MiB made the
             // third order of the day exceed the isolate's limit.
             None => dowiz_hub::Hub::create_sized(64 * 1024)
@@ -532,8 +531,7 @@ impl HubImages {
         let (stock_generation, mut stock) = match self.image(stock_image).await? {
             Some((meta, bytes)) => (
                 meta.generation,
-                dowiz_hub::stock::StockLog::load(&bytes)
-                    .map_err(|e| crate::image_err::unreadable("stock", e))?,
+                self.load_stock(meta.generation, &bytes).map_err(|e| crate::image_err::unreadable("stock", e))?,
             ),
             None => (
                 0,
@@ -579,7 +577,7 @@ impl HubImages {
         // stock image to say so would cost a request per order for no change.
         if stock.len() != reserved_before {
             if self
-                .put_image(stock_image, stock_generation, &stock.to_bytes_trimmed())
+                .put_derived(stock_image, stock_generation, &stock.to_bytes_trimmed())
                 .await?
                 .is_none()
             {
@@ -656,17 +654,15 @@ impl HubImages {
     {
         let (log_generation, listed) = self.orders_view().await?;
         let current = listed.iter().find(|o| o.order_id == input.order_id).map(|o| o.order_json.clone());
-        let Some((_, log_bytes)) = self.image(LOG_IMAGE).await? else {
+        let Some((log_meta, log_bytes)) = self.image(LOG_IMAGE).await? else {
             return Ok(Err(crate::command::Refused::NotFound));
         };
-        let mut hub = dowiz_hub::Hub::load(&log_bytes)
-            .map_err(|e| crate::image_err::unreadable("hub", e))?;
+        let mut hub = self.load_log(log_meta.generation, &log_bytes).map_err(|e| crate::image_err::unreadable("hub", e))?;
         let stock_image = crate::hubstore::IMAGE_STOCK;
         let (stock_generation, mut stock) = match self.image(stock_image).await? {
             Some((meta, bytes)) => (
                 meta.generation,
-                dowiz_hub::stock::StockLog::load(&bytes)
-                    .map_err(|e| crate::image_err::unreadable("stock", e))?,
+                self.load_stock(meta.generation, &bytes).map_err(|e| crate::image_err::unreadable("stock", e))?,
             ),
             None => (
                 0,
@@ -699,7 +695,7 @@ impl HubImages {
         self.commit_claim(claim.as_ref(), &serde_json::to_string(&out).unwrap_or_default()).await;
         if stock.len() != settled_before
             && self
-                .put_image(stock_image, stock_generation, &stock.to_bytes_trimmed())
+                .put_derived(stock_image, stock_generation, &stock.to_bytes_trimmed())
                 .await?
                 .is_none()
         {
@@ -743,11 +739,10 @@ impl HubImages {
     {
         let (log_generation, listed) = self.orders_view().await?;
         let current = listed.iter().find(|o| o.order_id == input.order_id).map(|o| o.order_json.clone());
-        let Some((_, log_bytes)) = self.image(LOG_IMAGE).await? else {
+        let Some((log_meta, log_bytes)) = self.image(LOG_IMAGE).await? else {
             return Ok(Err(crate::command::Refused::NotFound));
         };
-        let mut hub = dowiz_hub::Hub::load(&log_bytes)
-            .map_err(|e| crate::image_err::unreadable("hub", e))?;
+        let mut hub = self.load_log(log_meta.generation, &log_bytes).map_err(|e| crate::image_err::unreadable("hub", e))?;
         let ops_image = crate::hubstore::IMAGE_OPS;
         let ceiling = crate::hubstore::OPS_BYTES;
         let (ops_generation, mut ops) = match self.image(ops_image).await? {
@@ -1008,7 +1003,7 @@ impl HubImages {
         for n in chunks..old_chunks {
             let _ = store.delete(&Self::chunk_key(id, n)).await;
         }
-        self.catview_forget(id);
+        self.catview_forget(id); self.logmark_written(id, &how, expected, next);
         self.mem.borrow_mut().insert(id.to_string(), (meta, bytes.to_vec()));
         // THE STOREFRONT'S READ PATH IS PUBLISHED by the write that moved it (BN2, `hubdo/publish.rs`); it never fails the write.
         if menu::MENU_INPUTS.contains(&id) { self.publish_after_write().await; }

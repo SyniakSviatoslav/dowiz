@@ -51,7 +51,7 @@ impl HubImages {
             // NOTHING HAS BEEN WRITTEN: the log copy is dropped here.
             Err((status, said)) => return Response::error(said, status),
         };
-        if log.len() != before && self.put_image(crate::hubstore::IMAGE_STOCK, gen, &log.to_bytes_trimmed()).await?.is_none() {
+        if log.len() != before && self.put_derived(crate::hubstore::IMAGE_STOCK, gen, &log.to_bytes_trimmed()).await?.is_none() {
             return Response::error("the stock generation moved during a movement", 409);
         }
         // P7 (W-PREP): what the forecast will not use before each lot's date.

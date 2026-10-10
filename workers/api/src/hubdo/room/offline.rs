@@ -87,7 +87,7 @@ impl HubImages {
     async fn offline_sync(&self, mut input: SyncIn) -> Result<std::result::Result<SyncOut, Refused>> {
         // The drawer open at the sale, from the till log this object holds.
         let till = match self.image(crate::command::till::IMAGE_TILL).await? {
-            Some((_, b)) => dowiz_hub::logimage::LogImage::load(&b).map_err(|_| bad("the till image is unreadable"))?.entries(),
+            Some((m, b)) => self.load_entries(crate::command::till::IMAGE_TILL, m.generation, &b).map_err(|_| bad("the till image is unreadable"))?.entries(),
             None => Vec::new(),
         };
         // A till log that does not fold must not lose a sale: no drawer is named, and it is said.
