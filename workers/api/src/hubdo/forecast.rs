@@ -58,13 +58,13 @@ impl HubImages {
 
     /// P7: see the module. `told` is the movement's events; only a
     /// `stock.expiring` among them is touched.
-    pub(in crate::hubdo) async fn expiring_surplus(&self, told: &mut [(&'static str, serde_json::Value)], log: &dowiz_hub::stock::StockLog, input: &StockTurnIn) {
+    pub(in crate::hubdo) async fn expiring_surplus(&self, told: &mut [(&'static str, serde_json::Value)], log: &dowiz_hub::stock::StockLog, input: &StockTurnIn, cat: &dowiz_hub::catalog::Catalog) {
         if !told.iter().any(|(e, _)| *e == tell::EXPIRING) {
             return;
         }
         let lots_of = log.journal();
         let supply = |id: &str| input.supplies.get(id).map(|s| Supply { name: s.name.clone(), unit: s.unit.clone(), low_at: s.low_at });
-        let table = match self.use_table(input).await {
+        let table = match self.use_table(input, cat).await {
             Ok(t) => t,
             Err(e) => (None, Some(format!("the forecast could not be read: {e}"))),
         };
@@ -85,9 +85,9 @@ impl HubImages {
 
     /// The forecast's raw use per item per day ahead, and why it is absent
     /// or partial (learning, or an unreadable cube).
-    async fn use_table(&self, input: &StockTurnIn) -> Result<(Option<std::collections::BTreeMap<String, Vec<i64>>>, Option<String>)> {
-        let cat = self.catalogue().await?;
-        let venue = forecast::venue_of(&cat);
+    /// `cat`: the movement's own catalogue, decoded once by `stock_move` (W-LOOPB).
+    async fn use_table(&self, input: &StockTurnIn, cat: &dowiz_hub::catalog::Catalog) -> Result<(Option<std::collections::BTreeMap<String, Vec<i64>>>, Option<String>)> {
+        let venue = forecast::venue_of(cat);
         let loc = venue.as_ref().and_then(|v| v.get("id")).and_then(serde_json::Value::as_str).unwrap_or("").to_string();
         let zone = crate::hubstore::zone_of(venue.as_ref());
         let today = dowiz_hub::stock::meta::day_number(input.today);
@@ -97,7 +97,7 @@ impl HubImages {
         let cold = cube::rows_of(&parsed);
         let (h, unread, _) = forecast::history_with(listed, &loc, zone, input.now_ms, today, &cold);
         let warn = crate::services::operations::stock::view::EXPIRY_WARN_DAYS;
-        let table = expand::raw_by_day(&h, today, &cat, warn);
+        let table = expand::raw_by_day(&h, today, cat, warn);
         let why = unread.or_else(|| table.is_none().then(|| "learning".to_string()));
         Ok((table, why))
     }

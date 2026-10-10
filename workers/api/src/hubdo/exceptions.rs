@@ -48,7 +48,7 @@ impl HubImages {
         };
         let (_, ledger) = self.ledger_log().await?;
         let (_, listed) = self.orders_view().await?;
-        let currency = crate::services::venue::currency_of(&self.catalogue().await?);
+        let currency = self.with_catalog(|c| crate::services::venue::currency_of_record(c.location().and_then(|j| serde_json::from_str(&j).ok()).as_ref())).await?; // in place (W-LOOPB)
         match crate::exceptions::answer(&hub, &till, &settings, &ledger, &listed, &currency, &venue, &q, now) {
             Ok(v) => Response::from_json(&v),
             Err((status, why)) => Response::error(why, status),
@@ -88,17 +88,13 @@ impl HubImages {
         };
         // The venue's own record (the catalogue image): its zone for the
         // period start, and its `default_locale` for the words.
-        // Its currency is the wallet legs' default (`services::venue::currency_of`).
-        let catalog = match self.image(super::CATALOG_IMAGE).await? {
-            Some((_, b)) => Some(dowiz_hub::catalog::Catalog::load(&b).map_err(|_| Error::RustError("catalog image is unreadable".into()))?),
-            None => None,
-        };
-        let record: Option<serde_json::Value> =
-            catalog.as_ref().and_then(|c| c.location()).and_then(|j| serde_json::from_str(&j).ok());
+        // Its currency is the wallet legs' default (`services::venue::currency_of`). Read in place (W-LOOPB).
+        let record: Option<serde_json::Value> = self.cat_location().await?.transpose()
+            .map_err(|()| Error::RustError("catalog image is unreadable".into()))?.flatten().and_then(|j| serde_json::from_str(&j).ok());
         let lang = record.as_ref().and_then(|r| r.get("default_locale")).and_then(|v| v.as_str()).unwrap_or("en");
         let voice = alert::Voice { venue, zone: crate::hubstore::zone_of(record.as_ref()), lang };
         let mut due = alert::due(&rows, since, now_ms, threshold, &voice, &chat);
-        let currency = catalog.as_ref().map_or_else(|| "ALL".to_string(), crate::services::venue::currency_of);
+        let currency = crate::services::venue::currency_of_record(record.as_ref()); // no image = no record = lek, as before
         // A ledger that does not replay is said out loud and does not silence
         // the count alerts; the report refuses it in the owner's face.
         let legs = self.leg_rows(venue, &currency).await.unwrap_or_else(|e| {

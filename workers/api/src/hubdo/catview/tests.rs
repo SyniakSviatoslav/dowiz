@@ -99,3 +99,37 @@ fn a_delta_write_is_read_next_and_writes_two_chunks() {
     let cold = h.cold();
     assert!(cold.get("/fold/catalogue?q=product&id=p005").body_value()["product"].as_str().unwrap().contains("777"), "a cold object");
 }
+
+/// ONE FIELD, READ IN PLACE, IS THE FIELD `Catalog::load` GAVE (W-LOOPB, R-LOOPS row 11): the
+/// venue record, the currency (`room/till.rs` / `fiscal.rs` / `fiscal/send.rs` / `exceptions.rs`),
+/// the zone (`reads.rs` week top), the supplies (`routed.rs`) and the products (`ebills.rs`), over
+/// the four states every site told apart: no image, a record with currency and zone, a catalogue
+/// with no record at all, and one changed byte on storage (unreadable -- an error, never a default).
+#[test]
+fn one_field_read_in_place_is_the_field_catalog_load_gave() {
+    use crate::edge::mem::block_on;
+    let none = Harness::new();
+    assert_eq!(block_on(none.obj.cat_location()).unwrap(), None, "no image");
+    assert_eq!(block_on(none.obj.venue_currency()).unwrap(), "ALL");
+    let mut bare = Catalog::create().unwrap();
+    bare.set_product("p00", r#"{"id":"p00","name":"Maki","price":500}"#);
+    for (what, mut cat) in [("record", catalog()), ("no record", bare)] {
+        let h = Harness::new();
+        h.put("catalog", 0, &cat.to_bytes().unwrap());
+        assert_eq!(block_on(h.obj.cat_location()).unwrap(), Some(Ok(cat.location())), "{what}");
+        assert_eq!(block_on(h.obj.venue_currency()).unwrap(), crate::services::venue::currency_of(&cat), "{what}");
+        let zone = block_on(h.obj.with_catalog(|c| crate::hubstore::zone_of(c.location().and_then(|j| serde_json::from_str(&j).ok()).as_ref()))).unwrap();
+        assert_eq!(zone, crate::services::analytics::handler::zone_of(&cat), "{what}");
+        let supplies = block_on(h.obj.catalog_peek(|c| c.supplies())).unwrap();
+        assert_eq!(supplies, Some(Ok(cat.supplies())), "{what}");
+        let products = block_on(h.obj.with_catalog(|c| crate::ebills::status::products(&c.products()))).unwrap();
+        assert_eq!(products, crate::ebills::status::products(&cat.products()), "{what}");
+    }
+    let h = Harness::new();
+    h.put("catalog", 0, &catalog().to_bytes().unwrap());
+    corrupt_storage(&h, b"Maki 5\"");
+    h.obj.mem.borrow_mut().remove("catalog");
+    assert_eq!(block_on(h.obj.cat_location()).unwrap(), Some(Err(())), "unreadable is told apart");
+    assert!(block_on(h.obj.venue_currency()).is_err(), "an unreadable record is an error, not lek");
+    assert!(block_on(h.obj.with_catalog(|c| c.location())).is_err());
+}

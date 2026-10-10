@@ -21,6 +21,12 @@
 //!     because `forget` rewrites old records IN PLACE through the same door
 //!     (`hubdo/forget.rs` -> `write_both`) and a memo that stepped over a
 //!     redaction would keep serving the customer it was asked to forget.
+//!   * `Written::Tail` -- a command's hub that has ONLY APPENDED since it was loaded
+//!     (`Hub::appended`, W-LOOPB): the `k` new events, read by walking `k` records. Applied
+//!     when the memo is at the generation the hub was loaded at: the older records ARE
+//!     the bytes it folded (a generation names one image, the rule `read` already serves
+//!     by). A redaction or rotation leaves the hub without `appended()`, so it lands as
+//!     `Log` and meets the digest.
 //!   * `Written::Whole` -- a rotation, an import, a Worker's `/image/log` put.
 //!     Dropped; the next read refolds.
 //!
@@ -41,6 +47,8 @@ pub enum Written {
     Appended(Event),
     /// The hub as written, `Hub::events()` order: NEWEST FIRST.
     Log(Vec<Event>),
+    /// Only the events appended since the hub was loaded at `from` (`Hub::appended`): NEWEST FIRST.
+    Tail(Vec<Event>),
 }
 
 /// One order in the projection: the position of its newest event and its fold.
@@ -170,6 +178,10 @@ pub fn after_log_write(memo: &mut Option<Orders>, from: i64, to: i64, written: W
             let (new, older) = newest_first.split_at(k);
             let oldest_first: Vec<Event> = new.iter().rev().cloned().collect();
             m.generation == from && m.folded_exactly(older) && m.step(from, to, &oldest_first)
+        }
+        (Some(m), Written::Tail(newest_first)) => {
+            let oldest_first: Vec<Event> = newest_first.into_iter().rev().collect();
+            m.step(from, to, &oldest_first)
         }
         _ => false,
     };

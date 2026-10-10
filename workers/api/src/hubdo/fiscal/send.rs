@@ -11,7 +11,7 @@
 //! leaves the entry and its `Sending` intent, the next firing reconciles,
 //! finds the sale, and `note` writes nothing twice.
 
-use super::super::{HubImages, CATALOG_IMAGE};
+use super::super::HubImages;
 use crate::command::Refused;
 use crate::ebills::state::{self as eb, Mapping, Seen};
 use crate::fiscal::ebills_arm::{arming, cancels_owed, gated_plan, CancelEntry, LinkState, CANCEL};
@@ -92,8 +92,8 @@ impl HubImages {
         if !(owed.is_empty() && claims.is_empty()) && !self.save_table(wire::IMAGE, fgen, &mut ft).await? {
             return Ok(PlanOut { why: vec!["the fiscal image moved while claiming: next firing".into()], ..PlanOut::default() });
         }
-        let loc: Value = match self.image(CATALOG_IMAGE).await? {
-            Some((_, b)) => dowiz_hub::catalog::Catalog::load(&b).ok().and_then(|c| c.location()).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({})),
+        let loc: Value = match self.cat_location().await? {
+            Some(l) => l.ok().flatten().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({})),
             None => json!({}),
         };
         let p = crate::ebills::glue::plan_for(&et, &loc, input.now_ms).map_err(|r| bad(r.message()))?;
@@ -211,8 +211,8 @@ impl HubImages {
         let order: Value = serde_json::from_str(&v.order_json).map_err(bad)?;
         let (_, ft) = self.table_of(wire::IMAGE, wire::CEILING).await?;
         let queued = ft.as_ref().and_then(|t| t.all(KIND).into_iter().find_map(|(_, j)| serde_json::from_str::<Entry>(&j).ok().filter(|e| e.to == order_id)));
-        let currency = match self.image(CATALOG_IMAGE).await? {
-            Some((_, b)) => crate::services::venue::currency_of(&dowiz_hub::catalog::Catalog::load(&b).map_err(|_| bad("catalogue image is unreadable"))?),
+        let currency = match self.cat_location().await? {
+            Some(l) => crate::services::venue::currency_of_record(l.map_err(|()| bad("catalogue image is unreadable"))?.and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref()),
             None => "ALL".into(),
         };
         let issued = order.pointer("/fiscal/at").or_else(|| order.get("created_at_ms")).and_then(Value::as_i64).unwrap_or(0);

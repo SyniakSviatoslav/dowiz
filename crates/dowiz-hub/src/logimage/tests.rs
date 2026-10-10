@@ -222,7 +222,7 @@ fn chain_check_finds_an_edit() {
         last = Some(r.id);
     }
     EvLog::set_tip_bytes(&mut fresh, &last.unwrap()).unwrap();
-    let tampered = LogImage { store: fresh };
+    let tampered = LogImage { store: fresh, seen: crate::Seen::default() };
     let c = tampered.chain_check();
     assert_eq!(c.records, 5);
     assert_eq!(c.broken, 1, "an edited payload did not break its id");

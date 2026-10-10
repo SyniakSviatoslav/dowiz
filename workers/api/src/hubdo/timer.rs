@@ -26,7 +26,7 @@
 //! `id_from_name` must be this object's id, so a catalogue that named another
 //! venue could never make this object drain that venue's queue.
 
-use super::{HubImages, CATALOG_IMAGE};
+use super::HubImages;
 use crate::cron::timer::{self, Arm, Seen};
 use dowiz_hub::table::Table;
 use worker::*;
@@ -94,12 +94,8 @@ impl HubImages {
             return Ok(None);
         }
         let st: State = state::get(&t, K_STATE, ONE).map_err(bad)?.unwrap_or_default();
-        let loc: serde_json::Value = match self.image(CATALOG_IMAGE).await? {
-            Some((_, b)) => dowiz_hub::catalog::Catalog::load(&b)
-                .ok()
-                .and_then(|c| c.location())
-                .and_then(|j| serde_json::from_str(&j).ok())
-                .unwrap_or_default(),
+        let loc: serde_json::Value = match self.cat_location().await? {
+            Some(l) => l.ok().flatten().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default(),
             None => serde_json::Value::Null,
         };
         let floor_at = match self.image(FLOOR_IMAGE).await? {
@@ -132,14 +128,13 @@ impl HubImages {
         let store = self.state.storage();
         let stored: Option<String> = store.get(VENUE_KEY).await.ok().flatten();
         let catalogue = || async {
-            match self.image(CATALOG_IMAGE).await.ok().flatten() {
-                Some((_, b)) => dowiz_hub::catalog::Catalog::load(&b)
-                    .ok()
-                    .and_then(|c| c.location())
-                    .and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok())
-                    .and_then(|v| v.get("id").and_then(|i| i.as_str()).map(str::to_string)),
-                None => None,
-            }
+            self.cat_location()
+                .await
+                .ok()
+                .flatten()
+                .and_then(|l| l.ok().flatten())
+                .and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok())
+                .and_then(|v| v.get("id").and_then(|i| i.as_str()).map(str::to_string))
         };
         let mut found = [stored.clone(), told.map(str::to_string), self.state.own_name()]
             .into_iter()

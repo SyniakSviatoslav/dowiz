@@ -130,3 +130,95 @@ fn one_price_edit_on_a_dubin_size_menu_writes_two_chunks_per_image_and_no_journa
     assert!(cat_chunks <= 2 && j_chunks <= 2, "catalogue {cat_chunks} / journal {j_chunks} chunks for one edit");
     assert_eq!(replayed(&h.cold()), state(&h.cold()));
 }
+
+/// The current generation of `id` in `h`.
+fn gen(h: &Harness, id: &str) -> i64 {
+    Harness::gen_of(&h.get(&format!("/img/{id}")))
+}
+
+/// A catalogue of `n` dishes, dish `bump` at `price`.
+fn menu(n: usize, bump: usize, price: i64) -> Vec<u8> {
+    let mut c = Catalog::create().unwrap();
+    c.set_location(r#"{"name":"Twin","currency":"ALL"}"#);
+    for i in 0..n {
+        c.set_product(&format!("d{i:03}"), &dish(i, if i == bump { price } else { 500 + i as i64 }, 200));
+    }
+    c.to_bytes().unwrap()
+}
+
+/// THE RESIDENT JOURNAL CHANGES NO BYTE (W-LOOPB, R-LOOPS row 5). Two objects take the same
+/// forty-odd catalogue writes; one keeps the journal and the last `after` in hand (`Desk`), the
+/// other is the old path (`off`). After EVERY step the storage writes (every chunk key and
+/// meta, in order -- the changed-chunk lists), the stored journal and the catalogue are
+/// identical. The steps include each way the copy must be dropped: a journal rewritten by a
+/// route (compacted to 5 records), an unstamped write, a SHRINK (40 -> 12 dishes), a `mem`
+/// eviction of the journal and of the catalogue, and a write cut by storage after 2 keys.
+/// And the copy WAS used (the hit counters), so the equality is not two old paths agreeing.
+#[test]
+fn a_resident_journal_writes_exactly_the_bytes_the_reloaded_one_wrote() {
+    let (a, b) = (Harness::new(), Harness::new());
+    b.obj.edit.borrow_mut().off = true;
+    let same = |what: &str| {
+        assert_eq!(*a.host.writes.borrow(), *b.host.writes.borrow(), "{what}: storage writes (keys, in order)");
+        assert_eq!(bytes_of(&a, JOURNAL), bytes_of(&b, JOURNAL), "{what}: the journal");
+        assert_eq!(bytes_of(&a, "catalog"), bytes_of(&b, "catalog"), "{what}: the catalogue");
+    };
+    let both = |bytes: &[u8], by: Option<&str>| {
+        let (ga, gb) = (gen(&a, "catalog"), gen(&b, "catalog"));
+        assert_eq!(ga, gb);
+        let ra = put(&a, "catalog", ga.max(0), bytes, by).map(|r| r.status_code());
+        let rb = put(&b, "catalog", gb.max(0), bytes, by).map(|r| r.status_code());
+        assert_eq!(ra.is_ok(), rb.is_ok());
+        if let (Ok(x), Ok(y)) = (ra, rb) {
+            assert_eq!(x, y);
+        }
+    };
+    both(&menu(40, 0, 500), Some("owner-1"));
+    same("first write");
+    for i in 1..15 {
+        both(&menu(40, i, 900 + i as i64), Some("owner-1"));
+        same(&format!("edit {i}"));
+    }
+    // A route rewrites the journal (the console's compaction): another generation.
+    for h in [&a, &b] {
+        let small = edits::compacted(&LogImage::load(&bytes_of(h, JOURNAL)).unwrap(), 5).unwrap();
+        assert_eq!(h.put(JOURNAL, gen(h, JOURNAL), &small.to_bytes()).status_code(), 200);
+    }
+    same("journal rewritten by a route");
+    for i in 15..20 {
+        both(&menu(40, i, 1200), Some("owner-2"));
+        same(&format!("edit {i} after the rewrite"));
+    }
+    both(&bytes_of(&a, "catalog"), None);
+    same("an unstamped write of the same content");
+    both(&menu(12, 3, 777), Some("owner-1"));
+    same("a shrink to 12 dishes");
+    both(&menu(12, 4, 778), Some("owner-1"));
+    same("the edit after the shrink");
+    for h in [&a, &b] {
+        h.obj.mem.borrow_mut().remove(JOURNAL);
+    }
+    both(&menu(12, 5, 779), Some("owner-1"));
+    same("after the journal left memory");
+    for h in [&a, &b] {
+        h.obj.mem.borrow_mut().remove("catalog");
+    }
+    both(&menu(12, 6, 780), Some("owner-1"));
+    same("after the catalogue left memory");
+    for h in [&a, &b] {
+        h.host.puts_left.set(Some(2));
+    }
+    both(&menu(12, 7, 781), Some("owner-1"));
+    for h in [&a, &b] {
+        h.host.puts_left.set(None);
+    }
+    same("a write cut after 2 keys");
+    for i in 8..12 {
+        both(&menu(12, i, 800 + i as i64), Some("owner-3"));
+        same(&format!("edit {i} after the cut"));
+    }
+    let (ha, hb) = (a.obj.edit.borrow().hits, b.obj.edit.borrow().hits);
+    assert_eq!(hb, (0, 0), "the twin is the old path");
+    assert!(ha.0 >= 20 && ha.1 >= 20, "the resident copy must have served most writes: {ha:?}");
+    assert_eq!(replayed(&a.cold()), state(&a.cold()));
+}

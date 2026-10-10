@@ -31,9 +31,15 @@ pub fn objected(entries: &[Entry], key: &str) -> bool {
 
 /// The newest valid act for one key, purpose and channel, by the act's own clock; a tie goes to
 /// the withdrawal (`consent::state` folds this too).
+///
+/// THE SUBJECT IS TESTED BEFORE THE ACT IS PARSED (W-LOOPB, R-LOOPS row 4): the one writer
+/// (`log::write`) files every act under `subject_of(act.key)`, so another subject's acts are
+/// not parsed only to be dropped by the key test. An act filed under a subject that is not its
+/// key's was not written by this code and is not counted (`tests::a_misfiled_act_is_not_counted`).
 pub(super) fn newest(entries: &[Entry], key: &str, purpose: &str, channel: &str) -> Option<Act> {
     let mut best: Option<Act> = None;
-    for e in entries.iter().filter(|e| e.kind == KIND_ACT) {
+    let subject = super::subject_of(key);
+    for e in entries.iter().filter(|e| e.kind == KIND_ACT && e.subject == subject) {
         let Some(act) = Act::parse(&e.json) else { continue };
         if act.key != key || act.purpose != purpose || act.channel != channel || super::check(&act).is_err() {
             continue;

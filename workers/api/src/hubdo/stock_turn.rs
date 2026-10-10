@@ -35,7 +35,8 @@ impl HubImages {
         // THE CATALOGUE'S PART IS READ HERE (BN1): the supplies, the venue's
         // day and its currency come from the image this object holds, never
         // across the hop (`turn::from_catalogue`).
-        let input = input.from_catalogue(&self.catalogue().await?);
+        let cat = self.catalogue().await?; // decoded ONCE: the expiry forecast below reads it too (W-LOOPB)
+        let input = input.from_catalogue(&cat);
         let (gen, mut log) = self.stock_log().await?;
         let before = log.len();
         let routing = self.routing_groups().await.map(|(_, g)| g);
@@ -54,7 +55,7 @@ impl HubImages {
             return Response::error("the stock generation moved during a movement", 409);
         }
         // P7 (W-PREP): what the forecast will not use before each lot's date.
-        self.expiring_surplus(&mut told, &log, &input).await;
+        self.expiring_surplus(&mut told, &log, &input, &cat).await;
         if let Some(groups) = routing {
             let base = format!("stock/{}", log.len());
             let heard: Vec<_> = told.into_iter().filter(|(ev, _)| produce::wants(&groups, ev)).collect();

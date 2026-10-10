@@ -63,6 +63,8 @@ pub struct Entry {
 
 pub struct LogImage {
     store: Store,
+    /// The load-time crc scan, carried (`crate::Seen`; `logimage/scan.rs` reads it).
+    seen: crate::Seen,
 }
 
 fn encode(kind: &str, subject: &str, json: &str) -> Result<Vec<u8>, HubError> {
@@ -114,7 +116,7 @@ impl LogImage {
     pub fn create_sized(bytes: usize) -> Result<Self, HubError> {
         let mut store = Store::create_bytes(bytes.max(MIN_LOG_BYTES))?;
         EvLog::init_bytes(&mut store)?;
-        Ok(LogImage { store })
+        Ok(LogImage { store, seen: crate::Seen::default() })
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, HubError> {
@@ -137,8 +139,8 @@ impl LogImage {
         // ledger postings, and the one place it can still be said out loud is
         // here. See `crate::chain_is_whole`.
         // A record whose crc fails is QUARANTINED, not refused (`crate::quarantine`).
-        crate::chain_is_whole_quarantining(&store)?;
-        Ok(LogImage { store })
+        let seen = crate::chain_is_whole_seen(&store)?;
+        Ok(LogImage { store, seen })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -208,20 +210,6 @@ impl LogImage {
             .collect()
     }
 
-    /// Newest first, of one kind, optionally about one subject.
-    ///
-    /// THE FILTER IS THE WHOLE QUERY LANGUAGE HERE and that is deliberate: a
-    /// log of a few hundred short records is cheaper to walk than to index, and
-    /// an index on an append-only image would have to be rebuilt on every grow.
-    pub fn about(&self, kind: &str, subject: Option<&str>, limit: usize) -> Vec<Entry> {
-        self.entries()
-            .into_iter()
-            .filter(|e| e.kind == kind)
-            .filter(|e| subject.map_or(true, |s| e.subject == s))
-            .take(limit)
-            .collect()
-    }
-
     /// Walk the chain and check every id against the payload it names.
     pub fn chain_check(&self) -> ChainCheck {
         let mut out = ChainCheck::default();
@@ -270,7 +258,8 @@ impl LogImage {
         if let Some(id) = last {
             EvLog::set_tip_bytes(&mut fresh, &id)?;
         }
-        self.store = fresh;
+        // Every kept record was read clean and is sealed afresh: nothing in it is quarantined.
+        (self.store, self.seen) = (fresh, crate::Seen::default());
         Ok(dropped)
     }
 
@@ -291,6 +280,8 @@ impl LogImage {
         Ok(())
     }
 }
+
+mod scan;
 
 #[cfg(test)]
 mod tests;

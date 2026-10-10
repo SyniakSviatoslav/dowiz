@@ -93,7 +93,7 @@ pub(crate) use usage::{ceiling_cells, usage_of, usage_of_kind};
 mod kvload;
 pub(crate) use kvload::kv_load;
 mod quarantine;
-pub(crate) use quarantine::chain_is_whole_quarantining;
+pub(crate) use quarantine::{chain_is_whole_quarantining, chain_is_whole_seen, Seen};
 
 use bebop_store::Store;
 
@@ -112,4 +112,6 @@ pub const CEILING_BYTES: usize = 10 * 1024 * 1024;
 /// One hub's store image, in memory.
 pub struct Hub {
     store: Store,
+    /// The load-time crc scan, carried (`quarantine::Seen`); `None` after a rebuild.
+    seen: Option<Seen>,
 }

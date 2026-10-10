@@ -44,10 +44,12 @@ impl HubImages {
         if !matches!(cfg, wire::Config::From(_)) {
             return Ok(AtPlacement::NotConfigured);
         }
-        let currency = match self.image(super::CATALOG_IMAGE).await? {
-            Some((_, b)) => crate::services::venue::currency_of(
-                &dowiz_hub::catalog::Catalog::load(&b)
-                    .map_err(|_| Error::RustError("catalog image is unreadable".into()))?,
+        // The record alone, read in place (W-LOOPB): `currency_of` is `currency_of_record` of it.
+        let currency = match self.cat_location().await? {
+            Some(loc) => crate::services::venue::currency_of_record(
+                loc.map_err(|()| Error::RustError("catalog image is unreadable".into()))?
+                    .and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok())
+                    .as_ref(),
             ),
             None => "ALL".into(),
         };

@@ -28,31 +28,100 @@ impl EvLog {
     /// `walk_marked`, keeping only the records whose payload bytes at `at` equal `head`.
     /// Newest first; each with `Some(stored crc)` when its crc FAILS (quarantined).
     pub fn walk_marked_where(st: &Store, at: usize, head: &[u8]) -> Vec<(Record, Option<u32>)> {
+        let head = Head::new(at, head);
         let mut out = Vec::new();
-        let Some(root) = st.root() else { return out };
+        Self::scan(st, |p| {
+            if p.has(&head) {
+                out.push((p.record(), p.crc_bad()));
+            }
+            false
+        });
+        out
+    }
+
+    /// THE WALK UNDER EVERY PREFIX READER (W-LOOPB): the chain newest first, under `walk`'s
+    /// `step_cap` and read budget, handing `visit` a `Peek` of each record -- its position,
+    /// its payload bytes one at a time -- WITHOUT unpacking or hashing it. `Peek::record` and
+    /// `Peek::crc_bad` unpack / hash the one record asked about, with exactly the bytes
+    /// `read_at` hands `walk` there. `visit` returning true stops the walk after that record.
+    pub fn scan(st: &Store, mut visit: impl FnMut(&Peek<'_>) -> bool) {
+        let Some(root) = st.root() else { return };
         let version = Self::version(st);
         let cap = Self::step_cap(st);
         // `walk_until`'s budget, spent the same way record by record, so a record far down
         // a hostile chain is cut short here exactly where `walk` would cut it.
         let mut budget = st.cells.len();
-        let mut steps = 0usize;
-        let words = Words::of(at, head);
+        let mut pos = 0usize;
         let mut cur = st.follow(root, 1);
         while let Some(obj) = cur {
-            if steps >= cap {
+            if pos >= cap {
                 break;
             }
-            steps += 1;
             let span = span(st, version, obj, budget);
-            if span.matches(st, obj, at, head, &words) {
-                let mut b = budget;
-                let r = Self::read_at(st, version, obj, &mut b);
-                out.push((r, st.check_obj(obj).err().map(|bad| bad.want)));
+            let p = Peek { st, version, obj, budget, span, pos };
+            if visit(&p) {
+                break;
             }
-            budget -= span.cells;
+            budget -= p.span.cells;
+            pos += 1;
             cur = st.follow(obj, 2);
         }
-        out
+    }
+}
+
+/// A prefix to look for: payload bytes `at..at + bytes.len()`, compared a cell at a time.
+pub struct Head {
+    at: usize,
+    bytes: Vec<u8>,
+    words: Words,
+}
+
+impl Head {
+    pub fn new(at: usize, bytes: &[u8]) -> Self {
+        Head { at, bytes: bytes.to_vec(), words: Words::of(at, bytes) }
+    }
+}
+
+/// One record of a `scan`, not yet unpacked.
+pub struct Peek<'a> {
+    st: &'a Store,
+    version: i64,
+    obj: usize,
+    budget: usize,
+    span: Span,
+    /// Its place in the newest-first walk: 0 = the newest.
+    pub pos: usize,
+}
+
+impl Peek<'_> {
+    /// How many payload bytes `read_at` would hand back for this record.
+    pub fn len(&self) -> usize {
+        self.span.bytes
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.span.bytes == 0
+    }
+
+    /// Payload byte `j`, as `read_at` would return it; `None` past `len()`.
+    pub fn byte(&self, j: usize) -> Option<u8> {
+        (j < self.span.bytes).then(|| self.span.byte(self.st, self.obj, j))
+    }
+
+    /// Do this record's payload bytes at `head.at` equal `head`'s?
+    pub fn has(&self, head: &Head) -> bool {
+        self.span.matches(self.st, self.obj, head.at, &head.bytes, &head.words)
+    }
+
+    /// The record, unpacked: what `walk` returns at this position.
+    pub fn record(&self) -> Record {
+        let mut b = self.budget;
+        EvLog::read_at(self.st, self.version, self.obj, &mut b)
+    }
+
+    /// `Some(stored crc)` when this record's crc FAILS -- `walk_marked`'s mark.
+    pub fn crc_bad(&self) -> Option<u32> {
+        self.st.check_obj(self.obj).err().map(|bad| bad.want)
     }
 }
 

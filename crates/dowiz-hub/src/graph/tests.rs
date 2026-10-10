@@ -238,3 +238,71 @@ fn an_empty_hub_is_an_empty_graph_not_a_panic() {
     assert!(g.ppr(&[], 5).is_empty());
     assert!(g.bm25("").is_empty());
 }
+
+/// `ppr` BEFORE W-LOOPB, verbatim: the dangling return walked all `n` restart entries.
+/// The reference the seeds-only loop is held to.
+fn ppr_all_n(g: &Graph, seeds: &[usize], iterations: usize) -> Vec<(usize, i64)> {
+    let n = g.nodes.len();
+    if n == 0 || seeds.is_empty() {
+        return Vec::new();
+    }
+    let mut restart = vec![0i64; n];
+    let share = SCALE / seeds.len() as i64;
+    for &s in seeds {
+        if s < n {
+            restart[s] += share;
+        }
+    }
+    let deg: Vec<usize> = (0..n).map(|i| g.degree(i)).collect();
+    let mut rank = restart.clone();
+    let mut each = vec![0i64; n];
+    for _ in 0..iterations {
+        let mut next = vec![0i64; n];
+        for i in 0..n {
+            each[i] = if deg[i] == 0 { 0 } else { rank[i] * 85 / 100 / deg[i] as i64 };
+        }
+        for &(a, _, b) in &g.edges {
+            next[b] += each[a];
+            next[a] += each[b];
+        }
+        for i in 0..n {
+            if deg[i] == 0 {
+                for (j, r) in restart.iter().enumerate() {
+                    next[j] += rank[i] * 85 / 100 * r / SCALE;
+                }
+            }
+        }
+        for (j, r) in restart.iter().enumerate() {
+            next[j] += (SCALE - SCALE * 85 / 100) * r / SCALE;
+        }
+        rank = next;
+    }
+    let mut out: Vec<(usize, i64)> = rank.into_iter().enumerate().filter(|(_, s)| *s > 0).collect();
+    out.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    out
+}
+
+/// THE SEEDS-ONLY DANGLING LOOP IS THE OLD ONE, BIT FOR BIT (W-LOOPB, R-LOOPS row 10): a venue
+/// with forty supplies no dish uses (forty dangling nodes), seeded on one node, on three, on a
+/// seed given twice, on a seed past the end and on a dangling node itself -- every score equal.
+#[test]
+fn ppr_seeds_only_equals_the_all_n_loop_with_dangling_nodes() {
+    let (hub, mut cat) = sixty_dishes();
+    for k in 0..40 {
+        cat.set_supply(&format!("unused-{k}"), &format!(r#"{{"name":"unused {k}","unit":"kg"}}"#));
+    }
+    let g = Graph::of(&hub, &cat);
+    let n = g.len();
+    let dangling: Vec<usize> = (0..n).filter(|&i| g.degree(i) == 0).collect();
+    assert!(dangling.len() >= 40, "the fixture must have dangling nodes: {}", dangling.len());
+    let busy = (0..n).find(|&i| g.degree(i) > 3).unwrap();
+    let cases: Vec<Vec<usize>> =
+        vec![vec![busy], vec![0, busy, n - 1], vec![busy, busy, 2], vec![busy, n + 7], vec![dangling[3], busy], vec![dangling[0]]];
+    for seeds in cases {
+        for iters in [1, 12, 30] {
+            let (new, old) = (g.ppr(&seeds, iters), ppr_all_n(&g, &seeds, iters));
+            assert!(!new.is_empty(), "{seeds:?}");
+            assert_eq!(new, old, "seeds {seeds:?}, {iters} iterations");
+        }
+    }
+}

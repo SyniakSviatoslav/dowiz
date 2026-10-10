@@ -128,3 +128,40 @@ fn nothing_to_walk_is_nothing() {
     EvLog::init_bytes(&mut st).unwrap();
     assert!(EvLog::walk_marked_where(&st, 0, b"").is_empty());
 }
+
+/// `scan` IS `walk_marked`, one `Peek` per record: the same position, the same unpacked
+/// record, the same mark, the same bytes -- over v1, v2, a flipped byte and lying lengths.
+/// And a `visit` that says stop ends the walk after that record.
+#[test]
+fn scan_peeks_are_walk_marked() {
+    let mut cases = vec![log(false, 300, 40), log(true, 150, 20)];
+    let mut flipped = log(false, 200, 30);
+    let o = nth(&flipped, 9);
+    flipped.cells[o + 2 + 13] ^= 0x100;
+    cases.push(flipped);
+    let mut lying = log(false, 120, 15);
+    let o = nth(&lying, 4);
+    lying.cells[o + 2 + 1] = 0xFFFF_FFFF;
+    cases.push(lying);
+    for st in &cases {
+        let want = EvLog::walk_marked(st);
+        let mut got = Vec::new();
+        EvLog::scan(st, |p| {
+            let r = p.record();
+            assert_eq!(p.len(), r.payload.len());
+            assert!((0..=r.payload.len()).all(|j| p.byte(j) == r.payload.get(j).copied()));
+            got.push((p.pos, r, p.crc_bad()));
+            false
+        });
+        assert_eq!(got.len(), want.len());
+        for (i, ((pos, r, bad), (wr, wbad))) in got.into_iter().zip(want).enumerate() {
+            assert_eq!((pos, &r, bad), (i, &wr, wbad), "record {i}");
+        }
+        let mut seen = 0;
+        EvLog::scan(st, |p| {
+            seen += 1;
+            p.pos == 5
+        });
+        assert_eq!(seen, 6, "stops after the record visit accepted");
+    }
+}

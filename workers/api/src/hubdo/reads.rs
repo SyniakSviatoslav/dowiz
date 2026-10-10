@@ -140,8 +140,8 @@ impl HubImages {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
-        let cat = self.catalogue().await?;
-        let zone = crate::services::analytics::handler::zone_of(&cat);
+        // The zone alone, read in place (W-LOOPB): `zone_of` is `hubstore::zone_of` of the record.
+        let zone = self.with_catalog(|c| crate::hubstore::zone_of(c.location().and_then(|j| serde_json::from_str(&j).ok()).as_ref())).await?;
         let (_, listed) = self.orders_view().await?;
         let orders = crate::services::orders::mine::of_venue(listed, &venue);
         Response::from_json(&crate::services::analytics::week_top::public(&orders, zone, now))

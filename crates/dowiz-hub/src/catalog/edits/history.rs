@@ -26,12 +26,14 @@ pub fn compacted(log: &LogImage, keep: usize) -> Result<LogImage, JournalError> 
 }
 
 /// The newest `n` records, NEWEST first, for the console. Unreadable = the replay error.
-/// Decodes only those `n`, so the console's read does not pay for the whole journal.
+/// Decodes only those `n`, so the console's read does not pay for the whole journal: ONE walk
+/// that hashes nothing (the load's crc verdicts, `LogImage::recent_checked`) -- a record
+/// quarantined anywhere, older than the `n` included, still refuses, as it did.
 pub fn recent(log: &LogImage, n: usize) -> Result<Vec<Edit>, ReplayError> {
-    if let Some(q) = log.quarantined().first() {
-        return Err(ReplayError::Unreadable { seq: (log.len() - 1 - q.at) as u64, reason: q.reason });
-    }
-    log.entries().iter().take(n).map(|e| decode(e).map_err(|reason| ReplayError::Unreadable { seq: e.seq, reason })).collect()
+    let newest = log
+        .recent_checked(n)
+        .map_err(|q| ReplayError::Unreadable { seq: (log.len() - 1 - q.at) as u64, reason: q.reason })?;
+    newest.iter().map(|e| decode(e).map_err(|reason| ReplayError::Unreadable { seq: e.seq, reason })).collect()
 }
 
 /// The record at `seq` and what its key held just before it (`None` = did not exist).

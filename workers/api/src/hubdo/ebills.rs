@@ -4,7 +4,7 @@
 //! the poller's own state. Each command is one turn: read in memory, decide,
 //! write -- the log first, the shelf second, the `ebills` image last.
 
-use super::{HubImages, CATALOG_IMAGE};
+use super::HubImages;
 use crate::command::Refused;
 use crate::ebills::cmd::{ConfigIn, FloorIn, ImportIn, ImportOut, MapIn, ReportIn, TickIn};
 use crate::ebills::glue;
@@ -70,18 +70,12 @@ impl HubImages {
         Ok(self.put_image(IMAGE, generation, &bytes).await?.ok_or_else(|| Refused::Append("the ebills generation moved".into())))
     }
 
-    async fn catalog(&self) -> Result<Option<dowiz_hub::catalog::Catalog>> {
-        Ok(match self.image(CATALOG_IMAGE).await? {
-            Some((_, b)) => Some(dowiz_hub::catalog::Catalog::load(&b).map_err(|_| bad("catalogue image is unreadable"))?),
-            None => None,
-        })
-    }
-
     /// What this firing should do (`glue::plan_for`). A venue that never
     /// configured the link answers `enabled: false` from one storage read.
     async fn ebills_tick(&self, input: TickIn) -> Result<state::Plan> {
         let (_, Some(t)) = self.ebills_table().await? else { return Ok(state::Plan::default()) };
-        let loc: Value = self.catalog().await?.and_then(|c| c.location()).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
+        // The record alone, read in place (W-LOOPB); an unreadable catalogue is still the error it was.
+        let loc: Value = self.cat_location().await?.transpose().map_err(|()| bad("catalogue image is unreadable"))?.flatten().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
         glue::plan_for(&t, &loc, input.now_ms).map_err(|r| bad(r.message()))
     }
 
@@ -97,14 +91,17 @@ impl HubImages {
         let (_, mut hub) = self.log_hub().await?;
         let (stock_gen, mut stock) = self.stock_log_at(input.now_ms).await?;
         let before = stock.len();
-        let cat = self.catalog().await?;
         let out = {
             let map = |code: &str| state::get::<Mapping>(&t, K_MAP, code).ok().flatten().map(|m| m.product_id);
-            let product = |pid: &str| cat.as_ref().and_then(|c| c.product(pid));
-            let supply = |sid: &str| cat.as_ref().and_then(|c| c.supply(sid));
-            let look = Lookups { map: &map, product: &product, supply: &supply };
             let waiting = Waiting { bills: st.pending.clone(), leads: st.leads.clone() };
-            match import::decide(&mut hub, &mut stock, &listed, &look, waiting, &input.sales, input.now_ms) {
+            // The catalogue read in place (W-LOOPB): no image answers every lookup with nothing,
+            // as the empty catalogue `with_catalog` hands over does.
+            let decided = self.with_catalog(|c| {
+                let (product, supply) = (|pid: &str| c.product(pid), |sid: &str| c.supply(sid));
+                let look = Lookups { map: &map, product: &product, supply: &supply };
+                import::decide(&mut hub, &mut stock, &listed, &look, waiting, &input.sales, input.now_ms)
+            });
+            match decided.await? {
                 Ok(o) => o,
                 // NOTHING HAS BEEN WRITTEN: a storage refusal drops every copy.
                 Err(r) => return Ok(Err(r)),
@@ -176,7 +173,7 @@ impl HubImages {
             Some(t) => t,
             None => Table::create(CEILING).map_err(|_| bad("cannot create ebills image"))?,
         };
-        let products = self.catalog().await?.map(|c| status::products(&c.products())).unwrap_or_default();
+        let products = self.with_catalog(|c| status::products(&c.products())).await?; // in place (W-LOOPB); none = no products
         let floor = match self.image(FLOOR_IMAGE).await? {
             Some((_, b)) => serde_json::from_slice(&b).unwrap_or(Value::Null),
             None => Value::Null,
@@ -198,9 +195,7 @@ impl HubImages {
     /// SET BY THE OWNER, NEVER BY A GUESS (`glue::apply_map`).
     async fn ebills_map(&self, input: MapIn) -> Result<std::result::Result<Value, Refused>> {
         let (tgen, mut t) = self.ebills_table_or_new().await?;
-        let cat = self.catalog().await?;
-        let has = |pid: &str| cat.as_ref().and_then(|c| c.product(pid)).is_some();
-        let v = match glue::apply_map(&mut t, input, &has) {
+        let v = match self.with_catalog(|c| glue::apply_map(&mut t, input, &|pid: &str| c.product(pid).is_some())).await? {
             Ok(v) => v,
             Err(r) => return Ok(Err(r)),
         };

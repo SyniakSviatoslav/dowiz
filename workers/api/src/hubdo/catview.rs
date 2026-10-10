@@ -33,7 +33,29 @@ impl HubImages {
             let empty = Catalog::create().map_err(|_| Error::RustError("cannot create catalogue".into()))?;
             return Ok(f(&empty));
         }
-        // NO AWAIT FROM HERE ON: the borrow of `mem` is held while `f` runs.
+        self.in_place(f)?.map_err(|()| Error::RustError("catalogue image is unreadable".into()))
+    }
+
+    /// ONE FIELD WITHOUT A FULL DECODE (W-LOOPB, R-LOOPS row 11): `f` over the catalogue read in
+    /// place, keeping apart the three answers every `Catalog::load(&image)` site kept apart --
+    /// `Ok(None)` no image, `Ok(Some(Err(())))` an unreadable one, `Err` storage could not
+    /// answer -- so each site maps them exactly as it did.
+    pub(super) async fn catalog_peek<T>(&self, f: impl FnOnce(&dyn CatalogRead) -> T) -> Result<Option<std::result::Result<T, ()>>> {
+        let resident = self.mem.borrow().contains_key(CATALOG_IMAGE);
+        if !resident && self.image(CATALOG_IMAGE).await?.is_none() {
+            return Ok(None);
+        }
+        self.in_place(f).map(Some)
+    }
+
+    /// The venue's record (`Catalog::location`), read in place: `catalog_peek` of one field.
+    pub(super) async fn cat_location(&self) -> Result<Option<std::result::Result<Option<String>, ()>>> {
+        self.catalog_peek(|c| c.location()).await
+    }
+
+    /// `f` over the bytes `mem` holds, crc once per generation. NO AWAIT: the borrow of `mem`
+    /// is held while `f` runs.
+    fn in_place<T>(&self, f: impl FnOnce(&dyn CatalogRead) -> T) -> Result<std::result::Result<T, ()>> {
         let mem = self.mem.borrow();
         let Some((meta, bytes)) = mem.get(CATALOG_IMAGE) else {
             return Err(Error::RustError("catalogue image left memory during a read".into()));
@@ -41,9 +63,8 @@ impl HubImages {
         let view = match self.cat_checked.get() {
             Some((gen, ck)) if gen == meta.generation => CatalogView::reopen(bytes, ck),
             _ => CatalogView::open(bytes).inspect(|v| self.cat_checked.set(Some((meta.generation, v.checked())))),
-        }
-        .map_err(|_| Error::RustError("catalogue image is unreadable".into()))?;
-        Ok(f(&view))
+        };
+        Ok(view.map(|v| f(&v)).map_err(|_| ()))
     }
 }
 

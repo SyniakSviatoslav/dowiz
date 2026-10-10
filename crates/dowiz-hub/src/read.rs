@@ -35,11 +35,51 @@ impl Hub {
 
     /// Every event, newest first. A record that cannot be read is left out and
     /// appears in `quarantined()` instead — never dropped silently.
+    ///
+    /// ONE WALK, NO SECOND CRC (W-LOOPB, R-LOOPS row 6): the load already hashed every record
+    /// and kept which failed (`crate::Seen`); a hub without that (rebuilt in place) takes
+    /// `walk_marked`, which hashes again. `read::tests` holds the two equal.
     pub fn events(&self) -> Vec<Event> {
+        if let Some(seen) = &self.seen {
+            let walked = EvLog::walk(&self.store);
+            let n = walked.len();
+            if n >= seen.at {
+                return walked
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(pos, r)| (seen.is_bad(n, pos) == Some(false)).then(|| decode(&r)).flatten())
+                    .collect();
+            }
+        }
+        self.events_marked()
+    }
+
+    /// `events()` the long way: every record hashed again (`walk_marked`).
+    pub(crate) fn events_marked(&self) -> Vec<Event> {
         EvLog::walk_marked(&self.store)
             .into_iter()
             .filter_map(|(r, bad)| bad.is_none().then(|| decode(&r)).flatten())
             .collect()
+    }
+
+    /// THE EVENTS THIS HUB APPENDED SINCE IT WAS LOADED (or created), newest first -- read by
+    /// walking only those `k` records (W-LOOPB, R-LOOPS row 6: a command's write steps the
+    /// Worker's memo by `k`, not by refolding `n`). `None` once a rebuild (a redaction, a
+    /// rotation) re-laid the chain: then nothing says the older records are the loaded ones.
+    pub fn appended(&self) -> Option<Vec<Event>> {
+        let seen = self.seen.as_ref()?;
+        let k = EvLog::len(&self.store).checked_sub(seen.at)?;
+        if k == 0 {
+            return Some(Vec::new());
+        }
+        let mut walked = 0usize;
+        let new = EvLog::walk_until(&self.store, |_| {
+            walked += 1;
+            walked == k
+        });
+        // Appended here = sealed here, so no crc can fail; one that does not decode is
+        // quarantined, as `events()` leaves it out.
+        (new.len() == k).then(|| new.iter().filter_map(decode).collect())
     }
 
     /// One order's events, OLDEST FIRST — the input to a fold.

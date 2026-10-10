@@ -129,11 +129,9 @@ impl HubImages {
         if items.is_empty() {
             return;
         }
-        let supplies = match self.image(super::CATALOG_IMAGE).await {
-            Ok(Some((_, b))) => match dowiz_hub::catalog::Catalog::load(&b) {
-                Ok(c) => crate::services::operations::stock::turn::supplies_of(c.supplies()),
-                Err(_) => return,
-            },
+        // In place (W-LOOPB): only the supplies are read.
+        let supplies = match self.catalog_peek(|c| crate::services::operations::stock::turn::supplies_of(c.supplies())).await {
+            Ok(Some(Ok(s))) => s,
             _ => return,
         };
         let supply = |id: &str| supplies.get(id).map(|s| produce::Supply { name: s.name.clone(), unit: s.unit.clone(), low_at: s.low_at });

@@ -24,9 +24,13 @@ use super::atomic::plan;
 use super::host::{Batch, MAX_KEYS};
 use super::{changed_chunks, HubImages, Meta, CATALOG_IMAGE, CHUNK};
 use crate::hubstore::Edited;
+use desk::Resident;
 use dowiz_hub::catalog::{edits, Catalog};
 use dowiz_hub::logimage::LogImage;
 use worker::Result;
+
+mod desk;
+pub(super) use desk::Desk;
 
 /// Chunk `n` of an image's bytes under its storage key.
 fn slice<'a>(id: &str, b: &'a [u8], n: usize) -> (String, &'a [u8]) {
@@ -34,20 +38,23 @@ fn slice<'a>(id: &str, b: &'a [u8], n: usize) -> (String, &'a [u8]) {
     (HubImages::chunk_key(id, n), &b[at..(at + CHUNK).min(b.len())])
 }
 
-/// The journal's new bytes and how to store them.
+/// The journal's new bytes and how to store them; and, for the desk once they land, the
+/// journal itself and the catalogue `State` this write leaves (`journal/desk.rs`).
 struct Appended {
     bytes: Vec<u8>,
     changed: Vec<usize>,
     old_chunks: usize,
     meta: Meta,
+    log: LogImage,
+    after: edits::State,
 }
 
 impl HubImages {
     /// `put_image` carrying the signer of a catalogue write; the stamp never outlives the call.
     pub(super) async fn put_image_stamped(&self, id: &str, expected: i64, bytes: &[u8], stamp: Option<Edited>) -> Result<Option<i64>> {
-        *self.edit.borrow_mut() = stamp;
+        self.edit.borrow_mut().stamp = stamp;
         let out = self.put_image(id, expected, bytes).await;
-        *self.edit.borrow_mut() = None;
+        self.edit.borrow_mut().stamp = None;
         out
     }
 
@@ -59,7 +66,7 @@ impl HubImages {
         if id != CATALOG_IMAGE {
             return self.write_chunks_then_meta(id, bytes, changed, old_chunks, meta).await;
         }
-        let stamp = self.edit.borrow_mut().take().unwrap_or_default();
+        let stamp = self.edit.borrow_mut().stamp.take().unwrap_or_default();
         let at = if stamp.at_ms > 0 { stamp.at_ms } else { now };
         let Some(j) = self.journal_append(bytes, (current, meta.generation), at, &stamp.by).await else {
             return self.write_chunks_then_meta(id, bytes, changed, old_chunks, meta).await;
@@ -88,10 +95,14 @@ impl HubImages {
             return Err(e);
         }
         let new_chunks = j.meta.chunks;
+        // LANDED: the desk keeps this journal and this catalogue's `State` for the next write,
+        // tagged with exactly the images `mem` now holds (W-LOOPB, `journal/desk.rs`).
+        let resident = Resident { journal: (j.meta.generation, j.bytes.len()), log: j.log, catalogue: (meta.generation, bytes.len()), after: j.after };
+        self.mem.borrow_mut().insert(img.to_string(), (j.meta, j.bytes));
+        self.edit.borrow_mut().resident = Some(resident);
         for n in new_chunks..j.old_chunks {
             let _ = self.state.storage().delete(&Self::chunk_key(img, n)).await;
         }
-        self.mem.borrow_mut().insert(img.to_string(), (j.meta, j.bytes));
         Ok(())
     }
 
@@ -99,11 +110,25 @@ impl HubImages {
     /// journal is unusable -- said out loud).
     async fn journal_append(&self, bytes: &[u8], gens: (i64, i64), at: i64, by: &str) -> Option<Appended> {
         let img = crate::catalog_history::IMAGE;
+        // The desk's copy, TAKEN: only this write landing puts one back (`journal/desk.rs`).
+        let resident = self.edit.borrow_mut().take();
+        let held_as = |id: &str| self.mem.borrow().get(id).map(|(m, b)| (m.generation, b.len()));
+        let (cat_held, j_held) = (held_as(CATALOG_IMAGE), held_as(img));
+        let (log_kept, before_kept) = match resident {
+            Some(Resident { journal, log, catalogue, after }) => (
+                (j_held == Some(journal)).then_some(log),
+                (cat_held == Some(catalogue) && catalogue.0 == gens.0).then_some(after),
+            ),
+            None => (None, None),
+        };
+        #[cfg(test)]
+        self.edit.borrow_mut().hit(log_kept.is_some(), before_kept.is_some());
         // BEFORE: the catalogue this object holds (`put_image_as` read it just now); none = empty.
         let t0 = crate::otel::wall_us(); // AX0 (e): the two decodes, then the journal's load + append
-        let (before, held) = match self.mem.borrow().get(CATALOG_IMAGE) {
-            None => (Ok(edits::State::new()), 0),
-            Some((_, b)) => (Catalog::load(b).map(|c| edits::state_of(&c)), b.len()),
+        let (before, held) = match (before_kept, self.mem.borrow().get(CATALOG_IMAGE)) {
+            (Some(kept), _) => (Ok(kept), 0),
+            (None, None) => (Ok(edits::State::new()), 0),
+            (None, Some((_, b))) => (Catalog::load(b).map(|c| edits::state_of(&c)), b.len()),
         };
         let after = Catalog::load(bytes).map(|c| edits::state_of(&c));
         let (t1, decoded, jlen) = (crate::otel::wall_us(), held + bytes.len(), std::cell::Cell::new(0));
@@ -116,19 +141,23 @@ impl HubImages {
                 return None;
             }
         };
-        let (jmeta, mut log) = match self.image(img).await {
-            Ok(Some((m, b))) => match { jlen.set(b.len()); LogImage::load(&b) } {
-                Ok(l) => (Some(m), l),
+        let kept = log_kept.zip(self.mem.borrow().get(img).map(|(m, b)| (*m, b.len())));
+        let (jmeta, mut log) = match kept {
+            Some((log, (m, len))) => { jlen.set(len); (Some(m), log) }
+            None => match self.image(img).await {
+                Ok(Some((m, b))) => match { jlen.set(b.len()); LogImage::load(&b) } {
+                    Ok(l) => (Some(m), l),
+                    Err(e) => {
+                        log_error!("menu.journal: unreadable ({e:?}); not journaled");
+                        return None;
+                    }
+                },
+                Ok(None) => (None, LogImage::create().ok()?),
                 Err(e) => {
-                    log_error!("menu.journal: unreadable ({e:?}); not journaled");
+                    log_error!("menu.journal: not read ({e}); not journaled");
                     return None;
                 }
             },
-            Ok(None) => (None, LogImage::create().ok()?),
-            Err(e) => {
-                log_error!("menu.journal: not read ({e}); not journaled");
-                return None;
-            }
         };
         let out = match edits::journal(&mut log, &before, &after, at, by, gens) {
             Ok(j) if j.edits + j.unseen + j.baseline == 0 && !j.compacted => None,
@@ -140,7 +169,7 @@ impl HubImages {
                 let old_chunks = jmeta.as_ref().map_or(0, |m| m.chunks);
                 let changed = changed_chunks(self.mem.borrow().get(img).map(|(_, b)| b.as_slice()), &new, CHUNK);
                 let meta = Meta { generation: jmeta.map_or(0, |m| m.generation) + 1, chunks: new.len().div_ceil(CHUNK).max(1), len: new.len() };
-                Some(Appended { bytes: new, changed, old_chunks, meta })
+                Some(Appended { bytes: new, changed, old_chunks, meta, log, after })
             }
             Err(e) => {
                 log_error!("menu.journal: does not replay ({e:?}); not journaled");

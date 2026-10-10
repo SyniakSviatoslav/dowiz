@@ -427,3 +427,57 @@ fn personalisation_is_on_until_the_guest_objects() {
     assert_eq!(Method::of("objection"), Some(Method::Objection));
     assert_eq!(Method::Objection.as_str(), "objection");
 }
+
+/// `personal::newest` BEFORE W-LOOPB: every act parsed, then the key tested. The reference.
+fn newest_parsing_all(entries: &[Entry], key: &str, purpose: &str, channel: &str) -> Option<Act> {
+    let mut best: Option<Act> = None;
+    for e in entries.iter().filter(|e| e.kind == KIND_ACT) {
+        let Some(act) = Act::parse(&e.json) else { continue };
+        if act.key != key || act.purpose != purpose || act.channel != channel || check(&act).is_err() {
+            continue;
+        }
+        let takes = match &best {
+            None => true,
+            Some(b) => act.at_ms > b.at_ms || (act.at_ms == b.at_ms && act.state == State::Withdrawn),
+        };
+        if takes {
+            best = Some(act);
+        }
+    }
+    best
+}
+
+/// THE SUBJECT IS TESTED BEFORE THE PARSE (W-LOOPB, R-LOOPS row 4) AND THE ANSWER IS THE SAME
+/// for every log the writer produces: twelve guests, both purposes, grants, withdrawals,
+/// objections and ties, every key x purpose x channel asked.
+#[test]
+fn newest_filtering_the_subject_first_equals_parsing_every_act() {
+    let keys: Vec<String> = (0..12).map(|k| format!("k{k:02}x")).chain([KEY.to_string(), OTHER.to_string()]).collect();
+    let mut acts = Vec::new();
+    for (i, k) in keys.iter().enumerate() {
+        for t in 0..6i64 {
+            let st = if (i as i64 + t) % 3 == 0 { State::Withdrawn } else { State::Given };
+            let base = if t % 2 == 0 { act(st, 10 * t + (i as i64 % 4)) } else { personal(st, 10 * t) };
+            acts.push(Act { key: k.clone(), ..base });
+        }
+    }
+    let entries = log(&acts);
+    let mut asked = 0;
+    for k in &keys {
+        for (p, c) in [(PURPOSE_MARKETING, CHANNEL_WHATSAPP), (PURPOSE_MARKETING, CHANNEL_TELEGRAM), (PURPOSE_PERSONALISATION, CHANNEL_STOREFRONT)] {
+            assert_eq!(personal::newest(&entries, k, p, c), newest_parsing_all(&entries, k, p, c), "{k} {p} {c}");
+            asked += personal::newest(&entries, k, p, c).is_some() as usize;
+        }
+    }
+    assert!(asked >= 2 * keys.len(), "the fixture answers something for every guest: {asked}");
+}
+
+/// An act filed under ANOTHER guest's subject was not written by `log::write` (it files every act
+/// under its own key's subject), and is not counted for either guest.
+#[test]
+fn a_misfiled_act_is_not_counted() {
+    let objection = Act { method: Method::Objection, wording_id: String::new(), ..personal(State::Withdrawn, 50) };
+    let misfiled = Entry { kind: KIND_ACT.to_string(), subject: subject_of(OTHER), json: objection.to_json(), seq: 0 };
+    assert!(!objected(&[misfiled.clone()], KEY), "filed under OTHER: not KEY's objection");
+    assert!(!objected(&[misfiled], OTHER), "and not OTHER's: the act names KEY");
+}

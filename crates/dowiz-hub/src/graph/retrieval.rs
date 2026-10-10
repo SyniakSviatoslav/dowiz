@@ -111,6 +111,13 @@ impl Graph {
                 restart[s] += share;
             }
         }
+        // Where `restart` is non-zero: the seeds, each once, ascending. Everywhere else a
+        // dangling node's share is `rank * 85 / 100 * 0 / SCALE` = 0, so the return loop
+        // below visits these alone -- the same integers added to the same entries in the
+        // same order (W-LOOPB, R-LOOPS B9: 17.7x at 100 dangling nodes, bit-identical).
+        let mut seeded: Vec<usize> = seeds.iter().copied().filter(|&s| s < n).collect();
+        seeded.sort_unstable();
+        seeded.dedup();
         // Degrees once, not once per node per iteration. `neighbours` builds a
         // Vec to answer this and `ppr` asked it n * iterations times.
         let deg: Vec<usize> = (0..n).map(|i| self.degree(i)).collect();
@@ -137,8 +144,8 @@ impl Graph {
                     // A dangling node returns its mass to the seeds rather than
                     // losing it, or the totals shrink every iteration and the
                     // ranking drifts toward whatever is best connected.
-                    for (j, r) in restart.iter().enumerate() {
-                        next[j] += rank[i] * DAMP_NUM / DAMP_DEN * r / SCALE;
+                    for &j in &seeded {
+                        next[j] += rank[i] * DAMP_NUM / DAMP_DEN * restart[j] / SCALE;
                     }
                 }
             }

@@ -292,3 +292,43 @@ fn measure_projection_step_against_the_refold() {
 fn put_fast(hub: &mut Hub, kind: EventKind, id: &str, payload: &str, seq: u64) {
     hub.append(kind, id, payload, seq, [0u8; 32]).unwrap();
 }
+
+/// A COMMAND'S TAIL STEPS THE MEMO EXACTLY AS ITS WHOLE LOG DID (W-LOOPB, R-LOOPS row 6):
+/// a hub loaded at the memo's generation that only appended hands `Written::Tail` (the `k` new
+/// events, `k` records walked) and the memo ends where `Written::Log` + `folded_exactly` put it
+/// -- same count, same digest, same view -- over forty commands of one to three events each,
+/// one of them on a log with a quarantined record. A redacted hub offers no tail.
+#[test]
+fn a_tail_steps_the_memo_exactly_as_the_whole_log_did() {
+    let mut h = Hub::create_sized(64 * 1024).unwrap();
+    for i in 0..6u64 {
+        put(&mut h, EventKind::Placed, &format!("o{i}"), &placed(&format!("o{i}")), i + 1);
+    }
+    // One named corrupted byte, not re-sealed: the `3` of `"id":"o3"` in order o3's record (cells
+    // are little-endian, so a v2 payload's bytes sit in the image in order). Its crc fails.
+    let mut bytes = h.to_bytes_trimmed();
+    let at = bytes.windows(9).position(|w| w == br#""id":"o3""#).expect("o3's record") + 7;
+    bytes[at] = b'9';
+    assert_eq!(Hub::load(&bytes).unwrap().quarantined().len(), 1);
+    let (mut via_tail, mut via_log) = (warm(&Hub::load(&bytes).unwrap(), 0), warm(&Hub::load(&bytes).unwrap(), 0));
+    let mut image = bytes;
+    for g in 0..40i64 {
+        let mut hub = Hub::load(&image).unwrap(); // what each command does: load at `g`
+        for k in 0..(g % 3 + 1) {
+            let (kind, id, payload) = script((g * 3 + k) as usize);
+            hub.append(kind, &id, &payload, 100 + (g * 3 + k) as u64, [0u8; 32]).unwrap();
+        }
+        let tail = hub.appended().expect("only appended");
+        assert_eq!(tail.len() as i64, g % 3 + 1);
+        after_log_write(&mut via_tail, g, g + 1, Written::Tail(tail));
+        after_log_write(&mut via_log, g, g + 1, Written::Log(hub.events()));
+        let (t, l) = (via_tail.as_ref().expect("tail stepped"), via_log.as_ref().expect("log stepped"));
+        assert_eq!((t.generation, t.count, t.digest, t.next_at), (l.generation, l.count, l.digest, l.next_at), "command {g}");
+        assert_eq!(t.view(), l.view(), "command {g}");
+        image = hub.to_bytes_trimmed();
+    }
+    assert_eq!(via_tail.unwrap().view(), refold(&Hub::load(&image).unwrap()));
+    let mut redacted = Hub::load(&image).unwrap();
+    redacted.redact(|e| (e.order_id == "o1").then(|| "{}".to_string())).unwrap();
+    assert!(redacted.appended().is_none(), "a re-laid chain must meet the digest, not skip it");
+}

@@ -4,7 +4,7 @@
 //! writes it, and `pay` never writes the till: two images, each with one
 //! writer per command (`tools/gates/one-image.sh`).
 
-use super::super::{HubImages, CATALOG_IMAGE};
+use super::super::HubImages;
 use crate::command::till::{self, CashIn, Cmd, Period, Report, TillOut, IMAGE_TILL};
 use crate::command::Refused;
 use dowiz_hub::logimage::LogImage;
@@ -44,12 +44,12 @@ impl HubImages {
     /// The venue's currency, from its own record. No record yet is lek, as
     /// `services::venue::currency_of` says; an UNREADABLE record is an error.
     pub(in crate::hubdo) async fn venue_currency(&self) -> Result<String> {
-        match self.image(CATALOG_IMAGE).await? {
+        // The record alone, read in place (W-LOOPB).
+        match self.cat_location().await? {
             None => Ok("ALL".into()),
-            Some((_, bytes)) => {
-                let cat = dowiz_hub::catalog::Catalog::load(&bytes)
-                    .map_err(|_| Error::RustError("catalog image is unreadable".into()))?;
-                Ok(crate::services::venue::currency_of(&cat))
+            Some(loc) => {
+                let loc = loc.map_err(|()| Error::RustError("catalog image is unreadable".into()))?;
+                Ok(crate::services::venue::currency_of_record(loc.and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref()))
             }
         }
     }

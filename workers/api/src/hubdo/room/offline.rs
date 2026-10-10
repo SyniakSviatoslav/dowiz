@@ -200,8 +200,8 @@ impl HubImages {
             None => None,
         };
         let chat = settings.as_ref().map(crate::notify::route::alert_target).unwrap_or_default();
-        let record: Option<Value> = match self.image(super::super::CATALOG_IMAGE).await? {
-            Some((_, b)) => dowiz_hub::catalog::Catalog::load(&b).ok().and_then(|c| c.location()).and_then(|j| serde_json::from_str(&j).ok()),
+        let record: Option<Value> = match self.cat_location().await? {
+            Some(l) => l.ok().flatten().and_then(|j| serde_json::from_str(&j).ok()),
             None => None,
         };
         let lang = record.as_ref().and_then(|r| r.get("default_locale")).and_then(Value::as_str).unwrap_or("en").to_string();

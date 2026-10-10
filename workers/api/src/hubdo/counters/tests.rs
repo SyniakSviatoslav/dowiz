@@ -112,7 +112,9 @@ fn a_catalogue_write_counts_its_decodes_and_its_journal() {
     assert_eq!(put_cat(&h, 1, &second), 200);
     let k = counters(&h, false);
     assert_eq!(k["cat_writes"], 2, "{k}");
-    assert_eq!(k["cat_decoded_bytes"].as_u64(), Some((first.len() + first.len() + second.len()) as u64), "nothing held, then the two: {k}");
+    // W-LOOPB (R-LOOPS row 5): the second write's `before` is the first write's `after`, kept on the
+    // desk (`hubdo/journal/desk.rs`), so it decodes ONE catalogue: the one written. Was first + first + second.
+    assert_eq!(k["cat_decoded_bytes"].as_u64(), Some((first.len() + second.len()) as u64), "nothing held, then only the written one: {k}");
     assert!(k["journal_bytes"].as_u64().is_some_and(|n| n > 0), "the second write loaded the journal the first one began: {k}");
     // Positive twin: a write to another image is a write, never a catalogue write.
     assert_eq!(h.put("settings", 0, b"x").status_code(), 200);
@@ -159,7 +161,8 @@ fn one_price_edit_on_a_dubin_size_menu_is_timed_by_its_counters() {
         walls.push(t.elapsed().as_micros() as u64);
         let k = counters(&h, true);
         assert_eq!(k["cat_writes"], 1, "{k}");
-        assert!(k["cat_decoded_bytes"].as_u64().is_some_and(|n| n >= 2 * base.len() as u64), "two catalogues decoded per edit: {k}");
+        // W-LOOPB: ONE catalogue decoded per edit (the written one); the held one is the last write's `after`.
+        assert!(k["cat_decoded_bytes"].as_u64().is_some_and(|n| n >= base.len() as u64 && n < 2 * base.len() as u64), "one catalogue decoded per edit: {k}");
         decode.push(k["cat_decode_us"].as_u64().unwrap());
         journal.push(k["journal_us"].as_u64().unwrap());
         jbytes.push(k["journal_bytes"].as_u64().unwrap());

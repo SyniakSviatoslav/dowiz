@@ -102,7 +102,7 @@ impl Hub {
         loop {
             match rebuilt(&records, tip, size) {
                 Ok(fresh) => {
-                    self.store = fresh;
+                    (self.store, self.seen) = (fresh, None); // re-laid: the load-time scan no longer describes it
                     return Ok(n);
                 }
                 Err(HubError::Store(e)) if crate::e_is_full(&e) => size = size.saturating_mul(2),

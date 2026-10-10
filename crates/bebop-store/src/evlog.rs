@@ -1022,3 +1022,4 @@ mod tests {
 
 // One subject's records without unpacking the whole log (W-OCHAIN): `evlog/subject.rs`.
 mod subject;
+pub use subject::{Head, Peek};

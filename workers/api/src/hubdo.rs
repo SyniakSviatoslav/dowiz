@@ -188,7 +188,7 @@ pub struct HubImages {
     /// The catalogue image in `mem` passed the full crc check at this generation (W-ZC, `hubdo/catview.rs`).
     cat_checked: std::cell::Cell<Option<(i64, dowiz_hub::catalog::view::Checked)>>,
     /// Who signed the catalogue write under way, for its journal record (W-PITR2, `hubdo/journal.rs`).
-    edit: RefCell<Option<crate::hubstore::Edited>>,
+    edit: RefCell<journal::Desk>, // + the journal kept in hand between writes (W-LOOPB, `hubdo/journal/desk.rs`)
     /// AX0: what this wake served, read by `/api/owner/health` (`hubdo/counters.rs`).
     counters: counters::Counters,
 }
@@ -219,7 +219,7 @@ impl HubImages {
             menu: RefCell::new(None),
             in_alarm: std::cell::Cell::new(false),
             cat_checked: std::cell::Cell::new(None),
-            edit: RefCell::new(None),
+            edit: RefCell::new(journal::Desk::default()),
             counters: counters::Counters::woke(),
         }
     }
@@ -948,7 +948,7 @@ impl HubImages {
     pub(super) async fn put_log(&self, expected: i64, hub: &dowiz_hub::Hub) -> Result<Option<i64>> {
         let warm = self.folded.borrow().as_ref().is_some_and(|m| m.generation() == expected);
         let written = if warm {
-            crate::fold::projection::Written::Log(hub.events())
+            hub.appended().map_or_else(|| crate::fold::projection::Written::Log(hub.events()), crate::fold::projection::Written::Tail) // O(k) when only appended (W-LOOPB)
         } else {
             crate::fold::projection::Written::Whole
         };

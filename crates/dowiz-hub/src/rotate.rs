@@ -99,7 +99,7 @@ impl Hub {
             last = r.id;
         }
         EvLog::set_tip_bytes(&mut fresh, &last)?;
-        self.store = fresh;
+        (self.store, self.seen) = (fresh, None); // re-laid: the load-time scan no longer describes it
         Ok(archived)
     }
 }

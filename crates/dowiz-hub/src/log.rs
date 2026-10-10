@@ -19,7 +19,7 @@ impl Hub {
     pub fn create_sized(bytes: usize) -> Result<Self, HubError> {
         let mut store = Store::create_bytes(bytes)?;
         EvLog::init_bytes(&mut store)?;
-        Ok(Hub { store })
+        Ok(Hub { store, seen: Some(crate::Seen::default()) })
     }
 
     /// Load an existing image. Refuses one with no valid superblock rather than
@@ -35,8 +35,9 @@ impl Hub {
         // as "the log is all here". See `chain_is_whole`.
         // A record whose crc fails is QUARANTINED, served around and counted, not
         // refused (operator 2026-10-05); a broken link still refuses. `crate::quarantine`.
-        crate::chain_is_whole_quarantining(&store)?;
-        Ok(Hub { store })
+        // The scan's findings are kept (`crate::Seen`): `events()` reads them instead of hashing again.
+        let seen = crate::chain_is_whole_seen(&store)?;
+        Ok(Hub { store, seen: Some(seen) })
     }
 
     /// The image to persist. The caller writes this wherever the hub lives.
