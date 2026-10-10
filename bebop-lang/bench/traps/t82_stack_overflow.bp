@@ -1,7 +1,13 @@
+// Trap 82 probe (runtime SIGSEGV/SIGBUS handler on stack overflow). The recursive call must NOT
+// be in tail position: R2 tail-recursion elimination (compiler/tre.bp, 2026-10-07) turns
+// `recurse(n - 1)` in tail position into a branch, and the old probe then ran to 0 with rc=0
+// (W-BATRED 2026-10-10: e8e63169 rc=0, pre-TRE 8a0b4325 rc=82 on the old text). `+ 1` after
+// the call keeps a real frame per level -- the same fix diag_check.sh's t82 probe got with R2.
+// Depth 10000000 overflows the 8 MiB stack run_traps.sh pins for any frame of >= 1 byte.
 fn recurse(n: i64) -> i64 {
-  if n > 0 then recurse(n - 1) else 0
+  if n > 0 then recurse(n - 1) + 1 else 0
 }
 
 fn main() -> i64 {
-  recurse(100000)
+  recurse(10000000)
 }

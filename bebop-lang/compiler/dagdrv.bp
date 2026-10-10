@@ -24,13 +24,35 @@ fn w_adr_base(p: i64) -> i64 { 268435456 + ((524288 - p - 1) & 524287) * 32 + 16
 // callee fn index), 2 FNVAL (fn index; the movz/movk pair at w, w+1), 3 LIT (global literal
 // ordinal), 4 BASE, 5 SELF (a self call's bl, emit1.bp: re-aimed and dropped at the fn tail). Only
 // the emission table records (7111 != 0).
+// W-BATRED (2026-10-10): the buffer GROWS (dag_rel_grow) instead of being sized n[1] pairs up front.
+// L4 made dag_emit allocate zeros(n[1] * 2 + 2) = 524,290 cells (4 MiB) on EVERY compile, memo or not,
+// and the arena never frees: an in-thread compile inside a sys_clone child (8 MiB arena,
+// [sp+4 MiB, sp+12 MiB)) went from 358,376 to 815,594 cells for k1.bp and par_compile trapped 80
+// (pool_parity par_compile / par_compile_k7 BADREF ''). Doubling keeps every relocation (a dropped one
+// would be an unpatched word in the single pass) at <= 2x the cells actually needed.
 fn dag_rel(fntab: [i64], w: i64, kind: i64, t: i64) -> i64 {
   let on = if fntab[7111] == 0 then 0 else 1;
+  let _ = if on * (if fntab[7112] < fntab[7113] then 0 else 1) == 1 then dag_rel_grow(fntab) else 0;
   let c = fntab[7112];
   let fits = if c < fntab[7113] then 1 else 0;
   let _ = if on * fits == 1 then dag_rel_put(st_cells(fntab[7111]), c, w, (kind << 56) | t) else 0;
   let _ = if on * fits == 1 then (let _ = fntab[7112] = c + 1 in 0) else 0;
   let _ = if on * (1 - fits) == 1 then (let _ = fntab[7114] = 1 in 0) else 0;
+  0
+}
+// dag_rel_grow: a buffer of twice the pairs, the recorded ones copied, published in 7111/7113.
+fn dag_rel_grow(fntab: [i64]) -> i64 {
+  let old = st_cells(fntab[7111]);
+  let cap = fntab[7113];
+  let nb = zeros(cap * 4 + 2);
+  let k = 0;
+  while k < cap * 2 {
+    let _ = nb[k] = old[k];
+    let k = k + 1;
+    0
+  };
+  let _ = fntab[7111] = st_addr(nb);
+  let _ = fntab[7113] = cap * 2;
   0
 }
 fn dag_rel_put(rb: [i64], c: i64, w: i64, kt: i64) -> i64 {
@@ -334,8 +356,7 @@ fn dag_share(ptab: [i64], fntab: [i64]) -> i64 {
 
 // ---- emission: ONE walk in source order. A hit is copied, a miss is compiled in place (emit1.bp);
 // both record every layout-dependent word as a relocation, and e1_link patches them all at the end.
-// The buffer holds one pair per code word at most (a relocation sits on its own word), so it can
-// never fill: n[1] pairs.
+// The buffer starts at 4096 pairs and doubles when full (dag_rel_grow), so it never drops a pair.
 fn dag_emit(s: str, ws: [i64], dm: [i64], insns: [i64], n: [i64]) -> i64 {
   let cnt = ws[0];
   let sizes = wsa(ws, 3);
@@ -349,11 +370,10 @@ fn dag_emit(s: str, ws: [i64], dm: [i64], insns: [i64], n: [i64]) -> i64 {
   let li0 = wsa(ws, 18);
   let bad = wsa(ws, 21);
   let offs = wsa(ws, 24);
-  let rb = zeros(n[1] * 2 + 2);
-  let _ = ws[17] = st_addr(rb);
+  let rb = zeros(4096 * 2 + 2);
   let _ = fntab[7111] = st_addr(rb);
   let _ = fntab[7112] = 0;
-  let _ = fntab[7113] = n[1];
+  let _ = fntab[7113] = 4096;
   let stk_b = zeros(1088);
   let q = 0;
   while q < cnt {
@@ -374,6 +394,7 @@ fn dag_emit(s: str, ws: [i64], dm: [i64], insns: [i64], n: [i64]) -> i64 {
     0
   };
   let _ = e1_link(s, ws, fntab, insns, n);
+  let _ = ws[17] = fntab[7111];  // the buffer dag_rel_grow left (dag_put_relocs reads it for the memo)
   let _ = fntab[7111] = 0;
   0
 }

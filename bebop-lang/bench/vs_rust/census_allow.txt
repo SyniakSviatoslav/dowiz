@@ -122,3 +122,16 @@ bebop bcond 1929 W-DG4 phase 2 (2026-09-30): +422 b.cond over the 1507 W-BATGREE
 bebop cbz 191 W-DG4 phase 2 (2026-09-30): +58 zero-tests over the frozen 133, by the same three-source isolation as the bcond 1928 line: store.bp +5 (138), dagc.bp +12 (150), the driver + fast paths +41 (191). Per-layer, not line-level
 bebop bcond 1962 W-DG6 (2026-10-01): +33 b.cond over 1929, all new COMPILER code (program codegen unchanged: construct parity 129/0 with no WORD_DELTA on any existing construct, gen2 == gen3 == gen4 8a0b4325): the E124 class rules -- fn_class_at/mark_word_end/mark_word_is (marker scan), class_check (io builtin, callee class), pure_store_check (sig/array/out bits), diag_e124/diag_ident_len (the reason text), the `out ` skip in param_type_word -- and diag_exit's split into diag_pos/diag_exit_text. Measured by the battery's census of gen4, not isolated per fn
 bebop cbz 193 W-DG6 (2026-10-01): +2 zero-tests over 191, same cause and same measurement as the bcond 1962 line (the E124 class rules in compiler/lex_diag.bp and compiler/tables.bp)
+bebop bcond 2382 W-CFVAL 34da65b1 + W-BATRED 2026-10-10: compiler source grew (compiler/affine.bp R-CF, tre.bp TRE, emit1.bp, dagdrv dag_rel_grow); battery green otherwise
+bebop cbz 228 W-CFVAL 34da65b1 + W-BATRED 2026-10-10: compiler source grew (compiler/affine.bp R-CF, tre.bp TRE, emit1.bp, dagdrv dag_rel_grow); battery green otherwise
+c09_recursion bcond 2 W-CFVAL TRE (compiler/tre.bp): a self tail call becomes a loop, +1 loop-exit bcond per site
+c26_selfrec bcond 6 W-CFVAL TRE (compiler/tre.bp): a self tail call becomes a loop, +1 loop-exit bcond per site
+c67_deeprec bcond 2 W-CFVAL TRE (compiler/tre.bp): a self tail call becomes a loop, +1 loop-exit bcond per site
+c70_qdsl bcond 138 W-CFVAL L1/TRE 2026-10-10: store/gb helpers through the new passes; per-site cause NOT checked (+1..+6 bcond), output byte-identical to the goldens (std_golden 158/0)
+c70_qdsl_neg bcond 122 W-CFVAL L1/TRE 2026-10-10: store/gb helpers through the new passes; per-site cause NOT checked (+1..+6 bcond), output byte-identical to the goldens (std_golden 158/0)
+c_gb_degree bcond 297 W-CFVAL L1/TRE 2026-10-10: store/gb helpers through the new passes; per-site cause NOT checked (+1..+6 bcond), output byte-identical to the goldens (std_golden 158/0)
+c_gb_kernel_accessors bcond 270 W-CFVAL L1/TRE 2026-10-10: store/gb helpers through the new passes; per-site cause NOT checked (+1..+6 bcond), output byte-identical to the goldens (std_golden 158/0)
+c_gb_vec_setbit bcond 298 W-CFVAL L1/TRE 2026-10-10: store/gb helpers through the new passes; per-site cause NOT checked (+1..+6 bcond), output byte-identical to the goldens (std_golden 158/0)
+c_st_bytes bcond 151 W-CFVAL L1/TRE 2026-10-10: store/gb helpers through the new passes; per-site cause NOT checked (+1..+6 bcond), output byte-identical to the goldens (std_golden 158/0)
+k2 bcond 2 W-CFVAL TRE (compiler/tre.bp): a self tail call becomes a loop, +1 loop-exit bcond per site
+k2h bcond 2 W-CFVAL TRE (compiler/tre.bp): a self tail call becomes a loop, +1 loop-exit bcond per site

@@ -7,7 +7,12 @@ mkdir -p "$TMP"
 
 SEED=./seed/build/seed
 [ -x "$SEED" ] || { echo "seed not executable: $SEED" >&2; exit 2; }
-[ -s ./bebop.bin ] || { echo "bebop.bin missing or empty" >&2; exit 2; }
+# W-BATRED 2026-10-10: the compiler under test is BEBOP_BIN (battery.sh passes its candidate). It was a
+# hard-coded ./bebop.bin, so a battery run against a CONTROL compiler still measured the promoted one here --
+# which is how "TRAP 82 red with both e8e63169 and 8a0b4325" was reported while 8a0b4325 traps 82 correctly.
+BIN=${BEBOP_BIN:-./bebop.bin}
+[ -s "$BIN" ] || { echo "$BIN missing or empty" >&2; exit 2; }
+echo "trap_bin: $BIN $(md5sum < "$BIN" | cut -c1-8)"
 
 # Define trap expectations - code, documented_rc, documented_msg (for first line)
 declare -A expected_rc
@@ -116,7 +121,7 @@ test_compile_trap() {
   local out="$TMP/t${code}.bin"
 
   # Run compiler directly (not through cc.sh wrapper) to capture true exit code
-  "$SEED" ./bebop.bin compile "$src_file" "$out" > "$TMP/cc_${code}.out" 2> "$TMP/cc_${code}.err"
+  "$SEED" "$BIN" compile "$src_file" "$out" > "$TMP/cc_${code}.out" 2> "$TMP/cc_${code}.err"
   local cc_rc=$?
 
   local stderr=$(cat "$TMP/cc_${code}.err" 2>/dev/null | head -1)
@@ -149,7 +154,7 @@ test_runtime_trap() {
   local out="$TMP/t${code}.bin"
 
   # Compile the probe
-  "$SEED" ./bebop.bin compile "$src_file" "$out" > "$TMP/cc_${code}.out" 2> "$TMP/cc_${code}.err"
+  "$SEED" "$BIN" compile "$src_file" "$out" > "$TMP/cc_${code}.out" 2> "$TMP/cc_${code}.err"
   local cc_rc=$?
 
   if [ $cc_rc -ne 0 ]; then
@@ -158,7 +163,10 @@ test_runtime_trap() {
   fi
 
   # Run the compiled binary
-  timeout 30 "$SEED" "$out" 2> "$TMP/run_${code}.err" 1> "$TMP/run_${code}.out"
+  # Stack limit PINNED (W-BATRED 2026-10-10): t82's recursion depth overflows an 8 MiB stack, and an inherited
+  # `ulimit -s 65536` (std_golden/pool_parity set it) or `unlimited` made the same probe return 0. Measured:
+  # the non-tail probe traps 82 at 8192 KiB and exits 0 at 65536 KiB. A trap probe must not depend on its caller.
+  ( ulimit -s 8192; exec timeout 30 "$SEED" "$out" ) 2> "$TMP/run_${code}.err" 1> "$TMP/run_${code}.out"
   local run_rc=$?
 
   local stderr=$(cat "$TMP/run_${code}.err" 2>/dev/null | head -1)
@@ -199,7 +207,7 @@ echo "=== Testing special-case traps ==="
 # Test open failed: compile with non-existent source
 TMP=${TMPDIR:-/tmp}/traps-$$-${RANDOM}
 mkdir -p "$TMP"
-"$SEED" ./bebop.bin compile /nonexistent-$$.bp "$TMP/nonexistent.bin" > "$TMP/cc_90.out" 2> "$TMP/cc_90.err"
+"$SEED" "$BIN" compile /nonexistent-$$.bp "$TMP/nonexistent.bin" > "$TMP/cc_90.out" 2> "$TMP/cc_90.err"
 cc_rc=$?
 stderr=$(cat "$TMP/cc_90.err" 2>/dev/null | head -1)
 if [ $cc_rc -eq 90 ]; then

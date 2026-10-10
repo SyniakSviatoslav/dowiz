@@ -1023,8 +1023,14 @@ gate gb_gen_specialised -4783772994166464769 "$gb_gen_c"
 #      (pool-hit == tier-0 == golden). Reuses "$GBT/gb_gen.store" already built by the gb_gen
 #      block above; needs compiler internals in scope (gb_compile1.bp), so it is compiled
 #      pool_parity-style: a main-stripped copy of bebop.bp concatenated ahead of it. ----
-awk '/^fn main\(/{skip=1} !skip{print} skip&&/^}/{skip=0}' bebop.bp > "$GBT/gb_pool_build.bp"
-cat bench/vs_rust/std_tests/gb_pool.bp >> "$GBT/gb_pool_build.bp"
+awk '/^fn main\(/{skip=1} !skip{print} skip&&/^}/{skip=0}' bebop.bp > "$GBT/gb_pool_full.bp"
+cat bench/vs_rust/std_tests/gb_pool.bp >> "$GBT/gb_pool_full.bp"
+# W-BATRED 2026-10-10: the full concatenation is 800 fns, over the compiler's 768-fn cap (E104) since R2
+# (compiler/tre.bp) and L4 (compiler/emit1.bp) -- gb_pool did not COMPILE, and the old `compile && {...}`
+# left last_rc stale, so gate() printed `EMPTY(ran, printed nothing)`. tools/bp_prune.py flattens the
+# `use` includes the way use_expand does and drops the fns main cannot reach (measured 642 of 816 kept);
+# proved on bebop.bp itself: the pruned compiler (584 of 650 fns) compiles bebop.bp byte-identical.
+rm -f "$GBT/gb_pool_build.bp"; python3 tools/bp_prune.py "$GBT/gb_pool_full.bp" "$GBT/gb_pool_build.bp" 2> "$GBT/gb_pool_prune.log" || rm -f "$GBT/gb_pool_build.bp"  # a failed prune leaves NO build file: need_file below names it
 # 2026-09-08: the pool file is keyed by the COMPILER's md5, which bounds how many kernel
 # generations one $BEBOP_TMP accumulates (gb_pool_cap() is 48 = four compilers' worth of the 12
 # this driver builds). It was introduced as a determinism WORKAROUND for the defect below and is
@@ -1052,7 +1058,8 @@ GBPOOL="$GBT/gb_pool_gate.$(md5sum < "${BEBOP_BIN:-bebop.bin}" | cut -c1-8).gbpo
 # DIRECTLY, never through the memo -- a memo HIT printed the cached golden without running the binary, left
 # "$GBPOOL" unwritten, and gb_pool_reuse failed PREREQ on the second battery over one $BEBOP_TMP (measured:
 # gates.txt `gb_pool_test 0 hit rc=0`, memo entry written 17:01 by the first run, replayed 17:30).
-r=$(need_file gb_pool "$GBT/gb_gen.store" && ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_pool_build.bp" "$GBT/gb_pool_test.bin" >/dev/null 2>&1 && { timeout 60 ./seed/build/seed "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBPOOL" > "$GBT/gb_pool.out" 2> "$GBT/gb_pool.err"; echo $? > "$BEBOP_TMP/last_rc"; tail -1 "$GBT/gb_pool.out"; })
+# COMPILEFAIL is named with the compiler's diagnostic (W-BATRED: a failed compile used to read as a run that printed nothing).
+r=$(need_file gb_pool "$GBT/gb_gen.store" "$GBT/gb_pool_build.bp" && { ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_pool_build.bp" "$GBT/gb_pool_test.bin" > "$GBT/gb_pool_cc.log" 2>&1 || { echo "COMPILEFAIL(rc=$?: $(tail -1 "$GBT/gb_pool_cc.log"))"; false; }; } && { timeout 60 ./seed/build/seed "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBPOOL" > "$GBT/gb_pool.out" 2> "$GBT/gb_pool.err"; echo $? > "$BEBOP_TMP/last_rc"; tail -1 "$GBT/gb_pool.out"; })
 gate gb_pool -4783772994166464769 "$r"
 
 # ---- gb_pool_reuse (ROADMAP B3's OPEN DEFECT, closed 2026-09-08): the gate the defect never

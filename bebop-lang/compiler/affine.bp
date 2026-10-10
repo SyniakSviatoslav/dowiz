@@ -198,6 +198,17 @@ fn cf_lin(x: [i64], y: [i64], cx: i64, cy: i64) -> [i64] {
   };
   f
 }
+// copy a 9-cell affine form into dst (the running result of term/expr/shift lives in its own
+// array, not in a one-cell box: typecheck has no nested array type, and a box made f[0] an i64)
+fn cf_set(dst: [i64], src: [i64]) -> i64 {
+  let j = 0;
+  while j < 9 {
+    let _ = dst[j] = src[j];
+    let j = j + 1;
+    0
+  };
+  0
+}
 fn cf_isconst(f: [i64]) -> i64 {
   let j = 0;
   let z = 1;
@@ -240,56 +251,62 @@ fn cf_paren(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> [i64] {
 }
 // term = factor ('*' factor)*  -- one side constant; / and % refuse
 fn cf_term(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> [i64] {
-  let f = [cf_factor(a, ps, tk, sy, cur)];
+  let f = zeros(9);
+  let _ = cf_set(f, cf_factor(a, ps, tk, sy, cur));
   let go = 1;
+  let z9 = zeros(9);   // the zero form a missing operand reads as; one per call, not per iteration (L8)
   while go * (1 - ps[2]) == 1 {
     let ism = cf_isp(tk, 42);
     let _ = if cf_isp(tk, 47) + cf_isp(tk, 37) > 0 then cf_fail(ps) else 0;
     let _ = if ism == 1 then cf_adv(a, ps, tk) else 0;
-    let g = if ism == 1 then cf_factor(a, ps, tk, sy, cur) else zeros(9);
-    let l = f[0];
+    let g = if ism == 1 then cf_factor(a, ps, tk, sy, cur) else z9;
+    let l = f;
     let lc = cf_isconst(l);
     let gc = cf_isconst(g);
     let _ = if ism * (1 - lc) * (1 - gc) == 1 then cf_fail(ps) else 0;
-    let _ = if ism == 1 then (let _ = f[0] = if lc == 1 then cf_lin(g, g, l[8], 0) else cf_lin(l, l, g[8], 0) in 0) else 0;
+    let _ = if ism == 1 then cf_set(f, if lc == 1 then cf_lin(g, g, l[8], 0) else cf_lin(l, l, g[8], 0)) else 0;
     let go = ism;
     0
   };
-  f[0]
+  f
 }
 // expr = term (('+'|'-') term)*
 fn cf_expr(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> [i64] {
-  let f = [cf_term(a, ps, tk, sy, cur)];
+  let f = zeros(9);
+  let _ = cf_set(f, cf_term(a, ps, tk, sy, cur));
   let go = 1;
+  let z9 = zeros(9);   // the zero form a missing operand reads as; one per call, not per iteration (L8)
   while go * (1 - ps[2]) == 1 {
     let isp = cf_isp(tk, 43);
     let ism = cf_isp(tk, 45);
     let op = isp + ism;
     let _ = if op == 1 then cf_adv(a, ps, tk) else 0;
-    let g = if op == 1 then cf_term(a, ps, tk, sy, cur) else zeros(9);
-    let _ = if op == 1 then (let _ = f[0] = cf_lin(f[0], g, 1, isp - ism) in 0) else 0;
+    let g = if op == 1 then cf_term(a, ps, tk, sy, cur) else z9;
+    let _ = if op == 1 then cf_set(f, cf_lin(f, g, 1, isp - ism)) else 0;
     let go = op;
     0
   };
-  f[0]
+  f
 }
 // shift = expr ('<<' expr)*  -- bebop binds shifts LOOSER than + (emit_shift); >> >>> refuse
 fn cf_shift(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> [i64] {
-  let f = [cf_expr(a, ps, tk, sy, cur)];
+  let f = zeros(9);
+  let _ = cf_set(f, cf_expr(a, ps, tk, sy, cur));
   let go = 1;
+  let z9 = zeros(9);   // the zero form a missing operand reads as; one per call, not per iteration (L8)
   while go * (1 - ps[2]) == 1 {
     let isl = cf_isp(tk, 15420);
     let _ = if cf_isp(tk, 15934) + cf_isp(tk, 4079166) > 0 then cf_fail(ps) else 0;
     let _ = if isl == 1 then cf_adv(a, ps, tk) else 0;
-    let g = if isl == 1 then cf_expr(a, ps, tk, sy, cur) else zeros(9);
+    let g = if isl == 1 then cf_expr(a, ps, tk, sy, cur) else z9;
     let c = g[8];
     let okc = cf_isconst(g) * (c >= 0) * (c < 64);
     let _ = if isl * (1 - okc) == 1 then cf_fail(ps) else 0;
-    let _ = if isl * okc == 1 then (let _ = f[0] = cf_lin(f[0], f[0], 1 << c, 0) in 0) else 0;
+    let _ = if isl * okc == 1 then cf_set(f, cf_lin(f, f, 1 << c, 0)) else 0;
     let go = isl;
     0
   };
-  f[0]
+  f
 }
 // body statements up to the closing `}`: `let NAME = shift ;` ... [LIT]
 fn cf_body(a: [i64], ps: [i64], tk: [i64], sy: [i64], cur: [i64]) -> i64 {
