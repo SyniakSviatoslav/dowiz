@@ -5,8 +5,10 @@ use super::{memos, row, Step, EDGES, MENU, ORDERS};
 use crate::hubdo::host::mem::Harness;
 use crate::hubdo::menu::tests::catalog;
 
-/// The object's route table and the two read dispatchers, as compiled.
-const HUBDO: &str = include_str!("../../hubdo.rs");
+/// The object's route table (`route.rs`, split out of `hubdo.rs` by W-SPLIT), its two
+/// platform routes (`platform.rs`) and the object itself, read as ONE source so an arm
+/// added to any of the three is measured; and the two read dispatchers, as compiled.
+const HUBDO: &str = concat!(include_str!("../../hubdo.rs"), include_str!("../route.rs"), include_str!("../platform.rs"));
 const READS: &str = include_str!("../reads.rs");
 const FACTS: &str = include_str!("../facts.rs");
 
@@ -102,7 +104,7 @@ fn served() -> Vec<String> {
 }
 
 /// THE REFUSAL: a route with no row, a row with no route, a dispatched read
-/// nothing routes to. Rows == routes, MEASURED off `hubdo.rs`.
+/// nothing routes to. Rows == routes, MEASURED off `hubdo.rs` + `route.rs` + `platform.rs`.
 #[test]
 fn every_fold_route_names_one_row_and_every_row_a_route() {
     let routed = routes(HUBDO);

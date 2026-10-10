@@ -7,7 +7,8 @@
 //!     added to the table without a check makes the rebuild an ERROR, never a
 //!     silent pass. Every other step folds from the bytes per read, writes, or
 //!     answers about the object itself -- there is no kept answer to go stale.
-//!   * THE ROUTES. `edges/tests.rs` reads the route table out of `hubdo.rs`
+//!   * THE ROUTES. `edges/tests.rs` reads the route table out of `hubdo/route.rs`,
+//!     `hubdo/platform.rs` and `hubdo.rs`
 //!     (and the two read dispatchers, `reads.rs` and `facts.rs`) and refuses a
 //!     route with no row, a row with no route, and a duplicate: rows == routes.
 //!   * EARLY CUTOFF (AX3, D5). `OutKey::K64` rows compare their output before

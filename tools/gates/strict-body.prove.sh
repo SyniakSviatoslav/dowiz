@@ -66,8 +66,8 @@ edit "$PR" '                let input: AckIn = crate::body::parse(&mut req).awai
 want 1 "the Durable Object: req.json().await?"
 
 copy
-HD="$SCRATCH/r/workers/api/src/hubdo.rs"
-edit "$HD" '                    let input: crate::command::assign::AssignIn = crate::body::parse(&mut req).await?;' '                    let input: crate::command::assign::AssignIn = req.json().await?;'
+HD="$SCRATCH/r/workers/api/src/hubdo/verbs.rs" # the assign route's body, split out of hubdo.rs (W-SPLIT)
+edit "$HD" '        let input: crate::command::assign::AssignIn = crate::body::parse(&mut req).await?;' '        let input: crate::command::assign::AssignIn = req.json().await?;'
 want 1 "a let mut req = req; rebinding does not hide it"
 
 rm -rf "$SCRATCH/r"; mkdir -p "$SCRATCH/r/workers/api/src"

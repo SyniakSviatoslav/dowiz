@@ -165,9 +165,13 @@ fn every_catalogue_write_is_journaled_in_the_objects_write() {
     callers.sort();
     callers.dedup();
     assert_eq!(callers, vec![("journal.rs".to_string(), "write_image".to_string())], "an image write that bypasses the journal's door");
+    // `put_image_as` (hubdo.rs) writes through `put_chunks` (hubdo/store.rs, W-SPLIT), which stores through `write_image`.
     let hubdo = include_str!("../hubdo.rs");
     let at = hubdo.find("async fn put_image_as(").expect("put_image_as");
-    assert!(body_around(hubdo, at + 12).contains("self.write_image("), "put_image_as does not store through write_image");
+    assert!(body_around(hubdo, at + 12).contains("self.put_chunks("), "put_image_as does not write through put_chunks");
+    let store = include_str!("../hubdo/store.rs");
+    let at = store.find("async fn put_chunks(").expect("put_chunks");
+    assert!(body_around(store, at + 12).contains("self.write_image("), "put_chunks does not store through write_image");
     let hubstore = include_str!("../hubstore.rs");
     let at = hubstore.find("async fn save_image(").expect("save_image");
     assert!(body_around(hubstore, at + 12).contains("x-edit-by"), "the catalogue PUT does not say who signed");

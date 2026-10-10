@@ -91,13 +91,14 @@ fn the_stored_envelope_names_the_order() {
 /// and the storefront asks for a committed output before it sends the command.
 #[test]
 fn the_placement_marks_its_claim_and_the_storefront_reads_it_first() {
-    let hub = include_str!("../../hubdo.rs");
+    let hub = include_str!("../../hubdo/place.rs"); // split out of hubdo.rs (W-SPLIT)
     let place = &hub[hub.find("async fn place(").expect("hubdo::place")..];
     let place = &place[..place.find("\n    }\n").expect("end of place")];
     let mark = place.find("self.commit_claim(claim.as_ref()").expect("place marks its claim");
     assert!(place.find("\"the log generation moved during a placement\"").unwrap() < mark, "after the log write");
     assert!(mark < place.find("self.broadcast(").expect("the broadcast"), "before anyone is told");
-    assert!(hub.contains("Claimed { input, idem } = crate::body::parse(&mut req).await?"), "the object reads the claim");
+    let verbs = include_str!("../../hubdo/verbs.rs"); // the route bodies (W-SPLIT)
+    assert!(verbs.contains("Claimed { input, idem } = crate::body::parse(&mut req).await?;\n        match self.place(input, idem)"), "the object reads the claim");
     let front = include_str!("../../storefront.rs");
     let read = front.find("idem.committed()").expect("the storefront reads a committed output");
     let send = front.find("idem: idem.claim()").expect("the storefront sends its claim");

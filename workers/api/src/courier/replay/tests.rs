@@ -178,13 +178,16 @@ fn every_courier_tap_reads_its_committed_output_first_and_sends_its_claim() {
 /// anyone is told.
 #[test]
 fn the_object_marks_advance_refund_and_append_after_the_log_write() {
-    let hub = include_str!("../../hubdo.rs");
-    let adv = body_of(hub, "    async fn advance(");
+    // Split out of hubdo.rs (W-SPLIT): the commands in hubdo/orders.rs, the route bodies in hubdo/verbs.rs.
+    let hub = include_str!("../../hubdo/orders.rs");
+    let verbs = include_str!("../../hubdo/verbs.rs");
+    let adv = body_of(hub, "    pub(super) async fn advance(");
     before(adv, "\"the log generation moved during a transition\"", "self.commit_claim(claim.as_ref()");
     before(adv, "self.commit_claim(claim.as_ref()", "self.broadcast(");
-    assert!(hub.contains("Claimed { input, idem } = crate::body::parse(&mut req).await?;\n                    match self.advance(input, idem)"));
-    assert!(hub.contains("Claimed { input, idem } = crate::body::parse(&mut req).await?;\n                    match self.refund(input, idem)"));
-    let arm = &hub[hub.find("(Method::Post, \"append\")").unwrap()..];
+    assert!(verbs.contains("Claimed { input, idem } = crate::body::parse(&mut req).await?;\n        match self.advance(input, idem)"));
+    assert!(verbs.contains("Claimed { input, idem } = crate::body::parse(&mut req).await?;\n        match self.refund(input, idem)"));
+    assert!(include_str!("../../hubdo/route.rs").contains("(Method::Post, \"append\") => self.append_route(req).await"));
+    let arm = &hub[hub.find("async fn append_route(").unwrap()..];
     before(arm, "Some((generation, len)) =>", "self.commit_claim(Some(&m.claim)");
     let refund = include_str!("../../hubdo/refund.rs");
     let refund = body_of(refund, "    pub(super) async fn refund(");
