@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-13
 **Operator:** adversarial API-abuse specialist (red-team lane D3)
-**Targets:** `https://dowiz-staging.fly.dev` (primary, probed) · `https://dowiz.fly.dev` (prod, read-only/gentle)
+**Targets:** the legacy host (primary, probed) · the legacy host (prod, read-only/gentle)
 **Contract source:** `/root/dowiz/attic/apps-api/src/routes/**` (the TS Fastify API — moved to `attic/` on branch `feat/decentralized-pq-protocol`, but this is what is deployed live)
 **Method:** derived the route/auth model from code, then probed live with `curl`. Non-destructive: no DoS, no data exfil, no writes. One prod login was performed with a *known documented test credential* to prove token issuance; the token was **not** reused against any data endpoint.
 
@@ -15,7 +15,7 @@ The **authorization** surface is solid: every owner/admin/courier/customer endpo
 The **posture is dragged down by one critical issue and a cluster of medium/low abuse vectors**:
 
 - 🔴 **CRITICAL:** a **known, weak, repo-documented credential** (`test@dowiz.com` / `test123456`) is a **live, working OWNER login on PRODUCTION** — it returns a real RS256 owner access-token + refresh-token scoped to a real prod location.
-- 🟠 **MEDIUM:** rate limits key on `req.ip`, which behind the Fly proxy is a **shared/global bucket** (no `trustProxy`, no `Fly-Client-IP` keying on the global + login limiters) → global login-lockout and global request-budget DoS, plus weakened per-attacker isolation.
+- 🟠 **MEDIUM:** rate limits key on `req.ip`, which behind the legacy host proxy is a **shared/global bucket** (no `trustProxy`, no `proxy client-IP header` keying on the global + login limiters) → global login-lockout and global request-budget DoS, plus weakened per-attacker isolation.
 - 🟠 **MEDIUM:** the public order-create limiter keys on the **attacker-controlled** `body.customer.phone` → rotate the field to bypass the 5/min throttle (order spam).
 - 🟡 **LOW–MED:** anonymous Telegram webhook on **staging** (`POST /webhook/telegram/` → `200`, secret empty); design relies on URL-path secrecy + an optional header that is bypassable by omission. Prod is protected.
 - 🟡 **LOW:** unauthenticated `/health` enumerates full internal subsystem topology and is `rateLimit:false` over ~11 DB queries + external calls (recon + amplification). User-enumeration oracle on login. CSP missing on the SPA shell / API JSON (present but weak on SSR pages).
@@ -53,13 +53,13 @@ Verdict: **prod is not wide open, but the test-account credential is a full-owne
 ## 3. Findings
 
 ### F1 — 🔴 CRITICAL: Known weak test credential is a live OWNER login on PRODUCTION
-- **Endpoint:** `POST https://dowiz.fly.dev/api/auth/local/login`
+- **Endpoint:** `POST `<legacy-host>/api/auth/local/login`
 - **Type:** Broken authentication / weak & documented credential (OWASP API2:2023).
 - **Reproduction (observed live):**
   ```bash
   curl -s -X POST -H 'Content-Type: application/json' \
     -d '{"email":"test@dowiz.com","password":"test123456"}' \
-    https://dowiz.fly.dev/api/auth/local/login
+    the legacy host/api/auth/local/login
   ```
   Observed response `200`, body keys `["access_token","refresh_token","userId","activeLocationId"]`:
   - `access_token`: valid RS256 JWT (`{"alg":"RS256","kid":"2"}`), payload `role: owner`, `exp`/`iat` set, 660 chars
@@ -75,18 +75,18 @@ Verdict: **prod is not wide open, but the test-account credential is a full-owne
   3. Add a boot-guard / migration assertion that no seed/demo owner with a known password exists in a prod-tagged environment.
   4. Enforce a password policy (length/entropy) on `users.password_hash` creation so `test123456`-class passwords cannot be set.
 
-### F2 — 🟠 MEDIUM: Rate limits key on `req.ip` behind Fly → shared/global bucket
+### F2 — 🟠 MEDIUM: Rate limits key on `req.ip` behind the legacy host → shared/global bucket
 - **Where:** global limiter `server.ts` `fastify.register(fastifyRateLimit,{max:100,timeWindow:'1 minute'})` (no `keyGenerator`); login limiter `routes/auth/local.ts:39` (`max:5/min`, no `keyGenerator`); also `routes/customer/track.ts:34` (`req.ip`). No `trustProxy` is set on the Fastify constructor anywhere in the codebase.
 - **Type:** Improper rate-limit keying / availability (OWASP API4:2023).
 - **Evidence:**
   - Rate limiting **is present and fires** (CONFIRMED live): a burst of login POSTs returned `429` with `retry-after: 26` and `x-ratelimit-remaining: 0`.
-  - The code itself proves the authors know `req.ip` is not the client behind Fly: `routes/public/access-requests.ts` reads `Fly-Client-IP` for *its* keyGenerator and logs `"Fly-Client-IP missing … rate-limit degraded to a shared bucket"`. The global + login limiters do **not** do this → they fall back to `req.ip` = the Fly proxy peer address, which is shared across clients.
+  - The code itself proves the authors know `req.ip` is not the client behind the legacy host: `routes/public/access-requests.ts` reads `proxy client-IP header` for *its* keyGenerator and logs `"proxy client-IP header missing … rate-limit degraded to a shared bucket"`. The global + login limiters do **not** do this → they fall back to `req.ip` = the legacy host proxy peer address, which is shared across clients.
 - **Impact:**
   - **Global login lockout:** the 5/min login limit is effectively global; an attacker making 5 login attempts/min can block *all* users from logging in.
   - **Global request-budget DoS:** the 100/min global cap is shared, so ~100 req/min from one source throttles the entire app.
   - Conversely, brute-force is capped globally (a mild positive) but at the cost of availability.
 - **Status:** limiter presence CONFIRMED live; shared-bucket amplification PLAUSIBLE (strong code + author-comment evidence; not isolated live because it needs a second source IP).
-- **Fix:** set Fastify `trustProxy: true` (Fly sets `X-Forwarded-For`) **or** give the global + credential limiters a `keyGenerator` that reads `Fly-Client-IP` (as `access-requests` already does). Then per-client isolation is restored.
+- **Fix:** set Fastify `trustProxy: true` (the legacy host sets `X-Forwarded-For`) **or** give the global + credential limiters a `keyGenerator` that reads `proxy client-IP header` (as `access-requests` already does). Then per-client isolation is restored.
 
 ### F3 — 🟠 MEDIUM: Public order-create throttle bypassable via attacker-controlled key
 - **Endpoint:** `POST /api/orders` (public storefront route, no token by design).
@@ -94,7 +94,7 @@ Verdict: **prod is not wide open, but the test-account credential is a full-owne
 - **Type:** Rate-limit bypass / resource abuse (OWASP API4/API6).
 - **Reproduction:** the limiter is keyed on a value **in the request body**. Rotating `customer.phone` (or omitting it and rotating source) yields a fresh 5/min bucket per value, so an attacker can submit far more than 5 orders/min by cycling the phone field. (Not exercised against prod to avoid writing order rows; endpoint confirmed reachable — `POST /api/orders` returns `415` without a content-type and `400` on a bad body, i.e. it is live and public.)
 - **Impact:** Order spam / inventory & notification abuse (each order fans out Telegram notifications + kernel pricing + DB writes) against a real location.
-- **Fix:** key the order limiter on `Fly-Client-IP` (server-observed), not on a client-supplied body field. Keep an *additional* per-phone soft cap, but never let a body field be the sole/first key. Consider a proof-of-work or captcha on anonymous order-create.
+- **Fix:** key the order limiter on `proxy client-IP header` (server-observed), not on a client-supplied body field. Keep an *additional* per-phone soft cap, but never let a body field be the sole/first key. Consider a proof-of-work or captcha on anonymous order-create.
 
 ### F4 — 🟡 LOW–MEDIUM: Anonymous Telegram webhook on staging; weak webhook auth design
 - **Endpoint:** `POST /webhook/telegram/${TELEGRAM_BOT_SECRET}` (`routes/telegram-webhook.ts:36`).
@@ -102,9 +102,9 @@ Verdict: **prod is not wide open, but the test-account credential is a full-owne
 - **Reproduction (observed live):**
   ```bash
   curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' \
-    -d '{"update_id":1}' https://dowiz-staging.fly.dev/webhook/telegram/
+    -d '{"update_id":1}' the legacy host/webhook/telegram/
   # -> 200   (staging: TELEGRAM_BOT_SECRET is empty, route mounts at /webhook/telegram/, NO validation)
-  curl ... https://dowiz.fly.dev/webhook/telegram/    # -> 404  (prod: secret set, empty path does not exist)
+  curl ... the legacy host/webhook/telegram/    # -> 404  (prod: secret set, empty path does not exist)
   ```
 - **Design weaknesses (code):**
   1. When `telegramBotSecret` is empty (staging), `if (telegramBotSecret)` is falsy → **all** validation is skipped and any anonymous POST is processed (`{ok:true}`).
@@ -123,7 +123,7 @@ Verdict: **prod is not wide open, but the test-account credential is a full-owne
    "fallback":{"status":"degraded"},"free_tier":{"status":"ok"}}}
   ```
 - **Impact:** Any anonymous caller learns the full internal architecture (Postgres, Redis/message-bus, Telegram, Cloudflare R2/S3, settlement/anonymizer/backup subsystems), per-check latencies (timing recon), and current **degraded** operational state. The endpoint runs ~11 sequential DB queries + a Telegram `getMe` + an R2 `HeadBucket` **with rate-limiting explicitly disabled**, so repeated calls are a cheap DB/load amplifier. (The payload is already minimized to `{status,latencyMs}` — no driver text — which is good; the residual issue is the subsystem enumeration + un-limited cost.)
-- **Fix:** require an ops token (or internal-network restriction) for the rich `/health`; keep `/livez` public for Fly. If it must stay public, collapse to a single `{status}` and re-enable a modest rate limit.
+- **Fix:** require an ops token (or internal-network restriction) for the rich `/health`; keep `/livez` public for the legacy host. If it must stay public, collapse to a single `{status}` and re-enable a modest rate limit.
 
 ### F6 — 🟡 LOW: User-enumeration oracle on login
 - **Endpoint:** `POST /api/auth/local/login`.
@@ -151,7 +151,7 @@ Verdict: **prod is not wide open, but the test-account credential is a full-owne
 | Control | State | Action |
 |---|---|---|
 | **Prod credential hygiene** | ❌ known weak owner cred works on prod (F1) | remove/rotate `test@dowiz.com`; password policy; prod seed boot-guard |
-| **Rate-limit client keying** | ⚠️ `req.ip` = shared Fly proxy on global+login+track limiters (F2) | `trustProxy:true` or `Fly-Client-IP` keyGenerator everywhere |
+| **Rate-limit client keying** | ⚠️ `req.ip` = shared the legacy host proxy on global+login+track limiters (F2) | `trustProxy:true` or `proxy client-IP header` keyGenerator everywhere |
 | **Order-create throttle key** | ⚠️ keyed on body `customer.phone` (F3) | key on server-observed IP; body field only as secondary |
 | **Webhook auth** | ⚠️ URL-secret only; header optional; fails **open** when secret empty (F4, staging) | fail closed when secret unset; always validate header |
 | **`/health` exposure** | ⚠️ topology + un-rate-limited (F5) | auth-gate or minimize; re-enable limit |

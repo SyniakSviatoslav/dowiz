@@ -1,7 +1,7 @@
 # Full-Spectrum Audit Report — DeliveryOS
 
 > **Date:** 2026-06-14  
-> **Target:** `https://dowiz.fly.dev`  
+> **Target:** the legacy host  
 > **Method:** Live API probes + curl + existing Playwright E2E (57 tests) + static code analysis  
 > **Coverage:** 18 frontend surfaces, 35 API flows, 3 roles (owner/courier/customer), full codebase scan  
 
@@ -29,9 +29,9 @@
 | | |
 |---|---|
 | **Symptom** | `POST /auth/mock`, `POST /auth/local/login`, `POST /orders` all return 500 with `correlationId: "unknown"` |
-| **Root cause** | 2 compounding bugs: (1) `packages/platform/src/auth/jwt.ts:6` calls `loadEnv()` at module scope — crashes on import if `JWT_PRIVATE_KEY` missing; (2) `.env.example:8` documents `JWT_SIGNING_SECRET` (HS256) but code at `packages/config/src/index.ts:11-12` requires `JWT_PRIVATE_KEY` + `JWT_PUBLIC_KEY` (RS256). Fly.io likely has the old env var name. |
+| **Root cause** | 2 compounding bugs: (1) `packages/platform/src/auth/jwt.ts:6` calls `loadEnv()` at module scope — crashes on import if `JWT_PRIVATE_KEY` missing; (2) `.env.example:8` documents `JWT_SIGNING_SECRET` (HS256) but code at `packages/config/src/index.ts:11-12` requires `JWT_PRIVATE_KEY` + `JWT_PUBLIC_KEY` (RS256). the legacy host likely has the old env var name. |
 | **Impact** | Every authenticated flow is broken — owner dashboard, courier app, customer order history, all admin screens |
-| **Fix** | (a) `flyctl secrets set JWT_PRIVATE_KEY=... JWT_PUBLIC_KEY=...`; (b) Make `loadEnv()` lazy in jwt.ts; (c) Update `.env.example` |
+| **Fix** | (a) the platform secret `JWT_PRIVATE_KEY=... JWT_PUBLIC_KEY=...`; (b) Make `loadEnv()` lazy in jwt.ts; (c) Update `.env.example` |
 | **Evidence** | `apps/api/src/server.ts:687,800` — `signAuthToken()` called without try/catch; `jwt.ts:6` — module-scope env |
 
 ### B2. SSR menu returns SPA shell — Preact renderer never implemented
@@ -270,7 +270,7 @@ E2E test `button[aria-label="Add"]` not found on SSR-rendered product cards. Int
 
 | # | Priority | Item | Effort | Depends On |
 |---|---|---|---|---|
-| 1 | **P0** | Fix JWT env vars on Fly.io + lazy load in jwt.ts | 1h | Fly.io access |
+| 1 | **P0** | Fix JWT env vars on the legacy host + lazy load in jwt.ts | 1h | the legacy host access |
 | 2 | **P0** | Fix SSR menu — rewrite handler with Preact rendering | 4-6h | Preact + DB schema |
 | 3 | **P0** | Fix db.connect() try/catch in orders.ts | 30m | — |
 | 4 | **P0** | Configure CDN or direct R2 URLs for images | 2h | Cloudflare/R2 |

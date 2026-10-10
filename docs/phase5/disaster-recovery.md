@@ -45,8 +45,7 @@ On Supabase Free tier:
    # Option 1: Revoke INSERT/UPDATE from app role temporarily
    # (requires manual SQL via Supabase dashboard SQL editor)
    
-   # Option 2: Scale app instances to 0 (stop processing)
-   # flyctl scale count 0
+   # Option 2: Stop app processing (disable the Worker route)
    
    # Option 3: Set DB to read-only mode
    # (requires superuser — NOT available on Free tier)
@@ -101,7 +100,7 @@ On Supabase Free tier:
 2. **Re-establish R2**
    - Create new bucket via Cloudflare dashboard
    - Update env vars: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`
-   - Deploy new config: `flyctl secrets set R2_*=...`
+   - Deploy new config: the platform secret `R2_*=...`
 
 3. **Verify new bucket**
    ```bash
@@ -111,22 +110,6 @@ On Supabase Free tier:
 4. **Notify**
    - "Historical backups unavailable, last X hours affected."
    - No data loss if backup rotation was healthy.
-
-### Scenario C: Region Down (Fly.io)
-
-**Triggers:** UptimeRobot alert, health endpoint unreachable.
-
-**Procedure:**
-
-1. Verify via UptimeRobot dashboard
-2. If N=1: manual redeploy to another region
-   ```bash
-   flyctl regions add <region>
-   flyctl deploy
-   ```
-3. If N>1: auto-failover (Fly.io native)
-4. Verify: health endpoint /admin/health.html
-5. Restore backup if needed (Scenario A)
 
 ### Scenario D: Auto-Pause (Free Tier)
 

@@ -58,7 +58,7 @@ truth and the real, in-repo follow-ups.
 
 ## What WAS fixed (verified, in-repo)
 
-- `dowiz/.github/workflows/ci.yml:150` — unpinned `superfly/flyctl-actions/setup-flyctl@master`
+- `dowiz/.github/workflows/ci.yml:150` — unpinned `the unpinned third-party deploy action`
   → pinned to published tag `@v1` (supply-chain hardening). Verified `@v1` is a real tag.
 
 ## What was NOT done (and why)

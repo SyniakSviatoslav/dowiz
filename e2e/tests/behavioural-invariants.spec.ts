@@ -9,8 +9,8 @@ import { test, expect } from '@playwright/test';
 // green on the current repo (the behaviours hold today) — it goes red when a change breaks one.
 // Extend it (add `expect`s) as new outcome-invariants are discovered; never weaken it.
 //
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test behavioural-invariants --project=desktop --reporter=list
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test behavioural-invariants --project=desktop --reporter=list
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 // WCAG relative-luminance contrast, computed in the page over EFFECTIVE colours (walks
 // ancestors for the first opaque background) — the same maths a human auditor would apply.

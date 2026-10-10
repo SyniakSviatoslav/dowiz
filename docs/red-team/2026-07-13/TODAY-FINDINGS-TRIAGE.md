@@ -4,7 +4,7 @@ Single source of truth mapping every finding from the 2026-07-13 D1–D7 reports
 MASTER-SYNTHESIS + ESCALATION-RETIRED-TREE to an in-repo status.
 
 Scope rule (operator precedence, MANIFESTO D1 + DECISIONS): the centralized server
-(apps/api Fastify + Supabase + Fly) was **retired to `attic/`** and is **not built**.
+(apps/api Fastify + Supabase + the legacy host) was **retired to `attic/`** and is **not built**.
 Patching `attic/` is a no-op against prod (D1 + ESCALATION-RETIRED-TREE.md). Therefore
 findings filed against the retired tree are NOT patched in-repo; their classes are
 ported into the NEW architecture as design gates (ADRs) so the replacement cannot repeat
@@ -41,7 +41,7 @@ Legend:
 | Finding | Class | Status | Note |
 |---|---|---|---|
 | F1 CRITICAL weak test cred live prod | weak-credential | OOS-D1 / OPERATOR | Same as D1-F1. |
-| F2 MED rate-limit keys on req.ip (shared bucket) | ratelimit-keying | OOS-D1 | Retired stack (Fastify behind Fly). |
+| F2 MED rate-limit keys on req.ip (shared bucket) | ratelimit-keying | OOS-D1 | Retired stack (Fastify behind the legacy host). |
 | F3 MED order-create limiter keys on body.phone | ratelimit-bypass | OOS-D1 | Retired stack. |
 | F4 LOW anonymous telegram webhook on staging | auth-bypass | OOS-D1 | Retired stack. |
 | F5 LOW /health topology disclosure + rateLimit:false | info-leak | OOS-D1 | Retired stack. |
@@ -79,6 +79,6 @@ Legend:
 ## Summary
 - **CLOSED-REPO this pass (verified):** D3-F7 (CSP on staying SPA) + D5-H8 (local secret purge) + D5-gate (verify-secrets hardened).
 - **CLOSED-ADR:** F4 SSRF, F1/F2/F3 credential/PII classes (ADR-0007/0008/0009).
-- **OPERATOR (not repo-fixable, runbooks provided):** D1-F1/D3-F1 live weak-cred prod (DB rotate via `PART1-LIVE-PROD-DECOMMISSION.md`), live `dowiz.fly.dev` teardown (same runbook), D7 F-01..F-08 live-deploy/UX (CD/copy). D5-H8 GitHub GC → VERIFIED NOT NEEDED (404), no Support ticket.
+- **OPERATOR (not repo-fixable, runbooks provided):** D1-F1/D3-F1 live weak-cred prod (DB rotate via `PART1-LIVE-PROD-DECOMMISSION.md`), live legacy host teardown (same runbook), D7 F-01..F-08 live-deploy/UX (CD/copy). D5-H8 GitHub GC → VERIFIED NOT NEEDED (404), no Support ticket.
 - **TODO-DEFER (land with new-arch components):** route-layer requireRole + RED test; live-fetcher SSRF audit + RED test; e2e-fixture guardrail; SPA form a11y labels.
 - **OOS-D1 (explicitly not fixed — would be fake-fix):** all retired `attic/apps-api` + Supabase findings.

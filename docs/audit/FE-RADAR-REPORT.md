@@ -1,6 +1,6 @@
 # FE-RADAR-REPORT.md — Full Frontend Issue Matrix
 
-> Generated: 2026-06-12 · Target: `dowiz.fly.dev` (staging)
+> Generated: 2026-06-12 · Target: the legacy host (staging)
 > Method: Playwright × 12 surfaces × 3 viewports (mobile 390, tablet 768, desktop 1280)
 > Collectors: network (4xx/5xx/fails), console (errors/warnings), page errors, DOM state
 > Results: 36 tests — 34 ✅ pass · 2 ⏱ timeout
@@ -37,7 +37,7 @@
 | | |
 |---|---|
 | **Surface** | `admin-branding` |
-| **URL** | `https://dowiz.fly.dev/branding-preview/demo?embed=true&draft=true` |
+| **URL** | ``<legacy-host>/branding-preview/demo?embed=true&draft=true` |
 | **Expected** | Preview loads (2xx) |
 | **Actual** | `requestfailed` — 0 status |
 | **Evidence** | Network log on admin-branding page |
@@ -156,7 +156,7 @@
 
 ## Safety Confirmation
 
-- ✅ Staging only (`dowiz.fly.dev`)
+- ✅ Staging only (the legacy host)
 - ✅ Test accounts only (mock-auth, no real customer data)
 - ✅ No destructive operations
 - ✅ Screenshots/videos saved to `e2e/artifacts/test-results/`

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // Proof for the FE-polish batch (commit 1feff7c0). FE-only, server read-only.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test fe-polish-batch --project=desktop --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test fe-polish-batch --project=desktop --reporter=list
 
 test.describe('FE polish batch', () => {
   test('404 is a branded soft state with a real return-home CTA (was bare text)', async ({ page }) => {

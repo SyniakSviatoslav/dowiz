@@ -3,14 +3,14 @@ import urllib.request, json
 print('=== FINAL VERIFICATION ===')
 print()
 
-resp = urllib.request.urlopen('https://dowiz.fly.dev/health', timeout=10)
+resp = urllib.request.urlopen('https://qa-durres.dowiz.org/health', timeout=10)
 data = json.loads(resp.read())
 print(f'HEALTH: {data["status"]}')
 for k,v in data['checks'].items():
     print(f'  {k}: {v["status"]}')
 
 print()
-resp = urllib.request.urlopen('https://dowiz.fly.dev/s/demo', timeout=10)
+resp = urllib.request.urlopen('https://qa-durres.dowiz.org/s/demo', timeout=10)
 html = resp.read().decode()
 sq = 'lang="sq"' in html
 dsq = 'data-text-sq' in html
@@ -26,13 +26,13 @@ for path, name in [
     ('/auth/google', 'OAuth'),
 ]:
     try:
-        r = urllib.request.urlopen(f'https://dowiz.fly.dev{path}', timeout=10)
+        r = urllib.request.urlopen(f'https://qa-durres.dowiz.org{path}', timeout=10)
         print(f'{name}: {r.status} OK')
     except Exception as e:
         print(f'{name}: {e}')
 
 print()
-resp = urllib.request.urlopen('https://dowiz.fly.dev/', timeout=10)
+resp = urllib.request.urlopen('https://qa-durres.dowiz.org/', timeout=10)
 csp = resp.getheader('Content-Security-Policy')
 hsts = resp.getheader('Strict-Transport-Security')
 cookie = resp.getheader('Set-Cookie')

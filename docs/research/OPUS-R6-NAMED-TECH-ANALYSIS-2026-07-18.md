@@ -188,7 +188,7 @@ connecting 1000+ SaaS providers to AI agents** through SDK / CLI / **MCP** / HTT
 10,000+ prebuilt actions (GitHub, Gmail, Notion, BigQuery, Slack, …). It is explicitly a
 **credential/OAuth boundary**: it manages tokens and execution policy so the agent never holds
 provider credentials. TypeScript; **Apache-2.0**; 2.9k★; v1.3.0 (2026-07); deploys to Docker/Node,
-Fly.io, or Cloudflare Workers.
+the legacy host, or Cloudflare Workers.
 
 **Relevance verdict: not relevant for adoption; design reference only.**
 - The **Nextcloud ESB** is architecturally inapplicable — dowiz is not a Nextcloud app; that connector

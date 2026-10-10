@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 // Proof for the deployed-app owner fixes (session relogin, PDF import via OpenCode Zen,
 // Google OAuth hidden, test-owner → sushi-durres binding). Server changes are real.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev DEV_AUTH_SECRET=stg-e2e-secret \
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org DEV_AUTH_SECRET=stg-e2e-secret \
 //   pnpm exec playwright test owner-fixes-batch --project=desktop --reporter=list
 const CREDS = { email: 'test@dowiz.com', password: 'test123456' };
 const DEV_SECRET = process.env.DEV_AUTH_SECRET || 'stg-e2e-secret';

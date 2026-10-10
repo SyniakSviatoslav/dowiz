@@ -11,7 +11,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const TS = Date.now();
 const COURIER_EMAIL = `courier-full-${TS}@test.invalid`;
 const COURIER_NAME = `E2E Courier ${TS}`;

@@ -100,7 +100,7 @@ G2 Live display (frontend): marker tween + ETA smoothing + real polyline
 **Routing (ORS → self-host):** raise an ORS container in `fra` on an Albania `.pbf`
 extract; build the graph; await health → set `ROUTING_PROVIDER=self`,
 `ROUTING_BASE_URL=<internal>`, clear `ROUTING_API_KEY` → smoke one `route` self vs
-ORS-free for geometry/duration parity → `fly deploy`. The haversine fallback stays
+ORS-free for geometry/duration parity → a deploy. The haversine fallback stays
 untouched as the safety net.
 
 **Tiles (free → self-host):** raise `tileserver-gl` / `Protomaps` in `fra` on the
@@ -110,7 +110,7 @@ tile/style domain** in `apps/api/src/lib/security/headers.ts`,
 `apps/api/src/lib/spa-shell.ts`, and `apps/api/src/routes/public/branding-preview.ts`
 (plus the `tiles.openfreemap.org` assertion in `apps/api/scripts/config-drift.ts`) —
 otherwise the browser silently blocks every tile fetch; add a Cloudflare cache-rule →
-verify render at 390/768/1280, embed still MapLibre-free → `fly deploy`.
+verify render at 390/768/1280, embed still MapLibre-free → a deploy.
 
 **G3 ops checklist (provider console — not code, must be done by a human):**
 - MapTiler (or chosen free vector provider): set a **spending cap** so an overage

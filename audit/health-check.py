@@ -1,5 +1,5 @@
 import urllib.request, json
-req = urllib.request.Request('https://dowiz.fly.dev/health')
+req = urllib.request.Request('https://qa-durres.dowiz.org/health')
 resp = urllib.request.urlopen(req, timeout=10)
 data = json.loads(resp.read())
 print('Status:', data['status'])

@@ -18,7 +18,7 @@ import { test, expect } from '@playwright/test';
 // serves from memory); so 429 is tolerated, but every NON-throttled response must be a real menu.
 // BURST stays under the per-IP minute budget to keep the run non-flaky.
 //
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test menu-load --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test menu-load --reporter=list
 const MENU = '/public/locations/demo/menu';
 const BURST = 30;
 

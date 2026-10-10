@@ -6,7 +6,7 @@ A1). If you find a problem you REPORT it; you do not fix it.
 Run these read-only checks, then output the report:
 
 1. Deploy drift — `git ls-remote origin main` (deployed-ref proxy) vs `git rev-parse origin/main`/HEAD; is main ahead of what's likely live?
-2. Prod health — `curl -s -o /dev/null -w '%{http_code}' https://dowiz.fly.dev/healthz` and the storefront `https://dowiz.fly.dev/s/demo` (expect 200; SPA shell has id="root").
+2. Prod health — `curl -s -o /dev/null -w '%{http_code}' https://qa-durres.dowiz.org/healthz` and the storefront `https://qa-durres.dowiz.org/s/demo` (expect 200; SPA shell has id="root").
 3. CI — `gh run list --branch main --limit 5` if `gh` is available; flag any failure/cancelled.
 4. Context — `git log --oneline -5 origin/main`.
 

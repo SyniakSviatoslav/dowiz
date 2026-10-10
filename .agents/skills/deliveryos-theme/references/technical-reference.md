@@ -176,7 +176,6 @@ id, location_id, domain, cname_target, verified_at, ssl_status
 | Payments MVP+ | 2Checkout (Verifone) | Confirmed for Albania |
 | AI features | Claude API (Sonnet 4) | Dish descriptions, menu analysis, chat assistant, voice |
 | Theme CDN | Cloudflare CDN | Static CSS theme files, zero DB queries on render |
-| Deploy | Fly.io (backend) + Supabase | Compute separate from storage |
 | Security CDN | Cloudflare | DDoS, WAF, rate limiting, SSL, routing |
 | Monorepo | pnpm workspaces | apps/api + apps/web + packages/shared-types + packages/ui |
 
@@ -389,7 +388,6 @@ Cost: ~$0.84/client/month at normal usage.
 
 | Service | Cost | Detail |
 |---------|------|--------|
-| Fly.io (backend + Redis) | ~$15 | shared-cpu + managed Redis |
 | Supabase Pro | $25 | PostgreSQL + TimescaleDB + backups + pooler |
 | Cloudflare | $0 | Free tier + themes CDN (static CSS files) |
 | Cloudflare for SaaS | $0 now | Custom domains: $0.10/hostname — activates post-MVP |

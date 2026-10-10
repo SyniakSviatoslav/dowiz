@@ -19,7 +19,7 @@
  */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 // ── Full supply library (defaults + derived extras) ────────────────────────────
 // This is written to localStorage before the product edit UI opens,

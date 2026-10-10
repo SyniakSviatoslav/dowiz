@@ -34,7 +34,7 @@ not two. So parallel SESSIONS = 6 (design, reliability, ci-security[3+4], gtm, b
 | ID | Work | Gate (falsifiable) |
 |----|------|--------------------|
 | S1 | Fix red-main imports (§0) | typecheck green on main |
-| S2 | Deploy /claim + G03 to prod | Fly/AWS access + S1 green |
+| S2 | Deploy /claim + G03 to prod | legacy host/AWS access + S1 green |
 | S3 | Restart prod worker + rotate secret | secrets access (operator) |
 | S4 | Tier 1 GDPR trio merge to main | S1 + Tier0 landed |
 | S5 | Tier 2 quality bars (13-pt stable, 8-pt gtm) | S4 |

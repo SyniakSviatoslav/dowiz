@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const BOT_SECRET = process.env.TELEGRAM_BOT_SECRET;
 const WEBHOOK_URL = `${BASE}/webhook/telegram/${BOT_SECRET}`;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -12,7 +12,7 @@ function uuid() {
   });
 }
 
-test.describe('Telegram Webhook — Live https://dowiz.fly.dev', () => {
+test.describe('Telegram Webhook — Live https://qa-durres.dowiz.org', () => {
 
   test('HEALTH-1: health check returns 200 with Telegram degraded', async ({ request }) => {
     const resp = await request.get(`${BASE}/health`);

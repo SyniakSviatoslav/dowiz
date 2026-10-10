@@ -126,7 +126,7 @@ internet-facing app whose endpoints are phones.
 I investigated the live tree and ops docs. The honest answer: **no.**
 
 ### 3.1 What the deployment actually is (verified)
-- **No `fly.toml` in-repo** (Fly retired 2026-07-18 per CLAUDE.md; confirmed absent on disk).
+- **No `<legacy-deploy-manifest>` in-repo** (the legacy host retired 2026-07-18 per CLAUDE.md; confirmed absent on disk).
   Live target is **Hetzner + Cloudflare**.
 - **Single Hetzner box.** `docs/ops/P8-SINGLE-PANE-SPEC.md` describes exactly one server:
   live Postgres on the box's `sda`, plus a **same-account** 50 GB Hetzner volume

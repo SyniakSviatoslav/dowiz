@@ -10,7 +10,7 @@ Operational test for every finding. Run all 5 questions. Only "yes" to 1-4 AND c
 2. **Change scope**: Does the change ONLY bring behavior back to that spec, with no new behavior?
    - No → IMPROVEMENT
 
-3. **File safety**: Are ALL touched files in unprotected zones (not migrations/shared-types/fly.toml/Dockerfile/.github/.claude)?
+3. **File safety**: Are ALL touched files in unprotected zones (not migrations/shared-types/Dockerfile/.github/.claude)?
    - No → IMPROVEMENT
 
 4. **Contract integrity**: Are contracts/schema/scope/scaffold/deps/infra ALL untouched?

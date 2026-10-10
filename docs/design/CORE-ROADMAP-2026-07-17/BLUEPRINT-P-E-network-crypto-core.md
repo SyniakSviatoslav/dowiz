@@ -7,7 +7,7 @@
 > §3), written against the §2 20-point contract. Wave-2 Fable planning pass.
 > **Absorbs (does not re-derive):**
 > `docs/design/bebop2-mesh-tensor-hermetic-2026-07-17/14-BATCH5-network-hardware-findings.md`
-> (**v2, target-corrected** — the top half; the Fly-scoped v1 in its appendix is SUPERSEDED) and
+> (**v2, target-corrected** — the top half; the legacy host-scoped v1 in its appendix is SUPERSEDED) and
 > `docs/design/bebop2-mesh-tensor-hermetic-2026-07-17/BLUEPRINT-BEBOP2-MESH-MASTERWORK-SYNTHESIS-V2.md`
 > §C-A / wave item **W2-L5** (the AVX2 crypto-verify lane).
 >
@@ -353,7 +353,7 @@ gossiped; the per-recv hot path (§2) carries zero new bytes.
 ## §5. DPDK / RDMA — REJECTED, and the reason is CRYPTO DOMINANCE (read this before ever re-litigating)
 
 **The old rejection reason is DEAD. Do not cite it, do not re-argue against it.** The v1 batch
-rejected DPDK/RDMA as "the hardware does not exist in Fly Firecracker microVMs." Fly is not the
+rejected DPDK/RDMA as "the hardware does not exist in legacy Firecracker microVMs." the legacy host is not the
 target; the owner hub is real rooted hardware where a 2-NIC DPDK setup is *possible* and the
 "single shared NIC" objection **dissolves** (doc 14 v2 item 2). The rejection survives anyway,
 on the measured, target-correct grounds:

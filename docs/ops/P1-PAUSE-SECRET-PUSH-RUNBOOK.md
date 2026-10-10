@@ -15,7 +15,7 @@ repo.** I searched exhaustively and found:
   touches product code, never `git push`** (`scripts/harness-curation-local.sh:14-22`).
 - **No `git push` inside any scheduled/CI mechanism that rewrites or replays history.** The only
   `git push` write paths are:
-  - `ci.yml:155-157` — `flyctl deploy --remote-only` (deploys the **current** `main` image;
+  - `ci.yml:155-157` — the legacy deploy (deploys the **current** `main` image;
     does NOT push git history to origin, does NOT re-push scrubbed commits).
   - `scripts/automation/tier3-batch.sh:148` — pushes a **throwaway feature branch** + opens a
     **draft** PR, only when an operator runs the batch **on demand**, and only after an
@@ -48,7 +48,7 @@ was a one-off manual snapshot, not a durable guard. If anyone later runs `git pu
 be pushed.
 
 ### H2 — main-deploy is push-to-remote-origin-gated, but not history-gated
-`ci.yml:133-159` deploys `main` to Fly on every merge to `main`. `origin` is reachable
+`ci.yml:133-159` deploys `main` to the legacy host on every merge to `main`. `origin` is reachable
 (`git ls-remote origin` returns 200). A merge to `main` therefore ships whatever is in the tree.
 If a secret ever lands in a commit on `main`, it deploys and is reconstructable from the remote
 history until purged. The only guard is `pnpm verify:secrets` on the **diff** (`ci.yml:46-47`).
@@ -59,8 +59,8 @@ IF the operator decides a push-freeze is warranted (e.g. before a secrets rotati
 
 ### Step 1 — Freeze CI deploys (proven, safe)
 - In GitHub: **disable the `deploy` job** in `.github/workflows/ci.yml` (lines 133-190), OR
-  temporarily set the `FLY_API_TOKEN` GitHub secret to a dummy / remove `secrets.FLY_API_TOKEN`
-  so `flyctl deploy --remote-only` (line 157) cannot authenticate.
+  temporarily set the legacy deploy-token GitHub secret to a dummy / remove `secrets.LEGACY_DEPLOY_TOKEN`
+  so the legacy deploy (line 157) cannot authenticate.
 - This stops `main`→prod propagation. Does not touch git history.
 
 ### Step 2 — Block any `--force`/mirror push from this box
@@ -93,7 +93,7 @@ This produces a point-in-time, transportable copy of the clean tree without push
 
 ## File:line proof index
 - Cron on box: `crontab -l` → `37 9 * * 1 .../harness-curation-local.sh` (docs-only, no push).
-- CI deploy: `.github/workflows/ci.yml:133-159` (`flyctl deploy --remote-only` line 157).
+- CI deploy: `.github/workflows/ci.yml:133-159` (the legacy deploy line 157).
 - CI secret gate (diff-only): `.github/workflows/ci.yml:46-47` (`pnpm verify:secrets`).
 - Orphan clean snapshot ancestor of HEAD: commit `a7d198db` (verified `git merge-base --is-ancestor` → true).
 - tier3 push (on-demand draft PR only): `scripts/automation/tier3-batch.sh:148`.

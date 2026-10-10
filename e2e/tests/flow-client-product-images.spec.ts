@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const SECRET = process.env.DEV_AUTH_SECRET || '';
 
 // 1x1 PNGs (distinct bytes → distinct content hash → distinct image key).

@@ -6,7 +6,7 @@
 
 Verdict: the design is mostly sound on the claim-check / RLS-write mechanics, but it
 ships **two CRITICAL defects** (boot-time queue creation is structurally blocked; the
-rate-limit + ip_hash anti-abuse layer is inert behind the Fly proxy) and several
+rate-limit + ip_hash anti-abuse layer is inert behind the legacy host proxy) and several
 HIGH/MED gaps where stated invariants are not actually upheld by the cited code.
 
 ---
@@ -48,7 +48,7 @@ swallowed boot warn + zero ops alert.
 
 ---
 
-### B2 [CRITICAL] B-SEC / B-SCALE · Rate-limit + ip_hash are inert behind the Fly proxy — `trustProxy` is not set
+### B2 [CRITICAL] B-SEC / B-SCALE · Rate-limit + ip_hash are inert behind the legacy host proxy — `trustProxy` is not set
 
 The entire abuse-control story (§2 "Per-IP: 5 requests/minute", §7 "per-IP
 rate-limit (5/min)", `ip_hash` for forensics) depends on `request.ip` being the
@@ -56,7 +56,7 @@ client IP. It is not.
 
 - `Fastify({ logger, maxHeaderSize, bodyLimit })` is constructed with **no
   `trustProxy` option** (`apps/api/src/server.ts:138-142`). Default Fastify
-  `trustProxy=false` → `request.ip` is the **socket peer**, i.e. the Fly edge proxy's
+  `trustProxy=false` → `request.ip` is the **socket peer**, i.e. the legacy host edge proxy's
   internal address, identical for every external client.
 - `@fastify/rate-limit` is registered with **no `keyGenerator`**
   (`server.ts:462-465`), so it keys on `request.ip` = the proxy IP.
@@ -72,7 +72,7 @@ back-of-envelope ("5/min tolerates a fat-finger… without ever throttling a rea
 user") is wrong by construction.
 
 **Break scenario B (rate-limit useless against bots):** If `trustProxy` were later
-flipped to read `X-Forwarded-For` without pinning to the trusted Fly hop count, a bot
+flipped to read `X-Forwarded-For` without pinning to the trusted the legacy host hop count, a bot
 spoofs `X-Forwarded-For` per request → unbounded per-IP buckets → 5/min cap bypassed
 entirely → table fills to the `unique(email)` ceiling. Either way the 5/min number
 does not deliver what §2 claims.
@@ -97,7 +97,7 @@ sweep." But the **re-notify sweep is a defer-flag** (§9, "re-notify sweep… tr
 not built"). So in v1 the *only* recovery is "the operator reads the dashboard list"
 — and the **admin review UI is also a defer-flag** (§9). 
 
-**Break scenario:** API process is killed (Fly redeploy, OOM) in the window after
+**Break scenario:** API process is killed (the legacy host redeploy, OOM) in the window after
 `COMMIT` and before/within `boss.send`. The row exists, `notified_at IS NULL`, no job
 enqueued, no retry (pg-boss only retries jobs that exist). With both the sweep and the
 admin UI deferred, the operator has **no surfaced signal at all** — they would have to
@@ -197,7 +197,7 @@ But:
   (`retryLimit:5`) → exhausts → ops alert. With a 500-2000/day spike (§2), that is
   **hundreds of exhausted-retry ops alerts/day** to Telegram-ops = pager-storm /
   alert-fatigue, the opposite of the §2 goal "zero operator pager noise."
-- A **present-but-invalid** `RESEND_API_KEY` (typo'd Fly secret) is **not** caught at
+- A **present-but-invalid** `RESEND_API_KEY` (typo'd platform secrets) is **not** caught at
   boot (registration is gated only on *presence*, §7) → every notify silently 401s and
   exhausts retries. No boot-time validation of the key.
 
@@ -332,18 +332,18 @@ cron never schedules). **B1 regression:** the B1-fix proof obligation (§8: "a t
 the partition table exists + send→drain sets notified_at") covers `notify` only — it does
 **not** cover that the two cron queues actually *schedule* under the runtime role.
 
-### R2-2 [HIGH] B-SEC · B2-fix `X-Forwarded-For[0]` fallback is client-spoofable, and `Fly-Client-IP` is asserted but used NOWHERE in the repo — the "real client IP" claim is unproven and the fallback is exploitable · **B2 OPEN (residual)**
+### R2-2 [HIGH] B-SEC · B2-fix `X-Forwarded-For[0]` fallback is client-spoofable, and `proxy client-IP header` is asserted but used NOWHERE in the repo — the "real client IP" claim is unproven and the fallback is exploitable · **B2 OPEN (residual)**
 
 Grounded:
-- `Fly-Client-IP` appears in **zero** files (`grep -rln 'fly-client-ip' apps/ packages/` → empty).
-  The proposal's entire B2-fix rests on Fly injecting + overwriting this header (§2
-  `clientIp()`), but there is **no in-repo precedent, no test, and no proof** Fly sets it on
+- `proxy client-IP header` appears in **zero** files (`grep -rln 'proxy-client-ip' apps/ packages/` → empty).
+  The proposal's entire B2-fix rests on the legacy host injecting + overwriting this header (§2
+  `clientIp()`), but there is **no in-repo precedent, no test, and no proof** the legacy host sets it on
   this app. The one cited precedent, `websocket.ts:118`, reads
   `req.headers['x-forwarded-for'] || req.socket.remoteAddress` — the **raw full XFF string**,
   untrimmed, **for logging only** (`const clientIp = ...`, never a rate-limit/security key).
-  It is not evidence that `Fly-Client-IP` exists, nor that XFF[0] is trustworthy.
+  It is not evidence that `proxy client-IP header` exists, nor that XFF[0] is trustworthy.
 - **Spoof break:** the §2 helper falls through to `xff.split(',')[0].trim()` whenever
-  `Fly-Client-IP` is absent or falsy. If Fly does **not** inject `Fly-Client-IP` (unproven),
+  `proxy client-IP header` is absent or falsy. If the legacy host does **not** inject `proxy client-IP header` (unproven),
   the route trusts the **client-supplied** `X-Forwarded-For` first hop. An attacker sends
   `X-Forwarded-For: <random-per-request>` → unbounded distinct rate-limit keys → the 5/min
   cap is **bypassed entirely** (R1 B2 break B, *unchanged*), and `ip_hash =
@@ -351,14 +351,14 @@ Grounded:
   useless and a potential **hash-flood** (attacker chooses the stored value). The repo's
   Fastify still has **no `trustProxy`** (server.ts:138-142, re-verified — only `maxHeaderSize`
   + `bodyLimit`), so `request.ip` remains the proxy and the helper *must* fall through to the
-  spoofable XFF in any non-Fly-Client-IP path.
-- The proposal's claim "in prod `Fly-Client-IP` always wins" is an **assumption stated as a
-  fact**; the design provides no boot-time assertion that the header is present, so a Fly
+  spoofable XFF in any non-proxy client-IP header path.
+- The proposal's claim "in prod `proxy client-IP header` always wins" is an **assumption stated as a
+  fact**; the design provides no boot-time assertion that the header is present, so a legacy host
   config change / proxy bypass silently degrades to the spoofable path with no signal.
 
 Violated invariant: §2 "per-IP 5/min … caps a single real IP to ≤7,200/day" and §7 "ip_hash
 hashes the real client IP." Both depend on an unverified header. **B2 not fully closed** —
-the fix is correct *if and only if* `Fly-Client-IP` is injected, which the repo does not
+the fix is correct *if and only if* `proxy client-IP header` is injected, which the repo does not
 demonstrate.
 
 ### R2-3 [HIGH] B-SCALE / B-SEC · The consent-400 IS a DoS amplifier and a route-fingerprint oracle — directly contradicting resolution.md's "cheaper than a real submit, not a DoS amplifier" · **N1 = REAL, not accepted**
@@ -395,7 +395,7 @@ accept/mitigate.
 
 ### R2-4 [MEDIUM] B-FAIL · B5-fix fire-and-forget enqueue runs in the `web` process and is lost on every deploy/restart of a single-machine app — the sweep "self-heals" but on a 15-min + grace delay, and a `void enqueue().catch()` that itself throws synchronously can still surface · **B5 mostly holds, residual loss path**
 
-`fly.toml` confirms a single `web` machine (`auto_stop_machines = false`, `[[vm]] web 512mb`)
+`<legacy-deploy-manifest>` confirms a single `web` machine (`auto_stop_machines = false`, `[[vm]] web 512mb`)
 and `kill_timeout = "30s"`. The B5-fix replies first, then `void enqueue(...).catch(...)`
 (§5/§7). Grounded residuals:
 - The detached enqueue is an **unawaited promise in the `web` process**. On any deploy
@@ -553,7 +553,7 @@ weakest enforcement (a comment).
 | R1 ID | R2 status | Note |
 |-------|-----------|------|
 | B1 (CRIT) | **PARTIALLY REGRESSED** → R2-1 | notify queue fixed; the two **cron** queues' runtime `boss.schedule` write-path is unproven → retention auto-erase may silently never schedule. |
-| B2 (CRIT) | **OPEN (residual)** → R2-2 | fix is correct *iff* `Fly-Client-IP` is injected — used **nowhere** in repo, no proof; XFF[0] fallback stays spoofable; `trustProxy` still unset (server.ts:138-142 re-verified). |
+| B2 (CRIT) | **OPEN (residual)** → R2-2 | fix is correct *iff* `proxy client-IP header` is injected — used **nowhere** in repo, no proof; XFF[0] fallback stays spoofable; `trustProxy` still unset (server.ts:138-142 re-verified). |
 | B3 (HIGH) | holds, **coupled to R2-1** | reconcile cron is the recovery path; if it doesn't schedule (R2-1), B3's recovery evaporates. |
 | B4 (HIGH) | holds (accept-risk unchanged) | shared operational pool reads all emails — still true; not re-litigated. |
 | B5 (HIGH) | **holds for 200-class**; residual R2-4 + oracle re-opened by R2-3 (consent-400 branch). |
@@ -571,7 +571,7 @@ weakest enforcement (a comment).
 ## New CRITICAL/HIGH for the conductor
 - **R2-1 [HIGH]** retention/reconcile cron `boss.schedule` durability unproven → 12-month
   auto-erase may silently never run, no page. (B1 partial regression.)
-- **R2-2 [HIGH]** B2-fix depends on `Fly-Client-IP` that appears **nowhere** in repo; XFF[0]
+- **R2-2 [HIGH]** B2-fix depends on `proxy client-IP header` that appears **nowhere** in repo; XFF[0]
   fallback spoofable; rate-limit + ip_hash still defeatable. (B2 residual-open.)
 - **R2-3 [HIGH]** consent-400 IS a cheapest-path DoS amplifier + route-fingerprint oracle —
   resolution.md's "not a DoS amplifier" is inverted; N1 should be HIGH-open.
@@ -607,7 +607,7 @@ the two anti-abuse / durability fixes are **not yet provably closed**.
 >   — `/privacy` still absent in HEAD; `setNotFoundHandler` (`:871-880`) is `Accept`-OR-prefix.
 > - `server.ts:516-523` global error handler: `error.validation` → **400**; else `statusCode ||
 >   500` → **500**. There is no route-level path that converts a thrown handler error to 200.
-> - `otp.ts:36` keyGenerator precedent (`req.body?.phone || req.ip`); no `Fly-Client-IP` anywhere.
+> - `otp.ts:36` keyGenerator precedent (`req.body?.phone || req.ip`); no `proxy client-IP header` anywhere.
 
 ## Per-R2-HIGH verdict
 
@@ -640,25 +640,25 @@ to be written — it is **not** a runtime self-check that fails the deploy; it i
 aspiration with no specified failing assertion in the artifact. So "boot-assert" ≠ a live
 guard. **OPEN-residual** (the durability is real; the *visibility-of-failure* is not).
 
-### R2-2 (Fly-Client-IP only) — **CLOSED (design reads Fly-Client-IP exclusively; no XFF trust) — one residual DoS-shape flagged R3-2 LOW**
+### R2-2 (proxy client-IP header only) — **CLOSED (design reads proxy client-IP header exclusively; no XFF trust) — one residual DoS-shape flagged R3-2 LOW**
 
-Verified the §2 `clientIp()` helper: it reads `req.headers['fly-client-ip']` only, then in
-prod returns the constant `'no-fly-client-ip'` (fail-closed shared bucket), then non-prod
+Verified the §2 `clientIp()` helper: it reads `req.headers['proxy-client-ip']` only, then in
+prod returns the constant `'no-proxy-client-ip'` (fail-closed shared bucket), then non-prod
 returns `req.ip`. **The R1/R2 spoofable `X-Forwarded-For[0]` fallthrough is genuinely gone** —
 grep confirms no XFF read in the helper. **CLOSED** on the spoof vector (R2-2's load-bearing
 break).
 
 - **Local fallback active in prod? NO.** The `req.ip` branch is gated behind
-  `if (process.env.NODE_ENV === 'production') return 'no-fly-client-ip'` *before* it — so prod
+  `if (process.env.NODE_ENV === 'production') return 'no-proxy-client-ip'` *before* it — so prod
   can never reach `req.ip`. Correct; matches the design. CLOSED.
-- **Fail-closed → DoS? Real but ACCEPTED-shape (R3-2 LOW).** If `Fly-Client-IP` ever
-  disappears in prod (Fly config change / internal direct-hit), every request keys on the
-  single constant `'no-fly-client-ip'` → one global 5/min bucket → **planet-wide 429** during
+- **Fail-closed → DoS? Real but ACCEPTED-shape (R3-2 LOW).** If `proxy client-IP header` ever
+  disappears in prod (the legacy host config change / internal direct-hit), every request keys on the
+  single constant `'no-proxy-client-ip'` → one global 5/min bucket → **planet-wide 429** during
   the outage. This is the *same* self-throttle B2-A described, just relocated to a
   misconfig-only branch. The design names it explicitly ("fail-closed … throttles everyone
   (safe, noticed)") and pairs it with a boot-warn, so it is a *documented* degrade, not a
   silent hole. It is strictly safer than trusting a spoofable header. **Accept-shape; logged
-  R3-2 LOW** only because the boot-warn is "one-time on first request" — a Fly change *after*
+  R3-2 LOW** only because the boot-warn is "one-time on first request" — a legacy host change *after*
   the first good request would not re-warn (the degrade could go unnoticed mid-life). Not a
   blocker.
 
@@ -791,7 +791,7 @@ and the boot block is un-guarded:
 1. `main()` rejects at the worker-start line.
 2. `fastify.listen()` at `:905` is **never reached** → the web process **serves no HTTP** (no
    `/livez`, no `/readyz`, no API) — but `process.on('unhandledRejection', kept-alive)` keeps
-   the process **running**, so Fly sees a live process that *fails its HTTP health check* → the
+   the process **running**, so the legacy host sees a live process that *fails its HTTP health check* → the
    machine flaps/restarts in a loop, OR if `/livez` is TCP-only it looks "up" while 100% of
    requests hang. The `.catch`-less choice doesn't "surface to boot" cleanly — it **poisons the
    whole boot sequence** because the schedule is *upstream* of `listen()`.
@@ -814,12 +814,12 @@ specifically masks from a crash-loop detector. Also re-opens R2-1's own concern:
 "boot-assert both schedule rows exist" is a *test*, not a runtime guard, so nothing live catches
 "scheduled-zero-of-two."
 
-### R3-2 [LOW] B-SCALE / B-OPS · Fail-closed shared-bucket boot-warn is one-time-on-first-request → a Fly-Client-IP loss that begins AFTER the first good request degrades the whole planet to one 5/min bucket with no fresh warning
+### R3-2 [LOW] B-SCALE / B-OPS · Fail-closed shared-bucket boot-warn is one-time-on-first-request → a proxy client-IP header loss that begins AFTER the first good request degrades the whole planet to one 5/min bucket with no fresh warning
 
 Verified the §2 design: the boot-assert/warn fires "on the first real prod request" if
-`Fly-Client-IP` is absent. If the first request *has* the header (normal), the warn never arms;
-a *later* Fly-edge change that drops the header silently routes every client to the
-`'no-fly-client-ip'` constant bucket → global 5/min 429 with **no re-warn** (the one-time latch
+`proxy client-IP header` is absent. If the first request *has* the header (normal), the warn never arms;
+a *later* the legacy host-edge change that drops the header silently routes every client to the
+`'no-proxy-client-ip'` constant bucket → global 5/min 429 with **no re-warn** (the one-time latch
 already passed). Bounded (config-change-only, and it fails *safe* — over-throttle, not
 under-protect), so LOW; flagged because the design frames the degrade as "visible, not silent"
 and the visibility is only guaranteed at boot/first-request, not continuously.
@@ -887,7 +887,7 @@ contact), which is a policy accept, not a new defect.
 | R2 ID | R3 status | Note |
 |-------|-----------|------|
 | R2-1 (HIGH) | **grant-path CLOSED; boot-visibility OPEN → R3-1 HIGH** | runtime `boss.schedule` provably grant-clean; but un-`.catch`'d schedule before `listen()` in un-guarded `main()` poisons boot (R3-1). |
-| R2-2 (HIGH) | **CLOSED** | Fly-Client-IP-only verified; no XFF read; prod never reaches `req.ip`. Residual R3-2 LOW (one-time warn). |
+| R2-2 (HIGH) | **CLOSED** | proxy client-IP header-only verified; no XFF read; prod never reaches `req.ip`. Residual R3-2 LOW (one-time warn). |
 | R2-3 (HIGH) | **stated-threat CLOSED; inversion opened R3-3 HIGH** | 400 DoS-amplifier + status-oracle gone — but silent-200 = unmeasurable lead-loss + malformed-JSON 400 re-fingerprints at parser layer. |
 | R2-5 (HIGH) | **CLOSED (mechanism); not yet in HEAD** | `SPA_ROUTES` + `/privacy` is Accept-agnostic OR-branch, no earlier 404 interceptor. One-line edit unbuilt (design phase). |
 | R2-6 (MED) | CLOSED | content-hash CI test is a real binding mechanism. |

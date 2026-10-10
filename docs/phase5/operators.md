@@ -234,10 +234,10 @@ Set `R2_RETENTION_OVERRIDE_DAYS` to this value (or lower).
 
 ```bash
 # Set override env on all API instances
-flyctl secrets set R2_RETENTION_OVERRIDE_DAYS=365
+wrangler secret put R2_RETENTION_OVERRIDE_DAYS   # value 365
 
 # Restart to apply
-flyctl deploy --no-build
+wrangler deploy
 ```
 
 #### Step 4: Verify
@@ -331,7 +331,7 @@ WHERE c.location_id = l.id
 | Verify anonymization | `SELECT id, name, phone, anonymized_at FROM customers WHERE id = $1;` |
 | Export audit log | `psql -c "\COPY (SELECT * FROM anonymization_audit_log WHERE created_at > $1 ORDER BY created_at ASC) TO 'audit.csv' CSV HEADER;"` |
 | Check max DB retention | `SELECT max(retention_days) FROM locations;` |
-| Set R2 override | `flyctl secrets set R2_RETENTION_OVERRIDE_DAYS=365` |
+| Set R2 override | the platform secret `R2_RETENTION_OVERRIDE_DAYS=365` |
 
 ---
 

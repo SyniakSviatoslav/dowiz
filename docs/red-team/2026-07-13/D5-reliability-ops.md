@@ -9,7 +9,7 @@
 
 Two heads, both about **prod blast radius on `main`**:
 
-1. **Auto-deploy pipeline is a single unguarded lever.** A push to `main` runs `pnpm migrate:up` **directly against the prod DB** and then `flyctl deploy` — with **no approval gate, no automated rollback, no concurrency guard**, and the deploy step imports an **unpinned third-party action pinned to a moving branch** (`superfly/flyctl-actions/setup-flyctl@master`) that holds `FLY_API_TOKEN`. One bad migration or one compromised upstream action = prod outage / prod takeover at 3am.
+1. **Auto-deploy pipeline is a single unguarded lever.** A push to `main` runs `pnpm migrate:up` **directly against the prod DB** and then the legacy deploy — with **no approval gate, no automated rollback, no concurrency guard**, and the deploy step imports an **unpinned third-party action pinned to a moving branch** (`the unpinned third-party deploy action`) that holds `LEGACY_DEPLOY_TOKEN`. One bad migration or one compromised upstream action = prod outage / prod takeover at 3am.
 2. **Secrets hygiene: reachable history is clean and live keys were rotated, but the incident is not closed.** 10 unreachable/orphaned git blobs still carry (rotated) `JWT_PRIVATE_KEY` / `COURIER_PII_ENCRYPTION_KEY` / RSA private keys. The memory-tracked remote scrub/force-push is an **OPEN gate**, so those objects almost certainly still live on GitHub, retrievable by SHA even though `git log` cannot see them. The secrets gate (`gitleaks detect`) scans reachable refs only — it structurally cannot see them and reports "clean."
 
 ---
@@ -49,17 +49,17 @@ Evidence:
 
 ### F2 — Prod auto-deploy + prod DB migration on push-to-`main`, no approval / rollback / concurrency
 - **Severity:** HIGH
-- **Location:** `.github/workflows/ci.yml:127-153` (`deploy` job, `if: github.ref == 'refs/heads/main'` → `pnpm migrate:up` with `secrets.DATABASE_URL_MIGRATIONS`, then `flyctl deploy --remote-only`). Fly also re-runs migrations via `attic/fly.toml` `release_command = "dist/migrate/index.cjs"`.
+- **Location:** `.github/workflows/ci.yml:127-153` (`deploy` job, `if: github.ref == 'refs/heads/main'` → `pnpm migrate:up` with `secrets.DATABASE_URL_MIGRATIONS`, then the legacy deploy). the legacy host also re-runs migrations via `attic/<legacy-deploy-manifest>` `release_command = "dist/migrate/index.cjs"`.
 - **Evidence:** cited lines; no GitHub `environment:`/protection rule, no `concurrency:` group, no backup-before-migrate step.
 - **Failure/exploit:** A forward-only node-pg-migrate migration is applied to prod **before** the app deploys; a bad/destructive migration corrupts prod schema with no gated approval and no automated `down`. Two rapid merges → overlapping migration/deploy race. 3am pager with manual recovery only.
 - **Fix:** GitHub Environments approval gate on `deploy`; expand-contract migrations + dry-run; `concurrency` group; automated pre-migrate backup snapshot.
 
-### F3 — Unpinned third-party deploy action holds the prod Fly token
+### F3 — Unpinned third-party deploy action holds the prod legacy host token
 - **Severity:** HIGH
-- **Location:** `.github/workflows/ci.yml:150` `uses: superfly/flyctl-actions/setup-flyctl@master` (job env `FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}`)
+- **Location:** `.github/workflows/ci.yml:150` the unpinned third-party deploy action (job env `LEGACY_DEPLOY_TOKEN: ${{ secrets.LEGACY_DEPLOY_TOKEN }}`)
 - **Evidence:** `@master` = mutable branch, not a SHA. (All other actions are at least major-tag-pinned: `actions/*@v4/v5`, `pnpm/action-setup@v3`, `github/codeql-action@v3`.)
-- **Failure/exploit:** Upstream account takeover or a malicious commit to `master` runs in the prod-deploy job and exfiltrates `FLY_API_TOKEN` → full Fly-org control (deploy arbitrary image to `dowiz.fly.dev`).
-- **Fix:** Pin to a full commit SHA; scope the Fly deploy token to the single app; consider OIDC over a long-lived token.
+- **Failure/exploit:** Upstream account takeover or a malicious commit to `master` runs in the prod-deploy job and exfiltrates `LEGACY_DEPLOY_TOKEN` → full legacy-host account control (deploy arbitrary image to the legacy host).
+- **Fix:** Pin to a full commit SHA; scope the legacy host deploy token to the single app; consider OIDC over a long-lived token.
 
 ### F4 — gitleaks allowlist over-permissive + gate comment is factually wrong
 - **Severity:** MEDIUM
@@ -85,16 +85,16 @@ Evidence:
 ### F7 — Dockerfile drifted from the branch tree → un-buildable / deploy config attic'd
 - **Severity:** MEDIUM
 - **Location:** `Dockerfile:38` `COPY --from=builder /app/apps/api/public …`; `apps/api` absent on this branch
-- **Evidence:** `ls apps/api` → "No such file or directory" (moved to `attic/apps-api`). `fly.toml`, the boot-guard, and the reliability/`healthz` ratchet are all in `attic/` on this branch (`find` returns no live `reliability.rs`/boot-guard/server crate; only `kernel/Cargo.toml`).
+- **Evidence:** `ls apps/api` → "No such file or directory" (moved to `attic/apps-api`). `<legacy-deploy-manifest>`, the boot-guard, and the reliability/`healthz` ratchet are all in `attic/` on this branch (`find` returns no live `reliability.rs`/boot-guard/server crate; only `kernel/Cargo.toml`).
 - **Failure/exploit:** A build/deploy from this branch fails at the `COPY`. More importantly the branch has **no deployable server + no live boot-guard/health/storm-latch** — a latent release-integrity trap if it is merged/deployed without reconciliation. (Prod ships from `main`, which still has these — so this is branch-scoped drift, not a live prod outage.)
-- **Fix:** Reconcile Dockerfile/fly with the branch's real layout before it can ship; keep the boot-guard/health code out of `attic` for the deployable artifact.
+- **Fix:** Reconcile Dockerfile/deploy manifest with the branch's real layout before it can ship; keep the boot-guard/health code out of `attic` for the deployable artifact.
 
 ### F8 — Live local secret files are world-readable / world-writable
 - **Severity:** MEDIUM
 - **Location:** `/root/dowiz/.env` mode `-rw-rw-rw-` (0666); `.env.test`, `.secrets.local` 0644
 - **Evidence:** `ls -la`. `.env` holds live `JWT_PRIVATE_KEY`, `TELEGRAM_BOT_TOKEN`, `GOOGLE_CLIENT_SECRET`, `COURIER_PII_ENCRYPTION_KEY`, `OPENROUTER_API_KEY`, `IP_HASH_SALT`.
 - **Failure/exploit:** Any other local user or a compromised non-root process reads the live secrets; `.env` is world-**writable** → an attacker can also rewrite `APP_BASE_URL`/`JWT_*` to hijack signing/redirects.
-- **Fix:** `chmod 600` on all secret files; move to a secrets manager / Fly secrets only.
+- **Fix:** `chmod 600` on all secret files; move to a secrets manager / platform secrets only.
 
 ### F9 — Service-worker push-resubscribe endpoint mismatch → silent courier push loss
 - **Severity:** LOW
@@ -127,10 +127,10 @@ Evidence:
 
 1. **Close the secrets incident:** BFG/`filter-repo` scrub + force-push + GitHub GC request; full rotation audit of every secret in the 10 orphaned blobs; block the open-source publish until proven clean. *(F1)*
 2. **Gate the prod deploy:** GitHub Environment with required reviewers on `deploy`; expand-contract + dry-run migrations; pre-migrate backup; `concurrency` group. *(F2)*
-3. **Pin every third-party action to a full SHA** (start with `superfly/flyctl-actions@master`); scope `FLY_API_TOKEN` to one app / move to OIDC. *(F3)*
+3. **Pin every third-party action to a full SHA** (start with `third-party deploy action`); scope `LEGACY_DEPLOY_TOKEN` to one app / move to OIDC. *(F3)*
 4. **Fix the secrets gate:** narrow the allowlist to files not dirs; scan tracked files + history (not the noisy working tree); add a dangling-object scan; correct the false "respects `.gitignore`" comment; point the default-secret scan at the real server source. *(F4, F5)*
-5. **Harden the image:** `USER node`; digest-pin the base; pin + lockfile the runtime `npm install`, `--ignore-scripts`; reconcile the Dockerfile/fly with the branch layout. *(F6, F7)*
-6. **`chmod 600` all local secret files**; prefer Fly secrets / a manager over on-disk `.env`. *(F8)*
+5. **Harden the image:** `USER node`; digest-pin the base; pin + lockfile the runtime `npm install`, `--ignore-scripts`; reconcile the Dockerfile/deploy manifest with the branch layout. *(F6, F7)*
+6. **`chmod 600` all local secret files**; prefer platform secrets / a manager over on-disk `.env`. *(F8)*
 7. **Unify + monitor push:** single resubscribe endpoint, alert on 4xx; same-origin allowlist for SW navigation. *(F9, F10)*
 </content>
 </invoke>

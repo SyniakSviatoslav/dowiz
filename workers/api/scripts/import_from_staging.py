@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Port the live client data off the old platform into a hub bootstrap bundle.
 
-The old Fly deployment still serves Dubin & Sushi's real catalogue, and it is the
+The legacy staging host still serves Dubin & Sushi's real catalogue, and it is the
 only authoritative copy: the repo's design/dubin-sushi-menu.json is a 2026-07
 snapshot and the local vendor .mjs is another. Rather than pick between two
 stale copies, take what production actually answers with today.
@@ -14,9 +14,11 @@ stays matchable against the old system while both are alive.
        -H "x-dowiz-bootstrap: $BOOTSTRAP_SECRET" \
        -H 'content-type: application/json' --data @bundle.json
 """
-import json, sys, urllib.request
+import json, os, sys, urllib.request
 
-BASE = "https://dowiz-staging.fly.dev"
+BASE = os.environ.get("STAGING_BASE", "").rstrip("/")
+if not BASE:
+    raise RuntimeError("STAGING_BASE is not set: export the legacy staging host URL first")
 SLUG = "demo"
 
 

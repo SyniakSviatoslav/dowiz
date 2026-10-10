@@ -11,7 +11,7 @@ Final engineering gate before go-live. Ensures cross-tenant isolation, zero secr
 ## H2 — Secrets + Keys
 - `verify-secrets.ts`: gitleaks scan, .env.example placeholder audit, no JWT defaults in code
 - JWT rotation test (`tests/phase5/jwt-rotation.test.ts`): sign with kid=v1, rotate to v2, old token still valid, v1 removal → old tokens rejected
-- All secrets in Fly secrets/env — zero defaults in source
+- All secrets in platform secrets/env — zero defaults in source
 
 ## H3 — Rate-Limit + Noisy-Neighbor
 - `lib/resilience/rate-limit.ts`: per-tenant token bucket, per-IP token bucket, inflight semaphore per tenant

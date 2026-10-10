@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 // Real-UI proof for the polish-debt round's browser-facing seams (server read-only):
 //   F12 — a dedicated sr-only role="status" region announces the order status to screen readers.
 //   F13 — a mid-journey refresh restores the live order (continuity), not a "Not Found" dead-end.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test polish-debt --project=desktop --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test polish-debt --project=desktop --reporter=list
 const CREDS = { email: 'test@dowiz.com', password: 'test123456' };
 let phoneSeq = 0;
 const uniquePhone = () => `+35562${String(Date.now()).slice(-4)}${String(++phoneSeq).padStart(2, '0')}`;

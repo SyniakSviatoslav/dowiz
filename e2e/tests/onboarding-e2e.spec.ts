@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = 'https://dowiz.fly.dev';
+const BASE = 'https://qa-durres.dowiz.org';
 
 test.describe('E2E: Login → Onboarding → Reliability', () => {
 

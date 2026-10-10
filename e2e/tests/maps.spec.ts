@@ -27,7 +27,7 @@ test.describe('Map Components', () => {
       }
     });
 
-    await page.goto('https://dowiz.fly.dev/s/demo/checkout', { waitUntil: 'networkidle', timeout: 30000 });
+    await page.goto('https://qa-durres.dowiz.org/s/demo/checkout', { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(5000);
 
     // Verify no CSP worker-src/blob errors

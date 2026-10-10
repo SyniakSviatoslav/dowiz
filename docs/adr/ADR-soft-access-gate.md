@@ -21,7 +21,7 @@
   surface.
 - **R2-RESOLVE deltas (supersede earlier wording below):** consent-400 **removed** → silent
   uniform-200 honeypot drop + structural `z.literal(true)` gate (R2-3/R2-8); `clientIp()`
-  reads **`Fly-Client-IP` only**, no spoofable XFF (R2-2); `/privacy` added to `SPA_ROUTES`
+  reads **`proxy client-IP header` only**, no spoofable XFF (R2-2); `/privacy` added to `SPA_ROUTES`
   (R2-5); retention/reconcile cron scheduling proven via 16 live schedulers, no new
   migration (R2-1); launch gate = `ACCESS_GATE_PUBLIC_ENABLED` flag + banned-strings CI test
   (R2-10); privacy-notice content-hash CI test (R2-6); reconcile bounded by `notify_attempts`
@@ -99,7 +99,7 @@ goes live — making the gate true rather than softening copy.
      (`:905`) — which the `unhandledRejection`-kept-alive guard (`:129`) would otherwise mask
      as a live-but-HTTP-dead zombie. **Failure is still visible**, not swallowed: a dedicated
      post-listen **boot-assert** queries `pgboss.schedule` for both cron rows and, if either
-     is missing, calls `process.exit(1)` so Fly restarts and the deploy **shows red**
+     is missing, calls `process.exit(1)` so the legacy host restarts and the deploy **shows red**
      (fail-fast > silent zombie). See Decision-3 R3-1 note + proposal §5/§9.
    - **B3/B5 FIX — enqueue off the critical path + reconciliation sweep**: the handler
      **replies first, then fire-and-forgets** the enqueue (kills the new-vs-duplicate
@@ -142,11 +142,11 @@ goes live — making the gate true rather than softening copy.
    the content-type parser app-wide, an over-engineering against a non-leak). Owner: security.
    Identical `200 {ok:true}` for new/duplicate/honeypot/no-consent/malformed-**email** (route
    self-parses a *valid-JSON* body; no global 400 on those) [B5]; per-IP rate-limit `5/min`
-   keyed by a **managed `keyGenerator` reading the REAL client IP from `Fly-Client-IP`
-   ONLY** (R2-2 — the spoofable `X-Forwarded-For[0]` fallthrough is **removed**; Fly sets &
-   overwrites `Fly-Client-IP` so it is not client-injectable; non-prod degrades to
+   keyed by a **managed `keyGenerator` reading the REAL client IP from `proxy client-IP header`
+   ONLY** (R2-2 — the spoofable `X-Forwarded-For[0]` fallthrough is **removed**; the legacy host sets &
+   overwrites `proxy client-IP header` so it is not client-injectable; non-prod degrades to
    `request.ip`, prod-with-no-header fails closed to a shared bucket + boot warn). Fastify
-   has **no `trustProxy`** (so `request.ip` = proxy); `ip_hash` hashes the same `Fly-Client-IP`.
+   has **no `trustProxy`** (so `request.ip` = proxy); `ip_hash` hashes the same `proxy client-IP header`.
    Honeypot is **secondary** (rate-limit primary) [B11]; localStorage guard is UX-only [B12].
    We do **not** flip global `trustProxy`; telemetry/otp `request.ip` is a **separate
    defer-flag** (stays deferred per R2-2).

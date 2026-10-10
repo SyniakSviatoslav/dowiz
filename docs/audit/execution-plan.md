@@ -124,7 +124,7 @@
 | ⚪ S6-3 | Verify no regressions: `pnpm typecheck && pnpm lint:gates && pnpm build` | 15 min |
 | ⚪ S6-4 | Write 10 new Playwright tests for fixed issues (courier delivery flow, OTP enforcement, throttle 429, confirmation dialog) | 2h |
 | ⚪ S6-5 | Update `e2e/MATRIX.md` with new test results | 15 min |
-| ⚪ S6-6 | Deploy to Fly staging, verify on real Supabase | 30 min |
+| ⚪ S6-6 | Deploy to the legacy host staging, verify on real Supabase | 30 min |
 
 ---
 

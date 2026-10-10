@@ -1,9 +1,9 @@
-// Cross-role courier-geo validation against dev (dowiz.fly.dev).
+// Cross-role courier-geo validation against dev (qa-durres.dowiz.org).
 // Setup via /api/dev/* (mock-auth + create-assignment), then drive the courier
 // map UI + prove the live geo broadcast reaches the customer over WS.
 import { chromium, request as pwRequest } from '@playwright/test';
 
-const BASE = 'https://dowiz.fly.dev';
+const BASE = 'https://qa-durres.dowiz.org';
 const SECRET = process.env.DEV_AUTH_SECRET;
 const REST = { lat: 41.3275, lng: 19.8187 };   // courier start (Tirana center)
 const CUST = { lat: 41.3300, lng: 19.8200 };    // delivery pin

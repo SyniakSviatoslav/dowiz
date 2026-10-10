@@ -1,6 +1,6 @@
 # Staging full audit — 2026-06-23 (lifecycle + 5 adversarial agents)
 
-Target: `https://dowiz-staging.fly.dev` · branch `feat/product-media-seam` · HEAD `0ce7187b`.
+Target: `https://<legacy-host>` · branch `feat/product-media-seam` · HEAD `0ce7187b`.
 Driven by: lifecycle trace (owner-API) + 5 parallel agents — system-breaker (hater),
 test-scout (QA), UX/critique (browser), security-sentinel, invariant-guardian.
 

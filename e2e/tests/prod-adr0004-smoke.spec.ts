@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 // PROD-SAFE smoke for the deployed batch (ADR-0004 + audit/owner fixes). NON-MUTATING — no order
 // create, no import. Prod uses the argon2 login path (dev-bypass off), so the 24h access TTL is
 // observable here (it wasn't on staging's dev-bypass).
-// Run: VITE_BASE_URL=https://dowiz.fly.dev pnpm exec playwright test prod-adr0004-smoke --project=desktop --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test prod-adr0004-smoke --project=desktop --reporter=list
 const CREDS = { email: 'test@dowiz.com', password: 'test123456' };
 
 test('prod up + app shell serves', async ({ request }) => {

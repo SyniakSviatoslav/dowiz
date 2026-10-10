@@ -52,7 +52,7 @@
 
 - **AWS service list (EC2/Lambda/RDS/DynamoDB/VPC/CloudWatch/etc.)**: the ops-reliability plan
   already made an explicit, recorded decision to consolidate OFF managed clouds onto a single
-  Hetzner box, with Cloudflare scoped to edge/hosting only ("Дроп Fly+Supabase" — drop Fly and
+  Hetzner box, with Cloudflare scoped to edge/hosting only ("Дроп legacy host+Supabase" — drop the legacy host and
   Supabase, not add AWS). Introducing AWS services would add exactly the kind of managed-cloud
   dependency and cost surface that decision explicitly rejected. This is a direct conflict with
   existing architecture, not a matter of preference — flagging it as such rather than silently

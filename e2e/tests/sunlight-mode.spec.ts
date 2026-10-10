@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 // Sunlight Mode — high-contrast outdoor theme. Proves it flips dark surfaces to a light AAA
 // palette and that the header toggle works. Runs against staging.
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 function luminance(rgb: string): number {
   const m = (rgb.match(/\d+/g) || ['0', '0', '0']).map(Number);

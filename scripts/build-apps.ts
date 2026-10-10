@@ -5,8 +5,8 @@ import fs from 'fs';
 //
 // Root-cause note (2026-07-13, MANIFESTO/DECISIONS D1): the legacy
 // centralized server (apps/api + apps/worker + packages/db migrations, deployed
-// via attic/fly.toml → dist/api/server.cjs, dist/worker, dist/migrate) was
-// DROPPED. There is no server process, no central DB, no Supabase, no Fly in
+// via a removed attic deploy config → dist/api/server.cjs, dist/worker, dist/migrate) was
+// DROPPED. There is no server process, no central DB, no Supabase, no hosting platform in
 // the decentralized protocol (bebop2 peer nodes own their local SQLite). The
 // only thing this repo ships is the static SPA (apps/web/dist), which the
 // thin client / reference alt-client loads. We do NOT emit a fake "built

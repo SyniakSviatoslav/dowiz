@@ -1,6 +1,6 @@
 # FLOW-RADAR-REPORT.md — Full Issue Matrix
 
-> Generated: 2026-06-12 · Target: `dowiz.fly.dev` (staging)
+> Generated: 2026-06-12 · Target: the legacy host (staging)
 > Method: live API probes + static analysis (orphans, event wiring, connection lifecycle)
 > Coverage: 29 HTTP endpoints, 5 complete order lifecycle flows, 11 health checks, 3 static verify scripts
 
@@ -135,7 +135,7 @@
 
 ## Safety Confirmation
 
-- ✅ Staging only (`dowiz.fly.dev`)
+- ✅ Staging only (the legacy host)
 - ✅ Test accounts only (`test@dowiz.com`, mock-auth)
 - ✅ 0 real customer data accessed
 - ✅ All orders created during radar are test orders with test phone numbers

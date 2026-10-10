@@ -1,6 +1,6 @@
 # План розгортання DeliveryOS (Go-Live)
 
-Цей документ описує покроковий процес розгортання проєкту DeliveryOS на цільовій інфраструктурі (Supabase Free, Fly.io, Cloudflare) відповідно до архітектурних рішень Фази 5 (v4.5).
+Цей документ описує покроковий процес розгортання проєкту DeliveryOS на цільовій інфраструктурі (Supabase Free, Cloudflare) відповідно до архітектурних рішень Фази 5 (v4.5).
 
 ## 1. Підготовка Бази Даних (Supabase Free)
 
@@ -28,37 +28,9 @@ Supabase Free не має керованих бекапів (PITR), тому R2 
 2. Згенеруйте Access Keys (надайте права на читання та запис для цього бакета).
 3. Збережіть `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` та `R2_ENDPOINT`.
 
-## 3. Розгортання Backend та Worker (Fly.io)
+## 3. Розгортання Backend та Worker (Cloudflare Workers)
 
-Проєкт налаштовано як monorepo, де backend (`web`) та фонові задачі (`worker`) компілюються в окремі файли, але живуть в одному Docker-контейнері (`Dockerfile` та `fly.toml`).
-
-**Кроки:**
-1. Встановіть `flyctl` та авторизуйтесь (`fly auth login`).
-2. Ініціалізуйте додаток у регіоні `fra` (Франкфурт):
-   ```bash
-   fly launch --no-deploy
-   ```
-3. Встановіть необхідні секрети:
-   ```bash
-   fly secrets set \
-     DATABASE_URL_OPERATIONAL="<string>" \
-     DATABASE_URL_SESSION="<string>" \
-     DATABASE_URL_MIGRATIONS="<string>" \
-     JWT_SIGNING_SECRET="<secret_key_rs256_or_hs256>" \
-     JWT_KID="v1" \
-     GOOGLE_CLIENT_ID="<google_oauth_client_id>" \
-     GOOGLE_CLIENT_SECRET="<google_oauth_secret>" \
-     APP_BASE_URL="https://api.dowiz.org" \
-     R2_ACCESS_KEY_ID="<key>" \
-     R2_SECRET_ACCESS_KEY="<secret>" \
-     R2_ENDPOINT="<cloudflare_r2_endpoint>" \
-     R2_BUCKET="deliveryos-backups"
-   ```
-4. Виконайте деплой:
-   ```bash
-   fly deploy
-   ```
-   *Fly.io запустить 2 процеси згідно з `fly.toml`: `web` (Fastify 5) та `worker` (pg-boss).*
+Backend (`web`) та фонові задачі (`worker`) розгортаються як Cloudflare Worker. Конфігурація - у `workers/api/wrangler.toml`; секрети - через Cloudflare (`wrangler secret`).
 
 ## 4. Розгортання Frontend PWA
 
@@ -75,7 +47,7 @@ Supabase Free не має керованих бекапів (PITR), тому R2 
 ## 5. Post-Deploy та Go-Live Gate
 
 Згідно з інструкціями Фази 5 (Етапи 30-35), перед повноцінним запуском необхідно виконати аудит:
-1. **Worker Liveness:** Перевірте логи Fly.io, чи воркер коректно стартував і регулярно подає сигнали (observability).
+1. **Worker Liveness:** Перевірте логи Worker, чи воркер коректно стартував і регулярно подає сигнали (observability).
 2. **Backup Test:** Запустіть скрипт тестування відновлення, щоб переконатися, що R2 бекапи працюють:
    ```bash
    pnpm run backup:drill

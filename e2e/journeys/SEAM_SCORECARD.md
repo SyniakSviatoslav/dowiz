@@ -58,8 +58,8 @@ Synthesized from 3 adversarial audits (hater · UX-critique · QA-seams). Status
   F14 re-add guard) + `e2e/tests/polish-debt.spec.ts` **F13 GREEN on staging** (refresh continuity);
   **F12 proof pending deploy** (the new sr-announcer element 404s on the not-yet-deployed staging —
   the expected red half; goes green once f79e2910 ships). Ledger rows 5 (updated) + 7.
-- ⚠️ Deploy gap: no fly CLI in this sandbox → operator must deploy f79e2910 to staging, then re-run
-  `VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test polish-debt --project=desktop`
+- ⚠️ Deploy gap: no deploy CLI in this sandbox → operator must deploy f79e2910 to staging, then re-run
+  `VITE_BASE_URL=https://<legacy-host> pnpm exec playwright test polish-debt --project=desktop`
   to flip F12 green.
 
 ## BLOCKED-server → FIXED + DEPLOYED + PROVEN on staging (commits d120a914, 57f32e11) ✅

@@ -23,7 +23,6 @@ export function loadEnv(): Env {
 
 export const ALLOWLIST_HOSTS = [
   /^https:\/\/.*\.dowiz\.org/,
-  /^https:\/\/.*\.fly\.dev/,
   /^https:\/\/api\.anthropic\.com/,
   /^https:\/\/api\.telegram\.org/,
   /^https:\/\/api\.github\.com/,

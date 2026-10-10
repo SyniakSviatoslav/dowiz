@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
 import crypto from 'node:crypto';
 
 // Order-status stepper proof (testplan §2a) against deployed staging.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test order-stepper --project=desktop --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test order-stepper --project=desktop --reporter=list
 //
 // Places a real delivery order on the demo storefront, opens the customer tracking link
 // (self-authenticating via the ?t= grant — no login needed), asserts the delivery-branch

@@ -1,6 +1,6 @@
-# Dogfood Report — dowiz.fly.dev
+# Dogfood Report — <legacy-host>
 
-**Target:** https://dowiz.fly.dev (live)
+**Target:** https://<legacy-host> (live)
 **Date:** 2026-06-18
 **Method:** agent-browser exploratory QA (owner login, /admin, public menu /s/demo) + curl SSR inspection
 **Note:** Tests the **deployed** build; the in-progress local security fixes are NOT deployed.
@@ -21,13 +21,13 @@ Console/JS errors: none observed on login or menu pages. No PII/data leaks found
 
 ## Issue 1 — `/admin` renders without authentication (Medium)
 
-**What:** Navigating directly to `https://dowiz.fly.dev/admin` with no token renders the complete owner dashboard shell — sidebar (Paneli, Porosite, Menu, Furnizimet, Promocionet, Postieret, Analitika, Klientet, Brandingu, Cilesimet), the "Porosite Live" panel, order filters, CSV export, and search.
+**What:** Navigating directly to `https://<legacy-host>/admin` with no token renders the complete owner dashboard shell — sidebar (Paneli, Porosite, Menu, Furnizimet, Promocionet, Postieret, Analitika, Klientet, Brandingu, Cilesimet), the "Porosite Live" panel, order filters, CSV export, and search.
 
 **Impact:** No data leak — `/api/owner/orders`, `/api/owner/settings`, `/api/owner/couriers` all return **401**, so the panels are empty. But the protected admin UI and full feature surface are exposed to anonymous visitors, and a logged-out user sees a broken empty dashboard instead of being redirected to `/login`. The app needs a client-side auth guard on `/admin/*` that redirects unauthenticated users to `/login`.
 
 **Repro:**
 1. Clear storage / open a fresh session.
-2. Navigate to `https://dowiz.fly.dev/admin`.
+2. Navigate to `https://<legacy-host>/admin`.
 3. Observe: URL stays `/admin`, `localStorage.access_token` is null, full dashboard shell renders.
 
 **Evidence:** `screenshots/02-admin-direct-noauth.png`, network shows `/api/owner/*` → 401.
@@ -46,7 +46,7 @@ Console/JS errors: none observed on login or menu pages. No PII/data leaks found
 
 **Impact:** Browser tab and social-share cards display the literal `Dubin &amp; Sushi`. SEO/AEO degradation (the app explicitly targets SEO/AEO). Likely a meta-builder escaping an already-escaped value — fix by escaping exactly once.
 
-**Repro:** `curl -s https://dowiz.fly.dev/s/demo | grep -o '&amp;amp;' | wc -l` → 10.
+**Repro:** `curl -s https://<legacy-host>/s/demo | grep -o '&amp;amp;' | wc -l` → 10.
 
 ---
 
@@ -63,7 +63,7 @@ Console/JS errors: none observed on login or menu pages. No PII/data leaks found
 
 **What:** The address city "Durrës" is rendered as **"DurrëS"** (final character uppercased) in the meta description: `...Rruga Sulejman Kadiu, DurrëS.` Suggests a capitalize/title-case transform mishandling the trailing character (possibly the `ë` multibyte boundary).
 
-**Repro:** `curl -s https://dowiz.fly.dev/s/demo | grep -o 'Kadiu, [A-Za-zë]*'` → `Kadiu, DurrëS`.
+**Repro:** `curl -s https://<legacy-host>/s/demo | grep -o 'Kadiu, [A-Za-zë]*'` → `Kadiu, DurrëS`.
 
 ---
 

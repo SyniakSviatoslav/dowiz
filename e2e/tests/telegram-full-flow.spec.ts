@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const BOT_SECRET = process.env.TELEGRAM_BOT_SECRET;
 const WEBHOOK_URL = `${BASE}/webhook/telegram/${BOT_SECRET}`;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -39,7 +39,7 @@ async function authHeaders() {
   return { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' };
 }
 
-test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
+test.describe('Telegram Complete Flow — Live https://qa-durres.dowiz.org', () => {
 
   test.describe.configure({ mode: 'serial' });
 

@@ -1,5 +1,5 @@
 import urllib.request
-for url in ['https://dowiz.fly.dev/', 'https://dowiz.fly.dev/s/demo', 'https://dowiz.fly.dev/health']:
+for url in ['https://qa-durres.dowiz.org/', 'https://qa-durres.dowiz.org/s/demo', 'https://qa-durres.dowiz.org/health']:
     resp = urllib.request.urlopen(urllib.request.Request(url), timeout=10)
     hsts = resp.getheader('Strict-Transport-Security')
     csp = resp.getheader('Content-Security-Policy')

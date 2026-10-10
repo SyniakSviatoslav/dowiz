@@ -10,9 +10,9 @@ that is a **separate red-line domain** (auth/money/RLS/migrations), gated by
 `/council` + `backend-contract-convergence`, never by the kernel autopilot.
 
 ### DECISIVE FINDING — the findings describe a DORMANT tier
-Commit `e1505e1d` ("chore(declutter C2): quarantine retired Supabase/Fly/RLS stack")
+Commit `e1505e1d` ("chore(declutter C2): quarantine retired Supabase/legacy-host/RLS stack")
 moved the **entire Postgres/Supabase data tier into `attic/`**: `apps-api`,
-`apps-worker`, `packages-db` (all 140 migrations), `fly.toml`. Those packages are
+`apps-worker`, `packages-db` (all 140 migrations), `<legacy-deploy-manifest>`. Those packages are
 git-tracked + reactivatable but **NOT installed, NOT built, NOT deployed** on this
 branch. There is **no live server tier** (`grep` for `server/`, `axum`, `tokio_postgres`,
 `sqlx`, `rusqlite`, `CREATE TABLE` outside `attic/` → 0 hits), **no live migrations**,

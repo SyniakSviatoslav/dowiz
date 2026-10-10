@@ -1,9 +1,9 @@
 # FLOW-RADAR-MAP.md — DeliveryOS Staging Radar
 
-> Generated: 2026-06-12 · Target: `dowiz.fly.dev` · Status: UNKNOWN (all flows untested)
+> Generated: 2026-06-12 · Target: the legacy host · Status: UNKNOWN (all flows untested)
 
 ## Staging Info
-- **URL:** https://dowiz.fly.dev
+- **URL:** the legacy host
 - **Health:** `/health` — postgres/ok, telegram/ok, workers/ok, backup_restore/degraded, fallback/degraded
 - **Telegram bot:** `dowizbot_bot` (id: 8996764379)
 - **Test accounts:** test@dowiz.com / test123456 (owner, no orgs), owner-p36-...@test.com (P36 Org owner)
@@ -83,7 +83,7 @@
 
 ### Auth
 ```bash
-AUTH=$(curl -s -X POST https://dowiz.fly.dev/auth/local/login \
+AUTH=$(curl -s -X POST the legacy host/auth/local/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@dowiz.com","password":"test123456"}')
 TOKEN=$(echo $AUTH | jq -r '.access_token')

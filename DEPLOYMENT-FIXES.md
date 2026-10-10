@@ -1,6 +1,6 @@
 # Deployment Fixes — Audit Findings Resolution
 
-**Generated:** 2026-06-06 · **Deployment:** dowiz.fly.dev (staging) · **Audit verdict:** NO-GO → fixing
+**Generated:** 2026-06-06 · **Deployment:** <legacy-host> (staging) · **Audit verdict:** NO-GO → fixing
 
 ---
 
@@ -10,7 +10,7 @@
 **Root cause:** Route registered as `POST /orders` but client code calls `/api/orders`.
 **Fix:** Added `prefix: '/api'` to order route registration (`server.ts:472`).
 **File:** `apps/api/src/server.ts`
-**Verify:** `curl -X POST https://dowiz.fly.dev/api/orders -H "Content-Type: application/json" -d '{"location_id":"...","items":[...]}'`
+**Verify:** `curl -X POST https://<legacy-host>/api/orders -H "Content-Type: application/json" -d '{"location_id":"...","items":[...]}'`
 
 ### BLOCKER 2: Albanian (sq) locale missing from SSR
 **Root cause 1:** `fix-db.js` hardcoded `default_locale='uk'`, `supported_locales=['uk','en','ru']` in PostgreSQL function.
@@ -48,10 +48,10 @@
 **Note:** Google OAuth redirect URIs must match deployed domain. On staging with unverified OAuth, use `/api/dev/mock-auth` or local login.
 
 ### BLOCKER 7: No Cloudflare edge (infrastructure)
-**Root cause:** Deployment uses direct Fly.io, no Cloudflare in front.
+**Root cause:** Deployment exposed the origin directly, no Cloudflare in front.
 **Fix:** NOT a code fix. Requires:
 1. Set up Cloudflare zone for `dowiz.org`
-2. Add CNAME `app.dowiz.org` → `dowiz.fly.dev`
+2. Add CNAME `app.dowiz.org` → `<legacy-host>`
 3. Enable Full (strict) SSL
 4. Configure Page Rules / Transform Rules for caching + security headers
 5. Add WAF rules for rate limiting
@@ -126,8 +126,6 @@ npm run seed
 git add -A && git commit -m "fix: audit blockers — order prefix, sq locale, security headers, caching, seed data"
 git push origin main
 
-# Or via flyctl directly
-fly deploy
 ```
 **What this deploys:**
 - `/api/orders` route prefix fix
@@ -139,29 +137,28 @@ fly deploy
 ### 5. Re-run audit verification
 ```bash
 # Quick smoke after deploy
-curl -I https://dowiz.fly.dev/  # Should see security headers
-curl https://dowiz.fly.dev/s/demo  # Should see lang="sq", data-text-sq
-curl https://dowiz.fly.dev/health  # Should show fewer degraded components
-curl https://dowiz.fly.dev/public/locations/demo/theme.css  # Should return CSS
+curl -I https://<legacy-host>/  # Should see security headers
+curl https://<legacy-host>/s/demo  # Should see lang="sq", data-text-sq
+curl https://<legacy-host>/health  # Should show fewer degraded components
+curl https://<legacy-host>/public/locations/demo/theme.css  # Should return CSS
 ```
 
 ### 6. Set up Audit Sentinel CI secrets
 In GitHub repo settings → Secrets:
-- `AUDIT_BASE_URL` = `https://dowiz.fly.dev`
-- `AUDIT_MENU_URL` = `https://dowiz.fly.dev/s/demo`
+- `AUDIT_BASE_URL` = `https://<legacy-host>`
+- `AUDIT_MENU_URL` = `https://<legacy-host>/s/demo`
 - `AUDIT_TEST_TENANT` = `demo`
 - `OPS_TELEGRAM_BOT_TOKEN` = (from BotFather)
 - `OPS_TELEGRAM_CHAT_ID` = (ops channel ID)
-- `FLY_API_TOKEN` = (already exists for deploy)
 
 ---
 
 ## Infrastructure (not code-fixable)
 
-These require manual Cloudflare/Fly configuration:
+These require manual Cloudflare configuration:
 
 - [ ] Set up Cloudflare zone for `dowiz.org`
-- [ ] Configure `app.dowiz.org` CNAME → `dowiz.fly.dev`
+- [ ] Configure `app.dowiz.org` CNAME → `<legacy-host>`
 - [ ] Enable Full (strict) SSL mode
 - [ ] Set up Page Rules for asset caching (immutable TTLs)
 - [ ] Configure WAF rate-limit rules for `POST /api/orders`

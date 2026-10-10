@@ -51,7 +51,7 @@ git commit -m "rollback: revert to <stable-sha>"
 git tag rollback-$(date +%Y%m%d-%H%M)
 
 # 4. Deploy
-#    Fly.io: flyctl deploy --image <previous-image-tag>
+#    Redeploy the previous image tag (Worker: `wrangler deploy` at that commit)
 #    Or: git push production main (if auto-deploy)
 
 # 5. Verify rollback

@@ -14,7 +14,7 @@
 import { test, expect, Page } from '@playwright/test';
 import crypto from 'node:crypto';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const PAGE_TIMEOUT = 30000;
 
 test.describe.configure({ mode: 'serial' });

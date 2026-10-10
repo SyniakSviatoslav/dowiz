@@ -1,5 +1,5 @@
 # DeliveryOS Audit Matrix
-## Deployment: `dowiz.fly.dev` · ENV: staging · Date: 2026-06-05
+## Deployment: `<legacy-host>` · ENV: staging · Date: 2026-06-05
 
 ### Legend
 - 🟢 GREEN = verified, evidence attached
@@ -14,7 +14,7 @@
 
 | ID | Check | Spec Ref | Status | Evidence |
 |----|-------|----------|--------|----------|
-| E1a | TLS valid on `dowiz.fly.dev` | Wildcard cert, not expired | 🟢 | `openssl s_client`: CN=*.fly.dev, Let's Encrypt E8, expires 2026-07-21 |
+| E1a | TLS valid on `<legacy-host>` | Wildcard cert, not expired | 🟢 | `openssl s_client`: CN=*.<legacy-host>, Let's Encrypt E8, expires 2026-07-21 |
 | E1b | TLS for `dowiz.org` | Static site HTTPS | 🔴 | DNS does not resolve / no response |
 | E2a | HTTP→HTTPS redirect | 301/308 on http:// | 🟢 | `curl http://` → 301 to https:// |
 | E2b | HSTS header present | Strict-Transport-Security | 🔴 | Absent on ALL responses (SPA root, SSR menu, API) |
@@ -24,7 +24,7 @@
 | E3a | /health returns 200 | PG + Redis + workers | 🟢 | Returns `degraded` (honest): PG ok, MessageBus ok, workers ok |
 | E3b | /health granular: PG, Redis separate | Individual checks | 🟢 | postgres: ok (3ms), messageBus: ok (0ms), workers: ok |
 | E3c | /health degraded for non-critical | Not 503 for non-critical | 🟢 | settlement: degraded (table missing), backup_restore: degraded, fallback: degraded |
-| E3d | Origin protection | Fly.io origin not bypassing edge | 🔴 | **No Cloudflare edge deployed** — direct Fly.io access; spec requires Cloudflare CDN/WAF |
+| E3d | Origin protection | origin not bypassing edge | 🔴 | **No Cloudflare edge deployed** — direct origin access; spec requires Cloudflare CDN/WAF |
 | E4a | Cache: menu page edge HIT | cf-cache-status | ⬜ | No Cloudflare → no edge cache; `Cache-Control: public, max-age=60` on SSR pages |
 | E4b | Cache: menu_version invalidation | Bump → new content | 🟢 | `x-menu-version: 1` header present; SSR uses `menu_version` for staleness |
 | E4c | Cache: assets long TTL | immutable/long TTL | 🔴 | ALL assets: `Cache-Control: public, max-age=0` — zero caching |

@@ -1,7 +1,7 @@
 # D4 — Live Web Red-Team Session (browser + curl)
 
 **Date:** 2026-07-13
-**Targets:** `https://dowiz-staging.fly.dev` (primary, interactive) · `https://dowiz.fly.dev` (prod, gentle read-only)
+**Targets:** the legacy host (primary, interactive) · the legacy host (prod, gentle read-only)
 **Operator:** hostile-rival browser session (non-destructive: no DoS, no defacement, no real-customer-data exfil)
 **Tooling:** playwright-test MCP (browser drive/JS eval/network/DOM) + curl (headers, bundles, API). The `browser-use` MCP was unstable (CDP init failures) and was abandoned in favour of playwright-test MCP — all live browser evidence below is from playwright-test.
 
@@ -21,7 +21,7 @@
 ## 2. Findings
 
 ### F1 — Publicly-documented test owner account is live on PRODUCTION · Severity: HIGH
-- **Where:** `POST https://dowiz.fly.dev/api/auth/local/login` (and staging).
+- **Where:** `POST `<legacy-host>/api/auth/local/login` (and staging).
 - **Evidence:**
   - Prod: `POST /api/auth/local/login {"email":"test@dowiz.com","password":"test123456"}` → `HTTP 200`, body contains `access_token`; decoded JWT payload `role: owner`, `kid: 2`, TTL 1 day, `userId 00bf019a-49a3-4c16-817f-15554a4274a4`, `activeLocationId 3625d9b3-e53d-48e7-9d7b-84abf68326f5`.
   - Staging: same creds → `HTTP 200`, `role: owner`, `kid: dev`, TTL 7 days, location `28239442-63a1-431e-8cab-2e4ed64ab8e7`.

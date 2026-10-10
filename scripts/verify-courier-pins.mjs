@@ -4,10 +4,10 @@
 // asserting the ACTUAL MapLibre markers render, using the full `chromium` build
 // (the test-runner's headless-shell lacks WebGL). Emits a screenshot as evidence.
 //
-// Usage: BASE=https://dowiz-staging.fly.dev SECRET=stg-e2e-secret node scripts/verify-courier-pins.mjs
+// Usage: BASE=https://qa-durres.dowiz.org SECRET=stg-e2e-secret node scripts/verify-courier-pins.mjs
 import { chromium } from '@playwright/test';
 
-const BASE = process.env.BASE || 'https://dowiz-staging.fly.dev';
+const BASE = process.env.BASE || 'https://qa-durres.dowiz.org';
 const SECRET = process.env.SECRET || 'stg-e2e-secret';
 const H = { 'content-type': 'application/json', 'x-dev-auth-secret': SECRET };
 const j = async (r) => (r.ok ? r.json() : null);

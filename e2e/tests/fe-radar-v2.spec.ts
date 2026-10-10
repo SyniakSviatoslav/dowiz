@@ -1,7 +1,7 @@
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { checkAxe, checkTouchTargets, checkFormLabels, checkAriaLive, type A11yIssue } from '../helpers/a11y.js';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 interface Issue {
   surface: string; step: string; dimension: 'base' | 'a11y' | 'throttled';

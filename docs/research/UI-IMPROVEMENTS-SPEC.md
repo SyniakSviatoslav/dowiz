@@ -102,7 +102,7 @@ cross-tenant insert blocked by WITH CHECK.
 
 ---
 
-## Deployment + test status (against `https://dowiz-staging.fly.dev`)
+## Deployment + test status (against the legacy host)
 
 Migrations `059–063` applied via `release_command` (read_public_menu `063` serves cleanly).
 Per `UI-IMPROVEMENTS-TESTPLAN.md` the planner **verified live**: `venue-state-chip[data-state=open]`

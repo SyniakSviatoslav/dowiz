@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
 // Bootstraps entirely from PUBLIC endpoints (no owner/dev auth) so it runs against
 // prod, where /api/dev/mock-auth is intentionally 404. Order placement is public.
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const SLUG = process.env.TRACK_SLUG || 'sushi-durres'; // OTP off, min_order 0, real coords
 const TS = Date.now();
 

@@ -138,7 +138,6 @@ const EnvSchema = z.object({
   COURIER_DISPATCH_MAX_ATTEMPTS: z.string().optional(),
   COURIER_DISPATCH_RETRY_MS: z.string().optional(),
   COURIER_GPS_MAX_DIST_KM: z.string().optional(),
-  FLY_MACHINE_ID: z.string().optional(),
   GROQ_ENDPOINT: z.string().optional(),
   HOSTNAME: z.string().optional(),
   IP_HASH_SALT: z.string().min(1, 'Required for deterministic PII hashing — set any value in dev'),

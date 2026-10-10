@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // Harness smoke: confirms Playwright can drive the DEPLOYED storefront (VITE_BASE_URL).
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test \
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test \
 //        e2e/tests/storefront-smoke.spec.ts --project=mobile --reporter=list
 test('public storefront menu page renders (deployed)', async ({ page }) => {
   const resp = await page.goto('/s/sushi-durres');

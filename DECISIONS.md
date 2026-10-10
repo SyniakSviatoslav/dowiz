@@ -42,7 +42,7 @@ Staff personal KPIs (operator 2026-10-03) are NOT covered by this amendment; the
 - Rationale: a centralized dispatch/deploy server is the anti-pattern the protocol exists to
   kill (MANIFESTO C13, "DoorDash with extra steps").
 - Replacement: peer nodes, each running the Rust/WASM kernel + a local SQLite DB. No
-  server process, no central DB, no Supabase, no Fly.
+  server process, no central DB, no Supabase.
 - Action: delete `server/` crate; remove from workspace `Cargo.toml`; keep any genuinely
   reusable pure logic (e.g. `reliability.rs` retransmit queue) by porting it into the node
   crate as a transport-agnostic module.

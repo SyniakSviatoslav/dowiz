@@ -10,7 +10,7 @@ order_body = json.dumps({
     'idempotency_key': str(uuid.uuid4()),
 }).encode()
 
-req = urllib.request.Request('https://dowiz.fly.dev/api/orders', method='POST', data=order_body)
+req = urllib.request.Request('https://qa-durres.dowiz.org/api/orders', method='POST', data=order_body)
 req.add_header('Content-Type', 'application/json')
 try:
     resp = urllib.request.urlopen(req, timeout=10)

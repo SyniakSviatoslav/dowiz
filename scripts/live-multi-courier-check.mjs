@@ -5,10 +5,10 @@
 // retrievable. Cross-customer isolation is covered by the decorrelated worker
 // unit test (apps/api/tests/courier-multi-delivery.test.ts).
 //
-// Usage: BASE=https://dowiz-staging.fly.dev SECRET=stg-e2e-secret node scripts/live-multi-courier-check.mjs
+// Usage: BASE=https://qa-durres.dowiz.org SECRET=stg-e2e-secret node scripts/live-multi-courier-check.mjs
 import WebSocket from 'ws';
 
-const BASE = process.env.BASE || 'https://dowiz-staging.fly.dev';
+const BASE = process.env.BASE || 'https://qa-durres.dowiz.org';
 const SECRET = process.env.SECRET || 'stg-e2e-secret';
 const H = { 'content-type': 'application/json', 'x-dev-auth-secret': SECRET };
 const results = [];

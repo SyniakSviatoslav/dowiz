@@ -1,6 +1,6 @@
 # UI Improvement Plan — dowiz (post-deploy)
 
-**Date:** 2026-06-18 · **Method:** live dogfood of dowiz.fly.dev (agent-browser) + `web-design-guidelines` review + a11y signals. Deploy `9d18c93` is live; the menu now hydrates and add-to-cart works.
+**Date:** 2026-06-18 · **Method:** live dogfood of the legacy host (agent-browser) + `web-design-guidelines` review + a11y signals. Deploy `9d18c93` is live; the menu now hydrates and add-to-cart works.
 
 ---
 

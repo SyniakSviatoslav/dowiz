@@ -727,7 +727,7 @@ Zero-false-positive на безпечному корпусі.
 
 **TARGET FILES:** `/root/dowiz/.claude/settings.json`; `/root/dowiz/.claude/hooks/guard-bash.sh`
 
-**CURRENT STATE (звірено):** `guard-bash.sh` існує (DANGER regex: fly deploy/secrets, supabase, wrangler, git
+**CURRENT STATE (звірено):** `guard-bash.sh` існує (DANGER regex: platform deploy/secrets, supabase, wrangler, git
 push main, git push --force, pnpm migrate:up, pnpm add/remove, npm install, rm -rf /), exit 2 hard block,
 але **не зареєстрований** у settings.json hooks → dangerous-command veto **мертвий**. tier1-run.sh навіть
 стверджує «dangerous bash still vetoed by guard-bash» — наразі неправда.
@@ -737,7 +737,7 @@ push main, git push --force, pnpm migrate:up, pnpm add/remove, npm install, rm -
 **TARGET STATE:** зареєструвати `guard-bash.sh` як PreToolUse hook на `Bash` у settings.json (поряд з наявними
 PreToolUse). Формат — як інші зареєстровані hooks.
 
-**RED→GREEN GATE:** `fly deploy` / `git push origin main` / `rm -rf /` як Bash-команда → hook exit 2, команда
+**RED→GREEN GATE:** a deploy / `git push origin main` / `rm -rf /` як Bash-команда → hook exit 2, команда
 заблокована (RED до реєстрації = проходить; GREEN після = блок). Безпечна команда (`ls`, `git status`) —
 проходить.
 

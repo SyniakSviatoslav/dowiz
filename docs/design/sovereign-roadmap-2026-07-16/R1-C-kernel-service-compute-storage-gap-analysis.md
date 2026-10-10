@@ -126,7 +126,7 @@
   comment or propagation).
 
 ### S6 — Deploy: single-env; V5-C local re-exec
-- **CURRENT:** single-env is trivially true (Fly/staging scripts deleted with the JS-drop;
+- **CURRENT:** single-env is trivially true (the legacy host/staging scripts deleted with the JS-drop;
   `scripts/` now holds only build/verify tooling). **V5-C local re-exec verifier: NOT BUILT** —
   no independent-context re-execution harness exists anywhere.
 - **GAP:** build the local re-exec check (re-run `cargo test` in a clean checkout of the diff,

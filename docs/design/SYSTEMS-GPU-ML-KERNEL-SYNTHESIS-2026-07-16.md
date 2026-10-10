@@ -439,7 +439,7 @@ history", "4 unrotated pasted creds incl. CF API token", реальний `.env`
 OPENROUTER/JWT/COURIER_PII на диску). Це підтверджено **тричі незалежно**: тим самим
 git/CI кластером, cloud/IaC-кластером (externalized config), і roadmap-gap-analysis
 кластером (§9). Дія: gitleaks CI-гейт, секрети виключно через systemd
-`EnvironmentFile`/Fly secrets, ніколи в репо чи логах CI.
+`EnvironmentFile`/platform secrets, ніколи в репо чи логах CI.
 
 **Frontend — усі перевірені позиції виявились розривами, не "вже зробленими".**
 Класичний React (MenuPage.tsx хотспот з CLAUDE.md) переїхав у `attic/` на

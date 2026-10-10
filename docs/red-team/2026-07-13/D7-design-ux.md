@@ -1,7 +1,7 @@
 # D7 — Red-Team Design / UX / Accessibility Audit
 
 **Date:** 2026-07-13 (Sunday) · **Auditor:** red-team design critic (adversarial pass)
-**Targets (live):** https://dowiz-staging.fly.dev · https://dowiz.fly.dev — landing, `/s/:slug` storefront, `/login`, `/admin/*`
+**Targets (live):** the legacy host · the legacy host — landing, `/s/:slug` storefront, `/login`, `/admin/*`
 **Method:** Live Playwright drives (Chromium 1366×850 desktop + 390×844 mobile touch), scripted a11y probes (contrast sampling, tab traversal, tap-target measurement, reduced-motion emulation, money-tween sampling), curl HTTP/meta probes, plus static source review of `/root/dowiz/apps/web/src`, `/root/dowiz/packages/ui/src`, `/root/dowiz/web/src`. Screenshots in `assets/`.
 **Session hygiene:** the browser-use MCP screenshot backend was broken in this environment ("Root CDP client not initialized"); all browser work fell back to direct Playwright (headless Chromium, own isolated contexts, closed after each script). No orders were placed on prod; the prod funnel was walked to the empty-submit validation step only. No fixture data was mutated (the Settings hours form was deliberately NOT used — see F-08).
 
@@ -11,11 +11,11 @@
 
 **Would a stranger trust this enough to order and pay? On the storefront funnel itself — mostly yes. Everywhere around the funnel — no.**
 
-The core customer path on prod (`dowiz.fly.dev/s/demo`: menu → add → cart → checkout sheet) is genuinely competent: coherent dark venue theme, serif display headings, instant add-to-cart toast, free-delivery microcopy, clean cart drawer (`assets/pr-3-cart-mobile.png`, `assets/pr-4-checkout-mobile.png`). A hungry customer handed a direct link will probably complete a cash order.
+The core customer path on prod (`the legacy host/s/demo`: menu → add → cart → checkout sheet) is genuinely competent: coherent dark venue theme, serif display headings, instant add-to-cart toast, free-delivery microcopy, clean cart drawer (`assets/pr-3-cart-mobile.png`, `assets/pr-4-checkout-mobile.png`). A hungry customer handed a direct link will probably complete a cash order.
 
 Everything that *builds or destroys trust around* that funnel is currently working against conversion:
 
-- **Prod has no front door.** `dowiz.fly.dev/` 302s straight to a context-free `/start` upload wizard with no logo, no pitch, no nav (F-01). The excellent Warm Cosmo-Noir landing exists only on staging.
+- **Prod has no front door.** `the legacy host/` 302s straight to a context-free `/start` upload wizard with no logo, no pitch, no nav (F-01). The excellent Warm Cosmo-Noir landing exists only on staging.
 - **The product's own numbers lie.** Analytics shows revenue **0** with a green **"+15% vs previous period"**, next to a top-products list summing to **199,500 ALL** — on one screen (F-03). For a product whose entire pitch is "Paratë e tua" (your money), self-contradicting money figures are fatal to owner trust.
 - **Test garbage is customer-visible.** `UI-FCat-1783260801575` is a live category tab on the staging storefront a prospect would be demoed on (F-04).
 - **The checkout form is the least accessible screen in the app** — most required inputs have no programmatic label and validation falls back to the browser's English "Please fill out this field." bubble on an Albanian page (F-05, F-06).
@@ -32,7 +32,7 @@ Severity: **Critical** = blocks conversion or destroys trust · **High** = major
 ### A. First impression & trust
 
 **F-01 · Critical · Prod has no landing page — root redirects into a bare wizard**
-`https://dowiz.fly.dev/` → `/start` ("Filloni me menunë tuaj").
+``<legacy-host>/` → `/start` ("Filloni me menunë tuaj").
 Evidence: `assets/prod-landing-desktop.png`, `assets/prod-landing-mobile.png` — no logo, no product name, no value proposition, no nav, no footer; just an upload dropzone and two 20 px-tall text links.
 Why it costs: a prospect typing the bare domain gets an unexplained file-upload form asking for their menu PDF. Nothing on screen says what dowiz is, who runs it, or why to trust it with a menu. The polished cosmo-noir pitch page ("Kuzhina jote. Klientët e tu. Paratë e tua.", `assets/staging-landing-desktop.png`) exists **only on staging**.
 Fix: ship the staging landing to prod as `/`; keep `/start` as the CTA target. Add logo + one-line context to `/start` regardless.
@@ -96,7 +96,7 @@ Why it costs: enabled-looking controls that scold on tap teach distrust of every
 Fix: while closed, demote `+` to outline/quiet style, and put "Hapet nesër 09:00" (next-open time) in the closed banner and the toast.
 
 **F-10 · High · Checkout is a sheet on the same URL — refresh/share loses the checkout**
-Prod funnel walk: cart "Porosit" opens the "Përfundimi" sheet while the address bar stays `https://dowiz.fly.dev/s/demo` (walk-12 log; `assets/pr-4-checkout-mobile.png`).
+Prod funnel walk: cart "Porosit" opens the "Përfundimi" sheet while the address bar stays ``<legacy-host>/s/demo` (walk-12 log; `assets/pr-4-checkout-mobile.png`).
 Why it costs: an accidental refresh, tab restore, or OS-level app switch on low-memory phones dumps the customer back to the menu with the sheet closed (cart survives via localStorage, checkout inputs don't); support can't be sent a checkout link. A `/s/demo/checkout` route exists in the codebase (`apps/web/src/routes/ClientRoutes.tsx:13`) — the deployed prod build doesn't use it for this flow.
 Fix: push `/s/:slug/checkout` onto history when the sheet opens (restore on load), or ship the route-based checkout consistently.
 

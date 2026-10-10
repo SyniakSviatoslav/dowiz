@@ -7,10 +7,10 @@ import fs from 'node:fs';
  * drawer). For the pixel-perfect / design-system consistency audit.
  *
  * Run:
- *   CAPTURE=1 VITE_BASE_URL=https://dowiz-staging.fly.dev DEV_AUTH_SECRET=stg-e2e-secret \
+ *   CAPTURE=1 VITE_BASE_URL=https://qa-durres.dowiz.org DEV_AUTH_SECRET=stg-e2e-secret \
  *     pnpm exec playwright test e2e/tests/capture-states.spec.ts --project=desktop --reporter=line
  */
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const SECRET = process.env.DEV_AUTH_SECRET || 'stg-e2e-secret';
 const SLUG = process.env.SLUG || 'demo';
 const CLIENT_ONLY = !!process.env.CLIENT_ONLY;

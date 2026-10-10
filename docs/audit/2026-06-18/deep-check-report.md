@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-18
 **Branch:** chore/agentic-tooling-integration
-**Method:** Repowise code-intelligence (health/overview/dead-code/risk) + 4 parallel deep-analysis agents (architecture, tests/CI, deps/build/deploy, data-layer/SQL/RLS) + prior security review + live dogfood of dowiz.fly.dev.
+**Method:** Repowise code-intelligence (health/overview/dead-code/risk) + 4 parallel deep-analysis agents (architecture, tests/CI, deps/build/deploy, data-layer/SQL/RLS) + prior security review + live dogfood of the legacy host.
 **Verification note:** Findings from sub-agents cite `file:line` and were spot-checked. Items I personally verified are marked ✅. Where a claim needs live-DB confirmation it is marked ⚠️.
 
 ---
@@ -96,7 +96,7 @@ The most dangerous *latent* defects live here, at the seam between two incompati
 | # | Sev | Finding |
 |---|-----|---------|
 | T1 | High | **CI runs NO unit tests and NO e2e on PRs.** `ci.yml` validate = build/typecheck/lint/verify only. The 46+ `node:test` files are never run by CI and can rot. |
-| T2 | High | **E2E runs only POST-deploy, against live production** (`dowiz.fly.dev`). The gate fires *after* bad code is live — smoke alarm, not guardrail. A second workflow (`fly-deploy.yml`) deploys with **no validation**. |
+| T2 | High | **E2E runs only POST-deploy, against live production** (the legacy host). The gate fires *after* bad code is live — smoke alarm, not guardrail. A second workflow (`the deleted deploy workflow`) deploys with **no validation**. |
 | T3 | High | **Critical paths unit-untested:** `PATCH /orders/:id/status` state-machine + synchronous courier auto-assignment, settlements (money owed — `owner/settlements.ts`, `courier/settlements.ts`), `owner/gdpr.ts`, `customer/otp.ts`, `customer/orders.ts`. Coverage exists only via flaky live e2e. |
 | T4 | High | **E2E fragility:** `retries:0`, `workers:1`, serial; 60 specs depend on `/dev/mock-auth` + `DEV_AUTH_SECRET`; broken `e2e/helpers/auth.ts:getDevToken` hits a non-existent route and silently falls back to `'dev_test_token'` (false greens). |
 | T5 | Med | **No aggregate test runner** — no root `pnpm test`, no `node --test` glob; ~half the `.test.ts` files are unwired to any script and DB-coupled, so the "Mandatory Proof Rule" is **manual-only**. No coverage tooling. |
@@ -117,11 +117,11 @@ The most dangerous *latent* defects live here, at the seam between two incompati
 | B5 | Med | **`.env.example` missing required keys** (`VAPID_PUBLIC_KEY/PRIVATE_KEY`, `APP_BASE_URL`) → a fresh clone fails `loadEnv()` at boot. |
 | B6 | Low | `corepack prepare pnpm@latest` contradicts pinned `pnpm@9.4.0`; `maplibre-gl` stray in root deps; Baileys `7.0.0-rc13` (pre-release WhatsApp lib) in prod. |
 
-**Good:** no committed live secrets (scans were false positives in detector scripts); `.gitignore` covers `.env`/`dist`; lockfile committed; multi-stage Docker; real `/health` check wired to fly.toml; env schema itself is thorough with prod-safe defaults.
+**Good:** no committed live secrets (scans were false positives in detector scripts); `.gitignore` covers `.env`/`dist`; lockfile committed; multi-stage Docker; real `/health` check wired to the legacy deploy manifest; env schema itself is thorough with prod-safe defaults.
 
 ---
 
-## 7. Runtime / UX (dogfood of dowiz.fly.dev)
+## 7. Runtime / UX (dogfood of the legacy host)
 
 | # | Sev | Finding |
 |---|-----|---------|
@@ -147,14 +147,14 @@ Console clean on login/menu pages; no PII leaks observed (APIs enforce 401).
 ## 9. Prioritized remediation roadmap
 
 **P0 — correctness/security (do first):**
-- Deploy the security fixes (C1/H1–H5/M1) + set `DEV_AUTH_SECRET` on fly.dev & CI.
+- Deploy the security fixes (C1/H1–H5/M1) + set `DEV_AUTH_SECRET` on the legacy host & CI.
 - Commit a migration for `courier_payouts.paid_at` (D1) so rebuilds don't break settlements.
 - Add `ROLLBACK` to the 3 `dashboard.ts` early-return handlers (D3); remove nested `BEGIN/COMMIT` in `courier-invites.ts`/`menu-import.ts` (D4).
 - Fix the RLS regime mismatch on courier-family writes (D2); reconcile the operational-role write grants (D5).
 
 **P1 — process (stop the bleeding):**
 - Add a CI job that runs unit tests on PRs (provision a Postgres service); wire an aggregate `pnpm test` (T1, T5).
-- Gate deploy on e2e instead of running it only post-deploy; remove the unvalidated `fly-deploy.yml` path (T2).
+- Gate deploy on e2e instead of running it only post-deploy; remove the unvalidated `the deleted deploy workflow` path (T2).
 - Fix `getDevToken` false-green fallback (T4).
 
 **P2 — architecture (compounding payoff):**

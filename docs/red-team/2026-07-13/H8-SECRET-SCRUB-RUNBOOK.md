@@ -51,9 +51,9 @@ by `git gc --prune=now`). **No GitHub Support ticket is required.**
 - Open-source publish (MANIFESTO C6 / ADR-020) is **UNBLOCKED at the repo level**.
 
 ## Related operator action (separate from H8, same red-team sweep)
-The live `dowiz.fly.dev` prod (old `attic/` stack) still holds the `test@dowiz.com`
+The live legacy host prod (old `attic/` stack) still holds the `test@dowiz.com`
 owner credential confirmed by the synthesis. This repo cannot decommission it
-(no `flyctl`/DB creds here, and it is a prod auth/money red-line). Exact
+(no legacy-host CLI/DB creds here, and it is a prod auth/money red-line). Exact
 runbook: see `PART1-LIVE-PROD-DECOMMISSION.md` (operator executes).
 
 ## Gate status

@@ -6,7 +6,7 @@
 
 ## Result: **Branch (b) — `policy TO <role>` (no BYPASSRLS).** Branch (a) ruled out.
 
-The live empirical probe could **not** be executed from this sandbox: no `flyctl` (can't proxy staging DB), and the local `.env` (PROD, eu-central-1 Supabase) connects through Supavisor behind a `vestauth` secret proxy — every `psql` attempt returns Supavisor's auth-failure stand-in `FATAL: database "postgres" does not exist`. So the determination is made from **convergent platform + repo evidence** instead, with a live confirmation step specified below for whoever has staging credentials.
+The live empirical probe could **not** be executed from this sandbox: no legacy-host CLI (can't proxy staging DB), and the local `.env` (PROD, eu-central-1 Supabase) connects through Supavisor behind a `vestauth` secret proxy — every `psql` attempt returns Supavisor's auth-failure stand-in `FATAL: database "postgres" does not exist`. So the determination is made from **convergent platform + repo evidence** instead, with a live confirmation step specified below for whoever has staging credentials.
 
 ## Evidence (three independent, convergent lines)
 

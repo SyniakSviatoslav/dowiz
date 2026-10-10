@@ -1,5 +1,5 @@
 async function main() {
-  const authRes = await fetch('https://dowiz.fly.dev/api/dev/mock-auth', {
+  const authRes = await fetch('https://qa-durres.dowiz.org/api/dev/mock-auth', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ role: 'owner', locationSlug: 'demo' })
@@ -18,7 +18,7 @@ async function main() {
   };
   console.log('sending:', JSON.stringify(body));
   
-  const res = await fetch('https://dowiz.fly.dev/api/owner/promotions', {
+  const res = await fetch('https://qa-durres.dowiz.org/api/owner/promotions', {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + auth.access_token, 'Content-Type': 'application/json' },
     body: JSON.stringify(body)

@@ -15,7 +15,7 @@ corepack enable
 pnpm install
 
 # Run watchdog against staging
-ENV=staging BASE_URL=https://dowiz.fly.dev pnpm watchdog
+ENV=staging BASE_URL=https://qa-durres.dowiz.org pnpm watchdog
 
 # Run watchdog against prod (observe-only)
 ENV=prod BASE_URL=https://app.dowiz.org pnpm watchdog
@@ -46,4 +46,4 @@ Two GitHub Actions workflows:
 - Zero write access to the deployed system
 - Only test tenant credentials
 - Same safe-on-live protocol as the manual audit prompt
-- Network allowlist: only dowiz.org, fly.dev, Anthropic API, Telegram API, GitHub API
+- Network allowlist: only dowiz.org, Anthropic API, Telegram API, GitHub API

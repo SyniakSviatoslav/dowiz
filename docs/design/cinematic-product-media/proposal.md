@@ -49,7 +49,7 @@ single heavy dependency**.
 
 **Topology (confirmed from ADR-0001 + repo):** single Supabase Postgres (Free-tier floor:
 ~60 pooler conns; budget = 3 session + 8 operational + 3 pg-boss = 14, leaving room for
-migrations). Cloudflare in front of fly.io. Storage = Cloudflare R2 (`R2StorageProvider`)
+migrations). Cloudflare in front of the legacy host. Storage = Cloudflare R2 (`R2StorageProvider`)
 served via the `/images/*` proxy (extended to `/media/*`), 1-year immutable cache.
 
 ### Per-asset sizes (target ceilings, enforced client-side + server magic-byte/size cap)

@@ -28,6 +28,6 @@ out_of_scope:
   - "сервер/контракти/бізнес-логіка (delivery-fee, courier-status, reseed) — flag-only"
   - "форсити bespoke-кнопки (sticky CTA, qty-stepper, icon-only) на <Button>"
 escalation: "знахідка логіки/контракту/безпеки → flag-only список (не фікс); серйозне → /council"
-skills_required: [playwright-mobile-capture, image-read-vision, repo-access, fly-staging-deploy]
+skills_required: [playwright-mobile-capture, image-read-vision, repo-access]
 memory_file: loops/memory/mobile-polish.md
 verification_report: loops/reports/mobile-polish-0.1.md

@@ -1,11 +1,11 @@
 # Runbook — Production DB migrations (schema-drift prevention)
 
 ## What changed (the permanent fix)
-`fly.toml` now has a `[deploy] release_command = "node dist/migrate/index.cjs"`. On
-**every** deploy (CI push-to-`main` or a manual `flyctl deploy`), Fly runs the bundled
+`<legacy-deploy-manifest>` now has a `[deploy] release_command = "node dist/migrate/index.cjs"`. On
+**every** deploy (CI push-to-`main` or a manual redeploy), the legacy host runs the bundled
 migrator in a one-off machine **before** the new image receives traffic. node-pg-migrate
 applies only pending migrations (it records each by name in `pgmigrations`), so this is
-idempotent. If it fails, Fly **aborts the rollout** — the old code keeps serving (fail-safe),
+idempotent. If it fails, the legacy host **aborts the rollout** — the old code keeps serving (fail-safe),
 instead of the new code crash-looping against an old schema (the earlier outage).
 
 The migrator is bundled by `scripts/build-apps.ts` to `dist/migrate/` (runner + every
@@ -20,11 +20,9 @@ pooler / port 5432, the DDL role). If absent, `release_command` exits 1 and the 
 aborts. Check / set:
 
 ```
-flyctl secrets list -a dowiz | grep DATABASE_URL_MIGRATIONS
-# if missing:
-flyctl secrets set DATABASE_URL_MIGRATIONS="postgres://postgres:<pw>@<host>:5432/postgres" -a dowiz
+# legacy host retired: if it is ever brought back, DATABASE_URL_MIGRATIONS must be a platform secret
 ```
-(Same for `dowiz-staging` — its secret already exists.) Setting a secret triggers a deploy;
+(Same for the legacy staging app — its secret already existed.) Setting a secret triggers a deploy;
 that deploy will itself run the release_command.
 
 ## Merging this branch (feat/golive-remediation → main) — migrations 041–044
@@ -32,10 +30,10 @@ With the release_command in place, **the merge deploy auto-applies 041–044** b
 code boots. No manual step is required **if** the prerequisite secret exists. Sequence on
 push to `main`:
 1. CI builds the image (bundles migrator + migrations 001–044, stamps schema head = 044).
-2. Fly runs `release_command` → applies pending 041–044 to the prod DB.
+2. the legacy host runs `release_command` → applies pending 041–044 to the prod DB.
 3. Rollout proceeds; new code boots against the now-current schema.
 
-Watch the deploy: `flyctl logs -a dowiz` — look for `[migrate] applied N migration(s)` then
+Watch the deploy logs — look for `[migrate] applied N migration(s)` then
 the normal boot. If `release_command` fails, the deploy stops; fix and re-deploy (old code
 unaffected).
 

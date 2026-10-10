@@ -9,7 +9,7 @@
 | Bucket | Paths | Rule |
 |---|---|---|
 | **Self-ecosystem** — the agent's own machinery | `.claude/**` (hooks, agents, skills, commands, `settings.json`, non-token `state/`), the agent's lessons/ledger/reflections, `tools/` | Agent-modifiable **when** `.claude/state/self-mod-enabled` exists. Every edit appended to `.claude/logs/self-mod.log`. |
-| **Red-line floor** — product safety / infra | `packages/db/**`, `migrations/**`, `packages/shared-types/**`, `/contracts/`, `*.contract.*`, `.env`, `.github/**` (CI), `fly.toml`, `Dockerfile`, `pnpm-lock.yaml`, `package.json` | **Unconditional human-gate.** Never self-modifiable, even with the capability ON. |
+| **Red-line floor** — product safety / infra | `packages/db/**`, `migrations/**`, `packages/shared-types/**`, `/contracts/`, `*.contract.*`, `.env`, `.github/**` (CI), `<legacy-deploy-manifest>`, `Dockerfile`, `pnpm-lock.yaml`, `package.json` | **Unconditional human-gate.** Never self-modifiable, even with the capability ON. |
 | **Meta-red-line** — the enforcement itself | the authorization tokens; the red-line patterns inside the gates; the wiring of the red-line hooks | The agent may *refactor* gate files, but `verify-safety-floor.sh` fails loud if any product red-line stops being enforced. The floor may only be **strengthened or scope-corrected, never removed** (monotonic ratchet). |
 
 ## Why it is safe (autonomy ≠ arbitrariness)

@@ -1,4 +1,4 @@
-# Dogfood Round 2 — Customer Ordering Flow (dowiz.fly.dev)
+# Dogfood Round 2 — Customer Ordering Flow (the legacy host)
 
 **Date:** 2026-06-18 · **Target:** live prod · **Scope:** `/s/demo` menu → cart → checkout
 **Note:** live runs the pre-fix build; findings below are about the customer flow (not the admin/SSR areas already patched locally).

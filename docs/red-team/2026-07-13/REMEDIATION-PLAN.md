@@ -7,7 +7,7 @@
 
 ## DONE (verified green)
 
-- [x] **CI supply-chain pin** — `ci.yml:150` `setup-flyctl@master` → `@v1` (real tag).
+- [x] **CI supply-chain pin** — `ci.yml:150` `deploy-action@master` → `@v1` (real tag).
   No other `@master`/`@main`/`@latest` refs remain in `.github`.
 
 ## ESCALATED (not fixable in-repo; needs operator)

@@ -1,7 +1,7 @@
 /**
  * Full Client Order Flow E2E — branding-preview → menu → cart → checkout → post-order
  *
- * Validates ALL client-facing interactions on https://dowiz.fly.dev:
+ * Validates ALL client-facing interactions on https://qa-durres.dowiz.org:
  *  1. /branding-preview/{slug} loads without JS errors or CSP violations
  *  2. Category tab navigation
  *  3. Search filters products in real time
@@ -18,7 +18,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const SLUG = 'sushi-durres';
 
 const DELIVERY_PHONE = '+355683085694';

@@ -46,7 +46,7 @@
 - ★KEY-CORRECTION: agent-governance/index.ts(operator's-flagged-candidate) = PURE text/voice-policy-filter(gender/
   profanity/archetype/HARD-BAN), executes-NOTHING-untrusted → NEEDS-NO-SANDBOX. GENUINE-microVM-case = FUTURE dev-
   agent-tier port-adapters/3rd-party-MCP-servers(IP-01/IP-02 dev-agent-tier), code-dowiz-can't-vet, server-side.
-- Firecracker(~125ms-boot, <5MiB/VM, Apache-2.0, powers-AWS-Lambda/Fargate+Fly-Machines) vs Cloud-Hypervisor(~200ms,
+- Firecracker(~125ms-boot, <5MiB/VM, Apache-2.0, powers-AWS-Lambda/Fargate+the legacy host-Machines) vs Cloud-Hypervisor(~200ms,
   more-features) vs Kata(OCI-wrapper-around-either, "VM=security-boundary"). D3-note: dowiz-decentralized-non-hyperscale
   → Kata-on-containerd-fits-operationally BUT Kata=OCI-container-wrapper → CONFLICTS-«zero-OCI» → для-zero-OCI-decision =
   Firecracker-direct OR unikernel(NanoVMs/OPS Phase-3), NOT-Kata.

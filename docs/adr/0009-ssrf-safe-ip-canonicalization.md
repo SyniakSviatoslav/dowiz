@@ -6,7 +6,7 @@
 - Supersedes/relates: red-team `D1-appsec-authz.md` F4 (SSRF via IPv4-mapped IPv6), quick-win #10 (shared hook bundle so no route registers a fetch without the guard).
 
 ## Context
-The legacy SSRF guard (`isPrivateIp` / `assertPublicUrl`) classified IPv4 numerically but only **string-matched** IPv6 (`::1`, `fc*`, `fd*`, `fe80*`, `::`). An IPv4-mapped IPv6 literal such as `::ffff:169.254.169.254` matched none of these, and because `net.isIP("::ffff:169.254.169.254") === 6` the guard skipped DNS resolution and trusted the literal — reaching the cloud **metadata service** and Fly 6PN internal hosts (D1-F4, HIGH, confirmed in code). Root cause: the guard trusted `isIP()===6` literals **without unwrapping the embedded IPv4**.
+The legacy SSRF guard (`isPrivateIp` / `assertPublicUrl`) classified IPv4 numerically but only **string-matched** IPv6 (`::1`, `fc*`, `fd*`, `fe80*`, `::`). An IPv4-mapped IPv6 literal such as `::ffff:169.254.169.254` matched none of these, and because `net.isIP("::ffff:169.254.169.254") === 6` the guard skipped DNS resolution and trusted the literal — reaching the cloud **metadata service** and legacy private network internal hosts (D1-F4, HIGH, confirmed in code). Root cause: the guard trusted `isIP()===6` literals **without unwrapping the embedded IPv4**.
 
 ## Decision
 ANY owner-side or node-side code that dereferences a URL/IP MUST canonicalize before classifying, via a **single shared, tested helper** — no route registers a fetch without it (the red-team's structural "shared hook bundle" fix, D1 quick-win #10):

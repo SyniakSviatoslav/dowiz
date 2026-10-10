@@ -22,7 +22,7 @@ was deleted:
 - `79ef316f6` + `db766de47` (2026-07-13, "remove legacy JS/TS thin-layer, kernel is now sole source
   of truth") deleted **`apps/web`** (Storefront/Admin/Courier SPA), **`packages/ui`** (including ALL
   of i18n), **`packages/domain`**, **`packages/shared-types`**.
-- `fce5738b0` quarantined `apps/api`, `apps/worker`, `packages/db`, `fly.toml` into `attic/`.
+- `fce5738b0` quarantined `apps/api`, `apps/worker`, `packages/db`, `<legacy-deploy-manifest>` into `attic/`.
 - **Verified this session:** `git ls-files 'apps/*'` returns **0 files at HEAD** and **0 on
   `origin/main`**. `apps/web/` on disk holds only stale `dist/` + `node_modules/`.
 

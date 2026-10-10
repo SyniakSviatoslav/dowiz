@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 /**
  * E2E proof for the notification category preference-centre (Unit #1 / Part D-web-UI).
@@ -12,7 +12,7 @@ const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
  *      x-dev-auth-secret header from process.env.DEV_AUTH_SECRET).
  *   3. The category write path (owner PUT → setCategoryPref) deployed.
  *
- * Run: VITE_BASE_URL=https://dowiz-staging.fly.dev DEV_AUTH_SECRET=… \
+ * Run: VITE_BASE_URL=https://qa-durres.dowiz.org DEV_AUTH_SECRET=… \
  *        pnpm exec playwright test e2e/tests/notif-categories.spec.ts --project=desktop --reporter=list
  */
 test.describe('UI: Notification category preference-centre', () => {

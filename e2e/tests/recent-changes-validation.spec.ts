@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Recent Changes Validation — Live https://dowiz.fly.dev', () => {
+test.describe('Recent Changes Validation — Live https://qa-durres.dowiz.org', () => {
 
   // ─── CDN Image Serving ───────────────────────────────────────────
   test('CDN-1: image route serves webp with correct headers', async ({ page }) => {
     // Test that the /images/ route exists and returns proper content-type
-    const res = await page.request.get('https://dowiz.fly.dev/images/products/test/test.webp');
+    const res = await page.request.get('https://qa-durres.dowiz.org/images/products/test/test.webp');
     // 404 is expected since test.webp doesn't exist, but route should exist (not SPA fallback)
     expect([200, 404]).toContain(res.status());
     if (res.status() === 200) {
@@ -17,7 +17,7 @@ test.describe('Recent Changes Validation — Live https://dowiz.fly.dev', () => 
   });
 
   test('CDN-2: image route does not serve SPA HTML', async ({ page }) => {
-    const res = await page.request.get('https://dowiz.fly.dev/images/products/nonexistent/file.webp');
+    const res = await page.request.get('https://qa-durres.dowiz.org/images/products/nonexistent/file.webp');
     expect(res.status()).toBe(404);
     const text = await res.text();
     expect(text).not.toContain('<!DOCTYPE');
@@ -164,7 +164,7 @@ test.describe('Recent Changes Validation — Live https://dowiz.fly.dev', () => 
 
   // ─── Health Check ────────────────────────────────────────────────
   test('HEALTH-1: app serves HTML on root path', async ({ page }) => {
-    const res = await page.request.get('https://dowiz.fly.dev/');
+    const res = await page.request.get('https://qa-durres.dowiz.org/');
     expect(res.status()).toBe(200);
     const text = await res.text();
     expect(text).toContain('<!DOCTYPE html>');

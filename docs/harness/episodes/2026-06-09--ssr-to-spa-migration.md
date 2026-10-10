@@ -8,7 +8,7 @@
   3. Found SPA fallback serves correct React app but SSR intercepts the route
   4. Replaced Preact rendering pipeline with `reply.sendFile('index.html')`
   5. Removed heavy dependencies (ssr-renderer.ts, LRU cache, PII detector) from SSR route
-  6. Deployed to Fly.io
+  6. Deployed to the legacy host
 - **diffs**: 1 file, -72/+7 lines (apps/api/src/routes/public/ssr.ts)
 - **gate_results**: health green, SPA serves correctly
 - **interventions**: none

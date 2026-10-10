@@ -21,7 +21,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'node:url';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 // __dirname is undefined under ESM (the suite runs as ESM), which threw at
 // COLLECTION time and killed the whole Playwright run. Derive it from import.meta.url.

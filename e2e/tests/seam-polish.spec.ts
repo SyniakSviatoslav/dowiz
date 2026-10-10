@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 // Real-UI proof of the final seam-polish fixes (server read-only). Focus: no order-lifecycle
 // terminal state is a dead-end — REJECTED/CANCELLED tracking pages offer an "Order again" exit
 // and a humane, non-accusing reason (F3). Reuses the order-stepper harness.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test seam-polish --project=desktop --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test seam-polish --project=desktop --reporter=list
 const CREDS = { email: 'test@dowiz.com', password: 'test123456' };
 let cachedToken: string | null = null;
 async function ownerToken(request: APIRequestContext): Promise<string> {

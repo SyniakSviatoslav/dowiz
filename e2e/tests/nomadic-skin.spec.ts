@@ -4,8 +4,8 @@ import { test, expect, type Page } from '@playwright/test';
 // default, so each test opts in per-session via localStorage('dos_paper_skin','on'). Verifies
 // the journey scenes render, the honourable-mention credit links the right muse, the storefront
 // adopts the paper world, and login titles are READABLE (locks the contrast fix — the #6 class).
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test nomadic-skin --project=desktop --reporter=list
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test nomadic-skin --project=desktop --reporter=list
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const AWWWARDS = 'awwwards.com/sites/nomadic-tribe';
 
 async function enableSkin(page: Page) {

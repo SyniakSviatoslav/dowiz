@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
 import crypto from 'node:crypto';
 
 // Proof for the post-audit fix batch (C1 checkout contract, Google backend gate).
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test audit-fixes --project=desktop --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test audit-fixes --project=desktop --reporter=list
 
 test('security: Google OAuth backend route is gated (404), not reachable', async ({ request }) => {
   // Was a live 302 to accounts.google.com leaking client_id; now fail-closed when the flag is off.

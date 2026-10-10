@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 // (STOP-1). So:
 //   • the /privacy proofs run anywhere the build is deployed (the route is ungated);
 //   • the form proofs self-skip unless the gate is enabled on the target build.
-// Run (post-launch, flag on): VITE_BASE_URL=https://dowiz.fly.dev pnpm exec playwright
+// Run (post-launch, flag on): VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright
 //   test soft-access-gate --reporter=list
 
 test.describe('Soft access gate — /privacy (ungated, GDPR consent link target)', () => {

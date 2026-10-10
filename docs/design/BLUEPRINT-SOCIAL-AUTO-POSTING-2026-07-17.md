@@ -520,11 +520,11 @@ live-tested single-tenant (operator's own venue holds a role on the app) before 
 
 ### 6.2 Decision — media ingestion for ByUrl platforms (O-SOC-1: needs an operator ruling)
 
-| Criterion | Existing public app host (Fly) serves renditions | R2/CDN bucket | Per-venue self-hosted URL |
+| Criterion | Existing public app host (the legacy host) serves renditions | R2/CDN bucket | Per-venue self-hosted URL |
 |---|---|---|---|
 | Works for Meta `image_url` | Yes | Yes | Yes but fragile (venue uptime) |
 | Works for TikTok `PULL_FROM_URL` | Only if dowiz domain is TikTok-verified | Same requirement | Unrealistic (per-venue domain verification) |
-| Repo reality | Fly deploy exists today | **Off-Hetzner R2 was previously blocked** (docker-swap arc) — unresolved | Contradicts "it just works" for owners |
+| Repo reality | the legacy host deploy exists today | **Off-Hetzner R2 was previously blocked** (docker-swap arc) — unresolved | Contradicts "it just works" for owners |
 | Sovereignty posture | Canonical-operator convenience, venue may self-host later (M5) | Same | Purest but impractical now |
 
 **DECISION: deferred to the operator as O-SOC-1**, with a flagged-overridable recommendation:

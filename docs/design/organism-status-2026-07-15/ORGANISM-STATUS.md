@@ -42,8 +42,8 @@ but *all* governance hooks and *all* JS/TS everywhere, including the live produc
   longer exist.
 - `apps/api` is gone from the tree entirely; `apps/web` retains only `node_modules`/`dist` (a stale
   build), no source.
-- **Good news**: `dowiz.fly.dev` and `dowiz-staging.fly.dev` both return 200 right now — deployed
-  Fly artifacts are independent of the working-tree checkout, so nothing customer-facing is down.
+- **Good news**: the legacy host and the legacy host both return 200 right now — deployed
+  the legacy host artifacts are independent of the working-tree checkout, so nothing customer-facing is down.
   There's also a real, tested Rust replacement already in place for static serving
   (`tools/native-spa-server`, axum-based, its own integration tests) — this reads as a prepared
   cutover, not a reckless deletion, whatever you decide about the scope.

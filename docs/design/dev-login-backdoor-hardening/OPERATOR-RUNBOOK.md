@@ -5,20 +5,20 @@ Engineering is done and proven on staging (commits `5da9d136` + `ef0954c9` on
 access this session does not have). **The prod backdoor is LIVE until step 1.**
 
 ## 0. (verified) Current state
-- `POST https://dowiz.fly.dev/api/auth/local/login {test@dowiz.com/test123456}` → **HTTP 200, owner JWT** (backdoor live; `DEV_AUTH_SECRET` still set on prod).
-- Staging (`dowiz-staging`) is fully migrated to the new design: `ALLOW_DEV_LOGIN=true`, `JWT_DEV_KID=dev` + dev keypair, `NODE_ENV=development`, dev-login + mock-auth verified working with dev-kid tokens.
+- `POST https://qa-durres.dowiz.org/api/auth/local/login {test@dowiz.com/test123456}` → **HTTP 200, owner JWT** (backdoor live; `DEV_AUTH_SECRET` still set on prod).
+- The former staging app (`dowiz-staging`) was fully migrated to the new design: `ALLOW_DEV_LOGIN=true`, `JWT_DEV_KID=dev` + dev keypair, `NODE_ENV=development`, dev-login + mock-auth verified working with dev-kid tokens.
 
 ## 1. IMMEDIATE — kill the live backdoor (do now, before anything else)
 ```
-flyctl secrets unset DEV_AUTH_SECRET -a dowiz   # restarts prod; backdoor dies on restart
+wrangler secret delete DEV_AUTH_SECRET   # removes it from prod; restarts prod; backdoor dies on restart
 ```
 Side effect: the current prod deploy-validation E2E (mock-auth on prod) will 404 on the
 next push until the CI redesign (step 4) lands. That is expected — do NOT "fix" it by
-re-adding the secret. `flyctl deploy` itself still succeeds.
+re-adding the secret. the legacy deploy itself still succeeds.
 
 ## 2. Pin prod NODE_ENV (the boot-guard + release-guard depend on it)
 ```
-flyctl secrets set NODE_ENV=production -a dowiz   # if not already set to exactly 'production'
+wrangler secret put NODE_ENV   # if not already set to exactly 'production'
 ```
 After step 4 ships, the release_command will refuse the rollout if this is wrong.
 
@@ -34,7 +34,7 @@ invalidates it before expiry. Rotate `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` + bump `
   `ci.yml` is a protected path needing manual approval. It moves the authenticated E2E
   to a pre-deploy staging gate and replaces the prod job's 4 backdoor-dependent steps
   with the unauthenticated `e2e/tests/prod-smoke.spec.ts`.
-- Add GitHub repo secrets for the staging gate: `FLY_API_TOKEN_STAGING`,
+- Add GitHub repo secrets for the staging gate:
   `DEV_AUTH_SECRET` (staging = `stg-e2e-secret`), `JWT_DEV_KID`, `JWT_DEV_PRIVATE_KEY`,
   `JWT_DEV_PUBLIC_KEY`, `DEV_LOGIN_EMAIL`, `DEV_LOGIN_PASSWORD`.
 

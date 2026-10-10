@@ -2,7 +2,7 @@
 
 > Single config node + service registry for the agentic toolchain.
 > Companion to the build plan (`DeliveryOS-Tooling-Integration-Build-Plan`, 2026-06-17).
-> Dev/agentic plane only. Product plane (PostHog on Fly/Supabase) is tracked separately.
+> Dev/agentic plane only. Product plane (PostHog) is tracked separately.
 > Box: 4 vCPU (AMD EPYC-Genoa) · 7.6 GiB RAM (no swap) · ~68 GB free · ≈CPX31-class.
 
 ## Provider injection (the two seams — lay once, all tools pull from here)

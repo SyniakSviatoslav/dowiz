@@ -3,7 +3,7 @@ import fs from 'node:fs';
 
 // Mobile-first polish + proof: test@dowiz.com must see the Dubin & Sushi (demo) data,
 // and key screens must render clean at a phone viewport.
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const SHOTS = 'e2e/artifacts/mobile-polish';
 test.use({ viewport: { width: 390, height: 844 } });
 

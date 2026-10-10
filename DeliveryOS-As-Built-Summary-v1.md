@@ -20,7 +20,7 @@
 
 **What this is:** Dowiz is an Albanian-market SaaS delivery platform for restaurants. Three roles: Client (orders food), Owner (manages restaurant), Courier (delivers). Mobile-first, 77% cash payments.
 
-**Deployment reality:** N=1 on Supabase Free (operational pool 8 connections, session pool 3), Fly.io single instance, Cloudflare for DNS/CDN. ~50 pilot restaurants planned. Solo developer.
+**Deployment reality:** N=1 on Supabase Free (operational pool 8 connections, session pool 3), single instance, Cloudflare for DNS/CDN. ~50 pilot restaurants planned. Solo developer.
 
 **What's built (as evidenced by code):**
 

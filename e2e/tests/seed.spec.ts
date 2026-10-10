@@ -13,7 +13,7 @@ import { test, expect } from '@playwright/test';
  * Runs against VITE_BASE_URL (defaults to prod, per the Mandatory Proof Rule).
  */
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 type MockAuth = { access_token: string; userId: string; activeLocationId: string };
 

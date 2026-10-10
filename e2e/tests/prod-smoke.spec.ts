@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
 // Non-serial, self-contained: each test stands alone. The public storefront slug comes
 // from PROD_SMOKE_SLUG (a seeded public location), NOT from an authenticated owner call.
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const SLUG = process.env.PROD_SMOKE_SLUG || 'demo';
 
 test.describe('Prod smoke — unauthenticated liveness + public reads', () => {

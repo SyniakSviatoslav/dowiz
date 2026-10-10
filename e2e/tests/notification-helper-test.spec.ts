@@ -12,7 +12,7 @@ test.describe('Notification Helper Tests', () => {
   
   test('should be able to get owner token', async () => {
     // Test that we can get an owner token
-    const BASE_URL = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+    const BASE_URL = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
     const authRes = await fetch(`${BASE_URL}/api/dev/mock-auth`, { method: 'POST' });
     expect(authRes.status()).toBe(200);
     const authBody = await authRes.json();

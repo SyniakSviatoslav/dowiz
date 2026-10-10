@@ -23,7 +23,7 @@ endpoints = [
 ]
 
 for method, path, body in endpoints:
-    url = f'https://dowiz.fly.dev{path}'
+    url = f'https://qa-durres.dowiz.org{path}'
     try:
         req = urllib.request.Request(url, method=method)
         if body:

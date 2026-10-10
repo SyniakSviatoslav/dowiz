@@ -38,7 +38,7 @@ Repo's own (compose freely): `impeccable` · `taste-skill` · `design-taste-fron
 1. Read the brief; pull only fitting skills (no mechanical rule-application).
 2. Build against brand tokens + the constraints above.
 3. **`/critique-screen`** on a real screenshot; resolve every **P1** before "done".
-4. **Prove it**: Playwright E2E vs `https://dowiz.fly.dev` (or `VITE_BASE_URL`) with `toBeVisible()`/`toContainText()` on real DOM. Typecheck/build ≠ UI proof.
+4. **Prove it**: Playwright E2E vs `https://qa-durres.dowiz.org` (or `VITE_BASE_URL`) with `toBeVisible()`/`toContainText()` on real DOM. Typecheck/build ≠ UI proof.
 
 ## Anti-slop tells to kill on sight
 

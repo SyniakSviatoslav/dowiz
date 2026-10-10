@@ -2,7 +2,7 @@
 
 ## Application Overview
 
-Comprehensive Playwright test plan for the six UI improvements shipped to staging (https://dowiz-staging.fly.dev) on feat/golive-remediation. Every test targets real DOM elements via data-testid attributes confirmed in source code and/or live page inspection. Tests are structured as independent, stateless scenarios using expect(...).toBeVisible() / toContainText() / not.toBeVisible() on real elements. Where a scenario requires seeded state not available on staging today it is marked BLOCKED with the exact seed operation needed. The test owner for all specs is test@dowiz.com / test123456. The storefront demo slug is "demo". The admin routes are /admin/* and the courier routes are /courier/*. Login for owners goes via /login (NOT /admin/login). Live exploration confirmed: venue-state-chip (data-state=open) renders on /s/demo; owner-alert-enable (data-state=blocked) renders on /admin dashboard; schedule-editor renders on /admin/menu; modifier-group testid exists in code but the demo products have no modifier groups seeded; courier-offer-timer and courier-advance-action require an active courier session with a live dispatched task.
+Comprehensive Playwright test plan for the six UI improvements shipped to staging (the legacy host) on feat/golive-remediation. Every test targets real DOM elements via data-testid attributes confirmed in source code and/or live page inspection. Tests are structured as independent, stateless scenarios using expect(...).toBeVisible() / toContainText() / not.toBeVisible() on real elements. Where a scenario requires seeded state not available on staging today it is marked BLOCKED with the exact seed operation needed. The test owner for all specs is test@dowiz.com / test123456. The storefront demo slug is "demo". The admin routes are /admin/* and the courier routes are /courier/*. Login for owners goes via /login (NOT /admin/login). Live exploration confirmed: venue-state-chip (data-state=open) renders on /s/demo; owner-alert-enable (data-state=blocked) renders on /admin dashboard; schedule-editor renders on /admin/menu; modifier-group testid exists in code but the demo products have no modifier groups seeded; courier-offer-timer and courier-advance-action require an active courier session with a live dispatched task.
 
 ## Test Scenarios
 
@@ -15,7 +15,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
 **File:** `e2e/tests/client/venue-state.spec.ts`
 
 **Steps:**
-  1. Navigate to https://dowiz-staging.fly.dev/s/demo and wait for the page title 'Dubin & Sushi' to appear.
+  1. Navigate to the legacy host/s/demo and wait for the page title 'Dubin & Sushi' to appear.
     - expect: Page title contains 'Dubin & Sushi'
   2. Assert that [data-testid='venue-state-chip'] is visible in the header section.
     - expect: expect(page.locator('[data-testid="venue-state-chip"]')).toBeVisible()
@@ -32,7 +32,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
 **Steps:**
   1. SEED OPERATION: Using an authenticated owner JWT (POST /api/auth/local/login with test@dowiz.com/test123456), PATCH /api/owner/locations/:locationId/hours to set hours_json that marks the current time as closed (e.g. empty hours_json or hours that exclude the current UTC time). Alternatively, set delivery_paused=true.
     - expect: API returns 200 with updated location record
-  2. Navigate to https://dowiz-staging.fly.dev/s/demo.
+  2. Navigate to the legacy host/s/demo.
     - expect: Page loads without error
   3. Assert that [data-testid='venue-closed-banner'] is visible.
     - expect: expect(page.locator('[data-testid="venue-closed-banner"]')).toBeVisible()
@@ -49,7 +49,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
 **Steps:**
   1. SEED OPERATION: Authenticate as owner (POST /api/auth/local/login). PATCH /api/owner/locations/:locationId/kitchen-busy with body { busy_until: '<ISO timestamp 2 hours from now>' }. Confirm response includes kitchenBusyUntil.
     - expect: API returns 200 with kitchenBusyUntil set to future timestamp
-  2. Navigate to https://dowiz-staging.fly.dev/s/demo.
+  2. Navigate to the legacy host/s/demo.
     - expect: Page loads without error
   3. Assert [data-testid='venue-busy-banner'] is visible and shows a 'kitchen busy' message.
     - expect: expect(page.locator('[data-testid="venue-busy-banner"]')).toBeVisible()
@@ -69,7 +69,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
 **Steps:**
   1. SEED OPERATION: Authenticate as owner. PATCH /api/owner/locations/:locationId/products/:productId with { available: false } for one product visible on /s/demo.
     - expect: API returns 200; product.available=false
-  2. Navigate to https://dowiz-staging.fly.dev/s/demo and wait for product cards to render.
+  2. Navigate to the legacy host/s/demo and wait for product cards to render.
     - expect: Menu grid is visible
   3. Assert that [data-testid='item-state-chip'] is visible on at least one product card.
     - expect: expect(page.locator('[data-testid="item-state-chip"]').first()).toBeVisible()
@@ -160,7 +160,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
 **File:** `e2e/tests/admin/owner-alert.spec.ts`
 
 **Steps:**
-  1. Navigate to https://dowiz-staging.fly.dev/login. Fill email=test@dowiz.com, password=test123456, click 'Hyr'. Wait for redirect to /admin.
+  1. Navigate to the legacy host/login. Fill email=test@dowiz.com, password=test123456, click 'Hyr'. Wait for redirect to /admin.
     - expect: URL becomes /admin
     - expect: Dashboard content is visible
   2. In a fresh browser context (no AudioContext gesture yet), assert that [data-testid='owner-alert-enable'] is visible.
@@ -224,7 +224,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
 **Steps:**
   1. SEED OPERATION: Authenticate as owner. Create a modifier group via POST /api/owner/locations/:locationId/modifier-groups with { name: 'Size', min_select: 1, max_select: 1, required: true, display_type: 'radio' }. Add modifiers (e.g. Small, Large) to the group. Attach the group to a product via PUT /api/owner/locations/:locationId/products/:productId/modifier-groups. Repeat for a second group with display_type='checkbox' (max_select>1).
     - expect: Modifier groups created and attached to product; product appears on /s/demo
-  2. Navigate to https://dowiz-staging.fly.dev/s/demo. Click the product card that now has modifier groups. Wait for the modal dialog to open.
+  2. Navigate to the legacy host/s/demo. Click the product card that now has modifier groups. Wait for the modal dialog to open.
     - expect: Modal (role=dialog) is visible
     - expect: Modal title matches the product name
   3. Assert at least one [data-testid='modifier-group'] element is visible inside the modal.
@@ -269,7 +269,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
 **File:** `e2e/tests/admin/menu-schedule.spec.ts`
 
 **Steps:**
-  1. Log in as test@dowiz.com / test123456 and navigate to https://dowiz-staging.fly.dev/admin/menu.
+  1. Log in as test@dowiz.com / test123456 and navigate to the legacy host/admin/menu.
     - expect: Menu manager page loads; category list or product grid is visible
   2. Assert [data-testid='schedule-editor'] is visible.
     - expect: expect(page.locator('[data-testid="schedule-editor"]')).toBeVisible()
@@ -325,7 +325,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
     - expect: Courier JWT obtained and stored
   2. SEED OPERATION: Dispatch a delivery order to the courier. Place a new order on /s/demo as a customer. As the owner, confirm it (CONFIRMED), set it to PREPARING, then READY. The dispatch system should offer it to the courier. Alternatively, directly PATCH the assignment to 'offered' status for the courier ID.
     - expect: Assignment in 'offered' state exists for the courier
-  3. Navigate to https://dowiz-staging.fly.dev/courier (the TasksPage). Wait for the task card to appear.
+  3. Navigate to the legacy host/courier (the TasksPage). Wait for the task card to appear.
     - expect: At least one task card is visible on the courier tasks page
   4. Assert [data-testid='courier-offer-timer'] is visible with a data-remaining attribute containing a positive integer.
     - expect: expect(page.locator('[data-testid="courier-offer-timer"]')).toBeVisible()

@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
 import crypto from 'node:crypto';
 
 // Courier offer timer + accept/decline proof (testplan §6) against deployed staging.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev DEV_AUTH_SECRET=stg-e2e-secret \
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org DEV_AUTH_SECRET=stg-e2e-secret \
 //        pnpm exec playwright test offer-timer --project=desktop --reporter=list
 //
 // HARNESS (no product code — reuses the flag-gated /api/dev test helpers, ADR-0003):
@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 // is set in the env). On a prod-shaped deploy these tests will skip-fail at setup with a
 // clear message rather than fake green.
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 // /api/orders is rate-limited ~5/min per IP, so we place exactly ONE real order for the
 // whole file and reset its single assignment between tests (create-assignment is idempotent

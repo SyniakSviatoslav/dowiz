@@ -390,9 +390,9 @@ revokes access with no password-reset analogue anywhere.
    clause numbers are not to be quoted downstream from this doc.
 2. **The mesh-doc "§1 finding #2" citation** from the tasking was never located by grep (§1.1
    caveat); if the operator relies on that doc's wording elsewhere, it should be re-found manually.
-3. **Whether any *other* live service still runs the old TS stack** (e.g. a stale Fly machine on
-   dowiz.fly.dev deployed from a pre-deletion commit) was not probed — no deploy state was queried,
-   only the repo. If a legacy Fly app is still serving, it changes nothing about the forward
+3. **Whether any *other* live service still runs the old TS stack** (e.g. a stale the legacy host machine on
+   the legacy host deployed from a pre-deletion commit) was not probed — no deploy state was queried,
+   only the repo. If a legacy the legacy host app is still serving, it changes nothing about the forward
    design but would be a live unauthenticated-or-old-auth surface worth a separate check.
 4. **Consumer-app SHA-1-only behavior** ("Google Authenticator ignores the algorithm parameter") is
    knowledge-based, not re-tested in 2026 app versions; it is why §5.1 includes SHA-1 at all.
@@ -403,7 +403,7 @@ revokes access with no password-reset analogue anywhere.
 7. **`packages/platform` stub deps** (`jose`, `pg`) — assumed dead because no source exists; not
    verified that no external tooling still reads those manifests.
 - Bucket triage: items 1, 2, 4–7 are routine stated assumptions. **Item 3 is the "1-in-4" risk** —
-  recommend the operator (or next session) run `flyctl status -a dowiz` before treating "no live
+  recommend the operator (or next session) run a status check before treating "no live
   auth surface" as globally true rather than repo-true.
 
 **Q2 — the biggest thing I might be missing (one honest answer, no hedge):** This blueprint answers

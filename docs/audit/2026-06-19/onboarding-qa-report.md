@@ -1,6 +1,6 @@
 # Onboarding Wizard — QA Report
 
-**Target:** https://dowiz-staging.fly.dev (staging)
+**Target:** the legacy host (staging)
 **Date:** 2026-06-19
 **Surface:** `/admin/onboarding` — the 9-step owner onboarding wizard
 **Method:** agent-browser exploratory QA (desktop + mobile viewports) against a **fresh owner** with no location membership, plus a "hater" critical UX pass over all 9 steps. Evidence is screenshots in `qa-shots/` (no video — `ffmpeg` unavailable in sandbox).
@@ -92,7 +92,7 @@
 
 ## Environment limitations
 
-- Sandbox cannot deploy/migrate staging directly via the app; staging is warmed via the QA harness `wakeStaging()` (Fly auto-stops → cold-start 503s are expected, not bugs). See memory `deploy-topology`.
+- Sandbox cannot deploy/migrate staging directly via the app; staging is warmed via the QA harness `wakeStaging()` (the legacy host auto-stops → cold-start 503s are expected, not bugs). See memory `deploy-topology`.
 - No video (`ffmpeg` not installed) — evidence is screenshots only.
 - O1 was captured but not root-caused in this pass (see its "Next step").
 
@@ -119,7 +119,7 @@
 ### Reliability hardening (server / sockets — out of original QA scope, addressed same branch)
 Driven by a "service falls down sometimes / realtime not reliable" report. See diagnostic in the change summary; fixes:
 - **Process guards** (`server.ts`): `unhandledRejection`/`uncaughtException` now logged + sent to Sentry instead of crashing the single web process (which dropped every WebSocket).
-- **Liveness probe** (`health.ts` `GET /livez`): cheap endpoint so Fly's health check no longer rides the heavy 11-query `/health` (+5s Telegram) that could exceed the 3s timeout and restart the machine. ⚠️ **Manual step:** point `fly.toml`'s `http_service.checks.path` at `/livez` (file is in a protected zone — not auto-edited).
+- **Liveness probe** (`health.ts` `GET /livez`): cheap endpoint so the legacy host's health check no longer rides the heavy 11-query `/health` (+5s Telegram) that could exceed the 3s timeout and restart the machine. ⚠️ **Manual step:** point `<legacy-deploy-manifest>`'s `http_service.checks.path` at `/livez` (file is in a protected zone — not auto-edited).
 - **Realtime reconnect** (`message-bus.ts`, `useWebSocket.ts`): removed the permanent give-up after 5 reconnect attempts on **both** the server LISTEN/NOTIFY bus and the browser socket; the client also resumes on `online`/`focus`/`visibilitychange`. Prevents silent realtime death after a deploy/blip.
 - **NOTIFY safety** (`message-bus.ts`): publish on the pool (not the dedicated LISTEN client) + 8000-byte payload guard that truncates to `{type, data.id, _truncated}` instead of silently dropping the event. Proof: `packages/platform/tests/message-bus-notify.test.ts` — **passing**.
 - **WS authorization** (`websocket.ts`): owner `subscribe` now verifies location membership (closes a cross-tenant live-feed leak); courier `courier:*` scoped to their own room.

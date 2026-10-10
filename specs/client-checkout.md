@@ -15,7 +15,7 @@ DeliveryOS is a multi-tenant food-delivery SaaS. The public client ordering jour
 **File:** `specs/client-checkout.spec.ts`
 
 **Steps:**
-  1. Navigate to https://dowiz.fly.dev/s/test-slug?dev=true and wait for product cards to load.
+  1. Navigate to https://qa-durres.dowiz.org/s/test-slug?dev=true and wait for product cards to load.
     - expect: URL contains /s/test-slug
     - expect: At least one article.product-card element is visible
     - expect: The hero section h1 contains the restaurant name (e.g. 'Dubin')
@@ -70,7 +70,7 @@ DeliveryOS is a multi-tenant food-delivery SaaS. The public client ordering jour
 **File:** `specs/client-checkout-edge.spec.ts`
 
 **Steps:**
-  1. Navigate directly to https://dowiz.fly.dev/s/test-slug/checkout?dev=true without adding any items to the cart first (fresh session, no localStorage cart).
+  1. Navigate directly to https://qa-durres.dowiz.org/s/test-slug/checkout?dev=true without adding any items to the cart first (fresh session, no localStorage cart).
     - expect: The checkout form is NOT rendered
     - expect: A message containing 'Cart is empty' (or localised variant, key cart.empty) is visible
     - expect: A 'Back' button is visible below the empty-cart message
@@ -88,7 +88,7 @@ DeliveryOS is a multi-tenant food-delivery SaaS. The public client ordering jour
 **File:** `specs/client-checkout-edge.spec.ts`
 
 **Steps:**
-  1. Navigate to https://dowiz.fly.dev/s/test-slug?dev=true and add one item to the cart.
+  1. Navigate to https://qa-durres.dowiz.org/s/test-slug?dev=true and add one item to the cart.
     - expect: The cart FAB (#cartFabBtn) is visible showing '1'
   2. Click the cart FAB, then click 'Checkout' to navigate to /s/test-slug/checkout.
     - expect: URL matches /checkout

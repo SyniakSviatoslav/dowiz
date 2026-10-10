@@ -1,5 +1,5 @@
 import urllib.request, json
-resp = urllib.request.urlopen('https://dowiz.fly.dev/public/locations/demo/menu')
+resp = urllib.request.urlopen('https://qa-durres.dowiz.org/public/locations/demo/menu')
 data = json.loads(resp.read())
 lid = data.get('location', {}).get('id', 'NONE')
 print('Location ID:', lid)

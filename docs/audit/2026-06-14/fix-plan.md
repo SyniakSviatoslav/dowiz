@@ -124,13 +124,13 @@ pnpm verify:no-raw-status-update
 
 After all fixes:
 ```bash
-VITE_BASE_URL=https://dowiz.fly.dev npx playwright test e2e/tests/flow-core-lifecycles.spec.ts --project=mobile --reporter=list
+VITE_BASE_URL=<legacy-host-url> npx playwright test e2e/tests/flow-core-lifecycles.spec.ts --project=mobile --reporter=list
 # Expect: 32/32 passed, 0 skipped, 0 failed
 ```
 
 After notification fix:
 ```bash
 # Place test order via API, check notification_outbox_audit
-curl -X POST https://dowiz.fly.dev/api/orders -H 'Content-Type: application/json' -d '{...}'
+curl -X POST the legacy host/api/orders -H 'Content-Type: application/json' -d '{...}'
 # Verify audit entry status = 'delivered'
 ```

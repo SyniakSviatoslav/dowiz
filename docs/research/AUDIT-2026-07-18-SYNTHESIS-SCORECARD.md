@@ -14,7 +14,7 @@ Grades A–F, same scale the ARCHITECT report already established for cross-cons
 | **PROTOCOL** | C+ — real crypto (a genuine SSR-2020 forgery independently caught and fixed), but 2 live regressions (no_std RED, insecure-TLS default-on) confirmed AGAIN this pass, still open | C — event-log fsync ceiling measured at ~1,650 durable events/s, never benchmarked in any design doc that assumes it | B — ~70% built-and-proven delivery-domain remains real, unchanged by this audit | D — 100% stranded from dowiz's own kernel; a lever this large sitting unconnected is itself a risk (drift, bit-rot, the exact pattern already found 3x this session) |
 | **DELIVERY** | **F** — the one loadable page (`web/index.html`) crashes instantly in any real browser (imports Node's `fs`, calls `process.exit`); root `/` serves a placeholder Figma mockup of a fictional pizzeria | F — nothing to measure, 0% deployable | D — real design substrate exists (Sea&Sheet, narrative-cinematic layer) but zero of it reaches a screen | **F** — the interface actively misrepresents its own state (README claims rendering that doesn't happen) |
 | **AGENT** | D — `AgentLoop` has zero callers; MCP server has no binary; local-browser MCP design is 100% unbuilt | F — 0 of 20 designed metric IDs emit anywhere; no observable throughput exists to grade | C — Ollama client is real and works; fine-tuning correctly deferred with real criteria (a genuine strength, not just an absence) | C — mostly inert rather than actively dangerous, but inert-and-unmonitored is its own risk class |
-| **ECOSYSTEM/OPS** | **F** — Telegram monitoring root-caused as fully broken (5 Python scripts deleted 2026-07-17, 0 of 5 Rust replacements ever compiled or wired, exporter dead 37+ hours); `pgrust.service` targets a binary that doesn't exist | F — nothing running to measure | D — real infra exists on paper (Hetzner object storage, disk-cleanup done, backup topology designed) | **F (CRITICAL)** — `.env` mode 666 with a single, un-backed-up copy of the courier PII encryption key + JWT signing key + CF token; separately, `dowiz.fly.dev` is LIVE PRODUCTION (HTTP 200) serving source code deleted from the repo 5 days ago — unpatchable by construction |
+| **ECOSYSTEM/OPS** | **F** — Telegram monitoring root-caused as fully broken (5 Python scripts deleted 2026-07-17, 0 of 5 Rust replacements ever compiled or wired, exporter dead 37+ hours); `pgrust.service` targets a binary that doesn't exist | F — nothing running to measure | D — real infra exists on paper (Hetzner object storage, disk-cleanup done, backup topology designed) | **F (CRITICAL)** — `.env` mode 666 with a single, un-backed-up copy of the courier PII encryption key + JWT signing key + CF token; separately, the legacy host is LIVE PRODUCTION (HTTP 200) serving source code deleted from the repo 5 days ago — unpatchable by construction |
 
 **Overall system grade: D+.** Real, load-bearing engineering strength exists in CORE and PROTOCOL
 (independently confirmed by all 5 reviewers, not just asserted). Everything from DELIVERY outward
@@ -29,7 +29,7 @@ actively lying about its own state. The gap between the two halves is the whole 
 - TORVALDS: telemetry was "replaced" by a commit message, the replacement was never compiled.
 - PERFORMANCE: a benchmark-regression fix (REGRESSION-LEDGER row 23) silently re-opened; the gate
   that should have caught the re-opening is itself fail-open by construction (3 independent ways).
-- ARCHITECT: `dowiz.fly.dev` still answers HTTP 200 for source that's been gone 5 days — nobody
+- ARCHITECT: the legacy host still answers HTTP 200 for source that's been gone 5 days — nobody
   checked whether "deleted" meant "also stopped serving."
 - HERZOG: a README asserts rendering that has never once produced a pixel.
 
@@ -43,7 +43,7 @@ currently 0% wired** (Performance's finding) — the fox is still designing the 
 **NO-GO for real orders. Months away, not weeks.** No process on this machine accepts an order
 on any channel. The single fastest real path to a live "first order" is not forward — it's
 reverting the purge (`79ef316f6`) and patching the OLD stack that's still, right now, silently
-serving real traffic on `dowiz.fly.dev`. That is the honest, load-bearing fact this entire audit
+serving real traffic on the legacy host. That is the honest, load-bearing fact this entire audit
 converges on from five independent angles.
 
 ## 4. Immediate action required (severity CRITICAL, not deferred to a future wave)
@@ -54,7 +54,7 @@ none require a design decision — all are mechanical/operational:
 1. **`.env` mode 666 → 600.** One command, zero design risk, closes an actively-exploitable
    write-access hole on the courier PII encryption key. **Awaiting explicit operator go-ahead**
    (asked directly, not yet confirmed as of this synthesis).
-2. **`dowiz.fly.dev` zombie.** Decide explicitly: kill it, or restore its source so it's patchable
+2. **the legacy host zombie.** Decide explicitly: kill it, or restore its source so it's patchable
    again. Silently leaving it running unpatchable, serving real customers, is the worst of the
    three options and is the current default.
 3. **Telegram/monitoring blindness.** Either finish compiling+wiring the 5 Rust replacements, or
@@ -89,7 +89,7 @@ Full detail, evidence, and fix-guidance per finding: the 5 source reports in `do
 
 ### Tier 0 — BLOCKED on operator go-ahead (red-line: secrets/auth/prod), fix is mechanical
 1. **`.env` mode 666 → 600** — write hole on courier PII key + JWT key + CF token. One command. **BLOCKER: awaiting operator confirm** (§4.1).
-2. **`dowiz.fly.dev` zombie** — LIVE PROD serving source deleted 5 days ago, unpatchable by construction. Decide: kill or restore source. **BLOCKER: operator decision** (§4.2).
+2. **the legacy host zombie** — LIVE PROD serving source deleted 5 days ago, unpatchable by construction. Decide: kill or restore source. **BLOCKER: operator decision** (§4.2).
 3. **Telegram/monitoring blindness** — finish 5 Rust replacements OR revert to deleted Python stack. **BLOCKER: operator decision** (§4.3).
 
 ### Tier 1 — CRITICAL correctness (silent data corruption / safety check that lies) — NOT blocked, dispatch now

@@ -2,15 +2,15 @@
 
 > Дата: 2026-07-13 · 7 паралельних дослідницьких смуг + інвентар, зведені для
 > [OPS-RELIABILITY-PLAN.md](./OPS-RELIABILITY-PLAN.md) + [BLUEPRINTS](./BLUEPRINTS-OPS-RELIABILITY.md).
-> Операторські рішення: **pgrust одразу** · дроп Fly+Supabase · Cloudflare=edge/hosting-only.
+> Операторські рішення: **pgrust одразу** · дроп legacy host+Supabase · Cloudflare=edge/hosting-only.
 
-## Lane 1 — Supabase→pgrust + Fly/Supabase drop
+## Lane 1 — Supabase→pgrust + legacy host/Supabase drop
 pgrust ([malisper/pgrust], AGPL-3.0) = REAL але EXPERIMENTAL (passes regression, disk-compat PG18.3, BUT extensions
 pgcrypto/PostGIS/pg_cron "not generally compatible yet", not-perf-tuned). Дамп потребує ТІЛЬКИ citext+pgcrypto (обидва
 stock contrib = саме ризикова поверхня pgrust). НЕМАЄ реальної Supabase Auth/Storage/Realtime/Edge залежності (нуль
 @supabase/supabase-js; ролі=RLS-convention-mirror). 76 таблиць, 140 міграцій, 11 RLS-дір (couriers/telegram_login_tokens
 HIGH per D2 red-team). Restore: --no-owner --no-privileges, pre-create-ролі, CREATE EXTENSION, session_replication_role=
-replica, FIX-RLS-not-restore, row-verify. Drop: verify→cutover→24-72h-monitor→Fly-export+destroy→Supabase-delete
+replica, FIX-RLS-not-restore, row-verify. Drop: verify→cutover→24-72h-monitor→the legacy host-export+destroy→Supabase-delete
 (незворотні; PART1-DECOMMISSION runbook exists). Decommission-runbook + D2-RLS-audit already in-repo (today).
 
 ## Lane 2 — Single-pane monitoring + Telegram
@@ -42,7 +42,7 @@ never-destroy-old-key, never-colocate-key-with-backups. ★TOP-GAP=no-off-Hetzne
 
 ## Lane 5 — Cloudflare hardening
 ★Origin-hiding=Cloudflare TUNNEL(cloudflared outbound-only, firewall-deny-all-inbound, FREE)>>IP-allowlist(shared-spoofable).
-DNS: proxy-all+DNSSEC+exposed-IP-audit(old-Fly/R2-records-leak)+delete-stale-subdomains. TLS: Full(Strict)+Origin-CA-cert-
+DNS: proxy-all+DNSSEC+exposed-IP-audit(old-legacy host/R2-records-leak)+delete-stale-subdomains. TLS: Full(Strict)+Origin-CA-cert-
 15yr+min-1.2+HSTS-preload(one-way-door)+AOP-mTLS. WAF: Free-Managed-Ruleset+Bot-Fight+1-rate-limit→OTP+Turnstile-forms+
 custom-/admin; no-broad-geo-block(Balkans+diaspora). Admin: Access-ZeroTrust-free-gating-/admin + hardware-key-2FA-on-CF-
 account + scoped-per-job-tokens(add-Zone:Read, never-Global-Key). Cache: Cache-Rules(cache-/assets/*-bypass-/api/*)+Tiered-
@@ -58,13 +58,13 @@ DTN/BPv7-reliability-over-latency). GAPS-must-now: WAL-G-PITR, gated-prod-deploy
 (D5-F8), Trivy-CI, external-uptime. Later: paid-WAF, SLO, staging-parity, chaos, log-shipping, DNS-failover.
 
 ## Lane 7 — Inventory: CURRENT OPS REALITY
-★D1(2026-07-12 AUTHORITATIVE)=centralized-server DROPPED("no server/central-DB/Supabase/Fly")→apps/api+worker+packages/db
+★D1(2026-07-12 AUTHORITATIVE)=centralized-server DROPPED("no server/central-DB/Supabase/the legacy host")→apps/api+worker+packages/db
 QUARANTINED-to-attic, deploy-job-stripped. LIVE=static-SPA-ONLY(Dockerfile→nginx, 1-CI-gate, NO deploy/server/rate-limit/
-live-health/wired-alerting). BUT main-prod STILL-Fly + .secrets.local(today)-has-live-Supabase/R2/CF-creds=CONTRADICTION.
+live-health/wired-alerting). BUT main-prod STILL-the legacy host + .secrets.local(today)-has-live-Supabase/R2/CF-creds=CONTRADICTION.
 ★REUSABLE-FROM-ATTIC(resurrect-not-rebuild): health.ts(11-checks), rate-limit.ts(token-bucket), timeout.ts, sentry.ts(PII-
 redaction), notifications/*(telegram/email/push+outbox+quiet-hours+retry), backup-{drill,restore,verify,list}.ts, node-pg-
 migrate-140-migrations, boot-guard-pattern, k6-spike.js. ONE-live-primitive=CircuitBreaker(routing-provider). Orphaned=
-audit-sentinel-watchdog(Telegram-escalate, dead-Fly-target→repoint)+stale-visual.yml/e2e/spike.js. bebop2=strong-crypto
+audit-sentinel-watchdog(Telegram-escalate, dead-the legacy host-target→repoint)+stale-visual.yml/e2e/spike.js. bebop2=strong-crypto
 ZERO-reliability(no-retransmit/custody, plaintext-WSS-transport, unenforced-authz per-B3/B2)+ZERO-delivery-domain. 10-
 unreachable-git-blobs-still-have-rotated-keys(remote-scrub OPEN-gate D5-F1). Config=Zod-EnvSchema-~150-keys(targets-retired-
 server). GAPS: no-live-health/rate-limit/OTel/deploy-pipeline/enforced-backup-cadence/bebop2-reliability.

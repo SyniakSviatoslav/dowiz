@@ -1,6 +1,6 @@
 # RELEASE-GATE.md — Post-deploy smoke gate
 
-> Design: 2026-06-12 · Target platform: Fly.io (single-instance, blue-green via `fly deploy`)
+> Design: 2026-06-12 · Target platform: the legacy host (single-instance, blue-green via a deploy)
 > Budget: ≤90s total · Verdict: PASS → promote / FAIL → rollback / INCONCLUSIVE → block
 
 ---
@@ -9,9 +9,9 @@
 
 | Aspect | Detail |
 |---|---|
-| **Platform** | Fly.io — single `fly deploy` replaces the running instance |
-| **Traffic switch** | `fly deploy` (no explicit canary — new instance replaces old when healthy) |
-| **Rollback** | `flyctl deploy --image <previous-image>` or `flyctl releases list; flyctl deploy --image registry.fly.io/dowiz@sha256:...` |
+| **Platform** | the legacy host — single deploy replaces the running instance |
+| **Traffic switch** | deploy (no explicit canary — new instance replaces old when healthy) |
+| **Rollback** | redeploy `<previous-image>` |
 | **Health endpoint** | `GET /health` — returns JSON with per-component status |
 | **Migrations** | `pnpm migrate:up` runs at startup (`node-pg-migrate` in `server.ts` bootstrap) |
 | **Test tenant** | Demo location (`1f609add-062a-4bb5-89bf-d695f963ede6`), account `test@dowiz.com` |
@@ -28,7 +28,7 @@
 | **Sub-checks** | `postgres.status=ok`, `messageBus.status=ok`, `workers.status=ok`, `telegram.status=ok`, `r2.status=ok` |
 | **Budget** | ≤10s — single HTTP request |
 | **Fail condition** | Any critical subsystem non-ok (excluding backup_restore/fallback which are pre-existing known degradations) |
-| **Rollback** | `flyctl deploy --image <previous>` |
+| **Rollback** | redeploy previous image |
 
 ### B2 · Migrations
 | | |
@@ -37,7 +37,7 @@
 | **How** | Query `SELECT name FROM pgmigrations ORDER BY name DESC LIMIT 1` via health endpoint `data` field, or direct HTTP probe |
 | **Budget** | ≤10s |
 | **Fail condition** | Expected migration not applied (schema drift) |
-| **Rollback** | Run `pnpm migrate:down` or `flyctl deploy` previous image |
+| **Rollback** | Run `pnpm migrate:down` or redeploy previous image |
 
 ### B3 · Workers on session connection
 | | |
@@ -46,7 +46,7 @@
 | **Sub-checks** | (a) Send `notify.telegram.send` probe job → wait for `completed` state in `pgboss.job`; (b) Health endpoint shows `messageBus.status=ok` |
 | **Budget** | ≤30s — send + poll for completion (uses connected workers, not a new pool) |
 | **Fail condition** | Probe job not processed within budget → pooler mismatch (jobs enqueued but never consumed) |
-| **Rollback** | `flyctl deploy` previous image |
+| **Rollback** | redeploy previous image |
 
 ### B4 · Config & secrets
 | | |
@@ -55,7 +55,7 @@
 | **How** | (a) Health endpoint shows `telegram.status=ok` (confirms token works); (b) Health endpoint shows `r2.status=ok` |
 | **Budget** | ≤10s — already covered by health check |
 | **Fail condition** | Telegram or R2 check non-ok |
-| **Rollback** | `flyctl deploy` previous image + fix secrets |
+| **Rollback** | redeploy previous image + fix secrets |
 
 ### B5 · Critical end-to-end flow
 | | |
@@ -64,7 +64,7 @@
 | **Steps** | (1) Place test order via `POST /api/orders`; (2) Confirm via `POST .../orders/:id/confirm`; (3) Wait for `notification_outbox_audit` entry with `event=order.confirmed status=delivered`; (4) Verify delivery to test target |
 | **Budget** | ≤30s — order creation + confirm + poll audit |
 | **Fail condition** | Audit entry not created, or status not `delivered` within budget |
-| **Rollback** | `flyctl deploy` previous image |
+| **Rollback** | redeploy previous image |
 
 ### B6 · RLS / tenant isolation
 | | |
@@ -73,7 +73,7 @@
 | **How** | Query with randomly generated UUID as location_id against `/api/owner/locations/:random/...` — expect 404 |
 | **Budget** | ≤10s |
 | **Fail condition** | Returns 200 or leaks data for non-existent location |
-| **Rollback** | `flyctl deploy` previous image |
+| **Rollback** | redeploy previous image |
 
 ### B7 · Public menu has content
 | | |
@@ -82,7 +82,7 @@
 | **How** | Fetch `GET /public/locations/:locationId/menu` — verify ≥1 category with ≥1 product |
 | **Budget** | ≤10s |
 | **Fail condition** | 0 categories or 0 products returned (empty menu = zero orders) |
-| **Rollback** | `flyctl deploy` previous image |
+| **Rollback** | redeploy previous image |
 
 ### B8 · Critical assets load
 | | |
@@ -91,7 +91,7 @@
 | **How** | Fetch SPA route `/s/:slug` HTML → extract `<script src>` and `<link href>` → verify every referenced asset returns 200 |
 | **Budget** | ≤15s |
 | **Fail condition** | Any critical asset returns 4xx/5xx or fails to load |
-| **Rollback** | `flyctl deploy` previous image |
+| **Rollback** | redeploy previous image |
 
 ---
 
@@ -133,10 +133,7 @@ PASS → promote
 
 ### Rollback
 ```bash
-# Get previous release
-flyctl releases list --json | jq -r '.[1].id'
-# Deploy previous
-flyctl deploy --image registry.fly.io/dowiz:deployment-<previous-id>
+# Redeploy the previous release (Cloudflare Worker version; see workers/api)
 ```
 
 ---

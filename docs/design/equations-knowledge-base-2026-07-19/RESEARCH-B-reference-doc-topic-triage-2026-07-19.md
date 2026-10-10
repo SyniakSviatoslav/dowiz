@@ -152,7 +152,7 @@ are present), not new code.
 The single richest group. Most E2/E7 patterns are genuinely present in the kernel.
 
 ### E1 AWS Networking (Subnet, Route Table, IGW, NAT)
-**OUT OF SCOPE.** dowiz deploys on Hetzner + Cloudflare (Fly.io retired 2026-07-18); no AWS/VPC/subnet/
+**OUT OF SCOPE.** dowiz deploys on Hetzner + Cloudflare (the legacy host retired 2026-07-18); no AWS/VPC/subnet/
 NAT anywhere (`grep` hits are false positives on "draws"/entropy). Decorative.
 
 ### E2 Advanced Backend Concepts (the big list)

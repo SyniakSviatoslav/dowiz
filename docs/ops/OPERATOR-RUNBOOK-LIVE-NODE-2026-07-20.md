@@ -86,7 +86,7 @@ exist yet (see task backlog); until it does, don't expect a fresh node to admit 
 
 ## What this runbook does NOT cover (known gaps, not oversights)
 
-- Staging environment — none currently exists (Fly.io, the prior staging host, was fully retired
+- Staging environment — none currently exists (the legacy host, the prior staging host, was fully retired
   2026-07-18; there is no replacement staging tier yet).
 - Cross-mesh backup — every node's durability is currently its own disk plus one vendor-key-scoped
   offsite envelope; there's no second node holding a live copy of this one's data.

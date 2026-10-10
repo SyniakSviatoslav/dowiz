@@ -4,7 +4,7 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
 // the CLOSED venue state: when the demo location is paused, /s/demo shows
 // [data-testid="venue-closed-banner"] and the chip carries data-state="closed".
 //
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test venue-state \
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test venue-state \
 //        --project=desktop --reporter=list
 //
 // CLOSED lever (verified against source):

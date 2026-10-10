@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // Proof for the UI-loop run fixes (2026-06-24). Runs against the deployed app.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test ui-loop-fixes --project=desktop --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test ui-loop-fixes --project=desktop --reporter=list
 // NOTE: requires a deploy of the fix commit — both assertions fail on the pre-fix build (the prior
 // blank /admin/login, and the retry-only not-found), which is the expected red→green.
 

@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 // "Step N of 9" progress are gone.
 //
 // Run against staging (separate DB — safe to create a throwaway draft):
-//   VITE_BASE_URL=https://dowiz-staging.fly.dev DEV_AUTH_SECRET=stg-e2e-secret \
+//   VITE_BASE_URL=https://qa-durres.dowiz.org DEV_AUTH_SECRET=stg-e2e-secret \
 //     pnpm exec playwright test e2e/tests/onboarding-wizard-retired.spec.ts \
 //     --project=desktop --reporter=list
 

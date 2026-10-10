@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test';
  * Runs against the FE under test (VITE_BASE_URL).
  */
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const SLUG = process.env.TRACK_SLUG || 'sushi-durres';
 
 test.describe('Storefront ProductCard', () => {

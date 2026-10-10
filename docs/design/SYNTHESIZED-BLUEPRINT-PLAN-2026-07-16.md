@@ -132,7 +132,7 @@ these clusters gate each other.
 
 **P0-A3. Secrets management** `[SYSTEMS §8, §10.3]`
 - **What:** gitleaks CI gate at minimum; secrets exclusively via systemd
-  `EnvironmentFile` / Fly secrets, never in-repo or in CI logs.
+  `EnvironmentFile` / platform secrets, never in-repo or in CI logs.
 - **Files touched:** CI config (new gitleaks job), deploy scripts referencing
   `.env` today.
 - **Why P0:** triple-confirmed independently (git/CI cluster, cloud/IaC

@@ -1,8 +1,8 @@
 {
   "run_id": "2026-06-05T21:33Z",
   "env": "staging",
-  "base_url": "https://dowiz.fly.dev",
-  "menu_url": "https://dowiz.fly.dev/s/demo",
+  "base_url": "https://<legacy-host>",
+  "menu_url": "https://<legacy-host>/s/demo",
   "verdict": "NO-GO",
   "trigger": "manual",
   "summary": {

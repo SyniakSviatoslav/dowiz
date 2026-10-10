@@ -114,7 +114,7 @@ test.describe('Auth-first admin actions (Rule 14.2)', () => {
 
     const result = await page.evaluate(async (t: string) => {
       const protocol = 'wss:';
-      const ws = new WebSocket(`${protocol}//dowiz.fly.dev/ws?token=${t}`);
+      const ws = new WebSocket(`${protocol}//qa-durres.dowiz.org/ws?token=${t}`);
       return new Promise<string[]>((resolve) => {
         const events: string[] = [];
         const timer = setTimeout(() => { ws.close(); resolve([...events, 'timeout']); }, 8000);

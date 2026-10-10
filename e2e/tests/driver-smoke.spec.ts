@@ -9,8 +9,8 @@ import { ScriptedReasoner, clientOrderSmokePlan } from '../driver/reasoners.ts';
 // (scripted, NOT discovery)→Song-wrapped act, producing a transcript + Song verses + a trace,
 // within the 333 tokens/hr cap. Proves the harness end-to-end. Authentic LLM discovery
 // (LlmReasoner / Phase B) is gated on OPENROUTER_API_KEY and is NOT exercised here.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test driver-smoke --project=desktop --reporter=list
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test driver-smoke --project=desktop --reporter=list
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 test('A2 driver smoke — client persona session produces transcript + Song + trace under cap', async ({ browser }) => {
   // Isolated, clean mempalace so the smoke's Song is deterministic and pollutes nothing.

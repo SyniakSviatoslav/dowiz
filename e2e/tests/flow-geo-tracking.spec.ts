@@ -13,7 +13,7 @@ import { test, expect } from '@playwright/test';
 //
 // A customer JWT is obtained via the (deployed) tracking-link exchange.
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const SLUG = process.env.TRACK_SLUG || 'sushi-durres';
 const TS = Date.now();
 const DELIVERY_LAT = Number(process.env.TRACK_LAT ?? 41.315347);

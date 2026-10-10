@@ -86,7 +86,7 @@
 
 **Attack:** Grep for secrets in build output.
 
-**Evidence:** `.env` in `.gitignore`. `GITLEAKS_SKIP=1` in `.gitleaksignore`. `JWT_SIGNING_SECRET` only in env/Fly secrets. `packages/config/src/verify-env.ts` validates required env vars.
+**Evidence:** `.env` in `.gitignore`. `GITLEAKS_SKIP=1` in `.gitleaksignore`. `JWT_SIGNING_SECRET` only in env/platform secrets. `packages/config/src/verify-env.ts` validates required env vars.
 
 **Gap:** `devBootstrap.ts` and `mockData.ts` contain no real secrets — mock data only.
 

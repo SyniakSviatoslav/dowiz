@@ -2,7 +2,7 @@
 
 > Source of truth: `e2e/tests/` (28 spec files, ~320 test() calls, 3 projects = mobile/tablet/desktop)  
 > Status: `✅ PASS` = passing, `❌ FAIL` = failing, `⏭️ SKIP` = skipped, `⚠️ WEAK` = weak assertion, `🔴 BROKEN` = server bug  
-> Last run: `VITE_BASE_URL=https://dowiz.fly.dev npx playwright test` — 2026-06-10
+> Last run: `VITE_BASE_URL=https://qa-durres.dowiz.org npx playwright test` — 2026-06-10
 
 ---
 
@@ -32,7 +32,7 @@
 
 ---
 
-## 1. API Coverage (tested against live `https://dowiz.fly.dev`)
+## 1. API Coverage (tested against live `https://qa-durres.dowiz.org`)
 
 ### 1.1 Public Endpoints
 | Endpoint | Method | Test File | Status | Notes |
@@ -235,7 +235,7 @@
 
 ```powershell
 # API-only flow tests (fast — 1.1min, 182/210 pass)
-$env:VITE_BASE_URL="https://dowiz.fly.dev"; npx playwright test "e2e/tests/deploy-validation.spec.ts" "e2e/tests/flow-core-lifecycles.spec.ts" "e2e/tests/flow-regulatory-settlements.spec.ts" --reporter=list
+$env:VITE_BASE_URL="https://qa-durres.dowiz.org"; npx playwright test "e2e/tests/deploy-validation.spec.ts" "e2e/tests/flow-core-lifecycles.spec.ts" "e2e/tests/flow-regulatory-settlements.spec.ts" --reporter=list
 
 # Full suite (needs local dev server running — pnpm dev:all)
 npx playwright test --reporter=list
@@ -262,5 +262,5 @@ npx playwright test --project=mobile --reporter=list
 
 **To reproduce**:
 ```powershell
-$VITE_BASE_URL="https://dowiz.fly.dev"; npx playwright test "e2e/tests/flow-regulatory-settlements.spec.ts" --reporter=list
+$VITE_BASE_URL="https://qa-durres.dowiz.org"; npx playwright test "e2e/tests/flow-regulatory-settlements.spec.ts" --reporter=list
 ```

@@ -14,7 +14,7 @@ import crypto from 'node:crypto';
  * Bootstraps from PUBLIC endpoints only, so it runs against prod / any VITE_BASE_URL.
  */
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const SLUG = process.env.TRACK_SLUG || 'sushi-durres'; // OTP off, min_order 0, real coords
 const DELIVERY_LAT = Number(process.env.TRACK_LAT ?? 41.315347);
 const DELIVERY_LNG = Number(process.env.TRACK_LNG ?? 19.4449964);

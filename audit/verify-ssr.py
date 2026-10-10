@@ -1,6 +1,6 @@
 import urllib.request
 try:
-    resp = urllib.request.urlopen(urllib.request.Request('https://dowiz.fly.dev/s/demo'), timeout=15)
+    resp = urllib.request.urlopen(urllib.request.Request('https://qa-durres.dowiz.org/s/demo'), timeout=15)
     html = resp.read().decode()
     print(f'SSR /s/demo: {resp.status} ({len(html)} bytes)')
     lang_sq = 'YES' if 'lang="sq"' in html else 'NO'

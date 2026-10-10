@@ -1,9 +1,9 @@
 # dowiz · Improvement Plan — ALIGNED to MANIFESTO/DECISIONS (2026-07-13, root-cause fix)
 
 > Supersedes the earlier `IMPROVEMENT-PLAN.md` (same dir) which targeted the
-> legacy `apps-api`/Fly revenue stack. That stack is **QUARANTINED to `attic/`**
+> legacy `apps-api`/the legacy host revenue stack. That stack is **QUARANTINED to `attic/`**
 > and no longer builds or deploys (MANIFESTO D1 / DECISIONS D1: "drop the
-> centralized server — no server, no central DB, no Supabase, no Fly").
+> centralized server — no server, no central DB, no Supabase, no legacy host").
 >
 > The earlier plan's instruction "land P0 fixes in attic/apps-api/src/** so they
 > reach prod" was physically false: that code does not bundle (build-apps +
@@ -15,7 +15,7 @@
 
 ## 0. Root cause (the real bug, fixed this pass)
 The repo carried a **centralized-server deploy pipeline** — Dockerfile →
-`attic/fly.toml` → `dist/api/server.cjs` + `dist/worker` + `dist/migrate`
+`attic/<legacy-deploy-manifest>` → `dist/api/server.cjs` + `dist/worker` + `dist/migrate`
 (release_command migrator) — that MANIFESTO/DECISIONS D1 explicitly dropped.
 After the revenue stack was quarantined to `attic/`, the pipeline emitted
 **nothing real** yet still exited 0 with a "✅ Apps built to dist/api" message.
@@ -31,14 +31,14 @@ only the artifact the decentralized app shell actually serves: the static SPA.
   `dist/api`/`dist/worker`/`dist/migrate` **absent**.
 - `Dockerfile` — rewritten to a **static nginx image** serving `dist/public`.
   No Node backend, no `npm install argon2/sharp/@aws-sdk` runtime step, no
-  Fly release_command migrator.
-- `attic/fly.toml` — **deleted** (centralized-server deploy manifest; dead by D1).
+  the legacy host release_command migrator.
+- `attic/<legacy-deploy-manifest>` — **deleted** (centralized-server deploy manifest; dead by D1).
 - `scripts/migrate-runner.ts` — **deleted** (release_command migrator; dead by D1).
 - `packages/config/src/index.ts` — **removed `assertDevAuthDisabledInProd`**
   (the prod-boot dev-auth guard for the dropped server; only caller was the
   quarantined `attic/apps-api` test). Regenerated `dist/`.
 - `.github/workflows/ci.yml` — **retired the `deploy` + `fresh-provision`
-  jobs** (they exercised the deleted Fly/Postgres stack). `validate` now gates
+  jobs** (they exercised the deleted the legacy host/Postgres stack). `validate` now gates
   build / typecheck / lint / lint:gates / `test:governance` / `verify:secrets`
   / `compliance:gate`.
 - `package.json` — replaced the dangling `verify:fresh-provision` script with
@@ -52,7 +52,7 @@ only the artifact the decentralized app shell actually serves: the static SPA.
   via `pnpm test:governance` → **16/16 green** (resonator 6/6). TS strict clean.
 - **Honest build** — no fake "built dist/api" success; fails closed to a
   static-only artifact.
-- **Pipeline realigned** — dead Fly/deploy/fresh-provision removed; `validate`
+- **Pipeline realigned** — dead the legacy host/deploy/fresh-provision removed; `validate`
   gates the live repo (frontend SPA + governance math core).
 
 ## 3. Open work in-scope for THIS repo (post-D1)
@@ -89,7 +89,7 @@ only the artifact the decentralized app shell actually serves: the static SPA.
   as "done".
 
 ## 4. Declined (per MANIFESTO precedence)
-- "Fix prod fly.dev / rotate `test@dowiz.com` / add `requireRole` to
+- "Fix prod legacy host / rotate `test@dowiz.com` / add `requireRole` to
   `attic/apps-api`": the target is retired by mandate. Reopening it contradicts
   D1. Business risk noted in the red-team reports, not actioned as a direction
   (D6 business-value declined).

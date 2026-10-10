@@ -560,7 +560,7 @@ invariant structural, not remembered.
    abandoning the design.
 2. The PSI files require kernel ≥ 4.20 and may be absent in some container configs; the capsule
    treats absent PSI as typed `None` (fail-open), but I did not verify PSI availability inside the
-   Fly.io runtime this repo deploys to — only that the design tolerates absence.
+   the legacy host runtime this repo deploys to — only that the design tolerates absence.
 3. `DRAIN_INTERVAL_MS = 250` bounds detection latency but also sets worst-case ring occupancy;
    the ring capacity ↔ drain interval ↔ event rate arithmetic is stated as constants, not yet
    validated against a real burst profile (W2a's spike test covers one shape, not all).

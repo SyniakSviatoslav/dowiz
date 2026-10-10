@@ -1,7 +1,7 @@
 # RELEASE-GATE-RUN
 
 Release: v1.0.0-deploy-final
-Target: https://dowiz.fly.dev
+Target: the legacy host
 Duration: 5163ms
 Verdict: FAIL
 

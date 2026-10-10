@@ -38,7 +38,7 @@ inherited from an older doc's claim.
 | Offline canon F12: "Hub loses all peers, runs solo … island mode … LOCK" | `docs/design/ARCHITECTURE.md:75` | VERIFIED — DoD-5's authority |
 | Browser local-decide beachhead: `web/src/app.mjs` console-only, binds 24/24 `_js` kernel exports, its OWN header defers the DOM pass ("G3 … separate work unit") | `web/src/app.mjs:1-12`; export count: 24 `pub fn *_js` in `kernel/src/wasm.rs` | VERIFIED — deliberate first step, NOT throwaway |
 | Auth canon: D3 device-bound keypair primary = **capability certs** ("Reuses `HybridGate::check`/`verify_chain`/`RevocationSet`… unchanged"); TOTP/WebAuthn step-up only | `docs/design/BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md:113`, `:144`, `:212-215` (§5.2 "device enrollment = capability cert, not a new subsystem") | VERIFIED — P37 must not contradict; P23-P3 wires onto P37's routes later |
-| No `fly.toml`, no live deployment anywhere | `find /root/dowiz -name fly.toml` → 0 hits (this pass) | VERIFIED — bootable binary is the ceiling (DoD-6); deploy = P45 |
+| No `<legacy-deploy-manifest>`, no live deployment anywhere | `find /root/dowiz -name <legacy-deploy-manifest>` → 0 hits (this pass) | VERIFIED — bootable binary is the ceiling (DoD-6); deploy = P45 |
 
 Ground truth is non-discussible; everything below builds on this table only.
 
@@ -68,7 +68,7 @@ Ground truth is non-discussible; everything below builds on this table only.
   WebAuthn are P23/P39 step-up, wired later onto these routes, never primary.
 - **NOT an admin CRUD surface** — no menu/product/tenant management routes (§10.5.3 anti-scope).
   P23-P3 unblocks on P37's *existence*, it does not smuggle its routes in here.
-- **NOT deployment/monitoring** — no fly.toml, no metrics endpoint, no OpenTofu/Dokploy, no
+- **NOT deployment/monitoring** — no legacy deploy manifest, no metrics endpoint, no OpenTofu/Dokploy, no
   log shipping. That is P45 (ECOSYSTEM/OPS), hard-blocked on P37, not part of it. P37's ceiling
   is a bootable binary with one documented command (DoD-6).
 - **NOT domain logic in handlers** — no pricing, no discounts, no state-machine edges, no money
@@ -542,5 +542,5 @@ Execute in order; every task names files, acceptance command, and gate. The kern
    weakened or any route beyond §2's table was added.
 
 **Forbidden in this phase (repeated for the zero-context reader):** no sessions/passwords, no
-admin routes, no pagination/versioning, no fly.toml/monitoring, no domain logic in `api.rs`
+admin routes, no pagination/versioning, no legacy deploy manifest/monitoring, no domain logic in `api.rs`
 (the gate will catch you), no persistence layer, no P34 mesh wiring beyond the §4.4 trait seam.

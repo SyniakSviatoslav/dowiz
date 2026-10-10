@@ -7,9 +7,8 @@ context: |
 
   Tech stack: Rust-native (no Node.js/TypeScript, ever). Cargo workspace —
   kernel, engine, protocol/proto-wire, agent-loop, agent-adapters, delivery
-  domain crates. Deployed on Hetzner + Cloudflare only — Fly.io fully
-  retired (2026-07-18 operator directive); `dowiz.fly.dev` is a legacy
-  zombie being decommissioned, not a deploy target. NOTE: this context
+  domain crates. Deployed on Hetzner + Cloudflare only; the old host was retired
+  2026-07-18 by operator directive and is not a deploy target. NOTE: this context
   block predates the Rust-native rewrite in several other particulars
   (apps/api, apps/web, pnpm monorepo, Postgres-direct — all superseded);
   treat CLAUDE.md + docs/design/MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-*.md
@@ -26,7 +25,7 @@ context: |
     OpenSpec terms: a human approves the proposal/spec BEFORE `apply`.
   - Mandatory Proof Rule: every behavior change needs programmatic proof — UI
     change -> Playwright E2E vs the live Hetzner/Cloudflare deploy target
-    (Fly.io retired 2026-07-18, no longer a target); API-only -> a request.*
+    API-only -> a request.*
     assertion or cited test. Never declare done without pasting proof output.
   - Governance-protected zones (a PreToolUse hook blocks edits without manual
     approval): packages/shared-types (contracts), package.json/lockfile and

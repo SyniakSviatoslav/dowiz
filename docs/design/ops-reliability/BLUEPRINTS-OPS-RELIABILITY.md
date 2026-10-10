@@ -16,7 +16,7 @@
   (token-bucket), `timeout.ts` (withTimeout/retryWithBackoff), `sentry.ts` (PII-redaction), `notifications/*` (telegram/
   email/push adapters+outbox+quiet-hours+retry), `backup-{drill,restore,verify,list}.ts` (swap R2→Hetzner, AES-GCM→age),
   node-pg-migrate 140-міграцій. Live-примітив CircuitBreaker (routing-provider) лишається. Перенацілити orphaned
-  `audit-sentinel/` watchdog з мертвого Fly → Hetzner.
+  `audit-sentinel/` watchdog з мертвого the legacy host → Hetzner.
 - **Reuse:** усе з інвентаря lane7. **RED:** воскрешений health `/livez`+`/health` відповідає на Hetzner; backup-drill
   round-trips проти бакета. **Хвиля:** W0.
 
@@ -41,20 +41,20 @@
 
 ### OPS-04 · App cutover + monitor-вікно
 - **Мета:** перевести застосунок на pgrust зі збереженням миттєвого rollback.
-- **Межа:** ЧІПАЄМО — `DATABASE_URL`→pgrust. НЕ ЧІПАЄМО — Fly/Supabase (живі паралельно).
+- **Межа:** ЧІПАЄМО — `DATABASE_URL`→pgrust. НЕ ЧІПАЄМО — legacy host/Supabase (живі паралельно).
 - **Форма:** repoint DATABASE_URL, boot + read/write round-trip + E2E green; **monitor 24-72h** нуль-write-errors.
 - **RED:** rollback = repoint-назад миттєво (обидва стеки живі). **Хвиля:** W3.
 
-### OPS-05 · Fly export + destroy
-- **Мета:** зняти Fly ТІЛЬКИ після clean monitor.
-- **Межа:** ЧІПАЄМО — Fly-teardown. НЕ ЧІПАЄМО — pgrust (уже live).
+### OPS-05 · the legacy host export + destroy
+- **Мета:** зняти the legacy host ТІЛЬКИ після clean monitor.
+- **Межа:** ЧІПАЄМО — the legacy host-teardown. НЕ ЧІПАЄМО — pgrust (уже live).
 - **Форма:** export volumes(snapshot, permanent-if-destroyed)+secrets(лише-назви, values-unretrievable)+certs → у бакет;
   `scale count 0`→`apps suspend`(reversible)→`apps destroy`(IRREVERSIBLE).
 - **Reuse:** PART1-LIVE-PROD-DECOMMISSION.md runbook. **RED:** post-destroy old-URL 404; export-артефакти в бакеті ДО
   destroy. **Хвиля:** W10. 🔴 незворотнє.
 
 ### OPS-06 · Supabase project delete
-- **Мета:** видалити Supabase ТІЛЬКИ після Fly-drop + monitor-clean.
+- **Мета:** видалити Supabase ТІЛЬКИ після the legacy host-drop + monitor-clean.
 - **Межа:** ЧІПАЄМО — Supabase-teardown. НЕ ЧІПАЄМО — age-дамп (last-resort).
 - **Форма:** dashboard-confirm Edge-fns/Storage/Cron порожні (live-check, grep не замінить) → delete (IRREVERSIBLE:
   wipes auth/storage/realtime/PITR/API-keys; real-loss тут = лише PG-DB = в age-дампі).
@@ -226,7 +226,7 @@
 | OPS-02 | pgrust + COMPAT-GATE | дані | W1 | 🔴 |
 | OPS-03 | Restore+RLS-fix+verify | дані | W2 | 🔴 |
 | OPS-04 | Cutover+monitor | дані | W3 | — |
-| OPS-05 | Fly destroy | дроп | W10 | 🔴 незворотнє |
+| OPS-05 | the legacy host destroy | дроп | W10 | 🔴 незворотнє |
 | OPS-06 | Supabase delete | дроп | W10 | 🔴 незворотнє |
 | OPS-07 | Monitoring stack | 1 пульт | W4 | — |
 | OPS-08 | All-sources ingestion | 1 пульт | W4 | — |

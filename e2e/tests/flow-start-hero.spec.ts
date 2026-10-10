@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test';
  * client-rendered, so it needs no backend data.
  */
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 test.describe('L1: /start onboarding (simple form)', () => {
   test('renders the heading + upload CTA at a tappable size', async ({ page }) => {

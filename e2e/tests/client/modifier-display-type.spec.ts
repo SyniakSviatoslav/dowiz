@@ -1,7 +1,7 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 
 // Testplan §4a/§4b/§4c — Modifier display_type rendering in the /s/demo product modal.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test modifier-display-type --project=desktop --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test modifier-display-type --project=desktop --reporter=list
 //
 // The storefront resolves each modifier group's control via resolveDisplayType()
 // (apps/web/src/pages/client/MenuPage.tsx:41): it honours the owner-set display_type,

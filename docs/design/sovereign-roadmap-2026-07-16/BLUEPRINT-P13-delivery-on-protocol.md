@@ -35,7 +35,7 @@ Compounding this, R1-D's load-bearing ground-truth finding (its §0) is that **t
 product that F41–F50 assume is being "re-plumbed" no longer exists as live source.** Commits
 `79ef316f6` / `db766de47` (2026-07-13, "kernel is now sole source of truth") deleted `apps/web`
 (Storefront/Admin/Courier SPA), `packages/ui`, `packages/domain`, `packages/shared-types`; commit
-`fce5738b0` quarantined `apps/api`, `apps/worker`, `packages/db`, `fly.toml` into `attic/`. At HEAD,
+`fce5738b0` quarantined `apps/api`, `apps/worker`, `packages/db`, `<legacy-deploy-manifest>` into `attic/`. At HEAD,
 `git ls-files 'apps/*'` returns **0 files**. The order-intake path (Fastify `POST` + Postgres
 `INSERT INTO orders`), the courier assignment (`SELECT … FOR UPDATE`), the settlement cycle — all of
 it is now a *behavioral oracle in git history and design docs*, not editable code.

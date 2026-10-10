@@ -21,7 +21,7 @@ source.** Commit `79ef316f6` / `db766de47` (2026-07-13, "remove legacy JS/TS thi
 now sole source of truth") deleted `apps/web` (Storefront/Admin/Courier SPA), `packages/ui`
 (including i18n), `packages/domain`, `packages/shared-types`; commit `fce5738b0` (branch
 `feat/remove-legacy-thin-layer` lineage) quarantined `apps/api`, `apps/worker`, `packages/db`,
-`fly.toml` to `attic/`. At current HEAD (`feat/kernel-fsm-graph-analysis`), `git ls-files 'apps/*'`
+`<legacy-deploy-manifest>` to `attic/`. At current HEAD (`feat/kernel-fsm-graph-analysis`), `git ls-files 'apps/*'`
 returns **0 files**; `/root/dowiz/apps/web/` holds only stale `dist/` + `node_modules/`;
 `origin/main` is likewise post-deletion.
 
@@ -44,7 +44,7 @@ Albanian-market multi-tenant white-label restaurant delivery; 3 roles (Client/Ow
 cash; Node22/Fastify5 monolith (~60 route plugins, `apps/api/src/server.ts:585-634` historical),
 single Supabase Postgres (`packages/db/src/index.ts:18-51` historical), pg-boss queue, Postgres
 NOTIFY/LISTEN bus, in-memory WebSocket rooms explicitly N=1-safe (`apps/api/src/websocket.ts:12-48`
-historical), React18+Vite PWA, single Fly.io instance. Central JWT/OTP auth
+historical), React18+Vite PWA, single the legacy host instance. Central JWT/OTP auth
 (`packages/platform/src/auth/jwt.ts:1,55,105` historical). Orders priced server-authoritatively in
 `apps/api/src/routes/orders.ts` (POST :65, fee ladder :534-565, `INSERT INTO orders` :597,
 historical). Courier assignment = central DB `SELECT…FOR UPDATE` transaction

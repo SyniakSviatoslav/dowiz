@@ -13,7 +13,7 @@
 | "88.7k lines of planning docs" | `docs/design/*.md` = **129,741 lines** across **323 files**; repo-wide `.md` = **206,673 lines** | WORSE than claimed — the planning corpus grew ~46% past the session's own hostile number |
 | "54.3k lines of code" | dowiz Rust = **60,064** (kernel 42,523; engine 3,181; adapters+tools rest); `web/` = **1,452 lines total**; bebop-repo Rust = 66,028 | Roughly held; dowiz planning docs alone are 2.2× dowiz code |
 | "97% single-author commits" | 959 of 987 dowiz commits = **97.2%** SyniakSviatoslav (rest are agent identities, i.e. the same operator's swarm) | CONFIRMED |
-| "zero live deployment" | `https://dowiz.fly.dev/` returns **200** — serving the OLD React/Vite SPA whose source was **deleted from the repo** in purge `79ef316f6` (2026-07-13) | WRONG in the most damning possible way — see ARCHITECT-02 |
+| "zero live deployment" | ``<legacy-host>/` returns **200** — serving the OLD React/Vite SPA whose source was **deleted from the repo** in purge `79ef316f6` (2026-07-13) | WRONG in the most damning possible way — see ARCHITECT-02 |
 | "zero HTTP server beyond a static file host" | Only server code: `tools/native-spa-server` (static files; `systemctl is-active` → **inactive**). Kernel/engine: zero `TcpListener`/hyper/axum hits outside a `.bind()` false positive | CONFIRMED |
 | "452 kernel tests green" (GROUND-TRUTH-2026-07-17) | `cargo test --lib -q` → **621 passed, 0 failed, 1 ignored, 0.99s** | Better than claimed; CORE quality is real |
 | bebop2 delivery-domain | `cargo test -q` in `bebop2/delivery-domain` → 4 passed, 0 failed, verified live; the full bebop workspace was still cold-compiling at report close (multi-minute build), so workspace-wide counts rest on the repo's own claims, not this pass | Built, green, and — per the repo's own index — 100% stranded from the product |
@@ -75,7 +75,7 @@ tested but stranded (no consumer / never run as a system) · **D** = fragments a
 | **PROTOCOL** (bebop2/mesh) | **C+** | Real crypto with a genuinely earned red-team scalp (Ed25519 batch-verify SSR-2020 forgery found, fixed, and the perf claim honestly retracted); hub_ring/PoD/claim-machine built with multi-hub tests — but the repo's own index calls it "100% stranded from dowiz's own kernel" (`CORE-ROADMAP-INDEX.md:44`) and P34, the #1 lever, is unstarted |
 | **DELIVERY** (product) | **F** | 0% deployable by its own admission; the only renderable UI shows eigenvalues; the only production deployment runs source code the repo deleted five days ago |
 | **AGENT** (AI layer) | **D** | The one real external integration in the system (`llm-adapters` ureq→Ollama; `track_record.jsonl`: 12 real ollama calls, 20 fake) — but `AgentLoop` (P40) has **zero callers** outside its own module, the MCP port is types with no runnable server binary (`agent-adapters` has no `[[bin]]`), and the index's own words hold: "a chat backend today, not an agent" (`CORE-ROADMAP-INDEX.md:46`) |
-| **ECOSYSTEM/OPS** | **F** | `deploy/pgrust.service` ExecStart points at `/usr/local/bin/pgrust` which **does not exist**; `native-spa-server` inactive; the Fly zombie is unmanaged and unpatchable from this tree; zero monitoring of anything live. "Deliberately last" is the stated策 — an F on the axis is still an F |
+| **ECOSYSTEM/OPS** | **F** | `deploy/pgrust.service` ExecStart points at `/usr/local/bin/pgrust` which **does not exist**; `native-spa-server` inactive; the legacy host zombie is unmanaged and unpatchable from this tree; zero monitoring of anything live. "Deliberately last" is the stated策 — an F on the axis is still an F |
 
 ---
 
@@ -89,11 +89,11 @@ tested but stranded (no consumer / never run as a system) · **D** = fragments a
 **Fix guidance:** Freeze blueprint output. Build P37 intake + one customer screen + one owner queue + P52's one courier screen + P47 cash, deploy them, and only then resume design work.
 
 ### [SEVERITY: CRITICAL] [OPS/GOVERNANCE] ARCHITECT-02
-**Where:** `https://dowiz.fly.dev/` (live, HTTP 200) vs purge commit `79ef316f6` (2026-07-13, "remove legacy JS/TS thin-layer")
+**Where:** ``<legacy-host>/` (live, HTTP 200) vs purge commit `79ef316f6` (2026-07-13, "remove legacy JS/TS thin-layer")
 **What:** Production is a zombie: the live deployment serves the old React/Vite stack whose source code was deleted from the repo five days ago — the running system can no longer be patched from this tree.
-**Evidence:** `curl https://dowiz.fly.dev/` returns the old SPA (service-worker registration, `CheckoutPage` push comments); `/api/*` answers with the old JSON error envelope (`correlationId` format); `apps/` does not exist in the working tree; source exists only in git history.
+**Evidence:** `curl `<legacy-host>/` returns the old SPA (service-worker registration, `CheckoutPage` push comments); `/api/*` answers with the old JSON error envelope (`correlationId` format); `apps/` does not exist in the working tree; source exists only in git history.
 **Why it matters:** If the waiting first client — or any user — hits a bug, a security hole, or a GDPR request on the live system, the team's own repo cannot ship a fix without first resurrecting deleted code. For a culture that writes "fail-closed" in every module header, running an unpatchable production service is the single largest operational hypocrisy in the system.
-**Fix guidance:** Either kill the Fly app deliberately (and tell the waiting client the truth about timeline) or restore the legacy tree to a maintained branch and own it until the replacement actually exists. The current limbo is the worst of both.
+**Fix guidance:** Either kill the legacy host app deliberately (and tell the waiting client the truth about timeline) or restore the legacy tree to a maintained branch and own it until the replacement actually exists. The current limbo is the worst of both.
 
 ### [SEVERITY: CRITICAL] [PROCESS/CULTURE] ARCHITECT-03
 **Where:** repo-wide; `git log` (last 10 commits: 9 docs-only); 33 new doc files added on 2026-07-18 alone; 87 `BLUEPRINT-*.md` files totaling 44,833 lines

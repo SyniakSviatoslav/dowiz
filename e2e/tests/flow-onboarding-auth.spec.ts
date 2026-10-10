@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 // endpoints, and the OAuth callback page. Owner-authed flows (gate→publish→Z7) are
 // proven separately by the forged-owner runtime harness + the reliability gate.
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 test.describe('Flow: Onboarding + auth contract', () => {

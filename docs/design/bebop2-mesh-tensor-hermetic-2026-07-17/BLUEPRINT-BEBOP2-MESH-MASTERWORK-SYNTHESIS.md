@@ -191,7 +191,7 @@ complexity.
 7. **A second Merkle-DAG authority** — dual-authority desync hazard, the construction the RCI
    Triadic Council overturned (`ADR-realtime-change-intelligence.md:44-50`). (B2 §4.)
 8. **Raw L2 / custom Ethernet frame carrier** — no shared L2 broadcast domain exists on either
-   substrate (Fly microVMs are L3/WireGuard-routed; the dev host is one VM with no L2 peer), and a
+   substrate (the legacy host microVMs are L3/WireGuard-routed; the dev host is one VM with no L2 peer), and a
    cleartext header would move routing-critical fields outside the signed envelope — discarding the
    mesh's authenticity model. Fields adopted INSIDE the envelope. (B5 §1.2.)
 9. **RDMA/RoCE** — the device does not exist: no `/dev/infiniband` on dev (live probe); virtio-only
@@ -346,7 +346,7 @@ FirstContactQr / WebOfTrust-as-delegation-flow (never vote-count) — Batch 7 §
 | W4-L9 | Product T4 write paths (`POST /orders`, `PATCH /:id/status`, courier assignment): kernel computes the decision; tenant-GUC + transaction envelope + `WHERE location_id` survive as the thin adapter, never deleted | **HARD EXTERNAL GATE: the separate NOBYPASSRLS workstream** (`docs/ops/P8-NOBYPASSRLS-FLAG.md`) must land its flip + resolve role-name drift first — prod RLS is dormant today and the TS adapter is the only live tenant guard | RLS-adversarial suite green with the kernel in the decision seat |
 | W4-L10 | Frontend Path-2: no-DOM physics-UI islands in the `web/` Astro/Svelte beachhead (already kernel-wired via `kernel_client.mjs`); money-never-tween + text/IME/a11y discrete layer preserved per the field-UI RED proofs; joins the physics-ui/field-UI arcs (FE-01 VertexBridge gap is that arc's first wire) | — | island-by-island Gain−Loss adoption; never a flag-day cutover of `apps/web` |
 
-### DEFER REGISTER — named seams with numeric triggers (the "birds fly later" list)
+### DEFER REGISTER — named seams with numeric triggers (the "birds take flight later" list)
 
 Every entry keeps the `core_pinning.rs:41-64` shape where code-adjacent: a named port, a NoOp
 default, a numeric trigger in the doc comment, a `#[ignore]` failing-by-design activation test.

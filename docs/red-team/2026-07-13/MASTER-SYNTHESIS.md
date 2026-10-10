@@ -1,7 +1,7 @@
 # 🎷 MASTER RED-TEAM SYNTHESIS — bebop2 + dowiz (2026-07-13)
 
 **Operation:** full-scale adversarial assault by an 11-agent specialist army, each simulating a nit-picky, conservative, professional rival trying to hack / steal / break the projects.
-**Method:** read-only against local code + live web sessions (`dowiz.fly.dev`, `dowiz-staging.fly.dev`); every claim tagged **CONFIRMED** (traced to `file:line`, reproduced, or PoC-proven) or **PLAUSIBLE** (strong inference). Where possible, findings were **weaponized into running PoCs**. Cross-corroboration across independent agents is treated as verification.
+**Method:** read-only against local code + live web sessions (prod and staging on the legacy host); every claim tagged **CONFIRMED** (traced to `file:line`, reproduced, or PoC-proven) or **PLAUSIBLE** (strong inference). Where possible, findings were **weaponized into running PoCs**. Cross-corroboration across independent agents is treated as verification.
 **Targets:** bebop2 @ `feat/logic-governance` · dowiz @ `feat/decentralized-pq-protocol` (deployed legacy API mirrored in `attic/apps-api`).
 **Per-lane reports:** `bebop2/docs/red-team/2026-07-13/B{1..4}-*.md` · `dowiz/docs/red-team/2026-07-13/D{1..7}-*.md`.
 
@@ -48,18 +48,18 @@
 |---|---|---|---|---|
 | H1 | dowiz | **`owner/couriers` GET routes missing `requireRole`** → a *customer* token can pull the full staff roster + **live courier GPS**. | `owner/couriers.ts:14-15` (only `verifyAuth`+`requireLocationAccess`). | Cross-role PII + real-time location leak. |
 | H2 | dowiz | **Cross-tenant customer PII erasure** via client-supplied `customerId` with no location filter; the fail-open `customers` RLS policy lets the null-context worker write across tenants. | `gdpr.ts:48`, `anonymizer/index.ts:119,134-141`. | An owner irreversibly scrubs another venue's customer data by guessing a UUID. |
-| H3 | dowiz | **SSRF** — `isPrivateIp` misses IPv4-mapped IPv6 (`::ffff:169.254.169.254`) → brand-extractor reaches Fly 6PN / cloud metadata. | `brand-extractor.ts:150-169`. | Metadata/internal-service access from any owner (incl. C2 backdoor). |
+| H3 | dowiz | **SSRF** — `isPrivateIp` misses IPv4-mapped IPv6 (`::ffff:169.254.169.254`) → brand-extractor reaches legacy private network / cloud metadata. | `brand-extractor.ts:150-169`. | Metadata/internal-service access from any owner (incl. C2 backdoor). |
 | H4 | dowiz | **RLS reactivation gates (design-open, dormant now):** `couriers` table has **no RLS** while holding `password_hash`+encrypted PII; fail-open anonymous policies on `orders`/`order_items`/`customers` (`USING (app_current_user() IS NULL)` = session-level, not row-scoped); runtime role is **BYPASSRLS**; CI `verify:rls` guard is **dead** (script gone). | `attic/packages-db/migrations/*` (couriers `:5-19`, anon `1780338981783:5-10`), `1780691681296:8`. | Reactivating `attic/` today ships full-table cross-tenant read/write uncaught. |
 | H5 | bebop2 | **ML-KEM-768 is not FIPS-203-interoperable** (stores `t`/`s` in coefficient domain, NTT removed) and has **no external KAT** (self-consistency + circular dual-impl only). | `pq_kem.rs:473-474,604,616,622,897,920`. | The KEM half of "post-quantum" is bebop-to-bebop only; a wrong/trapdoored KEM passes its own tests. |
 | H6 | bebop2 | **Transport is plaintext "WSS"** (`MaybeTlsStream::Plain`, native-tls disabled) + **cross-connection replay** (fresh gate per connection, `check(&frame, 0)`) + channel-binding decorative. | `wss_transport.rs:118,96,123,153`. | MITM reads all payloads; captured frames replay. Not safe on a hostile network. |
-| H7 | dowiz | **Prod auto-deploy + prod DB migration on push-to-`main`** with no approval/rollback/concurrency guard, via **unpinned** `flyctl-actions@master` action holding the prod token. | `.github/workflows/ci.yml:127-153`. | One bad merge or a compromised `@master` tag = prod control / irreversible migration. |
+| H7 | dowiz | **Prod auto-deploy + prod DB migration on push-to-`main`** with no approval/rollback/concurrency guard, via **unpinned** `deploy-actions@master` action holding the prod token. | `.github/workflows/ci.yml:127-153`. | One bad merge or a compromised `@master` tag = prod control / irreversible migration. |
 | H8 | dowiz | **Orphaned git blobs retain rotated JWT/PII/RSA private keys**; remote force-push scrub still OPEN → invisible to `git log` and the refs-only gitleaks gate, almost certainly still fetchable on GitHub by SHA. | `git fsck --unreachable` → 10 blobs (e.g. `4505d018`). Hash-compare vs live `.env` = rotated (stale). | Open-source publish is blocked; residual exposure of key *classes* not fully audited. |
 
 ### 🟡 MEDIUM / notable
 
 - **bebop2 timing side-channels in ML-KEM** (secret-dependent `continue`, variable-time `%`, non-CT ciphertext compare in `decaps`) — chosen-ciphertext timing oracle (`pq_kem.rs:299-307,708`). · **No zeroization** of any secret material. · **"Anu QRNG" is vaporware** (HEAD commit advertises it; no code).
 - **bebop2 envelope `version` unenforced/unauthenticated**; handshake is dead code → no downgrade protection. · **DoS**: real memory ceiling is tungstenite's 64 MiB default, not the advertised 8 MiB; no connection cap / idle timeout (slowloris). · insert-before-verify unbounded nonce set (OOM) + `.expect` panic-DoS.
-- **dowiz** shared-IP rate-limit buckets (`req.ip` on Fly proxy → global login-lockout / budget DoS), order-spam throttle bypass (keys on attacker-controlled `body.customer.phone`), `/health` topology disclosure + login user-enumeration oracle, bearer tokens in `localStorage` (no HttpOnly → XSS = owner-session theft), CSP absent on SPA shell + `/admin/*` and weak (`unsafe-inline`/`unsafe-eval`) where present, Docker runs as root + runtime `npm install` w/o lockfile, `.env` mode 0666.
+- **dowiz** shared-IP rate-limit buckets (`req.ip` on the legacy host proxy → global login-lockout / budget DoS), order-spam throttle bypass (keys on attacker-controlled `body.customer.phone`), `/health` topology disclosure + login user-enumeration oracle, bearer tokens in `localStorage` (no HttpOnly → XSS = owner-session theft), CSP absent on SPA shell + `/admin/*` and weak (`unsafe-inline`/`unsafe-eval`) where present, Docker runs as root + runtime `npm install` w/o lockfile, `.env` mode 0666.
 - **dowiz UX (trust-bleeding):** prod has **no landing page** (302→context-free upload wizard); analytics self-contradicts (revenue "0" + "+15%" + test rows); checkout least-accessible (10/12 fields unlabeled, English validation bubble on an Albanian form); e2e junk categories visible on the live storefront; Settings hours form is a **data-loss trap**; demo storefronts dead-end and convert nobody.
 
 ---
@@ -85,7 +85,7 @@
 **P1 — this week:**
 - **bebop2:** wire `AnchorRoster::verify_chain` into `HybridGate::check`; enforce scope↔effect; make the nonce store connection-independent + persistent; pass real `now`; enable the ML-DSA leg (and require it under policy). *(C1, PQ-in-force)*
 - **dowiz:** finish the remote git-history scrub + full rotation audit; pin the deploy action to a SHA and gate prod migrations behind approval + rollback. *(H7, H8)*
-- Enforce Telegram webhook secret (fail closed); fix rate-limit keying (`trustProxy`/`Fly-Client-IP`); add CSP to the SPA shell + `/admin/*`; move tokens to HttpOnly cookies.
+- Enforce Telegram webhook secret (fail closed); fix rate-limit keying (`trustProxy`/`proxy client-IP header`); add CSP to the SPA shell + `/admin/*`; move tokens to HttpOnly cookies.
 
 **P2 — before any relaunch:**
 - **bebop2:** TLS on the transport; enforce+authenticate `version`; add ML-KEM external KATs + FIPS-203 NTT-domain encoding; constant-time KEM; zeroization. Decide honestly whether "protocol"/"post-quantum"/"decentralized" claims stay in the marketing until the code backs them.

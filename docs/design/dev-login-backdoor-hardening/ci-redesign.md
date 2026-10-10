@@ -24,12 +24,6 @@ Insert after `fresh-provision`:
         with: { node-version: 22, cache: 'pnpm' }
       - run: pnpm install --frozen-lockfile
 
-      - name: Deploy to staging (release_command runs migrations)
-        uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy -a dowiz-staging --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_STAGING }}
-
       - run: npx playwright install chromium
 
       - name: Authenticated E2E against staging
@@ -41,7 +35,7 @@ Insert after `fresh-provision`:
             e2e/tests/telegram-full-flow.spec.ts \
             --project=desktop --reporter=list
         env:
-          VITE_BASE_URL: "https://dowiz-staging.fly.dev"
+          VITE_BASE_URL: "https://qa-durres.dowiz.org"
           DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET_STAGING }}
         timeout-minutes: 15
 ```
@@ -57,15 +51,14 @@ Insert after `fresh-provision`:
       - name: Post-deploy prod smoke (unauthenticated)
         run: npx playwright test e2e/tests/prod-smoke.spec.ts --project=desktop --reporter=list
         env:
-          VITE_BASE_URL: "https://dowiz.fly.dev"
+          VITE_BASE_URL: "https://qa-durres.dowiz.org"
           PROD_SMOKE_SLUG: "demo"   # a seeded PUBLIC location slug
         timeout-minutes: 3
 ```
 
 ## C. Required GitHub repo secrets (operator)
-- `FLY_API_TOKEN_STAGING` — deploy token scoped to `dowiz-staging`.
 - `DEV_AUTH_SECRET_STAGING` — `stg-e2e-secret`.
-- The staging Fly app already carries `ALLOW_DEV_LOGIN`, `JWT_DEV_KID`, the dev keypair,
+- The staging app already carries `ALLOW_DEV_LOGIN`, `JWT_DEV_KID`, the dev keypair,
   and `DEV_LOGIN_EMAIL/PASSWORD` (set this session) — no GitHub secret needed for those;
   they live on the app.
 

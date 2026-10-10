@@ -1,5 +1,5 @@
 async function main() {
-  const authRes = await fetch('https://dowiz.fly.dev/api/dev/mock-auth', {
+  const authRes = await fetch('https://qa-durres.dowiz.org/api/dev/mock-auth', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ role: 'owner', locationSlug: 'demo' })

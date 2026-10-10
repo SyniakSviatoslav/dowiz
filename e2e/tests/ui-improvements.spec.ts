@@ -1,7 +1,7 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 
 // MVP UI-improvements proof (the GO subset per docs/research/UI-IMPROVEMENTS-TESTPLAN.md).
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test ui-improvements --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test ui-improvements --reporter=list
 const CREDS = { email: 'test@dowiz.com', password: 'test123456' };
 
 // The login endpoint is rate-limited (max 5/min); with the suite running serially across

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 // Go-live remediation — live checkout proofs against the demo tenant (staging).
 // #5 privacy notice (softened, decision-b copy) and #4 failure fallback + no
-// fake-success. Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec
+// fake-success. Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec
 // playwright test golive-remediation --reporter=list
 
 const CARD = '[data-testid="menu-item"]';

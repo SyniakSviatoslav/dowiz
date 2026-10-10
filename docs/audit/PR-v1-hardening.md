@@ -38,9 +38,9 @@ PII-free JWT · cross-tenant 404 · anon 401 · sitemap 200 · per-tenant SSR ·
 ## Deploy + backfill runbook (you drive)
 
 **Staging (recommended): provision an isolated DB first.** Don't point staging at prod Supabase.
-1. DB: `fly mpg create` (Managed Postgres) **or** a separate Supabase project. Set its URL in staging secrets.
-2. `fly apps create dowiz-staging`; copy prod secrets except `DATABASE_URL_*` (use the staging DB) and set `DEV_AUTH_SECRET` for E2E.
-3. `pnpm migrate:up` (against staging) → `pnpm seed` → `fly deploy -a dowiz-staging`.
+1. DB: a separate Supabase project (or a managed Postgres). Set its URL in staging secrets.
+2. Create the staging app; copy prod secrets except `DATABASE_URL_*` (use the staging DB) and set `DEV_AUTH_SECRET` for E2E.
+3. `pnpm migrate:up` (against staging) → `pnpm seed` → deploy to staging.
 4. Smoke: `/health` 200, place a test order, run `e2e/lifecycle-e2e`.
 
 **Promote to prod (`dowiz`):**

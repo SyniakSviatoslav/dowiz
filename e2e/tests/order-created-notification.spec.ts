@@ -33,7 +33,7 @@ test.describe('Order Created Notification Flow', () => {
 
 // Helper to get an owner token (mock-auth)
 async function getOwnerToken(): Promise<string> {
-  const BASE_URL = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+  const BASE_URL = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
   const authRes = await fetch(`${BASE_URL}/api/dev/mock-auth`, { method: 'POST' });
   if (!authRes.ok) throw new Error(`Failed to get owner token: ${await authRes.text()}`);
   const authBody = await authRes.json();

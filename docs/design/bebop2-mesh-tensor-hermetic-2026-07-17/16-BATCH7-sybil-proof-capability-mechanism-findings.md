@@ -323,7 +323,7 @@ machinery.
 inflow contributes zero flow" is stated from the asymmetric-flow construction at
 `[TRAINING-KNOWLEDGE]` level — a formal proof obligation, if ever raised, should be discharged
 against the paper's Theorem statements, not this summary; (ii) the Firecracker-prod substrate claim
-is Batch 5's `(training-knowledge)` on Fly's architecture — the rejection of hardware-attestation
+is Batch 5's `(training-knowledge)` on the legacy host's architecture — the rejection of hardware-attestation
 holds for *any* unprivileged microVM regardless, so the verdict is robust to it. Neither gap changes
 the verdict.
 

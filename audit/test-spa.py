@@ -1,7 +1,7 @@
 import urllib.request, json
 
 print('=== GET AUTH TOKEN ===')
-req = urllib.request.Request('https://dowiz.fly.dev/api/dev/mock-auth', method='POST', data=b'{}')
+req = urllib.request.Request('https://qa-durres.dowiz.org/api/dev/mock-auth', method='POST', data=b'{}')
 req.add_header('Content-Type', 'application/json')
 resp = urllib.request.urlopen(req, timeout=10)
 auth = json.loads(resp.read())
@@ -26,7 +26,7 @@ tests = [
 
 for name, method, path, *rest in tests:
     body = rest[0] if rest else None
-    url = f'https://dowiz.fly.dev{path}'
+    url = f'https://qa-durres.dowiz.org{path}'
     try:
         req = urllib.request.Request(url, method=method)
         req.add_header('Authorization', f'Bearer {token}')

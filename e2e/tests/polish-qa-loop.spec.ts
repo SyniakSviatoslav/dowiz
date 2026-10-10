@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
 import crypto from 'node:crypto';
 
 // Proof for the FE-polish + QA loop fixes.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test polish-qa-loop --project=mobile --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test polish-qa-loop --project=mobile --reporter=list
 const CREDS = { email: 'test@dowiz.com', password: 'test123456' };
 
 test('FE-polish: login form controls meet the 44px tap-target minimum', async ({ page }) => {

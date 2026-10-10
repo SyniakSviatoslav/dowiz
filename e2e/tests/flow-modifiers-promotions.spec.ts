@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 let authToken: string;
 let activeLocationId: string;
 let productId: string;

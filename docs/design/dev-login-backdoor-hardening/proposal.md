@@ -14,7 +14,7 @@
 ## 1. Problem + non-goals
 
 ### Problem (confirmed, live)
-A dev-only password backdoor is **active on production**. `POST https://dowiz.fly.dev/api/auth/local/login`
+A dev-only password backdoor is **active on production**. `POST `<legacy-host>/api/auth/local/login`
 with `{"email":"test@dowiz.com","password":"test123456"}` returns **HTTP 200 with a real
 `role:'owner'` JWT signed by the prod key (`kid:1`)**. The gate is purely "is `DEV_AUTH_SECRET`
 set?" (`apps/api/src/plugins/dev-guard.ts:19-21`, `devLoginAllowed` returns `!!configuredSecret`),
@@ -81,8 +81,8 @@ harden **both** guard functions under one shared flag (see §4).
 - **Hardcoded credential literals:** 2 pairs (`test@dowiz.com`/`test123456`,
   `empty@dowiz.com`/`empty123456`), in 2 files.
 - **Deploy environments (3):**
-  - **prod** = Fly app `dowiz` (`dowiz.fly.dev`). Must end with dev-login OFF.
-  - **staging** = Fly app `dowiz-staging` (`dowiz-staging.fly.dev`). Sets `DEV_AUTH_SECRET=stg-e2e-secret`; must keep dev-login ON.
+  - **prod** = the legacy host app `dowiz`. Must end with dev-login OFF.
+  - **staging** = the legacy host app `dowiz-staging`. Sets `DEV_AUTH_SECRET=stg-e2e-secret`; must keep dev-login ON.
   - **CI fresh-provision** = ephemeral PG/Redis (`ci.yml:51-125`); sets `DEV_AUTH_SECRET=ci-fresh-secret`. Must keep ON.
 - **E2E surfaces depending on the secret:** ~14 spec files + `e2e/lifecycle-e2e/playwright.config.ts:15`
   send `x-dev-auth-secret` and call `/dev/mock-auth` or dev-login (grep: `DEV_AUTH_SECRET` across `e2e/`).
@@ -90,7 +90,7 @@ harden **both** guard functions under one shared flag (see §4).
   the *gate change closes the prod endpoint regardless of the header* — the protocol being untouched is
   irrelevant to the prod-targeted suites; see next bullet.
 - **PROD-targeted CI gate (the R2 CRITICAL surface):** the CI `deploy` job (`ci.yml:127-184`, push-to-main,
-  deploys prod `dowiz`) runs **four** post-deploy E2E steps against `https://dowiz.fly.dev`, all of which
+  deploys prod `dowiz`) runs **four** post-deploy E2E steps against the legacy host, all of which
   authenticate via the prod backdoor:
   - `deploy-validation.spec.ts:13` — `POST /api/dev/mock-auth` (test 0.1 "mock-auth returns valid owner token");
   - `flow-core-lifecycles.spec.ts:31` — `POST /api/dev/mock-auth {role:'owner'}`, `:351` — `POST /api/dev/create-assignment`;
@@ -104,7 +104,7 @@ harden **both** guard functions under one shared flag (see §4).
   `deploy-validation.spec.ts:1.1–1.3`. Everything else **moves to staging or gets rewritten**:
   `deploy-validation.spec.ts` is a **22-test serial chain** (10 carry `Bearer ${authToken}`; its
   "storefront" test reads the slug from the **authenticated** `/api/owner/settings`, not a public read)
-  → retired from the prod job, runs on staging; both **telegram specs hardcode `BASE='https://dowiz.fly.dev'`
+  → retired from the prod job, runs on staging; both **telegram specs hardcode `BASE='<legacy-host-url>'`
   with no env fallback** → must be **source-edited** to read `VITE_BASE_URL` before they can target
   staging; `flow-core-lifecycles.spec.ts` is already env-driven → moves to staging with no edit. The
   **prod unauth smoke is a NEW standalone spec** (health/livez + a public `/s/:slug` read by seeded slug +
@@ -118,16 +118,16 @@ harden **both** guard functions under one shared flag (see §4).
   which one prod uses:
   - **Dockerfile sets NO `NODE_ENV`** (verified: runtime stage `apps/.../Dockerfile` has no
     `ENV NODE_ENV`).
-  - **fly.toml has NO `[env]` block** (verified).
-  - Therefore prod's NODE_ENV comes **only from a Fly secret/env** set out-of-band. **It is not
+  - **the legacy deploy manifest has NO `[env]` block** (verified).
+  - Therefore prod's NODE_ENV comes **only from a platform secret/env** set out-of-band. **It is not
     in the repo and not verifiable from source.** `.env.example:1` is `NODE_ENV=development`.
-  - **Consequence:** a NODE_ENV-only gate is only as trustworthy as an invisible Fly setting. If a
-    future `fly secrets` edit drops it, the app won't boot (good) — but if anyone ever adds
+  - **Consequence:** a NODE_ENV-only gate is only as trustworthy as an invisible legacy-host setting. If a
+    future platform secrets edit drops it, the app won't boot (good) — but if anyone ever adds
     `ENV NODE_ENV=production` to the Dockerfile, **staging would also boot as production and lose
     dev-login**, breaking E2E. The gate must not depend on NODE_ENV *alone*.
 
 **Assumptions to verify with the operator (cannot be read from repo):**
-1. `dowiz` Fly app has `NODE_ENV=production` set as a secret/env. (If unset → boot already fails;
+1. the `dowiz` app on the legacy host has `NODE_ENV=production` set as a secret/env. (If unset → boot already fails;
    if it boots, it's set.)
 2. `dowiz-staging` has `NODE_ENV` = `production`, `staging`-rejected (would fail boot), or
    `development`. **This determines whether a NODE_ENV-gate alone would break staging E2E.**
@@ -142,7 +142,7 @@ harden **both** guard functions under one shared flag (see §4).
 Gate `devLoginAllowed` on `NODE_ENV !== 'production'` AND a configured secret.
 - **Concept:** environment-aware feature gate.
 - **Pros:** one-line change in the gate; covers all 3 call sites; zero new env vars.
-- **Cons:** **single point of trust is an invisible Fly setting** (§2). If staging runs
+- **Cons:** **single point of trust is an invisible legacy-host setting** (§2). If staging runs
   NODE_ENV=production (plausible, to mirror prod), dev-login dies on staging → E2E breaks. If prod's
   NODE_ENV is ever lost, the only backstop is boot-failure. Does **not** invalidate already-leaked
   tokens. **Rejected as the sole mechanism** — too coupled to one unverifiable knob.
@@ -184,7 +184,7 @@ Mint dev/mock tokens under a **separate dev keypair + dev kid**, with three conc
   NODE_ENV fails **safe** because the dev keypair is absent from prod (C.3) — prod-rejection rests on
   **key-material isolation**, with NODE_ENV as a second lock.
 - **C.3 — Keys:** new non-prod envs `JWT_DEV_KID` + `JWT_DEV_PRIVATE_KEY`/`JWT_DEV_PUBLIC_KEY`
-  (staging Fly secret; CI extends the existing throwaway-keypair gen `ci.yml:112-118`). **Prod has
+  (staging platform secrets; CI extends the existing throwaway-keypair gen `ci.yml:112-118`). **Prod has
   none.** The `x-dev-auth-secret` request protocol is **untouched** — C changes only the signing
   kid/keypair, not the auth header the 14 specs send. No spec change for C.
 - **Concept:** key/kid namespacing — future dev tokens are bound to a keypair prod does not hold.
@@ -198,7 +198,7 @@ Mint dev/mock tokens under a **separate dev keypair + dev kid**, with three conc
 - **Honest limit of the "by construction" claim (R2 MED B-SEC):** prod-rejection of dev-kid tokens
   rests on the dev keypair being **absent from prod** — which is the *same class of guarantee* as
   "`DEV_AUTH_SECRET` is unset on prod," and that guarantee **already failed once** (the live leak was a
-  staging secret copied to prod). The dev keypair travels the **identical distribution channel** (Fly
+  staging secret copied to prod). The dev keypair travels the **identical distribution channel** (the legacy host
   secrets / CI env-file) and carries the **identical copy-paste hazard**. So C is "prod-rejected by
   construction" **only under the discipline that no one pastes the dev keypair onto prod AND prod's
   NODE_ENV is correct** — exactly the discipline that broke. Residual stated, not hidden (R-10).
@@ -215,7 +215,7 @@ Make `loadEnv()` **throw at boot** when the dangerous combination is present in 
 (NODE_ENV=production AND dev-login-enabling config set). This is not an alternative to A/B/C; it is
 the **detector** that converts a silent runtime exploit into a loud boot failure.
 - **Concept:** fail-fast config invariant (the same pattern as the schema-drift boot-guard).
-- **Pros:** misconfig becomes a crash-on-deploy (Fly aborts rollout → old code keeps serving, per
+- **Pros:** misconfig becomes a crash-on-deploy (the legacy host aborts rollout → old code keeps serving, per
   the existing `[deploy] release_command` fail-safe), detectable in <1 min; cheap.
 - **Cons:** relies on NODE_ENV being correctly `production` on prod to fire (so it backstops B, it
   doesn't replace it). If NODE_ENV is wrong on prod, the guard is silent — hence we combine.
@@ -277,7 +277,7 @@ under-specified — `!!secret` was never sufficient).
 ## 5. Data / migrations
 
 **None.** No schema change, no table, no data migration. The dev keypair (Option C) is **key
-material delivered via Fly secrets / CI env**, not stored in the DB.
+material delivered via platform secrets / CI env**, not stored in the DB.
 - Forward-only: N/A (no migration).
 - RLS FORCE: N/A (no new tenant table). The existing RLS posture is untouched.
 - Integer-money: N/A.
@@ -308,16 +308,16 @@ Per failure-first: design the failure paths before the happy path.
 | Scenario | Behaviour under this design |
 |---|---|
 | **Prod, secret accidentally re-set, flag unset (today's leak class)** | **Both** guards return false (G.1 + G.2). `/api/auth/local/login` → 401; `/api/dev/mock-auth` family → 404. **All six sites fail-closed.** |
-| **Prod, secret set AND flag set true (worst operator error)** | `loadEnv()` **throws at boot** (D, firing on prod's per-app `NODE_ENV=production` secret) → app fails boot; AND the `release_command` NODE_ENV assert (§9 R3) runs **before** that artifact serves → Fly aborts rollout → old (safe) code keeps serving. Loud, detectable <1 min. |
-| **Prod deploy after operator unsets `DEV_AUTH_SECRET` (immediate mitigation)** | If pipeline already rewired (§9.A step 1): green via unauthenticated prod smoke + staging gate. If NOT yet rewired: the four prod mock-auth E2E steps go 404 → red post-deploy validation, but `flyctl deploy` itself still succeeds (code ships). Sequence step 1 first to stay green (R-11). |
-| **Prod's `NODE_ENV` secret dropped/never set (unset)** | App won't boot (enum required, no default). Independently, the `release_command` NODE_ENV assert (§9 R3) exits nonzero **before traffic** → Fly aborts rollout, old code serves. Safe. |
-| **Prod's `NODE_ENV` wrongly `development` (fat-finger, NOT unset — the R-2 residual)** | The `release_command` assert (§9 R3) sees `FLY_APP_NAME==='dowiz'` AND `NODE_ENV!=='production'` → **exits nonzero before the new artifact serves** → Fly aborts the release, old (production-mode) code keeps serving. This is the inverse-direction gate D could not provide (D only fires when NODE_ENV *is* production). Closed pre-traffic. (Prior R2 text wrongly treated this as caught by a post-deploy CI assert — that ran after traffic; corrected R3.) |
+| **Prod, secret set AND flag set true (worst operator error)** | `loadEnv()` **throws at boot** (D, firing on prod's per-app `NODE_ENV=production` secret) → app fails boot; AND the `release_command` NODE_ENV assert (§9 R3) runs **before** that artifact serves → the legacy host aborts rollout → old (safe) code keeps serving. Loud, detectable <1 min. |
+| **Prod deploy after operator unsets `DEV_AUTH_SECRET` (immediate mitigation)** | If pipeline already rewired (§9.A step 1): green via unauthenticated prod smoke + staging gate. If NOT yet rewired: the four prod mock-auth E2E steps go 404 → red post-deploy validation, but the legacy deploy itself still succeeds (code ships). Sequence step 1 first to stay green (R-11). |
+| **Prod's `NODE_ENV` secret dropped/never set (unset)** | App won't boot (enum required, no default). Independently, the `release_command` NODE_ENV assert (§9 R3) exits nonzero **before traffic** → the legacy host aborts rollout, old code serves. Safe. |
+| **Prod's `NODE_ENV` wrongly `development` (fat-finger, NOT unset — the R-2 residual)** | The `release_command` assert (§9 R3) sees `APP_NAME==='dowiz'` AND `NODE_ENV!=='production'` → **exits nonzero before the new artifact serves** → the legacy host aborts the release, old (production-mode) code keeps serving. This is the inverse-direction gate D could not provide (D only fires when NODE_ENV *is* production). Closed pre-traffic. (Prior R2 text wrongly treated this as caught by a post-deploy CI assert — that ran after traffic; corrected R3.) |
 | **Staging forgets `NODE_ENV=development` (now that image has no NODE_ENV default)** | Staging boot fails the enum (NODE_ENV unset) → loud, caught in staging deploy. NOT defaulted to production (image is NODE_ENV-agnostic per R2 fix) → no silent prod-mode-on-staging. Operator sets the staging secret. |
 | **A FUTURE dev-kid token presented to prod** | Prod verifier refuses the dev kid (C.2 — `acceptDevKid` false on prod; dev keypair absent) → 401. Prod-rejected by construction. |
 | **The ALREADY-MINTED `kid:1` leaked owner token presented to prod** | **Verifies** (it bears the prod header kid). C does NOT reject it. Killed only by operator JWT key rotation (R-6) → all `kid:1` tokens invalid. Until rotation, lives to its 24h exp. **Mandatory rotation, not optional.** |
 | **NODE_ENV unset on prod** | App **won't boot** (config enum is required, no default). Existing fail-fast. Dev-login can't be exploited on a non-running app. |
 | **NODE_ENV is `'staging'` (invalid value)** | `loadEnv()` throws — the enum has no `staging`. Boot fails; safe. (Implication: anyone introducing a `staging` NODE_ENV must also add it to the enum **and** to D's prod-check — flagged as a risk.) |
-| **NODE_ENV mistakenly `'production'` on staging** | D would fire and **staging would refuse to boot with the dev flag set** — loud, not silent. Operator sets staging NODE_ENV to `development`. With the R2 fix (image is NODE_ENV-agnostic, value is a per-app Fly secret), this requires an active wrong-value secret on staging, not merely a forgotten override — less likely than under the rejected Dockerfile-pin design. Documented in §9. |
+| **NODE_ENV mistakenly `'production'` on staging** | D would fire and **staging would refuse to boot with the dev flag set** — loud, not silent. Operator sets staging NODE_ENV to `development`. With the R2 fix (image is NODE_ENV-agnostic, value is a per-app platform secret), this requires an active wrong-value secret on staging, not merely a forgotten override — less likely than under the rejected Dockerfile-pin design. Documented in §9. |
 | **A deploy forgets `NODE_ENV=production` on prod** | Two outcomes, both safe: unset → boot fails (won't serve); set to `development` → B still gates on the flag (default off) so dev-login stays closed unless the flag is *also* wrongly set, in which case **D cannot fire** (NODE_ENV≠production) — this is the one residual gap, mitigated by B's default-off + C's kid rejection. Accepted risk R-2. |
 | **CI runs ~14 specs from one runner IP** | Dev bypass is **exempt** from a per-route cap (prod has no live dev path; non-prod has no real secret to guess) → no 429 flake. Real argon2 path keyed by `email+IP` (~10/min), bounded by the global 100/min IP cap. (Resolves HIGH #4.) |
 | **Rate-limiter store unavailable** | **SPEC (R2-5b, not advisory):** the real-login per-route limiter **fails-closed (rejects)** when its store is unavailable — proof obligation, not a "should". The exempt-when-gate-open dev path has **no per-route limiter to fail** (it relies only on the global IP cap), so store-failure does not flake CI. No cascade — single route, no downstream calls. |
@@ -355,32 +355,32 @@ the only "external" dependency is the rate-limiter store, handled above.
 ## 9. Operability
 
 ### NODE_ENV contract (who sets it, what value) — resolves HIGH #3 + MED #8 + R2 NEW HIGH (Dockerfile stage)
-The breaker proved `NODE_ENV` is absent from every Dockerfile / `fly.toml` / `ci.yml` (CI injects
+The breaker proved `NODE_ENV` is absent from every Dockerfile / `<legacy-deploy-manifest>` / `ci.yml` (CI injects
 `development` in `scripts/verify-fresh-provision.sh:79`).
 
 **R2 correction — there is NO prod-specific runtime stage to pin.** The original §9 said "pin
 `ENV NODE_ENV=production` in the Dockerfile prod runtime stage." Verified false: `Dockerfile` has
 exactly two `FROM` lines — `builder` (L2) and **one unnamed runtime stage** (L30) — and the *same*
-image deploys to both prod (`dowiz`) and staging (`dowiz-staging`) (`flyctl deploy -a dowiz-staging`).
+image deploys to both prod (`dowiz`) and staging (`dowiz-staging`) (the legacy deploy).
 Pinning `ENV NODE_ENV=production` in that single shared stage would default **every** box (staging,
 CI-built images, local `docker run`) to `production`, so a forgotten staging override triggers D's
 boot-throw — converting a missing-env-var into a staging/CI **availability regression** on a shared
 image. That is the wrong place for the pin.
 
-**Resolved: prod NODE_ENV is a per-app Fly value, NOT a Dockerfile ENV.** The image stays
+**Resolved: prod NODE_ENV is a per-app the legacy host value, NOT a Dockerfile ENV.** The image stays
 NODE_ENV-agnostic (Dockerfile sets NO `NODE_ENV` — unchanged). Each app sets it explicitly per-app,
 and a **CI/deploy assertion verifies the prod value before serving** (replacing the "in-repo greppable
 ENV" property we lost):
 
 | Env | Required NODE_ENV | Set by | Verified by |
 |---|---|---|---|
-| **prod** (`dowiz`) | `production` | `fly secrets set NODE_ENV=production -a dowiz` (operator, one-time, recorded in runbook) | **`release_command` asserts it PRE-TRAFFIC** (see R3 below); mismatch = nonzero exit → Fly aborts the release → old code keeps serving. Plus the startup log line `dev-login: DISABLED`. |
-| **staging** (`dowiz-staging`) | `development` | `fly secrets set NODE_ENV=development -a dowiz-staging` (operator) | staging boot + E2E (dev-login must stay ON) |
+| **prod** (`dowiz`) | `production` | the platform secret `NODE_ENV=production` (operator, one-time, recorded in runbook) | **`release_command` asserts it PRE-TRAFFIC** (see R3 below); mismatch = nonzero exit → the legacy host aborts the release → old code keeps serving. Plus the startup log line `dev-login: DISABLED`. |
+| **staging** (`dowiz-staging`) | `development` | the platform secret `NODE_ENV=development` (operator) | staging boot + E2E (dev-login must stay ON) |
 | **CI fresh-provision** | `development` | `scripts/verify-fresh-provision.sh:79` (unchanged) | fresh-provision job |
 | **local** | `development` | `.env` (`.env.example:1`) | n/a |
 
 **R3 — the deploy-assert must be PRE-TRAFFIC, not a post-deploy CI step (R2-2 NEW MEDIUM corrected).**
-The R2 text "deploy job asserts `fly ssh console -a dowiz -C 'printenv NODE_ENV' == production` (or a
+The R2 text "deploy job asserts the NODE_ENV probe (or a
 `/api/health` field) before running post-deploy validation" was **fail-open / post-hoc** against real
 source — verified this round:
 - **The `/api/health` fallback does not exist and must not be added.** `apps/api/src/routes/health.ts`
@@ -389,16 +389,16 @@ source — verified this round:
   documents at `:37-38` and `:320-323` ("`/health` is unauthenticated … raw driver text … is a recon
   leak"; "public payload is minimal by construction"). Advertising the environment posture on an
   unauthenticated endpoint is exactly what that hardening forbids. **Rejected.**
-- **A `fly ssh console` CI step runs AFTER `flyctl deploy`** has already swapped the new machine into
+- **A post-deploy NODE_ENV probe CI step runs AFTER the legacy deploy** has already swapped the new machine into
   service (`ci.yml:151` deploy → then E2E steps). For NODE_ENV **unset**, the app won't boot (config
-  enum, no default) and `flyctl deploy`'s own health phase fails the release — but that is the existing
+  enum, no default) and the legacy deploy's own health phase fails the release — but that is the existing
   boot-enum guard, not the new assert. For NODE_ENV wrongly **`development`** (the R-2 residual,
   fat-finger), the app **boots, serves traffic, the deploy succeeds**, and a *post-deploy* assert only
   reds the CI job — with no automatic rollback, the development-mode artifact is **already live**. So
   the assert as spec'd does **not** gate the rollout for the wrong-value case.
 
-**Resolved — assert NODE_ENV inside `release_command` (the real pre-serving gate).** `fly.toml` already
-has `[deploy] release_command = "dist/migrate/index.cjs"` (verified `:14-15`), which Fly runs in a
+**Resolved — assert NODE_ENV inside `release_command` (the real pre-serving gate).** `<legacy-deploy-manifest>` already
+has `[deploy] release_command = "dist/migrate/index.cjs"` (verified `:14-15`), which the legacy host runs in a
 one-off machine **before** the new machine takes traffic; a **nonzero exit aborts the release** (the
 same fail-safe the schema-drift guard relies on — old code keeps serving). Add a pre-migrate assertion
 **in the migrator entrypoint** (`dist/migrate`, built from `scripts/build-apps.ts`):
@@ -406,7 +406,7 @@ same fail-safe the schema-drift guard relies on — old code keeps serving). Add
 // at the top of the migrate entrypoint, BEFORE applying migrations:
 if (process.env.NODE_ENV !== 'production') {
   console.error(`FATAL release_command: NODE_ENV must be 'production' on prod, got '${process.env.NODE_ENV ?? '(unset)'}'`);
-  process.exit(1);   // nonzero → Fly aborts the release, new artifact never serves
+  process.exit(1);   // nonzero → the legacy host aborts the release, new artifact never serves
 }
 ```
 This runs in the prod app's `release_command` (the prod app's secrets/env are in scope there), exits
@@ -415,10 +415,10 @@ serving. It is genuinely pre-traffic, needs no `/health` field, and is checked o
 (stronger than greppable). **Staging reconciliation (shared image):** the migrator runs on staging too
 (same `release_command`), and staging legitimately runs `NODE_ENV=development`. So the assertion must
 **not** unconditionally demand `production` — it demands `production` **only when a prod marker is
-present**. The marker is the prod app identity, available in the `release_command` env as Fly's
-`FLY_APP_NAME` (set by the platform): assert `NODE_ENV==='production'` **iff `FLY_APP_NAME === 'dowiz'`**;
+present**. The marker is the prod app identity, available in the `release_command` env as the legacy host's
+`APP_NAME` (set by the platform): assert `NODE_ENV==='production'` **iff `APP_NAME === 'dowiz'`**;
 on `dowiz-staging` the check is inert (and a separate inverse-direction line may assert
-`NODE_ENV !== 'production'` when `FLY_APP_NAME === 'dowiz-staging'`, catching a prod-mode-on-staging
+`NODE_ENV !== 'production'` when `APP_NAME === 'dowiz-staging'`, catching a prod-mode-on-staging
 fat-finger pre-traffic too). This is the **inverse-direction fail-closed boot condition** the finding
 asked for: D (boot-guard) already fail-fasts the **dangerous** direction (NODE_ENV=production + dev
 flag/secret set → throw before listen); the **inverse** gap (prod NODE_ENV ≠ production, so D never
@@ -428,7 +428,7 @@ asserting prod's NODE_ENV **is** production before the prod artifact ever serves
 Why `release_command` beats the rejected options: option (a) `/health` field — rejected (reverses recon
 hardening, runs post-traffic anyway); option (b') a pure boot-sequence assert in `server.ts` — would
 fire on every box including the worker process and any local `docker run`, and a failed app-boot does
-not abort a Fly release as cleanly as a failed `release_command` (a crash-looping new machine vs. a
+not abort a legacy host release as cleanly as a failed `release_command` (a crash-looping new machine vs. a
 clean rollout-abort with old code serving). `release_command` is the **one** hook that (1) runs once,
 (2) on the target app with that app's env, (3) **before** traffic, and (4) aborts the release on
 nonzero exit — exactly the pre-serving gate the design needs.
@@ -452,7 +452,7 @@ push, not only on a real prod boot (resolves MED #8 "untestable pre-prod"). The 
 **The conflict, stated plainly:** "prod fails closed for `/dev/*`" (G.2) and "the prod deploy job
 authenticates via prod `/api/dev/mock-auth`" (ci.yml:158-184, four steps) are mutually exclusive.
 The moment the operator unsets the prod `DEV_AUTH_SECRET` (the immediate mitigation), **the next push
-to main runs `deploy-validation.spec.ts:13` → `POST https://dowiz.fly.dev/api/dev/mock-auth` → 404 →
+to main runs `deploy-validation.spec.ts:13` → `POST `<legacy-host>/api/dev/mock-auth` → 404 →
 red deploy** — even before G.2 ships, because the secret is what those steps depend on. So the deploy
 pipeline redesign is **part of this remediation, not a follow-up**: prod can be EITHER backdoored OR
 unvalidated by the current pipeline, never both safe; we must change how prod is validated.
@@ -491,7 +491,7 @@ that legitimately holds the dev backdoor (staging); validate prod liveness with 
 **CI workflow change (`ci.yml`):**
 1. New job `staging-e2e` (or extend `validate`): `needs: validate`, on push-to-main, deploys the
    built image to `dowiz-staging`, runs `flow-core-lifecycles` + `telegram-*` against
-   `https://dowiz-staging.fly.dev` with `DEV_AUTH_SECRET=stg-e2e-secret` + `ALLOW_DEV_LOGIN=true`.
+   the legacy host with `DEV_AUTH_SECRET=stg-e2e-secret` + `ALLOW_DEV_LOGIN=true`.
    These are the *authenticated* suites — they keep their current mock-auth calls **unchanged**
    (staging has the backdoor). This is the prod-deploy gate.
 2. `deploy` job: `needs: [validate, staging-e2e]`. Migrate (`release_command`) → assert prod
@@ -513,16 +513,16 @@ that legitimately holds the dev backdoor (staging); validate prod liveness with 
      `locationSlug`, then probes the public menu/theme. So `3.1/5.1/9.1/12.1/13.1` all depend on
      `authToken`/`locationSlug` that only test 0.1 + 3.1 populate. **Serial shared-state makes the
      "keep" subset non-portable** — pulling 0.1 strands the chain.
-   - `e2e/tests/flow-core-lifecycles.spec.ts:4` reads `process.env.VITE_BASE_URL || 'https://dowiz.fly.dev'`
+   - `e2e/tests/flow-core-lifecycles.spec.ts:4` reads `process.env.VITE_BASE_URL || '<legacy-host-url>'`
      — **env-driven**, can target staging by env. Authenticated → moves to staging suite, no edit.
    - `e2e/tests/telegram-webhook.spec.ts:3` and `telegram-full-flow.spec.ts:3` are **`const BASE =
-     'https://dowiz.fly.dev'`** with **NO `VITE_BASE_URL` fallback**. Setting the env on `staging-e2e`
+     '<legacy-host-url>'`** with **NO `VITE_BASE_URL` fallback**. Setting the env on `staging-e2e`
      has **zero effect** — they hammer prod regardless. They authenticate via `/api/dev/mock-auth`
      (`telegram-full-flow:51`). After step 3 closes the prod backdoor, these two go 404 against prod.
 
    **Re-specified concretely (the honest, enlarged E2E delta):**
    - **(1) Prod unauth smoke — a NEW standalone non-serial spec** (e.g. `prod-smoke.spec.ts`), env-driven
-     (`process.env.VITE_BASE_URL || 'https://dowiz.fly.dev'`), mints **no token**. Exact assertions:
+     (`process.env.VITE_BASE_URL || '<legacy-host-url>'`), mints **no token**. Exact assertions:
      `GET /livez` → 200 and `GET /health` → 200/503 by liveness (no NODE_ENV field — see §9); a **public
      storefront read** via the SSR route `GET /s/:slug` (or the public API `GET /public/locations/:slug/menu`
      + `GET /api/public/theme/:slug`) against a **known seeded public slug passed by env**
@@ -532,7 +532,7 @@ that legitimately holds the dev backdoor (staging); validate prod liveness with 
      **3 of 22 tests** in a serial file, so they must be **lifted into the new standalone spec** to be
      portable. The old `deploy-validation.spec.ts` is **retired from the prod job** (it keeps running on
      staging where the backdoor lives, unchanged).
-   - **(2) Telegram specs MUST be edited** to read `const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev'`
+   - **(2) Telegram specs MUST be edited** to read `const BASE = process.env.VITE_BASE_URL || '<legacy-host-url>'`
      (one line each) so the `staging-e2e` job actually points them at staging. **The proposal's earlier
      "specs unchanged / no spec change" claim was wrong — list of spec files that MUST change:**
      `e2e/tests/telegram-webhook.spec.ts` (BASE → env), `e2e/tests/telegram-full-flow.spec.ts` (BASE →
@@ -562,7 +562,7 @@ that legitimately holds the dev backdoor (staging); validate prod liveness with 
 deploy-job E2E steps go red (mock-auth 404). Therefore the operator's immediate mitigation (unset
 prod secret) MUST be sequenced AFTER step 1 (pipeline rewired) — OR, if the secret is unset
 *immediately* for incident reasons, the operator must accept that the prod deploy job is red until
-step 1 lands (deploys still happen — `flyctl deploy` succeeds; only the post-deploy validation step
+step 1 lands (deploys still happen — the legacy deploy succeeds; only the post-deploy validation step
 fails). Stated explicitly: **unsetting the secret first = red-but-deploying pipeline until step 1;
 landing step 1 first = clean throughout.** Recommend step 1 first. This is a tracked dependency, owner
 below (R-11).
@@ -575,7 +575,7 @@ below (R-11).
   `DEV_AUTH_SECRET` are unchanged (the `x-dev-auth-secret` protocol is untouched). The C dev keypair
   + `JWT_DEV_KID=dev` are added to the CI env-file (throwaway, like the existing keypair gen at
   ci.yml:112-118).
-- **Misconfig detection (<1 min):** D's boot-throw surfaces as a failed Fly release (rollout
+- **Misconfig detection (<1 min):** D's boot-throw surfaces as a failed the legacy host release (rollout
   aborted, old code serves) — visible in deploy logs immediately. Add a one-line
   startup log of the effective dev-login state (`dev-login: DISABLED` in prod) for positive
   confirmation in logs/observability.
@@ -591,7 +591,7 @@ below (R-11).
 
 | ID | Risk | Disposition | Owner |
 |---|---|---|---|
-| R-1 | NODE_ENV is now a **per-app Fly secret** (R2: image is NODE_ENV-agnostic — NO Dockerfile pin, the assumed prod runtime stage does not exist). Prod must have `NODE_ENV=production`, staging `=development`. | **Verify + set per-app.** Prod value asserted **pre-traffic in `release_command`** (R3 §9) — nonzero exit aborts the release, old code serves; this catches the wrong-value (`development`) case the prior post-deploy CI assert missed. Staging unset → boot fails (caught in staging deploy). No silent prod-default on the shared image. | Operator + Implementer |
+| R-1 | NODE_ENV is now a **per-app platform secret** (R2: image is NODE_ENV-agnostic — NO Dockerfile pin, the assumed prod runtime stage does not exist). Prod must have `NODE_ENV=production`, staging `=development`. | **Verify + set per-app.** Prod value asserted **pre-traffic in `release_command`** (R3 §9) — nonzero exit aborts the release, old code serves; this catches the wrong-value (`development`) case the prior post-deploy CI assert missed. Staging unset → boot fails (caught in staging deploy). No silent prod-default on the shared image. | Operator + Implementer |
 | R-2 | If prod's NODE_ENV is ever wrongly `development` AND the flag is wrongly set, D cannot fire (NODE_ENV≠production). | **Accepted, mitigated** by B default-off + C kid-rejection. Residual = handler runs but tokens are prod-rejected. | Architect |
 | R-3 | Sharing one `dev` kid between staging and CI means a staging-minted dev token verifies in CI and vice-versa. | **Accepted** — both are non-prod; the security boundary is prod-rejection, which holds. | Architect |
 | R-4 | A future `staging` NODE_ENV value would need adding to the config enum AND to D's check, or boot breaks / D mis-scopes. | **Open** — documented; gate any such change through this ADR. | Architect |
@@ -602,8 +602,8 @@ below (R-11).
 | R-9 | Was prod dark / any real users + paid orders in the exposure window? (Determines CRITICAL-with-victims vs near-miss.) | **NEEDS-HUMAN-DECISION** (counsel open question) — count query in resolution.md (R2-corrected: run as BYPASSRLS role, join customers for phone, filter on paid status); operator defines window-start = when prod secret was first set. | Operator (human) |
 | R-10 | C's prod-rejection rests on the dev keypair being absent from prod — same copy-paste guarantee class that already failed for `DEV_AUTH_SECRET`. | **ACCEPT-RISK, reduced.** Lower residual than the secret (distinct artifact from prod key; D fails-fast if `JWT_DEV_KID` is on a NODE_ENV=production box — catches the cheap half). Fail-open needs BOTH a pasted keypair AND wrong prod NODE_ENV. | Operator (hygiene) + Architect (D) |
 | R-11 | Prod deploy validation depends on the prod `/api/dev/mock-auth` backdoor (4 CI steps). Closing it / unsetting the secret turns the prod deploy job red until the pipeline is rewired. | **FIX (in scope, §9.A).** Sequence: rewire CI (prod smoke = unauthenticated + staging gate) **first**, then close prod + unset secret. If secret unset first for incident reasons, deploys still ship; post-deploy validation is red until rewire lands. | Implementer (pipeline) + Operator (sequencing) |
-| R-12 | The §9.A spec-split is a **source rewrite, not a CI-config tweak** (R3): 2 telegram specs hardcode `dowiz.fly.dev` (must be edited to read `VITE_BASE_URL`), `deploy-validation.spec.ts` is a 22-test serial auth-chain (only 3 negatives portable), and the prod smoke is a **new standalone spec** reading a seeded public slug. Of ~50 prod-targeted tests, ~3 reusable as-is. | **FIX (in scope, §9.A R3).** Enlarges the E2E work; proof obligation added (prod-smoke spec passes with no secret; edited telegram specs prove they hit staging). | Implementer (E2E) |
-| R-13 | The NODE_ENV pre-traffic gate lives in the **migrator entrypoint** (`release_command`), keyed on `FLY_APP_NAME==='dowiz'`. If Fly does not populate `FLY_APP_NAME` in the `release_command` env, the prod-marker check is inert and the inverse gate silently no-ops. | **Verify** `FLY_APP_NAME` is present in the `release_command` env (Fly platform-set); if absent, substitute an explicit env marker set as a prod-only Fly secret (e.g. `DEPLOY_TARGET=prod`). Proof obligation covers both exit paths. | Implementer (verify) + Operator (marker secret if needed) |
+| R-12 | The §9.A spec-split is a **source rewrite, not a CI-config tweak** (R3): 2 telegram specs hardcode the legacy host (must be edited to read `VITE_BASE_URL`), `deploy-validation.spec.ts` is a 22-test serial auth-chain (only 3 negatives portable), and the prod smoke is a **new standalone spec** reading a seeded public slug. Of ~50 prod-targeted tests, ~3 reusable as-is. | **FIX (in scope, §9.A R3).** Enlarges the E2E work; proof obligation added (prod-smoke spec passes with no secret; edited telegram specs prove they hit staging). | Implementer (E2E) |
+| R-13 | The NODE_ENV pre-traffic gate lives in the **migrator entrypoint** (`release_command`), keyed on `APP_NAME==='dowiz'`. If the legacy host does not populate `APP_NAME` in the `release_command` env, the prod-marker check is inert and the inverse gate silently no-ops. | **Verify** `APP_NAME` is present in the `release_command` env (the legacy host platform-set); if absent, substitute an explicit env marker set as a prod-only platform secrets (e.g. `DEPLOY_TARGET=prod`). Proof obligation covers both exit paths. | Implementer (verify) + Operator (marker secret if needed) |
 
 ---
 
@@ -631,11 +631,11 @@ Per the Mandatory Proof Rule, the eventual implementation must include:
   `/api/owner/settings`) + the **extracted** 1.1–1.3 401 negatives, minting no token. Separately, the
   **edited** `telegram-webhook.spec.ts` / `telegram-full-flow.spec.ts` (now reading `VITE_BASE_URL`) +
   `flow-core-lifecycles.spec.ts` + `deploy-validation.spec.ts` pass against **staging-config** (flag on,
-  `VITE_BASE_URL=https://dowiz-staging.fly.dev`) — proving they actually hit staging and not prod. Prove
+  `VITE_BASE_URL=<legacy-host-url>`) — proving they actually hit staging and not prod. Prove
   the prod deploy job is green with the prod backdoor closed AND that no prod-targeted step still calls
   `/api/dev/*` — the regression guard for the R2 CRITICAL and the R3 spec-split HIGH.
 - **NODE_ENV pre-traffic assert proof (R2 HIGH + R3 MEDIUM):** a test of the migrator entrypoint
-  (`dist/migrate`) asserts it **exits nonzero** when `FLY_APP_NAME==='dowiz'` AND `NODE_ENV!=='production'`
+  (`dist/migrate`) asserts it **exits nonzero** when `APP_NAME==='dowiz'` AND `NODE_ENV!=='production'`
   (both unset and `development` cases), and **exits zero** when `NODE_ENV==='production'` — proving the
   gate runs in `release_command` (pre-traffic), not as a post-deploy CI step, and that no `/health`
   NODE_ENV field is relied upon.

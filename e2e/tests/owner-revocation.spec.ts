@@ -4,7 +4,7 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
 // NOTE: staging login takes the dev-bypass path (signDevToken, 7d, NO refresh token), so P-a (24h
 // argon2 access) and P-c (refresh re-derivation) are exercised by unit/guardrail + the grep
 // guardrail (scripts/guardrail-owner-active-membership.mjs), not observable via this login.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test owner-revocation --project=desktop --reporter=list
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org pnpm exec playwright test owner-revocation --project=desktop --reporter=list
 const CREDS = { email: 'test@dowiz.com', password: 'test123456' };
 
 async function token(request: APIRequestContext): Promise<string> {

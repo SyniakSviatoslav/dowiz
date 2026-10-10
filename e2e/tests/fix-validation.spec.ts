@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = 'https://dowiz.fly.dev';
+const BASE = 'https://qa-durres.dowiz.org';
 
 // ── Helper: get real auth token from mock-auth endpoint ──
 async function getOwnerToken(request: any): Promise<{ access_token: string; userId: string; activeLocationId: string }> {
@@ -47,7 +47,7 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
 
     const result = await page.evaluate(async (token) => {
       const protocol = 'wss:';
-      const wsUrl = `${protocol}//dowiz.fly.dev/ws?token=${token}`;
+      const wsUrl = `${protocol}//qa-durres.dowiz.org/ws?token=${token}`;
 
       return new Promise<any>((resolve, reject) => {
         const events: string[] = [];
@@ -102,7 +102,7 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
     const result = await page.evaluate(async () => {
       const events: string[] = [];
       return new Promise<{ events: string[] }>((resolve) => {
-        const ws = new WebSocket('wss://dowiz.fly.dev/ws?token=bogus');
+        const ws = new WebSocket('wss://qa-durres.dowiz.org/ws?token=bogus');
         const timer = setTimeout(() => {
           ws.close();
           resolve({ events: [...events, 'timeout'] });
@@ -138,7 +138,7 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
 
     const behavior = await page.evaluate(async (token) => {
       const events: string[] = [];
-      const ws = new WebSocket(`wss://dowiz.fly.dev/ws`);
+      const ws = new WebSocket(`wss://qa-durres.dowiz.org/ws`);
 
       await new Promise<void>((resolve) => {
         ws.onopen = () => {

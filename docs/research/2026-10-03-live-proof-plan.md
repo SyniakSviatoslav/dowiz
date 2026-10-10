@@ -119,7 +119,7 @@ No Stripe, Telegram, WhatsApp/Meta, OTEL, ebills.al or Wolt credential exists on
    `statusOf`, `_retry-fetch`, the IPv4-first DNS fix), `e2e/flows/f1..f4` for the browser checkout,
    `e2e/walk/q2-kitchen.mjs` (kitchen), `q5-stock.mjs` (stock), `courier.mjs`, and
    `tools/evals/collect/cf.mjs` (Workers analytics). `e2e/qa-staging/_harness.mjs` points at
-   `dowiz-staging.fly.dev`, the stack removed on 2026-07-15. Only its `makePage` and `recorder` shapes are
+   the legacy host, the stack removed on 2026-07-15. Only its `makePage` and `recorder` shapes are
    reusable, so the runner does not import it.
 5. **Output:** one JSON line per row, `{row, status, evidence, at, build, contract}`, where `build` is
    the live `/api/version.commit` and `contract` is the contract's version.

@@ -2,7 +2,7 @@
 
 First live run of the [UI Build-Verification Loop](../../docs/operating-model/ui-build-verification-loop.md).
 Layer 4 (agent-as-eye) executed by **4 parallel Claude subagents**, each reviewing one rendered screen
-from staging (`https://dowiz-staging.fly.dev`) against the A–F rubric. Screenshots captured at 390/1280,
+from staging (`https://<legacy-host>`) against the A–F rubric. Screenshots captured at 390/1280,
 `reducedMotion`, locale SQ. Triage, not a phase verdict.
 
 ## Findings (routed per the matrix)
@@ -30,7 +30,7 @@ from staging (`https://dowiz-staging.fly.dev`) against the A–F rubric. Screens
 **#1 — silent English in SQ/UK.** `StateChip` uses `t('state.open','Open')` etc., but those 5 keys were
 absent from the catalog → the resolver fell back to English for *all* locales. Added with real sq/uk
 via `pnpm exec tsx scripts/i18n-add.ts state.open "Open" "Hapur" "Відчинено"` (×5). Parity gate green
-(1084 keys). Proof-of-render pending a staging deploy (no fly CLI here), same as the polish-debt F12.
+(1084 keys). Proof-of-render pending a staging deploy (no deploy CLI here), same as the polish-debt F12.
 
 ## Gate loophole closed
 This run exposed that the i18n parity gate only checked keys *in* the catalog — keys used in code via

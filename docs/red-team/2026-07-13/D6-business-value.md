@@ -5,8 +5,8 @@
 > DeliveryOS-Product-Goal-Alignment-Audit.md, DeliveryOS-As-Built-Summary-v1.md,
 > MASTER-ROADMAP-MVP-2026-07-12.md, docs/design/ROADMAP-GROUND-TRUTH-2026-07-11.md,
 > BRAND-BIBLE.md (recovered from git 330ff4ed — the file no longer exists on the active branch),
-> README.md (origin/main), docs/design/payments/*; plus live probes of https://dowiz.fly.dev and
-> https://dowiz-staging.fly.dev on 2026-07-13. CLAIMED and SHIPPED are separated throughout.
+> README.md (origin/main), docs/design/payments/*; plus live probes of the legacy host and
+> the legacy host on 2026-07-13. CLAIMED and SHIPPED are separated throughout.
 
 ---
 
@@ -18,7 +18,7 @@ GloriaFood already gives away free, into a market whose entire in-country revenu
 rounding error, with no billing code, no live acquisition funnel (`/claim` 404s on prod today), no
 savings/ROI surface (its own #1-ranked lever), and — after ~1,400 commits in six weeks — **zero real
 customer orders and zero paying restaurants**. Worse, the project has formally pivoted away from the
-revenue product: the entire production stack (API, worker, DB, Fly config) sits quarantined in
+revenue product: the entire production stack (API, worker, DB, the legacy host config) sits quarantined in
 `attic/` on the active branch, and the new constitution (MANIFESTO.md C1–C13, DECISIONS.md D0/D1)
 subordinates "MVP-first pragmatism" to six ideological invariants — decentralized, local-first,
 post-quantum, from-scratch crypto, mesh, reliability-over-latency — none of which any restaurant
@@ -51,7 +51,7 @@ talent.
 | Billing / ability to charge money | NONE. "Stripe/Billing: Stub (post-MVP)" — there is no code path by which any restaurant can pay dowiz anything | As-Built-Summary §2 "Shims vs Real"; grep origin/main for stripe/billing → push-subscription hits only |
 | Savings/ROI display ("you saved $X vs Glovo commission") | ABSENT. Their own Business-Value-Sort Tier 5 ranks this the cheapest, highest-leverage retention lever ("подвоїти"); the Alignment-Audit §A calls it the "найбільша можливість." A month later: zero hits in admin UI or API | grep origin/main apps/web/src/pages/admin + apps/api/src for savings/commission → nothing |
 | Clean, premium production surface | Prod sitemap serves Google `debug-loc-1781513997559`, `gp-e2e-1781588122647`, `rg-tenantb` test venues — the exact "visible test-data clutter" PRODUCT.md lists as the anti-reference to kill | curl `/sitemap-locations-1.xml`; PRODUCT.md "Anti-references" |
-| Staging integrity | Staging sitemap index leaks an internal address: `https://dowiz-rust-staging.flycast/sitemap-locations-1.xml` — broken for crawlers, exposes infra topology | curl staging `/sitemap.xml` |
+| Staging integrity | Staging sitemap index leaks an internal address: `https://<legacy-internal-host>/sitemap-locations-1.xml` — broken for crawlers, exposes infra topology | curl staging `/sitemap.xml` |
 | "First real order" (G11) | NOT ACHIEVED. MASTER-ROADMAP §3 marks "S4 · FIRST REAL ORDER — DONE (G11 GREEN)" — but it is a **cargo-test simulation** (`node/src/sim.rs`, "simulated first real order end-to-end"). Tier-3 G11 (a real non-operator order) is explicitly still open (ROADMAP-GROUND-TRUTH Tier 3: "external, not code") | MASTER-ROADMAP §3 vs ROADMAP-GROUND-TRUTH §2 Tier 3 |
 
 ### 2.3 Vitamin or painkiller?
@@ -75,7 +75,7 @@ MANIFESTO C13: "`server/` (axum/rusqlite centralized deploy) is DROPPED… repla
 local SQLite." DECISIONS D1 repeats it: "a centralized dispatch/deploy server is the anti-pattern
 the protocol exists to kill." D0: the six invariants "outrank roadmap sequencing, feature requests,
 and 'MVP-first' pragmatism." Commit e1505e1d ("chore(declutter C2)") physically moved `apps/api`,
-`apps/worker`, `packages/db`, `fly.toml` into `attic/`. Meanwhile MANIFESTO §6 admits: "Not a
+`apps/worker`, `packages/db`, `<legacy-deploy-manifest>` into `attic/`. Meanwhile MANIFESTO §6 admits: "Not a
 business plan… Not '0% fee = moat' (poetry)." The constitution of the company now states, in
 writing, that it is not a business. Take it at its word.
 
@@ -257,7 +257,7 @@ acqui-hire of the founder, with the repo as portfolio. None is an investment.
 
 | # | Claim (source) | Status | Proof |
 |---|---|---|---|
-| 1 | "/claim 404 fix → prod (f0bd9966)" (ROADMAP-GROUND-TRUTH §1 "DONE (verified)") | FALSE | live `curl https://dowiz.fly.dev/claim` → 404; origin/main server.ts:840 SPA_ROUTES lacks `/claim`; f0bd9966 = GDPR photo-purge commit |
+| 1 | "/claim 404 fix → prod (f0bd9966)" (ROADMAP-GROUND-TRUTH §1 "DONE (verified)") | FALSE | live `curl `<legacy-host>/claim` → 404; origin/main server.ts:840 SPA_ROUTES lacks `/claim`; f0bd9966 = GDPR photo-purge commit |
 | 2 | "FIRST REAL ORDER — DONE (G11 GREEN)" (MASTER-ROADMAP §3 S4) | SIMULATION ONLY | `node/src/sim.rs` cargo test; real-order G11 still "external, not code" (ROADMAP-GROUND-TRUTH Tier 3) |
 | 3 | Pricing $0/19/39/59 (README.md) | UNBILLABLE | Stripe "Stub (post-MVP)" (As-Built §2); no pricing surface in app |
 | 4 | Savings/ROI counter = top retention lever (Business-Value-Sort Tier 5) | ABSENT | grep origin/main admin+api for savings/commission → 0 hits |
@@ -265,7 +265,7 @@ acqui-hire of the founder, with the repo as portfolio. None is an investment.
 | 6 | "kill visible test-data clutter" (PRODUCT.md anti-reference) | VIOLATED IN PROD | sitemap-locations-1.xml lists debug-loc-*/gp-e2e-*/rg-tenantb |
 | 7 | Warm Cosmo-Noir brand shipped (BRAND-BIBLE) | NOT ON MAIN / NOT ON PROD | landing commit 330ff4ed unmerged; prod `/` → `/start`; brand-bible file absent from active branch |
 | 8 | ~20 foundation research reports (2026-07-11 brief) | NEVER EXISTED ON DISK | ROADMAP-GROUND-TRUTH §0.1, "headline risk" |
-| 9 | Product stack maintained as "legacy oracle" | QUARANTINED | commit e1505e1d moved apps-api/apps-worker/packages-db/fly.toml to `attic/`; only `apps/web` remains |
-| 10 | Staging healthy public surface | LEAKY | staging sitemap index points to internal `dowiz-rust-staging.flycast` |
+| 9 | Product stack maintained as "legacy oracle" | QUARANTINED | commit e1505e1d moved apps-api/apps-worker/packages-db/the legacy deploy manifest to `attic/`; only `apps/web` remains |
+| 10 | Staging healthy public surface | LEAKY | staging sitemap index points to internal `<legacy-internal-host>` |
 
 *Confidential — red-team work product. Judgments falsifiable against the citations above; re-run the curls before reuse.*

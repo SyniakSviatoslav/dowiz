@@ -83,7 +83,7 @@ project's life. All same-day:
 - **D0 — RULED.** The six non-negotiable invariants, outranking all roadmap/feature pressure:
   **decentralized · local-first · post-quantum · crypto · mesh · reliability-over-latency.**
 - **D1 — RULED.** Drop the centralized server (`server/`, axum+rusqlite) entirely — peer nodes
-  only, no central DB, no Supabase, no Fly.
+  only, no central DB, no Supabase, no legacy host.
 - **D2 — RULED.** `MANIFESTO.md` + `DECISIONS.md` live at repo root.
 - **D3 — RULED.** Transport = DTN/BPv7 (RFC 9171) + QUIC/TCPCLv4 + BIBE custody, PQ envelope at
   the protocol layer regardless of underlay. `libp2p-gossipsub`/Zenoh/Reticulum rejected as
@@ -1549,7 +1549,7 @@ One-line ledger:
 
 #### 10.5.3 DELIVERY — Product Surface (P37–P39)
 
-**Position on the critical path:** CORE (~90% done) → PROTOCOL (mesh-real ~70% built, being wired in P34) → **DELIVERY is next**. The blunt truth: the product surface currently has **zero deployability** — no fly.toml, no live deployment, no HTTP order/API server anywhere in the repo (the only axum server, `tools/native-spa-server`, is static-file-only with zero dynamic routes). Once P34 lands, DELIVERY's order/courier/payment logic is mostly a **wiring** job (delivery-domain already has the proven flow), not new design.
+**Position on the critical path:** CORE (~90% done) → PROTOCOL (mesh-real ~70% built, being wired in P34) → **DELIVERY is next**. The blunt truth: the product surface currently has **zero deployability** — no legacy deploy manifest, no live deployment, no HTTP order/API server anywhere in the repo (the only axum server, `tools/native-spa-server`, is static-file-only with zero dynamic routes). Once P34 lands, DELIVERY's order/courier/payment logic is mostly a **wiring** job (delivery-domain already has the proven flow), not new design.
 
 **Already-landed substrate (DONE, listed for completeness, not re-scoped):** FE-01 zero-copy bridge (`engine/src/zerocopy.rs`, `engine/src/bridge.rs::VertexBridge` — caveat carried into P38a: `wasm/src/lib.rs` still returns copied `Vec`s, not the real ptr/len boundary), FE-02 SoA store (`engine/src/widget_store.rs`), FE-03 fixed-timestep loop (`engine/src/loop_.rs`), FE-08 motion/critical-damping (`engine/src/motion.rs`), FE-09 money-never-tween guard (`engine/src/money_guard.rs`); RW-02 (`kernel/src/analytics.rs::channel_ledger_js`), RW-03 (legacy money.ts/JS confirmed absent), RW-06 (`kernel/src/geo.rs`), RW-07 (`kernel/src/cart.rs`), RW-08 (`kernel/src/messenger.rs` + `money.rs`).
 
@@ -1580,7 +1580,7 @@ One-line ledger:
 3. Thin-shell invariant (RW-09): zero domain logic in handlers — every state change routes through kernel `decide`/`fold`; falsifiable by review gate: no order-state mutation outside kernel calls in the server crate.
 4. Mutating routes authenticate via **capability certificates** (proto-cap, ML-DSA-signed, PROTOCOL's `HybridGate`/`verify_chain`/`RevocationSet` — all already built). Falsifiable: a request with a forged or revoked cert is rejected (401/403) in a test; a valid chain passes.
 5. **Offline parity (ARCHITECTURE.md F12, canon-locked):** the HTTP server is NOT the only way to place an order. The WASM-in-browser local decide/fold path that `web/src/app.mjs`'s beachhead already uses is extended to real order placement — a test places an order with the server absent and the fold is identical; rejoin/sync is PROTOCOL P34's job, not P37's.
-6. The server binary is runnable locally with one documented command. (Deploy packaging — fly.toml, monitoring — is ECOSYSTEM/OPS scope, P40+; P37 only guarantees a bootable binary.)
+6. The server binary is runnable locally with one documented command. (Deploy packaging — the legacy deploy manifest, monitoring — is ECOSYSTEM/OPS scope, P40+; P37 only guarantees a bootable binary.)
 **Anti-scope:** Do NOT build a conventional REST+session/password login — auth is capability-cert-based per canon and `BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md` D3 (device-bound keypair primary; TOTP/WebAuthn are step-up only). Do NOT design a full resource-oriented REST API, pagination, versioning, or an admin CRUD surface. Do NOT put any pricing/discount/state logic in handlers. Do NOT make network the required path for order placement (F12).
 **Depends on / blocks:** Depends on PROTOCOL P34 for real mesh-backed order data (the server can land against local delivery-domain first). **Blocks** P23-P3 (its named live blocker), P13 wire-side wiring, P39b, and any AGENT (P4x) flow that needs an API to call.
 
@@ -1688,7 +1688,7 @@ blueprint, first design pass needed here.")*
 
 #### 10.5.5 ECOSYSTEM/OPS — External Integrations, Deployment, Multi-Product Platform
 
-> **Sequencing verdict (the most important sentence in this section):** ECOSYSTEM/OPS is **explicitly LAST on the critical path** — CORE → PROTOCOL (P34) → DELIVERY (P37/P38) → AGENT (P40/P41) → **then this**. This is not a priority judgment about the work's worth; it is a statement of physical reality: there is currently **zero live deployment** (no `fly.toml`, no pgrust binary installed, `attic/` and the old `apps/` stack physically deleted). Deployment, monitoring, external integrations, and multi-product platforming only make sense once there is something real to deploy, monitor, and integrate. Building a monitoring stack for a service that does not exist is waste, and every phase below carries an anti-scope rule enforcing that.
+> **Sequencing verdict (the most important sentence in this section):** ECOSYSTEM/OPS is **explicitly LAST on the critical path** — CORE → PROTOCOL (P34) → DELIVERY (P37/P38) → AGENT (P40/P41) → **then this**. This is not a priority judgment about the work's worth; it is a statement of physical reality: there is currently **zero live deployment** (no `<legacy-deploy-manifest>`, no pgrust binary installed, `attic/` and the old `apps/` stack physically deleted). Deployment, monitoring, external integrations, and multi-product platforming only make sense once there is something real to deploy, monitor, and integrate. Building a monitoring stack for a service that does not exist is waste, and every phase below carries an anti-scope rule enforcing that.
 
 > **Audit finding (largest silently-dropped cluster in the whole roadmap audit):** neither the integration-ports arc (IP-01..21) nor the ecosystem-strategy arc (EC-01..20) is referenced *at all* by `CORE-ROADMAP-INDEX.md` or `MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` — zero hits for either arc name. Roughly **38 of the 41 combined external-facing IP+EC unit IDs had no living tracking artifact anywhere in current canon** before this section. This section is their new (and only) home. The absorption ledger:
 > - **IP-10 / IP-15 / IP-16** (social/messenger marketing) → **ABSORBED INTO existing P22**, not renumbered (see below).
@@ -2568,34 +2568,34 @@ Sea (dowiz-owned ambient physics field/narrative layer) stays fixed, Sheet (bran
 customizable within that 5-token envelope. No new design work triggered by this dialogue pass;
 recorded here only so the mapping is explicit and citable.
 
-#### 16.10 Fly.io — fully retired, not deferred
-Operator's ruling, twice-confirmed: kill the Fly zombie now (*"вимкнути зараз, клієнт
-повідомлений про нову версію"*), remove Fly from the codebase entirely (*"прибирай з коду
+#### 16.10 Legacy host — fully retired, not deferred
+Operator's ruling, twice-confirmed: kill the legacy host zombie now (*"вимкнути зараз, клієнт
+повідомлений про нову версію"*), remove the legacy host from the codebase entirely (*"прибирай з коду
 повністю"*). Actioned this same pass:
 - `.env` mode 666→600 (unrelated pre-existing audit action, done same session, unblocking
-  nothing about Fly specifically but recorded for the same commit's provenance).
-- Stale `dowiz.fly.dev` references in live-behavior-driving config updated to reflect
+  nothing about the legacy host specifically but recorded for the same commit's provenance).
+- Stale legacy-host references in live-behavior-driving config updated to reflect
   Hetzner+Cloudflare-only: `.mcp.json` (`VITE_BASE_URL`), `openspec/config.yaml` (tech-stack +
-  Mandatory Proof Rule target), `.claude/CLAUDE.md` (both SUSPENDED-section Fly mentions).
-  `fly.toml` and the old TS backend (`apps-api`/`apps-worker`/`packages-db`) were already
+  Mandatory Proof Rule target), `.claude/CLAUDE.md` (both SUSPENDED-section the legacy host mentions).
+  `<legacy-deploy-manifest>` and the old TS backend (`apps-api`/`apps-worker`/`packages-db`) were already
   quarantined to `attic/` in an earlier commit (`fce5738b0`) — this pass only had stale
   *references* left to clean, not a live deploy pipeline.
 - **Actual teardown is blocked on operator action**, not a design question: this sandbox holds
-  no prod Fly credential (only a `dowiz-staging`-scoped token was ever intentionally saved, per
-  `staging-fly-access` memory — prod tokens were deliberately never persisted). The operator
-  must run `flyctl auth login` interactively (`! ~/.fly/bin/flyctl auth login`) before teardown
+  no prod legacy host credential (only a `dowiz-staging`-scoped token was ever intentionally saved, per
+  `staging-legacy-access` memory — prod tokens were deliberately never persisted). The operator
+  must log in to the legacy host CLI interactively before teardown
   can proceed.
 - A **pre-existing runbook already covers this exact teardown**:
   `docs/red-team/2026-07-13/PART1-LIVE-PROD-DECOMMISSION.md` — written 5 days before this
   dialogue pass, already scoped as "NOT EXECUTABLE FROM THIS HOST" for the same credential
   reason. Its Step A (rotate the seeded `test@dowiz.com` owner credential in the live prod
   Supabase DB, confirmed live/owner-privileged by the 2026-07-13 red-team synthesis) is a
-  prerequisite BEFORE Step B's `fly scale count 0` / `fly apps suspend` teardown, so the
+  prerequisite BEFORE Step B's stop-machines / suspend teardown, so the
   teardown window itself can't be abused. Step A is a live-prod auth/money-adjacent DB write —
   **not executed without separate explicit operator confirmation**, same red-line standard as
   every other prod-DB action this session.
 **Depends on / blocks:** blocks nothing else in this roadmap — the new stack's build (Tier 3 web
-UI, tracked via the audit triage's `#10`/`#11`) proceeds independently of when the Fly teardown
+UI, tracked via the audit triage's `#10`/`#11`) proceeds independently of when the legacy host teardown
 itself executes.
 
 #### 16.12 Vendor onboarding — self-serve, automatic
@@ -3661,7 +3661,7 @@ rewritten every time a phase changes.
   actively eliminated (`tools/eqc-rs` port, `apps/web`+`packages/*` decommission already landed
   this session).
 - **Deployment target**: decentralized local nodes (courier devices, owner-operated hub servers,
-  client devices) — Fly/Supabase decommissioned this session, not the planning target going
+  client devices) — legacy host/Supabase decommissioned this session, not the planning target going
   forward.
 
 ---

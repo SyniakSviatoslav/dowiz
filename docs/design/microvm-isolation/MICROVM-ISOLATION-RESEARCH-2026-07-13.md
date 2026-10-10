@@ -30,9 +30,9 @@ image resumed rather than cold-booted) cuts this further, to low single-digit ms
 reported setups [dev.to](https://dev.to/adwitiya/how-i-built-sandboxes-that-boot-in-28ms-using-firecracker-snapshots-i0k).
 Production home: **AWS Lambda and Fargate**, handling trillions of invocations/month
 [AWS blog](https://aws.amazon.com/blogs/aws/firecracker-lightweight-virtualization-for-serverless-computing/).
-Also backs **Fly.io's Fly Machines** [Northflank](https://northflank.com/blog/what-is-aws-firecracker),
+Also backs **the legacy host's the legacy host Machines** [Northflank](https://northflank.com/blog/what-is-aws-firecracker),
 Koyeb, Northflank, appfleet, OpenNebula, Qovery — i.e. this is the same primitive dowiz
-already runs *on top of* today via Fly.io hosting, without dowiz itself operating it.
+already runs *on top of* today via the legacy host hosting, without dowiz itself operating it.
 
 **Cloud Hypervisor** — sibling Rust VMM from the same `rust-vmm` lineage, also **Apache-2.0**,
 ~106K LOC. General-purpose rather than serverless-density-optimized: CPU/memory hotplug,
@@ -363,7 +363,7 @@ doc.**
 - [systemshardening.com — WASI Security Roadmap (incl. CVE-2026-34971)](https://www.systemshardening.com/articles/wasm/wasip3-security-roadmap/)
 - [techbytes.app — Wasm Component Model in 2026: Cloud Interop](https://techbytes.app/posts/wasm-component-model-2026-cloud-interop-deep-dive/)
 - [eunomia.dev — WASI and the WebAssembly Component Model: Current Status](https://eunomia.dev/blog/2025/02/16/wasi-and-the-webassembly-component-model-current-status/)
-- [HN — fly.io uses Firecracker, Apache 2 license discussion](https://news.ycombinator.com/item?id=40354323)
+- [HN — hosted-VM provider uses Firecracker, Apache 2 license discussion](https://news.ycombinator.com/item?id=40354323)
 - [blog.lyc8503.net — Running Linux/Windows on ARM via KVM on Android](https://blog.lyc8503.net/en/post/android-kvm-on-mediatek/)
 - [ostrich.kyiv.ua — Raspberry Pi as a KVM hypervisor](https://ostrich.kyiv.ua/en/2025/05/08/raspberry-pi-as-a-kvm-hypervisor/)
 - [Raspberry Pi Forums — Virtualisation on RaPi5](https://forums.raspberrypi.com/viewtopic.php?t=366860)

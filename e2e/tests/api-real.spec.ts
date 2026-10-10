@@ -7,7 +7,7 @@ function uuid() {
   });
 }
 
-const BASE = 'https://dowiz.fly.dev';
+const BASE = 'https://qa-durres.dowiz.org';
 
 test.describe('Real API — Public Endpoints', () => {
 

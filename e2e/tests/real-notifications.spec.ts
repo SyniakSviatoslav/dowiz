@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = 'https://dowiz.fly.dev';
+const BASE = 'https://qa-durres.dowiz.org';
 const BOT_SECRET = process.env.TELEGRAM_BOT_SECRET;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = 999999;

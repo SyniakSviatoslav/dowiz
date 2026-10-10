@@ -1,5 +1,5 @@
 # DeliveryOS Deployed Audit Findings
-## `dowiz.fly.dev` · ENV: staging · 2026-06-05T21:33Z
+## `<legacy-host>` · ENV: staging · 2026-06-05T21:33Z
 
 ---
 
@@ -14,13 +14,13 @@
 | ID | Layer | Target | Expected | Actual | Repro |
 |----|-------|--------|----------|--------|-------|
 | F-001 | EDGE | `dowiz.org` | Static site serves HTTPS (E8a) | DNS does not resolve; no HTTP response | `curl https://dowiz.org/` — no output |
-| F-002 | EDGE | SPA root | HSTS header present (E2b) | `Strict-Transport-Security` absent on all responses | `curl -I https://dowiz.fly.dev/` |
-| F-003 | EDGE | SPA root | Security headers: CSP, X-Content-Type-Options, X-Frame-Options (E2c) | ZERO security headers on SPA index.html | `curl -I https://dowiz.fly.dev/` — only Cache-Control + Content-Type |
-| F-004 | EDGE | All assets | Cache: immutable/long TTL on CSS/JS (E4c) | ALL assets served with `Cache-Control: public, max-age=0` | `curl -I https://dowiz.fly.dev/assets/index-*.js` |
-| F-005 | EDGE | Cloudflare edge | CDN/WAF in front of Fly.io origin (E3d) | No Cloudflare; direct Fly.io access. Spec requires Cloudflare edge | `server: Fly/0c81dcd5` on every response; no `cf-ray`/`cf-cache-status` |
+| F-002 | EDGE | SPA root | HSTS header present (E2b) | `Strict-Transport-Security` absent on all responses | `curl -I https://<legacy-host>/` |
+| F-003 | EDGE | SPA root | Security headers: CSP, X-Content-Type-Options, X-Frame-Options (E2c) | ZERO security headers on SPA index.html | `curl -I https://<legacy-host>/` — only Cache-Control + Content-Type |
+| F-004 | EDGE | All assets | Cache: immutable/long TTL on CSS/JS (E4c) | ALL assets served with `Cache-Control: public, max-age=0` | `curl -I https://<legacy-host>/assets/index-*.js` |
+| F-005 | EDGE | Cloudflare edge | CDN/WAF in front of the origin (E3d) | No Cloudflare; direct origin access. Spec requires Cloudflare edge | `server: <legacy platform header>` on every response; no `cf-ray`/`cf-cache-status` |
 | F-006 | APP | `POST /api/orders` | Create order with idempotency key (A1d, A6) | Returns **404 Not Found** — endpoint not deployed | `POST /api/orders` with valid JSON body → 404 |
 | F-007 | APP | Owner auth | Magic-link or Google OAuth login (E6a, A2a) | `POST /api/auth/magic-link/send` → 404; `GET /api/auth/google` → 404 | Both endpoints return 404 |
-| F-008 | APP | SSR menu i18n | Albanian (`sq`) locale rendered (A8d) | SSR defaults to `lang="uk"` (Ukrainian); `data-text-sq` attributes missing; locale dropdown shows UK/EN/RU | `curl https://dowiz.fly.dev/s/demo` → `<html lang="uk">` |
+| F-008 | APP | SSR menu i18n | Albanian (`sq`) locale rendered (A8d) | SSR defaults to `lang="uk"` (Ukrainian); `data-text-sq` attributes missing; locale dropdown shows UK/EN/RU | `curl https://<legacy-host>/s/demo` → `<html lang="uk">` |
 | F-009 | APP | Fallback phones | Each location must have fallback phone configured (E7) | Health: **0/59 locations** have fallback phone (0% coverage) | `/health` → `"fallback":{"detail":"0/59 locations have fallback phone configured (0%)"}` |
 
 ---
@@ -29,14 +29,14 @@
 
 | ID | Layer | Target | Expected | Actual | Repro |
 |----|-------|--------|----------|--------|-------|
-| F-010 | EDGE | SSR menu | Complete security headers (E2d) | CSP present but `script-src 'unsafe-eval'` + missing `X-Content-Type-Options` + no HSTS | `curl -I https://dowiz.fly.dev/s/demo` |
-| F-011 | APP | Cart/Checkout SSR | Server-rendered content, not empty shell (A1b, A1c) | Both render `<p>Loading...</p>` — require JS to populate | `curl https://dowiz.fly.dev/s/demo/cart` |
+| F-010 | EDGE | SSR menu | Complete security headers (E2d) | CSP present but `script-src 'unsafe-eval'` + missing `X-Content-Type-Options` + no HSTS | `curl -I https://<legacy-host>/s/demo` |
+| F-011 | APP | Cart/Checkout SSR | Server-rendered content, not empty shell (A1b, A1c) | Both render `<p>Loading...</p>` — require JS to populate | `curl https://<legacy-host>/s/demo/cart` |
 | F-012 | APP | Cart/Checkout brand colors | Consistent brand vars with menu page | Cart/Checkout use `#e63946`/`#f8f9fa`; Menu uses `#ea4f16`/`#121212` — different config sources | Compare menu SSR vs cart SSR CSS variables |
 | F-013 | APP | Error code UX | Distinct UX per status code (A5) | 401/404/500 share generic JSON format; no 403/422/429 differentiation visible | Test each error path |
 | F-014 | APP | `theme.css` endpoint | Public theme CSS (E8) | Returns **500 Internal Server Error** | `GET /public/locations/demo/theme.css` → 500 |
 | F-015 | APP | `manifest.webmanifest` | PWA manifest (A8) | Returns **500 Internal Server Error** | `GET /s/demo/manifest.webmanifest` → 500 |
 | F-016 | APP | `POST /api/telemetry` | Telemetry collection | Returns **500 Internal Server Error** | `POST /api/telemetry` → 500 with `correlationId: "unknown"` |
-| F-017 | APP | i18n `en` locale | Consistent English product translations (A8e) | Inconsistent — some products have `data-text-en`, most don't; menu categories only have `data-text-uk` | Compare English SSR: `curl "https://dowiz.fly.dev/s/demo?locale=en"` |
+| F-017 | APP | i18n `en` locale | Consistent English product translations (A8e) | Inconsistent — some products have `data-text-en`, most don't; menu categories only have `data-text-uk` | Compare English SSR: `curl "https://<legacy-host>/s/demo?locale=en"` |
 
 ---
 
@@ -64,7 +64,7 @@
 
 ## GREEN / PASSING (14 checks)
 
-- E1a: TLS valid (Let's Encrypt `*.fly.dev`, expires 2026-07-21)
+- E1a: TLS valid (Let's Encrypt `*.<legacy-host>`, expires 2026-07-21)
 - E2a: HTTP→HTTPS redirect (301)
 - E2e: Zero cookies on all endpoints
 - E3a: /health returns 200 with honest `degraded` status
@@ -112,4 +112,4 @@
 
 ---
 
-*dowiz / DeliveryOS · Deployment Audit Findings · read-only acceptance audit against dowiz.fly.dev (staging) · VERDICT: NO-GO*
+*dowiz / DeliveryOS · Deployment Audit Findings · read-only acceptance audit against <legacy-host> (staging) · VERDICT: NO-GO*

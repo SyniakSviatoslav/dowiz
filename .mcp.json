@@ -25,7 +25,7 @@
       "env": {
         "VITE_BASE_URL": "http://127.0.0.1:5173"
       },
-      "description": "playwright agents: planner/generator/healer drive tests against the running app. Fly.io retired 2026-07-18 (dowiz.fly.dev decommissioned) — points at local dev until a Hetzner/Cloudflare deploy target exists."
+      "description": "playwright agents: planner/generator/healer drive tests against the running app. Points at local dev."
     },
     "browser-use": {
       "command": "uvx",

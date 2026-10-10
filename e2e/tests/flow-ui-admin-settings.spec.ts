@@ -17,7 +17,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 const FINAL_NAME = 'Dubin & Sushi';
 const FINAL_ADDRESS = 'Rruga Sulejman Kadiu, Durrës';

@@ -63,7 +63,7 @@ DTN/BPv7). Wasmer = WASIX-non-standard (не той шлях для Scope-map). 
 ### Форма 3 — microVM (Firecracker/unikernel, ТІЛЬКИ де справді потрібно)
 Єдиний справжній кейс: **untrusted НЕ-WASM код** — майбутні **dev-agent-tier port-адаптери / 3rd-party MCP-сервери**
 (IP-01/IP-02), код, який dowiz не може повністю перевірити, server-side. **Firecracker** (~125ms, <5MiB/VM, powers
-Lambda/Fly-Machines, Apache-2.0) — direct, НЕ Kata (Kata = OCI-wrapper → суперечить «zero-OCI»). Для max-isolation
+Lambda/the legacy host-Machines, Apache-2.0) — direct, НЕ Kata (Kata = OCI-wrapper → суперечить «zero-OCI»). Для max-isolation
 sovereign-client-боксів — **unikernel** (NanoVMs/OPS, вже Phase-3 у sovereign-node-ladder). **Обмеження (чесно): KVM
 обов'язковий → телефон кур'єра КАТЕГОРИЧНО не годиться** (mobile-firmware EL1); owner-small-box можливий-але-крихкий на
 Pi-class. → **microVM = server-class-хаби only.** НЕ для kernel(trusted-compile-firewalled), static-SPA(no-execution),

@@ -16,7 +16,7 @@ import crypto from 'node:crypto';
  * (default) or any VITE_BASE_URL.
  */
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 let authToken: string;
 let locationId: string;

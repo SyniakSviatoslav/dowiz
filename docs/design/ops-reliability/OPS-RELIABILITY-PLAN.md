@@ -7,7 +7,7 @@
 > **Головні цілі оператора (дослівно):** менше точок відмови · один надійний real-time моніторинг з УСІХ джерел
 > в одному місці + Telegram-алерти · запобіжники (circuit-breakers/rate-limit/rollbacks/fallbacks) · оптимізація
 > головних метрик (особливо LATENCY) · зменшити DevOps-пекло, зробити зручно під одного оператора · безпека.
-> **Рішення оператора (mid-turn):** **pgrust — одразу** (не Postgres-interim). Дроп Fly + Supabase.
+> **Рішення оператора (mid-turn):** **pgrust — одразу** (не Postgres-interim). Дроп the legacy host + Supabase.
 
 ---
 
@@ -24,10 +24,10 @@ alert-, rollback-потоки). Головна теза: **менше рухом
    node-pg-migrate (140 міграцій), rate-limit token-bucket, timeout/retry — усе реальне й зріле, карантиновано
    рішенням D1. **Правило плану: «воскресити з attic + перенацілити», не «будувати з нуля».** Живим лишився один
    примітив — `CircuitBreaker` у `packages/platform/routing-provider.ts` — і orphaned `audit-sentinel/` watchdog
-   з Telegram-ескалацією (цілить у мертвий Fly → перенацілити).
-2. **Репо в стані переходу з суперечностями, які план мусить розв'язати:** `main` (прод) ДОСІ живий на Fly
-   (`dowiz.fly.dev`) з **незахищеним auto-deploy** (D5-F2); поточна гілка = static-SPA-only; D1/MANIFESTO кажуть
-   «no Supabase/Fly», але `.secrets.local` (сьогодні) має ЖИВІ Supabase/R2/CF креди; ADR-0008 пропонує
+   з Telegram-ескалацією (цілить у мертвий the legacy host → перенацілити).
+2. **Репо в стані переходу з суперечностями, які план мусить розв'язати:** `main` (прод) ДОСІ живий на the legacy host
+   (the legacy host) з **незахищеним auto-deploy** (D5-F2); поточна гілка = static-SPA-only; D1/MANIFESTO кажуть
+   «no Supabase/the legacy host», але `.secrets.local` (сьогодні) має ЖИВІ Supabase/R2/CF креди; ADR-0008 пропонує
    SQLite-per-node, а MIGRATION-PLAN — Postgres-via-SQLx. **Рішення «pgrust одразу» резолвить це в бік pgrust.**
 
 **Архітектурне уточнення (потребує твого підтвердження):** bebop2-меш ще НЕ реальний (per red-team B4: IrohTransport
@@ -41,7 +41,7 @@ ADR, зміна фіксується явно.
 ## 1. ЦІЛЬ 1 — Менше точок відмови (FMEA + принцип)
 
 **Принцип: усувати режим відмови > додавати надлишковий компонент.** Кожен зайвий вузол = ще одне, що патчити,
-моніторити, платити. Консолідація на один Hetzner уже прибрала найбільший клас відмов (координація Fly+Supabase+
+моніторити, платити. Консолідація на один Hetzner уже прибрала найбільший клас відмов (координація legacy host+Supabase+
 worker) — не відкочуй це другим вузлом; **зроби відмови одного вузла нудними й швидко-відновлюваними.**
 
 | # | Точка відмови | L×I | Ризик | Запобіжник (нижче) |
@@ -168,7 +168,7 @@ SSH-harden/unattended-upgrades) + усе-решта-в-git → full-rebuild = `t
 
 ---
 
-## 6. Дані: Supabase-дамп → pgrust (ОДРАЗУ) + дроп Fly/Supabase
+## 6. Дані: Supabase-дамп → pgrust (ОДРАЗУ) + дроп legacy host/Supabase
 
 **pgrust — рішення оператора, immediate.** Ризик сконцентрований в ОДНИХ воротах (compat), решта — чистий малий restore.
 
@@ -187,9 +187,9 @@ deliveryos_api_user = лише RLS-convention-mirror). 76 таблиць, 140 м
    --schema=public --no-owner --no-privileges`. Дані з `session_replication_role=replica`.
 4. **Фікс 11 RLS-дір** (D2 R1-R6). Falsifiable: NOBYPASSRLS-роль читає `couriers`/`telegram_login_tokens` → 0 cross-tenant.
 5. **Row-count verify** vs інтроспекція (168k/41k/19.7k/8.5k/151/108/21). Mismatch > write-drift = HARD STOP.
-6. App cutover (`DATABASE_URL`→pgrust), Fly/Supabase ЛИШАЮТЬСЯ ЖИВІ як rollback. Boot + read/write + E2E green.
+6. App cutover (`DATABASE_URL`→pgrust), legacy host/Supabase ЛИШАЮТЬСЯ ЖИВІ як rollback. Boot + read/write + E2E green.
 7. **Monitor 24-72h** (нуль write-errors). Rollback = repoint назад (миттєво).
-8. **THEN Fly**: export volumes(snapshot, permanent-if-destroyed)+secrets(лише-назви)+certs → `scale count 0` →
+8. **THEN the legacy host**: export volumes(snapshot, permanent-if-destroyed)+secrets(лише-назви)+certs → `scale count 0` →
    `apps suspend` (reversible) → `apps destroy` (IRREVERSIBLE, після monitor).
 9. **THEN Supabase delete** (IRREVERSIBLE — wipes auth/storage/edge-fns/realtime/PITR/API-keys; але тут real-loss =
    лише PG-DB = вже в age-дампі; confirm dashboard Edge-fns/Storage/Cron порожні перед delete).
@@ -228,7 +228,7 @@ deliveryos_api_user = лише RLS-convention-mirror). 76 таблиць, 140 м
 - **Origin-hiding: Cloudflare Tunnel** (`cloudflared` outbound-only, Hetzner firewall DENY-ALL inbound 80/443 → origin
   БЕЗ публічного listener, immune direct-IP-DDoS/portscan/spoof, FREE) >> IP-allowlist CF-ranges (shared, spoofable,
   false-confidence). DNS→CNAME cfargotunnel. SSH gate (residual risk).
-- **DNS:** proxy every web A/AAAA/CNAME, grey-cloud TXT/MX, DNSSEC on, **exposed-IP audit** (старі Fly/R2 A-records =
+- **DNS:** proxy every web A/AAAA/CNAME, grey-cloud TXT/MX, DNSSEC on, **exposed-IP audit** (старі legacy host/R2 A-records =
   leak), delete stale subdomains.
 - **TLS:** Full(Strict) + CF Origin-CA-cert (15р); min-TLS-1.2 + TLS1.3; Always-HTTPS; HSTS 1р+subdomains+preload
   (one-way-door, verify subdomains first); AOP mTLS (defense-in-depth).
@@ -273,14 +273,14 @@ deliveryos_api_user = лише RLS-convention-mirror). 76 таблиць, 140 м
 | **W0** | Resurrect-from-attic + перенацілити (health/rate-limit/timeout/sentry/notify/backup/migrations) | OPS-01 | середній |
 | **W1** | pgrust provision + **COMPAT-GATE** citext/pgcrypto | OPS-02 | 🔴 (весь ризик тут) |
 | **W2** | Restore roles→schema→data→**RLS-fix**→row-verify | OPS-03 | 🔴 (RLS/data) |
-| **W3** | App cutover + 24-72h monitor (Fly/Supabase живі) | OPS-04 | середній |
+| **W3** | App cutover + 24-72h monitor (legacy host/Supabase живі) | OPS-04 | середній |
 | **W4** | Моніторинг-стек (VM+VLogs+Grafana+Netdata+Gatus) + all-sources + Telegram + **dead-man's-switch** | OPS-07·08·09·10 | середній |
 | **W5** | Запобіжники: circuit-breakers uniform + rate-limit un-attic + 1-cmd-rollback + health-gated-deploy | OPS-11·12·13 | середній |
 | **W6** | Backups 3-2-1-1-0 (WAL-G + off-Hetzner rsync.net + Object-Lock bucket + age-multi-recipient) | OPS-14·15 | 🔴 (DR/crypto) |
 | **W7** | Cloudflare: Tunnel origin-hide + firewall-lockdown + edge-hardening | OPS-16·17 | 🔴 (auth/edge) |
 | **W8** | IaC (OpenTofu+cloud-init) + Dokploy + SOPS/age + **gated-prod-deploy** | OPS-18·19 | середній |
 | **W9** | Latency: PgBouncer + HTTP/3 + Cache-Rules + local-first | OPS-20 | низький |
-| **W10** | Drop Fly → Drop Supabase (тільки після monitor-clean) | OPS-05·06 | 🔴 незворотнє |
+| **W10** | Drop the legacy host → Drop Supabase (тільки після monitor-clean) | OPS-05·06 | 🔴 незворотнє |
 | **W11** | Gap-closers (Trivy/cert/chmod/external-uptime/incident-runbook) + розв'язати суперечності + ADR-0008 update | OPS-21·22 | середній |
 | **W-RED** | RED proof кожної хвилі | OPS-22 | обов'язковий |
 
@@ -288,10 +288,10 @@ deliveryos_api_user = лише RLS-convention-mirror). 76 таблиць, 140 м
 
 ## 11. Найбільші ризики + чесна напруга
 
-- **Незворотнє drop до закриття monitor-вікна** (W10) — Fly-destroy + Supabase-delete незворотні; Supabase-delete ще й
+- **Незворотнє drop до закриття monitor-вікна** (W10) — the legacy host-destroy + Supabase-delete незворотні; Supabase-delete ще й
   wipes PITR миттєво. Гейт: verified row-count-matched pgrust-restore, що вже обслуговує live-трафік monitor-вікно.
 - **pgrust-immediate** — весь ризик в COMPAT-GATE (W1). Якщо citext/pgcrypto непрацездатні на pgrust і app-substitute
-  надто дорогий — це точка чесного re-decision (Postgres-17 fallback). Fly/Supabase живі доти = нуль-втрат.
+  надто дорогий — це точка чесного re-decision (Postgres-17 fallback). legacy host/Supabase живі доти = нуль-втрат.
 - **Single-vendor Hetzner** — філософська напруга «нуль-зовнішніх-залежностей» vs «не-всі-яйця-в-одному-провайдері».
   Розв'язка: живі копії на Hetzner (дешево/швидко), АЛЕ DB-дамп+age-ключ = credential-isolated off-Hetzner (rsync.net).
 - **Ambient-trust / незахищений deploy** — не реінтродукувати D5-F2 auto-deploy на Hetzner; gated-deploy = must.

@@ -111,7 +111,7 @@ checkout-OTP UI, storefront test-data clutter, and the `'open'/'active'` storefr
   a delivery-layer defect — reliability/memory.)
 
 - **P1-SECRET · Weak `JWT_SIGNING_SECRET`** (`12345…`, 32 chars low-entropy) in `.env`. Confirm whether
-  any HS256 path still uses it; rotate to 256-bit random. Ensure prod uses Fly secrets, not the file.
+  any HS256 path still uses it; rotate to 256-bit random. Ensure prod uses platform secrets, not the file.
 - **P1-SITEMAP · `sitemap.xml` returns 500 on prod.** Broken route (`routes/public/seo.ts`); fix or
   disable. Hurts SEO and looks broken to crawlers.
 - **P1-SEO · SSR storefront `<title>`/OG are generic.** Branded storefronts share as "Dowiz" with no
@@ -202,7 +202,7 @@ Driving the **real API endpoints** end-to-end succeeded (no source changes; one 
 1. **DR/provisioning (P0-MIG, P0-PGBOSS, P0-ROLES):** commit the 4 migration fixes; add a pgboss-bootstrap
    + roles-bootstrap migration; add a from-scratch `migrate:up` smoke to CI. _(Backend)_
 2. **Security (P0-PII, P1-SECRET):** remove phone from customer JWT + server-side lookup; rotate signing
-   secret; confirm Fly-secrets usage. _(AppSec + Backend)_
+   secret; confirm platform-secrets usage. _(AppSec + Backend)_
 3. **Checkout OTP (P0-OTP):** add send/verify UI step + wire headers. _(Frontend)_
 4. **Storefront trust/brand (P0-CLUTTER, P1-SITEMAP, P1-SEO, P2-IMG):** purge demo test data; fix sitemap;
    per-tenant SSR meta; crafted no-photo fallback. _(Frontend + Backend + UI/UX)_

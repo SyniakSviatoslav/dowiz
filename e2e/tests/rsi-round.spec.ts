@@ -8,10 +8,10 @@ import { LlmReasoner } from '../driver/reasoners.ts';
 // reasoning, free-tier model chain) against the LIVE service; friction → findings. Shares one
 // Song ledger so the 333 tokens/hr cap is cumulative across the round (CapReached stops it).
 // Requires OPENROUTER_API_KEY. Round/persona set via env (a subset here — NOT a saturation round).
-//   OPENROUTER_API_KEY=… VITE_BASE_URL=https://dowiz-staging.fly.dev \
+//   OPENROUTER_API_KEY=… VITE_BASE_URL=https://qa-durres.dowiz.org \
 //   DOS_PERSONAS=client-first-timer-impatient,client-price-skeptic DOS_ROUND=1 \
 //   pnpm exec playwright test rsi-round --project=desktop --reporter=list --timeout=600000
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const ROUND = Number(process.env.DOS_ROUND ?? 1);
 const PERSONAS = (process.env.DOS_PERSONAS || 'client-first-timer-impatient,client-price-skeptic').split(',').map((s) => s.trim());
 const MAX_STEPS = Number(process.env.DOS_MAX_STEPS ?? 8);

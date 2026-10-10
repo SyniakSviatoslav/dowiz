@@ -79,7 +79,7 @@ popularity/trend grounds, all on a specific technical fact found during research
   license/governance regression with no engineering upside. Not proposed.
 - **AWS service list** (EC2/Lambda/RDS/DynamoDB/etc.) — directly conflicts with the ops-reliability
   plan's already-recorded decision to consolidate OFF managed clouds onto a single Hetzner box
-  ("Дроп Fly+Supabase," Cloudflare scoped to edge-only). Adding AWS services would reintroduce
+  ("Дроп legacy host+Supabase," Cloudflare scoped to edge-only). Adding AWS services would reintroduce
   exactly the managed-cloud dependency/cost surface that decision rejected.
 
 ## Already implemented — not proposals, noted so this plan doesn't re-suggest existing work

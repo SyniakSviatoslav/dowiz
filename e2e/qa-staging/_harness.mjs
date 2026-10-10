@@ -2,7 +2,7 @@
 // failed network requests, and screenshots for every page under test.
 import { chromium } from '@playwright/test';
 
-export const BASE = 'https://dowiz-staging.fly.dev';
+export const BASE = 'https://qa-durres.dowiz.org';
 export const SHOTS = '/tmp/qa-shots';
 export const DEV_SECRET = 'stg-e2e-secret';
 export const LOCATION_ID = '28239442-63a1-431e-8cab-2e4ed64ab8e7';
@@ -26,7 +26,7 @@ export const DESKTOP = {
   deviceScaleFactor: 1,
 };
 
-// Wake the staging machine (Fly auto-stops). Retry health until 200 or give up.
+// Wake the staging host (it can auto-stop). Retry health until 200 or give up.
 export async function wakeStaging() {
   for (let i = 0; i < 12; i++) {
     try {
@@ -95,7 +95,7 @@ export async function makePage(browser, device) {
 }
 
 // Navigate with cold-start resilience: if the page is 503/blank, wake the
-// machine and retry. Fly auto-stops the staging machine so the first hit after
+// machine and retry. The staging host auto-stops so the first hit after
 // idle returns 503/000 — this absorbs that without polluting results.
 export async function gotoSafe(page, url, { timeout = 45000, settle = 2000 } = {}) {
   for (let attempt = 0; attempt < 3; attempt++) {

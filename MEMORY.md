@@ -9,7 +9,7 @@
 - Architecture: kernel (decision engine) + agents (LLM-driven) + tools + intake adapters
 - Primary language: Rust; secondary: TypeScript (SPA), shell scripts (CI)
 - Repo root: `/root/dowiz/`; no workspace-level Cargo.toml (kernel is the root)
-- Deploy targets: Hetzner VPS (prod), Tauri desktop (card-capture), Fly.io (staging)
+- Deploy targets: Hetzner VPS (prod), Tauri desktop (card-capture)
 
 ## Architecture Quick-Map
 | Layer | Path | Notes |
@@ -700,13 +700,13 @@ Auto-deprioritization after ≥3 consecutive failures; recovery on success.
 ## Session note 2026-09-15 (product audit → Cloudflare/workers-rs decision)
 
 **AUDIT — the working product is NOT in this tree.**
-- `dowiz-staging.fly.dev` is **LIVE** (probed 2026-09-15 08:56 UTC): postgres/workers/messageBus/
+- `<legacy-host>` is **LIVE** (probed 2026-09-15 08:56 UTC): postgres/workers/messageBus/
   telegram/r2/settlement/anonymizer/backup all `ok`, `fallback` **degraded**. `/s/demo` →
   "Dubin & Sushi"; `/public/locations/demo/menu` → 50 products / 16 categories / currency ALL /
   locales sq,en,uk / menu_version 835. `/admin` + `/courier` → 200. `/api/owner/dashboard` → 401
   (auth real). Demo-data clutter in the live menu: categories `Pizzas`, `Pastas`, `Salads`,
   `UI-FCat-1783260801575`.
-- `dowiz.fly.dev` + `dowiz.org` do NOT resolve. **`dowiz.org` IS registered and its NS are already
+- `<legacy-host>` + `dowiz.org` do NOT resolve. **`dowiz.org` IS registered and its NS are already
   Cloudflare** (`dimitris.ns.cloudflare.com`, `ursula.ns.cloudflare.com`) — only an A/CNAME is missing.
 - **Every product image 404s on staging** (5/5 sampled) although health reports `r2: ok`.
   R2 buckets `dowiz-images` (2026-06-18) and `dowiz-offsite` (2026-07-13) exist. D1: 0 bases. KV: 0.

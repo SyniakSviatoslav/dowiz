@@ -10,7 +10,7 @@
 
 ## 0. GROUND TRUTH — READ FIRST (reframes every finding below)
 
-The task brief assumes a live "Supabase/Postgres with Row-Level Security" stack. **On this branch that is no longer the deployed reality.** Commit `e1505e1d` ("chore(declutter C2): quarantine retired Supabase/Fly/RLS stack") **moved the entire Postgres/Supabase data tier into `attic/`**: `apps-api`, `apps-worker`, `packages-db` (all 140 migrations), and `fly.toml`. Those packages are still git-tracked and therefore reactivatable, but they are **not installed, not built, and not deployed** on `feat/decentralized-pq-protocol`.
+The task brief assumes a live "Supabase/Postgres with Row-Level Security" stack. **On this branch that is no longer the deployed reality.** Commit `e1505e1d` ("chore(declutter C2): quarantine retired Supabase/legacy-host/RLS stack") **moved the entire Postgres/Supabase data tier into `attic/`**: `apps-api`, `apps-worker`, `packages-db` (all 140 migrations), and `<legacy-deploy-manifest>`. Those packages are still git-tracked and therefore reactivatable, but they are **not installed, not built, and not deployed** on `feat/decentralized-pq-protocol`.
 
 What is actually **LIVE** on this branch:
 

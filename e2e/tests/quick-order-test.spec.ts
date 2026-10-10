@@ -5,7 +5,7 @@ test.describe('Quick Order Test', () => {
     test.setTimeout(15000); // 15 second timeout
     
     console.log('Starting quick order test');
-    const BASE_URL = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+    const BASE_URL = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
     console.log(`Using BASE_URL: ${BASE_URL}`);
     
     // Get owner token

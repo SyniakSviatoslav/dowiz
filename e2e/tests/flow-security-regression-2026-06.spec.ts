@@ -8,7 +8,7 @@ import { test, expect, request as pwRequest } from '@playwright/test';
 // default `request` fixture is the "authorized harness" caller. For C1 we build
 // a SECOND context with no secret header to act as the anonymous attacker.
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 test.describe.configure({ mode: 'serial' });
 

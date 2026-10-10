@@ -40,7 +40,7 @@ Verified 2026-07-18 against `dowiz` `main` @ `f9b2eb9bb` and `bebop-repo` `main`
 | 4 | DK-03 host DONE | `bebop2/wasm-host/Cargo.toml:6`: "DK-03 — wasmtime host mapping Scope->WASI imports, deny-by-default"; wasmtime OPT-IN (`:19-26`: default build carries NO wasmtime, compiles to a deny-by-default stub returning `WasmRuntimeDisabled`); `src/lib.rs` = 297 lines | §10.5.2: DK-03 DONE, "Scope→WASI deny-by-default host (wasmtime feature-gated)" | **MATCH exact** |
 | 5 | DK-07 DECIDED | `docs/design/microvm-isolation/ADR-NO-SANDBOX-AGENT-GOVERNANCE.md` — ACCEPTED 2026-07-13; agent-governance = pure text/voice policy filter, executes nothing untrusted, "there is nothing to sandbox"; grep-proof falsifier recorded in its §Open-items | §10.5.2: DK-07 resolved by this ADR | **MATCH — cited, closed, NOT reopened** (anti-scope) |
 | 6 | 🔴 DK-06 still probe-only | `kernel/src/isolation/microvm.rs` (177 lines): `kvm_available` `:52`, `can_accept_native_adapter` `:61`, `register_adapter` fail-closed `:76`; the comment `:14-16` still reads "today we only probe host capability. The actual VMM launch (jailer, seccomp, guest kernel, network tap) is the next unit"; tests `r1_kvm_unavailable_on_this_host` `:125` … `r4_cannot_accept_native_adapter_without_kvm` `:156`. This host: `ls /dev/kvm` → No such file (probe correctly false, fail-closed posture live) | §10.5.2 DoD-2: "that comment being still-true is the fail condition" | **CONFIRMED still true** — DK-06 is P35's one substantial build unit (§3.1). Note: the refusal HALF of DK-06's RED is already tested (r1-r4); only the launch half is missing |
-| 7 | DK-04 further than PARTIAL | `tools/native-spa-server/` — real axum crate (`Cargo.toml`: "DK-04: native-Rust static SPA server (axum) replacing the nginx container. Zero-OCI runtime artifact"), with `tests/` (in-repo RED tests for SPA fallback / cache headers / security headers / compression, per its own manifest note); `deploy/native-spa-server.service` systemd unit committed | §10.5.2 DoD-4: "promoted to a deployed serving path (proven by one staging deploy) or descoped with a dated note. No third state" | **DRIFT in the DoD's own premise** — "staging deploy" targets Fly, which was DECOMMISSIONED (CORE-ROADMAP-STANDARD §1: deployment target = decentralized local nodes). §3.2 re-anchors the DoD honestly |
+| 7 | DK-04 further than PARTIAL | `tools/native-spa-server/` — real axum crate (`Cargo.toml`: "DK-04: native-Rust static SPA server (axum) replacing the nginx container. Zero-OCI runtime artifact"), with `tests/` (in-repo RED tests for SPA fallback / cache headers / security headers / compression, per its own manifest note); `deploy/native-spa-server.service` systemd unit committed | §10.5.2 DoD-4: "promoted to a deployed serving path (proven by one staging deploy) or descoped with a dated note. No third state" | **DRIFT in the DoD's own premise** — "staging deploy" targets the legacy host, which was DECOMMISSIONED (CORE-ROADMAP-STANDARD §1: deployment target = decentralized local nodes). §3.2 re-anchors the DoD honestly |
 | 8 | 🔴 DK-08 fully open | `grep -rn "syft\|cosign\|sbom" {dowiz,bebop-repo}/.github/workflows/` → 0 hits in both repos | §10.5.2 DoD-3: "zero hits exist in any workflow file today" | **MATCH — still zero** (§3.3) |
 | 9 | DK-05 substantially DONE | `deploy/pgrust.{service,toml,env}` (systemd, hardened directives, `rls.cross_tenant = "deny"`); `deploy/check-no-docker.sh` — a real RED gate ("Exits non-zero if ExecStart references docker/podman/nerdctl/containerd"); `deploy/README.md` — the isolation-model decision text (process model + app-level RLS gate; microVM = opt-in defense-in-depth, "NOT the default and NOT required by DK-05") | §10.5.2 DoD-5: "decision note written, cross-referencing P34B DoD-4" | **MOSTLY DONE** — the note exists in substance; two gaps: `README.md:4` calls pgrust "the per-node source-of-truth" (the exact hub/per-node conflation P34B DoD-4 forbids — correction co-owned with P34B V-1a) and the P34B cross-reference is absent (§3.4) |
 | 10 | DK-09 dev-only | `BLUEPRINTS-DOCKER-SWAP.md:86-92` — dev ergonomics, its own RED column says "N/A (dev)" | — | registration-only; no DoD beyond the index row (§1) |
@@ -56,7 +56,7 @@ Ground truth is non-discussible; everything below builds on the fresh column onl
 **P35's single sentence:** finish the zero-OCI runtime subsystem to its own blueprint's bar —
 an actual microVM boots a workload under a fail-closed KVM gate (DK-06), the build emits an
 SBOM and signed artifacts (DK-08), DK-04/DK-05 get their honest closure notes against the
-post-Fly deployment reality, and DK-10's proofs land as permanent ledger rows — with
+post-the legacy host deployment reality, and DK-10's proofs land as permanent ledger rows — with
 DK-01/02/03/07 cited as done and the index row (already live) pinned.
 
 **P35 owns (build items §3):**
@@ -65,7 +65,7 @@ DK-01/02/03/07 cited as done and the index row (already live) pinned.
 |---|---|---|
 | K-1 | DoD-2 (DK-06) | Firecracker launch unit: one microVM boots one workload in CI; fail-closed refusal path (already tested r1-r4) preserved and extended |
 | K-2 | DoD-3 (DK-08) | CI supply chain: syft SBOM + cosign signature over the two real zero-OCI artifacts (wasip2 component, native-spa-server binary); zero-OCI assertion |
-| K-3 | DoD-4 (DK-04) | The dated decision note re-anchoring DK-04's serving target post-Fly + a falsifiable local serve-proof |
+| K-3 | DoD-4 (DK-04) | The dated decision note re-anchoring DK-04's serving target post-the legacy host + a falsifiable local serve-proof |
 | K-4 | DoD-5 (DK-05) | Close DK-05's note: fix the hub/per-node wording (co-owned P34B V-1a), add the P34B cross-reference |
 | K-5 | (DK-10) | Aggregate the DK RED-suite into permanent regression-ledger rows; fill the two missing proof gaps it surfaces |
 
@@ -84,7 +84,7 @@ DK-01/02/03/07 cited as done and the index row (already live) pinned.
 - **AGENT's sandboxed tool ports** consume the wasm-host; their port implementations are P40's
   scope. ECOSYSTEM/OPS deployment topology consumes DK-06; the topology itself is §10.5.5's.
 - **Dokploy/deploy-layer decision** (BLUEPRINTS-DOCKER-SWAP.md:81-82's decision-point):
-  MOOT post-Fly-decommission — no Dokploy remains in the target topology; recorded here as
+  MOOT post-the legacy host-decommission — no Dokploy remains in the target topology; recorded here as
   resolved-by-events, no work item.
 
 ---
@@ -177,7 +177,7 @@ no bypass around `register_adapter`'s refusal.
 
 ### 3.2 K-3 — DK-04: the dated decision note + a local serve-proof (DoD-4)
 
-§10.5.2's DoD-4 assumed a Fly staging deploy that no longer exists (§0 row 7). Re-anchored
+§10.5.2's DoD-4 assumed a legacy host staging deploy that no longer exists (§0 row 7). Re-anchored
 decision, recorded here as the dated note DoD-4 demands:
 
 > **DK-04 decision (2026-07-18): RETAINED as the node-local static asset server.** Its serving
@@ -368,7 +368,7 @@ P36: §0 row 11 (build-unikernel.sh references docker-compose.sovereign.yml — 
 deletion). Memory: `docker-swap-arc-2026-07-13` (WAVE0 DONE lineage) ·
 `ops-reliability-arc-2026-07-13` (degrade-closed doctrine K-1 preserves) ·
 `ecosystem-strategy-arc-2026-07-13` · `rust-native-bare-metal-decision-2026-07-14` ·
-`environment-and-ops-facts-2026-07-16` (Fly decommission context for §3.2's re-anchor) ·
+`environment-and-ops-facts-2026-07-16` (the legacy host decommission context for §3.2's re-anchor) ·
 `cross-branch-todo-map-2026-07-10` (repo routing for the bebop-side SBOM job + WR-01 test).
 Supersedes: the PARTIAL/gap framing of DK-04/DK-05 and the "unregistered" framing of DoD-1
 (§0 rows 1, 7, 9 are newer); the DK design source remains authoritative for design.

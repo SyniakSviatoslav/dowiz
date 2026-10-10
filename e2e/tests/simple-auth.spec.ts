@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Simple Auth Test', () => {
   test('should be able to get owner token', async () => {
-    const BASE_URL = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+    const BASE_URL = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
     console.log(`Testing with BASE_URL: ${BASE_URL}`);
     
     const authRes = await fetch(`${BASE_URL}/api/dev/mock-auth`, { method: 'POST' });

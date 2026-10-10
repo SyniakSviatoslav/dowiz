@@ -5,7 +5,7 @@ test.describe('Debug Order Creation', () => {
   test('should create an order successfully', async () => {
     console.log('Starting debug order test');
     // First get a locationId by creating a minimal location
-    const BASE_URL = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+    const BASE_URL = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
     console.log(`Using BASE_URL: ${BASE_URL}`);
     
     // Get owner token

@@ -47,12 +47,12 @@
   (pin the renderer image for byte-deterministic pixels) but not a base to extend.
 
 ### 1.3 Deploy topology today (VERIFIED — corrected against stale memory)
-- **The old Fly.io + Supabase centralized server was DROPPED** (VERIFIED — `Dockerfile:3-6`: *"the legacy
-  centralized server (apps/api + apps/worker, Fly, Supabase) was DROPPED. This image serves ONLY the
-  static SPA"*; MANIFESTO/DECISIONS D1, 2026-07-13). **`fly.toml` and `wrangler.toml` are NOT
-  git-tracked** (VERIFIED — `git ls-files` finds neither; the only Cloudflare/Fly hits are docs + the
+- **The old legacy host + Supabase centralized server was DROPPED** (VERIFIED — `Dockerfile:3-6`: *"the legacy
+  centralized server (apps/api + apps/worker, the legacy host, Supabase) was DROPPED. This image serves ONLY the
+  static SPA"*; MANIFESTO/DECISIONS D1, 2026-07-13). **`<legacy-deploy-manifest>` and `wrangler.toml` are NOT
+  git-tracked** (VERIFIED — `git ls-files` finds neither; the only Cloudflare/the legacy host hits are docs + the
   bundled `wrangler`/`workers-best-practices` skills). The `deploy-topology.md` memory note (dated
-  2026-06-19, describing two Fly apps) **predates the drop and is stale for the current arc** — treat it
+  2026-06-19, describing two the legacy host apps) **predates the drop and is stale for the current arc** — treat it
   as history, not ground truth.
 - **Current production serving path = a single static-binary web server** (VERIFIED):
   - `Dockerfile` (DK-04/DK-08): **zero-OCI `scratch` image** = one compiled native-Rust **axum** binary

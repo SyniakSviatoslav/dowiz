@@ -28,17 +28,17 @@
 - **Deleted:** the entire JS/TS product surface — `79ef316f6` + `db766de47` (2026-07-13,
   "remove legacy JS/TS thin-layer") deleted `apps/web`, `packages/ui`, `packages/domain`,
   `packages/shared-types`; `e1505e1d9` quarantined `apps/api` (with `spa-shell.ts`,
-  `og-card.ts`, `preview-render.ts`), `apps/worker`, `packages/db`, `fly.toml` into `attic/`;
+  `og-card.ts`, `preview-render.ts`), `apps/worker`, `packages/db`, `<legacy-deploy-manifest>` into `attic/`;
   `f9ab28ff1` ("drop ALL JS/TS (per operator)") + `a29aa219e` then purged the attic itself.
   `ls attic/` → does not exist at HEAD. `scripts/` contains no `demo-builder.mjs` /
   `acquisition-bulk-provision.mjs` — the demo-builder loop, the 12-venue provisioning scripts,
   and the OG-card renderer exist **only in git history**.
 - **Still live (probed this session):** `curl -A "TelegramBot"
-  https://dowiz-staging.fly.dev/s/apollonia` → HTTP 200 with `og:title "Apollonia — Menu
-  Digjitale"`, `og:image https://dowiz-staging.fly.dev/og/apollonia.png`, `robots noindex,
+  `<legacy-host>/s/apollonia` → HTTP 200 with `og:title "Apollonia — Menu
+  Digjitale"`, `og:image `<legacy-host>/og/apollonia.png` `robots noindex,
   nofollow`. The 12 Durrës shadow demos and their rich per-venue OG unfurl (shipped `6a89d6e8`,
-  2026-07-06) are served by a **staging Fly deployment whose source no longer exists at HEAD**.
-- **Prod is effectively dark for demos:** `curl https://dowiz.fly.dev/s/apollonia` → HTTP 200,
+  2026-07-06) are served by a **legacy staging deployment whose source no longer exists at HEAD**.
+- **Prod is effectively dark for demos:** `curl `<legacy-host>/s/apollonia` → HTTP 200,
   **63-byte body, zero OG tags** (root `/` serves 2727 bytes). Whatever prod runs now, it is
   not the rich storefront.
 
@@ -294,11 +294,11 @@ DM-1 math cannot enforce.
 
 ### DM-8 (housekeeping, operator-gated) — decommission the orphaned deployments
 
-The staging Fly deployment (§1.1) keeps serving deleted code; prod serves a 63-byte stub.
+The legacy staging deployment (§1.1) keeps serving deleted code; prod serves a 63-byte stub.
 When DM-4+DM-5 reach visual/OG parity for the chosen fixture set, the orphaned Node staging
 deploy is retired. Irreversible infra action ⇒ **operator gate**, never autonomous.
 *Done-check (pre-parity):* a dated inventory of what the orphan serves (routes, OG assets) so
-parity is checkable, not vibes; *(post-parity, post-go)* the Fly app is stopped and the demo
+parity is checkable, not vibes; *(post-parity, post-go)* the legacy host app is stopped and the demo
 URLs resolve to the Rust-served bundles.
 
 ---
@@ -442,7 +442,7 @@ to point at, publishes nothing).
 1. **Prod's 63-byte body was never inspected** — I probed sizes/tags, not content; what prod
    actually serves now is unknown. *(Routine: DM-8's inventory done-check covers it before any
    action.)*
-2. **Staging Fly orphan's ownership/cost/expiry unverified** — no `flyctl status` run this
+2. **Staging legacy host orphan's ownership/cost/expiry unverified** — no status check run this
    session; the deploy could vanish on its own before parity. *(Real risk to DM-8's "keep until
    parity" assumption → elevated into DM-8's first done-check: the dated inventory must be
    taken EARLY, not at parity time.)*

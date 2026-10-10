@@ -5,7 +5,7 @@
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const ART = 'e2e/chaos/artifacts';
 const OWN = fs.readFileSync('e2e/chaos/.owner_tok', 'utf8').trim();
 const COUR = fs.readFileSync('e2e/chaos/.courier_tok', 'utf8').trim();

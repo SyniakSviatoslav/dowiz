@@ -15,7 +15,7 @@ tests = [
 
 for name, method, path, body, expect_code, expect_body in tests:
     try:
-        url = f'https://dowiz.fly.dev{path}'
+        url = f'https://qa-durres.dowiz.org{path}'
         req = urllib.request.Request(url, method=method)
         if body is not None:
             req.data = json.dumps(body).encode()

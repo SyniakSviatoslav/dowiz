@@ -2,7 +2,7 @@ import urllib.request, json
 
 # Test: does the route work with valid data?
 body = json.dumps({'email': 'test@dowiz.com', 'password': 'test123456'}).encode()
-req = urllib.request.Request('https://dowiz.fly.dev/api/auth/local/login', method='POST', data=body)
+req = urllib.request.Request('https://qa-durres.dowiz.org/api/auth/local/login', method='POST', data=body)
 req.add_header('Content-Type', 'application/json')
 try:
     resp = urllib.request.urlopen(req, timeout=10)

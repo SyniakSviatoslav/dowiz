@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 // Regression: the customer order flow must reach a rendered checkout, not an
 // error. /s/:slug is the SSR menu (hydrated, .product-add); adding an item then

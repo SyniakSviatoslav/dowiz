@@ -42,7 +42,7 @@ on the sovereign branches is aspirational ahead of a working replacement; prod s
 There are **two frontends**, and conflating them is the single biggest planning trap:
 | Path | Stack | Status | Consumes kernel WASM? |
 |---|---|---|---|
-| `apps/web/` | React 18 + Vite + react-map-gl + react-router | **LIVE in prod** (`dowiz.fly.dev`) | **No** |
+| `apps/web/` | React 18 + Vite + react-map-gl + react-router | **LIVE in prod** (the legacy host) | **No** |
 | `web/` (top-level) | Astro 5 + Svelte 5, zero-npm kernel shim | **Beachhead, not deployed** | **Yes** — `web/src/lib/kernel/kernel_client.mjs` |
 
 ---

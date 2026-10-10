@@ -4,7 +4,7 @@ import urllib.request, json
 # Let's try a direct approach - check the public menu API carefully
 import time
 time.sleep(5)
-req = urllib.request.Request('https://dowiz.fly.dev/public/locations/demo/menu')
+req = urllib.request.Request('https://qa-durres.dowiz.org/public/locations/demo/menu')
 resp = urllib.request.urlopen(req, timeout=10)
 data = json.loads(resp.read())
 print('default_locale:', data.get('default_locale'))

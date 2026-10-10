@@ -1,6 +1,6 @@
 # COMPLETE AUDIT REPORT — 2026-06-14
 
-> Generated: 2026-06-14 · Target: `dowiz.fly.dev` (production)
+> Generated: 2026-06-14 · Target: the legacy host (production)
 > Methods: TypeScript typecheck (12 packages), ESLint, E2E Playwright (5 specs run), 8 verification scripts, 2 contract checks
 
 ---
@@ -134,7 +134,7 @@ Zero errors. Warnings only, mostly in:
 | **Root cause** | Tests navigate to `http://localhost:3000` (playwright.config.ts baseURL) |
 | | No local API server → no menu content renders → all assertions fail |
 | **Impact** | ~25 tests of 693 cannot run without local API server |
-| **Fix** | Set `VITE_BASE_URL=https://dowiz.fly.dev` when running against deployed site |
+| **Fix** | Set `VITE_BASE_URL=<legacy-host-url>` when running against deployed site |
 
 ---
 

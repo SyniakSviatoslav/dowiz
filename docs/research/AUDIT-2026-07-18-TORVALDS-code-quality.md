@@ -258,7 +258,7 @@ Unwrap/expect discipline is genuinely good in most crates (engine: 0 prod hits; 
 
 ### [SEVERITY: MEDIUM] [CONVENTIONS] TORVALDS-27
 **Where:** `.claude/CLAUDE.md` (Repowise block); `docs/audit/RELEASE-GATE.md:3`; `BLUEPRINT-P45…:52`
-**What:** Documentation actively lies about the present: the CLAUDE.md index describes a 145-file TS API with `server.ts` entry points and hotspots that have 0 tracked files; RELEASE-GATE documents Fly.io rollback for a server that no longer exists; P45:52 claims spool reporting "never goes silent" — falsified live this session.
+**What:** Documentation actively lies about the present: the CLAUDE.md index describes a 145-file TS API with `server.ts` entry points and hotspots that have 0 tracked files; RELEASE-GATE documents the legacy host rollback for a server that no longer exists; P45:52 claims spool reporting "never goes silent" — falsified live this session.
 **Evidence:** `git ls-files apps/ packages/` → empty; this audit's own scope brief cited the stale paths.
 **Why it matters:** Stale ground-truth docs redirect every agent (including this one) into auditing ghosts. In an agent-operated repo, wrong docs are wrong CODE.
 **Fix guidance:** Re-index Repowise; add tombstone headers to RELEASE-GATE.md; amend P45:52 with a pointer to this audit's Part 1.
@@ -290,10 +290,10 @@ Unwrap/expect discipline is genuinely good in most crates (engine: 0 prod hits; 
 
 ### [SEVERITY: MEDIUM] [OPS] TORVALDS-31
 **Where:** `docs/audit/RELEASE-GATE.md:3` vs P45 §4a.1
-**What:** Two rollback designs exist — one stale (Fly.io blue-green for a deleted server), one unbuilt (releases/<sha> symlink swap, W1-blocked) — and zero working rollback.
-**Evidence:** no `fly.toml`, no `deploy-staging.sh` in tree; P45 §4a.1 all-designed.
+**What:** Two rollback designs exist — one stale (the legacy host blue-green for a deleted server), one unbuilt (releases/<sha> symlink swap, W1-blocked) — and zero working rollback.
+**Evidence:** no `<legacy-deploy-manifest>`, no `deploy-staging.sh` in tree; P45 §4a.1 all-designed.
 **Why it matters:** "Rollback" currently means `git revert` and hoping. Fine pre-launch; fatal after.
-**Fix guidance:** Tombstone the Fly doc now; build the symlink path with P37.
+**Fix guidance:** Tombstone the legacy host doc now; build the symlink path with P37.
 
 ### [SEVERITY: LOW] [OPS] TORVALDS-32
 **Where:** `/mnt/volume-fsn1-1` (84% of 49G)

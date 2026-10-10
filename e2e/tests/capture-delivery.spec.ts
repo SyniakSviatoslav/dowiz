@@ -6,10 +6,10 @@ import fs from 'node:fs';
  * courier ACTIVE DELIVERY (/courier/delivery/:id) and order TRACKING (/s/:slug/order/:id).
  * Seeds an order via /dev/seed-visual-state, assigns it to a fresh mock courier, captures at 390px.
  *
- * Run: CAPTURE=1 VITE_BASE_URL=https://dowiz-staging.fly.dev DEV_AUTH_SECRET=stg-e2e-secret \
+ * Run: CAPTURE=1 VITE_BASE_URL=https://qa-durres.dowiz.org DEV_AUTH_SECRET=stg-e2e-secret \
  *   CAPTURE_DIR=audit/mobile-polish-i3 pnpm exec playwright test e2e/tests/capture-delivery.spec.ts --project=desktop
  */
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const SECRET = process.env.DEV_AUTH_SECRET || 'stg-e2e-secret';
 const DIR = process.env.CAPTURE_DIR || '/root/dowiz/audit/mobile-polish-i3';
 test.skip(!process.env.CAPTURE, 'set CAPTURE=1 to capture');

@@ -1,6 +1,6 @@
 # FE-RADAR-REPORT-v2.md — a11y + Throttled-Network Findings
 
-> Generated: 2026-06-12 · Target: `dowiz.fly.dev` (staging)
+> Generated: 2026-06-12 · Target: the legacy host (staging)
 > Method: Playwright × 7 surfaces × 2 viewports (390/1280) × 2 net profiles (fast/slow-3g) = 84 tests
 > Added: axe-core a11y scan, touch-target audit, form-label audit, aria-live check, throttled-network loading check
 

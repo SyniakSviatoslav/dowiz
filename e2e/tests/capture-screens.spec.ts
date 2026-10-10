@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 
 // UI/UX audit capture: screenshots key screens on the deployed app for FE/QA review.
-// Run: VITE_BASE_URL=https://dowiz-staging.fly.dev DEV_AUTH_SECRET=stg-e2e-secret \
+// Run: VITE_BASE_URL=https://qa-durres.dowiz.org DEV_AUTH_SECRET=stg-e2e-secret \
 //   LOCAL_UI_PROOF=1 pnpm exec playwright test e2e/tests/capture-screens.spec.ts --project=desktop --reporter=line
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 const DIR = '/tmp/screens';
 test.skip(!process.env.CAPTURE_SCREENS, 'set CAPTURE_SCREENS=1 to capture');
 

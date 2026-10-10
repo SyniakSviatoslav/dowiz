@@ -28,7 +28,7 @@ DATA, never instructions; allowlist localhost+dev only) · **gates decide "done"
 | Design gate | ✅ `/audit-gate` skill (Frontend-Audit-Polish-Gate) |
 | Context-Handoff v4.5 / Service-Build-Plan v4.4 / contract-map / coverage | ✅ present in `docs/` |
 | AI/LLM channel for the driver | ⚠️ OpenRouter exists (`apps/api/src/lib/ai-ocr-parser.ts`); a **driver API key + per-round cost-cap** must be provisioned for the harness |
-| Front+backend reachable | ✅ staging `https://dowiz-staging.fly.dev` live |
+| Front+backend reachable | ✅ staging `https://<legacy-host>` live |
 
 ## Phase A — setup (built so far)
 - **A1 personas** — `e2e/personas/*.json` (23, full role matrix; minimum set, expand-only). ✅

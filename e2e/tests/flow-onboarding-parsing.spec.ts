@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test';
  * app theme, so this is theme-independent.
  */
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 test.describe('L2: menu parsing state', () => {
   test('uploading a menu shows the crafted parsing state', async ({ page }) => {

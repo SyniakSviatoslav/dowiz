@@ -1,11 +1,11 @@
 # BATCH 5 v2 — Network / Hardware Cluster, RE-DERIVED against the REAL target (2026-07-17)
 
-> **This v2 supersedes the Fly-scoped v1** (preserved verbatim in the appendix at the bottom, tagged
+> **This v2 supersedes the legacy host-scoped v1** (preserved verbatim in the appendix at the bottom, tagged
 > `SUPERSEDED — evaluated against the wrong target`). The v1 rejected RDMA / DPDK / custom-L2 /
 > RSS / eBPF / hardware-attestation / NUMA as *physics-impossible* — but it evaluated all of them
-> against **Fly.io Firecracker microVMs**. The operator has since stated, clearly and definitively:
+> against **the legacy host Firecracker microVMs**. The operator has since stated, clearly and definitively:
 >
-> **Fly is no longer used at all. The deployment target is fully decentralized local nodes:**
+> **the legacy host is no longer used at all. The deployment target is fully decentralized local nodes:**
 > **(1) courier devices (phones), (2) owner-operated local hub servers (real hardware the owner**
 > **controls), (3) client devices.** This is a fundamentally different hardware reality, and the
 > REJECT-ON-PHYSICS verdicts had to be **re-derived, not defended.**
@@ -352,7 +352,7 @@ ADOPTED via P25.
 
 ## §2. WHAT FLIPPED vs WHAT STAYED — corrected-target summary
 
-| # | Concept | v1 (Fly) verdict | v2 (real target) verdict | Flipped? | Target-correct reason |
+| # | Concept | v1 (the legacy host) verdict | v2 (real target) verdict | Flipped? | Target-correct reason |
 |---|---|---|---|---|---|
 | 1 | RDMA / RoCE | REJECT (no device in Firecracker) | **REJECT** | reason-changed | consumer hub NIC + no lossless fabric (datacenter-only); phone peers ⇒ topologically impossible; CPU-bypass contradicts verify-every-recv; <10 % of crypto-bound cost `[PROBED+RESEARCHED]` |
 | 2 | DPDK / io_uring / AF_XDP | REJECT (single NIC; unprivileged) | **DPDK REJECT · AF_XDP DEFER · io_uring DEFER (storage)** | **partial flip** | "single-NIC" objection dissolves on a 2-NIC hub; stays down because crypto is ~8–20× the whole stack; io_uring *loses* at few-long-lived-sockets (measured 417 ns batch=1) `[PROBED]` |
@@ -412,9 +412,9 @@ structural facts, not the ns numbers, are what actually decide the cluster on th
 ---
 ---
 
-# APPENDIX — SUPERSEDED v1 (evaluated against the WRONG target: Fly Firecracker)
+# APPENDIX — SUPERSEDED v1 (evaluated against the WRONG target: legacy Firecracker)
 
-> Preserved verbatim for honesty / audit trail. **Every verdict below was derived against Fly.io
+> Preserved verbatim for honesty / audit trail. **Every verdict below was derived against the legacy host
 > Firecracker microVMs, which the operator has confirmed are no longer the deployment target.** Read
 > the v2 above for the corrected verdicts. Kept because: (a) the *dev-host probe data* in §0.1 below
 > is still accurate live data; (b) the *prior-art reconciliation* (§2 below) with `discovery.rs` /
@@ -479,12 +479,12 @@ The deployed dowiz artifact is **not a server mesh at all**. It is a static-SPA 
 - `Dockerfile:52-68` **(file:line)** — final stage is `FROM scratch`; it copies exactly one thing: a
   single static Rust binary (`native-spa-server`) + the SPA `dist` + CA certs. There is **no OS
   beneath it**, no shell, no privileged networking, no packet tooling.
-- `Dockerfile:3-5` **(file:line)** — "the legacy centralized server (apps/api + apps/worker, Fly,
+- `Dockerfile:3-5` **(file:line)** — "the legacy centralized server (apps/api + apps/worker, the legacy host,
   Supabase) was **DROPPED**." Confirmed by `apps/*` deleted at HEAD (P24 §7 adoption note,
   `roadmap §1.2`) **(prior-art)**.
-- Prod host = `dowiz.fly.dev` (`.claude/CLAUDE.md:39` **(file:line)**). Fly.io runs guest workloads
+- Prod host = the legacy host (`.claude/CLAUDE.md:39` **(file:line)**). the legacy host runs guest workloads
   as **Firecracker / Cloud-Hypervisor microVMs**: minimal device model, **virtio-net only, no
-  SR-IOV, no NIC passthrough, no RDMA, unprivileged guest** **(training-knowledge — Fly's public
+  SR-IOV, no NIC passthrough, no RDMA, unprivileged guest** **(training-knowledge — the legacy host's public
   architecture; the implication holds for any unprivileged cloud microVM regardless of exact
   hypervisor)**.
 
@@ -558,7 +558,7 @@ from the existing shapes.
 
 1. **Physics (carrier):** raw L2 framing means `AF_PACKET`/raw Ethernet sockets, which require (a)
    `CAP_NET_RAW` **and** (b) an actual **L2 broadcast domain** shared by the peers. Prod Substrate B is
-   Fly Firecracker microVMs (§0.2): unprivileged, virtio-net, and Fly machines are **routed at L3 /
+   legacy Firecracker microVMs (§0.2): unprivileged, virtio-net, and the legacy host machines are **routed at L3 /
    WireGuard-meshed — there is no shared Ethernet segment between two machines** **(training-knowledge)**.
    Even on the dev host, `CAP_NET_RAW` is present **(live)** but it is **one VM with no L2 peer**. A raw
    Ethernet frame has nowhere to go on either substrate.
@@ -583,7 +583,7 @@ Ethernet-adjacent *and* line-rate framing (not crypto) is the measured bottlenec
 - Dev host: **no RDMA hardware** — `/dev/infiniband` and `/sys/class/infiniband` both absent **(live)**.
 - RDMA needs an RNIC (InfiniBand HCA, or a RoCE-capable Ethernet NIC with hardware verbs offload) exposed
   to the guest; RoCEv2 additionally needs a **lossless, PFC/DCB-configured Ethernet fabric**
-  **(training-knowledge)**. Hetzner standard cloud VMs and Fly Firecracker expose **virtio-net only** —
+  **(training-knowledge)**. Hetzner standard cloud VMs and legacy Firecracker expose **virtio-net only** —
   no verbs, no SR-IOV, no RNIC **(training-knowledge + `ethtool` live shows virtio_net)**.
 - This is the cleanest physics rejection in the cluster: **the device does not exist.**
 
@@ -593,7 +593,7 @@ not a code decision.
 
 ### 1.4 AF_XDP (zero-copy, kernel-bypass-lite) → **REJECT-on-physics (prod) / DEFER-WITH-TRIGGER (dev, near-zero payoff)**
 
-- **Prod (Substrate B):** Fly Firecracker microVM is unprivileged (no `CAP_NET_RAW`/`CAP_BPF` to the
+- **Prod (Substrate B):** legacy Firecracker microVM is unprivileged (no `CAP_NET_RAW`/`CAP_BPF` to the
   app) and serves a `scratch` static binary — AF_XDP cannot attach. **Undeployable.**
 - **Dev (Substrate A):** the `virtio_net` driver **does** have an XDP data path, and `CAP_NET_RAW` +
   `CAP_BPF` are present **(live)**, so an `AF_XDP` socket *could* attach in a lab. But the payoff is
@@ -618,7 +618,7 @@ latency. Until that exact measurement exists, AF_XDP is capacity-not-need.
   **hugepages**, a **poll-mode driver spinning a full core**, and dedicated CPUs **(training-knowledge)**.
 - Both substrates have **one shared NIC** (`eth0`, virtio_net **(live)**). Binding it to DPDK **kills all
   normal networking** — including SSH to the dev box and the agents' own outbound LLM API calls (the D-class
-  work in P25 §3.4 **(prior-art)**). On Fly Firecracker there is **no NIC to pass through** at all.
+  work in P25 §3.4 **(prior-art)**). On legacy Firecracker there is **no NIC to pass through** at all.
 - HugePages are currently **0/reserved (live)**; DPDK's hugepage + core-dedication demands compound the
   impossibility on a shared 4-core VM.
 
@@ -662,7 +662,7 @@ dedicated bare-metal packet-processing appliance the dowiz mesh is not.
   oversight.
 - **isolcpus → DEFER-host-level-WITH-TRIGGER.** `/proc/cmdline` has **no `isolcpus=`** **(live)**;
   enabling it is a **kernel boot parameter requiring a reboot of the Hetzner host** (root is available but
-  this is host-level and disruptive) and **does not exist on Fly at all**. On shared cloud VMs, cgroup
+  this is host-level and disruptive) and **does not exist on the legacy host at all**. On shared cloud VMs, cgroup
   `cpuset` + `nice` (P25's mechanism) already delivers most of the isolation **reversibly**. Trigger:
   only a dedicated bare-metal mesh node justifies true core isolation.
 
@@ -743,7 +743,7 @@ DHT gossip) are things the codebase **already rejected on the same grounds** I r
 **Anu (derivable, not asserted):** every REJECT is grounded in a **live probe** (`ls /dev/infiniband`
 empty; `ethtool` = virtio_net; `capsh`; `/proc/cmdline`; `/proc/meminfo` hugepages 0) or a **`file:line`**
 (the `scratch` Dockerfile, the QUIC transport, the length-prefixed framing) — not in "this is too
-complex." The one substrate claim I could not directly verify — that Fly prod is specifically Firecracker
+complex." The one substrate claim I could not directly verify — that the legacy host prod is specifically Firecracker
 — is tagged `(training-knowledge)`, and the rejection **does not depend on the exact hypervisor**: it
 holds for *any* unprivileged cloud microVM with a virtio NIC, which the deployed `scratch` artifact
 provably is. Weakest Anu link, named: the AF_XDP-on-virtio-net "near-zero payoff" rests on the *asserted*

@@ -1,6 +1,6 @@
 # DeliveryOS Issues Matrix — 2026-06-13
 
-> Source of truth: live deploy `https://dowiz.fly.dev` x local codebase at `C:\Users\Dell5\Documents\dowiz`
+> Source of truth: live deploy the legacy host x local codebase at `C:\Users\Dell5\Documents\dowiz`
 > Generated: 2026-06-13 · **Updated:** 2026-06-14 (structural sweep: @ts-nocheck removed, apiClient typed, catch blocks fixed, lifecycle spec tightened)
 
 ---
@@ -24,7 +24,7 @@
 | S2 | **Sort dropdown overlaps status filter pills** | On non-mobile, `<select>` element for sort sits beside status pills. Pills overflow into sort. | `DashboardPage.tsx:288-323` | ✅ Replaced `<select>` with unified icon+dropdown on ALL viewports | ✅ `dashboard.spec.ts:70` |
 | S3 | **Settings page width broken on desktop** | `max-w-lg` constrains to 512px; working hours rows use `flex-wrap` causing misalignment. | `SettingsPage.tsx:224,341-361` | ✅ Changed to `max-w-2xl`; working hours use `grid grid-cols-[120px_1fr]` | ✅ `fe-radar-v2 S6` |
 | S4 | **Allergen labels not translated** | Raw `{a}` rendered in 6 places across 4 files instead of `t(\`allergen.${a}\`, a)`. | `AllergenEditor.tsx:89,106`, `RecipeEditor.tsx:243`, `ClientUI.tsx:167`, `MenuManagerPage.tsx:674` | ✅ All wrapped with `t()` | ✅ Visual check on deploy |
-| S5 | **Product image URL points to staging domain** | `image_url` DB column stores absolute URL with old `APP_BASE_URL`. `mapProductRow()` re-computes from `image_key`, but env var `APP_BASE_URL=staging.dowiz.app` on production Fly.io overrides it. | `spa-proxy.ts:184`, `flyctl secrets APP_BASE_URL` | ✅ Route wildcard fix makes URL irrelevant — all formats served | ❌ Needs `flyctl secrets unset APP_BASE_URL` |
+| S5 | **Product image URL points to staging domain** | `image_url` DB column stores absolute URL with old `APP_BASE_URL`. `mapProductRow()` re-computes from `image_key`, but env var `APP_BASE_URL=staging.dowiz.app` on production the legacy host overrides it. | `spa-proxy.ts:184`, the legacy platform secret `APP_BASE_URL` | ✅ Route wildcard fix makes URL irrelevant — all formats served | ❌ Needs removing the platform secret `APP_BASE_URL` |
 | S6 | **Dashboard search input accepts text but locale placeholder differs** | Tests search for `input[placeholder*="Search"]` but server returns Albanian locale (`Kërko`). | Dashboard page, locale | ✅ Fixed tests to use generic `input:not([type])` selector | ✅ `dashboard.spec.ts:83` |
 
 ---
@@ -63,7 +63,7 @@
 | # | Issue | Why not fixed | Workaround |
 |---|---|---|---|
 | P1 | **Order status 401 on client tracking** | Backend endpoint requires auth token. Frontend can't set it without backend change to emit token on order creation. | Customer must refresh page after placing order; some orders still trackable via WebSocket if already on page |
-| P2 | **Product images stored on staging server** | `APP_BASE_URL` env var on Fly.io points to `staging.dowiz.app`. Image upload stores `image_url` with this domain. | Wildcard route fix serves images regardless of URL domain. But new uploads still compute wrong URL. Fix: unset `APP_BASE_URL` on Fly.io or update to `dowiz.fly.dev` |
+| P2 | **Product images stored on staging server** | `APP_BASE_URL` env var on the legacy host points to `staging.dowiz.app`. Image upload stores `image_url` with this domain. | Wildcard route fix serves images regardless of URL domain. But new uploads still compute wrong URL. Fix: unset `APP_BASE_URL` on the legacy host or update to the legacy host |
 | P3 | **Onboarding never completed** | Checkout requires entrance + apartment validation for delivery orders, but first-time users don't have these saved. | Route depends on URL (`/admin/onboarding`), not data state. May need redirect logic. |
 | P4 | **Branding page preview link points to broken client** | Preview link uses `slug.dowiz.org` subdomain routing. If subdomain DNS not configured, it falls through to wrong SPA. | Requires DNS/subdomain config on Cloudflare — infra issue, not code |
 

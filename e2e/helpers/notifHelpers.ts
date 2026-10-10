@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // Base URL for the deployed service (staging)
-const BASE_URL = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE_URL = process.env.VITE_BASE_URL || 'https://qa-durres.dowiz.org';
 
 // Telegram bot credentials (should be set in environment variables for security)
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;

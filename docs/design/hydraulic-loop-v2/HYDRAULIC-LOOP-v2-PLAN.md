@@ -692,7 +692,7 @@ lossy channel, тому вгору йде тільки те, що пережил
 9. **field.rs keyword-veto bypassable** («s3cret» обходить) — семантичний класифікатор + реальний граф
    залежностей замість toy-6-node. RED: obfuscated red-line task має все ще vetoed.
 10. **guard-bash.sh не підключений** — dangerous-command veto (deploy/git-push-main/rm-rf) мертвий.
-    Підключити в settings.json. RED: `fly deploy` у sandbox має block.
+    Підключити в settings.json. RED: a deploy у sandbox має block.
 11. **agentic_git snapshot lossy** — дропає salience/layer/attic → rollback втрачає метадані. Додати повний
     стан. RED: checkpoint→rollback має відновити salience.
 12. **money.rs unchecked arithmetic** — overflow panic/wrap. `checked_mul`/`checked_add`. RED: near-i64-max
