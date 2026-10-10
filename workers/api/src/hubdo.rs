@@ -80,7 +80,7 @@ mod catview; mod logmark; mod chunks; use chunks::changed_chunks; mod atomic; pu
 mod facts; // the folds over the log and the catalogue together, answered here (BN1), `hubdo/facts.rs`
 mod bulk; // a supplies / recipes spreadsheet as one turn (BN1, BN4's shape), `hubdo/bulk.rs`
 mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
-mod timer; // the venue's alarm: timed work without the minute cron (DAG Phase 2), `hubdo/timer.rs`
+mod timer; mod edges; // edges: what every /fold/* route derives from what (R-GRAPH D4); timer: the venue's alarm: timed work without the minute cron (DAG Phase 2), `hubdo/timer.rs`
 mod push_turn; mod chat; mod sms_turn; mod lost; // sms_turn: the customer's order-status text in the turn (W-SMS); push_turn: the phones' messages in the turn (W-PUSH); chat: the courier chat nudge to the two parties' sockets (W-URGENT), `hubdo/chat.rs`
 /// Where the object lives: the platform, or (tests) memory (W-COV C2), `hubdo/host.rs`.
 pub(crate) mod host;
@@ -809,7 +809,7 @@ impl HubImages {
     /// nobody ever sees.
     async fn rebuild(&self) -> Result<crate::rebuild::Report> {
         let Some((meta, bytes)) = self.image(LOG_IMAGE).await? else {
-            return Ok(crate::rebuild::Report::default());
+            return self.rebuild_rows(crate::rebuild::Report::default()).await; // no log: the other memo rows still answer
         };
         // FRESH, from the bytes. `Hub::load` parses the arena and
         // `orders_state` replays the chain (`rebuild::of_log`); neither
@@ -836,7 +836,7 @@ impl HubImages {
         if crate::rebuild::needs_archives(&report, &hub) {
             crate::rebuild::cross_archives(&mut report, &self.archive_folds().await?);
         }
-        Ok(report)
+        self.rebuild_rows(report).await // law 8 over EVERY memo row of the edge table (`hubdo/edges.rs`)
     }
 
     /// Queue the kitchen's message for every channel this venue has configured.
@@ -965,8 +965,8 @@ impl HubImages {
         let next = current + 1;
         let pinned = self.v2_when_pinned(id, bytes).await?; let bytes = pinned.as_deref().unwrap_or(bytes); // a KV image while pinned for a rollback (`hubdo/compact.rs`)
         let store = self.state.storage();
-        // The menu memo is DROPPED BEFORE a write to what it was folded from, so a failed write cannot leave one standing over bytes it no longer describes (R2, `hubdo/menu.rs`).
-        if menu::MENU_INPUTS.contains(&id) { *self.menu.borrow_mut() = None; }
+        // The menu memo is TAKEN DOWN BEFORE a write to what it was folded from, so a failed write cannot leave one standing over bytes it no longer describes (R2); it is kept aside only to be compared with its successor (AX3, `hubdo/menu.rs`).
+        let prev_menu = if menu::MENU_INPUTS.contains(&id) { self.menu.borrow_mut().take() } else { None };
 
         let chunks = bytes.len().div_ceil(CHUNK).max(1);
         // ONLY THE CHUNKS THAT MOVED. The log is append-only: an append touches
@@ -1006,7 +1006,7 @@ impl HubImages {
         self.catview_forget(id); self.logmark_written(id, &how, expected, next);
         self.mem.borrow_mut().insert(id.to_string(), (meta, bytes.to_vec()));
         // THE STOREFRONT'S READ PATH IS PUBLISHED by the write that moved it (BN2, `hubdo/publish.rs`); it never fails the write.
-        if menu::MENU_INPUTS.contains(&id) { self.publish_after_write().await; }
+        if menu::MENU_INPUTS.contains(&id) { self.menu_after_write(prev_menu).await; } // AX3: not when the menu's out bytes did not move (`hubdo/edges.rs`)
         // TIMED WORK ARMS THE ALARM in the write that makes it due (DAG Phase 2).
         if crate::cron::timer::TIMED.contains(&id) || id == crate::hubstore::IMAGE_SETTINGS { // settings: a rail set up (`outbox/park.rs`)
             self.timer_after_write(id, self.now_ms()).await;
@@ -1131,7 +1131,7 @@ impl HubImages {
                 (Method::Get, "products") => self.fold_products(&req).await,
                 (Method::Get, "preps") => self.fold_preps(&req).await,
                 // THE CATALOGUE READS OF BN1, answered from the images here (`hubdo/reads.rs`).
-                (Method::Get, "basket" | "analytics" | "kitchen" | "stock" | "exceptions" | "week_top" | "prep") => self.fold_read(what, &req).await,
+                (Method::Get, "basket" | "analytics" | "kitchen" | "stock" | "exceptions" | "week_top" | "prep" | "haccp") => self.fold_read(what, &req).await, // haccp: unreachable until D4's edge test named it
                 // THE CATALOGUE'S DERIVED NODES (`hubdo/catalogue.rs`) and the folds over the log and the catalogue together (`hubdo/facts.rs`).
                 (Method::Get, "catalogue") => self.fold_catalogue(&req).await,
                 (Method::Get, "reveals" | "assist" | "graph" | "kitchen_facts" | "waste") => self.fold_facts(what, &req).await,

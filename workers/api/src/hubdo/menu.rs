@@ -62,6 +62,41 @@ impl HubImages {
         Ok(())
     }
 
+    /// AFTER A WRITE TO ONE OF `MENU_INPUTS` (AX3 early cutoff, `fold/menu/out.rs`;
+    /// row `menu` of `hubdo/edges.rs`). `prev` is the memo the write took down.
+    /// Warm, the menu is refolded now and succeeds it: the same out bytes keep
+    /// its generation and the dependents (the publish: R2 objects, the root, the
+    /// record) do not run. Cold, there is nothing to compare: publish, as before.
+    /// Logged, never an error -- the write that caused it has landed.
+    pub(super) async fn menu_after_write(&self, prev: Option<Memo>) {
+        if let Some(prev) = prev {
+            if let Err(e) = self.menu_memo().await {
+                log_line!("menu: the refold after a write failed: {e}");
+            }
+            if self.menu.borrow_mut().as_mut().is_some_and(|m| m.succeed(&prev)) {
+                return;
+            }
+        }
+        let ok = match self.publish(false).await {
+            Ok(_) => true,
+            Err(e) => {
+                log_line!("publish: {e}");
+                false
+            }
+        };
+        if let Some(m) = self.menu.borrow_mut().as_mut() {
+            m.mark_published(ok);
+        }
+    }
+
+    /// The menu output's K64 (16 hex), generation and whether it reached its sink, when the memo is in hand.
+    pub(super) fn menu_out(&self) -> serde_json::Value {
+        match self.menu.borrow().as_ref() {
+            Some(m) => serde_json::json!({ "k64": format!("{:016x}", m.out_key()), "generation": m.out_generation(), "published": m.published() }),
+            None => serde_json::Value::Null,
+        }
+    }
+
     /// `?block=menu_prices|bom|names|taste` on either route: that block of the
     /// catalogue projection (row DG7), from the same memo as the JSON.
     async fn fold_block(&self, name: &str) -> Result<Response> {

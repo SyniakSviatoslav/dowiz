@@ -101,6 +101,8 @@ pub struct Memo {
     stripe_key: Option<String>,
     /// Per locale: the `categories` array and the `warnings` array, as JSON.
     rendered: HashMap<String, (String, String)>,
+    /// AX3: the OUTPUT's generation (moves only when the out bytes do) and whether that output reached its sink (`menu/out.rs`).
+    out_gen: i64, published: bool, key: std::cell::Cell<Option<u64>>,
 }
 
 impl Memo {
@@ -173,7 +175,7 @@ impl Memo {
             .filter_map(|(id, j)| serde_json::from_str::<Value>(j).ok().map(|v| (id.clone(), v)))
             .collect();
         let stored: HashMap<String, String> = listed.into_iter().collect();
-        Memo { gens, record, venue, cats, products, stored, i18n, blocks, stripe_key: rails.stripe_key, rendered: HashMap::new() }
+        Memo { gens, record, venue, cats, products, stored, i18n, blocks, stripe_key: rails.stripe_key, rendered: HashMap::new(), out_gen: 1, published: false, key: Default::default() }
     }
 
     #[cfg(test)]
@@ -277,6 +279,7 @@ pub fn is_current(memo: &Option<Memo>, current: Gens) -> bool {
     memo.as_ref().is_some_and(|m| m.gens == current)
 }
 
+mod out; // AX3 early cutoff: the out bytes, their K64, the output generation (R-GRAPH D5)
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

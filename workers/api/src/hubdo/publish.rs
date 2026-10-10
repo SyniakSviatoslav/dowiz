@@ -162,14 +162,6 @@ impl HubImages {
         Ok(self.state.storage().get::<Published>(RECORD).await?.unwrap_or_default())
     }
 
-    /// After a write to one of `MENU_INPUTS`: publish what changed. Logged,
-    /// never an error -- the write that caused it has landed.
-    pub(super) async fn publish_after_write(&self) {
-        if let Err(e) = self.publish(false).await {
-            log_line!("publish: {e}");
-        }
-    }
-
     /// `GET /fold/publish`: the record and whether publishing is on.
     /// `POST /fold/publish[?all=1]`: publish now; `all` rewrites every object.
     pub(super) async fn publish_route(&self, req: &Request) -> Result<Response> {
@@ -187,6 +179,7 @@ impl HubImages {
             "enabled": enabled,
             "manifest": slug.map(|s| format!("v/{s}/manifest.json")),
             "published": record,
+            "menu": self.menu_out(), // AX3: the output's K64 and generation (`hubdo/edges.rs`)
         }))
     }
 

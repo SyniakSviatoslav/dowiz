@@ -50,6 +50,15 @@ pub struct Report {
     /// expected state and means nothing; reporting the count without this
     /// would make every venue without recipes look broken.
     pub modelled: bool,
+    /// The memo rows of `hubdo/edges.rs` this rebuild checked, by projection
+    /// (`orders`, `menu`): law 8 walks the table, so a memo it did not check
+    /// is not in this list -- and a memo row with no check is an error.
+    #[serde(default)]
+    pub checked: Vec<String>,
+    /// The memos (by projection) whose served output differs from a fresh
+    /// fold of their inputs' bytes. EMPTY IS THE ONLY ACCEPTABLE ANSWER.
+    #[serde(default)]
+    pub stale_memos: Vec<String>,
 }
 
 /// One stranded order, found in an archive, with its status there.
@@ -63,7 +72,7 @@ pub struct Archived {
 impl Report {
     /// The only question the gate asks.
     pub fn intact(&self) -> bool {
-        self.stale.is_empty() && self.stranded.is_empty()
+        self.stale.is_empty() && self.stranded.is_empty() && self.stale_memos.is_empty()
     }
 }
 
@@ -157,7 +166,7 @@ pub fn compare(
         unheld.sort();
     }
 
-    Report { orders: fresh.len(), stale, stranded, unheld, archived: Vec::new(), modelled }
+    Report { orders: fresh.len(), stale, stranded, unheld, archived: Vec::new(), modelled, ..Report::default() }
 }
 
 /// THE OBJECT'S REBUILD, minus its I/O: refold `hub` from the bytes with

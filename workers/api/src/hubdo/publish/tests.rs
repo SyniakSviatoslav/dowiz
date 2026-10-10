@@ -64,10 +64,11 @@ fn only_changed_blocks_are_written() {
     assert!(edit.contains(&format!("v/dubin/{}", after["fragment"].as_str().unwrap())));
     assert!(edit.contains(&format!("v/dubin/{}", after["blocks"]["menu_prices"].as_str().unwrap())));
 
-    // The same bytes again (a write that changed nothing visible): no object,
-    // only the root, because the generation it names moved.
+    // The same bytes again (a write that changed nothing visible): NOTHING,
+    // not even the root -- the menu's out bytes did not move (AX3, D5; until
+    // then the root was rewritten because the input generation it names moved).
     assert_eq!(h.put("catalog", 2, &catalog(950).to_bytes().unwrap()).status_code(), 200);
-    assert_eq!(b.drain(), vec!["v/dubin/manifest.json".to_string()]);
+    assert_eq!(b.drain(), Vec::<String>::new());
 }
 
 /// The first publish writes every object the manifest names, the photos KV
@@ -230,4 +231,41 @@ fn the_manifest_names_every_object_by_kind() {
     assert_eq!(m["media"], "m.json");
     assert!(m.get("at").is_none(), "no clock in the root: the generations are its version");
     assert_eq!(m["gens"]["settings"], 1);
+}
+
+/// A settings image holding `pairs`.
+fn settings_with(pairs: &[(&str, &str)]) -> Vec<u8> {
+    let mut s = dowiz_hub::settings::Settings::create().unwrap();
+    for (k, v) in pairs {
+        s.set(k, v);
+    }
+    s.to_bytes().unwrap()
+}
+
+/// AX3 EARLY CUTOFF (R-GRAPH D5, `hubdo/edges.rs`): the menu reads settings only through
+/// `features::all`, so a notification setting moves no menu byte -- and must move nothing
+/// downstream: no R2 object, no root, no record, no `moved`. Its twin flips a feature.
+#[test]
+fn a_settings_write_that_changes_no_menu_byte_is_cut_off() {
+    let (h, b) = published_venue();
+    let _ = h.get("/fold/menu?slug=dubin&now=0"); // a storefront read: the memo is warm
+    let before = h.get("/fold/publish").body_value();
+    b.drain();
+    let console = h.host.socket(&[crate::hubdo::TAG_CONSOLE]);
+    assert_eq!(h.put("settings", 0, &settings_with(&[("notify.telegram.chat", "-100")])).status_code(), 200);
+    assert_eq!(b.drain(), Vec::<String>::new(), "no R2 write, not even the root");
+    let after = h.get("/fold/publish").body_value();
+    assert_eq!(after["published"], before["published"], "the record and its generation did not move");
+    assert_eq!(after["menu"], before["menu"], "the menu's K64 and generation did not move");
+    assert!(console.borrow().is_empty(), "no `moved` for a cut-off write: {:?}", console.borrow());
+
+    // THE TWIN: a STOREFRONT feature is a menu byte (a staff one, `feature.voice`, is not); it bumps, and it publishes.
+    let on = settings_with(&[("notify.telegram.chat", "-100"), ("feature.tips", "0")]);
+    assert_eq!(h.put("settings", 1, &on).status_code(), 200);
+    let moved = b.drain();
+    assert_eq!(moved.last().map(String::as_str), Some("v/dubin/manifest.json"), "{moved:?}");
+    let twin = h.get("/fold/publish").body_value();
+    assert_eq!(twin["published"]["generation"], serde_json::json!([1, 1, 2]));
+    assert_ne!(twin["menu"]["k64"], after["menu"]["k64"]);
+    assert_eq!(twin["menu"]["generation"].as_i64(), after["menu"]["generation"].as_i64().map(|g| g + 1));
 }
