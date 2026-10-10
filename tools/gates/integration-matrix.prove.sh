@@ -51,7 +51,7 @@ PY
 want 0 "the registry as it is"
 edit 'first["proof"]["ref"] = first["proof"]["ref"].rsplit("::", 1)[0] + "::nobody_wrote_this_test"'
 want 1 "a TESTED-INMEM row whose test is gone"
-n=$(sed -n 's/^tested_inmem=//p' "$S/base"); printf 'tested_inmem=%s\nlive=0\n' "$((n + 1))" > "$S/base"
+n=$(sed -n 's/^tested_inmem=//p' "$S/base"); l0=$(sed -n 's/^live=//p' "$S/base"); printf 'tested_inmem=%s\nlive=%s\n' "$((n + 1))" "$l0" > "$S/base"
 want 1 "the tested_inmem baseline above the count"
 edit 'first["proof"] = None'
 want 1 "a TESTED-INMEM row with no proof"
@@ -77,10 +77,14 @@ want 1 "live = the row's in-memory test"
 printf '#!/bin/sh\n# read-only probe (scratch)\n' > "$S/probe.sh"; printf '{"version": 1}\n' > "$S/contract.json"
 edit "first['live'] = {'kind': 'probe', 'ref': '$S/probe.sh', 'contract': '$S/nope.json'}"
 want 1 "live probe with no contract"
-edit "first['live'] = {'kind': 'probe', 'ref': '$S/probe.sh', 'contract': '$S/contract.json'}"
+# Relative to the registry's own live count (25 since W-LIVECOL, 2026-10-10): the probe goes on a row
+# whose live is still null, so a counted probe reads exactly one more than the baseline. Written as
+# "live=1" / "live=0" while the registry had none, which went red the day it had some.
+lv=$(sed -n 's/^live=//p' "$S/base")
+edit "next(l for l in L if l.get('live') is None)['live'] = {'kind': 'probe', 'ref': '$S/probe.sh', 'contract': '$S/contract.json'}"
 want 0 "live probe with its contract"
-grep -q 'live=1 of' "$S/out.last" || { echo "prove: a valid live probe was not counted"; fail=1; }
-m=$(sed -n 's/^tested_inmem=//p' "$S/base"); printf 'tested_inmem=%s\nlive=1\n' "$m" > "$S/base"
+grep -q "live=$((lv + 1)) of" "$S/out.last" || { echo "prove: a valid live probe was not counted (want live=$((lv + 1)))"; fail=1; }
+m=$(sed -n 's/^tested_inmem=//p' "$S/base"); printf 'tested_inmem=%s\nlive=%s\n' "$m" "$((lv + 1))" > "$S/base"
 want 1 "the live baseline above the live count"
 edit 'del first["live"]'
 want 1 "a row without the live key"
