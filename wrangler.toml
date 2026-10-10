@@ -1,8 +1,6 @@
+# Cloudflare Pages config for the git-connected `dowiz` Pages project.
+# Pages accepts only Pages keys here: a Worker key such as `pattern` makes
+# every build fail. The product itself is the Worker in workers/api.
 name = "dowiz"
 pages_build_output_dir = "web"
-
-[env.production]
-pattern = "dowiz.org/*"
-
-[env.preview]
-pattern = "preview.dowiz.org/*"
+compatibility_date = "2026-09-01"
