@@ -1,0 +1,17 @@
+# canvas-frame's marks (read by canvas-calib.mjs; `key=value` lines, '#' lines are comments).
+# first_ms: the first-frame mark on a machine at or faster than the nominal reference (CI, x86).
+# ref_nominal_ms: the reference page's time (canvas-calib.mjs REF_PAGE) the mark is stated for.
+#   The box must be held to the SAME board/reference ratio CI is: mark = first_ms x ref/nominal,
+#   i.e. pass iff board/ref <= first_ms/nominal = 2.0.
+#   MEASURED 2026-10-10 (W-RGQUICK), moto g57 power, slot cores 4,5,6 = Cortex-A78 (0xd41) 2.4 GHz,
+#   Chromium 153.0.8010.12 headless, dpr 2, 7 runs through slot.sh:
+#     quiet box (4 runs): board median 316-329 ms, reference 203-214 ms, board/ref 1.52-1.56
+#     W-HUBCRC3 compiling (3 runs): board 297-756, reference 205-317, board/ref 1.45-2.39
+#   The absolute 300 alone was red on every quiet run here (316-329); 2.0 keeps a 2x slower board
+#   red (board/ref ~3.1) and the real board green with 28% margin.
+#   NOT measured on CI: if CI's reference reads > 150 ms the factor rises above 1 there too --
+#   the gate prints `calib` in its JSON line; read it on the first CI run and lower this if so.
+# cap: a reference past cap x nominal (450 ms) is a machine too slow to judge: exit 2, never a pass.
+first_ms=300
+ref_nominal_ms=150
+cap=3

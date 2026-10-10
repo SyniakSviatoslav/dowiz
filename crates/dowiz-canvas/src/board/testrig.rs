@@ -53,6 +53,12 @@ impl Rig {
         self.b.draw(&mut ui);
         self.cmd.hash()
     }
+    /// `frame` the way ffi.rs `frame` builds it: through the dirty flag (dirty.rs).
+    pub fn frame_gated(&mut self, d: &mut super::dirty::Dirty) -> Option<u32> {
+        let pal = if self.b.dark { DARK } else { LIGHT };
+        let mut ui = Ui { cmd: &mut self.cmd, scene: &mut self.scene, widths: &mut self.widths, host: &mut self.m, pal, lang: self.b.lang };
+        super::dirty::frame(d, &mut self.b, &mut ui)
+    }
     pub fn tap_tour(&mut self, tour: &str) {
         let r = self.scene.find_tour(tour).unwrap_or_else(|| panic!("no node {tour}")).rect;
         self.tap(r.x + r.w / 2, r.y + r.h / 2);

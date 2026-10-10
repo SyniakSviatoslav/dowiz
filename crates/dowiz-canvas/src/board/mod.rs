@@ -10,6 +10,7 @@
 pub mod feed;
 pub mod model;
 mod cards;
+pub mod dirty;
 mod input;
 mod sheet;
 pub mod tsheet;

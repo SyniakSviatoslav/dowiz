@@ -8,6 +8,7 @@
 
 use core::mem::MaybeUninit;
 
+use crate::board::dirty::{self, Dirty};
 use crate::board::{Board, Intent, Role, Sync};
 use crate::cmd::Cmd;
 use crate::lang::Lang;
@@ -47,6 +48,8 @@ static mut CMD: Cmd = Cmd::new();
 static mut WIDTHS: Widths = Widths::new();
 static mut INTENT: [i32; 8] = [0; 8];
 static mut STATS: [u32; 12] = [0; 12];
+// board/dirty.rs: `bd()` marks it, so every export that can change state draws the next frame.
+static mut DIRTY: Dirty = Dirty::new();
 
 unsafe fn ready() {
     if !READY {
@@ -55,7 +58,13 @@ unsafe fn ready() {
         READY = true;
     }
 }
+/// The board for an export that may CHANGE it: marks the next frame dirty (board/dirty.rs). An
+/// export that only reads takes `quiet()` instead -- the default is the safe one.
 unsafe fn bd() -> &'static mut Board {
+    DIRTY.mark();
+    quiet()
+}
+unsafe fn quiet() -> &'static mut Board {
     ready();
     BOARD_M.assume_init_mut()
 }
@@ -105,6 +114,7 @@ pub unsafe extern "C" fn resize(w: i32, h: i32) {
 /// The text metrics changed (a devicePixelRatio or font change): measure again.
 #[no_mangle]
 pub unsafe extern "C" fn forget_widths() {
+    DIRTY.mark();
     WIDTHS.reset();
 }
 #[no_mangle]
@@ -169,16 +179,16 @@ pub unsafe extern "C" fn field_set(f: u32, len: u32) -> u32 {
 }
 #[no_mangle]
 pub unsafe extern "C" fn field_ptr(f: u32) -> *const u8 {
-    bd().fields.get(f as usize).map_or(core::ptr::null(), |x| x.value().as_ptr())
+    quiet().fields.get(f as usize).map_or(core::ptr::null(), |x| x.value().as_ptr())
 }
 #[no_mangle]
 pub unsafe extern "C" fn field_len(f: u32) -> u32 {
-    bd().fields.get(f as usize).map_or(0, |x| x.value().len() as u32)
+    quiet().fields.get(f as usize).map_or(0, |x| x.value().len() as u32)
 }
 /// 255 = no field focused.
 #[no_mangle]
 pub unsafe extern "C" fn focused() -> u32 {
-    bd().focus.map_or(255, |f| f as u32)
+    quiet().focus.map_or(255, |f| f as u32)
 }
 #[no_mangle]
 pub unsafe extern "C" fn blur() {
@@ -196,17 +206,18 @@ pub unsafe extern "C" fn toast_word(k: u32) {
     let s = bd().lang.s(w);
     bd().set_toast(s.as_bytes());
 }
-/// Draw the frame. Returns the command words.
+/// Draw the frame. Returns the command words; 0 = nothing changed since the last drawn frame
+/// (board/dirty.rs), the host replays nothing and the canvas keeps that frame.
 #[no_mangle]
 pub unsafe extern "C" fn frame(now_ms: f64) -> u32 {
-    bd().now_ms = now_ms as i64;
+    let b = quiet();
+    b.now_ms = now_ms as i64;
     let mut host = Host;
     let mut ui = Ui {
         cmd: &mut CMD, scene: sc(), widths: &mut WIDTHS, host: &mut host,
-        pal: if bd().dark { DARK } else { LIGHT }, lang: bd().lang,
+        pal: if b.dark { DARK } else { LIGHT }, lang: b.lang,
     };
-    bd().draw(&mut ui);
-    CMD.len as u32
+    dirty::frame(&mut DIRTY, b, &mut ui).unwrap_or(0)
 }
 #[no_mangle]
 pub unsafe extern "C" fn cmd_ptr() -> *const i32 {
@@ -298,7 +309,7 @@ pub unsafe extern "C" fn intent() -> *const i32 {
 pub unsafe extern "C" fn rect_of(kind: u32, len: u32) -> *const i32 {
     let want = input(len);
     INTENT = [0; 8];
-    let d = &bd().data;
+    let d = &quiet().data;
     let hit = sc().nodes().iter().find(|n| match (kind, n.act) {
         (0, _) => !n.tour.is_empty() && n.tour.as_bytes() == want,
         (1, crate::scene::Act::Bump(i)) => d.tickets.get(i as usize).is_some_and(|t| d.str(t.id).as_bytes() == want),
@@ -331,9 +342,9 @@ pub unsafe extern "C" fn tour_list() -> u32 {
 #[no_mangle]
 pub unsafe extern "C" fn stats() -> *const u32 {
     STATS = [
-        sc().len() as u32, CMD.len as u32, WIDTHS.misses, CMD.overflow, sc().dropped, bd().data.dropped,
-        bd().data.bad, sc().too_small(crate::ui::TAP) as u32, bd().data.nt as u32, bd().data.ntab as u32,
-        if bd().ts.open { bd().ts.n as u32 } else { 0 }, bd().ts.dropped + bd().ts.bad,
+        sc().len() as u32, CMD.len as u32, WIDTHS.misses, CMD.overflow, sc().dropped, quiet().data.dropped,
+        quiet().data.bad, sc().too_small(crate::ui::TAP) as u32, quiet().data.nt as u32, quiet().data.ntab as u32,
+        if quiet().ts.open { quiet().ts.n as u32 } else { 0 }, quiet().ts.dropped + quiet().ts.bad,
     ];
     STATS.as_ptr()
 }

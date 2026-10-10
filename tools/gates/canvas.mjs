@@ -16,7 +16,9 @@
 //            no lazy module (tools/gates/canvas-wire.baseline rows) is requested before the first
 //            tap, and table.js is requested once a table is tapped (CV2P: the runtime half of
 //            canvas-wire's first-frame / lazy split)
-//   frame    first frame <= 300 ms from navigation at dpr 2 (median of 3 fresh contexts); 120 wheel frames p99 CPU <= 8 ms;
+//   frame    first frame <= 300 ms from navigation at dpr 2 (median of 3 fresh contexts), the 300 scaled by
+//            max(1, reference/nominal) measured in the SAME run (canvas-calib.mjs, canvas-frame.baseline);
+//            120 wheel frames p99 CPU <= 8 ms;
 //            backing store == innerWidth x dpr after 5 resizes and 30 frames (no doubling);
 //            something is drawn (pixels that are not the page colour)
 //   ctxloss  the backing store is wiped and the context's state reset, then 'contextrestored'
@@ -30,6 +32,7 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { extname, join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { REF_PAGE, refRun, readCalib, calibrate } from './canvas-calib.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const PUB = join(ROOT, 'workers/api/public');
@@ -40,6 +43,7 @@ const CANVAS = resolve(opt('--canvas-dir') || join(PUB, 'room/canvas'));
 const OUT = opt('--out');
 const DPR = Number(opt('--dpr') || 2);
 const BASELINE = resolve(opt('--baseline') || join(ROOT, 'tools/gates/canvas-wire.baseline'));
+const FRAME_BASELINE = resolve(opt('--frame-baseline') || join(ROOT, 'tools/gates/canvas-frame.baseline'));
 
 function playwright() {
   for (const base of [ROOT, '/root/dowiz']) {
@@ -76,6 +80,7 @@ function serve() {
         : path === '/api/owner/settings' ? { values: { 'notify.order.late_min': '8' }, known: [], scope: 'kitchen' } : { ok: true };
       res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); return;
     }
+    if (path === '/__ref.html') { res.writeHead(200, { 'content-type': 'text/html' }); res.end(REF_PAGE); return; }
     const rel = path.endsWith('/') ? path + 'index.html' : path;
     const file = rel.startsWith('/room/canvas/') ? join(CANVAS, rel.slice('/room/canvas/'.length)) : join(PUB, rel);
     try { const b = await readFile(file); res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' }); res.end(b); }
@@ -156,8 +161,12 @@ async function dom(b, base) {
 async function frame(b, base) {
   // First frame: the MEDIAN of three fresh contexts (each a cold page cache), measured from
   // navigation start -- one run on this shared box swung 244..364 ms with other lanes compiling.
-  const navs = [];
-  for (let i = 0; i < 2; i++) {
+  // Each is PAIRED with a reference navigation just before it (calib.mjs), so a busy or slow
+  // machine slows both and the mark scales by the measured ratio, never by a guess.
+  const navs = [], refs = [];
+  for (let i = 0; i < 3; i++) {
+    refs.push(await refRun(b, base));
+    if (i === 2) break;
     const w = await page(b, base, { signed: true });
     navs.push(await w.p.evaluate(() => window.__canvas.t0 + window.__canvas.t_first_frame_ms));
     await w.ctx.close();
@@ -174,19 +183,23 @@ async function frame(b, base) {
     for (let i = 0; i < 5; i++) { dispatchEvent(new Event('resize')); await raf(); if (off(sz())) return { first, size: { ...sz(), afterResizes: i + 1 }, doubled: true }; }
     for (let i = 0; i < 30; i++) { C.ask(); await raf(); }
     const size = sz();
+    // D11 part 2 (board/dirty.rs): with nothing changed, an asked frame draws nothing (0 words).
+    const idle = [C.ex.frame(Date.now()), C.ex.frame(Date.now())];
     C.frames.length = 0;
     for (let i = 0; i < 120; i++) { c.dispatchEvent(new WheelEvent('wheel', { deltaY: 40, bubbles: true, cancelable: true })); await raf(); }
     const f = C.frames.slice().sort((a, b) => a - b), q = x => f[Math.min(f.length - 1, Math.floor(x * f.length))];
     const x = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     let drawn = 0; for (let i = 0; i < x.length; i += 4) if (x[i] !== x[0] || x[i + 1] !== x[1] || x[i + 2] !== x[2]) drawn++;
-    return { first, size, wheel: { n: f.length, p50: q(0.5), p90: q(0.9), p99: q(0.99), max: f[f.length - 1] }, drawn, pixels: x.length / 4, stats: C.stats() };
+    return { first, size, idle, wheel: { n: f.length, p50: q(0.5), p90: q(0.9), p99: q(0.99), max: f[f.length - 1] }, drawn, pixels: x.length / 4, stats: C.stats() };
   });
   await s.ctx.close();
   r.logs = s.logs;
   navs.push(r.first.fromNav); navs.sort((x, y) => x - y);
   r.first.navs = navs; r.first.median = navs[1];
-  r.pass = !r.doubled && r.first.median <= 300 && r.wheel.n >= 100 && r.wheel.p99 <= 8 && r.size.width === r.size.want && r.size.height === r.size.wantH
-    && r.size.clientWidth === r.size.innerWidth && r.drawn > r.pixels / 20 && r.stats[7] === 0;
+  r.calib = calibrate(refs, readCalib(FRAME_BASELINE));
+  if (r.calib.refused) { r.pass = false; r.refused = r.calib.refused; return r; }
+  r.pass = !r.doubled && r.first.median <= r.calib.mark && r.wheel.n >= 100 && r.wheel.p99 <= 8 && r.size.width === r.size.want && r.size.height === r.size.wantH
+    && r.size.clientWidth === r.size.innerWidth && r.drawn > r.pixels / 20 && r.stats[7] === 0 && r.idle?.[1] === 0;
   return r;
 }
 
@@ -228,6 +241,7 @@ try {
 res.chromium = browser.version(); res.dpr = DPR; res.check = check;
 await browser.close(); srv.close();
 const line = JSON.stringify(res);
+if (res.refused) { if (OUT) await writeFile(OUT, line + '\n'); console.log(line); console.log(`canvas ${check}: ${res.refused} -- NOT a pass`); process.exit(2); }
 if (OUT) await writeFile(OUT, line + '\n');
 console.log(line);
 console.log(`canvas ${check}: ${res.pass ? 'PASS' : 'FAIL'}`);
