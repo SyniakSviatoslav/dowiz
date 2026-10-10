@@ -8,10 +8,12 @@
 // clock the board's first frame is read on. So it pays what the board pays and the board's code does
 // not: context creation, navigation, HTML parse, script start, a full-screen raster.
 //
-// THE MARK = first_ms x clamp(ref_median / ref_nominal_ms, 1, cap)   (canvas-frame.baseline)
-//   - never BELOW first_ms: a fast machine is held to the absolute mark, not a tighter one;
-//   - on a machine whose reference reads <= the nominal (CI's, by statement: the baseline says what
-//     was and was not measured), the factor is 1: CI is not loosened;
+// THE MARK = first_ms x min(ref_median / ref_nominal_ms, cap)   (canvas-frame.baseline)
+//   i.e. pass iff board/reference <= first_ms/ref_nominal_ms (2.0) on EVERY machine.
+//   - NO floor at first_ms. The first version held a fast machine to the absolute 300 ms, and on CI
+//     (board 61.6 ms, reference 52.8 ms, run 38068929237) a first frame twice as slow read ~123 ms,
+//     PASSED, and canvas-frame.prove went red: an absolute mark on a machine 5x under it measures
+//     nothing. As a ratio: CI 1.17, this box 1.52-1.56, a 2x slower frame ~2.3 on CI and ~3.1 here.
 //   - past `cap` the machine is too slow to judge -> exit 2, never a pass and never a red.
 // Paired with the board's navigations (one reference before each), so load on a shared box slows
 // both sides of the ratio together.
@@ -55,7 +57,7 @@ export function readCalib(path) {
 /// The mark for this run, from its paired reference times (pure: tested in canvas-calib.test.mjs).
 export function calibrate(refs, { first_ms, ref_nominal_ms, cap }) {
   const sorted = refs.slice().sort((a, b) => a - b), ref = sorted[Math.floor(sorted.length / 2)];
-  const ratio = ref / ref_nominal_ms, factor = Math.min(Math.max(ratio, 1), cap);
+  const ratio = ref / ref_nominal_ms, factor = Math.min(ratio, cap);
   const out = { refs: sorted, ref, ref_nominal_ms, ratio: Math.round(ratio * 1000) / 1000, factor: Math.round(factor * 1000) / 1000, mark: Math.round(first_ms * factor) };
   if (ratio > cap) out.refused = `machine reads ${out.ratio}x the nominal reference (cap ${cap}x): too slow to judge a first frame`;
   return out;

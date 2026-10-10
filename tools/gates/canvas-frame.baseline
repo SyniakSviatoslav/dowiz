@@ -9,8 +9,9 @@
 #     W-HUBCRC3 compiling (3 runs): board 297-756, reference 205-317, board/ref 1.45-2.39
 #   The absolute 300 alone was red on every quiet run here (316-329); 2.0 keeps a 2x slower board
 #   red (board/ref ~3.1) and the real board green with 28% margin.
-#   NOT measured on CI: if CI's reference reads > 150 ms the factor rises above 1 there too --
-#   the gate prints `calib` in its JSON line; read it on the first CI run and lower this if so.
+#   MEASURED on CI 2026-10-10 (run 38068929237, x86 ubuntu-latest): board 61.6 ms, reference 52.8 ms,
+#   board/ref 1.17 -> mark 106. The mark scales DOWN too (no floor at first_ms): with a floor CI held
+#   a 2x slower frame (~123 ms) to 300 and canvas-frame.prove went red.
 # cap: a reference past cap x nominal (450 ms) is a machine too slow to judge: exit 2, never a pass.
 first_ms=300
 ref_nominal_ms=150
