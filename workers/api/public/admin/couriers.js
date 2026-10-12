@@ -8,8 +8,12 @@
 
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, busy, ago, switchEl, money, confirm } from '/admin/core.js';
 import { loadCouriers, rerender } from '/admin/app.js';
-import { intlLocale } from '/admin/i18n.js';
-import { btn, iconBtn, field, pill, empty, loading, rowBtn, rowDiv } from '/admin/parts.js';
+import { intlLocale, T, LANGS, lang } from '/admin/i18n.js';
+import { btn, iconBtn, field, select, pill, empty, loading, rowBtn, rowDiv } from '/admin/parts.js';
+import { WORDS as SEND_WORDS } from '/admin/invite-send-words.js';
+import { railOptions, inviteBody, deliveryLine } from '/admin/invite-send-view.js';
+
+for (const l of LANGS) for (const [key, v] of Object.entries({ ...SEND_WORDS.en, ...(SEND_WORDS[l] || {}) })) if (T[l] && !(key in T[l])) T[l][key] = v;
 
 /// A courier's last fix is shown as a map link at this zoom.
 const MAP_ZOOM = 16;
@@ -21,7 +25,7 @@ export async function render(host){
     <div id="clist" data-tour="couriers.list">${loading(3)}</div>`;
   $('#invite', host).onclick = openInvite;
   let d;
-  try { d = await api('/owner/couriers'); S.couriers = d.couriers || []; } catch (e) { $('#clist', host).innerHTML = empty('alert-triangle', { key: 'loadFail', alert: true }); return; }
+  try { d = await api('/owner/couriers'); S.couriers = d.couriers || []; S.courierRails = d.rails; } catch (e) { $('#clist', host).innerHTML = empty('alert-triangle', { key: 'loadFail', alert: true }); return; }
   const cs = d.couriers || [], inv = d.invites || [];
   $('#clist', host).innerHTML = `
     ${cs.length ? `<div class="rows">${cs.map(c => rowBtn({ cls: c.active ? '' : 'off', data: { c: c.id }, tour: 'couriers.card', leading: icon('bike'),
@@ -29,7 +33,7 @@ export async function render(host){
       trailing: `${pill(c.onShift ? 'ok' : '', { key: c.onShift ? 'onShift' : 'offShift', tour: 'couriers.shift' })}${icon('chevron-right', 'chev')}` })).join('')}</div>`
       : empty('bike', { key: 'noCouriers', bodyKey: 'inviteHint' })}
     ${inv.length ? `<div class="group mt-3"><p class="eyebrow" data-t="invite"></p><div class="rows">${inv.map(i => rowDiv({ cls: i.expired ? 'off' : '', leading: icon('ticket'),
-      title: i.name, sub: `${esc(t(i.expired ? 'inviteExpired' : 'inviteWaiting'))} · ${esc(new Date(i.untilMs).toLocaleDateString())}`,
+      title: i.name, sub: `${esc(t(i.expired ? 'inviteExpired' : 'inviteWaiting'))} · ${esc(new Date(i.untilMs).toLocaleDateString())}${sentLine(i.delivery)}`,
       trailing: iconBtn({ icon: 'x', ariaKey: 'remove', data: { uninvite: i.id }, tour: 'couriers.uninvite' }) })).join('')}</div></div>` : ''}`;
   host.onclick = async e => {
     const u = e.target.closest('[data-uninvite]'); if (u) { try { await busy(u, () => post(`/owner/couriers/${encodeURIComponent(u.dataset.uninvite)}/uninvite`, withLoc())); rerender(); } catch (err) { toast(String(err.message || err)); } return; }
@@ -53,18 +57,39 @@ export const deepLinks = url => ({
   sms: `sms:?body=${encodeURIComponent(shareText(url))}`,
 });
 
+// ── THE INVITE SENT (W-INVITE, R-GAPS A6) ──
+//
+// Where the venue has WhatsApp or a Telegram bot connected, the owner may have
+// the HUB send the link on it: one outbox entry, drained by the same rail as
+// every other message, its state shown on the invite row. No rail: the sheet
+// says so and the link is shown for sharing, as before.
+/// One delivery as a pill after an invite row's line; nothing when nothing was sent.
+const sentLine = d => { const l = deliveryLine(d, t); return l ? ` ${pill(l[0], { label: l[1] })}` : ''; };
+
+function sendFields(){
+  const opts = railOptions(S.courierRails);
+  if (!opts.length) return `<p class="hint" data-t="invs_noRail"></p>`;
+  return `${select({ id: 'i-send', key: 'invs_send', options: opts, value: '' })}
+    <div id="i-tgBox" hidden>${field({ id: 'i-tg', key: 'invs_chat', inputmode: 'numeric', autocomplete: 'off', hintKey: 'invs_chatHint' })}</div>`;
+}
+
 function openInvite(){
   sheet(`<p class="eyebrow" data-t="tabCouriers"></p><h2 data-t="invite"></h2><p class="muted small" data-t="inviteHint"></p>
     ${field({ id: 'i-name', key: 'name', autocomplete: 'off', tour: 'couriers.inviteName' })}
     ${field({ id: 'i-phone', key: 'phone', type: 'tel', inputmode: 'tel', placeholder: '+355…', tour: 'couriers.invitePhone' })}
+    ${sendFields()}
     <div class="btn-row">${btn({ id: 'iGo', variant: 'primary', icon: 'user-plus', key: 'invite', tour: 'couriers.inviteSend' })}</div>
     <div id="iOut"></div>`, { name: 'invite' });
+  const via = $('#i-send');
+  if (via) via.onchange = () => { $('#i-tgBox').hidden = via.value !== 'telegram'; };
   $('#iGo').onclick = async () => {
     try {
-      const d = await busy($('#iGo'), () => post('/owner/couriers/invite', { phone: $('#i-phone').value.trim(), name: $('#i-name').value.trim() }));
+      const body = inviteBody({ phone: $('#i-phone').value, name: $('#i-name').value, send: via ? via.value : '', telegram: $('#i-tg')?.value, lang });
+      const d = await busy($('#iGo'), () => post('/owner/couriers/invite', body));
+      const sentNow = deliveryLine(d.delivery, t);
       const until = new Date(d.expiresMs).toLocaleDateString(intlLocale(), { day: 'numeric', month: 'long' });
       const links = d.url ? deepLinks(d.url) : null;
-      $('#iOut').innerHTML = `<p class="eyebrow mt-3" data-t="inviteCode"></p><div class="code" id="iCode">${esc(d.code)}</div>
+      $('#iOut').innerHTML = `${sentNow ? `<p class="mt-3" id="iSent">${pill(sentNow[0], { label: sentNow[1] })}</p>` : ''}<p class="eyebrow mt-3" data-t="inviteCode"></p><div class="code" id="iCode">${esc(d.code)}</div>
         <p class="hint">${esc(t('inviteUntil'))} ${esc(until)} · ${esc(t('keyOnce'))}</p>
         ${links ? `<p class="eyebrow mt-3" data-t="inviteLink"></p><div class="code small" id="iLink">${esc(d.url)}</div><p class="hint" data-t="inviteLinkHint"></p>
           <div class="btn-row">${btn({ id: 'iShare', variant: 'primary', icon: 'share', key: 'inviteShare' })}${btn({ id: 'iCopy', variant: 'ghost', icon: 'copy', key: 'copy', tour: 'couriers.inviteCopy' })}</div>

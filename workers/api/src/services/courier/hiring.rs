@@ -11,24 +11,23 @@ use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::owner::{owner_and_venue};
-use super::invite_link;
+use super::{invite_link, invite_send};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct InviteIn {
     phone: String,
     name: String,
+    /// W-INVITE: `"whatsapp"`/`"telegram"` sends the link (`invite_send::ask`).
+    send: Option<String>,
+    telegram: Option<String>,
+    lang: Option<String>,
 }
 
-/// `POST /api/owner/couriers/invite` — mint a code, shown ONCE.
-///
-/// The code is stored HASHED, exactly like a password, because that is what it
-/// is: until it is claimed, whoever holds it can become this courier. A copied
-/// database would otherwise hand over every pending account.
+/// `POST /api/owner/couriers/invite` — mint a code, shown ONCE, stored HASHED
+/// (the module header says why), and SENT when the owner asked (W-INVITE).
 pub async fn invite_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     use crate::services::courier::roster;
-
-
     let body: InviteIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -40,6 +39,10 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     // The owner's words back to the owner: `invite_fields` carries the refusal
     // text, so the rule and the sentence it produces are tested together.
     let (phone, name) = match roster::invite_fields(&body.phone, &body.name) {
+        Ok(v) => v,
+        Err(why) => return Response::error(why, 400),
+    };
+    let to = match invite_send::ask(body.send.as_deref(), &phone, body.telegram.as_deref()) {
         Ok(v) => v,
         Err(why) => return Response::error(why, 400),
     };
@@ -67,18 +70,13 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> 
     // twice REPLACES the pending invite rather than leaving two codes alive for
     // one person -- the first would keep working after the owner believed they
     // had replaced it -- and that only holds if nothing runs in between.
-    let (ph, l2, own, nm, ch) = (
-        phone_hash.clone(),
-        loc.clone(),
-        owner.clone(),
-        name.clone(),
-        // Hashed with the same one-way function the phone uses. A 16-character
-        // code from a 32-symbol alphabet is 80 bits, so a plain digest is not
-        // brute-forceable the way a human password would be.
-        minted.hash,
-    );
+    let (ph, l2, own, nm, iid) = (phone_hash.clone(), loc.clone(), owner.clone(), name.clone(), id.clone());
+    // Hashed with the same one-way function the phone uses. A 16-character
+    // code from a 32-symbol alphabet is 80 bits, so a plain digest is not
+    // brute-forceable the way a human password would be.
+    let ch = minted.hash;
     let taken = crate::identity_store::with_couriers(&ctx.env, move |t| {
-        invite_turn(t, &ph, &l2, &own, &nm, &ch, &id, now)
+        invite_turn(t, &ph, &l2, &own, &nm, &ch, &iid, now)
     })
     .await?;
     if taken {
@@ -97,7 +95,9 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> 
         .filter(|s| !s.is_empty())
         .map(|slug| invite_link::invite_url(&slug, &platform, &code));
 
-    Response::from_json(&json!({ "code": code, "expiresMs": now + TTL_MS, "url": url }))
+    // THE SEND (W-INVITE, R-GAPS A6): an outbox entry the existing drain delivers.
+    let delivery = invite_send::send(&ctx, &loc, &id, &phone_hash, url.as_deref(), to, body.lang.as_deref(), now).await;
+    Response::from_json(&json!({ "code": code, "expiresMs": now + TTL_MS, "url": url, "delivery": delivery }))
 }
 
 /// A week. Long enough for a courier who starts next Monday, short enough
@@ -201,6 +201,7 @@ pub async fn uninvite_courier(req: Request, ctx: RouteContext<crate::Req>) -> Re
     if !revoked {
         return Response::error("not found", 404);
     }
+    invite_send::withdraw(&ctx, &loc, &id).await; // a withdrawn code's pending send leaves the queue
     Response::from_json(&json!({ "ok": true }))
 }
 

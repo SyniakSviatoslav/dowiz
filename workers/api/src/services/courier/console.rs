@@ -59,15 +59,20 @@ pub async fn couriers(req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
         .into_iter()
         .filter_map(|(_, id)| {
             let r = crate::identity_store::rec(&crew, crate::identity_store::K_INVITE, &id)?;
-            let row = roster::invite_row(&id, &r, now)?;
+            let mut row = roster::invite_row(&id, &r, now)?;
+            // The delivery MARK, turned into a state by `invite_send::decorate` below.
+            row["delivery"] = r.get("delivery").cloned().unwrap_or(Value::Null);
             Some((crate::identity_store::i_of(&r, "created_at_ms"), row))
         })
         .collect();
     invite_rows.sort_by_key(|(at, _)| *at);
+    // W-INVITE: which rails this venue can send an invite on, and how each sent one went.
+    let rails = super::invite_send::decorate(&ctx, &loc, &mut invite_rows).await;
 
     Response::from_json(&json!({
         "couriers": crew_rows.into_iter().map(|(_, r)| r).collect::<Vec<_>>(),
         "invites": invite_rows.into_iter().map(|(_, r)| r).collect::<Vec<_>>(),
+        "rails": rails,
     }))
 }
 
