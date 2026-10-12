@@ -12,12 +12,12 @@ const esc = ui.esc;
 /// The route, for one dish.
 export const optionBomPath = id => `/owner/products/${encodeURIComponent(id)}/option-bom`;
 
-/// One recipe line: a supply picker and a whole quantity in its unit.
+/// One recipe line: a supply picker and a quantity in its unit (up to 3 decimals).
 export function lineRow(supplies, line = {}, opt = '', i = 0){
   const options = [{ value: '', label: '-' }, ...supplies.map(s => ({ value: s.id, label: `${s.name} (${s.unit})` }))];
   return `<div class="grid2 pair" data-obline="${esc(opt)}">
     <div>${select({ id: `ob-s-${esc(opt)}-${i}`, key: 'ob_supply', value: line.supply || '', options, data: { obsupply: '1' } })}</div>
-    <div>${field({ id: `ob-q-${esc(opt)}-${i}`, key: 'ob_qty', inputmode: 'numeric', value: line.qty ?? '', data: { obqty: '1' } })}</div>
+    <div>${field({ id: `ob-q-${esc(opt)}-${i}`, key: 'ob_qty', inputmode: 'decimal', value: line.qty ?? '', data: { obqty: '1' } })}</div>
   </div>`;
 }
 
@@ -38,15 +38,18 @@ export function section(v){
 
 /// The lines typed for one option: `rows` are `{ supply, qty }` as read from
 /// the pickers. A row with no supply is skipped; a quantity that is not a
-/// positive whole number is refused (`{ error }`), never rounded.
+/// positive number with at most 3 decimals is refused (`{ error }`), never
+/// rounded. W-QTYHUB H5: half a sheet is "0,5" -- sent as the TEXT "0.5",
+/// which the Worker reads exactly (CONTRACT-QTY §1); a whole one as a number.
 export function collect(rows){
   const bom = [];
   for (const r of rows) {
     const supply = String(r.supply || '').trim();
     if (!supply) continue;
     const q = String(r.qty ?? '').trim();
-    if (!/^[0-9]+$/.test(q) || Number(q) <= 0) return { error: 'ob_badQty' };
-    bom.push({ supply, qty: Number(q) });
+    if (!/^\d+([.,]\d{1,3})?$/.test(q) || !/[1-9]/.test(q)) return { error: 'ob_badQty' };
+    const text = q.replace(',', '.');
+    bom.push({ supply, qty: /^\d+$/.test(text) ? Number(text) : text });
   }
   return { bom };
 }

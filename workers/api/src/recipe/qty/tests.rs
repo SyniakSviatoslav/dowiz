@@ -86,12 +86,4 @@ fn the_shelf_takes_a_decimal_that_is_whole_and_refuses_one_that_is_not() {
     assert_eq!(read(json!({})).unwrap().qty, None);
     let e = read(json!({ "qty": 2.5 })).unwrap_err().to_string();
     assert!(e.contains("2.5: the shelf counts whole units"), "{e}");
-    #[derive(Deserialize, Debug)]
-    struct CardLine {
-        #[serde(deserialize_with = "whole_card")]
-        qty: i64,
-    }
-    assert_eq!(serde_json::from_value::<CardLine>(json!({ "qty": "800" })).unwrap().qty, 800);
-    let e = serde_json::from_value::<CardLine>(json!({ "qty": 0.5 })).unwrap_err().to_string();
-    assert!(e.contains("0.5: a semi-finished card counts whole base units for now"), "{e}");
 }

@@ -56,3 +56,14 @@ fn a_semi_finished_portion_has_a_cost_through_its_tree() {
     assert_eq!(portion_cost(&dishes["philadelphia"], &supplies, &book), Some(16));
     assert_eq!(portion_cost(&dishes["maki"], &supplies, &book), Some(18), "the twin: 90 g at 0.20");
 }
+
+/// W-QTYHUB H1 (class): half a sheet of nori beside a ПФ line is half a
+/// sheet in the kitchen's numbers too, not a whole one.
+#[test]
+fn a_fractional_raw_line_beside_a_semi_finished_one_counts_exactly() {
+    let mut cat = venue();
+    cat.set_supply("nori", &json!({ "id": "nori", "name": "nori", "unit": "unit", "kind": "food_ingredient", "costPerBasis": 30 }).to_string());
+    let j = r#"{"id":"nori-roll","name":"Nori roll","price":700,"bom":[{"supply":"rice-seasoned","qty":130},{"supply":"nori","uq":500000}]}"#;
+    let leaves = leaves_of(&cat, j);
+    assert_eq!(leaves.iter().find(|(s, _)| s == "nori").map(|l| l.1), Some(500_000), "{leaves:?}");
+}

@@ -94,3 +94,21 @@ fn every_option_is_listed_with_its_group() {
     assert_eq!(o.len(), 3);
     assert_eq!(o[0], ("extra".into(), "Extras".into(), "xsalmon".into(), "Extra salmon".into()));
 }
+
+/// W-QTYHUB H5: half a sheet of nori as an option's line is stored as `uq`,
+/// joins the reservation exactly, and a whole line keeps its old bytes.
+#[test]
+fn an_option_line_keeps_half_a_sheet() {
+    let mut p: Value = serde_json::from_str(ROLL).unwrap();
+    let half = BomLine { supply: "nori".into(), qty: 1, uq: 500_000 };
+    set_option_bom(&mut p, "wasabi", &[half.clone(), BomLine::whole("salmon", 5)], 100_000).unwrap();
+    assert_eq!(p["optionBom"]["wasabi"], json!([{ "supply": "nori", "uq": 500_000 }, { "supply": "salmon", "qty": 5 }]));
+    assert_eq!(option_bom(&p, "wasabi")[0], half);
+    // Two portions with the option draw one whole sheet, exactly.
+    let pj = p.to_string();
+    let (line, n) = option_line("roll", &pj, &ids(&["wasabi"]), 2).unwrap();
+    let draws = draws_for("o1", &[(line, n)]);
+    assert_eq!(draws.iter().find(|d| d.item == "nori").map(|d| d.uq), Some(1_000_000));
+    // Zero millionths is still not a quantity.
+    assert!(set_option_bom(&mut p, "wasabi", &[BomLine { supply: "nori".into(), qty: 0, uq: 0 }], 100_000).is_err());
+}

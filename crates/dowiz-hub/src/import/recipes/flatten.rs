@@ -55,12 +55,12 @@ pub(super) fn flatten(c: &Card, cards: &[Card], report: &mut Vec<String>) -> Res
                 _ => None,
             })
             .ok_or_else(|| format!("{} is not a supply", leaf.item))?;
-        let q = leaf.qty.whole(base, QTY_MAX).map_err(|e| format!("{} {e}", leaf.item))?;
+        let q = leaf.qty.milli(base, QTY_MAX).map_err(|e| format!("{} {e}", leaf.item))?;
         let (net, yield_) = match (leaf.uses, leaf.direct) {
             (1, true) => side(&leaf.item).unwrap_or((None, None)),
             _ => (None, None),
         };
-        out.push(DraftLine { supply: leaf.item, qty: q, net, yield_ });
+        out.push(DraftLine { supply: leaf.item, qty_milli: q, net, yield_ });
     }
     if out.is_empty() {
         return Err("the card has no lines".into());

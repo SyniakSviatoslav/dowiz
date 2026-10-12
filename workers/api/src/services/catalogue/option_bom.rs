@@ -25,7 +25,8 @@ pub const CONTRACT: &str = "catalog.modifier_bom.v1";
 #[serde(deny_unknown_fields)]
 pub struct LineIn {
     pub supply: String,
-    pub qty: i64,
+    /// Read from its text (`recipe::qty`): `0.5`, `"0,5"`, `20` (W-QTYHUB H5).
+    pub qty: crate::recipe::Qty,
 }
 
 #[derive(Deserialize, Debug)]
@@ -43,7 +44,13 @@ pub fn view(product_id: &str, product_json: &str, supplies: &[(String, String)])
     let options: Vec<Value> = options_of(product_json)
         .into_iter()
         .map(|(gid, gname, id, name)| {
-            let bom: Vec<Value> = option_bom(&p, &id).iter().map(|l| json!({ "supply": l.supply, "qty": l.qty })).collect();
+            let bom: Vec<Value> = option_bom(&p, &id)
+                .iter()
+                .map(|l| {
+                    let q = crate::recipe::Qty::of_micro(l.uq);
+                    json!({ "supply": l.supply, "qty": q.json(), "qtyMilli": q.milli })
+                })
+                .collect();
             json!({ "group": gid, "groupName": gname, "id": id, "name": name, "bom": bom })
         })
         .collect();
@@ -69,8 +76,22 @@ pub fn apply(product: &mut Value, body: &OptionBomIn, supply: &dyn Fn(&str) -> O
             Some(_) => {}
         }
     }
-    let lines: Vec<BomLine> = body.bom.iter().map(|l| BomLine::whole(l.supply.trim(), l.qty)).collect();
-    set_option_bom(product, body.option.trim(), &lines, crate::recipe::QTY_MAX)
+    let lines: Vec<BomLine> = body.bom.iter().map(|l| BomLine { supply: l.supply.trim().to_string(), qty: l.qty.rounded(), uq: l.qty.uq() }).collect();
+    set_option_bom(product, body.option.trim(), &lines, crate::recipe::QTY_MAX)?;
+    // The option's recipe was saved by hand: a deletion's mark on THIS option is answered (contract §2).
+    clear_option_marks(product, body.option.trim());
+    Ok(())
+}
+
+/// Drop the `recipeReview` marks a supply's deletion left on option `option`
+/// (`supplies::delete`, W-QTYHUB H5); the key goes when the last mark does.
+pub fn clear_option_marks(product: &mut Value, option: &str) {
+    let Some(obj) = product.as_object_mut() else { return };
+    let Some(marks) = obj.get_mut("recipeReview").and_then(Value::as_array_mut) else { return };
+    marks.retain(|m| m.get("option").and_then(Value::as_str) != Some(option));
+    if marks.is_empty() {
+        obj.remove("recipeReview");
+    }
 }
 
 /// The GET answer derived IN THE VENUE'S OBJECT (`/fold/catalogue?q=option_bom`,

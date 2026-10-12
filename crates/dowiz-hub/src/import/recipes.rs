@@ -95,9 +95,10 @@ pub struct DraftSupply {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DraftLine {
     pub supply: String,
-    /// GROSS, in the supply's base unit: what the incumbents write off, so the
-    /// ledger's counts agree with the ones the owner trusts on day one.
-    pub qty: i64,
+    /// GROSS, in THOUSANDTHS of the supply's base unit (W-QTYHUB H4): what the
+    /// incumbents write off, so the ledger's counts agree with the ones the
+    /// owner trusts on day one -- `0,5` of a sheet is 500, exactly.
+    pub qty_milli: i64,
     /// Net and yield, kept on the line under keys the hub ignores.
     pub net: Option<i64>,
     pub yield_: Option<i64>,
@@ -259,7 +260,7 @@ impl RecipeDraft {
                         format!(
                             r#"{{"supply":"{}","qty":{},"net":{},"yield":{}}}"#,
                             esc(&l.supply),
-                            l.qty,
+                            milli_text(l.qty_milli),
                             opt_i(l.net),
                             opt_i(l.yield_)
                         )
@@ -283,5 +284,14 @@ impl RecipeDraft {
             strs(&self.warnings),
             preps::json_tail(&self.preps)
         )
+    }
+}
+
+/// Thousandths as a JSON number's text: 40000 -> `40`, 42500 -> `42.5`.
+fn milli_text(m: i64) -> String {
+    let (w, f) = (m / 1000, (m % 1000).abs());
+    match f {
+        0 => w.to_string(),
+        _ => format!("{w}.{}", format!("{f:03}").trim_end_matches('0')),
     }
 }

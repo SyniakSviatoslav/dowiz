@@ -205,6 +205,10 @@ impl Rat {
     }
 }
 
+/// A quantity in thousandths of its base unit (W-QTYHUB H4).
+#[path = "num/milli.rs"]
+mod milli;
+
 /// How the file writes money. The owner SAYS which; it is never guessed,
 /// because Poster's "kopecks" in an account set to lek are either ×1 or a
 /// defect, and nothing in the number tells which.

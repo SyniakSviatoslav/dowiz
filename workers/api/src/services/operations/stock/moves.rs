@@ -13,6 +13,8 @@
 //!   produced  -- prep: raw onto the board, cleaned or cooked off it.
 
 use dowiz_hub::stock::meta::{day_number, day_of_number, parse_day, Meta};
+use crate::recipe::Qty;
+use dowiz_hub::prep::MICRO;
 use dowiz_hub::stock::{PrepStage, StockError, StockEvent, StockLog, WasteReason};
 use serde_json::{json, Value};
 
@@ -20,6 +22,11 @@ use serde_json::{json, Value};
 #[path = "moves/input.rs"]
 mod input;
 pub use input::StockMoveIn;
+/// A quantity read exactly, and its price (W-QTYHUB H3).
+#[path = "moves/exact.rs"]
+mod exact;
+use exact::{price, uq_of};
+pub use exact::whole;
 
 /// A movement, decided but not yet applied: `expected` and `value` are the
 /// ledger's to fill in, at the moment of the write.
@@ -50,9 +57,11 @@ pub fn movement(kind: &str, body: StockMoveIn, by: &str, now_ms: i64) -> Result<
     }
     let by = by.to_string();
     match kind {
-        "received" => body.qty.map(|qty| StockEvent::Received { item, qty }).ok_or((400, "how much?".into())),
+        // A FRACTION IS BOOKED BY THE HUB (W-QTYHUB H3): the whole `qty` here is
+        // the typed one rounded, and `plan` puts the exact `uq` beside it.
+        "received" => body.qty.map(|q| StockEvent::Received { item, qty: q.rounded() }).ok_or((400, "how much?".into())),
         "wasted" => {
-            let qty = body.qty.ok_or((400, "how much?".to_string()))?;
+            let qty = body.qty.ok_or((400, "how much?".to_string()))?.rounded();
             let reason = match body.reason.as_deref().map(str::trim) {
                 None | Some("") => {
                     return Err((400, format!("a write-off says why: one of {}", WasteReason::allowed_words())))
@@ -65,10 +74,10 @@ pub fn movement(kind: &str, body: StockMoveIn, by: &str, now_ms: i64) -> Result<
         }
         "stocktake" => body
             .observed
-            .map(|observed| StockEvent::Stocktake { item, observed, stocktake_id: format!("st_{now_ms}"), by })
+            .map(|q| StockEvent::Stocktake { item, observed: q.rounded(), stocktake_id: format!("st_{now_ms}"), by })
             .ok_or((400, "what was counted?".into())),
         "produced" => {
-            let qty = body.qty.ok_or((400, "how much went onto the board?".to_string()))?;
+            let qty = whole(body.qty.ok_or((400, "how much went onto the board?".to_string()))?)?;
             let out = body.out.ok_or((400, "how much came off it?".to_string()))?;
             let s = body.stage.as_deref().map(str::trim).unwrap_or("clean");
             let stage = PrepStage::from_str(s).ok_or((400, format!("{s:?} is not a stage: clean or cook")))?;
@@ -76,17 +85,6 @@ pub fn movement(kind: &str, body: StockMoveIn, by: &str, now_ms: i64) -> Result<
             Ok(StockEvent::Produced { item, qty, out, stage, into, by })
         }
         other => Err((400, format!("no such movement: {other}"))),
-    }
-}
-
-/// The paper's price as `(unit_cost, per)`: the total for the whole quantity,
-/// or a cost per basis. Half a price is refused, not guessed.
-fn price(body: &StockMoveIn, qty: i64) -> Result<(Option<i64>, Option<i64>), Bad> {
-    match (body.total, body.unit_cost, body.per) {
-        (Some(t), None, None) if t >= 0 => Ok((Some(t), Some(qty))),
-        (None, Some(c), Some(p)) if c >= 0 && p > 0 => Ok((Some(c), Some(p))),
-        (None, None, None) => Ok((None, None)),
-        _ => Err((400, "a price is the line's total, or a cost with what it is per -- not negative".into())),
     }
 }
 
@@ -126,19 +124,19 @@ pub fn plan(
             let mut out = Vec::with_capacity(lines.len());
             for l in lines {
                 let item = l.item.trim().to_string();
-                if item.is_empty() || l.observed < 0 {
+                if item.is_empty() || l.observed < 0i64 {
                     return Err((400, format!("{item:?}: a count is a supply and a number from 0")));
                 }
                 if out.iter().any(|(e, _): &(StockEvent, Meta)| e.item() == item) {
                     return Err((400, format!("{item} is counted twice in one session")));
                 }
-                let ev = StockEvent::Stocktake { item, observed: l.observed, stocktake_id: session.clone(), by: by.into() };
-                out.push((ev, Meta { session: Some(session.clone()), ..base.clone() }));
+                let ev = StockEvent::Stocktake { item, observed: l.observed.rounded(), stocktake_id: session.clone(), by: by.into() };
+                out.push((ev, Meta { session: Some(session.clone()), uq: uq_of(Some(l.observed)), ..base.clone() }));
             }
             out
         }
         "received" => {
-            let (unit_cost, per) = price(&body, body.qty.unwrap_or(0))?;
+            let (unit_cost, per) = price(&body, body.qty.unwrap_or_default())?;
             let meta = Meta {
                 supplier: text(&body.supplier)?,
                 doc: text(&body.doc)?,
@@ -147,17 +145,23 @@ pub fn plan(
                 unit_cost,
                 per,
                 by: Some(by.to_string()),
+                uq: uq_of(body.qty),
                 ..base
             };
             vec![(movement(kind, body, by, now_ms)?, meta)]
         }
         "stocktake" => {
+            let uq = uq_of(body.observed);
             let ev = movement(kind, body, by, now_ms)?;
             let session = match &ev {
                 StockEvent::Stocktake { stocktake_id, .. } => stocktake_id.clone(),
                 _ => unreachable!("movement answers the kind it was asked"),
             };
-            vec![(ev, Meta { session: Some(session), ..base })]
+            vec![(ev, Meta { session: Some(session), uq, ..base })]
+        }
+        "wasted" => {
+            let uq = uq_of(body.qty);
+            vec![(movement(kind, body, by, now_ms)?, Meta { uq, ..base })]
         }
         "produced" => {
             let exp = expiry(&body, today, None)?;
@@ -188,7 +192,9 @@ impl Plan {
         if self.kind == "removed" {
             return super::removed::apply(self, log);
         }
-        let led = log.ledger()?;
+        // THE EXACT SHELF (W-QTYHUB H3): the booked level less the carried
+        // remainder, so a count of 0.75 compares with 0.75, not with 1.
+        let (led, carry) = log.shelf_exact()?;
         let book = log.cost_book();
         let mut lines = self.lines.clone();
         // P12: a named storage is one this venue has, open; a count IN a
@@ -197,31 +203,52 @@ impl Plan {
         let rooms = super::storages::Rooms::of(log, &lines)?;
         for (ev, meta) in lines.iter_mut() {
             if let (StockEvent::Stocktake { item, observed, .. }, Some(st)) = (ev, meta.store.as_deref()) {
-                *observed = rooms.total_for(item, st, *observed);
+                let total = rooms.total_for(item, st, *observed);
+                // The other storages' share is whole; the counted one keeps its fraction.
+                meta.uq = meta.uq.map(|u| u.saturating_add((total - *observed).saturating_mul(MICRO)));
+                *observed = total;
             }
         }
+        let shown_qty = |uq: Option<i64>, whole: i64| uq.map_or(json!(whole), |u| Qty::of_micro(u).json());
         let mut shown = Vec::new();
         let mut total: i64 = 0;
         for (ev, meta) in lines.iter_mut() {
             match ev {
                 StockEvent::Stocktake { item, observed, .. } => {
                     let expected = led.level(item).on_hand;
-                    let drift = *observed - expected;
-                    let value = book.value_of(item, drift.abs()).map(|v| if drift < 0 { -v } else { v });
+                    // In millionths: what the shelf holds exactly, what was counted exactly.
+                    let (exp_u, obs_u) = (carry.exact(item, expected), meta.uq.unwrap_or(observed.saturating_mul(MICRO)));
+                    let drift = obs_u - exp_u;
+                    let value = book.value_of_micro(item, drift.abs()).map(|v| if drift < 0 { -v } else { v });
                     total += value.unwrap_or(0);
                     meta.expected = Some(expected);
-                    shown.push(json!({ "item": item, "expected": expected, "observed": observed, "drift": drift, "value": value }));
+                    // A fractional count stores its own value: the journal's whole-unit drift would round it.
+                    if meta.uq.is_some_and(|u| u % MICRO != 0) {
+                        meta.value = value;
+                    }
+                    let d = Qty::of_micro(drift);
+                    shown.push(json!({ "item": item, "expected": Qty::of_micro(exp_u).json(), "observed": Qty::of_micro(obs_u).json(),
+                        "drift": d.json(), "driftMilli": d.milli, "value": value }));
                 }
                 StockEvent::Wasted { item, qty, .. } => {
-                    meta.value = book.value_of(item, *qty);
-                    shown.push(json!({ "item": item, "qty": qty, "value": meta.value }));
+                    meta.value = match meta.uq {
+                        Some(u) => book.value_of_micro(item, u),
+                        None => book.value_of(item, *qty),
+                    };
+                    shown.push(json!({ "item": item, "qty": shown_qty(meta.uq, *qty), "value": meta.value }));
                 }
                 StockEvent::Received { item, qty } => {
-                    let value = match (meta.unit_cost, meta.per) {
-                        (Some(c), Some(p)) => dowiz_hub::stock::journal::priced(*qty, c, p),
+                    // Priced on what was TYPED: 2.5 pieces at 300 is 750, not 3 x 300.
+                    let value = match (meta.unit_cost, meta.per, meta.uq) {
+                        (Some(c), Some(p), Some(u)) if p > 0 => {
+                            let n = i128::from(u) * i128::from(c);
+                            let d = i128::from(p) * i128::from(MICRO);
+                            i64::try_from((n + d / 2) / d).ok()
+                        }
+                        (Some(c), Some(p), _) => dowiz_hub::stock::journal::priced(*qty, c, p),
                         _ => None,
                     };
-                    shown.push(json!({ "item": item, "qty": qty, "value": value }));
+                    shown.push(json!({ "item": item, "qty": shown_qty(meta.uq, *qty), "value": value }));
                 }
                 StockEvent::Produced { item, qty, out, .. } => {
                     let pm = if *qty > 0 { *out * 1000 / *qty } else { 0 };

@@ -55,6 +55,15 @@ fn id_of(i: &Item) -> &str {
 /// A card's lines, one per item (a file may list an item twice: summed,
 /// exactly), each a whole number of its unit or refused with the reason.
 fn merged(c: &Card, cards: &[Card]) -> Result<Vec<(String, i64, usize)>, String> {
+    merged_with(c, cards, Rat::whole)
+}
+
+/// [`merged`] in thousandths (W-QTYHUB H4): a dish's line keeps its fraction.
+fn merged_milli(c: &Card, cards: &[Card]) -> Result<Vec<(String, i64, usize)>, String> {
+    merged_with(c, cards, Rat::milli)
+}
+
+fn merged_with(c: &Card, cards: &[Card], read: fn(Rat, Base, i64) -> Result<i64, String>) -> Result<Vec<(String, i64, usize)>, String> {
     let mut acc: Vec<(String, Rat, Base, usize)> = Vec::new();
     for i in &c.items {
         let (id, q) = match i {
@@ -69,7 +78,7 @@ fn merged(c: &Card, cards: &[Card]) -> Result<Vec<(String, i64, usize)>, String>
             None => acc.push((id, q, base, 1)),
         }
     }
-    acc.into_iter().map(|(id, q, base, n)| q.whole(base, QTY_MAX).map(|w| (id.clone(), w, n)).map_err(|e| format!("{id} {e}"))).collect()
+    acc.into_iter().map(|(id, q, base, n)| read(q, base, QTY_MAX).map(|w| (id.clone(), w, n)).map_err(|e| format!("{id} {e}"))).collect()
 }
 
 /// One prepack as a draft on its own, and the semi-finished products it names.
@@ -151,7 +160,7 @@ pub(super) fn dish_lines(c: &Card, cards: &[Card], made: &[String]) -> Option<Re
     if pre.is_empty() || !c.errors.is_empty() || !pre.iter().all(|k| made.iter().any(|m| m == k)) {
         return None;
     }
-    let lines = match merged(c, cards) {
+    let lines = match merged_milli(c, cards) {
         Ok(l) => l,
         Err(e) => return Some(Err(e)),
     };
@@ -167,7 +176,7 @@ pub(super) fn dish_lines(c: &Card, cards: &[Card], made: &[String]) -> Option<Re
         .into_iter()
         .map(|(id, qty, n)| {
             let (net, yield_) = if n == 1 { side(&id).unwrap_or((None, None)) } else { (None, None) };
-            DraftLine { supply: id, qty, net, yield_ }
+            DraftLine { supply: id, qty_milli: qty, net, yield_ }
         })
         .collect()))
 }

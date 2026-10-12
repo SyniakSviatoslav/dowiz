@@ -83,7 +83,7 @@ fn a_count_session_is_all_or_nothing_with_its_drift() {
     assert_eq!(log.len(), before, "the short line refused the whole session");
 
     let r = run(&mut log, "count", r#"{"session":"inv-1","lines":[{"item":"rice","observed":900},{"item":"nori","observed":55}]}"#).unwrap();
-    assert_eq!(r["lines"][0], json!({ "item": "rice", "expected": 1000, "observed": 900, "drift": -100, "value": -200 }));
+    assert_eq!(r["lines"][0], json!({ "item": "rice", "expected": 1000, "observed": 900, "drift": -100, "driftMilli": -100_000, "value": -200 }));
     assert_eq!((r["lines"][1]["drift"].clone(), r["lines"][1]["value"].clone()), (json!(5), Value::Null));
     assert_eq!(r["value"], json!(-200));
     let j = log.journal().unwrap();
@@ -152,27 +152,59 @@ fn a_movement_body_naming_its_venue_is_refused() {
 #[test]
 fn the_bodies_the_console_sends_now_are_accepted() {
     let b = crate::body::from_text::<StockMoveIn>(r#"{"item":"rice","qty":2100,"out":2050,"expiry":"2026-10-01"}"#).expect("cooked");
-    assert_eq!((b.item.as_str(), b.qty, b.out), ("rice", Some(2100), Some(2050)));
+    assert_eq!((b.item.as_str(), b.qty, b.out), ("rice", Some(Qty::whole(2100)), Some(2050)));
     let b = crate::body::from_text::<StockMoveIn>(r#"{"products":["d1","d2"]}"#).expect("as-is");
     assert_eq!(b.products, Some(vec!["d1".to_string(), "d2".to_string()]));
 }
 
-/// W-QTY (contract §1, H3): the door reads a quantity from its text --
-/// `"1500"`, `1500.000`, `"1 500"` -- and a fraction of the base unit is a
-/// 400 naming it, never a rounding: the shelf counts whole units.
+/// W-QTY (contract §1) + W-QTYHUB H3: the door reads a quantity from its
+/// text -- `"1500"`, `1500.000`, `"1 500"`, `2.5`, `"0,75"` -- and a delivery,
+/// a write-off and a count KEEP the fraction: booked whole on the shelf with
+/// the exact `uq` beside it. A prep's board is weighed whole (a 400 by name).
 #[test]
-fn the_door_reads_decimals_and_refuses_a_fraction_of_a_base_unit() {
+fn the_door_reads_decimals_and_keeps_a_fraction_of_a_base_unit() {
     let ok = |raw: &str| serde_json::from_str::<StockMoveIn>(raw).map(|b| (b.qty, b.observed, b.out)).map_err(|e| e.to_string());
-    assert_eq!(ok(r#"{"item":"rice","qty":"1500"}"#).unwrap(), (Some(1500), None, None));
+    assert_eq!(ok(r#"{"item":"rice","qty":"1500"}"#).unwrap(), (Some(Qty::whole(1500)), None, None));
     // A comma is a DECIMAL comma, never a thousands separator: "2,000" is two.
-    assert_eq!(ok(r#"{"item":"rice","qty":1500.000,"observed":"2,000","out":7}"#).unwrap(), (Some(1500), Some(2), Some(7)));
-    assert_eq!(ok(r#"{"item":"rice","observed":"2 000"}"#).unwrap().1, Some(2000), "a space groups thousands");
-    let e = ok(r#"{"item":"nori","qty":2.5}"#).unwrap_err();
-    assert!(e.contains("2.5: the shelf counts whole units"), "{e}");
-    let e = serde_json::from_str::<StockMoveIn>(r#"{"lines":[{"item":"nori","observed":"0.5"}]}"#).err().map(|e| e.to_string()).unwrap();
-    assert!(e.contains("0.5: the shelf counts whole units"), "{e}");
+    assert_eq!(ok(r#"{"item":"rice","qty":1500.000,"observed":"2,000","out":7}"#).unwrap(), (Some(Qty::whole(1500)), Some(Qty::whole(2)), Some(7)));
+    assert_eq!(ok(r#"{"item":"rice","observed":"2 000"}"#).unwrap().1, Some(Qty::whole(2000)), "a space groups thousands");
+    assert_eq!(ok(r#"{"item":"nori","qty":2.5}"#).unwrap().0, Some(Qty::milli(2500)));
+    assert!(ok(r#"{"item":"nori","qty":"0.0005"}"#).unwrap_err().contains("at most 3 decimals"));
     let mut log = StockLog::create_sized(64 * 1024).unwrap();
     log.set_clock(NOW);
     assert_eq!(run(&mut log, "received", r#"{"item":"rice","qty":"1500.000"}"#).unwrap()["lines"][0]["qty"], json!(1500));
     assert_eq!(log.ledger().unwrap().level("rice").on_hand, 1500);
+    assert!(!log.journal().unwrap().entries.iter().any(|e| e.meta.uq.is_some()), "a whole delivery writes no uq");
+    // 2.5 sheets at 750 for the line: valued 750, booked 3, exact 2.5.
+    let r = run(&mut log, "received", r#"{"item":"nori","qty":"2,5","total":750}"#).unwrap();
+    assert_eq!((r["lines"][0]["qty"].clone(), r["lines"][0]["value"].clone()), (json!(2.5), json!(750)));
+    let (led, carry) = log.shelf_exact().unwrap();
+    assert_eq!((led.level("nori").on_hand, carry.exact("nori", led.level("nori").on_hand)), (3, 2_500_000));
+    assert_eq!(log.cost_book().wac("nori", 1), Some(300), "the price per sheet is the paper's");
+    // Counted 0.75, then 0.25 thrown away: 0.5 left, exactly.
+    let r = run(&mut log, "count", r#"{"lines":[{"item":"nori","observed":"0,75"}]}"#).unwrap();
+    assert_eq!((r["lines"][0]["expected"].clone(), r["lines"][0]["observed"].clone(), r["lines"][0]["drift"].clone()), (json!(2.5), json!(0.75), json!(-1.75)));
+    assert_eq!(r["lines"][0]["value"], json!(-525), "1.75 sheets at 300");
+    let r = run(&mut log, "wasted", r#"{"item":"nori","qty":0.25,"reason":"spoiled"}"#).unwrap();
+    assert_eq!((r["lines"][0]["qty"].clone(), r["lines"][0]["value"].clone()), (json!(0.25), json!(75)));
+    let (led, carry) = log.shelf_exact().unwrap();
+    assert_eq!(carry.exact("nori", led.level("nori").on_hand), 500_000);
+    // A single stocktake reads the same way.
+    run(&mut log, "stocktake", r#"{"item":"nori","observed":"1.5"}"#).unwrap();
+    let (led, carry) = log.shelf_exact().unwrap();
+    assert_eq!(carry.exact("nori", led.level("nori").on_hand), 1_500_000);
+    // The board of a prep is weighed whole: named, not rounded.
+    let e = plan("produced", body(r#"{"item":"rice","qty":"2.5","out":2}"#), "p", NOW, TODAY, no_shelf).unwrap_err();
+    assert_eq!(e.0, 400);
+    assert!(e.1.contains("2.5: weigh this one in whole units"), "{}", e.1);
+}
+
+/// W-QTYHUB RED probe (H3), on the API main already had: 2.5 sheets of nori
+/// received and 0,75 counted are bodies the door takes.
+#[test]
+fn red_h3_the_door_takes_a_fraction_of_a_piece() {
+    for raw in [r#"{"item":"nori","qty":2.5}"#, r#"{"item":"nori","observed":"0,75"}"#, r#"{"lines":[{"item":"nori","observed":"0.75"}]}"#] {
+        let parsed = serde_json::from_str::<StockMoveIn>(raw);
+        assert!(parsed.is_ok(), "{raw}: {:?}", parsed.err());
+    }
 }

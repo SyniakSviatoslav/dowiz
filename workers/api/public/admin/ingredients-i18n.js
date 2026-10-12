@@ -11,7 +11,7 @@ import { T } from '/admin/i18n.js';
 
 export const WORDS = {
   en: {
-    inv_wholeUnits: 'The shelf counts whole units: 1,5 kg is 1500 g, half a sheet goes in the recipe, not in the count', inv_review: 'Recipe needs review',
+    inv_wholeUnits: 'At most 3 decimals of the unit: 0,001 kg is 1 g; 2,5 pieces is fine', inv_review: 'Recipe needs review',
     inv_reset: 'Delete all ingredient data', inv_resetAsk: 'This deletes every ingredient, recipe, allergen list and stock record of this venue. It cannot be undone. Type the venue id below to confirm:', inv_resetMismatch: 'The id does not match; nothing was deleted.', inv_resetDone: 'Deleted (ingredients / recipes / stock records)',
     inv_title: 'Ingredients & stock', inv_hint: 'Every ingredient with what is on the shelf. Tap one for its card; the buttons record what happened.',
     inv_delivery: 'Delivery', inv_count: 'Count', inv_prep: 'Prep', inv_waste: 'Write-offs', inv_numbers: 'Kitchen numbers',
@@ -45,7 +45,7 @@ export const WORDS = {
     ka_usedHint: 'By recipes = portions sold x recipe (gross). Recorded = what orders took off the shelf. A count difference is what nobody recorded.',
   },
   sq: {
-    inv_wholeUnits: 'Rafti numëron njësi të plota: 1,5 kg është 1500 g; gjysmë flete shkon në recetë, jo në numërim', inv_review: 'Receta kërkon rishikim',
+    inv_wholeUnits: 'Të shumtën 3 dhjetore të njësisë: 0,001 kg është 1 g; 2,5 copë është në rregull', inv_review: 'Receta kërkon rishikim',
     inv_reset: 'Fshi të gjitha të dhënat e përbërësve', inv_resetAsk: 'Kjo fshin çdo përbërës, recetë, listë alergjenësh dhe regjistrim magazine të këtij lokali. Nuk kthehet mbrapsht. Shkruani ID-në e lokalit më poshtë për ta konfirmuar:', inv_resetMismatch: 'ID-ja nuk përputhet; asgjë nuk u fshi.', inv_resetDone: 'U fshinë (përbërës / receta / regjistrime magazine)',
     inv_title: 'Përbërësit & magazina', inv_hint: 'Çdo përbërës me sa ka në raft. Prekni njërin për kartelën; butonat regjistrojnë çfarë ndodhi.',
     inv_delivery: 'Furnizim', inv_count: 'Numërim', inv_prep: 'Përgatitje', inv_waste: 'Të hedhurat', inv_numbers: 'Numrat e kuzhinës',
@@ -79,7 +79,7 @@ export const WORDS = {
     ka_usedHint: 'Sipas recetave = porcione të shitura x receta (bruto). Regjistruar = sa hoqën porositë nga rafti. Diferenca e numërimit është ajo që askush nuk regjistroi.',
   },
   uk: {
-    inv_wholeUnits: 'Склад рахує цілі одиниці: 1,5 кг це 1500 г; пів аркуша вписують у рецепт, а не в підрахунок', inv_review: 'Потрібен перегляд рецептури',
+    inv_wholeUnits: 'Не більше 3 знаків після коми: 0,001 кг це 1 г; 2,5 штуки можна', inv_review: 'Потрібен перегляд рецептури',
     inv_reset: 'Видалити всі дані про інгредієнти', inv_resetAsk: 'Буде видалено всі інгредієнти, рецепти, списки алергенів і записи складу цього закладу. Скасувати не можна. Щоб підтвердити, введіть id закладу нижче:', inv_resetMismatch: 'Id не збігається; нічого не видалено.', inv_resetDone: 'Видалено (інгредієнти / рецепти / записи складу)',
     inv_title: 'Інгредієнти та склад', inv_hint: 'Кожен інгредієнт і скільки його на полиці. Торкніться, щоб відкрити картку; кнопки записують, що сталося.',
     inv_delivery: 'Прихід', inv_count: 'Інвентаризація', inv_prep: 'Заготовка', inv_waste: 'Списання', inv_numbers: 'Аналітика кухні',
@@ -113,7 +113,7 @@ export const WORDS = {
     ka_usedHint: 'За техкартами = продані порції x техкарта (брутто). Записано = що замовлення зняли з полиці. Розбіжність інвентаризації = те, чого ніхто не записав.',
   },
   ru: {
-    inv_wholeUnits: 'Склад считает целые единицы: 1,5 кг это 1500 г; половина листа вписывается в рецепт, а не в подсчёт', inv_review: 'Требуется пересмотр рецептуры',
+    inv_wholeUnits: 'Не больше 3 знаков после запятой: 0,001 кг это 1 г; 2,5 штуки можно', inv_review: 'Требуется пересмотр рецептуры',
     inv_reset: 'Удалить все данные об ингредиентах', inv_resetAsk: 'Будут удалены все ингредиенты, рецепты, списки аллергенов и записи склада этого заведения. Отменить нельзя. Чтобы подтвердить, введите id заведения ниже:', inv_resetMismatch: 'Id не совпадает; ничего не удалено.', inv_resetDone: 'Удалено (ингредиенты / рецепты / записи склада)',
     inv_title: 'Ингредиенты и склад', inv_hint: 'Каждый ингредиент и сколько его на полке. Коснитесь, чтобы открыть карточку; кнопки записывают, что произошло.',
     inv_delivery: 'Приход', inv_count: 'Инвентаризация', inv_prep: 'Заготовка', inv_waste: 'Списание', inv_numbers: 'Аналитика кухни',

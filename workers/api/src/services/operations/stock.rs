@@ -127,6 +127,10 @@ pub fn shelf(cat: &dowiz_hub::catalog::Catalog, log: &dowiz_hub::stock::StockLog
                 "onHand": level.on_hand,
                 "reserved": level.reserved,
                 "available": level.available(),
+                // W-QTYHUB H3: the EXACT shelf in milli-units (2.5 pieces received
+                // reads 2500 here while `onHand` books 3). What a screen shows.
+                "onHandMilli": crate::recipe::Qty::of_micro(journal.carry.exact(&id, level.on_hand)).milli,
+                "availableMilli": crate::recipe::Qty::of_micro(journal.carry.exact(&id, level.available())).milli,
                 "lowAt": low_at,
                 // Never received or counted: its zero is unknown, not empty,
                 // and it neither refuses orders nor raises a low alarm.

@@ -71,11 +71,31 @@ test('dates, bars, levels and the dishes that reduce no stock', () => {
 
 test('W-QTY: why a typed amount is not one -- a fraction of the base unit is named, not swallowed', () => {
   assert.equal(C.amount('0,5 kg', 'g'), 500);
-  assert.equal(C.amount('2.5', 'unit'), null);
-  assert.equal(C.whyNot('2.5', 'unit'), 'fraction');
-  assert.equal(C.whyNot('0,0005 kg', 'g'), 'fraction');
+  assert.equal(C.amount('2.5', 'unit'), null, 'amount() stays whole: prices, a prep board, a transfer');
   assert.equal(C.whyNot('1,5 kg', 'unit'), 'badUnit');
   assert.equal(C.whyNot('1500', 'g'), null, 'a whole amount has no reason');
   assert.equal(C.whyNot('abc', 'g'), 'notANumber');
   assert.equal(C.whyNot('', 'g'), null, 'empty is empty, not wrong');
+});
+
+test('W-QTYHUB H3: a delivery, write-off or count keeps its fraction -- milli-units, exact, at most 3 decimals', () => {
+  assert.equal(C.milli('2.5', 'unit'), 2500);
+  assert.equal(C.milli('2,5', 'unit'), 2500);
+  assert.equal(C.milli('0,75 kg', 'g'), 750000);
+  assert.equal(C.milli('0.0005 kg', 'g'), 500, 'half a gram');
+  assert.equal(C.milli('1 500'), 1500000);
+  assert.equal(C.milli('0.0005', 'g'), null, 'finer than a thousandth of the base unit');
+  assert.equal(C.milli('1 kg', 'unit'), null);
+  assert.equal(C.milli('abc'), null);
+  assert.equal(C.milli(''), null);
+  assert.equal(C.whyNot('2.5', 'unit'), null, 'a fraction of a piece is a quantity now');
+  assert.equal(C.whyNot('0,0005 kg', 'g'), null);
+  assert.equal(C.whyNot('0.0005', 'g'), 'tooFine');
+  assert.equal(C.showMilli(2500), '2.5');
+  assert.equal(C.showMilli(750), '0.75');
+  assert.equal(C.showMilli(-250), '-0.25');
+  assert.equal(C.showMilli(1500000), '1500');
+  assert.equal(C.levelMilli({ onHand: 3, onHandMilli: 2500 }, 'onHand'), 2500, 'the exact shelf wins over the booked one');
+  assert.equal(C.levelMilli({ onHand: 3 }, 'onHand'), 3000, 'an older answer still reads');
+  assert.equal(C.levelMilli({}, 'available'), 0);
 });

@@ -108,7 +108,7 @@ fn where_used_names_cards_and_dishes_and_a_deletion_strips_the_cards() {
     assert!(r.dishes.contains(&"pf-dish".to_string()), "the dish through the card is re-derived: {:?}", r.dishes);
     let card = dowiz_hub::prep::card_of(&cat.supply("mitsukan").unwrap()).unwrap();
     assert_eq!(card.lines.iter().map(|l| l.item.as_str()).collect::<Vec<_>>(), vec!["rice"], "the card lost the line");
-    assert_eq!(card.yield_qty, 100, "and kept its yield");
+    assert_eq!(card.yield_qty(), 100, "and kept its yield");
     assert_eq!(product(&cat, "pf-dish")["bom"], json!([{ "supply": "mitsukan", "qty": 20 }]), "the dish still names the card");
     assert_eq!(product(&cat, "pf-dish")["cost"], json!(4), "20 g at 50 g rice per 100 g: 10 g rice at 38/100 = 3.8");
 }
@@ -164,7 +164,7 @@ fn a_deletion_marks_each_dish_and_card_for_review_until_the_recipe_is_saved_by_h
     use crate::services::operations::preps::{self, LineIn, PrepIn};
     let mut cat = catalogue();
     // A card under a dish: roll-pf = sushi-rice (rice + salmon) + rice.
-    let body = PrepIn { id: "sushi-rice".into(), name: Some("Sushi rice".into()), lines: vec![LineIn { item: "rice".into(), qty: 100 }, LineIn { item: "salmon".into(), qty: 5 }], yield_qty: 100, ..PrepIn::default() };
+    let body = PrepIn { id: "sushi-rice".into(), name: Some("Sushi rice".into()), lines: vec![LineIn { item: "rice".into(), qty: 100.into() }, LineIn { item: "salmon".into(), qty: 5.into() }], yield_qty: 100.into(), ..PrepIn::default() };
     let (pid, card) = preps::check(&body).unwrap();
     preps::save(&mut cat, &pid, &body, &card).unwrap();
     let mut d = json!({ "id": "roll-pf", "name": "Roll PF", "price": 700 });
@@ -208,7 +208,7 @@ fn a_deletion_marks_each_dish_and_card_for_review_until_the_recipe_is_saved_by_h
     set_bom(&mut roll, &[BomLineIn { supply: "rice".into(), qty: 90.into(), net: None, out: None }], |s| cat.supply(s), Typed::default()).unwrap();
     assert!(roll.get("recipeReview").is_none(), "saved by hand: reviewed");
     // The card saved by hand (its lines without the ghost) drops its mark too.
-    let body = PrepIn { id: "sushi-rice".into(), lines: vec![LineIn { item: "rice".into(), qty: 100 }], yield_qty: 100, ..PrepIn::default() };
+    let body = PrepIn { id: "sushi-rice".into(), lines: vec![LineIn { item: "rice".into(), qty: 100.into() }], yield_qty: 100.into(), ..PrepIn::default() };
     let (pid, card) = preps::check(&body).unwrap();
     preps::save(&mut cat, &pid, &body, &card).unwrap();
     assert!(!has_mark(&cat.supply("sushi-rice").unwrap()));

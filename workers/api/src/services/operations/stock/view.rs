@@ -56,8 +56,14 @@ pub fn movement_row(e: &Entry) -> Value {
         }
         other => (other_qty(other), json!({ "order": other.order_id() })),
     };
+    // W-QTYHUB H3: a delivery, write-off or count that carries `uq` shows what
+    // was TYPED (2.5), not the whole units it booked (3). Draws keep their booking.
+    let shown = match (&e.ev, e.meta.uq) {
+        (StockEvent::Received { .. } | StockEvent::Wasted { .. } | StockEvent::Stocktake { .. }, Some(u)) => crate::recipe::Qty::of_micro(u).json(),
+        _ => json!(qty),
+    };
     let mut row = json!({
-        "seq": e.seq, "at": e.meta.at, "kind": kind_of(&e.ev), "item": e.ev.item(), "qty": qty,
+        "seq": e.seq, "at": e.meta.at, "kind": kind_of(&e.ev), "item": e.ev.item(), "qty": shown,
         "value": e.value, "lot": e.meta.lot, "by": signer(&e.ev).or(e.meta.by.as_deref()),
     });
     if let (Some(m), Some(x)) = (row.as_object_mut(), extra.as_object()) {

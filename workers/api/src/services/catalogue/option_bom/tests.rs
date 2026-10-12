@@ -18,7 +18,7 @@ fn supply(id: &str) -> Option<String> {
 }
 
 fn body(option: &str, lines: &[(&str, i64)]) -> OptionBomIn {
-    OptionBomIn { location_id: "v".into(), option: option.into(), bom: lines.iter().map(|(s, q)| LineIn { supply: s.to_string(), qty: *q }).collect() }
+    OptionBomIn { location_id: "v".into(), option: option.into(), bom: lines.iter().map(|(s, q)| LineIn { supply: s.to_string(), qty: (*q).into() }).collect() }
 }
 
 #[test]
@@ -29,7 +29,7 @@ fn a_save_sets_the_option_recipe_and_the_view_reads_it_back() {
     assert_eq!(v["contract"], CONTRACT);
     assert_eq!(v["options"][0]["id"], "xsalmon");
     assert_eq!(v["options"][0]["groupName"], "Extras");
-    assert_eq!(v["options"][0]["bom"], json!([{ "supply": "salmon", "qty": 20 }]));
+    assert_eq!(v["options"][0]["bom"], json!([{ "supply": "salmon", "qty": 20, "qtyMilli": 20000 }]));
     assert_eq!(v["supplies"].as_array().unwrap().len(), 1, "a semi-finished product is not offered");
     assert_eq!(p["modifierGroups"], serde_json::from_str::<Value>(ROLL).unwrap()["modifierGroups"], "the guest's groups are untouched");
     apply(&mut p, &body("xsalmon", &[]), &supply).unwrap();

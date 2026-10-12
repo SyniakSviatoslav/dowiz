@@ -60,7 +60,8 @@ fn every_key_round_trips_and_the_movement_is_untouched() {
         expected: Some(40),
         value: Some(-12),
         by: Some("p_anna".into()),
-        uq: Some(773_810),
+        // W-QTYHUB H3: on a delivery `uq` is what was typed; 499.77381 books 500.
+        uq: Some(499_773_810),
         store: Some(r#"freezer","store":"bar"#.into()),
         treated: Some("CERT-1".into()),
         drawn: Some("=3;freezer=5".into()),

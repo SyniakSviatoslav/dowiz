@@ -25,25 +25,27 @@ export function openCount(ctx){
   sheet(`<p class="eyebrow" data-t="inv_count"></p><h2 data-t="inv_count"></h2><p class="hint" data-t="inv_countHint"></p>
     <div class="srch">${icon('search')}${ui.inputRow({ id: 'cQ', type: 'search', label: key('search'), placeholder: key('search'), attrs: {} })}</div>
     <div id="cList">${all.map(s => `<div class="inv-count" data-row="${esc(s.id)}"><span class="t"><b>${esc(s.name)}</b>
-      <small><span data-t="inv_onHand"></span> ${s.onHand ?? 0} ${esc(s.unit)} · ${esc(s.category || '')} <span data-drift="${esc(s.id)}"></span></small></span>
-      ${ui.inputRow({ label: s.name, attrs: { placeholder: String(s.onHand ?? 0), inputmode: 'decimal', autocomplete: 'off', data: { ci: s.id } } })}</div>`).join('')}</div>
+      <small><span data-t="inv_onHand"></span> ${C.showMilli(C.levelMilli(s, 'onHand'))} ${esc(s.unit)} · ${esc(s.category || '')} <span data-drift="${esc(s.id)}"></span></small></span>
+      ${ui.inputRow({ label: s.name, attrs: { placeholder: C.showMilli(C.levelMilli(s, 'onHand')), inputmode: 'decimal', autocomplete: 'off', data: { ci: s.id } } })}</div>`).join('')}</div>
     <div class="btn-row">${btn({ id: 'cGo', variant: 'primary', icon: 'check', key: 'save' })}</div>
     <div id="cOut"></div>
     ${sessions ? `<p class="eyebrow mt-3" data-t="inv_sessions"></p><div class="kt-wrap"><table class="kt"><thead><tr><th data-t="ka_day"></th><th data-t="inv_lines"></th><th data-t="inv_value"></th></tr></thead><tbody>${sessions}</tbody></table></div>` : ''}`, { name: 'count' });
   const sup = id => all.find(s => s.id === id);
   $('#cQ').oninput = () => { const q = $('#cQ').value.toLowerCase().trim(); for (const r of $$('[data-row]', $('#cList'))) { const s = sup(r.dataset.row); r.hidden = !!q && !`${s.name} ${s.category}`.toLowerCase().includes(q); } };
   for (const inp of $$('[data-ci]', $('#cList'))) inp.oninput = () => {
-    const s = sup(inp.dataset.ci), v = C.amount(inp.value, s.unit), el = $(`[data-drift="${CSS.escape(s.id)}"]`);
-    el.textContent = v == null ? '' : `· ${t('inv_drift')} ${v - (s.onHand ?? 0) > 0 ? '+' : ''}${v - (s.onHand ?? 0)}`;
+    const s = sup(inp.dataset.ci), v = C.milli(inp.value, s.unit), el = $(`[data-drift="${CSS.escape(s.id)}"]`);
+    const d = v == null ? 0 : v - C.levelMilli(s, 'onHand');
+    el.textContent = v == null ? '' : `· ${t('inv_drift')} ${d > 0 ? '+' : ''}${C.showMilli(d)}`;
   };
   $('#cGo').onclick = async () => {
     const lines = [];
     for (const inp of $$('[data-ci]', $('#cList'))) {
       if (!inp.value.trim()) continue;
-      const v = C.amount(inp.value, sup(inp.dataset.ci).unit);
-      if (v == null && C.whyNot(inp.value, sup(inp.dataset.ci).unit) === 'fraction') { inp.focus(); return toast(`${t('inv_wholeUnits')} (${sup(inp.dataset.ci).unit})`); }
+      // W-QTYHUB H3: a count keeps its fraction (0,75 kg, 2,5 sheets), sent as text.
+      const v = C.milli(inp.value, sup(inp.dataset.ci).unit);
+      if (v == null && C.whyNot(inp.value, sup(inp.dataset.ci).unit) === 'tooFine') { inp.focus(); return toast(`${t('inv_wholeUnits')} (${sup(inp.dataset.ci).unit})`); }
       if (v == null || v < 0) { inp.focus(); return toast(t('required')); }
-      lines.push({ item: inp.dataset.ci, observed: v });
+      lines.push({ item: inp.dataset.ci, observed: C.showMilli(v) });
     }
     if (!lines.length) return toast(t('required'));
     try {
@@ -84,8 +86,9 @@ export function openDelivery(ctx){
     const out = [];
     await busy($('#dGo'), async () => {
       for (const x of rows) {
-        const sup = all.find(s => s.id === x.id), qty = C.amount(x.qty, sup.unit);
-        if (!qty || qty <= 0) { out.push([sup.name, t('inv_lineFailed') + ': ' + t('required')]); continue; }
+        const sup = all.find(s => s.id === x.id), m = C.milli(x.qty, sup.unit);
+        if (!m || m <= 0) { out.push([sup.name, t('inv_lineFailed') + ': ' + t('required')]); continue; }
+        const qty = C.showMilli(m);
         const body = { item: x.id, qty, ...C.priceBody(sup.unit, C.amount(x.price, 'unit'), mode) };
         for (const [kk, v] of [['supplier', paper.supplier], ['doc', paper.doc], ['lot', x.lot], ['expiry', x.expiry]]) if (v) body[kk] = v;
         try { const r = await post('/owner/stock/received', body); const v = (r.lines || [])[0]?.value; out.push([sup.name, `${qty} ${sup.unit}${v != null ? ' · ' + money(v) : ''}`]); x.r.remove(); }

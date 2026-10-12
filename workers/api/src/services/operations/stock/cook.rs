@@ -45,7 +45,7 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn) -> Result<(Value, Told), (u1
     if !dowiz_hub::prep::is_prep(&record) {
         return Err((400, format!("{item} is not a semi-finished product: only a card can be cooked")));
     }
-    let planned = body.qty.ok_or((400, "how much does the card make from what went in?".to_string()))?;
+    let planned = super::moves::whole(body.qty.ok_or((400, "how much does the card make from what went in?".to_string()))?)?;
     let out = body.out.unwrap_or(planned);
     let expiry = match body.expiry.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(s) => Some(parse_day(s).ok_or((400, format!("{s:?} is not a date (yyyy-mm-dd)")))?),

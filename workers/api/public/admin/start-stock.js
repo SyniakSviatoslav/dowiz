@@ -94,7 +94,7 @@ async function dishes(){
     const at = e.target.dataset?.dq; if (!at) return;
     const [di, li] = at.split(':').map(Number), line = S.drafts[di].lines[li];
     line.typed = e.target.value;
-    line.qty = L.amount(line.typed, unitOf(line.supply));
+    line.qty = L.milli(line.typed, unitOf(line.supply));
     e.target.classList.toggle('bad', line.typed.trim() !== '' && line.qty == null);
     counted();
   };

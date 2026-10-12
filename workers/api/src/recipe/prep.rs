@@ -16,7 +16,7 @@
 use dowiz_hub::prep::{self, card_of, k_pm, MICRO};
 use serde_json::{json, Value};
 
-use super::{basis_of, is_food, line_with, PER_MASS};
+use super::{basis_of, is_food, line_with, Qty, PER_MASS};
 
 /// Half a millionth: what a half-up rounding of micro units adds.
 pub const MICRO_HALF: i64 = MICRO / 2;
@@ -66,7 +66,7 @@ fn hydrate_at(id: &str, json: &str, supply: &dyn Fn(&str) -> Option<String>, dep
         .filter_map(|l| {
             let j = supply(&l.item)?;
             let sv = hydrate_at(&l.item, &j, supply, depth + 1).or_else(|| serde_json::from_str(&j).ok())?;
-            Some(line_with(&l.item, l.qty, None, None, &sv))
+            Some(line_with(&l.item, Qty::of_micro(l.uq), None, None, &sv))
         })
         .collect();
     let food: Vec<&super::Line> = lines.iter().filter(|l| is_food(&l.kind)).collect();
@@ -75,7 +75,8 @@ fn hydrate_at(id: &str, json: &str, supply: &dyn Fn(&str) -> Option<String>, dep
             return None;
         }
         let sum: f64 = food.iter().filter_map(|l| f(l)).sum();
-        Some((sum / card.yield_qty as f64 * basis as f64 * 10.0).round() / 10.0)
+        // Nutrition is f64 already (kcal); the yield in base units only scales it.
+        Some((sum / (card.yield_uq as f64 / MICRO as f64) * basis as f64 * 10.0).round() / 10.0)
     };
     for (key, f) in [("kcalPer100", (|l: &super::Line| l.kcal) as fn(&super::Line) -> Option<f64>), ("proteinPer100", |l| l.protein), ("fatPer100", |l| l.fat), ("carbsPer100", |l| l.carbs)] {
         v[key] = per_basis(f).map(|x| json!(x)).unwrap_or(Value::Null);
@@ -107,11 +108,11 @@ pub fn view(id: &str, json: &str, supply: &dyn Fn(&str) -> Option<String>) -> Va
         .iter()
         .map(|l| match look(&l.item).and_then(|j| serde_json::from_str::<Value>(&j).ok()) {
             Some(sv) => {
-                let line = line_with(&l.item, l.qty, None, None, &sv);
-                json!({ "item": l.item, "qty": l.qty, "name": line.name, "unit": line.unit, "kind": line.kind, "cost": line.cost, "grossG": line.w.gross,
+                let line = line_with(&l.item, Qty::of_micro(l.uq), None, None, &sv);
+                json!({ "item": l.item, "qty": Qty::of_micro(l.uq).json(), "qtyMilli": Qty::of_micro(l.uq).milli, "name": line.name, "unit": line.unit, "kind": line.kind, "cost": line.cost, "grossG": line.w.gross,
                     "kcal": line.kcal.map(|x| x.round()), "untracked": sv.get("untracked").and_then(Value::as_bool).unwrap_or(false) })
             }
-            None => json!({ "item": l.item, "qty": l.qty, "name": l.item, "missing": true }),
+            None => json!({ "item": l.item, "qty": Qty::of_micro(l.uq).json(), "qtyMilli": Qty::of_micro(l.uq).milli, "name": l.item, "missing": true }),
         })
         .collect();
     let unit = v.get("unit").and_then(Value::as_str).unwrap_or("g").to_string();
@@ -120,10 +121,13 @@ pub fn view(id: &str, json: &str, supply: &dyn Fn(&str) -> Option<String>) -> Va
     let per = if unit == "unit" { 1 } else { 10 * PER_MASS };
     v["costPer"] = micro.map(|m| json!((i128::from(m) * i128::from(per) + i128::from(MICRO) / 2) / i128::from(MICRO))).unwrap_or(Value::Null);
     v["costPerQty"] = json!(per);
-    v["batchCost"] = micro.map(|m| json!((i128::from(m) * i128::from(card.yield_qty) + i128::from(MICRO) / 2) / i128::from(MICRO))).unwrap_or(Value::Null);
+    // micro per unit x yield in millionths: rounded once, from 10^12.
+    let m2 = i128::from(MICRO) * i128::from(MICRO);
+    v["batchCost"] = micro.map(|m| json!((i128::from(m) * i128::from(card.yield_uq) + m2 / 2) / m2)).unwrap_or(Value::Null);
     v["grossG"] = json!(lines.iter().filter_map(|l| l.get("grossG").and_then(Value::as_i64)).sum::<i64>());
     v["lines"] = Value::Array(lines);
-    v["yield"] = json!(card.yield_qty);
+    v["yield"] = Qty::of_micro(card.yield_uq).json();
+    v["yieldMilli"] = json!(Qty::of_micro(card.yield_uq).milli);
     // The deletion's mark on the ПФ (contract §2) passes through `hydrate_at` as stored.
     v
 }

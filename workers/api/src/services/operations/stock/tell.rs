@@ -29,6 +29,11 @@ fn named(supply: &dyn Fn(&str) -> Option<Supply>, id: &str) -> (String, String) 
     supply(id).map_or_else(|| (id.to_string(), String::new()), |s| (s.name, s.unit))
 }
 
+/// What the person typed (`uq`, W-QTYHUB H3), else the whole quantity.
+fn typed(uq: Option<i64>, qty: i64) -> Value {
+    uq.map_or(json!(qty), |u| crate::recipe::Qty::of_micro(u).json())
+}
+
 /// The events of one applied plan. `shown` is `Plan::apply`'s answer (the
 /// counted lines carry `expected`). `expiring` is `Some(lots)` on the first
 /// movement of the venue's day, else `None`.
@@ -45,7 +50,7 @@ pub fn events(
         match ev {
             StockEvent::Received { item, qty } => {
                 let (name, unit) = named(supply, item);
-                let mut d = json!({ "name": name, "qty": qty, "unit": unit });
+                let mut d = json!({ "name": name, "qty": typed(meta.uq, *qty), "unit": unit });
                 if let Some(l) = &meta.lot {
                     d["lot"] = json!(l);
                 }
@@ -56,7 +61,7 @@ pub fn events(
             }
             StockEvent::Wasted { item, qty, reason, .. } => {
                 let (name, unit) = named(supply, item);
-                out.push(("stock.wasted", json!({ "name": name, "qty": qty, "unit": unit, "reason": reason.as_str() })));
+                out.push(("stock.wasted", json!({ "name": name, "qty": typed(meta.uq, *qty), "unit": unit, "reason": reason.as_str() })));
             }
             _ => {}
         }
@@ -66,7 +71,7 @@ pub fn events(
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter(|l| l.get("drift").and_then(Value::as_i64).is_some_and(|d| d != 0))
+        .filter(|l| l.get("driftMilli").or_else(|| l.get("drift")).and_then(Value::as_i64).is_some_and(|d| d != 0))
         .map(|l| {
             let (name, unit) = named(supply, l["item"].as_str().unwrap_or(""));
             json!({ "name": name, "expected": l["expected"], "observed": l["observed"], "unit": unit })

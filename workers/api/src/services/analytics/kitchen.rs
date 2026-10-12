@@ -115,11 +115,12 @@ pub fn dishes_of(cat: &dowiz_hub::catalog::Catalog) -> HashMap<String, Dish> {
 /// are counted as they are, and `takes` says why).
 pub fn leaves_of(cat: &dowiz_hub::catalog::Catalog, product_json: &str) -> Vec<(String, i64)> {
     let supply = |s: &str| cat.supply(s);
-    let bom: Vec<(String, i64)> = dowiz_hub::stock::bom_of(product_json).into_iter().map(|l| (l.supply, l.qty)).collect();
+    // `uq` (W-QTYHUB H1): half a sheet beside a ПФ line stays half a sheet.
+    let bom: Vec<(String, i64)> = dowiz_hub::stock::bom_of(product_json).into_iter().map(|l| (l.supply, l.uq)).collect();
     if !bom.iter().any(|(s, _)| supply(s).is_some_and(|j| dowiz_hub::prep::is_prep(&j))) {
         return Vec::new();
     }
-    dowiz_hub::prep::expand(&bom, &supply).map(|v| v.into_iter().map(|l| (l.item, l.uq)).collect()).unwrap_or_default()
+    dowiz_hub::prep::expand_micro(&bom, &supply).map(|v| v.into_iter().map(|l| (l.item, l.uq)).collect()).unwrap_or_default()
 }
 
 /// THE KITCHEN READS ITS OWN NUMBERS (KITCHEN-ACCESS-2026-09-27): a member of

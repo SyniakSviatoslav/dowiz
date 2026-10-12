@@ -29,10 +29,12 @@ test('a dish without options says so', () => {
   assert.ok(html.includes('ob_none') && !html.includes('data-obsave'));
 });
 
-test('a save sends whole positive quantities and skips an empty row', () => {
+test('a save sends positive quantities (up to 3 decimals, as text) and skips an empty row', () => {
   assert.deepEqual(collect([{ supply: 'salmon', qty: '20' }, { supply: '', qty: '' }]), { bom: [{ supply: 'salmon', qty: 20 }] });
   assert.deepEqual(collect([]), { bom: [] }, 'no line clears the recipe');
-  for (const bad of ['0', '-1', '1.5', 'x', '']) assert.deepEqual(collect([{ supply: 'salmon', qty: bad }]), { error: 'ob_badQty' }, bad);
+  for (const bad of ['0', '0,000', '-1', '1.5555', 'x', '']) assert.deepEqual(collect([{ supply: 'salmon', qty: bad }]), { error: 'ob_badQty' }, bad);
+  // W-QTYHUB H5: half a sheet is a line, sent as its exact text.
+  assert.deepEqual(collect([{ supply: 'nori', qty: '0,5' }, { supply: 'salmon', qty: '1.25' }]), { bom: [{ supply: 'nori', qty: '0.5' }, { supply: 'salmon', qty: '1.25' }] });
   assert.deepEqual(bodyOf('v1', 'xsalmon', [{ supply: 'salmon', qty: 20 }]), { location_id: 'v1', option: 'xsalmon', bom: [{ supply: 'salmon', qty: 20 }] });
   assert.equal(optionBomPath('a b'), '/owner/products/a%20b/option-bom');
 });

@@ -1,27 +1,19 @@
-//! DELETING AN INGREDIENT FOR GOOD (W-NOM, 2026-09-28):
-//! `POST /api/owner/supplies/delete {ids: [...]}`. NOT a write-off, NOT a
-//! retire: the item leaves the nomenclature, every recipe that used it, and
-//! the shelf.
+//! DELETING AN INGREDIENT FOR GOOD (W-NOM, 2026-09-28): `POST
+//! /api/owner/supplies/delete {ids: [...]}`. NOT a write-off, NOT a retire:
+//! the item leaves the nomenclature, every recipe that used it, and the shelf.
 //!
-//! TWO STEPS, CATALOGUE FIRST. (1) One catalogue write: each supply removed,
-//! and every dish whose recipe names one of them loses that line and is
-//! re-derived from what is left -- nutrition, weight, ingredient list and
-//! cost, exactly as a hand-edited recipe is (`recipe::apply::set_bom`); a
-//! value the owner TYPED stays theirs. From this moment no order can reserve
-//! it: no recipe names it. THE DISH IS MARKED (W-QTY, TZ 2026-10-12 item 3,
-//! `/root/lanes/CONTRACT-QTY.md` §2): `recipeReview: [{supply, name, qty}]`
-//! names what left, a ПФ keeps `review: [{supply, name, qty}]`, and the
-//! mark goes when the recipe is next saved by hand -- never by a re-derivation. (2) The stock ledger, in the venue's object:
-//! one signed `Removed` per id it knows (`stock/removed.rs`) -- the history
-//! stays in the append-only log, the level, holds, lots and price leave every
-//! fold. No waste is recorded and no report counts it as waste.
+//! TWO STEPS, CATALOGUE FIRST. (1) One catalogue write: each supply removed;
+//! every dish whose recipe (or option recipe, W-QTYHUB H5) names one loses
+//! the line and is re-derived as a hand-edited recipe is (`set_bom`; a TYPED
+//! value stays). No order can reserve it from here. THE DISH IS MARKED
+//! (CONTRACT-QTY §2): `recipeReview: [{supply, name, qty, via?, option?}]`, a
+//! ПФ `review: [...]`; the mark goes with the next hand save, never a
+//! re-derivation. (2) The ledger, in the venue's object: one signed `Removed`
+//! per id it knows (`stock/removed.rs`); history stays, level/holds/lots/price
+//! leave every fold. No waste is recorded.
 //!
-//! RETRYABLE: a failure between the steps leaves ids the catalogue no longer
-//! has and the ledger still knows; deleting them again finishes step 2. An id
-//! neither side knows is a 404 -- the second click of a double tap.
-//!
-//! OWNER ONLY: an irreversible act on the venue's books, like the reset. A
-//! member of staff retires (`/retire`), which is reversible.
+//! RETRYABLE: deleting again finishes step 2; an id neither side knows is a
+//! 404. OWNER ONLY: irreversible, like the reset (staff retire, `/retire`).
 
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -39,14 +31,13 @@ pub struct Removal {
     pub deleted: Vec<String>,
     /// Dishes that lost a recipe line, re-derived.
     pub dishes: Vec<String>,
-    /// The marks set: `{id, name, removed: [{supply, name, qty}]}` per dish
-    /// and `{id, name, prep: true, removed: [...]}` per ПФ.
+    /// The marks set: `{id, name, removed: [...]}` per dish, `prep: true` on a ПФ.
     pub review: Vec<Value>,
 }
 
 /// The review marks a deletion leaves (contract §2), pure.
 pub mod review;
-use review::{mark, mark_on};
+use review::{mark, mark_on, options_only, strip_option_bom};
 
 /// The ids of a request: trimmed, distinct, 1 to `MAX_IDS`. PURE.
 pub fn ids_of(raw: &[String]) -> std::result::Result<Vec<String>, String> {
@@ -103,7 +94,7 @@ pub fn remove_supplies(cat: &mut Catalog, ids: &[String]) -> Removal {
             continue;
         }
         let Some(mut card) = dowiz_hub::prep::card_of(j) else { continue };
-        let marks: Vec<Value> = card.lines.iter().filter(|l| gone(&l.item)).map(|l| mark(&l.item, &name_of(&l.item), json!(l.qty), None)).collect();
+        let marks: Vec<Value> = card.lines.iter().filter(|l| gone(&l.item)).map(|l| mark(&l.item, &name_of(&l.item), crate::recipe::Qty::of_micro(l.uq).json(), None)).collect();
         if marks.is_empty() {
             continue;
         }
@@ -132,7 +123,16 @@ pub fn remove_supplies(cat: &mut Catalog, ids: &[String]) -> Removal {
     let mut dishes = Vec::new();
     for (pid, j) in cat.products() {
         let Ok(mut p) = serde_json::from_str::<Value>(&j) else { continue };
-        let Some(bom) = p.get("bom").and_then(Value::as_array).cloned() else { continue };
+        // W-QTYHUB H5: an option's recipe loses the line too, the dish marked naming the option.
+        let opt_marks = strip_option_bom(&mut p, &gone, &name_of);
+        let Some(bom) = p.get("bom").and_then(Value::as_array).cloned() else {
+            if let Some(r) = options_only(&mut p, &pid, opt_marks) {
+                cat.set_product(&pid, &p.to_string());
+                review.push(r);
+                dishes.push(pid);
+            }
+            continue;
+        };
         let (lost, keep): (Vec<Value>, Vec<Value>) = bom.into_iter().partition(|l| l.get("supply").and_then(Value::as_str).is_some_and(gone));
         let mut marks: Vec<Value> = lost
             .iter()
@@ -150,6 +150,7 @@ pub fn remove_supplies(cat: &mut Catalog, ids: &[String]) -> Removal {
                 }));
             }
         }
+        marks.extend(opt_marks);
         if marks.is_empty() {
             continue;
         }

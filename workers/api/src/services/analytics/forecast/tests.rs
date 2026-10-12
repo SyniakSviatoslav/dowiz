@@ -222,3 +222,15 @@ fn the_route_asks_the_numbers_door() {
     let row = crate::services::identity::staff::access::ROUTES.iter().find(|r| r.1 == "/api/staff/kitchen/prep").expect("a row");
     assert_eq!((row.0, row.2, row.3), ("get", crate::services::identity::staff::access::Door::Staff(&crate::services::identity::staff::guard::NUMBERS), crate::services::identity::staff::access::Kitchen::Read));
 }
+
+/// W-QTYHUB H1 (class): two rolls of half a sheet beside a ПФ line take ONE
+/// sheet, and the ПФ's use is what the lines say.
+#[test]
+fn a_fractional_raw_line_beside_a_semi_finished_one_is_needed_exactly() {
+    let mut cat = venue(true);
+    cat.set_supply("nori", &json!({ "id": "nori", "name": "nori", "unit": "unit", "kind": "food_ingredient" }).to_string());
+    cat.set_product("nori-roll", r#"{"id":"nori-roll","name":"Nori roll","price":700,"bom":[{"supply":"rice-seasoned","qty":130},{"supply":"nori","uq":500000}]}"#);
+    let n = needs(&[("nori-roll".to_string(), 2)].into_iter().collect(), &cat);
+    assert_eq!(n.raw.get("nori"), Some(&1), "{:?}", n.raw);
+    assert_eq!(n.preps.get("rice-seasoned"), Some(&260));
+}

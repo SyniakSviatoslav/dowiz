@@ -28,9 +28,11 @@ pub struct Basket {
     pub untracked: BTreeSet<String>,
 }
 
+/// A card of the tree, as `prep::card_json` wrote it: whole `qty`/`yield`, or
+/// exact `uq`/`yieldUq` (W-QTYHUB H2). A line without a quantity voids the card.
 fn card_of(v: &Value) -> Option<Card> {
-    let lines = v.get("lines")?.as_array()?.iter().map(|l| Some(Edge { item: l.get("item")?.as_str()?.to_string(), qty: Rat::new(i128::from(l.get("qty")?.as_i64()?), 1) })).collect::<Option<Vec<_>>>()?;
-    Some(Card { lines, batch: Rat::new(i128::from(v.get("yield")?.as_i64().filter(|y| *y > 0)?), 1) })
+    let lines = v.get("lines")?.as_array()?.iter().map(|l| Some(Edge { item: l.get("item")?.as_str()?.to_string(), qty: crate::prep::rat(crate::prep::micro_of(l, "uq", "qty")?) })).collect::<Option<Vec<_>>>()?;
+    Some(Card { lines, batch: crate::prep::rat(crate::prep::micro_of(v, "yieldUq", "yield").filter(|y| *y > 0)?) })
 }
 
 /// The basket of `lines` (`(product JSON, ordered)`, as `draws_for` takes
@@ -55,8 +57,8 @@ pub fn of(lines: &[(String, i64)]) -> Option<Basket> {
         };
         any = true;
         for l in t.get("lines").and_then(Value::as_array).into_iter().flatten() {
-            let (Some(s), Some(q)) = (l.get("supply").and_then(Value::as_str), l.get("qty").and_then(Value::as_i64)) else { continue };
-            b.roots.push((s.to_string(), Rat::new(i128::from(q) * i128::from(*ordered), 1)));
+            let (Some(s), Some(u)) = (l.get("supply").and_then(Value::as_str), crate::prep::micro_of(l, "uq", "qty")) else { continue };
+            b.roots.push((s.to_string(), Rat::new(i128::from(u) * i128::from(*ordered), i128::from(MICRO))));
         }
         for (id, c) in t.get("cards").and_then(Value::as_object).into_iter().flatten() {
             if let Some(c) = card_of(c) {

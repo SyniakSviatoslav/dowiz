@@ -199,7 +199,7 @@ fn lines_of(r: &DraftRecipe, supply: impl Fn(&str) -> Option<String>) -> Vec<Bom
             let sv: Value = supply(&l.supply).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
             let unit = sv.get("unit").and_then(Value::as_str).unwrap_or("g").to_string();
             let grams = |v: Option<i64>| v.and_then(|x| crate::recipe::weights::gross_g(&unit, x, &sv));
-            BomLineIn { supply: l.supply.clone(), qty: l.qty.into(), net: grams(l.net), out: grams(l.yield_) }
+            BomLineIn { supply: l.supply.clone(), qty: crate::recipe::Qty::milli(l.qty_milli), net: grams(l.net), out: grams(l.yield_) }
         })
         .collect()
 }

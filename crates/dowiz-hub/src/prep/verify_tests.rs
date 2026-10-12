@@ -81,8 +81,8 @@ fn zero_negative_and_no_yield() {
     assert_eq!(expand(&[("nobatch".into(), 1)], &lookup(&k)), Err(Refusal::Tree(tree::Stop::NoBatch("nobatch".into()))));
     k.push(prep("negbatch", "g", &[("salt", 1)], -5));
     assert!(expand(&[("negbatch".into(), 1)], &lookup(&k)).is_err());
-    assert!(matches!(check_card("x", &Card { lines: vec![Line { item: "salt".into(), qty: -1 }], yield_qty: 1 }, &k), Err(Refusal::Bound(_))));
-    assert!(matches!(check_card("x", &Card { lines: vec![Line { item: "salt".into(), qty: 1 }], yield_qty: 0 }, &k), Err(Refusal::Bound(_))));
+    assert!(matches!(check_card("x", &Card { lines: vec![Line::whole("salt", -1)], yield_uq: (1) * MICRO }, &k), Err(Refusal::Bound(_))));
+    assert!(matches!(check_card("x", &Card { lines: vec![Line::whole("salt", 1)], yield_uq: (0) * MICRO }, &k), Err(Refusal::Bound(_))));
 }
 
 /// Yield above gross (rice swells, K > 1) is legal: the leaves shrink.
@@ -90,7 +90,7 @@ fn zero_negative_and_no_yield() {
 fn a_yield_above_its_gross_is_k_above_one() {
     let mut k = kitchen();
     k.push(prep("boiled", "g", &[("rice-dry", 1000)], 2500));
-    assert_eq!(check_card("boiled2", &Card { lines: vec![Line { item: "rice-dry".into(), qty: 1000 }], yield_qty: 2500 }, &k), Ok(()));
+    assert_eq!(check_card("boiled2", &Card { lines: vec![Line::whole("rice-dry", 1000)], yield_uq: (2500) * MICRO }, &k), Ok(()));
     let card = card_of(&lookup(&k)("boiled").unwrap()).unwrap();
     assert_eq!(k_pm(&card, "g", None, &lookup(&k)), Some(2500));
     assert_eq!(expand(&[("boiled".into(), 250)], &lookup(&k)).unwrap(), vec![Leaf { item: "rice-dry".into(), uq: 100 * MICRO }]);

@@ -105,6 +105,35 @@ impl Carry {
                     self.open.insert(key(order_id, item), (uq_held - back_uq, q_held - back_q));
                 }
             }
+            // THE THREE HUMAN MOVEMENTS (W-QTYHUB H3). A delivery adds `uq`
+            // to the exact shelf and `qty` to the booked one; a write-off takes
+            // them off as a draw does. Only a record WITH a fractional `uq`
+            // moves the carry, and no record before H3 carries one here, so
+            // every old fold (and every checkpoint) is what it was.
+            StockEvent::Received { item, qty } => {
+                if let Some(uq) = uq.filter(|u| u % MICRO != 0) {
+                    self.shift(item, -uq, -*qty);
+                }
+            }
+            StockEvent::Wasted { item, qty, .. } => {
+                if let Some(uq) = uq.filter(|u| u % MICRO != 0) {
+                    self.shift(item, uq, *qty);
+                }
+            }
+            // A COUNT IS A MEASUREMENT: the exact shelf IS `uq`, so the carry
+            // becomes `observed x 10^6 - uq` -- whatever it was. Written with a
+            // whole `uq` too, when the item carried a remainder, so a whole
+            // count also clears it (`book_human`).
+            StockEvent::Stocktake { item, observed, .. } => {
+                if let Some(uq) = uq {
+                    let r = observed.saturating_mul(MICRO).saturating_sub(uq);
+                    if r == 0 {
+                        self.rem.remove(item);
+                    } else {
+                        self.rem.insert(item.clone(), r);
+                    }
+                }
+            }
             StockEvent::Removed { item, .. } => {
                 self.rem.remove(item);
                 self.open.retain(|(_, i), _| i != item);
@@ -228,3 +257,18 @@ impl StockLog {
 #[cfg(test)]
 #[path = "carry/tests.rs"]
 mod tests;
+
+/// W-QTYHUB H3: a delivery, a write-off and a count book their fraction here.
+#[path = "carry/human.rs"]
+mod human;
+pub(super) use human::book_human;
+
+/// W-QTYHUB H3: a delivery, a write-off and a count carry `uq`; old records stay byte for byte.
+#[cfg(test)]
+#[path = "carry/human_tests.rs"]
+mod human_tests;
+
+/// W-QTYHUB RED probes (old API, fail before H3).
+#[cfg(test)]
+#[path = "carry/red_probes.rs"]
+mod red_probes;

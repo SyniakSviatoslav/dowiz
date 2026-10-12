@@ -61,7 +61,7 @@ export function rowMarkup(sup, { money, t, warnDays, del = false }){
   const price = C.priceOf(sup);
   const soon = (sup.lots || []).find(l => l.daysLeft != null);
   const facts = [sup.category, price.perBasis != null ? `${money(price.perBasis)}${per}${price.from === 'wac' ? ' ' + t('inv_wac') : ''}` : ''].filter(Boolean).join(' · ');
-  const levels = `${t('inv_onHand')} ${sup.onHand ?? 0} · ${t('reserved')} ${sup.reserved ?? 0} · ${t('inv_available')} ${sup.available ?? 0} ${sup.unit || ''}`;
+  const levels = `${t('inv_onHand')} ${C.showMilli(C.levelMilli(sup, 'onHand'))} · ${t('reserved')} ${sup.reserved ?? 0} · ${t('inv_available')} ${C.showMilli(C.levelMilli(sup, 'available'))} ${sup.unit || ''}`;
   const pills = [
     state === 'needsCount' ? pill('info', { key: 'inv_needsCount' }) : '',
     state === 'out' ? pill('bad', { key: 'out' }) : state === 'low' ? pill('warn', { key: 'low' }) : state === 'ok' ? pill('ok', { key: 'onSale' }) : '',
@@ -107,8 +107,8 @@ export function cardMarkup(sup, { money, t, when, warnDays }){
   return `<p class="eyebrow" data-t="inv_card"></p><h2>${esc(sup.name || sup.id)}</h2>
     <p>${state === 'needsCount' ? pill('info', { key: 'inv_needsCount' }) : ''}${sup.expired ? pill('bad', { key: 'inv_expired' }) : sup.expiring ? pill('warn', { key: 'inv_expiring' }) : ''}</p>
     ${state === 'needsCount' ? `<p class="hint" data-t="inv_needsCountHint"></p>` : ''}
-    <div class="stats strip"><div class="stat"><b>${sup.onHand ?? 0}</b><small data-t="inv_onHand"></small></div><div class="stat"><b>${sup.reserved ?? 0}</b><small data-t="reserved"></small></div>
-      <div class="stat"><b>${sup.available ?? 0}</b><small data-t="inv_available"></small></div><div class="stat money"><b>${price.perBasis != null ? money(price.perBasis) : '-'}</b><small>${esc(t(price.from === 'wac' ? 'inv_avgPrice' : 'inv_listPrice'))}${esc(per)}</small></div></div>
+    <div class="stats strip"><div class="stat"><b>${C.showMilli(C.levelMilli(sup, 'onHand'))}</b><small data-t="inv_onHand"></small></div><div class="stat"><b>${sup.reserved ?? 0}</b><small data-t="reserved"></small></div>
+      <div class="stat"><b>${C.showMilli(C.levelMilli(sup, 'available'))}</b><small data-t="inv_available"></small></div><div class="stat money"><b>${price.perBasis != null ? money(price.perBasis) : '-'}</b><small>${esc(t(price.from === 'wac' ? 'inv_avgPrice' : 'inv_listPrice'))}${esc(per)}</small></div></div>
     <div class="btn-row">${ACTIONS
       .map(([a, ic, word]) => btn({ icon: ic, key: word, data: { cact: a }, tour: 'card.' + a })).join('')}</div>
     ${Object.keys(sup.byStore?.stores || {}).length ? `<p class="mono small">${esc(t('sto_where'))}: ${Object.entries(sup.byStore.stores).map(([k, q]) => `${esc(['kitchen', 'bar', 'freezer'].includes(k) ? t('sto_' + k) : k)} ${q}`).join(' · ')}</p>` : ''}

@@ -121,7 +121,14 @@ impl StockLog {
             signed(ev)?;
         }
         let at = self.len();
-        let (mut trial, costs, _, since) = self.fold_tail(true, book)?;
+        let (mut trial, costs, mut carry, since) = self.fold_tail(true, book)?;
+        // W-QTYHUB H3: a delivery, write-off or count with a fractional `uq`
+        // books its whole units from the carry here, at the one write door.
+        let mut evs = evs.to_vec();
+        for (ev, meta) in evs.iter_mut() {
+            super::carry::book_human(&mut carry, ev, meta);
+        }
+        let evs = evs.as_slice();
         for (ev, _) in evs {
             trial.apply(ev)?;
         }

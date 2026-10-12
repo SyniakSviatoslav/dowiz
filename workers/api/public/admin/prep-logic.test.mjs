@@ -102,3 +102,12 @@ test('TZ1: readLines keeps "0,5" of a piece as "0.5" on the wire, a whole 100 g 
   assert.deepEqual(P.readLines([{ item: 'nori', qty: '0', unit: 'unit' }]), { error: 'pf_qtyBad' });
   assert.equal(P.readYield('1,5 kg', 'g'), 1500, 'the yield stays whole base units');
 });
+
+// W-QTYHUB H2: the hub stores a fractional yield (`yieldUq`), so the editor sends it as text.
+test('H2: a yield of 999,5 g or 2,5 pieces goes as text; the cost per piece divides exactly', () => {
+  assert.equal(P.readYield('999,5', 'g'), '999.5');
+  assert.equal(P.readYield('2,5', 'unit'), '2.5');
+  assert.equal(P.readYield('0,0005', 'g'), null, 'finer than a thousandth');
+  assert.equal(P.costPer(1000, '2.5', 'unit'), 400, '1000 for 2.5 pieces is 400 a piece');
+  assert.equal(P.costPer(1000, 2000, 'g'), 500, 'a whole yield as before: per kg');
+});

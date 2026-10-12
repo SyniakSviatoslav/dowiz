@@ -21,7 +21,7 @@ fn run(ing: &str, rec: &str, preps: bool) -> RecipeDraft {
 }
 
 fn bom(d: &RecipeDraft, pid: &str) -> Vec<(String, i64)> {
-    d.recipes.iter().find(|r| r.product_id == pid).map(|r| r.lines.iter().map(|l| (l.supply.clone(), l.qty)).collect()).unwrap_or_default()
+    d.recipes.iter().find(|r| r.product_id == pid).map(|r| r.lines.iter().map(|l| (l.supply.clone(), l.qty_milli / 1000)).collect()).unwrap_or_default()
 }
 
 const FLAT_ING: &str = "name,unit,cost\nSalmon,kg,1800\nRice,kg,200\nNori,pcs,15\nSoy sauce,l,400\nMayo,g,1\n";
@@ -67,9 +67,11 @@ fn a_prepack_becomes_a_semi_finished_product_the_dish_names() {
 
 #[test]
 fn a_portion_that_would_split_a_gram_is_fine_once_the_sauce_is_real() {
-    // 7 g of the sauce is 5.6 g of mayo: flattening refuses the dish ...
-    let rec = SAUCE.replace("Spicy mayo,15,g", "Spicy mayo,7,g");
+    // 0.007 g of the sauce is 0.0056 g of mayo: flattening refuses the dish ...
+    // (W-QTYHUB H4: 7 g -> 5.6 g is a thousandth-exact line now, so it flattens.)
+    let rec = SAUCE.replace("Spicy mayo,15,g", "Spicy mayo,0.007,g");
     assert!(run(ING, &rec, false).recipes.is_empty());
+    let rec = SAUCE.replace("Spicy mayo,15,g", "Spicy mayo,7,g");
     // ... a real semi-finished product carries it exactly (the ledger's carry, `stock::carry`).
     assert_eq!(bom(&run(ING, &rec, true), "rolls-salmon-roll"), vec![("salmon".into(), 40), ("spicy-mayo".into(), 7), ("rice".into(), 100)]);
 }

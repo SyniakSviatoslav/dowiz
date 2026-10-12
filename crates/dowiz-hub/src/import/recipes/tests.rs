@@ -32,11 +32,17 @@ fn run(ing: &str, rec: &str) -> RecipeDraft {
     from_csv(ing, rec, &opts(&m, &[]))
 }
 
+/// Whole base units of a line that IS whole (every fixture here but one).
+fn whole(m: i64) -> i64 {
+    assert_eq!(m % 1000, 0, "{m} thousandths is not whole");
+    m / 1000
+}
+
 fn bom(d: &RecipeDraft, pid: &str) -> Vec<(String, i64)> {
     d.recipes
         .iter()
         .find(|r| r.product_id == pid)
-        .map(|r| r.lines.iter().map(|l| (l.supply.clone(), l.qty)).collect())
+        .map(|r| r.lines.iter().map(|l| (l.supply.clone(), whole(l.qty_milli))).collect())
         .unwrap_or_default()
 }
 
@@ -65,11 +71,17 @@ fn an_unknown_unit_is_refused() {
 }
 
 #[test]
-fn a_fractional_gram_is_refused_not_rounded() {
-    let d = run(ING, "dish,ingredient,qty,unit\nSalmon roll,Salmon,0.0425,kg\n");
-    assert!(d.recipes.is_empty(), "42.5 g must not become 42 or 43");
+fn a_fractional_gram_is_kept_and_a_finer_one_refused_not_rounded() {
+    // W-QTYHUB H4: 42.5 g is a line now, exactly -- and 1,5 sheets of nori.
+    let d = run(ING, "dish;ingredient;qty;unit\nSalmon roll;Salmon;0,0425;kg\nSalmon roll;Nori;1,5;pcs\n");
+    let lines: Vec<(String, i64)> = d.recipes[0].lines.iter().map(|l| (l.supply.clone(), l.qty_milli)).collect();
+    assert_eq!(lines, vec![("salmon".into(), 42_500), ("nori".into(), 1_500)], "{:?}", d.warnings);
+    assert!(d.as_json().contains(r#"{"supply":"salmon","qty":42.5,"#), "{}", d.as_json());
+    // Finer than a thousandth of a gram is refused, not rounded.
+    let d = run(ING, "dish,ingredient,qty,unit\nSalmon roll,Salmon,0.0425005,kg\n");
+    assert!(d.recipes.is_empty(), "42.5005 g must not become 42.5 or 42.501");
     assert_eq!(d.without_recipe, vec!["rolls-salmon-roll".to_string()]);
-    assert!(d.warnings.iter().any(|w| w.contains("42.5") && w.contains("refused")), "{:?}", d.warnings);
+    assert!(d.warnings.iter().any(|w| w.contains("42.500") && w.contains("refused")), "{:?}", d.warnings);
     // 0.043 kg is 43 g exactly, and is fine.
     let d = run(ING, "dish,ingredient,qty,unit\nSalmon roll,Salmon,0.043,kg\n");
     assert_eq!(bom(&d, "rolls-salmon-roll"), vec![("salmon".into(), 43)]);
@@ -99,7 +111,7 @@ fn gross_is_the_reserved_quantity() {
 fn net_and_yield_survive_on_the_line() {
     let d = run(ING, "dish,ingredient,gross,net,yield,unit\nSalmon roll,Salmon,50,40,38,g\n");
     let l = &d.recipes[0].lines[0];
-    assert_eq!((l.qty, l.net, l.yield_), (50, Some(40), Some(38)));
+    assert_eq!((l.qty_milli, l.net, l.yield_), (50_000, Some(40), Some(38)));
     let j = d.as_json();
     assert!(j.contains(r#"{"supply":"salmon","qty":50,"net":40,"yield":38}"#), "{j}");
 }
@@ -126,10 +138,14 @@ fn a_prepack_is_flattened_and_reported() {
     // The sauce is not a supply and not a dish: nothing reserves "spicy-mayo".
     assert!(d.supplies.iter().all(|s| s.id != "spicy-mayo"));
     assert!(d.recipes.iter().all(|r| r.lines.iter().all(|l| l.supply != "spicy-mayo")));
-    // 10 g of it would be 8 g + 2 g; 7 g would be 5.6 g of mayo: refused.
+    // W-QTYHUB H4: 7 g of it is 5.6 g of mayo and 1.4 g of sriracha -- kept, exactly.
     let d = run(ing, &SAUCE.replace("Spicy mayo,15,g", "Spicy mayo,7,g"));
-    assert!(d.recipes.is_empty());
-    assert!(d.warnings.iter().any(|w| w.contains("mayo") && w.contains("5.6")), "{:?}", d.warnings);
+    let milli: Vec<(String, i64)> = d.recipes[0].lines.iter().map(|l| (l.supply.clone(), l.qty_milli)).collect();
+    assert_eq!(milli, vec![("salmon".into(), 40_000), ("mayo".into(), 5_600), ("sriracha".into(), 1_400), ("rice".into(), 100_000)], "{:?}", d.warnings);
+    // 0.007 g of it would be 0.0056 g of mayo, finer than a thousandth: refused, not rounded.
+    let d = run(ing, &SAUCE.replace("Spicy mayo,15,g", "Spicy mayo,0.007,g"));
+    assert!(d.recipes.is_empty(), "{:?}", d.recipes);
+    assert!(d.warnings.iter().any(|w| w.contains("mayo") && w.contains("0.0056")), "{:?}", d.warnings);
 }
 
 #[test]

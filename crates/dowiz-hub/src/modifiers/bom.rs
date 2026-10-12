@@ -30,7 +30,17 @@ pub const KEY: &str = "optionBom";
 /// Lines per option: an extra is a handful of supplies, not a recipe book.
 pub const LINES_MAX: usize = 8;
 
-/// The recipe of option `option` on the dish, whole units.
+/// A line as the record stores it (W-QTYHUB H5): whole `{"supply","qty"}`,
+/// byte for byte what every option line was, or `{"supply","uq"}` for half
+/// a sheet -- the dish line's own form (CONTRACT-QTY §1).
+pub fn line_json(l: &BomLine) -> Value {
+    match l.uq % crate::prep::MICRO {
+        0 => json!({ "supply": l.supply, "qty": l.uq / crate::prep::MICRO }),
+        _ => json!({ "supply": l.supply, "uq": l.uq }),
+    }
+}
+
+/// The recipe of option `option` on the dish (`uq` exact, `qty` rounded).
 pub fn option_bom(product: &Value, option: &str) -> Vec<BomLine> {
     match product.get(KEY).and_then(|m| m.get(option)) {
         Some(lines) if lines.is_array() => bom_of(&json!({ "bom": lines }).to_string()),
@@ -56,7 +66,10 @@ pub fn option_line(product_id: &str, product_json: &str, chosen: &[String], qty:
     for c in chosen {
         for l in option_bom(&product, c) {
             match lines.iter_mut().find(|x| x.supply == l.supply) {
-                Some(x) => *x = BomLine::whole(x.supply.clone(), x.qty.saturating_add(l.qty)),
+                Some(x) => {
+                    let uq = x.uq.saturating_add(l.uq);
+                    *x = BomLine { supply: x.supply.clone(), qty: (uq + crate::prep::MICRO / 2).div_euclid(crate::prep::MICRO), uq };
+                }
                 None => lines.push(l),
             }
         }
@@ -64,7 +77,7 @@ pub fn option_line(product_id: &str, product_json: &str, chosen: &[String], qty:
     if lines.is_empty() && delta == 0 {
         return None;
     }
-    let bom: Vec<Value> = lines.iter().map(|l| json!({ "supply": l.supply, "qty": l.qty })).collect();
+    let bom: Vec<Value> = lines.iter().map(line_json).collect();
     Some((json!({ "of": product_id, "delta": delta, "bom": bom }).to_string(), qty))
 }
 
@@ -79,7 +92,8 @@ pub fn options_of(product_json: &str) -> Vec<(String, String, String, String)> {
 
 /// Set option `option`'s recipe on the dish record. Refused, nothing
 /// changed: an option the dish does not have, too many lines, a line that is
-/// not a supply and a positive whole quantity, a supply named twice. Empty
+/// not a supply and a positive quantity (`uq`, at most `qty_max` whole
+/// units), a supply named twice. Empty
 /// `lines` clears it.
 pub fn set_option_bom(product: &mut Value, option: &str, lines: &[BomLine], qty_max: i64) -> Result<(), String> {
     let pj = product.to_string();
@@ -90,7 +104,7 @@ pub fn set_option_bom(product: &mut Value, option: &str, lines: &[BomLine], qty_
         return Err(format!("an option takes at most {LINES_MAX} lines"));
     }
     for (i, l) in lines.iter().enumerate() {
-        if l.supply.trim().is_empty() || l.qty <= 0 || l.qty > qty_max {
+        if l.supply.trim().is_empty() || l.uq <= 0 || l.uq > qty_max.saturating_mul(crate::prep::MICRO) {
             return Err("a recipe line is a supply and a positive quantity".into());
         }
         if lines[..i].iter().any(|o| o.supply == l.supply) {
@@ -102,7 +116,7 @@ pub fn set_option_bom(product: &mut Value, option: &str, lines: &[BomLine], qty_
     if lines.is_empty() {
         map.remove(option);
     } else {
-        map.insert(option.to_string(), Value::Array(lines.iter().map(|l| json!({ "supply": l.supply, "qty": l.qty })).collect()));
+        map.insert(option.to_string(), Value::Array(lines.iter().map(line_json).collect()));
     }
     if map.is_empty() {
         obj.remove(KEY);

@@ -1,10 +1,11 @@
 // The ingredients screens' arithmetic, PURE: no DOM, no clock, no network, so
 // every rule here runs in node (`ingredients-calc.test.mjs`).
 //
-// INTEGERS ONLY. Weights are whole grams (or millilitres, or pieces), ratios
-// are per mille, money is minor units -- the hub's own units. A typed "1,5 kg"
-// becomes 1500 g here, and a fraction of a gram is refused rather than
-// rounded behind the owner's back.
+// INTEGERS ONLY. A shelf movement is milli-units (`milli`, thousandths of the
+// base unit: 2.5 pieces is 2500); a weighed board, a ratio per mille and money
+// in minor units stay whole -- the hub's own units. A typed "1,5 kg" becomes
+// 1500 g here, and finer than the precision is refused rather than rounded
+// behind the owner's back.
 //
 // ASCII QUOTES ONLY in this file.
 
@@ -35,17 +36,52 @@ export function amount(raw, unit = 'g'){
   return Number.isSafeInteger(n) ? n : null;
 }
 
-/// WHY `amount(raw, unit)` answered null (W-QTY, TZ 2026-10-12 item 1): the
-/// shelf counts whole base units (`workers/api/src/recipe/qty.rs` whole_opt),
-/// so "2.5" sheets is 'fraction' -- said to the owner, never rounded; a
-/// kg/l on a piece is 'badUnit'; text is 'notANumber'; empty is null.
+/// MILLI-UNITS (W-QTYHUB H3, CONTRACT-QTY §1): "2,5" pieces -> 2500,
+/// "0,75 kg" -> 750000, "1 500" g -> 1500000 -- what a delivery, a write-off
+/// or a count keeps, exactly, as an INTEGER (thousandths of the base unit).
+/// Finer than a thousandth is null (`whyNot` says 'tooFine'). Exact decimal
+/// arithmetic on the digits, never a float. `amount()` above stays whole for
+/// what the shelf weighs whole: a price, a prep's board, a transfer.
+export function milli(raw, unit = 'g'){
+  const s = String(raw ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!s) return null;
+  const m = /^(-?\d+(?:[.,]\d+)?)\s*(kg|g|ml|l)?$/.exec(s.replace(/(\d) (?=\d{3}\b)/g, '$1'));
+  if (!m) return null;
+  if (m[2] && unit === 'unit') return null;
+  const scale = BigInt(m[2] ? UNIT_SCALE[m[2]] : 1) * 1000n;
+  const [whole, frac = ''] = m[1].replace(',', '.').split('.');
+  const digits = BigInt(whole + frac) * scale;
+  const div = 10n ** BigInt(frac.length);
+  if (digits % div !== 0n) return null;
+  const n = Number(digits / div);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/// Milli-units as the wire and the screen write them: 2500 -> "2.5",
+/// 1500000 -> "1500" (CONTRACT-QTY §1: send the TEXT, the Worker reads it).
+export function showMilli(m){
+  const neg = m < 0, a = Math.abs(Math.trunc(m));
+  const w = Math.trunc(a / 1000), f = a % 1000;
+  return (neg ? '-' : '') + String(w) + (f ? '.' + String(f).padStart(3, '0').replace(/0+$/, '') : '');
+}
+
+/// A supply's exact level in milli-units: the Stock answer's `<key>Milli`
+/// when it has one (`onHandMilli`, `availableMilli`), else the whole `<key>`.
+export function levelMilli(sup, key){
+  const m = sup?.[key + 'Milli'];
+  return Number.isSafeInteger(m) ? m : (Number(sup?.[key]) || 0) * 1000;
+}
+
+/// WHY `milli(raw, unit)` answered null: finer than a thousandth of the base
+/// unit is 'tooFine'; a kg/l on a piece is 'badUnit'; text is 'notANumber';
+/// empty is null. A fraction of a piece is a quantity (W-QTYHUB H3).
 export function whyNot(raw, unit = 'g'){
   const s = String(raw ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
   if (!s) return null;
   const m = /^(-?\d+(?:[.,]\d+)?)\s*(kg|g|ml|l)?$/.exec(s.replace(/(\d) (?=\d{3}\b)/g, '$1'));
   if (!m) return 'notANumber';
   if (m[2] && unit === 'unit') return 'badUnit';
-  return amount(raw, unit) == null ? 'fraction' : null;
+  return milli(raw, unit) == null ? 'tooFine' : null;
 }
 
 /// A typed percent as per mille: "55" -> 550, "55,5" -> 555, "220" -> 2200.

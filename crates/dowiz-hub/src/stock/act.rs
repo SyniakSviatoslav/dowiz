@@ -57,9 +57,11 @@ fn refused(why: impl std::fmt::Display) -> StockError {
 
 /// Grams of the card's lines at `planned / yield` (g and ml are grams, a
 /// piece its `weightPerUnit`), rounded once; 0 when a piece has no weight.
-fn gross_grams(lines: &[(String, i64)], planned: Qty, yield_qty: Qty, supply: &dyn Fn(&str) -> Option<String>) -> Qty {
+/// `lines` and `yield_uq` in millionths (W-QTYHUB H2); grams are a display
+/// figure (the loss on cooking), never a booked quantity.
+fn gross_grams(lines: &[(String, i64)], planned: Qty, yield_uq: i64, supply: &dyn Fn(&str) -> Option<String>) -> Qty {
     let mut g = 0.0;
-    for (item, qty) in lines {
+    for (item, uq) in lines {
         let v: Value = supply(item).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(Value::Null);
         let per = match v.get("unit").and_then(Value::as_str).unwrap_or("g") {
             "unit" => match v.get("weightPerUnit").and_then(Value::as_f64).filter(|w| *w > 0.0) {
@@ -68,9 +70,9 @@ fn gross_grams(lines: &[(String, i64)], planned: Qty, yield_qty: Qty, supply: &d
             },
             _ => 1.0,
         };
-        g += per * *qty as f64;
+        g += per * *uq as f64;
     }
-    (g * planned as f64 / yield_qty as f64).round() as Qty
+    (g * planned as f64 / yield_uq as f64).round() as Qty
 }
 
 impl StockLog {
@@ -82,10 +84,10 @@ impl StockLog {
         if a.planned <= 0 || a.out <= 0 || a.planned > crate::prep::QTY_MAX || a.out > crate::prep::QTY_MAX {
             return Err(StockError::NotPositive { qty: a.planned.min(a.out) });
         }
-        let lines: Vec<(String, i64)> = card.lines.iter().map(|l| (l.item.clone(), l.qty)).collect();
+        let lines: Vec<(String, i64)> = card.lines.iter().map(|l| (l.item.clone(), l.uq)).collect();
         let (led, book, carry, _) = self.fold_tail(true, true)?;
         let roots: Vec<(String, Rat)> =
-            lines.iter().map(|(i, q)| (i.clone(), Rat::new(i128::from(*q) * i128::from(a.planned), i128::from(card.yield_qty)))).collect();
+            lines.iter().map(|(i, u)| (i.clone(), Rat::new(i128::from(*u) * i128::from(a.planned), i128::from(card.yield_uq)))).collect();
         let cards = |id: &str| card_from(supply, id);
         let quiet = |id: &str| supply(id).is_some_and(|j| untracked(&j));
         // The product being made is never taken from its own shelf.
@@ -106,7 +108,7 @@ impl StockLog {
         }
         let m2 = i128::from(MICRO) * i128::from(MICRO);
         let value = sum.and_then(|s| i64::try_from((s + m2 / 2) / m2).ok());
-        let gross = gross_grams(&lines, a.planned, card.yield_qty, supply);
+        let gross = gross_grams(&lines, a.planned, card.yield_uq, supply);
         let made = StockEvent::Made { item: a.prep.clone(), qty: a.out, planned: a.planned, gross, act: a.act.clone(), by: a.by.clone() };
         evs.push((made, Meta { value, lot: a.lot.clone(), expiry: a.expiry, ..Meta::default() }));
         self.commit(&evs, false)?;

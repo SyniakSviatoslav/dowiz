@@ -36,27 +36,28 @@ pub fn round_micro(v: i128) -> i64 {
     i64::try_from((v + m / 2).div_euclid(m)).unwrap_or(i64::MAX)
 }
 
-/// A dish's recipe lines `(supply, qty)`; empty without one.
+/// A dish's recipe lines `(supply, uq)` in millionths (W-QTYHUB H1); empty without one.
 fn bom(cat: &Catalog, dish: &str) -> Vec<(String, i64)> {
-    cat.product(dish).map(|j| dowiz_hub::stock::bom_of(&j).into_iter().map(|l| (l.supply, l.qty)).collect()).unwrap_or_default()
+    cat.product(dish).map(|j| dowiz_hub::stock::bom_of(&j).into_iter().map(|l| (l.supply, l.uq)).collect()).unwrap_or_default()
 }
 
 pub fn needs(portions: &BTreeMap<String, i64>, cat: &Catalog) -> Needs {
     let supply = |s: &str| cat.supply(s);
     let mut n = Needs::default();
     let mut raw: BTreeMap<String, i128> = BTreeMap::new();
+    let mut preps: BTreeMap<String, i128> = BTreeMap::new();
     for (dish, q) in portions.iter().filter(|(_, q)| **q > 0) {
         let lines = bom(cat, dish);
         if lines.is_empty() {
             n.unmodelled.push(dish.clone());
             continue;
         }
-        for (s, qty) in &lines {
+        for (s, uq) in &lines {
             if supply(s).is_some_and(|j| prep::is_prep(&j)) {
-                *n.preps.entry(s.clone()).or_default() += qty * q;
+                *preps.entry(s.clone()).or_default() += i128::from(*uq) * i128::from(*q);
             }
         }
-        match prep::expand(&lines, &supply) {
+        match prep::expand_micro(&lines, &supply) {
             Ok(leaves) => {
                 for l in leaves {
                     *raw.entry(l.item).or_default() += i128::from(l.uq) * i128::from(*q);
@@ -66,6 +67,7 @@ pub fn needs(portions: &BTreeMap<String, i64>, cat: &Catalog) -> Needs {
         }
     }
     n.raw = raw.into_iter().map(|(k, v)| (k, round_micro(v))).collect();
+    n.preps = preps.into_iter().map(|(k, v)| (k, round_micro(v))).collect();
     n
 }
 

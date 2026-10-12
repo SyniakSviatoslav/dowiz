@@ -26,7 +26,7 @@ fn catalogue() -> Catalog {
 }
 
 fn save_prep(cat: &mut Catalog, id: &str, lines: &[(&str, i64)], yield_qty: i64) {
-    let body = PrepIn { id: id.into(), lines: lines.iter().map(|(i, q)| LineIn { item: i.to_string(), qty: *q }).collect(), yield_qty, ..PrepIn::default() };
+    let body = PrepIn { id: id.into(), lines: lines.iter().map(|(i, q)| LineIn { item: i.to_string(), qty: (*q).into() }).collect(), yield_qty: yield_qty.into(), ..PrepIn::default() };
     let (id, card) = preps::check(&body).unwrap();
     preps::save(cat, &id, &body, &card).unwrap();
 }
@@ -96,7 +96,7 @@ fn a_raw_item_whose_deletion_would_empty_a_card_waits_for_the_card() {
 fn rename_retire_and_edit_then_delete() {
     let mut cat = catalogue();
     // Rename (a save with a new name) keeps the id; the roll follows.
-    let body = PrepIn { id: "mitsukan".into(), name: Some("Mitsukan 2".into()), lines: vec![LineIn { item: "vinegar".into(), qty: 8000 }, LineIn { item: "salt".into(), qty: 50 }], yield_qty: 850, ..PrepIn::default() };
+    let body = PrepIn { id: "mitsukan".into(), name: Some("Mitsukan 2".into()), lines: vec![LineIn { item: "vinegar".into(), qty: 8000.into() }, LineIn { item: "salt".into(), qty: 50.into() }], yield_qty: 850.into(), ..PrepIn::default() };
     let (id, card) = preps::check(&body).unwrap();
     let (_, dishes) = preps::save(&mut cat, &id, &body, &card).unwrap();
     assert_eq!(dishes, vec!["roll".to_string()], "an edited card re-derives the dish through two cards");

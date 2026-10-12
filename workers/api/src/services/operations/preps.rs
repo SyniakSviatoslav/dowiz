@@ -37,9 +37,9 @@ pub mod rederive;
 #[serde(deny_unknown_fields)]
 pub struct LineIn {
     pub item: String,
-    /// Read from its text (`recipe::qty`); whole for now (`qty::whole_card`, H2).
-    #[serde(deserialize_with = "crate::recipe::qty::whole_card")]
-    pub qty: i64,
+    /// Read from its text (`recipe::qty`): `0.5`, `"0,5"`, `40` -- half a
+    /// gram of saffron is a line (W-QTYHUB H2; stored `{"item","uq"}`).
+    pub qty: crate::recipe::Qty,
 }
 
 /// A ПФ as the console sends it.
@@ -57,8 +57,8 @@ pub struct PrepIn {
     #[serde(default)]
     pub lines: Vec<LineIn>,
     /// The batch's net output, in `unit`.
-    #[serde(rename = "yield", deserialize_with = "crate::recipe::qty::whole_card")]
-    pub yield_qty: i64,
+    #[serde(rename = "yield")]
+    pub yield_qty: crate::recipe::Qty,
     /// Grams per piece, for a ПФ counted in pieces.
     #[serde(default)]
     pub weight_per_unit: Option<f64>,
@@ -83,8 +83,8 @@ pub fn check(body: &PrepIn) -> std::result::Result<(String, Card), String> {
     if body.weight_per_unit.is_some_and(|w| !w.is_finite() || w < 0.0) {
         return Err("weight cannot be negative".into());
     }
-    let lines = body.lines.iter().map(|l| Line { item: l.item.trim().to_string(), qty: l.qty }).collect();
-    Ok((id, Card { lines, yield_qty: body.yield_qty }))
+    let lines = body.lines.iter().map(|l| Line { item: l.item.trim().to_string(), uq: l.qty.uq() }).collect();
+    Ok((id, Card { lines, yield_uq: body.yield_qty.uq() }))
 }
 
 /// The stored record: the card, the words, and what was there for the rest.
@@ -254,9 +254,10 @@ pub async fn uses(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
 pub fn takes(cat: &Catalog, product_json: &str) -> Value {
     let supply = |s: &str| cat.supply(s);
     let bom = dowiz_hub::stock::bom_of(product_json);
-    let lines: Vec<(String, i64)> = bom.iter().map(|l| (l.supply.clone(), l.qty)).collect();
+    // EXACT (W-QTYHUB H1): the lines' millionths, so half a sheet is half a sheet.
+    let lines: Vec<(String, i64)> = bom.iter().map(|l| (l.supply.clone(), l.uq)).collect();
     let price = |s: &str| supply(s).and_then(|j| crate::recipe::prep::price_micro(&j));
-    match prep::expand(&lines, &supply) {
+    match prep::expand_micro(&lines, &supply) {
         Ok(leaves) => {
             let rows: Vec<Value> = leaves
                 .iter()
@@ -269,7 +270,7 @@ pub fn takes(cat: &Catalog, product_json: &str) -> Value {
                         "uq": l.uq, "qty": format!("{}.{:03}", milli / 1000, milli % 1000), "cost": cost.map(|c| json!(c as i64)).unwrap_or(Value::Null) })
                 })
                 .collect();
-            let total = prep::cost_micro(&lines, &supply, &price).ok().flatten().map(|m| (i128::from(m) + i128::from(prep::MICRO) / 2) / i128::from(prep::MICRO));
+            let total = prep::cost_micro_uq(&lines, &supply, &price).ok().flatten().map(|m| (i128::from(m) + i128::from(prep::MICRO) / 2) / i128::from(prep::MICRO));
             json!({ "leaves": rows, "cost": total.map(|c| json!(c as i64)).unwrap_or(Value::Null), "lines": bom.len() })
         }
         Err(why) => json!({ "leaves": [], "cost": Value::Null, "lines": bom.len(), "refused": why.to_string() }),

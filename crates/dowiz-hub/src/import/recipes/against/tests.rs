@@ -129,7 +129,7 @@ fn recipes_match_dish_and_supply_by_normalised_name() {
     let rec = "dish,ingredient,qty,unit\nmaki  SALMON,oriz sushi,90,g\nMaki Salmon,NORI,2,g\nMaki Salmon,Salmon,35,g\nMaki Salmon,Kuti,1,unit\n";
     let d = recipes_against(rec, &opts(&m), &catalogue());
     assert!(d.warnings.is_empty(), "{:?}", d.warnings);
-    let lines: Vec<(&str, i64)> = d.recipes[0].lines.iter().map(|l| (l.supply.as_str(), l.qty)).collect();
+    let lines: Vec<(&str, i64)> = d.recipes[0].lines.iter().map(|l| (l.supply.as_str(), l.qty_milli / 1000)).collect();
     assert_eq!(d.recipes[0].product_id, "maki-salmon");
     assert_eq!(lines, vec![("oriz-sushi", 90), ("nori", 2), ("salmon", 35), ("kuti", 1)]);
     // This step changes no supply and retires none.

@@ -140,7 +140,7 @@ fn a_weighed_line_is_stored_and_the_dish_weighs_its_out() {
 /// (half a sheet as one), so it is refused by name, never rounded. Its
 /// twins: the same fraction with no ПФ beside it, and a whole line beside a ПФ.
 #[test]
-fn a_fractional_raw_line_beside_a_semi_finished_line_is_refused_by_name() {
+fn a_fractional_raw_line_beside_a_semi_finished_line_is_stored_exactly() {
     let look = |id: &str| match id {
         "pf" => Some(json!({ "id": "pf", "name": "PF", "unit": "g", "kind": "prep", "card": { "lines": [{ "item": "rice", "qty": 100 }], "yield": 100 } }).to_string()),
         "nori" => Some(json!({ "name": "Nori", "unit": "unit", "kind": "food_ingredient", "costPerBasis": 30 }).to_string()),
@@ -149,9 +149,9 @@ fn a_fractional_raw_line_beside_a_semi_finished_line_is_refused_by_name() {
     let half = BomLineIn { supply: "nori".into(), qty: crate::recipe::Qty::milli(500), net: None, out: None };
     let pf = BomLineIn { supply: "pf".into(), qty: 50.into(), net: None, out: None };
     let mut p = dish();
-    let err = set_bom(&mut p, &[pf.clone(), half.clone()], look, Typed::default()).unwrap_err();
-    assert_eq!(err, "nori: a fractional line beside a semi-finished line books whole until the hub expands it exactly");
-    assert!(p.get("bom").is_none(), "nothing written");
+    // W-QTYHUB H1: the hub expands `uq` now (`prep::for_ledger`), so the mix is a recipe.
+    set_bom(&mut p, &[pf.clone(), half.clone()], look, Typed::default()).unwrap();
+    assert!(p["bom"].as_array().unwrap().contains(&json!({ "supply": "nori", "uq": 500_000 })), "{}", p["bom"]);
     set_bom(&mut p, &[half.clone(), line("rice", 90)], look, Typed::default()).unwrap();
     assert_eq!(p["bom"], json!([{ "supply": "nori", "uq": 500_000 }, { "supply": "rice", "qty": 90 }]));
     assert_eq!(p["cost"], json!(15 + 34), "half a sheet at 30, 90 g rice at 38/100");

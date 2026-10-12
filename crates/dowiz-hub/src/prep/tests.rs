@@ -89,24 +89,24 @@ fn a_cycle_is_refused_with_its_path_and_a_tree_without_one_passes() {
     let mut k = kitchen();
     k.push(("a".into(), r#"{"id":"a","kind":"prep","card":{"lines":[{"item":"b","qty":1}],"yield":1}}"#.into()));
     k.push(("b".into(), r#"{"id":"b","kind":"prep","card":{"lines":[{"item":"salt","qty":1}],"yield":1}}"#.into()));
-    let good = Card { lines: vec![Line { item: "a".into(), qty: 1 }], yield_qty: 1 };
+    let good = Card { lines: vec![Line::whole("a", 1)], yield_uq: (1) * MICRO };
     assert_eq!(check_card("c", &good, &k), Ok(()), "c -> a -> b -> salt");
     // b -> a would close a -> b -> a.
-    let back = Card { lines: vec![Line { item: "a".into(), qty: 1 }], yield_qty: 1 };
+    let back = Card { lines: vec![Line::whole("a", 1)], yield_uq: (1) * MICRO };
     match check_card("b", &back, &k) {
         Err(Refusal::Tree(tree::Stop::Cycle(path))) => assert_eq!(path, vec!["b", "a", "b"]),
         other => panic!("{other:?}"),
     }
-    let me = Card { lines: vec![Line { item: "a".into(), qty: 1 }], yield_qty: 1 };
+    let me = Card { lines: vec![Line::whole("a", 1)], yield_uq: (1) * MICRO };
     assert_eq!(check_card("a", &me, &k), Err(Refusal::Itself), "a -> a");
-    let unknown = Card { lines: vec![Line { item: "ghost".into(), qty: 1 }], yield_qty: 1 };
+    let unknown = Card { lines: vec![Line::whole("ghost", 1)], yield_uq: (1) * MICRO };
     assert_eq!(check_card("c", &unknown, &k), Err(Refusal::Unknown("ghost".into())));
-    let twice = Card { lines: vec![Line { item: "salt".into(), qty: 1 }, Line { item: "salt".into(), qty: 2 }], yield_qty: 1 };
+    let twice = Card { lines: vec![Line::whole("salt", 1), Line::whole("salt", 2)], yield_uq: (1) * MICRO };
     assert_eq!(check_card("c", &twice, &k), Err(Refusal::Twice("salt".into())));
-    assert_eq!(check_card("c", &Card { lines: vec![], yield_qty: 1 }, &k), Err(Refusal::Lines));
-    let zero = Card { lines: vec![Line { item: "salt".into(), qty: 0 }], yield_qty: 1 };
+    assert_eq!(check_card("c", &Card { lines: vec![], yield_uq: (1) * MICRO }, &k), Err(Refusal::Lines));
+    let zero = Card { lines: vec![Line::whole("salt", 0)], yield_uq: (1) * MICRO };
     assert!(matches!(check_card("c", &zero, &k), Err(Refusal::Bound(_))));
-    let big = Card { lines: vec![Line { item: "salt".into(), qty: 1 }], yield_qty: QTY_MAX + 1 };
+    let big = Card { lines: vec![Line::whole("salt", 1)], yield_uq: (QTY_MAX + 1) * MICRO };
     assert!(matches!(check_card("c", &big, &k), Err(Refusal::Bound(_))));
 }
 
@@ -120,12 +120,12 @@ fn the_depth_cap_counts_the_chain_above_and_below() {
     }
     assert_eq!(expand(&[("p1".into(), 1)], &lookup(&k)).unwrap()[0].item, "salt", "six levels expand");
     // A seventh on top is refused; so is one squeezed in below p6.
-    let top = Card { lines: vec![Line { item: "p1".into(), qty: 1 }], yield_qty: 1 };
+    let top = Card { lines: vec![Line::whole("p1", 1)], yield_uq: (1) * MICRO };
     assert!(matches!(check_card("p0", &top, &k), Err(Refusal::Tree(tree::Stop::TooDeep(_)))), "above");
-    let bottom = Card { lines: vec![Line { item: "salt".into(), qty: 1 }], yield_qty: 1 };
+    let bottom = Card { lines: vec![Line::whole("salt", 1)], yield_uq: (1) * MICRO };
     assert_eq!(check_card("p7", &bottom, &k), Ok(()), "a new leaf card alone is fine");
     k.push(("p7".into(), r#"{"id":"p7","kind":"prep","card":{"lines":[{"item":"salt","qty":1}],"yield":1}}"#.into()));
-    let p6 = Card { lines: vec![Line { item: "p7".into(), qty: 1 }], yield_qty: 1 };
+    let p6 = Card { lines: vec![Line::whole("p7", 1)], yield_uq: (1) * MICRO };
     assert!(matches!(check_card("p6", &p6, &k), Err(Refusal::Tree(tree::Stop::TooDeep(_)))), "p6 under five cards cannot take a card below");
 }
 
@@ -146,21 +146,21 @@ fn where_used_is_transitive_and_k_is_derived() {
     // An egg without a weight: K unknown, never a refusal.
     let mut k2 = k.clone();
     k2.push(("egg".into(), r#"{"id":"egg","unit":"unit","kind":"food_ingredient"}"#.into()));
-    let sauce = Card { lines: vec![Line { item: "egg".into(), qty: 2 }, Line { item: "vinegar".into(), qty: 10 }], yield_qty: 100 };
+    let sauce = Card { lines: vec![Line::whole("egg", 2), Line::whole("vinegar", 10)], yield_uq: (100) * MICRO };
     assert_eq!(k_pm(&sauce, "g", None, &lookup(&k2)), None);
     assert_eq!(check_card("sauce", &sauce, &k2), Ok(()));
     k2.push(("egg-w".into(), r#"{"id":"egg-w","unit":"unit","kind":"food_ingredient","weightPerUnit":55}"#.into()));
-    let sauce = Card { lines: vec![Line { item: "egg-w".into(), qty: 2 }, Line { item: "vinegar".into(), qty: 10 }], yield_qty: 100 };
+    let sauce = Card { lines: vec![Line::whole("egg-w", 2), Line::whole("vinegar", 10)], yield_uq: (100) * MICRO };
     assert_eq!(k_pm(&sauce, "g", None, &lookup(&k2)), Some(833), "100 / (110 + 10)");
 }
 
 #[test]
 fn the_card_round_trips_and_a_raw_record_has_none() {
-    let c = Card { lines: vec![Line { item: "salt".into(), qty: 50 }], yield_qty: 1000 };
+    let c = Card { lines: vec![Line::whole("salt", 50)], yield_uq: (1000) * MICRO };
     let rec = format!(r#"{{"id":"m","kind":"prep","card":{}}}"#, card_json(&c));
     assert_eq!(card_of(&rec), Some(c));
     // The catalogue spends a cell per byte: the fixed part, and Mitsukan whole.
-    assert_eq!(card_json(&Card { lines: vec![], yield_qty: 1 }).to_string().len(), 22, "the card's fixed cost in bytes");
+    assert_eq!(card_json(&Card { lines: vec![], yield_uq: (1) * MICRO }).to_string().len(), 22, "the card's fixed cost in bytes");
     let mitsukan = card_of(&kitchen().iter().find(|(i, _)| i == "mitsukan").unwrap().1).unwrap();
     assert_eq!(format!(r#""card":{}"#, card_json(&mitsukan)).len(), 112, "three lines and a yield");
     assert_eq!(card_of(r#"{"id":"salt","kind":"food_ingredient","card":{"lines":[],"yield":1}}"#), None, "a raw record's stray card is not one");

@@ -185,10 +185,7 @@ pub fn portion(roots: &[(String, Rat)], w: &World, shelf: &Shelf) -> Result<BTre
 /// The world a catalogue answers: cards from its supplies, unknown ids refused.
 pub fn card_from(supply: &dyn Fn(&str) -> Option<String>, id: &str) -> Result<Option<Card>, Refusal> {
     let j = supply(id).ok_or_else(|| Refusal::Unknown(id.to_string()))?;
-    Ok(card_of(&j).map(|c| Card {
-        lines: c.lines.iter().map(|l| super::tree::Edge { item: l.item.clone(), qty: Rat::new(i128::from(l.qty), 1) }).collect(),
-        batch: Rat::new(i128::from(c.yield_qty), 1),
-    }))
+    Ok(card_of(&j).map(|c| super::node(&c)))
 }
 
 /// What a sale must carry for the shelf to be asked (`stock::basket`): the
@@ -217,7 +214,14 @@ pub fn tree_json(supply: &dyn Fn(&str) -> Option<String>, lines: &[(String, i64)
     if cards.is_empty() {
         return None;
     }
-    let lines: Vec<Value> = lines.iter().map(|(s, q)| json!({ "supply": s, "qty": q })).collect();
+    // `lines` are `(supply, uq)` (W-QTYHUB H1): a whole line keeps `qty`, a fraction carries `uq`.
+    let lines: Vec<Value> = lines
+        .iter()
+        .map(|(s, u)| match u % MICRO {
+            0 => json!({ "supply": s, "qty": u / MICRO }),
+            _ => json!({ "supply": s, "uq": u }),
+        })
+        .collect();
     Some(json!({ "lines": lines, "cards": cards, "untracked": quiet }))
 }
 

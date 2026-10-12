@@ -45,22 +45,6 @@ pub(crate) fn clear_derived(p: &mut Value) {
     p["nutritionComplete"] = Value::Null;
 }
 
-/// HAND-BACK H1 (`/root/lanes/CONTRACT-QTY.md` §5): the hub's
-/// `prep::for_ledger` expands a dish with a semi-finished line from WHOLE
-/// quantities, so a fractional raw line beside one would be booked rounded
-/// -- half a sheet of nori as a whole one. Refused by name until the hub
-/// expands `uq`; main deletes this function with that patch.
-pub fn mixed_fraction_guard(snap: &[Line]) -> Result<(), String> {
-    let has_prep = snap.iter().any(|l| l.kind == dowiz_hub::prep::KIND);
-    match snap.iter().find(|l| !l.qty.is_whole()) {
-        Some(frac) if has_prep => Err(format!(
-            "{}: a fractional line beside a semi-finished line books whole until the hub expands it exactly",
-            frac.supply
-        )),
-        _ => Ok(()),
-    }
-}
-
 /// THE REVIEW FLAG (contract §2): set by a supply's deletion, cleared by the
 /// next recipe write -- any `bom` the editor sends is the owner's review.
 pub(crate) fn clear_review(p: &mut Value) {
@@ -112,7 +96,6 @@ pub fn set_bom(
         weights::check(l.net, l.out, line.w.gross).map_err(|e| format!("{}: {e}", l.supply))?;
         snap.push(line);
     }
-    mixed_fraction_guard(&snap)?;
     clear_review(p);
     if snap.is_empty() {
         clear_derived(p);

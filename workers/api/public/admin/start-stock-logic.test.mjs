@@ -50,12 +50,14 @@ test('skeletons: grams EMPTY, a dish with a recipe untouched, the rest unmatched
   assert.equal(L.ready({ lines: [] }), false);
 });
 
-test('amounts: whole base units, the unit checked', () => {
-  assert.equal(L.amount('40', 'g'), 40);
-  assert.equal(L.amount('1,5 kg', 'g'), 1500);
-  assert.equal(L.amount('0,5 l', 'ml'), 500);
-  assert.equal(L.amount('2', 'unit'), 2);
-  for (const bad of ['', '0', '-3', '2.5', 'abc', '1 kg']) assert.equal(L.amount(bad, bad === '1 kg' ? 'ml' : 'g'), null, bad);
+test('amounts: thousandths of the base unit, exact, the unit checked (W-QTYHUB)', () => {
+  assert.equal(L.milli('40', 'g'), 40000);
+  assert.equal(L.milli('1,5 kg', 'g'), 1500000);
+  assert.equal(L.milli('0,5 l', 'ml'), 500000);
+  assert.equal(L.milli('2', 'unit'), 2000);
+  assert.equal(L.milli('2,5', 'unit'), 2500, 'half a sheet is a quantity');
+  assert.equal(L.milli('0.5', 'g'), 500, 'half a gram of spice');
+  for (const bad of ['', '0', '-3', '0.0005', 'abc', '1 kg']) assert.equal(L.milli(bad, bad === '1 kg' ? 'ml' : 'g'), null, bad);
 });
 
 test('the supplies file: stable ids, names in the language, defaults in the extra columns', () => {
@@ -71,10 +73,10 @@ test('the supplies file: stable ids, names in the language, defaults in the extr
 
 test('the recipes file: ready dishes only, the quantity with its unit', () => {
   const drafts = [
-    { id: 'd1', lines: [{ supply: 'pack-salmon', qty: 40 }, { supply: 'pack-nori', qty: 1 }] },
+    { id: 'd1', lines: [{ supply: 'pack-salmon', qty: 40000 }, { supply: 'pack-nori', qty: 1500 }] },
     { id: 'd2', lines: [{ supply: 'pack-salmon', qty: null }] },
   ];
-  assert.equal(L.recipesCsv(drafts), 'dish,ingredient,qty\nd1,pack-salmon,40 g\nd1,pack-nori,1 unit\n');
+  assert.equal(L.recipesCsv(drafts), 'dish,ingredient,qty\nd1,pack-salmon,40 g\nd1,pack-nori,1.5 unit\n');
 });
 
 test('what the venue has already is not offered again', () => {

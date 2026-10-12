@@ -3,7 +3,7 @@
 //! millionths of a minor unit per base unit: the catalogue's list price for
 //! the owner's screens, the ledger's weighted average for a sale's stamp.
 
-use super::{leaves_exact, tree::Stop, untracked, Refusal};
+use super::{edges_micro, leaves_exact, leaves_of_edges, tree::Stop, untracked, Refusal};
 use crate::import::recipes::num::Rat;
 
 /// The cost of ONE base unit of `lines`' root, in millionths of a minor unit
@@ -15,7 +15,24 @@ pub fn cost_micro(
     supply: &dyn Fn(&str) -> Option<String>,
     price_micro: &dyn Fn(&str) -> Option<i128>,
 ) -> Result<Option<i64>, Refusal> {
-    let walked = leaves_exact("cost", lines, supply)?;
+    priced(leaves_exact("cost", lines, supply)?, supply, price_micro)
+}
+
+/// [`cost_micro`] for `(item, uq)` lines in millionths (W-QTYHUB H1): what a
+/// dish with half a sheet of nori costs, through every card, exactly.
+pub fn cost_micro_uq(
+    lines: &[(String, i64)],
+    supply: &dyn Fn(&str) -> Option<String>,
+    price_micro: &dyn Fn(&str) -> Option<i128>,
+) -> Result<Option<i64>, Refusal> {
+    priced(leaves_of_edges("cost", &edges_micro(lines), supply)?, supply, price_micro)
+}
+
+fn priced(
+    walked: super::tree::Walked,
+    supply: &dyn Fn(&str) -> Option<String>,
+    price_micro: &dyn Fn(&str) -> Option<i128>,
+) -> Result<Option<i64>, Refusal> {
     let mut sum = Rat::new(0, 1);
     for l in &walked.leaves {
         let p = match price_micro(&l.item) {

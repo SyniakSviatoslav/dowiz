@@ -24,8 +24,8 @@ pub(crate) fn prep_in(p: &DraftPrep) -> PrepIn {
         id: p.id.clone(),
         name: Some(p.name.clone()),
         unit: Some(p.unit.to_string()),
-        lines: p.lines.iter().map(|(item, qty)| LineIn { item: item.clone(), qty: *qty }).collect(),
-        yield_qty: p.yield_qty,
+        lines: p.lines.iter().map(|(item, qty)| LineIn { item: item.clone(), qty: (*qty).into() }).collect(),
+        yield_qty: p.yield_qty.into(),
         ..PrepIn::default()
     }
 }

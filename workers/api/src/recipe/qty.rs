@@ -194,11 +194,10 @@ impl fmt::Display for Qty {
     }
 }
 
-/// THE SHELF COUNTS WHOLE BASE UNITS (`dowiz_hub::stock::Qty`; hand-back H3
-/// of the contract): a stock movement's quantity is read as a decimal and
-/// must come out whole -- `"1500"`, `"1500.000"` -- or it is refused by
-/// name, never rounded behind the owner's back. `1,5 kg` is the screen's to
-/// turn into `1500` before sending.
+/// A QUANTITY THE SHELF WEIGHS WHOLE (a prep's output, `out`): read as a
+/// decimal that must come out whole -- `"1500"`, `"1500.000"` -- or refused
+/// by name, never rounded behind the owner's back. A delivery, a write-off
+/// and a count keep their fraction since W-QTYHUB H3 (`Qty` + `uq`).
 pub fn whole_opt<'de, D: Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {
     match Option::<Qty>::deserialize(d)? {
         None => Ok(None),
@@ -206,22 +205,6 @@ pub fn whole_opt<'de, D: Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Erro
             de::Error::custom(format!("{}: the shelf counts whole units of the base measure (g, ml, piece); type 1,5 kg as 1500", q.show()))
         }),
     }
-}
-
-/// [`whole_opt`] for a required field.
-pub fn whole<'de, D: Deserializer<'de>>(d: D) -> Result<i64, D::Error> {
-    let q = Qty::deserialize(d)?;
-    q.as_whole().ok_or_else(|| de::Error::custom(format!("{}: the shelf counts whole units of the base measure (g, ml, piece); type 1,5 kg as 1500", q.show())))
-}
-
-/// HAND-BACK H2 (`/root/lanes/CONTRACT-QTY.md` §5): the hub's `prep::card_of`
-/// reads a card line's `qty` and the `yield` as integers, so a fraction on a
-/// semi-finished card has no stored form yet. Read as a decimal and refused
-/// by name when it is not whole, never rounded; main replaces this with
-/// `Qty` once the hub reads `uq` on a card line.
-pub fn whole_card<'de, D: Deserializer<'de>>(d: D) -> Result<i64, D::Error> {
-    let q = Qty::deserialize(d)?;
-    q.as_whole().ok_or_else(|| de::Error::custom(format!("{}: a semi-finished card counts whole base units for now", q.show())))
 }
 
 #[cfg(test)]

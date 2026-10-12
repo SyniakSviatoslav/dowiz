@@ -141,7 +141,7 @@ export function openMove(sup, first, ctx){
   if (!sup) return;
   const sups = ctx.data?.suppliers || [];
   sheet(`<p class="eyebrow" data-t="move"></p><h2>${esc(sup.name || sup.id)}</h2><p class="sheet-hint" data-t="ap_h_move"></p>
-    <p class="mono muted">${esc(t('inv_onHand'))} ${sup.onHand ?? 0} · ${esc(t('inv_available'))} ${sup.available ?? 0} ${esc(sup.unit || '')}</p>
+    <p class="mono muted">${esc(t('inv_onHand'))} ${C.showMilli(C.levelMilli(sup, 'onHand'))} · ${esc(t('inv_available'))} ${C.showMilli(C.levelMilli(sup, 'available'))} ${esc(sup.unit || '')}</p>
     <div class="chips" id="kind" role="group">${MOVES.map(([k, word, ic]) => ui.chip({ as: 'button', selected: k === first, icon: ic, label: key(word), attrs: { data: { k, tour: 'stock.' + k } } })).join('')}</div>
     <div class="inv-big">${field({ id: 'm-qty', key: 'inv_qty', hintKey: 'inv_qtyHint', inputmode: 'decimal', autocomplete: 'off', tour: 'move.qty' })}</div>
     ${packChips(sup)}
@@ -171,10 +171,11 @@ export function openMove(sup, first, ctx){
   // W-NOM: one tap adds one pack to the quantity ("2 boxes" is two taps).
   for (const b of $$('[data-pack]', $('#sheetIn'))) b.onclick = () => { $('#m-qty').value = String(N.plusPack($('#m-qty').value, { qty: Number(b.dataset.pack) }, sup.unit)); };
   $('#mGo').onclick = async () => {
-    const qty = C.amount($('#m-qty').value, sup.unit);
-    // W-QTY: a fraction of the base unit is named, not swallowed (the shelf counts whole units; 1,5 kg is 1500 g).
-    if (qty == null && C.whyNot($('#m-qty').value, sup.unit) === 'fraction') return toast(`${t('inv_wholeUnits')} (${sup.unit})`);
-    if (qty == null || qty < 0 || (kind !== 'stocktake' && qty === 0)) return toast(t('required'));
+    // W-QTYHUB H3: milli-units, exact (2,5 pieces is 2500); sent as the TEXT "2.5" (CONTRACT-QTY §1).
+    const m = C.milli($('#m-qty').value, sup.unit);
+    if (m == null && C.whyNot($('#m-qty').value, sup.unit) === 'tooFine') return toast(`${t('inv_wholeUnits')} (${sup.unit})`);
+    if (m == null || m < 0 || (kind !== 'stocktake' && m === 0)) return toast(t('required'));
+    const qty = C.showMilli(m);
     let body = kind === 'stocktake' ? { item: sup.id, observed: qty } : { item: sup.id, qty };
     if (kind === 'wasted') { body.reason = $('#m-reason').value.trim(); if (lot) body.lot = lot; }
     if (kind === 'received') {
@@ -201,7 +202,7 @@ export function pickSupply(ctx, titleKey, then){
   const draw = () => {
     const q = $('#pkQ').value.toLowerCase().trim();
     $('#pkList').innerHTML = all.filter(s => !q || `${s.name} ${s.category}`.toLowerCase().includes(q)).slice(0, 80)
-      .map(s => rowBtn({ title: s.name, sub: esc(`${s.category || ''} · ${s.onHand ?? 0} ${s.unit}`), data: { pk: s.id } })).join('');
+      .map(s => rowBtn({ title: s.name, sub: esc(`${s.category || ''} · ${C.showMilli(C.levelMilli(s, 'onHand'))} ${s.unit}`), data: { pk: s.id } })).join('');
   };
   draw();
   $('#pkQ').oninput = draw;

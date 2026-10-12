@@ -10,7 +10,7 @@
 // (`ingredients-calc.js` priceOf / costOf).
 // ASCII QUOTES ONLY in this file (DOWIZ-COMMON-RULES rule 11).
 
-import { amount, basisOf, costOf, priceOf, PM } from './ingredients-calc.js';
+import { basisOf, costOf, priceOf, PM } from './ingredients-calc.js';
 import { parseMilli, wireQty, toMilli, MILLI } from './qty-adapter.js';
 
 /// The hub's own bounds (`dowiz_hub::prep`).
@@ -62,9 +62,11 @@ export function batchCost(lines){
 
 /// Cost per kg / l (mass) or per piece, half up; null without a batch cost.
 export function costPer(batch, yieldQty, unit){
-  if (batch == null || !(yieldQty > 0)) return null;
-  const per = unit === 'unit' ? 1 : 1000;
-  return Math.floor((batch * per * 2 + yieldQty) / (2 * yieldQty));
+  const y = batch == null ? null : toMilli(yieldQty);
+  if (y == null || !(y > 0)) return null;
+  // In milli-units, integers: 1000 for 2.5 pieces is 400 a piece, half up.
+  const per = (unit === 'unit' ? 1 : 1000) * MILLI;
+  return Math.floor((batch * per * 2 + y) / (2 * y));
 }
 /// The word for `costPer`'s basis.
 export const perWord = unit => (unit === 'unit' ? 'pf_costPerPiece' : unit === 'ml' ? 'pf_costPerL' : 'pf_costPerKg');
@@ -88,10 +90,12 @@ export function readLines(rows){
   return { lines: out };
 }
 
-/// The yield as typed, whole and in range, or null.
+/// The yield as typed, in range, or null: a whole number of base units, or
+/// the decimal TEXT for a fraction ("999.5") -- the hub stores it exactly
+/// (`yieldUq`, W-QTYHUB H2). At most 3 decimals.
 export function readYield(raw, unit){
-  const y = amount(raw, unit);
-  return y != null && y >= 1 && y <= QTY_MAX ? y : null;
+  const m = parseMilli(raw, unit);
+  return m != null && m >= 1 && m <= QTY_MAX * MILLI ? wireQty(m) : null;
 }
 
 /// The request body of `POST /api/owner/preps`.
