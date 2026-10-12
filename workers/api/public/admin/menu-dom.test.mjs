@@ -35,9 +35,10 @@ const FAKES = {
     export const closeSheet = () => { F().closed++; };
     export const money = n => String(n), moneyEl = n => '<span>' + n + '</span>';
     export const hydrate = () => {}, retranslate = () => {}, repaintMoney = () => {};
+    let onClose = null; export const whenSheetCloses = fn => { onClose = fn; }; export const closeSheetFor = () => { const f = onClose; onClose = null; f?.(); };
     export const switchEl = (id, on, key, hintKey) => check({ id, checked: on, key, hintKey });`,
   '/admin/i18n.js': `export const T = { sq: {}, en: {}, uk: {}, ru: {} }; export const lang = 'en'; export const LANGS = ['sq', 'en', 'uk', 'ru']; export const st = k => k;`,
-  '/admin/app.js': `export const loadVenue = async () => {}, rerender = async () => {}, me = () => ({}), show = async () => {};`,
+  '/admin/app.js': `const F = () => globalThis.__md; export const loadVenue = async () => { F().loads++; }, rerender = async () => { F().rerenders++; }, me = () => ({}), show = async () => {};`,
 };
 register('data:text/javascript,' + encodeURIComponent(`const F = ${JSON.stringify(FAKES)}, P = ${JSON.stringify(PUBLIC)};
   export async function resolve(spec, ctx, next){
@@ -51,6 +52,9 @@ Object.defineProperty(Element.prototype, 'value', {
 Object.defineProperty(Element.prototype, 'checked', {
   get(){ return this.hasAttribute('checked'); }, set(v){ v ? this.setAttribute('checked', '') : this.removeAttribute('checked'); }, configurable: true });
 const tick = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(r => setTimeout(r, 0)); };
+// The shim has no insertAdjacentHTML and no <head>: the list's badges and stylesheets need both.
+Element.prototype.insertAdjacentHTML = function(where, html){ const tmp = this.ownerDocument.createElement('div'); tmp.innerHTML = html; const kids = [...tmp.childNodes];
+  for (const k of kids) { if (where === 'afterbegin' && this.childNodes.length) { k.parentNode = this; this.childNodes.unshift(k); } else this.appendChild(k); } };
 
 const SUPPLIES = [{ id: 'tuna', name: 'Tuna', unit: 'g', kind: 'food_ingredient' }, { id: 'rice', name: 'Rice', unit: 'g', kind: 'food_ingredient' }];
 // Declared "none of the 14" (W-MR0): an UNDECLARED dish on sale is refused by the hub where the
@@ -61,8 +65,9 @@ const dish = (id, name, allergens = []) => ({ id, name, price: 1000, categoryId:
 function page(routes){
   const doc = new Document();
   globalThis.document = doc;
+  doc.head = { append(){} };
   const box = doc.createElement('div'); box.setAttribute('id', 'sheetIn'); doc.body.appendChild(box);
-  const f = { S: { products: [dish('d1', 'Tuna roll'), dish('d2', 'Rice roll')], venue: { defaultLocale: 'en' }, categories: [] }, toast: [], calls: [], closed: 0,
+  const f = { S: { products: [dish('d1', 'Tuna roll'), dish('d2', 'Rice roll')], venue: { defaultLocale: 'en' }, categories: [] }, toast: [], calls: [], closed: 0, loads: 0, rerenders: 0,
     reply: async (method, path, body) => {
       f.calls.push([method, path, body]);
       const key = Object.keys(routes).filter(k => `${method} ${path}`.startsWith(k)).sort((a, b) => b.length - a.length)[0];
@@ -225,4 +230,181 @@ test('the segment counts draw all four, zero included, and fetch the venue route
   const html = box.innerHTML;
   for (const [k, n] of [['new', 2], ['regular', 5], ['at_risk', 0], ['lapsed', 1]]) assert.match(html, new RegExp(`data-t="seg_${k}"[^]*?</span> <b class="mono">${n}</b>`));
   assert.deepEqual(f.calls.map(c => c[1]), ['/owner/customers/taste/segments']);
+});
+
+// ── W-TKUI TZ 4 (operator 2026-10-12): the recipe picker's ticks survive the search box ─────────
+const BOOK4 = [...SUPPLIES, { id: 'nori', name: 'Nori', unit: 'g', kind: 'food_ingredient' }, { id: 'salmon', name: 'Salmon', unit: 'g', kind: 'food_ingredient' }];
+const tickBox = (box, id) => { const cb = box.querySelector(`[data-rs="${id}"]`); assert.ok(cb, `no checkbox for ${id}`); cb.checked = true; cb.onchange?.(); return cb; };
+const typeSearch = (box, v) => { const q = box.querySelector('#rcQ'); q.value = v; q.oninput?.(); };
+// menu.js keeps the shelf answer for a minute: the clock moves past it so this page's book is read.
+const realNow = performance.now.bind(performance); let skew = 0;
+performance.now = () => realNow() + skew;
+const freshBook = () => { skew += 120_000; };
+
+test('TZ4: a component ticked, a search typed and cleared: the tick is kept, and Add takes it', async () => {
+  freshBook(); const { box } = page({ ...BASE, 'GET /owner/stock': { supplies: BOOK4, noRecipe: [] } });
+  await M.openDish('d1'); await tick();
+  tickBox(box, 'nori');
+  typeSearch(box, 'sal'); typeSearch(box, '');
+  assert.ok(box.querySelector('[data-rs="nori"]')?.checked, 'clearing the search box reset the tick on nori (TZ 4)');
+  box.querySelector('#rcAdd').onclick();
+  assert.deepEqual(box.querySelectorAll('.rc-line b').map(b => b.textContent), ['Tuna', 'Rice', 'Nori']);
+});
+
+test('TZ4 twin: a tick hidden by the search is still added, and the kind chips keep ticks too; an untick is honoured', async () => {
+  freshBook(); const { box } = page({ ...BASE, 'GET /owner/stock': { supplies: BOOK4, noRecipe: [] } });
+  await M.openDish('d1'); await tick();
+  tickBox(box, 'nori');
+  typeSearch(box, 'sal');
+  assert.equal(box.querySelector('[data-rs="nori"]'), null, 'the search hides nori');
+  tickBox(box, 'salmon');
+  const chip = box.querySelectorAll('[data-rk]').find(b => b.dataset.rk === 'food_ingredient'); chip.onclick();
+  const s = box.querySelector('[data-rs="salmon"]'); assert.ok(s?.checked, 'the kind chip kept the tick');
+  s.checked = false; s.onchange?.();
+  box.querySelector('#rcAdd').onclick();
+  assert.deepEqual(box.querySelectorAll('.rc-line b').map(b => b.textContent), ['Tuna', 'Rice', 'Nori'], 'nori (hidden, ticked) added; salmon (unticked) not');
+  assert.equal(box.querySelectorAll('[data-rs][checked]').length, 0, 'after Add the picker starts clean');
+});
+
+// ── W-TKUI TZ 2: taste, texture and aroma under ONE collapsed accordion, remembered per device ──
+const SX_KEY = 'dw_fold_sxFold';
+const fakeStorage = (init = {}) => { const m = new Map(Object.entries(init)); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k), m }; };
+
+test('TZ2: the three sense blocks sit inside one <details> that opens closed, with a keyboard-reachable summary', async () => {
+  globalThis.localStorage = fakeStorage();
+  const { box } = page(BASE);
+  await M.openDish('d1'); await tick();
+  const fold = box.querySelector('details#sxFold');
+  assert.ok(fold, 'no single accordion around taste/texture/aroma (TZ 2)');
+  assert.equal(fold.hasAttribute('open'), false, 'collapsed by default: the form is shorter');
+  const sum = fold.querySelector('summary');
+  assert.ok(sum && /data-t="sxEdit"/.test(sum.innerHTML), 'the summary carries the heading');
+  for (const id of ['sxBox', 'sxSuggest', 'sxNote', 'sxRecipe']) assert.ok(fold.querySelector('#' + id), `${id} is inside the accordion`);
+  assert.equal(box.querySelectorAll('[data-t="sx_taste"], [data-t="sx_texture"], [data-t="sx_aroma"]').every(e => fold.querySelectorAll('[data-t]').includes(e)), true);
+});
+
+test('TZ2 twin: a device that opened it last time sees it open; a toggle is remembered; a broken storage is survived', async () => {
+  globalThis.localStorage = fakeStorage({ [SX_KEY]: 'open' });
+  let { box } = page(BASE);
+  await M.openDish('d1'); await tick();
+  const fold = box.querySelector('details#sxFold');
+  assert.equal(fold.hasAttribute('open'), true, 'remembered open');
+  fold.removeAttribute('open'); fold.dispatchEvent({ type: 'toggle', target: fold });
+  assert.equal(globalThis.localStorage.getItem(SX_KEY), 'closed', 'the toggle is written');
+  globalThis.localStorage = { getItem(){ throw new Error('blocked'); }, setItem(){ throw new Error('blocked'); } };
+  ({ box } = page(BASE));
+  await M.openDish('d1'); await tick();
+  assert.ok(box.querySelector('details#sxFold'), 'drawn without storage');
+});
+
+// ── W-TKUI TZ 6: after a save the console re-reads ONE answer and redraws, without F5 ─────────
+globalThis.location = { hostname: 'qa-durres.dowiz.org' };
+const MENU_AFTER = { location: { id: 'V1' }, categories: [{ id: 'c1', name: 'Rolls', products: [{ id: 'd1', name: 'Tuna roll XL', description: 'big', price: 1200, available: true }, { id: 'd2', name: 'Rice roll', price: 1000, available: true }] }] };
+const menuGets = f => f.calls.filter(c => c[0] === 'GET' && /\/public\/locations\/.*\/menu/.test(c[1])).map(c => c[1]);
+
+test('TZ6: a save re-reads the menu ONCE, in the console language, folds the dish into the list and redraws it', async () => {
+  const { box, f } = page({ ...BASE, 'GET /public/locations/qa-durres/menu': MENU_AFTER });
+  f.S.categories = [{ id: 'c1', name: 'Rolls', products: f.S.products }];
+  await M.openDish('d1'); await tick();
+  box.querySelector('#d-price').value = '1200'; box.querySelector('#d-name-uk').value = 'Тунець XL';
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.equal(saved(f, 'd1').length, 1);
+  assert.deepEqual(menuGets(f), ['/public/locations/qa-durres/menu?locale=en&fresh=1'], 'one read, the console language, fresh (not four languages)');
+  assert.equal(f.loads, 0, 'no whole-venue reload');
+  const row = f.S.products.find(p => p.id === 'd1');
+  assert.equal(row.price, 1200); assert.equal(row.name, 'Tuna roll XL'); assert.equal(row.description, 'big');
+  assert.equal(row.translations.uk.name, 'Тунець XL', 'the translation typed is kept on the row without a re-read');
+  assert.equal(f.S.categories[0].products.find(p => p.id === 'd1').price, 1200, 'the category list the screen draws from is the same row');
+  assert.ok(f.rerenders >= 1, 'the screen was redrawn');
+});
+
+test('TZ6 twin: a dish the fresh menu no longer carries falls back to the whole-venue reload; a failed read too', async () => {
+  const { box, f } = page({ ...BASE, 'GET /public/locations/qa-durres/menu': { location: {}, categories: [] } });
+  await M.openDish('d1'); await tick();
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.equal(f.loads, 1, 'the dish vanished from the answer: the whole venue is reloaded');
+  const p2 = page({ ...BASE, 'GET /public/locations/qa-durres/menu': new Error('HTTP 503') });
+  await M.openDish('d1'); await tick();
+  await p2.box.querySelector('#dSave').onclick(); await tick();
+  assert.equal(p2.f.loads, 1, 'a failed read: the whole venue is reloaded, never a stale row');
+});
+
+test('TZ6 twin: a nudge keeps the sheet open, re-reads once, and the list behind is redrawn when the sheet closes', async () => {
+  const { box, f } = page({ ...BASE, 'GET /public/locations/qa-durres/menu': MENU_AFTER });
+  await M.openDish('d1'); await tick();
+  const before = f.rerenders;
+  await box.querySelector('#dUp').onclick(); await tick();
+  assert.deepEqual(saved(f, 'd1')[0], { location_id: 'V1', move: 'up' });
+  assert.equal(menuGets(f).length, 1, 'one read');
+  assert.equal(f.loads, 0);
+  const core = await import('/admin/core.js');
+  core.closeSheetFor();
+  assert.ok(f.rerenders > before, 'the screen behind the sheet is redrawn on close');
+});
+
+// ── W-TKUI TZ 1 (CONTRACT-QTY section 1): a recipe line takes a decimal, exactly ───────────────
+test('TZ1: "0,5" typed on a line is sent as "0.5"; a stored 40.5 draws as 40.5 and goes back as it came; a stepper moves whole grams', async () => {
+  freshBook();
+  const { box, f } = page({ ...BASE, 'GET /owner/stock': { supplies: BOOK4, noRecipe: [] },
+    'GET /owner/products?id=d1': { products: [{ id: 'd1', bom: [{ supply: 'nori', qty: 0.5, qtyMilli: 500 }, { supply: 'rice', qty: 120, qtyMilli: 120000 }] }] } });
+  await M.openDish('d1'); await tick();
+  const q0 = box.querySelector('[data-rq="0"]');
+  assert.equal(q0.value, '0.5', 'a fractional stored line is drawn as its decimal, not rounded to 1');
+  assert.equal(q0.getAttribute('inputmode'), 'decimal', 'the keyboard offers the decimal point');
+  const q1 = box.querySelector('[data-rq="1"]');
+  q1.value = '0,25'; q1.oninput?.();
+  box.querySelector('[data-rm="0"]').onclick(); // - 10 g on 0.5 g floors at 0 -> the line is out
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.deepEqual(bomOf(saved(f, 'd1')[0]), [['rice', '0.25']], 'the fraction travels as text, the way the hub parses it');
+});
+
+test('TZ1 twin: a whole quantity still goes as the integer it always was; a 4th decimal is refused before the hub', async () => {
+  freshBook();
+  const { box, f } = page({ ...BASE, 'GET /owner/stock': { supplies: BOOK4, noRecipe: [] } });
+  await M.openDish('d1'); await tick();
+  const q0 = box.querySelector('[data-rq="0"]');
+  q0.value = '70'; q0.oninput?.();
+  q0.value = '0.0005'; q0.oninput?.(); q0.onchange?.();
+  assert.ok(f.toast.length >= 1, 'a 4th decimal is said no to');
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.deepEqual(bomOf(saved(f, 'd1')[0]), [['tuna', 70], ['rice', 120]]);
+});
+
+// ── W-TKUI TZ 3 (CONTRACT-QTY section 2): the review badge, on the sheet and on the list ─────────
+const REVIEWED = { products: [{ id: 'd1', recipeReview: [{ supply: 'nori', name: 'Nori' }],
+  bom: [{ supply: 'tuna', qty: 80, qtyMilli: 80000 }, { supply: 'nori', qty: 0, qtyMilli: 0, name: 'Nori', removed: true }] }] };
+test('TZ3: a dish with a ghost line shows the badge naming the removed ingredient; the ghost is drawn greyed and never sent back', async () => {
+  freshBook();
+  const { box, f } = page({ ...BASE, 'GET /owner/products?id=d1': REVIEWED });
+  await M.openDish('d1'); await tick();
+  const badge = box.querySelector('#rcReview');
+  assert.ok(badge, 'no review badge on the dish sheet (TZ 3)');
+  assert.match(badge.textContent, /Nori/, 'the badge names the removed ingredient');
+  const ghost = box.querySelectorAll('.rc-line').find(l => /Nori/.test(l.innerHTML));
+  assert.ok(ghost && ghost.classList.contains('off'), 'the ghost line is greyed');
+  assert.ok(ghost.querySelector('[data-rx]'), 'and can be taken out');
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.deepEqual(bomOf(saved(f, 'd1')[0]), [['tuna', 80]], 'a ghost line is never sent: the hub would refuse it, and dropping it clears the badge');
+});
+
+test('TZ3 twin: the menu list badges the dish from the owner read, once per render; a clean dish has none', async () => {
+  freshBook();
+  const { box, f } = page({ ...BASE, 'GET /owner/products': { products: [{ id: 'd1', recipeReview: [{ supply: 'nori', name: 'Nori' }], bom: [] }, { id: 'd2', bom: [] }] } });
+  f.S.categories = [{ id: 'c1', name: 'Rolls', products: f.S.products }];
+  const host = box.ownerDocument.createElement('div'); box.ownerDocument.body.appendChild(host);
+  await M.render(host); await tick();
+  assert.ok(host.querySelector('[data-p="d1"] .review'), 'the row of the flagged dish carries the badge (TZ 3)');
+  assert.equal(host.querySelector('[data-p="d2"] .review'), null);
+  assert.equal(f.calls.filter(c => c[1] === '/owner/products').length, 1, 'one owner read for the whole list');
+});
+
+// ── W-TKUI sweep (c): the dish sheet's optional groups fold ─────────────────────────────────────
+test('sweep c: translations and nutrition sit under remembered folds; price, name, stop-list stay in the open', async () => {
+  globalThis.localStorage = fakeStorage();
+  const { box } = page(BASE);
+  await M.openDish('d1'); await tick();
+  for (const id of ['dTrFold', 'dNutFold']) { const d = box.querySelector(`details#${id}`); assert.ok(d, `${id} is a fold`); assert.equal(d.hasAttribute('open'), false); }
+  assert.ok(box.querySelector('details#dTrFold #d-name-uk'), 'the other languages are inside the translations fold');
+  assert.ok(box.querySelector('details#dNutFold #d-kcal'), 'kcal is inside the nutrition fold');
+  for (const id of ['d-name', 'd-price', 'd-avail', 'd-cat']) assert.equal(box.querySelector('#' + id).closest('details'), null, `${id} is a primary field, never folded`);
 });

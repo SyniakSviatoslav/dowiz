@@ -197,6 +197,8 @@ pub const BROWSER: &[DeviceKey] = &[
     key("dw_theme", &[], "admin"),
     key("dowiz.replica.v1", &[Name, Phone, Address, OrderContent], "admin"),
     prefix("dw_guide_", &[], "admin"),
+    // W-TKUI 2026-10-12: which optional form sections this device left open (fold.js): a word per section, nothing personal.
+    prefix("dw_fold_", &[], "admin"),
     // Lesson progress (lib/learn.js), one index per app: lesson ids and done/paused, nothing personal.
     prefix("dw_learn_", &[], "admin"),
     // W-STORE: the storage this device sends deliveries to (admin/stock-storages-logic.js), a storage id, nothing personal.

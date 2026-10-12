@@ -8,6 +8,7 @@
 
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, busy, ago, switchEl, money, confirm } from '/admin/core.js';
 import { loadCouriers, rerender } from '/admin/app.js';
+import { redrawWhenClosed } from '/admin/sync.js';
 import { intlLocale, T, LANGS, lang } from '/admin/i18n.js';
 import { btn, iconBtn, field, select, pill, empty, loading, rowBtn, rowDiv } from '/admin/parts.js';
 import { WORDS as SEND_WORDS } from '/admin/invite-send-words.js';
@@ -135,7 +136,7 @@ async function openCourier(id){
       const ok = await confirm(t('deactivate'), t('deactivateHint'), { danger: true });
       if (!ok) return openCourier(id);
     }
-    try { await post(`/owner/couriers/${encodeURIComponent(id)}/active`, { active: e.target.checked }); toast(t('saved')); loadCouriers().then(rerender); openCourier(id); }
+    try { await post(`/owner/couriers/${encodeURIComponent(id)}/active`, { active: e.target.checked }); toast(t('saved')); loadCouriers().then(() => { openCourier(id); redrawWhenClosed(); }); } // W-TKUI sweep a: the list redraws when the card closes
     catch (err) { toast(String(err.message || err)); e.target.checked = !e.target.checked; }
   };
 }

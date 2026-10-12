@@ -15,6 +15,7 @@ import { SENSE_WORDS, wordKey } from '/lib/sense-words.js';
 import { RECIPE_WORDS, recipeMarkup, fillEmpty } from '/admin/sense-recipe-view.js';
 import { senseOf, TASTE, TEXTURE, AROMA, TASTE_MAX, TAG_MAX } from '/store/sense.js';
 import { cardSense } from '/store/sense-view.js';
+import { fold, bindFolds } from '/admin/fold.js';
 
 const WORDS = {
   sq: { sxEdit: 'Shija, struktura dhe aroma', sxEditHint: 'Gjithçka me dëshirë. Prekni një nivel; prekeni sërish për ta hequr. Çfarë nuk prekni nuk shfaqet te klienti.',
@@ -48,11 +49,13 @@ export function senseEditor(p){
   const s = senseOf(p) || { taste: {}, texture: {}, aroma: {} };
   draft = { taste: { ...s.taste }, texture: { ...s.texture }, aroma: { ...s.aroma } };
   start = snap();
-  return `<p class="eyebrow mt-3" data-t="sxEdit"></p><p class="muted small" data-t="sxEditHint"></p>
+  // TZ 2 (W-TKUI): the three blocks under ONE collapsed section (`fold.js`), remembered per device.
+  return fold({ id: 'sxFold', titleKey: 'sxEdit', cls: 'mt-3', tour: 'sense.fold' }, `
+    <p class="muted small" data-t="sxEditHint"></p>
     ${ui.button({ variant: 'ghost', icon: 'sparkles', label: { t: 'sxSuggest' }, id: 'sxSuggest', attrs: { data: { tour: 'sense.suggest' } } })}
     <p class="small muted" id="sxNote" hidden></p>
     <div id="sxRecipe" hidden></div>
-    <div class="taste" id="sxBox">${body()}</div>`;
+    <div class="taste" id="sxBox">${body()}</div>`);
 }
 
 function redraw(){ const b = $('#sxBox'); if (!b) return; b.innerHTML = body(); retranslate(b); bindLevels(); }
@@ -66,6 +69,7 @@ function bindLevels(){
 
 export function bindSenseEditor(p){
   bindLevels();
+  bindFolds($('#sxFold')?.parentNode || document);
   const sg = $('#sxSuggest'); if (!sg) return;
   sg.onclick = async () => {
     try {

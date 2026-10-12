@@ -69,7 +69,7 @@ export function openCard(c, done, forgotten){
     ${select({ id: 'cd-lang', key: 'cardLang', value: c.lang || '', options: [{ value: '', label: '' }, ...LANGS.map(l => ({ value: l, label: l }))], tour: 'customers.lang' })}
     ${field({ id: 'cd-bd', key: 'cardBirthday', inputmode: 'numeric', placeholder: 'MM-DD', maxlength: 5, value: c.birthdayMd || '', autocomplete: 'off', tour: 'customers.birthday' })}
     <div class="btn-row">${btn({ id: 'cdGo', variant: 'primary', icon: 'check', key: 'cardSave', tour: 'customers.save' })}</div>
-    <div id="cdTaste"></div>${linksHtml(c)}${privacyHtml()}`, { name: 'card' });
+    <div id="cdTaste"></div><div id="cdLinks">${linksHtml(c)}</div>${privacyHtml()}`, { name: 'card' });
   retranslate($('#sheetIn')); hydrate($('#sheetIn'));
   wireLinks(c);
   wirePrivacy(c, forgotten);
@@ -109,6 +109,7 @@ function wireLinks(c){
     const reason = linkReason(); if (!reason) return;
     try {
       await busy(b, () => post(`/owner/customers/${encodeURIComponent(b.dataset.unlink)}/unlink`, { reason }));
+      c.linked = (c.linked || []).filter(k => k !== b.dataset.unlink);
       b.closest('.ui-row').remove(); toast(t('unlinkDone'));
     } catch (e) { toast(String(e.message || e)); }
   };
@@ -123,7 +124,10 @@ function wireLinks(c){
       const reason = linkReason(); if (!reason) return;
       try {
         await busy(o, () => post(`/owner/customers/${encodeURIComponent(c.key)}/link`, { to: o.dataset.to, reason }));
-        $('#cdPick').innerHTML = ''; toast(t('linkDone'));
+        // W-TKUI sweep a: the card shows the new link at once, no close-and-reopen.
+        c.linked = [...(c.linked || []), o.dataset.to];
+        const lk = $('#cdLinks'); if (lk) { lk.innerHTML = linksHtml(c); retranslate(lk); wireLinks(c); }
+        toast(t('linkDone'));
       } catch (e) { toast(String(e.message || e)); }
     };
   };

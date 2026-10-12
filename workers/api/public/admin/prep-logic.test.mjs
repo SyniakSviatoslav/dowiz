@@ -38,7 +38,8 @@ test('K and the batch cost follow the operatorʼs example, and a piece without a
 test('typed lines are whole base units in range, distinct, one to forty; the yield likewise', () => {
   assert.deepEqual(P.readLines([{ item: 'rice-dry', qty: '1 kg', unit: 'g' }, { item: 'water', qty: '1,1 l', unit: 'ml' }, { item: '', qty: '9' }]),
     { lines: [{ item: 'rice-dry', qty: 1000 }, { item: 'water', qty: 1100 }] });
-  assert.deepEqual(P.readLines([{ item: 'salt', qty: '0.5', unit: 'g' }]), { error: 'pf_qtyBad' });
+  // Until 2026-10-12 a fraction was refused here; operator TZ 1 (CONTRACT-QTY 1) sends it as text and the hub decides.
+  assert.deepEqual(P.readLines([{ item: 'salt', qty: '0.5', unit: 'g' }]), { lines: [{ item: 'salt', qty: '0.5' }] });
   assert.deepEqual(P.readLines([{ item: 'salt', qty: '0', unit: 'g' }]), { error: 'pf_qtyBad' });
   assert.deepEqual(P.readLines([{ item: 'salt', qty: String(P.QTY_MAX + 1), unit: 'g' }]), { error: 'pf_qtyBad' });
   assert.deepEqual(P.readLines([{ item: 'salt', qty: String(P.QTY_MAX), unit: 'g' }]), { lines: [{ item: 'salt', qty: P.QTY_MAX }] });
@@ -91,4 +92,13 @@ test('the picker offers raw items and OTHER semi-finished products, not what is 
   assert.equal(P.gramsOf({ unit: 'ml' }, 30), 30);
   assert.equal(P.gramsOf({ unit: 'unit' }, 3), null);
   assert.equal(P.gramsOf({ unit: 'unit', weightPerUnit: 12.4 }, 3), 37);
+});
+
+// ── W-TKUI TZ 1 (CONTRACT-QTY section 1): a card line typed as a decimal goes to the hub as text ──
+test('TZ1: readLines keeps "0,5" of a piece as "0.5" on the wire, a whole 100 g as 100; a 4th decimal is refused', () => {
+  const r = P.readLines([{ item: 'nori', qty: '0,5', unit: 'unit' }, { item: 'rice', qty: '100', unit: 'g' }]);
+  assert.deepEqual(r, { lines: [{ item: 'nori', qty: '0.5' }, { item: 'rice', qty: 100 }] }, 'the hub parses the text; the editor never rounds 0.5 to 0 or refuses it');
+  assert.deepEqual(P.readLines([{ item: 'nori', qty: '0.0005', unit: 'unit' }]), { error: 'pf_qtyBad' });
+  assert.deepEqual(P.readLines([{ item: 'nori', qty: '0', unit: 'unit' }]), { error: 'pf_qtyBad' });
+  assert.equal(P.readYield('1,5 kg', 'g'), 1500, 'the yield stays whole base units');
 });

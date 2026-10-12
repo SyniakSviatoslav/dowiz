@@ -7,6 +7,7 @@
 
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, busy, switchEl, confirm } from '/admin/core.js';
 import { loadStaff, rerender } from '/admin/app.js';
+import { redrawWhenClosed } from '/admin/sync.js';
 import { btn, field, select, empty, loading, rowBtn, rowDiv } from '/admin/parts.js';
 
 /// The three roles a venue hires, as the select offers them.
@@ -78,7 +79,7 @@ async function openStaff(id){
     try {
       await post(`/owner/staff/${encodeURIComponent(id)}`, { role: $('#s-role').value, ...withLoc() });
       toast(t('saved'));
-      loadStaff().then(() => { rerender(); openStaff(id); });
+      loadStaff().then(() => { openStaff(id); redrawWhenClosed(); }); // W-TKUI sweep a: the list redraws when the card closes
     } catch (err) { toast(String(err.message || err)); $('#s-role').value = staff.role; }
   };
   $('#s-active').onchange = async e => {
@@ -89,7 +90,7 @@ async function openStaff(id){
     try {
       await post(`/owner/staff/${encodeURIComponent(id)}`, { active: e.target.checked, ...withLoc() });
       toast(t('saved'));
-      loadStaff().then(() => { rerender(); openStaff(id); });
+      loadStaff().then(() => { openStaff(id); redrawWhenClosed(); }); // W-TKUI sweep a: the list redraws when the card closes
     } catch (err) { toast(String(err.message || err)); e.target.checked = !e.target.checked; }
   };
 }

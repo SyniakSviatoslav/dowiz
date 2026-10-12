@@ -15,6 +15,7 @@ import { $, esc, icon, t, api, post, toast, sheet, day, busy, confirm } from '/a
 import { T, LANGS, intlLocale } from '/admin/i18n.js';
 import * as Money from '/lib/money.js';
 import { btn, field, select, loading, rowBtn, rowDiv } from '/admin/parts.js';
+import { fold, bindFolds } from '/admin/fold.js';
 
 const WORDS = {
   sq: { cpHint: 'Mesazhi shkon vetëm te klientët që kanë dhënë pëlqimin për oferta në WhatsApp. Dërgohet si shabllon i miratuar nga Meta, që duhet të përmbajë udhëzimin STOP.', cpTpl: 'Shablloni WhatsApp (emri në Meta)', cpTplLang: 'Gjuha e shabllonit', cpTplParams: 'Vlerat {{1}}, {{2}}... (një për rresht)', cpTplHint: 'Regjistroni mesazhin në WhatsApp Manager dhe prisni miratimin. Pa shabllon, fushata nuk dërgohet.', cpNew: 'Fushatë e re', cpNone: 'Asnjë fushatë ende.', cpName: 'Emri (vetëm për ju)', cpText: 'Mesazhi', cpWho: 'Për kë', cpDays: 'Ditë pa porosi', cpTag: 'Etiketa', cpPromo: 'Kodi i zbritjes (opsional)', cpPromoHint: 'Përdorimet e kodit pas dërgimit janë matja e vetme.', cpPreview: 'Shiko sa njerëz', cpSend: 'Dërgo', cpCount: 'Marrës', cpAlready: 'tashmë të dërguar', cpCost: 'Kosto e përafërt (Meta)', cpSendQ: 'Dërgo te', cpPeople: 'njerëz?', cpQueued: 'Në radhë', cpLeft: 'presin shtypjen tjetër', cpSent: 'Dërguar', cpWaiting: 'Në pritje', cpWithdrawn: 'Tërhequr', cpAbandoned: 'Dështuar', cpDelivered: 'Dorëzuar', cpRedeemed: 'Porosi me kodin', cpLocked: 'E dërguar: nuk ndryshohet më.', cpZero: 'Askush në këtë grup nuk ka dhënë pëlqim.',
@@ -60,13 +61,15 @@ function edit(c, tags){
     ${select({ id: 'cp-seg', key: 'cpWho', value: s.kind, options: SEGMENTS.map(k => ({ value: k, key: 'seg_' + k })), tour: 'campaigns.segment' })}
     <div id="cp-days-box">${field({ id: 'cp-days', key: 'cpDays', inputmode: 'numeric', value: s.days || DEFAULT_DAYS, tour: 'campaigns.days' })}</div>
     <div id="cp-tag-box">${select({ id: 'cp-tag', key: 'cpTag', value: s.tag, options: tags.map(x => ({ value: x, label: x })), tour: 'campaigns.tag' })}</div>
+    ${fold({ id: 'cpTplFold', titleKey: 'cpTpl', cls: 'mt-3', open: tp.name || (c && c.promo) ? true : null }, `
     ${field({ id: 'cp-tpl', key: 'cpTpl', maxlength: 512, autocapitalize: 'off', spellcheck: false, value: tp.name || '', tour: 'campaigns.template' })}
     ${select({ id: 'cp-tpl-lang', key: 'cpTplLang', value: tp.lang || 'sq', options: TPL_LANGS.map(l => ({ value: l, label: l })), tour: 'campaigns.templateLang' })}
     ${field({ id: 'cp-tpl-params', key: 'cpTplParams', rows: 3, value: (tp.params || []).join('\n'), hintKey: 'cpTplHint', tour: 'campaigns.templateParams' })}
-    ${field({ id: 'cp-promo', key: 'cpPromo', maxlength: 16, value: (c && c.promo) || '', hintKey: 'cpPromoHint', tour: 'campaigns.promo' })}
+    ${field({ id: 'cp-promo', key: 'cpPromo', maxlength: 16, value: (c && c.promo) || '', hintKey: 'cpPromoHint', tour: 'campaigns.promo' })}`)}
     <div class="btn-row">${btn({ id: 'cpSave', variant: 'primary', icon: 'check', key: 'save', tour: 'campaigns.save' })}</div>`, { name: 'campaigns' });
   const sync = () => { const k = $('#cp-seg').value; $('#cp-days-box').hidden = k !== 'not_seen_since'; $('#cp-tag-box').hidden = k !== 'tag'; };
   $('#cp-seg').onchange = sync; sync();
+  bindFolds($('#sheetIn')); // W-TKUI sweep c: the template group is optional and folds, remembered per device
   $('#cpSave').onclick = async () => {
     const kind = $('#cp-seg').value;
     const segment = kind === 'not_seen_since' ? { kind, days: Number($('#cp-days').value) | 0 } : kind === 'tag' ? { kind, tag: $('#cp-tag').value } : { kind };

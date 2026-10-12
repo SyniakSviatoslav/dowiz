@@ -11,6 +11,7 @@
 // ASCII QUOTES ONLY in this file (DOWIZ-COMMON-RULES rule 11).
 
 import { amount, basisOf, costOf, priceOf, PM } from './ingredients-calc.js';
+import { parseMilli, wireQty, toMilli, MILLI } from './qty-adapter.js';
 
 /// The hub's own bounds (`dowiz_hub::prep`).
 export const LINES_MAX = 40, QTY_MAX = 100000, DEPTH_MAX = 6;
@@ -22,8 +23,9 @@ export const isPrep = s => s?.kind === KIND;
 /// `weightPerUnit`, or null when it has none.
 export function gramsOf(sup, qty){
   if (!sup) return null;
-  if (sup.unit === 'unit') return sup.weightPerUnit != null ? Math.round(sup.weightPerUnit * qty) : null;
-  return qty;
+  const milli = toMilli(qty); if (milli == null) return null;
+  if (sup.unit === 'unit') return sup.weightPerUnit != null ? Math.round(sup.weightPerUnit * milli / MILLI) : null;
+  return milli / MILLI;
 }
 
 /// K per mille: yield in grams over the sum of the lines' gross in grams.
@@ -43,7 +45,7 @@ export function kPm(lines, yieldQty, unit, weightPerUnit = null){
 }
 
 /// One line's cost at the price the hub reads (average, else list), or null.
-export const lineCost = (sup, qty) => (sup ? costOf(priceOf(sup).perBasis, qty, basisOf(sup.unit)) : null);
+export const lineCost = (sup, qty) => { const m = sup ? toMilli(qty) : null; return m == null ? null : costOf(priceOf(sup).perBasis, m, basisOf(sup.unit) * MILLI); };
 
 /// The whole batch's cost, or null when any line has no price.
 export function batchCost(lines){
@@ -73,10 +75,13 @@ export function readLines(rows){
   const out = [];
   for (const r of rows || []) {
     if (!r.item) continue;
-    const qty = amount(r.qty, r.unit);
-    if (qty == null || qty < 1 || qty > QTY_MAX) return { error: 'pf_qtyBad' };
+    // TZ 1 (CONTRACT-QTY 1): a decimal is parsed as text into milli and sent as
+    // text; a whole quantity goes as the integer it always was. The hub counts a
+    // semi-finished card whole for now and says so by name (H2); never rounded here.
+    const milli = parseMilli(r.qty, r.unit);
+    if (milli == null || milli < 1 || milli > QTY_MAX * MILLI) return { error: 'pf_qtyBad' };
     if (out.some(l => l.item === r.item)) return { error: 'nom_packTwice' };
-    out.push({ item: r.item, qty });
+    out.push({ item: r.item, qty: wireQty(milli) });
   }
   if (!out.length) return { error: 'pf_noLines' };
   if (out.length > LINES_MAX) return { error: 'nom_tooMany' };
