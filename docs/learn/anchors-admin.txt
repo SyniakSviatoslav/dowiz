@@ -378,6 +378,7 @@ refund.go workers/api/public/admin/refund.js:40
 refund.note workers/api/public/admin/refund.js:39
 refund.reason workers/api/public/admin/refund.js:38
 sense.aroma workers/api/public/admin/sense.js:35
+sense.fold workers/api/public/admin/sense.js:53
 sense.suggest workers/api/public/admin/sense.js:51
 sense.taste workers/api/public/admin/sense.js:35
 sense.texture workers/api/public/admin/sense.js:35

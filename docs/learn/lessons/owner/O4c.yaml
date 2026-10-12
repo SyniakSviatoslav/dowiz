@@ -139,6 +139,23 @@ steps:
       uk: "Коли інгредієнт більше не входить."
       ru: "Когда ингредиент больше не входит."
   - key: 8
+    anchor: sense.fold
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="sense.fold"]'
+    title:
+      sq: "Shija, struktura dhe aroma"
+      en: "Taste, texture and aroma"
+      uk: "Смак, текстура й аромат"
+      ru: "Вкус, текстура и аромат"
+    caption:
+      sq: "Të tria janë nën një palosje të mbyllur, që formulari të mos jetë i gjatë. Hapeni; pajisja e mban mend."
+      en: "All three sit under one closed fold so the form stays short. Open it; this device remembers."
+      uk: "Усі три під однією згорнутою шторкою, щоб форма не була довгою. Розгорніть її; пристрій це запам'ятає."
+      ru: "Все три под одной свёрнутой шторкой, чтобы форма не была длинной. Раскройте её; устройство это запомнит."
+  - key: 9
     anchor: sense.suggest
     pending: no
     writes: no
@@ -155,7 +172,7 @@ steps:
       en: "A draft from the description and the usual sushi dishes. Nothing is saved until you press Save."
       uk: "Чернетка з опису та типових страв суші. Нічого не зберігається, доки не натиснете «Зберегти»."
       ru: "Черновик из описания и типичных блюд суши. Ничего не сохраняется, пока не нажмёте «Сохранить»."
-  - key: 9
+  - key: 10
     anchor: sense.taste
     pending: no
     writes: yes
@@ -172,7 +189,7 @@ steps:
       en: "Six axes from 0 to 5: sweet, sour, salty, bitter, umami, spicy. Tap again to clear."
       uk: "Шість осей від 0 до 5: солодкий, кислий, солоний, гіркий, умамі, гострий. Торкніться ще раз, щоб зняти."
       ru: "Шесть осей от 0 до 5: сладкий, кислый, солёный, горький, умами, острый. Нажмите ещё раз, чтобы снять."
-  - key: 10
+  - key: 11
     anchor: sense.texture
     pending: no
     writes: no
@@ -189,7 +206,7 @@ steps:
       en: "Crispy, creamy, tender and more, 1 to 3. Guests filter by them."
       uk: "Хрусткий, кремовий, ніжний тощо, від 1 до 3. Гості фільтрують за ними."
       ru: "Хрустящий, кремовый, нежный и другие, от 1 до 3. Гости фильтруют по ним."
-  - key: 11
+  - key: 12
     anchor: sense.aroma
     pending: no
     writes: no
@@ -206,7 +223,7 @@ steps:
       en: "Smoky, citrus, herbal and more. What you leave untouched is not shown."
       uk: "Копчений, цитрусовий, трав’яний тощо. Чого не торкалися, не показується."
       ru: "Копчёный, цитрусовый, травяной и другие. Что не трогали, не показывается."
-  - key: 12
+  - key: 13
     anchor: sense.recipe
     pending: no
     writes: no
