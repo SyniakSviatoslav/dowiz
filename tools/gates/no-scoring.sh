@@ -112,7 +112,13 @@ hits() {
     [ "$rel" = "$SCORER_JS" ] && code "$f" | grep -niE "$MONEY_WORDS" | sed "s|^|$rel: (a guest scorer naming money) |"
   done
 } 2>/dev/null
-filtered() { hits | grep -v 'google' | grep -v 'reviewCount' || true; }
+# The hits are collected ONCE into a file: the old `filtered` re-ran the whole per-file
+# pipeline inside a command substitution (and again for the listing), and at its peak the
+# gate held ~11 processes -- enough, beside a lane's cargo, for procguard (31) to kill
+# run-all here four times on 2026-10-11/12. Same matches, same order, same count.
+HITS=$(mktemp); trap 'rm -f "$HITS"' EXIT
+hits > "$HITS" || true   # a file with no hit ends the loop on a non-zero grep (set -e)
+filtered() { grep -v -e 'google' -e 'reviewCount' "$HITS" || true; }
 
 n=$(filtered | grep -c . || true)
 echo "no-scoring: $n site(s) that rate a participant, price by person, or score a guest outside the one scorer"
