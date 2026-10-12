@@ -75,7 +75,7 @@ impl Transport for MockTill {
                 Ok(json!({ "sales": rows, "total": 0.0 }).to_string())
             }
             Path::Sale { id, .. } => self.sales.iter().find(|s| s["id"] == json!(id)).map(|s| json!({ "sale": s }).to_string()).ok_or(Fail::NotFound),
-            Path::Items { .. } => Ok(r#"[{"id":23,"itemCode":"16","item":"Cola","price":200.0,"vat":"VAT_20"}]"#.into()),
+            Path::Items { .. } => Ok(r#"[{"id":23,"itemCode":"16","item":"Cola","price":200.0,"vat":"VAT_20"},{"id":24,"itemCode":"99","item":"Bakshish","price":0.0,"vat":"VAT_0"}]"#.into()),
             Path::Tables { .. } => Ok(r#"[{"id":7,"identifier":"DELIVERY","type":"TABLE","status":"ACTIVE","posX":2.0,"posY":2.0,"server":"Ana"}]"#.into()),
             other => Err(Fail::NotAllowed(format!("{other:?}"))),
         }
@@ -112,7 +112,7 @@ fn entry_for(id: &str, product: &str) -> Entry {
 fn batch(items: Vec<Item>) -> Batch {
     Batch {
         pos_id: 1, today: "2026-09-24".into(), yesterday: "2026-09-23".into(), sale_unit: "DELIVERY".into(),
-        fee_item: None, crosswalk: vec![("16".into(), "p-cola".into())], items,
+        fee_item: None, tip_item: Some("99".into()), crosswalk: vec![("16".into(), "p-cola".into())], items,
     }
 }
 
@@ -252,4 +252,25 @@ fn the_sale_unit_is_cut_to_six_keys_and_a_missing_one_is_named() {
     let t = r#"[{"id":7,"identifier":"DELIVERY","type":"TABLE","status":"ACTIVE","posX":2.0,"posY":2.0,"server":"Ana","activeUser":"x"}]"#;
     assert_eq!(sale_unit_of(t, "DELIVERY").unwrap(), json!({"id":7,"identifier":"DELIVERY","type":"TABLE","status":"ACTIVE","posX":2.0,"posY":2.0}));
     assert!(sale_unit_of(t, "9").unwrap_err().contains("\"9\""));
+}
+
+/// A TIPPED DOCUMENT GOES OUT WITH THE TIP AS ITS TILL ITEM (D34): the Batch's
+/// `tip_item` reaches the body as one VAT_0 record. Twin: a Batch with no tip
+/// item blocks it by name and POSTs nothing.
+#[test]
+fn a_tip_is_sent_as_the_chosen_till_item_and_without_one_is_blocked() {
+    let mut o = crate::fiscal::ebills_sender::tests::order("o-tip");
+    o["tip"] = json!(50);
+    o["total"] = json!(250);
+    o["payments"][0]["amount"] = json!(250);
+    let doc = crate::fiscal::document::document(&o, "ALL", T).unwrap();
+    let it = Item { uuid: entry(&doc).id, order_id: "o-tip".into(), doc: serde_json::to_string(&doc).unwrap(), action: Action::Send };
+    let mut till = MockTill::new(Mode::Success);
+    let out = fire(&mut till, &batch(vec![it.clone()])).now_or_never().unwrap();
+    assert!(matches!(out[0].1, Outcome::Sent { .. }), "{out:?}");
+    assert_eq!(till.sales.last().unwrap()["totalValue"], json!(250.0));
+    let mut none = MockTill::new(Mode::Success);
+    let out = fire(&mut none, &Batch { tip_item: None, ..batch(vec![it]) }).now_or_never().unwrap();
+    assert!(matches!(&out[0].1, Outcome::Blocked(w) if w.contains("tip")), "{out:?}");
+    assert_eq!(none.posts, 0);
 }

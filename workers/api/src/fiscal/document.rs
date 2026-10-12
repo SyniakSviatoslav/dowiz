@@ -31,6 +31,11 @@ pub struct Line {
     pub unit_as_priced: i64,
     pub gross: i64,
     pub rate_ppm: i64,
+    /// Given free (`items[].comped`, `room::amend` Op::Comp): the line stays,
+    /// its `gross` is what it would have cost, and that amount is inside the
+    /// order's `discount`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub comped: bool,
 }
 
 /// One rate group of the stamped block (`SameTaxes` by another name).
@@ -72,6 +77,13 @@ pub struct Document {
     pub total_base: i64,
     pub total_tax: i64,
     pub total: i64,
+    /// The order's whole cut in minor units (`discount`): promo AND comps.
+    /// `total = Σ gross - discount + fee + tip` (room::rules::reprice).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub discount: i64,
+    /// The gratuity (`tip`): outside VAT (dowiz_core::tax), inside `total`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tip: i64,
     pub payments: Vec<Payment>,
     pub table: Option<String>,
     pub channel: String,
@@ -88,6 +100,10 @@ pub enum Refusal {
     NotTaken,
     Currency(String),
     Lines(String),
+}
+
+fn is_zero(v: &i64) -> bool {
+    *v == 0
 }
 
 fn int(v: &Value, k: &str) -> Option<i64> {
@@ -143,7 +159,8 @@ pub fn document(order: &Value, venue_currency: &str, now_ms: i64) -> Result<Docu
         let gross = qty.checked_mul(unit).ok_or_else(|| Refusal::Lines(format!("line {i} overflows")))?;
         let name = text(it, "name").or_else(|| text(it, "product_id")).unwrap_or("?").to_string();
         let product_id = text(it, "product_id").map(str::to_string);
-        lines.push(Line { name, product_id, qty, unit_as_priced: unit, gross, rate_ppm: rate });
+        let comped = it.get("comped").and_then(Value::as_bool) == Some(true);
+        lines.push(Line { name, product_id, qty, unit_as_priced: unit, gross, rate_ppm: rate, comped });
     }
 
     let group = |g: &Value| Group {
@@ -161,6 +178,10 @@ pub fn document(order: &Value, venue_currency: &str, now_ms: i64) -> Result<Docu
     let total_base = groups.iter().map(|g| g.base).sum::<i64>() + fee.as_ref().map_or(0, |f| f.base);
     let total_tax = int(tax, "total").unwrap_or(0);
     let total = int(order, "total").unwrap_or(0);
+    let (discount, tip) = (int(order, "discount").unwrap_or(0), int(order, "tip").unwrap_or(0));
+    if discount < 0 || tip < 0 {
+        return Err(Refusal::Lines(format!("a negative discount ({discount}) or tip ({tip})")));
+    }
 
     let payments = payments_of(order, currency, total);
     let kind = if payments.iter().all(|p| p.method == "cash") { Kind::Cash } else { Kind::NonCash };
@@ -178,6 +199,8 @@ pub fn document(order: &Value, venue_currency: &str, now_ms: i64) -> Result<Docu
         total_base,
         total_tax,
         total,
+        discount,
+        tip,
         payments,
         table: order.get("fulfilment").and_then(|f| text(f, "table")).map(str::to_string),
         channel: text(order, "channel").unwrap_or("storefront").to_string(),
@@ -222,6 +245,8 @@ pub(super) fn corrective(orig: &Document, now_ms: i64) -> Document {
         total_base: -orig.total_base,
         total_tax: -orig.total_tax,
         total: -orig.total,
+        discount: -orig.discount,
+        tip: -orig.tip,
         payments: orig.payments.iter().map(|p| Payment { amount: -p.amount, ..p.clone() }).collect(),
         corrects: Some(orig.uuid),
         ..orig.clone()

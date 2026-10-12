@@ -11,7 +11,7 @@
 //!   * the venue's ebills link is healthy: configured, not halted, and its
 //!     last firing worked (`LinkState`).
 //!
-//! THE FOUR KEYS ARE DELIBERATELY NOT IN `settings/known.rs`. A declared key
+//! THE FIVE KEYS ARE DELIBERATELY NOT IN `settings/known.rs`. A declared key
 //! is editable from the generic settings pane, which would arm a legal act
 //! without the confirmation that names it; undeclared, the generic route
 //! refuses them ("unknown setting") and the fiscal route is the only writer.
@@ -26,6 +26,8 @@ pub const ARMED: &str = "fiscal.ebills.armed";
 pub const SALE_UNIT: &str = "fiscal.ebills.sale_unit";
 pub const FEE_ITEM: &str = "fiscal.ebills.fee_item";
 pub const CANCEL_ARMED: &str = "fiscal.ebills.cancel_armed";
+/// The till item a tip is sold as: a VAT_0 item on the till (`ebills_body::adjust::tip`).
+pub const TIP_ITEM: &str = "fiscal.ebills.tip_item";
 /// What the owner types to arm a venue: the consequence, in words.
 pub const CONFIRM: &str = "SEND FISCAL INVOICES TO EBILLS";
 
@@ -45,13 +47,15 @@ pub struct Arming {
     pub sale_unit: String,
     pub fee_item: String,
     pub cancel_armed: bool,
+    #[serde(default)]
+    pub tip_item: String,
 }
 
 /// From the settings image's raw values (`Settings::get`).
 pub fn arming(get: &dyn Fn(&str) -> Option<String>) -> Arming {
     let yes = |k: &str| get(k).is_some_and(|v| v.trim() == "yes");
     let text = |k: &str| get(k).map(|v| v.trim().to_string()).unwrap_or_default();
-    Arming { armed: yes(ARMED), sale_unit: text(SALE_UNIT), fee_item: text(FEE_ITEM), cancel_armed: yes(CANCEL_ARMED) }
+    Arming { armed: yes(ARMED), sale_unit: text(SALE_UNIT), fee_item: text(FEE_ITEM), cancel_armed: yes(CANCEL_ARMED), tip_item: text(TIP_ITEM) }
 }
 
 /// Every reason this venue may not send now. EMPTY MEANS ARMED.
@@ -93,7 +97,7 @@ pub fn gated_plan(
     Ok(super::ebills_sender::plan(entries, intents, now_ms))
 }
 
-/// The owner's change to the four keys (`POST /api/owner/fiscal/ebills`).
+/// The owner's change to the five keys (`POST /api/owner/fiscal/ebills`).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArmIn {
@@ -107,6 +111,8 @@ pub struct ArmIn {
     pub fee_item: Option<String>,
     #[serde(default)]
     pub cancel_armed: Option<bool>,
+    #[serde(default)]
+    pub tip_item: Option<String>,
 }
 
 fn plain(v: &str, max: usize) -> bool {
@@ -127,7 +133,7 @@ pub fn arm(input: &ArmIn) -> Result<Vec<(&'static str, String)>, String> {
             None => {}
         }
     }
-    for (key, v, max) in [(SALE_UNIT, &input.sale_unit, 32), (FEE_ITEM, &input.fee_item, 64)] {
+    for (key, v, max) in [(SALE_UNIT, &input.sale_unit, 32), (FEE_ITEM, &input.fee_item, 64), (TIP_ITEM, &input.tip_item, 64)] {
         if let Some(v) = v.as_deref().map(str::trim) {
             if !plain(v, max) {
                 return Err(format!("{key}: letters, digits, space, - _ . and at most {max}"));

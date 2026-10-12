@@ -1,6 +1,6 @@
 // Fiscal sending (card L70): orders that take money, sent to ebills.al as
 // fiscal invoices -- ONLY once the owner arms it here, with the consequence
-// typed out. One sheet: armed or why not, the sale unit and fee item, the
+// typed out. One sheet: armed or why not, the sale unit, fee and tip items, the
 // queue with each order's fiscal stage and deadline, and the receipt.
 //
 // ARMING IS A LEGAL ACT. The switch is a phrase typed by the owner, checked
@@ -11,6 +11,10 @@
 
 import { $, $$, esc, icon, t, api, post, toast, sheet, ago, day, clock, store, busy } from '/admin/core.js';
 import { btn, field, select, pill, loading, rowDiv } from '/admin/parts.js';
+import { T } from '/admin/i18n.js';
+import { WORDS, merge, tipOptions } from '/admin/fiscal-tip.js';
+
+merge(T, WORDS);
 
 const q = () => '?location_id=' + encodeURIComponent(store.loc || '');
 const fail = e => toast(String(e.message || e));
@@ -45,6 +49,8 @@ export async function open(){
       ${select({ id: 'fx-unit', key: 'fx_saleUnit', value: a.sale_unit || '', options: [{ value: '', key: 'fx_pick' }, ...units, ...lost], tour: 'fiscal.saleUnit' })}
       <p class="muted small" data-t="fx_saleUnitHint"></p>
       ${select({ id: 'fx-fee', key: 'fx_feeItem', value: a.fee_item || '', options: [{ value: '', key: 'fx_noFee' }, ...items], tour: 'fiscal.feeItem' })}
+      ${select({ id: 'fx-tip', key: 'fx_tipItem', value: a.tip_item || '', options: tipOptions(d.items, a.tip_item || '') })}
+      <p class="muted small" data-t="fx_tipHint"></p>
       <div class="btn-row">${btn({ id: 'fxSave', variant: 'primary', icon: 'check', key: 'save', tour: 'fiscal.save' })}</div></section>
     <section class="group mt-3"><p class="eyebrow" data-t="fx_arming"></p>
       <p class="small" data-t="fx_consequence"></p><p class="muted small"><span data-t="fx_marker"></span> <b class="mono">${esc(d.marker || '')}</b></p>
@@ -60,7 +66,7 @@ export async function open(){
 function wire(d){
   const save = body => post('/owner/fiscal/ebills' + q(), body);
   $('#fxSave').onclick = async () => {
-    try { await busy($('#fxSave'), () => save({ sale_unit: $('#fx-unit').value, fee_item: $('#fx-fee').value })); toast(t('saved')); open(); } catch (e) { fail(e); }
+    try { await busy($('#fxSave'), () => save({ sale_unit: $('#fx-unit').value, fee_item: $('#fx-fee').value, tip_item: $('#fx-tip').value })); toast(t('saved')); open(); } catch (e) { fail(e); }
   };
   const arm = $('#fxArm');
   if (arm) arm.onclick = async () => {

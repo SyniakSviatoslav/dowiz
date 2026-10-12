@@ -8,7 +8,7 @@ fn link() -> LinkState {
 }
 
 fn armed() -> Arming {
-    Arming { armed: true, sale_unit: "DELIVERY".into(), fee_item: String::new(), cancel_armed: false }
+    Arming { armed: true, sale_unit: "DELIVERY".into(), fee_item: String::new(), cancel_armed: false, tip_item: String::new() }
 }
 
 #[test]
@@ -78,4 +78,18 @@ fn a_refund_after_the_send_owes_one_cancel_entry() {
     assert_eq!(owed.len(), 1);
     assert_eq!((owed[0].order_id.as_str(), owed[0].sale_id, owed[0].reason.as_str()), ("r1", 9001, "refused_at_door"));
     assert_eq!(owed[0].shape["withoutfiscalization"], Value::Bool(false));
+}
+
+/// THE TIP'S TILL ITEM (D34): read from `fiscal.ebills.tip_item` and written by
+/// the fiscal route, plain text only; twin: unset reads as "", a quote is refused.
+#[test]
+fn the_tip_item_is_read_and_written_as_plain_text() {
+    let get = |k: &str| (k == TIP_ITEM).then(|| " 99 ".to_string());
+    assert_eq!(arming(&get).tip_item, "99");
+    assert_eq!(arming(&|_| None).tip_item, "");
+    let set = ArmIn { tip_item: Some(" 99 ".into()), ..ArmIn::default() };
+    assert_eq!(arm(&set).unwrap(), vec![(TIP_ITEM, "99".to_string())]);
+    let clear = ArmIn { tip_item: Some(String::new()), ..ArmIn::default() };
+    assert_eq!(arm(&clear).unwrap(), vec![(TIP_ITEM, String::new())], "an empty pick clears it");
+    assert!(arm(&ArmIn { tip_item: Some("9\"}".into()), ..ArmIn::default() }).is_err());
 }

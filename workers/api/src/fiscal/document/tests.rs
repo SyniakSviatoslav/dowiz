@@ -31,7 +31,7 @@ fn a_taxed_order_becomes_a_document_read_from_its_stamped_block() {
     assert_eq!(d.groups, vec![Group { rate_ppm: 200_000, lines: 1, base: 750, tax: 125 }]);
     assert_eq!(d.fee, Some(Group { rate_ppm: 200_000, lines: 0, base: 300, tax: 50 }));
     assert_eq!((d.total_base, d.total_tax, d.total), (1050, 175, 1050));
-    assert_eq!(d.lines[0], Line { name: "Kafe".into(), product_id: Some("coffee".into()), qty: 3, unit_as_priced: 250, gross: 750, rate_ppm: 200_000 });
+    assert_eq!(d.lines[0], Line { name: "Kafe".into(), product_id: Some("coffee".into()), qty: 3, unit_as_priced: 250, gross: 750, rate_ppm: 200_000, comped: false });
     assert_eq!(d.kind, Kind::Cash);
     assert_eq!(d.payments, vec![Payment { method: "cash".into(), amount: 1050, currency: "ALL".into(), rate_ppm: None }]);
     assert!(d.inclusive);

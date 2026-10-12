@@ -27,6 +27,7 @@ pub mod ebills_fire;
 pub mod ebills_sender;
 pub mod queue;
 pub mod receipt;
+pub mod refresh;
 pub mod sender;
 pub mod rail;
 pub mod routes;

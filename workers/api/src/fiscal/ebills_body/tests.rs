@@ -76,6 +76,7 @@ fn till() -> Till {
         currency: sale["currency"].clone(),
         sale_unit: Some(ex["saleUnit"].clone()),
         fee_code: None,
+        tip_code: None,
     }
 }
 
@@ -88,12 +89,14 @@ fn doc_7783() -> Document {
         kind: Kind::Cash,
         currency: "ALL".into(),
         inclusive: true,
-        lines: vec![Line { name: "Cola".into(), product_id: Some("p-cola".into()), qty: 1, unit_as_priced: 200, gross: 200, rate_ppm: 200_000 }],
+        lines: vec![Line { name: "Cola".into(), product_id: Some("p-cola".into()), qty: 1, unit_as_priced: 200, gross: 200, rate_ppm: 200_000, comped: false }],
         groups: vec![Group { rate_ppm: 200_000, lines: 1, base: 167, tax: 33 }],
         fee: None,
         total_base: 167,
         total_tax: 33,
         total: 200,
+        discount: 0,
+        tip: 0,
         payments: vec![Payment { method: "cash".into(), amount: 200, currency: "ALL".into(), rate_ppm: None }],
         table: None,
         channel: "storefront".into(),
@@ -144,7 +147,7 @@ fn the_sent_body_carries_the_order_marker_in_notes_and_nothing_else_differs() {
 #[test]
 fn each_vat_class_uses_its_divisor_at_ten_decimals() {
     let at = |ppm: i64, price: i64, qty: i64| {
-        let (rec, _, _) = record(1, &json!({"item": "x"}), "x", qty, price, ppm).unwrap();
+        let (rec, _, _) = record(1, &json!({"item": "x"}), "x", qty, price, price, ppm).unwrap();
         (rec["priceWithoutVat"].to_string(), rec["totalVatAmount"].to_string(), rec["vat"].clone())
     };
     assert_eq!(at(200_000, 200, 1), ("166.6666666667".into(), "33.3333333333".into(), json!("VAT_20")));
@@ -203,7 +206,8 @@ fn what_the_till_cannot_carry_is_refused_and_the_rest_builds() {
     (card.kind, card.payments[0].method) = (Kind::NonCash, "card".into());
     assert_eq!(body(&card, &till(), None).unwrap()["sale"]["paymentMethod"], json!("CARD"));
     let mut fee = doc_7783();
-    fee.fee = Some(Group { rate_ppm: 200_000, lines: 0, base: 250, tax: 50 });
+    // The block `tax_block::stamp` writes for a 300-lek inclusive fee: base IS the gross.
+    fee.fee = Some(Group { rate_ppm: 200_000, lines: 0, base: 300, tax: 50 });
     fee.total = 500;
     let mut t = till();
     t.fee_code = Some("16".into());

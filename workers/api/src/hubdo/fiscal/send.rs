@@ -19,6 +19,7 @@ use crate::fiscal::ebills_cmd::{view, AnswerIn, PlanIn, PlanOut, SenderState, K_
 use crate::fiscal::ebills_fire::Batch;
 use crate::fiscal::ebills_sender::{note, settle, EbillsSender, Intent, IntentWrite, Outcome, INTENT};
 use crate::fiscal::queue::{drain, KIND};
+use crate::fiscal::refresh::{refresh_all, refreshed};
 use crate::fiscal::wire::{self, Config};
 use crate::outbox::{Entry, Verdict};
 use dowiz_hub::settings::Settings;
@@ -58,6 +59,14 @@ impl HubImages {
         Ok(self.put_image(id, generation, &bytes).await?.is_some())
     }
 
+    /// The venue's invoicing currency, from the catalogue's record.
+    async fn fiscal_currency(&self) -> Result<String> {
+        Ok(match self.cat_location().await? {
+            Some(l) => crate::services::venue::currency_of_record(l.map_err(|()| bad("catalogue image is unreadable"))?.and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref()),
+            None => "ALL".into(),
+        })
+    }
+
     /// `fiscal_plan`: the gate, then the claim, then the batch.
     pub(in crate::hubdo) async fn fiscal_plan(&self, input: PlanIn) -> Result<PlanOut> {
         let s = self.settings_image().await?;
@@ -75,13 +84,21 @@ impl HubImages {
         let link = LinkState { usable: cfg.usable(), halted: st.halted, failures: st.failures, last_ok_ms: st.last_ok_ms };
         let (fgen, ft) = self.table_of(wire::IMAGE, wire::CEILING).await?;
         let Some(mut ft) = ft else { return Ok(PlanOut { why: vec!["no fiscal document has been queued".into()], ..PlanOut::default() }) };
-        let entries: Vec<Entry> = rows(&ft, KIND)?;
+        let mut entries: Vec<Entry> = rows(&ft, KIND)?;
         let intents: Vec<Intent> = rows(&ft, INTENT)?;
+        // A QUEUED DOCUMENT FOLLOWS ITS ORDER until a firing claims it (D34,
+        // `fiscal::refresh`): a tip at pay time, a comp, a discount. Same entry,
+        // same uuid, same deadline; never one a firing may have POSTed.
+        let (_, orders) = self.orders_view().await?;
+        let moved = refresh_all(&entries, &intents, &orders, &self.fiscal_currency().await?);
+        for m in &moved {
+            put(&mut ft, KIND, &m.id, m)?;
+            entries.iter_mut().filter(|e| e.id == m.id).for_each(|e| *e = m.clone());
+        }
         let (items, claims) = match gated_plan(&since, &a, &link, &entries, &intents, input.now_ms) {
             Ok(p) => p,
             Err(why) => return Ok(PlanOut { why, ..PlanOut::default() }),
         };
-        let (_, orders) = self.orders_view().await?;
         let owed = cancels_owed(&orders, &|id| ft.has(CANCEL, id), input.now_ms);
         for c in &owed {
             put(&mut ft, CANCEL, &c.order_id, c)?;
@@ -89,7 +106,7 @@ impl HubImages {
         for c in &claims {
             put(&mut ft, INTENT, &c.uuid, c)?;
         }
-        if !(owed.is_empty() && claims.is_empty()) && !self.save_table(wire::IMAGE, fgen, &mut ft).await? {
+        if !(owed.is_empty() && claims.is_empty() && moved.is_empty()) && !self.save_table(wire::IMAGE, fgen, &mut ft).await? {
             return Ok(PlanOut { why: vec!["the fiscal image moved while claiming: next firing".into()], ..PlanOut::default() });
         }
         let loc: Value = match self.cat_location().await? {
@@ -104,7 +121,7 @@ impl HubImages {
         }
         let batch = Batch {
             pos_id: cfg.pos_id, today: p.today, yesterday: p.yesterday, sale_unit: a.sale_unit.clone(),
-            fee_item: Some(a.fee_item.clone()).filter(|f| !f.is_empty()), crosswalk, items,
+            fee_item: Some(a.fee_item.clone()).filter(|f| !f.is_empty()), tip_item: Some(a.tip_item.clone()).filter(|f| !f.is_empty()), crosswalk, items,
         };
         Ok(PlanOut { ready: true, why: Vec::new(), user: cfg.user, secret: cfg.secret, session: st.session, batch })
     }
@@ -211,10 +228,13 @@ impl HubImages {
         let order: Value = serde_json::from_str(&v.order_json).map_err(bad)?;
         let (_, ft) = self.table_of(wire::IMAGE, wire::CEILING).await?;
         let queued = ft.as_ref().and_then(|t| t.all(KIND).into_iter().find_map(|(_, j)| serde_json::from_str::<Entry>(&j).ok().filter(|e| e.to == order_id)));
-        let currency = match self.cat_location().await? {
-            Some(l) => crate::services::venue::currency_of_record(l.map_err(|()| bad("catalogue image is unreadable"))?.and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref()),
-            None => "ALL".into(),
+        let currency = self.fiscal_currency().await?;
+        // The receipt shows the document as the next firing would send it (D34).
+        let intents: Vec<Intent> = match &ft {
+            Some(t) => rows(t, INTENT)?,
+            None => Vec::new(),
         };
+        let queued = queued.map(|e| refreshed(&e, intents.iter().find(|i| i.uuid == e.id), &order, &currency).unwrap_or(e));
         let issued = order.pointer("/fiscal/at").or_else(|| order.get("created_at_ms")).and_then(Value::as_i64).unwrap_or(0);
         let doc = match queued.and_then(|e| serde_json::from_str(&e.text).ok()) {
             Some(d) => d,

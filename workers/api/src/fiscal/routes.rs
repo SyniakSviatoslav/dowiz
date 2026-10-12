@@ -3,10 +3,10 @@
 //! no other (`Place::of_authorised`); the state is read server-side.
 //!
 //!   GET  /api/owner/fiscal               the pane: armed or why not, the queue, each order's stage
-//!   POST /api/owner/fiscal/ebills        {armed?, confirm?, sale_unit?, fee_item?, cancel_armed?}
+//!   POST /api/owner/fiscal/ebills        {armed?, confirm?, sale_unit?, fee_item?, tip_item?, cancel_armed?}
 //!   GET  /api/owner/orders/:id/receipt   the art. 29 receipt text, with the codes once registered
 //!
-//! ARMING IS A LEGAL ACT, and this is the only door to it: the four keys are
+//! ARMING IS A LEGAL ACT, and this is the only door to it: the five keys are
 //! not declared settings (`ebills_arm.rs` says why), and arming without the
 //! typed confirmation is refused here, before the settings image is touched.
 

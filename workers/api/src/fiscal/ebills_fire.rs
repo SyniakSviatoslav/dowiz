@@ -44,6 +44,9 @@ pub struct Batch {
     pub sale_unit: String,
     #[serde(default)]
     pub fee_item: Option<String>,
+    /// The till item a tip is sold as (`fiscal.ebills.tip_item`, D34).
+    #[serde(default)]
+    pub tip_item: Option<String>,
     pub crosswalk: Vec<(String, String)>,
     pub items: Vec<Item>,
 }
@@ -137,7 +140,9 @@ async fn context<T: Transport>(t: &mut T, b: &Batch, rows: &[Value]) -> Result<T
         let detail: Value = serde_json::from_str(&t.read(&Path::Sale { id, pos: b.pos_id }).await.map_err(|f| f.line())?).map_err(|e| format!("sale {id}: {e}"))?;
         if let Some((client, pos, currency)) = template_of(&detail["sale"], b.pos_id) {
             let fee_code = b.fee_item.clone().filter(|f| !f.is_empty());
-            return Ok(Till { items, crosswalk: b.crosswalk.clone(), client, pos, currency, sale_unit: Some(unit), fee_code });
+            // No tip item: a tipped document is refused by name (`adjust::tip`).
+            let tip_code = b.tip_item.clone().filter(|f| !f.is_empty());
+            return Ok(Till { items, crosswalk: b.crosswalk.clone(), client, pos, currency, sale_unit: Some(unit), fee_code, tip_code });
         }
     }
     Err(format!("no recent till sale on POS {} with the default client to copy it from", b.pos_id))

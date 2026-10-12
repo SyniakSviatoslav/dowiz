@@ -11,7 +11,8 @@
 //!
 //! REFUSE BY NAME, NEVER GUESS. A dish with no crosswalk to a till item, a rate
 //! that is not one of the till's four, a payment the till has no single word
-//! for, an order total that is not its lines: each is a `BodyRefusal` naming
+//! for, an order total that is not its lines (after the comps, the promo cut
+//! and the tip, which `adjust` writes as lines): each is a `BodyRefusal` naming
 //! the line, and nothing is sent. A dish is never sent as free text.
 
 use super::document::{Document, Kind};
@@ -39,6 +40,8 @@ pub struct Till {
     pub sale_unit: Option<Value>,
     /// The till item the delivery fee is sold as (`fiscal.ebills.fee_item`).
     pub fee_code: Option<String>,
+    /// The till item a tip is sold as (`fiscal.ebills.tip_item`): a VAT_0 item.
+    pub tip_code: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,6 +57,10 @@ pub enum BodyRefusal {
     Exclusive,
     Payment(String),
     Fee(String),
+    /// The tip has no till item, or one the till taxes.
+    Tip(String),
+    /// A cut the lines cannot carry: comps worth more than it, or more than the lines.
+    Discount(String),
     Total { lines: i64, total: i64 },
     CashLimit(i64),
     Currency(String),
@@ -71,7 +78,7 @@ impl BodyRefusal {
             BodyRefusal::Rate { line, ppm } => format!("\"{line}\" is taxed at {ppm} ppm; the till knows 0, 6, 10 and 20 %"),
             BodyRefusal::Exclusive => "prices are exclusive of VAT; the till's price is VAT-inclusive".into(),
             BodyRefusal::Payment(m) => format!("payment {m} has no single eBills word (CASH or CARD)"),
-            BodyRefusal::Fee(why) => why.clone(),
+            BodyRefusal::Fee(why) | BodyRefusal::Tip(why) | BodyRefusal::Discount(why) => why.clone(),
             BodyRefusal::Total { lines, total } => format!("the lines come to {lines} and the order to {total}: a discount or tip the till cannot carry"),
             BodyRefusal::CashLimit(t) => format!("{t} lek in cash is over the legal limit of {CASH_LIMIT_LEK}"),
             BodyRefusal::Currency(c) => format!("the document is in {c}; the till invoices in ALL"),
@@ -112,17 +119,20 @@ fn vat_of(ppm: i64) -> Option<(&'static str, i128)> {
 }
 
 /// One `saleRecords[]` entry (§1.4.1) and its (total, VAT) in scaled units.
-fn record(no: usize, row: &Value, name: &str, qty: i64, price: i64, ppm: i64) -> Result<(Value, i128, i128), BodyRefusal> {
+/// `price` is the unit price AFTER the discount, `list` before it; the wire's
+/// `discount` is the PERCENT between them (0 when they are equal).
+fn record(no: usize, row: &Value, name: &str, qty: i64, price: i64, list: i64, ppm: i64) -> Result<(Value, i128, i128), BodyRefusal> {
     let (word, pct) = vat_of(ppm).ok_or_else(|| BodyRefusal::Rate { line: name.to_string(), ppm })?;
     let (q, p) = (i128::from(qty), i128::from(price));
     let total = q * p * SCALE;
     let vat = if pct == 0 { 0 } else { ratio(q * p * pct, 100 + pct) };
     let without = ratio(p * 100, 100 + pct);
+    let discount = if price == list || list <= 0 { json!(0) } else { num(ratio(i128::from(list - price) * 100, i128::from(list))) };
     let item_name = row.get("item").and_then(Value::as_str).unwrap_or(name);
     let rec = json!({
         "itemInSale": row, "itemName": item_name, "saleNo": no,
         "refundType": null, "notes": null, "serialNumber": null, "expireDate": null,
-        "price": num(p * SCALE), "amount": num(q * SCALE), "discount": 0,
+        "price": num(p * SCALE), "amount": num(q * SCALE), "discount": discount,
         "priceWithoutVat": num(without), "vat": word,
         "totalValue": num(total), "totalVatAmount": num(vat),
     });
@@ -181,19 +191,25 @@ pub fn body(doc: &Document, till: &Till, notes: Option<&str>) -> Result<Value, B
     let pay = method(doc)?;
     let mut records = Vec::with_capacity(doc.lines.len() + 1);
     let (mut total, mut vat, mut gross) = (0i128, 0i128, 0i64);
-    for l in &doc.lines {
-        let row = row_for(till, &l.name, l.product_id.as_deref())?;
-        let (rec, t, v) = record(records.len() + 1, row, &l.name, l.qty, l.unit_as_priced, l.rate_ppm)?;
+    // Comps and the promo cut are folded into the lines (`adjust`).
+    for p in adjust::parts(doc, till)? {
+        let (rec, t, v) = record(records.len() + 1, p.row, p.name, p.qty, p.price, p.list, p.ppm)?;
         records.push(rec);
-        (total, vat, gross) = (total + t, vat + v, gross + l.gross);
+        (total, vat, gross) = (total + t, vat + v, gross + p.qty * p.price);
     }
-    if let Some(fee) = doc.fee.as_ref().filter(|f| f.base + f.tax != 0) {
+    // An inclusive fee block's `base` IS its gross (dowiz_core::tax step 5).
+    if let Some(fee) = doc.fee.as_ref().filter(|f| f.base != 0) {
         let code = till.fee_code.as_deref().ok_or_else(|| BodyRefusal::Fee("the delivery fee has no eBills item: choose one in the fiscal pane".into()))?;
         let row = till.items.iter().find(|(c, _, _)| c == code).map(|(_, _, r)| r);
         let row = row.ok_or_else(|| BodyRefusal::Fee(format!("the delivery fee's eBills item {code} is not on the till's menu")))?;
-        let (rec, t, v) = record(records.len() + 1, row, "delivery fee", 1, fee.base + fee.tax, fee.rate_ppm)?;
+        let (rec, t, v) = record(records.len() + 1, row, "delivery fee", 1, fee.base, fee.base, fee.rate_ppm)?;
         records.push(rec);
-        (total, vat, gross) = (total + t, vat + v, gross + fee.base + fee.tax);
+        (total, vat, gross) = (total + t, vat + v, gross + fee.base);
+    }
+    if let Some(p) = adjust::tip(doc, till)? {
+        let (rec, t, v) = record(records.len() + 1, p.row, p.name, p.qty, p.price, p.list, p.ppm)?;
+        records.push(rec);
+        (total, vat, gross) = (total + t, vat + v, gross + p.price);
     }
     if gross != doc.total {
         return Err(BodyRefusal::Total { lines: gross, total: doc.total });
@@ -227,6 +243,8 @@ pub fn body(doc: &Document, till: &Till, notes: Option<&str>) -> Result<Value, B
     w.insert("includeClosingTheTable".into(), json!(till.sale_unit.is_some()));
     Ok(Value::Object(w))
 }
+
+mod adjust;
 
 #[cfg(test)]
 mod tests;
