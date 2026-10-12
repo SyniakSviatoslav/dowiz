@@ -381,7 +381,14 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .line.total{font-weight:var(--weight-bold);font-size:var(--text-base);border:0;padding-top:12px}
 
 /* ── states ───────────────────────────────────────────────────────────────── */
-.login{max-width:380px;margin:12vh auto 0;padding:var(--space-8) var(--space-6);border-radius:var(--radius-2xl);background:var(--brand-surface);box-shadow:var(--elevation-2)}
+/* THE DOOR IS CENTRED (TZ 8): both axes, every width. The header and the bar
+   are hidden while signed out, so the page is the card; `safe center` keeps a
+   card taller than a short viewport scrollable from its top, and the viewport
+   meta's `interactive-widget=resizes-content` lets the phone's keyboard shrink
+   100dvh so the button stays above it. */
+body.signin{padding:0}
+body.signin #app,#app:has(>.login){min-height:100dvh;display:grid;align-content:safe center;justify-items:center;padding-block:var(--space-6)}
+.login{width:100%;max-width:380px;margin:0;padding:var(--space-8) var(--space-6);border-radius:var(--radius-2xl);background:var(--brand-surface);box-shadow:var(--elevation-2)}
 .login h1{font-size:var(--text-3xl);letter-spacing:-.03em;text-align:center}
 .login p{text-align:center;color:var(--brand-text-muted);margin-bottom:var(--space-4)}
 .langs{display:flex;justify-content:center;gap:6px;margin-top:var(--space-4)}

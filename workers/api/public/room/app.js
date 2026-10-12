@@ -22,6 +22,9 @@ import { visible } from './till-view.js';
 import { renderFloor, bindFloor, loadFloor } from './floor.js';
 import { safeGet, safeSet } from '../store/storage.js';
 import { renderLogin, renderRoom, renderSitting } from './screens.js';
+import { createRenewer } from '/lib/session-logic.js';
+import * as Draft from '/lib/draft.js';
+import { DRAFT_WORDS } from '/lib/draft-words.js';
 import { mountVoice } from './voice.js';
 import * as ui from '/lib/ui/index.js';
 import { createGuide } from '/lib/guide.js';
@@ -66,7 +69,32 @@ function adopt(s) {
   S.loc = s.staff.locationId; S.role = s.staff.role; S.caps = parseCaps(s.staff.caps);
   S.till = lastTill(S.loc);
 }
-function signedOut() {
+// ── renewal (TZ 7): the shift token is renewed in the background while the
+// tablet is open and under two hours remain (`POST /api/staff/refresh`, the
+// bearer is the proof; the hub re-reads the membership and the session row).
+async function renew() {
+  const s = session.get();
+  if (!s) return false;
+  try {
+    const d = await api('/staff/refresh', { method: 'POST', body: {} });
+    if (!d?.jwt) return false;
+    session.set({ ...s, jwt: d.jwt, staff: { ...s.staff, ...(d.staff || {}) } });
+    return true;
+  } catch { return false; }
+}
+const renewer = createRenewer({ token: () => session.get()?.jwt, renew, visible: () => document.visibilityState === 'visible' });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && session.get()) renewer.tick(); });
+// Every screen's typed fields are kept on the device (lib/draft.js); the
+// screens replace #app wholesale, so the attach follows the DOM itself.
+new MutationObserver(() => { try { if (S.view !== 'login') Draft.mountDrafts($('#app'), { app: 'room', venue: S.loc || '', scope: S.view, lang: lang() }); } catch {} })
+  .observe($('#app'), { childList: true });
+const draftWords = () => DRAFT_WORDS[lang()] || DRAFT_WORDS.en;
+
+/// `explicit`: the person signed out (drafts go with them); otherwise the hub
+/// ended the session and what they typed waits for the next sign-in.
+function signedOut({ explicit = false } = {}) {
+  renewer.stop();
+  if (explicit) Draft.forgetAllDrafts();
   session.set(null); lastRoom.clear(); OUT.forget();
   Object.assign(S, { view: 'login', sittings: [], at: 0, loc: null, caps: new Set(), known: {}, floor: null, floorPick: null });
   render();
@@ -82,6 +110,8 @@ async function onLogin(ev) {
     const d = await api(S.claiming ? '/staff/claim' : '/staff/login', { method: 'POST', body });
     session.set(d); adopt(d);
     S.view = 'room';
+    renewer.start();
+    if (Draft.hasDrafts('room', S.loc || '')) toast(draftWords().draftsKept);
     render(); loadRoom(); loadMenu(c); resync(c);
   } catch (e) {
     toast(e.offline ? t('offline') : e.message || t('error'));
@@ -144,6 +174,7 @@ function render() {
   if (!session.get()) S.view = 'login';
   else if (['round', 'add', 'pay', 'transfer'].includes(S.view) && !r) S.view = s ? 'sitting' : 'room';
   else if (['sitting', 'moveSit'].includes(S.view) && !s) S.view = 'room';
+  document.body.classList.toggle('signin', S.view === 'login');
   if (S.view === 'round') { root.innerHTML = renderRound(c, r); return bindRound(c, root, r); }
   if (S.view === 'add') { root.innerHTML = renderAdd(c); return bindAdd(c, root, r, amend); }
   if (S.view === 'pay') { root.innerHTML = renderPay(c, r); return bindPay(c, root, r); }
@@ -168,7 +199,7 @@ function render() {
     if (act === 'claimToggle') { S.claiming = !S.claiming; return render(); }
     if (act === 'refresh') return loadRoom();
     // UNSENT CASH SALES KEEP THE TABLET SIGNED IN: the money is in the drawer.
-    if (act === 'signout') return S.unsentSales ? toast(t('saleUnsentSignOut')) : signedOut();
+    if (act === 'signout') return S.unsentSales ? toast(t('saleUnsentSignOut')) : signedOut({ explicit: true });
     if (act === 'sell') { S.view = 'sell'; S.basket = {}; if (!S.menu) loadMenu(c).then(render); return render(); }
     if (act === 'till') { S.view = 'till'; return render(); }
     if (act === 'floor') { S.view = 'floor'; S.floorPick = null; render(); return loadFloor(c); }
@@ -241,6 +272,7 @@ retranslate();
 const s0 = session.get();
 if (s0) {
   adopt(s0); S.view = 'room';
+  renewer.start(); renewer.tick();
   const was = lastRoom.get(S.loc);
   if (was) { S.sittings = was.sittings; S.at = was.at; }
   loadRoom(); loadMenu(c).then(() => { if (S.view === 'add') render(); });

@@ -21,8 +21,11 @@ use crate::auth::{
     OWNER_TTL_MS,
 };
 
-const REFRESH_TTL_MS: i64 = 7 * 24 * 60 * 60 * 1000;
-const COURIER_REFRESH_TTL_MS: i64 = 30 * 24 * 60 * 60 * 1000;
+// The refresh window and the courier's session length were two constants (7 d
+// and 30 d); they are one number now, `auth::SESSION_IDLE_MS`, beside the
+// absolute cap that bounds both (`auth::SESSION_ABSOLUTE_MS`). Renewal for the
+// courier and for staff lives in `session_renew`.
+pub mod session_renew;
 /// Two tabs refreshing together is not an attack. The old service picked five
 /// seconds after a bug where honest double-fires logged people out everywhere.
 const CONCURRENT_REFRESH_GRACE_MS: i64 = 5_000;
@@ -66,10 +69,15 @@ fn opaque_token() -> Option<String> {
     Some(format!("{}{}", crate::edge_id()?, crate::edge_id()?).replace('-', ""))
 }
 
+/// `started_ms` is the login this family descends from and travels on every
+/// rotated record: it is what bounds the family (`auth::SESSION_ABSOLUTE_MS`).
+/// `expires_at_ms` is the slid window the caller computed with `auth::slide`.
 async fn issue_owner_refresh(
     env: &Env,
     user_id: &str,
     family_id: &str,
+    started_ms: i64,
+    expires_at_ms: i64,
     now: i64,
 ) -> Result<Option<String>> {
     let Some(tok) = opaque_token() else { return Ok(None) };
@@ -81,7 +89,7 @@ async fn issue_owner_refresh(
     crate::identity_store::with_sessions(env, move |t| {
         let rec = serde_json::json!({
             "user_id": u, "family_id": f, "used": false,
-            "expires_at_ms": now + REFRESH_TTL_MS, "created_at_ms": now,
+            "expires_at_ms": expires_at_ms, "created_at_ms": now, "started_ms": started_ms,
         })
         .to_string();
         let index = vec![(
@@ -294,7 +302,8 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
     let Some(family) = crate::edge_id() else {
         return Response::error("no platform CSPRNG", 500);
     };
-    let refresh = issue_owner_refresh(&ctx.env, &user.id, &family, ctx.data.now_ms).await?;
+    let refresh =
+        issue_owner_refresh(&ctx.env, &user.id, &family, now, now + auth::SESSION_IDLE_MS, now).await?;
 
     Response::from_json(&json!({
         "access_token": access,
@@ -317,6 +326,8 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<crate::Req>) -> R
     struct R {
         user_id: String,
         family_id: String,
+        started_ms: i64,
+        until_ms: i64,
     }
     // ── THE WHOLE ROTATION IS ONE WRITE ──
     //
@@ -326,9 +337,10 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<crate::Req>) -> R
     // the write are the same operation -- and "whoever flips `used` first owns
     // the rotation" stops being a race the database happened to settle.
     enum Verdict {
-        Ok { user_id: String, family_id: String },
+        Ok { user_id: String, family_id: String, started_ms: i64, until_ms: i64 },
         Missing,
-        Expired,
+        /// Expired unused, or past the family's absolute cap: `auth::slide` says which.
+        Over(&'static str),
         Concurrent,
         Reused,
     }
@@ -337,9 +349,22 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<crate::Req>) -> R
         let Some(r) = crate::identity_store::rec(t, crate::identity_store::K_REFRESH, &h) else {
             return Ok(Verdict::Missing);
         };
-        if crate::identity_store::i_of(&r, "expires_at_ms") <= now {
-            return Ok(Verdict::Expired);
-        }
+        // A record written before the cap existed carries no `started_ms`:
+        // its own birth is the nearest truth, and it is bounded from here on.
+        let started_ms = match crate::identity_store::i_of(&r, "started_ms") {
+            0 => crate::identity_store::i_of(&r, "created_at_ms"),
+            s => s,
+        };
+        let until_ms = match auth::slide(
+            started_ms,
+            crate::identity_store::i_of(&r, "expires_at_ms"),
+            auth::SESSION_IDLE_MS,
+            auth::SESSION_ABSOLUTE_MS,
+            now,
+        ) {
+            Ok(u) => u,
+            Err(why) => return Ok(Verdict::Over(why)),
+        };
         let family_id = crate::identity_store::s_of(&r, "family_id");
         let user_id = crate::identity_store::s_of(&r, "user_id");
         if r.get("used").and_then(serde_json::Value::as_bool).unwrap_or(false) {
@@ -377,13 +402,13 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<crate::Req>) -> R
         )];
         t.put(crate::identity_store::K_REFRESH, &h, &r.to_string(), &index, &[])
             .map_err(|e| Error::RustError(format!("refresh: {e}")))?;
-        Ok(Verdict::Ok { user_id, family_id })
+        Ok(Verdict::Ok { user_id, family_id, started_ms, until_ms })
     })
     .await?;
     let row = match verdict {
-        Verdict::Ok { user_id, family_id } => R { user_id, family_id },
+        Verdict::Ok { user_id, family_id, started_ms, until_ms } => R { user_id, family_id, started_ms, until_ms },
         Verdict::Missing => return Response::error("invalid refresh token", 401),
-        Verdict::Expired => return Response::error("refresh token expired", 401),
+        Verdict::Over(why) => return Response::error(format!("refresh token {why}"), 401),
         Verdict::Concurrent => return Response::error("concurrent refresh", 409),
         Verdict::Reused => {
             return Response::error("token reuse detected; family revoked", 401)
@@ -434,14 +459,19 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<crate::Req>) -> R
             owned.into_iter().next().map(|location_id| M { location_id })
         }
     };
-    let Some(m) = m else {
-        return Response::error("owner access revoked", 401);
+    // A PLATFORM ADMINISTRATOR rolls forward the way they signed in: no venue
+    // in the claim, authority from the `admin` record read now. Before this the
+    // main hub's family answered "owner access revoked" on its first refresh.
+    let venue = match m {
+        Some(m) => Some(m.location_id),
+        None if ident.get(crate::identity_store::K_ADMIN, &row.user_id).is_some() => None,
+        None => return Response::error("owner access revoked", 401),
     };
 
     let claims = Claims::Owner {
         sub: row.user_id.clone(),
         user_id: row.user_id.clone(),
-        active_location_id: Some(m.location_id),
+        active_location_id: venue,
         iat: now,
         exp: now + OWNER_TTL_MS,
     };
@@ -450,7 +480,7 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<crate::Req>) -> R
         Err(e) => return e.into_response(),
     };
     let refresh =
-        issue_owner_refresh(&ctx.env, &row.user_id, &row.family_id, ctx.data.now_ms).await?;
+        issue_owner_refresh(&ctx.env, &row.user_id, &row.family_id, row.started_ms, row.until_ms, now).await?;
     Response::from_json(&TokenPair {
         access_token: access,
         refresh_token: refresh.unwrap_or_default(),
@@ -665,7 +695,7 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<crate::Req>) -> R
         let rec = serde_json::json!({
             "courier_id": cid, "family_id": fid, "token_hash": token_hash,
             "active_location_id": lid,
-            "issued_at_ms": now, "expires_at_ms": now + COURIER_REFRESH_TTL_MS,
+            "issued_at_ms": now, "expires_at_ms": now + auth::SESSION_IDLE_MS,
             "revoked_at_ms": serde_json::Value::Null,
         })
         .to_string();
@@ -894,7 +924,7 @@ pub async fn courier_claim(mut req: Request, ctx: RouteContext<crate::Req>) -> R
         let rec = serde_json::json!({
             "courier_id": c3, "family_id": f3, "token_hash": token_hash,
             "active_location_id": l3,
-            "issued_at_ms": now, "expires_at_ms": now + COURIER_REFRESH_TTL_MS,
+            "issued_at_ms": now, "expires_at_ms": now + auth::SESSION_IDLE_MS,
             "revoked_at_ms": serde_json::Value::Null,
         })
         .to_string();

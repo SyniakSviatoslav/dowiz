@@ -14,8 +14,11 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
 // that may be shared; a reload asking for the password again is the cheapest
 // possible mitigation and costs an administrator five seconds.
 let TOKEN = null;
+let REFRESH = null;
+import { createRenewer } from '/lib/session-logic.js';
+import * as Draft from '/lib/draft.js';
 
-async function api(path, opts = {}) {
+async function api(path, opts = {}, retried = false) {
   const r = await fetch(API + path, {
     ...opts,
     headers: {
@@ -24,6 +27,10 @@ async function api(path, opts = {}) {
       ...(TOKEN ? { authorization: 'Bearer ' + TOKEN } : {}),
     },
   });
+  // ONE renewal on a 401, then the session is over: back to the sign-in.
+  if (r.status === 401 && TOKEN && !retried && await renew()) return api(path, opts, true);
+  if (r.status === 401 && TOKEN) { TOKEN = null; REFRESH = null; renewer.stop(); $('#hubs').classList.add('hidden'); $('#signin').classList.remove('hidden'); document.body.classList.add('signed-out'); }
+  if (r.ok && /^(POST|PUT|PATCH|DELETE)$/i.test(opts.method || 'GET')) Draft.draftSaved();
   const text = await r.text();
   let body = null;
   try { body = text ? JSON.parse(text) : null; } catch { /* not json */ }
@@ -32,6 +39,26 @@ async function api(path, opts = {}) {
   }
   return body;
 }
+
+// ── renewal (TZ 7): the family rotates in the background while the page is
+// open (lib/session-logic.js). Both tokens live in memory only, as before: a
+// reload still asks for the password, which is this page's chosen mitigation.
+async function renew() {
+  if (!REFRESH) return false;
+  try {
+    const r = await fetch(API + '/auth/refresh', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refresh_token: REFRESH }) });
+    if (r.status === 409) return true;
+    if (!r.ok) return false;
+    const d = await r.json();
+    TOKEN = d.access_token; if (d.refresh_token) REFRESH = d.refresh_token;
+    return true;
+  } catch { return false; }
+}
+const renewer = createRenewer({ token: () => TOKEN, renew, visible: () => !document.hidden });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && TOKEN) renewer.tick(); });
+// The create-hub form keeps what is typed (lib/draft.js); the sign-in form is
+// marked data-nodraft in hub.html.
+try { Draft.mountDrafts($('#createForm'), { app: 'platform', venue: 'platform', scope: 'create', lang: 'uk' }); } catch {}
 
 function say(el, msg, kind) {
   el.className = 'said ' + (kind || '');
@@ -50,13 +77,14 @@ async function signIn() {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    TOKEN = d.access_token;
+    TOKEN = d.access_token; REFRESH = d.refresh_token || null;
+    renewer.start();
     // THE ROLE IS PROVED BY THE PLATFORM, NOT ASSUMED BY THIS PAGE. A perfectly
     // valid owner token signs in here and is not a platform administrator; the
     // hub list is what says so, and it answers 404 rather than telling them
     // this door exists.
     await loadHubs();
-    $('#signin').classList.add('hidden');
+    $('#signin').classList.add('hidden'); document.body.classList.remove('signed-out');
     $('#hubs').classList.remove('hidden');
     $('#wait').classList.remove('hidden');
     $('#create').classList.remove('hidden');

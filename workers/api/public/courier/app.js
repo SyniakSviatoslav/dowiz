@@ -13,6 +13,8 @@ import { createLearn, loadLessons } from '/lib/learn.js';
 import { createOutbox, newKey } from '/lib/outbox.js';
 import { bodyOf } from '/lib/body.js';
 import { t, lang, LANGS, setLang, nextLang, retranslate, intlLocale, voiceLocale } from '/courier/i18n.js';
+import { createRenewer, dueToRenew } from '/lib/session-logic.js';
+import * as Draft from '/lib/draft.js';
 // THE DESIGN SYSTEM. Every control in the sheet is a /lib/ui component, built
 // by the pure screens in `screens.js`; this file keeps state, network, wiring.
 import * as ui from '/lib/ui/index.js';
@@ -66,6 +68,12 @@ const last = {
 const store = {
   get t(){ try { return localStorage.getItem('dw_c_jwt'); } catch { return null; } },
   set t(v){ try { v ? localStorage.setItem('dw_c_jwt', v) : localStorage.removeItem('dw_c_jwt'); } catch {} },
+  // The session secret the login returns (`<session_id>.<secret>`): what
+  // renews the day-long jwt for thirty days of use, ninety at most (TZ 7).
+  // The hub still reads the session row on every call, so the owner ending
+  // the session ends it whatever this holds.
+  get r(){ try { return localStorage.getItem('dw_c_rt'); } catch { return null; } },
+  set r(v){ try { v ? localStorage.setItem('dw_c_rt', v) : localStorage.removeItem('dw_c_rt'); } catch {} },
   // Theme preference is a display setting, not PII: '' (follow the phone), 'dark' or 'light'.
   get theme(){ try { return localStorage.getItem('dw_c_theme') || ''; } catch { return ''; } },
   set theme(v){ try { v ? localStorage.setItem('dw_c_theme', v) : localStorage.removeItem('dw_c_theme'); } catch {} },
@@ -278,7 +286,7 @@ function toast(m, ic = 'info-circle'){
 // because a request the network never carried is a tap to KEEP and a request
 // the server refused is a tap to report. `e.offline` is the first, `e.status`
 // is the second; the message is unchanged, so nothing that reads it broke.
-async function api(path, opts = {}){
+async function api(path, opts = {}, retried = false){
   const { attend, ...rest } = opts;
   if (attend) { S.inflight++; $('#sheet').classList.add('attending'); }
   try {
@@ -290,7 +298,12 @@ async function api(path, opts = {}){
     } catch (e) {
       const err = new Error(String(e?.message || e)); err.offline = true; throw err;
     }
-    if (r.status === 401) { signedOut(); throw new Error('unauthorised'); }
+    if (r.status === 401) {
+      // ONE renewal, then the session is over (the hub re-read the row and said no).
+      if (!retried && store.r && await renew()) return api(path, opts, true);
+      signedOut(); throw new Error('unauthorised');
+    }
+    if (r.ok && /^(POST|PUT|PATCH|DELETE)$/i.test(rest.method || 'GET')) Draft.draftSaved();
     if (!r.ok) {
       // The hub refuses in plain text: its words, not 'HTTP 4xx' (lib/body.js).
       const d = await bodyOf(r); const m = d.error || d.message || 'HTTP ' + r.status;
@@ -452,8 +465,31 @@ function startTracking(){
 //
 // Measured: two renders and two 401s in 66 s off-shift, with both fields
 // cleared the second time.
+// ── renewal (TZ 7): the jwt is renewed in the background while the app is
+// open and under two hours remain (lib/session-logic.js), and on the first
+// 401. The refresh token is the session row's own secret, so a session the
+// owner ended does not renew.
+async function renew(){
+  if (!store.r) return false;
+  try {
+    const r = await fetch(API + '/courier/auth/refresh', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refreshToken: store.r }) });
+    if (!r.ok) return false;
+    const d = await bodyOf(r);
+    if (!d.jwt) return false;
+    store.t = d.jwt;
+    return true;
+  } catch { return false; }
+}
+const renewer = createRenewer({ token: () => store.t, renew, visible: () => !document.hidden });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.booted) renewer.tick(); });
+// Every screen's typed fields are kept on the device (lib/draft.js): the
+// screens replace #app wholesale, so the attach follows the DOM itself.
+const mountDrafts = () => { try { const a = $('#app'); Draft.mountDrafts(a, { app: 'courier', venue: location.hostname, scope: a.firstElementChild?.id || a.firstElementChild?.className || '', lang }); } catch {} };
+new MutationObserver(mountDrafts).observe($('#app'), { childList: true });
+
 function signedOut(){
-  store.t = null;
+  store.t = null; store.r = null;
+  renewer.stop();
   last.clear();
   S.booted = false;
   // The unsent taps go with the session, for the reason `replica.js` forgets
@@ -496,7 +532,7 @@ document.addEventListener('visibilitychange', () => {
 
 // ── login ──
 function renderLogin(err){
-  $('#sheet').classList.add('tall');
+  $('#sheet').classList.add('tall'); document.body.classList.add('signin');
   $('#app').innerHTML = screens.login(err, ctx());
   $('#toClaim').onclick = () => renderClaim();
   ui.bindSegmented($('#langSeg'), l => { setLang(l); renderLogin(err); });
@@ -511,7 +547,7 @@ function renderLogin(err){
       // A refusal is plain text: `r.json()` threw and showed a parse error (lib/body.js).
       const d = await bodyOf(r);
       if (!r.ok) throw new Error(d.error || d.message || 'HTTP ' + r.status);
-      store.t = d.jwt; boot();
+      store.t = d.jwt; store.r = d.refreshToken || null; boot();
     } catch (e) { renderLogin(String(e.message || e)); }
   };
 }
@@ -532,6 +568,7 @@ function claimFromHash(){
 }
 
 function renderClaim(err, code = null){
+  document.body.classList.add('signin');
   $('#sheet').classList.add('tall');
   $('#app').innerHTML = screens.claim(err, code ? { code } : null);
   $('#toLogin').onclick = () => renderLogin();
@@ -550,7 +587,7 @@ function renderClaim(err, code = null){
       if (!r.ok) throw new Error(d.error || d.message || 'HTTP ' + r.status);
       // Signed in on the spot: they set the password ten seconds ago and
       // re-typing it proves nothing.
-      store.t = d.jwt; boot();
+      store.t = d.jwt; store.r = d.refreshToken || null; boot();
     } catch (e) { renderClaim(String(e.message || e), typed); }
   };
 }
@@ -1198,6 +1235,8 @@ function bindVoiceChrome(){
 }
 
 async function boot(){ S.booted = true;
+  document.body.classList.remove('signin');
+  renewer.start(); renewer.tick();
   // BEFORE the first load, and not only on the `online` event: a courier who
   // killed the app in the tunnel and reopens it above ground is already online,
   // so no event will ever fire and the queue would sit there.
@@ -1245,7 +1284,12 @@ document.documentElement.lang = lang; document.title = t('appTitle'); retranslat
 applyTheme(); bindLangChrome();
 // Signed in: the shift. An invite link: the claim screen with its code. Else: sign in.
 const linkCode = store.t ? null : claimFromHash();
-store.t ? boot() : (linkCode ? renderClaim(null, linkCode) : renderLogin());
+(async () => {
+  // A jwt that ended while the phone was in a pocket is renewed from the
+  // session secret before anything is asked, instead of showing the sign-in.
+  if (store.r && (!store.t || dueToRenew(store.t, Date.now()))) await renew();
+  store.t ? boot() : (linkCode ? renderClaim(null, linkCode) : renderLogin());
+})();
 
 // The shell that lets this page open with no network (`/courier/sw.js`).
 if ('serviceWorker' in navigator) {

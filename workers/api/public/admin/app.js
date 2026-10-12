@@ -8,6 +8,7 @@
 // an action names an intent, the hub's FSM answers.
 
 import { $, $$, esc, icon, t, lang, LANGS, setLang, retranslate, store, S, api, post, withLoc, logout, whenLoggedOut,
+         renew, startRenewal, tokenDue, mountDrafts, hasDrafts, draftWords,
          toast, sheet, closeSheet, bindSheetChrome, hydrate, setCurrency, displayCurrency, CURRENCIES, baseCurrency, POLL_MS, POLL_IDLE_MS, confirm, switchEl } from '/admin/core.js';
 import { ui, btn, field, chips, choice, press, loading } from '/admin/parts.js';
 import { safeGet, safeSet } from '/store/storage.js';
@@ -59,8 +60,8 @@ async function module(id){
 
 // ── login ───────────────────────────────────────────────────────────────────
 function renderLogin(err){
-  $('#top').hidden = true; $('#nav').hidden = true;
-  $('#app').innerHTML = `<div class="login">
+  $('#top').hidden = true; $('#nav').hidden = true; document.body.classList.add('signin');
+  $('#app').innerHTML = `<div class="login" data-nodraft>
     <div class="login-mark" aria-hidden="true"><span>d</span></div>
     <h1>dowiz</h1><p data-t="console"></p><p class="login-line" data-t="loginLine"></p>
     ${field({ id: 'e', key: 'email', type: 'email', autocomplete: 'username', inputmode: 'email', tour: 'login.email' })}
@@ -92,8 +93,8 @@ function renderLogin(err){
 /// signed-in console here, so a cook never needs the room app to start
 /// (`POST /api/staff/claim`, the room's own door; `signin.js` claim()).
 function renderClaim(err){
-  $('#top').hidden = true; $('#nav').hidden = true;
-  $('#app').innerHTML = `<div class="login">
+  $('#top').hidden = true; $('#nav').hidden = true; document.body.classList.add('signin');
+  $('#app').innerHTML = `<div class="login" data-nodraft>
     <div class="login-mark" aria-hidden="true"><span>d</span></div>
     <h1 data-t="acc_claimTitle"></h1><p class="login-line" data-t="acc_claimHint"></p>
     ${field({ id: 'cc', key: 'acc_code', autocomplete: 'one-time-code', autocapitalize: 'characters', spellcheck: false })}
@@ -167,6 +168,7 @@ export async function show(id, arg){
     $('#app').innerHTML = `<div class="screen" id="screen"></div>`;
     await m.render($('#screen'), arg);
     retranslate($('#app')); hydrate($('#app'));
+    mountDrafts($('#screen'), 'tab:' + id);
   };
   // A cross-fade between tabs where the browser has View Transitions; the
   // same swap, instantly, everywhere else and under reduced motion.
@@ -176,7 +178,7 @@ export async function show(id, arg){
 /// Re-render the open tab in place after data moved (the poll, an action).
 export async function rerender(){
   const m = modules.get(S.tab); const host = $('#screen');
-  if (m && host && !document.body.classList.contains('sheet-open')) { await m.render(host); retranslate(host); hydrate(host); }
+  if (m && host && !document.body.classList.contains('sheet-open')) { await m.render(host); retranslate(host); hydrate(host); mountDrafts(host, 'tab:' + S.tab); }
   paintLive();
 }
 function paintLive(){
@@ -350,13 +352,22 @@ function ring(){
   } catch {}
 }
 
+let saidKept = false;
 async function boot(){
+  // A NEW TAB HOLDS NO ACCESS TOKEN (sessionStorage) but may hold the refresh
+  // token: it signs itself in. A token about to end is renewed before the
+  // first read rather than on its first 401.
+  if (store.r && store.loc && tokenDue()) await renew();
   if (!store.t || !store.loc) return renderLogin();
   document.documentElement.lang = lang;
+  document.body.classList.remove('signin');
   $('#top').hidden = false; $('#nav').hidden = false;
   // The venue's open/busy/closed switch is the owner's; staff read it.
   $('#vstate').disabled = me().staff;
   S.booted = true; S.phase = 'loading';
+  startRenewal();
+  // What was typed before a session ended is still here (TZ 7): say so once.
+  if (!saidKept && hasDrafts()) { saidKept = true; toast(draftWords().draftsKept); }
   mountNav();
   // THE COPY IS DRAWN BEFORE ANYTHING IS ASKED. A console reopened at the
   // pass shows the queue it had, immediately; the reconciliation below

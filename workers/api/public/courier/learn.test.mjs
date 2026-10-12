@@ -107,6 +107,6 @@ test('words: every Learn key in every language; the step count carries {n}', () 
 test('offline shell: the lessons engine and both sheets are cached, under a new cache name', () => {
   const sw = read('sw.js');
   for (const f of ['/lib/learn.js', '/lib/learn.css', '/lib/guide.css']) assert.match(sw, new RegExp(`^  '${f.replace(/\./g, '\\.')}',$`, 'm'), f);
-  assert.match(sw, /const SHELL_CACHE = 'dowiz-courier-shell-2026-09-27-ru';/);
+  assert.match(sw, /const SHELL_CACHE = 'dowiz-courier-shell-2026-10-12-session';/);
   assert.match(read('app.js'), /^import \{ createLearn, loadLessons \} from '\/lib\/learn\.js';$/m);
 });

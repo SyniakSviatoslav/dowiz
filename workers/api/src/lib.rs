@@ -378,10 +378,12 @@ pub(crate) fn router<R: routes_dispatch::Routes>(r: R) -> R {
         .post_async("/api/auth/logout", |r, c| edge::run(r, c, accounts::owner_logout))
         .post_async("/api/courier/auth/login", |r, c| edge::run(r, c, accounts::courier_login))
         .post_async("/api/courier/auth/claim", |r, c| edge::run(r, c, accounts::courier_claim))
+        .post_async("/api/courier/auth/refresh", |r, c| edge::run(r, c, accounts::session_renew::courier_refresh))
         // THE ROOM (docs/design/BLUEPRINT-POS-THE-ROOM-2026-09-22.md).
         .post_async("/api/staff/login", |r, c| edge::run(r, c, services::identity::staff::staff_login))
         .post_async("/api/staff/claim", |r, c| edge::run(r, c, services::identity::staff::staff_claim))
         .post_async("/api/staff/password", |r, c| edge::run(r, c, services::identity::staff::staff_password))
+        .post_async("/api/staff/refresh", |r, c| edge::run(r, c, accounts::session_renew::staff_refresh))
         .get_async("/api/owner/staff", |r, c| edge::run(r, c, services::identity::staff_admin::list_staff))
         .post_async("/api/owner/staff/invite", |r, c| edge::run(r, c, services::identity::staff_admin::invite_staff))
         .post_async("/api/owner/staff/:id", |r, c| edge::run(r, c, services::identity::staff_admin::set_staff))

@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
 <meta name="theme-color" content="#0b0b0c">
 <title>dowiz · головний хаб</title>
 <meta name="robots" content="noindex">
@@ -19,7 +19,7 @@
 <link rel="stylesheet" href="/platform/landing.css">
 <link rel="stylesheet" href="/platform/hub.css">
 </head>
-<body class="hub-body">
+<body class="hub-body signed-out">
 
 <header class="top" id="top">
   <div class="wide top-in">
@@ -41,9 +41,9 @@
 
   <section class="on-ink hub-block" id="signin" aria-labelledby="h-signin">
     <div class="wide">
-      <h2 id="h-signin" class="mask-lines" data-reveal>Вхід</h2>
-      <p class="hub-p">Тільки для адміністраторів платформи. Токен живе в пам'яті сторінки: перезавантаження запитає пароль знову.</p>
-      <form class="join" id="signinForm" novalidate>
+      <form class="join" id="signinForm" novalidate data-nodraft>
+        <h2 id="h-signin" class="mask-lines" data-reveal>Вхід</h2>
+        <p class="hub-p">Тільки для адміністраторів платформи. Токен живе в пам'яті сторінки: перезавантаження запитає пароль знову.</p>
         <div class="join-row">
           <div class="join-field">
             <label for="email">Пошта</label>

@@ -203,8 +203,17 @@ pub const BROWSER: &[DeviceKey] = &[
     prefix("dw_learn_", &[], "admin"),
     // W-STORE: the storage this device sends deliveries to (admin/stock-storages-logic.js), a storage id, nothing personal.
     key("dowiz.recvStore", &[], "admin"),
+    // W-SESSION TZ 7 (lib/draft.js): what a signed-in person typed into a form and had not saved when the
+    // session ended -- kept 7 days on their own device, restored into the same record with a visible note,
+    // cleared by the save, the discard button or an explicit sign-out. Owner/staff forms may carry a guest's
+    // name, phone or note (a booking, a customer card); password, card, one-time-code and the typist's own
+    // identity fields (autocomplete username/name/tel/email/address) are never kept. Every app: admin,
+    // courier, room, platform.
+    prefix("dw_draft_", &[Name, Phone, Address, Note, OrderContent], "admin"),
     // The courier app (courier/).
     key("dw_c_jwt", &[Session], "courier"),
+    // W-SESSION TZ 7: the courier session's own secret (`<session_id>.<secret>`), what renews the day-long jwt.
+    key("dw_c_rt", &[Session], "courier"),
     key("dw_c_last", &[Address, OrderContent], "courier"),
     key("dw_c_theme", &[], "courier"),
     key("dw_c_lang", &[], "courier"),

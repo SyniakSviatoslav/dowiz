@@ -12,6 +12,9 @@ import { safeGet, safeSet } from '/store/storage.js';
 import { t, lang, LANGS, setLang, retranslate, intlLocale } from '/admin/i18n.js';
 import * as ui from '/lib/ui/index.js';
 import { btn, field, check } from '/admin/parts.js';
+import { createRenewer, roleOf, dueToRenew } from '/lib/session-logic.js';
+import * as Draft from '/lib/draft.js';
+import { DRAFT_WORDS } from '/lib/draft-words.js';
 
 export const API = '/api';
 export const $ = (s, r = document) => r.querySelector(s);
@@ -54,8 +57,14 @@ export const S = {
 
 let onLogout = null;
 export function whenLoggedOut(fn){ onLogout = fn; }
-export function logout(){
+/// `expired`: the hub ended the session (a 401), not the person. What they
+/// typed stays on the device for the sign-in that follows (lib/draft.js);
+/// an EXPLICIT sign-out forgets it, because the next person at this screen
+/// is not its author.
+export function logout({ expired = false } = {}){
   store.t = null; store.r = null; S.booted = false;
+  stopRenewal();
+  if (!expired) Draft.forgetAllDrafts();
   // THE NEXT PERSON AT THIS SCREEN IS NOT ENTITLED TO THIS QUEUE. The replica
   // holds customers' names and addresses; a logout that left it behind would
   // be a privacy hole with a friendly name.
@@ -63,8 +72,10 @@ export function logout(){
   onLogout?.();
 }
 
+const WRITES = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 /// One fetch wrapper so a 401 has exactly one meaning everywhere: the session is
-/// over. It tries a refresh once, then stops.
+/// over. It tries a renewal once, then stops. A write that landed forgets the
+/// draft of the form whose button sent it.
 export async function api(path, opts = {}, retried = false){
   const body = opts.body && typeof opts.body === 'object' && !(opts.body instanceof Blob) ? JSON.stringify(opts.body) : opts.body;
   const r = await fetch(API + path, {
@@ -72,13 +83,12 @@ export async function api(path, opts = {}, retried = false){
     headers: { ...(body instanceof Blob ? {} : { 'content-type': 'application/json' }), ...(opts.headers || {}),
                ...(store.t ? { authorization: 'Bearer ' + store.t } : {}) },
   });
-  // A staff session has no refresh token: its 401 is the end of the shift.
-  if (r.status === 401 && !store.r && store.t) { logout(); throw new Error(t('sessionOver')); }
-  if (r.status === 401 && !retried && store.r) {
-    const ok = await refresh();
+  if (r.status === 401 && store.t && !retried) {
+    const ok = await renew();
     if (ok) return api(path, opts, true);
-    logout(); throw new Error(t('sessionOver'));
   }
+  if (r.status === 401 && store.t) { logout({ expired: true }); throw new Error(t('sessionOver')); }
+  if (r.ok && WRITES.has(String(opts.method || 'GET').toUpperCase())) Draft.draftSaved();
   if (!r.ok) {
     // The hub's refusal, with the machine-readable `code` when it sends one,
     // so a screen can say it in the reader's language.
@@ -103,6 +113,44 @@ async function refresh(){
     return true;
   } catch { return false; }
 }
+/// A member of staff holds no refresh token: the still-valid bearer is the
+/// proof, and the hub slides their session (`POST /api/staff/refresh`).
+async function renewStaff(){
+  try {
+    const r = await fetch(API + '/staff/refresh', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + store.t }, body: '{}' });
+    if (!r.ok) return false;
+    const d = await r.json();
+    if (d.jwt) store.t = d.jwt;
+    return !!d.jwt;
+  } catch { return false; }
+}
+/// Renew whoever is signed in. True when the token moved.
+export async function renew(){
+  if (store.r) return refresh();
+  if (roleOf(store.t) === 'staff') return renewStaff();
+  return false;
+}
+// ── background renewal (TZ 7) ───────────────────────────────────────────────
+// Every five minutes while the tab is visible, and on every return to it, the
+// token is renewed when under two hours remain (lib/session-logic.js), so an
+// open console never meets the 401 mid-edit. The hub still re-derives the
+// owner's membership and the staff session on EVERY request: a removed person
+// is refused on their next call whatever this timer did.
+const renewer = createRenewer({ token: () => store.t, renew, visible: () => !document.hidden });
+export function startRenewal(){ renewer.start(); renewer.tick(); }
+export function stopRenewal(){ renewer.stop(); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.booted) renewer.tick(); });
+/// Is the token this tab holds about to end (or gone)? `boot` asks before the first read.
+export const tokenDue = () => !store.t || dueToRenew(store.t, Date.now());
+
+// ── drafts (TZ 7) ───────────────────────────────────────────────────────────
+/// Every form rendered into `root` keeps what is typed (lib/draft.js). Called
+/// by `sheet()` and by app.js after a tab renders; the login screen is not.
+export function mountDrafts(root, scope){
+  try { return Draft.mountDrafts(root, { app: 'admin', venue: store.loc || '', scope, lang }); } catch { return []; }
+}
+export const draftWords = () => DRAFT_WORDS[lang] || DRAFT_WORDS.en;
+export const hasDrafts = () => { try { return Draft.hasDrafts('admin', store.loc || ''); } catch { return false; } };
 
 // ── money ───────────────────────────────────────────────────────────────────
 // Integer minor units in, formatted text out, never parsed back.
@@ -153,6 +201,7 @@ export function sheet(html, { name = null, keepScroll = false } = {}){
   const top = keepScroll && box.classList.contains('show') ? box.scrollTop : 0;
   inner.innerHTML = html;
   retranslate(inner); repaintMoney(inner); hydrate(inner);
+  mountDrafts(inner, 'sheet:' + (name || S.tab || ''));
   box.dataset.name = name || '';
   box.classList.add('show'); $('#scrim').classList.add('show'); document.body.classList.add('sheet-open');
   box.scrollTop = top;

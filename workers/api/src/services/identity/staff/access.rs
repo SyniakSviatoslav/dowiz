@@ -16,7 +16,6 @@
 //! (`advance`, `catalog`, `stock`) open every screen it gains.
 
 use serde_json::{json, Value};
-
 #[allow(unused_imports)]
 use super::guard::{BIN, MENU, NUMBERS, PASS, SHELF};
 #[allow(unused_imports)]
@@ -108,6 +107,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/staff/login", Own, Yes),
     ("post", "/api/staff/claim", Own, Yes),
     ("post", "/api/staff/password", Own, Yes),
+    ("post", "/api/staff/refresh", Own, Yes), // W-SESSION: a staff member renews their own session
     ("get", "/api/staff/mcp/keys", Own, Yes),
     ("post", "/api/staff/mcp/keys", Own, Yes),
     ("post", "/api/staff/mcp/keys/revoke", Own, Yes),

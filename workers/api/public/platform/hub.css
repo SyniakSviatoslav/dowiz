@@ -7,6 +7,16 @@
 
 .hub-body{min-height:100dvh;display:flex;flex-direction:column}
 .hub-body main{flex:1 0 auto;display:flex;flex-direction:column}
+/* THE DOOR IS CENTRED (TZ 8): signed out, the hero steps aside and the sign-in
+   form (its heading inside it, hub.html) sits at the viewport's centre on both
+   axes, under the fixed top bar; the keyboard shrinks 100dvh (viewport meta). */
+.hub-body.signed-out .hub-hero{display:none}
+.hub-body.signed-out #signin{flex:1 0 auto;min-height:100dvh;display:grid;align-content:safe center;padding-block:var(--space-8)}
+.hub-body.signed-out #signin .wide{width:100%}
+.hub-body.signed-out #signinForm{margin-inline:auto}
+#signinForm{margin-top:0}
+#signinForm h2{margin-bottom:var(--space-3)}
+#signinForm .hub-p{margin-bottom:var(--space-6)}
 
 /* ── the hero: the name of the screen, and who is signed in ─────────────── */
 .hub-hero{padding-block:calc(120px + env(safe-area-inset-top,0px)) clamp(48px,8vh,96px);display:grid;align-content:end;

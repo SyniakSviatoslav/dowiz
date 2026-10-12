@@ -38,6 +38,60 @@ pub const OWNER_TTL_MS: i64 = 24 * 60 * 60 * 1000;
 pub const COURIER_TTL_MS: i64 = 24 * 60 * 60 * 1000;
 pub const CUSTOMER_TTL_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 
+// ── RENEWAL (W-SESSION, operator TZ 7, 2026-10-12) ──
+//
+// The access tokens above stay SHORT (a day, a shift) and the console renews
+// them in the background while it is open. What changed is what sits behind
+// a renewal: it slides while used and it ends regardless. Neither number
+// weakens revocation -- the guard re-derives membership, the courier's
+// session row and the staff session row on EVERY request, so a removed
+// owner, courier or cook is refused on their next call whatever the token or
+// the family still says.
+//
+/// How long a refresh token or a courier session may sit UNUSED before it is
+/// over: thirty days. Measured need: an owner back from a three-week holiday
+/// found the console asking for the password; the old seven-day window was
+/// the "session timeout" the operator reported. Thirty is the courier's
+/// existing session length, so the two roles now share one number.
+pub const SESSION_IDLE_MS: i64 = 30 * 24 * 60 * 60 * 1000;
+/// How long a session may live HOWEVER OFTEN it is renewed: ninety days from
+/// the login. A family that rotated forever never re-asked for the password;
+/// a stolen refresh token kept warm would have lived for years. Ninety days
+/// is a quarter: long enough that nobody notices it on a working console,
+/// short enough that a leaked token is bounded.
+pub const SESSION_ABSOLUTE_MS: i64 = 90 * 24 * 60 * 60 * 1000;
+/// A staff token (kitchen, waiter) slides by the shift window
+/// (`staff_rules::STAFF_TTL_MS`, 12 h) and ends a week after the login:
+/// a cook's phone left signed in over a weekend still opens on Monday; one
+/// left in a drawer for a week does not.
+pub const STAFF_ABSOLUTE_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+
+/// Slide a session that is being used: the new expiry, or why it is over.
+///
+/// PURE, so a day boundary is tested without waiting for one (the clock gate's
+/// reason). `started_ms` is when the person typed their password; the slid
+/// expiry never passes `started_ms + absolute_ms`, so the last renewal before
+/// the cap ends exactly at the cap and the one after it is refused.
+pub fn slide(
+    started_ms: i64,
+    expires_at_ms: i64,
+    idle_ms: i64,
+    absolute_ms: i64,
+    now_ms: i64,
+) -> std::result::Result<i64, &'static str> {
+    // THE CAP IS NAMED FIRST: a window slid up to the cap expires at the very
+    // instant the cap falls, and the person is told the reason that will not
+    // go away by waiting.
+    let cap = started_ms.saturating_add(absolute_ms);
+    if now_ms >= cap {
+        return Err("session too old; sign in again");
+    }
+    if expires_at_ms <= now_ms {
+        return Err("session expired");
+    }
+    Ok(now_ms.saturating_add(idle_ms).min(cap))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "role", rename_all = "lowercase")]
 pub enum Claims {
@@ -955,5 +1009,27 @@ mod password_tests {
 
         // And the function itself answers false without panicking.
         assert!(!verify_password_constant_work("anything", None));
+    }
+
+    // ── slide: the one renewal rule, at its boundaries ──
+    const D: i64 = 24 * 60 * 60 * 1000;
+
+    #[test]
+    fn a_used_session_slides_by_the_idle_window() {
+        assert_eq!(slide(0, 30 * D, 30 * D, 90 * D, 20 * D), Ok(50 * D));
+    }
+
+    #[test]
+    fn a_session_never_slides_past_its_absolute_cap() {
+        // Day 80 of 90: the window would reach day 110; the cap wins.
+        assert_eq!(slide(0, 90 * D, 30 * D, 90 * D, 80 * D), Ok(90 * D));
+    }
+
+    #[test]
+    fn an_expired_or_too_old_session_is_refused_by_name() {
+        assert_eq!(slide(0, 30 * D, 30 * D, 90 * D, 30 * D), Err("session expired"));
+        assert_eq!(slide(0, 200 * D, 30 * D, 90 * D, 90 * D), Err("session too old; sign in again"));
+        // One millisecond before the cap still renews -- to the cap.
+        assert_eq!(slide(0, 200 * D, 30 * D, 90 * D, 90 * D - 1), Ok(90 * D));
     }
 }

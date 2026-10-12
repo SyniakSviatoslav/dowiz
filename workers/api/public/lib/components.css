@@ -52,3 +52,7 @@
 .my-3{margin:14px 0}
 /* A leading icon that heads an empty/error state. */
 .ico-lg{font-size:2rem;display:block;margin-bottom:8px}
+
+/* ── the restored-draft note (lib/draft.js, TZ 7): the alert, with its one button on the right ── */
+.draft-note{align-items:center;flex-wrap:wrap;margin-bottom:var(--space-3)}
+.draft-note .ui-btn{margin-left:auto;min-height:var(--tap,44px)}

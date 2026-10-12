@@ -26,7 +26,7 @@
 // a cache under the old name would keep serving the old sheet offline.
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-courier-shell-2026-09-27-ru';
+const SHELL_CACHE = 'dowiz-courier-shell-2026-10-12-session';
 const SHELL = [
   '/courier/',
   '/courier/app.js',
@@ -34,6 +34,10 @@ const SHELL = [
   '/courier/screens.js',
   '/courier/mcp.js',
   '/lib/mcp.js',
+  '/lib/session-logic.js',
+  '/lib/draft.js',
+  '/lib/draft-logic.js',
+  '/lib/draft-words.js',
   '/lib/mcp-words.js',
   '/lib/mcp.css',
   '/courier/courier.css',

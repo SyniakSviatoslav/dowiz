@@ -27,7 +27,8 @@ const FAKES = {
     export const toast = () => {}, sheet = () => {}, closeSheet = () => {}, confirm = async () => ({ ok: true }), switchEl = () => '';
     export const setCurrency = async (base, shown) => { F().currency = [base, shown]; };
     export const displayCurrency = () => 'ALL', baseCurrency = () => 'ALL', CURRENCIES = ['ALL', 'EUR'];
-    export const POLL_MS = 15000, POLL_IDLE_MS = 60000;`,
+    export const POLL_MS = 15000, POLL_IDLE_MS = 60000;
+    export const renew = async () => false, startRenewal = () => {}, tokenDue = () => false, mountDrafts = () => [], hasDrafts = () => false, draftWords = () => ({});`,
   '/admin/i18n.js': `export const T = { sq: {}, en: {}, uk: {}, ru: {} }; export const LANGS = ['sq', 'en', 'uk', 'ru'];`,
 };
 register('data:text/javascript,' + encodeURIComponent(`const F = ${JSON.stringify(FAKES)}, P = ${JSON.stringify(PUBLIC)};
@@ -40,7 +41,7 @@ register('data:text/javascript,' + encodeURIComponent(`const F = ${JSON.stringif
 // The page around the shell: what admin/app.js touches at load (the theme, the
 // stored choices, the host the venue slug is read from). Signed out: boot()
 // draws the login and asks nothing.
-globalThis.document = { documentElement: { lang: '', setAttribute(){}, removeAttribute(){} }, hidden: false,
+globalThis.document = { documentElement: { lang: '', setAttribute(){}, removeAttribute(){} }, hidden: false, body: { classList: { add(){}, remove(){}, toggle(){} } },
   querySelectorAll: () => [], querySelector: () => null, addEventListener(){} };
 globalThis.localStorage = { getItem: () => null, setItem(){}, removeItem(){} };
 globalThis.location = { hostname: 'qa-durres.dowiz.org' };
