@@ -80,3 +80,10 @@ test('the edges: nothing typed, nothing answered, a negative field', () => {
   assert.equal(N.plusPack('-5', { qty: 2 }, 'g'), 2, 'a negative field starts from zero');
   assert.equal(N.deletedLine(null, k => k), 'nom_deleted: 0');
 });
+
+test('W-QTY: the delete toast names the dishes marked for review', () => {
+  const t = k => `[${k}]`;
+  assert.equal(N.deletedLine({ deleted: ['nori'], dishes: ['roll'] }, t), '[nom_deleted]: 1 · [nom_recipesChanged]: 1');
+  const r = { deleted: ['nori'], dishes: ['roll', 'maki'], review: [{ id: 'roll', name: 'Roll', removed: [{ supply: 'nori', name: 'Nori' }] }, { id: 'rice-pf', name: 'Sushi rice', prep: true, removed: [] }] };
+  assert.equal(N.deletedLine(r, t), '[nom_deleted]: 1 · [nom_recipesChanged]: 2 · [nom_review]: Roll, Sushi rice');
+});

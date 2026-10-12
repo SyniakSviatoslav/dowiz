@@ -9,6 +9,8 @@ use dowiz_hub::stock::cost::CostBook;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 
+use crate::recipe::Qty;
+
 /// A supply as the report needs it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Supply {
@@ -27,7 +29,9 @@ pub struct Supply {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DishLine {
     pub supply: String,
-    pub qty: i64,
+    /// Milli-units (W-QTY): a whole line counts whole, a fractional one is
+    /// summed in millionths over the window and rounded once, as a leaf is.
+    pub qty: Qty,
     pub gross_g: Option<i64>,
     pub net_g: Option<i64>,
     pub out_g: Option<i64>,
@@ -76,6 +80,27 @@ pub fn cost_of(s: &Supply, book: &CostBook, qty: i64) -> Option<i64> {
     book.value_of(&s.id, qty).or_else(|| s.list_cost.map(|c| dowiz_hub::stock::journal::priced(qty, c, s.basis).unwrap_or(0)))
 }
 
+/// Millionths of a minor unit per base unit of `s`: the average now, else
+/// the list price. What a fractional line or a leaf is priced from.
+fn per_micro(s: &Supply, book: &CostBook) -> Option<i128> {
+    match book.avg_micro(&s.id) {
+        Some(a) => Some(a),
+        None => Some(i128::from(s.list_cost?) * i128::from(MICRO) / i128::from(s.basis.max(1))),
+    }
+}
+
+/// [`cost_of`] for a line that may be fractional: a whole line costs what it
+/// always did; a fractional one is `uq x per_micro`, rounded once.
+pub fn cost_line(s: &Supply, book: &CostBook, qty: Qty) -> Option<i64> {
+    match qty.as_whole() {
+        Some(w) => cost_of(s, book, w),
+        None => {
+            let m2 = i128::from(MICRO) * i128::from(MICRO);
+            i64::try_from((per_micro(s, book)? * i128::from(qty.uq()) + m2 / 2).div_euclid(m2)).ok()
+        }
+    }
+}
+
 /// One dish's row.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DishRow {
@@ -101,9 +126,13 @@ pub struct Use {
     pub net_g: i64,
     pub out_g: i64,
     /// Leaf draws not yet rounded (millionths), whole and per day: a ПФ's
-    /// fraction of a gram is summed over the window and rounded ONCE.
+    /// fraction of a gram is summed over the window and rounded ONCE. A
+    /// fractional raw line (W-QTY) is summed here too.
     pub micro: i64,
     pub micro_by_day: Vec<i64>,
+    /// Of `micro`, what came through a ПФ: its grams are added at the end
+    /// (a raw line's grams are added as it is sold).
+    pub leaf_micro: i64,
 }
 
 /// One day's sales.
@@ -154,12 +183,21 @@ fn sell(s: &mut Sales, dishes: &HashMap<String, Dish>, d: usize, pid: &str, q: i
     for (item, uq) in &dish.leaves {
         let u = s.uses.entry(item.clone()).or_insert_with(|| Use { by_day: vec![0; n], micro_by_day: vec![0; n], ..Use::default() });
         u.micro += uq * q;
+        u.leaf_micro += uq * q;
         u.micro_by_day[d] += uq * q;
     }
     for l in dish.lines.iter().filter(|_| dish.leaves.is_empty()) {
         let u = s.uses.entry(l.supply.clone()).or_insert_with(|| Use { by_day: vec![0; n], micro_by_day: vec![0; n], ..Use::default() });
-        u.by_day[d] += l.qty * q;
-        u.qty += l.qty * q;
+        match l.qty.as_whole() {
+            Some(w) => {
+                u.by_day[d] += w * q;
+                u.qty += w * q;
+            }
+            None => {
+                u.micro += l.qty.uq() * q;
+                u.micro_by_day[d] += l.qty.uq() * q;
+            }
+        }
         u.gross_g += l.gross_g.unwrap_or(0) * q;
         u.net_g += l.net_g.unwrap_or(0) * q;
         u.out_g += l.out_g.unwrap_or(0) * q;
@@ -204,8 +242,8 @@ pub fn fold_with(orders: &[Value], cold: &BTreeMap<i64, super::super::cube::DayC
     // ПФ are its raw grams: no cleaning or cooking loss at the dish (the
     // batch's loss is the production act's, `shelf::fold` "yields").
     for u in s.uses.values_mut() {
-        let g = whole(u.micro);
-        u.qty += g;
+        u.qty += whole(u.micro);
+        let g = whole(u.leaf_micro);
         u.gross_g += g;
         u.net_g += g;
         u.out_g += g;
@@ -254,7 +292,7 @@ pub fn portion_cost(dish: &Dish, supplies: &HashMap<String, Supply>, book: &Cost
         let m2 = i128::from(MICRO) * i128::from(MICRO);
         return i64::try_from((sum + m2 / 2) / m2).ok();
     }
-    dish.lines.iter().map(|l| supplies.get(&l.supply).and_then(|s| cost_of(s, book, l.qty))).sum()
+    dish.lines.iter().map(|l| supplies.get(&l.supply).and_then(|s| cost_line(s, book, l.qty))).sum()
 }
 
 #[cfg(test)]

@@ -156,3 +156,23 @@ fn the_bodies_the_console_sends_now_are_accepted() {
     let b = crate::body::from_text::<StockMoveIn>(r#"{"products":["d1","d2"]}"#).expect("as-is");
     assert_eq!(b.products, Some(vec!["d1".to_string(), "d2".to_string()]));
 }
+
+/// W-QTY (contract §1, H3): the door reads a quantity from its text --
+/// `"1500"`, `1500.000`, `"1 500"` -- and a fraction of the base unit is a
+/// 400 naming it, never a rounding: the shelf counts whole units.
+#[test]
+fn the_door_reads_decimals_and_refuses_a_fraction_of_a_base_unit() {
+    let ok = |raw: &str| serde_json::from_str::<StockMoveIn>(raw).map(|b| (b.qty, b.observed, b.out)).map_err(|e| e.to_string());
+    assert_eq!(ok(r#"{"item":"rice","qty":"1500"}"#).unwrap(), (Some(1500), None, None));
+    // A comma is a DECIMAL comma, never a thousands separator: "2,000" is two.
+    assert_eq!(ok(r#"{"item":"rice","qty":1500.000,"observed":"2,000","out":7}"#).unwrap(), (Some(1500), Some(2), Some(7)));
+    assert_eq!(ok(r#"{"item":"rice","observed":"2 000"}"#).unwrap().1, Some(2000), "a space groups thousands");
+    let e = ok(r#"{"item":"nori","qty":2.5}"#).unwrap_err();
+    assert!(e.contains("2.5: the shelf counts whole units"), "{e}");
+    let e = serde_json::from_str::<StockMoveIn>(r#"{"lines":[{"item":"nori","observed":"0.5"}]}"#).err().map(|e| e.to_string()).unwrap();
+    assert!(e.contains("0.5: the shelf counts whole units"), "{e}");
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    log.set_clock(NOW);
+    assert_eq!(run(&mut log, "received", r#"{"item":"rice","qty":"1500.000"}"#).unwrap()["lines"][0]["qty"], json!(1500));
+    assert_eq!(log.ledger().unwrap().level("rice").on_hand, 1500);
+}

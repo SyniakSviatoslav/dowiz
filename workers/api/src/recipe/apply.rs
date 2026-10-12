@@ -9,7 +9,7 @@
 
 use serde_json::{json, Value};
 
-use super::{bom_json, derive, line_with, weights, BomLineIn, Derived, Line};
+use super::{bom_json, derive, line_with, weights, BomLineIn, Derived, Line, QTY_MAX};
 
 /// What the caller typed in the same request. A value the owner typed wins
 /// over the sum and stays marked as theirs; the import types none of them.
@@ -45,6 +45,46 @@ pub(crate) fn clear_derived(p: &mut Value) {
     p["nutritionComplete"] = Value::Null;
 }
 
+/// HAND-BACK H1 (`/root/lanes/CONTRACT-QTY.md` §5): the hub's
+/// `prep::for_ledger` expands a dish with a semi-finished line from WHOLE
+/// quantities, so a fractional raw line beside one would be booked rounded
+/// -- half a sheet of nori as a whole one. Refused by name until the hub
+/// expands `uq`; main deletes this function with that patch.
+pub fn mixed_fraction_guard(snap: &[Line]) -> Result<(), String> {
+    let has_prep = snap.iter().any(|l| l.kind == dowiz_hub::prep::KIND);
+    match snap.iter().find(|l| !l.qty.is_whole()) {
+        Some(frac) if has_prep => Err(format!(
+            "{}: a fractional line beside a semi-finished line books whole until the hub expands it exactly",
+            frac.supply
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// THE REVIEW FLAG (contract §2): set by a supply's deletion, cleared by the
+/// next recipe write -- any `bom` the editor sends is the owner's review.
+pub(crate) fn clear_review(p: &mut Value) {
+    if let Some(m) = p.as_object_mut() {
+        m.remove("recipeReview");
+    }
+}
+
+/// [`set_bom`] for a write that is NOT the owner's review -- a supply's
+/// price change re-deriving the dish, a deletion -- so the flag stays.
+pub fn set_bom_keeping_review(
+    p: &mut Value,
+    lines: &[BomLineIn],
+    supply: impl Fn(&str) -> Option<String>,
+    typed: Typed,
+) -> Result<Option<Derived>, String> {
+    let review = p.get("recipeReview").cloned();
+    let out = set_bom(p, lines, supply, typed);
+    if let Some(r) = review {
+        p["recipeReview"] = r;
+    }
+    out
+}
+
 /// Set `p`'s recipe to `lines`. `supply` answers a supply's stored JSON by id.
 /// An unknown supply refuses the whole write, naming it; a second line for the
 /// same supply is dropped (one line per supply, as the old editor enforced).
@@ -61,6 +101,9 @@ pub fn set_bom(
         let Some(sj) = supply(&l.supply) else {
             return Err(format!("unknown supply {}", l.supply));
         };
+        if l.qty <= 0 || l.qty > QTY_MAX {
+            return Err(format!("{}: a quantity is more than 0 and at most {QTY_MAX}", l.supply));
+        }
         let sv: Value = serde_json::from_str(&sj).unwrap_or(json!({}));
         if snap.iter().any(|x| x.supply == l.supply) {
             continue;
@@ -69,6 +112,8 @@ pub fn set_bom(
         weights::check(l.net, l.out, line.w.gross).map_err(|e| format!("{}: {e}", l.supply))?;
         snap.push(line);
     }
+    mixed_fraction_guard(&snap)?;
+    clear_review(p);
     if snap.is_empty() {
         clear_derived(p);
         p["bom"] = Value::Null;

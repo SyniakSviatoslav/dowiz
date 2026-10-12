@@ -16,6 +16,8 @@
 
 use serde_json::Value;
 
+use super::Qty;
+
 /// Per mille: 1000 = nothing lost.
 pub const PM: i64 = 1000;
 /// Cleaning can only lose.
@@ -49,20 +51,28 @@ pub fn scale(x: i64, pm: i64) -> i64 {
 }
 
 /// The gross weight of `qty` base units, in grams: grams are grams, a
-/// millilitre is a gram, a piece weighs `weightPerUnit`.
-pub fn gross_g(unit: &str, qty: i64, supply: &Value) -> Option<i64> {
+/// millilitre is a gram, a piece weighs `weightPerUnit`. A fraction of a
+/// gram rounds half up to the whole gram every weight here is (W-QTY: the
+/// error is at most half a gram per fractional line; the LEDGER does not
+/// round, it books millionths).
+pub fn gross_g_milli(unit: &str, qty: Qty, supply: &Value) -> Option<i64> {
     match unit {
-        "g" | "ml" => Some(qty),
-        _ => supply.get("weightPerUnit").and_then(Value::as_f64).map(|w| (w * qty as f64).round() as i64),
+        "g" | "ml" => Some(qty.rounded()),
+        _ => supply.get("weightPerUnit").and_then(Value::as_f64).map(|w| (w * qty.units_f64()).round() as i64),
     }
+}
+
+/// [`gross_g_milli`] for a whole number of base units.
+pub fn gross_g(unit: &str, qty: i64, supply: &Value) -> Option<i64> {
+    gross_g_milli(unit, Qty::whole(qty), supply)
 }
 
 /// The line's gross, net and out from the supply's defaults and the line's
 /// own overrides.
-pub fn weights(unit: &str, qty: i64, supply: &Value, net: Option<i64>, out: Option<i64>) -> Weights {
+pub fn weights(unit: &str, qty: impl Into<Qty>, supply: &Value, net: Option<i64>, out: Option<i64>) -> Weights {
     let clean_pm = pm_of(supply, "cleanPm", CLEAN_MAX);
     let cook_pm = pm_of(supply, "cookPm", COOK_MAX);
-    let gross = gross_g(unit, qty, supply);
+    let gross = gross_g_milli(unit, qty.into(), supply);
     let n = net.or_else(|| gross.map(|g| scale(g, clean_pm)));
     let o = out.or_else(|| n.map(|v| scale(v, cook_pm)));
     Weights { gross, net: n, out: o, clean_pm, cook_pm, net_set: net, out_set: out }

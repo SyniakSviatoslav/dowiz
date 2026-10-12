@@ -51,7 +51,7 @@ fn the_catalogue_as_the_report_reads_it() {
     assert_eq!((s["salmon"].basis, s["salmon"].list_cost, s["salmon"].clean_pm, s["salmon"].cook_pm), (100, Some(180), 550, 1000));
     assert_eq!(s["box"].basis, 1);
     let d = dishes_of(&cat);
-    assert_eq!(d["sake"].lines[0], DishLine { supply: "salmon".into(), qty: 100, gross_g: Some(100), net_g: Some(55), out_g: Some(50) });
+    assert_eq!(d["sake"].lines[0], DishLine { supply: "salmon".into(), qty: 100.into(), gross_g: Some(100), net_g: Some(55), out_g: Some(50) });
     assert_eq!(d["sake"].lines[1].gross_g, Some(12));
     assert!(d["water"].lines.is_empty());
 }

@@ -136,6 +136,10 @@ pub fn shelf(cat: &dowiz_hub::catalog::Catalog, log: &dowiz_hub::stock::StockLog
                 // is use nobody measured against -- a count is due, not an alarm.
                 "needsCount": !led.is_counted(&id) && level.on_hand < 0,
             });
+            // W-QTY (CONTRACT-QTY §2): a ПФ whose card lost an ingredient, until it is saved again.
+            if super::supplies::delete::review::has_mark(&j) {
+                row["review"] = json!(true);
+            }
             if let (Some(m), Some(x)) = (row.as_object_mut(), more.as_object()) {
                 for (k, val) in x {
                     m.insert(k.clone(), val.clone());

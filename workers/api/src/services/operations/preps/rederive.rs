@@ -11,8 +11,8 @@
 use dowiz_hub::catalog::Catalog;
 use serde_json::Value;
 
-use crate::recipe::apply::{set_bom, Typed};
-use crate::recipe::BomLineIn;
+use crate::recipe::apply::{set_bom_keeping_review, Typed};
+use crate::recipe::{BomLineIn, Qty};
 
 /// The stored lines of a dish, as `set_bom` takes them.
 pub fn lines_of(p: &Value) -> Vec<BomLineIn> {
@@ -22,7 +22,7 @@ pub fn lines_of(p: &Value) -> Vec<BomLineIn> {
             b.iter()
                 .filter_map(|l| {
                     let weighed = |k: &str| l.get(k).and_then(Value::as_i64);
-                    Some(BomLineIn { supply: l.get("supply")?.as_str()?.to_string(), qty: l.get("qty")?.as_i64()?, net: weighed("net"), out: weighed("out") })
+                    Some(BomLineIn { supply: l.get("supply")?.as_str()?.to_string(), qty: Qty::from_stored(l)?, net: weighed("net"), out: weighed("out") })
                 })
                 .collect()
         })
@@ -40,7 +40,8 @@ pub fn dishes_using(cat: &mut Catalog, item: &str) -> Vec<String> {
         let lines = lines_of(&p);
         let typed = Typed::from_record(&p);
         let before = p.to_string();
-        if set_bom(&mut p, &lines, |s| cat.supply(s), typed).is_ok() && p.to_string() != before {
+        // A re-derivation is not the owner's review: the flag stays (contract §2).
+        if set_bom_keeping_review(&mut p, &lines, |s| cat.supply(s), typed).is_ok() && p.to_string() != before {
             cat.set_product(&pid, &p.to_string());
             done.push(pid);
         }

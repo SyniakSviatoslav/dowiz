@@ -12,7 +12,7 @@ fn supply(id: &str) -> Option<String> {
 }
 
 fn line(s: &str, qty: i64) -> BomLineIn {
-    BomLineIn { supply: s.into(), qty, net: None, out: None }
+    BomLineIn { supply: s.into(), qty: qty.into(), net: None, out: None }
 }
 
 fn dish() -> Value {
@@ -120,7 +120,7 @@ fn clearing_a_recipe_clears_only_what_it_derived() {
 #[test]
 fn a_weighed_line_is_stored_and_the_dish_weighs_its_out() {
     let mut p = dish();
-    let fillet = BomLineIn { supply: "salmon".into(), qty: 100, net: Some(55), out: Some(50) };
+    let fillet = BomLineIn { supply: "salmon".into(), qty: 100.into(), net: Some(55), out: Some(50) };
     set_bom(&mut p, &[fillet, line("rice", 90)], supply, Typed::default()).unwrap();
     assert_eq!(p["bom"], json!([{ "supply": "salmon", "qty": 100, "net": 55, "out": 50 }, { "supply": "rice", "qty": 90 }]));
     assert_eq!(p["weightG"], json!(140), "50 g of salmon on the plate + 90 g rice");
@@ -129,8 +129,52 @@ fn a_weighed_line_is_stored_and_the_dish_weighs_its_out() {
     assert_eq!(p["cost"], json!(240 + 34), "cost is the GROSS the kitchen paid for");
     // Refusal twin: a net above the gross, and nothing changed on the dish.
     let before = p.clone();
-    let bad = BomLineIn { supply: "salmon".into(), qty: 100, net: Some(101), out: None };
+    let bad = BomLineIn { supply: "salmon".into(), qty: 100.into(), net: Some(101), out: None };
     let e = set_bom(&mut p, &[bad], supply, Typed::default()).unwrap_err();
     assert!(e.contains("salmon") && e.contains("more than the gross"), "{e}");
     assert_eq!(p, before);
+}
+
+/// Contract §1's last row and §5 H1: a fractional raw line beside a
+/// semi-finished line would be booked WHOLE by the hub's `for_ledger`
+/// (half a sheet as one), so it is refused by name, never rounded. Its
+/// twins: the same fraction with no ПФ beside it, and a whole line beside a ПФ.
+#[test]
+fn a_fractional_raw_line_beside_a_semi_finished_line_is_refused_by_name() {
+    let look = |id: &str| match id {
+        "pf" => Some(json!({ "id": "pf", "name": "PF", "unit": "g", "kind": "prep", "card": { "lines": [{ "item": "rice", "qty": 100 }], "yield": 100 } }).to_string()),
+        "nori" => Some(json!({ "name": "Nori", "unit": "unit", "kind": "food_ingredient", "costPerBasis": 30 }).to_string()),
+        other => supply(other),
+    };
+    let half = BomLineIn { supply: "nori".into(), qty: crate::recipe::Qty::milli(500), net: None, out: None };
+    let pf = BomLineIn { supply: "pf".into(), qty: 50.into(), net: None, out: None };
+    let mut p = dish();
+    let err = set_bom(&mut p, &[pf.clone(), half.clone()], look, Typed::default()).unwrap_err();
+    assert_eq!(err, "nori: a fractional line beside a semi-finished line books whole until the hub expands it exactly");
+    assert!(p.get("bom").is_none(), "nothing written");
+    set_bom(&mut p, &[half.clone(), line("rice", 90)], look, Typed::default()).unwrap();
+    assert_eq!(p["bom"], json!([{ "supply": "nori", "uq": 500_000 }, { "supply": "rice", "qty": 90 }]));
+    assert_eq!(p["cost"], json!(15 + 34), "half a sheet at 30, 90 g rice at 38/100");
+    set_bom(&mut p, &[pf, line("rice", 90)], look, Typed::default()).unwrap();
+    // Bounds hold for a fraction too: 0 and past the maximum are refused.
+    let zero = BomLineIn { supply: "rice".into(), qty: crate::recipe::Qty::milli(0), net: None, out: None };
+    assert!(set_bom(&mut p, &[zero], look, Typed::default()).unwrap_err().contains("more than 0"));
+    let huge = BomLineIn { supply: "rice".into(), qty: crate::recipe::Qty::milli(100_000_001), net: None, out: None };
+    assert!(set_bom(&mut p, &[huge], look, Typed::default()).unwrap_err().contains("at most 100000"));
+}
+
+/// Contract §3: the dish's cost is the EXACT sum rounded once; the lines are
+/// rounded for display. 3 x 0.333 g at 1 per 100 g: lines show 0, the dish 0;
+/// 7 lines of 0.5 g at 100 per 100 g: each shows 1 (0.5 half up), the dish 4 (3.5).
+#[test]
+fn the_dish_cost_is_the_exact_sum_rounded_once() {
+    let look = |id: &str| id.strip_prefix("s").map(|_| json!({ "name": id, "unit": "g", "kind": "food_ingredient", "costPerBasis": 100 }).to_string());
+    let lines: Vec<BomLineIn> = (1..=7).map(|i| BomLineIn { supply: format!("s{i}"), qty: crate::recipe::Qty::milli(500), net: None, out: None }).collect();
+    let mut p = json!({ "id": "x" });
+    set_bom(&mut p, &lines, look, Typed::default()).unwrap();
+    assert_eq!(p["cost"], json!(4), "7 x 0.5 minor = 3.5 -> 4, not 7 x round(0.5)");
+    let mut read = p.clone();
+    crate::recipe::hydrate(&mut read, look);
+    assert_eq!(read["bom"][0]["cost"], json!(1), "a line shows its own rounding");
+    assert_eq!(read["cost"], json!(4));
 }

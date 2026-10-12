@@ -8,7 +8,10 @@
 //! re-derived from what is left -- nutrition, weight, ingredient list and
 //! cost, exactly as a hand-edited recipe is (`recipe::apply::set_bom`); a
 //! value the owner TYPED stays theirs. From this moment no order can reserve
-//! it: no recipe names it. (2) The stock ledger, in the venue's object:
+//! it: no recipe names it. THE DISH IS MARKED (W-QTY, TZ 2026-10-12 item 3,
+//! `/root/lanes/CONTRACT-QTY.md` §2): `recipeReview: [{supply, name, qty}]`
+//! names what left, a ПФ keeps `review: [{supply, name, qty}]`, and the
+//! mark goes when the recipe is next saved by hand -- never by a re-derivation. (2) The stock ledger, in the venue's object:
 //! one signed `Removed` per id it knows (`stock/removed.rs`) -- the history
 //! stays in the append-only log, the level, holds, lots and price leave every
 //! fold. No waste is recorded and no report counts it as waste.
@@ -25,8 +28,8 @@ use serde_json::{json, Value};
 use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
-use crate::recipe::apply::{clear_derived, set_bom, Typed};
-use crate::recipe::BomLineIn;
+use crate::recipe::apply::{clear_derived, set_bom_keeping_review, Typed};
+use crate::recipe::{BomLineIn, Qty};
 use dowiz_hub::catalog::Catalog;
 
 /// What the catalogue step changed.
@@ -36,7 +39,14 @@ pub struct Removal {
     pub deleted: Vec<String>,
     /// Dishes that lost a recipe line, re-derived.
     pub dishes: Vec<String>,
+    /// The marks set: `{id, name, removed: [{supply, name, qty}]}` per dish
+    /// and `{id, name, prep: true, removed: [...]}` per ПФ.
+    pub review: Vec<Value>,
 }
+
+/// The review marks a deletion leaves (contract §2), pure.
+pub mod review;
+use review::{mark, mark_on};
 
 /// The ids of a request: trimmed, distinct, 1 to `MAX_IDS`. PURE.
 pub fn ids_of(raw: &[String]) -> std::result::Result<Vec<String>, String> {
@@ -77,52 +87,92 @@ pub fn remove_supplies(cat: &mut Catalog, ids: &[String]) -> Removal {
     // dish naming such a card is re-derived below although its own lines
     // do not change.
     let before = cat.supplies();
-    let touched: Vec<String> = ids.iter().flat_map(|id| dowiz_hub::prep::uses_of(id, &before, &[]).preps).map(|(p, _)| p).collect();
+    let name_of = |id: &str| -> String {
+        before.iter().find(|(i, _)| i == id).and_then(|(_, j)| dowiz_hub::minijson::str_field(j, "name")).unwrap_or_else(|| id.to_string())
+    };
+    // (ПФ, the marks it takes): which cards reach a deleted item, READ BEFORE
+    // anything is removed; a dish naming such a card is re-derived and marked
+    // below although its own lines do not change.
+    let mut touched: Vec<(String, Vec<Value>)> = Vec::new();
     let deleted: Vec<String> = ids.iter().filter(|id| cat.remove_supply(id)).cloned().collect();
+    let mut review = Vec::new();
     // The cards first, so the dishes below re-derive from cards without the line.
-    for (sid, j) in before {
+    for (sid, j) in &before {
         // A ПФ deleted in this same call is not rewritten: that would write it back.
-        if gone(&sid) {
+        if gone(sid) {
             continue;
         }
-        let Some(mut card) = dowiz_hub::prep::card_of(&j) else { continue };
-        let n = card.lines.len();
+        let Some(mut card) = dowiz_hub::prep::card_of(j) else { continue };
+        let marks: Vec<Value> = card.lines.iter().filter(|l| gone(&l.item)).map(|l| mark(&l.item, &name_of(&l.item), json!(l.qty), None)).collect();
+        if marks.is_empty() {
+            continue;
+        }
         card.lines.retain(|l| !gone(&l.item));
-        if card.lines.len() == n {
-            continue;
-        }
-        let Ok(mut v) = serde_json::from_str::<Value>(&j) else { continue };
+        let Ok(mut v) = serde_json::from_str::<Value>(j) else { continue };
         v["card"] = dowiz_hub::prep::card_json(&card);
-        cat.set_supply(&sid, &v.to_string());
+        // The ПФ's mark lives at the TOP of its record, under `review`: a key
+        // that sorts after `name`, so `minijson::str_field(j, "name")` (the
+        // first "name" in the text) still answers the ПФ's own name and not the
+        // removed ingredient's; `preps::record` rebuilds the record without it.
+        mark_on(&mut v, "review", marks.clone());
+        cat.set_supply(sid, &v.to_string());
+        review.push(json!({ "id": sid, "name": name_of(sid), "prep": true, "removed": marks.clone() }));
+        touched.push((sid.clone(), marks));
     }
+    // Every card ABOVE a touched one reaches the removed item too.
+    let after = cat.supplies();
+    let above: Vec<(String, Vec<Value>)> = touched
+        .iter()
+        .flat_map(|(pid, marks)| {
+            let via: Vec<Value> = marks.iter().map(|m| { let mut m = m.clone(); m["via"] = json!(pid); m }).collect();
+            dowiz_hub::prep::uses_of(pid, &after, &[]).preps.into_iter().map(move |(p, _)| (p, via.clone()))
+        })
+        .collect();
+    touched.extend(above);
     let mut dishes = Vec::new();
     for (pid, j) in cat.products() {
         let Ok(mut p) = serde_json::from_str::<Value>(&j) else { continue };
         let Some(bom) = p.get("bom").and_then(Value::as_array).cloned() else { continue };
-        let keep: Vec<Value> = bom.into_iter().filter(|l| !l.get("supply").and_then(Value::as_str).is_some_and(gone)).collect();
-        // Unchanged lines, and no card under them touched: not rewritten.
-        let through_card = keep.iter().any(|l| l.get("supply").and_then(Value::as_str).is_some_and(|s| touched.iter().any(|t| t == s)));
-        if keep.len() == p["bom"].as_array().map_or(0, Vec::len) && !through_card {
+        let (lost, keep): (Vec<Value>, Vec<Value>) = bom.into_iter().partition(|l| l.get("supply").and_then(Value::as_str).is_some_and(gone));
+        let mut marks: Vec<Value> = lost
+            .iter()
+            .filter_map(|l| Some(mark(l.get("supply")?.as_str()?, &name_of(l.get("supply")?.as_str()?), Qty::from_stored(l).map(Qty::json).unwrap_or(Value::Null), None)))
+            .collect();
+        // A line naming a touched card: the dish reaches the removed item through it.
+        for l in &keep {
+            if let Some((card, via)) = l.get("supply").and_then(Value::as_str).and_then(|s| touched.iter().find(|(t, _)| t == s)) {
+                marks.extend(via.iter().map(|m| {
+                    let mut m = m.clone();
+                    if m.get("via").is_none() {
+                        m["via"] = json!(card);
+                    }
+                    m
+                }));
+            }
+        }
+        if marks.is_empty() {
             continue;
         }
         let lines: Vec<BomLineIn> = keep
             .iter()
             .filter_map(|l| {
                 let weighed = |k: &str| l.get(k).and_then(Value::as_i64);
-                Some(BomLineIn { supply: l.get("supply")?.as_str()?.to_string(), qty: l.get("qty")?.as_i64()?, net: weighed("net"), out: weighed("out") })
+                Some(BomLineIn { supply: l.get("supply")?.as_str()?.to_string(), qty: Qty::from_stored(l)?, net: weighed("net"), out: weighed("out") })
             })
             .collect();
         let typed = Typed::from_record(&p);
         clear_derived(&mut p);
+        mark_on(&mut p, "recipeReview", marks.clone());
         // A remaining line whose supply is itself long gone cannot be derived:
         // the recipe keeps its lines, minus the deleted ones, as stored.
-        if set_bom(&mut p, &lines, |s| cat.supply(s), typed).is_err() {
+        if set_bom_keeping_review(&mut p, &lines, |s| cat.supply(s), typed).is_err() {
             p["bom"] = Value::Array(keep);
         }
         cat.set_product(&pid, &p.to_string());
+        review.push(json!({ "id": pid, "name": p.get("name").cloned().unwrap_or(json!(pid)), "removed": marks }));
         dishes.push(pid);
     }
-    Removal { deleted, dishes }
+    Removal { deleted, dishes, review }
 }
 
 /// Why a delete was held back before anything changed.
@@ -240,7 +290,7 @@ pub async fn delete_supplies(mut req: Request, ctx: RouteContext<crate::Req>) ->
     if removal.deleted.is_empty() && stock.as_array().is_none_or(Vec::is_empty) {
         return Response::error("unknown ingredient", 404);
     }
-    Response::from_json(&json!({ "ok": true, "deleted": removal.deleted, "dishes": removal.dishes, "stock": stock }))
+    Response::from_json(&json!({ "ok": true, "deleted": removal.deleted, "dishes": removal.dishes, "review": removal.review, "stock": stock }))
 }
 
 #[cfg(test)]

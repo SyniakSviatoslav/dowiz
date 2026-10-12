@@ -5,6 +5,7 @@
 //! dish's stored cost is what a fresh derivation says, and the preps list
 //! names only dishes and cards that exist.
 use super::*;
+use crate::recipe::apply::set_bom;
 use crate::services::operations::preps::{self, LineIn, PrepIn};
 use crate::services::operations::preps::rederive::lines_of;
 
@@ -17,7 +18,7 @@ fn catalogue() -> Catalog {
     save_prep(&mut cat, "sushi-rice", &[("rice", 1000), ("mitsukan", 250)], 1200);
     for (id, lines) in [("roll", vec![("sushi-rice", 130), ("salt", 1)]), ("bowl", vec![("rice", 200)])] {
         let mut d = json!({ "id": id, "name": id, "price": 500, "categoryId": "c1" });
-        let l: Vec<BomLineIn> = lines.iter().map(|(s, q)| BomLineIn { supply: s.to_string(), qty: *q, net: None, out: None }).collect();
+        let l: Vec<BomLineIn> = lines.iter().map(|(s, q)| BomLineIn { supply: s.to_string(), qty: (*q).into(), net: None, out: None }).collect();
         set_bom(&mut d, &l, |s| cat.supply(s), Typed::default()).unwrap();
         cat.set_product(id, &d.to_string());
     }

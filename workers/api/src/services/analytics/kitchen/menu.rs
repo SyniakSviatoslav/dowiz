@@ -17,7 +17,7 @@
 //!
 //! Integer arithmetic only: every comparison is cross-multiplied in i128.
 
-use super::sales::{cost_of, portion_cost, Dish, Sales, Supply};
+use super::sales::{cost_line, portion_cost, Dish, Sales, Supply};
 use dowiz_hub::stock::cost::CostBook;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -47,7 +47,7 @@ pub fn inputs(sold: &Sales, dishes: &HashMap<String, Dish>, supplies: &HashMap<S
             let costliest = dish.and_then(|d| {
                 d.lines
                     .iter()
-                    .filter_map(|l| supplies.get(&l.supply).and_then(|s| cost_of(s, book, l.qty).map(|c| (s.id.clone(), s.name.clone(), c))))
+                    .filter_map(|l| supplies.get(&l.supply).and_then(|s| cost_line(s, book, l.qty).map(|c| (s.id.clone(), s.name.clone(), c))))
                     .max_by(|a, b| a.2.cmp(&b.2).then(b.0.cmp(&a.0)))
             });
             MenuIn {

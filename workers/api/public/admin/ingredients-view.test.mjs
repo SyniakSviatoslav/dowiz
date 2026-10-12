@@ -26,6 +26,10 @@ test('a row: price at the average, levels, the nearest date, the four actions', 
   assert.ok(!html.includes('<script>'), 'a name is text');
   const n = V.rowMarkup(nori, fmt);
   assert.ok(n.includes('data-t="inv_needsCount"') && !n.includes('class="gauge"'), 'I0: an uncounted minus is a count due, with no gauge');
+  // W-QTY: a semi-finished product whose card lost an ingredient wears the review pill.
+  assert.ok(!n.includes('data-t="inv_review"'), 'an unmarked row has no review pill');
+  const marked = V.rowMarkup({ ...nori, kind: 'prep', review: true }, fmt);
+  assert.ok(marked.includes('data-t="inv_review"'), 'a marked ПФ says so on its row');
 });
 
 test('the alarms count and filter, and the dishes that reduce no stock group by category', () => {

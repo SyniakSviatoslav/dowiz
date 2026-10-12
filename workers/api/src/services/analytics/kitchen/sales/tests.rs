@@ -7,7 +7,7 @@ fn w() -> Window {
     Window { starts: vec![0, 100, 200], end: 300, days: vec![20260924, 20260925, 20260926] }
 }
 fn dishes() -> HashMap<String, Dish> {
-    let line = |s: &str, qty, g, n, o| DishLine { supply: s.into(), qty, gross_g: Some(g), net_g: Some(n), out_g: Some(o) };
+    let line = |s: &str, qty: i64, g, n, o| DishLine { supply: s.into(), qty: qty.into(), gross_g: Some(g), net_g: Some(n), out_g: Some(o) };
     HashMap::from([
         ("sake".to_string(), Dish { id: "sake".into(), name: "Sake".into(), lines: vec![line("salmon", 100, 100, 55, 50), line("rice", 90, 90, 90, 200)], leaves: vec![] }),
         ("cola".to_string(), Dish { id: "cola".into(), name: "Cola".into(), lines: vec![], leaves: vec![] }),
@@ -91,4 +91,22 @@ fn an_archived_day_from_the_cube_folds_like_its_orders() {
     let cold = fold_with(&[], &BTreeMap::from([(20260924, row)]), &dishes(), &w());
     assert_eq!((cold.days, cold.dishes, cold.uses, cold.unmodelled), (hot.days, hot.dishes, hot.uses, hot.unmodelled));
     assert!(cold.placed_at.is_empty(), "an archived order dates no draw: the shelf says undated, not today");
+}
+
+/// W-QTY: a fractional raw line (half a sheet of nori) is summed in
+/// millionths over the window and rounded ONCE, as a leaf is; its grams are
+/// the line's; its cost is `uq x the list price`, rounded once.
+#[test]
+fn a_fractional_raw_line_is_summed_exactly_and_priced_exactly() {
+    let nori = DishLine { supply: "nori".into(), qty: crate::recipe::Qty::milli(500), gross_g: Some(2), net_g: Some(2), out_g: Some(2) };
+    let dishes = HashMap::from([("roll".to_string(), Dish { id: "roll".into(), name: "Roll".into(), lines: vec![nori], leaves: vec![] })]);
+    let orders = vec![order("o1", 10, "DELIVERED", json!([{ "product_id": "roll", "quantity": 3, "unit_price": 500 }]))];
+    let s = fold(&orders, &dishes, &w());
+    let u = &s.uses["nori"];
+    assert_eq!((u.qty, u.by_day.clone(), u.gross_g), (2, vec![2, 0, 0], 6), "1.5 sheets book 2 (half up); 3 x 2 g");
+    let sup = Supply { id: "nori".into(), name: "Nori".into(), unit: "unit".into(), basis: 1, list_cost: Some(30), clean_pm: 1000, cook_pm: 1000 };
+    let book = dowiz_hub::stock::StockLog::create_sized(64 * 1024).unwrap().cost_book();
+    assert_eq!(cost_line(&sup, &book, crate::recipe::Qty::milli(500)), Some(15));
+    assert_eq!(cost_line(&sup, &book, crate::recipe::Qty::whole(2)), Some(60));
+    assert_eq!(portion_cost(&dishes["roll"], &HashMap::from([("nori".to_string(), sup)]), &book), Some(15));
 }

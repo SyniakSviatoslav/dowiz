@@ -10,6 +10,7 @@ import { T } from '/admin/i18n.js';
 
 export const WORDS = {
   sq: {
+    nom_review: 'Receta kërkon rishikim',
     nom_addMany: 'Shto disa', nom_addManyHint: 'Një përbërës për rresht. Njësia dhe grupi më poshtë vlejnë për çdo rresht; një rresht mund tʼi ndryshojë: «Salmon; kg; Peshk».',
     nom_lines: 'Përbërësit, një për rresht', nom_unitAll: 'Njësia', nom_groupAll: 'Grupi', nom_kindAll: 'Lloji',
     nom_willAdd: 'Do të shtohen', nom_exists: 'ekzistojnë tashmë', nom_add: 'Shto', nom_added: 'U shtuan',
@@ -28,6 +29,7 @@ export const WORDS = {
     inv_mv_removed: 'fshirë',
   },
   en: {
+    nom_review: 'Recipe needs review',
     nom_addMany: 'Add several', nom_addManyHint: 'One ingredient per line. The unit and group below apply to every line; a line may change them: “Salmon; kg; Fish”.',
     nom_lines: 'Ingredients, one per line', nom_unitAll: 'Unit', nom_groupAll: 'Group', nom_kindAll: 'Kind',
     nom_willAdd: 'Will be added', nom_exists: 'already there', nom_add: 'Add', nom_added: 'Added',
@@ -46,6 +48,7 @@ export const WORDS = {
     inv_mv_removed: 'deleted',
   },
   uk: {
+    nom_review: 'Потрібен перегляд рецептури',
     nom_addMany: 'Додати кілька', nom_addManyHint: 'Один інгредієнт на рядок. Одиниця й група нижче діють на кожен рядок; рядок може їх змінити: «Лосось; кг; Риба».',
     nom_lines: 'Інгредієнти, по одному на рядок', nom_unitAll: 'Одиниця', nom_groupAll: 'Група', nom_kindAll: 'Тип',
     nom_willAdd: 'Буде додано', nom_exists: 'вже є', nom_add: 'Додати', nom_added: 'Додано',
@@ -64,6 +67,7 @@ export const WORDS = {
     inv_mv_removed: 'видалено',
   },
   ru: {
+    nom_review: 'Требуется пересмотр рецептуры',
     nom_addMany: 'Добавить несколько', nom_addManyHint: 'Один ингредиент на строку. Единица и группа ниже действуют на каждую строку; строка может их изменить: «Лосось; кг; Рыба».',
     nom_lines: 'Ингредиенты, по одному на строку', nom_unitAll: 'Единица', nom_groupAll: 'Группа', nom_kindAll: 'Тип',
     nom_willAdd: 'Будет добавлено', nom_exists: 'уже есть', nom_add: 'Добавить', nom_added: 'Добавлено',

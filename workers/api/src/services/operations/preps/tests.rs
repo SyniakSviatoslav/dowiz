@@ -42,7 +42,7 @@ fn the_example_is_saved_costed_and_the_dish_follows_a_price_change_unsaved() {
     assert_eq!(rice["card"]["yield"], json!(2100));
     // The dish: 130 g of it. Stored cost 14.555 lek -> 15 (lek has no minor unit here).
     let mut dish = json!({ "id": "philadelphia", "name": "Philadelphia", "price": 650 });
-    set_bom(&mut dish, &[BomLineIn { supply: "rice-seasoned".into(), qty: 130, net: None, out: None }], |s| cat.supply(s), Typed::default()).unwrap();
+    set_bom(&mut dish, &[BomLineIn { supply: "rice-seasoned".into(), qty: 130.into(), net: None, out: None }], |s| cat.supply(s), Typed::default()).unwrap();
     assert_eq!(dish["bom"], json!([{ "supply": "rice-seasoned", "qty": 130 }]), "stored lean, naming the ПФ");
     assert_eq!(dish["cost"], json!(15));
     assert_eq!(dish["weightG"], json!(130), "a ПФ line weighs what it says: no losses");
@@ -116,7 +116,7 @@ fn a_card_edit_re_derives_the_dishes_that_use_it() {
     let mut cat = kitchen();
     saved(&mut cat, &prep_in("mitsukan", &[("vinegar", 800), ("salt", 50), ("sugar", 150)], 1000)).unwrap();
     let mut dish = json!({ "id": "d", "price": 100 });
-    set_bom(&mut dish, &[BomLineIn { supply: "mitsukan".into(), qty: 100, net: None, out: None }], |s| cat.supply(s), Typed::default()).unwrap();
+    set_bom(&mut dish, &[BomLineIn { supply: "mitsukan".into(), qty: 100.into(), net: None, out: None }], |s| cat.supply(s), Typed::default()).unwrap();
     assert_eq!(dish["cost"], json!(14), "14.05 lek");
     cat.set_product("d", &dish.to_string());
     // Twice the sugar: the batch costs more per gram, the dish follows in the same write.
@@ -148,7 +148,7 @@ fn fixture() -> Catalog {
     saved(&mut cat, &prep_in("mitsukan", &[("vinegar", 800), ("salt", 50), ("sugar", 150)], 1000)).unwrap();
     saved(&mut cat, &prep_in("rice-seasoned", &[("rice-dry", 1000), ("water", 1100), ("mitsukan", 250)], 2100)).unwrap();
     let mut dish = json!({ "id": "philadelphia", "name": "Philadelphia", "price": 650 });
-    set_bom(&mut dish, &[BomLineIn { supply: "rice-seasoned".into(), qty: 130, net: None, out: None }], |s| cat.supply(s), Typed::default()).unwrap();
+    set_bom(&mut dish, &[BomLineIn { supply: "rice-seasoned".into(), qty: 130.into(), net: None, out: None }], |s| cat.supply(s), Typed::default()).unwrap();
     cat.set_product("philadelphia", &dish.to_string());
     cat
 }

@@ -186,3 +186,42 @@ fn the_owner_sees_gross_net_out_and_the_loss() {
     assert_eq!((l["cleanPm"].clone(), l["cookPm"].clone(), l["lossPm"].clone()), (json!(550), json!(900), json!(500)));
     assert_eq!((l["net"].clone(), l["out"].clone()), (Value::Null, Value::Null), "nothing typed by the owner");
 }
+
+#[test]
+fn a_fractional_line_is_read_from_its_text_and_stored_as_millionths() {
+    // RED before W-QTY: `qty` was an i64 and 0.5 was "invalid type: floating point".
+    let l: BomLineIn = serde_json::from_value(json!({ "supply": "nori", "qty": 0.5 })).unwrap();
+    assert_eq!(l.qty.milli, 500);
+    let t: BomLineIn = serde_json::from_value(json!({ "supply": "nori", "qty": "40,5" })).unwrap();
+    assert_eq!(t.qty.milli, 40_500);
+    assert!(serde_json::from_value::<BomLineIn>(json!({ "supply": "nori", "qty": "0.0005" })).unwrap_err().to_string().contains("3 decimals"));
+    let nori = json!({ "name": "Nori", "unit": "unit", "kind": "food_ingredient", "kcalPer100": 35, "costPerBasis": 30, "weightPerUnit": 3 });
+    let line = line_with("nori", Qty::milli(500), None, None, &nori);
+    assert_eq!(line.cost, Some(15), "30 per sheet, half a sheet");
+    assert_eq!(line.weight_g, Some(2.0), "3 g a sheet, half of it, whole grams half up");
+    let v = bom_json(&[line, line_of("salmon", 40, &salmon())]);
+    assert_eq!(v, json!([{ "supply": "nori", "uq": 500_000 }, { "supply": "salmon", "qty": 40 }]), "a whole line keeps its old bytes");
+    let read = dowiz_hub::stock::bom_of(&json!({ "bom": v }).to_string());
+    assert_eq!((read[0].uq, read[0].qty), (500_000, 1), "the hub reads the millionths exactly");
+    let back = lines_of_stored(&v, |id| (id == "nori").then(|| nori.to_string()).or_else(|| (id == "salmon").then(|| salmon().to_string())));
+    assert_eq!(back[0].qty, Qty::milli(500));
+    assert_eq!(bom_view(&back)[0]["qty"], json!(0.5));
+    assert_eq!(bom_view(&back)[0]["qtyMilli"], json!(500));
+}
+
+/// Contract §3: `foodCostPm` on the owner's read, from the rounded cost and
+/// the price; absent without either. `recipeReview` passes through as stored.
+#[test]
+fn the_owner_read_carries_food_cost_per_mille_and_the_review_mark() {
+    let book = |id: &str| (id == "salmon").then(|| salmon().to_string());
+    let mut p = json!({ "id": "maki", "price": 2400, "bom": [{ "supply": "salmon", "qty": 40 }], "recipeReview": [{ "supply": "nori", "name": "Nori", "qty": 0.5 }] });
+    hydrate(&mut p, book);
+    assert_eq!((p["cost"].clone(), p["foodCostPm"].clone()), (json!(720), json!(300)));
+    assert_eq!(p["recipeReview"][0]["name"], json!("Nori"));
+    let mut free = json!({ "id": "gift", "price": 0, "bom": [{ "supply": "salmon", "qty": 40 }] });
+    hydrate(&mut free, book);
+    assert!(free.get("foodCostPm").is_none(), "no price, no per mille");
+    assert_eq!(stored::food_cost_pm(Some(1), Some(3)), Some(333));
+    assert_eq!(stored::food_cost_pm(Some(2), Some(3)), Some(667), "half up");
+    assert_eq!(stored::food_cost_pm(None, Some(3)), None);
+}

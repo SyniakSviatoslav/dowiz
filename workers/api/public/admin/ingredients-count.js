@@ -41,6 +41,7 @@ export function openCount(ctx){
     for (const inp of $$('[data-ci]', $('#cList'))) {
       if (!inp.value.trim()) continue;
       const v = C.amount(inp.value, sup(inp.dataset.ci).unit);
+      if (v == null && C.whyNot(inp.value, sup(inp.dataset.ci).unit) === 'fraction') { inp.focus(); return toast(`${t('inv_wholeUnits')} (${sup(inp.dataset.ci).unit})`); }
       if (v == null || v < 0) { inp.focus(); return toast(t('required')); }
       lines.push({ item: inp.dataset.ci, observed: v });
     }

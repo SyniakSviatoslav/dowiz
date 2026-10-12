@@ -68,3 +68,14 @@ test('dates, bars, levels and the dishes that reduce no stock', () => {
   assert.equal(C.basisOf('unit'), 1);
   assert.equal(C.basisOf('g'), 100);
 });
+
+test('W-QTY: why a typed amount is not one -- a fraction of the base unit is named, not swallowed', () => {
+  assert.equal(C.amount('0,5 kg', 'g'), 500);
+  assert.equal(C.amount('2.5', 'unit'), null);
+  assert.equal(C.whyNot('2.5', 'unit'), 'fraction');
+  assert.equal(C.whyNot('0,0005 kg', 'g'), 'fraction');
+  assert.equal(C.whyNot('1,5 kg', 'unit'), 'badUnit');
+  assert.equal(C.whyNot('1500', 'g'), null, 'a whole amount has no reason');
+  assert.equal(C.whyNot('abc', 'g'), 'notANumber');
+  assert.equal(C.whyNot('', 'g'), null, 'empty is empty, not wrong');
+});

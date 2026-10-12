@@ -35,6 +35,19 @@ export function amount(raw, unit = 'g'){
   return Number.isSafeInteger(n) ? n : null;
 }
 
+/// WHY `amount(raw, unit)` answered null (W-QTY, TZ 2026-10-12 item 1): the
+/// shelf counts whole base units (`workers/api/src/recipe/qty.rs` whole_opt),
+/// so "2.5" sheets is 'fraction' -- said to the owner, never rounded; a
+/// kg/l on a piece is 'badUnit'; text is 'notANumber'; empty is null.
+export function whyNot(raw, unit = 'g'){
+  const s = String(raw ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!s) return null;
+  const m = /^(-?\d+(?:[.,]\d+)?)\s*(kg|g|ml|l)?$/.exec(s.replace(/(\d) (?=\d{3}\b)/g, '$1'));
+  if (!m) return 'notANumber';
+  if (m[2] && unit === 'unit') return 'badUnit';
+  return amount(raw, unit) == null ? 'fraction' : null;
+}
+
 /// A typed percent as per mille: "55" -> 550, "55,5" -> 555, "220" -> 2200.
 /// More than one decimal, or not a number, is null.
 export function pmOfPct(raw){

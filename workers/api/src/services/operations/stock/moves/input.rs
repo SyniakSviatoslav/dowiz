@@ -10,6 +10,8 @@ use serde_json::Value;
 #[serde(deny_unknown_fields)]
 pub struct CountLineIn {
     pub item: String,
+    /// A decimal on the wire that comes out whole (`recipe::qty::whole`).
+    #[serde(deserialize_with = "crate::recipe::qty::whole")]
     pub observed: i64,
 }
 
@@ -18,10 +20,13 @@ pub struct CountLineIn {
 pub struct StockMoveIn {
     #[serde(default)]
     pub item: String,
-    #[serde(default)]
+    /// QUANTITIES READ FROM THEIR TEXT (W-QTY, contract §1): `1500`, `"1500"`,
+    /// `1500.000` all read; a fraction of the base unit is refused by name
+    /// (`recipe::qty::whole_opt`) -- the shelf counts whole units (H3).
+    #[serde(default, deserialize_with = "crate::recipe::qty::whole_opt")]
     pub qty: Option<i64>,
     /// For a stocktake: what was actually counted.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::recipe::qty::whole_opt")]
     pub observed: Option<i64>,
     /// For waste: one of `WasteReason::allowed_words()`. Required.
     #[serde(default)]
@@ -53,7 +58,7 @@ pub struct StockMoveIn {
     #[serde(default)]
     pub session: Option<String>,
     /// Prep: what came off the board, and after which stage.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::recipe::qty::whole_opt")]
     pub out: Option<i64>,
     #[serde(default)]
     pub stage: Option<String>,

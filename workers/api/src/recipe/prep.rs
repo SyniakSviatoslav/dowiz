@@ -124,6 +124,7 @@ pub fn view(id: &str, json: &str, supply: &dyn Fn(&str) -> Option<String>) -> Va
     v["grossG"] = json!(lines.iter().filter_map(|l| l.get("grossG").and_then(Value::as_i64)).sum::<i64>());
     v["lines"] = Value::Array(lines);
     v["yield"] = json!(card.yield_qty);
+    // The deletion's mark on the ПФ (contract §2) passes through `hydrate_at` as stored.
     v
 }
 

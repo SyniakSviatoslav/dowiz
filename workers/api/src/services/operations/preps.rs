@@ -27,6 +27,8 @@ use worker::*;
 use dowiz_hub::catalog::Catalog;
 use dowiz_hub::prep::{self, Card, Line};
 
+use super::supplies::delete::review::has_mark;
+
 /// Re-deriving the dishes an item reaches, shared with the supply write.
 pub mod rederive;
 
@@ -35,6 +37,8 @@ pub mod rederive;
 #[serde(deny_unknown_fields)]
 pub struct LineIn {
     pub item: String,
+    /// Read from its text (`recipe::qty`); whole for now (`qty::whole_card`, H2).
+    #[serde(deserialize_with = "crate::recipe::qty::whole_card")]
     pub qty: i64,
 }
 
@@ -53,7 +57,7 @@ pub struct PrepIn {
     #[serde(default)]
     pub lines: Vec<LineIn>,
     /// The batch's net output, in `unit`.
-    #[serde(rename = "yield")]
+    #[serde(rename = "yield", deserialize_with = "crate::recipe::qty::whole_card")]
     pub yield_qty: i64,
     /// Grams per piece, for a ПФ counted in pieces.
     #[serde(default)]
@@ -162,15 +166,27 @@ pub fn list(cat: &Catalog) -> Vec<Value> {
         .map(|(id, j)| {
             let mut v = crate::recipe::prep::view(id, j, &supply);
             let u = prep::uses_of(id, &supplies, &products);
-            v["uses"] = uses_json(&u);
+            v["uses"] = uses_json(&u, cat);
             v
         })
         .collect()
 }
 
-fn uses_json(u: &prep::Uses) -> Value {
-    let rows = |l: &[(String, String)]| l.iter().map(|(id, name)| json!({ "id": id, "name": name })).collect::<Vec<_>>();
-    json!({ "preps": rows(&u.preps), "dishes": rows(&u.dishes) })
+/// Where-used rows, each saying whether it is marked for review (contract §2).
+fn uses_json(u: &prep::Uses, cat: &Catalog) -> Value {
+    let rows = |l: &[(String, String)], look: &dyn Fn(&str) -> Option<String>| {
+        l.iter()
+            .map(|(id, name)| {
+                let mut row = json!({ "id": id, "name": name });
+                // Only when marked: an unmarked row keeps the bytes it always had.
+                if look(id).is_some_and(|j| has_mark(&j)) {
+                    row["review"] = json!(true);
+                }
+                row
+            })
+            .collect::<Vec<_>>()
+    };
+    json!({ "preps": rows(&u.preps, &|s| cat.supply(s)), "dishes": rows(&u.dishes, &|p| cat.product(p)) })
 }
 
 /// What `answer` says to a question it does not know.
@@ -187,7 +203,7 @@ pub fn answer(cat: &Catalog, q: &str) -> std::result::Result<Value, (u16, &'stat
         Some(("uses", id)) => {
             let j = cat.supply(id).ok_or((404, "unknown supply"))?;
             let u = prep::uses_of(id, &cat.supplies(), &cat.products());
-            Ok(json!({ "id": id, "kind": if prep::is_prep(&j) { prep::KIND } else { "raw" }, "uses": uses_json(&u) }))
+            Ok(json!({ "id": id, "kind": if prep::is_prep(&j) { prep::KIND } else { "raw" }, "uses": uses_json(&u, cat) }))
         }
         Some(("takes", id)) => {
             let j = cat.product(id).ok_or((404, "unknown dish"))?;

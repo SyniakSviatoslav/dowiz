@@ -104,5 +104,7 @@ export function deletedLine(r, t){
   const n = (r?.deleted || []).length || (r?.stock || []).length;
   const parts = [`${t('nom_deleted')}: ${n}`];
   if ((r?.dishes || []).length) parts.push(`${t('nom_recipesChanged')}: ${r.dishes.length}`);
+  // W-QTY: what was marked "recipe needs review", by name (CONTRACT-QTY §2).
+  if ((r?.review || []).length) parts.push(`${t('nom_review')}: ${r.review.map(x => x.name || x.id).join(', ')}`);
   return parts.join(' · ');
 }

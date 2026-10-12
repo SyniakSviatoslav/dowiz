@@ -172,6 +172,8 @@ export function openMove(sup, first, ctx){
   for (const b of $$('[data-pack]', $('#sheetIn'))) b.onclick = () => { $('#m-qty').value = String(N.plusPack($('#m-qty').value, { qty: Number(b.dataset.pack) }, sup.unit)); };
   $('#mGo').onclick = async () => {
     const qty = C.amount($('#m-qty').value, sup.unit);
+    // W-QTY: a fraction of the base unit is named, not swallowed (the shelf counts whole units; 1,5 kg is 1500 g).
+    if (qty == null && C.whyNot($('#m-qty').value, sup.unit) === 'fraction') return toast(`${t('inv_wholeUnits')} (${sup.unit})`);
     if (qty == null || qty < 0 || (kind !== 'stocktake' && qty === 0)) return toast(t('required'));
     let body = kind === 'stocktake' ? { item: sup.id, observed: qty } : { item: sup.id, qty };
     if (kind === 'wasted') { body.reason = $('#m-reason').value.trim(); if (lot) body.lot = lot; }

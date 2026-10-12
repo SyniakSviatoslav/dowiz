@@ -66,6 +66,8 @@ export function rowMarkup(sup, { money, t, warnDays, del = false }){
     state === 'needsCount' ? pill('info', { key: 'inv_needsCount' }) : '',
     state === 'out' ? pill('bad', { key: 'out' }) : state === 'low' ? pill('warn', { key: 'low' }) : state === 'ok' ? pill('ok', { key: 'onSale' }) : '',
     soon ? pill(C.expiryTone(soon.daysLeft, warnDays) || 'ok', { label: `${t('inv_expiry')} ${soon.expiry}` }) : '',
+    // W-QTY: a card that lost an ingredient (CONTRACT-QTY §2) until it is saved again.
+    sup.review ? pill('warn', { key: 'inv_review' }) : '',
   ].join('');
   const card = rowBtn({ leading: icon(ic), title: sup.name || sup.id, data: { s: sup.id }, tour: 'stock.supply',
     sub: `<span class="mono">${esc(facts)}</span><span class="mono">${esc(levels)}${low ? ` · ${esc(t('minLevel'))} ${low}` : ''}</span>
