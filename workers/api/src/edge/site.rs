@@ -28,7 +28,15 @@ impl Site {
     }
     /// A site whose Worker also holds these secrets (e.g. a Stripe key).
     pub fn with_secrets(extra: &[(&str, &str)]) -> Self {
+        Self::with_env(extra, &[])
+    }
+    /// Secrets AND plain vars, set before the world is shared: once an object has been
+    /// addressed it holds a link back to the world (`World::linked`), so `Rc::get_mut` fails.
+    pub fn with_env(extra: &[(&str, &str)], vars: &[(&str, &str)]) -> Self {
         let mut w = World::new(T0);
+        for (k, v) in vars {
+            w.vars.insert((*k).into(), (*v).into());
+        }
         for (k, v) in extra {
             w.secrets.insert((*k).into(), (*v).into());
         }

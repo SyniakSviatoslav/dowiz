@@ -12,7 +12,7 @@ use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::auth::{self, Principal};
-mod dashboard;
+mod dashboard; mod routed; pub use routed::{assign_courier, order_action, orders}; // W-BN4B: run whole by the venue's object
 
 // `now_ms()` WAS HERE, and nothing calls it any more.
 //
@@ -261,7 +261,7 @@ pub(crate) fn location_of(req: &Request) -> Option<String> {
 }
 
 /// `GET /api/owner/orders?location_id=&status=`
-pub async fn orders(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn orders_at(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // ── A CONSOLE THAT ALREADY HAS A COPY ──
     //
@@ -410,7 +410,7 @@ pub async fn orders(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
 /// hand-off from the counter and a claim from the phone are one fact in one
 /// place; the courier app shows it as theirs on its next read. An order that
 /// already has a courier is refused rather than quietly reassigned.
-pub async fn assign_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn assign_courier_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct In {
@@ -503,7 +503,7 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> 
 ///
 /// `action` names an intent, never a target status. The mapping from intent to
 /// status lives in one place and the FSM decides whether the edge is legal.
-pub async fn order_action(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn order_action_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct In {
         location_id: String,

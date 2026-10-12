@@ -61,10 +61,16 @@ pub async fn at_placement(place: &Place, secret: &[u8], location_id: &str, phone
     Some(StampIn { n: card.n, reward_minor: card.reward_minor, location_id: location_id.to_string(), phones })
 }
 
+/// `GET /api/order/:id/stamps`: run whole by the venue's object, in ONE request (W-BN4B, `hubdo/command.rs`);
+/// the handler is [`order_stamps_at`], unchanged, called inside that object's turn.
+pub async fn order_stamps(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::hubdo::command::forward(crate::hubdo::command::Kind::Stamps, req, ctx).await
+}
+
 /// `GET /api/order/:id/stamps` — the card, for the customer holding the key
 /// minted with THIS order. `{on:false}` when the venue has no card or the
 /// order carries no phone; otherwise `{on, have, n, reward, used}`.
-pub async fn order_stamps(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn order_stamps_at(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order id", 400);
     };

@@ -58,3 +58,40 @@ fn a_venues_own_kitchen_settings_shape_the_profile_field_by_field() {
     assert_eq!(p.pickup_min, 9);
     assert_eq!(p.default_cooking_min, d.default_cooking_min, "an unset field keeps the default");
 }
+
+/// W-BN4B: A QUOTE IS ONE REQUEST TO THE VENUE'S OBJECT (and the registry's). Counted by the
+/// test edge, both ways over the same venue: `quote_at` run by the Worker -- the route as it was
+/// -- paid `/fold/products` and `/fold/orders` (every order folded to count the queue); the
+/// route now hands the object the whole request. Same answer both ways, queue included.
+#[test]
+fn a_quote_costs_exactly_one_venue_object_request() {
+    let site = Site::new();
+    let (owner, dish) = open_venue(&site, "alpha", "a@x.test");
+    let id = place_pickup(&site, "alpha", &dish, 1).body_value()["id"].as_str().unwrap().to_string();
+    let r = site.run(
+        crate::owner::order_action,
+        post(&format!("https://alpha.{PLATFORM_HOST}/api/owner/orders/{id}/action"), &json!({"location_id": "alpha", "action": "confirm"})).bearer(&owner).on("alpha"),
+        &[("id", &id)],
+    );
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    let call = || post(&format!("https://alpha.{PLATFORM_HOST}/api/public/locations/alpha/eta"), &json!({"items": [{"id": dish}], "distanceM": 1200})).on("alpha");
+    let paid = |f: &dyn Fn() -> crate::wire::Reply| {
+        let from = crate::edge::mem::object_paths().len();
+        let r = f();
+        (crate::edge::mem::object_paths()[from..].to_vec(), r.body_value())
+    };
+    // The route as it was: the Worker resolves the slug and runs the body itself.
+    let from_worker = |req: crate::wire::Call, ctx: crate::edge::Ctx<crate::Req>| async move {
+        let place = crate::hubstore::Place::of_slug(&ctx, "alpha").await?;
+        super::quote_at(place, req, ctx).await
+    };
+    let (before, was) = paid(&|| site.run(from_worker, call(), &[("slug", "alpha")]));
+    let (after, is) = paid(&|| site.run(super::quote, call(), &[("slug", "alpha")]));
+    eprintln!("COST quote before {before:?} after {after:?}");
+    // The venue's own object only: the registry is the platform's (and W-CHEAP's slug memo may skip it).
+    let venue = |p: &[String]| p.iter().filter(|p| crate::storefront::route_costs::is_venue(p)).cloned().collect::<Vec<_>>();
+    assert_eq!(venue(&after), ["/fold/command"], "the quote is one turn (before: {before:?})");
+    assert_eq!(venue(&before), ["/fold/products", "/fold/orders"], "what it was");
+    assert_eq!(is, was, "the same quote both ways");
+    assert_eq!(is["ordersAhead"], 1, "the queue is still counted: {is}");
+}

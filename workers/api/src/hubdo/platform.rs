@@ -7,6 +7,13 @@
 use super::{host, HubImages, TAG_COURIER};
 use worker::*;
 
+/// THE KEEP-ALIVE, ANSWERED BY THE RUNTIME (W-CHEAP A3, landed by W-BN4B): `public/lib/live.js`
+/// sends exactly `JSON.stringify({ t: 'ping' })`. With the pair set, the runtime answers it
+/// itself, without waking the object: no billed `webSocketMessage` per ping. `on_message`
+/// (`hubdo/socket.rs`) still answers it the same way, for a runtime that does not.
+pub(super) const PING: &str = r#"{"t":"ping"}"#;
+pub(super) const PONG: &str = r#"{"t":"pong"}"#;
+
 impl HubImages {
     /// `Some` when the request was one of the two platform routes, answered.
     pub(super) async fn platform_route(&self, req: &worker::Request) -> Result<Option<worker::Response>> {
@@ -74,6 +81,11 @@ impl HubImages {
             #[cfg(test)]
             host::Host::Mem(_) => return worker::Response::error("no sockets in memory", 500),
         };
+        // Set on every accept: it is the object's state, and an object woken from
+        // hibernation has lost nothing it set before (idempotent; cheap).
+        if let Ok(p) = worker::worker_sys::WebSocketRequestResponsePair::new(PING, PONG) {
+            state.set_websocket_auto_response(&p);
+        }
         let pair = WebSocketPair::new()?;
         // A COURIER GETS TWO TAGS: `courier`, which the queue broadcast fans
         // out to, and `courier:<id>`, which says whose socket this is. The
@@ -106,3 +118,6 @@ impl HubImages {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

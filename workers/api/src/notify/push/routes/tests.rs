@@ -12,7 +12,6 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use base64::Engine;
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use serde_json::{json, Value};
-use std::rc::Rc;
 
 /// A TEST VAPID pair (the RFC 8291 sender key), never the live one.
 const TEST_D: &str = "yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw";
@@ -23,9 +22,7 @@ fn at(slug: &str, path: &str) -> String {
 }
 
 fn site() -> Site {
-    let mut s = Site::with_secrets(&[("VAPID_PRIVATE_KEY", TEST_D)]);
-    Rc::get_mut(&mut s.world).expect("the world is not shared yet").vars.insert("VAPID_PUBLIC_KEY".into(), TEST_PUB.into());
-    s
+    Site::with_env(&[("VAPID_PRIVATE_KEY", TEST_D)], &[("VAPID_PUBLIC_KEY", TEST_PUB)])
 }
 
 /// A phone: its private key, and what its browser would post.

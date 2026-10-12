@@ -23,9 +23,15 @@ struct KitchenAckBody {
     location_id: String,
 }
 
+/// `POST /api/staff/orders/:id/kitchen-ack`: run whole by the venue's object, in ONE request (W-BN4B, `hubdo/command.rs`);
+/// the handler is [`kitchen_ack_at`], unchanged, called inside that object's turn.
+pub async fn kitchen_ack(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::hubdo::command::forward(crate::hubdo::command::Kind::KitchenAck, req, ctx).await
+}
+
 /// `POST /api/staff/orders/:id/kitchen-ack` — `{location_id}`.
 /// Staff with Cap::Advance (the kitchen) records that they saw the order.
-pub async fn kitchen_ack(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn kitchen_ack_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let raw = req.text().await.unwrap_or_default();
     let body: KitchenAckBody = match serde_json::from_str(&raw) {
         Ok(b) => b,

@@ -230,7 +230,7 @@ impl HubImages {
     }
 
     /// `base`, with this venue's own name answered by this object (`edge::Own`).
-    fn own_env(&self, base: &crate::edge::Env, venue: &str) -> crate::edge::Env {
+    pub(super) fn own_env(&self, base: &crate::edge::Env, venue: &str) -> crate::edge::Env {
         // SAFETY: the `'static` the platform's own dispatch already takes for
         // every `alarm()` and `fetch()` (worker-macros `durable_object.rs`: "Durable
         // Object will never be destroyed while there is still a running promise

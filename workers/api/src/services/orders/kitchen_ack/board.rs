@@ -145,12 +145,18 @@ pub fn changes(changes: &[crate::hubdo::Change], venue: &str) -> Vec<Value> {
         .collect()
 }
 
+/// `GET /api/staff/kitchen`: run whole by the venue's object, in ONE request (W-BN4B, `hubdo/command.rs`);
+/// the handler is [`kitchen_orders_at`], unchanged, called inside that object's turn.
+pub async fn kitchen_orders(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::hubdo::command::forward(crate::hubdo::command::Kind::KitchenBoard, req, ctx).await
+}
+
 /// `GET /api/staff/kitchen?location_id=&since=` -- the pass's tickets.
 ///
 /// `Cap::Advance` (the kitchen, or an owner through `staff_at`). No catalogue
 /// read: the dish names ride on the lines, and the 538 KB catalogue is what
 /// trips the 10 ms CPU kill at dinner (FREE-TIER FT1).
-pub async fn kitchen_orders(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn kitchen_orders_at(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(loc) = crate::services::orders::room::handlers::query_location(&req) else {
         return Response::error("location_id is required", 400);
     };

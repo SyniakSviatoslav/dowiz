@@ -88,8 +88,14 @@ pub(crate) async fn staff_any_at(
     auth::room_admits_any(&p, venue, needs).map_err(|(s, m)| refusal::of(m, s))
 }
 
-/// `GET /api/courier/tasks` — what is mine, and what is up for grabs.
+/// `GET /api/courier/tasks`: run whole by the venue's object, in ONE request (W-BN4B, `hubdo/command.rs`);
+/// the handler is [`tasks_at`], unchanged, called inside that object's turn.
 pub async fn tasks(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::hubdo::command::forward(crate::hubdo::command::Kind::CourierTasks, req, ctx).await
+}
+
+/// `GET /api/courier/tasks` — what is mine, and what is up for grabs.
+pub(crate) async fn tasks_at(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
@@ -384,8 +390,14 @@ async fn write_status_with(
     Ok(written.ok_or_else(|| refused.take().unwrap_or_else(|| "order not found".into())))
 }
 
-/// `POST /api/courier/orders/:id/accept`
+/// `POST /api/courier/orders/:id/accept`: run whole by the venue's object, in ONE request (W-BN4B, `hubdo/command.rs`);
+/// the handler is [`accept_at`], unchanged, called inside that object's turn.
 pub async fn accept(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::hubdo::command::forward(crate::hubdo::command::Kind::CourierAccept, req, ctx).await
+}
+
+/// `POST /api/courier/orders/:id/accept`
+pub(crate) async fn accept_at(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
@@ -530,8 +542,14 @@ pub async fn accept(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     idem.answered(&place, res).await
 }
 
-/// `POST /api/courier/orders/:id/pickup` — READY → IN_DELIVERY
+/// `POST /api/courier/orders/:id/pickup`: run whole by the venue's object, in ONE request (W-BN4B, `hubdo/command.rs`);
+/// the handler is [`pickup_at`], unchanged, called inside that object's turn.
 pub async fn pickup(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::hubdo::command::forward(crate::hubdo::command::Kind::CourierPickup, req, ctx).await
+}
+
+/// `POST /api/courier/orders/:id/pickup` — READY → IN_DELIVERY
+pub(crate) async fn pickup_at(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
@@ -608,8 +626,14 @@ pub async fn pickup(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     idem.answered(&place, res).await
 }
 
+/// `POST /api/courier/orders/:id/deliver`: run whole by the venue's object, in ONE request (W-BN4B, `hubdo/command.rs`);
+/// the handler is [`deliver_at`], unchanged, called inside that object's turn.
+pub async fn deliver(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::hubdo::command::forward(crate::hubdo::command::Kind::CourierDeliver, req, ctx).await
+}
+
 /// `POST /api/courier/orders/:id/deliver` — `{cash_collected?}`
-pub async fn deliver(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn deliver_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     // THE RAW BODY IS READ ONCE, because the idempotency layer fingerprints it:
     // rule 3 is "same key, different body is a 409", and it cannot answer that
     // from a parsed struct that has already dropped whatever else was sent.
@@ -704,8 +728,14 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     idem.answered(&place, res).await
 }
 
+/// `POST /api/courier/position`: run whole by the venue's object, in ONE request (W-BN4B, `hubdo/command.rs`);
+/// the handler is [`position_at`], unchanged, called inside that object's turn.
+pub async fn position(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::hubdo::command::forward(crate::hubdo::command::Kind::CourierPosition, req, ctx).await
+}
+
 /// `POST /api/courier/position` — `{lat, lon, accuracy_m?, speed_mps?, order_id?}`
-pub async fn position(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn position_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct In {

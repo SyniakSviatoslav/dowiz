@@ -4,7 +4,13 @@
 use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
+/// `GET /api/order/:id`: run whole by the venue's object, in ONE request (W-BN4B, `hubdo/command.rs`);
+/// the handler is [`order_at`], unchanged, called inside that object's turn.
 pub async fn order(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::hubdo::command::forward(crate::hubdo::command::Kind::Track, req, ctx).await
+}
+
+pub(crate) async fn order_at(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order id", 400);
     };

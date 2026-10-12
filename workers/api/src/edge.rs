@@ -133,7 +133,7 @@ impl ObjectId {
             ObjectNamespace::Own(o) if o.venue == self.name => Ok(Stub::Own(o.me)),
             ObjectNamespace::Own(o) => o.base.durable_object("HUB")?.id_from_name(&self.name)?.get_stub(),
             #[cfg(test)]
-            ObjectNamespace::Mem(w) => Ok(Stub::Mem(w.object(&self.name))),
+            ObjectNamespace::Mem(w) => Ok(Stub::Mem(w.linked(&self.name))),
         }
     }
 }
@@ -157,7 +157,7 @@ impl Stub {
             Stub::Own(o) => o.route(req).await,
             #[cfg(test)]
             Stub::Mem(o) => {
-                mem::count_object_request();
+                mem::count_object_request(&req.path());
                 o.route(req).await
             }
         }
@@ -173,8 +173,8 @@ pub struct Ctx<D> {
 
 enum Params<D> {
     Live(worker::RouteContext<D>),
-    #[cfg(test)]
-    Mem(Vec<(String, String)>),
+    /// Named here: a test's, or a command the venue's object runs (`hubdo/command.rs`).
+    Given(Vec<(String, String)>),
 }
 
 impl<D: Clone> Ctx<D> {
@@ -186,14 +186,17 @@ impl<D: Clone> Ctx<D> {
 impl<D> Ctx<D> {
     #[cfg(test)]
     pub fn mem(data: D, env: Env, params: &[(&str, &str)]) -> Self {
+        Self::given(data, env, params)
+    }
+    /// A context whose path parameters are given rather than matched by the router.
+    pub fn given(data: D, env: Env, params: &[(&str, &str)]) -> Self {
         let params = params.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
-        Ctx { data, env, params: Params::Mem(params) }
+        Ctx { data, env, params: Params::Given(params) }
     }
     pub fn param(&self, key: &str) -> Option<&String> {
         match &self.params {
             Params::Live(c) => c.param(key),
-            #[cfg(test)]
-            Params::Mem(p) => p.iter().find(|(k, _)| k == key).map(|(_, v)| v),
+            Params::Given(p) => p.iter().find(|(k, _)| k == key).map(|(_, v)| v),
         }
     }
     pub fn var(&self, binding: &str) -> Result<String> {

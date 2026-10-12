@@ -425,8 +425,20 @@ fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
     (w > 0 && h > 0).then_some((w, h))
 }
 
-/// `POST /api/public/locations/:slug/orders`
-pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+/// `POST /api/public/locations/:slug/orders`: the venue resolved here, and the WHOLE
+/// placement run by its object in ONE request (BN4, `hubdo/command.rs`), which calls `place_at`.
+pub async fn place(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    let Some(slug) = ctx.param("slug").cloned() else {
+        return Response::error("missing slug", 400);
+    };
+    // The slug is not the id — see `Place::of_slug`.
+    let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    crate::hubdo::command::send(&place, crate::hubdo::command::Kind::Place, &ctx, req).await
+}
+
+/// The placement itself, INSIDE the venue's object (`hubdo/command.rs`): `ctx.env` answers
+/// this venue's own name in process, so every read and write below is a call, not a request.
+pub(crate) async fn place_at(place: crate::hubstore::Place, mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
@@ -483,8 +495,6 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         _ => {}
     }
 
-    // The slug is not the id — see `Place::of_slug`.
-    let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     // THE CATALOGUE'S PART OF A PLACEMENT, from the object (`/fold/basket`,
     // BN1): the venue's record, the dishes in the basket, what the shelf
     // reserves for each, and the code typed -- never the catalogue image
@@ -1200,3 +1210,8 @@ mod tests;
 #[cfg(test)]
 #[path = "storefront/routes/tests.rs"]
 pub(crate) mod route_tests;
+
+/// What one order costs in object requests, route by route (W-BN4B).
+#[cfg(test)]
+#[path = "storefront/routes/costs_tests.rs"]
+pub(crate) mod route_costs;

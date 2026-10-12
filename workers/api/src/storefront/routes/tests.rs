@@ -282,3 +282,64 @@ fn a_time_in_the_past_too_far_or_while_shut_is_refused_before_anything_is_writte
     assert_eq!(r.status_code(), 400, "{}", r.body_str());
     assert!(r.body_str().contains("scheduled_at"), "the unknown field is named: {}", r.body_str());
 }
+
+// ── BN4 (R-GRAPH D3, arch-evo P1): ONE COMMAND, ONE OBJECT TURN ──
+//
+// What a placement costs in billed Durable Object requests, counted by the test edge
+// (`edge::mem::object_requests`, every `Stub::Mem` fetch, with its path) -- not estimated.
+// Placed the way a customer places one, through `storefront::place`, with a phone (so the
+// customer's card, the allergy check, the taste profile and the consent all run).
+// MEASURED BEFORE (main 9eeb559c): 10 -- the registry, then NINE to the venue: /fold/basket,
+// /img/people, /img/settings, /fold/place, /img/people x2, /img/consent, /img/taste x2.
+// The registry lookup (slug -> venue id) is a different object: A4's row, not this one.
+/// The VENUE's object, once. The slug lookup is the platform's bill and is counted apart:
+/// W-CHEAP's memo (`hubstore::slugs`, own tests) skips it once the slug has been seen.
+const ONE_TURN: [&str; 1] = ["/fold/command"];
+
+/// The requests `f` made to the venue's own object, by path.
+fn paid(f: impl FnOnce()) -> Vec<String> {
+    let at = crate::edge::mem::object_paths().len();
+    f();
+    crate::edge::mem::object_paths()[at..].iter().filter(|p| super::route_costs::is_venue(p)).cloned().collect()
+}
+
+#[test]
+fn a_placement_costs_exactly_one_venue_object_request() {
+    let site = Site::new();
+    let (t, dish) = open_venue(&site, "alpha", "alpha@example.com");
+    // The first placement creates images; the second is the steady state. Both: one turn.
+    for n in 0..2 {
+        let mut r = None;
+        let what = paid(|| r = Some(place_pickup(&site, "alpha", &dish, 1)));
+        let r = r.unwrap();
+        assert_eq!(r.status_code(), 200, "placement {n}: {}", r.body_str());
+        assert_eq!(what, ONE_TURN, "placement {n} cost {} object requests", what.len());
+    }
+    // And the orders really are there, read the way the owner reads them.
+    let r = site.run(crate::owner::orders, get(&at("alpha", "/api/owner/orders")).bearer(&t).on("alpha"), &[]);
+    assert_eq!(r.body_value()["orders"].as_array().map(Vec::len), Some(2), "{}", r.body_str());
+}
+
+#[test]
+fn a_retried_placement_is_one_turn_and_answers_the_first_order() {
+    let site = Site::new();
+    let (_t, dish) = open_venue(&site, "alpha", "alpha@example.com");
+    let body = json!({
+        "items": [{"product_id": dish, "quantity": 2}],
+        "contact": {"name": "Guest", "phone": "+355690000001"},
+        "fulfilment": {"kind": "pickup"}, "payment": "cash",
+    });
+    let call = || post(&at("alpha", "/api/public/locations/alpha/orders"), &body).on("alpha").with_header("idempotency-key", "k-1");
+    let mut first = None;
+    let what = paid(|| first = Some(site.run(crate::storefront::place, call(), &[("slug", "alpha")])));
+    let first = first.unwrap();
+    assert_eq!(first.status_code(), 200, "{}", first.body_str());
+    assert_eq!(what, ONE_TURN, "the first try");
+    let mut again = None;
+    let what = paid(|| again = Some(site.run(crate::storefront::place, call(), &[("slug", "alpha")])));
+    let again = again.unwrap();
+    assert_eq!(again.status_code(), 200, "{}", again.body_str());
+    assert_eq!(what, ONE_TURN, "the again try");
+    assert_eq!(order_id(&again), order_id(&first), "the retry answers the first order, it places none");
+    assert_eq!(again.headers().get("idempotent-replay").ok().flatten().as_deref(), Some("true"), "the replay header crosses the hop");
+}

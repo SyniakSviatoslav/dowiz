@@ -17,13 +17,19 @@ struct FeedbackIn {
     text: String,
 }
 
+/// `POST /api/order/:id/feedback`: run whole by the venue's object, in ONE request (W-BN4B, `hubdo/command.rs`);
+/// the handler is [`feedback_at`], unchanged, called inside that object's turn.
+pub async fn feedback(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::hubdo::command::forward(crate::hubdo::command::Kind::Feedback, req, ctx).await
+}
+
 /// `POST /api/order/:id/feedback` — a sentence to the venue about one order.
 ///
 /// NO STARS, NO SCORE, NOT ON ANYONE. A number attached to an order becomes a
 /// number attached to whoever carried it the moment anybody joins the two, and
 /// dowiz does not rank the people who work through it. A kitchen can act on "the
 /// rice was cold"; it can do nothing with a three.
-pub async fn feedback(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn feedback_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order", 400);
     };

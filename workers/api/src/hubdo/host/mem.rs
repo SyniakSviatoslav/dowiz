@@ -31,6 +31,8 @@ pub struct MemHost {
     pub reads_fail: Cell<bool>,
     /// Every storage write, in order (key only).
     pub writes: RefCell<Vec<String>>,
+    /// The world this object lives in, once a stub reached it (`edge::mem::World::linked`).
+    pub world: RefCell<Option<std::rc::Weak<crate::edge::mem::World>>>,
 }
 
 impl MemHost {

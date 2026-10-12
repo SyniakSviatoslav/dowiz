@@ -82,6 +82,8 @@ impl HubImages {
                 // THE KITCHEN SAW THE TICKET: `/fold/kitchen_ack`
                 (Method::Post, "kitchen_ack") => self.kitchen_ack_route(req).await,
                 (Method::Post, "place") => self.place_route(req).await,
+                // A WHOLE REQUEST RUN IN THIS TURN (BN4, `hubdo/command.rs`): one object request per placement.
+                (Method::Post, "command") => self.command_route(req).await,
                 // THE REBUILD, read-only, for the conservation audit's law 8 (`hubdo/answers.rs`).
                 (Method::Get, "rebuild") => Response::from_json(&self.rebuild().await?),
                 (Method::Post, "advance") => self.advance_route(req).await,

@@ -81,11 +81,21 @@ pub(crate) fn profile_of(loc: &Value) -> KitchenProfile {
 /// A scheduled order further ahead than this is not in the kitchen's queue yet.
 const LATER_QUEUE_HORIZON_MS: i64 = 60 * 60 * 1000;
 
-/// `POST /api/public/locations/:slug/eta`
-pub async fn quote(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+/// `POST /api/public/locations/:slug/eta`: the venue resolved here, and the quote run WHOLE by
+/// its object in ONE request (W-BN4B, `hubdo/command.rs`). It was the registry and then two to
+/// the venue -- `/fold/products` and `/fold/orders`, the second folding every order the venue
+/// ever took to count the kitchen's queue -- on every quote and every watch probe.
+pub async fn quote(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
+    let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    crate::hubdo::command::send(&place, crate::hubdo::command::Kind::Quote, &ctx, req).await
+}
+
+/// The quote itself, inside the venue's object: every read below is a call, not a request.
+/// `place` is the venue the Worker resolved, so the registry is not asked twice.
+pub(crate) async fn quote_at(place: crate::hubstore::Place, mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: EtaBody = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request: {e}"), 400),
@@ -94,7 +104,6 @@ pub async fn quote(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         return Response::error("an empty basket has no estimate", 400);
     }
 
-    let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     // The venue's record and the dishes named, as stored (`/fold/products`,
     // R2) -- never the catalogue image they sit in (BN1).
     let ids: Vec<String> = body.items.iter().filter_map(|l| l.id.clone()).collect();

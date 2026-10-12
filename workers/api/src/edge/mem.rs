@@ -38,6 +38,12 @@ impl World {
         let obj = Rc::new(HubImages::in_memory(host.clone()));
         self.objects.borrow_mut().insert(name.to_string(), (host, obj));
     }
+    /// The object addressed by `name`, its host told which world it lives in, so a command it
+    /// runs in its own turn can reach the other objects (`hubdo/command.rs`, `Host::base_env`).
+    pub fn linked(self: &Rc<Self>, name: &str) -> Rc<HubImages> {
+        *self.host(name).world.borrow_mut() = Some(Rc::downgrade(self));
+        self.object(name)
+    }
     /// The names of every object a test caused to exist.
     pub fn names(&self) -> Vec<String> {
         let mut n: Vec<String> = self.objects.borrow().keys().cloned().collect();
@@ -107,10 +113,18 @@ thread_local! {
     /// request on the platform. A call answered in process (`Stub::Own`) is not counted, because
     /// it is not one (W-LOOP: the cost of an alarm run is this number).
     static OBJECT_REQUESTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// The path of every one of those requests, in order (W-BN4: a cost test names what it paid for).
+    static OBJECT_PATHS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
-pub(super) fn count_object_request() {
+pub(super) fn count_object_request(path: &str) {
     OBJECT_REQUESTS.with(|n| n.set(n.get() + 1));
+    OBJECT_PATHS.with(|p| p.borrow_mut().push(path.to_string()));
+}
+
+/// The paths of the object requests counted so far on this thread, in order.
+pub fn object_paths() -> Vec<String> {
+    OBJECT_PATHS.with(|p| p.borrow().clone())
 }
 
 /// The object requests counted so far on this thread.

@@ -248,6 +248,14 @@ impl Host {
             Host::Mem(_) => None,
         }
     }
+    /// The platform as a handler sees it, for a command run in this turn (`hubdo/command.rs`).
+    pub fn base_env(&self) -> Option<crate::edge::Env> {
+        match self {
+            Host::Live { env, .. } => Some(crate::edge::Env::Live(env.clone())),
+            #[cfg(test)]
+            Host::Mem(m) => m.world.borrow().as_ref().and_then(std::rc::Weak::upgrade).map(crate::edge::Env::Mem),
+        }
+    }
 }
 
 #[cfg(test)]

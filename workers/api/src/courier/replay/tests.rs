@@ -153,18 +153,19 @@ fn before(body: &str, a: &str, b: &str) {
 
 /// THE WIRING, read from the source (the object's turn has no native harness):
 /// each courier route answers a committed output before it checks or writes
-/// anything, and hands its claim to the write that decides.
+/// anything, and hands its claim to the write that decides. The bodies are the `*_at`
+/// handlers the venue's object runs (W-BN4B); `accept` itself only forwards.
 #[test]
 fn every_courier_tap_reads_its_committed_output_first_and_sends_its_claim() {
     let src = include_str!("../../courier.rs");
-    let accept = body_of(src, "pub async fn accept(");
+    let accept = body_of(src, "async fn accept_at(");
     before(accept, "idem.committed()", "with_ops(");
     before(accept, "idem.claim()", "append_claimed(");
-    let pickup = body_of(src, "pub async fn pickup(");
+    let pickup = body_of(src, "async fn pickup_at(");
     before(pickup, "idem.committed()", "asg_of(");
     assert!(pickup.contains("Claimed { input: &input, idem: claim"), "pickup sends its claim");
     assert!(pickup.contains("stamp_pickup("));
-    let deliver = body_of(src, "pub async fn deliver(");
+    let deliver = body_of(src, "async fn deliver_at(");
     before(deliver, "idem.committed()", "asg_of(");
     assert!(deliver.contains("settle_delivery("));
     let write = body_of(src, "async fn write_status_with(");
