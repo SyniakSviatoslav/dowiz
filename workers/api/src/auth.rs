@@ -33,6 +33,9 @@ use base64::Engine as _;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// The sign-in memo: a courier's or a cook's verdict reused inside a bounded window (W-AUTHC).
+pub mod memo;
+
 /// Access-token lifetimes, mirroring the old service's table.
 pub const OWNER_TTL_MS: i64 = 24 * 60 * 60 * 1000;
 pub const COURIER_TTL_MS: i64 = 24 * 60 * 60 * 1000;
@@ -412,6 +415,7 @@ pub fn verify_password_constant_work(password: &str, stored: Option<&str>) -> bo
 ///
 /// Two of its fields are carried and not read; each says why on itself.
 #[allow(dead_code)]
+#[derive(Clone)]
 pub enum Principal {
     Owner { user_id: String, active_location_id: Option<String> },
     /// `session_id` is not read by any consumer: the session's revocation and
@@ -614,6 +618,13 @@ pub async fn authenticate_token(
             Ok(Principal::Owner { user_id, active_location_id })
         }
         Claims::Courier { sub, active_location_id, jti, .. } => {
+            // THE MEMO FIRST (`auth/memo.rs`): the same token, read live less than
+            // `memo::TTL_MS` ago and still inside its session, is the same verdict.
+            let key = memo::key(&raw);
+            if let Some(p) = memo::get(&key, now_ms) {
+                return Ok(p);
+            }
+            let epoch = memo::begin();
             // One joined read decides all four conditions the old guard checked.
             #[derive(Deserialize)]
             struct Row {
@@ -657,12 +668,20 @@ pub async fn authenticate_token(
             if row.has_location == 0 {
                 return Err(AuthError::Revoked("courier no longer at this location"));
             }
-            Ok(Principal::Courier { courier_id: sub, active_location_id, session_id: jti })
+            let p = Principal::Courier { courier_id: sub, active_location_id, session_id: jti };
+            memo::store(key, &p, epoch, now_ms, row.expires_at_ms);
+            Ok(p)
         }
         Claims::Customer { sub, order_id, location_id, .. } => {
             Ok(Principal::Customer { customer_id: sub, order_id, location_id })
         }
         Claims::Staff { sub, active_location_id, jti, caps, .. } => {
+            // The memo, as for a courier: never an owner's (see `auth/memo.rs`).
+            let key = memo::key(&raw);
+            if let Some(p) = memo::get(&key, now_ms) {
+                return Ok(p);
+            }
+            let epoch = memo::begin();
             // Authority re-derived, as for an owner: the membership row at THIS
             // venue, read now, names the preset; the token can only lose rights.
             //
@@ -684,7 +703,10 @@ pub async fn authenticate_token(
             sr::session_verdict(row.as_ref(), &sub, &active_location_id, now_ms)
                 .map_err(AuthError::Revoked)?;
             let caps = staff_caps(&caps, &crate::identity_store::s_of(&m, "role"))?;
-            Ok(Principal::Staff { person_id: sub, active_location_id, session_id: jti, caps })
+            let until = row.as_ref().map(|r| crate::identity_store::i_of(r, "expires_at_ms")).unwrap_or(now_ms);
+            let p = Principal::Staff { person_id: sub, active_location_id, session_id: jti, caps };
+            memo::store(key, &p, epoch, now_ms, until);
+            Ok(p)
         }
     }
 }

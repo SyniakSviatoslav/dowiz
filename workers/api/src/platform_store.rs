@@ -153,7 +153,7 @@ where
     Err(Error::RustError(format!("log image {image}: four writers won the guard in a row")))
 }
 
-fn stub(env: &Env) -> Result<Stub> {
+pub(crate) fn stub(env: &Env) -> Result<Stub> {
     env.durable_object("HUB")?.id_from_name(PLATFORM)?.get_stub()
 }
 
@@ -240,5 +240,12 @@ pub async fn with<F, T>(env: &Env, image: &str, f: F) -> Result<T>
 where
     F: FnMut(&mut Table) -> Result<T>,
 {
-    with_at(&stub(env)?, image, ceiling(image), f).await
+    let out = with_at(&stub(env)?, image, ceiling(image), f).await;
+    // EVERY WRITER OF A PLATFORM IMAGE PASSES HERE, so this isolate's sign-in memo
+    // (`auth/memo.rs`) forgets what it remembered the moment a session, a roster or a
+    // membership may have changed -- AFTER the write, so a guard whose reads began
+    // before it cannot put a stale verdict back. Win or lose: a failed write may
+    // still have landed one of its retries.
+    crate::auth::memo::forget_all();
+    out
 }
