@@ -184,10 +184,17 @@ impl Place {
         struct Row {
             id: String,
         }
+        // A4 (W-CHEAP): an identity answer already learned skips the platform object (`slugs`).
+        if let Some(venue) = slugs::known(&ctx.env, slug).await {
+            return Ok(Place { ns: ctx.durable_object("HUB")?, venue, edit: Edited::now(ctx) });
+        }
         let row: Option<Row> = crate::identity_store::registry(&ctx.env)
             .await?
             .lookup(&crate::identity_store::loc_by_slug(slug))
             .map(|id| Row { id });
+        if let Some(r) = &row {
+            slugs::learned(&ctx.env, slug, &r.id).await;
+        }
         let venue = row.map(|r| r.id).unwrap_or_else(|| UNNAMED_VENUE.to_string());
         Ok(Place { ns: ctx.durable_object("HUB")?, venue, edit: Edited::now(ctx) })
     }
@@ -977,6 +984,7 @@ pub async fn append_blind(
 // `append_for` (and its claimed twin `append_claimed`, W-O2) live in
 // `hubstore/append.rs`.
 mod append;
+pub mod slugs; // A4: slug -> venue without the platform object (W-CHEAP)
 pub use append::{append_claimed, append_for};
 
 /// ── ROTATION: A BOUNDED HOT LOG WITH COLD HISTORY ──
