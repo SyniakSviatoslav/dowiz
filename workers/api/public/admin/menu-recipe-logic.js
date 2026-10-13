@@ -7,6 +7,8 @@
 // (`menu-recipe-logic.test.mjs`).
 // ASCII QUOTES ONLY in this file (DOWIZ-COMMON-RULES rule 11).
 
+import { MILLI } from './qty-adapter.js';
+
 /// The picker's list: the supplies of `kind` ('all' or one kind) matching `q`
 /// by name or category, not already on the recipe. Book order is kept.
 export function bookList(book, { q = '', kind = 'all', draft = [] } = {}){
@@ -24,6 +26,11 @@ export function setPick(picked, id, on){
   if (on) picked.add(id); else picked.delete(id);
   return picked;
 }
+
+/// A component added from the picker starts at one piece or 100 g/ml, in the
+/// recipe's exact milli units (TZ 1). It was passed as 1 / 100 milli from
+/// cf07c649 to here, so a new line read 0.001 pc / 0.1 g.
+export const starterMilli = sup => (sup && sup.unit === 'unit' ? 1 : 100) * MILLI;
 
 /// What "Add selected" adds: every ticked supply of the book, in book order,
 /// hidden by the search or not, that the recipe does not carry yet.

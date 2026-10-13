@@ -187,6 +187,8 @@ binding = "AI"
 # 49 = 49,000 points/day against the Free plan's 100,000 (analytics-engine/pricing, read 2026-10-07).
 # The dataset is created by the first write; nothing to set up first. A missing binding fails nothing.
 # Read with the SQL API and an Account Analytics:Read token: tools/evals/collect/cf.mjs.
-[[analytics_engine_datasets]]
-binding = "COUNTERS"
-dataset = "dowiz_counters"
+# OFF 2026-10-13 (operator): the upload is REFUSED until Analytics Engine is enabled on the account
+# (wrangler code 10089). Uncomment after enabling it in the dashboard; until then counters::ae::write is an Err, never a failure.
+# [[analytics_engine_datasets]]
+# binding = "COUNTERS"
+# dataset = "dowiz_counters"

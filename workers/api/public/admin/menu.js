@@ -562,7 +562,7 @@ async function bindRecipe(p){
   $('#rcQ').oninput = drawBook;
   for (const b of $$('[data-rk]', $('#rcKinds'))) b.onclick = () => { kind = b.dataset.rk; press($$('[data-rk]', $('#rcKinds')), b); drawBook(); };
   $('#rcAdd').onclick = () => {
-    for (const sup of RL.pickedOf(book, picked, recipeDraft)) { recipeDraft.push(lineOf(sup, sup.unit === 'unit' ? 1 : 100)); recipeDirty = true; }
+    for (const sup of RL.pickedOf(book, picked, recipeDraft)) { recipeDraft.push(lineOf(sup, RL.starterMilli(sup))); recipeDirty = true; }
     picked.clear();
     drawRecipe(p); drawBook();
   };

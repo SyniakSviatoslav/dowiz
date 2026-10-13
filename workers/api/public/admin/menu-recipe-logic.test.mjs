@@ -1,7 +1,7 @@
 // `node --test workers/api/public/admin/menu-recipe-logic.test.mjs` (W-TKUI, TZ 4 and 6).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bookList, picks, setPick, pickedOf, mergeSaved } from './menu-recipe-logic.js';
+import { bookList, picks, setPick, pickedOf, mergeSaved, starterMilli } from './menu-recipe-logic.js';
 
 const BOOK = [{ id: 'tuna', name: 'Tuna', category: 'Fish', kind: 'food_ingredient' }, { id: 'nori', name: 'Nori', category: 'Dry', kind: 'food_ingredient' },
   { id: 'box', name: 'Box', category: '', kind: 'packaging' }, { id: 'salmon', name: 'Salmon', category: 'Fish', kind: 'food_ingredient' }];
@@ -39,4 +39,10 @@ test('TZ6 mergeSaved: the saved dish replaces its row in place and keeps what th
   assert.equal(mergeSaved(list, { id: 'd9', name: 'new' }), false, 'a dish the list does not know asks for a full reload');
   assert.equal(mergeSaved(list, null), false);
   assert.equal(list.length, 2);
+});
+
+test('TZ1: a picked component starts at 100 g/ml or 1 piece, in milli', () => {
+  assert.equal(starterMilli({ unit: 'g' }), 100000, '100 g, not 0.1 g');
+  assert.equal(starterMilli({ unit: 'ml' }), 100000);
+  assert.equal(starterMilli({ unit: 'unit' }), 1000, '1 piece, not 0.001');
 });

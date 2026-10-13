@@ -103,15 +103,19 @@ for f in dfiles:
         decls[m.group(1)].append(f)
 
 SKIP = {'new','default','fmt','from','load','create','to_bytes','clone','next','eq','hash','as_str','len','is_empty'}
+# Every file is counted ONCE: `\bname\b` for a name made of word characters is
+# exactly a whole `\w+` run equal to it, so a Counter of runs answers each name
+# in O(1). Before (2026-10-13) every declared name re-ran prod() and a regex over
+# every file: 40+ min inside a deploy; seconds now, same rows.
+WORD = re.compile(r'\w+')
+full = {f: collections.Counter(WORD.findall(src[f])) for f in ufiles}
+shipped = {f: collections.Counter(WORD.findall(prod(src[f]))) for f in ufiles}
 rows = []
 for name, where in decls.items():
     if name in SKIP: continue
-    pat = re.compile(r'\b' + re.escape(name) + r'\b')
     p = t = 0
     for f in ufiles:
-        s = src[f]
-        pp = prod(s)
-        np_, nt = len(pat.findall(pp)), len(pat.findall(s)) - len(pat.findall(pp))
+        np_, nt = shipped[f][name], full[f][name] - shipped[f][name]
         if f in where: np_ -= 1
         p += max(0, np_); t += max(0, nt)
     if p == 0:
