@@ -2277,3 +2277,9 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1790880694,b29310c4,8a0b4325,stub_words,172,words,1,1,n/a,n/a,
 1790880695,b29310c4,8a0b4325,bin_fns,551,fns,1,1,n/a,n/a,
 1790880695,b29310c4,8a0b4325,push_words,0,words,1,1,n/a,n/a,register model: 0 = stack machine fully retired
+1791886676,d6a8a849,6c5cacff,battery_flakes,0,count,1,0,,,FAILs that passed standalone (timing-flag gates under load)
+1791886676,d6a8a849,6c5cacff,gate_run_ms,5990,ms,1,0,,,"sum of non-memo gate runs (23 runs, 131 memo hits)"
+1791886999,d6a8a849,6c5cacff,bin_words,80584,words,1,1,n/a,n/a,bytes 328664
+1791886999,d6a8a849,6c5cacff,stub_words,172,words,1,1,n/a,n/a,
+1791886999,d6a8a849,6c5cacff,bin_fns,723,fns,1,1,n/a,n/a,
+1791887000,d6a8a849,6c5cacff,push_words,0,words,1,1,n/a,n/a,register model: 0 = stack machine fully retired

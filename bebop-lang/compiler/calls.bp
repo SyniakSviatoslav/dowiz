@@ -361,7 +361,7 @@ fn vs_place_args(insns: [i64], n: [i64], fntab: [i64], stab: [i64], base: i64, n
     let _ = pass[0] = pass[0] + 1;
     0
   };
-  let _ = if vs_find_unplaced(fntab, base, nargs) >= 0 then sys_exit(89) else 0;
+  let _ = if vs_find_unplaced(fntab, base, nargs) >= 0 then (let _ = dp_worker_exit(89) in sys_exit(89)) else 0;
   0
 }
 fn vs_find_unplaced(fntab: [i64], base: i64, nargs: i64) -> i64 {

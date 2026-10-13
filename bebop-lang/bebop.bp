@@ -10,6 +10,8 @@ use "compiler/sys_builtins.bp"
 use "compiler/fnval_match.bp"
 use "compiler/dagdrv.bp"
 use "compiler/dagcli.bp"
+use "compiler/dagpar.bp"
+use "compiler/dagpar_node.bp"
 // selfhost/expr_compile.bp - real expression + function compiler (self-host).
 //
 // Two stages toward a self-hosting compiler:
@@ -595,7 +597,7 @@ fn vs_push(insns: [i64], n: [i64], fntab: [i64], stab: [i64], kind: i64, p0: i64
   // pending SYM/CONST/etc. entry must never be forced through vs_park_deepest
   // just because w passed 8. The only cap left is the physical entry-list
   // capacity itself.
-  let _ = if fntab[5387] >= 512 then sys_exit(89) else 0;
+  let _ = if fntab[5387] >= 512 then (let _ = dp_worker_exit(89) in sys_exit(89)) else 0;
   let w = fntab[5387];
   // A2 commit 2 (constant hoisting): a CONST push whose value matches a live
   // hoisted pair (fntab 4578+2k/4579+2k, only ever nonzero inside one

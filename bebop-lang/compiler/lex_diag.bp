@@ -157,7 +157,8 @@ fn diag_exit_text(buf: [i64], a2b: i64, code: i64) -> i64 {
   let mtail = at30 - at;
   let final_at = at + mtail;
   let _ = buf[final_at] = 10;
-  let _ = sys_write(2, buf, final_at + 1);
+  let _ = if dp_quiet() == 0 then sys_write(2, buf, final_at + 1) else 0;
+  let _ = dp_worker_exit(code);
   sys_exit(code)
 }
 fn slen(s: str, pos: [i64]) -> i64 {
@@ -263,7 +264,8 @@ fn diag_e124(s: str, p: i64, fntab: [i64], why: i64) -> i64 {
   let a = if why == 4 then diag_str(buf, a, "writes input array (declare it `out`) ") else a;
   let a = diag_span(buf, a, s, p, diag_ident_len(s, p));
   let _ = buf[a] = 10;
-  let _ = sys_write(2, buf, a + 1);
+  let _ = if dp_quiet() == 0 then sys_write(2, buf, a + 1) else 0;
+  let _ = dp_worker_exit(124);
   sys_exit(124)
 }
 // sys_prefix_at(s, p, strn): 1 when the four bytes at p are `sys_`. The out-of-range case

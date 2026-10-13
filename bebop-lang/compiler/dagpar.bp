@@ -1,0 +1,290 @@
+// bebop-lang/compiler/dagpar.bp -- part of the self-hosting compiler, NOT a standalone program.
+// R7 (W-R7, R-GRAPH B3, 2026-10-11): PARALLEL EMIT over the fn DAG, a client of the L3 scheduler
+// selfhost/prelude/sched.bp (persistent sys_clone workers parked on a futex, nodes claimed by LDADDAL,
+// the parent woken once per level). The emit DAG has ONE level: a fn's words depend only on its own
+// span and the context bytes (DG4's memo key, compiler/dagdrv.bp dag_ctx) -- every layout-dependent
+// word is a relocation e1_link patches -- so all misses are independent nodes, followed by ONE serial
+// link node (dag_emit's loop) that copies each worker's words into source order (T-1).
+//
+//   * a worker compiles fn q into ITS OWN fntab copy / word buffer / relocation buffer, literal
+//     ordinals counted from 0 per fn (the link adds the global ordinal, as dag_link_fn does for a memo
+//     hit), E89 recorded per fn; dag_emit then links it exactly as a hit (dp_link_fn);
+//   * a fn no worker took (arena or buffer headroom, see dp_room) is compiled in place by the link,
+//     the serial path -- so the output never depends on which worker took what;
+//   * a worker that meets ANY compile error does not print and does not exit the process: it raises
+//     the abort count and leaves its thread (dp_worker_exit); the parent then discards every worker result
+//     and runs the serial emit from scratch, which prints the canonical first diagnostic.
+// Workers live in their OWN anonymous mapping R placed above the main arena (sys_mmap, hint 16 MiB past
+// x28): worker w owns [R + w*16 MiB, R + (w+1)*16 MiB) -- a 64 KiB PROT_NONE guard at its bottom, its
+// stack below sp = +4 MiB, and its clone arena (emit_sys_clone: [sp+4 MiB, sp+12 MiB)) ending at the
+// top. Measured 2026-10-11: the self-compile's cursor is at 24.9M of 33.5M cells when emit starts, so
+// the main arena has no room for 48 MiB of workers; a mapping of their own costs one syscall and the
+// parent's arena is never shared with a thread (no race with a worker's last instructions).
+// dm cells: 36 W + 1 (0 = dp_env never ran: serial), 37 BEBOP_CC_ALWAYS, 38 BEBOP_CC_REPORT.
+use "selfhost/prelude/sched.bp"
+
+fn dp_magic() -> i64 { 5918259720394731633 }
+fn dp_pitch() -> i64 { 2097152 }          // 16 MiB in cells: the par_compile / sched.bp pitch
+fn dp_wcap() -> i64 { 65536 }             // a worker's word buffer (cells)
+fn dp_guard() -> i64 { 65536 }            // 2.6x the largest per-fn allocation measured (25029 cells)
+
+// dp_env(dm): BEBOP_CC_W=<n>, BEBOP_CC_ALWAYS=1, BEBOP_CC_REPORT=1. OPT-IN: unset = 0 = the serial emit.
+// Each worker is a THREAD and this box's phantom-process ceiling counts threads (measured 2026-10-11:
+// three W=3 compiles took the box from 23 to 33 tasks and procguard killed a run-all), so turning it on
+// by default is a box-budget decision, not this file's. W is clamped to the cores this process may run
+// on, and to 0 on ONE core, where workers would only time-share it (perf.py pins `taskset -c 4`).
+fn dp_env(dm: [i64]) -> i64 {
+  let p = zeros(24);
+  let pl = sch_lit(p, 0, "/proc/self/environ");
+  let fd = sys_open(p, pl, 0);
+  let buf = zeros(65536);
+  let n = if fd >= 0 then sys_read(fd, buf, 65536) else 0;
+  let _ = if fd >= 0 then sys_close(fd) else 0;
+  let _ = dm[36] = 1;
+  let k = zeros(24);
+  let kl = sch_lit(k, 0, "BEBOP_CC_");
+  let i = 0;
+  while i < n {
+    let _ = dp_env_var(dm, buf, i, k, kl);
+    let e = i;
+    while buf[e] != 0 {
+      let e = e + 1;
+      0
+    };
+    let i = e + 1;
+    0
+  };
+  0
+}
+fn dp_env_var(dm: [i64], buf: [i64], i: i64, k: [i64], kl: i64) -> i64 {
+  let ok = 1;
+  let j = 0;
+  while j < kl {
+    let ok = ok * (if buf[i + j] == k[j] then 1 else 0);
+    let j = j + 1;
+    0
+  };
+  let a = i + kl;
+  let isw = ok * (if buf[a] == 87 then 1 else 0) * (if buf[a + 1] == 61 then 1 else 0);
+  let isa = ok * (if buf[a] == 65 then 1 else 0) * (if buf[a + 1] == 76 then 1 else 0) * (if buf[a + 6] == 61 then 1 else 0);
+  let isr = ok * (if buf[a] == 82 then 1 else 0) * (if buf[a + 1] == 69 then 1 else 0) * (if buf[a + 6] == 61 then 1 else 0);
+  let w = if isw == 1 then dag_env_num(buf, a + 2) else 0;
+  let nc = if isw * (if w > 0 then 1 else 0) == 1 then dp_cores() else 0;
+  let wc = if nc < 2 then 0 else (if w > nc then nc else w);
+  let _ = if isw == 1 then (let _ = dm[36] = (if wc > 8 then 8 else wc) + 1 in 0) else 0;
+  let _ = if isa == 1 then (let _ = dm[37] = if buf[a + 7] == 49 then 1 else 0 in 0) else 0;
+  let _ = if isr == 1 then (let _ = dm[38] = if buf[a + 7] == 49 then 1 else 0 in 0) else 0;
+  0
+}
+
+// dp_cores(): the bits set in /proc/self/status `Cpus_allowed:` (hex, comma-grouped); 0 if unreadable.
+fn dp_cores() -> i64 {
+  let p = zeros(24);
+  let pl = sch_lit(p, 0, "/proc/self/status");
+  let fd = sys_open(p, pl, 0);
+  let buf = zeros(8192);
+  let n = if fd >= 0 then sys_read(fd, buf, 8190) else 0;
+  let _ = if fd >= 0 then sys_close(fd) else 0;
+  let k = zeros(24);
+  let kl = sch_lit(k, 0, "Cpus_allowed:");
+  let at = [0 - 1];
+  let i = 0;
+  let bol = 1;
+  while i + kl < n {
+    let _ = if bol * (if at[0] < 0 then 1 else 0) == 1 then (if dp_pre(buf, i, k, kl) == 1 then (let _ = at[0] = i + kl in 0) else 0) else 0;
+    let bol = if buf[i] == 10 then 1 else 0;
+    let i = i + 1;
+    0
+  };
+  if at[0] < 0 then 0 else dp_popcount_hex(buf, at[0], n)
+}
+fn dp_pre(buf: [i64], i: i64, k: [i64], kl: i64) -> i64 {
+  let ok = 1;
+  let j = 0;
+  while j < kl {
+    let ok = ok * (if buf[i + j] == k[j] then 1 else 0);
+    let j = j + 1;
+    0
+  };
+  ok
+}
+fn dp_popcount_hex(buf: [i64], a: i64, n: i64) -> i64 {
+  let c = 0;
+  let j = a;
+  let go = 1;
+  while go == 1 {
+    let ch = if j < n then buf[j] else 10;
+    let d = if ch >= 48 then (if ch <= 57 then ch - 48 else (if ch >= 97 then (if ch <= 102 then ch - 87 else 0 - 1) else 0 - 1)) else 0 - 1;
+    let c = c + (if d >= 0 then (d & 1) + ((d >> 1) & 1) + ((d >> 2) & 1) + ((d >> 3) & 1) else 0);
+    let go = if ch == 10 then 0 else 1;
+    let j = j + 1;
+    0
+  };
+  c
+}
+
+// ---- the funnel: every compile-error exit reachable from emission goes through dp_worker_exit ----
+// dp_tls_here(): this thread's TLS cell index when it is a dp worker, else -1. A worker's FIRST
+// allocation is its TLS block, at its clone arena's base = x28 - 8 MiB; the main thread (or any other
+// clone child) reads ordinary data there, which never holds magic + its own index + its own x28.
+fn dp_tls_here() -> i64 {
+  let x = sys_arena_end();
+  let t = x - 1048576;
+  let tl = sch_h(t);
+  if t < 0 then 0 - 1 else (if tl[0] == dp_magic() then (if tl[1] == t then (if tl[2] == x then t else 0 - 1) else 0 - 1) else 0 - 1)
+}
+// dp_quiet(): 1 inside a worker -- a diagnostic is not written there (the serial redo writes it).
+fn dp_quiet() -> i64 { if dp_tls_here() < 0 then 0 else 1 }
+// dp_worker_exit(code): inside a worker, leave (dp_die, never returns); elsewhere return 0 so the
+// caller's own literal `sys_exit(N)` runs -- the exit sites stay literal for tools/trap_census.py.
+fn dp_worker_exit(code: i64) -> i64 {
+  let t = dp_tls_here();
+  if t < 0 then 0 else dp_die(t, code)
+}
+// dp_die: raise the abort count, account this worker's level exit and loop exit exactly as
+// sch_worker would have (so the parent's wake and sch_stop's join still count W), leave the thread.
+fn dp_die(t: i64, code: i64) -> i64 {
+  let tl = sch_h(t);
+  let c = sch_h(tl[3]);
+  let _ = c[19] = code;
+  let _ = sys_atomic_add(c, 6, 1);
+  let e = sch_h(c[3]);
+  let _ = sch_exit_level(e);
+  let _ = sys_atomic_add(e, 12, 1);
+  let _ = sys_futex_wake(e, 12, 1);
+  sys_exit_thread_guard(1, code)
+}
+
+// ---- the parent: decide, spawn, one level, stop. Returns the ctx handle (0 = serial emit) ----
+// ctx c = zeros(32): 0 source (str as i64)  1 ws  2 master fntab  3 env e  4 R  5 W  6 abort count
+//   7 hit  8 wid  9 wst  10 wsz  11 wrlo  12 wrhi  13 wnlit  14 wfacts  15 wbad  16 wstate (8/worker:
+//   0 words 1 fntab 2 n)  17 we89  18 nodes a worker deferred  19 an abort's exit code (informational)
+//   20 order: node k compiles fn order[k] -- the misses by source bytes, LARGEST first (LPT: the big
+//      fns no longer finish the level alone, and they meet a fresh worker arena)
+fn dp_str_i(s: str) -> i64 { s }
+fn dp_i_str(a: i64) -> str { a }
+fn dp_par_emit(s: str, ws: [i64], dm: [i64], fntab: [i64]) -> i64 {
+  let W = if dm[36] > 0 then dm[36] - 1 else 0;
+  let est = dp_est(ws);
+  let go = if W > 0 then (if dm[37] == 1 then 1 else (if est >= sch_min_us_per_worker() * W then 1 else 0)) else 0;
+  let R = if go == 1 then dp_map(W) else 0 - 1;
+  let room = if R > sys_arena_end() then 1 else 0;
+  let _ = if dm[38] * go * (1 - room) == 1 then dp_say(dm, 0, W, est, sys_arena_end(), R, 0, 0) else 0;
+  if go * room == 1 then dp_run(s, ws, dm, fntab, W, R, est) else 0
+}
+// dp_map(W): the workers' mapping (PROT_READ|WRITE, MAP_PRIVATE|MAP_ANONYMOUS = 34), a guard page
+// range PROT_NONE at the bottom of each worker's 16 MiB. Returns its cell index (negative = failed:
+// an errno, or the kernel ignored the hint and placed it below x17, where zeros' index math is wrong).
+fn dp_map(W: i64) -> i64 {
+  let R = sys_mmap(sys_arena_end() + dp_pitch(), W * dp_pitch() * 8, 3, 34, 0 - 1, 0);
+  let w = 0;
+  while w < W * (if R > sys_arena_end() then 1 else 0) {
+    let _ = sys_mprotect(R + w * dp_pitch(), 65536, 0);
+    let w = w + 1;
+    0
+  };
+  R
+}
+// dp_est: T-4's estimate in us -- the misses' source bytes x 1.18 us/byte (measured 2026-10-11 on
+// the self-compile: 775 ms of emit over 659,075 bytes).
+fn dp_est(ws: [i64]) -> i64 {
+  let fpos = wsa(ws, 2);
+  let hit = wsa(ws, 8);
+  let cnt = ws[0];
+  let b = 0;
+  let q = 0;
+  while q < cnt {
+    let b = b + (if hit[q] > 0 then 0 else dp_span(fpos, q, cnt, ws[20]));
+    let q = q + 1;
+    0
+  };
+  b * 118 / 100
+}
+fn dp_span(fpos: [i64], q: i64, cnt: i64, strn: i64) -> i64 {
+  (if q + 1 < cnt then fpos[q + 1] else strn) - fpos[q]
+}
+fn dp_run(s: str, ws: [i64], dm: [i64], fntab: [i64], W: i64, R: i64, est: i64) -> i64 {
+  let cnt = ws[0];
+  let c = zeros(32);
+  let _ = c[0] = dp_str_i(s);
+  let _ = c[1] = sch_a(ws);
+  let _ = c[2] = sch_a(fntab);
+  let _ = c[4] = R;
+  let _ = c[5] = W;
+  let _ = c[7] = ws[8];
+  // cells 8..15 and 17: nine per-fn arrays carved from ONE allocation (handles are cell indices;
+  // no allocation inside a loop body, L8)
+  let pf = sch_a(zeros((cnt + 1) * 9));
+  let k = 8;
+  while k < 16 {
+    let _ = c[k] = pf + (k - 8) * (cnt + 1);
+    let k = k + 1;
+    0
+  };
+  let _ = c[17] = pf + 8 * (cnt + 1);
+  let _ = c[16] = sch_a(zeros(W * 8 + 8));
+  let wid = sch_h(c[8]);
+  let q = 0;
+  while q < cnt {
+    let _ = wid[q] = 0 - 1;
+    let q = q + 1;
+    0
+  };
+  let _ = c[20] = sch_a(dp_order(ws));
+  let out = zeros(cnt + 1);
+  let e = zeros(sch_cells_n());
+  let _ = e[0] = W;
+  let _ = e[15] = sch_a(zeros(256));
+  let _ = e[14] = R;
+  let _ = c[3] = sch_a(e);
+  let t0 = clock_ms();
+  let _ = dp_spawn(e, R);
+  let t1 = clock_ms();
+  let el = if dm[38] == 1 then dp_empty_levels(e, sch_a(c), out) else 0;
+  let t2 = clock_ms();
+  let _ = sch_level(e, 0, cnt, sch_always(), &dp_node, sch_a(c), out);
+  let t3 = clock_ms();
+  let _ = sch_stop(e);
+  let _ = if dm[38] == 1 then dp_say(dm, 1, W, est, t1 - t0, el, t3 - t2, c[18] * 1000 + c[6]) else 0;
+  let _ = if dm[38] == 1 then dp_say_workers(c, W) else 0;
+  if c[6] == 0 then sch_a(c) else 0
+}
+// dp_spawn: sch_spawn's loop with the stack tops in R. 4 symbols live at the clone (e, R, w, r).
+fn dp_spawn(e: [i64], R: i64) -> i64 {
+  let w = 0;
+  while w < e[0] {
+    let r = sys_clone(68864, R + w * 2097152 + 524288);
+    let is_child = if r == 0 then 1 else 0;
+    let _ = if is_child == 1 then sch_worker(e) else 0;
+    let _ = sys_cond_set(1 - is_child, e, 16 + w, r);
+    let _ = sys_exit_thread_guard(is_child, 0);
+    let w = w + 1;
+    0
+  };
+  0
+}
+// dp_empty_levels (BEBOP_CC_REPORT=1 only): 100 levels of 0 nodes on the parked pool -> us per level.
+fn dp_empty_levels(e: [i64], ctx: i64, out: [i64]) -> i64 {
+  let t0 = clock_ms();
+  let i = 0;
+  while i < 100 {
+    let _ = sch_level(e, 0, 0, sch_always(), &dp_node, ctx, out);
+    let i = i + 1;
+    0
+  };
+  (clock_ms() - t0) * 10
+}
+// dp_say: `dp: W=<w> est_us <e> spawn_ms <a> empty_level_us <b> level_ms <c> deferred <d> abort <x>`,
+// or `dp: W=<w> est_us <e> serial (mmap) arena_end <x> R <r>` when the mapping failed (kind 0).
+fn dp_say(dm: [i64], kind: i64, W: i64, est: i64, sp: i64, el: i64, lv: i64, da: i64) -> i64 {
+  let b = zeros(256);
+  let a = sch_put(b, sch_lit(b, 0, "dp: W="), W);
+  let a = sch_put(b, sch_lit(b, a, " est_us "), est);
+  let a = if kind == 0 then sch_put(b, sch_lit(b, sch_put(b, sch_lit(b, a, " serial (mmap) arena_end "), sp), " R "), el) else sch_put(b, sch_lit(b, a, " spawn_ms "), sp);
+  let a = if kind == 0 then a else sch_put(b, sch_lit(b, a, " empty_level_us "), el);
+  let a = if kind == 0 then a else sch_put(b, sch_lit(b, a, " level_ms "), lv);
+  let a = if kind == 0 then a else sch_put(b, sch_lit(b, a, " deferred "), da / 1000);
+  let a = if kind == 0 then a else sch_put(b, sch_lit(b, a, " abort "), da - (da / 1000) * 1000);
+  let _ = b[a] = 10;
+  sys_write(2, b, a + 1)
+}

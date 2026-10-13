@@ -83,6 +83,7 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
   // DG4: the per-fn memo <out>.dag (publish mode, like .becache, compiles cold and writes none)
   let dm = zeros(48);
   let _ = if nocache == 1 then (let _ = dm[29] = 1 in 0) else dag_setup(dm, pout, lo, pcomp, lc, str_len(srcv));
+  let _ = dp_env(dm);  // R7: BEBOP_CC_W / _ALWAYS / _REPORT (compiler/dagpar.bp)
   let offs = zeros(784);
   let words0 = dag_words_offs(srcv, at[0], offs, dm);
   let _ = if dm[26] == 1 then dag_hits_line(dm) else 0;

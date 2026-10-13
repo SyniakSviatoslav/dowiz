@@ -135,3 +135,5 @@ c_gb_vec_setbit bcond 298 W-CFVAL L1/TRE 2026-10-10: store/gb helpers through th
 c_st_bytes bcond 151 W-CFVAL L1/TRE 2026-10-10: store/gb helpers through the new passes; per-site cause NOT checked (+1..+6 bcond), output byte-identical to the goldens (std_golden 158/0)
 k2 bcond 2 W-CFVAL TRE (compiler/tre.bp): a self tail call becomes a loop, +1 loop-exit bcond per site
 k2h bcond 2 W-CFVAL TRE (compiler/tre.bp): a self tail call becomes a loop, +1 loop-exit bcond per site
+bebop bcond 2542 W-R7 (R-GRAPH B3, 2026-10-12): +160 b.cond over 2382, all new COMPILER code -- compiler/dagpar.bp + dagpar_node.bp (R7 parallel emit) and selfhost/prelude/sched.bp now compiled into bebop.bin; program codegen unchanged (par_emit_sweep 439/439 byte-identical to f846a1f4, construct parity 129/0)
+bebop cbz 262 W-R7 (R-GRAPH B3, 2026-10-12): +34 zero-tests over 228, same cause and same measurement as the bcond 2542 line

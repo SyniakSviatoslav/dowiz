@@ -7,8 +7,11 @@ Types: 'i64' | '[i64]' | 'str' | '?' (unknown)."""
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpref
-# The only sanctioned i64 <-> [i64] casts: the store's mapping base (selfhost/prelude/store.bp, T111).
-CASTS = {'st_cells', 'st_addr', 'addr_of'}
+# The only sanctioned i64 <-> [i64] casts: the store's mapping base (selfhost/prelude/store.bp, T111),
+# the scheduler's ctx handles (selfhost/prelude/sched.bp sch_h/sch_a: a node gets its ctx as an i64),
+# and W-R7's source handle through that ctx (compiler/dagpar.bp dp_str_i/dp_i_str: a `str` value is a
+# raw address, so the identity round-trips it -- measured 2026-10-11; a zeros() buffer is NOT a str).
+CASTS = {'st_cells', 'st_addr', 'addr_of', 'sch_h', 'sch_a', 'dp_str_i', 'dp_i_str'}
 # T48b (2026-09-06): `ref T` is a distinct type. It is produced only by these store fns
 # (they return 'ref *', compatible with every `ref T`) or by params/returns declared `ref T`;
 # arithmetic on a ref, an i64 where a `ref T` is declared, or a ref where a scalar is

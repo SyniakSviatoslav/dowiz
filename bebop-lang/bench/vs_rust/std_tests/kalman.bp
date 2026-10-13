@@ -11,18 +11,22 @@ use "selfhost/prelude/fp.bp"
 // Fold = kq*10^8 + pq*10^4 + trk*10 + fix (kq=K>>12, pq=P>>20).
 // Machine: fp_mul verbatim from spectral_machinery.bp (sha256 c184416666fe).
 
-// fp_div(a, b): floor(a * 2^32 / b), a >= 0, b > 0. Restoring long division,
-// 32 steps: r stays < 2b <= 2^36 - no overflow, fully deterministic.
+// fp_div(a, b): floor(a * 2^32 / b), a >= 0, b > 0. R8 (W-R7 B5, 2026-10-12): hardware sdiv in
+// clz-sized chunks (tdg.bp's form) instead of 32 restoring steps -- r << k stays < 2^63 because
+// k = clz(b) - 1 and r < b; same floor, so the gate's fold does not move.
 fn fp_div(a: i64, b: i64) -> i64 {
-  let q = 0;
-  let r = a;
-  let i = 0;
-  while i < 32 {
-    let r = r * 2;
-    let bit = if r >= b then 1 else 0;
-    let q = q * 2 + bit;
-    let r = r - bit * b;
-    let i = i + 1;
+  let q = a / b;
+  let r = a - q * b;
+  let left = 32;
+  while left > 0 {
+    let k = clz(b) - 1;
+    let k = if k > left then left else k;
+    let k = if k < 1 then 1 else k;
+    let r = r << k;
+    let qk = r / b;
+    let r = r - qk * b;
+    let q = (q << k) + qk;
+    let left = left - k;
     0
   };
   q

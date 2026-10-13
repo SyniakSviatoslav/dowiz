@@ -375,6 +375,8 @@ fn dag_emit(s: str, ws: [i64], dm: [i64], insns: [i64], n: [i64]) -> i64 {
   let _ = fntab[7112] = 0;
   let _ = fntab[7113] = 4096;
   let stk_b = zeros(1088);
+  // R7 (compiler/dagpar.bp): the misses compiled on the worker pool first; this loop is then the link
+  let pre = dp_par_emit(s, ws, dm, fntab);
   let q = 0;
   while q < cnt {
     let _ = starts[q] = n[0];
@@ -382,7 +384,8 @@ fn dag_emit(s: str, ws: [i64], dm: [i64], insns: [i64], n: [i64]) -> i64 {
     let _ = rlo[q] = fntab[7112];
     let _ = fntab[7114] = 0;
     let e = hit[q];
-    let _ = if e > 0 then dag_link_fn(ws, dm, q, insns, n) else e1_compile(s, ws, q, fntab, insns, n, stk_b);
+    let pw = dp_wid(pre, q);
+    let _ = if e > 0 then dag_link_fn(ws, dm, q, insns, n) else (if pw >= 0 then dp_link_fn(pre, q, fntab, insns, n) else e1_compile(s, ws, q, fntab, insns, n, stk_b));
     let _ = rhi[q] = fntab[7112];
     let _ = nlit[q] = fntab[5552] - li0[q];
     let _ = sizes[q] = n[0] - starts[q];
