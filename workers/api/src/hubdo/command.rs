@@ -76,6 +76,31 @@ pub enum Kind {
     Feedback,
     /// `POST /api/public/locations/:slug/eta` (`eta::quote_at`): products and the queue in one turn.
     Quote,
+    // ── the owner's catalogue edits (W-D9, `catalog_edit/routed.rs`; costs in `catalog_edit/costs/tests.rs`) ──
+    /// `POST /api/owner/products` (`catalog_edit::create_product_at`).
+    ProductNew,
+    /// `POST /api/owner/products/:id` (`owner::update_product_at`): edit, price, availability, recipe.
+    ProductEdit,
+    /// `POST /api/owner/products/:id/delete` (`catalog_edit::delete_product_at`).
+    ProductDelete,
+    /// `POST /api/owner/products/delete` (`catalog_edit::delete_products_at`).
+    ProductsDelete,
+    /// `POST /api/owner/categories` (`catalog_edit::set_category_at`).
+    CategorySet,
+    /// `POST /api/owner/categories/:id/delete` (`catalog_edit::delete_category_at`).
+    CategoryDelete,
+    /// `POST /api/owner/i18n` (`owner::write_translations_at`).
+    Translations,
+    /// `POST /api/owner/location` (`owner::update_location_at`): open, close, busy, pause.
+    Location,
+    /// The catalogue half of `POST /api/owner/products/:id/image` (`media::photo_in_object`).
+    ProductImage,
+    /// `POST /api/owner/products/:id/image/clear` (`media::clear_product_image_at`).
+    ProductImageClear,
+    /// `POST /api/owner/menu/history/restore` (`catalog_history::restore_at`).
+    MenuRestore,
+    /// `POST /api/owner/menu/import` (`catalogue::import::import_menu_at`): preview or apply a CSV.
+    MenuImport,
 }
 
 impl Kind {
@@ -84,6 +109,8 @@ impl Kind {
         match self {
             Kind::Place | Kind::Quote => &["slug"],
             Kind::ConsoleOrders | Kind::KitchenBoard | Kind::CourierTasks | Kind::CourierPosition => &[],
+            Kind::ProductNew | Kind::ProductsDelete | Kind::CategorySet | Kind::Translations | Kind::Location | Kind::MenuRestore | Kind::MenuImport => &[],
+            Kind::ProductEdit | Kind::ProductDelete | Kind::CategoryDelete | Kind::ProductImage | Kind::ProductImageClear => &["id"],
             Kind::OrderAction
             | Kind::Assign
             | Kind::KitchenAck
@@ -183,6 +210,13 @@ impl HubImages {
         let ctx = crate::edge::Ctx::given(crate::Req { now_ms: cmd.now_ms }, env, &params);
         // BOXED: the handler can reach this object again through `Stub::Own` -> `route`,
         // and an async cycle needs one heap hop to have a size.
+        // THE OWNER'S CATALOGUE EDITS (W-D9): their futures are built in a frame of their own,
+        // so the arms below do not each reserve a slot for them in THIS frame (debug builds do
+        // not overlap the slots, and a placement's turn ran out of a test thread's 2 MiB).
+        let (call, ctx) = match crate::catalog_edit::routed::in_object(cmd.kind, call, ctx) {
+            Ok(edit) => return edit.await,
+            Err(back) => back,
+        };
         match cmd.kind {
             Kind::Place => {
                 let place = crate::hubstore::Place::of_authorised(&ctx, &cmd.venue)?;
@@ -205,6 +239,8 @@ impl HubImages {
                 let place = crate::hubstore::Place::of_authorised(&ctx, &cmd.venue)?;
                 Box::pin(crate::eta::quote_at(place, call, ctx)).await
             }
+            // The catalogue edits are built in `catalog_edit::routed::in_object`, above.
+            _ => Reply::error("command: no handler for this kind", 500),
         }
     }
 }

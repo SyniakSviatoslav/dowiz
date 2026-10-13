@@ -67,7 +67,7 @@ pub fn remove_category(cat: &mut Catalog, id: &str, with_dishes: Option<usize>) 
 }
 
 /// `POST /api/owner/products/delete {ids}` -- many dishes, one write, owner only.
-pub async fn delete_products(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn delete_products_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct In {
@@ -97,7 +97,7 @@ pub async fn delete_products(mut req: Request, ctx: RouteContext<crate::Req>) ->
 }
 
 /// `POST /api/owner/categories/:id/delete {location_id, with_dishes?}`.
-pub async fn delete_category(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn delete_category_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct In {

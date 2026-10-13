@@ -12,7 +12,7 @@ use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::auth::{self, Principal};
-mod dashboard; mod routed; pub use routed::{assign_courier, order_action, orders}; // W-BN4B: run whole by the venue's object
+mod dashboard; mod routed; pub use routed::{assign_courier, order_action, orders}; pub use crate::catalog_edit::routed::{update_location, update_product, write_translations}; // W-BN4B, W-D9: run whole by the venue's object
 
 // `now_ms()` WAS HERE, and nothing calls it any more.
 //
@@ -767,7 +767,7 @@ pub(crate) struct ProductEdit {
 /// as the route existed, and nothing said so. The MCP fills `{id}` from its
 /// arguments and sends only its schema's fields plus `location_id`
 /// (`mcp::tools::plan`), and the console sends only what is named here.
-pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn update_product_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: ProductEdit = match crate::body::strict(&mut req).await {
         Ok(b) => b,
         Err(r) => return Ok(r),
@@ -1131,7 +1131,7 @@ async fn apply_i18n(
 /// language whatever the customer chose. This is the one place both are
 /// written, up to five hundred rows a call, each checked on its own so a bad
 /// row is named rather than the whole batch silently half-applied.
-pub async fn write_translations(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn write_translations_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct Entry {
         entity: String,
@@ -1214,7 +1214,7 @@ pub(crate) fn catalogue_ids(cat: &dowiz_hub::catalog::Catalog) -> Value {
 }
 
 /// `PATCH /api/owner/location` — open, close, go busy, pause delivery.
-pub async fn update_location(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn update_location_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct In {

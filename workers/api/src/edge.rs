@@ -157,8 +157,11 @@ impl Stub {
             Stub::Own(o) => o.route(req).await,
             #[cfg(test)]
             Stub::Mem(o) => {
-                mem::count_object_request(&req.path());
-                o.route(req).await
+                let (path, sent) = (req.path(), req.body_bytes().len());
+                mem::count_object_request(&path);
+                let reply = o.route(req).await;
+                mem::count_object_bytes(&path, sent, reply.as_ref().map_or(0, |r| r.body().len()));
+                reply
             }
         }
     }

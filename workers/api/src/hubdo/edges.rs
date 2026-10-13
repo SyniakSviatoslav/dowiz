@@ -139,7 +139,7 @@ pub(crate) const EDGES: &[Edge] = &[
     cmd("place", &["log", "stock", "settings", "outbox", "fiscal"]),
     // A whole request in one turn (BN4, W-BN4B): `place`, the order's moves, the courier's run and
     // the customer's reads, with every read and write around them (`hubdo/command.rs`, `Kind`).
-    cmd("command", &["log", "stock", "settings", "outbox", "fiscal", "catalog", "people", "consent", "taste", "idem", "ops"]),
+    cmd("command", &["log", "stock", "settings", "outbox", "fiscal", "catalog", "people", "consent", "taste", "idem", "ops", "i18n", "catalog.edits"]), // + the owner's catalogue edits (W-D9)
     cmd("advance", &["log", "stock"]),
     cmd("assign", &["log", "ops"]),
     cmd("append", LOG),

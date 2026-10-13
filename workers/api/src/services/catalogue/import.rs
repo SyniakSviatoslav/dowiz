@@ -13,7 +13,13 @@ use worker::*;
 ///
 /// PREVIEW BY DEFAULT. An import that applies on the first click is one the
 /// owner cannot inspect first, and a menu is the thing customers buy from.
-pub async fn import_menu(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub async fn import_menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::hubdo::command::forward(crate::hubdo::command::Kind::MenuImport, req, ctx).await
+}
+
+/// The object's half of [`import_menu`] (`hubdo/command.rs` `Kind::MenuImport`, W-D9): the
+/// catalogue read and write are function calls in the venue's own turn.
+pub(crate) async fn import_menu_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),

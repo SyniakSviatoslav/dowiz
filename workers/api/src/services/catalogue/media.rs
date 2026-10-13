@@ -9,6 +9,8 @@ use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::owner::owner_and_venue;
+/// The Worker's half: the whole request to the venue's object (W-D9, `catalog_edit/routed.rs`).
+pub use crate::catalog_edit::routed::clear_product_image;
 
 //
 // THE BYTES ARE SNIFFED, NEVER TRUSTED. A `content-type` header is what the
@@ -22,8 +24,8 @@ use crate::owner::owner_and_venue;
 
 /// `POST /api/owner/products/:id/image` — body is the image.
 pub async fn set_product_image(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
-        Ok((_, l)) => l,
+    let (by, loc) = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
+        Ok(v) => v,
         Err(r) => return Ok(r),
     };
     // The venue this caller was authorised for, and no other.
@@ -62,11 +64,46 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<crate::Req>) 
     // the catalogue differs.
     let small = matches!(req.url()?.query_pairs().find(|(k, _)| k == "variant"), Some((_, v)) if v == "small");
     let field = if small { "imageUrlSmall" } else { "imageUrl" };
-    let (pid, u) = (id.clone(), url.clone());
-    crate::hubstore::with_catalog(&place, move |cat| set_image_in(cat, &pid, &u, small).map_err(|e| Error::RustError(e.into()))).await?;
+    // THE CATALOGUE HALF IN THE OBJECT'S TURN (W-D9): the URL crosses, never the catalogue
+    // image (`with_catalog` from here read it whole and wrote it whole back).
+    let edit = json!({ "location_id": loc, "url": url, "small": small, "by": by });
+    let mut init = RequestInit::new();
+    init.with_method(Method::Post).with_body(Some(edit.to_string().into_bytes()));
+    let call = Request::new_with_init(&req.url()?.to_string(), &init)?;
+    let r = crate::hubdo::command::send(&place, crate::hubdo::command::Kind::ProductImage, &ctx, call).await?;
+    if r.status_code() != 200 {
+        return Ok(r);
+    }
     Response::from_json(&json!({
         field: url, "bytes": stored.bytes, "type": stored.kind.mime()
     }))
+}
+
+/// THE OBJECT'S HALF of a dish photograph (`Kind::ProductImage`). NO DOOR OF ITS OWN: only
+/// `/fold/command` reaches it (a Worker with the binding, `hubdo.rs` `fetch`) and only
+/// `set_product_image` builds its body, after the door and the blob. NEVER ROUTE IT FROM `lib.rs`.
+pub(crate) async fn photo_in_object(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct In {
+        location_id: String,
+        url: String,
+        small: bool,
+        by: String,
+    }
+    let body: In = match crate::body::strict(&mut req).await {
+        Ok(b) => b,
+        Err(r) => return Ok(r),
+    };
+    let Some(id) = ctx.param("id").cloned() else {
+        return Response::error("missing product", 400);
+    };
+    let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?.by(&body.by);
+    let (u, small) = (body.url, body.small);
+    match crate::hubstore::with_catalog(&place, move |cat| Ok(set_image_in(cat, &id, &u, small))).await? {
+        Ok(()) => Response::from_json(&json!({ "ok": true })),
+        Err(e) => Response::error(e, 404),
+    }
 }
 
 /// Point a stored dish at its new photograph. PURE on the catalogue.
@@ -188,7 +225,7 @@ pub async fn clear_venue_logo(req: Request, ctx: RouteContext<crate::Req>) -> Re
 }
 
 /// `POST /api/owner/products/:id/image/clear`
-pub async fn clear_product_image(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn clear_product_image_at(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),

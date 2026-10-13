@@ -16,6 +16,8 @@ use dowiz_hub::catalog::edits::{self, Edit};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
+/// The Worker's half of the restore: the whole request to the venue's object (W-D9).
+pub use crate::catalog_edit::routed::restore;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 /// The journal image. Backed up with the catalogue (`IMAGES`, `hubstore/backup.rs`).
@@ -88,7 +90,7 @@ struct RestoreIn {
 
 /// `POST /api/owner/menu/history/restore` — put one dish back to what it was just BEFORE the
 /// edit `seq` (a dish that edit created is removed). The restore is itself journaled.
-pub async fn restore(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn restore_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: RestoreIn = match crate::body::strict(&mut req).await {
         Ok(b) => b,
         Err(r) => return Ok(r),

@@ -16,13 +16,18 @@ use crate::services::catalogue::import::bump_menu_version;
 
 /// Many dishes, and a category with its dishes (W-NOM).
 mod remove;
-pub use remove::{delete_category, delete_products};
+pub(crate) use remove::{delete_category_at, delete_products_at};
+/// The Worker's half of every edit here: the whole request to the venue's object (W-D9).
+pub(crate) mod routed;
+pub use routed::{create_product, delete_category, delete_product, delete_products, set_category};
 /// Rename, category move, up/down order (W-CRUD).
 pub(crate) mod order;
 /// A deleted dish's or category's translations go with it (W-CRUD).
 pub(crate) mod forget;
-/// A request body whose unknown fields are refused for real (W-CRUD).
-
+/// What one catalogue edit costs on the hop, edit by edit (W-D9).
+#[cfg(test)]
+#[path = "catalog_edit/costs/tests.rs"]
+mod costs_tests;
 
 /// Ids are slugs of the name, like the importer's; a clash gets a numeric tail.
 const ID_MAX: usize = 64;
@@ -65,7 +70,7 @@ struct ProductNew {
 
 /// `POST /api/owner/products` — a new dish, minimal; the editor fills the rest
 /// through `POST /api/owner/products/:id`.
-pub async fn create_product(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn create_product_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: ProductNew = match crate::body::strict(&mut req).await {
         Ok(b) => b,
         Err(r) => return Ok(r),
@@ -136,7 +141,7 @@ struct LocOnly {
 
 /// `POST /api/owner/products/:id/delete` — gone from the menu. Past orders
 /// keep their own copy of the name and price, so nothing they show changes.
-pub async fn delete_product(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn delete_product_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: LocOnly = match crate::body::strict(&mut req).await {
         Ok(b) => b,
         Err(r) => return Ok(r),
@@ -183,7 +188,7 @@ struct CategoryIn {
 }
 
 /// `POST /api/owner/categories` — make one, or rename / reorder one by id.
-pub async fn set_category(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub(crate) async fn set_category_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: CategoryIn = match crate::body::strict(&mut req).await {
         Ok(b) => b,
         Err(r) => return Ok(r),

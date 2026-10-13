@@ -115,11 +115,24 @@ thread_local! {
     static OBJECT_REQUESTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// The path of every one of those requests, in order (W-BN4: a cost test names what it paid for).
     static OBJECT_PATHS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// What each of those requests carried across the hop: (path, body bytes sent, body bytes
+    /// answered). W-D9: a catalogue edit is judged by the image it no longer moves.
+    static OBJECT_TRAFFIC: RefCell<Vec<(String, usize, usize)>> = const { RefCell::new(Vec::new()) };
 }
 
 pub(super) fn count_object_request(path: &str) {
     OBJECT_REQUESTS.with(|n| n.set(n.get() + 1));
     OBJECT_PATHS.with(|p| p.borrow_mut().push(path.to_string()));
+}
+
+/// The bytes one counted request carried each way (`Stub::Mem`, after its answer).
+pub(super) fn count_object_bytes(path: &str, sent: usize, answered: usize) {
+    OBJECT_TRAFFIC.with(|t| t.borrow_mut().push((path.to_string(), sent, answered)));
+}
+
+/// Every counted request's (path, bytes sent, bytes answered), in order.
+pub fn object_traffic() -> Vec<(String, usize, usize)> {
+    OBJECT_TRAFFIC.with(|t| t.borrow().clone())
 }
 
 /// The paths of the object requests counted so far on this thread, in order.

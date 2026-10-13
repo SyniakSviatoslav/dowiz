@@ -11,7 +11,7 @@ const ROUTES: &[(&str, &str, &str)] = &[
     ("venue/place.rs", include_str!("../venue/place.rs"), "set_place"),
     ("identity/staff_admin.rs", include_str!("../identity/staff_admin.rs"), "invite_staff"),
     ("identity/staff_admin.rs", include_str!("../identity/staff_admin.rs"), "set_staff"),
-    ("catalogue/import.rs", include_str!("../catalogue/import.rs"), "import_menu"),
+    ("catalogue/import.rs", include_str!("../catalogue/import.rs"), "import_menu_at"),
 ];
 
 /// The doors a handler asks before it may read anything.
@@ -71,7 +71,7 @@ fn the_check_sees_a_body_read_before_the_door() {
 /// the bound is asked before the CSV is parsed.
 #[test]
 fn the_menu_import_is_bounded_before_it_is_parsed() {
-    let (_, src, name) = ROUTES.iter().find(|r| r.2 == "import_menu").unwrap();
+    let (_, src, name) = ROUTES.iter().find(|r| r.2 == "import_menu_at").unwrap();
     let body = body_of(src, name).unwrap();
     let bound = body.find("bulk::too_big(text.len())").expect("import_menu asks the bound");
     let parse = body.find("from_csv(").expect("import_menu parses the CSV");
