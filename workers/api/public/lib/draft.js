@@ -79,7 +79,18 @@ export function mountDrafts(root, { app, venue = '', scope = '', lang = 'en', st
   if (!containers.length) containers = [root];
   const restored = [];
   for (const c of containers) {
-    if (c.hasAttribute('data-nodraft') || c.closest('[data-nodraft]') || mounted.has(c)) continue;
+    if (c.hasAttribute('data-nodraft') || c.closest('[data-nodraft]')) continue;
+    // THE CONSOLE HAS ONE SHEET ELEMENT (`#sheetIn`), re-filled for every
+    // sheet. Mounted once, it kept the FIRST sheet's fields, key and base for
+    // the whole session: typing in any later sheet read those detached inputs,
+    // found no change, and wrote an empty book under the first sheet's key
+    // (TZ 7, measured on qa-durres 2026-10-13: dw_draft_.../sheet:dish/8826680b={}).
+    // A container whose mounted fields are no longer inside it is mounted again.
+    if (mounted.has(c)) {
+      const was = mounted.get(c), now = new Set(c.querySelectorAll(FIELDS));
+      if (was.fields.every(f => now.has(f.el))) continue;
+      was.off?.(); mounted.delete(c);
+    }
     const fields = fieldsIn(c);
     if (!fields.length) continue;
     const key = L.keyOf(app, venue, c.getAttribute('data-draft') || scope || c.id || '', L.shapeOf(fields.map(f => f.name)));
@@ -97,15 +108,18 @@ export function mountDrafts(root, { app, venue = '', scope = '', lang = 'en', st
       const book = L.parseBook(storage.getItem(key));
       storage.setItem(key, JSON.stringify(d ? L.remember(book, baseHash, d, now()) : L.forget(book, baseHash)));
     };
-    c.addEventListener('input', save);
-    c.addEventListener('change', save);
-    c.addEventListener('click', e => {
+    const arm = e => {
       const t = e.target;
       if (!t?.closest) return;
       if (t.closest('[data-draft-discard]')) return;
       if (t.closest('button,[type="submit"],[data-act]')) armed = c;
-    });
-    c.addEventListener('submit', () => { armed = c; });
+    };
+    const armSubmit = () => { armed = c; };
+    c.addEventListener('input', save);
+    c.addEventListener('change', save);
+    c.addEventListener('click', arm);
+    c.addEventListener('submit', armSubmit);
+    m.off = () => { c.removeEventListener('input', save); c.removeEventListener('change', save); c.removeEventListener('click', arm); c.removeEventListener('submit', armSubmit); if (armed === c) armed = null; };
   }
   return restored;
 }

@@ -9,6 +9,7 @@
 
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, ago, clock, day,
          busy, confirm, ORDER_ID_SHOWN } from '/admin/core.js';
+import { fresh } from '/admin/fresh-logic.js';
 import { st, payName, intlLocale } from '/admin/i18n.js';
 import { paidWith, paidIcon } from '/lib/paid-with.js';
 // ONE ANSWER TO "WHERE IS THIS GOING", shared with the storefront and matching
@@ -69,14 +70,15 @@ const needsSeen = o => OWED_SEEN.has(o.status) && !seenAt(o) && !acked.has(o.id)
 /// and printing are the outbox's, read from `/owner/print/jobs` at most every
 /// `JOBS_MS`. No state = no printer configured, and nothing is drawn.
 const JOBS_MS = 15000;
-const jobs = { at: 0, byOrder: new Map() };
+const jobs = { byOrder: new Map() };
 const printState = o => o.kitchen?.printed?.at ? 'printed' : o.kitchen?.print_failed?.at ? 'failed' : jobs.byOrder.get(o.id)?.state || null;
+// W-TZFRESH: kept `JOBS_MS`, and re-read at once after a printer or settings save on this console.
+const jobsRead = fresh.cache(async () => { const d = await api('/owner/print/jobs'); return new Map((d?.jobs || []).map(j => [j.orderId, j])); },
+  { ttlMs: JOBS_MS, stale: p => p.includes('/print') || p.includes('/settings') });
 async function loadJobs(){
-  if (Date.now() - jobs.at < JOBS_MS) return;
-  jobs.at = Date.now();
   try {
-    const d = await api('/owner/print/jobs');
-    const next = new Map((d?.jobs || []).map(j => [j.orderId, j]));
+    const next = await jobsRead();
+    if (next === jobs.byOrder) return;
     const changed = next.size !== jobs.byOrder.size || [...next].some(([k, v]) => jobs.byOrder.get(k)?.state !== v.state);
     jobs.byOrder = next;
     if (changed) await rerender();

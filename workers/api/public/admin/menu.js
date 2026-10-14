@@ -8,6 +8,7 @@
 // customer within the menu's thirty-second cache.
 
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, busy, switchEl, store, retranslate, confirm } from '/admin/core.js';
+import { fresh } from '/admin/fresh-logic.js'; // W-TZFRESH: the one version every console cache is keyed on
 import '/admin/wire-i18n.js';
 import { lang, LANGS } from '/admin/i18n.js';
 import { loadVenue, rerender } from '/admin/app.js';
@@ -126,16 +127,13 @@ export async function render(host){
 }
 
 /// TZ 3: which dishes need their recipe reviewed (a removed ingredient), from
-/// the owner read, once a minute and after every recipe save.
+/// the owner read. W-TZFRESH: stale after ANY save (a supply deleted on the
+/// stock screen shows the badge on the next draw), and after a minute anyway.
 const REVIEW_MS = 60_000;
-let reviewBook = null, reviewAt = 0;
-const forgetReview = () => { reviewBook = null; };
-async function reviews(){
-  if (reviewBook && performance.now() - reviewAt <= REVIEW_MS) return reviewBook;
-  try { const r = await api('/owner/products'); reviewBook = new Map((r?.products || []).filter(p => p.recipeReview?.length).map(p => [p.id, p.recipeReview])); reviewAt = performance.now(); }
-  catch { reviewBook = reviewBook || new Map(); }
-  return reviewBook;
-}
+const reviews = fresh.cache(async prev => {
+  try { const r = await api('/owner/products'); return new Map((r?.products || []).filter(p => p.recipeReview?.length).map(p => [p.id, p.recipeReview])); }
+  catch { return prev || new Map(); }
+}, { ttlMs: REVIEW_MS });
 /// I0c: a dish that takes nothing off the shelf says so on its row, so the
 /// owner sees which dishes the stock does not follow yet. TZ 3: and a dish
 /// whose recipe names a removed ingredient wears the review badge.
@@ -309,7 +307,7 @@ export async function openDish(id){
     });
     for (const k of Object.keys(body)) if (body[k] === null) delete body[k];
     // TZ 6: one read of the dish as stored, folded into the list, drawn -- no F5, no four-language reload.
-    try { await busy($('#dSave'), () => post(`/owner/products/${encodeURIComponent(id)}`, body)); toast(t('saved')); closeSheet(); if (body.bom) forgetReview(); await syncDish(id, { translations }); }
+    try { await busy($('#dSave'), () => post(`/owner/products/${encodeURIComponent(id)}`, body)); toast(t('saved')); closeSheet(); await syncDish(id, { translations }); }
     catch (err) { toast(String(err.message || err)); }
   };
 }
@@ -317,15 +315,13 @@ export async function openDish(id){
 
 /// A new dish: the three things it cannot exist without; the editor opens on it.
 /// Every category, empty ones too: the public menu hides those, the owner needs them.
-// TZ 6: read once per minute and after every category write, not on every dish sheet.
+// TZ 6: read once per minute and after every write (W-TZFRESH: a CSV import
+// that made a category counts too), not on every dish sheet.
 const CATS_MS = 60_000;
-let catsBook = null, catsAt = 0;
-const forgetCategories = () => { catsBook = null; };
-async function allCategories(){
-  if (catsBook && performance.now() - catsAt <= CATS_MS) return catsBook;
-  try { catsBook = (await api('/owner/categories')).categories || []; catsAt = performance.now(); return catsBook; }
+const allCategories = fresh.cache(async () => {
+  try { return (await api('/owner/categories')).categories || []; }
   catch { return (S.categories || []).map(c => ({ id: c.id, name: c.name, count: (c.products || []).length })); }
-}
+}, { ttlMs: CATS_MS });
 async function openNewDish(){
   const cats = await allCategories();
   sheet(`<p class="eyebrow" data-t="tabMenu"></p><h2 data-t="addDish"></h2><p class="sheet-hint" data-t="ap_h_dishNew"></p>
@@ -360,11 +356,11 @@ async function openCategories(){
     <div class="btn-row">${btn({ id: 'ncWords', icon: 'language', key: 'w_catWords' })}</div>`, { name: 'cats' });
   $('#ncWords').onclick = () => import('/admin/cat-i18n.js').then(m => m.openCategoryWords());
   const fail = e => toast(String(e.message || e));
-  $('#ncGo').onclick = async () => { const name = $('#nc-name').value.trim(); if (!name) return toast(t('required')); try { await busy($('#ncGo'), () => post('/owner/categories', withLoc({ name }))); forgetCategories(); await loadVenue(); openCategories(); redrawWhenClosed(); } catch (e) { fail(e); } };
-  for (const b of $$('[data-cs]', $('#sheetIn'))) b.onclick = async () => { const name = $(`[data-cn="${b.dataset.cs}"]`).value.trim(); if (!name) return; try { await busy(b, () => post('/owner/categories', withLoc({ id: b.dataset.cs, name }))); toast(t('saved')); forgetCategories(); await loadVenue(); redrawWhenClosed(); } catch (e) { fail(e); } };
+  $('#ncGo').onclick = async () => { const name = $('#nc-name').value.trim(); if (!name) return toast(t('required')); try { await busy($('#ncGo'), () => post('/owner/categories', withLoc({ name }))); await loadVenue(); openCategories(); redrawWhenClosed(); } catch (e) { fail(e); } };
+  for (const b of $$('[data-cs]', $('#sheetIn'))) b.onclick = async () => { const name = $(`[data-cn="${b.dataset.cs}"]`).value.trim(); if (!name) return; try { await busy(b, () => post('/owner/categories', withLoc({ id: b.dataset.cs, name }))); toast(t('saved')); await loadVenue(); redrawWhenClosed(); } catch (e) { fail(e); } };
   // W-CRUD: one place up or down among the categories; the stored name travels with it, not the box's draft.
   const names = Object.fromEntries(cats.map(c => [c.id, c.name]));
-  const nudgeCat = async (b, id, dir) => { try { await busy(b, () => post('/owner/categories', withLoc({ id, name: names[id] || id, move: dir }))); forgetCategories(); await loadVenue(); openCategories(); redrawWhenClosed(); } catch (e) { fail(e); } };
+  const nudgeCat = async (b, id, dir) => { try { await busy(b, () => post('/owner/categories', withLoc({ id, name: names[id] || id, move: dir }))); await loadVenue(); openCategories(); redrawWhenClosed(); } catch (e) { fail(e); } };
   for (const b of $$('[data-cu]', $('#sheetIn'))) b.onclick = () => nudgeCat(b, b.dataset.cu, 'up');
   for (const b of $$('[data-cdn]', $('#sheetIn'))) b.onclick = () => nudgeCat(b, b.dataset.cdn, 'down');
   // W-NOM: a category WITH dishes goes too, once the owner has seen how many.
@@ -373,7 +369,7 @@ async function openCategories(){
     const ok = await confirm(n ? t('nom_catDelete') : t('remove'), n ? `${name} · ${t('nom_catWithDishes')}: ${n} ${t('nom_dishes')}` : name,
       { danger: true, hint: n ? t('nom_deleteDishesHint') : t('ap_why_removeCategory') });
     if (!ok) return openCategories();
-    try { await post(`/owner/categories/${encodeURIComponent(b.dataset.cd)}/delete`, withLoc(n ? { with_dishes: n } : {})); forgetCategories(); await loadVenue(); openCategories(); redrawWhenClosed(); } catch (e) { fail(e); }
+    try { await post(`/owner/categories/${encodeURIComponent(b.dataset.cd)}/delete`, withLoc(n ? { with_dishes: n } : {})); await loadVenue(); openCategories(); redrawWhenClosed(); } catch (e) { fail(e); }
   };
 }
 
@@ -398,11 +394,16 @@ const basisOf = u => u === 'unit' ? 1 : 100;
 /// The stepper moves by ten grams or millilitres, by one piece (in milli-units, TZ 1).
 const STEP_MASS = 10 * MILLI, STEP_PIECE = MILLI;
 
-/// The shelf answer is kept this long: prices and links move between visits.
+/// The shelf answer is kept this long between visits (another device's saves);
+/// W-TZFRESH: a save on THIS console (a supply renamed, re-priced, deleted; a
+/// delivery; a recipe) makes it stale at once, so the dish sheet never shows
+/// the old name or the old food cost (TZ 3 cascade, TZ 5 cost chain).
 const SUPPLY_BOOK_MS = 60_000;
-let supplyBookAt = 0;
-async function supplies(){ if (supplyBook && performance.now() - supplyBookAt > SUPPLY_BOOK_MS) supplyBook = null;
-  if (!supplyBook) { supplyBookAt = performance.now(); try { const r = await api('/owner/stock'); supplyBook = r.supplies || []; noRecipeIds = (r.noRecipe || []).map(d => d.id); } catch { supplyBook = []; noRecipeIds = []; } } return supplyBook; }
+const shelf = fresh.cache(async () => {
+  try { const r = await api('/owner/stock'); return { supplies: r.supplies || [], noRecipe: (r.noRecipe || []).map(d => d.id) }; }
+  catch { return { supplies: [], noRecipe: [] }; }
+}, { ttlMs: SUPPLY_BOOK_MS });
+async function supplies(){ const s = await shelf(); supplyBook = s.supplies; noRecipeIds = s.noRecipe; return supplyBook; }
 /// A line scaled from its supply, the way the hub will scale it on save
 /// (`recipe.rs` + `recipe/weights.rs`): GROSS `qty` in the supply's unit, NET
 /// and OUT in grams (typed, or from the supply's cleaning / cooking losses),
@@ -543,7 +544,8 @@ async function bindRecipe(p){
   recipeKnown = p.id;
   // Lines loaded from the dish are re-scaled from today's supply numbers, as the hub does on save.
   // A fraction comes back exact as `qtyMilli` (CONTRACT-QTY 1); a ghost line (TZ 3) keeps its name and no numbers.
-  recipeDraft = (stored.bom || []).map(l => { const sup = l.removed ? null : book.find(s => s.id === l.supply); return sup ? lineOf(sup, toMilli(l.qty, l.qtyMilli) || 0, l.net ?? null, l.out ?? null) : bareLine(l); });
+  // W-TZFRESH: the deleted ingredient's line is GONE from the stored bom (the hub drops it and marks the dish); `RL.withGhosts` draws it back as a ghost.
+  recipeDraft = RL.withGhosts(stored.bom, stored.recipeReview).map(l => { const sup = l.removed ? null : book.find(s => s.id === l.supply); return sup ? lineOf(sup, toMilli(l.qty, l.qtyMilli) || 0, l.net ?? null, l.out ?? null) : bareLine(l); });
   // TZ 3: the badge names the removed ingredient; it goes when the recipe is saved without the ghost.
   const rb = $('#rcReviewBox'); if (rb) rb.innerHTML = stored.recipeReview?.length ? `<p class="hint warn" id="rcReview">${esc(badgeText(stored.recipeReview, lang))}</p><p class="hint" data-t="rv_hint"></p>` : '';
   drawRecipe(p);

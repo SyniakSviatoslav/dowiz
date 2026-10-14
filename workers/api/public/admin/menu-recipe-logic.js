@@ -53,3 +53,23 @@ export function mergeSaved(products, saved){
   products[i] = next;
   return true;
 }
+
+/// TZ 3: the ghost lines of a stored dish. When an ingredient in use is
+/// deleted, the hub DROPS its line from `bom` and marks the dish with
+/// `recipeReview: [{supply, name, qty, via?, option?}]` (supplies/delete.rs);
+/// the sheet used to look for `removed` ON a bom line, which never exists, so
+/// it drew no ghost. A direct mark (no `via` ПФ, no `option`) whose supply the
+/// recipe no longer lists becomes a line `{supply, name, qty, removed: true}`
+/// after the real ones: shown with the "removed" pill, never saved, x takes
+/// it out. A mark reached through a ПФ or an option is not a line of this
+/// recipe; the badge names it, the ПФ's own card carries its ghost.
+export function withGhosts(lines, review){
+  const have = new Set((lines || []).map(l => l.supply));
+  const ghosts = [];
+  for (const r of review || []) {
+    if (!r || !r.supply || r.via || r.option || have.has(r.supply)) continue;
+    have.add(r.supply);
+    ghosts.push({ supply: r.supply, name: r.name || r.supply, qty: r.qty ?? 0, removed: true });
+  }
+  return [...(lines || []), ...ghosts];
+}

@@ -236,10 +236,9 @@ test('the segment counts draw all four, zero included, and fetch the venue route
 const BOOK4 = [...SUPPLIES, { id: 'nori', name: 'Nori', unit: 'g', kind: 'food_ingredient' }, { id: 'salmon', name: 'Salmon', unit: 'g', kind: 'food_ingredient' }];
 const tickBox = (box, id) => { const cb = box.querySelector(`[data-rs="${id}"]`); assert.ok(cb, `no checkbox for ${id}`); cb.checked = true; cb.onchange?.(); return cb; };
 const typeSearch = (box, v) => { const q = box.querySelector('#rcQ'); q.value = v; q.oninput?.(); };
-// menu.js keeps the shelf answer for a minute: the clock moves past it so this page's book is read.
-const realNow = performance.now.bind(performance); let skew = 0;
-performance.now = () => realNow() + skew;
-const freshBook = () => { skew += 120_000; };
+// menu.js keeps the shelf answer until a write lands (W-TZFRESH `fresh.cache`): a bump makes this page's book be read.
+const { fresh } = await import('/admin/fresh-logic.js');
+const freshBook = () => { fresh.bump('/test'); };
 
 test('TZ4: a component ticked, a search typed and cleared: the tick is kept, and Add takes it', async () => {
   freshBook(); const { box } = page({ ...BASE, 'GET /owner/stock': { supplies: BOOK4, noRecipe: [] } });

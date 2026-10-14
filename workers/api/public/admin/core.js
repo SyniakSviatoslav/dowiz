@@ -15,6 +15,7 @@ import { btn, field, check } from '/admin/parts.js';
 import { createRenewer, roleOf, dueToRenew } from '/lib/session-logic.js';
 import * as Draft from '/lib/draft.js';
 import { DRAFT_WORDS } from '/lib/draft-words.js';
+import { fresh } from '/admin/fresh-logic.js';
 
 export const API = '/api';
 export const $ = (s, r = document) => r.querySelector(s);
@@ -88,7 +89,10 @@ export async function api(path, opts = {}, retried = false){
     if (ok) return api(path, opts, true);
   }
   if (r.status === 401 && store.t) { logout({ expired: true }); throw new Error(t('sessionOver')); }
-  if (r.ok && WRITES.has(String(opts.method || 'GET').toUpperCase())) Draft.draftSaved();
+  // A write that landed: the draft of its form is forgotten, and EVERY cache
+  // the console keeps is stale (W-TZFRESH, TZ 6: the shelf, the review set,
+  // the categories re-read on their next ask -- no F5, no sixty-second wait).
+  if (r.ok && WRITES.has(String(opts.method || 'GET').toUpperCase())) { Draft.draftSaved(); fresh.bump(path); }
   if (!r.ok) {
     // The hub's refusal, with the machine-readable `code` when it sends one,
     // so a screen can say it in the reader's language.

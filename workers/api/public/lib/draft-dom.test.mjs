@@ -100,3 +100,22 @@ test('a sign-out forgets every draft on the device and nothing else', () => {
   // discardDraft on a form with nothing to discard is a no-op, not a throw.
   discardDraft(root);
 });
+
+test('TZ7: one sheet element re-filled for a second record keeps the SECOND record\'s typing (not an empty book under the first key)', () => {
+  const s = fakeStorage();
+  const { root } = render(dishForm('Nori', '300'));
+  mountDrafts(root, opts(s));
+  // The console's #sheetIn is re-filled in place for the next dish and mounted again.
+  root.innerHTML = dishForm('Tuna', '400').replace('class="sheet-in"', 'class="sheet-in"');
+  mountDrafts(root, opts(s));
+  type(root, 'dnote', 'spicy');
+  const books = s.keys().map(k => [k, JSON.parse(s.getItem(k))]);
+  const kept = books.filter(([, b]) => Object.values(b).some(e => e?.fields?.dnote === 'spicy'));
+  assert.equal(kept.length, 1, `the typing is kept under one key (books: ${JSON.stringify(books)})`);
+  assert.ok(books.every(([, b]) => Object.keys(b).length > 0), `no empty book is written (books: ${JSON.stringify(books)})`);
+  // Reopened on the same record, the text comes back.
+  root.innerHTML = dishForm('Tuna', '400');
+  const restored = mountDrafts(root, opts(s));
+  assert.equal(restored.length, 1);
+  assert.equal(root.querySelector('#dnote').value, 'spicy');
+});

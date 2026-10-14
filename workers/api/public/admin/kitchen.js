@@ -15,6 +15,7 @@
 //
 // ASCII QUOTES ONLY in this file (DOWIZ-COMMON-RULES rule 11).
 import { $, $$, api, esc, icon, t, S, store, post, toast } from '/admin/core.js';
+import { fresh } from '/admin/fresh-logic.js';
 import { ui, btn, chips, empty } from '/admin/parts.js';
 import * as K from '/admin/kitchen-logic.js';
 import '/admin/kitchen-i18n.js';
@@ -24,13 +25,14 @@ import { rerender, loadOrders, loadVenue } from '/admin/app.js';
 const TICK_MS = 30_000;
 const view = { station: 'all', q: '' };
 let ticker = null;
-/// The venue's settings as the pass may read them (notify.order.late_min), re-read every 5 min.
-const venueLate = { at: 0, settings: null };
+/// The venue's settings as the pass may read them (notify.order.late_min):
+/// re-read every 5 min, and at once after a settings save on this console (W-TZFRESH).
+const venueLate = { settings: null };
 const LATE_EVERY_MS = 300_000;
+const lateRead = fresh.cache(() => api(`/owner/settings?location_id=${encodeURIComponent(store.loc || '')}`),
+  { ttlMs: LATE_EVERY_MS, stale: p => p.includes('/settings') || p.includes('/location') });
 function readLate(){
-  if (Date.now() - venueLate.at < LATE_EVERY_MS) return;
-  venueLate.at = Date.now();
-  api(`/owner/settings?location_id=${encodeURIComponent(store.loc || '')}`).then(d => {
+  lateRead().then(d => {
     const was = K.lateMin(venueLate.settings);
     venueLate.settings = d;
     if (K.lateMin(d) !== was && S.tab === 'kitchen') rerender();
@@ -173,7 +175,7 @@ function askReason(orderId, action){
 }
 
 /// For the tests: forget the venue's late minutes so the next draw reads them again.
-export const forgetLate = () => { venueLate.at = 0; venueLate.settings = null; };
+export const forgetLate = () => { lateRead.forget(); venueLate.settings = null; };
 
 /// For the shell's tests and the assistant's "show me": the station in view.
 export const station = () => view.station;

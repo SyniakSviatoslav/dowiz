@@ -1,7 +1,7 @@
 // `node --test workers/api/public/admin/menu-recipe-logic.test.mjs` (W-TKUI, TZ 4 and 6).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bookList, picks, setPick, pickedOf, mergeSaved, starterMilli } from './menu-recipe-logic.js';
+import { bookList, picks, setPick, pickedOf, mergeSaved, starterMilli, withGhosts } from './menu-recipe-logic.js';
 
 const BOOK = [{ id: 'tuna', name: 'Tuna', category: 'Fish', kind: 'food_ingredient' }, { id: 'nori', name: 'Nori', category: 'Dry', kind: 'food_ingredient' },
   { id: 'box', name: 'Box', category: '', kind: 'packaging' }, { id: 'salmon', name: 'Salmon', category: 'Fish', kind: 'food_ingredient' }];
@@ -45,4 +45,15 @@ test('TZ1: a picked component starts at 100 g/ml or 1 piece, in milli', () => {
   assert.equal(starterMilli({ unit: 'g' }), 100000, '100 g, not 0.1 g');
   assert.equal(starterMilli({ unit: 'ml' }), 100000);
   assert.equal(starterMilli({ unit: 'unit' }), 1000, '1 piece, not 0.001');
+});
+
+test('TZ3 ghost: a deleted ingredient the hub dropped from the bom is drawn as a removed line from recipeReview', () => {
+  const bom = [{ supply: 'rice', qty: 100 }];
+  const review = [{ supply: 'nori', name: 'Nori', qty: 2.5 }, { supply: 'salt', name: 'Salt', qty: 1, via: 'pf-sauce' }, { supply: 'cheese', name: 'Cheese', qty: 10, option: 'extra' }];
+  const lines = withGhosts(bom, review);
+  assert.deepEqual(lines, [{ supply: 'rice', qty: 100 }, { supply: 'nori', name: 'Nori', qty: 2.5, removed: true }], 'the direct mark becomes a ghost line after the real ones; via a ПФ or an option is not a line of this recipe');
+  assert.deepEqual(withGhosts(bom, []), bom, 'no marks, no ghosts');
+  assert.deepEqual(withGhosts(bom, null), bom);
+  assert.deepEqual(withGhosts([{ supply: 'nori', qty: 2, removed: true }], [{ supply: 'nori', name: 'Nori', qty: 2 }]).length, 1, 'a line already there is not doubled');
+  assert.deepEqual(withGhosts([], [{ supply: 'nori', name: 'Nori', qty: 2 }, { supply: 'nori', name: 'Nori', qty: 2 }]).length, 1, 'one ghost per supply');
 });
