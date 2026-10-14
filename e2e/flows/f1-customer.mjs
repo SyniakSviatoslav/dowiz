@@ -71,8 +71,14 @@ export async function f1(log) {
     if (!(await p.waitForSelector('.card', { timeout: 60000 }).then(() => true, () => false))) throw new Fail('the menu never drew a dish card');
     await p.waitForTimeout(3500);
     await dismiss(p);
+    // A dish off sale is still drawn, as a sold-out card (store/menu.js card()),
+    // so the cards match every listed dish, and the sold-out ones the off-sale
+    // ones. qa-lost-roll is left off sale by stock-lost.mjs (10-13: 7 vs 6).
+    const listed = dishes(m0).length;
     const cards = await p.$$eval('.card[data-p]', e => e.length);
-    if (cards !== all.length) throw new Fail(`menu shows ${cards} dish cards, the API lists ${all.length} on sale`);
+    const soldOut = await p.$$eval('.card[data-p][data-avail="0"]', e => e.length);
+    if (cards !== listed) throw new Fail(`menu shows ${cards} dish cards, the API lists ${listed}`);
+    if (soldOut !== listed - all.length) throw new Fail(`menu shows ${soldOut} sold-out cards, the API lists ${listed - all.length} off sale`);
     await inspect(p, 'F1 menu');
     log(`menu: ${cards} cards, matching the API`);
 

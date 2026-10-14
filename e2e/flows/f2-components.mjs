@@ -37,8 +37,11 @@ export async function openDish(p, id, cat) {
   const head = `.cat-h[data-cat="${cat}"]`;
   if (!(await p.waitForSelector(head, { timeout: 30000 }).then(() => true, () => false))) throw new Fail(`menu editor shows no category ${cat}`);
   if (await p.$eval(head, e => e.getAttribute('aria-expanded')) !== 'true') await p.click(head);
-  if (!(await p.waitForSelector(`[data-p="${id}"]`, { timeout: 10000 }).then(() => true, () => false))) throw new Fail(`menu editor lists no ${id} under ${cat}`);
-  await p.click(`[data-p="${id}"]`);
+  // The VISIBLE row: a dish with no allergens declared is listed a second
+  // time, first, inside the folded "without declared allergens" note (10-13).
+  const row = p.locator(`[data-p="${id}"]:visible`).first();
+  if (!(await row.waitFor({ timeout: 10000 }).then(() => true, () => false))) throw new Fail(`menu editor lists no ${id} under ${cat}`);
+  await row.click();
   if (!(await p.waitForSelector('#sheet.show[data-name="dish"] #d-name', { timeout: 20000 }).then(() => true, () => false))) throw new Fail(`tapping ${id} opened no dish sheet`);
 }
 
