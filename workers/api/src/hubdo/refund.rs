@@ -16,6 +16,11 @@ impl HubImages {
     ) -> Result<std::result::Result<RefundOut, Refused>> {
         let (log_gen, listed) = self.orders_view().await?;
         let current: Option<OrderView> = listed.into_iter().find(|o| o.order_id == input.order_id);
+        if current.is_none() {
+            if let Some(r) = self.refused_as_archived(&input.order_id, &input.location_id).await? {
+                return Ok(Err(r));
+            }
+        }
         let (_, mut hub) = self.log_hub().await?;
         let (stock_gen, mut stock) = self.stock_log_at(input.now_ms).await?;
         let venue_currency = self.venue_currency().await?;
@@ -113,6 +118,11 @@ impl HubImages {
     pub(super) async fn returned(&self, input: ReturnedIn) -> Result<std::result::Result<ReturnedOut, Refused>> {
         let (_, listed) = self.orders_view().await?;
         let current: Option<OrderView> = listed.into_iter().find(|o| o.order_id == input.order_id);
+        if current.is_none() {
+            if let Some(r) = self.refused_as_archived(&input.order_id, &input.location_id).await? {
+                return Ok(Err(r));
+            }
+        }
         let (stock_gen, mut stock) = self.stock_log_at(input.now_ms).await?;
         let out = match crate::command::refund::returned::decide(&mut stock, current.as_ref(), &input) {
             Ok(v) => v,

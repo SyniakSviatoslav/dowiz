@@ -79,7 +79,7 @@ mod catalogue; // the catalogue's derived nodes and the venue's record, answered
 mod catview; mod logmark; mod chunks; use chunks::changed_chunks; mod atomic; pub(crate) mod compact; mod journal; // the catalogue read in place, crc once per generation (W-ZC); the log's crc once per record (W-HUBCRC); the chunk diff; one atomic write per image and the v2 pin for a rollback (W-ATOMIC); the menu's edit journal in the same write (W-PITR2)
 mod facts; // the folds over the log and the catalogue together, answered here (BN1), `hubdo/facts.rs`
 mod bulk; // a supplies / recipes spreadsheet as one turn (BN1, BN4's shape), `hubdo/bulk.rs`
-mod archives; // the archives' folds for rebuild's R5 crossing, `hubdo/archives.rs`
+mod archives; // the archives' folds (rebuild R5) and one archived order (receipt, refund refusal), `hubdo/archives.rs`
 mod timer; mod edges; // edges: what every /fold/* route derives from what (R-GRAPH D4); timer: the venue's alarm: timed work without the minute cron (DAG Phase 2), `hubdo/timer.rs`
 mod push_turn; mod chat; mod sms_turn; mod lost; // sms_turn: the customer's order-status text in the turn (W-SMS); push_turn: the phones' messages in the turn (W-PUSH); chat: the courier chat nudge to the two parties' sockets (W-URGENT), `hubdo/chat.rs`
 /// Where the object lives: the platform, or (tests) memory (W-COV C2), `hubdo/host.rs`.

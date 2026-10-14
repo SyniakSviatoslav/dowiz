@@ -224,8 +224,17 @@ impl HubImages {
     /// `fiscal_receipt`: the art. 29 text for one order, with its codes once registered.
     pub(in crate::hubdo) async fn fiscal_receipt(&self, order_id: &str) -> Result<std::result::Result<Value, Refused>> {
         let (_, listed) = self.orders_view().await?;
-        let Some(v) = listed.iter().find(|o| o.order_id == order_id) else { return Ok(Err(Refused::NotFound)) };
-        let order: Value = serde_json::from_str(&v.order_json).map_err(bad)?;
+        // A REPRINT A MONTH LATER (2026-10-14): the rotation moves an order
+        // out after 30 quiet days, and its receipt said "not found". The
+        // archive holds it unchanged; reading it writes nothing.
+        let order_json = match listed.iter().find(|o| o.order_id == order_id) {
+            Some(v) => v.order_json.clone(),
+            None => match self.archived_order(order_id).await? {
+                Some(j) => j,
+                None => return Ok(Err(Refused::NotFound)),
+            },
+        };
+        let order: Value = serde_json::from_str(&order_json).map_err(bad)?;
         let (_, ft) = self.table_of(wire::IMAGE, wire::CEILING).await?;
         let queued = ft.as_ref().and_then(|t| t.all(KIND).into_iter().find_map(|(_, j)| serde_json::from_str::<Entry>(&j).ok().filter(|e| e.to == order_id)));
         let currency = self.fiscal_currency().await?;
