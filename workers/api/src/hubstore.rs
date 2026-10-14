@@ -1027,6 +1027,13 @@ pub async fn rotate(place: &Place, now_ms: i64) -> Result<serde_json::Value> {
     let loaded = load(place).await?;
     let generation = loaded.generation;
     let before = loaded.hub.len();
+    // AN ORDER A COURIER STILL HOLDS STAYS HOT (2026-10-14). A refund leaves
+    // the run open (`courier::run`), and only the order's status in THIS log
+    // releases it; archived, the order read as "never seen" and the courier
+    // could not end a shift again -- qa-durres, 7 runs, after one rotation.
+    let held = crate::courier::run::held_orders(
+        &load_table(place, IMAGE_OPS, OPS_BYTES).await?.table.all(crate::courier::K_ASG),
+    );
 
     let mut keep: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut moved = 0usize;
@@ -1034,7 +1041,7 @@ pub async fn rotate(place: &Place, now_ms: i64) -> Result<serde_json::Value> {
         let v: serde_json::Value = serde_json::from_str(&e.order_json).unwrap_or_default();
         let status = v.get("status").and_then(serde_json::Value::as_str).unwrap_or("");
         let fresh = (e.seq as i64) > now_ms - HOT_KEEP_MS;
-        if LIVE.contains(&status) || fresh {
+        if LIVE.contains(&status) || fresh || held.contains(&e.order_id) {
             keep.insert(e.order_id);
         } else {
             moved += 1;

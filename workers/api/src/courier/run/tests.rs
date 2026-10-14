@@ -216,3 +216,40 @@ fn only_a_ready_or_confirmed_order_is_taken_from_the_pool() {
     // Positive twin.
     assert_eq!(claim(&mut t, "o3", "c1", "CONFIRMED", 10, 0), Ok(Take::Taken));
 }
+
+// ── an archived order (2026-10-14): qa-durres's courier held 7 runs whose
+// refunded orders the rotation had moved out of the hot log ──
+
+fn archived(id: &str, status: &str) -> crate::hubdo::OrderView {
+    crate::hubdo::OrderView { order_id: id.into(), kind: 1, seq: 10, order_json: order(status) }
+}
+
+#[test]
+fn a_refunded_run_found_in_an_archive_is_no_longer_in_hand() {
+    let rows = vec![asg("o1", "c1", None), asg("o2", "c1", None)];
+    // What the hot log answered: o1 rotated out, o2 still live.
+    let mut read = vec![("o1".to_string(), None), ("o2".to_string(), Some(order("IN_DELIVERY")))];
+    assert_eq!(in_hand(&rows, "c1", &ended(&read)), vec!["o1".to_string(), "o2".to_string()]);
+    fill_from_archive(&mut read, &[archived("o1", "COMPENSATED_REFUND"), archived("o9", "DELIVERED")]);
+    assert_eq!(in_hand(&rows, "c1", &ended(&read)), vec!["o2".to_string()]);
+    // The live answer the hot log gave is not overwritten by an archive's.
+    assert_eq!(read[1].1.as_deref(), Some(order("IN_DELIVERY").as_str()));
+}
+
+#[test]
+fn an_id_no_log_knows_stays_held_after_the_archives() {
+    let rows = vec![asg("o1", "c1", None)];
+    let mut read = vec![("o1".to_string(), None)];
+    fill_from_archive(&mut read, &[archived("o2", "COMPENSATED_REFUND")]);
+    assert_eq!(in_hand(&rows, "c1", &ended(&read)), vec!["o1".to_string()]);
+}
+
+#[test]
+fn the_rotation_keeps_every_order_with_an_open_run_whoever_holds_it() {
+    let rows = vec![asg("o1", "c1", None), asg("o2", "c2", None), asg("o3", "c1", Some(5))];
+    let held = held_orders(&rows);
+    assert!(held.contains("o1") && held.contains("o2"));
+    // Positive twin: a delivered run lets its order go.
+    assert!(!held.contains("o3"));
+    assert_eq!(held.len(), 2);
+}

@@ -17,9 +17,65 @@
 //! AN UNREADABLE OR MISSING ORDER IS STILL HELD. Wrongly releasing a run
 //! strands food on the road with nobody holding it; wrongly holding one is a
 //! courier who cannot clock off and says so -- visible, and fixable.
+//!
+//! "MISSING" MEANS MISSING FROM EVERY LOG, not from the hot one (2026-10-14).
+//! The rotation moves finished orders to an archive; a refunded run's order
+//! went with it, the hot log answered 404, and the run was held for ever --
+//! qa-durres's courier had 7 and could not end a shift. `read_runs` asks the
+//! archives about what the hot log has never heard of, and `held_orders` is
+//! what the rotation keeps hot so a new run never needs that.
 
 use dowiz_kernel::order_machine::OrderStatus;
 use serde_json::Value;
+
+/// Every order some courier still has an open run on, whoever they are: what
+/// `hubstore::rotate` must not move out of the hot log.
+pub(crate) fn held_orders(rows: &[(String, String)]) -> std::collections::HashSet<String> {
+    rows.iter()
+        .filter(|(_, j)| {
+            serde_json::from_str::<Value>(j)
+                .ok()
+                .is_some_and(|v| v.get("delivered_at_ms").map_or(true, Value::is_null))
+        })
+        .map(|(id, _)| id.clone())
+        .collect()
+}
+
+/// Fill the runs the hot log did not know from one archive's orders.
+pub(crate) fn fill_from_archive(read: &mut [(String, Option<String>)], archive: &[crate::hubdo::OrderView]) {
+    for (id, raw) in read.iter_mut().filter(|(_, r)| r.is_none()) {
+        if let Some(o) = archive.iter().find(|o| &o.order_id == id) {
+            *raw = Some(o.order_json.clone());
+        }
+    }
+}
+
+/// Each open run's order, `(order_id, folded order)`: the hot log first, then
+/// the archives newest first for the ids it has never heard of, stopping as
+/// soon as none is left. An id no log knows stays `None`, and so stays held.
+pub(crate) async fn read_runs(
+    place: &crate::hubstore::Place,
+    ids: Vec<String>,
+) -> worker::Result<Vec<(String, Option<String>)>> {
+    let mut read = Vec::with_capacity(ids.len());
+    for id in ids {
+        let raw = crate::hubstore::order(place, &id).await?;
+        read.push((id, raw));
+    }
+    if read.iter().all(|(_, r)| r.is_some()) {
+        return Ok(read);
+    }
+    let settings = crate::hubstore::load_settings(place).await?.settings;
+    for archive in crate::hubstore::archives_of(&settings).iter().rev() {
+        if let Some(orders) = crate::hubstore::archive_orders(place, archive).await? {
+            fill_from_archive(&mut read, &orders);
+        }
+        if read.iter().all(|(_, r)| r.is_some()) {
+            break;
+        }
+    }
+    Ok(read)
+}
 
 /// Is this order past the point where a courier can carry it anywhere?
 ///

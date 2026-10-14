@@ -233,13 +233,11 @@ pub async fn shift(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // WHICH OPEN RUNS HAVE ENDED, read from the log before the ops write: a
     // refunded order leaves its assignment open (see `run`), and only the
     // order's own status says it is no longer a delivery.
-    let mut read = Vec::new();
-    if !body.open {
-        for id in run::open_runs(&ops(&place).await?.all(K_ASG), &courier_id) {
-            let raw = crate::hubstore::order(&place, &id).await?;
-            read.push((id, raw));
-        }
-    }
+    let read = if body.open {
+        Vec::new()
+    } else {
+        run::read_runs(&place, run::open_runs(&ops(&place).await?.all(K_ASG), &courier_id)).await?
+    };
     let over = run::ended(&read);
     let cid = courier_id.clone();
     let open = body.open;
@@ -293,7 +291,7 @@ pub async fn shift(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
 // defect and the last one in this file: the image is the venue, so there is no
 // other venue's assignment in it to leak.
 
-const K_ASG: &str = "asg";
+pub(crate) const K_ASG: &str = "asg";
 const K_SHIFT: &str = "shift";
 const K_POS: &str = "pos";
 
