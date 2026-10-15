@@ -39,6 +39,7 @@ bash scripts/smoke.sh https://sushi-durres.dowiz.org
 |---|---|---|
 | Production probes, read-only | `.github/workflows/health-cron.yml` running `tools/live-checks/health.sh` | every 15 minutes |
 | Each role through the real UI | `.github/workflows/key-flows.yml` running `e2e/walk/` against `WALK_HOST` | daily, QA host only |
+| An archived order: receipt from the archive, refund refused by name | `.github/workflows/qa-nightly.yml` running `e2e/archive/archived-order.mjs` on qa-durres via the Worker's workers.dev name | daily 03:47 UTC, QA hub only; writes and rotates the QA hub |
 | A venue's own gauges | `GET /api/owner/health` (console: More, Health): image sizes against their ceilings, outbox depth and oldest entry, recent errors | on demand |
 | The register | `node e2e/gates/conservation.mjs` with an owner's credentials | on demand, read-only |
 
@@ -118,7 +119,7 @@ is not readable from here (`gh` is not installed): that half is the Actions tab.
 | `HEALTH_VENUES` | variable | health-cron | venues the probes visit (default: all live) |
 | `WALK_HOST` | secret | key-flows | the QA host the role walks run against (never production) |
 | `WALK_LOC` | secret | key-flows | that host's venue id |
-| `WALK_OWNER_EMAIL`, `WALK_OWNER_PASSWORD` | secret | key-flows | the QA venue's owner |
+| `WALK_OWNER_EMAIL`, `WALK_OWNER_PASSWORD` | secret | key-flows, qa-nightly | the QA venue's owner (qa-nightly fails red when they are unset) |
 | `WALK_COURIER_PHONE`, `WALK_COURIER_PASSWORD` | secret | key-flows | the QA venue's courier |
 | `EVALS_READ_TOKEN` | secret | evals-nightly | the bearer dowiz-watch asks for before it serves the venues' aggregates (`/evals/latest`) or starts a run (`POST /evals/run`); the SAME value is the watcher's wrangler secret `EVALS_READ_TOKEN` |
 | `EVALS_OWNER_EMAIL`, `EVALS_OWNER_PASSWORD` | wrangler secret on dowiz-watch (no longer a GitHub secret since 2026-10-08) | dowiz-watch's nightly evals | an owner of the evaluated venues; the GitHub copies can be deleted |

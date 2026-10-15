@@ -1,0 +1,67 @@
+name: QA nightly
+
+# THE ARCHIVED-ORDER CHECK (e2e/archive/archived-order.mjs), NIGHTLY, ON THE QA HUB ONLY.
+#
+# It WRITES on qa-durres: a 20 % rate and pickup for the run (put back in `finally`), one TEST
+# pickup order walked to PICKED_UP, and a rotation AS OF now + 31 days, which moves every finished
+# order of the QA hub into an archive. Then: the receipt is read from the archive (200, names the
+# dish), a refund is refused by name (409) and writes nothing, an unknown id is still 404.
+# Not in the per-deploy flows gate on purpose: the rotation empties the QA hub's finished history.
+#
+# THE HOST IS THE WORKER'S workers.dev NAME. Bot Fight Mode challenges GitHub's runners on
+# *.dowiz.org (memory: bot-fight-mode-blinds-github-probes); workers.dev is outside that zone, and
+# FLOWS_LOC names the venue the host cannot.
+#
+# A MISSING SECRET IS RED, NOT A SKIP. key-flows.yml skipped green for every run it ever had
+# because WALK_HOST was never set; this job fails and says which secret is missing.
+#
+# Secrets (shared with key-flows): WALK_OWNER_EMAIL, WALK_OWNER_PASSWORD -- the QA venue's owner.
+
+on:
+  schedule:
+    - cron: '47 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-nightly
+  cancel-in-progress: false
+
+jobs:
+  archived-order:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FLOWS_HOST: https://dowiz-api.sviatoslavsyniak.workers.dev
+      FLOWS_LOC: qa-durres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: credentials file
+        env:
+          OWNER_EMAIL: ${{ secrets.WALK_OWNER_EMAIL }}
+          OWNER_PASSWORD: ${{ secrets.WALK_OWNER_PASSWORD }}
+        run: |
+          if [ -z "$OWNER_EMAIL" ] || [ -z "$OWNER_PASSWORD" ]; then
+            echo "::error title=QA nightly cannot run::WALK_OWNER_EMAIL / WALK_OWNER_PASSWORD are not set (repository settings -> Secrets and variables -> Actions). They are the qa-durres owner's login."
+            exit 1
+          fi
+          umask 077
+          f="$RUNNER_TEMP/qa_owner"
+          echo "DOWIZ_OWNER_FILE=$f" >> "$GITHUB_ENV"
+          {
+            echo "export OWNER_EMAIL='$OWNER_EMAIL'"
+            echo "export OWNER_PASSWORD='$OWNER_PASSWORD'"
+          } > "$f"
+      - name: archived order (receipt from the archive, refund refused by name)
+        run: |
+          set -o pipefail
+          node e2e/archive/archived-order.mjs | tee archived.log
+      - name: summary
+        if: always()
+        run: |
+          { echo '### QA nightly: archived order'; echo; echo '```'; cat archived.log 2>/dev/null || echo '(no output)'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

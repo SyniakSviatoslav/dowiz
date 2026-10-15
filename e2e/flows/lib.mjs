@@ -16,7 +16,9 @@ dns.setDefaultResultOrder('ipv4first');
 import '../kit-regression/_retry-fetch.mjs';
 
 export const HOST = process.env.FLOWS_HOST || 'https://qa-durres.dowiz.org';
-export const LOC = new URL(HOST).hostname.split('.')[0];
+// FLOWS_LOC names the venue when the host cannot: GitHub's runners reach the Worker only on its
+// workers.dev name (Bot Fight Mode challenges them on *.dowiz.org), whose first label is no venue.
+export const LOC = process.env.FLOWS_LOC || new URL(HOST).hostname.split('.')[0];
 if (!/^qa-/.test(LOC)) { console.log(`flows: FAIL refusing to run against ${LOC}: the flows write orders, qa-* venues only`); process.exit(2); }
 
 /// Every order and object this run creates carries RUN in its name, which is
