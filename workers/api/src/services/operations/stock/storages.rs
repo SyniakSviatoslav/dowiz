@@ -110,7 +110,7 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn) -> Result<(Value, Told), Bad
             json!({ "ok": true, "kind": STORAGE, "id": id, "archived": card.archived })
         }
         MOVED => {
-            let qty = b.get("qty").and_then(Value::as_i64).ok_or((400, "how much?".to_string()))?;
+            let qty = moved_qty(input, &item)?;
             let m = Moved { item: item.clone(), qty, from: s("from"), to: s("to"), by: input.by.clone() };
             log.move_stock(&m).map_err(refused)?;
             json!({ "ok": true, "kind": MOVED, "item": item, "qty": qty, "from": m.from, "to": m.to })
@@ -134,6 +134,23 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn) -> Result<(Value, Told), Bad
         }
     };
     Ok((shown, Vec::new()))
+}
+
+/// A transfer's quantity, read as every stock quantity is (`recipe::qty`:
+/// `500`, `"500"`, `"250,000"`). A storage's level is WHOLE units and the
+/// carried fraction (`dowiz_hub::stock::carry`) is the item's, not a
+/// storage's: a fraction cannot be moved exactly, so it is refused by name
+/// (2026-10-16), never rounded and never "how much?".
+fn moved_qty(input: &StockTurnIn, item: &str) -> Result<i64, Bad> {
+    let sup = input.supplies.get(item);
+    let name = sup.map(|s| s.name.as_str()).filter(|n| !n.is_empty()).unwrap_or(item);
+    let raw = input.body.get("qty").cloned().unwrap_or(Value::Null);
+    if raw.is_null() {
+        return Err((400, format!("{name}: how much to move? a number with at most 3 decimals")));
+    }
+    let q: crate::recipe::Qty = serde_json::from_value(raw).map_err(|e| (400, format!("{name}: {e}")))?;
+    let unit = sup.map(|s| s.unit.as_str()).filter(|u| !u.is_empty()).unwrap_or("g");
+    q.as_whole().ok_or_else(|| (400, format!("{name}: move whole units of {unit} between storages for now")))
 }
 
 /// The storages the movement plan names, checked against the venue's, and

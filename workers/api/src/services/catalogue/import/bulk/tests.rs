@@ -28,6 +28,11 @@ fn product(cat: &Catalog, id: &str) -> Value {
     serde_json::from_str(&cat.product(id).unwrap()).unwrap()
 }
 
+/// The supplied venue, for `merge_tests.rs`.
+pub(super) fn supplied_for_merge() -> Catalog {
+    supplied()
+}
+
 fn supplied() -> Catalog {
     let mut cat = venue();
     let (d, _) = read(&cat, SUPPLIES, Kind::Supplies, CostScale::Major, NOW);

@@ -6,6 +6,7 @@
 // ASCII QUOTES ONLY in this file.
 
 import { ui, btn, select, field } from './parts.js';
+import { parseMilli, wireQty } from './qty-adapter.js';
 
 const esc = ui.esc;
 
@@ -37,20 +38,26 @@ export function section(v){
 }
 
 /// The lines typed for one option: `rows` are `{ supply, qty }` as read from
-/// the pickers. A row with no supply is skipped; a quantity that is not a
-/// positive number with at most 3 decimals is refused (`{ error }`), never
-/// rounded. W-QTYHUB H5: half a sheet is "0,5" -- sent as the TEXT "0.5",
-/// which the Worker reads exactly (CONTRACT-QTY §1); a whole one as a number.
-export function collect(rows){
-  const bom = [];
-  for (const r of rows) {
-    const supply = String(r.supply || '').trim();
-    if (!supply) continue;
-    const q = String(r.qty ?? '').trim();
-    if (!/^\d+([.,]\d{1,3})?$/.test(q) || !/[1-9]/.test(q)) return { error: 'ob_badQty' };
-    const text = q.replace(',', '.');
-    bom.push({ supply, qty: /^\d+$/.test(text) ? Number(text) : text });
-  }
+/// the pickers. An empty row (no supply, no quantity) is skipped. A quantity
+/// that does not read, or is 0, is refused with `ob_badQty`; a quantity typed
+/// with no ingredient is refused with `ob_noSupply`. Either names the rows
+/// (`rows`: their indexes) -- never dropped, never rounded (TZ 2026-10-16).
+/// The kitchen's forms are read ("0,5 г", "1/2", "1,5 кг") through parseMilli
+/// against the supply's unit (`supplies`). The wire is the exact text (W-QTYHUB H5)
+/// or the integer when whole.
+export function collect(rows, supplies = []){
+  const bom = [], badQty = [], noSupply = [];
+  rows.forEach((r, i) => {
+    const supply = String(r.supply || '').trim(), raw = String(r.qty ?? '').trim();
+    if (!supply && !raw) return;
+    if (!supply) { noSupply.push(i); return; }
+    const unit = (supplies || []).find(s => s.id === supply)?.unit || 'g';
+    const milli = parseMilli(raw, unit);
+    if (milli == null || milli < 1) { badQty.push(i); return; }
+    bom.push({ supply, qty: wireQty(milli) });
+  });
+  if (badQty.length) return { error: 'ob_badQty', rows: badQty };
+  if (noSupply.length) return { error: 'ob_noSupply', rows: noSupply };
   return { bom };
 }
 

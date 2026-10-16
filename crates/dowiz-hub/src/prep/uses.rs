@@ -10,6 +10,9 @@ use super::{card_of, Card, DEPTH_MAX};
 pub struct Uses {
     pub preps: Vec<(String, String)>,
     pub dishes: Vec<(String, String)>,
+    /// Dishes whose OPTION recipe (`optionBom`) reaches it, `(dish id, dish
+    /// name, option id)`, sorted (2026-10-16: an option's draw is a use too).
+    pub options: Vec<(String, String, String)>,
 }
 
 pub fn uses_of(item: &str, supplies: &[(String, String)], products: &[(String, String)]) -> Uses {
@@ -29,6 +32,11 @@ pub fn uses_of(item: &str, supplies: &[(String, String)], products: &[(String, S
         memo.insert(id.to_string(), hit);
         hit
     }
+    // A DISH's own name, read off the parsed record: the first `"name"` in its
+    // text is an option group's when `modifierGroups` sorts before it.
+    let dish_name = |j: &str, id: &str| -> String {
+        serde_json::from_str::<serde_json::Value>(j).ok().and_then(|v| v.get("name")?.as_str().map(str::to_string)).unwrap_or_else(|| id.to_string())
+    };
     let mut out = Uses::default();
     for (id, j) in supplies {
         if id != item && reaches(id, item, &cards, &mut memo, 0) {
@@ -38,9 +46,20 @@ pub fn uses_of(item: &str, supplies: &[(String, String)], products: &[(String, S
     for (id, j) in products {
         let hit = crate::stock::bom_of(j).iter().any(|l| l.supply == item || reaches(&l.supply, item, &cards, &mut memo, 0));
         if hit {
-            out.dishes.push((id.clone(), name_of(j, id)));
+            out.dishes.push((id.clone(), dish_name(j, id)));
+        }
+        if !j.contains(crate::modifiers::bom::KEY) {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(j) else { continue };
+        for opt in v.get(crate::modifiers::bom::KEY).and_then(|m| m.as_object()).map(|m| m.keys().cloned().collect::<Vec<_>>()).unwrap_or_default() {
+            let lines = crate::modifiers::bom::option_bom(&v, &opt);
+            if lines.iter().any(|l| l.supply == item || reaches(&l.supply, item, &cards, &mut memo, 0)) {
+                out.options.push((id.clone(), dish_name(j, id), opt));
+            }
         }
     }
+    out.options.sort();
     out.preps.sort();
     out.dishes.sort();
     out

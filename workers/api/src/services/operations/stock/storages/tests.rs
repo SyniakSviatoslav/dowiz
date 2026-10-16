@@ -78,3 +78,32 @@ fn mint_id_is_latin_lowercase_and_unique() {
     assert_eq!(mint_id("Cold room #2", &taken), "cold-room-2");
     assert_eq!(mint_id("", &taken), "s2");
 }
+
+/// NO LOSS (2026-10-16): a transfer's quantity is read as every other stock
+/// quantity is (`recipe::qty`: text or number, three decimals). A storage
+/// level is whole units and the carried fraction is the ITEM's, not a
+/// storage's, so a fraction cannot move exactly between storages: it is
+/// refused BY NAME, never "how much?" and never rounded.
+#[test]
+fn a_transfer_reads_its_quantity_as_typed_and_refuses_a_fraction_by_name() {
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    turn(&mut log, &input("received", json!({ "item": "salmon", "qty": 2000, "store": "freezer" })), false).unwrap();
+    let n = log.len();
+    let (status, said) = turn(&mut log, &input("moved", json!({ "item": "salmon", "qty": 2.5, "from": "freezer", "to": "kitchen" })), false).unwrap_err();
+    assert_eq!(status, 400);
+    assert_eq!(said, "Salmon: move whole units of g between storages for now");
+    let (_, said) = turn(&mut log, &input("moved", json!({ "item": "salmon", "qty": "0,5", "from": "freezer", "to": "kitchen" })), false).unwrap_err();
+    assert!(said.starts_with("Salmon: move whole units"), "{said}");
+    let (status, said) = turn(&mut log, &input("moved", json!({ "item": "salmon", "qty": "1.0001", "from": "freezer", "to": "kitchen" })), false).unwrap_err();
+    assert_eq!(status, 400);
+    assert!(said.starts_with("Salmon: ") && said.contains("at most 3 decimals"), "{said}");
+    let (status, said) = turn(&mut log, &input("moved", json!({ "item": "salmon", "from": "freezer", "to": "kitchen" })), false).unwrap_err();
+    assert_eq!(status, 400);
+    assert!(said.starts_with("Salmon: ") && said != "how much?", "{said}");
+    assert_eq!(log.len(), n, "nothing written");
+    // TWINS: a whole quantity typed as text, or with zero decimals, moves.
+    turn(&mut log, &input("moved", json!({ "item": "salmon", "qty": "500", "from": "freezer", "to": "kitchen" })), false).unwrap();
+    let (shown, _) = turn(&mut log, &input("moved", json!({ "item": "salmon", "qty": "250,000", "from": "freezer", "to": "kitchen" })), false).unwrap();
+    assert_eq!(shown["qty"], json!(250));
+    assert_eq!(by_store(&log, "salmon"), json!({ "freezer": 1250, "kitchen": 750 }));
+}

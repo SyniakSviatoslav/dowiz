@@ -6,4 +6,6 @@
 .pf-line .t b{display:block;font-size:var(--text-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pf-line .t small{display:block;color:var(--brand-text-muted);font-size:var(--text-xs)}
 .pf-line .ui-input{text-align:right;font-variant-numeric:tabular-nums}
+.pf-line.lost{background:color-mix(in oklch,var(--color-danger) 8%,transparent)}
+.pf-line.lost .ui-input{outline:2px solid var(--color-danger);outline-offset:1px}
 .pf-line .ui-field{margin:0}

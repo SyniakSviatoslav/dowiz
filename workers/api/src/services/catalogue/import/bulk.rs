@@ -280,3 +280,5 @@ pub(crate) use room::projected;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod merge_tests;

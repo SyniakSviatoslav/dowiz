@@ -18,6 +18,8 @@ import { WORDS as STOCK_WORDS } from '/admin/start-stock-i18n.js';
 import { WORDS as RP_WORDS } from '/admin/receipt-photo-i18n.js';
 import { WORDS as STORE_WORDS } from '/admin/stock-storages-i18n.js';
 import * as SL from './stock-storages-logic.js';
+import { BOOK_MAX } from '/admin/menu-recipe-logic.js'; // TZ 2026-10-16: the pickers list every match
+import '/admin/review-i18n.js'; // rc_shown: "Showing n of total"
 
 export { KINDS };
 
@@ -198,11 +200,12 @@ export function pickSupply(ctx, titleKey, then){
   const all = (ctx.data?.supplies || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
   sheet(`<p class="eyebrow" data-t="${titleKey}"></p><h2 data-t="inv_pick"></h2>
     <div class="srch">${icon('search')}${ui.inputRow({ id: 'pkQ', type: 'search', label: key('search'), placeholder: key('search'), attrs: {} })}</div>
-    <div class="rows" id="pkList"></div>`, { name: 'pick' });
+    <div class="rows" id="pkList"></div><p class="hint" id="pkShown"></p>`, { name: 'pick' });
   const draw = () => {
     const q = $('#pkQ').value.toLowerCase().trim();
-    $('#pkList').innerHTML = all.filter(s => !q || `${s.name} ${s.category}`.toLowerCase().includes(q)).slice(0, 80)
-      .map(s => rowBtn({ title: s.name, sub: esc(`${s.category || ''} · ${C.showMilli(C.levelMilli(s, 'onHand'))} ${s.unit}`), data: { pk: s.id } })).join('');
+    const hit = all.filter(s => !q || `${s.name} ${s.category}`.toLowerCase().includes(q)), shown = hit.slice(0, BOOK_MAX);
+    $('#pkList').innerHTML = shown.map(s => rowBtn({ title: s.name, sub: esc(`${s.category || ''} · ${C.showMilli(C.levelMilli(s, 'onHand'))} ${s.unit}`), data: { pk: s.id } })).join('');
+    $('#pkShown').textContent = hit.length > shown.length ? t('rc_shown').replace('{n}', shown.length).replace('{total}', hit.length) : '';
   };
   draw();
   $('#pkQ').oninput = draw;

@@ -21,8 +21,11 @@ export function bookList(book, { q = '', kind = 'all', draft = [] } = {}){
 /// TZ 2026-10-16 "no ingredient lost": the recipe lines a save would drop -- a quantity the
 /// owner typed that did not read (`bad`), or 0 / empty. A removed ingredient's ghost line is
 /// not one of them (taking it out is how the review badge goes).
+/// TZ 2026-10-16 OLD DATA: a stored line whose supply the stock book no longer has
+/// (deleted before the review feature). The hub refuses the whole save for it ("unknown
+/// supply"), so the save guard names it and it is never sent; x takes it out.
 export function unsavable(draft){
-  return (draft || []).filter(l => !l.removed && (l.bad || !(l.milli > 0)));
+  return (draft || []).filter(l => !l.removed && (l.gone || l.bad || !(l.milli > 0)));
 }
 
 /// How many matches the picker draws at once; past it a hint says how many more there are.

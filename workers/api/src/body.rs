@@ -32,21 +32,59 @@ pub(crate) fn from_text<T: DeserializeOwned>(text: &str) -> std::result::Result<
 /// `wire::Call` a Durable Object route runs on under `cargo test` (W-COV C2).
 pub(crate) trait Body {
     async fn body_text(&mut self) -> Result<String>;
+    /// `?location_id=` of the request's URL, if it carries one.
+    fn query_venue(&self) -> Option<String>;
+}
+fn venue_of(url: Result<worker::Url>) -> Option<String> {
+    url.ok()?.query_pairs().find(|(k, _)| k == "location_id").map(|(_, v)| v.into_owned())
 }
 impl Body for Request {
     async fn body_text(&mut self) -> Result<String> {
         self.text().await
+    }
+    fn query_venue(&self) -> Option<String> {
+        venue_of(self.url())
     }
 }
 impl Body for crate::wire::Call {
     async fn body_text(&mut self) -> Result<String> {
         self.text().await
     }
+    fn query_venue(&self) -> Option<String> {
+        venue_of(self.url())
+    }
+}
+
+/// THE VENUE MAY RIDE IN THE QUERY (operator 2026-10-16): the GET routes take
+/// `?location_id=`, so a write sent the same way was a `400 missing field
+/// location_id`. `text` as `T` with `query` the URL's venue: a body naming a
+/// DIFFERENT venue is refused (never one silently picked); a body without one
+/// that `T` refuses is read again with the query's put in. A `T` with no venue
+/// field never gets one, so `deny_unknown_fields` means what it meant. PURE.
+pub(crate) fn from_text_at<T: DeserializeOwned>(text: &str, query: Option<&str>) -> std::result::Result<T, String> {
+    let Some(q) = query else { return from_text(text) };
+    let mut v: serde_json::Value = match serde_json::from_str(text) {
+        Ok(serde_json::Value::Object(m)) => serde_json::Value::Object(m),
+        _ => return from_text(text),
+    };
+    match v.get("location_id") {
+        Some(b) if b.as_str() != Some(q) => return Err("location_id in the query and the body differ".into()),
+        Some(_) => return from_text(text),
+        None => {}
+    }
+    let first = match from_text(text) {
+        Ok(t) => return Ok(t),
+        Err(e) => e,
+    };
+    v["location_id"] = serde_json::Value::String(q.to_string());
+    // Still refused with the venue put in: the body's OWN reason, unchanged.
+    serde_json::from_value(v).map_err(|_| first)
 }
 
 pub(crate) async fn parse<T: DeserializeOwned>(req: &mut impl Body) -> Result<T> {
+    let query = req.query_venue();
     let text = req.body_text().await?;
-    from_text(&text).map_err(Error::RustError)
+    from_text_at(&text, query.as_deref()).map_err(Error::RustError)
 }
 
 /// The body as `T`, or the 400 that names what was wrong with it.

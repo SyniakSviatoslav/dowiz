@@ -40,8 +40,8 @@ test('typed lines are whole base units in range, distinct, one to forty; the yie
     { lines: [{ item: 'rice-dry', qty: 1000 }, { item: 'water', qty: 1100 }] });
   // Until 2026-10-12 a fraction was refused here; operator TZ 1 (CONTRACT-QTY 1) sends it as text and the hub decides.
   assert.deepEqual(P.readLines([{ item: 'salt', qty: '0.5', unit: 'g' }]), { lines: [{ item: 'salt', qty: '0.5' }] });
-  assert.deepEqual(P.readLines([{ item: 'salt', qty: '0', unit: 'g' }]), { error: 'pf_qtyBad' });
-  assert.deepEqual(P.readLines([{ item: 'salt', qty: String(P.QTY_MAX + 1), unit: 'g' }]), { error: 'pf_qtyBad' });
+  assert.deepEqual(P.readLines([{ item: 'salt', qty: '0', unit: 'g' }]), { error: 'pf_qtyBad', bad: ['salt'] });
+  assert.deepEqual(P.readLines([{ item: 'salt', qty: String(P.QTY_MAX + 1), unit: 'g' }]), { error: 'pf_qtyBad', bad: ['salt'] });
   assert.deepEqual(P.readLines([{ item: 'salt', qty: String(P.QTY_MAX), unit: 'g' }]), { lines: [{ item: 'salt', qty: P.QTY_MAX }] });
   assert.deepEqual(P.readLines([{ item: 'salt', qty: '1', unit: 'g' }, { item: 'salt', qty: '2', unit: 'g' }]), { error: 'nom_packTwice' });
   assert.deepEqual(P.readLines([]), { error: 'pf_noLines' });
@@ -98,8 +98,8 @@ test('the picker offers raw items and OTHER semi-finished products, not what is 
 test('TZ1: readLines keeps "0,5" of a piece as "0.5" on the wire, a whole 100 g as 100; a 4th decimal is refused', () => {
   const r = P.readLines([{ item: 'nori', qty: '0,5', unit: 'unit' }, { item: 'rice', qty: '100', unit: 'g' }]);
   assert.deepEqual(r, { lines: [{ item: 'nori', qty: '0.5' }, { item: 'rice', qty: 100 }] }, 'the hub parses the text; the editor never rounds 0.5 to 0 or refuses it');
-  assert.deepEqual(P.readLines([{ item: 'nori', qty: '0.0005', unit: 'unit' }]), { error: 'pf_qtyBad' });
-  assert.deepEqual(P.readLines([{ item: 'nori', qty: '0', unit: 'unit' }]), { error: 'pf_qtyBad' });
+  assert.deepEqual(P.readLines([{ item: 'nori', qty: '0.0005', unit: 'unit' }]), { error: 'pf_qtyBad', bad: ['nori'] });
+  assert.deepEqual(P.readLines([{ item: 'nori', qty: '0', unit: 'unit' }]), { error: 'pf_qtyBad', bad: ['nori'] });
   assert.equal(P.readYield('1,5 kg', 'g'), 1500, 'the yield stays whole base units');
 });
 
@@ -110,4 +110,22 @@ test('H2: a yield of 999,5 g or 2,5 pieces goes as text; the cost per piece divi
   assert.equal(P.readYield('0,0005', 'g'), null, 'finer than a thousandth');
   assert.equal(P.costPer(1000, '2.5', 'unit'), 400, '1000 for 2.5 pieces is 400 a piece');
   assert.equal(P.costPer(1000, 2000, 'g'), 500, 'a whole yield as before: per kg');
+});
+
+// TZ 2026-10-16 "no ingredient lost": a bad quantity names the line(s), not just the card.
+test('readLines: a bad quantity returns the item of EVERY bad line, so the editor can name and outline them', () => {
+  assert.deepEqual(P.readLines([{ item: 'salt', qty: '0', unit: 'g' }, { item: 'rice', qty: 'abc', unit: 'g' }, { item: 'ok', qty: '1', unit: 'g' }]),
+    { error: 'pf_qtyBad', bad: ['salt', 'rice'] });
+  assert.deepEqual(P.readLines([{ item: 'salt', qty: '0', unit: 'g' }]), { error: 'pf_qtyBad', bad: ['salt'] });
+});
+
+// The quantity forms of the kitchen (canonQty) work on the card's lines and on the yield.
+test('readLines + readYield: "0,5 г", "1/2", "½ шт", "1,5кг" are read like the dish recipe reads them', () => {
+  assert.deepEqual(P.readLines([{ item: 'salt', qty: '0,5 г', unit: 'g' }]), { lines: [{ item: 'salt', qty: '0.5' }] });
+  assert.deepEqual(P.readLines([{ item: 'nori', qty: '1/2', unit: 'unit' }]), { lines: [{ item: 'nori', qty: '0.5' }] });
+  assert.deepEqual(P.readLines([{ item: 'nori', qty: '½ шт', unit: 'unit' }]), { lines: [{ item: 'nori', qty: '0.5' }] });
+  assert.deepEqual(P.readLines([{ item: 'rice', qty: '1,5кг', unit: 'g' }]), { lines: [{ item: 'rice', qty: 1500 }] });
+  assert.equal(P.readYield('1/2', 'unit'), '0.5');
+  assert.equal(P.readYield('1,5кг', 'g'), 1500);
+  assert.equal(P.readYield('1/3', 'g'), null, 'a third is not exact in thousandths: refused, not rounded');
 });

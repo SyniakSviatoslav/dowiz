@@ -166,3 +166,27 @@ fn the_card_round_trips_and_a_raw_record_has_none() {
     assert_eq!(card_of(r#"{"id":"salt","kind":"food_ingredient","card":{"lines":[],"yield":1}}"#), None, "a raw record's stray card is not one");
     assert!(!is_prep(r#"{"kind":"food_ingredient"}"#) && is_prep(r#"{"kind":"prep"}"#));
 }
+
+/// NO LOSS (2026-10-16): an option's recipe (`optionBom`) is a use too. A
+/// supply named only by an option -- directly, or through a card the option
+/// names -- is listed under `options` as `(dish, dish name, option)`, so a
+/// delete asks first. A dish's own `bom` stays under `dishes` as before.
+#[test]
+fn where_used_includes_option_recipes() {
+    let k = kitchen();
+    let cola = r#"{"id":"cola","name":"Cola","price":200,"optionBom":{"ice":[{"supply":"sugar","qty":5}],"rice":[{"supply":"rice-seasoned","uq":500000}]},"modifierGroups":[{"id":"g","options":[{"id":"ice"},{"id":"rice"}]}]}"#;
+    let products = vec![("cola".to_string(), cola.to_string()), ("philadelphia".to_string(), PHILADELPHIA.to_string())];
+    let u = uses_of("sugar", &k, &products);
+    let opt = |o: &str| ("cola".to_string(), "Cola".to_string(), o.to_string());
+    assert_eq!(u.options, vec![opt("ice"), opt("rice")], "directly in one option, through mitsukan in the other");
+    assert_eq!(u.dishes, vec![("philadelphia".to_string(), "Philadelphia".to_string())], "the cola has no recipe of its own");
+    let u = uses_of("rice-dry", &k, &products);
+    assert_eq!(u.options, vec![opt("rice")], "through the card an option names");
+    // TWIN: an item no option reaches lists no option.
+    assert!(uses_of("vinegar", &k, &[("cola".to_string(), r#"{"id":"cola","optionBom":{"ice":[{"supply":"salt","qty":1}]}}"#.to_string())]).options.is_empty());
+    assert_eq!(uses_of("nobody", &k, &products), Uses::default());
+    // The dish's OWN name, though an option group's "name" comes first in the
+    // text (serde_json writes `modifierGroups` before `name`).
+    let sorted = r#"{"id":"cola","modifierGroups":[{"id":"g","name":"Extras","options":[{"id":"ice","name":"Ice"}]}],"name":"Cola","optionBom":{"ice":[{"supply":"sugar","qty":5}]}}"#;
+    assert_eq!(uses_of("sugar", &k, &[("cola".to_string(), sorted.to_string())]).options, vec![opt("ice")]);
+}

@@ -11,28 +11,28 @@ export const WORDS = {
     ls_dish: 'Pjata', ls_refused: 'Refuzime', ls_portions: 'Porcione', ls_revenue: 'Të ardhura të humbura', ls_day: 'Dita',
     ls_none: 'Asnjë porosi e humbur në këtë periudhë.', ls_limit: 'Numërohet një herë për përbërës në 10 minuta: numri është minimal.',
     ob_title: 'Receta e opsioneve', ob_hint: 'Çfarë merr nga rafti një opsion, p.sh. salmon shtesë 20 g. Rezervohet bashkë me pjatën.',
-    ob_none: 'Kjo pjatë nuk ka opsione.', ob_supply: 'Përbërësi', ob_qty: 'Sasia', ob_add: 'Shto rresht', ob_save: 'Ruaj recetën e opsionit', ob_badQty: 'Sasia është numër i plotë mbi zero.',
+    ob_none: 'Kjo pjatë nuk ka opsione.', ob_supply: 'Përbërësi', ob_qty: 'Sasia', ob_add: 'Shto rresht', ob_save: 'Ruaj recetën e opsionit', ob_badQty: 'Sasia nuk lexohet, ose është 0. Shkruani p.sh. 20, 0,5 ose 1/2.', ob_noSupply: 'Zgjidhni përbërësin për sasinë e shkruar.',
   },
   en: {
     ls_title: 'Orders lost to stock-outs', ls_hint: 'Baskets the checkout refused because an ingredient ran out: how often, how many portions and what they were worth.',
     ls_dish: 'Dish', ls_refused: 'Refused', ls_portions: 'Portions', ls_revenue: 'Revenue lost', ls_day: 'Day',
     ls_none: 'No order lost to a stock-out in this period.', ls_limit: 'Counted once per ingredient per 10 minutes, so this is a lower bound.',
     ob_title: 'Option recipes', ob_hint: 'What an option takes off the shelf, e.g. extra salmon 20 g. It is reserved with the dish.',
-    ob_none: 'This dish has no options.', ob_supply: 'Ingredient', ob_qty: 'Quantity', ob_add: 'Add a line', ob_save: 'Save the option recipe', ob_badQty: 'A quantity is a whole number above zero.',
+    ob_none: 'This dish has no options.', ob_supply: 'Ingredient', ob_qty: 'Quantity', ob_add: 'Add a line', ob_save: 'Save the option recipe', ob_badQty: 'This quantity does not read, or is 0. Type e.g. 20, 0,5 or 1/2.', ob_noSupply: 'Pick the ingredient for the quantity typed.',
   },
   uk: {
     ls_title: 'Замовлення, втрачені через брак продуктів', ls_hint: 'Кошики, які каса відхилила, бо скінчився інгредієнт: скільки разів, скільки порцій і на яку суму.',
     ls_dish: 'Страва', ls_refused: 'Відмов', ls_portions: 'Порцій', ls_revenue: 'Втрачений виторг', ls_day: 'День',
     ls_none: 'За цей період жодного замовлення не втрачено через брак продуктів.', ls_limit: 'Рахується раз на інгредієнт за 10 хвилин, тож це нижня межа.',
     ob_title: 'Техкарта опцій', ob_hint: 'Що опція бере з полиці, напр. додатковий лосось 20 г. Резервується разом зі стравою.',
-    ob_none: 'У цієї страви немає опцій.', ob_supply: 'Інгредієнт', ob_qty: 'Кількість', ob_add: 'Додати рядок', ob_save: 'Зберегти техкарту опції', ob_badQty: 'Кількість - ціле число більше нуля.',
+    ob_none: 'У цієї страви немає опцій.', ob_supply: 'Інгредієнт', ob_qty: 'Кількість', ob_add: 'Додати рядок', ob_save: 'Зберегти техкарту опції', ob_badQty: 'Кількість не читається або дорівнює 0. Введіть, напр., 20, 0,5 або 1/2.', ob_noSupply: 'Оберіть інгредієнт для введеної кількості.',
   },
   ru: {
     ls_title: 'Заказы, потерянные из-за нехватки продуктов', ls_hint: 'Корзины, которые касса отклонила, потому что закончился ингредиент: сколько раз, сколько порций и на какую сумму.',
     ls_dish: 'Блюдо', ls_refused: 'Отказов', ls_portions: 'Порций', ls_revenue: 'Потерянная выручка', ls_day: 'День',
     ls_none: 'За этот период ни один заказ не потерян из-за нехватки продуктов.', ls_limit: 'Считается раз на ингредиент за 10 минут, поэтому это нижняя граница.',
     ob_title: 'Техкарта опций', ob_hint: 'Что опция берёт с полки, напр. дополнительный лосось 20 г. Резервируется вместе с блюдом.',
-    ob_none: 'У этого блюда нет опций.', ob_supply: 'Ингредиент', ob_qty: 'Количество', ob_add: 'Добавить строку', ob_save: 'Сохранить техкарту опции', ob_badQty: 'Количество - целое число больше нуля.',
+    ob_none: 'У этого блюда нет опций.', ob_supply: 'Ингредиент', ob_qty: 'Количество', ob_add: 'Добавить строку', ob_save: 'Сохранить техкарту опции', ob_badQty: 'Количество не читается или равно 0. Введите, напр., 20, 0,5 или 1/2.', ob_noSupply: 'Выберите ингредиент для введённого количества.',
   },
 };
 

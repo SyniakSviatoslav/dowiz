@@ -54,8 +54,17 @@ async function load(host, id){
 async function save(box, id, b){
   const opt = b.dataset.obsave;
   const rows = $$(`[data-obline="${CSS.escape(opt)}"]`, box).map(r => ({ supply: r.querySelector('[data-obsupply]')?.value, qty: r.querySelector('[data-obqty]')?.value }));
-  const got = collect(rows);
-  if (got.error) { toast(t(got.error)); return; }
+  const sup = views.get(id)?.supplies || [];
+  const got = collect(rows, sup);
+  if (got.error) {
+    // TZ 2026-10-16 "no ingredient lost": the toast names the ingredient(s) and the line(s) are outlined.
+    const lines = $$(`[data-obline="${CSS.escape(opt)}"]`, box);
+    lines.forEach((el, i) => el.classList.toggle('lost', got.rows.includes(i)));
+    const names = got.rows.map(i => sup.find(s => s.id === rows[i].supply)?.name || rows[i].supply).filter(Boolean);
+    toast([t(got.error), names.join(', ')].filter(Boolean).join(' '));
+    lines.find((el, i) => got.rows.includes(i))?.querySelector('input')?.focus();
+    return;
+  }
   try { await busy(b, () => post(optionBomPath(id), bodyOf(store.loc, opt, got.bom))); toast(t('saved')); }
   catch (e) { toast(String(e.message || e)); }
 }

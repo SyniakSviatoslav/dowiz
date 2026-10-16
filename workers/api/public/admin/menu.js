@@ -280,7 +280,13 @@ export async function openDish(id){
     // left out of the save with "Saved". Now the save stops and names every such line.
     if (recipeKnown === id) {
       const lost = RL.unsavable(recipeDraft);
-      if (lost.length) { markLost(lost); return toast(t('rc_lineBad').replace('{names}', lost.map(l => l.name).join(', '))); }
+      if (lost.length) {
+        markLost(lost);
+        // OLD DATA: a gone line is named as gone (add it to stock again, or take it out with x).
+        const gone = lost.filter(l => l.gone).map(l => l.name).join(', ');
+        const bad = lost.filter(l => !l.gone).map(l => l.name).join(', ');
+        return toast([bad && t('rc_lineBad').replace('{names}', bad), gone && t('rc_gone').replace('{names}', gone)].filter(Boolean).join(' '));
+      }
     }
     const avail = $('#d-avail').checked;
     // W-MR0: an undeclared dish is not put on sale where the hub refuses it; the console says why first.
@@ -505,6 +511,7 @@ function drawRecipe(p){
 /// One line's small print: nutrition, cost, loss. A ghost line says "removed".
 function lineMeta(l){
   if (l.removed) return pill('bad', { key: 'rv_removed' });
+  if (l.gone) return pill('bad', { key: 'rc_notInStock' });
   return `${l.kcal != null ? `${Math.round(l.kcal)} kcal` : isFoodKind(l.kind) ? pill('warn', { key: 'noData' }) : ''}${l.cost != null ? ` · ${money(l.cost)}` : ''}${l.w?.gross ? ` · ${esc(t('inv_loss'))} ${IC.pct(IC.lossPm(l.w))}` : ''}`;
 }
 /// Outline the lines a save would lose; `focus` puts the cursor in the first one.
@@ -563,7 +570,7 @@ async function bindRecipe(p){
   // Lines loaded from the dish are re-scaled from today's supply numbers, as the hub does on save.
   // A fraction comes back exact as `qtyMilli` (CONTRACT-QTY 1); a ghost line (TZ 3) keeps its name and no numbers.
   // W-TZFRESH: the deleted ingredient's line is GONE from the stored bom (the hub drops it and marks the dish); `RL.withGhosts` draws it back as a ghost.
-  recipeDraft = RL.withGhosts(stored.bom, stored.recipeReview).map(l => { const sup = l.removed ? null : book.find(s => s.id === l.supply); return sup ? lineOf(sup, toMilli(l.qty, l.qtyMilli) || 0, l.net ?? null, l.out ?? null) : bareLine(l); });
+  recipeDraft = RL.withGhosts(stored.bom, stored.recipeReview).map(l => { const sup = l.removed ? null : book.find(s => s.id === l.supply); return sup ? lineOf(sup, toMilli(l.qty, l.qtyMilli) || 0, l.net ?? null, l.out ?? null) : { ...bareLine(l), gone: !l.removed }; });
   // TZ 3: the badge names the removed ingredient; it goes when the recipe is saved without the ghost.
   const rb = $('#rcReviewBox'); if (rb) rb.innerHTML = stored.recipeReview?.length ? `<p class="hint warn" id="rcReview">${esc(badgeText(stored.recipeReview, lang))}</p><p class="hint" data-t="rv_hint"></p>` : '';
   drawRecipe(p);

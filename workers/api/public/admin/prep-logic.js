@@ -72,19 +72,22 @@ export function costPer(batch, yieldQty, unit){
 export const perWord = unit => (unit === 'unit' ? 'pf_costPerPiece' : unit === 'ml' ? 'pf_costPerL' : 'pf_costPerKg');
 
 /// The typed lines as the hub takes them, or { error: key }. `rows`:
-/// [{ item, qty: "1,5 kg", unit }] -- the unit is the ITEM's.
+/// [{ item, qty: "1,5 kg", unit }] -- the unit is the ITEM's. An error of `pf_qtyBad`
+/// names the items of the bad lines in `bad`.
 export function readLines(rows){
-  const out = [];
+  const out = [], bad = [];
   for (const r of rows || []) {
     if (!r.item) continue;
     // TZ 1 (CONTRACT-QTY 1): a decimal is parsed as text into milli and sent as
     // text; a whole quantity goes as the integer it always was. The hub counts a
     // semi-finished card whole for now and says so by name (H2); never rounded here.
     const milli = parseMilli(r.qty, r.unit);
-    if (milli == null || milli < 1 || milli > QTY_MAX * MILLI) return { error: 'pf_qtyBad' };
+    // TZ 2026-10-16 "no ingredient lost": every bad line is named (`bad`), not just the card.
+    if (milli == null || milli < 1 || milli > QTY_MAX * MILLI) { bad.push(r.item); continue; }
     if (out.some(l => l.item === r.item)) return { error: 'nom_packTwice' };
     out.push({ item: r.item, qty: wireQty(milli) });
   }
+  if (bad.length) return { error: 'pf_qtyBad', bad };
   if (!out.length) return { error: 'pf_noLines' };
   if (out.length > LINES_MAX) return { error: 'nom_tooMany' };
   return { lines: out };

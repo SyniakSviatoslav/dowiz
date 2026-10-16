@@ -814,12 +814,8 @@ pub(crate) async fn update_product_at(mut req: Request, ctx: RouteContext<crate:
         }
     }
 
-    if let Some(lines) = &body.bom {
-        for l in lines {
-            if l.supply.trim().is_empty() || l.qty <= 0 || l.qty > crate::recipe::QTY_MAX {
-                return Response::error("a recipe line is a supply and a positive quantity", 400);
-            }
-        }
+    if let Some(Err(e)) = body.bom.as_deref().map(crate::recipe::apply::precheck) {
+        return crate::recipe::apply::refusal(&e);
     }
     let taste = match &body.taste {
         None => None,
@@ -930,7 +926,7 @@ pub(crate) async fn update_product_at(mut req: Request, ctx: RouteContext<crate:
                 weight: weight_g.is_some(),
                 ingredients: ingredients.as_ref().is_some_and(|l| !l.is_empty()),
             };
-            crate::recipe::apply::set_bom(&mut p, lines, |s| cat.supply(s), typed).map_err(Error::RustError)?;
+            crate::recipe::apply::set_bom(&mut p, lines, |s| cat.supply(s), typed).map_err(|e| Error::RustError(format!("{}{e}", crate::recipe::apply::REFUSED)))?;
         }
         if let Some(list) = &allergens {
             p["allergens"] = json!(list);
@@ -995,7 +991,10 @@ pub(crate) async fn update_product_at(mut req: Request, ctx: RouteContext<crate:
                 409,
             );
         }
-        if e.to_string().starts_with("unknown supply") || e.to_string().starts_with("unknown category") {
+        if let Some(why) = e.to_string().strip_prefix(crate::recipe::apply::REFUSED) {
+            return crate::recipe::apply::refusal(why);
+        }
+        if e.to_string().starts_with("unknown category") {
             return Response::error(e.to_string(), 400);
         }
         if e.to_string().contains("unknown product") {

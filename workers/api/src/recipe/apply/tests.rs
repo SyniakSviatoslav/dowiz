@@ -58,12 +58,14 @@ fn an_unknown_supply_refuses_the_whole_write() {
     assert!(set_bom(&mut p, &[line("salmon", 35)], supply, Typed::default()).unwrap().is_some());
 }
 
+/// UPDATED 2026-10-16 (operator: "no loss of ingredients"): this test said a
+/// repeat was DROPPED -- the 50 g line vanished. A repeat now MERGES.
 #[test]
-fn no_lines_clears_the_recipe_and_a_repeat_is_dropped() {
+fn no_lines_clears_the_recipe_and_a_repeat_is_merged() {
     let mut p = dish();
     set_bom(&mut p, &[line("salmon", 35), line("salmon", 50)], supply, Typed::default()).unwrap();
     assert_eq!(p["bom"].as_array().map(Vec::len), Some(1));
-    assert_eq!(p["bom"][0]["qty"], json!(35));
+    assert_eq!(p["bom"][0]["qty"], json!(85), "35 + 50, nothing dropped");
     assert!(set_bom(&mut p, &[], supply, Typed::default()).unwrap().is_none());
     assert_eq!((p["bom"].clone(), p["cost"].clone()), (Value::Null, Value::Null));
 }
@@ -177,4 +179,30 @@ fn the_dish_cost_is_the_exact_sum_rounded_once() {
     crate::recipe::hydrate(&mut read, look);
     assert_eq!(read["bom"][0]["cost"], json!(1), "a line shows its own rounding");
     assert_eq!(read["cost"], json!(4));
+}
+
+/// NO LOSS (2026-10-16): two lines of one supply are ONE line with the
+/// quantities summed in milli-units, exactly; net/out summed when both lines
+/// weighed them, else kept from the one that did. The sum is bounded by
+/// QTY_MAX like any line, refused by name, nothing written.
+#[test]
+fn two_lines_of_one_supply_are_one_line_summed_exactly() {
+    let half = |s: &str, milli: i64| BomLineIn { supply: s.into(), qty: crate::recipe::Qty::milli(milli), net: None, out: None };
+    let mut p = dish();
+    set_bom(&mut p, &[half("rice", 500), line("salmon", 35), half("rice", 250)], supply, Typed::default()).unwrap();
+    assert_eq!(p["bom"], json!([{ "supply": "rice", "uq": 750_000 }, { "supply": "salmon", "qty": 35 }]), "0.5 + 0.25 = 0.75 g, in first-seen order");
+    // Both weighed: summed. One weighed: kept.
+    let a = BomLineIn { supply: "salmon".into(), qty: 100.into(), net: Some(55), out: Some(50) };
+    let b = BomLineIn { supply: "salmon".into(), qty: 50.into(), net: Some(30), out: None };
+    set_bom(&mut p, &[a, b], supply, Typed::default()).unwrap();
+    assert_eq!(p["bom"], json!([{ "supply": "salmon", "qty": 150, "net": 85, "out": 50 }]));
+    assert_eq!(p["cost"], json!(360), "150 g at 240 / 100 g: the whole gross is paid for");
+    // The sum past QTY_MAX: refused naming the supply, nothing changed.
+    let before = p.clone();
+    let e = set_bom(&mut p, &[line("rice", 60_000), line("rice", 40_001)], supply, Typed::default()).unwrap_err();
+    assert!(e.starts_with("rice: ") && e.contains("100000"), "{e}");
+    assert_eq!(p, before, "nothing half-written");
+    // TWIN: exactly at the bound lands.
+    set_bom(&mut p, &[line("rice", 60_000), line("rice", 40_000)], supply, Typed::default()).unwrap();
+    assert_eq!(p["bom"], json!([{ "supply": "rice", "qty": 100_000 }]));
 }

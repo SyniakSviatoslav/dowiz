@@ -72,3 +72,26 @@ fn a_nested_struct_is_held_to_its_own_attribute() {
     assert!(e.contains("unknown field `unit`"), "{e}");
     assert!(from_text::<Outer>(r#"{"lines":[{"qty":1}],"note":"x"}"#).is_ok(), "the outer struct did not deny");
 }
+
+/// ITEM 7 (operator, 2026-10-16): the console sent `?location_id=` in the
+/// query and a body without it -> `400 missing field location_id`. A body
+/// without it takes the query's; both present and different is refused.
+#[test]
+fn a_body_without_the_venue_takes_it_from_the_query() {
+    let s: Strict = super::from_text_at(r#"{"name":"Tuna"}"#, Some("v1")).unwrap();
+    assert_eq!(s, Strict { location_id: "v1".into(), name: Some("Tuna".into()) });
+    let e = super::from_text_at::<Strict>(r#"{"location_id":"v1","name":"Tuna"}"#, Some("v2")).err().unwrap();
+    assert_eq!(e, "location_id in the query and the body differ");
+    // TWINS: the same venue in both lands; no query is the old parse exactly.
+    assert!(super::from_text_at::<Strict>(r#"{"location_id":"v1"}"#, Some("v1")).is_ok());
+    assert!(super::from_text_at::<Strict>(r#"{"name":"Tuna"}"#, None).unwrap_err().contains("missing field `location_id`"));
+    // A body that has no venue field is NOT given one: strictness holds.
+    #[derive(Deserialize, Debug)]
+    #[serde(deny_unknown_fields)]
+    struct NoVenue {
+        #[allow(dead_code)]
+        name: String,
+    }
+    assert!(super::from_text_at::<NoVenue>(r#"{"name":"x"}"#, Some("v1")).is_ok());
+    assert!(super::from_text_at::<NoVenue>(r#"{"name":"x","zzz":1}"#, Some("v1")).unwrap_err().contains("zzz"));
+}

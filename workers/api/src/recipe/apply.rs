@@ -9,7 +9,7 @@
 
 use serde_json::{json, Value};
 
-use super::{bom_json, derive, line_with, weights, BomLineIn, Derived, Line, QTY_MAX};
+use super::{bom_json, derive, line_with, weights, BomLineIn, Derived, Line, Qty, QTY_MAX};
 
 /// What the caller typed in the same request. A value the owner typed wins
 /// over the sum and stays marked as theirs; the import types none of them.
@@ -69,9 +69,55 @@ pub fn set_bom_keeping_review(
     out
 }
 
+/// NO LOSS (operator 2026-10-16): two lines of one supply are ONE line, the
+/// quantities summed in milli-units (exact), net/out summed when both lines
+/// carry one, else kept from the line that does. Each line is bounded first,
+/// then the sum, refused naming the supply -- it was silently DROPPED.
+pub(crate) fn merged(lines: &[BomLineIn]) -> Result<Vec<BomLineIn>, String> {
+    let add = |a: Option<i64>, b: Option<i64>| match (a, b) {
+        (Some(x), Some(y)) => Some(x.saturating_add(y)),
+        (x, y) => x.or(y),
+    };
+    let mut out: Vec<BomLineIn> = Vec::with_capacity(lines.len());
+    for l in lines {
+        if l.qty <= 0 || l.qty > QTY_MAX {
+            return Err(format!("{}: a quantity is more than 0 and at most {QTY_MAX}", l.supply));
+        }
+        let Some(x) = out.iter_mut().find(|x| x.supply == l.supply) else {
+            out.push(l.clone());
+            continue;
+        };
+        let sum = Qty::milli(x.qty.milli.saturating_add(l.qty.milli));
+        if sum > QTY_MAX {
+            return Err(format!("{}: its lines add up to {sum}, more than the {QTY_MAX} one line takes", l.supply));
+        }
+        (x.qty, x.net, x.out) = (sum, add(x.net, l.net), add(x.out, l.out));
+    }
+    Ok(out)
+}
+
+/// The marker a refused recipe carries out of a catalogue closure (which can
+/// only fail with `Error`), so the route answers it as [`refusal`].
+pub(crate) const REFUSED: &str = "recipe refused: ";
+
+/// The lines' own checks, before the catalogue is read: a supply named, each
+/// quantity and each supply's sum in bounds (`merged`).
+pub(crate) fn precheck(lines: &[BomLineIn]) -> Result<(), String> {
+    match lines.iter().find(|l| l.supply.trim().is_empty()) {
+        Some(_) => Err("(no supply): a recipe line names its supply".into()),
+        None => merged(lines).map(|_| ()),
+    }
+}
+
+/// A refused recipe as the owner reads it (2026-10-16; it was a bare 500):
+/// `400 {"error": "<supply>: <reason>"}`.
+pub(crate) fn refusal(why: &str) -> worker::Result<crate::wire::Reply> {
+    Ok(crate::wire::Reply::from_json(&json!({ "error": why }))?.with_status(400))
+}
+
 /// Set `p`'s recipe to `lines`. `supply` answers a supply's stored JSON by id.
-/// An unknown supply refuses the whole write, naming it; a second line for the
-/// same supply is dropped (one line per supply, as the old editor enforced).
+/// An unknown supply refuses the whole write, naming it; two lines of the same
+/// supply are merged into one ([`merged`]), never dropped.
 /// No lines clears the recipe. Answers what was derived, if anything.
 pub fn set_bom(
     p: &mut Value,
@@ -79,19 +125,14 @@ pub fn set_bom(
     supply: impl Fn(&str) -> Option<String>,
     typed: Typed,
 ) -> Result<Option<Derived>, String> {
+    if let Some(l) = lines.iter().find(|l| supply(&l.supply).is_none()) {
+        return Err(format!("unknown supply {}", l.supply));
+    }
     let supply = super::prep::lookup(&supply);
+    let lines = merged(lines)?;
     let mut snap: Vec<Line> = Vec::with_capacity(lines.len());
-    for l in lines {
-        let Some(sj) = supply(&l.supply) else {
-            return Err(format!("unknown supply {}", l.supply));
-        };
-        if l.qty <= 0 || l.qty > QTY_MAX {
-            return Err(format!("{}: a quantity is more than 0 and at most {QTY_MAX}", l.supply));
-        }
-        let sv: Value = serde_json::from_str(&sj).unwrap_or(json!({}));
-        if snap.iter().any(|x| x.supply == l.supply) {
-            continue;
-        }
+    for l in &lines {
+        let sv: Value = supply(&l.supply).and_then(|sj| serde_json::from_str(&sj).ok()).unwrap_or(json!({}));
         let line = line_with(&l.supply, l.qty, l.net, l.out, &sv);
         weights::check(l.net, l.out, line.w.gross).map_err(|e| format!("{}: {e}", l.supply))?;
         snap.push(line);
@@ -133,3 +174,5 @@ pub fn set_bom(
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod route_tests;

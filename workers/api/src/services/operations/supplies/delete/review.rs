@@ -5,6 +5,7 @@
 //! recipe (`recipe::apply::set_bom`), the ПФ's with the next card saved
 //! (`preps::record` rebuilds the record from the form's keys, without it).
 
+use dowiz_hub::catalog::Catalog;
 use serde_json::{json, Value};
 
 /// One removed line as the mark names it. `via` is the ПФ a dish reached it
@@ -79,3 +80,84 @@ pub(super) fn options_only(p: &mut Value, pid: &str, marks: Vec<Value>) -> Optio
     mark_on(p, "recipeReview", marks.clone());
     Some(json!({ "id": pid, "name": p.get("name").cloned().unwrap_or(json!(pid)), "removed": marks }))
 }
+
+/// A where-used answer with the dishes whose OPTION recipe reaches the item
+/// (`dowiz_hub::prep::Uses::options`), under `options`: `{id, name, option}`.
+/// Absent when none, so an answer without one keeps its bytes.
+pub fn with_options(mut v: Value, options: &[(String, String, String)]) -> Value {
+    if !options.is_empty() {
+        v["options"] = options.iter().map(|(id, name, opt)| json!({ "id": id, "name": name, "option": opt })).collect();
+    }
+    v
+}
+
+/// EVERY CARD ABOVE A TOUCHED ONE (2026-10-16): card B naming card A, which
+/// lost a line, reaches the removed item too, transitively. B is marked
+/// `review` with A's marks, each naming `via: A`, and answered once in
+/// `review`; `touched` gains B's marks, so a dish naming B is marked too.
+pub(super) fn mark_above(cat: &mut Catalog, touched: &mut Vec<(String, Vec<Value>)>, review: &mut Vec<Value>) {
+    let after = cat.supplies();
+    let mut above: Vec<(String, Vec<Value>)> = Vec::new();
+    for (pid, marks) in touched.iter() {
+        let via: Vec<Value> = marks.iter().filter(|m| m.get("via").is_none()).map(|m| {
+            let mut m = m.clone();
+            m["via"] = json!(pid);
+            m
+        }).collect();
+        for (b, _) in dowiz_hub::prep::uses_of(pid, &after, &[]).preps {
+            match above.iter_mut().find(|(x, _)| *x == b) {
+                Some((_, ms)) => ms.extend(via.iter().cloned()),
+                None => above.push((b, via.clone())),
+            }
+        }
+    }
+    for (b, marks) in above {
+        let Some(mut v) = cat.supply(&b).and_then(|j| serde_json::from_str::<Value>(&j).ok()) else { continue };
+        mark_on(&mut v, "review", marks.clone());
+        cat.set_supply(&b, &v.to_string());
+        match review.iter_mut().find(|r| r["id"] == json!(b) && r["prep"] == json!(true)) {
+            Some(r) => mark_on(r, "removed", marks.clone()),
+            None => review.push(json!({ "id": b, "name": v.get("name").cloned().unwrap_or(json!(b)), "prep": true, "removed": marks.clone() })),
+        }
+        match touched.iter_mut().find(|(t, _)| *t == b) {
+            Some((_, ms)) => ms.extend(marks),
+            None => touched.push((b, marks)),
+        }
+    }
+}
+
+/// SAVING A CARD CLEARS THE MARKS THAT POINT THROUGH IT (2026-10-16): every
+/// dish `recipeReview` and every ПФ `review` mark with `via: <card>` goes;
+/// marks of other causes stay; an emptied list leaves the record. Answers
+/// the dishes changed. PURE on `cat`.
+pub fn clear_via(cat: &mut Catalog, card: &str) -> Vec<String> {
+    let strip = |j: &str, key: &str| -> Option<Value> {
+        let mut v: Value = serde_json::from_str(j).ok()?;
+        let marks = v.get(key)?.as_array()?.clone();
+        let kept: Vec<Value> = marks.iter().filter(|m| m.get("via").and_then(Value::as_str) != Some(card)).cloned().collect();
+        if kept.len() == marks.len() {
+            return None;
+        }
+        match kept.is_empty() {
+            true => v.as_object_mut()?.remove(key).map(|_| ())?,
+            false => v[key] = Value::Array(kept),
+        }
+        Some(v)
+    };
+    for (sid, j) in cat.supplies() {
+        if let Some(v) = strip(&j, "review") {
+            cat.set_supply(&sid, &v.to_string());
+        }
+    }
+    let mut dishes = Vec::new();
+    for (pid, j) in cat.products() {
+        if let Some(v) = strip(&j, "recipeReview") {
+            cat.set_product(&pid, &v.to_string());
+            dishes.push(pid);
+        }
+    }
+    dishes
+}
+
+#[cfg(test)]
+mod tests;

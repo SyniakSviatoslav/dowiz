@@ -463,6 +463,8 @@ body.signin #app,#app:has(>.login){min-height:100dvh;display:grid;align-content:
 /* TZ 2026-10-16: a line the save would lose (quantity unreadable or 0) is outlined, not dropped */
 .rc-line.lost{background:color-mix(in oklch,var(--color-danger) 8%,transparent)}
 .rc-line.lost .rc-qty input{outline:2px solid var(--color-danger);outline-offset:1px}
+[data-obline].lost{background:color-mix(in oklch,var(--color-danger) 8%,transparent);border-radius:var(--radius-sm,6px)}
+[data-obline].lost input{outline:2px solid var(--color-danger);outline-offset:1px}
 .rc-sum{margin-top:var(--space-3)}
 .taste-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--ui-hairline)}
 .taste-ax{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-sm)}

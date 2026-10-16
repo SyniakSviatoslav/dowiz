@@ -61,11 +61,11 @@ pub fn uses_of(cat: &Catalog, ids: &[String]) -> Value {
     let mut out = serde_json::Map::new();
     for id in ids {
         let u = dowiz_hub::prep::uses_of(id, &supplies, &products);
-        if u.preps.is_empty() && u.dishes.is_empty() {
+        if u.preps.is_empty() && u.dishes.is_empty() && u.options.is_empty() {
             continue;
         }
         let rows = |l: &[(String, String)]| l.iter().map(|(i, n)| json!({ "id": i, "name": n })).collect::<Vec<_>>();
-        out.insert(id.clone(), json!({ "preps": rows(&u.preps), "dishes": rows(&u.dishes) }));
+        out.insert(id.clone(), review::with_options(json!({ "preps": rows(&u.preps), "dishes": rows(&u.dishes) }), &u.options));
     }
     Value::Object(out)
 }
@@ -110,16 +110,8 @@ pub fn remove_supplies(cat: &mut Catalog, ids: &[String]) -> Removal {
         review.push(json!({ "id": sid, "name": name_of(sid), "prep": true, "removed": marks.clone() }));
         touched.push((sid.clone(), marks));
     }
-    // Every card ABOVE a touched one reaches the removed item too.
-    let after = cat.supplies();
-    let above: Vec<(String, Vec<Value>)> = touched
-        .iter()
-        .flat_map(|(pid, marks)| {
-            let via: Vec<Value> = marks.iter().map(|m| { let mut m = m.clone(); m["via"] = json!(pid); m }).collect();
-            dowiz_hub::prep::uses_of(pid, &after, &[]).preps.into_iter().map(move |(p, _)| (p, via.clone()))
-        })
-        .collect();
-    touched.extend(above);
+    // Every card ABOVE a touched one reaches the removed item too: marked (2026-10-16).
+    review::mark_above(cat, &mut touched, &mut review);
     let mut dishes = Vec::new();
     for (pid, j) in cat.products() {
         let Ok(mut p) = serde_json::from_str::<Value>(&j) else { continue };

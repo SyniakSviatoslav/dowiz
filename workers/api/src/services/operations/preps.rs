@@ -118,7 +118,11 @@ pub fn save(cat: &mut Catalog, id: &str, body: &PrepIn, card: &Card) -> std::res
     let existing: Value = cat.supply(id).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
     let rec = record(id, body, card, &existing);
     cat.set_supply(id, &rec.to_string());
-    Ok((rec, rederive::dishes_using(cat, id)))
+    // The marks a deletion left THROUGH this card go with its save (2026-10-16).
+    let cleared = super::supplies::delete::review::clear_via(cat, id);
+    let mut dishes = rederive::dishes_using(cat, id);
+    dishes.extend(cleared.into_iter().filter(|d| !dishes.contains(d)).collect::<Vec<_>>());
+    Ok((rec, dishes))
 }
 
 /// `POST /api/owner/preps` -- see the module.
@@ -186,7 +190,7 @@ fn uses_json(u: &prep::Uses, cat: &Catalog) -> Value {
             })
             .collect::<Vec<_>>()
     };
-    json!({ "preps": rows(&u.preps, &|s| cat.supply(s)), "dishes": rows(&u.dishes, &|p| cat.product(p)) })
+    super::supplies::delete::review::with_options(json!({ "preps": rows(&u.preps, &|s| cat.supply(s)), "dishes": rows(&u.dishes, &|p| cat.product(p)) }), &u.options)
 }
 
 /// What `answer` says to a question it does not know.

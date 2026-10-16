@@ -20,6 +20,8 @@ import { cardMarkup, editorLine, liveMarkup, takesMarkup, PREP_ICON } from '/adm
 import { deleteSupplies } from '/admin/nom.js';
 import { cookForm, cookLive, cookResult } from '/admin/pf2-view.js';
 import './pf2-i18n.js';
+import * as RL from '/admin/menu-recipe-logic.js'; // BOOK_MAX: the picker lists every match (TZ 2026-10-16)
+import '/admin/review-i18n.js'; // rc_shown: "Showing n of total" (the same words as the dish sheet)
 
 const fail = e => toast(String(e.message || e));
 
@@ -130,7 +132,13 @@ export function openPrepEditor(p, ctx, st = null){
     // WHAT IS TYPED, not the last number that parsed: a line typed as 0 (or
     // "abc") saved its OLD quantity with "Saved" (W-VERIFY, live 2026-09-30).
     const read = P.readLines(st.lines.map(l => ({ item: l.item, qty: l.typed ?? String(l.qty), unit: l.sup?.unit || 'g' })));
-    if (read.error) return toast(t(read.error));
+    if (read.error) {
+      // TZ 2026-10-16 "no ingredient lost": the toast names the line(s) and they are outlined, as on the dish sheet.
+      const bad = read.bad || [];
+      const names = bad.map(id => st.lines.find(l => l.item === id)?.sup?.name || id);
+      $$('[data-pl]', $('#pfLines')).forEach(el => el.classList.toggle('lost', bad.includes(st.lines[+el.dataset.pl]?.item)));
+      return toast(names.length ? `${t(read.error)} ${names.join(', ')}` : t(read.error));
+    }
     const y = P.readYield(st.yield, st.unit); if (y == null) return toast(t('pf_yieldBad'));
     const b = P.body({ id, name: st.name.trim() || id, unit: st.unit, category: st.category.trim(), lines: read.lines, yield: y, weightPerUnit: Number(st.weightPerUnit) || null });
     try {
@@ -147,10 +155,12 @@ function openPicker(all, st, then){
   const on = new Set(st.lines.map(l => l.item));
   sheet(`<p class="eyebrow" data-t="pf_lines"></p><h2 data-t="pf_pick"></h2>
     <div class="srch">${icon('search')}${ui.inputRow({ id: 'pkQ', type: 'search', label: key('search'), placeholder: key('search'), attrs: {} })}</div>
-    <div class="rows" id="pkList"></div>`, { name: 'prepPick' });
+    <div class="rows" id="pkList"></div><p class="hint" id="pkShown"></p>`, { name: 'prepPick' });
   const draw = () => {
-    const list = P.pickable(all, $('#pkQ').value, on, st.id.trim()).slice(0, 80);
+    // TZ 2026-10-16: every match is listed up to BOOK_MAX (it stopped at 80), with a hint past it.
+    const all2 = P.pickable(all, $('#pkQ').value, on, st.id.trim()), list = all2.slice(0, RL.BOOK_MAX);
     $('#pkList').innerHTML = list.map(s => `<button type="button" class="ui-row ui-row--action" data-pk="${esc(s.id)}"><span class="ui-row-lead">${icon(P.isPrep(s) ? PREP_ICON : 'meat')}</span><span class="ui-row-body"><span class="ui-row-title ui-row-title--strong">${esc(s.name)}</span><span class="ui-row-sub">${esc(`${s.category || ''} · ${s.unit}`)}</span></span></button>`).join('');
+    $('#pkShown').textContent = all2.length > list.length ? t('rc_shown').replace('{n}', list.length).replace('{total}', all2.length) : '';
   };
   draw();
   $('#pkQ').oninput = draw;

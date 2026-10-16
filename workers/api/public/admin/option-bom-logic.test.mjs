@@ -32,7 +32,7 @@ test('a dish without options says so', () => {
 test('a save sends positive quantities (up to 3 decimals, as text) and skips an empty row', () => {
   assert.deepEqual(collect([{ supply: 'salmon', qty: '20' }, { supply: '', qty: '' }]), { bom: [{ supply: 'salmon', qty: 20 }] });
   assert.deepEqual(collect([]), { bom: [] }, 'no line clears the recipe');
-  for (const bad of ['0', '0,000', '-1', '1.5555', 'x', '']) assert.deepEqual(collect([{ supply: 'salmon', qty: bad }]), { error: 'ob_badQty' }, bad);
+  for (const bad of ['0', '0,000', '-1', '1.5555', 'x', '']) assert.deepEqual(collect([{ supply: 'salmon', qty: bad }]), { error: 'ob_badQty', rows: [0] }, bad);
   // W-QTYHUB H5: half a sheet is a line, sent as its exact text.
   assert.deepEqual(collect([{ supply: 'nori', qty: '0,5' }, { supply: 'salmon', qty: '1.25' }]), { bom: [{ supply: 'nori', qty: '0.5' }, { supply: 'salmon', qty: '1.25' }] });
   assert.deepEqual(bodyOf('v1', 'xsalmon', [{ supply: 'salmon', qty: 20 }]), { location_id: 'v1', option: 'xsalmon', bom: [{ supply: 'salmon', qty: 20 }] });
@@ -45,4 +45,13 @@ test('the open sheet is the tapped dish, or the one dish with its title', () => 
   assert.equal(dishOf(products, null, 'Roll'), null, 'two dishes, one title, no tap: unknown');
   assert.equal(dishOf(products, 'a', 'Maki'), 'c', 'a stale tap does not override the title');
   assert.equal(dishOf(products, null, 'Nope'), null);
+});
+
+// TZ 2026-10-16 "no ingredient lost": a typed line is never dropped silently.
+test('a typed quantity with no ingredient is named (row), never dropped; kitchen forms are read', () => {
+  assert.deepEqual(collect([{ supply: '', qty: '20' }, { supply: 'salmon', qty: '20' }]), { error: 'ob_noSupply', rows: [0] });
+  assert.deepEqual(collect([{ supply: 'nori', qty: '0' }, { supply: 'salmon', qty: '' }]), { error: 'ob_badQty', rows: [0, 1] });
+  assert.deepEqual(collect([{ supply: 'nori', qty: '1/2' }, { supply: 'salmon', qty: '1,5 кг' }],
+    [{ id: 'nori', unit: 'unit' }, { id: 'salmon', unit: 'g' }]), { bom: [{ supply: 'nori', qty: '0.5' }, { supply: 'salmon', qty: 1500 }] });
+  assert.deepEqual(collect([{ supply: 'nori', qty: '1 кг' }], [{ id: 'nori', unit: 'unit' }]), { error: 'ob_badQty', rows: [0] }, 'a piece has no kilograms');
 });

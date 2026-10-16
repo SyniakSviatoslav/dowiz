@@ -74,3 +74,22 @@ test('unsavable: unreadable or 0 lines are named; a removed ghost line is not', 
 test('BOOK_MAX lets a kitchen-sized book be listed whole', () => {
   assert.ok(RL.BOOK_MAX >= 300);
 });
+
+// TZ 2026-10-16 OLD DATA: a stored line whose supply the stock book no longer has (deleted
+// before the review feature) is a GONE line: named by the save guard, never sent to the hub.
+test('OLD DATA: a gone line is named by the save guard and never silently sent', () => {
+  const draft = [
+    { supply: 'rice', name: 'Rice', milli: 120000 },
+    { supply: 'old', name: 'Old cheese', milli: 50000, gone: true },
+  ];
+  assert.deepEqual(RL.unsavable(draft).map(l => l.supply), ['old']);
+  assert.deepEqual(RL.unsavable([{ supply: 'old', name: 'Old', milli: 50000, gone: true, removed: true }]), [], 'a ghost with review is not a gone line');
+});
+
+test('OLD DATA: the review words exist in all four languages', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('./review-i18n.js', import.meta.url), 'utf8');
+  assert.equal((src.match(/rc_gone: '[^']*\{names\}[^']*'/g) || []).length, 4, 'rc_gone with {names} in en, uk, sq, ru');
+  assert.equal((src.match(/rc_notInStock: '[^']+'/g) || []).length, 4, 'the pill in four languages');
+  assert.match(src, /rc_gone: '\{names\}: no longer in stock — take the line out with x/);
+});
