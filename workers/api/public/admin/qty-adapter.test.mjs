@@ -28,3 +28,27 @@ test('showMilli / wireQty / toMilli: short decimals, integer when whole, exact r
   for (const s of ['0.1', '0.2', '0.3', '1.1', '99.999']) assert.equal(showMilli(parseMilli(s)), s);
   assert.equal(stepMilli(5000, -10000), 0); assert.equal(stepMilli(500, 10000), 10500);
 });
+
+// TZ 2026-10-16: "enter everything as is, no ingredient lost". The kitchen types units in
+// its own language and as fractions; each of these was parsed as nothing and the line it
+// sat on was dropped on save.
+test('parseMilli: Ukrainian/Russian/Albanian unit words, glued units and exact fractions', () => {
+  assert.equal(parseMilli('0,5 г'), 500, 'Cyrillic gram');
+  assert.equal(parseMilli('0,5г'), 500, 'glued Cyrillic gram');
+  assert.equal(parseMilli('1,5 кг'), 1500000);
+  assert.equal(parseMilli('1,5кг'), 1500000);
+  assert.equal(parseMilli('250 мл', 'ml'), 250000);
+  assert.equal(parseMilli('0,25 л', 'ml'), 250000);
+  assert.equal(parseMilli('2 гр'), 2000);
+  assert.equal(parseMilli('3 грамма'), 3000);
+  assert.equal(parseMilli('0.5 шт', 'unit'), 500, 'a piece word on a piece supply');
+  assert.equal(parseMilli('2 pcs', 'unit'), 2000);
+  assert.equal(parseMilli('1/2', 'unit'), 500, 'half a nori sheet');
+  assert.equal(parseMilli('½', 'unit'), 500);
+  assert.equal(parseMilli('1 1/2'), 1500);
+  assert.equal(parseMilli('¼ кг'), 250000);
+  assert.equal(parseMilli('3/8'), 375);
+  assert.equal(parseMilli('1/3'), null, 'not exact in thousandths: refused, never rounded');
+  assert.equal(parseMilli('2 кг', 'unit'), null, 'a piece still has no kilograms');
+  assert.equal(parseMilli('щіпка'), null, 'a word with no number stays refused');
+});

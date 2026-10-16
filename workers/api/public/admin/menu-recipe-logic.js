@@ -18,6 +18,16 @@ export function bookList(book, { q = '', kind = 'all', draft = [] } = {}){
     && !draft.some(l => l.supply === s.id));
 }
 
+/// TZ 2026-10-16 "no ingredient lost": the recipe lines a save would drop -- a quantity the
+/// owner typed that did not read (`bad`), or 0 / empty. A removed ingredient's ghost line is
+/// not one of them (taking it out is how the review badge goes).
+export function unsavable(draft){
+  return (draft || []).filter(l => !l.removed && (l.bad || !(l.milli > 0)));
+}
+
+/// How many matches the picker draws at once; past it a hint says how many more there are.
+export const BOOK_MAX = 500;
+
 /// A tick set: ids the owner ticked, whatever the search box shows now.
 export const picks = () => new Set();
 

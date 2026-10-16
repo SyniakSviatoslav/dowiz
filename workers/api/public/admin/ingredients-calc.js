@@ -16,12 +16,14 @@ export const CLEAN_MAX = PM, COOK_MAX = 5 * PM;
 /// How many base units a list price is per: 100 g/ml, or 1 piece.
 export const basisOf = unit => unit === 'unit' ? 1 : 100;
 
+import { canonQty } from './qty-adapter.js';
+
 const UNIT_SCALE = { g: 1, ml: 1, kg: 1000, l: 1000 };
 
 /// "1500", "1 500", "1,5 kg", "0.25 l" -> whole base units, or null.
 /// `unit` is the supply's base unit; kg/l scale only g/ml supplies.
 export function amount(raw, unit = 'g'){
-  const s = String(raw ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const s = canonQty(raw);
   if (!s) return null;
   const m = /^(-?\d+(?:[.,]\d+)?)\s*(kg|g|ml|l)?$/.exec(s.replace(/(\d) (?=\d{3}\b)/g, '$1'));
   if (!m) return null;
@@ -43,7 +45,7 @@ export function amount(raw, unit = 'g'){
 /// arithmetic on the digits, never a float. `amount()` above stays whole for
 /// what the shelf weighs whole: a price, a prep's board, a transfer.
 export function milli(raw, unit = 'g'){
-  const s = String(raw ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const s = canonQty(raw);
   if (!s) return null;
   const m = /^(-?\d+(?:[.,]\d+)?)\s*(kg|g|ml|l)?$/.exec(s.replace(/(\d) (?=\d{3}\b)/g, '$1'));
   if (!m) return null;
@@ -76,7 +78,7 @@ export function levelMilli(sup, key){
 /// unit is 'tooFine'; a kg/l on a piece is 'badUnit'; text is 'notANumber';
 /// empty is null. A fraction of a piece is a quantity (W-QTYHUB H3).
 export function whyNot(raw, unit = 'g'){
-  const s = String(raw ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const s = canonQty(raw);
   if (!s) return null;
   const m = /^(-?\d+(?:[.,]\d+)?)\s*(kg|g|ml|l)?$/.exec(s.replace(/(\d) (?=\d{3}\b)/g, '$1'));
   if (!m) return 'notANumber';

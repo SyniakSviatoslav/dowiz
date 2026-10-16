@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { bookList, picks, setPick, pickedOf, mergeSaved, starterMilli, withGhosts } from './menu-recipe-logic.js';
+import * as RL from './menu-recipe-logic.js';
 
 const BOOK = [{ id: 'tuna', name: 'Tuna', category: 'Fish', kind: 'food_ingredient' }, { id: 'nori', name: 'Nori', category: 'Dry', kind: 'food_ingredient' },
   { id: 'box', name: 'Box', category: '', kind: 'packaging' }, { id: 'salmon', name: 'Salmon', category: 'Fish', kind: 'food_ingredient' }];
@@ -56,4 +57,20 @@ test('TZ3 ghost: a deleted ingredient the hub dropped from the bom is drawn as a
   assert.deepEqual(withGhosts(bom, null), bom);
   assert.deepEqual(withGhosts([{ supply: 'nori', qty: 2, removed: true }], [{ supply: 'nori', name: 'Nori', qty: 2 }]).length, 1, 'a line already there is not doubled');
   assert.deepEqual(withGhosts([], [{ supply: 'nori', name: 'Nori', qty: 2 }, { supply: 'nori', name: 'Nori', qty: 2 }]).length, 1, 'one ghost per supply');
+});
+
+// TZ 2026-10-16 "no ingredient lost": the lines a save would drop are named, not dropped.
+test('unsavable: unreadable or 0 lines are named; a removed ghost line is not', () => {
+  const draft = [
+    { supply: 'rice', name: 'Rice', milli: 120000 },
+    { supply: 'nori', name: 'Nori', milli: 0 },
+    { supply: 'spice', name: 'Spice', milli: 500, bad: true, typed: '0.0005' },
+    { supply: 'gone', name: 'Gone', milli: 0, removed: true },
+  ];
+  assert.deepEqual(RL.unsavable(draft).map(l => l.supply), ['nori', 'spice']);
+  assert.deepEqual(RL.unsavable([{ supply: 'a', milli: 1 }]), []);
+});
+
+test('BOOK_MAX lets a kitchen-sized book be listed whole', () => {
+  assert.ok(RL.BOOK_MAX >= 300);
 });

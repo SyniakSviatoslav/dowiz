@@ -276,6 +276,12 @@ export async function openDish(id){
   $('#dSave').onclick = async () => {
     // Never "Saved" for a recipe change that cannot be sent (belt to bindRecipe's braces).
     if (recipeDirty && recipeKnown !== id) return toast(t('recipeUnread'));
+    // TZ 2026-10-16 "no ingredient lost": a line whose quantity is unreadable or 0 used to be
+    // left out of the save with "Saved". Now the save stops and names every such line.
+    if (recipeKnown === id) {
+      const lost = RL.unsavable(recipeDraft);
+      if (lost.length) { markLost(lost); return toast(t('rc_lineBad').replace('{names}', lost.map(l => l.name).join(', '))); }
+    }
     const avail = $('#d-avail').checked;
     // W-MR0: an undeclared dish is not put on sale where the hub refuses it; the console says why first.
     if (refusesSale(p, avail)) return toast(t('mf_needDeclare'));
@@ -441,6 +447,7 @@ function recipeMarkup(p){
       ${search('rcQ', '', 'recipe.search')}
       ${chips({ id: 'rcKinds', values: [{ value: 'all', key: 'all' }, ...Object.entries(KIND_ICON).map(([kd, ic]) => ({ value: kd, key: 'kind_' + kd, icon: ic }))], value: 'all', attr: 'rk', labelKey: 'kind', tour: 'recipe.kind' }).replace('class="chips"', 'class="chips filters"')}
       <div id="rcBook" class="rows">${loading()}</div>
+      <p class="hint" id="rcTicked" aria-live="polite"></p>
       <div class="btn-row">${btn({ id: 'rcAdd', icon: 'plus', key: 'addSelected', tour: 'recipe.addLine' })}</div>
     </details>
     <div id="rcSum" class="rc-sum"></div>
@@ -490,14 +497,25 @@ function drawRecipe(p){
   for (const inp of $$('[data-rq]', host)) {
     const i = +inp.dataset.rq;
     const read = () => { const s = String(inp.value ?? '').trim(); return s ? parseMilli(s, recipeDraft[i]?.unit || 'g') : 0; };
-    inp.oninput = () => { const m = read(); if (m != null) { const l = recipeDraft[i]; edit(i, m, l.net ?? null, l.out ?? null); } };
-    inp.onchange = () => { if (read() == null) toast(t('required')); };
+    // An unreadable entry is KEPT as typed on the line (`bad`), never silently replaced by 0.
+    inp.oninput = () => { const m = read(), l = recipeDraft[i]; if (!l) return; if (m != null) edit(i, m, l.net ?? null, l.out ?? null); else { recipeDraft[i] = { ...l, bad: true, typed: inp.value }; recipeDirty = true; } markLost(RL.unsavable(recipeDraft), false); };
+    inp.onchange = () => { if (read() == null) toast(t('rc_qtyUnreadable')); };
   }
 }
 /// One line's small print: nutrition, cost, loss. A ghost line says "removed".
 function lineMeta(l){
   if (l.removed) return pill('bad', { key: 'rv_removed' });
   return `${l.kcal != null ? `${Math.round(l.kcal)} kcal` : isFoodKind(l.kind) ? pill('warn', { key: 'noData' }) : ''}${l.cost != null ? ` · ${money(l.cost)}` : ''}${l.w?.gross ? ` · ${esc(t('inv_loss'))} ${IC.pct(IC.lossPm(l.w))}` : ''}`;
+}
+/// Outline the lines a save would lose; `focus` puts the cursor in the first one.
+function markLost(lost, focus = true){
+  const host = $('#rcLines'); if (!host) return;
+  const bad = new Set(lost.map(l => l.supply));
+  for (const inp of $$('[data-rq]', host)) {
+    const l = recipeDraft[+inp.dataset.rq];
+    inp.closest('.rc-line')?.classList.toggle('lost', !!l && bad.has(l.supply));
+  }
+  if (focus) $$('[data-rq]', host).find(inp => bad.has(recipeDraft[+inp.dataset.rq]?.supply))?.focus();
 }
 /// Repaint one line's numbers, never its controls.
 function paintLine(i){
@@ -556,9 +574,15 @@ async function bindRecipe(p){
   const picked = RL.picks();
   const drawBook = () => {
     const list = RL.bookList(book, { q: $('#rcQ')?.value, kind, draft: recipeDraft });
-    $('#rcBook').innerHTML = list.length ? list.slice(0, 60).map(s => check({ cls: 'pick', data: { rs: s.id }, tour: 'recipe.pick', checked: picked.has(s.id),
-      label: `${s.name} · ${s.category || ''} · ${s.unit}${isFoodKind(s.kind) && s.kcalPer100 == null ? ` · ${t('noData')}` : ''}` })).join('') : `<p class="hint" data-t="${book.length ? 'none' : 'noStock'}"></p>`;
-    for (const cb of $$('[data-rs]', $('#rcBook'))) cb.onchange = () => RL.setPick(picked, cb.dataset.rs, cb.checked);
+    // TZ 2026-10-16: every match is listed (the list stopped at 60, so a kitchen with 165
+    // ingredients could not see -- or tick -- the rest without guessing a search).
+    const shown = list.slice(0, RL.BOOK_MAX);
+    $('#rcBook').innerHTML = list.length ? shown.map(s => check({ cls: 'pick', data: { rs: s.id }, tour: 'recipe.pick', checked: picked.has(s.id),
+      label: `${s.name} · ${s.category || ''} · ${s.unit}${isFoodKind(s.kind) && s.kcalPer100 == null ? ` · ${t('noData')}` : ''}` })).join('')
+      + (list.length > shown.length ? `<p class="hint">${esc(t('rc_shown').replace('{n}', shown.length).replace('{total}', list.length))}</p>` : '') : `<p class="hint" data-t="${book.length ? 'none' : 'noStock'}"></p>`;
+    const ticked = () => { const n = RL.pickedOf(book, picked, recipeDraft).length; const box = $('#rcTicked'); if (box) box.textContent = n ? t('rc_ticked').replace('{n}', n) : ''; };
+    for (const cb of $$('[data-rs]', $('#rcBook'))) cb.onchange = () => { RL.setPick(picked, cb.dataset.rs, cb.checked); ticked(); };
+    ticked();
     retranslate($('#rcBook'));
   };
   $('#rcQ').oninput = drawBook;

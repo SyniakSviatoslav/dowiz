@@ -110,15 +110,22 @@ test('twin: a save that changed nothing sends the stored recipe as it was, and n
   assert.equal('name' in b, false, 'an unchanged name is not sent');
 });
 
-test('a qty typed as 0 removes the line on save, without redrawing under the finger', async () => {
+// TZ 2026-10-16 ("enter everything as is, no ingredient lost"): a line typed down to 0 is no
+// longer dropped by the save with "Saved". The save stops, names the line, and the x takes it out.
+test('a qty typed as 0 stops the save and names the line; the x takes it out', async () => {
   const { box, f } = page(BASE);
   await M.openDish('d1'); await tick();
   const qty = box.querySelector('[data-rq="1"]');
   const save = box.querySelector('#dSave');
   qty.value = '0'; qty.oninput?.(); qty.onchange?.();
-  assert.ok(box.querySelectorAll('button').includes(save));
+  assert.ok(box.querySelectorAll('button').includes(save), 'typing did not redraw under the finger');
   await save.onclick(); await tick();
-  assert.deepEqual(bomOf(saved(f, 'd1')[0]), [['tuna', 80]]);
+  assert.equal(saved(f, 'd1').length, 0, 'nothing was sent: the line would have been lost');
+  assert.ok(f.toast.some(m => /rc_lineBad|Not saved|quantity/i.test(String(m))), 'the owner is told which line');
+  assert.ok(qty.closest('.rc-line')?.classList.contains('lost'), 'and the line is outlined');
+  box.querySelector('[data-rx="1"]').onclick(); await tick();
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.deepEqual(bomOf(saved(f, 'd1')[0]), [['tuna', 80]], 'taken out with x, the save goes');
 });
 
 test('a recipe read that answers LATE, for a dish whose sheet is already gone, does not take over the next dish', async () => {
@@ -365,6 +372,10 @@ test('TZ1 twin: a whole quantity still goes as the integer it always was; a 4th 
   q0.value = '70'; q0.oninput?.();
   q0.value = '0.0005'; q0.oninput?.(); q0.onchange?.();
   assert.ok(f.toast.length >= 1, 'a 4th decimal is said no to');
+  // TZ 2026-10-16: the unreadable entry stops the save instead of quietly sending the old 70.
+  await box.querySelector('#dSave').onclick(); await tick();
+  assert.equal(saved(f, 'd1').length, 0, 'an unreadable quantity is not saved as something else');
+  q0.value = '70'; q0.oninput?.();
   await box.querySelector('#dSave').onclick(); await tick();
   assert.deepEqual(bomOf(saved(f, 'd1')[0]), [['tuna', 70], ['rice', 120]]);
 });

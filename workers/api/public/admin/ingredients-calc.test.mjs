@@ -99,3 +99,16 @@ test('W-QTYHUB H3: a delivery, write-off or count keeps its fraction -- milli-un
   assert.equal(C.levelMilli({ onHand: 3 }, 'onHand'), 3000, 'an older answer still reads');
   assert.equal(C.levelMilli({}, 'available'), 0);
 });
+
+// TZ 2026-10-16: deliveries, write-offs and counts read the kitchen's own unit words too.
+test('milli/amount/whyNot: Cyrillic and glued units, fractions, negatives', () => {
+  assert.equal(C.milli('0,5 г'), 500);
+  assert.equal(C.milli('0,5г'), 500);
+  assert.equal(C.milli('1,5 кг'), 1500000);
+  assert.equal(C.milli('½', 'unit'), 500);
+  assert.equal(C.milli('-0,5 г'), -500, 'a negative count correction keeps its sign');
+  assert.equal(C.amount('1,5 кг'), 1500);
+  assert.equal(C.amount('2 шт', 'unit'), 2);
+  assert.equal(C.whyNot('0,5 г'), null);
+  assert.equal(C.whyNot('щіпка'), 'notANumber');
+});
