@@ -4,6 +4,7 @@
 #   2. a secret the workflows read, unnamed in the docs  -> must refuse
 #   3. a run step naming a script that is not there      -> must refuse
 #   4. a workflow that does not parse                    -> must refuse
+#   5. a job-level env reading `runner`                   -> must refuse
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
@@ -28,5 +29,6 @@ copy; want 0 clean
 copy; sed -i 's/`WALK_LOC`/`WALK_L0C`/' "$R/docs/operations.md"; want 1 "undocumented secret"
 copy; sed -i 's#tools/live-checks/health.sh#tools/live-checks/health-gone.sh#' "$R/.github/workflows/health-cron.yml"; want 1 "missing script"
 copy; printf 'on: [push]\njobs:\n  x: [\n' > "$R/.github/workflows/zz-broken.yml"; want 1 "unparseable workflow"
-[ "$fail" -eq 0 ] && echo "ci-refs.prove: GREEN -- 4 of 4 cases" || echo "ci-refs.prove: RED"
+copy; sed -i "s#^      QA_HUB_PORT: '8787'#      QA_HUB_PORT: '8787'\n      QA_HUB_WORK: \${{ runner.temp }}/qa-hub#" "$R/.github/workflows/qa-nightly.yml"; want 1 "job env reads runner"
+[ "$fail" -eq 0 ] && echo "ci-refs.prove: GREEN -- 5 of 5 cases" || echo "ci-refs.prove: RED"
 exit "$fail"

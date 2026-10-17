@@ -10,7 +10,11 @@ this gate refuses:
      relative to the repo root, the step's `working-directory`, or a directory the step `cd`s into;
   3. every `secrets.X` and `vars.X` a workflow reads is NAMED in docs/operations.md, so the owner
      knows what to set -- a workflow whose secret nobody wrote down is a job that goes red, or
-     worse skips, on the first run after someone else set up the repository.
+     worse skips, on the first run after someone else set up the repository;
+  4. an `env:` at workflow or job level reads only the contexts GitHub offers THERE (github, needs,
+     strategy, matrix, vars, secrets, inputs). `${{ runner.temp }}` in a job's env made GitHub refuse
+     the whole qa-nightly file -- 0 jobs, a red run named after the file (891d7326, 2026-10-17) --
+     while the YAML parsed and every other rule here was green.
 
 Skipped on purpose, and printed: URLs, `$VAR`/`${{ }}` paths, globs, and paths inside a heredoc
 that the step writes itself. Exit 0 green, 1 red (each finding named), 3 when there is nothing
@@ -33,6 +37,9 @@ WF = os.path.join(ROOT, ".github", "workflows")
 DOC = os.path.join(ROOT, "docs", "operations.md")
 PATH_RE = re.compile(r"(?<![\w$/.:-])((?:\.claude/|\.github/)?[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:sh|py|mjs|cjs|js|toml))\b")
 SECRET_RE = re.compile(r"\b(secrets|vars)\.([A-Z][A-Z0-9_]*)")
+EXPR_RE = re.compile(r"\$\{\{(.*?)\}\}", re.S)
+CTX_RE = re.compile(r"(?<![\w.'\"])([a-z_]+)\s*(?:\.|\[)")
+LEVEL_CTX = {"github", "needs", "strategy", "matrix", "vars", "secrets", "inputs"}
 CD_RE = re.compile(r"(?:^|[;&|(]\s*|\n\s*)cd\s+([A-Za-z0-9_./-]+)")
 
 
@@ -42,6 +49,19 @@ def steps(doc):
         for st in job.get("steps") or []:
             if isinstance(st, dict) and isinstance(st.get("run"), str):
                 yield st["run"], st.get("working-directory") or default
+
+
+def level_env_misuse(doc):
+    """(where, context) for each expression in a workflow- or job-level env that reads a context
+    GitHub does not offer at that level."""
+    envs = [("env", doc.get("env"))] + [(f"jobs.{k}.env", (j or {}).get("env")) for k, j in (doc.get("jobs") or {}).items() if isinstance(j, dict)]
+    for where, env in envs:
+        for key, val in (env or {}).items() if isinstance(env, dict) else []:
+            for expr in EXPR_RE.findall(str(val)):
+                # A quoted literal (a fallback URL) names no context.
+                for ctx in CTX_RE.findall(re.sub(r"'[^']*'", "''", expr)):
+                    if ctx not in LEVEL_CTX:
+                        yield f"{where}.{key}", ctx
 
 
 def heredoc_free(script):
@@ -79,6 +99,8 @@ def main():
         if not isinstance(y, dict) or "jobs" not in y or not ({"on", True} & set(y)):
             bad.append(f"{f}: no `on:` or no `jobs:`")
             continue
+        for where, ctx in level_env_misuse(y):
+            bad.append(f"{f}: {where} reads `{ctx}`, a context GitHub does not offer at that level (move it to a step's env)")
         for kind, name in SECRET_RE.findall(text):
             names.add((kind, name, f))
         for script, wd in steps(y):

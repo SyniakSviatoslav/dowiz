@@ -54,8 +54,8 @@ jobs:
     env:
       QA_HUB_NO_SLOT: '1'
       QA_HUB_PORT: '8787'
-      QA_HUB_WORK: ${{ runner.temp }}/qa-hub
-      QA_HUB_LOG: ${{ runner.temp }}/archived.log
+      # QA_HUB_WORK / QA_HUB_LOG are set per STEP: the `runner` context does not exist at job level, and a
+      # job-level runner.temp expression made GitHub refuse the whole file (0 jobs, 891d7326).
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -69,9 +69,14 @@ jobs:
         with:
           workspaces: workers/api
       - name: local QA hub and the archived-order check
+        env:
+          QA_HUB_WORK: ${{ runner.temp }}/qa-hub
+          QA_HUB_LOG: ${{ runner.temp }}/archived.log
         run: bash tools/ci/local-qa-hub.sh
       - name: summary
         if: always()
+        env:
+          QA_HUB_LOG: ${{ runner.temp }}/archived.log
         run: |
           { echo '### QA nightly: archived order (local qa-durres hub)'; echo; echo '```'; cat "$QA_HUB_LOG" 2>/dev/null || echo '(no output: the local hub did not get as far as the check)'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: keep the logs
