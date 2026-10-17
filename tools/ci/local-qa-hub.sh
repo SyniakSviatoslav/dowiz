@@ -41,6 +41,9 @@ WPID=
 DEV_VARS=$API/.dev.vars
 
 say() { echo "== $* ($(( $(date +%s) - T0 )) s)"; }
+# On a runner the job log needs a token to read; an annotation does not. Each failure carries the
+# last lines of the log that explains it (%0A is a newline inside an annotation).
+annotate() { [ -n "${GITHUB_ACTIONS:-}" ] || return 0; echo "::error title=qa-hub $1::$(tail -25 "$2" 2>/dev/null | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')"; }
 die() { echo "qa-hub: FAIL $*"; exit "${RC:-1}"; }
 
 cleanup() {
@@ -75,7 +78,7 @@ else
   bash "$ROOT/bebop-lang/tools/slot.sh" qa-hub-build bash -c "$BUILD" _ "$API" > "$WORK/build.log" 2>&1
 fi
 rc=$?; tail -3 "$WORK/build.log"
-[ $rc -eq 0 ] || { RC=$rc; die "build rc=$rc (log $WORK/build.log)"; }
+[ $rc -eq 0 ] || { RC=$rc; annotate build "$WORK/build.log"; die "build rc=$rc (log $WORK/build.log)"; }
 
 # ── 2 SECRETS ──────────────────────────────────────────────────────────────
 say "2 generate per-run secrets"
@@ -97,7 +100,7 @@ say "3 wrangler dev --local on $HOST"
 WPID=$!
 # One curl process does the waiting (--retry), so no shell loop is needed. The first start includes wrangler's own build step.
 curl -fsS --retry 150 --retry-delay 2 --retry-all-errors --max-time 10 "$HOST/api/version" -o "$WORK/version.json" \
-  || { RC=3; tail -20 "$WORK/wrangler.log"; die "wrangler did not answer /api/version (log $WORK/wrangler.log)"; }
+  || { RC=3; tail -20 "$WORK/wrangler.log"; annotate wrangler "$WORK/wrangler.log"; die "wrangler did not answer /api/version (log $WORK/wrangler.log)"; }
 echo "   version: $(head -c 200 "$WORK/version.json")"
 
 # ── 4 SEED ─────────────────────────────────────────────────────────────────
@@ -105,7 +108,7 @@ say "4 seed qa-durres (bootstrap, owner, one dish on sale)"
 QA_HUB_HOST=$HOST BOOTSTRAP_SECRET=$BOOTSTRAP_SECRET OWNER_EMAIL=$OWNER_EMAIL OWNER_PASSWORD=$OWNER_PASSWORD \
   node "$ROOT/tools/ci/qa-hub-seed.mjs" > "$WORK/seed.log" 2>&1; rc=$?
 cat "$WORK/seed.log"
-[ $rc -eq 0 ] || { RC=$rc; die "seed rc=$rc"; }
+[ $rc -eq 0 ] || { RC=$rc; annotate seed "$WORK/seed.log"; annotate wrangler "$WORK/wrangler.log"; die "seed rc=$rc"; }
 
 # ── 5 CHECK ────────────────────────────────────────────────────────────────
 say "5 archived-order check against $HOST (FLOWS_LOC=qa-durres)"
@@ -114,6 +117,7 @@ say "5 archived-order check against $HOST (FLOWS_LOC=qa-durres)"
     node e2e/archive/archived-order.mjs ) 2>&1 | tee "$LOG"
 rc=${PIPESTATUS[0]}
 echo "archived-order exit=$rc"
+[ "$rc" -eq 0 ] || { annotate archived-order "$LOG"; annotate wrangler "$WORK/wrangler.log"; }
 say "done"
 RC=$rc
 exit "$rc"
