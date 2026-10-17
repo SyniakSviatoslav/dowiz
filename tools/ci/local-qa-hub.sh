@@ -86,7 +86,9 @@ if [ -e "$DEV_VARS" ]; then RC=2; die "$DEV_VARS already exists: refusing to ove
 BOOTSTRAP_SECRET=$(openssl rand -hex 32)
 OWNER_EMAIL=qa-owner@qa-durres.invalid
 OWNER_PASSWORD=$(openssl rand -hex 16)
-( umask 077; printf 'BOOTSTRAP_SECRET=%s\n' "$BOOTSTRAP_SECRET" > "$DEV_VARS" ) && DEV_VARS_MADE=1 || { RC=2; die "writing $DEV_VARS"; }
+# JWT_SECRET (>= 32 bytes) and AUTH_SIGNING_KEY: without them every login answers 503 "auth misconfigured"
+# (the first runner run, a7f7ed30, stopped exactly there).
+( umask 077; printf 'BOOTSTRAP_SECRET=%s\nJWT_SECRET=%s\nAUTH_SIGNING_KEY=%s\n' "$BOOTSTRAP_SECRET" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > "$DEV_VARS" ) && DEV_VARS_MADE=1 || { RC=2; die "writing $DEV_VARS"; }
 chmod 600 "$DEV_VARS"
 OWNER_FILE=$WORK/qa_owner
 ( umask 077
