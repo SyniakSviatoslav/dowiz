@@ -117,7 +117,7 @@ export function openSupply(sup, ctx, preset = {}){
     if (isFood(k)) { for (const [f, kk] of [['s-kcal', 'kcalPer100'], ['s-prot', 'proteinPer100'], ['s-fat', 'fatPer100'], ['s-carb', 'carbsPer100']]) { const v = num($('#' + f).value); if (v != null) body[kk] = v; } body.nutritionConfirmed = $('#s-conf').checked; body.nutritionBasis = nb; }
     const cost = num($('#s-cost').value); if (cost != null) body.costPerBasis = Math.round(cost);
     const wpu = num($('#s-wpu').value); if (wpu != null) body.weightPerUnit = wpu;
-    for (const [f, kk] of [['s-clean', 'cleanPm'], ['s-cook', 'cookPm']]) { const raw = $('#' + f).value.trim(); if (!raw) continue; const pm = C.pmOfPct(raw); if (pm == null) return void toast(t('required')); body[kk] = pm; }
+    for (const [f, kk] of [['s-clean', 'cleanPm'], ['s-cook', 'cookPm']]) { const pm = C.lossOfField($('#' + f).value, sup?.[kk]); if (pm === undefined) continue; if (pm == null) return void toast(t('required')); body[kk] = pm; }
     const shelf = num($('#s-shelf').value); if (shelf != null) body.shelfDays = Math.round(shelf);
     body.code = $('#s-code').value.trim(); body.barcode = $('#s-bar').value.trim();
     const pk = readPacks(body.unit); if (pk.error) return void toast(t(pk.error)); body.packs = pk.packs;

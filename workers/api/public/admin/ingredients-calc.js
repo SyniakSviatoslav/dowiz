@@ -98,6 +98,16 @@ export function pmOfPct(raw){
 export const scale = (x, pm) => Math.floor((x * pm + PM / 2) / PM);
 
 /// A supply's per-mille default, or 1000 when absent or out of range.
+/// What a loss field saves (per mille), or `undefined` to send nothing. An
+/// EMPTY field means "none lost": when the card had a loss, it is cleared to
+/// PM, because an absent key keeps the stored value (`supplies::record`) and a
+/// loss once typed could never be taken off. `null` = not a number. PURE.
+export function lossOfField(raw, prev){
+  const s = String(raw ?? '').trim();
+  if (!s) return Number.isInteger(prev) && prev !== PM ? PM : undefined;
+  return pmOfPct(s);
+}
+
 export function pmOf(sup, key, max){
   const v = sup?.[key];
   return Number.isInteger(v) && v >= 1 && v <= max ? v : PM;

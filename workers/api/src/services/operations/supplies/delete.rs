@@ -239,7 +239,11 @@ pub async fn delete_supplies(mut req: Request, ctx: RouteContext<crate::Req>) ->
         let r = match delete_in(cat, &wanted, confirmed) {
             Ok(r) => r,
             Err(Held::InUse(used)) => return Err(Error::RustError(format!("in-use: {used}"))),
-            Err(Held::Emptied(ids)) => return Err(Error::RustError(format!("emptied: {}", json!(ids)))),
+            Err(Held::Emptied(ids)) => {
+                // Named, so the console can say WHICH card in the owner's language.
+                let named: Vec<Value> = ids.iter().map(|id| json!({ "id": id, "name": cat.supply(id).and_then(|j| serde_json::from_str::<Value>(&j).ok()).and_then(|v| v.get("name").cloned()).unwrap_or(json!(id)) })).collect();
+                return Err(Error::RustError(format!("emptied: {}", json!(named))));
+            }
         };
         if !r.dishes.is_empty() {
             crate::services::catalogue::import::bump_menu_version(cat);
@@ -253,12 +257,12 @@ pub async fn delete_supplies(mut req: Request, ctx: RouteContext<crate::Req>) ->
             let said = e.to_string();
             if let Some((_, used)) = said.split_once("in-use: ") {
                 let uses: Value = serde_json::from_str(used).unwrap_or(Value::Null);
-                return Ok(Response::from_json(&json!({ "error": "in use", "uses": uses }))?.with_status(409));
+                return Ok(Response::from_json(&json!({ "error": "in use", "code": "in_use", "uses": uses }))?.with_status(409));
             }
             if let Some((_, ids)) = said.split_once("emptied: ") {
                 let emptied: Value = serde_json::from_str(ids).unwrap_or(Value::Null);
                 let why = "a semi-finished product would be left with no lines: delete it too, or give its card another line first";
-                return Ok(Response::from_json(&json!({ "error": why, "emptied": emptied }))?.with_status(409));
+                return Ok(Response::from_json(&json!({ "error": why, "code": "prep_emptied", "emptied": emptied }))?.with_status(409));
             }
             return Err(e);
         }

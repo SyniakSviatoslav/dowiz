@@ -1,26 +1,43 @@
 name: QA nightly
 
-# THE ARCHIVED-ORDER CHECK (e2e/archive/archived-order.mjs), NIGHTLY, ON THE QA HUB ONLY.
+# THE ARCHIVED-ORDER CHECK (e2e/archive/archived-order.mjs), NIGHTLY, AGAINST A LOCAL qa-durres HUB.
 #
-# It WRITES on qa-durres: a 20 % rate and pickup for the run (put back in `finally`), one TEST
-# pickup order walked to PICKED_UP, and a rotation AS OF now + 31 days, which moves every finished
-# order of the QA hub into an archive. Then: the receipt is read from the archive (200, names the
-# dish), a refund is refused by name (409) and writes nothing, an unknown id is still 404.
-# Not in the per-deploy flows gate on purpose: the rotation empties the QA hub's finished history.
+# NO REPOSITORY SECRETS. The job builds the Worker from this commit and runs it under `wrangler dev --local`
+# (workerd on the runner: no Cloudflare account, no token, nothing leaves the runner). tools/ci/local-qa-hub.sh
+# does the whole thing, and runs identically on the development box:
+#   1. build the Worker (worker-build --release, the repo's pinned rustc 1.96.1, wasm32);
+#   2. generate a RANDOM BOOTSTRAP_SECRET and a random owner password for this run only, written to
+#      workers/api/.dev.vars (wrangler's local secrets file, deleted on exit) and a 0600 owner file. Never committed;
+#   3. `wrangler dev --local` on 127.0.0.1, fresh state each run;
+#   4. seed the venue qa-durres, its first owner (POST /api/bootstrap, with the random secret) and one dish on sale
+#      (tools/ci/qa-hub-seed.mjs);
+#   5. run e2e/archive/archived-order.mjs unchanged, with FLOWS_HOST=http://127.0.0.1:<port> and FLOWS_LOC=qa-durres.
 #
-# THE HOST IS THE WORKER'S workers.dev NAME. Bot Fight Mode challenges GitHub's runners on
-# *.dowiz.org (memory: bot-fight-mode-blinds-github-probes); workers.dev is outside that zone, and
-# FLOWS_LOC names the venue the host cannot.
+# WHAT THE CHECK PROVES, ON THE LOCAL HUB. The rotation moves every finished order of qa-durres into the archive.
+# Then the receipt is read from the archive (200, names the dish), a refund is refused by name (409) and writes
+# nothing, and an unknown id is still 404. The settings it touches (tax rate, pickup) are put back in `finally`.
 #
-# A MISSING SECRET IS RED, NOT A SKIP. key-flows.yml skipped green for every run it ever had
-# because WALK_HOST was never set; this job fails and says which secret is missing.
+# WHY LOCAL, NOT THE QA HUB. The check used to run against qa-durres.dowiz.org with the owner's login in repository
+# secrets, and failed on the missing secrets. The operator will not set them, and a skip is not a pass, so the
+# check now owns its own hub for the length of one run. The live QA hub is not written by this job.
 #
-# Secrets (shared with key-flows): WALK_OWNER_EMAIL, WALK_OWNER_PASSWORD -- the QA venue's owner.
+# RED IS RED. A failing build, a Worker that does not answer, a seed that cannot sign in, or a failing assertion
+# each fail the job, and the summary shows the log. Nothing here skips.
+#
+# FAILURE MODES THIS DOES NOT COVER. Live-only behaviour (Cloudflare's own routing, the custom domain, the
+# workers.dev edge cache, R2 and KV as they run in production) is checked by the live probes, not by this job.
 
 on:
   schedule:
     - cron: '47 3 * * *'
   workflow_dispatch:
+  # A change to this job or its scripts proves itself on a runner at once (the box cannot run workerd).
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/qa-nightly.yml
+      - tools/ci/**
+      - e2e/archive/**
 
 permissions:
   contents: read
@@ -32,36 +49,38 @@ concurrency:
 jobs:
   archived-order:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # A cold worker-build plus `cargo install worker-build` plus wrangler's install and the check itself.
+    timeout-minutes: 60
     env:
-      FLOWS_HOST: https://dowiz-api.sviatoslavsyniak.workers.dev
-      FLOWS_LOC: qa-durres
+      QA_HUB_NO_SLOT: '1'
+      QA_HUB_PORT: '8787'
+      QA_HUB_WORK: ${{ runner.temp }}/qa-hub
+      QA_HUB_LOG: ${{ runner.temp }}/archived.log
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
-      - name: credentials file
-        env:
-          OWNER_EMAIL: ${{ secrets.WALK_OWNER_EMAIL }}
-          OWNER_PASSWORD: ${{ secrets.WALK_OWNER_PASSWORD }}
-        run: |
-          if [ -z "$OWNER_EMAIL" ] || [ -z "$OWNER_PASSWORD" ]; then
-            echo "::error title=QA nightly cannot run::WALK_OWNER_EMAIL / WALK_OWNER_PASSWORD are not set (repository settings -> Secrets and variables -> Actions). They are the qa-durres owner's login."
-            exit 1
-          fi
-          umask 077
-          f="$RUNNER_TEMP/qa_owner"
-          echo "DOWIZ_OWNER_FILE=$f" >> "$GITHUB_ENV"
-          {
-            echo "export OWNER_EMAIL='$OWNER_EMAIL'"
-            echo "export OWNER_PASSWORD='$OWNER_PASSWORD'"
-          } > "$f"
-      - name: archived order (receipt from the archive, refund refused by name)
-        run: |
-          set -o pipefail
-          node e2e/archive/archived-order.mjs | tee archived.log
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: workers/api
+      - name: local QA hub and the archived-order check
+        run: bash tools/ci/local-qa-hub.sh
       - name: summary
         if: always()
         run: |
-          { echo '### QA nightly: archived order'; echo; echo '```'; cat archived.log 2>/dev/null || echo '(no output)'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '### QA nightly: archived order (local qa-durres hub)'; echo; echo '```'; cat "$QA_HUB_LOG" 2>/dev/null || echo '(no output: the local hub did not get as far as the check)'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: keep the logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qa-nightly-logs
+          path: |
+            ${{ runner.temp }}/qa-hub/*.log
+            ${{ runner.temp }}/archived.log
+          if-no-files-found: ignore
+          retention-days: 14

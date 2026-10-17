@@ -10,6 +10,7 @@ import { T } from '/admin/i18n.js';
 
 export const WORDS = {
   sq: {
+    nom_prepEmptied: 'Një gjysmëprodukt do të mbetej pa asnjë përbërës: fshijeni edhe atë, ose shtojini kartës një rresht tjetër më parë',
     nom_review: 'Receta kërkon rishikim',
     nom_addMany: 'Shto disa', nom_addManyHint: 'Një përbërës për rresht. Njësia dhe grupi më poshtë vlejnë për çdo rresht; një rresht mund tʼi ndryshojë: «Salmon; kg; Peshk».',
     nom_lines: 'Përbërësit, një për rresht', nom_unitAll: 'Njësia', nom_groupAll: 'Grupi', nom_kindAll: 'Lloji',
@@ -29,6 +30,7 @@ export const WORDS = {
     inv_mv_removed: 'fshirë',
   },
   en: {
+    nom_prepEmptied: 'A semi-finished product would be left with no lines: delete it too, or give its card another line first',
     nom_review: 'Recipe needs review',
     nom_addMany: 'Add several', nom_addManyHint: 'One ingredient per line. The unit and group below apply to every line; a line may change them: “Salmon; kg; Fish”.',
     nom_lines: 'Ingredients, one per line', nom_unitAll: 'Unit', nom_groupAll: 'Group', nom_kindAll: 'Kind',
@@ -48,6 +50,7 @@ export const WORDS = {
     inv_mv_removed: 'deleted',
   },
   uk: {
+    nom_prepEmptied: 'Напівфабрикат лишився б без жодного рядка: видаліть і його або спершу додайте в його техкарту інший рядок',
     nom_review: 'Потрібен перегляд рецептури',
     nom_addMany: 'Додати кілька', nom_addManyHint: 'Один інгредієнт на рядок. Одиниця й група нижче діють на кожен рядок; рядок може їх змінити: «Лосось; кг; Риба».',
     nom_lines: 'Інгредієнти, по одному на рядок', nom_unitAll: 'Одиниця', nom_groupAll: 'Група', nom_kindAll: 'Тип',
@@ -67,6 +70,7 @@ export const WORDS = {
     inv_mv_removed: 'видалено',
   },
   ru: {
+    nom_prepEmptied: 'Полуфабрикат остался бы без единой строки: удалите и его или сначала добавьте в его техкарту другую строку',
     nom_review: 'Требуется пересмотр рецептуры',
     nom_addMany: 'Добавить несколько', nom_addManyHint: 'Один ингредиент на строку. Единица и группа ниже действуют на каждую строку; строка может их изменить: «Лосось; кг; Рыба».',
     nom_lines: 'Ингредиенты, по одному на строку', nom_unitAll: 'Единица', nom_groupAll: 'Группа', nom_kindAll: 'Тип',

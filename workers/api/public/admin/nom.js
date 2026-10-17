@@ -25,7 +25,7 @@ export { pickRow, packsMarkup, packChips };
 export const barMarkup = sel => bar(sel, t);
 
 export { N };
-const fail = e => toast(String(e.message || e));
+const fail = e => toast(N.refusedLine(e, t));
 
 /// The styles of the bar and the pack rows, once.
 export function ensureNomCss(){

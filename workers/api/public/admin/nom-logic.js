@@ -108,3 +108,14 @@ export function deletedLine(r, t){
   if ((r?.review || []).length) parts.push(`${t('nom_review')}: ${r.review.map(x => x.name || x.id).join(', ')}`);
   return parts.join(' · ');
 }
+
+/// A refused deletion in the reader's language (the hub's words are English):
+/// `prep_emptied` names each semi-finished product that would be left with no
+/// line. Anything else keeps the hub's message. PURE.
+export function refusedLine(e, t){
+  if (e?.code === 'prep_emptied') {
+    const names = (e.body?.emptied || []).map(x => (x && x.name) || x).join(', ');
+    return `${t('nom_prepEmptied')}${names ? `: ${names}` : ''}`;
+  }
+  return String((e && e.message) || e);
+}

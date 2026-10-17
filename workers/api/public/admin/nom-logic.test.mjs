@@ -87,3 +87,11 @@ test('W-QTY: the delete toast names the dishes marked for review', () => {
   const r = { deleted: ['nori'], dishes: ['roll', 'maki'], review: [{ id: 'roll', name: 'Roll', removed: [{ supply: 'nori', name: 'Nori' }] }, { id: 'rice-pf', name: 'Sushi rice', prep: true, removed: [] }] };
   assert.equal(N.deletedLine(r, t), '[nom_deleted]: 1 · [nom_recipesChanged]: 2 · [nom_review]: Roll, Sushi rice');
 });
+
+test('a refused deletion names the emptied semi-finished product in the reader language', () => {
+  // qa-durres 2026-10-17: the owner was shown the hub's English sentence.
+  const t = k => ({ nom_prepEmptied: 'Напівфабрикат лишився б без жодного рядка' })[k] || k;
+  const e = Object.assign(new Error('a semi-finished product would be left with no lines'), { status: 409, code: 'prep_emptied', body: { emptied: [{ id: 'соус-1', name: 'Соус тест' }] } });
+  assert.equal(N.refusedLine(e, t), 'Напівфабрикат лишився б без жодного рядка: Соус тест');
+  assert.equal(N.refusedLine(new Error('HTTP 500'), t), 'HTTP 500');
+});

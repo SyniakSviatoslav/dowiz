@@ -112,3 +112,13 @@ test('milli/amount/whyNot: Cyrillic and glued units, fractions, negatives', () =
   assert.equal(C.whyNot('0,5 г'), null);
   assert.equal(C.whyNot('щіпка'), 'notANumber');
 });
+
+test('an emptied loss field takes the loss off the card', () => {
+  // 2026-10-17, operator: "не усюди є втрати" -- a typed loss could never be cleared.
+  assert.equal(C.lossOfField('', 700), C.PM);
+  assert.equal(C.lossOfField('  ', 1200), C.PM);
+  assert.equal(C.lossOfField('', undefined), undefined);
+  assert.equal(C.lossOfField('', C.PM), undefined);
+  assert.equal(C.lossOfField('85', 700), 850);
+  assert.equal(C.lossOfField('abc', 700), null);
+});
