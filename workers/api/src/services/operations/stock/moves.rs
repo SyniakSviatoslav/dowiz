@@ -203,10 +203,12 @@ impl Plan {
         let rooms = super::storages::Rooms::of(log, &lines)?;
         for (ev, meta) in lines.iter_mut() {
             if let (StockEvent::Stocktake { item, observed, .. }, Some(st)) = (ev, meta.store.as_deref()) {
-                let total = rooms.total_for(item, st, *observed);
-                // The other storages' share is whole; the counted one keeps its fraction.
-                meta.uq = meta.uq.map(|u| u.saturating_add((total - *observed).saturating_mul(MICRO)));
-                *observed = total;
+                // EXACT (2026-10-17): the counted storage plus every other
+                // storage's exact level -- their fractions are kept, not
+                // added back as whole units. The hub books the whole units.
+                let total = rooms.total_for(item, st, meta.uq.unwrap_or(observed.saturating_mul(MICRO)));
+                meta.uq = (total > 0).then_some(total);
+                *observed = (total + MICRO / 2).div_euclid(MICRO);
             }
         }
         let shown_qty = |uq: Option<i64>, whole: i64| uq.map_or(json!(whole), |u| Qty::of_micro(u).json());

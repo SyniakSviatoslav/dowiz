@@ -77,3 +77,72 @@ fn the_view_names_each_line_and_prices_the_batch() {
     assert_eq!(missing["lines"][0]["missing"], json!(true));
     assert_eq!(missing["costPer"], Value::Null);
 }
+
+/// The raw supplies of `book` with NO list price: what dubin-sushi holds
+/// (0 of its supplies carry `costPerBasis`, 12 carry a weighted average).
+fn bare(id: &str) -> Option<String> {
+    let mut v: Value = serde_json::from_str(&book(id)?).ok()?;
+    if let Some(m) = v.as_object_mut() {
+        m.remove("costPerBasis");
+    }
+    Some(v.to_string())
+}
+
+/// Received at `per_kg` minor units per 1000 base units, 1000 of each.
+fn costs(rows: &[(&str, i64)]) -> dowiz_hub::stock::cost::CostBook {
+    let mut log = dowiz_hub::stock::StockLog::create_sized(64 * 1024).unwrap();
+    for (item, per_kg) in rows {
+        log.receive_priced(item, 1000, &dowiz_hub::stock::cost::Price { unit_cost: *per_kg, per: 1000, supplier: None, doc: None }).unwrap();
+    }
+    log.cost_book()
+}
+
+/// AVERAGE, THEN LIST (2026-10-17): the rule the console's `priceOf` and the
+/// kitchen report's `per_micro` hold, now the hydration's too.
+#[test]
+fn the_price_rule_is_the_average_then_the_list_price() {
+    assert_eq!(unit_micro(Some(230_000), Some(99), 100), Some(230_000), "the average wins");
+    assert_eq!(unit_micro(None, Some(5), 100), Some(50_000), "else the list per 100 g");
+    assert_eq!(unit_micro(None, Some(25), 1), Some(25_000_000), "per piece");
+    assert_eq!(unit_micro(None, None, 100), None, "neither: unknown, never 0");
+}
+
+#[test]
+fn a_prep_whose_leaves_have_only_an_average_gets_a_cost() {
+    // The list prices of `book`, as averages: the same 0.1405 per g.
+    let cb = costs(&[("vinegar", 150), ("salt", 50), ("sugar", 120)]);
+    let look = averaged(&bare, &cb);
+    let v: Value = serde_json::from_str(&hydrated("mitsukan", &look("mitsukan").unwrap(), &look)).unwrap();
+    assert_eq!((v["costMicroPerUnit"].clone(), v["costPerBasis"].clone()), (json!(140_500), json!(14)));
+    // Without the book the same supplies read unknown -- the gap this closes.
+    let v0: Value = serde_json::from_str(&hydrated("mitsukan", &bare("mitsukan").unwrap(), &bare)).unwrap();
+    assert_eq!(v0["costMicroPerUnit"], Value::Null);
+    // The raw record handed back carries the average for a line to read, and is still not a prep.
+    assert_eq!(price_micro(&look("vinegar").unwrap()), Some(150_000));
+    assert_eq!(price_micro(&look("mitsukan").unwrap()), None, "a prep is priced by its card, not as a leaf");
+}
+
+#[test]
+fn the_average_beats_the_list_price_and_list_only_still_works() {
+    // Vinegar bought at 300 per l against a list of 15 per 100 ml (150 per l).
+    let cb = costs(&[("vinegar", 300)]);
+    let look = averaged(&book, &cb);
+    let v: Value = serde_json::from_str(&hydrated("mitsukan", &look("mitsukan").unwrap(), &look)).unwrap();
+    // (800 x 300 000 + 50 x 50 000 + 150 x 120 000) / 1000 = 260 500.
+    assert_eq!(v["costMicroPerUnit"], json!(260_500));
+    // An empty book is the list price, byte for byte.
+    let empty = dowiz_hub::stock::cost::CostBook::default();
+    let look = averaged(&book, &empty);
+    assert_eq!(hydrated("rice-seasoned", &look("rice-seasoned").unwrap(), &look), hydrated("rice-seasoned", &book("rice-seasoned").unwrap(), &book));
+}
+
+#[test]
+fn a_leaf_priced_by_neither_keeps_the_prep_unknown() {
+    // Salt has no list price and no delivery: the card is unknown, not 0, not partial.
+    let cb = costs(&[("vinegar", 150), ("sugar", 120)]);
+    let look = averaged(&bare, &cb);
+    let v: Value = serde_json::from_str(&hydrated("mitsukan", &look("mitsukan").unwrap(), &look)).unwrap();
+    assert_eq!((v["costMicroPerUnit"].clone(), v["costPerBasis"].clone()), (Value::Null, Value::Null));
+    let rv: Value = serde_json::from_str(&hydrated("rice-seasoned", &look("rice-seasoned").unwrap(), &look)).unwrap();
+    assert_eq!(rv["costMicroPerUnit"], Value::Null, "unknown all the way up the tree");
+}

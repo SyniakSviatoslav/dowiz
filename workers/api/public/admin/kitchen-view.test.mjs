@@ -49,3 +49,14 @@ test('the kitchen numbers (scope kitchen) draw cost and usage with no revenue co
   const own = draw(answer, fmt);
   for (const k of ['ka_revenue', 'ka_margin', 'ka_marginPortion', 'ka_foodCost']) assert.ok(own.includes(`data-t="${k}"`), k);
 });
+
+test('the stock on hand is drawn with its value and the supplies it could not price (2026-10-17)', () => {
+  const html = draw({ ...answer, totals: { ...answer.totals, stockValue: 12345, stockUnpriced: [{ id: 'nori', name: 'Nori <i>g</i>' }, { id: 'tobiko', name: 'Tobiko' }] } }, fmt);
+  assert.ok(html.includes('data-t="ka_stockValue"') && html.includes('L12345'), 'the value, in the venue money');
+  assert.ok(html.includes('data-t="ka_stockUnpriced"'), 'the missing prices are named');
+  assert.ok(html.includes('Tobiko') && html.includes('Nori &lt;i&gt;g'), 'each name, as text');
+  // Twin: nothing unpriced, no warning line; no stock value sent, no tile.
+  const clean = draw({ ...answer, totals: { ...answer.totals, stockValue: 0, stockUnpriced: [] } }, fmt);
+  assert.ok(clean.includes('data-t="ka_stockValue"') && !clean.includes('ka_stockUnpriced'));
+  assert.ok(!draw(answer, fmt).includes('ka_stockValue'), 'an older hub without the field draws no tile');
+});

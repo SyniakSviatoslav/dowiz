@@ -89,6 +89,11 @@ pub struct StockMoveIn {
     #[allow(dead_code)]
     #[serde(default)]
     pub to: Option<String>,
+    /// `moved` (2026-10-17): one id per Move sheet, so a retried tap moves
+    /// once; `storages::run` reads it off the raw body.
+    #[allow(dead_code)]
+    #[serde(default)]
+    pub move_id: Option<String>,
     /// P13: a delivery the supplier already treated (frozen at source): its paper.
     #[serde(default)]
     pub treated: Option<String>,

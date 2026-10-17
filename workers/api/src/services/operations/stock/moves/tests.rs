@@ -155,6 +155,9 @@ fn the_bodies_the_console_sends_now_are_accepted() {
     assert_eq!((b.item.as_str(), b.qty, b.out), ("rice", Some(Qty::whole(2100)), Some(2050)));
     let b = crate::body::from_text::<StockMoveIn>(r#"{"products":["d1","d2"]}"#).expect("as-is");
     assert_eq!(b.products, Some(vec!["d1".to_string(), "d2".to_string()]));
+    // 2026-10-17: the console's fractional transfer, with its retry id, passes the strict door.
+    let b = crate::body::from_text::<StockMoveIn>(r#"{"item":"nori","qty":"0.5","from":"bar","to":"kitchen","moveId":"mv-1"}"#).expect("moved");
+    assert_eq!((b.qty, b.move_id.as_deref()), (Some(Qty::milli(500)), Some("mv-1")));
 }
 
 /// W-QTY (contract §1) + W-QTYHUB H3: the door reads a quantity from its

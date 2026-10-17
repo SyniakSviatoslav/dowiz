@@ -4,6 +4,7 @@
 // path, and the per-device "deliveries go to" choice. No DOM, no fetch.
 
 import * as C from './ingredients-calc.js';
+import { wireQty } from './qty-adapter.js';
 
 /// The storages a venue starts with; `kitchen` is where every old record is.
 export const BUILT_IN = ['kitchen', 'bar', 'freezer'];
@@ -15,35 +16,68 @@ export const nameOf = (s, t) => (s?.name || (BUILT_IN.includes(s?.id) ? t('sto_'
 /// The storages a transfer or a delivery may go to (not archived).
 export const open = storages => (storages || []).filter(s => !s.archived);
 
+const MICRO = 1000000;
+/// The hub's exact decimal text ("0.75", "-0.05", "7") -> integer millionths. Never a float.
+export function uqOf(text){
+  const m = /^(-?)(\d+)(?:\.(\d{1,6}))?$/.exec(String(text ?? '').trim());
+  if (!m) return 0;
+  const n = Number(m[2]) * MICRO + Number(((m[3] || '') + '000000').slice(0, 6));
+  return m[1] ? -n : n;
+}
+/// Integer millionths -> the short exact decimal the owner reads: 750000 -> "0.75".
+export function showUq(uq){
+  const neg = uq < 0 ? '-' : '', a = Math.abs(uq);
+  const f = String(a % MICRO).padStart(6, '0').replace(/0+$/, '');
+  return `${neg}${Math.floor(a / MICRO)}${f ? '.' + f : ''}`;
+}
+/// A supply's EXACT level per storage, `{storage: uq}`: the answer's `exact`
+/// map (2026-10-17: fractions move between storages) when it has one, else the whole `stores`.
+export function levelsUq(s){
+  const ex = s?.byStore?.exact;
+  if (ex) return Object.fromEntries(Object.entries(ex).map(([k, v]) => [k, uqOf(v)]));
+  return Object.fromEntries(Object.entries(s?.byStore?.stores || {}).map(([k, v]) => [k, Math.round(Number(v) || 0) * MICRO]));
+}
+/// "0.75" -- `supply`'s exact level in `store`, as text.
+export const levelText = (s, store) => showUq(levelsUq(s)[store] || 0);
+
 /// The rows of one storage (`all`: every storage), from `GET /owner/stock`:
 /// `{id, name, unit, qty, by: [[storage, qty]...], home}`, non-zero only.
+/// Quantities are EXACT decimal TEXT ("0.75"): a storage holds fractions.
 export function rowsFor(supplies, store){
   const out = [];
   for (const s of supplies || []) {
-    const by = Object.entries(s.byStore?.stores || {}).filter(([, q]) => q !== 0);
-    const qty = store === 'all' ? by.reduce((a, [, q]) => a + q, 0) : (s.byStore?.stores || {})[store] || 0;
-    if (qty !== 0) out.push({ id: s.id, name: s.name || s.id, unit: s.unit || 'g', qty, by, home: s.byStore?.home || DEFAULT });
+    const lv = levelsUq(s);
+    const by = Object.entries(lv).filter(([, q]) => q !== 0);
+    const uq = store === 'all' ? by.reduce((a, [, q]) => a + q, 0) : lv[store] || 0;
+    if (uq !== 0) out.push({ id: s.id, name: s.name || s.id, unit: s.unit || 'g', qty: showUq(uq), by: by.map(([k, q]) => [k, showUq(q)]), home: s.byStore?.home || DEFAULT });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/// A transfer's body, or `{error}` (a word key).
-export function moveBody(item, raw, unit, from, to){
+/// A transfer's body, or `{error}` (a word key). The quantity in the kitchen's
+/// words (`canonQty`: "0,25 кг", "½ шт") read EXACTLY into milli-units and sent
+/// as the integer when whole, else as a decimal STRING. `moveId`: one per Move
+/// sheet, so a retried tap moves once.
+export function moveBody(item, raw, unit, from, to, moveId = ''){
   if (!item) return { error: 'sto_item' };
-  const qty = C.amount(raw, unit);
-  if (qty == null || qty <= 0) return { error: 'required' };
+  const m = C.milli(raw, unit);
+  if (m == null || m <= 0) return { error: 'required' };
   if (!from || !to || from === to) return { error: 'sto_to' };
-  return { body: { item, qty, from, to } };
+  return { body: { item, qty: wireQty(m), from, to, ...(moveId ? { moveId } : {}) } };
 }
 
+/// A fresh move id for one Move sheet (1..64 of A-Z a-z 0-9 _ -).
+export const newMoveId = (now = Date.now(), rnd = Math.random) => `mv-${now.toString(36)}-${Math.floor(rnd() * 1e9).toString(36)}`;
+
 /// A count of ONE storage: `{lines, store}`; empty fields are not counted.
+/// A fraction is counted as typed ("0,75"), sent as a decimal string.
 export function countBody(entries, store, unitOf){
   const lines = [];
   for (const [item, raw] of entries) {
     if (String(raw ?? '').trim() === '') continue;
-    const v = C.amount(raw, unitOf(item));
+    const v = C.milli(raw, unitOf(item));
     if (v == null || v < 0) return { error: item };
-    lines.push({ item, observed: v });
+    lines.push({ item, observed: wireQty(v) });
   }
   return lines.length ? { body: { lines, store } } : { error: 'required' };
 }

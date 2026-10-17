@@ -107,3 +107,30 @@ fn only_three_movements_exist() {
     }
     assert_eq!(movement("received", body(r#"{"item":"  ","qty":3}"#), "p", 1).unwrap_err().0, 400);
 }
+
+/// A ПФ ON THE STOCK SCREEN IS PRICED FROM ITS LEAVES' AVERAGE (2026-10-17):
+/// the console's tech card reads a prep's `costPerBasis` from this list, and
+/// on a venue whose raw supplies carry only a weighted average (no list
+/// price) every prep read null. Twin: a prep with one leaf priced by
+/// NEITHER stays null -- never a partial sum.
+#[test]
+fn a_prep_whose_leaves_have_only_an_average_is_priced_on_the_shelf() {
+    use dowiz_hub::stock::cost::Price;
+    use serde_json::json;
+    let mut cat = dowiz_hub::catalog::Catalog::create().unwrap();
+    cat.set_supply("rice", &json!({ "id": "rice", "name": "Rice", "unit": "g", "kind": "food_ingredient" }).to_string());
+    cat.set_supply("salt", &json!({ "id": "salt", "name": "Salt", "unit": "g", "kind": "condiment" }).to_string());
+    cat.set_supply("nori", &json!({ "id": "nori", "name": "Nori", "unit": "g", "kind": "food_ingredient" }).to_string());
+    cat.set_supply("rice-ready", &json!({ "id": "rice-ready", "name": "Rice ready", "unit": "g", "kind": "prep", "card": { "lines": [{ "item": "rice", "qty": 1000 }, { "item": "salt", "qty": 10 }], "yield": 1000 } }).to_string());
+    cat.set_supply("roll", &json!({ "id": "roll", "name": "Roll", "unit": "g", "kind": "prep", "card": { "lines": [{ "item": "rice", "qty": 100 }, { "item": "nori", "qty": 3 }], "yield": 100 } }).to_string());
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    // Rice at 230 lek per kg, salt at 70 per kg: no list price anywhere.
+    log.receive_priced("rice", 1000, &Price { unit_cost: 230, per: 1000, supplier: None, doc: None }).unwrap();
+    log.receive_priced("salt", 1000, &Price { unit_cost: 70, per: 1000, supplier: None, doc: None }).unwrap();
+    let v = shelf(&cat, &log, 1_790_000_000_000).unwrap();
+    let row = |id: &str| v["supplies"].as_array().unwrap().iter().find(|r| r["id"] == id).cloned().unwrap();
+    // (1000 x 230 000 + 10 x 70 000) / 1000 = 230 700 millionths per g -> 23.07 per 100 g -> 23.
+    assert_eq!(row("rice-ready")["costPerBasis"], json!(23), "priced from the leaves' average");
+    assert_eq!(row("roll")["costPerBasis"], serde_json::Value::Null, "nori has no price at all: unknown, not partial");
+    assert_eq!(row("rice")["costPerBasis"], serde_json::Value::Null, "a raw row keeps its own (absent) list price");
+}

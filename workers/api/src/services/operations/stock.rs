@@ -96,11 +96,14 @@ pub fn shelf(cat: &dowiz_hub::catalog::Catalog, log: &dowiz_hub::stock::StockLog
     let journal = log.journal().map_err(|e| e.to_string())?;
     let led = &journal.ledger;
     let today = today_of(cat, now_ms);
+    let bare = |s: &str| cat.supply(s);
+    let priced = crate::recipe::prep::averaged(&bare, &journal.book);
     let rows: Vec<Value> = cat
         .supplies()
         .into_iter()
         .filter_map(|(id, j)| {
-            let j = if dowiz_hub::prep::is_prep(&j) { crate::recipe::prep::hydrated(&id, &j, &|s| cat.supply(s)) } else { j };
+            // A ПФ priced from its leaves at the AVERAGE, else the list (2026-10-17).
+            let j = if dowiz_hub::prep::is_prep(&j) { crate::recipe::prep::hydrated(&id, &j, &priced) } else { j };
             let v: Value = serde_json::from_str(&j).ok()?;
             // A retired supply keeps its ledger history and leaves the list.
             if v.get("active").and_then(Value::as_bool) == Some(false) {

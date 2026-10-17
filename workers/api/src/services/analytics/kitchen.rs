@@ -195,6 +195,17 @@ pub fn answer_with(
     let sold = sales::fold_with(&orders, &rows, &dishes, &w);
     let moved = shelf::fold_journal(&journal, &supplies, &sold.placed_at, &w);
     let mut out = report::report(&sold, &moved, &dishes, &supplies, &journal, &w);
+    // What the shelf holds now, at the one price rule; a ПФ with no average of its own at its card's.
+    let bare = |s: &str| cat.supply(s);
+    let priced = crate::recipe::prep::averaged(&bare, &journal.book);
+    let card = |id: &str| {
+        let j = cat.supply(id).filter(|j| dowiz_hub::prep::is_prep(j))?;
+        let v: serde_json::Value = serde_json::from_str(&crate::recipe::prep::hydrated(id, &j, &priced)).ok()?;
+        v.get("costMicroPerUnit").and_then(serde_json::Value::as_i64).map(i128::from)
+    };
+    if let (Some(t), serde_json::Value::Object(sv)) = (out.get_mut("totals").and_then(serde_json::Value::as_object_mut), report::stock_value(&supplies, &journal, &card)) {
+        t.extend(sv);
+    }
     out["menu"] = menu::matrix(&menu::inputs(&sold, &dishes, &supplies, &journal.book));
     out["topics"] = topics::fold(&orders, &dishes, &w);
     out["history"] = serde_json::json!({ "archivedDays": rows.len(), "error": unread });

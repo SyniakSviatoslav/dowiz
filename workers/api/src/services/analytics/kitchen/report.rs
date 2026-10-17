@@ -54,6 +54,35 @@ fn avt_of(j: &Journal, dishes: &HashMap<String, Dish>, supplies: &HashMap<String
     avt::report(&j.entries, &cx)
 }
 
+/// THE SHELF'S VALUE NOW (2026-10-17): Σ on hand (exact, in millionths) x
+/// the price by the one rule (`sales::per_micro`: the average, else the list
+/// price), and for a ПФ with neither, `card_micro` -- its card priced from its
+/// leaves (`recipe::prep::averaged`). Rounded ONCE over the whole, half up.
+/// A supply with stock on hand and no price at all is NAMED in
+/// `stockUnpriced`, never counted as 0 in silence; nothing on hand, nothing
+/// to name. PURE.
+pub fn stock_value(supplies: &HashMap<String, Supply>, j: &Journal, card_micro: &dyn Fn(&str) -> Option<i128>) -> Value {
+    let mut sum: i128 = 0;
+    let mut unpriced: Vec<(String, String)> = Vec::new();
+    for (id, s) in supplies {
+        let on_hand = j.ledger.level(id).on_hand;
+        if on_hand <= 0 {
+            continue;
+        }
+        let uq = j.carry.exact(id, on_hand);
+        match super::sales::per_micro(s, &j.book).or_else(|| card_micro(id)) {
+            Some(per) => sum += per * i128::from(uq),
+            None => unpriced.push((s.name.clone(), id.clone())),
+        }
+    }
+    unpriced.sort();
+    let m2 = i128::from(dowiz_hub::prep::MICRO) * i128::from(dowiz_hub::prep::MICRO);
+    json!({
+        "stockValue": i64::try_from((sum + m2 / 2).div_euclid(m2)).unwrap_or(i64::MAX),
+        "stockUnpriced": unpriced.into_iter().map(|(name, id)| json!({ "id": id, "name": name })).collect::<Vec<_>>(),
+    })
+}
+
 pub fn report(
     sales: &Sales,
     shelf: &Shelf,

@@ -160,7 +160,7 @@ fn fixture() -> Catalog {
 #[test]
 fn the_three_reads_answer_the_same_bytes_from_the_object() {
     let cat = fixture();
-    let body = |q: &str| answer(&cat, q).map(|v| v.to_string());
+    let body = |q: &str| answer(&cat, &CostBook::default(), q).map(|v| v.to_string());
     assert_eq!(body("list").unwrap(), r#"{"preps":[{"active":true,"batchCost":141,"card":{"lines":[{"item":"vinegar","qty":800},{"item":"salt","qty":50},{"item":"sugar","qty":150}],"yield":1000},"category":"","costMicroPerUnit":140500,"costPer":141,"costPerBasis":14,"costPerQty":1000,"grossG":1000,"id":"mitsukan","k":1000,"kcalPer100":76.0,"kind":"prep","lines":[{"cost":120,"grossG":800,"item":"vinegar","kcal":160.0,"kind":"food_ingredient","name":"vinegar","qty":800,"qtyMilli":800000,"unit":"ml","untracked":false},{"cost":3,"grossG":50,"item":"salt","kcal":0.0,"kind":"food_ingredient","name":"salt","qty":50,"qtyMilli":50000,"unit":"g","untracked":false},{"cost":18,"grossG":150,"item":"sugar","kcal":600.0,"kind":"food_ingredient","name":"sugar","qty":150,"qtyMilli":150000,"unit":"g","untracked":false}],"name":"mitsukan","nutritionBasis":"cooked","unit":"g","uses":{"dishes":[{"id":"philadelphia","name":"Philadelphia"}],"preps":[{"id":"rice-seasoned","name":"rice-seasoned"}]},"yield":1000,"yieldMilli":1000000},{"active":true,"batchCost":235,"card":{"lines":[{"item":"rice-dry","qty":1000},{"item":"water","qty":1100},{"item":"mitsukan","qty":250}],"yield":2100},"category":"","costMicroPerUnit":111964,"costPer":112,"costPerBasis":11,"costPerQty":1000,"grossG":2350,"id":"rice-seasoned","k":894,"kcalPer100":175.7,"kind":"prep","lines":[{"cost":200,"grossG":1000,"item":"rice-dry","kcal":3500.0,"kind":"food_ingredient","name":"rice-dry","qty":1000,"qtyMilli":1000000,"unit":"g","untracked":false},{"cost":0,"grossG":1100,"item":"water","kcal":0.0,"kind":"food_ingredient","name":"Water","qty":1100,"qtyMilli":1100000,"unit":"ml","untracked":true},{"cost":35,"grossG":250,"item":"mitsukan","kcal":190.0,"kind":"prep","name":"mitsukan","qty":250,"qtyMilli":250000,"unit":"g","untracked":false}],"name":"rice-seasoned","nutritionBasis":"cooked","unit":"g","uses":{"dishes":[{"id":"philadelphia","name":"Philadelphia"}],"preps":[]},"yield":2100,"yieldMilli":2100000}]}"#);
     assert_eq!(body("uses:mitsukan").unwrap(), r#"{"id":"mitsukan","kind":"prep","uses":{"dishes":[{"id":"philadelphia","name":"Philadelphia"}],"preps":[{"id":"rice-seasoned","name":"rice-seasoned"}]}}"#);
     assert_eq!(body("uses:salt").unwrap(), r#"{"id":"salt","kind":"raw","uses":{"dishes":[{"id":"philadelphia","name":"Philadelphia"}],"preps":[{"id":"mitsukan","name":"mitsukan"},{"id":"rice-seasoned","name":"rice-seasoned"}]}}"#);
@@ -173,13 +173,45 @@ fn the_three_reads_answer_the_same_bytes_from_the_object() {
 #[test]
 fn an_unknown_id_or_question_is_refused_as_before() {
     let cat = fixture();
-    assert_eq!(answer(&cat, "uses:nobody"), Err((404, "unknown supply")));
-    assert_eq!(answer(&cat, "uses:philadelphia"), Err((404, "unknown supply")), "a dish is not a supply");
-    assert_eq!(answer(&cat, "takes:nobody"), Err((404, "unknown dish")));
-    assert_eq!(answer(&cat, "takes:mitsukan"), Err((404, "unknown dish")), "a ПФ is not a dish");
-    assert_eq!(answer(&cat, "lists"), Err((400, NO_SUCH_QUESTION)));
-    assert_eq!(answer(&cat, ""), Err((400, NO_SUCH_QUESTION)));
+    assert_eq!(answer(&cat, &CostBook::default(), "uses:nobody"), Err((404, "unknown supply")));
+    assert_eq!(answer(&cat, &CostBook::default(), "uses:philadelphia"), Err((404, "unknown supply")), "a dish is not a supply");
+    assert_eq!(answer(&cat, &CostBook::default(), "takes:nobody"), Err((404, "unknown dish")));
+    assert_eq!(answer(&cat, &CostBook::default(), "takes:mitsukan"), Err((404, "unknown dish")), "a ПФ is not a dish");
+    assert_eq!(answer(&cat, &CostBook::default(), "lists"), Err((400, NO_SUCH_QUESTION)));
+    assert_eq!(answer(&cat, &CostBook::default(), ""), Err((400, NO_SUCH_QUESTION)));
     // The twins: a raw supply's where-used, and an empty catalogue's list.
-    assert_eq!(answer(&cat, "uses:vinegar").unwrap()["kind"], json!("raw"));
-    assert_eq!(answer(&Catalog::create().unwrap(), "list").unwrap(), json!({ "preps": [] }));
+    assert_eq!(answer(&cat, &CostBook::default(), "uses:vinegar").unwrap()["kind"], json!("raw"));
+    assert_eq!(answer(&Catalog::create().unwrap(), &CostBook::default(), "list").unwrap(), json!({ "preps": [] }));
+}
+
+/// ONE SALE'S COST AT THE AVERAGE (2026-10-17): the leaves carry no list
+/// price, the deliveries priced them; the dish is costed. Twin: a leaf with
+/// neither keeps the dish's cost null and that leaf's own cost null.
+#[test]
+fn one_sale_is_costed_from_the_leaves_average_and_unknown_without_one() {
+    let mut cat = Catalog::create().unwrap();
+    for id in ["rice-dry", "salt", "nori"] {
+        cat.set_supply(id, &json!({ "id": id, "name": id, "unit": "g", "kind": "food_ingredient" }).to_string());
+    }
+    saved(&mut cat, &prep_in("rice-ready", &[("rice-dry", 1000), ("salt", 10)], 1000)).unwrap();
+    cat.set_product("onigiri", &json!({ "id": "onigiri", "bom": [{ "supply": "rice-ready", "qty": 100 }] }).to_string());
+    cat.set_product("maki", &json!({ "id": "maki", "bom": [{ "supply": "rice-ready", "qty": 100 }, { "supply": "nori", "qty": 3 }] }).to_string());
+    let mut log = dowiz_hub::stock::StockLog::create_sized(64 * 1024).unwrap();
+    for (item, per_kg) in [("rice-dry", 230), ("salt", 70)] {
+        log.receive_priced(item, 1000, &dowiz_hub::stock::cost::Price { unit_cost: per_kg, per: 1000, supplier: None, doc: None }).unwrap();
+    }
+    let book = log.cost_book();
+    // 100 g of rice-ready at 0.2307 per g = 23.07 -> 23.
+    let t = takes_priced(&cat, &book, &cat.product("onigiri").unwrap());
+    assert_eq!(t["cost"], json!(23));
+    assert_eq!(t["leaves"][0]["cost"], json!(23), "rice-dry 100 g at 0.23");
+    let m = takes_priced(&cat, &book, &cat.product("maki").unwrap());
+    assert_eq!(m["cost"], Value::Null, "nori is priced by nothing");
+    let nori = m["leaves"].as_array().unwrap().iter().find(|l| l["supply"] == "nori").unwrap();
+    assert_eq!(nori["cost"], Value::Null);
+    // The list ПФ answer prices the card the same way.
+    let v = list_priced(&cat, &book);
+    assert_eq!(v.iter().find(|p| p["id"] == "rice-ready").unwrap()["costPer"], json!(231), "230.7 per kg");
+    // Without the book (the old read) the same dish was unknown.
+    assert_eq!(takes(&cat, &cat.product("onigiri").unwrap())["cost"], Value::Null);
 }

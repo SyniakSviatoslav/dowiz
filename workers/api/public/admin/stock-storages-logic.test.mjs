@@ -32,8 +32,9 @@ test('rows per storage, the export path, the date range', () => {
     { id: 'salmon', name: 'Salmon', unit: 'g', byStore: { stores: { freezer: 1500, kitchen: 450 }, home: 'kitchen' } },
     { id: 'rice', name: 'Rice', unit: 'g', byStore: { stores: {}, home: 'kitchen' } },
   ];
-  assert.deepEqual(L.rowsFor(sup, 'freezer').map(r => [r.id, r.qty]), [['salmon', 1500]]);
-  assert.deepEqual(L.rowsFor(sup, 'all').map(r => [r.id, r.qty, r.home]), [['salmon', 1950, 'kitchen']]);
+  // Quantities are exact decimal TEXT since 2026-10-17 (were numbers): a storage holds fractions.
+  assert.deepEqual(L.rowsFor(sup, 'freezer').map(r => [r.id, r.qty]), [['salmon', '1500']]);
+  assert.deepEqual(L.rowsFor(sup, 'all').map(r => [r.id, r.qty, r.home]), [['salmon', '1950', 'kitchen']]);
   assert.equal(L.exportPath('lots', '2026-10-01', '2026-10-05'), '/owner/stock/haccp?kind=lots&from=2026-10-01&to=2026-10-05');
   assert.equal(L.daysBefore('2026-03-01', 1), '2026-02-28');
   assert.equal(L.nameOf({ id: 'bar', name: '' }, k => `<${k}>`), '<sto_bar>');
@@ -72,4 +73,26 @@ test('W-STORE2: a recorded end needs the start and decides with it', () => {
   assert.equal(L.freezeBody('salmon', 'L1', '', '-20', '', '2026-10-05T04:00', '2026-10-05T04:00').error, 'hc_ended', 'an end at the start');
   const later = new Date('2026-10-05T14:00').getTime();
   assert.equal(L.hoursSince('2026-10-04T08:00', later, '2026-10-05T04:00'), 20, 'a late record adds no hours');
+});
+
+// 2026-10-17 (operator: "зроби дробове переміщення між складами"): a fraction moves.
+test('a fractional transfer and count are read exactly and sent as decimal text', () => {
+  assert.deepEqual(L.moveBody('salmon', '0,25 кг', 'g', 'freezer', 'kitchen'), { body: { item: 'salmon', qty: 250, from: 'freezer', to: 'kitchen' } });
+  assert.deepEqual(L.moveBody('salmon', '0,5 г', 'g', 'freezer', 'kitchen'), { body: { item: 'salmon', qty: '0.5', from: 'freezer', to: 'kitchen' } });
+  assert.deepEqual(L.moveBody('nori', '½ шт', 'unit', 'bar', 'kitchen', 'mv-1'), { body: { item: 'nori', qty: '0.5', from: 'bar', to: 'kitchen', moveId: 'mv-1' } });
+  assert.equal(L.moveBody('salmon', '0,0001', 'g', 'bar', 'kitchen').error, 'required', 'finer than a thousandth');
+  assert.deepEqual(L.countBody([['salmon', '0,75'], ['nori', '2']], 'kitchen', () => 'g'),
+    { body: { lines: [{ item: 'salmon', observed: '0.75' }, { item: 'nori', observed: 2 }], store: 'kitchen' } });
+  assert.match(L.newMoveId(1760000000000, () => 0.5), /^mv-[a-z0-9]+-[a-z0-9]+$/);
+});
+
+test('storage screens show fractional levels exactly', () => {
+  const sup = [{ id: 'salmon', name: 'Salmon', unit: 'kg', byStore: { stores: { freezer: 1, kitchen: 0 }, exact: { freezer: '0.75', kitchen: '0.25' }, home: 'kitchen' } }];
+  assert.deepEqual(L.rowsFor(sup, 'kitchen').map(r => [r.id, r.qty]), [['salmon', '0.25']]);
+  assert.deepEqual(L.rowsFor(sup, 'all').map(r => [r.qty, r.by]), [['1', [['freezer', '0.75'], ['kitchen', '0.25']]]]);
+  assert.equal(L.levelText(sup[0], 'freezer'), '0.75');
+  assert.equal(L.levelText(sup[0], 'bar'), '0');
+  assert.equal(L.showUq(L.uqOf('-0.05')), '-0.05');
+  assert.equal(L.showUq(L.uqOf('0.77381')), '0.77381');
+  assert.equal(L.levelText({ byStore: { stores: { bar: 12 } } }, 'bar'), '12', 'a whole venue reads its whole levels');
 });

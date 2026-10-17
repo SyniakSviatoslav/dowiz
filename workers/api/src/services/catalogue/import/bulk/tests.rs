@@ -353,13 +353,13 @@ fn the_owner_reads_each_stored_line_with_its_supply() {
     apply_recipes(&mut cat, &d).unwrap();
     let stored = product(&cat, "maki-salmon");
     assert_eq!(stored["bom"][0], json!({ "supply": "oriz-sushi", "qty": 90 }), "stored lean");
-    let all = owner_view(&cat, None);
+    let all = owner_view(&cat, None, &dowiz_hub::stock::cost::CostBook::default());
     assert_eq!(all.len(), 2);
-    let one = owner_view(&cat, Some("maki-salmon"));
+    let one = owner_view(&cat, Some("maki-salmon"), &dowiz_hub::stock::cost::CostBook::default());
     assert_eq!(one.len(), 1);
     assert_eq!((one[0]["bom"][0]["name"].clone(), one[0]["bom"][0]["kcal"].clone()), (json!("Oriz sushi"), json!(117.0)));
     assert_eq!(one[0]["bom"][3]["kind"], json!("packaging"));
-    assert!(owner_view(&cat, Some("nope")).is_empty());
+    assert!(owner_view(&cat, Some("nope"), &dowiz_hub::stock::cost::CostBook::default()).is_empty());
 }
 
 /// The preview is the write: a weight the owner typed (`weightDerived:false`)
@@ -379,4 +379,31 @@ fn a_file_past_the_bound_is_too_big_and_one_at_it_is_not() {
     assert!(too_big(MAX_BYTES + 1));
     assert!(!too_big(MAX_BYTES));
     assert!(!too_big(0));
+}
+
+/// THE OWNER'S DISH COST AT THE AVERAGE (2026-10-17): `/api/owner/products`
+/// answered `cost: null` on a venue whose supplies carry no list price, only
+/// what deliveries cost. Read with the cost book, a raw line and a ПФ line
+/// are both priced; a line priced by neither keeps the dish null.
+#[test]
+fn the_owner_reads_the_dish_cost_from_the_average() {
+    let mut cat = Catalog::create().unwrap();
+    for id in ["rice", "salt", "nori"] {
+        cat.set_supply(id, &json!({ "id": id, "name": id, "unit": "g", "kind": "food_ingredient" }).to_string());
+    }
+    cat.set_supply("rice-ready", &json!({ "id": "rice-ready", "name": "Rice ready", "unit": "g", "kind": "prep", "card": { "lines": [{ "item": "rice", "qty": 1000 }, { "item": "salt", "qty": 10 }], "yield": 1000 } }).to_string());
+    cat.set_product("bowl", &json!({ "id": "bowl", "price": 650, "bom": [{ "supply": "rice", "qty": 90 }, { "supply": "rice-ready", "qty": 100 }] }).to_string());
+    cat.set_product("maki", &json!({ "id": "maki", "price": 650, "bom": [{ "supply": "rice", "qty": 90 }, { "supply": "nori", "qty": 3 }] }).to_string());
+    let mut log = dowiz_hub::stock::StockLog::create_sized(64 * 1024).unwrap();
+    for (item, per_kg) in [("rice", 230), ("salt", 70)] {
+        log.receive_priced(item, 1000, &dowiz_hub::stock::cost::Price { unit_cost: per_kg, per: 1000, supplier: None, doc: None }).unwrap();
+    }
+    let book = log.cost_book();
+    let v = owner_view(&cat, None, &book);
+    let p = |id: &str| v.iter().find(|p| p["id"] == id).cloned().unwrap();
+    // 90 g x 0.23 = 20.7, + 100 g x 0.2307 = 23.07: 43.77 -> 44; 44 / 650 = 67.7 per mille.
+    assert_eq!((p("bowl")["cost"].clone(), p("bowl")["foodCostPm"].clone()), (json!(44), json!(68)));
+    assert_eq!(p("maki")["cost"], Value::Null, "nori: no average, no list price");
+    // Without a book (no delivery priced yet) the bowl is unknown, as before.
+    assert_eq!(owner_view(&cat, None, &dowiz_hub::stock::cost::CostBook::default()).iter().find(|p| p["id"] == "bowl").unwrap()["cost"], Value::Null);
 }

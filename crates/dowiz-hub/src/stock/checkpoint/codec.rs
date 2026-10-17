@@ -151,6 +151,8 @@ pub(in crate::stock) fn body(j: &Journal) -> String {
             }
         }
     }
+    // THE STORAGES' FRACTIONS (2026-10-17, `storages/exact.rs`), LAST and only when any.
+    w.0.push_str(&j.stores.frac_section());
     w.0
 }
 
@@ -279,6 +281,9 @@ pub(in crate::stock) fn parse(payload: &[u8]) -> Option<(Journal, Option<i64>)> 
             }
             j.stores.held.insert(key, shares);
         }
+    }
+    if r.0.starts_with(" F") {
+        r.0 = j.stores.read_frac(r.0)?;
     }
     if !r.0.is_empty() {
         return None;

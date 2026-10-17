@@ -14,6 +14,7 @@
 //! reads the new cost on the next request.
 
 use dowiz_hub::prep::{self, card_of, k_pm, MICRO};
+use dowiz_hub::stock::cost::CostBook;
 use serde_json::{json, Value};
 
 use super::{basis_of, is_food, line_with, Qty, PER_MASS};
@@ -25,16 +26,51 @@ pub const MICRO_HALF: i64 = MICRO / 2;
 /// a stored one would still not hang a request).
 const DEPTH: usize = prep::DEPTH_MAX + 1;
 
-/// A raw supply's list price in millionths of a minor unit per base unit:
-/// `costPerBasis` is per 100 g/ml or per piece.
+/// THE PRICE RULE, in one place (2026-10-17): millionths of a minor unit per
+/// base unit -- the weighted average purchase cost when a priced delivery
+/// set one, else the list price per basis (`list_per_basis` per `basis` base
+/// units); `None` with neither, never 0. The console's `priceOf`, the kitchen
+/// report's `per_micro` and every hydrated ПФ read this same rule.
+pub fn unit_micro(avg: Option<i128>, list_per_basis: Option<i64>, basis: i64) -> Option<i128> {
+    match avg {
+        Some(a) => Some(a),
+        None => Some(i128::from(list_per_basis?) * i128::from(MICRO) / i128::from(basis.max(1))),
+    }
+}
+
+/// A raw supply's price in millionths of a minor unit per base unit, by
+/// [`unit_micro`]: the average [`averaged`] put on the record
+/// (`costMicroPerUnit`), else the list price (`costPerBasis` per 100 g/ml or
+/// per piece). A ПФ has none of its own: its card prices it.
 pub fn price_micro(supply_json: &str) -> Option<i128> {
     let v: Value = serde_json::from_str(supply_json).ok()?;
     if prep::is_prep(supply_json) {
         return None;
     }
     let unit = v.get("unit").and_then(Value::as_str).unwrap_or("g");
-    let per = v.get("costPerBasis").and_then(Value::as_i64)?;
-    Some(i128::from(per) * i128::from(MICRO) / i128::from(basis_of(unit)))
+    unit_micro(v.get("costMicroPerUnit").and_then(Value::as_i64).map(i128::from), v.get("costPerBasis").and_then(Value::as_i64), basis_of(unit))
+}
+
+/// `supply`, with each RAW record that a priced delivery reached carrying its
+/// weighted average as `costMicroPerUnit` -- what [`price_micro`], a recipe
+/// line (`recipe::cost_nano`) and so every hydrated ПФ read first. A ПФ and a
+/// supply no priced delivery reached pass through untouched, so an empty
+/// book reads exactly what `supply` did. For DERIVING only: what a screen
+/// lists as the supply's own fields is never read from this.
+pub fn averaged<'a>(supply: &'a dyn Fn(&str) -> Option<String>, book: &'a CostBook) -> impl Fn(&str) -> Option<String> + 'a {
+    move |id: &str| {
+        let j = supply(id)?;
+        match book.avg_micro(id).and_then(|a| i64::try_from(a).ok()) {
+            Some(a) if !prep::is_prep(&j) => match serde_json::from_str::<Value>(&j) {
+                Ok(mut v) if v.is_object() => {
+                    v["costMicroPerUnit"] = json!(a);
+                    Some(v.to_string())
+                }
+                _ => Some(j),
+            },
+            _ => Some(j),
+        }
+    }
 }
 
 /// The record `line_with` reads for `id`: hydrated when it is a ПФ.

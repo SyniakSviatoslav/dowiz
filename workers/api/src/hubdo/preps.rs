@@ -27,7 +27,9 @@ impl HubImages {
             },
             None => Catalog::create().map_err(|_| Error::RustError("cannot create catalogue".into()))?,
         };
-        match crate::services::operations::preps::answer(&cat, &q) {
+        // The cost book prices the leaves at the AVERAGE (2026-10-17); `uses:` needs no price.
+        let book = if q.starts_with("uses:") { dowiz_hub::stock::cost::CostBook::default() } else { self.stock_log().await?.1.cost_book() };
+        match crate::services::operations::preps::answer(&cat, &book, &q) {
             Ok(v) => Response::from_json(&v),
             Err((status, why)) => Response::error(why, status),
         }

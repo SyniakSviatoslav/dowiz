@@ -173,7 +173,10 @@ impl StockLog {
         let mut n = 0;
         for (i, rec) in self.raw().iter().enumerate() {
             if let Some(stored) = rec.strip_prefix(HEAD).and_then(|r| r.split_once('\n')).map(|x| x.1) {
-                if stored != body(&j) {
+                // A checkpoint written before the storages' fractions (`F`, last)
+                // existed holds the same state without them: still the fold's.
+                let now = body(&j);
+                if stored != now && now.strip_suffix(&j.stores.frac_section()) != Some(stored) {
                     return Err(format!("checkpoint at record {i} disagrees with the fold from genesis"));
                 }
                 n += 1;

@@ -36,10 +36,10 @@ fn a_supply_used_only_by_an_option_is_in_use_and_listed() {
     assert_eq!(used["salmon"]["options"], json!([{ "id": "roll", "name": "Roll", "option": "xs" }]));
     assert!(cat.supply("salmon").is_some(), "nothing removed before the owner confirms");
     // GET /supplies/salmon/uses lists it too.
-    let a = preps::answer(&cat, "uses:salmon").unwrap();
+    let a = preps::answer(&cat, &dowiz_hub::stock::cost::CostBook::default(), "uses:salmon").unwrap();
     assert_eq!(a["uses"]["options"], json!([{ "id": "roll", "name": "Roll", "option": "xs" }]), "{a}");
     // TWIN: rice, used nowhere, deletes without asking; and its uses list no options key.
-    assert_eq!(preps::answer(&cat, "uses:rice").unwrap()["uses"], json!({ "preps": [], "dishes": [] }));
+    assert_eq!(preps::answer(&cat, &dowiz_hub::stock::cost::CostBook::default(), "uses:rice").unwrap()["uses"], json!({ "preps": [], "dishes": [] }));
     assert!(delete_in(&mut cat, &["rice".into()], false).is_ok());
     // Confirmed: the option loses the line and the dish is marked naming it.
     let r = delete_in(&mut cat, &["salmon".into()], true).unwrap();

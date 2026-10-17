@@ -132,3 +132,34 @@ fn the_margin_uses_the_stamped_cost_and_old_orders_todays() {
     let r = report(&s, &shelf::fold(&[], &bare, &s.placed_at, &w), &dishes, &bare, &empty, &w);
     assert_eq!((r["dishes"][0]["cogs"].clone(), r["totals"]["cogs"].clone(), r["totals"]["uncosted"].clone()), (Value::Null, json!(300), json!(1)));
 }
+
+/// THE SHELF'S VALUE (2026-10-17): on hand x (average, else list price), one
+/// rounding over the whole; a supply with stock and NO price is named, never
+/// counted as 0 silently. A prep with no average of its own takes its card's.
+#[test]
+fn the_stock_on_hand_is_valued_and_the_unpriced_are_named() {
+    let sup = |id: &str, basis, list| Supply { id: id.into(), name: id.to_uppercase(), unit: if basis == 1 { "unit".into() } else { "g".into() }, basis, list_cost: list, clean_pm: 1000, cook_pm: 1000 };
+    let supplies = HashMap::from([
+        ("salmon".to_string(), sup("salmon", 100, Some(250))),
+        ("rice".to_string(), sup("rice", 100, Some(99))),
+        ("box".to_string(), sup("box", 1, Some(35))),
+        ("nori".to_string(), sup("nori", 100, None)),
+        ("tobiko".to_string(), sup("tobiko", 100, None)),
+        ("rice-ready".to_string(), sup("rice-ready", 100, None)),
+    ]);
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    // Rice: 1000 g at 230 per kg (beats its list 99 per 100 g). Salmon: list only.
+    log.receive_with("rice", 1000, &Meta { unit_cost: Some(230), per: Some(1000), ..Meta::default() }).unwrap();
+    log.append(&StockEvent::Received { item: "salmon".into(), qty: 300 }).unwrap();
+    log.append(&StockEvent::Received { item: "box".into(), qty: 3 }).unwrap();
+    log.append(&StockEvent::Received { item: "nori".into(), qty: 50 }).unwrap();
+    log.append(&StockEvent::Received { item: "rice-ready".into(), qty: 200 }).unwrap();
+    // Tobiko: priced by nothing, but nothing on hand either -- not named.
+    let j = log.journal().unwrap();
+    let card = |id: &str| (id == "rice-ready").then_some(230_700i128);
+    let v = stock_value(&supplies, &j, &card);
+    // rice 1000 x 0.23 = 230; salmon 300 x 2.5 = 750; box 3 x 35 = 105; rice-ready 200 x 0.2307 = 46.14.
+    // 1131.14 -> 1131, rounded once.
+    assert_eq!(v["stockValue"], json!(1131));
+    assert_eq!(v["stockUnpriced"], json!([{ "id": "nori", "name": "NORI" }]));
+}

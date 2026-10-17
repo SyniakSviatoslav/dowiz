@@ -132,7 +132,7 @@ impl Journal {
     pub(super) fn step(&mut self, rec: &str) -> Result<(), StockError> {
         // A TRANSFER moves stock between storages and nothing else (P12).
         if let Some(m) = Moved::of(rec) {
-            self.stores.apply_move(&m, &self.ledger);
+            self.stores.apply_move(&m, &self.ledger, &self.carry);
             return Ok(());
         }
         // A STATION BOUND TO A STORAGE (W-STORE2): the storages' fold only.
@@ -153,9 +153,12 @@ impl Journal {
         };
         let before_to = to.as_deref().map_or(0, |t| self.ledger.level(t).on_hand);
         self.ledger.apply(&ev)?;
-        self.stores.step(&ev, meta.store.as_deref(), meta.drawn.as_deref(), before, before_to, &self.ledger);
-        self.book.apply_event(&ev, rec);
+        // The carry first: a storage's exact level takes the carry's change.
+        let c0 = self.carry.of(ev.item());
         self.carry.apply(&ev, meta.uq);
+        let dc = self.carry.of(ev.item()) - c0;
+        self.stores.step(&ev, meta.store.as_deref(), meta.drawn.as_deref(), before, before_to, &self.ledger, &self.carry, dc);
+        self.book.apply_event(&ev, rec);
         let entry = Entry { seq: self.seen, ev, meta, before, value };
         let ledger = &self.ledger;
         self.lots.step(&entry, |i| ledger.level(i).on_hand);

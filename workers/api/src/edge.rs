@@ -14,6 +14,8 @@ use worker::{Error, Result};
 /// `Own`: a venue's object answering its own name inside its alarm (W-LOOP).
 mod own;
 pub use own::Own;
+/// Path parameters, percent-decoded once for every handler.
+mod params;
 /// `Kv`: the KV store the media routes use.
 mod kv;
 pub use kv::Kv;
@@ -171,18 +173,20 @@ impl Stub {
 pub struct Ctx<D> {
     pub data: D,
     pub env: Env,
-    params: Params<D>,
+    params: Params,
 }
 
-enum Params<D> {
-    Live(worker::RouteContext<D>),
-    /// Named here: a test's, or a command the venue's object runs (`hubdo/command.rs`).
-    Given(Vec<(String, String)>),
-}
+/// The path's parameters: matched by the router and percent-decoded once ([`params`]), or named
+/// here -- a test's, or a command the venue's object runs (`hubdo/command.rs`).
+struct Params(Vec<(String, String)>);
 
 impl<D: Clone> Ctx<D> {
     pub fn from_worker(ctx: worker::RouteContext<D>) -> Self {
-        Ctx { data: ctx.data.clone(), env: Env::Live(ctx.env.clone()), params: Params::Live(ctx) }
+        let params = params::NAMES
+            .iter()
+            .filter_map(|k| ctx.param(k).map(|v| (k.to_string(), params::decoded(v))))
+            .collect();
+        Ctx { data: ctx.data.clone(), env: Env::Live(ctx.env.clone()), params: Params(params) }
     }
 }
 
@@ -194,13 +198,10 @@ impl<D> Ctx<D> {
     /// A context whose path parameters are given rather than matched by the router.
     pub fn given(data: D, env: Env, params: &[(&str, &str)]) -> Self {
         let params = params.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
-        Ctx { data, env, params: Params::Given(params) }
+        Ctx { data, env, params: Params(params) }
     }
     pub fn param(&self, key: &str) -> Option<&String> {
-        match &self.params {
-            Params::Live(c) => c.param(key),
-            Params::Given(p) => p.iter().find(|(k, _)| k == key).map(|(_, v)| v),
-        }
+        self.params.0.iter().find(|(k, _)| k == key).map(|(_, v)| v)
     }
     pub fn var(&self, binding: &str) -> Result<String> {
         self.env.var(binding)

@@ -82,11 +82,9 @@ pub fn cost_of(s: &Supply, book: &CostBook, qty: i64) -> Option<i64> {
 
 /// Millionths of a minor unit per base unit of `s`: the average now, else
 /// the list price. What a fractional line or a leaf is priced from.
-fn per_micro(s: &Supply, book: &CostBook) -> Option<i128> {
-    match book.avg_micro(&s.id) {
-        Some(a) => Some(a),
-        None => Some(i128::from(s.list_cost?) * i128::from(MICRO) / i128::from(s.basis.max(1))),
-    }
+/// The one rule, `recipe::prep::unit_micro`.
+pub fn per_micro(s: &Supply, book: &CostBook) -> Option<i128> {
+    crate::recipe::prep::unit_micro(book.avg_micro(&s.id), s.list_cost, s.basis)
 }
 
 /// [`cost_of`] for a line that may be fractional: a whole line costs what it
@@ -283,11 +281,7 @@ pub fn portion_cost(dish: &Dish, supplies: &HashMap<String, Supply>, book: &Cost
         let mut sum: i128 = 0;
         for (item, uq) in &dish.leaves {
             let s = supplies.get(item)?;
-            let per = match book.avg_micro(item) {
-                Some(a) => a,
-                None => i128::from(s.list_cost?) * i128::from(MICRO) / i128::from(s.basis.max(1)),
-            };
-            sum += per * i128::from(*uq);
+            sum += per_micro(s, book)? * i128::from(*uq);
         }
         let m2 = i128::from(MICRO) * i128::from(MICRO);
         return i64::try_from((sum + m2 / 2) / m2).ok();

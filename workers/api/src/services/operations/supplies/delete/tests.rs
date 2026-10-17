@@ -187,7 +187,7 @@ fn a_deletion_marks_each_dish_and_card_for_review_until_the_recipe_is_saved_by_h
     let ids: Vec<&str> = r.review.iter().map(|m| m["id"].as_str().unwrap()).collect();
     assert_eq!(ids, vec!["sushi-rice", "roll", "roll-pf", "sashimi"]);
     assert!(r.review[0]["prep"] == json!(true));
-    let u = preps::answer(&cat, "uses:rice").unwrap();
+    let u = preps::answer(&cat, &dowiz_hub::stock::cost::CostBook::default(), "uses:rice").unwrap();
     assert_eq!(u["uses"]["dishes"].as_array().unwrap().iter().map(|d| (d["id"].as_str().unwrap(), d["review"] == json!(true))).collect::<Vec<_>>(), vec![("bowl", false), ("roll", true), ("roll-pf", true)]);
     assert_eq!(u["uses"]["preps"], json!([{ "id": "sushi-rice", "name": "Sushi rice", "review": true }]));
     let listed = preps::list(&cat);

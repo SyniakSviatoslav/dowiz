@@ -74,13 +74,14 @@ export function openMove(stock, from = ''){
     <p class="hint" id="mvHave"></p>
     <div class="btn-row">${btn({ id: 'mvGo', variant: 'primary', icon: 'check', key: 'save', tour: 'store.moveSave' })}</div>`, { name: 'storeMove' });
   let f = from, to = '';
-  const have = () => { const s = sups.find(x => x.id === $('#mvItem').value); $('#mvHave').textContent = s && f ? `${L.nameOf(live.find(x => x.id === f), t)}: ${(s.byStore?.stores || {})[f] || 0} ${s.unit}` : ''; };
+  const have = () => { const s = sups.find(x => x.id === $('#mvItem').value); $('#mvHave').textContent = s && f ? `${L.nameOf(live.find(x => x.id === f), t)}: ${L.levelText(s, f)} ${s.unit}` : ''; };
+  const moveId = L.newMoveId();
   for (const b of $$('[data-mvf]', $('#sheetIn'))) b.onclick = () => { f = b.dataset.mvf; press($$('[data-mvf]', $('#sheetIn')), b); have(); };
   for (const b of $$('[data-mvt]', $('#sheetIn'))) b.onclick = () => { to = b.dataset.mvt; press($$('[data-mvt]', $('#sheetIn')), b); };
   $('#mvItem').onchange = have;
   $('#mvGo').onclick = async () => {
     const item = $('#mvItem').value, unit = sups.find(s => s.id === item)?.unit || 'g';
-    const r = L.moveBody(item, $('#mvQty').value, unit, f, to);
+    const r = L.moveBody(item, $('#mvQty').value, unit, f, to, moveId);
     if (r.error) return toast(t(r.error));
     try { await busy($('#mvGo'), () => post('/owner/stock/moved', r.body)); toast(t('sto_moved')); open(to); } catch (e) { fail(e); }
   };
@@ -90,7 +91,7 @@ export function openMove(stock, from = ''){
 function openCount(stock, cur){
   const sups = (stock.supplies || []).filter(s => s.kind !== 'prep');
   sheet(`<p class="eyebrow" data-t="sto_tool"></p><h2>${esc(L.nameOf(cur, t))}</h2><p class="sheet-hint" data-t="sto_countHint"></p>
-    <div class="rows">${sups.map(s => `<div class="row">${field({ id: 'sc-' + s.id, label: `${s.name || s.id} (${(s.byStore?.stores || {})[cur.id] || 0} ${s.unit})`, inputmode: 'decimal', autocomplete: 'off', attrs: { data: { sc: s.id } } })}</div>`).join('')}</div>
+    <div class="rows">${sups.map(s => `<div class="row">${field({ id: 'sc-' + s.id, label: `${s.name || s.id} (${L.levelText(s, cur.id)} ${s.unit})`, inputmode: 'decimal', autocomplete: 'off', attrs: { data: { sc: s.id } } })}</div>`).join('')}</div>
     <div class="btn-row">${btn({ id: 'scGo', variant: 'primary', icon: 'check', key: 'inv_saveAll', tour: 'store.countSave' })}</div>`, { name: 'storeCount' });
   $('#scGo').onclick = async () => {
     const entries = $$('[data-sc]', $('#sheetIn')).map(i => [i.dataset.sc, i.value]);

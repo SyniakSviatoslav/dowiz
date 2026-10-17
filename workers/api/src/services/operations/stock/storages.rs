@@ -4,8 +4,11 @@
 //!   storage  {card: {id?, name, archived?}} -- name, rename or archive one;
 //!            the id is minted from the name when empty. Refused: archiving
 //!            the default storage, or one that still holds stock.
-//!   moved    {item, qty, from, to}          -- a transfer: never makes or
-//!            destroys stock; refused past what `from` holds.
+//!   moved    {item, qty, from, to, moveId?} -- a transfer: never makes or
+//!            destroys stock; refused past what `from` holds EXACTLY. A
+//!            fraction moves exactly (2026-10-17: 0.25 kg, ½ piece); the
+//!            answer carries every storage's exact level as decimal text.
+//!            `moveId`: a retry with the same id moves once (`replayed`).
 //!   frozen   {item, lot, hours?, tempC, store?, started?} -- an in-house
 //!            freezing of a lot (853/2004 Annex III VIII): written whatever
 //!            rule it meets, and the answer says which one (`rule`), never
@@ -24,8 +27,10 @@
 use dowiz_hub::stock::haccp::{rule, Frozen};
 use dowiz_hub::stock::journal::Journal;
 use dowiz_hub::stock::meta::Meta;
+use dowiz_hub::stock::carry::Carry;
+use dowiz_hub::stock::storages::exact::{decimal, valid_move_id};
 use dowiz_hub::stock::storages::{Moved, Storage, Stores, DEFAULT, DEFAULTS, FREEZER};
-use dowiz_hub::stock::{Qty, StockError, StockEvent, StockLedger, StockLog};
+use dowiz_hub::stock::{StockError, StockEvent, StockLedger, StockLog};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -111,9 +116,19 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn) -> Result<(Value, Told), Bad
         }
         MOVED => {
             let qty = moved_qty(input, &item)?;
-            let m = Moved { item: item.clone(), qty, from: s("from"), to: s("to"), by: input.by.clone() };
-            log.move_stock(&m).map_err(refused)?;
-            json!({ "ok": true, "kind": MOVED, "item": item, "qty": qty, "from": m.from, "to": m.to })
+            let id = Some(s("moveId")).filter(|i| !i.is_empty());
+            if let Some(i) = id.as_deref().filter(|i| !valid_move_id(i)) {
+                return Err((400, format!("{i:?}: a move id is 1 to 64 of A-Z, a-z, 0-9, _ and -")));
+            }
+            let m = Moved { id, ..Moved::new(&item, qty.uq(), &s("from"), &s("to"), &input.by) };
+            // A refusal names the supply as the owner knows it, not its id.
+            let name = input.supplies.get(&item).map(|x| x.name.as_str()).filter(|n| !n.is_empty()).unwrap_or(&item).to_string();
+            let written = log.move_stock(&m).map_err(|e| (409, e.to_string().replacen(&format!("{item}: "), &format!("{name}: "), 1)))?;
+            let j = log.journal_now().map_err(refused)?;
+            let shown_qty = qty.as_whole().map_or_else(|| json!(qty.show()), |w| json!(w));
+            let l = levels(&j, &item);
+            json!({ "ok": true, "kind": MOVED, "item": item, "qty": shown_qty, "from": m.from, "to": m.to,
+                "replayed": !written, "stores": l["stores"], "exact": exact_levels(&j, &item) })
         }
         _ => {
             let int = |k: &str| b.get(k).and_then(Value::as_i64).ok_or((400, format!("{k}?")));
@@ -137,20 +152,17 @@ pub fn run(log: &mut StockLog, input: &StockTurnIn) -> Result<(Value, Told), Bad
 }
 
 /// A transfer's quantity, read as every stock quantity is (`recipe::qty`:
-/// `500`, `"500"`, `"250,000"`). A storage's level is WHOLE units and the
-/// carried fraction (`dowiz_hub::stock::carry`) is the item's, not a
-/// storage's: a fraction cannot be moved exactly, so it is refused by name
-/// (2026-10-16), never rounded and never "how much?".
-fn moved_qty(input: &StockTurnIn, item: &str) -> Result<i64, Bad> {
+/// `500`, `"500"`, `"0,25"`, `0.5`; three decimals). Since 2026-10-17 a
+/// fraction MOVES, exactly (`dowiz_hub::stock::storages::exact`); more than
+/// three decimals, or none at all, is refused by name -- never "how much?".
+fn moved_qty(input: &StockTurnIn, item: &str) -> Result<crate::recipe::Qty, Bad> {
     let sup = input.supplies.get(item);
     let name = sup.map(|s| s.name.as_str()).filter(|n| !n.is_empty()).unwrap_or(item);
     let raw = input.body.get("qty").cloned().unwrap_or(Value::Null);
     if raw.is_null() {
         return Err((400, format!("{name}: how much to move? a number with at most 3 decimals")));
     }
-    let q: crate::recipe::Qty = serde_json::from_value(raw).map_err(|e| (400, format!("{name}: {e}")))?;
-    let unit = sup.map(|s| s.unit.as_str()).filter(|u| !u.is_empty()).unwrap_or("g");
-    q.as_whole().ok_or_else(|| (400, format!("{name}: move whole units of {unit} between storages for now")))
+    serde_json::from_value(raw).map_err(|e| (400, format!("{name}: {e}")))
 }
 
 /// The storages the movement plan names, checked against the venue's, and
@@ -158,6 +170,7 @@ fn moved_qty(input: &StockTurnIn, item: &str) -> Result<i64, Bad> {
 pub struct Rooms {
     stores: Stores,
     led: StockLedger,
+    carry: Carry,
 }
 
 impl Rooms {
@@ -177,13 +190,15 @@ impl Rooms {
         } else {
             Journal::default()
         };
-        Ok(Rooms { stores: j.stores, led: j.ledger })
+        Ok(Rooms { stores: j.stores, led: j.ledger, carry: j.carry })
     }
 
-    /// The shelf's total for `item` when `store` is counted at `observed`.
-    pub fn total_for(&self, item: &str, store: &str, observed: Qty) -> Qty {
-        let others: Qty = self.stores.of(item, &self.led).iter().filter(|(s, _)| s != store).map(|x| x.1).sum();
-        observed.saturating_add(others)
+    /// The shelf's EXACT total for `item`, in millionths, when `store` is
+    /// counted at `observed_uq`: the counted storage plus every other one's
+    /// exact level, fractions kept (2026-10-17; they were whole before).
+    pub fn total_for(&self, item: &str, store: &str, observed_uq: i64) -> i64 {
+        let others: i64 = self.stores.exact_of(item, &self.led, &self.carry).iter().filter(|(s, _)| s != store).map(|x| x.1).sum();
+        observed_uq.saturating_add(others)
     }
 }
 
@@ -208,13 +223,27 @@ pub fn list(log: &StockLog) -> Value {
     Value::Array(all)
 }
 
-/// A supply's levels per storage, `{storage: qty}`, for its row. PURE.
+/// A supply's levels per storage, `{storage: qty}` (whole, as before), for
+/// its row -- and `exact`, `{storage: "0.75"}`, ONLY when a storage holds a
+/// fraction (any exact level differs from its whole one), so a whole
+/// venue's answer keeps its bytes (`PIN_STOCK`). PURE.
 pub fn levels(j: &Journal, id: &str) -> Value {
     let mut m = serde_json::Map::new();
     for (s, q) in j.stores.of(id, &j.ledger) {
         m.insert(s, json!(q));
     }
-    json!({ "stores": m, "home": j.stores.home(id) })
+    let mut v = json!({ "stores": m, "home": j.stores.home(id) });
+    let whole: Vec<(String, i64)> = j.stores.of(id, &j.ledger).into_iter().map(|(s, q)| (s, q.saturating_mul(dowiz_hub::prep::MICRO))).collect();
+    if j.stores.exact_of(id, &j.ledger, &j.carry) != whole {
+        v["exact"] = exact_levels(j, id);
+    }
+    v
+}
+
+/// `{storage: "<exact decimal>"}` for every storage holding `id`. PURE.
+pub fn exact_levels(j: &Journal, id: &str) -> Value {
+    let m: serde_json::Map<String, Value> = j.stores.exact_of(id, &j.ledger, &j.carry).into_iter().map(|(s, q)| (s, json!(decimal(q)))).collect();
+    Value::Object(m)
 }
 
 #[cfg(test)]

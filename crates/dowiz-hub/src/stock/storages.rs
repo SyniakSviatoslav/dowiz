@@ -30,9 +30,8 @@
 
 use std::collections::BTreeMap;
 
-use super::notes::is_note;
+use super::carry::{Carry, MICRO};
 use super::{moved_into, Qty, StockEvent, StockLedger};
-use crate::minijson::{esc, int_field, str_field};
 
 /// Where every record written before storages happened.
 pub const DEFAULT: &str = "kitchen";
@@ -65,44 +64,28 @@ pub struct Stores {
     /// W-STORE2: `(order, item)` -> the storages a bound reservation's later
     /// `consumed` takes from, `(storage, uq)`; "" is the unbound home.
     pub(super) held: BTreeMap<(String, String), Vec<(String, i64)>>,
+    /// 2026-10-17: `(item, storage)` -> millionths its EXACT level differs
+    /// from its whole one (`storages/exact.rs`). Empty while no fraction is
+    /// anywhere: nothing below changes, no checkpoint byte changes.
+    pub(super) frac: BTreeMap<(String, String), i64>,
 }
 
-/// A transfer: `qty` of `item` from one storage to another, signed.
+/// A transfer: `uq` millionths of `item` from one storage to another, signed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Moved {
     pub item: String,
+    /// The WHOLE units the storages' booked levels move. Set by the write
+    /// door (`move_stock`) from `uq`; what a caller puts here is ignored.
     pub qty: Qty,
+    /// The EXACT quantity moved, in millionths (2026-10-17). A record
+    /// written before fractions moved has none: it is `qty x 10^6`.
+    pub uq: i64,
     pub from: String,
     pub to: String,
     pub by: String,
-}
-
-impl Moved {
-    /// The note's body (`StockLog::append_note`).
-    pub fn body(&self) -> String {
-        format!(
-            r#"{{"item":"{}","qty":{},"from":"{}","to":"{}","by":"{}"}}"#,
-            esc(&self.item),
-            self.qty,
-            esc(&self.from),
-            esc(&self.to),
-            esc(&self.by)
-        )
-    }
-
-    /// The transfer a raw record is, or `None` for any other record.
-    pub fn of(rec: &str) -> Option<Moved> {
-        if !is_note(rec, MOVED) {
-            return None;
-        }
-        Some(Moved {
-            item: str_field(rec, "item")?,
-            qty: int_field(rec, "qty").filter(|q| *q > 0)?,
-            from: str_field(rec, "from")?,
-            to: str_field(rec, "to")?,
-            by: str_field(rec, "by").unwrap_or_default(),
-        })
-    }
+    /// The console's `moveId`: a transfer with an id already written is
+    /// never written again (a retried tap moves once).
+    pub id: Option<String>,
 }
 
 /// A storage's card. The newest card of an id is the card.
@@ -168,15 +151,18 @@ impl Stores {
         excess
     }
 
-    /// Fold one event that the ledger has JUST applied. `before`: the item's
-    /// `on_hand` before it; `before_to`: a prep's output's.
-    pub(super) fn step(&mut self, ev: &StockEvent, store: Option<&str>, drawn: Option<&str>, before: Qty, before_to: Qty, led: &StockLedger) {
+    /// Fold one event that the ledger and the carry have JUST applied.
+    /// `before`: the item's `on_hand` before it; `before_to`: a prep's
+    /// output's; `dc`: the item's carry change (`storages/exact.rs`).
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn step(&mut self, ev: &StockEvent, store: Option<&str>, drawn: Option<&str>, before: Qty, before_to: Qty, led: &StockLedger, carry: &Carry, dc: i64) {
         if !self.used {
             return;
         }
         let item = ev.item().to_string();
         if let StockEvent::Removed { .. } = ev {
             self.levels.retain(|(i, _), _| *i != item);
+            self.frac.retain(|(i, _), _| *i != item);
             self.last.remove(&item);
             self.held.retain(|(_, i), _| *i != item);
             return;
@@ -189,27 +175,36 @@ impl Stores {
         let here = store.map(str::to_string).unwrap_or_else(|| self.home(&item).to_string());
         match ev {
             StockEvent::Received { qty, .. } | StockEvent::Made { qty, .. } => {
+                self.pin_home(&item, &here, carry.of(&item) - dc);
                 let rest = self.forgive(&item, d - qty);
                 self.add(&item, &here, qty + rest);
-                self.last.insert(item, here);
+                self.last.insert(item.clone(), here.clone());
             }
             StockEvent::Produced { into, .. } => {
                 self.add(&item, &here, d);
                 if let Some(to) = moved_into(&item, into).map(str::to_string) {
                     let dt = led.level(&to).on_hand - before_to;
+                    self.pin_home(&to, &here, carry.of(&to));
                     self.add(&to, &here, dt);
-                    self.last.insert(to, here);
+                    self.last.insert(to, here.clone());
                 }
             }
             _ => self.add(&item, &here, d),
         }
+        self.land_frac(&item, &here, dc);
     }
 
     /// Fold one transfer. Never refused here: the write door decided it.
-    pub(super) fn apply_move(&mut self, m: &Moved, led: &StockLedger) {
+    /// The whole `qty` moves the booked levels, the rest of `uq` the
+    /// storages' fractions -- each storage changes by exactly `uq`.
+    pub(super) fn apply_move(&mut self, m: &Moved, led: &StockLedger, carry: &Carry) {
         self.materialise(led);
+        self.pin_home(&m.item, &m.to, carry.of(&m.item));
         self.add(&m.item, &m.from, -m.qty);
         self.add(&m.item, &m.to, m.qty);
+        let f = m.uq.saturating_sub(m.qty.saturating_mul(MICRO));
+        self.add_frac(&m.item, &m.from, f.saturating_neg());
+        self.add_frac(&m.item, &m.to, f);
         self.last.insert(m.item.clone(), m.to.clone());
     }
 
@@ -232,17 +227,6 @@ impl Stores {
         }
         self.levels.iter().filter(|((i, _), _)| i == item).map(|((_, s), q)| (s.clone(), *q)).collect()
     }
-
-    /// Every item with a non-zero level in `store`.
-    pub fn in_store(&self, store: &str, led: &StockLedger) -> Vec<(String, Qty)> {
-        if !self.used {
-            if store != DEFAULT {
-                return vec![];
-            }
-            return led.items().into_iter().filter(|(_, l)| l.on_hand != 0).map(|(i, l)| (i, l.on_hand)).collect();
-        }
-        self.levels.iter().filter(|((_, s), _)| s == store).map(|((i, _), q)| (i.clone(), *q)).collect()
-    }
 }
 
 /// A storage id as stored: trimmed, 1..=[`ID_MAX`] of `a-z 0-9 _ -`.
@@ -253,6 +237,10 @@ pub fn valid_id(id: &str) -> bool {
 /// The write doors: a storage's card and a transfer (split out at 300 lines).
 #[path = "storages/write.rs"]
 mod write;
+
+/// Exact levels per storage: fractions move (2026-10-17).
+#[path = "storages/exact.rs"]
+pub mod exact;
 
 /// W-STORE2: a station bound to a storage, and the draws that follow it.
 #[path = "storages/bind.rs"]

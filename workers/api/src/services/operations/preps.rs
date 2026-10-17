@@ -26,11 +26,17 @@ use worker::*;
 
 use dowiz_hub::catalog::Catalog;
 use dowiz_hub::prep::{self, Card, Line};
+use dowiz_hub::stock::cost::CostBook;
 
 use super::supplies::delete::review::has_mark;
 
 /// Re-deriving the dishes an item reaches, shared with the supply write.
 pub mod rederive;
+/// What one sale of a dish takes off the shelf, and its cost.
+mod takes;
+#[cfg(test)]
+pub use takes::takes;
+pub use takes::takes_priced;
 
 /// One card line as the console sends it.
 #[derive(Deserialize, Clone, Debug)]
@@ -159,11 +165,19 @@ pub async fn set_prep(mut req: Request, ctx: RouteContext<crate::Req>) -> Result
     }
 }
 
-/// Every ПФ of the catalogue, hydrated, with where each is used. PURE.
+/// Every ПФ of the catalogue, hydrated at LIST prices, with where each is used. PURE.
+#[cfg(test)] // the routes read the priced twin; the tests keep the list-price read
 pub fn list(cat: &Catalog) -> Vec<Value> {
+    list_priced(cat, &CostBook::default())
+}
+
+/// [`list`], each card's raw leaves priced at the AVERAGE a priced delivery
+/// set, else the list price (`recipe::prep::averaged`, 2026-10-17). PURE.
+pub fn list_priced(cat: &Catalog, book: &CostBook) -> Vec<Value> {
     let supplies = cat.supplies();
     let products = cat.products();
-    let supply = |s: &str| cat.supply(s);
+    let bare = |s: &str| cat.supply(s);
+    let supply = crate::recipe::prep::averaged(&bare, book);
     supplies
         .iter()
         .filter(|(_, j)| prep::is_prep(j))
@@ -201,9 +215,9 @@ pub const NO_SUCH_QUESTION: &str = "no such question: list, uses:<id> or takes:<
 /// image never crosses the hop (R3, `tools/gates/dataflow.sh`). `q` is `list`,
 /// `uses:<supply id>` or `takes:<product id>`; a refusal is a status and its
 /// words, exactly the ones the Worker's handlers gave. PURE.
-pub fn answer(cat: &Catalog, q: &str) -> std::result::Result<Value, (u16, &'static str)> {
+pub fn answer(cat: &Catalog, book: &CostBook, q: &str) -> std::result::Result<Value, (u16, &'static str)> {
     match q.split_once(':') {
-        None if q == "list" => Ok(json!({ "preps": list(cat) })),
+        None if q == "list" => Ok(json!({ "preps": list_priced(cat, book) })),
         Some(("uses", id)) => {
             let j = cat.supply(id).ok_or((404, "unknown supply"))?;
             let u = prep::uses_of(id, &cat.supplies(), &cat.products());
@@ -211,7 +225,7 @@ pub fn answer(cat: &Catalog, q: &str) -> std::result::Result<Value, (u16, &'stat
         }
         Some(("takes", id)) => {
             let j = cat.product(id).ok_or((404, "unknown dish"))?;
-            let mut v = takes(cat, &j);
+            let mut v = takes_priced(cat, book, &j);
             v["id"] = json!(id);
             Ok(v)
         }
@@ -251,34 +265,6 @@ pub async fn list_preps(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
 pub async fn uses(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing supply id", 400) };
     ask(&req, &ctx, &format!("uses:{id}")).await
-}
-
-/// What one sale of `product_json` takes off the shelf, and what it costs
-/// at list prices. PURE.
-pub fn takes(cat: &Catalog, product_json: &str) -> Value {
-    let supply = |s: &str| cat.supply(s);
-    let bom = dowiz_hub::stock::bom_of(product_json);
-    // EXACT (W-QTYHUB H1): the lines' millionths, so half a sheet is half a sheet.
-    let lines: Vec<(String, i64)> = bom.iter().map(|l| (l.supply.clone(), l.uq)).collect();
-    let price = |s: &str| supply(s).and_then(|j| crate::recipe::prep::price_micro(&j));
-    match prep::expand_micro(&lines, &supply) {
-        Ok(leaves) => {
-            let rows: Vec<Value> = leaves
-                .iter()
-                .map(|l| {
-                    let sv: Value = supply(&l.item).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
-                    let cost = price(&l.item).map(|p| (p * i128::from(l.uq) + i128::from(prep::MICRO) * i128::from(prep::MICRO) / 2) / (i128::from(prep::MICRO) * i128::from(prep::MICRO)));
-                    // Three decimals of the base unit, rounded once.
-                    let milli = (l.uq + 500) / 1000;
-                    json!({ "supply": l.item, "name": sv.get("name").cloned().unwrap_or(json!(l.item)), "unit": sv.get("unit").cloned().unwrap_or(json!("g")),
-                        "uq": l.uq, "qty": format!("{}.{:03}", milli / 1000, milli % 1000), "cost": cost.map(|c| json!(c as i64)).unwrap_or(Value::Null) })
-                })
-                .collect();
-            let total = prep::cost_micro_uq(&lines, &supply, &price).ok().flatten().map(|m| (i128::from(m) + i128::from(prep::MICRO) / 2) / i128::from(prep::MICRO));
-            json!({ "leaves": rows, "cost": total.map(|c| json!(c as i64)).unwrap_or(Value::Null), "lines": bom.len() })
-        }
-        Err(why) => json!({ "leaves": [], "cost": Value::Null, "lines": bom.len(), "refused": why.to_string() }),
-    }
 }
 
 /// `GET /api/owner/products/:id/takes`.

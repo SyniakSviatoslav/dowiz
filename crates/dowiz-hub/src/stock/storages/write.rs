@@ -2,6 +2,7 @@
 //! storage's card (name, rename, archive) and a transfer -- each refused with
 //! nothing written when it would break the storage rules.
 
+use super::exact::{decimal, round_half_up, valid_move_id};
 use super::{valid_id, Moved, Storage, DEFAULT, DEFAULTS, MOVED, NAME_MAX, STORAGE};
 use crate::minijson::{esc, int_field, str_field};
 use crate::stock::journal::Journal;
@@ -56,9 +57,10 @@ impl StockLog {
                 return refuse("the default storage cannot be archived");
             }
             let j = self.journal_now()?;
-            let held = j.stores.in_store(&s.id, &j.ledger);
+            // EXACT: 0.25 kg left in it is stock in it (2026-10-17).
+            let held = j.stores.in_store_exact(&s.id, &j.ledger, &j.carry);
             if let Some((item, q)) = held.first() {
-                return Err(StockError::Linkage(format!("{}: still holds {q} of {item}; move it out or count it first", s.id)));
+                return Err(StockError::Linkage(format!("{}: still holds {} of {item}; move it out or count it first", s.id, decimal(*q))));
             }
             // W-STORE2: a station's storage stays open while it is bound.
             if let Some((station, _)) = j.stores.bound().iter().find(|(_, st)| **st == s.id) {
@@ -69,16 +71,28 @@ impl StockLog {
         self.append_note(STORAGE, &body)
     }
 
-    /// A TRANSFER. Refused, nothing written: unsigned, not a quantity, the
-    /// same storage twice, a storage the venue does not have (or archived,
-    /// as the destination), and more than `from` holds -- a transfer never
-    /// makes stock, so it cannot take what is not there.
-    pub fn move_stock(&mut self, m: &Moved) -> Result<(), StockError> {
+    /// A TRANSFER of `m.uq` millionths, EXACT (2026-10-17). Refused, nothing
+    /// written: unsigned, not a quantity, the same storage twice, a storage
+    /// the venue does not have (or archived, as the destination), more than
+    /// `from` holds EXACTLY ("salmon: kitchen holds only 0.5"), an id reused
+    /// for another transfer -- and, checked on the write, storages that would
+    /// not sum to the item's exact shelf. Answers `false`, nothing written,
+    /// for a transfer whose `id` is already in the log (a retry moves once).
+    pub fn move_stock(&mut self, m: &Moved) -> Result<bool, StockError> {
         if m.by.trim().is_empty() {
             return Err(StockError::Unsigned);
         }
-        if m.qty <= 0 {
-            return Err(StockError::NotPositive { qty: m.qty });
+        if m.uq <= 0 {
+            return Err(StockError::NotPositive { qty: m.uq });
+        }
+        if let Some(id) = m.id.as_deref() {
+            if !valid_move_id(id) {
+                return Err(StockError::Linkage(format!("{id:?}: a move id is 1 to 64 of A-Z, a-z, 0-9, _ and -")));
+            }
+            if let Some(was) = self.notes(MOVED).iter().filter_map(|r| Moved::of(r)).find(|w| w.id.as_deref() == Some(id)) {
+                let same = (&was.item, was.uq, &was.from, &was.to) == (&m.item, m.uq, &m.from, &m.to);
+                return if same { Ok(false) } else { Err(StockError::Linkage(format!("move {id} was already used for another transfer"))) };
+            }
         }
         let known = self.storages();
         let has = |id: &str, open: bool| known.iter().any(|s| s.id == id && !(open && s.archived));
@@ -86,11 +100,29 @@ impl StockLog {
             return Err(StockError::Linkage(format!("a transfer is between two storages of this venue: {} -> {}", m.from, m.to)));
         }
         let j = self.journal_now()?;
-        let available = j.stores.level(&m.item, &m.from, &j.ledger);
-        if available < m.qty {
-            return Err(StockError::OutOfStock { item: m.item.clone(), wanted: m.qty, available });
+        let (st, led, carry) = (&j.stores, &j.ledger, &j.carry);
+        let have = st.exact(&m.item, &m.from, led, carry);
+        if have < m.uq {
+            return Err(StockError::Linkage(format!("{}: {} holds only {}", m.item, m.from, decimal(have))));
         }
-        self.append_note(MOVED, &m.body())
+        // THE WHOLE UNITS the booked levels move: what makes `to`'s booked
+        // level its exact one rounded, never more than `from` books. A whole
+        // transfer with no fraction anywhere is its own quantity (old bytes).
+        let to_have = st.exact(&m.item, &m.to, led, carry);
+        let to_level = st.level(&m.item, &m.to, led);
+        let want = round_half_up(to_have.saturating_add(m.uq)) - to_level;
+        let mv = Moved { qty: want.clamp(0, st.level(&m.item, &m.from, led).max(0)), ..m.clone() };
+        // THE INVARIANT, on the write: each storage moves by exactly `uq` and
+        // the storages still sum to the item's exact shelf.
+        let mut after = st.clone();
+        after.apply_move(&mv, led, carry);
+        let sum: i64 = after.exact_of(&m.item, led, carry).iter().map(|x| x.1).sum();
+        let ok = sum == carry.exact(&m.item, led.level(&m.item).on_hand)
+            && after.exact(&m.item, &m.from, led, carry) == have - m.uq
+            && after.exact(&m.item, &m.to, led, carry) == to_have + m.uq;
+        if !ok {
+            return Err(StockError::Linkage(format!("{}: the storages would not sum to the shelf; nothing moved", m.item)));
+        }
+        self.append_note(MOVED, &mv.body()).map(|()| true)
     }
 }
-

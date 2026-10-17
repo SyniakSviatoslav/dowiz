@@ -149,14 +149,17 @@ pub async fn owner_products(req: Request, ctx: RouteContext<crate::Req>) -> Resu
 
 /// The dishes as the owner reads them, `want` alone if given. PURE. A recipe
 /// is stored lean (`{supply, qty}`); each line is read with its supply's name
-/// and numbers as they are now.
-pub(crate) fn owner_view(cat: &Catalog, want: Option<&str>) -> Vec<Value> {
+/// and numbers as they are now, each raw leaf priced at the AVERAGE a priced
+/// delivery set, else its list price (`recipe::prep::averaged`, 2026-10-17).
+pub(crate) fn owner_view(cat: &Catalog, want: Option<&str>, book: &dowiz_hub::stock::cost::CostBook) -> Vec<Value> {
+    let bare = |s: &str| cat.supply(s);
+    let priced = crate::recipe::prep::averaged(&bare, book);
     cat.products()
         .into_iter()
         .filter(|(id, _)| want.is_none_or(|w| w == id))
         .filter_map(|(_, j)| serde_json::from_str(&j).ok())
         .map(|mut p: Value| {
-            crate::recipe::hydrate(&mut p, |s| cat.supply(s));
+            crate::recipe::hydrate(&mut p, &priced);
             p
         })
         .collect()

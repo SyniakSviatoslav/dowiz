@@ -14,7 +14,7 @@ fn into(store: &str) -> Meta {
     Meta { store: Some(store.into()), ..Meta::default() }
 }
 fn mv(item: &str, qty: Qty, from: &str, to: &str) -> Moved {
-    Moved { item: item.into(), qty, from: from.into(), to: to.into(), by: "p1".into() }
+    Moved::new(item, qty * 1_000_000, from, to, "p1")
 }
 fn sell(log: &mut StockLog, order: &str, portions: i64) {
     log.append_all(&reservations_for(order, &[(ROLL.into(), portions)])).unwrap();
@@ -75,7 +75,10 @@ fn a_transfer_never_makes_or_destroys_stock() {
     assert_eq!(total(&after), total(&before), "the sum over storages moved");
     // More than the storage holds is refused, nothing written.
     let n = log.len();
-    assert!(matches!(log.move_stock(&mv("salmon", 501, "kitchen", "bar")), Err(StockError::OutOfStock { available: 500, .. })));
+    // UPDATED 2026-10-17: was `OutOfStock { available: 500 }`; the refusal
+    // now names the storage and its EXACT level (fractions move).
+    let e = log.move_stock(&mv("salmon", 501, "kitchen", "bar")).unwrap_err();
+    assert_eq!(e.to_string(), "salmon: kitchen holds only 500");
     // Same storage twice, an unknown storage, unsigned, not a quantity.
     assert!(log.move_stock(&mv("salmon", 1, "kitchen", "kitchen")).is_err());
     assert!(log.move_stock(&mv("salmon", 1, "kitchen", "cellar")).is_err());
