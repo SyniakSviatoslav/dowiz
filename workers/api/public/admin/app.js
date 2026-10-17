@@ -158,22 +158,40 @@ function light(id){
   for (const b of $$('#nav [data-tab]')) b.setAttribute('aria-current', b.dataset.tab === id ? 'page' : 'false');
   for (const b of $$('#nav [data-open]')) b.setAttribute('aria-current', 'false');
 }
+// ONLY THE LAST TAP DRAWS (qa-durres, 2026-10-17): two taps in a row left the
+// first tab still rendering into the host the second had just replaced -- the
+// Menu tab showed the kitchen's tickets, and a render wrote into an element
+// that no longer existed ("Cannot set properties of null"). Each call takes a
+// number; a call that is no longer the latest stops before it touches the page.
+let showing = 0;
 export async function show(id, arg){
+  const mine = ++showing;
   S.tab = id; light(id); closeSheet();
   const m = await module(id);
+  if (mine !== showing) return;
   const swap = async () => {
+    if (mine !== showing) return;
     // The open tab's name on the host: admin.css scopes a few rules to a
     // screen whose markup another lane owns (menu, stock) by this attribute.
     $('#app').dataset.tab = id;
     $('#app').innerHTML = `<div class="screen" id="screen"></div>`;
-    await m.render($('#screen'), arg);
+    const host = $('#screen');
+    // A render a newer tap overtook may throw on the elements it lost; that
+    // throw is the old tab's, not this page's.
+    try { await m.render(host, arg); } catch (e) { if (mine === showing && host.isConnected) throw e; return; }
+    if (mine !== showing || !host.isConnected) return;
     retranslate($('#app')); hydrate($('#app'));
-    mountDrafts($('#screen'), 'tab:' + id);
+    mountDrafts(host, 'tab:' + id);
   };
   // A cross-fade between tabs where the browser has View Transitions; the
-  // same swap, instantly, everywhere else and under reduced motion.
-  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) await document.startViewTransition(swap).updateCallbackDone;
-  else await swap();
+  // same swap, instantly, everywhere else and under reduced motion. A newer
+  // tap SKIPS the running transition, which rejects its `ready` and
+  // `finished`: those are expected, so they are caught, not thrown at the page.
+  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const vt = document.startViewTransition(swap);
+    vt.ready.catch(() => {}); vt.finished.catch(() => {});
+    await vt.updateCallbackDone;
+  } else await swap();
 }
 /// Re-render the open tab in place after data moved (the poll, an action).
 export async function rerender(){
