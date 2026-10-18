@@ -230,7 +230,7 @@ fn kitchen() -> Value {
             {"id": "d2", "name": "Miso soup", "sold": 5, "revenue": 2500, "byDay": [4, 0, 0, 0, 0, 1, 0], "marginPortion": 300},
             {"id": "d3", "name": "Gyoza", "sold": 3, "revenue": 1800, "byDay": [1, 1, 1, 0, 0, 0, 0], "marginPortion": null}
         ],
-        "totals": {"revenue": 12400, "cogs": 3100, "foodCostPm": 250, "wasteValue": 700},
+        "totals": {"revenue": 12400, "costedRevenue": 12400, "cogs": 3100, "foodCostPm": 250, "wasteValue": 700},
         "waste": [{"reason": "spoiled", "rows": 1, "value": 500}, {"reason": "dropped", "rows": 1, "value": 200}],
         "ingredients": [{"id": "salmon", "name": "Salmon", "reorder": 2000}, {"id": "rice", "name": "Rice", "reorder": null}],
     })

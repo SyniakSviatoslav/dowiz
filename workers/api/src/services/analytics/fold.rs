@@ -113,7 +113,7 @@ pub fn fold(orders: &[Value], zone: Zone, starts: &[i64], now: i64) -> Report {
         starts.iter().map(|at| Day { at: *at, orders: 0, revenue: 0 }).collect();
     let mut by_hour = [0i64; 24];
     let mut products: Vec<Dish> = Vec::new();
-    let (mut count, mut revenue, mut rejected) = (0i64, 0i64, 0i64);
+    let (mut count, mut revenue, mut rejected, mut waiting) = (0i64, 0i64, 0i64, 0i64);
     let (mut delivery, mut pickup, mut dine_in) = (0i64, 0i64, 0i64);
     let mut by_channel = std::collections::BTreeMap::<String, i64>::new();
 
@@ -130,10 +130,14 @@ pub fn fold(orders: &[Value], zone: Zone, starts: &[i64], now: i64) -> Report {
 
         let st = o.get("status").and_then(Value::as_str).unwrap_or("");
         let refused = !status::took_money(st);
+        // NOT YET ACCEPTED: a visit like a refused one, but not money, a dish or
+        // a check either (`status::in_takings`, flows F11 P1, 2026-10-17).
+        let pending = !refused && !status::in_takings(st);
         count += 1;
         if refused {
             rejected += 1;
         }
+        waiting += i64::from(pending);
         let took = status::venue_took(
             o.get("total").and_then(Value::as_i64).unwrap_or(0),
             o.get("tip").and_then(Value::as_i64).unwrap_or(0),
@@ -165,7 +169,7 @@ pub fn fold(orders: &[Value], zone: Zone, starts: &[i64], now: i64) -> Report {
             .clamp(0, 23) as usize;
         by_hour[local_h] += 1;
 
-        if refused {
+        if refused || pending {
             continue;
         }
         for it in o.get("items").and_then(Value::as_array).into_iter().flatten() {
@@ -199,7 +203,7 @@ pub fn fold(orders: &[Value], zone: Zone, starts: &[i64], now: i64) -> Report {
         // INTEGER DIVISION over the ACCEPTED orders. Money never becomes a
         // float in this system, and a mean that rounds down by one lek is
         // honest in a way 2649.9999 is not.
-        average_order: if count > rejected { revenue / (count - rejected) } else { 0 },
+        average_order: if count > rejected + waiting { revenue / (count - rejected - waiting) } else { 0 },
         delivery,
         pickup,
         dine_in,

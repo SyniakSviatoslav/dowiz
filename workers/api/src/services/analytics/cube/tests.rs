@@ -34,6 +34,20 @@ fn a_day_row_counts_visits_money_hours_channels_and_dishes() {
     assert_eq!(r.m["sake"], [2, 900, 2, 240], "two portions, stamped at 120 each");
 }
 
+/// A WAITING ORDER IS A VISIT, NOT TAKINGS, and the average leaves it out
+/// (flows F11 P1). `p` is not written while zero, so rows written before it read the same.
+#[test]
+fn a_pending_order_is_a_visit_in_its_own_count_and_no_money() {
+    let os = [order("a", NOON, "DELIVERED", sake(2)), order("b", NOON + 60_000, "PENDING", sake(5))];
+    let rows = fold_orders(&os, tirane(), NOON + 3_600_000);
+    let r = &rows[&20260922];
+    assert_eq!((r.o, r.x, r.p, r.t, r.f), (2, 0, 1, 900, 900), "{r:?}");
+    assert_eq!(r.m["sake"][0], 2, "the waiting basket's five are no portions yet");
+    assert_eq!(crate::services::analytics::history::average(r), 900, "900 over one check, not two");
+    let old = fold_orders(&os[..1], tirane(), NOON + 3_600_000);
+    assert!(!serde_json::to_string(&old[&20260922]).unwrap().contains("\"p\""), "a zero is not written");
+}
+
 /// A line without a stamp is sold but not costed: a partial sum is not a cost.
 #[test]
 fn an_unstamped_line_is_sold_and_not_costed() {

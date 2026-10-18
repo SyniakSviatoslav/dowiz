@@ -46,6 +46,10 @@ pub struct DayCube {
     pub o: i64,
     /// Of those, refused: the venue took no money.
     pub x: i64,
+    /// Of those, still waiting to be accepted: a visit, not yet money, dishes or a
+    /// check (`status::in_takings`, flows F11 P1). Absent in a row written before it.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub p: i64,
     /// What the venue took: total minus tip, of the accepted orders.
     pub t: i64,
     /// Food sales: unit price x quantity of the accepted orders' lines.
@@ -65,6 +69,10 @@ pub struct DayCube {
     pub src: Vec<String>,
 }
 
+fn is_zero(n: &i64) -> bool {
+    *n == 0
+}
+
 impl DayCube {
     pub fn new(d: i64) -> Self {
         DayCube { d, ..DayCube::default() }
@@ -74,6 +82,7 @@ impl DayCube {
     pub fn add(&mut self, other: &DayCube) {
         self.o += other.o;
         self.x += other.x;
+        self.p += other.p;
         self.t += other.t;
         self.f += other.f;
         for i in 0..3 {
@@ -128,6 +137,7 @@ pub fn fold_orders(orders: &[Value], zone: Zone, now: i64) -> BTreeMap<i64, DayC
         let row = out.entry(d).or_insert_with(|| DayCube::new(d));
         let st = o.get("status").and_then(Value::as_str).unwrap_or("");
         let refused = !status::took_money(st);
+        let waiting = !refused && !status::in_takings(st);
         let took = status::venue_took(
             o.get("total").and_then(Value::as_i64).unwrap_or(0),
             o.get("tip").and_then(Value::as_i64).unwrap_or(0),
@@ -135,6 +145,7 @@ pub fn fold_orders(orders: &[Value], zone: Zone, now: i64) -> BTreeMap<i64, DayC
         );
         row.o += 1;
         row.x += i64::from(refused);
+        row.p += i64::from(waiting);
         row.t += took;
         row.k[match crate::services::ordering::fulfilment::of(o) {
             "delivery" => 0,
@@ -147,7 +158,7 @@ pub fn fold_orders(orders: &[Value], zone: Zone, now: i64) -> BTreeMap<i64, DayC
         let ch = row.c.entry(crate::services::ordering::channel::of(o).unwrap_or("unknown").to_string()).or_default();
         ch[0] += 1;
         ch[1] += took;
-        if refused {
+        if refused || waiting {
             continue;
         }
         for it in o.get("items").and_then(Value::as_array).into_iter().flatten() {

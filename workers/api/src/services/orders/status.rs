@@ -57,6 +57,17 @@ pub fn is_active(status: &str) -> bool {
     OrderStatus::from_str(status).is_some_and(|s| s.is_active())
 }
 
+/// Is this order in the venue's TAKINGS -- revenue, cost of goods, dishes sold?
+///
+/// `took_money`, less `PENDING`: an order nobody has accepted yet is a decision
+/// the venue owes, not money it took. Counting it put a guest's unanswered
+/// basket in the owner's revenue the moment it was placed, and an order the
+/// venue then rejected left the day's figure again a minute later (flows F11
+/// P1, 2026-10-17). `REFUNDING` stays in, for the reason `took_money` gives.
+pub fn in_takings(status: &str) -> bool {
+    status != "PENDING" && took_money(status)
+}
+
 /// What the VENUE took from one order, in minor units.
 ///
 /// THE TIP IS THE COURIER'S, passing through. This subtraction lived in four
@@ -66,7 +77,7 @@ pub fn is_active(status: &str) -> bool {
 /// showed an owner two different numbers depending on which deployment they
 /// opened, on the same screen.
 pub fn venue_took(total: i64, tip: i64, status: &str) -> i64 {
-    if took_money(status) {
+    if in_takings(status) {
         total - tip
     } else {
         0

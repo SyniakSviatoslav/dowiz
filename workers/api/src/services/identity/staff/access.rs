@@ -233,7 +233,7 @@ pub(crate) const HANDED_BACK: &[(&str, &str)] = &[];
 /// The kitchen numbers' money FROM SALES: what the venue took and kept, and
 /// food cost, which is a share of it. Removed at any depth, so a revenue field
 /// a later report grows under one of these names cannot reach a cook.
-pub(crate) const REVENUE_KEYS: [&str; 4] = ["revenue", "margin", "marginPortion", "foodCostPm"];
+pub(crate) const REVENUE_KEYS: [&str; 5] = ["revenue", "costedRevenue", "margin", "marginPortion", "foodCostPm"];
 
 /// `GET /api/owner/analytics/kitchen` for staff: cost and usage, no revenue.
 pub(crate) fn numbers_for_kitchen(mut out: Value) -> Value {

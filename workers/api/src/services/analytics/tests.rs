@@ -173,6 +173,22 @@ fn a_refusal_counts_as_a_visit_but_not_as_money_or_as_a_dish() {
     assert!(r.top_products.is_empty(), "nobody ate it");
 }
 
+/// AN ORDER NOBODY HAS ACCEPTED IS A VISIT, NOT TAKINGS (flows F11 P1,
+/// 2026-10-17): no money, no dish, not a check in the average, and not a
+/// refusal either. Counted, its basket sat in the owner's revenue from the
+/// moment it was placed and left it again when the venue rejected it.
+#[test]
+fn a_pending_order_is_a_visit_but_not_money_a_dish_or_a_check() {
+    let z = tirane();
+    let starts = day_starts(z, NOON, 7);
+    let os = [order(NOON, 1000, 0, "DELIVERED", "pickup"), order(NOON, 9000, 0, "PENDING", "pickup")];
+    let r = fold(&os, z, &starts, NOON);
+    assert_eq!((r.orders, r.rejected, r.pickup), (2, 0, 2), "two people tried, nobody was refused");
+    assert_eq!(r.revenue, 1000);
+    assert_eq!(r.average_order, 1000, "1000 over the one accepted, not over two");
+    assert_eq!(r.top_products.iter().map(|d| d.revenue).sum::<i64>(), 1000, "the waiting basket is no dish yet");
+}
+
 /// THREE KINDS, AND THE `else` BRANCH USED TO SWALLOW THE THIRD.
 ///
 /// The tally was `if kind == "pickup" { pickup } else { delivery }`, so a room

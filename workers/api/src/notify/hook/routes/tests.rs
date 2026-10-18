@@ -228,8 +228,16 @@ fn a_digest_group_gets_one_summary_at_its_own_minute_and_the_next_one_tomorrow()
     );
     assert_eq!(r.status_code(), 200, "{}", r.body_str());
     let before = messages().len();
-    order(&site, &dish);
-    order(&site, &dish);
+    // Accepted, so the summary has takings to name: one still waiting is a
+    // visit, not a dish sold (`status::in_takings`).
+    for id in [order(&site, &dish), order(&site, &dish)] {
+        let r = site.run(
+            crate::owner::order_action,
+            post(&at(&format!("/api/owner/orders/{id}/action")), &json!({"location_id": "alpha", "action": "confirm"})).bearer(&t).on("alpha"),
+            &[("id", &id)],
+        );
+        assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    }
     drain(&site, site.now_ms);
     assert_eq!(messages().len(), before, "a digest group is not told each order as it comes");
     let digest = || waiting(&site).into_iter().find(|e| e.kind == "digest").unwrap_or_else(|| panic!("{:?}", waiting(&site)));

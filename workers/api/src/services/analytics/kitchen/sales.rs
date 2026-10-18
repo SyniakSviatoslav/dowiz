@@ -217,7 +217,7 @@ pub fn fold_with(orders: &[Value], cold: &BTreeMap<i64, super::super::cube::DayC
         }
         let Some(d) = w.bucket(at) else { continue };
         let st = o.get("status").and_then(Value::as_str).unwrap_or("");
-        if !crate::services::orders::status::took_money(st) {
+        if !crate::services::orders::status::in_takings(st) {
             continue;
         }
         s.days[d].orders += 1;
@@ -231,7 +231,7 @@ pub fn fold_with(orders: &[Value], cold: &BTreeMap<i64, super::super::cube::DayC
     }
     for (d, day) in w.days.iter().enumerate() {
         let Some(r) = cold.get(day) else { continue };
-        s.days[d].orders += r.o - r.x;
+        s.days[d].orders += r.o - r.x - r.p;
         for (pid, v) in &r.m {
             sell(&mut s, dishes, d, pid, v[0].max(0), v[1], (v[2], v[3]));
         }

@@ -106,7 +106,7 @@ pub fn history_of(cold: &BTreeMap<i64, DayCube>, hot: &BTreeMap<i64, DayCube>, a
             continue;
         }
         let dishes = r.m.iter().filter(|(_, v)| v[0] > 0).map(|(k, v)| (k.clone(), v[0])).collect();
-        h.days.insert(num, fc::Day { orders: r.o - r.x, bands: fc::bands_of(&r.h), dishes });
+        h.days.insert(num, fc::Day { orders: r.o - r.x - r.p, bands: fc::bands_of(&r.h), dishes });
     }
     h
 }

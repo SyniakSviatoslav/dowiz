@@ -31,10 +31,18 @@ fn ai_off(site: &Site, t: &str) {
     assert_eq!(r.status_code(), 200, "{}", r.body_str());
 }
 
-/// A venue with one pickup order of two Futomaki (1800).
+/// A venue with one CONFIRMED pickup order of two Futomaki (1800). Confirmed,
+/// because an order nobody has accepted is not in the takings (`in_takings`).
 fn venue(site: &Site) -> String {
     let (t, dish) = open_venue(site, "alpha", "a@x.test");
     let r = place_pickup(site, "alpha", &dish, 2);
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    let id = r.body_value()["id"].as_str().unwrap().to_string();
+    let r = site.run(
+        crate::owner::order_action,
+        post(&at(&format!("/api/owner/orders/{id}/action")), &json!({"location_id": "alpha", "action": "confirm"})).bearer(&t).on("alpha"),
+        &[("id", &id)],
+    );
     assert_eq!(r.status_code(), 200, "{}", r.body_str());
     t
 }

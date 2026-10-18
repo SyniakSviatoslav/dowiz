@@ -98,10 +98,11 @@ pub fn total(rows: &BTreeMap<i64, DayCube>, s: Span) -> DayCube {
     t
 }
 
-/// INTEGER DIVISION over the ACCEPTED orders: a refused order is not a check.
+/// INTEGER DIVISION over the ACCEPTED orders: a refused order is not a check,
+/// and neither is one still waiting to be accepted.
 pub fn average(t: &DayCube) -> i64 {
-    if t.o > t.x {
-        t.t / (t.o - t.x)
+    if t.o > t.x + t.p {
+        t.t / (t.o - t.x - t.p)
     } else {
         0
     }

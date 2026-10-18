@@ -237,11 +237,12 @@ fn kitchen(q: &Query, k: &Value, lang: &str, src: &str, money: &dyn Fn(i64) -> S
         }
         Kind::FoodCost => match k.pointer("/totals/foodCostPm").and_then(Value::as_i64) {
             Some(pm) => {
-                let (c, r) = (int(k, "/totals/cogs"), int(k, "/totals/revenue"));
+                // Over the dishes whose cost is known: the ratio's own denominator.
+                let (c, r) = (int(k, "/totals/cogs"), int(k, "/totals/costedRevenue"));
                 say(&w::FOOD_COST, vec![win, w::pct(pm), money(c), money(r)], vec![
                     num(pm, "permille", vec!["/totals/foodCostPm".into()], span()),
                     num(c, "money", vec!["/totals/cogs".into()], span()),
-                    num(r, "money", vec!["/totals/revenue".into()], span()),
+                    num(r, "money", vec!["/totals/costedRevenue".into()], span()),
                 ])
             }
             None => say(&w::FOOD_COST_NONE, vec![win], vec![]),

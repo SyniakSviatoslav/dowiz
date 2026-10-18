@@ -95,6 +95,9 @@ pub fn report(
     let mut cogs_by_day = vec![0i64; n];
     let mut dish_rows: Vec<Value> = Vec::new();
     let mut uncosted = 0i64;
+    // The revenue of the dishes whose cost IS known: the food cost and the
+    // margin are a ratio over these alone (see the totals below).
+    let mut costed_revenue = 0i64;
     for (id, row) in &sales.dishes {
         let dish = dishes.get(id);
         // Today's portion cost is the dish sheet's number; the margin is
@@ -107,6 +110,9 @@ pub fn report(
         }
         if cost.is_none() {
             uncosted += row.sold - row.stamped;
+        }
+        if cogs.is_some() {
+            costed_revenue += row.revenue;
         }
         dish_rows.push(json!({
             "id": id, "name": dish.map_or(id.clone(), |d| d.name.clone()), "sold": row.sold, "revenue": row.revenue,
@@ -171,7 +177,13 @@ pub fn report(
         "days": w.days.iter().map(|d| show_day(*d)).collect::<Vec<_>>(),
         "totals": {
             "orders": sales.days.iter().map(|d| d.orders).sum::<i64>(), "revenue": revenue, "cogs": cogs,
-            "foodCostPm": pm(cogs, revenue), "margin": revenue - cogs,
+            // AN UNKNOWN COST IS NOT A ZERO COST. Over the whole revenue, a menu
+            // with no priced supply read food cost 0 and margin = revenue, 100%
+            // (flows F11 P4, 2026-10-17). Both are taken over the dishes whose
+            // cost is known, and are null while none is; `uncosted` says how
+            // many portions that leaves out.
+            "foodCostPm": pm(cogs, costed_revenue),
+            "margin": (costed_revenue > 0).then_some(costed_revenue - cogs), "costedRevenue": costed_revenue,
             "wasteValue": shelf.waste.values().map(|x| x.1).sum::<i64>(), "receivedValue": sum("receivedValue"),
             "driftValue": sum("driftValue"), "cleanLossG": sum("cleanLossG"), "cookLossG": sum("cookLossG"),
             "undated": shelf.undated, "unmodelled": sales.unmodelled, "uncosted": uncosted,

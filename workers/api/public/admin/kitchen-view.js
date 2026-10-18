@@ -27,7 +27,7 @@ function totals(r, money){
   const x = r.totals || {};
   const stat = (v, word, cls = 'money') => `<div class="stat ${cls}"><b>${v}</b><small data-t="${word}"></small></div>`;
   const sales = isKitchen(r) ? '' : stat(money(x.revenue || 0), 'ka_revenue');
-  const kept = isKitchen(r) ? '' : `${stat(C.pct(x.foodCostPm) || '-', 'ka_foodCost', '')}${stat(money(x.margin || 0), 'ka_margin')}`;
+  const kept = isKitchen(r) ? '' : `${stat(C.pct(x.foodCostPm) || '-', 'ka_foodCost', '')}${stat(x.margin == null ? '-' : money(x.margin), 'ka_margin')}`;
   return `<div class="stats kt-tot">${sales}${stat(money(x.cogs || 0), 'ka_cogs')}${kept}
     ${stat(money(x.wasteValue || 0), 'ka_waste')}${stat(money(x.driftValue || 0), 'ka_drift')}${stat(money(x.receivedValue || 0), 'ka_received')}${x.stockValue == null ? '' : stat(money(x.stockValue), 'ka_stockValue')}${stat(x.orders || 0, 'ka_orders', '')}</div>
     ${(x.stockUnpriced || []).length ? `<p class="hint"><span data-t="ka_stockUnpriced"></span> ${x.stockUnpriced.map(u => esc(u.name || u.id)).join(', ')}</p>` : ''}

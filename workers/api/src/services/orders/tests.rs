@@ -66,6 +66,9 @@ fn the_tip_is_never_the_venues_and_a_refusal_is_worth_nothing() {
     assert_eq!(venue_took(5000, 500, "REJECTED"), 0, "nothing, not 4500");
     assert_eq!(venue_took(5000, 500, "CANCELLED"), 0);
     assert_eq!(venue_took(5000, 500, "COMPENSATED_REFUND"), 0);
+    assert_eq!(venue_took(5000, 500, "PENDING"), 0, "an order nobody accepted is not takings");
+    assert_eq!(venue_took(5000, 500, "CONFIRMED"), 4500);
+    assert_eq!(venue_took(5000, 500, "REFUNDING"), 4500, "still the venue's until the refund completes");
 }
 
 /// THE KITCHEN'S QUEUE. `PENDING` is waiting to be accepted and is counted

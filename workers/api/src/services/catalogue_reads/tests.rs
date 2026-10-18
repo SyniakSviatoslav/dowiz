@@ -100,6 +100,17 @@ fn ai_on(site: &Site, t: &str) {
     setting(site, t, "ai.model", "tiny");
 }
 
+/// The guest's order, accepted: an order nobody has accepted is not in the
+/// takings (`status::in_takings`), so the money pins read it confirmed.
+fn confirm(site: &Site, v: &Venue) {
+    let r = site.run(
+        crate::owner::order_action,
+        post(&at("alpha", &format!("/api/owner/orders/{}/action", v.order)), &json!({"location_id": "alpha", "action": "confirm"})).bearer(&v.owner).on("alpha"),
+        &[("id", &v.order)],
+    );
+    assert_eq!(r.status_code(), 200, "confirm: {}", r.body_str());
+}
+
 fn fixture(site: &Site) -> Venue {
     let (owner, dish) = open_venue(site, "alpha", "a@x.test");
     let r = site.run(
@@ -385,6 +396,7 @@ const PIN_IMAGE: &str = r##"200 {"bytes":70,"imageUrl":"/media/497790947d4666760
 fn the_customer_book_and_the_reveal_log_answer_the_same_bytes() {
     let site = Site::new();
     let v = fixture(&site);
+    confirm(&site, &v);
     let r = site.run(crate::services::customers::handlers::customers, get(&at("alpha", "/api/owner/customers")).bearer(&v.owner).on("alpha"), &[]);
     pin("customers", pinned(&r, &v.ids()), PIN_CUSTOMERS);
     let key = r.body_value()["customers"][0]["key"].as_str().expect("one customer").to_string();

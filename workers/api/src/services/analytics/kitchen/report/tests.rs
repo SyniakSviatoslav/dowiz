@@ -163,3 +163,30 @@ fn the_stock_on_hand_is_valued_and_the_unpriced_are_named() {
     assert_eq!(v["stockValue"], json!(1131));
     assert_eq!(v["stockUnpriced"], json!([{ "id": "nori", "name": "NORI" }]));
 }
+
+/// AN UNKNOWN COST IS NOT A ZERO COST (flows F11 P4, 2026-10-17): a dish with
+/// no priced supply leaves the food cost and the margin, which are taken over
+/// the costed dishes; with none costed both are null, not 0 and 100%.
+#[test]
+fn an_uncosted_dish_is_left_out_of_the_food_cost_not_counted_free() {
+    let (mut dishes, mut supplies, w) = world();
+    supplies.insert("nori".into(), Supply { id: "nori".into(), name: "NORI".into(), unit: "g".into(), basis: 100, list_cost: None, clean_pm: 1000, cook_pm: 1000 });
+    dishes.insert("maki".into(), Dish { id: "maki".into(), name: "Maki".into(), lines: vec![DishLine { supply: "nori".into(), qty: 10.into(), gross_g: Some(10), net_g: Some(10), out_g: Some(10) }], leaves: vec![] });
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    log.set_clock(10);
+    log.receive_with("salmon", 1000, &Meta { unit_cost: Some(2000), per: Some(1000), ..Meta::default() }).unwrap();
+    let j = log.journal().unwrap();
+    let order = |id: &str, dish: &str| serde_json::json!({ "id": id, "created_at_ms": 100, "status": "DELIVERED", "items": [{ "product_id": dish, "quantity": 1, "unit_price": 1000 }] });
+    let run = |orders: &[Value]| {
+        let s = sales::fold(orders, &dishes, &w);
+        let sh = shelf::fold(&j.entries, &supplies, &s.placed_at, &w);
+        report(&s, &sh, &dishes, &supplies, &j, &w)["totals"].clone()
+    };
+    // Sake costs 200 of its 1000; maki's cost is unknown. 200 of 1000, not of 2000.
+    let t = run(&[order("o1", "sake"), order("o2", "maki")]);
+    assert_eq!((t["revenue"].clone(), t["costedRevenue"].clone(), t["cogs"].clone()), (json!(2000), json!(1000), json!(200)));
+    assert_eq!((t["foodCostPm"].clone(), t["margin"].clone(), t["uncosted"].clone()), (json!(200), json!(800), json!(1)));
+    // Only the uncosted dish sold: unknown, not 0 food cost and the whole revenue as margin.
+    let t = run(&[order("o3", "maki")]);
+    assert_eq!((t["foodCostPm"].clone(), t["margin"].clone(), t["revenue"].clone()), (Value::Null, Value::Null, json!(1000)));
+}
