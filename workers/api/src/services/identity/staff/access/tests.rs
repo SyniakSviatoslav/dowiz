@@ -124,7 +124,7 @@ fn has_key(v: &Value, k: &str) -> bool {
 
 fn report() -> Value {
     json!({
-        "totals": { "orders": 4, "revenue": 9000, "cogs": 3000, "foodCostPm": 333, "margin": 6000, "wasteValue": 120 },
+        "totals": { "orders": 4, "revenue": 9000, "cogs": 3000, "foodCostPm": 333, "margin": 6000, "costedRevenue": 9000, "wasteValue": 120 },
         "byDay": [{ "day": "2026-09-27", "orders": 4, "revenue": 9000, "cogs": 3000, "foodCostPm": 333, "waste": 120 }],
         "dishes": [{ "id": "d", "name": "Maki", "sold": 4, "revenue": 9000, "portionCost": 750, "cogs": 3000,
                      "margin": 6000, "marginPortion": 1500, "foodCostPm": 333, "hasRecipe": true }],
