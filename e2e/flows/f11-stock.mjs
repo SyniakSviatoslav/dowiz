@@ -78,7 +78,8 @@ const PF = 'flows-f11-pf';          // matches the -pf cleanup in f4-cleanup.mjs
 const ROLL = 'flows-f11-roll';      // a dish whose recipe is one portion of the ПФ card
 const SALMON = 'qa-salmon', RICE = 'qa-rice', TUNA = 'qa-tuna';
 const TERMINAL_NO_TAKE = new Set(['REJECTED', 'CANCELLED', 'COMPENSATED_REFUND']);
-const took = o => !TERMINAL_NO_TAKE.has(o.status) ? (Number(o.total) - Number(o.tip || 0)) : 0;
+// THE TAKINGS (status::in_takings, 2026-10-18): not refused, and not still waiting to be accepted.
+const took = o => !TERMINAL_NO_TAKE.has(o.status) && o.status !== 'PENDING' ? (Number(o.total) - Number(o.tip || 0)) : 0;
 
 export default async function f11(log = console.log) { return runF11(log); }
 
@@ -258,10 +259,13 @@ async function runF11(log) {
   const expToday = today.reduce((s, o) => s + took(o), 0);
   const expTodayRej = today.filter(o => REFUSED.has(o.status)).length;
   check('analytics TODAY: orders == live list orders placed today', TODAY.orders === today.length, today.length, TODAY.orders, { where: 'API owner/analytics byDay[today]' });
-  check('analytics TODAY: revenue == sum(total - tip) over today\'s orders (PENDING counted, refused not)', TODAY.revenue === expToday, expToday, TODAY.revenue, { where: 'API owner/analytics byDay[today]' });
+  check('analytics TODAY: revenue == sum(total - tip) over today\'s orders (PENDING and refused not)', TODAY.revenue === expToday, expToday, TODAY.revenue, { where: 'API owner/analytics byDay[today]' });
   const countable = today.length - expTodayRej;
   const expAvgToday = countable > 0 ? Math.floor(expToday / countable) : 0;
-  check('analytics: window averageOrder == floor(revenue / (orders - rejected)) (internal consistency)', an.averageOrder === (an.orders - an.rejected > 0 ? Math.floor(an.revenue / (an.orders - an.rejected)) : 0), 'consistent', an.averageOrder, { where: 'API owner/analytics' });
+  // A waiting order is a visit, not a check. PENDING is never archived, so the live list holds every one in the window.
+  const waitingW = list.filter(o => o.status === 'PENDING' && o.created_at_ms >= an.byDay[0].at && o.created_at_ms <= Date.now()).length;
+  const checksW = an.orders - an.rejected - waitingW;
+  check('analytics: window averageOrder == floor(revenue / (orders - rejected - pending))', an.averageOrder === (checksW > 0 ? Math.floor(an.revenue / checksW) : 0), checksW > 0 ? Math.floor(an.revenue / checksW) : 0, an.averageOrder, { where: 'API owner/analytics' });
   check('analytics: window byDay order counts sum to orders', an.byDay.reduce((s, d) => s + d.orders, 0) === an.orders, an.orders, an.byDay.reduce((s, d) => s + d.orders, 0), { where: 'API owner/analytics byDay' });
   const chToday = {}; for (const o of today) chToday[o.channel || 'unknown'] = (chToday[o.channel || 'unknown'] || 0) + 1;
   verify('analytics window byChannel == live list per channel', JSON.stringify(Object.entries(an.byChannel).sort()) === JSON.stringify(Object.entries(chToday).sort()) , chToday, an.byChannel, { where: 'API owner/analytics', why: 'window counts archived storefront orders' });
@@ -288,8 +292,11 @@ async function runF11(log) {
   const tipsRes = await own(`/api/staff/till/tips?location_id=${LOC}`);
   const tipsBody = tipsRes.body || {};
   const tipSum = (tipsBody.tips || []).reduce((s, t) => s + Number(t.amount ?? t.tip ?? t.total ?? 0), 0);
-  const tipsExp = today.reduce((s, o) => s + Number(o.tip || 0), 0);
-  check('tips: the tips report equals the sum of order tips today (O1 100 + the probe 50 + earlier runs)', tipSum === tipsExp, tipsExp, tipSum, { where: 'API till/tips', evidence: tipsRes.text.slice(0, 200) });
+  // The report is the tips a PERSON took at a payment (command/tips.rs): payments[].tip, paid today, on an
+  // order that took money. A tip left at the online checkout has no taker and is not in it.
+  const tipsExp = list.filter(o => !TERMINAL_NO_TAKE.has(o.status))
+    .reduce((s, o) => s + (o.payments || []).filter(p => Number(p.at) >= TODAY.at && Number(p.at) <= Date.now()).reduce((a, p) => a + Math.max(0, Number(p.tip || 0)), 0), 0);
+  check('tips: the tips report equals the tips taken at payments today (O1 100 + the probe 50 + earlier runs)', tipSum === tipsExp, tipsExp, tipSum, { where: 'API till/tips', evidence: tipsRes.text.slice(0, 200) });
   const o1 = list.find(o => o.id === O1);
   check('tips: O1 revenue contribution excludes its tip (total - tip = 1800)', took(o1) === Number(o1.total) - 100 && took(o1) === 1800, 1800, took(o1), { where: 'derived from API order' });
   const o2 = list.find(o => o.id === O2);
