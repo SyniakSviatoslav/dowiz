@@ -21,7 +21,7 @@
 // mean the order ended without the venue keeping the money is the KERNEL's
 // question, so it is imported rather than retyped -- see `/lib/vocab.js`.
 
-import { REFUSED } from '/lib/vocab.js';
+import { REFUSED, TERMINAL } from '/lib/vocab.js';
 
 const KEY = 'dowiz.kit.orders';
 
@@ -106,3 +106,5 @@ export const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY'
 /// `COMPENSATED_REFUND` -- a refunded order would have sat under "Active" for
 /// ever, because nothing else moves it.
 export const isOver = s => REFUSED.has(s);
+/// Arrived: delivered OR collected -- the kernel's `is_terminal` less the refusals.
+export const isDone = s => TERMINAL.has(s) && !REFUSED.has(s);

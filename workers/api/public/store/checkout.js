@@ -30,6 +30,9 @@ import { TABLE, tableBanner, tableBody } from '/store/table.js';
 import { venueWallMs, laterPrefill } from '/lib/booking-time.js';
 import { ui, k, cta, ghost, seg } from '/store/parts.js';
 import { keyFor, settle } from '/store/order-key.js';
+// The hub refuses in plain text ("venue is closed"): its words, not a JSON parse error.
+import { bodyOf } from '/lib/body.js';
+import { openLine } from '/store/venue.js';
 
 /// The basket attempt's Idempotency-Key, kept across a lost response (order-key.js).
 const orderKeys = { key: null, body: null };
@@ -320,7 +323,7 @@ export function openCheckout(){
     try {
       const items = cartLines().map(l => ({ product_id: l.p.id, modifier_ids: l.m, quantity: l.q }));
       const r = await fetch(`${API}/promo/check`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, items }) });
-      const d = await r.json(); if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      const d = await bodyOf(r); if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
       state.promo = { code: d.code, discount: d.discount };
       out.className = 'geo ok'; out.textContent = `−${money(d.discount)}`; promoBtn.textContent = t('promoOff'); refreshTotals();
     } catch (e) { state.promo = null; out.className = 'geo bad'; out.textContent = String(e.message || e); refreshTotals(); }
@@ -368,6 +371,11 @@ async function place(pay, wallet){
   // ORDER FOR LATER: a time already too close is said here, before the hub says it.
   const when = scheduledAt();
   if (when !== null && when < Date.now() + LATER_MIN_LEAD_MS) errs.push(t('laterPast'));
+  // A CLOSED VENUE IS SAID HERE, in the guest's language: the hub's refusal is
+  // English plain text ("venue is closed"), and a paused venue takes no order at
+  // all, even one for later (flows F10g, 2026-10-17).
+  const L = state.loc;
+  if (L && !TABLE && (L.closedReason === 'paused' || (L.status === 'closed' && when === null))) errs.push(openLine());
   $('#f-err').innerHTML = errs.map(e => `<div class="err">${esc(e)}</div>`).join('');
   if (errs.length) { $('#f-err').scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
 
@@ -394,7 +402,7 @@ async function place(pay, wallet){
     const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}/orders`, {
       method: 'POST', headers: { 'content-type': 'application/json', ...(idem ? { 'idempotency-key': idem } : {}) }, body
     });
-    const d = await r.json();
+    const d = await bodyOf(r);
     // AN ANSWER, EITHER WAY, spends the key; a 409 "still running" keeps it
     // (order-key.js). A lost connection throws before this line and keeps
     // the key, which is the whole point.

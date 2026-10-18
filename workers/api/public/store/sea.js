@@ -18,7 +18,7 @@ import { on, state } from '/store/state.js';
 // `/lib/vocab.js`. This file held `new Set(['REJECTED', 'CANCELLED'])` -- the
 // third copy of that set, and like the other two it did not know a refund ends
 // an order.
-import { REFUSED as FAILED } from '/lib/vocab.js';
+import { REFUSED as FAILED, TERMINAL } from '/lib/vocab.js';
 
 let dust = null;
 let calm = false;
@@ -27,7 +27,8 @@ let ocean = null;
 /// Where in its life an order is, as the sea's phase, 0..1.
 export const PHASE = {
   PENDING: 0.12, CONFIRMED: 0.26, PREPARING: 0.42, READY: 0.58,
-  IN_DELIVERY: 0.76, DELIVERED: 1.0, REJECTED: 0.12, CANCELLED: 0.12,
+  IN_DELIVERY: 0.76, DELIVERED: 1.0, PICKED_UP: 1.0, REJECTED: 0.12, CANCELLED: 0.12,
+  COMPENSATED_REFUND: 0.12,
 };
 /// The sea's energy while an order is live, and after it has ended.
 const OCEAN_ENERGY_LIVE = 0.3;
@@ -108,7 +109,7 @@ export function oceanStatus(status){
   ocean.status = status;
   try {
     ocean.sea.setPhase(PHASE[status]);
-    ocean.sea.setEnergy(status === 'DELIVERED' || FAILED.has(status) ? OCEAN_ENERGY_DONE : OCEAN_ENERGY_LIVE);
+    ocean.sea.setEnergy(TERMINAL.has(status) ? OCEAN_ENERGY_DONE : OCEAN_ENERGY_LIVE);
     if (FAILED.has(status)) ocean.sea.accent('anomaly', ANOMALY_MS);
   } catch {}
 }

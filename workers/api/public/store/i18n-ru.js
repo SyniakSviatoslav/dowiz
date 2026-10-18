@@ -30,7 +30,7 @@ export const RU = { ex_name:'напр. Арта', ex_note:'напр. без лу
         weekTop:'Чаще всего заказывают на этой неделе', notDeclared:'Аллергены не заявлены', noneOf14:'Ни одного из 14 аллергенов',
         tip:'Чаевые курьеру', tipNo:'Без чаевых', tipOther:'Другая сумма',
         sayHow:'Как вам?', sayHint:'Читает только заведение. Без звёзд и оценок.',
-        sayGo:'Отправить', saidIt:'Спасибо',
+        sayGo:'Отправить', saidIt:'Спасибо', whyRefused:'Причина от заведения',
         how:'Как заберёте', toDoor:'Доставка', toPickup:'Заберу сам', pickupAt:'Забрать по адресу',
         avoid:'Аллергены', avoidHint:'Скрыть блюда, которые их содержат', avoidOn:'скрыто',
         avoidUnknown:'блюд без заявления', clearAvoid:'Показать всё',
@@ -76,4 +76,5 @@ export const RU = { ex_name:'напр. Арта', ex_note:'напр. без лу
         stampCard:'Карта штампов', stampRule:'Полная карта снимает со следующего заказа:', stampUsed:'Полная карта на этом заказе:',
         st:{PENDING:'Ожидает подтверждения',CONFIRMED:'Подтверждён',PREPARING:'Готовится',
             READY:'Готов',IN_DELIVERY:'В пути',DELIVERED:'Доставлен',
-            REJECTED:'Отклонён',CANCELLED:'Отменён'} };
+            REJECTED:'Отклонён',CANCELLED:'Отменён',
+            PICKED_UP:'Получен',REFUNDING:'Возвращаем деньги',COMPENSATED_REFUND:'Деньги возвращены'} };

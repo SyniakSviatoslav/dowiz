@@ -30,12 +30,17 @@ import { cardRefundMarkup } from '/store/refund-note.js';
 // Generated from the kernel's `OrderStatus::took_money` -- see `/lib/vocab.js`.
 // The hand copy this replaces was `new Set(['REJECTED', 'CANCELLED'])`, missing
 // the state a refund ends in.
-import { REFUSED as DEAD } from '/lib/vocab.js';
+import { REFUSED as DEAD, TERMINAL } from '/lib/vocab.js';
 import { ui, k, ghost } from '/store/parts.js';
+import { bodyOf } from '/lib/body.js';
 
 /// The happy path as a stepper. NOT generated -- a presentation choice; the
 /// kernel's graph has two longest paths out of PENDING and does not prefer one.
 const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED'];
+/// A pickup ends at the counter. On the delivery path a collected order was
+/// "step 1 of 6, next: confirmed", and the page went on polling for ever.
+const PICKUP_FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP'];
+const flowOf = order => order?.fulfilment?.kind === 'pickup' ? PICKUP_FLOW : FLOW;
 /// How often the order is re-asked while it is live, and how many misses in a
 /// row before the customer is told the page has lost the hub.
 const POLL_MS = 12_000;
@@ -75,7 +80,9 @@ export function forWall(ms, tz = state.loc?.tz || 'Europe/Tirane', nowMs = Date.
 }
 
 function sayBlock(order){
-  const over = order.status === 'DELIVERED' || DEAD.has(order.status);
+  // OVER IS THE KERNEL'S `is_terminal`: a hand list here missed PICKED_UP, so
+  // a guest who collected their order was never asked how it was.
+  const over = TERMINAL.has(order.status);
   if (!over || !on('feedback')) return '';
   if (order.feedback) return `<p class="geo ok mb-2" data-t="saidIt"></p>`;
   return `${ui.field({ id: 'f-say', label: k('sayHow'), placeholder: k('ex_say'), rows: 2, maxlength: FEEDBACK_MAX, attrs: { data: { tour: 'track.feedback' } } })}
@@ -92,7 +99,7 @@ function bindSay(order){
       const r = await fetch(`${API}/order/${encodeURIComponent(order.id)}/feedback`, {
         method: 'POST', headers: { 'content-type': 'application/json', ...(tok ? { authorization: 'Bearer ' + tok } : {}) },
         body: JSON.stringify({ text }) });
-      const d = await r.json(); if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      const d = await bodyOf(r); if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
       openTracking({ ...order, feedback: { text } });
     } catch (e) { go.disabled = false; toast(String(e.message || e)); }
   };
@@ -172,16 +179,17 @@ function stopReel(){ if (reel) { clearInterval(reel.timer); reel = null; } }
 
 /// The episode: eyebrow, the one state as the title, the step, the time.
 function episodeMarkup(order, eta){
-  const st = order.status, dead = DEAD.has(st), i = FLOW.indexOf(st);
+  const st = order.status, dead = DEAD.has(st), flow = flowOf(order), i = flow.indexOf(st);
   const phase = dead ? PROGRESS_FLOOR : Math.max(PROGRESS_FLOOR, phaseOf(st));
-  const done = st === 'DELIVERED';
+  const done = TERMINAL.has(st);
   return `<div class="ep">
     <p class="ep-eyebrow"><span data-t="episode"></span> · #${esc(String(order.id).slice(0, ORDER_ID_SHOWN))} · ${esc(state.loc?.name || '')}</p>
     <div class="ep-plate" data-tour="track.status">
       <h2 class="ep-title ${st !== lastStatus ? 'flip' : ''}" data-t-st="${esc(st)}"></h2>
-      ${!dead ? `<div class="ep-dots" aria-hidden="true">${FLOW.map((f, n) => `<i class="${n < i ? 'done' : n === i ? 'now' : ''}"></i>`).join('')}</div>` : ''}
+      ${!dead ? `<div class="ep-dots" aria-hidden="true">${flow.map((f, n) => `<i class="${n < i ? 'done' : n === i ? 'now' : ''}"></i>`).join('')}</div>` : ''}
     </div>
-    ${!dead ? `<p class="ep-step mono"><span data-t="stepOf"></span> ${i + 1} <span data-t="ofSteps"></span> ${FLOW.length}${!done && i + 1 < FLOW.length ? ` · <span data-t="nextUp"></span>: <span data-t-st="${FLOW[i + 1]}"></span>` : ''}</p>` : ''}
+    ${dead && order.rejection_reason ? `<p class="ep-why"><span data-t="whyRefused"></span>: ${esc(String(order.rejection_reason))}</p>` : ''}
+    ${!dead ? `<p class="ep-step mono"><span data-t="stepOf"></span> ${i + 1} <span data-t="ofSteps"></span> ${flow.length}${!done && i + 1 < flow.length ? ` · <span data-t="nextUp"></span>: <span data-t-st="${flow[i + 1]}"></span>` : ''}</p>` : ''}
     <div class="ep-line" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(phase * 100)}"><i id="epBar"></i></div>
     <div class="ep-facts">
       ${order.scheduled_for_ms && !dead ? `<span>${icon('history')}<b><span data-t="forTime"></span> ${esc(forWall(order.scheduled_for_ms))}</b></span>` : ''}
@@ -242,7 +250,7 @@ export function openTracking(order){
   const live = order.eta && typeof order.eta === 'object' && order.eta.range ? { text: order.eta.range, live: true, parts: order.eta.parts, known: order.eta.known } : null;
   // An order for later never shows the checkout's "35-45 min": that quote was for now.
   const eta = live || (order.scheduled_for_ms ? null : state.lastEta);
-  const follow = (bot && !dead && st !== 'DELIVERED') ? `
+  const follow = (bot && !TERMINAL.has(st)) ? `
     <a class="btn btn-ghost mb-1" href="https://t.me/${encodeURIComponent(bot)}?start=${encodeURIComponent(order.id)}" target="_blank" rel="noopener noreferrer">
       ${icon('brand-telegram')}<span data-t="notify"></span></a>` : '';
   // The sea's canvas and the credits outlive the sheet's markup.
@@ -266,12 +274,12 @@ export function openTracking(order){
           ${cardRefundMarkup(order)}
           ${cryptoBlock(order)}
           ${follow}
-          ${!dead && st !== 'DELIVERED' && tokenFor(order.id) ? '<div id="pushHere"></div>' : ''}
+          ${!TERMINAL.has(st) && tokenFor(order.id) ? '<div id="pushHere"></div>' : ''}
           ${sayBlock(order)}
           ${ghost({ id: 'closeTrack', cls: 'mb-2', label: k('done'), tour: 'track.done' })}
         </div>
       </div>
-    </div>`, { name: 'track', attending: !dead && st !== 'DELIVERED', full: true });
+    </div>`, { name: 'track', attending: !TERMINAL.has(st), full: true });
   if (keepCanvas) $('.ocean-cv')?.replaceWith(keepCanvas);
   if (keepReel) $('#credits')?.replaceWith(keepReel);
   trackMap.mount(order, keepMap);
@@ -295,7 +303,7 @@ export function openTracking(order){
   // when the order is done; the interval below still runs, but `due()` holds
   // it back while the socket is up and healthy.
   ensureSocket(order);
-  if (!dead && st !== 'DELIVERED') {
+  if (!TERMINAL.has(st)) {
     openTracking._t = setTimeout(async () => {
       if (openTracking._live && !openTracking._live.due()) {
         // Nothing has been missed: re-arm and say nothing.

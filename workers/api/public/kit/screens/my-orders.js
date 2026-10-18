@@ -59,11 +59,11 @@ const state = { tab: 'active' };
 /// "Active", and their own two orders nowhere. What this device has placed comes
 /// first; the frame's rows are what a design with no orders behind it shows.
 ///
-/// A CANCELLED order is the kernel's `CANCELLED` or `REJECTED`, and `DELIVERED`
+/// A CANCELLED order is the kernel's `REFUSED` set, and DELIVERED or PICKED_UP
 /// is completed. Everything else is still happening, which is what "Active"
 /// means to the person waiting.
 const TAB_OF = o => Orders.isOver(o.status) ? 'cancelled'
-                  : o.status === 'DELIVERED' ? 'completed' : 'active';
+                  : Orders.isDone(o.status) ? 'completed' : 'active';
 
 function mine(){
   return Orders.all().map(o => {
