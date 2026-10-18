@@ -68,7 +68,9 @@ export function guard(page, tag) {
     expect(method, re, status) { expected.push({ method, re, status, hit: 0 }); },
     noise: 0,
   };
-  page.on('pageerror', e => bad.push(`${tag}: uncaught ${e.message.split('\n')[0].slice(0, 200)}`));
+  // A WebGL context refused (maplibre throws the requested attributes as its message) is the box, not
+  // the product: WebGL is off in this Chromium (memory webgl-renders-nothing-on-the-box).
+  page.on('pageerror', e => { if (NOISE.test(e.message) || /requestedAttributes/.test(e.message)) { g.noise++; return; } bad.push(`${tag}: uncaught ${e.message.split('\n')[0].slice(0, 200)}`); });
   page.on('console', m => {
     if (m.type() !== 'error') return;
     const t = m.text();
@@ -87,6 +89,12 @@ export function guard(page, tag) {
   page.on('requestfailed', r => {
     const why = r.failure()?.errorText || '';
     if (/ERR_ABORTED/.test(why)) return;   // a navigation or a reload cancelled it
+    // THE BOX'S TRANSPORT, not the product (lib.mjs: connects to Cloudflare drop and time out here): a
+    // background READ the page repeats on its own timer. Printed, counted, never a finding. A write, or
+    // a document, that failed this way is still reported.
+    if (/ERR_CONNECTION_(CLOSED|RESET|TIMED_OUT)|ERR_TIMED_OUT|ERR_NETWORK_CHANGED|ERR_NAME_NOT_RESOLVED/.test(why) && r.method() === 'GET' && r.resourceType() !== 'document' && /\/api\//.test(r.url())) {
+      g.netNoise = (g.netNoise || 0) + 1; console.log(`  !! ${tag}: box network dropped a background read (${why} ${r.url().replace(HOST, '').split('?')[0]})`); return;
+    }
     bad.push(`${tag}: request failed ${why} ${r.url().replace(HOST, '').slice(0, 120)}`);
   });
   return g;

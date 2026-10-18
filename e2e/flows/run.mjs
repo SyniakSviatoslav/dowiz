@@ -20,8 +20,35 @@ import { f1 } from './f1-customer.mjs';
 import { f2 } from './f2-owner.mjs';
 import { f3 } from './f3-courier.mjs';
 import { f4 } from './f4-cleanup.mjs';
+import { f5, f6, f7, f8, f9 } from './f5-cycle.mjs';
+import { f10 } from './f10-failures.mjs';
+import fs from 'node:fs';
 
-const FLOWS = [['F1', 'customer', f1], ['F2', 'owner', f2], ['F3', 'courier', f3], ['F4', 'cleanup', f4]];
+// F11 (stock + analytics) is owned by another lane: e2e/flows/f11-stock.mjs, if it exists.
+// Its contract: `export default async function f11(ctx)`, where ctx is
+//   { HOST, LOC, RUN, OUT, S,           // S.cycle.guests: [{key,how,name,phone,lang,ids,qty,id,token}], S.cycle.final
+//     own(path, body?, method?),        // owner API call (owner token for LOC) -> {status, body, text}
+//     api(path, {method, body, token}), // unauthenticated / token API call -> {status, body, text}
+//     ownerOrders(), ownerOrder(id), menu() }
+// It runs after F10 and before F4 (cleanup), and is skipped with an INFO line when the file is absent.
+const F11_FILE = new URL('./f11-stock.mjs', import.meta.url);
+const f11Present = fs.existsSync(F11_FILE);
+const f11 = f11Present ? (await import(F11_FILE.href)).default : null;
+const ctx11 = async () => ({ HOST, LOC, RUN, OUT, S, own, api, ownerOrders, ownerOrder, menu });
+import { own, api, ownerOrders, ownerOrder, menu, LOC } from './lib.mjs';
+
+const FLOWS = [['F1', 'customer', f1], ['F2', 'owner', f2], ['F3', 'courier', f3], ['F5', 'guests', f5], ['F6', 'kitchen', f6], ['F7', 'courier-cycle', f7], ['F8', 'in-venue', f8], ['F9', 'owner screens', f9], ['F10', 'failures', f10]];
+// f11-stock.mjs as written exports `f11(log)`; the contract says `f11(ctx, log)`. The ctx handed over
+// is ALSO callable as `log`, so either signature gets what it asks for.
+// It also ANSWERS its verdict (0 ok, 1 a check failed, 2 could not run) instead of throwing: a non-zero
+// answer is a FAIL here, never an ok over FAIL lines (memory gates-that-count-skips-as-passes).
+if (f11) FLOWS.push(['F11', 'stock+analytics', async log => {
+  const c = Object.assign((...a) => log(...a), await ctx11());
+  const rc = await f11(c, log);
+  if (typeof rc === 'number' && rc !== 0) throw new Fail(`f11-stock.mjs answered ${rc}${rc === 2 ? ' (could not run)' : ' (its FAIL lines above)'}`);
+}]);
+else console.log('F11: e2e/flows/f11-stock.mjs not present -- stock and analytics not run (INFO, not ok)');
+FLOWS.push(['F4', 'cleanup', f4]);
 const only = (process.env.FLOWS_ONLY || '').split(',').filter(Boolean);
 const t0 = Date.now();
 const res = [];
@@ -39,7 +66,7 @@ for (const [id, name, fn] of FLOWS) {
     res.push({ id, ok: true });
     console.log(`  ${id} ok (${Math.round((Date.now() - t) / 1000)} s)`);
   } catch (e) {
-    const why = e instanceof Fail || e instanceof NoLaunch ? e.message : `threw ${String(e.stack || e).split('\n').slice(0, 2).join(' ')}`;
+    const why = e instanceof Fail || e instanceof NoLaunch ? e.message : `threw ${String(e.message || e).split('\n').map(l => l.trim()).filter(l => l && l !== 'Call log:').slice(0, 2).join(' :: ')} @ ${String(e.stack || '').split('\n').find(l => /e2e\/flows/.test(l))?.trim() || ''}`;
     if (e instanceof NoLaunch) noLaunch = e.message;
     res.push({ id, ok: false, why, shot: e.shot });
     console.log(`  FAIL ${id}: ${why}${e.shot ? `\n       screenshot: ${e.shot}` : ''}`);

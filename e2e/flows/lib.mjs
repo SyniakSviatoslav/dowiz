@@ -63,12 +63,28 @@ const redact = t => String(t).replace(/"(jwt|token|access_token|refresh_token|pa
 /// is printed -- never swallowed.
 export async function api(path, { method = 'GET', body, token, headers = {} } = {}) {
   for (let i = 0; ; i++) {
-    const r = await fetch(`${HOST}${path}`, {
-      method,
-      headers: { 'content-type': 'application/json', 'user-agent': UA, ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
-      body: body == null ? undefined : JSON.stringify(body),
-    });
-    const t = await r.text();
+    let r;
+    try {
+      r = await fetch(`${HOST}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'user-agent': UA, ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
+        body: body == null ? undefined : JSON.stringify(body),
+      });
+    } catch (e) {
+      // The box's own network ("fetch failed", measured 2026-10-17 in F10): a READ is asked again, at
+      // most three times, each printed; a write is not (it may have landed).
+      // A connect-phase failure never reached the server, so a WRITE is safe to send again too.
+      const code = e.cause?.code || '';
+      const neverSent = /^(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|UND_ERR_CONNECT_TIMEOUT)$/.test(code);
+      if ((method === 'GET' || neverSent) && i < 4) { console.log(`  !! api ${method} ${path.split('?')[0]}: ${e.message} ${code} (try ${i + 1})`); await sleep(3000); continue; }
+      throw new Error(`${e.message} ${code} on ${method} ${path.split('?')[0]}`);
+    }
+    let t;
+    try { t = await r.text(); } catch (e) {
+      // "terminated": the connection died mid-body (measured 2026-10-17 in F6); same rule as above.
+      if (method === 'GET' && i < 2) { console.log(`  !! api ${method} ${path.split('?')[0]}: body ${e.message} (try ${i + 1})`); await sleep(2000); continue; }
+      throw e;
+    }
     if (r.status === 503 && method === 'GET' && i < 2) { console.log(`  !! api 503 ${method} ${path.split('?')[0]} (try ${i + 1}): ${t.slice(0, 80)}`); continue; }
     let b; try { b = JSON.parse(t); } catch { b = t; }
     return { status: r.status, body: b, text: redact(t).slice(0, 300) };

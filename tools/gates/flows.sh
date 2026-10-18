@@ -13,7 +13,7 @@
 # above 32 processes (DOWIZ-COMMON-RULES rule 1). slot.sh blocks until the slot
 # is free; a refused slot (95/96/97) is reported, never retried here.
 #
-# Output: `flows: F1 ok F2 ok F3 ok F4 ok (NN s)` and rc 0, or
+# Output: `flows: F1 ok F2 ok ... F4 ok (NN s)` (every flow run.mjs lists) and rc 0, or
 # `flows: FAIL F<n> :: <reason>` and rc 1 (3: chromium could not launch; the
 # slot's own refusal codes pass through). The full log's path is printed.
 set -u
@@ -39,7 +39,7 @@ fi
 echo "$last"
 echo "flows: log $LOG"
 # A zero exit with a FAIL line (or the reverse) is a broken instrument, not a pass.
-if [ "$rc" -eq 0 ] && ! printf '%s' "$last" | grep -Eq '^flows: F1 ok F2 ok F3 ok F4 ok \([0-9]+ s\)$'; then
+if [ "$rc" -eq 0 ] && ! printf '%s' "$last" | grep -Eq '^flows: (F[0-9]+ ok )+\([0-9]+ s\)$'; then
   echo "flows: FAIL run.mjs exited 0 but its verdict is not all-ok"; exit 1
 fi
 exit "$rc"
