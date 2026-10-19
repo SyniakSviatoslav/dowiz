@@ -234,3 +234,7 @@ fn the_alarm_path_imports_a_till_sale_into_the_owners_orders() {
 fn at_path(path: &str) -> String {
     at(path)
 }
+
+/// The till sale as an ordinary order on every reader (`ordinary_tests.rs`).
+#[path = "ordinary_tests.rs"]
+mod ordinary;

@@ -6,6 +6,7 @@
 //
 // ASCII QUOTES ONLY as delimiters (DOWIZ-COMMON-RULES rule 11).
 import { venueWallMs, venueWallValue } from '../lib/booking-time.js';
+import { orderRef } from '../lib/ui/core.js';
 
 /// Digits typed by a person as integer minor units, with `decimals` places
 /// (lek 0, euro 2). In a currency with no decimals a thousands mark is
@@ -75,6 +76,17 @@ export function inRange(orders, from, to, tz){
 export const total = orders => (orders || []).reduce((s, o) => s + (Number.isSafeInteger(o.total) ? o.total : 0), 0);
 
 /// An archive id (`log@<generation>`) as its number, for ordering; newest first.
+/// AN ARCHIVED ORDER'S ROW on the history screen: the ref a person reads (the
+/// storage prefix dropped, as on the live list -- `#ebills:0` was every till
+/// sale), and where it came from when that was not the venue's own shop: a
+/// sale from the fiscal till (ebills.al) reads "eBills" and its receipt number.
+const SOURCE = { ebills: 'eBills', wolt: 'Wolt', glovo: 'Glovo', baboon: 'Baboon' };
+export function archivedRow(o){
+  const n = o?.external?.order_id ?? o?.external?.inv_ord_num;
+  const source = SOURCE[o?.channel] ? `${SOURCE[o.channel]}${n != null && n !== '' ? ' ' + n : ''}` : '';
+  return { ref: orderRef(o?.id), source };
+}
+
 export const archivesNewestFirst = ids => [...(ids || [])].sort((a, b) => (Number(String(b).split('@')[1]) || 0) - (Number(String(a).split('@')[1]) || 0));
 
 /// The seq a venue READ mark should carry: the last customer message.

@@ -15,6 +15,12 @@ export function paidWith(o) {
     if (m && !taken.includes(m)) taken.push(m);
   }
   if (taken.length) return taken;
+  // A TABLE CLOSED ON THE VENUE'S FISCAL TILL (ebills.al) is paid by the bill
+  // the till issued, not by `payments[]`: the import writes that bill onto each
+  // course it paid (`ebills/import/bill.rs`, `bill.payment`). Without this a
+  // till table read as never paid, beside every other paid order.
+  const bill = o.bill && typeof o.bill.payment === 'string' ? o.bill.payment : '';
+  if (bill) return [bill];
   if (o.fulfilment && o.fulfilment.kind === 'dine_in') return [];
   return typeof o.payment === 'string' && o.payment ? [o.payment] : [];
 }

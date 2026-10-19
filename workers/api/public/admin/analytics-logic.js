@@ -100,3 +100,13 @@ export function csv(a){
   for (const d of (a && a.byDay) || []) rows.push([d.day, d.orders, d.revenue, d.hot, d.archived]);
   return rows.map(r => r.join(',')).join('\n');
 }
+
+/// A CHANNEL AS THE OWNER READS IT (`services::ordering::channel`): a source
+/// that is a company is its proper name -- "eBills" is the venue's own fiscal
+/// till, whose sales are ordinary orders -- and the venue's own two are words
+/// in the owner's language (`t(key)`). Never the storage word on screen.
+const CHANNEL_NAMES = { ebills: 'eBills', wolt: 'Wolt', glovo: 'Glovo', baboon: 'Baboon', whatsapp: 'WhatsApp', instagram: 'Instagram' };
+const CHANNEL_KEYS = { storefront: 'anChStorefront', console: 'anChConsole', unknown: 'anChUnknown' };
+export function channelName(c, t = k => k){
+  return CHANNEL_NAMES[c] || (CHANNEL_KEYS[c] ? t(CHANNEL_KEYS[c]) : String(c ?? ''));
+}

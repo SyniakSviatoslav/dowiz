@@ -49,3 +49,23 @@ fn a_lead_is_placed_only_when_a_bill_claims_it() {
     let out = v.import(&[], T0 + PENDING_FOR_MS + 1);
     assert_eq!((out.placed, out.leads.len(), out.refused.len()), (0, 0, 0), "an unclaimed lead goes quietly, never placed");
 }
+
+/// A TILL SALE'S FOOD COST IS STAMPED LIKE A PLACEMENT'S (R4): a mapped line
+/// carries what one portion cost at the average of the moment it was sold,
+/// so the cube and the kitchen report read it as stamped, not re-priced at
+/// today's average. An unmatched line draws nothing and is not stamped.
+#[test]
+fn a_mapped_till_line_is_cost_stamped_and_the_cube_reads_the_stamp() {
+    use dowiz_hub::stock::cost::Price;
+    let mut v = Venue::new();
+    v.map.push(("56".into(), "p-roll".into()));
+    v.stock.receive_priced("salmon", 1000, &Price { unit_cost: 2000, per: 1000, supplier: None, doc: None }).unwrap();
+    let c = super::tests::course(8901, "3", 9, &[Line("56", "Sake roll", 2, 250), Line("77", "Water", 1, 100)], 0);
+    v.import(std::slice::from_ref(&c), T0);
+    let o = v.order(&super::tests::id_of(&c));
+    assert_eq!(o["items"][0]["unit_cost"], json!(80), "40 g of salmon at 2,000 per kg: {o}");
+    assert!(o["items"][1].get("unit_cost").is_none(), "an unmatched line is not stamped: {o}");
+    let rows = crate::services::analytics::cube::fold_orders(&[o], dowiz_hub::tz::DEFAULT, T0 + 1);
+    let r = rows.values().next().expect("the sale's day");
+    assert_eq!(r.m.get("p-roll"), Some(&[2, 500, 2, 160]), "2 portions, 500 lek, 2 stamped at 160: {r:?}");
+}

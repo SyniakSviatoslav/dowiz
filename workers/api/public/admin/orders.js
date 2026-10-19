@@ -87,8 +87,12 @@ async function loadJobs(){
 
 /// §2.9: an order a marketplace took names THE PLATFORM and ITS number --
 /// what the platform's courier says at the counter. Proper nouns, not i18n.
-const PLATFORM = { wolt: 'Wolt', glovo: 'Glovo', baboon: 'Baboon' };
-const platformOf = o => PLATFORM[o.channel] ? `${PLATFORM[o.channel]}${o.external?.order_id ? ' ' + o.external.order_id : ''}` : '';
+/// The venue's own fiscal till (ebills.al) is named the same way: its sales
+/// come in as ordinary orders (`ebills/map.rs`) with no guest on them, so the
+/// row says "eBills" and the till's receipt number (`inv_ord_num`) -- what the
+/// waiter's paper says -- instead of a bare id.
+const PLATFORM = { wolt: 'Wolt', glovo: 'Glovo', baboon: 'Baboon', ebills: 'eBills' };
+const platformOf = o => { const n = o.external?.order_id ?? o.external?.inv_ord_num; return PLATFORM[o.channel] ? `${PLATFORM[o.channel]}${n != null && n !== '' ? ' ' + n : ''}` : ''; };
 
 const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 /// HISTORY = every order that is not live, in the list's own order. The live
@@ -106,7 +110,7 @@ const hays = new WeakMap();
 function hayOf(o){
   const word = st(o.status), have = hays.get(o);
   if (have && have.status === o.status && have.word === word) return have.hay;
-  const hay = norm([o.id.slice(0, ORDER_ID_SHOWN), o.contact?.name, o.contact?.phone, o.fulfilment?.address?.line, o.status, word, o.promo?.code, ...(o.items || []).map(i => i.name)].join(' '));
+  const hay = norm([o.id.slice(0, ORDER_ID_SHOWN), o.contact?.name, o.contact?.phone, o.fulfilment?.address?.line, o.status, word, o.promo?.code, platformOf(o), ...(o.items || []).map(i => i.name)].join(' '));
   hays.set(o, { status: o.status, word, hay });
   return hay;
 }

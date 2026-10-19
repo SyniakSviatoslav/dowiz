@@ -147,10 +147,15 @@ pub fn answer_with(
         Ok(r) => (r, None),
         Err(why) => (BTreeMap::new(), Some(why)),
     };
+    // A DISH THE CATALOGUE DOES NOT NAME is named by the line that sold it:
+    // a till line no one has mapped yet (`ebills:<code>`, "korca"), or a dish
+    // since deleted. Every placed line carries the name it was sold under.
+    let sold_as = line_names(&hot_orders);
     let name = |id: &str| {
         cat.product(id)
             .and_then(|j| serde_json::from_str::<Value>(&j).ok())
             .and_then(|p| p.get("name").cloned())
+            .or_else(|| sold_as.get(id).cloned())
             .unwrap_or(json!(id))
     };
     let mut out = history::report(zone, s, &rows, &hot, &name);
@@ -161,6 +166,18 @@ pub fn answer_with(
     out["history"] = json!({ "archivedDays": rows.len(), "error": unread });
     out["currency"] = json!(crate::services::venue::currency_of(cat));
     Ok(out)
+}
+
+/// Each product id's name as an order line carried it, for the dishes the
+/// catalogue cannot name. The first non-empty one wins; the lines are the
+/// venue's own records, so no name is invented.
+pub fn line_names(orders: &[Value]) -> BTreeMap<String, Value> {
+    let mut out = BTreeMap::new();
+    for it in orders.iter().filter_map(|o| o.get("items").and_then(Value::as_array)).flatten() {
+        let (Some(id), Some(n)) = (it.get("product_id").and_then(Value::as_str), it.get("name").and_then(Value::as_str).filter(|n| !n.is_empty())) else { continue };
+        out.entry(id.to_string()).or_insert_with(|| json!(n));
+    }
+    out
 }
 
 /// THE v1 SHAPE (`/api/owner/analytics` before W-HIST), from a v2 answer:

@@ -27,3 +27,17 @@ test('twin: a delivery keeps the method chosen at checkout', () => {
   assert.deepEqual(paidWith({ payment: 'cash' }), ['cash']);
   assert.deepEqual(paidWith(null), []);
 });
+
+// The course as `ebills/import/bill.rs` leaves it once the till's bill closed
+// its table: born PICKED_UP at the table, no `payments[]`, the bill on it.
+const tillCourse = bill => ({ id: 'ebills:00000000-0000-4000-8000-000000008602', status: 'PICKED_UP', channel: 'ebills',
+  fulfilment: { kind: 'dine_in', table: '12', fee: 0 }, payment: 'cash', ...(bill ? { payment_status: 'paid', bill } : {}) });
+
+test('a till table paid by its bill says how the bill was paid', () => {
+  assert.deepEqual(paidWith(tillCourse({ uuid: 'b1', total: 500, payment: 'card', courses: 1 })), ['card']);
+  assert.deepEqual(paidWith(tillCourse({ uuid: 'b1', total: 500, payment: 'cash', courses: 1 })), ['cash']);
+});
+
+test('twin: a till course whose bill has not come yet has no method', () => {
+  assert.deepEqual(paidWith(tillCourse(null)), []);
+});

@@ -93,3 +93,14 @@ test('the VAT schedule round-trips and names a bad row', () => {
 test('a request id is stable for one press', () => {
   assert.equal(W.requestId('tu', 36, 'a-b c'), 'tu-10-abc');
 });
+
+// The archived row of a till sale as `ebills/map.rs` writes it, and its twin,
+// a storefront order, which names no source.
+test('archivedRow: a till sale reads its short ref and "eBills" with the till receipt number', () => {
+  const till = { id: 'ebills:00000000-0000-4000-8000-000000008602', channel: 'ebills', status: 'PICKED_UP', total: 500,
+    external: { source: 'ebills', sale_id: 8602, inv_ord_num: 8598 } };
+  assert.deepEqual(W.archivedRow(till), { ref: '#00000000', source: 'eBills 8598' });
+  assert.deepEqual(W.archivedRow({ id: 'ord_0001abcdef', channel: 'storefront' }), { ref: '#0001abcd', source: '' });
+  assert.deepEqual(W.archivedRow({ id: 'glovo-7781', channel: 'glovo', external: { order_id: 'G-7781' } }), { ref: '#7781', source: 'Glovo G-7781' });
+  assert.deepEqual(W.archivedRow({}), { ref: '', source: '' });
+});

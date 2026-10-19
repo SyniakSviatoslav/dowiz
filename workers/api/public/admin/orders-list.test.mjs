@@ -137,3 +137,19 @@ test('history is by identity, as before: two objects with one id are told apart'
   globalThis.__ol.S.orders = [];
   sweep('empty');
 });
+
+// A till sale as `ebills/map.rs` writes it (born PICKED_UP, no guest, the
+// till's receipt number in `external.inv_ord_num`): an ordinary order in
+// HISTORY, found by the receipt number on the waiter's paper and by "ebills".
+test('an imported till sale is in history and is found by its till receipt number', () => {
+  globalThis.__ol.words = EN;
+  const till = { id: 'ebills:00000000-0000-4000-8000-000000008602', status: 'PICKED_UP', channel: 'ebills', total: 500,
+    contact: { name: '', phone: '' }, fulfilment: { kind: 'dine_in', table: '12', fee: 0 }, payment: 'cash',
+    items: [{ product_id: 'ebills:56', name: 'korca', quantity: 2, unit_price: 250 }],
+    external: { source: 'ebills', sale_id: 8602, inv_ord_num: 8598 } };
+  globalThis.__ol.S.orders = [...venue(20, 5), till];
+  assert.ok(O.listFor('history', '').includes(till), 'a finished till sale is history');
+  assert.ok(!O.listFor('live', '').includes(till));
+  assert.deepEqual(O.listFor('history', '8598').map(o => o.id), [till.id], 'the till receipt number finds it');
+  assert.deepEqual(O.listFor('history', 'korca').map(o => o.id), [till.id]);
+});

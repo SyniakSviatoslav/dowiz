@@ -8,7 +8,7 @@
 import { $, $$, esc, icon, t, api, moneyEl, day, clock } from '/admin/core.js';
 import { input, rowDiv, empty, loading, chips } from '/admin/parts.js';
 import { q, tz, fail, open, paint } from '/admin/wire-core.js';
-import { inRange, total, archivesNewestFirst } from '/admin/wire-logic.js';
+import { inRange, total, archivesNewestFirst, archivedRow } from '/admin/wire-logic.js';
 
 const DAY_MS = 86_400_000;
 
@@ -31,8 +31,8 @@ export async function mount(host){
   const draw = () => {
     const list = inRange(orders, $('#w-from').value, $('#w-to').value, tz());
     $('#wOrders').innerHTML = `${rowDiv({ leading: icon('receipt'), title: `${list.length} ${t('w_ordersN')}`, trailing: moneyEl(total(list)) })}
-      <div class="rows" role="list">${list.slice(0, 200).map(o => rowDiv({ leading: icon('receipt'), title: '#' + String(o.id || '').slice(0, 8),
-        sub: `${esc(day(o.created_at_ms))} ${esc(clock(o.created_at_ms))} · ${esc(o.status || '')}`, trailing: moneyEl(o.total || 0) })).join('')}</div>`;
+      <div class="rows" role="list">${list.slice(0, 200).map(o => { const r = archivedRow(o); return rowDiv({ leading: icon('receipt'), title: r.ref,
+        sub: `${esc(day(o.created_at_ms))} ${esc(clock(o.created_at_ms))} · ${esc(o.status || '')}${r.source ? ' · ' + esc(r.source) : ''}`, trailing: moneyEl(o.total || 0) }); }).join('')}</div>`;
     paint($('#wOrders'));
   };
   const load = async id => {

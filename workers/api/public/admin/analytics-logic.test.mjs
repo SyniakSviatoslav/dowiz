@@ -2,7 +2,7 @@
 // arithmetic (W-HIST): words, ranges, the matrix's sentence, the trace filter.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pct, fill, badRange, query, kitchenQuery, spark, heat, byQuadrant, advice, keep, csv, WINDOWS } from './analytics-logic.js';
+import { pct, fill, badRange, query, kitchenQuery, spark, heat, byQuadrant, advice, keep, csv, WINDOWS, channelName } from './analytics-logic.js';
 
 test('a change is a signed percent with one decimal, and nothing to compare is empty', () => {
   assert.equal(pct(1500), '+150.0%');
@@ -64,4 +64,15 @@ test('the trace keeps the records of a dish or an hour', () => {
 test('the CSV carries each day and where its orders came from', () => {
   assert.equal(csv({ byDay: [{ day: '2026-09-22', orders: 3, revenue: 4500, hot: 1, archived: 2 }] }),
     'day,orders,revenue_minor,hot_orders,archived_orders\n2026-09-22,3,4500,1,2');
+});
+
+test('channelName: the till is "eBills", the venue\'s own two are words, never the storage word', () => {
+  const words = { anChStorefront: 'Online shop', anChConsole: 'Staff', anChUnknown: 'Unknown source' };
+  const t = k => words[k] || k;
+  // The channels block as `/api/owner/analytics?v=2` answers it with an imported till sale in it.
+  const channels = [{ channel: 'storefront', orders: 4, revenue: 10000 }, { channel: 'ebills', orders: 1, revenue: 500 }, { channel: 'console', orders: 1, revenue: 900 }];
+  assert.deepEqual(channels.map(c => channelName(c.channel, t)), ['Online shop', 'eBills', 'Staff']);
+  assert.equal(channelName('glovo', t), 'Glovo');
+  assert.equal(channelName('unknown', t), 'Unknown source');
+  assert.equal(channelName('fax', t), 'fax', 'a word this build does not know is shown as it is, not renamed');
 });

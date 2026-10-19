@@ -155,9 +155,16 @@ fn order(hub: &mut Hub, stock: &mut StockLog, look: &Lookups, out: &mut Outcome,
     }
     if !served.is_empty() {
         // §6.4: `Served` is never refused for the shelf; only arithmetic can.
-        if let Err(e) = stock.append_served_draws(&served) {
-            out.refused.push(Noted { at_ms: now, sale_id, why: format!("stock: {e}") });
-            return Ok(());
+        match stock.append_served_draws(&served) {
+            // THE COST STAMP FROM THE SAME FOLD, as a placement's and an offline
+            // sale's (R4, `command::place::cost`): a till sale's food cost is read
+            // at the average of the moment it was sold, like every other order's,
+            // not at whatever the average is the day the owner opens the report.
+            Ok((book, at)) => crate::command::place::cost::stamp_lines(&mut env, &bom, &book, at, &dowiz_hub::prep::stocked::Shelf::new()),
+            Err(e) => {
+                out.refused.push(Noted { at_ms: now, sale_id, why: format!("stock: {e}") });
+                return Ok(());
+            }
         }
     }
     let seq = env.get("created_at_ms").and_then(Value::as_i64).unwrap_or(now).max(0) as u64;
