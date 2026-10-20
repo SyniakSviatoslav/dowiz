@@ -4,6 +4,7 @@
 use super::super::map::to_order;
 use super::tests::{bill, sale, Line, Venue, LOC, T0};
 use super::*;
+use dowiz_hub::stock::StockEvent;
 use serde_json::json;
 
 /// A VOID PUTS THE SHELF BACK: the voided course's `Served` draw is reversed

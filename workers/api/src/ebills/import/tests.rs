@@ -5,7 +5,7 @@ use super::super::map::{to_order, to_paid};
 use super::super::parse_detail;
 use super::super::wire::Sale;
 use super::*;
-use dowiz_hub::stock::{StockLevel, StockLog};
+use dowiz_hub::stock::{StockEvent, StockLevel, StockLog};
 use serde_json::json;
 
 pub(super) const LOC: &str = "loc-dubin";
@@ -213,10 +213,12 @@ fn every_imported_order_satisfies_law_3() {
 }
 
 /// THE VOID, AS MEASURED ON TABLE 10: a course (+4600), its cancellation
-/// (-4600, naming the course), and a bill of 0. Both are orders, they net to
-/// zero, the bill pays both, and the voided course says who voided it.
+/// (-4600, naming the course), and a bill of 0. The void is a REFUND of the
+/// course, not an order of its own (operator, 2026-10-20): one order, ended
+/// `COMPENSATED_REFUND` by the till, out of the takings, and the bill of 0
+/// still pays it. The week's re-read of the void moves nothing.
 #[test]
-fn a_void_nets_its_course_to_zero_and_the_bill_of_zero_pays_both() {
+fn a_void_refunds_its_course_and_is_no_order_of_its_own() {
     let mut v = Venue::new();
     let course = sale(8717, Some("10"), Some(5685), false, &[Line("117", "set", 1, 4600)], 0, 1);
     let mut void = sale(8718, Some("10"), Some(5686), false, &[Line("117", "set", 1, 4600)], 60, 1);
@@ -227,15 +229,40 @@ fn a_void_nets_its_course_to_zero_and_the_bill_of_zero_pays_both() {
     }
     void.total_value = -4600.0;
     let (c, x) = (to_order(&course, LOC).unwrap(), to_order(&void, LOC).unwrap());
-    let out = v.import(
-        &[Mapped::Order { sale_id: 8717, envelope: c.clone() }, Mapped::Order { sale_id: 8718, envelope: x.clone() }, bill(8719, "10", &[], 120)],
-        T0 + 200_000,
-    );
-    assert_eq!((out.placed, out.noted, out.paid, out.pending.len()), (2, 1, 2, 0));
-    let (co, xo) = (v.order(c["id"].as_str().unwrap()), v.order(x["id"].as_str().unwrap()));
-    assert_eq!(co["total"].as_i64().unwrap() + xo["total"].as_i64().unwrap(), 0);
+    let vx = Mapped::Order { sale_id: 8718, envelope: x.clone() };
+    let out = v.import(&[Mapped::Order { sale_id: 8717, envelope: c.clone() }, vx.clone(), bill(8719, "10", &[], 120)], T0 + 200_000);
+    assert_eq!((out.placed, out.noted, out.paid, out.pending.len(), out.refused.len()), (1, 1, 1, 0, 0));
+    assert_eq!(v.orders(), 1, "the void is not an order");
+    let co = v.order(c["id"].as_str().unwrap());
+    assert_eq!(co["status"], json!("COMPENSATED_REFUND"));
+    assert_eq!((co["total"].as_i64(), co["refund"]["reason"].as_str(), co["refund"]["by"].as_str()), (Some(4600), Some("till_void"), Some("ebills")));
+    assert_eq!((co["refund"]["owed"].as_i64(), co["refund"]["at"].as_i64()), (Some(4600), x["created_at_ms"].as_i64()));
     assert_eq!(co["ebills_voided_by"]["sale_id"], json!(8718));
-    assert_eq!((co["bill"]["total"].as_i64(), xo["payment_status"].as_str()), (Some(0), Some("paid")));
+    assert_eq!(co["bill"]["total"].as_i64(), Some(0), "the bill of 0 pays the refunded course");
+    // THE ANALYTICS PANE: one order, refused, no money and no dishes.
+    let (zone, now) = (dowiz_hub::tz::zone("Europe/Tirane").unwrap(), T0 + 300_000);
+    let r = crate::services::analytics::fold::fold(&[co.clone()], zone, &crate::services::analytics::fold::day_starts(zone, now, 7), now);
+    assert_eq!((r.orders, r.rejected, r.revenue, r.top_products.len()), (1, 1, 0, 0));
+
+    let again = v.import(std::slice::from_ref(&vx), T0 + 300_000);
+    assert_eq!((again.written.len(), again.unchanged, again.refused.len()), (0, 1, 0), "the re-read moves nothing");
+}
+
+/// A VOID OF A SALE THIS VENUE NEVER IMPORTED is refused by name: a lone
+/// negative order would take money off a day that never counted it.
+#[test]
+fn a_void_of_an_unknown_sale_is_refused_not_placed() {
+    let mut v = Venue::new();
+    let mut void = sale(8718, Some("10"), Some(5686), false, &[Line("117", "set", 1, 4600)], 60, 1);
+    void.changed_status = Some("CANCELLED".into());
+    void.modified = Some(super::super::wire::Modified { id: 8001, uuid: "00000000-0000-4000-8000-000000008001".into() });
+    if let Some(r) = void.sale_records.as_mut() {
+        (r[0].amount, r[0].total_value) = (-1.0, -4600.0);
+    }
+    void.total_value = -4600.0;
+    let out = v.import(&[Mapped::Order { sale_id: 8718, envelope: to_order(&void, LOC).unwrap() }], T0 + 200_000);
+    assert_eq!((out.placed, out.written.len(), out.refused.len()), (0, 0, 1));
+    assert!(out.refused[0].why.contains("never imported"), "{}", out.refused[0].why);
 }
 
 /// THE WEEK'S RE-READ OF BILLS: a bill older than the import is checked and

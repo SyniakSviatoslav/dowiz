@@ -13,12 +13,14 @@
 //!   known and unchanged                 -> nothing at all: the bytes stand
 //!   a bill                              -> `Paid` on its sitting's courses,
 //!                                          never an order (§1.6)
+//!   a void                              -> the refund of the sale it names,
+//!                                          never an order (`void.rs`)
 
 use super::state::{Noted, PendingBill, PendingLead, PENDING_FOR_MS};
 use crate::command::amend::next_seq;
 use crate::command::Refused;
 use crate::hubdo::OrderView;
-use dowiz_hub::stock::{StockEvent, StockLog};
+use dowiz_hub::stock::StockLog;
 use dowiz_hub::{EventKind, Hub};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -74,6 +76,8 @@ mod join;
 /// What a bill does to the log: `Paid` on its courses, or `Noted` if amended.
 mod bill;
 use bill::{bill, known_bill};
+/// A void: the refund of the sale it names.
+mod void;
 
 /// What the object knows that the batch needs: the crosswalk and the
 /// catalogue, as lookups, so nothing is copied that is not asked for.
@@ -128,6 +132,10 @@ fn order(hub: &mut Hub, stock: &mut StockLog, look: &Lookups, out: &mut Outcome,
         out.refused.push(Noted { at_ms: now, sale_id, why: "no id on the mapped sale".into() });
         return Ok(());
     };
+    // A VOID IS A REFUND OF ITS SALE, never an order of its own (`void.rs`).
+    if void::target(&env).is_some() {
+        return void::void(hub, stock, out, book, sale_id, &env, now);
+    }
     if book.contains_key(&id) {
         let fp = (env.get("total").and_then(Value::as_i64).unwrap_or(-1), env.pointer("/external/log_cis_len").and_then(Value::as_i64).unwrap_or(-1));
         return note(hub, out, book, &id, fp, sale_id, now);
@@ -168,36 +176,8 @@ fn order(hub: &mut Hub, stock: &mut StockLog, look: &Lookups, out: &mut Outcome,
         }
     }
     let seq = env.get("created_at_ms").and_then(Value::as_i64).unwrap_or(now).max(0) as u64;
-    let void_of = env.get("void_of").and_then(Value::as_str).map(str::to_string);
     append(hub, out, book, EventKind::Placed, &id, None, env, seq)?;
     out.placed += 1;
-    // A VOID NAMES WHAT IT VOIDS on the voided order too, so the owner sees
-    // it where the money was: a `Noted`, the original's total untouched --
-    // the void is its own negative order, and the two net to zero.
-    let voided = void_of.and_then(|v| book.get(&v).cloned().map(|held| (v, held)));
-    if let Some((vid, (before, cseq))) = voided {
-        if before.get("ebills_voided_by").is_none() {
-            let mut after = before.clone();
-            after["ebills_voided_by"] = json!({ "order_id": id, "sale_id": sale_id });
-            after["ebills_changed"] = json!(true);
-            append(hub, out, book, EventKind::Noted, &vid, Some(&before), after, next_seq(cseq, now))?;
-            out.noted += 1;
-            // AND THE SHELF GETS BACK WHAT THE VOIDED SALE TOOK: exactly its
-            // unreversed `Served`, which the ledger refuses to reverse twice.
-            let back: Vec<StockEvent> = match stock.ledger() {
-                Ok(l) => l.served_of(&vid).into_iter().map(|(item, qty)| StockEvent::Unserved { item, qty, order_id: vid.clone() }).collect(),
-                Err(e) => {
-                    out.refused.push(Noted { at_ms: now, sale_id, why: format!("stock unreadable, void not put back: {e}") });
-                    Vec::new()
-                }
-            };
-            if !back.is_empty() {
-                if let Err(e) = stock.append_all(&back) {
-                    out.refused.push(Noted { at_ms: now, sale_id, why: format!("stock: {e}") });
-                }
-            }
-        }
-    }
     Ok(())
 }
 
@@ -221,6 +201,8 @@ pub(crate) fn decide(hub: &mut Hub, stock: &mut StockLog, listed: &[OrderView], 
     let mut leads: Leads = waiting.leads.into_iter().map(|l| (l.envelope["id"].as_str().unwrap_or("").to_string(), (l.envelope, l.sale_id, l.since_ms))).collect();
     for m in sorted {
         match m {
+            // A VOID OF A LEAD: the lead was never placed, so nothing is refunded.
+            Mapped::Order { envelope, .. } if void::target(envelope).is_some_and(|v| leads.remove(v).is_some()) => {}
             Mapped::Order { sale_id, envelope } => order(hub, stock, look, &mut out, &mut book, *sale_id, envelope.clone(), now)?,
             Mapped::Seen { sale_id, order_id, total, log_cis_len } => note(hub, &mut out, &mut book, order_id, (*total, *log_cis_len), *sale_id, now)?,
             Mapped::Bill { sale_id, paid } if !bills.iter().any(|b| b.sale_id == *sale_id) => {

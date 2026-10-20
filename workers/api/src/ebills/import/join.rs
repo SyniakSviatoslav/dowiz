@@ -12,6 +12,10 @@ use serde_json::Value;
 /// run that does (an older course is likelier an orphan than part of this
 /// bill); else the oldest run. Nothing that does not add up is paid.
 ///
+/// A VOIDED COURSE COUNTS ZERO: it is refunded (`void.rs`), so the bill of 0
+/// that closes a cancelled table still finds it, and a bill of the rest still
+/// adds up beside it.
+///
 /// NOT BY `sale_unit_order_id`: on 2026-09-23 every detail inspected carried
 /// its own id, so nothing shows it groups a sitting (BLUEPRINT §8.2 (2)).
 pub(super) fn join<'a>(cands: impl Iterator<Item = (&'a String, &'a Value)>, paid: &Value) -> Option<Vec<String>> {
@@ -25,7 +29,11 @@ pub(super) fn join<'a>(cands: impl Iterator<Item = (&'a String, &'a Value)>, pai
                 && o.get("bill").is_none()
                 && o.get("created_at_ms").and_then(Value::as_i64).is_some_and(|t| t <= at)
         })
-        .map(|(id, o)| (o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0), id.clone(), o.get("total").and_then(Value::as_i64).unwrap_or(0)))
+        .map(|(id, o)| {
+            let voided = o.get("status").and_then(Value::as_str) == Some("COMPENSATED_REFUND");
+            let total = if voided { 0 } else { o.get("total").and_then(Value::as_i64).unwrap_or(0) };
+            (o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0), id.clone(), total)
+        })
         .collect();
     c.sort();
     let sum = |v: &[(i64, String, i64)]| v.iter().map(|x| x.2).sum::<i64>();
