@@ -101,6 +101,17 @@ export async function f4(log) {
     }
     return mine.length ? `deleted ${mine.join(', ')}` : '';
   });
+  // F11's ПФ dish (`flows-f11-roll`): F11 makes it again on every run, and the
+  // sweep below refuses any `flows-` object, so it went red on every full run.
+  await attempt('F11 dish', async () => {
+    const r = await own(`/api/owner/products?location_id=${LOC}`);
+    const mine = (r.body?.products || []).filter(x => String(x.id).startsWith(`${PREFIX.toLowerCase()}f11-`)).map(x => x.id);
+    for (const id of mine) {
+      const d = await own(`/api/owner/products/${encodeURIComponent(id)}/delete`, { location_id: LOC });
+      if (d.status !== 200) throw new Fail(`deleting ${id}: ${d.status} ${d.text.slice(0, 100)}`);
+    }
+    return mine.length ? `deleted ${mine.join(', ')}` : '';
+  });
   if (S.restore.pickup !== undefined) await attempt('venue pickup switch', async () => {
     const cur = !!(await menu()).location?.pickup;
     if (cur === S.restore.pickup) return `${cur} (as found)`;

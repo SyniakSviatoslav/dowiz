@@ -84,6 +84,12 @@ export async function recipeStep(p, g, log) {
   await p.keyboard.press('Escape');
   clean(g, 'F2 recipe');
   log(`recipe of ${DISH}: typed 70 + x on the other line -> save sent ${pairs(sent[0].body.bom)}, API ${pairs(api)}, reopened shows 1 line at 70`);
+  // PUT IT BACK NOW, not at F4: F11 orders this dish and reads its reservation
+  // (tuna 80 + rice 120). Left at "tuna 70" until the end, F11 measured F2's
+  // edit and went red on every full run (2026-10-20). F4 stays the crash net.
+  const back = await own(`/api/owner/products/${DISH}`, { location_id: LOC, bom: S.restore.bom });
+  if (back.status !== 200) throw new Fail(`restoring ${DISH}'s recipe: ${back.status} ${back.text.slice(0, 100)}`);
+  delete S.restore.bom; save();
 }
 
 /// ПФ card: made by the API with two lines; x on the second, first typed to 70, Save, reopen.
