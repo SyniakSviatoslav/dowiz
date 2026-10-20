@@ -21,10 +21,15 @@ async function openRound(p, table, n) {
   await p.click('.bar [data-act="open"]');
   await p.waitForSelector('[data-in="table"]', { timeout: 15000 });
   await p.fill('[data-in="table"]', table);
-  await p.waitForSelector('[data-act="pick"]:not([disabled])', { timeout: 20000 }).catch(() => {});   // the menu arrives after the screen
+  // The menu arrives after the screen; 20 s was not always enough (R1 found no dish, 2026-10-20).
+  await p.waitForSelector('[data-act="pick"]:not([disabled])', { timeout: 45000 }).catch(() => {});
   const picks = await p.$$('[data-act="pick"]:not([disabled])');
-  if (!picks.length) return { none: true };
-  for (let i = 0; i < n; i++) await (await p.$$('[data-act="pick"]:not([disabled])'))[i % picks.length].click();
+  // NO DISH TO TAP SAYS WHY: what the screen shows instead (loading, "menu failed", every dish off).
+  if (!picks.length) return { none: true, screen: (await p.evaluate(() => document.querySelector('#app, main, body')?.innerText || '')).replace(/\s+/g, ' ').slice(0, 200) };
+  // A LOCATOR, not a handle: each pick redraws the list, and a handle taken a
+  // moment before the redraw clicked a detached node ("Element is not attached
+  // to the DOM", 2026-10-20). The locator re-resolves and retries.
+  for (let i = 0; i < n; i++) await p.locator('[data-act="pick"]:not([disabled])').nth(i % picks.length).click();
   let placed = null;
   const h = async r => { if (/\/api\/public\/locations\/[^/]+\/orders$/.test(r.url()) && r.request().method() === 'POST') { try { placed = { status: r.status(), body: await r.json() }; } catch { placed = { status: r.status() }; } } };
   p.on('response', h);
