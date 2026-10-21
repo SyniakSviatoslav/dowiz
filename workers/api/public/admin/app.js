@@ -164,13 +164,16 @@ function light(id){
 // that no longer existed ("Cannot set properties of null"). Each call takes a
 // number; a call that is no longer the latest stops before it touches the page.
 let showing = 0;
+let fading = null;
 export async function show(id, arg){
   const mine = ++showing;
   S.tab = id; light(id); closeSheet();
   const m = await module(id);
   if (mine !== showing) return;
+  let drawn = false;
   const swap = async () => {
-    if (mine !== showing) return;
+    if (mine !== showing || drawn) return;
+    drawn = true;
     // The open tab's name on the host: admin.css scopes a few rules to a
     // screen whose markup another lane owns (menu, stock) by this attribute.
     $('#app').dataset.tab = id;
@@ -187,12 +190,24 @@ export async function show(id, arg){
   // same swap, instantly, everywhere else and under reduced motion. A newer
   // tap SKIPS the running transition, which rejects its `ready` and
   // `finished`: those are expected, so they are caught, not thrown at the page.
-  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    const vt = document.startViewTransition(swap);
-    vt.ready.catch(() => {}); vt.finished.catch(() => {});
-    await vt.updateCallbackDone;
-  } else await swap();
+  //
+  // THE LAST TAP DRAWS EVEN WHEN THE BROWSER DOES NOT CALL BACK (qa-durres,
+  // flows F9 phone, 2026-10-20): under load the nav said Menu while the screen
+  // stayed on Venue -- the latest tap's swap was left to a transition that had
+  // not called it 9 s later. So a transition is only for a lone tap; a tap
+  // that lands while one is fading skips it and draws at once; and a swap the
+  // browser has not called within TRANSITION_WAIT_MS is called here.
+  if (document.startViewTransition && !fading && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const vt = fading = document.startViewTransition(swap);
+    vt.ready.catch(() => {}); vt.finished.catch(() => {}).then(() => { if (fading === vt) fading = null; });
+    const late = new Promise(r => setTimeout(r, TRANSITION_WAIT_MS));
+    const called = vt.updateCallbackDone.catch(e => { if (drawn && mine === showing) throw e; });
+    await Promise.race([called, late]);
+    if (drawn) await called; else vt.skipTransition();
+  } else fading?.skipTransition();
+  if (!drawn && mine === showing) await swap();
 }
+const TRANSITION_WAIT_MS = 1000;
 /// Re-render the open tab in place after data moved (the poll, an action).
 export async function rerender(){
   const m = modules.get(S.tab); const host = $('#screen');

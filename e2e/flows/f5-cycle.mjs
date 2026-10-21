@@ -26,6 +26,24 @@ function sums(b) {
   return { total: n('total'), subtotal: n('subtotal'), fee: n('delivery_fee'), tip: n('tip'), cut: n('discount') };
 }
 
+/// THE SHELF THE SUITE EATS IS REFILLED BY THE SUITE (2026-10-21): every run
+/// serves tuna and nothing ever received it again, so qa-tuna reached 0 and
+/// F5's first order was refused ("qa-tuna: 80 wanted, 0 available"), taking
+/// F6-F11 down with it. F11 receives salmon and rice priced; a supply never
+/// priced is received here WITHOUT a price, so it stays unpriced for F11's
+/// stockUnpriced check. Named, not "every low row": qa-lost is kept short on
+/// purpose, for the lost-sale check.
+const FLOOR = 1500, REFILL = 3000, REFILLED = ['qa-tuna'];
+async function topUp(log) {
+  const r = await own(`/api/owner/stock?location_id=${LOC}`);
+  if (r.status !== 200) throw new Fail(`reading the shelf: ${r.status}`);
+  for (const s of (r.body.supplies || []).filter(s => REFILLED.includes(s.id) && s.costPerBasis == null && !(Number(s.wac) > 0) && Number(s.available) < FLOOR)) {
+    const rc = await own(`/api/owner/stock/received?location_id=${LOC}`, { item: s.id, qty: REFILL, supplier: 'FLOWS refill', doc: `FLOWS-${RUN}-refill` });
+    if (rc.status !== 200) throw new Fail(`refilling ${s.id}: ${rc.status} ${rc.text.slice(0, 160)}`);
+    log(`refilled ${s.id}: ${s.available} available + ${REFILL} (unpriced)`);
+  }
+}
+
 // ── F5 ────────────────────────────────────────────────────────────────────
 export async function f5(log) {
   const bad = [];
@@ -33,6 +51,7 @@ export async function f5(log) {
   // qa-veg-roll is taken off sale and back by F10; nothing else here depends on which dish.
   const on = dishes(m0).filter(d => d.available && !String(d.id).startsWith('flows-'));   // not another lane's temporary dish
   if (on.length < 4) throw new Fail(`qa-durres lists ${on.length} dishes on sale; the cycle needs 4 (run e2e/walk/qa-setup.mjs)`);
+  await topUp(log);
   if (!m0.location?.pickup) {
     if (S.restore.pickup === undefined) { S.restore.pickup = false; save(); }
     const r = await own('/api/owner/location', { location_id: LOC, pickup: true });
