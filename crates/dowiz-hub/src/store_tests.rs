@@ -32,6 +32,7 @@ fn a_damaged_write_cursor_refuses_the_next_append_instead_of_panicking() {
     for (bad, why) in [(-8, "negative"), (1 << 40, "past the arena"), (5, "inside the superblock"), (honest - 20, "behind the newest record")] {
         let mut st = Store::from_bytes(&bytes);
         st.cells[pt + 19] = bad;
+        st.seal(pt); // a resealed lie: the PartTab crc (W-ES-P0 D8) would refuse it at load
         let mut h = Hub::load(&st.to_bytes()).expect("the chain is whole; only the cursor lies");
         let r = h.append(EventKind::Placed, "o9", "{}", 9, [0u8; 32]);
         assert!(matches!(r, Err(HubError::Store(StoreError::Corrupt(_)))), "cursor {why} ({bad}): {r:?}");

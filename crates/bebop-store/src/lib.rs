@@ -1,20 +1,24 @@
-//! Rust side of the bebop store format.
+//! Rust side of the bebop store format. THE NORMATIVE DESCRIPTION is
+//! `docs/FORMAT-BEBOP-IMAGE-v2.md`; the names and limits are in `format.rs`. In short:
 //!
 //! Layout (bebop-lang `selfhost/prelude/store.bp`):
 //!   cells 0..15    superblock A
 //!   cells 512..527 superblock B
 //!   cells 1024..   append-only bump arena of objects
 //!
-//! Superblock (16 cells): 0 magic "BEBOPST1", 1 version, 2 generation, 3 root,
-//! 4 arena_used, 5 PROJTAB (DG5: the projection table, 0 = none; was `layout_table`, which no
-//! writer ever set), 6 migration_table, 7 live_cells, 8 superseded_cells,
-//! 9 `anc` (DG5: `(first cell the last commit wrote << 32) | crc32` of the cells it wrote; 0 =
-//! no anchor -- every image before DG5, and every commit this crate writes), 10 commit-object,
-//! 11 heads-table, 12 arena capacity in cells, 13..14 zero, 15 crc32 of cells 0..14.
-//! A reader picks the VALID superblock with the higher generation.
+//! Superblock (16 cells): 0 magic "BEBOPST1", 1 version (2), 2 generation, 3 the PartTab's
+//! cell index (NOT the data root: the root is the PartTab's cell 18), 4 arena_used (absolute),
+//! 5 PROJTAB (DG5, 0 = none), 6 migration_table, 7 live_cells, 8 superseded_cells,
+//! 9 `anc` = `(mark << 32) | crc32(cells[mark..arena_used))` over the cells the commit wrote
+//! (0 = no anchor: every image before W-ES-P0; this crate writes it since), 10 bebop C3's
+//! commit-object ref and 11 its heads table (written only by bebop `st_sb_write_ch`; this
+//! crate writes both 0), 12 arena capacity in cells, 13..14 zero (S-1), 15 crc32 of cells 0..14.
+//! A reader picks the VALID superblock with the higher generation, then checks that every
+//! offset it names fits the image and that the PartTab it names passes its own crc
+//! (`format::pick_checked_in`); a newer valid superblock that fails either is a REFUSAL.
 //!
 //! Object: h0 = (layout_digest_lo32 << 32) | length_in_cells,
-//!         h1 = (crc32(payload LE bytes) << 32) | generation,
+//!         h1 = (crc32(payload LE bytes) << 32) | (generation mod 2^32),
 //!         then `length_in_cells` payload cells.
 //! A `ref` field is an OBJECT-relative signed cell offset: target = this_object_start + off,
 //! 0 = null.
@@ -166,53 +170,9 @@ pub fn sb_valid_in<C: Cells + ?Sized>(c: &C, at: usize) -> bool {
     crc32_in(c, at, 15) == want
 }
 
-/// `Store::sb_fits` -- the reasoning is on that method.
-pub fn sb_fits_in<C: Cells + ?Sized>(c: &C, at: usize) -> bool {
-    let n = c.n_cells() as i64;
-    let pt = c.cell_at(at + 3);
-    let used = c.cell_at(at + 4);
-    if pt < 0 || used < 0 || used > n {
-        return false;
-    }
-    // A PartTab is read at `pt + 18` (B5 step 1), so that cell must exist.
-    // `pt == 0` means "no root", which is a legitimate empty store.
-    // Checked: every one of these came out of the image, and an i64 near
-    // its maximum makes the addition itself a panic.
-    if pt != 0 && pt.checked_add(18).is_none_or(|end| end >= n) {
-        return false;
-    }
-    // And the root the PartTab names has to be inside the image too, or the
-    // first object read walks off the end instead.
-    if pt != 0 {
-        let r = c.cell_at(pt as usize + 18);
-        // An object's header is two cells before its payload.
-        if r < 0 || (r != 0 && r.checked_add(2).is_none_or(|end| end >= n)) {
-            return false;
-        }
-    }
-    true
-}
-
-/// `Store::pick` -- the reasoning is on that method.
+/// `Store::pick` -- the reasoning is on that method; the rule is `format::pick_checked_in`.
 pub fn pick_in<C: Cells + ?Sized>(c: &C) -> Option<Superblock> {
-    let ok = |at: usize| at + 15 <= c.n_cells() && sb_valid_in(c, at);
-    let at = match (ok(SB_A), ok(SB_B)) {
-        (true, true) if c.cell_at(SB_B + 2) > c.cell_at(SB_A + 2) => SB_B,
-        (true, _) => SB_A,
-        (false, true) => SB_B,
-        (false, false) => return None,
-    };
-    if !sb_fits_in(c, at) {
-        return None;
-    }
-    Some(Superblock {
-        at,
-        generation: c.cell_at(at + 2),
-        root: c.cell_at(at + 3),
-        arena_used: c.cell_at(at + 4),
-        live_cells: c.cell_at(at + 7),
-        superseded_cells: c.cell_at(at + 8),
-    })
+    format::pick_checked_in(c).ok()
 }
 
 /// `Store::root`: the DATA root through the PartTab (raw cell `pt + 18`).
@@ -296,7 +256,14 @@ impl Store {
         st.cells[SB_A + 15] = crc32_cells(&st.cells, SB_A, 15) as i64;
         let mut buf = Vec::with_capacity(size_bytes);
         for c in &st.cells { buf.extend_from_slice(&c.to_le_bytes()); }
-        std::fs::write(path, &buf)?;
+        // DURABLY (W-ES-P0, D4): `std::fs::write` alone left the file's bytes and its
+        // directory entry in the page cache, so after a power loss the file could be empty or
+        // absent while the caller had been told it exists. The file is synced, then its
+        // directory (a new name is durable only once the directory is).
+        let mut f = std::fs::File::create(path)?;
+        f.write_all(&buf)?;
+        f.sync_all()?;
+        sync_parent_dir(path)?;
         Ok(st)
     }
 
@@ -425,10 +392,11 @@ impl Store {
     ///
     /// The on-disk `commit` orders three fsync'd writes -- objects, PartTab,
     /// superblock LAST -- so a crash between any two leaves generation k-1
-    /// intact. A whole-image PUT to object storage gives the same property by a
-    /// shorter route: the old image stays readable until the new one lands, and
-    /// there is no partial state in between. Stated rather than assumed, because
-    /// the guarantee is the reason the ordering exists.
+    /// intact. WITHOUT a filesystem that ordering is not this crate's to give:
+    /// dowiz's Durable Object writes only the CHANGED 96 KiB chunks plus a meta
+    /// record in one atomic `put` (workers/api `hubdo/atomic.rs`, W-ATOMIC), so the
+    /// atomicity is the platform's, not the format's (R-EMBED-STORE D3; this comment
+    /// used to describe a whole-image PUT that no longer happens).
     pub fn commit_bytes(&mut self, tx: &Tx, root: usize) -> i64 {
         let _ = self.stage_commit(tx, root);
         tx.next_gen
@@ -486,7 +454,7 @@ impl Store {
     ///
     /// So a superblock whose offsets do not fit is not a valid superblock. The
     /// image is then refused by the loader above it, loudly, which is what a
-    /// caller can act on. (`pick` applies it through `pick_in` -> `sb_fits_in`.)
+    /// caller can act on. (`pick` and `format::pick_checked_in` apply these bounds and the PartTab crc.)
     pub fn sb_fits(&self, at: usize) -> bool {
         let n = self.cells.len() as i64;
         let pt = self.cells[at + 3];
@@ -523,25 +491,57 @@ impl Store {
     /// the disagreement is how this was found. So the fallback happens only
     /// between superblocks whose checksum is bad, never past one whose
     /// checksum is good and whose arena is not all here.
+    ///
+    /// AND THE PARTTAB MUST PASS ITS OWN CRC (W-ES-P0, D8 of R-EMBED-STORE): the cursor and
+    /// the generation `begin` trusts, and the root every reader follows, are PartTab cells,
+    /// and one flipped bit there used to be believed. bebop's `st_anc_ok` checked it; this
+    /// reader did not. `pick_checked` says which rule refused.
+    ///
+    /// TWO COPIES OF ONE RULE, deliberately: this body is what the wasm reader links
+    /// (crates/bebop-wasm, whose `bytes.baseline` may only fall), and calling the generic,
+    /// error-naming `format::pick_checked_in` from here cost 138 bytes there; this lean copy
+    /// costs 91 fewer than the pre-D8 pick did. `format/catalogue_tests.rs` asserts on every
+    /// named corrupted cell that the two answer alike.
     pub fn pick(&self) -> Option<Superblock> {
-        let ok = |at: usize| at + 15 <= self.cells.len() && self.sb_valid(at);
-        let at = match (ok(SB_A), ok(SB_B)) {
+        let at = match (self.sb_valid(SB_A), self.sb_valid(SB_B)) {
             (true, true) if self.cells[SB_B + 2] > self.cells[SB_A + 2] => SB_B,
             (true, _) => SB_A,
             (false, true) => SB_B,
             (false, false) => return None,
         };
-        if !self.sb_fits(at) {
+        let n = self.cells.len() as i64;
+        let pt = self.cells[at + 3];
+        let used = self.cells[at + 4];
+        if pt < 0 || pt >= n || used < 0 || used > n {
             return None;
+        }
+        if pt != 0 {
+            let p = pt as usize;
+            let len = self.obj_len(p);
+            if len < PARTTAB_CELLS || p as i64 + 2 + len > n {
+                return None;
+            }
+            if crc32_cells(&self.cells, p + 2, len as usize) != (self.cells[p + 1] >> 32) as u32 {
+                return None;
+            }
+            let r = self.cells[p + 18];
+            if r < 0 || (r != 0 && r.checked_add(2).is_none_or(|end| end >= n)) {
+                return None;
+            }
         }
         Some(Superblock {
             at,
             generation: self.cells[at + 2],
-            root: self.cells[at + 3],
-            arena_used: self.cells[at + 4],
+            root: pt,
+            arena_used: used,
             live_cells: self.cells[at + 7],
             superseded_cells: self.cells[at + 8],
         })
+    }
+
+    /// `pick`, naming the refusal.
+    pub fn pick_checked(&self) -> Result<Superblock, PickError> {
+        format::pick_checked_in(self)
     }
 
     /// One cell, or zero if the image does not reach that far.
@@ -698,6 +698,11 @@ pub enum StoreError {
     Corrupt(&'static str),
     /// A store asked for below `MIN_BYTES` (W-FIX O11).
     TooSmall { bytes: usize, floor: usize },
+    /// The live superblock was refused, and why (W-ES-P0): a PartTab whose crc fails, an
+    /// offset outside the image. `NoSuperblock` stays the answer when neither is valid.
+    Image(PickError),
+    /// A limit of the format (`format.rs`, FORMAT §10) would be crossed: `what` names it.
+    Limit { what: &'static str, got: i64, max: i64 },
 }
 
 impl From<io::Error> for StoreError {
@@ -708,14 +713,18 @@ impl Store {
     /// Open a transaction: cursor and generation come from the live PartTab, exactly as
     /// `st_begin` reads `used_p` and `gen_p` rather than the superblock's own cells.
     pub fn begin(&self) -> Result<Tx, StoreError> {
-        let sb = self.pick().ok_or(StoreError::NoSuperblock)?;
+        let sb = match self.pick_checked() {
+            Ok(sb) => sb,
+            Err(PickError::NoValidSuperblock) => return Err(StoreError::NoSuperblock),
+            Err(e) => return Err(StoreError::Image(e)),
+        };
         let n = self.cells.len() as i64;
         let pt = self.cells[sb.at + 3];
         let (used, gen) = if pt == 0 {
             (self.cells[sb.at + 4], self.cells[sb.at + 2])
         } else {
-            // `sb_fits` proved `pt + 18 < n`; the cursor and the generation
-            // sit two cells further, and a PartTab cut off there is not one.
+            // `pick_checked` proved `pt + 20 < n` (a PartTab is 21 cells); this re-check stays
+            // as the guard of the two cells read next, should that rule ever loosen.
             if pt.checked_add(20).is_none_or(|end| end >= n) {
                 return Err(StoreError::Corrupt("the PartTab's cursor cells are outside the image"));
             }
@@ -738,12 +747,22 @@ impl Store {
         if used < self.cells[sb.at + 4] {
             return Err(StoreError::Corrupt("the write cursor is behind the superblock's arena_used"));
         }
+        // D7: an object's h1 keeps the generation's low 32 bits only, so the commit that
+        // would cross 2^32 - 1 is refused instead of wrapping `proj`'s `input_gen` test.
+        if gen >= MAX_GENERATION {
+            return Err(StoreError::Limit { what: "generation", got: gen.saturating_add(1), max: MAX_GENERATION });
+        }
         Ok(Tx { sb: sb.at, mark: used, cursor: used, live_delta: 0, sup_delta: 0, next_gen: gen + 1 })
     }
 
     /// Bump-allocate an object of `len` payload cells. Writes h0 and h1; the CRC half of h1
     /// stays zero until `seal`.
     pub fn alloc(&mut self, tx: &mut Tx, len: i64, digest: i64) -> Result<usize, StoreError> {
+        // The length is the low 32 bits of h0: a longer one would spill into the digest, and a
+        // negative one would become a usize of 1.8e19 below.
+        if !(0..=MAX_OBJ_CELLS).contains(&len) {
+            return Err(StoreError::Limit { what: "object cells", got: len, max: MAX_OBJ_CELLS });
+        }
         let off = tx.cursor;
         let capacity = self.cells[tx.sb + 12];
         if off + 2 + len > ARENA as i64 + capacity {
@@ -792,9 +811,13 @@ impl Store {
         tx.next_gen
     }
 
-    /// `stage_commit` with the PROJTAB cell given. Cell 9 (`anc`) is written 0: this
-    /// writer does not anchor its commits, and a zero anchor sends a bebop reopen down
-    /// the bounded arena scan it has always taken (store.bp `st_reopen_verify`).
+    /// `stage_commit` with the PROJTAB cell given. Cell 9 (`anc`) is the ANCHOR over the
+    /// cells this commit appended, `(mark << 32) | crc32(cells[mark..cursor))`, exactly as
+    /// bebop's `st_commit_x` writes it (W-ES-P0, operator Q5 2026-10-27): a bebop reopen then
+    /// verifies the last commit with one crc instead of walking the arena, and a torn last
+    /// commit is visible to `format::anchor_in`. Every reader accepts 0 too (older images).
+    /// Cells 10-11 (bebop C3's commit chain) are written 0: this writer appends no commit
+    /// object, so carrying the old ref forward would name the wrong generation.
     fn stage_commit_projtab(&mut self, tx: &Tx, root: usize, projtab: i64) -> (usize, usize) {
         let sb = tx.sb;
         let live = self.cells[sb + 7] + tx.live_delta - tx.sup_delta;
@@ -830,7 +853,9 @@ impl Store {
         self.cells[osb + 6] = mig;
         self.cells[osb + 7] = live;
         self.cells[osb + 8] = sup;
-        for k in 9..12 { self.cells[osb + k] = 0; }
+        self.cells[osb + SB_ANC] = format::anchor_of(&*self, tx.mark, tx.cursor);
+        self.cells[osb + SB_COMMIT] = 0;
+        self.cells[osb + SB_HEADS] = 0;
         self.cells[osb + 12] = capacity;
         self.cells[osb + 13] = 0;
         self.cells[osb + 14] = 0;
@@ -862,7 +887,20 @@ impl Store {
         f.write_all(&buf)
     }
 }
+/// fsync the directory holding `path`, so a file just created there survives a power loss.
+fn sync_parent_dir(path: &str) -> io::Result<()> {
+    let dir = match std::path::Path::new(path).parent() {
+        Some(d) if !d.as_os_str().is_empty() => d,
+        _ => std::path::Path::new("."),
+    };
+    std::fs::File::open(dir)?.sync_all()
+}
+
 mod crc;
+pub mod format;
+pub use format::{
+    PickError, MAX_GENERATION, MAX_KEY_BYTES, MAX_OBJ_CELLS, MAX_VALUE_BYTES, SB_ANC, SB_COMMIT, SB_HEADS,
+};
 pub mod verify;
 pub use verify::BadCrc;
 pub mod kv;

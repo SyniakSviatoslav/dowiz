@@ -76,6 +76,12 @@ pub fn append_delta_with(st: &mut Store, ops: &[Op], max_deltas: usize, dead_div
         return Ok(Appended::Compact(Why::V1));
     }
     let chain = chain_in(st, root).ok_or(StoreError::Corrupt("the KV delta chain does not hold"))?;
+    for op in ops {
+        match op {
+            Op::Put(k, v) => crate::kv::check_entry(k.len(), v.len())?,
+            Op::Remove(k) => crate::kv::check_entry(k.len(), 0)?,
+        }
+    }
     if chain.len() + ops.len() > max_deltas {
         return Ok(Appended::Compact(Why::Deltas));
     }

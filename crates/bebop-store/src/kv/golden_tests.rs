@@ -9,6 +9,15 @@
 //!     that read a compacted image before reads one after, and the fold is byte-equal).
 //!
 //! FNV-1a 64 over the whole image is the pin (bebop-store has no sha256 and takes no deps).
+//!
+//! THE ANCHOR (W-ES-P0, operator Q5 2026-10-27). From that change on, every commit writes
+//! superblock cell 9 (`anc`), so the raw bytes of both images moved in exactly these cells and
+//! no others: each valid superblock's cells 9 and 15, and each PartTab's copy of them (payload
+//! 9 and 15) and its h1 crc. The constants below are NOT re-printed: `without_anchor` puts the
+//! zero anchor back by the format's own rules, and the result must be the OLD bytes, FNV for
+//! FNV -- which proves the anchor is the only thing that changed. That the anchor itself is
+//! right is `format::tests::the_rust_writer_anchors_every_commit`'s job, and it is also asserted
+//! here on both images.
 
 use super::*;
 
@@ -69,6 +78,12 @@ fn golden_old_images_and_compaction_are_unchanged() {
     let kv = golden_catalogue();
     let compact = kv.compacted_bytes_fit(10 << 20).unwrap();
     let eager = eager_image(&kv);
+    for img in [&compact, &eager] {
+        let st = Store::from_bytes(img);
+        let sb = st.pick_checked().unwrap();
+        assert!(matches!(crate::format::anchor_in(&st, &sb), crate::format::Anchor::Holds { .. }), "anchored");
+    }
+    let (compact, eager) = (crate::format::without_anchor(&compact), crate::format::without_anchor(&eager));
     let cr = Kv::load(&Store::from_bytes(&compact)).unwrap().snapshot_root_u64();
     let er = Kv::load(&Store::from_bytes(&eager)).unwrap().snapshot_root_u64();
     println!(

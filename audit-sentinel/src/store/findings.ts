@@ -61,7 +61,7 @@ export const AuditRunSchema = z.object({
   trigger: z.enum(['watchdog', 'post_deploy', 'nightly', 'manual']),
   timestamp: z.string(),
   findings: z.array(FindingSchema),
-  health_check: z.record(z.unknown()),
+  health_check: z.record(z.string(), z.unknown()),
   summary: z.object({
     total_checks: z.number(),
     green: z.number(),

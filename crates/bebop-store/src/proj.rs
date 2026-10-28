@@ -23,10 +23,10 @@ use crate::kv::{Kv, FNV_OFFSET, FNV_PRIME};
 use crate::nodekey::{Frame, TAG_COMPILE, TAG_PROJECTION};
 use crate::{follow_in, get_in, obj_crc_ok_in, obj_digest_in, obj_len_in, pick_in, root_in, Cells, Store, StoreError};
 
-/// Superblock cell naming the projection table (was `layout_table`; no writer ever set it).
-pub const SB_PROJTAB: usize = 5;
-/// Commit anchor `(mark << 32) | crc32(cells[mark..used))`: bebop's `st_commit` writes it, this crate 0.
-pub const SB_ANC: usize = 9;
+/// Superblock cell naming the projection table (was `layout_table`; no writer ever set it),
+/// and the commit anchor `(mark << 32) | crc32(cells[mark..used))` -- written by bebop's
+/// `st_commit_x` and, since W-ES-P0, by this crate's `stage_commit` too. Named in `format.rs`.
+pub use crate::format::{SB_ANC, SB_PROJTAB};
 /// Kind 1: an event-log fold, extended per record (S-2).
 pub const KIND_LOG: i64 = 1;
 /// Kind 2: a KV snapshot, memoised per generation and re-derived whole (S-3).

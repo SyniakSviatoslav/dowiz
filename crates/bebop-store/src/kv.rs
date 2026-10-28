@@ -77,6 +77,18 @@ fn blob_cells(v: i64, bytes: usize) -> usize {
     c.max(1)
 }
 
+/// FORMAT §10: the longest key and value a writer accepts. Refused BEFORE anything is
+/// allocated, so a refusal leaves the image exactly as it was.
+pub(crate) fn check_entry(klen: usize, vlen: usize) -> Result<(), StoreError> {
+    if klen > crate::MAX_KEY_BYTES {
+        return Err(StoreError::Limit { what: "key bytes", got: klen as i64, max: crate::MAX_KEY_BYTES as i64 });
+    }
+    if vlen > crate::MAX_VALUE_BYTES {
+        return Err(StoreError::Limit { what: "value bytes", got: vlen as i64, max: crate::MAX_VALUE_BYTES as i64 });
+    }
+    Ok(())
+}
+
 /// Write a whole blob -- every cell of it, including v2's zero-filled tail and the one
 /// zero cell of an empty blob. `alloc` does not zero what it hands out, so a cell this
 /// does not write is whatever an aborted transaction left there.
@@ -244,6 +256,9 @@ impl Kv {
         let n = self.entries.len();
         let kbytes: usize = self.entries.iter().map(|(k, _)| k.len()).sum();
         let vbytes: usize = self.entries.iter().map(|(_, v)| v.len()).sum();
+        for (k, v) in &self.entries {
+            check_entry(k.len(), v.len())?;
+        }
 
         let mut tx = st.begin()?;
         let kidx = st.alloc(&mut tx, (2 * n).max(1) as i64, arr_dig)?;

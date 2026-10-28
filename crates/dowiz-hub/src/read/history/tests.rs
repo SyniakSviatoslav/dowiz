@@ -157,7 +157,8 @@ const HISTORY_SHA: &str = "1e5aa0b7f479efdff1043b6b66be9f1bb4fc85e9fbfdbdcbbcda1
 #[test]
 fn an_old_image_answers_history_identically() {
     let h = venue(300, 1200, 0x01D1_3A6E);
-    let image = hex(&h.to_bytes_trimmed());
+    // W-ES-P0 writes the anchor (Q5); the golden pins every other byte.
+    let image = hex(&bebop_store::format::without_anchor(&h.to_bytes_trimmed()));
     let back = Hub::load(&h.to_bytes_trimmed()).unwrap();
     let text: String = ids(&back).iter().map(|id| format!("{id:?}={:?};", back.history(id))).collect();
     let hist = hex(text.as_bytes());

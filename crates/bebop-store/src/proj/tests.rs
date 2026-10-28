@@ -89,7 +89,10 @@ fn hit_is_o1() {
         reads.push(view.reads());
     }
     assert_eq!(reads[0], reads[1], "cells read by a hit at 540 vs 5,400 events");
-    assert!(reads[0] < 200, "a hit read {} cells", reads[0]);
+    // The bound was 200 until W-ES-P0: `pick` now checks the PartTab's crc (D8), 21 more cells
+    // per pick, measured 240 here. The O(1) claim is the equality above; this only catches a
+    // hit that starts walking.
+    assert!(reads[0] < 300, "a hit read {} cells", reads[0]);
 }
 
 /// S-4, the spec's shape: record 3 of 10 is rewritten IN PLACE at the same generation and
@@ -194,7 +197,10 @@ fn the_table_survives_a_plain_commit_and_is_absent_otherwise() {
     assert!(t > 0, "the table is named");
     append(&mut st, &mut prev, 5, 1);
     assert_eq!(st.cells[st.pick().unwrap().at + SB_PROJTAB], t, "carried by EvLog's commit");
-    assert_eq!(st.cells[st.pick().unwrap().at + SB_ANC], 0, "this writer does not anchor");
+    // W-ES-P0 (operator Q5): this writer anchors its commits as bebop's `st_commit_x` does.
+    let sb = st.pick().unwrap();
+    assert_ne!(st.cells[sb.at + SB_ANC], 0, "this writer anchors");
+    assert!(matches!(crate::format::anchor_in(&st, &sb), crate::format::Anchor::Holds { .. }));
 }
 
 /// S-3: the KV snapshot is memoised per generation, NOT extended -- a put re-derives it

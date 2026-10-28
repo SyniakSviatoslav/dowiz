@@ -66,7 +66,8 @@ const FOLD_SHA: &str = "d83a1bd5b0e1f7940cfa78141b3bba92f2777e229d0f14ea7e38636d
 #[test]
 fn an_old_image_writes_and_folds_byte_equal() {
     let log = old_history();
-    let image = hex(&log.to_bytes_trimmed());
+    // W-ES-P0 writes the anchor (Q5); the golden pins every other byte.
+    let image = hex(&bebop_store::format::without_anchor(&log.to_bytes_trimmed()));
     let j = log.journal().unwrap();
     let fold = hex(fold_text(&j).as_bytes());
     let checked = log.verify_checkpoints().unwrap();
