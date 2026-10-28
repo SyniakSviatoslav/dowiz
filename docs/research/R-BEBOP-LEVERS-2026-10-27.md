@@ -464,6 +464,47 @@ flowchart LR
 - DBSP-формалізація (`tchajed/dbsp-theory`) — читалося README; теореми, які ми переносимо, названі за змістом, не за іменами в тому репо.
 - `R-STORE-VS-SQL-2026-10-27.md` на момент написання відсутній (перевірити при merge; його числа замінюють мої ESTIMATE для рядків «cold open/put»).
 
+## 12. Стан 2026-10-28
+
+Що змерджено за день (числа — з нотаток лейнів, release, контроль у тому самому процесі; batch-коміт
+решти лейнів нижче — **batch merge pending**, sha впише main). Живі хаби (qa-durres, sushi-durres)
+досі на `905f06f7` (`/api/version`, 2026-10-28): нічого з цього не задеплоєно.
+
+| Лейн | Коміт | Що лягло |
+|---|---|---|
+| P0 | `9f733d46` | заморозка формату: нормативний `FORMAT-BEBOP-IMAGE-v2.md`, каталог іменованих комірок, D2/D4/D7/D8 |
+| SHEAF3 | `1eb2083b` | S0 glue, S1 escrow + `Stock.lean`, S2 кухонний планшет офлайн; Lean `ZSet`/`Merkle`/`Sync` |
+| LV-INC-A | batch pending | `zset.rs`; PROJ види 3 (BLOB) і 4 (ZSET) з відбитком-tip (FORMAT §9.3); чотири читачі (native, wasm32, python, bebop) 4/4 на `proj4`/`proj4.log`; виправлено kind 2 на v3 у `proj.bp` (тепер відмова why 5) |
+| LV-INC-D | `1eb2083b` (разом із SHEAF3) | Lean: `ZSet.lean` (memo_step_eq_full, лінійний/join інкремент, `kv_chain_is_zset`), `Merkle.lean`, `Sync.lean`, лічильники в `Datalog.lean`; 9 RED-мутантів rc=1 |
+| LV-INC-D2 | batch pending | `DatalogZ.lean`: `zset_present_iff_pos`, `store_present_iff_pos`, `dred_sound` (+ `dred_needs_sound_keep`); 31 аксіома без змін, sorryAx 0 |
+| LV-INC-F | batch pending | `dl_del.bp`: ваги/лічильники для нерекурсивних страт, DRed для рекурсивних; `dl_kv.bp`; 19/19 dl-голденів |
+| LV-LOC-B | batch pending | S2b: rail замовлень кухні офлайн (`glue/orders.rs`, `tablet.rs`, Worker `operations/orders`), закон `sent == merged + held` |
+| LV-COL-E | batch pending | денний блок продажів `sales:v1(day:i32:0,dish:i64:0,qty:i32:0,gross:i64:1,cqty:i32:0,cgross:i64:1,cost:i64:1)` (K64 `85978ba600000057`), 4 ядра, foodCost в аналітиці; `std_golden` 162/162 |
+| W-KVPERF | batch pending | `overlay.rs`: O(D log n) відкриття v3 замість O(n); `prefix_range` бінарним пошуком; `Kv::remove_many` |
+
+| Число | Ціль (§7) | Виміряно | Вердикт |
+|---|---|---|---|
+| `proj4_price_step_us` (165 страв, 1 put) | ≤ 50 | 89 (повний перерахунок ~2 350) | **НЕ ДОСЯГНУТО**; ~26× проти refold |
+| `proj3_cold_read_us` (2 000 подій, +9) | ≤ 500 | 30,7 (HIT 4,2; повний 2 349) | так |
+| `dl_event_del_ns` (видалення 1 факту) | ≤ 10 000 | 5 259 (legacy 5 494) | так |
+| `dl_event_del5_ns` (5 фактів) | — | 13 839 проти legacy 28 906 | 2,1× |
+| `dl_event_ns` (вставка) | ≤ 1 000 незмінний | 930 / 930 (HEAD / нове, 21 перемежований прогін) | без регресу |
+| `year_scan` (рік продажів) | ≤ 500 µs | ~2,4 ms (JSON-куб ~7 ms у тому самому процесі) | **НЕ ДОСЯГНУТО**; 3× швидше за JSON |
+| reopen + get, 1e5 ключів, 32 дельти | — | 56 µs (було 2 077 µs) | ~37× |
+
+**Відкрите.**
+- Видалення одного ключа KV за O(log n): `Kv::remove` досі `Vec::remove` (memmove n/2); виправлення
+  потребує зробити `Kv.entries` приватним — поле будують struct-літералом ~20 файлів поза лейном.
+  Є лише пакетне `remove_many` (один прохід).
+- DRed: `dred_sound` доведено **за гіпотези K ⊆ M** (набір, що лишився після over-delete, лежить у
+  новій найменшій моделі); що правило over-delete у `dl_del.bp` її забезпечує — не доведено (потрібні
+  дерева виведення). `dred_needs_sound_keep` показує, що гіпотезу не можна відкинути.
+- LV-PCD-C (опублікований Merkle-корінь + доказ ціни на чеку): у роботі, не в цьому батчі; підпис
+  чекає на ключ венуї `VENUE_SIGN_SK` від оператора (Q4). Release-бенч кореня 165 страв — 191 µs проти
+  цілі 20 (sha256 у `nodekey` повільний); перевірка 8,07 µs (≤ 10, так).
+- `proj4_price_step_us`: решта після виправлення пошуку ключів у `base_get` — читання memo ~19 µs і
+  дельта ~30 µs; наступний крок — zero-copy пошук бази через `KvIn`.
+
 ## Додаток A. Джерела
 
 DBSP: https://www.vldb.org/pvldb/vol16/p1601-budiu.pdf · https://arxiv.org/abs/2203.16684 · https://github.com/tchajed/dbsp-theory · https://feldera.com/blog/Best-Research-Paper-VLDB-2023 · Differential dataflow: https://www.microsoft.com/en-us/research/publication/differential-dataflow/ · Gupta–Mumick–Subrahmanian 1993: https://www.springerprofessional.de/doi/10.1145/170036.170066 · Hu–Motik–Horrocks 2018: https://arxiv.org/pdf/1711.03987 · Adapton: https://people.mpi-sws.org/~hammer/adapton-pldi2014.pdf · Salsa: https://docs.rs/rust-analyzer-salsa/^0.17.0-pre.4 · Zero: https://zero.rocicorp.dev/llms.txt · Local-first: https://electric-sql.com/docs/reference/local-first · https://kleppmann.com/2021/06/14/emergencity.html · Automerge: https://talks.cam.ac.uk/talk/index/163276 · cr-sqlite/Replicache: https://legacy.electric-sql.com/docs/reference/alternatives · Certifying algorithms: https://researchportalplus.anu.edu.au/en/publications/certifying-algorithms/ · Authenticated data structures, generically: https://cs.umd.edu/~mwh/papers/gpads.pdf · Abadi–Madden–Hachem 2008: https://users.cs.utah.edu/~pandey/courses/cs6530/fall22/papers/rowvcolumn/abadi-sigmod08.pdf · MonetDB/X100: https://cs.brown.edu/courses/cs227/archives/2008/Papers/ColumnStores/MonetDB.pdf · DuckDB: https://duckdb.org/pdf/SIGMOD2019-demo-duckdb.pdf.

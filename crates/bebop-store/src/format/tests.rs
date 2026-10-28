@@ -93,6 +93,9 @@ fn the_format_document_states_every_constant_with_the_codes_value() {
         ("MAX_PAD_CELLS", crate::MAX_PAD_CELLS as i128), ("MAX_DELTAS", crate::kv::delta::MAX_DELTAS as i128),
         ("DEAD_DIV", crate::kv::delta::DEAD_DIV as i128), ("DIGEST_KV_ROOT", crate::kv::DIGEST_KV_ROOT as i128),
         ("DIGEST_ARR_I64", crate::kv::DIGEST_ARR_I64 as i128),
+        // PROJ OUT layouts (§9.3, LV-INC-A): kinds 1/2, 3 and 4, and the widest OUTZ row.
+        ("DIGEST_OUT", crate::proj::DIGEST_OUT as i128), ("DIGEST_OUTB", crate::proj::kinds::DIGEST_OUTB as i128),
+        ("DIGEST_OUTZ", crate::proj::kinds::DIGEST_OUTZ as i128), ("MAX_WIDTH", crate::proj::kinds::MAX_WIDTH as i128),
     ];
     // Rows of the form "| `NAME` | <decimal> | ...".
     let rows: Vec<(String, i128)> = doc

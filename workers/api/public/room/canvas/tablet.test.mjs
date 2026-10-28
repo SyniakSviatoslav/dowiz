@@ -55,3 +55,56 @@ test('the shelf the stock sheet steps through comes from the tablet, offline', a
   await assert.rejects(t.sync(), e => e.offline, 'offline: the sync says so and keeps the records');
   assert.equal(await t.pending(), 2);
 });
+
+// S2b: the order rail. The hub is played by an echo of the contract's answer
+// (services/operations/orders/glue.rs); the rebase against the hub's own deciders is
+// hubdo/glue_turn/orders_tests.rs and crates/bebop-wasm/tests/tablet_orders.rs.
+const KEYS = ['at', 'from', 'next', 'oid', 'op', 'order'];
+
+test('order taps offline are decided by the order machine, queued, and leave only after the hub answered', async () => {
+  const m = await mod();
+  const store = mem();
+  const sent = [];
+  let up = false;
+  const post = async (path, body) => {
+    if (!up) { const e = new Error('no network'); e.offline = true; throw e; }
+    sent.push({ path, body });
+    return { sent: body.tail.length, merged: body.tail.length, applied: body.tail.length, held: [], notes: 0 };
+  };
+  const t = tablet({ mod: m, store, post, loc: 'v1', now: () => 1_791_000_000_000 });
+  await t.record('{"k":"received","item":"rice","qty":5}');
+  const rail = await t.orderRail([{ id: 'o1', status: 'CONFIRMED' }, { id: 'o2', status: 'PENDING', kitchen: { seen: { at: 1 } } }]);
+  assert.equal(rail.tickets.length, 2);
+  assert.equal(await t.order('o1', 'PREPARING'), true);
+  assert.equal(await t.order('o2', ''), false, 'seen already: nothing queued');
+  await assert.rejects(t.order('o1', 'CONFIRMED'), e => e.code === 46 && /IllegalTransitionError/.test(e.message));
+  assert.equal(await t.ordersPending(), 1);
+  assert.equal(await t.pending(), 1, 'the stock record survives beside the rail');
+  await assert.rejects(t.syncOrders(), e => e.offline);
+  assert.equal(await t.ordersPending(), 1, 'offline: the tap stays queued');
+  up = true;
+  const r = await t.syncOrders();
+  assert.equal(r.merged, 1);
+  assert.equal(sent[0].path, '/staff/orders/glue');
+  assert.deepEqual(Object.keys(sent[0].body).sort(), ['ctx', 'location_id', 'tail']);
+  for (const line of sent[0].body.tail) assert.deepEqual(Object.keys(JSON.parse(line)).sort(), KEYS, 'no-tracking: op keys only');
+  assert.equal(await t.ordersPending(), 0);
+  const s = await store.get();
+  assert.equal(JSON.parse(s.rail).tickets.find(x => x.id === 'o1').status, 'PREPARING', 'the rail keeps what the tablet showed');
+});
+
+test('two_venues: two slugs, two rows, no shared tap', async () => {
+  const m = await mod();
+  const rows = new Map();
+  const keyed = k => ({ get: async () => rows.get(k), set: async v => { rows.set(k, v); } });
+  const off = async () => { const e = new Error('no network'); e.offline = true; throw e; };
+  const a = tablet({ mod: m, store: keyed('v1:kitchen'), post: off, loc: 'v1', now: () => 5 });
+  const b = tablet({ mod: m, store: keyed('v2:kitchen'), post: off, loc: 'v2', now: () => 5 });
+  await a.orderRail([{ id: 'o1', status: 'CONFIRMED' }]);
+  await b.orderRail([{ id: 'p1', status: 'CONFIRMED' }]);
+  await a.order('o1', 'PREPARING');
+  await assert.rejects(b.order('o1', 'PREPARING'), e => e.code === 46, 'another venue\'s order is not on this rail');
+  assert.equal(await a.ordersPending(), 1);
+  assert.equal(await b.ordersPending(), 0);
+  assert.ok(!rows.get('v2:kitchen').rail.includes('o1'), 'not one byte of v1 in v2\'s row');
+});

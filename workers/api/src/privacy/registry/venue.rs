@@ -24,6 +24,12 @@ pub const STORES: &[Store] = &[
         retention: Retention::NoLimitYet("derived from the archives and rebuildable (rebuild: true); never pruned"),
         erase: Eraser::NotPersonal("per day: counts, money and dish ids; no contact, no customer key"),
         export: Exporter::NotPersonal },
+    // LV-COL-E: the daily sales fact blocks (one row per day and dish), a cache of the archives.
+    Store { image: "sales", kinds: &[], home: Venue, holds: &[], subjects: &[],
+        purpose: P::Operations, basis: Basis::NotPersonal,
+        retention: Retention::NoLimitYet("derived from the archives and rebuildable (rebuild: true); never pruned"),
+        erase: Eraser::NotPersonal("per day and dish: portions and money; no order id, no contact, no customer key"),
+        export: Exporter::NotPersonal },
     // The customer card (note, tags, allergens, usual table, birthday MM-DD).
     Store { image: "people", kinds: &["cust", "alias"], home: Venue,
         holds: &[CustomerCard, Name], subjects: &[Customer],

@@ -54,6 +54,10 @@ const PAY: [Cap; 1] = [Cap::TakePayment];
 const VOID: [Cap; 1] = [Cap::Void];
 #[allow(dead_code)]
 const TILL: [Cap; 1] = [Cap::OpenTill];
+/// SHEAF S0/S2: the kitchen tablet's stock sync and its decision strip ask the shelf OR the pass
+/// (`services/operations/stock/glue.rs` NEEDS).
+#[allow(dead_code)]
+const GLUE: [Cap; 2] = [Cap::Stock, Cap::Advance];
 
 #[allow(unused_imports)]
 use Door::{Own, Owner, Staff};
@@ -66,6 +70,9 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/orders/:id/action", Staff(&PASS), Yes),
     ("post", "/api/staff/orders/:id/kitchen-ack", Staff(&PASS), Yes),
     ("get", "/api/staff/kitchen", Staff(&PASS), Read),
+    ("post", "/api/staff/orders/glue", Staff(&PASS), Yes), // S2b: the pass's offline taps
+    ("post", "/api/staff/stock/glue", Staff(&GLUE), Yes), // SHEAF S2: the tablet's stock sync
+    ("get", "/api/staff/stock/decisions", Staff(&GLUE), Read), ("post", "/api/staff/stock/decisions/close", Staff(&GLUE), Yes),
     ("get", "/api/owner/print/jobs", Staff(&PASS), Read),
     ("get", "/api/owner/floorplan", Staff(&PASS), Read),
     ("get", "/api/owner/reservations", Staff(&PASS), Read),

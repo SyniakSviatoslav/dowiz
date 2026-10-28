@@ -1,0 +1,14 @@
+# What every reader of fixtures/proj4.store must answer (LV-INC-A, PROJ kind 4 = ZSET; crates/bebop-store/src/proj/kinds.rs).
+# The image: kv2.store + a delta (order/0002 -> "cancelled"), a first eval_zset (Full: the memo is written), two more
+# deltas (zone/south -> "open", courier/alpha removed), a second eval_zset that STEPS by 2 -- written by the RUST
+# writer (bebop-store proj/kinds/tests.rs proj4_fixtures_are_what_this_writer_writes; PROJ4_WRITE=1 rewrites it).
+# Each reader prints `proj status=0 n=<KV root cell 0> root=<Z-set digest IT derives from the KV> memo=<OUTZ value>`:
+#   root = FNV-1a 64 over rows (K64('O'||len8||key), K64('O'||len8||value), weight 1) ascending, as LE8 cells --
+#   derived from the replayed entries, never from the memo; memo must equal it (the memo IS that Z-set).
+#   Rust native: bebop_wasm::proj::proj_view (src/proj/tests.rs proj4_fixture_reads_to_expected)
+#   wasm32     : bw_proj under node (harness.mjs --proj)
+#   oracle.py  : --proj, kv_entries + its own K64/digest: proj status=0 n=5 root=8768581835520683532 memo=8768581835520683532
+#   bebop.bin  : bench/vs_rust/std_tests/proj4.bp (n / h / p)
+n=5
+root=8768581835520683532
+memo=8768581835520683532

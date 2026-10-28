@@ -16,15 +16,15 @@ fn reseal(mut b: Vec<u8>) -> Vec<u8> {
     b
 }
 
-const NAMES: [&str; 4] = ["menu_prices", "bom", "stock_levels", "names"];
+const NAMES: [&str; 5] = ["menu_prices", "bom", "stock_levels", "names", "sales"];
 
 /// B-2 on this side: the four keys are the ones DG7's table and oracle.py --schemas print.
 #[test]
 fn table_parses_and_keys_are_dg7s() {
     let t = table();
-    assert_eq!(t.len(), 4, "every schema string parses");
+    assert_eq!(t.len(), 5, "every schema string parses");
     let keys: Vec<u64> = t.iter().map(|s| s.k64).collect();
-    assert_eq!(keys, [0x8bbf_0924_0000_0063, 0xee38_2c13_0000_002f, 0x959a_f446_0000_0031, 0x9130_70fc_0000_002a]);
+    assert_eq!(keys, [0x8bbf_0924_0000_0063, 0xee38_2c13_0000_002f, 0x959a_f446_0000_0031, 0x9130_70fc_0000_002a, 0x8597_8ba6_0000_0057]);
     assert_eq!(t.iter().map(|s| s.name).collect::<Vec<_>>(), NAMES);
     assert_eq!(t[0].cols[5], ("mods_val", CSR_VAL, 1), "an i64 after a CSR u32 is the CSR val");
 }
@@ -113,4 +113,22 @@ fn bw_block_answers_statuses_not_traps() {
     assert_eq!(unsafe { bw_block(m.as_ptr(), m.len(), out.as_mut_ptr(), 8) }, -1, "a short buffer is a status");
     let empty = unsafe { bw_block(core::ptr::null(), 0, out.as_mut_ptr(), 256) };
     assert_eq!(&out[..empty as usize], b"block refused=too_short col=-");
+}
+
+/// LV-COL-E: the kernel line over the sales fixtures, an overflow named, another schema skipped.
+#[test]
+fn kernel_lines_of_the_sales_fixtures() {
+    use super::kernel::line;
+    assert!(line(&fixture("sales_small")).starts_with("kernel sales rows=7 groups="), "{}", line(&fixture("sales_small")));
+    assert_eq!(line(&fixture("sales_empty")), format!("kernel sales rows=0 groups=0 gross={0:016x} costed=0 cost={0:016x} top=-", 0xcbf2_9ce4_8422_2325u64));
+    assert!(line(&fixture("sales")).starts_with("kernel sales rows=1825 "));
+    assert_eq!(line(&fixture("names_small")), "kernel skip=names");
+    // One sales row's gross set to i64::MAX next to a positive one of the same dish: refused by name.
+    let t = table();
+    let mut d = decode(&fixture("sales_small"), &t).unwrap();
+    d.cols[1] = vec![5; d.cols[1].len()];
+    d.cols[3] = vec![1; d.cols[3].len()];
+    assert!(line(&encode(&d, &t)).starts_with("kernel sales rows=7 groups=1 "), "twin: one dish sums");
+    d.cols[3][0] = i64::MAX;
+    assert_eq!(line(&encode(&d, &t)), "kernel refused=overflow col=gross");
 }

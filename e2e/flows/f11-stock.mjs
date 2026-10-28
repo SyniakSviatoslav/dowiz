@@ -273,6 +273,14 @@ async function runF11(log) {
   const topMine = (an.topProducts || []).find(x => x.id === ROLL);
   verify('analytics window topProducts: flows-f11-roll revenue == its lines on live orders that took money', topMine?.revenue === rollRev, rollRev, topMine?.revenue ?? 'absent', { where: 'API owner/analytics topProducts' });
   check('analytics window: byDay buckets sum to window revenue', an.byDay.reduce((s, d) => s + d.revenue, 0) === an.revenue, an.revenue, an.byDay.reduce((s, d) => s + d.revenue, 0), { where: 'API owner/analytics' });
+  // LV-COL-E: the newest archived day's SALES BLOCK, refolded from its archives and compared byte
+  // for byte (`block.equal`), and its food cost read off the block by the kernels.
+  const tr = await own(`/api/owner/analytics?v=2&verify=1&location_id=${LOC}`).catch(e => ({ error: String(e.message || e) }));
+  verify('analytics verify: the trace carries the sales block check', !!(tr && tr.block), 'block present', tr && (tr.block ? 'present' : tr.error || 'absent'), { where: 'API owner/analytics?verify=1', why: 'needs the LV-COL-E deploy and one catch-up' });
+  if (tr && tr.block && tr.block.stored) {
+    check('analytics verify: the stored sales block == its refold from the archives, byte for byte', tr.block.equal === true, true, `${tr.block.stored} vs ${tr.block.refolded}`, { where: 'API owner/analytics?verify=1 block' });
+    check('analytics verify: the day\'s food cost has a cost and a costPm-or-null', tr.block.foodCost && typeof tr.block.foodCost.cost === 'number', 'number', tr.block.foodCost && tr.block.foodCost.cost, { where: 'API owner/analytics?verify=1 block.foodCost' });
+  }
 
   // kitchen: dish cost, food cost, margin, stock value, the unpriced list
   const kRow = id => (kn.dishes || []).find(d => d.id === id);

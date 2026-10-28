@@ -257,6 +257,10 @@ pub fn repeat(orders: &[Value], zone: Zone, s: Span) -> Value {
     })
 }
 
+/// LV-COL-E: food cost by dish over the sales blocks.
+#[path = "history/food_cost.rs"]
+pub mod food_cost;
+
 #[cfg(test)]
 #[path = "history/tests.rs"]
 mod tests;

@@ -125,18 +125,10 @@ def image(path):
     return cells, n, live, (root if 0 < root and root + 2 <= n else 0), s1
 
 
-def main(path):
-    cells, n, live, root, s1 = image(path)
-    if not s1:
-        print("kv status=5 n=0 root=0")
-        return 5
-    if live is None:
-        print("kv status=1 n=0 root=0")
-        return 1
-    if root <= 0:
-        print("kv status=2 n=0 root=0")
-        return 2
-
+def kv_entries(cells, n, root):
+    """The KV's entries (base, then the v3 chain replayed), every claim checked, or a refusal:
+    (status, None) | (0, {"entries", "arrays", "chain"}). Shared by `main` and `--proj` kind 4
+    (LV-INC-A); `main`'s output is unchanged."""
     def obj_len(o):
         return cells[o] & 0xFFFFFFFF
 
@@ -149,15 +141,13 @@ def main(path):
     if obj_len(root) >= 6 and root + 2 + 5 < n and cells[root + 2 + 5] > 0:
         ver = cells[root + 2 + 5]
     if ver > 3:
-        print("kv status=3 n=0 root=0")
-        return 3
+        return 3, None
     per_cell = 8 if ver >= 2 else 1
 
     count = cells[root + 2]
     arrays = [follow(root, i) for i in (1, 2, 3, 4)]
     if count < 0 or any(a is None for a in arrays):
-        print("kv status=2 n=0 root=0")
-        return 2
+        return 2, None
     kidx, kblob, vidx, vblob = arrays
 
     # W-CRC: the root and the four arrays must match their header crc (bebop_store
@@ -169,38 +159,32 @@ def main(path):
         return zlib.crc32(struct.pack("<%dq" % ln, *cells[o + 2 : o + 2 + ln])) == (cells[o + 1] >> 32) & 0xFFFFFFFF
 
     if not all(crc_ok(o) for o in [root] + arrays):
-        print("kv status=10 n=0 root=0")
-        return 10
+        return 10, None
 
     # W-DELTA (v3): the chain, newest first, every claim checked (crates/bebop-store/src/kv/delta.rs
     # chain_in), re-derived here from the format, not from the Rust.
     chain = []
     if ver == 3:
         if obj_len(root) < 8 or root + 2 + 8 > n:
-            print("kv status=2 n=0 root=0")
-            return 2
+            return 2, None
         d = cells[root + 2 + 7]
         budget = n
         cur = follow(root, 6)
         while cur is not None:
             ln = obj_len(cur)
             if len(chain) >= d or ln < 4 or cur + 2 + ln > n or budget < ln + 2:
-                print("kv status=2 n=0 root=0")
-                return 2
+                return 2, None
             budget -= ln + 2
             op, kl, vl = cells[cur + 3], cells[cur + 4], cells[cur + 5]
             if op not in (1, 2) or kl < 0 or vl < 0 or (op == 2 and vl != 0) or 4 + (kl + 7) // 8 + (vl + 7) // 8 != ln:
-                print("kv status=2 n=0 root=0")
-                return 2
+                return 2, None
             chain.append((cur, op, kl, vl))
             cur = follow(cur, 0)
         if len(chain) != d:
-            print("kv status=2 n=0 root=0")
-            return 2
+            return 2, None
         # the crcs AFTER the whole shape held, as Kv::load_checked orders it (chain_in, then check_chain)
         if not all(crc_ok(o) for o, _, _, _ in chain):
-            print("kv status=10 n=0 root=0")
-            return 10
+            return 10, None
 
     def packed(o, at, ln):
         return bytes((cells[o + 2 + at + (b >> 3)] >> (8 * (b & 7))) & 0xFF for b in range(ln))
@@ -219,19 +203,17 @@ def main(path):
         )
 
     if 2 * count > min(obj_len(kidx), obj_len(vidx)):
-        print("kv status=2 n=0 root=0")
-        return 2
+        return 2, None
     entries = []
     for i in range(count):
         k, v = slice_of(kidx, kblob, i), slice_of(vidx, vblob, i)
         if k is None or v is None:
-            print("kv status=2 n=0 root=0")
-            return 2
+            return 2, None
         entries.append((k, v))
     if chain:
         if any(entries[i][0] >= entries[i + 1][0] for i in range(len(entries) - 1)):
-            print("kv status=2 n=0 root=0")  # a chain on an unsorted base is refused
-            return 2
+            # a chain on an unsorted base is refused
+            return 2, None
         m = dict(entries)
         for o, op, kl, vl in reversed(chain):  # oldest first
             k = packed(o, 4, kl)
@@ -240,14 +222,105 @@ def main(path):
             else:
                 m.pop(k, None)
         entries = sorted(m.items())
+    return 0, {"entries": entries, "arrays": arrays, "chain": [o for o, _, _, _ in chain]}
+
+
+def main(path):
+    cells, n, live, root, s1 = image(path)
+    if not s1:
+        print("kv status=5 n=0 root=0")
+        return 5
+    if live is None:
+        print("kv status=1 n=0 root=0")
+        return 1
+    if root <= 0:
+        print("kv status=2 n=0 root=0")
+        return 2
+    status, kv = kv_entries(cells, n, root)
+    if status:
+        print("kv status=%d n=0 root=0" % status)
+        return status
     h = FNV_OFFSET
-    for k, v in entries:
+    for k, v in kv["entries"]:
         h = fnv(h, struct.pack("<Q", len(k)))
         h = fnv(h, k)
         h = fnv(h, struct.pack("<Q", len(v)))
         h = fnv(h, v)
-    print(f"kv status=0 n={len(entries)} root={to_i64(h)}")
+    print(f"kv status=0 n={len(kv['entries'])} root={to_i64(h)}")
     return 0
+
+
+# --- PROJ kinds 3 and 4 (LV-INC-A, crates/bebop-store/src/proj/kinds.rs header), re-derived ---------
+# OUTB [value, count, nbytes, bytes 8/cell]: value = FNV-1a 64 of the bytes. OUTZ [value, count, m, w,
+# (c0..c(w-1), weight) x m]: value = FNV-1a 64 over each row's cells and weight as LE8, rows ascending.
+# Both print `proj status=0 n=<root cell 0> root=<what THIS reader derives from the input> memo=<value>`;
+# a value that does not match the OUT's own content is status 11 (a lying memo).
+DIGEST_OUTB, DIGEST_OUTZ = 4157677073, 85289679
+
+
+def fnv_cells(h, vals):
+    return fnv(h, b"".join(struct.pack("<q", v) for v in vals))
+
+
+def obj_key(b):
+    """K64 of the node-key frame 'O' || len8 || bytes (a KV row's cell)."""
+    return key64(b"O" + key_field(b))
+
+
+def zset_digest(rows):
+    h = FNV_OFFSET
+    for r, w in sorted(rows):
+        h = fnv_cells(h, list(r) + [w])
+    return to_i64(h)
+
+
+def out_of(p, digest, get, follow, olen, crc_ok, cells):
+    out = follow(p, 7)
+    if out is None or (cells[out] >> 32) & 0xFFFFFFFF != digest or not crc_ok(out):
+        return None
+    return out
+
+
+def proj_zset(cells, n, root, t, p, get, follow, olen, crc_ok):
+    status, kv = kv_entries(cells, n, root)
+    if status:
+        return (status,)
+    if not crc_ok(t) or not crc_ok(p) or get(p, 0) != get(t, 1):
+        return (6,)
+    out = out_of(p, DIGEST_OUTZ, get, follow, olen, crc_ok, cells)
+    m, w = (get(out, 2), get(out, 3)) if out is not None and olen(out) >= 4 else (-1, 0)
+    if out is None or m < 0 or not 1 <= w <= 64 or olen(out) != 4 + m * (w + 1):
+        return (6,)
+    stored = [(tuple(get(out, 4 + i * (w + 1) + q) for q in range(w)), get(out, 4 + i * (w + 1) + w)) for i in range(m)]
+    if zset_digest(stored) != get(out, 0):
+        return (11,)
+    # the tip: the newest delta record (0 = none) and the fingerprint over (offset, h1) of the four
+    # base arrays, then of every chain record oldest first.
+    fp = fnv_cells(FNV_OFFSET, [v for a in kv["arrays"] + list(reversed(kv["chain"])) for v in (a, cells[a + 1])])
+    tip = (kv["chain"][0] if kv["chain"] else 0, to_i64(fp))
+    if get(p, 4) != cells[root + 1] & 0xFFFFFFFF or (get(p, 5), get(p, 6)) != tip or get(out, 1) != get(root, 0):
+        return (7,)
+    rows = [((obj_key(k), obj_key(v)), 1) for k, v in kv["entries"]]
+    return (0, get(root, 0), zset_digest(rows), get(out, 0))
+
+
+def proj_blob(cells, n, root, recs, h, plens, p, get, follow, olen, crc_ok):
+    out = out_of(p, DIGEST_OUTB, get, follow, olen, crc_ok, cells)
+    nb = get(out, 2) if out is not None and olen(out) >= 3 else -1
+    if out is None or nb < 0 or olen(out) != 3 + (nb + 7) // 8:
+        return (6,)
+    blob = bytes((get(out, 3 + (b >> 3)) >> (8 * (b & 7))) & 0xFF for b in range(nb))
+    if to_i64(fnv(FNV_OFFSET, blob)) != get(out, 0):
+        return (11,)
+    tip = (get(recs[0], 3), get(recs[0], 4)) if recs else (0, 0)
+    if get(p, 4) != cells[root + 1] & 0xFFFFFFFF or (get(p, 5), get(p, 6)) != tip or get(out, 1) != get(root, 0):
+        return (7,)
+    # LogSummary (fn "log_summary"): count u64 || payload bytes u64 || the LOG fold u64, from the log itself.
+    if get(p, 8) == key64(b"C" + key_field(b"log_summary")):
+        mine = struct.pack("<QQQ", len(recs), plens, h)
+    else:
+        mine = blob
+    return (0, len(recs), to_i64(fnv(FNV_OFFSET, mine)), get(out, 0))
 
 
 def proj_mode(path):
@@ -279,6 +352,11 @@ def proj_mode(path):
             return False
         return zlib.crc32(struct.pack("<%dq" % ln, *cells[o + 2 : o + 2 + ln])) == (cells[o + 1] >> 32) & 0xFFFFFFFF
 
+    # LV-INC-A: the table's first memo says its kind; kind 4's input is a KV, not a log.
+    t0 = cells[live + 5]
+    p0 = follow(t0, 2) if 1024 <= t0 and t0 + 2 < n and olen(t0) >= 4 else None
+    if p0 is not None and olen(p0) == 9 and get(p0, 1) == 4:
+        return say(*proj_zset(cells, n, root, t0, p0, get, follow, olen, crc_ok))
     # the log: root {n, ref LAST, has_tip, tip0..3, VERSION}; record v2 {seq, plen, ref PREV, id0..3,
     # prev0..3, flags, [actor0..3 if flags & 1], payload 8 bytes/cell LE} or v1 {.., actor0..3, 1 byte/cell}
     ver = get(root, 7) if olen(root) >= 8 and get(root, 7) > 0 else 1
@@ -291,7 +369,7 @@ def proj_mode(path):
     # W-CRC: the log root and every record match their header crc (EvLog::chain_crc).
     if not all(crc_ok(o) for o in [root] + recs):
         return say(10)
-    h = FNV_OFFSET
+    h, plens = FNV_OFFSET, 0
     for r in reversed(recs):
         at = (16 if olen(r) >= 16 and get(r, 11) & 1 else 12) if ver >= 2 else 15
         have = olen(r) - at
@@ -302,6 +380,7 @@ def proj_mode(path):
         else:
             pay = bytes(get(r, at + b) & 0xFF for b in range(pl))
         h = fnv(h, struct.pack("<q", get(r, 0)) + struct.pack("<Q", pl) + pay)
+        plens += pl
     # the memo: PROJTAB [m, (key, ref PROJ, kind) x m]; PROJ 9 cells; OUT {value, count}
     t = cells[live + 5]
     if t < 1024 or t + 2 > n or not crc_ok(t) or get(t, 0) < 1:
@@ -309,6 +388,8 @@ def proj_mode(path):
     p = follow(t, 2)
     if p is None or olen(p) != 9 or not crc_ok(p) or get(p, 0) != get(t, 1):
         return say(6)
+    if get(p, 1) == 3:
+        return say(*proj_blob(cells, n, root, recs, h, plens, p, get, follow, olen, crc_ok))
     out = follow(p, 7)
     if out is None or olen(out) != 2 or not crc_ok(out):
         return say(6)
@@ -330,6 +411,7 @@ BLOCK_SCHEMAS = [
     "bom:v1(dish_ptr:u32rp:0,supply:u32:0,qty:i64:0)",
     "stock_levels:v1(supply:i64:0,qty:i64:0,gen:i64:7)",
     "names:v1(id:i64:0,bytes:u8:0,off:u32off:0)",
+    "sales:v1(day:i32:0,dish:i64:0,qty:i32:0,gross:i64:1,cqty:i32:0,cgross:i64:1,cost:i64:1)",
 ]
 B_I64, B_I32, B_BYTES, B_OFF, B_RP, B_COL, B_VAL = 1, 2, 3, 4, 5, 6, 7
 B_TOK = {"i64": B_I64, "i32": B_I32, "u8": B_BYTES, "u32off": B_OFF, "u32rp": B_RP, "u32": B_COL}
@@ -504,6 +586,65 @@ def block_mode(args):
     return 0
 
 
+# --- the sales kernels (LV-COL-E, R-BEBOP-LEVERS §5.4; dowiz-hub block/kernels.rs `line`) -----
+# `--kernel <file>... | @<list>`: per block, re-derived from the spec text --
+#   kernel sales rows=<n> groups=<g> gross=<fnv64> costed=<m> cost=<fnv64> top=<key:val,...|->
+#   kernel refused=<code> col=<column|->        (the block's refusal, or a sum leaving i64: overflow)
+#   kernel skip=<schema>                        (a block of another schema)
+# gross = per-dish sums of `gross` over every row; cost = per-dish sums of `cost` over rows with
+# cqty > 0; each sum checked in row order; fnv over the groups by ascending signed key, key then
+# sum as 8 LE bytes; top = the 3 largest gross groups, sum desc then key asc, both 16-hex.
+I64_MIN, I64_MAX = -(1 << 63), (1 << 63) - 1
+
+
+def kernel_sum(keys, vals, keep, col):
+    g = {}
+    for k, v, ok in zip(keys, vals, keep):
+        if ok:
+            x = g.get(k, 0) + v
+            if x < I64_MIN or x > I64_MAX:
+                raise Refused("overflow", col)
+            g[k] = x
+    return g
+
+
+def kernel_fold(g):
+    h = FNV_OFFSET
+    for k in sorted(g):
+        h = fnv(h, (k & M64).to_bytes(8, "little"))
+        h = fnv(h, (g[k] & M64).to_bytes(8, "little"))
+    return h
+
+
+def kernel_line(b):
+    try:
+        name, n, nnz, vals = block_decode(b)
+        if name != "sales":
+            return "kernel skip=%s" % name
+        dish, gross, cqty, cost = vals[1], vals[3], vals[4], vals[6]
+        g = kernel_sum(dish, gross, [True] * n, "gross")
+        keep = [q > 0 for q in cqty]
+        c = kernel_sum(dish, cost, keep, "cost")
+    except Refused as r:
+        return "kernel refused=%s col=%s" % (r.code, r.col)
+    top = sorted(g.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
+    tops = ",".join("%016x:%016x" % (k & M64, v & M64) for k, v in top) or "-"
+    return "kernel sales rows=%d groups=%d gross=%016x costed=%d cost=%016x top=%s" % (
+        n, len(g), kernel_fold(g), sum(keep), kernel_fold(c), tops)
+
+
+def kernel_mode(args):
+    paths = open(args[0][1:]).read().split() if len(args) == 1 and args[0].startswith("@") else args
+    for p in paths:
+        try:
+            b = open(p, "rb").read()
+        except OSError as e:
+            print("kernel unreadable=%s" % e)
+            continue
+        print(kernel_line(b))
+    return 0
+
+
 def block_schemas_mode():
     for s in BLOCK_SCHEMAS:
         print("schema %s k64=%016x %s" % (block_parse(s)[0], k64_of(s.encode()), s))
@@ -552,6 +693,8 @@ if __name__ == "__main__":
         sys.exit(key_mode(sys.argv[2]))
     elif len(sys.argv) >= 3 and sys.argv[1] == "--block":
         sys.exit(block_mode(sys.argv[2:]))
+    elif len(sys.argv) >= 3 and sys.argv[1] == "--kernel":
+        sys.exit(kernel_mode(sys.argv[2:]))
     elif len(sys.argv) == 4 and sys.argv[1] == "--menu":
         print(menu_line(open(sys.argv[2], "rb").read(), open(sys.argv[3], "rb").read()))
         sys.exit(0)

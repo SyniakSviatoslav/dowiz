@@ -83,6 +83,8 @@ impl HubImages {
             Ok(mut v) => {
                 v["history"]["folded"] = serde_json::json!(folded);
                 v["history"]["pending"] = serde_json::json!(pending);
+                // LV-COL-E: food cost per dish over the asked span, from the `sales` day blocks.
+                if let Ok(s) = crate::services::analytics::history::span(zone, now, q.0.as_deref(), q.1.as_deref(), q.2.as_deref()) { v["foodCost"] = self.food_cost_of(&venue, zone, now, s).await?; }
                 // v1 unless the caller asked for v2: the old shape stays byte for byte.
                 let v2 = query(req, "v")?.as_deref() == Some("2");
                 Response::from_json(&if v2 { v } else { crate::services::analytics::handler::v1_of(v) })

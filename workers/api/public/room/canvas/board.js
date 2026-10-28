@@ -3,6 +3,9 @@
 // SHEAF S2: GET /api/staff/stock/decisions (the "decision needed" strip), POST /api/staff/stock/decisions/close
 // (its Done), and the kitchen tablet's sync, POST /api/staff/stock/glue (./tablet.js over ./tablet.wasm),
 // every SYNC_MS and when back online.
+// SHEAF S2b: the pass's taps (seen, the four bumps) with the network down go to the tablet's order
+// rail (./tablet.js `order`, decided by the order machine in tablet.wasm) and are synced by
+// POST /api/staff/orders/glue on the next load; a tap the hub holds comes back on the decision strip.
 import { arrivals, makeChime } from './chime.js';
 const WASM = WebAssembly.compileStreaming(fetch('/room/canvas/board.wasm'));
 WASM.catch(() => {});   // start() reports it
@@ -50,7 +53,7 @@ async function load() {
         S.floor ? api(`/staff/room?location_id=${loc}`, { signedOut }) : null,
         S.pass ? api(`/staff/stock/decisions?location_id=${loc}`, { signedOut }).catch(() => null) : null,
       ]);
-      if (k) S.orders = k.orders || [];
+      if (k) { S.orders = k.orders || []; await orderRail(); }
       if (d) S.decisions = d.open || [];
       if (r) { S.sittings = r.sittings || []; lastRoom.set(S.s.staff.locationId, S.sittings, Date.now()); }
       S.sock?.polled();
@@ -73,6 +76,28 @@ async function tab() {
     S.tab = t.tablet({ mod: t.surface(inst.instance), store: t.idbStore(`${loc}:kitchen`), post: (p, b) => post(p, b), loc });
   }
   return S.tab;
+}
+
+/// S2b: the board's tickets laid under the taps still queued, so the pass sees what it tapped;
+/// queued taps are synced first when the network is up.
+const BUMP_TO = { confirm: 'CONFIRMED', preparing: 'PREPARING', ready: 'READY', collected: 'PICKED_UP' };
+async function orderRail() {
+  try {
+    const t = await tab();
+    if (navigator.onLine && await t.ordersPending()) {
+      const r = await t.syncOrders(S.orders);
+      if (r.held?.length) toast('', `${r.held.length}: ${r.held[0].why}`);
+    }
+    const rail = await t.orderRail(S.orders);
+    const by = new Map(rail.tickets.map(x => [x.id, x]));
+    S.orders = S.orders.map(o => { const x = by.get(o.id); return x ? { ...o, status: x.status, kitchen: x.seen ? { ...(o.kitchen || {}), seen: o.kitchen?.seen || { at: Date.now() } } : o.kitchen } : o; });
+  } catch (e) { if (!e.offline) console.warn('tablet orders', e); }
+}
+/// S2b: one tap with no network: on the rail now, synced later.
+async function tapOffline(id, next) {
+  await (await tab()).order(id, next);
+  await orderRail(); feed();
+  navigator.vibrate?.(12); toast('Offline');
 }
 
 /// The tablet's shelf, for the stock sheet; local, so it works offline.
@@ -132,6 +157,7 @@ async function onIntent(kind, a, text) {
   const loc = S.s?.staff?.locationId;
   try {
     await net();
+    if ((kind === 1 || kind === 2) && !navigator.onLine) return tapOffline(text, kind === 1 ? BUMP_TO[BUMPS[a]] : '');
     if (kind === 1) {
       await post(`/owner/orders/${encodeURIComponent(text)}/action`, { location_id: loc, action: BUMPS[a] });
       navigator.vibrate?.(12); toast('Saved'); return load();
@@ -172,6 +198,7 @@ async function onIntent(kind, a, text) {
       toast('Saved'); return load();
     }
   } catch (e) {
+    if (e.offline && (kind === 1 || kind === 2)) return tapOffline(text, kind === 1 ? BUMP_TO[BUMPS[a]] : '').catch(x => toast('', x.message));
     toast(e.offline ? 'Offline' : '', e.message);
     if (kind === 1 || kind === 2 || kind === 10) load();
   }

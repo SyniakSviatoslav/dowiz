@@ -228,6 +228,61 @@ sys.exit(1 if bad or absent else 0)
 EOFPY
 }
 
+# kernels_run <tag> <list> (LV-COL-E, R-BEBOP-LEVERS §5.4): the sales kernels' line -- `kernel sales
+# rows= groups= gross=<fnv> costed= cost=<fnv> top=..` or a named refusal (`overflow` names gross or
+# cost) -- per block of the list, from four readers: native (block_read --kernel = dowiz-hub
+# block::kernels::line), wasm32 (bw_kernel), python (oracle.py --kernel), bebop.bin (block_kernels.bp).
+# Writes $SCRATCH/kern.<tag>.<reader>; sets kagree (readers printing python's lines exactly) and kbad.
+kernels_run() {
+  [ -f "$SCRATCH/kernel.mjs" ] || cat > "$SCRATCH/kernel.mjs" <<'EOFJS'
+// node kernel.mjs <module.wasm> <list>: one bw_kernel line per file of the list.
+import { readFileSync } from "node:fs";
+const [, , mod, list] = process.argv;
+const { instance } = await WebAssembly.instantiate(readFileSync(mod), {});
+const { memory, bw_alloc, bw_free, bw_kernel } = instance.exports;
+if (typeof bw_kernel !== "function") { console.log("wasm32 ABSENT: the module exports no bw_kernel"); process.exit(3); }
+const cap = 512;
+const out = bw_alloc(cap);
+for (const p of readFileSync(list, "utf8").split("\n").filter((x) => x)) {
+  const img = readFileSync(p);
+  const at = bw_alloc(Math.max(img.length, 1));
+  new Uint8Array(memory.buffer, at, img.length).set(img);
+  const n = bw_kernel(at, img.length, out, cap);
+  console.log(n < 0 ? `kernel status=${n}` : new TextDecoder().decode(new Uint8Array(memory.buffer, out, n)));
+  bw_free(at, Math.max(img.length, 1));
+}
+EOFJS
+  k="$SCRATCH/kern.$1"
+  if [ -n "$HUBEX" ]; then "$HUBEX/block_read" --kernel "@$2" > "$k.native" 2>&1; else echo "native ABSENT" > "$k.native"; fi
+  if [ -f "$BLOCKWASM" ]; then node "$SCRATCH/kernel.mjs" "$BLOCKWASM" "$2" > "$k.wasm32" 2>&1; else echo "wasm32 ABSENT" > "$k.wasm32"; fi
+  python3 oracle.py --kernel "@$2" > "$k.python" 2>&1
+  KREADERS="native wasm32 python"
+  if [ -n "$BRTBIN" ]; then
+    KREADERS="$KREADERS bebop.bin"
+    if [ ! -f "$SCRATCH/block_kernels.bin" ]; then
+      (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile bench/vs_rust/std_tests/block_kernels.bp "$SCRATCH/block_kernels.bin") > "$SCRATCH/bkc.txt" 2>&1 \
+        || say "kernels bebop.bin: block_kernels.bp did not compile -- $(tail -1 "$SCRATCH/bkc.txt")"
+    fi
+    if [ -s "$SCRATCH/block_kernels.bin" ]; then
+      "$SEED" "$SCRATCH/block_kernels.bin" "$2" > "$k.bebop.raw" 2>&1
+      grep '^kernel ' "$k.bebop.raw" > "$k.bebop.bin"
+    else
+      : > "$k.bebop.bin"
+    fi
+  fi
+  kn=$(wc -l < "$2" | tr -d ' ')
+  kagree=0
+  kbad=""
+  for r in $KREADERS; do
+    if [ -s "$k.$r" ] && [ "$(wc -l < "$k.$r" | tr -d ' ')" = "$kn" ] && cmp -s "$k.$r" "$k.python"; then
+      kagree=$((kagree + 1))
+    else
+      kbad="$kbad $r"
+      say "kernels $1 $r DISAGREES -- first diff: $(diff "$k.$r" "$k.python" 2>&1 | sed -n 2p)"
+    fi
+  done
+}
+
 # blocks_prove: one corrupted byte per header region of a COPY of a fixture (the crc re-sealed
 # except for the crc's own region, so the check under test is the one reached), each with the
 # refusal the spec names. Every reader must print exactly that line; a reader that accepts, or
@@ -382,6 +437,25 @@ EOF2
   done
   say "prove: the number moved on every fixture; the gate measures the bytes"
   blocks_setup
+  # LV-COL-E: one named payload byte -- the low byte of sales_small's first `gross` -- moved and the
+  # crc re-sealed; every kernel reader must print the same line, and that line must not be the clean
+  # one (a kernel line that cannot move measures nothing).
+  python3 - "$BLOCKFIX/sales_small.dwb" "$SCRATCH/sales_moved.dwb" <<'EOFPY'
+import struct, sys, zlib
+b = bytearray(open(sys.argv[1], "rb").read())
+off = struct.unpack_from("<I", b, 24 + 16 * 3 + 8)[0]
+b[off] ^= 0x01
+struct.pack_into("<I", b, len(b) - 4, zlib.crc32(bytes(b[:-4])) & 0xFFFFFFFF)
+open(sys.argv[2], "wb").write(b)
+EOFPY
+  printf '%s\n%s\n' "$BLOCKFIX/sales_small.dwb" "$SCRATCH/sales_moved.dwb" > "$SCRATCH/kprove.list"
+  kernels_run prove "$SCRATCH/kprove.list"
+  if [ -n "$kbad" ] || [ "$(sed -n 1p "$SCRATCH/kern.prove.python")" = "$(sed -n 2p "$SCRATCH/kern.prove.python")" ]; then
+    say "prove kernels: FAILED -- readers:$kbad; clean '$(sed -n 1p "$SCRATCH/kern.prove.python")' moved '$(sed -n 2p "$SCRATCH/kern.prove.python")'"
+    fail=1
+  else
+    say "prove kernels: one gross byte moved the line on all $kagree readers ($KREADERS): '$(sed -n 2p "$SCRATCH/kern.prove.python")'"
+  fi
   if blocks_prove && [ "$fail" -eq 0 ]; then
     say "prove blocks: every reader refused every corrupted region by name, and the sweep agreed"
     exit 0
@@ -397,6 +471,7 @@ KVBIN=""
 NKBIN=""
 NKTRY=0
 SPBIN=""
+P4BIN=""
 if [ "$(uname -m)" = "aarch64" ] && [ -x "$SEED" ] && [ -f "$BIN" ]; then
   if (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile selfhost/std/kv.bp "$SCRATCH/kv.bin") > "$SCRATCH/kvc.txt" 2>&1; then
     KVBIN="$SCRATCH/kv.bin"
@@ -408,6 +483,11 @@ if [ "$(uname -m)" = "aarch64" ] && [ -x "$SEED" ] && [ -f "$BIN" ]; then
     SPBIN="$SCRATCH/sproj.bin"
   else
     say "bebop.bin: sproj.bp did not compile rc=$? -- $(tail -1 "$SCRATCH/spc.txt")"; fail=1
+  fi
+  if (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile bench/vs_rust/std_tests/proj4.bp "$SCRATCH/proj4.bin") > "$SCRATCH/p4c.txt" 2>&1; then
+    P4BIN="$SCRATCH/proj4.bin"
+  else
+    say "bebop.bin: proj4.bp did not compile rc=$? -- $(tail -1 "$SCRATCH/p4c.txt")"; fail=1
   fi
   if (cd ../../bebop-lang && ./seed/build/seed ./bebop.bin compile bench/vs_rust/std_tests/nodekey.bp "$SCRATCH/nodekey.bin") > "$SCRATCH/nkc.txt" 2>&1; then
     NKBIN="$SCRATCH/nodekey.bin"
@@ -567,6 +647,51 @@ else
 fi
 [ "$ran" -lt "$minran" ] && minran=$ran
 
+# 6b. PROJ KINDS 3 AND 4 (LV-INC-A, crates/bebop-store/src/proj/kinds.rs) -----------------
+# fixtures/proj4.store: a KV (kv2 + a delta chain) with a kind-4 Z-set memo; fixtures/proj4.log.store: a
+# 9-record log with a kind-3 blob memo (LogSummary). Both written by the RUST writer (bebop writes neither
+# kind). Each reader prints `proj status=0 n=<root cell 0> root=<what IT derives from the input> memo=<OUT
+# value>`; proj4{,.log}.expected derive the numbers. bebop.bin = std_tests/proj4.bp (n h p / N H P).
+for f in proj4 proj4.log; do
+  pline="proj status=0 n=$(want $f n) root=$(want $f root) memo=$(want $f memo)"
+  ran=0
+  bad=""
+  tname=$(echo "$f" | tr . _)
+  if grep -q "${tname}_fixture_reads_to_expected ... ok" "$SCRATCH/native.txt"; then ran=$((ran + 1)); else bad="$bad native"; fi
+  out=$(node harness.mjs --proj "$PROJWASM" fixtures/$f.store 2>&1)
+  say "$f wasm32: '$out'"
+  if [ "$out" = "$pline" ]; then ran=$((ran + 1)); else bad="$bad wasm32"; fi
+  out=$(python3 oracle.py --proj fixtures/$f.store 2>&1)
+  say "$f python: '$out'"
+  if [ "$out" = "$pline" ]; then ran=$((ran + 1)); else bad="$bad python"; fi
+  if [ -n "$P4BIN" ]; then
+    case "$f" in proj4) mn=n; mh=h; mp=p ;; *) mn=N; mh=H; mp=P ;; esac
+    # proj4.bin reads the image in the working directory and EXTENDS it (st_open), so a copy.
+    mkdir -p "$SCRATCH/p4" && cp fixtures/$f.store "$SCRATCH/p4/$f.store"
+    a=$(cd "$SCRATCH/p4" && "$OLDPWD/$SEED" "$P4BIN" $mn 2>&1)
+    b=$(cd "$SCRATCH/p4" && "$OLDPWD/$SEED" "$P4BIN" $mh 2>&1)
+    c=$(cd "$SCRATCH/p4" && "$OLDPWD/$SEED" "$P4BIN" $mp 2>&1)
+    out="proj status=0 n=$a root=$b memo=$c"
+    say "$f bebop.bin: '$out'"
+    if [ "$out" = "$pline" ]; then ran=$((ran + 1)); else bad="$bad bebop.bin"; fi
+  elif [ "$NKTRY" = 1 ]; then
+    bad="$bad bebop.bin"
+  fi
+  head -c $(( $(wc -c < fixtures/$f.store) - 8 )) fixtures/$f.store > "$SCRATCH/p4cut.store"
+  wout=$(node harness.mjs --proj "$PROJWASM" "$SCRATCH/p4cut.store" 2>&1)
+  pout=$(python3 oracle.py --proj "$SCRATCH/p4cut.store" 2>&1)
+  say "$f cut: wasm32 -> '$wout'; python -> '$pout'"
+  case "$wout" in "proj status=0"*) say "$f cut: wasm32 READ a truncated image"; fail=1 ;; esac
+  case "$pout" in "proj status=0"*) say "$f cut: python READ a truncated image"; fail=1 ;; esac
+  if [ -n "$bad" ]; then
+    say "$f: readers agreeing with $f.expected: $ran of 4 -- DISAGREE:$bad"
+    fail=1
+  else
+    say "$f: readers agreeing with $f.expected: $ran of 4 (bebop.bin counts only on aarch64)"
+  fi
+  [ "$ran" -lt "$minran" ] && minran=$ran
+done
+
 # 7. BLOCKS (DG9, SPEC-DATALOG-AND-CODEC §B.6) --------------------------------
 # The fixtures DG7's encoder wrote (the 165-dish catalogue, a 120-supply stock_levels, a small
 # and an EMPTY block of every type), then BLOCK_COUNT seeded random blocks per type written by
@@ -610,6 +735,22 @@ if [ -n "$sbad" ]; then
 else
   say "blocks schemas: identical schema tables: $sran ($(awk '{print $2"="$3}' "$SCRATCH/schema.python" | tr '\n' ' '))"
 fi
+# 7b. KERNELS (LV-COL-E): kernels_run over the three sales fixtures and every random sales block.
+# GREEN only when every present reader prints python's lines exactly, at least three blocks SUM and
+# at least one is refused by name (an overflow from the random regime), so both paths are compared.
+ls "$BLOCKFIX"/sales*.dwb > "$SCRATCH/kern.list"
+grep '/sales_[0-9]*\.dwb$' "$SCRATCH/rand/list" >> "$SCRATCH/kern.list" 2>/dev/null
+kernels_run fix "$SCRATCH/kern.list"
+ksum=$(grep -c '^kernel sales ' "$SCRATCH/kern.fix.python")
+kref=$(grep -c '^kernel refused=' "$SCRATCH/kern.fix.python")
+if [ -n "$kbad" ] || [ "$ksum" -lt 3 ] || [ "$kref" -lt 1 ]; then
+  say "kernels: $kn blocks ($ksum summed, $kref refused); readers agreeing: $kagree -- DISAGREE:$kbad"
+  fail=1
+else
+  say "kernels: $kn blocks ($ksum summed, $kref refused by name); readers agreeing on every line: $kagree of $(echo $KREADERS | wc -w | tr -d ' ') ($KREADERS)"
+fi
+[ "$kagree" -lt "$minran" ] && minran=$kagree
+
 # 8. THE PUBLISHED MENU (BN3): the two blocks a venue publishes (`menu_prices`, `names`), read as the
 # hub's `Catalogue::row_of` reads them -- a dish by its K64, CONFIRMED by its bytes in `names`.
 # Readers: wasm32 (bw_menu), python (oracle.py --menu), native (src/block_view/tests.rs pins the

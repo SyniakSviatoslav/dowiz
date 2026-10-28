@@ -10,8 +10,8 @@ use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 pub mod ingredients_reset;
-/// Semi-finished products: cards, where-used, one sale's leaves.
-pub mod preps;
+pub mod orders; // S2b: the kitchen tablet's offline order taps, rebased on the hub.
+pub mod preps; // Semi-finished products: cards, where-used, one sale's leaves.
 pub mod stock;
 pub mod supplies;
 pub mod waste;

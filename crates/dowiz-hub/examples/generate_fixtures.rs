@@ -2,7 +2,7 @@
 //! encoder (`dowiz_hub::block::encode::encode`), never by a second writer.
 //!
 //!   generate_fixtures fixtures <dir>              -- <type>_small.dwb and <type>_empty.dwb for the
-//!                                                    four §B.4 types (the 165-dish fixtures are
+//!                                                    §B.4 types and `sales` (the 165-dish fixtures are
 //!                                                    DG7's own, `block::tests`)
 //!   generate_fixtures random <dir> <seed> <count> -- <count> seeded random blocks per type,
 //!                                                    <dir>/<type>_<i>.dwb, and a `list` file
@@ -12,6 +12,7 @@
 //! size so a failing block can be regenerated from the printed line alone.
 
 use dowiz_hub::block::encode::{encode, project, stock_levels};
+use dowiz_hub::block::kernels::{sales_block, sample, Sale};
 use dowiz_hub::block::schema::{self, Schema};
 use dowiz_hub::block::{Block, Col};
 
@@ -57,6 +58,11 @@ fn fixtures(dir: &str) {
     write(dir, "bom_empty", &empty.bom);
     write(dir, "names_empty", &empty.names);
     write(dir, "stock_levels_empty", &stock_levels(&[]));
+    // LV-COL-E: the `sales` block empty, one day of 7 dish rows, and a year of 5 a day (one block).
+    let rows = |days, per| sample(20260101, days, per).into_iter().map(|(s, _)| s).collect::<Vec<Sale>>();
+    write(dir, "sales_empty", &sales_block(&[]));
+    write(dir, "sales_small", &sales_block(&rows(1, 7)));
+    write(dir, "sales", &sales_block(&rows(365, 5)));
 }
 
 /// splitmix64: one u64 per call.
@@ -148,6 +154,18 @@ fn random_block(r: &mut Rng, schema: &'static Schema) -> Block {
             }
             (0, vec![i64s(r, n), Col::Bytes(bytes), Col::U32(off)])
         }
+        "sales" => {
+            // money mostly in range (so the kernel line SUMS), one block in ten from every regime
+            // (so it also refuses an overflow by name); dishes from a few keys, so groups repeat.
+            let wild = r.below(10) == 0;
+            let money = |r: &mut Rng| if wild { r.i64() } else { r.below(1_000_000) as i64 - 1 };
+            let i32s = |r: &mut Rng, n: usize| Col::I32((0..n).map(|_| r.next() as i32).collect());
+            let dish = Col::I64((0..n).map(|_| [-7i64, 3, 11, i64::MIN, 42][r.below(5) as usize]).collect());
+            let gross = Col::I64((0..n).map(|_| money(r)).collect());
+            let cgross = Col::I64((0..n).map(|_| money(r)).collect());
+            let cost = Col::I64((0..n).map(|_| money(r)).collect());
+            (0, vec![i32s(r, n), dish, i32s(r, n), gross, i32s(r, n), cgross, cost])
+        }
         _ => (0, vec![i64s(r, n), i64s(r, n), i64s(r, n)]),
     };
     Block { schema, n: n as u32, nnz: nnz as u32, cols }
@@ -171,7 +189,7 @@ fn random(dir: &str, seed: u64, count: usize) {
         }
     }
     std::fs::write(format!("{dir}/list"), list).expect("write the list");
-    println!("random: {} blocks, {total} bytes", 4 * count);
+    println!("random: {} blocks, {total} bytes", schema::TABLE.len() * count);
 }
 
 fn main() {

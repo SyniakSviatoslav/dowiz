@@ -60,7 +60,7 @@ else echo "step 2 NOT FIRED (rc $rc, hits '${hits}')"; fi
 
 # step 4
 D4=$T/dl; mkdir -p "$D4/selfhost/std"
-cp selfhost/std/dl.bp selfhost/std/dl_index.bp selfhost/std/dl_eval.bp selfhost/std/dl_fix.bp selfhost/std/dl_sushi.bp "$D4/selfhost/std/"
+cp selfhost/std/dl.bp selfhost/std/dl_index.bp selfhost/std/dl_eval.bp selfhost/std/dl_del.bp selfhost/std/dl_fix.bp selfhost/std/dl_sushi.bp "$D4/selfhost/std/"
 python3 - "$D4/selfhost/std/dl_eval.bp" <<'PY' || { echo "step 4: mutation target not found"; exit 1; }
 import sys
 p = sys.argv[1]; s = open(p).read()

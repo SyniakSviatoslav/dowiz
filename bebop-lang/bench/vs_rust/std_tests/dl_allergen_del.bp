@@ -1,0 +1,42 @@
+use "selfhost/std/dl_fix.bp"
+// dl_allergen_del.bp -- `gate dl_allergen_del` (LV-INC-F, AX plan A1 RED-first fixture; selfhost/std/dl_del.bp).
+// Rule set 5 of dl_fix.bp on the sushi fixture: delete produced(105, 120) ("crab mix" made from "surimi"),
+// the ONLY path by which dish 23 carries fish (EU14 3). DRed must over-delete carries(105, 3) through the
+// recursive stratum and NOT re-derive it, and the counted allergen stratum must drop exactly allergen(23, 3)
+// by its weight (no re-derivation). Then the row comes back and everything must be as before.
+// Prints a ((((a*1000 + b)*10000 + wa)*10000 + wb)*10000 + flags) digit string:
+//   a n(allergen) before, b after the delete, wa / wb the allergen stratum's total weight (its number of
+//   derivations) before / after, flags = has allergen(23,3) after (0), has carries(105,3) after (0),
+//   incremental == scratch (rows AND weights) after the delete (1), and after the put-back with n == a (1).
+// Oracle: bench/oracles/dl_allergen_del.py (direct set semantics + derivation counts, dl_common.py).
+fn main() -> i64 {
+  let R = zeros(dl_rs_cells(16, 16, 64));
+  let _ = dl_rs_of(R, 5);
+  let _ = dl_check(R);
+  let caps = zeros(16);
+  let _ = dl_caps_of(caps, 5);
+  let db = zeros(dl_db_cells(R, caps));
+  let sc = zeros(dl_db_cells(R, caps));
+  let st = zeros(1);
+  let _ = st[0] = dl_seed_of(5);
+  let _ = dl_db_init(R, db, caps);
+  let _ = dl_db_strata(R, db);
+  let _ = dl_load(db, st, 5);
+  let _ = dl_event_end(R, db);
+  let _ = dl_eval_all(R, db);
+  let a = dl_n(db, 7);
+  let wa = dl_cnt_sum(db, 7);
+  let _ = dl_retract(db, 2, dl_setrow(db, 105, 120, 0, 0));
+  let _ = dl_propagate(R, db);
+  let b = dl_n(db, 7);
+  let wb = dl_cnt_sum(db, 7);
+  let h = dl_has(db, 7, dl_setrow(db, 23, 3, 0, 0));
+  let hc = dl_has(db, 6, dl_setrow(db, 105, 3, 0, 0));
+  let _ = dl_scratch(R, db, sc, caps);
+  let e1 = if dl_stale(R, db, sc) < 0 then 1 else 0;
+  let _ = dl_put(db, 2, dl_setrow(db, 105, 120, 0, 0));
+  let _ = dl_propagate(R, db);
+  let _ = dl_scratch(R, db, sc, caps);
+  let e2 = if dl_stale(R, db, sc) < 0 then (if dl_n(db, 7) == a then 1 else 0) else 0;
+  (((a * 1000 + b) * 10000 + wa) * 10000 + wb) * 10000 + ((h * 10 + hc) * 10 + e1) * 10 + e2
+}

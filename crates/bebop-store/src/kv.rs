@@ -200,6 +200,26 @@ impl Kv {
         }
     }
 
+    /// Remove every key in `keys` in ONE pass, returning how many were there. On sorted
+    /// entries (every writer here keeps them sorted) the result is exactly what calling
+    /// `remove` per key gives, so the bytes any commit writes afterwards are the same.
+    ///
+    /// WHY (W-KVPERF 2026-10-28): `remove` is `Vec::remove`, which shifts every later entry
+    /// -- O(n) per call, and 500k removes on 1e6 entries did not finish in 540 s. `entries`
+    /// is a public `Vec` built by struct literal across the tree, so the representation
+    /// cannot become a tombstone map here; a bulk delete costs O(n + k log k) through this.
+    pub fn remove_many<'a>(&mut self, keys: impl IntoIterator<Item = &'a str>) -> usize {
+        let mut gone: Vec<&str> = keys.into_iter().collect();
+        if gone.is_empty() {
+            return 0;
+        }
+        gone.sort_unstable();
+        gone.dedup();
+        let before = self.entries.len();
+        self.entries.retain(|(k, _)| gone.binary_search(&k.as_str()).is_err());
+        before - self.entries.len()
+    }
+
     /// FNV-1a 64 over frame-delimited (key, value) pairs -- `len || bytes` for each -- which is
     /// byte-for-byte what `InMemoryStore::snapshot_root` folds in dowiz-core, and what
     /// `kv_snapshot` folds in kv.bp.

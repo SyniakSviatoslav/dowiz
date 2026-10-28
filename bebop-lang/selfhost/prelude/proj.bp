@@ -34,6 +34,13 @@ fn pj_sb_projtab() -> i64 { 5 }
 fn pj_kind_log() -> i64 { 1 }
 fn pj_kind_kv() -> i64 { 2 }
 fn pj_fmt() -> i64 { 1 }
+// LV-INC-A (crates/bebop-store/src/proj/kinds.rs): kind 3 BLOB over the log, kind 4 ZSET over a KV, each with
+// its own OUT layout. bebop READS them (st_proj_peek); it does not write them -- st_proj_eval traps 124 for
+// either kind, since neither has a registered fold here.
+fn pj_kind_blob() -> i64 { 3 }
+fn pj_kind_zset() -> i64 { 4 }
+fn pj_dig_outb() -> i64 { 4157677073 }
+fn pj_dig_outz() -> i64 { 85289679 }
 // st_digest of the three layout strings, pinned (sproj re-derives them with st_digest; proj.rs has the test).
 fn pj_dig_projtab() -> i64 { 2699843079 }
 fn pj_dig_proj() -> i64 { 313398166 }
@@ -224,7 +231,7 @@ pure fn pj_kv_frame(h: i64, base: [i64], blob: ref Obj, off: i64, len: i64, ver:
   let j = 0;
   while j < len {
     let b = off + j;
-    let byte = if ver == 2 then (st_get(base, blob, b >> 3) >> (8 * (b & 7))) & 255 else st_get(base, blob, b) & 255;
+    let byte = if ver >= 2 then (st_get(base, blob, b >> 3) >> (8 * (b & 7))) & 255 else st_get(base, blob, b) & 255;
     let x = pj_fnv_byte(x, byte);
     let j = j + 1;
     0
@@ -308,11 +315,82 @@ fn pj_find(base: [i64], key: i64, why: [i64], tmp: [i64]) -> i64 {
   };
   let pok = if at == 0 then 0 else (if (base[at] >> 32) == pj_dig_proj() then (if st_len(base, at) == 9 then st_check(base, at, tmp) else 0) else 0);
   let out = if pok == 1 then pj_ref(base, at, 7) else 0;
-  let ook = if out == 0 then 0 else (if (base[out] >> 32) == pj_dig_out() then (if st_len(base, out) == 2 then st_check(base, out, tmp) else 0) else 0);
+  let ook = if out == 0 then 0 else pj_out_ok(base, st_get(base, at, 1), out, tmp);
   let good = ook * (if st_get(base, at, 0) == key then 1 else 0) * (if st_get(base, at, 3) == pj_fmt() then 1 else 0);
   let _ = why[0] = if at == 0 then 1 else (if good == 1 then 0 else 2);
   if good == 1 then at else 0
 }
+// pj_out_ok: out is the OUT layout `kind` names -- {value, count} for kinds 1/2, OUTB/OUTZ with their
+// length rules for 3/4 (kinds.rs out_ok) -- and its crc holds. Any other kind: 0.
+fn pj_out_ok(base: [i64], kind: i64, out: i64, tmp: [i64]) -> i64 {
+  let d = base[out] >> 32;
+  let n = st_len(base, out);
+  let old = if d == pj_dig_out() then (if n == 2 then 1 else 0) else 0;
+  let shape = if kind == 1 then old else (if kind == 2 then old else (if kind == pj_kind_blob() then pj_outb_shape(base, out, d, n) else (if kind == pj_kind_zset() then pj_outz_shape(base, out, d, n) else 0)));
+  if shape == 1 then st_check(base, out, tmp) else 0
+}
+// OUTB [value, count, nbytes, bytes 8/cell]: 3 + ceil(nbytes/8) cells.
+fn pj_outb_shape(base: [i64], out: i64, d: i64, n: i64) -> i64 {
+  let nb = if n >= 3 then st_get(base, out, 2) else 0 - 1;
+  if d == pj_dig_outb() then (if nb >= 0 then (if n == 3 + (nb + 7) / 8 then 1 else 0) else 0) else 0
+}
+// OUTZ [value, count, m, w, (c0..c(w-1), weight) x m]: 4 + m(w+1) cells, 1 <= w <= 64, m bounded by n first.
+fn pj_outz_shape(base: [i64], out: i64, d: i64, n: i64) -> i64 {
+  let m = if n >= 4 then st_get(base, out, 2) else 0 - 1;
+  let w = if n >= 4 then st_get(base, out, 3) else 0;
+  let fits = if m >= 0 then (if m <= n then (if w >= 1 then (if w <= 64 then 1 else 0) else 0) else 0) else 0;
+  if d == pj_dig_outz() then (if fits == 1 then (if n == 4 + m * (w + 1) then 1 else 0) else 0) else 0
+}
+// pj_out_digest: what an OUTB/OUTZ's value cell must be -- FNV-1a 64 over the blob's bytes (3), or over every
+// row cell and weight as LE8 in the stored (ascending) order (4).
+fn pj_out_digest(base: [i64], kind: i64, out: i64) -> i64 {
+  let zk = if kind == pj_kind_zset() then 1 else 0;
+  let lim = if zk == 1 then st_len(base, out) - 4 else st_get(base, out, 2);
+  let x = pj_fnv_offset();
+  let i = 0;
+  while i < lim {
+    let x = if zk == 1 then pj_fnv_u64(x, st_get(base, out, 4 + i)) else pj_fnv_byte(x, (st_get(base, out, 3 + (i >> 3)) >> (8 * (i & 7))) & 255);
+    let i = i + 1;
+    0
+  };
+  x
+}
+// pj_zchain: a v3 KV root's delta records, newest first, into out[0..]; at most cap. Returns how many.
+fn pj_zchain(base: [i64], root: i64, out: [i64], cap: i64) -> i64 {
+  let cur = if pj_kv_ver(base, root) >= 3 then pj_ref(base, root, 6) else 0;
+  let n = 0;
+  while cur != 0 {
+    let _ = out[n] = cur;
+    let n = n + 1;
+    let cur = if n >= cap then 0 else pj_ref(base, cur, 0);
+    0
+  };
+  n
+}
+// pj_ztip: kind 4's tip word w -- 0: the newest delta record (0 = no chain); 1: the FINGERPRINT, FNV-1a 64 over
+// (offset, h1) as LE8 of the four base arrays, then of every chain record oldest first (kinds.rs header).
+fn pj_ztip(base: [i64], root: i64, w: i64) -> i64 {
+  let d = if pj_kv_ver(base, root) >= 3 then st_get(base, root, 7) else 0;
+  let cap = if d < 0 then 0 else (if d > 1024 then 1024 else d);
+  let recs = zeros(cap + 1);
+  let k = pj_zchain(base, root, recs, cap);
+  let x = pj_fnv_offset();
+  let i = 1;
+  while i < 5 {
+    let a = st_ref(base, root, i);
+    let x = pj_fnv_u64(pj_fnv_u64(x, a), st_h1(base, a));
+    let i = i + 1;
+    0
+  };
+  let j = k - 1;
+  while j >= 0 {
+    let x = pj_fnv_u64(pj_fnv_u64(x, recs[j]), st_h1(base, recs[j]));
+    let j = j - 1;
+    0
+  };
+  if w == 0 then (if k > 0 then recs[0] else 0) else x
+}
+
 // pj_put: OUT + PROJ + a new sorted table in ONE commit that keeps the data root. Entries of the same fn and
 // kind under another code are dropped (a deploy supersedes its memo; the table does not grow per deploy).
 fn pj_put(base: [i64], tx: [i64], key: i64, kind: i64, code: i64, gen: i64, t0: i64, t1: i64, val: i64, cnt: i64, fnk: i64, tmp: [i64]) -> i64 {
@@ -421,7 +499,7 @@ fn pj_registered(kind: i64, fnv: i64) -> i64 {
 }
 // st_proj_eval(base, tx, code, kind, fnv, how, tmp): the projection's value, memoised in the image.
 //   how[0] = 0 hit | 1 step (how[1] = records stepped) | 2 full (no memo) | 3 refold (how[1]: 1 code,
-//   2 corrupt, 3 tip, 4 gen); how[2] = the memo count. Writes (and commits) the memo unless it was a hit.
+//   2 corrupt, 3 tip, 4 gen, 5 kind 2 on a v3 KV: refused, value 0 - 1); how[2] = the memo count. Writes (and commits) the memo unless it was a hit.
 fn st_proj_eval(base: [i64], tx: [i64], code: i64, kind: i64, fnv: i64, how: [i64], tmp: [i64]) -> i64 {
   let _ = if pj_registered(kind, fnv) == 1 then 0 else pj_refuse_impure();
   let key = pj_key(code, pj_fn_key_of(kind), kind);
@@ -436,19 +514,30 @@ fn st_proj_eval(base: [i64], tx: [i64], code: i64, kind: i64, fnv: i64, how: [i6
   let _ = how[0] = 0;
   let _ = how[1] = 0;
   let _ = how[2] = n;
-  let v = if hit == 1 then st_get(base, pj_ref(base, p, 7), 0) else pj_eval_miss(base, tx, code, kind, fnv, key, p, why[0], how, tmp);
+  let v3 = if kind == 2 then (if pj_kv_ver(base, root) >= 3 then 1 else 0) else 0;
+  let v = if v3 == 1 then pj_refuse_v3(how) else (if hit == 1 then st_get(base, pj_ref(base, p, 7), 0) else pj_eval_miss(base, tx, code, kind, fnv, key, p, why[0], how, tmp));
   v
 }
+// pj_refuse_v3 (LV-INC-A): pj_kv_fold folds a KV's BASE only, and a v3 root's delta chain (W-DELTA) is not in
+// it -- before this it answered the base's fold for a v3 image, which is not the snapshot Rust's eval_kv gives.
+// Refused instead, LOUDLY in how (3 = refold, why 5 = v3), value 0 - 1, and no memo written.
+fn pj_refuse_v3(how: [i64]) -> i64 {
+  let _ = how[0] = 3;
+  let _ = how[1] = 5;
+  0 - 1
+}
 // pj_tip: word w (0 or 1) of the input's tip -- the newest record's id0/id1 (kind 1; 0 for an
-// empty log), or the root's offset and h1 (kind 2).
+// empty log; kind 3 too), the root's offset and h1 (kind 2), or pj_ztip (kind 4).
 fn pj_tip(base: [i64], root: ref Obj, kind: i64, w: i64) -> i64 {
-  let last = if kind == 1 then pj_ref(base, root, 1) else 0;
-  if kind == 1 then (if last == 0 then 0 else st_get(base, last, 3 + w)) else (if w == 0 then root else st_h1(base, root))
+  let logk = if kind == pj_kind_log() then 1 else (if kind == pj_kind_blob() then 1 else 0);
+  let last = if logk == 1 then pj_ref(base, root, 1) else 0;
+  if kind == pj_kind_zset() then pj_ztip(base, root, w) else (if logk == 1 then (if last == 0 then 0 else st_get(base, last, 3 + w)) else (if w == 0 then root else st_h1(base, root)))
 }
 // st_proj_peek(base, tmp): READ ONLY -- the value of the table's FIRST memo when it is current for
 // the image's input (st_proj_eval's hit rule without the code check: a reader of a memo another
 // program wrote), else 0 - 1; also 0 - 1 when the live superblock's cells 13-14 are not zero (RT
-// S-1). The bebop reader of crates/bebop-wasm/fixtures/proj.store.
+// S-1). The bebop reader of crates/bebop-wasm/fixtures/proj.store, and (LV-INC-A) of proj4{,.log}.store: a
+// kind 3/4 value that is not the digest of its own OUT reads as 0 - 1 too.
 fn st_proj_peek(base: [i64], tmp: [i64]) -> i64 {
   let sb = st_pick(base, tmp);
   let s1 = if sb < 0 then 0 else (if base[sb + 13] == 0 then (if base[sb + 14] == 0 then 1 else 0) else 0);
@@ -460,7 +549,9 @@ fn st_proj_peek(base: [i64], tmp: [i64]) -> i64 {
   let root = st_root(base, tmp);
   let gen = st_h1(base, root) & 4294967295;
   let ok = if p == 0 then 0 else pj_is_hit(base, p, st_get(base, p, 2), gen, pj_tip(base, root, kind, 0), pj_tip(base, root, kind, 1), st_get(base, root, 0));
-  if ok == 1 then st_get(base, pj_ref(base, p, 7), 0) else 0 - 1
+  let out = if ok == 1 then pj_ref(base, p, 7) else 0;
+  let honest = if ok == 1 then (if kind > 2 then (if pj_out_digest(base, kind, out) == st_get(base, out, 0) then 1 else 0) else 1) else 0;
+  if honest == 1 then st_get(base, out, 0) else 0 - 1
 }
 // pj_is_hit: the memo at p is current -- same code, input generation, tip, and record count.
 fn pj_is_hit(base: [i64], p: i64, code: i64, gen: i64, t0: i64, t1: i64, n: i64) -> i64 {

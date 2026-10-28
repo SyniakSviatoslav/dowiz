@@ -37,8 +37,19 @@ pub const STOCK_LEVELS: Schema =
 /// §B.4 row 4: the intern table -- every id a block names by row.
 pub const NAMES: Schema = Schema { name: "names", string: "names:v1(id:i64:0,bytes:u8:0,off:u32off:0)" };
 
+/// R-BEBOP-LEVERS §5.4 (LV-COL-E): one venue-day's sales, ONE ROW PER DISH PER DAY (main's decision
+/// 2026-10-28, after one row per order line measured 2.5x slower than the JSON cube): the day's order
+/// lines the venue took, summed at the catch-up. `day` is `yyyymmdd` (unit 0: a date is not a
+/// generation, so §5.4's `:7` is not used); `dish` the product id's `K64` (an INDEX, RT K-1); no order
+/// column (§5.4's `order:u32` is dropped: no order key leaves the hot log). `qty`/`gross` are every
+/// line; `cqty`/`cgross`/`cost` are the STAMPED lines only (portions, their sales, their cost), so
+/// food cost = cost / cgross is exact on a day that mixes stamped and unstamped lines, and no
+/// sentinel value is needed.
+pub const SALES: Schema =
+    Schema { name: "sales", string: "sales:v1(day:i32:0,dish:i64:0,qty:i32:0,gross:i64:1,cqty:i32:0,cgross:i64:1,cost:i64:1)" };
+
 /// Every shipped schema. A reader refuses a block whose schema is not here.
-pub const TABLE: [&Schema; 4] = [&MENU_PRICES, &BOM, &STOCK_LEVELS, &NAMES];
+pub const TABLE: [&Schema; 5] = [&MENU_PRICES, &BOM, &STOCK_LEVELS, &NAMES, &SALES];
 
 /// W-TASTE (report D.1 #7): the dishes' taste, texture, aroma, allergens and availability as
 /// integer columns -- the "dish sense tensor" (`block::taste`). Six taste axes 0..=5 in

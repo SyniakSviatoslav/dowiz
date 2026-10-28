@@ -21,7 +21,7 @@ fn main() -> i64 {
     let p = bk_puthex(o, bk_puts(o, p, " k64="), t[r], 16);
     let _ = o[p] = 32;
     let st = t[r + 3];
-    let en = if i < n - 1 then t[r + 64 + 3] else t[256];
+    let en = if i < n - 1 then t[r + 64 + 3] else t[5];
     let p = bk_putcells(o, p + 1, s, st, en - st);
     let _ = o[p] = 10;
     let _ = sys_write(1, o, p + 1);

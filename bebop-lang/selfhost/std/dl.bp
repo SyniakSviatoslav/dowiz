@@ -35,6 +35,8 @@
 //   20/21 snapshot, 22 key version (moves on insert/delete only, not on an in-place replacement),
 //   23 dense-index base (4 regions of cap + 2), 24..27 the version each was built at, 28..31 its value
 //   bound (-1 = column not dense). Each list is (offset, count); every region holds `cap` rows of 4 cells.
+//   29 the WEIGHT directory (dl_del.bp: 3 cells per predicate, then `cap` rows of 5 cells each, laid out
+//   after the variant table), 30 = 1 the legacy control (the pre-AX1 delete paths, dl_del.bp header).
 //
 // Relations live in memory, not yet as store projection nodes: binding them to st_proj_eval needs DG6's
 // `pure` class for the rule fns (BLUEPRINT DG6), which is not built. See the DG8 verdict.
@@ -493,7 +495,7 @@ fn dl_db_cells(R: [i64], caps: [i64]) -> i64 {
   let mx = 0;
   let p = 0;
   while p < P {
-    let t = t + 32 * caps[p] + 8;
+    let t = t + 37 * caps[p] + 11;
     let mx = if caps[p] > mx then caps[p] else mx;
     let p = p + 1;
     0
@@ -562,7 +564,7 @@ fn dl_db_init(R: [i64], db: [i64], caps: [i64]) -> i64 {
   let _ = db[26] = 0;
   let _ = db[28] = 0;
   let _ = db[27] = at + mx + 8;
-  let _ = db[2] = at + mx + 8 + 1024;
+  let _ = db[2] = dl_cnt_lay(db, P, caps, at + mx + 8 + 1024);
   0
 }
 // dl_cmpk: compare the first k cells of the rows at db[a] and db[b]: -1, 0, 1.
@@ -710,7 +712,7 @@ fn dl_same(a: [i64], b: [i64], p: i64) -> i64 {
     let i = i + 1;
     0
   };
-  ok
+  if ok == 1 then dl_cnt_same(a, b, p) else 0
 }
 // dl_copy_rel: F_p of src into dst (same rule set, same caps).
 fn dl_copy_rel(src: [i64], dst: [i64], p: i64) -> i64 {

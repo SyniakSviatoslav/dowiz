@@ -1,5 +1,6 @@
 use "selfhost/std/dl.bp"
 use "selfhost/std/dl_index.bp"
+use "selfhost/std/dl_del.bp"
 // selfhost/std/dl_eval.bp -- evaluation half of the Datalog layer (row DG8; SPEC-DATALOG-AND-CODEC Part A
 // A.5 and A-7). selfhost/std/dl.bp holds the rule set, the refusals, the strata and the relation store;
 // this file holds the join, the semi-naive loop and the event propagation. Split only for the 800-line cap.
@@ -164,6 +165,7 @@ fn dl_leaf(R: [i64], db: [i64]) -> i64 {
     let k = k + 1;
     0
   };
+  let _ = if db[29] != 0 then (if dl_cnt_leaf(R, db, h, T) == 1 then return 0 else 0) else 0;
   let dd = dl_d(db, h);
   let inF = if db[12] == 0 then (if dl_sfind(db, db[dd], db[dd + 2], T) >= 0 then 1 else 0) else 0;
   let dp = if db[12] == 1 then db[28] else 0;
@@ -293,7 +295,7 @@ fn dl_reset_s(R: [i64], db: [i64], s: i64) -> i64 {
   let p = 0;
   while p < R[2] {
     let d = dl_d(db, p);
-    let _ = if dl_ins_s(R, s, p) == 1 then (let _ = db[d + 2] = 0 in let _ = db[d + 3] = db[d + 3] + 1 in let _ = db[d + 22] = db[d + 22] + 1 in let _ = db[d + 13] = 0 in let _ = db[d + 15] = 0 in 0) else 0;
+    let _ = if dl_ins_s(R, s, p) == 1 then (let _ = db[d + 2] = 0 in let _ = db[d + 3] = db[d + 3] + 1 in let _ = db[d + 22] = db[d + 22] + 1 in let _ = db[d + 13] = 0 in let _ = db[d + 15] = 0 in dl_cnt_clear(db, p)) else 0;
     let p = p + 1;
     0
   };
@@ -578,11 +580,11 @@ fn dl_inc_nonrec(R: [i64], db: [i64], s: i64) -> i64 {
   0
 }
 // dl_recheck(sure): 0 re-derive; 1 known derivable (simple insert pass); 2 simple delete pass -- only a
-// row that was in F is re-derived.
+// row that was in F is re-derived; 3 its weight decides (dl_del.bp counting).
 fn dl_recheck(R: [i64], db: [i64], p: i64, row: i64, sure: i64) -> i64 {
   let was = dl_has(db, p, row);
   let _ = if sure * (1 - was) == 2 then return 0 else 0;
-  let now = if sure == 1 then 1 else dl_exists(R, db, p, row);
+  let now = if sure == 1 then 1 else (if sure == 3 then dl_cnt_pos(db, p, row) else dl_exists(R, db, p, row));
   let _ = if now * (1 - was) == 1 then (let _ = dl_rins(db, p, row) in dl_note(db, p, 0, row)) else 0;
   let drop = was * (1 - now) * (1 - db[21]);
   let _ = if drop == 1 then (let _ = dl_rdel(db, p, row) in dl_note(db, p, 1, row)) else 0;
@@ -698,6 +700,7 @@ fn dl_propagate(R: [i64], db: [i64]) -> i64 {
   dl_event_end(R, db)
 }
 fn dl_inc_s(R: [i64], db: [i64], s: i64) -> i64 {
+  let _ = if db[29] != 0 then (if db[30] == 0 then return dl_del_inc_s(R, db, s) else 0) else 0;
   let fast = db[26];
   let st0 = if fast == 1 then 1 else dl_s_state(R, db, s);
   let _ = if st0 == 0 then return 0 else 0;

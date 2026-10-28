@@ -118,6 +118,9 @@ impl HubImages {
     }
 }
 
+/// S2b: the kitchen tablet's offline order taps (`/fold/glue_orders`).
+mod orders;
+
 #[cfg(test)]
 #[path = "glue_turn/tests.rs"]
 mod tests;

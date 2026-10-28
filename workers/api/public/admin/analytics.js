@@ -70,6 +70,15 @@ function stat(key, value, delta, extra = ''){
   return `<div class="stat"><small data-t="${key}"></small><b>${value}</b>${d}${extra}</div>`;
 }
 
+/// LV-COL-E: food cost by dish out of the daily sales blocks (`foodCost`: the span's, or a traced day's).
+function foodCost(fc){
+  if (!fc) return '';
+  if (fc.error) return rowDiv({ leading: icon('alert-triangle'), title: { t: 'anFoodCost' }, sub: esc(fc.error) });
+  return `${rowDiv({ leading: icon('receipt'), title: { t: 'anFoodCost' }, sub: `<span class="mono">${esc(money(fc.cost || 0))} / ${esc(money(fc.sales || 0))}</span>`, trailing: `<b class="mono">${esc(L.pct(fc.costPm))}</b>` })}
+    ${(fc.dishes || []).map(d => rowDiv({ leading: icon('bowl-chopsticks'), title: dishName(d.id), sub: `<span class="mono">${esc(d.quantity)} · ${esc(money(d.cost || 0))} / ${esc(money(d.sales || 0))}</span>`, trailing: `<b class="mono">${esc(L.pct(d.costPm))}</b>` })).join('')}
+    ${fc.unstampedSales ? rowDiv({ leading: icon('alert-triangle'), title: { t: 'anUnstamped' }, trailing: ui.amount(money(fc.unstampedSales)) }) : ''}`;
+}
+
 function body(a){
   const c = a.compare || {}, pv = c.prev || {}, wd = c.weekday || {}, dpm = pv.deltaPm || {}, dd = pv.delta || {};
   const byDay = a.byDay || [], maxRev = Math.max(1, ...byDay.map(d => d.revenue || 0));
@@ -103,6 +112,7 @@ function body(a){
       sub: `<span class="mono">${esc(c.orders)} · ${esc(L.pct(c.sharePm))} <span data-t="anShare"></span></span>`, trailing: ui.amount(money(c.revenue || 0)) })).join('')}
       ${rowDiv({ leading: icon('bike'), title: { t: 'delivery' }, trailing: `<b class="mono">${esc(a.delivery ?? 0)}</b>` })}${rowDiv({ leading: icon('walk'), title: { t: 'pickup' }, trailing: `<b class="mono">${esc(a.pickup ?? 0)}</b>` })}${rowDiv({ leading: icon('bowl-chopsticks'), title: { t: 'dineIn' }, trailing: `<b class="mono">${esc(a.dineIn ?? 0)}</b>` })}</div></section>
     <section class="group mt-3"><p class="eyebrow" data-t="anTrend"></p><div class="rows">${trend || empty('bowl-chopsticks', { key: 'anMenuEmpty' })}</div></section>
+    ${a.foodCost ? `<section class="group mt-3"><p class="eyebrow" data-t="anFoodCost"></p><p class="muted small" data-t="anFoodCostHint"></p><div class="rows">${foodCost(a.foodCost)}</div></section>` : ''}
     <section class="group mt-3"><p class="eyebrow" data-t="anRepeat"></p><p class="muted small" data-t="anRepeatHint"></p><div class="rows">
       ${rowDiv({ leading: icon('user'), title: { t: 'anCustomers' }, sub: `<span class="mono">${esc(rep.from || '')} - ${esc(rep.to || '')}</span>`, trailing: `<b class="mono">${esc(rep.customers ?? 0)}</b>` })}
       ${rowDiv({ leading: icon('user-plus'), title: { t: 'anCameBack' }, trailing: `<b class="mono">${esc(rep.repeatCustomers ?? 0)}</b>` })}
@@ -163,8 +173,11 @@ async function trace(d, f){
 function traceSheet(r, f){
   const ar = r.archived || {}, recs = L.keep(r.records, f);
   const check = ar.stored ? rowDiv({ leading: icon(ar.equal ? 'circle-check' : 'alert-triangle'), title: { t: ar.equal ? 'anVerified' : 'anMismatch' }, sub: `<span class="mono">${esc((ar.src || []).join(', '))}</span>` }) : '';
+  const bk = r.block || {};
+  const blockRow = !r.block ? '' : bk.error ? rowDiv({ leading: icon('alert-triangle'), title: { t: 'anBlockMismatch' }, sub: esc(bk.error) })
+    : rowDiv({ leading: icon(bk.stored ? (bk.equal ? 'circle-check' : 'alert-triangle') : 'clock'), title: { t: bk.stored ? (bk.equal ? 'anBlockVerified' : 'anBlockMismatch') : 'anBlockNone' }, sub: `<span class="mono">${esc(bk.stored || '-')} · ${esc(bk.refolded || '-')}</span>` });
   sheet(`${head('anRecords', 'anRecordsHint')}<p class="mono">${showDay(r.day)}${f.dish ? ' · ' + esc(dishName(f.dish)) : ''}${f.hour != null ? ' · ' + hh(f.hour) : ''}</p>
-    <div class="rows">${check}${recs.map(o => rowDiv({ leading: icon('receipt'), title: `${clock(o.at)} · ${L.channelName(o.channel, t)} · ${o.kind}`,
+    <div class="rows">${check}${blockRow}${foodCost(bk.foodCost)}${recs.map(o => rowDiv({ leading: icon('receipt'), title: `${clock(o.at)} · ${L.channelName(o.channel, t)} · ${o.kind}`,
       sub: `<span class="mono">${esc(String(o.id).slice(0, 8))} · ${esc(o.status)} · ${esc(o.from === 'hot' ? t('anFromHot') : t('anFromArchive') + ' ' + o.from)}<br>${(o.items || []).map(i => `${esc(i.quantity)} x ${esc(dishName(i.id))}`).join(', ')}</span>`,
       trailing: ui.amount(money(o.took || 0)) })).join('') || empty('receipt', { key: 'anNoRecords' })}</div>
     <div class="btn-row">${btn({ id: 'anBack', icon: 'arrow-left', key: 'analytics' })}</div>`, { name: 'analyticsTrace' });

@@ -907,6 +907,8 @@ pub mod kv;
 pub mod evlog;
 pub mod nodekey;
 pub mod proj;
+/// LV-INC-A: the Z-set, the one delta currency (R-BEBOP-LEVERS §2.4).
+pub mod zset;
 
 #[cfg(test)]
 mod view_tests;

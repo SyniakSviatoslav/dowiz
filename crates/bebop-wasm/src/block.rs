@@ -15,11 +15,12 @@
 use bebop_store::nodekey::sha256;
 
 /// §B.4, the order of DG7's `schema::TABLE` (the order matters only for printing).
-pub const SCHEMAS: [&str; 4] = [
+pub const SCHEMAS: [&str; 5] = [
     "menu_prices:v1(dish:i64:0,price:i64:1,tax_ppm:i64:5,mods_ptr:u32rp:0,mods_col:u32:0,mods_val:i64:1)",
     "bom:v1(dish_ptr:u32rp:0,supply:u32:0,qty:i64:0)",
     "stock_levels:v1(supply:i64:0,qty:i64:0,gen:i64:7)",
     "names:v1(id:i64:0,bytes:u8:0,off:u32off:0)",
+    "sales:v1(day:i32:0,dish:i64:0,qty:i32:0,gross:i64:1,cqty:i32:0,cgross:i64:1,cost:i64:1)",
 ];
 
 const I64: u8 = 1;
@@ -294,6 +295,10 @@ pub unsafe extern "C" fn bw_block(ptr: *const u8, len: usize, out: *mut u8, cap:
     core::ptr::copy_nonoverlapping(s.as_ptr(), out, s.len());
     s.len() as i32
 }
+
+/// LV-COL-E: the `sales` kernels' line (`bw_kernel`), over this reader's own decode.
+#[path = "block/kernel.rs"]
+pub mod kernel;
 
 #[cfg(test)]
 mod tests;

@@ -16,7 +16,8 @@
 //! after it; a healthy night with nothing rotated reads none.
 
 use crate::hubdo::HubImages;
-use crate::services::analytics::cube::{self as sc, Cube, DayCube};
+use crate::services::analytics::cube::{self as sc, sales as ss, Cube, DayCube};
+use dowiz_hub::block::kernels::pack::Pack;
 use dowiz_hub::tz::Zone;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashSet};
@@ -81,6 +82,11 @@ impl HubImages {
         Ok(self.image(sc::IMAGE).await?.map(|(m, b)| (m.generation, b)).unwrap_or((0, Vec::new())))
     }
 
+    /// The sales image (LV-COL-E: `kernels::pack`) and its generation; none yet is empty at 0.
+    pub(super) async fn sales_image(&self) -> Result<(i64, Vec<u8>)> {
+        Ok(self.image(ss::IMAGE).await?.map(|(m, b)| (m.generation, b)).unwrap_or((0, Vec::new())))
+    }
+
     /// The archives the settings list, in rotation order.
     async fn listed_archives(&self) -> Result<Vec<String>> {
         let Some((_, b)) = self.image(crate::hubstore::IMAGE_SETTINGS).await? else { return Ok(Vec::new()) };
@@ -138,22 +144,52 @@ impl HubImages {
                 Err(why) => return Response::error(format!("the cube is unreadable ({why}); rebuild it"), 409),
             },
         };
+        // THE SALES IMAGE catches up beside the cube, on its own folded list (LV-COL-E): a derived
+        // cache like the cube, so an unreadable one is rebuilt, never a reason to stop the cube.
+        let (sgen, sbytes) = self.sales_image().await?;
+        let (mut pack, sales_was) = match (rebuild, Pack::decode(&sbytes)) {
+            (false, Ok(p)) => (p, "kept"),
+            (true, _) => (Pack::default(), "rebuilt"),
+            (false, Err(_)) => (Pack::default(), "unreadable, rebuilt"),
+        };
         let mut added = Vec::new();
+        let mut sales_added = 0usize;
+        let mut sales_refused = Vec::new();
         for (k, archive) in listed.iter().enumerate() {
-            if cube.folded.contains(archive) {
+            let (need_cube, need_sales) = (!cube.folded.contains(archive), !pack.folded.contains(archive));
+            if !need_cube && !need_sales {
                 continue;
             }
-            let moved: Vec<Value> = self.moved_at(venue, &listed, k).await?.into_iter().map(|(_, o)| o).collect();
-            let days = sc::fold_orders(&moved, zone, i64::MAX);
-            added.push(json!({ "archive": archive, "orders": moved.len(), "days": days.len() }));
-            cube.absorb(archive, days);
+            let moved = self.moved_at(venue, &listed, k).await?;
+            if need_sales {
+                // A dish-id K64 clash refuses that archive's rows whole and is NAMED in the answer;
+                // the archive stays unfolded in the image, so the clash shows on every catch-up.
+                match pack.absorb(archive, &ss::sale_rows(&moved, zone, i64::MAX)) {
+                    Ok(_) => sales_added += 1,
+                    Err(r) => sales_refused.push(format!("{archive}: {r:?}")),
+                }
+            }
+            if need_cube {
+                let orders: Vec<Value> = moved.into_iter().map(|(_, o)| o).collect();
+                let days = sc::fold_orders(&orders, zone, i64::MAX);
+                added.push(json!({ "archive": archive, "orders": orders.len(), "days": days.len() }));
+                cube.absorb(archive, days);
+            }
         }
         if !added.is_empty() || rebuild {
             if self.put_image(sc::IMAGE, gen, &cube.encode()).await?.is_none() {
                 return Response::error("the cube moved during the catch-up", 409);
             }
         }
-        Response::from_json(&json!({ "folded": cube.folded.len(), "added": added, "days": cube.rows.len(), "listed": listed.len() }))
+        let sales = match pack.encode() {
+            Ok(b) if sales_added > 0 || sales_was != "kept" => match self.put_image(ss::IMAGE, sgen, &b).await? {
+                Some(_) => json!({ "image": sales_was, "added": sales_added, "refused": sales_refused, "folded": pack.folded.len(), "days": pack.days.len(), "bytes": b.len() }),
+                None => json!({ "error": "the sales image moved during the catch-up" }),
+            },
+            Ok(b) => json!({ "image": sales_was, "added": 0, "refused": sales_refused, "folded": pack.folded.len(), "days": pack.days.len(), "bytes": b.len() }),
+            Err(r) => json!({ "error": format!("the sales image is refused: {r:?}") }),
+        };
+        Response::from_json(&json!({ "folded": cube.folded.len(), "added": added, "days": cube.rows.len(), "listed": listed.len(), "sales": sales }))
     }
 
     /// THE TRACE: the records behind one day and the cube's verification of
@@ -182,6 +218,7 @@ impl HubImages {
         let listed = self.listed_archives().await?;
         let mut records = Vec::new();
         let mut cold = Vec::new();
+        let mut cold_pairs = Vec::new();
         for src in stored.iter().flat_map(|r| r.src.iter()) {
             let Some(k) = listed.iter().position(|a| a == src) else {
                 return Response::error(format!("the row names {src}, which is not listed"), 409);
@@ -189,7 +226,8 @@ impl HubImages {
             for (id, o) in self.moved_at(venue, &listed, k).await? {
                 if sc::day_of(zone, o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0)) == d {
                     records.push(record(&id, &o, zone, src));
-                    cold.push(o);
+                    cold.push(o.clone());
+                    cold_pairs.push((id, o));
                 }
             }
         }
@@ -209,15 +247,21 @@ impl HubImages {
         records.extend(hot.iter().map(|(id, o)| record(id, o, zone, "hot")));
         let hot_row = sc::fold_orders(&hot.into_iter().map(|(_, o)| o).collect::<Vec<_>>(), zone, now).remove(&d);
         records.sort_by(|a, b| a["at"].as_i64().cmp(&b["at"].as_i64()).then(a["id"].as_str().cmp(&b["id"].as_str())));
+        let block = self.trace_block(d, &cold_pairs, zone).await?;
         let line = |r: &Option<DayCube>| r.as_ref().map(sc::line);
         Response::from_json(&json!({
             "day": dowiz_hub::stock::meta::show_day(d),
             "archived": { "stored": line(&stored), "refolded": line(&refolded), "equal": line(&stored) == line(&refolded), "src": stored.map(|s| s.src) },
             "hot": line(&hot_row),
+            "block": block,
             "records": records,
         }))
     }
 }
+
+/// LV-COL-E: the sales image's verifier and the span's food cost.
+#[path = "cube/sales.rs"]
+mod sales;
 
 #[cfg(test)]
 #[path = "cube/tests.rs"]

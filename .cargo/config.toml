@@ -9,3 +9,10 @@
 # clean. Keep the speedup on the native host; leave other targets untouched.
 [target.aarch64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# TEST THREADS GET 8 MiB (2026-10-28). The Worker's tests drive nested `block_on` futures (archive
+# rotation, cube catch-up, restore) whose debug-build frames outgrew the 2 MiB default test thread:
+# two tests aborted with a stack overflow, not a wrong answer. This sets the stack of threads the Rust
+# runtime spawns (libtest's test threads); production is wasm32 on Workers and is unaffected.
+[env]
+RUST_MIN_STACK = "8388608"

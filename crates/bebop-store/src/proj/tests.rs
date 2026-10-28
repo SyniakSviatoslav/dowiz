@@ -7,7 +7,7 @@ use crate::evlog::{pack_payload, EvLog, Record};
 use crate::kv::Kv;
 use crate::nodekey::sha256;
 
-fn id_of(prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
+pub(super) fn id_of(prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
     let mut b = prev.to_vec();
     b.extend_from_slice(payload);
     sha256(&b)
@@ -15,12 +15,12 @@ fn id_of(prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
 
 /// Record `i`: a 330-byte payload (R §4's event size) whose bytes depend on `i`, chained
 /// the way dowiz chains content ids (sha256 over prev || payload).
-fn rec(i: u64, prev: &[u8; 32]) -> Record {
+pub(super) fn rec(i: u64, prev: &[u8; 32]) -> Record {
     let payload: Vec<u8> = (0..330u64).map(|j| ((i * 31 + j * 7) % 251) as u8).collect();
     Record { id: id_of(prev, &payload), prev: *prev, actor_pubkey: [0; 32], actor_seq: i, payload }
 }
 
-fn log_of(n: u64, bytes: usize) -> (Store, [u8; 32]) {
+pub(super) fn log_of(n: u64, bytes: usize) -> (Store, [u8; 32]) {
     let mut st = Store::create_bytes(bytes).unwrap();
     EvLog::init_bytes(&mut st).unwrap();
     let mut prev = [0u8; 32];
@@ -32,7 +32,7 @@ fn log_of(n: u64, bytes: usize) -> (Store, [u8; 32]) {
     (st, prev)
 }
 
-fn append(st: &mut Store, prev: &mut [u8; 32], from: u64, k: u64) {
+pub(super) fn append(st: &mut Store, prev: &mut [u8; 32], from: u64, k: u64) {
     for i in from..from + k {
         let r = rec(i, prev);
         *prev = r.id;
@@ -40,7 +40,7 @@ fn append(st: &mut Store, prev: &mut [u8; 32], from: u64, k: u64) {
     }
 }
 
-fn code() -> i64 {
+pub(super) fn code() -> i64 {
     rust_code()
 }
 
@@ -282,4 +282,17 @@ fn measure_append_step_vs_full() {
             img.len()
         );
     }
+}
+
+/// LV-INC-A: the bytes kinds 1 and 2 write did not move when `put` learned kinds 3/4 --
+/// sha256 of a Rust-written image after a kind-1 and a kind-2 memo, pinned BEFORE the change.
+#[test]
+fn kinds_1_and_2_write_the_same_bytes() {
+    let (mut st, _) = log_of(20, 1 << 20);
+    let _ = eval_log(&mut st, code(), fk()).unwrap();
+    let a = crate::nodekey::hex(&sha256(&st.to_bytes_trimmed()));
+    let mut st = crate::zset::tests::base(&[("a", "1"), ("b", "22")]);
+    let _ = eval_kv(&mut st, code(), fn_key("kv_snapshot")).unwrap();
+    let b = crate::nodekey::hex(&sha256(&st.to_bytes_trimmed()));
+    assert_eq!((a.as_str(), b.as_str()), ("babe636cdf716086a2c65f9c410d25bd0b206010c7a1ee57fa1d92485063a2b2", "7b6181f87be326a1138c15881028738a85b028276958a7befd68edddc869ed90"));
 }

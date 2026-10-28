@@ -64,10 +64,12 @@ pub struct KvIn<C: Image> {
     vbytes: usize,
     sorted: bool,
     /// W-DELTA: every record of a v3 chain (newest first), the newest op per key sorted by
-    /// key, and the merged order (empty when there is no chain: then index i IS base i).
+    /// key, and the merged order as runs (empty when there is no chain: then index i IS
+    /// base i) with its length.
     chain: Vec<Rec>,
     ov: Vec<(Vec<u8>, Rec)>,
-    merged: Vec<overlay::Slot>,
+    pieces: Vec<overlay::Piece>,
+    mlen: usize,
 }
 
 /// One entry's (offset, len), bounded by the blob: `None` is a slice the image does not hold.
@@ -135,7 +137,7 @@ impl<C: Image> KvIn<C> {
             return Err(KvError::NotKv);
         }
         let ov = overlay::build(&c, &chain);
-        Ok(KvIn { ver, n: n as usize, kidx, kblob, vidx, vblob, kbytes, vbytes, sorted, chain, ov, merged: Vec::new(), c })
+        Ok(KvIn { ver, n: n as usize, kidx, kblob, vidx, vblob, kbytes, vbytes, sorted, chain, ov, pieces: Vec::new(), mlen: 0, c })
     }
 
     /// Every slice bounded, the budget (entries together no larger than the blobs:

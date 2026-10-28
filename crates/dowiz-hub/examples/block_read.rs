@@ -6,6 +6,7 @@
 //!     block <schema> n=<n> nnz=<nnz> vals=<fnv64 hex> rt=<ok|diff> k256=<sha256 hex>
 //!     block refused=<code> col=<column|->
 //!   block_read --schemas                        -- schema <name> k64=<hex> <string>
+//!   block_read --kernel <file>... | @<list>     -- LV-COL-E: `block::kernels::line` per block
 //!
 //! `vals` is FNV-1a 64 over the DECODED columns in schema order: per column its element
 //! count, then every element, each as 8 little-endian bytes (u32 and byte columns
@@ -83,6 +84,8 @@ fn main() {
         }
         return;
     }
+    let kernel = args.first().map(String::as_str) == Some("--kernel");
+    let args: Vec<String> = if kernel { args[1..].to_vec() } else { args };
     let paths: Vec<String> = match args.first().and_then(|a| a.strip_prefix('@')) {
         Some(list) => std::fs::read_to_string(list).unwrap_or_else(|e| panic!("list {list}: {e}")).lines().map(String::from).collect(),
         None => args,
@@ -93,6 +96,7 @@ fn main() {
     }
     for p in paths {
         match std::fs::read(&p) {
+            Ok(b) if kernel => println!("{}", dowiz_hub::block::kernels::line(&b)),
             Ok(b) => println!("{}", line(&b)),
             Err(e) => println!("block unreadable={e}"),
         }

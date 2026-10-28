@@ -14,10 +14,21 @@
 //!   bw_tab_items(image, out)                       -> 0 ; answer = `[["item", on_hand], ...]`
 //!
 //! An empty image (`len == 0`) is a tablet that never synced: a fresh one.
+//!
+//! S2b, THE ORDER RAIL (`dowiz_hub::glue::orders::Rail`, JSON in and out; empty = a fresh rail):
+//!
+//!   bw_tab_order(rail, order, next, at_ms, out)  -> 0 queued | 2 nothing to do (seen already)
+//!                                                   | 46 the order machine refused ; answer = rail
+//!   bw_tab_order_rail(rail, orders, sent, out)   -> 0 ; answer = rail (the hub's `orders` from
+//!                                                   `GET /api/staff/kitchen`, `sent` taps dropped)
+//!   bw_tab_order_tail(rail, ctx, out)            -> 0 ; answer = `{"ctx","tail":[op line, ..]}`
+//!
+//! `next` empty is the kitchen ack; otherwise one of the four bumps (`orders::NEXT`).
 
 use crate::abi::NULL_ARG;
 use dowiz_hub::crypto::{hex, unhex};
 use dowiz_hub::glue::merge::Entry;
+use dowiz_hub::glue::orders::Rail;
 use dowiz_hub::glue::tablet::{self, TabErr};
 use serde_json::{json, Value};
 
@@ -36,6 +47,10 @@ pub const BASE: i32 = 43;
 pub const REPLY: i32 = 44;
 /// An argument that is not what it should be (a hex id, the reply's JSON).
 pub const BAD_INPUT: i32 = 45;
+/// S2b: a tap with nothing to do (the ticket was seen already); success, nothing queued.
+pub const NOTHING: i32 = 2;
+/// S2b: the order machine (or the rail) refused the tap; nothing queued.
+pub const ORDER: i32 = 46;
 
 fn status_of(e: &TabErr) -> (i32, String) {
     match e {
@@ -84,6 +99,41 @@ pub fn rebase_json(image: &[u8], base_hex: &str, from_zero: bool, sent: usize, r
 pub fn items_json(image: &[u8]) -> Result<String, (i32, String)> {
     let v = tablet::items(image).map_err(|e| status_of(&e))?;
     Ok(json!(v).to_string())
+}
+
+fn rail_of(rail: &str) -> Result<Rail, (i32, String)> {
+    if rail.trim().is_empty() {
+        return Ok(Rail::default());
+    }
+    serde_json::from_str(rail).map_err(|e| (BAD_INPUT, format!("the rail: {e}")))
+}
+
+fn rail_text(r: &Rail) -> String {
+    serde_json::to_string(r).unwrap_or_default()
+}
+
+/// ORDER: one tap on the rail, decided by the order machine; the new rail and `OK` / `NOTHING`.
+pub fn order_json(rail: &str, order: &str, next: &str, at_ms: i64) -> Result<(String, i32), (i32, String)> {
+    let mut r = rail_of(rail)?;
+    let next = (!next.trim().is_empty()).then_some(next.trim());
+    match r.record(order, next, at_ms) {
+        Ok(Some(_)) => Ok((rail_text(&r), OK)),
+        Ok(None) => Ok((rail_text(&r), NOTHING)),
+        Err(e) => Err((ORDER, e.words())),
+    }
+}
+
+/// ORDER RAIL: the hub's tickets as read, the first `sent` taps dropped, the rest laid over.
+pub fn order_rail_json(rail: &str, orders: &str, sent: usize) -> Result<String, (i32, String)> {
+    let mut r = rail_of(rail)?;
+    let v: Value = serde_json::from_str(orders).map_err(|e| (BAD_INPUT, format!("the orders: {e}")))?;
+    r.refresh(Rail::tickets_of(&v), sent);
+    Ok(rail_text(&r))
+}
+
+/// ORDER TAIL: the request body for `POST /api/staff/orders/glue`, without the venue.
+pub fn order_tail_json(rail: &str, ctx: &str) -> Result<String, (i32, String)> {
+    Ok(json!({"ctx": ctx, "tail": rail_of(rail)?.queue}).to_string())
 }
 
 /// `ptr..ptr+len` as a slice; an empty one may be null.
@@ -153,4 +203,37 @@ pub unsafe extern "C" fn bw_tab_items(img: *const u8, img_len: usize, out: *mut 
         return NULL_ARG;
     }
     give(out, items_json(i).map(|s| (s.into_bytes(), OK)))
+}
+
+/// # Safety
+/// As `bw_tab_record`.
+#[no_mangle]
+pub unsafe extern "C" fn bw_tab_order(rail: *const u8, rail_len: usize, order: *const u8, order_len: usize, next: *const u8, next_len: usize, at_ms: i64, out: *mut usize) -> i32 {
+    let (Some(r), Some(o), Some(n)) = (text(rail, rail_len), text(order, order_len), text(next, next_len)) else { return NULL_ARG };
+    if out.is_null() {
+        return NULL_ARG;
+    }
+    give(out, order_json(r, o, n, at_ms).map(|(s, st)| (s.into_bytes(), st)))
+}
+
+/// # Safety
+/// As `bw_tab_record`.
+#[no_mangle]
+pub unsafe extern "C" fn bw_tab_order_rail(rail: *const u8, rail_len: usize, orders: *const u8, orders_len: usize, sent: usize, out: *mut usize) -> i32 {
+    let (Some(r), Some(o)) = (text(rail, rail_len), text(orders, orders_len)) else { return NULL_ARG };
+    if out.is_null() {
+        return NULL_ARG;
+    }
+    give(out, order_rail_json(r, o, sent).map(|s| (s.into_bytes(), OK)))
+}
+
+/// # Safety
+/// As `bw_tab_record`.
+#[no_mangle]
+pub unsafe extern "C" fn bw_tab_order_tail(rail: *const u8, rail_len: usize, ctx: *const u8, ctx_len: usize, out: *mut usize) -> i32 {
+    let (Some(r), Some(c)) = (text(rail, rail_len), text(ctx, ctx_len)) else { return NULL_ARG };
+    if out.is_null() {
+        return NULL_ARG;
+    }
+    give(out, order_tail_json(r, c).map(|s| (s.into_bytes(), OK)))
 }

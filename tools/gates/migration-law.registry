@@ -23,3 +23,4 @@ block.bom          1 bom:v1(dish_ptr:u32rp:0,supply:u32:0,qty:i64:0)  block::tes
 block.stock_levels 1 stock_levels:v1(supply:i64:0,qty:i64:0,gen:i64:7)  block::tests::roundtrip_bom
 block.names        1 names:v1(id:i64:0,bytes:u8:0,off:u32off:0)  block::tests::roundtrip_bom
 block.taste        1 taste:v1(dish:i64:0,ids:u8:0,ids_off:u32off:0,sweet:i64:0,sour:i64:0,salty:i64:0,bitter:i64:0,umami:i64:0,spicy:i64:0,tex_lo:i64:0,tex_hi:i64:0,aro_lo:i64:0,aro_hi:i64:0,allergens:i64:0,flags:i64:0)  block::taste::tests::the_taste_block_round_trips_and_is_pinned
+block.sales        1 sales:v1(day:i32:0,dish:i64:0,qty:i32:0,gross:i64:1,cqty:i32:0,cgross:i64:1,cost:i64:1)  block::kernels::tests::sales_block_round_trips

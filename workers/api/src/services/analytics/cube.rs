@@ -278,6 +278,10 @@ impl Cube {
     }
 }
 
+/// LV-COL-E: the same orders as `sales` fact rows (`dowiz_hub::block::kernels`).
+#[path = "cube/sales.rs"]
+pub mod sales;
+
 #[cfg(test)]
 #[path = "cube/tests.rs"]
 mod tests;

@@ -195,3 +195,83 @@ fn cpu_of_a_year_read() {
     assert_eq!(v["orders"], 365 * 120);
     assert!(all.as_millis() < 2_000, "a year's read took {all:?}");
 }
+
+/// LV-COL-E: food cost is cost over the SAME lines' sales; an unstamped line is counted apart.
+#[test]
+fn food_cost_is_cost_over_the_costed_lines_sales() {
+    use dowiz_hub::block::kernels::sales_block;
+    let os = vec![
+        ("a".to_string(), json!({ "created_at_ms": NOON, "status": "DELIVERED", "items": [{ "product_id": "sake", "quantity": 2, "unit_price": 450, "unit_cost": 120 }] })),
+        ("b".to_string(), json!({ "created_at_ms": NOON, "status": "DELIVERED", "items": [{ "product_id": "sake", "quantity": 1, "unit_price": 600 }] })),
+        ("c".to_string(), json!({ "created_at_ms": NOON, "status": "REJECTED", "items": [{ "product_id": "maki", "quantity": 1, "unit_price": 900, "unit_cost": 1 }] })),
+    ];
+    let rows = cube::sales::sale_rows(&os, tirane(), NOON);
+    let names: BTreeMap<i64, String> = rows.iter().map(|(s, id)| (s.dish, id.clone())).collect();
+    // The day as the image stores it: ONE row for sake, a stamped line and an unstamped one summed.
+    let day = dowiz_hub::block::kernels::aggregate(&rows.iter().map(|(s, _)| *s).collect::<Vec<_>>()).unwrap();
+    assert_eq!(day.len(), 1);
+    let v = food_cost::food_cost(&[sales_block(&day)], &names, &no_name).unwrap();
+    assert_eq!((v["cost"].as_i64(), v["sales"].as_i64(), v["costPm"].as_i64(), v["unstampedSales"].as_i64()), (Some(240), Some(900), Some(266), Some(600)), "{v}");
+    assert_eq!(v["dishes"][0]["id"], "sake");
+    assert_eq!(v["dishes"].as_array().map(Vec::len), Some(1), "a refused order's line is no dish");
+    assert!(food_cost::food_cost(&[sales_block(&[rows[0].0])], &BTreeMap::new(), &no_name).is_err(), "a dish with no name is an error");
+}
+
+/// AC-LV-COL-05, MEASURED: a year's scan of the sales image (365 days x 90 lines over 40 dishes,
+/// summed to 365 day blocks of one row per dish = 14,600 rows: check every block, decode the span's,
+/// fold dishes by the kernels) beside the CONTROL --
+/// the cube image's JSON range parse of the same 365 days' dish maps -- in the same process.
+/// `cargo test --release --lib year_scan -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn year_scan_us() {
+    use dowiz_hub::block::kernels::{pack::{days_in, Pack}, sales_of, Sale};
+    let mut pack = Pack::default();
+    let mut c = cube::Cube::default();
+    let mut parts = BTreeMap::new();
+    let first = dowiz_hub::stock::meta::day_number(20251001);
+    let mut rows: Vec<(Sale, String)> = Vec::new();
+    for k in 0..365 {
+        let d = dowiz_hub::stock::meta::day_of_number(first + k);
+        let mut r = cube::DayCube::new(d);
+        for i in 0..90i64 {
+            let id = format!("dish-{:03}", (k * 7 + i) % 40);
+            let (q, g) = (1 + i % 3, 450 * (1 + i % 3));
+            let (cq, cg) = if i % 4 == 0 { (0, 0) } else { (q, g) };
+            let e = r.m.entry(id.clone()).or_default();
+            e[0] += q;
+            e[1] += g;
+            e[2] += cq;
+            e[3] += cg / 3;
+            let sale = Sale { day: d as i32, dish: dowiz_hub::block::schema::k64(id.as_bytes()) as i64, qty: q as i32, gross: g, cqty: cq as i32, cgross: cg, cost: cg / 3 };
+            rows.push((sale, id));
+        }
+        parts.insert(d, r);
+    }
+    pack.absorb("log@1", &rows).unwrap();
+    c.absorb("log@1", parts);
+    let (img, json) = (pack.encode().unwrap(), c.encode());
+    let t0 = std::time::Instant::now();
+    let blocks = days_in(&img, 20251001, 20260930).unwrap();
+    let read = t0.elapsed();
+    let all: Vec<Sale> = blocks.iter().flat_map(|b| sales_of(b).unwrap()).collect();
+    let dishes = cube::sales::dishes_of(&all, &pack.dishes).unwrap();
+    let fold = t0.elapsed();
+    let fc = food_cost::food_cost(&blocks, &pack.dishes, &no_name).unwrap();
+    let scan = t0.elapsed();
+    let t1 = std::time::Instant::now();
+    let cold = cube::Cube::decode_range(&json, 20251001, 20260930).unwrap();
+    let mut m: BTreeMap<String, [i64; 4]> = BTreeMap::new();
+    for r in cold.rows.values() {
+        for (id, v) in &r.m {
+            let e = m.entry(id.clone()).or_default();
+            for i in 0..4 {
+                e[i] += v[i];
+            }
+        }
+    }
+    let control = t1.elapsed();
+    assert_eq!(dishes, m, "the blocks and the JSON cube say the same year");
+    assert_eq!((rows.len(), all.len()), (32_850, 14_600));
+    println!("YEAR-SCAN rows={} blocks={} image={}B year_scan_us={} (check+decode {} + dishes {} + food cost {}) foodcost_dishes={} | control json={}B json_range_us={}", all.len(), blocks.len(), img.len(), scan.as_micros(), read.as_micros(), (fold - read).as_micros(), (scan - fold).as_micros(), fc["dishes"].as_array().map_or(0, Vec::len), json.len(), control.as_micros());
+}

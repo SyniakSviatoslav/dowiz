@@ -34,3 +34,4 @@ import Bebop.Stock
 import Bebop.ZSet
 import Bebop.Merkle
 import Bebop.Sync
+import Bebop.DatalogZ

@@ -5,7 +5,7 @@
 //! superblock cell 5  PROJTAB   (0 = no table; every image before DG5 reads 0 here)
 //! PROJTAB  [m, (key64, ref PROJ, kind) x m]          sorted by key64
 //! PROJ     [key64, kind, code, fmt, input_gen, tip0, tip1, ref OUT, fn_key]    9 cells
-//! OUT      [value, count]
+//! OUT      [value, count]                                     kinds 1/2; kinds 3/4: proj/kinds.rs
 //! ```
 //! A PROJ lives in the SAME image as its input, reached only through the table: an image
 //! rebuilt from its records (`dowiz_hub::Hub::redact`) carries no memo, which -- not the
@@ -41,7 +41,6 @@ pub const DIGEST_PROJTAB: i64 = 2699843079;
 pub const DIGEST_PROJ: i64 = 313398166;
 pub const DIGEST_OUT: i64 = 514297014;
 const PROJ_CELLS: i64 = 9;
-const OUT_CELLS: i64 = 2;
 
 /// How a read was answered. `Refold(why)` = a memo existed and was refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,7 +141,7 @@ fn lookup_why<C: Cells + ?Sized>(c: &C, key: i64) -> Result<Proj, &'static str> 
         return Err("crc");
     }
     let out = follow_in(c, at, 7).ok_or("crc")?;
-    if !ok(out, DIGEST_OUT, OUT_CELLS) {
+    if !kinds::out_ok(c, get_in(c, at, 1), out) {
         return Err("crc");
     }
     let g = |i| get_in(c, at, i);
@@ -164,7 +163,10 @@ fn lookup_why<C: Cells + ?Sized>(c: &C, key: i64) -> Result<Proj, &'static str> 
 fn input_state<C: Cells + ?Sized>(c: &C, kind: i64) -> Option<(i64, [i64; 2])> {
     let root = root_in(c)?;
     let h1 = c.cell_at(root + 1);
-    let tip = if kind == KIND_LOG {
+    if kind == KIND_ZSET {
+        return Some((h1 & 0xFFFF_FFFF, kinds::kv_tip(c, root)?));
+    }
+    let tip = if kind == KIND_LOG || kind == KIND_BLOB {
         match follow_in(c, root, 1) {
             Some(last) => [get_in(c, last, 3), get_in(c, last, 4)],
             None => [0, 0],
@@ -214,7 +216,7 @@ pub fn eval_log(st: &mut Store, code: i64, fn_key: i64) -> Result<(i64, How), St
             }
         }
     };
-    put(st, key, KIND_LOG, code, gen, tip, value, count, fn_key)?;
+    write::put(st, key, KIND_LOG, code, gen, tip, fn_key, Out::Pair(value, count))?;
     Ok((value, how))
 }
 
@@ -243,56 +245,16 @@ pub fn eval_kv(st: &mut Store, code: i64, fn_key: i64) -> Result<(i64, How), Sto
     };
     let value = value.ok_or(StoreError::Corrupt("the KV root does not load"))?;
     let n = Kv::load(st).map_or(0, |kv| kv.entries.len() as i64);
-    put(st, key, KIND_KV, code, gen, tip, value, n, fn_key)?;
+    write::put(st, key, KIND_KV, code, gen, tip, fn_key, Out::Pair(value, n))?;
     Ok((value, how))
 }
 
-/// Write the memo: OUT, PROJ, and a new sorted table, in ONE commit that keeps the data root.
-#[allow(clippy::too_many_arguments)]
-fn put(st: &mut Store, key: i64, kind: i64, code: i64, gen: i64, tip: [i64; 2], value: i64, count: i64, fn_key: i64) -> Result<(), StoreError> {
-    let root = root_in(st).ok_or(StoreError::NoSuperblock)?;
-    let old = projtab(st);
-    let mut rows: Vec<(i64, usize, i64)> = Vec::new();
-    if let Some(t) = old {
-        let m = st.get(t, 0).max(0) as usize;
-        for i in 0..m.min(st.obj_cells(t).saturating_sub(1) / 3) {
-            let k = st.get(t, 1 + 3 * i);
-            if let Some(p) = st.follow(t, 2 + 3 * i) {
-                // A row of the same fn and kind under another code is a previous deploy's.
-                let same = st.get(p, 8) == fn_key && st.get(p, 1) == kind;
-                if k != key && !same {
-                    rows.push((k, p, st.get(t, 3 + 3 * i)));
-                }
-            }
-        }
-    }
-    let mut tx = st.begin()?;
-    let out = st.alloc(&mut tx, OUT_CELLS, DIGEST_OUT)?;
-    st.put_cell(out, 0, value);
-    st.put_cell(out, 1, count);
-    st.seal(out);
-    let p = st.alloc(&mut tx, PROJ_CELLS, DIGEST_PROJ)?;
-    for (i, v) in [key, kind, code, FMT, gen, tip[0], tip[1], 0, fn_key].into_iter().enumerate() {
-        st.put_cell(p, i, v);
-    }
-    st.link(p, 7, out);
-    st.seal(p);
-    rows.push((key, p, kind));
-    rows.sort_by_key(|r| r.0);
-    let t = st.alloc(&mut tx, 1 + 3 * rows.len() as i64, DIGEST_PROJTAB)?;
-    st.put_cell(t, 0, rows.len() as i64);
-    for (i, &(k, at, kd)) in rows.iter().enumerate() {
-        st.put_cell(t, 1 + 3 * i, k);
-        st.link(t, 2 + 3 * i, at);
-        st.put_cell(t, 3 + 3 * i, kd);
-    }
-    st.seal(t);
-    if let Some(ot) = old {
-        tx.sup_delta += 2 + st.obj_len(ot);
-    }
-    st.commit_bytes_projtab(&tx, root, t as i64);
-    Ok(())
-}
+/// The writer, for every kind.
+mod write;
+use write::Out;
+/// Kinds 3 (BLOB) and 4 (ZSET), LV-INC-A.
+pub mod kinds;
+pub use kinds::{eval_blob, eval_zset, BlobFold, Identity, LogSummary, ZLinear, KIND_BLOB, KIND_ZSET};
 
 #[cfg(test)]
 mod tests;

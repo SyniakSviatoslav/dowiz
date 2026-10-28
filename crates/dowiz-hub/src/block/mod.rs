@@ -21,6 +21,8 @@
 
 pub mod decode;
 pub mod encode;
+/// LV-COL-E (R-BEBOP-LEVERS §5.4): the `sales` fact block, its four scalar kernels and the image.
+pub mod kernels;
 pub mod schema;
 /// W-TASTE: the dishes' sense as integer columns (`schema::TASTE`) and an exact top-k over them.
 pub mod taste;

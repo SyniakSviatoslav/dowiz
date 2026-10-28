@@ -1,0 +1,377 @@
+use "selfhost/std/dl_eval.bp"
+// selfhost/std/dl_del.bp -- deletion-aware incremental Datalog (AX1 + AX14, LV-INC-F; AX plan A1,
+// docs/research/2026-10-02-ax-implementation-plan.md; R-BEBOP-LEVERS-2026-10-27 §2.4). Library only.
+// dl_eval.bp `use`s this file and routes every stratum of an event here (dl_inc_s) unless db[30] = 1
+// (the LEGACY control: the pre-AX1 paths, kept for the same-process baseline of dl_event_del_ns).
+//
+// WEIGHTS (AX14: DBSP Z-sets, arXiv 2203.16684). Every IDB predicate of a NON-RECURSIVE, SIMPLE stratum
+// (no negated atom, no predicate twice in a rule: dl_s_simple) keeps a weight per row = its number of
+// derivations, in the CNT region dl.bp lays out after the variant table: db[29] = a directory of 3 cells
+// per predicate {offset, n, state 0 unknown | 1 counted | 2 not counted}, each region `cap` rows of 5
+// cells (row[4], weight), sorted by row, zero weights absent. dl_leaf calls dl_cnt_leaf on EVERY
+// derivation it reaches in collect mode: +1, or -1 while a cand walk reads DELETED rows (db[28] = 1).
+// A weight that would go below zero is trap 125 (loud: a wrong count would hide a row forever).
+// Invariant (dl_same checks it against a from-scratch database): row in F <-> weight > 0.
+//
+// COUNTING (non-recursive strata, Gupta-Mumick-Subrahmanian 1993): with ONE dirty input predicate the
+// cand walk's ins pass is exactly the new derivations and its del pass exactly the lost ones, so a head
+// is re-decided by its weight (dl_recheck sure = 3) -- no backward re-derivation (dl_exists). Two or more
+// dirty inputs: the stratum is recomputed (its weights recounted from scratch by the cold pass).
+//
+// DRed (recursive strata without negation; Hu-Motik-Horrocks, arXiv 1711.03987): over-delete every row
+// derivable through a deleted row (semi-naive over the deletions, the snapshot region d+20 holds the
+// over-deleted set D), cut D out of F, re-derive the rows of D that still have a derivation, then one
+// semi-naive insertion pass seeded with them and with the inputs' inserted rows. Only rows of D that
+// did not come back are noted deleted; only rows outside D are noted inserted -- the notes are EXACT
+// deltas, which the counted strata above require. O(affected), where dl_recompute_s was O(stratum).
+
+// ---- the weight store -------------------------------------------------------------------------------
+// dl_cnt_lay: the directory at `at` and one region of 5 * caps[p] cells per predicate; returns the end.
+fn dl_cnt_lay(db: [i64], P: i64, caps: [i64], at: i64) -> i64 {
+  let _ = db[29] = at;
+  let off = at + 3 * P;
+  let p = 0;
+  while p < P {
+    let _ = db[at + 3 * p] = off;
+    let _ = db[at + 3 * p + 1] = 0;
+    let _ = db[at + 3 * p + 2] = 0;
+    let off = off + 5 * caps[p];
+    let p = p + 1;
+    0
+  };
+  off
+}
+fn dl_cnt_clear(db: [i64], p: i64) -> i64 {
+  let _ = if db[29] != 0 then (let _ = db[db[29] + 3 * p + 1] = 0 in 0) else 0;
+  0
+}
+// dl_cnt_on: 1 when p's rows carry weights (an IDB predicate of a non-recursive simple stratum).
+fn dl_cnt_on(R: [i64], db: [i64], p: i64) -> i64 {
+  let _ = if db[29] == 0 then return 0 else 0;
+  let e = db[29] + 3 * p + 2;
+  let s = dl_pa(R, p, 2);
+  let on = if db[e] == 0 then dl_isidb(R, p) * (1 - dl_srec(R, s)) * dl_s_simple(R, s) else 0;
+  let _ = if db[e] == 0 then (let _ = db[e] = 2 - on in 0) else 0;
+  if db[e] == 1 then 1 else 0
+}
+// dl_cnt_find: first index in [0, n) of the region at off whose row is >= the row at db[key].
+fn dl_cnt_find(db: [i64], off: i64, n: i64, key: i64) -> i64 {
+  let lo = 0;
+  let hi = n;
+  while lo < hi {
+    let mid = (lo + hi) / 2;
+    let x = db[off + 5 * mid];
+    let c = if x < db[key] then 0 - 1 else (if x > db[key] then 1 else dl_cmpk(db, off + 5 * mid, key, 4));
+    let lo = if c < 0 then mid + 1 else lo;
+    let hi = if c < 0 then hi else mid;
+    0
+  };
+  lo
+}
+// dl_cnt_w: the weight of the row at db[key] in p's region (0 = absent).
+fn dl_cnt_w(db: [i64], p: i64, key: i64) -> i64 {
+  let e = db[29] + 3 * p;
+  let off = db[e];
+  let n = db[e + 1];
+  let i = dl_cnt_find(db, off, n, key);
+  if i < n then (if dl_cmpk(db, off + 5 * i, key, 4) == 0 then db[off + 5 * i + 4] else 0) else 0
+}
+fn dl_cnt_pos(db: [i64], p: i64, key: i64) -> i64 { if dl_cnt_w(db, p, key) > 0 then 1 else 0 }
+// dl_cnt_add: weight(row) += w; a zero weight leaves the region, a negative one is trap 125.
+fn dl_cnt_add(R: [i64], db: [i64], p: i64, key: i64, w: i64) -> i64 {
+  let e = db[29] + 3 * p;
+  let off = db[e];
+  let n = db[e + 1];
+  let i = dl_cnt_find(db, off, n, key);
+  let has = if i < n then (if dl_cmpk(db, off + 5 * i, key, 4) == 0 then 1 else 0) else 0;
+  let nw = w + (if has == 1 then db[off + 5 * i + 4] else 0);
+  let _ = if nw < 0 then dl_trap_weight(p) else 0;
+  let _ = if has * nw != 0 then (let _ = db[off + 5 * i + 4] = nw in 0) else 0;
+  let _ = if has == 1 then (if nw == 0 then dl_cnt_shift(db, off, i, n, 0 - 1) else 0) else 0;
+  let _ = if has == 1 then (if nw == 0 then (let _ = db[e + 1] = n - 1 in 0) else 0) else 0;
+  let _ = if has == 1 then return nw else 0;
+  let cap = db[dl_d(db, p) + 1];
+  let _ = if n >= cap then dl_trap_bound() else 0;
+  let _ = dl_cnt_shift(db, off, i, n, 1);
+  let _ = dl_cp4(db, off + 5 * i, key);
+  let _ = db[off + 5 * i + 4] = nw;
+  let _ = db[e + 1] = n + 1;
+  nw
+}
+// dl_cnt_shift: dir 1 opens slot i (rows i..n-1 move up one), dir -1 closes it.
+fn dl_cnt_shift(db: [i64], off: i64, i: i64, n: i64, dir: i64) -> i64 {
+  let _ = if dir == 1 then dl_cnt_up(db, off, 5 * n - 1, 5 * i) else 0;
+  let j = 5 * i;
+  let lim = if dir == 1 then j else 5 * (n - 1);
+  while j < lim {
+    let _ = db[off + j] = db[off + j + 5];
+    let j = j + 1;
+    0
+  };
+  0
+}
+fn dl_cnt_up(db: [i64], off: i64, j0: i64, lo: i64) -> i64 {
+  let j = j0;
+  while j >= lo {
+    let _ = db[off + j + 5] = db[off + j];
+    let j = j - 1;
+    0
+  };
+  0
+}
+fn dl_trap_weight(p: i64) -> i64 {
+  let o = zeros(80);
+  let q = dl_puts(o, 0, "trap 125: datalog negative weight -- predicate ");
+  let q = dl_putn(o, q, p);
+  dl_die(o, q)
+}
+// dl_cnt_leaf (dl_leaf, collect mode): one derivation of the row at db[T] for predicate h. Returns 1 when
+// the weight stayed positive (before and after): the head's presence cannot have changed, so dl_leaf
+// files it nowhere -- only a weight that crossed zero makes a candidate (exact, and the hot-path saving).
+fn dl_cnt_leaf(R: [i64], db: [i64], h: i64, T: i64) -> i64 {
+  let st = db[db[29] + 3 * h + 2];
+  let on = if st == 1 then 1 else (if st == 2 then 0 else dl_cnt_on(R, db, h));
+  let _ = if on * (1 - db[30]) == 0 then return 0 else 0;
+  let w = if db[12] == 1 then 1 - 2 * db[28] else 1;
+  let nw = dl_cnt_add(R, db, h, T, w);
+  if nw > 0 then (if nw - w > 0 then 1 else 0) else 0
+}
+// dl_cnt_same (dl_same): p's weights are identical in two databases (1 when either does not count).
+fn dl_cnt_same(a: [i64], b: [i64], p: i64) -> i64 {
+  let _ = if a[29] * b[29] == 0 then return 1 else 0;
+  let _ = if a[30] + b[30] != 0 then return 1 else 0;
+  let ea = a[29] + 3 * p;
+  let eb = b[29] + 3 * p;
+  let n = a[ea + 1];
+  let _ = if n != b[eb + 1] then return 0 else 0;
+  let ok = 1;
+  let i = 0;
+  while i < 5 * n {
+    let ok = if a[a[ea] + i] == b[b[eb] + i] then ok else 0;
+    let i = i + 1;
+    0
+  };
+  ok
+}
+
+// ---- routing ------------------------------------------------------------------------------------------
+// dl_del_inc_s: dl_eval.bp's dl_inc_s, with the counted and DRed paths.
+fn dl_del_inc_s(R: [i64], db: [i64], s: i64) -> i64 {
+  let fast = db[26];
+  let st0 = if fast == 1 then 1 else dl_s_state(R, db, s);
+  let _ = if st0 == 0 then return 0 else 0;
+  let rec = if fast == 1 then db[48 + s] & 1 else dl_srec(R, s);
+  let _ = if rec == 0 then return dl_del_nonrec(R, db, s) else 0;
+  let st = dl_s_state(R, db, s);
+  let _ = if st == 0 then return 0 else 0;
+  let _ = if st == 1 then return dl_cont_s(R, db, s) else 0;
+  if dl_dr_ok(R, s) == 1 then dl_dred_s(R, db, s) else dl_recompute_s(R, db, s)
+}
+// dl_del_nonrec: counted strata re-decide each candidate head by its weight (one dirty input), else
+// recompute (which recounts); uncounted strata keep dl_inc_nonrec.
+fn dl_del_nonrec(R: [i64], db: [i64], s: i64) -> i64 {
+  let p = if db[26] == 1 then (db[48 + s] >> 2) - 1 else dl_s_pred(R, s);
+  let _ = if dl_cnt_on(R, db, p) == 0 then return dl_inc_nonrec(R, db, s) else 0;
+  let x = if db[26] == 1 then db[32 + s] & db[25] else 0;
+  let one = if x != 0 then (if (x & (x - 1)) == 0 then 1 else 0) else 0;
+  let _ = if one == 0 then return dl_recompute_s(R, db, s) else 0;
+  let d = dl_d(db, p);
+  let _ = db[d + 15] = 0;
+  let _ = db[d + 13] = 0;
+  let r = 0;
+  while r < R[1] {
+    let _ = if R[R[4] + 8 * r] == p then dl_cand_rule(R, db, r) else 0;
+    let r = r + 1;
+    0
+  };
+  let i = 0;
+  while i < db[d + 15] {
+    let _ = dl_recheck(R, db, p, db[d + 14] + 4 * i, 3);
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < db[d + 13] {
+    let _ = dl_recheck(R, db, p, db[d + 12] + 4 * i, 3);
+    let i = i + 1;
+    0
+  };
+  let _ = db[d + 15] = 0;
+  let _ = db[d + 13] = 0;
+  0
+}
+// dl_dr_ok: 1 when no rule of stratum s has a negated atom (DRed's precondition here).
+fn dl_dr_ok(R: [i64], s: i64) -> i64 {
+  let ok = 1;
+  let r = 0;
+  while r < R[1] {
+    let a0 = dl_ra(R, r, 6);
+    let j = 0;
+    while j < (if dl_hs(R, r) == s then dl_ra(R, r, 7) else 0) {
+      let ok = ok * (1 - dl_aa(R, a0 + j, 1));
+      let j = j + 1;
+      0
+    };
+    let r = r + 1;
+    0
+  };
+  ok
+}
+
+// ---- DRed -----------------------------------------------------------------------------------------------
+fn dl_dred_s(R: [i64], db: [i64], s: i64) -> i64 {
+  let _ = dl_dr_each(R, db, s, 0);
+  let r = 0;
+  while r < R[1] {
+    let _ = if dl_hs(R, r) == s then dl_cand_rule(R, db, r) else 0;
+    let r = r + 1;
+    0
+  };
+  let _ = dl_dr_each(R, db, s, 1);
+  let _ = db[13] = 0;
+  let go = 1;
+  while go == 1 {
+    let go = if dl_dr_each(R, db, s, 2) > 0 then 1 else 0;
+    let _ = if go == 1 then dl_dr_round(R, db, s) else 0;
+    0
+  };
+  let _ = dl_dr_each(R, db, s, 3);
+  let _ = dl_dr_each(R, db, s, 4);
+  let r = 0;
+  while r < R[1] {
+    let _ = if dl_hs(R, r) == s then dl_cont_rule(R, db, s, r) else 0;
+    let r = r + 1;
+    0
+  };
+  let _ = db[13] = 0;
+  let go = 1;
+  while go == 1 {
+    let go = if dl_dr_each(R, db, s, 5) > 0 then 1 else 0;
+    let _ = if go == 1 then dl_round(R, db, s) else 0;
+    0
+  };
+  dl_dr_each(R, db, s, 6)
+}
+// dl_dr_each: one DRed step over every predicate of stratum s; returns the rows it moved.
+//   0 clear: new, delta and D empty      1 seed: the del-pass candidates (delta) become the frontier source
+//   2 take: new rows in F and not yet in D -> D and the frontier (delta)    3 cut: D out of F
+//   4 rederive: D rows with a derivation in the cut F -> new    5 promote: new -> F (noted unless in D)
+//   6 settle: D rows not back in F are noted deleted (db[21] = 1, the mutation: put back, not noted)
+fn dl_dr_each(R: [i64], db: [i64], s: i64, step: i64) -> i64 {
+  let moved = 0;
+  let p = 0;
+  while p < R[2] {
+    let moved = moved + (if dl_ins_s(R, s, p) == 1 then dl_dr_one(R, db, p, step) else 0);
+    let p = p + 1;
+    0
+  };
+  moved
+}
+fn dl_dr_one(R: [i64], db: [i64], p: i64, step: i64) -> i64 {
+  let d = dl_d(db, p);
+  let _ = if step == 0 then (let _ = db[d + 13] = 0 in let _ = db[d + 15] = 0 in let _ = db[d + 21] = 0 in 0) else 0;
+  let _ = if step == 1 then dl_dr_seed(db, d) else 0;
+  let _ = if step == 2 then return dl_dr_take(db, p, d) else 0;
+  let _ = if step == 5 then return dl_dr_promote(db, p, d) else 0;
+  let n = if step >= 3 then db[d + 21] else 0;
+  let i = 0;
+  while i < n {
+    let row = db[d + 20] + 4 * i;
+    let _ = if step == 3 then dl_rdel(db, p, row) else 0;
+    let _ = if step == 4 then (if dl_exists(R, db, p, row) == 1 then dl_sins(db, db[d + 14], d + 15, db[d + 1], row) else 0) else 0;
+    let _ = if step == 6 then dl_dr_settle(db, p, row) else 0;
+    let i = i + 1;
+    0
+  };
+  let _ = if step == 6 then (let _ = db[d + 21] = 0 in 0) else 0;
+  0
+}
+fn dl_dr_seed(db: [i64], d: i64) -> i64 {
+  let _ = db[d + 15] = 0;
+  let i = 0;
+  while i < db[d + 13] {
+    let _ = dl_sins(db, db[d + 14], d + 15, db[d + 1], db[d + 12] + 4 * i);
+    let i = i + 1;
+    0
+  };
+  let _ = db[d + 13] = 0;
+  0
+}
+fn dl_dr_take(db: [i64], p: i64, d: i64) -> i64 {
+  let _ = db[d + 13] = 0;
+  let moved = 0;
+  let i = 0;
+  while i < db[d + 15] {
+    let row = db[d + 14] + 4 * i;
+    let fresh = if dl_has(db, p, row) == 1 then (if dl_sfind(db, db[d + 20], db[d + 21], row) < 0 then 1 else 0) else 0;
+    let _ = if fresh == 1 then (let _ = dl_sins(db, db[d + 20], d + 21, db[d + 1], row) in dl_app(db, db[d + 12], d + 13, db[d + 1], row)) else 0;
+    let moved = moved + fresh;
+    let i = i + 1;
+    0
+  };
+  let _ = db[d + 15] = 0;
+  moved
+}
+// dl_dr_round: one over-delete round -- each same-stratum positive atom read from the frontier, every
+// other atom from F (the old F: D is still in it), every head collected unfiltered into new.
+fn dl_dr_round(R: [i64], db: [i64], s: i64) -> i64 {
+  let _ = db[13] = db[13] + 1;
+  let _ = if db[13] > db[14] then dl_trap_bound() else 0;
+  let r = 0;
+  while r < R[1] {
+    let a0 = dl_ra(R, r, 6);
+    let j = 0;
+    while j < (if dl_hs(R, r) == s then dl_ra(R, r, 7) else 0) {
+      let q = dl_aa(R, a0 + j, 0);
+      let d = dl_d(db, q);
+      let go = dl_ins_s(R, s, q) * (1 - dl_aa(R, a0 + j, 1)) * (if db[d + 13] > 0 then 1 else 0);
+      let _ = if go == 1 then dl_dr_walk(R, db, r, j, db[d + 12], db[d + 13]) else 0;
+      let j = j + 1;
+      0
+    };
+    let r = r + 1;
+    0
+  };
+  0
+}
+fn dl_dr_walk(R: [i64], db: [i64], r: i64, j: i64, off: i64, n: i64) -> i64 {
+  let _ = dl_src_all(R, db, r, 0);
+  let _ = dl_src_set(db, j, 1, off, n);
+  let _ = db[12] = 1;
+  let _ = db[28] = 0;
+  let _ = dl_run(R, db, r, j, 0, 0, 0);
+  let _ = db[12] = 0;
+  0
+}
+fn dl_dr_promote(db: [i64], p: i64, d: i64) -> i64 {
+  let nn = db[d + 15];
+  let i = 0;
+  while i < nn {
+    let row = db[d + 14] + 4 * i;
+    let _ = dl_cp4(db, db[d + 12] + 4 * i, row);
+    let _ = dl_rins(db, p, row);
+    let _ = if dl_sfind(db, db[d + 20], db[d + 21], row) < 0 then dl_note(db, p, 0, row) else 0;
+    let i = i + 1;
+    0
+  };
+  let _ = db[d + 13] = nn;
+  let _ = db[d + 15] = 0;
+  nn
+}
+fn dl_dr_settle(db: [i64], p: i64, row: i64) -> i64 {
+  let _ = if dl_has(db, p, row) == 1 then return 0 else 0;
+  if db[21] == 0 then dl_note(db, p, 1, row) else dl_rins(db, p, row)
+}
+// dl_cnt_sum: the total weight of p (its number of derivations; 0 when p is not counted).
+fn dl_cnt_sum(db: [i64], p: i64) -> i64 {
+  let _ = if db[29] == 0 then return 0 else 0;
+  let e = db[29] + 3 * p;
+  let t = 0;
+  let i = 0;
+  while i < db[e + 1] {
+    let t = t + db[db[e] + 5 * i + 4];
+    let i = i + 1;
+    0
+  };
+  t
+}

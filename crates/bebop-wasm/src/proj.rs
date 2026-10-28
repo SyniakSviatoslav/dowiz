@@ -15,6 +15,11 @@
 use crate::{log_view, Refusal};
 use bebop_store::proj::{is_current, lookup, projtab};
 use bebop_store::{get_in, sb_valid_in, Cells, View, SB_A, SB_B};
+/// Kinds 3/4 (LV-INC-A) are compiled only where they are read -- the `proj` module and the native
+/// tests: in the Worker's reader module the extra code moved inlining and cost 131 bytes
+/// (46067 -> 46198, MEASURED against a HEAD control build) for functions nothing there calls.
+#[cfg(any(test, feature = "proj"))]
+use kinds::{blob_view, zset_view};
 
 /// A valid superblock has non-zero cells 13-14 (RT S-1).
 pub const S1_BROKEN: i32 = 7;
@@ -22,6 +27,8 @@ pub const S1_BROKEN: i32 = 7;
 pub const NO_MEMO: i32 = 8;
 /// The memo describes an input that is not the image's any more.
 pub const STALE_MEMO: i32 = 9;
+/// LV-INC-A: a kind 3/4 memo whose value is not the digest of its own OUT (a lying memo).
+pub const BAD_MEMO: i32 = 11;
 
 /// A log image with its memo, read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,10 +59,19 @@ pub fn proj_view(bytes: &[u8]) -> Result<ProjView, i32> {
     if !s1_holds(bytes) {
         return Err(S1_BROKEN);
     }
-    let log = log_view(bytes).map_err(status_of)?;
     let v = View::new(bytes);
-    let t = projtab(&v).ok_or(NO_MEMO)?;
-    let p = lookup(&v, get_in(&v, t, 1)).ok_or(NO_MEMO)?;
+    // LV-INC-A: the first memo's kind decides the input; kind 4's is a KV, not a log.
+    let first = projtab(&v).and_then(|t| lookup(&v, get_in(&v, t, 1)));
+    #[cfg(any(test, feature = "proj"))]
+    if let Some(p) = first.filter(|p| p.kind == bebop_store::proj::KIND_ZSET) {
+        return zset_view(bytes, &v, &p);
+    }
+    let log = log_view(bytes).map_err(status_of)?;
+    let p = first.ok_or(NO_MEMO)?;
+    #[cfg(any(test, feature = "proj"))]
+    if p.kind == bebop_store::proj::KIND_BLOB {
+        return blob_view(bytes, &v, &p);
+    }
     if !is_current(&v, &p) {
         return Err(STALE_MEMO);
     }
@@ -81,3 +97,9 @@ pub unsafe extern "C" fn bw_proj(ptr: *const u8, len: usize, out: *mut i64) -> i
         Err(s) => s,
     }
 }
+
+#[cfg(any(test, feature = "proj"))]
+mod kinds;
+
+#[cfg(test)]
+mod tests;

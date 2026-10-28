@@ -10,6 +10,13 @@
 // holds this tablet's base (the owner reset the shelf): the tablet starts over from the hub's
 // whole log and carries its own records on top, so nothing written here is lost.
 //
+// S2b, THE ORDER RAIL: the same row keeps `rail` -- the open tickets as last read (id, status,
+// seen) and the taps (seen, the four bumps) taken offline, each decided by the order machine in
+// the module (bw_tab_order). One sync sends the taps (POST /api/staff/orders/glue, contract
+// services/operations/orders/glue.rs); the hub's deciders rebase them, and a tap they refuse comes
+// back as a decision on the strip -- never dropped. No guest data is kept: the rail is ids and
+// statuses only.
+//
 // ASCII QUOTES ONLY (DOWIZ-COMMON-RULES rule 11).
 
 export const ZERO = '0'.repeat(64);
@@ -82,18 +89,28 @@ export function surface(instance) {
     rebase(image, base, fromZero, sent, reply) {
       return must(run(ex.bw_tab_rebase, [image, base, fromZero ? 1 : 0, sent, JSON.stringify(reply)])).bytes;
     },
+    /// S2b: one tap on the rail (`next` '' = the ack); answers {rail, queued}. A refusal (46) throws
+    /// with the order machine's words.
+    order(rail, order, next, atMs) {
+      const r = must(run(ex.bw_tab_order, [rail, order, next || '', BigInt(Math.trunc(atMs))]), [0, 2]);
+      return { rail: words(r), queued: r.status === 0 };
+    },
+    /// S2b: the hub's tickets (GET /api/staff/kitchen `orders`) as the rail, `sent` taps dropped.
+    orderRail(rail, orders, sent) { return words(must(run(ex.bw_tab_order_rail, [rail, JSON.stringify(orders || []), sent]))); },
+    /// S2b: the request body (without the venue): {ctx, tail}.
+    orderTail(rail, ctx) { return JSON.parse(words(must(run(ex.bw_tab_order_tail, [rail, ctx])))); },
   };
 }
 
 /// A tablet: `mod` is `surface(...)`, `store` an `idbStore`, `post(path, body)` the room's api.
 export function tablet({ mod, store, post, loc, ctx = 'kitchen', now = () => Date.now() }) {
-  const load = async () => (await store.get()) || { image: new Uint8Array(0), base: ZERO };
+  const load = async () => ({ image: new Uint8Array(0), base: ZERO, rail: '', ...((await store.get()) || {}) });
   return {
     /// Record one movement offline. Answers whether it was a sale past the tablet's rights.
     async record(rec) {
       const s = await load();
       const r = mod.record(s.image, ctx, rec, now());
-      await store.set({ image: r.image, base: s.base });
+      await store.set({ ...s, image: r.image });
       return r.provisional;
     },
     /// The shelf the offline stock sheet steps through (empty before the first sync).
@@ -120,7 +137,38 @@ export function tablet({ mod, store, post, loc, ctx = 'kitchen', now = () => Dat
         fromZero = true; sent = 0;
       }
       const image = mod.rebase(s.image, s.base, fromZero, sent, reply);
-      await store.set({ image, base: reply.tip });
+      await store.set({ ...(await load()), image, base: reply.tip });
+      return reply;
+    },
+    /// S2b: ONE TAP on a ticket, with or without a network: `next` is a bump's status, '' the ack.
+    /// Answers whether it was queued (false: seen already). The rail moves at once.
+    async order(order, next) {
+      const s = await load();
+      const r = mod.order(s.rail, order, next, now());
+      await store.set({ ...s, rail: r.rail });
+      return r.queued;
+    },
+    /// S2b: a fresh board read laid under the queued taps: `orders` is GET /api/staff/kitchen's.
+    async orderRail(orders) {
+      const s = await load();
+      const rail = mod.orderRail(s.rail, orders, 0);
+      await store.set({ ...s, rail });
+      return JSON.parse(rail);
+    },
+    /// S2b: how many taps wait for the next sync.
+    async ordersPending() {
+      const s = await load();
+      return s.rail ? mod.orderTail(s.rail, ctx).tail.length : 0;
+    },
+    /// S2b: ONE SYNC of the taps. Answers the hub's {sent, merged, held, ...}; the sent taps leave
+    /// the queue only after the hub answered (a lost reply resends them, and the hub adopts once).
+    async syncOrders(orders) {
+      const s = await load();
+      const body = s.rail ? mod.orderTail(s.rail, ctx) : { ctx, tail: [] };
+      if (!body.tail.length) return { sent: 0, merged: 0, held: [] };
+      const reply = await post('/staff/orders/glue', { location_id: loc, ...body });
+      const cur = await load();
+      await store.set({ ...cur, rail: mod.orderRail(cur.rail, orders || (cur.rail ? JSON.parse(cur.rail).tickets : []), body.tail.length) });
       return reply;
     },
   };

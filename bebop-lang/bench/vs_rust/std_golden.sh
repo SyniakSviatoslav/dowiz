@@ -151,7 +151,9 @@ gate block_neg 15000 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/block_money_neg.bp ${BEBOP_TMP:-/tmp/opencode}/block_money_neg_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/block_money_neg_test.bin | tail -1)
 gate block_money_neg 8870921012342020174 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/block_schema.bp ${BEBOP_TMP:-/tmp/opencode}/block_schema_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/block_schema_test.bin | tail -1)
-gate block_schema 6618652239314401093 "$r"
+gate block_schema -6556393192159628878 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/block_kernels.bp ${BEBOP_TMP:-/tmp/opencode}/block_kernels_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/block_kernels_test.bin | tail -1)
+gate block_kernels -7076857299235178054 "$r"
 
 # ---- qplan_cover (W-BATGREEN 2026-09-29: every function of selfhost/std/qplan.bp, B7 step 2's planner) ----
 # The golden is bench/oracles/qplan_cover.py's fold, derived from the cost model with a FULL
@@ -769,6 +771,13 @@ rm -f sanchor_b.store
 rm -f sanchor_c.store
 rm -f sanchor_d.store
 
+# LV-INC-A: PROJ kinds 3 (OUTB over the log) and 4 (OUTZ, a Z-set over the KV) read by bebop, and
+# kind 2 over a v3 KV refused (why=5) -- selfhost/prelude/proj.bp; the self-test prints 1351.
+rm -f proj4_self.store
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/proj4.bp ${BEBOP_TMP:-/tmp/opencode}/proj4_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/proj4_test.bin | tail -1)
+gate proj4 1351 "$r"
+rm -f proj4_self.store
+
 # ---- dagc_* (DG4, docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md §2.2-§4.3): the compile-node memo
 # image `<out>.dag` driven through selfhost/prelude/dagc.bp (scaffolding bench/vs_rust/std_tests/lib/
 # dagc_t.bp): hit on the same bytes/context/compiler after a reopen (M-1, K-4), miss on one flipped byte,
@@ -1257,6 +1266,12 @@ r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl
 gate dl_allergen -7194953358355312332 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_allergen_neg.bp ${BEBOP_TMP:-/tmp/opencode}/dl_allergen_neg_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/dl_allergen_neg_test.bin | tail -1)
 gate dl_allergen_neg 1006008001 "$r"
+# LV-INC-F (AX1 + AX14): weighted IDB rows -- counting for non-recursive strata, DRed for recursive ones
+# (selfhost/std/dl_del.bp), and the KV v3 chain as a Z-set into Datalog (selfhost/std/dl_kv.bp).
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dl_allergen_del.bp ${BEBOP_TMP:-/tmp/opencode}/dl_allergen_del_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/dl_allergen_del_test.bin | tail -1)
+gate dl_allergen_del 127126018701800011 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dlkv_gate.bp ${BEBOP_TMP:-/tmp/opencode}/dl_kv_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/dl_kv_test.bin | tail -1)
+gate dl_kv 8294814250507678745 "$r"
 
 # ---- dl_gen (DG8, A.1): selfhost/std/gen_dl.bp writes one program per rule set whose every join is
 # generated code (dl_run -> call_fn -> dlg_walk); each must print its interpreted gate's fold, checked

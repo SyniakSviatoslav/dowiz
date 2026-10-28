@@ -48,6 +48,12 @@ if (f11) FLOWS.push(['F11', 'stock+analytics', async log => {
   if (typeof rc === 'number' && rc !== 0) throw new Fail(`f11-stock.mjs answered ${rc}${rc === 2 ? ' (could not run)' : ' (its FAIL lines above)'}`);
 }]);
 else console.log('F11: e2e/flows/f11-stock.mjs not present -- stock and analytics not run (INFO, not ok)');
+// F12 (S2b, LV-LOC-B): the kitchen tablet's offline order taps, synced and rebased. Same verdict contract as F11.
+const { default: f12 } = await import('./f12-offline-kitchen.mjs');
+FLOWS.push(['F12', 'offline kitchen', async log => {
+  const rc = await f12(await ctx11(), log);
+  if (typeof rc === 'number' && rc !== 0) throw new Fail(`f12-offline-kitchen.mjs answered ${rc}${rc === 2 ? ' (could not run)' : ' (its FAIL lines above)'}`);
+}]);
 FLOWS.push(['F4', 'cleanup', f4]);
 const only = (process.env.FLOWS_ONLY || '').split(',').filter(Boolean);
 const t0 = Date.now();

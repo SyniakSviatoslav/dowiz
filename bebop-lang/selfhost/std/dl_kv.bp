@@ -1,0 +1,298 @@
+use "selfhost/std/dl_fix.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/nodekey.bp"
+// selfhost/std/dl_kv.bp -- EDB deltas FROM THE KV CHAIN (LV-INC-F; R-BEBOP-LEVERS-2026-10-27 §2.4 "Datalog:
+// EDB-дельти = from_kv_chain, спроєктовані на відношення"). Library only. The bebop twin of
+// crates/bebop-store/src/zset.rs `from_kv_chain` (LV-INC-A): a v3 KV image's newest k delta records as a
+// Z-set over KV rows, `put k v` = +(k, v) - (k, old) and `remove k` = -(k, old), where `old` is what the
+// image said just before the record -- the newest OLDER record naming the key (a put: its value; a
+// remove: nothing), else the base. A row is two cells, K64('O' || len8 || key) and K64('O' || len8 ||
+// value) (nodekey.bp, TAG_OBJECT 79); `dlk_digest` is zset.rs `digest`: FNV-1a 64 over the rows in
+// ascending signed order, each as c0 LE8 || c1 LE8 || weight LE8. Rust, bench/oracles/dl_kv.py and this
+// file must agree on crates/bebop-wasm/fixtures/kv3.store for every k in 0..D (std_test dl_kv.bp).
+//
+// Projection onto relations (dlk_apply): a consolidated Z-set is applied to the Datalog EDB as
+// retractions first (weight < 0), then insertions (weight > 0) -- a keyed `put` becomes exactly the
+// A-7 "retraction by key" pair -(k, old) +(k, new). The relation is kv(K, V) over the two K64 cells.
+//
+// The reader trusts the image's shape (a v3 root of 8 cells, records {ref NEXT, OP, KLEN, VLEN, key
+// packed from payload cell 4, value after it}); crc checks are the store readers' job (Kv::load_checked,
+// oracle.py). The chain walk is bounded by D and by the caller's cap.
+
+fn dlk_byte(base: [i64], obj: i64, b: i64) -> i64 { (st_get(base, obj, b >> 3) >> (8 * (b & 7))) & 255 }
+// -1 / 0 / 1: slice (ao, aoff, alen) against (bo, boff, blen), bytes unsigned, shorter first on a tie.
+fn dlk_cmp(base: [i64], ao: i64, aoff: i64, alen: i64, bo: i64, boff: i64, blen: i64) -> i64 {
+  let n = if alen < blen then alen else blen;
+  let j = 0;
+  let r = 0;
+  while j < n {
+    let x = dlk_byte(base, ao, aoff + j);
+    let y = dlk_byte(base, bo, boff + j);
+    let r = if x < y then 0 - 1 else (if x > y then 1 else 0);
+    let j = if r != 0 then n else j + 1;
+    0
+  };
+  if r != 0 then r else (if alen < blen then 0 - 1 else (if alen > blen then 1 else 0))
+}
+// dlk_k64: K64 of the frame 'O' || len8 || the slice's bytes, built one byte per cell in buf.
+fn dlk_k64(base: [i64], obj: i64, off: i64, len: i64, buf: [i64]) -> i64 {
+  let p = kf_u64(buf, key_frame(buf, 79), len);
+  let i = 0;
+  while i < len {
+    let _ = buf[p + i] = dlk_byte(base, obj, off + i);
+    let i = i + 1;
+    0
+  };
+  key64(buf, p + len)
+}
+fn dlk_ref(base: [i64], obj: i64, i: i64) -> i64 { if st_get(base, obj, i) == 0 then 0 else st_ref(base, obj, i) }
+fn dlk_ver(base: [i64], root: i64) -> i64 {
+  if st_len(base, root) < 6 then 1 else (if st_get(base, root, 5) > 0 then st_get(base, root, 5) else 1)
+}
+// dlk_chain: the delta records newest first into out[0..]; at most min(D, cap). Returns how many.
+fn dlk_chain(base: [i64], root: i64, out: [i64], cap: i64) -> i64 {
+  let d = if dlk_ver(base, root) == 3 then st_get(base, root, 7) else 0;
+  let lim = if d < cap then d else cap;
+  let cur = if lim > 0 then dlk_ref(base, root, 6) else 0;
+  let n = 0;
+  while cur != 0 {
+    let _ = out[n] = cur;
+    let n = n + 1;
+    let cur = if n >= lim then 0 else dlk_ref(base, cur, 0);
+    0
+  };
+  n
+}
+// a record's key slice is (r, 32, KLEN), its value (r, 8 * (4 + ceil(KLEN / 8)), VLEN)
+fn dlk_vat(base: [i64], r: i64) -> i64 { 8 * (4 + ((st_get(base, r, 2) + 7) >> 3)) }
+// dlk_base_get: the base value of key (ko, koff, klen) by binary search; 1 and w[3..6) = its slice, or 0.
+fn dlk_base_get(base: [i64], root: i64, ko: i64, koff: i64, klen: i64, w: [i64]) -> i64 {
+  let kidx = st_ref(base, root, 1);
+  let kblob = st_ref(base, root, 2);
+  let lo = 0;
+  let hi = st_get(base, root, 0);
+  let hit = 0 - 1;
+  while lo < hi {
+    let mid = (lo + hi) / 2;
+    let c = dlk_cmp(base, kblob, st_get(base, kidx, 2 * mid), st_get(base, kidx, 2 * mid + 1), ko, koff, klen);
+    let hit = if c == 0 then mid else hit;
+    let lo = if c < 0 then mid + 1 else (if c == 0 then hi else lo);
+    let hi = if c > 0 then mid else hi;
+    0
+  };
+  let _ = if hit < 0 then return 0 else 0;
+  let vidx = st_ref(base, root, 3);
+  let _ = w[3] = st_ref(base, root, 4);
+  let _ = w[4] = st_get(base, vidx, 2 * hit);
+  let _ = w[5] = st_get(base, vidx, 2 * hit + 1);
+  1
+}
+// dlk_before: what the image said under record ch[i]'s key just before it -- 1 and w[3..6), or 0.
+fn dlk_before(base: [i64], root: i64, ch: [i64], n: i64, i: i64, w: [i64]) -> i64 {
+  let r = ch[i];
+  let kl = st_get(base, r, 2);
+  let j = i + 1;
+  let hit = 0;
+  while j < n {
+    let o = ch[j];
+    let hit = if dlk_cmp(base, o, 32, st_get(base, o, 2), r, 32, kl) == 0 then o else 0;
+    let j = if hit != 0 then n else j + 1;
+    0
+  };
+  let _ = if hit == 0 then return dlk_base_get(base, root, r, 32, kl, w) else 0;
+  let _ = w[3] = hit;
+  let _ = w[4] = dlk_vat(base, hit);
+  let _ = w[5] = st_get(base, hit, 3);
+  if st_get(base, hit, 1) == 1 then 1 else 0
+}
+// dlk_zadd: add (c0, c1) with weight w into the sorted, consolidated Z-set Z (3 cells per row, m rows,
+// zero weights absent). Returns the new m.
+fn dlk_zadd(Z: [i64], m: i64, c0: i64, c1: i64, w: i64) -> i64 {
+  let i = 0;
+  let go = 1;
+  while go == 1 {
+    let lt = if i < m then (if Z[3 * i] < c0 then 1 else (if Z[3 * i] == c0 then (if Z[3 * i + 1] < c1 then 1 else 0) else 0)) else 0;
+    let i = i + lt;
+    let go = lt;
+    0
+  };
+  let has = if i < m then (if Z[3 * i] == c0 then (if Z[3 * i + 1] == c1 then 1 else 0) else 0) else 0;
+  let nw = w + (if has == 1 then Z[3 * i + 2] else 0);
+  let _ = if has == 1 then (let _ = Z[3 * i + 2] = nw in 0) else 0;
+  let _ = if has * (if nw == 0 then 1 else 0) == 1 then dlk_zcut(Z, m, i) else 0;
+  let _ = if has == 1 then return (if nw == 0 then m - 1 else m) else 0;
+  let j = 3 * m - 1;
+  while j >= 3 * i {
+    let _ = Z[j + 3] = Z[j];
+    let j = j - 1;
+    0
+  };
+  let _ = Z[3 * i] = c0;
+  let _ = Z[3 * i + 1] = c1;
+  let _ = Z[3 * i + 2] = w;
+  m + 1
+}
+fn dlk_zcut(Z: [i64], m: i64, i: i64) -> i64 {
+  let j = 3 * i;
+  while j < 3 * (m - 1) {
+    let _ = Z[j] = Z[j + 3];
+    let j = j + 1;
+    0
+  };
+  0
+}
+// dlk_zset: from_kv_chain(k) as K64 rows into Z (3 * 2k cells); returns m, or -1 when k > D.
+// ch holds at least D cells (the whole chain: `old` may come from a record older than the window).
+fn dlk_zset(base: [i64], root: i64, k: i64, ch: [i64], cap: i64, Z: [i64], buf: [i64]) -> i64 {
+  let n = dlk_chain(base, root, ch, cap);
+  let _ = if k > n then return 0 - 1 else 0;
+  let w = zeros(8);
+  let m = 0;
+  let i = 0;
+  while i < k {
+    let r = ch[i];
+    let kk = dlk_k64(base, r, 32, st_get(base, r, 2), buf);
+    let m = if dlk_before(base, root, ch, n, i, w) == 1 then dlk_zadd(Z, m, kk, dlk_k64(base, w[3], w[4], w[5], buf), 0 - 1) else m;
+    let m = if st_get(base, r, 1) == 1 then dlk_zadd(Z, m, kk, dlk_k64(base, r, dlk_vat(base, r), st_get(base, r, 3), buf), 1) else m;
+    let i = i + 1;
+    0
+  };
+  m
+}
+// dlk_base_rows: the base entries as weight +1 rows (from_kv_base); returns m.
+fn dlk_base_rows(base: [i64], root: i64, Z: [i64], buf: [i64]) -> i64 {
+  let kidx = st_ref(base, root, 1);
+  let kblob = st_ref(base, root, 2);
+  let vidx = st_ref(base, root, 3);
+  let vblob = st_ref(base, root, 4);
+  let m = 0;
+  let i = 0;
+  while i < st_get(base, root, 0) {
+    let kk = dlk_k64(base, kblob, st_get(base, kidx, 2 * i), st_get(base, kidx, 2 * i + 1), buf);
+    let m = dlk_zadd(Z, m, kk, dlk_k64(base, vblob, st_get(base, vidx, 2 * i), st_get(base, vidx, 2 * i + 1), buf), 1);
+    let i = i + 1;
+    0
+  };
+  m
+}
+fn dlk_fnv8(h: i64, v: i64) -> i64 {
+  let x = h;
+  let b = 0;
+  while b < 8 {
+    let x = (x ^ ((v >> (8 * b)) & 255)) * 1099511628211;
+    let b = b + 1;
+    0
+  };
+  x
+}
+fn dlk_digest(Z: [i64], m: i64) -> i64 {
+  let h = 0 - 3750763034362895579;
+  let i = 0;
+  while i < 3 * m {
+    let h = dlk_fnv8(h, Z[i]);
+    let i = i + 1;
+    0
+  };
+  h
+}
+// dlk_apply: a consolidated Z-set of 2-cell rows onto EDB predicate p -- every negative row retracted,
+// then every positive row put (dl_retract / dl_put: the dirty set the next dl_propagate reads). A row
+// whose weight is not +-1 is applied once (set semantics: the EDB is the support of the Z-set).
+fn dlk_apply(db: [i64], p: i64, Z: [i64], m: i64) -> i64 {
+  let pass = 0;
+  let n = 0;
+  while pass < 2 {
+    let i = 0;
+    while i < m {
+      let w = Z[3 * i + 2];
+      let go = if pass == 0 then (if w < 0 then 1 else 0) else (if w > 0 then 1 else 0);
+      let n = n + (if go == 1 then (if pass == 0 then dl_retract(db, p, dl_setrow(db, Z[3 * i], Z[3 * i + 1], 0, 0)) else dl_put(db, p, dl_setrow(db, Z[3 * i], Z[3 * i + 1], 0, 0))) else 0);
+      let i = i + 1;
+      0
+    };
+    let pass = pass + 1;
+    0
+  };
+  n
+}
+
+// ---- dl_event_del_ns (docs/PERF.md; bench/vs_rust/dl_bench.sh) -------------------------------------------
+// dl_del_bench(set, rounds, g, legacy): the fixture of `set` (dl_fix.bp), evaluated; the stream = every
+// EDB row of the fixture, snapshotted BEFORE the clock; each step RETRACTS one row and propagates, then
+// PUTS it back and propagates -- `rounds` passes, the whole loop timed with clock_ms. The pair is timed
+// because clock_ms cannot time one event: dl_event_del_ns = ns per pair, an UPPER bound on one delete.
+// legacy = 1 runs the pre-AX1 paths (db[30], dl_del.bp header) on the same stream: the control.
+// Prints `dl_event_del_ns <ns> set <s> deletes <n> gen <0|1> legacy <0|1> equal <1|0>` (equal: the
+// incremental IDB, rows and weights, is the from-scratch one after the stream); returns ns, or -1.
+fn dl_del_bench(set: i64, rounds: i64, g: i64, legacy: i64) -> i64 {
+  let R = zeros(dl_rs_cells(16, 16, 64));
+  let _ = dl_rs_of(R, set);
+  let _ = dl_check(R);
+  let caps = zeros(16);
+  let _ = dl_caps_of(caps, set);
+  let db = zeros(dl_db_cells(R, caps));
+  let sc = zeros(dl_db_cells(R, caps));
+  let st = zeros(1);
+  let _ = st[0] = dl_seed_of(set);
+  let _ = dl_db_init(R, db, caps);
+  let _ = dl_db_strata(R, db);
+  let _ = db[22] = g;
+  let _ = if g != 0 then call_fn(g, R, db, 0 - 1, 0, 0, 0) else 0;
+  let _ = db[30] = legacy;
+  let _ = dl_load(db, st, set);
+  let _ = dl_event_end(R, db);
+  let _ = dl_eval_all(R, db);
+  let ev = zeros(5 * 8192);
+  let n = dl_del_stream(R, db, ev);
+  let t0 = clock_ms();
+  let k = 0;
+  while k < rounds * n {
+    let e = 5 * (k % n);
+    let _ = dl_retract(db, ev[e], dl_setrow(db, ev[e + 1], ev[e + 2], ev[e + 3], ev[e + 4]));
+    let _ = dl_propagate(R, db);
+    let _ = dl_put(db, ev[e], dl_setrow(db, ev[e + 1], ev[e + 2], ev[e + 3], ev[e + 4]));
+    let _ = dl_propagate(R, db);
+    let k = k + 1;
+    0
+  };
+  let t1 = clock_ms();
+  let _ = dl_scratch(R, db, sc, caps);
+  let eq = if dl_stale(R, db, sc) < 0 then 1 else 0;
+  let ns = ((t1 - t0) * 1000000) / (if rounds * n > 0 then rounds * n else 1);
+  let o = zeros(160);
+  let p = dl_puts(o, 0, "dl_event_del_ns ");
+  let p = dl_putn(o, p, ns);
+  let p = dl_puts(o, p, " set ");
+  let p = dl_putn(o, p, set);
+  let p = dl_puts(o, p, " deletes ");
+  let p = dl_putn(o, p, rounds * n);
+  let p = dl_puts(o, p, " gen ");
+  let p = dl_putn(o, p, if g != 0 then 1 else 0);
+  let p = dl_puts(o, p, " legacy ");
+  let p = dl_putn(o, p, legacy);
+  let p = dl_puts(o, p, " equal ");
+  let p = dl_putn(o, p, eq);
+  let _ = o[p] = 10;
+  let _ = sys_write(1, o, p + 1);
+  if eq == 1 then ns else 0 - 1
+}
+// dl_del_stream: every EDB row of db as (p, row[4]) into ev; returns how many (at most 8192).
+fn dl_del_stream(R: [i64], db: [i64], ev: [i64]) -> i64 {
+  let n = 0;
+  let p = 0;
+  while p < R[2] {
+    let m = if dl_pa(R, p, 3) == 0 then dl_n(db, p) else 0;
+    let i = 0;
+    while i < m {
+      let r = dl_row(db, p, i);
+      let _ = if n < 8192 then (let _ = ev[5 * n] = p in 0) else 0;
+      let _ = if n < 8192 then (let _ = ev[5 * n + 1] = db[r] in let _ = ev[5 * n + 2] = db[r + 1] in let _ = ev[5 * n + 3] = db[r + 2] in let _ = ev[5 * n + 4] = db[r + 3] in 0) else 0;
+      let n = if n < 8192 then n + 1 else n;
+      let i = i + 1;
+      0
+    };
+    let p = p + 1;
+    0
+  };
+  n
+}

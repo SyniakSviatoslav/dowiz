@@ -12,8 +12,11 @@
 # failure, never a number. Median of 5 runs; the interpreted engine (no generated code) is printed beside
 # it for reference, median of 3.
 #
-# Prints `dl_event_ns <median> (runs: ...) interpreted <median> (runs: ...) set 1 events 100000` and exits 1
-# when the median exceeds 1000, 2 on a missing prerequisite (a NAMED refusal), 3 when a run is not equal.
+# Prints `dl_event_ns <median> (runs: ...) interpreted <median> (runs: ...) set 1 events 100000`, then
+# `dl_event_del_ns <median> (runs: ...) legacy <median> (runs: ...) set 1 deletes <n> legacy/new_x10 <r>` and
+# the same line for `dl_event_del5_ns` (set 5), and exits 1 when dl_event_ns exceeds 1000, dl_event_del_ns
+# exceeds 10000 (AX plan A1: <= 10 x dl_event_ns) or dl_event_del5_ns exceeds its legacy control,
+# 2 on a missing prerequisite (a NAMED refusal), 3 when a run is not equal.
 # env: BEBOP_BIN (candidate, default ./bebop.bin), BEBOP_TMP. Run it through tools/slot.sh.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -37,4 +40,31 @@ gen=(); for i in 1 2 3 4 5; do v=$(one bench) || { echo "dl_bench: $v"; exit 3; 
 itp=(); for i in 1 2 3; do v=$(one bench interp) || { echo "dl_bench: interpreted $v"; exit 3; }; itp+=("$v"); done
 m=$(med "${gen[@]}"); mi=$(med "${itp[@]}")
 echo "dl_event_ns $m (runs: ${gen[*]}) interpreted $mi (runs: ${itp[*]}) set 1 events 100000"
-[ "$m" -le 1000 ]
+# dl_event_del_ns (LV-INC-F, AX plan A1): every EDB row of a fixture retracted then put back, each event
+# propagated, 20 passes; the PAIR is timed (selfhost/std/dl_kv.bp dl_del_bench: clock_ms cannot time one
+# event), so each number is an UPPER bound on one delete. Control in the same program, same stream:
+# legacy 1 = the pre-AX1 paths (dl_inc_nonrec's backward re-derivation, dl_recompute_s for a recursive
+# stratum). Set 1 (the 165/120/352 fixture of dl_event_ns: non-recursive, counted) is the gated row; set 5
+# (the sushi allergen closure: a recursive stratum under DRed, counted and negated strata above it) is
+# reported as dl_event_del5_ns and must not be slower than its legacy control. Median of 3 each.
+for s in 1 5; do "$SEED" "$BB" compile "$T/dl_g$s.bp" "$T/dl_g$s.bin" > /dev/null 2> "$T/g$s.err" \
+  || { echo "dl_bench: REFUSED -- the generated dl_g$s.bp does not compile: $(tail -1 "$T/g$s.err")"; exit 2; }; done
+del1() {  # del1 <set> <legacy 0|1>: "<ns> <deletes>" of one run, or a named failure (exit 3)
+  local o; o=$(timeout 600 "$SEED" "$T/dl_g$1.bin" del x "$2" 2>&1); local rc=$?
+  local line; line=$(grep -m1 '^dl_event_del_ns ' <<<"$o")
+  [ "$rc" = 0 ] && [ -n "$line" ] || { echo "RUNFAIL(rc=$rc: $(tail -1 <<<"$o"))"; return 3; }
+  grep -q ' equal 1$' <<<"$line" || { echo "NOTEQUAL($line)"; return 3; }
+  awk '{print $2 " " $6}' <<<"$line"
+}
+delrow() {  # delrow <set> <name>: three runs each way, the median line; sets MD / ML
+  local dn=() dl=() nd=0 v i
+  for i in 1 2 3; do v=$(del1 "$1" 0) || { echo "dl_bench: $2 $v"; exit 3; }; dn+=("${v% *}"); nd=${v#* }
+                     v=$(del1 "$1" 1) || { echo "dl_bench: $2 legacy $v"; exit 3; }; dl+=("${v% *}"); done
+  MD=$(med "${dn[@]}"); ML=$(med "${dl[@]}")
+  echo "$2 $MD (runs: ${dn[*]}) legacy $ML (runs: ${dl[*]}) set $1 deletes $nd legacy/new_x10 $(( ML * 10 / (MD > 0 ? MD : 1) ))"
+}
+delrow 1 dl_event_del_ns; d1=$MD
+delrow 5 dl_event_del5_ns; d5=$MD; l5=$ML
+[ "$m" -le 1000 ] || exit 1
+[ "$d1" -le 10000 ] || exit 1
+[ "$d5" -le "$l5" ]

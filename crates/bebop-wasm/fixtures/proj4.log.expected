@@ -1,0 +1,9 @@
+# What every reader of fixtures/proj4.log.store must answer (LV-INC-A, PROJ kind 3 = BLOB; crates/bebop-store/src/proj/kinds.rs).
+# The image: a 7-record log (proj/tests.rs `rec`: seq i, 330 payload bytes (i*31 + j*7) % 251, sha256-chained ids),
+# a first eval_blob with LogSummary (Full), 2 more records, a second eval_blob that STEPS by 2 -- the RUST writer.
+# LogSummary = count u64 || payload bytes u64 || LOG fold u64 (LE): here 9 || 2970 || 6344481284825166345.
+# Each reader prints `proj status=0 n=<records> root=<FNV-1a 64 of the LogSummary IT derives from the log> memo=<OUTB value>`.
+#   oracle.py --proj: proj status=0 n=9 root=-9190210101691969827 memo=-9190210101691969827
+n=9
+root=-9190210101691969827
+memo=-9190210101691969827

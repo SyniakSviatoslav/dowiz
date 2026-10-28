@@ -167,9 +167,10 @@ fn an_avoided_allergen_is_never_returned_and_an_undeclared_dish_goes_with_it() {
 
 #[test]
 fn the_shared_table_and_its_goldens_do_not_move() {
-    // Every implementation of the shared table carries exactly these four (bebop-wasm gate B-2).
+    // Every implementation of the shared table carries exactly these five (bebop-wasm gate B-2;
+    // `sales` joined in LV-COL-E with all four mirrors taught in the same change).
     let names: Vec<&str> = TABLE.iter().map(|s| s.name).collect();
-    assert_eq!(names, ["menu_prices", "bom", "stock_levels", "names"]);
+    assert_eq!(names, ["menu_prices", "bom", "stock_levels", "names", "sales"]);
     assert!(HUB_ONLY.iter().all(|h| !TABLE.iter().any(|t| t.string == h.string)), "a hub-only schema is not in the shared table");
     // A reader that knows only the shared table refuses the taste block by name, never misreads it.
     let b = block_bytes();

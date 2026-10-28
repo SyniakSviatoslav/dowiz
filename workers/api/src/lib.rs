@@ -395,6 +395,7 @@ pub(crate) fn router<R: routes_dispatch::Routes>(r: R) -> R {
         .get_async("/api/staff/kitchen", |r, c| edge::run(r, c, services::orders::kitchen_ack::board::kitchen_orders))
         .get_async("/api/staff/kitchen/prep", |r, c| edge::run(r, c, services::analytics::forecast::prep)) // W-PREP P6
         .post_async("/api/staff/stock/glue", |r, c| edge::run(r, c, services::operations::stock::glue::glue)) // sheaf S2
+        .post_async("/api/staff/orders/glue", |r, c| edge::run(r, c, services::operations::orders::glue::glue)) // S2b
         .get_async("/api/staff/stock/decisions", |r, c| edge::run(r, c, services::operations::stock::glue::decisions))
         .post_async("/api/staff/stock/decisions/close", |r, c| edge::run(r, c, services::operations::stock::glue::close))
         .post_async("/api/staff/assist", |r, c| edge::run(r, c, services::engagement::assist::kitchen::kitchen_assist))

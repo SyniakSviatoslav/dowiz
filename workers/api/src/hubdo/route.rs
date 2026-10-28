@@ -82,6 +82,7 @@ impl HubImages {
                 // SHEAF S2: A KITCHEN TABLET'S SYNC, and the decisions it leaves (`hubdo/glue_turn.rs`).
                 (Method::Post, "glue") => { let mut req = req; self.glue_route(crate::body::parse(&mut req).await?).await }
                 (Method::Post, "desk") => { let mut req = req; self.desk_route(crate::body::parse(&mut req).await?).await }
+                (Method::Post, "glue_orders") => { let mut req = req; self.glue_orders_route(crate::body::parse(&mut req).await?).await } // S2b: a tablet's offline order taps
                 // THE KITCHEN SAW THE TICKET: `/fold/kitchen_ack`
                 (Method::Post, "kitchen_ack") => self.kitchen_ack_route(req).await,
                 (Method::Post, "place") => self.place_route(req).await,

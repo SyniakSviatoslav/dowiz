@@ -228,7 +228,9 @@ pub const BROWSER: &[DeviceKey] = &[
     key("dw_room_sound", &[], "room"),
     // SHEAF S2 (room/canvas/tablet.js): the kitchen tablet's copy of the venue's stock log in IndexedDB,
     // with its own offline movements on top; each movement names the staff member who made it (`by`).
-    key("dowiz.tablet", &[StaffId], "room"),
+    // S2b: the same store keeps the pass's order rail (order id, status, seen) and its queued taps --
+    // order ids only, no lines, guests or prices.
+    key("dowiz.tablet", &[StaffId, OrderContent], "room"),
     key("dw_room_currency", &[], "room"),
     key("dowiz.room.outbox", &[OrderContent], "room"),
     // W-OFFSALE: the tablet's journal of its offline cash sales (lines, totals, no

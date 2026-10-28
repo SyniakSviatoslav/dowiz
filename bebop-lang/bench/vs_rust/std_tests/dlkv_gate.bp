@@ -1,0 +1,67 @@
+use "selfhost/std/dl_kv.bp"
+// dl_kv.bp -- `gate dl_kv` (LV-INC-F, R-BEBOP-LEVERS §2.4: Datalog EDB deltas from the KV chain).
+// crates/bebop-wasm/fixtures/kv3.store (a v2 base + D = 3 delta records: a changed value, a new key, a
+// removal), read-only. For k = 0..D: from_kv_chain(k) as K64 rows (selfhost/std/dl_kv.bp dlk_zset) and
+// its digest -- the SAME digest crates/bebop-store/src/zset.rs computes. Then the integration law through
+// Datalog: the base rows put into kv(K, V), has(K) :- kv(K, V) evaluated (a counted stratum), the chain's
+// whole Z-set applied as retractions then insertions and propagated -- kv and has must equal the image's
+// REPLAY (bench/oracles/dl_kv.py replays it independently) and a from-scratch re-derivation.
+// Prints one `dl_kv k <k> m <rows> digest <d>` line per k; returns, as s64 arithmetic,
+//   ((acc * 31 + fold(kv)) * 31 + fold(has)) * 2 + eq      acc = fold over k of acc * 31 + digest_k
+// (eq = 1 when incremental == scratch, rows and weights). Oracle: bench/oracles/dl_kv.py.
+fn dlkt_line(k: i64, m: i64, d: i64) -> i64 {
+  let o = zeros(96);
+  let p = dl_puts(o, 0, "dl_kv k ");
+  let p = dl_putn(o, p, k);
+  let p = dl_puts(o, p, " m ");
+  let p = dl_putn(o, p, m);
+  let p = dl_puts(o, p, " digest ");
+  let p = dl_putn(o, p, d);
+  let _ = o[p] = 10;
+  sys_write(1, o, p + 1)
+}
+fn main() -> i64 {
+  let path = zeros(96);
+  let pl = st_str(path, "../crates/bebop-wasm/fixtures/kv3.store");
+  let base = st_map_ro(path, pl, 65536);
+  let tmp = zeros(256);
+  let root = st_root(base, tmp);
+  let ch = zeros(64);
+  let Z = zeros(3 * 256);
+  let buf = zeros(8192);
+  let d = st_get(base, root, 7);
+  let acc = 0;
+  let k = 0;
+  while k <= d {
+    let m = dlk_zset(base, root, k, ch, 64, Z, buf);
+    let h = dlk_digest(Z, m);
+    let _ = dlkt_line(k, m, h);
+    let acc = acc * 31 + h;
+    let k = k + 1;
+    0
+  };
+  let R = zeros(dl_rs_cells(4, 4, 8));
+  let _ = dl_rs_init(R, 4, 4, 8);
+  let u = 0 - 1;
+  let kv = dl_pred(R, 71, 2, 0);
+  let has = dl_pred(R, 72, 1, 1);
+  let _ = dl_rule(R, has, 0, u, u, u);
+  let _ = dl_atom(R, kv, 0, 0, 1, u, u);
+  let _ = dl_check(R);
+  let caps = [64, 64];
+  let db = zeros(dl_db_cells(R, caps));
+  let sc = zeros(dl_db_cells(R, caps));
+  let _ = dl_db_init(R, db, caps);
+  let _ = dl_db_strata(R, db);
+  let B = zeros(3 * 256);
+  let mb = dlk_base_rows(base, root, B, buf);
+  let _ = dlk_apply(db, kv, B, mb);
+  let _ = dl_event_end(R, db);
+  let _ = dl_eval_all(R, db);
+  let m = dlk_zset(base, root, d, ch, 64, Z, buf);
+  let _ = dlk_apply(db, kv, Z, m);
+  let _ = dl_propagate(R, db);
+  let _ = dl_scratch(R, db, sc, caps);
+  let eq = if dl_stale(R, db, sc) < 0 then 1 else 0;
+  ((acc * 31 + dl_fold(db, kv)) * 31 + dl_fold(db, has)) * 2 + eq
+}

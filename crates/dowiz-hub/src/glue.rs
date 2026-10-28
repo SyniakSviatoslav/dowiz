@@ -51,6 +51,8 @@ pub mod merge;
 pub mod tablet;
 /// S2: the decisions a glue left for a person, and their resolution.
 pub mod desk;
+/// S2b: the kitchen's order rail offline -- the tablet's taps, rebased through the order machine.
+pub mod orders;
 pub use delta::{Conflict, Side};
 use walk::{Chain, OpenErr};
 

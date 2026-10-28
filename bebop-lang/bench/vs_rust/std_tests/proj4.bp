@@ -1,0 +1,242 @@
+use "selfhost/prelude/proj.bp"
+// proj4 (LV-INC-A, crates/bebop-store/src/proj/kinds.rs): the bebop reader of PROJ kinds 3 and 4, and the test
+// of proj.bp's kind-2-on-v3 refusal.
+//   argv[2] = n / h / p  : READS proj4.store in the working directory (a copy: st_open extends it) -- the KV
+//                          root's cell 0; the Z-set digest THIS program derives from the KV (the v2 base, then
+//                          the v3 delta chain replayed oldest first, each live entry as the row
+//                          (K64('O' || len8 || key), K64('O' || len8 || value)) weight 1, rows ascending, FNV-1a 64
+//                          over c0 || c1 || weight as LE8); or the memo through st_proj_peek.
+//   argv[2] = N / H / P  : READS proj4.log.store -- the record count; FNV-1a 64 of the LogSummary this program
+//                          derives from the log (count u64 || payload bytes u64 || LOG fold u64, LE); the memo.
+//   no argv[2]           : SELF-TEST, prints 1351 when all hold: the two OUT digests are st_digest of their
+//                          layouts (1000), and st_proj_eval kind 2 on a v3 KV refuses with how = 3 (300), why 5
+//                          (50) and value 0 - 1 (1). Before the fix it folded the base only: how 3, why 4.
+fn p4_open(name: str, size: i64, tmp: [i64]) -> [i64] {
+  let path = zeros(64);
+  let pl = st_str(path, name);
+  st_open(path, pl, size, tmp)
+}
+fn p4_byte(base: [i64], obj: i64, b: i64) -> i64 { (st_get(base, obj, b >> 3) >> (8 * (b & 7))) & 255 }
+// p4_k64: K64 of 'O' || len8 || the len bytes at byte offset off of obj (packed); len capped at 4096.
+fn p4_k64(base: [i64], obj: i64, off: i64, len: i64) -> i64 {
+  let n = if len < 0 then 0 else (if len > 4096 then 4096 else len);
+  let buf = zeros(n + 16);
+  let p = kf_u64(buf, key_frame(buf, 79), n);
+  let j = 0;
+  while j < n {
+    let _ = buf[p + j] = p4_byte(base, obj, off + j);
+    let j = j + 1;
+    0
+  };
+  key64(buf, p + n)
+}
+// p4_eq: slot i's key (s[6i..6i+3)) equals the kl bytes at byte offset 32 of record r.
+fn p4_eq(base: [i64], s: [i64], i: i64, r: i64, kl: i64) -> i64 {
+  let ok = if s[6 * i + 2] == kl then 1 else 0;
+  let j = 0;
+  while j < kl * ok {
+    let ok = if p4_byte(base, s[6 * i], s[6 * i + 1] + j) == p4_byte(base, r, 32 + j) then ok else 0;
+    let j = j + 1;
+    0
+  };
+  ok
+}
+// p4_slot: slot m := (kobj, koff, klen, vobj, voff, vlen), live.
+fn p4_slot(s: [i64], live: [i64], m: i64, ko: i64, koff: i64, kl: i64, vo: i64, voff: i64, vl: i64) -> i64 {
+  let _ = s[6 * m] = ko;
+  let _ = s[6 * m + 1] = koff;
+  let _ = s[6 * m + 2] = kl;
+  let _ = s[6 * m + 3] = vo;
+  let _ = s[6 * m + 4] = voff;
+  let _ = s[6 * m + 5] = vl;
+  let _ = live[m] = 1;
+  m + 1
+}
+// p4_apply: one delta record r: the live slot with its key dies; a put adds a slot. Returns the slot count.
+fn p4_apply(base: [i64], s: [i64], live: [i64], m: i64, r: i64) -> i64 {
+  let kl = st_get(base, r, 2);
+  let q = 0;
+  while q < m {
+    let dead = if live[q] == 1 then p4_eq(base, s, q, r, kl) else 0;
+    let _ = live[q] = live[q] - dead;
+    let q = q + 1;
+    0
+  };
+  if st_get(base, r, 1) == 1 then p4_slot(s, live, m, r, 32, kl, r, 8 * (4 + (kl + 7) / 8), st_get(base, r, 3)) else m
+}
+// p4_rows: the live entries' rows into rows[2c..2c+2); returns how many.
+fn p4_rows(base: [i64], s: [i64], live: [i64], m: i64, rows: [i64]) -> i64 {
+  let c = 0;
+  let i = 0;
+  while i < m {
+    let _ = if live[i] == 1 then (
+      let _ = rows[2 * c] = p4_k64(base, s[6 * i], s[6 * i + 1], s[6 * i + 2]) in
+      let _ = rows[2 * c + 1] = p4_k64(base, s[6 * i + 3], s[6 * i + 4], s[6 * i + 5]) in
+      0
+    ) else 0;
+    let c = c + live[i];
+    let i = i + 1;
+    0
+  };
+  c
+}
+fn p4_less(r: [i64], a: i64, b: i64) -> i64 {
+  if r[2 * a] < r[2 * b] then 1 else (if r[2 * a] == r[2 * b] then (if r[2 * a + 1] < r[2 * b + 1] then 1 else 0) else 0)
+}
+fn p4_swap(r: [i64], a: i64, b: i64) -> i64 {
+  let x = r[2 * a];
+  let y = r[2 * a + 1];
+  let _ = r[2 * a] = r[2 * b];
+  let _ = r[2 * a + 1] = r[2 * b + 1];
+  let _ = r[2 * b] = x;
+  let _ = r[2 * b + 1] = y;
+  0
+}
+fn p4_sort(r: [i64], c: i64) -> i64 {
+  let i = 1;
+  while i < c {
+    let j = i;
+    let go = 1;
+    while go == 1 {
+      let sw = if j > 0 then p4_less(r, j, j - 1) else 0;
+      let _ = if sw == 1 then p4_swap(r, j - 1, j) else 0;
+      let j = j - sw;
+      let go = sw;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  0
+}
+// p4_zdigest: the KV's Z-set digest, derived from the base and the chain (the header's rule).
+fn p4_zdigest(base: [i64], root: i64) -> i64 {
+  let n = st_get(base, root, 0);
+  let d = if pj_kv_ver(base, root) >= 3 then st_get(base, root, 7) else 0;
+  let cap = if d < 0 then 0 else (if d > 1024 then 1024 else d);
+  let s = zeros(6 * (n + cap) + 6);
+  let live = zeros(n + cap + 1);
+  let kidx = st_ref(base, root, 1);
+  let vidx = st_ref(base, root, 3);
+  let m = 0;
+  while m < n {
+    let m = p4_slot(s, live, m, st_ref(base, root, 2), st_get(base, kidx, 2 * m), st_get(base, kidx, 2 * m + 1), st_ref(base, root, 4), st_get(base, vidx, 2 * m), st_get(base, vidx, 2 * m + 1));
+    0
+  };
+  let recs = zeros(cap + 1);
+  let k = pj_zchain(base, root, recs, cap);
+  let j = k - 1;
+  while j >= 0 {
+    let m = p4_apply(base, s, live, m, recs[j]);
+    let j = j - 1;
+    0
+  };
+  let rows = zeros(2 * m + 2);
+  let c = p4_rows(base, s, live, m, rows);
+  let _ = p4_sort(rows, c);
+  let x = pj_fnv_offset();
+  let i = 0;
+  while i < c {
+    let x = pj_fnv_u64(pj_fnv_u64(pj_fnv_u64(x, rows[2 * i]), rows[2 * i + 1]), 1);
+    let i = i + 1;
+    0
+  };
+  x
+}
+// p4_summary: FNV-1a 64 of LogSummary's 24 bytes, derived from the log.
+fn p4_summary(base: [i64], tmp: [i64]) -> i64 {
+  let root = st_root(base, tmp);
+  let n = pj_log_cap(base, root, tmp);
+  let recs = zeros(n + 1);
+  let k = pj_log_chain(base, root, recs, n + 1, 0, 0, 0);
+  let ver = pj_log_ver(base, root);
+  let b = 0;
+  let i = 0;
+  while i < k {
+    let b = b + pj_rec_plen(base, recs[i], ver);
+    let i = i + 1;
+    0
+  };
+  pj_fnv_u64(pj_fnv_u64(pj_fnv_u64(pj_fnv_offset(), k), b), pj_log_fold(base, tmp))
+}
+fn p4_read(ph: i64, tmp: [i64]) -> i64 {
+  let kv = if ph > 96 then 1 else 0;
+  let base = if kv == 1 then p4_open("proj4.store", 1048576, tmp) else p4_open("proj4.log.store", 1048576, tmp);
+  let root = st_root(base, tmp);
+  let r = if ph == 110 then st_get(base, root, 0) else (if ph == 78 then st_get(base, root, 0) else (if ph == 104 then p4_zdigest(base, root) else (if ph == 72 then p4_summary(base, tmp) else st_proj_peek(base, tmp))));
+  let _ = sys_munmap(st_addr(base), 1048576);
+  r
+}
+// p4_kv1: a v2 KV {a: 1}, committed as the root (sproj.bp sp_kv's shape, one entry).
+fn p4_kv1(base: [i64], tx: [i64], d: [i64], tmp: [i64]) -> i64 {
+  let _ = st_begin(base, tx, tmp);
+  let kidx = st_alloc(base, tx, 2, d[1]);
+  let _ = st_put(base, kidx, 0, 0);
+  let _ = st_put(base, kidx, 1, 1);
+  let _ = st_seal(base, kidx, tmp);
+  let vidx = st_alloc(base, tx, 2, d[1]);
+  let _ = st_put(base, vidx, 0, 0);
+  let _ = st_put(base, vidx, 1, 1);
+  let _ = st_seal(base, vidx, tmp);
+  let kb = st_alloc(base, tx, 1, d[1]);
+  let _ = st_put(base, kb, 0, 97);
+  let _ = st_seal(base, kb, tmp);
+  let vb = st_alloc(base, tx, 1, d[1]);
+  let _ = st_put(base, vb, 0, 49);
+  let _ = st_seal(base, vb, tmp);
+  let root = st_alloc(base, tx, 6, d[0]);
+  let _ = st_put(base, root, 0, 1);
+  let _ = st_link(base, root, 1, kidx);
+  let _ = st_link(base, root, 2, kb);
+  let _ = st_link(base, root, 3, vidx);
+  let _ = st_link(base, root, 4, vb);
+  let _ = st_put(base, root, 5, 2);
+  let _ = st_seal(base, root, tmp);
+  st_commit(base, tx, root, tmp)
+}
+// p4_delta: one v3 delta record (put b -> 2) and a v3 root over the same base (kv/delta.rs's layout).
+fn p4_delta(base: [i64], tx: [i64], d: [i64], tmp: [i64]) -> i64 {
+  let old = st_root(base, tmp);
+  let _ = st_begin(base, tx, tmp);
+  let r = st_alloc(base, tx, 6, d[1]);
+  let _ = st_put(base, r, 0, 0);
+  let _ = st_put(base, r, 1, 1);
+  let _ = st_put(base, r, 2, 1);
+  let _ = st_put(base, r, 3, 1);
+  let _ = st_put(base, r, 4, 98);
+  let _ = st_put(base, r, 5, 50);
+  let _ = st_seal(base, r, tmp);
+  let nr = st_alloc(base, tx, 8, d[0]);
+  let _ = st_put(base, nr, 0, st_get(base, old, 0));
+  let i = 1;
+  while i < 5 {
+    let _ = st_link(base, nr, i, st_ref(base, old, i));
+    let i = i + 1;
+    0
+  };
+  let _ = st_put(base, nr, 5, 3);
+  let _ = st_link(base, nr, 6, r);
+  let _ = st_put(base, nr, 7, 1);
+  let _ = st_seal(base, nr, tmp);
+  st_commit(base, tx, nr, tmp)
+}
+fn p4_self(code: i64, tmp: [i64]) -> i64 {
+  let base = p4_open("proj4_self.store", 1048576, tmp);
+  let tx = zeros(6);
+  let how = zeros(3);
+  let d = zeros(2);
+  let _ = d[0] = st_digest("KV{i64,ref [i64],ref [i64],ref [i64],ref [i64]}");
+  let _ = d[1] = st_digest("arr i64");
+  let _ = p4_kv1(base, tx, d, tmp);
+  let _ = st_proj_eval(base, tx, code, pj_kind_kv(), &pj_kv_fold, how, tmp);
+  let _ = p4_delta(base, tx, d, tmp);
+  let v = st_proj_eval(base, tx, code, pj_kind_kv(), &pj_kv_fold, how, tmp);
+  let _ = sys_munmap(st_addr(base), 1048576);
+  let dig = if st_digest("OUTB{i64,i64,i64,[i64]}") == pj_dig_outb() then (if st_digest("OUTZ{i64,i64,i64,i64,[i64]}") == pj_dig_outz() then 1 else 0) else 0;
+  1000 * dig + 100 * how[0] + 10 * how[1] + (if v == 0 - 1 then 1 else 0)
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let tmp = zeros(256);
+  let ph = if argc > 2 then char(argv[2], 0) else 0;
+  if ph == 0 then p4_self(pj_code(argv[1]), tmp) else p4_read(ph, tmp)
+}

@@ -1,0 +1,84 @@
+use "selfhost/std/block.bp"
+// bench/vs_rust/std_tests/block_kernels.bp -- `gate block_kernels` (LV-COL-E, R-BEBOP-LEVERS §5.4):
+// bebop's reader of the sales kernels, the fourth of crates/bebop-wasm/gate.sh's `kernel` readers.
+//
+//   block_kernels.bin <list>  -- every block file named in <list> printed as a `kernel ...` line
+//                                (selfhost/std/block.bp bk_kernel_line); returns how many it read.
+//   block_kernels.bin         -- std_golden: the three sales fixtures under
+//                                crates/dowiz-hub/fixtures/blocks (run from bebop-lang/), each line's
+//                                characters folded with bk_fnv8 (one cell = 8 LE bytes) into one
+//                                FNV-1a 64 chain; the oracle (oracle.py --kernel) derives the same.
+
+module core { }
+
+// kl_one: read path[0..plen) into b and print its kernel line; returns the line's length, or -1.
+fn kl_one(path: [i64], plen: i64, b: [i64], t: [i64], s: [i64], st: [i64], v: [i64], e: [i64], o: [i64], gk: [i64], gv: [i64], tk: [i64]) -> i64 {
+  let len = bk_read(path, plen, b, 98305, v);
+  let _ = if len < 0 then return 0 - 1 else 0;
+  let _ = bk_kernel_line(b, len, t, s, st, v, e, o, gk, gv, tk);
+  let p = 0;
+  while o[p] != 10 { let p = p + 1; 0 };
+  p
+}
+
+fn kl_list(list: str, b: [i64], t: [i64], s: [i64], st: [i64], v: [i64], e: [i64], o: [i64], gk: [i64], gv: [i64], tk: [i64]) -> i64 {
+  let ln = str_len(list);
+  let lp = zeros(ln + 1);
+  let _ = bk_load(lp, 0, list);
+  let cap = 4194304;
+  let buf = zeros(cap + 8192);
+  let n = bk_read(lp, ln, buf, cap, v);
+  let _ = if n < 0 then return 0 - 1 else 0;
+  let path = zeros(4096);
+  let i = 0;
+  let count = 0;
+  while i < n {
+    let j = i;
+    while (j < n) & (buf[j] != 10) { let j = j + 1; 0 };
+    let k = 0;
+    while k < j - i {
+      let _ = path[k] = buf[i + k];
+      let k = k + 1;
+      0
+    };
+    let _ = if j > i then kl_one(path, j - i, b, t, s, st, v, e, o, gk, gv, tk) else 0;
+    let count = if j > i then count + 1 else count;
+    let i = j + 1;
+    0
+  };
+  count
+}
+
+fn kl_fix(dir: [i64], dl: i64, name: str, b: [i64], t: [i64], s: [i64], st: [i64], v: [i64], e: [i64], o: [i64], gk: [i64], gv: [i64], tk: [i64], h: i64) -> i64 {
+  let pl = bk_load(dir, dl, name);
+  let n = kl_one(dir, pl, b, t, s, st, v, e, o, gk, gv, tk);
+  let _ = if n < 0 then return 0 - 1 else 0;
+  let i = 0;
+  while i < n {
+    let h = bk_fnv8(h, o[i]);
+    let i = i + 1;
+    0
+  };
+  h
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let b = zeros(98305 + 8192 + 8);
+  let t = zeros(320);
+  let s = zeros(1024);
+  let st = zeros(128);
+  let v = zeros(98320);
+  let e = zeros(98320);
+  let o = zeros(1024);
+  let gk = zeros(16400);
+  let gv = zeros(16400);
+  let tk = zeros(16400);
+  let _ = bk_table(t, s);
+  let _ = if argc > 2 then return kl_list(argv[2], b, t, s, st, v, e, o, gk, gv, tk) else 0;
+  let dir = zeros(256);
+  let dl = bk_load(dir, 0, "../crates/dowiz-hub/fixtures/blocks/");
+  let h = 0 - 3750763034362895579;
+  let h = kl_fix(dir, dl, "sales_empty.dwb", b, t, s, st, v, e, o, gk, gv, tk, h);
+  let h = kl_fix(dir, dl, "sales_small.dwb", b, t, s, st, v, e, o, gk, gv, tk, h);
+  kl_fix(dir, dl, "sales.dwb", b, t, s, st, v, e, o, gk, gv, tk, h)
+}

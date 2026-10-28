@@ -102,7 +102,7 @@ pub(crate) const EDGES: &[Edge] = &[
     read("preps", CAT),
     read("catalogue", &["catalog", "i18n"]),
     read("basket", CAT),
-    read("analytics", &["log", "catalog", "cube", "settings"]),
+    read("analytics", &["log", "catalog", "cube", "sales", "settings"]),
     read("kitchen", &["log", "catalog", "stock", "cube"]),
     read("stock", &["catalog", "stock"]),
     read("exceptions", &["log", "till", "settings", "catalog", "ledger"]),
@@ -137,6 +137,7 @@ pub(crate) const EDGES: &[Edge] = &[
     cmd("stock_reset", &["stock"]),
     cmd("glue", &["stock"]), // SHEAF S2: a kitchen tablet's tail glued into the stock log (`hubdo/glue_turn.rs`)
     cmd("desk", &["stock"]), // SHEAF S2: the decisions a glue left, and their close
+    cmd("glue_orders", &["log", "stock"]), // S2b: a kitchen tablet's offline order taps rebased (`hubdo/glue_turn/orders.rs`)
     cmd("kitchen_ack", LOG),
     cmd("place", &["log", "stock", "settings", "outbox", "fiscal"]),
     // A whole request in one turn (BN4, W-BN4B): `place`, the order's moves, the courier's run and

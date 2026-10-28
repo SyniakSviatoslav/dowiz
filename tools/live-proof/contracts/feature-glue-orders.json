@@ -1,0 +1,80 @@
+{
+ "id": "feature-glue-orders",
+ "name": "glue-orders",
+ "contract_version": "1.0.0",
+ "contract_name": "staff.orders.glue.v1",
+ "class": "LIVE-AFTER-DEPLOY",
+ "description": {
+  "en": "SHEAF S2b: a kitchen tablet's order taps taken offline (the kitchen ack and the four bumps CONFIRMED/PREPARING/READY/PICKED_UP, each decided on the tablet by the order machine) are sent as one tail of op lines; the venue's object rebases them in the order taken with its OWN deciders (command::kitchen_ack, command::advance with the shelf settled in the same turn). Every tap is merged or held (sent == merged + held); a held tap is a decision on the kitchen's strip (GET /api/staff/stock/decisions, kind held, did o-<ctx>-<oid>); the same tail sent twice is adopted once (the FSM is a DAG); a line with any key outside {op,oid,order,from,next,at} refuses the whole tail (422) and writes nothing.",
+  "uk": "Офлайн-тапи кухонного планшета (бачив, чотири кроки) надсилаються одним хвостом; хаб перевиконує їх власними рішальниками; кожен тап або злитий, або утриманий як рішення для людини; повторний хвіст приймається один раз; чужий ключ у рядку відхиляє весь хвіст без запису."
+ },
+ "producer": {
+  "file": "workers/api/public/room/canvas/tablet.js",
+  "line": 165,
+  "what": "tablet().syncOrders(): POST /staff/orders/glue {location_id, ctx, tail} built by bw_tab_order_tail (crates/bebop-wasm/src/tablet.rs)"
+ },
+ "consumer": {
+  "file": "workers/api/src/hubdo/glue_turn/orders.rs",
+  "line": 34,
+  "what": "rebase_turn(): dowiz_hub::glue::orders::rebase with command::kitchen_ack::decide / command::advance::decide; hold_notes() for each held tap"
+ },
+ "readback": {
+  "file": "workers/api/src/services/operations/stock/glue.rs",
+  "line": 93,
+  "what": "GET /api/staff/stock/decisions (the held taps), and GET /api/owner/orders (the order's status and kitchen.seen)"
+ },
+ "routes": {
+  "lib_rs": ["workers/api/src/lib.rs POST /api/staff/orders/glue (hand-back row from LV-LOC-B)"]
+ },
+ "transport": { "method": "POST", "path": "/api/staff/orders/glue" },
+ "external": null,
+ "external_note": "No external API on this path; an applied bump tells the customer through the venue's own push/SMS routing exactly as an online bump does (hubdo/routed.rs tell_orders).",
+ "auth": {
+  "secrets": ["OWNER_EMAIL", "OWNER_PASSWORD"],
+  "where": "/root/.dowiz_owner",
+  "how": "the owner's token (courier::staff_at accepts an owner token for Cap::Advance)"
+ },
+ "request_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["location_id", "ctx", "tail"],
+  "properties": {
+   "location_id": { "type": "string", "minLength": 1 },
+   "ctx": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,32}$" },
+   "tail": { "type": "array", "maxItems": 400, "items": { "type": "string", "maxLength": 400 } }
+  }
+ },
+ "op_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["op", "oid", "order", "at"],
+  "properties": {
+   "op": { "enum": ["ack", "advance"] },
+   "oid": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,40}$" },
+   "order": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
+   "from": { "type": "string" },
+   "next": { "enum": ["CONFIRMED", "PREPARING", "READY", "PICKED_UP"] },
+   "at": { "type": "integer", "minimum": 0 }
+  }
+ },
+ "response_schema": {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sent", "merged", "applied", "held", "notes"],
+  "properties": {
+   "sent": { "type": "integer", "minimum": 0 },
+   "merged": { "type": "integer", "minimum": 0 },
+   "applied": { "type": "integer", "minimum": 0 },
+   "notes": { "type": "integer", "minimum": 0 },
+   "held": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["pos", "why"],
+     "properties": { "pos": { "type": "integer", "minimum": 0 }, "why": { "type": "string", "minLength": 1 } } } }
+  }
+ },
+ "schema_status": "drafted from the Rust types (services/operations/orders/glue.rs Body deny_unknown_fields, hubdo/glue_turn/orders.rs reply_json, dowiz_hub::glue::orders::KEYS); tighten from the first live answer",
+ "probe": "tools/live-proof/probes/feature-glue-orders.mjs: place a TEST order; POST /api/staff/orders/glue with [ack, PENDING->CONFIRMED, CONFIRMED->PREPARING, READY->PICKED_UP (stale)]; the law holds, 3 merged + 1 held; the owner's order is PREPARING with kitchen.seen; the held tap is on /api/staff/stock/decisions; the same tail again applies 0 and notes 0; a tail with a phone key is 422 and moves nothing; the decision is closed and the TEST order ended.",
+ "run": "node tools/live-proof/probes/feature-glue-orders.mjs   (LIVE_HOST defaults to https://qa-durres.dowiz.org)",
+ "last_verified": null
+}

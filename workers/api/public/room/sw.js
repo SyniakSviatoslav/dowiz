@@ -15,7 +15,7 @@
 
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-room-shell-2026-10-28-sheaf3';
+const SHELL_CACHE = 'dowiz-room-shell-2026-10-28-s2b';
 const SHELL = [
   '/room/',
   '/room/app.js',
