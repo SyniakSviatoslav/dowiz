@@ -2,7 +2,7 @@
 // src/lib.rs `THE HOST FILES`. ASCII QUOTES ONLY (DOWIZ-COMMON-RULES rule 11).
 
 const FONT = 'system-ui, -apple-system, Roboto, "Segoe UI", sans-serif';
-const KIND = { 1: ['email', 'username'], 2: ['password', 'current-password'], 3: ['text', 'one-time-code'], 4: ['text', 'off'], 5: ['text', 'off', 'decimal'] };
+const KIND = { 1: ['email', 'username'], 2: ['password', 'current-password'], 3: ['text', 'one-time-code'], 4: ['text', 'off'], 5: ['text', 'off', 'decimal'], 6: ['text', 'off', 'numeric'] };
 
 export async function start(canvas, wasmUrl, { langs = [], dark = 1, restoring = 0, onIntent = () => {}, onInput = () => {} } = {}) {
   const t0 = performance.now();

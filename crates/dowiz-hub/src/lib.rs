@@ -65,6 +65,8 @@ pub mod sense;
 pub mod rank;
 /// W-SNN 2026-10-06: a sheaf neural network ranker, integer inference, shipped in shadow.
 pub mod snn;
+/// W-S0 2026-10-08: sheaf S0 -- the gluing check for hub ∩ kitchen over the stock log.
+pub mod glue;
 // DG10: crypto-shredding for new logs; off by default (see Cargo.toml `shred`).
 #[cfg(feature = "shred")]
 pub mod shred;

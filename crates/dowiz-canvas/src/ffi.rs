@@ -247,7 +247,8 @@ pub unsafe extern "C" fn key_enter() {
 /// ptr: field kind), 7 blur, 8 submit (a: 1 claim), 9 table (ptr/len: sitting id),
 /// 10 stop (a: 0 reject 1 cancel; ptr/len: the order id; the reason is field 3),
 /// 11 sheet act (a: the row's act code; ptr/len: its argument), 12 Enter in sheet field a,
-/// 13 theme, 14 sound.
+/// 13 theme, 14 sound, 15 decided (SHEAF S2; ptr/len: the decision id),
+/// 16 stock movement (SHEAF S2; a: `model::MOVES` index; ptr/len: the item; the quantity is field 8).
 #[no_mangle]
 pub unsafe extern "C" fn intent() -> *const i32 {
     INTENT = [0; 8];
@@ -293,6 +294,14 @@ pub unsafe extern "C" fn intent() -> *const i32 {
         Some(Intent::SheetEnter(f)) => INTENT[..2].copy_from_slice(&[12, f as i32]),
         Some(Intent::Theme) => INTENT[0] = 13,
         Some(Intent::Sound) => INTENT[0] = 14,
+        Some(Intent::Decided { did }) => {
+            let (p, n) = span(did);
+            INTENT[..4].copy_from_slice(&[15, 0, p, n]);
+        }
+        Some(Intent::Stock { kind, item }) => {
+            let (p, n) = span(item);
+            INTENT[..4].copy_from_slice(&[16, kind as i32, p, n]);
+        }
         Some(Intent::Stop { cancel }) => {
             let id = board.ask_id();
             INTENT[..4].copy_from_slice(&[10, cancel as i32, id.as_ptr() as usize as i32, id.len() as i32]);

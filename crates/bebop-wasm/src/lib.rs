@@ -39,6 +39,9 @@ pub mod proj;
 pub mod decide;
 #[cfg(feature = "decide")]
 pub mod decide_abi;
+/// Sheaf S2: the kitchen tablet's writer over `dowiz_hub::glue::tablet` (`--features tablet`).
+#[cfg(feature = "tablet")]
+pub mod tablet;
 
 use bebop_store::evlog::EvLog;
 use bebop_store::kv::{Kv, FNV_OFFSET, FNV_PRIME};

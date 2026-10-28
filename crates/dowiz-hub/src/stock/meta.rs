@@ -53,6 +53,11 @@ pub struct Meta {
     /// (`storages/bind.rs`), `store=uq;store=uq` ("" = the unbound home).
     /// Absent on every record of a venue that never bound a station.
     pub drawn: Option<String>,
+    /// SHEAF S1 (`rights.rs`): the context that wrote this sale -- `hub`, `kitchen`, a waiter's
+    /// tablet. Absent on every record written before escrow rights existed.
+    pub ctx: Option<String>,
+    /// SHEAF S1: `1` = a sale PAST its context's rights, recorded and flagged, never refused.
+    pub prov: Option<i64>,
 }
 
 impl Meta {
@@ -75,6 +80,7 @@ impl Meta {
         int("expected", self.expected);
         int("value", self.value);
         int("uq", self.uq);
+        int("prov", self.prov);
         for (k, v) in [
             ("lot", &self.lot),
             ("supplier", &self.supplier),
@@ -84,6 +90,7 @@ impl Meta {
             ("store", &self.store),
             ("treated", &self.treated),
             ("drawn", &self.drawn),
+            ("ctx", &self.ctx),
         ] {
             if let Some(v) = v.as_ref().filter(|v| !v.trim().is_empty()) {
                 s.push_str(&format!(r#","{k}":"{}""#, esc(v.trim())));
@@ -125,6 +132,8 @@ pub fn meta_of(rec: &str) -> Meta {
         store: str_field(rec, "store").filter(|s| !s.trim().is_empty()),
         treated: str_field(rec, "treated").filter(|s| !s.trim().is_empty()),
         drawn: str_field(rec, "drawn").filter(|s| !s.trim().is_empty()),
+        ctx: str_field(rec, "ctx").filter(|s| !s.trim().is_empty()),
+        prov: int_field(rec, "prov").filter(|p| *p == 1),
     }
 }
 

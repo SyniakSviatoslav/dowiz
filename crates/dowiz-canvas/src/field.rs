@@ -15,6 +15,8 @@ pub enum Kind {
     Text,
     /// An amount or a rate: the keyboard offers digits and a separator (`inputmode=decimal`).
     Decimal,
+    /// A whole number (a stock quantity): the host asks for the numeric keyboard.
+    Number,
 }
 
 impl Kind {
@@ -26,6 +28,7 @@ impl Kind {
             Kind::Code => 3,
             Kind::Text => 4,
             Kind::Decimal => 5,
+            Kind::Number => 6,
         }
     }
 }

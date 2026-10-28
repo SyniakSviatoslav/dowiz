@@ -86,6 +86,8 @@ pub enum Str {
     Kitchen, Owner, GuestWaiting, Room, ForTime, StopReject, StopCancel, KReason, KReasonHint, KReasonNeeded, Close,
     // The table sheet (CV1b) and the theme button: room/i18n.js words, checked copy.
     ThemeSystem, ThemeDark, ThemeLight, Back, Send, NoLines, Subtotal, Discount, Total, Owed, AddItem, AddN, Search, NoMatch, SoldOut, Remove, Comp, Comped, MoveTable, Move, WhyRemove, WhyComp, RMistake, RGuestChanged, RUnavailable, RDropped, ROther, OtherText, NeedReason, ChangedReload, Take, TakeN, Amount, Method, Currency, Rate, MCash, MCard, MCheque, MTransfer, MGiftCard, MWallet, RateNeeded, OffTheBill, FillOwed, Taken, PaidInFull, BadAmount, BadRate, BadTip, Tip, WalletCode, NeedWallet, WalletNoTip, MoveLines, MoveLinesTo, PickLines, PickRound, NoTargets, NotAllLines, MoveSitting, MoveSittingHint, Moved, KitchenHasIt, RoundPaid, AlreadyThere, NotHere, GuestRound, GuestConfirm, GuestConfirmed, GuestRejected, QueuedSaved, QueueFull, QueueNoStore, MenuFailed, NoSlug,
+    Decide, Done, DOversold, DRecount, DHeld, DDouble, DProvisional, DDiverged,
+    Stock, StockReceived, StockWasted, StockCounted, Qty, Save, QtyNeeded, NoItems,
 }
 
 impl Str {
@@ -95,7 +97,7 @@ impl Str {
         Str::ALL.get(i).copied()
     }
     /// Every word, for the four-language test.
-    pub const ALL: [Str; 129] = [
+    pub const ALL: [Str; 145] = [
         Str::Live, Str::Offline, Str::Polling, Str::LoginLine, Str::Email, Str::Password, Str::ClaimCode,
         Str::SignIn, Str::Claim, Str::HaveCode, Str::HaveAccount, Str::ColNew, Str::ColPreparing,
         Str::ColReady, Str::Tables, Str::All, Str::StSushi, Str::StKitchen, Str::StBar, Str::KTable,
@@ -105,6 +107,8 @@ impl Str {
         Str::Waiter, Str::CounterManager, Str::Kitchen, Str::Owner, Str::GuestWaiting, Str::Room, Str::ForTime,
         Str::StopReject, Str::StopCancel, Str::KReason, Str::KReasonHint, Str::KReasonNeeded, Str::Close,
         Str::ThemeSystem, Str::ThemeDark, Str::ThemeLight, Str::Back, Str::Send, Str::NoLines, Str::Subtotal, Str::Discount, Str::Total, Str::Owed, Str::AddItem, Str::AddN, Str::Search, Str::NoMatch, Str::SoldOut, Str::Remove, Str::Comp, Str::Comped, Str::MoveTable, Str::Move, Str::WhyRemove, Str::WhyComp, Str::RMistake, Str::RGuestChanged, Str::RUnavailable, Str::RDropped, Str::ROther, Str::OtherText, Str::NeedReason, Str::ChangedReload, Str::Take, Str::TakeN, Str::Amount, Str::Method, Str::Currency, Str::Rate, Str::MCash, Str::MCard, Str::MCheque, Str::MTransfer, Str::MGiftCard, Str::MWallet, Str::RateNeeded, Str::OffTheBill, Str::FillOwed, Str::Taken, Str::PaidInFull, Str::BadAmount, Str::BadRate, Str::BadTip, Str::Tip, Str::WalletCode, Str::NeedWallet, Str::WalletNoTip, Str::MoveLines, Str::MoveLinesTo, Str::PickLines, Str::PickRound, Str::NoTargets, Str::NotAllLines, Str::MoveSitting, Str::MoveSittingHint, Str::Moved, Str::KitchenHasIt, Str::RoundPaid, Str::AlreadyThere, Str::NotHere, Str::GuestRound, Str::GuestConfirm, Str::GuestConfirmed, Str::GuestRejected, Str::QueuedSaved, Str::QueueFull, Str::QueueNoStore, Str::MenuFailed, Str::NoSlug,
+        Str::Decide, Str::Done, Str::DOversold, Str::DRecount, Str::DHeld, Str::DDouble, Str::DProvisional, Str::DDiverged,
+        Str::Stock, Str::StockReceived, Str::StockWasted, Str::StockCounted, Str::Qty, Str::Save, Str::QtyNeeded, Str::NoItems,
     ];
 }
 
@@ -278,5 +282,21 @@ fn words(k: Str) -> &'static str {
         Str::QueueNoStore => w!("Ky shfletues nuk ruan — nuk u ruajt.|This browser will not store — not saved.|Браузер не зберігає — не збережено.|Браузер не сохраняет — не сохранено."),
         Str::MenuFailed => w!("Menyja nuk u ngarkua.|The menu did not load.|Меню не завантажилось.|Меню не загрузилось."),
         Str::NoSlug => w!("Hapeni nga adresa e lokalit tuaj.|Open this from your venue address.|Відкрийте з адреси вашого закладу.|Откройте с адреса вашего заведения."),
+        Str::Decide => w!("Duhet një vendim|Decision needed|Потрібне рішення|Нужно решение"),
+        Str::Done => w!("U zgjidh|Done|Вирішено|Решено"),
+        Str::DOversold => w!("Shitur më shumë se sa ka|Sold more than there is|Продано більше, ніж є|Продано больше, чем есть"),
+        Str::DRecount => w!("Numëroje sërish|Count it again|Перерахуйте|Пересчитайте"),
+        Str::DHeld => w!("Lëvizja nuk u zbatua|Movement not applied|Рух не застосовано|Движение не применено"),
+        Str::DDouble => w!("E marrë dy herë|Taken twice|Взято двічі|Взято дважды"),
+        Str::DProvisional => w!("Shitur mbi kuotën|Sold past the share|Продано понад частку|Продано сверх доли"),
+        Str::DDiverged => w!("Të dhënat nuk përputhen|Records disagree|Записи не збігаються|Записи не совпадают"),
+        Str::Stock => w!("Magazina|Stock|Склад|Склад"),
+        Str::StockReceived => w!("Erdhi|Received|Прихід|Приход"),
+        Str::StockWasted => w!("Hedhur|Wasted|Списано|Списано"),
+        Str::StockCounted => w!("Numëruar|Counted|Пораховано|Посчитано"),
+        Str::Qty => w!("Sasia|Quantity|Кількість|Количество"),
+        Str::Save => w!("Ruaj|Save|Зберегти|Сохранить"),
+        Str::QtyNeeded => w!("Shkruani sasinë.|Write the quantity.|Напишіть кількість.|Напишите количество."),
+        Str::NoItems => w!("Ende asnjë artikull: lidhuni një herë.|No items yet: connect once.|Ще немає позицій: підключіться один раз.|Ещё нет позиций: подключитесь один раз."),
     }
 }

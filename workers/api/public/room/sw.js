@@ -15,7 +15,7 @@
 
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-room-shell-2026-10-12-session';
+const SHELL_CACHE = 'dowiz-room-shell-2026-10-28-sheaf3';
 const SHELL = [
   '/room/',
   '/room/app.js',
@@ -98,6 +98,9 @@ const SHELL = [
   // W-CV8a: the new-ticket chime the board imports (the kitchen hears an order offline too).
   '/room/canvas/chime.js',
   '/room/canvas/board.wasm',
+  // SHEAF S2: the kitchen tablet writer -- the whole point of it is to work with no network.
+  '/room/canvas/tablet.js',
+  '/room/canvas/tablet.wasm',
   '/lib/live.js',
 ];
 const NEVER = [/^\/api\//, /^\/media\//];

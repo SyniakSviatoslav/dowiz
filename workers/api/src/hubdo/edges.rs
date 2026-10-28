@@ -135,6 +135,8 @@ pub(crate) const EDGES: &[Edge] = &[
     cmd("returned", &["stock"]),
     cmd("stock_move", &["stock"]),
     cmd("stock_reset", &["stock"]),
+    cmd("glue", &["stock"]), // SHEAF S2: a kitchen tablet's tail glued into the stock log (`hubdo/glue_turn.rs`)
+    cmd("desk", &["stock"]), // SHEAF S2: the decisions a glue left, and their close
     cmd("kitchen_ack", LOG),
     cmd("place", &["log", "stock", "settings", "outbox", "fiscal"]),
     // A whole request in one turn (BN4, W-BN4B): `place`, the order's moves, the courier's run and

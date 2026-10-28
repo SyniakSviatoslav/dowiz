@@ -172,6 +172,48 @@ pub const BLANK_TABLE: Table = Table {
     guest: false, st: [Status::Other; ROUND_ST], nst: 0,
 };
 
+/// SHEAF S2: one "decision needed" a kitchen tablet's sync left (`dowiz_hub::glue::desk`):
+/// its id (what the Done tap closes), its kind, the item, the quantity as the hub wrote it, and
+/// which tablet. Read-only here; closing it is an intent the host sends.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Decision {
+    pub did: Span,
+    pub kind: Span,
+    pub item: Span,
+    pub qty: Span,
+    pub ctx: Span,
+}
+
+pub const BLANK_DECISION: Decision = Decision {
+    did: Span { off: 0, len: 0 }, kind: Span { off: 0, len: 0 }, item: Span { off: 0, len: 0 },
+    qty: Span { off: 0, len: 0 }, ctx: Span { off: 0, len: 0 },
+};
+
+/// SHEAF S2: one item of the tablet's own shelf (its local stock log, `glue::tablet::items`): the
+/// supply as the log names it and what is on hand, already a string for the screen.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StockItem {
+    pub item: Span,
+    pub on_hand: Span,
+}
+
+pub const BLANK_ITEM: StockItem = StockItem { item: Span { off: 0, len: 0 }, on_hand: Span { off: 0, len: 0 } };
+
+/// The three movements the tablet records offline, in the order the sheet draws them.
+pub const MOVES: [Str; 3] = [Str::StockReceived, Str::StockWasted, Str::StockCounted];
+
+/// The words of a decision's kind (`desk.rs` kinds); an unknown kind shows the "held" words.
+pub fn decision_word(kind: &str) -> Str {
+    match kind {
+        "oversold" => Str::DOversold,
+        "recount" => Str::DRecount,
+        "double" => Str::DDouble,
+        "provisional" => Str::DProvisional,
+        "diverged" => Str::DDiverged,
+        _ => Str::DHeld,
+    }
+}
+
 /// Whole minutes waited; never negative (kitchen-logic.js `ageMin`).
 pub fn age_min(start_ms: i64, now_ms: i64) -> i64 {
     ((now_ms - start_ms) / 60_000).max(0)

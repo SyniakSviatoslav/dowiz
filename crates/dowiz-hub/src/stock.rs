@@ -268,3 +268,7 @@ mod oldimage_tests;
 
 /// Lost sales: a basket the shelf refused, as a note that moves nothing (A13, W-LOST).
 pub mod refused;
+/// Sheaf S1: escrow rights per context, and sales past them recorded provisional.
+pub mod rights;
+/// Sheaf S2: records adopted verbatim -- the hub taking a tablet's tail, a tablet replaying the hub's.
+pub mod adopt;

@@ -53,6 +53,20 @@ impl HubImages {
         self.state.storage().put(NIGHT_KEY, now_ms).await
     }
 
+    /// SHEAF S2: THE STOCK CHECKPOINT, IN THE NIGHT. A glued tablet tail defers the checkpoint
+    /// it would make due (`StockLog::adopt_from`), and the next stock write would pay it (~6.7 ms
+    /// after a day's sync, measured): the venue's night writes it instead, in its own alarm turn.
+    /// Answers whether one was written. A moved generation is not an error -- a write raced the
+    /// alarm, and the next night (or that write's own door) writes it.
+    pub(in crate::hubdo) async fn night_stock_checkpoint(&self) -> Result<bool> {
+        let Some((meta, bytes)) = self.image(crate::hubstore::IMAGE_STOCK).await? else { return Ok(false) };
+        let mut log = dowiz_hub::stock::StockLog::load(&bytes).map_err(|_| Error::RustError("stock image is unreadable".into()))?;
+        if !log.checkpoint_if_due().map_err(|e| Error::RustError(e.to_string()))? {
+            return Ok(false);
+        }
+        Ok(self.put_image(crate::hubstore::IMAGE_STOCK, meta.generation, &log.to_bytes_trimmed()).await?.is_some())
+    }
+
     pub(super) async fn night_done(&self) -> Result<()> {
         self.state.storage().delete(NIGHT_KEY).await.map(|_| ())
     }

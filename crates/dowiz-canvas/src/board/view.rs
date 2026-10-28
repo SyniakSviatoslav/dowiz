@@ -34,6 +34,9 @@ pub fn draw(b: &mut Board, ui: &mut Ui) {
     if b.signed_in && b.ask.is_some() {
         super::sheet::draw(b, ui, root);
     }
+    if b.signed_in && b.stock_open {
+        super::stock::draw(b, ui, root);
+    }
     toast(b, ui, root);
 }
 
@@ -167,6 +170,9 @@ fn board(b: &mut Board, ui: &mut Ui, root: u16, area: Rect) {
         }
     }
     let (row, rest) = area.split_top(TAP + 2 * 8);
+    // SHEAF S2: what a kitchen tablet's sync left for a person, above the list it concerns.
+    let rest = if b.can_pass && b.data.nd > 0 { super::desk::strip(b, ui, root, rest) } else { rest };
+    let rest = if b.can_pass { super::stock::opener(b, ui, root, rest) } else { rest };
     let mut cells = [Rect::ZERO; 4];
     layout::columns(row.inset(8), n, 6, &mut cells);
     for (&t, &cell) in crate::head(&tabs, n).iter().zip(cells.iter()) {

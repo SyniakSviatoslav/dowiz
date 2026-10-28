@@ -12,7 +12,7 @@ pub async fn radius_health(place: &Place) -> serde_json::Value {
             let all: Vec<taste::Profile> = held.table.all(KIND).iter().filter_map(|(_, j)| taste::parse(j)).collect();
             let s = taste::agreement::summary(&all);
             log_line!("sheaf.radius venue={} cover=phone|venue compared={} max_pm={} median_pm={} over_half={}", place.venue, s.compared, s.max_pm, s.median_pm, s.over_half);
-            json!({ "taste": s.json(), "stock": "needs S0 glue (not built)" })
+            json!({ "taste": s.json(), "stock": "glue: built" })
         }
         Err(e) => json!({ "error": e.to_string() }),
     }

@@ -71,6 +71,7 @@ mod exceptions; // the exception alert (P1-5), `hubdo/exceptions.rs`
 mod fiscal; // the fiscal document queued at placement (B6/B8), `hubdo/fiscal.rs`
 mod routed; // the groups' messages written in the turn (W0a/W0b), `hubdo/routed.rs`
 mod stock_turn; // a stock movement as one turn (W0a), `hubdo/stock_turn.rs`
+mod glue_turn; // Sheaf S2: a tablet's tail glued and adopted; the decision list (`/fold/glue`, `/fold/desk`).
 mod menu; mod publish; // the catalogue projection's routes (R2) and its publish to R2 on every menu write (BN2): `hubdo/{menu,publish}.rs`
 mod preps; // the ПФ reads, answered here (R3), `hubdo/preps.rs`
 mod basket; // the basket's catalogue nodes and the room's recipes, answered here (BN1), `hubdo/basket.rs`

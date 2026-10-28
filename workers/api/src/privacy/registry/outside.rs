@@ -226,6 +226,9 @@ pub const BROWSER: &[DeviceKey] = &[
     key("dw_room_theme", &[], "room"),
     // W-CV8a: the board's new-ticket chime on/off for this device ('0' = off), nothing personal.
     key("dw_room_sound", &[], "room"),
+    // SHEAF S2 (room/canvas/tablet.js): the kitchen tablet's copy of the venue's stock log in IndexedDB,
+    // with its own offline movements on top; each movement names the staff member who made it (`by`).
+    key("dowiz.tablet", &[StaffId], "room"),
     key("dw_room_currency", &[], "room"),
     key("dowiz.room.outbox", &[OrderContent], "room"),
     // W-OFFSALE: the tablet's journal of its offline cash sales (lines, totals, no

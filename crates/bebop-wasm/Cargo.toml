@@ -43,6 +43,12 @@ serde_json = { version = "1", optional = true }
 [features]
 default = []
 decide = ["dep:dowiz-hub", "dep:serde_json"]
+# SHEAF S2: THE KITCHEN TABLET'S WRITER (`src/tablet.rs`), OFF by default for the reason `decide`
+# is: it links `dowiz_hub` (the same `glue::tablet` the venue's object glues against), which the
+# reader `bytes.baseline` ratchets must never carry. Exports `bw_tab_record` / `bw_tab_tail` /
+# `bw_tab_rebase`; `tablet.sh` builds it apart into `target/tablet/` and promotes it with the
+# digest of its sources. Verify the default stays clean: `cargo tree -e no-dev | grep -c dowiz` -> 0.
+tablet = ["dep:dowiz-hub", "dep:serde_json"]
 # THE NODE-KEY READER'S EXPORT (DG2), OFF by default. `src/nodekey.rs` is always
 # compiled and natively tested; this feature only makes `bw_key` a wasm export.
 # It exports the three fixture frames of `fixtures/key.expected` and nothing a

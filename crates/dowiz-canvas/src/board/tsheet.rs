@@ -158,7 +158,7 @@ impl TSheet {
                     r.tour = tour(f[6]);
                 }
                 (b'f', 5) => {
-                    let Some(field) = num(f[1]).filter(|&x| (super::F_SHEET as usize..super::FIELDS).contains(&x)) else {
+                    let Some(field) = num(f[1]).filter(|&x| (super::F_SHEET as usize..super::F_QTY as usize).contains(&x)) else {
                         self.bad += 1;
                         continue;
                     };

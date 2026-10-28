@@ -40,6 +40,13 @@ pub enum Act {
     Theme,
     /// The new-ticket sound toggle (CV8a): on by default; the host keeps the choice.
     Sound,
+    /// SHEAF S2: close the decision at this index of the feed's list.
+    Decided(u16),
+    /// SHEAF S2: open the offline stock sheet; pick its movement; step its item; save it.
+    StockOpen,
+    StockKind(u8),
+    StockStep(bool),
+    StockSave,
     /// Focus a text field.
     Field(u8),
     Submit,

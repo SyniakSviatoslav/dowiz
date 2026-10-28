@@ -102,3 +102,43 @@ test('the module picks the language as lib/langs.js pickLang does', async () => 
   assert.equal(pick('', 'de'), 0, 'else sq');
   assert.equal(new TextDecoder().decode(new Uint8Array(ex.memory.buffer, ex.lang_code(2), 2)), 'uk');
 });
+
+// SHEAF S2: the "decision needed" strip's records (GET /api/staff/stock/decisions -> D lines).
+const decisions = [{ did: 'ab12-1', kind: 'oversold', item: 'salmon', qty: -1, ctx: 'kitchen' }, { did: 'ab12-2', kind: 'held', item: 'tuna\tx', qty: null, ctx: 'kitchen' }, { kind: 'held' }];
+
+test('decisions become D lines; one with no id is skipped, never drawn as a row', () => {
+  const recs = toFeed({ decisions, now: NOW }).trim().split('\n').map(l => l.split('\t'));
+  assert.deepEqual(recs, [['D', 'ab12-1', 'oversold', 'salmon', '-1', 'kitchen'], ['D', 'ab12-2', 'held', 'tuna x', '', 'kitchen']]);
+});
+
+test('the shipped module reads the D lines and draws them at full tap size', async () => {
+  const { ex, put, stats } = await board();
+  ex.init(390, 844, 1, 0);
+  ex.session(1, 1, 1, 2);
+  ex.feed(put(toFeed({ orders, sittings, decisions, now: NOW })));
+  ex.frame(NOW);
+  const s = stats();
+  assert.deepEqual({ bad: s[6], dropped: s[5], small: s[7] }, { bad: 0, dropped: 0, small: 0 }, 'a module that does not know D counts both lines bad');
+});
+
+// SHEAF S2: the offline stock sheet -- the tablet's shelf as S lines, and its record.
+import { stockRecord } from './feed.js';
+
+test('the shelf becomes S lines and a movement becomes the codec record', () => {
+  const recs = toFeed({ items: [['salmon', 17], ['ri\tce', -3], ['', 1]], now: NOW }).trim().split('\n').map(l => l.split('\t'));
+  assert.deepEqual(recs, [['S', 'salmon', '17'], ['S', 'ri ce', '-3']]);
+  assert.equal(stockRecord(0, 'salmon', '5', 'k1', 1), '{"k":"received","item":"salmon","qty":5}');
+  assert.equal(stockRecord(1, 'salmon', '2', 'k1', 1), '{"k":"wasted","item":"salmon","qty":2,"reason":"spoiled","by":"k1"}');
+  assert.equal(stockRecord(2, 'salmon', '0', 'k1', 7), '{"k":"stocktake","item":"salmon","observed":0,"id":"tab-7","by":"k1"}');
+  for (const [k, q] of [[0, '0'], [1, '2.5'], [0, '-1'], [0, 'x'], [9, '1']]) assert.equal(stockRecord(k, 'salmon', q, 'k1', 1), null, `${k} ${q}`);
+});
+
+test('the shipped module reads the S lines', async () => {
+  const { ex, put, stats } = await board();
+  ex.init(390, 844, 1, 0);
+  ex.session(1, 1, 0, 2);
+  ex.feed(put(toFeed({ orders, items: [['salmon', 17], ['rice', 900]], now: NOW })));
+  ex.frame(NOW);
+  const s = stats();
+  assert.deepEqual({ bad: s[6], dropped: s[5], small: s[7] }, { bad: 0, dropped: 0, small: 0 });
+});

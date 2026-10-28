@@ -30,3 +30,7 @@ import Bebop.Datalog
 import Bebop.Dag
 import Bebop.KvDelta
 import Bebop.Affine
+import Bebop.Stock
+import Bebop.ZSet
+import Bebop.Merkle
+import Bebop.Sync

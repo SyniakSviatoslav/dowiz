@@ -8,6 +8,8 @@
 //! T <id> <STATUS> <start_ms> <seen 0|1> <t|p|d> <table> <note> <when>     a ticket
 //! L <qty> <station 1|2|3> <name> <note>                                   a line of the last T
 //! R <sitting> <table> <rounds> <due text> <guest 0|1> <STATUS,STATUS,...> an open table
+//! D <did> <kind> <item> <qty> <ctx>                                       a decision needed (S2)
+//! S <item> <on hand>                                                      the tablet's shelf (S2)
 //! ```
 //! A feed is a whole snapshot: it replaces every ticket and table. What does not fit a pool is
 //! counted in `dropped` and drawn as "+N more" -- never silently cut. Values never contain a tab
@@ -19,6 +21,8 @@ pub const ARENA: usize = 49_152;
 pub const MAX_TICKETS: usize = 96;
 pub const MAX_LINES: usize = 768;
 pub const MAX_TABLES: usize = 64;
+pub const MAX_DECISIONS: usize = 16;
+pub const MAX_ITEMS: usize = 128;
 
 pub struct Data {
     pub arena: [u8; ARENA],
@@ -29,6 +33,10 @@ pub struct Data {
     pub nl: usize,
     pub tables: [Table; MAX_TABLES],
     pub ntab: usize,
+    pub decisions: [Decision; MAX_DECISIONS],
+    pub nd: usize,
+    pub items: [StockItem; MAX_ITEMS],
+    pub ni: usize,
     /// Records the pools could not hold (tickets, lines, tables, or arena bytes).
     pub dropped: u32,
     /// Lines the reader did not understand.
@@ -69,6 +77,7 @@ impl Data {
         Data {
             arena: [0; ARENA], used: 0, tickets: [BLANK_TICKET; MAX_TICKETS], nt: 0,
             lines: [BLANK_LINE; MAX_LINES], nl: 0, tables: [BLANK_TABLE; MAX_TABLES], ntab: 0,
+            decisions: [BLANK_DECISION; MAX_DECISIONS], nd: 0, items: [BLANK_ITEM; MAX_ITEMS], ni: 0,
             dropped: 0, bad: 0, skip: false,
         }
     }
@@ -102,6 +111,8 @@ impl Data {
         self.nt = 0;
         self.nl = 0;
         self.ntab = 0;
+        self.nd = 0;
+        self.ni = 0;
         self.dropped = 0;
         self.bad = 0;
         self.skip = false;
@@ -114,6 +125,8 @@ impl Data {
                 b"T" if n == 9 => self.ticket(&f),
                 b"L" if n == 5 => self.line(&f),
                 b"R" if n == 7 => self.table(&f),
+                b"D" if n == 6 => self.decision(&f),
+                b"S" if n == 3 && !f[1].is_empty() => self.item(&f),
                 _ => self.bad += 1,
             }
         }
@@ -161,6 +174,29 @@ impl Data {
         if let Some(t) = self.tickets.get_mut(self.nt - 1) {
             t.nlines += 1;
         }
+    }
+
+    fn item(&mut self, f: &[&[u8]; 9]) {
+        if self.ni == MAX_ITEMS {
+            self.dropped += 1;
+            return;
+        }
+        self.items[self.ni] = StockItem { item: self.put(f[1]), on_hand: self.put(f[2]) };
+        self.ni += 1;
+    }
+
+    fn decision(&mut self, f: &[&[u8]; 9]) {
+        if f[1].is_empty() {
+            self.bad += 1;
+            return;
+        }
+        if self.nd == MAX_DECISIONS {
+            self.dropped += 1;
+            return;
+        }
+        let d = Decision { did: self.put(f[1]), kind: self.put(f[2]), item: self.put(f[3]), qty: self.put(f[4]), ctx: self.put(f[5]) };
+        self.decisions[self.nd] = d;
+        self.nd += 1;
     }
 
     fn table(&mut self, f: &[&[u8]; 9]) {

@@ -209,6 +209,9 @@ impl HubImages {
         let ran = async {
             if self.night_due().await? {
                 crate::cloud::night_venue(&env, &venue, now_ms).await;
+                if let Err(e) = self.night_stock_checkpoint().await {
+                    log_error!("timer {venue}: the stock checkpoint: {e}"); // the night goes on
+                }
                 self.night_done().await?;
             }
             crate::cron::run(&env, &venue, now_ms).await;

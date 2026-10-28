@@ -228,6 +228,46 @@ theorem stratified_well_defined (G : PredGraph) (h : NoNegativeEdgeInSCC G) (S :
     ∃ M, LeastPrefixed T M ∧ ∀ M', LeastPrefixed T M' → M' = M :=
   ⟨neg_strictly_lower G h S, stratum_model_unique T hm k hstab⟩
 
+-- ---- counting (LV-INC-D, R-BEBOP-LEVERS §2.4 / AX-plan A1) ------------------------------------------
+
+/-! A fact's COUNT is how many derivations in the current set derive it (the CNT weight AX1/AX14 add to
+    dl.bp's DESC). `counting_sound`: a fact holds exactly when its count is positive -- so a deletion
+    that DECREMENTS the count (`cnt_erase`) retracts the fact exactly when its last derivation goes
+    (`last_derivation_gone`), with no recompute of the stratum. Non-recursive strata only: in a
+    recursive one a fact can support itself, which is DRed's job, not counting's. -/
+
+section counting
+variable {δ β : Type} [DecidableEq β]
+
+/-- The number of derivations in `ds` whose head is `h`. -/
+def cnt (head : δ → β) (ds : List δ) (h : β) : Nat := ds.countP (fun d => head d = h)
+
+/-- COUNTING IS SOUND: a fact is derived iff its count is positive. -/
+theorem counting_sound (head : δ → β) (ds : List δ) (h : β) :
+    (∃ d ∈ ds, head d = h) ↔ 0 < cnt head ds h := by
+  simp [cnt, List.countP_pos_iff]
+
+/-- Insertions add counts. -/
+theorem cnt_append (head : δ → β) (ds es : List δ) (h : β) :
+    cnt head (ds ++ es) h = cnt head ds h + cnt head es h := by
+  simp [cnt, List.countP_append]
+
+/-- A deletion decrements its head's count by exactly one. -/
+theorem cnt_erase [DecidableEq δ] (head : δ → β) (ds : List δ) (d : δ) (hd : d ∈ ds) :
+    cnt head (ds.erase d) (head d) + 1 = cnt head ds (head d) := by
+  have hp := (List.perm_cons_erase hd).countP_eq (fun x => decide (head x = head d))
+  simp only [cnt] at hp ⊢
+  rw [hp, List.countP_cons_of_pos (by simp)]
+
+/-- The last derivation gone: the fact is retracted. -/
+theorem last_derivation_gone [DecidableEq δ] (head : δ → β) (ds : List δ) (d : δ) (hd : d ∈ ds)
+    (h1 : cnt head ds (head d) = 1) : ¬ ∃ d' ∈ ds.erase d, head d' = head d := by
+  rw [counting_sound]
+  have := cnt_erase head ds d hd
+  omega
+
+end counting
+
 end Bebop.Datalog
 
 #print axioms Bebop.Datalog.seminaive_eq_naive
@@ -236,3 +276,6 @@ end Bebop.Datalog
 #print axioms Bebop.Datalog.neg_strictly_lower
 #print axioms Bebop.Datalog.refusal_necessary
 #print axioms Bebop.Datalog.stratified_well_defined
+#print axioms Bebop.Datalog.counting_sound
+#print axioms Bebop.Datalog.cnt_erase
+#print axioms Bebop.Datalog.last_derivation_gone

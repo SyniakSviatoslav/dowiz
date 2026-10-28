@@ -34,6 +34,8 @@ pub mod aliases;
 pub mod storages;
 /// The HACCP traceability export: lot -> orders, order -> lots, the freezing log (P13, W-STORE).
 pub mod haccp;
+/// Sheaf S2: the kitchen tablet's sync and the "decision needed" list.
+pub mod glue;
 pub use moves::StockMoveIn;
 #[cfg(test)]
 use moves::movement;

@@ -11,6 +11,8 @@ pub mod feed;
 pub mod model;
 mod cards;
 pub mod dirty;
+mod desk;
+mod stock;
 mod input;
 mod sheet;
 pub mod tsheet;
@@ -64,6 +66,11 @@ pub enum Intent {
     /// Reject (before the kitchen accepted) or cancel (after) the ticket in `Board::ask_id`, with
     /// the reason in field `F_REASON` -- the reason the customer reads (kitchen.js `askReason`).
     Stop { cancel: bool },
+    /// SHEAF S2: a person closed this decision (`POST /api/staff/stock/decisions/close`).
+    Decided { did: Span },
+    /// SHEAF S2: record a movement on the tablet's own log, offline (`tablet.js` `record`):
+    /// `kind` indexes `model::MOVES`; the quantity is field `F_QTY`.
+    Stock { kind: u8, item: Span },
 }
 
 /// View tabs: the three ticket columns, then the tables.
@@ -76,9 +83,11 @@ pub const F_EMAIL: u8 = 0;
 pub const F_CODE: u8 = 1;
 pub const F_PASSWORD: u8 = 2;
 pub const F_REASON: u8 = 3;
-/// The table sheet's fields: 4..FIELDS (the pay form holds four at once: rate, amount, tip, wallet).
+/// The table sheet's fields: F_SHEET..F_QTY (the pay form holds four at once: rate, amount, tip, wallet).
 pub const F_SHEET: u8 = 4;
-pub const FIELDS: usize = 8;
+/// SHEAF S2: the offline stock sheet's quantity -- after the table sheet's four, never one of them.
+pub const F_QTY: u8 = 8;
+pub const FIELDS: usize = F_QTY as usize + 1;
 
 const QUEUE: usize = 8;
 const TOAST: usize = 160;
@@ -119,6 +128,10 @@ pub struct Board {
     /// `LATE_MIN` until the host says (`set_ages`, board.js `ages`).
     pub warn_min: i64,
     pub late_min: i64,
+    /// SHEAF S2: the offline stock sheet -- open, its movement (`model::MOVES`), its item.
+    pub stock_open: bool,
+    pub stock_kind: u8,
+    pub stock_item: u16,
     /// The reject/cancel sheet: open, for which order (its id copied: a new snapshot may move it).
     pub ask: Option<bool>,
     ask_id: [u8; 64],
@@ -143,8 +156,10 @@ impl Board {
             fields: [
                 Field::new(Kind::Email), Field::new(Kind::Code), Field::new(Kind::Password), Field::new(Kind::Text),
                 Field::new(Kind::Text), Field::new(Kind::Text), Field::new(Kind::Text), Field::new(Kind::Text),
+                Field::new(Kind::Number),
             ],
             ts: tsheet::TSheet::new(), theme: 0, sound: true, warn_min: model::WARN_MIN, late_min: model::LATE_MIN,
+            stock_open: false, stock_kind: 0, stock_item: 0,
             ask: None, ask_id: [0; 64], ask_len: 0,
             focus: None, claiming: false, toast: [0; TOAST], toast_len: 0, queue: [None; QUEUE], qlen: 0,
             down: None, last_y: 0, moved: false,
@@ -168,6 +183,7 @@ impl Board {
         self.focus = None;
         self.ask = None;
         self.ts.open = false;
+        self.stock_open = false;
         if !signed {
             self.data.apply(b"");
             for f in self.fields.iter_mut() {
@@ -196,7 +212,7 @@ impl Board {
     pub fn sheet(&mut self, b: &[u8]) -> usize {
         if b.is_empty() {
             self.ts.open = false;
-            if self.focus.is_some_and(|f| f >= F_SHEET) {
+            if self.focus.is_some_and(|f| (F_SHEET..F_QTY).contains(&f)) {
                 self.focus = None;
                 self.emit(Intent::Blur);
             }

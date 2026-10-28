@@ -8,7 +8,7 @@ export const BUMPS = ['confirm', 'preparing', 'ready', 'collected'];
 
 export const clean = v => String(v ?? '').replace(/[\t\n\r]+/g, ' ');
 
-export function toFeed({ orders = [], sittings = [], currency = null, locale = 'sq', now = Date.now(), when = () => '' } = {}) {
+export function toFeed({ orders = [], sittings = [], decisions = [], items = [], currency = null, locale = 'sq', now = Date.now(), when = () => '' } = {}) {
   const out = [];
   for (const o of orders || []) {
     if (!o || !o.id) continue;
@@ -26,6 +26,15 @@ export function toFeed({ orders = [], sittings = [], currency = null, locale = '
     out.push(['R', s.sitting_id, s.table, rounds.length, money(sittingDue(s), currency, locale),
       rounds.some(guestWaiting) ? 1 : 0, rounds.map(r => r.status).join(',')].map(clean).join('\t'));
   }
+  // SHEAF S2: what a kitchen tablet's sync left for a person (GET /api/staff/stock/decisions).
+  for (const d of decisions || []) {
+    if (!d || !d.did) continue;
+    out.push(['D', d.did, d.kind, d.item, d.qty ?? '', d.ctx].map(clean).join('\t'));
+  }
+  // SHEAF S2: the tablet's own shelf, for the offline stock sheet (tablet.js `items`).
+  for (const [item, onHand] of items || []) {
+    if (item) out.push(['S', item, String(onHand ?? '')].map(clean).join('\t'));
+  }
   return out.join('\n') + '\n';
 }
 
@@ -38,7 +47,8 @@ const WORDS = ('Live Offline Polling LoginLine Email Password ClaimCode SignIn C
   'MCash MCard MCheque MTransfer MGiftCard MWallet RateNeeded OffTheBill FillOwed Taken PaidInFull BadAmount BadRate BadTip Tip ' +
   'WalletCode NeedWallet WalletNoTip MoveLines MoveLinesTo PickLines PickRound NoTargets NotAllLines MoveSitting MoveSittingHint ' +
   'Moved KitchenHasIt RoundPaid AlreadyThere NotHere GuestRound GuestConfirm GuestConfirmed GuestRejected QueuedSaved QueueFull ' +
-  'QueueNoStore MenuFailed NoSlug').split(' ');
+  'QueueNoStore MenuFailed NoSlug Decide Done DOversold DRecount DHeld DDouble DProvisional DDiverged Stock StockReceived ' +
+  'StockWasted StockCounted Qty Save QtyNeeded NoItems').split(' ');
 export { WORDS };
 export const W = name => { const i = WORDS.indexOf(name); return i < 0 ? '' : i; };
 
@@ -51,4 +61,15 @@ export function ages(settings) {
 export function opens(s) {
   const caps = parseCaps(s?.staff?.caps);
   return [caps.has('advance'), caps.has('take_orders')];
+}
+
+/// SHEAF S2: one movement from the offline stock sheet as the codec's record (crates/dowiz-hub
+/// src/stock/codec.rs). `kind` is the sheet's: 0 received, 1 wasted, 2 counted. PURE (node-tested).
+export function stockRecord(kind, item, qty, by, nowMs) {
+  const n = Number(qty);
+  if (!item || !Number.isInteger(n) || n < 0 || (kind !== 2 && n === 0)) return null;
+  if (kind === 0) return JSON.stringify({ k: 'received', item, qty: n });
+  if (kind === 1) return JSON.stringify({ k: 'wasted', item, qty: n, reason: 'spoiled', by });
+  if (kind === 2) return JSON.stringify({ k: 'stocktake', item, observed: n, id: `tab-${nowMs}`, by });
+  return null;
 }

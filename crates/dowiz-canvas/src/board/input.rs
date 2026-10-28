@@ -26,7 +26,7 @@ impl Board {
                 }
                 let step = y - self.last_y;
                 self.last_y = y;
-                if self.moved && self.ask.is_none() && self.list.contains(dx, dy) {
+                if self.moved && self.ask.is_none() && !self.stock_open && self.list.contains(dx, dy) {
                     self.scroll_by(-step);
                     return true;
                 }
@@ -68,8 +68,10 @@ impl Board {
             self.emit(Intent::Submit { claim: self.claiming });
         } else if self.ask.is_some() {
             self.send_stop();
-        } else if let Some(f) = self.focus.filter(|&f| self.ts.open && f >= super::F_SHEET) {
+        } else if let Some(f) = self.focus.filter(|&f| self.ts.open && (super::F_SHEET..super::F_QTY).contains(&f)) {
             self.emit(Intent::SheetEnter(f));
+        } else if self.stock_open {
+            self.stock_save();
         }
     }
 
@@ -88,7 +90,7 @@ impl Board {
 
     pub(super) fn tap(&mut self, scene: &Scene, x: i32, y: i32) {
         let act = scene.hit(x, y).map_or(Act::None, |n| n.act);
-        if self.focus.is_some() && !matches!(act, Act::Field(_) | Act::Submit | Act::SheetSend) {
+        if self.focus.is_some() && !matches!(act, Act::Field(_) | Act::Submit | Act::SheetSend | Act::StockSave) {
             self.focus = None;
             self.emit(Intent::Blur);
         }
@@ -133,6 +135,7 @@ impl Board {
             }
             Act::SheetClose => {
                 self.ask = None;
+                self.stock_open = false;
                 if self.focus.take().is_some() {
                     self.emit(Intent::Blur);
                 }
@@ -146,6 +149,12 @@ impl Board {
             }
             Act::Theme => self.emit(Intent::Theme),
             Act::Sound => self.emit(Intent::Sound),
+            Act::StockOpen | Act::StockKind(_) | Act::StockStep(_) | Act::StockSave => self.stock_tap(act),
+            Act::Decided(i) => {
+                if let Some(d) = self.data.decisions[..self.data.nd].get(i as usize).copied() {
+                    self.emit(Intent::Decided { did: d.did });
+                }
+            }
             Act::Table(i) => {
                 if let Some(t) = crate::head(&self.data.tables, self.data.ntab).get(i as usize).copied() {
                     self.emit(Intent::Table { sitting: t.sitting });

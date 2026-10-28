@@ -1,5 +1,8 @@
 // THE ROOM / KITCHEN BOARD ON CANVAS (Wave CV rows CV1, CV1b): the surface's adapter. Routes and
 // reasons: crates/dowiz-canvas src/lib.rs `THE HOST FILES`. ASCII QUOTES ONLY (rule 11).
+// SHEAF S2: GET /api/staff/stock/decisions (the "decision needed" strip), POST /api/staff/stock/decisions/close
+// (its Done), and the kitchen tablet's sync, POST /api/staff/stock/glue (./tablet.js over ./tablet.wasm),
+// every SYNC_MS and when back online.
 import { arrivals, makeChime } from './chime.js';
 const WASM = WebAssembly.compileStreaming(fetch('/room/canvas/board.wasm'));
 WASM.catch(() => {});   // start() reports it
@@ -8,14 +11,15 @@ const CORE = Promise.all([import('./loader.js'), import('/store/storage.js')]).t
   ({ start } = lo); ({ safeGet, safeSet } = st);
 });
 
-let api, write, session, lastRoom, toFeed, opens, ROLE, BUMPS, W, ages, live, NET = null, TB = null;
+let api, write, session, lastRoom, toFeed, opens, ROLE, BUMPS, W, ages, stockRecord, live, NET = null, TB = null;
 const net = () => NET || (NET = Promise.all([import('/room/net.js'), import('./feed.js'), import('/lib/live.js')]).then(([n, f, l]) => {
-  ({ api, write, session, lastRoom } = n); ({ toFeed, opens, ROLE, BUMPS, W, ages } = f); ({ live } = l);
+  ({ api, write, session, lastRoom } = n); ({ toFeed, opens, ROLE, BUMPS, W, ages, stockRecord } = f); ({ live } = l);
 }));
 
 const POLL_MS = 20000;
+const SYNC_MS = 300000;
 
-const S = { s: null, sock: null, pass: false, floor: false, orders: [], sittings: [], timer: 0, toastT: 0, loading: null, known: null };
+const S = { s: null, sock: null, pass: false, floor: false, orders: [], sittings: [], decisions: [], items: [], timer: 0, toastT: 0, loading: null, known: null, tab: null, synced: 0 };
 let C = null, code = 'sq', CHIME = null;
 
 function toast(word, msg) {
@@ -27,7 +31,7 @@ function toast(word, msg) {
 function feed() {
   const locale = code;
   const when = ms => { try { return new Date(ms).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
-  const n = C.put(toFeed({ orders: S.orders, sittings: S.sittings, currency: safeGet('dw_room_currency') || null, locale, when }));
+  const n = C.put(toFeed({ orders: S.orders, sittings: S.sittings, decisions: S.decisions, items: S.items, currency: safeGet('dw_room_currency') || null, locale, when }));
   C.ex.feed(n); C.ask();
   const { ids, fresh } = arrivals(S.known, S.orders);
   S.known = ids;
@@ -40,11 +44,14 @@ async function load() {
   const signedOut = () => signOut();
   S.loading = (async () => {
     try {
-      const [k, r] = await Promise.all([
+      if (S.pass && Date.now() - S.synced > SYNC_MS) await sync();
+      const [k, r, d] = await Promise.all([
         S.pass ? api(`/staff/kitchen?location_id=${loc}`, { signedOut }) : null,
         S.floor ? api(`/staff/room?location_id=${loc}`, { signedOut }) : null,
+        S.pass ? api(`/staff/stock/decisions?location_id=${loc}`, { signedOut }).catch(() => null) : null,
       ]);
       if (k) S.orders = k.orders || [];
+      if (d) S.decisions = d.open || [];
       if (r) { S.sittings = r.sittings || []; lastRoom.set(S.s.staff.locationId, S.sittings, Date.now()); }
       S.sock?.polled();
       if (!S.sock || S.sock.state !== 'live') C.ex.set_sync(2);
@@ -55,6 +62,34 @@ async function load() {
     } finally { S.loading = null; }
   })();
   return S.loading;
+}
+
+/// SHEAF S2: the kitchen tablet (./tablet.js over ./tablet.wasm), made once per session. It needs
+/// no network: the module and this file are in the room's offline shell (room/sw.js).
+async function tab() {
+  if (!S.tab) {
+    const [t, inst] = await Promise.all([import('./tablet.js'), WebAssembly.instantiateStreaming(fetch('/room/canvas/tablet.wasm'), {})]);
+    const loc = S.s.staff.locationId;
+    S.tab = t.tablet({ mod: t.surface(inst.instance), store: t.idbStore(`${loc}:kitchen`), post: (p, b) => post(p, b), loc });
+  }
+  return S.tab;
+}
+
+/// The tablet's shelf, for the stock sheet; local, so it works offline.
+async function items() {
+  try { S.items = await (await tab()).items(); } catch (e) { console.warn('tablet items', e); }
+}
+
+/// The tablet's sync. A failure is said once and never blocks the board: the tablet keeps its
+/// records and tries again at the next SYNC_MS (or when the device is back online).
+async function sync() {
+  S.synced = Date.now();
+  try {
+    await (await tab()).sync();
+  } catch (e) {
+    if (!e.offline) console.warn('tablet sync', e);
+  }
+  await items();
 }
 
 function signedIn(s) {
@@ -71,7 +106,7 @@ function signedIn(s) {
 function signOut() {
   TB?.close();
   session.set(null); lastRoom.clear();
-  S.sock?.close(); S.sock = null; S.s = null; S.orders = []; S.sittings = []; S.known = null;
+  S.sock?.close(); S.sock = null; S.s = null; S.orders = []; S.sittings = []; S.known = null; S.decisions = []; S.items = []; S.tab = null; S.synced = 0;
   C.ex.session(0, 0, 0, 0); C.ex.set_sync(0); C.ask();
 }
 
@@ -120,6 +155,17 @@ async function onIntent(kind, a, text) {
       safeSet('dw_room_theme', MODES[(MODES.indexOf(safeGet('dw_room_theme') || '') + 1) % 3]);
       return toast(['ThemeSystem', 'ThemeDark', 'ThemeLight'][MODES.indexOf(theme())]);
     }
+    if (kind === 15) { await post('/staff/stock/decisions/close', { location_id: loc, did: text }); toast('Saved'); return load(); }
+    if (kind === 16) {
+      // SHEAF S2: one movement on the tablet's own log, with or without a network; the glue carries it.
+      const rec = stockRecord(a, text, fieldText(8).trim(), S.s?.staff?.id || 'kitchen', Date.now());
+      if (!rec) return toast('QtyNeeded');
+      await (await tab()).record(rec);
+      await items(); feed();
+      toast('Saved');
+      if (navigator.onLine) { S.synced = 0; return load(); }
+      return;
+    }
     if (kind === 10) {
       const reason = fieldText(3).trim();
       await post(`/owner/orders/${encodeURIComponent(text)}/action`, { location_id: loc, action: a ? 'cancel' : 'reject', reason });
@@ -137,7 +183,7 @@ export async function boot(canvas = document.querySelector('canvas')) {
   const dark = mode ? mode === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   const restoring = safeGet('dw_room_session') ? 1 : 0;
   C = await start(canvas, WASM, { langs: [safeGet('dw_room_lang'), ...(navigator.languages || [])], dark: dark ? 1 : 0, restoring, onIntent,
-    onInput: f => { if (f >= 4) TB?.input(); } });
+    onInput: f => { if (f >= 4 && f < 8) TB?.input(); } });
   document.documentElement.lang = code = C.code;
   // CV8a: the chime. Its AudioContext waits for the first pointer or key event (chime.js).
   CHIME = makeChime({ AudioCtx: window.AudioContext || window.webkitAudioContext, vibrate: n => navigator.vibrate?.(n), store: { get: safeGet, set: safeSet } });
@@ -155,7 +201,7 @@ export async function boot(canvas = document.querySelector('canvas')) {
   } else if (restoring) { C.ex.session(0, 0, 0, 0); C.ask(); }   // expired: the login form
   setInterval(() => { if (document.visibilityState === 'visible' && S.s && (!S.sock || S.sock.due())) load(); else C.ask(); }, POLL_MS);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/room/sw.js', { scope: '/room/' }).catch(() => {});
-  addEventListener('online', () => load());
+  addEventListener('online', () => { S.synced = 0; load(); });
   addEventListener('offline', () => { C.ex.set_sync(0); C.ask(); });
   return C;
 }
