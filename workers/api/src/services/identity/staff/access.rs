@@ -46,18 +46,12 @@ pub(crate) enum Kitchen {
     No,
 }
 
-#[allow(dead_code)]
-const TAKE: [Cap; 1] = [Cap::TakeOrders];
-#[allow(dead_code)]
-const PAY: [Cap; 1] = [Cap::TakePayment];
-#[allow(dead_code)]
-const VOID: [Cap; 1] = [Cap::Void];
-#[allow(dead_code)]
-const TILL: [Cap; 1] = [Cap::OpenTill];
-/// SHEAF S0/S2: the kitchen tablet's stock sync and its decision strip ask the shelf OR the pass
-/// (`services/operations/stock/glue.rs` NEEDS).
-#[allow(dead_code)]
-const GLUE: [Cap; 2] = [Cap::Stock, Cap::Advance];
+#[allow(dead_code)] const TAKE: [Cap; 1] = [Cap::TakeOrders];
+#[allow(dead_code)] const PAY: [Cap; 1] = [Cap::TakePayment];
+#[allow(dead_code)] const VOID: [Cap; 1] = [Cap::Void];
+#[allow(dead_code)] const TILL: [Cap; 1] = [Cap::OpenTill];
+// SHEAF S0/S2: the tablet's stock sync + decision strip ask the shelf OR the pass (stock/glue.rs NEEDS).
+#[allow(dead_code)] const GLUE: [Cap; 2] = [Cap::Stock, Cap::Advance];
 
 #[allow(unused_imports)]
 use Door::{Own, Owner, Staff};
@@ -70,8 +64,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/orders/:id/action", Staff(&PASS), Yes),
     ("post", "/api/staff/orders/:id/kitchen-ack", Staff(&PASS), Yes),
     ("get", "/api/staff/kitchen", Staff(&PASS), Read),
-    ("post", "/api/staff/orders/glue", Staff(&PASS), Yes), // S2b: the pass's offline taps
-    ("post", "/api/staff/stock/glue", Staff(&GLUE), Yes), // SHEAF S2: the tablet's stock sync
+    ("post", "/api/staff/orders/glue", Staff(&PASS), Yes), ("post", "/api/staff/stock/glue", Staff(&GLUE), Yes), // S2b + SHEAF S2 tablets
     ("get", "/api/staff/stock/decisions", Staff(&GLUE), Read), ("post", "/api/staff/stock/decisions/close", Staff(&GLUE), Yes),
     ("get", "/api/owner/print/jobs", Staff(&PASS), Read),
     ("get", "/api/owner/floorplan", Staff(&PASS), Read),
