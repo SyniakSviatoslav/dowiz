@@ -1,0 +1,22 @@
+[package]
+name = "bebop-log"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "The bebop chained event log over a bebop image: EvLog v1/v2 records, the crc quarantine policy, ChainMark. no_std + alloc; depends only on bebop-image."
+
+[features]
+default = []
+# EvLog::init / append / set_tip over a path.
+std = ["bebop-image/std"]
+
+[dependencies]
+bebop-image = { path = "../bebop-image" }
+
+[dev-dependencies]
+# the tests write temp files through the path API
+bebop-image = { path = "../bebop-image", features = ["std"] }
+
+[profile.release]
+opt-level = 3

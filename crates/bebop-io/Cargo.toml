@@ -1,0 +1,15 @@
+[package]
+name = "bebop-io"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "How bebop images reach a device: the Device trait, the commit plan, the Writer (recovery on open, Poisoned after a failed barrier), FileDevice (unix: pwrite + fdatasync, lock file) and the enumerated crash harness. std; builds for wasm32 (FileDevice is unix-only)."
+
+[dependencies]
+bebop-image = { path = "../bebop-image", features = ["std"] }
+# NORMAL dependency: Writer::commit_delta appends through kv::delta (W-ES-P2).
+bebop-kv = { path = "../bebop-kv", features = ["std"] }
+
+[profile.release]
+opt-level = 3

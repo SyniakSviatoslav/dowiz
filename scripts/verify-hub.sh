@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.." || exit 1
 # No workspace in this repo: each crate is standalone and must be entered.
 # `cargo -p` from the root resolves the manifest and pulls the wrong target
 # graph — a documented false-green trap (see CLAUDE.md, "Build model").
-for crate in crates/bebop-store crates/dowiz-core crates/dowiz-hub workers/api; do
+for crate in crates/bebop-image crates/bebop-kv crates/bebop-log crates/bebop-io crates/bebop-store crates/dowiz-core crates/dowiz-hub workers/api; do
   echo "== $crate: cargo test =="
   ( cd "$crate" && cargo test --quiet )
   echo "   $crate OK"

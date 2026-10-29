@@ -1,0 +1,20 @@
+[package]
+name = "bebop-image"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "The bebop pointer-free image format: 8-byte cells, two superblocks, the PartTab, self-describing objects with crc32, pick/verify over owned (Store) or borrowed (View) cells. no_std + alloc, zero dependencies."
+
+# docs/FORMAT-BEBOP-IMAGE-v2.md is normative. no_std unless `std` (the path API); the Device
+# trait is NOT here but in bebop-io (W-ES-P1, a deviation from R-EMBED-STORE §3.1, accepted by
+# main 2026-10-29): this crate's abstraction is `Cells`, cells in, answers out.
+[features]
+default = []
+# Store::create / open / commit over a path, StoreError::Io, From<std::io::Error>.
+std = []
+
+[dependencies]
+
+[profile.release]
+opt-level = 3

@@ -34,17 +34,48 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
-        with: { toolchain: '${{ env.RUST_TOOLCHAIN }}' }
+        with: { toolchain: '${{ env.RUST_TOOLCHAIN }}', targets: wasm32-unknown-unknown, components: clippy }
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
+            crates/bebop-image
+            crates/bebop-kv
+            crates/bebop-log
+            crates/bebop-io
             crates/bebop-store
             crates/dowiz-core
             crates/dowiz-hub
             crates/bebop-wasm
             workers/api
             tools/gen-vocab
-      - name: bebop-store (the image format)
+      # W-ES-P1 (2026-10-29): the store is four library crates and a facade; each is standalone.
+      - name: bebop-image (the image format)
+        run: cd crates/bebop-image && sh ../../tools/gates/ci-annotate.inc bebop-image cargo test
+      - name: bebop-kv (the KV layout)
+        run: cd crates/bebop-kv && sh ../../tools/gates/ci-annotate.inc bebop-kv cargo test
+      - name: bebop-log (the event log)
+        run: cd crates/bebop-log && sh ../../tools/gates/ci-annotate.inc bebop-log cargo test
+      - name: bebop-io (device, writer, crash harness)
+        run: cd crates/bebop-io && sh ../../tools/gates/ci-annotate.inc bebop-io cargo test
+      # T-ES-05: no_std for real (no `std` feature -> #![no_std]), zero crates outside the library,
+      # no `unsafe`; and bebop-io, which the Worker links, builds for wasm32.
+      - name: bebop library no_std + dependency gate (T-ES-05)
+        run: |
+          for c in bebop-image bebop-kv bebop-log bebop-io; do
+            (cd crates/$c && cargo build --target wasm32-unknown-unknown) || exit 1
+            grep -q '^#!\[forbid(unsafe_code)\]' crates/$c/src/lib.rs || { echo "::error::$c lacks forbid(unsafe_code)"; exit 1; }
+          done
+          for c in bebop-image bebop-kv bebop-log; do
+            extra=$(cd crates/$c && cargo tree -e no-dev --prefix none | awk '{print $1}' | sort -u | grep -v -x -e bebop-image -e $c)
+            [ -z "$extra" ] || { echo "::error::$c depends on: $extra"; exit 1; }
+          done
+      # T-ES-06: no new unchecked index in the three no_std crates (the existing sites carry a named allow).
+      - name: bebop library index gate (T-ES-06)
+        run: |
+          for c in bebop-image bebop-kv bebop-log; do
+            (cd crates/$c && cargo clippy --lib && cargo clippy --lib --features std) || exit 1
+          done
+      - name: bebop-store (the facade + the DAG runtime)
         run: cd crates/bebop-store && sh ../../tools/gates/ci-annotate.inc bebop-store cargo test
       - name: dowiz-core (the kernel)
         run: cd crates/dowiz-core && sh ../../tools/gates/ci-annotate.inc dowiz-core cargo test

@@ -33,7 +33,7 @@ trap 'rm -rf "$SCRATCH"' EXIT
 say() { echo "verify: $*"; }
 
 digest() {
-  ( cd "$HERE/.." && find bebop-wasm/Cargo.toml bebop-wasm/src/lib.rs bebop-wasm/src/abi.rs bebop-wasm/src/verify.rs bebop-store/src -type f \( -name '*.rs' -o -name Cargo.toml \) \
+  ( cd "$HERE/.." && find bebop-wasm/Cargo.toml bebop-wasm/src/lib.rs bebop-wasm/src/abi.rs bebop-wasm/src/verify.rs bebop-store/src bebop-image/src bebop-kv/src bebop-log/src bebop-io/src -type f \( -name '*.rs' -o -name Cargo.toml \) \
       | grep -v '/tests\.rs$' | LC_ALL=C sort | while read -r f; do printf '%s\n' "$f"; cat "$f"; done ) | sha256sum | cut -c1-16
 }
 if [ "${1:-}" = "--digest" ]; then digest; exit 0; fi

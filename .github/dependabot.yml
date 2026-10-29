@@ -17,6 +17,10 @@ updates:
     directories:
       - /crates/dowiz-core
       - /crates/dowiz-hub
+      - /crates/bebop-image
+      - /crates/bebop-kv
+      - /crates/bebop-log
+      - /crates/bebop-io
       - /crates/bebop-store
       - /crates/bebop-wasm
       - /workers/api

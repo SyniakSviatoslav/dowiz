@@ -2,7 +2,7 @@
 
 Статус: **нормативний**, заморожено 2026-10-27 (лейн W-ES-P0, фаза P0 плану
 `docs/research/R-EMBED-STORE-2026-10-27.md`). Документ описує байти, які сьогодні пишуть і
-читають `crates/bebop-store` (Rust), `bebop-lang/selfhost/prelude/store.bp` + `selfhost/std/kv.bp`
+читають `crates/bebop-image` + `bebop-kv` + `bebop-log` (Rust; з W-ES-P1 2026-10-29 `crates/bebop-store` — лише фасад, що реекспортує їх), `bebop-lang/selfhost/prelude/store.bp` + `selfhost/std/kv.bp`
 (bebop), `crates/bebop-wasm` (wasm32) і `crates/bebop-wasm/oracle.py` (Python). Там, де код і
 старі документи розходяться, **правий код, що читає й пише живі образи**; розбіжність названо в §11.
 
@@ -12,6 +12,12 @@
 Константи цього документа (§10) читає тест
 `crates/bebop-store/src/format/tests.rs::the_format_document_states_every_constant_with_the_codes_value`:
 змінити значення тут або в коді без іншого боку — червоний тест.
+
+Розкладка крейтів (W-ES-P1, 2026-10-29): правила цього документа над комірками живуть у
+`crates/bebop-image` (no_std, `Cells` = `Store` або `View`; шлях-API `create`/`open`/`commit` —
+`src/fs.rs` під фічею `std`). **Трейт `Device` — лише в `crates/bebop-io`**, не в `bebop-image`:
+це свідоме відхилення від R-EMBED-STORE §3.1 (там pick/verify/recover «над абстрактним Device»),
+прийняте main 2026-10-29 — два трейти розійшлися б; абстракція формату — комірки, не пристрій.
 
 ---
 

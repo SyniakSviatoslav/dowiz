@@ -1,0 +1,28 @@
+[package]
+name = "es-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "R-EMBED-STORE P7: bebop-store vs redb / LMDB (heed) / SQLite, and the regression gate"
+
+# Standalone: its own workspace, so no other crate's `cargo test` builds it and its lock file
+# holds the competitors' versions. Default features = bebop only (bebop-store + libc), which is
+# what the gate (tools/gates/es-bench.sh) builds; `competitors` adds the three other engines for
+# the full table (docs/measurements/ES-BENCH-2026-10-29.md).
+[workspace]
+
+[features]
+default = []
+competitors = ["dep:redb", "dep:heed", "dep:rusqlite"]
+
+[dependencies]
+bebop-store = { path = "../bebop-store" }
+libc = "0.2"
+redb = { version = "4", optional = true }
+heed = { version = "=0.22.1", optional = true }
+rusqlite = { version = "=0.32.1", features = ["bundled"], optional = true }
+
+[profile.release]
+opt-level = 3
+debug = false

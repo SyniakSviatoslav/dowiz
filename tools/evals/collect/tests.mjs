@@ -13,6 +13,10 @@ export const CRATES = {
   kernel: 'kernel',
   dowiz_core: 'crates/dowiz-core',
   dowiz_hub: 'crates/dowiz-hub',
+  bebop_image: 'crates/bebop-image',
+  bebop_kv: 'crates/bebop-kv',
+  bebop_log: 'crates/bebop-log',
+  bebop_io: 'crates/bebop-io',
   bebop_store: 'crates/bebop-store',
   worker: 'workers/api/src',
 };

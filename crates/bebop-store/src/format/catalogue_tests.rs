@@ -17,6 +17,8 @@ pub(super) fn pick(st: &Store) -> Result<Superblock, PickError> {
     let bytes = st.to_bytes();
     let r = st.pick_checked();
     assert_eq!(pick_in(&View::new(&bytes)), r.ok(), "View and Store disagree");
+    // T-ES-07 (W-ES-P1): not only `pick` -- every read rule, View against Store, on these cells.
+    crate::view_tests::agree(&bytes, "catalogue");
     // `Store::pick` is the wasm reader's own lean copy of the rule (its byte ratchet only
     // falls); every named cell here holds it to `pick_checked_in`'s answer.
     assert_eq!(st.pick(), r.ok(), "Store::pick and pick_checked disagree");
@@ -26,6 +28,7 @@ pub(super) fn pick(st: &Store) -> Result<Superblock, PickError> {
 /// `Kv::load_checked`, asserting the zero-copy reader refuses with the same error.
 pub(super) fn kv(st: &Store) -> Result<Kv, KvError> {
     let bytes = st.to_bytes();
+    crate::view_tests::agree(&bytes, "catalogue kv"); // T-ES-07 (W-ES-P1)
     let v = View::new(&bytes);
     let r = Kv::load_checked(st);
     assert_eq!(KvIn::open(&v).err(), r.as_ref().err().copied(), "KvIn and Kv::load_checked disagree");

@@ -3,8 +3,40 @@
 version = 4
 
 [[package]]
+name = "bebop-image"
+version = "0.1.0"
+
+[[package]]
+name = "bebop-io"
+version = "0.1.0"
+dependencies = [
+ "bebop-image",
+ "bebop-kv",
+]
+
+[[package]]
+name = "bebop-kv"
+version = "0.1.0"
+dependencies = [
+ "bebop-image",
+]
+
+[[package]]
+name = "bebop-log"
+version = "0.1.0"
+dependencies = [
+ "bebop-image",
+]
+
+[[package]]
 name = "bebop-store"
 version = "0.1.0"
+dependencies = [
+ "bebop-image",
+ "bebop-io",
+ "bebop-kv",
+ "bebop-log",
+]
 
 [[package]]
 name = "bebop-wasm"

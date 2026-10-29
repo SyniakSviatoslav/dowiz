@@ -110,8 +110,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "bebop-image"
+version = "0.1.0"
+
+[[package]]
+name = "bebop-io"
+version = "0.1.0"
+dependencies = [
+ "bebop-image",
+ "bebop-kv",
+]
+
+[[package]]
+name = "bebop-kv"
+version = "0.1.0"
+dependencies = [
+ "bebop-image",
+]
+
+[[package]]
+name = "bebop-log"
+version = "0.1.0"
+dependencies = [
+ "bebop-image",
+]
+
+[[package]]
 name = "bebop-store"
 version = "0.1.0"
+dependencies = [
+ "bebop-image",
+ "bebop-io",
+ "bebop-kv",
+ "bebop-log",
+]
 
 [[package]]
 name = "bit-set"

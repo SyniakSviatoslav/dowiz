@@ -6,10 +6,10 @@
     "uk": "Каталог читається на місці в об'єкті закладу: двійковий пошук по ключах, crc один раз на покоління; маршрути й відповіді не змінились."
   },
   "producer": [
-    { "file": "crates/bebop-store/src/kv/zc.rs", "line": 76, "what": "KvIn::open (full check: crc of the five objects, index bounds, sortedness)" },
-    { "file": "crates/bebop-store/src/kv/zc.rs", "line": 90, "what": "KvIn::reopen (O(1) bounds, no crc, for a holder that checked these bytes)" },
-    { "file": "crates/bebop-store/src/kv/zc.rs", "line": 233, "what": "KvIn::get (binary search, value borrowed)" },
-    { "file": "crates/bebop-store/src/kv/zc.rs", "line": 285, "what": "kv_get_in / kv_prefix_in" },
+    { "file": "crates/bebop-kv/src/zc.rs", "line": 88, "what": "KvIn::open (full check: crc of the five objects, index bounds, sortedness)" },
+    { "file": "crates/bebop-kv/src/zc.rs", "line": 105, "what": "KvIn::reopen (O(1) bounds, no crc, for a holder that checked these bytes)" },
+    { "file": "crates/bebop-kv/src/zc/overlay.rs", "line": 163, "what": "KvIn::get (binary search, value borrowed)" },
+    { "file": "crates/bebop-kv/src/zc.rs", "line": 288, "what": "kv_get_in / kv_prefix_in" },
     { "file": "crates/dowiz-hub/src/catalog/view.rs", "line": 31, "what": "CatalogRead (Catalog and CatalogView)" },
     { "file": "crates/dowiz-hub/src/catalog/view.rs", "line": 88, "what": "CatalogView::open / reopen" },
     { "file": "workers/api/src/hubdo/catview.rs", "line": 30, "what": "HubImages::with_catalog (crc once per generation)" },

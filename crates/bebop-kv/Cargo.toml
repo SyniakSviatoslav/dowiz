@@ -1,0 +1,22 @@
+[package]
+name = "bebop-kv"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "The bebop KV layout over a bebop image: v1/v2 compacted roots, the v3 delta chain, the zero-copy reader KvIn, crc-checked load. no_std + alloc; depends only on bebop-image."
+
+[features]
+default = []
+# Kv::init(path), Kv::commit_into(path).
+std = ["bebop-image/std"]
+
+[dependencies]
+bebop-image = { path = "../bebop-image" }
+
+[dev-dependencies]
+# the tests write temp files through the path API
+bebop-image = { path = "../bebop-image", features = ["std"] }
+
+[profile.release]
+opt-level = 3

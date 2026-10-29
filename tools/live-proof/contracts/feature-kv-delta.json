@@ -7,33 +7,33 @@
   },
   "producer": [
     {
-      "file": "crates/bebop-store/src/kv/delta/write.rs",
-      "line": 69,
+      "file": "crates/bebop-kv/src/delta/write.rs",
+      "line": 73,
       "what": "append_delta_with (records + v3 root, the compaction trigger, sup_delta)"
     },
     {
-      "file": "crates/bebop-store/src/kv/delta.rs",
-      "line": 123,
+      "file": "crates/bebop-kv/src/delta.rs",
+      "line": 126,
       "what": "chain_in (every claim of the chain bounded)"
     },
     {
-      "file": "crates/bebop-store/src/kv/delta.rs",
-      "line": 179,
+      "file": "crates/bebop-kv/src/delta.rs",
+      "line": 182,
       "what": "check_chain (crc of every record)"
     },
     {
-      "file": "crates/bebop-store/src/kv.rs",
-      "line": 175,
+      "file": "crates/bebop-kv/src/decode.rs",
+      "line": 40,
       "what": "Kv::decode (base + replay)"
     },
     {
-      "file": "crates/bebop-store/src/verify.rs",
-      "line": 82,
+      "file": "crates/bebop-kv/src/verify.rs",
+      "line": 21,
       "what": "Kv::load_checked (crc incl. the chain)"
     },
     {
-      "file": "crates/bebop-store/src/kv/zc/overlay.rs",
-      "line": 41,
+      "file": "crates/bebop-kv/src/zc/overlay.rs",
+      "line": 60,
       "what": "KvIn::finish (merged order) / get (overlay first)"
     },
     {
@@ -80,7 +80,7 @@
     }
   ],
   "external_api_version": null,
-  "on_disk_format": "bebop-store KV image v3 = v2 base + delta chain (crates/bebop-store/src/kv/delta.rs header); compaction writes v2. A Worker build that predates W-DELTA REFUSES a v3 image (rollback risk).",
+  "on_disk_format": "bebop-store KV image v3 = v2 base + delta chain (crates/bebop-kv/src/delta.rs header); compaction writes v2. A Worker build that predates W-DELTA REFUSES a v3 image (rollback risk).",
   "routes": {
     "place": {
       "request": {

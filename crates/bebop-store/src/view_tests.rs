@@ -16,7 +16,9 @@ fn image() -> Vec<u8> {
     st.to_bytes_trimmed()
 }
 
-fn agree(img: &[u8], what: &str) {
+/// Every read rule, View against Store, on one image. T-ES-07 runs it over the whole named-cell
+/// catalogue too (`format::catalogue_tests::pick`).
+pub(crate) fn agree(img: &[u8], what: &str) {
     let st = Store::from_bytes(img);
     // `from_bytes` pads a trimmed image to its capacity; the view is given the SAME cells, so
     // the comparison is of the rules, not of the padding (see `View`'s doc).
