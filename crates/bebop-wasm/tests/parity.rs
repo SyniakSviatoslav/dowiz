@@ -116,6 +116,17 @@ fn a_cut_below_the_arena_is_refused_not_read_as_the_previous_generation() {
     assert_eq!(kv_view(&[]), Err(Refusal::NoSuperblock));
 }
 
+/// W-F1: `fixtures/ptaway.store` is kv3 with the live superblock (B) naming a whole, sealed
+/// PartTab at the OTHER page's home, 16, instead of its own, 528 (`fixtures/ptaway.expected`).
+/// Every reader refuses it (FORMAT §3.1 `PartTabMisplaced`); `gate.sh` greps this name.
+#[test]
+fn ptaway_fixture_is_refused() {
+    let bytes = fixture_named("ptaway");
+    assert_eq!(kv_view(&bytes), Err(Refusal::NoSuperblock));
+    let st = Store::from_bytes(&bytes);
+    assert!(matches!(st.pick_checked(), Err(bebop_store::format::PickError::PartTabMisplaced { at: 512, pt: 16 })));
+}
+
 #[test]
 fn a_kv_image_is_not_a_log_and_a_log_is_not_a_kv() {
     assert_eq!(log_view(&fixture()), Err(Refusal::NotALog));

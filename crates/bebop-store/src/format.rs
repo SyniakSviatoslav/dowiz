@@ -74,6 +74,11 @@ pub enum PickError {
     ArenaUsedOutside { at: usize, used: i64, have: usize },
     /// Cell 3 names a PartTab whose header or partition entry is outside the image.
     PartTabOutside { at: usize, pt: i64 },
+    /// Cell 3 names a PartTab that is not at its home cell `at + PT_PAGE_OFFSET` (W-F1): the
+    /// next commit from this superblock writes ITS PartTab at the other page's home, so a
+    /// live PartTab anywhere else could be overwritten before the commit point, and a crash
+    /// there would lose generation k instead of leaving it readable (FORMAT §3.1, §8).
+    PartTabMisplaced { at: usize, pt: i64 },
     /// The PartTab's own crc (h1 high half) does not match its payload (D8, AC-ES-03), or it
     /// holds fewer than the 19 payload cells a P=1 entry needs (`got: None`).
     PartTabBad { at: usize, pt: usize, want: u32, got: Option<u32> },
@@ -101,6 +106,9 @@ pub fn pick_checked_in<C: Cells + ?Sized>(c: &C) -> Result<Superblock, PickError
     }
     if pt < 0 || (pt != 0 && pt.checked_add(PT_GEN as i64).is_none_or(|end| end >= n)) {
         return Err(PickError::PartTabOutside { at, pt });
+    }
+    if pt != 0 && pt != (at + PT_PAGE_OFFSET) as i64 {
+        return Err(PickError::PartTabMisplaced { at, pt });
     }
     if pt != 0 {
         let p = pt as usize;

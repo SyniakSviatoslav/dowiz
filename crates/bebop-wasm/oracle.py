@@ -121,6 +121,11 @@ def image(path):
     if live is None or cells[live + 4] > n:
         return cells, n, None, 0, s1
     pt = cells[live + 3]
+    # W-F1 (FORMAT §3.1 PartTabMisplaced): the live PartTab must sit at its home, live + 16;
+    # anywhere else the next commit could overwrite it before its commit point. Refused as
+    # "no superblock" (status 1), the verdict the wasm reader's Store::pick gives.
+    if pt != 0 and pt != live + 16:
+        return cells, n, None, 0, s1
     root = cells[pt + 18] if pt > 0 and pt + 18 < n else 0
     return cells, n, live, (root if 0 < root and root + 2 <= n else 0), s1
 

@@ -26,6 +26,20 @@ sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dowiz-core = { path = "../dowiz-core" }
+# THE AT-REST CODEC (W-SPACE, `src/pack.rs`): backup bundles carry each image LZ4-packed.
+# DECART: lz4_flex 0.14.0 (2026-09-26), MIT, pure Rust, builds for wasm32; ZERO dependencies
+# with `frame` off (its only optional dep, twox-hash, is behind `frame`). `safe-*` = no unsafe
+# in the codec, `checked-decode` = bounds checks on hostile input (a restore reads outside
+# bytes). Chosen over a hand-written decoder (operator, 2026-10-28: a home-made parser of
+# untrusted input is avoidable risk), over zstd (C, no wasm32-unknown-unknown) and over a Rust
+# deflate (40-60 KB of wasm, `workers/api/src/cloud.rs::gzip`). VERIFY: `cargo tree -e no-dev
+# | grep -c twox` = 0.
+# The envelope's crc (W-SPACE): crc32fast 1.5.0, MIT OR Apache-2.0, one dependency (cfg-if,
+# already in this graph). The same zlib CRC-32 as `bebop_store::crc32`, so packed bytes are
+# unchanged; chosen because that one is byte-table-driven and measured 6.6 ms per 1.9 MB in
+# wasm32 (main, 2026-10-29: "the slow implementation, not the data").
+crc32fast = "=1.5.0"
+lz4_flex = { version = "=0.14.0", default-features = false, features = ["alloc", "safe-encode", "safe-decode", "checked-decode"] }
 
 [features]
 # `shred` (DG10, default OFF): crypto-shredding for new logs -- `src/shred.rs`,

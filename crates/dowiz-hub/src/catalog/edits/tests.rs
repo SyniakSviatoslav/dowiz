@@ -171,3 +171,135 @@ fn before_names_what_a_dish_held_and_a_compaction_keeps_every_kept_point() {
     assert_eq!(replay(&small, Cut::All).unwrap(), state_of(&Catalog::load(&bytes).unwrap()));
     assert!(recent(&log, 3).unwrap().iter().map(|e| e.seq).eq([last.seq, last.seq - 1, last.seq - 2]));
 }
+
+// ── W-SPACE: the byte bound ─────────────────────────────────────────────────────────────────
+
+/// A venue record as large as qa-durres's (~1 KB): every menu edit rewrites it (`menu_version`).
+fn venue_record(v: i64) -> String {
+    format!(r#"{{"name":"Edits","currency":"ALL","menu_version":{v},"about":"{}"}}"#, "x".repeat(1000))
+}
+
+/// `journal` WITHOUT its compaction: the same records, for a reference that keeps everything.
+fn journal_all(log: &mut LogImage, before: &State, after: &State, at: i64, by: &str, gen: i64) {
+    let mut rows: Vec<(&str, (String, Option<String>, Option<String>))> = vec![];
+    if log.is_empty() {
+        rows.extend(diff(&State::new(), before).into_iter().map(|r| (BASELINE, r)));
+    }
+    rows.extend(diff(before, after).into_iter().map(|r| (by, r)));
+    for (i, (who, (k, o, n))) in rows.iter().enumerate() {
+        let g = (i + 1 == rows.len()).then_some(gen);
+        log.append(KIND, k, &record_json(at, who, k, o, n, g)).unwrap();
+    }
+}
+
+/// `writes` price edits of d1, each bumping the venue record, journaled in full: (journal, menu).
+fn qa_like(writes: i64) -> (LogImage, State) {
+    let mut log = LogImage::create().unwrap();
+    let mut c = Catalog::load(&born()).unwrap();
+    for w in 1..=writes {
+        let before = state_of(&c);
+        c.set_product("d1", &dish("d1", 1000 + w));
+        c.set_location(&venue_record(w));
+        journal_all(&mut log, &before, &state_of(&c), w * 1000, "staff-1", w);
+    }
+    (log, state_of(&c))
+}
+
+/// Every reader of the journal, on the window `small` kept: the newest records (the console),
+/// the menu at each kept record's time, and what each kept dish edit restores to.
+fn same_on_the_kept_window(big: &LogImage, small: &LogImage) -> usize {
+    let (b, s) = (edits(big).unwrap(), edits(small).unwrap());
+    let kept = s.iter().rev().take_while(|e| e.by != BASELINE).count();
+    let strip = |e: &Edit| (e.at_ms, e.by.clone(), e.key.clone(), e.old.clone(), e.new.clone(), e.gen);
+    let (rb, rs) = (recent(big, kept).unwrap(), recent(small, kept).unwrap());
+    assert!(rb.iter().map(strip).eq(rs.iter().map(strip)), "the console's newest {kept} differ");
+    for r in 0..kept {
+        let (eb, es) = (&b[b.len() - 1 - r], &s[s.len() - 1 - r]);
+        assert_eq!(strip(eb), strip(es));
+        assert_eq!(replay(small, Cut::Time(es.at_ms)).unwrap(), replay(big, Cut::Time(eb.at_ms)).unwrap(), "menu at t={}", es.at_ms);
+        assert_eq!(before(small, es.seq).unwrap().map(|x| x.1), before(big, eb.seq).unwrap().map(|x| x.1), "restore of {}", es.key);
+    }
+    assert_eq!(replay(small, Cut::All).unwrap(), replay(big, Cut::All).unwrap());
+    kept
+}
+
+/// RED-able: make `compacted_to` ignore `keep_bytes` (the cut stays at `len - keep`) and the
+/// image does not shrink below a third.
+#[test]
+fn a_byte_bounded_compaction_keeps_every_readers_answer_on_its_window_and_drops_the_rest() {
+    let (big, menu) = qa_like(250);
+    assert!(big.len() < MAX_RECORDS, "this is the byte bound, not the count bound: {}", big.len());
+    assert!(over_bytes(&big, &menu), "{} bytes in use", big.usage().used_cells * 8);
+    let small = compacted_to(&big, KEEP, byte_budget(&menu).0).unwrap();
+    let kept = same_on_the_kept_window(&big, &small);
+    assert!(kept >= 30, "the console's default page is inside the window: {kept}");
+    assert!(small.to_bytes().len() * 3 < big.to_bytes().len(), "{} -> {}", big.to_bytes().len(), small.to_bytes().len());
+    // WHAT IS DROPPED, by name: an edit older than the window -- its signer and its time.
+    let oldest_kept = edits(&small).unwrap().iter().find(|e| e.by != BASELINE).unwrap().at_ms;
+    assert!(edits(&small).unwrap().iter().all(|e| e.by == BASELINE || e.at_ms >= oldest_kept));
+    assert!(!edits(&small).unwrap().iter().any(|e| e.by == "staff-1" && e.at_ms == 1000), "the first edit is gone");
+    // And it is under its own bound: the next write does not compact again.
+    assert!(!over_bytes(&small, &menu));
+}
+
+/// RED-able: drop `|| over_bytes(log, after)` from `journal` and the journal grows to ~400 KB.
+#[test]
+fn the_writer_compacts_past_the_byte_bound_and_still_replays_to_the_menu() {
+    let mut log = LogImage::create().unwrap();
+    let mut bytes = born();
+    let mut compactions = 0;
+    for w in 1..=250 {
+        let mut c = Catalog::load(&bytes).unwrap();
+        let before = state_of(&c);
+        c.set_product("d1", &dish("d1", 1000 + w));
+        c.set_location(&venue_record(w));
+        let read_at = last_gen(&log).unwrap_or(0);
+        compactions += journal(&mut log, &before, &state_of(&c), w * 1000, "staff-1", (read_at, read_at + 1)).unwrap().compacted as usize;
+        bytes = c.to_bytes().unwrap();
+    }
+    assert!(compactions >= 1, "never compacted");
+    assert!(log.usage().used_cells as usize * 8 <= MAX_BYTES, "{} bytes in use", log.usage().used_cells * 8);
+    assert_eq!(replay(&log, Cut::All).unwrap(), state_of(&Catalog::load(&bytes).unwrap()));
+    assert!(log.quarantined().is_empty());
+}
+
+/// A menu larger than the bound itself: compaction cannot get under MAX_BYTES, so the bound
+/// rises to the baseline it writes -- and it does not compact on every write. RED-able: make
+/// `over_bytes` compare against MAX_BYTES alone and every write after the first compacts.
+#[test]
+fn a_menu_larger_than_the_bound_does_not_compact_on_every_write() {
+    let mut c = Catalog::load(&born()).unwrap();
+    for i in 0..300 {
+        c.set_product(&format!("big{i}"), &format!(r#"{{"id":"big{i}","name":"{}","price":1}}"#, "n".repeat(600)));
+    }
+    let mut log = LogImage::create().unwrap();
+    let mut compactions = 0;
+    for w in 1..=40 {
+        let before = state_of(&c);
+        c.set_product("d1", &dish("d1", 1000 + w));
+        let read_at = last_gen(&log).unwrap_or(0);
+        compactions += journal(&mut log, &before, &state_of(&c), w, "staff-1", (read_at, read_at + 1)).unwrap().compacted as usize;
+    }
+    assert!(compactions <= 1, "{compactions} compactions in 40 writes");
+    assert_eq!(replay(&log, Cut::All).unwrap(), state_of(&c));
+}
+
+/// THE REAL JOURNAL (qa-durres, W-SPACE). Not in the default run: the image is a copy of a
+/// venue's data and is never committed. `DOWIZ_SPACE_DIR=<dir holding catalog.edits.img>
+/// cargo test --release --lib real_catalog_edits -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn real_catalog_edits_compaction() {
+    let dir = std::env::var("DOWIZ_SPACE_DIR").expect("set DOWIZ_SPACE_DIR");
+    let raw = std::fs::read(format!("{dir}/catalog.edits.img")).unwrap();
+    let big = LogImage::load(&raw).unwrap();
+    let menu = replay(&big, Cut::All).unwrap();
+    let small = compacted_to(&big, KEEP, byte_budget(&menu).0).unwrap();
+    let kept = same_on_the_kept_window(&big, &small);
+    let after = small.to_bytes();
+    println!("catalog.edits: {} records, {} bytes -> {} records ({kept} kept + baseline), {} bytes; over_bytes before {} after {}",
+        big.len(), raw.len(), small.len(), after.len(), over_bytes(&big, &menu), over_bytes(&small, &menu));
+    println!("packed at rest: {} -> {}", after.len(), crate::pack::pack(&after).len());
+    // For the wasm32 timing of what an export packs (not `.img`, so the ratio test skips it).
+    std::fs::write(format!("{dir}/catalog.edits.compacted.bin"), &after).unwrap();
+}

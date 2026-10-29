@@ -73,6 +73,13 @@
    - `arena_used` < 0 або > довжини образу → `ArenaUsedOutside` (це **обрізаний** образ, а не
      привід читати попереднє покоління; тест `a_cut_one_cell_short_is_refused_not_read_as_the_previous_generation`);
    - `pt` < 0, або `pt` ≠ 0 і `pt + 20` ≥ довжини → `PartTabOutside`;
+   - `pt` ≠ 0 і `pt` ≠ `at + 16` (його **домівка**, §2, `PT_PAGE_OFFSET`) → `PartTabMisplaced`
+     (W-F1). Нормативно PartTab живого суперблока лежить лише на його сторінці: наступний коміт
+     з `at` пише свій PartTab у `(512 − at) + 16`, і живий PartTab деінде (напр. 528 при живому A)
+     був би перезаписаний **до** точки коміту — падіння в цьому вікні дало б відмову замість
+     покоління k (§8). Жоден письменник такого образу не пише; читач тепер це **перевіряє**,
+     а не припускає (гіпотеза `hpt` моделі `formal/Bebop/Disk.lean`). `Store::pick` (wasm-копія),
+     oracle.py (статус 1) і bebop `st_open`/`st_map_ro` (trap 79) відмовляють так само;
    - `pt` ≠ 0: довжина PartTab < 19 або об'єкт не вміщується → `PartTabBad{got: None}`;
      crc PartTab (§6) не збігається → `PartTabBad{got: Some}`;
    - корінь `r = cells[pt + 18]`: `r` < 0 або (`r` ≠ 0 і `r + 2` ≥ довжини) → `RootOutside`.
@@ -321,6 +328,10 @@ packed}`; v1 — 15 комірок заголовка й один байт на 
   бо фікстурні PartTab-и цілі. Образ із зіпсованим PartTab Rust і wasm-читач (він іде через
   `Store::pick`) тепер відмовляють, а oracle.py прочитав би — до P4 (конформація `torn-pt.store`)
   це розбіжність читачів. Якір не перевіряє жоден читач, крім `format::anchor_in`.
+- **Домівка PartTab** (W-F1, §3.1 `PartTabMisplaced`): **закрито для всіх чотирьох читачів** —
+  Rust (`pick_checked_in`, `Store::pick`, `View`), oracle.py (статус 1), bebop `st_open`/`st_map_ro`
+  (trap 79, `bebop-lang/docs/TRAPS.md`). Фікстура `crates/bebop-wasm/fixtures/ptaway.store` (kv3 з
+  PartTab живого B, перенесеним у 16) — усі четверо відмовляють (`gate.sh`, крок 4b).
 - **Дайджест PartTab**: 0 в образах, створених Rust, `st_digest("PartTab")` у bebop (§4).
 - **`Superblock.root`** у Rust API — це комірка 3, тобто індекс **PartTab**, а не корінь даних
   (історична назва; корінь — `Store::root()`).

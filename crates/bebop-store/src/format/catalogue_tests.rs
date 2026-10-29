@@ -156,3 +156,38 @@ fn c12_parttab_length_short_resealed() {
     st.seal(p);
     assert!(matches!(pick(&st), Err(PickError::PartTabBad { at: a, got: None, .. }) if a == at));
 }
+
+/// W-F1: the live superblock names a whole, sealed PartTab -- but at the OTHER page's home
+/// (the F1 image: live A naming 528). The next commit from A writes 528 in place, so a crash
+/// before its superblock lands would refuse instead of reading generation k. Refused by name.
+fn misplaced() -> (Store, usize, i64) {
+    let mut st = img3();
+    let (at, p) = (live(&st), pt(&st));
+    let away = (SB_B - at) + PT_PAGE_OFFSET;
+    for i in 0..PARTTAB_OBJ_CELLS {
+        st.cells[away + i] = st.cells[p + i];
+    }
+    st.cells[at + SB_PARTTAB] = away as i64;
+    resb(&mut st, at);
+    (st, at, away as i64)
+}
+
+#[test]
+fn c31_parttab_ref_moved_off_its_home_resealed() {
+    let (st, at, away) = misplaced();
+    assert_eq!(st.pick_checked(), Err(PickError::PartTabMisplaced { at, pt: away }));
+    assert!(matches!(st.begin(), Err(StoreError::Image(PickError::PartTabMisplaced { .. }))));
+}
+
+#[test]
+fn c32_parttab_ref_moved_store_pick() {
+    assert_eq!(misplaced().0.pick(), None, "the wasm reader's lean copy");
+}
+
+#[test]
+fn c33_parttab_ref_moved_view() {
+    let bytes = misplaced().0.to_bytes();
+    assert_eq!(View::new(&bytes).pick(), None);
+    let (st, at, away) = misplaced();
+    assert_eq!(pick(&st), Err(PickError::PartTabMisplaced { at, pt: away }));
+}

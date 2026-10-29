@@ -184,7 +184,7 @@ pub const STORES: &[Store] = &[
     Store { image: "catalog.edits", kinds: &["catalog.edit"], home: Venue,
         holds: &[StaffId], subjects: &[Staff],
         purpose: P::Operations, basis: Basis::LegitimateInterest,
-        retention: Retention::NoLimitYet("count-bounded: past 600 records it is folded to a baseline plus the newest 300 (catalog::edits::MAX_RECORDS)"),
+        retention: Retention::NoLimitYet("count- and byte-bounded (W-SPACE): past 600 records or 128 KiB in use (more only for a menu whose baseline alone is larger) it is folded to a baseline (the menu at the cut, signed 'baseline') plus the newest records up to 300 / 48 KiB; an older edit is DROPPED -- who made it, when, and what the dish held before it -- and only the menu it produced survives in the baseline (catalog::edits::{MAX_RECORDS, MAX_BYTES, over_bytes})"),
         erase: Eraser::Retain("the accountability record of menu changes; a staff id, never a customer (forget-me has nothing to reach here)"),
         export: NO_EXPORT },
     Store { image: "posts", kinds: &[], home: Venue,

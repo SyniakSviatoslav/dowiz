@@ -422,8 +422,9 @@ pub async fn push_place(
     let bundle = crate::hubstore::export(place, now_ms).await.map_err(|e| e.to_string())?;
     let raw = serde_json::to_vec(&bundle).map_err(|e| e.to_string())?;
     let plain = raw.len();
-    // Base64 of an image compresses well even now that the images are trimmed:
-    // the bundle is text with a small alphabet. If the runtime has no
+    // Each image in the bundle is already PACKED (LZ4, `dowiz_hub::pack`, W-SPACE);
+    // gzip still wins back base64's 6-of-8 bits, and is kept only when it is
+    // smaller (compress BEFORE the seal: sealed bytes do not compress). If the runtime has no
     // `CompressionStream`, the plain bundle goes up.
     let (body, gzipped) = match gzip(&raw).await {
         Some(z) if z.len() < raw.len() => (z, true),

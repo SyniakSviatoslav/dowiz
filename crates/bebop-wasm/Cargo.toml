@@ -39,6 +39,11 @@ bebop-store = { path = "../bebop-store" }
 # object runs, over the same images (`src/decide.rs`).
 dowiz-hub = { path = "../dowiz-hub", optional = true }
 serde_json = { version = "1", optional = true }
+# THE RECEIPT'S QR (LV-PCD-C), behind `verify` and OFF by default. DECART: the SAME crate and version
+# the Worker draws table codes with (workers/api/Cargo.toml, `qrcodegen = "1.8"`, MIT, zero
+# dependencies, pure Rust), so the tree keeps ONE QR implementation and the browser draws the
+# receipt's code offline. Default stays clean: `cargo tree -e no-dev | grep -c qrcodegen` -> 0.
+qrcodegen = { version = "1.8", optional = true }
 
 [features]
 default = []
@@ -59,6 +64,10 @@ key = []
 # always compiled and natively tested; this only makes `bw_proj` a wasm export. gate.sh builds it
 # into `target/proj/` and prints its size beside the reader's; `bytes.baseline` does not move.
 proj = []
+# THE PRICE-PROOF READER (LV-PCD-C), OFF by default: exports `bw_verify` (a receipt certificate
+# climbed to its root, src/verify.rs) and `bw_qr`. `verify.sh` builds it apart into
+# `target/verify/` and promotes it to workers/api/public/store/verify.wasm with its source digest.
+verify = ["dep:qrcodegen"]
 
 # The Worker's own profile (workers/api/Cargo.toml) minus `strip = false`,
 # which only wasm-bindgen's catch wrappers need. `panic = "abort"` because a

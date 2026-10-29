@@ -546,6 +546,35 @@ for f in $FIXTURES; do
   [ "$ran" -lt "$minran" ] && minran=$ran
 done
 
+# 4b. THE MISPLACED PARTTAB (W-F1, FORMAT §3.1 PartTabMisplaced) ---------------
+# fixtures/ptaway.store: kv3 with the live superblock naming a whole, sealed PartTab at the OTHER
+# page's home (16, not its own 528). Every reader must REFUSE it; the pre-W-F1 python and bebop
+# readers read it as kv3. Four readers, each named when it does not refuse.
+FIX=fixtures/ptaway.store
+ran=0
+bad=""
+if grep -q "test ptaway_fixture_is_refused ... ok" "$SCRATCH/native.txt"; then ran=$((ran + 1)); else bad="$bad native"; fi
+out=$(node harness.mjs "$WASM" "$FIX" 2>&1)
+say "ptaway wasm32: '$out' rc=$?"
+case "$out" in "kv status=$(want ptaway status) "*) ran=$((ran + 1)) ;; *) bad="$bad wasm32" ;; esac
+out=$(python3 oracle.py "$FIX" 2>&1)
+say "ptaway python: '$out' rc=$?"
+case "$out" in "kv status=$(want ptaway status) "*) ran=$((ran + 1)) ;; *) bad="$bad python" ;; esac
+if [ -n "$KVBIN" ]; then
+  mkdir -p "$SCRATCH/ptaway" && cp "$FIX" "$SCRATCH/ptaway/kv.store"
+  n=$(cd "$SCRATCH/ptaway" && "$OLDPWD/$SEED" "$KVBIN" n 2>&1)
+  rc=$?
+  say "ptaway bebop.bin: kv.bin n -> '$n' rc=$rc"
+  if [ "$rc" = "$(want ptaway bebop_rc)" ]; then ran=$((ran + 1)); else bad="$bad bebop.bin"; fi
+fi
+if [ -n "$bad" ]; then
+  say "ptaway: readers refusing as ptaway.expected says: $ran of 4 -- DISAGREE:$bad"
+  fail=1
+else
+  say "ptaway: readers refusing as ptaway.expected says: $ran of 4 (bebop.bin counts only on aarch64)"
+fi
+[ "$ran" -lt "$minran" ] && minran=$ran
+
 # 5. THE NODE KEY (DG2, SPEC-BEBOP-DAG-RUNTIME §2) -----------------------------
 # Three frames -- a compile node, a projection with two inputs, a projection
 # whose two lists are empty -- each BUILT by each reader from the field values

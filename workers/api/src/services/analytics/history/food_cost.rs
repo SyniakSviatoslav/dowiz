@@ -8,6 +8,7 @@
 //! lines' sales. Unstamped sales (`gross - cgross`) are counted apart, never as zero cost.
 
 use super::pm;
+use dowiz_hub::block::kernels::image::{run_plan_days, Day};
 use dowiz_hub::block::kernels::{run_plan, Op, PlanRow, AGG, FILTER, GROUP};
 use dowiz_hub::block::Block;
 use serde_json::{json, Value};
@@ -27,15 +28,26 @@ fn plan(filter: Option<(i64, Op)>, val: i64) -> Vec<PlanRow> {
     p
 }
 
-fn sums(blocks: &[Block], filter: Option<(i64, Op)>, val: i64) -> Result<BTreeMap<i64, i64>, String> {
-    Ok(run_plan(blocks, &plan(filter, val)).map_err(|r| format!("food cost: {r:?}"))?.into_iter().collect())
+/// W-BLOCKVIEW: the stored days read IN PLACE (`kernels::image`), then the hot tail's owned blocks
+/// added in, every add checked -- the same sums as one `run_plan` over both, without copying a day out.
+fn sums(days: &[Day], hot: &[Block], filter: Option<(i64, Op)>, val: i64) -> Result<BTreeMap<i64, i64>, String> {
+    let p = plan(filter, val);
+    let err = |r| format!("food cost: {r:?}");
+    let mut m: BTreeMap<i64, i64> = run_plan_days(days, &p).map_err(err)?.into_iter().collect();
+    for (k, v) in run_plan(hot, &p).map_err(err)? {
+        let e = m.entry(k).or_insert(0);
+        *e = e.checked_add(v).ok_or_else(|| format!("food cost: {k:016x} overflows"))?;
+    }
+    Ok(m)
 }
 
-/// The span's food cost: per dish (largest cost first, then id) and in total.
-pub fn food_cost(blocks: &[Block], names: &BTreeMap<i64, String>, name: &dyn Fn(&str) -> Value) -> Result<Value, String> {
+/// The span's food cost: per dish (largest cost first, then id) and in total, over the stored `days`
+/// and the `hot` blocks together.
+pub fn food_cost(days: &[Day], hot: &[Block], names: &BTreeMap<i64, String>, name: &dyn Fn(&str) -> Value) -> Result<Value, String> {
     let costed = Some((CQTY, Op::Gt));
-    let (cost, sales, qty) = (sums(blocks, costed, COST)?, sums(blocks, costed, CGROSS)?, sums(blocks, costed, CQTY)?);
-    let unstamped: i64 = sums(blocks, None, GROSS)?.values().sum::<i64>() - sums(blocks, None, CGROSS)?.values().sum::<i64>();
+    let s = |f, v| sums(days, hot, f, v);
+    let (cost, sales, qty) = (s(costed, COST)?, s(costed, CGROSS)?, s(costed, CQTY)?);
+    let unstamped: i64 = s(None, GROSS)?.values().sum::<i64>() - s(None, CGROSS)?.values().sum::<i64>();
     let mut rows: Vec<(String, i64, i64, i64)> = Vec::new();
     for (k, c) in &cost {
         let id = names.get(k).ok_or(format!("food cost: dish {k:016x} has no name"))?;

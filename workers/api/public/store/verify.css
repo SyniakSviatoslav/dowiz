@@ -1,0 +1,9 @@
+/* LV-PCD-C: the price-check page (store/verify.html). A STATIC verdict -- no pulse, no side tab, no
+   glow: the text says what was proved; the tint only repeats it. Storefront tokens only (lib/tokens.css). */
+body { margin: 0; background: var(--ui-bg); color: var(--ui-fg); font-family: var(--font-sans); }
+#verify { max-width: var(--measure); margin: 0 auto; padding: var(--space-6) var(--space-4); line-height: var(--leading-normal); }
+#verify p { margin: 0 0 var(--space-3); font-size: var(--text-base); }
+#verify .v-line { font-family: var(--font-money); font-size: var(--text-lg); }
+#verify .v-ok, #verify .v-bad { padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); border: 1px solid currentColor; }
+#verify .v-ok { color: var(--ui-success-ink); background: var(--ui-surface); }
+#verify .v-bad { color: var(--ui-danger-ink); background: var(--ui-surface); }

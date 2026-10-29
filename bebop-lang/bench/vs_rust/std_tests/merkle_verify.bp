@@ -1,0 +1,43 @@
+use "selfhost/prelude/merkle.bp"
+// bench/vs_rust/std_tests/merkle_verify.bp -- the bebop reader of crates/bebop-wasm/fixtures/verify/*.cert
+// (LV-PCD-C). crates/bebop-wasm/verify.sh runs it beside the native, wasm32 and python readers.
+//
+//   merkle_verify.bin <cert path> <s|0|1|2|3>
+//     s = the status (0 ok, 50 malformed, 51 mismatch); 0..3 = the climbed root as four big-endian
+//     64-bit words. (Under seed, argv[1] is the .bin itself, so the two arguments are argv[2], argv[3].)
+
+module core { }
+
+// mv_read: the file at `path` (at most 4096 bytes), one byte per cell into out (sys_read already
+// stores a byte per cell -- MEASURED 2026-10-28: buf[1] of good.cert is 5, its id length); its length.
+fn mv_read(path: str, out: [i64]) -> i64 {
+  let pl = str_len(path);
+  let pb = zeros(pl + 1);
+  let i = 0;
+  while i < pl {
+    let _ = pb[i] = char(path, i);
+    let i = i + 1;
+    0
+  };
+  let fd = sys_open(pb, pl, 0);
+  let buf = zeros(4096);
+  let got = if fd >= 0 then sys_read(fd, buf, 4096) else 0;
+  let _ = if fd >= 0 then sys_close(fd) else 0;
+  let n = if got > 0 then got else 0;
+  let k = 0;
+  while k < n {
+    let _ = out[k] = buf[k] & 255;
+    let k = k + 1;
+    0
+  };
+  n
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let b = zeros(4096);
+  let r = zeros(32);
+  let n = if argc > 3 then mv_read(argv[2], b) else 0;
+  let s = mk_check(b, n, r);
+  let what = if argc > 3 then char(argv[3], 0) else 115;
+  if what == 115 then s else mk_word(r, what - 48)
+}

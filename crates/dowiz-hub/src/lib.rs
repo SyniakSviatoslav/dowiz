@@ -53,6 +53,8 @@ pub mod zone;
 pub mod logimage;
 /// Is last night's off-site copy a venue? (W-PITR restore drill)
 pub mod drill;
+/// Images at rest in a backup bundle, compressed (W-SPACE): the envelope and its LZ4 codec.
+pub mod pack;
 pub mod table;
 pub mod tables;
 pub mod tz;

@@ -217,3 +217,25 @@ fn the_rotation_itself_folds_the_days_it_moves() {
     assert_eq!((k["totals"]["revenue"].as_i64(), k["totals"]["orders"].as_i64()), (Some(2700), Some(2)), "{}", k["totals"]);
     assert_eq!(k["history"]["archivedDays"], 1);
 }
+
+/// W-BLOCKVIEW: the opened sales image is kept per (venue, generation) and never read through for
+/// other bytes -- a changed image at a kept generation is opened again, a corrupt one is refused.
+#[test]
+fn the_opened_sales_image_is_kept_and_never_served_for_other_bytes() {
+    use super::sales::opened_image;
+    use dowiz_hub::block::kernels::{pack::Pack, sample};
+    let image = |days| {
+        let mut p = Pack::default();
+        p.absorb("log@1", &sample(20261001, days, 3)).unwrap();
+        p.encode().unwrap()
+    };
+    let (a, b) = (image(3), image(4));
+    let first = opened_image("bv-a", 7, &a).unwrap();
+    assert!(std::rc::Rc::ptr_eq(&first, &opened_image("bv-a", 7, &a).unwrap()), "a hit is the kept one");
+    assert_eq!(opened_image("bv-a", 7, &b).unwrap().0.days(), 4, "other bytes at a kept generation are opened again");
+    assert_eq!(opened_image("bv-b", 7, &a).unwrap().0.days(), 3, "another venue is its own");
+    let mut bad = b.clone();
+    let at = bad.len() - 5;
+    bad[at] ^= 1;
+    assert!(matches!(opened_image("bv-a", 8, &bad), Err(dowiz_hub::block::Refusal::BadCrc { .. })));
+}

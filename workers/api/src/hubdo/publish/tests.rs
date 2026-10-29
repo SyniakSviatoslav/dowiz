@@ -17,7 +17,7 @@ fn i18n_image() -> Vec<u8> {
 }
 
 /// A venue whose catalogue, translations and two of three photos exist.
-fn published_venue() -> (Harness, Rc<MemBucket>) {
+pub(super) fn published_venue() -> (Harness, Rc<MemBucket>) {
     let b = bucket();
     b.photos.borrow_mut().insert("aaa.jpg".into(), (vec![0xff, 0xd8, 1, 2, 3], "image/jpeg".into()));
     b.photos.borrow_mut().insert("aaas.jpg".into(), (vec![0xff, 0xd8, 9], "image/jpeg".into()));
@@ -30,7 +30,7 @@ fn published_venue() -> (Harness, Rc<MemBucket>) {
     (h, b)
 }
 
-fn manifest(b: &MemBucket) -> Value {
+pub(super) fn manifest(b: &MemBucket) -> Value {
     let puts = b.puts.borrow();
     let m = puts.iter().rev().find(|p| p.key.ends_with("/manifest.json")).expect("a manifest was written");
     serde_json::from_slice(&m.bytes).unwrap()

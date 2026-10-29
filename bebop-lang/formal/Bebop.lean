@@ -35,3 +35,5 @@ import Bebop.ZSet
 import Bebop.Merkle
 import Bebop.Sync
 import Bebop.DatalogZ
+import Bebop.Disk
+import Bebop.KvBytes

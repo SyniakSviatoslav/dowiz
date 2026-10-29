@@ -229,6 +229,33 @@ fn year_kernels_us() {
     assert_eq!(by_id, m.iter().map(|(k, v)| (k.clone(), v[1])).collect(), "blocks and JSON agree");
     let rows: usize = p.days.values().map(Vec::len).sum();
     assert_eq!((lines.len(), rows), (32_850, 14_600));
+    // W-BLOCKVIEW: the decode path (CONTROL) against the image read in place, each the median of
+    // 11 runs in this process. `open` is the full check (once per image generation); `view` is
+    // `Index::view` + the same three sums, what a holder of the generation's `Index` pays per query.
+    let med = |f: &mut dyn FnMut()| -> u128 {
+        let mut t: Vec<u128> = (0..11)
+            .map(|_| {
+                let s = std::time::Instant::now();
+                f();
+                s.elapsed().as_micros()
+            })
+            .collect();
+        t.sort_unstable();
+        t[5]
+    };
+    let (from, to) = (20251001, 20260930);
+    let decode_us = med(&mut || {
+        std::hint::black_box(three(&days_in(&img, from, to).unwrap()).unwrap());
+    });
+    let open_us = med(&mut || {
+        std::hint::black_box(Index::open(&img).unwrap());
+    });
+    let idx = Index::open(&img).unwrap();
+    let view_us = med(&mut || {
+        std::hint::black_box(three_days(&idx.view(&img).unwrap().days(from, to)).unwrap());
+    });
+    assert_eq!(three_days(&idx.view(&img).unwrap().days(from, to)).unwrap(), [gross.clone(), cost.clone(), sales.clone()], "in place == decode");
+    println!("YEAR-VIEW rows=14600 blocks={} control decode_path_us={decode_us} | open_us={open_us} (full check) view_scan_us={view_us} (reopen + 3 sums) open+scan={}", idx.days(), open_us + view_us);
     println!("YEAR-KERNELS lines={} rows={} image={}B year_scan_us={} (check+decode {}) groups={}/{}/{} | control json={}B json_parse_us={}", lines.len(), rows, img.len(), scan.as_micros(), read.as_micros(), gross.len(), cost.len(), sales.len(), json.len(), control.as_micros());
 }
 
@@ -246,4 +273,210 @@ fn aggregate_is_one_row_per_dish_in_any_order_and_refuses_an_overflow() {
     assert!(a.windows(2).all(|w| (w[0].day, w[0].dish) < (w[1].day, w[1].dish)), "day, then dish, ascending");
     let big = Sale { gross: i64::MAX, ..lines[0] };
     assert_eq!(aggregate(&[big, lines[0]]), Err(Refusal::Overflow { col: "gross" }));
+}
+
+// ---- W-BLOCKVIEW: the image read in place (`kernels::image`) against the decode path. ----
+
+use super::image::{full_sum_by_days, run_plan_days, sum_into_cols, ColRef, Day, Groups, Index};
+
+/// The decode path's three year sums of `blocks`: gross by dish, costed cost and costed sales.
+fn three(blocks: &[Block]) -> Result<[BTreeMap<i64, i64>; 3], Refusal> {
+    let f = Some((4, Op::Gt, 0));
+    Ok([full_sum_by(blocks, 1, 3, None)?, full_sum_by(blocks, 1, 6, f)?, full_sum_by(blocks, 1, 5, f)?])
+}
+
+fn three_days(days: &[Day]) -> Result<[BTreeMap<i64, i64>; 3], Refusal> {
+    let f = Some((4, Op::Gt, 0));
+    Ok([full_sum_by_days(days, 1, 3, None)?, full_sum_by_days(days, 1, 6, f)?, full_sum_by_days(days, 1, 5, f)?])
+}
+
+/// What the in-place reader must say of one loose block: the decode path's sums, or its refusal.
+fn same_as_decode(bytes: &[u8]) -> Result<(), String> {
+    let want = match decode(bytes) {
+        Ok(b) if b.schema == &schema::SALES && b.n > 0 => three(&[b]),
+        Ok(_) => Err(Refusal::Mismatch("day blocks are one day each, ascending")),
+        Err(r) => Err(r),
+    };
+    let got = Day::new(bytes).and_then(|d| three_days(&[d]));
+    if got == want { Ok(()) } else { Err(format!("view {got:?} != decode {want:?}")) }
+}
+
+#[test]
+fn views_equal_the_decode_path_on_every_fixture_and_every_flipped_byte() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/blocks");
+    let mut seen = 0;
+    for e in std::fs::read_dir(&dir).unwrap() {
+        let p = e.unwrap().path();
+        let bytes = std::fs::read(&p).unwrap();
+        same_as_decode(&bytes).unwrap_or_else(|m| panic!("{}: {m}", p.display()));
+        seen += 1;
+    }
+    assert!(seen >= 15, "every fixture: {seen}");
+    let small = fixture("sales_small");
+    assert!(Day::new(&small).is_ok(), "twin: the clean sales block reads in place");
+    for at in 0..small.len() {
+        let mut bad = small.clone();
+        bad[at] ^= 0x01;
+        same_as_decode(&bad).unwrap_or_else(|m| panic!("byte {at}: {m}"));
+    }
+}
+
+/// An image of `days` days from 2026-10-01, three dishes a day.
+fn image(days: i32) -> Vec<u8> {
+    let mut p = Pack::default();
+    p.absorb("log@1", &sample(20261001, days, 3)).unwrap();
+    p.encode().unwrap()
+}
+
+#[test]
+fn an_opened_image_reads_the_span_as_days_in_does() {
+    let bytes = image(20);
+    let idx = Index::open(&bytes).unwrap();
+    assert_eq!(idx.days(), 20);
+    let img = idx.view(&bytes).unwrap();
+    for (from, to) in [(20261005, 20261007), (0, i32::MAX), (20261020, 20261020), (20261008, 20261003), (20261101, 20261231)] {
+        let (blocks, days) = (days_in(&bytes, from, to).unwrap(), img.days(from, to));
+        let want: Vec<i32> = blocks.iter().map(|b| sales_of(b).unwrap()[0].day).collect();
+        assert_eq!(days.iter().map(Day::day).collect::<Vec<_>>(), want, "{from}..={to}");
+        assert_eq!(three_days(&days), three(&blocks));
+        for plan in [
+            vec![[FILTER, 4, Op::Gt as i64, 0, 0, 0, 0, 0], [GROUP, 1, 0, 0, 0, 0, 0, 0], [AGG, 6, 0, 0, 0, 0, 0, 0]],
+            vec![[GROUP, 1, 0, 0, 0, 0, 0, 0], [AGG, 3, 0, 0, 0, 0, 0, 0], [TOPK, 2, 0, 0, 0, 0, 0, 0]],
+            vec![[GROUP, 0, 0, 0, 0, 0, 0, 0], [AGG, 2, 0, 0, 0, 0, 0, 0]],
+            vec![[GROUP, 1, 0, 0, 0, 0, 0, 0]],
+        ] {
+            assert_eq!(run_plan_days(&days, &plan), run_plan(&blocks, &plan), "{plan:?}");
+        }
+    }
+    assert_eq!(Index::open(&[]).map(|i| i.days()), Ok(0), "no bytes is an empty image");
+}
+
+#[test]
+fn the_safe_open_refuses_what_days_in_refuses() {
+    let bytes = image(3);
+    assert!(Index::open(&bytes).is_ok(), "twin: the clean image opens");
+    let mut bad = bytes.clone();
+    let at = bad.len() - CRC_LEN - 1;
+    bad[at] ^= 0x01;
+    assert!(matches!(Index::open(&bad), Err(Refusal::BadCrc { .. })), "{:?}", Index::open(&bad));
+    assert!(matches!(days_in(&bad, 0, i32::MAX), Err(Refusal::BadCrc { .. })));
+    assert_eq!(Index::open(&bytes[..bytes.len() - 1]).err().map(|r| r.code()), Some("too_short"));
+}
+
+#[test]
+fn an_index_reads_only_the_bytes_it_was_opened_on() {
+    let (a, b) = (image(4), image(5));
+    let idx = Index::open(&a).unwrap();
+    assert!(idx.view(&a).is_ok(), "twin: its own bytes");
+    assert_eq!(idx.view(&b).err(), Some(Refusal::Mismatch("an index of other bytes")), "another length");
+    // Same length, one crc trailer changed (the last block's): another generation, refused.
+    let mut c = a.clone();
+    let end = c.len() - 1;
+    c[end] ^= 0x80;
+    assert_eq!(idx.view(&c).err(), Some(Refusal::Mismatch("an index of other bytes")));
+}
+
+#[test]
+fn days_out_of_order_are_refused_at_open() {
+    let mut p = Pack::default();
+    p.absorb("log@1", &sample(20261001, 2, 3)).unwrap();
+    let ok = p.encode().unwrap();
+    assert!(Index::open(&ok).is_ok(), "twin: ascending days open");
+    let blocks: Vec<Vec<u8>> = split(&ok).unwrap().iter().map(|b| encode(b).unwrap()).collect();
+    let swapped: Vec<u8> = [&blocks[0], &blocks[1], &blocks[3], &blocks[2]].into_iter().flatten().copied().collect();
+    assert_eq!(Index::open(&swapped).err(), Some(Refusal::Mismatch("day blocks are one day each, ascending, one row per dish")));
+    assert_eq!(Index::open(&swapped).err(), Pack::decode(&swapped).err());
+    let one_names: Vec<u8> = blocks[0].clone();
+    assert_eq!(Index::open(&one_names).err(), Some(Refusal::Mismatch("a sales image opens with two names blocks")));
+}
+
+#[test]
+fn groups_past_the_run_spill_and_keep_every_sum_and_refusal() {
+    let keys: Vec<i64> = (0..6000).map(|i| (i * 7919) % 3000 - 1500).collect();
+    let vals: Vec<i64> = (0..6000).map(|i| i * 3 - 9000).collect();
+    let le = |v: &[i64]| v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+    let (kb, vb) = (le(&keys), le(&vals));
+    let mut acc = Groups::default();
+    sum_into_cols(&mut acc, ColRef::I64(&kb), ColRef::I64(&vb), None, "gross").unwrap();
+    let got = acc.into_map();
+    assert_eq!(got.len(), 3000, "past RUN_MAX: spilled");
+    assert_eq!(got, sum_by(&keys, &vals, None, "gross").unwrap());
+    let mask: Vec<u8> = (0..6000i32).flat_map(|i| (i % 5).to_le_bytes()).collect();
+    let mut acc = Groups::default();
+    sum_into_cols(&mut acc, ColRef::I64(&kb), ColRef::I64(&vb), Some((ColRef::I32(&mask), Op::Gt, 2)), "cost").unwrap();
+    let m: Vec<bool> = (0..6000).map(|i| i % 5 > 2).collect();
+    assert_eq!(acc.into_map(), sum_by(&keys, &vals, Some(&m), "cost").unwrap());
+    let (k, v) = (le(&[7, 7, 9]), le(&[i64::MAX, 1, 0]));
+    let mut acc = Groups::default();
+    assert_eq!(sum_into_cols(&mut acc, ColRef::I64(&k), ColRef::I64(&v), None, "gross"), Err(Refusal::Overflow { col: "gross" }));
+}
+
+// ---- W-BLOCKVIEW: `Index::open` refuses a malformed image exactly as `Pack::decode` does. ----
+
+/// `sample(20261001, 3, 4)`'s image with day block `k`'s rows changed by `f`, resealed (crc good).
+fn with_day(k: usize, f: impl FnOnce(&mut Vec<Sale>)) -> Vec<u8> {
+    let mut p = Pack::default();
+    p.absorb("log@1", &sample(20261001, 3, 4)).unwrap();
+    let mut blocks = split(&p.encode().unwrap()).unwrap();
+    let mut rows = sales_of(&blocks[2 + k]).unwrap();
+    f(&mut rows);
+    blocks[2 + k] = sales_block(&rows);
+    blocks.iter().flat_map(|b| encode(b).unwrap()).collect()
+}
+
+fn refused_alike(bytes: &[u8], want: Refusal) {
+    assert_eq!(Pack::decode(bytes).err(), Some(want.clone()), "Pack::decode");
+    assert_eq!(Index::open(bytes).err(), Some(want), "Index::open");
+}
+
+const ROWS: Refusal = Refusal::Mismatch("day blocks are one day each, ascending, one row per dish");
+
+#[test]
+fn a_row_with_another_day_is_refused_as_pack_decode_refuses_it() {
+    assert!(Index::open(&with_day(1, |_| ())).is_ok() && Pack::decode(&with_day(1, |_| ())).is_ok(), "twin: resealed unchanged");
+    // Day block 1 (2026-10-02), row 2's `day` cell set to 2026-10-09.
+    refused_alike(&with_day(1, |r| r[2].day = 20261009), ROWS);
+}
+
+#[test]
+fn a_dish_out_of_order_is_refused_as_pack_decode_refuses_it() {
+    // Day block 0, rows 0 and 1 swapped: the `dish` cells descend.
+    refused_alike(&with_day(0, |r| r.swap(0, 1)), ROWS);
+}
+
+#[test]
+fn a_dish_the_names_do_not_hold_is_refused_as_pack_decode_refuses_it() {
+    // Day block 2, the last row's `dish` cell set to i64::MAX: still ascending, named nowhere.
+    refused_alike(&with_day(2, |r| r.last_mut().unwrap().dish = i64::MAX), Refusal::Mismatch("a row names a dish the image does not"));
+}
+
+#[test]
+fn an_empty_or_foreign_day_block_is_refused_as_pack_decode_refuses_it() {
+    refused_alike(&with_day(1, Vec::clear), Refusal::Mismatch("an empty day block"));
+    let ok = with_day(0, |_| ());
+    let blocks = split(&ok).unwrap();
+    let foreign: Vec<u8> = [&blocks[0], &blocks[1], &blocks[0]].iter().flat_map(|b| encode(b).unwrap()).collect();
+    refused_alike(&foreign, Refusal::Mismatch("not a sales block"));
+}
+
+#[test]
+fn every_block_is_checked_before_any_row_is_read() {
+    // A bad row in day block 0 AND a bad crc in the last block: `split` reports the crc first.
+    let mut bad = with_day(0, |r| r.swap(0, 1));
+    let at = bad.len() - CRC_LEN - 1;
+    bad[at] ^= 0x01;
+    assert!(matches!(Pack::decode(&bad), Err(Refusal::BadCrc { .. })));
+    assert_eq!(Index::open(&bad).err(), Pack::decode(&bad).err());
+}
+
+#[test]
+fn no_bytes_and_every_short_prefix_open_as_pack_decode_reads_them() {
+    // The empty image once underflowed `len - CRC` at open (an end offset taken with no block).
+    assert_eq!(Index::open(&[]).map(|i| i.days()), Ok(0));
+    assert_eq!(Pack::decode(&[]), Ok(Pack::default()));
+    let img = with_day(0, |_| ());
+    for n in 1..64.min(img.len()) {
+        assert_eq!(Index::open(&img[..n]).err(), Pack::decode(&img[..n]).err(), "prefix {n}");
+        assert!(Index::open(&img[..n]).is_err(), "prefix {n}");
+    }
 }

@@ -210,11 +210,11 @@ fn food_cost_is_cost_over_the_costed_lines_sales() {
     // The day as the image stores it: ONE row for sake, a stamped line and an unstamped one summed.
     let day = dowiz_hub::block::kernels::aggregate(&rows.iter().map(|(s, _)| *s).collect::<Vec<_>>()).unwrap();
     assert_eq!(day.len(), 1);
-    let v = food_cost::food_cost(&[sales_block(&day)], &names, &no_name).unwrap();
+    let v = food_cost::food_cost(&[], &[sales_block(&day)], &names, &no_name).unwrap();
     assert_eq!((v["cost"].as_i64(), v["sales"].as_i64(), v["costPm"].as_i64(), v["unstampedSales"].as_i64()), (Some(240), Some(900), Some(266), Some(600)), "{v}");
     assert_eq!(v["dishes"][0]["id"], "sake");
     assert_eq!(v["dishes"].as_array().map(Vec::len), Some(1), "a refused order's line is no dish");
-    assert!(food_cost::food_cost(&[sales_block(&[rows[0].0])], &BTreeMap::new(), &no_name).is_err(), "a dish with no name is an error");
+    assert!(food_cost::food_cost(&[], &[sales_block(&[rows[0].0])], &BTreeMap::new(), &no_name).is_err(), "a dish with no name is an error");
 }
 
 /// AC-LV-COL-05, MEASURED: a year's scan of the sales image (365 days x 90 lines over 40 dishes,
@@ -257,7 +257,7 @@ fn year_scan_us() {
     let all: Vec<Sale> = blocks.iter().flat_map(|b| sales_of(b).unwrap()).collect();
     let dishes = cube::sales::dishes_of(&all, &pack.dishes).unwrap();
     let fold = t0.elapsed();
-    let fc = food_cost::food_cost(&blocks, &pack.dishes, &no_name).unwrap();
+    let fc = food_cost::food_cost(&[], &blocks, &pack.dishes, &no_name).unwrap();
     let scan = t0.elapsed();
     let t1 = std::time::Instant::now();
     let cold = cube::Cube::decode_range(&json, 20251001, 20260930).unwrap();
@@ -273,5 +273,52 @@ fn year_scan_us() {
     let control = t1.elapsed();
     assert_eq!(dishes, m, "the blocks and the JSON cube say the same year");
     assert_eq!((rows.len(), all.len()), (32_850, 14_600));
+    // W-BLOCKVIEW: the Worker's food-cost read, BEFORE (`food_cost_of` until now: `Pack::decode` for the
+    // names + `days_in` + the plans over copied blocks) and AFTER (`Index::open` + `dishes_of` on a
+    // miss; `Index::view` + the plans in place on a hit), medians of 11 in this process.
+    use dowiz_hub::block::kernels::{image::Index, pack::dishes_of};
+    let med = |f: &mut dyn FnMut() -> Value| -> (u128, Value) {
+        let mut v = Value::Null;
+        let mut t: Vec<u128> = (0..11)
+            .map(|_| {
+                let s = std::time::Instant::now();
+                v = f();
+                s.elapsed().as_micros()
+            })
+            .collect();
+        t.sort_unstable();
+        (t[5], v)
+    };
+    let (before, want) = med(&mut || {
+        let names = Pack::decode(&img).unwrap().dishes;
+        food_cost::food_cost(&[], &days_in(&img, 20251001, 20260930).unwrap(), &names, &no_name).unwrap()
+    });
+    let (miss, _) = med(&mut || {
+        let (idx, names) = (Index::open(&img).unwrap(), dishes_of(&img).unwrap());
+        food_cost::food_cost(&idx.view(&img).unwrap().days(20251001, 20260930), &[], &names, &no_name).unwrap()
+    });
+    let (idx, names) = (Index::open(&img).unwrap(), dishes_of(&img).unwrap());
+    let (hit, got) = med(&mut || food_cost::food_cost(&idx.view(&img).unwrap().days(20251001, 20260930), &[], &names, &no_name).unwrap());
+    assert_eq!(got, want, "in place == the decode path");
+    assert_eq!(fc, want);
+    println!("YEAR-FOODCOST before_us={before} | after: miss_us={miss} (full check + names) hit_us={hit} (view + 5 plans)");
     println!("YEAR-SCAN rows={} blocks={} image={}B year_scan_us={} (check+decode {} + dishes {} + food cost {}) foodcost_dishes={} | control json={}B json_range_us={}", all.len(), blocks.len(), img.len(), scan.as_micros(), read.as_micros(), (fold - read).as_micros(), (scan - fold).as_micros(), fc["dishes"].as_array().map_or(0, Vec::len), json.len(), control.as_micros());
+}
+
+/// W-BLOCKVIEW: food cost over the stored days read IN PLACE equals food cost over the same days
+/// decoded, and over any split of them between stored days and hot blocks.
+#[test]
+fn food_cost_in_place_equals_the_decoded_blocks_at_every_split() {
+    use dowiz_hub::block::kernels::{image::Index, pack::{days_in, dishes_of, Pack}, sample};
+    let mut pack = Pack::default();
+    pack.absorb("log@1", &sample(20261001, 9, 7)).unwrap();
+    let img = pack.encode().unwrap();
+    let (idx, names) = (Index::open(&img).unwrap(), dishes_of(&img).unwrap());
+    assert_eq!(names, pack.dishes, "the names block alone is the image's dish ids");
+    let (days, blocks) = (idx.view(&img).unwrap().days(0, i32::MAX), days_in(&img, 0, i32::MAX).unwrap());
+    let want = food_cost::food_cost(&[], &blocks, &names, &no_name).unwrap();
+    assert!(want["cost"].as_i64().unwrap() > 0 && want["unstampedSales"].as_i64().unwrap() > 0, "{want}");
+    for k in 0..=days.len() {
+        assert_eq!(food_cost::food_cost(&days[..k], &blocks[k..], &names, &no_name).unwrap(), want, "split at {k}");
+    }
 }

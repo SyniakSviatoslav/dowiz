@@ -50,11 +50,12 @@ fn nightly_copy() -> (Site, Vec<u8>, Vec<u8>) {
 fn with_image(bundle: &[u8], id: &str, f: impl FnOnce(&mut Vec<u8>)) -> Vec<u8> {
     let mut v: Value = serde_json::from_slice(bundle).unwrap();
     let e = &mut v["images"][id];
-    let mut bytes = drill::b64(e["image"].as_str().unwrap()).unwrap();
+    // The copy is PACKED (W-SPACE): the cell is changed in the raw image, then packed again.
+    let mut bytes = dowiz_hub::pack::unpack(&drill::b64(e["image"].as_str().unwrap()).unwrap()).unwrap().into_owned();
     f(&mut bytes);
     e["sha256"] = json!(Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect::<String>());
     e["bytes"] = json!(bytes.len());
-    e["image"] = json!(base64::engine::general_purpose::STANDARD.encode(&bytes));
+    e["image"] = json!(base64::engine::general_purpose::STANDARD.encode(dowiz_hub::pack::pack(&bytes)));
     serde_json::to_vec(&v).unwrap()
 }
 
@@ -111,4 +112,44 @@ fn a_copy_with_one_changed_order_record_or_a_foreign_witness_is_refused() {
     w["tip"] = json!("ab".repeat(32));
     let d = drill::run(&bundle, Some(&serde_json::to_vec(&w).unwrap()));
     assert_eq!((d.tip.clone(), d.passed()), (Tip::Missing, false));
+}
+
+/// W-SPACE: the night's copy carries its small images PACKED (`dowiz_hub::pack`, within
+/// `PACK_BUDGET`), smaller than the raw image and with the RAW image's length in its manifest; and a copy written BEFORE the
+/// envelope (raw images, no `codec`) still passes the drill and restores. RED-able: drop the
+/// `pack::unpack` in `hubstore::import` and the packed copy stops restoring (its sha256 is the
+/// raw image's) -- `the_nightly_copy_passes_the_drill...` goes red; make `unpack` refuse what
+/// lacks the magic and this one does.
+#[test]
+fn the_copy_is_packed_and_a_copy_from_before_the_envelope_still_restores() {
+    let (site, bundle, _) = nightly_copy();
+    let mut v: Value = serde_json::from_slice(&bundle).unwrap();
+    let (mut raw_total, mut packed_total, mut budget_spent) = (0, 0, 0);
+    for (id, e) in v["images"].as_object_mut().unwrap() {
+        let packed = drill::b64(e["image"].as_str().unwrap()).unwrap();
+        // The pack budget (`dowiz_hub::pack::PACK_BUDGET`): `codec` names exactly the packed ones.
+        assert_eq!(dowiz_hub::pack::is_packed(&packed), e.get("codec").is_some(), "{id}: codec vs bytes");
+        let raw = dowiz_hub::pack::unpack(&packed).unwrap().into_owned();
+        assert_eq!(Some(raw.len() as u64), e["bytes"].as_u64(), "{id}: the manifest names the raw length");
+        if dowiz_hub::pack::is_packed(&packed) {
+            budget_spent += raw.len();
+        }
+        if ["catalog", "catalog.edits", "settings"].contains(&id.as_str()) {
+            assert!(dowiz_hub::pack::is_packed(&packed), "{id}: a small image is packed");
+        }
+        (raw_total, packed_total) = (raw_total + raw.len(), packed_total + packed.len());
+        // The shape every bundle had before W-SPACE.
+        e["image"] = json!(base64::engine::general_purpose::STANDARD.encode(&raw));
+        e.as_object_mut().unwrap().remove("codec");
+    }
+    assert!(packed_total < raw_total, "packed {packed_total} vs raw {raw_total}");
+    assert!(budget_spent <= dowiz_hub::pack::PACK_BUDGET, "{budget_spent} raw bytes packed in one export");
+    let old = serde_json::to_vec(&v).unwrap();
+    let d = drill::run(&old, None);
+    assert!(d.passed(), "{:?}", d.refused);
+    let gamma = crate::hubstore::Place::of_authorised(&site.ctx(&[]), "gamma").unwrap();
+    let written = block_on(crate::hubstore::import(&gamma, &v)).unwrap();
+    for want in ["log", "catalog", "catalog.edits"] {
+        assert!(written.iter().any(|w| w == want), "{want} not restored: {written:?}");
+    }
 }

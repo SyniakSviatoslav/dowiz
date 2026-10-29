@@ -512,11 +512,16 @@ impl Store {
         let n = self.cells.len() as i64;
         let pt = self.cells[at + 3];
         let used = self.cells[at + 4];
-        if pt < 0 || pt >= n || used < 0 || used > n {
+        // `pt` is 0 or its home `at + 16` (W-F1, `PickError::PartTabMisplaced`): that bounds
+        // it, and a home past the image's end reads a zero length below.
+        if used < 0 || used > n {
             return None;
         }
         if pt != 0 {
-            let p = pt as usize;
+            let p = at + 16;
+            if pt != p as i64 {
+                return None;
+            }
             let len = self.obj_len(p);
             if len < PARTTAB_CELLS || p as i64 + 2 + len > n {
                 return None;
@@ -909,6 +914,16 @@ pub mod nodekey;
 pub mod proj;
 /// LV-INC-A: the Z-set, the one delta currency (R-BEBOP-LEVERS §2.4).
 pub mod zset;
+/// LV-PCD-C: the published root and its inclusion proof (R-BEBOP-LEVERS §4.4).
+pub mod merkle;
+/// W-ES-P2: the device, commit protocol v2 and the writer (`io/`; `io` is std's name here).
+/// Not on wasm32: a file device needs `std::os::unix` (the Worker reader has no files).
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "io/mod.rs"]
+pub mod iodev;
+/// W-ES-P2: SimDisk, recovery and the enumerated crash harness (uses `iodev`).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod sim;
 
 #[cfg(test)]
 mod view_tests;

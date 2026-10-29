@@ -1,0 +1,14 @@
+{
+  "id": 64, "name": "feature-verify", "contract_version": "0.1.0", "class": "LIVE-NOW",
+  "description": {"en": "The venue's published manifest names the Merkle root of its menu prices; a receipt line's certificate cut from the published fragment climbs to that root in the promoted verify.wasm, and the price-check page is served.", "uk": "Опублікований маніфест закладу називає Merkle-корінь цін меню; сертифікат рядка чека, вирізаний з опублікованого фрагмента, сходить до цього кореня у verify.wasm, а сторінка перевірки ціни віддається."},
+  "producer": {"file": "workers/api/src/hubdo/publish/root.rs", "line": 1, "what": "manifest.json root/n/sig/pk_id (stamp_for)"},
+  "consumer": {"file": "workers/api/public/store/verify.js", "line": 1, "what": "certFor + bw_verify (/store/verify.html)"},
+  "transport": {"method": "GET", "path": "https://cdn.<platform>/v/<slug>/manifest.json; /store/verify.html; /store/verify.wasm"},
+  "external": {"service": "Cloudflare R2 (CDN binding) + static assets", "api_version": "SPEC-PCD v1 (docs/design/SPEC-PCD-2026-10-27.md); RFC 9162 §2.1 tree", "doc": "https://www.rfc-editor.org/rfc/rfc9162#section-2.1"},
+  "auth": {"secrets": [], "where": "public reads; VENUE_SIGN_SK (operator) decides signed vs unsigned"},
+  "request_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "null"},
+  "response_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["v", "slug", "fragment", "root", "n", "sig"], "properties": {"root": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "n": {"type": "integer", "minimum": 0}, "sig": {"type": ["string", "null"]}, "pk_id": {"type": "string", "pattern": "^[0-9a-f]{16}$"}}},
+  "schema_status": "draft: tighten from the first live answer",
+  "probe": "GET the manifest; GET its fragment; root of the fragment's prices == manifest.root; every line's certificate verifies in verify.wasm (status 0) and a moved price is 51; verify.html 200; report signed or unsigned.",
+  "last_verified": null
+}

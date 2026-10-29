@@ -35,6 +35,9 @@ pub mod block_view;
 pub mod nodekey;
 /// DG5: a log image's projection memo, read (`bw_proj`, exported under the `proj` feature).
 pub mod proj;
+/// LV-PCD-C: a receipt line's price certificate, climbed (`bw_verify`, `bw_qr`; `--features verify`).
+#[cfg(any(test, feature = "verify"))]
+pub mod verify;
 #[cfg(feature = "decide")]
 pub mod decide;
 #[cfg(feature = "decide")]

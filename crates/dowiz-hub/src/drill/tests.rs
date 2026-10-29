@@ -76,3 +76,24 @@ fn a_witnessed_tip_the_copy_does_not_hold_is_refused() {
     assert_eq!(d.tip, Tip::Missing);
     assert!(!d.passed());
 }
+
+/// W-SPACE: a bundle whose images are PACKED passes exactly as the raw one above does (the
+/// manifest's bytes and sha256 are the raw image's), and a packed image with one payload byte
+/// changed is refused by its envelope. RED-able: drop the `pack::unpack` in `run` and the
+/// packed bundle is refused at its sha256.
+#[test]
+fn a_packed_copy_passes_and_a_damaged_pack_is_refused() {
+    let (h, cat) = images();
+    let log = h.to_bytes_trimmed();
+    let packed = |raw: &[u8], p: Vec<u8>| serde_json::json!({ "generation": 1, "bytes": raw.len(), "sha256": hex(&Sha256::digest(raw)), "image": enc(&p) });
+    let mk = |pl: Vec<u8>| serde_json::json!({ "format": FORMAT, "venue": "alpha", "taken_at_ms": 7,
+        "images": { "log": packed(&log, pl), "catalog": packed(&cat, crate::pack::pack(&cat)) }, "archives": {} }).to_string().into_bytes();
+    let d = run(&mk(crate::pack::pack(&log)), None);
+    assert!(d.passed(), "{:?}", d.refused);
+    assert_eq!(d.chain.map(|c| c.records), Some(3));
+    let mut bad = crate::pack::pack(&log);
+    let n = bad.len();
+    bad[n - 7] ^= 0x01;
+    let d = run(&mk(bad), None);
+    assert!(d.refused.iter().any(|r| r.starts_with("log: its packed bytes do not open")), "{:?}", d.refused);
+}

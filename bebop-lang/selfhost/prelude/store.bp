@@ -245,6 +245,11 @@ fn st_open(path: [i64], plen: i64, size: i64, tmp: [i64]) -> [i64] {
   // red for exactly this and the symptom was an empty `got=`, which reads as a miscompile.
   let live_sb = if fresh == 1 then 0 else st_pick(base, tmp);
   let _ = if fresh == 0 then (if base[live_sb + 4] * 8 > size then sys_exit(86) else 0) else 0;
+  // Trap 79 (W-F1, FORMAT-BEBOP-IMAGE-v2 §3.1 PartTabMisplaced): the live superblock's PartTab
+  // must sit at its HOME sb+16. The next commit writes its PartTab at (512 - sb) + 16, so a live
+  // one anywhere else (528 under a live A) is overwritten before the commit point and a crash
+  // there loses generation k. No writer makes such an image; the Rust readers refuse it too.
+  let _ = if fresh == 0 then (if base[live_sb + 3] != 0 then (if base[live_sb + 3] != live_sb + 16 then sys_exit(79) else 0) else 0) else 0;
   let arena_capacity_cells = size / 8 - 1024;
   let _ = if fresh == 1 then st_sb_write(base, 0, 0, 0, 1024, 0, 0, arena_capacity_cells, tmp) else st_reopen_verify(base, tmp);
   // Trap 87: version cell mismatch (T127: fix for silent schema divergence)
@@ -266,6 +271,8 @@ fn st_map_ro(path: [i64], plen: i64, size: i64) -> [i64] {
   // readers call in loops -- the same per-call arena growth that cost this project a day.
   let live_sb = st_pick(base, base);
   let _ = if live_sb >= 0 then (if base[live_sb + 1] != 2 then sys_exit(87) else 0) else 0;
+  // Trap 79: the PartTab off its home sb+16, as in st_open (W-F1).
+  let _ = if live_sb >= 0 then (if base[live_sb + 3] != 0 then (if base[live_sb + 3] != live_sb + 16 then sys_exit(79) else 0) else 0) else 0;
   base
 }
 // st_parttab_cells(p: i64): number of cells in a PartTab for P=p partitions (16 + 3*P).

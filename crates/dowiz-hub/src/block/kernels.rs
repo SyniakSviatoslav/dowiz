@@ -29,6 +29,9 @@ use super::{schema, Block, Col, Refusal};
 
 #[path = "kernels/pack.rs"]
 pub mod pack;
+/// W-BLOCKVIEW: the image read in place (`Index`, `Day`) and the kernels over borrowed columns.
+#[path = "kernels/image.rs"]
+pub mod image;
 #[path = "kernels/sample.rs"]
 mod sample;
 pub use sample::sample;
@@ -208,8 +211,11 @@ pub const GROUP: i64 = 2;
 pub const AGG: i64 = 3;
 pub const TOPK: i64 = 4;
 
-/// Run a plan over a span's blocks: at most one of each row, GROUP and AGG required.
-pub fn run_plan(blocks: &[Block], plan: &[PlanRow]) -> Result<Vec<(i64, i64)>, Refusal> {
+/// A plan read: the filter, the key and value columns, `k`.
+pub(crate) type Plan = (Option<(usize, Op, i64)>, usize, usize, Option<usize>);
+
+/// A plan's rows: at most one of each, GROUP and AGG required.
+pub(crate) fn plan_of(plan: &[PlanRow]) -> Result<Plan, Refusal> {
     let (mut filter, mut key, mut val, mut k) = (None, None, None, None);
     for r in plan {
         let col = || usize::try_from(r[1]).map_err(|_| Refusal::Mismatch("plan: a negative column"));
@@ -222,6 +228,12 @@ pub fn run_plan(blocks: &[Block], plan: &[PlanRow]) -> Result<Vec<(i64, i64)>, R
         }
     }
     let (Some(key), Some(val)) = (key, val) else { return Err(Refusal::Mismatch("plan: GROUP and AGG are required")) };
+    Ok((filter, key, val, k))
+}
+
+/// Run a plan over a span's blocks.
+pub fn run_plan(blocks: &[Block], plan: &[PlanRow]) -> Result<Vec<(i64, i64)>, Refusal> {
+    let (filter, key, val, k) = plan_of(plan)?;
     let groups = full_sum_by(blocks, key, val, filter)?;
     Ok(match k {
         Some(k) => topk(&groups, k),

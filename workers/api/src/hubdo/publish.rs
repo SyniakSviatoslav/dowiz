@@ -36,6 +36,7 @@ use worker::*;
 use crate::wire::{Call as Request, Reply as Response};
 
 mod sink; // the bucket and the photo store, live or recorded (tests), `hubdo/publish/sink.rs`
+mod root; // LV-PCD-C: the price root + its ML-DSA-65 signature, `hubdo/publish/root.rs`
 use sink::{Photos, Sink};
 #[cfg(test)]
 use sink::mem;
@@ -61,6 +62,10 @@ pub(super) struct Published {
     pub objects: BTreeMap<String, String>,
     /// Photo names (`<sha256>.<ext>`) copied to `m/`, once each.
     pub media: BTreeSet<String>,
+    /// LV-PCD-C: the last signature, `[k64(signed message), sig object key, pk_id]`, so an unchanged
+    /// root is never signed twice (ML-DSA-65 sign is the one costly step here). Absent on old records.
+    #[serde(default)]
+    pub signed: Option<[String; 3]>,
 }
 
 /// One object of a generation's set.
@@ -158,6 +163,17 @@ impl HubImages {
         }
     }
 
+    /// The 64-hex seed of the venue's ML-DSA-65 key (`VENUE_SIGN_SK`), when the operator created it.
+    fn sign_seed(&self) -> Option<String> {
+        match self.state.env() {
+            Some(env) => env.secret("VENUE_SIGN_SK").ok().map(|s| s.to_string()),
+            #[cfg(test)]
+            None => root::tests::TEST_SEED.with(|s| s.borrow().clone()),
+            #[cfg(not(test))]
+            None => None,
+        }
+    }
+
     async fn record(&self) -> Result<Published> {
         Ok(self.state.storage().get::<Published>(RECORD).await?.unwrap_or_default())
     }
@@ -240,6 +256,8 @@ impl HubImages {
 
         let g = self.menu_gens_in_memory();
         let generation = [g.catalog, g.i18n, g.settings];
+        // LV-PCD-C: the price root over the fragment, and its signature when the key exists.
+        let (price_stamp, signed) = root::stamp_for(&fragment, &slug, g.catalog, &prev, everything, || self.sign_seed(), &mut set);
         let todo = plan(&prev, &set);
         for o in &todo {
             sink.put(&format!("v/{slug}/{}", o.key), o.bytes.clone(), o.content_type, IMMUTABLE).await?;
@@ -248,7 +266,10 @@ impl HubImages {
         // THE ROOT LAST, and only when something under it moved: an object a
         // reader can reach is on the bucket before the name that reaches it.
         if !todo.is_empty() || prev.generation != generation || everything {
-            let manifest = manifest_of(&slug, generation, &default, &locales, &set);
+            let mut manifest = manifest_of(&slug, generation, &default, &locales, &set);
+            if let Some(st) = &price_stamp {
+                manifest = root::stamp(&manifest, st);
+            }
             sink.put(&format!("v/{slug}/manifest.json"), manifest.into_bytes(), JSON, ROOT_CACHE).await?;
             written += 1;
         }
@@ -256,6 +277,7 @@ impl HubImages {
             generation,
             objects: set.iter().map(|o| (o.name.clone(), o.key.clone())).collect(),
             media: copied,
+            signed,
         };
         self.state.storage().put(RECORD, &record).await?;
         Ok(Some(written))
@@ -264,3 +286,5 @@ impl HubImages {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod stamp_tests; // LV-PCD-C: root_in_manifest, signed_root_in_manifest

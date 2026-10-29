@@ -24,3 +24,18 @@ block.stock_levels 1 stock_levels:v1(supply:i64:0,qty:i64:0,gen:i64:7)  block::t
 block.names        1 names:v1(id:i64:0,bytes:u8:0,off:u32off:0)  block::tests::roundtrip_bom
 block.taste        1 taste:v1(dish:i64:0,ids:u8:0,ids_off:u32off:0,sweet:i64:0,sour:i64:0,salty:i64:0,bitter:i64:0,umami:i64:0,spicy:i64:0,tex_lo:i64:0,tex_hi:i64:0,aro_lo:i64:0,aro_hi:i64:0,allergens:i64:0,flags:i64:0)  block::taste::tests::the_taste_block_round_trips_and_is_pinned
 block.sales        1 sales:v1(day:i32:0,dish:i64:0,qty:i32:0,gross:i64:1,cqty:i32:0,cgross:i64:1,cost:i64:1)  block::kernels::tests::sales_block_round_trips
+# The ORDER LOG (W-P0-LOG, R-BINREC P0, 2026-10-29). Fingerprints: see migration-law.sh's header --
+# the kind table, Hub::append's frame, the kernel snapshot's keys, the delta marks, and per kind the keys
+# its writer fns write literally. v1 laws: crates/dowiz-hub/src/event/migration_tests.rs.
+log.kinds       1 1=Placed,2=Advanced,3=Paid,4=Revealed,5=Noted,6=Checkpoint,7=Amended,8=Forgotten;redacted=0x80  event::migration_tests::every_log_kind_round_trips
+log.frame       1 kindasu8|idb.len()asu8|idb|order_json.as_bytes()  event::migration_tests::every_log_kind_round_trips
+log.order       1 id,customer_id,status,items[product_id,modifier_ids,quantity,unit_price],subtotal,total,created_at_ms,channel,cash_pay_with  event::migration_tests::the_kernel_snapshot_round_trips
+log.delta       1 _d,_x  event::migration_tests::old_deltas_still_fold
+log.placed      1 at_ms,code,conflicts,discount,ebills_changed,ebills_code,ebills_revision,log_cis_len,product_id,promo,sale_id,total  event::migration_tests::every_log_kind_round_trips
+log.advanced    1 at,by,cash_collected,currency,ebills_voided_by,from,money_taken,order_id,owed,reason,refund,rejection_reason,sale_id,status  event::migration_tests::every_log_kind_round_trips
+log.paid        1 amount,amount_in_order_currency,amount_received,applied,at,at_ms,bill,by,courses,currency,duplicate,ebills_bill_revision,ebills_changed,fic,ignored,iic,inv_ord_num,log_cis_len,method,ok,payment,payment_intent,payment_status,payments,rate_ppm,retry,sale_id,stripe_event,till_id,tip,total,unapplied,uuid,wallet  event::migration_tests::every_log_kind_round_trips
+log.revealed    1 address,at,by,id,name,orders,phone,reason,status,total  event::migration_tests::every_log_kind_round_trips
+log.noted       1 accepted_at_ms,amount,assigned_at_ms,at,at_ms,attempts,by,card,cash_collected,cash_due,courier_id,currency,delivered_at_ms,ebills_bill_revision,ebills_changed,ebills_revision,ebills_voided_by,feedback,fic,fiscal,fresh,from,iic,inv_ord_num,key,kitchen,location_id,log_cis_len,manual,money_taken,n,ok,order_id,owed,paid,pi,picked_up_at_ms,plan_unreadable,reason,refund,round_id,sale_id,seen,sitting_id,state,status,text,total  event::migration_tests::every_log_kind_round_trips
+log.checkpoint  1 bytes,events,tip  event::migration_tests::every_log_kind_round_trips
+log.amended     1 amount,at,by,comp,comped,dir,fulfilment,id,kind,line,lines,moved_from,moved_to,ops,other,product_id,quantity,reason,table,transfer  event::migration_tests::every_log_kind_round_trips
+log.forgotten   1 archives,at,by,hot,id,orders,reason,records,redacted,shredded  event::migration_tests::every_log_kind_round_trips

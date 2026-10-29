@@ -66,27 +66,9 @@ pub async fn archives_marked(place: &Place, ids: &[String]) -> Result<()> {
 }
 
 pub async fn export(place: &Place, now_ms: i64) -> Result<serde_json::Value> {
-    use sha2::{Digest, Sha256};
-    let got = load_images(place, IMAGES).await?;
-    let mut images = serde_json::Map::new();
-    for id in IMAGES {
-        let Some((bytes, generation)) = got.get(*id) else { continue };
-        let digest: String =
-            Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect();
-        images.insert(
-            (*id).to_string(),
-            serde_json::json!({
-                "generation": generation,
-                "bytes": bytes.len(),
-                "sha256": digest,
-                // Base64 rather than hex: a backup is downloaded whole, so the
-                // wire cost is paid once and a third smaller matters, unlike on
-                // the read path where the crossing was the cost.
-                "image": base64::Engine::encode(
-                    &base64::engine::general_purpose::STANDARD, bytes),
-            }),
-        );
-    }
+    let mut got = load_images(place, IMAGES).await?;
+    let fixed: Vec<(String, (Vec<u8>, i64))> =
+        IMAGES.iter().filter_map(|id| got.remove(*id).map(|g| ((*id).to_string(), g))).collect();
     // THE ARCHIVES THAT HAVE NEVER BEEN COPIED, and only those.
     //
     // Rotation makes history into its own image, and an image nobody copies
@@ -95,25 +77,21 @@ pub async fn export(place: &Place, now_ms: i64) -> Result<serde_json::Value> {
     // grows forever -- so each archive travels once and is marked by the
     // caller after the bundle lands.
     let pending = archives_pending(place).await.unwrap_or_default();
-    let mut archives = serde_json::Map::new();
+    let mut arch: Vec<(String, (Vec<u8>, i64))> = Vec::new();
     if !pending.is_empty() {
         let ids: Vec<&str> = pending.iter().map(String::as_str).collect();
-        let got = load_images(place, &ids).await?;
-        for id in &pending {
-            let Some((bytes, generation)) = got.get(id) else { continue };
-            let digest: String =
-                Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect();
-            archives.insert(
-                id.clone(),
-                serde_json::json!({
-                    "generation": generation,
-                    "bytes": bytes.len(),
-                    "sha256": digest,
-                    "image": base64::Engine::encode(
-                        &base64::engine::general_purpose::STANDARD, bytes),
-                }),
-            );
-        }
+        let mut got = load_images(place, &ids).await?;
+        arch = pending.iter().filter_map(|id| got.remove(id).map(|g| (id.clone(), g))).collect();
+    }
+    // ONE PACK BUDGET for the whole bundle (W-SPACE, `dowiz_hub::pack::PACK_BUDGET`): the
+    // smallest images are packed until the budget is spent, the rest go raw.
+    let raws: Vec<&[u8]> = fixed.iter().chain(&arch).map(|(_, (b, _))| b.as_slice()).collect();
+    let out = dowiz_hub::pack::pack_within(&raws, dowiz_hub::pack::PACK_BUDGET);
+    let (mut images, mut archives) = (serde_json::Map::new(), serde_json::Map::new());
+    // `pack_within` answers one entry per input, in input order: zip, never index.
+    for (i, ((id, (bytes, generation)), stored)) in fixed.iter().chain(&arch).zip(out).enumerate() {
+        let into = if i < fixed.len() { &mut images } else { &mut archives };
+        into.insert(id.clone(), entry(bytes, *generation, stored));
     }
 
     Ok(serde_json::json!({
@@ -123,6 +101,26 @@ pub async fn export(place: &Place, now_ms: i64) -> Result<serde_json::Value> {
         "images": images,
         "archives": archives,
     }))
+}
+
+/// One image's manifest entry. `bytes` and `sha256` are always the RAW image's; `image` is
+/// base64 of what [`dowiz_hub::pack::pack_within`] chose -- the envelope (`codec`), or the raw
+/// bytes when the pack budget was spent. Base64 rather than hex: a backup is downloaded
+/// whole, so the wire cost is paid once and a third smaller matters, unlike on the read path
+/// where the crossing was the cost.
+fn entry(raw: &[u8], generation: i64, (stored, packed): (Vec<u8>, bool)) -> serde_json::Value {
+    use sha2::{Digest, Sha256};
+    let digest: String = Sha256::digest(raw).iter().map(|b| format!("{b:02x}")).collect();
+    let mut e = serde_json::json!({
+        "generation": generation,
+        "bytes": raw.len(),
+        "sha256": digest,
+        "image": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, stored),
+    });
+    if packed {
+        e["codec"] = serde_json::json!("dwzpack1");
+    }
+    e
 }
 
 /// Put a backup back — ONLY INTO A VENUE THAT HAS NONE.
@@ -164,6 +162,10 @@ pub async fn import(place: &Place, bundle: &serde_json::Value) -> Result<Vec<Str
         };
         let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, b64)
             .map_err(|e| Error::RustError(format!("image {id} is not base64: {e}")))?;
+        // A bundle from before W-SPACE carries the raw image; `unpack` passes it through.
+        let bytes = dowiz_hub::pack::unpack(&bytes)
+            .map_err(|e| Error::RustError(format!("image {id} does not unpack ({e:?}); the backup is damaged")))?
+            .into_owned();
         let want = entry.get("sha256").and_then(|v| v.as_str()).unwrap_or("");
         let got: String = Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
         if got != want {

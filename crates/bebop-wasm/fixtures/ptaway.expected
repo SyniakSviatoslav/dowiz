@@ -1,0 +1,13 @@
+# What every reader of fixtures/ptaway.store must answer (W-F1 2026-10-29): a REFUSAL.
+# The image: fixtures/kv3.store (live superblock B = cell 512, generation 5, PartTab at its home 528)
+# with the 21 PartTab cells copied to 16 (the OTHER page's home), cell 512+3 set to 16 and cell
+# 512+15 resealed (zlib crc32 of cells 512..526). The PartTab is whole and its own crc holds, so
+# only the home rule refuses it (FORMAT-BEBOP-IMAGE-v2 §3.1 PartTabMisplaced).
+#   native   : tests/parity.rs ptaway_fixture_is_refused -- kv_view = NoSuperblock,
+#              pick_checked = PartTabMisplaced { at: 512, pt: 16 }
+#   wasm32   : kv status=1 n=0 root=0 (Store::pick = None)
+#   python   : kv status=1 n=0 root=0 (oracle.py image(): live = None); the pre-W-F1 oracle read
+#              it as kv3 (status=0 n=5) -- measured
+#   bebop.bin: st_open traps 79 (selfhost/prelude/store.bp), so `kv.bin n` exits 79
+status=1
+bebop_rc=79

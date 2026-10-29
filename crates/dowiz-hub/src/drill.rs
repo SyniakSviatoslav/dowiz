@@ -132,6 +132,14 @@ pub fn run(bundle: &[u8], witness: Option<&[u8]>) -> Drill {
             d.refused.push(format!("{id}: its bytes are not base64"));
             continue;
         };
+        // Packed since W-SPACE (`pack.rs`); a copy from before it is the raw image and passes through.
+        let bytes = match crate::pack::unpack(&bytes) {
+            Ok(raw) => raw.into_owned(),
+            Err(e) => {
+                d.refused.push(format!("{id}: its packed bytes do not open ({e:?}); the copy is damaged"));
+                continue;
+            }
+        };
         if e.get("sha256").and_then(|x| x.as_str()) != Some(hex(&Sha256::digest(&bytes)).as_str()) {
             d.refused.push(format!("{id}: does not match its sha256; the copy is damaged"));
             continue;

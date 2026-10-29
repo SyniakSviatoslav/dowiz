@@ -151,3 +151,7 @@ pub(crate) fn decode_or_reason(r: &Record) -> Result<Event, &'static str> {
 pub(crate) fn decode(r: &Record) -> Option<Event> {
     decode_or_reason(r).ok()
 }
+
+#[cfg(test)]
+#[path = "event/migration_tests.rs"]
+mod migration_tests;

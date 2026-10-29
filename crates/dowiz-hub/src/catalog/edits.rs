@@ -40,6 +40,12 @@ pub const BASELINE: &str = "baseline";
 /// Past this many records a write compacts the journal to a baseline plus the newest [`KEEP`].
 pub const MAX_RECORDS: usize = 600;
 pub const KEEP: usize = 300;
+/// ...or past this many bytes in use (W-SPACE): qa-durres held 452 KB at 433 records, 210 of
+/// them whole venue records (every menu edit bumps `menu_version`). The compaction then keeps
+/// the newest records whose payloads fit [`KEEP_BYTES`] (at least one). A menu larger than
+/// that keeps and is bounded by its own size instead ([`byte_budget`]).
+pub const MAX_BYTES: usize = 128 * 1024;
+pub const KEEP_BYTES: usize = 48 * 1024;
 
 /// A catalogue as its keys: `product:<id>`, `category:<id>`, `supply:`, `promo:`, `location`.
 pub type State = BTreeMap<String, String>;
@@ -249,8 +255,8 @@ pub fn journal(log: &mut LogImage, before: &State, after: &State, at_ms: i64, by
         let g = (Some(i) == last).then_some(gens.1);
         log.append(KIND, key, &record_json(at_ms, who, key, old, new, g)).map_err(JournalError::Hub)?;
     }
-    if log.len() > MAX_RECORDS {
-        *log = compacted(log, KEEP)?;
+    if log.len() > MAX_RECORDS || over_bytes(log, after) {
+        *log = compacted_to(log, KEEP, byte_budget(after).0)?;
         out.compacted = true;
     }
     Ok(out)
@@ -264,7 +270,7 @@ pub enum JournalError {
 
 /// Compaction, the console's newest records, and what a key held before an edit.
 mod history;
-pub use history::{before, compacted, recent};
+pub use history::{before, byte_budget, compacted, compacted_to, over_bytes, recent, RECORD_OVERHEAD};
 
 #[cfg(test)]
 mod tests;

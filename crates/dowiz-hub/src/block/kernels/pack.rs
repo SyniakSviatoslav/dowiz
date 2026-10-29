@@ -51,7 +51,7 @@ fn strings(b: &Block) -> Result<Vec<String>, Refusal> {
 }
 
 /// The byte length of the block that starts `b`, from its own header; `None` when it cannot say.
-fn block_len(b: &[u8]) -> Option<usize> {
+pub(super) fn block_len(b: &[u8]) -> Option<usize> {
     let ncols = usize::from(u16::from_le_bytes([*b.get(6)?, *b.get(7)?]));
     if ncols == 0 {
         return None;
@@ -174,4 +174,20 @@ pub fn days_in(bytes: &[u8], from: i32, to: i32) -> Result<Vec<Block>, Refusal> 
         k += 1;
     }
     Ok(out)
+}
+
+/// The image's dish ids (its second block, CHECKED) without reading a day block; no bytes is none.
+/// What a reader of `image::Index` pairs with the days (`Pack::decode` reads every block for it).
+pub fn dishes_of(bytes: &[u8]) -> Result<BTreeMap<i64, String>, Refusal> {
+    if bytes.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let first = block_len(bytes).filter(|l| *l < bytes.len()).ok_or(Refusal::Mismatch("a sales image opens with two names blocks"))?;
+    let rest = &bytes[first..];
+    let len = block_len(rest).filter(|l| *l <= rest.len()).ok_or(Refusal::TooShort { len: rest.len() })?;
+    let d = decode(&rest[..len])?;
+    let Col::I64(keys) = d.cols.first().filter(|_| d.schema == &schema::NAMES).ok_or(Refusal::Mismatch("a sales image opens with two names blocks"))? else {
+        return Err(Refusal::Mismatch("names"));
+    };
+    Ok(keys.iter().copied().zip(strings(&d)?).collect())
 }
