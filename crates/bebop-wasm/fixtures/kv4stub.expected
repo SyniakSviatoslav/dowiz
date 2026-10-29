@@ -1,0 +1,14 @@
+# What every reader of fixtures/kv4stub.store must answer (W-ES-P8A 2026-10-29): a REFUSAL BY NAME.
+# The image: fixtures/kv3.store with its KV root (cell 1140, 8 cells) payload cell 5 set 3 -> 4 and
+# the root re-sealed (zlib crc32 of its 8 payload cells into the high half of h1); 5 bytes differ.
+# v4 is the COW B+tree (R-EMBED-STORE §12 P8) and NO reader decodes it yet, so each must refuse it
+# before reading a cell of it. The arrays and the chain are kv3's on purpose: a reader that ignored the
+# version would FOLD it (measured: oracle.py with its check removed prints status=0 n=5
+# root=-211109995167561145, kv2's base fold, the chain dropped).
+#   native   : tests/parity.rs kv4stub_fixture_is_refused -- kv_view = UnknownVersion,
+#              Kv::load_checked / KvIn::open / open_lazy = KvError::UnknownVersion { v: 4 }
+#   wasm32   : kv status=12 n=0 root=0 (abi UNKNOWN_VERSION)
+#   python   : kv status=12 n=0 root=0 (oracle.py kv_entries)
+#   bebop.bin: kv.bp `n` / `h` trap 78 (selfhost/prelude/proj.bp pj_kv_known; bebop-lang docs/TRAPS.md)
+status=12
+bebop_rc=78

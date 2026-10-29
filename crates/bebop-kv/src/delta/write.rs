@@ -3,7 +3,7 @@
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use super::{chain_in, version_in, Appended, Op, Rec, Why, HEAD, OP_PUT, OP_REMOVE, ROOT_V3, VERSION_DELTA, MAX_DELTAS, DEAD_DIV};
+use super::{chain_in, version_in, Appended, KeyOp, Op, Rec, Why, HEAD, OP_PUT, OP_REMOVE, ROOT_V3, VERSION_DELTA, MAX_DELTAS, DEAD_DIV};
 use crate::{DIGEST_ARR_I64, VERSION};
 use crate::{obj_cells_in, Store, StoreError};
 
@@ -28,10 +28,10 @@ fn base_lens(st: &Store, root: usize, key: &[u8]) -> Option<(usize, usize)> {
 }
 
 /// Cells a record for `op` takes, header included.
-fn rec_cells(op: &Op) -> usize {
+fn rec_cells(op: &KeyOp) -> usize {
     let (k, v) = match op {
-        Op::Put(k, v) => (k.len(), v.len()),
-        Op::Remove(k) => (k.len(), 0),
+        KeyOp::Put(k, v) => (k.len(), v.len()),
+        KeyOp::Remove(k) => (k.len(), 0),
     };
     2 + HEAD + k.div_ceil(8) + v.div_ceil(8)
 }
@@ -40,14 +40,14 @@ fn rec_cells(op: &Op) -> usize {
 /// the base entry's value cells (+ key and index cells for a remove: an estimate -- those cells
 /// stay inside the base blobs until a compaction).
 #[allow(clippy::indexing_slicing)] // T-ES-06 inventory (W-ES-P1): a pre-split index site; this list may only shrink
-fn dead_of(st: &Store, root: usize, chain: &[Rec], ops: &[Op]) -> i64 {
+fn dead_of(st: &Store, root: usize, chain: &[Rec], ops: &[KeyOp]) -> i64 {
     let mut dead = 0i64;
     for (i, op) in ops.iter().enumerate() {
         let (key, remove) = match op {
-            Op::Put(k, _) => (k.as_bytes(), false),
-            Op::Remove(k) => (k.as_bytes(), true),
+            KeyOp::Put(k, _) => (*k, false),
+            KeyOp::Remove(k) => (*k, true),
         };
-        let earlier = ops[..i].iter().rev().find(|o| matches!(o, Op::Put(k, _) | Op::Remove(k) if k.as_bytes() == key));
+        let earlier = ops[..i].iter().rev().find(|o| matches!(o, KeyOp::Put(k, _) | KeyOp::Remove(k) if *k == key));
         if let Some(o) = earlier {
             dead += rec_cells(o) as i64;
         } else if let Some(r) = chain.iter().find(|r| r.key(st) == key) {
@@ -71,6 +71,14 @@ fn write_packed(st: &mut Store, obj: usize, at: usize, bytes: &[u8]) {
 
 /// `append_delta` with the trigger's two numbers given (tests move them).
 pub fn append_delta_with(st: &mut Store, ops: &[Op], max_deltas: usize, dead_div: i64) -> Result<Appended, StoreError> {
+    let ops: Vec<KeyOp> = ops.iter().map(|&o| KeyOp::from(o)).collect();
+    append_delta_ops(st, &ops, max_deltas, dead_div)
+}
+
+/// THE BYTE-KEY APPEND (W-ES-P3): `append_delta_with` over `&[u8]` keys, which is what the
+/// library's `WriteTxn` stages (R-EMBED-STORE §3.2: keys are bytes, closing D6). The `&str`
+/// form above converts and calls this, so the bytes of every record are the same by construction.
+pub fn append_delta_ops(st: &mut Store, ops: &[KeyOp], max_deltas: usize, dead_div: i64) -> Result<Appended, StoreError> {
     let root = st.root().ok_or(StoreError::NoSuperblock)?;
     let ver = version_in(st, root);
     if ver > VERSION_DELTA {
@@ -82,8 +90,8 @@ pub fn append_delta_with(st: &mut Store, ops: &[Op], max_deltas: usize, dead_div
     let chain = chain_in(st, root).ok_or(StoreError::Corrupt("the KV delta chain does not hold"))?;
     for op in ops {
         match op {
-            Op::Put(k, v) => crate::check_entry(k.len(), v.len())?,
-            Op::Remove(k) => crate::check_entry(k.len(), 0)?,
+            KeyOp::Put(k, v) => crate::check_entry(k.len(), v.len())?,
+            KeyOp::Remove(k) => crate::check_entry(k.len(), 0)?,
         }
     }
     if chain.len() + ops.len() > max_deltas {
@@ -105,8 +113,8 @@ pub fn append_delta_with(st: &mut Store, ops: &[Op], max_deltas: usize, dead_div
     let mut prev = chain.first().map(|r| r.obj);
     for op in ops {
         let (k, v, code) = match op {
-            Op::Put(k, v) => (k.as_bytes(), *v, OP_PUT),
-            Op::Remove(k) => (k.as_bytes(), &[][..], OP_REMOVE),
+            KeyOp::Put(k, v) => (*k, *v, OP_PUT),
+            KeyOp::Remove(k) => (*k, &[][..], OP_REMOVE),
         };
         let len = HEAD + k.len().div_ceil(8) + v.len().div_ceil(8);
         let rec = match st.alloc(&mut tx, len as i64, DIGEST_ARR_I64) {

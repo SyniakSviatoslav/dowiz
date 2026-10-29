@@ -60,7 +60,7 @@ pub const MIN_BYTES: usize = (ARENA + 1) * 8;
 /// One step of zlib CRC-32: the running register over more bytes. Streaming, so a CRC over
 /// cells never stages them in a buffer. TABLE-DRIVEN since W-CRC (`crc.rs`), byte-identical.
 fn crc32_step(c: u32, bytes: &[u8]) -> u32 {
-    crc::step_bytes(c, bytes)
+    bebop_crc::bytes(c, bytes)
 }
 
 /// zlib CRC-32 over raw bytes.
@@ -71,7 +71,7 @@ pub fn crc32(bytes: &[u8]) -> u32 {
 /// CRC-32 over `n` cells starting at `off`, taken as little-endian bytes.
 #[allow(clippy::indexing_slicing)] // T-ES-06 inventory (W-ES-P1): a pre-split index site; this list may only shrink
 pub fn crc32_cells(cells: &[i64], off: usize, n: usize) -> u32 {
-    !cells[off..off + n].iter().fold(0xFFFF_FFFF, |c, &v| crc::step_cell(c, v))
+    !bebop_crc::cells(0xFFFF_FFFF, &cells[off..off + n])
 }
 
 /// A bebop store file loaded into memory as cells.
@@ -194,7 +194,7 @@ impl Cells for View<'_> {
 /// CRC-32 over `n` cells from `off`, little-endian, through `Cells` (a cell past the end reads 0,
 /// as everywhere else; callers bound `n` first).
 pub fn crc32_in<C: Cells + ?Sized>(c: &C, off: usize, n: usize) -> u32 {
-    !(0..n).fold(0xFFFF_FFFF, |h, i| crc::step_cell(h, c.cell_at(off + i)))
+    !bebop_crc::cells_by(0xFFFF_FFFF, n, |i| c.cell_at(off + i))
 }
 
 /// `Store::sb_valid`: magic, and cell 15 = CRC-32 of cells 0..14.

@@ -12,12 +12,7 @@
 //! be the wrong shape for a platform, and that is what the hub-per-tenant
 //! architecture makes irrelevant rather than what it ignores.
 
-use std::collections::BTreeSet;
-
-use bebop_store::kv::delta::{self, Appended, Op};
-use bebop_store::kv::Kv;
-use bebop_store::Store;
-
+use crate::kvimage::{KvImage, Save};
 use crate::HubError;
 
 pub mod bom;
@@ -61,12 +56,11 @@ const P_SUPPLY: &str = "supply:";
 const P_PROMO: &str = "promo:";
 
 pub struct Catalog {
-    store: Store,
-    kv: Kv,
-    /// W-DELTA: the keys changed since this catalogue was LOADED from bytes, so `to_bytes`
-    /// can append them to `store` instead of rewriting it. `None` = created fresh: the
-    /// first `to_bytes` compacts, as every write did before.
-    dirty: Option<BTreeSet<String>>,
+    /// W-ES-P3: the image through the library API, with the pending writes (what `store`, the
+    /// decoded `kv` and the `dirty` key set were). Created fresh = the first save compacts;
+    /// loaded = a save appends one delta record per changed key (W-DELTA), compacting when
+    /// the delta writer says so.
+    kv: KvImage,
 }
 
 impl Catalog {
@@ -77,23 +71,15 @@ impl Catalog {
     /// What refuses a write is `compacted_bytes_fit` running out of doublings
     /// at `DEFAULT_CATALOG_BYTES`, so that is the ceiling measured against.
     pub fn usage(&self) -> crate::Usage {
-        crate::usage_of(&self.store, crate::ceiling_cells(DEFAULT_CATALOG_BYTES))
+        self.kv.usage()
     }
 
     pub fn create() -> Result<Self, HubError> {
-        let mut store = Store::create_bytes(DEFAULT_CATALOG_BYTES)?;
-        Kv::init_bytes(&mut store)?;
-        let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
-        Ok(Catalog { store, kv, dirty: None })
+        Ok(Catalog { kv: KvImage::create(DEFAULT_CATALOG_BYTES, Save::Delta)? })
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, HubError> {
-        let store = Store::from_bytes(bytes);
-        if store.pick().is_none() {
-            return Err(HubError::NotAHub);
-        }
-        let kv = crate::kv_load(&store)?;
-        Ok(Catalog { store, kv, dirty: Some(BTreeSet::new()) })
+        Ok(Catalog { kv: KvImage::load(bytes, DEFAULT_CATALOG_BYTES, Save::Delta)? })
     }
 
     /// Flush the in-memory entries into the image and hand back the bytes. The
@@ -119,55 +105,21 @@ impl Catalog {
     /// v1, or when the arena is full. The entries in memory are the truth either way.
     /// Nothing changed since the load: the image as it is (no new generation).
     pub fn to_bytes(&mut self) -> Result<Vec<u8>, HubError> {
-        if let Some(dirty) = &self.dirty {
-            if dirty.is_empty() {
-                return Ok(self.store.to_bytes_trimmed());
-            }
-            let vals: Vec<(&String, Option<Vec<u8>>)> = dirty.iter().map(|k| (k, self.kv.get(k))).collect();
-            let ops: Vec<Op> = vals
-                .iter()
-                .map(|(k, v)| match v {
-                    Some(v) => Op::Put(k, v),
-                    None => Op::Remove(k),
-                })
-                .collect();
-            // ANY failure of the append falls back to compaction: the entries are the truth,
-            // and compacting them is what every write did before this existed.
-            if let Ok(Appended::Delta(_)) = delta::append_delta(&mut self.store, &ops) {
-                self.dirty = Some(BTreeSet::new());
-                return Ok(self.store.to_bytes_trimmed());
-            }
-        }
-        self.compact()
+        self.kv.to_bytes()
     }
 
     /// Rewrite the image whole (v2, no chain), and carry on appending onto THAT. Public so
     /// an operator path can force it (a rollback to a build that predates v3 needs it).
     pub fn compact(&mut self) -> Result<Vec<u8>, HubError> {
-        let bytes = self.kv.compacted_bytes_fit(DEFAULT_CATALOG_BYTES)?;
-        self.store = Store::from_bytes(&bytes);
-        self.dirty = Some(BTreeSet::new());
-        Ok(bytes)
-    }
-
-    /// Record a changed key for the next `to_bytes`.
-    fn touch(&mut self, key: String) {
-        if let Some(d) = &mut self.dirty {
-            d.insert(key);
-        }
+        self.kv.compact()
     }
 
     fn put(&mut self, key: String, json: &str) {
         self.kv.put(&key, json.as_bytes());
-        self.touch(key);
     }
 
     fn del(&mut self, key: String) -> bool {
-        let gone = self.kv.remove(&key);
-        if gone {
-            self.touch(key);
-        }
-        gone
+        self.kv.remove(&key)
     }
 
     /// What [`Self::to_bytes`] would spend, measured by compacting a copy, and
@@ -178,10 +130,10 @@ impl Catalog {
         let ceiling = crate::ceiling_cells(DEFAULT_CATALOG_BYTES);
         let (bytes, fits) = match self.kv.compacted_bytes(DEFAULT_CATALOG_BYTES) {
             Ok(b) => (b, true),
-            Err(e) if crate::e_is_full(&e) => (self.kv.compacted_bytes(PROJECTION_BYTES)?, false),
-            Err(e) => return Err(e.into()),
+            Err(e) if e.arena_full().is_some() => (self.kv.compacted_bytes(PROJECTION_BYTES)?, false),
+            Err(e) => return Err(e),
         };
-        Ok(Projection { usage: crate::usage_of(&Store::from_bytes(&bytes), ceiling), fits })
+        Ok(Projection { usage: crate::usage_of(&bebop_store::Store::from_bytes(&bytes), ceiling), fits })
     }
 
     /// A fingerprint of the whole catalogue. Two hubs holding the same menu
@@ -283,10 +235,9 @@ impl Catalog {
     /// key, O(n^2) for every `products()`.
     fn entries_with_prefix(&self, prefix: &str) -> Vec<(String, String)> {
         self.kv
-            .entries
-            .iter()
-            .filter(|(k, _)| k.starts_with(prefix))
-            .filter_map(|(k, v)| Some((k[prefix.len()..].to_string(), String::from_utf8(v.clone()).ok()?)))
+            .prefixed(prefix)
+            .into_iter()
+            .filter_map(|(k, v)| Some((k[prefix.len()..].to_string(), String::from_utf8(v).ok()?)))
             .collect()
     }
 }

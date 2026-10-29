@@ -297,48 +297,9 @@ impl Kv {
     }
 
     /// Write the entries as a new root and four new arrays, superseding nothing.
+    #[cfg(any(feature = "std", test))]
     fn stage_write(&self, st: &mut Store, ver: i64, arr_dig: i64, root_dig: i64) -> Result<(crate::Tx, usize), StoreError> {
-        let n = self.entries.len();
-        let kbytes: usize = self.entries.iter().map(|(k, _)| k.len()).sum();
-        let vbytes: usize = self.entries.iter().map(|(_, v)| v.len()).sum();
-        for (k, v) in &self.entries {
-            check_entry(k.len(), v.len())?;
-        }
-
-        let mut tx = st.begin()?;
-        let kidx = st.alloc(&mut tx, (2 * n).max(1) as i64, arr_dig)?;
-        let kblob = st.alloc(&mut tx, blob_cells(ver, kbytes) as i64, arr_dig)?;
-        let vidx = st.alloc(&mut tx, (2 * n).max(1) as i64, arr_dig)?;
-        let vblob = st.alloc(&mut tx, blob_cells(ver, vbytes) as i64, arr_dig)?;
-
-        let (mut kall, mut vall) = (Vec::with_capacity(kbytes), Vec::with_capacity(vbytes));
-        for (i, (k, v)) in self.entries.iter().enumerate() {
-            st.put_cell(kidx, 2 * i, kall.len() as i64);
-            st.put_cell(kidx, 2 * i + 1, k.len() as i64);
-            kall.extend_from_slice(k.as_bytes());
-            st.put_cell(vidx, 2 * i, vall.len() as i64);
-            st.put_cell(vidx, 2 * i + 1, v.len() as i64);
-            vall.extend_from_slice(v);
-        }
-        if n == 0 {
-            st.put_cell(kidx, 0, 0);
-            st.put_cell(vidx, 0, 0);
-        }
-        blob_write(st, kblob, ver, &kall);
-        blob_write(st, vblob, ver, &vall);
-        st.seal(kidx); st.seal(kblob); st.seal(vidx); st.seal(vblob);
-
-        let root = st.alloc(&mut tx, if ver >= 2 { ROOT_V2 } else { ROOT_V1 } as i64, root_dig)?;
-        st.put_cell(root, 0, n as i64);
-        st.link(root, 1, kidx);
-        st.link(root, 2, kblob);
-        st.link(root, 3, vidx);
-        st.link(root, 4, vblob);
-        if ver >= 2 {
-            st.put_cell(root, 5, ver);
-        }
-        st.seal(root);
-        Ok((tx, root))
+        stage_entries(st, self.entries.iter().map(|(k, v)| (k.as_bytes(), v.as_slice())), ver, arr_dig, root_dig)
     }
 
     /// Write every entry back as a new generation.
@@ -375,20 +336,7 @@ impl Kv {
     /// and an audit trail belongs in the event log, which is append-only on
     /// purpose and is not this.
     pub fn compacted_bytes(&self, capacity: usize) -> Result<Vec<u8>, StoreError> {
-        let mut fresh = Store::create_bytes(capacity)?;
-        // STRAIGHT INTO THE EMPTY STORE, no `init_bytes` first (W-CRC): the empty schema
-        // that init wrote is superseded by the very next commit -- 20 cells dead in every
-        // compacted image, and, now that superseded cells are counted, a dead figure that
-        // could never return to 0 after a compaction. Same
-        // digests and version `init` uses, so the image reads exactly as before.
-        let (tx, root) = self.stage_write(&mut fresh, VERSION, DIGEST_ARR_I64, DIGEST_KV_ROOT)?;
-        fresh.commit_bytes(&tx, root);
-        // TRIMMED. The fresh image was sized by doubling until the content
-        // fitted, so most of the arena it ended up with is untouched zeros --
-        // the tail `Store::from_bytes` re-creates from the capacity in the
-        // superblock. Writing it would send up to half an image of nothing on
-        // every settings change and every menu import.
-        Ok(fresh.to_bytes_trimmed())
+        compacted_from(self.entries.iter().map(|(k, v)| (k.as_bytes(), v.as_slice())), capacity, None)
     }
 
     /// Commit into the SMALLEST image that holds the data, up to `max`.
@@ -405,17 +353,127 @@ impl Kv {
     /// honoured, so a genuinely large menu grows to the declared ceiling rather
     /// than silently truncating.
     pub fn compacted_bytes_fit(&self, max: usize) -> Result<Vec<u8>, StoreError> {
-        let mut cap = 16 * 1024;
-        loop {
-            match self.compacted_bytes(cap) {
-                Ok(b) => return Ok(b),
-                Err(StoreError::ArenaFull { .. }) if cap < max => {
-                    cap = (cap * 2).min(max);
-                }
-                Err(e) => return Err(e),
+        compacted_from_fit(self.entries.iter().map(|(k, v)| (k.as_bytes(), v.as_slice())), max, None)
+    }
+}
+
+/// `Kv::stage_write`'s body over ANY sorted entry stream of byte keys (W-ES-P3): the library's
+/// compaction writes the merged entries of a snapshot and a `Batch` through it, `Kv` its own.
+/// The stream is walked more than once (sizes, limits, then the write), hence `Clone`.
+fn stage_entries<'e, I>(st: &mut Store, entries: I, ver: i64, arr_dig: i64, root_dig: i64) -> Result<(crate::Tx, usize), StoreError>
+where
+    I: Iterator<Item = (&'e [u8], &'e [u8])> + Clone,
+{
+    let n = entries.clone().count();
+    let kbytes: usize = entries.clone().map(|(k, _)| k.len()).sum();
+    let vbytes: usize = entries.clone().map(|(_, v)| v.len()).sum();
+    for (k, v) in entries.clone() {
+        check_entry(k.len(), v.len())?;
+    }
+
+    let mut tx = st.begin()?;
+    let kidx = st.alloc(&mut tx, (2 * n).max(1) as i64, arr_dig)?;
+    let kblob = st.alloc(&mut tx, blob_cells(ver, kbytes) as i64, arr_dig)?;
+    let vidx = st.alloc(&mut tx, (2 * n).max(1) as i64, arr_dig)?;
+    let vblob = st.alloc(&mut tx, blob_cells(ver, vbytes) as i64, arr_dig)?;
+
+    let (mut kall, mut vall) = (Vec::with_capacity(kbytes), Vec::with_capacity(vbytes));
+    for (i, (k, v)) in entries.enumerate() {
+        st.put_cell(kidx, 2 * i, kall.len() as i64);
+        st.put_cell(kidx, 2 * i + 1, k.len() as i64);
+        kall.extend_from_slice(k);
+        st.put_cell(vidx, 2 * i, vall.len() as i64);
+        st.put_cell(vidx, 2 * i + 1, v.len() as i64);
+        vall.extend_from_slice(v);
+    }
+    if n == 0 {
+        st.put_cell(kidx, 0, 0);
+        st.put_cell(vidx, 0, 0);
+    }
+    blob_write(st, kblob, ver, &kall);
+    blob_write(st, vblob, ver, &vall);
+    st.seal(kidx); st.seal(kblob); st.seal(vidx); st.seal(vblob);
+
+    let root = st.alloc(&mut tx, if ver >= 2 { ROOT_V2 } else { ROOT_V1 } as i64, root_dig)?;
+    st.put_cell(root, 0, n as i64);
+    st.link(root, 1, kidx);
+    st.link(root, 2, kblob);
+    st.link(root, 3, vidx);
+    st.link(root, 4, vblob);
+    if ver >= 2 {
+        st.put_cell(root, 5, ver);
+    }
+    st.seal(root);
+    Ok((tx, root))
+}
+
+/// Commit sorted `entries` into a FRESH image of `capacity` bytes and hand back its trimmed bytes
+/// (`Kv::compacted_bytes` is this over its own entries, `after_gen` = None: byte for byte what
+/// it always wrote, `golden_tests`).
+///
+/// `after_gen` = Some(g) (W-ES-P3, the library's compaction): the fresh image is committed as
+/// generation g + 1 instead of 1, so a reader never sees the generation go backwards across a
+/// compaction. Only the generation-bearing cells differ (the superblock's and the PartTab's
+/// generation, each object's h1 low half, crc15, anc). `Store::begin` refuses g + 1 past
+/// `MAX_GENERATION` (`StoreError::Limit`), exactly as for a delta.
+pub fn compacted_from<'e, I>(entries: I, capacity: usize, after_gen: Option<i64>) -> Result<Vec<u8>, StoreError>
+where
+    I: Iterator<Item = (&'e [u8], &'e [u8])> + Clone,
+{
+    let mut fresh = Store::create_bytes(capacity)?;
+    if let Some(g) = after_gen {
+        set_fresh_generation(&mut fresh, g)?;
+    }
+    // STRAIGHT INTO THE EMPTY STORE, no `init_bytes` first (W-CRC): the empty schema
+    // that init wrote is superseded by the very next commit -- 20 cells dead in every
+    // compacted image, and, now that superseded cells are counted, a dead figure that
+    // could never return to 0 after a compaction. Same
+    // digests and version `init` uses, so the image reads exactly as before.
+    let (tx, root) = stage_entries(&mut fresh, entries, VERSION, DIGEST_ARR_I64, DIGEST_KV_ROOT)?;
+    fresh.commit_bytes(&tx, root);
+    // TRIMMED. The fresh image was sized by doubling until the content
+    // fitted, so most of the arena it ended up with is untouched zeros --
+    // the tail `Store::from_bytes` re-creates from the capacity in the
+    // superblock. Writing it would send up to half an image of nothing on
+    // every settings change and every menu import.
+    Ok(fresh.to_bytes_trimmed())
+}
+
+/// `compacted_from` into the SMALLEST image that holds the entries, doubling from 16 KiB up to
+/// `max` (`Kv::compacted_bytes_fit`'s loop).
+pub fn compacted_from_fit<'e, I>(entries: I, max: usize, after_gen: Option<i64>) -> Result<Vec<u8>, StoreError>
+where
+    I: Iterator<Item = (&'e [u8], &'e [u8])> + Clone,
+{
+    let mut cap = 16 * 1024;
+    loop {
+        match compacted_from(entries.clone(), cap, after_gen) {
+            Ok(b) => return Ok(b),
+            Err(StoreError::ArenaFull { .. }) if cap < max => {
+                cap = (cap * 2).min(max);
             }
+            Err(e) => return Err(e),
         }
     }
+}
+
+/// A fresh store's superblock A says generation `g` (and its crc15 again), so the first commit
+/// into it is g + 1. Refuses a negative `g`.
+fn set_fresh_generation(st: &mut Store, g: i64) -> Result<(), StoreError> {
+    if g < 0 {
+        return Err(StoreError::Limit { what: "generation", got: g, max: crate::MAX_GENERATION });
+    }
+    let at = crate::SB_A + crate::format::SB_GEN;
+    match st.cells.get_mut(at) {
+        Some(c) => *c = g,
+        None => return Err(StoreError::Corrupt("a fresh store has no superblock")),
+    }
+    let crc = crate::crc32_cells(&st.cells, crate::SB_A, 15) as i64;
+    match st.cells.get_mut(crate::SB_A + crate::format::SB_CRC) {
+        Some(c) => *c = crc,
+        None => return Err(StoreError::Corrupt("a fresh store has no superblock")),
+    }
+    Ok(())
 }
 
 /// The zero-copy reader (W-ZC): one value straight from the image cells.
@@ -433,3 +491,19 @@ mod golden_tests;
 
 /// `Kv::load_checked` and `KvError` (the KV half of W-CRC).
 pub mod verify;
+
+/// W-ES-P3 (R-EMBED-STORE §3.2-§3.4): the pure half of the library API. A key or value read out of
+/// an image (borrowed wherever it lies contiguous), the limits a writer checks first, the owned
+/// batch of uncommitted writes, and the merged read over a snapshot and a batch. The half that
+/// needs a device and a lock (`Db`, `ReadTxn`, `WriteTxn`) is bebop-io's.
+pub mod bytes;
+pub mod limits;
+pub mod batch;
+pub mod merge;
+pub use batch::Batch;
+pub use bytes::Bytes;
+pub use limits::{LimitError, Limits};
+pub use merge::{MergeCursor, Staged};
+
+#[cfg(test)]
+mod p3_tests;

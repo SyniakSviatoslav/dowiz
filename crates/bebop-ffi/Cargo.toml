@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+[package]
+name = "bebop-ffi"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "A C ABI over bebop-io's KV database (Db, ReadTxn, WriteTxn, Scan, Refusal as integer codes plus a message), built as a cdylib; bindings/python/bebop_store.py drives it through ctypes."
+
+# W-ES-P6 (R-EMBED-STORE §5 row P6). The only crate in the store family that may use `unsafe`:
+# a C ABI is raw pointers by definition. Every other crate keeps `forbid(unsafe_code)`.
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bebop-io = { path = "../bebop-io" }
+
+# The repo-level examples are built by this crate, so `cargo run --example kv` works from here
+# and CI has one place to build them.
+[[example]]
+name = "kv"
+path = "../../examples/kv.rs"
+
+[profile.release]
+opt-level = 3

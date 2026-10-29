@@ -10,7 +10,10 @@ use bebop_store::{get_in, root_in, Store, View};
 
 /// Kind 4: `fold` = the Z-set digest THIS reader derives from the KV's entries (checked load).
 pub(super) fn zset_view(bytes: &[u8], v: &View, p: &Proj) -> Result<ProjView, i32> {
-    let kv = Kv::load_checked(&Store::from_bytes(bytes)).map_err(|_| crate::abi::NOT_A_KV)?;
+    let kv = Kv::load_checked(&Store::from_bytes(bytes)).map_err(|e| match e {
+        bebop_store::verify::KvError::UnknownVersion { .. } => crate::abi::UNKNOWN_VERSION,
+        _ => crate::abi::NOT_A_KV,
+    })?;
     if digest(&zset_of(v, p.out)) != p.value {
         return Err(BAD_MEMO);
     }

@@ -1,0 +1,9 @@
+# W-ES-P4 (R-EMBED-STORE §4.4 T-ES-30). WRITTEN by the Rust writer: `bebop-conform write fixtures`
+# (fixtures/conform/src/main.rs, bebop-image + bebop-kv; deterministic, a re-run is byte-identical).
+# Judged by tools/gates/conformance.sh on five readers; statuses: docs/STATUS-CODES.md.
+# kv2.store + MAX_DELTAS = 32 one-op delta commits (append_delta_with, dead-cell trigger off): puts of
+# new keys (values 0/1/7/8/9/40 bytes), overwrites, removes of base and new keys, one remove of an
+# absent key. v3 root, D = 32, generation 34; a 33rd append answers Compact(Deltas) (asserted).
+#   native: kv status=0 n=27 root=-6264351955216461874   oracle.py: the same, from the bytes
+n=27
+root=-6264351955216461874

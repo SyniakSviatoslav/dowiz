@@ -96,8 +96,12 @@ pub(crate) use chain::{chain_is_whole, content_id_chained, hex32};
 pub(crate) use error::e_is_full;
 pub(crate) use event::{decode, decode_or_reason};
 pub(crate) use usage::{ceiling_cells, usage_of, usage_of_kind};
+/// The pre-W-ES-P3 load path (`Kv::load_checked` + the error mapping), kept with its tests as the
+/// oracle `KvImage::load`'s mapping must agree with; no production caller since W-ES-P3.
+#[cfg(test)]
 mod kvload;
-pub(crate) use kvload::kv_load;
+/// W-ES-P3: a KV image held through the bebop library API (`Db` + a pending `Batch`).
+mod kvimage;
 mod quarantine;
 pub(crate) use quarantine::{chain_is_whole_seen, Seen};
 

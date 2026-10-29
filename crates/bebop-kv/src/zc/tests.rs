@@ -229,3 +229,28 @@ fn zc_a_get_reads_log_n_keys_and_one_value() {
     println!("zc_a_get_reads_log_n_keys_and_one_value: {reads} cells read of {}", b.len() / 8);
     assert!(reads < 600, "{reads} cells read for one get");
 }
+
+/// W-ES-P8A: A VERSION THIS CODE DOES NOT KNOW IS REFUSED BY NAME, on every read path. v4 is the
+/// B+tree (R-EMBED-STORE §12 P8); until a reader is taught it, a v4 root must never be read as a
+/// v1-v3 base. The forged root keeps its v2 arrays and is re-sealed, so a reader that ignored the
+/// version would FOLD it -- only the version check stands between it and a wrong answer.
+#[test]
+fn an_unknown_version_is_refused_by_name_on_every_path() {
+    let clean = image_v(&catalogue(64), 2);
+    let ck = KvIn::open(View::new(&clean)).unwrap().checked();
+    for v in [4, 5, i64::MAX] {
+        let b = forge(&clean, 0, 5, v);
+        let want = Err(KvError::UnknownVersion { v });
+        assert_eq!(Kv::load_checked(&Store::from_bytes(&b)).map(|_| ()), want, "v{v}: load_checked");
+        assert!(Kv::load(&Store::from_bytes(&b)).is_none(), "v{v}: load");
+        assert!(Kv::decode(&Store::from_bytes(&b)).is_none(), "v{v}: decode");
+        assert_eq!(KvIn::open(View::new(&b)).map(|_| ()), want, "v{v}: open");
+        assert_eq!(KvIn::reopen(View::new(&b), ck).map(|_| ()), want, "v{v}: reopen");
+        assert_eq!(KvIn::open_lazy(View::new(&b)).map(|_| ()), want, "v{v}: open_lazy");
+        assert_eq!(kv_get_in(&View::new(&b), b"product:item-000").map(|_| ()), want, "v{v}: kv_get_in");
+    }
+    // The control: version 3's number on the same forged root is NOT this refusal (it fails the
+    // v3 shape instead), so the test above measures the version check and nothing else.
+    let b = forge(&clean, 0, 5, 3);
+    assert_eq!(Kv::load_checked(&Store::from_bytes(&b)).map(|_| ()), Err(KvError::NotKv), "v3 control");
+}

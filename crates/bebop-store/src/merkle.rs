@@ -84,6 +84,11 @@ fn split(n: usize) -> usize {
 
 /// MTH over leaf hashes.
 pub fn root(leaves: &[Hash]) -> Hash {
+    // P16: natively the same tree level by level, two nodes at a time (`sha_fast::merkle_root`).
+    // wasm32 keeps the recursion below: the level-wise form cost the reader module +124 bytes.
+    #[cfg(not(target_arch = "wasm32"))]
+    return crate::sha_fast::merkle_root(leaves);
+    #[cfg(target_arch = "wasm32")]
     match leaves.len() {
         0 => sha256(&[]),
         1 => leaves[0],

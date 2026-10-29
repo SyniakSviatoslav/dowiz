@@ -36,16 +36,12 @@
 //! how the catalogue acquired the same 8x amplification the order log had.
 
 use crate::HubError;
-use bebop_store::kv::Kv;
-use bebop_store::Store;
+use crate::kvimage::{KvImage, Save};
 
 /// A record and the keys that find it.
 pub struct Table {
-    store: Store,
-    kv: Kv,
-    /// The doubling loop's limit, which is the only honest denominator for a
-    /// compacted image's usage -- see `bebop-ceiling-not-capacity`.
-    ceiling: usize,
+    /// W-ES-P3: the image through the library API (rewritten compacted on every save).
+    kv: KvImage,
 }
 
 /// Why a write was refused.
@@ -85,27 +81,21 @@ impl Table {
         // START SMALL AND DOUBLE. The ceiling is the refusal point, not the
         // allocation: a platform with four users should not carry a quarter of
         // a megabyte of empty arena on every read.
-        let mut store = Store::create_bytes(ceiling_bytes.min(16 * 1024))?;
-        Kv::init_bytes(&mut store)?;
-        let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
-        Ok(Table { store, kv, ceiling: ceiling_bytes })
+        let kv = KvImage::create(ceiling_bytes, Save::Compact)?;
+        Ok(Table { kv })
     }
 
     pub fn load(bytes: &[u8], ceiling_bytes: usize) -> Result<Self, HubError> {
-        let store = Store::from_bytes(bytes);
-        if store.pick().is_none() {
-            return Err(HubError::NotAHub);
-        }
-        let kv = crate::kv_load(&store)?;
-        Ok(Table { store, kv, ceiling: ceiling_bytes })
+        let kv = KvImage::load(bytes, ceiling_bytes, Save::Compact)?;
+        Ok(Table { kv })
     }
 
     pub fn to_bytes(&mut self) -> Result<Vec<u8>, HubError> {
-        Ok(self.kv.compacted_bytes_fit(self.ceiling)?)
+        self.kv.to_bytes()
     }
 
     pub fn usage(&self) -> crate::Usage {
-        crate::usage_of(&self.store, crate::ceiling_cells(self.ceiling))
+        self.kv.usage()
     }
 
     /// The fold of every entry, for the four-way check against bebop, python

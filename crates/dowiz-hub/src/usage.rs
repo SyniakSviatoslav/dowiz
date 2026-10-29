@@ -102,12 +102,18 @@ pub(crate) fn usage_of(store: &Store, ceiling_cells: i64) -> Usage {
 }
 
 pub(crate) fn usage_of_kind(store: &Store, ceiling_cells: i64, grows: bool) -> Usage {
-    match store.pick() {
+    usage_of_sb(store.pick(), store.capacity_cells(), ceiling_cells, grows)
+}
+
+/// `usage_of_kind` from the live superblock and the capacity alone (W-ES-P3: a KV image held
+/// as a `Db` has a snapshot, not a `Store`; `KvImage::usage`).
+pub(crate) fn usage_of_sb(sb: Option<bebop_store::Superblock>, capacity_cells: i64, ceiling_cells: i64, grows: bool) -> Usage {
+    match sb {
         Some(sb) => Usage {
             // `arena_used` is an absolute cell index; the arena starts at 1024,
             // so the cells actually spent are what lies past that.
             used_cells: (sb.arena_used - bebop_store::ARENA as i64).max(0),
-            capacity_cells: store.capacity_cells(),
+            capacity_cells,
             ceiling_cells,
             grows,
             generation: sb.generation,

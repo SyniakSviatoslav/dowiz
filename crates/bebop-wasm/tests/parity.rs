@@ -127,6 +127,31 @@ fn ptaway_fixture_is_refused() {
     assert!(matches!(st.pick_checked(), Err(bebop_store::format::PickError::PartTabMisplaced { at: 512, pt: 16 })));
 }
 
+/// W-ES-P8A: `fixtures/kv4stub.store` is kv3 with its KV root's version cell (payload 5) set to 4
+/// and the root re-sealed (`fixtures/kv4stub.expected`). v4 is the B+tree no reader decodes yet,
+/// so every reader REFUSES it by name; `gate.sh` greps this name. The arrays are kv3's, so a
+/// reader that ignored the version would fold it: the control below puts 3 back and reads kv3.
+#[test]
+fn kv4stub_fixture_is_refused() {
+    let bytes = fixture_named("kv4stub");
+    assert_eq!(kv_view(&bytes), Err(Refusal::UnknownVersion));
+    let st = Store::from_bytes(&bytes);
+    let want = Err(bebop_store::verify::KvError::UnknownVersion { v: 4 });
+    assert_eq!(bebop_store::kv::Kv::load_checked(&st).map(|_| ()), want, "Kv::load_checked");
+    let view = bebop_store::View::new(&bytes);
+    assert_eq!(bebop_store::kv::zc::KvIn::open(&view).map(|_| ()), want, "KvIn::open");
+    assert_eq!(bebop_store::kv::zc::KvIn::open_lazy(&view).map(|_| ()), want, "KvIn::open_lazy");
+    let mut out = [0i64; 2];
+    assert_eq!(unsafe { abi::bw_kv(bytes.as_ptr(), bytes.len(), out.as_mut_ptr()) }, abi::UNKNOWN_VERSION);
+    // The control: version 3 back in the same root, re-sealed, reads to exactly kv3.expected.
+    let mut st = Store::from_bytes(&bytes);
+    let root = st.root().expect("a root");
+    st.cells[root + 2 + 5] = 3;
+    st.seal(root);
+    let v = kv_view(&st.to_bytes()).expect("the stub with version 3 back is kv3");
+    assert_eq!((v.n, v.root), expected_named("kv3"), "only the version cell differs from kv3");
+}
+
 #[test]
 fn a_kv_image_is_not_a_log_and_a_log_is_not_a_kv() {
     assert_eq!(log_view(&fixture()), Err(Refusal::NotALog));

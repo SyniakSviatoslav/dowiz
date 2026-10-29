@@ -23,6 +23,10 @@
 # runs the wasm reader on it, and expects a refusal or a moved root. A gate
 # whose number cannot move is not measuring anything (bebop-lang AGENTS.md).
 #
+# CONFORMANCE 5 x 5 (W-ES-P4) lives in tools/gates/conformance.sh, not here: every KV fixture (these
+# three, ptaway, kv4stub and W-ES-P4's kv3max/kv3c/torn/ptbad/empty/kv0) on five readers -- these four
+# plus the C ABI -- under one status vocabulary, docs/STATUS-CODES.md.
+#
 # Toolchain: the wasm32 target is in the rustup toolchain the repo pins
 # (rust-toolchain.toml -> 1.96.1), not in the distro cargo on PATH, so cargo
 # is taken from $HOME/.cargo/bin explicitly -- the same rule wrangler.toml states.
@@ -572,6 +576,37 @@ if [ -n "$bad" ]; then
   fail=1
 else
   say "ptaway: readers refusing as ptaway.expected says: $ran of 4 (bebop.bin counts only on aarch64)"
+fi
+[ "$ran" -lt "$minran" ] && minran=$ran
+
+# 4c. AN UNKNOWN KV VERSION (W-ES-P8A, R-EMBED-STORE §12 P8a) -------------------
+# fixtures/kv4stub.store: kv3 with its KV root claiming version 4 (the B+tree), re-sealed. No reader
+# decodes v4 yet, so every reader must REFUSE it by name -- never fold its kv3 arrays as a base. Four
+# readers, each named when it does not refuse as kv4stub.expected says.
+FIX=fixtures/kv4stub.store
+ran=0
+bad=""
+if grep -q "test kv4stub_fixture_is_refused ... ok" "$SCRATCH/native.txt"; then ran=$((ran + 1)); else bad="$bad native"; fi
+out=$(node harness.mjs "$WASM" "$FIX" 2>&1)
+say "kv4stub wasm32: '$out' rc=$?"
+case "$out" in "kv status=$(want kv4stub status) "*) ran=$((ran + 1)) ;; *) bad="$bad wasm32" ;; esac
+out=$(python3 oracle.py "$FIX" 2>&1)
+say "kv4stub python: '$out' rc=$?"
+case "$out" in "kv status=$(want kv4stub status) "*) ran=$((ran + 1)) ;; *) bad="$bad python" ;; esac
+if [ -n "$KVBIN" ]; then
+  mkdir -p "$SCRATCH/kv4stub" && cp "$FIX" "$SCRATCH/kv4stub/kv.store"
+  n=$(cd "$SCRATCH/kv4stub" && "$OLDPWD/$SEED" "$KVBIN" n 2>&1)
+  nrc=$?
+  r=$(cd "$SCRATCH/kv4stub" && "$OLDPWD/$SEED" "$KVBIN" h 2>&1)
+  hrc=$?
+  say "kv4stub bebop.bin: kv.bin n -> '$n' rc=$nrc, kv.bin h -> '$r' rc=$hrc"
+  if [ "$nrc" = "$(want kv4stub bebop_rc)" ] && [ "$hrc" = "$(want kv4stub bebop_rc)" ]; then ran=$((ran + 1)); else bad="$bad bebop.bin"; fi
+fi
+if [ -n "$bad" ]; then
+  say "kv4stub: readers refusing as kv4stub.expected says: $ran of 4 -- DISAGREE:$bad"
+  fail=1
+else
+  say "kv4stub: readers refusing as kv4stub.expected says: $ran of 4 (bebop.bin counts only on aarch64)"
 fi
 [ "$ran" -lt "$minran" ] && minran=$ran
 

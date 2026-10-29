@@ -14,6 +14,9 @@ pub enum KvError {
     NotKv,
     /// The root or one of its four arrays fails its crc.
     BadCrc(BadCrc),
+    /// The root names a KV version this code does not know (W-ES-P8A: v4 is the B+tree; until a
+    /// reader is taught it, it is REFUSED by name, never read as a v1-v3 base and never folded).
+    UnknownVersion { v: i64 },
 }
 
 impl Kv {
@@ -21,16 +24,18 @@ impl Kv {
     pub fn load_checked(st: &Store) -> Result<Kv, KvError> {
         let root = st.root().ok_or(KvError::NotKv)?;
         st.check_obj(root).map_err(KvError::BadCrc)?;
+        // W-ES-P8A: a version this code does not know is refused right after the root's own crc,
+        // before its cells 1-4 are followed as v1-v3 arrays and before any crc of what they name.
+        let v = Kv::version(st);
+        if v > crate::delta::VERSION_DELTA {
+            return Err(KvError::UnknownVersion { v });
+        }
         for i in 1..=4 {
             if let Some(arr) = st.follow(root, i) {
                 st.check_obj(arr).map_err(KvError::BadCrc)?;
             }
         }
-        // W-DELTA: every record on the chain is checked too, before any is replayed -- after a
-        // version this code does not know is refused, so it never surfaces as a crc failure.
-        if Kv::version(st) > crate::delta::VERSION_DELTA {
-            return Err(KvError::NotKv);
-        }
+        // W-DELTA: every record on the chain is checked too, before any is replayed.
         let chain = crate::delta::chain_in(st, root).ok_or(KvError::NotKv)?;
         crate::delta::check_chain(st, &chain).map_err(KvError::BadCrc)?;
         Kv::decode(st).ok_or(KvError::NotKv)

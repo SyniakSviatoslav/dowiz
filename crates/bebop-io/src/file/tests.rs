@@ -18,7 +18,7 @@ fn write_image(path: &str, st: &crate::Store) {
 fn a_second_open_is_locked_until_the_first_is_dropped() {
     let p = tmp("lock");
     let first = FileDevice::create(&p, CAP).unwrap();
-    assert!(matches!(FileDevice::open(&p), Err(IoError::Locked)));
+    assert!(matches!(FileDevice::open(&p), Err(IoError::Locked { .. })));
     drop(first);
     assert!(FileDevice::open(&p).is_ok(), "free again");
     assert!(std::path::Path::new(&lock_path(&p)).exists());

@@ -1,0 +1,7 @@
+# W-ES-P4 (R-EMBED-STORE §4.4 T-ES-30). WRITTEN by the Rust writer: `bebop-conform write fixtures`
+# (fixtures/conform/src/main.rs, bebop-image + bebop-kv; deterministic, a re-run is byte-identical).
+# Judged by tools/gates/conformance.sh on five readers; statuses: docs/STATUS-CODES.md.
+# kv3max's 27 entries right after the compaction a 33rd append asks for: compacted_from_fit,
+# after_gen = 34 -> a v2 image at generation 35. Same n and fold as kv3max: that equality is the point.
+n=27
+root=-6264351955216461874

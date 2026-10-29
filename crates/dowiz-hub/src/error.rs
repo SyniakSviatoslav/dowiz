@@ -46,6 +46,41 @@ impl HubError {
     }
 }
 
+/// The library's refusals as this crate's errors (W-ES-P3), with NO new variant, so every
+/// caller's match (workers/api) stands: a changed byte keeps its name (`BadCrc`), "this is not a
+/// hub image" stays `NotAHub`, a full image stays `Store(ArenaFull)` (`arena_full`, `e_is_full`).
+impl From<bebop_store::Refusal> for HubError {
+    fn from(e: bebop_store::Refusal) -> Self {
+        use bebop_store::sim::Why;
+        use bebop_store::format::Anchor;
+        use bebop_store::Refusal as R;
+        match e {
+            R::BadCrc(b) => HubError::BadCrc(b),
+            // A torn last commit in an image whose writes are atomic is a changed byte: name the
+            // cell where the proof failed and both numbers, as BadCrc does for an object.
+            R::LastCommit(Why::Anchor(Anchor::Torn { mark, want, got, .. })) => {
+                HubError::BadCrc(bebop_store::BadCrc { obj: mark.max(0) as usize, want, got })
+            }
+            R::LastCommit(Why::Walk { at }) | R::ObjectBad { at } => HubError::BadCrc(bebop_store::BadCrc { obj: at, want: 0, got: None }),
+            R::LastCommit(_) | R::Pick(_) | R::Recover { .. } | R::NotKv | R::UnknownVersion(_) => HubError::NotAHub,
+            R::ArenaFull { need, capacity } => HubError::Store(StoreError::ArenaFull { need, capacity }),
+            R::Limit { what, got, max } => HubError::Store(StoreError::Limit { what, got, max }),
+            R::KeyTooLong { len, max } => HubError::Store(StoreError::Limit { what: "key bytes", got: len as i64, max: max as i64 }),
+            R::ValueTooLong { len, max } => HubError::Store(StoreError::Limit { what: "value bytes", got: len as i64, max: max as i64 }),
+            R::TooSmall { bytes, floor } => HubError::Store(StoreError::TooSmall { bytes, floor }),
+            R::Corrupt(what) | R::Plan(what) => HubError::Store(StoreError::Corrupt(what)),
+            // Cannot happen over `Detached` (one owner, no device): named, never silent.
+            R::WriterBusy => HubError::Store(StoreError::Corrupt("the image's writer is busy")),
+            R::Poisoned => HubError::Store(StoreError::Corrupt("the image's writer is poisoned")),
+            R::Locked { .. } => HubError::Store(StoreError::Corrupt("the image is locked by another process")),
+            R::Exists => HubError::Store(StoreError::Corrupt("the image already holds a KV")),
+            R::Io { .. } => HubError::Store(StoreError::Corrupt("the image's device failed")),
+            R::Durability { .. } => HubError::Store(StoreError::Corrupt("the image's device cannot give that durability")),
+            _ => HubError::Store(StoreError::Corrupt("the image was refused")),
+        }
+    }
+}
+
 impl From<StoreError> for HubError {
     fn from(e: StoreError) -> Self {
         HubError::Store(e)

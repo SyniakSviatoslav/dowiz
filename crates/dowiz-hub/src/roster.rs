@@ -23,8 +23,7 @@ use crate::crypto::{
 use crate::minijson::{esc, int_field, str_field};
 use crate::token::Role;
 use crate::HubError;
-use bebop_store::kv::Kv;
-use bebop_store::Store;
+use crate::kvimage::{KvImage, Save};
 
 pub const DEFAULT_ROSTER_BYTES: usize = crate::CEILING_BYTES;
 
@@ -53,7 +52,8 @@ pub struct Roster {
     // back come from `kv.compacted_bytes_fit`. Holding it kept a whole
     // 512 KiB image alive for the lifetime of every one of these, inside
     // a Durable Object that holds one per venue.
-    kv: Kv,
+    /// W-ES-P3: the image through the library API (rewritten compacted on every save).
+    kv: KvImage,
     /// The cost new passwords are hashed at, AND the cost a failed lookup burns.
     ///
     /// One field for both, deliberately. The constant-work miss is only
@@ -67,9 +67,7 @@ pub struct Roster {
 
 impl Roster {
     pub fn create() -> Result<Self, HubError> {
-        let mut store = Store::create_bytes(DEFAULT_ROSTER_BYTES)?;
-        Kv::init_bytes(&mut store)?;
-        let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
+        let kv = KvImage::create(DEFAULT_ROSTER_BYTES, Save::Compact)?;
         Ok(Roster { kv, iterations: PBKDF2_ITERATIONS })
     }
 
@@ -80,11 +78,7 @@ impl Roster {
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, HubError> {
-        let store = Store::from_bytes(bytes);
-        if store.pick().is_none() {
-            return Err(HubError::NotAHub);
-        }
-        let kv = crate::kv_load(&store)?;
+        let kv = KvImage::load(bytes, DEFAULT_ROSTER_BYTES, Save::Compact)?;
         Ok(Roster { kv, iterations: PBKDF2_ITERATIONS })
     }
 
@@ -102,7 +96,7 @@ impl Roster {
     /// `Kv::compacted_bytes` for what that gives up (nothing anything here
     /// reads).
     pub fn to_bytes(&mut self) -> Result<Vec<u8>, HubError> {
-        Ok(self.kv.compacted_bytes_fit(DEFAULT_ROSTER_BYTES)?)
+        self.kv.to_bytes()
     }
 
     // ── people ──────────────────────────────────────────────────────────────
@@ -153,9 +147,8 @@ impl Roster {
 
     pub fn people(&self) -> Vec<Person> {
         self.kv
-            .entries
+            .prefixed(P_PERSON)
             .iter()
-            .filter(|(k, _)| k.starts_with(P_PERSON))
             .filter_map(|(_, v)| Self::parse(&String::from_utf8_lossy(v)))
             .collect()
     }

@@ -31,6 +31,8 @@ pub const TRUNCATED: i32 = 4;
 pub const NULL_ARG: i32 = 5;
 /// An object failed its crc (W-CRC, 2026-10-05). 10, not 6: `nodekey` uses 6 and `proj` 7-9.
 pub const BAD_CRC: i32 = 10;
+/// The KV root names a version this reader does not know (W-ES-P8A, 2026-10-29). 12: `proj` has 11.
+pub const UNKNOWN_VERSION: i32 = 12;
 
 fn status_of(r: &Refusal) -> i32 {
     match r {
@@ -39,6 +41,7 @@ fn status_of(r: &Refusal) -> i32 {
         Refusal::NotALog => NOT_A_LOG,
         Refusal::Truncated { .. } => TRUNCATED,
         Refusal::BadCrc { .. } => BAD_CRC,
+        Refusal::UnknownVersion => UNKNOWN_VERSION,
     }
 }
 

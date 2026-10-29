@@ -9,7 +9,7 @@
 //! process -- which is what lets the test prove it without a fork.
 
 use std::fs::{File, OpenOptions, TryLockError};
-use std::io;
+use std::io::{self, Read, Seek, SeekFrom};
 use std::os::unix::fs::FileExt;
 
 use super::{Device, IoError};
@@ -17,7 +17,9 @@ use super::{Device, IoError};
 /// A store file and its lock.
 pub struct FileDevice {
     file: File,
-    _lock: File,
+    path: String,
+    /// `None` for a `fresh` sibling: it lives under the lock of the device it will replace.
+    _lock: Option<File>,
 }
 
 /// `<path>.lock`.
@@ -25,18 +27,36 @@ pub fn lock_path(path: &str) -> String {
     format!("{path}.lock")
 }
 
+/// `<path>.compact`: where a compaction is written before it is published by rename.
+pub fn compact_path(path: &str) -> String {
+    format!("{path}.compact")
+}
+
+/// The pid the holder wrote into the lock file, if it reads as one (W-ES-P3, `Locked{by}`).
+fn holder_of(lock: &mut File) -> Option<u32> {
+    let mut s = String::new();
+    lock.seek(SeekFrom::Start(0)).ok()?;
+    lock.read_to_string(&mut s).ok()?;
+    s.trim().parse().ok()
+}
+
 impl FileDevice {
     /// Open an existing store file for writing, taking its lock first.
-    /// `IoError::Locked` when another handle (any process) holds it.
+    /// `IoError::Locked { by }` when another handle (any process) holds it; `by` is the pid the
+    /// holder wrote into the lock file.
     pub fn open(path: &str) -> Result<FileDevice, IoError> {
-        let lock = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(lock_path(path))?;
+        let mut lock = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(lock_path(path))?;
         match lock.try_lock() {
             Ok(()) => {}
-            Err(TryLockError::WouldBlock) => return Err(IoError::Locked),
+            Err(TryLockError::WouldBlock) => return Err(IoError::Locked { by: holder_of(&mut lock) }),
             Err(TryLockError::Error(e)) => return Err(IoError::Io(e)),
         }
+        // Who holds it, for the next opener's refusal. Not a lock by itself (flock is), and not
+        // synced: a stale pid after a crash names a dead process, which is still the truth.
+        lock.set_len(0)?;
+        lock.write_all_at(std::process::id().to_string().as_bytes(), 0)?;
         let file = OpenOptions::new().read(true).write(true).open(path)?;
-        Ok(FileDevice { file, _lock: lock })
+        Ok(FileDevice { file, path: path.to_string(), _lock: Some(lock) })
     }
 
     /// Create a fresh store file (`Store::create`: written, the file fsynced, then its
@@ -44,6 +64,11 @@ impl FileDevice {
     pub fn create(path: &str, size_bytes: usize) -> Result<FileDevice, IoError> {
         crate::Store::create(path, size_bytes)?;
         FileDevice::open(path)
+    }
+
+    /// The store file's path.
+    pub fn path(&self) -> &str {
+        &self.path
     }
 }
 
@@ -72,6 +97,23 @@ impl Device for FileDevice {
 
     fn barrier(&mut self) -> io::Result<()> {
         self.file.sync_data()
+    }
+
+    fn fresh(&self) -> io::Result<FileDevice> {
+        let path = compact_path(&self.path);
+        let file = OpenOptions::new().read(true).write(true).create(true).truncate(true).open(&path)?;
+        Ok(FileDevice { file, path, _lock: None })
+    }
+
+    /// fdatasync the staged file, rename it over this one, fsync the directory, and read from
+    /// the new inode from now on. A crash before the rename leaves the old file whole; after it,
+    /// the new one, which was durable before it got the name (R-EMBED-STORE §3.3).
+    fn publish(&mut self, staged: FileDevice) -> io::Result<()> {
+        staged.file.sync_data()?;
+        std::fs::rename(&staged.path, &self.path)?;
+        crate::sync_parent_dir(&self.path)?;
+        self.file = staged.file;
+        Ok(())
     }
 }
 

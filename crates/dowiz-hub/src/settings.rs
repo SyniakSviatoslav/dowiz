@@ -20,16 +20,15 @@
 
 use crate::minijson::esc;
 use crate::HubError;
-use bebop_store::kv::Kv;
-use bebop_store::Store;
+use crate::kvimage::{KvImage, Save};
 
 pub const DEFAULT_SETTINGS_BYTES: usize = crate::CEILING_BYTES;
 
 const PREFIX: &str = "set:";
 
 pub struct Settings {
-    store: Store,
-    kv: Kv,
+    /// W-ES-P3: the image through the library API (rewritten compacted on every save).
+    kv: KvImage,
 }
 
 /// Is this key a secret?
@@ -54,23 +53,15 @@ impl Settings {
     /// What refuses a write is `compacted_bytes_fit` running out of doublings
     /// at `DEFAULT_SETTINGS_BYTES`, so that is the ceiling measured against.
     pub fn usage(&self) -> crate::Usage {
-        crate::usage_of(&self.store, crate::ceiling_cells(DEFAULT_SETTINGS_BYTES))
+        self.kv.usage()
     }
 
     pub fn create() -> Result<Self, HubError> {
-        let mut store = Store::create_bytes(DEFAULT_SETTINGS_BYTES)?;
-        Kv::init_bytes(&mut store)?;
-        let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
-        Ok(Settings { store, kv })
+        Ok(Settings { kv: KvImage::create(DEFAULT_SETTINGS_BYTES, Save::Compact)? })
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, HubError> {
-        let store = Store::from_bytes(bytes);
-        if store.pick().is_none() {
-            return Err(HubError::NotAHub);
-        }
-        let kv = crate::kv_load(&store)?;
-        Ok(Settings { store, kv })
+        Ok(Settings { kv: KvImage::load(bytes, DEFAULT_SETTINGS_BYTES, Save::Compact)? })
     }
 
     /// THE IMAGE IS REWRITTEN WHOLE, not appended to.
@@ -87,7 +78,7 @@ impl Settings {
     /// `Kv::compacted_bytes` for what that gives up (nothing anything here
     /// reads).
     pub fn to_bytes(&mut self) -> Result<Vec<u8>, HubError> {
-        Ok(self.kv.compacted_bytes_fit(DEFAULT_SETTINGS_BYTES)?)
+        self.kv.to_bytes()
     }
 
     pub fn set(&mut self, key: &str, value: &str) {
@@ -122,9 +113,8 @@ impl Settings {
     /// cache and a support ticket.
     pub fn redacted(&self) -> Vec<(String, String)> {
         self.kv
-            .entries
+            .prefixed(PREFIX)
             .iter()
-            .filter(|(k, _)| k.starts_with(PREFIX))
             .map(|(k, v)| (k[PREFIX.len()..].to_string(), v.clone()))
             .filter(|(_, v)| !v.is_empty())
             .map(|(k, v)| {

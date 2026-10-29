@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+# W-ES-P4 (R-EMBED-STORE §5 row P4): the conformance fixtures' WRITER and the native-Rust READER of
+# tools/gates/conformance.sh, over bebop-image + bebop-kv directly (the library, not bebop-wasm's own
+# copy of the reader). Its own workspace root, so it is never a member of anything above it.
+[package]
+name = "bebop-conform"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace]
+
+[dependencies]
+bebop-image = { path = "../../../bebop-image" }
+bebop-kv = { path = "../../../bebop-kv" }
+
+[profile.release]
+opt-level = 3

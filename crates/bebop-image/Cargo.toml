@@ -12,9 +12,12 @@ description = "The bebop pointer-free image format: 8-byte cells, two superblock
 [features]
 default = []
 # Store::create / open / commit over a path, StoreError::Io, From<std::io::Error>.
-std = []
+std = ["bebop-crc/std"]
 
 [dependencies]
+# P12 (W-SPEED-A): the crc, with the CPU's crc instructions where present. Its own crate so
+# this one stays #![forbid(unsafe_code)]; `std` above turns on run-time detection.
+bebop-crc = { path = "../bebop-crc" }
 
 [profile.release]
 opt-level = 3

@@ -53,7 +53,8 @@ fn c18_root_version_4() {
     let mut st = img3();
     let r = root(&st);
     fix(&mut st, r, 5, 4);
-    assert_eq!(kv(&st).err(), Some(KvError::NotKv));
+    // W-ES-P8A: v4 (the B+tree) is refused BY NAME, before cells 1-4 are read as v1-v3 arrays.
+    assert_eq!(kv(&st).err(), Some(KvError::UnknownVersion { v: 4 }));
 }
 
 #[test]

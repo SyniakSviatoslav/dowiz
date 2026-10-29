@@ -1,0 +1,9 @@
+# W-ES-P4 (R-EMBED-STORE §4.4 T-ES-30). WRITTEN by the Rust writer: `bebop-conform write fixtures`
+# (fixtures/conform/src/main.rs, bebop-image + bebop-kv; deterministic, a re-run is byte-identical).
+# Judged by tools/gates/conformance.sh on five readers; statuses: docs/STATUS-CODES.md.
+# kv3max with its LAST commit cut mid-write in the superblock (W-ES-P2 sim crash model, Power(Tear::Cells),
+# window 3: arena range + PartTab durable, the new superblock's sector torn -- cells 0..7 of superblock
+# 0 new, 8..15 old). crc15 fails, FORMAT §3.1 item 3 falls back to generation 33 = the 31-delta image
+# (measured on that image directly: n=26 root=-5357977772297964327).
+n=26
+root=-5357977772297964327

@@ -62,6 +62,22 @@ pub enum Op<'a> {
     Remove(&'a str),
 }
 
+/// One change to append, keyed by BYTES (W-ES-P3). `Op` is the `&str` form dowiz writes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyOp<'a> {
+    Put(&'a [u8], &'a [u8]),
+    Remove(&'a [u8]),
+}
+
+impl<'a> From<Op<'a>> for KeyOp<'a> {
+    fn from(o: Op<'a>) -> KeyOp<'a> {
+        match o {
+            Op::Put(k, v) => KeyOp::Put(k.as_bytes(), v),
+            Op::Remove(k) => KeyOp::Remove(k.as_bytes()),
+        }
+    }
+}
+
 /// What `append_delta` did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Appended {
@@ -185,7 +201,7 @@ pub fn check_chain<C: super::zc::Image + ?Sized>(c: &C, chain: &[Rec]) -> Result
 
 /// The writer (split out of this file for the 300-line ratchet).
 mod write;
-pub use write::{append_delta, append_delta_with};
+pub use write::{append_delta, append_delta_ops, append_delta_with};
 
 #[cfg(test)]
 mod tests;

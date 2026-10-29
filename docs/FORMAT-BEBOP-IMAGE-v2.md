@@ -330,10 +330,11 @@ packed}`; v1 — 15 комірок заголовка й один байт на 
 
 Інші розбіжності, помічені під час заморозки:
 
-- **oracle.py** не перевіряє crc PartTab (і якір); він погоджується з Rust на всіх фікстурах,
-  бо фікстурні PartTab-и цілі. Образ із зіпсованим PartTab Rust і wasm-читач (він іде через
-  `Store::pick`) тепер відмовляють, а oracle.py прочитав би — до P4 (конформація `torn-pt.store`)
-  це розбіжність читачів. Якір не перевіряє жоден читач, крім `format::anchor_in`.
+- **oracle.py** не перевіряв crc PartTab — **закрито W-ES-P4 (2026-10-29)**: oracle.py відмовляє статусом 1,
+  bebop `kv.bp` — trap 77 (до `st_open`, бо `st_open` → `st_anc_ok` рахує поганий PartTab торованим
+  комітом і **відкочується** на генерацію k — розбіжність prelude, сказано в `docs/STATUS-CODES.md`).
+  Фікстура `ptbad.store`; словник статусів усіх п'яти читачів — `docs/STATUS-CODES.md`, гейт
+  `tools/gates/conformance.sh`. Якір не перевіряє жоден читач, крім `format::anchor_in` (і bebop `st_open`).
 - **Домівка PartTab** (W-F1, §3.1 `PartTabMisplaced`): **закрито для всіх чотирьох читачів** —
   Rust (`pick_checked_in`, `Store::pick`, `View`), oracle.py (статус 1), bebop `st_open`/`st_map_ro`
   (trap 79, `bebop-lang/docs/TRAPS.md`). Фікстура `crates/bebop-wasm/fixtures/ptaway.store` (kv3 з

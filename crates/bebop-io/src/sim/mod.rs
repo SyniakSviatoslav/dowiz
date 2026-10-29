@@ -116,6 +116,18 @@ impl Device for SimDisk {
         self.ops.push(SimOp::Barrier);
         Ok(())
     }
+    /// An empty disk (W-ES-P3: a compaction is written into one).
+    fn fresh(&self) -> io::Result<SimDisk> {
+        Ok(SimDisk::new(Vec::new()))
+    }
+    /// A rename: the staged disk's contents become this disk's durable contents at once. The
+    /// crash model of the rename itself (the old file or the new, never a mix) is the
+    /// filesystem's; this disk takes it as given.
+    fn publish(&mut self, staged: SimDisk) -> io::Result<()> {
+        self.base = staged.cache();
+        self.ops.clear();
+        Ok(())
+    }
 }
 
 /// A device that stops after `budget` operations (writes and barriers): every later one

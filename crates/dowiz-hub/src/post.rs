@@ -21,8 +21,7 @@
 
 use crate::minijson::{esc, int_field, str_field};
 use crate::HubError;
-use bebop_store::kv::Kv;
-use bebop_store::Store;
+use crate::kvimage::{KvImage, Save};
 
 pub const DEFAULT_POSTS_BYTES: usize = crate::CEILING_BYTES;
 const P_POST: &str = "post:";
@@ -103,8 +102,8 @@ pub struct Post {
 }
 
 pub struct Posts {
-    store: Store,
-    kv: Kv,
+    /// W-ES-P3: the image through the library API (rewritten compacted on every save).
+    kv: KvImage,
 }
 
 impl Posts {
@@ -115,23 +114,15 @@ impl Posts {
     /// What refuses a write is `compacted_bytes_fit` running out of doublings
     /// at `DEFAULT_POSTS_BYTES`, so that is the ceiling measured against.
     pub fn usage(&self) -> crate::Usage {
-        crate::usage_of(&self.store, crate::ceiling_cells(DEFAULT_POSTS_BYTES))
+        self.kv.usage()
     }
 
     pub fn create() -> Result<Self, HubError> {
-        let mut store = Store::create_bytes(DEFAULT_POSTS_BYTES)?;
-        Kv::init_bytes(&mut store)?;
-        let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
-        Ok(Posts { store, kv })
+        Ok(Posts { kv: KvImage::create(DEFAULT_POSTS_BYTES, Save::Compact)? })
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, HubError> {
-        let store = Store::from_bytes(bytes);
-        if store.pick().is_none() {
-            return Err(HubError::NotAHub);
-        }
-        let kv = crate::kv_load(&store)?;
-        Ok(Posts { store, kv })
+        Ok(Posts { kv: KvImage::load(bytes, DEFAULT_POSTS_BYTES, Save::Compact)? })
     }
 
     /// THE IMAGE IS REWRITTEN WHOLE, not appended to.
@@ -148,7 +139,7 @@ impl Posts {
     /// `Kv::compacted_bytes` for what that gives up (nothing anything here
     /// reads).
     pub fn to_bytes(&mut self) -> Result<Vec<u8>, HubError> {
-        Ok(self.kv.compacted_bytes_fit(DEFAULT_POSTS_BYTES)?)
+        self.kv.to_bytes()
     }
 
     fn encode(p: &Post) -> String {
@@ -193,9 +184,8 @@ impl Posts {
     pub fn all(&self) -> Vec<Post> {
         let mut out: Vec<Post> = self
             .kv
-            .entries
+            .prefixed(P_POST)
             .iter()
-            .filter(|(k, _)| k.starts_with(P_POST))
             .filter_map(|(_, v)| Self::decode(&String::from_utf8_lossy(v)))
             .collect();
         // Newest first: the owner is looking at what was just drafted.

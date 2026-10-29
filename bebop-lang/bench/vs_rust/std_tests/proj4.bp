@@ -112,7 +112,7 @@ fn p4_sort(r: [i64], c: i64) -> i64 {
 // p4_zdigest: the KV's Z-set digest, derived from the base and the chain (the header's rule).
 fn p4_zdigest(base: [i64], root: i64) -> i64 {
   let n = st_get(base, root, 0);
-  let d = if pj_kv_ver(base, root) >= 3 then st_get(base, root, 7) else 0;
+  let d = if pj_kv_known(base, root) >= 3 then st_get(base, root, 7) else 0;
   let cap = if d < 0 then 0 else (if d > 1024 then 1024 else d);
   let s = zeros(6 * (n + cap) + 6);
   let live = zeros(n + cap + 1);

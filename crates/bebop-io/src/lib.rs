@@ -25,6 +25,20 @@ use std::io;
 pub mod file;
 pub mod plan;
 pub mod writer;
+/// W-ES-P3 (R-EMBED-STORE §3.2): the library API over a device -- `Db`, `ReadTxn`, `WriteTxn`,
+/// `Scan`, `Refusal`, and `Detached` for an image whose bytes the caller persists.
+pub mod db;
+pub mod detached;
+pub mod refusal;
+mod snap;
+pub mod txn;
+
+pub use bebop_kv::{Batch, Bytes, LimitError, Limits};
+pub use db::{Db, Generation, OnTorn, Options, Report, Verify};
+pub use detached::Detached;
+pub use refusal::Refusal;
+pub use snap::SnapImage;
+pub use txn::{ReadTxn, Scan, WriteTxn};
 
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use file::FileDevice;
@@ -42,10 +56,33 @@ pub trait Device {
     /// fdatasync: when this returns Ok, every write issued before it is durable. An Err means
     /// NOTHING is known about those writes (fsyncgate, ATC'20): the writer poisons itself.
     fn barrier(&mut self) -> io::Result<()>;
+    /// The most this device can promise (W-ES-P3). A commit that asks for more is REFUSED
+    /// (`Refusal::Durability`), never silently downgraded. `Detached` says `None`.
+    fn durability(&self) -> Durability {
+        Durability::Full
+    }
+    /// An empty device of the same kind beside this one, for a compaction to write into
+    /// (`FileDevice`: `<path>.compact`). Default: this device cannot compact into a new one.
+    fn fresh(&self) -> io::Result<Self>
+    where
+        Self: Sized,
+    {
+        Err(io::Error::new(io::ErrorKind::Unsupported, "this device has no fresh sibling"))
+    }
+    /// Make `staged` -- fully written and, for a durable device, barriered by the caller --
+    /// REPLACE this device atomically (`FileDevice`: fdatasync, rename, fsync of the directory;
+    /// the lock stays). Readers holding the old image keep it (R-EMBED-STORE §3.3).
+    fn publish(&mut self, staged: Self) -> io::Result<()>
+    where
+        Self: Sized,
+    {
+        let _ = staged;
+        Err(io::Error::new(io::ErrorKind::Unsupported, "this device cannot publish a replacement"))
+    }
 }
 
-/// How far a flush goes (R-EMBED-STORE §3.5).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// How far a flush goes (R-EMBED-STORE §3.5). Ordered: `None < Data < Full`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Durability {
     /// The writes, no barrier: consistent under a PROCESS crash (one page cache), not a power
     /// loss. `crate::sim` shows both halves of that sentence.
@@ -62,8 +99,12 @@ pub enum Durability {
 pub enum IoError {
     /// The device said no.
     Io(io::Error),
-    /// Another handle holds `<path>.lock` (`Refusal::Locked`).
-    Locked,
+    /// Another handle holds `<path>.lock` (`Refusal::Locked`): `by` is the pid the holder
+    /// wrote into it, when it could be read (W-ES-P3).
+    Locked { by: Option<u32> },
+    /// The newest generation's last commit failed its proof and the holder asked not to fall
+    /// back past it (`OnTorn::Refuse`, W-ES-P3: an image from an atomic backend).
+    Torn(crate::sim::Why),
     /// An earlier write or barrier failed; nothing more is written until `reopen`.
     Poisoned,
     /// Recovery refused the image.

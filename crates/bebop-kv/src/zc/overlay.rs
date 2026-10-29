@@ -171,6 +171,45 @@ impl<C: Image> KvIn<C> {
         }
     }
 
+    /// THE LAZY OPEN (W-ES-P3, R-EMBED-STORE §12 P10): the shape and the chain walk, NO crc and
+    /// no index pass, the key order TRUSTED to be ascending. For a holder whose recovery already
+    /// proved the last commit (the anchor) and who asks for the rest explicitly (`verify`). The
+    /// contract is `reopen`'s: a wrong trust gives a wrong answer at worst, never a panic and
+    /// never an allocation beyond the blobs.
+    pub fn open_lazy(c: C) -> Result<Self, KvError> {
+        Self::reopen(c, super::Checked { sorted: true })
+    }
+
+    /// FNV-1a 64 over `len||key||len||value`, in stored order: `Kv::snapshot_root_u64`,
+    /// without building the entries.
+    pub fn snapshot_root_u64(&self) -> Result<u64, KvError> {
+        let mut h = crate::FNV_OFFSET;
+        for i in 0..self.len() {
+            let (k, v) = (self.key(i)?, self.value(i)?);
+            h = crate::fnv1a(h, &(k.len() as u64).to_le_bytes());
+            h = crate::fnv1a(h, &k);
+            h = crate::fnv1a(h, &(v.len() as u64).to_le_bytes());
+            h = crate::fnv1a(h, &v);
+        }
+        Ok(h)
+    }
+
+    /// The first merged index whose key is not below `key` (W-ES-P3: where a range scan starts).
+    /// O(log n) on a sorted base, O(log(2D+1) + log n) with a chain. On a base whose keys are not
+    /// ascending (no writer here makes one; `open` says `sorted() == false`) there is no order
+    /// to search, so this is 0 and a scan walks the stored order, filtering.
+    pub fn seek(&self, key: &[u8]) -> Result<usize, KvError> {
+        if self.ov.is_empty() {
+            return if self.sorted { Ok(self.lower_bound(key)?.0) } else { Ok(0) };
+        }
+        let (mut lo, mut hi) = (0usize, self.mlen);
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            if &*self.key(mid)? < key { lo = mid + 1 } else { hi = mid }
+        }
+        Ok(lo)
+    }
+
     /// The merged indices of every key starting with `prefix`, in key order. Without a chain
     /// this is the base's lower-bound search; with one, the same search over the merged order
     /// (sorted: a strictly ascending base with the newest op per key folded in).

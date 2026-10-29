@@ -47,7 +47,7 @@ impl Report {
     pub fn green(&self) -> bool {
         self.failures.is_empty()
     }
-    /// "<point>: <why>" of the first failure.
+    /// `"<point>: <why>"` of the first failure.
     pub fn first(&self) -> Option<String> {
         self.failures.first().map(|f| format!("{}: {}", f.point, f.why))
     }

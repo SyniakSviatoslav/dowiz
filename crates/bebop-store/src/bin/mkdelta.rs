@@ -1,7 +1,7 @@
 //! Make `crates/bebop-wasm/fixtures/kv3.store` (W-DELTA): `kv2.store`'s five entries, then three
 //! delta writes through `kv::delta::append_delta` -- a changed value, a new key, a removal -- each
 //! its own generation. Prints what this crate reads back; oracle.py re-derives it from the bytes.
-//!   mkdelta <kv2.store> <out kv3.store>
+//!   `mkdelta <kv2.store> <out kv3.store>`
 use bebop_store::kv::delta::{append_delta_with, Appended, Op, MAX_DELTAS};
 use bebop_store::{kv::Kv, Store};
 

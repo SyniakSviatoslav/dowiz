@@ -226,6 +226,21 @@ fn pj_log_append(base: [i64], tx: [i64], seq: i64, pay: [i64], plen: i64, id0: i
 pure fn pj_kv_ver(base: [i64], g: i64) -> i64 {
   if st_len(base, g) < 6 then 1 else (if st_get(base, g, 5) > 0 then st_get(base, g, 5) else 1)
 }
+// pj_kv_known (W-ES-P8A): the root's KV version, or TRAP 78 when this reader does not know it (v4 = the
+// B+tree, R-EMBED-STORE §12 P8). A v4 root's cells 1-4 and 6-7 are not a v1-v3 base or a delta chain, and
+// pj_kv_frame reads any ver >= 2 as packed bytes, so an unknown version is never folded: kv.bp's `h`/`n`/`d`,
+// st_proj_eval (kind 2) and pj_ztip (kind 4) all ask this first. Not `pure`: it can exit.
+fn pj_kv_known(base: [i64], g: i64) -> i64 {
+  let v = pj_kv_ver(base, g);
+  if v > 3 then pj_refuse_kv_ver() else v
+}
+fn pj_refuse_kv_ver() -> i64 {
+  let m = zeros(48);
+  let n = st_str(m, "trap 78: KV version this reader does not know");
+  let _ = m[n] = 10;
+  let _ = sys_write(2, m, n + 1);
+  sys_exit(78)
+}
 pure fn pj_kv_frame(h: i64, base: [i64], blob: ref Obj, off: i64, len: i64, ver: i64) -> i64 {
   let x = pj_fnv_u64(h, len);
   let j = 0;
@@ -357,7 +372,7 @@ fn pj_out_digest(base: [i64], kind: i64, out: i64) -> i64 {
 }
 // pj_zchain: a v3 KV root's delta records, newest first, into out[0..]; at most cap. Returns how many.
 fn pj_zchain(base: [i64], root: i64, out: [i64], cap: i64) -> i64 {
-  let cur = if pj_kv_ver(base, root) >= 3 then pj_ref(base, root, 6) else 0;
+  let cur = if pj_kv_known(base, root) >= 3 then pj_ref(base, root, 6) else 0;
   let n = 0;
   while cur != 0 {
     let _ = out[n] = cur;
@@ -370,7 +385,7 @@ fn pj_zchain(base: [i64], root: i64, out: [i64], cap: i64) -> i64 {
 // pj_ztip: kind 4's tip word w -- 0: the newest delta record (0 = no chain); 1: the FINGERPRINT, FNV-1a 64 over
 // (offset, h1) as LE8 of the four base arrays, then of every chain record oldest first (kinds.rs header).
 fn pj_ztip(base: [i64], root: i64, w: i64) -> i64 {
-  let d = if pj_kv_ver(base, root) >= 3 then st_get(base, root, 7) else 0;
+  let d = if pj_kv_known(base, root) >= 3 then st_get(base, root, 7) else 0;
   let cap = if d < 0 then 0 else (if d > 1024 then 1024 else d);
   let recs = zeros(cap + 1);
   let k = pj_zchain(base, root, recs, cap);
@@ -514,7 +529,7 @@ fn st_proj_eval(base: [i64], tx: [i64], code: i64, kind: i64, fnv: i64, how: [i6
   let _ = how[0] = 0;
   let _ = how[1] = 0;
   let _ = how[2] = n;
-  let v3 = if kind == 2 then (if pj_kv_ver(base, root) >= 3 then 1 else 0) else 0;
+  let v3 = if kind == 2 then (if pj_kv_known(base, root) >= 3 then 1 else 0) else 0;
   let v = if v3 == 1 then pj_refuse_v3(how) else (if hit == 1 then st_get(base, pj_ref(base, p, 7), 0) else pj_eval_miss(base, tx, code, kind, fnv, key, p, why[0], how, tmp));
   v
 }

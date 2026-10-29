@@ -1,0 +1,23 @@
+[package]
+name = "bebop-crc"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "zlib CRC-32 over bytes and 8-byte cells: slicing-by-8 tables everywhere, the CPU's own instructions where it has them (AArch64 crc32x, x86_64 PCLMUL folding). no_std, zero dependencies."
+
+# R-EMBED-STORE §12 P12 (W-SPEED-A, 2026-10-29). A crate of its own because bebop-image is
+# #![forbid(unsafe_code)] and stays so: intrinsics need `unsafe`, and here it is confined to
+# src/arm.rs and src/x86.rs, one SAFETY comment per block. wasm32 compiles neither module.
+[features]
+default = []
+# Run-time CPU detection (std::arch::is_*_feature_detected!). Without it only a feature enabled
+# at COMPILE time (-C target-feature / target-cpu) takes the hardware path; the default aarch64
+# and x86_64 targets enable neither, so a native build that wants the speed turns this on
+# (bebop-image's `std` feature does).
+std = []
+
+[dependencies]
+
+[profile.release]
+opt-level = 3

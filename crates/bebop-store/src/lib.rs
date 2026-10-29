@@ -18,6 +18,12 @@ pub use bebop_kv as kv;
 pub use bebop_log as evlog;
 pub use bebop_io as iodev;
 pub use bebop_io::sim;
+/// W-ES-P3: the library API (R-EMBED-STORE §3.2) under the facade's name, so a caller writes
+/// `bebop_store::{Db, ReadTxn, WriteTxn, Refusal}` as it writes `bebop_store::Store`.
+pub use bebop_io::{
+    Batch, Bytes, Db, Detached, Durability, Generation, LimitError, Limits, OnTorn, Options, ReadTxn, Refusal, Report, Scan,
+    SnapImage, Verify, WriteTxn,
+};
 
 /// The format's names and limits (bebop-image). Mounted here as well, so the tests that need the
 /// KV and PROJ layouts next to it (T-ES-02/03/08) keep their place.
@@ -48,6 +54,7 @@ pub mod verify {
 }
 
 pub mod nodekey;
+mod sha_fast;
 pub mod proj;
 /// LV-INC-A: the Z-set, the one delta currency (R-BEBOP-LEVERS §2.4).
 pub mod zset;

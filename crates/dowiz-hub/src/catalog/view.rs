@@ -78,7 +78,7 @@ pub struct CatalogView<'a> {
 /// `kv_load`'s mapping: a changed byte keeps its name.
 fn refusal(e: KvError) -> HubError {
     match e {
-        KvError::NotKv => HubError::NotAHub,
+        KvError::NotKv | KvError::UnknownVersion { .. } => HubError::NotAHub,
         KvError::BadCrc(b) => HubError::BadCrc(b),
     }
 }

@@ -10,7 +10,8 @@ non-zero status and a non-zero exit.
 TWO VERSIONS (DG3, 2026-09-28), and the root says which: a root of six or more
 cells with a positive cell 5 names its version; anything else is v1. v1 holds
 one byte per cell; v2 holds offsets and lengths in BYTES and the bytes packed
-eight to a cell, little-endian. A version above 2 is refused (status 3). The
+eight to a cell, little-endian. v3 is v2 plus a delta chain; a version above 3
+is refused (status 12, UNKNOWN_VERSION, W-ES-P8A; it was 3 = the wasm's NOT_A_LOG). The
 fold is over bytes, so both versions of the same entries print the same root.
 
 S-1 (SPEC-BEBOP-DAG-RUNTIME §6.1): every VALID superblock keeps cells 13-14 at
@@ -126,6 +127,16 @@ def image(path):
     # "no superblock" (status 1), the verdict the wasm reader's Store::pick gives.
     if pt != 0 and pt != live + 16:
         return cells, n, None, 0, s1
+    # W-ES-P4 (FORMAT §3.1 PartTabBad, D8): the live PartTab's own crc (h1 high half over its
+    # payload, at least the 19 cells a P=1 entry needs). It was never checked here, so a PartTab
+    # with one flipped bit was read while Rust, wasm32 and the C ABI refused it; fixture ptbad.
+    # No fallback: the superblock is whole, so this is NO_SUPERBLOCK (status 1), like Store::pick.
+    if pt != 0:
+        ln = cells[pt] & 0xFFFFFFFF if pt < n else 0
+        if ln < 19 or pt + 2 + ln > n:
+            return cells, n, None, 0, s1
+        if zlib.crc32(struct.pack("<%dq" % ln, *cells[pt + 2 : pt + 2 + ln])) != (cells[pt + 1] >> 32) & 0xFFFFFFFF:
+            return cells, n, None, 0, s1
     root = cells[pt + 18] if pt > 0 and pt + 18 < n else 0
     return cells, n, live, (root if 0 < root and root + 2 <= n else 0), s1
 
@@ -146,7 +157,9 @@ def kv_entries(cells, n, root):
     if obj_len(root) >= 6 and root + 2 + 5 < n and cells[root + 2 + 5] > 0:
         ver = cells[root + 2 + 5]
     if ver > 3:
-        return 3, None
+        # W-ES-P8A: a version this reader does not know (v4 = the B+tree) is refused BY NAME, the
+        # wasm reader's UNKNOWN_VERSION (abi.rs) -- it was 3, which is the wasm's NOT_A_LOG.
+        return 12, None
     per_cell = 8 if ver >= 2 else 1
 
     count = cells[root + 2]

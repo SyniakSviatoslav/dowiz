@@ -35,7 +35,7 @@ use core::cmp::Ordering;
 
 use super::delta::{self, Rec};
 use crate::verify::KvError;
-use crate::{follow_in, get_in, obj_cells_in, root_in, FNV_OFFSET, ROOT_V2};
+use crate::{follow_in, get_in, obj_cells_in, root_in, ROOT_V2};
 
 mod image;
 pub use image::{check_obj_in, Image};
@@ -85,6 +85,11 @@ impl<C: Image> KvIn<C> {
     pub fn open(c: C) -> Result<Self, KvError> {
         let root = root_in(&c).ok_or(KvError::NotKv)?;
         check_obj_in(&c, root).map_err(KvError::BadCrc)?;
+        // W-ES-P8A: an unknown version is refused by name before cells 1-4 are followed as arrays.
+        let v = delta::version_in(&c, root);
+        if v > delta::VERSION_DELTA {
+            return Err(KvError::UnknownVersion { v });
+        }
         for i in 1..=4 {
             if let Some(arr) = follow_in(&c, root, i) {
                 check_obj_in(&c, arr).map_err(KvError::BadCrc)?;
@@ -121,7 +126,7 @@ impl<C: Image> KvIn<C> {
         let root = root_in(&c).ok_or(KvError::NotKv)?;
         let ver = if obj_cells_in(&c, root) >= ROOT_V2 && get_in(&c, root, 5) > 0 { get_in(&c, root, 5) } else { 1 };
         if ver > delta::VERSION_DELTA {
-            return Err(KvError::NotKv);
+            return Err(KvError::UnknownVersion { v: ver });
         }
         let chain = delta::chain_in(&c, root).ok_or(KvError::NotKv)?;
         let n = get_in(&c, root, 0);
@@ -264,20 +269,6 @@ impl<C: Image> KvIn<C> {
             i += 1;
         }
         Ok(out)
-    }
-
-    /// FNV-1a 64 over `len||key||len||value`, in stored order: `Kv::snapshot_root_u64`,
-    /// without building the entries.
-    pub fn snapshot_root_u64(&self) -> Result<u64, KvError> {
-        let mut h = FNV_OFFSET;
-        for i in 0..self.len() {
-            let (k, v) = (self.key(i)?, self.value(i)?);
-            h = super::fnv1a(h, &(k.len() as u64).to_le_bytes());
-            h = super::fnv1a(h, &k);
-            h = super::fnv1a(h, &(v.len() as u64).to_le_bytes());
-            h = super::fnv1a(h, &v);
-        }
-        Ok(h)
     }
 }
 

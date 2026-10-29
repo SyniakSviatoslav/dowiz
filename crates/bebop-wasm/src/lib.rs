@@ -64,6 +64,8 @@ pub enum Refusal {
     Truncated { claimed: usize, chained: Option<usize> },
     /// An object's payload does not match its header crc (W-CRC): `obj` is its cell.
     BadCrc { obj: usize },
+    /// The KV root names a version this reader does not know (W-ES-P8A: v4 and above).
+    UnknownVersion,
 }
 
 /// A KV image, folded.
@@ -101,8 +103,10 @@ fn open(bytes: &[u8]) -> Result<Store, Refusal> {
 pub fn kv_view(bytes: &[u8]) -> Result<KvView, Refusal> {
     let st = open(bytes)?;
     let kv = Kv::load_checked(&st).map_err(|e| match e {
-        bebop_store::verify::KvError::NotKv => Refusal::NotAKv,
         bebop_store::verify::KvError::BadCrc(b) => Refusal::BadCrc { obj: b.obj },
+        // Spelled as a compare, not a third arm: measured 2026-10-29, the plain three-arm match
+        // is a br_table and costs 21 bytes more of the ratchet (46000 vs 45979).
+        e => if e == bebop_store::verify::KvError::NotKv { Refusal::NotAKv } else { Refusal::UnknownVersion },
     })?;
     Ok(KvView {
         n: kv.entries.len() as i64,

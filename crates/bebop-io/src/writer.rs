@@ -25,18 +25,65 @@ impl<D: Device> Writer<D> {
     /// magic is zeroed ON THE DEVICE and a barrier follows. Without it the next commit would
     /// write its PartTab into the page of a superblock that is still valid on disk and newer
     /// than the one recovered, and a crash in that window would be read through it.
-    pub fn open(mut dev: D) -> Result<Self, IoError> {
+    pub fn open(dev: D) -> Result<Self, IoError> {
         let n = dev.len_cells()?;
         let cells = dev.read_cells(0, n)?;
-        let mut store = Store::from_bytes(&cells_to_bytes(&cells));
+        let store = Store::from_bytes(&cells_to_bytes(&cells));
+        Writer::adopt(dev, store, true)
+    }
+
+    /// `open` over an image the caller already holds (W-ES-P3: `Db::from_bytes`, the Durable
+    /// Object's bytes) -- the same recovery and repair, without reading `dev`. With
+    /// `fallback == false` a newest generation whose last commit fails its proof is REFUSED
+    /// (`IoError::Torn`) instead of being hidden: for a backend whose writes are atomic, a torn
+    /// last commit is corruption, not a power cut, and falling back would drop it silently.
+    pub fn adopt(mut dev: D, mut store: Store, fallback: bool) -> Result<Self, IoError> {
         let recovered = recover(&store).map_err(IoError::Recover)?;
         if let Some(h) = recovered.hidden {
+            if !fallback {
+                return Err(match recovered.via {
+                    crate::sim::Via::Fallback { why, .. } => IoError::Torn(why),
+                    _ => IoError::Plan("recovery hid a superblock without falling back"),
+                });
+            }
             dev.write_cells(h, &[0])?;
             dev.barrier()?;
-            store.cells[h] = 0;
+            match store.cells.get_mut(h) {
+                Some(c) => *c = 0,
+                None => return Err(IoError::Plan("recovery hid a cell outside the image")),
+            }
         }
         let durable = Durable::of(&store)?;
         Ok(Writer { dev, store, durable, recovered, poisoned: false })
+    }
+
+    /// The device, to ask what it can promise.
+    pub fn device(&self) -> &D {
+        &self.dev
+    }
+
+    /// PUBLISH A COMPACTION (W-ES-P3, `Db::compact`): write `image` whole into `staged` (a
+    /// `Device::fresh` sibling), barrier it unless `d` is `None`, then `Device::publish` it over
+    /// this writer's device; from then on `image` is the writer's image and its generation the
+    /// durable one. A failed write before the publish leaves the old device untouched (the
+    /// staged one is dropped); a failed publish poisons the writer, as a failed barrier does.
+    pub fn publish(&mut self, mut staged: D, image: Store, d: Durability) -> Result<i64, IoError> {
+        if self.poisoned {
+            return Err(IoError::Poisoned);
+        }
+        let used = image.pick().map(|sb| sb.arena_used.max(crate::ARENA as i64) as usize).unwrap_or(image.cells.len());
+        let cells = image.cells.get(..used.min(image.cells.len())).unwrap_or(&[]);
+        staged.write_cells(0, cells)?;
+        if d != Durability::None {
+            staged.barrier()?;
+        }
+        if let Err(e) = self.dev.publish(staged) {
+            self.poisoned = true;
+            return Err(IoError::Io(e));
+        }
+        self.store = image;
+        self.durable = Durable::of(&self.store)?;
+        Ok(self.durable.gen)
     }
 
     /// The image as the writer sees it: durable generation plus anything staged since.

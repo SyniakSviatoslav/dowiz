@@ -5,6 +5,8 @@
 //! fuzzer over image bytes (operator rule, memory no-fuzzers-in-this-repo).
 use super::view::tests::big_165;
 use super::*;
+use bebop_store::kv::delta;
+use bebop_store::Store;
 use crate::catalog::view::{CatalogRead, CatalogView};
 
 /// Everything a catalogue answers, as one comparable value.
@@ -118,7 +120,19 @@ fn the_chain_is_compacted_at_its_limit() {
     assert!(versions[..delta::MAX_DELTAS].iter().all(|&v| v == 3), "{versions:?}");
     assert_eq!(versions[delta::MAX_DELTAS], 2, "the 33rd write did not compact");
     let entries = Catalog::load(&bytes).unwrap();
-    assert_eq!(bytes, compacted(&bytes), "a compacted write is not what compaction writes");
+    // W-ES-P3 (design D3b, main 2026-10-29): the 33rd write's OWN compaction is committed at
+    // generation + 1 (the library's generation only climbs), while `compact()` -- the explicit,
+    // canonical form W-PITR compares in -- writes generation 1 as every compaction always did. So
+    // the two are the same entries in the same layout, equal in length and fold, and differ only
+    // in the generation-bearing cells (superblock/PartTab generation, each object's h1, crc15, anc).
+    let again = compacted(&bytes);
+    assert_eq!(again.len(), bytes.len(), "a compacted write is not what compaction writes (length)");
+    assert_eq!(bebop_store::kv::Kv::version(&Store::from_bytes(&again)), 2);
+    assert_eq!(Catalog::load(&again).unwrap().root(), entries.root(), "a compacted write is not what compaction writes (fold)");
+    let g = |b: &[u8]| Store::from_bytes(b).pick().unwrap().generation;
+    assert!(g(&bytes) > 1, "the write's own compaction restarted the generation");
+    assert_eq!(g(&again), 1, "the explicit compaction is not the canonical form");
+    assert_eq!(compacted(&again), again, "the canonical form is not a fixed point");
     assert!(entries.product("item-001").unwrap().contains("1032"));
 }
 

@@ -1,0 +1,7 @@
+# W-ES-P4 (R-EMBED-STORE §4.4 T-ES-30). WRITTEN by the Rust writer: `bebop-conform write fixtures`
+# (fixtures/conform/src/main.rs, bebop-image + bebop-kv; deterministic, a re-run is byte-identical).
+# Judged by tools/gates/conformance.sh on five readers; statuses: docs/STATUS-CODES.md.
+# Store::create_bytes(16 KiB) + Kv::init_bytes: an empty v2 KV at generation 1. n = 0 and the fold is
+# the FNV-1a 64 offset basis 0xcbf29ce484222325 as an i64.
+n=0
+root=-3750763034362895579

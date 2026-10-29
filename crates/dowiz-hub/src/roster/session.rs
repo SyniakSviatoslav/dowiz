@@ -98,9 +98,8 @@ impl Roster {
 
     pub fn sessions_of(&self, person_id: &str) -> Vec<(String, String, i64)> {
         self.kv
-            .entries
+            .prefixed(P_SESSION)
             .iter()
-            .filter(|(k, _)| k.starts_with(P_SESSION))
             .filter_map(|(k, v)| {
                 let rec = String::from_utf8_lossy(v);
                 if int_field(&rec, "revoked").unwrap_or(1) != 0 {
@@ -151,9 +150,8 @@ impl Roster {
     pub fn revoke_all_for(&mut self, person_id: &str) -> usize {
         let ids: Vec<String> = self
             .kv
-            .entries
+            .prefixed(P_SESSION)
             .iter()
-            .filter(|(k, _)| k.starts_with(P_SESSION))
             .filter(|(_, v)| {
                 str_field(&String::from_utf8_lossy(v), "person").as_deref() == Some(person_id)
             })
