@@ -38,10 +38,13 @@ SCR=$(mktemp -d "${TMPDIR:-/tmp}/es-bench-gate.XXXXXX")
 # No baseline for this arch: still REFUSED (exit 2), but on CI record one and print it, so the
 # runner's own numbers can be committed -- the box is aarch64 and cannot measure an x86 ratio.
 if [ ! -f "$BASE" ] && [ -n "${GITHUB_ACTIONS:-}" ]; then
-  ES_BENCH_DIR="$SCR" "$BIN" gate-record "${ES_BENCH_REPS:-15}" 5 15 > "$SCR/rec.txt"
-  echo "es-bench: recorded on this runner (commit as crates/es-bench/baseline-$ARCH.txt):"
-  grep -v '^# get:\|^# prefix:\|^# verify:\|^# build:' "$SCR/rec.txt"
-  rm -rf "$SCR"
+  # The record goes OUTSIDE $SCR: gate-record deletes its whole ES_BENCH_DIR when it ends.
+  REC=$(mktemp "${TMPDIR:-/tmp}/es-bench-rec.XXXXXX")
+  ES_BENCH_DIR="$SCR" "$BIN" gate-record "${ES_BENCH_REPS:-15}" 5 15 > "$REC"
+  rrc=$?
+  echo "es-bench: recorded on this runner, rc=$rrc (commit as crates/es-bench/baseline-$ARCH.txt):"
+  grep -v '^# get:\|^# prefix:\|^# verify:\|^# build:' "$REC" || echo "es-bench: the record is EMPTY"
+  rm -rf "$SCR" "$REC"
   echo "es-bench: REFUSED -- no baseline at $BASE; rc=2 (arch $ARCH)"
   exit 2
 fi

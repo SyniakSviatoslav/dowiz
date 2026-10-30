@@ -71,8 +71,9 @@ jobs:
           done
           # bebop-crc is the library's own zero-dependency crate (the one place hardware CRC needs
           # `unsafe`, so bebop-image keeps forbid(unsafe_code)); it must itself depend on nothing.
+          # `|| true`: an empty grep exits 1, and the runner's `bash -e` ended the step on it silently.
           for c in bebop-crc bebop-image bebop-kv bebop-log; do
-            extra=$(cd crates/$c && cargo tree -e no-dev --prefix none | awk '{print $1}' | sort -u | grep -v -x -e bebop-crc -e bebop-image -e $c)
+            extra=$(cd crates/$c && cargo tree -e no-dev --prefix none | awk '{print $1}' | sort -u | { grep -v -x -e bebop-crc -e bebop-image -e $c || true; })
             [ -z "$extra" ] || { echo "::error::$c depends on: $extra"; exit 1; }
           done
       # T-ES-06: no new unchecked index in the three no_std crates (the existing sites carry a named allow).
