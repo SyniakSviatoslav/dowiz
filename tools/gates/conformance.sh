@@ -33,6 +33,8 @@
 # Usage: tools/gates/conformance.sh [--prove] [--lazy] [--no-build]
 # Heavy (three cargo builds): run it FOREGROUND under bebop-lang/tools/slot.sh; never nest slot.sh.
 set -u
+# The paths below are the crates' own target dirs; deploy.sh exports a shared one.
+unset CARGO_TARGET_DIR
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 W="$ROOT/crates/bebop-wasm"
 FIX="$W/fixtures"

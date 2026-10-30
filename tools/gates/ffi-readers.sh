@@ -18,6 +18,8 @@
 # Usage: tools/gates/ffi-readers.sh [--prove] [--no-build]
 # Heavy: run it FOREGROUND under bebop-lang/tools/slot.sh on the box (never nest slot.sh inside).
 set -u
+# The paths below are the crates' own target dirs; deploy.sh exports a shared one.
+unset CARGO_TARGET_DIR
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CARGO="${CARGO:-$HOME/.cargo/bin/cargo}"
 [ -x "$CARGO" ] || CARGO=cargo
