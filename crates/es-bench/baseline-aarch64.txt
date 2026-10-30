@@ -1,13 +1,13 @@
 # es-bench gate baseline: ratio bebop/control, median of 15 interleaved reps, worst of 5 runs.
 # arch=aarch64 recorded by `es-bench gate-record` -- see docs/measurements/ES-BENCH-2026-10-29.md
-# get: run medians 2.589 2.578 2.563 2.548 2.558
-# prefix: run medians 7.688 6.582 7.498 7.371 7.840
-# verify: run medians 0.720 0.721 0.720 0.720 0.719
-# build: run medians 10.066 9.957 9.988 9.935 9.870
+# get: run medians 2.596 2.523 2.532 2.277 2.282
+# prefix: run medians 6.176 7.430 7.116 6.357 4.655
+# verify: run medians 0.736 0.735 0.736 0.736 0.790
+# build: run medians 7.954 7.968 7.825 6.546 6.943
 n=10000
 vs=256
 tol_pct=15
-get=2.589
-prefix=7.840
-verify=0.721
-build=10.066
+get=2.596
+prefix=7.430
+verify=0.790
+build=7.968

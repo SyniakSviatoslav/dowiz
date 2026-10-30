@@ -47,10 +47,19 @@ fn s(k: &[u8]) -> &str {
     std::str::from_utf8(k).expect("bench keys are ASCII")
 }
 
+/// The decoded `Kv` of sorted entries.
+pub fn kv_of(entries: &[(Vec<u8>, Vec<u8>)]) -> Kv {
+    Kv { entries: entries.iter().map(|(k, v)| (s(k).to_string(), v.clone())).collect() }
+}
+
+/// The image bytes of a `Kv`: the serialisation alone, which is what the gate's `build` row times.
+pub fn image_of(kv: &Kv) -> Vec<u8> {
+    kv.compacted_bytes_fit(MAX_IMAGE).expect("image fits")
+}
+
 /// The image bytes for sorted entries, exactly as dowiz's `Catalog::compact` writes them.
 pub fn image(entries: &[(Vec<u8>, Vec<u8>)]) -> Vec<u8> {
-    let kv = Kv { entries: entries.iter().map(|(k, v)| (s(k).to_string(), v.clone())).collect() };
-    kv.compacted_bytes_fit(MAX_IMAGE).expect("image fits")
+    image_of(&kv_of(entries))
 }
 
 /// Bebop's verify-on-open over bytes already in memory: the full crc check.

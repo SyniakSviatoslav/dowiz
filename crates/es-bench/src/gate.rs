@@ -5,7 +5,7 @@
 //!   get     bebop `get_many` (100k random gets, one read txn)  /  binary search on a sorted Vec
 //!   prefix  bebop `prefix_many` (1000 prefixes x 100 keys)       /  partition_point on that Vec
 //!   verify  bebop's verify-on-open over the image bytes (crc)    /  FNV-1a 64 over the same bytes
-//!   build   bebop `image(entries)` (compacted_bytes_fit)         /  the entries concatenated
+//!   build   bebop `compacted_bytes_fit` over a `Kv` built once   /  the entries concatenated
 //!
 //! The ratio, not the time, is compared to the committed baseline: it cancels the machine's clock
 //! and most of its noise, but NOT its cache and branch-predictor shape, so a baseline is per
@@ -34,7 +34,10 @@ pub fn measure(dir: &Path, reps: usize) -> Vec<(&'static str, St)> {
     let e = entries(N, VS);
     let _ = fs::remove_dir_all(dir);
     let db = Bebop::load(dir, &e);
-    let img = bebop::image(&e);
+    // Built outside the timer: the row is the serialisation. With 20k allocations of `Kv` inside
+    // it, doubling the serialisation moved the row 1.36x on the x86 runner (2bf18a05), under the gate.
+    let kv = bebop::kv_of(&e);
+    let img = bebop::image_of(&kv);
     let ks = lookups(N, 100_000, 7);
     let ps = prefixes(N, 1_000, 11);
     let mut out = vec![];
@@ -88,7 +91,7 @@ pub fn measure(dir: &Path, reps: usize) -> Vec<(&'static str, St)> {
                     ac = (black_box(&cat).len() > 0) as u64;
                     tc = us(t0);
                     let t1 = t();
-                    ab = (black_box(bebop::image(&e)).len() > 0) as u64;
+                    ab = (black_box(bebop::image_of(&kv)).len() > 0) as u64;
                     tb = us(t1);
                 }
             }
