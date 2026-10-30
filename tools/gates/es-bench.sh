@@ -35,6 +35,16 @@ if [ -z "$BIN" ]; then
 fi
 [ -x "$BIN" ] || { echo "es-bench: no binary at $BIN"; exit 1; }
 SCR=$(mktemp -d "${TMPDIR:-/tmp}/es-bench-gate.XXXXXX")
+# No baseline for this arch: still REFUSED (exit 2), but on CI record one and print it, so the
+# runner's own numbers can be committed -- the box is aarch64 and cannot measure an x86 ratio.
+if [ ! -f "$BASE" ] && [ -n "${GITHUB_ACTIONS:-}" ]; then
+  ES_BENCH_DIR="$SCR" "$BIN" gate-record "${ES_BENCH_REPS:-15}" 5 15 > "$SCR/rec.txt"
+  echo "es-bench: recorded on this runner (commit as crates/es-bench/baseline-$ARCH.txt):"
+  grep -v '^# get:\|^# prefix:\|^# verify:\|^# build:' "$SCR/rec.txt"
+  rm -rf "$SCR"
+  echo "es-bench: REFUSED -- no baseline at $BASE; rc=2 (arch $ARCH)"
+  exit 2
+fi
 PIN=""
 [ -n "${ES_BENCH_CORE:-}" ] && command -v taskset >/dev/null && PIN="taskset -c $ES_BENCH_CORE"
 ES_BENCH_DIR="$SCR" $PIN "$BIN" gate "$BASE" "${ES_BENCH_REPS:-15}"
