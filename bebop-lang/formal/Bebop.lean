@@ -37,3 +37,4 @@ import Bebop.Sync
 import Bebop.DatalogZ
 import Bebop.Disk
 import Bebop.KvBytes
+import Bebop.KvTree
