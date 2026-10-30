@@ -22,7 +22,15 @@
 # answer on the clean image AND land on a NAMED answer: status 10, or (bebop.bin only, the anchor
 # fallback of FORMAT §7) exactly the `torn` fixture. A reader whose answer cannot move measures nothing.
 #
-# Usage: tools/gates/conformance.sh [--prove] [--no-build]
+# --lazy (W-ES-P10, R-EMBED-STORE §12 P10): THE DOCUMENTED GUARANTEE of the lazy open, measured on the C
+# ABI. kv4old carries one corrupted REACHABLE object of an OLDER commit (below the anchor's mark). An open
+# at depth 0 (Anchor: pick + PartTab crc + the anchor over the last commit, O(last commit)) must SUCCEED
+# and read the image -- the corruption is not the anchor's business, by design, not by accident -- and
+# `bebop_db_verify(REACHABLE)` on that open database must refuse it with BAD_CRC (10); an open at depth 1
+# (Reachable) must refuse with 10 at once. The same image is status 10 in the matrix above, where every
+# reader checks what it reaches.
+#
+# Usage: tools/gates/conformance.sh [--prove] [--lazy] [--no-build]
 # Heavy (three cargo builds): run it FOREGROUND under bebop-lang/tools/slot.sh; never nest slot.sh.
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -30,17 +38,20 @@ W="$ROOT/crates/bebop-wasm"
 FIX="$W/fixtures"
 CARGO="${CARGO:-$HOME/.cargo/bin/cargo}"
 [ -x "$CARGO" ] || CARGO=cargo
-PROVE=0; BUILD=1
+PROVE=0; BUILD=1; LAZY=0
 for a in "$@"; do
   case "$a" in
     --prove) PROVE=1 ;;
+    --lazy) LAZY=1 ;;
     --no-build) BUILD=0 ;;
     *) echo "conformance: unknown argument $a" >&2; exit 2 ;;
   esac
 done
 # W-ES-P8D: the KV v4 fixtures (crates/bebop-wasm/fixtures/conform/src/kv4.rs) on all five readers;
 # kv4stub is now a v4 claim that does not hold (status 2), no longer an unknown version (12).
-FIXTURES="kv kv2 kv3 ptaway kv4stub kv3max kv3c torn ptbad empty kv0 kv4small kv4deep kv4del kv4zero kv4badn kv4badv kv4badf kv4badd"
+# W-ES-P10: kv4stale (a re-sealed object under a stale anchor: LAST_COMMIT 41 on every reader) and kv4old
+# (a corrupted object of an OLDER commit: BAD_CRC 10 on every reader, and `--lazy` below).
+FIXTURES="kv kv2 kv3 ptaway kv4stub kv3max kv3c torn ptbad empty kv0 kv4small kv4deep kv4del kv4zero kv4badn kv4badv kv4badf kv4badd kv4stale kv4old"
 READERS="native wasm32 python bebop.bin ffi"
 SCRATCH="${CONFORMANCE_SCRATCH:-${TMPDIR:-/tmp}/conformance.$$}"
 mkdir -p "$SCRATCH"
@@ -93,8 +104,9 @@ except bs.Refusal as e:
     print("status=%d n=0 root=0" % e.code)
 PY
 }
-# bebop exit codes -> STATUS-CODES.md: 77/79 -> 1, 76 -> 2, 78 -> 12; kv.bp's -3 (a v3 or v4 claim that
-# does not hold) -> 2, -10 (a v4 object's crc, kv4.bp) -> 10. Any other exit is printed as itself and disagrees.
+# bebop exit codes -> STATUS-CODES.md: 77/79 -> 1, 76 -> 2, 78 -> 12, 74 -> 10 and 75 -> 41 (W-ES-P10: the
+# last commit's rule, kv.bp kv_anc_check); kv.bp's -3 (a v3 or v4 claim that does not hold) -> 2, -10 (a v4
+# object's crc, kv4.bp) -> 10. Any other exit is printed as itself and disagrees.
 bebop_read() {
   d="$SCRATCH/bb.$2"; mkdir -p "$d"; cp "$1" "$d/kv.store"
   n=$(cd "$d" && "$SEED" "$KVBIN" n 2>/dev/null); nrc=$?
@@ -110,6 +122,8 @@ bebop_read() {
     77|79) echo "status=1 n=0 root=0" ;;
     76) echo "status=2 n=0 root=0" ;;
     78) echo "status=12 n=0 root=0" ;;
+    74) echo "status=10 n=0 root=0" ;;
+    75) echo "status=41 n=0 root=0" ;;
     *) echo "status=rc$nrc n=$n root=$h" ;;
   esac
 }
@@ -179,21 +193,51 @@ PY
     case "$a" in NOT-MEASURED) continue ;; esac
     if [ "$a" != "$b" ]; then moved=$((moved + 1)); else still="$still $r"; fi
     # W-PRELUDE (2026-10-29): "moved" alone let a reader move to ANY answer. Now the answer is
-    # named: status 10 (the newest record fails its crc, what native/wasm32/python/ffi say), or --
-    # for bebop.bin only -- exactly the `torn` fixture's generation k-1, because st_open's anchor
-    # check (FORMAT §7, DG5, gate std_golden `sanchor`) stamps a torn last commit and falls back.
-    # That fallback is the one KNOWN divergence left (Rust anchor recovery is FORMAT §7 phase P2);
-    # a fallback past a bad PartTab is no longer one (store.bp trap 77, fixture `ptbad`).
-    tk="status=0 n=$(want torn n) root=$(want torn root)"
+    # named: status 10 -- the newest record fails its crc. W-ES-P10 (2026-10-30, FORMAT §7 phase
+    # P2): bebop.bin says 10 too (kv.bp kv_anc_check, trap 74). Until then it was allowed to answer
+    # exactly the `torn` fixture, generation k-1, because st_open's anchor check stamped the torn
+    # last commit and fell back; a READ of bytes has no recovery authority, so that is gone.
     case "$b" in
       "status=10 "*) ;;
-      "$tk") [ "$r" = bebop.bin ] || wrong="$wrong $r" ;;
       *) wrong="$wrong $r" ;;
     esac
   done
   if [ -n "$still" ]; then say "RED --prove: the flipped cell did not move:$still"; fail=1
-  elif [ -n "$wrong" ]; then say "RED --prove: moved, but not to status 10 (or, for bebop.bin, the anchor fallback = torn):$wrong"; fail=1
-  else say "prove: the named cell moved the answer of $moved measured readers (status 10; bebop.bin anchor fallback = torn)"; fi
+  elif [ -n "$wrong" ]; then say "RED --prove: moved, but not to status 10:$wrong"; fail=1
+  else say "prove: the named cell moved the answer of $moved measured readers to status 10 (all five; no anchor fallback)"; fi
+fi
+
+if [ "$LAZY" = 1 ]; then
+  if [ ! -f "$LIB" ]; then say "RED --lazy: the C ABI library is absent ($LIB)"; fail=1; else
+  lz=$(BEBOP_FFI_LIB="$LIB" python3 -I - "$ROOT" "$FIX/kv4old.store" "$FIX/kv4deep.store" <<'PY' 2>&1
+import os, sys
+sys.path.insert(0, os.path.join(sys.argv[1], "bindings", "python"))
+import bebop_store as bs
+old = open(sys.argv[2], "rb").read()
+clean = open(sys.argv[3], "rb").read()
+def code(f):
+    try:
+        f(); return 0
+    except bs.Refusal as e:
+        return e.code
+with bs.Db.from_bytes(old, verify=bs.ANCHOR) as db:        # the lazy open: O(last commit)
+    with db.read() as r:
+        n = len(r)
+    v_anchor = code(lambda: db.verify(bs.ANCHOR))
+    v_reach = code(lambda: db.verify(bs.REACHABLE))
+    v_whole = code(lambda: db.verify(bs.WHOLE_ARENA))
+open_reach = code(lambda: bs.Db.from_bytes(old, verify=bs.REACHABLE).close())
+with bs.Db.from_bytes(clean, verify=bs.ANCHOR) as db:
+    c_reach = code(lambda: db.verify(bs.REACHABLE))
+print("open(Anchor)=0 n=%d verify(Anchor)=%d verify(Reachable)=%d verify(WholeArena)=%d open(Reachable)=%d clean.verify(Reachable)=%d"
+      % (n, v_anchor, v_reach, v_whole, open_reach, c_reach))
+PY
+)
+  say "lazy kv4old: $lz"
+  want_lz="open(Anchor)=0 n=$(want kv4deep n) verify(Anchor)=0 verify(Reachable)=10 verify(WholeArena)=10 open(Reachable)=10 clean.verify(Reachable)=0"
+  if [ "$lz" = "$want_lz" ]; then say "lazy: an old commit's corruption is NOT caught by open(Anchor) and IS caught by verify(Reachable) -- the documented guarantee"
+  else say "RED --lazy: want '$want_lz'"; fail=1; fi
+  fi
 fi
 
 if [ "$fail" -ne 0 ]; then say "RED"; exit 1; fi

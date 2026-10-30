@@ -183,6 +183,10 @@ fn kv4_corrupted_fixtures_are_refused_by_name() {
         ("kv4badv", Refusal::BadCrc { obj: 1210 }, abi::BAD_CRC),
         ("kv4badf", Refusal::NotAKv, abi::NOT_A_KV),
         ("kv4badd", Refusal::NotAKv, abi::NOT_A_KV),
+        // W-ES-P10 (FORMAT §7 phase P2): kv4badf WITHOUT its re-anchor is the anchor's refusal, by
+        // name, before any v4 rule runs; an older commit's object (1024) is its crc's.
+        ("kv4stale", Refusal::LastCommit, abi::LAST_COMMIT),
+        ("kv4old", Refusal::BadCrc { obj: 1024 }, abi::BAD_CRC),
     ];
     for (name, want, code) in cases {
         let bytes = fixture_named(name);
@@ -198,6 +202,60 @@ fn a_kv_image_is_not_a_log_and_a_log_is_not_a_kv() {
     let mut st = Store::create_bytes(64 * 1024).unwrap();
     EvLog::init_bytes(&mut st).expect("init");
     assert_eq!(kv_view(&st.to_bytes()), Err(Refusal::NotAKv));
+}
+
+/// W-ES-P10: this module's short copy of the last-commit rule (`bebop_wasm::last_commit`, kept
+/// apart from `bebop_image::verify::last_commit_in` for the byte ratchet) answers exactly as the
+/// library rule on every fixture, on the `--prove` flip (a value byte of kv3max's newest record)
+/// and on a re-sealed variant of it (every object whole, the anchor stale).
+#[test]
+fn the_last_commit_copy_equals_the_library_rule() {
+    use bebop_store::verify::{last_commit_in, LastCommit};
+    let dir = format!("{}/fixtures", env!("CARGO_MANIFEST_DIR"));
+    let mut images: Vec<(String, Vec<u8>)> = std::fs::read_dir(&dir)
+        .expect("fixtures")
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|x| x == "store"))
+        .map(|e| (e.file_name().to_string_lossy().into_owned(), std::fs::read(e.path()).expect("read")))
+        .collect();
+    // the --prove flip of conformance.sh, and the same record re-sealed
+    let max = fixture_named("kv3max");
+    let mut st = Store::from_bytes(&max);
+    let root = st.root().unwrap();
+    let rec = (root as i64 + st.get(root, 6)) as usize; // a RELATIVE ref, backwards
+    let cell = rec + 2 + 4 + (st.get(rec, 2) as usize + 7) / 8;
+    st.cells[cell] ^= 1;
+    images.push(("prove-flip".into(), st.to_bytes_trimmed()));
+    st.seal(rec);
+    images.push(("prove-stale".into(), st.to_bytes_trimmed()));
+    let mut seen = (0, 0, 0);
+    for (name, bytes) in &images {
+        let st = Store::from_bytes(bytes);
+        let Some(sb) = st.pick() else { continue };
+        let want = match last_commit_in(&st, &sb) {
+            Ok(_) => Ok(()),
+            Err(LastCommit::Object(b)) => Err(Refusal::BadCrc { obj: b.obj }),
+            Err(LastCommit::Anchor(_)) => Err(Refusal::LastCommit),
+        };
+        match &want {
+            Ok(()) => seen.0 += 1,
+            Err(Refusal::BadCrc { .. }) => seen.1 += 1,
+            _ => seen.2 += 1,
+        }
+        assert_eq!(bebop_wasm::last_commit(&st, &sb), want, "{name}");
+    }
+    assert!(seen.0 > 0 && seen.1 > 0 && seen.2 > 0, "all three answers must be exercised: {seen:?}");
+}
+
+/// What a writer does after changing a cell inside the live commit's range: the anchor (FORMAT
+/// §7, superblock cell 9) and the superblock's crc recomputed over the bytes as they now are.
+fn reanchor(st: &mut Store) {
+    use bebop_store::format::{anchor_of, SB_ANC, SB_CRC, SB_USED};
+    let sb = st.pick().expect("a live superblock").at;
+    let mark = ((st.cells[sb + SB_ANC] as u64) >> 32) as i64;
+    let used = st.cells[sb + SB_USED];
+    st.cells[sb + SB_ANC] = anchor_of(&*st, mark, used);
+    st.cells[sb + SB_CRC] = bebop_store::crc32_cells(&st.cells, sb, 15) as i64;
 }
 
 fn rec(n: u8, payload: &[u8]) -> Record {
@@ -232,6 +290,11 @@ fn the_log_fold_is_stable_across_a_trim_and_sensitive_to_a_byte() {
     st.cells[newest + 2 + 12] ^= 1;
     assert_eq!(log_view(&st.to_bytes()), Err(Refusal::BadCrc { obj: newest }));
     st.seal(newest);
+    // W-ES-P10 (FORMAT §7 phase P2): the record is whole again by its own crc, but the LAST
+    // commit's anchor was recorded over the old byte, so a reader of bytes refuses it by name
+    // and never falls back; an honest writer re-anchors (`reanchor`) and the fold moves.
+    assert_eq!(log_view(&st.to_bytes()), Err(Refusal::LastCommit));
+    reanchor(&mut st);
     let moved = log_view(&st.to_bytes()).expect("still a log");
     assert_ne!(moved.fold, full.fold, "one byte must move the fold");
     st.cells[newest + 2 + 12] ^= 1;
@@ -242,6 +305,7 @@ fn the_log_fold_is_stable_across_a_trim_and_sensitive_to_a_byte() {
     let second = st.follow(newest, 2).unwrap();
     st.cells[second + 2 + 2] = 0;
     st.seal(second);
+    reanchor(&mut st); // W-ES-P10: both records lie in the last commit; the rule under test is the chain's
     assert_eq!(
         log_view(&st.to_bytes()),
         Err(Refusal::Truncated { claimed: 3, chained: Some(2) })

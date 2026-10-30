@@ -52,6 +52,7 @@ fn status_of(r: Refusal) -> i32 {
         Refusal::Truncated { .. } => crate::abi::TRUNCATED,
         Refusal::BadCrc { .. } => crate::abi::BAD_CRC,
         Refusal::UnknownVersion => crate::abi::UNKNOWN_VERSION,
+        Refusal::LastCommit => crate::abi::LAST_COMMIT,
     }
 }
 

@@ -904,8 +904,10 @@ mod tests {
             assert_eq!(bebop_db_create_mem(&mut db), OK);
             let mut w = null_mut();
             assert_eq!(bebop_write_begin(db, &mut w), OK);
+            // W-ES-P19b: writers are optimistic, a second one opens and its commit validates.
             let mut w2 = null_mut();
-            assert_eq!(bebop_write_begin(db, &mut w2), WRITER_BUSY);
+            assert_eq!(bebop_write_begin(db, &mut w2), OK);
+            bebop_write_abort(w2);
             for (k, v) in [(&b"b"[..], &b"2"[..]), (b"a", b"1"), (b"c", b"")] {
                 assert_eq!(bebop_write_put(w, k.as_ptr(), k.len(), v.as_ptr(), v.len()), OK);
             }

@@ -27,9 +27,85 @@
 //! passes; the bebop-wasm fixtures `kv.store` (v1, written by kv.bp + kvdemo) and
 //! `kv2.store` are pinned by `tests::the_frozen_fixtures_pass_the_check`.
 
+//!
+//! THE LAST COMMIT, ONE RULE FOR EVERY READER (W-ES-P10, FORMAT §7 phase P2, 2026-10-30).
+//! Before it, one image got three answers when an object of the LAST commit was corrupted:
+//! bebop.bin's `st_open` fell back to generation k-1, the C ABI refused `LAST_COMMIT` (41),
+//! and native/wasm32/python, which had no anchor logic, said 2 or 10 (measured by W-ES-P8D on
+//! kv4badf/kv4badd before it re-anchored them). `last_commit_in` is the rule now, and every
+//! Rust reader of bytes calls it; oracle.py and kv.bp re-implement it line for line:
+//!
+//!   * `Anchor::Holds`  -- the range `[mark, arena_used)` hashes to what the commit recorded:
+//!                         the last commit is proved, and an open at `Verify::Anchor` is done
+//!                         in O(that range), the older commits trusted (`KvIn::open_lazy`).
+//!   * `Anchor::Absent` -- `anc` = 0 (a pre-W-ES-P0 image, or a mark past `MAX_ANCHOR_MARK`):
+//!                         the anchor proves nothing; the reader checks what it reaches.
+//!   * `Anchor::Torn`   -- a reader of BYTES HANDED WHOLE (every conformance reader, the wasm
+//!                         module in a Worker, `Db::from_bytes` under `OnTorn::Refuse`) REFUSES:
+//!                         it walks the objects of `[mark, arena_used)` and names the first whose
+//!                         payload fails its crc (`LastCommit::Object`, status BAD_CRC 10); when
+//!                         every object checks (a re-sealed object, a changed header or length)
+//!                         the refusal is `LastCommit::Anchor` (status LAST_COMMIT 41). NEVER a
+//!                         fallback: bytes handed whole were not torn by a power cut, they are
+//!                         corrupt, and generation k-1 is not what the holder stored.
+//!                         Only a reader with RECOVERY AUTHORITY over a device -- `Db::open` on a
+//!                         file under `OnTorn::Fallback`, bebop `st_open` on its MAP_SHARED
+//!                         mapping -- hides that superblock and opens generation k-1 after
+//!                         walking its whole arena (`bebop_io::sim::recover`).
+//!
+//! The documented consequence (R-EMBED-STORE §12 P10's T-ES): a corrupted object of an OLDER
+//! commit is NOT caught by an open at `Verify::Anchor` -- the anchor covers the last commit
+//! only -- and IS caught by `verify(Reachable)` when the KV reaches it, by `verify(WholeArena)`
+//! always. `bebop_io::db::lazy_tests` pins both halves.
+
 #[allow(unused_imports)]
 use crate::prelude::*;
-use crate::{crc32_cells, Store};
+use crate::format::{anchor_in, Anchor};
+use crate::{crc32_cells, crc32_in, obj_len_in, Cells, Store, Superblock};
+
+/// Why a reader of bytes refused the last commit (FORMAT §7): see the module.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LastCommit {
+    /// The anchor is torn and this object of `[mark, arena_used)` fails its crc (status 10).
+    Object(BadCrc),
+    /// The anchor is torn and every object of the range checks (status 41).
+    Anchor(Anchor),
+}
+
+/// `Store::check_obj` over `Cells`.
+pub fn check_obj_in<C: Cells + ?Sized>(c: &C, obj: usize) -> Result<(), BadCrc> {
+    let want = ((c.cell_at(obj.saturating_add(1)) >> 32) & 0xFFFF_FFFF) as u32;
+    let len = obj_len_in(c, obj).max(0) as usize;
+    if obj.saturating_add(2).saturating_add(len) > c.n_cells() {
+        return Err(BadCrc { obj, want, got: None });
+    }
+    let got = crc32_in(c, obj + 2, len);
+    if got == want {
+        Ok(())
+    } else {
+        Err(BadCrc { obj, want, got: Some(got) })
+    }
+}
+
+/// THE RULE (module doc): the anchor of the superblock `sb` names, and -- when it is torn --
+/// the refusal a reader of bytes gives, the object named where one fails. `Ok` carries the
+/// anchor so a caller can tell `Holds` (the last commit proved) from `Absent` (nothing proved).
+pub fn last_commit_in<C: Cells + ?Sized>(c: &C, sb: &Superblock) -> Result<Anchor, LastCommit> {
+    let a = anchor_in(c, sb);
+    let Anchor::Torn { mark, used, got, .. } = a else { return Ok(a) };
+    // `got: None`: the mark is not a range inside the arena, so there is nothing to walk (oracle.py
+    // and kv.bp say 41 there too; walking from a mark below ARENA would "name" a superblock cell).
+    if got.is_none() {
+        return Err(LastCommit::Anchor(a));
+    }
+    let end = (used.max(0) as usize).min(c.n_cells());
+    let mut i = mark.max(0) as usize;
+    while i < end {
+        check_obj_in(c, i).map_err(LastCommit::Object)?;
+        i = i.saturating_add(2).saturating_add(obj_len_in(c, i).max(0) as usize);
+    }
+    Err(LastCommit::Anchor(a))
+}
 
 /// An object whose payload does not hash to the crc its header carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,3 +135,6 @@ impl Store {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

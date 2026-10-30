@@ -30,9 +30,9 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 | 5 | `NULL_ARG` | a null pointer at the ABI. oracle.py also uses 5 for an S-1 break (superblock cells 13-14 non-zero), which no fixture has. **Two meanings, kept apart only by which surface gave them** | wasm32, C ABI, python |
 | 6-9, 11 | — | the `nodekey` (6) and `proj` (7-9, 11) readers. Not KV codes | `bw_key`, `bw_proj`, `oracle.py --proj` |
 | 10 | `BAD_CRC` | an object the read reached fails its crc (root, an array, a delta record) | native, wasm32, python, C ABI |
-| 12 | `UNKNOWN_VERSION` | the KV root names a version above 3 (`kv4stub`) | all |
+| 12 | `UNKNOWN_VERSION` | the KV root names a version above 4 (W-ES-P9: every reader decodes v4 since W-ES-P8D/P8E, so `kv4stub` -- a v4 claim that does not hold -- is 2 now, and no committed fixture yields 12) | all |
 | 40 | `RECOVER` | the newest generation failed recovery and so did the fallback | C ABI |
-| 41 | `LAST_COMMIT` | the last commit failed its proof and falling back was not allowed | C ABI |
+| 41 | `LAST_COMMIT` | the last commit's range does not hash to its anchor and every object in it checks (a re-sealed object, a changed header); bytes handed whole are never fallen back past (W-ES-P10, FORMAT §7 phase P2, fixture `kv4stale`). An object of the range that fails its crc is 10 instead, naming it | all |
 | 42 | `OBJECT_BAD` | an object met while walking the whole arena is cut short or fails its crc | C ABI |
 | 43 | `CORRUPT` | a cell the write path was about to trust disagrees with the image | C ABI |
 | 44 | `KEY_TOO_LONG` | key over `MAX_KEY_BYTES` | C ABI |
@@ -40,7 +40,7 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 | 46 | `ARENA_FULL` | no room left in the arena | C ABI |
 | 47 | `LIMIT` | another format limit (FORMAT §10) | C ABI |
 | 48 | `TOO_SMALL` | an image below `MIN_BYTES` | C ABI |
-| 49 | `WRITER_BUSY` | a write transaction is already open | C ABI |
+| 49 | `WRITER_BUSY` | reserved: writers are optimistic since W-ES-P19b, nothing returns it | C ABI |
 | 50 | `LOCKED` | another process holds the store's lock | C ABI |
 | 51 | `POISONED` | an earlier write failed; reopen | C ABI |
 | 52 | `EXISTS` | create over a device that already holds a KV image | C ABI |
@@ -55,11 +55,17 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 
 ## 3. Mappings that are not already this number
 
-**native** (`bebop-conform read`): `pick_checked_in` refuses → 1; `Store::root()` is `None` → 2;
-`Kv::load_checked`: `KvError::NotKv` → 2, `BadCrc` → 10, `UnknownVersion` → 12.
+**native** (`bebop-conform read`): `pick_checked_in` refuses → 1; `last_commit_in` (W-ES-P10) →
+`Object` 10 / `Anchor` 41; `Store::root()` is `None` → 2; `Kv::load_checked`: `KvError::NotKv` → 2,
+`BadCrc` → 10, `UnknownVersion` → 12.
+
+**wasm32** (`src/lib.rs` `open`): `Store::pick` → 1, then `last_commit_in` → 10 / 41 (`Refusal::LastCommit`).
+
+**python** (`oracle.py` `last_commit`): the same rule re-derived from the bytes: 10 / 41 after the pick.
 
 **C ABI** (`crates/bebop-ffi/src/lib.rs` `code_of`): `Refusal::Pick` → 1, `NotKv` → 2, `BadCrc` →
-10, `UnknownVersion` → 12, and the rest 40-60 as in §2.
+10, `UnknownVersion` → 12, and the rest 40-60 as in §2. A torn anchor over adopted bytes is named by
+`db/adopt.rs` `name_torn`, which calls the same `last_commit_in`.
 
 **bebop.bin** (`kv.bp`; `bebop-lang/docs/TRAPS.md`):
 
@@ -70,12 +76,20 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 | trap 79 (PartTab off its home, `st_open`) | 1 |
 | trap 77 (live PartTab fails its crc; store.bp `st_open` (W-PRELUDE; was kv.bp `kv_precheck`, W-ES-P4)) | 1 |
 | trap 76 (no PartTab, so no KV root; `kv_precheck`, W-ES-P4) | 2 |
-| trap 78 (KV version above 3, `pj_kv_known`) | 12 |
+| trap 78 (KV version above 4, `pj_kv_known`) | 12 |
+| trap 74 (the anchor is torn and an object of `[mark, arena_used)` fails its crc; `kv_anc_check`, W-ES-P10) | 10 |
+| trap 75 (the anchor is torn and every object of the range checks; `kv_anc_check`, W-ES-P10) | 41 |
+| exit 0, `-10` (a v4 node or value fails its crc, `kv4.bp`, W-ES-P8D) | 10 |
 
-bebop has **no `BAD_CRC`**. `kv.bp` does not check object crcs on read. `st_open` proves only the
-last commit's range, through the anchor. A flipped bit there makes `st_open` fall back to the
-previous generation (see the `--prove` row below), and a flipped bit in an older object is read
-as data. Both are recorded here, not hidden. The answer still moves, so `--prove` measures it.
+bebop's `BAD_CRC` covers the LAST commit's range (trap 74, every version) and every v4 object it
+reads (`kv4.bp`'s `-10`). `kv.bp` does NOT check the crcs of a v1-v3 base or chain record of an
+OLDER commit: a flipped bit there is read as data (status 0 with a moved fold), which no fixture
+asks for and this table records rather than hides. One corner, recorded: inside a TORN range,
+`st_verify_range` counts a zero-length object as bad (trap 74, 10) where the Rust rule hashes its
+empty payload (0 = 0, so it walks on and may say 41); only an empty-schema init (`kv0`) writes such
+objects and no fixture tears one. Until W-ES-P10 a READ phase went through
+`st_open`'s recovery and a torn last commit FELL BACK to generation k-1 (the one divergence `--prove`
+used to allow); `kv_precheck` now applies FORMAT §7's rule for bytes before `st_open` runs.
 
 ## 4. The measured matrix (2026-10-29, `conformance.sh --prove`, aarch64, every cell read)
 
@@ -85,7 +99,7 @@ as data. Both are recorded here, not hidden. The answer still moves, so `--prove
 | kv2 (v2) | 0 n=5 −211109995167561145 | = | = | = | = | = |
 | kv3 (v3, D=3) | 0 n=5 −4092201869538170098 | = | = | = | = | = |
 | ptaway | 1 | 1 | 1 | 1 | 1 (trap 79) | 1 |
-| kv4stub | 12 | 12 | 12 | 12 | 12 (trap 78) | 12 |
+| kv4stub | 2 (since W-ES-P8D: a v4 claim whose cells 1-4 are not zero; was 12 while no reader decoded v4) | 2 | 2 | 2 | 2 (`-3`) | 2 |
 | kv3max (v3, D=32) | 0 n=27 −6264351955216461874 | = | = | = | = | = |
 | kv3c (compacted) | 0 n=27 −6264351955216461874 | = | = | = | = | = |
 | torn (SB torn) | 0 n=26 −5357977772297964327 | = | = | = | = | = |
@@ -96,6 +110,22 @@ as data. Both are recorded here, not hidden. The answer still moves, so `--prove
 `--prove`: bit 0 of cell 1677 of kv3max (the first value cell of the newest delta record) was
 flipped. native, wasm32, python and C ABI → 10. bebop.bin → 0 n=26 −5357977772297964327, which is
 generation 33. The anchor failed, so `st_open` fell back. All five answers moved.
+
+### 4.1 W-ES-P10 (2026-10-30): the last-commit rule and the lazy open
+
+The two new fixtures and the re-measured `--prove`, every reader, MEASURED 2026-10-30 by
+`tools/gates/conformance.sh --prove --lazy` on aarch64 (21 fixtures, each `5 of 5 agree`; the lines
+are quoted in the W-ES-P10 hand-back):
+
+| Fixture | Want | native | wasm32 | python | bebop.bin | C ABI |
+|---|---|---|---|---|---|---|
+| kv4stale (kv4badf without the re-anchor) | 41 | 41 | 41 | 41 | 41 (trap 75) | 41 |
+| kv4old (a reachable object of an OLDER commit, one bit) | 10 | 10 | 10 | 10 | 10 (kv4.bp −10) | 10 |
+| `--prove` (kv3max, newest record's value cell) | 10 | 10 | 10 | 10 | 10 (trap 74) | 10 |
+
+`--lazy` (C ABI on kv4old): `open(Anchor)=0` reads it, `verify(Anchor)=0`, `verify(Reachable)=10`,
+`verify(WholeArena)=10`, `open(Reachable)=10`; the clean kv4deep verifies 0. That is the lazy
+open's documented guarantee (FORMAT §7), not a gap.
 
 ## 5. Not covered
 

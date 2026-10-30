@@ -35,7 +35,7 @@ pub fn stage_tree(st: &mut Store, ops: &[KeyOp], fanout: usize) -> Result<(Tx, u
     if let Some(r) = old_root {
         w.kill(r);
     }
-    let (its, level) = if depth == 0 { (w.leaf_merge(Vec::new(), ops)?, 1) } else { (w.apply(top, depth, ops)?, depth) };
+    let (its, level) = if depth == 0 { (w.leaf_merge(Vec::new(), ops)?, 1) } else { w.apply_top(top, depth, ops)? };
     let (top, depth) = w.finish(its, level)?;
     let n = n0 + w.dn;
     if n < 0 {

@@ -1,5 +1,6 @@
 //! redb adapter. One table `kv: &[u8] -> &[u8]`. Durable = `Durability::Immediate` (redb's
-//! default: one commit = its two-phase fsync), unsynced = `Durability::None`.
+//! default: one commit = its two-phase fsync), unsynced = `Durability::None`, normal = `None`
+//! with an `Immediate` every 64th commit.
 //! Reads: one `begin_read` per batch. Compaction: `Database::compact()` (in place, needs no
 //! live transaction). Verify: `check_integrity()` (redb's own full check).
 use std::fs;
@@ -8,14 +9,15 @@ use std::path::Path;
 use redb::{Database, Durability, ReadableDatabase, TableDefinition};
 
 use crate::data::acc_of;
-use crate::engine::{Engine, W};
+use crate::engine::{Engine, Sync, W};
 
 const T: TableDefinition<&[u8], &[u8]> = TableDefinition::new("kv");
 const FILE: &str = "kv.redb";
 
 pub struct Redb {
     db: Database,
-    durable: bool,
+    sync: Sync,
+    commits: u64,
 }
 
 impl Engine for Redb {
@@ -33,11 +35,11 @@ impl Engine for Redb {
         }
         w.commit().unwrap();
         drop(db);
-        Self::open(dir, true)
+        Self::open(dir, Sync::Full)
     }
 
-    fn open(dir: &Path, durable: bool) -> Self {
-        Redb { db: Database::open(dir.join(FILE)).unwrap(), durable }
+    fn open(dir: &Path, sync: Sync) -> Self {
+        Redb { db: Database::open(dir.join(FILE)).unwrap(), sync, commits: 0 }
     }
 
     fn get_many(&self, keys: &[Vec<u8>]) -> u64 {
@@ -63,7 +65,15 @@ impl Engine for Redb {
 
     fn commit(&mut self, ops: &[W]) {
         let mut w = self.db.begin_write().unwrap();
-        w.set_durability(if self.durable { Durability::Immediate } else { Durability::None }).unwrap();
+        // redb 4 has no NORMAL: `Normal` is `None` with an `Immediate` every 64th commit, the
+        // checkpoint cadence bebop's `Durability::Normal` uses.
+        self.commits += 1;
+        let d = match self.sync {
+            Sync::Full => Durability::Immediate,
+            Sync::Normal if self.commits % 64 == 0 => Durability::Immediate,
+            _ => Durability::None,
+        };
+        w.set_durability(d).unwrap();
         {
             let mut t = w.open_table(T).unwrap();
             for op in ops {

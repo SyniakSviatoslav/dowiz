@@ -10,6 +10,9 @@ use bebop_kv::{Batch, Staged};
 
 use super::{check_durability, Db, Generation, Mode, Verify};
 
+/// Commits the log remembers (es-p19 §1.2): a transaction whose base fell off it is refused.
+pub(crate) const LOG_HORIZON: usize = 4096;
+
 /// The durability a compaction publishes with: a staged commit's compaction is not synced
 /// (`WriteTxn::stage`), a `Normal` commit's IS (a compaction is a checkpoint: everything
 /// staged is in the new image, and nothing unsynced is left behind).
@@ -22,7 +25,7 @@ pub(crate) fn compaction_durability(d: Durability, mode: Mode) -> Durability {
 }
 use crate::plan::plan;
 use crate::refusal::Refusal;
-use crate::snap::Snap;
+use crate::snap::{Snap, SnapImage};
 use crate::{Device, Durability, Store, Writer};
 
 impl<D: Device> Db<D> {
@@ -56,6 +59,51 @@ impl<D: Device> Db<D> {
         let snap = Snap::build(bytes, None, Verify::Anchor)?;
         *self.current.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(snap));
         Ok(Generation(g))
+    }
+
+    /// THE OPTIMISTIC COMMIT (W-ES-P19b), under the writer's lock = THE SECTION: validate the
+    /// transaction's read set against every commit logged since its base `g0` (gluing: a shared
+    /// key is a disagreement, the default resolver refuses it as `Conflict`), replay the batch on
+    /// the CURRENT snapshot (not the transaction's base: a path copy against the base would lose
+    /// the commits between), then log this commit's write set for the transactions still open.
+    pub(crate) fn commit_occ(&self, w: &mut Writer<D>, g0: i64, reads: crate::txn::ReadSet, batch: Batch, d: Durability, mode: Mode) -> Result<Generation, Refusal> {
+        let keys: Vec<Vec<u8>> = batch
+            .ops()
+            .map(|o| match o {
+                KeyOp::Put(k, _) | KeyOp::Remove(k) => k.to_vec(),
+            })
+            .collect();
+        if !keys.is_empty() {
+            self.validate(g0, &reads)?;
+        }
+        let cur = self.current();
+        let g = self.commit_txn(w, cur, batch, d, mode)?;
+        if !keys.is_empty() {
+            let mut log = self.log.lock().unwrap_or_else(|e| e.into_inner());
+            log.push_back((g.get(), keys));
+            while log.len() > LOG_HORIZON {
+                log.pop_front();
+            }
+        }
+        Ok(g)
+    }
+
+    /// Does any commit after `g0` disagree with `reads`? Also refuses a base older than the log
+    /// remembers (the horizon): it cannot be proved clean, so it is not.
+    fn validate(&self, g0: i64, reads: &crate::txn::ReadSet) -> Result<(), Refusal> {
+        let log = self.log.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(oldest) = log.front().map(|e| e.0) {
+            if g0 + 1 < oldest {
+                return Err(Refusal::Conflict { with: oldest });
+            }
+        }
+        for (g, keys) in log.iter().rev().take_while(|e| e.0 > g0) {
+            let clash = (reads.all && !keys.is_empty()) || !bebop_kv::glue::agree(keys, &reads.points) || keys.iter().any(|k| reads.covers(k));
+            if clash {
+                return Err(Refusal::Conflict { with: *g });
+            }
+        }
+        Ok(())
     }
 
     /// THE COMMIT (`WriteTxn::commit*`/`stage`), under the writer's lock. A `Durability::Normal`
@@ -134,15 +182,16 @@ impl<D: Device> Db<D> {
     /// Publish the writer's staged image to readers, patched from the current snapshot.
     pub(super) fn publish_patch(&self, w: &Writer<D>, checked: bebop_kv::zc::Checked, steps: &[crate::plan::Step]) -> Result<Generation, Refusal> {
         let mut cur = self.current.lock().unwrap_or_else(|e| e.into_inner());
-        // Take the published Arc OUT, so that when no reader holds it the bytes are unique and
-        // are patched in place (O(commit)); a reader that holds it gets a copy made instead.
+        // Take the published Arc OUT, so that when no reader holds it the chunks are unique and
+        // are patched in place (O(commit)); a reader that holds it keeps its chunks and only the
+        // ones the plan touches are copied (W-ES-P19a: O(chunks touched), never O(image)).
         // A plan step outside the image is a bug, not data: then rebuild from the writer's cells
         // (`snapshot == to_bytes_trimmed`, db/tests.rs, pins both paths).
-        let bytes = match cur.take() {
-            Some(old) => Snap::patched(old, w.store(), steps).unwrap_or_else(|_| w.store().to_bytes_trimmed()),
-            None => w.store().to_bytes_trimmed(),
+        let img = match cur.take() {
+            Some(old) => Snap::patched(old, w.store(), steps).unwrap_or_else(|_| SnapImage::from_bytes(w.store().to_bytes_trimmed())),
+            None => SnapImage::from_bytes(w.store().to_bytes_trimmed()),
         };
-        let snap = match Snap::build(bytes, Some(checked), Verify::Anchor) {
+        let snap = match Snap::build_img(img, Some(checked), Verify::Anchor) {
             Ok(s) => s,
             Err(e) => {
                 // Never leave the slot empty.

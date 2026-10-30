@@ -159,12 +159,61 @@ const GOLDEN: &str = "0372514c9e93342e";
 /// items' worth at n entries, 1.2 GB at 5e4, and a 1e5 build took the box down three times.
 #[test]
 fn split_even_retains_only_its_items() {
-    let n = 10_000;
-    let items: Vec<write::Item> = (0..n).map(|i| (Vec::new(), i)).collect();
+    let n: usize = 10_000;
+    let items: Vec<(Vec<u8>, usize)> = (0..n).map(|i| (Vec::new(), i)).collect();
     let pieces = write::split_even(items, 32);
     assert_eq!(pieces.len(), n.div_ceil(32));
     assert!(pieces.iter().all(|p| p.len().abs_diff(n / pieces.len()) <= 1));
     assert!(pieces.iter().flatten().map(|it| it.1).eq(0..n), "the order survives");
     let cap: usize = pieces.iter().map(Vec::capacity).sum();
     assert!(cap <= 2 * n, "capacity {cap} for {n} items");
+}
+
+/// W-ES-P9: `tree_compacted` is ONE build with a BOUNDED arena. Its objects are the bytes a
+/// build into any roomy arena writes (the arena's size never moves an object), its generation
+/// the one asked for, and the capacity it names is the 16 KiB multiple at or just over twice
+/// what the build used -- never the doubling walk's [2x, 4x), which `Store::from_bytes` pads
+/// the writer's RAM to. Three sizes, so the bound is checked where doubling would overshoot.
+#[test]
+fn tree_compacted_is_one_build_with_a_bounded_arena() {
+    use crate::{Cells, ARENA};
+    for (n, vlen) in [(10usize, 8usize), (700, 100), (3000, 300)] {
+        let e: Vec<(Vec<u8>, Vec<u8>)> = (0..n).map(|i| (alloc::format!("k{i:06}").into_bytes(), alloc::vec![i as u8; vlen])).collect();
+        let it = e.iter().map(|(k, v)| (k.as_slice(), v.as_slice()));
+        let fast = compact::tree_compacted(it.clone(), 1 << 26, FANOUT, Some(4)).unwrap();
+        let mut st = Store::create_bytes(1 << 24).unwrap();
+        crate::set_fresh_generation(&mut st, 4).unwrap();
+        let (tx, root) = stage_build(&mut st, it, FANOUT).unwrap();
+        st.commit_bytes(&tx, root);
+        let roomy = st.to_bytes_trimmed();
+        assert_eq!(fast.len(), roomy.len(), "n={n}: trimmed lengths differ");
+        assert!(fast[ARENA * 8..] == roomy[ARENA * 8..], "n={n}: the objects differ from a build at a fixed arena");
+        let (fv, rv) = (View::new(&fast), View::new(&roomy));
+        let (fs, rs) = (fv.pick().unwrap(), rv.pick().unwrap());
+        assert_eq!((fs.generation, fs.arena_used, fs.live_cells, fs.root), (rs.generation, rs.arena_used, rs.live_cells, rs.root), "n={n}");
+        assert_eq!(fs.generation, 5);
+        let used = fs.arena_used as usize * 8;
+        let cap = (fv.cell_at(fs.at + crate::format::SB_CAPACITY) as usize + ARENA) * 8;
+        assert!(cap >= 2 * used, "n={n}: capacity {cap} leaves less than as much again over {used} used");
+        assert!(cap < 2 * used + compact::CAP_GRID, "n={n}: capacity {cap} is more than a grid step over twice {used} used");
+        assert_eq!(cap % compact::CAP_GRID, 0, "n={n}: capacity {cap} is off the 16 KiB grid");
+        assert_eq!(Store::from_bytes(&fast).cells.len() * 8, cap, "n={n}: from_bytes pads to the capacity");
+    }
+}
+
+/// `max` is a wall: a build that needs more than it is `ArenaFull`, and one that fits with no
+/// room to spare names `max` (not more) as its capacity.
+#[test]
+fn tree_compacted_respects_max() {
+    use crate::Cells;
+    let e: Vec<(Vec<u8>, Vec<u8>)> = (0..200usize).map(|i| (alloc::format!("k{i:06}").into_bytes(), alloc::vec![i as u8; 100])).collect();
+    let it = e.iter().map(|(k, v)| (k.as_slice(), v.as_slice()));
+    let roomy = compact::tree_compacted(it.clone(), 1 << 24, FANOUT, None).unwrap();
+    let used = View::new(&roomy).pick().unwrap().arena_used as usize * 8;
+    let tight = compact::tree_compacted(it.clone(), used, FANOUT, None).unwrap();
+    assert_eq!(tight.len(), roomy.len());
+    let tv = View::new(&tight);
+    let ts = tv.pick().unwrap();
+    assert_eq!((tv.cell_at(ts.at + crate::format::SB_CAPACITY) as usize + crate::ARENA) * 8, used, "capacity is max when max is what was used");
+    assert!(matches!(compact::tree_compacted(it, used - 8, FANOUT, None), Err(WriteError::Store(crate::StoreError::ArenaFull { .. }))));
 }

@@ -93,6 +93,28 @@ fn step_equals_full_kind4() {
     assert!(steps > 9_000 && compactions > 0, "steps={steps} compactions={compactions}");
 }
 
+/// W-ES-P9: a v4 root is refused BY NAME before any walk. Its cell 6 is the TREE ref and its
+/// cell 7 the DEPTH -- exactly the cells `chain_in` reads as the newest record and the chain
+/// length -- so `kv_tip` used to hand a tree to the chain reader and `eval_zset` to answer
+/// "the KV delta chain does not hold" for an image that holds perfectly well. Positive twin:
+/// the same entries as a v1 base are folded, Full.
+#[test]
+fn kind4_refuses_a_v4_root_by_name() {
+    let e: Vec<(Vec<u8>, Vec<u8>)> = (0..40).map(|i| (format!("dish/{i:03}").into_bytes(), b"100".to_vec())).collect();
+    let b = crate::kv::tree::tree_compacted(e.iter().map(|(k, v)| (k.as_slice(), v.as_slice())), 1 << 20, crate::kv::tree::FANOUT, None).unwrap();
+    let mut st = Store::from_bytes(&b);
+    let root = root_in(&st).unwrap();
+    assert_eq!(crate::kv::delta::version_in(&st, root), crate::kv::tree::VERSION_TREE);
+    assert_eq!(kv_tip(&st, root), None, "a tree has no kind-4 tip");
+    let err = eval_zset(&mut st, code(), fz(), &Identity).unwrap_err();
+    assert!(matches!(err, StoreError::Limit { what: KIND4_VERSIONS, got: 4, max: 3 }), "refused by name, got {err:?}");
+    assert!(lookup(&st, crate::proj::proj_key(code(), fz(), KIND_ZSET)).is_none(), "nothing was memoised");
+    let pairs: Vec<(&str, &str)> = e.iter().map(|(k, _)| (std::str::from_utf8(k).unwrap(), "100")).collect();
+    let mut v1 = base(&pairs);
+    let (z, how) = eval_zset(&mut v1, code(), fz(), &Identity).unwrap();
+    assert_eq!((z.len(), how), (40, How::Full), "the twin: a v1 base with the same entries is folded");
+}
+
 /// S-4 for kind 4. (i) An OLDER delta record rewritten and re-sealed IN PLACE at the same
 /// generation: the newest record and the root did not move, only that record's h1 -- the
 /// fingerprint refuses the memo. (ii) The base rewritten in the same image (`commit_into`).

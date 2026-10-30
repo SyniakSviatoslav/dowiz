@@ -141,6 +141,25 @@ def image(path):
     return cells, n, live, (root if 0 < root and root + 2 <= n else 0), s1
 
 
+def last_commit(cells, n, live):
+    """0 when the anchor holds or is absent; else 10 (an object of [mark, used) fails its crc) or 41."""
+    anc = cells[live + 9] & M64
+    if anc == 0:
+        return 0
+    mark, want, used = anc >> 32, anc & 0xFFFFFFFF, cells[live + 4]
+    if mark < 1024 or mark > used or used > n:
+        return 41
+    if zlib.crc32(struct.pack("<%dq" % (used - mark), *cells[mark:used])) == want:
+        return 0
+    o = mark
+    while o < used:
+        ln = cells[o] & 0xFFFFFFFF
+        if o + 2 + ln > n or zlib.crc32(struct.pack("<%dq" % ln, *cells[o + 2 : o + 2 + ln])) != (cells[o + 1] >> 32) & 0xFFFFFFFF:
+            return 10
+        o += 2 + ln
+    return 41
+
+
 def kv_entries(cells, n, root):
     """The KV's entries (base, then the v3 chain replayed), every claim checked, or a refusal:
     (status, None) | (0, {"entries", "arrays", "chain"}). Shared by `main` and `--proj` kind 4
@@ -352,6 +371,14 @@ def main(path):
     if live is None:
         print("kv status=1 n=0 root=0")
         return 1
+    # W-ES-P10 (FORMAT §7 phase P2, bebop_image::verify::last_commit_in): the ANCHOR, before any KV
+    # rule, the same on every reader of bytes. anc = (mark << 32) | crc32(cells[mark..arena_used));
+    # 0 = no anchor (nothing proved, nothing refused). Torn: the first object of the range whose
+    # payload fails its crc is BAD_CRC (10); every object whole is LAST_COMMIT (41). Never a fallback.
+    last = last_commit(cells, n, live)
+    if last:
+        print("kv status=%d n=0 root=0" % last)
+        return last
     if root <= 0:
         print("kv status=2 n=0 root=0")
         return 2
@@ -453,6 +480,11 @@ def proj_mode(path):
         return say(5)
     if live is None or root <= 0:
         return say(1)
+    # W-ES-P10: the last-commit rule (FORMAT §7 phase P2) before any memo is read, as the wasm
+    # reader's `log_view` applies it: 10 / 41.
+    last = last_commit(cells, n, live)
+    if last:
+        return say(last)
 
     def olen(o):
         return cells[o] & 0xFFFFFFFF

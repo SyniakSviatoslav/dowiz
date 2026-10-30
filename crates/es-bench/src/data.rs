@@ -70,11 +70,16 @@ pub fn acc_of(v: &[u8]) -> u64 {
     v.len() as u64 + v[0] as u64
 }
 
+/// W-ES-P8E: `mean` and `max` beside the median, for the rows where one sample in many is a
+/// checkpoint or a compaction (design es-p8 §P8e: the durable put's mean against its median, and
+/// the compaction pause, which is a `max`).
 #[derive(Clone, Copy, Debug)]
 pub struct St {
     pub med: f64,
     pub p95: f64,
     pub min: f64,
+    pub max: f64,
+    pub mean: f64,
     pub n: usize,
 }
 
@@ -83,12 +88,12 @@ pub fn stats(mut v: Vec<f64>) -> St {
     v.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let n = v.len();
     let p95i = ((0.95 * n as f64).ceil() as usize).clamp(1, n) - 1;
-    St { med: v[n / 2], p95: v[p95i], min: v[0], n }
+    St { med: v[n / 2], p95: v[p95i], min: v[0], max: v[n - 1], mean: v.iter().sum::<f64>() / n as f64, n }
 }
 
-/// One machine-readable result line: `RES|row|engine|med|p95|min|reps|unit|note`.
+/// One machine-readable result line: `RES|row|engine|med|p95|max|mean|min|reps|unit|note`.
 pub fn res(row: &str, engine: &str, unit: &str, s: St, note: &str) {
-    println!("RES|{row}|{engine}|med={:.3}|p95={:.3}|min={:.3}|reps={}|{unit}|{note}", s.med, s.p95, s.min, s.n);
+    println!("RES|{row}|{engine}|med={:.3}|p95={:.3}|max={:.3}|mean={:.3}|min={:.3}|reps={}|{unit}|{note}", s.med, s.p95, s.max, s.mean, s.min, s.n);
 }
 pub fn one(row: &str, engine: &str, unit: &str, x: f64, note: &str) {
     println!("RES|{row}|{engine}|value={x:.3}|{unit}|{note}");

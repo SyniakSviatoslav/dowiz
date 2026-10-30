@@ -39,6 +39,17 @@ fn edit_out(img: &mut [u8], f: impl Fn(&View) -> (usize, usize), i: usize, x: i6
     let crc = bebop_store::crc32(&img[(out + 2) * 8..(out + 2 + len) * 8]) as u64;
     let h1 = i64::from_le_bytes(img[(out + 1) * 8..(out + 2) * 8].try_into().unwrap()) as u64;
     img[(out + 1) * 8..(out + 2) * 8].copy_from_slice(&(((crc << 32) | (h1 & 0xFFFF_FFFF)) as i64).to_le_bytes());
+    // W-ES-P10 (FORMAT §7 phase P2): the OUT lies inside the LAST commit's range, so a reader of
+    // bytes would refuse the stale anchor (LAST_COMMIT) before the memo rule under test is reached;
+    // an honest writer re-anchors, so this edit does too, and the memo rule is what answers.
+    use bebop_store::format::{anchor_of, SB_ANC, SB_CRC, SB_USED};
+    let mut st = Store::from_bytes(img);
+    let sb = st.pick().expect("a live superblock").at;
+    let mark = ((st.cells[sb + SB_ANC] as u64) >> 32) as i64;
+    st.cells[sb + SB_ANC] = anchor_of(&st, mark, st.cells[sb + SB_USED]);
+    st.cells[sb + SB_CRC] = bebop_store::crc32_cells(&st.cells, sb, 15) as i64;
+    let n = img.len();
+    img.copy_from_slice(&st.to_bytes()[..n]);
 }
 
 fn first_out(v: &View) -> (usize, usize) {

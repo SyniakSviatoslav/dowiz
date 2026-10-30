@@ -25,7 +25,7 @@ use super::{
     tip16, Cells, How, Out, Store, StoreError, DIGEST_OUT,
 };
 use crate::evlog::{EvLog, Record};
-use crate::kv::delta::chain_in;
+use crate::kv::delta::{chain_in, version_in, VERSION_DELTA};
 use crate::kv::FNV_OFFSET;
 use crate::zset::{self, KvRow, ZSet};
 
@@ -130,8 +130,25 @@ fn fingerprint<C: Cells + ?Sized>(c: &C, root: usize, chain: &[crate::kv::delta:
     Some(fnv_cells(FNV_OFFSET, &cells) as i64)
 }
 
-/// The kind-4 tip of the KV at `root`: [newest record offset or 0, fingerprint].
+/// The KV versions kind 4 reads: v1-v3, the ones with a base and a delta chain. A v4 root
+/// (W-ES-P9) keeps the TREE ref in cell 6 and its DEPTH in cell 7 -- the cells `chain_in` reads
+/// as the newest record and the chain length -- so it is refused BY NAME before any walk
+/// (`StoreError::Limit { what: KIND4_VERSIONS, .. }`), never handed to the chain reader.
+pub const KIND4_VERSIONS: &str = "KV version kind 4 reads";
+
+/// Refuse a KV root whose version kind 4 does not read (module header).
+fn kind4_version<C: Cells + ?Sized>(c: &C, root: usize) -> Result<(), StoreError> {
+    let v = version_in(c, root);
+    if v > VERSION_DELTA {
+        return Err(StoreError::Limit { what: KIND4_VERSIONS, got: v, max: VERSION_DELTA });
+    }
+    Ok(())
+}
+
+/// The kind-4 tip of the KV at `root`: [newest record offset or 0, fingerprint]. `None` on a
+/// version kind 4 does not read (a v4 tree has no chain to step).
 pub(super) fn kv_tip<C: Cells + ?Sized>(c: &C, root: usize) -> Option<[i64; 2]> {
+    kind4_version(c, root).ok()?;
     let chain = chain_in(c, root)?;
     let fp = fingerprint(c, root, &chain, if chain.is_empty() { None } else { Some(0) })?;
     Some([chain.first().map_or(0, |r| r.obj as i64), fp])
@@ -209,6 +226,7 @@ pub fn eval_zset(st: &mut Store, code: i64, fn_key: i64, q: &dyn ZLinear) -> Res
     let key = proj_key(code, fn_key, KIND_ZSET);
     let bad = StoreError::Corrupt("the KV does not hold");
     let root = crate::root_in(st).ok_or(StoreError::NoSuperblock)?;
+    kind4_version(st, root)?;
     let (gen, tip) = input_state(st, KIND_ZSET).ok_or(StoreError::Corrupt("the KV delta chain does not hold"))?;
     let count = get_in(st, root, 0);
     let all = |st: &Store| zset::from_kv(st, root).map(|z| q.apply(&z));

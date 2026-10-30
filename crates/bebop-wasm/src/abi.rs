@@ -33,6 +33,10 @@ pub const NULL_ARG: i32 = 5;
 pub const BAD_CRC: i32 = 10;
 /// The KV root names a version this reader does not know (W-ES-P8A, 2026-10-29). 12: `proj` has 11.
 pub const UNKNOWN_VERSION: i32 = 12;
+/// The last commit's range does not hash to its anchor and every object in it checks (W-ES-P10,
+/// FORMAT §7 phase P2): the C ABI's number, now every reader's. Bytes handed whole are never
+/// fallen back past to generation k-1.
+pub const LAST_COMMIT: i32 = 41;
 
 fn status_of(r: &Refusal) -> i32 {
     match r {
@@ -42,6 +46,7 @@ fn status_of(r: &Refusal) -> i32 {
         Refusal::Truncated { .. } => TRUNCATED,
         Refusal::BadCrc { .. } => BAD_CRC,
         Refusal::UnknownVersion => UNKNOWN_VERSION,
+        Refusal::LastCommit => LAST_COMMIT,
     }
 }
 

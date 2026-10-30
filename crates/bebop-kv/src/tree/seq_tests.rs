@@ -198,6 +198,44 @@ fn shrink_to_one_entry_then_regrow() {
     all("shrink", s);
 }
 
+/// The conformance fixture `kv4del` (crates/bebop-wasm/fixtures/conform/src/kv4.rs): 150 keys put by
+/// 6 interleaved commits, then 3 commits that remove 110 of them. W-ES-P8E: at fanout 4 the writer
+/// left a REACHABLE one-child node (a node whose other children emptied and whose survivor shrank
+/// under the minimum had nothing to merge with, so it was written as it was), which `verify`
+/// refuses with `Node { why: "a reachable node with one child" }`. P8D sidestepped it with B = 8.
+#[test]
+fn kv4del_at_every_fanout() {
+    let key = |i: usize| format!("k/{:03}{}", (i * 37) % 150, if i % 7 == 0 { "/longer-tail" } else { "" }).into_bytes();
+    let val = |i: usize, round: usize| -> Vec<u8> {
+        let n = [0usize, 1, 7, 8, 9, 40][(i + round) % 6];
+        (0..n).map(|j| (i * 13 + j * 5 + round) as u8).collect()
+    };
+    let mut s: Vec<Commit> = (0..6).map(|r| (0..150).filter(|i| i % 6 == r).map(|i| (key(i), Some(val(i, r)))).collect()).collect();
+    for r in 0..3 {
+        let mut c: Commit = (0..150).filter(|i| i % 4 != 0 && i % 3 == r).map(|i| (key(i), None)).collect();
+        c.extend((0..150).filter(|i| i % 4 == 0 && i % 30 == r * 4).map(|i| (key(i), Some(val(i, 9)))));
+        s.push(c);
+    }
+    for b in [4, 5, 6, 8, 32] {
+        run("kv4del", &s, b);
+    }
+}
+
+/// The smallest shape of the same defect: a parent whose children all but one are emptied while
+/// the survivor shrinks below the minimum, in ONE commit, at the minimum fanout.
+#[test]
+fn a_node_whose_siblings_empty_and_whose_survivor_shrinks_is_merged_with_a_cousin() {
+    // Fanout 4: 256 keys in one commit = 64 leaves, 16 nodes, 4 nodes, 1 root (depth 4). A lone
+    // one-entry LEAF is legal; the defect needs the survivor to be an INTERNAL node, so the tree
+    // must be at least 4 deep and the emptied subtree one of the root's children.
+    let mut s: Vec<Commit> = vec![(0..256).map(|i| put(i, 0)).collect()];
+    // Everything under the root's second child but one entry, and everything under its third.
+    s.push((65..192).map(del).collect());
+    s.push((0..256).map(del).collect());
+    s.push((0..256).map(|i| put(i, 1)).collect());
+    all("cousin", s);
+}
+
 #[test]
 fn edge_keys_and_value_lengths() {
     let long = "L".repeat(1000).into_bytes();

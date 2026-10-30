@@ -1,6 +1,7 @@
 //! SQLite adapter (rusqlite 0.32.1, bundled). `CREATE TABLE kv(k BLOB PRIMARY KEY, v BLOB)
 //! WITHOUT ROWID`, WAL, `locking_mode=EXCLUSIVE` (file locks taken once: under proot every
-//! fcntl costs ~140 us, R-STORE-VS-SQL §2). Durable = `synchronous=FULL`, unsynced = `OFF`.
+//! fcntl costs ~140 us, R-STORE-VS-SQL §2). Durable = `synchronous=FULL`, normal = `NORMAL`,
+//! unsynced = `OFF`.
 //! Reads: one BEGIN..COMMIT per batch. Compaction: `VACUUM`. Verify: `PRAGMA integrity_check`.
 use std::fs;
 use std::path::Path;
@@ -8,7 +9,7 @@ use std::path::Path;
 use rusqlite::{params, Connection};
 
 use crate::data::acc_of;
-use crate::engine::{Engine, W};
+use crate::engine::{Engine, Sync, W};
 
 const FILE: &str = "kv.sqlite";
 
@@ -16,13 +17,18 @@ pub struct Sqlite {
     db: Connection,
 }
 
-fn conn(dir: &Path, durable: bool) -> Connection {
+fn conn(dir: &Path, sync: Sync) -> Connection {
     let db = Connection::open(dir.join(FILE)).unwrap();
     let m: String = db.query_row("PRAGMA locking_mode=EXCLUSIVE", [], |r| r.get(0)).unwrap();
     assert_eq!(m, "exclusive");
     let j: String = db.query_row("PRAGMA journal_mode=WAL", [], |r| r.get(0)).unwrap();
     assert_eq!(j, "wal");
-    db.execute_batch(if durable { "PRAGMA synchronous=FULL;" } else { "PRAGMA synchronous=OFF;" }).unwrap();
+    db.execute_batch(match sync {
+        Sync::None => "PRAGMA synchronous=OFF;",
+        Sync::Normal => "PRAGMA synchronous=NORMAL;",
+        Sync::Full => "PRAGMA synchronous=FULL;",
+    })
+    .unwrap();
     db
 }
 
@@ -31,7 +37,7 @@ impl Engine for Sqlite {
 
     fn load(dir: &Path, entries: &[(Vec<u8>, Vec<u8>)]) -> Self {
         fs::create_dir_all(dir).unwrap();
-        let mut db = conn(dir, true);
+        let mut db = conn(dir, Sync::Full);
         db.execute_batch("CREATE TABLE kv(k BLOB PRIMARY KEY, v BLOB) WITHOUT ROWID;").unwrap();
         let tx = db.transaction().unwrap();
         {
@@ -42,11 +48,11 @@ impl Engine for Sqlite {
         }
         tx.commit().unwrap();
         drop(db); // close = checkpoint
-        Self::open(dir, true)
+        Self::open(dir, Sync::Full)
     }
 
-    fn open(dir: &Path, durable: bool) -> Self {
-        Sqlite { db: conn(dir, durable) }
+    fn open(dir: &Path, sync: Sync) -> Self {
+        Sqlite { db: conn(dir, sync) }
     }
 
     fn get_many(&self, keys: &[Vec<u8>]) -> u64 {

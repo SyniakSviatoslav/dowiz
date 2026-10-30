@@ -1,0 +1,7 @@
+# What every reader of fixtures/kv4stale.store must answer (W-ES-P10 2026-10-30): A REFUSAL BY NAME.
+# kv4badf WITHOUT its re-anchor: kv4deep's top node has its child-0 ref made forward (+5) and the node
+# RE-SEALED, so every object of the last commit checks by its own crc -- but the superblock's anchor
+# (FORMAT §7, cell 9) was recorded over the old bytes and no longer holds. FORMAT §7 phase P2, the one
+# rule for bytes handed whole: LAST_COMMIT = 41 on every reader, never a fallback to generation k-1.
+# This is the image that got THREE answers before P10 (bebop.bin k-1, C ABI 41, the three others 2).
+status=41

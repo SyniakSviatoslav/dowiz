@@ -1,0 +1,237 @@
+use "selfhost/prelude/store.bp"
+// selfhost/prelude/kv4walk.bp -- the KV v4 walk (W-ES-P8E; FORMAT §9.1 v4, crates/bebop-kv/src/tree/), in
+// the PRELUDE so that proj.bp's kind-2 fold (pj_kv_fold, registered, `pure`) can fold a v4 image instead
+// of trapping 78 on it, and std/kv4.bp's `n` / `h` read the same walk. ONE implementation of the fold
+// law: FNV-1a 64 over len||key||len||value in key order, byte for byte what every other reader gives
+// (crates/bebop-wasm/src/kv4.rs, oracle.py kv4_entries, bebop-conform, the C ABI, TreeIn::fold).
+//
+// Two passes, because a `pure fn` may not call st_check (st_crc writes its scratch; E124):
+//   pj_kv4_fold_s   PURE: the shape rules 1-5 and the fold, no crc. s[2] = 0, or -3 (NOT_A_KV, 2).
+//   pj_kv4_crc_ok   io: every reachable object's crc. 1 = all hold, 0 = one fails (BAD_CRC, 10),
+//                   2 = a ref it will not follow (forward, or past the object): the pure pass's verdict.
+// std/kv4.bp asks crc first, then the fold -- the order kv4.bp's single walk had (-10 before -3).
+//
+// The image (every ref is an offset from the object, STRICTLY BACKWARD):
+//   root  8 cells {n, 0, 0, 0, 0, VERSION = 4, ref TREE, DEPTH}; DEPTH 0 = the empty map (TREE 0, n 0)
+//   LEAF  [META = 1<<56 | m] [K_i, ref VAL_i]... [key bytes]           reached at level 1
+//   NODE  [META = 2<<56 | hc<<48 | m] [ref C_i, K_i, hc hash cells]... [key bytes]
+//   VAL   [vlen] [bytes, 8 to a cell]
+//   K_i   = koff << 16 | klen, into the node's key area, which starts at payload cell 1 + (2+hc) * m.
+// Rules (TreeIn::verify): a leaf exactly DEPTH <= 16 levels down; a separator K_i equals child i's first
+// key; keys strictly ascending over the whole tree; a reachable node has >= 2 children; the root's n is
+// the count of leaf entries.
+//
+// The walk is ITERATIVE: an explicit stack of frames, one per level, 8 cells each, at most 16 deep
+// (one-cell mutables, no closures; a frame's index cell is the loop variable).
+//   fr[8d+0] obj   fr[8d+1] m   fr[8d+2] stride   fr[8d+3] key-area byte address
+//   fr[8d+4] key-area bytes   fr[8d+5] next slot   fr[8d+6] leaf?
+// State s (8 cells): s[0] fold  s[1] count  s[2] status  s[3] last key byte address  s[4] its length
+//   s[5] a last key exists.  w: a 4-cell scratch for (address, length) pairs.
+
+// The three layout digests, st_digest("KV4L{i64,[i64]}") etc., PINNED (bebop-kv tree/mod.rs holds the
+// same numbers and tree/tests.rs re-derives them): st_digest is not `pure`.
+pure fn pj_kv4_dig_leaf() -> i64 { 284439384 }
+pure fn pj_kv4_dig_node() -> i64 { 3702325768 }
+pure fn pj_kv4_dig_val() -> i64 { 44497123 }
+
+// byte b of the image, b an ABSOLUTE byte address (`>>` is logical: the mask is exact)
+pure fn pj_kv4_byte(base: [i64], b: i64) -> i64 { (base[b >> 3] >> (8 * (b & 7))) & 255 }
+// FNV-1a over len || the len bytes at byte address addr (pj_kv_frame's law, absolute addresses)
+pure fn pj_kv4_frame(h: i64, base: [i64], addr: i64, len: i64) -> i64 {
+  let x = pj_fnv_u64(h, len);
+  let j = 0;
+  while j < len {
+    let x = pj_fnv_byte(x, pj_kv4_byte(base, addr + j));
+    let j = j + 1;
+    0
+  };
+  x
+}
+// lexicographic compare of two byte strings by (address, length): -1, 0, 1
+pure fn pj_kv4_cmp(base: [i64], a: i64, al: i64, b: i64, bl: i64) -> i64 {
+  let n = if al < bl then al else bl;
+  let j = 0;
+  let r = 0;
+  while (if r == 0 then (if j < n then 1 else 0) else 0) == 1 {
+    let x = pj_kv4_byte(base, a + j);
+    let y = pj_kv4_byte(base, b + j);
+    let r = if x < y then 0 - 1 else (if x > y then 1 else 0);
+    let j = j + 1;
+    0
+  };
+  if r != 0 then r else (if al < bl then 0 - 1 else (if al > bl then 1 else 0))
+}
+// an object's layout digest, the high half of its first header cell (st_len is the low half)
+pure fn pj_kv4_digest(base: [i64], obj: i64) -> i64 { base[obj] >> 32 }
+// the ref in payload cell i of obj, which must point strictly backward (rule 1): the target, or -1
+pure fn pj_kv4_back(base: [i64], obj: i64, i: i64) -> i64 {
+  let off = st_get(base, obj, i);
+  if off >= 0 then 0 - 1 else (if obj + off < 0 then 0 - 1 else obj + off)
+}
+// decode the node at obj into frame d; leaf = 1 at level 1. 0, or -3.
+pure fn pj_kv4_node(base: [i64], obj: i64, leaf: i64, fr: out [i64], d: i64) -> i64 {
+  let want = if leaf == 1 then pj_kv4_dig_leaf() else pj_kv4_dig_node();
+  let len = st_len(base, obj);
+  let meta = st_get(base, obj, 0);
+  let kind = meta >> 56;
+  let hc = (meta >> 48) & 255;
+  let m = meta & ((1 << 48) - 1);
+  let ok = if pj_kv4_digest(base, obj) != want then 0 else (if kind != (if leaf == 1 then 1 else 2) then 0
+           else (if (if leaf == 1 then hc else 0) != 0 then 0 else (if m < 1 then 0 else (if m > 65535 then 0 else 1))));
+  if ok == 0 then 0 - 3 else (
+    let stride = 2 + hc in
+    let karea = 1 + stride * m in
+    if karea > len then 0 - 3 else (
+      let _ = fr[8 * d] = obj in
+      let _ = fr[8 * d + 1] = m in
+      let _ = fr[8 * d + 2] = stride in
+      let _ = fr[8 * d + 3] = (obj + 2 + karea) * 8 in
+      let _ = fr[8 * d + 4] = (len - karea) * 8 in
+      let _ = fr[8 * d + 5] = 0 in
+      let _ = fr[8 * d + 6] = leaf in
+      0))
+}
+// slot i of frame d: the payload cell of its key (a leaf's slot is (K, V), a node's (C, K, hash))
+pure fn pj_kv4_kcell(fr: [i64], d: i64, i: i64) -> i64 { 1 + fr[8 * d + 2] * i + (1 - fr[8 * d + 6]) }
+pure fn pj_kv4_rcell(fr: [i64], d: i64, i: i64) -> i64 { 1 + fr[8 * d + 2] * i + fr[8 * d + 6] }
+// slot i's key of frame d as (byte address, length) into w[o], w[o+1]: 0, or -3 past the key area
+pure fn pj_kv4_key(base: [i64], fr: [i64], d: i64, i: i64, w: out [i64], o: i64) -> i64 {
+  let k = st_get(base, fr[8 * d], pj_kv4_kcell(fr, d, i));
+  let koff = k >> 16;
+  let klen = k & 65535;
+  if koff + klen > fr[8 * d + 4] then 0 - 3 else (
+    let _ = w[o] = fr[8 * d + 3] + koff in
+    let _ = w[o + 1] = klen in
+    0)
+}
+// enter the node at obj as frame d: decode, >= 2 children unless a leaf, first key = the separator
+// (sa, sl) unless sl < 0 (the top). 0 or -3.
+pure fn pj_kv4_enter(base: [i64], obj: i64, leaf: i64, fr: out [i64], d: i64, sa: i64, sl: i64, w: out [i64]) -> i64 {
+  let r = pj_kv4_node(base, obj, leaf, fr, d);
+  if r != 0 then r else (
+    if (if leaf == 1 then 2 else fr[8 * d + 1]) < 2 then 0 - 3 else (
+      if sl < 0 then 0 else (
+        let kr = pj_kv4_key(base, fr, d, 0, w, 2) in
+        if kr != 0 then kr else (if pj_kv4_cmp(base, w[2], w[3], sa, sl) != 0 then 0 - 3 else 0))))
+}
+// one leaf entry: key (w[0], w[1]) already above the last; the value at r. Sets s[2] on a refusal.
+pure fn pj_kv4_leaf(base: [i64], s: out [i64], r: i64, w: [i64]) -> i64 {
+  let vlen = st_get(base, r, 0);
+  let ok = if pj_kv4_digest(base, r) != pj_kv4_dig_val() then 0 else (if vlen < 0 then 0 else (if vlen > (1 << 30) then 0
+           else (if st_len(base, r) != 1 + ((vlen + 7) >> 3) then 0 else 1)));
+  if ok == 0 then (let _ = s[2] = 0 - 3 in 0) else (
+    let _ = s[0] = pj_kv4_frame(s[0], base, w[0], w[1]) in
+    let _ = s[0] = pj_kv4_frame(s[0], base, (r + 3) * 8, vlen) in
+    let _ = s[1] = s[1] + 1 in
+    let _ = s[3] = w[0] in
+    let _ = s[4] = w[1] in
+    let _ = s[5] = 1 in
+    0)
+}
+// slot i of frame d (level = depth - d): descend into a child (returns 1 = one frame pushed) or
+// take a leaf entry (returns 0). A refusal sets s[2] and returns 0.
+pure fn pj_kv4_step(base: [i64], depth: i64, s: out [i64], fr: out [i64], d: i64, i: i64, w: out [i64]) -> i64 {
+  let kr = pj_kv4_key(base, fr, d, i, w, 0);
+  let r = pj_kv4_back(base, fr[8 * d], pj_kv4_rcell(fr, d, i));
+  if kr != 0 then (let _ = s[2] = 0 - 3 in 0) else (if r < 0 then (let _ = s[2] = 0 - 3 in 0) else (
+    let level = depth - d in
+    if level > 1 then (
+      let e = pj_kv4_enter(base, r, (if level == 2 then 1 else 0), fr, d + 1, w[0], w[1], w) in
+      if e != 0 then (let _ = s[2] = e in 0) else 1
+    ) else (
+      let below = if s[5] == 1 then (if pj_kv4_cmp(base, s[3], s[4], w[0], w[1]) >= 0 then 1 else 0) else 0 in
+      if below == 1 then (let _ = s[2] = 0 - 3 in 0) else pj_kv4_leaf(base, s, r, w))))
+}
+// the whole tree under top (DEPTH = depth >= 1), in key order, into s
+pure fn pj_kv4_walk(base: [i64], depth: i64, top: i64, s: out [i64], fr: out [i64], w: out [i64]) -> i64 {
+  let _ = s[2] = pj_kv4_enter(base, top, (if depth == 1 then 1 else 0), fr, 0, 0, 0 - 1, w);
+  let sp = if s[2] == 0 then 1 else 0;
+  while sp > 0 {
+    let d = sp - 1;
+    let i = fr[8 * d + 5];
+    let sp = if i == fr[8 * d + 1] then sp - 1 else (
+      let _ = fr[8 * d + 5] = i + 1 in
+      sp + pj_kv4_step(base, depth, s, fr, d, i, w));
+    let sp = if s[2] != 0 then 0 else sp;
+    0
+  };
+  0
+}
+// pj_kv4_fold_s: the fold of the v4 image under root (s[0]) and its entry count (s[1]); s[2] the
+// status, 0 or -3. PURE: no crc -- pj_kv4_crc_ok is the crc pass.
+pure fn pj_kv4_fold_s(base: [i64], root: i64, s: out [i64]) -> i64 {
+  let fr = zeros(136);
+  let w = zeros(4);
+  let _ = s[0] = pj_fnv_offset();
+  let _ = s[1] = 0;
+  let _ = s[5] = 0;
+  let n = st_get(base, root, 0);
+  let depth = st_get(base, root, 7);
+  let zero14 = st_get(base, root, 1) + st_get(base, root, 2) + st_get(base, root, 3) + st_get(base, root, 4);
+  let shape = if st_len(base, root) != 8 then 0 else (if zero14 != 0 then 0 else (if n < 0 then 0
+              else (if depth < 0 then 0 else (if depth > 16 then 0 else 1))));
+  let top = if depth == 0 then (if st_get(base, root, 6) != 0 then 0 - 1 else (if n != 0 then 0 - 1 else 0))
+            else pj_kv4_back(base, root, 6);
+  let _ = s[2] = if shape == 0 then 0 - 3 else (if top < 0 then 0 - 3 else 0);
+  let _ = if s[2] == 0 then (if depth > 0 then pj_kv4_walk(base, depth, top, s, fr, w) else 0) else 0;
+  let _ = s[2] = if s[2] == 0 then (if s[1] != n then 0 - 3 else 0) else s[2];
+  s[0]
+}
+// pj_kv4_fold: the registered fold's shape (base, root) -> the fold. Asked only after pj_kv4_ok held.
+pure fn pj_kv4_fold(base: [i64], root: i64) -> i64 {
+  let s = zeros(8);
+  pj_kv4_fold_s(base, root, s)
+}
+
+// ---- the crc pass (io) ------------------------------------------------------------------------------
+// st[3d] obj, st[3d+1] m, st[3d+2] next slot; the ref cell of slot i is 2 + 2i in a leaf, 1 + (2+hc) i
+// in a node. A child is crc-checked when it is entered (a value when its slot is taken), the root first.
+fn pj_kv4_crc_push(base: [i64], obj: i64, st: [i64], d: i64, tmp: [i64]) -> i64 {
+  if st_check(base, obj, tmp) == 0 then 0 else (
+    let meta = st_get(base, obj, 0) in
+    let m = meta & ((1 << 48) - 1) in
+    let stride = 2 + ((meta >> 48) & 255) in
+    if 1 + stride * m > st_len(base, obj) then 2 else (
+      let _ = st[3 * d] = obj in
+      let _ = st[3 * d + 1] = m in
+      let _ = st[3 * d + 2] = 0 in
+      1))
+}
+fn pj_kv4_crc_slot(base: [i64], depth: i64, st: [i64], d: i64, i: i64, tmp: [i64]) -> i64 {
+  let obj = st[3 * d];
+  let leaf = if depth - d == 1 then 1 else 0;
+  let stride = 2 + ((st_get(base, obj, 0) >> 48) & 255);
+  let r = pj_kv4_back(base, obj, (if leaf == 1 then 2 + 2 * i else 1 + stride * i));
+  if r < 0 then 2 else (if leaf == 1 then (if st_check(base, r, tmp) == 0 then 0 else 1) else pj_kv4_crc_push(base, r, st, d + 1, tmp))
+}
+// pj_kv4_crc_ok(base, root, tmp): 1 = every reachable object's crc holds; 0 = one fails; 2 = a ref it
+// will not follow (the pure pass refuses that image as a shape, -3). v[0] carries the verdict out of
+// the loop (a while is a statement, not a value).
+fn pj_kv4_crc_ok(base: [i64], root: i64, tmp: [i64]) -> i64 {
+  let rc = st_check(base, root, tmp);
+  let depth = if rc == 0 then 0 else st_get(base, root, 7);
+  let top = if depth > 0 then (if depth > 16 then 0 - 2 else pj_kv4_back(base, root, 6)) else 0;
+  let st = zeros(51);
+  let v = zeros(1);
+  let _ = v[0] = if rc == 0 then 0 else (if depth <= 0 then 1 else (if top < 0 then 2 else pj_kv4_crc_push(base, top, st, 0, tmp)));
+  let sp = if (if depth > 0 then v[0] else 0) == 1 then 1 else 0;
+  while sp > 0 {
+    let d = sp - 1;
+    let i = st[3 * d + 2];
+    let sp = if i == st[3 * d + 1] then sp - 1 else (
+      let _ = st[3 * d + 2] = i + 1 in
+      let r = pj_kv4_crc_slot(base, depth, st, d, i, tmp) in
+      let _ = v[0] = r in
+      if r == 1 then (if depth - d == 1 then sp else sp + 1) else 0);
+    0
+  };
+  v[0]
+}
+// pj_kv4_ok(base, root, tmp): 1 when the crc pass and the pure pass both hold -- what st_proj_eval asks
+// before it memoises a kind-2 fold of a v4 image (the fold itself is then asked again, pure).
+fn pj_kv4_ok(base: [i64], root: i64, tmp: [i64]) -> i64 {
+  let c = pj_kv4_crc_ok(base, root, tmp);
+  let s = zeros(8);
+  let _ = if c == 0 then 0 else pj_kv4_fold_s(base, root, s);
+  if c == 0 then 0 else (if s[2] != 0 then 0 else (if c == 2 then 0 else 1))
+}

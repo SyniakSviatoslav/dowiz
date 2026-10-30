@@ -78,6 +78,11 @@ impl Device for FileDevice {
     }
 
     fn read_cells(&self, off: usize, n: usize) -> io::Result<Vec<i64>> {
+        let buf = self.read_bytes(off, n)?;
+        Ok(buf.chunks_exact(8).map(|w| i64::from_le_bytes([w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]])).collect())
+    }
+
+    fn read_bytes(&self, off: usize, n: usize) -> io::Result<Vec<u8>> {
         let mut buf = vec![0u8; n * 8];
         let mut got = 0;
         // A short read is the end of the file: the rest stays zero, the format's null.
@@ -88,7 +93,7 @@ impl Device for FileDevice {
             }
             got += r;
         }
-        Ok(buf.chunks_exact(8).map(|w| i64::from_le_bytes([w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]])).collect())
+        Ok(buf)
     }
 
     fn write_cells(&mut self, off: usize, cells: &[i64]) -> io::Result<()> {

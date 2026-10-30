@@ -53,7 +53,7 @@ fn normal_commits_reach_the_device_only_at_the_checkpoint_as_one_group() {
         assert_eq!(db.durable().get(), want_durable, "durable after commit {i}");
         assert_eq!(db.unsynced(), (i as u64 + 1) % 4, "unsynced after commit {i}");
     }
-    let disk = db.into_device();
+    let disk = db.into_device().unwrap();
     assert_eq!(barriers(disk.ops()), 2, "one group = two barriers: {:?}", disk.ops().iter().filter(|o| **o == SimOp::Barrier).count());
     let expect = [(k, m0.clone()), (k + 4, map_with(&m0, &kvs[..4]))];
     let r = run(&base.cells, disk.ops(), POWER, &expect, &replay, &next);
@@ -85,7 +85,7 @@ fn an_explicit_flush_or_a_data_commit_checkpoints_the_staged_tail() {
     assert_eq!(put(&db, b"z", b"z", Durability::Data).get(), k + 9, "a Data commit after 3 Normal ones");
     assert_eq!((db.durable().get(), db.unsynced()), (k + 9, 0));
     assert_eq!(db.snapshot_bytes(), db.writer_image());
-    let disk = db.into_device();
+    let disk = db.into_device().unwrap();
     assert_eq!(barriers(disk.ops()), 4, "two groups (N=5 and N=4), two barriers each");
     let again = Db::open(SimDisk::new(disk.cache()), opts(0)).unwrap();
     assert_eq!(again.begin_read().generation().get(), k + 9);
@@ -116,7 +116,7 @@ fn staged_groups_of_every_size_flush_under_two_barriers() {
         }
         assert_eq!(db.flush(Durability::Data).unwrap().get(), k + n as i64);
         assert_eq!(db.snapshot_bytes(), db.writer_image(), "N={n}");
-        let disk = db.into_device();
+        let disk = db.into_device().unwrap();
         assert_eq!(barriers(disk.ops()), 2, "N={n}");
         let d = Durable::of(&base).unwrap();
         let fin = disk.cache();
@@ -132,7 +132,7 @@ fn normal_on_a_v4_image_checkpoints_as_one_group() {
     // image the 4th path copy would otherwise compact, and a compaction IS a checkpoint.
     let o = opts(3).create_tree(true).tree(bebop_kv::tree::FANOUT, 0);
     let db = Db::create(SimDisk::new(Vec::new()), o).unwrap();
-    let mut seeded = db.into_device();
+    let mut seeded = db.into_device().unwrap();
     seeded.settle();
     let db = Db::open(seeded, o).unwrap();
     assert!(db.is_tree());
@@ -142,7 +142,7 @@ fn normal_on_a_v4_image_checkpoints_as_one_group() {
     }
     assert_eq!((db.durable().get(), db.unsynced()), (k + 3, 2));
     assert_eq!(db.snapshot_bytes(), db.writer_image());
-    let disk = db.into_device();
+    let disk = db.into_device().unwrap();
     assert_eq!(barriers(disk.ops()), 2);
     let again = Db::open(SimDisk::new(disk.cache()), opts(3)).unwrap();
     assert_eq!(again.begin_read().generation().get(), k + 3);

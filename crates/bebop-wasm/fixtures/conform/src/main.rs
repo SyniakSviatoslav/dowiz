@@ -24,11 +24,13 @@
 //!
 //! `bebop-conform read <image>...` prints, per image, `kv status=<s> n=<n> root=<fold>` in
 //! harness.mjs's shape, the status from docs/STATUS-CODES.md:
-//!   pick_checked_in refuses -> 1, no KV root -> 2, KvError::NotKv -> 2, BadCrc -> 10,
-//!   UnknownVersion -> 12, Tree(BadCrc) -> 10, any other Tree refusal -> 2.
+//!   pick_checked_in refuses -> 1, then the ANCHOR (W-ES-P10, FORMAT §7: a torn last commit's
+//!   failing object -> 10, every object whole -> 41), no KV root -> 2, KvError::NotKv -> 2,
+//!   BadCrc -> 10, UnknownVersion -> 12, Tree(BadCrc) -> 10, any other Tree refusal -> 2.
 mod kv4;
 
 use bebop_image::format::pick_checked_in;
+use bebop_image::verify::{last_commit_in, LastCommit};
 use bebop_image::Store;
 use bebop_kv::delta::{append_delta_with, Appended, Op, Why, MAX_DELTAS};
 use bebop_kv::verify::KvError;
@@ -36,8 +38,15 @@ use bebop_kv::Kv;
 
 fn read(bytes: &[u8]) -> (i32, i64, i64) {
     let st = Store::from_bytes(bytes);
-    if pick_checked_in(&st).is_err() {
+    let Ok(sb) = pick_checked_in(&st) else {
         return (1, 0, 0);
+    };
+    // W-ES-P10 (FORMAT §7 phase P2): the anchor is asked BEFORE the KV rules, the same rule on
+    // every reader of bytes -- a torn last commit names its failing object (10) or itself (41).
+    match last_commit_in(&st, &sb) {
+        Ok(_) => {}
+        Err(LastCommit::Object(_)) => return (10, 0, 0),
+        Err(LastCommit::Anchor(_)) => return (41, 0, 0),
     }
     if st.root().is_none() {
         return (2, 0, 0);

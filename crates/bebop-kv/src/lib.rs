@@ -484,6 +484,8 @@ pub mod delta;
 mod decode;
 /// KV v4, the copy-on-write B+tree (W-ES-P8B; wired into `KvIn` / `load_checked` by W-ES-P8C).
 pub mod tree;
+/// GLUING, the single contract of the write path (W-ES-P19, operator 2026-10-30).
+pub mod glue;
 
 #[cfg(test)]
 mod tests;

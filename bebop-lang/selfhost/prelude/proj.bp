@@ -1,5 +1,6 @@
 use "selfhost/prelude/sha256.bp"
 use "selfhost/prelude/store.bp"
+use "selfhost/prelude/kv4walk.bp"
 use "selfhost/prelude/nodekey.bp"
 // selfhost/prelude/proj.bp -- projection nodes in the store (docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md
 // §6, BLUEPRINT DG5). The bebop reader/writer of the SAME bytes crates/bebop-store/src/proj.rs reads and
@@ -226,13 +227,15 @@ fn pj_log_append(base: [i64], tx: [i64], seq: i64, pay: [i64], plen: i64, id0: i
 pure fn pj_kv_ver(base: [i64], g: i64) -> i64 {
   if st_len(base, g) < 6 then 1 else (if st_get(base, g, 5) > 0 then st_get(base, g, 5) else 1)
 }
-// pj_kv_known (W-ES-P8A): the root's KV version, or TRAP 78 when this reader does not know it (v4 = the
-// B+tree, R-EMBED-STORE §12 P8). A v4 root's cells 1-4 and 6-7 are not a v1-v3 base or a delta chain, and
-// pj_kv_frame reads any ver >= 2 as packed bytes, so an unknown version is never folded: kv.bp's `h`/`n`/`d`,
-// st_proj_eval (kind 2) and pj_ztip (kind 4) all ask this first. Not `pure`: it can exit.
+// pj_kv_known (W-ES-P8A): the root's KV version, or TRAP 78 when this reader does not know it. v4 (the
+// B+tree, R-EMBED-STORE §12 P8) is KNOWN since W-ES-P8E: kv4walk.bp walks it. A v4 root's cells 1-4 are
+// zero and 6-7 are the tree and its depth, not a v1-v3 base or a delta chain, so every caller that reads
+// those cells asks this first and branches on 4: pj_kv_fold (kind 2) folds the tree, pj_zchain / pj_ztip
+// (kind 4) see no chain, kv.bp's `h`/`n`/`d` go through std/kv4.bp. A version above 4 is still never
+// folded: pj_kv_frame would read it as packed bytes. Not `pure`: it can exit.
 fn pj_kv_known(base: [i64], g: i64) -> i64 {
   let v = pj_kv_ver(base, g);
-  if v > 3 then pj_refuse_kv_ver() else v
+  if v > 4 then pj_refuse_kv_ver() else v
 }
 fn pj_refuse_kv_ver() -> i64 {
   let m = zeros(48);
@@ -254,7 +257,11 @@ pure fn pj_kv_frame(h: i64, base: [i64], blob: ref Obj, off: i64, len: i64, ver:
   x
 }
 // pj_kv_fold: FNV-1a 64 over len||key||len||value in key order -- kv.bp's snapshot_root, byte for byte.
+// A v4 root is the tree walk (kv4walk.bp); st_proj_eval has held its crc and shape before asking.
 pure fn pj_kv_fold(base: [i64], g: i64) -> i64 {
+  if pj_kv_ver(base, g) == 4 then pj_kv4_fold(base, g) else pj_kv_fold_base(base, g)
+}
+pure fn pj_kv_fold_base(base: [i64], g: i64) -> i64 {
   let n = st_get(base, g, 0);
   let kidx = st_ref(base, g, 1);
   let kblob = st_ref(base, g, 2);
@@ -372,7 +379,7 @@ fn pj_out_digest(base: [i64], kind: i64, out: i64) -> i64 {
 }
 // pj_zchain: a v3 KV root's delta records, newest first, into out[0..]; at most cap. Returns how many.
 fn pj_zchain(base: [i64], root: i64, out: [i64], cap: i64) -> i64 {
-  let cur = if pj_kv_known(base, root) >= 3 then pj_ref(base, root, 6) else 0;
+  let cur = if pj_kv_known(base, root) == 3 then pj_ref(base, root, 6) else 0;
   let n = 0;
   while cur != 0 {
     let _ = out[n] = cur;
@@ -384,8 +391,14 @@ fn pj_zchain(base: [i64], root: i64, out: [i64], cap: i64) -> i64 {
 }
 // pj_ztip: kind 4's tip word w -- 0: the newest delta record (0 = no chain); 1: the FINGERPRINT, FNV-1a 64 over
 // (offset, h1) as LE8 of the four base arrays, then of every chain record oldest first (kinds.rs header).
+// A v4 KV has no chain and no base arrays (W-ES-P8E): both words are -1, which no memo's tip equals, so
+// a kind-4 memo over a v4 input is never a hit here -- Rust's kv_tip has no answer for it either.
 fn pj_ztip(base: [i64], root: i64, w: i64) -> i64 {
-  let d = if pj_kv_known(base, root) >= 3 then st_get(base, root, 7) else 0;
+  let kn = pj_kv_known(base, root);
+  if kn == 4 then 0 - 1 else pj_ztip_chain(base, root, w)
+}
+fn pj_ztip_chain(base: [i64], root: i64, w: i64) -> i64 {
+  let d = if pj_kv_known(base, root) == 3 then st_get(base, root, 7) else 0;
   let cap = if d < 0 then 0 else (if d > 1024 then 1024 else d);
   let recs = zeros(cap + 1);
   let k = pj_zchain(base, root, recs, cap);
@@ -529,9 +542,17 @@ fn st_proj_eval(base: [i64], tx: [i64], code: i64, kind: i64, fnv: i64, how: [i6
   let _ = how[0] = 0;
   let _ = how[1] = 0;
   let _ = how[2] = n;
-  let v3 = if kind == 2 then (if pj_kv_known(base, root) >= 3 then 1 else 0) else 0;
-  let v = if v3 == 1 then pj_refuse_v3(how) else (if hit == 1 then st_get(base, pj_ref(base, p, 7), 0) else pj_eval_miss(base, tx, code, kind, fnv, key, p, why[0], how, tmp));
+  let kv = if kind == 2 then pj_kv_known(base, root) else 0;
+  let bad4 = if kv == 4 then (if pj_kv4_ok(base, root, tmp) == 1 then 0 else 1) else 0;
+  let v = if kv == 3 then pj_refuse_v3(how) else (if bad4 == 1 then pj_refuse_v4(how) else (if hit == 1 then st_get(base, pj_ref(base, p, 7), 0) else pj_eval_miss(base, tx, code, kind, fnv, key, p, why[0], how, tmp)));
   v
+}
+// pj_refuse_v4 (W-ES-P8E): a v4 input whose crc or shape does not hold is never folded or memoised --
+// the pure fold cannot refuse, so the io check runs first. LOUD in how (3 = refold, why 6 = v4 refused).
+fn pj_refuse_v4(how: [i64]) -> i64 {
+  let _ = how[0] = 3;
+  let _ = how[1] = 6;
+  0 - 1
 }
 // pj_refuse_v3 (LV-INC-A): pj_kv_fold folds a KV's BASE only, and a v3 root's delta chain (W-DELTA) is not in
 // it -- before this it answered the base's fold for a v3 image, which is not the snapshot Rust's eval_kv gives.

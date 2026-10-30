@@ -68,6 +68,9 @@ pub enum Refusal {
     BadCrc { obj: usize },
     /// The KV root names a version this reader does not know (W-ES-P8A; v4 reads since W-ES-P8D).
     UnknownVersion,
+    /// The last commit's range does not hash to its anchor and every object in it checks
+    /// (W-ES-P10, FORMAT §7 phase P2; an object that fails is `BadCrc` naming it).
+    LastCommit,
 }
 
 /// A KV image, folded.
@@ -92,13 +95,48 @@ pub(crate) fn fnv1a(mut h: u64, bytes: &[u8]) -> u64 {
     h
 }
 
-/// The store, or the refusal that stands for "no valid superblock fits here".
+/// The store, or the refusal that stands for "no valid superblock fits here", or the last
+/// commit's refusal (W-ES-P10, FORMAT §7 phase P2): a torn anchor is never fallen back past here.
+///
+/// `last_commit` is a SEPARATE SHORT COPY of `bebop_image::verify::last_commit_in` for the reason
+/// `Store::pick` is one of `pick_checked_in` (FORMAT §3.1): this module's byte ratchet only falls,
+/// and the library rule is generic over `Cells` (`crc32_in` / `bebop_crc::cells_by`), which this
+/// module does not otherwise link; `Store::check_obj` and `crc32_cells` it already does. The copy
+/// is held equal to the rule on every fixture by `tests/parity.rs`
+/// `the_last_commit_copy_equals_the_library_rule`.
 fn open(bytes: &[u8]) -> Result<Store, Refusal> {
     let st = Store::from_bytes(bytes);
-    if st.pick().is_none() {
+    let Some(sb) = st.pick() else {
         return Err(Refusal::NoSuperblock);
-    }
+    };
+    last_commit(&st, &sb)?;
     Ok(st)
+}
+
+/// FORMAT §7 phase P2 over a `Store`: `Ok` when the anchor holds or is absent; a torn anchor
+/// names the first object of `[mark, arena_used)` whose crc fails, else `LastCommit`. `pub` only
+/// so `tests/parity.rs` can hold it against the library rule; it is not an export.
+#[doc(hidden)]
+pub fn last_commit(st: &Store, sb: &bebop_store::Superblock) -> Result<(), Refusal> {
+    let a = st.cells.get(sb.at + bebop_store::SB_ANC).copied().unwrap_or(0) as u64;
+    if a == 0 {
+        return Ok(());
+    }
+    let (mark, used) = ((a >> 32) as usize, sb.arena_used as usize);
+    if mark < bebop_store::ARENA || mark > used || used > st.cells.len() {
+        return Err(Refusal::LastCommit);
+    }
+    if bebop_store::crc32_cells(&st.cells, mark, used - mark) == a as u32 {
+        return Ok(());
+    }
+    let mut i = mark;
+    while i < used {
+        if !st.obj_crc_ok(i) {
+            return Err(Refusal::BadCrc { obj: i });
+        }
+        i = i.saturating_add(2).saturating_add(st.obj_len(i).max(0) as usize);
+    }
+    Err(Refusal::LastCommit)
 }
 
 /// Read a KV image to its count and root.

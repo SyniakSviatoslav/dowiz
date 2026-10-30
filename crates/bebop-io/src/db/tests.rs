@@ -151,26 +151,27 @@ fn staged_commits_are_visible_at_once_and_durable_after_flush() {
     snapshot_is_the_writer(&db);
     assert_eq!(db.flush(Durability::Data).unwrap().get(), d0.get() + 3);
     assert_eq!(db.durable().get(), d0.get() + 3);
-    let dev = db.into_device();
+    let dev = db.into_device().unwrap();
     let again = Db::open(dev, Options::default()).unwrap();
     assert_eq!(again.begin_read().get(&[b'g', 2]).unwrap().unwrap(), &[2u8][..]);
 }
 
 // ── T-ES-11 ──
 
+/// W-ES-P19b: writers are optimistic -- a second one is never `WriterBusy`, and a panic in a
+/// transaction's body poisons nothing (its batch was private). `occ_tests.rs` has the rest.
 #[test]
-fn t_es_11_in_process_a_second_writer_is_busy_and_a_panic_poisons() {
+fn t_es_11_in_process_a_second_writer_opens_and_a_panic_in_a_body_poisons_nothing() {
     let db = seeded(Detached, Durability::None);
     let w1 = db.begin_write().unwrap();
-    assert!(matches!(db.begin_write(), Err(Refusal::WriterBusy)));
+    assert!(db.begin_write().is_ok(), "any number of writers may be open");
     drop(w1);
-    assert!(db.begin_write().is_ok());
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _w = db.begin_write().unwrap();
         panic!("a panic inside a write transaction");
     }));
     assert!(r.is_err());
-    assert!(matches!(db.begin_write(), Err(Refusal::Poisoned)));
+    assert!(db.begin_write().is_ok(), "nothing was touched: nothing to poison");
     assert_eq!(db.begin_read().get(b"a").unwrap().unwrap(), &b"1"[..], "reads go on");
     let db = db.reopen().unwrap();
     assert!(db.begin_write().is_ok());

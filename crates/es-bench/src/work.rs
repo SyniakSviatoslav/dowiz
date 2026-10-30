@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::data::*;
-use crate::engine::{Engine, W};
+use crate::engine::{Engine, Sync, W};
 
 pub struct Cfg {
     pub n: u64,
@@ -65,21 +65,21 @@ pub fn run<E: Engine>(c: &Cfg) -> Vec<(String, u64)> {
         let mut has = None;
         for _ in 0..c.reps {
             let t0 = t();
-            let mut db = E::open(&dir, false);
+            let mut db = E::open(&dir, Sync::None);
             vo.push(us(t0));
             let t1 = t();
             has = db.verify();
             vv.push(us(t1) / 1000.0);
             assert_ne!(has, Some(false), "{name}: verify failed on its own image");
         }
-        res("open", name, "us", stats(vo), &format!("{tag}; warm page cache; bebop's open = KvIn::open = full crc"));
+        res("open", name, "us", stats(vo), &format!("{tag}; warm page cache; bebop's open = recover (the last commit's anchor) + lazy open, no crc; its verify = the full crc"));
         match has {
             Some(_) => res("verify", name, "ms", stats(vv), &format!("{tag}; the engine's full integrity check")),
             None => one("verify", name, "-", 0.0, "the engine offers no integrity check"),
         }
     }
 
-    let db = E::open(&dir, false);
+    let db = E::open(&dir, Sync::None);
     if c.want("get_hot") {
         let ks = lookups(c.n, HOT_GETS, 7);
         let acc = db.get_many(&ks); // warm
@@ -114,7 +114,7 @@ pub fn run<E: Engine>(c: &Cfg) -> Vec<(String, u64)> {
         for _ in 0..c.reps {
             evicted &= evict_dir(&dir);
             let t0 = t();
-            let db = E::open(&dir, false);
+            let db = E::open(&dir, Sync::None);
             acc = db.get_many(&ks);
             v.push(us(t0) / 1000.0);
         }
@@ -127,14 +127,16 @@ pub fn run<E: Engine>(c: &Cfg) -> Vec<(String, u64)> {
     if c.want("put") || c.want("compact") {
         let vals: Vec<Vec<u8>> = order[..k].iter().map(|&i| val(i, c.vs, 1)).collect();
         let keys: Vec<Vec<u8>> = order[..k].iter().map(|&i| key(i)).collect();
-        let (mut v, mut vc, mut note, mut cnote) = (vec![], vec![], String::new(), String::new());
+        let (mut v, mut vc, mut vk, mut note, mut cnote) = (vec![], vec![], vec![], String::new(), String::new());
         for _ in 0..c.reps {
             drop(fresh::<E>(&dir, &e));
-            let mut db = E::open(&dir, false);
+            let mut db = E::open(&dir, Sync::None);
             let t0 = t();
             for (ks, vs) in keys.chunks(BATCH).zip(vals.chunks(BATCH)) {
                 let ops: Vec<W> = ks.iter().zip(vs).map(|(a, b)| W::Put(a, b)).collect();
+                let t1 = t();
                 db.commit(&ops);
+                vk.push(us(t1) / 1000.0);
             }
             v.push(us(t0) / k as f64);
             note = db.note();
@@ -145,14 +147,25 @@ pub fn run<E: Engine>(c: &Cfg) -> Vec<(String, u64)> {
             cnote = format!("{what}; bytes {before} -> {}", dir_bytes(&dir));
         }
         res("put", name, "us/put", stats(v), &format!("{tag}; {k} overwrites, {BATCH} per commit, UNSYNCED; {note}"));
+        // W-ES-P8E: every commit of the put row on its own. `max` is the longest pause (bebop4:
+        // the dead-ratio compaction, when one fired -- the note says how many), `mean` what a
+        // commit costs with the pauses folded in, `med` what it costs without.
+        res("put_commit", name, "ms/commit", stats(vk), &format!("{tag}; the put row's {} commits each; max = the longest pause; {note}", k.div_ceil(BATCH)));
         res("compact", name, "ms", stats(vc), &format!("{tag}; after the put row; {cnote}"));
     }
-    if c.want("put_durable") {
+    // One put per commit, `DURABLE_COMMITS` commits per repetition: `put_durable` synced on every
+    // commit, `put_normal` (W-ES-P8E) torn-safe with the sync deferred to a checkpoint -- the
+    // mode SQLite is compared in (`synchronous=NORMAL`, R-EMBED-STORE §12.1). The mean carries
+    // the checkpoints the median hides.
+    for (row, sync) in [("put_durable", Sync::Full), ("put_normal", Sync::Normal)] {
+        if !c.want(row) {
+            continue;
+        }
         let mut v = vec![];
         let mut note = String::new();
         for r in 0..c.reps {
             drop(fresh::<E>(&dir, &e));
-            let mut db = E::open(&dir, true);
+            let mut db = E::open(&dir, sync);
             for j in 0..DURABLE_COMMITS {
                 let i = order[j];
                 let (kk, vv) = (key(i), val(i, c.vs, 2 + r as u64));
@@ -162,7 +175,8 @@ pub fn run<E: Engine>(c: &Cfg) -> Vec<(String, u64)> {
             }
             note = db.note();
         }
-        res("put_durable", name, "ms/commit", stats(v), &format!("{tag}; 1 put per commit, synced (proot: fsync is not representative); {note}"));
+        let how = if sync == Sync::Full { "synced (proot: fsync is not representative)" } else { "NORMAL: torn-safe, synced at a checkpoint (every 64th commit)" };
+        res(row, name, "ms/commit", stats(v), &format!("{tag}; 1 put per commit, {how}; {note}"));
     }
     if c.want("delete") {
         let keys: Vec<Vec<u8>> = order[..k].iter().map(|&i| key(i)).collect();
@@ -170,7 +184,7 @@ pub fn run<E: Engine>(c: &Cfg) -> Vec<(String, u64)> {
         let mut note = String::new();
         for _ in 0..c.reps {
             drop(fresh::<E>(&dir, &e));
-            let mut db = E::open(&dir, false);
+            let mut db = E::open(&dir, Sync::None);
             let t0 = t();
             for ks in keys.chunks(BATCH) {
                 let ops: Vec<W> = ks.iter().map(|a| W::Del(a)).collect();

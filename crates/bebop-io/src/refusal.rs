@@ -48,8 +48,13 @@ pub enum Refusal {
     Limit { what: &'static str, got: i64, max: i64 },
     TooSmall { bytes: usize, floor: usize },
     // ── concurrency and lifecycle ──
-    /// A write transaction is already open on this `Db` (in this process).
+    /// A write transaction is already open on this `Db` (in this process). Since W-ES-P19b
+    /// writers are optimistic and this is never returned in-process; kept for P20's lock path.
     WriterBusy,
+    /// W-ES-P19b: the transaction read a key (or a range) that commit `with` wrote after the
+    /// transaction's base generation: the two sections disagree on their overlap
+    /// (`bebop_kv::glue`, the default resolver). Retry re-runs the closure (`Db::write`).
+    Conflict { with: i64 },
     /// Another handle (another process) holds the store's lock; `by` = its pid, when readable.
     Locked { by: Option<u32> },
     /// An earlier write or barrier failed, or a write transaction panicked: nothing more is

@@ -43,6 +43,7 @@ pub mod iter;
 pub mod kvin;
 mod node;
 pub mod read;
+mod rebalance;
 pub mod write;
 
 pub use build::{migrate_to_tree, stage_build, tree_bytes_fit};

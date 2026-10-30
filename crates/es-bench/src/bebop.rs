@@ -4,10 +4,13 @@
 //! `remove_many`, `compacted_bytes_fit`), `iodev::{Writer, FileDevice, Durability}` (W-ES-P2's
 //! durable delta commit), `kv::zc::KvIn` over a `View`.
 //!
-//! READ PATH: the file is mmapped (MAP_SHARED) once; `open` runs `KvIn::open` over it, which IS
-//! bebop's verify-on-open (the crc of the root, the four arrays and every delta record), and keeps
-//! the `Checked` it mints. A read transaction is `KvIn::reopen(View, Checked)`: O(1) shape checks,
-//! the delta chain walked again, no crc; values come back borrowed from the map.
+//! READ PATH: the file is mmapped (MAP_SHARED) once; `open` (W-ES-P10's row, wired by P8E) is
+//! `sim::recover` over the map -- the superblock pick and the ANCHOR of the last commit, FORMAT §7,
+//! what `Db::open` with `Verify::Anchor` proves -- then `KvIn::open_lazy`: the shape and the chain
+//! walk, no crc, the key order trusted. The `verify` row is `KvIn::open` (the crc of the root, the
+//! four arrays and every delta record), which minted the `Checked` before P10. A read transaction
+//! is `KvIn::reopen(View, Checked)`: O(1) shape checks, the delta chain walked again, no crc;
+//! values come back borrowed from the map.
 //!
 //! WRITE PATH: `Writer::commit_delta(ops, Durability)` -- the crate's protocol v2 (two barriers
 //! under `Data`, the same writes and none under `None`), over a `FileDevice` holding
@@ -20,13 +23,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use bebop_store::iodev::{Durability, FileDevice, Writer};
+use bebop_store::sim::recover;
 use bebop_store::kv::delta::{Appended, Op};
 use bebop_store::kv::zc::{Checked, KvIn};
 use bebop_store::kv::Kv;
 use bebop_store::{View, PARTTAB_CELLS};
 
 use crate::data::{acc_of, write_atomic, Mmap};
-use crate::engine::{Engine, W};
+use crate::engine::{Engine, Sync, W};
 
 /// The largest image `compacted_bytes_fit` may produce here.
 const MAX_IMAGE: usize = 1 << 30;
@@ -34,7 +38,7 @@ const FILE: &str = "kv.bebop";
 
 pub struct Bebop {
     path: PathBuf,
-    sync: bool,
+    sync: Sync,
     map: Mmap,
     checked: Checked,
     /// The truth (`Kv`) and the writer over the file, once the first write needs them.
@@ -86,7 +90,7 @@ impl Bebop {
         let (w, kv) = self.writer.take().unwrap();
         drop(w); // its fd names the old inode, and its lock must go before the next open
         let bytes = kv.compacted_bytes_fit(MAX_IMAGE).expect("fits");
-        write_atomic(&self.path, &bytes, self.sync);
+        write_atomic(&self.path, &bytes, self.sync != Sync::None);
         self.writer = Some((self.device(), kv));
         self.map = Mmap::open(&self.path); // a new inode: the old map still shows the old file
         self.compactions += 1;
@@ -104,14 +108,15 @@ impl Engine for Bebop {
     fn load(dir: &Path, entries: &[(Vec<u8>, Vec<u8>)]) -> Self {
         fs::create_dir_all(dir).unwrap();
         write_atomic(&dir.join(FILE), &image(entries), true);
-        Self::open(dir, true)
+        Self::open(dir, Sync::Full)
     }
 
-    fn open(dir: &Path, durable: bool) -> Self {
+    fn open(dir: &Path, sync: Sync) -> Self {
         let path = dir.join(FILE);
         let map = Mmap::open(&path);
-        let checked = KvIn::open(View::new(map.bytes())).expect("verify on open").checked();
-        Bebop { path, sync: durable, map, checked, writer: None, deltas: 0, compactions: 0 }
+        recover(&View::new(map.bytes())).expect("recover: the last commit's anchor");
+        let checked = KvIn::open_lazy(View::new(map.bytes())).expect("lazy open").checked();
+        Bebop { path, sync, map, checked, writer: None, deltas: 0, compactions: 0 }
     }
 
     fn get_many(&self, keys: &[Vec<u8>]) -> u64 {
@@ -131,7 +136,12 @@ impl Engine for Bebop {
     }
 
     fn commit(&mut self, ops: &[W]) {
-        let d = if self.sync { Durability::Data } else { Durability::None };
+        // v3 has no checkpoint batching: `Writer::flush` treats `Normal` as `Data` (P11).
+        let d = match self.sync {
+            Sync::None => Durability::None,
+            Sync::Normal => Durability::Normal,
+            Sync::Full => Durability::Data,
+        };
         let bops: Vec<Op> = ops.iter().map(|o| match *o {
             W::Put(k, v) => Op::Put(s(k), v),
             W::Del(k) => Op::Remove(s(k)),

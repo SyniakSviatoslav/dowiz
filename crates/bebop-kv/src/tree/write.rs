@@ -5,13 +5,15 @@
 //! so the new node links to it -- shared, not copied. Allocation is post-order (values, then
 //! leaves, then nodes, then the root last), so every ref is strictly backward by construction.
 //!
-//! Shape rules: a node over the fanout splits into `ceil(m/B)` EVEN pieces; a rewritten node under
-//! `max(B/4, 2)` merges with a neighbour (which is rewritten too); an empty one is dropped; the root
-//! collapses while it has one child and grows a level while it has more than B.
+//! Shape rules (`rebalance.rs`): a node over the fanout splits into `ceil(m/B)` EVEN pieces; a
+//! rewritten node under `max(B/4, 2)` merges with a neighbour (which is rewritten too), or, when
+//! its siblings all emptied, with a cousin; an empty one is dropped; the root collapses while it
+//! has one child and grows a level while it has more than B.
 
 use alloc::vec::Vec;
 
-use super::node::{items, node_at, ref_at};
+use super::node::{node_at, ref_at};
+use super::rebalance::Slot;
 use super::{TreeError, DIGEST_KV4_LEAF, DIGEST_KV4_NODE, DIGEST_KV4_VAL, KIND_LEAF, KIND_NODE, MAX_FANOUT, MAX_TREE_DEPTH, MIN_FANOUT, ROOT_V4, VERSION_TREE};
 use crate::delta::KeyOp;
 use crate::{Store, StoreError, Tx, DIGEST_KV_ROOT};
@@ -46,14 +48,11 @@ impl From<TreeError> for WriteError {
     }
 }
 
-/// (first key, absolute address): one slot of a node about to be written.
-pub(crate) type Item = (Vec<u8>, usize);
+pub(crate) mod key;
+pub(crate) use key::{slots, Key, KeyBytes};
 
-/// A child slot during a rebuild: untouched (kept by address) or rewritten (its new items).
-enum Slot {
-    Old(Vec<u8>, usize),
-    New(Vec<Item>),
-}
+/// (first key by reference, absolute address): one slot of a node about to be written.
+pub(crate) type Item<'o> = (Key<'o>, usize);
 
 pub(crate) struct W<'s> {
     pub st: &'s mut Store,
@@ -83,7 +82,7 @@ fn write_packed(st: &mut Store, obj: usize, at: usize, bytes: &[u8]) {
 }
 
 /// `v` cut into `ceil(len/b)` pieces whose sizes differ by at most one.
-pub(crate) fn split_even(v: Vec<Item>, b: usize) -> Vec<Vec<Item>> {
+pub(crate) fn split_even<T>(v: Vec<T>, b: usize) -> Vec<Vec<T>> {
     let k = v.len().div_ceil(b).max(1);
     let (base, rem) = (v.len() / k, v.len() % k);
     let mut it = v.into_iter();
@@ -99,21 +98,26 @@ impl W<'_> {
         Ok(obj)
     }
 
-    /// One node from its slots (refs to objects already written: backward).
-    pub fn write_node(&mut self, its: &[Item], leaf: bool) -> Result<usize, WriteError> {
+    /// One node from its slots (refs to objects already written: backward). The keys are
+    /// copied ONCE, into the node's key area (`KeyBytes`).
+    pub fn write_node<KB: KeyBytes>(&mut self, its: &[(KB, usize)], leaf: bool) -> Result<usize, WriteError> {
         let m = its.len();
-        let keys: Vec<u8> = its.iter().flat_map(|(k, _)| k.iter().copied()).collect();
+        let mut keys: Vec<u8> = Vec::with_capacity(m * 16);
+        let mut lens = Vec::with_capacity(m);
+        for (k, _) in its {
+            lens.push(k.push_to(self.st, &mut keys));
+        }
         let len = 1 + 2 * m + keys.len().div_ceil(8);
         let (dig, kind) = if leaf { (DIGEST_KV4_LEAF, KIND_LEAF) } else { (DIGEST_KV4_NODE, KIND_NODE) };
         let obj = self.st.alloc(&mut self.tx, len as i64, dig)?;
         self.st.put_cell(obj, 0, ((kind << 56) | m as u64) as i64);
         let mut koff = 0usize;
-        for (i, (k, a)) in its.iter().enumerate() {
-            let kc = ((koff as i64) << 16) | k.len() as i64;
+        for (i, ((_, a), kl)) in its.iter().zip(lens).enumerate() {
+            let kc = ((koff as i64) << 16) | kl as i64;
             let (kcell, rcell) = if leaf { (1 + 2 * i, 2 + 2 * i) } else { (2 + 2 * i, 1 + 2 * i) };
             self.st.put_cell(obj, kcell, kc);
             self.st.link(obj, rcell, *a);
-            koff += k.len();
+            koff += kl;
         }
         write_packed(self.st, obj, 1 + 2 * m, &keys);
         self.st.seal(obj);
@@ -126,22 +130,22 @@ impl W<'_> {
 
     /// A leaf's entries with the ops merged in: a put writes its value and overwrites or inserts,
     /// a remove deletes (a remove of an absent key changes nothing).
-    pub fn leaf_merge(&mut self, old: Vec<Item>, ops: &[KeyOp]) -> Result<Vec<Item>, WriteError> {
+    pub fn leaf_merge<'o>(&mut self, old: Vec<Item<'o>>, ops: &'o [KeyOp<'o>]) -> Result<Vec<Item<'o>>, WriteError> {
         let mut out = Vec::with_capacity(old.len() + ops.len());
         let mut it = old.into_iter().peekable();
         for op in ops {
             let k = key_of(op);
-            while let Some(e) = it.next_if(|(ok, _)| ok.as_slice() < k) {
+            while let Some(e) = it.next_if(|(ok, _)| ok.cmp(self.st, k) == core::cmp::Ordering::Less) {
                 out.push(e);
             }
-            let hit = it.next_if(|(ok, _)| ok.as_slice() == k);
+            let hit = it.next_if(|(ok, _)| ok.cmp(self.st, k) == core::cmp::Ordering::Equal);
             if let Some((_, v)) = &hit {
                 self.kill(*v);
             }
             match op {
                 KeyOp::Put(_, v) => {
                     let a = self.write_val(v)?;
-                    out.push((k.to_vec(), a));
+                    out.push((Key::Op(k), a));
                     self.dn += i64::from(hit.is_none());
                 }
                 KeyOp::Remove(_) => self.dn -= i64::from(hit.is_some()),
@@ -151,20 +155,31 @@ impl W<'_> {
         Ok(out)
     }
 
-    /// The new slots of the node at `obj` (`level` 1 = leaf) with `ops` applied, NOT yet written.
-    pub fn apply(&mut self, obj: usize, level: usize, ops: &[KeyOp]) -> Result<Vec<Item>, WriteError> {
+    /// The top node's new slots with `ops` applied, and their level: `depth`, or lower when the
+    /// whole tree shrank to one under-minimum node (`Slot::Under`), which `finish` collapses.
+    pub fn apply_top<'o>(&mut self, top: usize, depth: usize, ops: &'o [KeyOp<'o>]) -> Result<(Vec<Item<'o>>, usize), WriteError> {
+        match self.apply(top, depth, ops)? {
+            Slot::New(its) => Ok((its, depth)),
+            Slot::Under(its, level) => Ok((its, level)),
+            Slot::Old(..) => Err(WriteError::Tree(TreeError::Root { why: "the top came back untouched" })),
+        }
+    }
+
+    /// The new slots of the node at `obj` (`level` 1 = leaf) with `ops` applied, NOT yet written:
+    /// `Slot::New`, or `Slot::Under` when what is left is too small to be a node (`rebalance.rs`).
+    fn apply<'o>(&mut self, obj: usize, level: usize, ops: &'o [KeyOp<'o>]) -> Result<Slot<'o>, WriteError> {
         let nd = node_at(&*self.st, obj, level == 1)?;
-        let old = items(&*self.st, &nd)?;
+        let old = slots(self.st, &nd)?;
         self.kill(obj);
         if level == 1 {
-            return self.leaf_merge(old, ops);
+            return Ok(Slot::New(self.leaf_merge(old, ops)?));
         }
         // Child i takes the ops below separator i+1; child 0 also takes every op below its own.
         let mut cuts = Vec::with_capacity(old.len());
         let mut rest = ops;
         for i in 0..old.len() {
             let cut = match old.get(i + 1) {
-                Some((nk, _)) => rest.partition_point(|o| key_of(o) < nk.as_slice()),
+                Some((nk, _)) => rest.partition_point(|o| nk.cmp(self.st, key_of(o)) == core::cmp::Ordering::Greater),
                 None => rest.len(),
             };
             let (mine, tail) = rest.split_at(cut);
@@ -173,62 +188,14 @@ impl W<'_> {
         }
         let mut slots = Vec::with_capacity(old.len());
         for ((k, child), mine) in old.into_iter().zip(cuts) {
-            slots.push(if mine.is_empty() { Slot::Old(k, child) } else { Slot::New(self.apply(child, level - 1, mine)?) });
+            slots.push(if mine.is_empty() { Slot::Old(k, child) } else { self.apply(child, level - 1, mine)? });
         }
         self.rebalance(slots, level - 1)
     }
 
-    fn open_slot(&mut self, s: Slot, leaf: bool) -> Result<Vec<Item>, WriteError> {
-        match s {
-            Slot::New(v) => Ok(v),
-            Slot::Old(_, a) => {
-                let nd = node_at(&*self.st, a, leaf)?;
-                self.kill(a);
-                Ok(items(&*self.st, &nd)?)
-            }
-        }
-    }
-
-    /// Merge each small rewritten child into a neighbour, then write every rewritten child (split
-    /// evenly when over the fanout). Returns the parent's new slots.
-    fn rebalance(&mut self, mut slots: Vec<Slot>, child_level: usize) -> Result<Vec<Item>, WriteError> {
-        let leaf = child_level == 1;
-        let min = (self.b / 4).max(2);
-        slots.retain(|s| !matches!(s, Slot::New(v) if v.is_empty()));
-        let mut i = 0;
-        while i < slots.len() {
-            let small = matches!(slots.get(i), Some(Slot::New(v)) if v.len() < min);
-            if !small || slots.len() < 2 {
-                i += 1;
-                continue;
-            }
-            let a = i.saturating_sub(1);
-            let right = slots.remove(a + 1);
-            let left = slots.remove(a);
-            let mut merged = self.open_slot(left, leaf)?;
-            merged.extend(self.open_slot(right, leaf)?);
-            slots.insert(a, Slot::New(merged));
-            i = a;
-        }
-        let mut out = Vec::with_capacity(slots.len());
-        for s in slots {
-            match s {
-                Slot::Old(k, a) => out.push((k, a)),
-                Slot::New(v) => {
-                    for piece in split_even(v, self.b) {
-                        let first = piece.first().map(|(k, _)| k.clone()).unwrap_or_default();
-                        let a = self.write_node(&piece, leaf)?;
-                        out.push((first, a));
-                    }
-                }
-            }
-        }
-        Ok(out)
-    }
-
     /// The root from the top level's slots: grow while over the fanout, collapse one-child chains.
     /// Returns (top node, DEPTH); (0, 0) is the empty map.
-    pub fn finish(&mut self, mut its: Vec<Item>, mut level: usize) -> Result<(usize, usize), WriteError> {
+    pub fn finish<KB: KeyBytes>(&mut self, mut its: Vec<(KB, usize)>, mut level: usize) -> Result<(usize, usize), WriteError> {
         loop {
             if its.is_empty() {
                 return Ok((0, 0));
@@ -239,7 +206,7 @@ impl W<'_> {
             if its.len() > self.b {
                 let mut up = Vec::new();
                 for piece in split_even(its, self.b) {
-                    let first = piece.first().map(|(k, _)| k.clone()).unwrap_or_default();
+                    let first = piece.first().map(|(k, _)| k.clone()).ok_or(WriteError::Tree(TreeError::Root { why: "an empty piece" }))?;
                     up.push((first, self.write_node(&piece, level == 1)?));
                 }
                 its = up;

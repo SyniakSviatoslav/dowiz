@@ -1,5 +1,5 @@
 //! LMDB adapter through heed. One named database of raw bytes. Durable = default env flags
-//! (fsync at every commit), unsynced = `NO_SYNC`. Reads: one `read_txn` per batch, values
+//! (fsync at every commit), unsynced = normal = `NO_SYNC` (ACI kept without `WRITEMAP`). Reads: one `read_txn` per batch, values
 //! borrowed from the map. Compaction: LMDB has none in place (freed pages are reused, the file
 //! never shrinks); the only way to give space back is `copy_to_path(.., Compact)` and swapping
 //! the file, which is what `compact` does and says. Verify: LMDB offers no integrity check.
@@ -10,22 +10,27 @@ use heed::types::Bytes;
 use heed::{CompactionOption, Database, Env, EnvFlags, EnvOpenOptions};
 
 use crate::data::acc_of;
-use crate::engine::{Engine, W};
+use crate::engine::{Engine, Sync, W};
 
-const MAP: usize = 4 << 30;
+/// A reservation, not memory. 1 GiB: 1e6 entries of 16 + 256 bytes are ~0.3 GB with LMDB's
+/// page overhead, and 4 GiB refused to map under the `ulimit -v 2500000` every scaling run on
+/// this box carries (W-ES-P8E: `Io(Os { code: 12, kind: OutOfMemory })` at env open).
+const MAP: usize = 1 << 30;
 
 pub struct Lmdb {
     dir: PathBuf,
     /// `None` only inside `compact`, between closing the old file and opening the new one.
     env: Option<Env>,
     db: Database<Bytes, Bytes>,
-    durable: bool,
+    sync: Sync,
 }
 
-fn env_open(dir: &Path, durable: bool) -> Env {
+fn env_open(dir: &Path, sync: Sync) -> Env {
     let mut o = EnvOpenOptions::new();
     o.map_size(MAP).max_dbs(1);
-    if !durable {
+    // `NO_SYNC` without `WRITEMAP` keeps ACI and loses only D (the LMDB docs): it is both the
+    // unsynced and the NORMAL mode here.
+    if sync != Sync::Full {
         unsafe { o.flags(EnvFlags::NO_SYNC) };
     }
     unsafe { o.open(dir) }.unwrap()
@@ -42,7 +47,7 @@ impl Engine for Lmdb {
 
     fn load(dir: &Path, entries: &[(Vec<u8>, Vec<u8>)]) -> Self {
         fs::create_dir_all(dir).unwrap();
-        let env = env_open(dir, true);
+        let env = env_open(dir, Sync::Full);
         let mut w = env.write_txn().unwrap();
         let db: Database<Bytes, Bytes> = env.create_database(&mut w, Some("kv")).unwrap();
         for (k, v) in entries {
@@ -50,15 +55,15 @@ impl Engine for Lmdb {
         }
         w.commit().unwrap();
         env.prepare_for_closing().wait();
-        Self::open(dir, true)
+        Self::open(dir, Sync::Full)
     }
 
-    fn open(dir: &Path, durable: bool) -> Self {
-        let env = env_open(dir, durable);
+    fn open(dir: &Path, sync: Sync) -> Self {
+        let env = env_open(dir, sync);
         let r = env.read_txn().unwrap();
         let db = env.open_database(&r, Some("kv")).unwrap().expect("kv db");
         r.commit().unwrap();
-        Lmdb { dir: dir.to_path_buf(), env: Some(env), db, durable }
+        Lmdb { dir: dir.to_path_buf(), env: Some(env), db, sync }
     }
 
     fn get_many(&self, keys: &[Vec<u8>]) -> u64 {
@@ -97,7 +102,7 @@ impl Engine for Lmdb {
         self.env().copy_to_path(&tmp, CompactionOption::Enabled).unwrap();
         self.env.take().unwrap().prepare_for_closing().wait();
         fs::rename(&tmp, self.dir.join("data.mdb")).unwrap();
-        *self = Self::open(&self.dir.clone(), self.durable);
+        *self = Self::open(&self.dir.clone(), self.sync);
         "copy_to_path(Compact) + close + rename over data.mdb + reopen".into()
     }
 

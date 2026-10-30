@@ -7,7 +7,7 @@ use bebop_store::kv::Kv;
 use bebop_store::Store;
 use es_bench::bebop::Bebop;
 use es_bench::data::{acc_of, entries, key, val};
-use es_bench::engine::{Engine, W};
+use es_bench::engine::{Engine, Sync, W};
 
 fn on_disk(dir: &std::path::Path) -> Vec<(String, Vec<u8>)> {
     let st = Store::from_bytes(&std::fs::read(dir.join("kv.bebop")).unwrap());
@@ -18,7 +18,7 @@ fn exercise(durable: bool) {
     let dir = std::env::temp_dir().join(format!("es-bench-file-{}-{durable}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     drop(Bebop::load(&dir, &entries(500, 64)));
-    let mut db = Bebop::open(&dir, durable);
+    let mut db = Bebop::open(&dir, Sync::durable(durable));
     for round in 0..40u64 {
         let ks: Vec<Vec<u8>> = (0..8).map(|j| key((round * 37 + j * 11) % 700)).collect();
         let vs: Vec<Vec<u8>> = (0..8).map(|j| val(round * 8 + j, 64, round)).collect();
@@ -31,7 +31,7 @@ fn exercise(durable: bool) {
         let truth = db.truth();
         assert_eq!(on_disk(&dir), truth, "round {round}: file != adapter truth ({})", db.note());
         // and the adapter's own read path, freshly opened (verify-on-open) and on the live handle
-        let fresh = Bebop::open(&dir, durable);
+        let fresh = Bebop::open(&dir, Sync::durable(durable));
         let want = truth.iter().map(|(_, v)| acc_of(v)).fold(0u64, u64::wrapping_add);
         let all: Vec<Vec<u8>> = truth.iter().map(|(k, _)| k.as_bytes().to_vec()).collect();
         assert_eq!(fresh.get_many(&all), want, "round {round}: fresh open reads other values");

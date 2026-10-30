@@ -321,20 +321,24 @@ impl Store {
             w.copy_from_slice(&bytes[i * 8..i * 8 + 8]);
             cells.push(i64::from_le_bytes(w));
         }
+        Self::from_cells(cells)
+    }
 
+    /// `from_bytes` for cells already decoded (a `Device::read_cells`, W-ES-P10): the same
+    /// padding rule, no bytes round trip. Measured 2026-10-30 (docs/measurements/B4-LAZY-OPEN):
+    /// `Db::open_path` at 1e5 commits spent 20 of its 30 ms copying, none of it verifying.
+    pub fn from_cells(mut cells: Vec<i64>) -> Self {
         // The live superblock names both the arena's end (cell 4, an ABSOLUTE
         // cell index) and its capacity (cell 12, a count of cells from ARENA).
         // Pick the valid one with the higher generation, the same rule every
-        // reader uses.
+        // reader uses. (No index site: `c` reads 0 past the end, the format's null.)
+        let c = |i: usize| cells.get(i).copied().unwrap_or(0);
         let mut best: Option<(i64, i64, i64)> = None; // (generation, arena_used, capacity)
         for at in [SB_A, SB_B] {
-            if at + 15 < cells.len()
-                && cells[at] == MAGIC
-                && crc32_cells(&cells, at, 15) as i64 == cells[at + 15]
-            {
-                let gen = cells[at + 2];
+            if at + 15 < cells.len() && c(at) == MAGIC && crc32_cells(&cells, at, 15) as i64 == c(at + 15) {
+                let gen = c(at + 2);
                 if best.is_none_or(|(g, _, _)| gen > g) {
-                    best = Some((gen, cells[at + 4], cells[at + 12]));
+                    best = Some((gen, c(at + 4), c(at + 12)));
                 }
             }
         }

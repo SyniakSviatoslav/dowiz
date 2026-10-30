@@ -1,14 +1,18 @@
 //! `ReadTxn`, `WriteTxn`, `Scan` (W-ES-P3, R-EMBED-STORE §3.2-§3.4).
 //!
 //! A `ReadTxn` is SNAPSHOT isolation of one generation: it holds that generation's bytes and
-//! nothing a later commit does changes them (AC-ES-10). A `WriteTxn` is the only writer
-//! (Serializable, trivially): it reads its own writes through its `Batch` (the batch first,
-//! then the generation it started from) and touches the image only at commit. So `abort` costs
-//! nothing and changes no byte (AC-ES-12): there is nothing to undo.
+//! nothing a later commit does changes them (AC-ES-10). A `WriteTxn` (W-ES-P19b: OPTIMISTIC, any
+//! number may be open) reads its own writes through its `Batch` (the batch first, then the
+//! generation it started from), RECORDS what it read (`ReadSet`: keys, ranges, or everything)
+//! and touches the image only at commit, where the section validates the read set against every
+//! commit since its base -- a key read here and written there is `Refusal::Conflict`
+//! (SERIALIZABLE: backward validation, `bebop_kv::glue::agree`) -- then replays the batch on the
+//! CURRENT root. So `abort` costs nothing and changes no byte (AC-ES-12): there is nothing to undo.
 
+use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::ops::Bound;
-use std::sync::{Arc, MutexGuard};
+use std::sync::Arc;
 
 use bebop_kv::zc::KvIn;
 use bebop_kv::{Batch, Bytes, MergeCursor, Staged};
@@ -16,7 +20,7 @@ use bebop_kv::{Batch, Bytes, MergeCursor, Staged};
 use crate::db::{Db, Generation, Mode};
 use crate::refusal::Refusal;
 use crate::snap::{Snap, SnapImage};
-use crate::{Device, Durability, Superblock, Writer};
+use crate::{Device, Durability, Superblock};
 
 /// The bound just past every key that starts with `p`: `p` with its last byte below 0xFF
 /// incremented and the rest cut, or no bound when `p` is all 0xFF (or empty).
@@ -126,47 +130,96 @@ impl<'db> ReadTxn<'db> {
     }
 }
 
-/// The one write transaction.
+fn own(b: Bound<&[u8]>) -> Bound<Vec<u8>> {
+    match b {
+        Bound::Included(k) => Bound::Included(k.to_vec()),
+        Bound::Excluded(k) => Bound::Excluded(k.to_vec()),
+        Bound::Unbounded => Bound::Unbounded,
+    }
+}
+
+/// What a write transaction READ (W-ES-P19b): the restriction the commit section validates
+/// against every later commit's write set. A range is recorded as asked (not clipped where the
+/// iterator stopped: conservative, never unsound); `len`/`is_empty` read everything.
+#[derive(Default)]
+pub(crate) struct ReadSet {
+    pub(crate) points: Vec<Vec<u8>>,
+    pub(crate) ranges: Vec<(Bound<Vec<u8>>, Bound<Vec<u8>>)>,
+    pub(crate) all: bool,
+}
+
+impl ReadSet {
+    /// Did this read set cover `k`? (A point, a range holding it, or everything.)
+    pub(crate) fn covers(&self, k: &[u8]) -> bool {
+        self.all
+            || self.points.iter().any(|p| p == k)
+            || self.ranges.iter().any(|(lo, hi)| {
+                let above = match lo {
+                    Bound::Included(l) => k >= l.as_slice(),
+                    Bound::Excluded(l) => k > l.as_slice(),
+                    Bound::Unbounded => true,
+                };
+                let below = match hi {
+                    Bound::Included(h) => k <= h.as_slice(),
+                    Bound::Excluded(h) => k < h.as_slice(),
+                    Bound::Unbounded => true,
+                };
+                above && below
+            })
+    }
+}
+
+/// A write transaction. Any number may be open; the commit section orders them (P19b).
 pub struct WriteTxn<'db, D: Device> {
     db: &'db Db<D>,
-    writer: MutexGuard<'db, Writer<D>>,
     base: Arc<Snap>,
     batch: Batch,
+    reads: RefCell<ReadSet>,
 }
 
 impl<'db, D: Device> WriteTxn<'db, D> {
-    pub(crate) fn new(db: &'db Db<D>, writer: MutexGuard<'db, Writer<D>>, base: Arc<Snap>, batch: Batch) -> WriteTxn<'db, D> {
-        WriteTxn { db, writer, base, batch }
+    pub(crate) fn new(db: &'db Db<D>, base: Arc<Snap>, batch: Batch) -> WriteTxn<'db, D> {
+        WriteTxn { db, base, batch, reads: RefCell::new(ReadSet::default()) }
     }
 
     fn staged(&self) -> Staged<'_, SnapImage> {
         Staged::new(&self.base.kv, &self.batch)
     }
 
+    fn read_point(&self, key: &[u8]) {
+        self.reads.borrow_mut().points.push(key.to_vec());
+    }
+
     /// The value under `key` as this transaction sees it: its own writes first (AC-ES-10).
     pub fn get(&self, key: &[u8]) -> Result<Option<Bytes<'_>>, Refusal> {
+        self.read_point(key);
         Ok(self.staged().get(key)?)
     }
 
     pub fn contains(&self, key: &[u8]) -> Result<bool, Refusal> {
+        self.read_point(key);
         Ok(self.staged().contains(key)?)
     }
 
     /// The entries between the bounds as this transaction sees them, in key order.
     pub fn scan(&self, lo: Bound<&[u8]>, hi: Bound<&[u8]>) -> Result<Scan<'_>, Refusal> {
+        self.reads.borrow_mut().ranges.push((own(lo), own(hi)));
         scan_of(&self.base.kv, &self.batch, lo, hi)
     }
 
     pub fn prefix(&self, p: &[u8]) -> Result<Scan<'_>, Refusal> {
+        self.reads.borrow_mut().ranges.push((Bound::Included(p.to_vec()), prefix_end(p)));
         prefix_of(&self.base.kv, &self.batch, p)
     }
 
-    /// Entries this transaction sees.
+    /// Entries this transaction sees (reads everything: any later write conflicts).
     pub fn len(&self) -> Result<usize, Refusal> {
+        self.reads.borrow_mut().all = true;
         Ok(self.staged().len()?)
     }
 
     pub fn is_empty(&self) -> Result<bool, Refusal> {
+        self.reads.borrow_mut().all = true;
         Ok(self.staged().is_empty()?)
     }
 
@@ -176,8 +229,9 @@ impl<'db, D: Device> WriteTxn<'db, D> {
         Ok(self.batch.put(key, value)?)
     }
 
-    /// Remove `key`; `true` when this transaction saw it.
+    /// Remove `key`; `true` when this transaction saw it (an existence read: recorded).
     pub fn remove(&mut self, key: &[u8]) -> Result<bool, Refusal> {
+        self.read_point(key);
         let had = self.staged().contains(key)?;
         self.batch.remove(key)?;
         Ok(had)
@@ -203,8 +257,20 @@ impl<'db, D: Device> WriteTxn<'db, D> {
     }
 
     fn finish(self, d: Durability, mode: Mode) -> Result<Generation, Refusal> {
-        let WriteTxn { db, mut writer, base, batch } = self;
-        db.commit_txn(&mut writer, base, batch, d, mode)
+        let db = self.db;
+        let mut w = db.lock_writer()?;
+        self.finish_in(&mut w, d, mode)
+    }
+
+    /// The commit on a held writer (the section): `Db::write`'s pessimistic fallback holds it
+    /// across the whole closure, so this never locks.
+    pub(crate) fn finish_in(self, w: &mut crate::Writer<D>, d: Durability, mode: Mode) -> Result<Generation, Refusal> {
+        let WriteTxn { db, base, batch, reads } = self;
+        let g0 = base.generation().get();
+        // The base is let go BEFORE the commit: a snapshot this transaction still held would make
+        // `Snap::patched` copy every chunk the commit touches (snap/tests.rs pins it at 0).
+        drop(base);
+        db.commit_occ(w, g0, reads.into_inner(), batch, d, mode)
     }
 
     /// Drop the writes. Nothing touched the image, so nothing is undone.

@@ -43,7 +43,7 @@ pub mod format {
 /// The crc check on load, all three halves (W-CRC): the object (bebop-image), the KV
 /// (bebop-kv), the log and its mark (bebop-log).
 pub mod verify {
-    pub use bebop_image::verify::BadCrc;
+    pub use bebop_image::verify::{check_obj_in, last_commit_in, BadCrc, LastCommit};
     pub use bebop_kv::verify::KvError;
     pub use bebop_log::verify::{ChainMark, ChainScan};
     #[cfg(test)]

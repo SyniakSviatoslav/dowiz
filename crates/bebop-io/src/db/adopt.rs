@@ -6,20 +6,18 @@ use crate::refusal::Refusal;
 use crate::{Store, Writer};
 
 /// A refused torn last commit, NAMED where it can be (dowiz's `HubError::BadCrc` names the
-/// object, W-CRC): the anchor says only that `[mark, used)` changed, so walk the objects of that
-/// range and name the first whose payload fails its crc. When none does (the anchor cell itself,
-/// or a header, changed), the refusal stays `LastCommit`.
+/// object, W-CRC): the anchor says only that `[mark, used)` changed, so the objects of that range
+/// are walked and the first whose payload fails its crc is named. When none does (the anchor
+/// cell itself, or a header, changed), the refusal stays `LastCommit`. The walk is
+/// `bebop_image::verify::last_commit_in` -- THE rule of FORMAT §7 phase P2 (W-ES-P10), the one
+/// every reader of bytes applies, so this surface and the four others cannot drift apart.
 fn name_torn(bytes: &[u8], e: Refusal) -> Refusal {
-    let Refusal::LastCommit(crate::sim::Why::Anchor(crate::format::Anchor::Torn { mark, used, .. })) = e else { return e };
+    let Refusal::LastCommit(crate::sim::Why::Anchor(crate::format::Anchor::Torn { .. })) = e else { return e };
     let st = Store::from_bytes(bytes);
-    let (mut i, end) = (mark.max(0) as usize, (used.max(0) as usize).min(st.cells.len()));
-    while i < end {
-        if let Err(b) = st.check_obj(i) {
-            return Refusal::BadCrc(b);
-        }
-        i = i.saturating_add(2).saturating_add(st.obj_len(i).max(0) as usize);
+    match crate::format::pick_checked_in(&st).map(|sb| bebop_image::verify::last_commit_in(&st, &sb)) {
+        Ok(Err(bebop_image::verify::LastCommit::Object(b))) => Refusal::BadCrc(b),
+        _ => e,
     }
-    e
 }
 
 impl Db<crate::Detached> {

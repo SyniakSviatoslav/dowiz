@@ -15,6 +15,9 @@
 //!   kv4badv   kv4deep, bit 0 of the first value cell of the first non-empty value: 10.
 //!   kv4badf   kv4deep, the top node's child-0 ref made FORWARD (+5) and the node re-sealed: rule 1, 2.
 //!   kv4badd   kv4deep, the root's DEPTH claim + 1 and the root re-sealed: rule 2, 2.
+//!   kv4stale  kv4badf WITHOUT the re-anchor (W-ES-P10, FORMAT §7 phase P2): LAST_COMMIT, 41.
+//!   kv4old    kv4deep, one bit in a REACHABLE object of an OLDER commit (below the anchor's mark): 10,
+//!             and the lazy open's documented guarantee under `conformance.sh --lazy`.
 //! Structural refusals (rules 1-5 of FORMAT §9.1 v4) are NOT_A_KV (2) on every reader; a crc is 10.
 use bebop_image::Store;
 use bebop_kv::delta::KeyOp;
@@ -152,4 +155,46 @@ pub fn write(dir: &str, kv3max: &[u8], say: &dyn Fn(&str, &[u8])) {
         reseal(s, root);
         reanchor(s);
     }));
+
+    // W-ES-P10 (FORMAT §7 phase P2): the two fixtures of the LAST-COMMIT rule.
+    //   kv4stale  kv4badf WITHOUT the re-anchor: the top node re-sealed over its changed byte, so
+    //             every object checks, but the anchor was recorded over the old bytes -> 41 on every
+    //             reader (the case that got three answers before P10).
+    //   kv4old    a bit flipped in a REACHABLE object of an OLDER commit (below the anchor's mark):
+    //             the anchor still holds, so an open at Verify::Anchor succeeds and reads it, and
+    //             verify(Reachable) -- what the five conformance readers do -- names it: 10.
+    put("kv4stale", &cut(&|s| {
+        s.cells[top + 2 + 1] = 5;
+        reseal(s, top);
+    }));
+    let old = old_reachable(&base);
+    println!("kv4stale: top {top} payload cell 1 = +5, re-sealed, anchor NOT recomputed; kv4old: object {old} (below the mark) cell {} bit 0", old + 2);
+    put("kv4old", &cut(&|s| {
+        s.cells[old + 2] ^= 1;
+    }));
+}
+
+/// The first object below the live anchor's mark (an OLDER commit's) that the KV reaches: found by
+/// trying each, a bit flipped, against the native reader, which must name exactly it.
+fn old_reachable(base: &Store) -> usize {
+    use bebop_image::format::{anchor_in, Anchor, SB_ANC};
+    use bebop_kv::tree::TreeError;
+    use bebop_kv::verify::KvError;
+    let sb = base.pick().expect("a live superblock");
+    let mark = ((base.cells[sb.at + SB_ANC] as u64) >> 32) as usize;
+    assert!(mark > bebop_image::ARENA, "kv4deep's last commit must not be its first");
+    let mut o = bebop_image::ARENA;
+    while o < mark {
+        let len = base.obj_cells(o);
+        if len > 0 {
+            let mut s = Store { cells: base.cells.clone() };
+            s.cells[o + 2] ^= 1;
+            assert!(matches!(anchor_in(&s, &sb), Anchor::Holds { .. }), "the flip at {o} must not touch the anchor");
+            if matches!(bebop_kv::Kv::load_checked(&s), Err(KvError::Tree(TreeError::BadCrc(b))) if b.obj == o) {
+                return o;
+            }
+        }
+        o += 2 + len;
+    }
+    panic!("no reachable object below the mark {mark}");
 }

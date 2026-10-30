@@ -5,7 +5,8 @@
 //! LOAD writes the entries as a fresh v4 image (`tree_compacted`, the bulk load) atomically and
 //! opens it. OPEN is `Db::open_path` (`Verify::Anchor`: recovery proves the last commit; the full
 //! check is the `verify` row). A COMMIT is one `WriteTxn`: the batch path-copied into the tree
-//! (`Writer::stage_tree`), flushed with protocol v2 (`Durability::None` unsynced, `Data` durable);
+//! (`Writer::stage_tree`), flushed with protocol v2 (`Durability::None` unsynced, `Normal` =
+//! P11's checkpoint every 64th commit, `Data` durable);
 //! a compaction happens only when the dead cells pass the live ones (`Options::tree`).
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,14 +15,14 @@ use bebop_store::iodev::{Db, Durability, FileDevice, Options, Verify};
 use bebop_store::kv::tree::{tree_compacted, FANOUT};
 
 use crate::data::{acc_of, write_atomic};
-use crate::engine::{Engine, W};
+use crate::engine::{Engine, Sync, W};
 
 const MAX_IMAGE: usize = 1 << 30;
 const FILE: &str = "kv4.bebop";
 
 pub struct Bebop4 {
     db: Db<FileDevice>,
-    sync: bool,
+    sync: Sync,
     commits: u64,
 }
 
@@ -36,13 +37,13 @@ impl Engine for Bebop4 {
         fs::create_dir_all(dir).unwrap();
         let b = tree_compacted(entries.iter().map(|(k, v)| (k.as_slice(), v.as_slice())), MAX_IMAGE, FANOUT, None).expect("v4 image");
         write_atomic(&dir.join(FILE), &b, true);
-        Self::open(dir, true)
+        Self::open(dir, Sync::Full)
     }
 
-    fn open(dir: &Path, durable: bool) -> Self {
+    fn open(dir: &Path, sync: Sync) -> Self {
         let p: PathBuf = dir.join(FILE);
         let db = Db::open_path(p.to_str().unwrap(), opts()).expect("Db::open_path");
-        Bebop4 { db, sync: durable, commits: 0 }
+        Bebop4 { db, sync, commits: 0 }
     }
 
     fn get_many(&self, keys: &[Vec<u8>]) -> u64 {
@@ -63,7 +64,11 @@ impl Engine for Bebop4 {
     }
 
     fn commit(&mut self, ops: &[W]) {
-        let d = if self.sync { Durability::Data } else { Durability::None };
+        let d = match self.sync {
+            Sync::None => Durability::None,
+            Sync::Normal => Durability::Normal,
+            Sync::Full => Durability::Data,
+        };
         let mut w = self.db.begin_write().expect("begin_write");
         for op in ops {
             match *op {

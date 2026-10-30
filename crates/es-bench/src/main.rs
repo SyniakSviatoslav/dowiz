@@ -8,7 +8,7 @@
 //!
 //! Scratch databases live under $ES_BENCH_DIR (default ./es-bench-data) and are deleted after
 //! each engine. Engines: bebop, bebop4 (v4 tree through Db), redb, lmdb, sqlite; rows: load open verify get_hot prefix
-//! get_cold put compact put_durable delete.
+//! get_cold put put_commit compact put_durable put_normal delete.
 use es_bench::{bebop, bebop4, gate, work};
 #[cfg(feature = "competitors")]
 use es_bench::{lmdb_e, redb_e, sqlite_e};

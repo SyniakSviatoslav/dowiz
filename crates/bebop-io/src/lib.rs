@@ -51,6 +51,12 @@ pub trait Device {
     fn len_cells(&self) -> io::Result<usize>;
     /// `n` cells from `off`. A cell past the end reads 0, the format's null (a trimmed image).
     fn read_cells(&self, off: usize, n: usize) -> io::Result<Vec<i64>>;
+    /// The same `n` cells from `off` as their little-endian BYTES (W-ES-P10: what a snapshot
+    /// holds, so an open that only reads decodes nothing). Default: through `read_cells`; a
+    /// device that holds bytes (`FileDevice`) hands them over directly.
+    fn read_bytes(&self, off: usize, n: usize) -> io::Result<Vec<u8>> {
+        Ok(cells_to_bytes(&self.read_cells(off, n)?))
+    }
     /// Write `cells` at `off`, growing the device if it is shorter. NOT durable until `barrier`.
     fn write_cells(&mut self, off: usize, cells: &[i64]) -> io::Result<()>;
     /// fdatasync: when this returns Ok, every write issued before it is durable. An Err means

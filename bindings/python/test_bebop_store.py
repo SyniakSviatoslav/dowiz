@@ -43,9 +43,7 @@ class StoreTest(unittest.TestCase):
                 w.put(b"k" * 65536, b"v")
             self.assertEqual((e.exception.code, e.exception.name), (44, "KEY_TOO_LONG"))
             self.assertIn("KeyTooLong", e.exception.message)
-            with self.assertRaises(bs.Refusal) as e:
-                db.write()
-            self.assertEqual(e.exception.name, "WRITER_BUSY")
+            db.write().abort()  # W-ES-P19b: a second writer opens; its commit validates
             r = db.read()
             with self.assertRaises(bs.Refusal) as e:
                 db.close()
