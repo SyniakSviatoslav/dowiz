@@ -117,7 +117,9 @@ fn a_ticked_order_is_texted_through_the_venues_own_gateway_and_nothing_personal_
     for (to, text, auth) in &got {
         assert_eq!((to.as_str(), auth.as_str()), (GUEST, want_auth.as_str()));
         assert!(text.contains(&format!("#{short}")) && text.contains("STOP"), "{text}");
-        assert!(!text.contains("Arben") && !text.contains("Futomaki") && !text.contains("900"), "nothing personal: {text}");
+        // The order's short id is random hex and can hold "900" itself: 70ba9004 reddened CI.
+        let rest = text.replace(&short, "");
+        assert!(!rest.contains("Arben") && !rest.contains("Futomaki") && !rest.contains("900"), "nothing personal: {text}");
     }
     assert!(got[0].1.contains("Confirmed") && got[1].1.contains("Ready"), "{got:?}");
     let c = card(&s, &owner);
