@@ -51,7 +51,8 @@ done
 # kv4stub is now a v4 claim that does not hold (status 2), no longer an unknown version (12).
 # W-ES-P10: kv4stale (a re-sealed object under a stale anchor: LAST_COMMIT 41 on every reader) and kv4old
 # (a corrupted object of an OLDER commit: BAD_CRC 10 on every reader, and `--lazy` below).
-FIXTURES="kv kv2 kv3 ptaway kv4stub kv3max kv3c torn ptbad empty kv0 kv4small kv4deep kv4del kv4zero kv4badn kv4badv kv4badf kv4badd kv4stale kv4old"
+# W-MG-M1: doc (a DOC root, FORMAT §9.4, root-version 5): UNKNOWN_VERSION 12 on every reader until M5.
+FIXTURES="kv kv2 kv3 ptaway kv4stub kv3max kv3c torn ptbad empty kv0 kv4small kv4deep kv4del kv4zero kv4badn kv4badv kv4badf kv4badd kv4stale kv4old doc"
 READERS="native wasm32 python bebop.bin ffi"
 SCRATCH="${CONFORMANCE_SCRATCH:-${TMPDIR:-/tmp}/conformance.$$}"
 mkdir -p "$SCRATCH"

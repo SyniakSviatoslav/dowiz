@@ -63,11 +63,12 @@ fn a_record_this_build_cannot_read_is_quarantined_and_the_log_still_answers() {
     let newest = st.follow(root, 1).expect("newest");
     // v2 packs eight payload bytes per cell after a twelve-cell header,
     // plus four more when an actor key is present (bit 0 of cell 11). This
-    // log appends without an actor, so the payload starts at twelve.
-    let at = if st.get(newest, 11) & 1 != 0 { 16 } else { 12 };
+    // log appends without an actor, so the payload starts at twelve -- and
+    // the body two cells later, behind the nonce an M0 record carries (bit 1).
+    let at = if st.get(newest, 11) & 1 != 0 { 16 } else { 12 } + crate::chain::NONCE_LEN / 8;
     let cell = st.get(newest, at);
-    // Byte 0 is the kind's LENGTH, and 255 runs off the end of a payload
-    // this short -- the framing damage a truncated write would leave.
+    // Byte 0 of the body is the kind's LENGTH, and 255 runs off the end of a
+    // payload this short -- the framing damage a truncated write would leave.
     st.cells[newest + 2 + at] = (cell & !0xFF) | 0xFF;
     // SEALED (W-CRC): see `tests::a_record_this_build_cannot_read_is_quarantined...`.
     st.seal(newest);
@@ -222,7 +223,7 @@ fn chain_check_finds_an_edit() {
         last = Some(r.id);
     }
     EvLog::set_tip_bytes(&mut fresh, &last.unwrap()).unwrap();
-    let tampered = LogImage { store: fresh, seen: crate::Seen::default() };
+    let tampered = LogImage { store: fresh, seen: crate::Seen::default(), entropy: Default::default() };
     let c = tampered.chain_check();
     assert_eq!(c.records, 5);
     assert_eq!(c.broken, 1, "an edited payload did not break its id");

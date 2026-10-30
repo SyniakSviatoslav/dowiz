@@ -22,7 +22,20 @@ fn the_hub_adopts_what_its_ledger_takes_and_holds_the_rest_by_position() {
     assert_eq!(a.merged, 1);
     assert_eq!(a.held.iter().map(|h| h.0).collect::<Vec<_>>(), vec![0, 2], "9 reserved of 5 counted, and a note");
     let last = log.since(&[0u8; 32]).unwrap();
-    assert_eq!(last.last().unwrap(), &recs[1], "written as received, byte for byte");
+    // The record arrived BARE (a pre-M0 tablet): its body is written as received, behind a
+    // nonce the hub puts in front, because the hub writes no legacy id after its first
+    // sha256 one (`adopt.rs` header). A nonced record is written verbatim -- the twin below.
+    assert!(nonced(last.last().unwrap()), "a bare record is adopted with a nonce in front: {:?}", last.last());
+    assert_eq!(rec_body(last.last().unwrap()), recs[1], "the body is written as received, byte for byte");
+    let mut other = StockLog::create_sized(64 * 1024).unwrap();
+    other.append(&StockEvent::Received { item: "rice".into(), qty: 5 }).unwrap();
+    other.append(&StockEvent::Served { item: "rice".into(), qty: 1, order_id: "p".into() }).unwrap();
+    let theirs = other.since(&[0u8; 32]).unwrap();
+    assert!(nonced(&theirs[1]));
+    let start = log.ledger_since().unwrap();
+    let (a, _) = log.adopt_from(&theirs[1..], start).unwrap();
+    assert_eq!(a.merged, 1);
+    assert_eq!(log.since(&[0u8; 32]).unwrap().last().unwrap(), &theirs[1], "a nonced record is written as received, byte for byte");
 }
 
 #[test]

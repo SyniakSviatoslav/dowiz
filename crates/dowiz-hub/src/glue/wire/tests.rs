@@ -15,7 +15,7 @@ fn one(line: &str) -> (StockLog, Tail) {
 
 /// The tail with record 0 replaced and the tip recomputed: a tablet that WROTE this.
 fn rewritten(t: &Tail, rec: &str) -> Tail {
-    let tip = crate::content_id_chained(&t.base, rec.as_bytes());
+    let tip = wire_id(&t.base, rec);
     Tail { recs: vec![rec.to_string()], tip, ..t.clone() }
 }
 
@@ -47,12 +47,49 @@ fn a_record_edited_after_it_was_chained_is_refused() {
     assert_eq!(merge(&h.to_bytes_trimmed(), &mut h, &t).unwrap().merged, 1, "the record as chained glues");
 }
 
+/// M0 ON THE WIRE. A tail written by this build carries a nonce in front of every record and
+/// is chained under sha256; it glues, and the reply echoes it by index. A tail from a tablet
+/// that chained under the legacy FNV scheme (bare JSON, no nonce) still glues -- the scheme is
+/// read off the text -- but the hub adopts it WITH a nonce, so the reply carries the record
+/// back as bytes, not an echo, and the tablet replaying that reply lands on the hub's tip.
+#[test]
+fn m0_a_nonced_tail_is_echoed_and_a_legacy_tail_comes_back_renonced() {
+    use super::super::merge::Entry;
+    let line = r#"{"k":"wasted","item":"rice","qty":1,"reason":"spoiled","by":"chef"}"#;
+    let (mut h, t) = one(line);
+    assert!(crate::stock::nonced(&t.recs[0]), "a record this build wrote carries its nonce: {}", t.recs[0]);
+    // The body is the movement with the tablet's meta (`at`, `ctx`) appended by `record`.
+    assert!(crate::stock::rec_body(&t.recs[0]).starts_with(line.trim_end_matches('}')), "{}", t.recs[0]);
+    assert_eq!(t.tip, crate::chain::chain_id(&t.base, t.recs[0].as_bytes()), "sha256 over base ‖ nonced record");
+    let r = merge(&h.to_bytes_trimmed(), &mut h, &t).unwrap();
+    assert_eq!(r.merged, 1);
+    assert!(r.entries.iter().any(|e| *e == Entry::Echo(0)), "its own record comes back as an index: {:?}", r.entries);
+
+    // The pre-M0 tablet: the same movement chained bare, by the verbatim door.
+    let mut h = hub(5000, 10);
+    let (img, base) = bootstrapped(&mut h);
+    let mut old = StockLog::load(&img).unwrap();
+    old.carry_raw(&[line]).unwrap();
+    let img = old.to_bytes_trimmed();
+    let t = tablet::tail(&img, "kitchen", &base).unwrap();
+    assert!(!crate::stock::nonced(&t.recs[0]));
+    assert_eq!(t.tip, crate::chain::legacy_id_chained(&base, line.as_bytes()), "the legacy chain, as that tablet computed it");
+    let r = merge(&h.to_bytes_trimmed(), &mut h, &t).unwrap();
+    assert_eq!(r.merged, 1, "{r:?}");
+    let back: Vec<&String> = r.entries.iter().filter_map(|e| if let Entry::Rec(s) = e { Some(s) } else { None }).collect();
+    assert!(!r.entries.contains(&Entry::Echo(0)), "not an echo: the hub's copy has a nonce the tablet's did not");
+    assert!(back.iter().any(|s| crate::stock::nonced(s) && crate::stock::rec_body(s) == line), "the record comes back renonced: {back:?}");
+    let replayed = tablet::rebase(&img, &base, false, 1, &r.entries, &r.tip).unwrap();
+    assert_eq!(StockLog::load(&replayed).unwrap().tip_id(), r.tip, "and the tablet lands on the hub's tip");
+    assert_eq!(h.events().len(), StockLog::load(&replayed).unwrap().events().len());
+}
+
 #[test]
 fn a_base_the_hub_never_held_is_refused() {
     let (mut h, t) = one(r#"{"k":"wasted","item":"rice","qty":1,"reason":"spoiled","by":"chef"}"#);
     let mut other = t.clone();
     other.base = [7u8; 32];
-    other.tip = crate::content_id_chained(&other.base, other.recs[0].as_bytes());
+    other.tip = wire_id(&other.base, &other.recs[0]);
     assert_eq!(refused(&mut h, &other), Why::NoCommonAncestor);
 }
 

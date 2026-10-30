@@ -17,6 +17,15 @@ bebop-image = { path = "../bebop-image" }
 [dev-dependencies]
 # the tests write temp files through the path API
 bebop-image = { path = "../bebop-image", features = ["std"] }
+# W-MG-M1: the REAL ML-DSA-65 seal (`doc/dsa_tests.rs`) through the `doc::Signer` /
+# `doc::Verifier` seams. DEV ONLY: dowiz-core is AGPL-3.0-or-later and never links into this
+# MIT OR Apache-2.0 library -- `cargo tree -e no-dev` must keep showing bebop-image alone.
+# Zero dependencies of its own (pure core + alloc).
+dowiz-core = { path = "../dowiz-core" }
 
 [profile.release]
 opt-level = 3
+
+# ML-DSA-65 at opt-level 0 is seconds per signature; the test seals a dozen times.
+[profile.dev.package.dowiz-core]
+opt-level = 2

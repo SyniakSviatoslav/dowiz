@@ -7,7 +7,7 @@
 
 use bebop_store::{evlog::{EvLog, Record}, Store};
 
-use crate::{content_id_chained, e_is_full, usage_of_kind};
+use crate::{chain_id, e_is_full, usage_of_kind};
 use crate::{EventKind, Hub, HubError, LogMark, Usage, DEFAULT_IMAGE_BYTES};
 
 impl Hub {
@@ -19,7 +19,7 @@ impl Hub {
     pub fn create_sized(bytes: usize) -> Result<Self, HubError> {
         let mut store = Store::create_bytes(bytes)?;
         EvLog::init_bytes(&mut store)?;
-        Ok(Hub { store, seen: Some(crate::Seen::default()) })
+        Ok(Hub { store, seen: Some(crate::Seen::default()), entropy: Default::default() })
     }
 
     /// Load an existing image. Refuses one with no valid superblock rather than
@@ -47,7 +47,7 @@ impl Hub {
         // refused (operator 2026-10-05); a broken link still refuses. `crate::quarantine`.
         // The scan's findings are kept (`crate::Seen`): `events()` reads them instead of hashing again.
         let (seen, next) = crate::chain_is_whole_seen(&store, mark)?;
-        Ok((Hub { store, seen: Some(seen) }, next))
+        Ok((Hub { store, seen: Some(seen), entropy: Default::default() }, next))
     }
 
     /// The image to persist. The caller writes this wherever the hub lives.
@@ -107,18 +107,24 @@ impl Hub {
         if idb.len() > 255 {
             return Err(HubError::OrderIdTooLong);
         }
-        // payload = [kind][id_len][id bytes][order json]
-        let mut payload = Vec::with_capacity(2 + idb.len() + order_json.len());
-        payload.push(kind as u8);
-        payload.push(idb.len() as u8);
-        payload.extend_from_slice(idb);
-        payload.extend_from_slice(order_json.as_bytes());
+        // body = [kind][id_len][id bytes][order json]; payload = nonce ‖ body (M0).
+        let mut body = Vec::with_capacity(2 + idb.len() + order_json.len());
+        body.push(kind as u8);
+        body.push(idb.len() as u8);
+        body.extend_from_slice(idb);
+        body.extend_from_slice(order_json.as_bytes());
 
+        // A v1 store has no flags cell: rebuilt as v2 first, the chain copied verbatim.
+        if EvLog::version(&self.store) < 2 {
+            self.grow()?;
+        }
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
-        // CHAINED: the id commits to the record BEFORE it, so an edit anywhere
-        // in the log breaks every id after it. See `content_id_chained`.
-        let id = content_id_chained(&prev, &payload);
-        let rec = Record { id, prev, actor_pubkey, actor_seq: seq, payload };
+        let (nonce, derived) = self.entropy.nonce(&prev, &body);
+        let payload = crate::chain::with_nonce(&nonce, &body);
+        // CHAINED: the id commits to the record BEFORE it -- sha256 over `prev ‖ payload`
+        // since M0, and the flags cell says so. See `chain.rs`.
+        let id = chain_id(&prev, &payload);
+        let rec = Record { id, prev, actor_pubkey, actor_seq: seq, flags: crate::chain::flags_for(derived), payload };
 
         // ── THE IMAGE GROWS RATHER THAN REFUSING ──
         //

@@ -1,7 +1,8 @@
 # What every reader of fixtures/kv4badf.store must answer (W-ES-P8D 2026-10-30): A REFUSAL BY NAME.
 # kv4deep with the top node's child-0 ref made FORWARD (+5) and the node RE-SEALED, so every crc holds and
 # only FORMAT §9.1 v4 rule 1 (every ref points strictly backward) refuses it. Measured native:
-# Tree(Forward { obj: 3812 }). A v4 claim that does not hold is NOT_A_KV = 2 on every reader, the word a
+# Tree(Forward { obj: 4334 }) (the top node at MIN_FANOUT since W-ES-HARD; 3812 at fanout 8). A v4 claim
+# that does not hold is NOT_A_KV = 2 on every reader, the word a
 # v3 chain that does not hold gets; bebop.bin prints -3.
 status=2
 # RE-ANCHORED (conform kv4.rs `reanchor`, 2026-10-30): the corrupted cell lies inside the live commit's

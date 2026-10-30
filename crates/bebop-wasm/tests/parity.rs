@@ -179,8 +179,8 @@ fn kv4_fixtures_read_to_what_the_rust_writer_folded() {
 #[test]
 fn kv4_corrupted_fixtures_are_refused_by_name() {
     let cases = [
-        ("kv4badn", Refusal::BadCrc { obj: 3726 }, abi::BAD_CRC),
-        ("kv4badv", Refusal::BadCrc { obj: 1210 }, abi::BAD_CRC),
+        ("kv4badn", Refusal::BadCrc { obj: 4280 }, abi::BAD_CRC),
+        ("kv4badv", Refusal::BadCrc { obj: 1240 }, abi::BAD_CRC),
         ("kv4badf", Refusal::NotAKv, abi::NOT_A_KV),
         ("kv4badd", Refusal::NotAKv, abi::NOT_A_KV),
         // W-ES-P10 (FORMAT §7 phase P2): kv4badf WITHOUT its re-anchor is the anchor's refusal, by
@@ -264,6 +264,7 @@ fn rec(n: u8, payload: &[u8]) -> Record {
         prev: [n.wrapping_sub(1); 32],
         actor_pubkey: [0u8; 32],
         actor_seq: n as u64,
+        flags: 0,
         payload: payload.to_vec(),
     }
 }

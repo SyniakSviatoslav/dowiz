@@ -39,7 +39,7 @@ fn frame(kind: u8, id: &str, body: &str) -> Vec<u8> {
 }
 
 fn record(payload: Vec<u8>) -> Record {
-    Record { id: [0u8; 32], prev: [0u8; 32], actor_pubkey: [0u8; 32], actor_seq: 7, payload }
+    Record { id: [0u8; 32], prev: [0u8; 32], actor_pubkey: [0u8; 32], actor_seq: 7, flags: 0, payload }
 }
 
 /// Base law for `log.kinds`, `log.frame` and every `log.<kind>` at v1: the frozen bytes decode to
@@ -64,7 +64,8 @@ fn every_log_kind_round_trips() {
 
         hub.append(ev.kind, &ev.order_id, &ev.order_json, seq as u64 + 1, [0u8; 32]).unwrap();
         let walked = EvLog::walk(&hub.store);
-        assert_eq!(walked[0].payload, old, "re-encoding kind {byte} is not a fixed point");
+        // The BODY is the fixed point; since M0 the stored payload carries a nonce in front of it.
+        assert_eq!(crate::body_of(&walked[0]), old.as_slice(), "re-encoding kind {byte} is not a fixed point");
         assert_eq!(decode(&walked[0]).map(|e| (e.kind, e.order_id, e.order_json)), Some((ev.kind, ev.order_id, ev.order_json)));
 
         if ev.kind != EventKind::Checkpoint {

@@ -5,11 +5,14 @@
 //!   `base` -- the hub record its branch starts from (the hub's tip at the last sync), and
 //!   `tip`  -- its own newest record's id.
 //!
-//! THE GLUING CONDITION, ON THE WIRE. A record's id is `sha256(prev ‖ payload)` (`chain.rs`), so
-//! the hub recomputes the tablet's chain from `base` over the bytes it received and must land on
-//! `tip`: one 32-byte compare proves the tail is the tablet's whole section above the overlap,
-//! untouched and complete. `base` must be in the hub's chain -- the overlap's digest is that id.
-//! Nothing else about the tablet's image is needed or sent.
+//! THE GLUING CONDITION, ON THE WIRE. A record's id is `sha256(prev ‖ payload)` (`chain.rs`, M0;
+//! a record whose text carries no nonce was written by a pre-M0 tablet under the FNV chain and
+//! is recomputed under that -- `codec::nonced`, `chain::id_for`), so the hub recomputes the
+//! tablet's chain from `base` over the bytes it received and must land on `tip`: one 32-byte
+//! compare proves the tail is the tablet's whole section above the overlap, untouched and
+//! complete. `base` must be in the hub's chain -- the overlap's digest is that id. Nothing else
+//! about the tablet's image is needed or sent. (Until 2026-10-30 this comment said sha256 while
+//! every id was FNV; `chain.rs` carries the history.)
 //!
 //! NO-TRACKING, AS A RESTRICTION MAP (G.1 item 3). A kitchen tail is stock movements and nothing
 //! else: every record must decode as a `StockEvent` and carry only keys a stock record has
@@ -25,7 +28,12 @@ use super::delta::{self, TailDelta};
 use super::walk::{to_cells, Chain};
 use super::{open, refuse, tail_events, Conflict, Glued, Refusal, Side, Why};
 use crate::stock::rights::{provisional_of, PROV_KEY};
-use crate::stock::{decode, StockEvent, StockLedger, StockLog};
+use crate::stock::{decode, nonced, rec_body, StockEvent, StockLedger, StockLog};
+
+/// The id of `rec` chained after `prev`, under the scheme its text names (`chain::id_for`).
+pub(crate) fn wire_id(prev: &[u8; 32], rec: &str) -> [u8; 32] {
+    crate::chain::id_for(prev, rec.as_bytes(), nonced(rec))
+}
 
 /// The longest record a tail may carry: a movement with every meta key is ~400 bytes.
 pub const REC_MAX: usize = 1024;
@@ -124,7 +132,7 @@ fn admit(pos: usize, rec: &str) -> Result<StockEvent, Refusal> {
     if rec.len() > REC_MAX {
         return refuse(Side::Kitchen, Why::TooLong { pos });
     }
-    let Some(keys) = keys_of(rec) else { return refuse(Side::Kitchen, Why::NotAMovement { pos }) };
+    let Some(keys) = keys_of(rec_body(rec)) else { return refuse(Side::Kitchen, Why::NotAMovement { pos }) };
     if let Some(k) = keys.into_iter().find(|k| !KEYS.contains(&k.as_str())) {
         return refuse(Side::Kitchen, Why::Tracking { pos, key: k });
     }
@@ -152,7 +160,7 @@ pub fn glue_tail(hub_bytes: &[u8], hub: &StockLog, led_h: &StockLedger, t: &Tail
     let mut prev = t.base;
     for (pos, rec) in t.recs.iter().enumerate() {
         ek.push(admit(pos, rec)?);
-        prev = crate::content_id_chained(&prev, rec.as_bytes());
+        prev = wire_id(&prev, rec);
         if rec.contains(PROV_KEY) {
             if let Some(p) = provisional_of(rec) {
                 prov.push(Conflict::Provisional { side: Side::Kitchen, ctx: p.ctx, item: p.item, order_id: p.order_id, qty: p.qty });

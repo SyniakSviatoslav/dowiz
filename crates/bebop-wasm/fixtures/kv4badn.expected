@@ -1,7 +1,8 @@
 # What every reader of fixtures/kv4badn.store must answer (W-ES-P8D 2026-10-30): A REFUSAL BY NAME.
-# kv4deep with ONE bit flipped in an INTERNAL node's key area (cell 3726 is the node; its crc was not
+# kv4deep with ONE bit flipped in an INTERNAL node's key area (object 4280, its last cell 4296, at
+# MIN_FANOUT since W-ES-HARD; it was object 3726 at fanout 8; its crc was not
 # re-sealed). The shape still parses, so a reader that skipped the crc would fold a changed separator --
-# measured native: Tree(BadCrc { obj: 3726, want: 3720567729, got: Some(292117295) }). docs/STATUS-CODES.md
+# measured native: Tree(BadCrc { obj: 4280, want: 3707678422, got: Some(273985096) }). docs/STATUS-CODES.md
 # BAD_CRC = 10 on every reader; bebop.bin: kv4.bp prints -10 (conformance.sh maps it to 10).
 status=10
 # RE-ANCHORED (conform kv4.rs `reanchor`, 2026-10-30): the corrupted cell lies inside the live commit's

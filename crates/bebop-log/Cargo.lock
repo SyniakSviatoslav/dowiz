@@ -18,4 +18,9 @@ name = "bebop-log"
 version = "0.1.0"
 dependencies = [
  "bebop-image",
+ "dowiz-core",
 ]
+
+[[package]]
+name = "dowiz-core"
+version = "0.1.0"

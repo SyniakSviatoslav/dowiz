@@ -5,7 +5,7 @@
 //!
 //!   kv4small  kv3max's 27 entries migrated (`migrate_to_tree`, FANOUT 32): ONE leaf, depth 1, and
 //!             the SAME n and fold as kv3max -- the fold law across versions.
-//!   kv4deep   150 keys put by 6 path-copy commits at fanout 8 (`commit_tree_bytes`), interleaved so
+//!   kv4deep   150 keys put by 6 path-copy commits at MIN_FANOUT (`commit_tree_bytes`), interleaved so
 //!             leaves split in the middle and the root grows: depth >= 3, values 0..40 bytes, old
 //!             subtrees shared by address with earlier generations.
 //!   kv4del    kv4deep, then 3 commits that remove 110 keys (small leaves merge, the root collapses)
@@ -21,12 +21,11 @@
 //! Structural refusals (rules 1-5 of FORMAT §9.1 v4) are NOT_A_KV (2) on every reader; a crc is 10.
 use bebop_image::Store;
 use bebop_kv::delta::KeyOp;
-use bebop_kv::tree::{commit_tree_bytes, migrate_to_tree, stage_tree, TreeIn, FANOUT};
+use bebop_kv::tree::{commit_tree_bytes, migrate_to_tree, stage_tree, TreeIn, FANOUT, MIN_FANOUT};
 
-// 8, not MIN_FANOUT (4): at 4 the writer merges on `m < B/4 = 1`, never, and leaves a REACHABLE
-// one-child node after removes that its own verify refuses (measured 2026-10-30: kv4del at B = 4 ->
-// `Node { obj: 5476, why: "a reachable node with one child" }`; handed to bebop-kv as a writer defect).
-const B: usize = 8;
+/// The smallest fanout the writer accepts: the deepest tree for 150 keys, every split and merge
+/// (W-ES-HARD: the one-child-node writer defect this was 8 to avoid was fixed by W-ES-P8E).
+const B: usize = MIN_FANOUT;
 
 fn deep_key(i: usize) -> String {
     format!("k/{:03}{}", (i * 37) % 150, if i % 7 == 0 { "/longer-tail" } else { "" })

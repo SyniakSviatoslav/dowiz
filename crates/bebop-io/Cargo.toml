@@ -11,10 +11,17 @@ bebop-image = { path = "../bebop-image", features = ["std"] }
 # NORMAL dependency: Writer::commit_delta appends through kv::delta (W-ES-P2).
 bebop-kv = { path = "../bebop-kv", features = ["std"] }
 
+# W-MG-M1: `docverify` -- the DOC root's counters from bytes (bebop-log's `doc`), behind `doc`
+# and OFF by default so the wasm32 reader's byte ratchet (bebop-wasm bytes.baseline) carries
+# nothing of it until M5 teaches that reader DOC. MIT OR Apache-2.0 like this crate.
+bebop-log = { path = "../bebop-log", optional = true }
+
 [features]
 default = []
 # W-ES-P8C: Db / Writer write and read KV v4 (the B+tree): bebop-kv's `tree`. Off by default (P8d).
 tree = ["bebop-kv/tree"]
+# W-MG-M1: `docverify::verify_doc`.
+doc = ["dep:bebop-log"]
 
 [profile.release]
 opt-level = 3

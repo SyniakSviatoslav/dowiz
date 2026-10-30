@@ -78,6 +78,8 @@ impl<D: Device> Writer<D> {
     /// this writer's device; from then on `image` is the writer's image and its generation the
     /// durable one. A failed write before the publish leaves the old device untouched (the
     /// staged one is dropped); a failed publish poisons the writer, as a failed barrier does.
+    /// At `None` the device publishes UNSYNCED (W-ES-HARD: `FileDevice` defers the fdatasync and
+    /// the directory fsync to the next barrier; `sim::crash` names what a power loss can leave).
     pub fn publish(&mut self, mut staged: D, image: Store, d: Durability) -> Result<i64, IoError> {
         if self.poisoned {
             return Err(IoError::Poisoned);

@@ -72,7 +72,7 @@ fn s1_holds_on_every_fixture_and_a_broken_one_is_refused() {
 fn a_memo_behind_its_log_is_refused() {
     let mut st = Store::from_bytes(&fixture("proj"));
     let prev = EvLog::tip(&st).unwrap();
-    let r = Record { id: [7; 32], prev, actor_pubkey: [0; 32], actor_seq: 9, payload: b"late".to_vec() };
+    let r = Record { id: [7; 32], prev, actor_pubkey: [0; 32], actor_seq: 9, flags: 0, payload: b"late".to_vec() };
     EvLog::append_tip_bytes(&mut st, &r).unwrap();
     assert_eq!(proj_view(&st.to_bytes_trimmed()), Err(STALE_MEMO));
 }

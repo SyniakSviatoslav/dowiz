@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+[package]
+name = "bebop-wasm-reader"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "The bebop image read in wasm32 under a permissive licence: open / kind / root / get / scan / log_len / log_at / verify / status_text over KV v1-v4 and EvLog v1-v2, no imports, built on bebop-image + bebop-kv + bebop-log (all MIT OR Apache-2.0)."
+
+# WHY A SECOND WASM CRATE (W-MG-MR, R-MAINGOAL-A §5.1 / §7 M5, R-MAINGOAL-B §5, 2026-10-30).
+#
+# `crates/bebop-wasm` is AGPL-3.0-or-later and is the module the Worker links; its `bytes.baseline`
+# (48501) is a ratchet nobody may raise, and its exports read an image to ONE number. The goal
+# ("readable without the library", R-EMBED-STORE §12.2) needs a reader a stranger may embed in a
+# tool without taking the AGPL, and an ABI a stranger can USE: the entries, the records, a verify.
+# So this crate is that reader, under the library's own licence. It depends on nothing that is not
+# MIT OR Apache-2.0 and nothing outside the three format crates: `cargo tree -e no-dev` lists
+# bebop-crc, bebop-image, bebop-kv, bebop-log and this one.
+#
+# It does NOT change bebop-wasm, is not linked by the Worker, and has its own `bytes.baseline`
+# (tools/verify/build.sh): a ratchet of its own, never bebop-wasm's.
+#
+# The ABI is `src/abi.rs`: the host owns the image's lifetime, this side owns its memory, no
+# string, JSON or callback crosses; a refusal is a status code of docs/STATUS-CODES.md, never a
+# trap (`panic = "abort"` below, so a panic would be an `unreachable` with no message).
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bebop-image = { path = "../bebop-image", features = ["std"] }
+# `tree` so the NATIVE tests read v4 through `Kv::load_checked` as conformance.sh's native
+# reader does; on wasm32 `bebop_kv::tree::kvin::v4_here()` is false by design, so this crate
+# routes a v4 root to `TreeIn` itself on every target (src/lib.rs `open_kv`).
+bebop-kv = { path = "../bebop-kv", features = ["std", "tree"] }
+bebop-log = { path = "../bebop-log", features = ["std"] }
+
+# bebop-wasm's profile: the smallest module, and a refusal is a status code, never an unwind.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -24,8 +24,9 @@
 use super::{subject_of, Act, Method, State, KIND_ACT, PAIRS};
 use crate::logimage::LogImage;
 use crate::minijson::int_field;
-use crate::{content_id_chained, HubError};
-use bebop_store::evlog::{EvLog, Record};
+use crate::chain::{verify_id, IdScheme, ERASED_NONCE};
+use crate::{body_of, HubError};
+use bebop_store::evlog::{EvLog, Record, FLAG_SHA256};
 use bebop_store::Store;
 
 /// The declaration: how many acts of `cust:<key>` were redacted in place.
@@ -115,7 +116,7 @@ fn redact_acts(log: &mut LogImage, key: &str) -> Result<usize, HubError> {
     let subject = subject_of(key);
     let mut n = 0;
     for (r, bad) in records.iter_mut() {
-        let Some((k, s, j)) = split(&r.payload) else { continue };
+        let Some((k, s, j)) = split(body_of(r)) else { continue };
         if k != KIND_ACT.as_bytes() || s != subject.as_bytes() {
             continue;
         }
@@ -126,11 +127,16 @@ fn redact_acts(log: &mut LogImage, key: &str) -> Result<usize, HubError> {
         // one that does not parse cannot be shown to be theirs and stays verbatim.
         bad.take();
         let json = clean.to_json();
-        let mut p = Vec::with_capacity(2 + k.len() + s.len() + json.len());
+        let (k, s) = (k.to_vec(), s.to_vec());
+        let mut p = Vec::with_capacity(ERASED_NONCE.len() + 2 + k.len() + s.len() + json.len());
+        // The nonce is erased with the fields (M0, `crate::forget` says why).
+        if r.flags & FLAG_SHA256 != 0 {
+            p.extend_from_slice(&ERASED_NONCE);
+        }
         p.push(k.len() as u8);
-        p.extend_from_slice(k);
+        p.extend_from_slice(&k);
         p.push(s.len() as u8);
-        p.extend_from_slice(s);
+        p.extend_from_slice(&s);
         p.extend_from_slice(json.as_bytes());
         r.payload = p;
         n += 1;
@@ -155,7 +161,10 @@ fn redact_acts(log: &mut LogImage, key: &str) -> Result<usize, HubError> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ConsentCheck {
     pub records: usize,
+    /// Verified as `sha256(prev ‖ payload)` (M0).
     pub chained: usize,
+    /// Verified under a pre-M0 FNV scheme, and older than every sha256 record (`chain.rs`).
+    pub legacy: usize,
     /// Content changed, link held.
     pub redacted: usize,
     /// What the `f` declarations name.
@@ -174,19 +183,23 @@ pub fn chain_check(log: &LogImage) -> ConsentCheck {
     let tip = EvLog::tip(&store);
     let walked = EvLog::walk(&store);
     let mut out = ConsentCheck::default();
-    for (at, r) in walked.iter().enumerate() {
+    let schemes: Vec<Option<IdScheme>> = walked.iter().map(|r| verify_id(r.flags, &r.prev, &r.payload, &r.id)).collect();
+    // The scheme moves forward once (`chain::walk_check`): a legacy id newer than any sha256
+    // record is a repair under the retired scheme. Newest first, so "newer" is a lower index.
+    let oldest_sha = schemes.iter().rposition(|s| *s == Some(IdScheme::Sha256));
+    for (at, (r, scheme)) in walked.iter().zip(&schemes).enumerate() {
         out.records += 1;
         let linked = match at {
             0 => tip == Some(r.id),
             n => walked[n - 1].prev == r.id,
         };
-        let is_act = split(&r.payload).is_some_and(|(k, _, _)| k == KIND_ACT.as_bytes());
-        if r.id == content_id_chained(&r.prev, &r.payload) {
-            out.chained += 1;
-        } else if linked && is_act {
-            out.redacted += 1;
-        } else {
-            out.broken += 1;
+        let is_act = split(body_of(r)).is_some_and(|(k, _, _)| k == KIND_ACT.as_bytes());
+        match scheme {
+            Some(IdScheme::Sha256) => out.chained += 1,
+            Some(_) if oldest_sha.is_some_and(|o| at < o) => out.broken += 1,
+            Some(_) => out.legacy += 1,
+            None if linked && is_act => out.redacted += 1,
+            None => out.broken += 1,
         }
     }
     out.declared = log

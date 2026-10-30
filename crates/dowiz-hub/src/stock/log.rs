@@ -34,7 +34,7 @@ impl StockLog {
     pub fn create_sized(bytes: usize) -> Result<Self, crate::HubError> {
         let mut store = Store::create_bytes(bytes)?;
         EvLog::init_bytes(&mut store)?;
-        Ok(StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false, bad: Vec::new() })
+        Ok(StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false, bad: Vec::new(), entropy: Default::default() })
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, crate::HubError> {
@@ -65,7 +65,7 @@ impl StockLog {
         } else {
             (EvLog::walk_marked(&store).into_iter().filter(|(_, c)| c.is_some()).map(|(r, _)| r.id).collect(), None)
         };
-        Ok((StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false, bad }, next))
+        Ok((StockLog { store, clock: None, every: checkpoint::CHECKPOINT_EVERY, grew: false, bad, entropy: Default::default() }, next))
     }
 
     /// FULL CAPACITY: `grow()` doubles from this length, so it keeps the
@@ -113,17 +113,41 @@ impl StockLog {
         self.bad.len()
     }
 
-    /// One record, chained to the previous. The chain is what makes the log
-    /// tamper-evident: editing any event changes every content id after it,
-    /// which is I4's other half. Takes the bytes, so a test can lay down an
-    /// OLDER encoding and prove the fold still reads them, and a checkpoint
-    /// is written through the same door as an event.
-    pub(super) fn write_payload(&mut self, payload: Vec<u8>) -> Result<(), StockError> {
+    /// THE ENTROPY SEAM (M0): the nonce in every record written after this call is drawn
+    /// from `seed`; without one it is derived and flagged. See `Hub::set_entropy`.
+    pub fn set_entropy(&mut self, seed: [u8; 32]) {
+        self.entropy.set(seed);
+    }
+
+    /// A NEW record: `rec` is the JSON object, and this puts the nonce in front of it
+    /// before `write_payload` chains it. Every door that makes a record goes through here;
+    /// the doors that copy one (`adopt.rs`) go to `write_payload` with the bytes they have.
+    pub(super) fn write_new(&mut self, rec: String) -> Result<(), StockError> {
+        if EvLog::version(&self.store) < 2 {
+            // A v1 store has no flags cell: rebuilt as v2 first, the chain copied verbatim.
+            self.grow().map_err(|_| StockError::Malformed)?;
+        }
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
-        // CHAINED, which is what the comment above has always claimed: the id
-        // commits to the previous record, so editing an event breaks every id
-        // after it. It hashed the payload alone until 2026-09-20.
-        let id = crate::content_id_chained(&prev, &payload);
+        let (nonce, derived) = self.entropy.nonce(&prev, rec.as_bytes());
+        self.write_bytes(crate::chain::with_nonce(&nonce, rec.as_bytes()), derived)
+    }
+
+    /// One record, chained to the previous, AS THESE BYTES. Which scheme chains it is
+    /// what the bytes say (`codec::nonced_bytes`): a nonced payload gets `sha256(prev ‖
+    /// payload)` and the sha256 flag, a bare JSON object the legacy FNV id -- so a tablet
+    /// replaying a hub's pre-M0 records lands on the hub's own ids, and the hub chaining a
+    /// tablet's records lands on the tablet's. Takes the bytes, so a test can lay down an
+    /// OLDER encoding and prove the fold still reads them, and a checkpoint is written
+    /// through the same door as an event. The chain is what makes the log tamper-evident
+    /// (`chain.rs` says exactly what that means and what it does not).
+    pub(super) fn write_payload(&mut self, payload: Vec<u8>) -> Result<(), StockError> {
+        self.write_bytes(payload, false)
+    }
+
+    fn write_bytes(&mut self, payload: Vec<u8>, derived: bool) -> Result<(), StockError> {
+        let sha = crate::stock::codec::nonced_bytes(&payload);
+        let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
+        let id = crate::chain::id_for(&prev, &payload, sha);
         let rec = Record {
             id,
             prev,
@@ -134,6 +158,7 @@ impl StockLog {
             // The root's own counter, not a walk: `events().len()` decoded the
             // whole stock log on every single delivery just to number it.
             actor_seq: EvLog::len(&self.store) as u64,
+            flags: if sha { crate::chain::flags_for(derived) } else { 0 },
             payload,
         };
         // THE IMAGE GROWS RATHER THAN REFUSING, like the order log. A shelf

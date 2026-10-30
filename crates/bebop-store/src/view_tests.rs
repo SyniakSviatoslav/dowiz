@@ -9,7 +9,7 @@ fn image() -> Vec<u8> {
     EvLog::init_bytes(&mut st).unwrap();
     let mut prev = [0u8; 32];
     for i in 0..6u8 {
-        let r = Record { id: [i + 1; 32], prev, actor_pubkey: [0; 32], actor_seq: i as u64, payload: vec![i; 20] };
+        let r = Record { id: [i + 1; 32], prev, actor_pubkey: [0; 32], actor_seq: i as u64, flags: 0, payload: vec![i; 20] };
         prev = r.id;
         EvLog::append_tip_bytes(&mut st, &r).unwrap();
     }

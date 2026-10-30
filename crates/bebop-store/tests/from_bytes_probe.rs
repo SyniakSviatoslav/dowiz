@@ -59,6 +59,7 @@ fn evlog_store(capacity: usize, events: usize, payload: usize) -> (Store, Vec<u8
             prev: [0u8; 32],
             actor_pubkey: [0xAA; 32],
             actor_seq: i as u64,
+            flags: 0,
             payload: vec![(i % 251) as u8; payload],
         };
         EvLog::append_tip_bytes(&mut st, &rec).unwrap();

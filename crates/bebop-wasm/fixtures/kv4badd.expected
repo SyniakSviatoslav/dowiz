@@ -1,6 +1,7 @@
 # What every reader of fixtures/kv4badd.store must answer (W-ES-P8D 2026-10-30): A REFUSAL BY NAME.
 # kv4deep with the root's DEPTH claim + 1 and the root RE-SEALED: the walk reaches a leaf where rule 2 says
-# a node must be. Measured native: Tree(Depth { obj: 3117 }). NOT_A_KV = 2 on every reader; bebop.bin -3.
+# a node must be. Measured native: Tree(Depth { obj: 2813 }) (root 4349 claims DEPTH 5 for a 4-deep tree at
+# MIN_FANOUT since W-ES-HARD; obj 3117 at fanout 8). NOT_A_KV = 2 on every reader; bebop.bin -3.
 status=2
 # RE-ANCHORED (conform kv4.rs `reanchor`, 2026-10-30): the corrupted cell lies inside the live commit's
 # range, so the superblock's anchor (FORMAT §7, cell 9) and its crc are recomputed over the corrupted

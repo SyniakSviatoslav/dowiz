@@ -41,7 +41,10 @@ fn history() -> StockLog {
 // and a dump of this history under the pre-W-CRC code differs in 12 cells, ALL inside the two
 // superblock pages (7, 8, 15, 17, 25, 26, 519, 520, 527, 529, 537, 538); the arena is byte-equal.
 // The pre-W-CRC value, which the unbound pre-STORE2 code also printed, was f76fa117...d8fc.
-const IMAGE_SHA: &str = "c7544181e16d25f45205bc0b4aa0665231cc63e5555c1fa44475c7f9e350a9ad";
+// Re-derived at M0 (2026-10-30): the record envelope changed for every writer (16-byte nonce,
+// sha256 flag, sha256 id -- `dowiz-hub/src/chain.rs`); the pre-M0 value was c7544181...a9ad.
+// What this golden still pins is that the storages feature leaves the write path alone.
+const IMAGE_SHA: &str = "22228f1fbaff4cc30a610772c6bed4e8a4599b624cd654025c39213c7135b2a7";
 
 #[test]
 fn an_unbound_venue_writes_the_pre_store2_bytes() {

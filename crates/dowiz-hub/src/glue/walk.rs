@@ -70,6 +70,12 @@ impl<'a> Chain<'a> {
         cells_b32(&self.view, obj, 7)
     }
 
+    /// A record's flags cell (`evlog` cell 11, less the actor bit): which id scheme it is
+    /// under (`FLAG_SHA256`, M0) is what `glue.rs` reads from it.
+    pub(crate) fn flags(&self, obj: usize) -> i64 {
+        get_in(&self.view, obj, 11) & !1
+    }
+
     /// Does the object's crc match its cells?
     pub(crate) fn crc_ok(&self, obj: usize) -> bool {
         obj_crc_ok_in(&self.view, obj)

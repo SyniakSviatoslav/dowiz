@@ -272,6 +272,12 @@ v1 корінь 7 комірок `{n, ref LAST, has_tip, tip0..3}`, v2 — 8 к�
 `{actor_seq, payload_len (байти), ref prev, id0..3, prev_id0..3, flags, [actor_pubkey 4], payload
 packed}`; v1 — 15 комірок заголовка й один байт на комірку. Повний опис — модульний коментар
 `evlog.rs:12-45`; правило карантину — `verify.rs` `chain_scan`.
+**`flags` (M0, 2026-10-30):** біт0 = є `actor_pubkey`; біт1 = `id = sha256(prev_id ‖ payload)` і
+payload починається з nonce 16 байт (base64url); біт2 = nonce виведено з запису, а не з ентропії
+(`FLAG_NONCE_DERIVED`). Біт1 = 0 — запис до M0: id за FNV-1a ×4 (`dowiz-hub/src/chain.rs`,
+`legacy_id_chained`/`legacy_id`), байти старих образів не змінюються, `chain_check` рахує їх як
+`legacy`. Схема рухається вперед один раз: legacy-запис новіший за sha256-запис = `broken`.
+Хто перевіряє id — лише dowiz-hub; bebop-log, wasm і oracle.py id не хешують і біти пропускають.
 
 ### 9.3 PROJTAB / PROJ / OUT (`proj.rs`)
 
@@ -318,6 +324,49 @@ packed}`; v1 — 15 комірок заголовка й один байт на 
 Розбіжності нотатки лейна з кодом: немає (усі числа звірено з `proj/kinds.rs`, дайджести
 перераховано незалежно). Межу `MAX_WIDTH` на самій межі (64 приймає, 65 відмовляє) окремий тест
 **не перевіряє** — на відміну від рядків §10, що їх виводить T-ES-08.
+
+### 9.4 DOC / SEAL / HEADS / KEY / KEYS (`bebop-log/src/doc.rs`, W-MG-M1, 2026-10-30)
+
+Корінь-версія **5** = DOC (R-MAINGOAL-A §1.2, фаза M1). Номери корінь-версій — **один простір на всі
+розкладки**: усі п'ять KV-читачів читають комірку 5 кореня як версію KV і відмовляють `> 4` (§9.1,
+`UNKNOWN_VERSION` 12); читачі журналу читають комірку 7 (`EvLog::version`). Тому DOC несе 5 **в обох**
+комірках, і жоден читач, написаний до M5, його не декодує — фікстура `doc` у `conformance.sh`: 12 на
+всіх п'ятьох. (План писав `VERSION=1` у комірці 0 — такий корінь читався б як KV v1.) Читач журналу
+відмовляє за іменем через `EvLog::unknown_version` (`MAX_VERSION` = 2).
+
+```
+DOC   10 комірок, дайджест st_digest("DOC{i64,ref EVLOG,ref KV,ref HEADS,ref KEYS,i64,ref SPEC,i64,ref ANCH,i64}") = 3669646107
+      0 FLAGS (біт0 id = sha256 [M0], біт1 дерево = fold(журнал), біт2 самоописний [M5])
+      1 ref LOG (корінь EvLog v2, 0 = нема)   2 ref TREE (корінь KV v3/v4, 0 = нема)
+      3 ref HEADS   4 ref KEYS   5 VERSION = 5   6 ref SPEC (M5, 0)   7 VERSION = 5   8 ref ANCH (M6, 0)   9 = 0
+SEAL  {VERSION=1, actor_id 4, seq, tip 4, claimed_ms, ref PREV_SEAL, ref TIME (0), alg, sig_len, sig 8 Б/комірку}
+      15 + ceil(sig_len/8) комірок (ML-DSA-65: 429); дайджест 1951851249. Одна на коміт пристрою.
+      Підписане повідомлення: "bebop-seal/1" ‖ actor_id ‖ seq LE8 ‖ tip ‖ claimed_ms LE8 ‖ prev_tip (tip попередньої
+      печатки цього пристрою, 0^32 для першої). Зміна повідомлення = SEAL v2.
+HEADS {m, (actor_id 4, seq, tip 4, ref SEAL) × m}  за зростанням actor_id; 1 + 10m; дайджест 4237402659
+KEY   {actor_id 4, alg, valid_from, revoked_at, ref ADMIT_REC, pk_len, pk 8 Б/комірку}  9 + ceil(pk_len/8)
+      (ML-DSA-65: 253); дайджест 2540354000. revoked_at = 0: не відкликано; k: печатки з seq > k невалідні.
+      ADMIT_REC = 0: ключ генезису (`Doc::init_bytes`).
+KEYS  {m, (actor_id 4, ref KEY) × m}  за зростанням; 1 + 5m; дайджест 1448248784
+```
+
+Тіла ключових операцій у payload запису (за фреймінгом власника — nonce M0, байт виду — їх знаходить
+`Ids::body`): `ADMIT = "bebop-admit/1" ‖ actor_id ‖ alg LE8 ‖ valid_from LE8 ‖ pk_len LE8 ‖ pk`,
+`REVOKE = "bebop-revoke/1" ‖ actor_id ‖ after_seq LE8`. Усі ref — назад: коміт алокує запис → KEY → KEYS →
+SEAL → HEADS → корінь журналу → DOC. `actor_pubkey` запису (4 комірки) = `actor_id` = sha256(pk) за
+конвенцією dowiz-hub; сам pk лежить у KEY один раз.
+
+**`verify` (`doc/verify.rs`) — вісім лічильників** `records / chained / legacy / redacted / broken /
+seals_ok / seals_bad / forks`: запис, чий `prev` не називає попередній запис **свого пристрою** — `broken`;
+інакше `Ids::chained`, `Ids::legacy`, редакція з утриманим зв'язком (правило `forget.rs`), інакше `broken`;
+`forks` = пари `(actor, seq)`, що трапляються понад раз. Печатка — `ok`, коли ключ її актора **допущено**
+(довірений корінь, або ADMIT-запис саме цього ключа, написаний допущеним актором у позиції, яку покривають
+його валідні печатки, поки його ключ валідний — нерухома точка над підписаними записами, не над таблицею),
+валідний на її seq (REVOKE після k ламає k+1), tip називає запис у `(actor, seq)`, підпис сходиться. Що
+доказ каже і чого не каже — §2d дослідження; crc журналу/таблиць — відмова до лічби.
+
+Бібліотека MIT без коду підписів: `doc::Signer` / `doc::Verifier` / `doc::Ids` — шви; ML-DSA-65 живе
+в dowiz-core (AGPL) і лінкується лише в dev-тести `bebop-log` (`doc/dsa_tests.rs`) та в dowiz-hub.
 
 ## 10. Константи й ліміти
 

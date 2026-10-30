@@ -67,7 +67,7 @@ fn an_object_claiming_more_than_the_image_is_refused_not_panicked() {
 }
 
 fn rec(n: u8, payload: &[u8]) -> Record {
-    Record { id: [n; 32], prev: [n.wrapping_sub(1); 32], actor_pubkey: [0; 32], actor_seq: n as u64, payload: payload.to_vec() }
+    Record { id: [n; 32], prev: [n.wrapping_sub(1); 32], actor_pubkey: [0; 32], actor_seq: n as u64, flags: 0, payload: payload.to_vec() }
 }
 
 fn log_image(n: u8) -> Store {

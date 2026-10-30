@@ -1,6 +1,7 @@
 use super::*;
 use bebop_store::evlog::{EvLog, Record};
-use crate::chain::content_id;
+use crate::chain::{chain_id, legacy_id, legacy_id_chained, verify_id, with_nonce, NONCE_LEN};
+use bebop_store::evlog::{FLAG_NONCE_DERIVED, FLAG_SHA256};
 
 const ACTOR: [u8; 32] = [0xA1; 32];
 fn order(id: &str, status: &str) -> String {
@@ -109,10 +110,11 @@ fn a_record_this_build_cannot_read_is_quarantined_and_the_venue_still_serves() {
     let root = st.root().unwrap();
     let newest = st.follow(root, 1).unwrap();
     // v2 packs eight payload bytes per cell after a twelve-cell header, plus
-    // four more when an actor key is present (bit 0 of cell 11 says so).
-    let at = if st.get(newest, 11) & 1 != 0 { 16 } else { 12 };
+    // four more when an actor key is present (bit 0 of cell 11 says so), plus
+    // the two cells of the nonce an M0 record carries in front (bit 1).
+    let at = if st.get(newest, 11) & 1 != 0 { 16 } else { 12 } + NONCE_LEN / 8;
     let cell = st.get(newest, at);
-    // Byte 0 of the payload is the event kind, and 9 is not one of the six.
+    // Byte 0 of the body is the event kind, and 9 is not one of the six.
     st.cells[newest + 2 + at] = (cell & !0xFF) | 9;
     // SEALED (W-CRC): a record this build cannot read was WRITTEN, crc and all, by a
     // build that could. An unsealed edit is a changed byte, and that is refused by name
@@ -400,8 +402,8 @@ fn every_id_commits_to_the_record_before_it() {
     // The same payload after a DIFFERENT predecessor is a different id.
     // Under the old scheme these two were identical, which is what made
     // "editing any event changes every id after it" false.
-    let one = content_id_chained(&[0u8; 32], b"same bytes");
-    let two = content_id_chained(&[9u8; 32], b"same bytes");
+    let one = chain_id(&[0u8; 32], b"same bytes");
+    let two = chain_id(&[9u8; 32], b"same bytes");
     assert_ne!(one, two, "the id has to depend on where in the chain it sits");
 }
 
@@ -448,10 +450,11 @@ fn a_pre_cascade_log_is_legacy_rather_than_broken() {
     };
     let rec = Record {
         // The OLD scheme: the payload alone.
-        id: content_id(&payload),
+        id: legacy_id(&payload),
         prev: [0u8; 32],
         actor_pubkey: [0u8; 32],
         actor_seq: 1,
+        flags: 0,
         payload,
     };
     // Written straight into a store, because no public path writes an old
@@ -466,6 +469,250 @@ fn a_pre_cascade_log_is_legacy_rather_than_broken() {
     assert_eq!(check.legacy, 1, "an old id is old, not wrong: {check:?}");
     assert_eq!(check.broken, 0);
     assert!(check.intact());
+}
+
+// ── M0: sha256 ids, the nonce, and the one forgery FNV let through ──────────
+
+/// A pre-M0 image: `n` records chained under the FNV scheme, flags 0, no nonce -- written
+/// by hand because no public path writes one any more, which is the point. Its bytes.
+fn legacy_image(n: usize) -> Vec<u8> {
+    let mut st = Store::create_bytes(64 * 1024).unwrap();
+    EvLog::init_bytes(&mut st).unwrap();
+    let mut prev = [0u8; 32];
+    for i in 0..n {
+        let id = format!("ord_{i}");
+        let mut payload = vec![EventKind::Placed as u8, id.len() as u8];
+        payload.extend_from_slice(id.as_bytes());
+        payload.extend_from_slice(order(&id, "PENDING").as_bytes());
+        let rid = legacy_id_chained(&prev, &payload);
+        EvLog::append_tip_bytes(&mut st, &Record { id: rid, prev, actor_pubkey: ACTOR, actor_seq: i as u64 + 1, flags: 0, payload }).unwrap();
+        prev = rid;
+    }
+    st.to_bytes_trimmed()
+}
+
+/// OLD IMAGES ARE BYTE-IDENTICAL AND READ AS LEGACY, ALL OF THEM (the M0 kill test, part 1).
+/// Loading and saving a pre-M0 image changes nothing, every record is `legacy`, the fold
+/// reads every order, and `tip()` is the FNV tip it always was.
+#[test]
+fn m0_an_old_image_is_byte_identical_and_every_record_is_legacy() {
+    let img = legacy_image(5);
+    let h = Hub::load(&img).unwrap();
+    assert_eq!(h.to_bytes_trimmed(), img, "a load and a save move no byte of an old image");
+    let check = h.chain_check();
+    assert_eq!((check.records, check.legacy, check.chained, check.broken), (5, 5, 0, 0), "{check:?}");
+    assert_eq!(check.gaps, 0);
+    assert_eq!(h.events().len(), 5, "every legacy record still decodes");
+    let tip = EvLog::tip(&Store::from_bytes(&img)).unwrap();
+    assert_eq!(h.tip().as_deref(), Some(hex32(&tip).as_str()));
+}
+
+/// A NEW RECORD IS sha256(prev ‖ payload), FLAGGED, AND CARRIES A NONCE (part 2). Appended to
+/// an old image, the scheme moves forward: the old records stay legacy, the new ones are
+/// chained, and the image is still intact. The nonce is 16 base64url bytes in front of the
+/// body, the id is sha256 over prev and the whole payload, and the decoder reads past it.
+#[test]
+fn m0_a_new_record_is_sha256_flagged_and_nonced() {
+    let mut h = Hub::load(&legacy_image(3)).unwrap();
+    h.append(EventKind::Placed, "ord_new", &order("ord_new", "PENDING"), 4, ACTOR).unwrap();
+    h.append(EventKind::Advanced, "ord_new", &order("ord_new", "ACCEPTED"), 5, ACTOR).unwrap();
+    let check = h.chain_check();
+    assert_eq!((check.records, check.legacy, check.chained, check.broken), (5, 3, 2, 0), "{check:?}");
+    assert_eq!(check.derived, 2, "no entropy was set: both nonces are derived, and the bytes say so");
+    assert!(check.intact());
+
+    let walked = EvLog::walk(&Store::from_bytes(&h.to_bytes()));
+    let newest = &walked[0];
+    assert_eq!(newest.flags & FLAG_SHA256, FLAG_SHA256);
+    assert_eq!(newest.flags & FLAG_NONCE_DERIVED, FLAG_NONCE_DERIVED);
+    assert_eq!(newest.id, chain_id(&newest.prev, &newest.payload), "sha256 over prev ‖ payload");
+    assert_ne!(newest.id, legacy_id_chained(&newest.prev, &newest.payload));
+    assert_eq!(newest.prev, walked[1].id);
+    let nonce = &newest.payload[..NONCE_LEN];
+    assert!(nonce.iter().all(|b| b.is_ascii_alphanumeric() || *b == b'-' || *b == b'_'), "base64url: {nonce:?}");
+    assert_eq!(newest.payload[NONCE_LEN], EventKind::Advanced as u8, "the body starts after the nonce");
+    assert_ne!(&walked[1].payload[..NONCE_LEN], nonce, "each record its own nonce");
+    assert_eq!(walked[2].flags, 0, "the legacy record below is untouched");
+    assert_eq!(h.history("ord_new").len(), 2, "the decoder reads past the nonce");
+}
+
+/// THE ENTROPY SEAM: with a seed the nonce is drawn, not derived; the same seed draws the
+/// same nonces (one request, replayed); a different seed draws different ones.
+#[test]
+fn m0_a_seeded_nonce_is_drawn_and_an_unseeded_one_is_flagged_derived() {
+    let build = |seed: Option<[u8; 32]>| {
+        let mut h = Hub::create_sized(128 * 1024).unwrap();
+        if let Some(s) = seed {
+            h.set_entropy(s);
+        }
+        h.append(EventKind::Placed, "o1", &order("o1", "PENDING"), 1, ACTOR).unwrap();
+        h
+    };
+    let (a, b, c, d) = (build(Some([1u8; 32])), build(Some([1u8; 32])), build(Some([2u8; 32])), build(None));
+    assert_eq!(a.chain_check().derived, 0);
+    assert_eq!(d.chain_check().derived, 1);
+    assert_eq!(a.to_bytes_trimmed(), b.to_bytes_trimmed(), "the same seed, the same bytes");
+    assert_ne!(a.tip(), c.tip(), "another seed, another nonce, another id");
+    assert_ne!(a.tip(), d.tip());
+    assert_eq!(build(None).tip(), d.tip(), "a derived nonce is deterministic");
+}
+
+/// THE FORGERY sha256 CATCHES (the M0 kill test, part 3). A middle record of a post-M0 log is
+/// edited and its id REPAIRED under the legacy FNV scheme, flag cleared, nonce dropped -- the
+/// exact repair that verified before M0. It is `broken`: a legacy id newer than a sha256 one
+/// was written after the log left that scheme. The twin keeps the flag and is broken too.
+#[test]
+fn m0_a_forged_middle_record_with_a_repaired_fnv_id_is_broken() {
+    let mut h = Hub::create_sized(256 * 1024).unwrap();
+    for i in 0..4 {
+        h.append(EventKind::Placed, &format!("ord_{i}"), &order(&format!("ord_{i}"), "PENDING"), i as u64 + 1, ACTOR).unwrap();
+    }
+    assert_eq!(h.chain_check().chained, 4);
+    let mut st = Store::from_bytes(&h.to_bytes());
+    let newest = st.follow(st.root().unwrap(), 1).unwrap();
+    let mid = st.follow(newest, 2).unwrap(); // the third of four, newest first = 1
+    let walked = EvLog::walk(&st);
+    let victim = &walked[1];
+    // The edit: PENDING -> PENDINH, nonce dropped, so the forger has the pre-M0 record shape.
+    let body = String::from_utf8_lossy(&victim.payload[NONCE_LEN..]).replace("PENDING", "PENDINH");
+    let forged = body.as_bytes().to_vec();
+    let repaired = legacy_id_chained(&victim.prev, &forged);
+    let at = 12 + 4; // HEAD_V2 + the named actor's four cells
+    let cells = bebop_store::evlog::pack_payload(&forged);
+    for (j, c) in cells.iter().enumerate() {
+        st.put_cell(mid, at + j, *c);
+    }
+    for j in cells.len()..st.obj_cells(mid) - at {
+        st.put_cell(mid, at + j, 0);
+    }
+    st.put_cell(mid, 1, forged.len() as i64);
+    for (i, c) in crate::glue::walk::to_cells(&repaired).iter().enumerate() {
+        st.put_cell(mid, 3 + i, *c);
+    }
+    st.put_cell(mid, 11, 1); // FLAG_ACTOR only: the forger clears the sha256 bit
+    st.seal(mid); // and repairs the crc, so nothing but the chain can tell
+    let forged_img = st.to_bytes();
+    let check = Hub::load(&forged_img).unwrap().chain_check();
+    assert_eq!(check.broken, 1, "a repaired FNV id above sha256 records is a forgery: {check:?}");
+    assert_eq!(check.legacy, 0, "it is not counted as an old record");
+    assert_eq!(check.chained, 3);
+    assert_eq!(check.gaps, 1, "the record above still names the id that was repaired away");
+    assert!(verify_id(0, &victim.prev, &forged, &repaired).is_some(), "the repair itself verifies under FNV: only the rule catches it");
+
+    // The twin: the same repair with the sha256 flag left set. A flagged record must verify
+    // as sha256; an FNV match is not accepted for it.
+    st.put_cell(mid, 11, 1 | FLAG_SHA256);
+    st.seal(mid);
+    let check = Hub::load(&st.to_bytes()).unwrap().chain_check();
+    assert_eq!((check.broken, check.chained, check.legacy), (1, 3, 0), "{check:?}");
+}
+
+/// THE FLAG IS A COMMITMENT OF ITS OWN. When the forged record is the OLDEST sha256 record
+/// there is no sha256 record below it for the direction rule to lean on -- a repaired FNV
+/// id with the flag still set would count `legacy`. It does not: a record flagged sha256
+/// must verify as sha256. (With the flag ALSO cleared the record is indistinguishable from a
+/// pre-M0 one, by construction; that is the witness tip's to catch, `Hub::holds`.)
+#[test]
+fn m0_a_flagged_record_that_only_verifies_under_fnv_is_broken_even_as_the_oldest_new_one() {
+    let mut h = Hub::load(&legacy_image(2)).unwrap();
+    h.append(EventKind::Placed, "ord_new", &order("ord_new", "PENDING"), 3, ACTOR).unwrap();
+    let mut st = Store::from_bytes(&h.to_bytes());
+    let newest = st.follow(st.root().unwrap(), 1).unwrap();
+    let victim = EvLog::walk(&st)[0].clone();
+    let forged = String::from_utf8_lossy(&victim.payload[NONCE_LEN..]).replace("PENDING", "PENDINH").into_bytes();
+    let at = 12 + 4;
+    let cells = bebop_store::evlog::pack_payload(&forged);
+    for (j, c) in cells.iter().enumerate() {
+        st.put_cell(newest, at + j, *c);
+    }
+    for j in cells.len()..st.obj_cells(newest) - at {
+        st.put_cell(newest, at + j, 0);
+    }
+    st.put_cell(newest, 1, forged.len() as i64);
+    let repaired = legacy_id_chained(&victim.prev, &forged);
+    for (i, c) in crate::glue::walk::to_cells(&repaired).iter().enumerate() {
+        st.put_cell(newest, 3 + i, *c);
+    }
+    st.seal(newest); // flag left as written: FLAG_SHA256 | FLAG_NONCE_DERIVED | actor
+    EvLog::set_tip_bytes(&mut st, &repaired).unwrap();
+    let check = Hub::load(&st.to_bytes()).unwrap().chain_check();
+    assert_eq!((check.records, check.chained, check.legacy, check.broken), (3, 0, 2, 1), "{check:?}");
+}
+
+/// WHAT THE WALK CANNOT SEE, SAID OUT LOUD. The same edit repaired under sha256 with a fresh
+/// nonce verifies record by record -- the record above names an id that is gone, and that is
+/// a GAP, which a rotation also leaves (`rotate.rs`). The walk counts it; what refuses it is
+/// the tip a witness holds (`Hub::holds`), and from M1 the seal. This test pins the limit so
+/// nobody reads `intact()` as "unedited".
+#[test]
+fn m0_a_repair_under_sha256_is_a_gap_the_witness_tip_catches_not_the_walk() {
+    let mut h = Hub::create_sized(256 * 1024).unwrap();
+    for i in 0..3 {
+        h.append(EventKind::Placed, &format!("ord_{i}"), &order(&format!("ord_{i}"), "PENDING"), i as u64 + 1, ACTOR).unwrap();
+    }
+    let witness_tip = h.tip().unwrap();
+    let mut st = Store::from_bytes(&h.to_bytes());
+    let newest = st.follow(st.root().unwrap(), 1).unwrap();
+    let mid = st.follow(newest, 2).unwrap();
+    let victim = EvLog::walk(&st)[1].clone();
+    let forged = with_nonce(b"forgerforgerforg", &String::from_utf8_lossy(&victim.payload[NONCE_LEN..]).replace("PENDING", "PENDINH").into_bytes());
+    assert_eq!(forged.len(), victim.payload.len());
+    let at = 12 + 4;
+    for (j, c) in bebop_store::evlog::pack_payload(&forged).iter().enumerate() {
+        st.put_cell(mid, at + j, *c);
+    }
+    for (i, c) in crate::glue::walk::to_cells(&chain_id(&victim.prev, &forged)).iter().enumerate() {
+        st.put_cell(mid, 3 + i, *c);
+    }
+    st.seal(mid);
+    let forged_hub = Hub::load(&st.to_bytes()).unwrap();
+    let check = forged_hub.chain_check();
+    assert_eq!((check.broken, check.chained, check.gaps), (0, 3, 1), "every id verifies; the gap is the only trace: {check:?}");
+    assert!(forged_hub.holds(&witness_tip), "the tip itself was not touched...");
+    // ...so the witness's tip still holds, and the tip's `prev` chain is what M1's seal
+    // must bind record by record. Until then: `gaps` is the number to watch.
+    assert_eq!(check.records, 3);
+}
+
+/// LEGACY ABOVE sha256 IS BROKEN EVEN WHEN NOTHING WAS EDITED: the rule is about the
+/// scheme's direction, not about one record's bytes. A legacy-chained record appended
+/// above a sha256 one (no public path writes one; done by hand) is a `broken` record.
+#[test]
+fn m0_the_scheme_moves_forward_once_and_never_back() {
+    let mut h = Hub::create_sized(128 * 1024).unwrap();
+    h.append(EventKind::Placed, "o1", &order("o1", "PENDING"), 1, ACTOR).unwrap();
+    let mut st = Store::from_bytes(&h.to_bytes());
+    let prev = EvLog::tip(&st).unwrap();
+    let payload = {
+        let mut p = vec![EventKind::Placed as u8, 2];
+        p.extend_from_slice(b"o2");
+        p.extend_from_slice(order("o2", "PENDING").as_bytes());
+        p
+    };
+    let id = legacy_id_chained(&prev, &payload);
+    EvLog::append_tip_bytes(&mut st, &Record { id, prev, actor_pubkey: ACTOR, actor_seq: 2, flags: 0, payload }).unwrap();
+    let check = Hub::load(&st.to_bytes()).unwrap().chain_check();
+    assert_eq!((check.records, check.chained, check.legacy, check.broken), (2, 1, 0, 1), "{check:?}");
+    assert_eq!(check.gaps, 0, "it links; the scheme is what is wrong");
+}
+
+/// A REDACTION ERASES THE NONCE (R-MAINGOAL-A §2c): the tombstone's id is kept, its nonce
+/// is sixteen zeros, and it counts `redacted`, not `broken`.
+#[test]
+fn m0_a_redacted_record_loses_its_nonce_and_counts_redacted() {
+    let mut h = Hub::create_sized(128 * 1024).unwrap();
+    h.set_entropy([7u8; 32]);
+    h.append(EventKind::Placed, "o1", &order("o1", "PENDING"), 1, ACTOR).unwrap();
+    h.append(EventKind::Placed, "o2", &order("o2", "PENDING"), 2, ACTOR).unwrap();
+    let before = EvLog::walk(&Store::from_bytes(&h.to_bytes()));
+    let n = h.redact(|e| (e.order_id == "o1").then(|| r#"{"id":"o1","status":"PENDING"}"#.to_string())).unwrap();
+    assert_eq!(n, 1);
+    let after = EvLog::walk(&Store::from_bytes(&h.to_bytes()));
+    assert_eq!(after[1].id, before[1].id, "the id is kept: the chain's links do not move");
+    assert_eq!(&after[1].payload[..NONCE_LEN], &crate::chain::ERASED_NONCE, "the nonce is erased with the fields");
+    assert_eq!(after[1].flags & FLAG_SHA256, FLAG_SHA256);
+    let check = h.chain_check();
+    assert_eq!((check.chained, check.redacted, check.broken), (1, 1, 0), "{check:?}");
 }
 
 /// The whole hub survives being written out and read back — which is the

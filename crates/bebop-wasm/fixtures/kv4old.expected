@@ -1,7 +1,8 @@
 # What every reader of fixtures/kv4old.store must answer (W-ES-P10 2026-10-30): A REFUSAL BY NAME.
 # kv4deep with bit 0 of the first payload cell of the first REACHABLE object BELOW the anchor's mark
 # flipped: an object of an OLDER commit (conform kv4.rs `old_reachable`; measured 2026-10-30: object 1024,
-# the first leaf the first commit wrote, cell 1026; native: Tree(BadCrc { obj: 1024, .. })).
+# the first leaf the first commit wrote, cell 1026 -- the same object at MIN_FANOUT, W-ES-HARD 2026-10-30;
+# native: Tree(BadCrc { obj: 1024, want: 1696784233, got: Some(2844319735) })).
 # The anchor still holds, so the conformance readers, which check every object they reach, say
 # BAD_CRC = 10 (bebop.bin: kv4.bp -10) -- and `conformance.sh --lazy` proves on the C ABI that an open at
 # Verify::Anchor SUCCEEDS on this image and verify(Reachable) refuses it: the lazy open's documented

@@ -64,7 +64,7 @@ impl StockLog {
             if self.is_bad(&r.id) {
                 return false;
             }
-            let Some((j, at)) = parse(&r.payload) else { return false };
+            let Some((j, at)) = parse(super::codec::body_bytes(&r.payload)) else { return false };
             let newest = at.map(|a| a.max(j.max_at.unwrap_or(a)));
             let take = accept(&j, newest);
             if take {
@@ -134,7 +134,7 @@ impl StockLog {
         }
         for (ev, meta) in evs {
             let m = self.stamped(meta);
-            self.write_payload(with_meta(&encode(ev), &m).into_bytes())?;
+            self.write_new(with_meta(&encode(ev), &m))?;
         }
         if !evs.is_empty() && self.every != usize::MAX && (since + evs.len() >= self.every || self.grew) {
             self.checkpoint_now()?;
@@ -161,7 +161,7 @@ impl StockLog {
             None => format!("{HEAD}}}"),
         };
         self.grew = false;
-        self.write_payload(format!("{head}\n{}", body(&j)).into_bytes())?;
+        self.write_new(format!("{head}\n{}", body(&j)))?;
         self.grew = false;
         Ok(())
     }

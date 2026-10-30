@@ -35,6 +35,28 @@ pub use recover::{recover, walk, Hide, RecoverError, Recovered, Via, Why};
 pub enum SimOp {
     Write { off: usize, cells: Vec<i64> },
     Barrier,
+    /// W-ES-HARD: a `publish` (a compaction into a sibling file). `how` says when the sibling
+    /// gets the store's NAME; `crash` enumerates what each leaves.
+    Publish { cells: Vec<i64>, how: PublishHow },
+}
+
+/// How a publish reached the name (`SimOp::Publish`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PublishHow {
+    /// The staged record ended with a barrier: the sibling was durable before the rename
+    /// (`Durability::Data`). States: the old file, the new file.
+    Synced,
+    /// No barrier on the sibling (`Durability::None`): the rename is DEFERRED to the next
+    /// barrier (`FileDevice`): the old file keeps the name and receives no more writes; the
+    /// writer goes on in the sibling. Until that barrier a crash leaves exactly the old file --
+    /// the last durable generation -- and the tail since it is lost; at the barrier the sibling
+    /// is synced, then renamed. `SimDisk::publish` records exactly one of these two.
+    Deferred,
+    /// THE MUTANT, never recorded by `SimDisk`: a device that renames an unsynced sibling at
+    /// once. A power loss can then give the name to an inode whose blocks never reached the
+    /// disk -- the new file EMPTY, and every generation durable before it is gone. The RED proof
+    /// of `publish_tests` rewrites a record to this.
+    RenamedUnsynced,
 }
 
 /// A disk that records what is written to it.
@@ -73,8 +95,10 @@ impl SimDisk {
     pub fn cache(&self) -> Vec<i64> {
         let mut c = self.base.clone();
         for op in &self.ops {
-            if let SimOp::Write { off, cells } = op {
-                apply(&mut c, *off, cells);
+            match op {
+                SimOp::Write { off, cells } => apply(&mut c, *off, cells),
+                SimOp::Publish { cells, .. } => c = cells.clone(),
+                SimOp::Barrier => {}
             }
         }
         c
@@ -120,12 +144,12 @@ impl Device for SimDisk {
     fn fresh(&self) -> io::Result<SimDisk> {
         Ok(SimDisk::new(Vec::new()))
     }
-    /// A rename: the staged disk's contents become this disk's durable contents at once. The
-    /// crash model of the rename itself (the old file or the new, never a mix) is the
-    /// filesystem's; this disk takes it as given.
+    /// A publish, RECORDED (`SimOp::Publish`): the staged disk's contents are what this disk
+    /// reads from here on. `Synced` when the staged record ended with a barrier, else
+    /// `Deferred` (the name moves at the next barrier); the crash states of each are `crash`'s.
     fn publish(&mut self, staged: SimDisk) -> io::Result<()> {
-        self.base = staged.cache();
-        self.ops.clear();
+        let how = if matches!(staged.ops.last(), Some(SimOp::Barrier)) { PublishHow::Synced } else { PublishHow::Deferred };
+        self.ops.push(SimOp::Publish { cells: staged.cache(), how });
         Ok(())
     }
 }
@@ -167,7 +191,13 @@ impl<D: Device> Device for Cut<D> {
 
 #[cfg(test)]
 pub(crate) mod testkit;
+/// W-ES-HARD: the enumerated schedules of N optimistic commits (order x group cut x crash point).
+#[cfg(test)]
+pub(crate) mod schedule;
 #[cfg(test)]
 mod tests;
+/// W-ES-HARD: the crash states of a publish, synced and unsynced.
+#[cfg(test)]
+mod publish_tests;
 #[cfg(all(test, feature = "tree"))]
 mod tree_tests;

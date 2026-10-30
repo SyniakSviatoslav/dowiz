@@ -26,8 +26,15 @@ impl EvLog {
     /// about records that OVERLAP: the records of an honest log are disjoint objects, so
     /// together they hold at most the image's cells. Hashing is bounded by that, which is
     /// what keeps a crafted loop of large records from costing `step_cap` x image.
+    #[inline]
     pub fn chain_crc(st: &Store) -> Result<Option<usize>, BadCrc> {
-        let Some(root) = st.root() else { return Ok(Some(0)) };
+        Self::chain_crc_at(st, st.root())
+    }
+
+    /// `chain_crc` of the log rooted at `root` (W-MG-M1: a `DOC`'s log).
+    #[inline]
+    pub fn chain_crc_at(st: &Store, root: Option<usize>) -> Result<Option<usize>, BadCrc> {
+        let Some(root) = root else { return Ok(Some(0)) };
         st.check_obj(root)?;
         let cap = Self::step_cap(st);
         let mut budget = st.cells.len();

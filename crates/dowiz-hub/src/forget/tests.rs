@@ -101,7 +101,7 @@ fn a_tombstone_without_its_link_is_broken() {
     h.redact(redactor).unwrap();
     let mut walked = EvLog::walk(&h.store);
     let tip = EvLog::tip(&h.store);
-    let at = walked.iter().position(|r| r.payload[0] & REDACTED_BIT != 0).unwrap();
+    let at = walked.iter().position(|r| crate::body_of(r)[0] & REDACTED_BIT != 0).unwrap();
     assert!(tombstone_holds(&walked, at, tip));
     // Cut the link: the record after it no longer names it.
     if at > 0 {
@@ -109,5 +109,5 @@ fn a_tombstone_without_its_link_is_broken() {
         assert!(!tombstone_holds(&walked, at, tip));
     }
     // And an edited record with NO high bit is broken as it always was.
-    assert!(!tombstone_holds(&walked, walked.len() - 1, tip) || walked[walked.len() - 1].payload[0] & REDACTED_BIT != 0);
+    assert!(!tombstone_holds(&walked, walked.len() - 1, tip) || crate::body_of(&walked[walked.len() - 1])[0] & REDACTED_BIT != 0);
 }

@@ -28,9 +28,17 @@
 //!   2        ref to the previous EV
 //!   3..6     content-id
 //!   7..10    prev content-id
-//!   11       flags: bit 0 = an actor_pubkey follows
+//!   11       flags: bit 0 = an actor_pubkey follows (`FLAG_ACTOR`);
+//!                   bit 1 = the id is sha256(prev-id ‖ payload) and the payload begins with
+//!                           a 16-byte nonce (`FLAG_SHA256`, dowiz-hub M0, 2026-10-30; clear =
+//!                           the FNV scheme every record before M0 was written under);
+//!                   bit 2 = that nonce was DERIVED from the record, not drawn from entropy
+//!                           (`FLAG_NONCE_DERIVED`: the writer had no entropy seam set)
 //!   12..     the actor_pubkey (4 cells) when that bit is set, then the payload
 //!            PACKED EIGHT BYTES TO A CELL, little-endian, last cell zero-filled
+//!
+//! This crate never hashes: which scheme an id is under is dowiz-hub's (`chain.rs`); the bits
+//! are here because the layout is. Bits 3..63 are zero and a reader passes them through.
 //!
 //! WHY v2 EXISTS. Measured on the live venue: 583 cells -- 4.66 KB -- per event, for a
 //! payload of a few hundred bytes. One byte per eight-byte cell is an 8x amplification, and
@@ -109,6 +117,11 @@ pub struct Record {
     pub prev: [u8; 32],
     pub actor_pubkey: [u8; 32],
     pub actor_seq: u64,
+    /// Cell 11's bits other than `FLAG_ACTOR`, which the key's presence says: `FLAG_SHA256`,
+    /// `FLAG_NONCE_DERIVED`, and whatever a later writer adds. A v1 record has no cell for
+    /// them and reads as 0; a v1 store cannot hold them, which is why dowiz-hub rebuilds a v1
+    /// log as v2 before it writes a flagged record.
+    pub flags: i64,
     pub payload: Vec<u8>,
 }
 
@@ -135,6 +148,11 @@ fn cells_to_b32(c: &[i64]) -> [u8; 32] {
 /// The version this module writes. A store says its own version in its root;
 /// this is only what a FRESH log is created as.
 pub const VERSION: i64 = 2;
+/// The newest log version this reader knows. A root naming more is REFUSED BY NAME by a
+/// loader that asks `EvLog::unknown_version` first (W-MG-M1: a `DOC` root carries
+/// `doc::ROOT_VERSION_DOC` = 5 in this cell, so a log reader that did not ask would walk
+/// the DOC's refs as records).
+pub const MAX_VERSION: i64 = 2;
 
 /// Cells in a v1 root, and in a v2 one. The extra cell is the version itself.
 const ROOT_V1: i64 = 7;
@@ -144,8 +162,19 @@ const ROOT_V2: i64 = 8;
 const HEAD_V1: i64 = 15;
 /// v2 record header, before the optional actor key and the packed payload.
 const HEAD_V2: i64 = 12;
-/// Bit 0 of cell 11: an `actor_pubkey` follows the header.
-const FLAG_ACTOR: i64 = 1;
+/// Bit 0 of cell 11: an `actor_pubkey` follows the header. Derived from the key, never
+/// carried in `Record::flags`.
+pub const FLAG_ACTOR: i64 = 1;
+/// Bit 1 of cell 11: the id is `sha256(prev ‖ payload)` and the payload starts with a 16-byte
+/// nonce (dowiz-hub M0). Clear: the FNV scheme of every record written before.
+pub const FLAG_SHA256: i64 = 2;
+/// What `FLAG_SHA256` says is in front of the payload: a nonce of this many bytes -- two packed
+/// cells, so the body behind it starts on a cell (`subject.rs` reads the body).
+pub const NONCE_LEN: usize = 16;
+/// Bit 2 of cell 11: the nonce was derived from the record because the writer had no entropy
+/// set. Such a record's id can be recomputed from a guessed payload, which is what a nonce is
+/// there to prevent; the bit keeps that fact in the bytes.
+pub const FLAG_NONCE_DERIVED: i64 = 4;
 
 /// The log's read/write handle.
 pub struct EvLog;
@@ -158,8 +187,17 @@ impl EvLog {
     /// version or entirely the other, because an append writes what the root
     /// says. A root with no version cell is v1, which is exactly what every
     /// image written before this change looks like.
+    #[inline]
     pub fn version(st: &Store) -> i64 {
-        let Some(root) = st.root() else { return VERSION };
+        Self::version_at(st, st.root())
+    }
+
+    /// `version` of the log whose root is `root` -- a log that is not the image's root
+    /// (W-MG-M1: a `DOC` root names its log by ref). Every `_at` below is the same split:
+    /// the old name reads `st.root()`, the `_at` name reads what it is handed.
+    #[inline]
+    pub fn version_at(st: &Store, root: Option<usize>) -> i64 {
+        let Some(root) = root else { return VERSION };
         if st.obj_len(root) >= ROOT_V2 {
             let v = st.get(root, 7);
             if v > 0 {
@@ -169,17 +207,47 @@ impl EvLog {
         1
     }
 
+    /// `Some(v)` when the root names a log version above `MAX_VERSION`: the loader refuses
+    /// it by that name instead of reading it. `None` = a version this reader knows.
+    pub fn unknown_version(st: &Store) -> Option<i64> {
+        let v = Self::version(st);
+        (v > MAX_VERSION).then_some(v)
+    }
+
+    /// The record objects of the log rooted at `root`, newest first, under `walk`'s cap:
+    /// what `walk_until_at` reads, by offset (W-MG-M1: `doc::verify` names records by it).
+    pub fn objs_at(st: &Store, root: Option<usize>) -> Vec<usize> {
+        let mut objs = Vec::new();
+        let Some(root) = root else { return objs };
+        let cap = Self::step_cap(st);
+        let mut cur = st.follow(root, 1);
+        while let Some(o) = cur {
+            if objs.len() >= cap {
+                break;
+            }
+            objs.push(o);
+            cur = st.follow(o, 2);
+        }
+        objs
+    }
+
     /// Stage the empty EVLOG schema. Shared by both commit paths so the layout
     /// has exactly one definition.
     fn stage_init(st: &mut Store) -> Result<(crate::Tx, usize), StoreError> {
         let mut tx = st.begin()?;
-        let root = st.alloc(&mut tx, ROOT_V2, DIGEST_EVLOG_ROOT)?;
+        let root = Self::stage_init_in(st, &mut tx)?;
+        Ok((tx, root))
+    }
+
+    /// The empty v2 log root inside a transaction someone else opened (`doc`).
+    pub(crate) fn stage_init_in(st: &mut Store, tx: &mut crate::Tx) -> Result<usize, StoreError> {
+        let root = st.alloc(tx, ROOT_V2, DIGEST_EVLOG_ROOT)?;
         for i in 0..ROOT_V2 as usize {
             st.put_cell(root, i, 0);
         }
         st.put_cell(root, 7, VERSION);
         st.seal(root);
-        Ok((tx, root))
+        Ok(root)
     }
 
     /// Stage an empty V1 schema — for the tests that have to prove an old image
@@ -215,13 +283,27 @@ impl EvLog {
     }
 
     /// Number of records.
+    #[inline]
     pub fn len(st: &Store) -> usize {
-        st.root().map(|r| st.get(r, 0) as usize).unwrap_or(0)
+        Self::len_at(st, st.root())
+    }
+
+    /// `len` of the log rooted at `root`.
+    #[inline]
+    pub fn len_at(st: &Store, root: Option<usize>) -> usize {
+        root.map(|r| st.get(r, 0) as usize).unwrap_or(0)
     }
 
     /// The chain tip, if one has been set.
+    #[inline]
     pub fn tip(st: &Store) -> Option<[u8; 32]> {
-        let r = st.root()?;
+        Self::tip_at(st, st.root())
+    }
+
+    /// `tip` of the log rooted at `root`.
+    #[inline]
+    pub fn tip_at(st: &Store, root: Option<usize>) -> Option<[u8; 32]> {
+        let r = root?;
         if st.get(r, 2) == 0 {
             return None;
         }
@@ -288,6 +370,7 @@ impl EvLog {
                 prev: cells_to_b32(&prevc),
                 actor_pubkey: actor,
                 actor_seq: seq,
+                flags: flags & !FLAG_ACTOR,
                 payload: unpack_payload(&cells, plen),
             }
         } else {
@@ -316,6 +399,7 @@ impl EvLog {
                 prev: cells_to_b32(&prevc),
                 actor_pubkey: cells_to_b32(&pkc),
                 actor_seq: seq,
+                flags: 0,
                 payload,
             }
         }
@@ -351,10 +435,17 @@ impl EvLog {
     /// one returned). A log that keeps a checkpoint record reads back only as
     /// far as its newest checkpoint instead of to its first record: the
     /// records older than it are never unpacked. Same cap as `walk`.
-    pub fn walk_until(st: &Store, mut stop: impl FnMut(&Record) -> bool) -> Vec<Record> {
+    #[inline]
+    pub fn walk_until(st: &Store, stop: impl FnMut(&Record) -> bool) -> Vec<Record> {
+        Self::walk_until_at(st, st.root(), stop)
+    }
+
+    /// `walk_until` of the log rooted at `root`.
+    #[inline]
+    pub fn walk_until_at(st: &Store, root: Option<usize>, mut stop: impl FnMut(&Record) -> bool) -> Vec<Record> {
         let mut out = Vec::new();
-        let Some(root) = st.root() else { return out };
-        let version = Self::version(st);
+        let Some(root) = root else { return out };
+        let version = Self::version_at(st, Some(root));
         let cap = Self::step_cap(st);
         // The whole walk may read at most the image (`read_at`).
         let mut budget = st.cells.len();
@@ -383,8 +474,15 @@ impl EvLog {
     ///
     /// `None` means the chain never ended -- a cycle. It is not "very long":
     /// no honest image can chain more records than it has room for.
+    #[inline]
     pub fn chain_len(st: &Store) -> Option<usize> {
-        let Some(root) = st.root() else { return Some(0) };
+        Self::chain_len_at(st, st.root())
+    }
+
+    /// `chain_len` of the log rooted at `root`.
+    #[inline]
+    pub fn chain_len_at(st: &Store, root: Option<usize>) -> Option<usize> {
+        let Some(root) = root else { return Some(0) };
         let cap = Self::step_cap(st);
         let mut n = 0usize;
         let mut cur = st.follow(root, 1);
@@ -417,14 +515,29 @@ impl EvLog {
         tip: Option<&[u8; 32]>,
     ) -> Result<(crate::Tx, usize), StoreError> {
         let old_root = st.root().ok_or(StoreError::NoSuperblock)?;
-        let version = Self::version(st);
+        let mut tx = st.begin()?;
+        let root = Self::stage_append_in(st, &mut tx, old_root, rec, tip)?;
+        Ok((tx, root))
+    }
+
+    /// The body of `stage_append` inside a transaction someone else opened, on the log
+    /// rooted at `old_root` (W-MG-M1: a `DOC` commit appends to its log and allocates its
+    /// seal in the SAME transaction). Returns the new log root.
+    #[allow(clippy::indexing_slicing)] // T-ES-06 inventory (W-ES-P1): a pre-split index site; this list may only shrink
+    pub(crate) fn stage_append_in(
+        st: &mut Store,
+        tx: &mut crate::Tx,
+        old_root: usize,
+        rec: &Record,
+        tip: Option<&[u8; 32]>,
+    ) -> Result<usize, StoreError> {
+        let version = Self::version_at(st, Some(old_root));
         let n = st.get(old_root, 0);
         let has_tip = st.get(old_root, 2);
         let tipc: Vec<i64> = (3..7).map(|i| st.get(old_root, i)).collect();
         let last = st.follow(old_root, 1);
 
-        let mut tx = st.begin()?;
-        let ev = st.alloc(&mut tx, Self::record_cells(version, rec), DIGEST_EV)?;
+        let ev = st.alloc(tx, Self::record_cells(version, rec), DIGEST_EV)?;
         st.put_cell(ev, 0, rec.actor_seq as i64);
         st.put_cell(ev, 1, rec.payload.len() as i64);
         match last {
@@ -439,7 +552,7 @@ impl EvLog {
         }
         if version >= 2 {
             let named = rec.actor_pubkey != [0u8; 32];
-            st.put_cell(ev, 11, if named { FLAG_ACTOR } else { 0 });
+            st.put_cell(ev, 11, (rec.flags & !FLAG_ACTOR) | if named { FLAG_ACTOR } else { 0 });
             let mut at = HEAD_V2 as usize;
             if named {
                 for (i, c) in b32_to_cells(&rec.actor_pubkey).iter().enumerate() {
@@ -461,7 +574,7 @@ impl EvLog {
         st.seal(ev);
 
         let root_cells = if version >= 2 { ROOT_V2 } else { ROOT_V1 };
-        let root = st.alloc(&mut tx, root_cells, DIGEST_EVLOG_ROOT)?;
+        let root = st.alloc(tx, root_cells, DIGEST_EVLOG_ROOT)?;
         // The old root is dead from this generation on (W-CRC, D.1 #4); records never are.
         tx.sup_delta += 2 + st.obj_cells(old_root) as i64;
         st.put_cell(root, 0, n + 1);
@@ -484,7 +597,7 @@ impl EvLog {
             st.put_cell(root, 7, version);
         }
         st.seal(root);
-        Ok((tx, root))
+        Ok(root)
     }
 
     /// `stage_append` without a tip move, for `verify::append_carry_bytes`.
@@ -564,7 +677,7 @@ mod tests {
 
     fn rec(n: u8, payload: &[u8]) -> Record {
         Record { id: [n; 32], prev: [n.wrapping_sub(1); 32], actor_pubkey: [0xAA; 32],
-                 actor_seq: n as u64, payload: payload.to_vec() }
+                 actor_seq: n as u64, flags: 0, payload: payload.to_vec() }
     }
 
     /// A CHAIN THAT POINTS BACKWARDS MUST NOT BE WALKED FOR EVER.
@@ -711,6 +824,7 @@ mod tests {
             prev: [0u8; 32],
             actor_pubkey: [0u8; 32],
             actor_seq: 1,
+            flags: 0,
             payload: b"eight!!!".to_vec(),
         };
         let before = st.pick().unwrap().arena_used;
@@ -726,6 +840,42 @@ mod tests {
         let got = EvLog::walk(&st);
         assert_eq!(got[1].actor_pubkey, [0u8; 32], "an absent key reads back as zero");
         assert_eq!(got[0].actor_pubkey, [0xAA; 32], "a present one reads back whole");
+    }
+
+    /// THE SCHEME BITS ROUND-TRIP AND THE ACTOR BIT IS NEVER THEIRS (M0). A record's
+    /// `flags` are cell 11 less bit 0: bit 0 is derived from the key at write time and
+    /// stripped at read time, so a caller cannot forge a "named" record by setting it, and
+    /// `FLAG_SHA256 | FLAG_NONCE_DERIVED` come back exactly, named or not. Bytes pinned: a
+    /// record with flags 0 writes cell 11 exactly as before this field existed.
+    #[test]
+    fn the_scheme_flags_round_trip_and_bit_zero_is_derived_from_the_key() {
+        let mut st = Store::create_bytes(1 << 20).unwrap();
+        EvLog::init_bytes(&mut st).unwrap();
+        let lying = Record { flags: FLAG_ACTOR, ..rec(1, b"no key, bit set") };
+        let lying = Record { actor_pubkey: [0u8; 32], ..lying };
+        EvLog::append_bytes(&mut st, &lying).unwrap();
+        let flagged = Record { flags: FLAG_SHA256 | FLAG_NONCE_DERIVED, actor_pubkey: [0u8; 32], ..rec(2, b"sha256 + derived") };
+        EvLog::append_bytes(&mut st, &flagged).unwrap();
+        let named = Record { flags: FLAG_SHA256, actor_pubkey: [0xAA; 32], ..rec(3, b"sha256, named") };
+        EvLog::append_tip_bytes(&mut st, &named).unwrap();
+        let got = EvLog::walk(&st);
+        assert_eq!(got[2].flags, 0, "bit 0 in `flags` is dropped: the key decides it");
+        assert_eq!(got[2].actor_pubkey, [0u8; 32]);
+        assert_eq!(got[1].flags, FLAG_SHA256 | FLAG_NONCE_DERIVED);
+        assert_eq!(got[0].flags, FLAG_SHA256, "the actor bit is not reported in `flags`");
+        assert_eq!(got[0].actor_pubkey, [0xAA; 32], "and the key still reads back");
+        let objs: Vec<usize> = {
+            let mut v = Vec::new();
+            let mut cur = st.follow(st.root().unwrap(), 1);
+            while let Some(o) = cur {
+                v.push(o);
+                cur = st.follow(o, 2);
+            }
+            v
+        };
+        assert_eq!(st.get(objs[2], 11), 0, "an unflagged, unnamed record's cell 11 is 0, as before");
+        assert_eq!(st.get(objs[1], 11), FLAG_SHA256 | FLAG_NONCE_DERIVED);
+        assert_eq!(st.get(objs[0], 11), FLAG_SHA256 | FLAG_ACTOR);
     }
 
     /// THE TIP TRAVELS WITH THE RECORD. One commit, not two, and what the
@@ -768,6 +918,7 @@ mod tests {
             prev: [0u8; 32],
             actor_pubkey: [0u8; 32], // unnamed: the record is 12 cells + payload
             actor_seq: 1,
+            flags: 0,
             payload: b"x".to_vec(),
         })
         .unwrap();
@@ -1055,3 +1206,6 @@ pub use subject::{Head, Peek};
 /// The log half of the crc check on load (W-CRC, W-HUBCRC).
 pub mod verify;
 pub use verify::{ChainMark, ChainScan};
+
+/// The DOC root over this log: seals, keys, heads, and `verify`'s counters (W-MG-M1).
+pub mod doc;

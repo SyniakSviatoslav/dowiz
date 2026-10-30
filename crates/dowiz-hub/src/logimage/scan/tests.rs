@@ -26,11 +26,13 @@ fn nth(st: &Store, at: usize) -> usize {
     o
 }
 
-/// Payload cell `cell` of the `at`-th record XORed with `mask`; re-sealed or not.
+/// BODY cell `cell` of the `at`-th record XORed with `mask`; re-sealed or not. `cell` counts
+/// as the cases below number it, from the record's twelve-cell header; the two cells of the
+/// nonce an M0 record carries in front of its body (`chain::NONCE_LEN`) are stepped over here.
 fn changed(b: &[u8], at: usize, cell: usize, mask: i64, reseal: bool) -> Vec<u8> {
     let mut st = Store::from_bytes(b);
     let o = nth(&st, at);
-    st.cells[o + 2 + cell] ^= mask;
+    st.cells[o + 2 + cell + crate::chain::NONCE_LEN / 8] ^= mask;
     if reseal {
         st.seal(o);
     }

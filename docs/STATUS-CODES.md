@@ -30,7 +30,7 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 | 5 | `NULL_ARG` | a null pointer at the ABI. oracle.py also uses 5 for an S-1 break (superblock cells 13-14 non-zero), which no fixture has. **Two meanings, kept apart only by which surface gave them** | wasm32, C ABI, python |
 | 6-9, 11 | — | the `nodekey` (6) and `proj` (7-9, 11) readers. Not KV codes | `bw_key`, `bw_proj`, `oracle.py --proj` |
 | 10 | `BAD_CRC` | an object the read reached fails its crc (root, an array, a delta record) | native, wasm32, python, C ABI |
-| 12 | `UNKNOWN_VERSION` | the KV root names a version above 4 (W-ES-P9: every reader decodes v4 since W-ES-P8D/P8E, so `kv4stub` -- a v4 claim that does not hold -- is 2 now, and no committed fixture yields 12) | all |
+| 12 | `UNKNOWN_VERSION` | the KV root names a version above 4 (W-ES-P9: every reader decodes v4 since W-ES-P8D/P8E, so `kv4stub` -- a v4 claim that does not hold -- is 2 now). W-MG-M1 (2026-10-30): fixture `doc` -- a DOC root, FORMAT §9.4, root-version 5 in the version cell -- yields 12 on every reader until M5 teaches them DOC | all |
 | 40 | `RECOVER` | the newest generation failed recovery and so did the fallback | C ABI |
 | 41 | `LAST_COMMIT` | the last commit's range does not hash to its anchor and every object in it checks (a re-sealed object, a changed header); bytes handed whole are never fallen back past (W-ES-P10, FORMAT §7 phase P2, fixture `kv4stale`). An object of the range that fails its crc is 10 instead, naming it | all |
 | 42 | `OBJECT_BAD` | an object met while walking the whole arena is cut short or fails its crc | C ABI |
@@ -52,6 +52,9 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 | 58 | `UNSUPPORTED` | this build cannot do that | C ABI |
 | 59 | `PANIC` | a panic caught at the boundary | C ABI |
 | 60 | `OTHER` | a `Refusal` variant newer than the ABI | C ABI |
+| 70 | `NOT_OPEN` | a call with no image open | bebop-wasm-reader ABI, never a read |
+| 71 | `NOT_FOUND` | the key is not in the image | bebop-wasm-reader ABI, never a read |
+| 73 | `OUT_OF_RANGE` | a log index past its length | bebop-wasm-reader ABI, never a read |
 
 ## 3. Mappings that are not already this number
 

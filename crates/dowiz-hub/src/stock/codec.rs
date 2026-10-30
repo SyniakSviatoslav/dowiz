@@ -1,6 +1,42 @@
 //! The stock event as one line of JSON, and back -- the record format of the log.
+//!
+//! THE NONCE IN FRONT (M0, `crate::chain`). A record written since M0 is 16 base64url
+//! characters and then its JSON object; one written before is the object alone. Every stock
+//! record is a JSON object, so the first byte says which: `{` is a legacy record, anything else
+//! a nonced one -- and that is how the wire form (`glue::wire`), which carries records as
+//! text with no flags cell, tells the hub and a tablet which id scheme each record is under.
+//! `str_field`/`int_field` scan for a key and read a nonced record as is; a parser that needs
+//! the object to START the text takes `rec_body`.
 
 use super::*;
+
+/// Does this record text carry an M0 nonce in front of its JSON object?
+pub fn nonced(rec: &str) -> bool {
+    nonced_bytes(rec.as_bytes())
+}
+
+/// `nonced`, over the payload bytes.
+pub fn nonced_bytes(payload: &[u8]) -> bool {
+    payload.len() >= crate::chain::NONCE_LEN && payload.first() != Some(&b'{')
+}
+
+/// The record's JSON object: the text without its nonce.
+pub fn rec_body(rec: &str) -> &str {
+    if nonced(rec) {
+        rec.get(crate::chain::NONCE_LEN..).unwrap_or("")
+    } else {
+        rec
+    }
+}
+
+/// `rec_body`, over the payload bytes.
+pub fn body_bytes(payload: &[u8]) -> &[u8] {
+    if nonced_bytes(payload) {
+        payload.get(crate::chain::NONCE_LEN..).unwrap_or(&[])
+    } else {
+        payload
+    }
+}
 
 // ── serialisation, so the log survives a restart ────────────────────────────
 

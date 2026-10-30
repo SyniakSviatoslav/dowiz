@@ -28,7 +28,9 @@
 //! is the caller's (`redact` returns the new JSON): this crate has no JSON
 //! parser (`minijson`'s header), and the Worker has one.
 
-use crate::{content_id_chained, decode, EventKind, Event, Hub, HubError};
+use crate::chain::{verify_id, ERASED_NONCE};
+use crate::{body_of, decode, EventKind, Event, Hub, HubError};
+use bebop_store::evlog::FLAG_SHA256;
 use bebop_store::evlog::{EvLog, Record};
 use bebop_store::Store;
 
@@ -39,13 +41,13 @@ pub(crate) const REDACTED_BIT: u8 = 0x80;
 /// A tombstone cannot vouch for its content; it vouches for its place.
 pub(crate) fn tombstone_holds(walked: &[Record], at: usize, tip: Option<[u8; 32]>) -> bool {
     let r = &walked[at];
-    if r.payload.first().map_or(true, |k| k & REDACTED_BIT == 0) {
+    if body_of(r).first().map_or(true, |k| k & REDACTED_BIT == 0) {
         return false;
     }
     // A redacted record that still verifies was never changed, and one whose
-    // content id matches is not a tombstone at all -- `chain_check` asked that
-    // first.
-    if content_id_chained(&r.prev, &r.payload) == r.id {
+    // content id matches (under whichever scheme it was written in) is not a
+    // tombstone at all -- `chain_check` asked that first.
+    if verify_id(r.flags, &r.prev, &r.payload, &r.id).is_some() {
         return false;
     }
     match at {
@@ -74,7 +76,7 @@ impl Hub {
         records.reverse();
         let mut n = 0usize;
         for (r, bad) in records.iter_mut() {
-            if r.payload.first().map_or(true, |k| k & REDACTED_BIT != 0) {
+            if body_of(r).first().map_or(true, |k| k & REDACTED_BIT != 0) {
                 continue;
             }
             let Some(ev) = decode(r) else { continue };
@@ -86,7 +88,12 @@ impl Hub {
             // to be theirs and stays carried verbatim.
             let json = if bad.take().is_some() { ERASED_WHOLE.to_string() } else { json };
             let id = ev.order_id.as_bytes();
-            let mut payload = Vec::with_capacity(2 + id.len() + json.len());
+            let mut payload = Vec::with_capacity(ERASED_NONCE.len() + 2 + id.len() + json.len());
+            // THE NONCE GOES WITH THE FIELDS (M0, R-MAINGOAL-A §2c): left in place, the
+            // kept id would confirm a guessed payload by recomputation; erased, it cannot.
+            if r.flags & FLAG_SHA256 != 0 {
+                payload.extend_from_slice(&ERASED_NONCE);
+            }
             payload.push(ev.kind as u8 | REDACTED_BIT);
             payload.push(id.len() as u8);
             payload.extend_from_slice(id);
@@ -141,7 +148,7 @@ impl Hub {
     pub fn tombstones_where(&self, of: impl Fn(&str) -> bool) -> usize {
         EvLog::walk(&self.store)
             .iter()
-            .filter(|r| r.payload.first().is_some_and(|k| k & REDACTED_BIT != 0))
+            .filter(|r| body_of(r).first().is_some_and(|k| k & REDACTED_BIT != 0))
             .filter_map(decode)
             .filter(|e| of(&e.order_id))
             .count()

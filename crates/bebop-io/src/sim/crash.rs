@@ -13,10 +13,19 @@
 //!
 //! PROCESS CRASH (`Model::Process`): one page cache, writes land in issue order, so the
 //! states are the prefixes of the writes. What `Durability::None` promises.
+//!
+//! A PUBLISH (`SimOp::Publish`, W-ES-HARD: a compaction into a sibling file) under power loss.
+//! `Synced`: the old file with any subset of the window's writes (the rename not durable), or the
+//! new file whole; it ends its window (the directory fsync is a barrier). `Deferred`: the old file
+//! keeps the name and gets no more writes -- every later write goes to the sibling -- so until the
+//! next barrier the only state at the name is the old file (with the subsets of the writes BEFORE
+//! the publish); that barrier syncs the sibling, then renames it: the old file whole or the new
+//! file whole with every write since the publish. `RenamedUnsynced` (the mutant) renames at once:
+//! the new file EMPTY is a state, and the generations durable before it are gone.
 
 use std::fmt;
 
-use super::{apply, SimOp};
+use super::{apply, PublishHow, SimOp};
 
 /// Cells in one 512-byte sector.
 pub const SECTOR_CELLS: usize = 64;
@@ -84,19 +93,39 @@ pub fn each_state(base: &[i64], ops: &[SimOp], model: Model, mut visit: impl FnM
         visit(&Point { ordinal: ord, ..p }, img);
         ord += 1;
     };
+    // A deferred publish's sibling: what the writer writes until the barrier that names it.
+    let mut staged: Option<Vec<i64>> = None;
     if model == Model::Process {
         let mut img = base.to_vec();
         let blank = |n: Vec<usize>| Point { ordinal: 0, window: 0, new: n, torn: None, class: None, kind: "process crash" };
         emit(blank(vec![]), &img);
         for (i, op) in ops.iter().enumerate() {
-            if let SimOp::Write { off, cells } = op {
-                apply(&mut img, *off, cells);
-                emit(blank(vec![i]), &img);
+            match op {
+                SimOp::Write { off, cells } => {
+                    apply(staged.as_mut().unwrap_or(&mut img), *off, cells);
+                    emit(blank(vec![i]), &img);
+                }
+                SimOp::Publish { cells, how: PublishHow::Deferred } => {
+                    staged = Some(cells.clone());
+                    emit(Point { kind: "process crash after the deferred publish", ..blank(vec![i]) }, &img);
+                }
+                SimOp::Publish { cells, .. } => {
+                    img = cells.clone();
+                    staged = None;
+                    emit(Point { kind: "process crash after the publish", ..blank(vec![i]) }, &img);
+                }
+                SimOp::Barrier => {
+                    if let Some(s) = staged.take() {
+                        img = s;
+                        emit(Point { kind: "process crash after the barrier's rename", ..blank(vec![i]) }, &img);
+                    }
+                }
             }
         }
         return ord;
     }
     let Model::Power(tear) = model else { unreachable!() };
+    let point = |window: usize, kind: &'static str| Point { ordinal: 0, window, new: vec![], torn: None, class: None, kind };
     let mut durable = base.to_vec();
     let mut window = 0usize;
     let mut writes: Vec<(usize, &[i64])> = Vec::new();
@@ -104,7 +133,37 @@ pub fn each_state(base: &[i64], ops: &[SimOp], model: Model, mut visit: impl FnM
     for op in ops.iter().map(Some).chain([None]) {
         match op {
             Some(SimOp::Write { off, cells }) => {
-                writes.push((*off, cells.as_slice()));
+                match staged.as_mut() {
+                    Some(s) => apply(s, *off, cells),
+                    None => writes.push((*off, cells.as_slice())),
+                }
+                ended = false;
+            }
+            Some(SimOp::Publish { cells, how }) => {
+                // The old file, with every subset of the writes it got in this window: what a
+                // crash leaves while the rename is not durable. What landed in it is gone with
+                // the rename, so the pending image is not kept.
+                if writes.is_empty() {
+                    emit(point(window, "publish: the old file"), &durable);
+                } else {
+                    window_states(&durable, &writes, window, tear, &mut emit);
+                    writes.clear();
+                }
+                match how {
+                    PublishHow::Synced => {
+                        durable = cells.clone();
+                        staged = None;
+                        emit(point(window, "publish: the new file"), &durable);
+                        window += 1;
+                    }
+                    PublishHow::Deferred => staged = Some(cells.clone()),
+                    PublishHow::RenamedUnsynced => {
+                        emit(point(window, "publish renamed unsynced: the new file EMPTY"), &vec![0; cells.len()]);
+                        durable = cells.clone();
+                        staged = None;
+                        emit(point(window, "publish renamed unsynced: the new file"), &durable);
+                    }
+                }
                 ended = false;
             }
             Some(SimOp::Barrier) | None => {
@@ -112,6 +171,12 @@ pub fn each_state(base: &[i64], ops: &[SimOp], model: Model, mut visit: impl FnM
                     let pending = window_states(&durable, &writes, window, tear, &mut emit);
                     durable = pending;
                     writes.clear();
+                }
+                if let (true, Some(s)) = (op.is_some(), staged.take()) {
+                    // The deferred rename: the sibling synced whole first, then the name moves.
+                    emit(point(window, "publish deferred: the old file"), &durable);
+                    durable = s;
+                    emit(point(window, "publish deferred: the new file"), &durable);
                 }
                 if op.is_some() {
                     window += 1;

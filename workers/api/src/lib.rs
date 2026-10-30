@@ -122,6 +122,17 @@ pub fn edge_id() -> Option<String> {
     Some(format!("{}-{}-{}-{}-{}", &h[0..8], &h[8..12], &h[12..16], &h[16..20], &h[20..32]))
 }
 
+/// THE HUB'S NONCE SEED (dowiz-hub M0, `Hub::set_entropy`): 32 bytes from the CSPRNG for every
+/// log this request writes to. The hub crate has no randomness of its own on wasm32; without a
+/// seed it derives each nonce from the record and flags it `FLAG_NONCE_DERIVED`, which the
+/// nightly `chain_check` reports as `derived`. `None` when the CSPRNG is unavailable -- the
+/// flagged, derived nonce is the loud fallback, never a clock or a counter.
+pub(crate) fn entropy_seed() -> Option<[u8; 32]> {
+    let mut seed = [0u8; 32];
+    booking::pass::getrandom_fill(&mut seed).ok()?;
+    Some(seed)
+}
+
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
     // One span per request, continuing an incoming W3C traceparent if there is

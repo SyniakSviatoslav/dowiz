@@ -21,8 +21,11 @@
 //! WHAT IS CHECKED BEFORE ONE RECORD IS BELIEVED, and refused by name (`Why`): the hub's image
 //! loads as a stock log with nothing quarantined (`StockLog::load`, every record's crc); each
 //! root's crc holds and its tip is the newest record's id; every KITCHEN-OR-HUB TAIL record's
-//! crc holds, its id is `sha256(prev ‖ payload)`, and its `prev` is the record below it, down
-//! to the ancestor; the cover manifest's `last_glued` tip, when given, is in both chains.
+//! crc holds, its id is `sha256(prev ‖ payload)` -- for a record written since M0; a record
+//! from before carries no sha256 flag and is checked against the FNV chain it was written
+//! under (`chain.rs`: until 2026-10-30 EVERY record was FNV, and this comment said sha256) --
+//! and its `prev` is the record below it, down to the ancestor; the cover manifest's
+//! `last_glued` tip, when given, is in both chains.
 //!
 //! THE KITCHEN IMAGE IS NOT LOADED WHOLE. Nothing below its ancestor is used: that prefix is
 //! the hub's, which was loaded and checked, and the kitchen's copy is compared by one id. Its
@@ -69,8 +72,8 @@ pub enum Why {
     TipMismatch,
     /// A tail record (0 = newest) whose crc fails.
     BadCrc { pos: usize },
-    /// A tail record whose id is not `sha256(prev ‖ payload)`, or whose `prev` is not the
-    /// record below it.
+    /// A tail record whose id is not `sha256(prev ‖ payload)` (nor, for a pre-M0 record, the
+    /// FNV chain it was written under), or whose `prev` is not the record below it.
     BrokenLink { pos: usize },
     /// The cover manifest's last glued tip is not in this chain.
     LastGluedNotInLog,
@@ -256,7 +259,11 @@ fn tail_events(
         let below = tail.get(pos + 1).map(|b| c.id(*b)).unwrap_or(*anc);
         let payload = c.payload(o);
         let prev = c.prev(o);
-        if prev != below || crate::content_id_chained(&prev, &payload) != c.id(o) {
+        // The id under the scheme the record's flags cell names (`chain::verify_id`): sha256
+        // since M0, the legacy FNV chain before. A pre-cascade id (payload alone) never
+        // chained to anything and is a broken link here, as it always was.
+        let chained = matches!(crate::chain::verify_id(c.flags(o), &prev, &payload, &c.id(o)), Some(crate::IdScheme::Sha256 | crate::IdScheme::LegacyChained));
+        if prev != below || !chained {
             return refuse(side, Why::BrokenLink { pos });
         }
         let rec = String::from_utf8_lossy(&payload);

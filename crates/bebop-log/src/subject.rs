@@ -20,14 +20,23 @@
 //! `min(payload_len claim, what the object holds, what the walk's budget still allows)`,
 //! the three bounds `read_at` applies, so a truncated or lying header cannot make this
 //! match a record whose unpacked payload would not.
+//!
+//! THE BODY, NOT THE PAYLOAD (M0, 2026-10-30). A record flagged `FLAG_SHA256` carries a
+//! `NONCE_LEN`-byte nonce in front of its payload; what a reader frames and filters on is
+//! the bytes BEHIND it. So a `Peek` -- `byte`, `len`, `has` -- and a `Head`'s `at` count
+//! from the body: byte 0 of a legacy record is payload byte 0, byte 0 of a flagged record
+//! is payload byte `NONCE_LEN`. `Peek::record` still hands back the whole payload, nonce
+//! included, as `walk` does; the budget is charged for the whole record as `read_at`
+//! charges it. The nonce is exactly two packed cells, so the body starts on a cell.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use super::{EvLog, Record, FLAG_ACTOR, HEAD_V1, HEAD_V2};
+use super::{EvLog, Record, FLAG_ACTOR, FLAG_SHA256, HEAD_V1, HEAD_V2, NONCE_LEN};
 use crate::Store;
 
 impl EvLog {
-    /// `walk_marked`, keeping only the records whose payload bytes at `at` equal `head`.
+    /// `walk_marked`, keeping only the records whose BODY bytes at `at` equal `head` (the
+    /// payload behind its nonce on a `FLAG_SHA256` record, the whole payload otherwise).
     /// Newest first; each with `Some(stored crc)` when its crc FAILS (quarantined).
     pub fn walk_marked_where(st: &Store, at: usize, head: &[u8]) -> Vec<(Record, Option<u32>)> {
         let head = Head::new(at, head);
@@ -71,7 +80,8 @@ impl EvLog {
     }
 }
 
-/// A prefix to look for: payload bytes `at..at + bytes.len()`, compared a cell at a time.
+/// A prefix to look for: BODY bytes `at..at + bytes.len()` (the payload behind its nonce,
+/// when it has one), compared a cell at a time.
 pub struct Head {
     at: usize,
     bytes: Vec<u8>,
@@ -96,7 +106,8 @@ pub struct Peek<'a> {
 }
 
 impl Peek<'_> {
-    /// How many payload bytes `read_at` would hand back for this record.
+    /// How many BODY bytes `read_at` would hand back for this record (its payload less the
+    /// nonce a `FLAG_SHA256` record carries in front).
     pub fn len(&self) -> usize {
         self.span.bytes
     }
@@ -105,12 +116,12 @@ impl Peek<'_> {
         self.span.bytes == 0
     }
 
-    /// Payload byte `j`, as `read_at` would return it; `None` past `len()`.
+    /// Body byte `j`, as `read_at` would return it behind the nonce; `None` past `len()`.
     pub fn byte(&self, j: usize) -> Option<u8> {
         (j < self.span.bytes).then(|| self.span.byte(self.st, self.obj, j))
     }
 
-    /// Do this record's payload bytes at `head.at` equal `head`'s?
+    /// Do this record's body bytes at `head.at` equal `head`'s?
     pub fn has(&self, head: &Head) -> bool {
         self.span.matches(self.st, self.obj, head.at, &head.bytes, &head.words)
     }
@@ -127,13 +138,13 @@ impl Peek<'_> {
     }
 }
 
-/// Where one record's payload is and how many of its bytes `read_at` would hand back.
+/// Where one record's body is and how many of its bytes `read_at` would hand back.
 struct Span {
-    /// Payload cell index of payload byte 0.
+    /// Payload cell index of BODY byte 0 (past the nonce's two cells on a flagged record).
     from: usize,
-    /// Payload cells charged to the walk's budget (`read_at`'s `have`).
+    /// Payload cells charged to the walk's budget (`read_at`'s `have`), nonce included.
     cells: usize,
-    /// Payload bytes that exist: `read_at`'s returned length.
+    /// Body bytes that exist: `read_at`'s returned length, less the nonce.
     bytes: usize,
     /// v2 packs eight bytes to a cell; v1 stores one per cell.
     packed: bool,
@@ -144,10 +155,15 @@ struct Span {
 fn span(st: &Store, version: i64, obj: usize, budget: usize) -> Span {
     let plen = st.get(obj, 1) as usize;
     if version >= 2 {
-        let named = st.get(obj, 11) & FLAG_ACTOR != 0 && st.obj_cells(obj) >= (HEAD_V2 + 4) as usize;
-        let from = HEAD_V2 as usize + if named { 4 } else { 0 };
-        let cells = st.obj_cells(obj).saturating_sub(from).min(budget);
-        Span { from, cells, bytes: plen.min(cells * 8), packed: true }
+        let flags = st.get(obj, 11);
+        let named = flags & FLAG_ACTOR != 0 && st.obj_cells(obj) >= (HEAD_V2 + 4) as usize;
+        let payload_at = HEAD_V2 as usize + if named { 4 } else { 0 };
+        let cells = st.obj_cells(obj).saturating_sub(payload_at).min(budget);
+        // The nonce in front of a flagged record is NONCE_LEN / 8 whole cells: the body
+        // starts on a cell, and a flagged record too short to hold its nonce has no body.
+        let skip = if flags & FLAG_SHA256 != 0 { NONCE_LEN } else { 0 };
+        let have = plen.min(cells * 8);
+        Span { from: payload_at + skip / 8, cells, bytes: have.saturating_sub(skip), packed: true }
     } else {
         let from = HEAD_V1 as usize;
         let cells = st.obj_cells(obj).saturating_sub(from).min(budget);

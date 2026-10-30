@@ -39,7 +39,7 @@ mod floor;
 pub(crate) mod forget;
 mod guest;
 pub(crate) mod hours;
-mod pass;
+pub(crate) mod pass;
 mod reservations;
 mod store;
 mod venue;

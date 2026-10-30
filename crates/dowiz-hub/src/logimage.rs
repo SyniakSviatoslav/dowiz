@@ -24,14 +24,18 @@
 //!   * **The copy goes oldest first.** `walk` is newest-first; appending in
 //!     that order leaves every `prev` pointing at a record that does not exist
 //!     yet, and the result is a chain of orphans that still LOOKS like a log.
-//!   * **The ids are chained**, so an edit anywhere breaks every id after it
-//!     and `chain_check` finds it.
+//!   * **The ids are chained** -- `sha256(prev ‖ payload)` since M0, FNV before,
+//!     the flags cell saying which (`chain.rs`) -- so an edit to a record breaks
+//!     its id and `chain_check` finds it.
 //!
-//! PAYLOAD: `[kind_len][kind][subject_len][subject][json]`. Two length-prefixed
-//! short strings and then the record, so a reader never has to guess where one
-//! ends — the order log's own `[kind][id_len][id][json]`, generalised.
+//! PAYLOAD: `[kind_len][kind][subject_len][subject][json]`, behind the 16-byte
+//! nonce every M0 record carries (`chain::body_of` is where a decoder starts).
+//! Two length-prefixed short strings and then the record, so a reader never has
+//! to guess where one ends — the order log's own `[kind][id_len][id][json]`,
+//! generalised.
 
-use crate::{content_id_chained, ChainCheck, HubError};
+use crate::chain::{flags_for, with_nonce, Entropy};
+use crate::{body_of, chain_id, ChainCheck, HubError};
 use bebop_store::evlog::{EvLog, Record};
 use bebop_store::Store;
 
@@ -65,6 +69,8 @@ pub struct LogImage {
     store: Store,
     /// The load-time crc scan, carried (`crate::Seen`; `logimage/scan.rs` reads it).
     seen: crate::Seen,
+    /// The nonce source (`set_entropy`, M0); derived nonces, flagged, without one.
+    entropy: Entropy,
 }
 
 fn encode(kind: &str, subject: &str, json: &str) -> Result<Vec<u8>, HubError> {
@@ -116,7 +122,7 @@ impl LogImage {
     pub fn create_sized(bytes: usize) -> Result<Self, HubError> {
         let mut store = Store::create_bytes(bytes.max(MIN_LOG_BYTES))?;
         EvLog::init_bytes(&mut store)?;
-        Ok(LogImage { store, seen: crate::Seen::default() })
+        Ok(LogImage { store, seen: crate::Seen::default(), entropy: Entropy::default() })
     }
 
     /// `load_since(bytes, None)`: every record hashed (`logimage/since.rs` has the checks).
@@ -140,13 +146,25 @@ impl LogImage {
         crate::usage_of_kind(&self.store, self.store.capacity_cells(), true)
     }
 
+    /// THE ENTROPY SEAM (M0): the nonce in every record written after this call is drawn
+    /// from `seed`; without one it is derived and flagged. See `Hub::set_entropy`.
+    pub fn set_entropy(&mut self, seed: [u8; 32]) {
+        self.entropy.set(seed);
+    }
+
     /// Append one record. The id commits to the record before it.
     pub fn append(&mut self, kind: &str, subject: &str, json: &str) -> Result<(), HubError> {
-        let payload = encode(kind, subject, json)?;
+        let body = encode(kind, subject, json)?;
+        // A v1 store has no flags cell: rebuilt as v2 first, the chain copied verbatim.
+        if EvLog::version(&self.store) < 2 {
+            self.grow()?;
+        }
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
-        let id = content_id_chained(&prev, &payload);
+        let (nonce, derived) = self.entropy.nonce(&prev, &body);
+        let payload = with_nonce(&nonce, &body);
+        let id = chain_id(&prev, &payload);
         let seq = EvLog::len(&self.store) as u64;
-        let rec = Record { id, prev, actor_pubkey: [0u8; 32], actor_seq: seq, payload };
+        let rec = Record { id, prev, actor_pubkey: [0u8; 32], actor_seq: seq, flags: flags_for(derived), payload };
         match EvLog::append_tip_bytes(&mut self.store, &rec) {
             Ok(_) => Ok(()),
             Err(e) if crate::e_is_full(&e) => {
@@ -161,7 +179,7 @@ impl LogImage {
     /// The newest record alone, unpacking no other (W-PITR2: the journal's in-step check).
     pub fn newest(&self) -> Option<Entry> {
         let n = self.len() as u64;
-        EvLog::walk_until(&self.store, |_| true).first().and_then(|r| decode(&r.payload, n.saturating_sub(1)))
+        EvLog::walk_until(&self.store, |_| true).first().and_then(|r| decode(body_of(r), n.saturating_sub(1)))
     }
 
     /// Every record, NEWEST FIRST, which is the order every one of the tables
@@ -172,7 +190,7 @@ impl LogImage {
         walked
             .into_iter()
             .enumerate()
-            .filter_map(|(i, (r, bad))| bad.is_none().then(|| decode(&r.payload, (n - 1 - i) as u64)).flatten())
+            .filter_map(|(i, (r, bad))| bad.is_none().then(|| decode(body_of(&r), (n - 1 - i) as u64)).flatten())
             .collect()
     }
 
@@ -185,24 +203,16 @@ impl LogImage {
             .iter()
             .enumerate()
             .filter_map(|(at, (r, bad))| {
-                let ok = if bad.is_some() { Err("crc") } else { decode_or_reason(&r.payload, 0).map(|_| ()) };
+                let ok = if bad.is_some() { Err("crc") } else { decode_or_reason(body_of(r), 0).map(|_| ()) };
                 ok.err().map(|reason| crate::Quarantined { id: crate::hex32(&r.id), at, reason })
             })
             .collect()
     }
 
-    /// Walk the chain and check every id against the payload it names.
+    /// Walk the chain and check every id against the payload it names: `chain::walk_check`'s
+    /// rules, with no redaction this log knows of (the consent log's is `consent::chain_check`).
     pub fn chain_check(&self) -> ChainCheck {
-        let mut out = ChainCheck::default();
-        for r in EvLog::walk(&self.store) {
-            out.records += 1;
-            if r.id == content_id_chained(&r.prev, &r.payload) {
-                out.chained += 1;
-            } else {
-                out.broken += 1;
-            }
-        }
-        out
+        crate::chain::walk_check(&EvLog::walk(&self.store), EvLog::tip(&self.store), |_, _, _| false)
     }
 
     /// Keep the newest `n` records and drop the rest.
@@ -228,10 +238,12 @@ impl LogImage {
         let mut prev = [0u8; 32];
         let mut last = None;
         for (i, e) in keep.iter().enumerate() {
-            let payload = encode(&e.kind, &e.subject, &e.json)?;
-            let id = content_id_chained(&prev, &payload);
+            let body = encode(&e.kind, &e.subject, &e.json)?;
+            let (nonce, derived) = self.entropy.nonce(&prev, &body);
+            let payload = with_nonce(&nonce, &body);
+            let id = chain_id(&prev, &payload);
             let rec =
-                Record { id, prev, actor_pubkey: [0u8; 32], actor_seq: i as u64, payload };
+                Record { id, prev, actor_pubkey: [0u8; 32], actor_seq: i as u64, flags: flags_for(derived), payload };
             EvLog::append_bytes(&mut fresh, &rec)?;
             prev = id;
             last = Some(id);

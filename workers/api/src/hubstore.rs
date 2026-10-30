@@ -396,7 +396,14 @@ pub async fn load_both(place: &Place) -> Result<(Loaded, LoadedCatalog)> {
     let hub = match images.remove(IMAGE_LOG) {
         Some((bytes, generation)) => Loaded {
             hub: Hub::load(&bytes)
-                .map(crate::image_err::hub_loaded).map_err(|e| crate::image_err::unreadable("hub", e))?,
+                .map(crate::image_err::hub_loaded).map_err(|e| crate::image_err::unreadable("hub", e))
+                .map(|mut h| {
+                    // M0: the nonce seed for whatever this request appends (`crate::entropy_seed`).
+                    if let Some(seed) = crate::entropy_seed() {
+                        h.set_entropy(seed);
+                    }
+                    h
+                })?,
             generation,
         },
         None => Loaded {
@@ -606,8 +613,11 @@ pub struct LoadedStock {
 pub async fn load_stock(place: &Place) -> Result<LoadedStock> {
     match load_bytes(place, IMAGE_STOCK).await? {
         Some((image, generation)) => {
-            let stock = dowiz_hub::stock::StockLog::load(&image)
+            let mut stock = dowiz_hub::stock::StockLog::load(&image)
                 .map_err(|e| crate::image_err::unreadable("stock", e))?;
+            if let Some(seed) = crate::entropy_seed() {
+                stock.set_entropy(seed); // M0
+            }
             Ok(LoadedStock { stock, generation })
         }
         None => Ok(LoadedStock {

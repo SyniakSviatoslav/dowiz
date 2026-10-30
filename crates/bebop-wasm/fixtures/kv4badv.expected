@@ -1,6 +1,7 @@
 # What every reader of fixtures/kv4badv.store must answer (W-ES-P8D 2026-10-30): A REFUSAL BY NAME.
-# kv4deep with bit 0 of the first value cell of the first non-empty value flipped (VAL object 1210, crc not
-# re-sealed). Measured native: Tree(BadCrc { obj: 1210, want: 1977864513, got: Some(3108622815) }).
+# kv4deep with bit 0 of the first value cell of the first non-empty value flipped (VAL object 1240 under
+# leaf 2813 at MIN_FANOUT since W-ES-HARD -- object 1210 at fanout 8; crc not re-sealed). Measured
+# native: Tree(BadCrc { obj: 1240, want: 1977864513, got: Some(3108622815) }).
 # BAD_CRC = 10 on every reader; bebop.bin prints -10.
 status=10
 # RE-ANCHORED (conform kv4.rs `reanchor`, 2026-10-30): the corrupted cell lies inside the live commit's

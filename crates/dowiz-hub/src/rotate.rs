@@ -4,7 +4,7 @@
 
 use bebop_store::{evlog::{EvLog, Record}, Store};
 
-use crate::{content_id_chained, decode};
+use crate::{chain_id, decode};
 use crate::{EventKind, Hub, HubError};
 
 impl Hub {
@@ -50,19 +50,22 @@ impl Hub {
             archived_events,
             archived.len()
         );
-        let mut payload = Vec::with_capacity(2 + descriptor.len());
-        payload.push(EventKind::Checkpoint as u8);
-        payload.push(0); // no order id: a checkpoint is about the log, not an order
-        payload.extend_from_slice(descriptor.as_bytes());
+        let mut body = Vec::with_capacity(2 + descriptor.len());
+        body.push(EventKind::Checkpoint as u8);
+        body.push(0); // no order id: a checkpoint is about the log, not an order
+        body.extend_from_slice(descriptor.as_bytes());
 
         // A fresh image sized for what it will hold, never smaller than a hub's
         // birth size: the whole point is that it is not the old one.
         let mut fresh = Store::create_bytes(self.store.to_bytes().len().max(64 * 1024))?;
         EvLog::init_bytes(&mut fresh)?;
-        let check_id = content_id_chained(&tip, &payload);
+        // The checkpoint is a NEW record: nonce in front, sha256 id, flagged (M0).
+        let (nonce, derived) = self.entropy.nonce(&tip, &body);
+        let payload = crate::chain::with_nonce(&nonce, &body);
+        let check_id = chain_id(&tip, &payload);
         EvLog::append_tip_bytes(
             &mut fresh,
-            &Record { id: check_id, prev: tip, actor_pubkey: [0u8; 32], actor_seq: 0, payload },
+            &Record { id: check_id, prev: tip, actor_pubkey: [0u8; 32], actor_seq: 0, flags: crate::chain::flags_for(derived), payload },
         )?;
 
         let mut last = check_id;

@@ -89,7 +89,7 @@ fn add_neg_and_consolidation() {
 
 #[test]
 fn log_tail_is_plus_one() {
-    let r = |b: u8| Record { id: [b; 32], prev: [0; 32], actor_pubkey: [0; 32], actor_seq: b as u64, payload: vec![b] };
+    let r = |b: u8| Record { id: [b; 32], prev: [0; 32], actor_pubkey: [0; 32], actor_seq: b as u64, flags: 0, payload: vec![b] };
     let z = from_log_tail(&[r(1), r(2), r(3)]);
     assert_eq!(z.rows().iter().map(|p| p.1).collect::<Vec<_>>(), vec![1, 1, 1]);
     assert_eq!(z.weight(&[2; 32]), 1);

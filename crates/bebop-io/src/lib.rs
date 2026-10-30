@@ -29,6 +29,9 @@ pub mod writer;
 /// `Scan`, `Refusal`, and `Detached` for an image whose bytes the caller persists.
 pub mod db;
 pub mod detached;
+/// W-MG-M1: the DOC root's `verify` from bytes, under the last-commit rule (feature `doc`).
+#[cfg(feature = "doc")]
+pub mod docverify;
 pub mod refusal;
 mod snap;
 pub mod txn;
@@ -78,6 +81,8 @@ pub trait Device {
     /// Make `staged` -- fully written and, for a durable device, barriered by the caller --
     /// REPLACE this device atomically (`FileDevice`: fdatasync, rename, fsync of the directory;
     /// the lock stays). Readers holding the old image keep it (R-EMBED-STORE §3.3).
+    /// A device may defer the rename of an unbarriered sibling to its next `barrier`
+    /// (`FileDevice`); until then the name holds the last durable generation.
     fn publish(&mut self, staged: Self) -> io::Result<()>
     where
         Self: Sized,

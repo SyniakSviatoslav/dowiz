@@ -42,7 +42,7 @@ impl StockLog {
             rec.push_str(&format!(r#","at":{at}"#));
         }
         rec.push('}');
-        self.write_payload(rec.into_bytes())
+        self.write_new(rec)
     }
 
     /// Every note of kind `what`, OLDEST FIRST, as written.

@@ -15,14 +15,14 @@
 #   * THE ORDER LOG (W-P0-LOG, R-BINREC P0, 2026-10-29) -- before this an order-log payload could
 #     change shape and pass unnoticed. Its formats, each read from the code that writes it:
 #       log.kinds  the kind byte of every `EventKind` (event.rs `from_byte`) and forget's REDACTED_BIT;
-#       log.frame  what `Hub::append` pushes, in order (log.rs: `[kind][id_len][id][json]`);
+#       log.frame  what `Hub::append` pushes, in order (log.rs: `nonce ‖ [kind][id_len][id][json]`);
 #       log.order  the kernel's order snapshot, the keys `order_to_value`/`item_to_value` write
 #                  (crates/dowiz-core/src/json_api.rs) -- the base envelope of Placed/Advanced;
 #       log.delta  the delta marks every order kind folds by (room/delta.rs DELTA_MARK, DELTA_DROP);
 #       log.<kind> per EventKind, lowercase: the JSON keys LITERALLY written (`"k":` in a json!
 #                  or a raw string, `x["k"] =`) in every non-test fn that writes that kind -- an
 #                  `append(..EventKind::K`, `events.push((EventKind::K`, `Ok(Some((..EventKind::K`,
-#                  `kind: EventKind::K`, `payload.push(EventKind::K` or a `const ..: EventKind =`
+#                  `kind: EventKind::K`, `payload.push(EventKind::K`, `body.push(EventKind::K` or a `const ..: EventKind =`
 #                  alias of it -- plus the same-file fns it calls, one level. `-` when none.
 #                  NOT seen: keys stamped by helpers in OTHER files (storefront's envelope, tax,
 #                  loyalty); a writer that adds a key there changes no fingerprint. A writer site
@@ -120,8 +120,8 @@ table = re.findall(r'(\d+)\s*=>\s*Some\(EventKind::(\w+)\)', ev)
 bit = re.search(r'REDACTED_BIT\s*:\s*u8\s*=\s*(\w+)', read('crates/dowiz-hub/src/forget.rs'))
 found['log.kinds'] = ','.join(f'{b}={k}' for b, k in table) + ';redacted=' + (bit.group(1) if bit else '?')
 lg = read('crates/dowiz-hub/src/log.rs')
-a = lg.find('pub fn append('); b = lg.find('content_id_chained', a)
-found['log.frame'] = '|'.join(re.sub(r'\s+', '', x) for x in re.findall(r'payload\.(?:push|extend_from_slice)\((.*?)\);', lg[a:b]))
+a = lg.find('pub fn append('); b = lg.find('chain_id(', a)
+found['log.frame'] = '|'.join((['with_nonce'] if 'with_nonce(' in lg[a:b] else []) + [re.sub(r'\s+', '', x) for x in re.findall(r'(?:payload|body)\.(?:push|extend_from_slice)\((.*?)\);', lg[a:b])])
 ja = read('crates/dowiz-core/src/json_api.rs')
 part = lambda f: ','.join(re.findall(r'String::from\("(\w+)"\)', ja[ja.find('fn ' + f):ja.find('\n}', ja.find('fn ' + f))]))
 found['log.order'] = part('order_to_value').replace('items', 'items[' + part('item_to_value') + ']')
@@ -130,7 +130,7 @@ found['log.delta'] = ','.join(re.findall(r'pub const DELTA_(?:MARK|DROP)\s*:\s*&
 
 kinds = [k for _, k in table]
 logkeys, unplaced = {k: set() for k in kinds}, []
-WRITE = re.compile(r'(append\w*\s*\(|events\.push\(\(|Ok\(Some\(\(|kind:\s*|payload\.push\(|EventKind\s*=\s*)[^;{}]*$')
+WRITE = re.compile(r'(append\w*\s*\(|events\.push\(\(|Ok\(Some\(\(|kind:\s*|(?:payload|body)\.push\(|EventKind\s*=\s*)[^;{}]*$')
 for d in ('crates/dowiz-hub/src', 'workers/api/src'):
     for f in sorted(glob.glob(os.path.join(ROOT, d, '**', '*.rs'), recursive=True)):
         rel = os.path.relpath(f, ROOT)

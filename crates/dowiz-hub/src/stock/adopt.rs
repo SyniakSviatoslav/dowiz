@@ -1,8 +1,13 @@
 //! SHEAF S2: RECORDS ADOPTED VERBATIM. The two doors a glued section needs that the write door
 //! (`commit`) is not: the hub adopting a kitchen tablet's tail AS WRITTEN, and a tablet replaying
 //! the hub's tail AS WRITTEN. Both keep the bytes, so a record's chained id -- `sha256(prev ‖
-//! payload)` -- is the same on the hub and on the tablet once the prefix below it is the same:
-//! that equality is the whole gluing condition on the wire (`glue::wire`), one 32-byte compare.
+//! payload)` since M0, the legacy FNV for a record whose text carries no nonce (`codec::nonced`,
+//! `chain::id_for`) -- is the same on the hub and on the tablet once the prefix below it is the
+//! same: that equality is the whole gluing condition on the wire (`glue::wire`), one 32-byte
+//! compare. ONE EXCEPTION, stated: a tablet record that arrives WITHOUT a nonce (written by a
+//! tablet from before M0) is adopted with a nonce put in front, because the hub writes no
+//! legacy id after its first sha256 one (`chain::walk_check`'s rule); the reply then carries it
+//! back as its new bytes rather than as an echo, and the tablet replays those.
 //!
 //! `commit` re-encodes an event with the meta it is given and stamps the clock; that is right for
 //! a new fact and wrong for an old one, whose bytes ARE the fact. So the hub's door here decides
@@ -112,7 +117,11 @@ impl StockLog {
                 continue;
             }
             led.apply(&ev)?;
-            self.write_payload(rec.as_bytes().to_vec())?;
+            if nonced(rec) {
+                self.write_payload(rec.as_bytes().to_vec())?;
+            } else {
+                self.write_new(rec.clone())?;
+            }
             out.merged += 1;
         }
         // THE CHECKPOINT IS DEFERRED, BOUNDED. A glued tail is up to a day of records at once, and

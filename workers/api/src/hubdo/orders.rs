@@ -137,6 +137,9 @@ impl HubImages {
             ),
         };
         stock.set_clock(input.now_ms);
+        if let Some(seed) = crate::entropy_seed() {
+            stock.set_entropy(seed); // M0 (a fresh stock image has no seed yet)
+        }
         let settled_before = stock.len();
 
         let merged = match crate::command::advance::decide(

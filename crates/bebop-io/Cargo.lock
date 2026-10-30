@@ -19,10 +19,18 @@ version = "0.1.0"
 dependencies = [
  "bebop-image",
  "bebop-kv",
+ "bebop-log",
 ]
 
 [[package]]
 name = "bebop-kv"
+version = "0.1.0"
+dependencies = [
+ "bebop-image",
+]
+
+[[package]]
+name = "bebop-log"
 version = "0.1.0"
 dependencies = [
  "bebop-image",

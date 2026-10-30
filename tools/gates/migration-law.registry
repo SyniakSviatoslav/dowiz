@@ -29,6 +29,7 @@ block.sales        1 sales:v1(day:i32:0,dish:i64:0,qty:i32:0,gross:i64:1,cqty:i3
 # its writer fns write literally. v1 laws: crates/dowiz-hub/src/event/migration_tests.rs.
 log.kinds       1 1=Placed,2=Advanced,3=Paid,4=Revealed,5=Noted,6=Checkpoint,7=Amended,8=Forgotten;redacted=0x80  event::migration_tests::every_log_kind_round_trips
 log.frame       1 kindasu8|idb.len()asu8|idb|order_json.as_bytes()  event::migration_tests::every_log_kind_round_trips
+log.frame       2 with_nonce|kindasu8|idb.len()asu8|idb|order_json.as_bytes()  tests::m0_a_new_record_is_sha256_flagged_and_nonced
 log.order       1 id,customer_id,status,items[product_id,modifier_ids,quantity,unit_price],subtotal,total,created_at_ms,channel,cash_pay_with  event::migration_tests::the_kernel_snapshot_round_trips
 log.delta       1 _d,_x  event::migration_tests::old_deltas_still_fold
 log.placed      1 at_ms,code,conflicts,discount,ebills_changed,ebills_code,ebills_revision,log_cis_len,product_id,promo,sale_id,total  event::migration_tests::every_log_kind_round_trips

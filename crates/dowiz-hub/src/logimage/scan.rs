@@ -48,7 +48,7 @@ impl LogImage {
         let mut out = Vec::new();
         EvLog::scan(&self.store, |p| {
             if p.has(&head) && p.crc_bad().is_none() {
-                if let Some(e) = decode(&p.record().payload, seq(n, p.pos)) {
+                if let Some(e) = decode(crate::body_of(&p.record()), seq(n, p.pos)) {
                     out.push(e);
                 }
             }
@@ -87,7 +87,7 @@ impl LogImage {
                 return true;
             }
             if out.len() < n {
-                out.extend(decode(&p.record().payload, seq(total, p.pos)));
+                out.extend(decode(crate::body_of(&p.record()), seq(total, p.pos)));
             }
             false
         });

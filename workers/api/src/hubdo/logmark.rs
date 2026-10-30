@@ -74,23 +74,33 @@ impl HubImages {
     /// describes these bytes and with a full scan when not; the mark is then moved to them.
     /// ONLY for the bytes `image(LOG_IMAGE)` returned for `generation`.
     pub(super) fn load_log(&self, generation: i64, bytes: &[u8]) -> Result<Hub, HubError> {
-        let (hub, next) = Hub::load_since(bytes, self.mark_at(LOG_IMAGE, generation).as_ref())?;
+        let (mut hub, next) = Hub::load_since(bytes, self.mark_at(LOG_IMAGE, generation).as_ref())?;
         self.mark_now(LOG_IMAGE, generation, next);
+        // M0: the nonce seed for whatever this turn appends (`crate::entropy_seed`).
+        if let Some(seed) = crate::entropy_seed() {
+            hub.set_entropy(seed);
+        }
         Ok(hub)
     }
 
     /// `load_log` for the stock log (`IMAGE_STOCK`).
     pub(super) fn load_stock(&self, generation: i64, bytes: &[u8]) -> Result<StockLog, HubError> {
         let id = crate::hubstore::IMAGE_STOCK;
-        let (log, next) = StockLog::load_since(bytes, self.mark_at(id, generation).as_ref())?;
+        let (mut log, next) = StockLog::load_since(bytes, self.mark_at(id, generation).as_ref())?;
         self.mark_now(id, generation, next);
+        if let Some(seed) = crate::entropy_seed() {
+            log.set_entropy(seed);
+        }
         Ok(log)
     }
 
     /// `load_log` for an entry log held under `id` (the wallet ledger, the till).
     pub(super) fn load_entries(&self, id: &str, generation: i64, bytes: &[u8]) -> Result<LogImage, HubError> {
-        let (log, next) = LogImage::load_since(bytes, self.mark_at(id, generation).as_ref())?;
+        let (mut log, next) = LogImage::load_since(bytes, self.mark_at(id, generation).as_ref())?;
         self.mark_now(id, generation, next);
+        if let Some(seed) = crate::entropy_seed() {
+            log.set_entropy(seed);
+        }
         Ok(log)
     }
 }

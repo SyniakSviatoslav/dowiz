@@ -3,12 +3,49 @@
 //! an image holds every record it claims.
 //!
 //! Shared beyond the order log: `stock.rs`, `logimage.rs`, `forget.rs` and
-//! `consent/forget.rs` address their own records with `content_id_chained`.
+//! `consent/forget.rs` address their own records with `chain_id`.
+//!
+//! ── TWO SCHEMES, AND THE RECORD SAYS WHICH (M0, 2026-10-30) ──
+//!
+//! A record written since M0 carries `FLAG_SHA256` in its flags cell, a 16-byte
+//! nonce at the front of its payload, and `id = sha256(prev ‖ payload)` -- the
+//! commitment `glue.rs` and `glue/wire.rs` had described since S0 while the code
+//! under them hashed with four lanes of FNV-1a. Every record written before is
+//! LEGACY: its id is `legacy_id_chained` (FNV over `prev ‖ payload`, 2026-09-20
+//! to M0) or `legacy_id` (FNV over the payload alone, before that), its flags
+//! cell is 0, and it stays exactly as it is -- `chain_check` counts it under
+//! `legacy`, never rewrites it, and an old image serialises byte for byte.
+//!
+//! WHAT sha256 BUYS. FNV-1a is not a commitment: a forger who edits a payload
+//! can choose the bytes so the four lanes land where they were, and nothing
+//! downstream notices. With sha256 the id is bound to the bytes; what a forger
+//! can still do is repair the id -- and `chain_check` now has one more rule for
+//! that, under `walk_check`: the scheme may move from legacy to sha256 ONCE,
+//! oldest to newest, and never back. A legacy record newer than any sha256
+//! record is what "edited after M0, id repaired under the retired scheme"
+//! looks like, and it is counted `broken`.
+//!
+//! WHAT IT DOES NOT BUY, stated so nobody reads more into it. Repairing a
+//! record's id under sha256 leaves the record after it naming the OLD id in its
+//! `prev`, and this walk COUNTS those gaps (`ChainCheck::gaps`) but cannot
+//! refuse them: `rotate.rs` carries records verbatim past a checkpoint, so a
+//! healthy rotated image has gaps by design. What binds the whole history is
+//! the tip a witness wrote down (`Hub::tip`, `Hub::holds`) and, from M1, the
+//! seal over it. The nonce is for M4 (R-MAINGOAL-A §2c): once a record is
+//! redacted the nonce is erased with it, so its id cannot confirm a guessed
+//! payload by recomputation. A writer with no entropy set derives the nonce
+//! from the record itself and says so with `FLAG_NONCE_DERIVED` -- such a nonce
+//! protects nothing, and `ChainCheck::derived` counts them so that is visible.
 
-use bebop_store::{evlog::EvLog, Store};
+use bebop_store::evlog::{EvLog, Record, FLAG_NONCE_DERIVED};
+use bebop_store::Store;
 
 use crate::forget;
 use crate::{Hub, HubError};
+
+mod scheme;
+pub use scheme::IdScheme;
+pub(crate) use scheme::{body_of, chain_id, flags_for, id_for, legacy_id, legacy_id_chained, verify_id, with_nonce, Entropy, ERASED_NONCE, NONCE_LEN};
 
 impl Hub {
     /// Walk the chain and check every id against the payload it names.
@@ -16,24 +53,11 @@ impl Hub {
     /// THE POINT IS THAT IT CAN FAIL. An append-only log whose ids are never
     /// recomputed is an append-only log by assertion; this is the assertion
     /// being checked, and it is the half of I4 that was claimed in a comment
-    /// and not delivered by any code.
+    /// and not delivered by any code. The rules are `walk_check`'s.
     pub fn chain_check(&self) -> ChainCheck {
-        let mut out = ChainCheck::default();
         let walked = EvLog::walk(&self.store);
         let tip = EvLog::tip(&self.store);
-        for (at, r) in walked.iter().enumerate() {
-            out.records += 1;
-            if r.id == content_id_chained(&r.prev, &r.payload) {
-                out.chained += 1;
-            } else if r.id == content_id(&r.payload) {
-                out.legacy += 1;
-            } else if forget::tombstone_holds(&walked, at, tip) {
-                out.redacted += 1;
-            } else {
-                out.broken += 1;
-            }
-        }
-        out
+        walk_check(&walked, tip, forget::tombstone_holds)
     }
 
     /// The newest record's chain id, in hex. `None` for a log with no records.
@@ -58,6 +82,65 @@ impl Hub {
     pub fn holds(&self, id_hex: &str) -> bool {
         EvLog::walk(&self.store).iter().any(|r| hex32(&r.id) == id_hex)
     }
+
+    /// THE ENTROPY SEAM. The nonce in every record written after this call is drawn from
+    /// `seed` (sha256 over the seed, a counter and the previous id), never from a clock or a
+    /// counter alone. This crate has no randomness of its own on wasm32, so the caller
+    /// hands it one seed per request, as it hands the clock to the stock log. Without one
+    /// the nonce is derived from the record and flagged `FLAG_NONCE_DERIVED`.
+    pub fn set_entropy(&mut self, seed: [u8; 32]) {
+        self.entropy.set(seed);
+    }
+}
+
+/// THE WALK'S RULES, shared by the order log and `LogImage`. `walked` is newest first;
+/// `tombstone(walked, at, tip)` says whether a record that verifies under no scheme is a
+/// redaction whose LINK holds (the order log's `forget::tombstone_holds`; a log with no
+/// redaction answers `false`).
+pub(crate) fn walk_check(walked: &[Record], tip: Option<[u8; 32]>, tombstone: impl Fn(&[Record], usize, Option<[u8; 32]>) -> bool) -> ChainCheck {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Kind {
+        Chained,
+        Legacy,
+        Redacted,
+        Broken,
+    }
+    let mut kinds: Vec<Kind> = walked
+        .iter()
+        .enumerate()
+        .map(|(at, r)| match verify_id(r.flags, &r.prev, &r.payload, &r.id) {
+            Some(IdScheme::Sha256) => Kind::Chained,
+            Some(_) => Kind::Legacy,
+            None if tombstone(walked, at, tip) => Kind::Redacted,
+            None => Kind::Broken,
+        })
+        .collect();
+    // THE SCHEME MOVES FORWARD ONCE. Newest first, so everything before the oldest sha256
+    // record was written after it: a legacy id there was repaired under a scheme this log
+    // had already left, which is the one forgery FNV lets through and sha256 does not.
+    if let Some(oldest_sha) = kinds.iter().rposition(|k| *k == Kind::Chained) {
+        for k in kinds.iter_mut().take(oldest_sha) {
+            if *k == Kind::Legacy {
+                *k = Kind::Broken;
+            }
+        }
+    }
+    let mut out = ChainCheck { records: walked.len(), ..ChainCheck::default() };
+    for (at, (r, k)) in walked.iter().zip(&kinds).enumerate() {
+        match k {
+            Kind::Chained => out.chained += 1,
+            Kind::Legacy => out.legacy += 1,
+            Kind::Redacted => out.redacted += 1,
+            Kind::Broken => out.broken += 1,
+        }
+        if r.flags & FLAG_NONCE_DERIVED != 0 {
+            out.derived += 1;
+        }
+        if walked.get(at + 1).is_some_and(|below| below.id != r.prev) {
+            out.gaps += 1;
+        }
+    }
+    out
 }
 
 /// Does this image hold every record it says it holds?
@@ -102,68 +185,35 @@ pub(crate) fn hex32(b: &[u8; 32]) -> String {
     s
 }
 
-/// Content id over the PREVIOUS ID AND THE PAYLOAD — the cascade that makes
-/// the chain tamper-evident.
-///
-/// WHAT THIS FIXES. `content_id` hashes the payload alone, so editing an event
-/// in an image changed that event's id and NOTHING ELSE: the records after it
-/// still verified, and `stock.rs` said in as many words that "editing any
-/// event changes every content id after it", which was not true of the code
-/// under the comment. Folding the previous id in makes it true: rewriting
-/// event N breaks N's own id, and repairing that id breaks N+1's `prev` and
-/// therefore N+1's id, all the way to the tip.
-///
-/// Still FNV rather than sha256, for the reason below: this crate has no
-/// dependencies and the cryptographic commitment lives in the kernel, where
-/// the keys are. What this gives is detection of an EDIT, not resistance to a
-/// determined forger.
-pub(crate) fn content_id_chained(prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-    let mut buf = Vec::with_capacity(32 + payload.len());
-    buf.extend_from_slice(prev);
-    buf.extend_from_slice(payload);
-    content_id(&buf)
-}
-
-/// What a walk of the chain found. `legacy` records were written before the
-/// cascade and can only be checked against the old scheme, which is a fact
-/// about them rather than a fault: pretending otherwise would make every image
-/// in production look broken.
+/// What a walk of the chain found. `legacy` records were written before M0 (or before the
+/// 2026-09-20 cascade) and can only be checked against their own scheme, which is a fact
+/// about them rather than a fault: pretending otherwise would make every image in
+/// production look broken.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ChainCheck {
     pub records: usize,
-    /// Verified against `content_id_chained(prev, payload)`.
+    /// Verified as `sha256(prev ‖ payload)` (M0).
     pub chained: usize,
-    /// Verified only against the old `content_id(payload)`.
+    /// Verified only under a pre-M0 FNV scheme, and older than every sha256 record.
     pub legacy: usize,
-    /// Matched neither. An edited event, or a damaged one.
+    /// Matched no scheme, or a legacy id newer than a sha256 record. An edited event, or a
+    /// damaged one.
     pub broken: usize,
     /// Redacted in place by `Hub::forget`: verified by LINK, not content.
     /// Must equal what the `Forgotten` declarations name (conservation law 9).
     pub redacted: usize,
+    /// Records whose `prev` is not the id of the record below them. A rotation leaves these
+    /// by design (`rotate.rs`); a nightly that knows how many rotations an image has had can
+    /// say whether the number is the expected one. Counted, never refused here.
+    pub gaps: usize,
+    /// Records whose nonce was derived, not drawn (`FLAG_NONCE_DERIVED`): the writer had no
+    /// entropy set, so their ids offer no cover to a redacted payload (M4).
+    pub derived: usize,
 }
 
 impl ChainCheck {
-    /// Nothing in this log fails BOTH schemes.
+    /// Nothing in this log fails every scheme it may be under.
     pub fn intact(&self) -> bool {
         self.broken == 0
     }
-}
-
-/// Content id over the payload. Not a cryptographic commitment — it is the
-/// chain's own addressing, and it is derived from the bytes so two identical
-/// events are indistinguishable by construction.
-pub(crate) fn content_id(payload: &[u8]) -> [u8; 32] {
-    // FNV-1a over 4 lanes, spread to 32 bytes. Deliberately NOT sha256: this
-    // crate has zero dependencies, and the cryptographic chain commitment lives
-    // in the kernel where the keys are.
-    let mut out = [0u8; 32];
-    for lane in 0..4u64 {
-        let mut h: u64 = 0xcbf29ce484222325 ^ lane.wrapping_mul(0x9E3779B97F4A7C15);
-        for b in payload {
-            h ^= *b as u64;
-            h = h.wrapping_mul(0x100000001b3);
-        }
-        out[lane as usize * 8..lane as usize * 8 + 8].copy_from_slice(&h.to_le_bytes());
-    }
-    out
 }

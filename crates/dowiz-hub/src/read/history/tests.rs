@@ -151,7 +151,10 @@ fn hex(b: &[u8]) -> String {
 /// THE OLD IMAGE, AS A GOLDEN. A deterministic v2 venue (the only version `Hub` has ever
 /// written); IMAGE_SHA pins its bytes and HISTORY_SHA every id's history, both taken from
 /// the code BEFORE the scan (history() = the walk), by running this with the constants empty.
-const IMAGE_SHA: &str = "8be3c3135207a4fb4b88db7ab463e43430dce30191e85d1ab3a7ab75384b224f";
+// IMAGE_SHA re-derived at M0 (2026-10-30): every record now carries a nonce, the sha256 flag
+// and a sha256 id (`chain.rs`); the pre-M0 value was 8be3c313...224f. HISTORY_SHA did NOT
+// move: the scan reads the body behind the nonce and answers exactly what it answered.
+const IMAGE_SHA: &str = "7fc5e457cb91c753839038f447461ac5c39da1c4e6a39681889a6b337dcb101f";
 const HISTORY_SHA: &str = "1e5aa0b7f479efdff1043b6b66be9f1bb4fc85e9fbfdbdcbbcda1352b09d1e95";
 
 #[test]

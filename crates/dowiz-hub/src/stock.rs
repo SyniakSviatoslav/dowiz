@@ -110,7 +110,7 @@ pub struct StockLedger {
 mod ledger;
 
 mod codec;
-pub use codec::{decode, encode};
+pub use codec::{decode, encode, nonced, rec_body};
 /// W-TASTE2 S7c: the record format's migration laws (`tools/gates/migration-law.sh` names them).
 #[cfg(test)]
 #[path = "stock/migration_tests.rs"]
@@ -146,6 +146,8 @@ pub struct StockLog {
     /// Ids of the records quarantined for a failed crc at load (W-CRC policy: an append
     /// log serves the rest). Empty on every healthy image, so no reader pays for it.
     bad: Vec<[u8; 32]>,
+    /// The nonce source ([`StockLog::set_entropy`], M0); derived nonces, flagged, without one.
+    entropy: crate::chain::Entropy,
 }
 
 /// Room for roughly a year of a single venue's stock events.

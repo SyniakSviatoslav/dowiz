@@ -132,19 +132,20 @@ pub struct Quarantined {
 /// evidence. One decoder, four named refusals, and `decode` is this with the
 /// name thrown away.
 pub(crate) fn decode_or_reason(r: &Record) -> Result<Event, &'static str> {
-    if r.payload.len() < 2 {
+    // The body: the payload less the nonce an M0 record carries in front (`chain::body_of`).
+    let p = crate::body_of(r);
+    if p.len() < 2 {
         return Err("short");
     }
     // The high bit marks a record redacted in place (`forget.rs`); the kind
     // is the low seven.
-    let kind = EventKind::from_byte(r.payload[0] & !forget::REDACTED_BIT).ok_or("kind")?;
-    let id_len = r.payload[1] as usize;
-    if r.payload.len() < 2 + id_len {
+    let kind = EventKind::from_byte(p[0] & !forget::REDACTED_BIT).ok_or("kind")?;
+    let id_len = p[1] as usize;
+    if p.len() < 2 + id_len {
         return Err("framing");
     }
-    let order_id = String::from_utf8(r.payload[2..2 + id_len].to_vec()).map_err(|_| "id-utf8")?;
-    let order_json =
-        String::from_utf8(r.payload[2 + id_len..].to_vec()).map_err(|_| "json-utf8")?;
+    let order_id = String::from_utf8(p[2..2 + id_len].to_vec()).map_err(|_| "id-utf8")?;
+    let order_json = String::from_utf8(p[2 + id_len..].to_vec()).map_err(|_| "json-utf8")?;
     Ok(Event { kind, order_id, order_json, seq: r.actor_seq })
 }
 

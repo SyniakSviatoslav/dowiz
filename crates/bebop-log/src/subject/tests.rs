@@ -35,7 +35,7 @@ fn log(v1: bool, n: u32, orders: u32) -> Store {
         let id = format!("o{}", (x >> 33) as u32 % orders);
         let json = "j".repeat((x >> 20) as usize % 19);
         let actor = if i % 3 == 0 { [0x5A; 32] } else { [0u8; 32] };
-        let r = Record { id: [i as u8; 32], prev: [0; 32], actor_pubkey: actor, actor_seq: i as u64, payload: framed(1 + (i % 4) as u8, &id, &json) };
+        let r = Record { id: [i as u8; 32], prev: [0; 32], actor_pubkey: actor, actor_seq: i as u64, flags: 0, payload: framed(1 + (i % 4) as u8, &id, &json) };
         EvLog::append_bytes(&mut st, &r).unwrap();
     }
     st
@@ -117,6 +117,49 @@ fn a_lying_length_is_bounded_the_same() {
             assert_same(&st, 15, &format!("v1={v1} claim={claim}"));
         }
     }
+}
+
+/// A `FLAG_SHA256` RECORD IS MATCHED ON ITS BODY (M0): the sixteen nonce bytes in front of its
+/// payload are skipped, so a head at `at` means body byte `at` on a flagged record and payload
+/// byte `at` on a legacy one, in the same walk -- and the reference is `walk_marked` filtered
+/// the same way. A flagged record shorter than its nonce has no body and matches nothing but
+/// the empty head.
+#[test]
+fn a_flagged_record_is_matched_on_its_body_behind_the_nonce() {
+    use crate::{FLAG_SHA256, NONCE_LEN};
+    let mut st = Store::create_bytes(1 << 20).unwrap();
+    EvLog::init_bytes(&mut st).unwrap();
+    for i in 0..60u32 {
+        let id = format!("o{}", i % 7);
+        let body = framed(1 + (i % 4) as u8, &id, &"j".repeat(i as usize % 11));
+        let (flags, payload) = if i % 2 == 0 {
+            let mut p = format!("{:016}", i).into_bytes();
+            p.extend_from_slice(&body);
+            (FLAG_SHA256, p)
+        } else {
+            (0, body)
+        };
+        let actor = if i % 3 == 0 { [0x5A; 32] } else { [0u8; 32] };
+        let payload = if i == 10 { payload[..9].to_vec() } else { payload }; // a flagged stub: no body
+        EvLog::append_bytes(&mut st, &Record { id: [i as u8; 32], prev: [0; 32], actor_pubkey: actor, actor_seq: i as u64, flags, payload }).unwrap();
+    }
+    let body_of = |r: &Record| -> Vec<u8> { if r.flags & FLAG_SHA256 != 0 { r.payload.get(NONCE_LEN..).unwrap_or(&[]).to_vec() } else { r.payload.clone() } };
+    for (at, head) in heads(7) {
+        let want: Vec<(Record, Option<u32>)> = EvLog::walk_marked(&st)
+            .into_iter()
+            .filter(|(r, _)| at.checked_add(head.len()).and_then(|e| body_of(r).get(at..e).map(|b| b == head.as_slice())) == Some(true))
+            .collect();
+        assert_eq!(EvLog::walk_marked_where(&st, at, &head), want, "at={at} head={head:?}");
+    }
+    let hits = EvLog::walk_marked_where(&st, 1, b"\x02o3");
+    assert!(hits.iter().any(|(r, _)| r.flags == FLAG_SHA256) && hits.iter().any(|(r, _)| r.flags == 0), "both kinds matched on the same head");
+    EvLog::scan(&st, |p| {
+        let r = p.record();
+        let body = body_of(&r);
+        assert_eq!(p.len(), body.len(), "pos {}", p.pos);
+        assert!((0..=body.len()).all(|j| p.byte(j) == body.get(j).copied()));
+        false
+    });
 }
 
 /// An empty log and a store with no log at all answer nothing, without panicking.

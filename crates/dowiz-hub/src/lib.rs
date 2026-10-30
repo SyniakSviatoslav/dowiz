@@ -86,13 +86,13 @@ mod usage;
 #[cfg(test)]
 mod tests;
 
-pub use chain::ChainCheck;
+pub use chain::{ChainCheck, IdScheme};
 pub use error::HubError;
 pub use event::{Event, EventKind, Quarantined};
 pub use usage::Usage;
 /// What a log load proved, for the next load of the same bytes (W-HUBCRC, `Hub::load_since`).
 pub use bebop_store::verify::ChainMark as LogMark;
-pub(crate) use chain::{chain_is_whole, content_id_chained, hex32};
+pub(crate) use chain::{body_of, chain_id, chain_is_whole, hex32};
 pub(crate) use error::e_is_full;
 pub(crate) use event::{decode, decode_or_reason};
 pub(crate) use usage::{ceiling_cells, usage_of, usage_of_kind};
@@ -124,4 +124,6 @@ pub struct Hub {
     store: Store,
     /// The load-time crc scan, carried (`quarantine::Seen`); `None` after a rebuild.
     seen: Option<Seen>,
+    /// The nonce source (`Hub::set_entropy`, M0); derived nonces, flagged, without one.
+    entropy: chain::Entropy,
 }

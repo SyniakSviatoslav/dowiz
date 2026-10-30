@@ -6,7 +6,7 @@ use super::*;
 use crate::Record;
 
 fn rec(n: u8, payload: &[u8]) -> Record {
-    Record { id: [n; 32], prev: [n.wrapping_sub(1); 32], actor_pubkey: [0; 32], actor_seq: n as u64, payload: payload.to_vec() }
+    Record { id: [n; 32], prev: [n.wrapping_sub(1); 32], actor_pubkey: [0; 32], actor_seq: n as u64, flags: 0, payload: payload.to_vec() }
 }
 
 fn append(st: &mut Store, from: u8, to: u8) {

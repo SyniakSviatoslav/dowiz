@@ -17,7 +17,7 @@ pub(super) fn id_of(prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
 /// the way dowiz chains content ids (sha256 over prev || payload).
 pub(super) fn rec(i: u64, prev: &[u8; 32]) -> Record {
     let payload: Vec<u8> = (0..330u64).map(|j| ((i * 31 + j * 7) % 251) as u8).collect();
-    Record { id: id_of(prev, &payload), prev: *prev, actor_pubkey: [0; 32], actor_seq: i, payload }
+    Record { id: id_of(prev, &payload), prev: *prev, actor_pubkey: [0; 32], actor_seq: i, flags: 0, payload }
 }
 
 pub(super) fn log_of(n: u64, bytes: usize) -> (Store, [u8; 32]) {

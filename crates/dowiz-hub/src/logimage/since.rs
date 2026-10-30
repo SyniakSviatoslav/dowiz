@@ -32,7 +32,7 @@ impl LogImage {
         // A record whose crc fails is QUARANTINED, not refused (`crate::quarantine`).
         // ONE walk: the scan's findings are kept (`crate::Seen`, W-LOOPB) and give the mark.
         let (seen, next) = crate::chain_is_whole_seen(&store, mark)?;
-        Ok((LogImage { store, seen }, next))
+        Ok((LogImage { store, seen, entropy: Default::default() }, next))
     }
 }
 

@@ -1,0 +1,14 @@
+# What every reader of fixtures/doc.store must answer (W-MG-M1, 2026-10-30): a REFUSAL BY NAME.
+# The image: a DOC root (FORMAT §9.4) over an empty-then-three-record v2 log, three toy-sealed
+# commits, written by `cargo test -p bebop-log write_the_doc_fixture_when_asked` with
+# BEBOP_DOC_FIXTURE=<this path> (deterministic: a re-run is byte-identical). The DOC root carries
+# root-version 5 in cell 5 (the KV readers' version cell) and in cell 7 (the log readers'):
+# every reader written before M5 reads "a version above 4" and says UNKNOWN_VERSION (12) -- never
+# a fold, never NOT_A_KV (2), which would mean it tried to decode it.
+#   native   : bebop-kv Kv::load_checked -> KvError::UnknownVersion { v: 5 }
+#   wasm32   : kv status=12 n=0 root=0 (abi UNKNOWN_VERSION)
+#   python   : kv status=12 n=0 root=0 (oracle.py kv_entries, ver > 4)
+#   bebop.bin: kv.bp kv_version -> pj_kv_known traps 78 (conformance.sh maps 78 to status 12)
+#   ffi      : bebop-io Refusal::UnknownVersion(5) -> UNKNOWN_VERSION
+status=12
+bebop_rc=78

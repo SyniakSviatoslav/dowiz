@@ -52,7 +52,7 @@ async fn pass_key(place: &crate::hubstore::Place) -> Result<Vec<u8>> {
         .ok_or_else(|| Error::RustError("venue pass key is not base64".into()))
 }
 
-fn getrandom_fill(buf: &mut [u8]) -> Result<()> {
+pub(crate) fn getrandom_fill(buf: &mut [u8]) -> Result<()> {
     // Natively (a test) the OS CSPRNG, through the crate the Worker already links for the same
     // job on wasm (`getrandom` with `js`); wasm keeps the Web Crypto call below (W-COV C2).
     if !cfg!(target_arch = "wasm32") {
