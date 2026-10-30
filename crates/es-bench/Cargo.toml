@@ -18,6 +18,9 @@ competitors = ["dep:redb", "dep:heed", "dep:rusqlite"]
 
 [dependencies]
 bebop-store = { path = "../bebop-store" }
+# W-ES-P8C: the `bebop4` adapter needs KV v4, which is behind bebop-io's `tree` feature (off by
+# default until P8d). A direct path dependency only to turn the feature on (cargo unifies it).
+bebop-io = { path = "../bebop-io", features = ["tree"] }
 libc = "0.2"
 redb = { version = "4", optional = true }
 heed = { version = "=0.22.1", optional = true }

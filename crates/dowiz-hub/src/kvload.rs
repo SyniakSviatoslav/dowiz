@@ -15,7 +15,7 @@ use crate::HubError;
 #[allow(dead_code)] // W-ES-P3: superseded by `KvImage::load`; its tests (kvload/tests.rs) now prove that path
 pub(crate) fn kv_load(store: &Store) -> Result<Kv, HubError> {
     Kv::load_checked(store).map_err(|e| match e {
-        KvError::NotKv | KvError::UnknownVersion { .. } => HubError::NotAHub,
+        KvError::NotKv | KvError::UnknownVersion { .. } | KvError::Tree(_) => HubError::NotAHub,
         KvError::BadCrc(b) => HubError::BadCrc(b),
     })
 }

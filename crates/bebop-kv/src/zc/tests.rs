@@ -240,7 +240,13 @@ fn an_unknown_version_is_refused_by_name_on_every_path() {
     let ck = KvIn::open(View::new(&clean)).unwrap().checked();
     for v in [4, 5, i64::MAX] {
         let b = forge(&clean, 0, 5, v);
-        let want = Err(KvError::UnknownVersion { v });
+        // W-ES-P8C: with the `tree` feature v4 is READ through the tree, which refuses this forged
+        // v2-shaped root by name; without it (the default) v4 stays unknown, as do 5 and up.
+        let want = if v == 4 && crate::tree::v4_here() {
+            Err(KvError::Tree(crate::tree::TreeError::Root { why: "a v4 root is exactly 8 cells" }))
+        } else {
+            Err(KvError::UnknownVersion { v })
+        };
         assert_eq!(Kv::load_checked(&Store::from_bytes(&b)).map(|_| ()), want, "v{v}: load_checked");
         assert!(Kv::load(&Store::from_bytes(&b)).is_none(), "v{v}: load");
         assert!(Kv::decode(&Store::from_bytes(&b)).is_none(), "v{v}: decode");

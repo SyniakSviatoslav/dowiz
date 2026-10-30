@@ -110,6 +110,9 @@ pub fn code_of(r: &Refusal) -> i32 {
         Refusal::BadCrc(_) => BAD_CRC,
         Refusal::ObjectBad { .. } => OBJECT_BAD,
         Refusal::NotKv => NOT_A_KV,
+        // W-ES-P8D: a KV v4 claim that does not hold (FORMAT §9.1 v4 rules 1-5; a crc is already
+        // `BadCrc` by bebop-io's From) is NOT_A_KV, the word a v3 chain that does not hold gets.
+        Refusal::Tree(_) => NOT_A_KV,
         Refusal::UnknownVersion(_) => UNKNOWN_VERSION,
         Refusal::Corrupt(_) => CORRUPT,
         Refusal::KeyTooLong { .. } => KEY_TOO_LONG,

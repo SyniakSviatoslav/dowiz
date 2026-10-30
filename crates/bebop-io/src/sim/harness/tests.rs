@@ -5,6 +5,7 @@ use crate::kv::delta::Op;
 use crate::sim::crash::Tear;
 use crate::sim::testkit::{applied, delta, flush, kv_image, next, replay, scenarios, Map, CAP};
 use crate::sim::SimOp;
+use crate::{Durable, Store};
 
 const POWER: Opts = Opts { model: Model::Power(Tear::Half), pick_only: false, old_intact: true };
 
@@ -92,24 +93,64 @@ fn a_superblock_torn_at_any_cell_opens_the_previous_generation() {
     assert_eq!(torn_sb, 126, "every cut of the superblock's sector");
 }
 
-/// T-ES-23 (AC-ES-18): a GROUP of staged commits flushed once is a prefix: N=2 shows k, k+1
-/// or k+2 (four barriers: the inner commit first), N=3 shows k or k+3 (two barriers).
-#[test]
-fn a_group_flush_recovers_a_prefix_of_the_group() {
+/// The N-th op of the group scenario, and the group's base.
+fn group_ops() -> Vec<Vec<Op<'static>>> {
+    vec![
+        vec![Op::Put("b", b"2")],
+        vec![Op::Remove("a")],
+        vec![Op::Put("c", b"3")],
+        vec![Op::Put("d", b"4"), Op::Put("e", b"5")],
+        vec![Op::Remove("c")],
+        vec![Op::Put("a", b"back")],
+        vec![Op::Put("f", b"6")],
+        vec![Op::Remove("b"), Op::Put("g", b"7")],
+    ]
+}
+
+/// One group of the first `n` ops flushed with `d`: the flush, and the maps of k and k+n.
+fn group(n: usize, d: Durability) -> (crate::sim::testkit::Flushed, [(i64, Map); 2]) {
     let base = kv_image(&[("a", "1")], CAP);
-    let ops: [&[Op]; 3] = [&[Op::Put("b", b"2")], &[Op::Remove("a")], &[Op::Put("c", b"3")]];
-    for n in [2usize, 3] {
-        let f = flush(&base, Durability::Data, |st| ops[..n].iter().for_each(|o| delta(st, o)));
-        let mut m = replay(&base);
-        let mut expect = vec![(1, m.clone())];
-        for (i, o) in ops[..n].iter().enumerate() {
-            m = applied(&m, o);
-            expect.push((2 + i as i64, m.clone()));
-        }
+    let ops = group_ops();
+    let f = flush(&base, d, |st| ops[..n].iter().for_each(|o| delta(st, o)));
+    let before = replay(&base);
+    let after = ops[..n].iter().fold(before.clone(), |m, o| applied(&m, o));
+    (f, [(1, before), (1 + n as i64, after)])
+}
+
+/// T-ES-23 (AC-ES-18, W-ES-P11): a GROUP of N staged commits flushed once costs exactly TWO
+/// barriers for every N in 1..8 (the flip: an even group's live superblock is moved to the
+/// page opposite the durable one, FORMAT §8), and every power-loss state recovers k or k+N
+/// with the exact map -- never a generation between (the `expect` list holds only those two,
+/// so a state opening k+j, 0<j<N, would fail "not one of").
+#[test]
+fn a_group_flush_is_two_barriers_and_recovers_k_or_k_plus_n() {
+    for n in 1..=8usize {
+        let (f, expect) = group(n, Durability::Data);
+        assert_eq!(f.gen, 1 + n as i64, "N={n}");
         let barriers = f.disk.ops().iter().filter(|o| **o == SimOp::Barrier).count();
-        assert_eq!(barriers, if n % 2 == 0 { 4 } else { 2 });
-        let r = run_map(&f.base, f.disk.ops(), Opts { old_intact: false, ..POWER }, &expect);
-        assert!(r.green(), "N={n}: {:?}", r.first());
+        assert_eq!(barriers, 2, "N={n}: {barriers} barriers");
+        for opts in [Opts { old_intact: true, ..POWER }, Opts { pick_only: true, ..POWER }] {
+            let r = run_map(&f.base, f.disk.ops(), opts, &expect);
+            assert!(r.green(), "N={n} ({opts:?}): {} of {} states fail; first {:?}", r.failures.len(), r.states, r.first());
+            eprintln!("T-ES-23 N={n} pick_only={}: {} states green, 2 barriers", opts.pick_only, r.states);
+        }
+        // What the device holds after the group: the durable page as it was, k+N opposite.
+        let fin = f.disk.cache();
+        let d = Durable::of(&Store { cells: f.base.clone() }).unwrap();
+        assert_eq!(fin[d.at..d.at + 39], f.base[d.at..d.at + 39], "N={n}: the old durable page is untouched");
+        assert_eq!(Durable::of(&Store { cells: fin }).unwrap().at, crate::SB_B - d.at, "N={n}: k+N sits opposite");
+    }
+}
+
+/// T-ES-23 RED (W-ES-P11): a group that skips barrier 1 (superblock in the same window as
+/// the arena and PartTab it names) fails the harness, for an even and an odd N.
+#[test]
+fn a_group_that_skips_barrier_1_is_red() {
+    for n in [2usize, 5] {
+        let (f, expect) = group(n, Durability::Data);
+        let r = run_map(&f.base, &m_sb_early(f.disk.ops()), Opts { old_intact: false, ..POWER }, &expect);
+        assert!(!r.green(), "N={n}: a group without barrier 1 passed");
+        eprintln!("T-ES-23 RED N={n} M-SB-EARLY: {} of {} states fail; first {:?}", r.failures.len(), r.states, r.first());
     }
 }
 

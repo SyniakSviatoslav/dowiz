@@ -25,10 +25,10 @@ mutant() { # mutant <old> <new> -> builds $SCR/m and prints the binary path, or 
   rm -rf "$SCR/m"; mkdir -p "$SCR/m"
   cp -r "$ROOT/crates/es-bench/Cargo.toml" "$ROOT/crates/es-bench/src" "$SCR/m/"
   [ -f "$ROOT/crates/es-bench/Cargo.lock" ] && cp "$ROOT/crates/es-bench/Cargo.lock" "$SCR/m/"
-  python3 - "$SCR/m" "$ROOT/crates/bebop-store" "$1" "$2" <<'PY' || return 1
+  python3 - "$SCR/m" "$ROOT/crates" "$1" "$2" <<'PY' || return 1
 import sys, pathlib
-m, store, old, new = sys.argv[1:]
-c = pathlib.Path(m, "Cargo.toml"); c.write_text(c.read_text().replace('path = "../bebop-store"', f'path = "{store}"'))
+m, crates, old, new = sys.argv[1:]
+c = pathlib.Path(m, "Cargo.toml"); c.write_text(c.read_text().replace('path = "../', f'path = "{crates}/'))
 b = pathlib.Path(m, "src", "bebop.rs"); s = b.read_text()
 if s.count(old) != 1:
     sys.exit(f"prove: mutation target found {s.count(old)} times in bebop.rs: {old!r}")

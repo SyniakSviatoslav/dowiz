@@ -33,6 +33,10 @@ impl<'t> Bytes<'t> {
     pub fn into_owned(self) -> Vec<u8> {
         self.0.into_owned()
     }
+    /// The `Cow` back (W-ES-P8C: `KvIn::get` answers a `Cow` for every version).
+    pub fn into_cow(self) -> Cow<'t, [u8]> {
+        self.0
+    }
 }
 
 impl<'t> From<Cow<'t, [u8]>> for Bytes<'t> {

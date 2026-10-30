@@ -81,12 +81,19 @@ pub trait Device {
     }
 }
 
-/// How far a flush goes (R-EMBED-STORE §3.5). Ordered: `None < Data < Full`.
+/// How far a flush goes (R-EMBED-STORE §3.5). Ordered: `None < Normal < Data < Full`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Durability {
     /// The writes, no barrier: consistent under a PROCESS crash (one page cache), not a power
     /// loss. `crate::sim` shows both halves of that sentence.
     None,
+    /// W-ES-P11, SQLite `synchronous=NORMAL`'s promise: a commit is STAGED and published, and
+    /// NOTHING reaches the device until a checkpoint (`Db::flush`, or every
+    /// `Options::checkpoint_every`-th commit) writes every staged commit as one group under two
+    /// barriers. A power cut loses the commits since the last checkpoint and never tears: the
+    /// device always holds exactly a checkpoint. For `Writer::flush` itself `Normal` IS `Data`
+    /// (a checkpoint is a `Data` flush); the batching is `Db`'s.
+    Normal,
     /// The two-barrier protocol: power-loss safe.
     Data,
     /// `Data`; for a commit there is nothing more to sync. It differs from `Data` only at
@@ -113,6 +120,8 @@ pub enum IoError {
     Store(crate::StoreError),
     /// The in-memory image cannot be flushed over the durable one; `what` says why.
     Plan(&'static str),
+    /// A v4 tree commit was refused before anything was staged (W-ES-P8C, `Writer::commit_tree`).
+    Tree(bebop_kv::tree::WriteError),
 }
 
 impl From<io::Error> for IoError {

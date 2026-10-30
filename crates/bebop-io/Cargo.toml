@@ -11,5 +11,10 @@ bebop-image = { path = "../bebop-image", features = ["std"] }
 # NORMAL dependency: Writer::commit_delta appends through kv::delta (W-ES-P2).
 bebop-kv = { path = "../bebop-kv", features = ["std"] }
 
+[features]
+default = []
+# W-ES-P8C: Db / Writer write and read KV v4 (the B+tree): bebop-kv's `tree`. Off by default (P8d).
+tree = ["bebop-kv/tree"]
+
 [profile.release]
 opt-level = 3

@@ -1,0 +1,5 @@
+# What every reader of fixtures/kv4del.store must answer (W-ES-P8D 2026-10-30). KV v4: kv4deep, then 3
+# commits that remove 110 keys (small leaves merge, the root collapses a level) and overwrite 5. The image
+# keeps every older generation's nodes: a reader must follow the LIVE root only (39992 bytes).
+n=38
+root=-1005982070270437490

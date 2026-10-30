@@ -10,6 +10,10 @@ description = "The bebop KV layout over a bebop image: v1/v2 compacted roots, th
 default = []
 # Kv::init(path), Kv::commit_into(path).
 std = ["bebop-image/std"]
+# W-ES-P8C: KvIn / Kv::load_checked READ KV v4 (the B+tree). Off by default: until P8d every other
+# reader (wasm, oracle.py, kv.bp, C ABI) refuses v4, and conformance.sh needs all five to agree.
+# Without it a v4 root is refused as `UnknownVersion` exactly as W-ES-P8A made it.
+tree = []
 
 [dependencies]
 bebop-image = { path = "../bebop-image" }

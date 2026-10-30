@@ -579,14 +579,19 @@ else
 fi
 [ "$ran" -lt "$minran" ] && minran=$ran
 
-# 4c. AN UNKNOWN KV VERSION (W-ES-P8A, R-EMBED-STORE §12 P8a) -------------------
-# fixtures/kv4stub.store: kv3 with its KV root claiming version 4 (the B+tree), re-sealed. No reader
-# decodes v4 yet, so every reader must REFUSE it by name -- never fold its kv3 arrays as a base. Four
-# readers, each named when it does not refuse as kv4stub.expected says.
+# 4c. A KV v4 CLAIM THAT DOES NOT HOLD (W-ES-P8A, re-derived by W-ES-P8D) -------------------
+# fixtures/kv4stub.store: kv3 with its KV root claiming version 4 (the B+tree), re-sealed. Since P8D
+# every reader DECODES v4 (the real v4 fixtures kv4* are judged by tools/gates/conformance.sh on all
+# five readers, and natively by tests/parity.rs below), so the stub is a v4 root whose cells 1-4 are
+# not zero: a claim that does not hold, NOT_A_KV (2) -- never UNKNOWN_VERSION (12), never a fold of
+# its kv3 arrays. Four readers, each named when it does not refuse as kv4stub.expected says; bebop.bin
+# prints -3 with rc 0 (kv4stub.expected bebop_rc), conformance.sh's status 2.
 FIX=fixtures/kv4stub.store
 ran=0
 bad=""
-if grep -q "test kv4stub_fixture_is_refused ... ok" "$SCRATCH/native.txt"; then ran=$((ran + 1)); else bad="$bad native"; fi
+if grep -q "test kv4stub_fixture_is_refused ... ok" "$SCRATCH/native.txt" \
+  && grep -q "test kv4_fixtures_read_to_what_the_rust_writer_folded ... ok" "$SCRATCH/native.txt" \
+  && grep -q "test kv4_corrupted_fixtures_are_refused_by_name ... ok" "$SCRATCH/native.txt"; then ran=$((ran + 1)); else bad="$bad native"; fi
 out=$(node harness.mjs "$WASM" "$FIX" 2>&1)
 say "kv4stub wasm32: '$out' rc=$?"
 case "$out" in "kv status=$(want kv4stub status) "*) ran=$((ran + 1)) ;; *) bad="$bad wasm32" ;; esac
@@ -600,7 +605,7 @@ if [ -n "$KVBIN" ]; then
   r=$(cd "$SCRATCH/kv4stub" && "$OLDPWD/$SEED" "$KVBIN" h 2>&1)
   hrc=$?
   say "kv4stub bebop.bin: kv.bin n -> '$n' rc=$nrc, kv.bin h -> '$r' rc=$hrc"
-  if [ "$nrc" = "$(want kv4stub bebop_rc)" ] && [ "$hrc" = "$(want kv4stub bebop_rc)" ]; then ran=$((ran + 1)); else bad="$bad bebop.bin"; fi
+  if [ "$nrc" = "$(want kv4stub bebop_rc)" ] && [ "$hrc" = "$(want kv4stub bebop_rc)" ] && [ "$n" = "-3" ] && [ "$r" = "-3" ]; then ran=$((ran + 1)); else bad="$bad bebop.bin"; fi
 fi
 if [ -n "$bad" ]; then
   say "kv4stub: readers refusing as kv4stub.expected says: $ran of 4 -- DISAGREE:$bad"

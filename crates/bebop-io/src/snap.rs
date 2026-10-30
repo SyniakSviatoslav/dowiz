@@ -59,7 +59,8 @@ impl Snap {
         let sb = crate::format::pick_checked_in(&img)?;
         let root = crate::root_in(&img).ok_or(Refusal::NotKv)?;
         let ver = bebop_kv::delta::version_in(&img, root);
-        if ver > bebop_kv::delta::VERSION_DELTA {
+        let v4 = ver == bebop_kv::tree::VERSION_TREE && bebop_kv::tree::v4_here();
+        if ver > bebop_kv::delta::VERSION_DELTA && !v4 {
             return Err(Refusal::UnknownVersion(ver));
         }
         let kv = match (checked, depth) {

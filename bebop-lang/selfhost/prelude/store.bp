@@ -199,17 +199,27 @@ fn st_reopen_verify(base: [i64], tmp: [i64]) -> i64 {
   let _ = if bad2 > 0 then base[sb2] = 0 else 0;
   sb2
 }
-// st_anc_ok(base, sb, tmp): 1 when the superblock's PartTab checks and its anchor range
-// [mark, arena_used) still has the crc the commit recorded; 0 otherwise (a torn last commit).
+// st_anc_ok(base, sb, tmp): 1 when the anchor range [mark, arena_used) still has the crc the
+// commit recorded; 0 otherwise (a torn last commit). The range covers the ARENA only (FORMAT §7);
+// the PartTab has its own crc and st_open REFUSES a bad one (trap 77, st_pt_bad) before this runs.
+// Until W-PRELUDE (2026-10-29) a bad PartTab counted here as "torn", so st_reopen_verify stamped
+// the live superblock and FELL BACK to generation k -- §3.1 allows a fallback only past a bad
+// magic/crc15, and every other reader refuses (status 1).
 fn st_anc_ok(base: [i64], sb: i64, tmp: [i64]) -> i64 {
   let a = base[sb + 9];
   let lo = a >> 32;
   let up = base[sb + 4];
-  let pt = base[sb + 3];
-  let ptok = if pt == 0 then 1 else (if pt < 16 then 0 else st_check(base, pt, tmp));
   let fits = if lo >= 1024 then (if lo <= up then 1 else 0) else 0;
   let crc = if fits == 1 then st_crc(base, lo, up - lo, tmp) else 0 - 1;
-  if ptok == 1 then (if crc == (a & 4294967295) then 1 else 0) else 0
+  if crc == (a & 4294967295) then 1 else 0
+}
+// st_pt_bad(base, sb, ncells, tmp): 1 when superblock sb names a PartTab shorter than 19 cells,
+// running past the ncells-cell image, or failing its own crc (FORMAT §3.1 PartTabBad); 0 when it
+// checks or there is none (pt = 0, a formatted store before its first commit).
+fn st_pt_bad(base: [i64], sb: i64, ncells: i64, tmp: [i64]) -> i64 {
+  let pt = base[sb + 3];
+  let n = if pt == 0 then 19 else st_len(base, pt);
+  if pt == 0 then 0 else if n < 19 then 1 else if pt + 2 + n > ncells then 1 else 1 - st_check(base, pt, tmp)
 }
 // st_open_verify_all(path, plen, size, tmp): st_open, then the WHOLE-arena scan of the live
 // generation (and of the fallback, if the live one fails) -- the fsck-grade open the crash
@@ -250,14 +260,16 @@ fn st_open(path: [i64], plen: i64, size: i64, tmp: [i64]) -> [i64] {
   // one anywhere else (528 under a live A) is overwritten before the commit point and a crash
   // there loses generation k. No writer makes such an image; the Rust readers refuse it too.
   let _ = if fresh == 0 then (if base[live_sb + 3] != 0 then (if base[live_sb + 3] != live_sb + 16 then sys_exit(79) else 0) else 0) else 0;
+  // Trap 77 (W-PRELUDE, FORMAT §3.1 PartTabBad): the live PartTab fails its crc or its length,
+  // anchored image or not. REFUSED, never a fallback: st_verify_range walks from cell 1024 and the
+  // anchor covers the arena only, so nothing else looks at sb+16. Checked again on the generation
+  // st_reopen_verify falls back to (a torn anchor or walk), which must hold the same rule.
+  let _ = if fresh == 0 then (if st_pt_bad(base, live_sb, size / 8, tmp) == 1 then sys_exit(77) else 0) else 0;
   let arena_capacity_cells = size / 8 - 1024;
-  let _ = if fresh == 1 then st_sb_write(base, 0, 0, 0, 1024, 0, 0, arena_capacity_cells, tmp) else st_reopen_verify(base, tmp);
+  let fin = if fresh == 1 then st_sb_write(base, 0, 0, 0, 1024, 0, 0, arena_capacity_cells, tmp) else st_reopen_verify(base, tmp);
+  let _ = if fin != live_sb then (if fin >= 0 then (if st_pt_bad(base, fin, size / 8, tmp) == 1 then sys_exit(77) else 0) else 0) else 0;
   // Trap 87: version cell mismatch (T127: fix for silent schema divergence)
   let _ = if fresh == 0 then (if base[live_sb + 1] != 2 then sys_exit(87) else 0) else 0;
-  // Trap 88: the PartTab carries its own crc, and NOTHING verified it. st_verify_range walks
-  // from cell 1024 and the PartTab lives at sb+16 -- inside the superblock page, outside that
-  // walk -- so a corrupted PartTab passed reopen silently and the reader followed a bad root.
-  // st_check recomputes the object crc; st_crc ignores its tmp argument, so base serves.
   base
 }
 // st_map_ro(path, plen, size): a reader's mapping (PROT_READ, MAP_SHARED).

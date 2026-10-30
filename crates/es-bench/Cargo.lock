@@ -136,6 +136,7 @@ dependencies = [
 name = "es-bench"
 version = "0.1.0"
 dependencies = [
+ "bebop-io",
  "bebop-store",
  "heed",
  "libc",

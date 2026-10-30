@@ -1,6 +1,7 @@
 use "selfhost/prelude/sha256.bp"
 use "selfhost/prelude/store.bp"
 use "selfhost/prelude/proj.bp"
+use "selfhost/std/kv4.bp"
 // kv.bp — a key/value store over the bebop store, shaped to dowiz's `MemoryStore` trait
 // (crates/dowiz-core/src/retrieval/memory_store.rs): put / get / keys / snapshot_root.
 //
@@ -26,7 +27,8 @@ use "selfhost/prelude/proj.bp"
 // which is the property dowiz's InMemoryStore relies on.
 //
 // argv[2] phase: i init an empty (v2) store | n count | h snapshot_root | d dump lengths | v version
-//                (n/h/d/m/M trap 78 on a version this reader does not know; v prints it)
+//                (n/h/d/m/M trap 78 on a version this reader does not know; v prints it;
+//                 v4, the B+tree, is read by std/kv4.bp since W-ES-P8D: n/h walk it, d/m/M answer -3)
 //                m snapshot_root memoised (DG5 kind 2) | M how the memoised read was answered
 //
 // snapshot_root is FNV-1a 64 over frame-delimited (key, value) pairs -- len||bytes for each --
@@ -110,11 +112,13 @@ fn kv3_pick(base: [i64], root: i64, w: [i64]) -> i64 {
   best
 }
 // kv_vkind: 0 = foldable by pj_kv_fold (v1/v2), 3 = replay below, 4 = refuse (-3: a v3 whose claims do
-// not hold). A version above 3 never gets here: kv_version traps 78 (W-ES-P8A).
+// not hold), 5 = v4, the B+tree (std/kv4.bp, W-ES-P8D; asked BEFORE kv_version, whose pj_kv_known still
+// traps 78 on it). A version above 4 never gets here: kv_version traps 78 (W-ES-P8A).
 fn kv_vkind(base: [i64], tmp: [i64]) -> i64 {
   let root = kv_root(base, tmp);
-  let v = kv_version(base, root);
-  if v < 3 then 0 else (if v == 3 then (if kv3_ok(base, root) == 1 then 3 else 4) else 4)
+  if pj_kv_ver(base, root) == 4 then 5 else (
+    let v = kv_version(base, root) in
+    if v < 3 then 0 else (if v == 3 then (if kv3_ok(base, root) == 1 then 3 else 4) else 4))
 }
 // kv3_ok: the claims the replay walks are honest -- an 8-cell root, a chain that ends after
 // EXACTLY D records, and base keys strictly ascending (the merge needs them; Rust refuses the same
@@ -233,33 +237,30 @@ fn kv_memo(base: [i64], code: i64, how: [i64], tmp: [i64]) -> i64 {
 }
 
 // ---- THE READER'S PRE-CHECK (W-ES-P4, docs/STATUS-CODES.md; tools/gates/conformance.sh) ----
-// st_open is the WRITER's open: on an anchored image whose live PartTab fails its crc, st_anc_ok
-// says "torn" and st_reopen_verify stamps that superblock's magic and FALLS BACK to generation k;
-// on a formatted image with no PartTab, st_root is 0 and the superblock itself is read as a v1
-// root (measured: n=0). FORMAT §3.1 allows a fallback only past a bad magic/crc15, and every other
-// reader refuses both images. So a READ phase looks first, read-only, and refuses by name:
-//   trap 77  the live PartTab fails its own crc or is shorter than 19 cells (status 1, NO_SUPERBLOCK)
+// On a formatted image with no PartTab, st_root is 0 and the superblock itself would be read as a
+// v1 root (measured before this check: n=0, kv3c's fresh superblock A n=34). Every other reader
+// says NOT_A_KV, so a READ phase looks first, read-only, and refuses by name:
 //   trap 76  a valid superblock with no PartTab, so no KV root (status 2, NOT_A_KV)
-// It extends the file to `size` exactly as st_open is about to. No prelude is touched.
-fn kv_refuse(code: i64) -> i64 {
-  let m = zeros(48);
-  let n = if code == 77 then st_str(m, "trap 77: the live PartTab fails its crc") else st_str(m, "trap 76: no KV root (no PartTab)");
-  let _ = m[n] = 10;
-  let _ = sys_write(2, m, n + 1);
-  sys_exit(code)
-}
+// The prelude cannot refuse this itself: a formatted store before its first commit is a valid
+// STORE, just not a KV. Trap 77 (a live PartTab that fails its crc, status 1) was checked here too
+// until W-PRELUDE (2026-10-29) moved it into st_open, where it belongs: st_anc_ok used to count a
+// bad PartTab as a torn commit and fall back. The second check bought nothing, so it went.
+// It extends the file to `size` exactly as st_open is about to.
 fn kv_precheck(path: [i64], pl: i64, size: i64, tmp: [i64]) -> i64 {
   let fd = sys_open(path, pl, 66);
   let _ = sys_ftruncate(fd, size);
   let base = st_cells(sys_mmap(0, size, 1, 1, fd, 0));
   let _ = sys_close(fd);
   let sb = st_pick(base, tmp);
-  let pt = if sb < 0 then 0 else base[sb + 3];
-  let home = if sb < 0 then 0 - 1 else sb + 16;
-  let ptbad = if pt == home then (if st_len(base, pt) < 16 + 3 * 1 then 1 else 1 - st_check(base, pt, tmp)) else 0;
-  let noroot = if sb < 0 then 0 else (if pt == 0 then 1 else 0);
+  let noroot = if sb < 0 then 0 else (if base[sb + 3] == 0 then 1 else 0);
   let _ = sys_munmap(st_addr(base), size);
-  if ptbad == 1 then kv_refuse(77) else (if noroot == 1 then kv_refuse(76) else 0)
+  if noroot == 1 then (
+    let m = zeros(48) in
+    let n = st_str(m, "trap 76: no KV root (no PartTab)") in
+    let _ = m[n] = 10 in
+    let _ = sys_write(2, m, n + 1) in
+    sys_exit(76)
+  ) else 0
 }
 
 fn main(argc: i64, argv: [str]) -> i64 {
@@ -298,10 +299,10 @@ fn main(argc: i64, argv: [str]) -> i64 {
     let _ = st_seal(base, root, tmp) in
     let _ = st_commit(base, tx, root, tmp) in
     0
-  ) else (if ph == 110 then (let k = kv_vkind(base, tmp) in if k == 0 then st_get(base, kv_root(base, tmp), 0) else (if k == 3 then kv3_n(base, tmp) else 0 - 3))
-  else (if ph == 104 then (let k = kv_vkind(base, tmp) in if k == 0 then kv_snapshot(base, tmp) else (if k == 3 then kv3_h(base, tmp) else 0 - 3))
+  ) else (if ph == 110 then (let k = kv_vkind(base, tmp) in if k == 0 then st_get(base, kv_root(base, tmp), 0) else (if k == 3 then kv3_n(base, tmp) else (if k == 5 then kv4_n(base, kv_root(base, tmp), tmp) else 0 - 3)))
+  else (if ph == 104 then (let k = kv_vkind(base, tmp) in if k == 0 then kv_snapshot(base, tmp) else (if k == 3 then kv3_h(base, tmp) else (if k == 5 then kv4_h(base, kv_root(base, tmp), tmp) else 0 - 3)))
   else (if ph == 103 then st_gen(base, tmp)
-  else (if ph == 100 then (let root = kv_root(base, tmp) in let _ = kv_version(base, root) in st_get(base, st_ref(base, root, 1), 0))
+  else (if ph == 100 then (let root = kv_root(base, tmp) in if pj_kv_ver(base, root) == 4 then 0 - 3 else (let _ = kv_version(base, root) in st_get(base, st_ref(base, root, 1), 0)))
   else (if ph == 118 then pj_kv_ver(base, kv_root(base, tmp))
   else (if ph == 109 then (if kv_vkind(base, tmp) == 0 then kv_memo(base, pj_code(argv[1]), zeros(3), tmp) else 0 - 3)
   else (if ph == 77 then (if kv_vkind(base, tmp) == 0 then (let how = zeros(3) in let _ = kv_memo(base, pj_code(argv[1]), how, tmp) in how[0]) else 0 - 3)

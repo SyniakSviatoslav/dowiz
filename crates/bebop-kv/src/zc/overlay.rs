@@ -143,6 +143,9 @@ impl<C: Image> KvIn<C> {
     /// Key `i` in the merged (sorted) order.
     #[allow(clippy::indexing_slicing)] // T-ES-06 inventory (W-ES-P1): a pre-split index site; this list may only shrink
     pub fn key(&self, i: usize) -> Result<Cow<'_, [u8]>, KvError> {
+        if self.tree_head().is_some() {
+            return Err(crate::tree::kvin::UNINDEXED);
+        }
         match self.slot(i)? {
             Slot::Base(b) => self.base_key(b),
             Slot::Delta(j) => Ok(Cow::Borrowed(&self.ov[j].0)),
@@ -152,6 +155,9 @@ impl<C: Image> KvIn<C> {
     /// Value `i` in the merged order.
     #[allow(clippy::indexing_slicing)] // T-ES-06 inventory (W-ES-P1): a pre-split index site; this list may only shrink
     pub fn value(&self, i: usize) -> Result<Cow<'_, [u8]>, KvError> {
+        if self.tree_head().is_some() {
+            return Err(crate::tree::kvin::UNINDEXED);
+        }
         match self.slot(i)? {
             Slot::Base(b) => self.base_value(b),
             Slot::Delta(j) => Ok(self.rec_value(&self.ov[j].1)),
@@ -161,6 +167,9 @@ impl<C: Image> KvIn<C> {
     /// The value under `key`: the overlay first, then O(log n) base keys and the one value.
     #[allow(clippy::indexing_slicing)] // T-ES-06 inventory (W-ES-P1): a pre-split index site; this list may only shrink
     pub fn get(&self, key: &[u8]) -> Result<Option<Cow<'_, [u8]>>, KvError> {
+        if let Some((t, d)) = self.tree_head() {
+            return self.tree_value(t, d, key);
+        }
         if let Ok(j) = self.ov.binary_search_by(|(k, _)| k.as_slice().cmp(key)) {
             let r = &self.ov[j].1;
             return Ok(if r.op == delta::OP_PUT { Some(self.rec_value(r)) } else { None });
@@ -183,6 +192,9 @@ impl<C: Image> KvIn<C> {
     /// FNV-1a 64 over `len||key||len||value`, in stored order: `Kv::snapshot_root_u64`,
     /// without building the entries.
     pub fn snapshot_root_u64(&self) -> Result<u64, KvError> {
+        if let Some((t, d)) = self.tree_head() {
+            return self.tree_fold(t, d);
+        }
         let mut h = crate::FNV_OFFSET;
         for i in 0..self.len() {
             let (k, v) = (self.key(i)?, self.value(i)?);
@@ -199,6 +211,9 @@ impl<C: Image> KvIn<C> {
     /// ascending (no writer here makes one; `open` says `sorted() == false`) there is no order
     /// to search, so this is 0 and a scan walks the stored order, filtering.
     pub fn seek(&self, key: &[u8]) -> Result<usize, KvError> {
+        if self.tree_head().is_some() {
+            return Err(crate::tree::kvin::UNINDEXED);
+        }
         if self.ov.is_empty() {
             return if self.sorted { Ok(self.lower_bound(key)?.0) } else { Ok(0) };
         }
@@ -214,6 +229,9 @@ impl<C: Image> KvIn<C> {
     /// this is the base's lower-bound search; with one, the same search over the merged order
     /// (sorted: a strictly ascending base with the newest op per key folded in).
     pub fn prefix_range(&self, prefix: &[u8]) -> Result<Vec<usize>, KvError> {
+        if self.tree_head().is_some() {
+            return Err(crate::tree::kvin::UNINDEXED);
+        }
         if self.ov.is_empty() {
             return self.base_prefix_range(prefix);
         }

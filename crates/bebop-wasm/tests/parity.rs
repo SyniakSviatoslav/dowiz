@@ -128,13 +128,15 @@ fn ptaway_fixture_is_refused() {
 }
 
 /// W-ES-P8A: `fixtures/kv4stub.store` is kv3 with its KV root's version cell (payload 5) set to 4
-/// and the root re-sealed (`fixtures/kv4stub.expected`). v4 is the B+tree no reader decodes yet,
-/// so every reader REFUSES it by name; `gate.sh` greps this name. The arrays are kv3's, so a
-/// reader that ignored the version would fold it: the control below puts 3 back and reads kv3.
+/// and the root re-sealed (`fixtures/kv4stub.expected`). Since W-ES-P8D this reader DECODES v4, so
+/// the stub is a v4 CLAIM THAT DOES NOT HOLD (cells 1-4 of a v4 root must be zero; these name kv3's
+/// arrays): NOT_A_KV, the word a v3 chain that does not hold gets. `gate.sh` greps this name. The
+/// library's `Kv::load_checked` WITHOUT the `tree` feature (this crate's build) still says
+/// UnknownVersion, as P8A made it. The control below puts 3 back and reads kv3.
 #[test]
 fn kv4stub_fixture_is_refused() {
     let bytes = fixture_named("kv4stub");
-    assert_eq!(kv_view(&bytes), Err(Refusal::UnknownVersion));
+    assert_eq!(kv_view(&bytes), Err(Refusal::NotAKv));
     let st = Store::from_bytes(&bytes);
     let want = Err(bebop_store::verify::KvError::UnknownVersion { v: 4 });
     assert_eq!(bebop_store::kv::Kv::load_checked(&st).map(|_| ()), want, "Kv::load_checked");
@@ -142,7 +144,7 @@ fn kv4stub_fixture_is_refused() {
     assert_eq!(bebop_store::kv::zc::KvIn::open(&view).map(|_| ()), want, "KvIn::open");
     assert_eq!(bebop_store::kv::zc::KvIn::open_lazy(&view).map(|_| ()), want, "KvIn::open_lazy");
     let mut out = [0i64; 2];
-    assert_eq!(unsafe { abi::bw_kv(bytes.as_ptr(), bytes.len(), out.as_mut_ptr()) }, abi::UNKNOWN_VERSION);
+    assert_eq!(unsafe { abi::bw_kv(bytes.as_ptr(), bytes.len(), out.as_mut_ptr()) }, abi::NOT_A_KV);
     // The control: version 3 back in the same root, re-sealed, reads to exactly kv3.expected.
     let mut st = Store::from_bytes(&bytes);
     let root = st.root().expect("a root");
@@ -150,6 +152,44 @@ fn kv4stub_fixture_is_refused() {
     st.seal(root);
     let v = kv_view(&st.to_bytes()).expect("the stub with version 3 back is kv3");
     assert_eq!((v.n, v.root), expected_named("kv3"), "only the version cell differs from kv3");
+}
+
+/// W-ES-P8D: the four VALUE fixtures of KV v4 (the COW B+tree, fixtures/conform/src/kv4.rs), each
+/// read to exactly its `.expected`. kv4small is kv3max migrated, so the fold law across versions is
+/// asserted too: the same n and root as kv3.expected's sibling kv3max. `gate.sh` greps this name.
+#[test]
+fn kv4_fixtures_read_to_what_the_rust_writer_folded() {
+    for name in ["kv4small", "kv4deep", "kv4del", "kv4zero"] {
+        let (n, root) = expected_named(name);
+        let v = kv_view(&fixture_named(name)).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        assert_eq!((v.n, v.root), (n, root), "{name}");
+        let (mut out, bytes) = ([0i64; 2], fixture_named(name));
+        assert_eq!(unsafe { abi::bw_kv(bytes.as_ptr(), bytes.len(), out.as_mut_ptr()) }, abi::OK, "{name} abi");
+        assert_eq!(out, [n, root], "{name} abi cells");
+    }
+    assert_eq!(expected_named("kv4small"), expected_named("kv3max"), "the fold law: migrated = v3");
+    let empty = kv_view(&fixture_named("kv4zero")).expect("kv4zero");
+    assert_eq!((empty.n, empty.root), expected_named("kv0"), "an empty map folds alike in every version");
+}
+
+/// W-ES-P8D: the four REFUSAL fixtures of KV v4, each refused BY NAME before anything past the
+/// broken object is read: a crc (node, value) is BadCrc at that object; a structural rule (a forward
+/// ref, a leaf where a node must be) is a v4 claim that does not hold, NotAKv. Per fixture the cell
+/// is the one `bebop-conform why` named when the fixture was written (the .expected quotes it).
+#[test]
+fn kv4_corrupted_fixtures_are_refused_by_name() {
+    let cases = [
+        ("kv4badn", Refusal::BadCrc { obj: 3726 }, abi::BAD_CRC),
+        ("kv4badv", Refusal::BadCrc { obj: 1210 }, abi::BAD_CRC),
+        ("kv4badf", Refusal::NotAKv, abi::NOT_A_KV),
+        ("kv4badd", Refusal::NotAKv, abi::NOT_A_KV),
+    ];
+    for (name, want, code) in cases {
+        let bytes = fixture_named(name);
+        assert_eq!(kv_view(&bytes), Err(want), "{name}");
+        let mut out = [0i64; 2];
+        assert_eq!(unsafe { abi::bw_kv(bytes.as_ptr(), bytes.len(), out.as_mut_ptr()) }, code, "{name} abi");
+    }
 }
 
 #[test]

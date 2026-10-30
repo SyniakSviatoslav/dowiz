@@ -14,7 +14,9 @@ description = "A C ABI over bebop-io's KV database (Db, ReadTxn, WriteTxn, Scan,
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bebop-io = { path = "../bebop-io" }
+# `tree` (W-ES-P8D): the C ABI reads KV v4 (the B+tree) through bebop-io's Db, the same code the
+# native conformance reader runs; `code_of` maps a tree rule that does not hold to NOT_A_KV.
+bebop-io = { path = "../bebop-io", features = ["tree"] }
 
 # The repo-level examples are built by this crate, so `cargo run --example kv` works from here
 # and CI has one place to build them.

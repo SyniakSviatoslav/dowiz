@@ -778,6 +778,13 @@ r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/pr
 gate proj4 1351 "$r"
 rm -f proj4_self.store
 
+# W-PRELUDE (2026-10-29): store.bp st_open refuses a live PartTab that fails its crc (trap 77) and
+# never falls back past it; the old prelude printed a0/b0/d0 (silent fallback). One run per case.
+rm -f sptbad.store
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sptbad.bp ${BEBOP_TMP:-/tmp/opencode}/sptbad_test.bin >/dev/null 2>&1 && for c in e a b c d; do rm -f sptbad.store; v=$(timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sptbad_test.bin $c); echo -n "$c$?=$v "; done | sed 's/ $//')
+gate sptbad "e0=20 a77= b77= c0=19 d77=" "$r"
+rm -f sptbad.store
+
 # ---- dagc_* (DG4, docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md §2.2-§4.3): the compile-node memo
 # image `<out>.dag` driven through selfhost/prelude/dagc.bp (scaffolding bench/vs_rust/std_tests/lib/
 # dagc_t.bp): hit on the same bytes/context/compiler after a reopen (M-1, K-4), miss on one flipped byte,

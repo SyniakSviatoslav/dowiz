@@ -1,5 +1,7 @@
 //! es-bench as a library, so the integration tests (tests/) drive the same adapters the binary does.
 pub mod bebop;
+/// The v4 (B+tree) adapter through `Db` (W-ES-P8C).
+pub mod bebop4;
 pub mod data;
 pub mod engine;
 pub mod gate;

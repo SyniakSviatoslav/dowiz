@@ -15,14 +15,19 @@
 //! O (the other page). If N is odd L sits opposite the durable superblock and is written as
 //! above (O is on the durable page and is NOT written: writing it there would tear the only
 //! durable generation). If N is even L sits ON the durable page; writing it first would put
-//! the durable generation's page in a crash window, so O (generation k+N-1, opposite) is
-//! written first as an inner commit, and only once it is durable does L overwrite the old page:
+//! the durable generation's page in a crash window, so this planner publishes O (generation
+//! k+N-1, opposite) first as an inner commit, and only once it is durable does L overwrite the
+//! old page:
 //!
 //! ```text
 //! W arena[mark0, used_L) ; W PartTab_O ; B ; W superblock_O ; B ; W PartTab_L ; B ; W superblock_L ; B
 //! ```
 //!
 //! A crash then recovers k, k+N-1 or k+N: a prefix of the group (AC-ES-18), never less than k.
+//! W-ES-P11: `Writer::flush` never hands this planner an even group any more -- its FLIP moves
+//! L to the page opposite the durable one in memory first (writer.rs `flip`), so every group
+//! is the two-barrier shape above and recovers k or k+N (formal/Bebop/Group.lean). The inner
+//! branch stays for a caller of `plan` that did not flip.
 
 use super::IoError;
 use crate::format::{PT_CURSOR, SB_GEN, SB_PARTTAB, SB_USED};

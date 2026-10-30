@@ -169,3 +169,5 @@ impl<D: Device> Device for Cut<D> {
 pub(crate) mod testkit;
 #[cfg(test)]
 mod tests;
+#[cfg(all(test, feature = "tree"))]
+mod tree_tests;

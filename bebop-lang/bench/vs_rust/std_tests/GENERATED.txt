@@ -177,3 +177,4 @@ dl_allergen_del.bp local
 dlkv_gate.bp local
 proj4.bp local
 merkle_verify.bp local
+sptbad.bp local

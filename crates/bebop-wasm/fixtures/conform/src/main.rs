@@ -20,11 +20,14 @@
 //!   empty.store   `Store::create_bytes(16 KiB)` trimmed: superblock A, generation 0, no PartTab,
 //!                 no KV root: NOT_A_KV (2).
 //!   kv0.store     an empty KV (`Kv::init_bytes`): n = 0, fold = the FNV-1a offset basis.
+//!   kv4*.store    KV v4, the COW B+tree (W-ES-P8D): see `kv4.rs`.
 //!
 //! `bebop-conform read <image>...` prints, per image, `kv status=<s> n=<n> root=<fold>` in
 //! harness.mjs's shape, the status from docs/STATUS-CODES.md:
 //!   pick_checked_in refuses -> 1, no KV root -> 2, KvError::NotKv -> 2, BadCrc -> 10,
-//!   UnknownVersion -> 12.
+//!   UnknownVersion -> 12, Tree(BadCrc) -> 10, any other Tree refusal -> 2.
+mod kv4;
+
 use bebop_image::format::pick_checked_in;
 use bebop_image::Store;
 use bebop_kv::delta::{append_delta_with, Appended, Op, Why, MAX_DELTAS};
@@ -44,6 +47,10 @@ fn read(bytes: &[u8]) -> (i32, i64, i64) {
         Err(KvError::NotKv) => (2, 0, 0),
         Err(KvError::BadCrc(_)) => (10, 0, 0),
         Err(KvError::UnknownVersion { .. }) => (12, 0, 0),
+        // KV v4 (W-ES-P8D): a reachable object's crc -> 10; any structural rule of FORMAT §9.1 v4
+        // (forward ref, depth, order, count, a length) -> NOT_A_KV, as a v3 claim that does not hold.
+        Err(KvError::Tree(bebop_kv::tree::TreeError::BadCrc(_))) => (10, 0, 0),
+        Err(KvError::Tree(_)) => (2, 0, 0),
     }
 }
 
@@ -163,6 +170,8 @@ fn write(dir: &str) {
     let z = z.to_bytes_trimmed();
     std::fs::write(p("kv0.store"), &z).expect("write kv0");
     say("kv0", &z);
+
+    kv4::write(dir, &max, &say);
 }
 
 fn main() {
@@ -175,8 +184,15 @@ fn main() {
                 println!("kv status={s} n={n} root={r}");
             }
         }
+        // `why`: the library's refusal BY NAME (a status hides which rule), one line per image.
+        Some("why") => {
+            for f in &a[2..] {
+                let st = Store::from_bytes(&std::fs::read(f).expect("read image"));
+                println!("{f}: {:?}", Kv::load_checked(&st).map(|kv| kv.entries.len()));
+            }
+        }
         _ => {
-            eprintln!("usage: bebop-conform write <fixtures dir> | read <image>...");
+            eprintln!("usage: bebop-conform write <fixtures dir> | read <image>... | why <image>...");
             std::process::exit(2);
         }
     }

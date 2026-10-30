@@ -1,0 +1,45 @@
+use "selfhost/prelude/proj.bp"
+// sptbad (W-PRELUDE, 2026-10-29; FORMAT-BEBOP-IMAGE-v2 §3.1): a live superblock whose PartTab fails
+// its crc is REFUSED by st_open (trap 77), anchored image or not; a fallback is allowed only past a
+// bad magic/crc15. Each run builds a 20-record log in sptbad.store, damages it one way, unmaps,
+// reopens with st_open and prints the record count it then reads (or dies with the trap). The case
+// letter is argv[2]:
+//   e  untouched                                     -> 20  (control)
+//   a  anchored, bit 0 of the live PartTab's payload  -> trap 77  (was: fell back, printed 19)
+//   b  anchor zeroed (pre-DG5 image), the same flip    -> trap 77  (was: never checked, printed 20)
+//   c  live superblock's magic zeroed                  -> 19  (the legitimate fallback, unchanged)
+//   d  newest record torn (anchor says torn) AND the
+//      fallback generation's PartTab flipped           -> trap 77  (was: fell back onto it, 19)
+// The gate (std_golden.sh `sptbad`) runs each case directly, since a trap is the answer.
+fn sp_log(base: [i64], tmp: [i64]) -> i64 {
+  let tx = zeros(6);
+  let pay = zeros(24);
+  let _ = pj_log_init(base, tx, tmp);
+  let i = 0;
+  while i < 20 {
+    let _ = pay[i % 16] = i + 65;
+    let _ = pj_log_append(base, tx, i, pay, 16, 1000 + i, i + 1, tmp);
+    let i = i + 1;
+    0
+  };
+  20
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let tmp = zeros(256);
+  let c = if argc > 2 then char(argv[2], 0) else 101;
+  let path = zeros(64);
+  let pl = st_str(path, "sptbad.store");
+  let base = st_open(path, pl, 1048576, tmp);
+  let _ = sp_log(base, tmp);
+  let sb = st_pick(base, tmp);
+  let other = 512 - sb;
+  let _ = if c == 97 then base[base[sb + 3] + 2] = base[base[sb + 3] + 2] ^ 1 else 0;
+  let _ = if c == 98 then (let _ = base[sb + 9] = 0 in let _ = base[sb + 15] = st_crc(base, sb, 15, tmp) in base[base[sb + 3] + 2] = base[base[sb + 3] + 2] ^ 1) else 0;
+  let _ = if c == 99 then base[sb] = 0 else 0;
+  let _ = if c == 100 then (let tip = pj_ref(base, st_root(base, tmp), 1) in let _ = base[tip + 2 + 12] = base[tip + 2 + 12] ^ 255 in base[base[other + 3] + 2] = base[base[other + 3] + 2] ^ 1) else 0;
+  let _ = sys_munmap(st_addr(base), 1048576);
+  let b2 = st_open(path, pl, 1048576, tmp);
+  let n = st_get(b2, st_root(b2, tmp), 0);
+  let _ = sys_munmap(st_addr(b2), 1048576);
+  n
+}

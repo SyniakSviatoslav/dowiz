@@ -1,0 +1,6 @@
+# What every reader of fixtures/kv4deep.store must answer (W-ES-P8D 2026-10-30). KV v4: 150 keys put by 6
+# path-copy commits at fanout 8 (fixtures/conform/src/kv4.rs), leaves split in the middle, depth >= 3,
+# values 0..40 bytes, older subtrees shared by address. Written once by the Rust writer; byte-identical
+# on a re-run. Every reader walks the tree in key order and folds FNV-1a over len||key||len||value.
+n=150
+root=7496409543980330172

@@ -459,7 +459,7 @@ where
 
 /// A fresh store's superblock A says generation `g` (and its crc15 again), so the first commit
 /// into it is g + 1. Refuses a negative `g`.
-fn set_fresh_generation(st: &mut Store, g: i64) -> Result<(), StoreError> {
+pub(crate) fn set_fresh_generation(st: &mut Store, g: i64) -> Result<(), StoreError> {
     if g < 0 {
         return Err(StoreError::Limit { what: "generation", got: g, max: crate::MAX_GENERATION });
     }
@@ -482,6 +482,8 @@ pub mod zc;
 pub mod delta;
 /// `decode`'s blob copy, a cell at a time (W-KVDEC).
 mod decode;
+/// KV v4, the copy-on-write B+tree (W-ES-P8B; wired into `KvIn` / `load_checked` by W-ES-P8C).
+pub mod tree;
 
 #[cfg(test)]
 mod tests;

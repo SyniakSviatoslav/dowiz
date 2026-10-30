@@ -23,6 +23,8 @@
 //! `Truncated`, exactly as `dowiz_hub::Hub::load` refuses it.
 
 pub mod abi;
+/// W-ES-P8D: KV v4, the B+tree, an allocation-free walk of the image (`kv_view` routes version 4 here).
+pub mod kv4;
 /// DG9: the columnar block, decoded and re-encoded. Compiled only for tests and under
 /// `--cfg bw_block` (gate.sh's separate module, which exports `bw_block`): measured 2026-09-30,
 /// merely compiling it into the Worker's module moved `bytes.baseline` 31626 -> 31769.
@@ -64,7 +66,7 @@ pub enum Refusal {
     Truncated { claimed: usize, chained: Option<usize> },
     /// An object's payload does not match its header crc (W-CRC): `obj` is its cell.
     BadCrc { obj: usize },
-    /// The KV root names a version this reader does not know (W-ES-P8A: v4 and above).
+    /// The KV root names a version this reader does not know (W-ES-P8A; v4 reads since W-ES-P8D).
     UnknownVersion,
 }
 
@@ -82,7 +84,7 @@ pub struct LogView {
     pub fold: i64,
 }
 
-fn fnv1a(mut h: u64, bytes: &[u8]) -> u64 {
+pub(crate) fn fnv1a(mut h: u64, bytes: &[u8]) -> u64 {
     for &b in bytes {
         h ^= b as u64;
         h = h.wrapping_mul(FNV_PRIME);
@@ -102,6 +104,13 @@ fn open(bytes: &[u8]) -> Result<Store, Refusal> {
 /// Read a KV image to its count and root.
 pub fn kv_view(bytes: &[u8]) -> Result<KvView, Refusal> {
     let st = open(bytes)?;
+    // v4 (W-ES-P8D): the root says so; `Kv::load_checked` in this build (no `tree` feature) would
+    // refuse it as UnknownVersion, so the version is asked first and v4 goes to `kv4`.
+    if Kv::version(&st) == bebop_store::kv::tree::VERSION_TREE {
+        if let Some(root) = st.root() {
+            return kv4::kv4_view(&st, bytes, root);
+        }
+    }
     let kv = Kv::load_checked(&st).map_err(|e| match e {
         bebop_store::verify::KvError::BadCrc(b) => Refusal::BadCrc { obj: b.obj },
         // Spelled as a compare, not a third arm: measured 2026-10-29, the plain three-arm match

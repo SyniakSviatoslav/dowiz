@@ -57,6 +57,16 @@ pub struct Options {
     /// The compaction trigger: the longest delta chain, and dead cells over live / `dead_div`.
     pub max_deltas: usize,
     pub dead_div: i64,
+    /// v4 (W-ES-P8C): the tree writer's fanout, and the ONLY automatic compaction trigger of a
+    /// v4 image -- superseded cells over live / `tree_dead_div` (default 1: arena <= ~2x live).
+    pub tree_fanout: usize,
+    pub tree_dead_div: i64,
+    /// `create` writes an empty v4 map instead of the empty v2 schema (default false).
+    pub create_tree: bool,
+    /// W-ES-P11, `Durability::Normal`: the n-th commit staged since the last checkpoint
+    /// flushes them all as one group (two barriers). Default 64; 0 = never automatically
+    /// (`Db::flush` only).
+    pub checkpoint_every: usize,
 }
 
 impl Default for Options {
@@ -69,6 +79,10 @@ impl Default for Options {
             initial_bytes: 16 * 1024,
             max_deltas: MAX_DELTAS,
             dead_div: DEAD_DIV,
+            tree_fanout: bebop_kv::tree::FANOUT,
+            tree_dead_div: 1,
+            create_tree: false,
+            checkpoint_every: 64,
         }
     }
 }
@@ -98,9 +112,24 @@ impl Options {
         self.initial_bytes = n;
         self
     }
+    /// The v4 writer's fanout and dead-cell compaction ratio.
+    pub fn tree(mut self, fanout: usize, dead_div: i64) -> Options {
+        self.tree_fanout = fanout;
+        self.tree_dead_div = dead_div;
+        self
+    }
+    pub fn create_tree(mut self, yes: bool) -> Options {
+        self.create_tree = yes;
+        self
+    }
     pub fn compaction(mut self, max_deltas: usize, dead_div: i64) -> Options {
         self.max_deltas = max_deltas;
         self.dead_div = dead_div;
+        self
+    }
+    /// `Durability::Normal`'s checkpoint trigger, in commits (0: only `Db::flush`).
+    pub fn checkpoint_every(mut self, n: usize) -> Options {
+        self.checkpoint_every = n;
         self
     }
 }

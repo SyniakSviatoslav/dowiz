@@ -72,12 +72,16 @@ impl<'a, C: Image> Staged<'a, C> {
         if empty_range(lo, hi) {
             return Ok(MergeCursor::empty(base));
         }
+        // W-ES-P8C: a v4 base is walked in order by the tree's own scan, seeked to `lo`.
+        let tree = base.tree_scan(lo, Bound::Unbounded);
         let start = match lo {
+            _ if tree.is_some() => 0,
             Bound::Included(k) | Bound::Excluded(k) => base.seek(k)?,
             Bound::Unbounded => 0,
         };
         Ok(MergeCursor {
             base,
+            tree,
             i: start,
             sorted: base.sorted(),
             lo: own(lo),
@@ -119,6 +123,8 @@ fn own(b: Bound<&[u8]>) -> Bound<Vec<u8>> {
 /// A merge of the base's range and the batch's, in key order. An `Err` ends it.
 pub struct MergeCursor<'a, C: Image> {
     base: &'a KvIn<C>,
+    /// A v4 base's scan (W-ES-P8C); `None` for v1-v3, walked by index.
+    tree: Option<crate::tree::Iter<'a, 'static, C>>,
     i: usize,
     sorted: bool,
     lo: Bound<Vec<u8>>,
@@ -133,6 +139,7 @@ impl<'a, C: Image> MergeCursor<'a, C> {
     fn empty(base: &'a KvIn<C>) -> MergeCursor<'a, C> {
         MergeCursor {
             base,
+            tree: None,
             i: 0,
             sorted: true,
             lo: Bound::Unbounded,
@@ -163,6 +170,14 @@ impl<'a, C: Image> MergeCursor<'a, C> {
     /// The next base entry inside the bounds. On a sorted base the walk stops at the first key
     /// past `hi`; on an unsorted one (no writer here makes one) it filters the whole stored order.
     fn next_base(&mut self) -> Result<Option<(Bytes<'a>, Bytes<'a>)>, KvError> {
+        if let Some(it) = self.tree.as_mut() {
+            return match it.next() {
+                None => Ok(None),
+                Some(Err(e)) => Err(KvError::Tree(e)),
+                Some(Ok((k, _))) if self.above_hi(&k) => Ok(None),
+                Some(Ok(e)) => Ok(Some(e)),
+            };
+        }
         let base: &'a KvIn<C> = self.base;
         while self.i < base.len() {
             let i = self.i;

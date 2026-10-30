@@ -7,9 +7,9 @@
 //!   es-bench gate-record [reps] [runs] [tol_pct]          print a baseline file
 //!
 //! Scratch databases live under $ES_BENCH_DIR (default ./es-bench-data) and are deleted after
-//! each engine. Engines: bebop, redb, lmdb, sqlite; rows: load open verify get_hot prefix
+//! each engine. Engines: bebop, bebop4 (v4 tree through Db), redb, lmdb, sqlite; rows: load open verify get_hot prefix
 //! get_cold put compact put_durable delete.
-use es_bench::{bebop, gate, work};
+use es_bench::{bebop, bebop4, gate, work};
 #[cfg(feature = "competitors")]
 use es_bench::{lmdb_e, redb_e, sqlite_e};
 
@@ -26,6 +26,7 @@ fn scratch() -> PathBuf {
 fn run_one(engine: &str, c: &work::Cfg) -> Vec<(String, u64)> {
     match engine {
         "bebop" => work::run::<bebop::Bebop>(c),
+        "bebop4" => work::run::<bebop4::Bebop4>(c),
         #[cfg(feature = "competitors")]
         "redb" => work::run::<redb_e::Redb>(c),
         #[cfg(feature = "competitors")]

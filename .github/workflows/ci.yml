@@ -57,6 +57,10 @@ jobs:
         run: cd crates/bebop-log && sh ../../tools/gates/ci-annotate.inc bebop-log cargo test
       - name: bebop-io (device, writer, crash harness)
         run: cd crates/bebop-io && sh ../../tools/gates/ci-annotate.inc bebop-io cargo test
+      - name: bebop-kv with KV v4 (feature tree)
+        run: cd crates/bebop-kv && sh ../../tools/gates/ci-annotate.inc bebop-kv-tree cargo test --features tree
+      - name: bebop-io with KV v4 (feature tree; the v4 crash harness)
+        run: cd crates/bebop-io && sh ../../tools/gates/ci-annotate.inc bebop-io-tree cargo test --features tree
       - name: bebop-crc (hardware CRC == software, every length)
         run: cd crates/bebop-crc && sh ../../tools/gates/ci-annotate.inc bebop-crc cargo test --features std
       - name: bebop-ffi (the C ABI, the fifth reader)

@@ -14,7 +14,7 @@
 //! WHAT IS NOT HERE: multi-process readers (Q4), multi-writer (§6: rejected), an mmap read path
 //! (P14: `SnapImage` gains a mapped backing, the API stays).
 
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 
 use bebop_kv::delta::KeyOp;
@@ -29,6 +29,7 @@ use crate::{cells_to_bytes, Device, Durability, Store, Writer, ARENA};
 
 mod adopt;
 mod commit;
+mod tree;
 mod options;
 pub use options::{Generation, OnTorn, Options, Report, Verify};
 
@@ -52,6 +53,10 @@ pub struct Db<D: Device> {
     opts: Options,
     durable: AtomicI64,
     poisoned: AtomicBool,
+    /// Compactions since open (W-ES-P8C: es-bench reports it next to every write row).
+    compactions: AtomicU64,
+    /// `Durability::Normal` commits staged since the last checkpoint (W-ES-P11).
+    unsynced: AtomicU64,
 }
 
 /// Read `dev` whole and recover it as `opts.on_torn` says.
@@ -88,7 +93,11 @@ impl<D: Device> Db<D> {
         if w.store().root().is_some() {
             return Err(Refusal::Exists);
         }
-        Kv::init_bytes(w.stage()?)?;
+        if opts.create_tree {
+            w.stage_tree(&[], opts.tree_fanout)?;
+        } else {
+            Kv::init_bytes(w.stage()?)?;
+        }
         w.flush(best)?;
         Db::over(w, opts)
     }
@@ -102,6 +111,8 @@ impl<D: Device> Db<D> {
             opts,
             durable: AtomicI64::new(durable),
             poisoned: AtomicBool::new(false),
+            compactions: AtomicU64::new(0),
+            unsynced: AtomicU64::new(0),
         })
     }
 
@@ -162,28 +173,18 @@ impl<D: Device> Db<D> {
         Ok(guard)
     }
 
-    /// Flush every commit `WriteTxn::stage` left in memory (P11: the SAFE group commit -- P2's
-    /// plan writes the inner generation first when it sits on the durable page).
+    /// THE CHECKPOINT (W-ES-P11): flush every commit `WriteTxn::stage` or a `Normal` commit
+    /// left in memory as ONE group under two barriers (`Writer::flush`'s flip), and re-publish
+    /// the snapshot where the flip moved a superblock page in the writer's image.
     pub fn flush(&self, d: Durability) -> Result<Generation, Refusal> {
         let mut w = self.lock_writer()?;
         check_durability(&*w, d)?;
-        let g = self.flush_writer(&mut w, d)?;
-        Ok(Generation(g))
+        Ok(Generation(self.checkpoint(&mut w, d)?))
     }
 
-    fn flush_writer(&self, w: &mut Writer<D>, d: Durability) -> Result<i64, Refusal> {
-        match w.flush(d) {
-            Ok(g) => {
-                self.durable.store(g, Ordering::SeqCst);
-                Ok(g)
-            }
-            Err(e) => {
-                if w.poisoned() {
-                    self.poisoned.store(true, Ordering::SeqCst);
-                }
-                Err(e.into())
-            }
-        }
+    /// Commits staged (`Durability::Normal`, `WriteTxn::stage`) since the last checkpoint.
+    pub fn unsynced(&self) -> u64 {
+        self.unsynced.load(Ordering::SeqCst)
     }
 
     /// The generation the device holds, as far as this database has written it.
@@ -198,7 +199,8 @@ impl<D: Device> Db<D> {
         let mut w = self.lock_writer()?;
         let base = self.current();
         let d = w.device().durability();
-        self.compact_into(&mut w, base, Batch::empty(), into, d)
+        let tree = base.kv.tree_head().is_some();
+        self.compact_into(&mut w, base, Batch::empty(), into, d, tree)
     }
 
     /// `compact` into the device's own fresh sibling (`Device::fresh`; `FileDevice`:
@@ -208,7 +210,8 @@ impl<D: Device> Db<D> {
         let base = self.current();
         let d = w.device().durability();
         let into = w.device().fresh()?;
-        self.compact_into(&mut w, base, Batch::empty(), into, d)
+        let tree = base.kv.tree_head().is_some();
+        self.compact_into(&mut w, base, Batch::empty(), into, d, tree)
     }
 
     /// The writer's own image, trimmed: what the published snapshot must equal after every
@@ -266,6 +269,8 @@ impl<D: Device> Db<D> {
     }
 }
 
+pub(crate) use commit::compaction_durability;
+
 pub(crate) fn check_durability<D: Device>(w: &Writer<D>, d: Durability) -> Result<(), Refusal> {
     let device = w.device().durability();
     if d > device {
@@ -276,3 +281,7 @@ pub(crate) fn check_durability<D: Device>(w: &Writer<D>, d: Durability) -> Resul
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod normal_tests;
+#[cfg(all(test, feature = "tree"))]
+mod tree_tests;

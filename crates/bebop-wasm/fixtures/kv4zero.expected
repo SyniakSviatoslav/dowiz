@@ -1,0 +1,5 @@
+# What every reader of fixtures/kv4zero.store must answer (W-ES-P8D 2026-10-30). The empty v4 map: root
+# {0, 0, 0, 0, 0, 4, 0, 0} -- DEPTH 0, TREE 0, n 0. The fold is the FNV-1a offset basis as an i64, the same
+# number kv0.expected has: an empty map folds to the same root in every version.
+n=0
+root=-3750763034362895579

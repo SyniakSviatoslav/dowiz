@@ -68,7 +68,7 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 | exit 0, a value | 0 (`n` from `kv.bin n`, `root` from `kv.bin h`) |
 | exit 0, `-3` (a v3 root whose chain or base-order claims do not hold) | 2 |
 | trap 79 (PartTab off its home, `st_open`) | 1 |
-| trap 77 (live PartTab fails its crc; `kv_precheck`, W-ES-P4) | 1 |
+| trap 77 (live PartTab fails its crc; store.bp `st_open` (W-PRELUDE; was kv.bp `kv_precheck`, W-ES-P4)) | 1 |
 | trap 76 (no PartTab, so no KV root; `kv_precheck`, W-ES-P4) | 2 |
 | trap 78 (KV version above 3, `pj_kv_known`) | 12 |
 

@@ -1,0 +1,10 @@
+# What every reader of fixtures/kv4small.store must answer (W-ES-P8D 2026-10-30). KV v4, the COW B+tree
+# (FORMAT §9.1 v4): kv3max's 27 entries migrated by the Rust writer (bebop-kv tree::migrate_to_tree, FANOUT
+# 32) into ONE leaf, depth 1. THE FOLD LAW ACROSS VERSIONS: the same n and root as kv3max.expected.
+#   native   : fixtures/conform `bebop-conform read` (bebop-kv Kv::load_checked, feature tree)
+#   wasm32   : crates/bebop-wasm kv4.rs (TreeIn::verify + fold) -- kv status=0 n=27 root=-6264351955216461874
+#   python   : oracle.py kv4_entries, its own walk from the bytes
+#   bebop.bin: selfhost/std/kv4.bp kv4_fold (`kv.bin n` / `kv.bin h`)
+#   ffi      : bebop-ffi over bebop-io (feature tree), Verify::Reachable
+n=27
+root=-6264351955216461874

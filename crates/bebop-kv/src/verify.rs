@@ -17,6 +17,8 @@ pub enum KvError {
     /// The root names a KV version this code does not know (W-ES-P8A: v4 is the B+tree; until a
     /// reader is taught it, it is REFUSED by name, never read as a v1-v3 base and never folded).
     UnknownVersion { v: i64 },
+    /// A v4 image (the B+tree, W-ES-P8C) refused by the tree reader, which names why.
+    Tree(crate::tree::TreeError),
 }
 
 impl Kv {
@@ -27,6 +29,9 @@ impl Kv {
         // W-ES-P8A: a version this code does not know is refused right after the root's own crc,
         // before its cells 1-4 are followed as v1-v3 arrays and before any crc of what they name.
         let v = Kv::version(st);
+        if v == crate::tree::VERSION_TREE && crate::tree::v4_here() {
+            return crate::tree::kvin::load_tree(st, root);
+        }
         if v > crate::delta::VERSION_DELTA {
             return Err(KvError::UnknownVersion { v });
         }

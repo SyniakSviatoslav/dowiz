@@ -156,8 +156,11 @@ def kv_entries(cells, n, root):
     ver = 1
     if obj_len(root) >= 6 and root + 2 + 5 < n and cells[root + 2 + 5] > 0:
         ver = cells[root + 2 + 5]
-    if ver > 3:
-        # W-ES-P8A: a version this reader does not know (v4 = the B+tree) is refused BY NAME, the
+    if ver == 4:
+        # W-ES-P8D: v4, the COW B+tree, walked by kv4_entries from the bytes alone.
+        return kv4_entries(cells, n, root)
+    if ver > 4:
+        # W-ES-P8A: a version this reader does not know is refused BY NAME, the
         # wasm reader's UNKNOWN_VERSION (abi.rs) -- it was 3, which is the wasm's NOT_A_LOG.
         return 12, None
     per_cell = 8 if ver >= 2 else 1
@@ -241,6 +244,104 @@ def kv_entries(cells, n, root):
                 m.pop(k, None)
         entries = sorted(m.items())
     return 0, {"entries": entries, "arrays": arrays, "chain": [o for o, _, _, _ in chain]}
+
+
+def kv4_entries(cells, n, root):
+    """KV v4 (W-ES-P8D), the COW B+tree of FORMAT §9.1 v4, re-derived from the format text, not from
+    the Rust (bebop-kv tree/read.rs is the thing being checked): (status, None) | (0, {"entries"}).
+    Root {n, 0, 0, 0, 0, 4, ref TREE, DEPTH}; LEAF [META = 1<<56 | m][K_i, ref VAL_i]..[keys];
+    NODE [META = 2<<56 | hc<<48 | m][ref C_i, K_i, hc hash cells]..[keys]; VAL [vlen][bytes 8/cell];
+    K_i = koff<<16 | klen into the node's key area. Rules: every ref strictly BACKWARD; a leaf exactly
+    at depth DEPTH <= 16; a separator equals its child's first key; keys strictly ascending over the
+    whole tree; a reachable node has >= 2 children; n counts the leaves' entries. Every reachable
+    object's crc is checked before its cells are read: a crc is 10 (BAD_CRC); any rule that does not
+    hold is a v4 CLAIM that does not hold, 2 (NOT_A_KV), the word a v3 chain that does not hold gets."""
+    LEAF, NODE, VAL = 284439384, 3702325768, 44497123  # DIGEST_KV4_LEAF / NODE / VAL (FORMAT §9.1 v4)
+
+    def obj_len(o):
+        return cells[o] & 0xFFFFFFFF
+
+    def digest(o):
+        return (cells[o] >> 32) & 0xFFFFFFFF
+
+    def crc_ok(o):
+        ln = obj_len(o)
+        if o + 2 + ln > n:
+            return False
+        return zlib.crc32(struct.pack("<%dq" % ln, *cells[o + 2 : o + 2 + ln])) == (cells[o + 1] >> 32) & 0xFFFFFFFF
+
+    def back(o, i):
+        off = cells[o + 2 + i]
+        return o + off if off < 0 and o + off >= 0 else None
+
+    def packed(o, at, ln):
+        return bytes((cells[o + 2 + at + (b >> 3)] >> (8 * (b & 7))) & 0xFF for b in range(ln))
+
+    class Bad(Exception):
+        def __init__(self, status):
+            self.status = status
+
+    def walk(o, level, sep, out):
+        if not crc_ok(o):
+            raise Bad(10)
+        leaf = level == 1
+        if digest(o) != (LEAF if leaf else NODE):
+            raise Bad(2)
+        ln, meta = obj_len(o), cells[o + 2] & 0xFFFFFFFFFFFFFFFF
+        kind, hc, m = meta >> 56, (meta >> 48) & 0xFF, meta & 0xFFFFFFFFFFFF
+        if ln == 0 or kind != (1 if leaf else 2) or (leaf and hc) or m == 0 or m > 65535:
+            raise Bad(2)
+        stride, karea = 2 + hc, 1 + (2 + hc) * m
+        if karea > ln or (level > 1 and m < 2):
+            raise Bad(2)
+        kbytes = (ln - karea) * 8
+        slots = []
+        for i in range(m):
+            k = cells[o + 2 + 1 + stride * i + (0 if leaf else 1)] & 0xFFFFFFFFFFFFFFFF
+            koff, klen = k >> 16, k & 0xFFFF
+            r = back(o, 1 + stride * i + (1 if leaf else 0))
+            if koff + klen > kbytes or r is None:
+                raise Bad(2)
+            slots.append((packed(o, karea, kbytes)[koff : koff + klen], r))
+        if sep is not None and slots[0][0] != sep:
+            raise Bad(2)
+        for k, r in slots:
+            if not leaf:
+                walk(r, level - 1, k, out)
+                continue
+            if out and out[-1][0] >= k:
+                raise Bad(2)
+            if not crc_ok(r):
+                raise Bad(10)
+            vlen = cells[r + 2]
+            if digest(r) != VAL or not 0 <= vlen <= 1 << 30 or obj_len(r) != 1 + (vlen + 7) // 8:
+                raise Bad(2)
+            out.append((k, packed(r, 1, vlen)))
+
+    if obj_len(root) != 8 or root + 10 > n or any(cells[root + 2 + i] for i in (1, 2, 3, 4)):
+        return 2, None
+    count, depth = cells[root + 2], cells[root + 9]
+    if count < 0 or not 0 <= depth <= 16:
+        return 2, None
+    top = 0
+    if depth == 0:
+        if cells[root + 8] != 0 or count != 0:
+            return 2, None
+    else:
+        top = back(root, 6)
+        if top is None:
+            return 2, None
+    if not crc_ok(root):
+        return 10, None
+    entries = []
+    try:
+        if depth:
+            walk(top, depth, None, entries)
+    except Bad as e:
+        return e.status, None
+    if len(entries) != count:
+        return 2, None
+    return 0, {"entries": entries, "arrays": None, "chain": []}
 
 
 def main(path):

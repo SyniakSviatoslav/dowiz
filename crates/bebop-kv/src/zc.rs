@@ -41,6 +41,7 @@ mod image;
 pub use image::{check_obj_in, Image};
 /// The delta chain read in place (W-DELTA): `get`, `len`, `key`, `value`, `prefix_range`.
 mod overlay;
+mod v4; // W-ES-P8C: KvIn's v4 state; the reads are `tree::kvin`'s
 
 /// Proof that `KvIn::open` passed on some bytes, and what it learned (the key order).
 /// The field is private: only `open` makes one.
@@ -69,6 +70,8 @@ pub struct KvIn<C: Image> {
     ov: Vec<(Vec<u8>, Rec)>,
     pieces: Vec<overlay::Piece>,
     mlen: usize,
+    /// W-ES-P8C: (top, depth) of a v4 tree (read through `tree::kvin`); `None` for v1-v3.
+    t4: Option<(usize, usize)>,
 }
 
 /// One entry's (offset, len), bounded by the blob: `None` is a slice the image does not hold.
@@ -87,6 +90,9 @@ impl<C: Image> KvIn<C> {
         check_obj_in(&c, root).map_err(KvError::BadCrc)?;
         // W-ES-P8A: an unknown version is refused by name before cells 1-4 are followed as arrays.
         let v = delta::version_in(&c, root);
+        if v == crate::tree::VERSION_TREE && crate::tree::v4_here() {
+            return Self::open_tree(c, root, true);
+        }
         if v > delta::VERSION_DELTA {
             return Err(KvError::UnknownVersion { v });
         }
@@ -105,6 +111,9 @@ impl<C: Image> KvIn<C> {
     /// For bytes this holder already `open`ed. See the module. A v3 chain is walked again
     /// (O(D) cells, no crc) -- the `Checked` names no generation, only the key order.
     pub fn reopen(c: C, checked: Checked) -> Result<Self, KvError> {
+        if let Some(root) = root_in(&c).filter(|&r| crate::tree::v4_here() && delta::version_in(&c, r) == crate::tree::VERSION_TREE) {
+            return Self::open_tree(c, root, false);
+        }
         let mut kv = Self::shape(c, checked.sorted)?;
         kv.finish()?;
         Ok(kv)
@@ -141,7 +150,7 @@ impl<C: Image> KvIn<C> {
             return Err(KvError::NotKv);
         }
         let ov = overlay::build(&c, &chain);
-        Ok(KvIn { ver, n: n as usize, kidx, kblob, vidx, vblob, kbytes, vbytes, sorted, chain, ov, pieces: Vec::new(), mlen: 0, c })
+        Ok(KvIn { ver, n: n as usize, kidx, kblob, vidx, vblob, kbytes, vbytes, sorted, chain, ov, pieces: Vec::new(), mlen: 0, c, t4: None })
     }
 
     /// Every slice bounded, the budget (entries together no larger than the blobs:

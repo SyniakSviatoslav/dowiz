@@ -7,6 +7,7 @@ use std::fmt;
 use std::io;
 
 use bebop_kv::verify::KvError;
+use bebop_kv::tree::{TreeError, WriteError};
 use bebop_kv::LimitError;
 
 use crate::sim::{RecoverError, Why};
@@ -32,6 +33,11 @@ pub enum Refusal {
     NotKv,
     /// A KV root version this code does not know.
     UnknownVersion(i64),
+    /// A v4 tree (W-ES-P8C) refused by the tree reader or writer, which names why.
+    Tree(TreeError),
+    /// A v4 tree commit over an image that is not v4 (`v` = its version): v1-v3 move to v4 only
+    /// through the explicit `Db::migrate_to_tree`.
+    NotTree(i64),
     /// A cell the write path was about to trust disagrees with the image (`StoreError::Corrupt`).
     Corrupt(&'static str),
     // ── limits ──
@@ -86,6 +92,8 @@ impl From<KvError> for Refusal {
             KvError::NotKv => Refusal::NotKv,
             KvError::UnknownVersion { v } => Refusal::UnknownVersion(v),
             KvError::BadCrc(b) => Refusal::BadCrc(b),
+            KvError::Tree(TreeError::BadCrc(b)) => Refusal::BadCrc(b),
+            KvError::Tree(t) => Refusal::Tree(t),
         }
     }
 }
@@ -123,6 +131,23 @@ impl From<IoError> for Refusal {
             IoError::Recover(r) => Refusal::from(r),
             IoError::Store(s) => Refusal::from(s),
             IoError::Plan(what) => Refusal::Plan(what),
+            IoError::Tree(w) => Refusal::from(w),
+        }
+    }
+}
+
+impl From<WriteError> for Refusal {
+    fn from(e: WriteError) -> Refusal {
+        match e {
+            WriteError::Store(s) => Refusal::from(s),
+            WriteError::Tree(TreeError::BadCrc(b)) => Refusal::BadCrc(b),
+            WriteError::Tree(t) => Refusal::Tree(t),
+            WriteError::NotTree { v } => Refusal::NotTree(v),
+            WriteError::Kv(k) => Refusal::from(k),
+            // The writer's own preconditions: a caller here broke them, never the image.
+            WriteError::Unsorted => Refusal::Plan("tree ops not strictly ascending"),
+            WriteError::Fanout(_) => Refusal::Plan("tree fanout outside MIN_FANOUT..=MAX_FANOUT"),
+            WriteError::NotFresh => Refusal::Plan("a bulk load into a store that has a root"),
         }
     }
 }

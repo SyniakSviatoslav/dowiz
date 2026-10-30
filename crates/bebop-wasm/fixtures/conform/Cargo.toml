@@ -13,7 +13,8 @@ publish = false
 
 [dependencies]
 bebop-image = { path = "../../../bebop-image" }
-bebop-kv = { path = "../../../bebop-kv" }
+# `tree` (W-ES-P8D): this native reader reads KV v4 and writes the kv4* fixtures.
+bebop-kv = { path = "../../../bebop-kv", features = ["tree"] }
 
 [profile.release]
 opt-level = 3
