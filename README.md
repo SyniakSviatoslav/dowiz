@@ -20,6 +20,8 @@ Live today: **Dubin & Sushi, Durrës** at `sushi-durres.dowiz.org` (the same ven
 `dubin-sushi.dowiz.org`), with 165 dishes in Albanian, English and Ukrainian, delivery, pickup and
 dine-in. The platform's landing page and waiting list are at `dowiz.org`. Open source under
 AGPL-3.0; trademark terms in [`TRADEMARK.md`](TRADEMARK.md), contribution terms in [`DCO`](DCO).
+The embedded store crates (`crates/bebop-*`, except `crates/bebop-wasm`) are MIT OR Apache-2.0:
+see [`crates/bebop-store/README.md`](crates/bebop-store/README.md).
 
 ---
 

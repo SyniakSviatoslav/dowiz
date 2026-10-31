@@ -10,7 +10,7 @@ Prints ONE line, the line every reader of docs/STATUS-CODES.md prints --
 -- exits with the status (0 = read), and says the status in words on stderr. `--dump` prints
 every entry (key order) or every record (oldest first; a DOC's heads first). `--verify` prints
 a DOC's counters on stdout:
-    verify records= chained= legacy= redacted= broken= forks= seals= checked= heads= keys= admitted=
+    verify records= chained= legacy= redacted= broken= forks= seals= checked= heads= keys= genesis=
 
 WHAT IT CHECKS, in the library's order (docs/FORMAT-BEBOP-IMAGE-v2.md; bebop-image
 `pick_checked_in` §3.1 -> 1 and `last_commit_in` §7 -> 10 / 41; then the root's family: bebop-kv
@@ -48,11 +48,15 @@ MAX_VALUE_BYTES = 1 << 30
 MAX_SIG_BYTES = MAX_PK_BYTES = 65536
 MAX_BLOB_BYTES = 16 << 20
 FLAG_SHA256, NONCE_LEN = 2, 16
-WORDS = {0: "OK", 1: "NO_SUPERBLOCK: no valid superblock, or the live one refused structurally",
-         2: "NOT_A_KV: no root, or a KV claim that does not hold, or a DOC whose SPEC or v1-v3 TREE this reader does not read",
-         4: "TRUNCATED: the log's chain does not deliver the root's count",
-         10: "BAD_CRC: an object the read reached fails its crc", 12: "UNKNOWN_VERSION: the KV root names a version above 4 and is not a DOC",
-         41: "LAST_COMMIT: the last commit does not hash to its anchor and every object in it checks",
+REVOKE_MARK, REDACTED_BIT = b"bebop-revoke/1", 0x80
+# Word for word bebop-wasm-reader `status.rs` TABLE: tools/gates/maingoal.sh holds the surfaces to one text.
+WORDS = {0: "OK: read; n = entries or records, root = the FNV-1a 64 fold (a DOC's root is its log's fold)",
+         1: "NO_SUPERBLOCK: no valid superblock, or the live one was refused structurally (arena_used or PartTab outside, PartTab misplaced or its crc bad, root outside)",
+         2: "NOT_A_KV: a superblock but no KV root, or a KV claim (a slice, a chain, a v4 rule) that does not hold, or a DOC whose SPEC or v1-v3 TREE this reader does not read",
+         4: "TRUNCATED: the log's root claims more records than its chain delivers, or the chain never ends",
+         10: "BAD_CRC: an object the read reached fails its crc (root, an array, a delta record, a node, a value, a log record, HEADS, KEYS, SPEC, an object of a torn last commit)",
+         12: "UNKNOWN_VERSION: the KV root names a version above 4 and is not a DOC (root-version 5 in both version cells)",
+         41: "LAST_COMMIT: the last commit's range does not hash to its anchor and every object in it checks (a re-sealed object, a changed header); never fallen back past",
          75: "CUT_UNDECLARED: a log segment left this file (a SEG under the DOC) and no TRUNCATE record on the kept chain names it by root and range -- records were dropped without the cut being declared"}
 UNCHECKED = ("seals COUNTED, not CHECKED: this reader carries no signature algorithm (stdlib, no ML-DSA); "
              "a count is not a proof -- bring a verifier, or the format text's independent readers")

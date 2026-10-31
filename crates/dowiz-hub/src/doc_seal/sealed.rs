@@ -43,6 +43,8 @@ pub(super) fn doc_err(e: DocError) -> HubError {
         DocError::CutUndeclared { .. } => HubError::Store(StoreError::Corrupt("a log segment was cut without a signed TRUNCATE")),
         DocError::NothingToCut => HubError::Store(StoreError::Corrupt("nothing to cut: keep is not below the log's length")),
         DocError::CutsAdmit(_) => HubError::Store(StoreError::Corrupt("the cut would take a device's ADMIT record")),
+        DocError::TakesRevoke(_) => HubError::Store(StoreError::Corrupt("the cut or the redaction would take a device's REVOKE record")),
+        DocError::Readmit(_) => HubError::Store(StoreError::Corrupt("the key is revoked here and a REVOKE is final")),
         DocError::NoTree => HubError::Store(StoreError::Corrupt("the id scheme has no tree root to name a segment by")),
         DocError::Carries(what) => HubError::Store(StoreError::Corrupt(what)),
     }

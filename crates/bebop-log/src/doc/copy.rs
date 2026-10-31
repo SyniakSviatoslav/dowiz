@@ -10,18 +10,21 @@
 //! WHAT IS REFUSED, BY NAME: a record whose crc fails (a copy would re-seal it -- the laundering
 //! `verify::copy_chain_bytes` carries a failed crc to avoid -- and a DOC is refused whole on one
 //! anyway, so there is nothing to carry); a DOC with a TREE or a SPEC (M5's objects; copying a
-//! KV is `bebop-kv`'s business, and this crate does not guess at it).
+//! KV is `bebop-kv`'s business, and this crate does not guess at it). A copy carries every
+//! REVOKE record and the KEYS table as they stood, so `verify` answers on the copy what it
+//! answered on the source, a table that disagrees included; a redaction that would tombstone
+//! a REVOKE is refused (`TakesRevoke`), because a tombstone declares nothing (`declare.rs`).
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use alloc::collections::BTreeMap;
 use crate::{EvLog, Record, Store, Tx};
 use super::anch::{read_anchors, stage_anchor};
-use super::keys::{key_rows, read_key, stage_key, stage_keys, Key};
+use super::keys::{key_rows, parse_revoke, read_key, stage_key, stage_keys, Key};
 use super::seal::{read_heads, read_seal, stage_heads, stage_seal, Head};
 use super::seg::{read_segs, stage_seg, Segment};
 use super::write::{stage_doc, Refs};
-use super::{Doc, DocError, FLAG_SELF_DESCRIBING};
+use super::{Doc, DocError, Ids, FLAG_SELF_DESCRIBING};
 
 /// What a redacting copy asks per record: `Some(payload)` replaces the payload, id and
 /// `prev` kept (`forget.rs`'s rule: the tombstone keeps its place and stops vouching for
@@ -44,9 +47,9 @@ impl Doc {
     /// are declared, not hidden. Returns how many records were redacted; the caller then
     /// commits the signed FORGOTTEN (`seg::forgotten_body`) through `commit_bytes`, or
     /// `verify` says `redacted != declared`. Nothing is committed when the count is 0.
-    pub fn redact_into(src: &Store, dst: &mut Store, redact: Redact<'_>) -> Result<usize, DocError> {
+    pub fn redact_into(src: &Store, dst: &mut Store, ids: &dyn Ids, redact: Redact<'_>) -> Result<usize, DocError> {
         let mut tx = dst.begin()?;
-        let (doc, n) = stage_copy_with(src, dst, &mut tx, None, Some(redact))?;
+        let (doc, n) = stage_copy_with(src, dst, &mut tx, None, Some((ids, redact)))?;
         if n > 0 {
             dst.commit_bytes(&tx, doc);
         }
@@ -61,7 +64,7 @@ pub(crate) fn stage_copy(src: &Store, dst: &mut Store, tx: &mut Tx, spec: Option
 }
 
 /// `stage_copy`, with an optional redaction; returns the DOC and how many payloads moved.
-fn stage_copy_with(src: &Store, dst: &mut Store, tx: &mut Tx, spec: Option<usize>, redact: Option<Redact<'_>>) -> Result<(usize, usize), DocError> {
+fn stage_copy_with(src: &Store, dst: &mut Store, tx: &mut Tx, spec: Option<usize>, redact: Option<(&dyn Ids, Redact<'_>)>) -> Result<(usize, usize), DocError> {
     let mut redacted = 0usize;
     {
         let view = Doc::open(src)?;
@@ -86,8 +89,11 @@ fn stage_copy_with(src: &Store, dst: &mut Store, tx: &mut Tx, spec: Option<usize
         let mut moved: BTreeMap<usize, usize> = BTreeMap::new();
         for (old, r) in objs.iter().zip(&recs) {
             let tomb;
-            let r = match redact.and_then(|f| f(r)) {
-                Some(payload) => {
+            let r = match redact.and_then(|(ids, f)| f(r).map(|p| (ids, p))) {
+                Some((ids, payload)) => {
+                    if let Some((target, _)) = parse_revoke(ids.body(r.flags, &r.payload)) {
+                        return Err(DocError::TakesRevoke(target));
+                    }
                     redacted += 1;
                     tomb = Record { payload, ..r.clone() };
                     &tomb

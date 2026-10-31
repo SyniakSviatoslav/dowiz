@@ -1,0 +1,14 @@
+# What the one-file readers must answer on fixtures/anch.store (W-MG-M7A, 2026-10-31): a REAL sealed
+# hub with real ML-DSA-65 seals and two real platform marks, cut once, forget declared. It is the
+# working file of crates/dowiz-hub/src/bin/maingoal_device.rs at seed 0^32 (deterministic);
+# tools/gates/maingoal.sh refuses a fixture that is not that program's output byte for byte. The
+# newest anchor names the kept tip, the older one a record under the cut: `bw_anchors` and python's
+# read_anchors print both, newest first, PRESENT and never verified. `seals` is a count (`checked=0`).
+# doc_verify, which does check them, agrees on every shared counter: tools/gates/maingoal.sh.
+# tools/verify/gate.sh holds node and python to these lines. The five conformance readers are not run
+# on this file: they stop at a DOC root by name (doc.expected).
+doc_n=4
+doc_root=873890418513991691
+doc_verify=records=4 chained=4 legacy=0 redacted=0 broken=0 forks=0 seals=4 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 unsealed=0
+doc_anchor=kind=1 over=90677d8ace5382f6274a92e51597a0c6cc3defa871e233ce544411ae5729b06e time_ms=1761900006500 proof_len=5261
+doc_anchor=kind=1 over=cd514442333686b11e729c6241b514e5c89fcd6a4e78427348b57ba871188b56 time_ms=1761900002500 proof_len=5261

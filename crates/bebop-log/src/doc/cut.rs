@@ -15,8 +15,17 @@
 //! be cuttable, or the two main-goal properties -- kept history, external time -- would
 //! exclude each other; an anchor whose `over` left under the segment is not dropped and not
 //! judged here, see `anch.rs` `under_cut`). What is refused: a cut through the ADMIT record
-//! of a key still in KEYS (`CutsAdmit`: the proof of the key is that record), a DOC that
-//! names a TREE or SPEC (`Carries`: the layer owning it moves it), a log with nothing to cut.
+//! of a key still in KEYS (`CutsAdmit`: the proof of the key is that record), a cut through a
+//! REVOKE record (`TakesRevoke`: the fold of `settle.rs` reads the records and only them), a
+//! DOC that names a TREE or SPEC (`Carries`: the layer owning it moves it), a log with
+//! nothing to cut.
+//!
+//! WHY REFUSED, NOT CARRIED IN THE FRONTIER ROW: a row is signed by nobody, so it could only
+//! say what `revoked_at` says, and the effect of a REVOKE is decided by its record's chain and
+//! seal, which a row cannot carry. A REVOKE comes after the ADMIT of its target unless the
+//! target is a genesis key, so the cut already stops near it. Judged by mark, not by seal (a
+//! writer has no `Verifier`): an ineffective REVOKE holds the cut too. This guards the honest
+//! cutter; a forger who writes the bytes himself is the archive's to catch (`settle.rs`).
 //!
 //! The counts under the cut (`redacted`, `declared`) are counted by mark, not by seal: a
 //! writer has no `Verifier`. They are the TRUNCATE signer's claim -- verify a file before
@@ -28,7 +37,7 @@ use crate::prelude::*;
 use alloc::collections::BTreeMap;
 use crate::{EvLog, Record, Store};
 use super::anch::{read_anchors, stage_anchor, Anchor};
-use super::keys::{read_keys, stage_key, stage_keys, Key};
+use super::keys::{parse_revoke, read_keys, stage_key, stage_keys, Key};
 use super::seal::{read_heads, read_seal, stage_heads, stage_seal, Head, Seal};
 use super::seg::{frontier_of, parse_forgotten, read_segs, stage_seg, Frontier, Segment, SCHEME_CHAINED, SCHEME_LEGACY};
 use super::write::{stage_doc, Refs};
@@ -111,6 +120,9 @@ impl Doc {
                     return Err(DocError::Corrupt("a KEY names an ADMIT record the log does not hold"));
                 }
             }
+        }
+        if let Some((target, _)) = gone.iter().find_map(|(_, r)| parse_revoke(ids.body(r.flags, &r.payload))) {
+            return Err(DocError::TakesRevoke(target));
         }
         let cut_ids: Vec<[u8; 32]> = gone.iter().map(|(_, r)| r.id).collect();
         let root = ids.tree_root(&cut_ids).ok_or(DocError::NoTree)?;

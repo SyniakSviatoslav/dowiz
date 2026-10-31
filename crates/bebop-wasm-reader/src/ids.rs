@@ -4,8 +4,11 @@
 //! `ReaderIds` re-derives dowiz-hub's documented id schemes (`crates/dowiz-hub/src/chain/scheme.rs`,
 //! FORMAT §9.2): a record's id is `sha256(prev ‖ payload)` (M0, the payload led by a 16-byte
 //! nonce), or under one of the two legacy FNV-1a x4 schemes of older images (over `prev ‖ payload`
-//! from 2026-09-20, over the payload alone before). A redaction leaves the nonce erased to sixteen
-//! `'0'` bytes. These are FORMAT rules re-derived from the text, exactly as `oracle.py` re-derives
+//! from 2026-09-20, over the payload alone before). A redaction shows as dowiz-hub's mark, the high
+//! bit of the kind byte (`forget.rs`), behind the nonce when there is one, or as a nonce erased to
+//! sixteen `'0'` bytes on a record with no kind byte: a legacy record has no nonce to erase, and
+//! reading the erased nonce alone counted a real legacy tombstone broken.
+//! These are FORMAT rules re-derived from the text, exactly as `oracle.py` re-derives
 //! the fold; the test fixture written with `ToyIds` (bebop-log's test mix) therefore counts
 //! `broken`, which is the honest answer about a toy file.
 //!
@@ -21,6 +24,8 @@ use crate::sha256::sha256;
 /// The nonce in front of every post-M0 payload, and what a redaction leaves there.
 pub const NONCE_LEN: usize = 16;
 const ERASED: [u8; NONCE_LEN] = [b'0'; NONCE_LEN];
+/// `forget.rs`'s tombstone mark on the kind byte.
+const REDACTED_BIT: u8 = 0x80;
 
 /// FNV-1a 64 over four salted lanes, spread to 32 bytes: the pre-M0 id.
 fn legacy_mix(bytes: &[u8]) -> [u8; 32] {
@@ -55,13 +60,21 @@ impl Ids for ReaderIds {
         legacy_mix(&m) == *id || legacy_mix(payload) == *id
     }
     fn redacted(&self, flags: i64, payload: &[u8]) -> bool {
-        flags & bebop_log::FLAG_SHA256 != 0 && payload.len() >= NONCE_LEN && payload[..NONCE_LEN] == ERASED
+        let sha = flags & bebop_log::FLAG_SHA256 != 0;
+        if sha && payload.starts_with(&ERASED) {
+            return true;
+        }
+        let b = if sha { payload.get(NONCE_LEN..).unwrap_or(&[]) } else { payload };
+        b.first().is_some_and(|k| k & REDACTED_BIT != 0)
     }
+    /// FORMAT §9.4, the owner's framing: M0's nonce, then dowiz-hub's kind byte on a declaration
+    /// (`D`) or a key op (`K`) -- without this a REAL hub's TRUNCATE reads as no TRUNCATE (75). A
+    /// body with no kind byte (bebop-log's own fixtures) starts at its mark.
     fn body<'a>(&self, flags: i64, payload: &'a [u8]) -> &'a [u8] {
-        if flags & bebop_log::FLAG_SHA256 != 0 {
-            payload.get(NONCE_LEN..).unwrap_or(&[])
-        } else {
-            payload
+        let b = if flags & bebop_log::FLAG_SHA256 != 0 { payload.get(NONCE_LEN..).unwrap_or(&[]) } else { payload };
+        match b.first() {
+            Some(b'D' | b'K') => &b[1..],
+            _ => b,
         }
     }
 }

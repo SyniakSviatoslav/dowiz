@@ -14,7 +14,7 @@ use bebop_log::EvLog;
 
 use crate::{blank, ids, log_fold, log_records, tree_entries, Doc, Kind, Refusal};
 
-/// `doc::verify`'s answer as the ABI hands it out (`abi::bw_counts`), sixteen numbers.
+/// `doc::verify`'s answer as the ABI hands it out (`abi::bw_counts`), eighteen numbers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct DocCounts {
     pub records: i64,
@@ -27,7 +27,9 @@ pub struct DocCounts {
     pub forks: i64,
     pub heads: i64,
     pub keys: i64,
-    pub admitted: i64,
+    /// Keys with no ADMIT record. With no signature code this is all that can be counted: what
+    /// the signed records ADMIT takes a verifier, which is `doc_verify`'s `admitted`.
+    pub genesis: i64,
     /// 1 if this reader checked the signatures; 0 -- always, in this crate (`ids::NoVerifier`).
     pub checked: i64,
     /// `Report::holds()` as the library computed it under that verifier (0 here: unchecked
@@ -39,6 +41,14 @@ pub struct DocCounts {
     pub cut: i64,
     pub cut_redacted: i64,
     pub declared: i64,
+    /// W-MG-REVOKE (appended): keys whose `revoked_at` is not what the file's REVOKE records say.
+    /// Blind, so the rule is `settle.rs`'s for a reader with no verifier: a REVOKE counts on its
+    /// chain alone (its id = sha256(prev ‖ payload), no tombstone), its seal not judged. A forged
+    /// table shows here with no signature code; a REVOKE a verifier would void counts as a claim.
+    pub keys_disagree: i64,
+    /// W-MG-SEAL (appended): records no seal's tip reaches through `prev`, plus walks that leave
+    /// the file. Seals unjudged here: the tips are read, not believed.
+    pub unsealed: i64,
 }
 
 /// A DOC (FORMAT §9.4): the root's crc (`Doc::open`), its log as `open_log` reads one, HEADS
@@ -115,13 +125,15 @@ impl Doc {
             forks: c.forks as i64,
             heads: rep.heads.len() as i64,
             keys: rep.keys as i64,
-            admitted: rep.admitted as i64,
+            genesis: rep.admitted as i64,
             checked: 0,
             holds: rep.holds() as i64,
             segments: c.segments as i64,
             cut: c.cut as i64,
             cut_redacted: c.cut_redacted as i64,
             declared: c.declared as i64,
+            keys_disagree: c.keys_disagree as i64,
+            unsealed: c.unsealed as i64,
         };
         self.counts = Some(counts);
         Some(Ok(counts))

@@ -54,6 +54,7 @@ mod declare;
 pub mod keys;
 pub mod seal;
 pub mod seg;
+mod settle;
 pub mod spec;
 mod verify;
 mod write;
@@ -110,8 +111,13 @@ pub enum DocError {
     /// `keep` is not smaller than the log: there is nothing to cut.
     NothingToCut,
     /// The cut would take the ADMIT record of a key still in KEYS; that key's proof lives
-    /// in the record, so the record stays. Cut up to it, or revoke and re-admit first.
+    /// in the record, so the record stays. Cut up to it.
     CutsAdmit([u8; 32]),
+    /// The cut or the redaction would take a REVOKE record of this actor's key; the
+    /// revocation is that record, so the record stays. Cut up to it.
+    TakesRevoke([u8; 32]),
+    /// An ADMIT of a key already revoked here: a REVOKE is final, a new device takes a new key.
+    Readmit([u8; 32]),
     /// The caller's `Ids` has no `tree_root`: a segment has no root to be declared by.
     NoTree,
     /// The DOC names an object this cut does not carry (`what`: "TREE", "SPEC", "ANCH"); the
@@ -133,7 +139,7 @@ impl PartialEq for DocError {
             (DocError::Seq { want: a, got: s }, DocError::Seq { want: b, got: t }) => a == b && s == t,
             (DocError::Corrupt(a), DocError::Corrupt(b)) => a == b,
             (DocError::CutUndeclared { root: a }, DocError::CutUndeclared { root: b }) => a == b,
-            (DocError::CutsAdmit(a), DocError::CutsAdmit(b)) => a == b,
+            (DocError::CutsAdmit(a), DocError::CutsAdmit(b)) | (DocError::TakesRevoke(a), DocError::TakesRevoke(b)) | (DocError::Readmit(a), DocError::Readmit(b)) => a == b,
             (DocError::Carries(a), DocError::Carries(b)) => a == b,
             (DocError::NothingToCut, DocError::NothingToCut) | (DocError::NoTree, DocError::NoTree) => true,
             _ => false,

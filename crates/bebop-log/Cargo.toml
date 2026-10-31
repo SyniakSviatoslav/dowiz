@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
+repository = "https://github.com/SyniakSviatoslav/dowiz"
+readme = "README.md"
 description = "The bebop chained event log over a bebop image: EvLog v1/v2 records, the crc quarantine policy, ChainMark. no_std + alloc; depends only on bebop-image."
 
 [features]
@@ -12,11 +14,11 @@ default = []
 std = ["bebop-image/std"]
 
 [dependencies]
-bebop-image = { path = "../bebop-image" }
+bebop-image = { path = "../bebop-image", version = "0.1.0" }
 
 [dev-dependencies]
 # the tests write temp files through the path API
-bebop-image = { path = "../bebop-image", features = ["std"] }
+bebop-image = { path = "../bebop-image", version = "0.1.0", features = ["std"] }
 # W-MG-M1: the REAL ML-DSA-65 seal (`doc/dsa_tests.rs`) through the `doc::Signer` /
 # `doc::Verifier` seams. DEV ONLY: dowiz-core is AGPL-3.0-or-later and never links into this
 # MIT OR Apache-2.0 library -- `cargo tree -e no-dev` must keep showing bebop-image alone.

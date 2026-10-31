@@ -6,12 +6,14 @@
 //!
 //! The writer polices what it can see (the actor's key exists and is not revoked at this
 //! seq, the device's seq is the next one) and leaves AUTHORITY to `verify`: whether the key
-//! was admitted by an admitted key is a question about the signed records, not the tables.
+//! was admitted by an admitted key, or revoked by one, is a question about the signed records,
+//! not the tables. A key op is the record's AND the table's: `op` moves the table, `rec`
+//! carries the body, and a caller who lets them differ gets `keys_disagree` from `verify`.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::{EvLog, Record, Store, StoreError, Tx};
-use super::keys::{key_rows, read_keys, stage_key, stage_keys, Key, KeyOp};
+use super::keys::{key_rows, narrower, read_keys, stage_key, stage_keys, Key, KeyOp};
 use super::seal::{message, read_heads, stage_heads, stage_seal, Head};
 use super::{Doc, DocError, Signer, C_ANCH, C_FLAGS, C_HEADS, C_KEYS, C_LOG, C_SEG, C_SPEC, C_TREE, C_VERSION, C_VERSION_LOG, DIGEST_DOC, DOC_CELLS, ROOT_VERSION_DOC};
 
@@ -123,10 +125,15 @@ impl Doc {
         let mut keys_root = view.keys;
         if let Some(op) = op {
             let staged = match op {
-                KeyOp::Admit(k) => Key { admit_rec: Some(ev), ..k.clone() },
+                KeyOp::Admit(k) => {
+                    if keys.iter().any(|old| old.actor_id == k.actor_id && old.revoked_at != 0) {
+                        return Err(DocError::Readmit(k.actor_id));
+                    }
+                    Key { admit_rec: Some(ev), ..k.clone() }
+                }
                 KeyOp::Revoke { actor_id, after_seq } => {
                     let old = keys.iter().find(|k| k.actor_id == *actor_id).ok_or(DocError::UnknownActor(*actor_id))?;
-                    Key { revoked_at: *after_seq, ..old.clone() }
+                    Key { revoked_at: narrower(old.revoked_at, *after_seq), ..old.clone() }
                 }
             };
             let mut rows = key_rows(st, view.keys);

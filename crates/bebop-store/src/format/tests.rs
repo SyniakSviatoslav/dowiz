@@ -80,7 +80,6 @@ fn each_commit_writes_its_parttab_into_the_other_page() {
 /// re-valued on either side without the other turns this red.
 #[test]
 fn the_format_document_states_every_constant_with_the_codes_value() {
-    let doc = include_str!("../../../../docs/FORMAT-BEBOP-IMAGE-v2.md");
     let code: &[(&str, i128)] = &[
         ("MAGIC", MAGIC as i128), ("FORMAT_VERSION", FORMAT_VERSION as i128), ("SB_A", SB_A as i128),
         ("SB_B", SB_B as i128), ("SB_CELLS", SB_CELLS as i128), ("ARENA", ARENA as i128),
@@ -101,6 +100,12 @@ fn the_format_document_states_every_constant_with_the_codes_value() {
         ("DIGEST_OUT", crate::proj::DIGEST_OUT as i128), ("DIGEST_OUTB", crate::proj::kinds::DIGEST_OUTB as i128),
         ("DIGEST_OUTZ", crate::proj::kinds::DIGEST_OUTZ as i128), ("MAX_WIDTH", crate::proj::kinds::MAX_WIDTH as i128),
     ];
+    // Both languages state the same table: an archive embeds the English one (W-MG-FMT2).
+    the_table_states(include_str!("../../../../docs/FORMAT-BEBOP-IMAGE-v2.md"), code);
+    the_table_states(include_str!("../../../../docs/FORMAT-BEBOP-IMAGE-v2.en.md"), code);
+}
+
+fn the_table_states(doc: &str, code: &[(&str, i128)]) {
     // Rows of the form "| `NAME` | <decimal> | ...".
     let rows: Vec<(String, i128)> = doc
         .lines()

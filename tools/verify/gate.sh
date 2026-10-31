@@ -5,6 +5,9 @@
 # line conformance.sh's five readers answer, on all 21 of its fixtures, the log fixture, and the
 # DOC fixture (W-MG-M5: the five refuse DOC by name, 12; these two READ it, and must agree with
 # each other and with doc.expected's `doc_n` / `doc_root` / `doc_verify` lines).
+# W-MG-M7A: anch.store is a REAL sealed hub with two anchors, one under a cut (bw_anchors had only ever
+# been read empty): both must print anch.expected's `doc_anchor` rows, in order. The writer is
+# crates/dowiz-hub/src/bin/maingoal_device.rs at seed 0; tools/gates/maingoal.sh refuses a stale fixture.
 #
 # "No repo" is enforced, not assumed: the two verifier files and the fixtures are COPIED to an
 # empty directory outside the checkout, the gate cd's there, and the verifiers run with that as
@@ -49,7 +52,7 @@ CLEAN="${VERIFY_SCRATCH:-${TMPDIR:-/tmp}/bebop-verify-clean.$$}"
 rm -rf "$CLEAN"; mkdir -p "$CLEAN"
 trap 'rm -rf "$CLEAN"' EXIT
 cp "$V/bebop-verify.mjs" "$V/bebop-verify.py" "$ROOT/examples/read.mjs" "$CLEAN/"
-for f in $FIXTURES proj4.log doc; do cp "$FIX/$f.store" "$CLEAN/"; done
+for f in $FIXTURES proj4.log doc anch; do cp "$FIX/$f.store" "$CLEAN/" || { say "RED fixture $f.store is absent"; exit 1; }; done
 say "clean dir $CLEAN holds $(ls "$CLEAN" | wc -l | tr -d ' ') files and no repo"
 
 want() { awk -F= "/^$2=/{print \$2}" "$FIX/$1.expected"; }
@@ -92,16 +95,26 @@ doc_check() { # doc_check <label> <image> <want status line> <want verify line>
 }
 doc_check doc ./doc.store "doc status=0 n=$(want doc doc_n) root=$(want doc doc_root)" "verify $(sed -n 's/^doc_verify=//p' "$FIX/doc.expected")"
 
+# THE NON-EMPTY ANCH (W-MG-M7A): the counters as above, then every anchor row, newest first, on both
+doc_check anch ./anch.store "doc status=0 n=$(want anch doc_n) root=$(want anch doc_root)" "verify $(sed -n 's/^doc_verify=//p' "$FIX/anch.expected")"
+rows=$(sed -n 's/^doc_anchor=//p' "$FIX/anch.expected")
+for r in node python; do
+  if [ "$r" = node ]; then got=$(node_read ./anch.store --verify); else got=$(py_read ./anch.store --verify); fi
+  got=$(printf '%s\n' "$got" | sed -n 's/^anchor \(.*\) (present, NOT verified by this reader)$/\1/p')
+  if [ -n "$rows" ] && [ "$got" = "$rows" ]; then say "anch: $r prints the $(printf '%s\n' "$rows" | wc -l | tr -d ' ') anchor rows of anch.expected, in order"
+  else say "anch: want '$rows' -- $r '$got' DISAGREE"; fail=1; fi
+done
+
 if [ "$BUILD" = 1 ]; then
   # THE ARCHIVE: SPEC first, the reader just built inside, sha256 ids; read by the file's own reader.
   WASM="${BWR_TARGET_DIR:-$ROOT/crates/bebop-wasm-reader/target}/wasm32-unknown-unknown/release/bebop_wasm_reader.wasm"
   CARGO="${CARGO:-$HOME/.cargo/bin/cargo}"; [ -x "$CARGO" ] || CARGO=cargo
-  if ! (cd "$ROOT/crates/bebop-log" && BEBOP_ARCHIVE_FIXTURE="$CLEAN/archive.store" BEBOP_CUT_FIXTURE="$CLEAN/cut.store" BEBOP_CUT_UNDECLARED_FIXTURE="$CLEAN/cut-undeclared.store" BEBOP_READER_WASM="$WASM" BEBOP_FORMAT_TEXT="$ROOT/docs/FORMAT-BEBOP-IMAGE-v2.md" \
+  if ! (cd "$ROOT/crates/bebop-log" && BEBOP_ARCHIVE_FIXTURE="$CLEAN/archive.store" BEBOP_CUT_FIXTURE="$CLEAN/cut.store" BEBOP_CUT_UNDECLARED_FIXTURE="$CLEAN/cut-undeclared.store" BEBOP_READER_WASM="$WASM" BEBOP_FORMAT_TEXT="$ROOT/docs/FORMAT-BEBOP-IMAGE-v2.en.md" \
       CARGO_INCREMENTAL=0 "$CARGO" test --offline --target-dir "${BLOG_TARGET_DIR:-$ROOT/crates/bebop-log/target}" write_the_) > "$CLEAN/archive.log" 2>&1 || [ ! -s "$CLEAN/archive.store" ] || [ ! -s "$CLEAN/cut.store" ] || [ ! -s "$CLEAN/cut-undeclared.store" ]; then
     say "RED the archive fixture was not written -- $(grep -m1 -E 'error|panicked|FAILED' "$CLEAN/archive.log")"; fail=1
   else
-    say "archive: $(wc -c < "$CLEAN/archive.store" | tr -d ' ') bytes = doc.store $(wc -c < "$FIX/doc.store" | tr -d ' ') + reader $(wc -c < "$WASM" | tr -d ' ') + FORMAT $(wc -c < "$ROOT/docs/FORMAT-BEBOP-IMAGE-v2.md" | tr -d ' ') + headers (the per-file cost of SPEC, §2f)"
-    doc_check archive ./archive.store "doc status=0 n=3 root=$(py_read ./archive.store | sed 's/.*root=//')" "verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 admitted=1 segments=0 cut=0 cut_redacted=0 declared=0"
+    say "archive: $(wc -c < "$CLEAN/archive.store" | tr -d ' ') bytes = doc.store $(wc -c < "$FIX/doc.store" | tr -d ' ') + reader $(wc -c < "$WASM" | tr -d ' ') + FORMAT $(wc -c < "$ROOT/docs/FORMAT-BEBOP-IMAGE-v2.en.md" | tr -d ' ') + headers (the per-file cost of SPEC, §2f)"
+    doc_check archive ./archive.store "doc status=0 n=3 root=$(py_read ./archive.store | sed 's/.*root=//')" "verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0"
     out=$(cd "$CLEAN" && env -i PATH="$(dirname "$(command -v node)")" node ./read.mjs ./archive.store 2>&1); rc=$?
     printf '%s\n' "$out" | sed 's/^/verify-gate: read.mjs | /'
     ok=1
@@ -109,7 +122,7 @@ if [ "$BUILD" = 1 ]; then
     printf '%s\n' "$out" | grep -q '^doc status=0 n=3 root=' || ok=0
     [ "$(printf '%s\n' "$out" | grep -c '^head actor=')" = 1 ] || ok=0
     [ "$(printf '%s\n' "$out" | grep -c '^#[0-9]* seq=')" = 3 ] || ok=0
-    printf '%s\n' "$out" | grep -q '^verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 admitted=1 segments=0 cut=0 cut_redacted=0 declared=0$' || ok=0
+    printf '%s\n' "$out" | grep -q '^verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0$' || ok=0
     printf '%s\n' "$out" | grep -q '^verify(whole arena) = OK' || ok=0
     printf '%s\n' "$out" | grep -q '^seals COUNTED, not CHECKED' || ok=0
     if [ "$rc" = 0 ] && [ "$ok" = 1 ]; then say "read.mjs: a clean Node read the archive with the reader embedded in it (rc=0, every line present)"
@@ -149,7 +162,7 @@ PY
     o3=$(cd "$CLEAN" && node ./read.mjs ./forged.store 2>&1); r3=$?
     case "$o1" in *"doc status=10 n=0 root=0"*"BAD_CRC:"*) say "RED proof 1: flipped record -> rc=$r1 '$(printf '%s' "$o1" | tail -1 | cut -c1-80)'" ;; *) say "RED proof 1 FAILED: rc=$r1 '$o1'"; fail=1 ;; esac
     case "$r2:$o2" in 4:*"REFUSED: the embedded reader hashes to"*) say "RED proof 2: flipped reader byte -> rc=4, not run" ;; *) say "RED proof 2 FAILED: rc=$r2 '$o2'"; fail=1 ;; esac
-    forged="verify records=3 chained=2 legacy=0 redacted=0 broken=1 forks=0 seals=3 checked=0 heads=1 keys=1 admitted=1 segments=0 cut=0 cut_redacted=0 declared=0"
+    forged="verify records=3 chained=2 legacy=0 redacted=0 broken=1 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0"
     case "$r3:$o3" in 0:*"doc status=0 n=3 root="*"$forged"*) say "RED proof 3: forged record (crc re-sealed) -> rc=0 and '$forged'" ;; *) say "RED proof 3 FAILED: rc=$r3 '$o3'"; fail=1 ;; esac
     doc_check forged ./forged.store "$(py_read ./forged.store | sed -n 1p)" "$forged"
 
@@ -158,7 +171,7 @@ PY
     # chain continues the frontier (chained=3, broken=0). RED 4: the same cut archived BEFORE the
     # TRUNCATE -> every reader says 75 CUT_UNDECLARED by name. RED 5: the oldest KEPT record forged
     # (payload bit, crc re-sealed) -> chained 2, broken 1, the segment still declared.
-    cutline="verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 admitted=1 segments=1 cut=3 cut_redacted=0 declared=0"
+    cutline="verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=3 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0"
     doc_check cut ./cut.store "$(py_read ./cut.store | sed -n 1p)" "$cutline"
     o4=$(cd "$CLEAN" && env -i PATH="$(dirname "$(command -v node)")" node ./read.mjs ./cut.store 2>&1); r4=$?
     case "$r4:$o4" in 0:*"$cutline"*) say "cut: read.mjs read the cut archive with its own reader: '$cutline'" ;; *) say "RED cut: read.mjs rc=$r4 '$o4'"; fail=1 ;; esac
@@ -186,7 +199,7 @@ ln = c(old) & 0xFFFFFFFF; crc = zlib.crc32(b[8 * (old + 2): 8 * (old + 2 + ln)])
 struct.pack_into("<Q", b, 8 * (old + 1), (crc << 32) | (c(old + 1) & 0xFFFFFFFF)); reanchor(b, sb); open(sys.argv[2], "wb").write(b)
 print("verify-gate: cut archive oldest KEPT record %d -> payload bit flipped and crc re-sealed to %08x" % (old, crc))
 PY2
-    cutforged="verify records=3 chained=2 legacy=0 redacted=0 broken=1 forks=0 seals=3 checked=0 heads=1 keys=1 admitted=1 segments=1 cut=3 cut_redacted=0 declared=0"
+    cutforged="verify records=3 chained=2 legacy=0 redacted=0 broken=1 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=3 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0"
     doc_check cut-forged ./cut-forged.store "$(py_read ./cut-forged.store | sed -n 1p)" "$cutforged"
     o6=$(cd "$CLEAN" && node ./read.mjs ./cut-forged.store 2>&1); r6=$?
     case "$r6:$o6" in 0:*"$cutforged"*) say "RED proof 5: forged kept record in the cut archive -> rc=0 and '$cutforged'" ;; *) say "RED proof 5 FAILED: rc=$r6 '$o6'"; fail=1 ;; esac
@@ -210,9 +223,25 @@ PY
     say "prove $r: clean '$a' -> flipped '$b' rc=$brc"
     case "$b" in "kv status=10 "*) [ "$a" != "$b" ] || { say "RED --prove: $r did not move"; fail=1; } ;; *) say "RED --prove: $r did not land on status 10"; fail=1 ;; esac
   done
+  # the ANCH chain is read for real: one proof byte of the newest anchor, crc not fixed -> both say 10
+  python3 -I - "$FIX/anch.store" "$CLEAN/anch-flip.store" <<'PY' || { say "RED --prove: could not name the anchor cell"; exit 1; }
+import struct, sys
+b = bytearray(open(sys.argv[1], "rb").read())
+c = lambda i: struct.unpack_from("<q", b, 8 * i)[0]
+sb = max((at for at in (0, 512) if c(at) == 3554557610294396226), key=lambda at: c(at + 2))
+doc = c(c(sb + 3) + 18); a = doc + c(doc + 2 + 8)
+b[8 * (a + 2 + 9) + 3000] ^= 1
+open(sys.argv[2], "wb").write(b)
+print("verify-gate --prove: anch.store newest anchor %d -> flipped one proof byte, crc not fixed" % a)
+PY
+  for r in node python; do
+    if [ "$r" = node ]; then b=$(node_read ./anch-flip.store); brc=$?; else b=$(py_read ./anch-flip.store); brc=$?; fi
+    say "prove $r: flipped anchor proof -> '$b' rc=$brc"
+    case "$b" in *"status=10 "*) ;; *) say "RED --prove: $r read a damaged anchor"; fail=1 ;; esac
+  done
 fi
 
 bytes=$(cat "$V/bytes.baseline" 2>/dev/null || echo "?")
 if [ "$fail" -ne 0 ]; then say "RED"; exit 1; fi
-say "GREEN (node and python, from a clean dir, agree with conformance on $agree of 21 fixtures + the log + doc$([ "$BUILD" = 1 ] && echo ' + the archive and the cut archive read by their own reader, 5 REDs'); reader wasm $bytes bytes, sha256 $sha)"
+say "GREEN (node and python, from a clean dir, agree with conformance on $agree of 21 fixtures + the log + doc + anch$([ "$BUILD" = 1 ] && echo ' + the archive and the cut archive read by their own reader, 5 REDs'); reader wasm $bytes bytes, sha256 $sha)"
 exit 0

@@ -6,7 +6,8 @@
 
 use bebop_image::{Store, ARENA};
 use bebop_log::doc::spec::{SpecIn, DIGEST_SPEC};
-use bebop_log::doc::{Doc as DocRoot, Key, Signer};
+use bebop_log::doc::keys::key_rows;
+use bebop_log::doc::{Doc as DocRoot, Key, KeyOp, Signer};
 use bebop_log::{Record, FLAG_SHA256};
 use bebop_wasm_reader::abi::*;
 use bebop_wasm_reader::sha256::sha256;
@@ -48,7 +49,7 @@ fn the_doc_fixture_opens_and_is_counted_honestly() {
     assert_eq!(d.spec, None, "a working image has no SPEC");
     let c = d.verify_doc().unwrap().unwrap();
     assert_eq!((c.records, c.chained, c.legacy, c.redacted, c.broken), (3, 0, 0, 0, 3));
-    assert_eq!((c.seals, c.forks, c.heads, c.keys, c.admitted, c.checked, c.holds), (3, 0, 1, 1, 1, 0, 0));
+    assert_eq!((c.seals, c.forks, c.heads, c.keys, c.genesis, c.checked, c.holds), (3, 0, 1, 1, 1, 0, 0));
     assert_eq!((c.segments, c.cut, c.cut_redacted, c.declared), (0, 0, 0, 0), "a working image: nothing cut");
     assert!(d.anchors.is_empty());
     assert!(d.records.windows(2).all(|w| w[0].actor_seq < w[1].actor_seq), "records come oldest first");
@@ -194,7 +195,7 @@ fn the_doc_abi_round_trips_natively() {
         let n = bw_counts(buf.as_mut_ptr(), buf.len()) as usize;
         assert_eq!(n, 8 * COUNTS_CELLS);
         let c: Vec<i64> = (0..COUNTS_CELLS).map(|i| i64::from_le_bytes(buf[8 * i..8 * i + 8].try_into().unwrap())).collect();
-        assert_eq!(c, vec![3, 3, 0, 0, 0, 3, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0], "twelve M1 cells, four M3/M4 cells appended");
+        assert_eq!(c, vec![3, 3, 0, 0, 0, 3, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0], "twelve M1 cells, four M3/M4 cells, keys_disagree, unsealed appended");
         buf[0] = 0xAA;
         assert_eq!(bw_counts(buf.as_mut_ptr(), 8), 8 * COUNTS_CELLS as i64, "too small: the length, nothing written");
         assert_eq!(buf[0], 0xAA);
@@ -221,4 +222,70 @@ fn the_doc_abi_round_trips_natively() {
         assert_eq!(bw_spec(buf.as_mut_ptr(), buf.len()), 0);
         bw_close();
     }
+}
+
+/// One sealed sha256 commit of `Toy`'s chain: nonce, then the body.
+fn sha_commit(st: &mut Store, tip: &mut [u8; 32], seq: u64, body: &[u8], op: Option<&KeyOp>) {
+    let mut payload = format!("nonce-{seq:0>10}").into_bytes();
+    payload.extend_from_slice(body);
+    let mut m = tip.to_vec();
+    m.extend_from_slice(&payload);
+    let id = sha256(&m);
+    let r = Record { id, prev: *tip, actor_pubkey: Toy.actor_id(), actor_seq: seq, flags: FLAG_SHA256, payload };
+    DocRoot::commit_bytes(st, &r, &Toy, seq as i64, op).unwrap();
+    *tip = id;
+}
+
+/// W-MG-REVOKE WITH NO SIGNATURE CODE: `revoked_at` zeroed and re-sealed reads `keys_disagree` 1
+/// against the REVOKE on its chain; `checked` stays 0 and `holds` false. The honest file reads 0.
+#[test]
+fn a_forged_table_shows_without_a_signature() {
+    let key = Key { actor_id: Toy.actor_id(), alg: 1, valid_from: 0, revoked_at: 0, admit_rec: None, pk: Toy.public_key() };
+    let mut st = Store::create_bytes(1 << 20).unwrap();
+    DocRoot::init_bytes(&mut st, 0, &[key]).unwrap();
+    let mut tip = [0u8; 32];
+    sha_commit(&mut st, &mut tip, 1, b"order", None);
+    let op = KeyOp::Revoke { actor_id: Toy.actor_id(), after_seq: 2 };
+    sha_commit(&mut st, &mut tip, 2, &[&[b'K'][..], &op.body()].concat(), Some(&op));
+    let mut d = open(&st.to_bytes_trimmed()).expect("opens");
+    let c = d.verify_doc().unwrap().unwrap();
+    assert_eq!((c.keys_disagree, c.checked, c.holds), (0, 0, 0), "{c:?}");
+
+    let view = DocRoot::open(&st).unwrap();
+    let at = key_rows(&st, view.keys)[0].1;
+    st.put_cell(at, 6, 0);
+    st.seal(at);
+    // A verbatim copy is one honest commit over the forgery: `open` proves the last commit, and
+    // the forger, who owns the bytes, can always give it one.
+    let mut whole = Store::create_bytes(1 << 20).unwrap();
+    DocRoot::copy_bytes(&st, &mut whole).unwrap();
+    let mut d = open(&whole.to_bytes_trimmed()).expect("opens");
+    let c = d.verify_doc().unwrap().unwrap();
+    assert_eq!((c.keys_disagree, c.checked, c.holds), (1, 0, 0), "{c:?}");
+}
+
+/// A TOMBSTONE OVER A LEGACY RECORD (no nonce, no sha256 flag, an id that no longer hashes): the
+/// hub's mark is the kind byte's high bit, and so is this reader's. The twin: the same record
+/// without the mark is an edit, broken. The real one is `maingoal.sh`'s legacy-forget.sealed.
+#[test]
+fn a_redacted_legacy_record_is_redacted_not_broken() {
+    let key = Key { actor_id: Toy.actor_id(), alg: 1, valid_from: 0, revoked_at: 0, admit_rec: None, pk: Toy.public_key() };
+    let image = |kind: u8| {
+        let mut st = Store::create_bytes(1 << 20).unwrap();
+        let r = Record { id: [7; 32], prev: [0; 32], actor_pubkey: [3; 32], actor_seq: 1, flags: 0, payload: vec![kind, 3, b'o', b'l', b'd'] };
+        DocRoot::init_over_bytes(&mut st, 0, &[key.clone()], &[r]).unwrap();
+        st.to_bytes_trimmed()
+    };
+    let c = open(&image(1 | 0x80)).expect("opens").verify_doc().unwrap().unwrap();
+    assert_eq!((c.redacted, c.broken, c.legacy), (1, 0, 0), "{c:?}");
+    let c = open(&image(1)).expect("opens").verify_doc().unwrap().unwrap();
+    assert_eq!((c.redacted, c.broken, c.legacy), (0, 1, 0), "{c:?}");
+
+    // The other mark stays: a sha256 record whose nonce is erased, no kind byte behind it (what
+    // a writer without the hub's framing leaves, `crates/bebop-store/examples/forget_a_person.rs`).
+    let mut st = Store::create_bytes(1 << 20).unwrap();
+    let r = Record { id: [7; 32], prev: [0; 32], actor_pubkey: [3; 32], actor_seq: 1, flags: FLAG_SHA256, payload: vec![b'0'; 16] };
+    DocRoot::init_over_bytes(&mut st, 0, &[key.clone()], &[r]).unwrap();
+    let c = open(&st.to_bytes_trimmed()).expect("opens").verify_doc().unwrap().unwrap();
+    assert_eq!((c.redacted, c.broken, c.legacy), (1, 0, 0), "{c:?}");
 }

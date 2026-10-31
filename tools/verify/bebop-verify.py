@@ -10,7 +10,7 @@ Prints ONE line, the line every reader of docs/STATUS-CODES.md prints --
 -- exits with the status (0 = read), and says the status in words on stderr. `--dump` prints
 every entry (key order) or every record (oldest first; a DOC's heads first). `--verify` prints
 a DOC's counters on stdout:
-    verify records= chained= legacy= redacted= broken= forks= seals= checked= heads= keys= admitted=
+    verify records= chained= legacy= redacted= broken= forks= seals= checked= heads= keys= genesis=
 
 WHAT IT CHECKS, in the library's order (docs/FORMAT-BEBOP-IMAGE-v2.md; bebop-image
 `pick_checked_in` §3.1 -> 1 and `last_commit_in` §7 -> 10 / 41; then the root's family: bebop-kv
@@ -48,11 +48,15 @@ MAX_VALUE_BYTES = 1 << 30
 MAX_SIG_BYTES = MAX_PK_BYTES = 65536
 MAX_BLOB_BYTES = 16 << 20
 FLAG_SHA256, NONCE_LEN = 2, 16
-WORDS = {0: "OK", 1: "NO_SUPERBLOCK: no valid superblock, or the live one refused structurally",
-         2: "NOT_A_KV: no root, or a KV claim that does not hold, or a DOC whose SPEC or v1-v3 TREE this reader does not read",
-         4: "TRUNCATED: the log's chain does not deliver the root's count",
-         10: "BAD_CRC: an object the read reached fails its crc", 12: "UNKNOWN_VERSION: the KV root names a version above 4 and is not a DOC",
-         41: "LAST_COMMIT: the last commit does not hash to its anchor and every object in it checks",
+REVOKE_MARK, REDACTED_BIT = b"bebop-revoke/1", 0x80
+# Word for word bebop-wasm-reader `status.rs` TABLE: tools/gates/maingoal.sh holds the surfaces to one text.
+WORDS = {0: "OK: read; n = entries or records, root = the FNV-1a 64 fold (a DOC's root is its log's fold)",
+         1: "NO_SUPERBLOCK: no valid superblock, or the live one was refused structurally (arena_used or PartTab outside, PartTab misplaced or its crc bad, root outside)",
+         2: "NOT_A_KV: a superblock but no KV root, or a KV claim (a slice, a chain, a v4 rule) that does not hold, or a DOC whose SPEC or v1-v3 TREE this reader does not read",
+         4: "TRUNCATED: the log's root claims more records than its chain delivers, or the chain never ends",
+         10: "BAD_CRC: an object the read reached fails its crc (root, an array, a delta record, a node, a value, a log record, HEADS, KEYS, SPEC, an object of a torn last commit)",
+         12: "UNKNOWN_VERSION: the KV root names a version above 4 and is not a DOC (root-version 5 in both version cells)",
+         41: "LAST_COMMIT: the last commit's range does not hash to its anchor and every object in it checks (a re-sealed object, a changed header); never fallen back past",
          75: "CUT_UNDECLARED: a log segment left this file (a SEG under the DOC) and no TRUNCATE record on the kept chain names it by root and range -- records were dropped without the cut being declared"}
 UNCHECKED = ("seals COUNTED, not CHECKED: this reader carries no signature algorithm (stdlib, no ML-DSA); "
              "a count is not a proof -- bring a verifier, or the format text's independent readers")
@@ -385,7 +389,7 @@ def read_seal(im, at):
 
 
 def read_keys(im, t):
-    """`keys::read_keys`: (actor, admit ref) per row whose KEY reads; an unreadable KEY is skipped."""
+    """`keys::read_keys`: (actor, admit ref, revoked_at) per row whose KEY reads; an unreadable KEY is skipped."""
     if t is None or im.digest(t) != DIGEST_KEYS or im.obj_cells(t) < 1:
         return []
     m, out = min(max(im.get(t, 0), 0), (im.obj_cells(t) - 1) // 5), []
@@ -395,7 +399,7 @@ def read_keys(im, t):
             continue
         pk_len = im.get(k, 8)
         if 0 <= pk_len <= MAX_PK_BYTES and im.obj_cells(k) == 9 + (pk_len + 7) // 8:
-            out.append((im.id_at(k, 0), im.follow(k, 7)))
+            out.append((im.id_at(k, 0), im.follow(k, 7), im.get(k, 6)))
     return out
 
 
@@ -475,11 +479,20 @@ def is_legacy(r):
 
 
 def is_redacted(r):
-    return bool(r["flags"] & FLAG_SHA256) and len(r["payload"]) >= NONCE_LEN and r["payload"][:NONCE_LEN] == b"0" * NONCE_LEN
+    """`ReaderIds::redacted`: a nonce erased to sixteen '0', or dowiz-hub's mark, the kind byte's high bit,
+    behind the nonce when there is one (a legacy record has no nonce to erase)."""
+    sha = r["flags"] & FLAG_SHA256
+    if sha and r["payload"][:NONCE_LEN] == b"0" * NONCE_LEN:
+        return True
+    b = r["payload"][NONCE_LEN:] if sha else r["payload"]
+    return bool(b) and b[0] & REDACTED_BIT != 0
 
 
 def body_of(r):
-    return r["payload"][NONCE_LEN:] if r["flags"] & FLAG_SHA256 else r["payload"]
+    """FORMAT §9.4, the owner's framing: M0's nonce, then the hub's kind byte on a declaration (`D`) or a
+    key op (`K`). A body with no kind byte (bebop-log's own fixtures) starts at its mark."""
+    b = r["payload"][NONCE_LEN:] if r["flags"] & FLAG_SHA256 else r["payload"]
+    return b[1:] if b[:1] in (b"D", b"K") else b
 
 
 def doc_open(im, root):
@@ -527,8 +540,8 @@ def first_ok(segs, actor, r):
 def effective(recs):
     """`declare.rs` `effective` with `signatures` False (this file judges no seal): a declaration counts
     on its chain alone -- its record not redacted and its id = sha256(prev || payload). Returns
-    (truncates, forgotten)."""
-    truncates, forgotten = [], 0
+    (truncates, forgotten, revokes)."""
+    truncates, forgotten, revokes = [], 0, []
     for r in recs:
         if is_redacted(r) or chained_id(r) != r["id"]:
             continue
@@ -538,7 +551,23 @@ def effective(recs):
             truncates.append((x[:32], x[32:64]) + struct.unpack_from("<QQQQ", x, 64))
         elif b.startswith(FORGOTTEN_MARK) and len(b) >= len(FORGOTTEN_MARK) + 40:
             forgotten += struct.unpack_from("<Q", b, len(FORGOTTEN_MARK))[0]
-    return truncates, forgotten
+        elif b.startswith(REVOKE_MARK) and len(b) >= len(REVOKE_MARK) + 40:
+            revokes.append((b[len(REVOKE_MARK):len(REVOKE_MARK) + 32], struct.unpack_from("<q", b, len(REVOKE_MARK) + 32)[0]))
+    return truncates, forgotten, revokes
+
+
+def keys_disagree(keys, revokes):
+    """`settle.rs` under a reader with no verifier: per key the earliest `after_seq` of the REVOKEs
+    naming it, on their chain alone (`keys::narrower`: 0 = none, -1 = after 0), against the table's
+    `revoked_at`. No seal is judged: this says the table and the records' CLAIM differ, nothing more."""
+    def cell(actor):
+        c = 0
+        for who, after in revokes:
+            if who == actor:
+                this = after if after > 0 else -1
+                c = this if c == 0 else min(c, this)
+        return c
+    return sum(1 for actor, _, table in keys if table != cell(actor))
 
 
 def check_segments(segs, truncates):
@@ -552,14 +581,32 @@ def check_segments(segs, truncates):
         vouched = s["prev_root"]
 
 
+def unsealed(recs, tips, segs):
+    """`verify.rs` `unsealed` with no seal judged: from the tip cell of EVERY seal reached from HEADS,
+    follow `prev` by id. Each record never visited counts 1; each walk that stops on an id absent
+    from the file and neither 0^32 nor the tip of any frontier row of any SEG counts 1. A HEADS
+    row's own tip cell is never a start: HEADS is signed by nobody."""
+    at = {r["id"]: r for r in recs}
+    ends = {f[2] for s in segs for f in s["frontier"]} | {bytes(32)}
+    seen, dangling = set(), 0
+    for i in tips:
+        while i in at and i not in seen:
+            seen.add(i)
+            i = at[i]["prev"]
+        if i not in at and i not in ends:
+            dangling += 1
+    return max(len(recs) - len(seen), 0) + dangling
+
+
 def doc_counts(im, recs, heads, keys, log_tip, segs):
-    """`doc::verify`'s sixteen counters as the MIT reader computes them (bebop-wasm-reader `ids.rs`,
+    """`doc::verify`'s eighteen counters as the MIT reader computes them (bebop-wasm-reader `ids.rs`,
     `Verifier::checks_signatures` false): ids under dowiz-hub's sha256 scheme or the pre-M0 FNV lanes
     (a legacy id newer than a chained record of its device is broken: the scheme moves once), a
-    redaction by its erased nonce, forks by `(actor, seq)`, every seal COUNTED (`checked` 0,
-    `admitted` = genesis keys), segments declared by TRUNCATEs on their chain alone or 75."""
+    redaction by the kind byte's high bit, forks by `(actor, seq)`, every seal COUNTED (`checked` 0,
+    `genesis` = keys with no ADMIT record), segments declared by TRUNCATEs on their chain alone or 75,
+    `keys_disagree` the table against the REVOKEs on their chain alone, `unsealed` from every seal's tip."""
     c = dict(records=len(recs), chained=0, legacy=0, redacted=0, broken=0, forks=0, seals=0,
-             checked=0, heads=len(heads), keys=len(keys), admitted=sum(1 for _, a in keys if a is None),
+             checked=0, heads=len(heads), keys=len(keys), genesis=sum(1 for _, a, _ in keys if a is None),
              segments=len(segs), cut=sum(s["last"] - s["first"] + 1 for s in segs),
              cut_redacted=sum(s["redacted"] for s in segs), declared=0)
     at = {}
@@ -588,7 +635,7 @@ def doc_counts(im, recs, heads, keys, log_tip, segs):
                 c["redacted"] += 1
             else:
                 c["broken"] += 1
-    cap = len(recs) + 1
+    cap, tips = len(recs) + 1, []
     for _, _, _, seal in heads:
         cur, steps = seal, 0
         while cur is not None:
@@ -596,10 +643,12 @@ def doc_counts(im, recs, heads, keys, log_tip, segs):
             c["seals"] += 1
             if steps > cap or not im.crc_ok(cur) or read_seal(im, cur) is None:
                 break
+            tips.append(read_seal(im, cur)[2])
             cur = read_seal(im, cur)[3]
-    truncates, forgotten = effective(recs)
+    truncates, forgotten, revokes = effective(recs)
     check_segments(segs, truncates)
     c["declared"] = forgotten + sum(s["declared"] for s in segs)
+    c.update(keys_disagree=keys_disagree(keys, revokes), unsealed=unsealed(recs, tips, segs))
     return c
 
 
@@ -624,8 +673,8 @@ def read(raw):
 
 
 COUNT_LINE = ("verify records=%(records)d chained=%(chained)d legacy=%(legacy)d redacted=%(redacted)d broken=%(broken)d "
-              "forks=%(forks)d seals=%(seals)d checked=%(checked)d heads=%(heads)d keys=%(keys)d admitted=%(admitted)d "
-              "segments=%(segments)d cut=%(cut)d cut_redacted=%(cut_redacted)d declared=%(declared)d")
+              "forks=%(forks)d seals=%(seals)d checked=%(checked)d heads=%(heads)d keys=%(keys)d genesis=%(genesis)d "
+              "segments=%(segments)d cut=%(cut)d cut_redacted=%(cut_redacted)d declared=%(declared)d keys_disagree=%(keys_disagree)d unsealed=%(unsealed)d")
 
 
 def main(argv):

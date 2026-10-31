@@ -21,8 +21,8 @@ def read(raw):
 
 
 COUNT_LINE = ("verify records=%(records)d chained=%(chained)d legacy=%(legacy)d redacted=%(redacted)d broken=%(broken)d "
-              "forks=%(forks)d seals=%(seals)d checked=%(checked)d heads=%(heads)d keys=%(keys)d admitted=%(admitted)d "
-              "segments=%(segments)d cut=%(cut)d cut_redacted=%(cut_redacted)d declared=%(declared)d")
+              "forks=%(forks)d seals=%(seals)d checked=%(checked)d heads=%(heads)d keys=%(keys)d genesis=%(genesis)d "
+              "segments=%(segments)d cut=%(cut)d cut_redacted=%(cut_redacted)d declared=%(declared)d keys_disagree=%(keys_disagree)d unsealed=%(unsealed)d")
 
 
 def main(argv):

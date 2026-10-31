@@ -55,11 +55,14 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(e.exception.name, "IO")
 
     def test_fixture_refusal(self):
-        with open(os.path.join(FIX, "kv4stub.store"), "rb") as f:
-            data = f.read()
-        with self.assertRaises(bs.Refusal) as e:
-            bs.Db.from_bytes(data)
-        self.assertEqual((e.exception.code, e.exception.name), (12, "UNKNOWN_VERSION"))
+        # kv4stub.expected is the authority: a v4 claim that does not hold is NOT_A_KV since KV v4
+        # reads everywhere; a root version this reader does not know is the DOC fixture's 12.
+        for name, want in (("kv4stub", (2, "NOT_A_KV")), ("doc", (12, "UNKNOWN_VERSION"))):
+            with open(os.path.join(FIX, name + ".store"), "rb") as f:
+                data = f.read()
+            with self.assertRaises(bs.Refusal) as e:
+                bs.Db.from_bytes(data)
+            self.assertEqual((e.exception.code, e.exception.name), want)
 
     def test_memory_snapshot_roundtrip(self):
         with bs.Db.memory() as db:

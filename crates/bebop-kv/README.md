@@ -11,6 +11,8 @@ and it depends only on `bebop-image`.
 - **v2**: the bytes packed eight to a cell. Every fresh image and every compaction is v2.
 - **v3**: a v2 base plus a chain of delta records. A commit appends one delta and does not rewrite
   the world. Compaction folds the chain back into a v2 base.
+- **v4**: a copy-on-write B+ tree, behind the `tree` feature. A commit copies only the path from each
+  changed leaf to the root.
 - Any other version is **refused** (`KvError::UnknownVersion`), never guessed at.
 
 The fold is over bytes, never over cells, so a v1 and a v2 image of the same entries give the same

@@ -32,7 +32,7 @@ const v = x.bw_verify(2), c = take((p, n) => x.bw_counts(p, n));
 if (typeof c === "number") { console.log(`verify status=${-c} -- ${words(-c)}`); process.exit(-c); }
 const g = (i) => new DataView(c.buffer, c.byteOffset + 8 * i, 8).getBigInt64(0, true);
 console.log(`verify(whole arena) = ${words(v)}`);
-console.log(`verify records=${g(0)} chained=${g(1)} legacy=${g(2)} redacted=${g(3)} broken=${g(4)} forks=${g(6)} seals=${g(5)} checked=${g(10)} heads=${g(7)} keys=${g(8)} admitted=${g(9)} segments=${g(12)} cut=${g(13)} cut_redacted=${g(14)} declared=${g(15)}`);
+console.log(`verify records=${g(0)} chained=${g(1)} legacy=${g(2)} redacted=${g(3)} broken=${g(4)} forks=${g(6)} seals=${g(5)} checked=${g(10)} heads=${g(7)} keys=${g(8)} genesis=${g(9)} segments=${g(12)} cut=${g(13)} cut_redacted=${g(14)} declared=${g(15)} keys_disagree=${c.length > 128 ? g(16) : "absent"} unsealed=${c.length > 136 ? g(17) : "absent"}`);
 if (g(10) === 0n) console.log(Buffer.from(take((p, n) => x.bw_unchecked_text(p, n))).toString());
 const an = take((p, n) => x.bw_anchors(p, n)), a64 = (at) => new DataView(an.buffer, an.byteOffset + at, 8).getBigInt64(0, true);
 for (let i = 0; typeof an !== "number" && i + 56 <= an.length; i += 56) console.log(`anchor kind=${a64(i)} over=${hex(an.subarray(i + 8, i + 40))} time_ms=${a64(i + 40)} proof_len=${a64(i + 48)} (present, NOT verified by this reader)`);

@@ -1,13 +1,15 @@
 //! KEY and KEYS (R-MAINGOAL-A §1.2, §2e): one KEY object per admitted device key, a sorted
 //! table naming them, and the two key-op bodies a device writes INTO ITS OWN SEALED CHAIN --
 //! ADMIT (a new key) and REVOKE (after a seq). The table is an index; the records are the
-//! signed truth, and `verify.rs` admits a key only through its ADMIT record.
+//! signed truth: `settle.rs` admits a key only through its ADMIT record and revokes it only
+//! through its REVOKE records.
 //!
 //! ```text
 //! KEY  v1  {actor_id 4, alg, valid_from, revoked_at, ref ADMIT_REC, pk_len, pk packed}
 //!          9 + ceil(pk_len / 8) cells (ML-DSA-65: 9 + 244 = 253). revoked_at = 0: not
-//!          revoked; k > 0: seals with seq > k are invalid. ADMIT_REC = 0: a genesis key
-//!          (written by `Doc::init_bytes`, trusted by `Trust::Genesis`).
+//!          revoked; k > 0: seals with seq > k are invalid; -1: revoked after 0, no seal is
+//!          valid. An INDEX of the REVOKE records, signed by nobody (`settle.rs`). ADMIT_REC
+//!          = 0: a genesis key (written by `Doc::init_bytes`, trusted by `Trust::Genesis`).
 //! KEYS     {m, (actor_id 4, ref KEY) × m}   sorted by actor_id, 1 + 5m cells
 //! ```
 //!
@@ -20,7 +22,8 @@
 //! ```
 //!
 //! Rotation = ADMIT of the new key + REVOKE of the old, two records of one chain; this crate
-//! offers the format, no lane runs it (memory `no-secret-rotation.md`).
+//! offers the format, no lane runs it (memory `no-secret-rotation.md`). A revoked key stays
+//! revoked: ADMIT does not bring it back (`DocError::Readmit`), a new device takes a new key.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
@@ -40,6 +43,9 @@ pub const REVOKE_MARK: &[u8] = b"bebop-revoke/1";
 /// The longest public key a KEY may carry: 64 KiB, far above any FIPS 204 size, so a damaged
 /// `pk_len` never becomes an allocation.
 pub const MAX_PK_BYTES: usize = 65536;
+/// `revoked_at` for "after 0": 0 is taken by "not revoked", and a key that never sealed must
+/// be revocable. `Key::valid_at` already reads it right: no seq is at or below it.
+pub const REVOKED_ALL: i64 = -1;
 
 /// One admitted key as read out of (or staged into) an image.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,7 +53,7 @@ pub struct Key {
     pub actor_id: [u8; 32],
     pub alg: i64,
     pub valid_from: i64,
-    /// 0 = not revoked; otherwise seals with `seq > revoked_at` are invalid.
+    /// 0 = not revoked; k > 0: seals with `seq > k` are invalid; `REVOKED_ALL`: none is valid.
     pub revoked_at: i64,
     /// The ADMIT record (absolute offset) that admitted it; `None` = genesis.
     pub admit_rec: Option<usize>,
@@ -55,9 +61,10 @@ pub struct Key {
 }
 
 impl Key {
-    /// May this key seal `seq`?
+    /// May this key seal `seq`? Compared unsigned: `seq` is the record's, written by whoever
+    /// holds the key, and a seq past `i64::MAX` must not wrap to below every `revoked_at`.
     pub fn valid_at(&self, seq: u64) -> bool {
-        self.revoked_at == 0 || (seq as i64) <= self.revoked_at
+        self.revoked_at == 0 || (self.revoked_at > 0 && seq <= self.revoked_at as u64)
     }
 }
 
@@ -68,6 +75,16 @@ pub enum KeyOp {
     Admit(Key),
     /// Revoke `actor_id`'s key: seals past `after_seq` are invalid.
     Revoke { actor_id: [u8; 32], after_seq: i64 },
+}
+
+/// `revoked_at` after one more REVOKE: the earliest wins, so no REVOKE ever widens a key.
+pub fn narrower(revoked_at: i64, after_seq: i64) -> i64 {
+    let this = if after_seq > 0 { after_seq } else { REVOKED_ALL };
+    if revoked_at == 0 {
+        this
+    } else {
+        revoked_at.min(this)
+    }
 }
 
 impl KeyOp {
@@ -118,6 +135,12 @@ pub fn parse_admit(body: &[u8]) -> Option<([u8; 32], i64, i64, Vec<u8>)> {
     }
     let pk = rest.get(56..56 + n as usize)?.to_vec();
     Some((actor, alg, valid_from, pk))
+}
+
+/// `(actor_id, after_seq)` of a REVOKE body, or `None` when it is not one.
+pub fn parse_revoke(body: &[u8]) -> Option<([u8; 32], i64)> {
+    let rest = body.strip_prefix(REVOKE_MARK)?;
+    Some((id32(rest)?, le8(rest.get(32..)?)?))
 }
 
 /// One KEY object, bounded by what it really holds; `None` for a wrong digest or length.

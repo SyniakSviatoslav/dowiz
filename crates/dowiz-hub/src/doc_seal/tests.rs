@@ -170,6 +170,26 @@ fn a_second_device_is_admitted_and_revoked() {
     assert!(format!("{e:?}").contains("revoked"), "{e:?}");
 }
 
+/// THE SENTENCES DESCRIBE THE CODE: the anchor kinds that bound "no later" and "no earlier" are
+/// the constants' numbers, and no seal carries a `ref TIME` (the writer stages 0, `seal.rs`), so
+/// no sentence may lean on one. They said kinds 2/3/4 and "печатка має ref TIME".
+#[test]
+fn the_three_sentences_describe_the_code() {
+    assert!(super::SENTENCES[1].contains(&format!("виду {KIND_PLATFORM_TSA} (TSA-мітка платформи) або {KIND_OTS} (OpenTimestamps)")), "{}", super::SENTENCES[1]);
+    assert!(super::SENTENCES[1].contains("**не пізніше**"));
+    assert!(super::SENTENCES[2].contains(&format!("виду {KIND_ROUGHTIME} (Roughtime)")), "{}", super::SENTENCES[2]);
+    assert!(super::SENTENCES[2].contains("**не раніше**"));
+    assert!(!super::SENTENCES.iter().any(|l| l.contains("ref TIME")), "SEAL.TIME is 0: {:?}", super::SENTENCES);
+
+    let owner = device(7);
+    let mut sh = SealedHub::create(&owner).unwrap();
+    sh.append(EventKind::Placed, "o1", JSON, &owner, 1).unwrap();
+    let st = Store::from_bytes(&sh.to_bytes_trimmed());
+    let view = bebop_store::evlog::doc::Doc::open(&st).unwrap();
+    let seal = bebop_store::evlog::doc::seal::read_heads(&st, view.heads)[0].seal.unwrap();
+    assert_eq!(bebop_store::evlog::doc::seal::read_seal(&st, seal).unwrap().time, None, "the control: a real seal names no TIME");
+}
+
 // ── anchors ──────────────────────────────────────────────────────────────────────────────
 
 /// KIND 1, the platform TSA mark: ok under the platform key the auditor brings; unchecked

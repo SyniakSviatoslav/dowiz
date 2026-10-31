@@ -405,7 +405,7 @@ fn a_redacting_copy_keeps_the_ids_and_is_declared_by_a_forgotten() {
         })
     };
     let mut fresh = Store::create_bytes(1 << 20).unwrap();
-    assert_eq!(Doc::redact_into(&old, &mut fresh, &person).unwrap(), 2);
+    assert_eq!(Doc::redact_into(&old, &mut fresh, &ToyIds, &person).unwrap(), 2);
     let after = oldest_first(&fresh);
     assert_eq!(after.iter().map(|r| (r.id, r.prev, r.actor_seq)).collect::<Vec<_>>(), before.iter().map(|r| (r.id, r.prev, r.actor_seq)).collect::<Vec<_>>(), "every id and link kept");
     assert_eq!((after[1].payload.as_slice(), after[3].payload.as_slice()), (&[b'e' | 0x80][..], &b"event-3"[..]), "the person's payloads emptied, the rest verbatim");
@@ -420,6 +420,6 @@ fn a_redacting_copy_keeps_the_ids_and_is_declared_by_a_forgotten() {
 
     // Nothing to redact: nothing is committed, the fresh store has no root.
     let mut empty = Store::create_bytes(1 << 20).unwrap();
-    assert_eq!(Doc::redact_into(&old, &mut empty, &|_| None).unwrap(), 0);
+    assert_eq!(Doc::redact_into(&old, &mut empty, &ToyIds, &|_| None).unwrap(), 0);
     assert!(matches!(Doc::open(&empty), Err(DocError::NotDoc)));
 }

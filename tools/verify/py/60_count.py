@@ -17,8 +17,8 @@ def first_ok(segs, actor, r):
 def effective(recs):
     """`declare.rs` `effective` with `signatures` False (this file judges no seal): a declaration counts
     on its chain alone -- its record not redacted and its id = sha256(prev || payload). Returns
-    (truncates, forgotten)."""
-    truncates, forgotten = [], 0
+    (truncates, forgotten, revokes)."""
+    truncates, forgotten, revokes = [], 0, []
     for r in recs:
         if is_redacted(r) or chained_id(r) != r["id"]:
             continue
@@ -28,7 +28,23 @@ def effective(recs):
             truncates.append((x[:32], x[32:64]) + struct.unpack_from("<QQQQ", x, 64))
         elif b.startswith(FORGOTTEN_MARK) and len(b) >= len(FORGOTTEN_MARK) + 40:
             forgotten += struct.unpack_from("<Q", b, len(FORGOTTEN_MARK))[0]
-    return truncates, forgotten
+        elif b.startswith(REVOKE_MARK) and len(b) >= len(REVOKE_MARK) + 40:
+            revokes.append((b[len(REVOKE_MARK):len(REVOKE_MARK) + 32], struct.unpack_from("<q", b, len(REVOKE_MARK) + 32)[0]))
+    return truncates, forgotten, revokes
+
+
+def keys_disagree(keys, revokes):
+    """`settle.rs` under a reader with no verifier: per key the earliest `after_seq` of the REVOKEs
+    naming it, on their chain alone (`keys::narrower`: 0 = none, -1 = after 0), against the table's
+    `revoked_at`. No seal is judged: this says the table and the records' CLAIM differ, nothing more."""
+    def cell(actor):
+        c = 0
+        for who, after in revokes:
+            if who == actor:
+                this = after if after > 0 else -1
+                c = this if c == 0 else min(c, this)
+        return c
+    return sum(1 for actor, _, table in keys if table != cell(actor))
 
 
 def check_segments(segs, truncates):
@@ -42,14 +58,32 @@ def check_segments(segs, truncates):
         vouched = s["prev_root"]
 
 
+def unsealed(recs, tips, segs):
+    """`verify.rs` `unsealed` with no seal judged: from the tip cell of EVERY seal reached from HEADS,
+    follow `prev` by id. Each record never visited counts 1; each walk that stops on an id absent
+    from the file and neither 0^32 nor the tip of any frontier row of any SEG counts 1. A HEADS
+    row's own tip cell is never a start: HEADS is signed by nobody."""
+    at = {r["id"]: r for r in recs}
+    ends = {f[2] for s in segs for f in s["frontier"]} | {bytes(32)}
+    seen, dangling = set(), 0
+    for i in tips:
+        while i in at and i not in seen:
+            seen.add(i)
+            i = at[i]["prev"]
+        if i not in at and i not in ends:
+            dangling += 1
+    return max(len(recs) - len(seen), 0) + dangling
+
+
 def doc_counts(im, recs, heads, keys, log_tip, segs):
-    """`doc::verify`'s sixteen counters as the MIT reader computes them (bebop-wasm-reader `ids.rs`,
+    """`doc::verify`'s eighteen counters as the MIT reader computes them (bebop-wasm-reader `ids.rs`,
     `Verifier::checks_signatures` false): ids under dowiz-hub's sha256 scheme or the pre-M0 FNV lanes
     (a legacy id newer than a chained record of its device is broken: the scheme moves once), a
-    redaction by its erased nonce, forks by `(actor, seq)`, every seal COUNTED (`checked` 0,
-    `admitted` = genesis keys), segments declared by TRUNCATEs on their chain alone or 75."""
+    redaction by the kind byte's high bit, forks by `(actor, seq)`, every seal COUNTED (`checked` 0,
+    `genesis` = keys with no ADMIT record), segments declared by TRUNCATEs on their chain alone or 75,
+    `keys_disagree` the table against the REVOKEs on their chain alone, `unsealed` from every seal's tip."""
     c = dict(records=len(recs), chained=0, legacy=0, redacted=0, broken=0, forks=0, seals=0,
-             checked=0, heads=len(heads), keys=len(keys), admitted=sum(1 for _, a in keys if a is None),
+             checked=0, heads=len(heads), keys=len(keys), genesis=sum(1 for _, a, _ in keys if a is None),
              segments=len(segs), cut=sum(s["last"] - s["first"] + 1 for s in segs),
              cut_redacted=sum(s["redacted"] for s in segs), declared=0)
     at = {}
@@ -78,7 +112,7 @@ def doc_counts(im, recs, heads, keys, log_tip, segs):
                 c["redacted"] += 1
             else:
                 c["broken"] += 1
-    cap = len(recs) + 1
+    cap, tips = len(recs) + 1, []
     for _, _, _, seal in heads:
         cur, steps = seal, 0
         while cur is not None:
@@ -86,8 +120,10 @@ def doc_counts(im, recs, heads, keys, log_tip, segs):
             c["seals"] += 1
             if steps > cap or not im.crc_ok(cur) or read_seal(im, cur) is None:
                 break
+            tips.append(read_seal(im, cur)[2])
             cur = read_seal(im, cur)[3]
-    truncates, forgotten = effective(recs)
+    truncates, forgotten, revokes = effective(recs)
     check_segments(segs, truncates)
     c["declared"] = forgotten + sum(s["declared"] for s in segs)
+    c.update(keys_disagree=keys_disagree(keys, revokes), unsealed=unsealed(recs, tips, segs))
     return c

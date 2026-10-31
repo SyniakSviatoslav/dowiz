@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
+repository = "https://github.com/SyniakSviatoslav/dowiz"
+readme = "README.md"
 description = "The bebop pointer-free image format: 8-byte cells, two superblocks, the PartTab, self-describing objects with crc32, pick/verify over owned (Store) or borrowed (View) cells. no_std + alloc, zero dependencies."
 
 # docs/FORMAT-BEBOP-IMAGE-v2.md is normative. no_std unless `std` (the path API); the Device
@@ -17,7 +19,7 @@ std = ["bebop-crc/std"]
 [dependencies]
 # P12 (W-SPEED-A): the crc, with the CPU's crc instructions where present. Its own crate so
 # this one stays #![forbid(unsafe_code)]; `std` above turns on run-time detection.
-bebop-crc = { path = "../bebop-crc" }
+bebop-crc = { path = "../bebop-crc", version = "0.1.0" }
 
 [profile.release]
 opt-level = 3

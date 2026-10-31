@@ -25,7 +25,7 @@ def read_seal(im, at):
 
 
 def read_keys(im, t):
-    """`keys::read_keys`: (actor, admit ref) per row whose KEY reads; an unreadable KEY is skipped."""
+    """`keys::read_keys`: (actor, admit ref, revoked_at) per row whose KEY reads; an unreadable KEY is skipped."""
     if t is None or im.digest(t) != DIGEST_KEYS or im.obj_cells(t) < 1:
         return []
     m, out = min(max(im.get(t, 0), 0), (im.obj_cells(t) - 1) // 5), []
@@ -35,7 +35,7 @@ def read_keys(im, t):
             continue
         pk_len = im.get(k, 8)
         if 0 <= pk_len <= MAX_PK_BYTES and im.obj_cells(k) == 9 + (pk_len + 7) // 8:
-            out.append((im.id_at(k, 0), im.follow(k, 7)))
+            out.append((im.id_at(k, 0), im.follow(k, 7), im.get(k, 6)))
     return out
 
 
@@ -115,11 +115,20 @@ def is_legacy(r):
 
 
 def is_redacted(r):
-    return bool(r["flags"] & FLAG_SHA256) and len(r["payload"]) >= NONCE_LEN and r["payload"][:NONCE_LEN] == b"0" * NONCE_LEN
+    """`ReaderIds::redacted`: a nonce erased to sixteen '0', or dowiz-hub's mark, the kind byte's high bit,
+    behind the nonce when there is one (a legacy record has no nonce to erase)."""
+    sha = r["flags"] & FLAG_SHA256
+    if sha and r["payload"][:NONCE_LEN] == b"0" * NONCE_LEN:
+        return True
+    b = r["payload"][NONCE_LEN:] if sha else r["payload"]
+    return bool(b) and b[0] & REDACTED_BIT != 0
 
 
 def body_of(r):
-    return r["payload"][NONCE_LEN:] if r["flags"] & FLAG_SHA256 else r["payload"]
+    """FORMAT §9.4, the owner's framing: M0's nonce, then the hub's kind byte on a declaration (`D`) or a
+    key op (`K`). A body with no kind byte (bebop-log's own fixtures) starts at its mark."""
+    b = r["payload"][NONCE_LEN:] if r["flags"] & FLAG_SHA256 else r["payload"]
+    return b[1:] if b[:1] in (b"D", b"K") else b
 
 
 def doc_open(im, root):

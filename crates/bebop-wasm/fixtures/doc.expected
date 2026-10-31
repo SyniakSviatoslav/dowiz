@@ -23,4 +23,4 @@ bebop_rc=78
 # over the records and did not move; the four M3/M4 counters are appended (a working image: all 0).
 doc_n=3
 doc_root=-5898116667070633908
-doc_verify=records=3 chained=0 legacy=0 redacted=0 broken=3 forks=0 seals=3 checked=0 heads=1 keys=1 admitted=1 segments=0 cut=0 cut_redacted=0 declared=0
+doc_verify=records=3 chained=0 legacy=0 redacted=0 broken=3 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0

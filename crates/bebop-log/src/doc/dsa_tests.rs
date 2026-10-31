@@ -123,4 +123,15 @@ fn ml_dsa_65_revoke_after_k_breaks_k_plus_1() {
     let rep = verify(&st, &super::tests::ToyIds, &MlDsaVerifier, Trust::Genesis).unwrap();
     assert_eq!((rep.counters.seals_ok, rep.counters.seals_bad), (3, 1), "B's seal 2 is past the revoke: {rep:?}");
     assert_eq!(b.commit(&mut st, b"b-3", None), Err(DocError::Revoked { after_seq: 1, seq: 3 }));
+
+    // W-MG-REVOKE under the real signature: the KEY row zeroed and re-sealed brings nothing
+    // back. The thief's next seal verifies as ML-DSA and is bad, and the table is named.
+    let rows = super::keys::key_rows(&st, Doc::open(&st).unwrap().keys);
+    let at = rows.iter().find(|r| r.0 == b.s.id).unwrap().1;
+    st.put_cell(at, 6, 0);
+    st.seal(at);
+    b.commit(&mut st, b"b-3", None).unwrap();
+    let rep = verify(&st, &super::tests::ToyIds, &MlDsaVerifier, Trust::Genesis).unwrap();
+    assert_eq!((rep.counters.seals_ok, rep.counters.seals_bad, rep.counters.keys_disagree), (3, 2, 1), "a zeroed revoked_at: {rep:?}");
+    assert!(!rep.holds());
 }

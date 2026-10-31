@@ -156,11 +156,13 @@ pub fn hex32(b: &[u8; 32]) -> String {
     crate::hex32(b)
 }
 
-/// THE THREE SENTENCES of R-MAINGOAL-A §2d, verbatim: what the proof says, and the one line
-/// after them saying what it does not. A verifier prints these and nothing stronger.
+/// THE THREE SENTENCES of R-MAINGOAL-A §2d, as the code stands: what the proof says, and the one
+/// line after them saying what it does not. §2d planned `ref TIME` on the seal and other kind
+/// numbers; a seal's TIME is 0, a lower bound comes from a Roughtime anchor, and `tests.rs` holds
+/// the numbers here to the `KIND_` constants. A verifier prints these and nothing stronger.
 pub const SENTENCES: [&str; 4] = [
     "(1) ці байти підписав власник ключа K у ланцюгу з номером seq, і після печатки їх не змінювали;",
-    "(2) якщо є якір виду 2/3/4 — байти існували **не пізніше** T_anchor;",
-    "(3) якщо печатка має `ref TIME` (Roughtime-відповідь на nonce = попередня печатка) — **не раніше** T_roughtime − radius.",
+    "(2) якщо є перевірений якір виду 1 (TSA-мітка платформи) або 2 (OpenTimestamps) — байти існували **не пізніше** T_anchor;",
+    "(3) якщо є перевірений якір виду 3 (Roughtime) — **не раніше** T_roughtime − radius.",
     "Доказ **не** каже, що подія сталась, що кількість правдива, що `claimed_ms` правильний.",
 ];

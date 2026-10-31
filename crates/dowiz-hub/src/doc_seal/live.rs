@@ -24,8 +24,9 @@ use bebop_store::evlog::doc::{Anchor, AnchorCheck, AnchorCounts, Checked, Report
 use super::ots::{self, BlockHeaders, Ots};
 use super::roughtime::Roughtime;
 use super::tsa::PlatformTsa;
-use super::SealedHub;
+use super::{hex32, SealedHub};
 use crate::HubError;
+use bebop_store::StoreError;
 
 pub mod stamp;
 #[cfg(feature = "anchor-live")]
@@ -175,3 +176,37 @@ pub fn describe(v: &Verdict) -> (&'static str, String) {
         Verdict::Unchecked(w) => ("unchecked", w.clone()),
     }
 }
+
+/// The counters line of `doc_verify` and `anchor verify`, one text. The first fourteen fields
+/// are M1B's; `anchors_cut` and the four M3/M4 counters follow (`Counters`, `AnchorCounts`).
+pub fn doc_line(r: &Report, ac: &AnchorCounts) -> String {
+    let c = &r.counters;
+    format!(
+        "doc records={} chained={} legacy={} redacted={} broken={} seals_ok={} seals_bad={} forks={} keys={} admitted={} anchors={} anchors_ok={} anchors_bad={} anchors_unchecked={} anchors_cut={} segments={} cut={} cut_redacted={} declared={} keys_disagree={} revokes_unsettled={} tombs_foreign={} unsealed={}",
+        c.records, c.chained, c.legacy, c.redacted, c.broken, c.seals_ok, c.seals_bad, c.forks, r.keys, r.admitted, ac.anchors, ac.ok, ac.bad, ac.unchecked, ac.cut, c.segments, c.cut, c.cut_redacted, c.declared, c.keys_disagree, c.revokes_unsettled, c.tombs_foreign, c.unsealed
+    )
+}
+
+/// One anchor's line, with its verdict in `describe`'s words. `under_cut=true` = its record left
+/// under a segment: only the archive can place it, and it is never ok here.
+pub fn anchor_line(x: &Checked) -> String {
+    let (word, why) = describe(&x.verdict);
+    format!("anchor kind={} over={} time_ms={} names_record={} under_cut={} -> {word}: {why}", x.anchor.kind, hex32(&x.anchor.over), x.anchor.time_ms, x.names_record, x.under_cut)
+}
+
+/// A refusal in the words of `docs/STATUS-CODES.md`: `bebop-wasm-reader` `status.rs` TABLE and
+/// `bebop-verify.py` WORDS say the same text for the same file (`tools/gates/maingoal.sh` compares
+/// them). This crate does not link the MIT reader, so the two refusals a verifier can meet are
+/// spelled here. Any other refusal keeps its Rust name: it has no number on those surfaces.
+pub fn refusal_words(e: &HubError) -> String {
+    match e {
+        HubError::BadCrc(b) => format!("status=10 {BAD_CRC_WORDS} [{b:?}]"),
+        HubError::Store(StoreError::Corrupt(what)) if *what == CUT_WITHOUT_TRUNCATE => format!("status=75 {CUT_UNDECLARED_WORDS}"),
+        e => format!("refused: {e:?}"),
+    }
+}
+
+const BAD_CRC_WORDS: &str = "BAD_CRC: an object the read reached fails its crc (root, an array, a delta record, a node, a value, a log record, HEADS, KEYS, SPEC, an object of a torn last commit)";
+const CUT_UNDECLARED_WORDS: &str = "CUT_UNDECLARED: a log segment left this file (a SEG under the DOC) and no TRUNCATE record on the kept chain names it by root and range -- records were dropped without the cut being declared";
+/// `sealed.rs` `doc_err`'s text for `DocError::CutUndeclared`.
+const CUT_WITHOUT_TRUNCATE: &str = "a log segment was cut without a signed TRUNCATE";

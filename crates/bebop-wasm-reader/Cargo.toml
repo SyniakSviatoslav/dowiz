@@ -5,6 +5,8 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
+repository = "https://github.com/SyniakSviatoslav/dowiz"
+readme = "README.md"
 description = "The bebop image read in wasm32 under a permissive licence: open / kind / root / get / scan / log_len / log_at / verify / status_text over KV v1-v4 and EvLog v1-v2, no imports, built on bebop-image + bebop-kv + bebop-log (all MIT OR Apache-2.0)."
 
 # WHY A SECOND WASM CRATE (W-MG-MR, R-MAINGOAL-A §5.1 / §7 M5, R-MAINGOAL-B §5, 2026-10-30).
@@ -28,12 +30,12 @@ description = "The bebop image read in wasm32 under a permissive licence: open /
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bebop-image = { path = "../bebop-image", features = ["std"] }
+bebop-image = { path = "../bebop-image", version = "0.1.0", features = ["std"] }
 # `tree` so the NATIVE tests read v4 through `Kv::load_checked` as conformance.sh's native
 # reader does; on wasm32 `bebop_kv::tree::kvin::v4_here()` is false by design, so this crate
 # routes a v4 root to `TreeIn` itself on every target (src/lib.rs `open_kv`).
-bebop-kv = { path = "../bebop-kv", features = ["std", "tree"] }
-bebop-log = { path = "../bebop-log", features = ["std"] }
+bebop-kv = { path = "../bebop-kv", version = "0.1.0", features = ["std", "tree"] }
+bebop-log = { path = "../bebop-log", version = "0.1.0", features = ["std"] }
 
 # bebop-wasm's profile: the smallest module, and a refusal is a status code, never an unwind.
 [profile.release]

@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
-description = "The bebop store library's facade: re-exports bebop-image / bebop-kv / bebop-log / bebop-io under the paths dowiz already uses, plus the DAG runtime (proj, zset, nodekey, merkle)."
+repository = "https://github.com/SyniakSviatoslav/dowiz"
+readme = "README.md"
+description = "An embedded key-value store and signed event log in one file: damage refused by name, commits all-or-nothing, a file that reads with no install."
+keywords = ["embedded", "database", "key-value", "event-log", "file-format"]
+categories = ["database-implementations", "embedded"]
 
 # A Rust reader/writer for the bebop store file format (bebop-lang
 # selfhost/prelude/store.bp, docs/LANG-DB-DESIGN.md §4).
@@ -16,10 +20,10 @@ description = "The bebop store library's facade: re-exports bebop-image / bebop-
 # `cargo tree -e no-dev` here lists exactly those four and this one. It is the seam by which
 # dowiz uses bebop as its database.
 [dependencies]
-bebop-image = { path = "../bebop-image", features = ["std"] }
-bebop-kv = { path = "../bebop-kv", features = ["std"] }
-bebop-log = { path = "../bebop-log", features = ["std"] }
-bebop-io = { path = "../bebop-io" }
+bebop-image = { path = "../bebop-image", version = "0.1.0", features = ["std"] }
+bebop-kv = { path = "../bebop-kv", version = "0.1.0", features = ["std"] }
+bebop-log = { path = "../bebop-log", version = "0.1.0", features = ["std"] }
+bebop-io = { path = "../bebop-io", version = "0.1.0" }
 
 [profile.release]
 opt-level = 3

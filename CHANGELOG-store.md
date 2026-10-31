@@ -1,76 +1,82 @@
 <!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->
 # Changelog: the bebop store library
 
-The crates `bebop-image`, `bebop-kv`, `bebop-log`, `bebop-io`, `bebop-store` and `bebop-ffi`.
-Format changes are listed first in any entry that has them, because a format change must update
-every reader in the same change.
+The crates `bebop-crc`, `bebop-image`, `bebop-kv`, `bebop-log`, `bebop-io`, `bebop-store`,
+`bebop-ffi` and `bebop-wasm-reader`, and the verifiers in `tools/verify`. What the file promises and
+what it does not: [`crates/bebop-store/README.md`](crates/bebop-store/README.md). The bytes:
+[`docs/FORMAT-BEBOP-IMAGE-v2.md`](docs/FORMAT-BEBOP-IMAGE-v2.md).
+
+## Versioning
+
+Nothing has been released. These rules apply from the first release.
+
+- **The crates move together.** They share one version number, and a release lists them all.
+- **Crate versions and format versions are separate numbers.** The container version is cell 1 of
+  the superblock (2 today). Each layout has its own root-version: KV 1 to 4, EvLog 1 and 2, DOC 5.
+- **Old bytes stay readable.** A release does not stop reading an image an earlier release could
+  write. Dropping a layout needs a major version and its own entry here.
+- **A new layout gets a new root-version.** A reader that does not know a version refuses it by name
+  (status 12, `UNKNOWN_VERSION`). It never guesses, so an old reader cannot misread a new file.
+- **Status codes keep their numbers** ([`docs/STATUS-CODES.md`](docs/STATUS-CODES.md)). A code is
+  added, never reused.
+- **Before 1.0:** a minor version may change the Rust API or add a layout, and a patch version does
+  neither. A layout with no production image may still change without a new root-version; this
+  happened to DOC and SEG in October 2026 and the entry below says so. From 1.0 that stops.
+- **An entry with a format change lists it first,** because a format change must update every
+  reader in the same change.
+
+The names `bebop-store`, `bebop-image`, `bebop-kv`, `bebop-log`, `bebop-io`, `bebop-ffi`, `bebop-crc`
+and `bebop-wasm-reader` were free on crates.io on 2026-10-31. The name `bebop` belongs to an
+unrelated project, a schema-based serialization format.
 
 ## Unreleased (0.1.0)
 
+### Format
+
+- **A signed file (root-version 5, DOC).** A DOC root names a log, a tree, a table of device heads
+  and a table of keys. Each device commit adds one record and one seal over the device's chain tip,
+  and readers older than this refuse the root by name. Old images are byte-identical.
+- **Time anchors (ANCH).** Evidence from outside the file, kept as an opaque proof: a time-stamp
+  authority's signature, an OpenTimestamps proof, or a Roughtime response.
+- **Log segments (SEG), TRUNCATE and FORGOTTEN.** Records leave a signed file only under a segment
+  declared by a signed TRUNCATE; a file whose segment nobody declared is refused. An erased record
+  keeps its id and place, and a signed FORGOTTEN declares it.
+- **Self-describing archives (SPEC, BLOB).** An archive file can carry its reader and the format text
+  as its first objects, so that a host with no parser can find them.
+- **Record ids.** A flag marks a record whose id is `sha256(prev ‖ payload)`, with a 16-byte nonce at
+  the start of its payload. Older records keep their FNV ids and are counted as `legacy`.
+- **KV v4,** a copy-on-write B+ tree, read by all five readers. Writing it is off by default.
+- **The commit anchor.** Superblock cell 9 anchors the last commit. Images from before it hold 0 and
+  still read. Every reader of bytes now applies one rule to a torn last commit: it refuses.
+- **KV v3** (2026-10-06), a v2 base plus a delta chain.
+- **KV and EvLog v2** (2026-09-28), bytes packed eight to a cell.
+- **Changed before any production image held them:** DOC cell 9 became `ref SEG`, and a SEG row gained
+  `scheme`. Both moved the layout's digest without a new root-version.
+
 ### Added
-- **Format** (W-MG-M1, FORMAT §9.4): root-version **5 = DOC** -- `DOC {FLAGS, ref LOG, ref TREE,
-  ref HEADS, ref KEYS, 5, ref SPEC, 5, ref ANCH, 0}` over an EvLog v2 log, with `SEAL` (one
-  ML-DSA-65 signature per device commit over the tip), `HEADS`, `KEY` / `KEYS` and the ADMIT /
-  REVOKE record bodies. Old images are byte-identical; every reader written before refuses a DOC
-  root by name (`UNKNOWN_VERSION` 12, fixture `doc` in `conformance.sh`).
-- **Format** (W-MG-M1B, FORMAT §9.4): `ANCH {1, kind, over 4, time_ms, ref PREV_ANCH, proof_len,
-  proof packed}`, the level-1 time anchors of a DOC (DOC cell 8 names the newest); kinds 1
-  platform TSA mark, 2 OpenTimestamps, 3 Roughtime; proofs are opaque blobs, the adapters live
-  in dowiz-hub `doc_seal/`. `Doc::anchor_bytes`, `doc::check_anchors` through the `AnchorCheck`
-  seam (`Verdict::Ok / Bad / Unchecked` -- a kind without an adapter is never ok), `Doc::copy_bytes`
-  (a DOC carried whole into another store, nothing re-signed), `Doc::init_over_bytes` (a DOC over
-  an existing chain, verbatim). `doc::Ids` now sees the record's flags (`legacy(flags, prev,
-  payload, id)`, `redacted(flags, ..)`, `body(flags, ..)`) and `verify` applies M0's rule inside a
-  DOC: a legacy id newer than a chained record of its device is `broken`. `oracle.py --proj`
-  refuses a log version above 2 by name (12) instead of walking it (4).
-- **bebop-log** `doc`: `Doc::init_bytes` / `Doc::commit_bytes` (the writer), `doc::verify` with
-  the counters `records / chained / legacy / redacted / broken / seals_ok / seals_bad / forks`,
-  the seams `Signer` / `Verifier` / `Ids` (no signature or hash code in the MIT crates), and
-  `EvLog::unknown_version` / `MAX_VERSION` for log readers. `EvLog::{version,len,tip,walk_until,
-  chain_len,chain_crc}_at(root)` read a log that is not the image's root.
-- **bebop-io** feature `doc`: `docverify::verify_doc(bytes, ..)` -- the last-commit rule, then
-  the DOC counters. `Db` still refuses a DOC root (`Refusal::UnknownVersion(5)`) until M5.
-- **Format** (W-MG-M3b, FORMAT §9.4): the SEG frontier row carries `scheme` (M0's forward-once
-  rule across a cut; row 9 -> 10 cells, SEG digest 3288852188 -> 2192499951, no production image
-  holds a SEG). A cut carries the anchors (`Carries("ANCH")` is gone); an anchor over a record that
-  left under a segment is `under_cut` in `check_anchors` -- never ok, bad only on a failed proof,
-  placed by the archive -- and `AnchorCounts.cut` counts them. `Doc::redact_into` is redaction in
-  place for a DOC. dowiz-hub `SealedHub::forget` / `SealedHub::cut` commit the signed FORGOTTEN /
-  TRUNCATE through the device's ML-DSA-65 seal (`KIND_DECL` records).
-- **Format** (W-MG-M3/M4, FORMAT §9.4): DOC cell 9 is `ref SEG` (was reserved; DOC digest
-  3669646107 -> 2619226223, no DOC image predates it). `SEG {VERSION, first, last, root, ref
-  PREV_SEG, ref BLOB, redacted, declared, frontier rows}` -- an RFC 9162 root over the ids a cut
-  took out of the log, and the record bodies `TRUNCATE` (names the segment, signed through the
-  cutting device's seal) and `FORGOTTEN` (n redacted, subject). The log is kept history: records
-  leave a DOC file only under a segment declared by a TRUNCATE; `verify` REFUSES a file whose
-  segment nobody declared (`DocError::CutUndeclared`).
-- **bebop-log** `doc`: `Doc::cut_into(old, fresh, keep, ids)` (the rebuild without the oldest
-  records; `Segment::truncate_body` is what the caller then commits), `Ids::tree_root` (the seam
-  for the root; `None` refuses the cut), counters `segments / cut / cut_redacted / declared`, a
-  FORGOTTEN counts only under an admitted key's valid seal, `holds` requires `redacted +
-  cut_redacted == declared`.
-- **dowiz-hub** `rotate`: the checkpoint descriptor names `root=` -- the same RFC 9162 root over
-  the archived ids (`rotate::segment_root`) -- so a witness cites one value per archive.
-- **bebop-ffi** (W-ES-P6): a C ABI (cdylib) over `Db` / `ReadTxn` / `WriteTxn` / `Scan`, with
-  `Refusal` as integer codes plus a message. The codes it shares with bebop-wasm keep their
-  numbers.
-- **bindings/python/bebop_store.py**: a ctypes module, and a test that writes, reopens, reads
-  and checks refusals.
-- **tools/gates/ffi-readers.sh**: the fifth reader (T-ES-01). The C ABI reads the bebop-wasm
-  fixtures (`kv`, `kv2`, `kv3`, `ptaway`, `kv4stub`) against their `.expected`.
-- `examples/kv.rs`, `examples/kv.py`, and a README for each crate.
-- **bebop-io** (W-ES-P3): `Db`, `ReadTxn`, `WriteTxn`, `Scan`, `Refusal`, `Options`, `Verify`,
-  `OnTorn`, and the `Detached` device. **bebop-kv**: `Batch`, `Staged`, `MergeCursor`, `Bytes`,
-  `Limits`, and `KeyOp` byte-key deltas.
-- **bebop-kv** (W-ES-P8A): `KvError::UnknownVersion`. A KV root version this code does not know
-  is refused before any of it is read (fixture `kv4stub`).
+
+- `Db`, `ReadTxn`, `WriteTxn`, `Scan`, `Options`, `Verify`, `OnTorn`, and `Refusal`, a named value for
+  every refusal. `Durability::Normal` batches commits to a checkpoint.
+- `bebop_store::evlog::doc`: the DOC writer, `verify` and its counters, `check_anchors`, `Doc::cut_into`,
+  `Doc::redact_into`, `Doc::archive_bytes`. The traits `Signer`, `Verifier`, `Ids` and `AnchorCheck`
+  are how a caller brings signatures, hashes and anchor checks. The MIT crates hold no signature code.
+- `bebop-io`'s `doc` feature: `docverify::verify_doc(bytes, ..)`, the last-commit rule and then the
+  counters.
+- `bebop-ffi`: a C ABI over `Db`, with refusals as integer codes plus a message.
+  `bindings/python/bebop_store.py` is a ctypes module over it.
+- `bebop-wasm-reader`: the reader in wasm32 under MIT OR Apache-2.0, with no imports.
+- `tools/verify/bebop-verify.mjs` and `.py`: one-file verifiers with nothing to install.
+- `examples/read.mjs`: reads an archive with the reader inside it.
+- One runnable example per promise in `crates/bebop-store/examples`, a README for every crate, and
+  licence texts in every crate.
 
 ### Changed
-- W-ES-P1: `bebop-store` split into `bebop-image`, `bebop-kv`, `bebop-log` and `bebop-io`.
-  `bebop-store` stays as a re-exporting facade, so existing paths keep working.
 
-### Format
-- W-ES-P0: superblock cell 9 `anc` anchors the last commit (`0` = no anchor, as in every image
-  written before it).
-- v3 KV root (W-DELTA, 2026-10-06): a v2 base plus a delta chain.
-- v2 KV / EvLog roots (DG3, 2026-09-28): bytes packed eight to a cell.
+- `bebop-store` split into `bebop-image`, `bebop-kv`, `bebop-log` and `bebop-io`. It stays as a
+  re-exporting facade, so existing paths keep working.
+
+### Not in this version
+
+- **Merging two copies of a file.** Not built.
+- **Checking seals in the MIT reader.** It counts them and says so.
+- **Level 2, settlement between organisations.** Not built.

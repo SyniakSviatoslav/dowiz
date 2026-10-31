@@ -63,3 +63,9 @@ pub mod merkle;
 
 #[cfg(test)]
 mod view_tests;
+
+/// README.md's quickstart, compiled and run by `cargo test --doc`. `doctest` is set only there, so
+/// no build of this crate carries this item.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctest;

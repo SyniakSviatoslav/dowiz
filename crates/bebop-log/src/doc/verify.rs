@@ -20,18 +20,36 @@
 //!   * forks     `(actor, seq)` pairs that occur more than once (§2a: a named refusal, not
 //!               the death of the identity).
 //!   * seals_ok / seals_bad   every seal reachable from HEADS through `ref PREV_SEAL`. A seal
-//!               is ok when its actor's key is ADMITTED (below), valid at its seq (REVOKE
-//!               after k breaks k+1), the tip names a record at `(actor, seq)`, and the
-//!               signature over `seal::message` verifies with the previous seal's tip.
-//!               Anything else -- a head row that disagrees with its seal, a crc failure,
-//!               an unknown algorithm -- is bad.
+//!               is ok when its actor's key is ADMITTED (below), valid at its seq (an
+//!               effective REVOKE after k breaks k+1), the tip names a record at `(actor,
+//!               seq)`, and the signature over `seal::message` verifies with the previous
+//!               seal's tip. Anything else -- a head row that disagrees with its seal, a crc
+//!               failure, an unknown algorithm -- is bad.
+//!   * keys_disagree   keys whose table `revoked_at` is not what the REVOKE records fold to,
+//!               either way. A COUNTER AND NOT A REFUSAL: the records answer in full without
+//!               the table, so a refusal would only let one forged cell hide every other
+//!               counter; `holds` is false on it, which is what a refusal would have meant.
+//!   * revokes_unsettled   REVOKEs that contradict each other (`settle.rs`), held in force.
+//!               Not a term of `holds`: a contradiction always leaves a seal bad, the one that
+//!               made the REVOKE effective and that the REVOKEs in force then break.
+//!   * unsealed  records no signed tip vouches for, plus chains a signed tip reaches that end
+//!               on nothing (`unsealed` below). `prev` is walked from the tip INSIDE every ok
+//!               seal, never from a HEADS row: HEADS is signed by nobody, so a row names where
+//!               to look and a signature decides what was found. Reachability and not "a seal
+//!               at this seq": one seal over a tip vouches for every record under it, across
+//!               devices (a device's first record chains onto the log) and across seq gaps
+//!               between seals. A redaction keeps its id and `prev`, so it stays on the path;
+//!               a chain ends at 0^32 or at a frontier tip a segment recorded. THE LIMIT: a
+//!               whole tail gone with its seals and its row is a shorter true file, the
+//!               rollback `settle.rs` names; this counter sees only what stays in the file.
+//!   * tombs_foreign   live tombstones no FORGOTTEN of their author or of a root covers
+//!               (`declare.rs` `foreign_tombs`): a thief must not erase a REVOKE and declare it.
 //!
-//! ADMISSION is a fixpoint over the signed records, never the KEYS table alone: a key is
-//! admitted when it is trusted (`Trust`), or when its `ref ADMIT_REC` names a record whose
-//! body is an ADMIT of exactly this key, written by an admitted actor at a seq that actor's
-//! ok seals cover, while that actor's key was valid. The table's `revoked_at` is believed
-//! as a claim that only NARROWS (a forger can make a key less valid, never more); proving
-//! the REVOKE record is M2's merge event's business.
+//! ADMISSION AND REVOCATION are one fixpoint over the signed records (`settle.rs`), never the
+//! KEYS table: a key is admitted when it is trusted (`Trust`), or when its `ref ADMIT_REC`
+//! names a record whose body is an ADMIT of exactly this key, written by an admitted actor at
+//! a seq that actor's ok seals cover, while that actor's key was valid. A key is revoked by
+//! its effective REVOKE records, and by nothing else: the table's `revoked_at` is an index.
 //!
 //! SEGMENTS AND DECLARATIONS (W-MG-M3/M4, `seg.rs`, `declare.rs`): `segments` / `cut` /
 //! `cut_redacted` count what left the file under a root; every segment must be declared by
@@ -45,13 +63,17 @@
 use crate::prelude::*;
 use alloc::collections::{BTreeMap, BTreeSet};
 use crate::{EvLog, Record, Store};
-use super::declare::{check_segments, effective};
-use super::keys::{parse_admit, read_keys, Key};
-use super::seal::{message, read_heads, read_seal, Head};
+use super::declare::{check_segments, foreign_tombs};
+use super::keys::read_keys;
+use super::seal::{read_heads, Head};
 use super::seg::{frontier_at, frontier_of, read_segs, Segment, SCHEME_CHAINED};
+use super::settle::{settle, Cx};
 use super::{Doc, DocError, Ids, Verifier};
 
-/// The counters: M1's eight, and M3/M4's four.
+#[cfg(test)]
+mod tests;
+
+/// The counters: M1's eight, M3/M4's four, W-MG-REVOKE's three, and W-MG-SEAL's one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Counters {
     pub records: usize,
@@ -69,6 +91,14 @@ pub struct Counters {
     pub cut_redacted: usize,
     /// What effective FORGOTTENs (live, and under the segments) declare.
     pub declared: usize,
+    /// Keys whose table `revoked_at` differs from the fold of the REVOKE records.
+    pub keys_disagree: usize,
+    /// REVOKEs that contradict each other; held in force, never settled here.
+    pub revokes_unsettled: usize,
+    /// Live tombstones covered by no FORGOTTEN of their author or of a root.
+    pub tombs_foreign: usize,
+    /// Records no signed tip reaches by `prev`, plus chains that end on an unknown id.
+    pub unsealed: usize,
 }
 
 /// What `verify` found.
@@ -82,11 +112,12 @@ pub struct Report {
 }
 
 impl Report {
-    /// Every record chains or is a declared redaction, every seal holds, no fork, and every
-    /// tombstone -- live or cut -- is declared (law 9).
+    /// Every record chains or is a declared redaction, every seal holds, no fork, every
+    /// tombstone -- live or cut -- is declared (law 9) by someone who may, the table and the
+    /// REVOKE records tell one story, and a signed tip vouches for every record.
     pub fn holds(&self) -> bool {
         let c = &self.counters;
-        c.broken == 0 && c.seals_bad == 0 && c.forks == 0 && c.seals_ok > 0 && c.redacted + c.cut_redacted == c.declared
+        c.broken == 0 && c.seals_bad == 0 && c.forks == 0 && c.seals_ok > 0 && c.redacted + c.cut_redacted == c.declared && c.keys_disagree == 0 && c.tombs_foreign == 0 && c.unsealed == 0
     }
 }
 
@@ -102,13 +133,13 @@ pub enum Trust<'a> {
 
 type Actor = [u8; 32];
 
-struct Chains {
+pub(super) struct Chains {
     /// Oldest first: the record and its object offset.
-    recs: Vec<(usize, Record)>,
+    pub recs: Vec<(usize, Record)>,
     /// Per device, the indices into `recs`, in file order.
     by_actor: BTreeMap<Actor, Vec<usize>>,
     /// Every id seen at `(actor, seq)` (more than one = a fork).
-    ids_at: BTreeMap<(Actor, u64), Vec<[u8; 32]>>,
+    pub ids_at: BTreeMap<(Actor, u64), Vec<[u8; 32]>>,
 }
 
 fn chains(st: &Store, log: Option<usize>) -> Chains {
@@ -125,7 +156,8 @@ fn chains(st: &Store, log: Option<usize>) -> Chains {
     Chains { recs, by_actor, ids_at }
 }
 
-fn count_records(ch: &Chains, heads: &[Head], segs: &[Segment], log_tip: Option<[u8; 32]>, ids: &dyn Ids, c: &mut Counters) {
+fn count_records(ch: &Chains, heads: &[Head], segs: &[Segment], log_tip: Option<[u8; 32]>, ids: &dyn Ids, c: &mut Counters) -> BTreeMap<Actor, u64> {
+    let mut tombs: BTreeMap<Actor, u64> = BTreeMap::new();
     c.records = ch.recs.len();
     c.forks = ch.ids_at.values().filter(|v| v.len() > 1).count();
     for (actor, idx) in &ch.by_actor {
@@ -163,84 +195,50 @@ fn count_records(ch: &Chains, heads: &[Head], segs: &[Segment], log_tip: Option<
                 }
             } else if ids.redacted(r.flags, &r.payload) && next_names_me {
                 c.redacted += 1;
+                *tombs.entry(*actor).or_insert(0) += 1;
             } else {
                 c.broken += 1;
             }
         }
     }
+    tombs
 }
 
-/// One pass over every seal reachable from HEADS. Returns `(ok, bad, covered)`: `covered`
-/// is, per actor, the highest seq an ok seal signed.
-fn seals(st: &Store, ch: &Chains, heads: &[Head], segs: &[Segment], keys: &[Key], admitted: &BTreeSet<Actor>, v: &dyn Verifier) -> (usize, usize, BTreeMap<Actor, u64>) {
-    let (mut ok, mut bad) = (0usize, 0usize);
-    let mut covered: BTreeMap<Actor, u64> = BTreeMap::new();
-    let cap = ch.recs.len() + 1;
-    for h in heads {
-        let mut cur = h.seal;
-        let mut first = true;
-        let mut steps = 0usize;
-        while let Some(at) = cur {
-            steps += 1;
-            if steps > cap {
-                bad += 1;
-                break;
+/// `unsealed`: walk `prev` from `tips`, over ids and not over positions, so the file's order
+/// plays no part. Each record no walk visits counts one; so does each walk that leaves the file
+/// anywhere but at 0^32 or a frontier tip, because a signature over a tip commits to the whole
+/// chain below it, and a record dropped from under it must not read as a shorter history.
+/// THE TWO COLLECTIONS ARE `covered`'s AND `admitted`'s TYPES, ON PURPOSE: a sort or a new map
+/// type here cost the reader's wasm 6 KB (measured); these two are already in the binary.
+fn unsealed(ch: &Chains, tips: &[[u8; 32]], segs: &[Segment]) -> usize {
+    let mut at: BTreeMap<Actor, u64> = BTreeMap::new();
+    let mut i = 0u64;
+    for (_, r) in &ch.recs {
+        *at.entry(r.id).or_insert(0) = i;
+        i += 1;
+    }
+    let mut seen: BTreeSet<Actor> = BTreeSet::new();
+    let mut dangling = 0usize;
+    for tip in tips {
+        let mut id = *tip;
+        loop {
+            match at.get(&id).and_then(|n| ch.recs.get(*n as usize)) {
+                Some((_, r)) => {
+                    if !seen.insert(id) {
+                        break;
+                    }
+                    id = r.prev;
+                }
+                None => {
+                    if id != [0u8; 32] && !segs.iter().any(|s| s.frontier.iter().any(|f| f.tip == id)) {
+                        dangling += 1;
+                    }
+                    break;
+                }
             }
-            let Some(s) = st.check_obj(at).ok().and_then(|_| read_seal(st, at)) else {
-                bad += 1;
-                break;
-            };
-            let head_agrees = !first || (s.actor_id == h.actor_id && s.seq == h.seq && s.tip == h.tip);
-            first = false;
-            let key = keys.iter().find(|k| k.actor_id == s.actor_id);
-            // The previous seal's tip; a seal with no previous seal (the device's first, or
-            // its oldest kept after a cut) reads it from the segment's frontier, else 0^32.
-            let prev_tip = s
-                .prev
-                .and_then(|p| read_seal(st, p))
-                .map(|p| p.tip)
-                .or_else(|| frontier_at(segs, &s.actor_id, s.seq.wrapping_sub(1)).map(|f| f.tip))
-                .unwrap_or([0u8; 32]);
-            let names_record = ch.ids_at.get(&(s.actor_id, s.seq)).is_some_and(|ids| ids.contains(&s.tip));
-            let good = head_agrees
-                && names_record
-                && admitted.contains(&s.actor_id)
-                && key.is_some_and(|k| k.valid_at(s.seq) && k.alg == s.alg && v.verify(s.alg, &k.pk, &message(&s.actor_id, s.seq, &s.tip, s.claimed_ms, &prev_tip), &s.sig));
-            if good {
-                ok += 1;
-                let e = covered.entry(s.actor_id).or_insert(0);
-                *e = (*e).max(s.seq);
-            } else {
-                bad += 1;
-            }
-            cur = s.prev;
         }
     }
-    (ok, bad, covered)
-}
-
-/// Keys the records admit, given who is already admitted and what their ok seals cover.
-fn admit_more(ch: &Chains, keys: &[Key], ids: &dyn Ids, admitted: &mut BTreeSet<Actor>, covered: &BTreeMap<Actor, u64>) -> bool {
-    let mut grew = false;
-    for k in keys {
-        if admitted.contains(&k.actor_id) {
-            continue;
-        }
-        let Some(at) = k.admit_rec else { continue };
-        let Some((_, r)) = ch.recs.iter().find(|(o, _)| *o == at) else { continue };
-        let Some((actor, alg, valid_from, pk)) = parse_admit(ids.body(r.flags, &r.payload)) else { continue };
-        let same = actor == k.actor_id && alg == k.alg && valid_from == k.valid_from && pk == k.pk;
-        let by = r.actor_pubkey;
-        let by_key = keys.iter().find(|x| x.actor_id == by);
-        let authorised = admitted.contains(&by)
-            && covered.get(&by).is_some_and(|&s| s >= r.actor_seq)
-            && by_key.is_some_and(|x| x.valid_at(r.actor_seq));
-        if same && authorised {
-            admitted.insert(k.actor_id);
-            grew = true;
-        }
-    }
-    grew
+    ch.recs.len().saturating_sub(seen.len()) + dangling
 }
 
 /// The counters of the DOC at the image's root. `Err` = the image could not be counted (not
@@ -258,26 +256,25 @@ pub fn verify(st: &Store, ids: &dyn Ids, v: &dyn Verifier, trust: Trust<'_>) -> 
     let heads = read_heads(st, view.heads);
     let keys = read_keys(st, view.keys);
     let mut c = Counters::default();
-    count_records(&ch, &heads, &segs, EvLog::tip_at(st, view.log), ids, &mut c);
+    let tombs = count_records(&ch, &heads, &segs, EvLog::tip_at(st, view.log), ids, &mut c);
 
-    let mut admitted: BTreeSet<Actor> = match trust {
+    let trusted: BTreeSet<Actor> = match trust {
         Trust::Genesis => keys.iter().filter(|k| k.admit_rec.is_none()).map(|k| k.actor_id).collect(),
         Trust::Only(list) => list.iter().copied().collect(),
     };
-    let (mut ok, mut bad, mut covered) = seals(st, &ch, &heads, &segs, &keys, &admitted, v);
-    for _ in 0..=keys.len() {
-        if !admit_more(&ch, &keys, ids, &mut admitted, &covered) {
-            break;
-        }
-        (ok, bad, covered) = seals(st, &ch, &heads, &segs, &keys, &admitted, v);
-    }
-    c.seals_ok = ok;
-    c.seals_bad = bad;
-    let decl = effective(&ch.recs, ids, &admitted, &covered, v.checks_signatures());
+    let cx = Cx { st, ch: &ch, heads: &heads, segs: &segs, ids, v };
+    let (end, unsettled) = settle(&cx, &keys, &trusted);
+    c.seals_ok = end.ok;
+    c.seals_bad = end.bad;
+    c.revokes_unsettled = unsettled;
+    c.keys_disagree = keys.iter().zip(&end.keys).filter(|(table, fold)| table.revoked_at != fold.revoked_at).count();
+    c.unsealed = unsealed(&ch, &end.tips, &segs);
+    let decl = end.declared;
+    c.tombs_foreign = foreign_tombs(&tombs, &decl.forgotten_by, &trusted) as usize;
     check_segments(&segs, &decl.truncates)?;
     c.segments = segs.len();
     c.cut = segs.iter().map(|s| s.count() as usize).sum();
     c.cut_redacted = segs.iter().map(|s| s.redacted as usize).sum();
     c.declared = decl.forgotten as usize + segs.iter().map(|s| s.declared as usize).sum::<usize>();
-    Ok(Report { counters: c, heads, keys: keys.len(), admitted: admitted.len() })
+    Ok(Report { counters: c, heads, keys: keys.len(), admitted: end.admitted.len() })
 }

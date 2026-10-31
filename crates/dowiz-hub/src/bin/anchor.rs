@@ -17,7 +17,7 @@
 //! nothing written.
 
 use bebop_store::evlog::doc::Verdict;
-use dowiz_hub::doc_seal::live::{describe, verify_image, verify_ots, FileHeaders};
+use dowiz_hub::doc_seal::live::{anchor_line, describe, doc_line, refusal_words, verify_image, verify_ots, FileHeaders};
 use dowiz_hub::doc_seal::{hex32, ots, SENTENCES};
 
 const USAGE: &str = "usage: anchor stamp <path> [--calendars a,b] [--out f.ots] | upgrade <path> | verify <path> [--headers f] [--platform-key hex]... | fetch-headers <h>... --out f [--explorer api]";
@@ -106,19 +106,13 @@ fn verify(a: &Args) {
             Verdict::Unchecked(_) => 4,
         });
     }
-    let out = verify_image(&bytes, &keys, hd).unwrap_or_else(|e| die(2, &format!("{path}: refused: {e:?}")));
-    let c = &out.report.counters;
-    let ac = &out.counts;
-    println!(
-        "doc records={} chained={} legacy={} redacted={} broken={} seals_ok={} seals_bad={} forks={} keys={} admitted={} anchors={} anchors_ok={} anchors_bad={} anchors_unchecked={}",
-        c.records, c.chained, c.legacy, c.redacted, c.broken, c.seals_ok, c.seals_bad, c.forks, out.report.keys, out.report.admitted, ac.anchors, ac.ok, ac.bad, ac.unchecked
-    );
+    let out = verify_image(&bytes, &keys, hd).unwrap_or_else(|e| die(2, &format!("{path}: {}", refusal_words(&e))));
+    println!("{}", doc_line(&out.report, &out.counts));
     for hd in &out.report.heads {
         println!("head actor={} seq={} tip={}", hex32(&hd.actor_id), hd.seq, hex32(&hd.tip));
     }
     for x in &out.checked {
-        let (word, why) = describe(&x.verdict);
-        println!("anchor kind={} over={} time_ms={} names_record={} -> {word}: {why}", x.anchor.kind, hex32(&x.anchor.over), x.anchor.time_ms, x.names_record);
+        println!("{}", anchor_line(x));
     }
     println!("what the proof says (R-MAINGOAL-A §2d):");
     for s in SENTENCES {

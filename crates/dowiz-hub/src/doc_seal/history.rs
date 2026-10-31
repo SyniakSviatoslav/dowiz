@@ -49,7 +49,7 @@ impl SealedHub {
         let mut size = self.store.to_bytes().len().max(MIN_SEALED_BYTES);
         let (fresh, n) = loop {
             let mut fresh = Store::create_bytes(size)?;
-            match Doc::redact_into(&self.store, &mut fresh, &rule) {
+            match Doc::redact_into(&self.store, &mut fresh, &HubIds, &rule) {
                 Ok(n) => break (fresh, n),
                 Err(DocError::Store(e)) if e_is_full(&e) => size = size.saturating_mul(2),
                 Err(e) => return Err(doc_err(e)),
