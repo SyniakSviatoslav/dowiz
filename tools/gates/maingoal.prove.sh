@@ -43,7 +43,10 @@ want() { # want <rc> <label> <grep>
 }
 PYV="$S/r/tools/verify/bebop-verify.py"
 fresh; want 0 "clean scratch" "GREEN (3 of 3 scenarios held.*1 SKIPPED not passed: two offline devices merge"
+# On GitHub a stale stamp rebuilds by itself, by design: this case is about the box's refusal.
+ci=${GITHUB_ACTIONS:-}; unset GITHUB_ACTIONS
 fresh; sed -i 's/^src=[0-9a-f]\{8\}/src=00000000/' "$S/bin/stamp"; want 2 "stamp names other sources" "STALE"
+[ -z "$ci" ] || export GITHUB_ACTIONS="$ci"
 fresh; sed -i 's/^    return b\[1:\] if b\[:1\] in (b"D", b"K") else b$/    return b/' "$PYV"; want 1 "python forgets the kind byte" "hub.sealed: records: doc_verify .* python .* DISAGREE"
 fresh; cat > "$S/bin/doc_verify" <<'L'
 #!/bin/sh

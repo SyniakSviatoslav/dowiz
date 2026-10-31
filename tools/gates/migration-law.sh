@@ -134,7 +134,8 @@ WRITE = re.compile(r'(append\w*\s*\(|events\.push\(\(|Ok\(Some\(\(|kind:\s*|(?:p
 for d in ('crates/dowiz-hub/src', 'workers/api/src'):
     for f in sorted(glob.glob(os.path.join(ROOT, d, '**', '*.rs'), recursive=True)):
         rel = os.path.relpath(f, ROOT)
-        if re.search(r'(^|/)tests?(\.rs|/)|_tests?\.rs$', rel) or rel.endswith('/event.rs'):
+        # src/bin: command-line drivers (maingoal_device writes demo orders), not a shipped writer.
+        if re.search(r'(^|/)tests?(\.rs|/)|_tests?\.rs$|/src/bin/', rel) or rel.endswith('/event.rs'):
             continue
         code, strs = lex(open(f, encoding='utf-8').read())
         tmods = [(m.end() - 1, block_end(code, m.end() - 1)) for m in re.finditer(r'#\[cfg\(test\)\]\s*mod\s+\w+\s*\{', code)]
