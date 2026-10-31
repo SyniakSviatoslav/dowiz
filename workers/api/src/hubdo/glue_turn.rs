@@ -83,6 +83,7 @@ impl HubImages {
         if let Some(seed) = crate::entropy_seed() {
             log.set_entropy(seed); // M0
         }
+        self.arm_scheme(&mut log);
         let before = log.len();
         let t = Tail { ctx: input.ctx, base, tip, recs: input.tail };
         let r = match merge(&bytes, &mut log, &t) {
@@ -106,6 +107,7 @@ impl HubImages {
         if let Some(seed) = crate::entropy_seed() {
             log.set_entropy(seed); // M0
         }
+        self.arm_scheme(&mut log);
         let mut closed = false;
         if let Some(did) = &input.did {
             closed = match desk::close(&mut log, did, &input.by) {

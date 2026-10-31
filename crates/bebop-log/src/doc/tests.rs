@@ -3,10 +3,11 @@
 //! it). They prove the LAYOUT and the COUNTERS; the real ML-DSA-65 kill tests are
 //! `dsa_tests.rs`, through the same traits.
 
+use super::anch::{check_anchors, Anchor, AnchorCheck, AnchorCounts, NoAdapters, Verdict, KIND_OTS, KIND_PLATFORM_TSA};
 use super::keys::{Key, KeyOp};
 use super::verify::{verify, Counters, Trust};
 use super::write::{stage_doc, Refs};
-use super::{Doc, DocError, Ids, Signer, Verifier, ROOT_VERSION_DOC};
+use super::{Doc, DocError, Head, Ids, Signer, Verifier, ROOT_VERSION_DOC};
 use crate::{EvLog, Record, Store};
 
 pub(crate) const ALG_TOY: i64 = 1;
@@ -35,11 +36,15 @@ impl Ids for ToyIds {
     fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
         mix(&[b"c", prev, payload])
     }
-    fn legacy(&self, payload: &[u8]) -> Option<[u8; 32]> {
-        Some(mix(&[b"l", payload]))
+    fn legacy(&self, _flags: i64, _prev: &[u8; 32], payload: &[u8], id: &[u8; 32]) -> bool {
+        mix(&[b"l", payload]) == *id
     }
-    fn redacted(&self, payload: &[u8]) -> bool {
+    fn redacted(&self, _flags: i64, payload: &[u8]) -> bool {
         payload.first().is_some_and(|k| k & 0x80 != 0)
+    }
+    /// A toy tree: one mix over the ids in order (dowiz-hub's is RFC 9162).
+    fn tree_root(&self, ids: &[[u8; 32]]) -> Option<[u8; 32]> {
+        Some(mix(&[b"t", &ids.concat()]))
     }
 }
 
@@ -303,4 +308,143 @@ fn write_the_doc_fixture_when_asked() {
         std::fs::write(&p, st.to_bytes_trimmed()).unwrap();
     }
     assert_eq!(count(&st).seals_ok, 3);
+}
+
+// ── W-MG-M1B: anchors, the copy, M0's rule ──────────────────────────────────────────────
+
+/// A toy adapter (NOT CRYPTO): kind 1's proof "checks" when it is `mix("tsa", over, time)`.
+/// It proves the ANCH plumbing -- the chain, the crc, `names_record`, the counters -- not
+/// a time; the real adapters are dowiz-hub `doc_seal/{tsa,ots,roughtime}.rs`.
+pub(crate) struct ToyTsa;
+impl AnchorCheck for ToyTsa {
+    fn check(&self, a: &Anchor) -> Verdict {
+        if a.kind != KIND_PLATFORM_TSA {
+            return Verdict::Unchecked(format!("toy: no adapter for kind {}", a.kind));
+        }
+        if a.proof == mix(&[b"tsa", &a.over, &a.time_ms.to_le_bytes()]) {
+            Verdict::Ok { not_after_ms: Some(a.time_ms), not_before_ms: None, what: "toy tsa".into() }
+        } else {
+            Verdict::Bad("toy tsa: the proof does not match".into())
+        }
+    }
+}
+
+pub(crate) fn toy_mark(over: &[u8; 32], time_ms: i64) -> Vec<u8> {
+    mix(&[b"tsa", over, &time_ms.to_le_bytes()]).to_vec()
+}
+
+/// Two anchors over two tips: both read back newest first, both check; a third over a
+/// 32-byte value that is no record of the log is bad before any adapter sees it; with no
+/// adapters nothing is ok. The log, seals and keys are untouched by anchoring.
+#[test]
+fn anchors_are_chained_checked_and_named() {
+    let (mut st, mut owner) = doc_with(2);
+    let tip1 = owner.tip;
+    Doc::anchor_bytes(&mut st, KIND_PLATFORM_TSA, &tip1, 1_000, &toy_mark(&tip1, 1_000)).unwrap();
+    owner.commit(&mut st, b"third", None).unwrap();
+    let tip2 = owner.tip;
+    Doc::anchor_bytes(&mut st, KIND_PLATFORM_TSA, &tip2, 2_000, &toy_mark(&tip2, 2_000)).unwrap();
+    let back = Store::from_bytes(&st.to_bytes_trimmed());
+
+    let rep = verify(&back, &ToyIds, &ToyVerifier, Trust::Genesis).unwrap();
+    assert_eq!(rep.counters, Counters { records: 3, chained: 3, seals_ok: 3, ..Counters::default() }, "anchoring moved nothing: {rep:?}");
+    let checked = check_anchors(&back, &ToyTsa).unwrap();
+    assert_eq!(checked.len(), 2);
+    assert_eq!((checked[0].anchor.over, checked[0].anchor.time_ms), (tip2, 2_000), "newest first");
+    assert_eq!((checked[1].anchor.over, checked[1].anchor.time_ms), (tip1, 1_000));
+    assert!(checked.iter().all(|c| c.names_record));
+    assert_eq!(AnchorCounts::of(&checked), AnchorCounts { anchors: 2, ok: 2, bad: 0, unchecked: 0, cut: 0 }, "{checked:?}");
+    let blind = check_anchors(&back, &NoAdapters).unwrap();
+    assert_eq!(AnchorCounts::of(&blind), AnchorCounts { anchors: 2, ok: 0, bad: 0, unchecked: 2, cut: 0 }, "no adapter = no verdict");
+
+    let mut st = back;
+    let nobody = [0x5Au8; 32];
+    Doc::anchor_bytes(&mut st, KIND_OTS, &nobody, 3_000, b"whatever").unwrap();
+    let checked = check_anchors(&st, &ToyTsa).unwrap();
+    assert_eq!(checked.len(), 3);
+    assert!(!checked[0].names_record);
+    assert_eq!(AnchorCounts::of(&checked), AnchorCounts { anchors: 3, ok: 2, bad: 1, unchecked: 0, cut: 0 }, "an anchor over nothing is bad: {checked:?}");
+}
+
+/// KILL TEST (M6): a changed byte of a proof is `bad` when the object is re-sealed (a forger)
+/// and a refusal when it is not (damage), and a changed `over` under a valid mark is bad.
+#[test]
+fn a_changed_anchor_is_bad_or_refused() {
+    let (mut st, owner) = doc_with(1);
+    let tip = owner.tip;
+    Doc::anchor_bytes(&mut st, KIND_PLATFORM_TSA, &tip, 1_000, &toy_mark(&tip, 1_000)).unwrap();
+    assert_eq!(AnchorCounts::of(&check_anchors(&st, &ToyTsa).unwrap()).ok, 1, "control");
+    let a = Doc::open(&st).unwrap().anch.unwrap();
+    let clean = st.to_bytes_trimmed();
+
+    st.put_cell(a, 9, st.get(a, 9) ^ 1);
+    assert!(matches!(check_anchors(&st, &ToyTsa), Err(DocError::BadCrc(_))), "damage is refused");
+    st.seal(a);
+    let c = AnchorCounts::of(&check_anchors(&st, &ToyTsa).unwrap());
+    assert_eq!((c.ok, c.bad), (0, 1), "a re-sealed forgery is bad: {c:?}");
+
+    let mut st = Store::from_bytes(&clean);
+    st.put_cell(a, 6, 999);
+    st.seal(a);
+    let c = AnchorCounts::of(&check_anchors(&st, &ToyTsa).unwrap());
+    assert_eq!((c.ok, c.bad), (0, 1), "a moved time under the old mark is bad: {c:?}");
+}
+
+/// A copied DOC (records, keys, seals, anchors re-pointed, nothing re-signed) answers the
+/// same counters, heads and anchors; a copy into a store too small is refused whole.
+#[test]
+fn a_copied_doc_verifies_the_same() {
+    let (mut st, mut owner) = doc_with(2);
+    let b = ToySigner { id: [0xB2; 32] };
+    let admit = KeyOp::Admit(Key { valid_from: 1, ..key_of(&b) });
+    owner.commit(&mut st, &admit.body(), Some(&admit)).unwrap();
+    let mut bdev = Dev::new(b);
+    bdev.commit(&mut st, b"b-1", None).unwrap();
+    Doc::anchor_bytes(&mut st, KIND_PLATFORM_TSA, &bdev.tip, 7_000, &toy_mark(&bdev.tip, 7_000)).unwrap();
+    let before = verify(&st, &ToyIds, &ToyVerifier, Trust::Genesis).unwrap();
+    assert_eq!((before.counters.seals_ok, before.admitted, before.heads.len()), (4, 2, 2), "control: {before:?}");
+
+    let mut big = Store::create_bytes(1 << 20).unwrap();
+    Doc::copy_bytes(&st, &mut big).unwrap();
+    let copy = Store::from_bytes(&big.to_bytes_trimmed());
+    let after = verify(&copy, &ToyIds, &ToyVerifier, Trust::Genesis).unwrap();
+    assert_eq!(after.counters, before.counters);
+    // A head's facts travel; its `seal` is an OFFSET, and the copy lays objects out anew.
+    let facts = |hs: &[Head]| hs.iter().map(|h| (h.actor_id, h.seq, h.tip, h.seal.is_some())).collect::<Vec<_>>();
+    assert_eq!(facts(&after.heads), facts(&before.heads));
+    assert_eq!((after.keys, after.admitted), (before.keys, before.admitted));
+    let anchors = check_anchors(&copy, &ToyTsa).unwrap();
+    assert_eq!(AnchorCounts::of(&anchors), AnchorCounts { anchors: 1, ok: 1, bad: 0, unchecked: 0, cut: 0 });
+    assert!(bdev.commit(&mut Store::from_bytes(&copy.to_bytes_trimmed()), b"b-2", None).is_ok(), "the copy takes the next commit");
+
+    let mut small = Store::create_bytes((bebop_image::ARENA + 64) * 8).unwrap();
+    assert!(matches!(Doc::copy_bytes(&st, &mut small), Err(DocError::Store(_))), "no room = refused whole");
+    assert!(small.root().is_none(), "and nothing committed");
+}
+
+/// M0's rule inside a DOC: a device's ids may move from legacy to chained once and never
+/// back. Two legacy records then a chained one are `legacy 2, chained 1`; a legacy record
+/// AFTER a chained one is `broken` (an edit repaired under the retired scheme).
+#[test]
+fn a_legacy_id_newer_than_a_chained_one_is_broken() {
+    let mut st = Store::create_bytes(1 << 20).unwrap();
+    let mut owner = Dev::new(ToySigner { id: [0xA1; 32] });
+    Doc::init_bytes(&mut st, 0, &[key_of(&owner.s)]).unwrap();
+    let legacy = |dev: &mut Dev<ToySigner>, payload: &[u8]| {
+        let mut r = dev.next(payload);
+        r.id = mix(&[b"l", payload]);
+        dev.tip = r.id;
+        r
+    };
+    let r1 = legacy(&mut owner, b"old-1");
+    Doc::commit_bytes(&mut st, &r1, &owner.s, 1, None).unwrap();
+    let r2 = legacy(&mut owner, b"old-2");
+    Doc::commit_bytes(&mut st, &r2, &owner.s, 2, None).unwrap();
+    owner.commit(&mut st, b"new-3", None).unwrap();
+    let c = count(&st);
+    assert_eq!((c.legacy, c.chained, c.broken), (2, 1, 0), "forward once: {c:?}");
+    let r4 = legacy(&mut owner, b"old-4");
+    Doc::commit_bytes(&mut st, &r4, &owner.s, 4, None).unwrap();
+    let c = count(&st);
+    assert_eq!((c.legacy, c.chained, c.broken), (2, 1, 1), "and never back: {c:?}");
 }

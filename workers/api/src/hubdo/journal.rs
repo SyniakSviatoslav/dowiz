@@ -159,6 +159,7 @@ impl HubImages {
                 }
             },
         };
+        self.arm_scheme(&mut log);
         let out = match edits::journal(&mut log, &before, &after, at, by, gens) {
             Ok(j) if j.edits + j.unseen + j.baseline == 0 && !j.compacted => None,
             Ok(j) => {

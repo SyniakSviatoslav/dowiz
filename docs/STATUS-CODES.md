@@ -55,6 +55,18 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 | 70 | `NOT_OPEN` | a call with no image open | bebop-wasm-reader ABI, never a read |
 | 71 | `NOT_FOUND` | the key is not in the image | bebop-wasm-reader ABI, never a read |
 | 73 | `OUT_OF_RANGE` | a log index past its length | bebop-wasm-reader ABI, never a read |
+| 74 | `NOT_A_DOC` | `bw_counts` against a KV or a log (W-MG-M5) | bebop-wasm-reader ABI, never a read |
+| 75 | `CUT_UNDECLARED` | a DOC's log segment (a SEG under the root: records that left the file) is named by no TRUNCATE record on the kept chain -- the file is whole, the cut is undeclared (W-MG-M3 rule, FORMAT §9.4; `bw_verify(1)` / `bw_counts` and bebop-verify.py `verify status=75`). | bebop-wasm-reader, bebop-verify.py, bebop-io `docverify`, C ABI |
+
+**DOC (W-MG-M5, FORMAT §9.4-9.5).** The five conformance readers keep answering 12 on `doc.store` (they
+refuse by name, as §2 row 12 says). The two ONE-FILE readers of `tools/verify` -- `bebop-verify.mjs`
+(bebop-wasm-reader, `bw_kind` = 5) and `bebop-verify.py` (stdlib) -- READ it and print
+`doc status=0 n=<records> root=<the LOG fold>` plus a `verify` line of twelve counters; `tools/verify/gate.sh`
+holds both to each other and to `doc.expected`'s `doc_n` / `doc_root` / `doc_verify`. Their `checked=0` is
+not a defect to fix: neither carries a signature algorithm, so `seals` is a COUNT and the readers say so.
+W-MG-M5b: the `verify` line has sixteen counters (`segments cut cut_redacted declared` appended); with no
+signature a TRUNCATE or FORGOTTEN counts on its chain alone (`Verifier::checks_signatures` false), a segment no
+TRUNCATE names is 75, and a time anchor is printed as PRESENT (`anchor kind= over= time_ms= proof_len=`), never verified.
 
 ## 3. Mappings that are not already this number
 

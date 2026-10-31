@@ -47,7 +47,8 @@ ln -s admin/app.js "$T/repo/workers/api/public/link.js"
 g add -A; g commit -m one
 SHA=$(git -C "$T/repo" rev-parse HEAD)
 
-export ROLLBACK_PIN_MARK="$T/kv-pinned-none" PATH="$T/bin:$PATH" STUB_CALLS="$T/calls" DEPLOY_REPO="$T/repo" DEPLOY_WORK="$T/work" \
+export ROLLBACK_PIN_MARK="$T/kv-pinned-none" ROLLBACK_FLOOR_MARK="$T/sha256-floor" ROLLBACK_FLIP_MARK="$T/sha256-flipped" \
+  DEPLOY_VERSIONS="$T/versions.log" PATH="$T/bin:$PATH" STUB_CALLS="$T/calls" DEPLOY_REPO="$T/repo" DEPLOY_WORK="$T/work" \
   DEPLOY_SLOT="$T/bin/slot" DEPLOY_WRANGLER=wrangler DEPLOY_TOKEN_FILE="$T/token" DEPLOY_CARGO="$T/bin/cargo" \
   DEPLOY_VERIFY="$T/bin/verify" DEPLOY_PROBE="$T/bin/probe" DEPLOY_HOST=https://qa-stub.invalid FLOWS_SETTLE_S=0
 run() { : > "$T/calls"; bash "$HERE/deploy.sh" "$@" > "$T/out" 2>&1; RC=$?; }
@@ -118,6 +119,24 @@ run
 [ $RC = 0 ] && [ "$(date -r "$F" +%Y)" = 2020 ] && [ ! -e "$T/work/src/workers/api/public/stale.js" ] \
   && grep -q 'core = 2' "$T/work/src/workers/api/public/admin/core.js" && grep -q 'i18n = 1' "$T/work/src/workers/api/public/admin/i18n.js" \
   && has 'wrote 1, removed 1 extra, repaired 1' && ok "sync rewrites only the changed file, deletes extras, repairs tampering" || no "sync"
+
+# ── the sha256 floor (W-MG-MIG): versions recorded; the first wrangler.toml declaring SHA256_VENUES is the floor;
+#    a non-empty value is a one-way flip; a dry run records nothing ──
+rm -f "$T/versions.log" "$T/sha256-floor" "$T/sha256-flipped"; SHA=$(git -C "$T/repo" rev-parse HEAD)
+run; [ $RC = 0 ] && [ "$(grep -c " $SHA 4e400000-0000-4000-8000-000000000000 sha256_venues=$" "$T/versions.log")" = 1 ] \
+  && [ ! -e "$T/sha256-floor" ] && [ ! -e "$T/sha256-flipped" ] \
+  && ok "a commit without SHA256_VENUES: version recorded, no floor, no flip" || no "versions.log before the var"
+printf '[vars]\nSHA256_VENUES = ""\n' > "$T/repo/workers/api/wrangler.toml"; g add -A; g commit -m expand; SHA=$(git -C "$T/repo" rev-parse HEAD)
+run; [ $RC = 0 ] && has 'sha256 floor: 4e400000-0000-4000-8000-000000000000' && [ "$(cut -d' ' -f1 "$T/sha256-floor")" = 4e400000-0000-4000-8000-000000000000 ] \
+  && [ ! -e "$T/sha256-flipped" ] && [ "$(wc -l < "$T/versions.log")" = 2 ] \
+  && ok "the expand release (SHA256_VENUES = \"\"): floor written, no flip, nothing flipped" || no "floor on expand"
+printf '[vars]\nSHA256_VENUES = "qa-durres"\n' > "$T/repo/workers/api/wrangler.toml"; g commit -am flip; SHA=$(git -C "$T/repo" rev-parse HEAD)
+run; [ $RC = 0 ] && has 'sha256 FLIP: SHA256_VENUES="qa-durres"' && grep -q '^qa-durres flipped at' "$T/sha256-flipped" \
+  && [ "$(cut -d' ' -f1 "$T/sha256-floor")" = 4e400000-0000-4000-8000-000000000000 ] && grep -q "sha256_venues=qa-durres$" "$T/versions.log" \
+  && ok "a flip (SHA256_VENUES = \"qa-durres\"): flip mark written, floor unchanged, value recorded" || no "flip mark"
+printf '[vars]\nSHA256_VENUES = ""\n' > "$T/repo/workers/api/wrangler.toml"; g commit -am unflip; SHA=$(git -C "$T/repo" rev-parse HEAD)
+run; [ $RC = 0 ] && grep -q '^qa-durres flipped at' "$T/sha256-flipped" && ok "an un-flip deploy leaves the flip mark: one-way" || no "flip is one-way"
+run --dry-run; [ $RC = 0 ] && [ "$(wc -l < "$T/versions.log")" = 4 ] && ok "a dry run records no version" || no "dry run records nothing"
 
 # ── dry run: builds and checks the wasm, never reads the token, never asks for the previous version ──
 run --dry-run; [ $RC = 0 ] && has 'DRY-RUN OK' && [ "$(cat "$T/calls")" = "deploy --dry-run --outdir $T/work/dry token=" ] && ok "--dry-run: one no-upload build, no token" || no "dry run"

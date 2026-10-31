@@ -119,13 +119,30 @@ impl StockLog {
         self.entropy.set(seed);
     }
 
+    /// THE SCHEME SWITCH (W-MG-MIG): legacy or sha256 records from now on, one-way per log.
+    /// See `Hub::set_sha256`. A record ADOPTED with a nonce (`write_payload`) keeps its own
+    /// scheme whatever this says: its id is the tablet's, and the bytes decide.
+    pub fn set_sha256(&mut self, on: bool) {
+        self.entropy.set_sha256(on);
+    }
+
+    /// The scheme the next new record is written under (`set_sha256`, or the log's own once flipped).
+    pub fn writes_sha256(&self) -> bool {
+        self.entropy.writes_sha256(&self.store)
+    }
+
     /// A NEW record: `rec` is the JSON object, and this puts the nonce in front of it
-    /// before `write_payload` chains it. Every door that makes a record goes through here;
-    /// the doors that copy one (`adopt.rs`) go to `write_payload` with the bytes they have.
+    /// before `write_payload` chains it -- while the log is on sha256; a log not yet flipped
+    /// writes the bare object, which `write_bytes` chains under the legacy FNV id, byte for
+    /// byte as ac5ff0c4 does. Every door that makes a record goes through here; the doors
+    /// that copy one (`adopt.rs`) go to `write_payload` with the bytes they have.
     pub(super) fn write_new(&mut self, rec: String) -> Result<(), StockError> {
         if EvLog::version(&self.store) < 2 {
             // A v1 store has no flags cell: rebuilt as v2 first, the chain copied verbatim.
             self.grow().map_err(|_| StockError::Malformed)?;
+        }
+        if !self.entropy.writes_sha256(&self.store) {
+            return self.write_bytes(rec.into_bytes(), false);
         }
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
         let (nonce, derived) = self.entropy.nonce(&prev, rec.as_bytes());

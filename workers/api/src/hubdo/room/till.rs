@@ -29,11 +29,12 @@ impl HubImages {
                 meta.generation,
                 self.load_entries(IMAGE_TILL, meta.generation, &bytes).map_err(|_| Error::RustError("till image is unreadable".into()))?,
             ),
-            None => (
-                0,
-                LogImage::create_sized(dowiz_hub::logimage::DEFAULT_LOG_BYTES)
-                    .map_err(|_| Error::RustError("cannot create till image".into()))?,
-            ),
+            None => {
+                let mut log = LogImage::create_sized(dowiz_hub::logimage::DEFAULT_LOG_BYTES)
+                    .map_err(|_| Error::RustError("cannot create till image".into()))?;
+                self.arm_scheme(&mut log); // the loaded arm goes through `load_entries`
+                (0, log)
+            }
         };
         Ok(match till::periods(&log.entries()) {
             Ok(p) => Ok((gen, log, p)),

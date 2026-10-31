@@ -15,7 +15,7 @@
 #   * THE ORDER LOG (W-P0-LOG, R-BINREC P0, 2026-10-29) -- before this an order-log payload could
 #     change shape and pass unnoticed. Its formats, each read from the code that writes it:
 #       log.kinds  the kind byte of every `EventKind` (event.rs `from_byte`) and forget's REDACTED_BIT;
-#       log.frame  what `Hub::append` pushes, in order (log.rs: `nonce ‖ [kind][id_len][id][json]`);
+#       log.frame  what `Hub::append` pushes, in order (log.rs: `[kind][id_len][id][json]`, then `Entropy::stamp` frames it under the log's scheme);
 #       log.order  the kernel's order snapshot, the keys `order_to_value`/`item_to_value` write
 #                  (crates/dowiz-core/src/json_api.rs) -- the base envelope of Placed/Advanced;
 #       log.delta  the delta marks every order kind folds by (room/delta.rs DELTA_MARK, DELTA_DROP);
@@ -120,8 +120,8 @@ table = re.findall(r'(\d+)\s*=>\s*Some\(EventKind::(\w+)\)', ev)
 bit = re.search(r'REDACTED_BIT\s*:\s*u8\s*=\s*(\w+)', read('crates/dowiz-hub/src/forget.rs'))
 found['log.kinds'] = ','.join(f'{b}={k}' for b, k in table) + ';redacted=' + (bit.group(1) if bit else '?')
 lg = read('crates/dowiz-hub/src/log.rs')
-a = lg.find('pub fn append('); b = lg.find('chain_id(', a)
-found['log.frame'] = '|'.join((['with_nonce'] if 'with_nonce(' in lg[a:b] else []) + [re.sub(r'\s+', '', x) for x in re.findall(r'(?:payload|body)\.(?:push|extend_from_slice)\((.*?)\);', lg[a:b])])
+a = lg.find('pub fn append('); b = lg.find('.stamp(', a)
+found['log.frame'] = '|'.join((['stamp'] if b > 0 else []) + [re.sub(r'\s+', '', x) for x in re.findall(r'(?:payload|body)\.(?:push|extend_from_slice)\((.*?)\);', lg[a:b])])
 ja = read('crates/dowiz-core/src/json_api.rs')
 part = lambda f: ','.join(re.findall(r'String::from\("(\w+)"\)', ja[ja.find('fn ' + f):ja.find('\n}', ja.find('fn ' + f))]))
 found['log.order'] = part('order_to_value').replace('items', 'items[' + part('item_to_value') + ']')

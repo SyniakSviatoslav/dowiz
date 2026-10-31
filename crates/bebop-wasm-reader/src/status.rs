@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! The status vocabulary in words: docs/STATUS-CODES.md §2 for the codes a read can give, plus
-//! the three this ABI adds for a call made against an open image (70, 71, 73: above the C ABI's
-//! 40-60 range, so no number of that table is reused). `bw_status_text` hands a
-//! host the line for a code so a person sees "BAD_CRC: an object the read reached fails its
-//! crc" and not `10`.
+//! the five this ABI adds for a call made against an open image (70, 71, 73, 74, 75: above the C
+//! ABI's 40-60 range, so no number of that table is reused). `bw_status_text` hands a host the
+//! line for a code so a person sees "BAD_CRC: an object the read reached fails its crc" and not
+//! `10`; `UNCHECKED` is the line a host prints beside a DOC's seal count (W-MG-M5, §5.3).
 
 /// The codes a read of an image can give (STATUS-CODES §2, the reader rows).
 pub const OK: i32 = 0;
@@ -22,22 +22,32 @@ pub const NOT_FOUND: i32 = 71;
 /// `bw_log_at`: the index is past the last record. (72 is left free: a buffer too small is
 /// answered with the length needed, not a status -- abi.rs.)
 pub const OUT_OF_RANGE: i32 = 73;
+/// `bw_counts`: the open image is a KV or a log, not a DOC.
+pub const NOT_A_DOC: i32 = 74;
+/// `doc::verify` (W-MG-M3's rule): a log segment left the file and no TRUNCATE record names it.
+pub const CUT_UNDECLARED: i32 = 75;
+
+/// What a DOC's seal count means from THIS reader -- not a status, the sentence a host prints
+/// when `bw_counts` says `checked = 0` (which it always does here: `ids::NoVerifier`).
+pub const UNCHECKED: &str = "seals COUNTED, not CHECKED: this reader carries no signature algorithm (MIT, no ML-DSA); a count is not a proof -- bring a verifier to the same seam, or the format text's independent readers";
 
 /// Every code this crate can give, in order, with its name and meaning. `tests/conformance.rs`
 /// holds this table total over `Refusal` and over every `abi` return.
 pub const TABLE: &[(i32, &str)] = &[
-    (OK, "OK: read; n = entries or records, root = the FNV-1a 64 fold"),
+    (OK, "OK: read; n = entries or records, root = the FNV-1a 64 fold (a DOC's root is its log's fold)"),
     (NO_SUPERBLOCK, "NO_SUPERBLOCK: no valid superblock, or the live one was refused structurally (arena_used or PartTab outside, PartTab misplaced or its crc bad, root outside)"),
-    (NOT_A_KV, "NOT_A_KV: a superblock but no KV root, or a KV claim (a slice, a chain, a v4 rule) that does not hold"),
-    (NOT_A_LOG, "NOT_A_LOG: asked for the log of an image whose root is not a log root"),
+    (NOT_A_KV, "NOT_A_KV: a superblock but no KV root, or a KV claim (a slice, a chain, a v4 rule) that does not hold, or a DOC whose SPEC or v1-v3 TREE this reader does not read"),
+    (NOT_A_LOG, "NOT_A_LOG: asked for the log of an image whose root is not a log or DOC root"),
     (TRUNCATED, "TRUNCATED: the log's root claims more records than its chain delivers, or the chain never ends"),
     (NULL_ARG, "NULL_ARG: a null pointer at the ABI"),
-    (BAD_CRC, "BAD_CRC: an object the read reached fails its crc (root, an array, a delta record, a node, a value, a log record, an object of a torn last commit)"),
-    (UNKNOWN_VERSION, "UNKNOWN_VERSION: the KV root names a version above 4"),
+    (BAD_CRC, "BAD_CRC: an object the read reached fails its crc (root, an array, a delta record, a node, a value, a log record, HEADS, KEYS, SPEC, an object of a torn last commit)"),
+    (UNKNOWN_VERSION, "UNKNOWN_VERSION: the KV root names a version above 4 and is not a DOC (root-version 5 in both version cells)"),
     (LAST_COMMIT, "LAST_COMMIT: the last commit's range does not hash to its anchor and every object in it checks (a re-sealed object, a changed header); never fallen back past"),
     (NOT_OPEN, "NOT_OPEN: no image is open (bw_open was not called, or refused)"),
     (NOT_FOUND, "NOT_FOUND: no entry under that key"),
     (OUT_OF_RANGE, "OUT_OF_RANGE: the index is past the last record"),
+    (NOT_A_DOC, "NOT_A_DOC: a DOC call (bw_counts) against a KV or a log"),
+    (CUT_UNDECLARED, "CUT_UNDECLARED: a log segment left this file (a SEG under the DOC) and no TRUNCATE record on the kept chain names it by root and range -- records were dropped without the cut being declared"),
 ];
 
 /// The line for `code`, or `None` for a number this crate never gives.

@@ -126,6 +126,7 @@ impl HubImages {
             Some((m, b)) => (m.generation, dowiz_hub::logimage::LogImage::load(&b).map_err(|_| unreadable(consent_img))?),
             None => (0, dowiz_hub::logimage::LogImage::create_sized(64 * 1024).map_err(|_| unreadable(consent_img))?),
         };
+        self.arm_scheme(&mut consent);
         let mut forgot = dowiz_hub::consent::forget::Forgot::default();
         for k in &circle {
             let f = dowiz_hub::consent::forget::forget(&mut consent, k, input.now_ms)
@@ -199,7 +200,8 @@ impl HubImages {
         let (mut pairs, mut gens) = (Vec::new(), Vec::new());
         for id in wanted.into_iter().filter(|id| crate::hubstore::is_archive_id(id)) {
             let Some((meta, bytes)) = self.image(&id).await? else { continue };
-            let hub = dowiz_hub::Hub::load(&bytes).map_err(|_| unreadable(&id))?;
+            let mut hub = dowiz_hub::Hub::load(&bytes).map_err(|_| unreadable(&id))?;
+            self.arm_scheme(&mut hub);
             gens.push(meta.generation);
             pairs.push((id, hub));
         }

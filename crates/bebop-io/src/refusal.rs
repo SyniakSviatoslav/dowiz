@@ -40,6 +40,9 @@ pub enum Refusal {
     NotTree(i64),
     /// A cell the write path was about to trust disagrees with the image (`StoreError::Corrupt`).
     Corrupt(&'static str),
+    /// A log segment left the file and no TRUNCATE record names it: the file is whole, the
+    /// cut is undeclared (status 75, FORMAT §9.4).
+    CutUndeclared { root: [u8; 32] },
     // ── limits ──
     KeyTooLong { len: usize, max: usize },
     ValueTooLong { len: usize, max: usize },

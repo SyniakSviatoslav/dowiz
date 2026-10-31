@@ -92,7 +92,9 @@ pub async fn record(ns: &ObjectNamespace, venue: Option<&str>, place: &str, mess
     };
     let image = image_of(venue);
     let subject = place.to_string();
+    let scheme_of = venue.unwrap_or(crate::scheme::PLATFORM).to_string();
     if let Err(e) = crate::platform_store::with_log_at(&stub, image, move |log| {
+        crate::scheme::arm(log, &scheme_of);
         log.append(KIND, &subject, &rec)
             .map_err(|x| Error::RustError(format!("{x:?}")))?;
         // PRUNED ON WRITE, not only nightly. The nightly job is what keeps the
@@ -167,7 +169,9 @@ pub async fn recent(ns: &ObjectNamespace, venue: Option<&str>, limit: usize) -> 
 /// did -- see `image_of`, and why guessing it twice was the defect.
 pub async fn prune_at(stub: &Stub, venue: Option<&str>, now_ms: i64) -> Result<usize> {
     let before = now_ms - KEEP_MS;
+    let scheme_of = venue.unwrap_or(crate::scheme::PLATFORM).to_string();
     crate::platform_store::with_log_at(stub, image_of(venue), move |log| {
+        crate::scheme::arm(log, &scheme_of);
         let keep: usize = log
             .about(KIND, None, usize::MAX)
             .into_iter()

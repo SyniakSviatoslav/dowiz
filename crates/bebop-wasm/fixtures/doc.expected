@@ -12,3 +12,15 @@
 #   ffi      : bebop-io Refusal::UnknownVersion(5) -> UNKNOWN_VERSION
 status=12
 bebop_rc=78
+# W-MG-M5 (2026-10-31): the two ONE-FILE readers of tools/verify (bebop-verify.mjs = bebop-wasm-reader,
+# bebop-verify.py = stdlib) READ a DOC. Its line is `doc status=0 n=<records> root=<the LOG fold over the
+# three records>`; `doc_verify` is their counter line. The three records carry TOY ids (bebop-log's test
+# mix, not sha256), so a reader that knows dowiz-hub's schemes counts them `broken` -- the honest answer
+# about this file -- and the toy seals are COUNTED (3), never checked (`checked=0`: no ML-DSA in MIT).
+# tools/verify/gate.sh holds node and python to these three lines; crates/bebop-wasm-reader/tests/doc.rs
+# holds the Rust side to doc_root. python first wrote them (2026-10-31); the wasm must agree or the gate is red.
+# W-MG-M5b: the fixture was REWRITTEN with the merged layout (DIGEST_DOC 2619226223, cell 9 = ref SEG); the fold is
+# over the records and did not move; the four M3/M4 counters are appended (a working image: all 0).
+doc_n=3
+doc_root=-5898116667070633908
+doc_verify=records=3 chained=0 legacy=0 redacted=0 broken=3 forks=0 seals=3 checked=0 heads=1 keys=1 admitted=1 segments=0 cut=0 cut_redacted=0 declared=0

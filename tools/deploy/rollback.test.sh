@@ -34,7 +34,8 @@ printf 'export ADMIN_EMAIL=admin@x.test\nexport ADMIN_PASSWORD=pw-secret-31z\n' 
 
 export STUB_CALLS="$T/calls" ROLLBACK_REPO="$T/repo" ROLLBACK_CURL="$T/bin/curl" ROLLBACK_WRANGLER="$T/bin/wrangler" \
   ROLLBACK_TOKEN_FILE="$T/token" ROLLBACK_ADMIN_FILE="$T/admin" ROLLBACK_PLATFORM=https://platform.invalid \
-  ROLLBACK_PIN_MARK="$T/kv-pinned"
+  ROLLBACK_PIN_MARK="$T/kv-pinned" ROLLBACK_FLIP_MARK="$T/sha256-flipped" ROLLBACK_FLOOR_MARK="$T/sha256-floor" \
+  DEPLOY_VERSIONS="$T/versions.log"
 run() { : > "$T/calls"; bash "$HERE/rollback.sh" "$@" > "$T/out" 2>&1; RC=$?; }
 has() { grep -q -- "$1" "$T/out"; }
 switched() { grep -c '^wrangler rollback' "$T/calls"; }
@@ -69,6 +70,25 @@ run 0ld0; [ $RC = 0 ] && [ -s "$T/kv-pinned" ] && ok "a compacting rollback writ
 # ── unpin: the lift, and nothing else ──
 run --unpin; [ $RC = 0 ] && grep -q 'compact?pin=0 auth=tok-admin' "$T/calls" && [ "$(switched)" = 0 ] && [ ! -e "$T/kv-pinned" ] \
   && ok "--unpin: POST compact?pin=0, no switch (0), pin mark removed" || no "unpin"
+
+# ── the sha256 floor (W-MG-MIG): once a venue writes sha256 ids, a target that cannot read them is refused ──
+# deploy.sh's records: the floor is the first build that reads sha256 (f100), then a flip (f200), then one more (f300).
+printf '2026-11-01T00:00:00Z sha0 0ld00000-0000 sha256_venues=\n2026-11-02T00:00:00Z sha1 f100 sha256_venues=\n2026-11-03T00:00:00Z sha2 f200 sha256_venues=qa-durres\n2026-11-04T00:00:00Z sha3 f300 sha256_venues=*\n' > "$T/versions.log"
+echo "f100 2026-11-02T00:00:00Z sha1" > "$T/sha256-floor"
+rm -f "$T/sha256-flipped"
+run 0ld00000-0000; [ $RC = 0 ] && [ "$(switched)" = 1 ] && ! has 'sha256 floor' \
+  && ok "no venue flipped: the floor does not apply, an old target switches (0)" || no "floor off before a flip"
+echo "qa-durres flipped at 2026-11-03T00:00:00Z by f200 (sha2)" > "$T/sha256-flipped"
+run 0ld00000-0000; [ $RC = 53 ] && has 'FAIL floor' && has 'QUARANTINE every order' && [ ! -s "$T/calls" ] \
+  && ok "flipped + target before the floor: refused (53) before compact or switch, says what it would do" || no "floor refusal"
+run unknown-0000; [ $RC = 53 ] && [ ! -s "$T/calls" ] && ok "flipped + a target deploy.sh never recorded: refused (53)" || no "floor unknown target"
+run f100; [ $RC = 0 ] && [ "$(switched)" = 1 ] && has 'f100 reads sha256 records' && ok "twin: the floor itself switches (0)" || no "floor target ok"
+run f300 m; [ $RC = 0 ] && [ "$(switched)" = 1 ] && ok "twin: a version after the floor switches (0)" || no "post-floor target ok"
+ROLLBACK_PAST_FLOOR=1 run 0ld00000-0000; [ $RC = 0 ] && has 'PAST THE FLOOR by ROLLBACK_PAST_FLOOR=1' && [ "$(switched)" = 1 ] \
+  && ok "ROLLBACK_PAST_FLOOR=1: switches anyway (0) and names the consequence" || no "past floor override"
+mv "$T/sha256-floor" "$T/floor.away"; run f300; [ $RC = 53 ] && ok "flipped but no floor record: refused (53), the target cannot be proved to read sha256" || no "no floor mark"
+mv "$T/floor.away" "$T/sha256-floor"
+run --unpin; [ $RC = 0 ] && ok "--unpin is not a rollback: the floor is not asked (0)" || no "unpin under flip"
 
 echo "rollback.test: $pass passed, $bad failed"
 [ $bad = 0 ]

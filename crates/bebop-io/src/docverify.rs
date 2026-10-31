@@ -24,7 +24,11 @@ fn refusal(e: DocError) -> Refusal {
         DocError::Store(s) => Refusal::from(s),
         DocError::NotDoc => Refusal::Corrupt("the root is not a DOC root"),
         DocError::Corrupt(w) => Refusal::Corrupt(w),
-        DocError::Actor | DocError::UnknownActor(_) | DocError::Revoked { .. } | DocError::Seq { .. } => Refusal::Corrupt("not a verify refusal"),
+        // W-MG-M3: a sealed segment left the file and no signed TRUNCATE names its root.
+        DocError::CutUndeclared { root } => Refusal::CutUndeclared { root },
+        DocError::Actor | DocError::UnknownActor(_) | DocError::Revoked { .. } | DocError::Seq { .. } | DocError::NothingToCut | DocError::CutsAdmit(_) | DocError::NoTree | DocError::Carries(_) => {
+            Refusal::Corrupt("not a verify refusal")
+        }
     }
 }
 

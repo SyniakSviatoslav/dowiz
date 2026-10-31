@@ -49,6 +49,7 @@ mod courier;
 mod hubdo;
 mod command;
 mod hubstore;
+mod scheme; // W-MG-MIG: which venues write sha256 records (`SHA256_VENUES`), armed on every log load
 mod otel;
 mod outbox;
 mod print_rail;
@@ -138,6 +139,9 @@ pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
     // One span per request, continuing an incoming W3C traceparent if there is
     // one. The export happens in waitUntil AFTER the response is returned, so
     // tracing costs the customer nothing in latency.
+    // THE ID-SCHEME SWITCH (W-MG-MIG): which venues write sha256 records. Installed before
+    // any log is loaded; the Durable Object installs it for itself in `HubImages::new`.
+    scheme::install(env.var(scheme::VAR).ok().map(|v| v.to_string()));
     let method = req.method().to_string();
     let path = req.path();
     let mut trace = otel::Trace::begin(req.headers().get("traceparent").ok().flatten().as_deref(), &format!("{method} {path}"));

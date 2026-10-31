@@ -34,8 +34,8 @@
 //! to guess where one ends — the order log's own `[kind][id_len][id][json]`,
 //! generalised.
 
-use crate::chain::{flags_for, with_nonce, Entropy};
-use crate::{body_of, chain_id, ChainCheck, HubError};
+use crate::chain::Entropy;
+use crate::{body_of, ChainCheck, HubError};
 use bebop_store::evlog::{EvLog, Record};
 use bebop_store::Store;
 
@@ -152,6 +152,17 @@ impl LogImage {
         self.entropy.set(seed);
     }
 
+    /// THE SCHEME SWITCH (W-MG-MIG): legacy or sha256 records from now on, one-way per log.
+    /// See `Hub::set_sha256`.
+    pub fn set_sha256(&mut self, on: bool) {
+        self.entropy.set_sha256(on);
+    }
+
+    /// The scheme the next record is written under: what a rebuild of this log copies.
+    pub fn writes_sha256(&self) -> bool {
+        self.entropy.writes_sha256(&self.store)
+    }
+
     /// Append one record. The id commits to the record before it.
     pub fn append(&mut self, kind: &str, subject: &str, json: &str) -> Result<(), HubError> {
         let body = encode(kind, subject, json)?;
@@ -160,11 +171,10 @@ impl LogImage {
             self.grow()?;
         }
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
-        let (nonce, derived) = self.entropy.nonce(&prev, &body);
-        let payload = with_nonce(&nonce, &body);
-        let id = chain_id(&prev, &payload);
+        let sha = self.entropy.writes_sha256(&self.store);
+        let (payload, id, flags) = self.entropy.stamp(sha, &prev, body);
         let seq = EvLog::len(&self.store) as u64;
-        let rec = Record { id, prev, actor_pubkey: [0u8; 32], actor_seq: seq, flags: flags_for(derived), payload };
+        let rec = Record { id, prev, actor_pubkey: [0u8; 32], actor_seq: seq, flags, payload };
         match EvLog::append_tip_bytes(&mut self.store, &rec) {
             Ok(_) => Ok(()),
             Err(e) if crate::e_is_full(&e) => {
@@ -235,15 +245,14 @@ impl LogImage {
         keep.reverse();
         let mut fresh = Store::create_bytes(self.store.to_bytes().len().max(MIN_LOG_BYTES))?;
         EvLog::init_bytes(&mut fresh)?;
+        // Re-sealed under the scheme this log is on (W-MG-MIG): a kept legacy log stays legacy.
+        let sha = self.entropy.writes_sha256(&self.store);
         let mut prev = [0u8; 32];
         let mut last = None;
         for (i, e) in keep.iter().enumerate() {
             let body = encode(&e.kind, &e.subject, &e.json)?;
-            let (nonce, derived) = self.entropy.nonce(&prev, &body);
-            let payload = with_nonce(&nonce, &body);
-            let id = chain_id(&prev, &payload);
-            let rec =
-                Record { id, prev, actor_pubkey: [0u8; 32], actor_seq: i as u64, flags: flags_for(derived), payload };
+            let (payload, id, flags) = self.entropy.stamp(sha, &prev, body);
+            let rec = Record { id, prev, actor_pubkey: [0u8; 32], actor_seq: i as u64, flags, payload };
             EvLog::append_bytes(&mut fresh, &rec)?;
             prev = id;
             last = Some(id);

@@ -95,6 +95,8 @@ pub fn rebuilt(log: &dowiz_hub::logimage::LogImage, keep: impl Fn(&dowiz_hub::lo
         return Ok((None, 0));
     }
     let mut out = dowiz_hub::logimage::LogImage::create_sized(log.to_bytes().len()).map_err(|e| format!("{e:?}"))?;
+    // The rebuild keeps the source's id scheme (W-MG-MIG): a legacy log pruned stays legacy.
+    out.set_sha256(log.writes_sha256());
     for e in kept.into_iter().rev() {
         out.append(&e.kind, &e.subject, &e.json).map_err(|e| format!("{e:?}"))?;
     }

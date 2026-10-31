@@ -61,6 +61,7 @@ impl HubImages {
     pub(in crate::hubdo) async fn night_stock_checkpoint(&self) -> Result<bool> {
         let Some((meta, bytes)) = self.image(crate::hubstore::IMAGE_STOCK).await? else { return Ok(false) };
         let mut log = dowiz_hub::stock::StockLog::load(&bytes).map_err(|_| Error::RustError("stock image is unreadable".into()))?;
+        self.arm_scheme(&mut log); // the checkpoint is a record (W-MG-MIG)
         if !log.checkpoint_if_due().map_err(|e| Error::RustError(e.to_string()))? {
             return Ok(false);
         }

@@ -153,11 +153,12 @@ fn the_status_table_is_total_over_refusal() {
         Refusal::BadCrc { obj: 1024 },
         Refusal::UnknownVersion,
         Refusal::LastCommit,
+        Refusal::CutUndeclared,
     ];
     for r in all {
         assert!(status::text(status_of(&r)).is_some(), "{r:?} has no line");
     }
-    for c in [status::NULL_ARG, status::NOT_OPEN, status::NOT_FOUND, status::OUT_OF_RANGE] {
+    for c in [status::NULL_ARG, status::NOT_OPEN, status::NOT_FOUND, status::OUT_OF_RANGE, status::NOT_A_DOC] {
         assert!(status::text(c).is_some(), "{c} has no line");
     }
 }

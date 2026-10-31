@@ -335,10 +335,13 @@ payload починається з nonce 16 байт (base64url); біт2 = nonce
 відмовляє за іменем через `EvLog::unknown_version` (`MAX_VERSION` = 2).
 
 ```
-DOC   10 комірок, дайджест st_digest("DOC{i64,ref EVLOG,ref KV,ref HEADS,ref KEYS,i64,ref SPEC,i64,ref ANCH,i64}") = 3669646107
+DOC   10 комірок, дайджест st_digest("DOC{i64,ref EVLOG,ref KV,ref HEADS,ref KEYS,i64,ref SPEC,i64,ref ANCH,ref SEG}") = 2619226223
+      (W-MG-M3, 2026-10-30 ввечері: комірка 9 була «reserved 0», дайджест 3669646107; жодного образу DOC
+      до цього не існувало, читачі відмовляють DOC за комірками версії, які не рухались)
       0 FLAGS (біт0 id = sha256 [M0], біт1 дерево = fold(журнал), біт2 самоописний [M5])
       1 ref LOG (корінь EvLog v2, 0 = нема)   2 ref TREE (корінь KV v3/v4, 0 = нема)
-      3 ref HEADS   4 ref KEYS   5 VERSION = 5   6 ref SPEC (M5, 0)   7 VERSION = 5   8 ref ANCH (M6, 0)   9 = 0
+      3 ref HEADS   4 ref KEYS   5 VERSION = 5   6 ref SPEC (M5, 0)   7 VERSION = 5   8 ref ANCH (M6, 0)
+      9 ref SEG (найновіший сегмент журналу, 0 = журнал ніколи не різали)
 SEAL  {VERSION=1, actor_id 4, seq, tip 4, claimed_ms, ref PREV_SEAL, ref TIME (0), alg, sig_len, sig 8 Б/комірку}
       15 + ceil(sig_len/8) комірок (ML-DSA-65: 429); дайджест 1951851249. Одна на коміт пристрою.
       Підписане повідомлення: "bebop-seal/1" ‖ actor_id ‖ seq LE8 ‖ tip ‖ claimed_ms LE8 ‖ prev_tip (tip попередньої
@@ -348,13 +351,52 @@ KEY   {actor_id 4, alg, valid_from, revoked_at, ref ADMIT_REC, pk_len, pk 8 Б/�
       (ML-DSA-65: 253); дайджест 2540354000. revoked_at = 0: не відкликано; k: печатки з seq > k невалідні.
       ADMIT_REC = 0: ключ генезису (`Doc::init_bytes`).
 KEYS  {m, (actor_id 4, ref KEY) × m}  за зростанням; 1 + 5m; дайджест 1448248784
+SEG   {VERSION=1, first, last, root 4, ref PREV_SEG, ref BLOB (0), redacted, declared, m, (actor_id 4, seq, tip 4, scheme) × m}
+      12 + 10m; дайджест st_digest("SEG{i64,i64,i64,i64,i64,i64,i64,ref SEG,ref BLOB,i64,i64,i64,[i64,i64,i64,i64,i64,i64,i64,i64,i64,i64]}")
+      = 2192499951 (`bebop-log/src/doc/seg.rs`, W-MG-M3b 2026-10-31; рядок із 9 комірок без `scheme` мав дайджест
+      3288852188 — жодного образу з SEG у продакшні не було, тож розкладка рухалась без версії). `scheme` — правило M0
+      «схема id рухається вперед один раз» через зріз: 1, якщо до зрізу пристрій уже мав ЗЧЕПЛЕНИЙ (sha256) запис,
+      0 — поки всі його записи були legacy; `verify` починає `moved` пристрою з цієї комірки, тож legacy-id одразу
+      після зрізу зчеплених записів — `broken`, як і в нерозрізаному файлі. first/last — позиції вирізаних записів у ФАЙЛІ
+      від його першого запису; root — дерево RFC 9162 над їх id у порядку файлу (`Ids::tree_root`; dowiz-hub:
+      `bebop_store::merkle`, лист = sha256(0x00 ‖ id)); BLOB = 0 (записи живуть в архіві, який віддав зріз;
+      упакована копія — P15 S4); redacted/declared — надгробки й суми FORGOTTEN під зрізом (закон 9 через зріз);
+      рядки — фронтир на момент зрізу: (seq, tip) найновішого вирізаного запису кожного пристрою = prev_tip
+      його найстарішої залишеної печатки (печатка без `ref PREV_SEAL` читає prev_tip звідси).
 ```
 
 Тіла ключових операцій у payload запису (за фреймінгом власника — nonce M0, байт виду — їх знаходить
 `Ids::body`): `ADMIT = "bebop-admit/1" ‖ actor_id ‖ alg LE8 ‖ valid_from LE8 ‖ pk_len LE8 ‖ pk`,
-`REVOKE = "bebop-revoke/1" ‖ actor_id ‖ after_seq LE8`. Усі ref — назад: коміт алокує запис → KEY → KEYS →
-SEAL → HEADS → корінь журналу → DOC. `actor_pubkey` запису (4 комірки) = `actor_id` = sha256(pk) за
+`REVOKE = "bebop-revoke/1" ‖ actor_id ‖ after_seq LE8`,
+`TRUNCATE = "bebop-truncate/1" ‖ root ‖ prev_root ‖ first LE8 ‖ last LE8 ‖ redacted LE8 ‖ declared LE8` (W-MG-M3),
+`FORGOTTEN = "bebop-forgotten/1" ‖ n_redacted LE8 ‖ subject 32` (W-MG-M4). Усі ref — назад: коміт алокує запис →
+KEY → KEYS → SEAL → HEADS → корінь журналу → DOC. `actor_pubkey` запису (4 комірки) = `actor_id` = sha256(pk) за
 конвенцією dowiz-hub; сам pk лежить у KEY один раз.
+
+**Зріз (`doc/cut.rs`, W-MG-M3, §2b дослідження).** Контейнер не має компакції, тож зріз — перебудова у свіжий
+образ (`Doc::cut_into(old, fresh, keep, ids)`): найстаріші записи, крім `keep` найновіших, виходять під SEG,
+залишені записи переносяться дослівно (нові зміщення), печатки залишених записів — дослівно з перев'язаним
+`ref PREV_SEAL`, KEY — з перемапленим `ref ADMIT_REC`, старі SEG — ланцюгом. Старий образ — архів: його id
+перераховують root. Файл після зрізу — НЕОГОЛОШЕНИЙ, поки той, хто різав, не закомітить запис із тілом
+TRUNCATE через `Doc::commit_bytes` (печатка покриває його). ЯКОРІ (ANCH) переносяться всі (W-MG-M3b: файл,
+якого раз заякорили, лишається різальним — інакше «збережена історія» і «зовнішній час» виключали б одне одне);
+якір, чий `over` вийшов під сегмент, у `check_anchors` — `under_cut`: не `bad` (id міг бути в журналі), не `ok`
+(файл його показати не може), а `Unchecked` з назвою сегментів; доказ усе одно перевіряється (підробка — `bad`);
+розміщує його АРХІВ: `over` серед вирізаних id, чиє дерево — корінь сегмента. Лічильник якорів `cut` рахує такі.
+Відмови: `CutsAdmit` (зріз через ADMIT ключа, що
+ще в KEYS — доказ ключа і є той запис), `NothingToCut`, `NoTree` (`Ids` без дерева), `Carries("TREE"|"SPEC")`
+(їх переносить шар, що ними володіє: компакція дерева не торкається журналу, зріз журналу — дерева).
+Редагування на місці для DOC — `Doc::redact_into(old, fresh, redact)` (копія з заміненими payload, id/prev/печатки/
+якорі/сегменти дослівно; той, хто стирав, потім комітить підписаний FORGOTTEN).
+
+**`verify` — дванадцять лічильників**: вісім M1 + `segments / cut / cut_redacted / declared` (W-MG-M3/M4).
+Декларація (TRUNCATE, FORGOTTEN) ДІЄ, лише коли її запис зчеплений, актор допущений і його валідна печатка
+покриває seq (`doc/declare.rs`): FORGOTTEN відкликаного ключа не декларує нічого. Кожен SEG має бути названий
+дієвим TRUNCATE (усі шість полів) — інакше `verify` ВІДМОВЛЯЄ за іменем (`DocError::CutUndeclared{root}`);
+старіший SEG, чий TRUNCATE забрав пізніший зріз, названий через `prev_root` SEG над ним (не підписано:
+переписаний старий SEG ловить аудит архіву, що перераховує корені, а не `verify`). Найстаріший залишений
+запис пристрою продовжує його фронтир (seq + 1, `prev` = tip фронтиру), інакше `broken`. `holds` =
+broken 0, seals_bad 0, forks 0, seals_ok > 0 **і redacted + cut_redacted == declared** (закон 9).
 
 **`verify` (`doc/verify.rs`) — вісім лічильників** `records / chained / legacy / redacted / broken /
 seals_ok / seals_bad / forks`: запис, чий `prev` не називає попередній запис **свого пристрою** — `broken`;
@@ -367,6 +409,77 @@ seals_ok / seals_bad / forks`: запис, чий `prev` не називає п�
 
 Бібліотека MIT без коду підписів: `doc::Signer` / `doc::Verifier` / `doc::Ids` — шви; ML-DSA-65 живе
 в dowiz-core (AGPL) і лінкується лише в dev-тести `bebop-log` (`doc/dsa_tests.rs`) та в dowiz-hub.
+`Ids` отримує комірку `flags` запису разом із payload (W-MG-M1B): фреймінг M0 (nonce є рівно тоді,
+коли `FLAG_SHA256`) не вгадується. Усередині DOC `verify` застосовує правило M0: legacy-id, новіший за
+chained-запис того самого пристрою, — `broken`.
+
+**ANCH — якорі часу рівня 1 (W-MG-M1B, R-MAINGOAL-A §3, фаза M6; `bebop-log/src/doc/anch.rs`).**
+
+```
+ANCH  {VERSION=1, kind, over 4, time_ms, ref PREV_ANCH, proof_len, proof 8 Б/комірку}  9 + ceil(proof_len/8)
+      дайджест st_digest("ANCH{i64,i64,i64,i64,i64,i64,i64,ref ANCH,i64,[i64]}") = 180762881
+      DOC комірка 8 називає НАЙНОВІШИЙ; кожен називає попередній (0 для першого) — ланцюг, як у печаток.
+      over = id запису цього журналу (tip на момент якоря); якір, чий over не називає запис, — bad до адаптера.
+      time_ms = твердження письменника; доказ перевіряє адаптер. MAX_PROOF_BYTES = 1 MiB.
+      kind 1 платформна TSA-мітка: proof = pk(1952) ‖ sig(3309), ML-DSA-65 над
+             "bebop-anchor/1" ‖ kind LE8 ‖ over ‖ time_ms LE8; перевіряється проти ключів платформи,
+             які приносить АУДИТОР, ніколи з файлу.
+      kind 2 OpenTimestamps: proof = файл .ots, чий digest = over; перевірка = обчислення ops до
+             Bitcoin-атестації і порівняння з Merkle-коренем блоку з джерела заголовків аудитора.
+      kind 3 Roughtime: proof = nonce(64) ‖ відповідь; nonce = over ‖ sha256("bebop-roughtime/1" ‖ over).
+```
+
+Ядро (MIT) НЕ тлумачить proof: `doc::AnchorCheck` — шов, `doc::check_anchors` — crc ланцюга, `over` проти
+id журналу, потім адаптер; `Verdict::Ok {not_after_ms, not_before_ms, what} / Bad / Unchecked` — вид
+без адаптера, без ключа, ще pending у календаря, або з хешем, якого нема в збірці, — `Unchecked`
+з причиною, ніколи ok. Адаптери: dowiz-hub `doc_seal/{tsa,ots,roughtime}.rs`; живі виклики
+(календар OTS, UDP Roughtime) — за швами `Calendar` / `RoughtimeServer` без реалізації в ядрі.
+Запис: `Doc::anchor_bytes` (одна транзакція: ANCH + новий DOC; журнал і печатки незмінні).
+`Doc::copy_bytes` переносить DOC цілком у інший store (ріст образу), нічого не перепідписуючи.
+
+### 9.5 SPEC / BLOB — файл, що читає себе (`bebop-log/src/doc/spec.rs`, W-MG-M5, 2026-10-31)
+
+Рівень **архіву**, не кожного образу (R-MAINGOAL-A §2f): робочий образ тримає `DOC.SPEC = 0`; архівний
+файл пишеться СВІЖИМ і несе SPEC **першим об'єктом арени** (комірка `ARENA` = 1024), а DOC називає його
+коміркою 6 і ставить біт 2 `FLAGS` (`FLAG_SELF_DESCRIBING`). `Doc::init_described_bytes` відмовляє
+(`Corrupt`) сховищу, чия арена не порожня: «перший» — обіцянка хостові, що не вміє парсити.
+
+```
+SPEC  {VERSION=1, ref WASM, ref TEXT, sha256 4, abi}   8 комірок; дайджест st_digest("SPEC{i64,ref BLOB,ref BLOB,i64,i64,i64,i64,i64}") = 849619745
+BLOB  {len, байти по 8 на комірку LE}                  1 + ceil(len/8); дайджест st_digest("BLOB{i64,[i64]}") = 799774958; MAX_BLOB_BYTES = 16 MiB
+```
+
+`WASM` — читач `crates/bebop-wasm-reader` (MIT, wasm32, без імпортів, ABI §9.5.1); `TEXT` — цей документ;
+`sha256` — **твердження файлу** про вбудований читач; `abi` — версія ABI читача. Ref-и SPEC вказують
+**уперед** (блоби йдуть за ним): правило «лише назад» — правило KV v4 (§9.1), не контейнера; `Store::follow`
+і всі читачі приймають ненульовий зсув у межах образу.
+
+**Bootstrap без парсера (шість рядків, `examples/read.mjs`, у Rust — `Doc::spec_first`):** h0 у комірці 1024
+→ старші 32 біти = 849619745, інакше це не архів; комірка 1027 (payload[1]) = зсув → `W = 1024 + зсув`;
+комірка `W+2` = довжина `L` у байтах; байти читача — `[(W+3)·8, (W+3)·8 + L)`; комірки 1029..1032 — заявлений
+sha256; хост рахує sha256 над прочитаними байтами і **відмовляє (exit 4), якщо не збігається**, перш ніж
+щось виконати. Далі `WebAssembly.instantiate` і ABI.
+
+**Довіра (§5.3 дослідження).** Вбудований читач — *свідчення*, не авторитет: він працює в пісочниці без I/O,
+його sha256 названо тут і в релізі `bebop-wasm-reader` (`tools/verify/bytes.baseline` — розмір; sha — у
+`tools/verify/bebop-verify.mjs` `WASM_SHA256`), і хост друкує обидва числа поруч. Авторитет — цей текст і
+незалежні читачі, яких `conformance.sh` і `tools/verify/gate.sh` тримають до одної відповіді
+(`bebop-verify.py` читає DOC без wasm, лише за §9.4–9.5). Читач MIT **не несе ML-DSA**: печатки він
+*лічить*, не *перевіряє* (`checked = 0` у `bw_counts`), і каже це словами (`bw_unchecked_text`).
+
+**Ціна (§2f, виміряно `spec/tests.rs`):** `8·((2+8) + (2+1+⌈wasm/8⌉) + (2+1+⌈text/8⌉))` байтів на архівний
+ФАЙЛ — для читача ~65 КБ і тексту ~45 КБ це ≈ 110 КБ, один раз на архів, нуль на робочий образ.
+
+#### 9.5.1 ABI читача (`crates/bebop-wasm-reader/src/abi.rs`, ABI 2)
+
+`bw_version`=2, `bw_alloc/bw_free`, `bw_open(ptr,len)→status`, `bw_kind`→ 1..4 KV | **5 DOC** | 16 LOG,
+`bw_len`, `bw_root(out)`, `bw_get`, `bw_scan_next` (KV або дерево v4 DOC), `bw_log_len`/`bw_log_at`
+(LOG або журнал DOC: `seq8 ‖ plen8 ‖ id32 ‖ prev32 ‖ actor32 ‖ payload`), `bw_heads(out,cap)` →
+рядки `actor32 ‖ seq8 ‖ tip32`, `bw_verify(depth)` (0 якір, 1 досяжне + `doc::verify`, 2 вся арена),
+`bw_counts(out,cap)` → 16 комірок i64 (останні чотири дописані в кінець: segments, cut, cut_redacted, declared; статус 75 `CUT_UNDECLARED`; `bw_anchors(out,cap)` → рядки `kind8 ‖ over32 ‖ time_ms8 ‖ proof_len8`, присутні, не перевірені) `records chained legacy redacted broken seals forks heads keys
+admitted checked holds`, `bw_spec(out,cap)` → `abi8 ‖ sha256 32 ‖ текст формату`, `bw_status_text(code)`,
+`bw_unchecked_text`. Буфер, що не вміщує, отримує потрібну довжину і нічого не записано; відмова = `-status`.
+Дерево v1–v3 у DOC цей читач не читає й каже це `NOT_A_KV` словами (відкрито; фікстури такої нема).
 
 ## 10. Константи й ліміти
 

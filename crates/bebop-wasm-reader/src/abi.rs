@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! The C surface: what a host with no wasm-bindgen calls (R-MAINGOAL-A §5.1, as far as today's
-//! format reaches: open / kind / root / get / scan / log_len / log_at / verify / status_text).
+//! The C surface: what a host with no wasm-bindgen calls (R-MAINGOAL-A §5.1: open / kind / root /
+//! get / scan / log_len / log_at / heads / verify + counts / spec / status_text).
 //!
 //! ONE IMAGE OPEN AT A TIME, held in this module (a wasm instance is one thread; a host that
 //! wants two images instantiates twice). The host asks `bw_alloc` for room, copies the image in,
@@ -11,25 +11,38 @@
 //! (status.rs).
 //! A status is never an exception: `panic = "abort"` is set, so every refusal is a number.
 //!
-//! COMPILED FOR EVERY TARGET: `tests/conformance.rs` calls these very functions natively.
+//! COMPILED FOR EVERY TARGET: `tests/conformance.rs` and `tests/doc.rs` call these very functions
+//! natively.
 
 use core::cell::UnsafeCell;
 
 use crate::status::*;
 use crate::{open, Doc, Kind, Refusal};
+/// The DOC calls (`abi_doc.rs`), one surface with these.
+pub use crate::abi_doc::{bw_anchors, bw_counts, bw_heads, bw_spec, bw_unchecked_text};
 
-/// Bumped when a signature below changes.
-pub const ABI_VERSION: i32 = 1;
+/// Bumped when a signature below changes. 2 = W-MG-M5: DOC (`bw_kind` 5), `bw_heads`,
+/// `bw_counts`, `bw_spec`, `bw_unchecked_text`, `bw_anchors`; every ABI-1 call unchanged.
+pub const ABI_VERSION: i32 = 2;
 /// `bw_kind` for a log root; a KV root answers its version 1..=4.
 pub const KIND_LOG: i32 = 16;
+/// `bw_kind` for a DOC root: 5, the root-version a DOC carries (FORMAT §9.4: one namespace).
+pub const KIND_DOC: i32 = 5;
+/// Bytes of one `bw_heads` row: `actor_id 32 || seq 8 || tip 32`.
+pub const HEAD_ROW: usize = 72;
+/// Cells of `bw_counts` (`DocCounts`, in field order; 12 in ABI 2 as merged, 16 since W-MG-M5b --
+/// the four segment counters are APPENDED, so a host written for 12 reads its 12 unchanged).
+pub const COUNTS_CELLS: usize = 16;
+/// Bytes of one `bw_anchors` row: `kind 8 || over 32 || time_ms 8 || proof_len 8`.
+pub const ANCHOR_ROW: usize = 56;
 
 struct Slot(UnsafeCell<Option<Doc>>);
 // One thread per wasm instance; natively the tests run this ABI serially (`--test-threads` is
-// not set: the tests that touch the slot are in one `#[test]`, `the_abi_round_trips_natively`).
+// not set: the tests that touch the slot are in one `#[test]` per test binary).
 unsafe impl Sync for Slot {}
 static SLOT: Slot = Slot(UnsafeCell::new(None));
 
-fn slot() -> &'static mut Option<Doc> {
+pub(crate) fn slot() -> &'static mut Option<Doc> {
     // SAFETY: single-threaded by construction (see `Slot`); no reference escapes a call.
     unsafe { &mut *SLOT.0.get() }
 }
@@ -44,6 +57,7 @@ pub fn status_of(r: &Refusal) -> i32 {
         Refusal::BadCrc { .. } => BAD_CRC,
         Refusal::UnknownVersion => UNKNOWN_VERSION,
         Refusal::LastCommit => LAST_COMMIT,
+        Refusal::CutUndeclared => CUT_UNDECLARED,
     }
 }
 
@@ -99,17 +113,18 @@ pub extern "C" fn bw_close() {
     *slot() = None;
 }
 
-/// 0 when nothing is open; a KV root's version 1..=4; `KIND_LOG` for a log.
+/// 0 when nothing is open; a KV root's version 1..=4; `KIND_DOC` (5) for a DOC; `KIND_LOG` for a log.
 #[no_mangle]
 pub extern "C" fn bw_kind() -> i32 {
     match slot().as_ref().map(|d| d.kind) {
         None => 0,
         Some(Kind::Kv { version }) => version as i32,
+        Some(Kind::Doc) => KIND_DOC,
         Some(Kind::Log) => KIND_LOG,
     }
 }
 
-/// Entries of a KV or records of a log, or `-NOT_OPEN`.
+/// Entries of a KV or records of a log / DOC, or `-NOT_OPEN`.
 #[no_mangle]
 pub extern "C" fn bw_len() -> i64 {
     slot().as_ref().map_or(-(NOT_OPEN as i64), |d| d.len() as i64)
@@ -134,7 +149,7 @@ pub unsafe extern "C" fn bw_root(out: *mut i64) -> i32 {
 }
 
 /// Copy `src` into `out..out+cap` if it fits: its length either way (nothing written if not).
-unsafe fn put(src: &[u8], out: *mut u8, cap: usize) -> i64 {
+pub(crate) unsafe fn put(src: &[u8], out: *mut u8, cap: usize) -> i64 {
     if src.len() <= cap {
         core::ptr::copy_nonoverlapping(src.as_ptr(), out, src.len());
     }
@@ -142,7 +157,8 @@ unsafe fn put(src: &[u8], out: *mut u8, cap: usize) -> i64 {
 }
 
 /// The value under the key at `kptr..kptr+klen`, into `out..out+cap`: its length (written only
-/// if it fits), or `-NOT_FOUND`, `-NOT_OPEN`, `-NOT_A_KV` (a log is open), `-NULL_ARG`.
+/// if it fits), or `-NOT_FOUND`, `-NOT_OPEN`, `-NOT_A_KV` (a log is open), `-NULL_ARG`. A DOC
+/// answers from its v4 TREE (no tree: every key is `-NOT_FOUND`).
 ///
 /// # Safety
 /// The key is readable and `out..out+cap` writable.
@@ -185,12 +201,12 @@ pub unsafe extern "C" fn bw_scan_next(cursor: i64, out: *mut u8, cap: usize) -> 
     put(&f, out, cap)
 }
 
-/// Records of the open log, or `-NOT_A_LOG` (a KV is open), `-NOT_OPEN`.
+/// Records of the open log or DOC, or `-NOT_A_LOG` (a KV is open), `-NOT_OPEN`.
 #[no_mangle]
 pub extern "C" fn bw_log_len() -> i64 {
     match slot().as_ref() {
         None => -(NOT_OPEN as i64),
-        Some(d) if d.kind != Kind::Log => -(NOT_A_LOG as i64),
+        Some(d) if matches!(d.kind, Kind::Kv { .. }) => -(NOT_A_LOG as i64),
         Some(d) => d.records.len() as i64,
     }
 }
@@ -206,7 +222,7 @@ pub unsafe extern "C" fn bw_log_at(i: i64, out: *mut u8, cap: usize) -> i64 {
         return -(NULL_ARG as i64);
     }
     let Some(d) = slot().as_ref() else { return -(NOT_OPEN as i64) };
-    if d.kind != Kind::Log {
+    if matches!(d.kind, Kind::Kv { .. }) {
         return -(NOT_A_LOG as i64);
     }
     let Some(r) = usize::try_from(i).ok().and_then(|i| d.records.get(i)) else { return -(OUT_OF_RANGE as i64) };
@@ -220,12 +236,20 @@ pub unsafe extern "C" fn bw_log_at(i: i64, out: *mut u8, cap: usize) -> i64 {
     put(&f, out, cap)
 }
 
-/// `depth` 0 (Anchor) and 1 (Reachable): what `bw_open` already proved, so OK while an image
-/// is open. 2 (WholeArena): every object of the arena up to `arena_used` hashes to its crc, or
-/// `BAD_CRC`. `NOT_OPEN` when nothing is open.
+/// `depth` 0 (Anchor): what `bw_open` already proved, so OK while an image is open. 1
+/// (Reachable): the same for a KV or a log; for a DOC, `doc::verify` under this reader's seams
+/// (the counters `bw_counts` then returns) -- a refusal there is its status. 2 (WholeArena): 1,
+/// then every object of the arena up to `arena_used` hashes to its crc, or `BAD_CRC`.
+/// `NOT_OPEN` when nothing is open.
 #[no_mangle]
 pub extern "C" fn bw_verify(depth: i32) -> i32 {
-    let Some(d) = slot().as_ref() else { return NOT_OPEN };
+    let Some(d) = slot().as_mut() else { return NOT_OPEN };
+    if depth < 1 {
+        return OK;
+    }
+    if let Some(Err(r)) = d.verify_doc() {
+        return status_of(&r);
+    }
     if depth < 2 {
         return OK;
     }

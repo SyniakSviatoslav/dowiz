@@ -3,6 +3,7 @@
 //! unchanged, `holds(old_tip)` true."
 
 use super::*;
+use crate::chain::{chain_id, NONCE_LEN};
 
 const ACTOR: [u8; 32] = [0xA1; 32];
 const SUBJECT: &str = "+355691111111";
@@ -91,6 +92,61 @@ fn the_declaration_counts_what_was_redacted_and_folds_into_nothing() {
     assert_eq!(h.orders().len(), orders, "a declaration is not a sale");
     let back = Hub::load(&h.to_bytes_trimmed()).unwrap();
     assert!(back.quarantined().is_empty(), "this build reads kind 8");
+}
+
+/// KILL (M4, R-MAINGOAL-A §2c): THE KEPT ID CONFIRMS NO GUESS. A tombstone keeps its id,
+/// and the id is `sha256(prev ‖ payload)`; with everything but the phone known (the order
+/// id and status are still in the tombstone, the name and street follow the test's
+/// pattern) a guesser enumerates ten thousand phones around the true one and recomputes.
+/// With the nonce ERASED (`ERASED_NONCE` in the tombstone) not one candidate -- not even
+/// the true phone -- lands on the kept id. The control is the attack the nonce exists to
+/// stop: with the ORIGINAL nonce the true phone recomputes the id exactly, on all six
+/// records. So the nonce is the only thing between the kept id and the person, and the
+/// erasure removes it.
+#[test]
+fn an_erased_id_is_not_recovered_by_enumerating_ten_thousand_phones() {
+    let mut h = forty();
+    let original: Vec<Record> = EvLog::walk(&h.store).into_iter().filter(|r| decode(r).is_some_and(|e| e.order_json.contains(SUBJECT))).collect();
+    assert_eq!(original.len(), 6);
+    assert_eq!(h.redact(redactor).unwrap(), 6);
+    let tombstones: Vec<Record> = EvLog::walk(&h.store).into_iter().filter(|r| original.iter().any(|o| o.id == r.id)).collect();
+    assert_eq!(tombstones.len(), 6);
+    assert!(tombstones.iter().all(|t| t.payload[..NONCE_LEN] == ERASED_NONCE), "the nonce is erased with the fields");
+
+    // What a guesser rebuilds for record `t` under phone `phone`, with nonce `nonce`.
+    let guess = |t: &Record, nonce: &[u8], phone: &str| -> Vec<u8> {
+        let ev = decode(t).unwrap();
+        let status = crate::minijson::str_field(&ev.order_json, "status").unwrap();
+        let json = order(&ev.order_id, phone, &status);
+        let mut p = nonce.to_vec();
+        p.push(ev.kind as u8);
+        p.push(ev.order_id.len() as u8);
+        p.extend_from_slice(ev.order_id.as_bytes());
+        p.extend_from_slice(json.as_bytes());
+        p
+    };
+    let candidates: Vec<String> = (0..10_000).map(|i| format!("+35569{:07}", 1_106_111 + i)).collect();
+    assert!(candidates.contains(&SUBJECT.to_string()), "the true phone is among the guesses");
+
+    let mut hits = 0;
+    for t in &tombstones {
+        for phone in &candidates {
+            if chain_id(&t.prev, &guess(t, &t.payload[..NONCE_LEN], phone)) == t.id {
+                hits += 1;
+            }
+        }
+    }
+    assert_eq!(hits, 0, "an erased nonce confirms no guess");
+
+    // CONTROL: the original nonce confirms the true phone on every record.
+    let mut confirmed = 0;
+    for t in &tombstones {
+        let o = original.iter().find(|o| o.id == t.id).unwrap();
+        if chain_id(&t.prev, &guess(t, &o.payload[..NONCE_LEN], SUBJECT)) == t.id {
+            confirmed += 1;
+        }
+    }
+    assert_eq!(confirmed, 6, "with the nonce kept, the id would have confirmed the phone");
 }
 
 /// A TOMBSTONE WHOSE LINK IS CUT IS BROKEN, not redacted: the high bit is not

@@ -42,6 +42,13 @@ crc32fast = "=1.5.0"
 lz4_flex = { version = "=0.14.0", default-features = false, features = ["alloc", "safe-encode", "safe-decode", "checked-decode"] }
 
 [features]
+# `anchor-live` (W-MG-M6b, default OFF): the LIVE side of level-1 anchors --
+# `src/doc_seal/live/curl.rs`, a `Calendar` over HTTPS and the block-explorer fetch, by shelling
+# out to `curl` (DECART in that file: zero crates against ureq's rustls+ring stack). WHAT IT
+# PULLS: no crate. The feature only decides whether that module and the live commands of
+# `bin/anchor` are compiled; the verifier (`live.rs`, `verify_image`) never needs it.
+# VERIFY: cargo tree -e no-dev > a; cargo tree -e no-dev --features anchor-live > b; diff a b   # empty
+anchor-live = []
 # `shred` (DG10, default OFF): crypto-shredding for new logs -- `src/shred.rs`,
 # a per-person key table and `seal_field`/`open_field` over AES-256-GCM.
 # WHAT IT PULLS: no crate. The cipher is `dowiz_core::pq::aes_gcm` (hand-rolled,

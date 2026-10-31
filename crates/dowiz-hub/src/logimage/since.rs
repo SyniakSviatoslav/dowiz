@@ -22,6 +22,11 @@ impl LogImage {
         if EvLog::len(&store) == 0 && store.root().is_none() {
             return Err(HubError::NotAHub);
         }
+        // A root version this loader does not know is refused BY NAME, before the walk
+        // (W-MG-M1B): a DOC root (root-version 5) read as a log would come back `Corrupt`.
+        if let Some(v) = EvLog::unknown_version(&store) {
+            return Err(HubError::UnknownVersion(v));
+        }
         // AND IT IS NOT THIS IMAGE EITHER IF IT LOST RECORDS ON THE WAY HERE.
         // The superblock is fifteen cells at the front, so it survives a
         // truncation that takes half the records with it -- this image loaded

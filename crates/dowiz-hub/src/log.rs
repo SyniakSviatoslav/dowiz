@@ -7,7 +7,7 @@
 
 use bebop_store::{evlog::{EvLog, Record}, Store};
 
-use crate::{chain_id, e_is_full, usage_of_kind};
+use crate::{e_is_full, usage_of_kind};
 use crate::{EventKind, Hub, HubError, LogMark, Usage, DEFAULT_IMAGE_BYTES};
 
 impl Hub {
@@ -38,6 +38,11 @@ impl Hub {
         let store = Store::from_bytes(bytes);
         if store.pick().is_none() {
             return Err(HubError::NotAHub);
+        }
+        // A ROOT VERSION THIS LOADER DOES NOT KNOW IS REFUSED BY NAME, before the walk (W-MG-M1B):
+        // a DOC root (root-version 5) carries a log by ref; walked as a log it would be `Corrupt`.
+        if let Some(v) = EvLog::unknown_version(&store) {
+            return Err(HubError::UnknownVersion(v));
         }
         // AND REFUSES ONE THAT LOST RECORDS ON THE WAY HERE. A superblock
         // survives a truncation -- it is fifteen cells at the front of the
@@ -119,12 +124,12 @@ impl Hub {
             self.grow()?;
         }
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
-        let (nonce, derived) = self.entropy.nonce(&prev, &body);
-        let payload = crate::chain::with_nonce(&nonce, &body);
         // CHAINED: the id commits to the record BEFORE it -- sha256 over `prev ‖ payload`
-        // since M0, and the flags cell says so. See `chain.rs`.
-        let id = chain_id(&prev, &payload);
-        let rec = Record { id, prev, actor_pubkey, actor_seq: seq, flags: crate::chain::flags_for(derived), payload };
+        // since M0, and the flags cell says so; or the legacy FNV record while this log is
+        // not yet flipped (`Hub::set_sha256`, W-MG-MIG). See `chain.rs`.
+        let sha = self.entropy.writes_sha256(&self.store);
+        let (payload, id, flags) = self.entropy.stamp(sha, &prev, body);
+        let rec = Record { id, prev, actor_pubkey, actor_seq: seq, flags, payload };
 
         // ── THE IMAGE GROWS RATHER THAN REFUSING ──
         //

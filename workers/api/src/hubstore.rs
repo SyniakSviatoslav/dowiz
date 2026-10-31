@@ -402,12 +402,17 @@ pub async fn load_both(place: &Place) -> Result<(Loaded, LoadedCatalog)> {
                     if let Some(seed) = crate::entropy_seed() {
                         h.set_entropy(seed);
                     }
+                    crate::scheme::arm(&mut h, &place.venue);
                     h
                 })?,
             generation,
         },
         None => Loaded {
             hub: Hub::create_sized(64 * 1024)
+                .map(|mut h| {
+                    crate::scheme::arm(&mut h, &place.venue);
+                    h
+                })
                 .map_err(|_| Error::RustError("cannot create hub image".into()))?,
             generation: 0,
         },
@@ -443,10 +448,11 @@ pub async fn load(place: &Place) -> Result<Loaded> {
 
     match row {
         Some(r) => {
-            let hub = Hub::load(&r.image)
+            let mut hub = Hub::load(&r.image)
                 // A corrupt image must not be silently replaced with an empty
                 // one: that would present a hub with no orders as a healthy hub.
                 .map(crate::image_err::hub_loaded).map_err(|e| crate::image_err::unreadable("hub", e))?;
+            crate::scheme::arm(&mut hub, &place.venue);
             Ok(Loaded { hub, generation: r.generation })
         }
         None => {
@@ -457,8 +463,9 @@ pub async fn load(place: &Place) -> Result<Loaded> {
             // when an append does not fit (doubling, chain copied verbatim), so
             // starting at 64 KiB costs a handful of doublings over a hub's life
             // and keeps the common case one row.
-            let hub = Hub::create_sized(64 * 1024)
+            let mut hub = Hub::create_sized(64 * 1024)
                 .map_err(|_| Error::RustError("cannot create hub image".into()))?;
+            crate::scheme::arm(&mut hub, &place.venue);
             Ok(Loaded { hub, generation: 0 })
         }
     }
@@ -618,16 +625,18 @@ pub async fn load_stock(place: &Place) -> Result<LoadedStock> {
             if let Some(seed) = crate::entropy_seed() {
                 stock.set_entropy(seed); // M0
             }
+            crate::scheme::arm(&mut stock, &place.venue);
             Ok(LoadedStock { stock, generation })
         }
-        None => Ok(LoadedStock {
+        None => {
             // Born small and grown by the log itself, for the reason the order
             // log is: 8 MiB of arena would be nine D1 chunks read and written
             // on every single order.
-            stock: dowiz_hub::stock::StockLog::create_sized(64 * 1024)
-                .map_err(|_| Error::RustError("cannot create stock image".into()))?,
-            generation: 0,
-        }),
+            let mut stock = dowiz_hub::stock::StockLog::create_sized(64 * 1024)
+                .map_err(|_| Error::RustError("cannot create stock image".into()))?;
+            crate::scheme::arm(&mut stock, &place.venue);
+            Ok(LoadedStock { stock, generation: 0 })
+        }
     }
 }
 
@@ -892,15 +901,23 @@ pub const IMAGE_AUDIT: &str = "audit";
 
 /// Read one of the venue's append-only images.
 pub async fn load_log(place: &Place, image: &str) -> Result<crate::platform_store::LoadedLog> {
-    crate::platform_store::load_log_at(&place.stub()?, image).await
+    let mut loaded = crate::platform_store::load_log_at(&place.stub()?, image).await?;
+    crate::scheme::arm(&mut loaded.log, &place.venue);
+    Ok(loaded)
 }
 
-/// Read, append, write one of the venue's append-only images, under the guard.
-pub async fn with_log<F, T>(place: &Place, image: &str, f: F) -> Result<T>
+/// Read, append, write one of the venue's append-only images, under the guard. The log is
+/// armed with the venue's id scheme (W-MG-MIG) before `f` appends to it.
+pub async fn with_log<F, T>(place: &Place, image: &str, mut f: F) -> Result<T>
 where
     F: FnMut(&mut dowiz_hub::logimage::LogImage) -> Result<T>,
 {
-    crate::platform_store::with_log_at(&place.stub()?, image, f).await
+    let venue = place.venue.clone();
+    crate::platform_store::with_log_at(&place.stub()?, image, move |log| {
+        crate::scheme::arm(log, &venue);
+        f(log)
+    })
+    .await
 }
 
 /// Read one of the venue's table images.

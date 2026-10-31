@@ -511,6 +511,12 @@ def proj_mode(path):
     # the log: root {n, ref LAST, has_tip, tip0..3, VERSION}; record v2 {seq, plen, ref PREV, id0..3,
     # prev0..3, flags, [actor0..3 if flags & 1], payload 8 bytes/cell LE} or v1 {.., actor0..3, 1 byte/cell}
     ver = get(root, 7) if olen(root) >= 8 and get(root, 7) > 0 else 1
+    # W-MG-M1B: a log version this reader does not know is refused BY NAME before the walk
+    # (bebop-log EvLog::unknown_version, MAX_VERSION = 2). A DOC root (FORMAT §9.4) carries 5
+    # here; walked as a log its refs read as records and the answer was 4 (TRUNCATED) -- damage's
+    # name, not a newer file's.
+    if ver > 2:
+        return say(12)
     recs, cur = [], follow(root, 1)
     while cur is not None and len(recs) <= get(root, 0):
         recs.append(cur)

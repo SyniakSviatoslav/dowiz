@@ -69,6 +69,9 @@ pub mod rank;
 pub mod snn;
 /// W-S0 2026-10-08: sheaf S0 -- the gluing check for hub ∩ kitchen over the stock log.
 pub mod glue;
+/// W-MG-M1B 2026-10-30: the DOC seal in the hub -- the three seams of `bebop_store::evlog::doc`
+/// filled with this crate's ids and ML-DSA-65, a sealed hub image, and the level-1 anchors.
+pub mod doc_seal;
 // DG10: crypto-shredding for new logs; off by default (see Cargo.toml `shred`).
 #[cfg(feature = "shred")]
 pub mod shred;

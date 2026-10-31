@@ -91,7 +91,25 @@ impl Hub {
     pub fn set_entropy(&mut self, seed: [u8; 32]) {
         self.entropy.set(seed);
     }
+
+    /// THE SCHEME SWITCH (W-MG-MIG): `false` = write legacy records (FNV id, flags 0, no
+    /// nonce -- byte for byte what prod ac5ff0c4 writes, so a rollback to it reads them);
+    /// `true` (the default) = sha256 (M0). One-way per log: once this log's newest record is
+    /// sha256 the switch is ignored and it stays sha256 (`Entropy::writes_sha256` says why).
+    /// The Worker sets it per venue from `SHA256_VENUES`; the runbook is
+    /// `docs/design/MIGRATION-sha256-ids.md`.
+    pub fn set_sha256(&mut self, on: bool) {
+        self.entropy.set_sha256(on);
+    }
+
+    /// The scheme the next record is written under (`set_sha256`, or the log's own once flipped).
+    pub fn writes_sha256(&self) -> bool {
+        self.entropy.writes_sha256(&self.store)
+    }
 }
+
+#[cfg(test)]
+mod mig_tests;
 
 /// THE WALK'S RULES, shared by the order log and `LogImage`. `walked` is newest first;
 /// `tombstone(walked, at, tip)` says whether a record that verifies under no scheme is a

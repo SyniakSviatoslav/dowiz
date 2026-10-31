@@ -67,6 +67,8 @@ pub const LAST_COMMIT: i32 = 41;
 pub const OBJECT_BAD: i32 = 42;
 /// A cell the write path was about to trust disagrees with the image (`Refusal::Corrupt`).
 pub const CORRUPT: i32 = 43;
+/// A log segment left the file with no TRUNCATE naming it (the reader's own number, FORMAT §9.4).
+pub const CUT_UNDECLARED: i32 = 75;
 pub const KEY_TOO_LONG: i32 = 44;
 pub const VALUE_TOO_LONG: i32 = 45;
 pub const ARENA_FULL: i32 = 46;
@@ -115,6 +117,7 @@ pub fn code_of(r: &Refusal) -> i32 {
         Refusal::Tree(_) => NOT_A_KV,
         Refusal::UnknownVersion(_) => UNKNOWN_VERSION,
         Refusal::Corrupt(_) => CORRUPT,
+        Refusal::CutUndeclared { .. } => CUT_UNDECLARED,
         Refusal::KeyTooLong { .. } => KEY_TOO_LONG,
         Refusal::ValueTooLong { .. } => VALUE_TOO_LONG,
         Refusal::ArenaFull { .. } => ARENA_FULL,
@@ -145,6 +148,7 @@ pub extern "C" fn bebop_status_name(code: i32) -> *const c_char {
         LAST_COMMIT => b"LAST_COMMIT\0",
         OBJECT_BAD => b"OBJECT_BAD\0",
         CORRUPT => b"CORRUPT\0",
+        CUT_UNDECLARED => b"CUT_UNDECLARED\0",
         KEY_TOO_LONG => b"KEY_TOO_LONG\0",
         VALUE_TOO_LONG => b"VALUE_TOO_LONG\0",
         ARENA_FULL => b"ARENA_FULL\0",

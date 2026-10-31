@@ -54,7 +54,7 @@ impl HubImages {
                 meta.generation,
                 self.load_log(meta.generation, &bytes).map_err(|_| Error::RustError("hub image is unreadable".into()))?,
             ),
-            None => (0, dowiz_hub::Hub::create_sized(64 * 1024).map_err(|_| Error::RustError("cannot create hub image".into()))?),
+            None => (0, dowiz_hub::Hub::create_sized(64 * 1024).map(|mut h| { self.arm_scheme(&mut h); h }).map_err(|_| Error::RustError("cannot create hub image".into()))?), // W-MG-MIG: a loaded log is armed in `load_log`
         })
     }
 
@@ -65,7 +65,7 @@ impl HubImages {
                 meta.generation,
                 self.load_entries(crate::wallet::IMAGE_LEDGER, meta.generation, &bytes).map_err(|_| Error::RustError("ledger image is unreadable".into()))?,
             ),
-            None => (0, dowiz_hub::logimage::LogImage::create().map_err(|_| Error::RustError("cannot create ledger image".into()))?),
+            None => (0, dowiz_hub::logimage::LogImage::create().map(|mut l| { self.arm_scheme(&mut l); l }).map_err(|_| Error::RustError("cannot create ledger image".into()))?),
         })
     }
 
@@ -76,7 +76,7 @@ impl HubImages {
                 meta.generation,
                 self.load_stock(meta.generation, &bytes).map_err(|_| Error::RustError("stock image is unreadable".into()))?,
             ),
-            None => (0, dowiz_hub::stock::StockLog::create_sized(64 * 1024).map_err(|_| Error::RustError("cannot create stock image".into()))?),
+            None => (0, dowiz_hub::stock::StockLog::create_sized(64 * 1024).map(|mut l| { self.arm_scheme(&mut l); l }).map_err(|_| Error::RustError("cannot create stock image".into()))?),
         })
     }
 

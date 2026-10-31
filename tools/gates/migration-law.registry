@@ -30,6 +30,7 @@ block.sales        1 sales:v1(day:i32:0,dish:i64:0,qty:i32:0,gross:i64:1,cqty:i3
 log.kinds       1 1=Placed,2=Advanced,3=Paid,4=Revealed,5=Noted,6=Checkpoint,7=Amended,8=Forgotten;redacted=0x80  event::migration_tests::every_log_kind_round_trips
 log.frame       1 kindasu8|idb.len()asu8|idb|order_json.as_bytes()  event::migration_tests::every_log_kind_round_trips
 log.frame       2 with_nonce|kindasu8|idb.len()asu8|idb|order_json.as_bytes()  tests::m0_a_new_record_is_sha256_flagged_and_nonced
+log.frame       3 stamp|kindasu8|idb.len()asu8|idb|order_json.as_bytes()  chain::mig_tests::switch_off_appends_exactly_what_the_old_writer_writes
 log.order       1 id,customer_id,status,items[product_id,modifier_ids,quantity,unit_price],subtotal,total,created_at_ms,channel,cash_pay_with  event::migration_tests::the_kernel_snapshot_round_trips
 log.delta       1 _d,_x  event::migration_tests::old_deltas_still_fold
 log.placed      1 at_ms,code,conflicts,discount,ebills_changed,ebills_code,ebills_revision,log_cis_len,product_id,promo,sale_id,total  event::migration_tests::every_log_kind_round_trips
@@ -38,5 +39,6 @@ log.paid        1 amount,amount_in_order_currency,amount_received,applied,at,at_
 log.revealed    1 address,at,by,id,name,orders,phone,reason,status,total  event::migration_tests::every_log_kind_round_trips
 log.noted       1 accepted_at_ms,amount,assigned_at_ms,at,at_ms,attempts,by,card,cash_collected,cash_due,courier_id,currency,delivered_at_ms,ebills_bill_revision,ebills_changed,ebills_revision,ebills_voided_by,feedback,fic,fiscal,fresh,from,iic,inv_ord_num,key,kitchen,location_id,log_cis_len,manual,money_taken,n,ok,order_id,owed,paid,pi,picked_up_at_ms,plan_unreadable,reason,refund,round_id,sale_id,seen,sitting_id,state,status,text,total  event::migration_tests::every_log_kind_round_trips
 log.checkpoint  1 bytes,events,tip  event::migration_tests::every_log_kind_round_trips
+log.checkpoint  2 bytes,events,root,tip  rotate::tests::the_checkpoint_root_is_recomputed_from_the_archive
 log.amended     1 amount,at,by,comp,comped,dir,fulfilment,id,kind,line,lines,moved_from,moved_to,ops,other,product_id,quantity,reason,table,transfer  event::migration_tests::every_log_kind_round_trips
 log.forgotten   1 archives,at,by,hot,id,orders,reason,records,redacted,shredded  event::migration_tests::every_log_kind_round_trips

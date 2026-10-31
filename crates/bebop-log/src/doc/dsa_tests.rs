@@ -63,6 +63,10 @@ fn digests_are_st_digest_of_their_layouts() {
     assert_eq!(st_digest(super::seal::LAYOUT_HEADS), super::seal::DIGEST_HEADS);
     assert_eq!(st_digest(super::keys::LAYOUT_KEY), super::keys::DIGEST_KEY);
     assert_eq!(st_digest(super::keys::LAYOUT_KEYS), super::keys::DIGEST_KEYS);
+    assert_eq!(st_digest(super::seg::LAYOUT_SEG), super::seg::DIGEST_SEG, "W-MG-M3b: the frontier row carries the scheme");
+    assert_eq!(st_digest("SEG{i64,i64,i64,i64,i64,i64,i64,ref SEG,ref BLOB,i64,i64,i64,[i64,i64,i64,i64,i64,i64,i64,i64,i64]}"), 3288852188, "the M3 row without `scheme`");
+    assert_eq!(st_digest("DOC{i64,ref EVLOG,ref KV,ref HEADS,ref KEYS,i64,ref SPEC,i64,ref ANCH,i64}"), 3669646107, "the M1 layout with cell 9 reserved");
+    assert_eq!(st_digest(super::anch::LAYOUT_ANCH), super::anch::DIGEST_ANCH, "W-MG-M1B: ANCH");
 }
 
 /// The seal is 429 cells (15 + 3 309 / 8 rounded up) and the key 253 (9 + 1 952 / 8), as

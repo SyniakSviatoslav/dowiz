@@ -87,18 +87,7 @@ impl Hub {
             // the quarantine as an ordinary tombstone. One that does not decode cannot be shown
             // to be theirs and stays carried verbatim.
             let json = if bad.take().is_some() { ERASED_WHOLE.to_string() } else { json };
-            let id = ev.order_id.as_bytes();
-            let mut payload = Vec::with_capacity(ERASED_NONCE.len() + 2 + id.len() + json.len());
-            // THE NONCE GOES WITH THE FIELDS (M0, R-MAINGOAL-A §2c): left in place, the
-            // kept id would confirm a guessed payload by recomputation; erased, it cannot.
-            if r.flags & FLAG_SHA256 != 0 {
-                payload.extend_from_slice(&ERASED_NONCE);
-            }
-            payload.push(ev.kind as u8 | REDACTED_BIT);
-            payload.push(id.len() as u8);
-            payload.extend_from_slice(id);
-            payload.extend_from_slice(json.as_bytes());
-            r.payload = payload;
+            r.payload = redacted_payload(r.flags, &ev, &json);
             n += 1;
         }
         if n == 0 {
@@ -153,6 +142,24 @@ impl Hub {
             .filter(|e| of(&e.order_id))
             .count()
     }
+}
+
+/// The tombstone's payload for `ev`'s record (written under `flags`), with the person taken
+/// out of `json`: the nonce ERASED, the kind byte marked, the order id and the emptied JSON.
+/// THE NONCE GOES WITH THE FIELDS (M0, R-MAINGOAL-A §2c): left in place, the kept id would
+/// confirm a guessed payload by recomputation; erased, it cannot (`tests.rs` enumerates ten
+/// thousand phones). One function for the plain `Hub` and the `SealedHub` (`doc_seal`).
+pub(crate) fn redacted_payload(flags: i64, ev: &Event, json: &str) -> Vec<u8> {
+    let id = ev.order_id.as_bytes();
+    let mut payload = Vec::with_capacity(ERASED_NONCE.len() + 2 + id.len() + json.len());
+    if flags & FLAG_SHA256 != 0 {
+        payload.extend_from_slice(&ERASED_NONCE);
+    }
+    payload.push(ev.kind as u8 | REDACTED_BIT);
+    payload.push(id.len() as u8);
+    payload.extend_from_slice(id);
+    payload.extend_from_slice(json.as_bytes());
+    payload
 }
 
 /// The same chain, oldest first, in a fresh store of `size` bytes. The ids and

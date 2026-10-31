@@ -30,7 +30,8 @@
 #
 # The token file is sourced ONLY inside the subshell that runs wrangler, and never printed.
 # Overrides (tests use them to stub every external): DEPLOY_REPO DEPLOY_WORK DEPLOY_SLOT DEPLOY_WRANGLER
-# DEPLOY_TOKEN_FILE DEPLOY_HOST DEPLOY_CARGO DEPLOY_VERIFY DEPLOY_PROBE DEPLOY_TOOLCHAIN DEPLOY_FILES.
+# DEPLOY_TOKEN_FILE DEPLOY_HOST DEPLOY_CARGO DEPLOY_VERIFY DEPLOY_PROBE DEPLOY_TOOLCHAIN DEPLOY_FILES
+# DEPLOY_VERSIONS ROLLBACK_FLOOR_MARK ROLLBACK_FLIP_MARK (the sha256 floor, W-MG-MIG: see step 5 and rollback.sh).
 set -u
 MODE=deploy
 case "${1:-}" in --dry-run) MODE=dry ;; --verify) MODE=verify ;; "") ;; *) echo "usage: deploy.sh [--dry-run|--verify]"; exit 2 ;; esac
@@ -158,6 +159,21 @@ if [ $MODE != verify ]; then
   hits=$(grep -c -a "$SHA" "$WASM" 2>/dev/null); hits=${hits:-0}
   echo "   version: ${NEW:-dry-run}; $WASM carries $SHA: $hits"
   [ "$hits" -gt 0 ] || fail 32 "wasm-commit: the built $WASM does not contain $SHA -- /api/version will not say HEAD"
+  # THE sha256 FLOOR (W-MG-MIG; rollback.sh's header, docs/design/MIGRATION-sha256-ids.md). Every uploaded version
+  # is recorded; the first whose wrangler.toml DECLARES SHA256_VENUES is the floor (the first build that reads sha256
+  # records); a non-empty value is a flip and is marked for good. Recorded BEFORE verify, so a rollback of a version
+  # that failed verification already knows about it.
+  if [ $MODE != dry ]; then
+    SCHEME=$(sed -n 's/^SHA256_VENUES *= *"\([^"]*\)".*/\1/p' "$SRC/workers/api/wrangler.toml" 2>/dev/null | head -1)
+    DECLARED=$(grep -c '^SHA256_VENUES *=' "$SRC/workers/api/wrangler.toml" 2>/dev/null); DECLARED=${DECLARED:-0}
+    echo "$BUILT_AT $SHA $NEW sha256_venues=${SCHEME:-}" >> "${DEPLOY_VERSIONS:-$WORK/versions.log}"
+    FLOOR_MARK=${ROLLBACK_FLOOR_MARK:-$WORK/sha256-floor}; FLIP_MARK=${ROLLBACK_FLIP_MARK:-$WORK/sha256-flipped}
+    if [ "$DECLARED" -gt 0 ] && [ ! -s "$FLOOR_MARK" ]; then echo "$NEW $BUILT_AT $SHA" > "$FLOOR_MARK"; echo "   sha256 floor: $NEW (first build that reads sha256 record ids)"; fi
+    if [ -n "$SCHEME" ]; then
+      [ -s "$FLIP_MARK" ] || echo "$SCHEME flipped at $BUILT_AT by $NEW ($SHA)" > "$FLIP_MARK"
+      echo "   sha256 FLIP: SHA256_VENUES=\"$SCHEME\" -- one-way; rollback.sh now refuses a target before the floor"
+    fi
+  fi
   took
   [ $MODE = dry ] && { echo "deploy: DRY-RUN OK $SHA (built, gated, not uploaded) in $(( $(date +%s) - T0 )) s"; exit 0; }
 fi

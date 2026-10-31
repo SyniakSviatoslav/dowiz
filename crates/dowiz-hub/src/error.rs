@@ -29,6 +29,13 @@ pub enum HubError {
     /// one changed byte of a value or a record, which used to load and be served as the
     /// truth. Names the object (its cell index) and both numbers; see `bebop_store::verify`.
     BadCrc(bebop_store::BadCrc),
+    /// THE ROOT NAMES A LOG VERSION THIS BUILD DOES NOT KNOW (W-MG-M1B): a DOC root
+    /// (`bebop_store::evlog::doc`, root-version 5) under a loader that reads EvLog v1-v2.
+    /// Refused BY NAME before the walk, as every reader of the format must (FORMAT §9: an
+    /// unknown version is a refusal, never a guess) -- read as a log, a DOC's refs would have
+    /// been walked as records and the answer would have been `Corrupt`, which names damage,
+    /// not a newer file. `doc_seal::SealedHub` is the loader that knows a DOC.
+    UnknownVersion(i64),
 }
 
 impl HubError {

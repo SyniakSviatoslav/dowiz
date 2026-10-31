@@ -21,13 +21,19 @@
 //!                bit2 = self-describing (SPEC != 0, M5)
 //!   1 ref LOG    the EvLog v2 root (0 = no log)       2 ref TREE   a KV v3/v4 root (0 = none)
 //!   3 ref HEADS  `seal::Head`s                         4 ref KEYS   `keys::Key`s
-//!   5 VERSION=5  (the KV readers' cell)                6 ref SPEC   M5 (0)
-//!   7 VERSION=5  (the log readers' cell)               8 ref ANCH   M6 (0)
-//!   9 reserved 0
+//!   5 VERSION=5  (the KV readers' cell)                6 ref SPEC   `spec.rs` (0 in a working image)
+//!   7 VERSION=5  (the log readers' cell)               8 ref ANCH   the newest anchor (M6, `anch.rs`)
+//!   9 ref SEG    the newest log segment (`seg.rs`, W-MG-M3; 0 = the log was never cut)
 //! ```
 //!
 //! Every ref points BACK (FORMAT §9.1 v4's rule): a commit allocates record -> KEY -> KEYS ->
-//! SEAL -> HEADS -> LOG root -> DOC last. `write.rs` is the writer, `verify.rs` the counters.
+//! SEAL -> HEADS -> LOG root -> DOC last. `write.rs` is the writer, `verify.rs` the counters,
+//! `cut.rs` the one way history leaves the file (a SEG over the cut ids, declared by a signed
+//! TRUNCATE record -- R-MAINGOAL-A §2b: one proof mechanism, never a second structure).
+//!
+//! Cell 9 was "reserved 0" in the M1 layout (digest 3669646107, 2026-10-30 morning); it is
+//! `ref SEG` from W-MG-M3 the same day. No DOC image older than that exists; the readers that
+//! refuse a DOC do so by the VERSION cells, which did not move.
 //!
 //! ── THE SEAMS ──
 //!
@@ -41,20 +47,30 @@ use crate::prelude::*;
 use crate::{Store, StoreError};
 pub use bebop_image::verify::BadCrc;
 
+pub mod anch;
+mod copy;
+mod cut;
+mod declare;
 pub mod keys;
 pub mod seal;
+pub mod seg;
+pub mod spec;
 mod verify;
 mod write;
+pub use anch::{check_anchors, Anchor, AnchorCheck, AnchorCounts, Checked, Verdict, KIND_OTS, KIND_PLATFORM_TSA, KIND_ROUGHTIME};
 pub use keys::{Key, KeyOp, ALG_ML_DSA_65};
 pub use seal::{Head, Seal};
+pub use seg::{forgotten_body, Segment};
+pub use spec::{SpecIn, SpecView, DIGEST_BLOB, DIGEST_SPEC};
 pub use verify::{verify, Counters, Report, Trust};
 
 /// The root-version a DOC root carries in cells 5 and 7. KV 1-4 are taken (FORMAT §9.1).
 pub const ROOT_VERSION_DOC: i64 = 5;
 pub const DOC_CELLS: i64 = 10;
-pub const LAYOUT_DOC: &str = "DOC{i64,ref EVLOG,ref KV,ref HEADS,ref KEYS,i64,ref SPEC,i64,ref ANCH,i64}";
-/// `st_digest(LAYOUT_DOC)`: the low 32 bits of sha256, big-endian (`doc/tests.rs` re-derives).
-pub const DIGEST_DOC: i64 = 3669646107;
+pub const LAYOUT_DOC: &str = "DOC{i64,ref EVLOG,ref KV,ref HEADS,ref KEYS,i64,ref SPEC,i64,ref ANCH,ref SEG}";
+/// `st_digest(LAYOUT_DOC)`: the low 32 bits of sha256, big-endian (`doc/dsa_tests.rs`
+/// re-derives). 3669646107 was the M1 layout with cell 9 reserved.
+pub const DIGEST_DOC: i64 = 2619226223;
 
 pub const FLAG_SHA256_IDS: i64 = 1;
 pub const FLAG_TREE_IS_FOLD: i64 = 2;
@@ -69,6 +85,7 @@ pub(crate) const C_VERSION: usize = 5;
 pub(crate) const C_SPEC: usize = 6;
 pub(crate) const C_VERSION_LOG: usize = 7;
 pub(crate) const C_ANCH: usize = 8;
+pub(crate) const C_SEG: usize = 9;
 
 /// Why a DOC operation refused.
 #[derive(Debug)]
@@ -87,6 +104,20 @@ pub enum DocError {
     Seq { want: u64, got: u64 },
     /// A table the commit must carry forward is damaged; `what` names it.
     Corrupt(&'static str),
+    /// A segment's records are gone from the log and no effective TRUNCATE names its root
+    /// (W-MG-M3's kill: a sealed segment dropped without the signed cut).
+    CutUndeclared { root: [u8; 32] },
+    /// `keep` is not smaller than the log: there is nothing to cut.
+    NothingToCut,
+    /// The cut would take the ADMIT record of a key still in KEYS; that key's proof lives
+    /// in the record, so the record stays. Cut up to it, or revoke and re-admit first.
+    CutsAdmit([u8; 32]),
+    /// The caller's `Ids` has no `tree_root`: a segment has no root to be declared by.
+    NoTree,
+    /// The DOC names an object this cut does not carry (`what`: "TREE", "SPEC", "ANCH"); the
+    /// layer that owns it moves it to the fresh file (R-MAINGOAL-A §2b: compaction of the
+    /// tree never touches the log, and the log's cut never touches the tree).
+    Carries(&'static str),
 }
 
 /// `StoreError` carries an `io::Error` and derives no `PartialEq`; two `Store` refusals are
@@ -101,6 +132,10 @@ impl PartialEq for DocError {
             (DocError::Revoked { after_seq: a, seq: s }, DocError::Revoked { after_seq: b, seq: t }) => a == b && s == t,
             (DocError::Seq { want: a, got: s }, DocError::Seq { want: b, got: t }) => a == b && s == t,
             (DocError::Corrupt(a), DocError::Corrupt(b)) => a == b,
+            (DocError::CutUndeclared { root: a }, DocError::CutUndeclared { root: b }) => a == b,
+            (DocError::CutsAdmit(a), DocError::CutsAdmit(b)) => a == b,
+            (DocError::Carries(a), DocError::Carries(b)) => a == b,
+            (DocError::NothingToCut, DocError::NothingToCut) | (DocError::NoTree, DocError::NoTree) => true,
             _ => false,
         }
     }
@@ -131,24 +166,44 @@ pub trait Signer {
 /// algorithm the implementor does not know is `false`, never a guess.
 pub trait Verifier {
     fn verify(&self, alg: i64, pk: &[u8], msg: &[u8], sig: &[u8]) -> bool;
+    /// `false` for a reader that carries no signature algorithm at all: every seal is then
+    /// unjudged rather than forged, and a TRUNCATE or FORGOTTEN counts on its chain alone.
+    /// A cut file stays readable by such a reader; `Report::holds` stays false on it.
+    fn checks_signatures(&self) -> bool {
+        true
+    }
 }
 
-/// How a record's id is derived (M0 owns the scheme; this crate only asks). `legacy` is the
-/// pre-cascade scheme of old images (`None` = the implementor has none); `redacted` reads the
-/// in-place redaction mark; `body` strips the implementor's framing (nonce, kind byte) so the
-/// key-op bodies of `keys.rs` are found where the implementor put them.
+/// How a record's id is derived (M0 owns the scheme; this crate only asks). Every question
+/// is asked WITH the record's flags cell (W-MG-M1B): M0's framing -- a 16-byte nonce in front
+/// of the payload -- is there exactly when `FLAG_SHA256` is set, so an implementor that was
+/// handed the payload alone would have to guess where the body starts, and a reader never
+/// guesses. `legacy` answers whether `id` holds under a pre-M0 scheme of old images (the
+/// implementor may have several, and one of them needs `prev`; `false` = it has none);
+/// `redacted` reads the in-place redaction mark; `body` strips the implementor's framing
+/// (nonce, kind byte) so the key-op bodies of `keys.rs` are found where the implementor put
+/// them.
 pub trait Ids {
     fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32];
-    fn legacy(&self, payload: &[u8]) -> Option<[u8; 32]> {
-        let _ = payload;
-        None
-    }
-    fn redacted(&self, payload: &[u8]) -> bool {
-        let _ = payload;
+    fn legacy(&self, flags: i64, prev: &[u8; 32], payload: &[u8], id: &[u8; 32]) -> bool {
+        let _ = (flags, prev, payload, id);
         false
     }
-    fn body<'a>(&self, payload: &'a [u8]) -> &'a [u8] {
+    fn redacted(&self, flags: i64, payload: &[u8]) -> bool {
+        let _ = (flags, payload);
+        false
+    }
+    fn body<'a>(&self, flags: i64, payload: &'a [u8]) -> &'a [u8] {
+        let _ = flags;
         payload
+    }
+    /// The root a segment is named by: RFC 9162's tree over the cut records' ids in file
+    /// order (dowiz-hub: `bebop_store::merkle`, leaf = sha256(0x00 ‖ id)). This crate has no
+    /// hash, so the implementor's absence (`None`) is `DocError::NoTree`: nothing is cut
+    /// under a root nobody can recompute.
+    fn tree_root(&self, ids: &[[u8; 32]]) -> Option<[u8; 32]> {
+        let _ = ids;
+        None
     }
 }
 
@@ -163,6 +218,8 @@ pub struct DocView {
     pub keys: Option<usize>,
     pub spec: Option<usize>,
     pub anch: Option<usize>,
+    /// The newest SEG (`seg.rs`); `None` = the log was never cut.
+    pub seg: Option<usize>,
 }
 
 /// The DOC layout's handle; the writer is `write.rs`, the counters `verify.rs`.
@@ -195,6 +252,7 @@ impl Doc {
             keys: st.follow(root, C_KEYS),
             spec: st.follow(root, C_SPEC),
             anch: st.follow(root, C_ANCH),
+            seg: st.follow(root, C_SEG),
         })
     }
 }
@@ -210,6 +268,11 @@ pub(crate) fn cells_to_bytes(c: &[i64], len: usize) -> Vec<u8> {
 /// 32 bytes as 4 cells and back (`lib.rs` keeps the one definition).
 pub(crate) fn id_to_cells(b: &[u8; 32]) -> [i64; 4] {
     crate::b32_to_cells(b)
+}
+/// `id_to_cells` for a test outside this crate that names an id's cells (dowiz-hub's kill
+/// tests rewrite a record's id the way a forger would).
+pub fn id_cells(b: &[u8; 32]) -> [i64; 4] {
+    id_to_cells(b)
 }
 /// Fewer than four cells (a cut object) read as zero cells, never as an index past the end.
 pub(crate) fn cells_to_id(c: &[i64]) -> [u8; 32] {

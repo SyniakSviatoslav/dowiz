@@ -80,7 +80,17 @@ impl HubImages {
         if let Some(seed) = crate::entropy_seed() {
             hub.set_entropy(seed);
         }
+        self.arm_scheme(&mut hub);
         Ok(hub)
+    }
+
+    /// THE ID-SCHEME SWITCH for this object's venue (W-MG-MIG, `crate::scheme`): every log
+    /// this object loads or creates and may append to goes through here.
+    pub(super) fn arm_scheme<T: crate::scheme::Switch>(&self, log: &mut T) {
+        // A host with no name (a test's Mem host) is not a venue: the crate's default stands.
+        if let Some(venue) = self.state.own_name() {
+            crate::scheme::arm(log, &venue);
+        }
     }
 
     /// `load_log` for the stock log (`IMAGE_STOCK`).
@@ -91,6 +101,7 @@ impl HubImages {
         if let Some(seed) = crate::entropy_seed() {
             log.set_entropy(seed);
         }
+        self.arm_scheme(&mut log);
         Ok(log)
     }
 
@@ -101,6 +112,7 @@ impl HubImages {
         if let Some(seed) = crate::entropy_seed() {
             log.set_entropy(seed);
         }
+        self.arm_scheme(&mut log);
         Ok(log)
     }
 }

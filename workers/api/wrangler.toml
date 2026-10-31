@@ -47,6 +47,17 @@ compatibility_date = "2026-09-15"
 # apex serves the storefront, and nothing below changes.
 [vars]
 PLATFORM_HOST = "dowiz.org"
+# THE ID-SCHEME SWITCH (W-MG-MIG, 2026-10-31; `src/scheme.rs`, runbook
+# docs/design/MIGRATION-sha256-ids.md). Which venues' logs write sha256 records
+# (dowiz-hub M0): "" nobody -- the expand release, which reads both schemes and
+# writes the old one, so prod ac5ff0c4 still reads every byte it wrote; a
+# comma-separated list of venue IDS (not slugs), "qa-durres" first; "*" everybody.
+# The platform's own logs flip under the name "platform" or "*". A flip is a
+# deploy of this file and is ONE-WAY per venue: the hub crate keeps a log on
+# sha256 once its newest record is, whatever this says afterwards -- so after a
+# flip, roll back to a build that reads sha256 (tools/deploy/rollback.sh refuses
+# the others). Flipped by the operator, qa-durres first, then "*".
+SHA256_VENUES = ""
 # `LEGACY_VENUE` WAS HERE, and it is gone with the rows it named. It scoped the
 # `hub_image` seed to the one venue that predated the Durable Objects; the D1
 # binding, the migrations and `do_image`'s fallback have all been deleted, so

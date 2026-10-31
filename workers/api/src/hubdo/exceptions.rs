@@ -38,10 +38,11 @@ impl HubImages {
             return Response::error("the report needs a venue and a clock", 400);
         };
         let (_, hub) = self.log_hub().await?;
-        let till = match self.image(crate::command::till::IMAGE_TILL).await? {
+        let mut till = match self.image(crate::command::till::IMAGE_TILL).await? {
             Some((m, b)) => self.load_entries(crate::command::till::IMAGE_TILL, m.generation, &b).map_err(|_| Error::RustError("till image is unreadable".into()))?,
             None => LogImage::create().map_err(|_| Error::RustError("cannot create till image".into()))?,
         };
+        self.arm_scheme(&mut till);
         let settings = match self.image(crate::hubstore::IMAGE_SETTINGS).await? {
             Some((_, b)) => dowiz_hub::settings::Settings::load(&b).map_err(|_| Error::RustError("settings image is unreadable".into()))?,
             None => dowiz_hub::settings::Settings::create().map_err(|_| Error::RustError("cannot create settings".into()))?,

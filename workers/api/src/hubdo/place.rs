@@ -50,6 +50,7 @@ impl HubImages {
             None => dowiz_hub::Hub::create_sized(64 * 1024)
                 .map_err(|_| Error::RustError("cannot create hub image".into()))?,
         };
+        self.arm_scheme(&mut hub);
         let stock_image = crate::hubstore::IMAGE_STOCK;
         let (stock_generation, mut stock) = match self.image(stock_image).await? {
             Some((meta, bytes)) => (
@@ -62,6 +63,7 @@ impl HubImages {
                     .map_err(|_| Error::RustError("cannot create stock image".into()))?,
             ),
         };
+        self.arm_scheme(&mut stock);
         let reserved_before = stock.len();
         stock.set_clock(input.now_ms);
 

@@ -247,6 +247,7 @@ impl HubImages {
 
 impl DurableObject for HubImages {
     fn new(state: State, env: worker::Env) -> Self {
+        crate::scheme::install(env.var(crate::scheme::VAR).ok().map(|v| v.to_string())); // W-MG-MIG: `logmark.rs::arm_scheme`
         Self::with_host(host::Host::Live { state, env })
     }
 
