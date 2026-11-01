@@ -3,7 +3,7 @@
 //!
 //!   * `forget`  redacts the person's records in place (`Doc::redact_into`: ids, `prev`, seals,
 //!               anchors and segments verbatim; the payload emptied and its nonce erased, the
-//!               rule of `forget.rs`) and commits one FORGOTTEN naming how many and whom;
+//!               rule of `forget.rs`) and commits one FORGOTTEN listing each record, and whom;
 //!   * `cut`     moves the oldest records out under a segment (`Doc::cut_into`) and commits the
 //!               TRUNCATE that names the segment; what left comes back as the archive.
 //!
@@ -31,7 +31,7 @@ pub const KIND_DECL: u8 = b'D';
 
 impl SealedHub {
     /// Redact every order record `redact` answers for and declare it: one signed FORGOTTEN
-    /// (`n`, `subject` -- a hash of the person's key, never the key). Returns `n`; nothing
+    /// (`subject` -- a hash of the person's key, never the key -- and each tombstone it covers). Returns `n`; nothing
     /// is written for 0. The image is rebuilt (`Doc::redact_into`) at its size, doubling on
     /// the rare redaction that grew a record.
     pub fn forget<F>(&mut self, redact: F, subject: &[u8; 32], key: &DeviceKey, claimed_ms: i64) -> Result<usize, HubError>
@@ -46,22 +46,22 @@ impl SealedHub {
             let json = redact(&ev)?;
             Some(redacted_payload(r.flags, &ev, &json))
         };
-        let mut size = self.store.to_bytes().len().max(MIN_SEALED_BYTES);
-        let (fresh, n) = loop {
+        let mut size = self.store.image_bytes().max(MIN_SEALED_BYTES);
+        let (fresh, erased) = loop {
             let mut fresh = Store::create_bytes(size)?;
             match Doc::redact_into(&self.store, &mut fresh, &HubIds, &rule) {
-                Ok(n) => break (fresh, n),
+                Ok(erased) => break (fresh, erased),
                 Err(DocError::Store(e)) if e_is_full(&e) => size = size.saturating_mul(2),
                 Err(e) => return Err(doc_err(e)),
             }
         };
-        if n == 0 {
+        if erased.is_empty() {
             return Ok(0);
         }
         let mut body = vec![KIND_DECL];
-        body.extend_from_slice(&forgotten_body(n as u64, subject));
+        body.extend_from_slice(&forgotten_body(subject, &erased));
         self.swap_and_declare(fresh, body, key, claimed_ms)?;
-        Ok(n)
+        Ok(erased.len())
     }
 
     /// Cut every record but the newest `keep` out under a segment and declare it: one
@@ -71,7 +71,7 @@ impl SealedHub {
     /// the caller's question, as `Hub::rotate`'s `keep` is.
     pub fn cut(&mut self, keep: usize, key: &DeviceKey, claimed_ms: i64) -> Result<Vec<u8>, HubError> {
         let archive = self.store.to_bytes_trimmed();
-        let mut size = self.store.to_bytes().len().max(MIN_SEALED_BYTES);
+        let mut size = self.store.image_bytes().max(MIN_SEALED_BYTES);
         let (fresh, seg) = loop {
             let mut fresh = Store::create_bytes(size)?;
             match Doc::cut_into(&self.store, &mut fresh, keep, &HubIds) {

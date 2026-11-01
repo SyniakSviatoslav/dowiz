@@ -3,7 +3,8 @@
 Status: **normative** from 2026-10-29 (lane W-ES-P4, R-EMBED-STORE §4.4 AC-ES-30/32, §5 row P4).
 Every reader of a KV image answers with one number from this table. A reader whose native refusal
 is not a number says here how it maps to one. The gate that holds them to it is
-`tools/gates/conformance.sh`: 11 fixtures × 5 readers, plus `--prove`.
+`tools/gates/conformance.sh`: 11 fixtures × 5 readers, plus `--prove`. This file maps the reference readers onto the
+vocabulary of FORMAT §9.0; which text rules is said once, at the head of FORMAT.
 
 ## 1. The readers
 
@@ -24,9 +25,9 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 |---|---|---|---|
 | 0 | `OK` | read; `n` = entries, `root` = the FNV-1a 64 fold (FORMAT §9.1) | all |
 | 1 | `NO_SUPERBLOCK` | no valid superblock, or the live one was refused structurally: `arena_used` outside, PartTab outside, **misplaced** (`ptaway`), **PartTab crc bad** (`ptbad`), root outside (FORMAT §3.1). This is never a fallback | all |
-| 2 | `NOT_A_KV` | a superblock but no KV root (`empty`), or a slice/chain claim that does not hold | all |
+| 2 | `NOT_A_KV` | a superblock but no KV root (`empty`), or a slice/chain claim that does not hold, a KV base not strictly ascending in raw bytes, a DOC part that does not hold (a SEG with `last` < `first`), or the walk bound spent (FORMAT §9.0) | all |
 | 3 | `NOT_A_LOG` | log reader only (`bw_log`) | wasm32 |
-| 4 | `TRUNCATED` | log reader: a record cut short | wasm32 |
+| 4 | `TRUNCATED` | log reader: a record cut short (an object shorter than a record's head), a chain short of the root's count, or one that never ends (FORMAT §9.2) | wasm32 |
 | 5 | `NULL_ARG` | a null pointer at the ABI. oracle.py also uses 5 for an S-1 break (superblock cells 13-14 non-zero), which no fixture has. **Two meanings, kept apart only by which surface gave them** | wasm32, C ABI, python |
 | 6-9, 11 | — | the `nodekey` (6) and `proj` (7-9, 11) readers. Not KV codes | `bw_key`, `bw_proj`, `oracle.py --proj` |
 | 10 | `BAD_CRC` | an object the read reached fails its crc (root, an array, a delta record) | native, wasm32, python, C ABI |
@@ -56,15 +57,18 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 | 71 | `NOT_FOUND` | the key is not in the image | bebop-wasm-reader ABI, never a read |
 | 73 | `OUT_OF_RANGE` | a log index past its length | bebop-wasm-reader ABI, never a read |
 | 74 | `NOT_A_DOC` | `bw_counts` against a KV or a log (W-MG-M5) | bebop-wasm-reader ABI, never a read |
-| 75 | `CUT_UNDECLARED` | a DOC's log segment (a SEG under the root: records that left the file) is named by no TRUNCATE record on the kept chain -- the file is whole, the cut is undeclared (W-MG-M3 rule, FORMAT §9.4; `bw_verify(1)` / `bw_counts` and bebop-verify.py `verify status=75`). | bebop-wasm-reader, bebop-verify.py, bebop-io `docverify`, C ABI |
+| 75 | `CUT_UNDECLARED` | a DOC's log segment (a SEG under the root: records that left the file) is named by no TRUNCATE record on the kept chain -- the file is whole, the cut is undeclared (W-MG-M3 rule, FORMAT §9.4). A status of `verify`, never of the open: the open line stays `doc status=0 n=<records> root=<log fold>`, the next line reads `verify status=75` with no counter, and the exit code is 75 (FORMAT §9.0); at the ABI `bw_open` 0, `bw_verify(1)` 75, `bw_counts` -75. | bebop-wasm-reader, bebop-verify.py, bebop-io `docverify`, C ABI |
+| 76 | `UNPINNED` | the embedded reader's sha256 is not the one this `read.mjs` pins: it is not run; the file agreeing with itself is not a verify | `examples/read.mjs`, host only |
+| 77 | `MODULE_REFUSED` | the embedded module has an import, a start section, or no bounded memory | `examples/read.mjs`, host only |
+| 78 | `HOST_FAILED` | the host stopped the reader, or could not read the file | `examples/read.mjs`, `bebop-verify.mjs`, `bebop-verify.py` |
 
 **DOC (W-MG-M5, FORMAT §9.4-9.5).** The five conformance readers keep answering 12 on `doc.store` (they
 refuse by name, as §2 row 12 says). The two ONE-FILE readers of `tools/verify` -- `bebop-verify.mjs`
 (bebop-wasm-reader, `bw_kind` = 5) and `bebop-verify.py` (stdlib) -- READ it and print
-`doc status=0 n=<records> root=<the LOG fold>` plus a `verify` line of twelve counters; `tools/verify/gate.sh`
+`doc status=0 n=<records> root=<the LOG fold>` plus a `verify` line (FORMAT §9.4 gives its seventeen fields and what is not among them); `tools/verify/gate.sh`
 holds both to each other and to `doc.expected`'s `doc_n` / `doc_root` / `doc_verify`. Their `checked=0` is
 not a defect to fix: neither carries a signature algorithm, so `seals` is a COUNT and the readers say so.
-W-MG-M5b: the `verify` line has sixteen counters (`segments cut cut_redacted declared` appended); with no
+W-MG-M5b: `segments cut cut_redacted declared` appended to that line; with no
 signature a TRUNCATE or FORGOTTEN counts on its chain alone (`Verifier::checks_signatures` false), a segment no
 TRUNCATE names is 75, and a time anchor is printed as PRESENT (`anchor kind= over= time_ms= proof_len=`), never verified.
 

@@ -30,6 +30,14 @@ pub(crate) struct Chain<'a> {
     cap: usize,
 }
 
+/// How many records of an image verify as sha256, or `None` when the bytes are not an event log
+/// (a keyed store's objects read as records here, and none of them verifies). The Worker's
+/// scheme check runs it on every image a test run stores.
+pub fn flagged(bytes: &[u8]) -> Option<usize> {
+    let c = Chain::open(bytes).ok()?;
+    Some(c.objs().filter(|o| crate::chain::verify_id(&c.record(*o)) == Some(crate::IdScheme::Sha256)).count())
+}
+
 /// Why a log could not be opened for walking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OpenErr {
@@ -74,6 +82,13 @@ impl<'a> Chain<'a> {
     /// under (`FLAG_SHA256`, M0) is what `glue.rs` reads from it.
     pub(crate) fn flags(&self, obj: usize) -> i64 {
         get_in(&self.view, obj, 11) & !1
+    }
+
+    /// The record as `chain::verify_id` reads it: every cell but the payload's own walk.
+    pub(crate) fn record(&self, obj: usize) -> bebop_store::evlog::Record {
+        let named = get_in(&self.view, obj, 11) & 1 != 0 && obj_cells_in(&self.view, obj) >= HEAD_V2 + 4;
+        let actor_pubkey = if named { cells_b32(&self.view, obj, HEAD_V2) } else { [0u8; 32] };
+        bebop_store::evlog::Record { id: self.id(obj), prev: self.prev(obj), actor_pubkey, actor_seq: get_in(&self.view, obj, 0) as u64, flags: self.flags(obj), payload: self.payload(obj) }
     }
 
     /// Does the object's crc match its cells?

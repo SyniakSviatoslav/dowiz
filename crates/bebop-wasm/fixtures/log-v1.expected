@@ -1,0 +1,4 @@
+# A v1 log: one payload byte per cell.
+# Written by doc/spec/fixture_wishes.rs (W-MG-READ), BEBOP_RULE_FIXTURES=<dir>; deterministic.
+n=3
+root=5846225103546468352

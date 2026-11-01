@@ -28,7 +28,9 @@
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::{Store, StoreError, Tx};
-use super::{bytes_to_cells, cells_of, cells_to_bytes, cells_to_id, id_to_cells};
+use bebop_image::{idx, idx_end};
+use super::budget::Budget;
+use super::{bytes_to_cells, cells_of, cells_to_bytes, cells_to_id, id_to_cells, DocError};
 
 /// ML-DSA-65 (FIPS 204), the only algorithm the plan names. pk 1 952 B, sig 3 309 B.
 pub const ALG_ML_DSA_65: i64 = 65;
@@ -64,8 +66,13 @@ impl Key {
     /// May this key seal `seq`? Compared unsigned: `seq` is the record's, written by whoever
     /// holds the key, and a seq past `i64::MAX` must not wrap to below every `revoked_at`.
     pub fn valid_at(&self, seq: u64) -> bool {
-        self.revoked_at == 0 || (self.revoked_at > 0 && seq <= self.revoked_at as u64)
+        valid_at(self.revoked_at, seq)
     }
+}
+
+/// `Key::valid_at` over the cell alone: `settle.rs` folds `revoked_at` and never clones a key.
+pub(crate) fn valid_at(revoked_at: i64, seq: u64) -> bool {
+    revoked_at == 0 || (revoked_at > 0 && seq <= revoked_at as u64)
 }
 
 /// A key operation carried by a sealed commit (`Doc::commit_bytes`).
@@ -125,6 +132,11 @@ fn id32(b: &[u8]) -> Option<[u8; 32]> {
 
 /// `(actor_id, alg, valid_from, pk)` of an ADMIT body, or `None` when it is not one.
 pub fn parse_admit(body: &[u8]) -> Option<([u8; 32], i64, i64, Vec<u8>)> {
+    admit_view(body).map(|(a, alg, from, pk)| (a, alg, from, pk.to_vec()))
+}
+
+/// `parse_admit` borrowing the key: the fixpoint asks once per key per pass.
+pub(crate) fn admit_view(body: &[u8]) -> Option<([u8; 32], i64, i64, &[u8])> {
     let rest = body.strip_prefix(ADMIT_MARK)?;
     let actor = id32(rest)?;
     let alg = le8(rest.get(32..)?)?;
@@ -133,7 +145,7 @@ pub fn parse_admit(body: &[u8]) -> Option<([u8; 32], i64, i64, Vec<u8>)> {
     if !(0..=MAX_PK_BYTES as i64).contains(&n) {
         return None;
     }
-    let pk = rest.get(56..56 + n as usize)?.to_vec();
+    let pk = rest.get(56..56 + idx(n)?)?;
     Some((actor, alg, valid_from, pk))
 }
 
@@ -152,7 +164,7 @@ pub fn read_key(st: &Store, at: usize) -> Option<Key> {
     if !(0..=MAX_PK_BYTES as i64).contains(&pk_len) {
         return None;
     }
-    let n_cells = (pk_len as usize).div_ceil(8);
+    let n_cells = idx_end(pk_len).div_ceil(8);
     if st.obj_cells(at) != KEY_HEAD + n_cells {
         return None;
     }
@@ -162,7 +174,7 @@ pub fn read_key(st: &Store, at: usize) -> Option<Key> {
         valid_from: st.get(at, 5),
         revoked_at: st.get(at, 6),
         admit_rec: st.follow(at, 7),
-        pk: cells_to_bytes(&cells_of(st, at, KEY_HEAD, n_cells), pk_len as usize),
+        pk: cells_to_bytes(&cells_of(st, at, KEY_HEAD, n_cells), idx_end(pk_len)),
     })
 }
 
@@ -172,7 +184,7 @@ pub fn key_rows(st: &Store, keys: Option<usize>) -> Vec<([u8; 32], usize)> {
     if st.obj_digest(t) != DIGEST_KEYS || st.obj_cells(t) < 1 {
         return Vec::new();
     }
-    let m = st.get(t, 0).max(0) as usize;
+    let m = idx_end(st.get(t, 0).max(0));
     let m = m.min(st.obj_cells(t).saturating_sub(1) / KEYS_ROW);
     (0..m)
         .filter_map(|i| {
@@ -185,7 +197,19 @@ pub fn key_rows(st: &Store, keys: Option<usize>) -> Vec<([u8; 32], usize)> {
 /// The KEYS table's keys, in table order. A row whose KEY is unreadable is skipped: the
 /// seals it would have covered then count as bad, which is the refusal-biased answer.
 pub fn read_keys(st: &Store, keys: Option<usize>) -> Vec<Key> {
-    key_rows(st, keys).into_iter().filter_map(|(_, k)| read_key(st, k)).collect()
+    let mut budget = Budget::of(st);
+    key_rows(st, keys).into_iter().map_while(|(_, k)| budget.spend(st, k).ok().map(|_| k)).filter_map(|k| read_key(st, k)).collect()
+}
+
+/// `read_keys` for `verify`: one row's KEY is paid for before its key is copied, and a table that
+/// runs the budget out is refused, never read short.
+pub(crate) fn read_keys_in(st: &Store, keys: Option<usize>, budget: &mut Budget) -> Result<Vec<Key>, DocError> {
+    let mut out = Vec::new();
+    for (_, k) in key_rows(st, keys) {
+        budget.spend(st, k)?;
+        out.extend(read_key(st, k));
+    }
+    Ok(out)
 }
 
 pub(crate) fn stage_key(st: &mut Store, tx: &mut Tx, key: &Key) -> Result<usize, StoreError> {

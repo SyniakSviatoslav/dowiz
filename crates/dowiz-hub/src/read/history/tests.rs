@@ -154,7 +154,10 @@ fn hex(b: &[u8]) -> String {
 // IMAGE_SHA re-derived at M0 (2026-10-30): every record now carries a nonce, the sha256 flag
 // and a sha256 id (`chain.rs`); the pre-M0 value was 8be3c313...224f. HISTORY_SHA did NOT
 // move: the scan reads the body behind the nonce and answers exactly what it answered.
-const IMAGE_SHA: &str = "7fc5e457cb91c753839038f447461ac5c39da1c4e6a39681889a6b337dcb101f";
+// Re-derived at W-MG-HOLES (2026-10-31): every record here is sha256 and its id now commits to
+// flags, actor and seq (`doc::id_message`); the M0 value was 7fc5e457...101f, on no live data.
+// HISTORY_SHA did not move, printed by the same run.
+const IMAGE_SHA: &str = "0866b14081f7ac950a2ad4c5cffc6a7ae4949e70ffb4e26b2cb1118aa99ccfaa";
 const HISTORY_SHA: &str = "1e5aa0b7f479efdff1043b6b66be9f1bb4fc85e9fbfdbdcbbcda1352b09d1e95";
 
 #[test]

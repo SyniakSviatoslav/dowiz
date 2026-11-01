@@ -27,8 +27,8 @@ fn mix(parts: &[&[u8]]) -> [u8; 32] {
 }
 struct Toy;
 impl Ids for Toy {
-    fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-        mix(&[b"c", prev, payload])
+    fn chained(&self, r: &Record) -> [u8; 32] {
+        mix(&[b"c", &r.prev, &r.payload])
     }
 }
 impl Signer for Toy {
@@ -58,10 +58,10 @@ fn doc_bytes(n: u64) -> Vec<u8> {
     let mut tip = [0u8; 32];
     for seq in 1..=n {
         let payload = format!("event-{seq}").into_bytes();
-        let id = Toy.chained(&tip, &payload);
-        let r = Record { id, prev: tip, actor_pubkey: Toy.actor_id(), actor_seq: seq, flags: 0, payload };
+        let mut r = Record { id: [0u8; 32], prev: tip, actor_pubkey: Toy.actor_id(), actor_seq: seq, flags: 0, payload };
+        r.id = Toy.chained(&r);
         Doc::commit_bytes(&mut st, &r, &Toy, 0, None).unwrap();
-        tip = id;
+        tip = r.id;
     }
     st.to_bytes_trimmed()
 }

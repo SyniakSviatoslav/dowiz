@@ -1,9 +1,17 @@
 
 
+def log_version(im, root):
+    """FORMAT §9.2: cell 7 when the root has it and it is above 0, else 1."""
+    return im.get(root, 7) if im.obj_len(root) >= 8 and im.get(root, 7) > 0 else 1
+
+
 def log_chain(im, root):
     """`EvLog::chain_crc`: the root and every record's crc (10), the count held to the root's
-    claim and the walk bounded (4). The record objects, NEWEST FIRST."""
+    claim and the walk bounded (4), a version above 2 refused before it (12). The record objects, NEWEST FIRST."""
     im.need_crc(root)
+    if log_version(im, root) > 2:
+        raise Refuse(12)
+    head = 12 if log_version(im, root) >= 2 else 15
     cap, budget, cnt, cur, chain = im.n // 14 + 1, im.n, 0, im.follow(root, 1), []
     while cur is not None:
         cnt += 1
@@ -11,6 +19,8 @@ def log_chain(im, root):
         if cnt > cap or cost > budget:
             raise Refuse(4)
         budget -= cost
+        if im.obj_cells(cur) < head:
+            raise Refuse(4)  # a record cut short: no field of it is read from the cells behind it
         im.need_crc(cur)
         chain.append(cur)
         cur = im.follow(cur, 2)
@@ -23,7 +33,7 @@ def log_detail(im, root):
     """Every record OLDEST FIRST as a dict: obj, seq, flags, id, prev, actor, payload (bebop-log
     `walk`: v2 packs the payload eight bytes to a cell after the optional actor; v1 one per cell)."""
     chain = log_chain(im, root)
-    ver = im.get(root, 7) if im.obj_len(root) >= 8 and im.get(root, 7) > 0 else 1
+    ver = log_version(im, root)
     out, budget = [], im.n
     for obj in chain:
         seq, plen = im.get(obj, 0) & M64, im.get(obj, 1) & M64

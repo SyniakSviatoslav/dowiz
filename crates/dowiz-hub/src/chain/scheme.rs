@@ -3,6 +3,7 @@
 //! and `verify_id` says which scheme an id holds under. `Entropy` is the nonce source a log
 //! carries. The reasoning -- what sha256 buys, what it does not -- is `chain.rs`'s header.
 
+use bebop_store::evlog::doc::id_message;
 use bebop_store::evlog::{EvLog, Record, FLAG_NONCE_DERIVED, FLAG_SHA256};
 use bebop_store::Store;
 
@@ -13,23 +14,38 @@ pub(crate) const NONCE_LEN: usize = 16;
 /// What a redaction leaves where the nonce was (`forget.rs`, `consent/forget.rs`).
 pub(crate) const ERASED_NONCE: [u8; NONCE_LEN] = [b'0'; NONCE_LEN];
 
-/// THE ID OF A RECORD WRITTEN NOW: `sha256(prev ‖ payload)`, the payload with its nonce in
-/// front. Every writer in this crate uses this; the legacy functions below exist to CHECK
-/// what was written before M0, and `id_for` to re-chain a record whose bytes say which.
-pub(crate) fn chain_id(prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-    let mut buf = Vec::with_capacity(32 + payload.len());
-    buf.extend_from_slice(prev);
-    buf.extend_from_slice(payload);
-    bebop_store::nodekey::sha256(&buf)
+/// THE ID OF A RECORD WRITTEN NOW: sha256 over `doc::id_message` -- domain tag, flags, actor, seq,
+/// `prev`, payload with its nonce in front (W-MG-HOLES, 2026-10-31: M0 hashed `prev ‖ payload`
+/// and no live record ever carried that). Every writer in this crate uses this; the legacy
+/// functions below exist to CHECK what was written before M0.
+pub(crate) fn chain_id(flags: i64, actor: &[u8; 32], seq: u64, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
+    bebop_store::nodekey::sha256(&id_message(flags, actor, seq, prev, payload))
 }
 
-/// The id a record's bytes call for: sha256 when it carries a nonce (`sha`), the legacy FNV
-/// chain otherwise. The stock log's wire form travels as record text with no flags cell, so
-/// the hub and a tablet both derive the scheme from the text (`stock::codec::nonced`) and
-/// land on the same ids; it is also how a tablet replays a hub's pre-M0 records verbatim.
-pub(crate) fn id_for(prev: &[u8; 32], payload: &[u8], sha: bool) -> [u8; 32] {
+/// `chain_id` of a whole record.
+pub(crate) fn record_id(r: &Record) -> [u8; 32] {
+    chain_id(r.flags, &r.actor_pubkey, r.actor_seq, &r.prev, &r.payload)
+}
+
+/// The flags a stock record's own bytes call for: `FLAG_SHA256` when it carries a nonce, and
+/// `FLAG_NONCE_DERIVED` when that nonce is what a writer with no seed derives from `prev` and
+/// the body. The stock log's wire form travels as record text with no flags cell, and flags are
+/// in the id, so hub and tablet must reach them from the text alone.
+pub(crate) fn stock_flags(prev: &[u8; 32], payload: &[u8], sha: bool) -> i64 {
+    if !sha {
+        return 0;
+    }
+    let (nonce, body) = payload.split_at(NONCE_LEN.min(payload.len()));
+    flags_for(nonce == derived_nonce(prev, body))
+}
+
+/// The id a stock record's bytes call for at position `seq` of its log: `chain_id` under
+/// `stock_flags` when it carries a nonce (`sha`), the legacy FNV chain otherwise. Actor is zero:
+/// the stock log names none (`stock/log.rs`). This is how the wire form, a tablet replaying the
+/// hub's records, and the hub chaining a tablet's land on one id.
+pub(crate) fn stock_id(seq: u64, prev: &[u8; 32], payload: &[u8], sha: bool) -> [u8; 32] {
     if sha {
-        chain_id(prev, payload)
+        chain_id(stock_flags(prev, payload, true), &[0u8; 32], seq, prev, payload)
     } else {
         legacy_id_chained(prev, payload)
     }
@@ -59,20 +75,23 @@ pub(crate) fn with_nonce(nonce: &[u8; NONCE_LEN], body: &[u8]) -> Vec<u8> {
     p
 }
 
-/// Which scheme an id verifies under, or `None`. A record flagged sha256 must verify as
-/// sha256 -- a flagged record whose id only matches FNV was edited and repaired under the
-/// wrong scheme. An unflagged one is tried as legacy first; sha256 last, for a record whose
-/// flag was stripped (a pointless edit: the id still holds) or that sits in a v1 store.
-pub(crate) fn verify_id(flags: i64, prev: &[u8; 32], payload: &[u8], id: &[u8; 32]) -> Option<IdScheme> {
-    if flags & FLAG_SHA256 != 0 {
-        return (chain_id(prev, payload) == *id).then_some(IdScheme::Sha256);
+/// Which scheme a record's id verifies under, or `None`. A record flagged sha256 must verify as
+/// sha256, whose id commits to the flag -- no flagged record verifies under a legacy rule. An
+/// unflagged record is legacy or nothing: a stripped flag changes what the id was hashed over, so
+/// such a record verifies under no scheme (`atk_holes` hole 2 is what it cost when it did).
+pub(crate) fn verify_id(r: &Record) -> Option<IdScheme> {
+    if r.flags & FLAG_SHA256 != 0 {
+        return (record_id(r) == r.id).then_some(IdScheme::Sha256);
     }
+    legacy_scheme(&r.prev, &r.payload, &r.id)
+}
+
+/// The legacy half of `verify_id`, unchanged since M0.
+pub(crate) fn legacy_scheme(prev: &[u8; 32], payload: &[u8], id: &[u8; 32]) -> Option<IdScheme> {
     if legacy_id_chained(prev, payload) == *id {
         Some(IdScheme::LegacyChained)
     } else if legacy_id(payload) == *id {
         Some(IdScheme::LegacyPayload)
-    } else if chain_id(prev, payload) == *id {
-        Some(IdScheme::Sha256)
     } else {
         None
     }
@@ -81,7 +100,7 @@ pub(crate) fn verify_id(flags: i64, prev: &[u8; 32], payload: &[u8], id: &[u8; 3
 /// The scheme a record's id was found to verify under.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IdScheme {
-    /// `sha256(prev ‖ payload)`, M0.
+    /// `chain_id`: sha256 over `doc::id_message`.
     Sha256,
     /// FNV-1a x4 over `prev ‖ payload`: 2026-09-20 to M0.
     LegacyChained,
@@ -121,6 +140,14 @@ impl Entropy {
         self.sha = on;
     }
 
+    /// THE ARMED STATE FOR A REBUILD OF THIS LOG (W-MG-TRANS): the seed, the counter and the
+    /// scheme the log is on NOW travel to whatever replaces it. Every door that lays a new image
+    /// for an armed log takes this: a rebuild that started from `Entropy::default()` turned an
+    /// unflipped venue's consent log and catalogue journal sha256 (holes H5, H6).
+    pub(crate) fn forward(&self, st: &Store) -> Entropy {
+        Entropy { sha: self.writes_sha256(st), ..self.clone() }
+    }
+
     /// THE SCHEME MOVES FORWARD ONCE, PER LOG. The caller's choice holds until the log's
     /// newest record is sha256; from then on the log writes sha256 whatever the caller says,
     /// because `walk_check` counts a legacy record NEWER than a sha256 one as `broken` (the
@@ -136,16 +163,17 @@ impl Entropy {
     /// `(payload, id, flags)` for `body` after `prev`, under the scheme `writes_sha256` chose.
     /// Legacy is BYTE FOR BYTE what ac5ff0c4 writes: the body as the payload, FNV over
     /// `prev ‖ payload`, flags 0, no nonce drawn (the counter does not move). Sha256 is M0:
-    /// `nonce ‖ body`, `sha256(prev ‖ payload)`, `FLAG_SHA256` (+ `FLAG_NONCE_DERIVED`).
-    pub(crate) fn stamp(&mut self, sha: bool, prev: &[u8; 32], body: Vec<u8>) -> (Vec<u8>, [u8; 32], i64) {
+    /// `nonce ‖ body`, `chain_id`, `FLAG_SHA256` (+ `FLAG_NONCE_DERIVED`).
+    pub(crate) fn stamp(&mut self, sha: bool, actor: &[u8; 32], seq: u64, prev: &[u8; 32], body: Vec<u8>) -> (Vec<u8>, [u8; 32], i64) {
         if !sha {
             let id = legacy_id_chained(prev, &body);
             return (body, id, 0);
         }
         let (nonce, derived) = self.nonce(prev, &body);
         let payload = with_nonce(&nonce, &body);
-        let id = chain_id(prev, &payload);
-        (payload, id, flags_for(derived))
+        let flags = flags_for(derived);
+        let id = chain_id(flags, actor, seq, prev, &payload);
+        (payload, id, flags)
     }
 
     /// The nonce for the record about to follow `prev`, and whether it was DERIVED (no
@@ -161,19 +189,27 @@ impl Entropy {
                 m.extend_from_slice(prev);
                 (bebop_store::nodekey::sha256(&m), false)
             }
-            None => {
-                let mut m = Vec::with_capacity(20 + 32 + body.len());
-                m.extend_from_slice(b"dowiz/nonce/derived");
-                m.extend_from_slice(prev);
-                m.extend_from_slice(body);
-                (bebop_store::nodekey::sha256(&m), true)
-            }
+            None => return (derived_nonce(prev, body), true),
         };
-        let text = crate::crypto::b64url_encode(&digest[..12]);
-        let mut out = [0u8; NONCE_LEN];
-        out.copy_from_slice(text.as_bytes());
-        (out, derived)
+        (nonce_text(&digest), derived)
     }
+}
+
+/// A digest as the 16 base64url characters a nonce is.
+fn nonce_text(digest: &[u8; 32]) -> [u8; NONCE_LEN] {
+    let text = crate::crypto::b64url_encode(&digest[..12]);
+    let mut out = [0u8; NONCE_LEN];
+    out.copy_from_slice(text.as_bytes());
+    out
+}
+
+/// The nonce of a writer with no seed: sha256 over a domain tag, `prev` and the body.
+pub(crate) fn derived_nonce(prev: &[u8; 32], body: &[u8]) -> [u8; NONCE_LEN] {
+    let mut m = Vec::with_capacity(20 + 32 + body.len());
+    m.extend_from_slice(b"dowiz/nonce/derived");
+    m.extend_from_slice(prev);
+    m.extend_from_slice(body);
+    nonce_text(&bebop_store::nodekey::sha256(&m))
 }
 
 /// LEGACY: the id of a record written between the 2026-09-20 cascade and M0 -- four lanes of

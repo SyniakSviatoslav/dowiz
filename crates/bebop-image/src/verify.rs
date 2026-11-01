@@ -75,7 +75,7 @@ pub enum LastCommit {
 /// `Store::check_obj` over `Cells`.
 pub fn check_obj_in<C: Cells + ?Sized>(c: &C, obj: usize) -> Result<(), BadCrc> {
     let want = ((c.cell_at(obj.saturating_add(1)) >> 32) & 0xFFFF_FFFF) as u32;
-    let len = obj_len_in(c, obj).max(0) as usize;
+    let len = crate::idx_end(obj_len_in(c, obj).max(0));
     if obj.saturating_add(2).saturating_add(len) > c.n_cells() {
         return Err(BadCrc { obj, want, got: None });
     }
@@ -98,11 +98,11 @@ pub fn last_commit_in<C: Cells + ?Sized>(c: &C, sb: &Superblock) -> Result<Ancho
     if got.is_none() {
         return Err(LastCommit::Anchor(a));
     }
-    let end = (used.max(0) as usize).min(c.n_cells());
-    let mut i = mark.max(0) as usize;
+    let end = crate::idx_end(used.max(0)).min(c.n_cells());
+    let mut i = crate::idx_end(mark.max(0));
     while i < end {
         check_obj_in(c, i).map_err(LastCommit::Object)?;
-        i = i.saturating_add(2).saturating_add(obj_len_in(c, i).max(0) as usize);
+        i = i.saturating_add(2).saturating_add(crate::idx_end(obj_len_in(c, i).max(0)));
     }
     Err(LastCommit::Anchor(a))
 }
@@ -123,7 +123,7 @@ impl Store {
     /// Check one object's payload against its header crc.
     pub fn check_obj(&self, obj: usize) -> Result<(), BadCrc> {
         let want = ((self.cell(obj.saturating_add(1)) >> 32) & 0xFFFF_FFFF) as u32;
-        let len = self.obj_len(obj) as usize;
+        let len = crate::idx_end(self.obj_len(obj));
         if obj.saturating_add(2).saturating_add(len) > self.cells.len() {
             return Err(BadCrc { obj, want, got: None });
         }

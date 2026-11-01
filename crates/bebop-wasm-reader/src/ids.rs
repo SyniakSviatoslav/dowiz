@@ -2,12 +2,13 @@
 //! The two seams `bebop_log::doc::verify` asks the caller for, as THIS reader fills them.
 //!
 //! `ReaderIds` re-derives dowiz-hub's documented id schemes (`crates/dowiz-hub/src/chain/scheme.rs`,
-//! FORMAT §9.2): a record's id is `sha256(prev ‖ payload)` (M0, the payload led by a 16-byte
+//! FORMAT §9.2): a record's id is the sha256 of `bebop_log::doc::id_message` (id v2, W-MG-HOLES:
+//! `"bebop-record/1" ‖ flags ‖ actor ‖ seq ‖ prev ‖ payload`, the payload led by M0's 16-byte
 //! nonce), or under one of the two legacy FNV-1a x4 schemes of older images (over `prev ‖ payload`
-//! from 2026-09-20, over the payload alone before). A redaction shows as dowiz-hub's mark, the high
-//! bit of the kind byte (`forget.rs`), behind the nonce when there is one, or as a nonce erased to
-//! sixteen `'0'` bytes on a record with no kind byte: a legacy record has no nonce to erase, and
-//! reading the erased nonce alone counted a real legacy tombstone broken.
+//! from 2026-09-20, over the payload alone before). A redaction keeps its id and shows as dowiz-hub's
+//! mark, the high bit of the kind byte (`forget.rs`), behind the nonce when there is one. That bit
+//! is the ONLY mark (FORMAT §9.4): a legacy record has no nonce to erase, so a nonce of sixteen
+//! `'0'` bytes with no bit behind it is an edit, and reads broken, as it does to `HubIds`.
 //! These are FORMAT rules re-derived from the text, exactly as `oracle.py` re-derives
 //! the fold; the test fixture written with `ToyIds` (bebop-log's test mix) therefore counts
 //! `broken`, which is the honest answer about a toy file.
@@ -21,9 +22,8 @@ use bebop_log::doc::{Ids, Verifier};
 
 use crate::sha256::sha256;
 
-/// The nonce in front of every post-M0 payload, and what a redaction leaves there.
+/// The nonce in front of every post-M0 payload.
 pub const NONCE_LEN: usize = 16;
-const ERASED: [u8; NONCE_LEN] = [b'0'; NONCE_LEN];
 /// `forget.rs`'s tombstone mark on the kind byte.
 const REDACTED_BIT: u8 = 0x80;
 
@@ -44,11 +44,12 @@ fn legacy_mix(bytes: &[u8]) -> [u8; 32] {
 pub struct ReaderIds;
 
 impl Ids for ReaderIds {
-    fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-        let mut m = Vec::with_capacity(32 + payload.len());
-        m.extend_from_slice(prev);
-        m.extend_from_slice(payload);
-        sha256(&m)
+    fn chained(&self, r: &bebop_log::Record) -> [u8; 32] {
+        sha256(&bebop_log::doc::id_message(r.flags, &r.actor_pubkey, r.actor_seq, &r.prev, &r.payload))
+    }
+    /// The SEG chain's hash (`seg::chain_hash`). Without it every cut file is refused (75).
+    fn hash(&self, bytes: &[u8]) -> Option<[u8; 32]> {
+        Some(sha256(bytes))
     }
     /// Both legacy schemes: FNV over `prev ‖ payload` and over the payload alone.
     fn legacy(&self, flags: i64, prev: &[u8; 32], payload: &[u8], id: &[u8; 32]) -> bool {
@@ -60,11 +61,7 @@ impl Ids for ReaderIds {
         legacy_mix(&m) == *id || legacy_mix(payload) == *id
     }
     fn redacted(&self, flags: i64, payload: &[u8]) -> bool {
-        let sha = flags & bebop_log::FLAG_SHA256 != 0;
-        if sha && payload.starts_with(&ERASED) {
-            return true;
-        }
-        let b = if sha { payload.get(NONCE_LEN..).unwrap_or(&[]) } else { payload };
+        let b = if flags & bebop_log::FLAG_SHA256 != 0 { payload.get(NONCE_LEN..).unwrap_or(&[]) } else { payload };
         b.first().is_some_and(|k| k & REDACTED_BIT != 0)
     }
     /// FORMAT §9.4, the owner's framing: M0's nonce, then dowiz-hub's kind byte on a declaration

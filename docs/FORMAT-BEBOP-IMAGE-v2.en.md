@@ -2,19 +2,22 @@
 
 Status: **normative**, frozen 2026-10-27, English text added 2026-10-31. This is the English twin of
 `docs/FORMAT-BEBOP-IMAGE-v2.md`, section for section; the two state the same rules. It describes the
-bytes that the reference writers and readers produce and accept today. Where this text and the
-reference code disagree, the code that reads and writes live images is right and the disagreement
-is a defect of this text.
+bytes that the reference writers and readers produce and accept today.
+
+**Authority.** This text is the contract for a third party and the reference code is informative: where the two differ that is a defect, to be reported to the maintainers of the reference repository with the section, the file or its sha256, and both answers, and §12 lists the ones known today.
 
 Key words: **MUST** - breaking it makes an image invalid or a reader non-conforming; **MUST NOT** -
 a prohibition; **MAY** - allowed. Identifiers are written as the code writes them. A name in
 `backticks` that ends in `.rs`, `.bp` or `.py` is an informative pointer to the reference
-implementation: nothing normative depends on opening it, and neither does any repository path. Everything a
+implementation: nothing normative depends on opening it, and neither does any repository path. So is a qualified
+name (`doc::id_message`, `chain::stock_flags`, `HubIds::body`, `ReaderIds::body`, `Verifier::actor_of`) and the reference tool
+`doc_verify`: the rule stands here, and `Ids::chained(r)` means the id formula of §9.4 over record `r`. Everything a
 reader needs is in this text, and §13 gives the answers a conforming reader must reach, with the sha256 of each file.
 
 Notation: `a ‖ b` is byte concatenation; `LE8(x)` is `x` as 8 bytes, little-endian, two's complement;
 `ceil(x/8)` rounds up; `[a, b)` is a half-open range; `0^32` is 32 zero bytes. "Packed" bytes sit eight
-to a cell, little-endian (byte `i` is byte `i % 8` of cell `i / 8`), and the last cell is zero-filled.
+to a cell, little-endian (byte `i` is byte `i % 8` of cell `i / 8`), and a writer MUST zero-fill the last cell. A reader takes
+the bytes its length names and MUST NOT refuse non-zero padding behind them.
 A 32-byte value held in four cells (an id, a tip, a sha256) is packed the same way.
 
 ---
@@ -27,6 +30,17 @@ A 32-byte value held in four cells (an id, a tip, a sha256) is packed the same w
 - A reader that reads a cell past the end of the image MUST get **0**. That is already the format's
   null (`ref` 0 = no object, length 0 = no payload). A reader MUST NOT panic on, or allocate by, a
   value from the image without first bounding it by the image.
+- **Integers.** Every expression over cell values in this text (`1024 + capacity`, `pt + 20`, `r + 2`, `this_obj + off`,
+  `i + 2 + len`) is exact integer arithmetic. A reader with fixed-width integers MUST NOT let one wrap: an overflow is a
+  value past every bound, so the check that guards it refuses, and a `ref` that overflows reads as null. A negative
+  `capacity` counts as 0. A length or seq read "as unsigned" is 64 bits wide on every platform.
+- **A field past `len`.** A field is read by its cell number; `len` bounds what this text says it bounds, namely the crc, a
+  payload, table rows and the lengths it states. An object shorter than its layout is one a writer MUST NOT produce, and no
+  rule refuses it unless a section says so: a reader MUST read such a field from the cell that lies there (the next
+  object's header, or 0 past the image's end) and MUST NOT read it as 0 inside the image. The stated bounds: a KV root under 6
+  cells has no version cell (§9.1), under 8 a v3 root is refused and a v4 root must be exactly 8; a log root under 8 cells has no
+  version cell (§9.2); a record shorter than its head is refused (§9.2), and a v2 record under 16 cells has no actor; a DOC is exactly 10 cells, and SEAL, KEY, SEG, ANCH and SPEC have exact
+  lengths (§9.4, §9.5).
 
 ## 2. Image layout
 
@@ -69,13 +83,11 @@ is **not verified**; the only integrity argument is the crc (§6).
 
 ### 3.1 Picking the live superblock
 
-Let `n` be the image's cell count after this step: when a valid superblock exists, take the valid one
-of higher generation (A on a tie), and if `arena_used` ≤ the cell count < `1024 + capacity`, and
-`1024 + capacity` is at most `max(MAX_PAD_CELLS, cell count)`, the image is a **trimmed** image (§8)
-and MUST read as if zero-padded to `1024 + capacity` cells. Otherwise it is left exactly as it arrived.
+A reader of bytes handed whole **never pads**: `n` is the cells that arrived, and no answer depends on `capacity`. A ref,
+a root or an object past them is outside the image, and a cell read there is 0 (§1). `capacity` is the writer's: what a
+writer re-opening a trimmed image restores before it writes (§8), never a claim on what a reader reads.
 
-Validity is judged on the cells as they arrived, so a superblock B whose 16 cells are past the end is simply not
-valid. Every `n` in step 2 below is the padded count.
+A superblock B whose 16 cells are past the end is simply not valid.
 
 1. Validity by the rule above. Both valid → the higher generation (compared as `i64`); equal → A. One
    valid → that one. None → refuse (status 1). A reader MAY check cells 13-14 here: the Python reference reader
@@ -129,7 +141,9 @@ payload[0..len]
 - Objects lie in the arena from `ARENA` = 1024 with no gaps, in allocation order. The next commit
   starts at the cursor (`used_p`).
 - `len` is a **claim**: a reader MUST bound it by the image. An object that does not fit fails its crc
-  check (status 10), and MUST NOT cause an allocation.
+  check (status 10), and MUST NOT cause an allocation. Three walks ask something else first and name their own status for
+  such an object: a PartTab is **1** (§3.1), a v3 chain record is **2** (§9.1), and a log record is **4** when the running sum
+  passes the image (§9.2). Anywhere else a crc is asked, 10.
 - **The crc covers the payload, not the header.** h0 is protected only by the anchor over the last commit, so a
   digest or length bit of an older object is caught by the read that depends on it, or not at all.
 - **`ref`**: a payload cell holding a **signed offset in cells, relative to the first header cell of the
@@ -144,8 +158,8 @@ payload[0..len]
 - **`st_digest(s)`** is the last four bytes of `sha256(s)` (bytes 28..31) as a big-endian `u32`, over
   the ASCII string `s`. §10 lists every layout string. Two digests are **not** derived this way, they
   are ASCII labels: the EvLog root `0x45564C47` and the EvLog record `0x45565F52` (§9.2).
-- **Who checks the digest.** KV readers MUST NOT require the KV root's digest: the layout and version
-  come from cell 5 of the root (§9.1). DOC layouts (§9.4, §9.5) are checked by digest, because a root is
+- **Who checks the digest.** A reader of KV v1-v3 MUST NOT require the KV root's digest: the layout and version
+  come from cell 5 of the root (§9.1); a v4 root's digest is rule 0 of §9.1, after the version. DOC layouts (§9.4, §9.5) are checked by digest, because a root is
   a DOC only if digest, length and both version cells all agree.
 
 ## 6. CRC
@@ -230,9 +244,9 @@ the file is written, then the file and its directory are `fsync`ed. Below `MIN_B
   append the old root; a DOC commit the old HEADS, KEYS when replaced, and DOC. These two cells are
   accounting that compaction policy reads. A reader MUST NOT derive a read's answer from them.
 - `SB_CAPACITY` is set at creation and carried by every commit. **Trimming**: an image MAY be stored cut
-  at `max(arena_used, 1024)` cells (no readable superblock: stored whole); capacity is not changed, so
-  the reader restores the zero tail by the rule at the head of §3.1. Past `MAX_PAD_CELLS` a reader MUST NOT
-  pad to a capacity claim: the claim is not an instruction to allocate.
+  at `max(arena_used, 1024)` cells (no readable superblock: stored whole); capacity is not changed. A reader reads what arrived (§3.1); a writer re-opening such an
+  image restores the zero tail before it writes, sized by the capacity (`Store::image_bytes`), and past its ceiling, by default
+  `MAX_PAD_CELLS`, it MUST NOT grow to a capacity claim: the claim is not an instruction to allocate.
 
 ## 9. Layouts over the container
 
@@ -256,29 +270,41 @@ answers with; status 0 is `OK`.
 |---|---|---|
 | 0 | `OK` | read; `n` = entries or records, `root` = the fold |
 | 1 | `NO_SUPERBLOCK` | no valid superblock, or the live one refused structurally (§3.1). Never a fallback |
-| 2 | `NOT_A_KV` | a superblock but no root, or a slice, chain or v4 claim that does not hold, or a DOC part this reader does not read |
+| 2 | `NOT_A_KV` | a superblock but no root, or a slice, chain or v4 claim that does not hold, or a KV base not strictly ascending, or a DOC part this reader does not read or that does not hold (a SEG with `last` < `first`, the walk bound spent) |
 | 3 | `NOT_A_LOG` | asked for the log of an image whose root is neither a log nor a DOC |
-| 4 | `TRUNCATED` | a log's chain does not deliver the root's count, or never ends |
+| 4 | `TRUNCATED` | a log's chain does not deliver the root's count, or never ends, or holds a record shorter than its head |
 | 5 | `NULL_ARG` | an ABI null pointer; the Python reference reader also uses 5 for non-zero superblock cells 13-14 (§3.1) |
 | 10 | `BAD_CRC` | an object the read reached fails its crc |
 | 12 | `UNKNOWN_VERSION` | a KV root names a version above 4 and is not a DOC, or a log root names a version above 2 (§9.2) |
 | 41 | `LAST_COMMIT` | the anchor does not hold and every object of its range checks |
 | 75 | `CUT_UNDECLARED` | `verify` on a DOC: the file is whole, but a SEG is named by no TRUNCATE on the kept chain (§9.4) |
+| 76 | `UNPINNED` | a host only (§9.5): the embedded reader is not the one the host pins; it is not run |
+| 77 | `MODULE_REFUSED` | a host only (§9.5): the embedded module has an import, a start section, or no single bounded memory |
+| 78 | `HOST_FAILED` | a host only (§9.5): the file could not be read, or the reader trapped or ran out of its clock or memory; no verdict |
 
 The readers report `kv status=<s> n=<n> root=<fold>`, `log status=…` or `doc status=…`, with `n=0 root=0`
-on a refusal. `<fold>` is printed as a signed `i64` (the `u64` hash reinterpreted in two's complement).
+on a refusal, and exit with `<s>`. `<fold>` is printed as a signed `i64` (the `u64` hash reinterpreted in two's complement).
+
+**`verify` is a second question, asked of a DOC that opened.** Status 75 is a status of `verify`, never of the open. The open
+line of such a file MUST stay `doc status=0 n=<records> root=<log fold>`; the next line MUST read `verify status=75` in place of
+the counters, with no counter printed; and the exit code MUST be 75. Any other refusal `verify` gives after a good open
+takes the same form, `verify status=<s>` and exit `<s>`. At the ABI the same file answers `bw_open` 0, `bw_verify(1)` 75 and
+`bw_counts` -75.
 **The kind.** There are three words, `kv`, `log`, `doc`, and the ABI's numbers for them (§9.5.1): the KV version 1..4,
-5 for a DOC, 16 for a log. A kind exists only for an opened image: a refusal has none (`bw_kind` = 0), and which word
-prefixes a refused line carries no meaning; the conformance answer is the status.
+5 for a DOC, 16 for a log. A kind exists only for an opened image: a refusal has none (`bw_kind` = 0). A refused line MAY
+start with any of the three words (the reference readers print `kv`), a consumer MUST NOT read a kind from it, and
+conformance compares the status, `n` and `root` alone.
 Codes 40-60 and 70-74 belong to a database or ABI layer and never come from a read of bytes as above.
 A KV-only reader MAY stop at step 4 and refuse a DOC root as 12 (cell 5 reads as a version above 4);
 §13 gives both answers for the fixture `doc`.
+
+**The walk bound.** One number bounds every walk over objects: `n`, the cells that arrived (§3.1). Each object a walk reads costs `2 + c`, `c` being its `len` bounded by the cells behind it, paid before it is read. The objects of an honest file are disjoint, so no honest file spends it; a file that does has named something twice or laid objects over each other. Spent: a v3 chain → 2 (§9.1), a v4 walk, nodes and values → 2 (§9.1), a log walk → 4 (§9.2), a SEG chain → 2 and an ANCH chain ends without a refusal (§9.4). A read's walks each start from `n`; all the walks of one `verify` share one bound (§9.4). A count of steps (`step_cap`) is a separate rule, stated where it applies.
 
 ### 9.1 KV
 
 Digests: root `DIGEST_KV_ROOT`, arrays and records `DIGEST_ARR_I64`. A reader of v1-v3 MUST NOT check the digest of
 the root, of an array or of a delta record: those objects are found by position, and only their crc is checked.
-Keys in the base are **sorted** by raw bytes, strictly ascending.
+A writer MUST keep the base's keys **sorted** by raw bytes, strictly ascending, and a reader MUST refuse a base that is not, with or without a chain.
 
 **Version**: when the root has ≥ 6 payload cells and `payload[5]` > 0, the version is `payload[5]`;
 otherwise it is 1. Above 4 → status 12, checked after the root's crc and before any of its cells is
@@ -301,17 +327,17 @@ followed.
   on: a
   root under 8 cells; `D` < 0; more or fewer than `D` records; a record whose `len` does not fit the image (a record cut by the image's end is therefore **2**, never
   10), a bad length, an unknown OP,
-  KLEN or VLEN < 0, or a remove with VLEN ≠ 0; records that together with their headers exceed the image's
-  cells (that also ends a looping chain); (5) crc of every record, newest first → 10; (6) decode, refusing with **2** on:
+  KLEN or VLEN < 0, or a remove with VLEN ≠ 0; the walk bound spent (§9.0, that also ends a looping chain); (5) crc of every record, newest first → 10; (6) decode, refusing with **2** on:
   a null array ref; `n` < 0; `2n` above either index's cell count; any offset or length negative, or a
   slice past its blob (blob size = its cells, ×8 from v2); the entries together claiming more bytes than
-  the two blobs hold; a non-empty chain over a base that is not strictly ascending. So with two defects the order
+  the two blobs hold; a v1, v2 or v3 base that is not strictly ascending in raw bytes. So with two defects the order
   is arrays' crc, chain shape, records' crc, decode: a null array ref behind a failing crc elsewhere answers 10.
 - **The map** = the base, then the records from the **oldest**: a put inserts or overwrites, a remove
-  deletes (a remove of an absent key changes nothing). Entries stay in byte order of keys.
+  deletes (a remove of an absent key changes nothing). Entries stay in byte order of keys. With an empty chain nothing is
+  replayed: the map is the base, already ascending by step 6, and `n` is cell 0.
 - **Fold**: FNV-1a 64 (basis `0xCBF29CE484222325`, prime `0x100000001B3`, xor the byte then multiply mod
-  2⁶⁴) over `LE8(len(key)) ‖ key ‖ LE8(len(value)) ‖ value`, entry by entry in key order. It runs over
-  bytes, so v1, v2, v3 and v4 of the same entries give one root. An empty map folds to the basis.
+  2⁶⁴) over `LE8(len(key)) ‖ key ‖ LE8(len(value)) ‖ value`, entry by entry in the map's order. It runs over
+  the raw bytes of keys and values, which a reader MUST NOT decode or replace, so v1, v2, v3 and v4 of the same entries give one root. An empty map folds to the basis.
 - **Compaction** writes v2 into a fresh image (doubling from 16 KiB up to the ceiling), trimmed. The
   delta writer compacts when the chain would pass `MAX_DELTAS`, when `superseded · DEAD_DIV > live`, when
   the base is v1, or when the arena is full.
@@ -329,10 +355,11 @@ followed.
   `2 + hc`, and MUST NOT interpret or check the hash cells. They are reserved space, not a Merkle tree:
   the tree is not hashed, its integrity is the crc of each object.
   **The rules a reader refuses on**, each **2** unless it says otherwise:
-  (0) the root: `len` = 8, cells 1-4 zero, `n` ≥ 0, `0 ≤ DEPTH ≤ 16`; `DEPTH = 0` requires `TREE = 0` and
+  (0) the root: digest `DIGEST_KV_ROOT`, `len` = 8, cells 1-4 zero, `n` ≥ 0, `0 ≤ DEPTH ≤ 16`; `DEPTH = 0` requires `TREE = 0` and
   `n = 0`;
   (1) every ref inside the tree, the root's `ref TREE` included, is strictly BACKWARD (`off < 0`, `target ≥ 0`; a commit
-  allocates values, leaves, nodes, the root last), which ends any walk;
+  allocates values, leaves, nodes, the root last), which ends any walk. A target below 1024 is not refused by this rule: it
+  meets the crc and digest of the level that reads it;
   (2) a leaf lies at exactly `DEPTH` levels below the root (the top node is level `DEPTH`, leaves level 1): an
   object of the wrong digest, or wrong META kind, at a level is refused; `1 ≤ m ≤ 65535`, and `1 + m·(2 + hc)`
   ≤ `len`; a reachable NODE has `m ≥ 2`;
@@ -367,25 +394,26 @@ oldest. A v1 record, `15 + payload_len` cells: `{actor_seq, payload_len, ref pre
 actor_pubkey 4, payload one byte per cell}`, with no flags.
 
 **Read of a log**, from its root (the image's, or a DOC's `ref LOG`): (1) crc of the root → 10; (2) walk from
-`ref LAST` through `ref prev` to null, newest first. Before each record count one step and add `2 + len` to
-a running sum: more than `step_cap` steps, or a sum above the image's cells, means the chain never ends →
-**4**. `step_cap` = `floor(cells / 14) + 1`. Each record's crc → 10. (3) The count MUST equal root cell 0,
+`ref LAST` through `ref prev` to null, newest first. Before each record count one step and pay the walk bound (§9.0):
+more than `step_cap` steps, or the bound spent, means the chain never ends → **4**. `step_cap` = `floor(cells / 14) + 1`, `cells` being `n`
+of §3.1, here and in every walk of §9.4. An object shorter than a record's head (12 cells in v2, 15 in v1) → **4**, a record cut short: no field of it is read from the cells behind it.
+Each record's crc → 10, after that record's step. A reader MUST NOT check the record digest `0x45565F52`, nor the digest of a
+DOC's `ref LOG` root: both are found by position, and only their crc is checked. (3) The count MUST equal root cell 0,
 else **4**. A record's payload is bounded by its object: `payload_len` is read as unsigned, so a negative one is
 huge, and a `payload_len` larger than the object holds reads as the bytes that are there, never as an error here and
-never as 0 bytes; the fold runs over the bytes actually read. A record whose crc fails is refused here; only a loader with a
+never as 0 bytes; the fold runs over the bytes actually read, and `len(payload)` in it is their count. A v1 payload byte is the cell's low byte. A record whose crc fails is refused here; only a loader with a
 quarantine policy of its own serves the rest. A root naming a version above 2 MUST be refused before the walk, with status **12**: that is
-the word the vocabulary has, and the hub's loaders refuse it by that name (`UnknownVersion`). The reference byte
-readers do not ask yet (§12, item 8).
+the word the vocabulary has, and the hub's loaders refuse it by that name (`UnknownVersion`).
 
 **Log fold**: FNV-1a 64 (§9.1) over `LE8(actor_seq) ‖ LE8(len(payload)) ‖ payload`, from the oldest record.
 `n` = the records. A DOC's root for a reader is the fold of its log.
 
-**`flags`**: bit 0 = `actor_pubkey` present; bit 1 (`FLAG_SHA256`) = `id = sha256(prev_id ‖ payload)` and the
+**`flags`**: bit 0 = `actor_pubkey` present; bit 1 (`FLAG_SHA256`) = the id is sha256 over `doc::id_message` (§9.4, W-MG-HOLES) and the
 payload starts with a 16-byte nonce (base64url text in a writer's hands, opaque to a reader); bit 2 = the
 nonce was derived from the record, not drawn from entropy. Bits 3-63 are zero and a reader passes them
 through. Bit 1 = 0 is a record written before that scheme: its id is the FNV-1a ×4 `legacy_id` below, and the
 bytes of old images do not change. The scheme moves forward once: within one device a legacy record newer
-than a sha256 record is `broken`. `legacy_id(b)` is four `u64` LE concatenated (32 bytes), lane `i` ∈ 0..3:
+than a record that moved the device is `broken`, and §9.4 says what moves one. `legacy_id(b)` is four `u64` LE concatenated (32 bytes), lane `i` ∈ 0..3:
 FNV-1a 64 over `b` with basis `0xCBF29CE484222325 ^ (i · 0x9E3779B97F4A7C15 mod 2⁶⁴)`; `b` =
 `prev_id ‖ payload` (2026-09-20 until the scheme moved) or `payload` (earlier). A plain log reader does
 not hash ids; the DOC verifiers do (§9.4).
@@ -400,7 +428,8 @@ PROJ     [key64, kind, code, fmt, input_gen, tip0, tip1, ref OUT, fn_key]   9 ce
 OUT      [value, count]                         digest DIGEST_OUT
 ```
 
-`input_gen` is compared with the low 32 bits of h1 of the input's root. `key64` and `fn_key` are opaque to a
+For every kind `input_gen` = the low 32 bits of h1 of the input's root. Every offset in a PROJ and in a fingerprint is an
+**absolute** cell index, not a `ref`. `key64` and `fn_key` are opaque to a
 reader of the file. A table MAY hold several rows, of one kind or of many; a reader of the file MUST consider each
 row on its own, and MUST NOT take a row's position or kind for the answer to a read. `code` is the producer's code version. A memo is
 checked by digest, length, crc and the kind's OUT rule; a memo that fails reads as absent and the owner
@@ -416,10 +445,11 @@ that a `PROJ` points at depends on the kind:
 | 4 ZSET | KV v1/v2/v3 | `OUTZ [value, count, m, w, (c0..c(w−1), weight) × m]` | `DIGEST_OUTZ` 85289679 | exactly `4 + m·(w+1)`, `m ≥ 0`, `1 ≤ w ≤ MAX_WIDTH` (64) |
 
 A reader that knows only kinds 1/2 sees a foreign digest and refuses the row, then recomputes; it does
-**not** misread. An unknown kind is a refusal.
+**not** misread. A row of an unknown kind is refused as a memo, so it reads as absent. A memo never moves a read's status, `n`
+or `root`: §9.0 does not read this table.
 
 - **Kind 1.** `value` = the log fold (§9.2); `count` = root cell 0; `tip0, tip1` = id0, id1 of the newest record.
-- **Kind 2.** `input_gen` and tip are the root's offset and h1.
+- **Kind 2.** `value` = the KV fold (§9.1); `count` = root cell 0; `tip0` = the root's absolute offset; `tip1` = the root's whole h1 cell.
 - **Kind 3.** `value` = FNV-1a 64 over the bytes; `count` = the log's record count; the tail of the last
   cell is zero. Tip as in kind 1. Step: the tip is found in the chain and `count + k` = the log's length →
   `step(old bytes, the k newer records from the oldest)`; the law is `step(full(a), b) == full(a ++ b)`.
@@ -452,7 +482,7 @@ A 32-byte field below takes 4 cells. Cell numbers are payload cells.
 ```
 DOC   10 cells, digest st_digest("DOC{i64,ref EVLOG,ref KV,ref HEADS,ref KEYS,i64,ref SPEC,i64,ref ANCH,ref SEG}") = 2619226223
       0 FLAGS (bit0 ids = sha256, bit1 tree = fold(log), bit2 self-describing)
-      1 ref LOG (EvLog v2 root, 0 = none)   2 ref TREE (KV v3/v4 root, 0 = none)
+      1 ref LOG (EvLog v2 root, 0 = none)   2 ref TREE (a KV root, 0 = none; which versions a reader reads: "Reading a DOC")
       3 ref HEADS   4 ref KEYS   5 VERSION = 5   6 ref SPEC (0 = none)   7 VERSION = 5   8 ref ANCH (0 = none)
       9 ref SEG (the newest log segment, 0 = the log was never cut)
 SEAL  {VERSION=1 (0), actor_id (1-4), seq (5), tip (6-9), claimed_ms (10), ref PREV_SEAL (11), ref TIME (12, 0),
@@ -490,7 +520,7 @@ SEG   {VERSION=1 (0), first (1), last (2), root (3-6), ref PREV_SEG (7), ref BLO
 (pk 1952 bytes, signature 3309 bytes). Any other number, or a key or signature of another length, MUST NOT
 verify: such a seal counts bad, never a guess at another scheme. `actor_id` is a 32-byte name; the writer
 convention is `actor_id = sha256(pk)`, and `actor_pubkey` of a record = `actor_id`, while the pk itself is held
-once, in KEY. No reader recomputes that hash (§12, item 7).
+once, in KEY. A verifier with an algorithm recomputes it (`Verifier::actor_of`, below); a reader with none cannot judge it.
 
 **Record framing.** The framing of a record's payload is one rule for every verifier:
 
@@ -504,12 +534,17 @@ once, in KEY. No reader recomputes that hash (§12, item 7).
    the tail: behind the nonce when `FLAG_SHA256` is set, the first payload byte when it is not. An empty tail is no
    tombstone. A writer that redacts a record MUST set that bit, and on a flagged record MUST also erase the nonce to
    sixteen ASCII `0` bytes, because a kept id would otherwise confirm a guessed payload by recomputation. A reader
-   MUST NOT read the erased nonce as the mark: a legacy record has no nonce to erase.
+   MUST NOT read the erased nonce as the mark: a legacy record has no nonce to erase, and a record with an erased nonce and no bit is an edit, **broken**.
 
 Key-op bodies: `ADMIT = "bebop-admit/1" ‖ actor_id ‖ LE8(alg) ‖ LE8(valid_from) ‖ LE8(pk_len) ‖ pk`,
 `REVOKE = "bebop-revoke/1" ‖ actor_id ‖ LE8(after_seq)` (signed),
-`TRUNCATE = "bebop-truncate/1" ‖ root ‖ prev_root ‖ LE8(first) ‖ LE8(last) ‖ LE8(redacted) ‖ LE8(declared)`,
-`FORGOTTEN = "bebop-forgotten/1" ‖ LE8(n_redacted) ‖ subject (32)`. A body shorter than its fields is not that body.
+`TRUNCATE = "bebop-truncate/1" ‖ root ‖ prev_root ‖ LE8(first) ‖ LE8(last) ‖ LE8(redacted) ‖ LE8(declared) ‖ seg_hash (32)`,
+`FORGOTTEN = "bebop-forgotten/1" ‖ LE8(n_redacted) ‖ subject (32) ‖ (id (32) ‖ digest (32)) × n_redacted`. A body shorter than its
+fields is not that body, and a FORGOTTEN whose `n_redacted` is not the number of rows it holds is not a FORGOTTEN. An ADMIT
+needs `0 ≤ pk_len ≤ 65536`. Bytes behind the last field of an ADMIT, REVOKE or TRUNCATE MUST be ignored: only a FORGOTTEN is exact.
+In a hub's file only records of kinds `K` (key op) and `D` (declaration) have a body: `HubIds::body` answers empty for any other, or a
+98-byte order id would read as a declaration. A reader with no signature code (`ReaderIds::body`, Python) leaves another kind's body
+alone: it starts at its kind byte 1..8 and matches no mark, and a body with no kind byte (bebop-log's own fixtures) starts at its mark.
 All refs in a commit point back: record → KEY → KEYS → SEAL → HEADS → log root → DOC.
 
 **Cut.** The container has no compaction of a log, so a cut is a rebuild into a fresh image: the oldest records,
@@ -528,26 +563,51 @@ the redactor then commits a signed FORGOTTEN. A tombstone over a REVOKE record i
 archive carries REVOKE records and KEYS verbatim, so the verdict travels with the file.
 
 **Reading a DOC** (§9.0 step 4 reached): (1) crc of the root → 10; (2) the log as §9.2; (3) crc of HEADS and KEYS when
-named → 10; (4) SPEC when named: crc → 10, and not a SPEC (digest, 8 cells, VERSION = 1) → 2; (5) TREE when named: crc
-→ 10, then a v4 tree as §9.1; a reader MAY refuse a v1-v3 TREE with 2, and the reference reader does (§12, item 9);
-(6) SEG chain from `ref SEG` through `ref PREV_SEG`: crc → 10; not a SEG (digest, version, exact length) → 2;
-more steps than `step_cap` → 2; (7) the ANCH chain from `ref ANCH` through `ref PREV_ANCH`: an object that is not an ANCH (digest, VERSION = 1, `0 ≤
-proof_len ≤ MAX_PROOF_BYTES`, exact length) ENDS the walk without a refusal, as does `floor(cells / 11) + 1` steps; the crc of
+named → 10; (4) SPEC when named: crc → 10, and not a SPEC (digest, 8 cells, VERSION = 1) → 2. The SPEC's sha256 is a claim:
+a read and `verify` MUST NOT check it, and §9.5 binds a host before it executes; (5) TREE when named: crc → 10, then by cell 5 of
+the object: 4 is a v4 tree as §9.1, which a DOC reader MUST read; 1-3 a reader MAY refuse with 2, and the reference reader does (§12, item 1);
+anything else is 2, never 12. Digest and root rules are those of §9.1;
+(6) SEG chain from `ref SEG` through `ref PREV_SEG`: crc → 10; not a SEG (digest, version, exact length) → 2; `last` < `first` as `u64` → 2;
+more steps than `step_cap`, or the walk bound spent → 2; (7) the ANCH chain from `ref ANCH` through `ref PREV_ANCH`: an object that is not an ANCH (digest, VERSION = 1, `0 ≤
+proof_len ≤ MAX_PROOF_BYTES`, exact length) ENDS the walk without a refusal, as do `floor(cells / 11) + 1` steps and the walk bound spent; the crc of
 each ANCH read → 10. Only after that walk is a crc checked: a foreign object at the end is not one. Status 0 reports `doc status=0 n=<records>
 root=<log fold>`; with `ref LOG` = 0 there are no records, so `n` = 0 and `root` = the FNV basis as a signed `i64`
 (-3750763034362895579). HEADS and KEYS read by digest: a table of a foreign digest reads as empty, `m` is clamped to the
 rows its object holds, and a KEYS row with a null ref is skipped. A foreign KEY object is skipped (digest, exact
 length, `0 ≤ pk_len ≤ 65536`).
 
+A KEY object's crc is not read: a read and `verify` MUST NOT refuse on it. A key's actor is the KEY object's `actor_id`, and the
+actor cells of its KEYS row MUST NOT be used. A `ref ADMIT_REC` that reads as null under §5, dangling included, makes a genesis key: that
+one unsigned cell is why `Trust::Genesis` proves nothing. Of several HEADS rows for one actor the first in table order answers
+for it, and of several KEYS rows the first. Only bit 1 of FLAGS changes an answer (`tree_unsigned`): a reader MUST NOT derive anything from
+bits 0 and 2, and a record's scheme comes from that record's own flags. An anchor changes no status and no counter: "bad" and `under_cut`
+are verdicts of an anchor check, which a blind reader does not run; it reports what it read as present.
+
+**Record id (W-MG-HOLES, 2026-10-31).** `id = sha256("bebop-record/1" ‖ LE8(flags) ‖ actor (32) ‖ LE8(seq) ‖ prev (32) ‖ payload)`,
+`doc::id_message`, with `flags` excluding `FLAG_ACTOR`. M0 hashed `prev ‖ payload`, and no live record carries that. A redaction keeps
+the id: flags, actor, seq and `prev` do not move and the redacted bit is the kind byte inside the payload, so a tombstone's id
+stops checking anything, and the tombstone's cells are bound by the `digest` in its FORGOTTEN. A record with `FLAG_SHA256` is never tested
+by the legacy rule. The stock log carries no actor and no flags on the wire: actor = 0, seq = position counted from 0, flags derived from the
+text (`chain::stock_flags`: `FLAG_NONCE_DERIVED` when the nonce equals the one derived from `prev` and the body). Legacy (FNV) records
+carry none of these guarantees: their actor, seq and flags are free (§14).
+
+**Segment hash (W-MG-HOLES).** `chain_hash` folds oldest to newest: `h = hash("bebop-seg/1" ‖ h_below ‖ root ‖ blob≠0 (1 byte) ‖ first ‖ last ‖
+redacted ‖ declared ‖ m ‖ (actor (32), LE8(seq), tip (32), LE8(scheme)) × m)`, numbers LE8, `h` under the oldest = 0^32, hash = sha256. The TRUNCATE
+signs the newest hash, so no number `verify` sums from any segment and no frontier row stands unsigned. The records that left are not under this
+hash: `root` names their ids and a tombstone keeps its id, so a tombstone's bytes under a cut are bound only by a FORGOTTEN still in the
+file; the archive is what shows them.
+
 **`verify`: the counters.** Over the records oldest first, grouped by device (`actor_pubkey`). Refusals first: the
 steps above, and then CUT_UNDECLARED (below). `records` = the log's records; `forks` = `(actor, seq)` pairs
 that occur more than once. For each device, for each of its records in file order, exactly one of:
 
-- `prev` test, first: a device's first record passes if a segment's frontier names the device at `seq − 1` and
-  its tip equals `prev`, or if no segment names the device at all; a later record passes if `prev` = the id of
-  the device's previous record. Fail → **broken**. So the first record of a device with no segment is not
-  tested against anything.
-- `id == sha256(prev ‖ payload)` → **chained**, and the device has moved. It is tested on every record, flagged or not.
+- `prev` test, first: a device's first record passes if the device's newest frontier row (newest segment first, and no
+  older row counts) sits at `seq − 1` modulo 2⁶⁴ and its tip equals `prev`, or if no segment names the device at all; a later
+  record passes if `prev` = the id of the device's previous record. Fail → **broken**. So the first record of a device with no
+  segment is not tested against anything, and one whose row sits at another seq is broken.
+- `id == Ids::chained(record)` → **chained**, and the device has moved. It is tested on every record, flagged or not. Only
+  this result moves a device: a tombstone does not, flagged or not, so a legacy record after a tombstone stays **legacy** while the
+  device has not moved.
 - `legacy`: `FLAG_SHA256` clear, and `id` = `legacy_id(prev ‖ payload)` or `legacy_id(payload)`. → **legacy**, or **broken**
   when the device has moved. A device starts as moved if its newest frontier row (newest segment first) has
   `scheme` = 1.
@@ -555,13 +615,23 @@ that occur more than once. For each device, for each of its records in file orde
   device's HEADS row tip (no row: the log's tip, root cells 3-6 when `has_tip` ≠ 0) = this id. → **redacted**.
 - otherwise **broken**.
 
+**The seq of a device.** A device's seqs are 1, 2, 3 ... along its chain, and every rule that reads a seq (`valid_at`, "covers") trusts that. It is judged for an actor with a KEY row; any other actor signed nothing and may carry any number. Walk the device's records in file order, keeping `last` (the seq of the previous record, none at the start) and `soft` (the seq of the previous legacy record, none at the start). A record is **dense** when: its actor has no KEY row; or its `(actor, seq)` occurs more than once, which is a fork, counted in `forks` and not again here; or `last` exists and seq = `last` + 1 with no wrap; or `last` does not exist and any of: the device has a frontier row, seq = 1, `soft` exists and seq = `soft` + 1 with no wrap, or this is the device's first record and its `prev` is neither 0^32 nor the id of any record in the file. After a record classed legacy, `last` is none and `soft` is its seq; after any other record `last` is its seq, broken ones included, so one hole reads as one. A record whose `prev` test holds and whose id equals `Ids::chained` is **chained** only when dense; otherwise it is **broken**, it still moves the device, and a seal whose tip is that id is bad. A tombstone is **redacted** only when dense or when `last` does not exist. A legacy id does not cover its seq, so a legacy record is not judged: a device with no chained record has no bound seq at all (§14).
+
+**What a number may decide.** Only a record counted **chained** (`prev` holds, id holds, dense) may admit a key or declare a TRUNCATE, FORGOTTEN or REVOKE. `valid_at` compares the seal's own seq, which the seal's tip binds to a record whose id covers that seq, and with dense seqs `seq ≤ covered` means at or below that seal on the device's chain.
+
+**Bounds of one `verify`.** A verifier reads each object once, from the walk bound of §9.0, before copying it; `check_anchors` pays from its own. It holds at most 8 × the file size of heap above the image (measured worst 3 ×: 1.58 MB, 7 000 records of 7 000 actors; refused shapes 1-2 × at 1 MB). Time is O(n log n) in the file for reading, indexing and hashing, plus settle rounds × admission passes × distinct seals, each a map lookup; each signature is checked at most once, and a round past the first needs a real signature, 3 309 B each.
+
 The tombstone's link test is one rule for every device, and it is REQUIRED, fallback included: a device with no HEADS row
 uses the log's tip. Status 75 and all other refusals come before the counters are reported.
 
-`seals`: for each HEADS row, walk from `ref SEAL` through `ref PREV_SEAL`, each step counted, ended early (counted
-once more, bad) past `records + 1` steps or on an object that fails its crc or is not a SEAL. A seal is **ok** when all
-hold, otherwise **bad**: for the first seal of a row, actor, seq and tip equal the row's; the tip names a record
-at `(actor, seq)`; the actor is admitted; its key is valid at seq (`revoked_at` = 0, or `revoked_at` > 0 and `seq ≤ revoked_at` as unsigned; the `revoked_at` that
+`seals`: for each HEADS row in table order, walk from `ref SEAL` through `ref PREV_SEAL`; a null `ref SEAL` (§5) starts no walk and
+counts nothing. A seal is one object and counts once, however many rows reach it: a walk that meets a seal already read stops there,
+and one that meets a seal it read itself (a ring) also counts one bad. An object that fails its crc, or is not a SEAL (digest, VERSION = 1,
+`0 ≤ sig_len ≤ 65536`, exact length), ends the walk and counts one bad, once, and no seal. `seals` = the seals read + those bad.
+All the walks of one `verify` (log records, HEADS, KEYS, SEGs, KEYs, SEALs) share one walk bound (§9.0); a file that spends it is refused, `verify status=2`.
+A seal is **ok** when all hold, otherwise **bad**: for the first seal of a row, whichever walk read it, actor, seq and tip equal the row's; the tip names a record
+at `(actor, seq)`; `Verifier::actor_of(pk)` equals the actor id, roots included, because the KEY row is unsigned and `Trust::Only` brings ids, not keys
+(a verifier with no such rule, `None`, skips this); the actor is admitted; its key is valid at seq (`revoked_at` = 0, or `revoked_at` > 0 and `seq ≤ revoked_at` as unsigned; the `revoked_at` that
 Revocation derives, never the table's), its `alg` equals the
 seal's, and the signature verifies over the message with `prev_tip` = the previous seal's tip, else the device's frontier
 tip at `seq − 1`, else 0^32.
@@ -584,12 +654,12 @@ a thief cannot do is a statement under `Trust::Only`, and under no other trust. 
 MUST bring its roots.
 
 **Revocation.** `revoked_at` is signed by nobody, so `verify` derives it from the records. A REVOKE is **effective** under the
-rule for declarations (below): not a tombstone, id = `sha256(prev ‖ payload)`, its actor admitted, its seq covered by that
+rule for declarations (below): classed **chained**, no tombstone mark, its actor admitted, its seq covered by that
 actor's ok seals. The effective `revoked_at` of a key is the narrowest of the effective REVOKEs naming it: start at 0, and
 for each `after_seq`, take `a = after_seq` if `after_seq` > 0, otherwise `a = REVOKED_ALL` (-1), then `revoked_at = a` if it was
-0, otherwise `min(revoked_at, a)`. So `after_seq` 0 becomes -1, because 0 already means "not revoked" and a key that never
-sealed must be revocable. No REVOKE widens a key. A key with `revoked_at` = -1 is valid at no seq; the comparison with
-`seq` is unsigned. A REVOKE naming no key in KEYS changes nothing.
+0, otherwise `min(revoked_at, a)`, signed. So `after_seq` 0 becomes -1, because 0 already means "not revoked" and a key that never
+sealed must be revocable, and a top-bit `after_seq` is negative and becomes -1 too. No REVOKE widens a key. A key with `revoked_at` = -1 is
+valid at no seq; only a `revoked_at` > 0 is compared with `seq`, as unsigned. A REVOKE naming no key in KEYS changes nothing.
 
 **Who may revoke whom:** ANY key valid at its own seq may revoke ANY key, itself and a root included. There are no roles, and a
 stolen key can do this too. A REVOKE is **final**: a writer MUST refuse an ADMIT of a key already revoked in the table
@@ -606,52 +676,64 @@ reading), and `revokes_unsettled` = |`maybe`| − |`sure`|. Else `sure = s`. Uns
 that revoked each other back past their REVOKEs, a key that declared itself dead before its own seal). That is not
 resolved here: a seal is bad as a result, so `holds` is false, and a person decides.
 
-**A reader with no signature algorithm (blind)** judges no seal, so it takes a REVOKE on its chain alone (not a tombstone, id =
-`sha256(prev ‖ payload)`): `keys_disagree` compares `revoked_at` with the narrowest `after_seq` of those records, by the rule above.
+**A reader with no signature algorithm (blind)** judges no seal, so it takes a REVOKE on its chain alone (classed **chained**, no
+tombstone mark): `keys_disagree` compares `revoked_at` with the narrowest `after_seq` of those records, by the rule above.
 That is the records' claim against the table, NOT a proof: a REVOKE a verifier would void counts here. `checked` = 0, and `holds`
 is false.
 
-**Who may erase whom.** The sum in `holds` alone would let any key's FORGOTTEN balance any tombstone, and a tombstone cannot say
-what it was. So each live tombstone must be covered by a counted FORGOTTEN of the record's AUTHOR or of a ROOT (a trusted key):
-owed, per author who is not a root, tombstones minus that author's own n_redacted, floored at 0, and for a root author all its tombstones;
-`tombs_foreign` = the sum owed minus the roots' n_redacted, floored at 0. Only live tombstones are owed.
+**Who may erase whom.** The sum in `holds` alone would let any FORGOTTEN balance any tombstone, and a tombstone is one bit anyone can
+set and cannot say what it was. So each live tombstone, a record classed **redacted**, must be listed by a counted FORGOTTEN of the record's AUTHOR or of a ROOT (a trusted key), with
+`digest` = `Ids::chained` over the tombstone as it now stands, and each listed id still in the log must be a tombstone. `tombs_foreign` counts one per
+tombstone that fails this and one per listed live record that is no tombstone. A listed id not in the log left under a cut. When an id is listed twice the
+last row in file order rules; that is this rule's alone, and `declared` below sums every row. A blind reader takes its roots as the library does under `Trust::Genesis`, the keys with no ADMIT
+record: not 0 means the file's own FORGOTTENs do not account for that tombstone; 0 proves no authority, because it judges no seal and the roots are in a table
+nobody signs, so a forger with no key can write both halves.
 
-**Declarations.** A TRUNCATE or FORGOTTEN **counts** only when its record is not a tombstone, its id =
-`sha256(prev ‖ payload)`, and its actor is admitted with an ok seal covering its seq. A verifier that carries no signature
-algorithm cannot judge seals, so it takes a declaration on its chain alone; `holds` stays false for it. FORGOTTEN
-of a revoked key declares nothing. Every SEG, newest first, MUST be named by a counted TRUNCATE on all six fields
+**Declarations.** A TRUNCATE or FORGOTTEN **counts** only when its record is classed **chained** (so its `prev` test held) with no
+tombstone mark, and its actor is admitted with an ok seal covering its seq. A verifier that carries no signature
+algorithm cannot judge seals, so it takes a declaration on its chain alone, which is the first half of that sentence;
+`holds` stays false for it. FORGOTTEN of a revoked key declares nothing to a verifier that judges seals; a blind reader does
+not apply revocation to a declaration. The NEWEST SEG MUST be named by a counted TRUNCATE on all six fields
 (root, prev_root = the root of the SEG at `ref PREV_SEG` or 0^32, first, last, redacted, declared; numbers compared as
-`u64`), or be vouched for by the segment directly above it. As an algorithm, with `vouched` empty at the start, for each SEG
-from the newest: if no counted TRUNCATE names it and `vouched` ≠ its root, refuse **75** `CUT_UNDECLARED`; then
-`vouched` = its prev_root. So the newest SEG is always named directly, and an older SEG whose own TRUNCATE a later cut
-took is named by root through the SEG above it. That second case is not signed: a rewritten older SEG is caught by an
-archive audit that recomputes roots, not here.
+`u64`) and on `seg_hash` = `chain_hash` of the whole chain, else refuse **75** `CUT_UNDECLARED`. The same hash covers every older SEG, so a later cut may
+take their TRUNCATEs.
 
 `segments` = SEGs; `cut` = Σ(last − first + 1); `cut_redacted` = Σ redacted; `declared` = Σ n_redacted of counted
-FORGOTTENs + Σ declared of SEGs. `heads`, `keys`: table rows read (KEYS rows that resolve to a KEY); `genesis`: keys with no
+FORGOTTENs + Σ declared of SEGs. These three are `u64` sums that saturate at i64::MAX on every reader width: a file's claim neither wraps nor depends on the platform. `heads`, `keys`: table rows read (KEYS rows that resolve to a KEY); `genesis`: keys with no
 ADMIT record, which is all that can be counted with no signature code; `admitted`: keys admission reached, reported only by a
 verifier that judges signatures (the reference auditor's `doc_verify` tool).
 
 **Vouched for: `unsealed`.** Collect the tip INSIDE every ok seal (a blind reader: inside every seal it read), never a HEADS
 row's tip: HEADS names where to start reading seals, and nobody signs it. From each tip follow `prev` by id, across devices and
-over seq gaps, stopping at an id already visited. A record is **vouched for** when such a walk reaches it. A walk that leaves
-the file anywhere but at 0^32 or a frontier tip of a segment counts one. `unsealed` = records not vouched for + such walks. Seals
+over seq gaps, stopping at an id already visited, one visited set for all the walks of the file. A seal that fails its crc or
+is not a SEAL gives no tip. A record is **vouched for** when such a walk reaches it. An id that is a record of the file continues the walk even
+when it is also a frontier tip; ids are a map, so of two records with one id the walk follows the newer in file order. A walk that leaves
+the file anywhere but at 0^32 or a frontier tip of any segment counts one. `unsealed` = records not vouched for (records − distinct ids visited, so each repeated id counts one) + such walks + records of a key above that key's own ok seals (a device's first record chains onto the log, so another device's tip reaches a record its author did not cover: a REVOKE with a rolled-back HEADS row; a blind reader judges no seal and does not count this term; an actor with no KEY row does not fall under it). Seals
 need not cover consecutive seqs: one seal over a tip vouches for every record under it. A redaction keeps its id and `prev`, so
 it stays on the path.
 
-`holds` = broken 0, seals_bad 0, forks 0, seals_ok > 0, redacted + cut_redacted = declared, keys_disagree 0, tombs_foreign 0
-**and** unsealed 0: every record vouched for, and every such chain ending at 0^32 or at a frontier tip. `revokes_unsettled` is not
+`holds` = broken 0, seals_bad 0, forks 0, seals_ok > 0, redacted + cut_redacted = declared, keys_disagree 0, tombs_foreign 0, unsealed 0
+**and** tree_unsigned 0: every record vouched for, every such chain ending at 0^32 or at a frontier tip, and no tree outside the signatures.
+`tree_unsigned` = 1 when the DOC names a TREE or sets `FLAG_TREE_IS_FOLD`: `verify` never reads a tree and no signature covers one, so `holds` speaks for the log alone
+and is false on such a file until a signature does. `revokes_unsettled` is not
 a term: a contradiction always leaves a seal bad. This does **not** detect a tail removed together with its seals and its HEADS
 row: what remains is a shorter true file (§14). Only anchors or a second file see that.
 
 Printed line, in this order: `records= chained= legacy= redacted= broken= forks= seals= checked= heads= keys= genesis= segments=
 cut= cut_redacted= declared= keys_disagree= unsealed=`, where `seals` = ok + bad and `checked` = 1 if signatures were judged, else 0.
 
+**What is not in the line.** The line and the ABI's counters are closed: `tombs_foreign`, `tree_unsigned`, `revokes_unsettled`, `admitted` and
+the split of `seals` are in neither, and a reader MUST NOT add a field to the line. Five terms of `holds` can be read off the line; `seals_ok` > 0,
+`seals_bad` 0, `tombs_foreign` 0 and `tree_unsigned` 0 cannot. A verifier that judges signatures MUST report all four. A blind reader's `holds` is false
+whatever they are, because it has no ok seal, so it need not compute them; one that does MUST print each on a line of its own on its
+diagnostics channel, stderr, as `name=<n>`, never on stdout. The reference Python reader prints `tombs_foreign=` there, and a host of the ABI has neither value.
+
 **What an ok seal says.** The holder of key K signed this tip at seq s of its chain, and nothing under the tip
 has changed since. It does NOT say the event happened, that a quantity is true, or that `claimed_ms` is right.
 Time comes only from an anchor. A crc failure in the log or the tables is a refusal before any counting. A `forks`
 count is a named finding, not the death of the identity. Signatures are a seam: a reader MAY carry no algorithm,
-and then every seal is COUNTED and none is CHECKED, and it MUST say so wherever it prints the count.
+and then every seal is COUNTED and none is CHECKED, and it MUST say so in words wherever it prints the count, on a line of its own
+beside the printed line. `checked=0` alone does not say so, and the words MUST NOT go inside the line, which stays exact.
 
 **ANCH - level 1 time anchors.**
 
@@ -689,14 +771,14 @@ BLOB  {len, bytes packed}                  1 + ceil(len/8) cells; digest st_dige
 **claim of the file** about the embedded reader; `abi` is the reader's ABI version. SPEC's refs point **forward** (the
 blobs follow it): "backward only" is a rule of KV v4, not of the container.
 
-**Bootstrap with no parser, six lines:** h0 at cell 1024 → high 32 bits = 849619745, otherwise this is no archive;
+**Bootstrap with no parser, six lines:** h0 at cell 1024 → high 32 bits = 849619745, otherwise this is no archive (2);
 cell 1027 (payload[1]) = offset → `W = 1024 + offset`; cell `W+2` = the length `L` in bytes; the reader's bytes are
-`[(W+3)·8, (W+3)·8 + L)`; cells 1029..1032 are the claimed sha256. The host computes sha256 over the bytes it read and
-MUST **refuse if they differ**, before executing anything. Then `WebAssembly.instantiate` and the ABI.
+`[(W+3)·8, (W+3)·8 + L)`; cells 1029..1032 are the claimed sha256. A cell that becomes an offset or a length past the file refuses (2).
+Then, in this order, before anything runs. A host MUST compute sha256 over the bytes it read and **refuse if they differ from the claim** (the reference host: 4). It MUST check the module's outline with no parser but its own: wasm 1, no import section with an entry, no start section, exactly one memory, unshared, with a maximum; otherwise **77** `MODULE_REFUSED`, not instantiated. The live superblock (§3.1) names a DOC, and that DOC's `ref SPEC` MUST be cell 1024, or the file runs a reader it does not declare → 2. The reader's sha256 MUST equal the one the host pins; the file agreeing with itself is no verify, so any other reader is **76** `UNPINNED` and is not run. A host MAY offer to run it anyway on the operator's word: every line then says the verdict is the file's own code, and the exit code is never 0. The module runs with no imports, under a clock and a memory ceiling, and no byte of it is printed unescaped; a trap, the clock or the ceiling is **78** `HOST_FAILED`, no verdict.
 
-**Trust.** The embedded reader is *testimony*, not authority: it runs sandboxed with no I/O, and its sha256 is named
-here and in the reader's release; the host prints both numbers side by side. Authority is this text and independent
-readers. A reader without ML-DSA *counts* seals, it does not *check* them (`checked = 0`), and says so in words.
+**Trust.** The embedded reader is *testimony*: it runs sandboxed with no I/O, and its sha256 is named
+here and in the reader's release; the host prints both numbers side by side. A reader without ML-DSA *counts* seals, it does not
+*check* them (`checked = 0`), and says so in words (§9.4).
 
 **Cost:** `8·((2+8) + (2+1+⌈wasm/8⌉) + (2+1+⌈text/8⌉))` bytes per archive FILE, zero on a working image.
 
@@ -707,8 +789,9 @@ readers. A reader without ML-DSA *counts* seals, it does not *check* them (`chec
 (a LOG or a DOC's log: `seq8 ‖ plen8 ‖ id32 ‖ prev32 ‖ actor32 ‖ payload`), `bw_heads(out,cap)` → rows
 `actor32 ‖ seq8 ‖ tip32`, `bw_verify(depth)` (0 anchor, 1 reachable + `verify`, 2 whole arena),
 `bw_counts(out,cap)` → 18 `i64` cells `records chained legacy redacted broken seals forks heads keys genesis
-checked holds segments cut cut_redacted declared keys_disagree unsealed` (cell 10, `genesis`, was named `admitted`; cells 17 and
-18 were appended, so older cells keep their places), `bw_anchors(out,cap)` → rows `kind8 ‖ over32 ‖ time_ms8 ‖
+checked holds segments cut cut_redacted declared keys_disagree unsealed`, cells numbered from 0 like every cell in this text and in
+this order, which is not the printed line's (cell 9, `genesis`, was named `admitted`; cells 16 and
+17 were appended, so older cells keep their places), `bw_anchors(out,cap)` → rows `kind8 ‖ over32 ‖ time_ms8 ‖
 proof_len8` (present, not verified), `bw_spec(out,cap)` → `abi8 ‖ sha256 32 ‖ format text`, `bw_status_text(code)`,
 `bw_unchecked_text`. A buffer too small gets the needed length and nothing is written; a refusal is `-status`.
 Other ABI statuses: 70 `NOT_OPEN`, 71 `NOT_FOUND`, 73 `OUT_OF_RANGE`, 74 `NOT_A_DOC`.
@@ -738,7 +821,7 @@ A limit refuses **at the bound + 1** and accepts at the bound.
 | `MAX_ANCHOR_MARK` | 4294967295 | `mark` field of the anchor; past it `anc` = 0 |
 | `MAX_KEY_BYTES` | 65535 | KV writers refuse above |
 | `MAX_VALUE_BYTES` | 1073741824 | 1 GiB |
-| `MAX_PAD_CELLS` | 67108864 | 512 MiB: no padding of a trimmed image above this |
+| `MAX_PAD_CELLS` | 67108864 | 512 MiB: the default writer ceiling, and nothing else (§8); no reader pads |
 | `MAX_DELTAS` | 32 | longest chain before compaction |
 | `DEAD_DIV` | 4 | compaction at `superseded · 4 > live` |
 | `DIGEST_KV_ROOT` | 610082063 | `st_digest` of the KV root |
@@ -788,22 +871,14 @@ writer (§4). The name `Superblock.root` in the Rust API is cell 3, the **PartTa
 
 ## 12. Can a third party implement a reader from this text (closed 2026-10-31)
 
-Seven gaps were listed on 2026-10-31. Closed by this text, from the code: 1 language (this file); 2 outside references
-(§9.1-§9.5 carry their rules, §9.0 the status table, pointers are informative); 3 the fixtures are a contract (§13);
-4 the writer (§8, "What a writer must keep"); 5 `hc` (§9.1). The rest, open with a reason:
+Seven gaps were listed on 2026-10-31 and are closed: language (this file), outside references (§9.1-§9.5 carry their rules, §9.0
+the status table, pointers are informative), the fixtures as a contract (§13), the writer (§8), `hc` (§9.1), the tombstone mark (§9.4), `actor_id` (§9.4).
 
-6. **Closed by the code.** The tombstone mark is the kind byte's high bit for every reader (§9.4); a legacy tombstone now
-   counts `redacted` everywhere.
-7. **`actor_id`.** `alg` has its one-entry registry (§9.4). Whether a verifier MUST check `actor_id = sha256(pk)` is
-   undecided: no reader does, and making it a rule changes `verify`.
+Open, each true today:
 
-Found while writing this text:
-
-8. **A log version above 2.** Text says refuse with 12; the hub's loaders do by name, the embedded reader's open does not ask,
-   and reads such a root as v2. A code change.
-9. **A v1-v3 TREE in a DOC.** The format allows one (KV v3/v4), the reference reader refuses it with 2. No fixture.
-10. **Status of a DOC failure.** Status 2 here is named NOT_A_KV for a DOC part; the name is historical.
-11. **Cells 13-14.** One reader refuses them, the others ignore them (§3.1). Making that one rule is a code change.
+1. **A v1-v3 TREE in a DOC.** A reader MAY refuse one with 2 (§9.4), and the reference reader does. Nothing writes a TREE. No fixture.
+2. **Status of a DOC failure.** Status 2 here is named NOT_A_KV for a DOC part; the name is historical.
+3. **Cells 13-14.** One reader refuses them, the others ignore them (§3.1). Making that one rule is a code change.
 
 ## 13. Conformance set
 
@@ -839,11 +914,25 @@ read a family MUST refuse by name rather than answer. `sha256` identifies the fi
 | `proj4` | kv | 9800 | 0 | 5 | -444871924492142954 | `37a2a0c84e6828fb` |
 | `proj` | log | 13360 | 0 | 9 | 6344481284825166345 | `b40e2519e0776f3b` |
 | `proj4.log` | log | 13424 | 0 | 9 | 6344481284825166345 | `cd888900a0832779` |
-| `doc` | doc | 10376 | 0 | 3 | -5898116667070633908 | `29138e21aca897a7` |
-| `anch` | doc | 36912 | 0 | 4 | 873890418513991691 | `f4d84c13cac69864` |
+| `doc` | doc | 10376 | 0 | 3 | -5898116667070633908 | `c0a6fa19a88e7634` |
+| `anch` | doc | 37072 | 0 | 4 | 4203703982444439664 | `d701979a9deb537f` |
+| `tomb-sha` | doc | 10640 | 0 | 4 | 2912520156778742020 | `b7e346a7b74fba10` |
+| `tomb-legacy` | doc | 10592 | 0 | 4 | 2385174699030489450 | `c47fb175735ed2fe` |
+| `seg2` | doc | 10624 | 0 | 3 | 2237665766422822682 | `f53ea34a266ef8c2` |
+| `seg2-forged` | doc | 10624 | 75 | 3 | 2237665766422822682 | `e2e4c81f72d8aa41` |
+| `forged-tail` | doc | 10768 | 0 | 4 | 9058683980081876988 | `fb6741a5acb5cc04` |
+| `keys-disagree` | doc | 12248 | 0 | 5 | 2233471922488689952 | `4965ea8f78fae881` |
+| `cut-undeclared` | doc | 9680 | 75 | 2 | 936859044395617976 | `db5094856033cfd9` |
+| `log-v1` | log | 8976 | 0 | 3 | 5846225103546468352 | `f1a4ea0cf755c6ba` |
+| `log-v3` | log | 8552 | 12 | - | - | `3f7bf288a84c3e96` |
+| `kv-unsorted` | kv | 8400 | 2 | - | - | `6ce0aeb177b618d9` |
 
-`doc` as a DOC verifier, with no signature algorithm, MUST print exactly: `records=3 chained=0 legacy=0 redacted=0 broken=3 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0`. Its ids are a test mix, not
-sha256, so `broken=3` is the honest answer for that file. A KV-only reader answers `doc` with status 12.
+`seg2-forged` and `cut-undeclared` read as a DOC, status 0 with the `n` and `root` above, and the status in their row is that of `verify`: 75. `doc_verify=` in each `.expected` is the exact counter line of the others. `log-v3` and `kv-unsorted` are refused at the read.
+
+`doc` as a DOC verifier, with no signature algorithm, MUST print exactly: `records=3 chained=0 legacy=0 redacted=0 broken=3 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0`. This fixture is
+written with a test-only id mix in place of sha256, which this text does not define and no other file uses, so its ids answer neither `chained` nor
+`legacy`. A reader MUST count those three records **broken** and MUST NOT look for a scheme under which they hold: the conformance
+value is `broken=3`. A KV-only reader answers `doc` with status 12.
 
 `anch` is a real sealed hub, cut once, and MUST print exactly: `records=4 chained=4 legacy=0 redacted=0 broken=0 forks=0 seals=4 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 unsealed=0`.
 
@@ -866,5 +955,9 @@ Nothing above decides these, and a reader MUST NOT claim that it does.
   What a file does hold, under `Trust::Only`: a thief with an admitted, non-root key cannot hide a REVOKE inside it, because a tombstone
   stops at `tombs_foreign`, and a cut through a REVOKE takes that key's older ADMIT with it, so its TRUNCATE declares nothing.
 - **A blind reader** counts; it does not check. `checked` = 0 and `holds` is false, whatever else it prints.
-- **An older SEG** is bound through an unsigned `prev_root`; only an archive audit that recomputes roots checks it.
+- **Removing an anchor.** Nobody signs the ANCH chain: DOC.ANCH = 0 gives a file with no anchors and no trace. Anchors prove when present; their absence says nothing.
+- **Swapping files of one owner.** No seal names the file, so two hubs of one key both hold. Which file this is, is a question for whoever brings the root (first id, tip, anchor). A file id in the first seal would not help: it helps only if the verifier brings the expected id, and that verifier can already bring the journal's first id (after a cut, `root`).
+- **Order across devices.** Nobody signs it: `prev` links only a device's own records and a device's first record; the fold reads file order.
+- **Legacy records.** Id v2 does not bind them: actor, seq and `FLAG_NONCE_DERIVED` of an FNV record are free, and FNV preimages are untested. Live data is all legacy, so a `seal_hub` of a real venue is exposed on its pre-seal records until those records leave the file.
+- **A tombstone's bytes under a cut.** `root` names ids and a tombstone keeps its id, so those bytes are bound only by a FORGOTTEN still in the file; the archive shows them (§9.4).
 - **Time.** `claimed_ms` is a claim; only an anchor's proof bounds time, and only with a verifier that holds what the proof needs.

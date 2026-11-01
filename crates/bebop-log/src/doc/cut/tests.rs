@@ -5,8 +5,8 @@
 use crate::doc::anch::{check_anchors, AnchorCounts, NoAdapters, Verdict, KIND_PLATFORM_TSA};
 use crate::doc::keys::KeyOp;
 use crate::doc::seg::{forgotten_body, parse_truncate, SCHEME_CHAINED, SCHEME_LEGACY};
-use crate::doc::tests::{doc_with, key_of, mix, toy_mark, Dev, ToyIds, ToySigner, ToyTsa, ToyVerifier};
-use crate::doc::verify::{verify, Report, Trust};
+use crate::doc::tests::{doc_with, key_of, mix, tombs_body, toy_mark, Dev, ToyIds, ToySigner, ToyTsa, ToyVerifier};
+use crate::doc::verify::{verify, Counters, Report, Trust};
 use crate::doc::write::{stage_doc, Refs};
 use crate::doc::{Doc, DocError, Ids, Verifier};
 use crate::{EvLog, Record, Store};
@@ -75,8 +75,8 @@ fn a_dropped_segment_without_a_truncate_is_refused_by_name() {
 }
 
 /// A second cut chains the segments (`prev_root` = the first root) and may take the first
-/// TRUNCATE record with it: the newest segment is signed directly, the older one through
-/// the newest one's `prev_root`. Everything leaves the live log; the file still verifies.
+/// TRUNCATE record with it: the newest TRUNCATE signs the hash of the whole chain (`seg.rs`).
+/// Everything leaves the live log; the file still verifies.
 #[test]
 fn a_second_cut_chains_the_segments_and_may_take_the_first_truncate() {
     let (old, mut owner) = doc_with(6);
@@ -92,13 +92,17 @@ fn a_second_cut_chains_the_segments_and_may_take_the_first_truncate() {
     assert!(r.holds(), "{:?}", r.counters);
     assert_eq!((r.counters.records, r.counters.segments, r.counters.cut, r.counters.seals_ok), (1, 2, 7, 1), "{:?}", r.counters);
 
-    // A rewritten older segment is NOT caught here (its root is only the newer SEG's unsigned
-    // `prev_root`), which `declare.rs` says; the newest one is: one bit of its root and the
-    // TRUNCATE no longer names it.
+    // One bit of the newest segment's root, and of the OLDER segment's `declared`, the cell no
+    // signature reached until W-MG-HOLES: each one and the TRUNCATE no longer names the chain.
     let mut st = Store::from_bytes(&fresh.to_bytes_trimmed());
     let seg_at = Doc::open(&st).unwrap().seg.unwrap();
     st.put_cell(seg_at, 3, st.get(seg_at, 3) ^ 1);
     st.seal(seg_at);
+    assert!(matches!(rep(&st), Err(DocError::CutUndeclared { .. })));
+    let mut st = Store::from_bytes(&fresh.to_bytes_trimmed());
+    let older = st.follow(Doc::open(&st).unwrap().seg.unwrap(), 7).unwrap();
+    st.put_cell(older, 10, st.get(older, 10) ^ 1);
+    st.seal(older);
     assert!(matches!(rep(&st), Err(DocError::CutUndeclared { .. })));
 }
 
@@ -117,8 +121,8 @@ fn a_cut_refuses_what_it_cannot_carry() {
     assert_eq!(Doc::cut_into(&st, &mut fresh, 5, &ToyIds), Err(DocError::NothingToCut));
     struct NoTree;
     impl Ids for NoTree {
-        fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-            ToyIds.chained(prev, payload)
+        fn chained(&self, r: &Record) -> [u8; 32] {
+            ToyIds.chained(r)
         }
     }
     assert_eq!(Doc::cut_into(&st, &mut fresh, 3, &NoTree), Err(DocError::NoTree));
@@ -129,7 +133,9 @@ fn a_cut_refuses_what_it_cannot_carry() {
     assert!(r.holds(), "{:?}", r.counters);
     assert_eq!((r.counters.records, r.counters.seals_ok, r.admitted), (4, 4, 2), "{:?}", r.counters);
 
-    // A DOC naming a TREE is the tree layer's to move; the counters never looked at it.
+    // A DOC naming a TREE is the tree layer's to move. The log's counters do not depend on it,
+    // and `tree_unsigned` says no signature covers it (`atk_holes` hole 8, W-MG-HOLES): this line
+    // pinned the old behaviour, every counter equal and `holds` true.
     let (mut st, _) = doc_with(1);
     let view = Doc::open(&st).unwrap();
     let plain = rep(&st).unwrap().counters;
@@ -139,7 +145,9 @@ fn a_cut_refuses_what_it_cannot_carry() {
     st.seal(tree);
     let d = stage_doc(&mut st, &mut tx, view.flags, Refs { log: view.log, tree: Some(tree), heads: view.heads, keys: view.keys, ..Refs::default() }).unwrap();
     st.commit_bytes(&tx, d);
-    assert_eq!(rep(&st).unwrap().counters, plain, "the log's counters do not depend on the tree");
+    let r = rep(&st).unwrap();
+    assert_eq!(r.counters, Counters { tree_unsigned: 1, ..plain }, "the log's counters do not depend on the tree");
+    assert!(!r.holds(), "no signature covers the tree");
     assert_eq!(Doc::cut_into(&st, &mut fresh, 0, &ToyIds), Err(DocError::Carries("TREE")));
 }
 
@@ -163,7 +171,9 @@ fn a_forgotten_by_a_revoked_key_declares_nothing() {
     assert_eq!((r.counters.redacted, r.counters.broken, r.counters.declared), (1, 0, 0), "{:?}", r.counters);
     assert!(!r.holds(), "an undeclared tombstone does not hold");
 
-    b.commit(&mut st, &forgotten_body(1, &[0x5B; 32]), None).unwrap();
+    let body = tombs_body(&st);
+
+    b.commit(&mut st, &body, None).unwrap();
     let r = rep(&st).unwrap();
     assert_eq!((r.counters.redacted, r.counters.broken, r.counters.declared, r.counters.seals_ok), (1, 0, 1, 4), "{:?}", r.counters);
     assert!(r.holds(), "declared: {:?}", r.counters);
@@ -173,7 +183,7 @@ fn a_forgotten_by_a_revoked_key_declares_nothing() {
     let r = rep(&st).unwrap();
     assert_eq!((r.counters.redacted, r.counters.broken, r.counters.declared, r.counters.seals_bad), (1, 0, 0, 1), "{:?}", r.counters);
     assert!(!r.holds());
-    assert_eq!(b.commit(&mut st, &forgotten_body(1, &[0x5B; 32]), None), Err(DocError::Revoked { after_seq: 2, seq: 4 }));
+    assert_eq!(b.commit(&mut st, &forgotten_body(&[0x5B; 32], &[]), None), Err(DocError::Revoked { after_seq: 2, seq: 4 }));
 }
 
 /// LAW 9 ACROSS A CUT: the tombstone leaves under the segment, its declaration stays live;
@@ -188,7 +198,8 @@ fn law_9_balances_across_a_cut_and_the_counts_are_signed() {
     b.commit(&mut st, b"contact: +355 69 000 0002", None).unwrap();
     b.commit(&mut st, b"b-2", None).unwrap();
     redact_in_place(&mut st, 0);
-    b.commit(&mut st, &forgotten_body(1, &[0x5B; 32]), None).unwrap();
+    let body = tombs_body(&st);
+    b.commit(&mut st, &body, None).unwrap();
     owner.commit(&mut st, b"owner-1", None).unwrap();
     assert!(rep(&st).unwrap().holds());
     // THE HOLDS CONJUNCT ITSELF (M3b): a second tombstone, undeclared, in the part that stays.
@@ -205,7 +216,8 @@ fn law_9_balances_across_a_cut_and_the_counts_are_signed() {
     let r = rep(&fresh).unwrap();
     assert_eq!((r.counters.redacted, r.counters.cut_redacted, r.counters.declared, r.counters.broken), (1, 1, 1, 0), "{:?}", r.counters);
     assert!(!r.holds(), "the cut tombstone is declared, the live one is not: {:?}", r.counters);
-    b.commit(&mut fresh, &forgotten_body(1, &[0x5C; 32]), None).unwrap();
+    let body = tombs_body(&fresh);
+    b.commit(&mut fresh, &body, None).unwrap();
     let r = rep(&fresh).unwrap();
     assert_eq!((r.counters.redacted, r.counters.cut_redacted, r.counters.declared, r.counters.broken), (1, 1, 2, 0), "{:?}", r.counters);
     assert!(r.holds(), "{:?}", r.counters);
@@ -405,7 +417,8 @@ fn a_redacting_copy_keeps_the_ids_and_is_declared_by_a_forgotten() {
         })
     };
     let mut fresh = Store::create_bytes(1 << 20).unwrap();
-    assert_eq!(Doc::redact_into(&old, &mut fresh, &ToyIds, &person).unwrap(), 2);
+    let erased = Doc::redact_into(&old, &mut fresh, &ToyIds, &person).unwrap();
+    assert_eq!(erased.len(), 2);
     let after = oldest_first(&fresh);
     assert_eq!(after.iter().map(|r| (r.id, r.prev, r.actor_seq)).collect::<Vec<_>>(), before.iter().map(|r| (r.id, r.prev, r.actor_seq)).collect::<Vec<_>>(), "every id and link kept");
     assert_eq!((after[1].payload.as_slice(), after[3].payload.as_slice()), (&[b'e' | 0x80][..], &b"event-3"[..]), "the person's payloads emptied, the rest verbatim");
@@ -413,13 +426,13 @@ fn a_redacting_copy_keeps_the_ids_and_is_declared_by_a_forgotten() {
     assert_eq!((r.counters.records, r.counters.chained, r.counters.redacted, r.counters.declared, r.counters.broken, r.counters.seals_ok), (4, 2, 2, 0, 0, 4), "{:?}", r.counters);
     assert!(!r.holds(), "two tombstones, nothing declared");
     assert_eq!(AnchorCounts::of(&check_anchors(&fresh, &ToyTsa).unwrap()), AnchorCounts { anchors: 1, ok: 1, bad: 0, unchecked: 0, cut: 0 }, "the anchor rode along");
-    owner.commit(&mut fresh, &forgotten_body(2, &[0x5B; 32]), None).unwrap();
+    owner.commit(&mut fresh, &forgotten_body(&[0x5B; 32], &erased), None).unwrap();
     let r = rep(&fresh).unwrap();
     assert_eq!((r.counters.redacted, r.counters.declared), (2, 2));
     assert!(r.holds(), "{:?}", r.counters);
 
     // Nothing to redact: nothing is committed, the fresh store has no root.
     let mut empty = Store::create_bytes(1 << 20).unwrap();
-    assert_eq!(Doc::redact_into(&old, &mut empty, &ToyIds, &|_| None).unwrap(), 0);
+    assert_eq!(Doc::redact_into(&old, &mut empty, &ToyIds, &|_| None).unwrap(), Vec::new());
     assert!(matches!(Doc::open(&empty), Err(DocError::NotDoc)));
 }

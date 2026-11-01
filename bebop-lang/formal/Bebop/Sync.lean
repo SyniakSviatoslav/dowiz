@@ -22,10 +22,28 @@
     held_subset          every held event came from the tail
     len_law              accepted + held = tail, the S2 law `len == events + held`
     state_is_merge       the state after sync is the merge of exactly the accepted events
+
+  THE FRONTIER EXTENSION (W-MG-LEAN, for M2; the file-level theorems are Bebop.DocMerge):
+    glue / glue_comm / glue_idem / glue_assoc   one device's chain on two sides: of two lists, one a
+                         prefix of the other (`Compat`, else a Fork), the longer. Commutative,
+                         idempotent, and associative INCLUDING the refusal (`compat_assoc`)
+    unionL_mem, no_record_lost   the union keeps every record of both sides, duplicates once
+    front_perm           the frontier (per actor, the highest seq) as a fold: any arrival order, by
+                         merge_comm_perm
+    front_union_comm / _assoc / _idem   on frontiers the union is a semilattice, the file's own
+                         order across devices playing no part (which nobody signs)
+    conflict_named, conflict_stays, obstructed_iff, commutes_when_clean   GLUING DETECTS AND NEVER
+                         RESOLVES: a clash on the overlap is named, both records stay, and with
+                         nothing named the two tails commute
+  THE MODEL'S CLASH IS PAIRWISE. dowiz-hub's `glue::obstructed` folds both sides and can name a
+  conflict no single pair shows (a shelf two tails overdraw together). `named` is the shape of the
+  guarantee (what is detected is named, and both records stay), not that detector.
 -/
 import Bebop.ZSet
 
 namespace Bebop.Sync
+
+set_option linter.unusedSectionVars false
 
 variable {E S : Type}
 
@@ -126,6 +144,296 @@ theorem state_is_merge (step : S → E → S) (ok : S → E → Bool) (s : S) (t
     (syncFold step ok s tail).2.2 = merge step s (syncFold step ok s tail).1 :=
   (syncFold_spec step ok s tail).2
 
+/-! ### The frontier: two sides of one chain -/
+
+section Frontier
+
+variable {R : Type}
+
+/-- One side's chain is a prefix of the other's. Anything else is a Fork (merge.rs `missing`). -/
+def Compat (x y : List R) : Prop := x <+: y ∨ y <+: x
+
+/-- The longer of the two: M2's "their tail". Meaningful under `Compat`. -/
+def glue (x y : List R) : List R := if x.length ≤ y.length then y else x
+
+theorem glue_of_prefix {x y : List R} (h : x <+: y) : glue x y = y := by
+  simp [glue, h.length_le]
+
+theorem glue_of_prefix' {x y : List R} (h : y <+: x) : glue x y = x := by
+  unfold glue
+  split
+  · next hl => exact (h.eq_of_length (Nat.le_antisymm h.length_le hl)).symm ▸ rfl
+  · rfl
+
+theorem Compat.symm {x y : List R} (h : Compat x y) : Compat y x := Or.symm h
+
+theorem compat_self (x : List R) : Compat x x := .inl (List.prefix_refl x)
+
+/-- Two prefixes of one list are comparable: the fact behind the refusal's associativity. -/
+theorem compat_of_prefixes {x y z : List R} (hx : x <+: z) (hy : y <+: z) : Compat x y := by
+  rcases Nat.le_total x.length y.length with h | h
+  · exact .inl (List.prefix_of_prefix_length_le hx hy h)
+  · exact .inr (List.prefix_of_prefix_length_le hy hx h)
+
+theorem glue_comm {x y : List R} (h : Compat x y) : glue x y = glue y x := by
+  rcases h with h | h
+  · rw [glue_of_prefix h, glue_of_prefix' h]
+  · rw [glue_of_prefix' h, glue_of_prefix h]
+
+theorem glue_idem (x : List R) : glue x x = x := glue_of_prefix (List.prefix_refl x)
+
+/-- Associativity on the values: the two neighbours compatible is enough. -/
+theorem glue_assoc {x y z : List R} (hxy : Compat x y) (hyz : Compat y z) :
+    glue (glue x y) z = glue x (glue y z) := by
+  rcases hxy with a | a <;> rcases hyz with b | b
+  · rw [glue_of_prefix a, glue_of_prefix b, glue_of_prefix (a.trans b)]
+  · rw [glue_of_prefix a, glue_of_prefix' b, glue_of_prefix a]
+  · rw [glue_of_prefix' a, glue_of_prefix b]
+  · rw [glue_of_prefix' a, glue_of_prefix' b, glue_of_prefix' a, glue_of_prefix' (b.trans a)]
+
+/-- THE REFUSAL IS ASSOCIATIVE TOO: gluing left-first is refused exactly when gluing right-first is,
+  because the compatibility of three is one fact: pairwise. -/
+theorem compat_assoc {x y z : List R} :
+    (Compat x y ∧ Compat (glue x y) z) ↔ (Compat y z ∧ Compat x (glue y z)) := by
+  have left : (Compat x y ∧ Compat (glue x y) z) → Compat y z ∧ Compat x z := by
+    rintro ⟨hxy | hxy, h⟩
+    · rw [glue_of_prefix hxy] at h
+      refine ⟨h, ?_⟩
+      rcases h with h | h
+      · exact .inl (hxy.trans h)
+      · exact compat_of_prefixes hxy h
+    · rw [glue_of_prefix' hxy] at h
+      refine ⟨?_, h⟩
+      rcases h with h | h
+      · exact .inl (hxy.trans h)
+      · exact compat_of_prefixes hxy h
+  have right : (Compat y z ∧ Compat x (glue y z)) → Compat x y ∧ Compat x z := by
+    rintro ⟨hyz | hyz, h⟩
+    · rw [glue_of_prefix hyz] at h
+      refine ⟨?_, h⟩
+      rcases h with h | h
+      · exact compat_of_prefixes h hyz
+      · exact .inr (hyz.trans h)
+    · rw [glue_of_prefix' hyz] at h
+      refine ⟨h, ?_⟩
+      rcases h with h | h
+      · exact compat_of_prefixes h hyz
+      · exact .inr (hyz.trans h)
+  constructor
+  · intro h
+    obtain ⟨hyz, hxz⟩ := left h
+    refine ⟨hyz, ?_⟩
+    rcases hyz with b | b
+    · rw [glue_of_prefix b]; exact hxz
+    · rw [glue_of_prefix' b]; exact h.1
+  · intro h
+    obtain ⟨hxy, hxz⟩ := right h
+    refine ⟨hxy, ?_⟩
+    rcases hxy with a | a
+    · rw [glue_of_prefix a]; exact h.1
+    · rw [glue_of_prefix' a]; exact hxz
+
+end Frontier
+
+/-! ### The union: no record lost, a conflict named -/
+
+section Union
+
+variable {R : Type} [DecidableEq R]
+
+/-- Ours as they stand, then what they have and we lack, in their order (merge.rs `all`). -/
+def unionL (a b : List R) : List R := a ++ b.filter (fun r => decide (r ∉ a))
+
+theorem unionL_mem {a b : List R} {r : R} : r ∈ unionL a b ↔ r ∈ a ∨ r ∈ b := by
+  simp only [unionL, List.mem_append, List.mem_filter, decide_eq_true_eq]
+  constructor
+  · rintro (h | h)
+    · exact .inl h
+    · exact .inr h.1
+  · rintro (h | h)
+    · exact .inl h
+    · by_cases ha : r ∈ a
+      · exact .inl ha
+      · exact .inr ⟨h, ha⟩
+
+/-- NO RECORD LOST: whatever the two sides say, conflict or none, both stay. -/
+theorem no_record_lost (a b : List R) : (∀ r ∈ a, r ∈ unionL a b) ∧ (∀ r ∈ b, r ∈ unionL a b) :=
+  ⟨fun _ h => unionL_mem.mpr (.inl h), fun _ h => unionL_mem.mpr (.inr h)⟩
+
+/-- The conflicts of two tails under a clash test: `n_conf`, as a function of the tails. -/
+def named (clash : R → R → Bool) (xs ys : List R) : List (R × R) :=
+  xs.flatMap fun x => (ys.filter (clash x)).map (fun y => (x, y))
+
+theorem named_mem {clash : R → R → Bool} {xs ys : List R} {x y : R} :
+    (x, y) ∈ named clash xs ys ↔ x ∈ xs ∧ y ∈ ys ∧ clash x y = true := by
+  simp only [named, List.mem_flatMap, List.mem_map, List.mem_filter, Prod.mk.injEq]
+  constructor
+  · rintro ⟨x', hx, y', ⟨hy, hc⟩, rfl, rfl⟩
+    exact ⟨hx, hy, hc⟩
+  · rintro ⟨hx, hy, hc⟩
+    exact ⟨x, hx, y, ⟨hy, hc⟩, rfl, rfl⟩
+
+/-- A clash on the overlap is named, never dropped. -/
+theorem conflict_named {clash : R → R → Bool} {xs ys : List R} {x y : R} (hx : x ∈ xs) (hy : y ∈ ys)
+    (hc : clash x y = true) : (x, y) ∈ named clash xs ys := named_mem.mpr ⟨hx, hy, hc⟩
+
+/-- A named conflict resolves nothing: both of its records stay in the union. -/
+theorem conflict_stays {clash : R → R → Bool} {xs ys a b : List R} {x y : R}
+    (hxa : ∀ r ∈ xs, r ∈ a) (hyb : ∀ r ∈ ys, r ∈ b) (h : (x, y) ∈ named clash xs ys) :
+    x ∈ unionL a b ∧ y ∈ unionL a b :=
+  have m := named_mem.mp h
+  ⟨unionL_mem.mpr (.inl (hxa _ m.1)), unionL_mem.mpr (.inr (hyb _ m.2.1))⟩
+
+/-- merge_body.rs's state: 3 exactly when a conflict is named. -/
+def gstate (clash : R → R → Bool) (xs ys : List R) : Nat := if named clash xs ys = [] then 2 else 3
+
+theorem obstructed_iff {clash : R → R → Bool} {xs ys : List R} :
+    gstate clash xs ys = 3 ↔ ∃ x y, (x, y) ∈ named clash xs ys := by
+  unfold gstate
+  cases h : named clash xs ys with
+  | nil => simp
+  | cons p l =>
+    simp only [reduceCtorEq, if_false, true_iff]
+    exact ⟨p.1, p.2, List.mem_cons_self⟩
+
+/-- With nothing named, the tails commute, for any step in which unclashing events do. -/
+theorem commutes_when_clean {S : Type} (step : S → R → S) (clash : R → R → Bool)
+    (hstep : ∀ s x y, clash x y = false → step (step s x) y = step (step s y) x) {xs ys : List R}
+    (hn : named clash xs ys = []) (s : S) : merge step s (xs ++ ys) = merge step s (ys ++ xs) := by
+  have one : ∀ (x : R) (l : List R) (s : S), (∀ y ∈ l, clash x y = false) →
+      merge step (step s x) l = step (merge step s l) x := by
+    intro x l
+    induction l with
+    | nil => intro _ _; rfl
+    | cons y l ih =>
+      intro s h
+      simp only [merge, List.foldl_cons]
+      rw [hstep s x y (h y List.mem_cons_self)]
+      exact ih (step s y) (fun z hz => h z (List.mem_cons_of_mem _ hz))
+  have clean : ∀ x ∈ xs, ∀ y ∈ ys, clash x y = false := by
+    intro x hx y hy
+    cases hc : clash x y with
+    | false => rfl
+    | true => have := conflict_named hx hy hc; rw [hn] at this; cases this
+  induction xs generalizing s with
+  | nil => simp
+  | cons x xs ih =>
+    have hn' : named clash xs ys = [] := by
+      apply List.eq_nil_iff_forall_not_mem.mpr
+      rintro ⟨u, v⟩ hm
+      have m := named_mem.mp hm
+      have := clean u (List.mem_cons_of_mem _ m.1) v m.2.1
+      rw [this] at m
+      cases m.2.2
+    have ih' := ih hn' (step s x) (fun u hu v hv => clean u (List.mem_cons_of_mem _ hu) v hv)
+    have h1 : merge step s (x :: xs ++ ys) = merge step (step s x) (xs ++ ys) := rfl
+    rw [h1, ih']
+    simp only [merge, List.foldl_append, List.foldl_cons]
+    congr 1
+    exact one x ys s (clean x List.mem_cons_self)
+
+end Union
+
+/-! ### The frontier as a fold -/
+
+section Top
+
+variable {A R : Type} [DecidableEq A]
+
+/-- One record moves its actor's seq up. -/
+def fstep (actor : R → A) (seq : R → Nat) (f : A → Nat) (r : R) : A → Nat :=
+  fun a => if a = actor r then max (f a) (seq r) else f a
+
+/-- Per actor, the highest seq: the `(seq, tip)` a HEADS row carries, the tip being unique once there
+  is no fork. -/
+def front (actor : R → A) (seq : R → Nat) (l : List R) : A → Nat :=
+  merge (fstep actor seq) (fun _ => 0) l
+
+theorem fstep_comm (actor : R → A) (seq : R → Nat) (f : A → Nat) (x y : R) :
+    fstep actor seq (fstep actor seq f x) y = fstep actor seq (fstep actor seq f y) x := by
+  funext a
+  simp only [fstep]
+  by_cases h1 : a = actor y
+  · by_cases h2 : a = actor x
+    · simp only [if_pos h1, if_pos h2]; omega
+    · simp only [if_pos h1, if_neg h2]
+  · by_cases h2 : a = actor x
+    · simp only [if_neg h1, if_pos h2]
+    · simp only [if_neg h1, if_neg h2]
+
+theorem front_perm (actor : R → A) (seq : R → Nat) {l₁ l₂ : List R} (hp : l₁.Perm l₂) :
+    front actor seq l₁ = front actor seq l₂ :=
+  merge_comm_perm _ (fstep_comm actor seq) _ hp
+
+theorem front_le (actor : R → A) (seq : R → Nat) (l : List R) (n : Nat) (a : A) :
+    front actor seq l a ≤ n ↔ ∀ r ∈ l, actor r = a → seq r ≤ n := by
+  have gen : ∀ (l : List R) (f : A → Nat), merge (fstep actor seq) f l a ≤ n ↔
+      f a ≤ n ∧ ∀ r ∈ l, actor r = a → seq r ≤ n := by
+    intro l
+    induction l with
+    | nil => intro f; simp [merge]
+    | cons x l ih =>
+      intro f
+      have hm : merge (fstep actor seq) f (x :: l) = merge (fstep actor seq) (fstep actor seq f x) l := rfl
+      rw [hm, ih]
+      simp only [fstep, List.mem_cons, forall_eq_or_imp]
+      by_cases h : a = actor x
+      · rw [if_pos h]
+        constructor
+        · rintro ⟨h1, h2⟩
+          exact ⟨by omega, fun _ => by omega, h2⟩
+        · rintro ⟨h1, h2, h3⟩
+          have := h2 h.symm
+          exact ⟨by omega, h3⟩
+      · rw [if_neg h]
+        have hne : ¬ actor x = a := fun e => h e.symm
+        simp [hne]
+  simpa [front] using gen l (fun _ => 0)
+
+/-- The frontier sees only which records there are. -/
+theorem front_mem_eq (actor : R → A) (seq : R → Nat) {l₁ l₂ : List R} (h : ∀ r, r ∈ l₁ ↔ r ∈ l₂) :
+    front actor seq l₁ = front actor seq l₂ := by
+  funext a
+  apply Nat.le_antisymm
+  · exact (front_le actor seq l₁ _ a).mpr fun r hr ha =>
+      (front_le actor seq l₂ _ a).mp (Nat.le_refl _) r ((h r).mp hr) ha
+  · exact (front_le actor seq l₂ _ a).mpr fun r hr ha =>
+      (front_le actor seq l₁ _ a).mp (Nat.le_refl _) r ((h r).mpr hr) ha
+
+variable [DecidableEq R]
+
+theorem front_union_comm (actor : R → A) (seq : R → Nat) (a b : List R) :
+    front actor seq (unionL a b) = front actor seq (unionL b a) :=
+  front_mem_eq actor seq fun r => by simp only [unionL_mem, or_comm]
+
+theorem front_union_assoc (actor : R → A) (seq : R → Nat) (a b c : List R) :
+    front actor seq (unionL (unionL a b) c) = front actor seq (unionL a (unionL b c)) :=
+  front_mem_eq actor seq fun r => by simp only [unionL_mem, or_assoc]
+
+theorem front_union_idem (actor : R → A) (seq : R → Nat) (a : List R) :
+    front actor seq (unionL a a) = front actor seq a :=
+  front_mem_eq actor seq fun r => by simp only [unionL_mem, or_self]
+
+/-- The union's frontier is the pointwise maximum: HEADS as a pointwise maximum. -/
+theorem front_union_max (actor : R → A) (seq : R → Nat) (a b : List R) (x : A) :
+    front actor seq (unionL a b) x = max (front actor seq a x) (front actor seq b x) := by
+  apply Nat.le_antisymm
+  · refine (front_le actor seq _ _ x).mpr fun r hr ha => ?_
+    rcases unionL_mem.mp hr with h | h
+    · have := (front_le actor seq a _ x).mp (Nat.le_refl _) r h ha
+      exact Nat.le_trans this (Nat.le_max_left _ _)
+    · have := (front_le actor seq b _ x).mp (Nat.le_refl _) r h ha
+      exact Nat.le_trans this (Nat.le_max_right _ _)
+  · have h1 : front actor seq a x ≤ front actor seq (unionL a b) x :=
+      (front_le actor seq a _ x).mpr fun r hr ha =>
+        (front_le actor seq _ _ x).mp (Nat.le_refl _) r (unionL_mem.mpr (.inl hr)) ha
+    have h2 : front actor seq b x ≤ front actor seq (unionL a b) x :=
+      (front_le actor seq b _ x).mpr fun r hr ha =>
+        (front_le actor seq _ _ x).mp (Nat.le_refl _) r (unionL_mem.mpr (.inr hr)) ha
+    exact Nat.max_le.mpr ⟨h1, h2⟩
+
+end Top
+
 /-! ### Evaluated example: a shelf of 3, sales of 2, 2, 1; a sale past the level is held -/
 
 private def sell (lvl q : Int) : Int := lvl - q
@@ -144,3 +452,7 @@ end Bebop.Sync
 #print axioms Bebop.Sync.held_subset
 #print axioms Bebop.Sync.len_law
 #print axioms Bebop.Sync.state_is_merge
+#print axioms Bebop.Sync.glue_assoc
+#print axioms Bebop.Sync.compat_assoc
+#print axioms Bebop.Sync.commutes_when_clean
+#print axioms Bebop.Sync.front_union_assoc

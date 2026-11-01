@@ -90,10 +90,31 @@ pub struct Superblock {
     pub superseded_cells: i64,
 }
 
-/// The largest image `from_bytes` will pad a trimmed one back up to: 512 MiB.
-/// Far above anything dowiz stores (a hub that has traded for a year is tens of
+/// The largest image a writer makes by default (`bebop-io` `Options::max_image_bytes`): 512 MiB. The
+/// name is older than the rule: until W-MG-HOLES2 this bounded a reader's padding, and no reader
+/// pads now. Far above anything dowiz stores (a hub that has traded for a year is tens of
 /// megabytes) and far below what would hurt to allocate by accident.
 pub const MAX_PAD_CELLS: usize = (512 << 20) / 8;
+
+/// A CELL AS AN INDEX, the one door (W-MG-HOLES2, `tools/gates/cell-usize.sh`). A cell is any i64;
+/// `as usize` cuts it to 32 bits on wasm32, so a reader there followed a ref every other reader
+/// called outside the image. `None`: negative, or too wide for this machine, both outside it.
+#[inline]
+pub fn idx(cell: i64) -> Option<usize> {
+    usize::try_from(cell).ok()
+}
+
+/// `idx` where the caller bounds the answer next: outside the image reads as past every bound.
+#[inline]
+pub fn idx_end(cell: i64) -> usize {
+    idx(cell).unwrap_or(usize::MAX)
+}
+
+/// `idx` over a field taken out of a cell as `u64`.
+#[inline]
+pub fn idx_u(field: u64) -> Option<usize> {
+    usize::try_from(field).ok()
+}
 
 // ---------------------------------------------------------------------------
 // Read rules over `Cells` (DG5), for the borrowed reader.
@@ -141,11 +162,8 @@ impl<T: Cells + ?Sized> Cells for &T {
 
 /// A borrowed image: the cells are read out of `bytes` on demand, never copied.
 ///
-/// NOT PADDED. `Store::from_bytes` pads a trimmed image back to its capacity; a view
-/// reads a cell past the end as 0, which is what the padding would have put there -- but
-/// the rules that bound a CLAIM by the image (`obj_cells`, `sb_fits`, `follow`) bound it by
-/// the bytes the view was given, so on a trimmed image they are STRICTER than `Store`'s
-/// (measured: an object claiming 7166 cells is 7166 in a padded Store, 170 in the view).
+/// The cells that arrived, as `Store::from_bytes` holds them: no reader of bytes pads, so a claim
+/// bounded by the image (`obj_cells`, `sb_fits`, `follow`) reads alike through a view and a store.
 pub struct View<'a> {
     bytes: &'a [u8],
     reads: core::cell::Cell<usize>,
@@ -218,8 +236,8 @@ pub fn root_in<C: Cells + ?Sized>(c: &C) -> Option<usize> {
     if pt <= 0 {
         return None;
     }
-    let r = c.cell_at(pt as usize + 18);
-    if r <= 0 { None } else { Some(r as usize) }
+    let r = c.cell_at(idx(pt)?.checked_add(18)?);
+    if r <= 0 { None } else { idx(r) }
 }
 
 /// `Store::obj_len`: the header's CLAIM.
@@ -229,7 +247,7 @@ pub fn obj_len_in<C: Cells + ?Sized>(c: &C, obj: usize) -> i64 {
 
 /// `Store::obj_cells`: the FACT -- the claim bounded by the image.
 pub fn obj_cells_in<C: Cells + ?Sized>(c: &C, obj: usize) -> usize {
-    let claim = obj_len_in(c, obj).max(0) as usize;
+    let claim = idx_end(obj_len_in(c, obj).max(0));
     claim.min(c.n_cells().saturating_sub(obj.saturating_add(2)))
 }
 
@@ -240,7 +258,7 @@ pub fn obj_digest_in<C: Cells + ?Sized>(c: &C, obj: usize) -> i64 {
 
 /// `Store::obj_crc_ok`: a length that does not fit cannot have a matching CRC.
 pub fn obj_crc_ok_in<C: Cells + ?Sized>(c: &C, obj: usize) -> bool {
-    let len = obj_len_in(c, obj) as usize;
+    let len = idx_end(obj_len_in(c, obj));
     if obj.saturating_add(2).saturating_add(len) > c.n_cells() {
         return false;
     }
@@ -266,10 +284,11 @@ pub fn follow_in<C: Cells + ?Sized>(c: &C, obj: usize, i: usize) -> Option<usize
     // out-of-bounds index this function exists to prevent.
     let at = (obj as i64).checked_add(off)?;
     // An object needs its two header cells to exist before it is an object.
-    if at < 0 || at as usize + 2 > c.n_cells() {
+    let at = idx(at)?;
+    if at.checked_add(2)? > c.n_cells() {
         return None;
     }
-    Some(at as usize)
+    Some(at)
 }
 
 impl Store {
@@ -301,17 +320,14 @@ impl Store {
         Ok(st)
     }
 
-    /// Load a store from a byte image. Trailing bytes that do not fill a whole
-    /// cell are ignored rather than padded: a truncated image must not silently
-    /// become a valid one.
+    /// Load a store from a byte image: the cells that arrived and no others. Trailing bytes that
+    /// do not fill a whole cell are ignored.
     ///
-    /// A TRIMMED image is padded back to capacity; a TRUNCATED one is not, and
-    /// the difference is the whole guarantee. `to_bytes_trimmed` drops the tail
-    /// of zeros past `arena_used`, which a reader can re-create exactly. An
-    /// image cut BELOW `arena_used` is missing objects the superblock still
-    /// names, and padding it would hand the caller a store whose arena reads as
-    /// zeros where records used to be -- valid-looking and wrong. So the padding
-    /// is allowed only up from `arena_used`, never up to it.
+    /// A READER OF BYTES HANDED WHOLE NEVER PADS (W-MG-HOLES2). This filled a trimmed image back to
+    /// the capacity its superblock names, so 296 bytes could ask for 564 MB, and a ref past the
+    /// bytes read as zeros in Rust and as outside the image in every other reader. Capacity is a
+    /// WRITER'S number: `alloc` grows the cells it needs, and `image_bytes` is what a writer sizes
+    /// the next image by.
     #[allow(clippy::indexing_slicing)] // T-ES-06 inventory (W-ES-P1): a pre-split index site; this list may only shrink
     pub fn from_bytes(bytes: &[u8]) -> Self {
         let n = bytes.len() / 8;
@@ -324,44 +340,18 @@ impl Store {
         Self::from_cells(cells)
     }
 
-    /// `from_bytes` for cells already decoded (a `Device::read_cells`, W-ES-P10): the same
-    /// padding rule, no bytes round trip. Measured 2026-10-30 (docs/measurements/B4-LAZY-OPEN):
-    /// `Db::open_path` at 1e5 commits spent 20 of its 30 ms copying, none of it verifying.
-    pub fn from_cells(mut cells: Vec<i64>) -> Self {
-        // The live superblock names both the arena's end (cell 4, an ABSOLUTE
-        // cell index) and its capacity (cell 12, a count of cells from ARENA).
-        // Pick the valid one with the higher generation, the same rule every
-        // reader uses. (No index site: `c` reads 0 past the end, the format's null.)
-        let c = |i: usize| cells.get(i).copied().unwrap_or(0);
-        let mut best: Option<(i64, i64, i64)> = None; // (generation, arena_used, capacity)
-        for at in [SB_A, SB_B] {
-            if at + 15 < cells.len() && c(at) == MAGIC && crc32_cells(&cells, at, 15) as i64 == c(at + 15) {
-                let gen = c(at + 2);
-                if best.is_none_or(|(g, _, _)| gen > g) {
-                    best = Some((gen, c(at + 4), c(at + 12)));
-                }
-            }
-        }
-        if let Some((_, arena_used, capacity)) = best {
-            let full = ARENA + capacity.max(0) as usize;
-            // EVERY CELL THE ARENA CLAIMS MUST ALREADY BE HERE. Below that the
-            // image is truncated, not trimmed, and it is left exactly as it
-            // arrived so whatever reads it next fails on the real bytes.
-            //
-            // AND THE CLAIM IS NOT TRUSTED FOR ITS SIZE. A restore hands this
-            // bytes the caller chose: a superblock whose capacity cell says a
-            // hundred million cells would have the reader allocate 800 MB for
-            // an image that is a few kilobytes long, which on a Worker is the
-            // isolate, not an error message. Past the bound the image is left
-            // as it arrived, exactly like a truncated one -- padding is a
-            // convenience for images we wrote, never an instruction we follow.
-            let bound = MAX_PAD_CELLS.max(cells.len());
-            if cells.len() >= arena_used.max(0) as usize && cells.len() < full && full <= bound {
-                cells.resize(full, 0);
-            }
-        }
-
+    /// `from_bytes` for cells already decoded (a `Device::read_cells`, W-ES-P10), no bytes round
+    /// trip. Measured 2026-10-30 (docs/measurements/B4-LAZY-OPEN): `Db::open_path` at 1e5 commits
+    /// spent 20 of its 30 ms copying, none of it verifying.
+    pub fn from_cells(cells: Vec<i64>) -> Self {
         Store { cells }
+    }
+
+    /// The size of the image this store was created as, in bytes: what a writer doubles or
+    /// rebuilds by. The live superblock's capacity, or the cells held when that says less.
+    pub fn image_bytes(&self) -> usize {
+        let full = self.pick().map_or(0, |sb| ARENA.saturating_add(idx(self.cells[sb.at + 12]).unwrap_or(0)));
+        full.max(self.cells.len()).saturating_mul(8)
     }
 
     /// The byte image. Little-endian cells, identical to what `create`/`commit`
@@ -375,14 +365,14 @@ impl Store {
         buf
     }
 
-    /// The image without its unused tail. The arena is a bump allocator, so every
-    /// cell past `arena_used` is a zero that the reader re-creates from the
-    /// capacity in the superblock. A freshly doubled image is mostly nothing.
+    /// The image without its unused tail. The arena is a bump allocator, so every cell past
+    /// `arena_used` is a zero no reader needs, and a writer gets it back as it allocates.
+    /// A freshly doubled image is mostly nothing.
     ///
     /// The cut is at `arena_used` (superblock cell 4), which is an ABSOLUTE cell
     /// index rather than a count from `ARENA` -- `create_bytes` seeds it with
     /// `ARENA` itself and every commit writes `tx.cursor` into it. Reopen with
-    /// `Store::from_bytes`, which pads the zeros back.
+    /// `Store::from_bytes`.
     ///
     /// Without a readable superblock nothing may be dropped: a store that cannot
     /// say where its arena ends is handed back whole.
@@ -392,7 +382,7 @@ impl Store {
             Some(sb) => sb.arena_used.max(ARENA as i64),
             None => self.cells.len() as i64,
         };
-        let trim_len = (trim_at as usize).min(self.cells.len());
+        let trim_len = idx_end(trim_at).min(self.cells.len());
         let mut buf = Vec::with_capacity(trim_len * 8);
         for i in 0..trim_len {
             buf.extend_from_slice(&self.cells[i].to_le_bytes());
@@ -474,7 +464,7 @@ impl Store {
         // And the root the PartTab names has to be inside the image too, or the
         // first object read walks off the end instead.
         if pt != 0 {
-            let r = self.cells[pt as usize + 18];
+            let r = self.cell(idx_end(pt).saturating_add(18));
             // An object's header is two cells before its payload.
             if r < 0 || (r != 0 && r.checked_add(2).is_none_or(|end| end >= n)) {
                 return false;
@@ -529,7 +519,7 @@ impl Store {
             if len < PARTTAB_CELLS || p as i64 + 2 + len > n {
                 return None;
             }
-            if crc32_cells(&self.cells, p + 2, len as usize) != (self.cells[p + 1] >> 32) as u32 {
+            if crc32_cells(&self.cells, p + 2, idx_end(len)) != (self.cells[p + 1] >> 32) as u32 {
                 return None;
             }
             let r = self.cells[p + 18];
@@ -592,7 +582,7 @@ impl Store {
     /// this; a reader that wants to know whether the claim was honest compares
     /// the two itself and refuses the image -- which is what `Kv::load` does.
     pub fn obj_cells(&self, obj: usize) -> usize {
-        let claim = self.obj_len(obj).max(0) as usize;
+        let claim = idx_end(self.obj_len(obj).max(0));
         claim.min(self.cells.len().saturating_sub(obj.saturating_add(2)))
     }
 
@@ -603,10 +593,10 @@ impl Store {
 
     /// Does the object's stored CRC match its payload?
     pub fn obj_crc_ok(&self, obj: usize) -> bool {
-        let len = self.obj_len(obj) as usize;
+        let len = idx_end(self.obj_len(obj));
         // A length that does not fit cannot have a matching CRC, and computing
         // one over cells that are not there is the panic this guards.
-        if obj + 2 + len > self.cells.len() {
+        if obj.saturating_add(2).saturating_add(len) > self.cells.len() {
             return false;
         }
         let want = ((self.cell(obj + 1) >> 32) & 0xFFFF_FFFF) as u32;
@@ -625,15 +615,15 @@ impl Store {
         let sb = self.pick()?;
         let pt = self.cell(sb.at + 3);
         if pt <= 0 { return None; }
-        let r = self.cell(pt as usize + 18);
-        if r <= 0 { None } else { Some(r as usize) }
+        let r = self.cell(idx(pt)?.checked_add(18)?);
+        if r <= 0 { None } else { idx(r) }
     }
 
     /// The PartTab offset the live superblock names.
     pub fn parttab(&self) -> Option<usize> {
         let sb = self.pick()?;
         let pt = self.cell(sb.at + 3);
-        if pt <= 0 { None } else { Some(pt as usize) }
+        if pt <= 0 { None } else { idx(pt) }
     }
 
     /// Follow the object-relative ref in payload cell `i`. Returns None for a
@@ -656,10 +646,11 @@ impl Store {
         // out-of-bounds index this function exists to prevent.
         let at = (obj as i64).checked_add(off)?;
         // An object needs its two header cells to exist before it is an object.
-        if at < 0 || at as usize + 2 > self.cells.len() {
+        let at = idx(at)?;
+        if at.checked_add(2)? > self.cells.len() {
             return None;
         }
-        Some(at as usize)
+        Some(at)
     }
 }
 
@@ -735,7 +726,8 @@ impl Store {
             if pt.checked_add(20).is_none_or(|end| end >= n) {
                 return Err(StoreError::Corrupt("the PartTab's cursor cells are outside the image"));
             }
-            (self.cells[pt as usize + 19], self.cells[pt as usize + 20])
+            let p = idx_end(pt);
+            (self.cell(p.saturating_add(19)), self.cell(p.saturating_add(20)))
         };
         // THE CURSOR IS A CLAIM, AND THIS IS WHERE THE CLAIM BECOMES A WRITE
         // (W-AUDIT S1, 2026-09-27). Every reader bounds what it reads by the
@@ -776,9 +768,11 @@ impl Store {
         if off + 2 + len > ARENA as i64 + capacity {
             return Err(StoreError::ArenaFull { need: off + 2 + len, capacity });
         }
-        let o = off as usize;
-        if o + 2 + len as usize > self.cells.len() {
-            self.cells.resize(o + 2 + len as usize, 0);
+        let (Some(o), Some(end)) = (idx(off), idx(off + 2 + len)) else {
+            return Err(StoreError::ArenaFull { need: off + 2 + len, capacity });
+        };
+        if end > self.cells.len() {
+            self.cells.resize(end, 0);
         }
         self.cells[o] = ((digest & 0xFFFF_FFFF) << 32) | len;
         self.cells[o + 1] = tx.next_gen;
@@ -802,7 +796,7 @@ impl Store {
     /// Seal an object: CRC-32 of its payload into the high half of h1.
     #[allow(clippy::indexing_slicing)] // T-ES-06 inventory (W-ES-P1): a pre-split index site; this list may only shrink
     pub fn seal(&mut self, obj: usize) {
-        let len = self.obj_len(obj) as usize;
+        let len = idx_end(self.obj_len(obj));
         let crc = crc32_cells(&self.cells, obj + 2, len) as i64;
         self.cells[obj + 1] = (crc << 32) | (self.cells[obj + 1] & 0xFFFF_FFFF);
     }
@@ -839,7 +833,7 @@ impl Store {
         let capacity = self.cells[sb + 12];
         // the PartTab digest is reused from the live PartTab rather than recomputed, so the
         // Rust side never needs sha256; schema creation stays bebop's job.
-        let old_pt = self.cells[sb + 3] as usize;
+        let old_pt = idx(self.cells[sb + 3]).unwrap_or(0);
         let ptdig = if old_pt != 0 { self.obj_digest(old_pt) } else { 0 };
 
         let pt = (SB_B - sb) + 16;
@@ -1020,7 +1014,9 @@ mod bytes_tests {
         st.commit_bytes(&tx, root);
 
         let trimmed = st.to_bytes_trimmed();
-        assert_eq!(Store::from_bytes(&trimmed).cells.len(), st.cells.len(), "trimmed pads back");
+        let back = Store::from_bytes(&trimmed);
+        assert_eq!(back.cells.len(), trimmed.len() / 8, "the cells that arrived, no others");
+        assert_eq!(back.image_bytes(), st.cells.len() * 8, "capacity is the writer's number");
 
         // Cut one cell BELOW the arena cursor: an object the superblock names
         // is now missing, so nothing may be invented in its place.
@@ -1090,7 +1086,7 @@ mod bytes_tests {
 
         let mut cells = st.cells.clone();
         let at = st.pick().unwrap().at;
-        cells[at + 12] = (MAX_PAD_CELLS as i64) * 4; // a capacity nothing could hold
+        cells[at + 12] = 1 << 40; // a capacity nothing could hold
         cells[at + 15] = crc32_cells(&cells, at, 15) as i64; // and a CRC that agrees
         let mut bytes = Vec::new();
         for c in &cells[..st.pick().unwrap().arena_used as usize] {
@@ -1099,6 +1095,20 @@ mod bytes_tests {
 
         let back = Store::from_bytes(&bytes);
         assert_eq!(back.cells.len(), bytes.len() / 8, "no padding on an absurd claim");
+    }
+
+    /// THE ONE DOOR, BY VALUE: a cell is its value or outside the image, on every width. The
+    /// wide rows of `tools/gates/atk3_run.py` hold each site to this on a real wasm32.
+    #[test]
+    fn a_cell_is_its_value_or_outside_the_image() {
+        assert_eq!((idx(-1), idx(i64::MIN), idx(0), idx(5)), (None, None, Some(0), Some(5)));
+        assert_eq!(idx_end(-1), usize::MAX);
+        assert_eq!(idx_u(7), Some(7));
+        let wide = 1i64 << 32;
+        #[cfg(target_pointer_width = "32")]
+        assert_eq!((idx(wide), idx_end(wide), idx_u(wide as u64)), (None, usize::MAX, None));
+        #[cfg(target_pointer_width = "64")]
+        assert_eq!((idx(wide), idx_end(wide), idx_u(wide as u64)), (Some(1 << 32), 1 << 32, Some(1 << 32)));
     }
 
     /// A trimmed image is much smaller than the full one.

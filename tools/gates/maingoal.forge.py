@@ -18,6 +18,10 @@ payload; payload cell i of object o is cell o + 2 + i; a ref is relative to its 
   seg-range   the segment's `last` moved by one; resealed             -> no TRUNCATE names it (75)
   zero-revoked  the first KEY with a revoked_at: zeroed; resealed      -> the records and the table disagree
   unsealed-tail the first HEADS row moved back one seal; resealed       -> the newest record is under no seal
+  flag-strip  FLAG_SHA256 cleared on the oldest kept record; resealed -> the id covers flags (broken)
+  root-pk     a byte of the first KEY's public key; resealed          -> no seal of that actor verifies
+  frontier-row the newest segment's first row, its seq + 1; resealed  -> the chain hash differs (75)
+  tomb-swap   the two oldest tombstones trade payloads; resealed      -> FORGOTTEN's digests (tombs_foreign)
   wasm-byte   byte 100 of an archive's embedded reader                -> read.mjs refuses before running it
 """
 import struct
@@ -25,6 +29,9 @@ import sys
 import zlib
 
 SB_MAGIC = 3554557610294396226
+FLAG_SHA256 = 2
+NONCE_CELLS = 2  # the 16 bytes in front of a chained payload
+ERASED_NONCE = b"0" * 16
 PROOF_SIG_BYTE = 3000  # past the 1 952 B public key of a TSA mark: inside the signature
 
 
@@ -69,6 +76,17 @@ class Image:
         while self.i(rec + 2 + 2):
             rec = rec + self.i(rec + 2 + 2)
         return rec
+
+    def records(self):
+        """Every record object, oldest first."""
+        out = [self.newest_record()]
+        while self.i(out[-1] + 2 + 2):
+            out.append(out[-1] + self.i(out[-1] + 2 + 2))
+        return out[::-1]
+
+    def tombstones(self):
+        """Record objects a redaction left: an erased nonce behind the actor, on a chained record."""
+        return [r for r in self.records() if self.i(r + 2 + 11) & FLAG_SHA256 and bytes(self.b[8 * (r + 2 + 16): 8 * (r + 2 + 16 + NONCE_CELLS)]) == ERASED_NONCE]
 
     def seals(self):
         """The first head's seal chain, newest first."""
@@ -115,6 +133,29 @@ def main(mode, src, dst):
             im.put(t + 2 + 1 + 5 + j, im.u(s + 2 + 6 + j))
         im.put(t + 2 + 1 + 9, s - t)
         im.reseal(t)
+    elif mode == "flag-strip":
+        rec = im.oldest_record()
+        im.put(rec + 2 + 11, im.u(rec + 2 + 11) & ~FLAG_SHA256)
+        im.reseal(rec)
+    elif mode == "root-pk":
+        k = im.ref(im.ref(im.doc, 4), 1 + 4)
+        im.b[8 * (k + 2 + 9)] ^= 1
+        im.reseal(k)
+    elif mode == "frontier-row":
+        s = im.ref(im.doc, 9)
+        im.put(s + 2 + 12 + 4, im.u(s + 2 + 12 + 4) + 1)
+        im.reseal(s)
+    elif mode == "tomb-swap":
+        t = im.tombstones()
+        if len(t) < 2 or im.i(t[0]) & 0xFFFFFFFF != im.i(t[1]) & 0xFFFFFFFF:
+            raise SystemExit("maingoal.forge: no two tombstones of one size here: %r" % [im.i(x) & 0xFFFFFFFF for x in t])
+        a, b, n = 8 * (t[0] + 2 + 16), 8 * (t[1] + 2 + 16), 8 * ((im.i(t[0]) & 0xFFFFFFFF) - 16)
+        im.b[a: a + n], im.b[b: b + n] = im.b[b: b + n], im.b[a: a + n]
+        lengths = im.u(t[0] + 2 + 1), im.u(t[1] + 2 + 1)
+        im.put(t[0] + 2 + 1, lengths[1])
+        im.put(t[1] + 2 + 1, lengths[0])
+        im.reseal(t[0])
+        im.reseal(t[1])
     elif mode == "wasm-byte":
         im.b[(1024 + im.i(1027) + 3) * 8 + 100] ^= 1
     else:

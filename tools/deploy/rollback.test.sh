@@ -73,10 +73,13 @@ run --unpin; [ $RC = 0 ] && grep -q 'compact?pin=0 auth=tok-admin' "$T/calls" &&
 
 # ── the sha256 floor (W-MG-MIG): once a venue writes sha256 ids, a target that cannot read them is refused ──
 # deploy.sh's records: the floor is the first build that reads sha256 (f100), then a flip (f200), then one more (f300).
-printf '2026-11-01T00:00:00Z sha0 0ld00000-0000 sha256_venues=\n2026-11-02T00:00:00Z sha1 f100 sha256_venues=\n2026-11-03T00:00:00Z sha2 f200 sha256_venues=qa-durres\n2026-11-04T00:00:00Z sha3 f300 sha256_venues=*\n' > "$T/versions.log"
+printf '2026-11-01T00:00:00Z sha0 0ld00000-0000 sha256_venues= declared=0\n2026-11-02T00:00:00Z sha1 f100 sha256_venues= declared=1\n2026-11-03T00:00:00Z sha2 f200 sha256_venues=qa-durres declared=1\n2026-11-04T00:00:00Z sha3 f300 sha256_venues=* declared=1\n' > "$T/versions.log"
 echo "f100 2026-11-02T00:00:00Z sha1" > "$T/sha256-floor"
 rm -f "$T/sha256-flipped"
-run 0ld00000-0000; [ $RC = 0 ] && [ "$(switched)" = 1 ] && ! has 'sha256 floor' \
+# before any flip no witness speaks: versions.log names no list either (W-MG-TRANS H1: it is a witness now).
+cp "$T/versions.log" "$T/versions.all"; grep -v 'sha256_venues=[^ ]' "$T/versions.all" > "$T/versions.log"
+run 0ld00000-0000; RCP=$RC; cp "$T/versions.all" "$T/versions.log"; RC=$RCP
+[ $RC = 0 ] && [ "$(switched)" = 1 ] && ! has 'sha256 floor' \
   && ok "no venue flipped: the floor does not apply, an old target switches (0)" || no "floor off before a flip"
 echo "qa-durres flipped at 2026-11-03T00:00:00Z by f200 (sha2)" > "$T/sha256-flipped"
 run 0ld00000-0000; [ $RC = 53 ] && has 'FAIL floor' && has 'QUARANTINE every order' && [ ! -s "$T/calls" ] \

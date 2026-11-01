@@ -172,8 +172,8 @@ impl LogImage {
         }
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
         let sha = self.entropy.writes_sha256(&self.store);
-        let (payload, id, flags) = self.entropy.stamp(sha, &prev, body);
         let seq = EvLog::len(&self.store) as u64;
+        let (payload, id, flags) = self.entropy.stamp(sha, &[0u8; 32], seq, &prev, body);
         let rec = Record { id, prev, actor_pubkey: [0u8; 32], actor_seq: seq, flags, payload };
         match EvLog::append_tip_bytes(&mut self.store, &rec) {
             Ok(_) => Ok(()),
@@ -243,7 +243,7 @@ impl LogImage {
         let dropped = all.len() - n;
         let mut keep: Vec<Entry> = all.into_iter().take(n).collect();
         keep.reverse();
-        let mut fresh = Store::create_bytes(self.store.to_bytes().len().max(MIN_LOG_BYTES))?;
+        let mut fresh = Store::create_bytes(self.store.image_bytes().max(MIN_LOG_BYTES))?;
         EvLog::init_bytes(&mut fresh)?;
         // Re-sealed under the scheme this log is on (W-MG-MIG): a kept legacy log stays legacy.
         let sha = self.entropy.writes_sha256(&self.store);
@@ -251,7 +251,7 @@ impl LogImage {
         let mut last = None;
         for (i, e) in keep.iter().enumerate() {
             let body = encode(&e.kind, &e.subject, &e.json)?;
-            let (payload, id, flags) = self.entropy.stamp(sha, &prev, body);
+            let (payload, id, flags) = self.entropy.stamp(sha, &[0u8; 32], i as u64, &prev, body);
             let rec = Record { id, prev, actor_pubkey: [0u8; 32], actor_seq: i as u64, flags, payload };
             EvLog::append_bytes(&mut fresh, &rec)?;
             prev = id;
@@ -271,7 +271,7 @@ impl LogImage {
         // straight to 64 KiB on its first overflow would cost that on every
         // read for the rest of its life. The floor is only there so a corrupt
         // zero-length image cannot produce another one.
-        let bigger = self.store.to_bytes().len().saturating_mul(2).max(MIN_LOG_BYTES);
+        let bigger = self.store.image_bytes().saturating_mul(2).max(MIN_LOG_BYTES);
         let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
         // Verbatim, a failed crc CARRIED (W-CRC): a re-seal would launder it.
@@ -283,6 +283,7 @@ impl LogImage {
     }
 }
 
+mod armed;
 mod scan;
 mod since;
 

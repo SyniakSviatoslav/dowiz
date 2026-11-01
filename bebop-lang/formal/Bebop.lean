@@ -40,3 +40,6 @@ import Bebop.KvBytes
 import Bebop.KvTree
 import Bebop.Group
 import Bebop.Glue
+import Bebop.DocLog
+import Bebop.DocMerge
+import Bebop.DocLimits

@@ -14,15 +14,17 @@
 //! REVOKE record and the KEYS table as they stood, so `verify` answers on the copy what it
 //! answered on the source, a table that disagrees included; a redaction that would tombstone
 //! a REVOKE is refused (`TakesRevoke`), because a tombstone declares nothing (`declare.rs`).
+//! A redaction returns what it erased, and the FORGOTTEN must list exactly that (`seg.rs`).
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use alloc::collections::BTreeMap;
 use crate::{EvLog, Record, Store, Tx};
 use super::anch::{read_anchors, stage_anchor};
+use super::budget::Budget;
 use super::keys::{key_rows, parse_revoke, read_key, stage_key, stage_keys, Key};
 use super::seal::{read_heads, read_seal, stage_heads, stage_seal, Head};
-use super::seg::{read_segs, stage_seg, Segment};
+use super::seg::{read_segs, stage_seg, Erased, Segment};
 use super::write::{stage_doc, Refs};
 use super::{Doc, DocError, Ids, FLAG_SELF_DESCRIBING};
 
@@ -44,16 +46,16 @@ impl Doc {
     /// REDACTION IN PLACE, for a DOC (W-MG-M3b, R-MAINGOAL-A §2c): the copy with the payloads
     /// `redact` answers for replaced, everything else -- ids, `prev`, seals, keys, anchors,
     /// segments -- verbatim, so the tips the seals signed do not move and the tombstones
-    /// are declared, not hidden. Returns how many records were redacted; the caller then
-    /// commits the signed FORGOTTEN (`seg::forgotten_body`) through `commit_bytes`, or
-    /// `verify` says `redacted != declared`. Nothing is committed when the count is 0.
-    pub fn redact_into(src: &Store, dst: &mut Store, ids: &dyn Ids, redact: Redact<'_>) -> Result<usize, DocError> {
+    /// are declared, not hidden. Returns what was redacted; the caller then commits the signed
+    /// FORGOTTEN (`seg::forgotten_body`) listing exactly that through `commit_bytes`, or `verify`
+    /// counts it. Nothing is committed when the list is empty.
+    pub fn redact_into(src: &Store, dst: &mut Store, ids: &dyn Ids, redact: Redact<'_>) -> Result<Vec<Erased>, DocError> {
         let mut tx = dst.begin()?;
-        let (doc, n) = stage_copy_with(src, dst, &mut tx, None, Some((ids, redact)))?;
-        if n > 0 {
+        let (doc, erased) = stage_copy_with(src, dst, &mut tx, None, Some((ids, redact)))?;
+        if !erased.is_empty() {
             dst.commit_bytes(&tx, doc);
         }
-        Ok(n)
+        Ok(erased)
     }
 }
 
@@ -63,9 +65,9 @@ pub(crate) fn stage_copy(src: &Store, dst: &mut Store, tx: &mut Tx, spec: Option
     stage_copy_with(src, dst, tx, spec, None).map(|(doc, _)| doc)
 }
 
-/// `stage_copy`, with an optional redaction; returns the DOC and how many payloads moved.
-fn stage_copy_with(src: &Store, dst: &mut Store, tx: &mut Tx, spec: Option<usize>, redact: Option<(&dyn Ids, Redact<'_>)>) -> Result<(usize, usize), DocError> {
-    let mut redacted = 0usize;
+/// `stage_copy`, with an optional redaction; returns the DOC and what it redacted.
+fn stage_copy_with(src: &Store, dst: &mut Store, tx: &mut Tx, spec: Option<usize>, redact: Option<(&dyn Ids, Redact<'_>)>) -> Result<(usize, Vec<Erased>), DocError> {
+    let mut redacted: Vec<Erased> = Vec::new();
     {
         let view = Doc::open(src)?;
         if view.tree.is_some() || view.spec.is_some() {
@@ -94,8 +96,8 @@ fn stage_copy_with(src: &Store, dst: &mut Store, tx: &mut Tx, spec: Option<usize
                     if let Some((target, _)) = parse_revoke(ids.body(r.flags, &r.payload)) {
                         return Err(DocError::TakesRevoke(target));
                     }
-                    redacted += 1;
                     tomb = Record { payload, ..r.clone() };
+                    redacted.push(Erased { id: r.id, digest: ids.chained(&tomb) });
                     &tomb
                 }
                 None => r,
@@ -120,6 +122,7 @@ fn stage_copy_with(src: &Store, dst: &mut Store, tx: &mut Tx, spec: Option<usize
         // Heads: each device's seal chain, oldest first.
         let mut heads: Vec<Head> = Vec::new();
         let cap = recs.len() + 1;
+        let mut budget = Budget::of(src);
         for h in read_heads(src, view.heads) {
             let mut chain = Vec::new();
             let mut cur = h.seal;
@@ -127,6 +130,7 @@ fn stage_copy_with(src: &Store, dst: &mut Store, tx: &mut Tx, spec: Option<usize
                 if chain.len() >= cap {
                     return Err(DocError::Corrupt("a seal chain never ends"));
                 }
+                budget.spend(src, at)?;
                 src.check_obj(at)?;
                 let s = read_seal(src, at).ok_or(DocError::Corrupt("a HEADS row names no SEAL"))?;
                 cur = s.prev;

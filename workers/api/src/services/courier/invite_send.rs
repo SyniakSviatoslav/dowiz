@@ -195,7 +195,7 @@ pub async fn decorate(ctx: &RouteContext<crate::Req>, loc: &str, rows: &mut [(i6
 /// The venue's `outbox.abandoned` lines, `(atMs, message)`; `None` = unreadable.
 async fn abandoned(place: &crate::hubstore::Place) -> Option<Vec<(i64, String)>> {
     let stub = place.stub().ok()?;
-    let loaded = crate::platform_store::load_log_at(&stub, crate::errlog::image_of(Some(&place.venue))).await.ok()?;
+    let loaded = crate::platform_store::load_log_at(&stub, crate::errlog::image_of(Some(&place.venue)), &place.venue).await.ok()?;
     Some(
         loaded
             .log

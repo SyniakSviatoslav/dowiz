@@ -23,9 +23,9 @@
 //!
 //! KEYS ARE SORTED by every writer in the tree (`Kv::put` inserts by binary search,
 //! `stage_write` writes `entries` in order; `kv.bp` writes only the empty schema), and
-//! the order is raw-byte order, which is Rust's `str` order. `open` CHECKS it anyway:
-//! an image whose keys are not strictly ascending is read by a linear scan (`sorted()`
-//! says which), so an image nobody here wrote still answers like `Kv::get`.
+//! the order is raw-byte order, which is Rust's `str` order. `open` CHECKS it: a base whose keys
+//! are not strictly ascending is REFUSED (`NotKv`, W-MG-ATK3), as `Kv::decode` refuses it; the
+//! readers answered differently on one.
 //!
 //! LIMIT, stated: a key is compared as raw bytes; `Kv` decodes keys lossily. They
 //! differ only for a key that is not valid UTF-8, which no writer here produces.
@@ -76,11 +76,8 @@ pub struct KvIn<C: Image> {
 
 /// One entry's (offset, len), bounded by the blob: `None` is a slice the image does not hold.
 fn slice_of(off: i64, len: i64, bytes: usize) -> Option<(usize, usize)> {
-    if off < 0 || len < 0 {
-        return None;
-    }
-    let end = (off as usize).checked_add(len as usize)?;
-    if end > bytes { None } else { Some((off as usize, len as usize)) }
+    let (off, len) = (bebop_image::idx(off)?, bebop_image::idx(len)?);
+    if off.checked_add(len)? > bytes { None } else { Some((off, len)) }
 }
 
 impl<C: Image> KvIn<C> {
@@ -146,11 +143,12 @@ impl<C: Image> KvIn<C> {
             if ver >= 2 { cells.checked_mul(8).ok_or(KvError::NotKv) } else { Ok(cells) }
         };
         let (kbytes, vbytes) = (bytes(kblob)?, bytes(vblob)?);
-        if n < 0 || (n as usize).checked_mul(2).is_none_or(|t| t > obj_cells_in(&c, kidx).min(obj_cells_in(&c, vidx))) {
+        let n = bebop_image::idx(n).ok_or(KvError::NotKv)?;
+        if n.checked_mul(2).is_none_or(|t| t > obj_cells_in(&c, kidx).min(obj_cells_in(&c, vidx))) {
             return Err(KvError::NotKv);
         }
         let ov = overlay::build(&c, &chain);
-        Ok(KvIn { ver, n: n as usize, kidx, kblob, vidx, vblob, kbytes, vbytes, sorted, chain, ov, pieces: Vec::new(), mlen: 0, c, t4: None })
+        Ok(KvIn { ver, n, kidx, kblob, vidx, vblob, kbytes, vbytes, sorted, chain, ov, pieces: Vec::new(), mlen: 0, c, t4: None })
     }
 
     /// Every slice bounded, the budget (entries together no larger than the blobs:
@@ -162,8 +160,8 @@ impl<C: Image> KvIn<C> {
             let (_, kl) = self.key_slice(i)?;
             let (_, vl) = self.val_slice(i)?;
             budget = budget.checked_sub(kl + vl).ok_or(KvError::NotKv)?;
-            if sorted && i > 0 && self.cmp_keys(i - 1, i)? != Ordering::Less {
-                sorted = false;
+            if i > 0 && self.cmp_keys(i - 1, i)? != Ordering::Less {
+                return Err(KvError::NotKv);
             }
         }
         Ok(sorted)

@@ -5,10 +5,11 @@
 //!   `base` -- the hub record its branch starts from (the hub's tip at the last sync), and
 //!   `tip`  -- its own newest record's id.
 //!
-//! THE GLUING CONDITION, ON THE WIRE. A record's id is `sha256(prev ‖ payload)` (`chain.rs`, M0;
-//! a record whose text carries no nonce was written by a pre-M0 tablet under the FNV chain and
-//! is recomputed under that -- `codec::nonced`, `chain::id_for`), so the hub recomputes the
-//! tablet's chain from `base` over the bytes it received and must land on `tip`: one 32-byte
+//! THE GLUING CONDITION, ON THE WIRE. A record's id is `chain::stock_id` over its position, `prev`
+//! and bytes (`chain.rs`; a record whose text carries no nonce was written by a pre-M0 tablet
+//! under the FNV chain and is recomputed under that -- `codec::nonced`), so the hub recomputes the
+//! tablet's chain from `base`, whose position it knows, over the bytes it received and must land
+//! on `tip`: one 32-byte
 //! compare proves the tail is the tablet's whole section above the overlap, untouched and
 //! complete. `base` must be in the hub's chain -- the overlap's digest is that id. Nothing else
 //! about the tablet's image is needed or sent. (Until 2026-10-30 this comment said sha256 while
@@ -30,9 +31,17 @@ use super::{open, refuse, tail_events, Conflict, Glued, Refusal, Side, Why};
 use crate::stock::rights::{provisional_of, PROV_KEY};
 use crate::stock::{decode, nonced, rec_body, StockEvent, StockLedger, StockLog};
 
-/// The id of `rec` chained after `prev`, under the scheme its text names (`chain::id_for`).
-pub(crate) fn wire_id(prev: &[u8; 32], rec: &str) -> [u8; 32] {
-    crate::chain::id_for(prev, rec.as_bytes(), nonced(rec))
+/// The id of `rec` at position `seq`, chained after `prev`, under the scheme its text names
+/// (`chain::stock_id`: flags come from the text, the stock log's actor is zero and its seq is the
+/// record's position, so nothing but the bytes and the count below them travels).
+pub(crate) fn wire_id(seq: u64, prev: &[u8; 32], rec: &str) -> [u8; 32] {
+    crate::chain::stock_id(seq, prev, rec.as_bytes(), nonced(rec))
+}
+
+/// The tablet's chain over `recs`: the id after each, from `base` at position `at`.
+pub(crate) fn wire_chain(at: usize, base: &[u8; 32], recs: &[String]) -> Vec<[u8; 32]> {
+    let mut prev = *base;
+    recs.iter().enumerate().map(|(pos, rec)| { prev = wire_id((at + pos) as u64, &prev, rec); prev }).collect()
 }
 
 /// The longest record a tail may carry: a movement with every meta key is ~400 bytes.
@@ -144,8 +153,11 @@ fn admit(pos: usize, rec: &str) -> Result<StockEvent, Refusal> {
 
 /// THE GLUING CHECK for a wire tail against the hub's log (`hub_bytes` is `hub`'s image, as the
 /// hub's object holds it; `led_h` its ledger now, folded once by the caller for the whole turn).
-/// Answers what S0's `glue` answers, plus the tail decoded.
-pub fn glue_tail(hub_bytes: &[u8], hub: &StockLog, led_h: &StockLedger, t: &Tail) -> Result<(Glued, Vec<StockEvent>), Refusal> {
+/// Answers what S0's `glue` answers, plus the tail decoded. `chain`: `wire_chain` of the tail, one
+/// hash per record per turn however many doors read it. `skip`: the tail's first records the hub
+/// adopted at an earlier sync (`merge`): every record is still admitted and its link checked, but
+/// those are hub records now, so only the ones after them fold on the kitchen's side.
+pub fn glue_tail(hub_bytes: &[u8], hub: &StockLog, led_h: &StockLedger, t: &Tail, chain: &[[u8; 32]], skip: usize) -> Result<(Glued, Vec<StockEvent>), Refusal> {
     if hub.quarantined() > 0 {
         return refuse(Side::Hub, Why::Quarantined(hub.quarantined()));
     }
@@ -154,20 +166,18 @@ pub fn glue_tail(hub_bytes: &[u8], hub: &StockLog, led_h: &StockLedger, t: &Tail
     }
     let ch = open(Side::Hub, hub_bytes)?;
     let th = hub_tail(&ch, &t.base)?;
-    // The tablet's section: every record admitted, every link recomputed, ending at its tip.
+    // The tablet's section: every record admitted, its links (`chain`) ending at its tip.
     let mut ek = Vec::with_capacity(t.recs.len());
     let mut prov = Vec::new();
-    let mut prev = t.base;
     for (pos, rec) in t.recs.iter().enumerate() {
         ek.push(admit(pos, rec)?);
-        prev = wire_id(&prev, rec);
-        if rec.contains(PROV_KEY) {
+        if pos >= skip && rec.contains(PROV_KEY) {
             if let Some(p) = provisional_of(rec) {
                 prov.push(Conflict::Provisional { side: Side::Kitchen, ctx: p.ctx, item: p.item, order_id: p.order_id, qty: p.qty });
             }
         }
     }
-    if prev != t.tip {
+    if *chain.last().unwrap_or(&t.base) != t.tip {
         return refuse(Side::Kitchen, Why::TipMismatch);
     }
     let mut hub_prov = Vec::new();
@@ -176,16 +186,17 @@ pub fn glue_tail(hub_bytes: &[u8], hub: &StockLog, led_h: &StockLedger, t: &Tail
     let mut g = Glued {
         ancestor: to_cells(&t.base),
         hub_tail: th.len(),
-        kitchen_tail: t.recs.len(),
+        kitchen_tail: t.recs.len() - skip,
         wire_bytes: t.recs.iter().map(String::len).sum(),
         conflicts: hub_prov,
         shared: Vec::new(),
     };
-    if th.is_empty() || ek.is_empty() {
+    let fresh = &ek[skip.min(ek.len())..];
+    if th.is_empty() || fresh.is_empty() {
         return Ok((g, ek));
     }
-    let (dh, dk) = (TailDelta::of(&eh), TailDelta::of(&ek));
-    let led_k = if delta::needs_kitchen(led_h, &dh, &dk) { Some(kitchen_ledger(&ch, th.len(), &ek)?) } else { None };
+    let (dh, dk) = (TailDelta::of(&eh), TailDelta::of(fresh));
+    let led_k = if delta::needs_kitchen(led_h, &dh, &dk) { Some(kitchen_ledger(&ch, th.len(), fresh)?) } else { None };
     let (conflicts, shared) = delta::obstructions(led_h, led_k.as_ref(), &dh, &dk);
     g.conflicts.extend(conflicts);
     g.shared = shared;

@@ -217,7 +217,10 @@ fn open_reads_the_live_image_once_and_the_writer_only_at_the_first_write() {
         w.put(format!("k{i}").as_bytes(), b"v").unwrap();
         w.commit(Durability::None).unwrap();
     }
-    let padded = Store::from_bytes(&db.snapshot_bytes()).cells;
+    let st = Store::from_bytes(&db.snapshot_bytes());
+    let full = st.image_bytes() / 8;
+    let mut padded = st.cells;
+    padded.resize(full, 0);
     let disk = crate::sim::SimDisk::new(padded);
     let total = disk.len_cells().unwrap();
     let used = crate::format::pick_checked_in(&View::new(&db_bytes(&disk))).unwrap().arena_used as usize;

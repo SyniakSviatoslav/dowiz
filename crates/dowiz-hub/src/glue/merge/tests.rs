@@ -229,10 +229,10 @@ fn profile_merge_phases() {
         lap(&mut us, t0);
         let t0 = Instant::now();
         let start = l.ledger_since().unwrap();
-        let _ = crate::glue::wire::glue_tail(&bytes, &l, &start.0, &t).unwrap();
+        let _ = crate::glue::wire::glue_tail(&bytes, &l, &start.0, &t, &crate::glue::wire::wire_chain(l.len() - l.since(&t.base).map_or(0, |a| a.len()), &t.base, &t.recs), 0).unwrap();
         lap(&mut us, t0);
         let t0 = Instant::now();
-        let (a, led) = l.adopt_from(&t.recs, start).unwrap();
+        let (a, led) = l.adopt_from(&t.recs, &[], start).unwrap();
         assert_eq!(a.merged, 400);
         lap(&mut us, t0);
         let t0 = Instant::now();
@@ -305,7 +305,7 @@ fn profile_adopt_and_regrant_parts() {
         l.set_checkpoint_every(usize::MAX);
         let t0 = Instant::now();
         let start = l.ledger_since().unwrap();
-        l.adopt_from(&t.recs, start).unwrap();
+        l.adopt_from(&t.recs, &[], start).unwrap();
         nockp.push(t0.elapsed().as_micros());
         usage = format!("{u0} -> {:?}", l.usage());
         let t0 = Instant::now();

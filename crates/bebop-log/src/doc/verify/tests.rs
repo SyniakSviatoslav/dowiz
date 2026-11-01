@@ -2,6 +2,7 @@
 //! record. Real ML-DSA-65, unions and per-sync sealing are in dowiz-hub `tests/k3_union.rs`.
 
 use super::{chains, unsealed, verify, Report, Trust};
+use crate::doc::frontier::Frontiers;
 use crate::doc::seal::{read_heads, stage_heads, Head};
 use crate::doc::seg::{Frontier, Segment};
 use crate::doc::tests::{doc_with, key_of, mix, Dev, ToyIds, ToySigner, ToyVerifier};
@@ -110,11 +111,11 @@ fn a_chain_ends_at_zero_or_at_a_frontier_tip() {
     let id = mix(&[&lost, b"second"]);
     forge_record(&mut st, &Record { id, prev: lost, actor_pubkey: a.s.id, actor_seq: 2, flags: 0, payload: b"second".to_vec() });
     let ch = chains(&st, Doc::open(&st).unwrap().log);
-    assert_eq!(unsealed(&ch, &[id], &[]), 1, "reached, and the walk ended on an unknown id");
+    assert_eq!(unsealed(&ch, &[id], &Frontiers::of(&[]), &|_| false), 1, "reached, and the walk ended on an unknown id");
     let row = Frontier { actor_id: a.s.id, seq: 1, tip: lost, scheme: 0 };
-    let seg = Segment { first: 0, last: 0, root: [0; 32], prev: None, prev_root: [0; 32], blob: None, redacted: 0, declared: 0, frontier: vec![row] };
-    assert_eq!(unsealed(&ch, &[id], &[seg]), 0);
-    assert_eq!(unsealed(&ch, &[], &[]), 1, "no tip: the record itself is unsealed");
+    let seg = Segment { first: 0, last: 0, root: [0; 32], prev: None, prev_root: [0; 32], blob: None, redacted: 0, declared: 0, seg_hash: [0; 32], frontier: vec![row] };
+    assert_eq!(unsealed(&ch, &[id], &Frontiers::of(&[seg]), &|_| false), 0);
+    assert_eq!(unsealed(&ch, &[], &Frontiers::of(&[]), &|_| false), 1, "no tip: the record itself is unsealed");
 }
 
 /// The reader that judges nothing walks from every seal: on an honest file it agrees, and the
@@ -135,4 +136,23 @@ fn a_blind_reader_walks_from_every_seal() {
     let r = a.next(b"forged");
     forge_record(&mut st, &r);
     assert_eq!(verify(&st, &ToyIds, &Blind, Trust::Genesis).unwrap().counters.unsealed, 1);
+}
+
+/// A record object shorter than its head reads its id from whatever follows it: refused by name.
+#[test]
+fn a_record_shorter_than_its_head_is_refused() {
+    let (mut st, _) = doc_with(2);
+    assert!(verify(&st, &ToyIds, &ToyVerifier, Trust::Genesis).is_ok(), "the twin");
+    let o = EvLog::objs_at(&st, Doc::open(&st).unwrap().log)[1];
+    st.cells[o] = (st.cells[o] & !0xFFFF_FFFF) | 5;
+    st.seal(o);
+    assert!(matches!(verify(&st, &ToyIds, &ToyVerifier, Trust::Genesis), Err(crate::doc::DocError::Corrupt("the log chain never ends"))));
+}
+
+/// A sum of cells is one number on every width: saturating at `i64::MAX`, never wrapping.
+#[test]
+fn a_sum_of_cells_saturates_at_i64_max() {
+    assert_eq!(super::sum_of(&[u64::MAX, 1]), i64::MAX as u64);
+    assert_eq!(super::sum_of(&[i64::MAX as u64, 1]), i64::MAX as u64);
+    assert_eq!(super::sum_of(&[2, 3]), 5);
 }

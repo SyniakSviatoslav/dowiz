@@ -124,11 +124,11 @@ impl Hub {
             self.grow()?;
         }
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
-        // CHAINED: the id commits to the record BEFORE it -- sha256 over `prev ‖ payload`
-        // since M0, and the flags cell says so; or the legacy FNV record while this log is
+        // CHAINED: the id commits to the record BEFORE it and to every cell of this one --
+        // `chain_id` since M0, and the flags cell says so; or the legacy FNV record while this log is
         // not yet flipped (`Hub::set_sha256`, W-MG-MIG). See `chain.rs`.
         let sha = self.entropy.writes_sha256(&self.store);
-        let (payload, id, flags) = self.entropy.stamp(sha, &prev, body);
+        let (payload, id, flags) = self.entropy.stamp(sha, &actor_pubkey, seq, &prev, body);
         let rec = Record { id, prev, actor_pubkey, actor_seq: seq, flags, payload };
 
         // ── THE IMAGE GROWS RATHER THAN REFUSING ──
@@ -188,7 +188,7 @@ impl Hub {
         // on every request, and the resource limit a few orders later. The
         // floor exists so a corrupt zero-length image cannot produce a
         // zero-length one; it is not a target.
-        let bigger = self.store.to_bytes().len().saturating_mul(2).max(64 * 1024);
+        let bigger = self.store.image_bytes().saturating_mul(2).max(64 * 1024);
         let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
         // VERBATIM INCLUDING A FAILED CRC (W-CRC): re-sealing a quarantined record

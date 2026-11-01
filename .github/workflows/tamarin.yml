@@ -1,0 +1,29 @@
+# The DOC seal protocol under a symbolic attacker (docs/design/tamarin). Separate from CI on purpose:
+# a red here blocks no merge and no release. The box cannot run the prover; this runner can.
+name: tamarin
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['docs/design/tamarin/**']
+permissions:
+  contents: read
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the prover
+        run: |
+          curl -sSL https://github.com/tamarin-prover/tamarin-prover/releases/download/1.12.0/tamarin-prover-1.12.0-linux64-ubuntu.tar.gz | tar xz
+          sudo apt-get install -y maude graphviz
+      - name: Prove
+        run: |
+          T=$(find . -type f -name tamarin-prover | head -1)
+          "$T" --prove docs/design/tamarin/bebop_seal.spthy +RTS -N2 -RTS | tee tamarin.out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tamarin-out
+          path: tamarin.out

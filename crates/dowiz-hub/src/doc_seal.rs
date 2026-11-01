@@ -1,8 +1,8 @@
 //! THE SEAL IN THE HUB (W-MG-M1B, R-MAINGOAL-A §1.2/§2d/§2e, phases M1 and M6): the three
 //! seams of `bebop_store::evlog::doc` filled with this crate's own answers --
 //!
-//!   * `HubIds`   -- how a record's id is derived: M0's `chain_id` (sha256 over `prev ‖
-//!                   payload`), the two FNV schemes of old images as LEGACY, the redaction
+//!   * `HubIds`   -- how a record's id is derived: `chain_id` (sha256 over
+//!                   `doc::id_message`), the two FNV schemes of old images as LEGACY, the redaction
 //!                   mark of `forget.rs`, and the body behind M0's nonce and the kind byte;
 //!   * `MlDsa65`  -- the verifier: ML-DSA-65 (FIPS 204) from `dowiz_core::pq::dsa`, alg 65,
 //!                   pk 1 952 B, sig 3 309 B. NEVER `pq::hybrid_signing` (memory
@@ -31,11 +31,11 @@
 //! anchors (`tsa.rs`, `ots.rs`, `roughtime.rs`) are the time half.
 
 use bebop_store::evlog::doc::{Ids, Key, Signer, Verifier, ALG_ML_DSA_65};
-use bebop_store::evlog::FLAG_SHA256;
+use bebop_store::evlog::{Record, FLAG_SHA256};
 use bebop_store::merkle;
 use dowiz_core::pq::dsa;
 
-use crate::chain::{chain_id, verify_id, IdScheme, NONCE_LEN};
+use crate::chain::{legacy_scheme, record_id, NONCE_LEN};
 use crate::forget::REDACTED_BIT;
 
 mod history;
@@ -62,25 +62,33 @@ pub fn actor_id(pk: &[u8]) -> [u8; 32] {
 pub struct HubIds;
 
 impl Ids for HubIds {
-    fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-        chain_id(prev, payload)
+    fn chained(&self, r: &Record) -> [u8; 32] {
+        record_id(r)
     }
     /// A pre-M0 id: FNV over `prev ‖ payload` (2026-09-20 to M0) or over the payload alone.
     /// A record FLAGGED sha256 whose id only matches FNV is not legacy -- it was edited and
     /// repaired under the wrong scheme (`verify_id`'s rule) -- and `verify` counts it broken.
     fn legacy(&self, flags: i64, prev: &[u8; 32], payload: &[u8], id: &[u8; 32]) -> bool {
-        matches!(verify_id(flags, prev, payload, id), Some(IdScheme::LegacyChained | IdScheme::LegacyPayload))
+        flags & FLAG_SHA256 == 0 && legacy_scheme(prev, payload, id).is_some()
     }
     fn redacted(&self, flags: i64, payload: &[u8]) -> bool {
         after_nonce(flags, payload).first().is_some_and(|k| k & REDACTED_BIT != 0)
     }
-    /// Behind the nonce (when `FLAG_SHA256`) and the kind byte: where a key-op body starts.
+    /// Behind the nonce (when `FLAG_SHA256`) and the kind byte: where a key-op body starts. ONLY
+    /// kinds `K` and `D` have one: any other record answers empty, or an order id that spells a
+    /// mark would read as a declaration (`atk_holes` hole 7).
     fn body<'a>(&self, flags: i64, payload: &'a [u8]) -> &'a [u8] {
-        after_nonce(flags, payload).get(1..).unwrap_or(&[])
+        match after_nonce(flags, payload).split_first() {
+            Some((&KIND_KEYOP | &KIND_DECL, body)) => body,
+            _ => &[],
+        }
     }
     /// The root a cut segment is named by (W-MG-M3's `Doc::cut_into`): RFC 9162 over the ids
     /// in file order, `bebop_store::merkle` -- the same tree `rotate.rs` publishes for an
     /// archive, so a segment's root and an archive's root over the same ids are one value.
+    fn hash(&self, bytes: &[u8]) -> Option<[u8; 32]> {
+        Some(bebop_store::nodekey::sha256(bytes))
+    }
     fn tree_root(&self, ids: &[[u8; 32]]) -> Option<[u8; 32]> {
         let leaves: Vec<[u8; 32]> = ids.iter().map(|id| merkle::leaf_hash(id)).collect();
         Some(merkle::root(&leaves))
@@ -103,6 +111,9 @@ pub struct MlDsa65;
 impl Verifier for MlDsa65 {
     fn verify(&self, alg: i64, pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
         alg == ALG_ML_DSA_65 && pk.len() == dsa::PUBLICKEYBYTES && sig.len() == dsa::SIGNATUREBYTES && dsa::verify_internal_bytes(pk, msg, sig)
+    }
+    fn actor_of(&self, pk: &[u8]) -> Option<[u8; 32]> {
+        Some(actor_id(pk))
     }
 }
 

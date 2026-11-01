@@ -41,6 +41,15 @@ pub(super) fn real_hub() -> Vec<u8> {
     bytes
 }
 
+/// No flagged record verifies under a legacy rule; the twin: unflagged, the same id does.
+#[test]
+fn a_flagged_record_is_never_legacy() {
+    let (prev, payload) = ([7u8; 32], b"bytes".to_vec());
+    let id = crate::chain::legacy_id_chained(&prev, &payload);
+    assert!(HubIds.legacy(0, &prev, &payload, &id));
+    assert!(!HubIds.legacy(bebop_store::evlog::FLAG_SHA256, &prev, &payload, &id));
+}
+
 /// The seal on real hub bytes, then two hub commits, each sealing its tip; every reader
 /// written before refuses the sealed image by name.
 #[test]
@@ -107,7 +116,7 @@ fn a_changed_byte_under_a_seal_is_broken_or_refused() {
     let mut payload = r.payload.clone();
     payload[16] ^= 1;
     st.put_cell(newest, 18, st.get(newest, 18) ^ 1);
-    let id = HubIds.chained(&r.prev, &payload);
+    let id = HubIds.chained(&Record { payload: payload.clone(), ..r.clone() });
     for (j, c) in bebop_store::evlog::doc::id_cells(&id).iter().enumerate() {
         st.put_cell(newest, 3 + j, *c);
     }

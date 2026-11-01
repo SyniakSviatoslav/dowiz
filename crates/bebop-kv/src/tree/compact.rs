@@ -13,8 +13,7 @@
 //! set from what the build used, before the commit that copies it into the PartTab and the
 //! other superblock. Before this the arena was found by the v2 doubling walk -- which rebuilt
 //! the whole tree once per attempt (three builds at 1e4, measured: the first always refused,
-//! since its cap was under the values alone) and landed anywhere in [2x, 4x) of the used cells,
-//! which `Store::from_bytes` then pads the writer's RAM to.
+//! since its cap was under the values alone) and landed anywhere in [2x, 4x) of the used cells.
 
 use alloc::vec::Vec;
 
@@ -45,9 +44,8 @@ where
 }
 
 /// `tree_compacted` with `room_pct` percent of the cells the build used left free (100 = as
-/// much again; 0 = no room: the next commit compacts). The writer's RAM after the compaction is
-/// the capacity (`Store::from_bytes` pads to it), so this is the memory lever as much as the
-/// trigger lever.
+/// much again; 0 = no room: the next commit compacts). The capacity is what a writer may grow to,
+/// so this is the memory lever as much as the trigger lever.
 pub fn tree_compacted_room<'e, I>(entries: I, max: usize, fanout: usize, after_gen: Option<i64>, room_pct: usize) -> Result<Vec<u8>, WriteError>
 where
     I: Iterator<Item = (&'e [u8], &'e [u8])>,
@@ -60,7 +58,7 @@ where
     set_capacity(&mut st, max)?;
     let (tx, root) = stage_build(&mut st, entries, fanout)?;
     // What the build used, in bytes from the image's start, plus the room asked for, on the grid.
-    let used = tx.cursor.max(0) as usize * 8;
+    let used = bebop_image::idx_end(tx.cursor.max(0)).saturating_mul(8);
     let want = used.saturating_add(used.saturating_mul(room_pct) / 100);
     let cap = want.div_ceil(CAP_GRID).saturating_mul(CAP_GRID).min(max).max(used);
     set_capacity(&mut st, cap)?;

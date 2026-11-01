@@ -187,8 +187,8 @@ impl Kv {
     }
 
     /// Fetch a value by key: BINARY SEARCH (W-ZC), since every writer keeps the keys
-    /// sorted. A miss falls back to the old linear scan, so an image whose keys are not
-    /// sorted (none is written here; `zc::KvIn` checks) still answers what it holds.
+    /// sorted, and `decode` refuses a base that is not. A miss falls back to the linear scan
+    /// for a `Kv` built by hand.
     #[allow(clippy::indexing_slicing)] // T-ES-06 inventory (W-ES-P1): a pre-split index site; this list may only shrink
     pub fn get(&self, key: &str) -> Option<Vec<u8>> {
         match self.entries.binary_search_by(|(k, _)| k.as_str().cmp(key)) {
@@ -433,8 +433,8 @@ where
     fresh.commit_bytes(&tx, root);
     // TRIMMED. The fresh image was sized by doubling until the content
     // fitted, so most of the arena it ended up with is untouched zeros --
-    // the tail `Store::from_bytes` re-creates from the capacity in the
-    // superblock. Writing it would send up to half an image of nothing on
+    // the tail no reader needs and a writer allocates back.
+    // Writing it would send up to half an image of nothing on
     // every settings change and every menu import.
     Ok(fresh.to_bytes_trimmed())
 }

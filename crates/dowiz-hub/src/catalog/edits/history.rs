@@ -58,7 +58,8 @@ pub fn compacted_to(log: &LogImage, keep: usize, keep_bytes: usize) -> Result<Lo
     let mut state = State::new();
     apply(&mut state, &list[..cut], Cut::All).map_err(JournalError::Replay)?;
     let at = list[..cut].last().map_or(0, |e| e.at_ms);
-    let mut fresh = LogImage::create().map_err(JournalError::Hub)?;
+    // Armed as the journal it replaces: a compaction is not a flip.
+    let mut fresh = log.fresh().map_err(JournalError::Hub)?;
     // The baseline's last record carries the cut's generation only when nothing is kept after it.
     let gen = list[..cut].iter().rev().find_map(|e| e.gen);
     let n = state.len();

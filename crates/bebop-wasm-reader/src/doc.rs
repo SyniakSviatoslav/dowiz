@@ -6,6 +6,7 @@
 use bebop_image::{Store, Superblock};
 use bebop_kv::tree::VERSION_TREE;
 use bebop_log::doc::anch::read_anchors;
+use bebop_log::doc::keys::{key_rows, read_key};
 use bebop_log::doc::seal::read_heads;
 use bebop_log::doc::seg::read_segs;
 use bebop_log::doc::spec::{read_blob, read_spec};
@@ -43,7 +44,7 @@ pub struct DocCounts {
     pub declared: i64,
     /// W-MG-REVOKE (appended): keys whose `revoked_at` is not what the file's REVOKE records say.
     /// Blind, so the rule is `settle.rs`'s for a reader with no verifier: a REVOKE counts on its
-    /// chain alone (its id = sha256(prev ‖ payload), no tombstone), its seal not judged. A forged
+    /// chain alone (its id = `ids::ReaderIds::chained`, no tombstone), its seal not judged. A forged
     /// table shows here with no signature code; a REVOKE a verifier would void counts as a claim.
     pub keys_disagree: i64,
     /// W-MG-SEAL (appended): records no seal's tip reaches through `prev`, plus walks that leave
@@ -115,6 +116,9 @@ impl Doc {
             Err(e) => return Some(Err(doc_refusal(e))),
         };
         let c = rep.counters;
+        // Keys with no ADMIT record, row by row: `admitted` would count a repeated actor once.
+        let table = DocRoot::open(&self.st).ok().and_then(|v| v.keys);
+        let genesis = key_rows(&self.st, table).iter().filter(|(_, k)| read_key(&self.st, *k).is_some_and(|k| k.admit_rec.is_none())).count();
         let counts = DocCounts {
             records: c.records as i64,
             chained: c.chained as i64,
@@ -125,7 +129,7 @@ impl Doc {
             forks: c.forks as i64,
             heads: rep.heads.len() as i64,
             keys: rep.keys as i64,
-            genesis: rep.admitted as i64,
+            genesis: genesis as i64,
             checked: 0,
             holds: rep.holds() as i64,
             segments: c.segments as i64,

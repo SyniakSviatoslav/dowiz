@@ -1,0 +1,5 @@
+# A live tombstone of a legacy record: no nonce, the kind byte's high bit is the mark.
+# Written by doc/spec/fixture_tests.rs (W-MG-FIX), BEBOP_RULE_FIXTURES=<dir>; deterministic.
+doc_n=4
+doc_root=2385174699030489450
+doc_verify=records=4 chained=1 legacy=2 redacted=1 broken=0 forks=0 seals=4 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=1 keys_disagree=0 unsealed=0

@@ -120,3 +120,22 @@ fn a_root_that_breaks_its_shape_is_refused() {
     patch(&mut st, r, 6, 3);
     assert_eq!(TreeIn::at(&st, r).err(), Some(TreeError::Forward { obj: r }));
 }
+
+/// One value object under two slots: each slot alone is well formed, and 2 000 of them asked for
+/// 444 MB from 252 KB (W-MG-ATK3 res_kv4_shared_value). The walk pays for every value it reaches,
+/// so two reads of an object past half the image run it out. Its twin, unshared, reads.
+#[test]
+fn a_value_named_twice_runs_the_budget_out() {
+    let mut st = Store::create_bytes(4 << 20).unwrap();
+    commit(&mut st, &vec![(k(0), Some(vec![7u8; 1 << 20])), (k(1), Some(b"b".to_vec()))], MIN_FANOUT);
+    let mut st = Store::from_bytes(&st.to_bytes_trimmed());
+    let r = st.root().unwrap();
+    TreeIn::at(&st, r).unwrap().verify().unwrap();
+    let leaf = first_leaf(&st, r);
+    let nd = node_at(&st, leaf, true).unwrap();
+    let big = ref_at(&st, &nd, 0).unwrap();
+    let cell = nd.r_cell(1);
+    patch(&mut st, leaf, cell, big as i64 - leaf as i64);
+    let t = TreeIn::at(&st, r).unwrap();
+    assert!(matches!(t.verify(), Err(TreeError::Node { why: "the tree reads more cells than the image holds", .. })), "{:?}", t.verify());
+}

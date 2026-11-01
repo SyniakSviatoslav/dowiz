@@ -1,6 +1,6 @@
 use super::*;
 use bebop_store::evlog::{EvLog, Record};
-use crate::chain::{chain_id, legacy_id, legacy_id_chained, verify_id, with_nonce, NONCE_LEN};
+use crate::chain::{chain_id, legacy_id, legacy_id_chained, legacy_scheme, record_id, with_nonce, NONCE_LEN};
 use bebop_store::evlog::{FLAG_NONCE_DERIVED, FLAG_SHA256};
 
 const ACTOR: [u8; 32] = [0xA1; 32];
@@ -402,9 +402,13 @@ fn every_id_commits_to_the_record_before_it() {
     // The same payload after a DIFFERENT predecessor is a different id.
     // Under the old scheme these two were identical, which is what made
     // "editing any event changes every id after it" false.
-    let one = chain_id(&[0u8; 32], b"same bytes");
-    let two = chain_id(&[9u8; 32], b"same bytes");
+    let one = chain_id(2, &[0u8; 32], 1, &[0u8; 32], b"same bytes");
+    let two = chain_id(2, &[0u8; 32], 1, &[9u8; 32], b"same bytes");
     assert_ne!(one, two, "the id has to depend on where in the chain it sits");
+    // ...and on every other cell of the record (W-MG-HOLES): each one, moved alone, moves the id.
+    assert_ne!(one, chain_id(6, &[0u8; 32], 1, &[0u8; 32], b"same bytes"), "flags");
+    assert_ne!(one, chain_id(2, &[7u8; 32], 1, &[0u8; 32], b"same bytes"), "actor");
+    assert_ne!(one, chain_id(2, &[0u8; 32], 2, &[0u8; 32], b"same bytes"), "seq");
 }
 
 /// An event edited in the image is found. This is the property the log is
@@ -525,7 +529,7 @@ fn m0_a_new_record_is_sha256_flagged_and_nonced() {
     let newest = &walked[0];
     assert_eq!(newest.flags & FLAG_SHA256, FLAG_SHA256);
     assert_eq!(newest.flags & FLAG_NONCE_DERIVED, FLAG_NONCE_DERIVED);
-    assert_eq!(newest.id, chain_id(&newest.prev, &newest.payload), "sha256 over prev ‖ payload");
+    assert_eq!(newest.id, record_id(&newest), "sha256 over `doc::id_message`");
     assert_ne!(newest.id, legacy_id_chained(&newest.prev, &newest.payload));
     assert_eq!(newest.prev, walked[1].id);
     let nonce = &newest.payload[..NONCE_LEN];
@@ -597,7 +601,7 @@ fn m0_a_forged_middle_record_with_a_repaired_fnv_id_is_broken() {
     assert_eq!(check.legacy, 0, "it is not counted as an old record");
     assert_eq!(check.chained, 3);
     assert_eq!(check.gaps, 1, "the record above still names the id that was repaired away");
-    assert!(verify_id(0, &victim.prev, &forged, &repaired).is_some(), "the repair itself verifies under FNV: only the rule catches it");
+    assert!(legacy_scheme(&victim.prev, &forged, &repaired).is_some(), "the repair itself verifies under FNV: only the rule catches it");
 
     // The twin: the same repair with the sha256 flag left set. A flagged record must verify
     // as sha256; an FNV match is not accepted for it.
@@ -661,7 +665,7 @@ fn m0_a_repair_under_sha256_is_a_gap_the_witness_tip_catches_not_the_walk() {
     for (j, c) in bebop_store::evlog::pack_payload(&forged).iter().enumerate() {
         st.put_cell(mid, at + j, *c);
     }
-    for (i, c) in crate::glue::walk::to_cells(&chain_id(&victim.prev, &forged)).iter().enumerate() {
+    for (i, c) in crate::glue::walk::to_cells(&record_id(&Record { payload: forged.clone(), ..victim.clone() })).iter().enumerate() {
         st.put_cell(mid, 3 + i, *c);
     }
     st.seal(mid);
@@ -752,7 +756,8 @@ fn a_trimmed_log_reloads_into_the_same_hub() {
     assert_eq!(back.len(), 5);
     assert_eq!(back.orders().len(), 5);
     assert!(back.order("ord_3").unwrap().contains("ord_3"));
-    assert_eq!(back.to_bytes(), full, "the padded image is the full image");
+    assert_eq!(back.to_bytes_trimmed(), trimmed, "what ships is what arrived");
+    assert_eq!(back.store.image_bytes(), full.len(), "the writer still knows the image's size");
     assert_eq!(back.usage().capacity_cells, h.usage().capacity_cells, "capacity survives");
 }
 
@@ -769,8 +774,7 @@ fn a_trimmed_log_keeps_appending() {
     h.append(EventKind::Advanced, "ord_1", &order("ord_1", "COOKING"), 2, ACTOR).unwrap();
     back.append(EventKind::Advanced, "ord_1", &order("ord_1", "COOKING"), 2, ACTOR).unwrap();
     assert_eq!(back.len(), 2);
-    assert_eq!(back.to_bytes(), h.to_bytes(), "the reloaded hub writes the same image");
-    assert_eq!(back.to_bytes_trimmed(), h.to_bytes_trimmed());
+    assert_eq!(back.to_bytes_trimmed(), h.to_bytes_trimmed(), "the reloaded hub writes the same image");
 }
 
 /// The number this change exists for: a fresh hub is a few hundred bytes on

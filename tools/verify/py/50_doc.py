@@ -24,14 +24,19 @@ def read_seal(im, at):
     return im.id_at(at, 1), im.get(at, 5) & M64, im.id_at(at, 6), im.follow(at, 11)
 
 
-def read_keys(im, t):
-    """`keys::read_keys`: (actor, admit ref, revoked_at) per row whose KEY reads; an unreadable KEY is skipped."""
+def key_rows(im, t):
+    """`keys::key_rows`: the KEY object of every row with a ref, in table order."""
     if t is None or im.digest(t) != DIGEST_KEYS or im.obj_cells(t) < 1:
         return []
-    m, out = min(max(im.get(t, 0), 0), (im.obj_cells(t) - 1) // 5), []
-    for i in range(m):
-        k = im.follow(t, 1 + 5 * i + 4)
-        if k is None or im.digest(k) != DIGEST_KEY or im.obj_cells(k) < 9:
+    m = min(max(im.get(t, 0), 0), (im.obj_cells(t) - 1) // 5)
+    return [k for k in (im.follow(t, 1 + 5 * i + 4) for i in range(m)) if k is not None]
+
+
+def read_keys(im, t):
+    """`keys::read_keys`: (actor, admit ref, revoked_at) per row whose KEY reads; an unreadable KEY is skipped."""
+    out = []
+    for k in key_rows(im, t):
+        if im.digest(k) != DIGEST_KEY or im.obj_cells(k) < 9:
             continue
         pk_len = im.get(k, 8)
         if 0 <= pk_len <= MAX_PK_BYTES and im.obj_cells(k) == 9 + (pk_len + 7) // 8:
@@ -43,19 +48,21 @@ def read_segs(im, newest):
     """`seg::read_segs`: every SEG from the DOC's ref SEG back, NEWEST FIRST, each crc checked (10); a
     chain object that is not a SEG, or one that never ends -> 2. A segment is a dict: first, last,
     root, prev_root, redacted, declared, frontier [(actor, seq, tip, scheme)]."""
-    out, cur, cap = [], newest, im.n // 14 + 1
+    out, cur, cap, left = [], newest, im.n // 14 + 1, im.n
     while cur is not None:
-        if len(out) >= cap:
+        left -= im.obj_cells(cur) + 2
+        if len(out) >= cap or left < 0:
             raise Refuse(2)
         im.need_crc(cur)
         if im.digest(cur) != DIGEST_SEG or im.obj_cells(cur) < 12 or im.get(cur, 0) != 1:
             raise Refuse(2)
         m = max(im.get(cur, 11), 0)
-        if im.obj_cells(cur) != SEG_HEAD + SEG_ROW * m:
-            raise Refuse(2)
+        if im.obj_cells(cur) != SEG_HEAD + SEG_ROW * m or im.get(cur, 2) & M64 < im.get(cur, 1) & M64:
+            raise Refuse(2)  # `last` < `first` names no range (W-MG-ATK3, main)
         prev = im.follow(cur, 7)
         prev_root = im.id_at(prev, 3) if prev is not None and im.digest(prev) == DIGEST_SEG and im.obj_cells(prev) >= 12 and im.get(prev, 0) == 1 else bytes(32)
         out.append({"first": im.get(cur, 1) & M64, "last": im.get(cur, 2) & M64, "root": im.id_at(cur, 3), "prev_root": prev_root,
+                    "blob": im.follow(cur, 8) is not None, "obj": cur,
                     "redacted": im.get(cur, 9) & M64, "declared": im.get(cur, 10) & M64,
                     "frontier": [(im.id_at(cur, SEG_HEAD + SEG_ROW * i), im.get(cur, SEG_HEAD + SEG_ROW * i + 4) & M64,
                                   im.id_at(cur, SEG_HEAD + SEG_ROW * i + 5), im.get(cur, SEG_HEAD + SEG_ROW * i + 9)) for i in range(m)]})
@@ -66,8 +73,11 @@ def read_segs(im, newest):
 def read_anchors(im, newest):
     """`anch::read_anchors`: (kind, over, time_ms, proof_len) NEWEST FIRST; each crc checked (10) as the
     reader does at open. PRESENT, never verified: this file has no adapter for any kind."""
-    out, cur, cap = [], newest, im.n // 11 + 1
+    out, cur, cap, left = [], newest, im.n // 11 + 1, im.n
     while cur is not None and len(out) < cap:
+        left -= im.obj_cells(cur) + 2
+        if left < 0:
+            break
         if im.digest(cur) != DIGEST_ANCH or im.obj_cells(cur) < 9 or im.get(cur, 0) != 1:
             break
         plen = im.get(cur, 8)
@@ -106,7 +116,9 @@ def legacy_id(payload):
 
 
 def chained_id(r):
-    return hashlib.sha256(r["prev"] + r["payload"]).digest()
+    """`doc::id_message` under sha256: the tag, then every cell a reader acts on. `flags` holds no
+    FLAG_ACTOR (`log_detail`, `Record::flags`). A tombstone's id no longer answers this."""
+    return hashlib.sha256(ID_TAG + struct.pack("<q", r["flags"]) + r["actor"] + struct.pack("<Q", r["seq"]) + r["prev"] + r["payload"]).digest()
 
 
 def is_legacy(r):
@@ -115,12 +127,9 @@ def is_legacy(r):
 
 
 def is_redacted(r):
-    """`ReaderIds::redacted`: a nonce erased to sixteen '0', or dowiz-hub's mark, the kind byte's high bit,
-    behind the nonce when there is one (a legacy record has no nonce to erase)."""
-    sha = r["flags"] & FLAG_SHA256
-    if sha and r["payload"][:NONCE_LEN] == b"0" * NONCE_LEN:
-        return True
-    b = r["payload"][NONCE_LEN:] if sha else r["payload"]
+    """`ReaderIds::redacted`: the kind byte's high bit, behind the nonce when there is one. It is the only
+    mark: a legacy record has no nonce to erase, so an erased nonce with no bit is an edit (FORMAT §9.4)."""
+    b = r["payload"][NONCE_LEN:] if r["flags"] & FLAG_SHA256 else r["payload"]
     return bool(b) and b[0] & REDACTED_BIT != 0
 
 
@@ -134,7 +143,7 @@ def body_of(r):
 def doc_open(im, root):
     """bebop-wasm-reader `open_doc`: the root's crc, the log as a log is read, HEADS / KEYS / SPEC
     crc (10), the SEG chain and every anchor crc-checked, a v4 TREE's entries, another TREE version -> 2.
-    Returns (records, heads, keys, spec, tree entries, log tip, segments, anchors)."""
+    Returns (records, heads, keys, spec, tree entries, log tip, segments, anchors, (HEADS, KEYS))."""
     im.need_crc(root)
     log = im.follow(root, 1)
     recs = log_detail(im, log) if log is not None else []
@@ -156,4 +165,4 @@ def doc_open(im, root):
         entries = kv4_entries(im, tree)
     segs = read_segs(im, im.follow(root, 9))
     anchors = read_anchors(im, im.follow(root, 8))
-    return recs, read_heads(im, heads_at), read_keys(im, keys_at), spec, entries, log_tip(im, log), segs, anchors
+    return recs, read_heads(im, heads_at), read_keys(im, keys_at), spec, entries, log_tip(im, log), segs, anchors, (heads_at, keys_at)

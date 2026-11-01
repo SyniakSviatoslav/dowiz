@@ -13,21 +13,25 @@
 use bebop_store::evlog::doc::{Doc, DocError, Ids, Key, KeyOp, Signer, Verifier};
 use bebop_store::evlog::{Record, FLAG_SHA256};
 use bebop_store::nodekey::sha256;
+use bebop_store::evlog::doc::id_message;
 use bebop_store::{merkle, Store};
 
 pub const NONCE_LEN: usize = 16;
 pub const ERASED_NONCE: [u8; NONCE_LEN] = [b'0'; NONCE_LEN];
+/// FORMAT §9.4: the mark, the high bit of the byte behind the nonce. The erased nonce is no mark.
+pub const TOMBSTONE_BIT: u8 = 0x80;
 /// Not an algorithm of the format: `ALG_ML_DSA_65` (65) is the one a real file uses.
 pub const ALG_NOT_A_SIGNATURE: i64 = 9000;
 
 pub struct Sha256Ids;
 
 impl Ids for Sha256Ids {
-    fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-        sha256(&[&prev[..], payload].concat())
+    fn chained(&self, r: &Record) -> [u8; 32] {
+        sha256(&id_message(r.flags, &r.actor_pubkey, r.actor_seq, &r.prev, &r.payload))
     }
     fn redacted(&self, flags: i64, payload: &[u8]) -> bool {
-        flags & FLAG_SHA256 != 0 && payload.starts_with(&ERASED_NONCE)
+        let tail = if flags & FLAG_SHA256 != 0 { payload.get(NONCE_LEN..).unwrap_or(&[]) } else { payload };
+        tail.first().is_some_and(|k| k & TOMBSTONE_BIT != 0)
     }
     fn body<'a>(&self, flags: i64, payload: &'a [u8]) -> &'a [u8] {
         if flags & FLAG_SHA256 != 0 {
@@ -35,6 +39,9 @@ impl Ids for Sha256Ids {
         } else {
             payload
         }
+    }
+    fn hash(&self, bytes: &[u8]) -> Option<[u8; 32]> {
+        Some(sha256(bytes))
     }
     /// The RFC 9162 tree over the ids, in file order.
     fn tree_root(&self, ids: &[[u8; 32]]) -> Option<[u8; 32]> {
@@ -97,8 +104,9 @@ impl Device {
     pub fn commit(&mut self, st: &mut Store, body: &[u8], op: Option<&KeyOp>) -> Result<i64, DocError> {
         let seq = self.seq + 1;
         let payload = [format!("{seq:016x}").as_bytes(), body].concat();
-        let id = Sha256Ids.chained(&self.tip, &payload);
-        let rec = Record { id, prev: self.tip, actor_pubkey: self.signer.actor_id(), actor_seq: seq, flags: FLAG_SHA256, payload };
+        let mut rec = Record { id: [0u8; 32], prev: self.tip, actor_pubkey: self.signer.actor_id(), actor_seq: seq, flags: FLAG_SHA256, payload };
+        rec.id = Sha256Ids.chained(&rec);
+        let id = rec.id;
         let generation = Doc::commit_bytes(st, &rec, &self.signer, 1_700_000_000_000 + seq as i64, op)?;
         self.seq = seq;
         self.tip = id;

@@ -37,6 +37,7 @@ use bebop_image::format::pick_checked_in;
 use bebop_image::verify::{last_commit_in, LastCommit};
 use bebop_image::{Store, Superblock, ARENA};
 use bebop_kv::tree::{TreeError, TreeIn, VERSION_TREE};
+use bebop_kv::delta::chain_in;
 use bebop_kv::verify::KvError;
 use bebop_kv::{Kv, FNV_OFFSET, FNV_PRIME};
 use bebop_log::doc::{Anchor, Doc as DocRoot, Head, SpecView};
@@ -57,7 +58,7 @@ pub enum Refusal {
     Truncated { claimed: usize, chained: Option<usize> },
     /// An object the read reached fails its crc: status 10, naming the object.
     BadCrc { obj: usize },
-    /// The KV root names a version above 4 that is not a DOC: status 12.
+    /// The KV root names a version above 4 that is not a DOC, or a log root one above 2: status 12.
     UnknownVersion,
     /// The last commit's range does not hash to its anchor and every object in it checks: 41.
     LastCommit,
@@ -131,6 +132,46 @@ pub(crate) fn blank(kind: Kind, fold: i64, st: Store, sb: Superblock) -> Doc {
     Doc { kind, fold, entries: Vec::new(), records: Vec::new(), heads: Vec::new(), spec: None, anchors: Vec::new(), counts: None, st, sb }
 }
 
+/// The KV entries and fold over RAW bytes (FORMAT §9.1): `Kv`'s keys are lossy Strings, so a non-UTF-8
+/// key would fold, and read, otherwise. Here and not `KvIn::open`, whose fold is the same bytes at +15 586 B of wasm
+/// (measured 148 953 vs 133 367): `load_checked` has already held every claim this walks.
+fn raw_fold(st: &Store, root: usize, version: i64) -> Option<(Vec<(Vec<u8>, Vec<u8>)>, u64)> {
+    let (kidx, kblob, vidx, vblob) = (st.follow(root, 1)?, st.follow(root, 2)?, st.follow(root, 3)?, st.follow(root, 4)?);
+    let bytes = |idx: usize, blob: usize, i: usize| -> Vec<u8> {
+        let (off, len) = (st.get(idx, 2 * i) as usize, st.get(idx, 2 * i + 1) as usize);
+        (off..off + len).map(|b| if version >= 2 { (st.get(blob, b >> 3) >> ((b & 7) * 8)) as u8 } else { st.get(blob, b) as u8 }).collect()
+    };
+    let mut map: Vec<(Vec<u8>, Vec<u8>)> = (0..st.get(root, 0) as usize).map(|i| (bytes(kidx, kblob, i), bytes(vidx, vblob, i))).collect();
+    for r in chain_in(st, root)?.iter().rev() {
+        // A put overwrites by removing and inserting: one path for both ops.
+        let k = r.key(st);
+        let at = map.partition_point(|e| e.0 < k);
+        if map.get(at).is_some_and(|e| e.0 == k) {
+            map.remove(at);
+        }
+        if r.op == 1 {
+            map.insert(at, (k, r.value(st)));
+        }
+    }
+    let mut h = FNV_OFFSET;
+    for (k, v) in &map {
+        for part in [k, v] {
+            h = fnv1a(h, &(part.len() as u64).to_le_bytes());
+            h = fnv1a(h, part);
+        }
+    }
+    Some((map, h))
+}
+
+fn kv_refusal(e: KvError) -> Refusal {
+    match e {
+        KvError::NotKv => Refusal::NotAKv,
+        KvError::BadCrc(b) => Refusal::BadCrc { obj: b.obj },
+        KvError::UnknownVersion { .. } => Refusal::UnknownVersion,
+        KvError::Tree(t) => tree_refusal(t),
+    }
+}
+
 /// The KV families. The root's crc first, then its version, exactly as `Kv::load_checked`
 /// orders them; v4 goes to `TreeIn` on every target (`v4_here()` is false on wasm32).
 fn open_kv(st: Store, sb: Superblock, root: usize) -> Result<Doc, Refusal> {
@@ -139,14 +180,8 @@ fn open_kv(st: Store, sb: Superblock, root: usize) -> Result<Doc, Refusal> {
     let (entries, fold) = if version == VERSION_TREE {
         tree_entries(&st, root)?
     } else {
-        let kv = Kv::load_checked(&st).map_err(|e| match e {
-            KvError::NotKv => Refusal::NotAKv,
-            KvError::BadCrc(b) => Refusal::BadCrc { obj: b.obj },
-            KvError::UnknownVersion { .. } => Refusal::UnknownVersion,
-            KvError::Tree(t) => tree_refusal(t),
-        })?;
-        let fold = kv.snapshot_root_u64();
-        (kv.entries.into_iter().map(|(k, v)| (k.into_bytes(), v)).collect(), fold)
+        Kv::load_checked(&st).map_err(kv_refusal)?;
+        raw_fold(&st, root, version).ok_or(Refusal::NotAKv)?
     };
     Ok(Doc { entries, ..blank(Kind::Kv { version }, fold as i64, st, sb) })
 }
@@ -182,6 +217,13 @@ pub(crate) fn log_fold(records: &[Record]) -> i64 {
 /// The records of the log rooted at `log` (`None` = the image's root): the root and every
 /// record's crc in one walk, the count held to the root's claim, then oldest first.
 pub(crate) fn log_records(st: &Store, log: Option<usize>) -> Result<Vec<Record>, Refusal> {
+    // FORMAT §9.2: the root's crc, then a version above 2 refuses before the walk.
+    if let Some(root) = log {
+        st.check_obj(root).map_err(|b| Refusal::BadCrc { obj: b.obj })?;
+    }
+    if EvLog::version_at(st, log) > bebop_log::MAX_VERSION {
+        return Err(Refusal::UnknownVersion);
+    }
     let claimed = EvLog::len_at(st, log);
     let chained = EvLog::chain_crc_at(st, log).map_err(|b| Refusal::BadCrc { obj: b.obj })?;
     if chained != Some(claimed) {

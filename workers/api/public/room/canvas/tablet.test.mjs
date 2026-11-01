@@ -108,3 +108,21 @@ test('two_venues: two slugs, two rows, no shared tap', async () => {
   assert.equal(await b.ordersPending(), 0);
   assert.ok(!rows.get('v2:kitchen').rail.includes('o1'), 'not one byte of v1 in v2\'s row');
 });
+
+// W-MG-TRANS H10: two tablets of one venue never share a context, and a stalk with records keeps its own.
+test('each new tablet has its own context; a stalk with records keeps the one it wrote under', async () => {
+  const m = await mod();
+  const off = async () => { const e = new Error('no network'); e.offline = true; throw e; };
+  const rec = '{"k":"received","item":"rice","qty":5}';
+  const [s1, s2] = [mem(), mem()];
+  await tablet({ mod: m, store: s1, post: off, loc: 'v1', now: () => 5 }).record(rec);
+  await tablet({ mod: m, store: s2, post: off, loc: 'v1', now: () => 5 }).record(rec);
+  const [a, b] = [(await s1.get()).ctx, (await s2.get()).ctx];
+  assert.match(a, /^kitchen-[0-9a-f]{8}$/);
+  assert.notEqual(a, b, 'two tablets, two contexts');
+  const old = mem();
+  const { image } = m.record(new Uint8Array(0), 'kitchen', rec, 1);
+  await old.set({ image, base: ZERO });
+  await tablet({ mod: m, store: old, post: off, loc: 'v1', now: () => 5 }).pending();
+  assert.equal((await old.get()).ctx, 'kitchen', 'its unanswered tail still reads as a retry');
+});

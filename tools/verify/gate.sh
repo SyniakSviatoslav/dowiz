@@ -52,7 +52,8 @@ CLEAN="${VERIFY_SCRATCH:-${TMPDIR:-/tmp}/bebop-verify-clean.$$}"
 rm -rf "$CLEAN"; mkdir -p "$CLEAN"
 trap 'rm -rf "$CLEAN"' EXIT
 cp "$V/bebop-verify.mjs" "$V/bebop-verify.py" "$ROOT/examples/read.mjs" "$CLEAN/"
-for f in $FIXTURES proj4.log doc anch; do cp "$FIX/$f.store" "$CLEAN/" || { say "RED fixture $f.store is absent"; exit 1; }; done
+RULES="tomb-sha tomb-legacy seg2 forged-tail keys-disagree"
+for f in $FIXTURES proj4.log doc anch $RULES seg2-forged cut-undeclared log-v1 log-v3 kv-unsorted; do cp "$FIX/$f.store" "$CLEAN/" || { say "RED fixture $f.store is absent"; exit 1; }; done
 say "clean dir $CLEAN holds $(ls "$CLEAN" | wc -l | tr -d ' ') files and no repo"
 
 want() { awk -F= "/^$2=/{print \$2}" "$FIX/$1.expected"; }
@@ -97,6 +98,20 @@ doc_check doc ./doc.store "doc status=0 n=$(want doc doc_n) root=$(want doc doc_
 
 # THE NON-EMPTY ANCH (W-MG-M7A): the counters as above, then every anchor row, newest first, on both
 doc_check anch ./anch.store "doc status=0 n=$(want anch doc_n) root=$(want anch doc_root)" "verify $(sed -n 's/^doc_verify=//p' "$FIX/anch.expected")"
+# W-MG-FIX's and FMT3's rule fixtures: each can fail one rule, each written by the library (`doc/spec/fixture_*.rs`).
+for f in $RULES; do
+  doc_check "$f" "./$f.store" "doc status=0 n=$(want "$f" doc_n) root=$(want "$f" doc_root)" "verify $(sed -n 's/^doc_verify=//p' "$FIX/$f.expected")"
+done
+for f in seg2-forged cut-undeclared; do
+  doc_check "$f" "./$f.store" "doc status=0 n=$(want "$f" doc_n) root=$(want "$f" doc_root)" "verify status=75"
+done
+exp="log status=0 n=$(want log-v1 n) root=$(want log-v1 root)"
+n=$(node_read ./log-v1.store); p=$(py_read ./log-v1.store)
+if [ "$n" = "$exp" ] && [ "$p" = "$exp" ]; then say "log-v1: want '$exp' -- node and python agree"; else say "log-v1: want '$exp' -- node '$n' python '$p' DISAGREE"; fail=1; fi
+for f in log-v3 kv-unsorted; do
+  st=$(want "$f" status); n=$(node_read "./$f.store"); nrc=$?; p=$(py_read "./$f.store"); prc=$?
+  case "$n:$p" in *" status=$st "*:*" status=$st "*) if [ "$nrc" = "$st" ] && [ "$prc" = "$st" ]; then say "$f: status $st on node and python"; else say "$f: node rc=$nrc python rc=$prc DISAGREE"; fail=1; fi ;; *) say "$f: want status $st -- node '$n' python '$p' DISAGREE"; fail=1 ;; esac
+done
 rows=$(sed -n 's/^doc_anchor=//p' "$FIX/anch.expected")
 for r in node python; do
   if [ "$r" = node ]; then got=$(node_read ./anch.store --verify); else got=$(py_read ./anch.store --verify); fi
@@ -241,7 +256,13 @@ PY
   done
 fi
 
-bytes=$(cat "$V/bytes.baseline" 2>/dev/null || echo "?")
+# THE MEASURED SIZE: the module inside the .mjs under test, never the ratchet's number, which said
+# 134195 of a 147476-byte reader (W-MG-READ, 2026-10-31). The baseline is printed beside it.
+bytes=$(python3 -I - "$V/bebop-verify.mjs" <<'PY'
+import base64, re, sys
+print(len(base64.b64decode(re.search(r'^const WASM_B64 = "([^"]*)";$', open(sys.argv[1]).read(), re.M).group(1))))
+PY
+) || { say "RED cannot measure the reader inside bebop-verify.mjs"; exit 1; }
 if [ "$fail" -ne 0 ]; then say "RED"; exit 1; fi
-say "GREEN (node and python, from a clean dir, agree with conformance on $agree of 21 fixtures + the log + doc + anch$([ "$BUILD" = 1 ] && echo ' + the archive and the cut archive read by their own reader, 5 REDs'); reader wasm $bytes bytes, sha256 $sha)"
+say "GREEN (node and python, from a clean dir, agree with conformance on $agree of 21 fixtures + the log + doc + anch$([ "$BUILD" = 1 ] && echo ' + the archive and the cut archive read by their own reader, 5 REDs'); reader wasm $bytes bytes (baseline $(cat "$V/bytes.baseline" 2>/dev/null || echo "?")), sha256 $sha)"
 exit 0

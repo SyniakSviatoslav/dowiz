@@ -17,7 +17,7 @@ fn the_hub_adopts_what_its_ledger_takes_and_holds_the_rest_by_position() {
         r#"{"k":"note","note":"x"}"#.to_string(),
     ];
     let start = log.ledger_since().unwrap();
-    let (a, led) = log.adopt_from(&recs, start).unwrap();
+    let (a, led) = log.adopt_from(&recs, &[], start).unwrap();
     assert_eq!(led, log.ledger().unwrap(), "the ledger handed back is the one a fold of the log gives");
     assert_eq!(a.merged, 1);
     assert_eq!(a.held.iter().map(|h| h.0).collect::<Vec<_>>(), vec![0, 2], "9 reserved of 5 counted, and a note");
@@ -33,7 +33,7 @@ fn the_hub_adopts_what_its_ledger_takes_and_holds_the_rest_by_position() {
     let theirs = other.since(&[0u8; 32]).unwrap();
     assert!(nonced(&theirs[1]));
     let start = log.ledger_since().unwrap();
-    let (a, _) = log.adopt_from(&theirs[1..], start).unwrap();
+    let (a, _) = log.adopt_from(&theirs[1..], &[], start).unwrap();
     assert_eq!(a.merged, 1);
     assert_eq!(log.since(&[0u8; 32]).unwrap().last().unwrap(), &theirs[1], "a nonced record is written as received, byte for byte");
 }
@@ -67,11 +67,11 @@ fn a_glued_tail_defers_its_checkpoint_but_never_past_twice_the_cadence() {
         (0..n).map(|i| line(&StockEvent::Served { item: "rice".into(), qty: 1, order_id: format!("{tag}-{i}") })).collect()
     };
     let start = log.ledger_since().unwrap();
-    log.adopt_from(&served(15, "a"), start).unwrap();
+    log.adopt_from(&served(15, "a"), &[], start).unwrap();
     assert_eq!(log.verify_checkpoints().unwrap(), 0, "16 records after none: past the cadence, under twice it -- deferred");
     let start = log.ledger_since().unwrap();
     assert_eq!(start.1, 16);
-    log.adopt_from(&served(5, "b"), start).unwrap();
+    log.adopt_from(&served(5, "b"), &[], start).unwrap();
     assert_eq!(log.verify_checkpoints().unwrap(), 1, "21 >= 2 x 10: the glue writes it now");
     let (_, since) = log.ledger_since().unwrap();
     assert_eq!(since, 0, "and the fold starts from it");

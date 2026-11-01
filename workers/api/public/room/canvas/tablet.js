@@ -102,14 +102,29 @@ export function surface(instance) {
   };
 }
 
+/// A new tablet's context: `kitchen-` and eight hex characters (the hub's `ctx_ok` allows 32).
+export function deviceCtx(base) {
+  const b = crypto.getRandomValues(new Uint8Array(4));
+  return `${base}-${Array.from(b, x => x.toString(16).padStart(2, '0')).join('')}`;
+}
+
 /// A tablet: `mod` is `surface(...)`, `store` an `idbStore`, `post(path, body)` the room's api.
 export function tablet({ mod, store, post, loc, ctx = 'kitchen', now = () => Date.now() }) {
-  const load = async () => ({ image: new Uint8Array(0), base: ZERO, rail: '', ...((await store.get()) || {}) });
+  // ONE CONTEXT PER TABLET, kept in its row (W-MG-TRANS H10). The hub reads two equal tails from one
+  // context as one retry, so two tablets sharing `kitchen` could lose a movement. A stalk that already
+  // holds records keeps the name they were written under: its unanswered tail must still read as a retry.
+  const load = async () => {
+    const s = { image: new Uint8Array(0), base: ZERO, rail: '', ...((await store.get()) || {}) };
+    if (s.ctx) return s;
+    s.ctx = s.image.length ? ctx : deviceCtx(ctx);
+    await store.set(s);
+    return s;
+  };
   return {
     /// Record one movement offline. Answers whether it was a sale past the tablet's rights.
     async record(rec) {
       const s = await load();
-      const r = mod.record(s.image, ctx, rec, now());
+      const r = mod.record(s.image, s.ctx, rec, now());
       await store.set({ ...s, image: r.image });
       return r.provisional;
     },
@@ -121,19 +136,19 @@ export function tablet({ mod, store, post, loc, ctx = 'kitchen', now = () => Dat
     /// How many records wait for the next sync.
     async pending() {
       const s = await load();
-      return s.image.length ? mod.tail(s.image, ctx, s.base).tail.length : 0;
+      return s.image.length ? mod.tail(s.image, s.ctx, s.base).tail.length : 0;
     },
     /// ONE SYNC: the tail out, the hub's answer replayed. Answers the hub's reply (its
     /// `conflicts` and `held` are what the board shows as decisions after its next read).
     async sync() {
       const s = await load();
-      const body = s.image.length ? mod.tail(s.image, ctx, s.base) : { ctx, base: ZERO, tip: ZERO, tail: [] };
+      const body = s.image.length ? mod.tail(s.image, s.ctx, s.base) : { ctx: s.ctx, base: ZERO, tip: ZERO, tail: [] };
       let reply, fromZero = false, sent = body.tail.length;
       try {
         reply = await post('/staff/stock/glue', { location_id: loc, ...body });
       } catch (e) {
         if (e.status !== 409) throw e;
-        reply = await post('/staff/stock/glue', { location_id: loc, ctx, base: ZERO, tip: ZERO, tail: [] });
+        reply = await post('/staff/stock/glue', { location_id: loc, ctx: s.ctx, base: ZERO, tip: ZERO, tail: [] });
         fromZero = true; sent = 0;
       }
       const image = mod.rebase(s.image, s.base, fromZero, sent, reply);
@@ -158,13 +173,13 @@ export function tablet({ mod, store, post, loc, ctx = 'kitchen', now = () => Dat
     /// S2b: how many taps wait for the next sync.
     async ordersPending() {
       const s = await load();
-      return s.rail ? mod.orderTail(s.rail, ctx).tail.length : 0;
+      return s.rail ? mod.orderTail(s.rail, s.ctx).tail.length : 0;
     },
     /// S2b: ONE SYNC of the taps. Answers the hub's {sent, merged, held, ...}; the sent taps leave
     /// the queue only after the hub answered (a lost reply resends them, and the hub adopts once).
     async syncOrders(orders) {
       const s = await load();
-      const body = s.rail ? mod.orderTail(s.rail, ctx) : { ctx, tail: [] };
+      const body = s.rail ? mod.orderTail(s.rail, s.ctx) : { ctx: s.ctx, tail: [] };
       if (!body.tail.length) return { sent: 0, merged: 0, held: [] };
       const reply = await post('/staff/orders/glue', { location_id: loc, ...body });
       const cur = await load();

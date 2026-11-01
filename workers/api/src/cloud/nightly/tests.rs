@@ -46,7 +46,7 @@ fn the_night_prunes_old_keys_and_old_errors_and_keeps_the_new() {
     let stub = p.stub().unwrap();
     for (what, at) in [("an old failure", night - 8 * DAY), ("a new failure", night - 3_600_000)] {
         let rec = json!({"atMs": at, "place": "test.prune", "message": what}).to_string();
-        block_on(crate::platform_store::with_log_at(&stub, crate::errlog::image_of(Some("alpha")), move |log| {
+        block_on(crate::platform_store::with_log_at(&stub, crate::errlog::image_of(Some("alpha")), "alpha", move |log| {
             log.append(crate::errlog::KIND, "test.prune", &rec).map_err(|e| worker::Error::RustError(format!("{e:?}")))
         }))
         .unwrap();

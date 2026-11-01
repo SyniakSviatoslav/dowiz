@@ -14,8 +14,8 @@ fn one(line: &str) -> (StockLog, Tail) {
 }
 
 /// The tail with record 0 replaced and the tip recomputed: a tablet that WROTE this.
-fn rewritten(t: &Tail, rec: &str) -> Tail {
-    let tip = wire_id(&t.base, rec);
+fn rewritten(h: &StockLog, t: &Tail, rec: &str) -> Tail {
+    let tip = wire_id(h.len() as u64, &t.base, rec);
     Tail { recs: vec![rec.to_string()], tip, ..t.clone() }
 }
 
@@ -29,12 +29,12 @@ fn refused(h: &mut StockLog, t: &Tail) -> Why {
 #[test]
 fn a_guest_key_in_a_kitchen_tail_is_refused_by_name() {
     let (mut h, t) = one(r#"{"k":"wasted","item":"rice","qty":1,"reason":"spoiled","by":"chef"}"#);
-    let bad = rewritten(&t, r#"{"k":"served","item":"rice","qty":1,"order":"o-9","phone":"+355690000000"}"#);
+    let bad = rewritten(&h, &t, r#"{"k":"served","item":"rice","qty":1,"order":"o-9","phone":"+355690000000"}"#);
     assert_eq!(refused(&mut h, &bad), Why::Tracking { pos: 0, key: "phone".into() });
-    let taste = rewritten(&t, r#"{"k":"served","item":"rice","qty":1,"order":"o-9","taste":"umami"}"#);
+    let taste = rewritten(&h, &t, r#"{"k":"served","item":"rice","qty":1,"order":"o-9","taste":"umami"}"#);
     assert_eq!(refused(&mut h, &taste), Why::Tracking { pos: 0, key: "taste".into() });
     // The twin: the same sale without the key is admitted.
-    let good = rewritten(&t, r#"{"k":"served","item":"rice","qty":1,"order":"o-9"}"#);
+    let good = rewritten(&h, &t, r#"{"k":"served","item":"rice","qty":1,"order":"o-9"}"#);
     assert_eq!(merge(&h.to_bytes_trimmed(), &mut h, &good).unwrap().merged, 1);
 }
 
@@ -60,7 +60,7 @@ fn m0_a_nonced_tail_is_echoed_and_a_legacy_tail_comes_back_renonced() {
     assert!(crate::stock::nonced(&t.recs[0]), "a record this build wrote carries its nonce: {}", t.recs[0]);
     // The body is the movement with the tablet's meta (`at`, `ctx`) appended by `record`.
     assert!(crate::stock::rec_body(&t.recs[0]).starts_with(line.trim_end_matches('}')), "{}", t.recs[0]);
-    assert_eq!(t.tip, crate::chain::chain_id(&t.base, t.recs[0].as_bytes()), "sha256 over base ‖ nonced record");
+    assert_eq!(t.tip, wire_id(h.len() as u64, &t.base, &t.recs[0]), "the stock id over position, base and the nonced record");
     let r = merge(&h.to_bytes_trimmed(), &mut h, &t).unwrap();
     assert_eq!(r.merged, 1);
     assert!(r.entries.iter().any(|e| *e == Entry::Echo(0)), "its own record comes back as an index: {:?}", r.entries);
@@ -89,18 +89,18 @@ fn a_base_the_hub_never_held_is_refused() {
     let (mut h, t) = one(r#"{"k":"wasted","item":"rice","qty":1,"reason":"spoiled","by":"chef"}"#);
     let mut other = t.clone();
     other.base = [7u8; 32];
-    other.tip = wire_id(&other.base, &other.recs[0]);
+    other.tip = wire_id(h.len() as u64, &other.base, &other.recs[0]);
     assert_eq!(refused(&mut h, &other), Why::NoCommonAncestor);
 }
 
 #[test]
 fn a_note_or_a_grant_is_not_a_tablets_to_send() {
     let (mut h, t) = one(r#"{"k":"wasted","item":"rice","qty":1,"reason":"spoiled","by":"chef"}"#);
-    let grant = rewritten(&t, r#"{"k":"note","note":"rights","ctx":"kitchen","item":"salmon","qty":99}"#);
+    let grant = rewritten(&h, &t, r#"{"k":"note","note":"rights","ctx":"kitchen","item":"salmon","qty":99}"#);
     assert_eq!(refused(&mut h, &grant), Why::Tracking { pos: 0, key: "note".into() });
-    let unknown = rewritten(&t, r#"{"k":"teleported","item":"rice","qty":1}"#);
+    let unknown = rewritten(&h, &t, r#"{"k":"teleported","item":"rice","qty":1}"#);
     assert_eq!(refused(&mut h, &unknown), Why::NotAMovement { pos: 0 });
-    let long = rewritten(&t, &format!(r#"{{"k":"wasted","item":"{}","qty":1,"reason":"spoiled","by":"chef"}}"#, "r".repeat(REC_MAX)));
+    let long = rewritten(&h, &t, &format!(r#"{{"k":"wasted","item":"{}","qty":1,"reason":"spoiled","by":"chef"}}"#, "r".repeat(REC_MAX)));
     assert_eq!(refused(&mut h, &long), Why::TooLong { pos: 0 });
 }
 

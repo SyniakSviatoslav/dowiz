@@ -11,17 +11,17 @@ use crate::{obj_cells_in, Store, StoreError};
 /// sorted base index. For the writer's superseded estimate only -- a miss costs nothing.
 fn base_lens(st: &Store, root: usize, key: &[u8]) -> Option<(usize, usize)> {
     let (kidx, kblob, vidx) = (st.follow(root, 1)?, st.follow(root, 2)?, st.follow(root, 3)?);
-    let n = st.get(root, 0).max(0) as usize;
+    let n = bebop_image::idx_end(st.get(root, 0).max(0));
     let n = n.min(st.obj_cells(kidx) / 2).min(st.obj_cells(vidx) / 2);
     let (mut lo, mut hi) = (0usize, n);
     while lo < hi {
         let mid = lo + (hi - lo) / 2;
-        let (ko, kl) = (st.get(kidx, 2 * mid).max(0) as usize, st.get(kidx, 2 * mid + 1).max(0) as usize);
+        let (ko, kl) = (bebop_image::idx_end(st.get(kidx, 2 * mid).max(0)), bebop_image::idx_end(st.get(kidx, 2 * mid + 1).max(0)));
         let k: Vec<u8> = (0..kl.min(1 << 16)).map(|j| ko.saturating_add(j)).map(|b| (st.get(kblob, b >> 3) >> (8 * (b & 7))) as u8).collect();
         match k.as_slice().cmp(key) {
             core::cmp::Ordering::Less => lo = mid + 1,
             core::cmp::Ordering::Greater => hi = mid,
-            core::cmp::Ordering::Equal => return Some((kl, st.get(vidx, 2 * mid + 1).max(0) as usize)),
+            core::cmp::Ordering::Equal => return Some((kl, bebop_image::idx_end(st.get(vidx, 2 * mid + 1).max(0)))),
         }
     }
     None

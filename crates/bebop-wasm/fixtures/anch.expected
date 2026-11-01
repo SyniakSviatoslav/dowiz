@@ -7,8 +7,10 @@
 # doc_verify, which does check them, agrees on every shared counter: tools/gates/maingoal.sh.
 # tools/verify/gate.sh holds node and python to these lines. The five conformance readers are not run
 # on this file: they stop at a DOC root by name (doc.expected).
+# W-MG-HOLES (2026-10-31): REWRITTEN. The ids moved to id v2 (the two anchors' `over` name them) and the TRUNCATE
+# body grew `seg_hash`, so the log fold moved; the counters did not. Oracle: maingoal_device at seed 0 + python + node agree.
 doc_n=4
-doc_root=873890418513991691
+doc_root=4203703982444439664
 doc_verify=records=4 chained=4 legacy=0 redacted=0 broken=0 forks=0 seals=4 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 unsealed=0
-doc_anchor=kind=1 over=90677d8ace5382f6274a92e51597a0c6cc3defa871e233ce544411ae5729b06e time_ms=1761900006500 proof_len=5261
-doc_anchor=kind=1 over=cd514442333686b11e729c6241b514e5c89fcd6a4e78427348b57ba871188b56 time_ms=1761900002500 proof_len=5261
+doc_anchor=kind=1 over=617d55e5b223b9362017422221467315354262b2f93da2be7fb3b2407f2fb00f time_ms=1761900006500 proof_len=5261
+doc_anchor=kind=1 over=37ba2871215e2de155160225e9dd5f7f1602e0a94267c4fad5f6f62682658bd8 time_ms=1761900002500 proof_len=5261

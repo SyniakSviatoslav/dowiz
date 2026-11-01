@@ -25,21 +25,23 @@
 //! seal, which a row cannot carry. A REVOKE comes after the ADMIT of its target unless the
 //! target is a genesis key, so the cut already stops near it. Judged by mark, not by seal (a
 //! writer has no `Verifier`): an ineffective REVOKE holds the cut too. This guards the honest
-//! cutter; a forger who writes the bytes himself is the archive's to catch (`settle.rs`).
+//! cutter. A forger's bytes meet `verify`: with no key he cannot sign the TRUNCATE, which names
+//! every row and count (`seg.rs`); a key holder's own cut is `settle.rs`'s.
 //!
 //! The counts under the cut (`redacted`, `declared`) are counted by mark, not by seal: a
-//! writer has no `Verifier`. They are the TRUNCATE signer's claim -- verify a file before
-//! cutting it. The frontier row's `scheme` is the same kind of claim: whether a chained
-//! record of the device had left by the cut (M0's forward-once rule, `verify.rs`).
+//! writer has no `Verifier`. They are the TRUNCATE signer's claim, signed through the segment
+//! hash -- verify a file before cutting it. The frontier row's `scheme` is the same kind of claim:
+//! whether a chained record of the device had left by the cut (M0's rule, `verify.rs`).
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use alloc::collections::BTreeMap;
 use crate::{EvLog, Record, Store};
 use super::anch::{read_anchors, stage_anchor, Anchor};
+use super::budget::Budget;
 use super::keys::{parse_revoke, read_keys, stage_key, stage_keys, Key};
 use super::seal::{read_heads, read_seal, stage_heads, stage_seal, Head, Seal};
-use super::seg::{frontier_of, parse_forgotten, read_segs, stage_seg, Frontier, Segment, SCHEME_CHAINED, SCHEME_LEGACY};
+use super::seg::{chain_hash, frontier_of, parse_forgotten, read_segs, stage_seg, Frontier, Segment, SCHEME_CHAINED, SCHEME_LEGACY};
 use super::write::{stage_doc, Refs};
 use super::{Doc, DocError, Ids};
 
@@ -81,13 +83,14 @@ fn read_old(st: &Store) -> Result<Old, DocError> {
 }
 
 /// Every seal reachable from `head`, newest first, crc checked.
-fn seals_of(st: &Store, head: &Head, cap: usize) -> Result<Vec<Seal>, DocError> {
+fn seals_of(st: &Store, head: &Head, cap: usize, budget: &mut Budget) -> Result<Vec<Seal>, DocError> {
     let mut out = Vec::new();
     let mut cur = head.seal;
     while let Some(at) = cur {
         if out.len() > cap {
             return Err(DocError::Corrupt("a seal chain never ends"));
         }
+        budget.spend(st, at)?;
         st.check_obj(at)?;
         let s = read_seal(st, at).ok_or(DocError::Corrupt("a HEADS row names an object that is not a SEAL"))?;
         cur = s.prev;
@@ -137,15 +140,15 @@ impl Doc {
                 Some(f) => f.scheme == SCHEME_CHAINED,
                 None => frontier_of(&old.segs, &r.actor_pubkey).is_some_and(|f| f.scheme == SCHEME_CHAINED),
             };
-            let scheme = if moved_before || r.id == ids.chained(&r.prev, &r.payload) { SCHEME_CHAINED } else { SCHEME_LEGACY };
+            let scheme = if moved_before || r.id == ids.chained(r) { SCHEME_CHAINED } else { SCHEME_LEGACY };
             frontier.insert(r.actor_pubkey, Frontier { actor_id: r.actor_pubkey, seq: r.actor_seq, tip: r.id, scheme });
             if ids.redacted(r.flags, &r.payload) {
                 redacted += 1;
-            } else if let Some((k, _)) = parse_forgotten(ids.body(r.flags, &r.payload)) {
-                declared += k;
+            } else if let Some((_, list)) = parse_forgotten(ids.body(r.flags, &r.payload)) {
+                declared += list.len() as u64;
             }
         }
-        let seg = Segment {
+        let mut seg = Segment {
             first,
             last: first + cut as u64 - 1,
             root,
@@ -155,7 +158,11 @@ impl Doc {
             redacted,
             declared,
             frontier: frontier.into_values().collect(),
+            seg_hash: [0u8; 32],
         };
+        let mut chain = vec![seg.clone()];
+        chain.extend_from_slice(&old.segs);
+        seg.seg_hash = chain_hash(&chain, ids).ok_or(DocError::NoTree)?;
 
         let mut tx = fresh.begin()?;
         let mut log = EvLog::stage_init_in(fresh, &mut tx)?;
@@ -178,9 +185,10 @@ impl Doc {
         let keys = stage_keys(fresh, &mut tx, &mut key_rows)?;
         let cap = n + 1;
         let mut heads = Vec::with_capacity(old.heads.len());
+        let mut budget = Budget::of(st);
         for h in &old.heads {
             let cut_seq = seg.frontier.iter().find(|f| f.actor_id == h.actor_id).map_or(0, |f| f.seq);
-            let mut chain = seals_of(st, h, cap)?;
+            let mut chain = seals_of(st, h, cap, &mut budget)?;
             chain.retain(|s| s.seq > cut_seq);
             chain.reverse();
             let mut prev = None;

@@ -51,7 +51,7 @@ pub async fn night_venue(env: &Env, venue: &str, now: i64) {
     // (`services/orders/chat/store.rs` KEEP_MS). The venue's own thread in
     // the same image is not this prune's.
     match place.stub() {
-        Ok(s) => match crate::services::orders::chat::store::prune_at(&s, now).await {
+        Ok(s) => match crate::services::orders::chat::store::prune_at(&s, &r.id, now).await {
             Ok(0) => {}
             Ok(n) => log_line!("nightly prune {}: {n} courier chat lines", r.id),
             Err(e) => log_error!("nightly prune {}: chat refused: {e}", r.id),

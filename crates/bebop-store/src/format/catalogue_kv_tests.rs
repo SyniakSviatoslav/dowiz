@@ -110,7 +110,8 @@ fn c25_fresh_store_one_cell_below_the_floor() {
     let st = Store::create_bytes(MIN_BYTES).unwrap();
     let back = Store::from_bytes(&st.to_bytes()[..MIN_BYTES - 8]);
     assert_eq!(pick(&back).unwrap().generation, 0);
-    assert_eq!(back.cells, st.cells, "padded back to its capacity");
+    assert_eq!(back.cells.len(), st.cells.len() - 1, "the cells that arrived, no others");
+    assert_eq!(back.image_bytes(), MIN_BYTES, "capacity is the writer's number");
 }
 
 #[test]

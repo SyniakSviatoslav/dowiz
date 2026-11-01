@@ -11,8 +11,8 @@ def read(raw):
     if root <= 0:
         raise Refuse(2)
     if is_doc(im, root):
-        recs, heads, keys, spec, _entries, tip, segs, anchors = doc_open(im, root)
-        return "doc", [(r["seq"], r["payload"]) for r in recs], (im, recs, heads, keys, tip, segs, anchors, spec)
+        recs, heads, keys, spec, _entries, tip, segs, anchors, tables = doc_open(im, root)
+        return "doc", [(r["seq"], r["payload"]) for r in recs], (im, recs, heads, keys, tip, segs, anchors, spec, tables)
     if im.digest(root) == DIGEST_EVLOG_ROOT:
         return "log", log_records(im, root), None
     im.need_crc(root)
@@ -33,6 +33,10 @@ def main(argv):
         return 2
     try:
         family, items, doc = read(open(paths[0], "rb").read())
+    except OSError as e:
+        print("kv status=78 n=0 root=0")
+        print("HOST_FAILED: cannot read the file: %s" % (type(e).__name__,), file=sys.stderr)
+        return 78
     except Refuse as r:
         print("kv status=%d n=0 root=0" % r.args[0])
         print(WORDS.get(r.args[0], "status %d" % r.args[0]), file=sys.stderr)
@@ -47,9 +51,10 @@ def main(argv):
     what = {"log": "EvLog", "doc": "DOC (root-version 5)", "kv": "KV"}[family]
     print("OK; %s; every reached object whole, the last commit anchored" % what, file=sys.stderr)
     if doc is not None:
-        im, recs, heads, keys, tip, segs, anchors, spec = doc
+        im, recs, heads, keys, tip, segs, anchors, spec, tables = doc
         out = sys.stdout if "--verify" in flags else sys.stderr
         try:
+            spend_walks(im, recs, tables, segs)
             c = doc_counts(im, recs, heads, keys, tip, segs)
         except Refuse as r:
             print("verify status=%d" % r.args[0], file=out)
@@ -57,6 +62,7 @@ def main(argv):
             return r.args[0]
         print(COUNT_LINE % c, file=out)
         print(UNCHECKED, file=sys.stderr)
+        print("tombs_foreign=%d (blind: not 0 = the file's own FORGOTTENs do not account for a tombstone; 0 proves no authority)" % c["tombs_foreign"], file=sys.stderr)
         for kind, over, ms, plen in anchors:
             print("anchor kind=%d over=%s time_ms=%d proof_len=%d (present, NOT verified by this reader)" % (kind, over.hex(), ms, plen), file=out)
         if spec is None:

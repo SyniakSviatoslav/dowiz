@@ -99,6 +99,9 @@ here was never measured and is refuted (docs/blueprints/F3-lean-semantics.md §3
 | `Bebop/Traps.lean` | rc=0 | 24-row trap table, `#guard` x3 |
 | `Bebop/Conformance.lean` | rc=0 | 80 + 14 EXPECT rows, 97 program entries now carrying the **verbatim** `.bp` source (88 of 97 were invented programs until 2026-09-14), **10** inline-AST samples each with a `#guard`, 5 probe fixtures (§5b) pinning the three fakes closed 2026-09-13. `oracleCount` is now `oracleEntries.size`, not a typed 121 |
 | `Bebop/Theorems.lean` | rc=0 | **6 `theorem` + 1 `axiom`**, 0 `sorry`; `#print axioms` on all 6 in the build log. Two of the old 7 axioms were FALSE and are now theorems with the hypotheses that make them true |
+| `Bebop/DocLog.lean` | gate | W-MG-LEAN. MODEL of `Report::holds` and what it gives (`holds_gives`): hypotheses, never axioms; not a proof of the Rust |
+| `Bebop/DocMerge.lean` | gate | W-MG-LEAN. The union of two chains: `merged_holds_iff`, `merges_iff`, the frontier semilattice |
+| `Bebop/DocLimits.lean` | gate | W-MG-LEAN. The limits: `rollback_holds` IS one, and five counterexample files in the model |
 | `Bebop.lean` | rc=0 | Root module importing all |
 | `harness.lean` | rc=0 (`lean --run`) | Prints the 5 sample verdicts and the 5 probe verdicts as `lean_conformance: 5/5` and `lean_probes: 5/5`; exits 1 if either is short |
 | `lakefile.lean` | not exercised | Lake project config |

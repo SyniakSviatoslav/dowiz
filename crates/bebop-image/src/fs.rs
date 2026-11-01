@@ -64,7 +64,7 @@ impl Store {
     pub fn commit(&mut self, tx: &Tx, root: usize, path: &str) -> Result<i64, StoreError> {
         let (pt, osb) = self.stage_commit(tx, root);
         let mut f = std::fs::OpenOptions::new().write(true).open(path)?;
-        self.write_cells(&mut f, tx.mark as usize, (tx.cursor - tx.mark) as usize)?;
+        self.write_cells(&mut f, crate::idx_end(tx.mark), crate::idx_end(tx.cursor - tx.mark))?;
         f.sync_data()?;
         self.write_cells(&mut f, pt, PARTTAB_CELLS as usize + 2)?;
         f.sync_data()?;

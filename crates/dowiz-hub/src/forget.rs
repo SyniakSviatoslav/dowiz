@@ -47,7 +47,7 @@ pub(crate) fn tombstone_holds(walked: &[Record], at: usize, tip: Option<[u8; 32]
     // A redacted record that still verifies was never changed, and one whose
     // content id matches (under whichever scheme it was written in) is not a
     // tombstone at all -- `chain_check` asked that first.
-    if verify_id(r.flags, &r.prev, &r.payload, &r.id).is_some() {
+    if verify_id(r).is_some() {
         return false;
     }
     match at {
@@ -94,7 +94,7 @@ impl Hub {
             return Ok(0);
         }
         // SAME SIZE FIRST, and double on the rare redaction that grew a record.
-        let mut size = self.store.to_bytes().len().max(64 * 1024);
+        let mut size = self.store.image_bytes().max(64 * 1024);
         loop {
             match rebuilt(&records, tip, size) {
                 Ok(fresh) => {

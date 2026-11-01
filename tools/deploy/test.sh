@@ -123,7 +123,7 @@ run
 # ── the sha256 floor (W-MG-MIG): versions recorded; the first wrangler.toml declaring SHA256_VENUES is the floor;
 #    a non-empty value is a one-way flip; a dry run records nothing ──
 rm -f "$T/versions.log" "$T/sha256-floor" "$T/sha256-flipped"; SHA=$(git -C "$T/repo" rev-parse HEAD)
-run; [ $RC = 0 ] && [ "$(grep -c " $SHA 4e400000-0000-4000-8000-000000000000 sha256_venues=$" "$T/versions.log")" = 1 ] \
+run; [ $RC = 0 ] && [ "$(grep -c " $SHA 4e400000-0000-4000-8000-000000000000 sha256_venues= declared=0$" "$T/versions.log")" = 1 ] \
   && [ ! -e "$T/sha256-floor" ] && [ ! -e "$T/sha256-flipped" ] \
   && ok "a commit without SHA256_VENUES: version recorded, no floor, no flip" || no "versions.log before the var"
 printf '[vars]\nSHA256_VENUES = ""\n' > "$T/repo/workers/api/wrangler.toml"; g add -A; g commit -m expand; SHA=$(git -C "$T/repo" rev-parse HEAD)
@@ -132,7 +132,7 @@ run; [ $RC = 0 ] && has 'sha256 floor: 4e400000-0000-4000-8000-000000000000' && 
   && ok "the expand release (SHA256_VENUES = \"\"): floor written, no flip, nothing flipped" || no "floor on expand"
 printf '[vars]\nSHA256_VENUES = "qa-durres"\n' > "$T/repo/workers/api/wrangler.toml"; g commit -am flip; SHA=$(git -C "$T/repo" rev-parse HEAD)
 run; [ $RC = 0 ] && has 'sha256 FLIP: SHA256_VENUES="qa-durres"' && grep -q '^qa-durres flipped at' "$T/sha256-flipped" \
-  && [ "$(cut -d' ' -f1 "$T/sha256-floor")" = 4e400000-0000-4000-8000-000000000000 ] && grep -q "sha256_venues=qa-durres$" "$T/versions.log" \
+  && [ "$(cut -d' ' -f1 "$T/sha256-floor")" = 4e400000-0000-4000-8000-000000000000 ] && grep -q "sha256_venues=qa-durres declared=1$" "$T/versions.log" \
   && ok "a flip (SHA256_VENUES = \"qa-durres\"): flip mark written, floor unchanged, value recorded" || no "flip mark"
 printf '[vars]\nSHA256_VENUES = ""\n' > "$T/repo/workers/api/wrangler.toml"; g commit -am unflip; SHA=$(git -C "$T/repo" rev-parse HEAD)
 run; [ $RC = 0 ] && grep -q '^qa-durres flipped at' "$T/sha256-flipped" && ok "an un-flip deploy leaves the flip mark: one-way" || no "flip is one-way"
@@ -142,5 +142,11 @@ run --dry-run; [ $RC = 0 ] && [ "$(wc -l < "$T/versions.log")" = 4 ] && ok "a dr
 run --dry-run; [ $RC = 0 ] && has 'DRY-RUN OK' && [ "$(cat "$T/calls")" = "deploy --dry-run --outdir $T/work/dry token=" ] && ok "--dry-run: one no-upload build, no token" || no "dry run"
 run --verify; [ $RC = 0 ] && [ ! -s "$T/calls" ] && has 'deploy: OK' && ok "--verify: checks live only, no wrangler" || no "verify mode"
 
+# ── W-MG-TRANS: tablet.wasm must be its source ──
+mkdir -p "$T/repo/crates/bebop-wasm" "$T/repo/workers/api/public/room/canvas"
+printf '#!/bin/sh\necho digest-now\n' > "$T/repo/crates/bebop-wasm/tablet.sh"; echo digest-old > "$T/repo/workers/api/public/room/canvas/tablet.wasm.src"; g add -A; g commit -m stale
+run; [ $RC = 15 ] && has 'FAIL tablet:' && [ "$(uploads)" = 0 ] && ok "a stale tablet.wasm refused (15), no upload" || no "stale tablet"
+echo digest-now > "$T/repo/workers/api/public/room/canvas/tablet.wasm.src"; g add -A; g commit -m fresh
+run; [ $RC = 0 ] && ok "twin: tablet.wasm.src equal to its digest deploys (0)" || no "fresh tablet"
 echo "deploy.test: $pass passed, $bad failed"
 [ $bad = 0 ]

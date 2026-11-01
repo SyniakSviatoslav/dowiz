@@ -2,8 +2,8 @@
 //!
 //! Measured 2026-10-30 (docs/measurements/B4-LAZY-OPEN-2026-10-30.md): `Db::open_path` at the
 //! default depth took 30 ms for a 11.7 MB image, of which the anchor's proof was 1 us and 20 ms
-//! were COPIES -- `read_cells` -> `Vec<i64>`, `Store::from_bytes` (padding the image back to its
-//! arena capacity), `to_bytes_trimmed` for the snapshot -- all of them for the WRITER, which an
+//! were COPIES -- `read_cells` -> `Vec<i64>`, `Store::from_bytes` (which then padded the image back
+//! to its arena capacity), `to_bytes_trimmed` for the snapshot -- all of them for the WRITER, which an
 //! open that only reads never needs. W-ES-P8E measured the same linearity at 330 MB: 1046 ms.
 //!
 //! Now `Db::open`:

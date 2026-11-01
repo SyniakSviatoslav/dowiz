@@ -65,7 +65,10 @@ pub(super) fn fold_text(j: &Journal) -> String {
 // by design (the pre-M0 value was 863594c1...031d). FOLD_SHA did NOT move -- the fold does not
 // see the envelope -- and `m0_a_pre_m0_stock_image_reloads_byte_equal_and_folds_as_the_nonced_one`
 // below holds the old bytes themselves to the same fold.
-const IMAGE_SHA: &str = "dfacc9ccbc3c08ae5dfa19429ec22ee791a01583b8db9cb34a68388d328909a9";
+// Re-derived at W-MG-HOLES (2026-10-31): these records are sha256 and the id now commits to flags,
+// actor and seq (`doc::id_message`); the M0 value was dfacc9cc...09a9, on no live data. FOLD_SHA did
+// not move. The legacy image is `m0_a_pre_m0_stock_image_reloads_byte_equal_...`, unchanged.
+const IMAGE_SHA: &str = "cf9d910cca22b3dbf688feb4c40e8a4e1e71f407fde6b22ba663479acbb1974b";
 const FOLD_SHA: &str = "d83a1bd5b0e1f7940cfa78141b3bba92f2777e229d0f14ea7e38636dc45a2a9f";
 
 #[test]
@@ -98,7 +101,7 @@ fn m0_a_pre_m0_stock_image_reloads_byte_equal_and_folds_as_the_nonced_one() {
     let bytes = old.to_bytes_trimmed();
     assert_eq!(StockLog::load(&bytes).unwrap().to_bytes_trimmed(), bytes, "a load and a save move no byte of an old image");
     let schemes = |log: &StockLog| -> Vec<Option<IdScheme>> {
-        EvLog::walk(&bebop_store::Store::from_bytes(&log.to_bytes())).iter().map(|r| verify_id(r.flags, &r.prev, &r.payload, &r.id)).collect()
+        EvLog::walk(&bebop_store::Store::from_bytes(&log.to_bytes())).iter().map(verify_id).collect()
     };
     assert!(schemes(&old).iter().all(|s| *s == Some(IdScheme::LegacyChained)), "every old record is a legacy id");
     assert!(schemes(&new).iter().all(|s| *s == Some(IdScheme::Sha256)), "every new record is sha256");

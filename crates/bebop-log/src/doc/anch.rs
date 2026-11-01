@@ -42,8 +42,9 @@
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use alloc::collections::BTreeSet;
 use crate::{EvLog, Store, StoreError, Tx};
+use bebop_image::idx_end;
+use super::budget::{set_of, Budget};
 use super::seg::read_segs;
 use super::write::{stage_doc, Refs};
 use super::{bytes_to_cells, cells_of, cells_to_bytes, cells_to_id, id_to_cells, Doc, DocError};
@@ -151,7 +152,7 @@ pub fn read_anchor(st: &Store, at: usize) -> Option<Anchor> {
     if !(0..=MAX_PROOF_BYTES as i64).contains(&proof_len) {
         return None;
     }
-    let n_cells = (proof_len as usize).div_ceil(8);
+    let n_cells = idx_end(proof_len).div_ceil(8);
     if st.obj_cells(at) != ANCH_HEAD + n_cells {
         return None;
     }
@@ -161,7 +162,7 @@ pub fn read_anchor(st: &Store, at: usize) -> Option<Anchor> {
         over: cells_to_id(&cells_of(st, at, 2, 4)),
         time_ms: st.get(at, 6),
         prev: st.follow(at, 7),
-        proof: cells_to_bytes(&cells_of(st, at, ANCH_HEAD, n_cells), proof_len as usize),
+        proof: cells_to_bytes(&cells_of(st, at, ANCH_HEAD, n_cells), idx_end(proof_len)),
     })
 }
 
@@ -175,9 +176,10 @@ fn chain_cap(st: &Store) -> usize {
 pub fn read_anchors(st: &Store, newest: Option<usize>) -> Vec<Anchor> {
     let mut out = Vec::new();
     let cap = chain_cap(st);
+    let mut budget = Budget::of(st);
     let mut cur = newest;
     while let Some(at) = cur {
-        if out.len() >= cap {
+        if out.len() >= cap || budget.spend(st, at).is_err() {
             break;
         }
         let Some(a) = read_anchor(st, at) else { break };
@@ -248,15 +250,17 @@ pub fn check_anchors(st: &Store, ac: &dyn AnchorCheck) -> Result<Vec<Checked>, D
     if EvLog::chain_crc_at(st, view.log)?.is_none() {
         return Err(DocError::Corrupt("the log chain never ends"));
     }
-    let ids: BTreeSet<[u8; 32]> = EvLog::walk_until_at(st, view.log, |_| false).into_iter().map(|r| r.id).collect();
+    let ids = set_of(EvLog::walk_until_at(st, view.log, |_| false).into_iter().map(|r| r.id));
     let segments = read_segs(st, view.seg, EvLog::step_cap(st))?.len();
     let cap = chain_cap(st);
+    let mut budget = Budget::of(st);
     let mut out = Vec::new();
     let mut cur = view.anch;
     while let Some(at) = cur {
         if out.len() >= cap {
             return Err(DocError::Corrupt("the anchor chain never ends"));
         }
+        budget.spend(st, at)?;
         st.check_obj(at)?;
         let a = read_anchor(st, at).ok_or(DocError::Corrupt("an object on the anchor chain is not an ANCH"))?;
         cur = a.prev;

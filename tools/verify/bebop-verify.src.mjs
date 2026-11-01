@@ -28,6 +28,17 @@ import { readFileSync } from "node:fs";
 const WASM_B64 = "__WASM_BASE64__";
 const WASM_SHA256 = "__WASM_SHA256__";
 
+// W-MG-HOST: whatever goes wrong below is a status line and a code, never a stack trace; every word
+// that names something from outside (a path) passes `clean`. 78 = HOST_FAILED (read.mjs's number).
+const clean = (t) => String(t).replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]/g, (c) => "\\x" + c.charCodeAt(0).toString(16).padStart(2, "0"));
+const failed = (e) => {
+  console.log("kv status=78 n=0 root=0");
+  console.error(`HOST_FAILED: the file could not be read, or the reader trapped; no verdict (${clean(e?.message ?? e)})`);
+  process.exit(78);
+};
+process.on("uncaughtException", failed);
+process.on("unhandledRejection", failed);
+
 const args = process.argv.slice(2);
 const imagePath = args.find((a) => !a.startsWith("--"));
 if (!imagePath || args.includes("--help")) {
@@ -60,12 +71,19 @@ const words = (code) => {
 const hex = (b) => Buffer.from(b).toString("hex");
 const u64 = (b, at) => new DataView(b.buffer, b.byteOffset + at, 8).getBigUint64(0, true);
 const i64 = (b, at) => new DataView(b.buffer, b.byteOffset + at, 8).getBigInt64(0, true);
+// Every cell that becomes a JS Number: a length inside the bytes it came with, or a refusal.
+const num = (v, max) => {
+  if (v < 0n || v > BigInt(max)) throw new Error("a length past the bytes the reader returned");
+  return Number(v);
+};
 
 const image = readFileSync(imagePath);
-const ptr = w.bw_alloc(image.length);
+// One byte of room at least: `bw_alloc(0)` is null, and an empty file is status 1 as on every reader, not NULL_ARG.
+const room = Math.max(image.length, 1);
+const ptr = w.bw_alloc(room);
 mem().set(image, ptr);
 const status = w.bw_open(ptr, image.length);
-w.bw_free(ptr, image.length);
+w.bw_free(ptr, room);
 if (status !== 0) {
   console.log(`kv status=${status} n=0 root=0`);
   console.error(words(status));
@@ -110,8 +128,8 @@ if (args.includes("--dump")) {
     for (let i = 0; ; i++) {
       const f = take((p, c) => w.bw_scan_next(BigInt(i), p, c));
       if (typeof f === "number" || f.length === 0) break;
-      const kl = Number(u64(f, 0));
-      const vl = Number(u64(f, 8 + kl));
+      const kl = num(u64(f, 0), f.length);
+      const vl = num(u64(f, 8 + kl), f.length);
       console.log(`${show(f.subarray(8, 8 + kl))} = ${show(f.subarray(16 + kl, 16 + kl + vl))}`);
     }
   } else {
@@ -119,10 +137,10 @@ if (args.includes("--dump")) {
     for (let i = 0; typeof h !== "number" && i + 72 <= h.length; i += 72) {
       console.log(`head actor=${hex(h.subarray(i, i + 32))} seq=${u64(h, i + 32)} tip=${hex(h.subarray(i + 40, i + 72))}`);
     }
-    for (let i = 0; i < Number(n); i++) {
+    for (let i = 0; i < num(n, image.length); i++) {
       const f = take((p, c) => w.bw_log_at(BigInt(i), p, c));
       if (typeof f === "number") break;
-      const plen = Number(u64(f, 8));
+      const plen = num(u64(f, 8), f.length);
       console.log(`#${i} seq=${u64(f, 0)} id=${hex(f.subarray(16, 48))} payload=${show(f.subarray(112, 112 + plen))}`);
     }
   }

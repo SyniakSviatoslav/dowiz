@@ -50,12 +50,12 @@ pub(crate) fn node_at<C: Image + ?Sized>(c: &C, obj: usize, leaf: bool) -> Resul
     if dig != want {
         return Err(bad(obj, "digest"));
     }
-    let len = obj_len_in(c, obj) as usize;
-    if obj.checked_add(2 + len).is_none_or(|e| e > c.n_cells()) || len == 0 {
+    let len = bebop_image::idx_end(obj_len_in(c, obj));
+    if obj.checked_add(2).and_then(|e| e.checked_add(len)).is_none_or(|e| e > c.n_cells()) || len == 0 {
         return Err(bad(obj, "length past the image"));
     }
     let meta = get_in(c, obj, 0) as u64;
-    let (kind, hc, m) = (meta >> 56, (meta >> 48) & 0xFF, (meta & 0xFFFF_FFFF_FFFF) as usize);
+    let (kind, hc, m) = (meta >> 56, (meta >> 48) & 0xFF, bebop_image::idx_u(meta & 0xFFFF_FFFF_FFFF).unwrap_or(usize::MAX));
     if kind != if leaf { KIND_LEAF } else { KIND_NODE } {
         return Err(bad(obj, "META kind"));
     }
@@ -78,7 +78,7 @@ pub(crate) fn node_at<C: Image + ?Sized>(c: &C, obj: usize, leaf: bool) -> Resul
 /// Slot i's key as (absolute BYTE address, length), bounded by the node's key area.
 pub(crate) fn key_at<C: Image + ?Sized>(c: &C, nd: &NodeRef, i: usize) -> Result<(usize, usize), TreeError> {
     let k = get_in(c, nd.obj, nd.k_cell(i)) as u64;
-    let (koff, klen) = ((k >> 16) as usize, (k & 0xFFFF) as usize);
+    let (koff, klen) = (bebop_image::idx_u(k >> 16).unwrap_or(usize::MAX), (k & 0xFFFF) as usize);
     if koff.checked_add(klen).is_none_or(|e| e > nd.kbytes()) {
         return Err(bad(nd.obj, "key past the key area"));
     }
@@ -97,8 +97,8 @@ pub(crate) fn back<C: Image + ?Sized>(c: &C, obj: usize, cell: usize) -> Result<
         return Err(TreeError::Forward { obj });
     }
     match (obj as i64).checked_add(off) {
-        Some(t) if t >= 0 => Ok(t as usize),
-        _ => Err(TreeError::Forward { obj }),
+        Some(t) => bebop_image::idx(t).ok_or(TreeError::Forward { obj }),
+        None => Err(TreeError::Forward { obj }),
     }
 }
 
@@ -107,15 +107,15 @@ pub(crate) fn val_at<C: Image + ?Sized>(c: &C, obj: usize) -> Result<(usize, usi
     if obj_digest_in(c, obj) != DIGEST_KV4_VAL {
         return Err(bad(obj, "value digest"));
     }
-    let len = obj_len_in(c, obj) as usize;
-    if obj.checked_add(2 + len).is_none_or(|e| e > c.n_cells()) {
+    let len = bebop_image::idx_end(obj_len_in(c, obj));
+    if obj.checked_add(2).and_then(|e| e.checked_add(len)).is_none_or(|e| e > c.n_cells()) {
         return Err(bad(obj, "value past the image"));
     }
     let vlen = get_in(c, obj, 0);
-    if !(0..=crate::MAX_VALUE_BYTES as i64).contains(&vlen) || len != 1 + (vlen as usize).div_ceil(8) {
+    if !(0..=crate::MAX_VALUE_BYTES as i64).contains(&vlen) || len != 1 + bebop_image::idx_end(vlen).div_ceil(8) {
         return Err(bad(obj, "value length"));
     }
-    Ok(((obj + 3) * 8, vlen as usize))
+    Ok(((obj + 3) * 8, bebop_image::idx_end(vlen)))
 }
 
 /// Compare the `len` bytes at `addr` with `probe`, reading each cell once.

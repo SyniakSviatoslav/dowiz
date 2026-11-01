@@ -50,16 +50,18 @@ fresh; sed -i 's/^src=[0-9a-f]\{8\}/src=00000000/' "$S/bin/stamp"; want 2 "stamp
 fresh; sed -i 's/^    return b\[1:\] if b\[:1\] in (b"D", b"K") else b$/    return b/' "$PYV"; want 1 "python forgets the kind byte" "hub.sealed: records: doc_verify .* python .* DISAGREE"
 fresh; cat > "$S/bin/doc_verify" <<'L'
 #!/bin/sh
-echo "doc records=4 chained=4 legacy=0 redacted=0 broken=0 seals_ok=4 seals_bad=0 forks=0 keys=1 admitted=1 anchors=2 anchors_ok=1 anchors_bad=0 anchors_unchecked=1 anchors_cut=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0"
+echo "doc records=4 chained=4 legacy=0 redacted=0 broken=0 seals_ok=4 seals_bad=0 forks=0 keys=1 admitted=1 anchors=2 anchors_ok=1 anchors_bad=0 anchors_unchecked=1 anchors_cut=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0 tree_unsigned=0"
 echo HOLDS
 L
 chmod +x "$S/bin/doc_verify"; gate --stamp > /dev/null; want 1 "doc_verify is a liar" "KILL rec-bit FAILED"
 fresh; printf 'import sys, shutil\nshutil.copy(sys.argv[2], sys.argv[3])\n' > "$S/r/tools/gates/maingoal.forge.py"; want 1 "the forger changes nothing" "KILL rec-bit FAILED"
 fresh; sed -i 's/if (got !== claimed)/if (false)/' "$S/r/examples/read.mjs"; want 1 "read.mjs ignores the digest" "KILL wasm-byte FAILED"
 fresh; sed -i 's/10: "BAD_CRC: an object the read reached fails its crc (root/10: "BAD_CRC: an object fails its crc (root/' "$PYV"; want 1 "python's words drift" "KILL rec-bit FAILED"
-fresh; sed -i 's/cut=sum(s\["last"\] - s\["first"\] + 1 for s in segs),/cut=sum(s["last"] - s["first"] + 2 for s in segs),/' "$PYV"; want 1 "python's cut is off by one" "cut: doc_verify .* python .* DISAGREE"
+fresh; sed -i 's/cut=sat(sum(s\["last"\] - s\["first"\] + 1 for s in segs)),/cut=sat(sum(s["last"] - s["first"] + 2 for s in segs)),/' "$PYV"; want 1 "python's cut is off by one" "cut: doc_verify .* python .* DISAGREE"
 fresh; sed -i 's/keys_disagree=keys_disagree(keys, revokes)/keys_disagree=0/' "$PYV"; want 1 "python believes the table" "KILL zero-revoked FAILED"
 fresh; sed -i 's/^    return bool(b) and b\[0\] \& REDACTED_BIT != 0$/    return False/' "$PYV"; want 1 "python misses the legacy tombstone" "legacy-forget.sealed: redacted: doc_verify .* python .* DISAGREE"
 fresh; sed -i 's/unsealed=unsealed(recs, tips, segs)/unsealed=0/' "$PYV"; want 1 "python walks no tip" "KILL unsealed-tail FAILED"
-[ "$fail" = 0 ] && echo "maingoal.prove: GREEN (11 cases: one pass, one refusal, nine named reds)" || echo "maingoal.prove: RED"
+fresh; sed -i 's/chain_hash(segs)) not in truncates:/None) not in [t[:6] + (None,) for t in truncates]:/' "$PYV"; want 1 "python takes a moved frontier row" "KILL frontier-row FAILED"
+fresh; sed -i 's/tombs_foreign=tombs_foreign(recs, tombs, erased, keys)/tombs_foreign=0/' "$PYV"; want 1 "python counts no tombstone" "KILL tomb-swap FAILED"
+[ "$fail" = 0 ] && echo "maingoal.prove: GREEN (13 cases: one pass, one refusal, eleven named reds)" || echo "maingoal.prove: RED"
 exit $fail

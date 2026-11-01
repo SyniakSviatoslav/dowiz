@@ -147,10 +147,7 @@ pub fn chain_in<C: Cells + ?Sized>(c: &C, root: usize) -> Option<Vec<Rec>> {
         return None;
     }
     let d = get_in(c, root, 7);
-    if d < 0 {
-        return None;
-    }
-    let d = d as usize;
+    let d = bebop_image::idx(d)?;
     let mut budget = c.n_cells();
     let mut out = Vec::new();
     let mut cur = follow_in(c, root, 6);
@@ -164,10 +161,10 @@ pub fn chain_in<C: Cells + ?Sized>(c: &C, root: usize) -> Option<Vec<Rec>> {
         }
         budget = budget.checked_sub(len + 2)?;
         let (op, kl, vl) = (get_in(c, obj, 1), get_in(c, obj, 2), get_in(c, obj, 3));
-        if !(op == OP_PUT || op == OP_REMOVE) || kl < 0 || vl < 0 || (op == OP_REMOVE && vl != 0) {
+        if !(op == OP_PUT || op == OP_REMOVE) || (op == OP_REMOVE && vl != 0) {
             return None;
         }
-        let (klen, vlen) = (kl as usize, vl as usize);
+        let (klen, vlen) = (bebop_image::idx(kl)?, bebop_image::idx(vl)?);
         if HEAD.checked_add(klen.div_ceil(8))?.checked_add(vlen.div_ceil(8))? != len {
             return None;
         }

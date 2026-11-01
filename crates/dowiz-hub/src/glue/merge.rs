@@ -20,7 +20,7 @@
 //! land on the hub's tip (`tablet::rebase`). An adopted record goes back as its INDEX in the
 //! tail the tablet sent (`Entry::Echo`), never as its bytes a second time.
 
-use super::wire::{glue_tail, Tail};
+use super::wire::{glue_tail, wire_chain, Tail, TAIL_MAX};
 use super::{Conflict, Refusal, Side, Why};
 use crate::crypto::hex;
 use crate::minijson::{esc, str_field};
@@ -62,6 +62,8 @@ pub struct Reply {
     pub grants: usize,
     /// True: this tail had been adopted already; nothing was written.
     pub replay: bool,
+    /// The tail's first records, adopted at an earlier sync whose reply never landed.
+    pub skipped: usize,
     /// What the tail cost on the wire (its records' bytes).
     pub wire_up: usize,
 }
@@ -69,7 +71,7 @@ pub struct Reply {
 impl Reply {
     /// THE MERGE LAW: every record the tablet sent is a movement or a held decision.
     pub fn law(&self, sent: usize) -> bool {
-        self.replay || sent == self.merged + self.held.len()
+        self.replay || sent == self.skipped + self.merged + self.held.len()
     }
 
     /// What the reply's records cost on the wire (an echo as its index's digits).
@@ -88,7 +90,16 @@ pub fn hub_refused(why: String) -> Refusal {
 pub fn merge(hub_bytes: &[u8], log: &mut StockLog, t: &Tail) -> Result<Reply, Refusal> {
     let ktip = hex(&t.tip);
     let above = log.since(&t.base).ok_or(Refusal { side: Side::Kitchen, why: Why::NoCommonAncestor })?;
-    if t.recs.is_empty() || above.iter().any(|r| r.contains(&ktip) && is_note(r, GLUED) && str_field(r, "ctx").as_deref() == Some(t.ctx.as_str()) && str_field(r, "ktip").as_deref() == Some(ktip.as_str())) {
+    // WHAT THE HUB ALREADY HOLDS OF THIS TAIL (W-MG-TRANS H2). A reply that never landed leaves the
+    // tablet on its old base, so its next tail is the same records and whatever it wrote since.
+    // The `glued` note of each adoption names the tablet's tip then: the tablet's chain over this
+    // tail passes through that id exactly when the records up to there are the ones adopted.
+    if t.recs.len() > TAIL_MAX {
+        return Err(Refusal { side: Side::Kitchen, why: Why::TooLong { pos: TAIL_MAX } });
+    }
+    let chain = wire_chain(log.len() - above.len(), &t.base, &t.recs);
+    let skip = adopted_prefix(&above, &t.ctx, &chain);
+    if t.recs.is_empty() || skip == t.recs.len() {
         // A tablet with nothing to send asks only for the hub's tail (read-only, so a board that
         // polls writes nothing), except at its first sync, which is when it gets its rights; a
         // retried tail was adopted already.
@@ -106,9 +117,12 @@ pub fn merge(hub_bytes: &[u8], log: &mut StockLog, t: &Tail) -> Result<Reply, Re
     // shelf, 0.64 ms apiece): the glue reads it, the adoption carries it forward, the grants read
     // what the adoption left.
     let start = log.ledger_since().map_err(|e| hub_refused(e.to_string()))?;
-    let (g, _) = glue_tail(hub_bytes, log, &start.0, t)?;
+    let (g, _) = glue_tail(hub_bytes, log, &start.0, t, &chain, skip)?;
     let old_tip = log.tip_id();
-    let (adopted, led) = log.adopt_from(&t.recs, start).map_err(|e| hub_refused(e.to_string()))?;
+    let below = |i: usize| if i == 0 { t.base } else { chain[i - 1] };
+    let prevs: Vec<[u8; 32]> = (skip..t.recs.len()).map(below).collect();
+    let (mut adopted, led) = log.adopt_from(&t.recs[skip..], &prevs, start).map_err(|e| hub_refused(e.to_string()))?;
+    adopted.held.iter_mut().for_each(|(pos, _)| *pos += skip);
     let mut n = 0usize;
     let mut note = |log: &mut StockLog, body: String| -> Result<(), Refusal> {
         n += 1;
@@ -122,8 +136,10 @@ pub fn merge(hub_bytes: &[u8], log: &mut StockLog, t: &Tail) -> Result<Reply, Re
         note(log, format!(r#""kind":"held","pos":{pos},"why":"{}","rec":"{}""#, esc(why), esc(&t.recs[*pos])))?;
     }
     let grants = regrant(log, &t.ctx, &led)?;
+    // `derived` only when there are some: a legacy log's note stays byte for byte what ac5ff0c4 writes.
+    let derived = if adopted.derived > 0 { format!(r#","derived":{}"#, adopted.derived) } else { String::new() };
     let body = format!(
-        r#"{{"ctx":"{}","base":"{}","ktip":"{ktip}","n":{},"merged":{},"held":{}}}"#,
+        r#"{{"ctx":"{}","base":"{}","ktip":"{ktip}","n":{},"merged":{},"held":{}{derived}}}"#,
         esc(&t.ctx),
         hex(&t.base),
         t.recs.len(),
@@ -135,7 +151,17 @@ pub fn merge(hub_bytes: &[u8], log: &mut StockLog, t: &Tail) -> Result<Reply, Re
     // new records only, not a second walk down to `base`.
     let mut all = above;
     all.extend(log.since(&old_tip).unwrap_or_default());
-    Ok(reply(log, t, all, g.conflicts, adopted.merged, adopted.held, grants, false))
+    Ok(Reply { skipped: skip, ..reply(log, t, all, g.conflicts, adopted.merged, adopted.held, grants, false) })
+}
+
+/// How many of the tail's first records an earlier `glued` note of this context covers: the
+/// longest prefix whose tablet id such a note names. `chain` is the tablet's id after each.
+fn adopted_prefix(above: &[String], ctx: &str, chain: &[[u8; 32]]) -> usize {
+    let glued: Vec<String> = above.iter().filter(|r| is_note(r, GLUED) && str_field(r, "ctx").as_deref() == Some(ctx)).filter_map(|r| str_field(r, "ktip")).collect();
+    if glued.is_empty() {
+        return 0;
+    }
+    chain.iter().rposition(|id| glued.contains(&hex(id))).map_or(0, |i| i + 1)
 }
 
 /// The reply over `all`, the hub's records above the tablet's base, OLDEST FIRST.
@@ -153,7 +179,7 @@ fn reply(log: &StockLog, t: &Tail, all: Vec<String>, conflicts: Vec<Conflict>, m
             }
         })
         .collect();
-    Reply { tip: log.tip_id(), entries, conflicts, merged, held, grants, replay, wire_up: t.recs.iter().map(String::len).sum() }
+    Reply { tip: log.tip_id(), entries, conflicts, merged, held, grants, replay, skipped: 0, wire_up: t.recs.iter().map(String::len).sum() }
 }
 
 /// A conflict as a decision note's keys (the note adds `did` and `ctx`).

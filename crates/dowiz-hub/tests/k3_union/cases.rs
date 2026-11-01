@@ -23,9 +23,9 @@ fn forged(actor: Id, seq: u64, prev: Id, tag: u8) -> Record {
     let mut payload = vec![tag; 16];
     payload.push(EventKind::Placed as u8);
     payload.extend_from_slice(b"\x01xforged");
-    let mut m = prev.to_vec();
-    m.extend_from_slice(&payload);
-    Record { id: sha256(&m), prev, actor_pubkey: actor, actor_seq: seq, flags: FLAG_SHA256, payload }
+    let mut r = Record { id: [0; 32], prev, actor_pubkey: actor, actor_seq: seq, flags: FLAG_SHA256, payload };
+    r.id = doc::Ids::chained(&HubIds, &r);
+    r
 }
 
 #[test]

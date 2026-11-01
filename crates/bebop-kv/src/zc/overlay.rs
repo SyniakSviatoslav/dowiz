@@ -15,14 +15,12 @@
 //! of all n base keys into an (n + D)-slot vector on EVERY `open`/`reopen`: 1.6 ms for one
 //! delta at 1e5 x 256 B against 1.7 us without one, which is what `reopen` exists to avoid.
 //! Now each overlay key is placed in the base by ONE binary search (the base is strictly
-//! ascending: `open` checked it, and a chain on an unsorted base is refused below), and the
+//! ascending: `open` refused any other), and the
 //! pieces between those places are counted, not listed. `key(i)` is a binary search over
 //! the <= 2D+1 pieces.
 //!
 //! Without a chain `pieces` stays EMPTY and index i is base i: a v1/v2 image costs nothing new.
-//! A chain on a base whose keys are not strictly ascending is refused (`NotKv`), as by
-//! `Kv::decode`: no writer here makes one, and merging into an unsorted order has no answer
-//! both readers would agree on.
+//! A base whose keys are not strictly ascending never gets here: `open` and `Kv::decode` refuse it.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
@@ -207,9 +205,7 @@ impl<C: Image> KvIn<C> {
     }
 
     /// The first merged index whose key is not below `key` (W-ES-P3: where a range scan starts).
-    /// O(log n) on a sorted base, O(log(2D+1) + log n) with a chain. On a base whose keys are not
-    /// ascending (no writer here makes one; `open` says `sorted() == false`) there is no order
-    /// to search, so this is 0 and a scan walks the stored order, filtering.
+    /// O(log n), O(log(2D+1) + log n) with a chain.
     pub fn seek(&self, key: &[u8]) -> Result<usize, KvError> {
         if self.tree_head().is_some() {
             return Err(crate::tree::kvin::UNINDEXED);

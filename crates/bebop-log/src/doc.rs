@@ -48,12 +48,18 @@ use crate::{Store, StoreError};
 pub use bebop_image::verify::BadCrc;
 
 pub mod anch;
+mod budget;
 mod copy;
+mod count;
 mod cut;
 mod declare;
+mod forgotten;
+mod frontier;
 pub mod keys;
 pub mod seal;
+mod seals;
 pub mod seg;
+mod seams;
 mod settle;
 pub mod spec;
 mod verify;
@@ -61,7 +67,8 @@ mod write;
 pub use anch::{check_anchors, Anchor, AnchorCheck, AnchorCounts, Checked, Verdict, KIND_OTS, KIND_PLATFORM_TSA, KIND_ROUGHTIME};
 pub use keys::{Key, KeyOp, ALG_ML_DSA_65};
 pub use seal::{Head, Seal};
-pub use seg::{forgotten_body, Segment};
+pub use seams::{id_message, Ids, Signer, Verifier, ID_TAG};
+pub use seg::{forgotten_body, Erased, Segment};
 pub use spec::{SpecIn, SpecView, DIGEST_BLOB, DIGEST_SPEC};
 pub use verify::{verify, Counters, Report, Trust};
 
@@ -155,61 +162,6 @@ impl From<StoreError> for DocError {
 impl From<BadCrc> for DocError {
     fn from(e: BadCrc) -> Self {
         DocError::BadCrc(e)
-    }
-}
-
-/// The writer's half of a device key: WHO signs. `actor_id` is `sha256(public_key)` by the
-/// implementor's convention (32 bytes, the record's `actor_pubkey` slot); the crate never
-/// derives it.
-pub trait Signer {
-    fn actor_id(&self) -> [u8; 32];
-    fn alg(&self) -> i64;
-    fn public_key(&self) -> Vec<u8>;
-    fn sign(&self, msg: &[u8]) -> Vec<u8>;
-}
-
-/// The reader's half: does `sig` over `msg` verify under `pk` for algorithm `alg`? An
-/// algorithm the implementor does not know is `false`, never a guess.
-pub trait Verifier {
-    fn verify(&self, alg: i64, pk: &[u8], msg: &[u8], sig: &[u8]) -> bool;
-    /// `false` for a reader that carries no signature algorithm at all: every seal is then
-    /// unjudged rather than forged, and a TRUNCATE or FORGOTTEN counts on its chain alone.
-    /// A cut file stays readable by such a reader; `Report::holds` stays false on it.
-    fn checks_signatures(&self) -> bool {
-        true
-    }
-}
-
-/// How a record's id is derived (M0 owns the scheme; this crate only asks). Every question
-/// is asked WITH the record's flags cell (W-MG-M1B): M0's framing -- a 16-byte nonce in front
-/// of the payload -- is there exactly when `FLAG_SHA256` is set, so an implementor that was
-/// handed the payload alone would have to guess where the body starts, and a reader never
-/// guesses. `legacy` answers whether `id` holds under a pre-M0 scheme of old images (the
-/// implementor may have several, and one of them needs `prev`; `false` = it has none);
-/// `redacted` reads the in-place redaction mark; `body` strips the implementor's framing
-/// (nonce, kind byte) so the key-op bodies of `keys.rs` are found where the implementor put
-/// them.
-pub trait Ids {
-    fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32];
-    fn legacy(&self, flags: i64, prev: &[u8; 32], payload: &[u8], id: &[u8; 32]) -> bool {
-        let _ = (flags, prev, payload, id);
-        false
-    }
-    fn redacted(&self, flags: i64, payload: &[u8]) -> bool {
-        let _ = (flags, payload);
-        false
-    }
-    fn body<'a>(&self, flags: i64, payload: &'a [u8]) -> &'a [u8] {
-        let _ = flags;
-        payload
-    }
-    /// The root a segment is named by: RFC 9162's tree over the cut records' ids in file
-    /// order (dowiz-hub: `bebop_store::merkle`, leaf = sha256(0x00 ‖ id)). This crate has no
-    /// hash, so the implementor's absence (`None`) is `DocError::NoTree`: nothing is cut
-    /// under a root nobody can recompute.
-    fn tree_root(&self, ids: &[[u8; 32]]) -> Option<[u8; 32]> {
-        let _ = ids;
-        None
     }
 }
 

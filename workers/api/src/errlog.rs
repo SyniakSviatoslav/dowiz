@@ -93,8 +93,7 @@ pub async fn record(ns: &ObjectNamespace, venue: Option<&str>, place: &str, mess
     let image = image_of(venue);
     let subject = place.to_string();
     let scheme_of = venue.unwrap_or(crate::scheme::PLATFORM).to_string();
-    if let Err(e) = crate::platform_store::with_log_at(&stub, image, move |log| {
-        crate::scheme::arm(log, &scheme_of);
+    if let Err(e) = crate::platform_store::with_log_at(&stub, image, &scheme_of, move |log| {
         log.append(KIND, &subject, &rec)
             .map_err(|x| Error::RustError(format!("{x:?}")))?;
         // PRUNED ON WRITE, not only nightly. The nightly job is what keeps the
@@ -150,7 +149,7 @@ impl Default for Recent {
 /// The newest failures, for the console and for an operator.
 pub async fn recent(ns: &ObjectNamespace, venue: Option<&str>, limit: usize) -> Result<Recent> {
     let stub = ns.id_from_name(object_of(venue))?.get_stub()?;
-    let loaded = crate::platform_store::load_log_at(&stub, image_of(venue)).await?;
+    let loaded = crate::platform_store::load_log_at(&stub, image_of(venue), venue.unwrap_or(crate::scheme::PLATFORM)).await?;
     Ok(Recent {
         errors: loaded
             .log
@@ -169,9 +168,7 @@ pub async fn recent(ns: &ObjectNamespace, venue: Option<&str>, limit: usize) -> 
 /// did -- see `image_of`, and why guessing it twice was the defect.
 pub async fn prune_at(stub: &Stub, venue: Option<&str>, now_ms: i64) -> Result<usize> {
     let before = now_ms - KEEP_MS;
-    let scheme_of = venue.unwrap_or(crate::scheme::PLATFORM).to_string();
-    crate::platform_store::with_log_at(stub, image_of(venue), move |log| {
-        crate::scheme::arm(log, &scheme_of);
+    crate::platform_store::with_log_at(stub, image_of(venue), venue.unwrap_or(crate::scheme::PLATFORM), move |log| {
         let keep: usize = log
             .about(KIND, None, usize::MAX)
             .into_iter()

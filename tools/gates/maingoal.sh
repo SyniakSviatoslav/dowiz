@@ -123,8 +123,8 @@ av() { clean "$AUD" ./anchor verify "$1" --platform-key "$PPK"; }
 py() { clean "$AUD" python3 -I ./bebop-verify.py "$@"; }
 nd() { clean "$AUD" node ./bebop-verify.mjs "$@"; }
 before=$fail
-WANT_HUB="doc records=4 chained=4 legacy=0 redacted=0 broken=0 seals_ok=4 seals_bad=0 forks=0 keys=1 admitted=1 anchors=2 anchors_ok=1 anchors_bad=0 anchors_unchecked=1 anchors_cut=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0"
-WANT_HIST="doc records=12 chained=9 legacy=1 redacted=2 broken=0 seals_ok=6 seals_bad=0 forks=0 keys=1 admitted=1 anchors=1 anchors_ok=1 anchors_bad=0 anchors_unchecked=0 anchors_cut=0 segments=0 cut=0 cut_redacted=0 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0"
+WANT_HUB="doc records=4 chained=4 legacy=0 redacted=0 broken=0 seals_ok=4 seals_bad=0 forks=0 keys=1 admitted=1 anchors=2 anchors_ok=1 anchors_bad=0 anchors_unchecked=1 anchors_cut=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0 tree_unsigned=0"
+WANT_HIST="doc records=12 chained=9 legacy=1 redacted=2 broken=0 seals_ok=6 seals_bad=0 forks=0 keys=1 admitted=1 anchors=1 anchors_ok=1 anchors_bad=0 anchors_unchecked=0 anchors_cut=0 segments=0 cut=0 cut_redacted=0 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0 tree_unsigned=0"
 # `admitted` is not shared: doc_verify's is what the signed records admit, the readers print `genesis=`,
 # the keys with no ADMIT record, which is all a reader with no signature code can count (a reader's
 # keys_disagree is the same kind of number: the table against the REVOKEs' CLAIM, on their chain alone).
@@ -270,6 +270,39 @@ o=$(dv k10.sealed 2>&1); r=$?; l=$(printf '%s\n' "$o" | sed -n 1p)
 pl=$(py k10.sealed --verify 2>/dev/null | sed -n '/^verify /p'); nl=$(nd k10.sealed --verify 2>/dev/null | sed -n '/^verify /p')
 if [ "$r" = 3 ] && [ "$(field "$l" unsealed)" = 1 ] && [ "$(field "$l" seals_bad)" = 0 ] && [ "$(field "$l" broken)" = 0 ] && [ "$(printf '%s\n' "$o" | tail -1)" = "DOES NOT HOLD" ] && [ "$(field "$pl" unsealed)" = 1 ] && [ "$(field "$nl" unsealed)" = 1 ]; then killed "(b) unsealed-tail resealed -> doc_verify rc=3 unsealed=1 seals_bad=0 DOES NOT HOLD; python and node unsealed=1"
 else red "KILL unsealed-tail FAILED: doc_verify rc=$r '$l'; python '$pl'; node '$nl'"; fi
+
+# W-MG-READ: ATK's holes as a script forges them, no key and no repo. The flag is inside id v2: with it
+# stripped the id stops hashing, where M0's id stayed right and the body moved (hole 2).
+forge flag-strip hub.sealed k11.sealed
+o=$(dv k11.sealed 2>&1); r=$?; l=$(printf '%s\n' "$o" | sed -n 1p)
+if [ "$r" = 3 ] && [ "$(field "$l" broken)" = 1 ] && [ "$(field "$l" chained)" = 3 ] && [ "$(printf '%s\n' "$o" | tail -1)" = "DOES NOT HOLD" ]; then killed "(b) flag-strip resealed -> rc=3 broken=1 chained=3 DOES NOT HOLD"
+else red "KILL flag-strip FAILED: rc=$r '$l'"; fi
+agree k11.sealed "$o"
+
+# hole 1: the root's pk changed in the unsigned KEY row. A script holds no ML-DSA, so it cannot re-sign:
+# this kill lands on the signatures as well as on `actor_of`. atk_holes hole 1 is the one that re-signs.
+forge root-pk history.sealed k12.sealed
+o=$(dv k12.sealed 2>&1); r=$?; l=$(printf '%s\n' "$o" | sed -n 1p)
+if [ "$r" = 3 ] && [ "$(field "$l" seals_ok)" = 0 ] && [ "$(printf '%s\n' "$o" | tail -1)" = "DOES NOT HOLD" ]; then killed "(b) root-pk resealed -> rc=3 seals_ok=0 DOES NOT HOLD"
+else red "KILL root-pk FAILED: rc=$r '$l'"; fi
+
+# hole 5: a frontier row moved. The six fields of the TRUNCATE still name the segment; only the signed
+# chain hash covers the row, so a verdict is not reached: all three refuse the file by name.
+forge frontier-row hub.sealed k13.sealed
+o=$(dv k13.sealed 2>&1 >/dev/null); r=$?
+p=$(py k13.sealed --verify 2>&1 >/dev/null); pr=$?
+n=$(nd k13.sealed --verify 2>&1 >/dev/null); nr=$?
+if [ "$r" = 2 ] && [ "$pr" = 75 ] && [ "$nr" = 75 ]; then
+  case "$o|$p|$n" in *"status=75 $UND"*"|"*"$UND"*"|"*"$UND"*) killed "(b) frontier-row resealed -> doc_verify rc=2, python and node rc=75, CUT_UNDECLARED" ;; *) red "KILL frontier-row FAILED: the words: doc_verify '$o' python '$p' node '$n'" ;; esac
+else red "KILL frontier-row FAILED: doc_verify rc=$r '$o'; python rc=$pr '$p'; node rc=$nr '$n'"; fi
+
+# hole 3: two tombstones trade payloads. Law 9 still balances (redacted == declared) and every id and
+# link stands; only FORGOTTEN's digests see it. doc_verify and python both count it, node has no cell.
+forge tomb-swap history.sealed k14.sealed
+o=$(dv k14.sealed 2>&1); r=$?; l=$(printf '%s\n' "$o" | sed -n 1p)
+pl=$(py k14.sealed --verify 2>&1 >/dev/null | sed -n 's/^tombs_foreign=\([0-9]*\) .*/\1/p')
+if [ "$r" = 3 ] && [ "$(field "$l" tombs_foreign)" = 2 ] && [ "$(field "$l" redacted)" = 2 ] && [ "$(field "$l" declared)" = 2 ] && [ "$(printf '%s\n' "$o" | tail -1)" = "DOES NOT HOLD" ] && [ "$pl" = 2 ]; then killed "(b) tomb-swap resealed -> rc=3 tombs_foreign=2 redacted=2 declared=2 DOES NOT HOLD; python tombs_foreign=2"
+else red "KILL tomb-swap FAILED: rc=$r '$l'; python tombs_foreign='$pl'"; fi
 
 # (c) a byte of the embedded reader: refused before it runs. A byte of a record: its own reader says 10.
 forge wasm-byte archive.store k7.store; cp "$AUD/k7.store" "$NOD/"

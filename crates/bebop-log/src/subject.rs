@@ -153,7 +153,7 @@ struct Span {
 /// `read_at`'s arithmetic, without reading the payload. Kept beside the test that
 /// compares the two answers record for record (`tests.rs`).
 fn span(st: &Store, version: i64, obj: usize, budget: usize) -> Span {
-    let plen = st.get(obj, 1) as usize;
+    let plen = bebop_image::idx_end(st.get(obj, 1));
     if version >= 2 {
         let flags = st.get(obj, 11);
         let named = flags & FLAG_ACTOR != 0 && st.obj_cells(obj) >= (HEAD_V2 + 4) as usize;

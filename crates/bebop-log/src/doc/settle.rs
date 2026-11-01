@@ -33,10 +33,12 @@
 //! nothing here binds him: it is all a self-contained read can say. Everything below assumes a
 //! verifier that brings its roots (`Trust::Only`), which a thief cannot edit.
 //!
-//! A REVOKE IS NOT HIDDEN INSIDE THE FILE by a thief holding an admitted key: its tombstone
-//! needs its author's or a root's FORGOTTEN (`declare.rs` `foreign_tombs`), and a cut through
-//! a REVOKE of an admitted key takes that key's ADMIT with it, an older record, so the
-//! key is admitted by nothing and its TRUNCATE declares nothing (`CutUndeclared`).
+//! THREE WAYS TO HIDE A REVOKE THAT ARE PINNED, under `Trust::Only`, by a named test: a thief's
+//! tombstone over it needs its author's or a root's FORGOTTEN listing it (`foreign_tombs`,
+//! `a_thief_does_not_erase_the_revoke_of_its_own_key`); a thief's cut through it takes the older
+//! ADMIT of the thief's key, so its TRUNCATE declares nothing (`a_thief_with_an_admitted_key_...`);
+//! a forger with no key and the file: `atk_holes` holes 2-6 name the doors tried. Nothing here
+//! says those are all the doors.
 //!
 //! WHAT THE FILE CANNOT DECIDE (pinned in `settle/tests.rs`). ROLLBACK: the file as it stood
 //! before the REVOKE, or a revoker's newest records dropped with their HEADS row: one file
@@ -54,28 +56,36 @@
 #[allow(unused_imports)]
 use crate::prelude::*;
 use alloc::collections::{BTreeMap, BTreeSet};
-use crate::Store;
-use super::declare::{effective, Declared};
-use super::keys::{narrower, parse_admit, Key};
-use super::seal::{message, read_seal, Head};
-use super::seg::{frontier_at, Segment};
+use super::budget::{at_key, set_of};
+use super::declare::{effective, Body, Declared};
+use super::keys::{admit_view, narrower, valid_at, Key};
+use super::seal::message;
+use super::seals::Seals;
 use super::verify::Chains;
 use super::{Ids, Verifier};
 
 type Actor = [u8; 32];
 
-/// What every round reads.
+/// What every round reads. Each of these is computed once, in `verify`: a round is a question
+/// about who is admitted, and nothing about a seal or a record changes between rounds.
 pub(super) struct Cx<'a> {
-    pub st: &'a Store,
     pub ch: &'a Chains,
-    pub heads: &'a [Head],
-    pub segs: &'a [Segment],
+    pub seals: &'a Seals,
+    pub decls: &'a [(usize, Body)],
+    /// `count.rs`: the records whose id, link and seq stand.
+    pub sound: &'a [bool],
+    pub off_seq: &'a BTreeSet<Actor>,
+    /// Per actor, its KEY's index in the table.
+    pub key_ix: &'a BTreeMap<Actor, u64>,
+    /// Per key, `actor_of(pk)` names it.
+    pub bound: &'a [bool],
     pub ids: &'a dyn Ids,
     pub v: &'a dyn Verifier,
 }
 
-/// Each seal's signature answer by offset, sorted (`seals`).
-type Sigs = Vec<(usize, bool)>;
+/// Per seal, in `Seals::all`'s order, the signature's answer once asked: the rounds of a hostile
+/// file do not multiply the ML-DSA checks.
+type Sigs = Vec<Option<bool>>;
 
 /// One pass over the seals' ok, their bad, per actor the highest seq an ok seal signed, and the
 /// tips `verify`'s `unsealed` walks from.
@@ -83,96 +93,70 @@ type Passes = (usize, usize, BTreeMap<Actor, u64>, Vec<[u8; 32]>);
 
 /// One round: the key state with some REVOKEs in force, and what it makes effective.
 pub(super) struct Round {
-    /// The table with `revoked_at` replaced by the fold's.
-    pub keys: Vec<Key>,
+    /// Per key, `revoked_at` as the fold has it; nothing of the table's own survives.
+    pub revoked: Vec<i64>,
     pub admitted: BTreeSet<Actor>,
     pub ok: usize,
     pub bad: usize,
     /// The tip inside every ok seal; a reader that judges no seal, inside every seal it read.
     /// Never a HEADS row's `tip`: no signature covers that cell.
     pub tips: Vec<[u8; 32]>,
+    /// Per actor, the highest seq an ok seal signed.
+    pub covered: BTreeMap<Actor, u64>,
     pub declared: Declared,
 }
 
-/// One pass over every seal reachable from HEADS. `sigs` keeps each signature's answer by the
-/// seal's offset, so the rounds of a hostile file do not multiply the ML-DSA checks: a seal's
-/// key and message do not change between rounds. A sorted Vec and not a map: the reader's
-/// wasm ratchet pays for every map type, and this one holds one entry per seal.
-fn seals(cx: &Cx<'_>, keys: &[Key], admitted: &BTreeSet<Actor>, sigs: &mut Sigs) -> Passes {
-    let (mut ok, mut bad) = (0usize, 0usize);
+/// Every seal, judged under `revoked`. `s.seq` is the seal's own, and `names_record` ties it to a
+/// record whose id holds that seq; `count.rs` is what makes that seq a place on the device's chain.
+fn seals(cx: &Cx<'_>, keys: &[Key], revoked: &[i64], admitted: &BTreeSet<Actor>, sigs: &mut Sigs) -> Passes {
+    let (mut ok, mut bad) = (0usize, cx.seals.bad);
     let mut covered: BTreeMap<Actor, u64> = BTreeMap::new();
     let mut tips: Vec<[u8; 32]> = Vec::new();
     let blind = !cx.v.checks_signatures();
-    let cap = cx.ch.recs.len() + 1;
-    for h in cx.heads {
-        let mut cur = h.seal;
-        let mut first = true;
-        let mut steps = 0usize;
-        while let Some(at) = cur {
-            steps += 1;
-            if steps > cap {
-                bad += 1;
-                break;
-            }
-            let Some(s) = cx.st.check_obj(at).ok().and_then(|_| read_seal(cx.st, at)) else {
-                bad += 1;
-                break;
-            };
-            let head_agrees = !first || (s.actor_id == h.actor_id && s.seq == h.seq && s.tip == h.tip);
-            first = false;
-            let key = keys.iter().find(|k| k.actor_id == s.actor_id);
-            // The previous seal's tip; a seal with no previous seal (the device's first, or
-            // its oldest kept after a cut) reads it from the segment's frontier, else 0^32.
-            let prev_tip = s
-                .prev
-                .and_then(|p| read_seal(cx.st, p))
-                .map(|p| p.tip)
-                .or_else(|| frontier_at(cx.segs, &s.actor_id, s.seq.wrapping_sub(1)).map(|f| f.tip))
-                .unwrap_or([0u8; 32]);
-            let names_record = cx.ch.ids_at.get(&(s.actor_id, s.seq)).is_some_and(|ids| ids.contains(&s.tip));
-            let good = head_agrees
-                && names_record
-                && admitted.contains(&s.actor_id)
-                && key.is_some_and(|k| k.valid_at(s.seq) && k.alg == s.alg && match sigs.binary_search_by_key(&at, |e| e.0) {
-                    Ok(i) => sigs.get(i).is_some_and(|e| e.1),
-                    Err(i) => {
-                        let yes = cx.v.verify(s.alg, &k.pk, &message(&s.actor_id, s.seq, &s.tip, s.claimed_ms, &prev_tip), &s.sig);
-                        sigs.insert(i, (at, yes));
-                        yes
-                    }
-                });
-            if good || blind {
-                tips.push(s.tip);
-            }
-            if good {
-                ok += 1;
-                let e = covered.entry(s.actor_id).or_insert(0);
-                *e = (*e).max(s.seq);
-            } else {
-                bad += 1;
-            }
-            cur = s.prev;
+    for (it, answer) in cx.seals.all.iter().zip(sigs.iter_mut()) {
+        let s = &it.seal;
+        let at = cx.key_ix.get(&s.actor_id).map(|i| *i as usize);
+        let key = at.and_then(|i| keys.get(i));
+        let names_record = cx.ch.ids_at.get(&(s.actor_id, s.seq)).is_some_and(|ids| ids.contains(&s.tip)) && !cx.off_seq.contains(&s.tip);
+        let good = it.agrees
+            && names_record
+            && at.is_some_and(|i| cx.bound.get(i).copied().unwrap_or(false))
+            && admitted.contains(&s.actor_id)
+            && at.is_some_and(|i| revoked.get(i).is_some_and(|r| valid_at(*r, s.seq)))
+            && key.is_some_and(|k| k.alg == s.alg && *answer.get_or_insert_with(|| cx.v.verify(s.alg, &k.pk, &message(&s.actor_id, s.seq, &s.tip, s.claimed_ms, &it.prev_tip), &s.sig)));
+        if good || blind {
+            tips.push(s.tip);
+        }
+        if good {
+            ok += 1;
+            let e = covered.entry(s.actor_id).or_insert(0);
+            *e = (*e).max(s.seq);
+        } else {
+            bad += 1;
         }
     }
     (ok, bad, covered, tips)
 }
 
-/// Keys the records admit, given who is already admitted and what their ok seals cover.
-fn admit_more(cx: &Cx<'_>, keys: &[Key], admitted: &mut BTreeSet<Actor>, covered: &BTreeMap<Actor, u64>) -> bool {
+/// Keys the records admit, given who is already admitted and what their ok seals cover. The ADMIT
+/// must be `sound`: a number a forger picked, on a record the counters call broken, admits nobody.
+fn admit_more(cx: &Cx<'_>, keys: &[Key], revoked: &[i64], admitted: &mut BTreeSet<Actor>, covered: &BTreeMap<Actor, u64>) -> bool {
     let mut grew = false;
     for k in keys {
         if admitted.contains(&k.actor_id) {
             continue;
         }
         let Some(at) = k.admit_rec else { continue };
-        let Some((_, r)) = cx.ch.recs.iter().find(|(o, _)| *o == at) else { continue };
-        let Some((actor, alg, valid_from, pk)) = parse_admit(cx.ids.body(r.flags, &r.payload)) else { continue };
-        let same = actor == k.actor_id && alg == k.alg && valid_from == k.valid_from && pk == k.pk;
+        let Some(i) = cx.ch.by_obj.get(&at_key(at)).map(|i| *i as usize) else { continue };
+        let Some((_, r)) = cx.ch.recs.get(i) else { continue };
+        if !cx.sound.get(i).copied().unwrap_or(false) || cx.ids.redacted(r.flags, &r.payload) {
+            continue;
+        }
+        let Some((actor, alg, valid_from, pk)) = admit_view(cx.ids.body(r.flags, &r.payload)) else { continue };
+        let same = actor == k.actor_id && alg == k.alg && valid_from == k.valid_from && pk == k.pk.as_slice();
         let by = r.actor_pubkey;
-        let by_key = keys.iter().find(|x| x.actor_id == by);
-        let authorised = admitted.contains(&by)
-            && covered.get(&by).is_some_and(|&s| s >= r.actor_seq)
-            && by_key.is_some_and(|x| x.valid_at(r.actor_seq));
+        let by_valid = cx.key_ix.get(&by).and_then(|i| revoked.get(*i as usize)).is_some_and(|c| valid_at(*c, r.actor_seq));
+        let authorised = admitted.contains(&by) && covered.get(&by).is_some_and(|&s| s >= r.actor_seq) && by_valid;
         if same && authorised {
             admitted.insert(k.actor_id);
             grew = true;
@@ -181,32 +165,36 @@ fn admit_more(cx: &Cx<'_>, keys: &[Key], admitted: &mut BTreeSet<Actor>, covered
     grew
 }
 
-/// The table with `revoked_at` as these REVOKEs say; nothing of the table's own survives.
-fn narrowed(keys: &[Key], in_force: &[(Actor, i64)]) -> Vec<Key> {
-    let cell = |k: &Key| in_force.iter().filter(|(a, _)| *a == k.actor_id).fold(0, |c, (_, after)| narrower(c, *after));
-    keys.iter().map(|k| Key { revoked_at: cell(k), ..k.clone() }).collect()
+/// Per key, `revoked_at` as these REVOKEs say; nothing of the table's own survives.
+fn narrowed(keys: &[Key], in_force: &[(Actor, i64)]) -> Vec<i64> {
+    let mut cell: BTreeMap<Actor, u64> = BTreeMap::new();
+    for (a, after) in in_force {
+        let e = cell.entry(*a).or_insert(0);
+        *e = narrower(*e as i64, *after) as u64;
+    }
+    keys.iter().map(|k| cell.get(&k.actor_id).map_or(0, |c| *c as i64)).collect()
 }
 
 /// The admission fixpoint under `in_force`, and what it makes effective.
 fn round(cx: &Cx<'_>, table: &[Key], trusted: &BTreeSet<Actor>, in_force: &[(Actor, i64)], sigs: &mut Sigs) -> Round {
-    let keys = narrowed(table, in_force);
-    let mut admitted: BTreeSet<Actor> = trusted.iter().copied().collect();
-    let (mut ok, mut bad, mut covered, mut tips) = seals(cx, &keys, &admitted, sigs);
-    for _ in 0..=keys.len() {
-        if !admit_more(cx, &keys, &mut admitted, &covered) {
+    let revoked = narrowed(table, in_force);
+    let mut admitted = set_of(trusted.iter().copied());
+    let (mut ok, mut bad, mut covered, mut tips) = seals(cx, table, &revoked, &admitted, sigs);
+    for _ in 0..=table.len() {
+        if !admit_more(cx, table, &revoked, &mut admitted, &covered) {
             break;
         }
-        (ok, bad, covered, tips) = seals(cx, &keys, &admitted, sigs);
+        (ok, bad, covered, tips) = seals(cx, table, &revoked, &admitted, sigs);
     }
-    let declared = effective(&cx.ch.recs, cx.ids, &admitted, &covered, cx.v.checks_signatures());
-    Round { keys, admitted, ok, bad, tips, declared }
+    let declared = effective(&cx.ch.recs, cx.decls, &admitted, &covered, cx.v.checks_signatures());
+    Round { revoked, admitted, ok, bad, tips, covered, declared }
 }
 
 /// The alternating fixpoint: the final round, and how many REVOKEs stayed unsettled. It ends
 /// because `sure` only grows (round-of-round is monotone), and no further than the log's
 /// REVOKEs: a pass that adds nothing returns.
 pub(super) fn settle(cx: &Cx<'_>, table: &[Key], trusted: &BTreeSet<Actor>) -> (Round, usize) {
-    let mut sigs = Sigs::new();
+    let mut sigs: Sigs = vec![None; cx.seals.all.len()];
     let mut sure: Vec<(Actor, i64)> = Vec::new();
     loop {
         let first = round(cx, table, trusted, &sure, &mut sigs);

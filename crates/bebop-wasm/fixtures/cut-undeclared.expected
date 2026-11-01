@@ -1,0 +1,5 @@
+# Three sealed records cut under a SEG and no TRUNCATE on the kept chain: 75.
+# Written by doc/spec/fixture_wishes.rs (W-MG-READ), BEBOP_RULE_FIXTURES=<dir>; deterministic.
+doc_n=2
+doc_root=936859044395617976
+doc_verify=status=75

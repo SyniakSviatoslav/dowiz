@@ -26,36 +26,48 @@
 //! declared) still balances when a declaration and its tombstones part ways at a cut. The
 //! rows are the FRONTIER at the cut, one per device: the `(seq, tip)` of its newest cut
 //! record, which is the `prev_tip` its oldest kept seal signed (`seal.rs`) -- a seal with no
-//! `ref PREV_SEAL` reads it here. The rows are bound by the seals that cite them, the root
-//! and the counts by the TRUNCATE that names them; the SEG object itself proves nothing.
+//! `ref PREV_SEAL` reads it here.
+//!
+//! THE SEG HASH (W-MG-HOLES). A seal citing a row proved nothing: a moved or added row excused a
+//! hole in the kept log, and the counts of a segment below the newest were nobody's claim, though
+//! `verify` sums them (`atk_holes` holes 5, 6). So `chain_hash` runs over EVERY cell of every
+//! segment that means anything, rows and counts included, oldest first, each hash over the one
+//! below it, and the TRUNCATE signs the newest. One signature on the newest covers the chain; a
+//! later cut may take the older TRUNCATE records. What it does NOT cover: the records that left.
+//! `root` names their ids, and a tombstone keeps its id, so a tombstone's bytes under a cut are
+//! bound only by a FORGOTTEN still in the file; the archive is what shows them.
 //!
 //! The bodies, found through `Ids::body` like `keys.rs`'s:
 //!
 //! ```text
-//! TRUNCATE   "bebop-truncate/1" ‖ root 32 ‖ prev_root 32 ‖ first LE8 ‖ last LE8 ‖ redacted LE8 ‖ declared LE8
-//! FORGOTTEN  "bebop-forgotten/1" ‖ n_redacted LE8 ‖ subject 32
+//! TRUNCATE   "bebop-truncate/1" ‖ root 32 ‖ prev_root 32 ‖ first LE8 ‖ last LE8 ‖ redacted LE8 ‖ declared LE8 ‖ seg_hash 32
+//! FORGOTTEN  "bebop-forgotten/1" ‖ n_redacted LE8 ‖ subject 32 ‖ (id 32 ‖ digest 32) × n_redacted
 //! ```
 //!
 //! A TRUNCATE is EFFECTIVE when its record chains, its actor is admitted and an ok seal of
-//! that actor covers its seq (`declare.rs`). It names its segment exactly (all six fields)
-//! and the segment before it by root, so one effective TRUNCATE vouches for the chain of
-//! segments under it: a later cut may take an earlier TRUNCATE record with it. A FORGOTTEN
-//! is effective under the same rule; `verify` sums its `n_redacted` as `declared`. Why the
-//! declaration is signed and the nonce erased with the fields: §2c -- an erased id must
+//! that actor covers its seq (`declare.rs`). A FORGOTTEN is effective under the same rule;
+//! `verify` sums its `n_redacted` as `declared`. It LISTS what it covers: each tombstone's id and
+//! its `digest`, `Ids::chained` over the tombstone as it now stands (flags, actor, seq, `prev`,
+//! tombstone payload), because the id itself stopped checking those. A tombstone is a mark
+//! anyone can set, so a count alone balanced whichever record a forger erased (`atk_holes` hole 3).
+//! Why the declaration is signed and the nonce erased with the fields: §2c -- an erased id must
 //! confirm no guess (`dowiz-hub/src/forget/tests.rs` enumerates ten thousand phones).
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::{Store, StoreError, Tx};
-use super::{cells_of, cells_to_id, id_to_cells, DocError};
+use super::budget::Budget;
+use super::{cells_of, cells_to_id, id_to_cells, DocError, Ids};
+pub use super::forgotten::{forgotten_body, parse_forgotten, Erased, FORGOTTEN_MARK};
 
 pub const SEG_VERSION: i64 = 1;
 pub const LAYOUT_SEG: &str = "SEG{i64,i64,i64,i64,i64,i64,i64,ref SEG,ref BLOB,i64,i64,i64,[i64,i64,i64,i64,i64,i64,i64,i64,i64,i64]}";
 /// `st_digest(LAYOUT_SEG)`; 3288852188 was the 9-cell row without `scheme` (`dsa_tests.rs`
 /// keeps it as the control). Mirrored by `tools/verify` (python) -- tell its owner on a move.
 pub const DIGEST_SEG: i64 = 2192499951;
+/// The tag in front of `seg_message`.
+pub const SEG_TAG: &[u8] = b"bebop-seg/1";
 pub const TRUNCATE_MARK: &[u8] = b"bebop-truncate/1";
-pub const FORGOTTEN_MARK: &[u8] = b"bebop-forgotten/1";
 const SEG_HEAD: usize = 12;
 const SEG_ROW: usize = 10;
 /// The `scheme` cell of a frontier row: no chained record of the device yet ...
@@ -86,6 +98,35 @@ pub struct Segment {
     pub redacted: u64,
     pub declared: u64,
     pub frontier: Vec<Frontier>,
+    /// `chain_hash` with this segment on top. Only `Doc::cut_into` fills it, for
+    /// `truncate_body`; a segment read back holds 0^32 and `verify` recomputes the chain.
+    pub seg_hash: [u8; 32],
+}
+
+/// What one segment's hash covers, `below` being the hash of the segment under it (0^32 for the
+/// oldest): every field a reader acts on. `blob` as a bit: BLOB is 0 and its offset is not a fact.
+pub fn seg_message(s: &Segment, below: &[u8; 32]) -> Vec<u8> {
+    let mut m = Vec::with_capacity(SEG_TAG.len() + 121 + s.frontier.len() * 80);
+    m.extend_from_slice(SEG_TAG);
+    m.extend_from_slice(below);
+    m.extend_from_slice(&s.root);
+    m.push(s.blob.is_some() as u8);
+    for n in [s.first, s.last, s.redacted, s.declared, s.frontier.len() as u64] {
+        m.extend_from_slice(&n.to_le_bytes());
+    }
+    for f in &s.frontier {
+        m.extend_from_slice(&f.actor_id);
+        m.extend_from_slice(&f.seq.to_le_bytes());
+        m.extend_from_slice(&f.tip);
+        m.extend_from_slice(&f.scheme.to_le_bytes());
+    }
+    m
+}
+
+/// The hash of a segment chain (`segs` newest first, as `read_segs` gives it). `None` when `ids`
+/// has no hash.
+pub fn chain_hash(segs: &[Segment], ids: &dyn Ids) -> Option<[u8; 32]> {
+    segs.iter().rev().try_fold([0u8; 32], |below, s| ids.hash(&seg_message(s, &below)))
 }
 
 impl Segment {
@@ -102,6 +143,7 @@ impl Segment {
         for n in [self.first, self.last, self.redacted, self.declared] {
             b.extend_from_slice(&n.to_le_bytes());
         }
+        b.extend_from_slice(&self.seg_hash);
         b
     }
 
@@ -120,6 +162,7 @@ pub struct Truncate {
     pub last: u64,
     pub redacted: u64,
     pub declared: u64,
+    pub seg_hash: [u8; 32],
 }
 
 fn le8(b: &[u8], at: usize) -> Option<u64> {
@@ -139,23 +182,8 @@ pub fn parse_truncate(body: &[u8]) -> Option<Truncate> {
         last: le8(r, 72)?,
         redacted: le8(r, 80)?,
         declared: le8(r, 88)?,
+        seg_hash: id32(r, 96)?,
     })
-}
-
-/// The FORGOTTEN declaration: `n` records of `subject` (a hash of the person's key, never
-/// the key) were redacted in place.
-pub fn forgotten_body(n: u64, subject: &[u8; 32]) -> Vec<u8> {
-    let mut b = Vec::with_capacity(FORGOTTEN_MARK.len() + 40);
-    b.extend_from_slice(FORGOTTEN_MARK);
-    b.extend_from_slice(&n.to_le_bytes());
-    b.extend_from_slice(subject);
-    b
-}
-
-/// `(n, subject)` of a FORGOTTEN body.
-pub fn parse_forgotten(body: &[u8]) -> Option<(u64, [u8; 32])> {
-    let r = body.strip_prefix(FORGOTTEN_MARK)?;
-    Some((le8(r, 0)?, id32(r, 8)?))
 }
 
 /// One SEG object; `None` for a wrong digest, version or length.
@@ -163,8 +191,14 @@ pub fn read_seg(st: &Store, at: usize) -> Option<Segment> {
     if st.obj_digest(at) != DIGEST_SEG || st.obj_cells(at) < SEG_HEAD || st.get(at, 0) != SEG_VERSION {
         return None;
     }
-    let m = st.get(at, 11).max(0) as usize;
-    if st.obj_cells(at) != SEG_HEAD + m * SEG_ROW {
+    // Against the object and in the cell's own width: `m * SEG_ROW` wraps on wasm32 at 2^31 rows.
+    let rows = st.obj_cells(at) - SEG_HEAD;
+    if rows % SEG_ROW != 0 || (rows / SEG_ROW) as i64 != st.get(at, 11).max(0) {
+        return None;
+    }
+    let m = rows / SEG_ROW;
+    // Compared as the u64s the counters read them as: a segment is at least one record.
+    if (st.get(at, 2) as u64) < (st.get(at, 1) as u64) {
         return None;
     }
     let prev = st.follow(at, 7);
@@ -185,6 +219,7 @@ pub fn read_seg(st: &Store, at: usize) -> Option<Segment> {
         redacted: st.get(at, 9) as u64,
         declared: st.get(at, 10) as u64,
         frontier,
+        seg_hash: [0u8; 32],
     })
 }
 
@@ -198,12 +233,18 @@ fn read_seg_root(st: &Store, at: usize) -> Option<[u8; 32]> {
 /// chain (a shorter chain would be fewer segments to declare). `cap` bounds a chain that
 /// does not end.
 pub fn read_segs(st: &Store, newest: Option<usize>, cap: usize) -> Result<Vec<Segment>, DocError> {
+    read_segs_in(st, newest, cap, &mut Budget::of(st))
+}
+
+/// `read_segs` paying from `budget`, before each read.
+pub(crate) fn read_segs_in(st: &Store, newest: Option<usize>, cap: usize, budget: &mut Budget) -> Result<Vec<Segment>, DocError> {
     let mut out = Vec::new();
     let mut cur = newest;
     while let Some(at) = cur {
         if out.len() >= cap {
             return Err(DocError::Corrupt("the segment chain never ends"));
         }
+        budget.spend(st, at)?;
         st.check_obj(at)?;
         let s = read_seg(st, at).ok_or(DocError::Corrupt("a ref SEG names an object that is not a SEG"))?;
         cur = s.prev;
@@ -216,11 +257,6 @@ pub fn read_segs(st: &Store, newest: Option<usize>, cap: usize) -> Result<Vec<Se
 /// device stood when its records last left the file.
 pub fn frontier_of(segs: &[Segment], actor: &[u8; 32]) -> Option<Frontier> {
     segs.iter().find_map(|s| s.frontier.iter().find(|f| f.actor_id == *actor).copied())
-}
-
-/// The frontier row that binds `actor`'s position `seq`: `frontier_of`, when it sits at `seq`.
-pub fn frontier_at(segs: &[Segment], actor: &[u8; 32], seq: u64) -> Option<Frontier> {
-    frontier_of(segs, actor).filter(|f| f.seq == seq)
 }
 
 pub(crate) fn stage_seg(st: &mut Store, tx: &mut Tx, s: &Segment) -> Result<usize, StoreError> {

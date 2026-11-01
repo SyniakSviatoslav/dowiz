@@ -144,7 +144,7 @@ fn redact_acts(log: &mut LogImage, key: &str) -> Result<usize, HubError> {
     if n == 0 {
         return Ok(0);
     }
-    let mut size = store.to_bytes().len().max(crate::logimage::MIN_LOG_BYTES);
+    let mut size = store.image_bytes().max(crate::logimage::MIN_LOG_BYTES);
     let fresh = loop {
         match crate::forget::rebuilt(&records, tip, size) {
             Ok(fresh) => break fresh,
@@ -152,7 +152,7 @@ fn redact_acts(log: &mut LogImage, key: &str) -> Result<usize, HubError> {
             Err(e) => return Err(e),
         }
     };
-    *log = LogImage::load(&fresh.to_bytes())?;
+    log.reload(&fresh.to_bytes())?;
     Ok(n)
 }
 
@@ -161,7 +161,7 @@ fn redact_acts(log: &mut LogImage, key: &str) -> Result<usize, HubError> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ConsentCheck {
     pub records: usize,
-    /// Verified as `sha256(prev ‖ payload)` (M0).
+    /// Verified under `chain_id` (M0, W-MG-HOLES).
     pub chained: usize,
     /// Verified under a pre-M0 FNV scheme, and older than every sha256 record (`chain.rs`).
     pub legacy: usize,
@@ -183,7 +183,7 @@ pub fn chain_check(log: &LogImage) -> ConsentCheck {
     let tip = EvLog::tip(&store);
     let walked = EvLog::walk(&store);
     let mut out = ConsentCheck::default();
-    let schemes: Vec<Option<IdScheme>> = walked.iter().map(|r| verify_id(r.flags, &r.prev, &r.payload, &r.id)).collect();
+    let schemes: Vec<Option<IdScheme>> = walked.iter().map(verify_id).collect();
     // The scheme moves forward once (`chain::walk_check`): a legacy id newer than any sha256
     // record is a repair under the retired scheme. Newest first, so "newer" is a lower index.
     let oldest_sha = schemes.iter().rposition(|s| *s == Some(IdScheme::Sha256));

@@ -197,7 +197,7 @@ fn tree_compacted_is_one_build_with_a_bounded_arena() {
         assert!(cap >= 2 * used, "n={n}: capacity {cap} leaves less than as much again over {used} used");
         assert!(cap < 2 * used + compact::CAP_GRID, "n={n}: capacity {cap} is more than a grid step over twice {used} used");
         assert_eq!(cap % compact::CAP_GRID, 0, "n={n}: capacity {cap} is off the 16 KiB grid");
-        assert_eq!(Store::from_bytes(&fast).cells.len() * 8, cap, "n={n}: from_bytes pads to the capacity");
+        assert_eq!(Store::from_bytes(&fast).image_bytes(), cap, "n={n}: the writer's capacity survives the read");
     }
 }
 

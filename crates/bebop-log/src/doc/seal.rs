@@ -27,6 +27,7 @@
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::{Store, StoreError, Tx};
+use bebop_image::idx_end;
 use super::{bytes_to_cells, cells_of, cells_to_bytes, cells_to_id, id_to_cells};
 
 pub const SEAL_VERSION: i64 = 1;
@@ -85,7 +86,7 @@ pub fn read_seal(st: &Store, at: usize) -> Option<Seal> {
     if !(0..=MAX_SIG_BYTES as i64).contains(&sig_len) {
         return None;
     }
-    let n_cells = (sig_len as usize).div_ceil(8);
+    let n_cells = idx_end(sig_len).div_ceil(8);
     if st.obj_cells(at) != SEAL_HEAD + n_cells {
         return None;
     }
@@ -98,7 +99,7 @@ pub fn read_seal(st: &Store, at: usize) -> Option<Seal> {
         prev: st.follow(at, 11),
         time: st.follow(at, 12),
         alg: st.get(at, 13),
-        sig: cells_to_bytes(&cells_of(st, at, SEAL_HEAD, n_cells), sig_len as usize),
+        sig: cells_to_bytes(&cells_of(st, at, SEAL_HEAD, n_cells), idx_end(sig_len)),
     })
 }
 
@@ -108,7 +109,7 @@ pub fn read_heads(st: &Store, heads: Option<usize>) -> Vec<Head> {
     if st.obj_digest(t) != DIGEST_HEADS || st.obj_cells(t) < 1 {
         return Vec::new();
     }
-    let m = st.get(t, 0).max(0) as usize;
+    let m = idx_end(st.get(t, 0).max(0));
     let m = m.min(st.obj_cells(t).saturating_sub(1) / HEADS_ROW);
     (0..m)
         .map(|i| {

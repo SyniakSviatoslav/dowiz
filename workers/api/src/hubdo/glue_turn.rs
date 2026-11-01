@@ -80,9 +80,6 @@ impl HubImages {
         let (gen, bytes) = self.stock_bytes().await?;
         let mut log = StockLog::load(&bytes).map_err(|_| Error::RustError("stock image is unreadable".into()))?;
         log.set_clock(input.now_ms);
-        if let Some(seed) = crate::entropy_seed() {
-            log.set_entropy(seed); // M0
-        }
         self.arm_scheme(&mut log);
         let before = log.len();
         let t = Tail { ctx: input.ctx, base, tip, recs: input.tail };
@@ -104,9 +101,6 @@ impl HubImages {
     pub(super) async fn desk_route(&self, input: DeskIn) -> Result<Response> {
         let (gen, bytes) = self.stock_bytes().await?;
         let mut log = StockLog::load(&bytes).map_err(|_| Error::RustError("stock image is unreadable".into()))?;
-        if let Some(seed) = crate::entropy_seed() {
-            log.set_entropy(seed); // M0
-        }
         self.arm_scheme(&mut log);
         let mut closed = false;
         if let Some(did) = &input.did {

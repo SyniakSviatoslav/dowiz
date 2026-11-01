@@ -71,7 +71,7 @@ impl Kv {
         if n < 0 {
             return None;
         }
-        let n = n as usize;
+        let n = bebop_image::idx(n)?;
         if n.checked_mul(2)? > kidx_cells.min(vidx_cells) {
             return None;
         }
@@ -79,11 +79,11 @@ impl Kv {
             if off < 0 || len < 0 {
                 return None;
             }
-            let end = (off as usize).checked_add(len as usize)?;
-            if end > cells {
+            let (off, len) = (bebop_image::idx(off)?, bebop_image::idx(len)?);
+            if off.checked_add(len)? > cells {
                 return None;
             }
-            Some(len as usize)
+            Some(len)
         };
         let mut entries = Vec::with_capacity(n);
         // EVERY ENTRY OWNS ITS OWN BYTES, so the entries together cannot be
@@ -92,6 +92,7 @@ impl Kv {
         // n × blob, and a crafted index made one `load` allocate quadratically
         // in the image. An index that over-claims the blobs is refused.
         let mut budget = kblob_cells.checked_add(vblob_cells)?;
+        let mut last: Option<Vec<u8>> = None;
         for i in 0..n {
             let ko = st.get(kidx, 2 * i);
             let kl = st.get(kidx, 2 * i + 1);
@@ -100,7 +101,7 @@ impl Kv {
             let kl = fits(ko, kl, kblob_cells)?;
             let vl = fits(vo, vl, vblob_cells)?;
             budget = budget.checked_sub(kl.checked_add(vl)?)?;
-            let (ko, vo) = (ko as usize, vo as usize);
+            let (ko, vo) = (bebop_image::idx(ko)?, bebop_image::idx(vo)?);
             // KEYS ARE UTF-8 BYTES AND MUST BE DECODED AS UTF-8. This read
             // `(byte as char)`, which is not a decode at all -- in Rust that
             // maps a `u8` to the code point of the same value, which is exactly
@@ -115,7 +116,14 @@ impl Kv {
             // Lossy rather than strict: a key that is already damaged must still
             // be readable, or this fix would make an affected image unopenable
             // instead of repairable.
-            let k = key_of(copy(st, kblob, ver, ko, kl)?);
+            let raw = copy(st, kblob, ver, ko, kl)?;
+            // STRICTLY ASCENDING IN RAW BYTES, or it is no base (W-MG-ATK3): every writer sorts,
+            // and readers answered differently on one that did not.
+            if last.as_ref().is_some_and(|l| *l >= raw) {
+                return None;
+            }
+            let k = key_of(raw.clone());
+            last = Some(raw);
             let v = copy(st, vblob, ver, vo, vl)?;
             entries.push((k, v));
         }

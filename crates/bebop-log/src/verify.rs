@@ -40,10 +40,13 @@ impl EvLog {
         let mut budget = st.cells.len();
         let mut n = 0usize;
         let mut cur = st.follow(root, 1);
+        // A RECORD SHORTER THAN ITS HEAD IS NO RECORD: `read_at` would take its id and `prev` from
+        // the object after it (W-MG-ATK3 doc_short_record).
+        let head = Self::head_cells(Self::version_at(st, Some(root)));
         while let Some(obj) = cur {
             n += 1;
             let cost = st.obj_cells(obj).saturating_add(2);
-            if n > cap || cost > budget {
+            if n > cap || cost > budget || st.obj_cells(obj) < head {
                 return Ok(None);
             }
             budget -= cost;

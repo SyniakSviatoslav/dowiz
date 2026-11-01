@@ -8,7 +8,6 @@ use bebop_store::evlog::doc::keys::{key_rows, read_key, Key, DIGEST_KEY, DIGEST_
 use bebop_store::evlog::doc::seal::{message, read_heads, read_seal, Seal, DIGEST_HEADS, DIGEST_SEAL, SEAL_VERSION};
 use bebop_store::evlog::doc::{self, id_cells, Doc, KeyOp, Report, Signer, Trust, DIGEST_DOC, DOC_CELLS, ROOT_VERSION_DOC};
 use bebop_store::evlog::{pack_payload, EvLog, Record, FLAG_SHA256};
-use bebop_store::nodekey::sha256;
 use bebop_store::{Store, Tx};
 use dowiz_hub::doc_seal::{DeviceKey, HubIds, MlDsa65, SealedHub};
 use dowiz_hub::{EventKind, Hub};

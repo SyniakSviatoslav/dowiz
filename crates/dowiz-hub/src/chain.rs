@@ -8,7 +8,8 @@
 //! ── TWO SCHEMES, AND THE RECORD SAYS WHICH (M0, 2026-10-30) ──
 //!
 //! A record written since M0 carries `FLAG_SHA256` in its flags cell, a 16-byte
-//! nonce at the front of its payload, and `id = sha256(prev ‖ payload)` -- the
+//! nonce at the front of its payload, and `id` = sha256 over `doc::id_message` (tag, flags, actor,
+//! seq, `prev`, payload; W-MG-HOLES 2026-10-31, M0 hashed `prev ‖ payload` alone) -- the
 //! commitment `glue.rs` and `glue/wire.rs` had described since S0 while the code
 //! under them hashed with four lanes of FNV-1a. Every record written before is
 //! LEGACY: its id is `legacy_id_chained` (FNV over `prev ‖ payload`, 2026-09-20
@@ -45,7 +46,7 @@ use crate::{Hub, HubError};
 
 mod scheme;
 pub use scheme::IdScheme;
-pub(crate) use scheme::{body_of, chain_id, flags_for, id_for, legacy_id, legacy_id_chained, verify_id, with_nonce, Entropy, ERASED_NONCE, NONCE_LEN};
+pub(crate) use scheme::{body_of, chain_id, derived_nonce, flags_for, legacy_id, legacy_id_chained, legacy_scheme, record_id, stock_flags, stock_id, verify_id, with_nonce, Entropy, ERASED_NONCE, NONCE_LEN};
 
 impl Hub {
     /// Walk the chain and check every id against the payload it names.
@@ -126,7 +127,7 @@ pub(crate) fn walk_check(walked: &[Record], tip: Option<[u8; 32]>, tombstone: im
     let mut kinds: Vec<Kind> = walked
         .iter()
         .enumerate()
-        .map(|(at, r)| match verify_id(r.flags, &r.prev, &r.payload, &r.id) {
+        .map(|(at, r)| match verify_id(r) {
             Some(IdScheme::Sha256) => Kind::Chained,
             Some(_) => Kind::Legacy,
             None if tombstone(walked, at, tip) => Kind::Redacted,
@@ -210,7 +211,7 @@ pub(crate) fn hex32(b: &[u8; 32]) -> String {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ChainCheck {
     pub records: usize,
-    /// Verified as `sha256(prev ‖ payload)` (M0).
+    /// Verified under `chain_id` (M0, W-MG-HOLES).
     pub chained: usize,
     /// Verified only under a pre-M0 FNV scheme, and older than every sha256 record.
     pub legacy: usize,

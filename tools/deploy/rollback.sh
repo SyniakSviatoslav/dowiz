@@ -18,7 +18,7 @@
 # <platform>/api/auth/login. The token file is sourced only in the subshell that runs wrangler, never printed.
 #
 # THE sha256 FLOOR (W-MG-MIG, 2026-10-31; docs/design/MIGRATION-sha256-ids.md). Once any venue is flipped to
-# sha256 record ids (SHA256_VENUES in wrangler.toml, recorded by deploy.sh in $FLIP_MARK), the target must be
+# sha256 record ids (SHA256_VENUES in wrangler.toml; `flip_evidence` below lists the four witnesses), the target must be
 # a build that READS sha256: deploy.sh records every version it uploads in $VERSIONS and the first one whose
 # wrangler.toml declared SHA256_VENUES in $FLOOR_MARK; a target not recorded at or after that line is REFUSED
 # (exit 53) before anything is touched. Measured with the real binary: an older build does not refuse those
@@ -55,21 +55,38 @@ case "${1:-}" in
 esac
 
 # ── 0 THE sha256 FLOOR ───────────────────────────────────────────────────────────────────────────────────
-# floor_ok <version>: 0 when <version> is recorded in $VERSIONS at or after the floor's line; 1 otherwise.
+# floor_ok <version>: 0 when <version> is recorded in $VERSIONS at or after the floor's line, as a build that DECLARED
+# the var (W-MG-TRANS H9: a later commit without it has no reader, whatever its line number); 1 otherwise.
 floor_ok() {
   [ -r "$FLOOR_MARK" ] && [ -r "$VERSIONS" ] || return 1
   floor=$(head -1 "$FLOOR_MARK" | cut -d' ' -f1); [ -n "$floor" ] || return 1
-  awk -v floor="$floor" -v want="$1" '$3 == floor { seen = 1 } seen && $3 == want { ok = 1 } END { exit ok ? 0 : 1 }' "$VERSIONS"
+  awk -v floor="$floor" -v want="$1" '$3 == floor { seen = 1 } seen && $3 == want && / declared=1( |$)/ { ok = 1 } END { exit ok ? 0 : 1 }' "$VERSIONS"
 }
-if [ $MODE = rollback ] && [ -f "$FLIP_MARK" ]; then
-  echo "== sha256 floor: $(head -1 "$FLIP_MARK")"
+# flip_evidence: what says a venue was flipped, or nothing. THE MARK IS NOT THE ONLY WITNESS (W-MG-TRANS H1): it lives in
+# one cache directory on one box, and "no mark" used to mean "no flip", which switched prod over flipped venues. So: the
+# mark; any version recorded with a list; the tree's wrangler.toml (unparsable counts); any commit that ever set a list.
+flip_evidence() {
+  if [ -f "$FLIP_MARK" ]; then head -1 "$FLIP_MARK"; [ -s "$FLIP_MARK" ] || echo "flip mark $FLIP_MARK"; return; fi
+  line=$(grep -E ' sha256_venues=[^ ]' "$VERSIONS" 2>/dev/null | tail -1)
+  if [ -n "$line" ]; then echo "versions.log: $line"; return; fi
+  here=$(cd "$(dirname "$0")" && pwd)
+  toml=$REPO/workers/api/wrangler.toml
+  if ! var=$(python3 "$here/scheme_var.py" "$toml" 2>/dev/null); then echo "$toml does not parse"; return; fi
+  if [ -n "${var#* }" ]; then echo "$toml: SHA256_VENUES=\"${var#* }\""; return; fi
+  commit=$(git -C "$REPO" log -1 --format=%h -G"^[[:space:]]*SHA256_VENUES[[:space:]]*=[[:space:]]*[\"'][^\"']" -- workers/api/wrangler.toml 2>/dev/null)
+  if [ -n "$commit" ]; then echo "commit $commit set SHA256_VENUES"; fi
+}
+FLIPPED=
+[ $MODE = rollback ] && FLIPPED=$(flip_evidence)
+if [ -n "$FLIPPED" ]; then
+  echo "== sha256 floor: $FLIPPED"
   if floor_ok "$VERSION"; then
     echo "   $VERSION reads sha256 records (recorded at or after the floor $(head -1 "$FLOOR_MARK" | cut -d' ' -f1)); a flipped venue keeps writing them"
   elif [ "${ROLLBACK_PAST_FLOOR:-}" = 1 ]; then
     echo "   PAST THE FLOOR by ROLLBACK_PAST_FLOOR=1: $VERSION will QUARANTINE every order written since the flip, write FNV"
     echo "   records after them that every later build counts broken, and strip the flag on its next grow"
   else
-    fail 53 "floor: venues write sha256 records ($(head -1 "$FLIP_MARK")) and $VERSION is not recorded at or after the floor $(head -1 "$FLOOR_MARK" 2>/dev/null | cut -d' ' -f1) in $VERSIONS -- it would QUARANTINE every order written since the flip (reason=kind), write FNV records every later build counts broken, and strip the flag on its next grow. Roll back to the floor or later; ROLLBACK_PAST_FLOOR=1 overrides. Nothing was touched"
+    fail 53 "floor: venues write sha256 records ($FLIPPED) and $VERSION is not recorded at or after the floor $(head -1 "$FLOOR_MARK" 2>/dev/null | cut -d' ' -f1) in $VERSIONS -- it would QUARANTINE every order written since the flip (reason=kind), write FNV records every later build counts broken, and strip the flag on its next grow. Roll back to the floor or later; ROLLBACK_PAST_FLOOR=1 overrides. Nothing was touched"
   fi
 fi
 

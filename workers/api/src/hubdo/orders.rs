@@ -38,8 +38,12 @@ impl HubImages {
             Some(b) => self.load_log(generation, &b).map_err(|e| crate::image_err::unreadable("hub", e))?,
             // BORN SMALL, as `hubstore::load` does it: a hub created at 4 MiB
             // made the third order of the day exceed the isolate's limit.
-            None => dowiz_hub::Hub::create_sized(64 * 1024)
-                .map_err(|_| Error::RustError("cannot create hub image".into()))?,
+            None => {
+                // A venue's first order: the door the behaviour check found (W-MG-TRANS).
+                let mut hub = dowiz_hub::Hub::create_sized(64 * 1024).map_err(|_| Error::RustError("cannot create hub image".into()))?;
+                self.arm_scheme(&mut hub);
+                hub
+            }
         };
         let kind = dowiz_hub::EventKind::from_u8(ev.kind)
             .ok_or_else(|| Error::RustError(format!("unknown event kind {}", ev.kind)))?;
@@ -137,9 +141,6 @@ impl HubImages {
             ),
         };
         stock.set_clock(input.now_ms);
-        if let Some(seed) = crate::entropy_seed() {
-            stock.set_entropy(seed); // M0 (a fresh stock image has no seed yet)
-        }
         self.arm_scheme(&mut stock);
         let settled_before = stock.len();
 

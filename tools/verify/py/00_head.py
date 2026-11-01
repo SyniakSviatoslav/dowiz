@@ -48,6 +48,7 @@ MAX_VALUE_BYTES = 1 << 30
 MAX_SIG_BYTES = MAX_PK_BYTES = 65536
 MAX_BLOB_BYTES = 16 << 20
 FLAG_SHA256, NONCE_LEN = 2, 16
+ID_TAG, SEG_TAG = b"bebop-record/1", b"bebop-seg/1"  # id v2, the SEG hash (W-MG-HOLES; FORMAT §9.2, §9.4)
 REVOKE_MARK, REDACTED_BIT = b"bebop-revoke/1", 0x80
 # Word for word bebop-wasm-reader `status.rs` TABLE: tools/gates/maingoal.sh holds the surfaces to one text.
 WORDS = {0: "OK: read; n = entries or records, root = the FNV-1a 64 fold (a DOC's root is its log's fold)",
@@ -76,8 +77,9 @@ def to_i64(u):
     return u - (1 << 64) if u >= 1 << 63 else u
 
 
-def lossy(kb):
-    return kb.decode("utf-8", "replace").encode("utf-8")
+def sat(v):
+    """A counter past i64 saturates: the line prints signed cells, and a file's claim wraps nothing."""
+    return min(v, (1 << 63) - 1)
 
 
 class Image:
@@ -86,6 +88,14 @@ class Image:
     def __init__(self, raw):
         self.n = len(raw) // 8
         self.b = raw[: self.n * 8]
+        self.left = self.n
+
+    def spend(self, o):
+        """`doc/budget.rs`: one budget of `n` cells for every walk of a `verify`, `2 + c` per object,
+        paid before it is read. The objects of an honest file are disjoint and cannot run it out."""
+        self.left -= self.obj_cells(o) + 2
+        if self.left < 0:
+            raise Refuse(2)
 
     def cell(self, i):
         return struct.unpack_from("<q", self.b, 8 * i)[0] if 0 <= i < self.n else 0

@@ -1,0 +1,257 @@
+/*
+ * W-MG-TAM: the DOC seal protocol under a symbolic attacker (FORMAT-BEBOP-IMAGE-v2 s9.4,
+ * the files under crates/bebop-log/src/doc). Trust::Only throughout: roots reach the verifier out of band.
+ * THIS FILE HAS NEVER BEEN PARSED OR PROVED. See README.md for why, and for what was run instead.
+ * A proved lemma here would be a statement about this model. It says nothing about the Rust.
+ *
+ * The file is the network: every record and seal goes to Out, and a "view" (one verify of one file)
+ * reads whatever the adversary hands it through In. Everything verify takes from unsigned cells
+ * (HEADS, KEYS, SEG rows, order across devices, ref PREV_SEAL) is therefore adversary-chosen.
+ */
+theory BebopSeal
+begin
+
+builtins: signing, hashing, natural-numbers
+
+functions: rid/4, sealmsg/5, digest/3, seg/4, row/3,
+           admit/2, revoke/2, revoke_all/1, truncate/1, forgotten/2, mergeb/2
+
+/* ---- restrictions ---- */
+restriction eq: "All x y #i. Eq(x, y)@i ==> x = y"
+restriction lt: "All %x %y #i. Lt(%x, %y)@i ==> %x << %y"
+restriction le: "All %x %y #i. Le(%x, %y)@i ==> (%x << %y | %x = %y)"
+
+/* A seal past an effective REVOKE is not ok. Effective = declare.rs:82, valid_at = keys.rs:74. */
+restriction revokes_bind:
+  "All v a b %s %k %c %u id #i #j #l #m.
+     Rec(v, a, %s, id, revoke(b, %k))@i & AdmittedA(v, a)@j & Covered(v, a, %c)@l
+     & (%s << %c | %s = %c) & UseKey(v, b, %u)@m ==> (%u << %k | %u = %k)"
+restriction revoke_all_binds:
+  "All v a b %s %c %u id #i #j #l #m.
+     Rec(v, a, %s, id, revoke_all(b))@i & AdmittedA(v, a)@j & Covered(v, a, %c)@l
+     & (%s << %c | %s = %c) & UseKey(v, b, %u)@m ==> F"
+/* The newest SEG must be named by an effective TRUNCATE, or status 75 (declare.rs:152). */
+restriction truncate_declared:
+  "All v S #i. NeedsTruncate(v, S)@i ==> Ex a %s id %c #j #k #l.
+     Rec(v, a, %s, id, truncate(S))@j & AdmittedA(v, a)@k & Covered(v, a, %c)@l
+     & (%s << %c | %s = %c)"
+/* The terms of holds (verify.rs:151). A 'status view models status 0 alone. */
+restriction holds_no_fork:
+  "All v a %s x y p q #h #i #j. Accept(v, 'holds')@h & Rec(v, a, %s, x, p)@i & Rec(v, a, %s, y, q)@j
+     ==> x = y"
+restriction holds_all_covered:
+  "All v a %s id p #h #i. Accept(v, 'holds')@h & Rec(v, a, %s, id, p)@i
+     ==> Ex %c #k. Covered(v, a, %c)@k & (%s << %c | %s = %c)"
+restriction holds_tombs_listed: /* foreign_tombs, declare.rs:132 */
+  "All v a %s id pid #h #i. Accept(v, 'holds')@h & Tomb(v, a, %s, id, pid)@i
+     ==> Ex w %q r %c #k #l #n. Rec(v, w, %q, r, forgotten(id, digest(a, %s, pid)))@k
+         & Covered(v, w, %c)@l & (%q << %c | %q = %c) & AdmittedA(v, w)@n
+         & (w = a | Ex #o. RootA(v, w)@o)"
+
+/* ---- keys ---- */
+rule Root:
+  let a = h(pk(~sk)) in
+  [ Fr(~sk) ] --[ Registered(a), IsRoot(a) ]->
+  [ !Ltk(a, ~sk), !Trusted(a, pk(~sk)), Dev(a, ~sk, %1, 'zero'), Out(pk(~sk)) ]
+
+rule Device:
+  let a = h(pk(~sk)) in
+  [ Fr(~sk) ] --[ Registered(a) ]->
+  [ !Ltk(a, ~sk), !DeviceKey(a, pk(~sk)), Dev(a, ~sk, %1, 'zero'), Out(pk(~sk)) ]
+
+/* A stolen non-root key. */
+rule Steal_Device: [ !Ltk(a, sk), !DeviceKey(a, p) ] --[ Compromised(a) ]-> [ Out(sk) ]
+/* A stolen root: used only by the limit lemmas, every other lemma assumes it away by name. */
+rule Steal_Root: [ !Ltk(a, sk), !Trusted(a, p) ] --[ Compromised(a), StolenRoot(a) ]-> [ Out(sk) ]
+/* A key the thief makes himself, so "for later" has a time: FreshAtk happens at a point in the trace. */
+rule Attacker_Key: [ Fr(~e) ] --[ FreshAtk(h(pk(~e))) ]-> [ Out(~e) ]
+
+/* ---- honest device commits: one record, one seal over it, seq by one (write.rs:93) ---- */
+rule Commit:
+  let id = rid(a, %s, t, ~p) in
+  [ Dev(a, sk, %s, t), Fr(~p) ] --[ Wrote(a, %s, id) ]->
+  [ Dev(a, sk, %s %+ %1, id), !Written(a, %s, id, t),
+    Out(<a, %s, t, ~p>), Out(sign(sealmsg(a, %s, id, 'ms', t), sk)) ]
+
+/* One seal over two records (write.rs:156): the lower record is under no signature of its own. */
+rule Commit_Many:
+  let i1 = rid(a, %s, t, ~p)
+      i2 = rid(a, %s %+ %1, i1, ~q) in
+  [ Dev(a, sk, %s, t), Fr(~p), Fr(~q) ] --[ Wrote(a, %s, i1), Wrote(a, %s %+ %1, i2) ]->
+  [ Dev(a, sk, %s %+ %1 %+ %1, i2), !Written(a, %s %+ %1, i2, i1),
+    Out(<a, %s, t, ~p>), Out(<a, %s %+ %1, i1, ~q>),
+    Out(sign(sealmsg(a, %s %+ %1, i2, 'ms', t), sk)) ]
+
+rule Commit_Admit:
+  let body = admit(b, pb)
+      id = rid(a, %s, t, body) in
+  [ Dev(a, sk, %s, t), !DeviceKey(b, pb) ] --[ Wrote(a, %s, id), AdmitWritten(a, %s, b) ]->
+  [ Dev(a, sk, %s %+ %1, id), Out(<a, %s, t, body>), Out(sign(sealmsg(a, %s, id, 'ms', t), sk)) ]
+
+/* Any key may revoke any key (settle.rs:11). after_seq is the revoker's choice, and no tip is named. */
+rule Commit_Revoke:
+  let body = revoke(b, %k)
+      id = rid(a, %s, t, body) in
+  [ Dev(a, sk, %s, t), !Ltk(b, sb), In(%k) ] --[ Wrote(a, %s, id), RevokeWritten(a, %s, b, %k) ]->
+  [ Dev(a, sk, %s %+ %1, id), Out(<a, %s, t, body>), Out(sign(sealmsg(a, %s, id, 'ms', t), sk)) ]
+
+/* An honest cut: of one device's plain record, so never through a key op (cut.rs:117, :127). */
+rule Commit_Truncate:
+  let S = seg('nil', c, %f, f)
+      body = truncate(S)
+      id = rid(a, %s, t, body) in
+  [ Dev(a, sk, %s, t), !Written(c, %f, f, q) ] --[ Wrote(a, %s, id), TruncateWritten(a, S) ]->
+  [ Dev(a, sk, %s %+ %1, id), Out(S), Out(<a, %s, t, body>), Out(sign(sealmsg(a, %s, id, 'ms', t), sk)) ]
+
+rule Commit_Forgotten:
+  let body = forgotten(g, digest(c, %r, q))
+      id = rid(a, %s, t, body) in
+  [ Dev(a, sk, %s, t), !Written(c, %r, g, q) ] --[ Wrote(a, %s, id), ForgottenWritten(a, g) ]->
+  [ Dev(a, sk, %s %+ %1, id), Out(<a, %s, t, body>), Out(sign(sealmsg(a, %s, id, 'ms', t), sk)) ]
+
+rule Commit_Merge:
+  let body = mergeb(row(c, %x, tx), row(e, %y, ty))
+      id = rid(a, %s, t, body) in
+  [ Dev(a, sk, %s, t), !Written(c, %x, tx, q1), !Written(e, %y, ty, q2) ] --[ Wrote(a, %s, id) ]->
+  [ Dev(a, sk, %s %+ %1, id), Out(<a, %s, t, body>), Out(sign(sealmsg(a, %s, id, 'ms', t), sk)) ]
+
+/* ---- verify: one view, one file. 'holds = all terms; 'status = status 0 only ---- */
+rule V_open_holds:  [ Fr(~v) ] --> [ !View(~v, 'holds') ]
+rule V_open_status: [ Fr(~v) ] --> [ !View(~v, 'status') ]
+rule V_close: [ !View(v, m) ] --[ Accept(v, m) ]-> [ ]
+
+rule V_root: [ !View(v, m), !Trusted(a, p) ] --[ AdmittedA(v, a), RootA(v, a) ]-> [ !Admitted(v, a, p) ]
+
+/* Records: the verifier recomputes the id, so a record is fixed by (actor, seq, prev, payload).
+   A device's first record is at seq 1 over 'zero, or goes on from its frontier row. Dense seq. */
+rule V_first:
+  let id = rid(a, %1, 'zero', p) in
+  [ !View(v, m), In(<a, p>) ] --[ Rec(v, a, %1, id, p) ]-> [ !InFile(v, a, %1, id, p) ]
+rule V_next:
+  let id = rid(a, %s %+ %1, x, p) in
+  [ !InFile(v, a, %s, x, y), In(p) ] --[ Rec(v, a, %s %+ %1, id, p) ]-> [ !InFile(v, a, %s %+ %1, id, p) ]
+rule V_first_cut:
+  let id = rid(a, %f %+ %1, t, p) in
+  [ !Cut(v, a, %f, t), In(p) ] --[ Rec(v, a, %f %+ %1, id, p) ]-> [ !InFile(v, a, %f %+ %1, id, p) ]
+/* A tombstone: its id checks nothing, so it is any value (seams.rs:21). */
+rule V_tomb:
+  [ !InFile(v, a, %s, x, y), In(id) ]
+  --[ Rec(v, a, %s %+ %1, id, 'tomb'), Tomb(v, a, %s %+ %1, id, x) ]->
+  [ !InFile(v, a, %s %+ %1, id, 'tomb') ]
+/* count.rs:95: a seq already used is dense because `forked`, so at the top of the chain a record may
+   name an old seq and stay sound. In a 'holds view that is a fork and holds_no_fork closes it. */
+rule V_fork_status:
+  let id = rid(a, %l, top, p) in
+  [ !View(v, 'status'), !InFile(v, a, %s, top, y), !InFile(v, a, %l, z, w), In(p) ]
+  --[ Lt(%l, %s), Rec(v, a, %l, id, p), Forked(v, a, %l) ]-> [ !InFile(v, a, %l, id, p) ]
+
+/* A frontier row: unsigned by itself, it stands only if a TRUNCATE names its hash. One row per
+   segment here: abstraction, README. Nothing relates a row to what really left the file. */
+rule V_cut: [ !View(v, m), In(seg(b, a, %f, t)) ] --[ NeedsTruncate(v, seg(b, a, %f, t)), HasCut(v) ]-> [ !Cut(v, a, %f, t) ]
+
+/* Seals (settle.rs:111): prev_tip = previous seal's tip, else the frontier's at seq-1, else 'zero. */
+rule V_seal_first:
+  let m = sealmsg(a, %1, t, c, 'zero') in
+  [ !InFile(v, a, %1, t, y), !Admitted(v, a, p), In(<c, g>) ]
+  --[ Eq(verify(g, m, p), true), UseKey(v, a, %1), Covered(v, a, %1), OkSeal(v, a, %1, t) ]->
+  [ !OkSeal(v, a, %1, t) ]
+rule V_seal_next:
+  let m = sealmsg(a, %s, t, c, u) in
+  [ !OkSeal(v, a, %q, u), !InFile(v, a, %s, t, y), !Admitted(v, a, p), In(<c, g>) ]
+  --[ Lt(%q, %s), Eq(verify(g, m, p), true), UseKey(v, a, %s), Covered(v, a, %s), OkSeal(v, a, %s, t) ]->
+  [ !OkSeal(v, a, %s, t) ]
+rule V_seal_cut:
+  let m = sealmsg(a, %f %+ %1, t, c, u) in
+  [ !Cut(v, a, %f, u), !InFile(v, a, %f %+ %1, t, y), !Admitted(v, a, p), In(<c, g>) ]
+  --[ Eq(verify(g, m, p), true), UseKey(v, a, %f %+ %1), Covered(v, a, %f %+ %1), OkSeal(v, a, %f %+ %1, t) ]->
+  [ !OkSeal(v, a, %f %+ %1, t) ]
+
+/* Admission (settle.rs:143): the writer admitted, valid at that seq, its ok seals covering it.
+   h(pb) is Verifier::actor_of. */
+rule V_admit:
+  [ !InFile(v, a, %s, id, admit(h(pb), pb)), !Admitted(v, a, p), !OkSeal(v, a, %c, t) ]
+  --[ Le(%s, %c), UseKey(v, a, %s), AdmitUsed(v, a, %s, h(pb)), AdmittedA(v, h(pb)) ]->
+  [ !Admitted(v, h(pb), pb) ]
+
+/* MERGE rows (declare.rs:99): a record of the file, or any tip at a seq at or under a frontier row. */
+rule V_placed_rec: [ !InFile(v, a, %s, t, y) ] --> [ !Placed(v, row(a, %s, t)) ]
+rule V_placed_cut:
+  [ !Cut(v, a, %f, u), In(<%s, t>) ] --[ Le(%s, %f), PlacedUnderCut(v) ]-> [ !Placed(v, row(a, %s, t)) ]
+rule V_merge:
+  [ !InFile(v, a, %s, id, mergeb(r1, r2)), !Placed(v, r1), !Placed(v, r2), !Admitted(v, a, p), !OkSeal(v, a, %c, t) ]
+  --[ Le(%s, %c), MergeOK(v, a, r1, r2) ]-> [ ]
+
+/* ---- executability: the model is not vacuous. EXPECTED verified, all of them ---- */
+lemma exec_commit:   exists-trace "Ex v a #i #j. Covered(v, a, %1)@i & Accept(v, 'holds')@j"
+lemma exec_admitted: exists-trace "Ex v a b %s #i #j. AdmitUsed(v, a, %s, b)@i & Accept(v, 'holds')@j & not Ex #k. Compromised(a)@k"
+lemma exec_revoke_in_view: exists-trace "Ex v c b %q %k id #i #j. Rec(v, c, %q, id, revoke(b, %k))@i & Accept(v, 'holds')@j & not Ex a #s. Compromised(a)@s"
+lemma exec_cut:      exists-trace "Ex v S #i #j. NeedsTruncate(v, S)@i & Accept(v, 'holds')@j & not Ex a #k. Compromised(a)@k"
+lemma exec_forgotten: exists-trace "Ex v a %s id x #i #j. Tomb(v, a, %s, id, x)@i & Accept(v, 'holds')@j & not Ex c #k. Compromised(c)@k"
+lemma exec_merge:    exists-trace "Ex v a r s #i #j. MergeOK(v, a, r, s)@i & Accept(v, 'holds')@j & not Ex c #k. Compromised(c)@k"
+
+/* ---- card lemmas ---- */
+/* L1. EXPECTED verified. */
+lemma sealed_by_device_or_compromised:
+  "All v a %s t #i #r. OkSeal(v, a, %s, t)@i & Registered(a)@r
+     ==> (Ex #j. Wrote(a, %s, t)@j) | (Ex #j. Compromised(a)@j)"
+/* L1b. A key nobody registered seals only behind a theft. EXPECTED verified. */
+lemma unregistered_sealer_needs_a_theft:
+  "All v a %s t #i. OkSeal(v, a, %s, t)@i & not (Ex #r. Registered(a)@r)
+     ==> Ex b #j. Compromised(b)@j"
+/* L2, in the seq sense the Rust means. EXPECTED verified. */
+lemma no_admit_above_after_seq:
+  "All v a b c %s %q %k %z id #i #j #l #m.
+     AdmitUsed(v, a, %s, b)@i & Rec(v, c, %q, id, revoke(a, %k))@j & AdmittedA(v, c)@l
+     & Covered(v, c, %z)@m & (%q << %z | %q = %z) ==> (%s << %k | %s = %k)"
+/* L2t, in the sense of the card: time, not seq. EXPECTED FALSIFIED: H2, REVOKE names no tip. */
+lemma no_admit_for_later_in_time:
+  "All v a b c %s %q %k %z id #i #j #l #m #w #f.
+     AdmitUsed(v, a, %s, b)@i & Rec(v, c, %q, id, revoke(a, %k))@j & AdmittedA(v, c)@l
+     & Covered(v, c, %z)@m & (%q << %z | %q = %z)
+     & RevokeWritten(c, %q, a, %k)@w & FreshAtk(b)@f & w < f ==> F"
+/* L3. EXPECTED verified. */
+lemma truncate_held_was_signed:
+  "All v S #h #i. Accept(v, 'holds')@h & NeedsTruncate(v, S)@i & not (Ex r #s. StolenRoot(r)@s)
+     ==> (Ex a #j. TruncateWritten(a, S)@j) | (Ex a #j. Compromised(a)@j) | (Ex a #j. FreshAtk(a)@j)"
+/* L3s, status 0 and not holds. EXPECTED FALSIFIED: H3, a forged TRUNCATE in a fork, no key at all. */
+lemma truncate_status_was_signed:
+  "All v S #h #i. Accept(v, 'status')@h & NeedsTruncate(v, S)@i
+     ==> (Ex a #j. TruncateWritten(a, S)@j) | (Ex a #j. Compromised(a)@j) | (Ex a #j. FreshAtk(a)@j)"
+/* L3f. EXPECTED verified. */
+lemma forgotten_held_was_signed:
+  "All v a %s id x #h #i. Accept(v, 'holds')@h & Tomb(v, a, %s, id, x)@i & not (Ex r #s. StolenRoot(r)@s)
+     ==> (Ex w #j. ForgottenWritten(w, id)@j) | (Ex w #j. Compromised(w)@j) | (Ex w #j. FreshAtk(w)@j)"
+/* L4, no cut in the view; the first row stands for both, V_merge treats them alike. EXPECTED verified. */
+lemma merge_parents_signed_uncut:
+  "All v a c %s t r #h #i #g. Accept(v, 'holds')@h & MergeOK(v, a, row(c, %s, t), r)@i
+     & Registered(c)@g & not (Ex #u. HasCut(v)@u)
+     ==> (Ex #j. Wrote(c, %s, t)@j) | (Ex #j. Compromised(c)@j)"
+/* L4c, with a cut. EXPECTED FALSIFIED: H4, declare.rs:100 reads no tip under a frontier row. */
+lemma merge_parents_signed:
+  "All v a c %s t r #h #i #g. Accept(v, 'holds')@h & MergeOK(v, a, row(c, %s, t), r)@i
+     & Registered(c)@g
+     ==> (Ex #j. Wrote(c, %s, t)@j) | (Ex #j. Compromised(c)@j)"
+/* L5. FORMAT s14: "a thief with an admitted, non-root key cannot hide a REVOKE inside it". The
+   revoker's record ABOVE the REVOKE is in the view, so this is not a rollback, and no root is stolen.
+   EXPECTED FALSIFIED: H1, when revoker and admitter differ. */
+lemma non_root_cannot_cut_a_revoke:
+  "All v c b %q %k %u %w x y #r #i #j #h. RevokeWritten(c, %q, b, %k)@r & Rec(v, c, %w, x, y)@i & (%q << %w)
+     & UseKey(v, b, %u)@j & (%k << %u) & Accept(v, 'holds')@h & not (Ex a #s. StolenRoot(a)@s) ==> F"
+/* L5s, the case the sentence does cover: every admission of b in this view is by the revoker, and b
+   is no root. EXPECTED verified, and it may need a hand-written induction or an oracle. */
+lemma same_device_cut_takes_the_admit:
+  "All v c b %q %k %u %w x y #r #i #j #h. RevokeWritten(c, %q, b, %k)@r & Rec(v, c, %w, x, y)@i & (%q << %w)
+     & UseKey(v, b, %u)@j & (%k << %u) & Accept(v, 'holds')@h & not (Ex a #s. StolenRoot(a)@s)
+     & not (Ex #o. RootA(v, b)@o) & (All e %y #z. AdmitUsed(v, e, %y, b)@z ==> e = c) ==> F"
+
+/* ---- the named limits, each an attack: "verified" here means the attack EXISTS ---- */
+/* Rollback: the REVOKE never reaches the view, and the thief goes on. No root stolen. */
+lemma limit_rollback: exists-trace
+  "Ex v c b %q %k %u #r #j #h #t. RevokeWritten(c, %q, b, %k)@r & UseKey(v, b, %u)@j & Compromised(b)@t
+     & (%k << %u) & Accept(v, 'holds')@h & not Ex a #s. StolenRoot(a)@s"
+/* A stolen root admits, cuts and revokes at will: it needs no record to stand on. */
+lemma limit_stolen_root: exists-trace
+  "Ex v S a #i #h #s. NeedsTruncate(v, S)@i & Accept(v, 'holds')@h & StolenRoot(a)@s
+     & (not Ex b #t. TruncateWritten(b, S)@t)"
+
+end

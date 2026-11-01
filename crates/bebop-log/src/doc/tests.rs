@@ -31,10 +31,21 @@ pub(crate) fn mix(parts: &[&[u8]]) -> [u8; 32] {
     out
 }
 
+/// A FORGOTTEN listing every live tombstone of `st` as it stands: what an honest eraser signs.
+pub(crate) fn tombs_body(st: &Store) -> Vec<u8> {
+    let log = Doc::open(st).unwrap().log;
+    let recs = EvLog::walk_until_at(st, log, |_| false);
+    let erased: Vec<_> = recs.iter().filter(|r| ToyIds.redacted(r.flags, &r.payload)).map(|r| super::Erased { id: r.id, digest: ToyIds.chained(r) }).collect();
+    super::forgotten_body(&[0x5B; 32], &erased)
+}
+
 pub(crate) struct ToyIds;
 impl Ids for ToyIds {
-    fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-        mix(&[b"c", prev, payload])
+    fn chained(&self, r: &Record) -> [u8; 32] {
+        mix(&[b"c", &super::id_message(r.flags, &r.actor_pubkey, r.actor_seq, &r.prev, &r.payload)])
+    }
+    fn hash(&self, bytes: &[u8]) -> Option<[u8; 32]> {
+        Some(mix(&[b"h", bytes]))
     }
     fn legacy(&self, _flags: i64, _prev: &[u8; 32], payload: &[u8], id: &[u8; 32]) -> bool {
         mix(&[b"l", payload]) == *id
@@ -88,9 +99,9 @@ impl<S: Signer> Dev<S> {
     }
     pub fn next(&mut self, payload: &[u8]) -> Record {
         self.seq += 1;
-        let id = ToyIds.chained(&self.tip, payload);
-        let r = Record { id, prev: self.tip, actor_pubkey: self.s.actor_id(), actor_seq: self.seq, flags: 0, payload: payload.to_vec() };
-        self.tip = id;
+        let mut r = Record { id: [0u8; 32], prev: self.tip, actor_pubkey: self.s.actor_id(), actor_seq: self.seq, flags: 0, payload: payload.to_vec() };
+        r.id = ToyIds.chained(&r);
+        self.tip = r.id;
         r
     }
     pub fn commit(&mut self, st: &mut Store, payload: &[u8], op: Option<&KeyOp>) -> Result<i64, DocError> {
@@ -132,7 +143,7 @@ pub(crate) fn repair_edit(st: &mut Store, k: usize) {
             payload[0] ^= 1;
             st.put_cell(o, 16, st.get(o, 16) ^ 1);
         }
-        let id = ToyIds.chained(&prev, &payload);
+        let id = ToyIds.chained(&Record { prev, payload, ..recs[i].clone() });
         for (j, c) in crate::b32_to_cells(&prev).iter().enumerate() {
             st.put_cell(o, 7 + j, *c);
         }
@@ -265,7 +276,9 @@ fn trust_is_the_verifiers_decision() {
 #[test]
 fn a_fork_is_counted_by_name() {
     let (mut st, mut owner) = doc_with(2);
-    let dup = Record { actor_seq: 2, ..owner.next(b"forked") };
+    // A real fork: a second record at seq 2, its id over that seq (the id commits to the seq now).
+    let mut dup = Record { actor_seq: 2, ..owner.next(b"forked") };
+    dup.id = ToyIds.chained(&dup);
     let view = Doc::open(&st).unwrap();
     let mut tx = st.begin().unwrap();
     let log = EvLog::stage_append_in(&mut st, &mut tx, view.log.unwrap(), &dup, None).unwrap();

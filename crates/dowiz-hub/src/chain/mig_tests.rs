@@ -9,7 +9,7 @@
 use bebop_store::evlog::{EvLog, Record, FLAG_SHA256};
 use bebop_store::Store;
 
-use crate::chain::{chain_id, legacy_id_chained, NONCE_LEN};
+use crate::chain::{legacy_id_chained, record_id, NONCE_LEN};
 use crate::logimage::LogImage;
 use crate::stock::StockLog;
 use crate::{EventKind, Hub};
@@ -78,7 +78,7 @@ fn switch_off_is_ignored_once_the_log_is_sha256() {
     h.append(EventKind::Placed, "new_1", &order("new_1"), 4, ACTOR).unwrap();
     let w = walk(&h.to_bytes());
     assert_eq!(w[0].flags & FLAG_SHA256, FLAG_SHA256, "flipped: the switch is ignored");
-    assert_eq!(w[0].id, chain_id(&w[0].prev, &w[0].payload));
+    assert_eq!(w[0].id, record_id(&w[0]));
     assert_eq!(w[1].flags & FLAG_SHA256, FLAG_SHA256);
     let c = h.chain_check();
     assert_eq!((c.records, c.chained, c.legacy, c.broken), (4, 2, 2, 0), "{c:?}");
@@ -175,4 +175,28 @@ fn keep_reseals_a_legacy_log_as_legacy() {
     assert!(w.iter().all(|r| r.flags == 0 && r.id == legacy_id_chained(&r.prev, &r.payload)), "all legacy after the trim");
     let c = l.chain_check();
     assert_eq!((c.chained, c.legacy, c.broken), (0, 3, 0), "{c:?}");
+}
+
+/// FLAGS IN THE ID, ON A LOG WITH NO FLAGS ON THE WIRE (W-MG-HOLES): a stock record's flags come
+/// from its bytes, so a writer with no seed is flagged derived, a seeded one is not, and each
+/// record verifies under its own flags. The hub's copy of a tablet's record lands on the same id.
+#[test]
+fn a_stock_records_flags_follow_its_nonce() {
+    use crate::chain::verify_id;
+    use crate::stock::{StockEvent, StockLog};
+    use bebop_store::evlog::{FLAG_NONCE_DERIVED, FLAG_SHA256};
+    let write = |seed: Option<[u8; 32]>| {
+        let mut log = StockLog::create_sized(16 * 1024).unwrap();
+        if let Some(s) = seed {
+            log.set_entropy(s);
+        }
+        log.append(&StockEvent::Received { item: "rice".into(), qty: 5 }).unwrap();
+        EvLog::walk(&bebop_store::Store::from_bytes(&log.to_bytes_trimmed()))
+    };
+    let derived = &write(None)[0];
+    assert_eq!(derived.flags, FLAG_SHA256 | FLAG_NONCE_DERIVED);
+    assert!(verify_id(derived).is_some());
+    let seeded = &write(Some([3; 32]))[0];
+    assert_eq!(seeded.flags, FLAG_SHA256);
+    assert!(verify_id(seeded).is_some());
 }

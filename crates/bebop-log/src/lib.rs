@@ -29,7 +29,7 @@
 //!   3..6     content-id
 //!   7..10    prev content-id
 //!   11       flags: bit 0 = an actor_pubkey follows (`FLAG_ACTOR`);
-//!                   bit 1 = the id is sha256(prev-id ‖ payload) and the payload begins with
+//!                   bit 1 = the id is sha256 over `doc::id_message`; the payload begins with
 //!                           a 16-byte nonce (`FLAG_SHA256`, dowiz-hub M0, 2026-10-30; clear =
 //!                           the FNV scheme every record before M0 was written under);
 //!                   bit 2 = that nonce was DERIVED from the record, not drawn from entropy
@@ -165,7 +165,7 @@ const HEAD_V2: i64 = 12;
 /// Bit 0 of cell 11: an `actor_pubkey` follows the header. Derived from the key, never
 /// carried in `Record::flags`.
 pub const FLAG_ACTOR: i64 = 1;
-/// Bit 1 of cell 11: the id is `sha256(prev ‖ payload)` and the payload starts with a 16-byte
+/// Bit 1 of cell 11: the id is sha256 over `doc::id_message` and the payload starts with a 16-byte
 /// nonce (dowiz-hub M0). Clear: the FNV scheme of every record written before.
 pub const FLAG_SHA256: i64 = 2;
 /// What `FLAG_SHA256` says is in front of the payload: a nonce of this many bytes -- two packed
@@ -291,7 +291,7 @@ impl EvLog {
     /// `len` of the log rooted at `root`.
     #[inline]
     pub fn len_at(st: &Store, root: Option<usize>) -> usize {
-        root.map(|r| st.get(r, 0) as usize).unwrap_or(0)
+        root.map_or(0, |r| idx_end(st.get(r, 0)))
     }
 
     /// The chain tip, if one has been set.
@@ -334,7 +334,7 @@ impl EvLog {
     /// the budget comes back short, and the layer above refuses it.
     fn read_at(st: &Store, version: i64, obj: usize, budget: &mut usize) -> Record {
         let seq = st.get(obj, 0) as u64;
-        let plen = st.get(obj, 1) as usize;
+        let plen = idx_end(st.get(obj, 1));
         let idc: Vec<i64> = (3..7).map(|i| st.get(obj, i)).collect();
         let prevc: Vec<i64> = (7..11).map(|i| st.get(obj, i)).collect();
         if version >= 2 {
@@ -403,6 +403,11 @@ impl EvLog {
                 payload,
             }
         }
+    }
+
+    /// The cells of a record's head in a log of `version`.
+    pub(crate) fn head_cells(version: i64) -> usize {
+        (if version >= 2 { HEAD_V2 } else { HEAD_V1 }) as usize
     }
 
     /// The most records an image of this size could possibly hold.

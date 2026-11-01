@@ -14,7 +14,7 @@ mod shared;
 use bebop_store::evlog::doc::{forgotten_body, verify, Doc, DocError, Trust, FLAG_SHA256_IDS};
 use bebop_store::evlog::Record;
 use bebop_store::Store;
-use shared::{AnyoneCanForge, Device, Sha256Ids, ERASED_NONCE};
+use shared::{AnyoneCanForge, Device, Sha256Ids, ERASED_NONCE, TOMBSTONE_BIT};
 
 fn main() -> Result<(), DocError> {
     let mut old = Store::create_bytes(1 << 20)?;
@@ -23,10 +23,10 @@ fn main() -> Result<(), DocError> {
     till.commit(&mut old, b"delivery to +355 00 000 0000", None)?;
     till.commit(&mut old, b"sold 1 cake", None)?;
 
-    let erase = |r: &Record| r.payload.windows(4).any(|w| w == b"+355").then(|| ERASED_NONCE.to_vec());
+    let erase = |r: &Record| r.payload.windows(4).any(|w| w == b"+355").then(|| [&ERASED_NONCE[..], &[TOMBSTONE_BIT]].concat());
     let mut fresh = Store::create_bytes(1 << 20)?;
     let erased = Doc::redact_into(&old, &mut fresh, &Sha256Ids, &erase)?;
-    assert_eq!(erased, 1);
+    assert_eq!(erased.len(), 1);
 
     let r = verify(&fresh, &Sha256Ids, &AnyoneCanForge, Trust::Genesis)?;
     assert_eq!((r.counters.redacted, r.counters.declared), (1, 0), "{:?}", r.counters);
@@ -34,7 +34,7 @@ fn main() -> Result<(), DocError> {
     println!("erased, not declared: holds = {}", r.holds());
 
     // `subject` is a hash the application chooses. It must not be the person's identifier.
-    till.commit(&mut fresh, &forgotten_body(1, &[0x5A; 32]), None)?;
+    till.commit(&mut fresh, &forgotten_body(&[0x5A; 32], &erased), None)?;
     let r = verify(&fresh, &Sha256Ids, &AnyoneCanForge, Trust::Genesis)?;
     assert!(r.holds(), "{:?}", r.counters);
     println!("erased, declared:     redacted = {}, declared = {}", r.counters.redacted, r.counters.declared);

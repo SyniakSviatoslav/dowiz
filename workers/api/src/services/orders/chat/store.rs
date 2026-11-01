@@ -94,9 +94,8 @@ pub fn rebuilt(log: &dowiz_hub::logimage::LogImage, keep: impl Fn(&dowiz_hub::lo
     if dropped == 0 {
         return Ok((None, 0));
     }
-    let mut out = dowiz_hub::logimage::LogImage::create_sized(log.to_bytes().len()).map_err(|e| format!("{e:?}"))?;
-    // The rebuild keeps the source's id scheme (W-MG-MIG): a legacy log pruned stays legacy.
-    out.set_sha256(log.writes_sha256());
+    // The rebuild keeps the source's armed state (W-MG-MIG, W-MG-TRANS): a legacy log pruned stays legacy.
+    let mut out = log.fresh_sized(log.to_bytes().len()).map_err(|e| format!("{e:?}"))?;
     for e in kept.into_iter().rev() {
         out.append(&e.kind, &e.subject, &e.json).map_err(|e| format!("{e:?}"))?;
     }
@@ -119,8 +118,8 @@ pub fn pruned(log: &dowiz_hub::logimage::LogImage, now_ms: i64) -> std::result::
 }
 
 /// The nightly's call (cloud.rs, per venue): how many messages went.
-pub async fn prune_at(stub: &Stub, now_ms: i64) -> Result<usize> {
-    crate::platform_store::with_log_at(stub, crate::social::IMAGE_THREADS, move |log| {
+pub async fn prune_at(stub: &Stub, venue: &str, now_ms: i64) -> Result<usize> {
+    crate::platform_store::with_log_at(stub, crate::social::IMAGE_THREADS, venue, move |log| {
         let (next, dropped) = pruned(log, now_ms).map_err(Error::RustError)?;
         if let Some(next) = next {
             *log = next;

@@ -7,7 +7,7 @@
 use bebop_image::{Store, ARENA};
 use bebop_log::doc::spec::{SpecIn, DIGEST_SPEC};
 use bebop_log::doc::keys::key_rows;
-use bebop_log::doc::{Doc as DocRoot, Key, KeyOp, Signer};
+use bebop_log::doc::{id_message, Doc as DocRoot, Key, KeyOp, Signer};
 use bebop_log::{Record, FLAG_SHA256};
 use bebop_wasm_reader::abi::*;
 use bebop_wasm_reader::sha256::sha256;
@@ -81,9 +81,7 @@ fn described(wasm: &[u8], text: &[u8]) -> Vec<u8> {
     let mut tip = [0u8; 32];
     for i in 0..3u64 {
         let payload = format!("nonce-{i:0>10}event-{i}").into_bytes();
-        let mut m = tip.to_vec();
-        m.extend_from_slice(&payload);
-        let id = sha256(&m);
+        let id = sha256(&id_message(FLAG_SHA256, &Toy.actor_id(), i + 1, &tip, &payload));
         let r = Record { id, prev: tip, actor_pubkey: Toy.actor_id(), actor_seq: i + 1, flags: FLAG_SHA256, payload };
         DocRoot::commit_bytes(&mut st, &r, &Toy, 1_700_000_000_000 + i as i64, None).unwrap();
         tip = id;
@@ -228,9 +226,7 @@ fn the_doc_abi_round_trips_natively() {
 fn sha_commit(st: &mut Store, tip: &mut [u8; 32], seq: u64, body: &[u8], op: Option<&KeyOp>) {
     let mut payload = format!("nonce-{seq:0>10}").into_bytes();
     payload.extend_from_slice(body);
-    let mut m = tip.to_vec();
-    m.extend_from_slice(&payload);
-    let id = sha256(&m);
+    let id = sha256(&id_message(FLAG_SHA256, &Toy.actor_id(), seq, tip, &payload));
     let r = Record { id, prev: *tip, actor_pubkey: Toy.actor_id(), actor_seq: seq, flags: FLAG_SHA256, payload };
     DocRoot::commit_bytes(st, &r, &Toy, seq as i64, op).unwrap();
     *tip = id;
@@ -281,11 +277,19 @@ fn a_redacted_legacy_record_is_redacted_not_broken() {
     let c = open(&image(1)).expect("opens").verify_doc().unwrap().unwrap();
     assert_eq!((c.redacted, c.broken, c.legacy), (0, 1, 0), "{c:?}");
 
-    // The other mark stays: a sha256 record whose nonce is erased, no kind byte behind it (what
-    // a writer without the hub's framing leaves, `crates/bebop-store/examples/forget_a_person.rs`).
-    let mut st = Store::create_bytes(1 << 20).unwrap();
-    let r = Record { id: [7; 32], prev: [0; 32], actor_pubkey: [3; 32], actor_seq: 1, flags: FLAG_SHA256, payload: vec![b'0'; 16] };
-    DocRoot::init_over_bytes(&mut st, 0, &[key.clone()], &[r]).unwrap();
-    let c = open(&st.to_bytes_trimmed()).expect("opens").verify_doc().unwrap().unwrap();
-    assert_eq!((c.redacted, c.broken, c.legacy), (1, 0, 0), "{c:?}");
+    // FORMAT §9.4: the kind bit is the only mark, flagged or not. A nonce erased with the bit
+    // behind it is a tombstone (`forget.rs`); the same nonce with no bit is an edit, one answer,
+    // the one `HubIds::redacted` gives.
+    let flagged = |payload: Vec<u8>| {
+        let mut st = Store::create_bytes(1 << 20).unwrap();
+        let r = Record { id: [7; 32], prev: [0; 32], actor_pubkey: [3; 32], actor_seq: 1, flags: FLAG_SHA256, payload };
+        DocRoot::init_over_bytes(&mut st, 0, &[key.clone()], &[r]).unwrap();
+        st.to_bytes_trimmed()
+    };
+    let c = open(&flagged([vec![b'0'; 16], vec![1 | 0x80]].concat())).expect("opens").verify_doc().unwrap().unwrap();
+    assert_eq!((c.redacted, c.broken), (1, 0), "{c:?}");
+    let c = open(&flagged([vec![b'0'; 16], vec![1]].concat())).expect("opens").verify_doc().unwrap().unwrap();
+    assert_eq!((c.redacted, c.broken), (0, 1), "{c:?}");
+    let c = open(&flagged(vec![b'0'; 16])).expect("opens").verify_doc().unwrap().unwrap();
+    assert_eq!((c.redacted, c.broken), (0, 1), "an empty tail is no tombstone: {c:?}");
 }

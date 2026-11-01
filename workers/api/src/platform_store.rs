@@ -106,8 +106,10 @@ pub struct LoadedLog {
 }
 
 /// Read one append-only image from an object, creating an empty one the first
-/// time.
-pub async fn load_log_at(stub: &Stub, image: &str) -> Result<LoadedLog> {
+/// time. ARMED FOR `venue` (`scheme::arm`), and the venue is a required argument so that no
+/// caller can forget it (W-MG-TRANS): when arming was each caller's job, the witness's census and
+/// the nightly chat prune wrote sha256 on the expand release.
+pub async fn load_log_at(stub: &Stub, image: &str, venue: &str) -> Result<LoadedLog> {
     let mut res = stub.fetch_with_str(&format!("https://hub/img/{image}")).await?;
     if res.status_code() == 200 {
         let generation = res
@@ -118,12 +120,14 @@ pub async fn load_log_at(stub: &Stub, image: &str) -> Result<LoadedLog> {
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
         let bytes = res.bytes().await?;
-        let log = LogImage::load(&bytes)
+        let mut log = LogImage::load(&bytes)
             .map_err(|_| Error::RustError(format!("log image {image} is unreadable")))?;
+        crate::scheme::arm(&mut log, venue);
         return Ok(LoadedLog { log, generation });
     }
-    let log = LogImage::create()
+    let mut log = LogImage::create()
         .map_err(|_| Error::RustError(format!("cannot create log image {image}")))?;
+    crate::scheme::arm(&mut log, venue);
     Ok(LoadedLog { log, generation: 0 })
 }
 
@@ -139,12 +143,12 @@ pub async fn save_log_at(stub: &Stub, image: &str, loaded: &LoadedLog) -> Result
 }
 
 /// Read, append, write — with a bounded retry when the guard is lost.
-pub async fn with_log_at<F, T>(stub: &Stub, image: &str, mut f: F) -> Result<T>
+pub async fn with_log_at<F, T>(stub: &Stub, image: &str, venue: &str, mut f: F) -> Result<T>
 where
     F: FnMut(&mut LogImage) -> Result<T>,
 {
     for _ in 0..4 {
-        let mut loaded = load_log_at(stub, image).await?;
+        let mut loaded = load_log_at(stub, image, venue).await?;
         let out = f(&mut loaded.log)?;
         if save_log_at(stub, image, &loaded).await? {
             return Ok(out);

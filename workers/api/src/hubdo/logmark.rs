@@ -76,21 +76,15 @@ impl HubImages {
     pub(super) fn load_log(&self, generation: i64, bytes: &[u8]) -> Result<Hub, HubError> {
         let (mut hub, next) = Hub::load_since(bytes, self.mark_at(LOG_IMAGE, generation).as_ref())?;
         self.mark_now(LOG_IMAGE, generation, next);
-        // M0: the nonce seed for whatever this turn appends (`crate::entropy_seed`).
-        if let Some(seed) = crate::entropy_seed() {
-            hub.set_entropy(seed);
-        }
         self.arm_scheme(&mut hub);
         Ok(hub)
     }
 
     /// THE ID-SCHEME SWITCH for this object's venue (W-MG-MIG, `crate::scheme`): every log
-    /// this object loads or creates and may append to goes through here.
+    /// this object loads or creates and may append to goes through here, for its seed too.
     pub(super) fn arm_scheme<T: crate::scheme::Switch>(&self, log: &mut T) {
-        // A host with no name (a test's Mem host) is not a venue: the crate's default stands.
-        if let Some(venue) = self.state.own_name() {
-            crate::scheme::arm(log, &venue);
-        }
+        // No name is not "the crate's default": `scheme::chosen` fails closed to legacy (H3).
+        crate::scheme::arm_named(log, self.state.own_name().as_deref());
     }
 
     /// `load_log` for the stock log (`IMAGE_STOCK`).
@@ -98,9 +92,6 @@ impl HubImages {
         let id = crate::hubstore::IMAGE_STOCK;
         let (mut log, next) = StockLog::load_since(bytes, self.mark_at(id, generation).as_ref())?;
         self.mark_now(id, generation, next);
-        if let Some(seed) = crate::entropy_seed() {
-            log.set_entropy(seed);
-        }
         self.arm_scheme(&mut log);
         Ok(log)
     }
@@ -109,9 +100,6 @@ impl HubImages {
     pub(super) fn load_entries(&self, id: &str, generation: i64, bytes: &[u8]) -> Result<LogImage, HubError> {
         let (mut log, next) = LogImage::load_since(bytes, self.mark_at(id, generation).as_ref())?;
         self.mark_now(id, generation, next);
-        if let Some(seed) = crate::entropy_seed() {
-            log.set_entropy(seed);
-        }
         self.arm_scheme(&mut log);
         Ok(log)
     }

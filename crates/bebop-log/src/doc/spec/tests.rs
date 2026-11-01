@@ -127,15 +127,16 @@ fn a_flipped_reader_byte_and_a_wrong_digest_are_refused_by_name() {
     assert_eq!(read_blob(&bad, w), None, "a length past MAX_BLOB_BYTES is refused, never allocated");
 }
 
-/// Real sha256 ids (dowiz-hub's scheme, `chain/scheme.rs`): `sha256(prev ‖ payload)`, the
+/// Real sha256 ids (dowiz-hub's scheme, `chain/scheme.rs`): sha256 over `id_message`, the
 /// payload led by a 16-byte nonce, `FLAG_SHA256` set. The archive fixture is written with it
 /// so the embedded reader counts `chained`, not `broken`, on a file written the way dowiz writes.
 struct ShaIds;
 impl Ids for ShaIds {
-    fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-        let mut m = prev.to_vec();
-        m.extend_from_slice(payload);
-        sha256(&m)
+    fn hash(&self, bytes: &[u8]) -> Option<[u8; 32]> {
+        Some(sha256(bytes))
+    }
+    fn chained(&self, r: &Record) -> [u8; 32] {
+        sha256(&crate::doc::id_message(r.flags, &r.actor_pubkey, r.actor_seq, &r.prev, &r.payload))
     }
 }
 
@@ -155,10 +156,10 @@ fn write_the_archive_fixture_when_asked() {
     for i in 0..3u64 {
         let mut payload = format!("nonce-{i:0>10}").into_bytes();
         payload.extend_from_slice(format!("event-{i}").as_bytes());
-        let id = ShaIds.chained(&tip, &payload);
-        let r = Record { id, prev: tip, actor_pubkey: owner.id, actor_seq: i + 1, flags: FLAG_SHA256, payload };
+        let mut r = Record { id: [0u8; 32], prev: tip, actor_pubkey: owner.id, actor_seq: i + 1, flags: FLAG_SHA256, payload };
+        r.id = ShaIds.chained(&r);
         Doc::commit_bytes(&mut st, &r, &owner, 1_700_000_000_000 + i as i64, None).unwrap();
-        tip = id;
+        tip = r.id;
     }
     let rep = verify(&st, &ShaIds, &ToyVerifier, Trust::Genesis).unwrap();
     assert_eq!((rep.counters.records, rep.counters.chained, rep.counters.broken, rep.counters.seals_ok), (3, 3, 0, 3));
@@ -190,7 +191,7 @@ fn an_archive_is_a_verbatim_copy_with_spec_first() {
 /// RFC 9162 Merkle tree hash over the cut ids (dowiz-hub's `bebop_store::merkle` shape: leaf =
 /// sha256(0x00 ‖ id), node = sha256(0x01 ‖ l ‖ r), the split at the largest power of two below n),
 /// so `cut_into` can name a segment by a root a stranger can recompute.
-fn mth(ids: &[[u8; 32]]) -> [u8; 32] {
+pub(super) fn mth(ids: &[[u8; 32]]) -> [u8; 32] {
     match ids.len() {
         0 => sha256(b""),
         1 => {
@@ -212,8 +213,11 @@ fn mth(ids: &[[u8; 32]]) -> [u8; 32] {
 }
 struct ShaTreeIds;
 impl Ids for ShaTreeIds {
-    fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-        ShaIds.chained(prev, payload)
+    fn hash(&self, bytes: &[u8]) -> Option<[u8; 32]> {
+        ShaIds.hash(bytes)
+    }
+    fn chained(&self, r: &Record) -> [u8; 32] {
+        ShaIds.chained(r)
     }
     fn tree_root(&self, ids: &[[u8; 32]]) -> Option<[u8; 32]> {
         Some(mth(ids))
@@ -233,10 +237,10 @@ impl Ids for ShaTreeIds {
 fn sha_commit(st: &mut Store, owner: &ToySigner, tip: [u8; 32], seq: u64, body: &[u8]) -> [u8; 32] {
     let mut payload = format!("nonce-{seq:0>10}").into_bytes();
     payload.extend_from_slice(body);
-    let id = ShaIds.chained(&tip, &payload);
-    let r = Record { id, prev: tip, actor_pubkey: owner.id, actor_seq: seq, flags: FLAG_SHA256, payload };
+    let mut r = Record { id: [0u8; 32], prev: tip, actor_pubkey: owner.id, actor_seq: seq, flags: FLAG_SHA256, payload };
+    r.id = ShaIds.chained(&r);
     Doc::commit_bytes(st, &r, owner, 1_700_000_000_000 + seq as i64, None).unwrap();
-    id
+    r.id
 }
 
 /// THE CUT FIXTURES (W-MG-M5b), written when asked, deterministic: a working DOC with five sha256

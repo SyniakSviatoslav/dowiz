@@ -55,8 +55,8 @@ impl<C: Image> TreeIn<C> {
         if obj_digest_in(&c, root) != DIGEST_KV_ROOT {
             return Err(TreeError::NotTree);
         }
-        let len = obj_len_in(&c, root) as usize;
-        if len < 6 || root.checked_add(2 + len).is_none_or(|e| e > c.n_cells()) {
+        let len = bebop_image::idx_end(obj_len_in(&c, root));
+        if len < 6 || root.checked_add(2).and_then(|e| e.checked_add(len)).is_none_or(|e| e > c.n_cells()) {
             return Err(TreeError::NotTree);
         }
         if get_in(&c, root, 5) != VERSION_TREE {
@@ -69,9 +69,7 @@ impl<C: Image> TreeIn<C> {
             return Err(TreeError::Root { why: "cells 1-4 of a v4 root must be zero" });
         }
         let (n, depth) = (get_in(&c, root, 0), get_in(&c, root, 7));
-        if n < 0 {
-            return Err(TreeError::Root { why: "n is negative" });
-        }
+        let n = bebop_image::idx(n).ok_or(TreeError::Root { why: "n is outside what this reader can count" })?;
         if !(0..=MAX_TREE_DEPTH as i64).contains(&depth) {
             return Err(TreeError::Root { why: "DEPTH past MAX_TREE_DEPTH" });
         }
@@ -83,7 +81,7 @@ impl<C: Image> TreeIn<C> {
         } else {
             super::node::back(&c, root, 6)?
         };
-        Ok(TreeIn { c, root, n: n as usize, top, depth: depth as usize })
+        Ok(TreeIn { c, root, n, top, depth: bebop_image::idx_end(depth) })
     }
 
     /// Entries, as the root CLAIMS (`verify` checks the claim).
@@ -164,8 +162,11 @@ impl<C: Image> TreeIn<C> {
     pub fn verify(&self) -> Result<(), TreeError> {
         check_obj_in(&self.c, self.root).map_err(TreeError::BadCrc)?;
         let (mut last, mut count) = (None, 0usize);
+        // Every node and every value of a tree is its own object, so a walk reads at most the
+        // image; slots naming one value 100 000 times asked for 444 MB from 252 KB (W-MG-ATK3).
+        let mut budget = self.c.n_cells();
         if self.depth > 0 {
-            self.walk(self.top, self.depth, None, &mut last, &mut count)?;
+            self.walk(self.top, self.depth, None, &mut last, &mut count, &mut budget)?;
         }
         if count != self.n {
             return Err(TreeError::Count { claim: self.n as i64, got: count as i64 });
@@ -173,7 +174,14 @@ impl<C: Image> TreeIn<C> {
         Ok(())
     }
 
-    fn walk(&self, obj: usize, level: usize, sep: Option<&[u8]>, last: &mut Option<Vec<u8>>, count: &mut usize) -> Result<(), TreeError> {
+    fn spend(&self, obj: usize, budget: &mut usize) -> Result<(), TreeError> {
+        let cost = bebop_image::idx_end(obj_len_in(&self.c, obj)).saturating_add(2);
+        *budget = budget.checked_sub(cost).ok_or(TreeError::Node { obj, why: "the tree reads more cells than the image holds" })?;
+        Ok(())
+    }
+
+    fn walk(&self, obj: usize, level: usize, sep: Option<&[u8]>, last: &mut Option<Vec<u8>>, count: &mut usize, budget: &mut usize) -> Result<(), TreeError> {
+        self.spend(obj, budget)?;
         check_obj_in(&self.c, obj).map_err(TreeError::BadCrc)?;
         let nd = node_at(&self.c, obj, level == 1)?;
         if level > 1 && nd.m < 2 {
@@ -185,12 +193,13 @@ impl<C: Image> TreeIn<C> {
         }
         for (k, r) in its {
             if level > 1 {
-                self.walk(r, level - 1, Some(&k), last, count)?;
+                self.walk(r, level - 1, Some(&k), last, count, budget)?;
                 continue;
             }
             if last.as_ref().is_some_and(|l| *l >= k) {
                 return Err(TreeError::Order { obj });
             }
+            self.spend(r, budget)?;
             check_obj_in(&self.c, r).map_err(TreeError::BadCrc)?;
             val_at(&self.c, r)?;
             *last = Some(k);

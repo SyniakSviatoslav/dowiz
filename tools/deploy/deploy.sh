@@ -25,7 +25,7 @@
 # Every heavy step runs through bebop-lang/tools/slot.sh (one compute slot, waits under the process cap) --
 # which is what stops the process-cap kill -- and every step prints its seconds.
 #
-# EXIT: 0 ok | 10 not main | 11 dirty tree | 12 copy | 20 run-all | 21 cargo test | 30 no previous version
+# EXIT: 0 ok | 10 not main | 11 dirty tree | 12 copy | 13 wrangler.toml unreadable | 14 no reader past a flip | 15 tablet.wasm is not its source | 20 run-all | 21 cargo test | 30 no previous version
 #       | 31 upload / no Version ID | 32 wasm lacks the commit | 40 live != HEAD | 41 probe_crud | 42 flows (FLOWS_BLOCKING=0 makes it advisory)
 #
 # The token file is sourced ONLY inside the subshell that runs wrangler, and never printed.
@@ -73,6 +73,24 @@ if [ $MODE != verify ]; then
   step copy
   python3 "$HERE/sync.py" "$REPO" "$SRC" || fail 12 "copy: $SRC could not be made equal to HEAD"
   took
+
+  # THE SCHEME OF THIS BUILD, read BEFORE anything is uploaded and by a TOML parser (W-MG-TRANS H1: a sed read
+  # double quotes at column 0 only, and `SHA256_VENUES = '*'` went live with no flip recorded). Past a flip a build
+  # that does not declare the var has no sha256 reader: refused here, as rollback.sh refuses it as a target (H9).
+  SCHEME_LINE=$(python3 "$HERE/scheme_var.py" "$SRC/workers/api/wrangler.toml") || fail 13 "scheme: $SRC/workers/api/wrangler.toml does not parse; nothing was uploaded"
+  DECLARED=${SCHEME_LINE%% *}; SCHEME=${SCHEME_LINE#* }
+  FLOOR_MARK=${ROLLBACK_FLOOR_MARK:-$WORK/sha256-floor}; FLIP_MARK=${ROLLBACK_FLIP_MARK:-$WORK/sha256-flipped}
+  VERSIONS=${DEPLOY_VERSIONS:-$WORK/versions.log}
+  if [ "$DECLARED" = 0 ] && { [ -f "$FLIP_MARK" ] || grep -qE ' sha256_venues=[^ ]' "$VERSIONS" 2>/dev/null; }; then
+    fail 14 "no-reader: venues write sha256 records and this tree does not declare SHA256_VENUES: a build without the reader QUARANTINES their orders; nothing was uploaded"
+  fi
+  # THE TABLET'S MODULE IS ITS SOURCE (W-MG-TRANS H2). tablet.wasm is a committed binary: the expand release shipped
+  # prod's bytes, which refuse every reply of a flipped venue. The digest moves with any change under crates/, so this
+  # is a deploy gate and not a run-all one: it asks for the rebuild when it matters and not on every commit.
+  if [ -f "$SRC/crates/bebop-wasm/tablet.sh" ]; then
+    want=$(sh "$SRC/crates/bebop-wasm/tablet.sh" --digest); have=$(cat "$SRC/workers/api/public/room/canvas/tablet.wasm.src" 2>/dev/null)
+    [ "$want" = "$have" ] || fail 15 "tablet: tablet.wasm.src is ${have:-missing}, its sources are $want: run sh crates/bebop-wasm/tablet.sh and commit; nothing was uploaded"
+  fi
 
   # ── 3 GATES ───────────────────────────────────────────────────────────────
   # A commit whose gates AND cargo test already passed here is not re-gated: the copy was just re-hashed
@@ -141,6 +159,9 @@ if [ $MODE != verify ]; then
   step upload
   BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   if [ $MODE = dry ]; then args="deploy --dry-run --outdir $WORK/dry"; else args=deploy; fi
+  # THE FLIP IS MARKED BEFORE THE ATTEMPT (W-MG-TRANS H1). An upload can land and still exit non-zero with no version
+  # id, and a mark too many only asks a person for ROLLBACK_PAST_FLOOR=1; a mark too few loses orders.
+  if [ $MODE != dry ] && [ -n "$SCHEME" ] && [ ! -s "$FLIP_MARK" ]; then echo "$SCHEME flipped at $BUILT_AT by the upload of $SHA" > "$FLIP_MARK"; fi
   # Retried only on net_flake with no Version ID printed (the rebuild is cached); anything else fails at once.
   for try in 1 2 3; do
     ( cd "$SRC/workers/api" && export RUSTUP_TOOLCHAIN=$TOOLCHAIN DOWIZ_COMMIT=$SHA DOWIZ_BUILT_AT=$BUILT_AT &&
@@ -152,28 +173,22 @@ if [ $MODE != verify ]; then
     echo "   upload try $try: $NET_ERR, retrying"
   done
   tail -6 "$WORK/logs/upload.log" | sed 's/^/   /'
-  [ $rc = 0 ] || fail 31 "upload: wrangler rc=$rc (log $WORK/logs/upload.log)"
   NEW=$(grep -o 'Current Version ID: [0-9a-f-]*' "$WORK/logs/upload.log" | tail -1 | cut -d' ' -f4)
+  # THE sha256 FLOOR (W-MG-MIG; rollback.sh's header, docs/design/MIGRATION-sha256-ids.md). Every uploaded version is
+  # recorded, FIRST, before any check below can exit (W-MG-TRANS H1: an exit 32 left a live flip unrecorded): the one
+  # that first DECLARES SHA256_VENUES is the floor, `declared=` says whether a version has the reader at all (H9), and
+  # the flip mark above was already written before the upload was attempted.
+  if [ $MODE != dry ] && [ -n "$NEW" ]; then
+    echo "$BUILT_AT $SHA $NEW sha256_venues=${SCHEME:-} declared=$DECLARED" >> "$VERSIONS"
+    if [ "$DECLARED" = 1 ] && [ ! -s "$FLOOR_MARK" ]; then echo "$NEW $BUILT_AT $SHA" > "$FLOOR_MARK"; echo "   sha256 floor: $NEW (first build that reads sha256 record ids)"; fi
+    [ -z "$SCHEME" ] || echo "   sha256 FLIP: SHA256_VENUES=\"$SCHEME\" -- one-way; rollback.sh now refuses a target before the floor"
+  fi
+  [ $rc = 0 ] || fail 31 "upload: wrangler rc=$rc (log $WORK/logs/upload.log)"
   [ $MODE = dry ] || [ -n "$NEW" ] || fail 31 "upload: wrangler exited 0 but printed no 'Current Version ID' (log $WORK/logs/upload.log)"
   WASM=$SRC/workers/api/build/index_bg.wasm
   hits=$(grep -c -a "$SHA" "$WASM" 2>/dev/null); hits=${hits:-0}
   echo "   version: ${NEW:-dry-run}; $WASM carries $SHA: $hits"
   [ "$hits" -gt 0 ] || fail 32 "wasm-commit: the built $WASM does not contain $SHA -- /api/version will not say HEAD"
-  # THE sha256 FLOOR (W-MG-MIG; rollback.sh's header, docs/design/MIGRATION-sha256-ids.md). Every uploaded version
-  # is recorded; the first whose wrangler.toml DECLARES SHA256_VENUES is the floor (the first build that reads sha256
-  # records); a non-empty value is a flip and is marked for good. Recorded BEFORE verify, so a rollback of a version
-  # that failed verification already knows about it.
-  if [ $MODE != dry ]; then
-    SCHEME=$(sed -n 's/^SHA256_VENUES *= *"\([^"]*\)".*/\1/p' "$SRC/workers/api/wrangler.toml" 2>/dev/null | head -1)
-    DECLARED=$(grep -c '^SHA256_VENUES *=' "$SRC/workers/api/wrangler.toml" 2>/dev/null); DECLARED=${DECLARED:-0}
-    echo "$BUILT_AT $SHA $NEW sha256_venues=${SCHEME:-}" >> "${DEPLOY_VERSIONS:-$WORK/versions.log}"
-    FLOOR_MARK=${ROLLBACK_FLOOR_MARK:-$WORK/sha256-floor}; FLIP_MARK=${ROLLBACK_FLIP_MARK:-$WORK/sha256-flipped}
-    if [ "$DECLARED" -gt 0 ] && [ ! -s "$FLOOR_MARK" ]; then echo "$NEW $BUILT_AT $SHA" > "$FLOOR_MARK"; echo "   sha256 floor: $NEW (first build that reads sha256 record ids)"; fi
-    if [ -n "$SCHEME" ]; then
-      [ -s "$FLIP_MARK" ] || echo "$SCHEME flipped at $BUILT_AT by $NEW ($SHA)" > "$FLIP_MARK"
-      echo "   sha256 FLIP: SHA256_VENUES=\"$SCHEME\" -- one-way; rollback.sh now refuses a target before the floor"
-    fi
-  fi
   took
   [ $MODE = dry ] && { echo "deploy: DRY-RUN OK $SHA (built, gated, not uploaded) in $(( $(date +%s) - T0 )) s"; exit 0; }
 fi

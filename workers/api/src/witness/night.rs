@@ -57,7 +57,7 @@ pub async fn take(
 /// The newest census this platform holds for a venue.
 pub async fn last(ns: &ObjectNamespace, venue: &str) -> Result<Option<Census>> {
     let stub = ns.id_from_name(crate::platform_store::PLATFORM)?.get_stub()?;
-    let loaded = crate::platform_store::load_log_at(&stub, IMAGE).await?;
+    let loaded = crate::platform_store::load_log_at(&stub, IMAGE, crate::scheme::PLATFORM).await?;
     Ok(loaded
         .log
         .about(KIND, Some(venue), 1)
@@ -72,7 +72,7 @@ pub async fn record(ns: &ObjectNamespace, c: &Census) -> Result<()> {
     let stub = ns.id_from_name(crate::platform_store::PLATFORM)?.get_stub()?;
     let venue = c.venue.clone();
     let json = serde_json::to_string(c).map_err(|e| Error::RustError(e.to_string()))?;
-    crate::platform_store::with_log_at(&stub, IMAGE, move |log| {
+    crate::platform_store::with_log_at(&stub, IMAGE, crate::scheme::PLATFORM, move |log| {
         log.append(KIND, &venue, &json).map_err(|x| Error::RustError(format!("{x:?}")))
     })
     .await

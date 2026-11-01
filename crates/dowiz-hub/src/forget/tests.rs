@@ -3,7 +3,8 @@
 //! unchanged, `holds(old_tip)` true."
 
 use super::*;
-use crate::chain::{chain_id, NONCE_LEN};
+use bebop_store::evlog::Record;
+use crate::chain::{record_id, NONCE_LEN};
 
 const ACTOR: [u8; 32] = [0xA1; 32];
 const SUBJECT: &str = "+355691111111";
@@ -131,7 +132,7 @@ fn an_erased_id_is_not_recovered_by_enumerating_ten_thousand_phones() {
     let mut hits = 0;
     for t in &tombstones {
         for phone in &candidates {
-            if chain_id(&t.prev, &guess(t, &t.payload[..NONCE_LEN], phone)) == t.id {
+            if record_id(&Record { payload: guess(t, &t.payload[..NONCE_LEN], phone), ..t.clone() }) == t.id {
                 hits += 1;
             }
         }
@@ -142,7 +143,7 @@ fn an_erased_id_is_not_recovered_by_enumerating_ten_thousand_phones() {
     let mut confirmed = 0;
     for t in &tombstones {
         let o = original.iter().find(|o| o.id == t.id).unwrap();
-        if chain_id(&t.prev, &guess(t, &o.payload[..NONCE_LEN], SUBJECT)) == t.id {
+        if record_id(&Record { payload: guess(t, &o.payload[..NONCE_LEN], SUBJECT), ..t.clone() }) == t.id {
             confirmed += 1;
         }
     }

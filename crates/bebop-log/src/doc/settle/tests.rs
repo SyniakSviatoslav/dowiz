@@ -6,7 +6,7 @@
 use crate::doc::keys::{key_rows, narrower, Key, KeyOp, REVOKED_ALL};
 use crate::doc::seal::read_heads;
 use crate::doc::spec::SpecIn;
-use crate::doc::tests::{key_of, mix, Dev, ToyIds, ToySigner, ToyVerifier};
+use crate::doc::tests::{key_of, mix, tombs_body, Dev, ToyIds, ToySigner, ToyVerifier};
 use crate::doc::verify::{verify, Counters, Report, Trust};
 use crate::doc::write::{stage_doc, Refs};
 use crate::doc::{forgotten_body, Doc, DocError, Ids, Verifier};
@@ -412,7 +412,7 @@ fn tombstone(st: &mut Store, newest: usize) {
 /// A TOMBSTONE OVER THE REVOKE: `redact_into` refuses it, a forger writes the bytes, and a
 /// tombstone cannot say what it was (an erased id confirms no guess). Before `foreign_tombs`
 /// the thief's key, unrevoked by the erasure, signed the FORGOTTEN that balanced law 9 and the
-/// file held. Now that FORGOTTEN does not cover another author's record.
+/// file held. Now that FORGOTTEN does not cover another author's record, even listing it.
 #[test]
 fn a_thief_does_not_erase_the_revoke_of_its_own_key() {
     let (mut st, mut a, mut b) = root_and_device();
@@ -420,7 +420,8 @@ fn a_thief_does_not_erase_the_revoke_of_its_own_key() {
     op(&mut st, &mut a, &revoke(&b, 1)).unwrap();
     forge_table(&mut st, &b, 0);
     tombstone(&mut st, 0);
-    b.commit(&mut st, &forgotten_body(1, &[0x5B; 32]), None).unwrap();
+    let body = tombs_body(&st);
+    b.commit(&mut st, &body, None).unwrap();
     let r = under(&st, &a);
     assert_eq!((r.counters.redacted, r.counters.declared, r.counters.seals_bad, r.counters.keys_disagree), (1, 1, 0, 0), "law 9 balances and every seal is ok: {:?}", r.counters);
     assert_eq!(r.counters.tombs_foreign, 1, "{:?}", r.counters);
@@ -436,21 +437,24 @@ fn a_tombstone_is_declared_by_its_author_or_a_root() {
     b.commit(&mut st, b"b-2", None).unwrap();
     tombstone(&mut st, 1);
     assert_eq!(under(&st, &a).counters.tombs_foreign, 1, "undeclared");
-    b.commit(&mut st, &forgotten_body(1, &[0x5B; 32]), None).unwrap();
+    let body = tombs_body(&st);
+    b.commit(&mut st, &body, None).unwrap();
     assert!(under(&st, &a).holds(), "the author declares: {:?}", under(&st, &a).counters);
 
     let (mut st, mut a, mut b) = root_and_device();
     b.commit(&mut st, b"b-1", None).unwrap();
     b.commit(&mut st, b"b-2", None).unwrap();
     tombstone(&mut st, 1);
-    a.commit(&mut st, &forgotten_body(1, &[0x5B; 32]), None).unwrap();
+    let body = tombs_body(&st);
+    a.commit(&mut st, &body, None).unwrap();
     assert!(under(&st, &a).holds(), "a root declares: {:?}", under(&st, &a).counters);
 
     let (mut st, mut a, mut b) = root_and_device();
     a.commit(&mut st, b"a-2", None).unwrap();
     a.commit(&mut st, b"a-3", None).unwrap();
     tombstone(&mut st, 1);
-    b.commit(&mut st, &forgotten_body(1, &[0x5B; 32]), None).unwrap();
+    let body = tombs_body(&st);
+    b.commit(&mut st, &body, None).unwrap();
     let r = under(&st, &a);
     assert_eq!((r.counters.redacted, r.counters.declared, r.counters.tombs_foreign), (1, 1, 1), "{:?}", r.counters);
     assert!(!r.holds(), "a device does not declare a root's record");
@@ -465,7 +469,8 @@ fn limit_a_stolen_root_erases_a_revoke() {
     op(&mut st, &mut a, &revoke(&b, 1)).unwrap();
     forge_table(&mut st, &b, 0);
     tombstone(&mut st, 0);
-    b.commit(&mut st, &forgotten_body(1, &[0x5B; 32]), None).unwrap();
+    let body = tombs_body(&st);
+    b.commit(&mut st, &body, None).unwrap();
     let r = rep(&st);
     assert_eq!((r.counters.redacted, r.counters.declared, r.counters.seals_bad, r.counters.keys_disagree, r.counters.tombs_foreign), (1, 1, 0, 0, 0), "{:?}", r.counters);
     assert!(r.holds(), "the limit moved: {:?}", r.counters);
@@ -475,8 +480,11 @@ fn limit_a_stolen_root_erases_a_revoke() {
 /// no REVOKE, as the forger's writer would not look.
 struct Bodiless;
 impl Ids for Bodiless {
-    fn chained(&self, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-        ToyIds.chained(prev, payload)
+    fn chained(&self, r: &Record) -> [u8; 32] {
+        ToyIds.chained(r)
+    }
+    fn hash(&self, bytes: &[u8]) -> Option<[u8; 32]> {
+        ToyIds.hash(bytes)
     }
     fn body<'a>(&self, _flags: i64, _payload: &'a [u8]) -> &'a [u8] {
         &[]

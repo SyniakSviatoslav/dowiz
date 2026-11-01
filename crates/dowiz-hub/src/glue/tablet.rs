@@ -46,6 +46,10 @@ fn open(image: &[u8]) -> Result<StockLog, TabErr> {
         return Err(TabErr::Image);
     }
     log.set_checkpoint_every(usize::MAX);
+    // A TABLET WRITES ITS LOG'S SCHEME (W-MG-TRANS H8): it is told no switch, so what the hub last
+    // sent it decides. The crate's default, sha256, would flip an unflipped venue from a tablet;
+    // `false` is only a request, and a log whose newest record is sha256 stays sha256.
+    log.set_sha256(false);
     Ok(log)
 }
 

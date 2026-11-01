@@ -1,2 +1,0 @@
-
-SEAL DONE in batch5: unsealed by reachability from tips inside ok seals, holds requires 0; bebop-log 107, hub 892 + k3_union 12; reader 131096 B (ceiling 133000). REVOKE resumed in batch5: cells 17 keys_disagree + 18 unsealed, genesis= word, examples fix, all gates. FMT2 in w-pkg: 17 cold gaps, new rules, stranger reader rebuilt, English embedded. W-MG-ATK (Opus, fresh) in w-atk: ADD/REMOVE/REPLAY/SWAP attack table, tests only; leads: frontier rows unsigned, TREE not covered by holds?. Order: REVOKE gates -> FORMAT merge -> run-all quiet -> commit; ATK's holes -> next lane.

@@ -199,7 +199,7 @@ fn cellwise_decode_refuses_exactly_what_bytewise_refused() {
             x ^= x << 13; x ^= x >> 7; x ^= x << 17;
             at.push(x as usize % base.cells.len());
         }
-        for &c in &at {
+        for &c in at.iter().filter(|c| **c < base.cells.len()) {
             let old = base.cells[c];
             for new in [0, -1, old.wrapping_add(1), old.wrapping_sub(1), old | (1 << 33), i64::MAX, old ^ 0xff] {
                 let mut st = Store { cells: base.cells.clone() };

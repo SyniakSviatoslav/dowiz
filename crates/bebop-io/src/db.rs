@@ -72,9 +72,8 @@ pub struct Db<D: Device> {
 /// `Db::create`, `Db::reopen`); `Db::open` itself reads only the snapshot (`db/lazy.rs`).
 pub(super) fn writer_of<D: Device>(dev: D, opts: &Options) -> Result<Writer<D>, Refusal> {
     let n = dev.len_cells()?;
-    // W-ES-P10: the cells go straight into the writer's `Store` (`from_cells` pads them to the
-    // arena's capacity exactly as `from_bytes` does); the bytes round trip was two of the four
-    // image copies an open paid (docs/measurements/B4-LAZY-OPEN-2026-10-30.md §3).
+    // W-ES-P10: the cells go straight into the writer's `Store`, which grows as it allocates; the
+    // bytes round trip was two of the four image copies an open paid (docs/measurements/B4-LAZY-OPEN-2026-10-30.md §3).
     let store = Store::from_cells(dev.read_cells(0, n)?);
     Ok(Writer::adopt(dev, store, opts.on_torn == OnTorn::Fallback)?)
 }

@@ -104,11 +104,11 @@ pub fn read_blob(st: &Store, at: usize) -> Option<Vec<u8>> {
     if !(0..=MAX_BLOB_BYTES as i64).contains(&len) {
         return None;
     }
-    let n = (len as usize).div_ceil(8);
+    let n = bebop_image::idx_end(len).div_ceil(8);
     if st.obj_cells(at) != 1 + n {
         return None;
     }
-    Some(cells_to_bytes(&cells_of(st, at, 1, n), len as usize))
+    Some(cells_to_bytes(&cells_of(st, at, 1, n), bebop_image::idx_end(len)))
 }
 
 pub(crate) fn stage_blob(st: &mut Store, tx: &mut Tx, bytes: &[u8]) -> Result<usize, StoreError> {
@@ -195,3 +195,9 @@ impl Doc {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod fixture_ids;
+#[cfg(test)]
+mod fixture_tests;
+#[cfg(test)]
+mod fixture_wishes;

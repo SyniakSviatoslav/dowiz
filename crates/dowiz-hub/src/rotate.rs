@@ -8,8 +8,11 @@
 //! for the whole archive and an auditor with the archive recomputes it. The hub's log is
 //! not a DOC yet (W-MG-M1B's `doc_seal.rs` is where its commits will be sealed); until then
 //! the checkpoint record is the hub's TRUNCATE, chained and nonced like every M0 record.
+//!
+//! THE CHECKPOINT OPENS THE FRESH IMAGE, except on a log in transition, where it closes it: legacy
+//! records carried past a flip stay older than every sha256 one (`rotate`, W-MG-TRANS H4).
 
-use bebop_store::{evlog::{EvLog, Record}, merkle, Store};
+use bebop_store::{evlog::{EvLog, Record, FLAG_SHA256}, merkle, Store};
 
 use crate::decode;
 use crate::{EventKind, Hub, HubError};
@@ -73,51 +76,59 @@ impl Hub {
 
         // A fresh image sized for what it will hold, never smaller than a hub's
         // birth size: the whole point is that it is not the old one.
-        let mut fresh = Store::create_bytes(self.store.to_bytes().len().max(64 * 1024))?;
+        let mut fresh = Store::create_bytes(self.store.image_bytes().max(64 * 1024))?;
         EvLog::init_bytes(&mut fresh)?;
         // The checkpoint is a NEW record and continues the log's own scheme: a rotation must not
         // be what flips an unflipped venue (docs/design/MIGRATION-sha256-ids.md).
         let sha = self.entropy.writes_sha256(&self.store);
-        let (payload, check_id, flags) = self.entropy.stamp(sha, &tip, body);
-        EvLog::append_tip_bytes(
-            &mut fresh,
-            &Record { id: check_id, prev: tip, actor_pubkey: [0u8; 32], actor_seq: 0, flags, payload },
-        )?;
+        let (payload, check_id, flags) = self.entropy.stamp(sha, &[0u8; 32], 0, &tip, body);
+        let checkpoint = Record { id: check_id, prev: tip, actor_pubkey: [0u8; 32], actor_seq: 0, flags, payload };
 
-        let mut last = check_id;
-        for (r, bad) in &records {
-            let Some(ev) = decode(r) else { continue };
-            // A checkpoint from an EARLIER rotation is not carried forward: the
-            // new one names the image that holds it, so the chain of
-            // checkpoints runs through the archives rather than piling up here.
-            if ev.kind == EventKind::Checkpoint {
-                continue;
-            }
-            // THE AUDIT TRAIL IS NOT AN ORDER AND IS NOT ROTATED OUT.
-            //
-            // A `Revealed` record names who looked at a customer's contact
-            // details; its subject is "cust:<key>", which is not an order id,
-            // so `keep` -- built from the orders -- was never going to say yes
-            // to one. The first rotation would have taken the whole trail out
-            // of the hot log, and the only archive reader folds orders, so it
-            // would have been unreachable from every surface. For a log whose
-            // header calls itself the only tamper-evident thing this hub has,
-            // that is the opposite of the point.
-            //
-            // They are small (one short record per read of a phone number) and
-            // they stay.
-            if !ev.kind.is_order() {
-                EvLog::append_carry_bytes(&mut fresh, r, *bad)?;
-                last = r.id;
-                continue;
-            }
-            if !keep(&ev.order_id) {
-                continue;
-            }
-            EvLog::append_carry_bytes(&mut fresh, r, *bad)?;
-            last = r.id;
+        // Every event of a kept order, and the audit trail. A checkpoint from an EARLIER rotation
+        // is not carried forward: the new one names the image that holds it, so the chain of
+        // checkpoints runs through the archives rather than piling up here.
+        //
+        // THE AUDIT TRAIL IS NOT AN ORDER AND IS NOT ROTATED OUT.
+        //
+        // A `Revealed` record names who looked at a customer's contact
+        // details; its subject is "cust:<key>", which is not an order id,
+        // so `keep` -- built from the orders -- was never going to say yes
+        // to one. The first rotation would have taken the whole trail out
+        // of the hot log, and the only archive reader folds orders, so it
+        // would have been unreachable from every surface. For a log whose
+        // header calls itself the only tamper-evident thing this hub has,
+        // that is the opposite of the point.
+        //
+        // They are small (one short record per read of a phone number) and
+        // they stay.
+        let carried: Vec<&(Record, Option<u32>)> = records
+            .iter()
+            .filter(|(r, _)| match decode(r) {
+                None => false,
+                Some(ev) if ev.kind == EventKind::Checkpoint => false,
+                Some(ev) => !ev.kind.is_order() || keep(&ev.order_id),
+            })
+            .collect();
+
+        // THE SCHEME MOVES FORWARD IN THE FILE TOO (W-MG-TRANS H4). A sha256 checkpoint above a
+        // carried legacy record is `walk_check`'s forgery shape, and a carried legacy record as the
+        // newest walks `writes_sha256` back. So a rotation of a log in transition writes its
+        // checkpoint LAST: legacy, then sha256, then the checkpoint, and the newest record says
+        // sha256. A log wholly on one scheme keeps the checkpoint first, byte for byte.
+        let last = sha && carried.iter().any(|(r, _)| r.flags & FLAG_SHA256 == 0);
+        if !last {
+            EvLog::append_tip_bytes(&mut fresh, &checkpoint)?;
         }
-        EvLog::set_tip_bytes(&mut fresh, &last)?;
+        let mut newest = check_id;
+        for (r, bad) in &carried {
+            EvLog::append_carry_bytes(&mut fresh, r, *bad)?;
+            newest = r.id;
+        }
+        if last {
+            EvLog::append_tip_bytes(&mut fresh, &checkpoint)?;
+        } else {
+            EvLog::set_tip_bytes(&mut fresh, &newest)?;
+        }
         (self.store, self.seen) = (fresh, None); // re-laid: the load-time scan no longer describes it
         Ok(archived)
     }

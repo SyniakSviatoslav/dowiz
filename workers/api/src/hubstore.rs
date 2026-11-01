@@ -398,10 +398,6 @@ pub async fn load_both(place: &Place) -> Result<(Loaded, LoadedCatalog)> {
             hub: Hub::load(&bytes)
                 .map(crate::image_err::hub_loaded).map_err(|e| crate::image_err::unreadable("hub", e))
                 .map(|mut h| {
-                    // M0: the nonce seed for whatever this request appends (`crate::entropy_seed`).
-                    if let Some(seed) = crate::entropy_seed() {
-                        h.set_entropy(seed);
-                    }
                     crate::scheme::arm(&mut h, &place.venue);
                     h
                 })?,
@@ -622,9 +618,6 @@ pub async fn load_stock(place: &Place) -> Result<LoadedStock> {
         Some((image, generation)) => {
             let mut stock = dowiz_hub::stock::StockLog::load(&image)
                 .map_err(|e| crate::image_err::unreadable("stock", e))?;
-            if let Some(seed) = crate::entropy_seed() {
-                stock.set_entropy(seed); // M0
-            }
             crate::scheme::arm(&mut stock, &place.venue);
             Ok(LoadedStock { stock, generation })
         }
@@ -901,9 +894,7 @@ pub const IMAGE_AUDIT: &str = "audit";
 
 /// Read one of the venue's append-only images.
 pub async fn load_log(place: &Place, image: &str) -> Result<crate::platform_store::LoadedLog> {
-    let mut loaded = crate::platform_store::load_log_at(&place.stub()?, image).await?;
-    crate::scheme::arm(&mut loaded.log, &place.venue);
-    Ok(loaded)
+    crate::platform_store::load_log_at(&place.stub()?, image, &place.venue).await
 }
 
 /// Read, append, write one of the venue's append-only images, under the guard. The log is
@@ -912,12 +903,7 @@ pub async fn with_log<F, T>(place: &Place, image: &str, mut f: F) -> Result<T>
 where
     F: FnMut(&mut dowiz_hub::logimage::LogImage) -> Result<T>,
 {
-    let venue = place.venue.clone();
-    crate::platform_store::with_log_at(&place.stub()?, image, move |log| {
-        crate::scheme::arm(log, &venue);
-        f(log)
-    })
-    .await
+    crate::platform_store::with_log_at(&place.stub()?, image, &place.venue, f).await
 }
 
 /// Read one of the venue's table images.

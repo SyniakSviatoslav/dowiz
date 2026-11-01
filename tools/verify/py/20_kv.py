@@ -47,7 +47,7 @@ def kv_base(im, root, ver):
         budget -= kl + vl
         if budget < 0:
             raise Refuse(2)
-        entries.append((lossy(blob_bytes(im, kblob, ver, ko, kl)), blob_bytes(im, vblob, ver, vo, vl)))
+        entries.append((blob_bytes(im, kblob, ver, ko, kl), blob_bytes(im, vblob, ver, vo, vl)))
     return entries
 
 
@@ -64,11 +64,13 @@ def kv_entries(im, root):
     for rec in chain:
         im.need_crc(rec[0])
     entries = kv_base(im, root, ver)
-    if chain and any(entries[i][0] >= entries[i + 1][0] for i in range(len(entries) - 1)):
-        raise Refuse(2)
+    if any(entries[i][0] >= entries[i + 1][0] for i in range(len(entries) - 1)):
+        raise Refuse(2)  # strictly ascending in raw bytes, chain or no chain (W-MG-ATK3, main)
+    if not chain:
+        return entries
     m = dict(entries)
     for obj, op, kl, vl in reversed(chain):
-        k = lossy(im.b[(obj + 6) * 8: (obj + 6) * 8 + kl])
+        k = im.b[(obj + 6) * 8: (obj + 6) * 8 + kl]
         if op == 1:
             m[k] = im.b[(obj + 6 + (kl + 7) // 8) * 8: (obj + 6 + (kl + 7) // 8) * 8 + vl]
         else:

@@ -10,14 +10,53 @@ tree; every number is quoted from a run.
 
 Expand, then contract. The first build that READS both schemes WRITES the old one: `SHA256_VENUES = ""`
 in `workers/api/wrangler.toml`. A venue is flipped by naming it there and deploying (`"qa-durres"`
-first, then `"*"`). A flip is ONE-WAY per venue and lives in the bytes, not in the config: the hub crate
-keeps writing sha256 once a log's newest record is sha256, whatever the var says afterwards
-(`crates/dowiz-hub/src/chain/scheme.rs`, `Entropy::writes_sha256`). Before any flip, rolling back to
+first, then `"*"`). A flip is ONE-WAY per venue and lives in the bytes, not in the config.
+
+**How per-log state makes that per-venue (W-MG-TRANS).** The state is per LOG: a log is on sha256 once its
+newest record is (`Entropy::writes_sha256`), whatever the var says afterwards. The DECISION is per venue:
+every door the Worker has to a log of a venue arms it for that venue (`scheme::arm`, one call, seed and
+scheme), so while the var names the venue each of its logs turns sha256 at its own next write. A venue is
+therefore flipped log by log, not atomically: a log nobody wrote since the flip is still legacy, and it is
+read as legacy, because every reader asks the record it holds and no reader compares two logs. After a
+rollback to the floor the var says `""`: the logs already flipped stay flipped, the ones not yet flipped
+stay legacy, and neither is broken. "Flipped venue" means: its logs are allowed to be sha256, and none that
+is ever goes back. Before any flip, rolling back to
 prod is safe because nothing written needs the new reader. After a flip, roll back only to a build that
-reads sha256 -- `tools/deploy/rollback.sh` refuses the others (exit 53). No new format bytes: the flag
-bit and the nonce already exist in main; this change only decides WHEN they are first written.
+reads sha256 -- `tools/deploy/rollback.sh` refuses the others (exit 53), and `deploy.sh` refuses a forward
+build without the reader (exit 14). No new format bytes from this
+lane: the flag bit and the nonce already exist in main; it only decides WHEN they are first written.
+
+**Id v2 (W-MG-HOLES, 2026-10-31).** "sha256 ids" below means `sha256("bebop-record/1" ‖ flags ‖ actor ‖
+seq ‖ prev ‖ payload)` (`doc::id_message`, FORMAT §9.4), not M0's `sha256(prev ‖ payload)`, which no
+live record carries and no build reads any more: a flagged record with an M0 id is `broken` by rule
+(`verify_id`; not measured on a real uncut file), and a cut file written before HOLES has no `seg_hash`
+in its TRUNCATE and is refused 75 (measured: the old `anch.store` read `verify status=75`). So the
+expand release of step A MUST be a build at or after HOLES, and the floor is such a build. A build
+from `58154dd9` up to HOLES is NOT a rollback target once any venue is flipped: its reader calls every
+v2 record broken. The wire needs no new field: a stock record has actor 0,
+seq = its position and flags derived from its text (`chain::stock_flags`), and a record carried over
+a rebase loses `FLAG_NONCE_DERIVED` because its `prev` changed. Id v2 binds the sha256 records only: a
+legacy record's actor, seq and flags stay free, so a `seal_hub` of a real venue is exposed on its
+pre-seal records until those records leave the file (FORMAT §14).
 
 ## 1. What `ac5ff0c4` does with a sha256 record (measured, not inferred)
+
+Measured on M0 ids below; RE-MEASURED on id v2 by W-MG-ATK4, 2026-10-31: the same quarantine, and §1.3's
+numbers moved. The lines, with the real old binary on an image the new code wrote:
+
+```
+old-read hub:     len=5 events=3 quarantined=2 chain={records:5 chained:3 legacy:0 broken:2 redacted:0} reasons=["kind", "kind"]
+old-read stock:   len=4 events=4 quarantined=0 shelf=[("salmon", StockLevel { on_hand: 147, reserved: 0 })]
+old-read log:     len=2 entries=1 quarantined=1 reasons=["kind-framing"]
+old-read consent: len=3 entries=3 quarantined=0 state=true     <- a withdrawal, SILENTLY not read
+after 400 old appends, new-read hub: len=405 events=403 quarantined=2 chain={records:405 chained:0 legacy:403 broken:2 redacted:0}
+```
+
+So a past-the-floor rollback loses every order since the flip for good (the first old grow strips the flag:
+`chained:0`, the log no longer reads as flipped and is not `broken:400` as M0 measured), loses no stock
+movement, and turns a consent withdrawal back into a grant with nothing quarantined. A promoted `tablet.wasm`
+from before the reader refuses a flipped venue's reply: `tablet rebase: REFUSED Reply("the replay does not
+land on the hub's tip")`, which is why the expand release ships a rebuilt one (§2).
 
 Main's note said a rollback "would misread new records". Measured 2026-10-31 with the real old binary
 (`/root/lanes/deploy-src` = `ac5ff0c4`, `crates/dowiz-hub` built as is) against an image the new code
@@ -55,23 +94,19 @@ deploy, and corruption on the first grow. That is what the floor in §3 prevents
 | Piece | Where | Guarantee |
 |---|---|---|
 | The switch | `crates/dowiz-hub/src/chain/scheme.rs` (`Entropy::{set_sha256, writes_sha256, stamp}`), `Hub::set_sha256` in `crates/dowiz-hub/src/chain.rs`, `LogImage::set_sha256` in `crates/dowiz-hub/src/logimage.rs`, `StockLog::set_sha256` in `crates/dowiz-hub/src/stock/log.rs` | `false` writes a record byte for byte as `ac5ff0c4` does (FNV over `prev ‖ payload`, flags 0, no nonce); one-way once the log is sha256 |
-| The per-venue config | `workers/api/src/scheme.rs` (`SHA256_VENUES`: `""` nobody, a list of venue IDS, `"*"`), installed in `workers/api/src/lib.rs` `main` and `workers/api/src/hubdo.rs` `new`; every log the Worker may append to is armed (`scheme::arm` / `arm_scheme`) | the expand release writes legacy everywhere; the crate's own default stays sha256 so no test in the crate moved |
+| The per-venue config | `workers/api/src/scheme.rs` (`SHA256_VENUES`: `""` nobody, a list of venue IDS, `"*"`), installed in `workers/api/src/lib.rs` `main` and `workers/api/src/hubdo.rs` `new`; every log the Worker may append to is armed in ONE call, seed and scheme (`scheme::arm` / `arm_scheme`); `platform_store::{load_log_at, with_log_at}` take the venue as a required argument and arm inside; an object that does not know its name is legacy unless the list is `*` (`scheme::chosen`) | the expand release writes legacy everywhere; the crate's own default stays sha256 so no test in the crate moved |
+| The armed state travels | `Entropy` is one object (seed, counter, scheme); `Entropy::forward`, `LogImage::{fresh, fresh_sized, reload}` hand it to whatever replaces a log | no rebuild or reload resets it: a consent erasure, a catalogue-journal compaction and a chat prune all stay on the log's scheme with its seed |
+| The rotation of a log in transition | `crates/dowiz-hub/src/rotate.rs`: when a sha256 checkpoint would sit above a carried legacy record the checkpoint is written LAST | the scheme moves forward in the file too: no honest record reads `broken`, and the newest record keeps the log one-way past the rotation; a log wholly on one scheme keeps the checkpoint first, byte for byte |
+| The tablet | `glue/tablet.rs` writes its log's scheme; `stock/adopt.rs` `keeps_as_written`; `glue/merge.rs` `adopted_prefix`; a rebuilt `tablet.wasm`, and `deploy.sh` refuses a module that is not its source (exit 15) | a tablet does not flip a venue, a derived nonce that loses its flag over a rebase is still counted (`StockLog::derived`), a tablet reads a flipped reply, and a retry with more records adopts each movement once |
 | The tripwire | `tools/deploy/scheme-armed.sh` | every Worker file that constructs a `Hub`/`LogImage`/`StockLog` arms it or is named read-only with a reason; `scheme-armed: 12 files armed, 10 read-only by name, 0 unarmed` |
-| The floor | `tools/deploy/deploy.sh` step 5 records every uploaded version in `versions.log`, the first build whose `wrangler.toml` declares `SHA256_VENUES` as the floor (`sha256-floor`), a non-empty value as a flip (`sha256-flipped`, never removed); `tools/deploy/rollback.sh` step 0 refuses a target not recorded at or after the floor once a flip exists (exit 53), `ROLLBACK_PAST_FLOOR=1` overrides and says what will happen | no rollback can reach a build that quarantines flipped venues' orders by accident |
+| The floor | `tools/deploy/deploy.sh` reads the var with a TOML parser (`scheme_var.py`) before anything is uploaded, marks a flip (`sha256-flipped`, never removed) BEFORE the upload, records every uploaded version in `versions.log` with `declared=` before any later check can exit, the first build that declares `SHA256_VENUES` as the floor (`sha256-floor`); `tools/deploy/rollback.sh` step 0 takes four witnesses of a flip (the mark, a list in `versions.log`, the tree's `wrangler.toml`, any commit that ever set a list) and refuses a target not recorded at or after the floor as a build that declared the var (exit 53), `ROLLBACK_PAST_FLOOR=1` overrides and says what will happen | no rollback can reach a build that quarantines flipped venues' orders by accident, a lost cache included |
 | Kill tests | `crates/dowiz-hub/src/chain/mig_tests.rs` (6), `workers/api/src/scheme.rs` tests (2), `tools/deploy/rollback.test.sh` (+8), `tools/deploy/test.sh` (+5) | §4 |
-
-Not touched: `crates/dowiz-hub/src/rotate.rs` (W-MG-M3M4) still writes its checkpoint record as sha256
-unconditionally -- the hand-back in the lane verdict names the three-line change (`stamp` instead of
-`with_nonce`/`chain_id`/`flags_for`). Until it lands, a ROTATION on an unflipped venue writes one sha256
-record into the fresh image and flips that venue. Rotation is the nightly archive step
-(`workers/api/src/hubstore.rs` `rotate`), so the expand release must not run a rotation before that
-hand-back is merged, or must be deployed with rotation off.
 
 ## 3. The runbook: order, check, rollback
 
 Preconditions, all local: `cd crates/dowiz-hub && cargo test --lib` green; `cd workers/api && cargo test --lib`
 green; `bash tools/deploy/scheme-armed.sh` prints `0 unarmed`; `bash tools/deploy/rollback.test.sh` and
-`bash tools/deploy/test.sh` green; the rotate.rs hand-back merged (§2). `SHA256_VENUES = ""` in
+`bash tools/deploy/test.sh` green; `sh crates/bebop-wasm/tablet.sh` run on the commit (`deploy.sh` refuses it otherwise, exit 15). `SHA256_VENUES = ""` in
 `workers/api/wrangler.toml`. Prod version id noted (`wrangler deployments status --json`; deploy.sh prints
 it as `serving now:`).
 
@@ -99,7 +134,7 @@ it as `serving now:`).
    and writes `sha256-flipped` (never removed).
 2. CHECK on qa-durres: place an order, receive stock; the operations report shows `chained` = the new
    records, `legacy` = the old ones, `broken` = 0, `derived` = 0 (the Worker sets the entropy seed);
-   the storefront, kitchen and console show the order; `/api/owner/health` lists no quarantine. On a
+   the storefront, kitchen and console show the order; a tablet syncs a movement (`merged` = 1, it lands on the hub's tip); `/api/owner/health` lists no quarantine. On a
    NOT-flipped venue nothing changed: `chained` still 0.
 3. ROLLBACK after the flip: `bash tools/deploy/rollback.sh <step-A-version-id>` -- the floor. qa-durres
    KEEPS writing sha256 (one-way, `switch_off_is_ignored_once_the_log_is_sha256`), its records are read
@@ -116,9 +151,9 @@ it as `serving now:`).
 ### Step C -- flip everybody
 
 Same as B with `SHA256_VENUES = "*"` (the platform's own logs, `errlog`, flip under `"*"` too).
-Check: `chained > 0` on every venue after its first write; `broken` = 0 everywhere; a stock tablet
+Check: `chained > 0` on every venue after its first write; `broken` = 0 everywhere, the first night's rotation included; a stock tablet
 glue (`workers/api/src/hubdo/glue_turn.rs`) still merges -- a tablet's bare records are chained under
-the hub's scheme (`adopt_from` -> `write_new`). Rollback as B.3: the floor or later.
+the hub's scheme (`adopt_from` -> `write_new`), and a tablet on a flipped log writes sha256 itself. Rollback as B.3: the floor or later.
 
 ### Step D -- nothing to contract
 
@@ -148,12 +183,25 @@ switches and names the consequence; a flip with no floor record refuses; `--unpi
 `bash tools/deploy/test.sh`: a commit without the var records a version and no floor; the expand release
 writes the floor and no flip; a flip writes the mark; an un-flip leaves it; a dry run records nothing.
 
+`cd crates/dowiz-hub && cargo test --test atk4_expand --test atk4_rotate --test atk4_nonce --test atk4_s2` (W-MG-ATK4's attacks, closed by
+W-MG-TRANS, each RED on the tree it was found on): an erasure and a compacted journal stay legacy and keep their
+seed, a tablet writes its log's scheme and a crafted nonced record goes in bare, the first rotation after a flip
+breaks nothing and leaves the log one-way, a longer retry adopts each movement once, a derived nonce is counted
+across a rebase. `bash tools/deploy/atk4-rollback.test.sh`, `atk4-deploy.test.sh`, `atk4-seams.test.sh`: the floor
+with its state damaged, what `deploy.sh` records of a flip, the seams no crate test reaches.
+`bash tools/deploy/scheme-armed.sh --behaviour` runs the whole Worker suite with every log on legacy and fails on
+any image that newly holds a sha256 record outside a named fixture: it is what found a venue's first order
+(`hubdo/orders.rs`) unarmed, after the file grep had printed `0 unarmed`. Run it before step A.
+
 ## 5. What cannot be proven locally (for main, when deploys reopen)
 
-- That every live write path is armed: the tripwire is file-level; the live proof is `chained == 0` on
+- That every live write path is armed: `--behaviour` covers what a test reaches, and a Mem host is not
+  Cloudflare; the live proof is `chained == 0` on
   an unflipped venue after a day of trading on the expand release (A.2).
 - That `wrangler rollback` to the floor version restores `SHA256_VENUES = ""` with it (a version carries
   its vars) -- expected, not exercised here.
+- What `own_name()` answers in a live alarm turn: workerd aborts on this box (`MmapAligned() failed`), so
+  this is unmeasured, and an object with no name writes legacy under a list (`scheme::chosen`), which is the safe side.
 - The stock tablet (web) under a flipped hub: `glue_turn` is covered by the crate's adopt tests, the
   browser flow by `tools/gates/flows.sh` on deployed qa-durres (operator 10-12 rule).
 - The floor's `versions.log` starts with the expand release: prod's current version is not in it, which

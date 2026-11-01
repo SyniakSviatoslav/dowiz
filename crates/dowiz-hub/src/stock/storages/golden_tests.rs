@@ -44,7 +44,9 @@ fn history() -> StockLog {
 // Re-derived at M0 (2026-10-30): the record envelope changed for every writer (16-byte nonce,
 // sha256 flag, sha256 id -- `dowiz-hub/src/chain.rs`); the pre-M0 value was c7544181...a9ad.
 // What this golden still pins is that the storages feature leaves the write path alone.
-const IMAGE_SHA: &str = "22228f1fbaff4cc30a610772c6bed4e8a4599b624cd654025c39213c7135b2a7";
+// Re-derived at W-MG-HOLES (2026-10-31): sha256 records, the id now over flags, actor and seq
+// (`doc::id_message`); the M0 value was 22228f1f...b2a7, on no live data.
+const IMAGE_SHA: &str = "d3b93ba9ff45ff368c6567aefa9573867025edd875d55375c81b0f037c442e18";
 
 #[test]
 fn an_unbound_venue_writes_the_pre_store2_bytes() {

@@ -58,7 +58,7 @@ impl<T: Image + ?Sized> Image for &T {
 /// `Store::check_obj` over `Cells`.
 pub fn check_obj_in<C: Image + ?Sized>(c: &C, obj: usize) -> Result<(), BadCrc> {
     let want = ((c.cell_at(obj.saturating_add(1)) >> 32) & 0xFFFF_FFFF) as u32;
-    let len = obj_len_in(c, obj) as usize;
+    let len = bebop_image::idx_end(obj_len_in(c, obj));
     if obj.saturating_add(2).saturating_add(len) > c.n_cells() {
         return Err(BadCrc { obj, want, got: None });
     }

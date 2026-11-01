@@ -199,19 +199,19 @@ fn zc_an_unbounded_length_is_an_error_not_a_panic() {
     assert!(kv_get_in(&View::new(&clean[..clean.len() / 2]), b"location").is_err(), "a truncated image read");
 }
 
-/// AN UNSORTED IMAGE (none is written here, but an image is a claim) is detected by
-/// `open` and read by scan, answering exactly `Kv::get`.
+/// AN UNSORTED BASE IS NO BASE (W-MG-ATK3 kv2_unsorted, kv2_dup_keys): every writer sorts, and
+/// the readers answered differently on one, so `open` and `decode` refuse it; the twin reads.
 #[test]
-fn zc_an_unsorted_image_falls_back_to_a_scan() {
-    let kv = Kv { entries: vec![("m".into(), b"1".to_vec()), ("b".into(), b"2".to_vec()), ("z".into(), b"3".to_vec()), ("a".into(), b"4".to_vec())] };
-    let b = kv.compacted_bytes_fit(1 << 20).unwrap();
-    let v = View::new(&b);
-    let zc = KvIn::open(&v).unwrap();
-    assert!(!zc.sorted(), "the order check missed an unsorted index");
-    for k in ["m", "b", "z", "a", "c"] {
-        assert_eq!(zc.get(k.as_bytes()).unwrap().map(|c| c.into_owned()), kv.get(k), "{k}");
+fn zc_an_unsorted_or_repeated_base_is_refused() {
+    for keys in [["m", "b"], ["a", "a"]] {
+        let kv = Kv { entries: keys.iter().map(|k| (k.to_string(), b"1".to_vec())).collect() };
+        let b = kv.compacted_bytes_fit(1 << 20).unwrap();
+        assert!(matches!(KvIn::open(&View::new(&b)), Err(crate::verify::KvError::NotKv)), "{keys:?}");
+        assert!(Kv::load(&Store::from_bytes(&b)).is_none(), "{keys:?}");
     }
-    assert_eq!(kv_prefix_in(&v, b"").unwrap().len(), 4);
+    let kv = Kv { entries: vec![("a".into(), b"1".to_vec()), ("b".into(), b"2".to_vec())] };
+    let b = kv.compacted_bytes_fit(1 << 20).unwrap();
+    assert!(KvIn::open(&View::new(&b)).is_ok() && Kv::load(&Store::from_bytes(&b)).is_some());
 }
 
 /// O(log n), MEASURED IN CELLS READ: one `get` on the 165 x 2.5 KB image after `reopen`

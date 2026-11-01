@@ -25,7 +25,7 @@ TARGET="${BWR_TARGET_DIR:-$C/target}"
 WASM="$TARGET/wasm32-unknown-unknown/release/bebop_wasm_reader.wasm"
 say() { echo "verify-build: $*"; }
 
-if ! (cd "$C" && CARGO_INCREMENTAL=0 RUSTFLAGS="--remap-path-prefix=$ROOT=/dowiz" "$CARGO" build --release --target wasm32-unknown-unknown --offline --target-dir "$TARGET") > "$V/.build.log" 2>&1; then
+if ! (cd "$C" && CARGO_INCREMENTAL=0 RUSTFLAGS="--remap-path-prefix=$ROOT=/dowiz -C link-arg=--max-memory=1073741824" "$CARGO" build --release --target wasm32-unknown-unknown --offline --target-dir "$TARGET") > "$V/.build.log" 2>&1; then
   say "RED wasm32 build failed rc=$? -- $(grep -m1 'error' "$V/.build.log")"; exit 1
 fi
 [ -f "$WASM" ] || { say "RED no module at $WASM"; exit 1; }
@@ -62,6 +62,8 @@ else
   mv "$V/.bebop-verify.new.mjs" "$V/bebop-verify.mjs"; chmod +x "$V/bebop-verify.mjs"
   say "REWRITTEN tools/verify/bebop-verify.mjs ($(wc -c < "$V/bebop-verify.mjs" | tr -d ' ') bytes; reader sha256 $sha) -- commit it"
 fi
+# read.mjs pins this reader: a rebuild moves the pin (tools/gates/atk3.sh holds them equal)
+python3 -I "$ROOT/tools/gates/atk3_pin.py" || exit 1
 # the file must stand alone: no import but node:fs, no placeholder left
 if grep -q '__WASM_' "$V/bebop-verify.mjs"; then say "RED a placeholder survived"; exit 1; fi
 if [ "$(grep -c '^import ' "$V/bebop-verify.mjs")" != "1" ]; then say "RED more than one import"; exit 1; fi

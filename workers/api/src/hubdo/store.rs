@@ -122,6 +122,10 @@ impl HubImages {
         if expected != current {
             return Ok(None);
         }
+        #[cfg(test)]
+        if crate::scheme::behaviour::on() {
+            crate::scheme::behaviour::check(id, self.image(id).await?.map(|(_, b)| b).as_deref(), bytes);
+        }
         let next = current + 1;
         let pinned = self.v2_when_pinned(id, bytes).await?; let bytes = pinned.as_deref().unwrap_or(bytes); // a KV image while pinned for a rollback (`hubdo/compact.rs`)
         let store = self.state.storage();

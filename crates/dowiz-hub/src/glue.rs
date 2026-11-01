@@ -21,7 +21,7 @@
 //! WHAT IS CHECKED BEFORE ONE RECORD IS BELIEVED, and refused by name (`Why`): the hub's image
 //! loads as a stock log with nothing quarantined (`StockLog::load`, every record's crc); each
 //! root's crc holds and its tip is the newest record's id; every KITCHEN-OR-HUB TAIL record's
-//! crc holds, its id is `sha256(prev ‖ payload)` -- for a record written since M0; a record
+//! crc holds, its id is `chain_id` over its cells -- for a record written since M0; a record
 //! from before carries no sha256 flag and is checked against the FNV chain it was written
 //! under (`chain.rs`: until 2026-10-30 EVERY record was FNV, and this comment said sha256) --
 //! and its `prev` is the record below it, down to the ancestor; the cover manifest's
@@ -72,7 +72,7 @@ pub enum Why {
     TipMismatch,
     /// A tail record (0 = newest) whose crc fails.
     BadCrc { pos: usize },
-    /// A tail record whose id is not `sha256(prev ‖ payload)` (nor, for a pre-M0 record, the
+    /// A tail record whose id is not `chain_id` over its cells (nor, for a pre-M0 record, the
     /// FNV chain it was written under), or whose `prev` is not the record below it.
     BrokenLink { pos: usize },
     /// The cover manifest's last glued tip is not in this chain.
@@ -257,16 +257,15 @@ fn tail_events(
             return refuse(side, Why::BadCrc { pos });
         }
         let below = tail.get(pos + 1).map(|b| c.id(*b)).unwrap_or(*anc);
-        let payload = c.payload(o);
-        let prev = c.prev(o);
+        let r = c.record(o);
         // The id under the scheme the record's flags cell names (`chain::verify_id`): sha256
         // since M0, the legacy FNV chain before. A pre-cascade id (payload alone) never
         // chained to anything and is a broken link here, as it always was.
-        let chained = matches!(crate::chain::verify_id(c.flags(o), &prev, &payload, &c.id(o)), Some(crate::IdScheme::Sha256 | crate::IdScheme::LegacyChained));
-        if prev != below || !chained {
+        let chained = matches!(crate::chain::verify_id(&r), Some(crate::IdScheme::Sha256 | crate::IdScheme::LegacyChained));
+        if r.prev != below || !chained {
             return refuse(side, Why::BrokenLink { pos });
         }
-        let rec = String::from_utf8_lossy(&payload);
+        let rec = String::from_utf8_lossy(&r.payload);
         // Only a record carrying the `"prov"` key can be provisional; the substring test keeps
         // the full meta parse off every other record, which measured +170 us at 2000+20+20
         // when it ran on all forty.

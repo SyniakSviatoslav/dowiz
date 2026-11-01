@@ -100,11 +100,20 @@ def key_mode(name):
     return 0
 
 
+class Cells(tuple):
+    """The image: a cell past either end reads 0 (FORMAT §1), so no claim out of a file can raise."""
+
+    def __getitem__(self, i):
+        if isinstance(i, slice):
+            return tuple.__getitem__(self, i)
+        return tuple.__getitem__(self, i) if 0 <= i < len(self) else 0
+
+
 def image(path):
     """(cells, n, live superblock or None, data root or 0, S-1 holds)."""
     raw = open(path, "rb").read()
     n = len(raw) // 8
-    cells = struct.unpack("<%dq" % n, raw[: n * 8])
+    cells = Cells(struct.unpack("<%dq" % n, raw[: n * 8]))
 
     def sb_ok(at):
         if at + 16 > n or cells[at] != MAGIC:
@@ -119,7 +128,7 @@ def image(path):
             s1 = s1 and cells[at + 13] == 0 and cells[at + 14] == 0
             if live is None or cells[at + 2] > cells[live + 2]:
                 live = at
-    if live is None or cells[live + 4] > n:
+    if live is None or not 0 <= cells[live + 4] <= n:
         return cells, n, None, 0, s1
     pt = cells[live + 3]
     # W-F1 (FORMAT §3.1 PartTabMisplaced): the live PartTab must sit at its home, live + 16;
@@ -138,7 +147,10 @@ def image(path):
         if zlib.crc32(struct.pack("<%dq" % ln, *cells[pt + 2 : pt + 2 + ln])) != (cells[pt + 1] >> 32) & 0xFFFFFFFF:
             return cells, n, None, 0, s1
     root = cells[pt + 18] if pt > 0 and pt + 18 < n else 0
-    return cells, n, live, (root if 0 < root and root + 2 <= n else 0), s1
+    # FORMAT §3.1: r < 0, or r + 2 >= n, is status 1; a root with no cell to read is refused, never a crash
+    if root < 0 or (root and root + 2 >= n):
+        return cells, n, None, 0, s1
+    return cells, n, live, root, s1
 
 
 def last_commit(cells, n, live):
@@ -244,16 +256,21 @@ def kv_entries(cells, n, root):
 
     if 2 * count > min(obj_len(kidx), obj_len(vidx)):
         return 2, None
+    # FORMAT §9.1 step 6: the entries together claim no more bytes than the two blobs hold
+    room = (obj_len(kblob) + obj_len(vblob)) * per_cell
+    for i in range(count):
+        room -= max(cells[kidx + 2 + 2 * i + 1], 0) + max(cells[vidx + 2 + 2 * i + 1], 0)
+    if room < 0:
+        return 2, None
     entries = []
     for i in range(count):
         k, v = slice_of(kidx, kblob, i), slice_of(vidx, vblob, i)
         if k is None or v is None:
             return 2, None
         entries.append((k, v))
+    if any(entries[i][0] >= entries[i + 1][0] for i in range(len(entries) - 1)):
+        return 2, None  # strictly ascending in raw bytes, chain or no chain (W-MG-ATK3, main)
     if chain:
-        if any(entries[i][0] >= entries[i + 1][0] for i in range(len(entries) - 1)):
-            # a chain on an unsorted base is refused
-            return 2, None
         m = dict(entries)
         for o, op, kl, vl in reversed(chain):  # oldest first
             k = packed(o, 4, kl)
@@ -300,7 +317,15 @@ def kv4_entries(cells, n, root):
         def __init__(self, status):
             self.status = status
 
+    left = [n]  # one image-sized budget: an honest tree's objects are disjoint (`doc/budget.rs`)
+
+    def spend(o):
+        left[0] -= min(obj_len(o), max(n - o - 2, 0)) + 2
+        if left[0] < 0:
+            raise Bad(2)
+
     def walk(o, level, sep, out):
+        spend(o)
         if not crc_ok(o):
             raise Bad(10)
         leaf = level == 1
@@ -314,14 +339,19 @@ def kv4_entries(cells, n, root):
         if karea > ln or (level > 1 and m < 2):
             raise Bad(2)
         kbytes = (ln - karea) * 8
-        slots = []
+        area = packed(o, karea, kbytes)
+        slots, used = [], 0
         for i in range(m):
             k = cells[o + 2 + 1 + stride * i + (0 if leaf else 1)] & 0xFFFFFFFFFFFFFFFF
             koff, klen = k >> 16, k & 0xFFFF
             r = back(o, 1 + stride * i + (1 if leaf else 0))
-            if koff + klen > kbytes or r is None:
+            # rule 5: keys packed in slot order with no gap, strictly ascending, the object exact
+            if koff != used or koff + klen > kbytes or r is None or (slots and slots[-1][0] >= area[koff : koff + klen]):
                 raise Bad(2)
-            slots.append((packed(o, karea, kbytes)[koff : koff + klen], r))
+            used += klen
+            slots.append((area[koff : koff + klen], r))
+        if ln != karea + (used + 7) // 8:
+            raise Bad(2)
         if sep is not None and slots[0][0] != sep:
             raise Bad(2)
         for k, r in slots:
@@ -330,6 +360,7 @@ def kv4_entries(cells, n, root):
                 continue
             if out and out[-1][0] >= k:
                 raise Bad(2)
+            spend(r)
             if not crc_ok(r):
                 raise Bad(10)
             vlen = cells[r + 2]
@@ -337,8 +368,8 @@ def kv4_entries(cells, n, root):
                 raise Bad(2)
             out.append((k, packed(r, 1, vlen)))
 
-    if obj_len(root) != 8 or root + 10 > n or any(cells[root + 2 + i] for i in (1, 2, 3, 4)):
-        return 2, None
+    if digest(root) != 610082063 or obj_len(root) != 8 or root + 10 > n or any(cells[root + 2 + i] for i in (1, 2, 3, 4)):
+        return 2, None  # 610082063 = DIGEST_KV_ROOT, FORMAT §9.1 v4 rule 0
     count, depth = cells[root + 2], cells[root + 9]
     if count < 0 or not 0 <= depth <= 16:
         return 2, None
@@ -517,8 +548,12 @@ def proj_mode(path):
     # name, not a newer file's.
     if ver > 2:
         return say(12)
-    recs, cur = [], follow(root, 1)
+    recs, cur, left = [], follow(root, 1), n
     while cur is not None and len(recs) <= get(root, 0):
+        # FORMAT §9.2: a record shorter than its head is cut short, and the walk spends the image once
+        left -= min(olen(cur), max(n - cur - 2, 0)) + 2
+        if olen(cur) < (12 if ver >= 2 else 15) or left < 0:
+            return say(4)
         recs.append(cur)
         cur = follow(cur, 2)
     if len(recs) != get(root, 0):

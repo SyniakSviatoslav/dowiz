@@ -113,10 +113,10 @@ pub fn pick_checked_in<C: Cells + ?Sized>(c: &C) -> Result<Superblock, PickError
         return Err(PickError::PartTabMisplaced { at, pt });
     }
     if pt != 0 {
-        let p = pt as usize;
-        let len = crate::obj_len_in(c, p) as usize;
+        let p = crate::idx_end(pt);
+        let len = crate::idx_end(crate::obj_len_in(c, p));
         let want = ((c.cell_at(p + 1) >> 32) & 0xFFFF_FFFF) as u32;
-        if len < crate::PARTTAB_CELLS as usize || p + 2 + len > have {
+        if len < crate::PARTTAB_CELLS as usize || p.saturating_add(2).saturating_add(len) > have {
             return Err(PickError::PartTabBad { at, pt: p, want, got: None });
         }
         let got = crc32_in(c, p + 2, len);
@@ -161,12 +161,13 @@ pub fn anchor_in<C: Cells + ?Sized>(c: &C, sb: &Superblock) -> Anchor {
     let mark = ((a as u64) >> 32) as i64;
     let want = (a as u64 & 0xFFFF_FFFF) as u32;
     let used = sb.arena_used;
-    if mark < ARENA as i64 || mark > used || used as usize > c.n_cells() {
+    if mark < ARENA as i64 || mark > used || crate::idx_end(used) > c.n_cells() {
         return Anchor::Torn { mark, used, want, got: None };
     }
-    let got = crc32_in(c, mark as usize, (used - mark) as usize);
+    let (from, to) = (crate::idx_end(mark), crate::idx_end(used));
+    let got = crc32_in(c, from, to - from);
     if got == want {
-        Anchor::Holds { mark: mark as usize, used: used as usize }
+        Anchor::Holds { mark: from, used: to }
     } else {
         Anchor::Torn { mark, used, want, got: Some(got) }
     }
@@ -178,7 +179,7 @@ pub fn anchor_of<C: Cells + ?Sized>(c: &C, mark: i64, cursor: i64) -> i64 {
     if !(ARENA as i64..=MAX_ANCHOR_MARK).contains(&mark) || cursor < mark {
         return 0;
     }
-    let crc = crc32_in(c, mark as usize, (cursor - mark) as usize);
+    let crc = crc32_in(c, crate::idx_end(mark), crate::idx_end(cursor - mark));
     (((mark as u64) << 32) | crc as u64) as i64
 }
 
@@ -193,7 +194,7 @@ pub fn without_anchor(img: &[u8]) -> Vec<u8> {
         if !st.sb_valid(at) {
             continue;
         }
-        let pt = st.cells[at + SB_PARTTAB].max(0) as usize;
+        let pt = crate::idx(st.cells[at + SB_PARTTAB]).unwrap_or(0);
         st.cells[at + SB_ANC] = 0;
         st.cells[at + SB_CRC] = crate::crc32_cells(&st.cells, at, 15) as i64;
         if pt != 0 && pt + PARTTAB_OBJ_CELLS <= n {

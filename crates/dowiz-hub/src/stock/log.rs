@@ -142,29 +142,30 @@ impl StockLog {
             self.grow().map_err(|_| StockError::Malformed)?;
         }
         if !self.entropy.writes_sha256(&self.store) {
-            return self.write_bytes(rec.into_bytes(), false);
+            return self.write_bytes(rec.into_bytes());
         }
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
-        let (nonce, derived) = self.entropy.nonce(&prev, rec.as_bytes());
-        self.write_bytes(crate::chain::with_nonce(&nonce, rec.as_bytes()), derived)
+        let (nonce, _) = self.entropy.nonce(&prev, rec.as_bytes());
+        self.write_bytes(crate::chain::with_nonce(&nonce, rec.as_bytes()))
     }
 
     /// One record, chained to the previous, AS THESE BYTES. Which scheme chains it is
-    /// what the bytes say (`codec::nonced_bytes`): a nonced payload gets `sha256(prev ‖
-    /// payload)` and the sha256 flag, a bare JSON object the legacy FNV id -- so a tablet
+    /// what the bytes say (`codec::nonced_bytes`): a nonced payload gets `chain::stock_id`
+    /// and the flags its bytes call for, a bare JSON object the legacy FNV id -- so a tablet
     /// replaying a hub's pre-M0 records lands on the hub's own ids, and the hub chaining a
     /// tablet's records lands on the tablet's. Takes the bytes, so a test can lay down an
     /// OLDER encoding and prove the fold still reads them, and a checkpoint is written
     /// through the same door as an event. The chain is what makes the log tamper-evident
     /// (`chain.rs` says exactly what that means and what it does not).
     pub(super) fn write_payload(&mut self, payload: Vec<u8>) -> Result<(), StockError> {
-        self.write_bytes(payload, false)
+        self.write_bytes(payload)
     }
 
-    fn write_bytes(&mut self, payload: Vec<u8>, derived: bool) -> Result<(), StockError> {
+    fn write_bytes(&mut self, payload: Vec<u8>) -> Result<(), StockError> {
         let sha = crate::stock::codec::nonced_bytes(&payload);
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
-        let id = crate::chain::id_for(&prev, &payload, sha);
+        let seq = EvLog::len(&self.store) as u64;
+        let id = crate::chain::stock_id(seq, &prev, &payload, sha);
         let rec = Record {
             id,
             prev,
@@ -174,8 +175,8 @@ impl StockLog {
             actor_pubkey: [0u8; 32],
             // The root's own counter, not a walk: `events().len()` decoded the
             // whole stock log on every single delivery just to number it.
-            actor_seq: EvLog::len(&self.store) as u64,
-            flags: if sha { crate::chain::flags_for(derived) } else { 0 },
+            actor_seq: seq,
+            flags: crate::chain::stock_flags(&prev, &payload, sha),
             payload,
         };
         // THE IMAGE GROWS RATHER THAN REFUSING, like the order log. A shelf
@@ -215,7 +216,7 @@ impl StockLog {
     /// order leaves every `prev` pointing at a record that does not exist yet,
     /// which is a heap of orphans that still looks like a log.
     fn grow(&mut self) -> Result<(), crate::HubError> {
-        let bigger = self.store.to_bytes().len().saturating_mul(2).max(64 * 1024);
+        let bigger = self.store.image_bytes().saturating_mul(2).max(64 * 1024);
         let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
         // The chain's BYTES, failed crcs carried: a quarantined record is never re-sealed

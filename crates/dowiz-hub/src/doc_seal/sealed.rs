@@ -11,7 +11,7 @@ use bebop_store::{Store, StoreError};
 
 use super::history::KIND_DECL;
 use super::{DeviceKey, HubIds, MlDsa65};
-use crate::chain::{chain_id, flags_for, with_nonce, Entropy};
+use crate::chain::{flags_for, record_id, with_nonce, Entropy};
 use crate::{e_is_full, ChainCheck, Event, EventKind, Hub, HubError};
 
 /// The kind byte of a record that carries a KEY OP (ADMIT / REVOKE) instead of an order
@@ -180,8 +180,8 @@ impl SealedHub {
         let prev = self.device_prev(key);
         let (nonce, derived) = self.entropy.nonce(&prev, &body);
         let payload = with_nonce(&nonce, &body);
-        let id = chain_id(&prev, &payload);
-        let rec = Record { id, prev, actor_pubkey: key.id, actor_seq: self.next_seq(key), flags: flags_for(derived), payload };
+        let mut rec = Record { id: [0u8; 32], prev, actor_pubkey: key.id, actor_seq: self.next_seq(key), flags: flags_for(derived), payload };
+        rec.id = record_id(&rec);
         match Doc::commit_bytes(&mut self.store, &rec, key, claimed_ms, op) {
             Ok(gen) => Ok(gen),
             Err(DocError::Store(e)) if e_is_full(&e) => {
@@ -194,7 +194,7 @@ impl SealedHub {
 
     /// Double the image: the DOC copied whole (`Doc::copy_bytes`), nothing re-signed.
     fn grow(&mut self) -> Result<(), HubError> {
-        let bigger = self.store.to_bytes().len().saturating_mul(2).max(MIN_SEALED_BYTES);
+        let bigger = self.store.image_bytes().saturating_mul(2).max(MIN_SEALED_BYTES);
         let mut fresh = Store::create_bytes(bigger)?;
         Doc::copy_bytes(&self.store, &mut fresh).map_err(doc_err)?;
         self.store = fresh;
