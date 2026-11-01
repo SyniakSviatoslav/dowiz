@@ -25,12 +25,43 @@ def forgotten_list(b):
     return [(rest[i:i + 32], rest[i + 32:i + 64]) for i in range(0, len(rest), 64)]
 
 
+def merge_rows(b):
+    """`merge_body::parse_merge`: the rows of both lists of a MERGE body, or None when it carries the
+    mark and is not exactly a MERGE (a count past the body, a state outside 1..3, a nonzero dup_declared
+    or held_n, a byte left over, state 3 without a conflict or a conflict without state 3)."""
+    at, rows = len(MERGE_MARK), []
+    try:
+        for _ in (0, 1):
+            n = struct.unpack_from("<Q", b, at)[0]
+            at += 8
+            if n > (len(b) - at) // 72:
+                return None
+            for _ in range(n):
+                rows.append((b[at:at + 32], struct.unpack_from("<Q", b, at + 32)[0], b[at + 40:at + 72]))
+                at += 72
+        state = b[at]
+        dup, held, n = struct.unpack_from("<QQQ", b, at + 33)
+        at += 57
+        if not 1 <= state <= 3 or dup or held or n > (len(b) - at) // 8:
+            return None
+        for _ in range(n):
+            size = struct.unpack_from("<Q", b, at)[0]
+            at += 8
+            if size > len(b) - at:
+                return None
+            at += size
+    except (struct.error, IndexError):
+        return None
+    return rows if at == len(b) and (state == 3) == (n > 0) else None
+
+
 def effective(sound):
     """`declare.rs` `declarations` with `signatures` False (this file judges no seal): a declaration counts
     on its chain alone -- its record classed chained, so its `prev` test held, with no tombstone mark.
-    `sound` = those records, oldest first. Returns (truncates, forgotten, revokes, erased): `erased` =
-    (id, digest, signer) in file order, FORGOTTEN's list."""
-    truncates, forgotten, revokes, erased = [], 0, [], []
+    `sound` = those records, oldest first. Returns (truncates, forgotten, revokes, erased, merges, named):
+    `erased` = (id, digest, signer) in file order, FORGOTTEN's list; `merges` = `merge_rows` per MERGE;
+    `named` = (target, after_seq, tip, signer, its seq) per REVOKE, `off_chain`'s input."""
+    truncates, forgotten, revokes, erased, merges, named = [], 0, [], [], [], []
     for r in sound:
         if is_redacted(r):
             continue
@@ -41,9 +72,13 @@ def effective(sound):
         elif (rows := forgotten_list(b)) is not None:
             forgotten += len(rows)
             erased += [(i, d, r["actor"]) for i, d in rows]
-        elif b.startswith(REVOKE_MARK) and len(b) >= len(REVOKE_MARK) + 40:
-            revokes.append((b[len(REVOKE_MARK):len(REVOKE_MARK) + 32], struct.unpack_from("<q", b, len(REVOKE_MARK) + 32)[0]))
-    return truncates, forgotten, revokes, erased
+        elif b.startswith(REVOKE_MARK) and len(b) >= len(REVOKE_MARK) + 72:
+            target, after = b[len(REVOKE_MARK):len(REVOKE_MARK) + 32], struct.unpack_from("<q", b, len(REVOKE_MARK) + 32)[0]
+            revokes.append((target, after))
+            named.append((target, after, b[len(REVOKE_MARK) + 40:len(REVOKE_MARK) + 72], r["actor"], r["seq"]))
+        elif b.startswith(MERGE_MARK):
+            merges.append(merge_rows(b))
+    return truncates, forgotten, revokes, erased, merges, named
 
 
 def keys_disagree(keys, revokes):
@@ -135,14 +170,34 @@ def unsealed(recs, tips, segs):
     row's own tip cell is never a start: HEADS is signed by nobody."""
     at = {r["id"]: r for r in recs}
     ends = {f[2] for s in segs for f in s["frontier"]} | {bytes(32)}
-    seen, dangling = set(), 0
-    for i in tips:
+    seen, bad = {}, 0
+    for walk, i in enumerate(tips):
         while i in at and i not in seen:
-            seen.add(i)
+            seen[i] = walk
             i = at[i]["prev"]
-        if i not in at and i not in ends:
-            dangling += 1
-    return max(len(recs) - len(seen), 0) + dangling
+        if i in seen:
+            bad += seen[i] == walk  # came back to its own record: a ring ends at neither
+        elif i not in ends:
+            bad += 1
+    return max(len(recs) - len(seen), 0) + bad
+
+
+def placed(actor, seq, tip, ids_at, segs):
+    """`declare.rs` `placed`: `tip` is this log's record at `(actor, seq)`, or a cut of that actor took the seq."""
+    cut = frontier_of(segs, actor)
+    return tip in ids_at.get((actor, seq), ()) or (cut is not None and seq <= cut[1])
+
+
+def merges_bad(merges, ids_at, segs):
+    """`declare.rs` `merges_bad`: MERGEs that are no MERGE, or with a row `placed` does not find."""
+    return sum(1 for m in merges if m is None or not all(placed(a, q, t, ids_at, segs) for a, q, t in m))
+
+
+def off_chain(named, keyed, ids_at, segs):
+    """`declare.rs` `Declared::off_chain`, counted in `broken`: a REVOKE after a seq > 0 of a key in the
+    table whose tip is not `placed`, unless the record is the target's own at that seq (its id covers
+    the body, so it cannot name itself)."""
+    return sum(1 for a, after, tip, by, seq in named if after > 0 and a in keyed and not (by == a and seq == after) and not placed(a, after, tip, ids_at, segs))
 
 
 def spend_walks(im, recs, tables, segs):
@@ -153,20 +208,21 @@ def spend_walks(im, recs, tables, segs):
 
 
 def doc_counts(im, recs, heads, keys, log_tip, segs):
-    """`doc::verify`'s eighteen counters as the MIT reader computes them (bebop-wasm-reader `ids.rs`,
+    """`doc::verify`'s twenty counters as the MIT reader computes them (bebop-wasm-reader `ids.rs`,
     `Verifier::checks_signatures` false): ids under dowiz-hub's sha256 scheme or the pre-M0 FNV lanes
     (a legacy id newer than a chained record of its device is broken: the scheme moves once), a
     redaction by the kind byte's high bit, forks by `(actor, seq)`, every seal COUNTED (`checked` 0,
     `genesis` = keys with no ADMIT record), segments declared by TRUNCATEs on their chain alone or 75,
     `keys_disagree` the table against the REVOKEs on their chain alone, `unsealed` from every seal's tip,
-    `tombs_foreign` (printed apart: the ABI's eighteen cells do not hold it) against the table's roots."""
+    `tombs_foreign` (printed apart: the ABI's twenty cells do not hold it) against the table's roots."""
     c = dict(records=len(recs), chained=0, legacy=0, redacted=0, broken=0, forks=0, seals=0,
              checked=0, heads=len(heads), keys=len(keys), genesis=sum(1 for _, a, _ in keys if a is None),
              segments=len(segs), cut=sat(sum(s["last"] - s["first"] + 1 for s in segs)),
              cut_redacted=sat(sum(s["redacted"] for s in segs)), declared=0)
-    tombs, sound, at = [], set(), {}
+    tombs, sound, at, ids_at = [], set(), {}, {}
     for r in recs:
         at[(r["actor"], r["seq"])] = at.get((r["actor"], r["seq"]), 0) + 1
+        ids_at.setdefault((r["actor"], r["seq"]), set()).add(r["id"])
     c["forks"] = sum(1 for n in at.values() if n > 1)  # by records: one id held twice is a fork too
     by_actor = {}
     for r in recs:
@@ -186,7 +242,7 @@ def doc_counts(im, recs, heads, keys, log_tip, segs):
             dense = (actor not in keyed or at[(actor, r["seq"])] > 1
                      or (last + 1 == r["seq"] if last is not None else
                          row is not None or r["seq"] == 1 or (soft is not None and soft + 1 == r["seq"])
-                         or (j == 0 and r["prev"] != bytes(32) and r["prev"] not in ids)))
+                         or (j == 0 and r["prev"] != bytes(32) and r["prev"] not in ids and not any(f[2] == r["prev"] for s in segs for f in s["frontier"]))))
             if not prev_ok:
                 c["broken"] += 1
                 last = r["seq"]
@@ -194,13 +250,14 @@ def doc_counts(im, recs, heads, keys, log_tip, segs):
                 moved, last = True, r["seq"]
                 if dense:
                     c["chained"] += 1
-                    sound.add(id(r))
+                    if at[(actor, r["seq"])] == 1:  # a record at a forked seq declares nothing (`count.rs`)
+                        sound.add(id(r))
                 else:
                     c["broken"] += 1
             elif is_legacy(r):
                 last, soft = None, r["seq"]
                 c["broken" if moved else "legacy"] += 1
-            elif is_redacted(r) and next_names_me and (dense or last is None):
+            elif is_redacted(r) and next_names_me and dense:
                 last = r["seq"]
                 c["redacted"] += 1
                 tombs.append(r)
@@ -209,8 +266,10 @@ def doc_counts(im, recs, heads, keys, log_tip, segs):
                 c["broken"] += 1
     tips, bad = read_seals(im, heads)
     c["seals"] = len(tips) + bad
-    truncates, forgotten, revokes, erased = effective([r for r in recs if id(r) in sound])
+    truncates, forgotten, revokes, erased, merges, named = effective([r for r in recs if id(r) in sound])
     check_segments(segs, truncates)
+    c["broken"] += off_chain(named, keyed, ids_at, segs)
     c["declared"] = sat(forgotten + sum(s["declared"] for s in segs))
-    c.update(keys_disagree=keys_disagree(keys, revokes), unsealed=unsealed(recs, tips, segs), tombs_foreign=tombs_foreign(recs, tombs, erased, keys))
+    c.update(keys_disagree=keys_disagree(keys, revokes), unsealed=unsealed(recs, tips, segs), tombs_foreign=tombs_foreign(recs, tombs, erased, keys),
+             merges=len(merges), merges_bad=merges_bad(merges, ids_at, segs))
     return c

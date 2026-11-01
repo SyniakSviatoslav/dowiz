@@ -77,12 +77,11 @@ fn the_union_is_a_live_file() {
     println!("K3 cut keep={keep} of {}: {:?}", sh.len(), cut.as_ref().map(|v| v.len()));
     cut.unwrap();
     pin("union-cut", &sh.to_bytes_trimmed(), (12, 0, 12, 0, 0, 2), true);
-    // the TRUNCATE signed by the ADMITTED device, not the genesis one
+    // the TRUNCATE signed by the ADMITTED device, not the genesis one: only a root cuts (`tam_tests::h1`)
     let mut sh = SealedHub::load(&bytes).unwrap();
     sh.set_entropy([5; 32]);
     let keep = sh.len() - 2;
-    sh.cut(keep, &b, 304).unwrap();
-    report("union-cut-by-b", &sh.to_bytes_trimmed());
+    assert!(sh.cut(keep, &b, 304).is_err(), "an admitted key's cut declares nothing");
 }
 
 #[test]
@@ -93,7 +92,8 @@ fn where_it_breaks() {
     // no dedupe: the shared prefix twice
     let mut twice = union(&sa, &sb);
     twice.recs = sa.recs.iter().chain(&sb.recs).cloned().collect();
-    pin("no-dedupe", &write(&twice), (17, 1, 13, 0, 4, 2), false);
+    // A record at a forked seq declares nothing (H3), B's ADMIT among them: 4 of its seals fall with it.
+    pin("no-dedupe", &write(&twice), (17, 1, 9, 4, 4, 1), false);
     // one device on both copies: a restored backup
     let (r1, r2) = {
         let mut x = SealedHub::load(&fa).unwrap();
@@ -219,12 +219,13 @@ fn a_revoke_on_one_side() {
     let (fa, fb) = offline(&a, &b, 0, 4);
     let mut sh = SealedHub::load(&fa).unwrap();
     sh.set_entropy([8; 32]);
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 1 }, &a, 500).unwrap();
+    // A holds none of B's records, so it can name none: revoked after 0 (`tam_tests::h2`).
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 0, tip: [0; 32] }, &a, 500).unwrap();
     let u = union(&side(&sh.to_bytes_trimmed()), &side(&fb));
     let mut with = u.clone();
     with.keys = side(&sh.to_bytes_trimmed()).keys;
-    pin("revoke-in-table", &write(&with), (9, 0, 6, 3, 0, 2), false);
+    pin("revoke-in-table", &write(&with), (9, 0, 5, 4, 0, 2), false);
     let mut wiped = with.clone();
     wiped.keys.iter_mut().for_each(|k| k.0.revoked_at = 0);
-    pin("revoke-table-wiped", &write(&wiped), (9, 0, 6, 3, 0, 2), false);
+    pin("revoke-table-wiped", &write(&wiped), (9, 0, 5, 4, 0, 2), false);
 }

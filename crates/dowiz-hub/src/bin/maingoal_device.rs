@@ -104,7 +104,7 @@ fn revoked_device(a: &Args, owner: &DeviceKey) -> Result<Vec<u8>, String> {
     sh.set_entropy(tagged("maingoal/revoke-entropy", &a.seed));
     sh.commit_keyop(&KeyOp::Admit(second.key()), owner, T0).map_err(er)?;
     sh.append(EventKind::Placed, "r1", PLAIN, &second, T0 + 1000).map_err(er)?;
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: second.id(), after_seq: 1 }, owner, T0 + 2000).map_err(er)?;
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: second.id(), after_seq: 1, tip: sh.tip_at(&second.id(), 1) }, owner, T0 + 2000).map_err(er)?;
     Ok(sh.to_bytes_trimmed())
 }
 

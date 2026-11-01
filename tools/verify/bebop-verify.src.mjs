@@ -12,7 +12,7 @@
 // and exits with the status (0 = read). The status in words goes to stderr. `--dump` prints
 // every entry (`key = value`, bytes shown UTF-8 or as hex), or every record (oldest first) and,
 // for a DOC, its heads first. `--verify` prints a DOC's counters on stdout:
-//   verify records= chained= legacy= redacted= broken= forks= seals= checked= heads= keys= genesis= segments= cut= cut_redacted= declared= keys_disagree= unsealed=
+//   verify records= chained= legacy= redacted= broken= forks= seals= checked= heads= keys= genesis= segments= cut= cut_redacted= declared= keys_disagree= unsealed= merges= merges_bad=
 //   (or `verify status=<s>` when the counters are refused, e.g. 75 CUT_UNDECLARED), then one `anchor kind= over= time_ms=
 //   proof_len= (present, NOT verified by this reader)` line per time anchor the file carries
 //
@@ -105,9 +105,9 @@ if (family === "doc") {
   const say = args.includes("--verify") ? console.log : console.error;
   const c = take((p, cap) => w.bw_counts(p, cap));
   if (typeof c === "number") { say(`verify status=${-c}`); console.error(words(-c)); process.exit(-c); }
-  // 18 cells (ABI 2): the twelve M1 counters, then segments cut cut_redacted declared (W-MG-M5b), keys_disagree (W-MG-REVOKE), unsealed (W-MG-SEAL) appended
+  // 20 cells (ABI 2): the twelve M1 counters, then segments cut cut_redacted declared (W-MG-M5b), keys_disagree (W-MG-REVOKE), unsealed (W-MG-SEAL), merges merges_bad (W-MG-M2) appended
   const v = Array.from({ length: c.length / 8 }, (_, i) => i64(c, 8 * i));
-  say(`verify records=${v[0]} chained=${v[1]} legacy=${v[2]} redacted=${v[3]} broken=${v[4]} forks=${v[6]} seals=${v[5]} checked=${v[10]} heads=${v[7]} keys=${v[8]} genesis=${v[9]} segments=${v[12]} cut=${v[13]} cut_redacted=${v[14]} declared=${v[15]} keys_disagree=${v[16]} unsealed=${v[17]}`);
+  say(`verify records=${v[0]} chained=${v[1]} legacy=${v[2]} redacted=${v[3]} broken=${v[4]} forks=${v[6]} seals=${v[5]} checked=${v[10]} heads=${v[7]} keys=${v[8]} genesis=${v[9]} segments=${v[12]} cut=${v[13]} cut_redacted=${v[14]} declared=${v[15]} keys_disagree=${v[16]} unsealed=${v[17]} merges=${v[18]} merges_bad=${v[19]}`);
   if (v[10] === 0n) console.error(text(take((p, cap) => w.bw_unchecked_text(p, cap))));
   const an = take((p, cap) => w.bw_anchors(p, cap));
   for (let i = 0; typeof an !== "number" && i + 56 <= an.length; i += 56) {

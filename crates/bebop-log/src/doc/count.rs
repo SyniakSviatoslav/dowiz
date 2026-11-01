@@ -21,10 +21,16 @@
 //! by two records is a FORK: counted by name, `holds` false, and not `broken` as well. A device's
 //! first record whose `prev` left the file is `unsealed`'s, and a broken record's own seq still
 //! places the next one, so `holds` is false in each case and one hole reads as one.
+//! FROM WHERE. A keyed device's chain starts at 1, or one past its OWN frontier row. `prev` on
+//! another device's frontier tip starts nothing (W-MG-LEAN): that tip is in no record of the file,
+//! which is why it once passed as "left the file", and a device opened there at any seq it liked.
+//! A TOMBSTONE'S SEQ IS NO FREER. Its id checks nothing, so its seq and its place are all that bind
+//! it: it is dense like any record (W-MG-LEAN: a device opened on one at seq 0, listed by its own
+//! FORGOTTEN).
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use alloc::collections::BTreeSet;
+use alloc::collections::{BTreeMap, BTreeSet};
 use crate::Record;
 use super::seal::Head;
 use super::frontier::Frontiers;
@@ -50,7 +56,7 @@ pub(super) fn count_records(ch: &Chains, heads: &[Head], fr: &Frontiers, keyed: 
     c.records = ch.recs.len();
     c.forks = ch.ids_at.values().filter(|v| v.len() > 1).count();
     // The first row of an actor answers for it.
-    let mut head_of: alloc::collections::BTreeMap<Actor, u64> = alloc::collections::BTreeMap::new();
+    let mut head_of: BTreeMap<Actor, u64> = BTreeMap::new();
     let mut n = 0u64;
     for h in heads {
         head_of.entry(h.actor_id).or_insert(n);
@@ -80,16 +86,17 @@ pub(super) fn count_records(ch: &Chains, heads: &[Head], fr: &Frontiers, keyed: 
         let mut soft: Option<u64> = None;
         for (j, &i) in idx.iter().enumerate() {
             let Some(r) = rec_at(i) else { continue };
+            let fork = forked(r);
             let prev_ok = if j == 0 { first_ok(r) } else { idx.get(j.wrapping_sub(1)).and_then(|&p| rec_at(p)).is_some_and(|p| p.id == r.prev) };
             let next_names_me = match idx.get(j + 1).and_then(|&n| rec_at(n)) {
                 Some(n) => n.prev == r.id,
                 None => head_tip == Some(r.id),
             };
             let dense = !judged
-                || forked(r)
+                || fork
                 || match last {
                     Some(l) => l.checked_add(1) == Some(r.actor_seq),
-                    None => row.is_some() || r.actor_seq == 1 || soft.and_then(|l| l.checked_add(1)) == Some(r.actor_seq) || (j == 0 && r.prev != [0u8; 32] && !ch.ids.contains(&r.prev)),
+                    None => row.is_some() || r.actor_seq == 1 || soft.and_then(|l| l.checked_add(1)) == Some(r.actor_seq) || (j == 0 && r.prev != [0u8; 32] && !ch.ids.contains(&r.prev) && !fr.tips.contains(&r.prev)),
                 };
             if !prev_ok {
                 c.broken += 1;
@@ -99,7 +106,10 @@ pub(super) fn count_records(ch: &Chains, heads: &[Head], fr: &Frontiers, keyed: 
                 last = Some(r.actor_seq);
                 if dense {
                     c.chained += 1;
-                    if let Some(s) = out.sound.get_mut(i) {
+                    // A record at a forked seq counts as chained, and the fork is named once. It
+                    // declares nothing: a forger with no key lands a TRUNCATE on a used seq, the
+                    // victim's seal covers that seq, and a refusal would become a count (H3).
+                    if let Some(s) = out.sound.get_mut(i).filter(|_| !fork) {
                         *s = true;
                     }
                 } else {
@@ -114,7 +124,7 @@ pub(super) fn count_records(ch: &Chains, heads: &[Head], fr: &Frontiers, keyed: 
                 } else {
                     c.legacy += 1;
                 }
-            } else if ids.redacted(r.flags, &r.payload) && next_names_me && (dense || last.is_none()) {
+            } else if ids.redacted(r.flags, &r.payload) && next_names_me && dense {
                 last = Some(r.actor_seq);
                 c.redacted += 1;
                 out.tombs.push(i);
@@ -125,4 +135,49 @@ pub(super) fn count_records(ch: &Chains, heads: &[Head], fr: &Frontiers, keyed: 
         }
     }
     out
+}
+
+/// `unsealed`: walk `prev` from `tips`, over ids and not over positions, so the file's order
+/// plays no part. Each record no walk visits counts one; so does each walk that leaves the file
+/// anywhere but at 0^32 or a frontier tip, because a signature over a tip commits to the whole
+/// chain below it, and a record dropped from under it must not read as a shorter history. So does a
+/// walk that comes back to a record of its own: a ring ends at neither (W-MG-LEAN; ids can do this
+/// only through a tombstone, whose id checks nothing). Meeting an EARLIER walk is no ring: chains
+/// join. So does a visited record for which `unowned` is true: a device's first record chains onto
+/// the log, so another device's tip reaches records their own author's seals may not cover, and such
+/// a record stays in the file while declaring nothing (a REVOKE disowned by rolling back a HEADS
+/// row, `atk_holes` hole 4).
+/// THE TWO MAPS ARE `covered`'s TYPE, ON PURPOSE: a sort or a new map type here cost the reader's
+/// wasm 6 KB (measured); this one is already in the binary.
+pub(super) fn unsealed(ch: &Chains, tips: &[[u8; 32]], fr: &Frontiers, unowned: &dyn Fn(&Record) -> bool) -> usize {
+    let mut at: BTreeMap<Actor, u64> = BTreeMap::new();
+    let mut i = 0u64;
+    for (_, r) in &ch.recs {
+        *at.entry(r.id).or_insert(0) = i;
+        i += 1;
+    }
+    // Per record, the walk that first reached it.
+    let mut seen: BTreeMap<Actor, u64> = BTreeMap::new();
+    let (mut bad, mut walk) = (0usize, 0u64);
+    for tip in tips {
+        walk += 1;
+        let mut id = *tip;
+        loop {
+            match at.get(&id).and_then(|n| ch.recs.get(*n as usize)) {
+                Some((_, r)) => {
+                    if let Some(w) = seen.get(&id) {
+                        bad += usize::from(*w == walk);
+                        break;
+                    }
+                    seen.insert(id, walk);
+                    id = r.prev;
+                }
+                None => {
+                    bad += usize::from(id != [0u8; 32] && !fr.tips.contains(&id));
+                    break;
+                }
+            }
+        }
+    }
+    ch.recs.len().saturating_sub(seen.len()) + bad + ch.recs.iter().filter(|(_, r)| seen.contains_key(&r.id) && unowned(r)).count()
 }

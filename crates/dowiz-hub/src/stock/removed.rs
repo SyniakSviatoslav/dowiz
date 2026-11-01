@@ -20,6 +20,8 @@ impl StockLedger {
     pub(super) fn forget(&mut self, item: &str) {
         self.levels.retain(|(i, _)| i != item);
         self.counted.retain(|i| i != item);
+        self.counted_set.remove(item);
+        self.level_at = self.levels.iter().enumerate().map(|(n, (i, _))| (i.clone(), n)).collect();
         self.open.retain(|(_, i), _| i != item);
         self.served.retain(|(_, i), _| i != item);
     }

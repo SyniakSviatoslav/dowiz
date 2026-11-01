@@ -183,7 +183,7 @@ fn replay_keys_from_an_older_copy() {
     let old = read(&bytes);
     let mut sh = SealedHub::load(&bytes).unwrap();
     sh.set_entropy([3; 32]);
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 3 }, &a, 9).unwrap();
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 3, tip: sh.tip_at(&b.id(), 3) }, &a, 9).unwrap();
     let mut s = round_trip(&sh.to_bytes_trimmed(), &roots);
     s.keys = old.keys.clone();
     caught("keys-replay-pre-revoke", &s, &roots, |r| r.counters.keys_disagree == 1);
@@ -236,7 +236,7 @@ fn a_revoked_keys_row_removed() {
     let mut sh = SealedHub::load(&bytes).unwrap();
     sh.set_entropy([3; 32]);
     sh.commit_keyop(&KeyOp::Admit(c.key()), &a, 8).unwrap();
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: c.id(), after_seq: 0 }, &a, 9).unwrap();
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: c.id(), after_seq: 0, tip: sh.tip_at(&c.id(), 0) }, &a, 9).unwrap();
     let mut s = round_trip(&sh.to_bytes_trimmed(), &roots);
     s.keys.retain(|k| k.0.actor_id != c.id());
     stays("key-remove-revoked-never-sealed INERT", &s, &roots);

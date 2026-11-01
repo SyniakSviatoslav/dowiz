@@ -93,7 +93,7 @@ fn stage_copy_with(src: &Store, dst: &mut Store, tx: &mut Tx, spec: Option<usize
             let tomb;
             let r = match redact.and_then(|(ids, f)| f(r).map(|p| (ids, p))) {
                 Some((ids, payload)) => {
-                    if let Some((target, _)) = parse_revoke(ids.body(r.flags, &r.payload)) {
+                    if let Some((target, ..)) = parse_revoke(ids.body(r.flags, &r.payload)) {
                         return Err(DocError::TakesRevoke(target));
                     }
                     tomb = Record { payload, ..r.clone() };

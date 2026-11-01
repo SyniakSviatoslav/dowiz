@@ -15,7 +15,7 @@ use bebop_log::EvLog;
 
 use crate::{blank, ids, log_fold, log_records, tree_entries, Doc, Kind, Refusal};
 
-/// `doc::verify`'s answer as the ABI hands it out (`abi::bw_counts`), eighteen numbers.
+/// `doc::verify`'s answer as the ABI hands it out (`abi::bw_counts`), twenty numbers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct DocCounts {
     pub records: i64,
@@ -50,6 +50,10 @@ pub struct DocCounts {
     /// W-MG-SEAL (appended): records no seal's tip reaches through `prev`, plus walks that leave
     /// the file. Seals unjudged here: the tips are read, not believed.
     pub unsealed: i64,
+    /// W-MG-M2 (appended): MERGE records on their chain alone, and those naming a position this file
+    /// does not hold or that are no MERGE (`merge_body.rs`). Seals unjudged here, like `unsealed`.
+    pub merges: i64,
+    pub merges_bad: i64,
 }
 
 /// A DOC (FORMAT §9.4): the root's crc (`Doc::open`), its log as `open_log` reads one, HEADS
@@ -138,6 +142,8 @@ impl Doc {
             declared: c.declared as i64,
             keys_disagree: c.keys_disagree as i64,
             unsealed: c.unsealed as i64,
+            merges: c.merges as i64,
+            merges_bad: c.merges_bad as i64,
         };
         self.counts = Some(counts);
         Some(Ok(counts))

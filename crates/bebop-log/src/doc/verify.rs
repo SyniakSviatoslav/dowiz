@@ -45,12 +45,14 @@
 //!               at this seq": one seal over a tip vouches for every record under it, across
 //!               devices (a device's first record chains onto the log) and across seq gaps
 //!               between seals. A redaction keeps its id and `prev`, so it stays on the path;
-//!               a chain ends at 0^32 or at a frontier tip a segment recorded. THE LIMIT: a
+//!               a chain ends at 0^32 or at a frontier tip a segment recorded, and a walk that closes
+//!               a ring has ended on neither. THE LIMIT: a
 //!               whole tail gone with its seals and its row is a shorter true file, the
 //!               rollback `settle.rs` names; this counter sees only what stays in the file.
 //!   * tombs_foreign   live tombstones no FORGOTTEN of their author or of a root lists as they
 //!               stand, plus listed ids still in the log that are no tombstone (`declare.rs`
 //!               `foreign_tombs`): nobody but those two erases a record, and none is swapped.
+//!   * merges / merges_bad   effective MERGEs, and those naming a position no record holds (`merge_body.rs`).
 //!
 //! THE BOUND (`budget.rs`). Every walk pays from one budget of the image's cells before it copies,
 //! each object once. One `verify` holds at most 8x the file of heap above the image, measured
@@ -76,8 +78,8 @@ use crate::prelude::*;
 use alloc::collections::{BTreeMap, BTreeSet};
 use crate::{EvLog, Record, Store};
 use super::budget::{at_key, set_of, Budget};
-use super::count::count_records;
-use super::declare::{check_segments, declarations, erased, foreign_tombs};
+use super::count::{count_records, unsealed};
+use super::declare::{check_segments, declarations, erased, foreign_tombs, merges_bad};
 use super::keys::read_keys_in;
 use super::seal::{read_heads, Head};
 use super::seals::load;
@@ -119,6 +121,8 @@ pub struct Counters {
     pub unsealed: usize,
     /// 1 when the DOC names a TREE or sets `FLAG_TREE_IS_FOLD`: no signature covers either.
     pub tree_unsigned: usize,
+    pub merges: usize,
+    pub merges_bad: usize,
 }
 
 /// A sum of cells of the file, so of any u64: saturating at `i64::MAX`, the largest number every
@@ -144,7 +148,7 @@ impl Report {
     /// for every record, and no tree stands outside the signatures. About the log alone.
     pub fn holds(&self) -> bool {
         let c = &self.counters;
-        c.broken == 0 && c.seals_bad == 0 && c.forks == 0 && c.seals_ok > 0 && sum_of(&[c.redacted as u64, c.cut_redacted]) == c.declared && c.keys_disagree == 0 && c.tombs_foreign == 0 && c.unsealed == 0 && c.tree_unsigned == 0
+        c.broken == 0 && c.seals_bad == 0 && c.forks == 0 && c.seals_ok > 0 && sum_of(&[c.redacted as u64, c.cut_redacted]) == c.declared && c.keys_disagree == 0 && c.tombs_foreign == 0 && c.unsealed == 0 && c.tree_unsigned == 0 && c.merges_bad == 0
     }
 }
 
@@ -190,50 +194,15 @@ fn chains(st: &Store, log: Option<usize>) -> Chains {
     Chains { recs, by_actor, by_obj, ids, ids_at }
 }
 
-/// `unsealed`: walk `prev` from `tips`, over ids and not over positions, so the file's order
-/// plays no part. Each record no walk visits counts one; so does each walk that leaves the file
-/// anywhere but at 0^32 or a frontier tip, because a signature over a tip commits to the whole
-/// chain below it, and a record dropped from under it must not read as a shorter history. So does
-/// a visited record for which `unowned` is true: a device's first record chains onto the log, so
-/// another device's tip reaches records their own author's seals may not cover, and such a record
-/// stays in the file while declaring nothing (a REVOKE disowned by rolling back a HEADS row,
-/// `atk_holes` hole 4).
-/// THE TWO COLLECTIONS ARE `covered`'s AND `admitted`'s TYPES, ON PURPOSE: a sort or a new map
-/// type here cost the reader's wasm 6 KB (measured); these two are already in the binary.
-fn unsealed(ch: &Chains, tips: &[[u8; 32]], fr: &Frontiers, unowned: &dyn Fn(&Record) -> bool) -> usize {
-    let mut at: BTreeMap<Actor, u64> = BTreeMap::new();
-    let mut i = 0u64;
-    for (_, r) in &ch.recs {
-        *at.entry(r.id).or_insert(0) = i;
-        i += 1;
-    }
-    let mut seen: BTreeSet<Actor> = BTreeSet::new();
-    let mut dangling = 0usize;
-    for tip in tips {
-        let mut id = *tip;
-        loop {
-            match at.get(&id).and_then(|n| ch.recs.get(*n as usize)) {
-                Some((_, r)) => {
-                    if !seen.insert(id) {
-                        break;
-                    }
-                    id = r.prev;
-                }
-                None => {
-                    if id != [0u8; 32] && !fr.tips.contains(&id) {
-                        dangling += 1;
-                    }
-                    break;
-                }
-            }
-        }
-    }
-    ch.recs.len().saturating_sub(seen.len()) + dangling + ch.recs.iter().filter(|(_, r)| seen.contains(&r.id) && unowned(r)).count()
-}
-
 /// The counters of the DOC at the image's root. `Err` = the image could not be counted (not
 /// a DOC, a crc failure on the root, a table or the log chain, a chain that never ends).
 pub fn verify(st: &Store, ids: &dyn Ids, v: &dyn Verifier, trust: Trust<'_>) -> Result<Report, DocError> {
+    verify_with(st, ids, v, trust).map(|(r, _)| r)
+}
+
+/// `verify`, and the effective declarations it settled on: `merge.rs` folds those REVOKEs, not every
+/// record that reads like one.
+pub(super) fn verify_with(st: &Store, ids: &dyn Ids, v: &dyn Verifier, trust: Trust<'_>) -> Result<(Report, super::declare::Declared), DocError> {
     let view = Doc::open(st)?;
     if EvLog::chain_crc_at(st, view.log)?.is_none() {
         return Err(DocError::Corrupt("the log chain never ends"));
@@ -271,7 +240,7 @@ pub fn verify(st: &Store, ids: &dyn Ids, v: &dyn Verifier, trust: Trust<'_>) -> 
         Trust::Genesis => set_of(keys.iter().filter(|k| k.admit_rec.is_none()).map(|k| k.actor_id)),
         Trust::Only(list) => set_of(list.iter().copied()),
     };
-    let cx = Cx { ch: &ch, seals: &seals, decls: &decls, sound: &counted.sound, off_seq: &counted.off_seq, key_ix: &key_ix, bound: &bound, ids, v };
+    let cx = Cx { ch: &ch, fr: &fr, seals: &seals, decls: &decls, sound: &counted.sound, off_seq: &counted.off_seq, key_ix: &key_ix, bound: &bound, ids, v };
     let (end, unsettled) = settle(&cx, &keys, &trusted);
     c.seals_ok = end.ok;
     c.seals_bad = end.bad;
@@ -283,6 +252,8 @@ pub fn verify(st: &Store, ids: &dyn Ids, v: &dyn Verifier, trust: Trust<'_>) -> 
     c.unsealed = unsealed(&ch, &end.tips, &fr, &unowned);
     c.tree_unsigned = usize::from(view.tree.is_some() || view.flags & FLAG_TREE_IS_FOLD != 0);
     let decl = end.declared;
+    c.broken += decl.off_chain;
+    (c.merges, c.merges_bad) = (decl.merges.len(), merges_bad(&decls, &decl, &ch, &fr, ids));
     c.tombs_foreign = foreign_tombs(&ch.recs, &counted.tombs, &erased(&ch.recs, &decls, &decl), &trusted, ids);
     check_segments(&segs, &decl.truncates, ids)?;
     c.segments = segs.len();
@@ -290,5 +261,5 @@ pub fn verify(st: &Store, ids: &dyn Ids, v: &dyn Verifier, trust: Trust<'_>) -> 
     c.cut = sum(&|s: &Segment| s.count());
     c.cut_redacted = sum(&|s: &Segment| s.redacted);
     c.declared = sum_of(&[sum(&|s: &Segment| s.declared), decl.forgotten]);
-    Ok(Report { counters: c, heads, keys: keys.len(), admitted: end.admitted.len() })
+    Ok((Report { counters: c, heads, keys: keys.len(), admitted: end.admitted.len() }, decl))
 }

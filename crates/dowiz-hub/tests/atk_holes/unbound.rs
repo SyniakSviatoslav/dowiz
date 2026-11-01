@@ -16,7 +16,7 @@ fn hole_7_an_order_id_reads_as_a_declaration() {
     sh.set_entropy([1; 32]);
     let x = Key { actor_id: [b'x'; 32], ..key(0xC3).key() };
     sh.commit_keyop(&KeyOp::Admit(x), &a, 1).unwrap();
-    let mut body = revoke_body(&[b'x'; 32], 0x7878_7878_7878_7878);
+    let mut body = revoke_body(&[b'x'; 32], 0x7878_7878_7878_7878, &[b'x'; 32]);
     body.resize(99, b'x');
     let id = String::from_utf8(body[1..].to_vec()).unwrap();
     sh.append(EventKind::Placed, &id, MOVE, &a, 3).unwrap();

@@ -171,7 +171,7 @@ fn a_second_device_is_admitted_and_revoked() {
     assert_eq!(keyop_kind, 0, "a DOC root is not a log root: the raw walk sees nothing");
     assert_eq!(KIND_KEYOP, b'K');
 
-    let revoke = KeyOp::Revoke { actor_id: b.id(), after_seq: 1 };
+    let revoke = KeyOp::Revoke { actor_id: b.id(), after_seq: 1, tip: sh.tip_at(&b.id(), 1) };
     sh.commit_keyop(&revoke, &owner, 4).unwrap();
     let rep = sh.verify().unwrap();
     assert_eq!((rep.counters.seals_ok, rep.counters.seals_bad), (3, 1), "B's seal 2 is past the revoke: {rep:?}");

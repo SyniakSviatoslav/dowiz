@@ -49,6 +49,7 @@ pub use bebop_image::verify::BadCrc;
 
 pub mod anch;
 mod budget;
+#[cfg(test)] mod tam_tests;
 mod copy;
 mod count;
 mod cut;
@@ -56,6 +57,8 @@ mod declare;
 mod forgotten;
 mod frontier;
 pub mod keys;
+mod merge;
+pub mod merge_body;
 pub mod seal;
 mod seals;
 pub mod seg;
@@ -66,6 +69,8 @@ mod verify;
 mod write;
 pub use anch::{check_anchors, Anchor, AnchorCheck, AnchorCounts, Checked, Verdict, KIND_OTS, KIND_PLATFORM_TSA, KIND_ROUGHTIME};
 pub use keys::{Key, KeyOp, ALG_ML_DSA_65};
+pub use merge::Union;
+pub use merge_body::{merge_body, parse_merge, MergeView, Row, MERGE_MARK, STATE_COMMUTES, STATE_OBSTRUCTED};
 pub use seal::{Head, Seal};
 pub use seams::{id_message, Ids, Signer, Verifier, ID_TAG};
 pub use seg::{forgotten_body, Erased, Segment};
@@ -120,6 +125,11 @@ pub enum DocError {
     /// The cut would take the ADMIT record of a key still in KEYS; that key's proof lives
     /// in the record, so the record stays. Cut up to it.
     CutsAdmit([u8; 32]),
+    /// The cut ends at `seq` of this device, between two records one seal covers. Cut to a seal's
+    /// edge: `keep` counts records, and a sync lays many under one seal.
+    CutInsideSeal { actor: [u8; 32], seq: u64 },
+    /// A REVOKE after this `seq` names a tip that is not this device's record there.
+    RevokeTip { actor: [u8; 32], seq: u64 },
     /// The cut or the redaction would take a REVOKE record of this actor's key; the
     /// revocation is that record, so the record stays. Cut up to it.
     TakesRevoke([u8; 32]),
@@ -131,6 +141,31 @@ pub enum DocError {
     /// layer that owns it moves it to the fresh file (R-MAINGOAL-A §2b: compaction of the
     /// tree never touches the log, and the log's cut never touches the tree).
     Carries(&'static str),
+    /// One device, two histories: `(actor, seq)` holds a different id on each side. Most often a
+    /// device restored from a backup; a restored device takes a new key (M2 design §5.6).
+    Fork { actor: [u8; 32], seq: u64, ours: [u8; 32], theirs: [u8; 32] },
+    /// The two files do not name one set of genesis keys (or one id scheme): not one document.
+    ForeignRoot,
+    /// One actor id, two different keys on the two sides.
+    KeyClash([u8; 32]),
+    /// The two files do not carry one segment chain; `root` is the newest either names. M2-min.
+    CutOneSide { root: [u8; 32] },
+    /// A tombstone, or a FORGOTTEN, one side does not have: a merge never brings the erased text
+    /// back and never spreads an erasure unasked. M2-min (design §5.2).
+    ForgetOneSide,
+    /// Records of `actor` past a REVOKE the other side holds. M2-min (design §5.3).
+    RevokedTail { actor: [u8; 32], after_seq: i64 },
+    /// A record to take in is under a legacy id, which proves nothing (design §5.5).
+    LegacyTail { actor: [u8; 32], seq: u64 },
+    /// A file to merge does not hold (`Report::holds`): `ours` says which. There is nothing to
+    /// glue in a file that fails on its own, and a union that fails is not written either.
+    NotWhole { ours: bool },
+    /// Each side holds and their union does not: what only the two together show, an actor keyed on
+    /// one side whose records on the other were never judged (`merge.rs`).
+    UnionNotWhole,
+    /// One key, two seal chains over the same records. HEADS keeps one chain and a seal signs the
+    /// tip before it, so a merge would lose a signature; a person picks. `seq`: where they part.
+    SealFork { actor: [u8; 32], seq: u64 },
 }
 
 /// `StoreError` carries an `io::Error` and derives no `PartialEq`; two `Store` refusals are
@@ -148,6 +183,17 @@ impl PartialEq for DocError {
             (DocError::CutUndeclared { root: a }, DocError::CutUndeclared { root: b }) => a == b,
             (DocError::CutsAdmit(a), DocError::CutsAdmit(b)) | (DocError::TakesRevoke(a), DocError::TakesRevoke(b)) | (DocError::Readmit(a), DocError::Readmit(b)) => a == b,
             (DocError::Carries(a), DocError::Carries(b)) => a == b,
+            (DocError::Fork { actor: a, seq: s, ours: o, theirs: t }, DocError::Fork { actor: b, seq: u, ours: p, theirs: q }) => a == b && s == u && o == p && t == q,
+            (DocError::KeyClash(a), DocError::KeyClash(b)) => a == b,
+            (DocError::CutOneSide { root: a }, DocError::CutOneSide { root: b }) => a == b,
+            (DocError::RevokedTail { actor: a, after_seq: s }, DocError::RevokedTail { actor: b, after_seq: t }) => a == b && s == t,
+            (DocError::LegacyTail { actor: a, seq: s }, DocError::LegacyTail { actor: b, seq: t }) => a == b && s == t,
+            (DocError::NotWhole { ours: a }, DocError::NotWhole { ours: b }) => a == b,
+            (DocError::SealFork { actor: a, seq: s }, DocError::SealFork { actor: b, seq: t }) => a == b && s == t,
+            (DocError::UnionNotWhole, DocError::UnionNotWhole) => true,
+            (DocError::RevokeTip { actor: a, seq: s }, DocError::RevokeTip { actor: b, seq: t }) => a == b && s == t,
+            (DocError::CutInsideSeal { actor: a, seq: s }, DocError::CutInsideSeal { actor: b, seq: t }) => a == b && s == t,
+            (DocError::ForeignRoot, DocError::ForeignRoot) | (DocError::ForgetOneSide, DocError::ForgetOneSide) => true,
             (DocError::NothingToCut, DocError::NothingToCut) | (DocError::NoTree, DocError::NoTree) => true,
             _ => false,
         }
@@ -250,3 +296,5 @@ pub(crate) fn cells_of(st: &Store, obj: usize, at: usize, n: usize) -> Vec<i64> 
 mod tests;
 #[cfg(test)]
 mod dsa_tests;
+#[cfg(test)]
+mod lean_tests;

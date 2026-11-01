@@ -144,7 +144,7 @@ fn redact_acts(log: &mut LogImage, key: &str) -> Result<usize, HubError> {
     if n == 0 {
         return Ok(0);
     }
-    let mut size = store.image_bytes().max(crate::logimage::MIN_LOG_BYTES);
+    let mut size = store.writer_bytes()?.max(crate::logimage::MIN_LOG_BYTES);
     let fresh = loop {
         match crate::forget::rebuilt(&records, tip, size) {
             Ok(fresh) => break fresh,

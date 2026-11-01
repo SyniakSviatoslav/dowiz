@@ -182,8 +182,8 @@ pub fn describe(v: &Verdict) -> (&'static str, String) {
 pub fn doc_line(r: &Report, ac: &AnchorCounts) -> String {
     let c = &r.counters;
     format!(
-        "doc records={} chained={} legacy={} redacted={} broken={} seals_ok={} seals_bad={} forks={} keys={} admitted={} anchors={} anchors_ok={} anchors_bad={} anchors_unchecked={} anchors_cut={} segments={} cut={} cut_redacted={} declared={} keys_disagree={} revokes_unsettled={} tombs_foreign={} unsealed={} tree_unsigned={}",
-        c.records, c.chained, c.legacy, c.redacted, c.broken, c.seals_ok, c.seals_bad, c.forks, r.keys, r.admitted, ac.anchors, ac.ok, ac.bad, ac.unchecked, ac.cut, c.segments, c.cut, c.cut_redacted, c.declared, c.keys_disagree, c.revokes_unsettled, c.tombs_foreign, c.unsealed, c.tree_unsigned
+        "doc records={} chained={} legacy={} redacted={} broken={} seals_ok={} seals_bad={} forks={} keys={} admitted={} anchors={} anchors_ok={} anchors_bad={} anchors_unchecked={} anchors_cut={} segments={} cut={} cut_redacted={} declared={} keys_disagree={} revokes_unsettled={} tombs_foreign={} unsealed={} tree_unsigned={} merges={} merges_bad={}",
+        c.records, c.chained, c.legacy, c.redacted, c.broken, c.seals_ok, c.seals_bad, c.forks, r.keys, r.admitted, ac.anchors, ac.ok, ac.bad, ac.unchecked, ac.cut, c.segments, c.cut, c.cut_redacted, c.declared, c.keys_disagree, c.revokes_unsettled, c.tombs_foreign, c.unsealed, c.tree_unsigned, c.merges, c.merges_bad
     )
 }
 

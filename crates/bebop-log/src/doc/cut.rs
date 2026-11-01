@@ -26,7 +26,9 @@
 //! target is a genesis key, so the cut already stops near it. Judged by mark, not by seal (a
 //! writer has no `Verifier`): an ineffective REVOKE holds the cut too. This guards the honest
 //! cutter. A forger's bytes meet `verify`: with no key he cannot sign the TRUNCATE, which names
-//! every row and count (`seg.rs`); a key holder's own cut is `settle.rs`'s.
+//! every row and count (`seg.rs`); an admitted key's own cut declares nothing, only a root's does
+//! (`declare.rs`). A cut ends on a seal's edge (`CutInsideSeal`): one seal covers a device's whole
+//! sync, and half its records gone would leave it naming a chain that left.
 //!
 //! The counts under the cut (`redacted`, `declared`) are counted by mark, not by seal: a
 //! writer has no `Verifier`. They are the TRUNCATE signer's claim, signed through the segment
@@ -49,16 +51,16 @@ type Actor = [u8; 32];
 
 /// The old file, read once: records oldest first with their offsets, the heads, the keys,
 /// the segments and the anchors newest first.
-struct Old {
-    flags: i64,
-    recs: Vec<(usize, Record)>,
-    heads: Vec<Head>,
-    keys: Vec<Key>,
-    segs: Vec<Segment>,
-    anchors: Vec<Anchor>,
+pub(super) struct Old {
+    pub flags: i64,
+    pub recs: Vec<(usize, Record)>,
+    pub heads: Vec<Head>,
+    pub keys: Vec<Key>,
+    pub segs: Vec<Segment>,
+    pub anchors: Vec<Anchor>,
 }
 
-fn read_old(st: &Store) -> Result<Old, DocError> {
+pub(super) fn read_old(st: &Store) -> Result<Old, DocError> {
     let view = Doc::open(st)?;
     for (what, r) in [("TREE", view.tree), ("SPEC", view.spec)] {
         if r.is_some() {
@@ -83,7 +85,7 @@ fn read_old(st: &Store) -> Result<Old, DocError> {
 }
 
 /// Every seal reachable from `head`, newest first, crc checked.
-fn seals_of(st: &Store, head: &Head, cap: usize, budget: &mut Budget) -> Result<Vec<Seal>, DocError> {
+pub(super) fn seals_of(st: &Store, head: &Head, cap: usize, budget: &mut Budget) -> Result<Vec<Seal>, DocError> {
     let mut out = Vec::new();
     let mut cur = head.seal;
     while let Some(at) = cur {
@@ -124,7 +126,7 @@ impl Doc {
                 }
             }
         }
-        if let Some((target, _)) = gone.iter().find_map(|(_, r)| parse_revoke(ids.body(r.flags, &r.payload))) {
+        if let Some((target, ..)) = gone.iter().find_map(|(_, r)| parse_revoke(ids.body(r.flags, &r.payload))) {
             return Err(DocError::TakesRevoke(target));
         }
         let cut_ids: Vec<[u8; 32]> = gone.iter().map(|(_, r)| r.id).collect();
@@ -189,6 +191,11 @@ impl Doc {
         for h in &old.heads {
             let cut_seq = seg.frontier.iter().find(|f| f.actor_id == h.actor_id).map_or(0, |f| f.seq);
             let mut chain = seals_of(st, h, cap, &mut budget)?;
+            // A seal covers its device's records since the last one (`commit_many_bytes`), and it
+            // stays or goes whole: a cut inside its run leaves it naming a chain that left.
+            if cut_seq > 0 && !chain.iter().any(|s| s.seq == cut_seq) {
+                return Err(DocError::CutInsideSeal { actor: h.actor_id, seq: cut_seq });
+            }
             chain.retain(|s| s.seq > cut_seq);
             chain.reverse();
             let mut prev = None;

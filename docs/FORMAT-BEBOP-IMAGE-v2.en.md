@@ -550,11 +550,12 @@ once, in KEY. A verifier with an algorithm recomputes it (`Verifier::actor_of`, 
    sixteen ASCII `0` bytes, because a kept id would otherwise confirm a guessed payload by recomputation. A reader
    MUST NOT read the erased nonce as the mark: a legacy record has no nonce to erase, and a record with an erased nonce and no bit is an edit, **broken**.
 
-<!-- MERGE-TEXT §9.4, place held: the rules for MERGE, TRUNCATE by a root and REVOKE with a tip come from the merge lane through main and go here. This text describes none of the three until then. -->
+A merge loses no record and no signature: per device it keeps the longer seal chain, a seal of the other side that extends this side's is taken in with no new record, and two different chains over the same records are refused (`SealFork`), since a seal signs the tip before it and one chain would have to go. An actor keyed on one side only makes its records on the other side judged in the union; if they do not stand there the merge is refused (`UnionNotWhole`). Only REVOKEs effective on their own side count against a tail.
 
 Key-op bodies: `ADMIT = "bebop-admit/1" ‖ actor_id ‖ LE8(alg) ‖ LE8(valid_from) ‖ LE8(pk_len) ‖ pk`,
-`REVOKE = "bebop-revoke/1" ‖ actor_id ‖ LE8(after_seq)` (signed),
+`REVOKE = "bebop-revoke/2" ‖ actor_id ‖ LE8(after_seq) ‖ tip (32)` (signed), `tip` being the id of the target's record at `after_seq`, 0^32 when `after_seq` ≤ 0 or when the target revokes itself at this record's own seq,
 `TRUNCATE = "bebop-truncate/1" ‖ root ‖ prev_root ‖ LE8(first) ‖ LE8(last) ‖ LE8(redacted) ‖ LE8(declared) ‖ seg_hash (32)`,
+`MERGE = "bebop-merge/1" ‖ LE8(n_ours) ‖ (actor_id (32) ‖ LE8(seq) ‖ tip (32)) × n_ours ‖ LE8(n_theirs) ‖ (the same row) × n_theirs ‖ state (1 byte: 1 fast-forward, never written; 2 commutes; 3 obstructed) ‖ seg_root (32) ‖ LE8(dup_declared = 0) ‖ LE8(held_n = 0) ‖ LE8(n_conf) ‖ (LE8(len) ‖ bytes) × n_conf` (W-MG-M2, no format change: a record body, in the merging device's chain, under its seal), EXACT like FORGOTTEN: state 3 if and only if `n_conf` > 0, nothing after the last field. A body with the mark that is not exactly this counts in `merges_bad`. An effective MERGE counts in `merges`, and in `merges_bad` when a row names neither a record of the log at that `(actor, seq)` nor a seq at or below the newest frontier row of that actor. The conflict bytes are the signer's claim and the implementor's words; the rows fix both sides, so an implementor can re-derive them.,
 `FORGOTTEN = "bebop-forgotten/1" ‖ LE8(n_redacted) ‖ subject (32) ‖ (id (32) ‖ digest (32)) × n_redacted`. A body shorter than its
 fields is not that body, and a FORGOTTEN whose `n_redacted` is not the number of rows it holds is not a FORGOTTEN. An ADMIT
 needs `0 ≤ pk_len ≤ 65536`. Bytes behind the last field of an ADMIT, REVOKE or TRUNCATE MUST be ignored: only a FORGOTTEN is exact.
@@ -573,7 +574,7 @@ unchecked, naming the segments; its proof is still checked, and the ARCHIVE plac
 whose tree is the segment's root). A cut is refused when: it would cross the ADMIT of a key still in KEYS; it would
 take a **REVOKE** record (the revocation is that record, and a frontier row is signed by nobody, so it cannot be carried;
 the writer refuses by the mark, not by the seal, because it has no verifier); there is nothing to cut; the id scheme
-has no tree; the image carries a TREE or SPEC (those belong to the layer that owns them).
+has no tree; the image carries a TREE or SPEC (those belong to the layer that owns them); a device's seq at the cut is not on a seal's edge, because one seal covers a whole sync and half of its records gone would leave it naming a chain that left.
 In-place redaction for a DOC is a copy with payloads replaced, ids, links, seals, anchors and segments verbatim;
 the redactor then commits a signed FORGOTTEN. A tombstone over a REVOKE record is refused the same way. A copy or an
 archive carries REVOKE records and KEYS verbatim, so the verdict travels with the file.
@@ -642,9 +643,9 @@ that occur more than once, each pair counted once. For each device, for each of 
   device's HEADS row tip (no row: the log's tip, root cells 3-6 when `has_tip` ≠ 0; no row and `has_tip` = 0: nothing, so the link does not hold) = this id. → **redacted**.
 - otherwise **broken**.
 
-**The seq of a device.** A device's seqs are 1, 2, 3 ... along its chain, and every rule that reads a seq (`valid_at`, "covers") trusts that. It is judged for an actor with a KEY row; any other actor signed nothing and may carry any number. Walk the device's records in file order, keeping `last` (the seq of the previous record, none at the start) and `soft` (the seq of the previous legacy record, none at the start). A record is **dense** when: its actor has no KEY row; or its `(actor, seq)` occurs more than once, which is a fork, counted in `forks` and not again here; or `last` exists and seq = `last` + 1 with no wrap; or `last` does not exist and any of: the device has a frontier row, seq = 1, `soft` exists and seq = `soft` + 1 with no wrap, or this is the device's first record and its `prev` is neither 0^32 nor the id of any record in the file. After a record classed legacy, `last` is none and `soft` is its seq; after any other record `last` is its seq, broken ones included, so one hole reads as one. A record whose `prev` test holds and whose id equals `Ids::chained` is **chained** only when dense; otherwise it is **broken**, it still moves the device, and a seal whose tip is that id is bad. A tombstone is **redacted** only when dense or when `last` does not exist. A legacy id does not cover its seq, so a legacy record is not judged: a device with no chained record has no bound seq at all (§14).
+**The seq of a device.** A device's seqs are 1, 2, 3 ... along its chain, and every rule that reads a seq (`valid_at`, "covers") trusts that. It is judged for an actor with a KEY row; any other actor signed nothing and may carry any number. Walk the device's records in file order, keeping `last` (the seq of the previous record, none at the start) and `soft` (the seq of the previous legacy record, none at the start). A record is **dense** when: its actor has no KEY row; or its `(actor, seq)` occurs more than once, which is a fork, counted in `forks` and not again here; or `last` exists and seq = `last` + 1 with no wrap; or `last` does not exist and any of: the device has a frontier row, seq = 1, `soft` exists and seq = `soft` + 1 with no wrap, or this is the device's first record and its `prev` is not 0^32, not the id of any record in the file and not a frontier tip of any segment (that case is `unsealed`'s). So a keyed device's chain runs from 1, or from its OWN frontier row, never from another device's. After a record classed legacy, `last` is none and `soft` is its seq; after any other record `last` is its seq, broken ones included, so one hole reads as one. A record whose `prev` test holds and whose id equals `Ids::chained` is **chained** only when dense; otherwise it is **broken**, it still moves the device, and a seal whose tip is that id is bad. A tombstone is **redacted** only when dense: its id checks nothing, so its seq and its place are all that bind it. A legacy id does not cover its seq, so a legacy record is not judged: a device with no chained record has no bound seq at all (§14).
 
-**What a number may decide.** Only a record counted **chained** (`prev` holds, id holds, dense) may admit a key or declare a TRUNCATE, FORGOTTEN or REVOKE. `valid_at` compares the seal's own seq, which the seal's tip binds to a record whose id covers that seq, and with dense seqs `seq ≤ covered` means at or below that seal on the device's chain.
+**What a number may decide.** Only a record counted **chained** (`prev` holds, id holds, dense) may admit a key or declare a TRUNCATE, FORGOTTEN, REVOKE or MERGE. A record at a forked seq is counted once and declares nothing. `valid_at` compares the seal's own seq, which the seal's tip binds to a record whose id covers that seq, and with dense seqs `seq ≤ covered` means at or below that seal on the device's chain.
 
 **Bounds of one `verify`.** A verifier pays for each object from the walk bound of §9.0 before copying it, each object once, but for two cases: every KEYS row pays for its KEY, so a KEY two rows name is paid twice, and a seal already read is met and not paid; `check_anchors` pays from its own. It holds at most 8 × the file size of heap above the image (measured worst 3 ×: 1.58 MB, 7 000 records of 7 000 actors; refused shapes 1-2 × at 1 MB). Time is O(n log n) in the file for reading, indexing and hashing, plus settle rounds × admission passes × distinct seals, each a map lookup; each signature is checked at most once, and a round past the first needs a real signature, 3 309 B each.
 
@@ -686,7 +687,7 @@ actor's ok seals. The effective `revoked_at` of a key is the narrowest of the ef
 for each `after_seq`, take `a = after_seq` if `after_seq` > 0, otherwise `a = REVOKED_ALL` (-1), then `revoked_at = a` if it was
 0, otherwise `min(revoked_at, a)`, signed. So `after_seq` 0 becomes -1, because 0 already means "not revoked" and a key that never
 sealed must be revocable, and a top-bit `after_seq` is negative and becomes -1 too. No REVOKE widens a key. A key with `revoked_at` = -1 is
-valid at no seq; only a `revoked_at` > 0 is compared with `seq`, as unsigned. A REVOKE naming no key in KEYS changes nothing.
+valid at no seq; only a `revoked_at` > 0 is compared with `seq`, as unsigned. A REVOKE naming no key in KEYS changes nothing. An effective REVOKE of a key in KEYS with `after_seq` > 0 counts one `broken` unless the log holds `tip` at `(target, after_seq)`, that seq lies at or below the target's newest frontier row, or the record is the target's own at that seq.
 
 **Who may revoke whom:** ANY key valid at its own seq may revoke ANY key, itself and a root included. There are no roles, and a
 stolen key can do this too. A REVOKE is **final**: a writer MUST refuse an ADMIT of a key already revoked in the table
@@ -704,7 +705,7 @@ that revoked each other back past their REVOKEs, a key that declared itself dead
 resolved here: a seal is bad as a result, so `holds` is false, and a person decides.
 
 **A reader with no signature algorithm (blind)** judges no seal, so it takes a REVOKE on its chain alone (classed **chained**, no
-tombstone mark): `keys_disagree` compares `revoked_at` with the narrowest `after_seq` of those records, by the rule above.
+tombstone mark), and the tip rule above holds for it too: `keys_disagree` compares `revoked_at` with the narrowest `after_seq` of those records, by the rule above.
 That is the records' claim against the table, NOT a proof: a REVOKE a verifier would void counts here. `checked` = 0, and `holds`
 is false.
 
@@ -717,7 +718,7 @@ record: not 0 means the file's own FORGOTTENs do not account for that tombstone;
 nobody signs, so a forger with no key can write both halves.
 
 **Declarations.** A TRUNCATE or FORGOTTEN **counts** only when its record is classed **chained** (so its `prev` test held) with no
-tombstone mark, and its actor is admitted with an ok seal covering its seq. A verifier that carries no signature
+tombstone mark, and its actor is admitted with an ok seal covering its seq. A TRUNCATE is effective only when its actor is a root, in the fold's trust; a reader that judges no seal takes it on its chain alone. A verifier that carries no signature
 algorithm cannot judge seals, so it takes a declaration on its chain alone, which is the first half of that sentence;
 `holds` stays false for it. FORGOTTEN of a revoked key declares nothing to a verifier that judges seals; a blind reader does
 not apply revocation to a declaration. The NEWEST SEG MUST be named by a counted TRUNCATE on all six fields
@@ -732,7 +733,7 @@ verifier that judges signatures (the reference auditor's `doc_verify` tool).
 
 **Vouched for: `unsealed`.** Collect the tip INSIDE every ok seal (a blind reader: inside every seal it read), never a HEADS
 row's tip: HEADS names where to start reading seals, and nobody signs it. From each tip follow `prev` by id, across devices and
-over seq gaps, stopping at an id already visited, one visited set for all the walks of the file. The set holds ids of records only, so a tip that is no record is a walk that
+over seq gaps, stopping at an id already visited, one visited set for all the walks of the file. An id an earlier walk visited is a join and counts nothing; an id THIS walk visited closes a ring, which ends at neither 0^32 nor a frontier tip, and counts one. The set holds ids of records only, so a tip that is no record is a walk that
 leaves the file at once, and two walks that leave by one id count two. A seal that fails its crc or
 is not a SEAL gives no tip. A record is **vouched for** when such a walk reaches it. An id that is a record of the file continues the walk even
 when it is also a frontier tip; ids are a map, so of two records with one id the walk follows the newer in file order. A walk that leaves
@@ -740,15 +741,15 @@ the file anywhere but at 0^32 or a frontier tip of any segment counts one. `unse
 need not cover consecutive seqs: one seal over a tip vouches for every record under it. A redaction keeps its id and `prev`, so
 it stays on the path.
 
-`holds` = broken 0, seals_bad 0, forks 0, seals_ok > 0, redacted + cut_redacted = declared, keys_disagree 0, tombs_foreign 0, unsealed 0
-**and** tree_unsigned 0: every record vouched for, every such chain ending at 0^32 or at a frontier tip, and no tree outside the signatures.
+`holds` = broken 0, seals_bad 0, forks 0, seals_ok > 0, redacted + cut_redacted = declared, keys_disagree 0, tombs_foreign 0, unsealed 0,
+merges_bad 0 **and** tree_unsigned 0: every record vouched for, every such chain ending at 0^32 or at a frontier tip, and no tree outside the signatures.
 `tree_unsigned` = 1 when the DOC names a TREE or sets `FLAG_TREE_IS_FOLD`: `verify` never reads a tree and no signature covers one, so `holds` speaks for the log alone
 and is false on such a file until a signature does. `revokes_unsettled` is not
 a term: a contradiction always leaves a seal bad. This does **not** detect a tail removed together with its seals and its HEADS
 row: what remains is a shorter true file (§14). Only anchors or a second file see that.
 
 Printed line, behind the word `verify` and one space, in this order: `records= chained= legacy= redacted= broken= forks= seals= checked= heads= keys= genesis= segments=
-cut= cut_redacted= declared= keys_disagree= unsealed=`, where `seals` is the number defined above, which for a verifier that judges signatures is ok + bad, since it calls each
+cut= cut_redacted= declared= keys_disagree= unsealed= merges= merges_bad=`, where `seals` is the number defined above, which for a verifier that judges signatures is ok + bad, since it calls each
 seal read one or the other, and `checked` = 1 if signatures were judged, else 0.
 
 **What is not in the line.** The line and the ABI's counters are closed: `tombs_foreign`, `tree_unsigned`, `revokes_unsettled`, `admitted` and
@@ -818,10 +819,10 @@ here and in the reader's release; the host prints both numbers side by side. A r
 `bw_len`, `bw_root(out)`, `bw_get`, `bw_scan_next` (a KV, or a DOC's v4 tree), `bw_log_len`/`bw_log_at`
 (a LOG or a DOC's log: `seq8 ‖ plen8 ‖ id32 ‖ prev32 ‖ actor32 ‖ payload`), `bw_heads(out,cap)` → rows
 `actor32 ‖ seq8 ‖ tip32`, `bw_verify(depth)` (0 anchor, 1 reachable + `verify`, 2 whole arena),
-`bw_counts(out,cap)` → 18 `i64` cells `records chained legacy redacted broken seals forks heads keys genesis
-checked holds segments cut cut_redacted declared keys_disagree unsealed`, cells numbered from 0 like every cell in this text and in
-this order, which is not the printed line's (cell 9, `genesis`, was named `admitted`; cells 16 and
-17 were appended, so older cells keep their places), `bw_anchors(out,cap)` → rows `kind8 ‖ over32 ‖ time_ms8 ‖
+`bw_counts(out,cap)` → 20 `i64` cells `records chained legacy redacted broken seals forks heads keys genesis
+checked holds segments cut cut_redacted declared keys_disagree unsealed merges merges_bad`, cells numbered from 0 like every cell in this text and in
+this order, which is not the printed line's (cell 9, `genesis`, was named `admitted`; cells 16 to
+19 were appended, so older cells keep their places), `bw_anchors(out,cap)` → rows `kind8 ‖ over32 ‖ time_ms8 ‖
 proof_len8` (present, not verified), `bw_spec(out,cap)` → `abi8 ‖ sha256 32 ‖ format text`, `bw_status_text(code)`,
 `bw_unchecked_text`. A buffer too small gets the needed length and nothing is written; a refusal is `-status`.
 Other ABI statuses: 70 `NOT_OPEN`, 71 `NOT_FOUND`, 73 `OUT_OF_RANGE`, 74 `NOT_A_DOC`.
@@ -951,7 +952,7 @@ read a family MUST refuse by name rather than answer. `sha256` identifies the fi
 | `seg2` | doc | 10624 | 0 | 3 | 2237665766422822682 | `f53ea34a266ef8c2` |
 | `seg2-forged` | doc | 10624 | 75 | 3 | 2237665766422822682 | `e2e4c81f72d8aa41` |
 | `forged-tail` | doc | 10768 | 0 | 4 | 9058683980081876988 | `fb6741a5acb5cc04` |
-| `keys-disagree` | doc | 12248 | 0 | 5 | 2233471922488689952 | `4965ea8f78fae881` |
+| `keys-disagree` | doc | 12280 | 0 | 5 | -3420459667669814167 | `590c88afb547a4ee` |
 | `cut-undeclared` | doc | 9680 | 75 | 2 | 936859044395617976 | `db5094856033cfd9` |
 | `log-v1` | log | 8976 | 0 | 3 | 5846225103546468352 | `f1a4ea0cf755c6ba` |
 | `log-v3` | log | 8552 | 12 | - | - | `3f7bf288a84c3e96` |
@@ -959,12 +960,12 @@ read a family MUST refuse by name rather than answer. `sha256` identifies the fi
 
 `seg2-forged` and `cut-undeclared` read as a DOC, status 0 with the `n` and `root` above, and the status in their row is that of `verify`: 75. `doc_verify=` in each `.expected` is the exact counter line of the others, behind the word `verify`. `log-v3` and `kv-unsorted` are refused at the read.
 
-`doc` as a DOC verifier, with no signature algorithm, MUST print exactly: `verify records=3 chained=0 legacy=0 redacted=0 broken=3 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0`. This fixture is
+`doc` as a DOC verifier, with no signature algorithm, MUST print exactly: `verify records=3 chained=0 legacy=0 redacted=0 broken=3 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0 merges=0 merges_bad=0`. This fixture is
 written with a test-only id mix in place of sha256, which this text does not define and no other file uses, so its ids answer neither `chained` nor
 `legacy`. A reader MUST count those three records **broken** and MUST NOT look for a scheme under which they hold: the conformance
 value is `broken=3`. A KV-only reader answers `doc` with status 12.
 
-`anch` is a real sealed hub, cut once, and MUST print exactly: `verify records=4 chained=4 legacy=0 redacted=0 broken=0 forks=0 seals=4 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 unsealed=0`.
+`anch` is a real sealed hub, cut once, and MUST print exactly: `verify records=4 chained=4 legacy=0 redacted=0 broken=0 forks=0 seals=4 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 unsealed=0 merges=0 merges_bad=0`.
 
 The memo lines bind only a reader that claims to read memos. Memos: `proj` kind 1, value 6344481284825166345; `proj4.log` kind 3, value -9190210101691969827, `root` = FNV-1a 64 over the LogSummary
 derived from the log; `proj4` kind 4, value 8768581835520683532, `root` = the Z-set digest derived from the replayed entries. In all
@@ -982,23 +983,20 @@ Nothing above decides these, and a reader MUST NOT claim that it does.
   revoker's among them. `unsealed` catches a HEADS row dropped alone, never a tail removed with its seals and its row. Only anchors or a second file see it.
 - **A stolen root.** Roots have no rank between them and nothing outranks one, so the thief of a root can tombstone or cut a REVOKE
   and sign the declaration. A witness, or the audit of the archive that holds the record under the root the TRUNCATE names, sees that.
-  What a file does hold, under `Trust::Only`: a thief with an admitted, non-root key cannot hide a REVOKE behind a tombstone, which stops at `tombs_foreign`.
-- **A thief with an admitted key, today.** A TRUNCATE counts for any admitted key, so such a key can declare a cut through another key's REVOKE while its own ADMIT
-  stays in the file. A REVOKE names a seq and no tip, so the holder of a revoked key can replace that key's records at or below `after_seq` and seal them again, with no
-  fork in the one file. Both were shown on the library. The rules that close them are in the marked place of §9.4, not yet in this text.
+  What a file does hold, under `Trust::Only`: a thief with an admitted, non-root key cannot hide a REVOKE inside it: a tombstone stops at `tombs_foreign`, and only a root's TRUNCATE is effective, so its cut is refused 75.
 - **A blind reader** counts; it does not check. `checked` = 0 and `holds` is false, whatever else it prints.
 - **Removing an anchor.** Nobody signs the ANCH chain: DOC.ANCH = 0 gives a file with no anchors and no trace. Anchors prove when present; their absence says nothing.
 - **Swapping files of one owner.** No seal names the file, so two hubs of one key both hold. Which file this is, is a question for whoever brings the root (first id, tip, anchor). A file id in the first seal would not help: it helps only if the verifier brings the expected id, and that verifier can already bring the journal's first id (after a cut, `root`).
-- **Order across devices.** Nobody signs it: `prev` links only a device's own records and a device's first record; the fold reads file order.
+- **Order across devices.** Nobody signs it: `prev` links only a device's own records and a device's first record; the fold reads file order. A conflict is re-derived in one order computed from signed edges alone, so every copy agrees; an adoption signs no edge, so that order may differ from what happened.
 - **Legacy records.** Id v2 does not bind them: actor, seq and `FLAG_NONCE_DERIVED` of an FNV record are free, and FNV preimages are untested. Live data is all legacy, so a `seal_hub` of a real venue is exposed on its pre-seal records until those records leave the file.
 - **A tombstone's bytes under a cut.** `root` names ids and a tombstone keeps its id, so those bytes are bound only by a FORGOTTEN still in the file; the archive shows them (§9.4).
 - **Time.** `claimed_ms` is a claim; only an anchor's proof bounds time, and only with a verifier that holds what the proof needs.
-- **MERGE strip, from the day MERGE lands.** A union with no MERGE holds, so a file's holder can strip a MERGE with its seal and leave a shorter true file. One file cannot
+- **MERGE strip.** A union with no MERGE holds, so a file's holder can strip a MERGE with its seal and leave a shorter true file. One file cannot
   know; a merge against a copy that has the MERGE gets it back.
-- **A conflict hidden after a cut, from the day MERGE lands.** A MERGE's conflict list is its signer's claim, and what checks it is folding the two sides its rows name. Under a cut
-  the base those folds need may be gone, and a MERGE row there fixes a seq and no tip, so the answer is unchecked, never clean: a conflict the signer left out does not show in the one file.
-
-<!-- MERGE-TEXT §14, place held: the limits of MERGE, TRUNCATE by a root and REVOKE with a tip, as the merge lane words them, come through main and go here. -->
+- **A conflict list under a cut.** The base level left with the records, so a MERGE's list cannot be re-derived and `doc_verify` exits 4, `NOT CHECKED`, never 0. A cut of one record would otherwise launder a lie.
+- **A MERGE row or a REVOKE under a cut** fixes the seq and not the tip: what left is not in the file. The archive binds it.
+- **What a MERGE saw.** Its rows are the signer's claim. `same` says the list follows from the rows, never that the rows are all there was.
+- **After a rotation** an admitted key is not a root under `Trust::Genesis`: such a file cannot be cut unless a verifier brings the new key via `Trust::Only`.
 
 **How far this has been attacked.** No attack round that tested this format came back empty: each found defects, so the list above is what is known, not all there is. A sixth
 round stopped with nothing tested and is no evidence either way. Six named attack cases have never been tested: a thief rewriting a tombstone's actor, a FORGOTTEN listing an id

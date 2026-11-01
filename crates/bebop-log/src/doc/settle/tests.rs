@@ -32,12 +32,19 @@ fn genesis<const N: usize>(ids: [u8; N]) -> (Store, [D; N]) {
 }
 
 fn revoke(who: &D, after_seq: i64) -> KeyOp {
-    KeyOp::Revoke { actor_id: who.s.id, after_seq }
+    KeyOp::Revoke { actor_id: who.s.id, after_seq, tip: [0; 32] }
 }
 
 /// One sealed commit carrying `op`, the table moved with it.
 fn op(st: &mut Store, by: &mut D, op: &KeyOp) -> Result<i64, DocError> {
-    by.commit(st, &op.body(), Some(op))
+    // A REVOKE names the record it stops at, read from the file as the revoker's writer does.
+    let named = match op {
+        KeyOp::Revoke { actor_id, after_seq, .. } if *after_seq > 0 => {
+            KeyOp::Revoke { actor_id: *actor_id, after_seq: *after_seq, tip: Doc::tip_at(st, actor_id, *after_seq as u64).unwrap_or([0; 32]) }
+        }
+        other => other.clone(),
+    };
+    by.commit(st, &named.body(), Some(&named))
 }
 
 /// One sealed commit carrying `op`'s body with the table left alone.
@@ -277,7 +284,7 @@ fn a_key_revoking_itself() {
 #[test]
 fn a_revoked_key_is_not_admitted_again() {
     let (mut st, [mut a, b]) = genesis([0xA1, 0xB2]);
-    op(&mut st, &mut a, &revoke(&b, 1)).unwrap();
+    op(&mut st, &mut a, &revoke(&b, 0)).unwrap();
     let again = KeyOp::Admit(key_of(&b.s));
     assert_eq!(op(&mut st, &mut a, &again), Err(DocError::Readmit(b.s.id)));
     assert!(rep(&st).holds(), "the refusal wrote nothing: {:?}", cnt(&st));
@@ -328,9 +335,8 @@ fn a_copy_an_archive_and_a_redaction_keep_the_revoke() {
     Doc::archive_bytes(&st, &mut archive, &spec).unwrap();
     assert_eq!(cnt(&archive), want);
 
-    let is_revoke = revoke(&b, 1).body();
     let mut fresh = Store::create_bytes(1 << 20).unwrap();
-    let rule = |r: &Record| (r.payload == is_revoke).then(|| vec![0x80]);
+    let rule = |r: &Record| r.payload.starts_with(crate::doc::keys::REVOKE_MARK).then(|| vec![0x80]);
     assert_eq!(Doc::redact_into(&st, &mut fresh, &ToyIds, &rule), Err(DocError::TakesRevoke(b.s.id)));
     assert!(fresh.root().is_none());
 }
@@ -365,7 +371,7 @@ fn a_reader_without_signatures_reports_the_claim() {
 fn a_forged_signature_stays_bad_across_the_rounds() {
     let (mut st, mut a, mut b) = root_and_device();
     b.commit(&mut st, b"b-1", None).unwrap();
-    op(&mut st, &mut a, &revoke(&b, 5)).unwrap();
+    op(&mut st, &mut a, &revoke(&b, 1)).unwrap();
     assert_eq!(under(&st, &a).counters.seals_bad, 0, "control");
     let seal = read_heads(&st, Doc::open(&st).unwrap().heads).iter().find(|h| h.actor_id == b.s.id).unwrap().seal.unwrap();
     st.put_cell(seal, 15, st.get(seal, 15) ^ 1);

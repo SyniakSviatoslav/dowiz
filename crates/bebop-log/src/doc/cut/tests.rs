@@ -178,7 +178,7 @@ fn a_forgotten_by_a_revoked_key_declares_nothing() {
     assert_eq!((r.counters.redacted, r.counters.broken, r.counters.declared, r.counters.seals_ok), (1, 0, 1, 4), "{:?}", r.counters);
     assert!(r.holds(), "declared: {:?}", r.counters);
 
-    let revoke = KeyOp::Revoke { actor_id: b.s.id, after_seq: 2 };
+    let revoke = KeyOp::Revoke { actor_id: b.s.id, after_seq: 2, tip: Doc::tip_at(&st, &b.s.id, 2).unwrap() };
     owner.commit(&mut st, &revoke.body(), Some(&revoke)).unwrap();
     let r = rep(&st).unwrap();
     assert_eq!((r.counters.redacted, r.counters.broken, r.counters.declared, r.counters.seals_bad), (1, 0, 0, 1), "{:?}", r.counters);

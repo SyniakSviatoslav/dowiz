@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { crc32 } from "node:zlib";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
-const PINNED = "5a8b5cae863fb9dcd717ff679da933103c53b7422485b6cfed70ab43aa6b5fa3";
+const PINNED = "3f098ec8c92d82a4f7224d2e62ae8583498882b5d2966852da0a68101f247eab";
 const MAX_PAGES = 16384, UNPINNED = 76, MODULE_REFUSED = 77, HOST_FAILED = 78, OWN = "--run-files-own-code", MARK = "[file's own code: testimony, not a verify] ";
 const WORDS = { // crates/bebop-wasm-reader/src/status.rs TABLE, word for word (tools/gates/atk3.sh), then the host's three
   0: "OK: read; n = entries or records, root = the FNV-1a 64 fold (a DOC's root is its log's fold)",
@@ -98,7 +98,7 @@ if (!isMainThread) { // THE WORKER: everything the module says comes back as byt
     const c = r.counts; if (typeof c === "number") { out(`verify status=${-c} -- ${words(-c)}`); process.exit(own ? UNPINNED : WORDS[-c] ? -c : HOST_FAILED); }
     const g = (i) => new DataView(c.buffer, c.byteOffset + 8 * i, 8).getBigInt64(0, true);
     out(`verify(whole arena) = ${words(r.v)}`);
-    out(`verify records=${g(0)} chained=${g(1)} legacy=${g(2)} redacted=${g(3)} broken=${g(4)} forks=${g(6)} seals=${g(5)} checked=${g(10)} heads=${g(7)} keys=${g(8)} genesis=${g(9)} segments=${g(12)} cut=${g(13)} cut_redacted=${g(14)} declared=${g(15)} keys_disagree=${c.length > 128 ? g(16) : "absent"} unsealed=${c.length > 136 ? g(17) : "absent"}`);
+    out(`verify records=${g(0)} chained=${g(1)} legacy=${g(2)} redacted=${g(3)} broken=${g(4)} forks=${g(6)} seals=${g(5)} checked=${g(10)} heads=${g(7)} keys=${g(8)} genesis=${g(9)} segments=${g(12)} cut=${g(13)} cut_redacted=${g(14)} declared=${g(15)} keys_disagree=${c.length > 128 ? g(16) : "absent"} unsealed=${c.length > 136 ? g(17) : "absent"} merges=${c.length > 144 ? g(18) : "absent"} merges_bad=${c.length > 152 ? g(19) : "absent"}`);
     if (g(10) === 0n) out(UNCHECKED);
     const an = r.anchors, a64 = (at) => new DataView(an.buffer, an.byteOffset + at, 8).getBigInt64(0, true);
     for (let i = 0; typeof an !== "number" && i + 56 <= an.length; i += 56) out(`anchor kind=${a64(i)} over=${hex(an.subarray(i + 8, i + 40))} time_ms=${a64(i + 40)} proof_len=${a64(i + 48)} (present, NOT verified by this reader)`);

@@ -75,7 +75,7 @@ fn a_revoked_key_seals_a_new_record_at_seq_zero() {
     orders(&mut sh, &a, "c", 1);
     sh.commit_keyop(&KeyOp::Admit(b.key()), &a, 2).unwrap();
     orders(&mut sh, &b, "b", 2);
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 2 }, &a, 3).unwrap();
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 2, tip: sh.tip_at(&b.id(), 2) }, &a, 3).unwrap();
     let bytes = sh.to_bytes_trimmed();
     let roots = [a.id()];
     let mut s = round_trip(&bytes, &roots);
@@ -97,7 +97,7 @@ fn a_revoked_key_admits_a_fresh_key_at_seq_zero() {
     orders(&mut sh, &a, "c", 1);
     sh.commit_keyop(&KeyOp::Admit(b.key()), &a, 2).unwrap();
     orders(&mut sh, &b, "b", 2);
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 2 }, &a, 3).unwrap();
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 2, tip: sh.tip_at(&b.id(), 2) }, &a, 3).unwrap();
     let bytes = sh.to_bytes_trimmed();
     let roots = [a.id()];
     let mut s = round_trip(&bytes, &roots);
@@ -123,14 +123,14 @@ fn a_revoke_at_seq_zero_revokes_nobody() {
     orders(&mut sh, &a, "c", 3);
     sh.commit_keyop(&KeyOp::Admit(b.key()), &a, 2).unwrap();
     orders(&mut sh, &b, "b", 2);
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 2 }, &a, 3).unwrap();
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 2, tip: sh.tip_at(&b.id(), 2) }, &a, 3).unwrap();
     let bytes = sh.to_bytes_trimmed();
     let roots = [a.id()];
     let mut s = round_trip(&bytes, &roots);
     let last = chain_of(&mut s, &b.id()).last().unwrap().tip;
     let mut payload = vec![0x41u8; 16];
     payload.push(KIND_KEYOP);
-    payload.extend_from_slice(&KeyOp::Revoke { actor_id: a.id(), after_seq: 1 }.body());
+    payload.extend_from_slice(&KeyOp::Revoke { actor_id: a.id(), after_seq: 1, tip: [0; 32] }.body());
     let mut x = Record { id: [0; 32], prev: last, actor_pubkey: b.id(), actor_seq: 0, flags: FLAG_SHA256, payload };
     x.id = HubIds.chained(&x);
     let top = seal(&b, 0, x.id, last);

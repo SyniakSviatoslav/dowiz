@@ -76,7 +76,7 @@ impl Hub {
 
         // A fresh image sized for what it will hold, never smaller than a hub's
         // birth size: the whole point is that it is not the old one.
-        let mut fresh = Store::create_bytes(self.store.image_bytes().max(64 * 1024))?;
+        let mut fresh = Store::create_bytes(self.store.writer_bytes()?.max(64 * 1024))?;
         EvLog::init_bytes(&mut fresh)?;
         // The checkpoint is a NEW record and continues the log's own scheme: a rotation must not
         // be what flips an unflipped venue (docs/design/MIGRATION-sha256-ids.md).

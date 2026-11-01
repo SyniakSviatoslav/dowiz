@@ -118,7 +118,7 @@ fn ml_dsa_65_revoke_after_k_breaks_k_plus_1() {
     let rep = verify(&st, &super::tests::ToyIds, &MlDsaVerifier, Trust::Genesis).unwrap();
     assert_eq!((rep.counters.seals_ok, rep.counters.seals_bad, rep.admitted), (3, 0, 2), "control: {rep:?}");
 
-    let revoke = KeyOp::Revoke { actor_id: b.s.id, after_seq: 1 };
+    let revoke = KeyOp::Revoke { actor_id: b.s.id, after_seq: 1, tip: Doc::tip_at(&st, &b.s.id, 1).unwrap() };
     owner.commit(&mut st, &revoke.body(), Some(&revoke)).unwrap();
     let rep = verify(&st, &super::tests::ToyIds, &MlDsaVerifier, Trust::Genesis).unwrap();
     assert_eq!((rep.counters.seals_ok, rep.counters.seals_bad), (3, 1), "B's seal 2 is past the revoke: {rep:?}");

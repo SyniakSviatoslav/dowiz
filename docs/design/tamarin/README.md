@@ -1,120 +1,87 @@
-# The DOC seal protocol, symbolic model (W-MG-TAM, 2026-11-01)
+# The DOC seal protocol, symbolic model (W-MG-TAM)
 
 `bebop_seal.spthy` is a Tamarin model of what a DOC file carries (FORMAT-BEBOP-IMAGE-v2 §9.4):
 genesis keys, records, SEAL, ADMIT, REVOKE, TRUNCATE over a SEG hash, FORGOTTEN, MERGE, read under
 `Trust::Only`. The adversary holds the whole file, rewrites every unsigned cell, and may hold a
-stolen non-root key. A root is stolen only where a lemma says so.
+stolen non-root key. A root is stolen only where a lemma says so. It models
+`crates/bebop-log/src/doc` as it stood on 2026-11-01.
 
-**STATUS: THE MODEL HAS NEVER BEEN PARSED OR PROVED.** Tamarin 1.12.0 (homebrew `arm64_linux` bottle) and
-Maude 3.5.1 (Ubuntu arm64) were unpacked on the box, and running them was refused by the session's
-permission classifier (below). Every "EXPECTED" in the model is a prediction by hand. A parse error
-is the likely first result of the first real run. Its one check so far is a script that counted brackets,
-comments, duplicate names and fact arities, which is not a parse.
+**STATUS: NEVER PARSED, NEVER PROVED.** No Tamarin has run on this file, on the box or anywhere else
+that this tree records. Every "expected" below is a prediction by hand. The only check so far is a
+script counting brackets, comments, duplicate names and fact arities, which is not a parse, so a
+parse error is a likely first result. No lemma here says anything about the Rust.
 
-What did run: the four predicted failures, as traces on the real `verify`, in
-`rust-traces/tam_tests.rs`. Those are executions of one file each, with toy hash and signature seams.
-They show those four files pass or are not refused. They prove nothing about the Rust in general,
-and no lemma here does either.
+`.github/workflows/tamarin.yml` runs it on `ubuntu-24.04`, on `workflow_dispatch` and on a push to
+main touching this directory. It is separate from CI, so a red blocks no merge. A green job is not a
+result: Tamarin reports a falsified lemma in its output and not in its exit code, and the step
+pipes through `tee`. Read the `tamarin-out` artifact and compare each lemma with the table.
+Why not on the box: the arm64 bottle was unpacked, and running it through the dynamic loader was
+refused by the session's permission classifier on 2026-11-01. Nothing here has been re-tried.
 
-## Run it
-
-x86-64 Linux, from the repo root, one command:
-
-```sh
-curl -sL https://github.com/tamarin-prover/tamarin-prover/releases/download/1.12.0/tamarin-prover-1.12.0-linux64-ubuntu.tar.gz | tar xz && sudo apt-get install -y maude graphviz && ./tamarin-prover --prove docs/design/tamarin/bebop_seal.spthy +RTS -N2 -RTS
-```
-
-The tarball's inner layout was not inspected: if `./tamarin-prover` is not at its top, use the path
-`tar tzf` shows. First parse only, which is the step to do first: drop `--prove`.
-
-CI job proposal, NOT added (`.github/workflows` is main's):
-
-```yaml
-tamarin-seal:
-  runs-on: ubuntu-24.04
-  timeout-minutes: 120
-  steps:
-    - uses: actions/checkout@v4
-    - run: |
-        curl -sL https://github.com/tamarin-prover/tamarin-prover/releases/download/1.12.0/tamarin-prover-1.12.0-linux64-ubuntu.tar.gz | tar xz
-        sudo apt-get install -y maude graphviz
-        ./tamarin-prover --prove docs/design/tamarin/bebop_seal.spthy +RTS -N2 -RTS | tee tamarin.out
-        # A falsified lemma stays here on purpose until its hole closes: pin the expected verdict
-        # of each lemma against tamarin.out, do not gate on "all verified".
-```
-
-On this box, should the operator allow it: the bottle's ELF interpreter is the unsubstituted
-`@@HOMEBREW_PREFIX@@/lib/ld.so`, so it can only start with `/lib/ld-linux-aarch64.so.1` as the launcher, and
-it finds `maude` through PATH with `LD_LIBRARY_PATH` at the unpacked debs. That launcher command is what was
-refused. It was not retried in another shape.
+To parse it by hand on x86-64, with the prover and `maude` on PATH:
+`tamarin-prover docs/design/tamarin/bebop_seal.spthy`. To prove, add `--prove`.
 
 ## The lemmas
 
-| id | lemma | meaning | expected | evidence |
-|---|---|---|---|---|
-| E1-6 | `exec_*` | commit, admit, revoke, cut, tombstone, merge all reach an accepted view | verified | not run |
-| L1 | `sealed_by_device_or_compromised` | an ok seal of a registered key: it wrote that record, or the key was stolen | verified | not run |
-| L1b | `unregistered_sealer_needs_a_theft` | a key nobody registered seals only behind a theft | verified | not run |
-| L2 | `no_admit_above_after_seq` | an effective ADMIT by a revoked key sits at or below `after_seq` | verified | not run |
-| **L2t** | `no_admit_for_later_in_time` | a key MINTED AFTER the REVOKE is not admitted by the revoked key | **FALSIFIED** | **H2, trace ran** |
-| L3 | `truncate_held_was_signed` | under `holds`, a TRUNCATE was signed, or a theft | verified | not run |
-| **L3s** | `truncate_status_was_signed` | at status 0 alone, the same | **FALSIFIED** | **H3, trace ran** |
-| L3f | `forgotten_held_was_signed` | under `holds`, a tombstone's FORGOTTEN was signed, or a theft | verified | not run |
-| L4 | `merge_parents_signed_uncut` | with no cut, a MERGE row's tip was written by that device, or a theft | verified | not run |
-| **L4c** | `merge_parents_signed` | the same with a cut in the view | **FALSIFIED** | **H4, trace ran** |
-| **L5** | `non_root_cannot_cut_a_revoke` | FORMAT §14's sentence, read as written | **FALSIFIED** | **H1, trace ran** |
-| L5s | `same_device_cut_takes_the_admit` | the case the sentence does cover: revoker = admitter | verified, may need induction | not run; pinned by `a_thief_with_an_admitted_key_cannot_cut_its_revoke_away` |
-| Lim1 | `limit_rollback` | ATTACK EXISTS: the view without the REVOKE, thief goes on | verified (= attack) | not run; pinned by `limit_the_file_before_the_revoke_knows_nothing_of_it` |
-| Lim2 | `limit_stolen_root` | ATTACK EXISTS: a stolen root's cut | verified (= attack) | not run; pinned by `limit_a_stolen_root_cuts_a_revoke_away` |
+Expected "verified" on an `exists-trace` lemma means the trace exists. For a `limit_` lemma that trace
+is the attack.
 
-The card's lemma "a key revoked effectively cannot admit a key for later" splits in two, because the
-Rust's `valid_at` means seq and the card means time. L2 is what the code enforces. L2t is what was asked.
+| id | lemma | meaning | expected |
+|---|---|---|---|
+| E1-6 | `exec_*` | commit, admit, revoke, cut, tombstone, merge each reach an accepted view | verified |
+| L1 | `sealed_by_device_or_compromised` | an ok seal of a registered key: it wrote that record, or the key was stolen | verified |
+| L1b | `unregistered_sealer_needs_a_theft` | a key nobody registered seals only behind a theft | verified |
+| L2 | `no_admit_above_after_seq` | under `holds`, an ADMIT by a revoked key sits at or below `after_seq` | verified |
+| L2t | `no_admit_for_later_in_time` | under `holds`, a key minted after the REVOKE is not admitted by the revoked key | verified, likely needs induction |
+| L3 | `truncate_held_was_signed` | under `holds`, a cut is an honest root's, or a root was stolen | verified |
+| L3s | `truncate_status_was_signed_no_tomb` | at status 0, with no tombstone in the view, the same | verified |
+| **L3t** | `truncate_status_was_signed` | at status 0, the same, tombstones allowed | **FALSIFIED** |
+| L3f | `forgotten_held_was_signed` | under `holds`, a tombstone's FORGOTTEN was signed, or a theft | verified |
+| L4 | `merge_parents_signed_uncut` | with no cut, a MERGE row's tip was written by that device, or a theft | verified |
+| L5 | `non_root_cannot_cut_a_revoke` | FORMAT §14: a non-root key cannot hide a REVOKE, with the revoker's newer record in the file | verified |
+| Lim1 | `limit_rollback` | ATTACK: the view without the REVOKE, and the thief goes on | verified = attack |
+| Lim2 | `limit_merge_row_under_cut` | ATTACK: under a cut a MERGE row binds its seq and not its tip | verified = attack |
+| Lim3 | `limit_stolen_root` | ATTACK: a stolen root's own cut | verified = attack |
 
-## The four holes
+**L3t is a new prediction, read from `count.rs`, not run on the Rust or the prover.** A tombstone's
+`prev` sits under no id, so a forger with no key puts a forged TRUNCATE at seq `s` and tombstones the
+genuine `s+1` with `prev` on the forgery. Nothing forks, so the forgery is sound and the root's seal
+covers it, and status 75 becomes 0. `tombs_foreign` should keep `holds` false, so `holds` is not
+fooled: what falls is the refusal, for a caller that reads status alone. A REVOKE or ADMIT goes the same way.
 
-**H1, real, and it contradicts the format.** An admitted NON-ROOT key cuts away a REVOKE written by a
-device other than the one that admitted it, and `holds` is true under `Trust::Only` with no root
-stolen. Root A admits T; root C writes REVOKE(T) then one more record; T's holder signs a cut of the
-one REVOKE record, keeps its own ADMIT on A's chain, and goes on signing past `after_seq`. C's newer
-record stays in the file, so this is NOT the named rollback: the file is not a shorter true file.
-Wrong words: FORMAT §14 "a cut through a REVOKE takes that key's older ADMIT with it"; `settle.rs:38`.
-That holds only on one chain. `cut.rs:127` `TakesRevoke` is a writer's refusal and a thief has his own
-writer; `declare.rs:152` `check_segments` asks only for an effective TRUNCATE, `declare.rs:82` lets any
-admitted key sign one, and nothing compares a SEG with what left, because only the archive can.
-Cross-device order is unsigned (§14), so the cut need not be a prefix of the true file.
-The revoker need not be a root: any valid key may revoke any key, and revoker ≠ admitter is enough.
+## How the fixes appear in the model
 
-**H2, real, unnamed in §14.** REVOKE names `after_seq` and no tip (`keys.rs:21`), and `valid_at` reads
-only the seq (`keys.rs:74`). So the holder of a revoked key rewrites its own chain at or below `after_seq`
-into an ADMIT of a key made after the revocation, re-seals it, and that key is admitted, unrevoked,
-and outlives the REVOKE. `holds` is true. The REVOKE is the same id and its seal the same bytes in
-both files. `settle.rs:158` `by_valid` and `count.rs` density both pass: no seq is reused inside the
-one file. `Doc::merge_into` against an honest copy refuses with `Fork` at that seq, so a second file
-sees it, and an anchor over the old tip would. `after_seq` = 0 (REVOKED_ALL) closes it for that key.
-It is the "back-dated operation" R-MAINGOAL-A:146 quotes as unsolved by Keyhive.
+| fix | code | model |
+|---|---|---|
+| only a root's TRUNCATE is effective | `declare.rs:97` | `truncate_declared` asks `RootA`; `Commit_Truncate` needs `!Trusted` |
+| REVOKE names a tip, `bebop-revoke/2` | `keys.rs`, `declare.rs:103` | `revoke/3`; `holds_revoke_tip_stands` is `off_chain`, with its self-revoke exemption |
+| a record at a forked seq declares nothing | `count.rs:112` | `sound_is_unforked`, and the no-fork clause in `revokes_bind`, `truncate_declared` |
+| dense seq | `count.rs:95` | chains grow by `%1` from 1 or from a frontier row |
+| a chain ends at 0^32 or a frontier tip | `count.rs:176` | `V_first`, `V_first_cut`, `V_first_onto`, `V_first_onto_cut` are the only starts |
+| FORGOTTEN | `forgotten.rs` | `forgotten(id, digest)`, one row, by the author or a root |
 
-**H3, real, narrower.** No key at all. `dense` is true for any record whose seq is forked
-(`count.rs:95`), so a forged record at a used seq on top of a device's chain is `sound`, and that
-device's seal covers its seq (`declare.rs:82`). A forged TRUNCATE there turns status 75 into status 0.
-`forks` = 1, `unsealed` = 1, `holds` is false, so `holds` is not fooled. What falls is the refusal, and
-`declare.rs:151` "no record leaves a file without a key" read as a refusal. A forged REVOKE or ADMIT goes the
-same way (`declarations`, `declare.rs:38`). Any caller that reads status and not `holds` is exposed.
+**There is no second FORGOTTEN mark.** `FORGOTTEN_MARK` is `bebop-forgotten/1`, and "FORGOTTEN v2" occurs
+only in the wording of one fixture. What that wording can mean is the body with `(id, digest)` rows, which is what is modelled.
 
-**H4, real, already written in §9.4 as behaviour.** `placed` (`declare.rs:100`) reads no tip at or under
-a frontier row, so a MERGE row there names a tip nobody signed, and `holds` is true. §9.4 says "a seq at or
-below the newest frontier row", so the text and the code agree; what is missing is a limit in §14:
-under a cut, "the rows fix both sides" holds for seq, not for tip.
+Forks reach further than H3: neither record at a forked seq is sound, the honest one included. So at
+status 0 a forger with no key silences an honest REVOKE, or makes an honest TRUNCATE read as undeclared,
+by forking its seq. `forks` keeps `holds` false, and `sound_is_unforked` models it.
 
 ## What the model leaves out, so a verified lemma cannot claim these
 
-Legacy (FNV) records. Keyless actors. Blind readers. Anchors and time. `claimed_ms`, `flags`, `alg`
-as anything but bound fields. Two rows in one segment (one row per TRUNCATE here; a chain of hashes is
-`seg`'s first argument and is not walked). A device's first record chaining onto the log: here it
-is over `'zero` at seq 1. The `unsettled` branch of `settle.rs`: a contradiction has no accepted view
-here, which matches `holds` false and models nothing about its count. Sums (`redacted = declared`).
-Byte parsing: ambiguity between bodies, `Ids::body` framing and the nonce are free constructors here,
-so no confusion attack can appear. ML-DSA is a perfect signature here and sha256 a perfect hash.
-`Rec` of an admitted `b`'s REVOKE binds in every view: a seal past it is not ok, as in the Rust.
+Legacy (FNV) records. Keyless actors, and a REVOKE naming one. Blind readers, for whom a TRUNCATE
+stands with no root. Anchors and time. `claimed_ms`, `flags`, `alg` as anything but bound fields.
+Two rows in one segment, and the walk down `seg`'s first argument. A prev that leaves the file, which is
+`unsealed`'s in `holds` and so has no rule, in a `'status` view too. The `unsettled` branch of `settle.rs`: a
+contradiction has no accepted view here. Sums (`redacted = declared`). A cut's reach across devices
+in file order: an honest cut here names one device's row. Byte parsing: bodies are free constructors,
+so no confusion between them can appear. ML-DSA is a perfect signature and sha256 a perfect hash.
 
-The Rust traces use `ToyIds`, `ToySigner`, `ToyVerifier`, so `actor_of` is `None`, not the hub's seams.
-No step forges a signature, so H1, H2 and H4 should carry over, and that was not run on `dowiz-hub`.
+## History
+
+**As of 2026-11-01 02:47, before the fixes**, four failures predicted against the first model ran as
+traces on the real `verify`, with toy seams, and reproduced: H1 a non-root key cut another device's
+REVOKE, `holds` true; H2 a revoked key back-dated an ADMIT under `after_seq`, `holds` true; H3 a forged
+TRUNCATE in a fork escaped status 75, `holds` false; H4 a MERGE row under a cut named an unsigned tip,
+`holds` true. `rust-traces/tam_tests.rs` is that pre-fix form and does not build against today's API.
+The current traces are `crates/bebop-log/src/doc/tam_tests.rs`, asserting the opposite for H1-H3.

@@ -69,7 +69,7 @@ impl<C: Image> TreeIn<C> {
             return Err(TreeError::Root { why: "cells 1-4 of a v4 root must be zero" });
         }
         let (n, depth) = (get_in(&c, root, 0), get_in(&c, root, 7));
-        let n = bebop_image::idx(n).ok_or(TreeError::Root { why: "n is outside what this reader can count" })?;
+        let n = bebop_image::idx(n).ok_or(TreeError::Root { why: "n past what this reader counts" })?;
         if !(0..=MAX_TREE_DEPTH as i64).contains(&depth) {
             return Err(TreeError::Root { why: "DEPTH past MAX_TREE_DEPTH" });
         }

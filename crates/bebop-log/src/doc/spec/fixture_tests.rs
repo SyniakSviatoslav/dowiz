@@ -150,7 +150,7 @@ fn keys_disagree() -> Store {
     for seq in 1..=3u64 {
         tip = sha_commit(&mut st, &b, tip, seq, format!("b-{seq}").as_bytes());
     }
-    let op = KeyOp::Revoke { actor_id: b.id, after_seq: 3 };
+    let op = KeyOp::Revoke { actor_id: b.id, after_seq: 3, tip };
     let a_tip = commit(&mut st, &a, &sha_rec(&a, [0u8; 32], 1, &op.body()), Some(&op));
     assert!(report(&st, &ToyVerifier).holds(), "control: the table and the REVOKE agree");
     let rows = key_rows(&st, Doc::open(&st).unwrap().keys);
@@ -170,8 +170,8 @@ fn verify_line(st: &Store) -> String {
     let r = report(st, &Blind);
     let c = r.counters;
     format!(
-        "records={} chained={} legacy={} redacted={} broken={} forks={} seals={} checked=0 heads={} keys={} genesis={} segments={} cut={} cut_redacted={} declared={} keys_disagree={} unsealed={}",
-        c.records, c.chained, c.legacy, c.redacted, c.broken, c.forks, c.seals_ok + c.seals_bad, r.heads.len(), r.keys, r.admitted, c.segments, c.cut, c.cut_redacted, c.declared, c.keys_disagree, c.unsealed
+        "records={} chained={} legacy={} redacted={} broken={} forks={} seals={} checked=0 heads={} keys={} genesis={} segments={} cut={} cut_redacted={} declared={} keys_disagree={} unsealed={} merges={} merges_bad={}",
+        c.records, c.chained, c.legacy, c.redacted, c.broken, c.forks, c.seals_ok + c.seals_bad, r.heads.len(), r.keys, r.admitted, c.segments, c.cut, c.cut_redacted, c.declared, c.keys_disagree, c.unsealed, c.merges, c.merges_bad
     )
 }
 

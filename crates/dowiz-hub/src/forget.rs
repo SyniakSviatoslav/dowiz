@@ -94,7 +94,7 @@ impl Hub {
             return Ok(0);
         }
         // SAME SIZE FIRST, and double on the rare redaction that grew a record.
-        let mut size = self.store.image_bytes().max(64 * 1024);
+        let mut size = self.store.writer_bytes()?.max(64 * 1024);
         loop {
             match rebuilt(&records, tip, size) {
                 Ok(fresh) => {

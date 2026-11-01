@@ -254,7 +254,7 @@ fn revoke_after_k_breaks_k_plus_1() {
     let rep = verify(&st, &ToyIds, &ToyVerifier, Trust::Genesis).unwrap();
     assert_eq!((rep.counters.seals_ok, rep.counters.seals_bad, rep.admitted), (4, 0, 2), "control: {rep:?}");
 
-    let revoke = KeyOp::Revoke { actor_id: b.s.id, after_seq: 2 };
+    let revoke = KeyOp::Revoke { actor_id: b.s.id, after_seq: 2, tip: Doc::tip_at(&st, &b.s.id, 2).unwrap() };
     owner.commit(&mut st, &revoke.body(), Some(&revoke)).unwrap();
     let c = count(&st);
     assert_eq!((c.seals_ok, c.seals_bad, c.records), (4, 1, 5), "B's seal 3 is past the revoke: {c:?}");

@@ -5,13 +5,17 @@
 //!
 //! `--headers`: lines of `<height> <merkle_root_hex 32 B, raw header byte order> <time_ms>`, the
 //! file `anchor fetch-headers` writes (`#` comments included).
-//! Prints the counters, the heads, every anchor with its verdict and `under_cut`, then the three
-//! sentences of R-MAINGOAL-A §2d VERBATIM and what the proof does not say. Exit 0 when the
-//! report holds and no anchor is bad; 3 when it does not; 2 when the file is not a sealed
-//! image (the refusal named).
+//! Prints the counters, the heads, every anchor with its verdict and `under_cut`, every MERGE with
+//! its conflicts in words and whether they re-derive, then the three sentences of R-MAINGOAL-A
+//! §2d VERBATIM and what the proof does not say. Exit 0 when the report holds, no anchor is bad
+//! and every conflict list re-derives; 3 when it does not hold or one differs; 4 when all of that
+//! stands and a conflict list could not be asked, because the file was cut (`NOT CHECKED`: never
+//! read as clean, a cut of one record would launder a lie); 2 when the file is not a sealed image
+//! (the refusal named).
 
 use bebop_store::evlog::doc::{AnchorCounts, Trust};
 use dowiz_hub::doc_seal::live::{anchor_line, doc_line, refusal_words, Adapters, FileHeaders};
+use dowiz_hub::doc_seal::merge::merge_report;
 use dowiz_hub::doc_seal::ots::BlockHeaders;
 use dowiz_hub::doc_seal::{hex32, SealedHub, SENTENCES};
 use dowiz_hub::HubError;
@@ -75,11 +79,21 @@ fn main() {
     for x in &checked {
         println!("{}", anchor_line(x));
     }
+    let (merges, recheck_clean) = merge_report(&sh, rep.holds());
+    for l in &merges {
+        println!("{l}");
+    }
     println!("what the proof says (R-MAINGOAL-A §2d):");
     for s in SENTENCES {
         println!("  {s}");
     }
-    let holds = rep.holds() && ac.bad == 0;
+    let said = |word: &str| merges.iter().any(|l| l.starts_with("merge ") && l.ends_with(word));
+    let (unasked, differs) = (said("recheck=unchecked"), said("recheck=DIFFERS"));
+    if rep.holds() && ac.bad == 0 && unasked && !differs {
+        println!("NOT CHECKED");
+        std::process::exit(4);
+    }
+    let holds = rep.holds() && ac.bad == 0 && recheck_clean;
     println!("{}", if holds { "HOLDS" } else { "DOES NOT HOLD" });
     std::process::exit(if holds { 0 } else { 3 });
 }

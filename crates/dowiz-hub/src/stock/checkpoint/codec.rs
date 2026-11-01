@@ -206,7 +206,7 @@ pub(in crate::stock) fn parse(payload: &[u8]) -> Option<(Journal, Option<i64>)> 
     let led = &mut j.ledger;
     for _ in 0..r.tag("L")? {
         let item = r.s()?;
-        led.levels.push((item, StockLevel { on_hand: r.n()?, reserved: r.n()? }));
+        led.place(item, StockLevel { on_hand: r.n()?, reserved: r.n()? });
     }
     for tag in ["O", "S"] {
         // A map since W-AUDIT M1: the fold keeps these keyed, not scanned.
@@ -217,7 +217,8 @@ pub(in crate::stock) fn parse(payload: &[u8]) -> Option<(Journal, Option<i64>)> 
         if tag == "O" { led.open = list } else { led.served = list }
     }
     for _ in 0..r.tag("C")? {
-        led.counted.push(r.s()?);
+        let item = r.s()?;
+        led.mark_counted(&item);
     }
     for _ in 0..r.tag("B")? {
         let item = r.s()?;

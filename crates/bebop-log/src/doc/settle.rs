@@ -35,10 +35,11 @@
 //!
 //! THREE WAYS TO HIDE A REVOKE THAT ARE PINNED, under `Trust::Only`, by a named test: a thief's
 //! tombstone over it needs its author's or a root's FORGOTTEN listing it (`foreign_tombs`,
-//! `a_thief_does_not_erase_the_revoke_of_its_own_key`); a thief's cut through it takes the older
-//! ADMIT of the thief's key, so its TRUNCATE declares nothing (`a_thief_with_an_admitted_key_...`);
-//! a forger with no key and the file: `atk_holes` holes 2-6 name the doors tried. Nothing here
-//! says those are all the doors.
+//! `a_thief_does_not_erase_the_revoke_of_its_own_key`); a thief's cut through it declares nothing,
+//! because only a root's TRUNCATE is effective (`declare.rs`; the older sentence here, "a cut takes
+//! the thief's own ADMIT", was false: that ADMIT can sit on another device's chain, and the file's
+//! order is signed by nobody, `tam_tests::h1`); a forger with no key and the file: `atk_holes` holes
+//! 2-6 name the doors tried. Nothing here says those are all the doors.
 //!
 //! WHAT THE FILE CANNOT DECIDE (pinned in `settle/tests.rs`). ROLLBACK: the file as it stood
 //! before the REVOKE, or a revoker's newest records dropped with their HEADS row: one file
@@ -58,6 +59,7 @@ use crate::prelude::*;
 use alloc::collections::{BTreeMap, BTreeSet};
 use super::budget::{at_key, set_of};
 use super::declare::{effective, Body, Declared};
+use super::frontier::Frontiers;
 use super::keys::{admit_view, narrower, valid_at, Key};
 use super::seal::message;
 use super::seals::Seals;
@@ -70,6 +72,7 @@ type Actor = [u8; 32];
 /// about who is admitted, and nothing about a seal or a record changes between rounds.
 pub(super) struct Cx<'a> {
     pub ch: &'a Chains,
+    pub fr: &'a Frontiers,
     pub seals: &'a Seals,
     pub decls: &'a [(usize, Body)],
     /// `count.rs`: the records whose id, link and seq stand.
@@ -186,7 +189,7 @@ fn round(cx: &Cx<'_>, table: &[Key], trusted: &BTreeSet<Actor>, in_force: &[(Act
         }
         (ok, bad, covered, tips) = seals(cx, table, &revoked, &admitted, sigs);
     }
-    let declared = effective(&cx.ch.recs, cx.decls, &admitted, &covered, cx.v.checks_signatures());
+    let declared = effective(cx.ch, cx.fr, cx.key_ix, cx.decls, &admitted, trusted, &covered, cx.v.checks_signatures());
     Round { revoked, admitted, ok, bad, tips, covered, declared }
 }
 

@@ -57,6 +57,12 @@ pub mod desk;
 /// S2b: the kitchen's order rail offline -- the tablet's taps, rebased through the order machine.
 pub mod orders;
 pub use delta::{Conflict, Side};
+
+/// The obstructions of two tails with both ledgers at hand (M2: two whole files, `doc_seal::merge`;
+/// `ours` plays the hub, `theirs` the kitchen). Detects and never resolves, as everything here.
+pub(crate) fn obstructed(ours: &crate::stock::StockLedger, theirs: &crate::stock::StockLedger, tail_o: &[crate::stock::StockEvent], tail_t: &[crate::stock::StockEvent]) -> Vec<Conflict> {
+    delta::obstructions(ours, Some(theirs), &delta::TailDelta::of(tail_o), &delta::TailDelta::of(tail_t), false).0
+}
 use walk::{Chain, OpenErr};
 
 /// Why a pair of images was not glued. Every refusal names the branch it found the fault in.
@@ -179,7 +185,7 @@ pub fn glue(hub: &[u8], kitchen: &[u8], last_glued: Option<&[i64; 4]>) -> Result
     let led_h = ledger(Side::Hub, &lh)?;
     let (dh, dk) = (delta::TailDelta::of(&eh), delta::TailDelta::of(&ek));
     let led_k = if delta::needs_kitchen(&led_h, &dh, &dk) { Some(ledger(Side::Kitchen, &load(Side::Kitchen, kitchen)?)?) } else { None };
-    let (conflicts, shared) = delta::obstructions(&led_h, led_k.as_ref(), &dh, &dk);
+    let (conflicts, shared) = delta::obstructions(&led_h, led_k.as_ref(), &dh, &dk, true);
     g.conflicts.extend(conflicts);
     g.shared = shared;
     Ok(g)

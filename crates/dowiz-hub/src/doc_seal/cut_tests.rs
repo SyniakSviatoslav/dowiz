@@ -126,7 +126,7 @@ fn a_forgotten_by_a_revoked_device_declares_nothing_on_a_sealed_hub() {
     assert_eq!((r.counters.records, r.counters.redacted, r.counters.declared, r.counters.broken, r.counters.seals_ok), (4, 1, 1, 0, 4), "{:?}", r.counters);
     assert!(r.holds(), "{:?}", r.counters);
 
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 2 }, &owner, 5).unwrap();
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 2, tip: sh.tip_at(&b.id(), 2) }, &owner, 5).unwrap();
     let r = sh.verify().unwrap();
     assert_eq!((r.counters.records, r.counters.redacted, r.counters.declared, r.counters.broken, r.counters.seals_bad), (5, 1, 0, 0, 1), "{:?}", r.counters);
     assert!(!r.holds(), "a revoked key's FORGOTTEN declares nothing");

@@ -46,6 +46,18 @@ impl Kv {
     /// with a byte range `fits` has bounded by the blob.
     #[allow(clippy::indexing_slicing)] // T-ES-06 inventory (W-ES-P1): a pre-split index site; this list may only shrink
     pub(super) fn decode_with(st: &Store, copy: fn(&Store, usize, i64, usize, usize) -> Option<Vec<u8>>) -> Option<Kv> {
+        Self::decode_in(st, copy, true)
+    }
+
+    /// `decode` for a READER, which takes keys as raw bytes (FORMAT §9.1, "MUST NOT decode"): the
+    /// check on keys as read below is a writer's, and with it a reader answered 2 where the format's
+    /// other readers answer 0 (atk3 `kv2_lossy_collision`). What it returns is not for writing.
+    pub(crate) fn decode_raw(st: &Store) -> Option<Kv> {
+        Self::decode_in(st, blob_bytes, false)
+    }
+
+    #[allow(clippy::indexing_slicing)] // T-ES-06 inventory (W-ES-P1): a pre-split index site; this list may only shrink
+    fn decode_in(st: &Store, copy: fn(&Store, usize, i64, usize, usize) -> Option<Vec<u8>>, writes: bool) -> Option<Kv> {
         let root = st.root()?;
         let ver = Self::version(st);
         if ver > delta::VERSION_DELTA {
@@ -125,7 +137,7 @@ impl Kv {
         // why), and a writer writes these Strings: keys that pass above in raw bytes and collide or
         // reorder under `key_of` would save an image the next load refuses (W-MG-TIDY). Refused
         // here, before any writer; one damaged key alone still reads, which is what lossy is for.
-        if entries.windows(2).any(|w| w[0].0 >= w[1].0) {
+        if writes && entries.windows(2).any(|w| w[0].0 >= w[1].0) {
             return None;
         }
         let mut kv = Kv { entries };

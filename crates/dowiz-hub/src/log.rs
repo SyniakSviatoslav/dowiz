@@ -188,7 +188,7 @@ impl Hub {
         // on every request, and the resource limit a few orders later. The
         // floor exists so a corrupt zero-length image cannot produce a
         // zero-length one; it is not a target.
-        let bigger = self.store.image_bytes().saturating_mul(2).max(64 * 1024);
+        let bigger = self.store.writer_bytes()?.saturating_mul(2).max(64 * 1024);
         let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
         // VERBATIM INCLUDING A FAILED CRC (W-CRC): re-sealing a quarantined record

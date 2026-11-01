@@ -22,6 +22,7 @@ payload; payload cell i of object o is cell o + 2 + i; a ref is relative to its 
   root-pk     a byte of the first KEY's public key; resealed          -> no seal of that actor verifies
   frontier-row the newest segment's first row, its seq + 1; resealed  -> the chain hash differs (75)
   tomb-swap   the two oldest tombstones trade payloads; resealed      -> FORGOTTEN's digests (tombs_foreign)
+  merge-bit   the last payload byte of the newest MERGE; resealed     -> its id no longer hashes (broken), it declares nothing
   wasm-byte   byte 100 of an archive's embedded reader                -> read.mjs refuses before running it
 """
 import struct
@@ -33,6 +34,7 @@ FLAG_SHA256 = 2
 NONCE_CELLS = 2  # the 16 bytes in front of a chained payload
 ERASED_NONCE = b"0" * 16
 PROOF_SIG_BYTE = 3000  # past the 1 952 B public key of a TSA mark: inside the signature
+MERGE_MARK = b"bebop-merge/1"  # behind the 16-byte nonce and the kind byte
 
 
 class Image:
@@ -156,6 +158,13 @@ def main(mode, src, dst):
         im.put(t[1] + 2 + 1, lengths[0])
         im.reseal(t[0])
         im.reseal(t[1])
+    elif mode == "merge-bit":
+        marked = [r for r in im.records() if bytes(im.b[8 * (r + 2 + 16) + 17: 8 * (r + 2 + 16) + 17 + len(MERGE_MARK)]) == MERGE_MARK]
+        if not marked:
+            raise SystemExit("maingoal.forge: no MERGE in this file")
+        rec = marked[-1]
+        im.b[8 * (rec + 2 + 16) + im.u(rec + 2 + 1) - 1] ^= 1
+        im.reseal(rec)
     elif mode == "wasm-byte":
         im.b[(1024 + im.i(1027) + 3) * 8 + 100] ^= 1
     else:

@@ -205,6 +205,20 @@ fn a_count_on_one_tablet_against_a_sale_on_the_other_asks_for_a_recount() {
     assert_eq!(g.conflicts, vec![Conflict::Recount { item: "b".into(), absolute_in: Side::Hub }]);
 }
 
+/// THE HUB KEEPS ITS DOOR (W-MG-MERGE2): each branch here passed the write door, so a branch below
+/// zero and one order served on both stay what `glue` always said. `doc_seal::merge` has no door.
+#[test]
+fn the_rules_for_two_doorless_files_do_not_reach_the_hub() {
+    let served = |q: i64, o: &str| StockEvent::Served { item: "salmon".into(), qty: q, order_id: o.into() };
+    let mut base = StockLog::create_sized(64 * 1024).unwrap();
+    base.append_all(&[rec("salmon", 10)]).unwrap();
+    let base = base.to_bytes_trimmed();
+    let g = glue(&branch(&base, &[vec![served(2, "o1")]]), &branch(&base, &[vec![served(2, "o1")]]), None).unwrap();
+    assert!(g.conflicts.is_empty(), "{:?}", g.conflicts);
+    let g = glue(&branch(&base, &[vec![served(11, "a")]]), &branch(&base, &[vec![served(1, "b")]]), None).unwrap();
+    assert!(g.conflicts.is_empty(), "the hub's branch went below zero past its own door: {:?}", g.conflicts);
+}
+
 #[test]
 fn a_hold_released_on_the_hub_and_consumed_in_the_kitchen_is_taken_twice() {
     let base = grid_base();

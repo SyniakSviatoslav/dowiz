@@ -19,7 +19,9 @@ jobs:
           curl -sSL https://github.com/tamarin-prover/tamarin-prover/releases/download/1.12.0/tamarin-prover-1.12.0-linux64-ubuntu.tar.gz | tar xz
           sudo apt-get install -y maude graphviz
       - name: Prove
+        shell: bash
         run: |
+          set -o pipefail
           T=$(find . -type f -name tamarin-prover | head -1)
           "$T" --prove docs/design/tamarin/bebop_seal.spthy +RTS -N2 -RTS | tee tamarin.out
       - uses: actions/upload-artifact@v4

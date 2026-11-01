@@ -193,7 +193,7 @@ fn the_doc_abi_round_trips_natively() {
         let n = bw_counts(buf.as_mut_ptr(), buf.len()) as usize;
         assert_eq!(n, 8 * COUNTS_CELLS);
         let c: Vec<i64> = (0..COUNTS_CELLS).map(|i| i64::from_le_bytes(buf[8 * i..8 * i + 8].try_into().unwrap())).collect();
-        assert_eq!(c, vec![3, 3, 0, 0, 0, 3, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0], "twelve M1 cells, four M3/M4 cells, keys_disagree, unsealed appended");
+        assert_eq!(c, vec![3, 3, 0, 0, 0, 3, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "twelve M1 cells, four M3/M4 cells, keys_disagree, unsealed appended");
         buf[0] = 0xAA;
         assert_eq!(bw_counts(buf.as_mut_ptr(), 8), 8 * COUNTS_CELLS as i64, "too small: the length, nothing written");
         assert_eq!(buf[0], 0xAA);
@@ -241,7 +241,7 @@ fn a_forged_table_shows_without_a_signature() {
     DocRoot::init_bytes(&mut st, 0, &[key]).unwrap();
     let mut tip = [0u8; 32];
     sha_commit(&mut st, &mut tip, 1, b"order", None);
-    let op = KeyOp::Revoke { actor_id: Toy.actor_id(), after_seq: 2 };
+    let op = KeyOp::Revoke { actor_id: Toy.actor_id(), after_seq: 2, tip: [0; 32] };
     sha_commit(&mut st, &mut tip, 2, &[&[b'K'][..], &op.body()].concat(), Some(&op));
     let mut d = open(&st.to_bytes_trimmed()).expect("opens");
     let c = d.verify_doc().unwrap().unwrap();

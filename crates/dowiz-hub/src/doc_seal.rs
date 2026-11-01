@@ -40,12 +40,16 @@ use crate::forget::REDACTED_BIT;
 
 mod history;
 pub mod live;
+pub mod merge;
 pub mod ots;
 pub mod roughtime;
 mod sealed;
+mod sides;
+mod stock;
 pub mod tsa;
 pub use history::KIND_DECL;
 pub use sealed::{SealedHub, KIND_KEYOP, MIN_SEALED_BYTES};
+pub use stock::KIND_STOCK;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

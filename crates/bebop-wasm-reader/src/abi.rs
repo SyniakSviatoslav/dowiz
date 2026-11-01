@@ -32,8 +32,8 @@ pub const KIND_DOC: i32 = 5;
 pub const HEAD_ROW: usize = 72;
 /// Cells of `bw_counts` (`DocCounts`, in field order; 12 in ABI 2 as merged, 16 since W-MG-M5b --
 /// the four segment counters are APPENDED, so a host written for 12 reads its 12 unchanged; 17
-/// since W-MG-REVOKE, `keys_disagree` appended the same way; 18 since W-MG-SEAL, `unsealed`).
-pub const COUNTS_CELLS: usize = 18;
+/// since W-MG-REVOKE, `keys_disagree` appended the same way; 18 since W-MG-SEAL, `unsealed`; 20 since W-MG-M2, `merges`, `merges_bad`).
+pub const COUNTS_CELLS: usize = 20;
 /// Bytes of one `bw_anchors` row: `kind 8 || over 32 || time_ms 8 || proof_len 8`.
 pub const ANCHOR_ROW: usize = 56;
 

@@ -41,6 +41,14 @@ unrelated project, a schema-based serialization format.
 - **Log segments (SEG), TRUNCATE and FORGOTTEN.** Records leave a signed file only under a segment
   declared by a signed TRUNCATE; a file whose segment nobody declared is refused. An erased record
   keeps its id and place, and a signed FORGOTTEN declares it.
+- **MERGE (M2-min).** Two copies of one signed file become one with no server. A MERGE is a record
+  body, not a new object: the merging device signs the heads of both sides and names each conflict,
+  and every record and seal of both sides stays as written. `verify` counts `merges` and `merges_bad`.
+  A cut, an erasure or a revocation on one side only, and two seal chains of one key over the same
+  records, are named refusals in this version.
+- **Only a root cuts; a REVOKE names a tip.** A TRUNCATE declares a cut only when its actor is a root,
+  and a REVOKE body is now `bebop-revoke/2`, carrying the id of the target's record at `after_seq`. A
+  cut ends on a seal's edge. No production image holds a REVOKE.
 - **Self-describing archives (SPEC, BLOB).** An archive file can carry its reader and the format text
   as its first objects, so that a host with no parser can find them.
 - **Record ids.** A flag marks a record whose id is sha256 over a tag, its flags, actor, seq, `prev` and
@@ -81,7 +89,8 @@ unrelated project, a schema-based serialization format.
 
 ### Not in this version
 
-- **Merging two copies of a file.** Not built.
+- **The full merge.** M2-min is built: a one-sided cut, erasure or revocation is refused, not merged,
+  and format §14 lists what a MERGE does not prove.
 - **Checking seals in the MIT reader.** It counts them and says so.
 - **Level 2, settlement between organisations.** Not built.
 - **A clean attack round.** None has happened: every round that tested this format found defects. Six

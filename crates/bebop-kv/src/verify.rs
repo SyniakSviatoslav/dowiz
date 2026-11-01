@@ -24,6 +24,17 @@ pub enum KvError {
 impl Kv {
     /// Read all entries out of a store, refusing an object whose crc does not match.
     pub fn load_checked(st: &Store) -> Result<Kv, KvError> {
+        Self::checked(st, Kv::decode)
+    }
+
+    /// `load_checked` for a reader of raw keys (`Kv::decode_raw`): every check of the image, none of
+    /// a writer's. Its `Kv` holds keys as read, which two raw keys can share: read the raw bytes,
+    /// and never write this `Kv` back.
+    pub fn read_checked(st: &Store) -> Result<Kv, KvError> {
+        Self::checked(st, Kv::decode_raw)
+    }
+
+    fn checked(st: &Store, decode: fn(&Store) -> Option<Kv>) -> Result<Kv, KvError> {
         let root = st.root().ok_or(KvError::NotKv)?;
         st.check_obj(root).map_err(KvError::BadCrc)?;
         // W-ES-P8A: a version this code does not know is refused right after the root's own crc,
@@ -43,7 +54,7 @@ impl Kv {
         // W-DELTA: every record on the chain is checked too, before any is replayed.
         let chain = crate::delta::chain_in(st, root).ok_or(KvError::NotKv)?;
         crate::delta::check_chain(st, &chain).map_err(KvError::BadCrc)?;
-        Kv::decode(st).ok_or(KvError::NotKv)
+        decode(st).ok_or(KvError::NotKv)
     }
 
     /// `load_checked` for a caller that only asks yes or no. `None` covers a crc

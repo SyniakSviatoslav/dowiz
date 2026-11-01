@@ -6,11 +6,7 @@ use super::*;
 
 impl StockLedger {
     pub fn level(&self, item: &str) -> StockLevel {
-        self.levels
-            .iter()
-            .find(|(i, _)| i == item)
-            .map(|(_, l)| *l)
-            .unwrap_or_default()
+        self.level_at.get(item).and_then(|i| self.levels.get(*i)).map(|(_, l)| *l).unwrap_or_default()
     }
 
     pub fn available(&self, item: &str) -> Qty {
@@ -22,7 +18,7 @@ impl StockLedger {
     /// `on_hand` goes below zero -- but never refuses an order: its level is
     /// "what was used since nobody looked", not what is there.
     pub fn is_counted(&self, item: &str) -> bool {
-        self.counted.iter().any(|i| i == item)
+        self.counted_set.contains(item)
     }
 
     /// Every item this ledger knows about, sorted, so two folds of one log
@@ -33,13 +29,20 @@ impl StockLedger {
         out
     }
 
+    /// A new item, last in first-seen order: where it stands.
+    pub(super) fn place(&mut self, item: String, level: StockLevel) -> usize {
+        let at = self.levels.len();
+        self.level_at.insert(item.clone(), at);
+        self.levels.push((item, level));
+        at
+    }
+
     fn level_mut(&mut self, item: &str) -> &mut StockLevel {
-        if let Some(pos) = self.levels.iter().position(|(i, _)| i == item) {
-            return &mut self.levels[pos].1;
-        }
-        self.levels.push((item.to_string(), StockLevel::default()));
-        let last = self.levels.len() - 1;
-        &mut self.levels[last].1
+        let at = match self.level_at.get(item) {
+            Some(i) => *i,
+            None => self.place(item.to_string(), StockLevel::default()),
+        };
+        &mut self.levels[at].1
     }
 
     fn served_qty(&self, order_id: &str, item: &str) -> Qty {
@@ -62,8 +65,8 @@ impl StockLedger {
         self.open.get(&(order_id.to_string(), item.to_string())).copied().unwrap_or(0)
     }
 
-    fn mark_counted(&mut self, item: &str) {
-        if !self.is_counted(item) {
+    pub(super) fn mark_counted(&mut self, item: &str) {
+        if self.counted_set.insert(item.to_string()) {
             self.counted.push(item.to_string());
         }
     }
@@ -71,7 +74,7 @@ impl StockLedger {
     fn take_held(&mut self, order_id: &str, item: &str, qty: Qty) {
         let key = (order_id.to_string(), item.to_string());
         if let Some(q) = self.open.get_mut(&key) {
-            *q -= qty;
+            *q = q.saturating_sub(qty);
             if *q <= 0 {
                 self.open.remove(&key);
             }
@@ -80,6 +83,11 @@ impl StockLedger {
 
     pub(super) fn apply(&mut self, ev: &StockEvent) -> Result<(), StockError> {
         self.decide(ev)?;
+        self.record(ev)
+    }
+
+    /// `apply` without the door: what happened, as it happened. Only the arithmetic can refuse.
+    fn record(&mut self, ev: &StockEvent) -> Result<(), StockError> {
         match ev {
             StockEvent::Received { item, qty } => {
                 // THE FIRST DELIVERY ARMS THE ITEM AT WHAT CAME IN, as it
@@ -96,7 +104,8 @@ impl StockLedger {
             StockEvent::Reserved { item, qty, order_id } => {
                 let l = self.level_mut(item);
                 l.reserved = l.reserved.checked_add(*qty).ok_or(StockError::Overflow)?;
-                *self.open.entry((order_id.clone(), item.clone())).or_insert(0) += qty;
+                let q = self.open.entry((order_id.clone(), item.clone())).or_insert(0);
+                *q = q.saturating_add(*qty);
             }
             StockEvent::Consumed { item, qty, order_id } => {
                 let l = self.level_mut(item);
@@ -132,7 +141,7 @@ impl StockLedger {
                 l.on_hand = l.on_hand.checked_add(*qty).ok_or(StockError::Overflow)?;
                 let key = (order_id.clone(), item.clone());
                 if let Some(q) = self.served.get_mut(&key) {
-                    *q -= qty;
+                    *q = q.saturating_sub(*qty);
                     if *q <= 0 {
                         self.served.remove(&key);
                     }
@@ -180,6 +189,27 @@ impl StockLedger {
             led.apply(ev)?;
         }
         Ok(led)
+    }
+
+    /// THE FOLD OF A HISTORY, door open (W-MG-MERGE2). `fold` runs `decide` over every event, which
+    /// is right for a log one door wrote and wrong for a merged one: two offline devices each pass
+    /// their own door, and the union holds what no door would have let through. A named conflict is
+    /// such a history, and gluing detects and never resolves, so refusing to read it locked the file
+    /// for good (`atk5_stuck`). This is not a write path: nothing here says a movement was allowed.
+    pub fn history(events: &[StockEvent]) -> Result<StockLedger, StockError> {
+        let mut led = StockLedger::default();
+        for ev in events {
+            led.record(ev)?;
+        }
+        Ok(led)
+    }
+
+    /// The largest magnitude any level, hold or served line holds: what a sum must start from.
+    pub fn peak(&self) -> i128 {
+        let wide = |q: Qty| (q as i128).abs();
+        let levels = self.levels.iter().map(|(_, l)| wide(l.on_hand).max(wide(l.reserved)));
+        let lines = self.open.values().chain(self.served.values()).map(|q| wide(*q));
+        levels.chain(lines).max().unwrap_or(0)
     }
 
     /// I3, checked over a whole log: every reservation is eventually matched.

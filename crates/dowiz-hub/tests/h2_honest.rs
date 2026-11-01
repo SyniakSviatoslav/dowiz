@@ -87,7 +87,7 @@ fn a_revoked_device_keeps_what_it_sealed() {
     orders(&mut sh, &a, "c", 1);
     sh.commit_keyop(&KeyOp::Admit(b.key()), &a, 2).unwrap();
     orders(&mut sh, &b, "b", 2);
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 2 }, &a, 3).unwrap();
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 2, tip: sh.tip_at(&b.id(), 2) }, &a, 3).unwrap();
     holds("revoked", &sh.to_bytes_trimmed(), &[a.id()]);
 }
 

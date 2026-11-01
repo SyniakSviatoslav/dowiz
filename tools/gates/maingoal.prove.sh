@@ -3,7 +3,7 @@
 # maingoal's proof: the REAL tools/gates/maingoal.sh runs from a SCRATCH ROOT (the gate, the two
 # verifiers, read.mjs, the format text, a link to crates/ -- it resolves its root from its own path),
 # with a scratch copy of the prebuilt binaries:
-#   1. clean                                                      -> rc 0, GREEN, and the SKIP is named
+#   1. clean                                                      -> rc 0, GREEN, four scenarios
 #   2. the stamp names other sources                              -> rc 2, STALE
 #   3. bebop-verify.py forgets the hub's kind byte                -> rc 1, python's counters DISAGREE
 #   4. doc_verify is a liar that prints the wanted answer         -> rc 1, the kills fail
@@ -14,6 +14,7 @@
 #   9. python believes the table (`keys_disagree` stuck at 0)      -> rc 1, kill zero-revoked fails
 #  10. python reads a tombstone by its erased nonce again          -> rc 1, the legacy tombstone DISAGREES
 #  11. python does not walk the seals' tips                        -> rc 1, kill unsealed-tail fails
+#  12. python believes every MERGE (`merges_bad` stuck at 0)         -> rc 1, kill lie fails
 # With no binaries the gate refuses (rc 2), and so does this proof, naming the same command.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -32,7 +33,7 @@ fresh() {
   cp "$REPO/tools/verify/bebop-verify.py" "$REPO/tools/verify/bebop-verify.mjs" "$S/r/tools/verify/"
   cp "$REPO/examples/read.mjs" "$S/r/examples/"; cp "$REPO/docs/FORMAT-BEBOP-IMAGE-v2.md" "$S/r/docs/"
   ln -s "$REPO/crates" "$S/r/crates"
-  cp "$SRC/doc_verify" "$SRC/anchor" "$SRC/maingoal_device" "$SRC/stamp" "$S/bin/"
+  cp "$SRC/doc_verify" "$SRC/anchor" "$SRC/maingoal_device" "$SRC/maingoal_merge" "$SRC/stamp" "$S/bin/"
 }
 gate() { MAINGOAL_BIN="$S/bin" sh "$S/r/tools/gates/maingoal.sh" "$@"; }
 want() { # want <rc> <label> <grep>
@@ -42,7 +43,7 @@ want() { # want <rc> <label> <grep>
   [ "$rc" -eq "$1" ] && [ -n "$hit" ] || { tail -5 "$S/out" | cut -c1-200; fail=1; }
 }
 PYV="$S/r/tools/verify/bebop-verify.py"
-fresh; want 0 "clean scratch" "GREEN (3 of 3 scenarios held.*1 SKIPPED not passed: two offline devices merge"
+fresh; want 0 "clean scratch" "GREEN (4 of 4 scenarios held"
 # On GitHub a stale stamp rebuilds by itself, by design: this case is about the box's refusal.
 ci=${GITHUB_ACTIONS:-}; unset GITHUB_ACTIONS
 fresh; sed -i 's/^src=[0-9a-f]\{8\}/src=00000000/' "$S/bin/stamp"; want 2 "stamp names other sources" "STALE"
@@ -50,7 +51,7 @@ fresh; sed -i 's/^src=[0-9a-f]\{8\}/src=00000000/' "$S/bin/stamp"; want 2 "stamp
 fresh; sed -i 's/^    return b\[1:\] if b\[:1\] in (b"D", b"K") else b$/    return b/' "$PYV"; want 1 "python forgets the kind byte" "hub.sealed: records: doc_verify .* python .* DISAGREE"
 fresh; cat > "$S/bin/doc_verify" <<'L'
 #!/bin/sh
-echo "doc records=4 chained=4 legacy=0 redacted=0 broken=0 seals_ok=4 seals_bad=0 forks=0 keys=1 admitted=1 anchors=2 anchors_ok=1 anchors_bad=0 anchors_unchecked=1 anchors_cut=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0 tree_unsigned=0"
+echo "doc records=4 chained=4 legacy=0 redacted=0 broken=0 seals_ok=4 seals_bad=0 forks=0 keys=1 admitted=1 anchors=2 anchors_ok=1 anchors_bad=0 anchors_unchecked=1 anchors_cut=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0 tree_unsigned=0 merges=0 merges_bad=0"
 echo HOLDS
 L
 chmod +x "$S/bin/doc_verify"; gate --stamp > /dev/null; want 1 "doc_verify is a liar" "KILL rec-bit FAILED"
@@ -60,8 +61,9 @@ fresh; sed -i 's/10: "BAD_CRC: an object the read reached fails its crc (root/10
 fresh; sed -i 's/cut=sat(sum(s\["last"\] - s\["first"\] + 1 for s in segs)),/cut=sat(sum(s["last"] - s["first"] + 2 for s in segs)),/' "$PYV"; want 1 "python's cut is off by one" "cut: doc_verify .* python .* DISAGREE"
 fresh; sed -i 's/keys_disagree=keys_disagree(keys, revokes)/keys_disagree=0/' "$PYV"; want 1 "python believes the table" "KILL zero-revoked FAILED"
 fresh; sed -i 's/^    return bool(b) and b\[0\] \& REDACTED_BIT != 0$/    return False/' "$PYV"; want 1 "python misses the legacy tombstone" "legacy-forget.sealed: redacted: doc_verify .* python .* DISAGREE"
+fresh; sed -i 's/merges_bad=merges_bad(merges, ids_at, segs)/merges_bad=0/' "$PYV"; want 1 "python believes every MERGE" "KILL lie FAILED"
 fresh; sed -i 's/unsealed=unsealed(recs, tips, segs)/unsealed=0/' "$PYV"; want 1 "python walks no tip" "KILL unsealed-tail FAILED"
 fresh; sed -i 's/chain_hash(segs)) not in truncates:/None) not in [t[:6] + (None,) for t in truncates]:/' "$PYV"; want 1 "python takes a moved frontier row" "KILL frontier-row FAILED"
 fresh; sed -i 's/tombs_foreign=tombs_foreign(recs, tombs, erased, keys)/tombs_foreign=0/' "$PYV"; want 1 "python counts no tombstone" "KILL tomb-swap FAILED"
-[ "$fail" = 0 ] && echo "maingoal.prove: GREEN (13 cases: one pass, one refusal, eleven named reds)" || echo "maingoal.prove: RED"
+[ "$fail" = 0 ] && echo "maingoal.prove: GREEN (14 cases: one pass, one refusal, twelve named reds)" || echo "maingoal.prove: RED"
 exit $fail

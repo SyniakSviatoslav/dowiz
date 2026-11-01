@@ -300,3 +300,13 @@ fn a_damaged_key_stays_readable_through_a_write() {
     let back = Store::from_bytes(&kv.compacted_bytes(1 << 16).unwrap());
     assert_eq!(Kv::decode(&back).unwrap().entries, kv.entries);
 }
+
+/// A READER TAKES RAW KEYS (FORMAT §9.1, "MUST NOT decode"): the keys a writer is refused are two
+/// keys to it. The refusal stays the writer's, `load_checked`; atk3 `kv2_lossy_collision` holds the
+/// five readers to one answer.
+#[test]
+fn a_reader_reads_raw_keys_a_writer_is_refused() {
+    let st = raw_image(&[b"a\xfe", b"a\xff"]);
+    assert!(Kv::load_checked(&st).is_err(), "the writer's half");
+    assert_eq!(Kv::read_checked(&st).expect("the reader's half").entries.len(), 2);
+}

@@ -31,8 +31,11 @@ These limits are part of the contract.
   `Unchecked`, and `Unchecked` is never a pass.
 - **The clock in a seal is a claim.** `claimed_ms` is the device's own clock, signed and repeated
   and never believed.
-- **Two devices cannot merge one file yet.** Merging is the goal and it is not built. Nothing in
-  this crate reconciles two copies of a file, and no text here should be read as saying so.
+- **Two devices merge as M2-min, and no wider.** `Doc::merge_into` joins two copies of one genesis
+  with no server, keeping every record and seal, and names each conflict without resolving it. A
+  cut, an erasure or a revocation on one side only is refused by name; so are one device forked
+  across the copies and two seal chains of one key. Under a cut a conflict list cannot be re-derived:
+  the answer is `NOT CHECKED`, never clean. See format §14.
 - **Opening a file checks only what you ask for.** `Options::default()` opens at `Verify::Anchor`,
   which proves the last commit. Older commits are trusted, and a damaged old object can read as a
   refusal or as a wrong answer, until you open at `Verify::Reachable` or call `Db::verify`.

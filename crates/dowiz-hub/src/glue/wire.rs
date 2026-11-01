@@ -197,7 +197,7 @@ pub fn glue_tail(hub_bytes: &[u8], hub: &StockLog, led_h: &StockLedger, t: &Tail
     }
     let (dh, dk) = (TailDelta::of(&eh), TailDelta::of(fresh));
     let led_k = if delta::needs_kitchen(led_h, &dh, &dk) { Some(kitchen_ledger(&ch, th.len(), fresh)?) } else { None };
-    let (conflicts, shared) = delta::obstructions(led_h, led_k.as_ref(), &dh, &dk);
+    let (conflicts, shared) = delta::obstructions(led_h, led_k.as_ref(), &dh, &dk, true);
     g.conflicts.extend(conflicts);
     g.shared = shared;
     Ok((g, ek))

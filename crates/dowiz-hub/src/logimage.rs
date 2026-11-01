@@ -243,7 +243,7 @@ impl LogImage {
         let dropped = all.len() - n;
         let mut keep: Vec<Entry> = all.into_iter().take(n).collect();
         keep.reverse();
-        let mut fresh = Store::create_bytes(self.store.image_bytes().max(MIN_LOG_BYTES))?;
+        let mut fresh = Store::create_bytes(self.store.writer_bytes()?.max(MIN_LOG_BYTES))?;
         EvLog::init_bytes(&mut fresh)?;
         // Re-sealed under the scheme this log is on (W-MG-MIG): a kept legacy log stays legacy.
         let sha = self.entropy.writes_sha256(&self.store);
@@ -271,7 +271,7 @@ impl LogImage {
         // straight to 64 KiB on its first overflow would cost that on every
         // read for the rest of its life. The floor is only there so a corrupt
         // zero-length image cannot produce another one.
-        let bigger = self.store.image_bytes().saturating_mul(2).max(MIN_LOG_BYTES);
+        let bigger = self.store.writer_bytes()?.saturating_mul(2).max(MIN_LOG_BYTES);
         let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
         // Verbatim, a failed crc CARRIED (W-CRC): a re-seal would launder it.

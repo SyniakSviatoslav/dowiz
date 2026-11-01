@@ -8,8 +8,9 @@
 #       `anchor verify` for signatures, bebop-verify.py and .mjs for structure, and they agree on
 #       every shared counter, head and anchor;
 #   (c) a clean Node reads the archive with the reader embedded IN it (examples/read.mjs).
-# "two offline devices merge" belongs to M2, which is not built: a named SKIP, reported as a SKIP,
-# never counted as a pass (the final line names it).
+#   (d) two offline devices, each with its own key and its own file, one genesis, no server, merge
+#       both ways (crates/dowiz-hub/src/bin/maingoal_merge.rs): every seal survives, the conflict
+#       is named and nothing is dropped, and a third party agrees on the result.
 # Every scenario has a kill: one changed byte -> the named refusal (tools/gates/maingoal.forge.py).
 #
 # WHAT THIS IS NOT. Not M7 whole: §7's row also wants the three scenarios in a browser on qa-durres
@@ -29,7 +30,7 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 HERE="$ROOT/tools/gates"
 BIN="${MAINGOAL_BIN:-$ROOT/crates/dowiz-hub/target/maingoal}"
-BINS="doc_verify anchor maingoal_device"
+BINS="doc_verify anchor maingoal_device maingoal_merge"
 FIX="$ROOT/crates/bebop-wasm/fixtures"
 PHONE="+355691111111"
 say() { echo "maingoal: $*"; }
@@ -45,7 +46,7 @@ build() {
   T="${MAINGOAL_TARGET:-$ROOT/crates/dowiz-hub/target}"
   CARGO="${CARGO:-$HOME/.cargo/bin/cargo}"; [ -x "$CARGO" ] || CARGO=cargo
   offline="--offline"; [ -n "${GITHUB_ACTIONS:-}" ] && offline=""
-  (cd "$ROOT/crates/dowiz-hub" && CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$T" "$CARGO" build --release $offline --bin doc_verify --bin anchor --bin maingoal_device) || { say "RED the build failed"; exit 1; }
+  (cd "$ROOT/crates/dowiz-hub" && CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$T" "$CARGO" build --release $offline --bin doc_verify --bin anchor --bin maingoal_device --bin maingoal_merge) || { say "RED the build failed"; exit 1; }
   mkdir -p "$BIN"
   for b in $BINS; do cp "$T/release/$b" "$BIN/$b" || exit 1; done
   stamp_text > "$BIN/stamp"
@@ -102,7 +103,7 @@ clean "$DEV" ./maingoal_device ../zero --seed 0000000000000000000000000000000000
 if cmp -s "$S/zero/hub.sealed" "$FIX/anch.store"; then say "fixture anch.store is the writer's output at seed 0, byte for byte"
 else red "fixtures/anch.store is not the writer's output at seed 0 (STALE fixture; see anch.expected)"; fi
 # NO MOCK IN THE PATH: the two programs of the path name none
-if grep -nE 'Toy|Fake|Mock|cfg\(test\)' "$ROOT/crates/dowiz-hub/src/bin/maingoal_device.rs" "$ROOT/crates/dowiz-hub/src/bin/doc_verify.rs" > "$S/mock"; then red "a test double is in the path: $(cat "$S/mock")"; else say "no test double named in maingoal_device.rs or doc_verify.rs"; fi
+if grep -nE 'Toy|Fake|Mock|cfg\(test\)' "$ROOT/crates/dowiz-hub/src/bin/maingoal_device.rs" "$ROOT/crates/dowiz-hub/src/bin/maingoal_merge.rs" "$ROOT/crates/dowiz-hub/src/bin/doc_verify.rs" > "$S/mock"; then red "a test double is in the path: $(cat "$S/mock")"; else say "no test double named in maingoal_device.rs, maingoal_merge.rs or doc_verify.rs"; fi
 # THE ERASURE left the bytes: the control has the phone, nothing written after the forget does
 if grep -qaF "$PHONE" "$DEV/before-forget.sealed"; then say "control: the phone is in before-forget.sealed"; else red "control: the phone is not in before-forget.sealed, this grep measures nothing"; fi
 for f in hub.sealed history.sealed archive.store; do
@@ -123,12 +124,12 @@ av() { clean "$AUD" ./anchor verify "$1" --platform-key "$PPK"; }
 py() { clean "$AUD" python3 -I ./bebop-verify.py "$@"; }
 nd() { clean "$AUD" node ./bebop-verify.mjs "$@"; }
 before=$fail
-WANT_HUB="doc records=4 chained=4 legacy=0 redacted=0 broken=0 seals_ok=4 seals_bad=0 forks=0 keys=1 admitted=1 anchors=2 anchors_ok=1 anchors_bad=0 anchors_unchecked=1 anchors_cut=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0 tree_unsigned=0"
-WANT_HIST="doc records=12 chained=9 legacy=1 redacted=2 broken=0 seals_ok=6 seals_bad=0 forks=0 keys=1 admitted=1 anchors=1 anchors_ok=1 anchors_bad=0 anchors_unchecked=0 anchors_cut=0 segments=0 cut=0 cut_redacted=0 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0 tree_unsigned=0"
+WANT_HUB="doc records=4 chained=4 legacy=0 redacted=0 broken=0 seals_ok=4 seals_bad=0 forks=0 keys=1 admitted=1 anchors=2 anchors_ok=1 anchors_bad=0 anchors_unchecked=1 anchors_cut=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0 tree_unsigned=0 merges=0 merges_bad=0"
+WANT_HIST="doc records=12 chained=9 legacy=1 redacted=2 broken=0 seals_ok=6 seals_bad=0 forks=0 keys=1 admitted=1 anchors=1 anchors_ok=1 anchors_bad=0 anchors_unchecked=0 anchors_cut=0 segments=0 cut=0 cut_redacted=0 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0 tree_unsigned=0 merges=0 merges_bad=0"
 # `admitted` is not shared: doc_verify's is what the signed records admit, the readers print `genesis=`,
 # the keys with no ADMIT record, which is all a reader with no signature code can count (a reader's
 # keys_disagree is the same kind of number: the table against the REVOKEs' CLAIM, on their chain alone).
-SHARED="records chained legacy redacted broken forks keys segments cut cut_redacted declared keys_disagree unsealed"
+SHARED="records chained legacy redacted broken forks keys segments cut cut_redacted declared keys_disagree unsealed merges merges_bad"
 
 agree() { # agree <file> <the signature verifier's output> [no-anchor]: both structure readers against it, field by field
   sig=$(printf '%s\n' "$2" | sed -n 1p)
@@ -312,10 +313,98 @@ forge rec-bit archive.store k8.store; cp "$AUD/k8.store" "$NOD/"
 o=$(clean "$NOD" node ./read.mjs ./k8.store 2>&1); r=$?
 case "$r:$o" in 10:*"doc status=10 n=0 root=0"*"$CRC"*) killed "(c) rec-bit on the archive -> read.mjs rc=10 BAD_CRC" ;; *) red "KILL archive rec-bit FAILED: rc=$r '$o'" ;; esac
 
-# ── THE SCENARIO THAT IS NOT HERE ────────────────────────────────────────────────────────────
-say "SKIP two offline devices merge -- M2 is not built (held for the operator's interviews); nothing ran, this is not a pass"
+# ── (d) TWO OFFLINE DEVICES, ONE GENESIS, NO SERVER ──────────────────────────────────────────
+# Each device runs in its own directory holding its own file and the one it was handed. Neither
+# has the other's seed in any file; `--who` picks which key the shared run seed derives.
+before=$fail
+MA="$S/device-a"; MB="$S/device-b"; MW="$S/writer"
+mkdir -p "$MA" "$MB" "$MW"
+for d in "$MA" "$MB" "$MW"; do cp "$BIN/maingoal_merge" "$d/"; done
+MSEED=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')
+say "merge seed $MSEED"
+out=$(clean "$MW" ./maingoal_merge write . --seed "$MSEED" 2>&1); rc=$?
+printf '%s\n' "$out" | sed 's/^/maingoal: /'
+[ "$rc" = 0 ] || { say "RED the merge device was refused rc=$rc"; exit 1; }
+cp "$MW"/*.sealed "$MA/"; cp "$MW"/*.sealed "$MB/"; cp "$MW"/*.sealed "$AUD/"
+mg() { d=$1; w=$2; ms=$3; shift 3; clean "$d" ./maingoal_merge merge "$@" --seed "$MSEED" --who "$w" --ms "$ms"; }
+MV_ARGS="--trust $(cat "$MW/merge.actor")"
+mv_() { clean "$AUD" ./doc_verify "$1" $MV_ARGS; }
+held_line() { # held_line <file> <what>: rc 0, HOLDS; sets $o and $l
+  o=$(mv_ "$1" 2>"$S/err"); r=$?; l=$(printf '%s\n' "$o" | sed -n 1p)
+  [ "$r" = 0 ] && [ "$(printf '%s\n' "$o" | tail -1)" = HOLDS ] || red "doc_verify $1 ($2) rc=$r '$l' $(cat "$S/err")"
+}
+
+# commuting tails
+r=$(mg "$MA" a 1000 calm-a.sealed calm-b.sealed calm-m.sealed 2>&1); rc=$?
+[ "$rc" = 0 ] && [ "$r" = "merged records=1 conflicts=0" ] || red "the calm merge rc=$rc '$r'"
+cp "$MA/calm-m.sealed" "$AUD/"; held_line calm-m.sealed "commuting tails"
+[ "$(field "$l" merges)" = 1 ] && [ "$(field "$l" merges_bad)" = 0 ] && [ "$(field "$l" seals_ok)" = 5 ] || red "calm-m: '$l'"
+printf '%s\n' "$o" | grep -q '^merge .*state=commutes .*conflicts=0 recheck=same$' || red "calm-m: no commuting MERGE line"
+agree calm-m.sealed "$o" no-anchor
+
+# the last salmon, sold on both: each device merges the other, then each takes in the other's MERGE
+r=$(mg "$MA" a 1000 salmon-a.sealed salmon-b.sealed merged-a.sealed 2>&1); rc=$?
+[ "$rc" = 0 ] && [ "$r" = "merged records=1 conflicts=1" ] || red "A's merge rc=$rc '$r'"
+r=$(mg "$MB" b 1001 salmon-b.sealed salmon-a.sealed merged-b.sealed 2>&1); rc=$?
+[ "$rc" = 0 ] && [ "$r" = "merged records=2 conflicts=1" ] || red "B's merge rc=$rc '$r'"
+cp "$MB/merged-b.sealed" "$MA/"; cp "$MA/merged-a.sealed" "$MB/"
+r=$(mg "$MA" a 1002 merged-a.sealed merged-b.sealed final-a.sealed 2>&1); rc=$?
+[ "$rc" = 0 ] && [ "$r" = "adopted records=1" ] || red "A taking B's MERGE rc=$rc '$r': a third MERGE would never end"
+r=$(mg "$MB" b 1003 merged-b.sealed merged-a.sealed final-b.sealed 2>&1); rc=$?
+[ "$rc" = 0 ] && [ "$r" = "adopted records=1" ] || red "B taking A's MERGE rc=$rc '$r'"
+cp "$MA/merged-a.sealed" "$MA/final-a.sealed" "$MB/final-b.sealed" "$AUD/"
+cp "$MB/final-b.sealed" "$MA/"
+for f in final-a.sealed final-b.sealed; do
+  held_line "$f" "both MERGEs"
+  [ "$(field "$l" records)" = 8 ] && [ "$(field "$l" seals_ok)" = 6 ] && [ "$(field "$l" merges)" = 2 ] && [ "$(field "$l" forks)" = 0 ] || red "$f: '$l'"
+  printf '%s\n' "$o" | grep -q '^conflict .*"kind":"oversold","item":"salmon".*salmon: на двох пристроях' || red "$f: the conflict is not named"
+  printf '%s\n' "$o" | grep -q '^Цей файл звів власник ключа K' || red "$f: the MERGE's sentence is not printed"
+  [ "$(printf '%s\n' "$o" | grep -c 'recheck=same$')" = 2 ] || red "$f: the MERGEs do not re-derive"
+  agree "$f" "$o" no-anchor
+done
+ha=$(mv_ final-a.sealed | grep '^head '); hb=$(mv_ final-b.sealed | grep '^head ')
+if [ -n "$ha" ] && [ "$ha" = "$hb" ]; then say "the two devices end on one set of heads"; else red "the heads differ: '$ha' vs '$hb'"; fi
+r=$(mg "$MA" a 1004 final-a.sealed final-b.sealed end.sealed 2>&1); rc=$?
+[ "$rc" = 0 ] && [ "$r" = nothing ] && cmp -s "$MA/final-a.sealed" "$MA/end.sealed" || red "the two ends still differ rc=$rc '$r'"
+[ "$fail" = "$before" ] && { held=$((held + 1)); say "SCENARIO (d) held: two devices, one genesis, no server, every seal real, the conflict named, nothing dropped"; }
+
+# the kills: one flipped byte, two MERGEs a real key signed, and each refusal by name, nothing written
+forge merge-bit merged-a.sealed k15.sealed
+o=$(mv_ k15.sealed 2>&1); r=$?; l=$(printf '%s\n' "$o" | sed -n 1p)
+if [ "$r" = 3 ] && [ "$(field "$l" broken)" = 1 ] && [ "$(field "$l" merges)" = 0 ] && [ "$(printf '%s\n' "$o" | tail -1)" = "DOES NOT HOLD" ]; then killed "(d) merge-bit resealed -> rc=3 broken=1 merges=0 DOES NOT HOLD"
+else red "KILL merge-bit FAILED: rc=$r '$l'"; fi
+agree k15.sealed "$o" no-anchor
+o=$(mv_ lie.sealed 2>&1); r=$?; l=$(printf '%s\n' "$o" | sed -n 1p)
+pl=$(py lie.sealed --verify 2>/dev/null | sed -n '/^verify /p'); nl=$(nd lie.sealed --verify 2>/dev/null | sed -n '/^verify /p')
+if [ "$r" = 3 ] && [ "$(field "$l" merges_bad)" = 1 ] && [ "$(field "$l" seals_bad)" = 0 ] && [ "$(printf '%s\n' "$o" | tail -1)" = "DOES NOT HOLD" ] && [ "$(field "$pl" merges_bad)" = 1 ] && [ "$(field "$nl" merges_bad)" = 1 ]; then killed "(d) a signed MERGE over a record no file holds -> rc=3 merges_bad=1 seals_bad=0; python and node merges_bad=1"
+else red "KILL lie FAILED: rc=$r '$l'; python '$pl'; node '$nl'"; fi
+o=$(mv_ hidden.sealed 2>&1); r=$?; l=$(printf '%s\n' "$o" | sed -n 1p)
+if [ "$r" = 3 ] && [ "$(field "$l" merges_bad)" = 0 ] && [ "$(field "$l" seals_bad)" = 0 ] && printf '%s\n' "$o" | grep -q '^merge .*conflicts=0 recheck=DIFFERS$' && [ "$(printf '%s\n' "$o" | tail -1)" = "DOES NOT HOLD" ]; then killed "(d) a signed MERGE hiding the conflict -> rc=3 recheck=DIFFERS DOES NOT HOLD"
+else red "KILL hidden FAILED: rc=$r '$l'"; fi
+refused_by() { # refused_by <name> <who> <ours> <theirs>
+  e=$(mg "$MA" "$2" 2000 "$3" "$4" gone.sealed 2>&1 >/dev/null); r=$?
+  case "$r:$e" in
+    "4:REFUSED $1"*) if [ -e "$MA/gone.sealed" ]; then red "KILL $1 wrote a file"; else killed "(d) $3 + $4 -> rc=4 REFUSED $1, nothing written"; fi ;;
+    *) red "KILL $1 FAILED: rc=$r '$e'" ;;
+  esac
+  rm -f "$MA/gone.sealed"
+}
+refused_by FOREIGN_ROOT a calm-a.sealed other.sealed
+refused_by FORK a fork-a.sealed fork-b.sealed
+refused_by REVOKED_TAIL a revoke-a.sealed revoke-b.sealed
+refused_by REVOKED_TAIL b revoke-b.sealed revoke-a.sealed
+refused_by FORGET_ONE_SIDE a forget-a.sealed forget-b.sealed
+refused_by FORGET_ONE_SIDE b forget-b.sealed forget-a.sealed
+refused_by CUT_ONE_SIDE a cut-a.sealed cut-b.sealed
+refused_by NOT_WHOLE a calm-a.sealed lie.sealed
+if grep -qaF "+355692222222" "$MW/forget-b.sealed" && ! grep -qaF "+355692222222" "$MW/forget-a.sealed"; then say "control: the phone is in forget-b.sealed and not in forget-a.sealed, and no merge of the two exists"; else red "control: the erasure pair is not what the kill says"; fi
+for pair in "calm-a.sealed calm-a.sealed itself" "merged-a.sealed salmon-b.sealed replay"; do
+  set -- $pair
+  r=$(mg "$MA" a 2000 "$1" "$2" same.sealed 2>&1); rc=$?
+  if [ "$rc" = 0 ] && [ "$r" = nothing ] && cmp -s "$MA/$1" "$MA/same.sealed"; then killed "(d) $3 -> 'nothing', the file byte for byte"; else red "KILL $3 FAILED: rc=$rc '$r'"; fi
+done
 
 took=$(($(date +%s) - started))
-if [ "$fail" != 0 ]; then say "RED ($held of 3 scenarios held, $kills kills named, 1 SKIPPED; ${took}s)"; exit 1; fi
-say "GREEN ($held of 3 scenarios held from a clean dir, $kills kills named, 1 SKIPPED not passed: two offline devices merge; ${took}s)"
+if [ "$fail" != 0 ]; then say "RED ($held of 4 scenarios held, $kills kills named; ${took}s)"; exit 1; fi
+say "GREEN ($held of 4 scenarios held from a clean dir, $kills kills named; ${took}s)"
 exit 0

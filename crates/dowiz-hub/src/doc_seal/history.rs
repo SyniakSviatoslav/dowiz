@@ -7,7 +7,7 @@
 //!   * `cut`     moves the oldest records out under a segment (`Doc::cut_into`) and commits the
 //!               TRUNCATE that names the segment; what left comes back as the archive.
 //!
-//! Both declarations are records of kind `KIND_DECL` behind M0's nonce, sealed like every hub
+//! Both declarations (and M2's MERGE, `merge.rs`) are records of kind `KIND_DECL` behind M0's nonce, sealed like every hub
 //! commit (ML-DSA-65 only, `DeviceKey`; never `pq::hybrid_signing`), so `verify` counts them
 //! only while the key is admitted and valid at that seq: a revoked device's FORGOTTEN declares
 //! nothing and a dropped segment is refused by name. The new image replaces the old one ONLY
@@ -15,9 +15,10 @@
 //!
 //! The plain `Hub` keeps its own paths (`forget.rs`, `rotate.rs`): its log is not a DOC.
 
+use bebop_store::evlog::doc::keys::read_keys;
 use bebop_store::evlog::doc::{forgotten_body, Doc, DocError};
 use bebop_store::evlog::Record;
-use bebop_store::Store;
+use bebop_store::{Store, StoreError};
 
 use super::sealed::doc_err;
 use super::{DeviceKey, HubIds, SealedHub, MIN_SEALED_BYTES};
@@ -46,7 +47,7 @@ impl SealedHub {
             let json = redact(&ev)?;
             Some(redacted_payload(r.flags, &ev, &json))
         };
-        let mut size = self.store.image_bytes().max(MIN_SEALED_BYTES);
+        let mut size = self.store.writer_bytes()?.max(MIN_SEALED_BYTES);
         let (fresh, erased) = loop {
             let mut fresh = Store::create_bytes(size)?;
             match Doc::redact_into(&self.store, &mut fresh, &HubIds, &rule) {
@@ -69,9 +70,18 @@ impl SealedHub {
     /// the whole image as it stood, which recomputes the root (`rotate::segment_root` over
     /// its ids in file order). `keep` counts records, not orders: which orders may leave is
     /// the caller's question, as `Hub::rotate`'s `keep` is.
+    ///
+    /// ONLY A ROOT CUTS: a TRUNCATE of an admitted key declares nothing (`declare.rs`), so its file
+    /// would be refused `CutUndeclared`. Refused here first, with nothing written. After a rotation
+    /// (ADMIT of a new key) the new key is no root under `Trust::Genesis`: nobody cuts that file
+    /// until a verifier brings that key as a root (`Trust::Only`).
     pub fn cut(&mut self, keep: usize, key: &DeviceKey, claimed_ms: i64) -> Result<Vec<u8>, HubError> {
+        let view = Doc::open(&self.store).map_err(doc_err)?;
+        if !read_keys(&self.store, view.keys).iter().any(|k| k.actor_id == key.id && k.admit_rec.is_none()) {
+            return Err(HubError::Store(StoreError::Corrupt("only a root may cut: this key was admitted")));
+        }
         let archive = self.store.to_bytes_trimmed();
-        let mut size = self.store.image_bytes().max(MIN_SEALED_BYTES);
+        let mut size = self.store.writer_bytes()?.max(MIN_SEALED_BYTES);
         let (fresh, seg) = loop {
             let mut fresh = Store::create_bytes(size)?;
             match Doc::cut_into(&self.store, &mut fresh, keep, &HubIds) {
@@ -87,7 +97,7 @@ impl SealedHub {
     }
 
     /// The rebuilt image takes the old one's place only with its declaration committed.
-    fn swap_and_declare(&mut self, fresh: Store, body: Vec<u8>, key: &DeviceKey, claimed_ms: i64) -> Result<(), HubError> {
+    pub(super) fn swap_and_declare(&mut self, fresh: Store, body: Vec<u8>, key: &DeviceKey, claimed_ms: i64) -> Result<(), HubError> {
         let old = core::mem::replace(&mut self.store, fresh);
         match self.commit_body(body, key, claimed_ms, None) {
             Ok(_) => Ok(()),

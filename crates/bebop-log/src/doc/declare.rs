@@ -4,14 +4,17 @@
 //! EFFECTIVE -- its record chains (the id verifies), its actor is admitted, and an ok seal
 //! of that actor covers its seq -- so a declaration a revoked key wrote after its revoke,
 //! or one nobody sealed, declares nothing. That is M4's second kill test: a FORGOTTEN by a
-//! revoked key leaves `redacted != declared`.
+//! revoked key leaves `redacted != declared`. A TRUNCATE asks more: its actor is a ROOT.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use alloc::collections::{BTreeMap, BTreeSet};
 use crate::Record;
+use super::frontier::Frontiers;
 use super::keys::parse_revoke;
+use super::merge_body::{walk_merge, MERGE_MARK};
 use super::seg::{chain_hash, parse_forgotten, parse_truncate, Erased, Segment, Truncate};
+use super::verify::Chains;
 use super::{DocError, Ids};
 
 type Actor = [u8; 32];
@@ -21,7 +24,9 @@ type Actor = [u8; 32];
 pub(crate) enum Body {
     Truncate(Truncate),
     Forgotten(Vec<Erased>),
-    Revoke(Actor, i64),
+    Revoke(Actor, i64, [u8; 32]),
+    /// It carries the mark; `merges_bad` walks it (`merge_body.rs`).
+    Merge,
 }
 
 /// `(index into recs, what it declares)`, oldest first, for each `sound` record that declares
@@ -38,8 +43,10 @@ pub(crate) fn declarations(recs: &[(usize, Record)], sound: &[bool], ids: &dyn I
             out.push((i, Body::Truncate(t)));
         } else if let Some((_, list)) = parse_forgotten(body) {
             out.push((i, Body::Forgotten(list)));
-        } else if let Some((a, after)) = parse_revoke(body) {
-            out.push((i, Body::Revoke(a, after)));
+        } else if let Some((a, after, tip)) = parse_revoke(body) {
+            out.push((i, Body::Revoke(a, after, tip)));
+        } else if body.starts_with(MERGE_MARK) {
+            out.push((i, Body::Merge));
         }
     }
     out
@@ -55,6 +62,14 @@ pub(crate) struct Declared {
     pub truncates: Vec<Truncate>,
     /// `(target, after_seq)` of the effective REVOKEs, in file order.
     pub revokes: Vec<(Actor, i64)>,
+    /// Effective REVOKEs of a key whose chain does not stand at the tip the revoker saw: it was
+    /// rewritten at or below `after_seq` after the fact, or dropped. Counted in `broken`. `placed`'s
+    /// reading: under a cut only the seq binds (FORMAT §14). `after_seq` <= 0 names no record, a
+    /// REVOKE of no key changes nothing, and a key that revokes itself after this very record
+    /// cannot name it: its id covers the body.
+    pub off_chain: usize,
+    /// Which of `declarations` are effective MERGEs (`merges_bad`).
+    pub merges: Vec<u64>,
 }
 
 /// `recs` oldest first; `admitted` and `covered` are `verify`'s fixpoint (per actor, the
@@ -63,7 +78,9 @@ pub(crate) struct Declared {
 /// `signatures` false (a verifier that knows no algorithm, `Verifier::checks_signatures`): no seal
 /// can be judged, so a declaration is taken on its chain alone. The structure still binds: a
 /// dropped segment stays refused, and `Report::holds` stays false because no seal is ok.
-pub(crate) fn effective(recs: &[(usize, Record)], decls: &[(usize, Body)], admitted: &BTreeSet<Actor>, covered: &BTreeMap<Actor, u64>, signatures: bool) -> Declared {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn effective(ch: &Chains, fr: &Frontiers, keyed: &BTreeMap<Actor, u64>, decls: &[(usize, Body)], admitted: &BTreeSet<Actor>, roots: &BTreeSet<Actor>, covered: &BTreeMap<Actor, u64>, signatures: bool) -> Declared {
+    let recs = &ch.recs;
     let mut out = Declared::default();
     let mut n = 0u64;
     for (i, body) in decls {
@@ -74,15 +91,38 @@ pub(crate) fn effective(recs: &[(usize, Record)], decls: &[(usize, Body)], admit
             continue;
         }
         match body {
-            Body::Truncate(t) => out.truncates.push(*t),
+            // ONLY A ROOT CUTS (W-MG-MERGE2, W-MG-TAM's trace H1). A cut carries nothing but the
+            // TRUNCATE's word for what left, and the REVOKE of another device can be in it: an
+            // admitted key that could vouch for one could cut away its own revocation.
+            Body::Truncate(t) if !signatures || roots.contains(&r.actor_pubkey) => out.truncates.push(*t),
+            Body::Truncate(_) => {}
             Body::Forgotten(list) => {
                 out.forgotten = out.forgotten.saturating_add(list.len() as u64);
                 out.lists.push(at);
             }
-            Body::Revoke(a, after) => out.revokes.push((*a, *after)),
+            Body::Revoke(a, after, tip) => {
+                out.revokes.push((*a, *after));
+                let seq = *after as u64;
+                if *after > 0 && keyed.contains_key(a) && !(r.actor_pubkey == *a && r.actor_seq == seq) && !placed(a, seq, tip, ch, fr) {
+                    out.off_chain += 1;
+                }
+            }
+            Body::Merge => out.merges.push(at),
         }
     }
     out
+}
+
+/// Does `r` name a record of this log, or a seq a cut of its actor took?
+fn placed(actor: &Actor, seq: u64, tip: &[u8; 32], ch: &Chains, fr: &Frontiers) -> bool {
+    ch.ids_at.get(&(*actor, seq)).is_some_and(|v| v.contains(tip)) || fr.of_actor(actor).is_some_and(|f| seq <= f.seq)
+}
+
+/// Effective MERGEs that are no MERGE, or that name a position this file does not hold
+/// (`merge_body.rs`): a signed claim about a record nobody can show.
+pub(crate) fn merges_bad(decls: &[(usize, Body)], d: &Declared, ch: &Chains, fr: &Frontiers, ids: &dyn Ids) -> usize {
+    let good = |i: usize| ch.recs.get(i).is_some_and(|(_, r)| walk_merge(ids.body(r.flags, &r.payload), &mut |_, row| placed(&row.actor_id, row.seq, &row.tip, ch, fr), &mut |_| ()).is_some());
+    d.merges.iter().filter(|n| !decls.get(**n as usize).is_some_and(|(i, _)| good(*i))).count()
 }
 
 /// What the effective FORGOTTENs list, with who signed each (`foreign_tombs`).

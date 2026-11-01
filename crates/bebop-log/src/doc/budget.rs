@@ -27,7 +27,7 @@ impl Budget {
     pub(crate) fn spend(&mut self, st: &Store, obj: usize) -> Result<(), DocError> {
         let cost = st.obj_cells(obj).saturating_add(2);
         if cost > self.left {
-            return Err(DocError::Corrupt("the walks read more cells than the image holds: objects overlap"));
+            return Err(DocError::Corrupt("walks past the image: objects overlap"));
         }
         self.left -= cost;
         Ok(())

@@ -13,7 +13,7 @@ fn revoked(a: &DeviceKey, b: &DeviceKey) -> SealedHub {
     orders(&mut sh, a, "c", 1);
     sh.commit_keyop(&KeyOp::Admit(b.key()), a, 2).unwrap();
     orders(&mut sh, b, "b", 2);
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 1 }, a, 3).unwrap();
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 1, tip: sh.tip_at(&b.id(), 1) }, a, 3).unwrap();
     sh
 }
 
@@ -132,7 +132,7 @@ fn hole_4_a_rolled_back_row_disowns_a_revoke_another_tip_still_covers() {
     sh.commit_keyop(&KeyOp::Admit(b.key()), &a, 1).unwrap();
     sh.commit_keyop(&KeyOp::Admit(c.key()), &a, 2).unwrap();
     orders(&mut sh, &b, "b", 2);
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 1 }, &a, 3).unwrap();
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 1, tip: sh.tip_at(&b.id(), 1) }, &a, 3).unwrap();
     orders(&mut sh, &c, "n", 2);
     let bytes = sh.to_bytes_trimmed();
     let roots = [a.id()];

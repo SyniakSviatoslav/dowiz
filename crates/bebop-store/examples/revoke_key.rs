@@ -27,7 +27,8 @@ fn main() -> Result<(), DocError> {
     println!("admitted: seals_ok = {}, seals_bad = {}", r.counters.seals_ok, r.counters.seals_bad);
 
     // The tablet is lost after its first record.
-    let revoke = KeyOp::Revoke { actor_id: tablet.key().actor_id, after_seq: 1 };
+    let id = tablet.key().actor_id;
+    let revoke = KeyOp::Revoke { actor_id: id, after_seq: 1, tip: Doc::tip_at(&st, &id, 1).expect("the tablet's first record") };
     owner.commit(&mut st, &revoke.body(), Some(&revoke))?;
     let r = verify(&st, &Sha256Ids, &AnyoneCanForge, Trust::Genesis)?;
     assert_eq!((r.counters.seals_ok, r.counters.seals_bad), (3, 1), "{r:?}");

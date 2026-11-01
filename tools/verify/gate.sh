@@ -129,7 +129,7 @@ if [ "$BUILD" = 1 ]; then
     say "RED the archive fixture was not written -- $(grep -m1 -E 'error|panicked|FAILED' "$CLEAN/archive.log")"; fail=1
   else
     say "archive: $(wc -c < "$CLEAN/archive.store" | tr -d ' ') bytes = doc.store $(wc -c < "$FIX/doc.store" | tr -d ' ') + reader $(wc -c < "$WASM" | tr -d ' ') + FORMAT $(wc -c < "$ROOT/docs/FORMAT-BEBOP-IMAGE-v2.en.md" | tr -d ' ') + headers (the per-file cost of SPEC, §2f)"
-    doc_check archive ./archive.store "doc status=0 n=3 root=$(py_read ./archive.store | sed 's/.*root=//')" "verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0"
+    doc_check archive ./archive.store "doc status=0 n=3 root=$(py_read ./archive.store | sed 's/.*root=//')" "verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0 merges=0 merges_bad=0"
     out=$(cd "$CLEAN" && env -i PATH="$(dirname "$(command -v node)")" node ./read.mjs ./archive.store 2>&1); rc=$?
     printf '%s\n' "$out" | sed 's/^/verify-gate: read.mjs | /'
     ok=1
@@ -137,7 +137,7 @@ if [ "$BUILD" = 1 ]; then
     printf '%s\n' "$out" | grep -q '^doc status=0 n=3 root=' || ok=0
     [ "$(printf '%s\n' "$out" | grep -c '^head actor=')" = 1 ] || ok=0
     [ "$(printf '%s\n' "$out" | grep -c '^#[0-9]* seq=')" = 3 ] || ok=0
-    printf '%s\n' "$out" | grep -q '^verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0$' || ok=0
+    printf '%s\n' "$out" | grep -q '^verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0 merges=0 merges_bad=0$' || ok=0
     printf '%s\n' "$out" | grep -q '^verify(whole arena) = OK' || ok=0
     printf '%s\n' "$out" | grep -q '^seals COUNTED, not CHECKED' || ok=0
     if [ "$rc" = 0 ] && [ "$ok" = 1 ]; then say "read.mjs: a clean Node read the archive with the reader embedded in it (rc=0, every line present)"
@@ -177,7 +177,7 @@ PY
     o3=$(cd "$CLEAN" && node ./read.mjs ./forged.store 2>&1); r3=$?
     case "$o1" in *"doc status=10 n=0 root=0"*"BAD_CRC:"*) say "RED proof 1: flipped record -> rc=$r1 '$(printf '%s' "$o1" | tail -1 | cut -c1-80)'" ;; *) say "RED proof 1 FAILED: rc=$r1 '$o1'"; fail=1 ;; esac
     case "$r2:$o2" in 4:*"REFUSED: the embedded reader hashes to"*) say "RED proof 2: flipped reader byte -> rc=4, not run" ;; *) say "RED proof 2 FAILED: rc=$r2 '$o2'"; fail=1 ;; esac
-    forged="verify records=3 chained=2 legacy=0 redacted=0 broken=1 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0"
+    forged="verify records=3 chained=2 legacy=0 redacted=0 broken=1 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0 merges=0 merges_bad=0"
     case "$r3:$o3" in 0:*"doc status=0 n=3 root="*"$forged"*) say "RED proof 3: forged record (crc re-sealed) -> rc=0 and '$forged'" ;; *) say "RED proof 3 FAILED: rc=$r3 '$o3'"; fail=1 ;; esac
     doc_check forged ./forged.store "$(py_read ./forged.store | sed -n 1p)" "$forged"
 
@@ -186,7 +186,7 @@ PY
     # chain continues the frontier (chained=3, broken=0). RED 4: the same cut archived BEFORE the
     # TRUNCATE -> every reader says 75 CUT_UNDECLARED by name. RED 5: the oldest KEPT record forged
     # (payload bit, crc re-sealed) -> chained 2, broken 1, the segment still declared.
-    cutline="verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=3 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0"
+    cutline="verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=3 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0 merges=0 merges_bad=0"
     doc_check cut ./cut.store "$(py_read ./cut.store | sed -n 1p)" "$cutline"
     o4=$(cd "$CLEAN" && env -i PATH="$(dirname "$(command -v node)")" node ./read.mjs ./cut.store 2>&1); r4=$?
     case "$r4:$o4" in 0:*"$cutline"*) say "cut: read.mjs read the cut archive with its own reader: '$cutline'" ;; *) say "RED cut: read.mjs rc=$r4 '$o4'"; fail=1 ;; esac
@@ -214,7 +214,7 @@ ln = c(old) & 0xFFFFFFFF; crc = zlib.crc32(b[8 * (old + 2): 8 * (old + 2 + ln)])
 struct.pack_into("<Q", b, 8 * (old + 1), (crc << 32) | (c(old + 1) & 0xFFFFFFFF)); reanchor(b, sb); open(sys.argv[2], "wb").write(b)
 print("verify-gate: cut archive oldest KEPT record %d -> payload bit flipped and crc re-sealed to %08x" % (old, crc))
 PY2
-    cutforged="verify records=3 chained=2 legacy=0 redacted=0 broken=1 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=3 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0"
+    cutforged="verify records=3 chained=2 legacy=0 redacted=0 broken=1 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=3 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0 merges=0 merges_bad=0"
     doc_check cut-forged ./cut-forged.store "$(py_read ./cut-forged.store | sed -n 1p)" "$cutforged"
     o6=$(cd "$CLEAN" && node ./read.mjs ./cut-forged.store 2>&1); r6=$?
     case "$r6:$o6" in 0:*"$cutforged"*) say "RED proof 5: forged kept record in the cut archive -> rc=0 and '$cutforged'" ;; *) say "RED proof 5 FAILED: rc=$r6 '$o6'"; fail=1 ;; esac

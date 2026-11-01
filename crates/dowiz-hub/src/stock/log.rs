@@ -216,7 +216,7 @@ impl StockLog {
     /// order leaves every `prev` pointing at a record that does not exist yet,
     /// which is a heap of orphans that still looks like a log.
     fn grow(&mut self) -> Result<(), crate::HubError> {
-        let bigger = self.store.image_bytes().saturating_mul(2).max(64 * 1024);
+        let bigger = self.store.writer_bytes()?.saturating_mul(2).max(64 * 1024);
         let mut fresh = Store::create_bytes(bigger)?;
         EvLog::init_bytes(&mut fresh)?;
         // The chain's BYTES, failed crcs carried: a quarantined record is never re-sealed

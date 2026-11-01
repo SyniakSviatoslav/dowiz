@@ -171,6 +171,26 @@ impl StockEvent {
         }
     }
 
+    /// Every quantity this event names, as one magnitude: what a sum of movements cannot exceed.
+    pub fn moved(&self) -> i128 {
+        let wide = |q: &Qty| (*q as i128).abs();
+        match self {
+            StockEvent::Received { qty, .. }
+            | StockEvent::Reserved { qty, .. }
+            | StockEvent::Consumed { qty, .. }
+            | StockEvent::Released { qty, .. }
+            | StockEvent::Wasted { qty, .. }
+            | StockEvent::Served { qty, .. }
+            | StockEvent::Unserved { qty, .. }
+            | StockEvent::Returned { qty, .. }
+            | StockEvent::Cooked { qty, .. }
+            | StockEvent::Made { qty, .. } => wide(qty),
+            StockEvent::Produced { qty, out, .. } => wide(qty) + wide(out),
+            StockEvent::Stocktake { observed, .. } => wide(observed),
+            StockEvent::Removed { .. } => 0,
+        }
+    }
+
     pub fn order_id(&self) -> Option<&str> {
         match self {
             StockEvent::Reserved { order_id, .. }

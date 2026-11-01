@@ -21,7 +21,7 @@ fn line(bytes: &[u8]) -> String {
     };
     let mut s = format!("{fam} status=0 n={} root={}", d.len(), d.fold);
     match d.verify_doc() {
-        Some(Ok(c)) => s += &format!(" || verify records={} chained={} legacy={} redacted={} broken={} forks={} seals={} checked={} heads={} keys={} genesis={} segments={} cut={} cut_redacted={} declared={} keys_disagree={} unsealed={}", c.records, c.chained, c.legacy, c.redacted, c.broken, c.forks, c.seals, c.checked, c.heads, c.keys, c.genesis, c.segments, c.cut, c.cut_redacted, c.declared, c.keys_disagree, c.unsealed),
+        Some(Ok(c)) => s += &format!(" || verify records={} chained={} legacy={} redacted={} broken={} forks={} seals={} checked={} heads={} keys={} genesis={} segments={} cut={} cut_redacted={} declared={} keys_disagree={} unsealed={} merges={} merges_bad={}", c.records, c.chained, c.legacy, c.redacted, c.broken, c.forks, c.seals, c.checked, c.heads, c.keys, c.genesis, c.segments, c.cut, c.cut_redacted, c.declared, c.keys_disagree, c.unsealed, c.merges, c.merges_bad),
         Some(Err(r)) => s += &format!(" || verify status={}", status_of(&r)),
         None => {}
     }

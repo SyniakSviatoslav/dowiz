@@ -205,7 +205,7 @@ fn reply(log: &StockLog, t: &Tail, all: Vec<String>, conflicts: Vec<Conflict>, m
 }
 
 /// A conflict as a decision note's keys (the note adds `did` and `ctx`).
-fn conflict_body(c: &Conflict) -> String {
+pub(crate) fn conflict_body(c: &Conflict) -> String {
     let side = |s: &Side| if *s == Side::Hub { "hub" } else { "kitchen" };
     match c {
         Conflict::Oversold { item, merged, .. } => format!(r#""kind":"oversold","item":"{}","qty":{}"#, esc(item), merged.on_hand.min(merged.available())),

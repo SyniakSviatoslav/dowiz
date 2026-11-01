@@ -156,6 +156,13 @@ fn broken(l: StockLevel) -> bool {
     l.on_hand < 0 || l.available() < 0
 }
 
+/// Is `merged` lower than `l` on a line that broke? `doors` false (two whole files, `doc_seal::merge`):
+/// `sync_stock` has no write door, so a side already below zero decided nothing, and a shelf that
+/// falls further is a new conflict. A side that only gave back is not below: nothing was taken.
+fn below_both(merged: StockLevel, l: StockLevel) -> bool {
+    (merged.on_hand < 0 && merged.on_hand < l.on_hand) || (merged.available() < 0 && merged.available() < l.available())
+}
+
 /// Must the kitchen's own ledger be read? Only when an item both tails touched was measured on
 /// the hub's tail while the hub counts it: then the ancestor may have been uncounted, and the
 /// kitchen's level is not `ancestor + dKitchen` without knowing which.
@@ -164,7 +171,7 @@ pub(crate) fn needs_kitchen(hub: &StockLedger, dh: &TailDelta, dk: &TailDelta) -
 }
 
 /// The obstructions of two tails over one ancestor, given the hub's ledger at its tip and,
-/// when `needs_kitchen` said so, the kitchen's. Without it the kitchen's level is DERIVED:
+/// when `needs_kitchen` said so, the kitchen's. `doors` true: each branch passed a write door. Without it the kitchen's level is DERIVED:
 /// `ancestor + dKitchen`, the ancestor being `hub - dHub` exactly (every hub delta on a shared
 /// item is additive there). Also answers the glued level of every item both tails touched.
 pub(crate) fn obstructions(
@@ -172,6 +179,7 @@ pub(crate) fn obstructions(
     kit: Option<&StockLedger>,
     dh: &TailDelta,
     dk: &TailDelta,
+    doors: bool,
 ) -> (Vec<Conflict>, Vec<(String, StockLevel)>) {
     let mut out = Vec::new();
     let mut shared = Vec::new();
@@ -207,16 +215,17 @@ pub(crate) fn obstructions(
         }
         let merged = plus(lh, k);
         shared.push((item.clone(), merged));
-        if (ch || ck) && broken(merged) && !(ch && broken(lh)) && !(ck && broken(lk)) {
+        let named = if doors { !(ch && broken(lh)) && !(ck && broken(lk)) } else { below_both(merged, lh) && below_both(merged, lk) };
+        if (ch || ck) && broken(merged) && named {
             out.push(Conflict::Oversold { item: item.clone(), merged, hub: lh, kitchen: lk });
         }
     }
-    takes(hub, kit, dh, dk, &mut out);
+    takes(hub, kit, dh, dk, doors, &mut out);
     (out, shared)
 }
 
 /// Holds and served lines both tails moved: the glued amount may not go below zero.
-fn takes(hub: &StockLedger, kit: Option<&StockLedger>, dh: &TailDelta, dk: &TailDelta, out: &mut Vec<Conflict>) {
+fn takes(hub: &StockLedger, kit: Option<&StockLedger>, dh: &TailDelta, dk: &TailDelta, doors: bool, out: &mut Vec<Conflict>) {
     let both: Vec<&(String, String)> = dh.held.keys().filter(|key| dk.held.contains_key(*key)).collect();
     if !both.is_empty() {
         let open = |l: &StockLedger| -> BTreeMap<(String, String), Qty> { l.stranded().into_iter().map(|(o, i, q)| ((o, i), q)).collect() };
@@ -235,12 +244,11 @@ fn takes(hub: &StockLedger, kit: Option<&StockLedger>, dh: &TailDelta, dk: &Tail
         }
     }
     for (key, dkq) in &dk.served {
-        if !dh.served.contains_key(key) {
-            continue;
-        }
+        let Some(dhq) = dh.served.get(key) else { continue };
         let of = |l: &StockLedger| l.served_of(&key.0).into_iter().find(|(i, _)| *i == key.1).map(|x| x.1).unwrap_or(0);
         let merged = of(hub) + dkq;
-        if merged < 0 {
+        // One order served on both, with no door between them, is a second sale of one order.
+        if merged < 0 || (!doors && *dhq > 0 && *dkq > 0) {
             out.push(Conflict::DoubleTake { order_id: key.0.clone(), item: key.1.clone(), what: "served", merged });
         }
     }

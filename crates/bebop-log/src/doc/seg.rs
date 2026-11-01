@@ -44,8 +44,8 @@
 //! FORGOTTEN  "bebop-forgotten/1" ‖ n_redacted LE8 ‖ subject 32 ‖ (id 32 ‖ digest 32) × n_redacted
 //! ```
 //!
-//! A TRUNCATE is EFFECTIVE when its record chains, its actor is admitted and an ok seal of
-//! that actor covers its seq (`declare.rs`). A FORGOTTEN is effective under the same rule;
+//! A TRUNCATE is EFFECTIVE when its record chains, its actor is a ROOT and an ok seal of that actor
+//! covers its seq (`declare.rs`). A FORGOTTEN is effective with any admitted actor;
 //! `verify` sums its `n_redacted` as `declared`. It LISTS what it covers: each tombstone's id and
 //! its `digest`, `Ids::chained` over the tombstone as it now stands (flags, actor, seq, `prev`,
 //! tombstone payload), because the id itself stopped checking those. A tombstone is a mark
@@ -165,10 +165,10 @@ pub struct Truncate {
     pub seg_hash: [u8; 32],
 }
 
-fn le8(b: &[u8], at: usize) -> Option<u64> {
+pub(super) fn le8(b: &[u8], at: usize) -> Option<u64> {
     b.get(at..at + 8).and_then(|w| w.try_into().ok()).map(u64::from_le_bytes)
 }
-fn id32(b: &[u8], at: usize) -> Option<[u8; 32]> {
+pub(super) fn id32(b: &[u8], at: usize) -> Option<[u8; 32]> {
     b.get(at..at + 32).and_then(|w| w.try_into().ok())
 }
 
@@ -242,11 +242,11 @@ pub(crate) fn read_segs_in(st: &Store, newest: Option<usize>, cap: usize, budget
     let mut cur = newest;
     while let Some(at) = cur {
         if out.len() >= cap {
-            return Err(DocError::Corrupt("the segment chain never ends"));
+            return Err(DocError::Corrupt("the SEG chain never ends"));
         }
         budget.spend(st, at)?;
         st.check_obj(at)?;
-        let s = read_seg(st, at).ok_or(DocError::Corrupt("a ref SEG names an object that is not a SEG"))?;
+        let s = read_seg(st, at).ok_or(DocError::Corrupt("a ref SEG is no SEG"))?;
         cur = s.prev;
         out.push(s);
     }

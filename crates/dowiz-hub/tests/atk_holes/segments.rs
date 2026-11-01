@@ -37,7 +37,7 @@ fn hole_5b_an_added_frontier_row_erases_a_revoke() {
     sh.commit_keyop(&KeyOp::Admit(b.key()), &a, 1).unwrap();
     sh.commit_keyop(&KeyOp::Admit(c.key()), &a, 2).unwrap();
     orders(&mut sh, &b, "b", 2);
-    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 1 }, &c, 3).unwrap();
+    sh.commit_keyop(&KeyOp::Revoke { actor_id: b.id(), after_seq: 1, tip: sh.tip_at(&b.id(), 1) }, &c, 3).unwrap();
     orders(&mut sh, &c, "n", 1);
     let keep = sh.len() - 1;
     sh.cut(keep, &a, 4).unwrap();

@@ -29,7 +29,7 @@ pub unsafe extern "C" fn bw_heads(out: *mut u8, cap: usize) -> i64 {
 
 /// A DOC's counters as `COUNTS_CELLS` little-endian i64 cells -- records, chained, legacy,
 /// redacted, broken, seals, forks, heads, keys, genesis, checked, holds, segments, cut,
-/// cut_redacted, declared, keys_disagree, unsealed (`DocCounts`): the length (144), written if it fits; `-NOT_A_DOC` for a KV or a log; `-status` when `doc::verify`
+/// cut_redacted, declared, keys_disagree, unsealed, merges, merges_bad (`DocCounts`): the length (160), written if it fits; `-NOT_A_DOC` for a KV or a log; `-status` when `doc::verify`
 /// refuses; `-NOT_OPEN`, `-NULL_ARG`. Runs the verify if `bw_verify(1)` has not.
 ///
 /// # Safety
@@ -45,7 +45,7 @@ pub unsafe extern "C" fn bw_counts(out: *mut u8, cap: usize) -> i64 {
         Some(Err(r)) => return -(status_of(&r) as i64),
         Some(Ok(c)) => c,
     };
-    let cells = [c.records, c.chained, c.legacy, c.redacted, c.broken, c.seals, c.forks, c.heads, c.keys, c.genesis, c.checked, c.holds, c.segments, c.cut, c.cut_redacted, c.declared, c.keys_disagree, c.unsealed];
+    let cells = [c.records, c.chained, c.legacy, c.redacted, c.broken, c.seals, c.forks, c.heads, c.keys, c.genesis, c.checked, c.holds, c.segments, c.cut, c.cut_redacted, c.declared, c.keys_disagree, c.unsealed, c.merges, c.merges_bad];
     let mut f = Vec::with_capacity(8 * COUNTS_CELLS);
     for v in cells {
         f.extend_from_slice(&v.to_le_bytes());

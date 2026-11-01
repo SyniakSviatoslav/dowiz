@@ -180,7 +180,7 @@ fn open_kv(st: Store, sb: Superblock, root: usize) -> Result<Doc, Refusal> {
     let (entries, fold) = if version == VERSION_TREE {
         tree_entries(&st, root)?
     } else {
-        Kv::load_checked(&st).map_err(kv_refusal)?;
+        Kv::read_checked(&st).map_err(kv_refusal)?;
         raw_fold(&st, root, version).ok_or(Refusal::NotAKv)?
     };
     Ok(Doc { entries, ..blank(Kind::Kv { version }, fold as i64, st, sb) })

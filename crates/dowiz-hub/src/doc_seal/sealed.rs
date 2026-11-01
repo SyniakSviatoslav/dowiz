@@ -42,11 +42,17 @@ pub(super) fn doc_err(e: DocError) -> HubError {
         DocError::Seq { .. } => HubError::Store(StoreError::Corrupt("the device's seq is not the next one")),
         DocError::CutUndeclared { .. } => HubError::Store(StoreError::Corrupt("a log segment was cut without a signed TRUNCATE")),
         DocError::NothingToCut => HubError::Store(StoreError::Corrupt("nothing to cut: keep is not below the log's length")),
+        DocError::CutInsideSeal { .. } => HubError::Store(StoreError::Corrupt("the cut ends inside one seal's records: cut to a seal's edge")),
+        DocError::RevokeTip { .. } => HubError::Store(StoreError::Corrupt("the REVOKE names a tip that is not this device's record at that seq")),
         DocError::CutsAdmit(_) => HubError::Store(StoreError::Corrupt("the cut would take a device's ADMIT record")),
         DocError::TakesRevoke(_) => HubError::Store(StoreError::Corrupt("the cut or the redaction would take a device's REVOKE record")),
         DocError::Readmit(_) => HubError::Store(StoreError::Corrupt("the key is revoked here and a REVOKE is final")),
         DocError::NoTree => HubError::Store(StoreError::Corrupt("the id scheme has no tree root to name a segment by")),
         DocError::Carries(what) => HubError::Store(StoreError::Corrupt(what)),
+        // A merge's refusals: `doc_seal::merge` keeps them whole, and only a commit reaches here.
+        DocError::Fork { .. } | DocError::ForeignRoot | DocError::KeyClash(_) | DocError::CutOneSide { .. } | DocError::ForgetOneSide | DocError::RevokedTail { .. } | DocError::LegacyTail { .. } | DocError::NotWhole { .. } | DocError::UnionNotWhole | DocError::SealFork { .. } => {
+            HubError::Store(StoreError::Corrupt("the merge was refused"))
+        }
     }
 }
 
@@ -124,6 +130,11 @@ impl SealedHub {
     }
 
     /// The log's tip: what a seal signs and an anchor is taken over.
+    /// The id of `actor`'s record at `after_seq`: what a REVOKE after that seq names, 0^32 for none.
+    pub fn tip_at(&self, actor: &[u8; 32], after_seq: i64) -> [u8; 32] {
+        u64::try_from(after_seq).ok().and_then(|s| Doc::tip_at(&self.store, actor, s)).unwrap_or([0u8; 32])
+    }
+
     pub fn tip(&self) -> Option<[u8; 32]> {
         EvLog::tip_at(&self.store, self.log())
     }
@@ -164,7 +175,7 @@ impl SealedHub {
     /// which W-MG-M1B's two-device test left uncounted), else where a cut left it (the SEG
     /// frontier row, W-MG-M3b), else the log's tip (a device's first record after `seal_hub`
     /// chains onto the pre-seal records), else 0^32. One device: the log's tip, as before.
-    fn device_prev(&self, key: &DeviceKey) -> [u8; 32] {
+    pub(super) fn device_prev(&self, key: &DeviceKey) -> [u8; 32] {
         let view = Doc::open(&self.store).ok();
         if let Some(h) = read_heads(&self.store, view.as_ref().and_then(|v| v.heads)).iter().find(|h| h.actor_id == key.id) {
             return h.tip;
@@ -193,8 +204,8 @@ impl SealedHub {
     }
 
     /// Double the image: the DOC copied whole (`Doc::copy_bytes`), nothing re-signed.
-    fn grow(&mut self) -> Result<(), HubError> {
-        let bigger = self.store.image_bytes().saturating_mul(2).max(MIN_SEALED_BYTES);
+    pub(super) fn grow(&mut self) -> Result<(), HubError> {
+        let bigger = self.store.writer_bytes()?.saturating_mul(2).max(MIN_SEALED_BYTES);
         let mut fresh = Store::create_bytes(bigger)?;
         Doc::copy_bytes(&self.store, &mut fresh).map_err(doc_err)?;
         self.store = fresh;
@@ -218,7 +229,8 @@ impl SealedHub {
     }
 
     /// Every order event, newest first; key-op records (`KIND_KEYOP`) and declarations
-    /// (`KIND_DECL`: FORGOTTEN, TRUNCATE) are skipped by name.
+    /// (`KIND_DECL`: FORGOTTEN, TRUNCATE, MERGE) are skipped by name; a movement
+    /// (`KIND_STOCK`) has no order kind and `decode` drops it.
     pub fn events(&self) -> Vec<Event> {
         EvLog::walk_until_at(&self.store, self.log(), |_| false)
             .iter()

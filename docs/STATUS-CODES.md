@@ -65,12 +65,13 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 **DOC (W-MG-M5, FORMAT §9.4-9.5).** The five conformance readers keep answering 12 on `doc.store` (they
 refuse by name, as §2 row 12 says). The two ONE-FILE readers of `tools/verify` -- `bebop-verify.mjs`
 (bebop-wasm-reader, `bw_kind` = 5) and `bebop-verify.py` (stdlib) -- READ it and print
-`doc status=0 n=<records> root=<the LOG fold>` plus a line that starts with the word `verify`: `verify records=...` or, refused, `verify status=<s>` (FORMAT §9.4 gives its seventeen fields and what is not among them); `tools/verify/gate.sh`
+`doc status=0 n=<records> root=<the LOG fold>` plus a line that starts with the word `verify`: `verify records=...` or, refused, `verify status=<s>` (FORMAT §9.4 gives its nineteen fields and what is not among them); `tools/verify/gate.sh`
 holds both to each other and to `doc.expected`'s `doc_n` / `doc_root` / `doc_verify`. Their `checked=0` is
 not a defect to fix: neither carries a signature algorithm, so `seals` is a COUNT and the readers say so, on stderr, in a line that starts `seals COUNTED, not CHECKED:`. A refused line starts with `kv` whatever the root was: a refusal has no kind (FORMAT §9.0).
 W-MG-M5b: `segments cut cut_redacted declared` appended to that line; with no
 signature a TRUNCATE or FORGOTTEN counts on its chain alone (`Verifier::checks_signatures` false), a segment no
 TRUNCATE names is 75, and a time anchor is printed as PRESENT (`anchor kind= over= time_ms= proof_len=`), never verified.
+W-MG-M2: `merges merges_bad` appended the same way. `doc_verify`, which judges seals, exits 0 HOLDS, 3 DOES NOT HOLD, 2 not a sealed image, and 4 `NOT CHECKED` when all else stands and a MERGE's conflict list cannot be re-derived because the file was cut: never clean.
 
 ## 3. Mappings that are not already this number
 

@@ -18,8 +18,15 @@
 //!
 //! ```text
 //! ADMIT   "bebop-admit/1"  ‖ actor_id 32 ‖ alg LE8 ‖ valid_from LE8 ‖ pk_len LE8 ‖ pk
-//! REVOKE  "bebop-revoke/1" ‖ actor_id 32 ‖ after_seq LE8
+//! REVOKE  "bebop-revoke/2" ‖ actor_id 32 ‖ after_seq LE8 ‖ tip 32
 //! ```
+//!
+//! `tip` (W-MG-MERGE2, after W-MG-TAM's trace H2) is the id of the target's record at `after_seq`,
+//! 0^32 when `after_seq` <= 0. A seq alone let the holder of a revoked key write a new record AT OR
+//! BELOW it after the fact, and nothing the revoker signed moved. With the tip, the chain at
+//! `after_seq` is what the revoker saw, and `prev` binds all of it below. Where that seq left under
+//! a cut, only the seq binds (FORMAT §14). A key revoking itself after its own REVOKE writes 0^32:
+//! that record's id covers the body, so it cannot name itself.
 //!
 //! Rotation = ADMIT of the new key + REVOKE of the old, two records of one chain; this crate
 //! offers the format, no lane runs it (memory `no-secret-rotation.md`). A revoked key stays
@@ -41,7 +48,7 @@ pub const DIGEST_KEYS: i64 = 1448248784;
 const KEY_HEAD: usize = 9;
 const KEYS_ROW: usize = 5;
 pub const ADMIT_MARK: &[u8] = b"bebop-admit/1";
-pub const REVOKE_MARK: &[u8] = b"bebop-revoke/1";
+pub const REVOKE_MARK: &[u8] = b"bebop-revoke/2";
 /// The longest public key a KEY may carry: 64 KiB, far above any FIPS 204 size, so a damaged
 /// `pk_len` never becomes an allocation.
 pub const MAX_PK_BYTES: usize = 65536;
@@ -80,8 +87,9 @@ pub(crate) fn valid_at(revoked_at: i64, seq: u64) -> bool {
 pub enum KeyOp {
     /// Admit `key` (its `admit_rec` is filled in by the writer).
     Admit(Key),
-    /// Revoke `actor_id`'s key: seals past `after_seq` are invalid.
-    Revoke { actor_id: [u8; 32], after_seq: i64 },
+    /// Revoke `actor_id`'s key: seals past `after_seq` are invalid, and its record there is `tip`
+    /// (`Doc::tip_at`), 0^32 when `after_seq` <= 0.
+    Revoke { actor_id: [u8; 32], after_seq: i64, tip: [u8; 32] },
 }
 
 /// `revoked_at` after one more REVOKE: the earliest wins, so no REVOKE ever widens a key.
@@ -99,7 +107,7 @@ impl KeyOp {
     pub fn body(&self) -> Vec<u8> {
         match self {
             KeyOp::Admit(k) => admit_body(&k.actor_id, k.alg, k.valid_from, &k.pk),
-            KeyOp::Revoke { actor_id, after_seq } => revoke_body(actor_id, *after_seq),
+            KeyOp::Revoke { actor_id, after_seq, tip } => revoke_body(actor_id, *after_seq, tip),
         }
     }
 }
@@ -115,11 +123,12 @@ pub fn admit_body(actor_id: &[u8; 32], alg: i64, valid_from: i64, pk: &[u8]) -> 
     b
 }
 
-pub fn revoke_body(actor_id: &[u8; 32], after_seq: i64) -> Vec<u8> {
-    let mut b = Vec::with_capacity(REVOKE_MARK.len() + 40);
+pub fn revoke_body(actor_id: &[u8; 32], after_seq: i64, tip: &[u8; 32]) -> Vec<u8> {
+    let mut b = Vec::with_capacity(REVOKE_MARK.len() + 72);
     b.extend_from_slice(REVOKE_MARK);
     b.extend_from_slice(actor_id);
     b.extend_from_slice(&after_seq.to_le_bytes());
+    b.extend_from_slice(tip);
     b
 }
 
@@ -149,10 +158,10 @@ pub(crate) fn admit_view(body: &[u8]) -> Option<([u8; 32], i64, i64, &[u8])> {
     Some((actor, alg, valid_from, pk))
 }
 
-/// `(actor_id, after_seq)` of a REVOKE body, or `None` when it is not one.
-pub fn parse_revoke(body: &[u8]) -> Option<([u8; 32], i64)> {
+/// `(actor_id, after_seq, tip)` of a REVOKE body, or `None` when it is not one.
+pub fn parse_revoke(body: &[u8]) -> Option<([u8; 32], i64, [u8; 32])> {
     let rest = body.strip_prefix(REVOKE_MARK)?;
-    Some((id32(rest)?, le8(rest.get(32..)?)?))
+    Some((id32(rest)?, le8(rest.get(32..)?)?, id32(rest.get(40..)?)?))
 }
 
 /// One KEY object, bounded by what it really holds; `None` for a wrong digest or length.

@@ -19,7 +19,7 @@
 //! next order and oversells.
 
 use crate::minijson::{esc, int_field, str_field};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Quantity in the item's base unit -- pieces, grams, millilitres. Integer,
 /// because a conserved quantity that can be 0.30000000000000004 is not
@@ -80,7 +80,12 @@ impl StockLevel {
 /// A PROJECTION. Rebuilt by fold, never edited in place.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StockLedger {
+    /// In first-seen order, which a checkpoint's bytes carry: that is why this stays a Vec.
     levels: Vec<(String, StockLevel)>,
+    /// Item -> its place in `levels`, and `counted` as a set (W-MG-MERGE2): scanned per event, a fold
+    /// of `n` items was O(n^2) (HOLE 12). Derived: a decode rebuilds them through `place`, `mark_counted`.
+    level_at: BTreeMap<String, usize>,
+    counted_set: BTreeSet<String>,
     /// Open reservations, for I3. `(order_id, item)` -> qty.
     ///
     /// A MAP, NOT A VEC (W-AUDIT M1, 2026-09-27). Both this and `served` were
