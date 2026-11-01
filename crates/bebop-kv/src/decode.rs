@@ -68,17 +68,11 @@ impl Kv {
         // the index arrays that are really there -- not by the root's word.
         let (kidx_cells, vidx_cells) = (st.obj_cells(kidx), st.obj_cells(vidx));
         let (kblob_cells, vblob_cells) = (bytes_of(st.obj_cells(kblob))?, bytes_of(st.obj_cells(vblob))?);
-        if n < 0 {
-            return None;
-        }
         let n = bebop_image::idx(n)?;
         if n.checked_mul(2)? > kidx_cells.min(vidx_cells) {
             return None;
         }
         let fits = |off: i64, len: i64, cells: usize| -> Option<usize> {
-            if off < 0 || len < 0 {
-                return None;
-            }
             let (off, len) = (bebop_image::idx(off)?, bebop_image::idx(len)?);
             if off.checked_add(len)? > cells {
                 return None;
@@ -127,9 +121,11 @@ impl Kv {
             let v = copy(st, vblob, ver, vo, vl)?;
             entries.push((k, v));
         }
-        // A chain merges into SORTED keys only (zc/overlay.rs says why); none is written onto
-        // any other base, so an image that has one is refused rather than guessed at.
-        if !chain.is_empty() && !entries.windows(2).all(|w| w[0].0 < w[1].0) {
+        // STRICTLY ASCENDING AS READ, TOO. A chain merges into sorted keys only (zc/overlay.rs says
+        // why), and a writer writes these Strings: keys that pass above in raw bytes and collide or
+        // reorder under `key_of` would save an image the next load refuses (W-MG-TIDY). Refused
+        // here, before any writer; one damaged key alone still reads, which is what lossy is for.
+        if entries.windows(2).any(|w| w[0].0 >= w[1].0) {
             return None;
         }
         let mut kv = Kv { entries };

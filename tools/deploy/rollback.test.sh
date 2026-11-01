@@ -64,7 +64,10 @@ ROLLBACK_SKIP_COMPACT=1 run 0ld0; [ $RC = 0 ] && has 'SKIPPED by ROLLBACK_SKIP_C
   && ok "ROLLBACK_SKIP_COMPACT=1: no compaction, says so, switches (0)" || no "skip"
 
 # ── the pin mark: written by a compacting rollback, never by a refused one; deploy.sh lifts it ──
-rm -f "$T/kv-pinned"; COMPACT_CODE=502 COMPACT_FAILED=1 run 0ld0; [ ! -e "$T/kv-pinned" ] && ok "refused compaction leaves no pin mark" || no "mark on 502"
+# W-MG-TIDY: the mark goes down BEFORE the POST, as deploy.sh marks a flip before the upload. A 502 or a lost answer can leave
+# venues pinned, and a pin with no mark is never lifted; a mark too many only costs one `compact?pin=0`.
+rm -f "$T/kv-pinned"; COMPACT_CODE=502 COMPACT_FAILED=1 run 0ld0; [ -s "$T/kv-pinned" ] && ok "a failed compaction keeps the pin mark: some venues may be pinned" || no "no mark on 502"
+rm -f "$T/kv-pinned"; LOGIN_CODE=401 run 0ld0; [ ! -e "$T/kv-pinned" ] && ok "twin: no token, no POST, no pin mark" || no "mark without a POST"
 run 0ld0; [ $RC = 0 ] && [ -s "$T/kv-pinned" ] && ok "a compacting rollback writes the pin mark" || no "mark written"
 
 # ── unpin: the lift, and nothing else ──

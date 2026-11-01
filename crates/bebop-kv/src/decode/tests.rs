@@ -262,3 +262,41 @@ fn fnv_is_bytewise_over_every_byte() {
     }
     assert_eq!(kv.snapshot_root_u64(), h);
 }
+
+/// W-MG-TIDY: KEYS THAT ARE NOT UTF-8. decode's raw compare passes them; `key_of` replaces them,
+/// and the `Kv` writes the replacements. What a load hands a writer must be what the next load
+/// takes, or a catalogue save bricks the image. `raw` must ascend in raw bytes.
+fn raw_image(raw: &[&[u8]]) -> Store {
+    let entries = raw.iter().map(|k| (*k, &b"v"[..]));
+    Store::from_bytes(&crate::compacted_from(entries, 1 << 16, None).unwrap())
+}
+
+/// Two raw keys one replacement: `a\xfe` and `a\xff` both read `a\u{fffd}`.
+#[test]
+fn raw_keys_that_read_as_one_key_do_not_reach_a_writer() {
+    let st = raw_image(&[b"a\xfe", b"a\xff"]);
+    if let Some(kv) = Kv::decode(&st) {
+        let back = Store::from_bytes(&kv.compacted_bytes(1 << 16).unwrap());
+        assert!(Kv::decode(&back).is_some(), "HOLE: a load + write bricks the image: {:?}", kv.entries);
+    }
+}
+
+/// Raw order that the replacement reverses: U+FFFE ascends below `\xff` raw, above U+FFFD read.
+#[test]
+fn raw_keys_the_replacement_reorders_do_not_reach_a_writer() {
+    let st = raw_image(&["\u{fffe}".as_bytes(), b"\xff"]);
+    if let Some(kv) = Kv::decode(&st) {
+        let back = Store::from_bytes(&kv.compacted_bytes(1 << 16).unwrap());
+        assert!(Kv::decode(&back).is_some(), "HOLE: a load + write bricks the image: {:?}", kv.entries);
+    }
+}
+
+/// The twin the lossy read exists for: one damaged key is still readable, and written, and read.
+#[test]
+fn a_damaged_key_stays_readable_through_a_write() {
+    let st = raw_image(&[b"a", b"b\xff", b"c"]);
+    let kv = Kv::decode(&st).expect("a damaged key is readable");
+    assert_eq!(kv.get("b\u{fffd}"), Some(b"v".to_vec()));
+    let back = Store::from_bytes(&kv.compacted_bytes(1 << 16).unwrap());
+    assert_eq!(Kv::decode(&back).unwrap().entries, kv.entries);
+}

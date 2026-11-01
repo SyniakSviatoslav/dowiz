@@ -18,7 +18,7 @@
 # <platform>/api/auth/login. The token file is sourced only in the subshell that runs wrangler, never printed.
 #
 # THE sha256 FLOOR (W-MG-MIG, 2026-10-31; docs/design/MIGRATION-sha256-ids.md). Once any venue is flipped to
-# sha256 record ids (SHA256_VENUES in wrangler.toml; `flip_evidence` below lists the four witnesses), the target must be
+# sha256 record ids (SHA256_VENUES in wrangler.toml; `flip-evidence.sh` lists the four witnesses, shared with deploy.sh's exit 14), the target must be
 # a build that READS sha256: deploy.sh records every version it uploads in $VERSIONS and the first one whose
 # wrangler.toml declared SHA256_VENUES in $FLOOR_MARK; a target not recorded at or after that line is REFUSED
 # (exit 53) before anything is touched. Measured with the real binary: an older build does not refuse those
@@ -37,7 +37,7 @@ CURL=${ROLLBACK_CURL:-curl}
 WRANGLER=${ROLLBACK_WRANGLER:-node --no-warnings $REPO/workers/node_modules/wrangler/wrangler-dist/cli.js}
 TOKEN_FILE=${ROLLBACK_TOKEN_FILE:-/root/.cf_deploy_token}
 ADMIN_FILE=${ROLLBACK_ADMIN_FILE:-/root/.dowiz_admin}
-# Written once every venue is pinned v2; deploy.sh lifts the pin (rollback.sh --unpin) after its next
+# Written before the pinning POST, so it stands whenever a venue may be pinned; deploy.sh lifts the pin (rollback.sh --unpin) after its next
 # successful forward deploy and removes this file (main's decision 2026-10-07).
 PIN_MARK=${ROLLBACK_PIN_MARK:-/root/.cache/dowiz-deploy/kv-pinned}
 # The sha256 floor (header above): written by deploy.sh, never by this script, never removed.
@@ -62,20 +62,7 @@ floor_ok() {
   floor=$(head -1 "$FLOOR_MARK" | cut -d' ' -f1); [ -n "$floor" ] || return 1
   awk -v floor="$floor" -v want="$1" '$3 == floor { seen = 1 } seen && $3 == want && / declared=1( |$)/ { ok = 1 } END { exit ok ? 0 : 1 }' "$VERSIONS"
 }
-# flip_evidence: what says a venue was flipped, or nothing. THE MARK IS NOT THE ONLY WITNESS (W-MG-TRANS H1): it lives in
-# one cache directory on one box, and "no mark" used to mean "no flip", which switched prod over flipped venues. So: the
-# mark; any version recorded with a list; the tree's wrangler.toml (unparsable counts); any commit that ever set a list.
-flip_evidence() {
-  if [ -f "$FLIP_MARK" ]; then head -1 "$FLIP_MARK"; [ -s "$FLIP_MARK" ] || echo "flip mark $FLIP_MARK"; return; fi
-  line=$(grep -E ' sha256_venues=[^ ]' "$VERSIONS" 2>/dev/null | tail -1)
-  if [ -n "$line" ]; then echo "versions.log: $line"; return; fi
-  here=$(cd "$(dirname "$0")" && pwd)
-  toml=$REPO/workers/api/wrangler.toml
-  if ! var=$(python3 "$here/scheme_var.py" "$toml" 2>/dev/null); then echo "$toml does not parse"; return; fi
-  if [ -n "${var#* }" ]; then echo "$toml: SHA256_VENUES=\"${var#* }\""; return; fi
-  commit=$(git -C "$REPO" log -1 --format=%h -G"^[[:space:]]*SHA256_VENUES[[:space:]]*=[[:space:]]*[\"'][^\"']" -- workers/api/wrangler.toml 2>/dev/null)
-  if [ -n "$commit" ]; then echo "commit $commit set SHA256_VENUES"; fi
-}
+. "$(cd "$(dirname "$0")" && pwd)/flip-evidence.sh"
 FLIPPED=
 [ $MODE = rollback ] && FLIPPED=$(flip_evidence)
 if [ -n "$FLIPPED" ]; then
@@ -105,8 +92,11 @@ admin_token() {
   json_field "$WORK/login.out" access_token
 }
 
-compact() { # compact <query>
+compact() { # compact <query> [pin]
   TOKEN=$(admin_token); [ -n "$TOKEN" ] || fail 51 "admin: no platform administrator token (ROLLBACK_ADMIN_TOKEN, or ADMIN_EMAIL/ADMIN_PASSWORD in $ADMIN_FILE)"
+  # MARKED BEFORE THE POST (W-MG-TIDY), as deploy.sh marks a flip before the upload: a 502 or a lost answer can leave venues
+  # pinned, and a pin with no mark is never lifted. A mark too many costs one `compact?pin=0`.
+  if [ -n "${2:-}" ]; then mkdir -p "$(dirname "$PIN_MARK")" && date -u +%FT%TZ > "$PIN_MARK"; fi
   code=$($CURL -sS -o "$WORK/compact.out" -w '%{http_code}' -X POST -H "authorization: Bearer $TOKEN" \
     "$PLATFORM/api/platform/compact$1"); rc=$?
   echo "   compact$1: HTTP $code, failed venues: $(json_field "$WORK/compact.out" failed)"
@@ -122,7 +112,7 @@ echo "== compact (every venue's KV images to v2, pinned)"
 if [ "${ROLLBACK_SKIP_COMPACT:-}" = 1 ]; then
   echo "   SKIPPED by ROLLBACK_SKIP_COMPACT=1 -- a target built before W-DELTA will REFUSE any v3 catalogue"
 else
-  compact ""; mkdir -p "$(dirname "$PIN_MARK")" && date -u +%FT%TZ > "$PIN_MARK"
+  compact "" pin
 fi
 echo "== switch to $VERSION"
 ( cd "$REPO/workers/api" && set -a && . "$TOKEN_FILE" && set +a && $WRANGLER rollback "$VERSION" -m "$MSG" ) || fail 52 "switch: wrangler rollback $VERSION failed"

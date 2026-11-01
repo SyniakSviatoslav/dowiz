@@ -26,7 +26,7 @@ use crate::crypto::hex;
 use crate::minijson::{esc, str_field};
 use crate::stock::notes::is_note;
 use crate::stock::rights::Rights;
-use crate::stock::{Qty, StockLog};
+use crate::stock::{nonced, rec_body, Qty, StockLog};
 
 /// The decision note's kind.
 pub const DECIDE: &str = "decide";
@@ -98,7 +98,7 @@ pub fn merge(hub_bytes: &[u8], log: &mut StockLog, t: &Tail) -> Result<Reply, Re
         return Err(Refusal { side: Side::Kitchen, why: Why::TooLong { pos: TAIL_MAX } });
     }
     let chain = wire_chain(log.len() - above.len(), &t.base, &t.recs);
-    let skip = adopted_prefix(&above, &t.ctx, &chain);
+    let skip = adopted_prefix(&above, t, &chain);
     if t.recs.is_empty() || skip == t.recs.len() {
         // A tablet with nothing to send asks only for the hub's tail (read-only, so a board that
         // polls writes nothing), except at its first sync, which is when it gets its rights; a
@@ -154,14 +154,36 @@ pub fn merge(hub_bytes: &[u8], log: &mut StockLog, t: &Tail) -> Result<Reply, Re
     Ok(Reply { skipped: skip, ..reply(log, t, all, g.conflicts, adopted.merged, adopted.held, grants, false) })
 }
 
-/// How many of the tail's first records an earlier `glued` note of this context covers: the
-/// longest prefix whose tablet id such a note names. `chain` is the tablet's id after each.
-fn adopted_prefix(above: &[String], ctx: &str, chain: &[[u8; 32]]) -> usize {
-    let glued: Vec<String> = above.iter().filter(|r| is_note(r, GLUED) && str_field(r, "ctx").as_deref() == Some(ctx)).filter_map(|r| str_field(r, "ktip")).collect();
+/// How many of the tail's first records an earlier adoption of this context covers. First the
+/// longest prefix whose tablet id a `glued` note names (`chain`: the tablet's id after each). Then
+/// the records themselves (W-MG-TIDY): a tail SHORTER than the one adopted -- the older request
+/// delivered last, a tablet back from a stale copy -- stops below the id the note names, and a
+/// fork leaves it, so each record is looked for among what was adopted or held above `base`, each
+/// adopted record answering for one sent. Only with a `glued` note of this context there.
+fn adopted_prefix(above: &[String], t: &Tail, chain: &[[u8; 32]]) -> usize {
+    let glued: Vec<String> = above.iter().filter(|r| is_note(r, GLUED) && str_field(r, "ctx").as_deref() == Some(t.ctx.as_str())).filter_map(|r| str_field(r, "ktip")).collect();
     if glued.is_empty() {
         return 0;
     }
-    chain.iter().rposition(|id| glued.contains(&hex(id))).map_or(0, |i| i + 1)
+    let named = chain.iter().rposition(|id| glued.contains(&hex(id))).map_or(0, |i| i + 1);
+    if named == t.recs.len() {
+        return named;
+    }
+    let mut known: Vec<String> = above.iter().filter_map(|r| if is_note(r, DECIDE) { str_field(r, "rec") } else { Some(r.clone()) }).collect();
+    let mut same = 0;
+    for rec in &t.recs {
+        let Some(at) = known.iter().position(|k| adopted_as(k, rec)) else { break };
+        known.swap_remove(at);
+        same += 1;
+    }
+    named.max(same)
+}
+
+/// Is `kept`, a record of the hub's log, the tablet's `sent`? Its bytes, or, where `adopt_from` put
+/// a nonce on it or took one off (`keeps_as_written`), its body. Two nonced records with one body
+/// are two movements.
+fn adopted_as(kept: &str, sent: &str) -> bool {
+    kept == sent || (nonced(kept) != nonced(sent) && rec_body(kept) == rec_body(sent))
 }
 
 /// The reply over `all`, the hub's records above the tablet's base, OLDEST FIRST.
@@ -222,3 +244,7 @@ fn regrant(log: &mut StockLog, ctx: &str, led: &crate::stock::StockLedger) -> Re
 #[cfg(test)]
 #[path = "merge/tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "merge/retry_tests.rs"]
+mod retry_tests;

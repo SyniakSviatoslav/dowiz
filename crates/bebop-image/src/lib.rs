@@ -349,9 +349,9 @@ impl Store {
 
     /// The size of the image this store was created as, in bytes: what a writer doubles or
     /// rebuilds by. The live superblock's capacity, or the cells held when that says less.
+    /// A claim past the writers' bound is not believed (`writer_bytes` names it).
     pub fn image_bytes(&self) -> usize {
-        let full = self.pick().map_or(0, |sb| ARENA.saturating_add(idx(self.cells[sb.at + 12]).unwrap_or(0)));
-        full.max(self.cells.len()).saturating_mul(8)
+        self.writer_bytes().unwrap_or(self.cells.len().saturating_mul(8))
     }
 
     /// The byte image. Little-endian cells, identical to what `create`/`commit`
@@ -873,6 +873,7 @@ impl Store {
 }
 
 #[doc(hidden)]
+mod capacity;
 pub mod crc;
 pub mod format;
 pub use format::{

@@ -56,4 +56,17 @@ bash "$HERE/rollback.sh" "$V" > "$T/out" 2>&1; R=$?; [ $R = 0 ] && ok "twin: the
 # Every mark reaped and the var back to "": the history still says a flip happened.
 fresh; commit 'SHA256_VENUES = ""'; commit 'SHA256_VENUES = "qa-durres"'; commit 'SHA256_VENUES = ""'
 bash "$HERE/rollback.sh" pr0d > "$T/out" 2>&1; R=$?; [ $R = 53 ] && grep -q 'set SHA256_VENUES' "$T/out" && ok "marks and var gone: a commit that set a list refuses (53)" || no "the git witness rc=$R"
+# W-MG-TIDY: deploy's exit 14 reads the witnesses rollback.sh reads. Marks reaped, the tree without the var, and history says a flip.
+fresh; commit 'SHA256_VENUES = ""'; commit 'SHA256_VENUES = "qa-durres"'; commit '# reverted: this build predates the reader'; deploy
+[ $RC = 14 ] && grep -q 'set SHA256_VENUES' "$T/out" && ok "marks reaped: history alone refuses a build with no reader (14)" || no "deploy.sh shipped no reader past a flip only git remembers rc=$RC"
+fresh; rm -rf "$T/repo/.git"; g init -b main; commit "# never declared"; deploy; [ $RC = 0 ] && ok "twin: no witness at all, a build without the var deploys" || no "twin no witness rc=$RC"
+# The history witness reads what TOML reads: an inline table and a quoted key set a list too; a comment does not.
+for form in 'vars = { SHA256_VENUES = "*" }' "vars = { SHA256_VENUES = 'qa-durres' }" '"SHA256_VENUES" = "*"'; do
+  fresh; rm -rf "$T/repo/.git"; g init -b main; commit "$form"; commit 'SHA256_VENUES = ""'
+  bash "$HERE/rollback.sh" pr0d > "$T/out" 2>&1; R=$?; [ $R = 53 ] && ok "git witness reads: $form (53)" || no "git witness missed $form rc=$R"
+done
+for form in '# SHA256_VENUES = "qa-durres"' 'vars = { SHA256_VENUES = "" }'; do
+  fresh; rm -rf "$T/repo/.git"; g init -b main; commit "$form"; commit 'SHA256_VENUES = ""'
+  bash "$HERE/rollback.sh" pr0d > "$T/out" 2>&1; R=$?; [ $R = 0 ] && ok "twin: no flip in: $form (0)" || no "git witness false alarm on $form rc=$R"
+done
 echo "atk4-deploy: $pass ok, $bad HOLE"; [ $bad = 0 ]

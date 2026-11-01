@@ -81,8 +81,9 @@ if [ $MODE != verify ]; then
   DECLARED=${SCHEME_LINE%% *}; SCHEME=${SCHEME_LINE#* }
   FLOOR_MARK=${ROLLBACK_FLOOR_MARK:-$WORK/sha256-floor}; FLIP_MARK=${ROLLBACK_FLIP_MARK:-$WORK/sha256-flipped}
   VERSIONS=${DEPLOY_VERSIONS:-$WORK/versions.log}
-  if [ "$DECLARED" = 0 ] && { [ -f "$FLIP_MARK" ] || grep -qE ' sha256_venues=[^ ]' "$VERSIONS" 2>/dev/null; }; then
-    fail 14 "no-reader: venues write sha256 records and this tree does not declare SHA256_VENUES: a build without the reader QUARANTINES their orders; nothing was uploaded"
+  if [ "$DECLARED" = 0 ]; then
+    FLIPPED=$(. "$HERE/flip-evidence.sh"; flip_evidence)
+    [ -z "$FLIPPED" ] || fail 14 "no-reader: venues write sha256 records ($FLIPPED) and this tree does not declare SHA256_VENUES: a build without the reader QUARANTINES their orders; nothing was uploaded"
   fi
   # THE TABLET'S MODULE IS ITS SOURCE (W-MG-TRANS H2). tablet.wasm is a committed binary: the expand release shipped
   # prod's bytes, which refuse every reply of a flipped venue. The digest moves with any change under crates/, so this
