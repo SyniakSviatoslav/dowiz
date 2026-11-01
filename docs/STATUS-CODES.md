@@ -27,10 +27,10 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 | 1 | `NO_SUPERBLOCK` | no valid superblock, or the live one was refused structurally: `arena_used` outside, PartTab outside, **misplaced** (`ptaway`), **PartTab crc bad** (`ptbad`), root outside (FORMAT §3.1). This is never a fallback | all |
 | 2 | `NOT_A_KV` | a superblock but no KV root (`empty`), or a slice/chain claim that does not hold, a KV base not strictly ascending in raw bytes, a DOC part that does not hold (a SEG with `last` < `first`), or the walk bound spent (FORMAT §9.0) | all |
 | 3 | `NOT_A_LOG` | log reader only (`bw_log`) | wasm32 |
-| 4 | `TRUNCATED` | log reader: a record cut short (an object shorter than a record's head), a chain short of the root's count, or one that never ends (FORMAT §9.2) | wasm32 |
+| 4 | `TRUNCATED` | log reader: a record cut short (an object shorter than a record's head, the cells it has being what counts), a chain short of the root's count, or one that never ends (FORMAT §9.2). A record cut by the image's end with its head inside is 10 | wasm32 |
 | 5 | `NULL_ARG` | a null pointer at the ABI. oracle.py also uses 5 for an S-1 break (superblock cells 13-14 non-zero), which no fixture has. **Two meanings, kept apart only by which surface gave them** | wasm32, C ABI, python |
 | 6-9, 11 | — | the `nodekey` (6) and `proj` (7-9, 11) readers. Not KV codes | `bw_key`, `bw_proj`, `oracle.py --proj` |
-| 10 | `BAD_CRC` | an object the read reached fails its crc (root, an array, a delta record) | native, wasm32, python, C ABI |
+| 10 | `BAD_CRC` | an object the read reached fails its crc (root, an array, a delta record, a log record, one cut by the image's end included) | native, wasm32, python, C ABI |
 | 12 | `UNKNOWN_VERSION` | a log root names a version above 2 (FORMAT §9.2), or the KV root names a version above 4 (W-ES-P9: every reader decodes v4 since W-ES-P8D/P8E, so `kv4stub` -- a v4 claim that does not hold -- is 2 now). W-MG-M1 (2026-10-30): fixture `doc` -- a DOC root, FORMAT §9.4, root-version 5 in the version cell -- yields 12 on every reader until M5 teaches them DOC | all |
 | 40 | `RECOVER` | the newest generation failed recovery and so did the fallback | C ABI |
 | 41 | `LAST_COMMIT` | the last commit's range does not hash to its anchor and every object in it checks (a re-sealed object, a changed header); bytes handed whole are never fallen back past (W-ES-P10, FORMAT §7 phase P2, fixture `kv4stale`). An object of the range that fails its crc is 10 instead, naming it | all |
@@ -65,9 +65,9 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 **DOC (W-MG-M5, FORMAT §9.4-9.5).** The five conformance readers keep answering 12 on `doc.store` (they
 refuse by name, as §2 row 12 says). The two ONE-FILE readers of `tools/verify` -- `bebop-verify.mjs`
 (bebop-wasm-reader, `bw_kind` = 5) and `bebop-verify.py` (stdlib) -- READ it and print
-`doc status=0 n=<records> root=<the LOG fold>` plus a `verify` line (FORMAT §9.4 gives its seventeen fields and what is not among them); `tools/verify/gate.sh`
+`doc status=0 n=<records> root=<the LOG fold>` plus a line that starts with the word `verify`: `verify records=...` or, refused, `verify status=<s>` (FORMAT §9.4 gives its seventeen fields and what is not among them); `tools/verify/gate.sh`
 holds both to each other and to `doc.expected`'s `doc_n` / `doc_root` / `doc_verify`. Their `checked=0` is
-not a defect to fix: neither carries a signature algorithm, so `seals` is a COUNT and the readers say so.
+not a defect to fix: neither carries a signature algorithm, so `seals` is a COUNT and the readers say so, on stderr, in a line that starts `seals COUNTED, not CHECKED:`. A refused line starts with `kv` whatever the root was: a refusal has no kind (FORMAT §9.0).
 W-MG-M5b: `segments cut cut_redacted declared` appended to that line; with no
 signature a TRUNCATE or FORGOTTEN counts on its chain alone (`Verifier::checks_signatures` false), a segment no
 TRUNCATE names is 75, and a time anchor is printed as PRESENT (`anchor kind= over= time_ms= proof_len=`), never verified.

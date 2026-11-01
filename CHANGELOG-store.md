@@ -43,15 +43,19 @@ unrelated project, a schema-based serialization format.
   keeps its id and place, and a signed FORGOTTEN declares it.
 - **Self-describing archives (SPEC, BLOB).** An archive file can carry its reader and the format text
   as its first objects, so that a host with no parser can find them.
-- **Record ids.** A flag marks a record whose id is `sha256(prev ‖ payload)`, with a 16-byte nonce at
-  the start of its payload. Older records keep their FNV ids and are counted as `legacy`.
+- **Record ids.** A flag marks a record whose id is sha256 over a tag, its flags, actor, seq, `prev` and
+  payload, with a 16-byte nonce at the start of its payload. Older records keep their FNV ids and are
+  counted as `legacy`, and id v2 binds nothing of theirs.
 - **KV v4,** a copy-on-write B+ tree, read by all five readers. Writing it is off by default.
 - **The commit anchor.** Superblock cell 9 anchors the last commit. Images from before it hold 0 and
   still read. Every reader of bytes now applies one rule to a torn last commit: it refuses.
 - **KV v3** (2026-10-06), a v2 base plus a delta chain.
 - **KV and EvLog v2** (2026-09-28), bytes packed eight to a cell.
 - **Changed before any production image held them:** DOC cell 9 became `ref SEG`, and a SEG row gained
-  `scheme`. Both moved the layout's digest without a new root-version.
+  `scheme`. Both moved the layout's digest without a new root-version. TRUNCATE gained `seg_hash` and a
+  FORGOTTEN row a digest, inside record bodies, so no digest moved.
+- **The format text is not frozen.** Its date of 2026-10-27 stated something that stopped being true when
+  those changes landed; it now says what holds until the first release.
 
 ### Added
 
@@ -80,3 +84,5 @@ unrelated project, a schema-based serialization format.
 - **Merging two copies of a file.** Not built.
 - **Checking seals in the MIT reader.** It counts them and says so.
 - **Level 2, settlement between organisations.** Not built.
+- **A clean attack round.** None has happened: every round that tested this format found defects. Six
+  named cases are untested, and format §14 lists them with what one file cannot decide.

@@ -117,7 +117,7 @@ fn compaction_is_dead_ratio_triggered_and_generation_monotone() {
     let sb = cs.pick().unwrap();
     assert_eq!(sb.generation, g + 1);
     assert_eq!(sb.superseded_cells, 0);
-    assert!(sb.arena_used as usize * 2 <= cs.cells.len(), "headroom: used {} of {} cells", sb.arena_used, cs.cells.len());
+    assert!(sb.arena_used as usize * 2 <= cs.image_bytes() / 8, "headroom: used {} of {} cells", sb.arena_used, cs.image_bytes() / 8);
     assert_eq!(Kv::load_checked(&cs).unwrap().entries.len(), m.len() - 1);
     eprintln!("{}", format!("P8c trigger: {n} one-key commits at 300 keys"));
 }
