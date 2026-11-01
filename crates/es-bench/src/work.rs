@@ -25,7 +25,7 @@ pub const BATCH: usize = 32;
 pub const DURABLE_COMMITS: usize = 100;
 
 impl Cfg {
-    fn want(&self, row: &str) -> bool {
+    pub fn want(&self, row: &str) -> bool {
         self.only.is_empty() || self.only.iter().any(|r| r == row)
     }
     fn writes(&self) -> usize {
@@ -57,6 +57,15 @@ pub fn run<E: Engine>(c: &Cfg) -> Vec<(String, u64)> {
         res("load", name, "ms", stats(v), &format!("{tag}; sorted input, one txn, synced; includes open; file bytes={}", dir_bytes(&dir)));
     } else {
         drop(fresh::<E>(&dir, &e));
+    }
+
+    // What `load` left, before any row writes: every byte in the engine's directory per record,
+    // as the filesystem reports it and as it allocated it.
+    if c.want("size") {
+        let rec = (c.n as usize * (15 + c.vs)) as f64;
+        let note = format!("{tag}; the whole store directory after load; {} key+value bytes in all", rec as u64);
+        one("size", name, "bytes/rec", dir_bytes(&dir) as f64 / c.n as f64, &note);
+        one("size_alloc", name, "bytes/rec", dir_alloc(&dir) as f64 / c.n as f64, &note);
     }
 
     if c.want("open") || c.want("verify") {

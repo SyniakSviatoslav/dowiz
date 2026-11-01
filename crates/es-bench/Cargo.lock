@@ -31,6 +31,7 @@ version = "0.1.0"
 dependencies = [
  "bebop-image",
  "bebop-kv",
+ "bebop-log",
 ]
 
 [[package]]
@@ -124,6 +125,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "dowiz-core"
+version = "0.1.0"
+
+[[package]]
 name = "doxygen-rs"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -138,6 +143,7 @@ version = "0.1.0"
 dependencies = [
  "bebop-io",
  "bebop-store",
+ "dowiz-core",
  "heed",
  "libc",
  "redb",

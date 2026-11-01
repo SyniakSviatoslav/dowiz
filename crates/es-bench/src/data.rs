@@ -132,6 +132,12 @@ pub fn dir_bytes(dir: &Path) -> u64 {
     fs::read_dir(dir).map(|r| r.flatten().filter_map(|e| e.metadata().ok()).map(|m| m.len()).sum()).unwrap_or(0)
 }
 
+/// Bytes the filesystem really allocated for `dir`: an engine's sparse file reads big in `dir_bytes`.
+pub fn dir_alloc(dir: &Path) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    fs::read_dir(dir).map(|r| r.flatten().filter_map(|e| e.metadata().ok()).map(|m| m.blocks() * 512).sum()).unwrap_or(0)
+}
+
 /// Drop every file under `dir` from the page cache (clean pages only). False if any refused.
 pub fn evict_dir(dir: &Path) -> bool {
     let mut ok = true;

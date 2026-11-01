@@ -1,0 +1,57 @@
+# The whole benchmark table, by hand, on a machine anyone can name. Manual only, and nothing depends
+# on it: no gate reads this result, a red run blocks no merge and no release. The regression gate is
+# tools/gates/es-bench.sh, a ratio; this is the table, absolute numbers.
+#
+# WHAT THIS RUNNER IS NOT: a shared GitHub-hosted x86 VM is not a NVMe lab machine. Its neighbours,
+# its virtual disk and its CPU model change from run to run, so its fsync and cold-read rows say
+# little, and two runs are not comparable to each other. It proves that the table reruns on a
+# stranger's machine. The numbers a reader should quote come from one named machine with a real disk,
+# by the same command, which the raw output's `# machine` lines describe.
+name: es-bench-full
+on:
+  workflow_dispatch:
+    inputs:
+      n:
+        description: records (N)
+        default: '100000'
+      vs:
+        description: value bytes (VS)
+        default: '256'
+      reps:
+        description: repetitions, at least 5
+        default: '5'
+permissions:
+  contents: read
+jobs:
+  full:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      N: ${{ inputs.n }}
+      VS: ${{ inputs.vs }}
+      REPS: ${{ inputs.reps }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: '1.96.1' }
+      - name: The machine, as far as a guest can see it
+        run: |
+          for v in "$N" "$VS" "$REPS"; do case "$v" in ''|*[!0-9]*) echo "not a number: $v"; exit 2 ;; esac; done
+          { echo '# a shared GitHub-hosted runner, not a NVMe lab machine: see this workflow header'
+            lscpu; free -h; df -hT "$RUNNER_TEMP"; lsblk -o NAME,SIZE,ROTA,MODEL || true; uname -a
+          } > machine.txt 2>&1
+          cat machine.txt
+      - name: full all
+        working-directory: crates/es-bench
+        run: |
+          set -o pipefail
+          ES_BENCH_COMMIT="$GITHUB_SHA" ES_BENCH_DIR="$RUNNER_TEMP/es-bench-data" \
+            cargo run --release --locked --features competitors,mldsa -- full all "$N" "$VS" "$REPS" \
+            | tee "$GITHUB_WORKSPACE/es-bench-full.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: es-bench-full
+          path: |
+            machine.txt
+            es-bench-full.txt

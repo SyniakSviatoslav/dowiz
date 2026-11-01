@@ -8,13 +8,18 @@ description = "R-EMBED-STORE P7: bebop-store vs redb / LMDB (heed) / SQLite, and
 
 # Standalone: its own workspace, so no other crate's `cargo test` builds it and its lock file
 # holds the competitors' versions. Default features = bebop only (bebop-store + libc), which is
-# what the gate (tools/gates/es-bench.sh) builds; `competitors` adds the three other engines for
-# the full table (docs/measurements/ES-BENCH-2026-10-29.md).
+# what the gate (tools/gates/es-bench.sh) builds; `competitors` adds the three other engines and
+# `mldsa` the signed-file rows, the two together being what `full all` needs.
 [workspace]
 
 [features]
 default = []
 competitors = ["dep:redb", "dep:heed", "dep:rusqlite"]
+# The `signed` rows (src/signed.rs): a real ML-DSA-65 behind `doc::Signer` / `doc::Verifier`, from
+# dowiz-core, which is AGPL-3.0-or-later. OFF by default and never in the gate's build: a binary
+# built with this feature carries AGPL code, this crate's own source does not. One file names the
+# provider (src/mldsa.rs); swapping it is that file and this line.
+mldsa = ["dep:dowiz-core", "bebop-io/doc"]
 
 [dependencies]
 bebop-store = { path = "../bebop-store" }
@@ -22,7 +27,8 @@ bebop-store = { path = "../bebop-store" }
 # default until P8d). A direct path dependency only to turn the feature on (cargo unifies it).
 bebop-io = { path = "../bebop-io", features = ["tree"] }
 libc = "0.2"
-redb = { version = "4", optional = true }
+dowiz-core = { path = "../dowiz-core", optional = true }
+redb = { version = "=4.4.0", optional = true }
 heed = { version = "=0.22.1", optional = true }
 rusqlite = { version = "=0.32.1", features = ["bundled"], optional = true }
 
