@@ -136,7 +136,7 @@ fn a_days_orders_on_the_wire_full_against_trimmed() {
     let back = dowiz_hub::Hub::load(&h.to_bytes_trimmed()).unwrap();
     assert_eq!(back.len(), 60);
     assert_eq!(back.orders().len(), 10);
-    assert_eq!(back.to_bytes().len(), full, "the padded image is the full image again");
+    assert_eq!(back.to_bytes_trimmed(), h.to_bytes_trimmed(), "a reader never pads: what came in is what goes out");
     assert!(back.order("ord_0").unwrap().contains("DELIVERED"), "the fold survives the trim");
 }
 
