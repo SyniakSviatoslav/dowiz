@@ -139,7 +139,8 @@ fn id32(b: &[u8]) -> Option<[u8; 32]> {
     b.get(..32).and_then(|w| w.try_into().ok())
 }
 
-/// `(actor_id, alg, valid_from, pk)` of an ADMIT body, or `None` when it is not one.
+/// `(actor_id, alg, valid_from, pk)` of an ADMIT body, or `None` when it is not exactly one: EXACT,
+/// like FORGOTTEN and MERGE (W-MG-TIDY2), a byte past `pk` makes it no key op.
 pub fn parse_admit(body: &[u8]) -> Option<([u8; 32], i64, i64, Vec<u8>)> {
     admit_view(body).map(|(a, alg, from, pk)| (a, alg, from, pk.to_vec()))
 }
@@ -154,13 +155,19 @@ pub(crate) fn admit_view(body: &[u8]) -> Option<([u8; 32], i64, i64, &[u8])> {
     if !(0..=MAX_PK_BYTES as i64).contains(&n) {
         return None;
     }
-    let pk = rest.get(56..56 + idx(n)?)?;
+    let pk = rest.get(56..)?;
+    if pk.len() != idx(n)? {
+        return None;
+    }
     Some((actor, alg, valid_from, pk))
 }
 
-/// `(actor_id, after_seq, tip)` of a REVOKE body, or `None` when it is not one.
+/// `(actor_id, after_seq, tip)` of a REVOKE body, or `None` when it is not exactly one.
 pub fn parse_revoke(body: &[u8]) -> Option<([u8; 32], i64, [u8; 32])> {
     let rest = body.strip_prefix(REVOKE_MARK)?;
+    if rest.len() != 72 {
+        return None;
+    }
     Some((id32(rest)?, le8(rest.get(32..)?)?, id32(rest.get(40..)?)?))
 }
 

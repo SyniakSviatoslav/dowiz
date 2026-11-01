@@ -228,7 +228,35 @@ def doc_escape_payloads():
     return im.commit(d)
 
 
+def doc_truncate_long():
+    "`cut`, its TRUNCATE a byte past the body: exact, so it vouches for nothing, 75"
+    t = Rec(B, 1, ZERO, nonce(truncate_body(1, 5, b"R" * 32, ()) + b"\0"))
+    im = Img()
+    log, _ = lay_log(im, [t], tip=t.id)
+    s = seg_obj(im, 1, 5)
+    return im.commit(doc_root(im, log=log, seg=s))
+
+
+def revoke_of_a(tail=b""):
+    "A revokes itself, the table saying nothing. The body read as a REVOKE is `keys_disagree` 1."
+    r0 = Rec(A, 1, ZERO, nonce(b"x"))
+    r1 = Rec(A, 2, r0.id, nonce(b"bebop-revoke/2" + A + struct.pack("<q", 0) + ZERO + tail))
+    im, d = plain([r0, r1])
+    return im.commit(d)
+
+
+def doc_revoke_exact():
+    "the twin of `doc_revoke_long`: the exact body, keys_disagree 1"
+    return revoke_of_a()
+
+
+def doc_revoke_long():
+    "a REVOKE a byte past the body: exact, so it says nothing, keys_disagree 0"
+    return revoke_of_a(b"\0")
+
+
 CASES = [ok_doc, ok_doc_cut, doc_seq_gap, doc_seq_zero_keyed, doc_heads_dup_rows, doc_fork_same_id, doc_keys_dup_rows,
          doc_keys_overlap, doc_two_heads_one_seal, doc_seal_ring, doc_cut_inverted, doc_cut_max, doc_cut_redacted_max,
          doc_frontier_wrap, doc_short_record, doc_tree_wrong_digest, doc_keys_wide_m, doc_heads_wide_m, doc_ref_wide,
-         doc_anchor_ring, doc_no_log, doc_log_is_kv, doc_escape_payloads]
+         doc_anchor_ring, doc_no_log, doc_log_is_kv, doc_escape_payloads, doc_truncate_long, doc_revoke_exact,
+         doc_revoke_long]

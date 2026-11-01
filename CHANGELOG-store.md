@@ -64,6 +64,9 @@ unrelated project, a schema-based serialization format.
   FORGOTTEN row a digest, inside record bodies, so no digest moved.
 - **The format text is not frozen.** Its date of 2026-10-27 stated something that stopped being true when
   those changes landed; it now says what holds until the first release.
+- **Key ops and TRUNCATE are exact.** ADMIT, REVOKE and TRUNCATE parse at their exact length, like
+  FORGOTTEN and MERGE: a body with a byte more is an ordinary record that declares nothing. No writer
+  ever produced such a body. Every reader follows.
 
 ### Added
 

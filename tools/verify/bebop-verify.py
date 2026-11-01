@@ -631,13 +631,13 @@ def effective(sound):
         if is_redacted(r):
             continue
         b = body_of(r)
-        if b.startswith(TRUNCATE_MARK) and len(b) >= len(TRUNCATE_MARK) + 128:
+        if b.startswith(TRUNCATE_MARK) and len(b) == len(TRUNCATE_MARK) + 128:
             x = b[len(TRUNCATE_MARK):]
             truncates.append((x[:32], x[32:64]) + struct.unpack_from("<QQQQ", x, 64) + (x[96:128],))
         elif (rows := forgotten_list(b)) is not None:
             forgotten += len(rows)
             erased += [(i, d, r["actor"]) for i, d in rows]
-        elif b.startswith(REVOKE_MARK) and len(b) >= len(REVOKE_MARK) + 72:
+        elif b.startswith(REVOKE_MARK) and len(b) == len(REVOKE_MARK) + 72:
             target, after = b[len(REVOKE_MARK):len(REVOKE_MARK) + 32], struct.unpack_from("<q", b, len(REVOKE_MARK) + 32)[0]
             revokes.append((target, after))
             named.append((target, after, b[len(REVOKE_MARK) + 40:len(REVOKE_MARK) + 72], r["actor"], r["seq"]))

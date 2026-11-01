@@ -64,12 +64,12 @@ fn odd_kv() -> Kv {
     kv
 }
 
-/// A dubin-size catalogue: 165 products of ~3.3 KB (Albanian, so multi-byte UTF-8), 12
+/// A one-venue catalogue, the venue made up: 165 products of ~3.3 KB (Albanian, so multi-byte UTF-8), 12
 /// categories and a location -- ~548 KB of content, the shape of docs/research
 /// 2026-09-28-bebop-dag.md §4 (165 x 3.2 KB). Deterministic.
-pub(super) fn dubin_kv() -> Kv {
+pub(super) fn catalogue_kv() -> Kv {
     let mut kv = Kv { entries: Vec::new() };
-    kv.put("location", "{\"name\":\"Dubin & Sushi\",\"slug\":\"dubin-sushi\",\"tz\":\"Europe/Tirane\"}".repeat(20).as_bytes());
+    kv.put("location", "{\"name\":\"Tidal & Rolls\",\"slug\":\"tidal-rolls\",\"tz\":\"Europe/Tirane\"}".repeat(20).as_bytes());
     for c in 0..12 {
         kv.put(&format!("category:c_{c}"), format!("{{\"name\":\"Kategoria {c}\",\"sortOrder\":{c}}}").as_bytes());
     }
@@ -87,9 +87,9 @@ pub(super) fn dubin_kv() -> Kv {
     kv
 }
 
-/// The image bytes of `dubin_kv`, as `Catalog::to_bytes` writes them (compacted, v2).
-pub(super) fn dubin_image() -> Vec<u8> {
-    dubin_kv().compacted_bytes_fit(4 << 20).expect("the fixture fits")
+/// The image bytes of `catalogue_kv`, as `Catalog::to_bytes` writes them (compacted, v2).
+pub(super) fn catalogue_image() -> Vec<u8> {
+    catalogue_kv().compacted_bytes_fit(4 << 20).expect("the fixture fits")
 }
 
 /// MEASURED, not asserted:
@@ -98,8 +98,8 @@ pub(super) fn dubin_image() -> Vec<u8> {
 /// `pick`, then `Kv::load_checked` (crc of every object, then `decode`).
 #[test]
 #[ignore]
-fn bench_decode_dubin() {
-    let bytes = dubin_image();
+fn bench_decode_catalogue() {
+    let bytes = catalogue_image();
     let st = Store::from_bytes(&bytes);
     let kv = Kv::decode(&st).expect("decodes");
     let content: usize = kv.entries.iter().map(|(k, v)| k.len() + v.len()).sum();
@@ -151,13 +151,13 @@ fn bench_decode_dubin() {
     );
 }
 
-/// (a) the dubin catalogue, (b) an empty KV, (c) v1, v2 and v3 images, (d) every tail
+/// (a) the catalogue, (b) an empty KV, (c) v1, v2 and v3 images, (d) every tail
 /// length 1..7 at every alignment: the new copy reads exactly what the old one read.
 #[test]
 fn cellwise_decode_equals_bytewise_on_every_version_and_tail() {
-    let dubin = Store::from_bytes(&dubin_image());
-    assert!(same(&dubin, "dubin v2"));
-    assert_eq!(Kv::decode(&dubin).unwrap().snapshot_root_u64(), 0xabc9_ed39_eb57_5eef, "the root measured before W-KVDEC");
+    let catalogue = Store::from_bytes(&catalogue_image());
+    assert!(same(&catalogue, "catalogue v2"));
+    assert_eq!(Kv::decode(&catalogue).unwrap().snapshot_root_u64(), 0x4263_5999_067c_7387, "this fixture's root, regenerated when its venue became a made-up one; `fnv_is_bytewise_over_every_byte` derives it by the byte loop");
     let mut empty = Store::create_bytes(64 * 1024).unwrap();
     Kv::init_bytes(&mut empty).unwrap();
     assert!(same(&empty, "empty v2"));
@@ -177,11 +177,11 @@ fn cellwise_decode_equals_bytewise_on_every_version_and_tail() {
 
 /// (e) truncated and corrupt images: every refusal the byte-wise decode made, the cell-wise
 /// one makes, and every image it read, this reads the same. A positive twin is in the
-/// test above; here the dubin image and the odd-tails image are cut and bit-flipped.
+/// test above; here the catalogue image and the odd-tails image are cut and bit-flipped.
 #[test]
 fn cellwise_decode_refuses_exactly_what_bytewise_refused() {
     let (mut refused, mut read) = (0, 0);
-    for bytes in [dubin_image(), image_v(&odd_kv(), 2).to_bytes_trimmed(), image_v(&odd_kv(), 1).to_bytes_trimmed()] {
+    for bytes in [catalogue_image(), image_v(&odd_kv(), 2).to_bytes_trimmed(), image_v(&odd_kv(), 1).to_bytes_trimmed()] {
         for cut in (0..bytes.len()).step_by(bytes.len() / 97 + 1).chain([bytes.len() - 1, bytes.len() - 8]) {
             if same(&Store::from_bytes(&bytes[..cut]), &format!("cut at {cut}")) { read += 1 } else { refused += 1 }
         }
@@ -243,7 +243,7 @@ fn key_of_is_from_utf8_lossy() {
 }
 
 /// `fnv1a` is FNV-1a one byte at a time over EVERY byte: every length 0..=40 (each tail
-/// 0..7 after 0..5 whole cells), from two seeds, and the dubin catalogue's whole root. It
+/// 0..7 after 0..5 whole cells), from two seeds, and the catalogue's whole root. It
 /// guards any future per-cell rewrite (W-KVDEC measured one and kept the byte loop).
 #[test]
 fn fnv_is_bytewise_over_every_byte() {
@@ -253,7 +253,7 @@ fn fnv_is_bytewise_over_every_byte() {
             assert_eq!(fnv1a(seed, &data[..n]), fnv_old(seed, &data[..n]), "len {n}");
         }
     }
-    let kv = dubin_kv();
+    let kv = catalogue_kv();
     let mut h = FNV_OFFSET;
     for (k, v) in &kv.entries {
         for part in [&(k.len() as u64).to_le_bytes()[..], k.as_bytes(), &(v.len() as u64).to_le_bytes()[..], v] {

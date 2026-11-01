@@ -1,6 +1,6 @@
 //! `Kv::decode`, and its blob copy A CELL AT A TIME (W-KVDEC, 2026-10-07).
 //!
-//! MEASURED before this (kv/decode/tests.rs `bench_decode_dubin`, native release, one A78
+//! MEASURED before this (kv/decode/tests.rs `bench_decode_catalogue`, native release, one A78
 //! core, a 548,420-byte catalogue of 178 entries): `decode` 998 us of `Catalog::load`'s
 //! 2,083 us -- a fifth of the Free plan's 10 ms CPU cap, at every one of the Worker's
 //! `Catalog::load` sites. The cost was `blob_byte`: a version branch, a bounds-checked
@@ -167,7 +167,7 @@ fn blob_bytes(st: &Store, blob: usize, ver: i64, off: usize, len: usize) -> Opti
         let cells = st.cells.get(base.checked_add(first)?..=base.checked_add(last)?)?;
         // Each cell's eight little-endian bytes appended, the first one entered at
         // `off % 8`, then the tail cut: one pass. Same speed as resize + copy_within
-        // (bench_decode_dubin, 2026-10-09) and 514 B less wasm.
+        // (bench_decode_catalogue, 2026-10-09) and 514 B less wasm.
         let skip = off & 7;
         out.reserve_exact(len + 8);
         for (i, c) in cells.iter().enumerate() {

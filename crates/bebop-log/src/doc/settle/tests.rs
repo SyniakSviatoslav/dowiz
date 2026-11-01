@@ -3,7 +3,7 @@
 //! archive. The `limit_` tests pin what the file alone cannot decide: `holds` on them is the
 //! limit, written down, and whoever closes one turns its assert around.
 
-use crate::doc::keys::{key_rows, narrower, Key, KeyOp, REVOKED_ALL};
+use crate::doc::keys::{admit_body, key_rows, narrower, parse_admit, parse_revoke, revoke_body, Key, KeyOp, ADMIT_MARK, REVOKED_ALL};
 use crate::doc::seal::read_heads;
 use crate::doc::spec::SpecIn;
 use crate::doc::tests::{key_of, mix, tombs_body, Dev, ToyIds, ToySigner, ToyVerifier};
@@ -546,4 +546,65 @@ fn limit_a_stolen_root_cuts_a_revoke_away() {
     let ids: Vec<[u8; 32]> = archived[..2].iter().map(|r| r.id).collect();
     assert_eq!(ToyIds.tree_root(&ids), Some(seg.root));
     assert!(archived[1].payload.starts_with(crate::doc::keys::REVOKE_MARK), "the audit that recomputes the root reads it");
+}
+
+fn with_a_byte_more(body: &[u8]) -> Vec<u8> {
+    [body, &[0u8]].concat()
+}
+
+/// EXACT, LIKE FORGOTTEN AND MERGE (W-MG-TIDY2). A key op is a signed sentence with one spelling:
+/// every shorter body, and the same body with a byte more, is no key op at all.
+#[test]
+fn a_key_op_body_parses_at_its_exact_length_only() {
+    let (revoke, admit) = (revoke_body(&[7; 32], 3, &[9; 32]), admit_body(&[7; 32], 65, 2, b"a key"));
+    assert_eq!(parse_revoke(&revoke), Some(([7; 32], 3, [9; 32])), "control");
+    assert_eq!(parse_admit(&admit), Some(([7; 32], 65, 2, b"a key".to_vec())), "control");
+    for n in 0..revoke.len() {
+        assert_eq!(parse_revoke(&revoke[..n]), None, "cut at {n}");
+    }
+    for n in 0..admit.len() {
+        assert_eq!(parse_admit(&admit[..n]), None, "cut at {n}");
+    }
+    assert_eq!(parse_revoke(&with_a_byte_more(&revoke)), None, "a trailing byte");
+    assert_eq!(parse_admit(&with_a_byte_more(&admit)), None, "a trailing byte");
+    let at = ADMIT_MARK.len() + 48;
+    for (n, what) in [(4u8, "pk_len one short of the body"), (6, "pk_len one past the body")] {
+        let mut lying = admit.clone();
+        lying[at] = n;
+        assert_eq!(parse_admit(&lying), None, "{what}");
+    }
+}
+
+/// A REVOKE WITH A BYTE MORE ENDS NO KEY: the table moved by nobody's REVOKE is `keys_disagree`
+/// when the table moves, and nothing at all when it stays. Control: the exact body does end B.
+#[test]
+fn a_revoke_with_a_trailing_byte_revokes_nobody() {
+    let run = |long: bool, table: bool| {
+        let (mut st, [mut a, b]) = genesis([0xA1, 0xB2]);
+        let r = revoke(&b, 0);
+        let bytes = if long { with_a_byte_more(&r.body()) } else { r.body() };
+        a.commit(&mut st, &bytes, table.then_some(&r)).unwrap();
+        cnt(&st).keys_disagree
+    };
+    assert_eq!((run(false, true), run(false, false)), (0, 1), "control: the exact body revokes, the table must follow");
+    assert_eq!((run(true, true), run(true, false)), (1, 0), "the long body revokes nobody, the table must not move");
+}
+
+/// AN ADMIT WITH A BYTE MORE ADMITS NOBODY: the KEY row names the record, the record is no ADMIT,
+/// so the key's seal is bad. Control: the exact body admits.
+#[test]
+fn an_admit_with_a_trailing_byte_admits_nobody() {
+    let run = |long: bool| {
+        let (mut st, [mut a]) = genesis([0xA1]);
+        let mut b = Dev::new(ToySigner { id: [0xB2; 32] });
+        let op = KeyOp::Admit(key_of(&b.s));
+        let bytes = if long { with_a_byte_more(&op.body()) } else { op.body() };
+        a.commit(&mut st, &bytes, Some(&op)).unwrap();
+        b.tip = EvLog::tip_at(&st, Doc::open(&st).unwrap().log).unwrap();
+        b.commit(&mut st, b"b-1", None).unwrap();
+        rep(&st)
+    };
+    assert!(run(false).holds(), "control: {:?}", run(false).counters);
+    let r = run(true);
+    assert_eq!((r.admitted, r.counters.seals_ok, r.counters.seals_bad, r.holds()), (1, 1, 1, false), "{r:?}");
 }

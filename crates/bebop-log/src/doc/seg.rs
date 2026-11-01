@@ -172,9 +172,12 @@ pub(super) fn id32(b: &[u8], at: usize) -> Option<[u8; 32]> {
     b.get(at..at + 32).and_then(|w| w.try_into().ok())
 }
 
-/// `None` when the body is not a TRUNCATE.
+/// `None` when the body is not exactly a TRUNCATE: EXACT, like FORGOTTEN and MERGE (W-MG-TIDY2).
 pub fn parse_truncate(body: &[u8]) -> Option<Truncate> {
     let r = body.strip_prefix(TRUNCATE_MARK)?;
+    if r.len() != 128 {
+        return None;
+    }
     Some(Truncate {
         root: id32(r, 0)?,
         prev_root: id32(r, 32)?,

@@ -4,7 +4,7 @@
 
 use crate::doc::anch::{check_anchors, AnchorCounts, NoAdapters, Verdict, KIND_PLATFORM_TSA};
 use crate::doc::keys::KeyOp;
-use crate::doc::seg::{forgotten_body, parse_truncate, SCHEME_CHAINED, SCHEME_LEGACY};
+use crate::doc::seg::{forgotten_body, parse_truncate, SCHEME_CHAINED, SCHEME_LEGACY, TRUNCATE_MARK};
 use crate::doc::tests::{doc_with, key_of, mix, tombs_body, toy_mark, Dev, ToyIds, ToySigner, ToyTsa, ToyVerifier};
 use crate::doc::verify::{verify, Counters, Report, Trust};
 use crate::doc::write::{stage_doc, Refs};
@@ -435,4 +435,29 @@ fn a_redacting_copy_keeps_the_ids_and_is_declared_by_a_forgotten() {
     let mut empty = Store::create_bytes(1 << 20).unwrap();
     assert_eq!(Doc::redact_into(&old, &mut empty, &ToyIds, &|_| None).unwrap(), Vec::new());
     assert!(matches!(Doc::open(&empty), Err(DocError::NotDoc)));
+}
+
+/// EXACT, LIKE FORGOTTEN AND MERGE (W-MG-TIDY2): a TRUNCATE is `TRUNCATE_MARK` and 128 bytes, and a
+/// body with a byte more vouches for no segment. Control: the same body without that byte.
+#[test]
+fn a_truncate_parses_at_its_exact_length_and_a_longer_one_declares_nothing() {
+    let (old, mut owner) = doc_with(6);
+    let mut fresh = Store::create_bytes(1 << 20).unwrap();
+    let seg = Doc::cut_into(&old, &mut fresh, 2, &ToyIds).unwrap();
+    let body = seg.truncate_body();
+    assert_eq!(body.len(), TRUNCATE_MARK.len() + 128);
+    assert!(parse_truncate(&body).is_some(), "control");
+    for n in 0..body.len() {
+        assert_eq!(parse_truncate(&body[..n]), None, "cut at {n}");
+    }
+    let long = [body.as_slice(), &[0u8]].concat();
+    assert_eq!(parse_truncate(&long), None, "a trailing byte");
+
+    let mut held = Store::from_bytes(&fresh.to_bytes());
+    let (seq, tip) = (owner.seq, owner.tip);
+    owner.commit(&mut fresh, &long, None).unwrap();
+    assert_eq!(rep(&fresh).map(|_| ()), Err(DocError::CutUndeclared { root: seg.root }));
+    (owner.seq, owner.tip) = (seq, tip);
+    owner.commit(&mut held, &body, None).unwrap();
+    assert!(rep(&held).unwrap().holds(), "control: the exact body declares it");
 }

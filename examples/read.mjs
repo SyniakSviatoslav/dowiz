@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { crc32 } from "node:zlib";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
-const PINNED = "3f098ec8c92d82a4f7224d2e62ae8583498882b5d2966852da0a68101f247eab";
+const PINNED = "8797afbfe88e21319e07184bac1b81a74d506dcb00ea20bef233fcceaa310e17";
 const MAX_PAGES = 16384, UNPINNED = 76, MODULE_REFUSED = 77, HOST_FAILED = 78, OWN = "--run-files-own-code", MARK = "[file's own code: testimony, not a verify] ";
 const WORDS = { // crates/bebop-wasm-reader/src/status.rs TABLE, word for word (tools/gates/atk3.sh), then the host's three
   0: "OK: read; n = entries or records, root = the FNV-1a 64 fold (a DOC's root is its log's fold)",

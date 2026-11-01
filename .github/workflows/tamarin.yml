@@ -1,11 +1,14 @@
 # The DOC seal protocol under a symbolic attacker (docs/design/tamarin). Separate from CI on purpose:
 # a red here blocks no merge and no release. The box cannot run the prover; this runner can.
+# The prover's exit code does not carry a falsified lemma, so the last step holds its verdicts against
+# docs/design/tamarin/expected-verdicts.txt: a moved verdict is red. No run has produced a verdict
+# yet, so that list does not exist, and the step prints them and says so instead of inventing any.
 name: tamarin
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['docs/design/tamarin/**']
+    paths: ['docs/design/tamarin/**', 'tools/gates/tamarin-verdicts.py', '.github/workflows/tamarin.yml']
 permissions:
   contents: read
 jobs:
@@ -15,17 +18,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install the prover
+        shell: bash
         run: |
-          curl -sSL https://github.com/tamarin-prover/tamarin-prover/releases/download/1.12.0/tamarin-prover-1.12.0-linux64-ubuntu.tar.gz | tar xz
+          set -o pipefail
+          curl -fsSL https://github.com/tamarin-prover/tamarin-prover/releases/download/1.12.0/tamarin-prover-1.12.0-linux64-ubuntu.tar.gz | tar xz
           sudo apt-get install -y maude graphviz
       - name: Prove
+        timeout-minutes: 110
         shell: bash
         run: |
           set -o pipefail
           T=$(find . -type f -name tamarin-prover | head -1)
           "$T" --prove docs/design/tamarin/bebop_seal.spthy +RTS -N2 -RTS | tee tamarin.out
+      - name: Compare the verdicts
+        if: always()
+        shell: bash
+        run: python3 -I tools/gates/tamarin-verdicts.py tamarin.out --write tamarin.verdicts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: tamarin-out
-          path: tamarin.out
+          path: |
+            tamarin.out
+            tamarin.verdicts

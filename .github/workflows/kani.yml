@@ -1,0 +1,50 @@
+# Kani proof harnesses over bebop-log and bebop-image's small pure functions (crates/bebop-log-kani).
+# Separate from CI on purpose: a red here blocks no merge and no release. Kani is a bounded model
+# checker, not a fuzzer, and it is not installed on the box: THIS WORKFLOW IS WHAT RUNS THE HARNESSES.
+# Until its first green run they have never run, and a property in them is a statement to check.
+#
+# A green `cargo kani` is not enough: an unsatisfied `kani::cover!` leaves the exit code at 0 and means
+# the harness checked nothing (crates/bebop-log-kani/src/lib.rs), and a harness that was not run
+# proves nothing. So the last step counts all of them, from the source and from the log.
+name: kani
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * 1'
+permissions:
+  contents: read
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+      # v1.1 by commit, Kani by version: nothing moves under a run. `true`: the action installs, the
+      # next step runs, because the action's own step keeps no log.
+      - uses: model-checking/kani-github-action@f838096619a707b0f6b2118cf435eaccfa33e51f
+        with:
+          kani-version: '0.68.0'
+          command: 'true'
+      - name: Prove
+        timeout-minutes: 165
+        shell: bash
+        run: |
+          set -o pipefail
+          cd crates/bebop-log-kani
+          cargo kani 2>&1 | tee "$GITHUB_WORKSPACE/kani.out"
+      - name: Count the harnesses and the covers
+        if: always()
+        shell: bash
+        run: |
+          set -o pipefail
+          n=$(grep -rh '^#\[kani::proof\]' crates/bebop-log-kani/src | wc -l)
+          [ "$n" -gt 0 ] || { echo "::error::no harness in the source: this measured nothing"; exit 1; }
+          grep -q "Complete - $n successfully verified harnesses, 0 failures, $n total" kani.out || { echo "::error::not all $n harnesses verified (or the run did not finish): read kani.out"; exit 1; }
+          if grep -nE 'Status: (UNSATISFIABLE|UNDETERMINED)' kani.out; then echo "::error::a cover is unsatisfied or undetermined: that harness checked nothing"; exit 1; fi
+          if grep -E 'of [0-9]+ cover properties satisfied' kani.out | awk '$2 != $4 { bad = 1 } END { exit bad }'; then :; else echo "::error::a harness left a cover unsatisfied"; exit 1; fi
+          echo "kani: $n of $n harnesses verified, every cover satisfied"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: kani-out
+          path: kani.out

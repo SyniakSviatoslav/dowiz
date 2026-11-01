@@ -564,6 +564,8 @@ In a hub's file only records of kinds `K` (key op) and `D` (declaration) have a 
 alone: it starts at its kind byte 1..8 and matches no mark, and a body with no kind byte (bebop-log's own fixtures) starts at its mark.
 All refs in a commit point back: record → KEY → KEYS → SEAL → HEADS → log root → DOC.
 
+ADMIT, REVOKE and TRUNCATE are EXACT like FORGOTTEN: a body with the mark and any other length declares nothing, and its record is an ordinary record. ADMIT's length is its head plus exactly pk_len.
+
 **Cut.** The container has no compaction of a log, so a cut is a rebuild into a fresh image: the oldest records,
 all but the `keep` newest, leave under a SEG; kept records are carried verbatim at new offsets; seals of kept
 records verbatim, with `ref PREV_SEAL` relinked; KEY with `ref ADMIT_REC` remapped; old SEGs chained. The old

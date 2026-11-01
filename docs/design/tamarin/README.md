@@ -12,9 +12,13 @@ script counting brackets, comments, duplicate names and fact arities, which is n
 parse error is a likely first result. No lemma here says anything about the Rust.
 
 `.github/workflows/tamarin.yml` runs it on `ubuntu-24.04`, on `workflow_dispatch` and on a push to
-main touching this directory. It is separate from CI, so a red blocks no merge. A green job is not a
-result: Tamarin reports a falsified lemma in its output and not in its exit code, and the step
-pipes through `tee`. Read the `tamarin-out` artifact and compare each lemma with the table.
+main touching this directory. It is separate from CI, so a red blocks no merge. Tamarin reports a
+falsified lemma in its output and not in its exit code, so `tools/gates/tamarin-verdicts.py` reads the
+summary after the prover: a lemma with no verdict is red, and a verdict that differs from
+`expected-verdicts.txt` is red. **That list does not exist yet, because no verdict has ever been
+produced**, so the step prints the verdicts and says they are compared with nothing. To pin them,
+read the first real run against the table below, then commit the `tamarin.verdicts` file of the
+`tamarin-out` artifact as `expected-verdicts.txt`. Never write it from the table: the table is a prediction.
 Why not on the box: the arm64 bottle was unpacked, and running it through the dynamic loader was
 refused by the session's permission classifier on 2026-11-01. Nothing here has been re-tried.
 
