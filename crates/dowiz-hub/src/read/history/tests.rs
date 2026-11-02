@@ -157,7 +157,9 @@ fn hex(b: &[u8]) -> String {
 // Re-derived at W-MG-HOLES (2026-10-31): every record here is sha256 and its id now commits to
 // flags, actor and seq (`doc::id_message`); the M0 value was 7fc5e457...101f, on no live data.
 // HISTORY_SHA did not move, printed by the same run.
-const IMAGE_SHA: &str = "0866b14081f7ac950a2ad4c5cffc6a7ae4949e70ffb4e26b2cb1118aa99ccfaa";
+// IMAGE_SHA re-derived at the rename (2026-11-02): ID_TAG bebop-record/1 -> ein-record/1 moves every sha256 id;
+// the fold/history golden beside it did not move, printed by the same run.
+const IMAGE_SHA: &str = "1358ad9148b51293498d8e67b332cc782bedb553efacc5f50bb428f4369402ca";
 const HISTORY_SHA: &str = "1e5aa0b7f479efdff1043b6b66be9f1bb4fc85e9fbfdbdcbbcda1352b09d1e95";
 
 #[test]

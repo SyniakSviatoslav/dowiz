@@ -46,7 +46,9 @@ fn history() -> StockLog {
 // What this golden still pins is that the storages feature leaves the write path alone.
 // Re-derived at W-MG-HOLES (2026-10-31): sha256 records, the id now over flags, actor and seq
 // (`doc::id_message`); the M0 value was 22228f1f...b2a7, on no live data.
-const IMAGE_SHA: &str = "d3b93ba9ff45ff368c6567aefa9573867025edd875d55375c81b0f037c442e18";
+// IMAGE_SHA re-derived at the rename (2026-11-02): ID_TAG bebop-record/1 -> ein-record/1 moves every sha256 id;
+// the fold/history golden beside it did not move, printed by the same run.
+const IMAGE_SHA: &str = "f42aca40c1f07b0807c6ecc43348656dcfe5eb1be8f922e44b5ae8ef0544ba9c";
 
 #[test]
 fn an_unbound_venue_writes_the_pre_store2_bytes() {

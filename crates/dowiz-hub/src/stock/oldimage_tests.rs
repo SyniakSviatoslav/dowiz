@@ -68,7 +68,9 @@ pub(super) fn fold_text(j: &Journal) -> String {
 // Re-derived at W-MG-HOLES (2026-10-31): these records are sha256 and the id now commits to flags,
 // actor and seq (`doc::id_message`); the M0 value was dfacc9cc...09a9, on no live data. FOLD_SHA did
 // not move. The legacy image is `m0_a_pre_m0_stock_image_reloads_byte_equal_...`, unchanged.
-const IMAGE_SHA: &str = "cf9d910cca22b3dbf688feb4c40e8a4e1e71f407fde6b22ba663479acbb1974b";
+// IMAGE_SHA re-derived at the rename (2026-11-02): ID_TAG bebop-record/1 -> ein-record/1 moves every sha256 id;
+// the fold/history golden beside it did not move, printed by the same run.
+const IMAGE_SHA: &str = "615ba738d02c70695db14ec451d74ed0dd40ebeeeb798ded6bb6ca067c0f312f";
 const FOLD_SHA: &str = "d83a1bd5b0e1f7940cfa78141b3bba92f2777e229d0f14ea7e38636dc45a2a9f";
 
 #[test]
