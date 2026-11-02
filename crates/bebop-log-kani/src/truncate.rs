@@ -1,7 +1,7 @@
-//! TRUNCATE: `"bebop-truncate/1" ‖ root 32 ‖ prev_root 32 ‖ first LE8 ‖ last LE8 ‖ redacted LE8 ‖
-//! declared LE8 ‖ seg_hash 32`, 144 bytes. The body that lets records leave the file.
+//! TRUNCATE: `"ein-truncate/1" ‖ root 32 ‖ prev_root 32 ‖ first LE8 ‖ last LE8 ‖ redacted LE8 ‖
+//! declared LE8 ‖ seg_hash 32`, 142 bytes. The body that lets records leave the file.
 //!
-//! BOUNDS: EVERY byte string of length <= 152: the 144 of the body and 8 past it, the mark not
+//! BOUNDS: EVERY byte string of length <= 150: the 142 of the body and 8 past it, the mark not
 //! forced. The body has a fixed size and no loop over its contents, so the extra 8 are there only to
 //! show what the parser does past the end. Round trip: every value of every field.
 //!
@@ -11,7 +11,7 @@
 use crate::common::{id_at, u64_at, Bytes};
 use bebop_log::doc::seg::{parse_truncate, Segment, TRUNCATE_MARK};
 
-/// Mark 16 + three ids and four counters.
+/// Mark 14 + three ids and four counters.
 const LEN: usize = TRUNCATE_MARK.len() + 128;
 const N: usize = LEN + 8;
 
@@ -32,10 +32,10 @@ fn any_segment() -> Segment {
 
 /// PROPERTIES over any bytes:
 ///   (a) no panic, no overflow;
-///   (b) it parses exactly when the mark is there and the body is 144 bytes;
+///   (b) it parses exactly when the mark is there and the body is 142 bytes;
 ///   (c) each field is the bytes at its documented offset.
 #[kani::proof]
-#[kani::unwind(160)] // past 152
+#[kani::unwind(160)] // past 150
 fn truncate_parser_on_any_bytes() {
     let input = Bytes::<N>::any();
     let b = input.as_slice();
@@ -54,7 +54,7 @@ fn truncate_parser_on_any_bytes() {
     }
 }
 
-/// PROPERTY: round trip with the writer. `truncate_body` is exactly 144 bytes; it parses to the
+/// PROPERTY: round trip with the writer. `truncate_body` is exactly 142 bytes; it parses to the
 /// seven fields it was written from; the segment is named by what it wrote. `first`, `last`,
 /// `redacted` and `declared` are unconstrained, so `first > last` is in: the body does not judge.
 #[kani::proof]
@@ -71,13 +71,13 @@ fn truncate_round_trip() {
     assert!(s.is_named_by(&t));
 }
 
-/// PROPERTY: a body with bytes past the 144th is no TRUNCATE, whatever its first 144 say.
+/// PROPERTY: a body with bytes past the 142nd is no TRUNCATE, whatever its first 142 say.
 #[kani::proof]
 #[kani::unwind(160)]
 fn truncate_refuses_trailing_bytes() {
     let input = Bytes::<N>::any();
     let b = input.as_slice();
     kani::assume(b.len() > LEN);
-    kani::cover!(parse_truncate(&b[..LEN]).is_some(), "the 144 bytes alone are a TRUNCATE");
+    kani::cover!(parse_truncate(&b[..LEN]).is_some(), "the 142 bytes alone are a TRUNCATE");
     assert_eq!(parse_truncate(b), None);
 }

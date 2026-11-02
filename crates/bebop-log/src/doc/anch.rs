@@ -26,7 +26,7 @@
 //! adapter checks.
 //!
 //! The kinds, in the order the card asked for them:
-//!   1 PLATFORM TSA MARK   ML-DSA-65 over `"bebop-anchor/1" ‖ kind ‖ over ‖ time_ms` by the
+//!   1 PLATFORM TSA MARK   ML-DSA-65 over `"ein-anchor/1" ‖ kind ‖ over ‖ time_ms` by the
 //!                         platform's key; proves "no later than time_ms, by dowiz's word";
 //!                         checked against the platform keys the AUDITOR brings.
 //!   2 OPENTIMESTAMPS      the `.ots` file for digest = `over`; proves "no later than Bitcoin

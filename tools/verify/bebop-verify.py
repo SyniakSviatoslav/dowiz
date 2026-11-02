@@ -42,15 +42,15 @@ DIGEST_SEAL, DIGEST_HEADS, DIGEST_KEY, DIGEST_KEYS = 1951851249, 4237402659, 254
 # SEG rows carry `scheme` since W-MG-M3b (12 + 10m cells, digest 2192499951; 3288852188 was the 9-cell row).
 DIGEST_SEG, DIGEST_ANCH, DIGEST_SPEC, DIGEST_BLOB = 2192499951, 180762881, 849619745, 799774958
 SEG_HEAD, SEG_ROW, SCHEME_CHAINED = 12, 10, 1
-TRUNCATE_MARK, FORGOTTEN_MARK = b"bebop-truncate/1", b"bebop-forgotten/1"
-MERGE_MARK = b"bebop-merge/1"
+TRUNCATE_MARK, FORGOTTEN_MARK = b"ein-truncate/1", b"ein-forgotten/1"
+MERGE_MARK = b"ein-merge/1"
 FNV_OFFSET, FNV_PRIME = 0xCBF29CE484222325, 0x100000001B3
 MAX_VALUE_BYTES = 1 << 30
 MAX_SIG_BYTES = MAX_PK_BYTES = 65536
 MAX_BLOB_BYTES = 16 << 20
 FLAG_SHA256, NONCE_LEN = 2, 16
-ID_TAG, SEG_TAG = b"bebop-record/1", b"bebop-seg/1"  # id v2, the SEG hash (W-MG-HOLES; FORMAT §9.2, §9.4)
-REVOKE_MARK, REDACTED_BIT = b"bebop-revoke/2", 0x80
+ID_TAG, SEG_TAG = b"ein-record/1", b"ein-seg/1"  # id v2, the SEG hash (W-MG-HOLES; FORMAT §9.2, §9.4)
+REVOKE_MARK, REDACTED_BIT = b"ein-revoke/2", 0x80
 # Word for word bebop-wasm-reader `status.rs` TABLE: tools/gates/maingoal.sh holds the surfaces to one text.
 WORDS = {0: "OK: read; n = entries or records, root = the FNV-1a 64 fold (a DOC's root is its log's fold)",
          1: "NO_SUPERBLOCK: no valid superblock, or the live one was refused structurally (arena_used or PartTab outside, PartTab misplaced or its crc bad, root outside)",

@@ -484,7 +484,7 @@ DOC   10 комірок, дайджест st_digest("DOC{i64,ref EVLOG,ref KV,re
       9 ref SEG (найновіший сегмент журналу, 0 = журнал ніколи не різали)
 SEAL  {VERSION=1, actor_id 4, seq, tip 4, claimed_ms, ref PREV_SEAL, ref TIME (0), alg, sig_len, sig 8 Б/комірку}
       15 + ceil(sig_len/8) комірок (ML-DSA-65: 429); дайджест 1951851249. Одна на коміт пристрою.
-      Підписане повідомлення: "bebop-seal/1" ‖ actor_id ‖ seq LE8 ‖ tip ‖ claimed_ms LE8 ‖ prev_tip (tip попередньої
+      Підписане повідомлення: "ein-seal/1" ‖ actor_id ‖ seq LE8 ‖ tip ‖ claimed_ms LE8 ‖ prev_tip (tip попередньої
       печатки цього пристрою, 0^32 для першої). Зміна повідомлення = SEAL v2.
       Підпис при alg = 65: зовнішній pure ML-DSA-65 (FIPS 204, `ML-DSA.Sign` / `ML-DSA.Verify`, алгоритми 2 і 3) над
       цим повідомленням із порожнім контекстом: `M' = 0x00 ‖ 0x00 ‖ повідомлення`, `ctx = ""`. Це звичайний підпис
@@ -528,11 +528,11 @@ SEG   {VERSION=1, first, last, root 4, ref PREV_SEG, ref BLOB (0), redacted, dec
 Злиття не губить ні запису, ні підпису: на кожен пристрій воно лишає довший ланцюг печаток, печатка другої сторони, що продовжує ланцюг цієї, приймається без нового запису, а два різні ланцюги над тими самими записами відмовляються (`SealFork`), бо печатка підписує tip перед собою, і один ланцюг мусив би зникнути. Актор із ключем лише на одній стороні: його записи з другої судяться в об'єднанні, і якщо вони там не стоять, злиття відмовляється (`UnionNotWhole`). Проти хвоста лічаться лише REVOKE, дієві на своїй стороні.
 
 Тіла ключових операцій у payload запису (за фреймінгом власника — nonce M0, байт виду — їх знаходить
-`Ids::body`): `ADMIT = "bebop-admit/1" ‖ actor_id ‖ alg LE8 ‖ valid_from LE8 ‖ pk_len LE8 ‖ pk`,
-`REVOKE = "bebop-revoke/2" ‖ actor_id ‖ after_seq LE8 ‖ tip 32` (підписаний), де `tip` — id запису цілі на `after_seq`, 0³² коли `after_seq` ≤ 0 або коли ціль відкликає себе на власному seq цього запису,
-`TRUNCATE = "bebop-truncate/1" ‖ root ‖ prev_root ‖ first LE8 ‖ last LE8 ‖ redacted LE8 ‖ declared LE8 ‖ seg_hash 32` (W-MG-M3, W-MG-HOLES),
-`MERGE = "bebop-merge/1" ‖ n_ours LE8 ‖ (actor_id 32 ‖ seq LE8 ‖ tip 32) × n_ours ‖ n_theirs LE8 ‖ (той самий рядок) × n_theirs ‖ state 1 Б (1 fast-forward, не пишеться; 2 commutes; 3 obstructed) ‖ seg_root 32 ‖ dup_declared LE8 = 0 ‖ held_n LE8 = 0 ‖ n_conf LE8 ‖ (len LE8 ‖ bytes) × n_conf` (W-MG-M2, формат не змінюється: це тіло запису в ланцюгу пристрою, що зливає, під його печаткою), ТОЧНЕ, як FORGOTTEN: state 3 тоді й лише тоді, коли `n_conf` > 0, після останнього поля нічого. Тіло з позначкою, що не є точно цим, рахується в `merges_bad`. Дієвий MERGE рахується в `merges`, а в `merges_bad`, коли рядок не називає ні запису журналу на цьому `(actor, seq)`, ні seq не вище за найновіший рядок фронтиру того актора. Байти конфліктів є твердженням підписанта словами реалізації; рядки фіксують обидві сторони, тож реалізація може вивести їх наново.
-`FORGOTTEN = "bebop-forgotten/1" ‖ n_redacted LE8 ‖ subject 32 ‖ (id 32 ‖ digest 32) × n_redacted` (W-MG-M4, W-MG-HOLES): `n_redacted` мусить дорівнювати кількості рядків тіла, інакше це не FORGOTTEN. Тіло, коротше за свої поля, — не це тіло; ADMIT вимагає `0 ≤ pk_len ≤ 65536`. Байти за останнім полем ADMIT, REVOKE чи TRUNCATE МУСЯТЬ ігноруватися: точний лише FORGOTTEN.
+`Ids::body`): `ADMIT = "ein-admit/1" ‖ actor_id ‖ alg LE8 ‖ valid_from LE8 ‖ pk_len LE8 ‖ pk`,
+`REVOKE = "ein-revoke/2" ‖ actor_id ‖ after_seq LE8 ‖ tip 32` (підписаний), де `tip` — id запису цілі на `after_seq`, 0³² коли `after_seq` ≤ 0 або коли ціль відкликає себе на власному seq цього запису,
+`TRUNCATE = "ein-truncate/1" ‖ root ‖ prev_root ‖ first LE8 ‖ last LE8 ‖ redacted LE8 ‖ declared LE8 ‖ seg_hash 32` (W-MG-M3, W-MG-HOLES),
+`MERGE = "ein-merge/1" ‖ n_ours LE8 ‖ (actor_id 32 ‖ seq LE8 ‖ tip 32) × n_ours ‖ n_theirs LE8 ‖ (той самий рядок) × n_theirs ‖ state 1 Б (1 fast-forward, не пишеться; 2 commutes; 3 obstructed) ‖ seg_root 32 ‖ dup_declared LE8 = 0 ‖ held_n LE8 = 0 ‖ n_conf LE8 ‖ (len LE8 ‖ bytes) × n_conf` (W-MG-M2, формат не змінюється: це тіло запису в ланцюгу пристрою, що зливає, під його печаткою), ТОЧНЕ, як FORGOTTEN: state 3 тоді й лише тоді, коли `n_conf` > 0, після останнього поля нічого. Тіло з позначкою, що не є точно цим, рахується в `merges_bad`. Дієвий MERGE рахується в `merges`, а в `merges_bad`, коли рядок не називає ні запису журналу на цьому `(actor, seq)`, ні seq не вище за найновіший рядок фронтиру того актора. Байти конфліктів є твердженням підписанта словами реалізації; рядки фіксують обидві сторони, тож реалізація може вивести їх наново.
+`FORGOTTEN = "ein-forgotten/1" ‖ n_redacted LE8 ‖ subject 32 ‖ (id 32 ‖ digest 32) × n_redacted` (W-MG-M4, W-MG-HOLES): `n_redacted` мусить дорівнювати кількості рядків тіла, інакше це не FORGOTTEN. Тіло, коротше за свої поля, — не це тіло; ADMIT вимагає `0 ≤ pk_len ≤ 65536`. Байти за останнім полем ADMIT, REVOKE чи TRUNCATE МУСЯТЬ ігноруватися: точний лише FORGOTTEN.
 У файлах hub тіло мають лише записи видів `K` (key op) і `D` (декларація): `HubIds::body` для будь-якого іншого відповідає порожнім, бо інакше 98-байтний order id читався як декларація. Читач без підпису (`ReaderIds::body`, Python) не обрізає тіло іншого виду: воно починається з байта виду 1..8, тож не збігається з жодною міткою, а тіло без байта виду (власні фікстури bebop-log) починається з мітки. Усі ref — назад: коміт алокує запис →
 KEY → KEYS → SEAL → HEADS → корінь журналу → DOC. `actor_pubkey` запису (4 комірки) = `actor_id` = sha256(pk) за
 конвенцією dowiz-hub; сам pk лежить у KEY один раз.
@@ -585,14 +585,14 @@ Crc об'єкта KEY не читається: читання й `verify` НЕ �
 `ref PREV_SEG` або 0³². Для верифікатора, що судить підписи, `seals` — те саме число, що ok + bad, бо кожну прочитану печатку він зве тим чи іншим; `checked` = 1, лише коли підписи судили. `keys` — рядки KEYS, що
 дають KEY: рядок із чужим об'єктом не лічиться, а KEY двох рядків лічиться двічі; `cut` = Σ(last − first + 1). `cut`, `cut_redacted` і `declared` — суми `u64`, що насичуються на i64::MAX на кожній ширині читача: заява файла не переповнюється й не залежить від платформи.
 
-**Id запису (W-MG-HOLES, 2026-10-31).** `id = sha256("bebop-record/1" ‖ flags LE8 ‖ actor 32 ‖ seq LE8 ‖ prev 32 ‖ payload)` — `doc::id_message`,
+**Id запису (W-MG-HOLES, 2026-10-31).** `id = sha256("ein-record/1" ‖ flags LE8 ‖ actor 32 ‖ seq LE8 ‖ prev 32 ‖ payload)` — `doc::id_message`,
 `flags` без `FLAG_ACTOR`. M0 хешував `prev ‖ payload`, і жоден живий запис такого не несе. Запис, що не відповідає жодній схемі цього тексту, — `broken`, хоч би хто його написав (§13, `doc`). Редакція лишає id: `flags`, actor, seq і `prev` не
 рухаються, біт редакції — у байті виду всередині payload, тож id надгробка більше нічого не перевіряє, і комірки надгробка зв'язує `digest` у
 FORGOTTEN. Запис із `FLAG_SHA256` ніколи не перевіряється legacy-правилом. Журнал запасів не несе actor і
 `flags` на дроті: actor = 0, seq = позиція від 0, `flags` виводяться з тексту (`chain::stock_flags`): запис без nonce має flags 0 і legacy-id; запис із nonce має `FLAG_SHA256`, а ще `FLAG_NONCE_DERIVED`,
 коли його 16-байтний nonce дорівнює виведеному, тексту base64url перших 12 байтів `sha256("dowiz/nonce/derived" ‖ prev ‖ body)`, де `body` — payload за nonce. Запис, який hub прийняв через rebase, лишає свій текст під новим `prev`, тож виведення більше не видно й прапорець знято; нотатка hub `glued` про це прийняття тоді несе `derived`, їх кількість, лише коли вона більша за 0. Виведені nonce журналу — це його записи з прапорцем плюс `derived` його нотаток. Legacy-записи (FNV) не несуть жодної з цих гарантій: їх actor, seq і `flags` вільні (§14).
 
-**Хеш сегментів (W-MG-HOLES).** `chain_hash` = згортка від найстарішого: `h = hash("bebop-seg/1" ‖ h_нижче ‖ root ‖ blob≠0 (1 Б) ‖ first ‖ last ‖ redacted ‖ declared ‖ m ‖ (actor 32, seq LE8, tip 32, scheme LE8) × m)`,
+**Хеш сегментів (W-MG-HOLES).** `chain_hash` = згортка від найстарішого: `h = hash("ein-seg/1" ‖ h_нижче ‖ root ‖ blob≠0 (1 Б) ‖ first ‖ last ‖ redacted ‖ declared ‖ m ‖ (actor 32, seq LE8, tip 32, scheme LE8) × m)`,
 числа LE8, `h` під найстарішим = 0³², hash — sha256. Байт `blob≠0` дорівнює 1, коли `ref BLOB` за §5 читається не як null, тож висячий дає 0. TRUNCATE підписує хеш найновішого, тому жодне число, яке `verify` сумує з будь-якого сегмента, і жоден рядок фронтиру
 не лишаються непідписаними. Цього хеша вирізані записи не покривають: `root` називає їх id, а надгробок зберігає id, тож байти надгробка під зрізом
 пов'язані лише FORGOTTEN, що ще у файлі; показує їх архів.
@@ -678,11 +678,11 @@ ANCH  {VERSION=1, kind, over 4, time_ms, ref PREV_ANCH, proof_len, proof 8 Б/к
       over = id запису цього журналу (tip на момент якоря); якір, чий over не називає запис, — bad до адаптера.
       time_ms = твердження письменника; доказ перевіряє адаптер. MAX_PROOF_BYTES = 1 MiB.
       kind 1 платформна TSA-мітка: proof = pk(1952) ‖ sig(3309), ML-DSA-65 над
-             "bebop-anchor/1" ‖ kind LE8 ‖ over ‖ time_ms LE8; перевіряється проти ключів платформи,
+             "ein-anchor/1" ‖ kind LE8 ‖ over ‖ time_ms LE8; перевіряється проти ключів платформи,
              які приносить АУДИТОР, ніколи з файлу.
       kind 2 OpenTimestamps: proof = файл .ots, чий digest = over; перевірка = обчислення ops до
              Bitcoin-атестації і порівняння з Merkle-коренем блоку з джерела заголовків аудитора.
-      kind 3 Roughtime: proof = nonce(64) ‖ відповідь; nonce = over ‖ sha256("bebop-roughtime/1" ‖ over).
+      kind 3 Roughtime: proof = nonce(64) ‖ відповідь; nonce = over ‖ sha256("ein-roughtime/1" ‖ over).
 ```
 
 Ядро (MIT) НЕ тлумачить proof: `doc::AnchorCheck` — шов, `doc::check_anchors` — crc ланцюга, `over` проти

@@ -122,7 +122,7 @@ class Rec:
 
 
 def chained_id(flags, actor, seq, prev, payload):
-    return hashlib.sha256(b"bebop-record/1" + struct.pack("<q", flags) + actor + struct.pack("<Q", seq) + prev + payload).digest()
+    return hashlib.sha256(b"ein-record/1" + struct.pack("<q", flags) + actor + struct.pack("<Q", seq) + prev + payload).digest()
 
 
 def nonce(body=b""):
@@ -188,14 +188,14 @@ def seg_obj(im, first, last, root=b"R" * 32, rows=(), redacted=0, declared=0):
 
 
 def seg_hash(first, last, root, rows, redacted, declared, below=ZERO):
-    m = b"bebop-seg/1" + below + root + b"\0" + struct.pack("<QQQQQ", first, last, redacted, declared, len(rows))
+    m = b"ein-seg/1" + below + root + b"\0" + struct.pack("<QQQQQ", first, last, redacted, declared, len(rows))
     for a, s, t, sch in rows:
         m += a + struct.pack("<Q", s) + t + struct.pack("<q", sch)
     return hashlib.sha256(m).digest()
 
 
 def truncate_body(first, last, root, rows, redacted=0, declared=0, prev_root=ZERO):
-    return (b"bebop-truncate/1" + root + prev_root + struct.pack("<QQQQ", first, last, redacted, declared)
+    return (b"ein-truncate/1" + root + prev_root + struct.pack("<QQQQ", first, last, redacted, declared)
             + seg_hash(first, last, root, rows, redacted, declared))
 
 

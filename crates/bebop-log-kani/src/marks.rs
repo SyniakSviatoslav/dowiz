@@ -12,7 +12,7 @@ use bebop_log::doc::seg::{FORGOTTEN_MARK, TRUNCATE_MARK};
 /// PROPERTY: no mark is a prefix of another, so one body starts with at most one mark, and the
 /// parsers, each of which opens with `strip_prefix` of its own mark, can accept it at most once.
 #[kani::proof]
-#[kani::unwind(20)] // past the longest mark, 17 bytes
+#[kani::unwind(20)] // past the longest mark, 15 bytes
 fn marks_are_prefix_free() {
     let marks = [TRUNCATE_MARK, FORGOTTEN_MARK, REVOKE_MARK, ADMIT_MARK, MERGE_MARK];
     for (i, a) in marks.iter().enumerate() {

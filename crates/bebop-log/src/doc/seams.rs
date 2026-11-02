@@ -7,7 +7,7 @@ use crate::prelude::*;
 use crate::Record;
 
 /// The domain tag in front of a chained id's message (W-MG-HOLES, 2026-10-31).
-pub const ID_TAG: &[u8] = b"bebop-record/1";
+pub const ID_TAG: &[u8] = b"ein-record/1";
 
 /// What a chained id is the hash of: `ID_TAG ‖ flags LE8 ‖ actor 32 ‖ seq LE8 ‖ prev 32 ‖ payload`.
 /// Every cell of the record is in it, because a cell outside the id is a cell a forger with no

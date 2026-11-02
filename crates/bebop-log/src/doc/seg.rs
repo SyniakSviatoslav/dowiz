@@ -40,8 +40,8 @@
 //! The bodies, found through `Ids::body` like `keys.rs`'s:
 //!
 //! ```text
-//! TRUNCATE   "bebop-truncate/1" ‖ root 32 ‖ prev_root 32 ‖ first LE8 ‖ last LE8 ‖ redacted LE8 ‖ declared LE8 ‖ seg_hash 32
-//! FORGOTTEN  "bebop-forgotten/1" ‖ n_redacted LE8 ‖ subject 32 ‖ (id 32 ‖ digest 32) × n_redacted
+//! TRUNCATE   "ein-truncate/1" ‖ root 32 ‖ prev_root 32 ‖ first LE8 ‖ last LE8 ‖ redacted LE8 ‖ declared LE8 ‖ seg_hash 32
+//! FORGOTTEN  "ein-forgotten/1" ‖ n_redacted LE8 ‖ subject 32 ‖ (id 32 ‖ digest 32) × n_redacted
 //! ```
 //!
 //! A TRUNCATE is EFFECTIVE when its record chains, its actor is a ROOT and an ok seal of that actor
@@ -66,8 +66,8 @@ pub const LAYOUT_SEG: &str = "SEG{i64,i64,i64,i64,i64,i64,i64,ref SEG,ref BLOB,i
 /// keeps it as the control). Mirrored by `tools/verify` (python) -- tell its owner on a move.
 pub const DIGEST_SEG: i64 = 2192499951;
 /// The tag in front of `seg_message`.
-pub const SEG_TAG: &[u8] = b"bebop-seg/1";
-pub const TRUNCATE_MARK: &[u8] = b"bebop-truncate/1";
+pub const SEG_TAG: &[u8] = b"ein-seg/1";
+pub const TRUNCATE_MARK: &[u8] = b"ein-truncate/1";
 const SEG_HEAD: usize = 12;
 const SEG_ROW: usize = 10;
 /// The `scheme` cell of a frontier row: no chained record of the device yet ...

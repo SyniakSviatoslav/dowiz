@@ -26,12 +26,12 @@ reads sha256 -- `tools/deploy/rollback.sh` refuses the others (exit 53), and `de
 build without the reader (exit 14). No new format bytes from this
 lane: the flag bit and the nonce already exist in main; it only decides WHEN they are first written.
 
-**REVOKE v2 (W-MG-MERGE2, 2026-11-01).** A REVOKE body is `bebop-revoke/2` with a 32-byte `tip`. This changes
+**REVOKE v2 (W-MG-MERGE2, 2026-11-01).** A REVOKE body is `ein-revoke/2` with a 32-byte `tip`. This changes
 no step below: the Worker has no path that writes a DOC or a key op (`grep -rn 'KeyOp\|SealedHub' workers/api/src`
 prints nothing), so no live image holds a `bebop-revoke/1` record, and none needs converting. In a file that
 did, such a body now reads as no REVOKE at all: it revokes nothing and the table disagrees (`keys_disagree`).
 
-**Id v2 (W-MG-HOLES, 2026-10-31).** "sha256 ids" below means `sha256("bebop-record/1" ‖ flags ‖ actor ‖
+**Id v2 (W-MG-HOLES, 2026-10-31).** "sha256 ids" below means `sha256("ein-record/1" ‖ flags ‖ actor ‖
 seq ‖ prev ‖ payload)` (`doc::id_message`, FORMAT §9.4), not M0's `sha256(prev ‖ payload)`, which no
 live record carries and no build reads any more: a flagged record with an M0 id is `broken` by rule
 (`verify_id`; not measured on a real uncut file), and a cut file written before HOLES has no `seg_hash`

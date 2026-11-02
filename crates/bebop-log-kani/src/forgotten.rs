@@ -1,8 +1,8 @@
-//! FORGOTTEN: `"bebop-forgotten/1" ‖ n_redacted LE8 ‖ subject 32 ‖ (id 32 ‖ digest 32) × n_redacted`.
+//! FORGOTTEN: `"ein-forgotten/1" ‖ n_redacted LE8 ‖ subject 32 ‖ (id 32 ‖ digest 32) × n_redacted`.
 //! `verify` sums `n_redacted` as `declared`, and law 9 balances it against the tombstones, so the
 //! count a reader believes must be the list it holds.
 //!
-//! BOUNDS: parser harnesses: EVERY byte string of length <= 185, i.e. the 57-byte head plus a list
+//! BOUNDS: parser harnesses: EVERY byte string of length <= 183, i.e. the 55-byte head plus a list
 //! of 0, 1 or 2 entries, with any 64-bit `n` in the count field, the mark not forced (the solver
 //! has to find it). Round trip: 0, 1 or 2 entries with any bytes. A list of three or more was not
 //! looked at.
@@ -10,7 +10,7 @@
 use crate::common::{id_at, u64_at, Bytes};
 use bebop_log::doc::seg::{forgotten_body, parse_forgotten, Erased, FORGOTTEN_MARK};
 
-/// Mark 17 + count 8 + subject 32.
+/// Mark 15 + count 8 + subject 32.
 const HEAD: usize = FORGOTTEN_MARK.len() + 40;
 const ENTRY: usize = 64;
 /// Longest body checked: two entries.
@@ -28,7 +28,7 @@ fn any_erased() -> Erased {
 ///   (d) canonical: writing back what was parsed gives the same bytes, so one declaration has one
 ///       encoding.
 #[kani::proof]
-#[kani::unwind(192)] // past 185
+#[kani::unwind(192)] // past 183
 fn forgotten_parser_on_any_bytes() {
     let input = Bytes::<N>::any();
     let b = input.as_slice();

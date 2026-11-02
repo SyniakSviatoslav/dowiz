@@ -66,13 +66,13 @@ loose from `prev` holds on the same bytes. FORMAT §14 states it as a limit: a c
 | fix | code | model |
 |---|---|---|
 | only a root's TRUNCATE is effective | `declare.rs:97` | `truncate_declared` asks `RootA`; `Commit_Truncate` needs `!Trusted` |
-| REVOKE names a tip, `bebop-revoke/2` | `keys.rs`, `declare.rs:103` | `revoke/3`; `holds_revoke_tip_stands` is `off_chain`, with its self-revoke exemption |
+| REVOKE names a tip, `ein-revoke/2` | `keys.rs`, `declare.rs:103` | `revoke/3`; `holds_revoke_tip_stands` is `off_chain`, with its self-revoke exemption |
 | a record at a forked seq declares nothing | `count.rs:112` | `sound_is_unforked`, and the no-fork clause in `revokes_bind`, `truncate_declared` |
 | dense seq | `count.rs:95` | chains grow by `%1` from 1 or from a frontier row |
 | a chain ends at 0^32 or a frontier tip | `count.rs:176` | `V_first`, `V_first_cut`, `V_first_onto`, `V_first_onto_cut` are the only starts |
 | FORGOTTEN | `forgotten.rs` | `forgotten(id, digest)`, one row, by the author or a root |
 
-**There is no second FORGOTTEN mark.** `FORGOTTEN_MARK` is `bebop-forgotten/1`, and "FORGOTTEN v2" is wrong
+**There is no second FORGOTTEN mark.** `FORGOTTEN_MARK` is `ein-forgotten/1`, and "FORGOTTEN v2" is wrong
 wording that survives in one journal line. What that wording can mean is the body with `(id, digest)` rows, which is what is modelled.
 
 Forks reach further than H3: neither record at a forked seq is sound, the honest one included. So at

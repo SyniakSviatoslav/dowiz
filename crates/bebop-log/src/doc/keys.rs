@@ -17,8 +17,8 @@
 //! -- M0's nonce, the kind byte -- sits in front of them):
 //!
 //! ```text
-//! ADMIT   "bebop-admit/1"  ‖ actor_id 32 ‖ alg LE8 ‖ valid_from LE8 ‖ pk_len LE8 ‖ pk
-//! REVOKE  "bebop-revoke/2" ‖ actor_id 32 ‖ after_seq LE8 ‖ tip 32
+//! ADMIT   "ein-admit/1"  ‖ actor_id 32 ‖ alg LE8 ‖ valid_from LE8 ‖ pk_len LE8 ‖ pk
+//! REVOKE  "ein-revoke/2" ‖ actor_id 32 ‖ after_seq LE8 ‖ tip 32
 //! ```
 //!
 //! `tip` (W-MG-MERGE2, after W-MG-TAM's trace H2) is the id of the target's record at `after_seq`,
@@ -47,8 +47,8 @@ pub const LAYOUT_KEYS: &str = "KEYS{i64,[i64,i64,i64,i64,ref KEY]}";
 pub const DIGEST_KEYS: i64 = 1448248784;
 const KEY_HEAD: usize = 9;
 const KEYS_ROW: usize = 5;
-pub const ADMIT_MARK: &[u8] = b"bebop-admit/1";
-pub const REVOKE_MARK: &[u8] = b"bebop-revoke/2";
+pub const ADMIT_MARK: &[u8] = b"ein-admit/1";
+pub const REVOKE_MARK: &[u8] = b"ein-revoke/2";
 /// The longest public key a KEY may carry: 64 KiB, far above any FIPS 204 size, so a damaged
 /// `pk_len` never becomes an allocation.
 pub const MAX_PK_BYTES: usize = 65536;

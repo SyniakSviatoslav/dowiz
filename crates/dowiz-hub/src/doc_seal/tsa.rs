@@ -1,5 +1,5 @@
 //! ANCHOR KIND 1: THE PLATFORM TSA MARK (R-MAINGOAL-A §3, choice 1). The platform signs
-//! `"bebop-anchor/1" ‖ kind ‖ over ‖ time_ms` with its own ML-DSA-65 key at every sync --
+//! `"ein-anchor/1" ‖ kind ‖ over ‖ time_ms` with its own ML-DSA-65 key at every sync --
 //! immediate, free, offline-checkable, and it proves EXACTLY "dowiz's key saw this tip by
 //! then": a bound against dowiz, not against the world (that is kind 2). An RFC 3161
 //! TSTInfo would carry the same four things in ASN.1; this is the same claim in the
@@ -17,7 +17,7 @@ use bebop_store::evlog::doc::{Anchor, AnchorCheck, Signer, Verdict, KIND_PLATFOR
 use super::{actor_id, DeviceKey, MlDsa65};
 use bebop_store::evlog::doc::Verifier;
 
-pub const ANCHOR_PREFIX: &[u8] = b"bebop-anchor/1";
+pub const ANCHOR_PREFIX: &[u8] = b"ein-anchor/1";
 pub const MARK_BYTES: usize = PK_BYTES + SIG_BYTES;
 
 /// The bytes a mark signs.

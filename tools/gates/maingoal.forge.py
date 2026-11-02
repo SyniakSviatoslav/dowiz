@@ -34,7 +34,7 @@ FLAG_SHA256 = 2
 NONCE_CELLS = 2  # the 16 bytes in front of a chained payload
 ERASED_NONCE = b"0" * 16
 PROOF_SIG_BYTE = 3000  # past the 1 952 B public key of a TSA mark: inside the signature
-MERGE_MARK = b"bebop-merge/1"  # behind the 16-byte nonce and the kind byte
+MERGE_MARK = b"ein-merge/1"  # behind the 16-byte nonce and the kind byte
 
 
 class Image:

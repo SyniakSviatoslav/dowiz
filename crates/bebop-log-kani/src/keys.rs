@@ -1,14 +1,14 @@
 //! The key-op bodies:
-//!   REVOKE  `"bebop-revoke/2" ‖ actor_id 32 ‖ after_seq LE8 ‖ tip 32`            86 bytes
-//!   ADMIT   `"bebop-admit/1"  ‖ actor_id 32 ‖ alg LE8 ‖ valid_from LE8 ‖ pk_len LE8 ‖ pk`
+//!   REVOKE  `"ein-revoke/2" ‖ actor_id 32 ‖ after_seq LE8 ‖ tip 32`            84 bytes
+//!   ADMIT   `"ein-admit/1"  ‖ actor_id 32 ‖ alg LE8 ‖ valid_from LE8 ‖ pk_len LE8 ‖ pk`
 //!
 //! ADMIT was not in the lane's list. It is here because it is the one body of this family whose
 //! length comes out of its own bytes through `idx`, and `settle.rs` runs it on every record.
 //!
 //! BOUNDS:
-//!   REVOKE parser: EVERY byte string of length <= 94 (the body and 8 past it). Round trip: every
+//!   REVOKE parser: EVERY byte string of length <= 92 (the body and 8 past it). Round trip: every
 //!   value of every field, negative `after_seq` included.
-//!   ADMIT parser: EVERY byte string of length <= 81, so a key of at most 12 bytes. `pk_len` is any
+//!   ADMIT parser: EVERY byte string of length <= 79, so a key of at most 12 bytes. `pk_len` is any
 //!   i64, which covers the negative and the past-`MAX_PK_BYTES` refusals, but a pk of real size
 //!   (1952 bytes) and `pk_len` exactly `MAX_PK_BYTES` inside a body that holds it are NOT reached.
 //!   ADMIT round trip: pk of at most 8 bytes.
@@ -24,9 +24,9 @@ const ADMIT_HEAD: usize = ADMIT_MARK.len() + 56;
 const ADMIT_N: usize = ADMIT_HEAD + 12;
 
 /// PROPERTIES over any bytes: no panic, no overflow; it parses exactly when the mark is there and
-/// the body is 86 bytes; each field is the bytes at its offset; the writer gives the same bytes back.
+/// the body is 84 bytes; each field is the bytes at its offset; the writer gives the same bytes back.
 #[kani::proof]
-#[kani::unwind(102)] // past 94
+#[kani::unwind(102)] // past 92
 fn revoke_parser_on_any_bytes() {
     let input = Bytes::<REVOKE_N>::any();
     let b = input.as_slice();
@@ -52,14 +52,14 @@ fn revoke_round_trip() {
     assert_eq!(parse_revoke(&body), Some((actor, after_seq, tip)));
 }
 
-/// PROPERTY: a body with bytes past the 86th is no REVOKE, whatever its first 86 say.
+/// PROPERTY: a body with bytes past the 84th is no REVOKE, whatever its first 84 say.
 #[kani::proof]
 #[kani::unwind(102)]
 fn revoke_refuses_trailing_bytes() {
     let input = Bytes::<REVOKE_N>::any();
     let b = input.as_slice();
     kani::assume(b.len() > REVOKE_LEN);
-    kani::cover!(parse_revoke(&b[..REVOKE_LEN]).is_some(), "the 86 bytes alone are a REVOKE");
+    kani::cover!(parse_revoke(&b[..REVOKE_LEN]).is_some(), "the 84 bytes alone are a REVOKE");
     assert_eq!(parse_revoke(b), None);
 }
 
@@ -67,7 +67,7 @@ fn revoke_refuses_trailing_bytes() {
 /// `pk_len` is in `0..=MAX_PK_BYTES`, and the body holds exactly that many bytes after the head; the
 /// key returned has `pk_len` bytes, and they are all the bytes after the head.
 #[kani::proof]
-#[kani::unwind(90)] // past 81
+#[kani::unwind(90)] // past 79
 fn admit_parser_on_any_bytes() {
     let input = Bytes::<ADMIT_N>::any();
     let b = input.as_slice();

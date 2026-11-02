@@ -11,7 +11,7 @@
 //! The signed message (`message`):
 //!
 //! ```text
-//! "bebop-seal/1" ‖ actor_id 32 ‖ seq LE8 ‖ tip 32 ‖ claimed_ms LE8 ‖ prev_tip 32
+//! "ein-seal/1" ‖ actor_id 32 ‖ seq LE8 ‖ tip 32 ‖ claimed_ms LE8 ‖ prev_tip 32
 //! ```
 //!
 //! `prev_tip` is the tip the device's PREVIOUS seal signed (0^32 for its first). The plan
@@ -35,7 +35,7 @@ pub const LAYOUT_SEAL: &str = "SEAL{i64,i64,i64,i64,i64,i64,i64,i64,i64,i64,ref 
 pub const DIGEST_SEAL: i64 = 1951851249;
 pub const LAYOUT_HEADS: &str = "HEADS{i64,[i64,i64,i64,i64,i64,i64,i64,i64,i64,ref SEAL]}";
 pub const DIGEST_HEADS: i64 = 4237402659;
-pub const SEAL_PREFIX: &[u8] = b"bebop-seal/1";
+pub const SEAL_PREFIX: &[u8] = b"ein-seal/1";
 const SEAL_HEAD: usize = 15;
 const HEADS_ROW: usize = 10;
 /// The longest signature a SEAL may carry (64 KiB; ML-DSA-87 is 4 627 B).

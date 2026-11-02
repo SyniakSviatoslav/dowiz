@@ -4,7 +4,7 @@
 //! found through `Ids::body` like TRUNCATE and FORGOTTEN, and DOC stays root-version 5.
 //!
 //! ```text
-//! MERGE  "bebop-merge/1"
+//! MERGE  "ein-merge/1"
 //!        ‖ n_ours LE8   ‖ (actor_id 32 ‖ seq LE8 ‖ tip 32) × n_ours     the HEADS it stood on
 //!        ‖ n_theirs LE8 ‖ (actor_id 32 ‖ seq LE8 ‖ tip 32) × n_theirs   the HEADS it took in
 //!        ‖ state u8                     2 Commutes, 3 Obstructed
@@ -34,7 +34,7 @@
 use crate::prelude::*;
 use super::seg::{id32, le8};
 
-pub const MERGE_MARK: &[u8] = b"bebop-merge/1";
+pub const MERGE_MARK: &[u8] = b"ein-merge/1";
 pub const STATE_FAST_FORWARD: u8 = 1;
 pub const STATE_COMMUTES: u8 = 2;
 pub const STATE_OBSTRUCTED: u8 = 3;

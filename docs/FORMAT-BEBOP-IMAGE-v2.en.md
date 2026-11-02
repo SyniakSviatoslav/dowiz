@@ -503,7 +503,7 @@ SEAL  {VERSION=1 (0), actor_id (1-4), seq (5), tip (6-9), claimed_ms (10), ref P
       alg (13), sig_len (14), sig packed (15..)}
       15 + ceil(sig_len/8) cells (ML-DSA-65: 429); digest st_digest("SEAL{i64,i64,i64,i64,i64,i64,i64,i64,i64,i64,ref SEAL,ref TIME,i64,i64,[i64]}") = 1951851249.
       One per device commit. sig_len ≤ 65536.
-      Signed message: "bebop-seal/1" ‖ actor_id ‖ LE8(seq) ‖ tip ‖ LE8(claimed_ms) ‖ prev_tip (the tip of this
+      Signed message: "ein-seal/1" ‖ actor_id ‖ LE8(seq) ‖ tip ‖ LE8(claimed_ms) ‖ prev_tip (the tip of this
       device's previous seal, 0^32 for the first). Changing the message means SEAL v2.
       With alg = 65 the signature is external pure ML-DSA-65 (FIPS 204, `ML-DSA.Sign` / `ML-DSA.Verify`, algorithms
       2 and 3) over this message with the empty context: `M' = 0x00 ‖ 0x00 ‖ message`, `ctx = ""`. That is plain
@@ -552,11 +552,11 @@ once, in KEY. A verifier with an algorithm recomputes it (`Verifier::actor_of`, 
 
 A merge loses no record and no signature: per device it keeps the longer seal chain, a seal of the other side that extends this side's is taken in with no new record, and two different chains over the same records are refused (`SealFork`), since a seal signs the tip before it and one chain would have to go. An actor keyed on one side only makes its records on the other side judged in the union; if they do not stand there the merge is refused (`UnionNotWhole`). Only REVOKEs effective on their own side count against a tail.
 
-Key-op bodies: `ADMIT = "bebop-admit/1" ‖ actor_id ‖ LE8(alg) ‖ LE8(valid_from) ‖ LE8(pk_len) ‖ pk`,
-`REVOKE = "bebop-revoke/2" ‖ actor_id ‖ LE8(after_seq) ‖ tip (32)` (signed), `tip` being the id of the target's record at `after_seq`, 0^32 when `after_seq` ≤ 0 or when the target revokes itself at this record's own seq,
-`TRUNCATE = "bebop-truncate/1" ‖ root ‖ prev_root ‖ LE8(first) ‖ LE8(last) ‖ LE8(redacted) ‖ LE8(declared) ‖ seg_hash (32)`,
-`MERGE = "bebop-merge/1" ‖ LE8(n_ours) ‖ (actor_id (32) ‖ LE8(seq) ‖ tip (32)) × n_ours ‖ LE8(n_theirs) ‖ (the same row) × n_theirs ‖ state (1 byte: 1 fast-forward, never written; 2 commutes; 3 obstructed) ‖ seg_root (32) ‖ LE8(dup_declared = 0) ‖ LE8(held_n = 0) ‖ LE8(n_conf) ‖ (LE8(len) ‖ bytes) × n_conf` (W-MG-M2, no format change: a record body, in the merging device's chain, under its seal), EXACT like FORGOTTEN: state 3 if and only if `n_conf` > 0, nothing after the last field. A body with the mark that is not exactly this counts in `merges_bad`. An effective MERGE counts in `merges`, and in `merges_bad` when a row names neither a record of the log at that `(actor, seq)` nor a seq at or below the newest frontier row of that actor. The conflict bytes are the signer's claim and the implementor's words; the rows fix both sides, so an implementor can re-derive them.,
-`FORGOTTEN = "bebop-forgotten/1" ‖ LE8(n_redacted) ‖ subject (32) ‖ (id (32) ‖ digest (32)) × n_redacted`. A body shorter than its
+Key-op bodies: `ADMIT = "ein-admit/1" ‖ actor_id ‖ LE8(alg) ‖ LE8(valid_from) ‖ LE8(pk_len) ‖ pk`,
+`REVOKE = "ein-revoke/2" ‖ actor_id ‖ LE8(after_seq) ‖ tip (32)` (signed), `tip` being the id of the target's record at `after_seq`, 0^32 when `after_seq` ≤ 0 or when the target revokes itself at this record's own seq,
+`TRUNCATE = "ein-truncate/1" ‖ root ‖ prev_root ‖ LE8(first) ‖ LE8(last) ‖ LE8(redacted) ‖ LE8(declared) ‖ seg_hash (32)`,
+`MERGE = "ein-merge/1" ‖ LE8(n_ours) ‖ (actor_id (32) ‖ LE8(seq) ‖ tip (32)) × n_ours ‖ LE8(n_theirs) ‖ (the same row) × n_theirs ‖ state (1 byte: 1 fast-forward, never written; 2 commutes; 3 obstructed) ‖ seg_root (32) ‖ LE8(dup_declared = 0) ‖ LE8(held_n = 0) ‖ LE8(n_conf) ‖ (LE8(len) ‖ bytes) × n_conf` (W-MG-M2, no format change: a record body, in the merging device's chain, under its seal), EXACT like FORGOTTEN: state 3 if and only if `n_conf` > 0, nothing after the last field. A body with the mark that is not exactly this counts in `merges_bad`. An effective MERGE counts in `merges`, and in `merges_bad` when a row names neither a record of the log at that `(actor, seq)` nor a seq at or below the newest frontier row of that actor. The conflict bytes are the signer's claim and the implementor's words; the rows fix both sides, so an implementor can re-derive them.,
+`FORGOTTEN = "ein-forgotten/1" ‖ LE8(n_redacted) ‖ subject (32) ‖ (id (32) ‖ digest (32)) × n_redacted`. A body shorter than its
 fields is not that body, and a FORGOTTEN whose `n_redacted` is not the number of rows it holds is not a FORGOTTEN. An ADMIT
 needs `0 ≤ pk_len ≤ 65536`. Bytes behind the last field of an ADMIT, REVOKE or TRUNCATE MUST be ignored: only a FORGOTTEN is exact.
 In a hub's file only records of kinds `K` (key op) and `D` (declaration) have a body: `HubIds::body` answers empty for any other, or a
@@ -604,7 +604,7 @@ for it, and of several KEYS rows the first; that names the actor's row and remov
 bits 0 and 2, and a record's scheme comes from that record's own flags. An anchor changes no status and no counter: "bad" and `under_cut`
 are verdicts of an anchor check, which a blind reader does not run; it reports what it read as present.
 
-**Record id (W-MG-HOLES, 2026-10-31).** `id = sha256("bebop-record/1" ‖ LE8(flags) ‖ actor (32) ‖ LE8(seq) ‖ prev (32) ‖ payload)`,
+**Record id (W-MG-HOLES, 2026-10-31).** `id = sha256("ein-record/1" ‖ LE8(flags) ‖ actor (32) ‖ LE8(seq) ‖ prev (32) ‖ payload)`,
 `doc::id_message`, with `flags` excluding `FLAG_ACTOR`. M0 hashed `prev ‖ payload`, and no live record carries that. A record that answers to no scheme of this text is `broken`, whatever wrote it (§13, `doc`). A redaction keeps
 the id: flags, actor, seq and `prev` do not move and the redacted bit is the kind byte inside the payload, so a tombstone's id
 stops checking anything, and the tombstone's cells are bound by the `digest` in its FORGOTTEN. A record with `FLAG_SHA256` is never tested
@@ -616,7 +616,7 @@ off; the hub's `glued` note for that adoption then carries `derived`, their numb
 flagged records plus the `derived` of its notes. Legacy (FNV) records
 carry none of these guarantees: their actor, seq and flags are free (§14).
 
-**Segment hash (W-MG-HOLES).** `chain_hash` folds oldest to newest: `h = hash("bebop-seg/1" ‖ h_below ‖ root ‖ blob≠0 (1 byte) ‖ first ‖ last ‖
+**Segment hash (W-MG-HOLES).** `chain_hash` folds oldest to newest: `h = hash("ein-seg/1" ‖ h_below ‖ root ‖ blob≠0 (1 byte) ‖ first ‖ last ‖
 redacted ‖ declared ‖ m ‖ (actor (32), LE8(seq), tip (32), LE8(scheme)) × m)`, numbers LE8, `h` under the oldest = 0^32, hash = sha256. The `blob≠0` byte is 1 when `ref BLOB` reads as non-null under §5, so a dangling one is 0. The TRUNCATE
 signs the newest hash, so no number `verify` sums from any segment and no frontier row stands unsigned. The records that left are not under this
 hash: `root` names their ids and a tombstone keeps its id, so a tombstone's bytes under a cut are bound only by a FORGOTTEN still in the
@@ -777,11 +777,11 @@ ANCH  {VERSION=1 (0), kind (1), over (2-5), time_ms (6), ref PREV_ANCH (7), proo
       over = the id of a record of this log (the tip at the anchor); an anchor whose over names no record is bad
       before any adapter runs. time_ms = the writer's claim; the proof is checked by an adapter. MAX_PROOF_BYTES = 1 MiB.
       kind 1 platform TSA mark: proof = pk(1952) ‖ sig(3309), ML-DSA-65 over
-             "bebop-anchor/1" ‖ LE8(kind) ‖ over ‖ LE8(time_ms); checked against platform keys the AUDITOR brings,
+             "ein-anchor/1" ‖ LE8(kind) ‖ over ‖ LE8(time_ms); checked against platform keys the AUDITOR brings,
              never from the file.
       kind 2 OpenTimestamps: proof = an .ots file whose digest = over; the check computes the ops up to a Bitcoin
              attestation and compares with the block's Merkle root from the auditor's header source.
-      kind 3 Roughtime: proof = nonce(64) ‖ reply; nonce = over ‖ sha256("bebop-roughtime/1" ‖ over).
+      kind 3 Roughtime: proof = nonce(64) ‖ reply; nonce = over ‖ sha256("ein-roughtime/1" ‖ over).
 ```
 
 The core does not interpret a proof. The verdict is Ok (not-after, not-before, what), Bad, or Unchecked: a

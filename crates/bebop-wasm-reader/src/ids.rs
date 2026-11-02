@@ -3,7 +3,7 @@
 //!
 //! `ReaderIds` re-derives dowiz-hub's documented id schemes (`crates/dowiz-hub/src/chain/scheme.rs`,
 //! FORMAT §9.2): a record's id is the sha256 of `bebop_log::doc::id_message` (id v2, W-MG-HOLES:
-//! `"bebop-record/1" ‖ flags ‖ actor ‖ seq ‖ prev ‖ payload`, the payload led by M0's 16-byte
+//! `"ein-record/1" ‖ flags ‖ actor ‖ seq ‖ prev ‖ payload`, the payload led by M0's 16-byte
 //! nonce), or under one of the two legacy FNV-1a x4 schemes of older images (over `prev ‖ payload`
 //! from 2026-09-20, over the payload alone before). A redaction keeps its id and shows as dowiz-hub's
 //! mark, the high bit of the kind byte (`forget.rs`), behind the nonce when there is one. That bit

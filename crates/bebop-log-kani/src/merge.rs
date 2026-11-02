@@ -1,17 +1,17 @@
 //! MERGE, the one body with variable-length parts inside it:
 //!
 //! ```text
-//! "bebop-merge/1" ‖ n_ours LE8 ‖ rows ‖ n_theirs LE8 ‖ rows ‖ state u8 ‖ seg_root 32
+//! "ein-merge/1" ‖ n_ours LE8 ‖ rows ‖ n_theirs LE8 ‖ rows ‖ state u8 ‖ seg_root 32
 //!                 ‖ dup_declared LE8 ‖ held_n LE8 ‖ n_conf LE8 ‖ (len LE8 ‖ bytes) × n_conf
 //! ```
-//! A row is 72 bytes. `X` below is where `state` lands: 13 + 16 + 72 × rows.
+//! A row is 72 bytes. `X` below is where `state` lands: 11 + 16 + 72 × rows.
 //!
 //! BOUNDS:
-//!   `merge_parser_no_rows`: EVERY byte string of length <= 110, enough for the 86-byte minimum and
+//!   `merge_parser_no_rows`: EVERY byte string of length <= 108, enough for the 84-byte minimum and
 //!   24 more: no row fits, up to three conflicts do. The cheap one; run it first.
-//!   `merge_parser_one_row`: EVERY byte string of length <= 170: at most one row in all, with 12
+//!   `merge_parser_one_row`: EVERY byte string of length <= 168: at most one row in all, with 12
 //!   bytes left for conflicts. Includes the former; kept apart because this one may be expensive.
-//!   Neither reaches two rows, or a row on each side (230 bytes).
+//!   Neither reaches two rows, or a row on each side (228 bytes).
 //!   `merge_round_trip`: up to one row per side, so the two-row case IS reached from the writer's
 //!   side; at most one conflict of at most 2 bytes.
 //!   Counts are any u64 in the parser harnesses, so the "more rows than bytes" refusal is covered.
@@ -71,17 +71,17 @@ fn check_merge(b: &[u8]) {
     assert_eq!(merge_body(&v), b);
 }
 
-/// PROPERTIES: `check_merge`, every byte string up to 110 bytes.
+/// PROPERTIES: `check_merge`, every byte string up to 108 bytes.
 #[kani::proof]
-#[kani::unwind(118)] // past 110
+#[kani::unwind(118)] // past 108
 fn merge_parser_no_rows() {
     let input = Bytes::<NO_ROWS_N>::any();
     check_merge(input.as_slice());
 }
 
-/// PROPERTIES: `check_merge`, every byte string up to 170 bytes.
+/// PROPERTIES: `check_merge`, every byte string up to 168 bytes.
 #[kani::proof]
-#[kani::unwind(178)] // past 170
+#[kani::unwind(178)] // past 168
 fn merge_parser_one_row() {
     let input = Bytes::<ONE_ROW_N>::any();
     let b = input.as_slice();
@@ -93,7 +93,7 @@ fn merge_parser_one_row() {
 /// i.e. state 1 or 2 with no conflict, state 3 with one. FastForward is included: it is never
 /// written, and the header says it parses.
 #[kani::proof]
-#[kani::unwind(254)] // past the longest body: 86 + 144 + 10
+#[kani::unwind(254)] // past the longest body: 84 + 144 + 10
 fn merge_round_trip() {
     let c = Bytes::<2>::any();
     let conflicts = if kani::any() { vec![c.as_slice().to_vec()] } else { Vec::new() };

@@ -29,11 +29,11 @@ pub trait RoughtimeServer {
     fn query(&self, nonce: &[u8; NONCE_BYTES]) -> Result<Vec<u8>, String>;
 }
 
-/// The 64-byte nonce for a tip: `over ‖ sha256("bebop-roughtime/1" ‖ over)`. Binding, not
+/// The 64-byte nonce for a tip: `over ‖ sha256("ein-roughtime/1" ‖ over)`. Binding, not
 /// secret: the lower bound is on the bytes the nonce was derived from.
 pub fn nonce_for(over: &[u8; 32]) -> [u8; NONCE_BYTES] {
     let mut m = Vec::with_capacity(18 + 32);
-    m.extend_from_slice(b"bebop-roughtime/1");
+    m.extend_from_slice(b"ein-roughtime/1");
     m.extend_from_slice(over);
     let h = bebop_store::nodekey::sha256(&m);
     let mut n = [0u8; NONCE_BYTES];

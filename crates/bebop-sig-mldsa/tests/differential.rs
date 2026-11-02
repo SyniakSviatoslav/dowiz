@@ -82,7 +82,7 @@ fn an_internal_signature_is_not_a_seal() {
 #[test]
 fn a_wrong_algorithm_or_length_is_false_and_its_twin_is_true() {
     let key = DeviceKey::from_seed(&seed(1));
-    let (pk, msg) = (key.public_key().to_vec(), b"bebop-seal/1".to_vec());
+    let (pk, msg) = (key.public_key().to_vec(), b"ein-seal/1".to_vec());
     let sig = key.sign(&msg);
     assert!(MlDsa65.verify(ALG_ML_DSA_65, &pk, &msg, &sig), "control");
     assert!(!MlDsa65.verify(ALG_ML_DSA_65 + 1, &pk, &msg, &sig), "alg");

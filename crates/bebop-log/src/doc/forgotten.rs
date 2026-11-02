@@ -4,7 +4,7 @@
 #[allow(unused_imports)]
 use crate::prelude::*;
 
-pub const FORGOTTEN_MARK: &[u8] = b"bebop-forgotten/1";
+pub const FORGOTTEN_MARK: &[u8] = b"ein-forgotten/1";
 
 /// One tombstone a FORGOTTEN covers: its id, and `Ids::chained` over it as it now stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

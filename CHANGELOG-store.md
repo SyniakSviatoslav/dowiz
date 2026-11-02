@@ -47,7 +47,7 @@ unrelated project, a schema-based serialization format.
   A cut, an erasure or a revocation on one side only, and two seal chains of one key over the same
   records, are named refusals in this version.
 - **Only a root cuts; a REVOKE names a tip.** A TRUNCATE declares a cut only when its actor is a root,
-  and a REVOKE body is now `bebop-revoke/2`, carrying the id of the target's record at `after_seq`. A
+  and a REVOKE body is now `ein-revoke/2`, carrying the id of the target's record at `after_seq`. A
   cut ends on a seal's edge. No production image holds a REVOKE.
 - **Self-describing archives (SPEC, BLOB).** An archive file can carry its reader and the format text
   as its first objects, so that a host with no parser can find them.

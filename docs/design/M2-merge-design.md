@@ -48,7 +48,7 @@
 Запис `KIND_DECL` (`b'D'`, `history.rs:30`) за nonce M0, у ланцюгу пристрою, що зливає, під однією печаткою, тіло через `Ids::body`. `SealedHub::events()` пропускає `KIND_DECL` за іменем (`sealed.rs:223`), тож згортки не міняються.
 
 ```text
-MERGE  "bebop-merge/1"
+MERGE  "ein-merge/1"
        ‖ n_ours LE8   ‖ (actor_id 32 ‖ seq LE8 ‖ tip 32) × n_ours      HEADS нашого файлу до злиття
        ‖ n_theirs LE8 ‖ (actor_id 32 ‖ seq LE8 ‖ tip 32) × n_theirs    HEADS чужого файлу
        ‖ state u8                 1 FastForward, 2 Commutes, 3 Obstructed (`glue::State`)

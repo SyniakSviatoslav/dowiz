@@ -5,7 +5,7 @@
 //!
 //! The signature is EXTERNAL PURE `ML-DSA.Sign` of FIPS 204 with the empty context,
 //! `M' = 0x00 0x00 ‖ msg` (FORMAT §9.4): what any stock library calls plain signing. The domain
-//! is separated by the message itself (`bebop-seal/1`, `bebop-anchor/1`). `rnd = 0^32` is this
+//! is separated by the message itself (`ein-seal/1`, `ein-anchor/1`). `rnd = 0^32` is this
 //! writer's choice, not the format's: a verifier cannot tell.
 //!
 //! The DECART for `fips204` is in this crate's Cargo.toml.

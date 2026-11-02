@@ -240,7 +240,7 @@ def doc_truncate_long():
 def revoke_of_a(tail=b""):
     "A revokes itself, the table saying nothing. The body read as a REVOKE is `keys_disagree` 1."
     r0 = Rec(A, 1, ZERO, nonce(b"x"))
-    r1 = Rec(A, 2, r0.id, nonce(b"bebop-revoke/2" + A + struct.pack("<q", 0) + ZERO + tail))
+    r1 = Rec(A, 2, r0.id, nonce(b"ein-revoke/2" + A + struct.pack("<q", 0) + ZERO + tail))
     im, d = plain([r0, r1])
     return im.commit(d)
 

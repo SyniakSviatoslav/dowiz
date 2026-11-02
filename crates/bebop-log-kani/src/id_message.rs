@@ -17,8 +17,8 @@ use bebop_log::doc::{id_message, ID_TAG};
 
 const PAIR_PAYLOAD: usize = 4;
 const LAYOUT_PAYLOAD: usize = 16;
-/// `ID_TAG` is 14 bytes, the fixed fields 80.
-const HEAD: usize = 94;
+/// `ID_TAG` is 12 bytes, the fixed fields 80.
+const HEAD: usize = 92;
 
 struct Rec<const P: usize> {
     flags: i64,
@@ -39,7 +39,7 @@ fn msg<const P: usize>(r: &Rec<P>) -> Vec<u8> {
 /// PROPERTY: two different records never serialise alike. If two messages are equal, then flags,
 /// actor, seq, prev and payload are all equal. Each pair of records within the payload bound.
 #[kani::proof]
-#[kani::unwind(102)] // past the longest message compared: 94 + 4
+#[kani::unwind(102)] // past the longest message compared: 92 + 4
 fn id_message_is_injective() {
     let (a, b) = (any_rec::<PAIR_PAYLOAD>(), any_rec::<PAIR_PAYLOAD>());
     let same = msg(&a) == msg(&b);
@@ -59,16 +59,16 @@ fn id_message_is_injective() {
 /// and it pins the documented order: a swap of `actor` and `prev` passes the harness above and fails
 /// this one.
 #[kani::proof]
-#[kani::unwind(120)] // past the longest message read: 94 + 16
+#[kani::unwind(120)] // past the longest message read: 92 + 16
 fn id_message_layout_is_as_documented() {
     let r = any_rec::<LAYOUT_PAYLOAD>();
     let m = msg(&r);
     assert_eq!(ID_TAG.len() + 80, HEAD);
     assert_eq!(m.len(), HEAD + r.payload.as_slice().len());
     assert_eq!(&m[..ID_TAG.len()], ID_TAG);
-    assert_eq!(i64_at(&m, 14), r.flags);
-    assert_eq!(id_at(&m, 22), r.actor);
-    assert_eq!(u64_at(&m, 54), r.seq);
-    assert_eq!(id_at(&m, 62), r.prev);
+    assert_eq!(i64_at(&m, 12), r.flags);
+    assert_eq!(id_at(&m, 20), r.actor);
+    assert_eq!(u64_at(&m, 52), r.seq);
+    assert_eq!(id_at(&m, 60), r.prev);
     assert_eq!(&m[HEAD..], r.payload.as_slice());
 }

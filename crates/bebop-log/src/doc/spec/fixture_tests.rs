@@ -232,7 +232,7 @@ fn rule_fixtures_two_cuts() {
     let c = counts(&st);
     assert_eq!((c.records, c.chained, c.broken, c.segments, c.cut), (3, 3, 0, 2, 6), "{c:?}");
     let bodies = EvLog::walk_until_at(&st, Doc::open(&st).unwrap().log, |_| false);
-    assert_eq!(bodies.iter().filter(|r| FixIds.body(r.flags, &r.payload).starts_with(b"bebop-truncate/1")).count(), 1, "only the newest TRUNCATE stays");
+    assert_eq!(bodies.iter().filter(|r| FixIds.body(r.flags, &r.payload).starts_with(b"ein-truncate/1")).count(), 1, "only the newest TRUNCATE stays");
 }
 
 /// The twin of `rule_fixtures_two_cuts`: the same file, one count moved, refused by name. The

@@ -4,7 +4,7 @@
  * THIS FILE HAS NEVER BEEN PARSED OR PROVED. See README.md. Every EXPECTED below is a prediction by hand.
  * It models the protocol as crates/bebop-log/src/doc stood on 2026-11-01 06:30 (w-m2 = batch7 for
  * declare, count, keys, settle, verify, seg, forgotten): only a root's TRUNCATE is effective; REVOKE
- * is bebop-revoke/2 and names the target's tip; a record at a forked seq is not sound; dense seq.
+ * is ein-revoke/2 and names the target's tip; a record at a forked seq is not sound; dense seq.
  * A proved lemma here would be a statement about this model. It says nothing about the Rust.
  *
  * The file is the network: every record and seal goes to Out, and a "view" (one verify of one file)
