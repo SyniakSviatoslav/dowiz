@@ -13,7 +13,7 @@
 # board.wasm whose recorded digest is not the digest of the sources in the tree.
 # THE DIGEST IS EVERYTHING THE BYTES DEPEND ON (W-MG-TAB, 2026-11-01): the crate, its lockfile, this
 # script, the toolchain pin, the cargo config, and every file under src/ except the test files. No
-# remap and no stable-id wrapper here, unlike crates/bebop-wasm/tablet.sh: this crate has no
+# remap and no stable-id wrapper here, unlike crates/dowiz-hub-wasm/tablet.sh: this crate has no
 # dependencies and is its own workspace root, so cargo passes relative paths, none is hashed, and the
 # committed module carries no box path.
 set -eu

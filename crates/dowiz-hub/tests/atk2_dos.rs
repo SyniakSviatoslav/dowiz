@@ -5,10 +5,10 @@
 #[path = "atk2_dos/shapes.rs"]
 mod shapes;
 
-use bebop_store::evlog::doc::seg::SEG_VERSION;
-use bebop_store::evlog::doc::{self, check_anchors, Anchor, AnchorCheck, Doc, Trust, Verdict};
-use bebop_store::Store;
-use bebop_store::evlog::doc::Signer as _;
+use einstore::evlog::doc::seg::SEG_VERSION;
+use einstore::evlog::doc::{self, check_anchors, Anchor, AnchorCheck, Doc, Trust, Verdict};
+use einstore::Store;
+use einstore::evlog::doc::Signer as _;
 use dowiz_hub::doc_seal::{DeviceKey, HubIds, MlDsa65, SealedHub};
 use dowiz_hub::EventKind;
 use shapes::*;
@@ -130,7 +130,7 @@ fn the_plain_anchor_read_is_bounded_too() {
     let f = nested_anchors(16 << 10);
     let (_, p) = measure("read-anchors", &f, &|st| {
         let v = Doc::open(st).unwrap();
-        format!("anchors={}", bebop_store::evlog::doc::anch::read_anchors(st, v.anch).len())
+        format!("anchors={}", einstore::evlog::doc::anch::read_anchors(st, v.anch).len())
     });
     bounded("read_anchors", f.len(), p);
 }
@@ -145,7 +145,7 @@ fn a_segment_claiming_two_to_the_sixty_two_rows_is_no_segment() {
         st.cells[p + 2] = SEG_VERSION;
         st.cells[p + 2 + 11] = 1 << 62;
     };
-    let s = nest(&mut st, &mut tx, 256, bebop_store::evlog::doc::seg::DIGEST_SEG, 12, 10, 7, &fill);
+    let s = nest(&mut st, &mut tx, 256, einstore::evlog::doc::seg::DIGEST_SEG, 12, 10, 7, &fill);
     let f = commit(&mut st, &mut tx, Refs { seg: Some(s), ..Refs::default() });
     assert!(matches!(doc::verify(&Store::from_bytes(&f), &HubIds, &MlDsa65, Trust::Genesis), Err(doc::DocError::Corrupt(_))));
 }

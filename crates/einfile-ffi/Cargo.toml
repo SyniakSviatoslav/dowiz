@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+[package]
+name = "einfile-ffi"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/SyniakSviatoslav/dowiz"
+readme = "README.md"
+description = "A C ABI over einfile-io's KV database (Db, ReadTxn, WriteTxn, Scan, Refusal as integer codes plus a message), built as a cdylib; bindings/python/einstore.py drives it through ctypes."
+
+# W-ES-P6 (R-EMBED-STORE §5 row P6). The only crate in the store family that may use `unsafe`:
+# a C ABI is raw pointers by definition. Every other crate keeps `forbid(unsafe_code)`.
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# `tree` (W-ES-P8D): the C ABI reads KV v4 (the B+tree) through einfile-io's Db, the same code the
+# native conformance reader runs; `code_of` maps a tree rule that does not hold to NOT_A_KV.
+einfile-io = { path = "../einfile-io", version = "0.1.0", features = ["tree"] }
+
+# The repo-level examples are built by this crate, so `cargo run --example kv` works from here
+# and CI has one place to build them.
+[[example]]
+name = "kv"
+path = "../../examples/kv.rs"
+
+[profile.release]
+opt-level = 3

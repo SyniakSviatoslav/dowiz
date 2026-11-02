@@ -6,8 +6,8 @@
 //!   cargo run --release --example p9mem -- <N> [VS]
 use std::time::Instant;
 
-use bebop_store::kv::tree::{tree_compacted, FANOUT};
-use bebop_store::{Cells, Store, View};
+use einstore::kv::tree::{tree_compacted, FANOUT};
+use einstore::{Cells, Store, View};
 use es_bench::data::entries;
 
 fn ms(t: Instant) -> f64 {
@@ -24,7 +24,7 @@ fn main() {
     let t = Instant::now();
     let b = tree_compacted(e.iter().map(|(k, v)| (k.as_slice(), v.as_slice())), 1 << 30, FANOUT, None).unwrap();
     let sb = View::new(&b).pick().unwrap();
-    let cap = (View::new(&b).cell_at(sb.at + 12) as usize + bebop_store::ARENA) * 8;
+    let cap = (View::new(&b).cell_at(sb.at + 12) as usize + einstore::ARENA) * 8;
     println!("MEM|tree_compacted|{:.1} ms|trimmed bytes={}|used={}|capacity={} ({:.2}x used)", ms(t), b.len(), sb.arena_used * 8, cap, cap as f64 / (sb.arena_used * 8) as f64);
     drop(e);
     let t = Instant::now();

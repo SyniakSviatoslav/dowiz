@@ -45,7 +45,7 @@ h0=$(sha256sum "$LOCK" | cut -d' ' -f1)
 # path-dep filter (item 31 §2.1): with `--prefix none`, cargo tree renders the root package
 # and EVERY path dependency as `name vX.Y.Z (/abs/path)` and every registry crate as
 # `name vX.Y.Z`. `grep -v ' (/'` removes the root and all in-tree/sibling path deps
-# (dowiz-kernel, dowiz-engine, agent-facade, bebop crates, …) in one principled step —
+# (dowiz-kernel, dowiz-engine, agent-facade, einfile crates, …) in one principled step —
 # no hardcoded crate-name list to rot. `(proc-macro)`/`(*)` dedup markers do not contain
 # ` (/` and pass through to awk unchanged; `awk 'NF'` drops any blank line.
 cargo tree --manifest-path "$CRATE/Cargo.toml" -e no-dev --locked --offline --prefix none \

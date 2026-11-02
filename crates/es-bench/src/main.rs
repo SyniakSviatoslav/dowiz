@@ -1,5 +1,5 @@
-//! es-bench -- R-EMBED-STORE P7 (§4.6): bebop-store vs redb, LMDB (heed) and SQLite on the same
-//! workloads in the same process, and the bebop regression gate.
+//! es-bench -- R-EMBED-STORE P7 (§4.6): einstore vs redb, LMDB (heed) and SQLite on the same
+//! workloads in the same process, and the einfile regression gate.
 //!
 //!   es-bench full <engines|all> <N> <VS> <reps> [rows]   the table. `all` needs --features
 //!                                                         competitors,mldsa; a missing engine
@@ -9,11 +9,11 @@
 //!
 //! Scratch databases live under $ES_BENCH_DIR (default ./es-bench-data) and are deleted after
 //! each engine: the directory itself goes at the end of a run, so name one nothing else lives in.
-//! Engines: bebop, bebop4 (v4 tree through Db), redb, lmdb, sqlite, signed (a sealed DOC file, not a
+//! Engines: einfile, einfile4 (v4 tree through Db), redb, lmdb, sqlite, signed (a sealed DOC file, not a
 //! KV: src/signed.rs). Rows: load size size_alloc open verify get_hot prefix get_cold put put_commit
 //! compact put_durable put_normal delete; signed: load_signed verify_signed seal merge archive.
 //! Every run opens with `# machine` lines and every row prints its spread: `RES|` is what to read.
-use es_bench::{bebop, bebop4, gate, machine, work};
+use es_bench::{einfile, einfile4, gate, machine, work};
 #[cfg(feature = "competitors")]
 use es_bench::{lmdb_e, redb_e, sqlite_e};
 #[cfg(feature = "mldsa")]
@@ -31,8 +31,8 @@ fn scratch() -> PathBuf {
 
 fn run_one(engine: &str, c: &work::Cfg) -> Vec<(String, u64)> {
     match engine {
-        "bebop" => work::run::<bebop::Bebop>(c),
-        "bebop4" => work::run::<bebop4::Bebop4>(c),
+        "einfile" => work::run::<einfile::Einfile>(c),
+        "einfile4" => work::run::<einfile4::Einfile4>(c),
         #[cfg(feature = "competitors")]
         "redb" => work::run::<redb_e::Redb>(c),
         #[cfg(feature = "competitors")]
@@ -53,7 +53,7 @@ fn main() {
     match a.get(1).map(String::as_str).unwrap_or("") {
         "full" => {
             let engines: Vec<String> = match a.get(2).map(String::as_str).unwrap_or("all") {
-                "all" => ["bebop", "bebop4", "redb", "lmdb", "sqlite", "signed"].map(String::from).to_vec(),
+                "all" => ["einfile", "einfile4", "redb", "lmdb", "sqlite", "signed"].map(String::from).to_vec(),
                 list => list.split(',').map(String::from).collect(),
             };
             let c = work::Cfg {

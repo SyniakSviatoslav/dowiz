@@ -7,8 +7,8 @@
 //! of what a walk reads must be bounded by the image, not each record alone.
 
 use crate::{EventKind, Hub, HubError};
-use bebop_store::evlog::EvLog;
-use bebop_store::{Store, StoreError};
+use einstore::evlog::EvLog;
+use einstore::{Store, StoreError};
 
 fn hub_with(n: usize) -> Vec<u8> {
     let mut h = Hub::create_sized(64 * 1024).unwrap();

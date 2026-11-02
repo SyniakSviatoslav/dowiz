@@ -1,7 +1,7 @@
 //! SHEAF S2: THE TABLET'S SIDE (G.1 "the tablet's local stalk"). A kitchen tablet holds the
 //! venue's stock log as it was at its last sync -- its `base`, the hub's tip then -- with its
 //! own records appended while it was offline. Three things happen to that image, and this file
-//! is all three, so the wasm module (`bebop-wasm --features tablet`) is a thin C surface over it
+//! is all three, so the wasm module (`dowiz-hub-wasm --features tablet`) is a thin C surface over it
 //! and every rule is the hub crate's own:
 //!
 //!   `record` -- one movement, decided against the tablet's own ledger by the same write door the

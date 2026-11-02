@@ -1,7 +1,7 @@
 //! What `holds` says nothing about, though a reader takes it for covered.
 use super::*;
-use bebop_store::evlog::doc::keys::{revoke_body, Key, KeyOp};
-use bebop_store::evlog::doc::FLAG_TREE_IS_FOLD;
+use einstore::evlog::doc::keys::{revoke_body, Key, KeyOp};
+use einstore::evlog::doc::FLAG_TREE_IS_FOLD;
 use dowiz_hub::Hub;
 
 /// HOLE 7. `ids.body` skipped ONE byte of any kind, so `effective` read a declaration out of an

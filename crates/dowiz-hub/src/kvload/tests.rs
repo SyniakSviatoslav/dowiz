@@ -9,8 +9,8 @@ use crate::settings::Settings;
 use crate::stock::{StockEvent, StockLog};
 use crate::table::Table;
 use crate::{EventKind, Hub, HubError};
-use bebop_store::kv::Kv;
-use bebop_store::Store;
+use einstore::kv::Kv;
+use einstore::Store;
 
 /// A KV image the five KV loaders all accept (they read any KV image; what they do with
 /// the keys is theirs).

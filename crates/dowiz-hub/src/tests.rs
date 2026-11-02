@@ -1,7 +1,7 @@
 use super::*;
-use bebop_store::evlog::{EvLog, Record};
+use einstore::evlog::{EvLog, Record};
 use crate::chain::{chain_id, legacy_id, legacy_id_chained, legacy_scheme, record_id, with_nonce, NONCE_LEN};
-use bebop_store::evlog::{FLAG_NONCE_DERIVED, FLAG_SHA256};
+use einstore::evlog::{FLAG_NONCE_DERIVED, FLAG_SHA256};
 
 const ACTOR: [u8; 32] = [0xA1; 32];
 fn order(id: &str, status: &str) -> String {
@@ -582,7 +582,7 @@ fn m0_a_forged_middle_record_with_a_repaired_fnv_id_is_broken() {
     let forged = body.as_bytes().to_vec();
     let repaired = legacy_id_chained(&victim.prev, &forged);
     let at = 12 + 4; // HEAD_V2 + the named actor's four cells
-    let cells = bebop_store::evlog::pack_payload(&forged);
+    let cells = einstore::evlog::pack_payload(&forged);
     for (j, c) in cells.iter().enumerate() {
         st.put_cell(mid, at + j, *c);
     }
@@ -625,7 +625,7 @@ fn m0_a_flagged_record_that_only_verifies_under_fnv_is_broken_even_as_the_oldest
     let victim = EvLog::walk(&st)[0].clone();
     let forged = String::from_utf8_lossy(&victim.payload[NONCE_LEN..]).replace("PENDING", "PENDINH").into_bytes();
     let at = 12 + 4;
-    let cells = bebop_store::evlog::pack_payload(&forged);
+    let cells = einstore::evlog::pack_payload(&forged);
     for (j, c) in cells.iter().enumerate() {
         st.put_cell(newest, at + j, *c);
     }
@@ -662,7 +662,7 @@ fn m0_a_repair_under_sha256_is_a_gap_the_witness_tip_catches_not_the_walk() {
     let forged = with_nonce(b"forgerforgerforg", &String::from_utf8_lossy(&victim.payload[NONCE_LEN..]).replace("PENDING", "PENDINH").into_bytes());
     assert_eq!(forged.len(), victim.payload.len());
     let at = 12 + 4;
-    for (j, c) in bebop_store::evlog::pack_payload(&forged).iter().enumerate() {
+    for (j, c) in einstore::evlog::pack_payload(&forged).iter().enumerate() {
         st.put_cell(mid, at + j, *c);
     }
     for (i, c) in crate::glue::walk::to_cells(&record_id(&Record { payload: forged.clone(), ..victim.clone() })).iter().enumerate() {

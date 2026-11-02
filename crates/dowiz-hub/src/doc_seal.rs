@@ -1,10 +1,10 @@
 //! THE SEAL IN THE HUB (W-MG-M1B, R-MAINGOAL-A §1.2/§2d/§2e, phases M1 and M6): the three
-//! seams of `bebop_store::evlog::doc` filled with this crate's own answers --
+//! seams of `einstore::evlog::doc` filled with this crate's own answers --
 //!
 //!   * `HubIds`   -- how a record's id is derived: `chain_id` (sha256 over
 //!                   `doc::id_message`), the two FNV schemes of old images as LEGACY, the redaction
 //!                   mark of `forget.rs`, and the body behind M0's nonce and the kind byte;
-//!   * `MlDsa65`  -- the verifier: ML-DSA-65 (FIPS 204) from the `bebop-sig-mldsa` crate, alg 65,
+//!   * `MlDsa65`  -- the verifier: ML-DSA-65 (FIPS 204) from the `einfile-sig-mldsa` crate, alg 65,
 //!                   pk 1 952 B, sig 3 309 B, external pure with the empty context (FORMAT
 //!                   §9.4). NEVER `pq::hybrid_signing` (memory `pq-hybrid-signing-leaks-key.md`:
 //!                   one signature recovers its secret);
@@ -32,9 +32,9 @@
 //! that the event happened, that a quantity is true, or that `claimed_ms` is right. The
 //! anchors (`tsa.rs`, `ots.rs`, `roughtime.rs`) are the time half.
 
-use bebop_store::evlog::doc::Ids;
-use bebop_store::evlog::{Record, FLAG_SHA256};
-use bebop_store::merkle;
+use einstore::evlog::doc::Ids;
+use einstore::evlog::{Record, FLAG_SHA256};
+use einstore::merkle;
 
 use crate::chain::{legacy_scheme, record_id, NONCE_LEN};
 use crate::forget::REDACTED_BIT;
@@ -58,8 +58,8 @@ mod cut_tests;
 #[cfg(test)]
 mod sig_tests;
 // `actor_id` is sha256 over a public key (R-MAINGOAL-A §1.1): the convention belongs to the
-// signature crate, `bebop-log` never derives it.
-pub use bebop_sig_mldsa::{actor_id, DeviceKey, MlDsa65};
+// signature crate, `einfile-log` never derives it.
+pub use einfile_sig_mldsa::{actor_id, DeviceKey, MlDsa65};
 
 /// How this crate's records are named: M0's scheme, the legacy schemes, the redaction mark,
 /// the framing. Every answer is `chain::scheme`'s, called -- nothing re-derived here.
@@ -88,10 +88,10 @@ impl Ids for HubIds {
         }
     }
     /// The root a cut segment is named by (W-MG-M3's `Doc::cut_into`): RFC 9162 over the ids
-    /// in file order, `bebop_store::merkle` -- the same tree `rotate.rs` publishes for an
+    /// in file order, `einstore::merkle` -- the same tree `rotate.rs` publishes for an
     /// archive, so a segment's root and an archive's root over the same ids are one value.
     fn hash(&self, bytes: &[u8]) -> Option<[u8; 32]> {
-        Some(bebop_store::nodekey::sha256(bytes))
+        Some(einstore::nodekey::sha256(bytes))
     }
     fn tree_root(&self, ids: &[[u8; 32]]) -> Option<[u8; 32]> {
         let leaves: Vec<[u8; 32]> = ids.iter().map(|id| merkle::leaf_hash(id)).collect();

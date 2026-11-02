@@ -1,4 +1,4 @@
-//! Who may act on this hub, in a bebop KV store.
+//! Who may act on this hub, in an einfile KV store.
 //!
 //! ONE VENUE, so this is small by construction: an owner, some staff, some
 //! couriers. It is not a user directory and deliberately cannot become one —

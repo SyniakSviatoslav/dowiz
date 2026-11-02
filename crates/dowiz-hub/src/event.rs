@@ -5,7 +5,7 @@
 //! `Hub::append` (`log.rs`). A record this build cannot read is not dropped:
 //! it comes back as a `Quarantined` with the promise it broke.
 
-use bebop_store::evlog::Record;
+use einstore::evlog::Record;
 
 use crate::forget;
 

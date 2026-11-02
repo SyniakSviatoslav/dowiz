@@ -1,0 +1,81 @@
+[package]
+name = "dowiz-hub-wasm"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "The einfile image FORMAT inside wasm32: einstore's reader as a standalone module with a C ABI, and the parity gate that makes four readers of one image answer one number."
+
+# WHAT THIS IS, AND WHAT IT IS NOT (BLUEPRINT-BEBOP-IN-WASM-2026-09-23, order of work item 1).
+#
+# It is NOT the bebop language running in a Worker. `bebop.bp` emits AArch64
+# words from 595 `em(` sites with no intermediate form, so wasm32 would be a
+# second emitter, not a target flag; the blueprint recommends AGAINST that and
+# names the re-entry condition. What CAN run inside wasm32 today is the thing
+# the product actually shares with bebop: the pointer-free image format, read
+# by `crates/einstore` (zero dependencies).
+#
+# So this crate is the seam made measurable. `src/lib.rs` reads a KV image and
+# a log image to one integer each -- the same FNV-1a root `kv.bp` folds and the
+# same count -- and refuses a damaged image instead of panicking. `src/abi.rs`
+# is the C surface a host with no wasm-bindgen can call: node in `gate.sh`, a
+# Worker if the main session wires it. `gate.sh` then makes FOUR readers of
+# `fixtures/kv.store` print their number: bebop.bin (AArch64, box only), this
+# crate natively, this crate as wasm32 under node, and `oracle.py`. That is the
+# four-way fold check F28 that the no-SQL blueprint names and nothing ran.
+#
+# ZERO dependencies beyond einstore, which has none. No wasm-bindgen: the
+# module exports its own `memory`, an allocator pair and four functions, so the
+# host is any WebAssembly runtime and the bytes are what the reader costs and
+# nothing else (`bytes.baseline`, a ratchet that may only fall).
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+einstore = { path = "../einstore" }
+# THE ROOM'S DECIDERS (D7 phase 1), behind `decide` and OFF by default, so the
+# reader above stays the few KB `bytes.baseline` ratchets. With it the module
+# exports `bw_amend` / `bw_pay`: the same `dowiz_hub::room` code the Worker's
+# object runs, over the same images (`src/decide.rs`).
+dowiz-hub = { path = "../dowiz-hub", optional = true }
+serde_json = { version = "1", optional = true }
+# THE RECEIPT'S QR (LV-PCD-C), behind `verify` and OFF by default. DECART: the SAME crate and version
+# the Worker draws table codes with (workers/api/Cargo.toml, `qrcodegen = "1.8"`, MIT, zero
+# dependencies, pure Rust), so the tree keeps ONE QR implementation and the browser draws the
+# receipt's code offline. Default stays clean: `cargo tree -e no-dev | grep -c qrcodegen` -> 0.
+qrcodegen = { version = "1.8", optional = true }
+
+[features]
+default = []
+decide = ["dep:dowiz-hub", "dep:serde_json"]
+# SHEAF S2: THE KITCHEN TABLET'S WRITER (`src/tablet.rs`), OFF by default for the reason `decide`
+# is: it links `dowiz_hub` (the same `glue::tablet` the venue's object glues against), which the
+# reader `bytes.baseline` ratchets must never carry. Exports `bw_tab_record` / `bw_tab_tail` /
+# `bw_tab_rebase`; `tablet.sh` builds it apart into `target/tablet/` and promotes it with the
+# digest of its sources. Verify the default stays clean: `cargo tree -e no-dev | grep -c "dowiz-hub v"` -> 0.
+tablet = ["dep:dowiz-hub", "dep:serde_json"]
+# THE NODE-KEY READER'S EXPORT (DG2), OFF by default. `src/nodekey.rs` is always
+# compiled and natively tested; this feature only makes `bw_key` a wasm export.
+# It exports the three fixture frames of `fixtures/key.expected` and nothing a
+# Worker calls, so it stays out of the module `bytes.baseline` ratchets: gate.sh
+# builds it into `target/key/` and prints its size beside the reader's.
+key = []
+# THE PROJECTION READER'S EXPORT (DG5), OFF by default for the same reason: `src/proj.rs` is
+# always compiled and natively tested; this only makes `bw_proj` a wasm export. gate.sh builds it
+# into `target/proj/` and prints its size beside the reader's; `bytes.baseline` does not move.
+proj = []
+# THE PRICE-PROOF READER (LV-PCD-C), OFF by default: exports `bw_verify` (a receipt certificate
+# climbed to its root, src/verify.rs) and `bw_qr`. `verify.sh` builds it apart into
+# `target/verify/` and promotes it to workers/api/public/store/verify.wasm with its source digest.
+verify = ["dep:qrcodegen"]
+
+# The Worker's own profile (workers/api/Cargo.toml) minus `strip = false`,
+# which only wasm-bindgen's catch wrappers need. `panic = "abort"` because a
+# refusal is a status code here, never an unwind, and an unwinder is ~20 KB of
+# wasm nobody would call.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,3 @@
+# A log root naming version 3: refused before the walk, 12.
+# Written by doc/spec/fixture_wishes.rs (W-MG-READ), EIN_RULE_FIXTURES=<dir>; deterministic.
+status=12

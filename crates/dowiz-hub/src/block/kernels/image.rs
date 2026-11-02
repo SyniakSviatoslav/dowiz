@@ -10,7 +10,7 @@
 //!     after the last, dishes strictly ascending and named -- refusing with ITS refusal, in ITS order
 //!     (rows walked in place, never copied). It keeps each day's column ranges.
 //!   * `Index::view(bytes)` -- for a holder that already opened THESE bytes (one `Index` per image
-//!     generation, as `bebop_store::kv::zc`'s `Checked`): no crc, O(blocks) -- the length and every
+//!     generation, as `einstore::kv::zc`'s `Checked`): no crc, O(blocks) -- the length and every
 //!     block's stored crc trailer must equal what `open` saw, else `Mismatch`. An `Index` only comes
 //!     out of a successful `open`, and every range it holds lies inside a buffer of that length, so a
 //!     wrong `Index` gives a wrong answer at worst, never a panic.

@@ -1,8 +1,8 @@
 //! The limits of what `holds` covers, measured: anchors, SPEC, DOC flags, whole files.
 use super::*;
-use bebop_store::evlog::doc::spec::SpecIn;
-use bebop_store::evlog::doc::{Doc, Signer, FLAG_SELF_DESCRIBING, FLAG_SHA256_IDS, KIND_PLATFORM_TSA};
-use bebop_store::Store;
+use einstore::evlog::doc::spec::SpecIn;
+use einstore::evlog::doc::{Doc, Signer, FLAG_SELF_DESCRIBING, FLAG_SHA256_IDS, KIND_PLATFORM_TSA};
+use einstore::Store;
 use dowiz_hub::doc_seal::live::verify_image;
 use dowiz_hub::doc_seal::tsa;
 
@@ -37,14 +37,14 @@ fn anchors_spec_flags_and_whole_files() {
     orders(&mut other, &a, "q", 3);
     other.cut(2, &a, 5).unwrap();
     let mut x = read(&other.to_bytes_trimmed());
-    x.anchors.push(bebop_store::evlog::doc::Anchor { at: 0, kind: KIND_PLATFORM_TSA, over: [7; 32], time_ms: 5, prev: None, proof: tsa::mark(&platform, &[7; 32], 5) });
+    x.anchors.push(einstore::evlog::doc::Anchor { at: 0, kind: KIND_PLATFORM_TSA, over: [7; 32], time_ms: 5, prev: None, proof: tsa::mark(&platform, &[7; 32], 5) });
     let o = verify_image(&write(&x), &keys, None).unwrap();
     println!("ATK anch-moved-into-cut-file LIMIT: ok={} bad={} unchecked={} cut={} outcome_holds={}", o.counts.ok, o.counts.bad, o.counts.unchecked, o.counts.cut, o.holds());
     assert!(o.holds() && o.counts.bad == 0 && o.counts.unchecked == 1);
 
     // SPEC: the embedded reader swapped, its sha claim with it: `verify` never reads it.
     let wasm = b"\0asm evil";
-    let spec = SpecIn { wasm, wasm_sha256: bebop_store::nodekey::sha256(wasm), text: b"lies", abi: 2 };
+    let spec = SpecIn { wasm, wasm_sha256: einstore::nodekey::sha256(wasm), text: b"lies", abi: 2 };
     let mut arch = Store::create_bytes(1 << 20).unwrap();
     Doc::archive_bytes(&Store::from_bytes(&bytes), &mut arch, &spec).unwrap();
     let r = only("spec-swapped LIMIT", &arch.to_bytes_trimmed(), &roots).unwrap();

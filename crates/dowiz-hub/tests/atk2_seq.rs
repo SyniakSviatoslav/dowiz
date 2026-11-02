@@ -5,10 +5,10 @@
 mod atk_forge;
 
 use atk_forge::*;
-use bebop_store::evlog::doc::keys::{Key, KeyOp};
-use bebop_store::evlog::doc::seal::{message, Seal};
-use bebop_store::evlog::doc::{Ids, Signer, ALG_ML_DSA_65};
-use bebop_store::evlog::{Record, FLAG_SHA256};
+use einstore::evlog::doc::keys::{Key, KeyOp};
+use einstore::evlog::doc::seal::{message, Seal};
+use einstore::evlog::doc::{Ids, Signer, ALG_ML_DSA_65};
+use einstore::evlog::{Record, FLAG_SHA256};
 use dowiz_hub::doc_seal::{DeviceKey, HubIds, SealedHub, KIND_KEYOP};
 use dowiz_hub::EventKind;
 

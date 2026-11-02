@@ -1,12 +1,12 @@
 # Oracle for gate `block_neg` (DG9, SPEC-DATALOG-AND-CODEC B-1). The same fifteen cases as
 # std_tests/block_neg.bp on the 165-dish menu_prices fixture: the untouched twin must decode with
 # encode(decode(b)) == b, and each single flipped byte (crc re-sealed, except for the crc's own case)
-# must be refused by crates/bebop-wasm/oracle.py's block_check with the region's code AND column
+# must be refused by crates/dowiz-hub-wasm/oracle.py's block_check with the region's code AND column
 # (DG7's check() order). Prints pass * 1000 + fail.
 import importlib.util, pathlib, struct, zlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
-spec = importlib.util.spec_from_file_location("bw_oracle", ROOT / "crates/bebop-wasm/oracle.py")
+spec = importlib.util.spec_from_file_location("bw_oracle", ROOT / "crates/dowiz-hub-wasm/oracle.py")
 o = importlib.util.module_from_spec(spec); spec.loader.exec_module(o)
 b0 = (ROOT / "crates/dowiz-hub/fixtures/blocks/menu_prices.dwb").read_bytes()
 nm, n, nnz, vals = o.block_decode(b0)

@@ -9,9 +9,9 @@ use super::{describe, header_line_from_explorer, verify_image, verify_ots, FileH
 use crate::doc_seal::ots::{self, Attestation, BlockHeaders, Calendar, Op, Proof, Ts};
 use crate::doc_seal::{DeviceKey, SealedHub};
 use crate::{EventKind, HubError};
-use bebop_store::evlog::doc::{Doc, Verdict};
-use bebop_store::nodekey::sha256;
-use bebop_store::Store;
+use einstore::evlog::doc::{Doc, Verdict};
+use einstore::nodekey::sha256;
+use einstore::Store;
 
 const JSON: &str = r#"{"id":"o1","total":300}"#;
 const A: &str = "https://a.test.calendar";
@@ -187,7 +187,7 @@ fn a_changed_cell_in_an_anchored_image_is_refused() {
 }
 
 /// Not a test of anything: a FIXTURE WRITER for the live run of `bin/anchor` (M1's
-/// `BEBOP_DOC_FIXTURE` shape). `DOWIZ_SEALED_OUT=<path>` writes a two-commit sealed image there;
+/// `EIN_DOC_FIXTURE` shape). `DOWIZ_SEALED_OUT=<path>` writes a two-commit sealed image there;
 /// unset, it writes nothing and asserts nothing.
 #[test]
 fn write_a_sealed_image_when_asked() {

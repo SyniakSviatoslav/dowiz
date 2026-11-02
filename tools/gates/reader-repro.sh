@@ -8,7 +8,7 @@
 #   sh tools/gates/reader-repro.sh         (two wasm32 builds: on the box under slot.sh, never nested)
 #
 # Copies what Cargo.lock names into two directories of different name and length, runs each copy's
-# own tools/verify/build.sh, and requires one sha, equal to WASM_SHA256 (bebop-verify.mjs), PINNED
+# own tools/verify/build.sh, and requires one sha, equal to WASM_SHA256 (ein-verify.mjs), PINNED
 # (read.mjs) and the sha of the embedded base64. The repo is only read. Whether build.sh's ratchet
 # accepted the module is reported, not judged: that is verify-gate's question.
 #
@@ -16,7 +16,7 @@
 # made no module). A gate that cannot measure never passes (memory: gates-that-count-skips-as-passes).
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-C="$ROOT/crates/bebop-wasm-reader"
+C="$ROOT/crates/einfile-reader"
 unset BWR_TARGET_DIR   # one shared target dir would make "two directories" one build
 say() { echo "reader-repro: $*"; }
 red() { say "RED $*"; exit 1; }
@@ -42,7 +42,7 @@ checkout() { # checkout <dir>: exactly what build.sh reads, found from the lockf
 build() { # build <dir>: sets $sha and $bytes, or stops with NO VERDICT
   checkout "$1"
   sh "$1/tools/verify/build.sh" > "$S/log" 2>&1; brc=$?
-  w="$1/crates/bebop-wasm-reader/target/wasm32-unknown-unknown/release/bebop_wasm_reader.wasm"
+  w="$1/crates/einfile-reader/target/wasm32-unknown-unknown/release/einfile_reader.wasm"
   if [ ! -s "$w" ]; then
     grep -q 'signal: 9' "$1/tools/verify/.build.log" 2>/dev/null && say "the compiler was SIGKILLed, by the box and not by the source"
     say "NO VERDICT no module in $(basename "$1"): rc=$brc -- $(tail -1 "$S/log")"; exit 3
@@ -55,9 +55,9 @@ build "$S/a-second-checkout-under-a-longer-name"
 [ "$sha1" = "$sha" ] || red "the same source built $sha1 and $sha: the bytes depend on the directory (is rustc-stable-id.sh still build.sh's RUSTC_WRAPPER?)"
 
 pin=$(sed -n 's/^const PINNED = "\([0-9a-f]\{64\}\)";$/\1/p' "$ROOT/examples/read.mjs")
-sum=$(sed -n 's/^const WASM_SHA256 = "\([0-9a-f]\{64\}\)";$/\1/p' "$ROOT/tools/verify/bebop-verify.mjs")
-emb=$(sed -n 's/^const WASM_B64 = "\(.*\)";$/\1/p' "$ROOT/tools/verify/bebop-verify.mjs" | base64 -d 2>/dev/null | sha256sum | cut -c1-64)
-fix="rebuild with tools/verify/build.sh and commit tools/verify/bebop-verify.mjs and examples/read.mjs"
+sum=$(sed -n 's/^const WASM_SHA256 = "\([0-9a-f]\{64\}\)";$/\1/p' "$ROOT/tools/verify/ein-verify.mjs")
+emb=$(sed -n 's/^const WASM_B64 = "\(.*\)";$/\1/p' "$ROOT/tools/verify/ein-verify.mjs" | base64 -d 2>/dev/null | sha256sum | cut -c1-64)
+fix="rebuild with tools/verify/build.sh and commit tools/verify/ein-verify.mjs and examples/read.mjs"
 [ "$sum" = "$sha" ] || red "WASM_SHA256 is ${sum:-missing}, the source builds $sha: $fix"
 [ "$pin" = "$sha" ] || red "read.mjs PINNED is ${pin:-missing}, the source builds $sha: $fix"
 [ "$emb" = "$sha" ] || red "the embedded base64 is $emb, the source builds $sha: $fix"

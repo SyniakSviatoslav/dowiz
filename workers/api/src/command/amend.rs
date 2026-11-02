@@ -2,7 +2,7 @@
 //! stands at — as one signed `Amended` event, in one object turn.
 //!
 //! THE DECIDER MOVED to `dowiz_hub::room::amend` (D7 phase 1, BLUEPRINT-
-//! OPERATIONAL-BLIND-SPOTS §2.11), where `bebop-wasm --features decide` runs the
+//! OPERATIONAL-BLIND-SPOTS §2.11), where `dowiz-hub-wasm --features decide` runs the
 //! same code for a tablet that is offline. Its header holds the rules (the
 //! intent form, `base_seq`, the record outranking the permission). This file
 //! is what every caller here already names, so none of them changed.

@@ -5,8 +5,8 @@
 mod atk5_common;
 
 use atk5_common::*;
-use bebop_store::evlog::doc::{Doc, DocError, Signer};
-use bebop_store::Store;
+use einstore::evlog::doc::{Doc, DocError, Signer};
+use einstore::Store;
 use dowiz_hub::doc_seal::{HubIds, SealedHub, MIN_SEALED_BYTES};
 
 fn records(f: &[u8]) -> usize {

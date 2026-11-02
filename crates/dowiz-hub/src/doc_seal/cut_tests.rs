@@ -7,10 +7,10 @@ use super::tests::{device, real_hub, JSON};
 use super::tsa::{self, PlatformTsa};
 use super::{HubIds, SealedHub, KIND_DECL};
 use crate::{Event, EventKind, Hub, HubError};
-use bebop_store::evlog::doc::seg::{parse_truncate, read_seg};
-use bebop_store::evlog::doc::{AnchorCounts, Doc, Ids, KeyOp, Verdict, KIND_PLATFORM_TSA};
-use bebop_store::evlog::EvLog;
-use bebop_store::nodekey::sha256;
+use einstore::evlog::doc::seg::{parse_truncate, read_seg};
+use einstore::evlog::doc::{AnchorCounts, Doc, Ids, KeyOp, Verdict, KIND_PLATFORM_TSA};
+use einstore::evlog::EvLog;
+use einstore::nodekey::sha256;
 
 const PHONE: &str = "+355691111111";
 

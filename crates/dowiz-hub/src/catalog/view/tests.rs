@@ -37,8 +37,8 @@ fn images() -> Vec<(&'static str, Vec<u8>)> {
         ("dubin 165 dishes", dubin().to_bytes().unwrap()),
         ("dubin + recipes/supplies/promos", dubin_full().to_bytes().unwrap()),
         ("165 x 2.5 KB", big_165().to_bytes().unwrap()),
-        ("kv.store v1 fixture", include_bytes!("../../../../bebop-wasm/fixtures/kv.store").to_vec()),
-        ("kv2.store v2 fixture", include_bytes!("../../../../bebop-wasm/fixtures/kv2.store").to_vec()),
+        ("kv.store v1 fixture", include_bytes!("../../../../dowiz-hub-wasm/fixtures/kv.store").to_vec()),
+        ("kv2.store v2 fixture", include_bytes!("../../../../dowiz-hub-wasm/fixtures/kv2.store").to_vec()),
         ("165 x 2.5 KB + 3 delta writes (v3)", with_deltas()),
     ]
 }
@@ -98,7 +98,7 @@ fn the_view_refuses_what_catalog_load_refuses() {
     assert!(matches!(CatalogView::open(b"not an image"), Err(HubError::NotAHub)));
     assert!(matches!(Catalog::load(b"not an image"), Err(HubError::NotAHub)));
     let mut bytes = dubin().to_bytes().unwrap();
-    let st = bebop_store::Store::from_bytes(&bytes);
+    let st = einstore::Store::from_bytes(&bytes);
     let vblob = st.follow(st.root().unwrap(), 4).unwrap();
     bytes[(vblob + 2 + 100) * 8 + 3] ^= 0x20;
     match (Catalog::load(&bytes), CatalogView::open(&bytes)) {

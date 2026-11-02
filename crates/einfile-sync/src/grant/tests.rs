@@ -4,9 +4,9 @@
 use super::*;
 use crate::toys::*;
 use crate::Device;
-use bebop_image::Store;
-use bebop_log::doc::{Doc, KeyOp};
-use bebop_log::EvLog;
+use einfile_image::Store;
+use einfile_log::doc::{Doc, KeyOp};
+use einfile_log::EvLog;
 
 const MONEY: Pair = (R_LEDGER, A_APPEND);
 const MENU: Pair = (0x05, 0x02);
@@ -19,7 +19,7 @@ fn records(st: &Store) -> Vec<Record> {
 }
 
 fn keys(st: &Store) -> Vec<Key> {
-    bebop_log::doc::keys::read_keys(st, Doc::open(st).unwrap().keys)
+    einfile_log::doc::keys::read_keys(st, Doc::open(st).unwrap().keys)
 }
 
 fn fold(st: &Store) -> Grants {

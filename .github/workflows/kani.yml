@@ -1,10 +1,10 @@
-# Kani proof harnesses over bebop-log and bebop-image's small pure functions (crates/bebop-log-kani).
+# Kani proof harnesses over einfile-log and einfile-image's small pure functions (crates/einfile-log-kani).
 # Separate from CI on purpose: a red here blocks no merge and no release. Kani is a bounded model
 # checker, not a fuzzer, and it is not installed on the box: THIS WORKFLOW IS WHAT RUNS THE HARNESSES.
 # Until its first green run they have never run, and a property in them is a statement to check.
 #
 # A green `cargo kani` is not enough: an unsatisfied `kani::cover!` leaves the exit code at 0 and means
-# the harness checked nothing (crates/bebop-log-kani/src/lib.rs), and a harness that was not run
+# the harness checked nothing (crates/einfile-log-kani/src/lib.rs), and a harness that was not run
 # proves nothing. So the last step counts all of them, from the source and from the log.
 name: kani
 on:
@@ -30,14 +30,14 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cd crates/bebop-log-kani
+          cd crates/einfile-log-kani
           cargo kani 2>&1 | tee "$GITHUB_WORKSPACE/kani.out"
       - name: Count the harnesses and the covers
         if: always()
         shell: bash
         run: |
           set -o pipefail
-          n=$(grep -rh '^#\[kani::proof\]' crates/bebop-log-kani/src | wc -l)
+          n=$(grep -rh '^#\[kani::proof\]' crates/einfile-log-kani/src | wc -l)
           [ "$n" -gt 0 ] || { echo "::error::no harness in the source: this measured nothing"; exit 1; }
           grep -q "Complete - $n successfully verified harnesses, 0 failures, $n total" kani.out || { echo "::error::not all $n harnesses verified (or the run did not finish): read kani.out"; exit 1; }
           if grep -nE 'Status: (UNSATISFIABLE|UNDETERMINED)' kani.out; then echo "::error::a cover is unsatisfied or undetermined: that harness checked nothing"; exit 1; fi

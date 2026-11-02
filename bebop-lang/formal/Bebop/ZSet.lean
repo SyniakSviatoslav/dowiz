@@ -5,7 +5,7 @@
 
   THE MODEL (DBSP, Budiu et al. PVLDB 16(7) 2023; formalisation tchajed/dbsp-theory):
     * a Z-set is a function `α → Int` (a weight per row); `add`/`neg`/`zero` make it a group;
-    * `ofList` is the finite-support form the Rust side keeps (`crates/bebop-store/src/zset.rs`, a
+    * `ofList` is the finite-support form the Rust side keeps (`crates/einstore/src/zset.rs`, a
       sorted `Vec<(row, i64)>`): a list of (row, weight) pairs, summed; `ofList_append` says
       concatenating two such lists adds the Z-sets, so sorting/merging them is an implementation detail;
     * `logTail` is `from_log_tail`: records after `tip`, every weight +1;

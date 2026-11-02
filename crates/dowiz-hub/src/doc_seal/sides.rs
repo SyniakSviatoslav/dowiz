@@ -20,9 +20,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use bebop_store::evlog::doc::keys::read_keys;
-use bebop_store::evlog::doc::{parse_merge, Doc, Ids, Row};
-use bebop_store::evlog::Record;
+use einstore::evlog::doc::keys::read_keys;
+use einstore::evlog::doc::{parse_merge, Doc, Ids, Row};
+use einstore::evlog::Record;
 
 use super::stock::{stock_event, KIND_STOCK};
 use super::{hex32, HubIds, SealedHub};

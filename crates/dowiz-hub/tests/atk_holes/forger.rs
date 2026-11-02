@@ -1,8 +1,8 @@
 //! A file, no key: revocation and erasure undone.
 use super::*;
-use bebop_store::evlog::doc::keys::{KeyOp, REVOKE_MARK};
-use bebop_store::evlog::FLAG_SHA256;
-use bebop_store::nodekey::sha256;
+use einstore::evlog::doc::keys::{KeyOp, REVOKE_MARK};
+use einstore::evlog::FLAG_SHA256;
+use einstore::nodekey::sha256;
 
 const PHONE: &str = "+355691111111";
 
@@ -31,7 +31,7 @@ fn hole_1_a_root_key_row_is_not_bound_to_the_actor_it_names() {
     let mut s = round_trip(&bytes, &roots);
     let top = s.chains[0].last().unwrap().clone();
     let rec = forged(a.id(), top.seq + 1, top.tip, 0x55);
-    s.chains[0].push(bebop_store::evlog::doc::Seal { seq: top.seq + 1, tip: rec.id, ..top });
+    s.chains[0].push(einstore::evlog::doc::Seal { seq: top.seq + 1, tip: rec.id, ..top });
     s.recs.push(rec);
     s.keys[0].0.pk = forger.public_key().to_vec();
     resign(&mut s.chains[0], &forger, [0; 32]);

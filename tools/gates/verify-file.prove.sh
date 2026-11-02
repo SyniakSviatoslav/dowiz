@@ -16,10 +16,10 @@ S=$(mktemp -d "${TMPDIR:-/tmp}/verify-file-prove.XXXXXX")
 trap 'rm -rf "$S"' EXIT
 fail=0
 fresh() {
-  rm -rf "$S/r"; mkdir -p "$S/r/tools/gates" "$S/r/crates/bebop-wasm/fixtures" "$S/r/examples"
+  rm -rf "$S/r"; mkdir -p "$S/r/tools/gates" "$S/r/crates/dowiz-hub-wasm/fixtures" "$S/r/examples"
   cp -r "$REPO/tools/verify" "$S/r/tools/verify"
   cp "$REPO/tools/gates/verify-file.sh" "$S/r/tools/gates/"
-  cp "$REPO/crates/bebop-wasm/fixtures/"*.store "$REPO/crates/bebop-wasm/fixtures/"*.expected "$S/r/crates/bebop-wasm/fixtures/"
+  cp "$REPO/crates/dowiz-hub-wasm/fixtures/"*.store "$REPO/crates/dowiz-hub-wasm/fixtures/"*.expected "$S/r/crates/dowiz-hub-wasm/fixtures/"
   cp "$REPO/examples/read.mjs" "$S/r/examples/"
 }
 want() { # want <rc> <label> <grep>
@@ -28,7 +28,7 @@ want() { # want <rc> <label> <grep>
   echo "verify-file.prove: $2 -> rc=$rc (want $1): ${hit:-$(tail -1 "$S/out" | cut -c1-120)}"
   [ "$rc" -eq "$1" ] && [ -n "$hit" ] || { tail -5 "$S/out"; fail=1; }
 }
-F="$S/r/crates/bebop-wasm/fixtures"
+F="$S/r/crates/dowiz-hub-wasm/fixtures"
 fresh; want 0 "clean scratch" "verify-file: GREEN"
 fresh; sed -i 's/^root=-4092201869538170098$/root=-4092201869538170097/' "$F/kv3.expected"; want 1 "kv3.expected root moved by one" "kv3: .*DISAGREE"
 fresh; sed -i 's/^doc_verify=\(.*\)broken=0/doc_verify=\1broken=2/; s/^doc_verify=\(.*\)broken=3/doc_verify=\1broken=2/' "$F/doc.expected"; want 1 "doc_verify says broken=2" "doc: .*DISAGREE"

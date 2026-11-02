@@ -6,8 +6,8 @@
 //! (`public/store/verify.js`).
 //!
 //! This is the Worker's reader of the tree, written over `sha2` because the Worker does not link
-//! `bebop-store` (the crate's own `merkle.rs` is the normative Rust); `root/tests.rs` pins it to the
-//! gate fixture root of `crates/bebop-wasm/fixtures/verify.expected`, so the two cannot drift.
+//! `einstore` (the crate's own `merkle.rs` is the normative Rust); `root/tests.rs` pins it to the
+//! gate fixture root of `crates/dowiz-hub-wasm/fixtures/verify.expected`, so the two cannot drift.
 //!
 //! THE SIGNATURE is ML-DSA-65 (`dowiz_core::pq::dsa`, FIPS 204, ACVP-gated), deterministic
 //! (`rnd = 0^32`) over `signed_message`, with the key derived from the 32-byte seed in the
@@ -78,7 +78,7 @@ pub(super) fn root_of(rows: &[(String, i64)]) -> Hash {
     mth(&rows.iter().map(|(id, p)| leaf(id, *p)).collect::<Vec<_>>())
 }
 
-/// The bytes the venue signs: byte-for-byte `bebop_store::merkle::signed_message`.
+/// The bytes the venue signs: byte-for-byte `einstore::merkle::signed_message`.
 pub(super) fn signed_message(slug: &str, gen: i64, n: u64, root: &Hash) -> Vec<u8> {
     let mut v = vec![b'R'];
     field(&mut v, b"dowiz-price-root-v1");

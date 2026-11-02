@@ -23,7 +23,7 @@ from atk3_lib import *
 from atk3_cases_doc import A, recs_ab
 
 READ = os.environ.get("ATK3_READ", ROOT + "/examples/read.mjs")
-PY, MJS = os.environ.get("ATK3_PY", ROOT + "/tools/verify/bebop-verify.py"), os.environ.get("ATK3_MJS", ROOT + "/tools/verify/bebop-verify.mjs")
+PY, MJS = os.environ.get("ATK3_PY", ROOT + "/tools/verify/ein-verify.py"), os.environ.get("ATK3_MJS", ROOT + "/tools/verify/ein-verify.mjs")
 
 
 def leb(n):

@@ -1,6 +1,6 @@
 //! ROLLBACK SAFETY FOR v3 KV IMAGES (W-ATOMIC row 3).
 //!
-//! W-DELTA's catalogue writes append a delta chain (bebop-store image v3) instead of compacting.
+//! W-DELTA's catalogue writes append a delta chain (einstore image v3) instead of compacting.
 //! A Worker built before W-DELTA REFUSES a v3 image, so rolling the Worker back after the first
 //! delta write would leave every venue's catalogue unreadable until something compacted it.
 //!
@@ -26,7 +26,7 @@ use worker::{Error, Result};
 mod tests;
 pub(crate) mod fan;
 
-/// The images held in the bebop KV layout, the ones W-DELTA can leave at v3.
+/// The images held in the einfile KV layout, the ones W-DELTA can leave at v3.
 pub(super) const KV_IMAGES: &[&str] = &[super::CATALOG_IMAGE];
 /// `true` while KV images are stored v2 only.
 const PIN_KEY: &str = "pin:kv-v2";

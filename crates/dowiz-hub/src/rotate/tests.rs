@@ -2,7 +2,7 @@
 
 use super::segment_root;
 use crate::{EventKind, Hub};
-use bebop_store::evlog::EvLog;
+use einstore::evlog::EvLog;
 
 const ACTOR: [u8; 32] = [0xA1; 32];
 

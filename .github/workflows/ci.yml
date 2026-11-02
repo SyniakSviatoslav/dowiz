@@ -38,83 +38,83 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            crates/bebop-image
-            crates/bebop-kv
-            crates/bebop-log
-            crates/bebop-io
-            crates/bebop-store
+            crates/einfile-image
+            crates/einfile-kv
+            crates/einfile-log
+            crates/einfile-io
+            crates/einstore
             crates/einfile-sync
-            crates/bebop-sig-mldsa
+            crates/einfile-sig-mldsa
             crates/dowiz-core
             crates/dowiz-hub
-            crates/bebop-wasm
+            crates/dowiz-hub-wasm
             workers/api
             tools/gen-vocab
       # W-ES-P1 (2026-10-29): the store is four library crates and a facade; each is standalone.
-      - name: bebop-image (the image format)
-        run: cd crates/bebop-image && sh ../../tools/gates/ci-annotate.inc bebop-image cargo test
-      - name: bebop-kv (the KV layout)
-        run: cd crates/bebop-kv && sh ../../tools/gates/ci-annotate.inc bebop-kv cargo test
-      - name: bebop-log (the event log)
-        run: cd crates/bebop-log && sh ../../tools/gates/ci-annotate.inc bebop-log cargo test
-      - name: bebop-io (device, writer, crash harness)
-        run: cd crates/bebop-io && sh ../../tools/gates/ci-annotate.inc bebop-io cargo test
-      - name: bebop-kv with KV v4 (feature tree)
-        run: cd crates/bebop-kv && sh ../../tools/gates/ci-annotate.inc bebop-kv-tree cargo test --features tree
-      - name: bebop-io with KV v4 (feature tree; the v4 crash harness)
-        run: cd crates/bebop-io && sh ../../tools/gates/ci-annotate.inc bebop-io-tree cargo test --features tree
-      - name: bebop-crc (hardware CRC == software, every length)
-        run: cd crates/bebop-crc && sh ../../tools/gates/ci-annotate.inc bebop-crc cargo test --features std
-      - name: bebop-ffi (the C ABI, the fifth reader)
-        run: cd crates/bebop-ffi && sh ../../tools/gates/ci-annotate.inc bebop-ffi cargo test
+      - name: einfile-image (the image format)
+        run: cd crates/einfile-image && sh ../../tools/gates/ci-annotate.inc einfile-image cargo test
+      - name: einfile-kv (the KV layout)
+        run: cd crates/einfile-kv && sh ../../tools/gates/ci-annotate.inc einfile-kv cargo test
+      - name: einfile-log (the event log)
+        run: cd crates/einfile-log && sh ../../tools/gates/ci-annotate.inc einfile-log cargo test
+      - name: einfile-io (device, writer, crash harness)
+        run: cd crates/einfile-io && sh ../../tools/gates/ci-annotate.inc einfile-io cargo test
+      - name: einfile-kv with KV v4 (feature tree)
+        run: cd crates/einfile-kv && sh ../../tools/gates/ci-annotate.inc einfile-kv-tree cargo test --features tree
+      - name: einfile-io with KV v4 (feature tree; the v4 crash harness)
+        run: cd crates/einfile-io && sh ../../tools/gates/ci-annotate.inc einfile-io-tree cargo test --features tree
+      - name: einfile-crc (hardware CRC == software, every length)
+        run: cd crates/einfile-crc && sh ../../tools/gates/ci-annotate.inc einfile-crc cargo test --features std
+      - name: einfile-ffi (the C ABI, the fifth reader)
+        run: cd crates/einfile-ffi && sh ../../tools/gates/ci-annotate.inc einfile-ffi cargo test
       # T-ES-05: no_std for real (no `std` feature -> #![no_std]), zero crates outside the library,
-      # no `unsafe`; and bebop-io, which the Worker links, builds for wasm32.
-      - name: bebop library no_std + dependency gate (T-ES-05)
+      # no `unsafe`; and einfile-io, which the Worker links, builds for wasm32.
+      - name: einfile library no_std + dependency gate (T-ES-05)
         run: |
-          for c in bebop-image bebop-kv bebop-log bebop-io; do
+          for c in einfile-image einfile-kv einfile-log einfile-io; do
             (cd crates/$c && cargo build --target wasm32-unknown-unknown) || exit 1
             grep -q '^#!\[forbid(unsafe_code)\]' crates/$c/src/lib.rs || { echo "::error::$c lacks forbid(unsafe_code)"; exit 1; }
           done
-          # bebop-crc is the library's own zero-dependency crate (the one place hardware CRC needs
-          # `unsafe`, so bebop-image keeps forbid(unsafe_code)); it must itself depend on nothing.
+          # einfile-crc is the library's own zero-dependency crate (the one place hardware CRC needs
+          # `unsafe`, so einfile-image keeps forbid(unsafe_code)); it must itself depend on nothing.
           # `|| true`: an empty grep exits 1, and the runner's `bash -e` ended the step on it silently.
-          for c in bebop-crc bebop-image bebop-kv bebop-log; do
-            extra=$(cd crates/$c && cargo tree -e no-dev --prefix none | awk '{print $1}' | sort -u | { grep -v -x -e bebop-crc -e bebop-image -e $c || true; })
+          for c in einfile-crc einfile-image einfile-kv einfile-log; do
+            extra=$(cd crates/$c && cargo tree -e no-dev --prefix none | awk '{print $1}' | sort -u | { grep -v -x -e einfile-crc -e einfile-image -e $c || true; })
             [ -z "$extra" ] || { echo "::error::$c depends on: $extra"; exit 1; }
           done
       # T-ES-06: no new unchecked index in the three no_std crates (the existing sites carry a named allow).
-      - name: bebop library index gate (T-ES-06)
+      - name: einfile library index gate (T-ES-06)
         run: |
-          for c in bebop-image bebop-kv bebop-log; do
+          for c in einfile-image einfile-kv einfile-log; do
             (cd crates/$c && cargo clippy --lib && cargo clippy --lib --features std) || exit 1
           done
-      - name: bebop-log with feature sync (the tail door, K-T1)
-        run: cd crates/bebop-log && sh ../../tools/gates/ci-annotate.inc bebop-log-sync cargo test --features sync
+      - name: einfile-log with feature sync (the tail door, K-T1)
+        run: cd crates/einfile-log && sh ../../tools/gates/ci-annotate.inc einfile-log-sync cargo test --features sync
       - name: einfile-sync (frames, sessions, the file transport, GRANT)
         run: cd crates/einfile-sync && sh ../../tools/gates/ci-annotate.inc einfile-sync cargo test
       - name: einfile-sync clippy
         run: cd crates/einfile-sync && cargo clippy --all-targets -- -D warnings
-      - name: bebop-store (the facade + the DAG runtime)
-        run: cd crates/bebop-store && sh ../../tools/gates/ci-annotate.inc bebop-store cargo test
+      - name: einstore (the facade + the DAG runtime)
+        run: cd crates/einstore && sh ../../tools/gates/ci-annotate.inc einstore cargo test
       # W-MG-SIG: the seal's signature, the differential against dowiz-core's dsa, and its
       # wasm32 build, since the Worker links it. No getrandom: this crate draws no randomness.
-      - name: bebop-sig-mldsa (ML-DSA-65 behind Signer and Verifier)
-        run: cd crates/bebop-sig-mldsa && sh ../../tools/gates/ci-annotate.inc bebop-sig-mldsa cargo test
-      - name: bebop-sig-mldsa clippy, wasm32, dependency gate
+      - name: einfile-sig-mldsa (ML-DSA-65 behind Signer and Verifier)
+        run: cd crates/einfile-sig-mldsa && sh ../../tools/gates/ci-annotate.inc einfile-sig-mldsa cargo test
+      - name: einfile-sig-mldsa clippy, wasm32, dependency gate
         run: |
-          cd crates/bebop-sig-mldsa
+          cd crates/einfile-sig-mldsa
           cargo clippy --all-targets -- -D warnings
           cargo build --target wasm32-unknown-unknown
           bad=$(cargo tree -e no-dev --prefix none | awk '{print $1}' | sort -u | { grep -x -e getrandom -e dowiz-core || true; })
-          [ -z "$bad" ] || { echo "::error::bebop-sig-mldsa links: $bad"; exit 1; }
+          [ -z "$bad" ] || { echo "::error::einfile-sig-mldsa links: $bad"; exit 1; }
       - name: dowiz-core (the kernel)
         run: cd crates/dowiz-core && sh ../../tools/gates/ci-annotate.inc dowiz-core cargo test
       - name: dowiz-hub (one venue's images as pure logic)
         run: cd crates/dowiz-hub && sh ../../tools/gates/ci-annotate.inc dowiz-hub cargo test
       # The room's amend and pay deciders built into the wasm32 module: the browser and the
       # server must produce the same bytes (D7 phase 1).
-      - name: bebop-wasm with the room deciders
-        run: cd crates/bebop-wasm && sh ../../tools/gates/ci-annotate.inc bebop-wasm cargo test --features decide
+      - name: dowiz-hub-wasm with the room deciders
+        run: cd crates/dowiz-hub-wasm && sh ../../tools/gates/ci-annotate.inc dowiz-hub-wasm cargo test --features decide
       - name: workers/api (every route's pure half)
         run: cd workers/api && sh ../../tools/gates/ci-annotate.inc workers-api cargo test
       # Links dowiz-core and cross-checks FSM_GOLDEN_SIGNATURE, so a kernel change that moves the
@@ -125,7 +125,7 @@ jobs:
   # EVERY GATE, ONE TABLE. run-all.sh discovers tools/gates/*.sh by glob, so a gate added to that
   # directory runs here without editing this file -- three gates once sat committed and ran
   # nowhere. Each *.prove.sh runs before its gate. --cargo adds vocab.sh (compiles gen-vocab) and
-  # the bebop-wasm four-reader gate (bebop.bin is AArch64-only: NOT MEASURED here, and said so).
+  # the dowiz-hub-wasm four-reader gate (bebop.bin is AArch64-only: NOT MEASURED here, and said so).
   gates:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -141,15 +141,15 @@ jobs:
         with:
           workspaces: |
             tools/gen-vocab
-            crates/bebop-wasm
+            crates/dowiz-hub-wasm
       # vocab.sh runs `cargo run --offline`; a cold runner has nothing to be offline with.
       - name: fetch gen-vocab's dependencies
         run: cd tools/gen-vocab && cargo fetch
       # 2026-10-08: three gates REFUSED on the runner for want of their inputs, which the box has and the
       # runner did not: deps-audit (no RustSec checkout), ci-refs (no python yaml), canvas-* (no playwright).
-      # bebop-wasm/gate.sh builds with --offline (the hub crate's examples too): fetch what a cold cache lacks.
-      - name: fetch bebop-wasm's and dowiz-hub's dependencies
-        run: (cd crates/bebop-wasm && cargo fetch) && (cd crates/dowiz-hub && cargo fetch)
+      # dowiz-hub-wasm/gate.sh builds with --offline (the hub crate's examples too): fetch what a cold cache lacks.
+      - name: fetch dowiz-hub-wasm's and dowiz-hub's dependencies
+        run: (cd crates/dowiz-hub-wasm && cargo fetch) && (cd crates/dowiz-hub && cargo fetch)
       - name: the RustSec advisory checkout deps-audit reads
         run: sh tools/deps/refresh.sh
       - name: python yaml for ci-refs

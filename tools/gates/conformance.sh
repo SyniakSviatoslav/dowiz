@@ -1,16 +1,16 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT OR Apache-2.0
 # CONFORMANCE 5 x 5 (W-ES-P4, R-EMBED-STORE §4.4 T-ES-30/32, §5 row P4). Every KV fixture of
-# crates/bebop-wasm/fixtures, read by FIVE readers, each answer mapped to ONE status vocabulary
+# crates/dowiz-hub-wasm/fixtures, read by FIVE readers, each answer mapped to ONE status vocabulary
 # (docs/STATUS-CODES.md) and held against the fixture's `.expected`:
 #
-#   native    crates/bebop-wasm/fixtures/conform (`bebop-conform read`): bebop-image's
-#             pick_checked_in + bebop-kv's Kv::load_checked -- the LIBRARY, not bebop-wasm's copy
-#   wasm32    crates/bebop-wasm built for wasm32 (the ratchet module, bytes.baseline), under node
-#   python    crates/bebop-wasm/oracle.py, from the bytes alone
+#   native    crates/dowiz-hub-wasm/fixtures/conform (`einfile-conform read`): einfile-image's
+#             pick_checked_in + einfile-kv's Kv::load_checked -- the LIBRARY, not dowiz-hub-wasm's copy
+#   wasm32    crates/dowiz-hub-wasm built for wasm32 (the ratchet module, bytes.baseline), under node
+#   python    crates/dowiz-hub-wasm/oracle.py, from the bytes alone
 #   bebop.bin selfhost/std/kv.bp compiled by bebop.bin (AArch64 only: elsewhere NOT MEASURED, said
 #             so, never counted as agreement); exit codes mapped by docs/STATUS-CODES.md
-#   ffi       crates/bebop-ffi's C ABI through bindings/python/bebop_store.py (Verify::Reachable)
+#   ffi       crates/einfile-ffi's C ABI through bindings/python/einstore.py (Verify::Reachable)
 #
 # value fixtures   : status=0 and n= and root= must all match
 # refusal fixtures : status= must match on every reader (n/root are not compared)
@@ -26,7 +26,7 @@
 # ABI. kv4old carries one corrupted REACHABLE object of an OLDER commit (below the anchor's mark). An open
 # at depth 0 (Anchor: pick + PartTab crc + the anchor over the last commit, O(last commit)) must SUCCEED
 # and read the image -- the corruption is not the anchor's business, by design, not by accident -- and
-# `bebop_db_verify(REACHABLE)` on that open database must refuse it with BAD_CRC (10); an open at depth 1
+# `einfile_db_verify(REACHABLE)` on that open database must refuse it with BAD_CRC (10); an open at depth 1
 # (Reachable) must refuse with 10 at once. The same image is status 10 in the matrix above, where every
 # reader checks what it reaches.
 #
@@ -36,7 +36,7 @@ set -u
 # The paths below are the crates' own target dirs; deploy.sh exports a shared one.
 unset CARGO_TARGET_DIR
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-W="$ROOT/crates/bebop-wasm"
+W="$ROOT/crates/dowiz-hub-wasm"
 FIX="$W/fixtures"
 CARGO="${CARGO:-$HOME/.cargo/bin/cargo}"
 [ -x "$CARGO" ] || CARGO=cargo
@@ -49,7 +49,7 @@ for a in "$@"; do
     *) echo "conformance: unknown argument $a" >&2; exit 2 ;;
   esac
 done
-# W-ES-P8D: the KV v4 fixtures (crates/bebop-wasm/fixtures/conform/src/kv4.rs) on all five readers;
+# W-ES-P8D: the KV v4 fixtures (crates/dowiz-hub-wasm/fixtures/conform/src/kv4.rs) on all five readers;
 # kv4stub is now a v4 claim that does not hold (status 2), no longer an unknown version (12).
 # W-ES-P10: kv4stale (a re-sealed object under a stale anchor: LAST_COMMIT 41 on every reader) and kv4old
 # (a corrupted object of an OLDER commit: BAD_CRC 10 on every reader, and `--lazy` below).
@@ -62,13 +62,13 @@ trap 'rm -rf "$SCRATCH"' EXIT
 say() { echo "conformance: $*"; }
 fail=0
 
-CONF="$W/target/conform/release/bebop-conform"
-WASM="$W/target/wasm32-unknown-unknown/release/bebop_wasm.wasm"
-LIB="$ROOT/crates/bebop-ffi/target/release/libbebop_ffi.so"
+CONF="$W/target/conform/release/einfile-conform"
+WASM="$W/target/wasm32-unknown-unknown/release/dowiz_hub_wasm.wasm"
+LIB="$ROOT/crates/einfile-ffi/target/release/libeinfile_ffi.so"
 if [ "$BUILD" = 1 ]; then
   (cd "$FIX/conform" && "$CARGO" build --release --offline --target-dir "$W/target/conform") > "$SCRATCH/b1.txt" 2>&1 \
     || { say "RED native build failed -- $(grep -m1 '^error' "$SCRATCH/b1.txt")"; exit 1; }
-  (cd "$ROOT/crates/bebop-ffi" && "$CARGO" build --release --offline) > "$SCRATCH/b2.txt" 2>&1 \
+  (cd "$ROOT/crates/einfile-ffi" && "$CARGO" build --release --offline) > "$SCRATCH/b2.txt" 2>&1 \
     || { say "RED ffi build failed -- $(grep -m1 '^error' "$SCRATCH/b2.txt")"; exit 1; }
   # the same remap gate.sh uses, so the byte count is the code's and not the checkout path's
   (cd "$W" && RUSTFLAGS="--remap-path-prefix=$ROOT=/dowiz" "$CARGO" build --release --target wasm32-unknown-unknown --offline) > "$SCRATCH/b3.txt" 2>&1 \
@@ -95,10 +95,10 @@ fi
 
 # one reader over one image -> `status=<s> n=<n> root=<r>` (or a line naming why it could not)
 ffi_read() {
-  BEBOP_FFI_LIB="$LIB" python3 -I - "$ROOT" "$1" <<'PY'
+  EIN_FFI_LIB="$LIB" python3 -I - "$ROOT" "$1" <<'PY'
 import os, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "bindings", "python"))
-import bebop_store as bs
+import einstore as bs
 data = open(sys.argv[2], "rb").read()
 try:
     with bs.Db.from_bytes(data, verify=bs.REACHABLE) as db, db.read() as r:
@@ -212,10 +212,10 @@ fi
 
 if [ "$LAZY" = 1 ]; then
   if [ ! -f "$LIB" ]; then say "RED --lazy: the C ABI library is absent ($LIB)"; fail=1; else
-  lz=$(BEBOP_FFI_LIB="$LIB" python3 -I - "$ROOT" "$FIX/kv4old.store" "$FIX/kv4deep.store" <<'PY' 2>&1
+  lz=$(EIN_FFI_LIB="$LIB" python3 -I - "$ROOT" "$FIX/kv4old.store" "$FIX/kv4deep.store" <<'PY' 2>&1
 import os, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "bindings", "python"))
-import bebop_store as bs
+import einstore as bs
 old = open(sys.argv[2], "rb").read()
 clean = open(sys.argv[3], "rb").read()
 def code(f):

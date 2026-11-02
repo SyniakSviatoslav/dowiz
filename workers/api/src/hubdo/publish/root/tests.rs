@@ -11,8 +11,8 @@ thread_local! {
 /// A TEST seed, 32 bytes of 0x5a. Never a production key (operator decision Q4).
 pub(in crate::hubdo::publish) const SEED: &str = "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a";
 
-/// The catalogue `crates/bebop-wasm/oracle_verify.py --make` cuts the gate fixtures from; its root is
-/// the `good` line of `crates/bebop-wasm/fixtures/verify.expected` (and bebop_store::merkle's).
+/// The catalogue `crates/dowiz-hub-wasm/oracle_verify.py --make` cuts the gate fixtures from; its root is
+/// the `good` line of `crates/dowiz-hub-wasm/fixtures/verify.expected` (and einstore::merkle's).
 #[test]
 fn the_workers_root_is_the_gate_fixtures_root() {
     let rows: Vec<(String, i64)> = (0..165).map(|i| (format!("p_{i:03}"), 100 + 7 * i as i64)).collect();

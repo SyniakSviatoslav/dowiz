@@ -1,6 +1,6 @@
 //! Photographs, content-addressed on disk.
 //!
-//! NOT IN A BEBOP STORE, and that is a considered exception rather than an
+//! NOT IN AN EINFILE, and that is a considered exception rather than an
 //! oversight. The KV layout this crate uses everywhere else is rewritten WHOLE
 //! on every write -- which is exactly right for a menu of fifty products and
 //! exactly wrong for a hundred JPEGs: adding the fiftieth photo would rewrite

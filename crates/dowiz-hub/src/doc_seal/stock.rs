@@ -11,8 +11,8 @@
 //! tablet's and stays there; after an obstructed merge the union has no one fold, and a person
 //! decides. What a merge reads is each SIDE's fold (`merge.rs`).
 
-use bebop_store::evlog::doc::Doc;
-use bebop_store::evlog::{EvLog, Record};
+use einstore::evlog::doc::Doc;
+use einstore::evlog::{EvLog, Record};
 
 use super::{DeviceKey, SealedHub};
 use crate::chain::{flags_for, record_id, with_nonce};
@@ -52,7 +52,7 @@ impl SealedHub {
         }
         match Doc::commit_many_bytes(&mut self.store, &recs, key, claimed_ms) {
             Ok(gen) => Ok(gen),
-            Err(bebop_store::evlog::doc::DocError::Store(e)) if e_is_full(&e) => {
+            Err(einstore::evlog::doc::DocError::Store(e)) if e_is_full(&e) => {
                 self.grow()?;
                 Doc::commit_many_bytes(&mut self.store, &recs, key, claimed_ms).map_err(super::sealed::doc_err)
             }

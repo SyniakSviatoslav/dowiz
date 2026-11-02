@@ -2,37 +2,37 @@
   "id": "kv.delta.v1",
   "version": "1.0.0",
   "description": {
-    "en": "The KV delta chain (W-DELTA, R-BEBOPDB D.1 #3). A catalogue write no longer rewrites the whole image: Catalog::to_bytes on a catalogue loaded from bytes appends one record per changed key ({ref NEXT, OP put|remove, KLEN, VLEN, key, value}, packed) and a new 8-cell root {n, KIDX, KBLOB, VIDX, VBLOB, VERSION=3, ref DELTA, D} that re-uses the v2 base arrays. Every reader replays base + chain oldest-first: Kv::load_checked / Kv::decode, the zero-copy KvIn (overlay of the newest op per key + a merged order), CatalogView, the bebop-wasm reader (via Kv::load_checked) and oracle.py and kv.bp (kv3_fold, a map-free merged replay; its projection memo `m` refuses v3 with -3). The crc of every record is checked wherever the base's is. The writer compacts to v2 -- byte-identical to the old writer (golden pinned from the old code) -- when the chain would pass 32 records, superseded cells would pass a quarter of live cells, the base is v1, or the arena is full; superseded_cells is now written for KV images. A Durable Object therefore writes the chunk holding the superblock pages and the tail chunk for one price edit instead of every chunk. No route, request or response shape changes.",
+    "en": "The KV delta chain (W-DELTA, R-BEBOPDB D.1 #3). A catalogue write no longer rewrites the whole image: Catalog::to_bytes on a catalogue loaded from bytes appends one record per changed key ({ref NEXT, OP put|remove, KLEN, VLEN, key, value}, packed) and a new 8-cell root {n, KIDX, KBLOB, VIDX, VBLOB, VERSION=3, ref DELTA, D} that re-uses the v2 base arrays. Every reader replays base + chain oldest-first: Kv::load_checked / Kv::decode, the zero-copy KvIn (overlay of the newest op per key + a merged order), CatalogView, the dowiz-hub-wasm reader (via Kv::load_checked) and oracle.py and kv.bp (kv3_fold, a map-free merged replay; its projection memo `m` refuses v3 with -3). The crc of every record is checked wherever the base's is. The writer compacts to v2 -- byte-identical to the old writer (golden pinned from the old code) -- when the chain would pass 32 records, superseded cells would pass a quarter of live cells, the base is v1, or the arena is full; superseded_cells is now written for KV images. A Durable Object therefore writes the chunk holding the superblock pages and the tail chunk for one price edit instead of every chunk. No route, request or response shape changes.",
     "uk": "Редагування каталогу більше не переписує весь образ: дописується один запис на змінений ключ і новий корінь (v3); читачі відтворюють ланцюжок; ущільнення після 32 записів або чверті мертвих клітинок."
   },
   "producer": [
     {
-      "file": "crates/bebop-kv/src/delta/write.rs",
+      "file": "crates/einfile-kv/src/delta/write.rs",
       "line": 73,
       "what": "append_delta_with (records + v3 root, the compaction trigger, sup_delta)"
     },
     {
-      "file": "crates/bebop-kv/src/delta.rs",
+      "file": "crates/einfile-kv/src/delta.rs",
       "line": 126,
       "what": "chain_in (every claim of the chain bounded)"
     },
     {
-      "file": "crates/bebop-kv/src/delta.rs",
+      "file": "crates/einfile-kv/src/delta.rs",
       "line": 182,
       "what": "check_chain (crc of every record)"
     },
     {
-      "file": "crates/bebop-kv/src/decode.rs",
+      "file": "crates/einfile-kv/src/decode.rs",
       "line": 40,
       "what": "Kv::decode (base + replay)"
     },
     {
-      "file": "crates/bebop-kv/src/verify.rs",
+      "file": "crates/einfile-kv/src/verify.rs",
       "line": 21,
       "what": "Kv::load_checked (crc incl. the chain)"
     },
     {
-      "file": "crates/bebop-kv/src/zc/overlay.rs",
+      "file": "crates/einfile-kv/src/zc/overlay.rs",
       "line": 60,
       "what": "KvIn::finish (merged order) / get (overlay first)"
     },
@@ -64,12 +64,12 @@
       "what": "with_catalog in the object (CatalogView over v3 bytes; memo forgotten on write)"
     },
     {
-      "file": "crates/bebop-wasm/src/lib.rs",
+      "file": "crates/dowiz-hub-wasm/src/lib.rs",
       "line": 95,
       "what": "kv_view (wasm32 reader, replays v3)"
     },
     {
-      "file": "crates/bebop-wasm/oracle.py",
+      "file": "crates/dowiz-hub-wasm/oracle.py",
       "line": 1,
       "what": "python oracle (replays v3)"
     },
@@ -80,7 +80,7 @@
     }
   ],
   "external_api_version": null,
-  "on_disk_format": "bebop-store KV image v3 = v2 base + delta chain (crates/bebop-kv/src/delta.rs header); compaction writes v2. A Worker build that predates W-DELTA REFUSES a v3 image (rollback risk).",
+  "on_disk_format": "einstore KV image v3 = v2 base + delta chain (crates/einfile-kv/src/delta.rs header); compaction writes v2. A Worker build that predates W-DELTA REFUSES a v3 image (rollback risk).",
   "routes": {
     "place": {
       "request": {

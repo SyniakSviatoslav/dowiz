@@ -1,6 +1,6 @@
 //! What an image reads, and what that reading is allowed to mean.
 //!
-//! THE ARENA IS THE LIMIT NOBODY SEES UNTIL IT BITES. A bebop store never
+//! THE ARENA IS THE LIMIT NOBODY SEES UNTIL IT BITES. An einfile never
 //! reclaims a generation, so an image is spent by the NUMBER OF WRITES as much
 //! as by the data — measured at 313 empty commits before a fresh roster
 //! refused. These are the figures that make that a thing the owner sees coming

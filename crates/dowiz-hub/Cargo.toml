@@ -3,7 +3,7 @@ name = "dowiz-hub"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
-description = "One tenant's sovereign hub: the order log over a bebop store, as pure bytes-in/bytes-out logic."
+description = "One tenant's sovereign hub: the order log over an einfile, as pure bytes-in/bytes-out logic."
 
 [lib]
 name = "dowiz_hub"
@@ -11,7 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # The store. Zero dependencies of its own, and it builds for wasm32.
-bebop-store = { path = "../bebop-store" }
+einstore = { path = "../einstore" }
 # SHA-256 only. HMAC and PBKDF2 are built on it in `crypto.rs` rather than
 # pulled in, because `hmac` and `argon2` are outside native-spa-server's
 # zero-dep allowlist and that gate may only shrink. See that module's header
@@ -35,7 +35,7 @@ dowiz-core = { path = "../dowiz-core" }
 # deflate (40-60 KB of wasm, `workers/api/src/cloud.rs::gzip`). VERIFY: `cargo tree -e no-dev
 # | grep -c twox` = 0.
 # The envelope's crc (W-SPACE): crc32fast 1.5.0, MIT OR Apache-2.0, one dependency (cfg-if,
-# already in this graph). The same zlib CRC-32 as `bebop_store::crc32`, so packed bytes are
+# already in this graph). The same zlib CRC-32 as `einstore::crc32`, so packed bytes are
 # unchanged; chosen because that one is byte-table-driven and measured 6.6 ms per 1.9 MB in
 # wasm32 (main, 2026-10-29: "the slow implementation, not the data").
 crc32fast = "=1.5.0"
@@ -43,7 +43,7 @@ lz4_flex = { version = "=0.14.0", default-features = false, features = ["alloc",
 # THE SEAL'S SIGNATURE (W-MG-SIG, 2026-11-01): `DeviceKey` and `MlDsa65` come from this crate, over
 # `fips204`, so the hub runs exactly what a stranger under MIT runs. The DECART is in its Cargo.toml.
 # `dowiz_core::pq::dsa` stays for mesh, envelopes, the price root, and as the oracle in tests.
-bebop-sig-mldsa = { path = "../bebop-sig-mldsa" }
+einfile-sig-mldsa = { path = "../einfile-sig-mldsa" }
 
 [features]
 # `anchor-live` (W-MG-M6b, default OFF): the LIVE side of level-1 anchors --
@@ -68,7 +68,7 @@ shred = []
 
 # K-T1 under real seals (`tests/k_t1_tail.rs`) needs the tail door; the Worker's graph does not get it.
 [dev-dependencies]
-bebop-log = { path = "../bebop-log", version = "0.1.0", features = ["sync"] }
+einfile-log = { path = "../einfile-log", version = "0.1.0", features = ["sync"] }
 # ML-DSA-65 at opt-level 0 is seconds per signature, and these tests seal hundreds of times.
 [profile.dev.package.fips204]
 opt-level = 2

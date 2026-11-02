@@ -1,11 +1,11 @@
 //! The crafted files of `atk2_dos`: no key, no valid signature, every crc right.
-use bebop_store::evlog::doc::anch::{ANCH_VERSION, DIGEST_ANCH};
-use bebop_store::evlog::doc::keys::{DIGEST_KEY, DIGEST_KEYS};
-use bebop_store::evlog::doc::seal::{read_heads, DIGEST_HEADS, DIGEST_SEAL, SEAL_VERSION};
-use bebop_store::evlog::doc::seg::{DIGEST_SEG, SEG_VERSION};
-use bebop_store::evlog::doc::{id_cells, Doc, DIGEST_DOC, DOC_CELLS, ROOT_VERSION_DOC};
-use bebop_store::evlog::Record;
-use bebop_store::{Store, Tx};
+use einstore::evlog::doc::anch::{ANCH_VERSION, DIGEST_ANCH};
+use einstore::evlog::doc::keys::{DIGEST_KEY, DIGEST_KEYS};
+use einstore::evlog::doc::seal::{read_heads, DIGEST_HEADS, DIGEST_SEAL, SEAL_VERSION};
+use einstore::evlog::doc::seg::{DIGEST_SEG, SEG_VERSION};
+use einstore::evlog::doc::{id_cells, Doc, DIGEST_DOC, DOC_CELLS, ROOT_VERSION_DOC};
+use einstore::evlog::Record;
+use einstore::{Store, Tx};
 use dowiz_hub::doc_seal::DeviceKey;
 
 pub fn recs(n: usize) -> Vec<Record> {

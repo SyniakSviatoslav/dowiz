@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 license = "MIT OR Apache-2.0"
-description = "R-EMBED-STORE P7: bebop-store vs redb / LMDB (heed) / SQLite, and the regression gate"
+description = "R-EMBED-STORE P7: einstore vs redb / LMDB (heed) / SQLite, and the regression gate"
 
 # Standalone: its own workspace, so no other crate's `cargo test` builds it and its lock file
-# holds the competitors' versions. Default features = bebop only (bebop-store + libc), which is
+# holds the competitors' versions. Default features = einfile only (einstore + libc), which is
 # what the gate (tools/gates/es-bench.sh) builds; `competitors` adds the three other engines and
 # `mldsa` the signed-file rows, the two together being what `full all` needs.
 [workspace]
@@ -19,13 +19,13 @@ competitors = ["dep:redb", "dep:heed", "dep:rusqlite"]
 # dowiz-core, which is AGPL-3.0-or-later. OFF by default and never in the gate's build: a binary
 # built with this feature carries AGPL code, this crate's own source does not. One file names the
 # provider (src/mldsa.rs); swapping it is that file and this line.
-mldsa = ["dep:dowiz-core", "bebop-io/doc"]
+mldsa = ["dep:dowiz-core", "einfile-io/doc"]
 
 [dependencies]
-bebop-store = { path = "../bebop-store" }
-# W-ES-P8C: the `bebop4` adapter needs KV v4, which is behind bebop-io's `tree` feature (off by
+einstore = { path = "../einstore" }
+# W-ES-P8C: the `einfile4` adapter needs KV v4, which is behind einfile-io's `tree` feature (off by
 # default until P8d). A direct path dependency only to turn the feature on (cargo unifies it).
-bebop-io = { path = "../bebop-io", features = ["tree"] }
+einfile-io = { path = "../einfile-io", features = ["tree"] }
 libc = "0.2"
 dowiz-core = { path = "../dowiz-core", optional = true }
 redb = { version = "=4.4.0", optional = true }

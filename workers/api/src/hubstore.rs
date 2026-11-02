@@ -1,6 +1,6 @@
 //! Where this hub's image is parked, and the single place that knows.
 //!
-//! The DATA MODEL is bebop: an append-only event log, folded to get an order's
+//! The DATA MODEL is einfile: an append-only event log, folded to get an order's
 //! state. This module only answers "where do those bytes live", and it is the
 //! one function to change when they move.
 //!
@@ -24,7 +24,7 @@ use dowiz_hub::Hub;
 use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
-/// Two images, one hub. A bebop store has ONE root, and the event log's root and
+/// Two images, one hub. An einfile has ONE root, and the event log's root and
 /// the KV root are different layouts -- they cannot share an image. The split
 /// also matches their lifecycles: the log is append-only and grows, the
 /// catalogue is small and rewritten whole.

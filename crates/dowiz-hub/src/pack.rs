@@ -7,7 +7,7 @@
 //! `codec` 0 = stored (compression did not pay), 1 = one LZ4 block (`lz4_flex::block`, the
 //! crate's safe encoder and checked safe decoder; see `Cargo.toml` for why a crate).
 //!
-//! OLD BYTES STILL LOAD: an image is a bebop store and begins `BEBOPST1`; anything that does
+//! OLD BYTES STILL LOAD: an image is an einfile and begins `BEBOPST1`; anything that does
 //! not begin with [`MAGIC`] is returned as it is ([`unpack`]), so every bundle written before
 //! this module reads exactly as it did.
 //!

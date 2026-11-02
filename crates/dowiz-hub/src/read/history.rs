@@ -8,7 +8,7 @@
 //! records are crc-checked, unpacked and decoded.
 //!
 //! THE ANSWER IS TODAY'S ANSWER, NOT A NEW ONE. `walk_marked_where` is `walk_marked` filtered
-//! by the prefix (held record for record in bebop-store), and every record `events()` would
+//! by the prefix (held record for record in einstore), and every record `events()` would
 //! keep for this order has exactly that prefix -- `decode` takes `order_id` from those bytes.
 //! The decoded `order_id == id && kind.is_order()` test then runs again on the survivors,
 //! so the predicate is literally the old one. `tests::scan_equals_the_walk_*` hold it.
@@ -17,7 +17,7 @@
 //! returned it. There is no index and nothing is stored, so there is nothing to go stale
 //! after a grow, a rotation or a redaction rebuild.
 
-use bebop_store::evlog::EvLog;
+use einstore::evlog::EvLog;
 
 use crate::decode;
 use crate::{Event, Hub};

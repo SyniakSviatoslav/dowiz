@@ -3,7 +3,7 @@
 //! the way the order log writes it (one legacy record, then sha256), sealed, and carries on as a
 //! `SealedHub`: orders, a platform mark, the person forgotten, the oldest records cut, a mark over
 //! the new tip. The keys are derived from `--seed`, so one seed is one set of bytes: the gate's
-//! fixture `crates/bebop-wasm/fixtures/anch.store` is this program at seed 0^32, and the gate's
+//! fixture `crates/dowiz-hub-wasm/fixtures/anch.store` is this program at seed 0^32, and the gate's
 //! scenarios run on a fresh random seed. The platform key here is the run's own: NO platform mark
 //! is issued by anyone in production (`doc_seal/live.rs`).
 //!
@@ -21,9 +21,9 @@
 //!
 //! Exit 0 written; 2 bad arguments; 1 the library refused (named).
 
-use bebop_store::evlog::doc::{Doc, KeyOp, SpecIn, KIND_PLATFORM_TSA};
-use bebop_store::nodekey::sha256;
-use bebop_store::Store;
+use einstore::evlog::doc::{Doc, KeyOp, SpecIn, KIND_PLATFORM_TSA};
+use einstore::nodekey::sha256;
+use einstore::Store;
 use dowiz_hub::crypto::{hex, unhex};
 use dowiz_hub::doc_seal::{hex32, tsa, DeviceKey, SealedHub};
 use dowiz_hub::{Event, EventKind, Hub};
@@ -33,7 +33,7 @@ const PHONE: &str = "+355691111111";
 const PLAIN: &str = r#"{"status":"new","total":{"amount":1500,"currency":"ALL"}}"#;
 /// `claimed_ms` of the first commit: the writer's claim, which no proof vouches for (§2d).
 const T0: i64 = 1_761_900_000_000;
-/// The reader ABI `bebop-verify.mjs` asks for (`bw_version`).
+/// The reader ABI `ein-verify.mjs` asks for (`bw_version`).
 const READER_ABI: i64 = 2;
 
 fn order(id: &str) -> String {

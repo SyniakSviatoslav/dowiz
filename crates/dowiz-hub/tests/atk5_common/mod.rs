@@ -2,7 +2,7 @@
 //! `SealedHub::merge`. Nothing here re-implements a rule.
 #![allow(dead_code)]
 
-use bebop_store::evlog::doc::keys::KeyOp;
+use einstore::evlog::doc::keys::KeyOp;
 use dowiz_hub::doc_seal::merge::{merge_report, Merged, Recheck};
 use dowiz_hub::doc_seal::{DeviceKey, SealedHub};
 use dowiz_hub::stock::{StockEvent, StockLedger, WasteReason};

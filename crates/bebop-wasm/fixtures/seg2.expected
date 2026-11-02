@@ -1,5 +1,0 @@
-# Two cuts: the older segment's TRUNCATE left the file, the chain hash in the newest covers it.
-# Written by doc/spec/fixture_tests.rs (W-MG-FIX), BEBOP_RULE_FIXTURES=<dir>; deterministic.
-doc_n=3
-doc_root=2237665766422822682
-doc_verify=records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=2 cut=6 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0 merges=0 merges_bad=0

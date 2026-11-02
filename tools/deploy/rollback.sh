@@ -4,7 +4,7 @@
 #   bash tools/deploy/rollback.sh <version-id> [message]    # compact + pin every venue, then switch
 #   bash tools/deploy/rollback.sh --unpin                   # lift the pin (after a later forward deploy)
 #
-# WHY A STEP BEFORE THE SWITCH. W-DELTA's catalogue saves write bebop-store v3 images (a delta chain), and a
+# WHY A STEP BEFORE THE SWITCH. W-DELTA's catalogue saves write einstore v3 images (a delta chain), and a
 # Worker built before W-DELTA REFUSES v3. Switching first would leave every venue that saved its menu since the
 # deploy with a catalogue the old Worker cannot read. So:
 #   1 COMPACT  POST <platform>/api/platform/compact as a platform administrator (workers/api/src/hubdo/compact/fan.rs):

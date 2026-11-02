@@ -1,7 +1,7 @@
 
 
 def is_doc(im, root):
-    """bebop-log `Doc::is_doc`: digest, length and BOTH version cells (FORMAT §9.4)."""
+    """einfile-log `Doc::is_doc`: digest, length and BOTH version cells (FORMAT §9.4)."""
     return (im.digest(root) == DIGEST_DOC and im.obj_len(root) == DOC_CELLS and im.obj_cells(root) == DOC_CELLS
             and im.get(root, 5) == ROOT_VERSION_DOC and im.get(root, 7) == ROOT_VERSION_DOC)
 
@@ -135,13 +135,13 @@ def is_redacted(r):
 
 def body_of(r):
     """FORMAT §9.4, the owner's framing: M0's nonce, then the hub's kind byte on a declaration (`D`) or a
-    key op (`K`). A body with no kind byte (bebop-log's own fixtures) starts at its mark."""
+    key op (`K`). A body with no kind byte (einfile-log's own fixtures) starts at its mark."""
     b = r["payload"][NONCE_LEN:] if r["flags"] & FLAG_SHA256 else r["payload"]
     return b[1:] if b[:1] in (b"D", b"K") else b
 
 
 def doc_open(im, root):
-    """bebop-wasm-reader `open_doc`: the root's crc, the log as a log is read, HEADS / KEYS / SPEC
+    """einfile-reader `open_doc`: the root's crc, the log as a log is read, HEADS / KEYS / SPEC
     crc (10), the SEG chain and every anchor crc-checked, a v4 TREE's entries, another TREE version -> 2.
     Returns (records, heads, keys, spec, tree entries, log tip, segments, anchors, (HEADS, KEYS))."""
     im.need_crc(root)

@@ -4,9 +4,9 @@
 mod atk_forge;
 
 use atk_forge::*;
-use bebop_store::evlog::doc::keys::KeyOp;
-use bebop_store::evlog::doc::{self, merge_body, DocError, Ids, MergeView, Report, Row, Trust, MERGE_MARK, STATE_COMMUTES, STATE_OBSTRUCTED};
-use bebop_store::Store;
+use einstore::evlog::doc::keys::KeyOp;
+use einstore::evlog::doc::{self, merge_body, DocError, Ids, MergeView, Report, Row, Trust, MERGE_MARK, STATE_COMMUTES, STATE_OBSTRUCTED};
+use einstore::Store;
 use dowiz_hub::doc_seal::merge::{merge_report, MergeError, Merged, Recheck};
 use dowiz_hub::doc_seal::{DeviceKey, HubIds, MlDsa65, SealedHub};
 use dowiz_hub::stock::StockEvent;

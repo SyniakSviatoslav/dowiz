@@ -36,8 +36,8 @@
 
 use crate::chain::Entropy;
 use crate::{body_of, ChainCheck, HubError};
-use bebop_store::evlog::{EvLog, Record};
-use bebop_store::Store;
+use einstore::evlog::{EvLog, Record};
+use einstore::Store;
 
 /// Small: these images hold short records and are pruned. It doubles.
 pub const DEFAULT_LOG_BYTES: usize = 64 * 1024;
@@ -46,12 +46,12 @@ pub const DEFAULT_LOG_BYTES: usize = 64 * 1024;
 ///
 /// DERIVED, NOT WRITTEN AS A NUMBER, because getting it wrong looks like a
 /// corrupt store rather than a size mistake: the arena starts at cell
-/// `bebop_store::ARENA` and a cell is eight bytes, so an image of exactly that
+/// `einstore::ARENA` and a cell is eight bytes, so an image of exactly that
 /// many bytes has a capacity of ZERO and refuses its first record with
 /// `ArenaFull { capacity: 0 }`. `create_sized(8 * 1024)` did exactly that while
 /// this file was being written. The floor is the arena plus a thousand cells of
 /// actual room.
-pub const MIN_LOG_BYTES: usize = (bebop_store::ARENA + 1024) * 8;
+pub const MIN_LOG_BYTES: usize = (einstore::ARENA + 1024) * 8;
 
 /// One appended record, decoded.
 #[derive(Debug, Clone, PartialEq, Eq)]

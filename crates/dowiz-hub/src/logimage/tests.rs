@@ -5,7 +5,7 @@ use super::*;
 fn an_image_below_the_arena_is_raised_rather_than_born_useless() {
     let mut tiny = LogImage::create_sized(1).unwrap();
     tiny.append("e", "v", "{}").expect("an image with no room refused its first record");
-    assert!(MIN_LOG_BYTES > bebop_store::ARENA * 8);
+    assert!(MIN_LOG_BYTES > einstore::ARENA * 8);
 }
 
 /// A TRUNCATED IMAGE IS NOT A SHORTER LOG, and for two days it was read as
@@ -58,7 +58,7 @@ fn a_record_this_build_cannot_read_is_quarantined_and_the_log_still_answers() {
     for i in 0..6 {
         l.append("error", "notify.telegram", &format!(r#"{{"n":{i}}}"#)).unwrap();
     }
-    let mut st = bebop_store::Store::from_bytes(&l.to_bytes());
+    let mut st = einstore::Store::from_bytes(&l.to_bytes());
     let root = st.root().expect("root");
     let newest = st.follow(root, 1).expect("newest");
     // v2 packs eight payload bytes per cell after a twelve-cell header,
@@ -98,7 +98,7 @@ fn a_chain_ref_that_leaves_the_image_is_refused() {
     for i in 0..6 {
         l.append("e", "s", &format!(r#"{{"n":{i}}}"#)).unwrap();
     }
-    let mut st = bebop_store::Store::from_bytes(&l.to_bytes());
+    let mut st = einstore::Store::from_bytes(&l.to_bytes());
     let root = st.root().expect("root");
     let newest = st.follow(root, 1).expect("newest");
     // Payload cell 2 of a record is the ref to the next (older) one.

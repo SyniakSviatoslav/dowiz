@@ -1,5 +1,5 @@
 //! Who people are, which venues exist, and which sessions are live — in the
-//! platform's own bebop images.
+//! platform's own einfile images.
 //!
 //! THE LAST FAMILY, AND THE ONE WITH THE BLAST RADIUS. A bad cutover here locks
 //! everyone out, so it lands last and behind a fallback. What it replaces is

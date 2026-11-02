@@ -1,4 +1,4 @@
-//! The platform's own bebop images, in a Durable Object like every venue's.
+//! The platform's own einfile images, in a Durable Object like every venue's.
 //!
 //! WHY THIS EXISTS. D1 is going. Twenty-nine relational tables hold what this
 //! platform knows, and every one of them is either a VENUE'S fact -- which

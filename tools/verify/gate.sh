@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT OR Apache-2.0
-# THE CLEAN-MACHINE GATE for bebop-verify (W-MG-MR, W-MG-M5; R-MAINGOAL-A §7 M5 kill-test, -B §4):
+# THE CLEAN-MACHINE GATE for ein-verify (W-MG-MR, W-MG-M5; R-MAINGOAL-A §7 M5 kill-test, -B §4):
 # a Node with NO repo and a Python with NO repo each read a fixture from ONE file and answer the
 # line conformance.sh's five readers answer, on all 21 of its fixtures, the log fixture, and the
 # DOC fixture (W-MG-M5: the five refuse DOC by name, 12; these two READ it, and must agree with
@@ -15,7 +15,7 @@
 # any file but its argument, would fail there.
 #
 # WITH THE BUILD (the §7 M5 kill-test, heavy, under slot.sh): tools/verify/build.sh makes the reader;
-# bebop-log's `write_the_archive_fixture_when_asked` writes an ARCHIVE (a DOC with SPEC first, the
+# einfile-log's `write_the_archive_fixture_when_asked` writes an ARCHIVE (a DOC with SPEC first, the
 # reader just built embedded, sha256 ids) into the clean dir; `examples/read.mjs` -- Node 22, no npm,
 # ~30 lines -- reads that file WITH THE READER INSIDE IT and must print heads, records, counters and
 # statuses in words; both verifiers must agree on it; and two REDs are shown: a flipped record cell
@@ -30,7 +30,7 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 V="$ROOT/tools/verify"
-FIX="$ROOT/crates/bebop-wasm/fixtures"
+FIX="$ROOT/crates/dowiz-hub-wasm/fixtures"
 PROVE=0; BUILD=1
 for a in "$@"; do
   case "$a" in
@@ -41,25 +41,25 @@ for a in "$@"; do
 done
 say() { echo "verify-gate: $*"; }
 fail=0
-sh "$V/assemble.sh" --check || { say "RED the committed bebop-verify.py is not the assembly of tools/verify/py"; exit 1; }
+sh "$V/assemble.sh" --check || { say "RED the committed ein-verify.py is not the assembly of tools/verify/py"; exit 1; }
 if [ "$BUILD" = 1 ]; then sh "$V/build.sh" || { say "RED build"; exit 1; }; fi
-[ -f "$V/bebop-verify.mjs" ] || { say "RED tools/verify/bebop-verify.mjs is absent (run build.sh)"; exit 1; }
-sha=$(sed -n 's/^const WASM_SHA256 = "\([0-9a-f]*\)";$/\1/p' "$V/bebop-verify.mjs")
+[ -f "$V/ein-verify.mjs" ] || { say "RED tools/verify/ein-verify.mjs is absent (run build.sh)"; exit 1; }
+sha=$(sed -n 's/^const WASM_SHA256 = "\([0-9a-f]*\)";$/\1/p' "$V/ein-verify.mjs")
 
 # the same list conformance.sh reads (W-ES-P10), plus the one log fixture and the DOC fixture
 FIXTURES="kv kv2 kv3 ptaway kv4stub kv3max kv3c torn ptbad empty kv0 kv4small kv4deep kv4del kv4zero kv4badn kv4badv kv4badf kv4badd kv4stale kv4old"
-CLEAN="${VERIFY_SCRATCH:-${TMPDIR:-/tmp}/bebop-verify-clean.$$}"
+CLEAN="${VERIFY_SCRATCH:-${TMPDIR:-/tmp}/ein-verify-clean.$$}"
 rm -rf "$CLEAN"; mkdir -p "$CLEAN"
 trap 'rm -rf "$CLEAN"' EXIT
-cp "$V/bebop-verify.mjs" "$V/bebop-verify.py" "$ROOT/examples/read.mjs" "$CLEAN/"
+cp "$V/ein-verify.mjs" "$V/ein-verify.py" "$ROOT/examples/read.mjs" "$CLEAN/"
 RULES="tomb-sha tomb-legacy seg2 forged-tail keys-disagree"
 for f in $FIXTURES proj4.log doc anch $RULES seg2-forged cut-undeclared log-v1 log-v3 kv-unsorted; do cp "$FIX/$f.store" "$CLEAN/" || { say "RED fixture $f.store is absent"; exit 1; }; done
 say "clean dir $CLEAN holds $(ls "$CLEAN" | wc -l | tr -d ' ') files and no repo"
 
 want() { awk -F= "/^$2=/{print \$2}" "$FIX/$1.expected"; }
 # one verifier over one copied image, FROM the clean dir, HOME and PATH stripped to the interpreter
-node_read() { (cd "$CLEAN" && env -i PATH="$(dirname "$(command -v node)")" node ./bebop-verify.mjs "$@" 2>/dev/null); }
-py_read() { (cd "$CLEAN" && env -i PATH="$(dirname "$(command -v python3)")" python3 -I ./bebop-verify.py "$@" 2>/dev/null); }
+node_read() { (cd "$CLEAN" && env -i PATH="$(dirname "$(command -v node)")" node ./ein-verify.mjs "$@" 2>/dev/null); }
+py_read() { (cd "$CLEAN" && env -i PATH="$(dirname "$(command -v python3)")" python3 -I ./ein-verify.py "$@" 2>/dev/null); }
 
 agree=0
 for f in $FIXTURES; do
@@ -122,13 +122,13 @@ done
 
 if [ "$BUILD" = 1 ]; then
   # THE ARCHIVE: SPEC first, the reader just built inside, sha256 ids; read by the file's own reader.
-  WASM="${BWR_TARGET_DIR:-$ROOT/crates/bebop-wasm-reader/target}/wasm32-unknown-unknown/release/bebop_wasm_reader.wasm"
+  WASM="${BWR_TARGET_DIR:-$ROOT/crates/einfile-reader/target}/wasm32-unknown-unknown/release/einfile_reader.wasm"
   CARGO="${CARGO:-$HOME/.cargo/bin/cargo}"; [ -x "$CARGO" ] || CARGO=cargo
-  if ! (cd "$ROOT/crates/bebop-log" && BEBOP_ARCHIVE_FIXTURE="$CLEAN/archive.store" BEBOP_CUT_FIXTURE="$CLEAN/cut.store" BEBOP_CUT_UNDECLARED_FIXTURE="$CLEAN/cut-undeclared.store" BEBOP_READER_WASM="$WASM" BEBOP_FORMAT_TEXT="$ROOT/docs/FORMAT-BEBOP-IMAGE-v2.en.md" \
-      CARGO_INCREMENTAL=0 "$CARGO" test --offline --target-dir "${BLOG_TARGET_DIR:-$ROOT/crates/bebop-log/target}" write_the_) > "$CLEAN/archive.log" 2>&1 || [ ! -s "$CLEAN/archive.store" ] || [ ! -s "$CLEAN/cut.store" ] || [ ! -s "$CLEAN/cut-undeclared.store" ]; then
+  if ! (cd "$ROOT/crates/einfile-log" && EIN_ARCHIVE_FIXTURE="$CLEAN/archive.store" EIN_CUT_FIXTURE="$CLEAN/cut.store" EIN_CUT_UNDECLARED_FIXTURE="$CLEAN/cut-undeclared.store" EIN_READER_WASM="$WASM" EIN_FORMAT_TEXT="$ROOT/docs/FORMAT-EINFILE-v2.en.md" \
+      CARGO_INCREMENTAL=0 "$CARGO" test --offline --target-dir "${BLOG_TARGET_DIR:-$ROOT/crates/einfile-log/target}" write_the_) > "$CLEAN/archive.log" 2>&1 || [ ! -s "$CLEAN/archive.store" ] || [ ! -s "$CLEAN/cut.store" ] || [ ! -s "$CLEAN/cut-undeclared.store" ]; then
     say "RED the archive fixture was not written -- $(grep -m1 -E 'error|panicked|FAILED' "$CLEAN/archive.log")"; fail=1
   else
-    say "archive: $(wc -c < "$CLEAN/archive.store" | tr -d ' ') bytes = doc.store $(wc -c < "$FIX/doc.store" | tr -d ' ') + reader $(wc -c < "$WASM" | tr -d ' ') + FORMAT $(wc -c < "$ROOT/docs/FORMAT-BEBOP-IMAGE-v2.en.md" | tr -d ' ') + headers (the per-file cost of SPEC, §2f)"
+    say "archive: $(wc -c < "$CLEAN/archive.store" | tr -d ' ') bytes = doc.store $(wc -c < "$FIX/doc.store" | tr -d ' ') + reader $(wc -c < "$WASM" | tr -d ' ') + FORMAT $(wc -c < "$ROOT/docs/FORMAT-EINFILE-v2.en.md" | tr -d ' ') + headers (the per-file cost of SPEC, §2f)"
     doc_check archive ./archive.store "doc status=0 n=3 root=$(py_read ./archive.store | sed 's/.*root=//')" "verify records=3 chained=3 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0 merges=0 merges_bad=0"
     out=$(cd "$CLEAN" && env -i PATH="$(dirname "$(command -v node)")" node ./read.mjs ./archive.store 2>&1); rc=$?
     printf '%s\n' "$out" | sed 's/^/verify-gate: read.mjs | /'
@@ -258,11 +258,11 @@ fi
 
 # THE MEASURED SIZE: the module inside the .mjs under test, never the ratchet's number, which said
 # 134195 of a 147476-byte reader (W-MG-READ, 2026-10-31). The baseline is printed beside it.
-bytes=$(python3 -I - "$V/bebop-verify.mjs" <<'PY'
+bytes=$(python3 -I - "$V/ein-verify.mjs" <<'PY'
 import base64, re, sys
 print(len(base64.b64decode(re.search(r'^const WASM_B64 = "([^"]*)";$', open(sys.argv[1]).read(), re.M).group(1))))
 PY
-) || { say "RED cannot measure the reader inside bebop-verify.mjs"; exit 1; }
+) || { say "RED cannot measure the reader inside ein-verify.mjs"; exit 1; }
 if [ "$fail" -ne 0 ]; then say "RED"; exit 1; fi
 say "GREEN (node and python, from a clean dir, agree with conformance on $agree of 21 fixtures + the log + doc + anch$([ "$BUILD" = 1 ] && echo ' + the archive and the cut archive read by their own reader, 5 REDs'); reader wasm $bytes bytes (baseline $(cat "$V/bytes.baseline" 2>/dev/null || echo "?")), sha256 $sha)"
 exit 0

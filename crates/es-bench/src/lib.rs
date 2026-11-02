@@ -2,9 +2,9 @@
 /// The reader and format text an archive embeds (needs the DOC API behind `mldsa`).
 #[cfg(feature = "mldsa")]
 pub mod archive;
-pub mod bebop;
+pub mod einfile;
 /// The v4 (B+tree) adapter through `Db` (W-ES-P8C).
-pub mod bebop4;
+pub mod einfile4;
 pub mod data;
 pub mod engine;
 pub mod gate;

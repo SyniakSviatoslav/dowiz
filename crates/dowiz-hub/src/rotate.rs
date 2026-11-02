@@ -4,7 +4,7 @@
 //!
 //! THE CHECKPOINT NAMES THE ARCHIVE'S ROOT (W-MG-M3, R-MAINGOAL-A §2b): `root=` is the RFC
 //! 9162 tree over the archived records' ids in file order -- the same `segment_root` a DOC
-//! segment carries (`bebop-log/src/doc/seg.rs`) -- so a witness or a seal cites one value
+//! segment carries (`einfile-log/src/doc/seg.rs`) -- so a witness or a seal cites one value
 //! for the whole archive and an auditor with the archive recomputes it. The hub's log is
 //! not a DOC yet (W-MG-M1B's `doc_seal.rs` is where its commits will be sealed); until then
 //! the checkpoint record is the hub's TRUNCATE, chained and nonced like every M0 record.
@@ -12,7 +12,7 @@
 //! THE CHECKPOINT OPENS THE FRESH IMAGE, except on a log in transition, where it closes it: legacy
 //! records carried past a flip stay older than every sha256 one (`rotate`, W-MG-TRANS H4).
 
-use bebop_store::{evlog::{EvLog, Record, FLAG_SHA256}, merkle, Store};
+use einstore::{evlog::{EvLog, Record, FLAG_SHA256}, merkle, Store};
 
 use crate::decode;
 use crate::{EventKind, Hub, HubError};

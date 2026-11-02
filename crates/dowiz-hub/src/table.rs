@@ -1,4 +1,4 @@
-//! A set of records, and the keys that find them, in one bebop image.
+//! A set of records, and the keys that find them, in one einfile image.
 //!
 //! WHAT THIS REPLACES. Twenty-nine D1 tables and roughly thirty indexes. There
 //! is no query planner here and no `WHERE`: **every access path is a key that

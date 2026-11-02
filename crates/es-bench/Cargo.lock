@@ -15,50 +15,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bebop-crc"
-version = "0.1.0"
-
-[[package]]
-name = "bebop-image"
-version = "0.1.0"
-dependencies = [
- "bebop-crc",
-]
-
-[[package]]
-name = "bebop-io"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
- "bebop-kv",
- "bebop-log",
-]
-
-[[package]]
-name = "bebop-kv"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
-]
-
-[[package]]
-name = "bebop-log"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
-]
-
-[[package]]
-name = "bebop-store"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
- "bebop-io",
- "bebop-kv",
- "bebop-log",
-]
-
-[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -138,12 +94,56 @@ dependencies = [
 ]
 
 [[package]]
+name = "einfile-crc"
+version = "0.1.0"
+
+[[package]]
+name = "einfile-image"
+version = "0.1.0"
+dependencies = [
+ "einfile-crc",
+]
+
+[[package]]
+name = "einfile-io"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+ "einfile-kv",
+ "einfile-log",
+]
+
+[[package]]
+name = "einfile-kv"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+]
+
+[[package]]
+name = "einfile-log"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+]
+
+[[package]]
+name = "einstore"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+ "einfile-io",
+ "einfile-kv",
+ "einfile-log",
+]
+
+[[package]]
 name = "es-bench"
 version = "0.1.0"
 dependencies = [
- "bebop-io",
- "bebop-store",
  "dowiz-core",
+ "einfile-io",
+ "einstore",
  "heed",
  "libc",
  "redb",

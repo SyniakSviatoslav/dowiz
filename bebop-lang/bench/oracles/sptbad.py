@@ -1,4 +1,4 @@
-# sptbad oracle (FORMAT-BEBOP-IMAGE-v2 §3.1): what st_open must answer on each damaged image of
+# sptbad oracle (FORMAT-EINFILE-v2 §3.1): what st_open must answer on each damaged image of
 # bench/vs_rust/std_tests/sptbad.bp, derived from the format's rule, not from the program.
 # A superblock is live when its magic and crc15 hold. The newest live one is picked. If its PartTab
 # fails its crc the open REFUSES (trap 77), whether or not the image is anchored: a fallback is

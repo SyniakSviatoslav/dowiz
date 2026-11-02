@@ -4,8 +4,8 @@
   Core Lean 4, no Mathlib, no `axiom`, no `sorry`. Every failure-model assumption is a HYPOTHESIS of
   the theorem that needs it, never an axiom.
 
-  THE CODE IT MODELS (format: docs/FORMAT-BEBOP-IMAGE-v2.md, frozen 9f733d46):
-    * `Store::commit` crates/bebop-store/src/lib.rs:868-878 --
+  THE CODE IT MODELS (format: docs/FORMAT-EINFILE-v2.md, frozen 9f733d46):
+    * `Store::commit` crates/einstore/src/lib.rs:868-878 --
         write_cells(arena [mark, cursor)) ; sync_data ; write_cells(PartTab, 21 cells at (512-sb)+16) ;
         sync_data ; write_cells(other superblock, 16 cells at 512-sb) ; sync_data
       (`rustOps` below; FORMAT §8 says the same three steps). Every value written is a cell of the

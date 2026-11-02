@@ -18,7 +18,7 @@
 //! is quarantined ANYWHERE in the log. It reads the crc verdicts the load already made
 //! (`crate::Seen`) and each record's framing bytes, and unpacks only the `n` it returns.
 
-use bebop_store::evlog::{EvLog, Head, Peek};
+use einstore::evlog::{EvLog, Head, Peek};
 
 use super::{decode, Entry, LogImage};
 use crate::Quarantined;

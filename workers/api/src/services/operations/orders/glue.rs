@@ -3,7 +3,7 @@
 //!   POST /api/staff/orders/glue   {location_id, ctx, tail:[op line, ...]}
 //!
 //! THE CONTRACT. Producer: the kitchen board's tablet module (`public/room/canvas/tablet.js`
-//! `syncOrders`, over `bebop-wasm --features tablet` `bw_tab_order_tail`). Consumer: the venue's
+//! `syncOrders`, over `dowiz-hub-wasm --features tablet` `bw_tab_order_tail`). Consumer: the venue's
 //! object, `/fold/glue_orders` (`hubdo/glue_turn/orders.rs`), which runs
 //! `dowiz_hub::glue::orders::rebase` with the object's own deciders (`command::advance`,
 //! `command::kitchen_ack`). `tail` is the taps the tablet took since its last sync, OLDEST FIRST,

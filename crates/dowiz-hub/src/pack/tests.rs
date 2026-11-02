@@ -157,12 +157,12 @@ fn real_images_ratio() {
     println!("TOTAL {raw_total} -> {packed_total} ({:.2}x)", raw_total as f64 / packed_total.max(1) as f64);
 }
 
-/// The envelope's crc is the zlib CRC-32 `bebop_store::crc32` computes: swapping the crate in
+/// The envelope's crc is the zlib CRC-32 `einstore::crc32` computes: swapping the crate in
 /// changes no packed byte. RED-able: a different polynomial (crc32c) and this fails.
 #[test]
 fn the_envelope_crc_is_the_zlib_crc32() {
     for (name, raw) in shapes() {
-        assert_eq!(crc32fast::hash(&raw), bebop_store::crc32(&raw), "{name}");
+        assert_eq!(crc32fast::hash(&raw), einstore::crc32(&raw), "{name}");
     }
 }
 

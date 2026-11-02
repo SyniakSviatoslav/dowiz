@@ -2,8 +2,8 @@
   Bebop.Glue -- W-ES-P19 (operator decision 2026-10-30): GLUING IS THE SINGLE CONTRACT OF THE
   WRITE PATH. Core Lean 4, no Mathlib, no `axiom`, no `sorry`.
 
-  THE CODE IT MODELS (crates/bebop-kv/src/glue.rs, the library operation; its instances in
-  crates/bebop-io's commit section and the tree 3-way merge): two SECTIONS of one object over a
+  THE CODE IT MODELS (crates/einfile-kv/src/glue.rs, the library operation; its instances in
+  crates/einfile-io's commit section and the tree 3-way merge): two SECTIONS of one object over a
   common BASE -- each section is the base plus a delta; a section's RESTRICTION to the overlap is
   the set of keys its delta touches (`deltaKeys`); the sections GLUE when the restrictions do not
   disagree, i.e. no key is touched by both. Then the two deltas COMMUTE: the glued section is the

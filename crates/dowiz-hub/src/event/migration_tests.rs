@@ -12,7 +12,7 @@
 
 use super::{decode, EventKind};
 use crate::Hub;
-use bebop_store::evlog::{EvLog, Record};
+use einstore::evlog::{EvLog, Record};
 use serde_json::{json, Value};
 
 const TIP: &str = "5be0c1a2d3e4f5061728394a5b6c7d8e9fa0b1c2d3e4f5061728394a5b6c7d8e";

@@ -2,7 +2,7 @@
 //! no `Store::from_bytes` copy, and a record's payload is unpacked only when the caller asks
 //! for it. The ancestor search reads four id cells per record and nothing else.
 //!
-//! The layout is `bebop_store::evlog`'s v2 record (its module header): `0 actor_seq`,
+//! The layout is `einstore::evlog`'s v2 record (its module header): `0 actor_seq`,
 //! `1 payload_len`, `2 ref prev`, `3..6 id`, `7..10 prev id`, `11 flags`, `12..` (+4 when an
 //! actor is named) the payload packed eight bytes to a cell. A v1 root is not walked here; the
 //! caller refuses it by name (`Why::OldFormat`) -- every log that has grown once is v2.
@@ -10,7 +10,7 @@
 //! EVERY CLAIM IS BOUNDED as `EvLog::read_at` bounds it: the object's length is the fact, the
 //! header's is a claim, and a chain that does not end stops at the image's record capacity.
 
-use bebop_store::{follow_in, get_in, obj_cells_in, obj_crc_ok_in, root_in, View};
+use einstore::{follow_in, get_in, obj_cells_in, obj_crc_ok_in, root_in, View};
 
 /// The v2 record head, in cells (`evlog::HEAD_V2`).
 const HEAD_V2: usize = 12;
@@ -85,10 +85,10 @@ impl<'a> Chain<'a> {
     }
 
     /// The record as `chain::verify_id` reads it: every cell but the payload's own walk.
-    pub(crate) fn record(&self, obj: usize) -> bebop_store::evlog::Record {
+    pub(crate) fn record(&self, obj: usize) -> einstore::evlog::Record {
         let named = get_in(&self.view, obj, 11) & 1 != 0 && obj_cells_in(&self.view, obj) >= HEAD_V2 + 4;
         let actor_pubkey = if named { cells_b32(&self.view, obj, HEAD_V2) } else { [0u8; 32] };
-        bebop_store::evlog::Record { id: self.id(obj), prev: self.prev(obj), actor_pubkey, actor_seq: get_in(&self.view, obj, 0) as u64, flags: self.flags(obj), payload: self.payload(obj) }
+        einstore::evlog::Record { id: self.id(obj), prev: self.prev(obj), actor_pubkey, actor_seq: get_in(&self.view, obj, 0) as u64, flags: self.flags(obj), payload: self.payload(obj) }
     }
 
     /// Does the object's crc match its cells?

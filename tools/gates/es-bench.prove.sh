@@ -1,6 +1,6 @@
 #!/bin/sh
-# es-bench's proof: the gate is GREEN on the tree and RED on a deliberately slowed bebop adapter.
-# Each case copies crates/es-bench to a scratch dir, rewrites ONE line of src/bebop.rs (the
+# es-bench's proof: the gate is GREEN on the tree and RED on a deliberately slowed einfile adapter.
+# Each case copies crates/es-bench to a scratch dir, rewrites ONE line of src/einfile.rs (the
 # adapter -- the file P3 swaps), builds it, and runs the real gate on that binary. A mutation
 # that does not apply is a FAILURE of this proof, never a silent pass.
 #   A  every point get done twice           -> the `get` row ~2x
@@ -29,9 +29,9 @@ mutant() { # mutant <old> <new> -> builds $SCR/m and prints the binary path, or 
 import sys, pathlib
 m, crates, old, new = sys.argv[1:]
 c = pathlib.Path(m, "Cargo.toml"); c.write_text(c.read_text().replace('path = "../', f'path = "{crates}/'))
-b = pathlib.Path(m, "src", "bebop.rs"); s = b.read_text()
+b = pathlib.Path(m, "src", "einfile.rs"); s = b.read_text()
 if s.count(old) != 1:
-    sys.exit(f"prove: mutation target found {s.count(old)} times in bebop.rs: {old!r}")
+    sys.exit(f"prove: mutation target found {s.count(old)} times in einfile.rs: {old!r}")
 b.write_text(s.replace(old, new))
 PY
   ( cd "$SCR/m" && CARGO_TARGET_DIR="$T" cargo build --release --quiet ) || { echo "prove: mutant build FAILED"; return 1; }

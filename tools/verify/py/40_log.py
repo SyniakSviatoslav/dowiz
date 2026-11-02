@@ -30,7 +30,7 @@ def log_chain(im, root):
 
 
 def log_detail(im, root):
-    """Every record OLDEST FIRST as a dict: obj, seq, flags, id, prev, actor, payload (bebop-log
+    """Every record OLDEST FIRST as a dict: obj, seq, flags, id, prev, actor, payload (einfile-log
     `walk`: v2 packs the payload eight bytes to a cell after the optional actor; v1 one per cell)."""
     chain = log_chain(im, root)
     ver = log_version(im, root)

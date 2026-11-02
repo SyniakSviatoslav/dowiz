@@ -30,9 +30,9 @@
 #[allow(unused_imports)]
 use alloc::{vec, vec::Vec};
 use alloc::collections::{BTreeMap, BTreeSet};
-use bebop_log::doc::keys::Key;
-use bebop_log::doc::Ids;
-use bebop_log::Record;
+use einfile_log::doc::keys::Key;
+use einfile_log::doc::Ids;
+use einfile_log::Record;
 
 pub const GRANT_MARK: &[u8] = b"ein-grant/1";
 

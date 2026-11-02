@@ -19,14 +19,14 @@
 //! hand. The OTS attestation's message is the header's raw field (python-opentimestamps
 //! `BitcoinBlockHeaderAttestation.verify_against_blockheader`: `hashMerkleRoot != msg`).
 
-use bebop_store::evlog::doc::{Anchor, AnchorCheck, AnchorCounts, Checked, Report, Verdict, KIND_OTS, KIND_PLATFORM_TSA, KIND_ROUGHTIME};
+use einstore::evlog::doc::{Anchor, AnchorCheck, AnchorCounts, Checked, Report, Verdict, KIND_OTS, KIND_PLATFORM_TSA, KIND_ROUGHTIME};
 
 use super::ots::{self, BlockHeaders, Ots};
 use super::roughtime::Roughtime;
 use super::tsa::PlatformTsa;
 use super::{hex32, SealedHub};
 use crate::HubError;
-use bebop_store::StoreError;
+use einstore::StoreError;
 
 pub mod stamp;
 #[cfg(feature = "anchor-live")]
@@ -194,8 +194,8 @@ pub fn anchor_line(x: &Checked) -> String {
     format!("anchor kind={} over={} time_ms={} names_record={} under_cut={} -> {word}: {why}", x.anchor.kind, hex32(&x.anchor.over), x.anchor.time_ms, x.names_record, x.under_cut)
 }
 
-/// A refusal in the words of `docs/STATUS-CODES.md`: `bebop-wasm-reader` `status.rs` TABLE and
-/// `bebop-verify.py` WORDS say the same text for the same file (`tools/gates/maingoal.sh` compares
+/// A refusal in the words of `docs/STATUS-CODES.md`: `einfile-reader` `status.rs` TABLE and
+/// `ein-verify.py` WORDS say the same text for the same file (`tools/gates/maingoal.sh` compares
 /// them). This crate does not link the MIT reader, so the two refusals a verifier can meet are
 /// spelled here. Any other refusal keeps its Rust name: it has no number on those surfaces.
 pub fn refusal_words(e: &HubError) -> String {

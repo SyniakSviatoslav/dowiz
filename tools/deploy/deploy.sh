@@ -88,9 +88,9 @@ if [ $MODE != verify ]; then
   # THE TABLET'S MODULE IS ITS SOURCE (W-MG-TRANS H2). tablet.wasm is a committed binary: the expand release shipped
   # prod's bytes, which refuse every reply of a flipped venue. The digest moves with any change under crates/, so this
   # is a deploy gate and not a run-all one: it asks for the rebuild when it matters and not on every commit.
-  if [ -f "$SRC/crates/bebop-wasm/tablet.sh" ]; then
-    want=$(sh "$SRC/crates/bebop-wasm/tablet.sh" --digest); have=$(cat "$SRC/workers/api/public/room/canvas/tablet.wasm.src" 2>/dev/null)
-    [ "$want" = "$have" ] || fail 15 "tablet: tablet.wasm.src is ${have:-missing}, its sources are $want: run sh crates/bebop-wasm/tablet.sh and commit; nothing was uploaded"
+  if [ -f "$SRC/crates/dowiz-hub-wasm/tablet.sh" ]; then
+    want=$(sh "$SRC/crates/dowiz-hub-wasm/tablet.sh" --digest); have=$(cat "$SRC/workers/api/public/room/canvas/tablet.wasm.src" 2>/dev/null)
+    [ "$want" = "$have" ] || fail 15 "tablet: tablet.wasm.src is ${have:-missing}, its sources are $want: run sh crates/dowiz-hub-wasm/tablet.sh and commit; nothing was uploaded"
   fi
 
   # ── 3 GATES ───────────────────────────────────────────────────────────────

@@ -1,9 +1,9 @@
 //! W-MG-HOLES2: the positive twins of the dense seq and the walk budget. Real files, written by the
 //! real writers, each shape the two rules could have refused by mistake. Green is the point.
-use bebop_store::evlog::doc::keys::KeyOp;
-use bebop_store::evlog::doc::{self, Doc, Report, Trust};
-use bebop_store::nodekey::sha256;
-use bebop_store::Store;
+use einstore::evlog::doc::keys::KeyOp;
+use einstore::evlog::doc::{self, Doc, Report, Trust};
+use einstore::nodekey::sha256;
+use einstore::Store;
 use dowiz_hub::doc_seal::{DeviceKey, HubIds, MlDsa65, SealedHub};
 use dowiz_hub::{EventKind, Hub};
 use std::time::Instant;

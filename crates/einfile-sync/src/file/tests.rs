@@ -6,8 +6,8 @@ use super::*;
 use crate::session::Peer;
 use crate::toys::*;
 use crate::Budget;
-use bebop_image::Store;
-use bebop_log::doc::{Doc, KIND_PLATFORM_TSA};
+use einfile_image::Store;
+use einfile_log::doc::{Doc, KIND_PLATFORM_TSA};
 use std::path::PathBuf;
 
 const NOW: i64 = 1_000;
@@ -126,7 +126,7 @@ fn one_file() -> (Vec<u8>, Tail, Front) {
     let mut st = Store::from_bytes(&g);
     write(&mut st, &b, b"one", None);
     write(&mut st, &b, b"two", None);
-    let over = bebop_log::EvLog::tip_at(&st, Doc::open(&st).unwrap().log).unwrap();
+    let over = einfile_log::EvLog::tip_at(&st, Doc::open(&st).unwrap().log).unwrap();
     Doc::anchor_bytes(&mut st, KIND_PLATFORM_TSA, &over, 9, b"proof").unwrap();
     let t = Doc::tail_of(&st, &base, &ToyIds).unwrap();
     (pack(&t, NOW + TTL, &Budget::default(), &ToyIds).unwrap(), t, base)
@@ -163,10 +163,10 @@ fn a_forger_who_fixes_the_sum_meets_the_door() {
     let mut x = t.clone();
     x.recs[0].payload[0] ^= 1;
     x.recs[0].id = ToyIds.chained(&x.recs[0]);
-    assert_eq!(landed(&x), Err(SyncError::Doc(bebop_log::doc::DocError::Fork { actor: B, seq: 1, ours: x.recs[0].id, theirs: t.recs[0].id })));
+    assert_eq!(landed(&x), Err(SyncError::Doc(einfile_log::doc::DocError::Fork { actor: B, seq: 1, ours: x.recs[0].id, theirs: t.recs[0].id })));
     let mut x = t.clone();
     x.seals[0].sig[0] ^= 1;
-    assert!(matches!(landed(&x), Err(SyncError::Doc(bebop_log::doc::DocError::SealFork { .. } | bebop_log::doc::DocError::UnionNotWhole))));
+    assert!(matches!(landed(&x), Err(SyncError::Doc(einfile_log::doc::DocError::SealFork { .. } | einfile_log::doc::DocError::UnionNotWhole))));
     let mut x = t.clone();
     x.front.places[0].row.seq ^= 1;
     assert!(landed(&x).is_err());

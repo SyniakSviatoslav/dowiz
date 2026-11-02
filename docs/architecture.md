@@ -22,7 +22,7 @@ flowchart TB
   subgraph Pure["Pure crates (no I/O, no clock)"]
     HUB[crates/dowiz-hub: folds over images, room deciders, caps, consent, stock]
     CORE[crates/dowiz-core: order and booking FSMs, money, tax, PQ primitives]
-    STORE[crates/bebop-store: the image format]
+    STORE[crates/einstore: the image format]
   end
   Browser -->|HTTPS + WebSocket /api/live| RT
   RT --> SV --> HS --> TURN
@@ -34,9 +34,9 @@ flowchart TB
 - **`crates/dowiz-core`** is the kernel: `order_machine.rs` (the order FSM), `reservation.rs`
   (the booking FSM), `money.rs`, `tax.rs`, `pq/`. It has no clock, network, RNG or float on the
   decision path, so any node folding the same events reaches the same state.
-- **`crates/dowiz-hub`** is one venue's records as pure logic over bebop images: the order log,
+- **`crates/dowiz-hub`** is one venue's records as pure logic over einfile images: the order log,
   tables, capabilities (`caps.rs`), consent, forget, stock, and the room's amend and pay deciders
-  (`room/`), which also compile into the wasm32 module in `crates/bebop-wasm` (`--features decide`)
+  (`room/`), which also compile into the wasm32 module in `crates/dowiz-hub-wasm` (`--features decide`)
   so the room app can run the same decision the server runs.
 - **`workers/api`** is the Worker: routing, authentication, the Durable Object, the cron, and the
   rails to third parties. `kernel/` is a std facade that re-exports `dowiz-core`.
@@ -81,7 +81,7 @@ Rules this shape enforces:
 
 ## The venue's images
 
-A venue's state is a set of named bebop images inside its object, stored in 96 KiB chunks
+A venue's state is a set of named einfile images inside its object, stored in 96 KiB chunks
 (`hubdo.rs`, `CHUNK`) with the meta written last. Names are `IMAGE_*` constants:
 
 | Image | Holds | Defined in |
@@ -102,21 +102,21 @@ A venue's state is a set of named bebop images inside its object, stored in 96 K
 The platform itself (registry of venues, waiting list, witness log) lives in one more object,
 named `PLATFORM` (`workers/api/src/platform_store.rs`).
 
-## The bebop image format
+## The einfile format
 
-The product uses the bebop **format**; the bebop **language** (`bebop-lang/`) runs beside the
+The product uses the einfile **format**; the bebop **language** (`bebop-lang/`) runs beside the
 product, not inside the Worker.
 
 - **Pointer-free and self-describing.** Two CRC-checked superblocks (a reader takes the newest valid
   one, or nothing); an append-only arena of objects whose header carries a layout digest, length,
   payload CRC and generation; every reference is an object-relative offset. The same bytes are read
-  by `crates/bebop-store` (Rust, zero dependencies), `crates/bebop-wasm` (wasm32) and an
-  independent Python oracle (`crates/bebop-wasm/oracle.py`).
-- **Four readers must agree.** `crates/bebop-wasm/gate.sh` folds one fixture image to one number
+  by `crates/einstore` (Rust, zero dependencies), `crates/dowiz-hub-wasm` (wasm32) and an
+  independent Python oracle (`crates/dowiz-hub-wasm/oracle.py`).
+- **Four readers must agree.** `crates/dowiz-hub-wasm/gate.sh` folds one fixture image to one number
   in each reader; a cut image must be refused by all of them; the wasm32 reader's size is a ratchet
-  (`crates/bebop-wasm/bytes.baseline`, 30,863 bytes). `bebop.bin` is AArch64-only, so on an x86 CI
+  (`crates/dowiz-hub-wasm/bytes.baseline`, 30,863 bytes). `bebop.bin` is AArch64-only, so on an x86 CI
   runner that reader prints NOT MEASURED and the gate relies on the other three.
-- **Append in O(1).** One object per event with the root relinked (`crates/bebop-store/src/evlog.rs`).
+- **Append in O(1).** One object per event with the root relinked (`crates/einstore/src/evlog.rs`).
 - **Tables without a query planner.** Bounded sets (people, dishes, keys) live in a sorted
   key/value image where every access path is a key written on purpose and a record owns its index
   keys (`crates/dowiz-hub/src/table.rs`).

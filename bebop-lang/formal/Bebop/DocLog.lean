@@ -2,8 +2,8 @@
   Bebop.DocLog -- W-MG-LEAN: what `Report::holds` means, as a MODEL. Core Lean 4, no Mathlib, no
   `axiom`, no `sorry`.
 
-  THE CODE IT MODELS, BY READING: crates/bebop-log/src/doc/{verify,count,seals,settle,declare}.rs and
-  docs/FORMAT-BEBOP-IMAGE-v2.en.md §9.4. NOTHING HERE SAYS THE RUST IS PROVED. A theorem below is
+  THE CODE IT MODELS, BY READING: crates/einfile-log/src/doc/{verify,count,seals,settle,declare}.rs and
+  docs/FORMAT-EINFILE-v2.en.md §9.4. NOTHING HERE SAYS THE RUST IS PROVED. A theorem below is
   about the structure `Holds`; that the Rust counters compute `Holds` is a reading, and
   W-MG-LEAN's verdict lists each place where it does not.
 

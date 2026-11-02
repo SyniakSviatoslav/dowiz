@@ -7,7 +7,7 @@ def blob_bytes(im, blob, ver, off, ln):
 
 
 def kv_chain(im, root, ver):
-    """bebop-kv `delta::chain_in`: the v3 records newest first, every claim held, or 2."""
+    """einfile-kv `delta::chain_in`: the v3 records newest first, every claim held, or 2."""
     if ver < 3:
         return []
     if im.obj_cells(root) < 8 or im.get(root, 7) < 0:
@@ -29,7 +29,7 @@ def kv_chain(im, root, ver):
 
 
 def kv_base(im, root, ver):
-    """bebop-kv `Kv::decode`: the v1/v2 base entries, every slice bounded by its array, or 2."""
+    """einfile-kv `Kv::decode`: the v1/v2 base entries, every slice bounded by its array, or 2."""
     n = im.get(root, 0)
     arrs = [im.follow(root, i) for i in (1, 2, 3, 4)]
     if n < 0 or None in arrs:

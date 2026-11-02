@@ -29,7 +29,7 @@ def main(argv):
     flags = [a for a in argv[1:] if a.startswith("--")]
     paths = [a for a in argv[1:] if not a.startswith("--")]
     if not paths or "--help" in flags:
-        print("usage: python3 bebop-verify.py <image> [--dump] [--verify]", file=sys.stderr)
+        print("usage: python3 ein-verify.py <image> [--dump] [--verify]", file=sys.stderr)
         return 2
     try:
         family, items, doc = read(open(paths[0], "rb").read())

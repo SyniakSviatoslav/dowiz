@@ -3,8 +3,8 @@
 
 use super::*;
 use crate::toys::*;
-use bebop_image::Store;
-use bebop_log::doc::{Doc, KIND_PLATFORM_TSA};
+use einfile_image::Store;
+use einfile_log::doc::{Doc, KIND_PLATFORM_TSA};
 
 fn a_tail() -> Tail {
     let (a, b) = (toy(A), toy(B));
@@ -13,7 +13,7 @@ fn a_tail() -> Tail {
     let mut st = Store::from_bytes(&g);
     write(&mut st, &b, b"one", None);
     write(&mut st, &b, b"two", None);
-    let over = bebop_log::EvLog::tip_at(&st, Doc::open(&st).unwrap().log).unwrap();
+    let over = einfile_log::EvLog::tip_at(&st, Doc::open(&st).unwrap().log).unwrap();
     Doc::anchor_bytes(&mut st, KIND_PLATFORM_TSA, &over, 9, b"proof").unwrap();
     Doc::tail_of(&st, &Doc::front(&base, &ToyIds).unwrap(), &ToyIds).unwrap()
 }
@@ -130,4 +130,4 @@ fn eight_admits_pass_and_the_ninth_is_refused() {
     assert!(decode(&m, &Budget { keys: 9, ..Budget::default() }, &ToyIds).is_ok());
 }
 
-use bebop_log::doc::KeyOp;
+use einfile_log::doc::KeyOp;

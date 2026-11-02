@@ -1,10 +1,10 @@
 # The DOC seal protocol, symbolic model (W-MG-TAM)
 
-`bebop_seal.spthy` is a Tamarin model of what a DOC file carries (FORMAT-BEBOP-IMAGE-v2 §9.4):
+`ein_seal.spthy` is a Tamarin model of what a DOC file carries (FORMAT-EINFILE-v2 §9.4):
 genesis keys, records, SEAL, ADMIT, REVOKE, TRUNCATE over a SEG hash, FORGOTTEN, MERGE, read under
 `Trust::Only`. The adversary holds the whole file, rewrites every unsigned cell, and may hold a
 stolen non-root key. A root is stolen only where a lemma says so. It models
-`crates/bebop-log/src/doc` as it stood on 2026-11-01.
+`crates/einfile-log/src/doc` as it stood on 2026-11-01.
 
 **STATUS: THIS MODEL HAS NEVER BEEN PARSED AND NEVER PROVED**, unless a later `tamarin.yml` run shows
 otherwise. As of 2026-11-01 the public API lists one run, 41302238312 on a7507f4c, with the old
@@ -28,7 +28,7 @@ Why not on the box: the arm64 bottle was unpacked, and running it through the dy
 refused by the session's permission classifier on 2026-11-01. Nothing here has been re-tried.
 
 To parse it by hand on x86-64, with the prover and `maude` on PATH:
-`tamarin-prover docs/design/tamarin/bebop_seal.spthy`. To prove, add `--prove`.
+`tamarin-prover docs/design/tamarin/ein_seal.spthy`. To prove, add `--prove`.
 
 ## The lemmas
 
@@ -52,7 +52,7 @@ is the attack.
 | Lim2 | `limit_merge_row_under_cut` | ATTACK: under a cut a MERGE row binds its seq and not its tip | verified = attack |
 | Lim3 | `limit_stolen_root` | ATTACK: a stolen root's own cut | verified = attack |
 
-**L3t was read from `count.rs`, then run on the Rust on 2026-11-01 (`tam_l3t_` in `crates/bebop-log/src/doc/tam_tests.rs`, green); the verdict in the table is still a prediction for the prover.** A tombstone's
+**L3t was read from `count.rs`, then run on the Rust on 2026-11-01 (`tam_l3t_` in `crates/einfile-log/src/doc/tam_tests.rs`, green); the verdict in the table is still a prediction for the prover.** A tombstone's
 `prev` sits under no id, so a forger with no key puts a forged TRUNCATE at seq `s` and tombstones the
 genuine `s+1` with `prev` on the forgery. Nothing forks, so the forgery is sound and the root's seal
 covers it, and status 75 becomes 0. `tombs_foreign` keeps `holds` false, so `holds` is not
@@ -96,4 +96,4 @@ traces on the real `verify`, with toy seams, and reproduced: H1 a non-root key c
 REVOKE, `holds` true; H2 a revoked key back-dated an ADMIT under `after_seq`, `holds` true; H3 a forged
 TRUNCATE in a fork escaped status 75, `holds` false; H4 a MERGE row under a cut named an unsigned tip,
 `holds` true. `rust-traces/tam_tests.rs` is that pre-fix form and does not build against today's API.
-The current traces are `crates/bebop-log/src/doc/tam_tests.rs`, asserting the opposite for H1-H3.
+The current traces are `crates/einfile-log/src/doc/tam_tests.rs`, asserting the opposite for H1-H3.

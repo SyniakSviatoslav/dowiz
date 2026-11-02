@@ -2,9 +2,9 @@
 //! on the wire as `ch.n - th.len()`. Stale bases, two tablets, a legacy image then a flip: every
 //! case asks whether a position, an id or a tablet's landing can go wrong.
 
-use bebop_store::evlog::{EvLog, FLAG_NONCE_DERIVED, FLAG_SHA256};
-use bebop_store::nodekey::sha256;
-use bebop_store::Store;
+use einstore::evlog::{EvLog, FLAG_NONCE_DERIVED, FLAG_SHA256};
+use einstore::nodekey::sha256;
+use einstore::Store;
 use dowiz_hub::glue::merge::merge;
 use dowiz_hub::glue::{glue, tablet, State as Gs};
 use dowiz_hub::stock::{StockEvent, StockLog};
@@ -21,7 +21,7 @@ fn hub(sha: bool) -> StockLog {
     s
 }
 
-fn records(s: &StockLog) -> Vec<bebop_store::evlog::Record> {
+fn records(s: &StockLog) -> Vec<einstore::evlog::Record> {
     let mut w = EvLog::walk(&Store::from_bytes(&s.to_bytes_trimmed()));
     w.reverse();
     w

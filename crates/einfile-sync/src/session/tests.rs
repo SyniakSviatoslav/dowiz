@@ -3,8 +3,8 @@
 use super::*;
 use crate::toys::*;
 use crate::{frames, Assembler};
-use bebop_log::doc::keys::Key;
-use bebop_log::doc::{forgotten_body, KeyOp};
+use einfile_log::doc::keys::Key;
+use einfile_log::doc::{forgotten_body, KeyOp};
 
 /// Carry messages until nobody has one, starting with `first`'s hello. `carry` is what the wire does
 /// to each message. Returns how many messages moved.
@@ -219,7 +219,7 @@ fn past_an_erasure_difference_not_one_record_leaves() {
     let (a, b) = (toy(A), toy(B));
     let g = genesis(&[&a, &b]);
     let (mut pa, mut pb) = (peer(&g, &a), peer(&g, &b));
-    let erased = bebop_log::doc::Erased { id: [1; 32], digest: [2; 32] };
+    let erased = einfile_log::doc::Erased { id: [1; 32], digest: [2; 32] };
     let at = Store::from_bytes(&g);
     write(&mut pa.store, &a, &forgotten_body(&[9; 32], &[erased]), None);
     write(&mut pb.store, &b, b"plaintext", None);
@@ -260,8 +260,8 @@ fn a_named_conflict_is_sealed_as_obstructed() {
     let g = genesis(&[&a, &b]);
     let (mut pa, mut pb) = two_wrote(&g, &a, &b);
     meet(&mut pa, &mut pb);
-    let recs = bebop_log::EvLog::walk_until_at(&pa.store, Doc::open(&pa.store).unwrap().log, |_| false);
-    let view = recs.iter().find_map(|r| bebop_log::doc::parse_merge(&r.payload)).unwrap();
+    let recs = einfile_log::EvLog::walk_until_at(&pa.store, Doc::open(&pa.store).unwrap().log, |_| false);
+    let view = recs.iter().find_map(|r| einfile_log::doc::parse_merge(&r.payload)).unwrap();
     assert_eq!((view.state, view.conflicts), (STATE_OBSTRUCTED, vec![b"the last salmon".to_vec()]));
 }
 
@@ -277,7 +277,7 @@ fn a_key_change_travels_in_the_tail() {
     let op = KeyOp::Revoke { actor_id: C, after_seq: 1, tip: Doc::tip_at(&pa.store, &C, 1).unwrap() };
     write(&mut pa.store, &a, &op.body(), Some(&op));
     meet(&mut pa, &mut pb);
-    let keys: Vec<Key> = bebop_log::doc::keys::read_keys(&pb.store, Doc::open(&pb.store).unwrap().keys);
+    let keys: Vec<Key> = einfile_log::doc::keys::read_keys(&pb.store, Doc::open(&pb.store).unwrap().keys);
     assert_eq!(keys.iter().find(|k| k.actor_id == C).map(|k| k.revoked_at), Some(1));
     assert!(report(&pb.store).holds());
 }

@@ -46,11 +46,11 @@ os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 # twin server (tools/native-spa-server) until that was deleted on 2026-10-01:
 # the Worker is now `dowiz-hub`'s only consumer, so what only the twin called
 # is dead and is reported here.
-DECL = ['crates/dowiz-hub/src', 'crates/bebop-store/src', 'workers/api/src',
-        # W-ES-P1 (2026-10-29): bebop-store's code moved into four crates; without them here the
+DECL = ['crates/dowiz-hub/src', 'crates/einstore/src', 'workers/api/src',
+        # W-ES-P1 (2026-10-29): einstore's code moved into four crates; without them here the
         # catalogue would lose every capability declared there and the count would fall for nothing.
-        'crates/bebop-image/src', 'crates/bebop-kv/src', 'crates/bebop-log/src', 'crates/bebop-io/src',
-        'crates/bebop-sig-mldsa/src']
+        'crates/einfile-image/src', 'crates/einfile-kv/src', 'crates/einfile-log/src', 'crates/einfile-io/src',
+        'crates/einfile-sig-mldsa/src']
 USE  = DECL
 dfiles = subprocess.check_output(['find']+DECL+['-name','*.rs']).decode().split()
 ufiles = subprocess.check_output(['find']+USE+['-name','*.rs']).decode().split()

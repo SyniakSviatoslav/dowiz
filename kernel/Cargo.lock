@@ -110,49 +110,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
-name = "bebop-crc"
-version = "0.1.0"
-
-[[package]]
-name = "bebop-image"
-version = "0.1.0"
-dependencies = [
- "bebop-crc",
-]
-
-[[package]]
-name = "bebop-io"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
- "bebop-kv",
-]
-
-[[package]]
-name = "bebop-kv"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
-]
-
-[[package]]
-name = "bebop-log"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
-]
-
-[[package]]
-name = "bebop-store"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
- "bebop-io",
- "bebop-kv",
- "bebop-log",
-]
-
-[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -559,10 +516,10 @@ name = "dowiz-kernel"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
- "bebop-store",
  "criterion",
  "curve25519-dalek",
  "dowiz-core",
+ "einstore",
  "eqc-rs",
  "paste",
  "pollster",
@@ -573,6 +530,49 @@ dependencies = [
  "tokio",
  "wasm-bindgen",
  "wgpu",
+]
+
+[[package]]
+name = "einfile-crc"
+version = "0.1.0"
+
+[[package]]
+name = "einfile-image"
+version = "0.1.0"
+dependencies = [
+ "einfile-crc",
+]
+
+[[package]]
+name = "einfile-io"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+ "einfile-kv",
+]
+
+[[package]]
+name = "einfile-kv"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+]
+
+[[package]]
+name = "einfile-log"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+]
+
+[[package]]
+name = "einstore"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+ "einfile-io",
+ "einfile-kv",
+ "einfile-log",
 ]
 
 [[package]]

@@ -46,20 +46,20 @@ pub struct BootConfig {
 /// exact value item 2's proof condition required a production binary to construct.
 /// The durable store the composition root boots on.
 ///
-/// Default: [`FileEventStore`], the hand-rolled JSONL append log. Under the `bebopdb` feature
-/// it is [`BebopEventStore`](crate::bebop_event_store::BebopEventStore) instead -- bebop's own
+/// Default: [`FileEventStore`], the hand-rolled JSONL append log. Under the `einstore` feature
+/// it is [`EinEventStore`](crate::ein_event_store::EinEventStore) instead -- bebop's own
 /// object store, which is the seam `docs/adr/0008-local-sqlite-pq-at-rest.md` describes
 /// (`Status: PROPOSED`, per-node local SQLite) and that no SQLite dependency was ever added to
 /// fill. Selecting it here is what makes it a PRODUCTION construction rather than a test one.
-#[cfg(not(feature = "bebopdb"))]
+#[cfg(not(feature = "einstore"))]
 pub type BootStore = FileEventStore;
 /// See [`BootStore`].
-#[cfg(feature = "bebopdb")]
-pub type BootStore = crate::bebop_event_store::BebopEventStore;
+#[cfg(feature = "einstore")]
+pub type BootStore = crate::ein_event_store::EinEventStore;
 
-/// Arena size for a freshly created bebop-backed store, in bytes.
-#[cfg(feature = "bebopdb")]
-pub const BEBOP_STORE_BYTES: usize = 64 << 20;
+/// Arena size for a freshly created einstore-backed store, in bytes.
+#[cfg(feature = "einstore")]
+pub const EIN_STORE_BYTES: usize = 64 << 20;
 
 pub struct ProductionRoot {
     log: EventLog<BootStore>,
@@ -106,22 +106,22 @@ impl ProductionRoot {
 /// Open the durable store the composition root boots on.
 ///
 /// ONE construction site, deliberately. It was briefly two -- `boot` and the cycle
-/// test's helper each opened their own -- and under the `bebopdb` feature the two
+/// test's helper each opened their own -- and under the `einstore` feature the two
 /// disagreed about which store type they produced, which is how the feature came to
 /// be committed in a state that did not compile. A feature that changes a type must
 /// change it in one place or it changes it in none.
 fn open_boot_store(cfg: &BootConfig) -> Result<BootStore, InitError> {
-    #[cfg(not(feature = "bebopdb"))]
+    #[cfg(not(feature = "einstore"))]
     {
         FileEventStore::open(&cfg.store_path).map_err(|e| InitError::StoreIo(e.to_string()))
     }
-    #[cfg(feature = "bebopdb")]
+    #[cfg(feature = "einstore")]
     {
-        crate::bebop_event_store::BebopEventStore::open_or_create(
+        crate::ein_event_store::EinEventStore::open_or_create(
             cfg.store_path
                 .to_str()
                 .ok_or_else(|| InitError::StoreIo("store_path is not valid UTF-8".to_string()))?,
-            BEBOP_STORE_BYTES,
+            EIN_STORE_BYTES,
         )
         .map_err(|e| InitError::StoreIo(alloc::format!("{e:?}")))
     }

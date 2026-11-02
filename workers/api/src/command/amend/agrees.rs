@@ -1,4 +1,4 @@
-//! THE WORKER'S HALF OF THE D7 GATE (`crates/bebop-wasm/tests/decide_agrees.rs`
+//! THE WORKER'S HALF OF THE D7 GATE (`crates/dowiz-hub-wasm/tests/decide_agrees.rs`
 //! is the other). The object's own path over the committed images -- the log
 //! folded by `hubstore::orders_state` (what `orders_view` serves), the order
 //! found in it, `command::amend::decide` / `command::pay::decide` -- must write
@@ -12,7 +12,7 @@ use dowiz_hub::stock::StockLog;
 
 macro_rules! fixture {
     ($name:literal) => {
-        include_bytes!(concat!("../../../../../crates/bebop-wasm/fixtures/decide/", $name)).as_slice()
+        include_bytes!(concat!("../../../../../crates/dowiz-hub-wasm/fixtures/decide/", $name)).as_slice()
     };
 }
 

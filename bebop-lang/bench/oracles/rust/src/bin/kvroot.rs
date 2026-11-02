@@ -1,5 +1,5 @@
 //! Fold the same (key, value) set through PRODUCTION `dowiz_core`'s InMemoryStore and print
-//! its snapshot_root, so bebop's and bebop-store's roots can be set against dowiz's own.
+//! its snapshot_root, so bebop's and einstore's roots can be set against dowiz's own.
 use dowiz_core::retrieval::memory_store::{InMemoryStore, MemoryStore};
 fn main() {
     let s = InMemoryStore::new();

@@ -1,13 +1,13 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT OR Apache-2.0
-# THE FIFTH READER (W-ES-P6, R-EMBED-STORE §4 T-ES-01). crates/bebop-wasm/gate.sh runs four readers of
+# THE FIFTH READER (W-ES-P6, R-EMBED-STORE §4 T-ES-01). crates/dowiz-hub-wasm/gate.sh runs four readers of
 # the store fixtures (bebop.bin, native, wasm32, oracle.py); this gate runs the fifth -- the C ABI of
-# crates/bebop-ffi, driven from Python through ctypes (bindings/python/bebop_store.py) -- over the
+# crates/einfile-ffi, driven from Python through ctypes (bindings/python/einstore.py) -- over the
 # SAME fixtures and compares it with the SAME `.expected` files. Kept apart from gate.sh on purpose:
 # gate.sh is owned by the wasm lane and ratchets bytes; this one only needs a native cdylib.
 #
 #   value fixtures  (kv, kv2, kv3, kv3max, kv3c, torn, kv0) : n= and root= must both match
-#   refusal fixtures (ptaway, kv4stub, ptbad, empty)       : status= must match (the FFI keeps bebop-wasm's numbers)
+#   refusal fixtures (ptaway, kv4stub, ptbad, empty)       : status= must match (the FFI keeps dowiz-hub-wasm's numbers)
 #
 # Every fixture is opened with Verify::Reachable (crc of every object the root reaches). A fixture
 # the reader could not run is a FAILURE, never a skip. Green = 5/5 agree.
@@ -32,16 +32,16 @@ for a in "$@"; do
   esac
 done
 if [ "$BUILD" = 1 ]; then
-  (cd "$ROOT/crates/bebop-ffi" && "$CARGO" build --release --offline) || { echo "ffi-readers: RED build failed rc=$?" >&2; exit 1; }
+  (cd "$ROOT/crates/einfile-ffi" && "$CARGO" build --release --offline) || { echo "ffi-readers: RED build failed rc=$?" >&2; exit 1; }
 fi
-LIB="$ROOT/crates/bebop-ffi/target/release/libbebop_ffi.so"
+LIB="$ROOT/crates/einfile-ffi/target/release/libeinfile_ffi.so"
 [ -f "$LIB" ] || { echo "ffi-readers: RED no $LIB" >&2; exit 1; }
-BEBOP_FFI_LIB="$LIB" PROVE="$PROVE" python3 -I - "$ROOT" <<'PY'
+EIN_FFI_LIB="$LIB" PROVE="$PROVE" python3 -I - "$ROOT" <<'PY'
 import os, sys
 root = sys.argv[1]
 sys.path.insert(0, os.path.join(root, "bindings", "python"))
-import bebop_store as bs
-fix = os.path.join(root, "crates", "bebop-wasm", "fixtures")
+import einstore as bs
+fix = os.path.join(root, "crates", "dowiz-hub-wasm", "fixtures")
 
 def expected(name):
     out = {}

@@ -4,7 +4,7 @@
 //! `schema` field (§B.2 offset 16) is its `K64`. Every column's §B.2 type code
 //! and unit are DERIVED from the string by `parse`, so there is no second hand
 //! copy of the layout to drift from it. Mirrors: `bebop-lang/selfhost/std/block.bp`
-//! and `crates/bebop-wasm/oracle.py` (row DG9) must carry these same strings.
+//! and `crates/dowiz-hub-wasm/oracle.py` (row DG9) must carry these same strings.
 //!
 //! TYPE TOKENS -> §B.2 codes: `i64` 1, `i32` 2, `u8` 3, `u32off` 4, `u32rp` 5,
 //! `u32` 6 (CSR col). An `i64` that directly follows a `u32` (CSR col) is the
@@ -63,7 +63,7 @@ pub const TASTE: Schema = Schema {
 };
 
 /// Schemas only THIS reader knows (W-TASTE, 2026-10-05). `TABLE` is the set every implementation
-/// carries -- `block_read --schemas` prints it and the bebop-wasm gate (B-2) holds it equal to
+/// carries -- `block_read --schemas` prints it and the dowiz-hub-wasm gate (B-2) holds it equal to
 /// `oracle.py` and `block.bp` -- so a new kind starts here, where the other readers never meet it
 /// (it is served on its own route, `?block=taste`, never mixed into their fixtures), and moves to
 /// `TABLE` in the commit that teaches the mirrors.

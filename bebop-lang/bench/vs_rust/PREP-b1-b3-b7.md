@@ -14,7 +14,7 @@ Files:
   stays small (the box's filesystem-heaviness rule). `bench/oracles/scrash.py` is already
   generic in the generation number (no scrash.bp-specific constant), so it is reused
   UNMODIFIED against this writer's store — verified byte-exact (see below).
-- `bench/vs_rust/scrash_torn.sh` — the harness. `scrash_torn.sh` runs the bebop-store
+- `bench/vs_rust/scrash_torn.sh` — the harness. `scrash_torn.sh` runs the einstore
   trials; `scrash_torn.sh --sqlite` runs the sqlite-WAL trials. Both take `TRIALS`
   (default 1000) and `BEBOP_TMP=$OUT`.
 

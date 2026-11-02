@@ -1,12 +1,12 @@
 //! `LogImage::load`, through a mark (W-HUBCRC follow-up, 2026-10-09): the wallet ledger,
 //! the till and the other entry logs are append logs like the order `Hub`, loaded on
 //! every turn that writes them, so they take the same `LogMark` (`Hub::load_since`,
-//! `bebop_store::verify::since`). `None` is the full check `LogImage::load` always made.
+//! `einstore::verify::since`). `None` is the full check `LogImage::load` always made.
 
 use super::LogImage;
 use crate::{HubError, LogMark};
-use bebop_store::evlog::EvLog;
-use bebop_store::Store;
+use einstore::evlog::EvLog;
+use einstore::Store;
 
 impl LogImage {
     /// `load`, not re-hashing the records `mark` covers; hands back the mark for these bytes.

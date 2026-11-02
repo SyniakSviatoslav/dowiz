@@ -92,7 +92,7 @@
      "proof": {"kind": "cargo-test", "ref": "cron::route_tests::a_lost_alarm_is_rearmed_by_the_nightly_and_the_venue_drains_in_its_own_turn"}, "owner_step": null, "notes": null},
     {"id": 45, "name": "DW7 columnar block", "producer": "hubdo/menu.rs ?block=", "consumer": "no reader", "status": "DISCONNECTED", "live": null,
      "proof": null, "owner_step": null, "notes": "in flight in lane W-BN3A; not claimed here"},
-    {"id": 46, "name": "DW1 browser replica (bebop-wasm)", "producer": "crates/bebop-wasm", "consumer": "public/**", "status": "DISCONNECTED", "live": null,
+    {"id": 46, "name": "DW1 browser replica (dowiz-hub-wasm)", "producer": "crates/dowiz-hub-wasm", "consumer": "public/**", "status": "DISCONNECTED", "live": null,
      "proof": null, "owner_step": null, "notes": "in flight in lane W-BN3A; not claimed here"},
     {"id": 47, "name": "Console replica (today)", "producer": "owner.rs changes_since {changes, generation}", "consumer": "lib/replica.js", "status": "TESTED-INMEM", "live": {"kind": "probe", "ref": "tools/live-proof/probes/47-console-replica.mjs", "contract": "tools/live-proof/contracts/47.json", "build": "1ae4923bef74", "at": "2026-10-10"},
      "proof": {"kind": "cargo-test", "ref": "owner::route_tests::a_console_catches_up_from_its_generation_and_only_with_its_own_venues_changes"}, "also": ["node:workers/api/public/lib/replica.test.mjs"], "owner_step": null, "notes": "server side by route test; the browser fold by its node test"},

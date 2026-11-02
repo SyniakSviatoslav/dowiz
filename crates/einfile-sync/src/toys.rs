@@ -1,12 +1,12 @@
-//! TOY SEAMS for this crate's tests, as in `bebop-log`'s `doc/tests.rs`: NOT CRYPTO. A 32-byte mix
+//! TOY SEAMS for this crate's tests, as in `einfile-log`'s `doc/tests.rs`: NOT CRYPTO. A 32-byte mix
 //! and a "signature" anyone can forge. They prove the layout and the flow; real ML-DSA-65 goes through
 //! the same door in `crates/dowiz-hub/tests/k_t1_tail.rs`.
 
 use crate::{Budget, Device, Peer};
-use bebop_image::Store;
-use bebop_log::doc::seal::read_heads;
-use bebop_log::doc::{id_message, verify, Doc, Ids, Key, KeyOp, Report, Signer, Trust, Union, Verifier};
-use bebop_log::{EvLog, Record};
+use einfile_image::Store;
+use einfile_log::doc::seal::read_heads;
+use einfile_log::doc::{id_message, verify, Doc, Ids, Key, KeyOp, Report, Signer, Trust, Union, Verifier};
+use einfile_log::{EvLog, Record};
 
 pub const ALG_TOY: i64 = 1;
 pub const A: [u8; 32] = [0xA1; 32];

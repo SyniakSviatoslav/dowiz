@@ -2,7 +2,7 @@
 // at the last sync, kept on the device (IndexedDB), with the tablet's own movements appended while
 // it is offline; one sync sends only those, and replays the hub's answer onto the hub's own tip.
 //
-// Every rule is Rust's: `tablet.wasm` is crates/bebop-wasm built with `--features tablet`, a C
+// Every rule is Rust's: `tablet.wasm` is crates/dowiz-hub-wasm built with `--features tablet`, a C
 // surface over dowiz_hub::glue::tablet -- the crate the venue's object glues with. This file moves
 // bytes: into the module, into IndexedDB, onto the wire (POST /api/staff/stock/glue).
 //
@@ -46,7 +46,7 @@ export function idbStore(key) {
   };
 }
 
-/// The module's C surface, with the copy-in / read-back the ABI asks for (crates/bebop-wasm
+/// The module's C surface, with the copy-in / read-back the ABI asks for (crates/dowiz-hub-wasm
 /// src/tablet.rs header). Every call answers {status, bytes}; a status >= 40 is a refusal whose
 /// bytes are its words.
 export function surface(instance) {

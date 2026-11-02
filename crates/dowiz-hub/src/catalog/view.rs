@@ -3,7 +3,7 @@
 //! `Catalog::load` copies the image into a `Store` and decodes all ~180 entries before
 //! `product(id)` can answer -- the whole cost of every Durable Object handler that wanted
 //! one dish (FRESH 368-787 us at 165 dishes, report F.3 W1). `CatalogView` answers the
-//! same reads from the borrowed bytes through `bebop_store::kv::zc::KvIn`: a binary
+//! same reads from the borrowed bytes through `einstore::kv::zc::KvIn`: a binary
 //! search over the sorted keys and the one value. Writers keep `Catalog` (its `put` and
 //! `compacted_bytes` need the entries in memory); nothing here writes.
 //!
@@ -17,11 +17,11 @@
 //! and `view::tests::the_view_answers_what_catalog_load_answers` walks every fixture
 //! and catalogue shape in the tree to hold that.
 
-use bebop_store::kv::zc::KvIn;
-/// What `CatalogView::open` proved, for `reopen` (re-exported so a holder need not name bebop-store).
-pub use bebop_store::kv::zc::Checked;
-use bebop_store::verify::KvError;
-use bebop_store::View;
+use einstore::kv::zc::KvIn;
+/// What `CatalogView::open` proved, for `reopen` (re-exported so a holder need not name einstore).
+pub use einstore::kv::zc::Checked;
+use einstore::verify::KvError;
+use einstore::View;
 
 use super::{Catalog, K_LOCATION, P_CATEGORY, P_PRODUCT, P_PROMO, P_SUPPLY};
 use crate::HubError;

@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::toys::*;
-use bebop_log::doc::Signer;
+use einfile_log::doc::Signer;
 
 #[test]
 fn a_good_signature_is_asked_once() {
@@ -40,9 +40,9 @@ fn the_union_pays_only_for_what_is_new() {
     let (a, b) = (toy(A), toy(B));
     let g = genesis(&[&a, &b]);
     let mut pa = peer(&g, &a);
-    let mut st = bebop_image::Store::from_bytes(&g);
+    let mut st = einfile_image::Store::from_bytes(&g);
     write(&mut st, &b, b"new", None);
-    let t = bebop_log::doc::Doc::tail_of(&st, &pa.front().unwrap(), &ToyIds).unwrap();
+    let t = einfile_log::doc::Doc::tail_of(&st, &pa.front().unwrap(), &ToyIds).unwrap();
     let memo = Memo::new(&V, &IDS);
     pa.v = &memo;
     pa.adopt(&t).unwrap();

@@ -51,7 +51,7 @@ fn the_audit_entry_carries_no_contact_details() {
 }
 
 /// The `at`-th record of a newest-first walk (its object index).
-fn nth(st: &bebop_store::Store, at: usize) -> usize {
+fn nth(st: &einstore::Store, at: usize) -> usize {
     let mut o = st.follow(st.root().unwrap(), 1).unwrap();
     for _ in 0..at {
         o = st.follow(o, 2).unwrap();
@@ -78,7 +78,7 @@ fn events_from_the_carried_scan_equal_the_rehashing_walk() {
     let clean = hub_of(40).to_bytes_trimmed();
     let mut cases = vec![("clean", clean.clone(), None)];
     for at in [0usize, 17, 39] {
-        let mut st = bebop_store::Store::from_bytes(&clean);
+        let mut st = einstore::Store::from_bytes(&clean);
         let o = nth(&st, at);
         st.cells[o + 2 + 12] ^= 0x100;
         cases.push(("flipped", st.to_bytes(), Some(at)));

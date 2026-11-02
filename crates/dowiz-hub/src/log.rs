@@ -5,7 +5,7 @@
 //! rewrites the image in place). Reading the log back is `read.rs`; moving old
 //! history out of it is `rotate.rs`; checking its chain ids is `chain.rs`.
 
-use bebop_store::{evlog::{EvLog, Record}, Store};
+use einstore::{evlog::{EvLog, Record}, Store};
 
 use crate::{e_is_full, usage_of_kind};
 use crate::{EventKind, Hub, HubError, LogMark, Usage, DEFAULT_IMAGE_BYTES};
@@ -33,7 +33,7 @@ impl Hub {
     /// `None` is `load` exactly: every record hashed. Hands back the mark for these bytes,
     /// to pass on the next load of them or of what this hub appends to them (none for a
     /// log with a quarantined record, `quarantine::chain_is_whole_since`).
-    /// `bebop_store::verify::since` says what a mark trusts.
+    /// `einstore::verify::since` says what a mark trusts.
     pub fn load_since(bytes: &[u8], mark: Option<&LogMark>) -> Result<(Self, Option<LogMark>), HubError> {
         let store = Store::from_bytes(bytes);
         if store.pick().is_none() {

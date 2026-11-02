@@ -3,7 +3,7 @@
 //! the walk (root, `next` ref, `prev` id) REFUSES. No fuzzing (operator rule).
 use crate::logimage::LogImage;
 use crate::{EventKind, Hub, HubError};
-use bebop_store::Store;
+use einstore::Store;
 
 fn hub_bytes(n: u64, json_len: usize) -> Vec<u8> {
     let mut hub = Hub::create_sized(64 * 1024).unwrap();

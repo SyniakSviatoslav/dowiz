@@ -11,10 +11,10 @@ use super::tsa::{self, PlatformTsa};
 use super::{DeviceKey, HubIds, SealedHub, KIND_KEYOP};
 use crate::logimage::LogImage;
 use crate::{EventKind, Hub, HubError};
-use bebop_store::evlog::doc::{AnchorCounts, Ids, Key, KeyOp, Verdict, KIND_OTS, KIND_PLATFORM_TSA, KIND_ROUGHTIME};
-use bebop_store::evlog::{EvLog, Record};
-use bebop_store::nodekey::sha256;
-use bebop_store::Store;
+use einstore::evlog::doc::{AnchorCounts, Ids, Key, KeyOp, Verdict, KIND_OTS, KIND_PLATFORM_TSA, KIND_ROUGHTIME};
+use einstore::evlog::{EvLog, Record};
+use einstore::nodekey::sha256;
+use einstore::Store;
 
 pub(super) const JSON: &str = r#"{"status":"new","total":{"amount":1500,"currency":"ALL"}}"#;
 
@@ -47,7 +47,7 @@ fn a_flagged_record_is_never_legacy() {
     let (prev, payload) = ([7u8; 32], b"bytes".to_vec());
     let id = crate::chain::legacy_id_chained(&prev, &payload);
     assert!(HubIds.legacy(0, &prev, &payload, &id));
-    assert!(!HubIds.legacy(bebop_store::evlog::FLAG_SHA256, &prev, &payload, &id));
+    assert!(!HubIds.legacy(einstore::evlog::FLAG_SHA256, &prev, &payload, &id));
 }
 
 /// The seal on real hub bytes, then two hub commits, each sealing its tip; every reader
@@ -95,7 +95,7 @@ fn a_changed_byte_under_a_seal_is_broken_or_refused() {
     let clean = sh.to_bytes_trimmed();
 
     let mut st = Store::from_bytes(&clean);
-    let log = bebop_store::evlog::doc::Doc::open(&st).unwrap().log;
+    let log = einstore::evlog::doc::Doc::open(&st).unwrap().log;
     let newest = EvLog::objs_at(&st, log)[0];
     // A v2 record: 12 header cells, 4 actor cells (12..16), the 16-byte nonce (16..18), the
     // body from cell 18 -- bit 0 of its first byte is bit 0 of the kind (Paid 3 -> Advanced 2,
@@ -117,12 +117,12 @@ fn a_changed_byte_under_a_seal_is_broken_or_refused() {
     payload[16] ^= 1;
     st.put_cell(newest, 18, st.get(newest, 18) ^ 1);
     let id = HubIds.chained(&Record { payload: payload.clone(), ..r.clone() });
-    for (j, c) in bebop_store::evlog::doc::id_cells(&id).iter().enumerate() {
+    for (j, c) in einstore::evlog::doc::id_cells(&id).iter().enumerate() {
         st.put_cell(newest, 3 + j, *c);
     }
     st.seal(newest);
     let log_root = log.unwrap();
-    for (j, c) in bebop_store::evlog::doc::id_cells(&id).iter().enumerate() {
+    for (j, c) in einstore::evlog::doc::id_cells(&id).iter().enumerate() {
         st.put_cell(log_root, 3 + j, *c);
     }
     st.seal(log_root);
@@ -136,7 +136,7 @@ fn a_changed_byte_under_a_seal_is_broken_or_refused() {
 #[test]
 fn a_sealed_hub_grows_and_refuses_a_stranger() {
     let key = device(7);
-    let mut sh = SealedHub::create_sized(&key, (bebop_store::ARENA + 2_500) * 8).unwrap();
+    let mut sh = SealedHub::create_sized(&key, (einstore::ARENA + 2_500) * 8).unwrap();
     let before = sh.to_bytes().len();
     for i in 0..6 {
         sh.append(EventKind::Placed, &format!("g{i}"), JSON, &key, i).unwrap();
@@ -194,9 +194,9 @@ fn the_three_sentences_describe_the_code() {
     let mut sh = SealedHub::create(&owner).unwrap();
     sh.append(EventKind::Placed, "o1", JSON, &owner, 1).unwrap();
     let st = Store::from_bytes(&sh.to_bytes_trimmed());
-    let view = bebop_store::evlog::doc::Doc::open(&st).unwrap();
-    let seal = bebop_store::evlog::doc::seal::read_heads(&st, view.heads)[0].seal.unwrap();
-    assert_eq!(bebop_store::evlog::doc::seal::read_seal(&st, seal).unwrap().time, None, "the control: a real seal names no TIME");
+    let view = einstore::evlog::doc::Doc::open(&st).unwrap();
+    let seal = einstore::evlog::doc::seal::read_heads(&st, view.heads)[0].seal.unwrap();
+    assert_eq!(einstore::evlog::doc::seal::read_seal(&st, seal).unwrap().time, None, "the control: a real seal names no TIME");
 }
 
 // ── anchors ──────────────────────────────────────────────────────────────────────────────
@@ -228,7 +228,7 @@ fn a_platform_tsa_mark_checks_under_the_auditors_key() {
 
     // RED: one flipped bit of the signature, re-sealed; and the time moved under the mark.
     let mut st = Store::from_bytes(&bytes);
-    let a = bebop_store::evlog::doc::Doc::open(&st).unwrap().anch.unwrap();
+    let a = einstore::evlog::doc::Doc::open(&st).unwrap().anch.unwrap();
     st.put_cell(a, 9 + 300, st.get(a, 9 + 300) ^ 1);
     st.seal(a);
     let forged = SealedHub::load(&st.to_bytes()).unwrap().anchors(&PlatformTsa { keys: &keys }).unwrap();

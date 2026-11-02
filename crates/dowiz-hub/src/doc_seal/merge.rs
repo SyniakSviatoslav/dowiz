@@ -19,9 +19,9 @@
 //!
 //! WHAT THE MERGE SAYS (§2d's frame): `MERGE_SENTENCE`, which `doc_verify` prints.
 
-use bebop_store::evlog::doc::{merge_body, parse_merge, Doc, DocError, Ids, MergeView, Trust, STATE_COMMUTES, STATE_OBSTRUCTED};
-use bebop_store::evlog::Record;
-use bebop_store::Store;
+use einstore::evlog::doc::{merge_body, parse_merge, Doc, DocError, Ids, MergeView, Trust, STATE_COMMUTES, STATE_OBSTRUCTED};
+use einstore::evlog::Record;
+use einstore::Store;
 
 use super::history::KIND_DECL;
 use super::sides::{canonical, conflicts_at, is_stock, keyed, two_tails};
@@ -128,7 +128,7 @@ impl SealedHub {
         let mut out = Vec::new();
         for r in &recs {
             let body = HubIds.body(r.flags, &r.payload);
-            if !body.starts_with(bebop_store::evlog::doc::MERGE_MARK) {
+            if !body.starts_with(einstore::evlog::doc::MERGE_MARK) {
                 continue;
             }
             let view = parse_merge(body);

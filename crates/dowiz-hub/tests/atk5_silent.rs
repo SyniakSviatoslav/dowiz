@@ -5,9 +5,9 @@ mod atk_forge;
 
 use atk5_common::*;
 use atk_forge::{forged, read, write};
-use bebop_store::evlog::doc::seal::{message, Seal};
-use bebop_store::evlog::doc::{merge_body, Doc, Ids, MergeView, Row, Signer, Trust, ALG_ML_DSA_65, STATE_COMMUTES};
-use bebop_store::Store;
+use einstore::evlog::doc::seal::{message, Seal};
+use einstore::evlog::doc::{merge_body, Doc, Ids, MergeView, Row, Signer, Trust, ALG_ML_DSA_65, STATE_COMMUTES};
+use einstore::Store;
 use dowiz_hub::doc_seal::merge::{merge_report, Merged, Recheck};
 use dowiz_hub::doc_seal::{DeviceKey, HubIds, MlDsa65, SealedHub, KIND_STOCK, MIN_SEALED_BYTES};
 

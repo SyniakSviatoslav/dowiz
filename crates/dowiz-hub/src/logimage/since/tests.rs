@@ -5,7 +5,7 @@
 //! One named corrupted cell per case (payload cell 12 = the record's own bytes); no fuzzing.
 use crate::logimage::LogImage;
 use crate::{EventKind, Hub};
-use bebop_store::Store;
+use einstore::Store;
 
 fn hub_bytes(n: u64) -> Vec<u8> {
     let mut hub = Hub::create_sized(64 * 1024).unwrap();

@@ -1,9 +1,9 @@
 #!/bin/sh
-# ES-BENCH — bebop-store must not get slower (R-EMBED-STORE §4.6, T-ES-50).
+# ES-BENCH — einstore must not get slower (R-EMBED-STORE §4.6, T-ES-50).
 #
-# WHAT IT MEASURES. Four CPU-only rows over a warm page cache, each as a RATIO of bebop's time
+# WHAT IT MEASURES. Four CPU-only rows over a warm page cache, each as a RATIO of einfile's time
 # to a same-process std control doing the same logical work (crates/es-bench/src/gate.rs):
-# get (100k random point gets), prefix (1000 x ~100-key scans), verify (bebop's verify-on-open
+# get (100k random point gets), prefix (1000 x ~100-key scans), verify (einfile's verify-on-open
 # crc over the image), build (compacted_bytes_fit). The two are interleaved inside every
 # repetition, so a slow second of the machine lands on both. RED when a row's median ratio
 # is past its committed baseline by more than the baseline's tol_pct.
@@ -11,7 +11,7 @@
 # WHAT IT DOES NOT. Write rows (unsynced put, durable commit) are report-only, as §4.6 says:
 # fsync time on this box is proot's (~273 us per syscall), not the engine's. redb / LMDB /
 # SQLite are NOT built here -- the full table is `cargo run --release --features competitors
-# -- full all ...` (docs/measurements/ES-BENCH-2026-10-29.md); the gate builds bebop only.
+# -- full all ...` (docs/measurements/ES-BENCH-2026-10-29.md); the gate builds einfile only.
 #
 # BASELINE PER ARCHITECTURE: crates/es-bench/baseline-<arch>.txt. A ratio cancels the clock, not
 # the cache shape, so an x86 runner is not held to an ARM number: with no file for this arch

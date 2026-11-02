@@ -1,0 +1,28 @@
+[package]
+name = "einfile-kv"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/SyniakSviatoslav/dowiz"
+readme = "README.md"
+description = "The einfile KV layout over an einfile image: v1/v2 compacted roots, the v3 delta chain, the zero-copy reader KvIn, crc-checked load. no_std + alloc; depends only on einfile-image."
+
+[features]
+default = []
+# Kv::init(path), Kv::commit_into(path).
+std = ["einfile-image/std"]
+# W-ES-P8C: KvIn / Kv::load_checked READ KV v4 (the B+tree). Off by default: until P8d every other
+# reader (wasm, oracle.py, kv.bp, C ABI) refuses v4, and conformance.sh needs all five to agree.
+# Without it a v4 root is refused as `UnknownVersion` exactly as W-ES-P8A made it.
+tree = []
+
+[dependencies]
+einfile-image = { path = "../einfile-image", version = "0.1.0" }
+
+[dev-dependencies]
+# the tests write temp files through the path API
+einfile-image = { path = "../einfile-image", version = "0.1.0", features = ["std"] }
+
+[profile.release]
+opt-level = 3

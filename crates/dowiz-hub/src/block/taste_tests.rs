@@ -4,7 +4,7 @@
 //! The catalogue is SYNTHETIC and seeded (`menu(SEED)`): 165 dishes, new `sense` and old `taste`
 //! fields and none, declared / empty / undeclared allergens, some off sale, ids that differ in case.
 //! Its block is pinned at `fixtures/taste/taste.dwb` -- NOT `fixtures/blocks/`, which every
-//! reader of the shared table (oracle.py, block.bp, bebop-wasm) walks. Regenerate ONLY on a
+//! reader of the shared table (oracle.py, block.bp, dowiz-hub-wasm) walks. Regenerate ONLY on a
 //! deliberate format change: `DWB_WRITE_FIXTURES=1`.
 
 use std::collections::BTreeMap;
@@ -167,7 +167,7 @@ fn an_avoided_allergen_is_never_returned_and_an_undeclared_dish_goes_with_it() {
 
 #[test]
 fn the_shared_table_and_its_goldens_do_not_move() {
-    // Every implementation of the shared table carries exactly these five (bebop-wasm gate B-2;
+    // Every implementation of the shared table carries exactly these five (dowiz-hub-wasm gate B-2;
     // `sales` joined in LV-COL-E with all four mirrors taught in the same change).
     let names: Vec<&str> = TABLE.iter().map(|s| s.name).collect();
     assert_eq!(names, ["menu_prices", "bom", "stock_levels", "names", "sales"]);

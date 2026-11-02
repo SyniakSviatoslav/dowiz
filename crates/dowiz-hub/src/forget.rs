@@ -30,9 +30,9 @@
 
 use crate::chain::{verify_id, ERASED_NONCE};
 use crate::{body_of, decode, EventKind, Event, Hub, HubError};
-use bebop_store::evlog::FLAG_SHA256;
-use bebop_store::evlog::{EvLog, Record};
-use bebop_store::Store;
+use einstore::evlog::FLAG_SHA256;
+use einstore::evlog::{EvLog, Record};
+use einstore::Store;
 
 /// The high bit of the payload's kind byte: this record was redacted in place.
 pub(crate) const REDACTED_BIT: u8 = 0x80;

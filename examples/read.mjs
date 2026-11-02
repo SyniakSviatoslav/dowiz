@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// A bebop ARCHIVE read by the reader EMBEDDED IN IT. Node 22, no npm, nothing installed, no repo
+// An einfile ARCHIVE read by the reader EMBEDDED IN IT. Node 22, no npm, nothing installed, no repo
 // (W-MG-M5, R-MAINGOAL-A §5.2 bootstrap, §5.3 trust):   node read.mjs <archive.store>
 // THE FILE IS NOT TRUSTED (W-MG-HOST). Its sha256 claim only says the file agrees with itself, so a
 // reader runs as a verifier only if it hashes to PINNED below. Any other reader is UNPINNED and is
@@ -8,14 +8,14 @@
 // (TESTIMONY, §5.3) and the exit code is never 0. Either way the module has no imports, no start
 // section, one bounded memory, and runs in a worker under a clock; no byte of it is ever printed:
 // the words below are this file's, and every line passes `clean`.
-// PINNED is written by tools/gates/atk3_pin.py from tools/verify/bebop-verify.mjs; tools/gates/atk3.sh holds them equal.
+// PINNED is written by tools/gates/atk3_pin.py from tools/verify/ein-verify.mjs; tools/gates/atk3.sh holds them equal.
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { crc32 } from "node:zlib";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 const PINNED = "6cb4c63c4cc02b728c85de2fb701eb07269c6815a2b38ef7fa37399df46daa9c";
 const MAX_PAGES = 16384, UNPINNED = 76, MODULE_REFUSED = 77, HOST_FAILED = 78, OWN = "--run-files-own-code", MARK = "[file's own code: testimony, not a verify] ";
-const WORDS = { // crates/bebop-wasm-reader/src/status.rs TABLE, word for word (tools/gates/atk3.sh), then the host's three
+const WORDS = { // crates/einfile-reader/src/status.rs TABLE, word for word (tools/gates/atk3.sh), then the host's three
   0: "OK: read; n = entries or records, root = the FNV-1a 64 fold (a DOC's root is its log's fold)",
   1: "NO_SUPERBLOCK: no valid superblock, or the live one was refused structurally (arena_used or PartTab outside, PartTab misplaced or its crc bad, root outside)",
   2: "NOT_A_KV: a superblock but no KV root, or a KV claim (a slice, a chain, a v4 rule) that does not hold, or a DOC whose SPEC or v1-v3 TREE this reader does not read",

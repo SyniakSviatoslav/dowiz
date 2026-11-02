@@ -2,10 +2,10 @@
 //! confirm a guessed payload. That rests on the writer having a seed. The attacker here holds
 //! only the redacted image and a list of guesses: no key, no seed.
 
-use bebop_store::evlog::doc::id_message;
-use bebop_store::evlog::{EvLog, Record};
-use bebop_store::nodekey::sha256;
-use bebop_store::Store;
+use einstore::evlog::doc::id_message;
+use einstore::evlog::{EvLog, Record};
+use einstore::nodekey::sha256;
+use einstore::Store;
 use dowiz_hub::consent::{self, Act, Method, State, KIND_ACT};
 use dowiz_hub::logimage::LogImage;
 

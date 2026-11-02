@@ -10,8 +10,8 @@
 
 use std::collections::BTreeSet;
 
-use bebop_store::evlog::doc::anch::NoAdapters;
-use bebop_store::evlog::doc::KIND_OTS;
+use einstore::evlog::doc::anch::NoAdapters;
+use einstore::evlog::doc::KIND_OTS;
 
 use crate::doc_seal::ots::{self, Attestation, Calendar, Proof, Reached, Ts};
 use crate::doc_seal::{hex32, SealedHub};

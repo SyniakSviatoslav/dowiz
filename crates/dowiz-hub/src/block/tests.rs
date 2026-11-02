@@ -229,8 +229,8 @@ fn schema_table_agrees() {
     let mut keys = Vec::new();
     for k in schema::known() {
         let s = k.schema.string.as_bytes();
-        // The second implementation: bebop_store's bitwise crc (the `crc32x` twin).
-        let twin = (u64::from(bebop_store::crc32(s)) << 32) | s.len() as u64;
+        // The second implementation: einstore's bitwise crc (the `crc32x` twin).
+        let twin = (u64::from(einstore::crc32(s)) << 32) | s.len() as u64;
         assert_eq!(k.k64, twin, "{}", k.schema.name);
         assert!(k.schema.string.starts_with(&format!("{}:v1(", k.schema.name)));
         keys.push(k.k64);
@@ -240,14 +240,14 @@ fn schema_table_agrees() {
     assert_eq!(keys.len(), schema::TABLE.len() + schema::HUB_ONLY.len(), "every schema has its own K64");
     let names: Vec<&str> = schema::of(&schema::MENU_PRICES).unwrap().cols.iter().map(|c| c.name).collect();
     assert_eq!(names, ["dish", "price", "tax_ppm", "mods_ptr", "mods_col", "mods_val"]);
-    // The slice-by-8 crc IS bebop_store::crc32, on every fixture and on seeded noise of every length.
+    // The slice-by-8 crc IS einstore::crc32, on every fixture and on seeded noise of every length.
     for (_, b) in encoded() {
-        assert_eq!(crc32(&b), bebop_store::crc32(&b));
+        assert_eq!(crc32(&b), einstore::crc32(&b));
     }
     let mut s = SEED;
     let noise: Vec<u8> = (0..700).map(|_| lcg(&mut s) as u8).collect();
     for n in 0..noise.len() {
-        assert_eq!(crc32(&noise[..n]), bebop_store::crc32(&noise[..n]), "len {n}");
+        assert_eq!(crc32(&noise[..n]), einstore::crc32(&noise[..n]), "len {n}");
     }
 }
 

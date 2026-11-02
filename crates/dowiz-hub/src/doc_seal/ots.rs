@@ -33,8 +33,8 @@
 //! calendar's Bitcoin branch onto that pending leaf, and the evaluation against a fake
 //! header source -- the whole path except the two HTTP calls.
 
-use bebop_store::evlog::doc::{Anchor, AnchorCheck, Verdict, KIND_OTS};
-use bebop_store::nodekey::sha256;
+use einstore::evlog::doc::{Anchor, AnchorCheck, Verdict, KIND_OTS};
+use einstore::nodekey::sha256;
 
 pub const MAGIC: [u8; 31] = [
     0x00, b'O', b'p', b'e', b'n', b'T', b'i', b'm', b'e', b's', b't', b'a', b'm', b'p', b's', 0x00, 0x00, b'P', b'r', b'o', b'o', b'f', 0x00, 0xbf, 0x89, 0xe2, 0xe8, 0x84, 0xe8, 0x92, 0x94,

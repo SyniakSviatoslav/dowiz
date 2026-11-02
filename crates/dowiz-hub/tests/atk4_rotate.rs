@@ -3,8 +3,8 @@
 //! records verbatim: on a flipped log, legacy records NEWER than a sha256 one, `walk_check`'s forgery
 //! shape, and `writes_sha256` reads only the newest record. A rotation in transition now writes it last.
 
-use bebop_store::evlog::{EvLog, FLAG_SHA256};
-use bebop_store::Store;
+use einstore::evlog::{EvLog, FLAG_SHA256};
+use einstore::Store;
 use dowiz_hub::{EventKind, Hub};
 
 const ACTOR: [u8; 32] = [0xA1; 32];

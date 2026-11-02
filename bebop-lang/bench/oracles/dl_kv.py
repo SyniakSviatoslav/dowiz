@@ -1,5 +1,5 @@
-# Oracle for gate `dl_kv` (LV-INC-F): from_kv_chain(k) of crates/bebop-wasm/fixtures/kv3.store re-derived
-# here from the image's BYTES (the format: docs/FORMAT-BEBOP-IMAGE-v2.md, kv/delta.rs) -- not from the bebop
+# Oracle for gate `dl_kv` (LV-INC-F): from_kv_chain(k) of crates/dowiz-hub-wasm/fixtures/kv3.store re-derived
+# here from the image's BYTES (the format: docs/FORMAT-EINFILE-v2.md, kv/delta.rs) -- not from the bebop
 # program and not from the Rust: the chain newest first, `old` = the newest older record naming the key
 # (put: its value, remove: nothing) else the base, put = +(k, v) - (k, old), remove = -(k, old); rows as
 # K64('O' || len8 || bytes) pairs, digest as zset.rs `digest`. Then the integration law: kv / has(K) over
@@ -7,11 +7,11 @@
 import sys, pathlib
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(HERE.parents[2] / "crates" / "bebop-wasm"))
+sys.path.insert(0, str(HERE.parents[2] / "crates" / "dowiz-hub-wasm"))
 import dl_common as C
 import oracle as O
 
-cells, n, live, root, _ = O.image(str(HERE.parents[2] / "crates" / "bebop-wasm" / "fixtures" / "kv3.store"))
+cells, n, live, root, _ = O.image(str(HERE.parents[2] / "crates" / "dowiz-hub-wasm" / "fixtures" / "kv3.store"))
 assert live is not None and root, "kv3.store: no live superblock / data root"
 get = lambda o, i: cells[o + 2 + i]
 ref = lambda o, i: (o + get(o, i)) if get(o, i) != 0 else 0

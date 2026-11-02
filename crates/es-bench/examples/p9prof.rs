@@ -4,11 +4,11 @@
 //!   cargo run --release --example p9prof -- <N> [VS]
 use std::time::Instant;
 
-use bebop_store::iodev::Db;
-use bebop_store::kv::tree::{stage_build, tree_compacted, FANOUT};
-use bebop_store::kv::zc::KvIn;
-use bebop_store::kv::Staged;
-use bebop_store::{Batch, Cells, Durability, Options, Store, View};
+use einstore::iodev::Db;
+use einstore::kv::tree::{stage_build, tree_compacted, FANOUT};
+use einstore::kv::zc::KvIn;
+use einstore::kv::Staged;
+use einstore::{Batch, Cells, Durability, Options, Store, View};
 use es_bench::data::{entries, key, perm, val, write_atomic};
 use es_bench::work::BATCH;
 
@@ -57,11 +57,11 @@ fn main() {
     let dir = std::path::PathBuf::from(std::env::var("ES_BENCH_DIR").unwrap_or_else(|_| "es-bench-data".into())).join("p9prof");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("kv4.bebop");
+    let path = dir.join("kv4.ein");
     let e = entries(n, vs);
     println!("# p9prof N={n} VS={vs}");
 
-    // LOAD: tree_compacted as es-bench's bebop4 load does it, then one build at the cap it landed on.
+    // LOAD: tree_compacted as es-bench's einfile4 load does it, then one build at the cap it landed on.
     let t = Instant::now();
     let b = tree_compacted(e.iter().map(|(k, v)| (k.as_slice(), v.as_slice())), 1 << 30, FANOUT, None).unwrap();
     println!("PROF|load.tree_compacted|{:.2} ms|bytes={}", ms(t), b.len());
@@ -123,8 +123,8 @@ fn main() {
     let t = Instant::now();
     let kv2 = KvIn::open_lazy(View::new(&nb)).unwrap();
     println!("PROF|D.open_lazy(fresh)|{:.2} ms|len={}", ms(t), kv2.len());
-    publish_steps(&dir.join("kv4.bebop.probe"), &nb, "E");
-    publish_steps(&dir.join("kv4.bebop.probe"), &nb, "E2");
+    publish_steps(&dir.join("kv4.ein.probe"), &nb, "E");
+    publish_steps(&dir.join("kv4.ein.probe"), &nb, "E2");
     // The put row's commits were UNSYNCED: their appends sit dirty in the page cache of the old
     // file until something forces them out. Is that the pause? Sync them first, timed, then compact.
     let t = Instant::now();

@@ -4,8 +4,8 @@ mod atk_forge;
 
 use atk5_common::*;
 use atk_forge::read;
-use bebop_store::evlog::doc::keys::KeyOp;
-use bebop_store::evlog::doc::{parse_merge, DocError, Ids, MERGE_MARK};
+use einstore::evlog::doc::keys::KeyOp;
+use einstore::evlog::doc::{parse_merge, DocError, Ids, MERGE_MARK};
 use dowiz_hub::doc_seal::merge::{MergeError, Merged, Recheck};
 use dowiz_hub::doc_seal::{HubIds, SealedHub};
 use dowiz_hub::stock::{decode, encode};

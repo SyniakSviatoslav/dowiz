@@ -18,7 +18,7 @@ pub mod waste;
 
 /// `GET /api/owner/health` — what this venue is spending, and how close to a limit.
 ///
-/// THE ARENA IS THE LIMIT NOBODY SEES UNTIL IT BITES. A bebop store never
+/// THE ARENA IS THE LIMIT NOBODY SEES UNTIL IT BITES. An einfile never
 /// reclaims a generation, so an image is spent by the NUMBER OF WRITES as much
 /// as by the data — measured at 313 empty commits before a fresh roster
 /// refused. When it fills, the hub answers `arena_full` and an order is refused

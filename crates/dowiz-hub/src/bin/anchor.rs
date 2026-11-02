@@ -16,7 +16,7 @@
 //! 4 still pending, nothing written; 5 built without `anchor-live` or the network failed --
 //! nothing written.
 
-use bebop_store::evlog::doc::Verdict;
+use einstore::evlog::doc::Verdict;
 use dowiz_hub::doc_seal::live::{anchor_line, describe, doc_line, refusal_words, verify_image, verify_ots, FileHeaders};
 use dowiz_hub::doc_seal::{hex32, ots, SENTENCES};
 
@@ -143,7 +143,7 @@ fn fetch_headers(_: &Args) {
 #[cfg(feature = "anchor-live")]
 mod live {
     use super::*;
-    use bebop_store::nodekey::sha256;
+    use einstore::nodekey::sha256;
     use dowiz_hub::doc_seal::live::curl::{fetch_block_json, CurlCalendar, EXPLORER};
     use dowiz_hub::doc_seal::SealedHub;
     use dowiz_hub::doc_seal::live::stamp::{stamp_image, stamp_multi, upgrade_file, upgrade_image, Stamped, Upgraded};

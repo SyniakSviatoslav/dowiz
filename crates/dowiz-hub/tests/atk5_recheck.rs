@@ -4,8 +4,8 @@
 mod atk5_common;
 
 use atk5_common::*;
-use bebop_store::evlog::doc::{merge_body, Doc, MergeView, Trust, STATE_COMMUTES};
-use bebop_store::Store;
+use einstore::evlog::doc::{merge_body, Doc, MergeView, Trust, STATE_COMMUTES};
+use einstore::Store;
 use dowiz_hub::doc_seal::merge::Recheck;
 use dowiz_hub::doc_seal::{HubIds, MlDsa65, MIN_SEALED_BYTES};
 
@@ -89,7 +89,7 @@ fn a_sale_folds_after_the_delivery_it_sold_from() {
         let s = genesis(&[received("rice", 1)]);
         let fresh = key(0xD4);
         let mut sh = opened(&s, 2);
-        sh.commit_keyop(&bebop_store::evlog::doc::keys::KeyOp::Admit(fresh.key()), &a(), 3).unwrap();
+        sh.commit_keyop(&einstore::evlog::doc::keys::KeyOp::Admit(fresh.key()), &a(), 3).unwrap();
         let s = trimmed(&sh);
         let d = offline(&s, 3, &deliverer, &[received("salmon", 1)]);
         let first = offline(&d, 4, &fresh, &[served("salmon", 1, "o1")]);

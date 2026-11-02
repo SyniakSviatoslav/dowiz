@@ -8,8 +8,8 @@
 //! with the network down needs the SAME decision, not a second one written in
 //! JavaScript, and "the same" is only provable if it is the same code. So the
 //! code moved: the Worker re-exports it (`command::amend`, `command::pay`,
-//! `command::room_rules`, `fold`), and `crates/bebop-wasm --features decide`
-//! exports it to any wasm32 host. `bebop-wasm/tests/decide_agrees.rs` and the
+//! `command::room_rules`, `fold`), and `crates/dowiz-hub-wasm --features decide`
+//! exports it to any wasm32 host. `dowiz-hub-wasm/tests/decide_agrees.rs` and the
 //! Worker's `command/amend/agrees.rs` hold both builds to one committed delta.
 //!
 //! WHAT DID NOT MOVE: anything that needs the Worker or the kernel. The wallet

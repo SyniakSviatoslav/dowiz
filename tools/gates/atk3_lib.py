@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT OR Apache-2.0
-"""W-MG-ATK3: a bebop image written cell by cell, so one named cell can lie. Stdlib only. NOT a
+"""W-MG-ATK3: an einfile image written cell by cell, so one named cell can lie. Stdlib only. NOT a
 fuzzer: tools/gates/atk3_cases*.py name every image by hand. The layouts are FORMAT §1-§9.5 and the
-writer's (`crates/bebop-log/src/lib.rs` stage_append_in, `doc/*.rs` stage_*, `bebop-kv` tree)."""
+writer's (`crates/einfile-log/src/lib.rs` stage_append_in, `doc/*.rs` stage_*, `einfile-kv` tree)."""
 import hashlib
 import struct
 import zlib

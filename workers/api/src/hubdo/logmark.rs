@@ -5,7 +5,7 @@
 //! 866-872 us of a 2 000-event log's ~1.2 ms load, on every order, on a 10 ms CPU plan.
 //! The log is append-only and this object holds its bytes in `mem` between turns, so the
 //! records it already checked are the same cells next turn. `Hub::load_since` re-hashes
-//! only the records newer than a `LogMark` (`bebop_store::verify::since`); the root, the
+//! only the records newer than a `LogMark` (`einstore::verify::since`); the root, the
 //! whole walk, the count and the `prev` links are checked on every load as before.
 //!
 //! THE SAME FOR EVERY APPEND LOG THE OBJECT WRITES PER TURN (follow-up, 2026-10-09): the

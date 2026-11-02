@@ -4,7 +4,7 @@
 //!
 //! The law every reader here keeps: `len() == events().len() + quarantined().len()`.
 
-use bebop_store::evlog::EvLog;
+use einstore::evlog::EvLog;
 
 use crate::{decode, decode_or_reason, hex32};
 use crate::{Event, EventKind, Hub, HubError, Quarantined};

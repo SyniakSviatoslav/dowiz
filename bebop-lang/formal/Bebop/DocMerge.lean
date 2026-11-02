@@ -2,7 +2,7 @@
   Bebop.DocMerge -- W-MG-LEAN: the MERGE of two chains from one genesis, over the model of
   Bebop.DocLog. Core Lean 4, no Mathlib, no `axiom`, no `sorry`.
 
-  THE CODE IT MODELS, BY READING: crates/bebop-log/src/doc/merge.rs `Doc::merge_into`. NOTHING HERE
+  THE CODE IT MODELS, BY READING: crates/einfile-log/src/doc/merge.rs `Doc::merge_into`. NOTHING HERE
   SAYS THE RUST IS PROVED. `union` is records ours-then-their-tail and seals likewise; the frontier
   rows must be equal (`CutOneSide`). The model does not write a MERGE: nor does `merge_into`.
   `Merges` is every refusal of `merge_into` the model can state, in the code's order; WHAT IT CANNOT
@@ -430,7 +430,7 @@ theorem union_idem_front (F : File A I P G) (a : A) : frontOf (union F F) a = fr
 /-! ### Where this model and merge.rs differ
 
   A theorem above says nothing past these lines. Each is a place the code does something the model
-  cannot state, read against crates/bebop-log/src/doc on 2026-11-01:
+  cannot state, read against crates/einfile-log/src/doc on 2026-11-01:
 
   * NO ACTOR WITHOUT A KEY. `count.rs` judges only keyed actors, and `merge.rs` says `keyed` is not
     monotone: a side's KEY row judges the other side's stranger in the union. That is the one way

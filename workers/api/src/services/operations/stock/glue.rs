@@ -5,7 +5,7 @@
 //!   POST /api/staff/stock/decisions/close   {location_id, did}
 //!
 //! THE CONTRACT. Producer: the kitchen board's tablet module (`public/room/canvas/tablet.js`,
-//! over the wasm writer `bebop-wasm --features tablet`). Consumer: the venue's object, `/fold/glue`
+//! over the wasm writer `dowiz-hub-wasm --features tablet`). Consumer: the venue's object, `/fold/glue`
 //! and `/fold/desk` (`hubdo/glue_turn.rs`), which run `dowiz_hub::glue::{merge, desk}`.
 //! `base` and `tip` are 64 hex characters (a record id); `tail` is the tablet's records above
 //! `base`, OLDEST FIRST, each the JSON text it chained. The answer:

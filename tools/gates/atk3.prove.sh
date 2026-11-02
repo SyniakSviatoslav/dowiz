@@ -7,9 +7,9 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 S="$(mktemp -d "${TMPDIR:-/tmp}/atk3prove.XXXXXX")" || exit 2
 trap 'rm -rf "$S"' EXIT
 fresh() {
-  rm -rf "$S/r"; mkdir -p "$S/r/tools/gates" "$S/r/tools/verify" "$S/r/examples" "$S/r/crates/bebop-wasm-reader/src"
-  cp "$REPO"/tools/gates/atk3* "$S/r/tools/gates/"; cp "$REPO/tools/verify/bebop-verify.mjs" "$REPO/tools/verify/bebop-verify.py" "$S/r/tools/verify/"
-  cp "$REPO/examples/read.mjs" "$S/r/examples/"; cp "$REPO/crates/bebop-wasm-reader/src/status.rs" "$S/r/crates/bebop-wasm-reader/src/"
+  rm -rf "$S/r"; mkdir -p "$S/r/tools/gates" "$S/r/tools/verify" "$S/r/examples" "$S/r/crates/einfile-reader/src"
+  cp "$REPO"/tools/gates/atk3* "$S/r/tools/gates/"; cp "$REPO/tools/verify/ein-verify.mjs" "$REPO/tools/verify/ein-verify.py" "$S/r/tools/verify/"
+  cp "$REPO/examples/read.mjs" "$S/r/examples/"; cp "$REPO/crates/einfile-reader/src/status.rs" "$S/r/crates/einfile-reader/src/"
 }
 fail=0
 kill1() { # kill1 <what> <file> <sed expr> <the row the gate must name> [the rc, default 1]
@@ -22,7 +22,7 @@ kill1() { # kill1 <what> <file> <sed expr> <the row the gate must name> [the rc,
   else echo "prove: FAILED $1 (rc=$rc, want $want naming '$4')"; tail -3 "$S/out"; fail=1; fi
 }
 fresh; sh "$S/r/tools/gates/atk3.sh" > "$S/out" 2>&1; rc=$?; echo "prove: unmutated copy -> rc=$rc: $(tail -1 "$S/out")"; [ "$rc" = 0 ] || fail=1
-R=examples/read.mjs; M=tools/verify/bebop-verify.mjs
+R=examples/read.mjs; M=tools/verify/ein-verify.mjs
 kill1 "the pin is not asked" $R 's/if (got !== PINNED \&\& !own)/if (got === "" \&\& !own)/' '^HOLE  read_forged_green'
 kill1 "the pin drifts from the reader" $R 's/^const PINNED = "[0-9a-f]\{4\}/const PINNED = "dead/' 'RED read.mjs pins'
 kill1 "imports are not looked at" $R 's/if (id === 2 \&\&/if (id === 99 \&\&/' '^HOLE  read_import_nostart'
@@ -36,7 +36,7 @@ kill1 "the catch rethrows" $R 's/} catch (e) { stop(HOST_FAILED/} catch (e) { th
 kill1 "num does not bound" $R 's/if (v < 0n || v > BigInt(max)) stop(/if (v < 0n \&\& v > BigInt(max)) stop(/' '^HOLE  read_ref_huge'
 kill1 "the flag marks stdout no more" $R 's/const out = (s) => console.log((own ? MARK : "") + clean(s))/const out = (s) => console.log(clean(s))/' '^HOLE  read_forged_flag'
 kill1 "the exit code under the flag is 0" $R 's/process.exit(own ? UNPINNED : 0)/process.exit(0)/' '^HOLE  read_abi_status\|^HOLE  read_forged_flag'
-kill1 "a word drifts from status.rs" crates/bebop-wasm-reader/src/status.rs 's/BAD_CRC: an object/BAD_CRC: one object/' 'RED read.mjs WORDS'
+kill1 "a word drifts from status.rs" crates/einfile-reader/src/status.rs 's/BAD_CRC: an object/BAD_CRC: one object/' 'RED read.mjs WORDS'
 kill1 "the host passes null for an empty file" $M 's/const room = Math.max(image.length, 1);/const room = image.length;/' '^HOLE  mjs_file_empty'
 kill1 "the verifier has no catch" $M 's/^process.on("uncaughtException", failed);$//;s/^process.on("unhandledRejection", failed);$//' '^HOLE  path_wasm_mjs'
 kill1 "the harness loses rows" tools/gates/atk3_bootstrap.py '/row("agree" if good else "HOLE", "read_abi_status"/d' 'REFUSED 28 rows' 2

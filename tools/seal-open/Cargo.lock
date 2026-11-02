@@ -3,58 +3,6 @@
 version = 4
 
 [[package]]
-name = "bebop-crc"
-version = "0.1.0"
-
-[[package]]
-name = "bebop-image"
-version = "0.1.0"
-dependencies = [
- "bebop-crc",
-]
-
-[[package]]
-name = "bebop-io"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
- "bebop-kv",
-]
-
-[[package]]
-name = "bebop-kv"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
-]
-
-[[package]]
-name = "bebop-log"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
-]
-
-[[package]]
-name = "bebop-sig-mldsa"
-version = "0.1.0"
-dependencies = [
- "bebop-log",
- "fips204",
- "sha2",
-]
-
-[[package]]
-name = "bebop-store"
-version = "0.1.0"
-dependencies = [
- "bebop-image",
- "bebop-io",
- "bebop-kv",
- "bebop-log",
-]
-
-[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -115,14 +63,66 @@ version = "0.1.0"
 name = "dowiz-hub"
 version = "0.1.0"
 dependencies = [
- "bebop-sig-mldsa",
- "bebop-store",
  "crc32fast",
  "dowiz-core",
+ "einfile-sig-mldsa",
+ "einstore",
  "lz4_flex",
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "einfile-crc"
+version = "0.1.0"
+
+[[package]]
+name = "einfile-image"
+version = "0.1.0"
+dependencies = [
+ "einfile-crc",
+]
+
+[[package]]
+name = "einfile-io"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+ "einfile-kv",
+]
+
+[[package]]
+name = "einfile-kv"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+]
+
+[[package]]
+name = "einfile-log"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+]
+
+[[package]]
+name = "einfile-sig-mldsa"
+version = "0.1.0"
+dependencies = [
+ "einfile-log",
+ "fips204",
+ "sha2",
+]
+
+[[package]]
+name = "einstore"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+ "einfile-io",
+ "einfile-kv",
+ "einfile-log",
 ]
 
 [[package]]

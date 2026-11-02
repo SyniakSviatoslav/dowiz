@@ -17,7 +17,7 @@ fn fixed() -> SealEntropy {
     SealEntropy { m: [1u8; 32], eph: [2u8; 32], nonce: [3u8; 12] }
 }
 
-/// A REAL bebop hub image with a few orders on it, and the census the nightly
+/// A REAL einfile hub image with a few orders on it, and the census the nightly
 /// would have uploaded for it.
 fn hub_and_witness() -> (Vec<u8>, crate::witness::Census) {
     let mut h = dowiz_hub::Hub::create_sized(64 * 1024).unwrap();

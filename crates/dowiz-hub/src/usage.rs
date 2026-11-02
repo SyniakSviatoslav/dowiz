@@ -1,11 +1,11 @@
 //! How much of an image is spent, measured against the point at which a write
 //! is refused. One gauge for every image kind in this crate; see `Usage`.
 
-use bebop_store::Store;
+use einstore::Store;
 
 /// How much of an image is spent, and on what.
 ///
-/// THE ARENA IS THE LIMIT NOBODY SEES UNTIL IT BITES. A bebop store is
+/// THE ARENA IS THE LIMIT NOBODY SEES UNTIL IT BITES. An einfile is
 /// append-only: every commit allocates a new generation and the old one is
 /// never reclaimed, so an image is spent by the NUMBER OF WRITES as much as by
 /// the data. `settings.rs` measured it — 313 empty commits before a fresh
@@ -40,7 +40,7 @@ use bebop_store::Store;
 ///   - KV images were COMPACTED on every save (`compacted_bytes_fit`), so an image read
 ///     back from storage read 0. Since W-DELTA (2026-10-06) the CATALOGUE appends a delta
 ///     record per changed key instead, and each append adds the root it retires plus the
-///     cells the edit shadows (bebop_store::kv::delta); it returns to 0 when the writer
+///     cells the edit shadows (einstore::kv::delta); it returns to 0 when the writer
 ///     compacts at a quarter of live cells or 32 records. Settings/posts still compact.
 ///   - Logs never compact; each append retires one 10-cell root. An image written before
 ///     W-CRC carries 0 here for all its old roots -- an UNDERCOUNT until it is rebuilt by
@@ -94,7 +94,7 @@ impl Usage {
 /// The usable cells in an image of `bytes` bytes: the arena is what lies past
 /// the two superblocks, exactly as `Store::create_bytes` computes it.
 pub(crate) fn ceiling_cells(bytes: usize) -> i64 {
-    (bytes / 8) as i64 - bebop_store::ARENA as i64
+    (bytes / 8) as i64 - einstore::ARENA as i64
 }
 
 pub(crate) fn usage_of(store: &Store, ceiling_cells: i64) -> Usage {
@@ -107,12 +107,12 @@ pub(crate) fn usage_of_kind(store: &Store, ceiling_cells: i64, grows: bool) -> U
 
 /// `usage_of_kind` from the live superblock and the capacity alone (W-ES-P3: a KV image held
 /// as a `Db` has a snapshot, not a `Store`; `KvImage::usage`).
-pub(crate) fn usage_of_sb(sb: Option<bebop_store::Superblock>, capacity_cells: i64, ceiling_cells: i64, grows: bool) -> Usage {
+pub(crate) fn usage_of_sb(sb: Option<einstore::Superblock>, capacity_cells: i64, ceiling_cells: i64, grows: bool) -> Usage {
     match sb {
         Some(sb) => Usage {
             // `arena_used` is an absolute cell index; the arena starts at 1024,
             // so the cells actually spent are what lies past that.
-            used_cells: (sb.arena_used - bebop_store::ARENA as i64).max(0),
+            used_cells: (sb.arena_used - einstore::ARENA as i64).max(0),
             capacity_cells,
             ceiling_cells,
             grows,

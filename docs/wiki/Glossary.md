@@ -47,7 +47,7 @@ folds them; it does not store a status that could disagree with its own history.
 
 **Image.** One of a venue's record files (the order log, the catalogue, bookings, the outbox...). An
 image is append-only and each record is chained to the previous one by a hash. The format is called
-bebop.
+einfile.
 
 **Durable Object.** The Cloudflare component that holds one venue's images and is the only writer
 for that venue.

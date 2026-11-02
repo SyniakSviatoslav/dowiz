@@ -11,7 +11,7 @@ fn dir(name: &str) -> PathBuf {
     d
 }
 
-/// A REAL hub image (the bebop store the nightly copies), a few orders on it.
+/// A REAL hub image (the einfile the nightly copies), a few orders on it.
 fn hub_image() -> (Vec<u8>, Option<String>) {
     let mut h = dowiz_hub::Hub::create_sized(64 * 1024).unwrap();
     for (i, id) in ["a", "b", "c", "d"].iter().enumerate() {

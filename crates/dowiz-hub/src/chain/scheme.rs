@@ -3,9 +3,9 @@
 //! and `verify_id` says which scheme an id holds under. `Entropy` is the nonce source a log
 //! carries. The reasoning -- what sha256 buys, what it does not -- is `chain.rs`'s header.
 
-use bebop_store::evlog::doc::id_message;
-use bebop_store::evlog::{EvLog, Record, FLAG_NONCE_DERIVED, FLAG_SHA256};
-use bebop_store::Store;
+use einstore::evlog::doc::id_message;
+use einstore::evlog::{EvLog, Record, FLAG_NONCE_DERIVED, FLAG_SHA256};
+use einstore::Store;
 
 /// The nonce in front of every post-M0 payload: 16 base64url characters (96 bits), so the
 /// text logs stay text and the stock log's wire form carries it as part of the record.
@@ -19,7 +19,7 @@ pub(crate) const ERASED_NONCE: [u8; NONCE_LEN] = [b'0'; NONCE_LEN];
 /// and no live record ever carried that). Every writer in this crate uses this; the legacy
 /// functions below exist to CHECK what was written before M0.
 pub(crate) fn chain_id(flags: i64, actor: &[u8; 32], seq: u64, prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
-    bebop_store::nodekey::sha256(&id_message(flags, actor, seq, prev, payload))
+    einstore::nodekey::sha256(&id_message(flags, actor, seq, prev, payload))
 }
 
 /// `chain_id` of a whole record.
@@ -187,7 +187,7 @@ impl Entropy {
                 m.extend_from_slice(&seed);
                 m.extend_from_slice(&self.drawn.to_le_bytes());
                 m.extend_from_slice(prev);
-                (bebop_store::nodekey::sha256(&m), false)
+                (einstore::nodekey::sha256(&m), false)
             }
             None => return (derived_nonce(prev, body), true),
         };
@@ -209,7 +209,7 @@ pub(crate) fn derived_nonce(prev: &[u8; 32], body: &[u8]) -> [u8; NONCE_LEN] {
     m.extend_from_slice(b"dowiz/nonce/derived");
     m.extend_from_slice(prev);
     m.extend_from_slice(body);
-    nonce_text(&bebop_store::nodekey::sha256(&m))
+    nonce_text(&einstore::nodekey::sha256(&m))
 }
 
 /// LEGACY: the id of a record written between the 2026-09-20 cascade and M0 -- four lanes of

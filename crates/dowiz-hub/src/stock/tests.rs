@@ -195,7 +195,7 @@ fn a_truncated_stock_image_is_refused_not_folded_short() {
     assert!(refused > 0, "no prefix of a 40-record stock log was refused");
     assert_eq!(StockLog::load(&bytes).unwrap().events().len(), 40, "the whole image still loads whole");
     // The sharpest case: every byte is there, one `next` ref is not.
-    let mut st = bebop_store::Store::from_bytes(&bytes);
+    let mut st = einstore::Store::from_bytes(&bytes);
     let newest = st.follow(st.root().unwrap(), 1).unwrap();
     st.cells[newest + 2 + 2] = 1 << 40;
     st.seal(newest); // W-CRC hand-back: re-seal so the load still answers Corrupt, not BadCrc
@@ -241,7 +241,7 @@ fn a_changed_stock_record_is_quarantined_and_the_shelf_folds_from_the_rest() {
         log.append(&StockEvent::Received { item: "salmon".into(), qty: 10 }).unwrap();
     }
     // One payload byte of the 5th record (newest first), flipped and NOT re-sealed.
-    let mut st = bebop_store::Store::from_bytes(&log.to_bytes());
+    let mut st = einstore::Store::from_bytes(&log.to_bytes());
     let mut o = st.follow(st.root().unwrap(), 1).unwrap();
     for _ in 0..4 {
         o = st.follow(o, 2).unwrap();

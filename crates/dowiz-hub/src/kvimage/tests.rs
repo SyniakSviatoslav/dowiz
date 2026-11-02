@@ -1,8 +1,8 @@
 //! `KvImage` against the decoded `Kv` it replaced: the same answers after the same writes,
 //! through saves and loads, in both save modes.
 use super::*;
-use bebop_store::kv::Kv;
-use bebop_store::Store;
+use einstore::kv::Kv;
+use einstore::Store;
 
 fn script(img: &mut KvImage, oracle: &mut Kv, round: u8) {
     for i in 0..6u8 {
@@ -67,7 +67,7 @@ fn a_key_past_the_limit_refuses_every_save_by_name_and_a_failed_save_keeps_the_w
     img.put("ok", b"1");
     img.put(&"k".repeat(65_536), b"v");
     let e = img.to_bytes().unwrap_err();
-    assert!(matches!(e, HubError::Store(bebop_store::StoreError::Limit { what: "key bytes", .. })), "{e:?}");
+    assert!(matches!(e, HubError::Store(einstore::StoreError::Limit { what: "key bytes", .. })), "{e:?}");
     assert_eq!(img.get("ok"), Some(b"1".to_vec()), "a refused save dropped the pending writes");
 }
 

@@ -1,5 +1,5 @@
 // T-LV-PCD-03: the storefront's price proof. The JS PRODUCER (`certFor`) must emit, byte for byte,
-// the gate's fixture certificate (crates/bebop-wasm/fixtures/verify/good.cert, cut by
+// the gate's fixture certificate (crates/dowiz-hub-wasm/fixtures/verify/good.cert, cut by
 // oracle_verify.py and read by four readers), and the promoted reader (verify.wasm, bw_verify) must
 // accept 100% of a fixture menu's lines and refuse a moved price and one named path byte.
 // Run: node --test workers/api/public/store/verify.test.mjs
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { pricesOf, certFor, verifyWith, qrWith, unb64url, b64url, readCert, verifyLink, hex } from './verify.js';
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
-const FIX = here('../../../../crates/bebop-wasm/fixtures/verify/good.cert');
+const FIX = here('../../../../crates/dowiz-hub-wasm/fixtures/verify/good.cert');
 const WASM = here('./verify.wasm');
 
 // The gate's catalogue: p_000..p_164 at 100 + 7 i, split over two categories (one dish twice).
@@ -45,7 +45,7 @@ test('codecs: base64url round trip, the link, the line read back', async () => {
   assert.equal(r.root, '9d64ce278dfc1b4282ef478ea3361e6f9ded6cfc8ac8717d3d2c234e8481879b');
 });
 
-test('the promoted reader accepts every line and refuses a moved price and a named byte', { skip: !existsSync(WASM) && 'verify.wasm not promoted (crates/bebop-wasm/verify.sh --promote)' }, async () => {
+test('the promoted reader accepts every line and refuses a moved price and a named byte', { skip: !existsSync(WASM) && 'verify.wasm not promoted (crates/dowiz-hub-wasm/verify.sh --promote)' }, async () => {
   const { instance } = await WebAssembly.instantiate(readFileSync(WASM), {});
   const x = instance.exports;
   for (const [id, price] of pricesOf(menu)) {

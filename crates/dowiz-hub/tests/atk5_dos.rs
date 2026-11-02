@@ -4,8 +4,8 @@ mod atk_forge;
 
 use atk5_common::*;
 use atk_forge::{forged, read, write};
-use bebop_store::evlog::doc::{merge_body, Ids, MergeView, Row, Signer, STATE_COMMUTES};
-use bebop_store::evlog::Record;
+use einstore::evlog::doc::{merge_body, Ids, MergeView, Row, Signer, STATE_COMMUTES};
+use einstore::evlog::Record;
 use dowiz_hub::doc_seal::merge::{merge_report, refusal_name, MergeError};
 use dowiz_hub::doc_seal::{HubIds, SealedHub, KIND_DECL, KIND_STOCK};
 use std::time::Instant;

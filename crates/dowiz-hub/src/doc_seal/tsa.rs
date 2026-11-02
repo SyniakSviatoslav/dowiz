@@ -11,11 +11,11 @@
 //! by a key the auditor did not bring is `Unchecked`, with the key's id so it can be
 //! brought; a mark that does not verify under a brought key is `Bad`.
 
-use bebop_sig_mldsa::{PK_BYTES, SIG_BYTES};
-use bebop_store::evlog::doc::{Anchor, AnchorCheck, Signer, Verdict, KIND_PLATFORM_TSA};
+use einfile_sig_mldsa::{PK_BYTES, SIG_BYTES};
+use einstore::evlog::doc::{Anchor, AnchorCheck, Signer, Verdict, KIND_PLATFORM_TSA};
 
 use super::{actor_id, DeviceKey, MlDsa65};
-use bebop_store::evlog::doc::Verifier;
+use einstore::evlog::doc::Verifier;
 
 pub const ANCHOR_PREFIX: &[u8] = b"ein-anchor/1";
 pub const MARK_BYTES: usize = PK_BYTES + SIG_BYTES;
@@ -65,7 +65,7 @@ impl AnchorCheck for PlatformTsa<'_> {
         if !self.keys.iter().any(|k| k.as_slice() == pk) {
             return Verdict::Unchecked(format!("the mark's key {} is not one of the platform keys given", hex8(&id)));
         }
-        if MlDsa65.verify(bebop_store::evlog::doc::ALG_ML_DSA_65, pk, &message(a.kind, &a.over, a.time_ms), sig) {
+        if MlDsa65.verify(einstore::evlog::doc::ALG_ML_DSA_65, pk, &message(a.kind, &a.over, a.time_ms), sig) {
             Verdict::Ok { not_after_ms: Some(a.time_ms), not_before_ms: None, what: format!("ML-DSA-65 by platform key {}", hex8(&id)) }
         } else {
             Verdict::Bad(format!("the ML-DSA-65 signature by platform key {} does not verify over this over/time", hex8(&id)))

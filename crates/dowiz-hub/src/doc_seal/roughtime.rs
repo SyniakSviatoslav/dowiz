@@ -18,7 +18,7 @@
 //! are the ASCII bytes LE-packed (`SIG\0`, `PATH`, `SREP`, `CERT`, `INDX`; inside SREP:
 //! `RADI` u32 µs, `MIDP` u64 µs, `ROOT`). The proof an ANCH carries: `nonce (64) ‖ response`.
 
-use bebop_store::evlog::doc::{Anchor, AnchorCheck, Verdict, KIND_ROUGHTIME};
+use einstore::evlog::doc::{Anchor, AnchorCheck, Verdict, KIND_ROUGHTIME};
 
 pub const NONCE_BYTES: usize = 64;
 
@@ -35,7 +35,7 @@ pub fn nonce_for(over: &[u8; 32]) -> [u8; NONCE_BYTES] {
     let mut m = Vec::with_capacity(18 + 32);
     m.extend_from_slice(b"ein-roughtime/1");
     m.extend_from_slice(over);
-    let h = bebop_store::nodekey::sha256(&m);
+    let h = einstore::nodekey::sha256(&m);
     let mut n = [0u8; NONCE_BYTES];
     n[..32].copy_from_slice(over);
     n[32..].copy_from_slice(&h);

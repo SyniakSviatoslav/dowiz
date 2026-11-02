@@ -16,9 +16,9 @@
 //! writes <out> (the unchanged file on `nothing`); rc 0. rc 4 with `REFUSED <NAME>: ...` on stderr and
 //! no <out>. rc 2 bad arguments, rc 1 a file that cannot be read.
 
-use bebop_store::evlog::doc::keys::KeyOp;
-use bebop_store::evlog::doc::{merge_body, MergeView, Row, STATE_COMMUTES};
-use bebop_store::nodekey::sha256;
+use einstore::evlog::doc::keys::KeyOp;
+use einstore::evlog::doc::{merge_body, MergeView, Row, STATE_COMMUTES};
+use einstore::nodekey::sha256;
 use dowiz_hub::crypto::unhex;
 use dowiz_hub::doc_seal::merge::{refusal_name, Merged};
 use dowiz_hub::doc_seal::{hex32, DeviceKey, SealedHub};

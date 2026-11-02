@@ -6,9 +6,9 @@
 //! is a different failure with a different remedy (restore last night's copy, not
 //! "create a fresh one"), so it keeps its name: `HubError::BadCrc`, naming the object.
 
-use bebop_store::kv::Kv;
-use bebop_store::verify::KvError;
-use bebop_store::Store;
+use einstore::kv::Kv;
+use einstore::verify::KvError;
+use einstore::Store;
 
 use crate::HubError;
 

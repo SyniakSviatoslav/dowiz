@@ -5,8 +5,8 @@
     python3 tools/gates/atk3_run.py write <dir>          the images (*.img)
     python3 tools/gates/atk3_run.py run <dir> [name...]  wasm32 / python / oracle, + $dir/native.lines
 
-The wasm32 reader is $ATK3_MJS (default the committed tools/verify/bebop-verify.mjs). native.lines is
-written by `ATK3_DIR=<dir> cargo test --test atk3_native` (crates/bebop-wasm-reader), through slot.sh.
+The wasm32 reader is $ATK3_MJS (default the committed tools/verify/ein-verify.mjs). native.lines is
+written by `ATK3_DIR=<dir> cargo test --test atk3_native` (crates/einfile-reader), through slot.sh.
 Exit 0 = every case agrees; 1 = the HOLE lines above."""
 import os
 import re
@@ -88,9 +88,9 @@ def main():
             open(os.path.join(d, f.__name__ + ".img"), "wb").write(f())
         print("atk3: %d images in %s" % (len(all_cases()), d))
         return 0
-    mjs = os.environ.get("ATK3_MJS", ROOT + "/tools/verify/bebop-verify.mjs")
-    readers = {"wasm32": ["node", mjs, "--verify"], "python": ["python3", "-I", ROOT + "/tools/verify/bebop-verify.py", "--verify"],
-               "oracle": ["python3", "-I", ROOT + "/crates/bebop-wasm/oracle.py"]}
+    mjs = os.environ.get("ATK3_MJS", ROOT + "/tools/verify/ein-verify.mjs")
+    readers = {"wasm32": ["node", mjs, "--verify"], "python": ["python3", "-I", ROOT + "/tools/verify/ein-verify.py", "--verify"],
+               "oracle": ["python3", "-I", ROOT + "/crates/dowiz-hub-wasm/oracle.py"]}
     native = {}
     if os.path.exists(d + "/native.lines"):
         for x in open(d + "/native.lines"):

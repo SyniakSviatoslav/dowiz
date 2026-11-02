@@ -5,7 +5,7 @@ gate or test that holds it, or says plainly that nothing does yet. Run them all 
 
 ```sh
 sh tools/gates/run-all.sh            # prints one row per gate: ok/FAIL, exit code, verdict line
-sh tools/gates/run-all.sh --cargo    # plus vocab.sh and the bebop-wasm four-reader gate
+sh tools/gates/run-all.sh --cargo    # plus vocab.sh and the dowiz-hub-wasm four-reader gate
 ```
 
 Most gates are **ratchets**: a `.baseline` file records today's count, the gate refuses anything
@@ -37,7 +37,7 @@ epitaph (the comment recording a deletion) and passed while blind. So:
 | **The clock is read at the entry point only** | a job whose parts each ask the wall clock has as many answers as parts; a pure core replays identically | `tools/gates/clock.sh` (zero); `clippy.toml` names `SystemTime::now` as disallowed (clippy is not yet a gate, see below) |
 | **One venue per request** | 37 owner routes once authorised one venue and acted on another | `tools/gates/one-venue.sh` |
 | **One image written per handler** | two writes in one handler can half-happen; a command runs in one object turn | `tools/gates/one-image.sh` |
-| **No SQL** | the store is the venue's bebop images; D1 was removed on 2026-09-22 | `tools/gates/no-sql.sh` (zero) |
+| **No SQL** | the store is the venue's einfile images; D1 was removed on 2026-09-22 | `tools/gates/no-sql.sh` (zero) |
 | **Replayable routes are idempotent on the server** | a phone's queued tap is replayed; a replay must get the first answer, not a second order | `tools/gates/idempotent.sh` |
 | **Closed vocabularies** | an open set silently accepts a typo as a new kind | statuses and currencies: `tools/gates/vocab.sh` (the committed `lib/vocab.js` is exactly what `tools/gen-vocab` emits) and `tools/gates/vocabulary.sh` (every status has a word in three languages and a colour on every surface); order channel: `tools/gates/channel-closed.sh`; order event kinds in Rust and JS: `tools/gates/event-kinds.sh` |
 | **Nobody is scored** | trust is a signed capability, never a score (`DECISIONS.md`) | `tools/gates/no-scoring.sh`; routing and capability enums deliberately have no `Ord` |
@@ -50,7 +50,7 @@ epitaph (the comment recording a deletion) and passed while blind. So:
 | **CSP: no inline style or script, no unlisted origin** | on 2026-09-16 one header left every surface unstyled while every request answered 200 | the policy in `workers/api/public/_headers`; `e2e/kit-regression/render.mjs` fails on any CSP violation in a real browser (run by hand); `tools/live-checks/health.sh` checks the header is served |
 | **ASCII quotes in JavaScript strings** | a typographic quote as a string delimiter is a syntax error that takes down a whole surface | no gate yet. Check a file by copying it to `.mjs` and running `node --check` on the copy, and confirm the check fails on a deliberately broken copy (`node --check` on a plain `.js` file proves nothing). |
 | **Every UI string in sq, en and uk** | a missing key shows the key's name to a guest | partial: `tools/gates/vocabulary.sh` for status words; `e2e/walk/guest.mjs browse` reports untranslated keys live. No general gate yet. |
-| **The four readers of an image agree** | a second reader found a truncation read as the previous generation on day one | `crates/bebop-wasm/gate.sh`, and the wasm module's size ratchet `crates/bebop-wasm/bytes.baseline` |
+| **The four readers of an image agree** | a second reader found a truncation read as the previous generation on day one | `crates/dowiz-hub-wasm/gate.sh`, and the wasm module's size ratchet `crates/dowiz-hub-wasm/bytes.baseline` |
 | **The register adds up** | the one question a restaurant asks | `e2e/gates/conservation.mjs` (thirteen laws, live and read-only; its proof runs in CI) |
 | **Dependencies are allowed ones** | yanked crates, wildcards, disallowed licences | `deny.toml`, run by `cargo deny` in CI's `supply-chain` job |
 
@@ -66,8 +66,8 @@ See `docs/design/AUDIT-BUGS-BLINDSPOTS-TESTS-2026-09-24.md`, section 3a.
 ## Formatting and lints: configured, not yet gates
 
 - **`rustfmt.toml`** pins rustfmt's defaults (edition 2021, width 100). No product crate is
-  fmt-clean yet (`cargo fmt --check` hunks on the 2026-09-24 working tree: `crates/bebop-store` 67,
-  `crates/bebop-wasm` 26, `crates/dowiz-hub` 695, `crates/dowiz-core` 2,144, `workers/api` 2,383),
+  fmt-clean yet (`cargo fmt --check` hunks on the 2026-09-24 working tree: `crates/einstore` 67,
+  `crates/dowiz-hub-wasm` 26, `crates/dowiz-hub` 695, `crates/dowiz-core` 2,144, `workers/api` 2,383),
   so CI does not run
   `cargo fmt --check`. Turning it on is one mechanical `cargo fmt` commit per crate, made while no
   one else has that crate open, followed by that crate's tests.

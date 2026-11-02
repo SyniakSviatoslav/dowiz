@@ -12,7 +12,7 @@
 //! count, then every element, each as 8 little-endian bytes (u32 and byte columns
 //! zero-extended, i32 sign-extended). `rt` is `encode(decode(b)) == b`, byte for byte, and
 //! `k256` is the sha256 of the RE-ENCODED bytes -- both are facts a reader that never decoded
-//! could not print. The four readers (this, crates/bebop-wasm/src/block.rs under node,
+//! could not print. The four readers (this, crates/dowiz-hub-wasm/src/block.rs under node,
 //! oracle.py --block, bebop-lang/selfhost/std/block.bp) print the same line or disagree.
 
 use dowiz_hub::block::decode::decode;

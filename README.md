@@ -20,8 +20,8 @@ Live today: **Dubin & Sushi, Durrës** at `sushi-durres.dowiz.org` (the same ven
 `dubin-sushi.dowiz.org`), with 165 dishes in Albanian, English and Ukrainian, delivery, pickup and
 dine-in. The platform's landing page and waiting list are at `dowiz.org`. Open source under
 AGPL-3.0; trademark terms in [`TRADEMARK.md`](TRADEMARK.md), contribution terms in [`DCO`](DCO).
-The embedded store crates (`crates/bebop-*`, except `crates/bebop-wasm`) are MIT OR Apache-2.0:
-see [`crates/bebop-store/README.md`](crates/bebop-store/README.md).
+The embedded store crates (`crates/einfile-*` and `crates/einstore`) are MIT OR Apache-2.0:
+see [`crates/einstore/README.md`](crates/einstore/README.md).
 
 ---
 
@@ -44,7 +44,7 @@ see [`crates/bebop-store/README.md`](crates/bebop-store/README.md).
 ## What dowiz is
 
 A venue's ordering, room and delivery on one Cloudflare Worker, with **one Durable Object per
-venue** holding that venue's records as **bebop images**: append-only, content-chained, pointer-free
+venue** holding that venue's records as **einfile images**: append-only, content-chained, pointer-free
 files that the Rust side, a wasm32 module and an independent Python oracle all read the same way.
 There is no shared database and no SQL (`tools/gates/no-sql.sh` holds that at zero).
 
@@ -181,7 +181,7 @@ flowchart LR
   EB[ebills.al fiscal platform] -->|sales, read only| W
 ```
 
-### Worker, Durable Object, bebop images
+### Worker, Durable Object, einfile images
 
 One object per venue (`id_from_name(location_id)`, `workers/api/src/hubstore.rs`) is the single writer for that venue. A command such as
 placing an order runs in one object turn: the event is appended to the log image and any message it
@@ -192,7 +192,7 @@ sequenceDiagram
   participant P as Phone
   participant W as Worker (router)
   participant D as HubImages object (venue)
-  participant I as bebop images
+  participant I as einfile images
   P->>W: POST /api/public/locations/:slug/orders
   W->>W: resolve venue from Host, read clock once, price with the kernel
   W->>D: place(command, now_ms)
@@ -205,7 +205,7 @@ sequenceDiagram
 The images a venue owns include `log`, `catalog`, `settings`, `posts`, `stock`, `people`,
 `consent`, `bookings`, `ledger`, `till`, `outbox`, `idem`, `inbox`, `threads`, `campaign`,
 `rails`, `audit`, `i18n` and `ops` (constants `IMAGE_*` under `workers/api/src/`). The format:
-`crates/bebop-store` (Rust, zero dependencies), `crates/bebop-wasm` (the same reader in wasm32),
+`crates/einstore` (Rust, zero dependencies), `crates/dowiz-hub-wasm` (the same reader in wasm32),
 and `bebop-lang/` (the language the format came from).
 
 ### Order lifecycle (the kernel's state machine)
@@ -304,7 +304,7 @@ There is no cargo workspace: each crate is standalone and is entered with `cd`.
 | `workers/api/` | the Cloudflare Worker (Rust), its Durable Object (`hubdo.rs`), and `public/`, the browser apps |
 | `crates/dowiz-core/` | the kernel: order and booking state machines, money, tax, PQ primitives, ports |
 | `crates/dowiz-hub/` | one venue's images as pure logic: order log, tables, capabilities, consent, forget, stock, room deciders |
-| `crates/bebop-store/`, `crates/bebop-wasm/` | the bebop image format in Rust and its wasm32 reader with the four-reader gate |
+| `crates/einstore/`, `crates/dowiz-hub-wasm/` | the einfile format in Rust and its wasm32 reader with the four-reader gate |
 | `kernel/` | `dowiz-kernel`, the std facade over `dowiz-core`, with benches and examples |
 | `bebop-lang/` | the bebop language: self-hosting compiler, seed, standard modules, oracles |
 | `tools/gates/` | the code-quality gates and their mutation proofs; `run-all.sh` runs them all |
@@ -347,9 +347,9 @@ Full guide: [`docs/testing.md`](docs/testing.md).
 
 | Layer | Command | What it proves |
 |---|---|---|
-| Kernel and hub | `cd crates/dowiz-core && cargo test` (also `dowiz-hub`, `bebop-store`, `workers/api`) | the state machines, money, tax, image format, every route handler's pure half |
-| Room deciders in wasm | `cd crates/bebop-wasm && cargo test --features decide` | amend and pay run byte-identically in the browser and the server |
-| Four readers | `sh crates/bebop-wasm/gate.sh` | native, wasm32, Python (and bebop on AArch64) read one image to one number |
+| Kernel and hub | `cd crates/dowiz-core && cargo test` (also `dowiz-hub`, `einstore`, `workers/api`) | the state machines, money, tax, image format, every route handler's pure half |
+| Room deciders in wasm | `cd crates/dowiz-hub-wasm && cargo test --features decide` | amend and pay run byte-identically in the browser and the server |
+| Four readers | `sh crates/dowiz-hub-wasm/gate.sh` | native, wasm32, Python (and bebop on AArch64) read one image to one number |
 | Browser units | `node --test` over `workers/api/public/**/*.test.mjs` | money formatting, booking time, floor plan, replica fold, UI components |
 | Gates | `sh tools/gates/run-all.sh` | each code-quality rule, each proved able to fire first |
 | Conservation laws | `node e2e/gates/conservation.prove.mjs` (stub); `conservation.mjs` against a live venue with an owner token | thirteen laws (1 to 12, and N for fiscal codes): the register adds up |
@@ -358,7 +358,7 @@ Full guide: [`docs/testing.md`](docs/testing.md).
 
 Static count of `#[test]` functions on 2026-09-24 (`grep -rE '#\[(tokio::)?test\]'`):
 `dowiz-core` 3,658, `workers/api` 843, `kernel` 472, `dowiz-hub` 461, `native-spa-server` 92,
-`bebop-store` 35.
+`einstore` 35.
 
 ## Deployment
 

@@ -21,7 +21,7 @@
 //! served bill equals the fold of it. A change with no signer is refused.
 //!
 //! MOVED FROM `workers/api/src/command/amend.rs` (D7 phase 1): the Worker and
-//! `bebop-wasm --features decide` run THIS function, so a tablet offline and
+//! `dowiz-hub-wasm --features decide` run THIS function, so a tablet offline and
 //! the venue's object decide the same bytes.
 
 use super::rules::{self as rr, Stage, VoidReason};

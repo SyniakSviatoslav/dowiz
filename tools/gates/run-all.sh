@@ -2,7 +2,7 @@
 # EVERY GATE, ONE TABLE, EVERY EXIT CODE.
 #
 #   sh tools/gates/run-all.sh            # the gates that need no compiler (seconds to minutes)
-#   sh tools/gates/run-all.sh --cargo    # also vocab.sh, x86-check and the bebop-wasm four-reader gate
+#   sh tools/gates/run-all.sh --cargo    # also vocab.sh, x86-check and the dowiz-hub-wasm four-reader gate
 #
 # On the dev box, anything that compiles goes through the slot, in the foreground:
 #   bash bebop-lang/tools/slot.sh gates sh tools/gates/run-all.sh --cargo
@@ -40,7 +40,7 @@ run() { # run <name> <command...>
     # On GitHub, name the red gate in an annotation: annotations are public without a token, job logs are not,
     # and "Process completed with exit code 1" hid which gate was red for 100+ runs (2026-10-06..08).
     # The body carries the log's last 15 lines (%0A is an annotation newline): a verdict line alone
-    # ("bebop-wasm: RED") still left the cause in the token-only log.
+    # ("dowiz-hub-wasm: RED") still left the cause in the token-only log.
     [ -n "${GITHUB_ACTIONS:-}" ] && printf '::error title=gate %s (rc=%s)::%s\n' "$name" "$rc" \
       "$(grep -v '^[[:space:]]*$' "$OUT/$n.log" | tail -15 | tr -d '\r' | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
   fi
@@ -109,9 +109,9 @@ for p in e2e/gates/*.prove.mjs; do run "$(basename "$p" .mjs)" node "$p"; done
 run browser-units sh -c "node --test \$(find workers/api/public -name '*.test.mjs' | sort)"
 
 if [ $CARGO = 1 ]; then
-  run bebop-wasm sh crates/bebop-wasm/gate.sh
+  run dowiz-hub-wasm sh crates/dowiz-hub-wasm/gate.sh
 else
-  skip bebop-wasm "compiles Rust (wasm32); pass --cargo"
+  skip dowiz-hub-wasm "compiles Rust (wasm32); pass --cargo"
 fi
 
 echo

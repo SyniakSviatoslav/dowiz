@@ -5,7 +5,7 @@
 # with a scratch copy of the prebuilt binaries:
 #   1. clean                                                      -> rc 0, GREEN, four scenarios
 #   2. the stamp names other sources                              -> rc 2, STALE
-#   3. bebop-verify.py forgets the hub's kind byte                -> rc 1, python's counters DISAGREE
+#   3. ein-verify.py forgets the hub's kind byte                -> rc 1, python's counters DISAGREE
 #   4. doc_verify is a liar that prints the wanted answer         -> rc 1, the kills fail
 #   5. the forger changes nothing                                 -> rc 1, the kills fail
 #   6. read.mjs runs a reader that fails its digest               -> rc 1, kill wasm-byte fails
@@ -30,8 +30,8 @@ fresh() {
   rm -rf "${S:?}/r" "${S:?}/bin"
   mkdir -p "$S/r/tools/gates" "$S/r/tools/verify" "$S/r/examples" "$S/r/docs" "$S/bin"
   cp "$HERE/maingoal.sh" "$HERE/maingoal.forge.py" "$S/r/tools/gates/"
-  cp "$REPO/tools/verify/bebop-verify.py" "$REPO/tools/verify/bebop-verify.mjs" "$S/r/tools/verify/"
-  cp "$REPO/examples/read.mjs" "$S/r/examples/"; cp "$REPO/docs/FORMAT-BEBOP-IMAGE-v2.md" "$S/r/docs/"
+  cp "$REPO/tools/verify/ein-verify.py" "$REPO/tools/verify/ein-verify.mjs" "$S/r/tools/verify/"
+  cp "$REPO/examples/read.mjs" "$S/r/examples/"; cp "$REPO/docs/FORMAT-EINFILE-v2.md" "$S/r/docs/"
   ln -s "$REPO/crates" "$S/r/crates"
   cp "$SRC/doc_verify" "$SRC/anchor" "$SRC/maingoal_device" "$SRC/maingoal_merge" "$SRC/stamp" "$S/bin/"
 }
@@ -42,7 +42,7 @@ want() { # want <rc> <label> <grep>
   echo "maingoal.prove: $2 -> rc=$rc (want $1): ${hit:-$(tail -1 "$S/out" | cut -c1-150)}"
   [ "$rc" -eq "$1" ] && [ -n "$hit" ] || { tail -5 "$S/out" | cut -c1-200; fail=1; }
 }
-PYV="$S/r/tools/verify/bebop-verify.py"
+PYV="$S/r/tools/verify/ein-verify.py"
 fresh; want 0 "clean scratch" "GREEN (4 of 4 scenarios held"
 # On GitHub a stale stamp rebuilds by itself, by design: this case is about the box's refusal.
 ci=${GITHUB_ACTIONS:-}; unset GITHUB_ACTIONS

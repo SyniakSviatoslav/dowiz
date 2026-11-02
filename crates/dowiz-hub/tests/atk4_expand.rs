@@ -3,8 +3,8 @@
 //! rollback.sh applies no floor before a flip and the old build misreads that record. Each test was
 //! RED on the tree the attack ran on; the HOLE numbers are the attack's verdict's.
 
-use bebop_store::evlog::{EvLog, FLAG_SHA256};
-use bebop_store::Store;
+use einstore::evlog::{EvLog, FLAG_SHA256};
+use einstore::Store;
 use dowiz_hub::catalog::edits;
 use dowiz_hub::consent::{self, Act, Method, State};
 use dowiz_hub::glue::{merge::merge, tablet};

@@ -165,7 +165,7 @@ pub struct Block {
     pub cols: Vec<Col>,
 }
 
-/// zlib CRC-32 (§B.2 trailer). The SAME function as `bebop_store::crc32`
+/// zlib CRC-32 (§B.2 trailer). The SAME function as `einstore::crc32`
 /// (bitwise); `schema_table_agrees` holds the two equal on every fixture and on
 /// seeded input of every length 0..700.
 ///

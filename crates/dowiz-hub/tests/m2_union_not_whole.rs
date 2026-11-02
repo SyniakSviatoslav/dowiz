@@ -6,8 +6,8 @@
 mod atk_forge;
 
 use atk_forge::*;
-use bebop_store::evlog::doc::keys::KeyOp;
-use bebop_store::evlog::doc::DocError;
+use einstore::evlog::doc::keys::KeyOp;
+use einstore::evlog::doc::DocError;
 use dowiz_hub::doc_seal::merge::{refusal_name, MergeError, Merged};
 use dowiz_hub::doc_seal::{DeviceKey, SealedHub};
 use dowiz_hub::stock::StockEvent;

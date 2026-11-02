@@ -14,7 +14,7 @@
 //! incremental `step(acc, zset Δ)` form waits for LV-INC-A's `ZSet` (§2.4); until it lands a
 //! hot tail is folded `full` beside the blocks (`services::analytics`), never stepped.
 //!
-//! `line` is what `crates/bebop-wasm/gate.sh` compares across four readers (`block_read --kernel`,
+//! `line` is what `crates/dowiz-hub-wasm/gate.sh` compares across four readers (`block_read --kernel`,
 //! `bw_kernel`, `oracle.py --kernel`, `block.bp bk_kernel_line`):
 //!   kernel sales rows=<n> groups=<g> gross=<fnv64> costed=<m> cost=<fnv64> top=<key:val,...|->
 //!   kernel refused=<code> col=<column|->

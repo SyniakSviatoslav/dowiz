@@ -143,8 +143,8 @@ run --dry-run; [ $RC = 0 ] && has 'DRY-RUN OK' && [ "$(cat "$T/calls")" = "deplo
 run --verify; [ $RC = 0 ] && [ ! -s "$T/calls" ] && has 'deploy: OK' && ok "--verify: checks live only, no wrangler" || no "verify mode"
 
 # ── W-MG-TRANS: tablet.wasm must be its source ──
-mkdir -p "$T/repo/crates/bebop-wasm" "$T/repo/workers/api/public/room/canvas"
-printf '#!/bin/sh\necho digest-now\n' > "$T/repo/crates/bebop-wasm/tablet.sh"; echo digest-old > "$T/repo/workers/api/public/room/canvas/tablet.wasm.src"; g add -A; g commit -m stale
+mkdir -p "$T/repo/crates/dowiz-hub-wasm" "$T/repo/workers/api/public/room/canvas"
+printf '#!/bin/sh\necho digest-now\n' > "$T/repo/crates/dowiz-hub-wasm/tablet.sh"; echo digest-old > "$T/repo/workers/api/public/room/canvas/tablet.wasm.src"; g add -A; g commit -m stale
 run; [ $RC = 15 ] && has 'FAIL tablet:' && [ "$(uploads)" = 0 ] && ok "a stale tablet.wasm refused (15), no upload" || no "stale tablet"
 echo digest-now > "$T/repo/workers/api/public/room/canvas/tablet.wasm.src"; g add -A; g commit -m fresh
 run; [ $RC = 0 ] && ok "twin: tablet.wasm.src equal to its digest deploys (0)" || no "fresh tablet"

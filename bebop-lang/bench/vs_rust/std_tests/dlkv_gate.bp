@@ -22,7 +22,7 @@ fn dlkt_line(k: i64, m: i64, d: i64) -> i64 {
 }
 fn main() -> i64 {
   let path = zeros(96);
-  let pl = st_str(path, "../crates/bebop-wasm/fixtures/kv3.store");
+  let pl = st_str(path, "../crates/dowiz-hub-wasm/fixtures/kv3.store");
   let base = st_map_ro(path, pl, 65536);
   let tmp = zeros(256);
   let root = st_root(base, tmp);

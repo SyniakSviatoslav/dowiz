@@ -51,7 +51,7 @@ const IMAGE_SHA: &str = "d3b93ba9ff45ff368c6567aefa9573867025edd875d55375c81b0f0
 #[test]
 fn an_unbound_venue_writes_the_pre_store2_bytes() {
     let log = history();
-    let image: String = Sha256::digest(bebop_store::format::without_anchor(&log.to_bytes_trimmed())).iter().map(|x| format!("{x:02x}")).collect();
+    let image: String = Sha256::digest(einstore::format::without_anchor(&log.to_bytes_trimmed())).iter().map(|x| format!("{x:02x}")).collect();
     println!("GOLDEN STORE2 IMAGE_SHA={image} records={}", log.len());
     assert!(log.verify_checkpoints().unwrap() > 5);
     assert_eq!(image, IMAGE_SHA, "an unbound venue's image changed by one byte or more");

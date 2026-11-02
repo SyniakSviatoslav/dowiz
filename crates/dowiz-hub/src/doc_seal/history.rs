@@ -15,10 +15,10 @@
 //!
 //! The plain `Hub` keeps its own paths (`forget.rs`, `rotate.rs`): its log is not a DOC.
 
-use bebop_store::evlog::doc::keys::read_keys;
-use bebop_store::evlog::doc::{forgotten_body, Doc, DocError};
-use bebop_store::evlog::Record;
-use bebop_store::{Store, StoreError};
+use einstore::evlog::doc::keys::read_keys;
+use einstore::evlog::doc::{forgotten_body, Doc, DocError};
+use einstore::evlog::Record;
+use einstore::{Store, StoreError};
 
 use super::sealed::doc_err;
 use super::{DeviceKey, HubIds, SealedHub, MIN_SEALED_BYTES};

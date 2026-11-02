@@ -5,7 +5,7 @@ output and not in its exit code, so without this a change of verdict is a green 
 
     python3 tools/gates/tamarin-verdicts.py <prover output> [--write <file>]
 
-Every lemma of docs/design/tamarin/bebop_seal.spthy must have a verdict in the summary, or this
+Every lemma of docs/design/tamarin/ein_seal.spthy must have a verdict in the summary, or this
 exits 2: a parse error, or a prover that stopped early, has no summary to compare.
 
 docs/design/tamarin/expected-verdicts.txt holds `lemma verdict` per line. WHILE IT IS ABSENT there
@@ -46,7 +46,7 @@ def main(argv):
     if len(argv) not in (2, 4) or (len(argv) == 4 and argv[2] != "--write"):
         sys.exit(__doc__)
     model = os.environ.get("TAMARIN_MODEL", MODEL)
-    names = lemmas(os.path.join(model, "bebop_seal.spthy"))
+    names = lemmas(os.path.join(model, "ein_seal.spthy"))
     got = verdicts(open(argv[1], errors="replace").read())
     for k in names:
         print("tamarin: %-40s %s" % (k, got.get(k, "NO VERDICT")))

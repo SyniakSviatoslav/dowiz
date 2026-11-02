@@ -2,7 +2,7 @@
   Bebop.KvDelta -- W-DELTALEAN (R-LANG 2026-10-09 §2 item 3): a KV DELTA CHAIN REPLAYED EQUALS ITS
   COMPACTED IMAGE, for EVERY chain, not only the goldens the four readers agree on.
 
-  THE CODE IT MODELS: crates/bebop-store/src/kv/delta.rs (+ delta/write.rs). A v3 KV root is a v2 base
+  THE CODE IT MODELS: crates/einstore/src/kv/delta.rs (+ delta/write.rs). A v3 KV root is a v2 base
   plus a chain of delta records; each record is ONE op (put key value | remove key); `append_delta`
   writes one batch of ops as records; a READ is the base, then the records replayed OLDEST FIRST (a put
   inserts or overwrites, a remove deletes, a remove of an absent key changes nothing: `Kv::replay` over
@@ -31,7 +31,7 @@
     newest_put_wins, remove_sticks, remove_absent_noop                           (the three RED targets
                           in delta/tests.rs, as statements)
 
-  WHAT IT DOES NOT COVER (the differential test crates/bebop-store/src/kv/delta/lean_tests.rs runs the
+  WHAT IT DOES NOT COVER (the differential test crates/einstore/src/kv/delta/lean_tests.rs runs the
   REAL writer + compactor over named chains and asserts these same equalities on the bytes):
     * byte layout: packing eight bytes to a cell, KIDX/KBLOB/VIDX/VBLOB, the sorted base, the v3 root's
       eight cells, the record header {NEXT, OP, KLEN, VLEN};

@@ -1,14 +1,14 @@
-//! What an archive embeds: the COMMITTED reader, out of `tools/verify/bebop-verify.mjs` under the
+//! What an archive embeds: the COMMITTED reader, out of `tools/verify/ein-verify.mjs` under the
 //! digest that file states, and the format text. Both are read at run time and a missing or
 //! mismatched one stops the run by name: a smaller stand-in would print a smaller archive.
 use std::fs;
 
-use bebop_store::nodekey::sha256;
+use einstore::nodekey::sha256;
 
-/// `bw_version()` of `crates/bebop-wasm-reader`, FORMAT §9.5.1.
+/// `bw_version()` of `crates/einfile-reader`, FORMAT §9.5.1.
 pub const READER_ABI: i64 = 2;
-const VERIFY_MJS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tools/verify/bebop-verify.mjs");
-const FORMAT_TEXT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/FORMAT-BEBOP-IMAGE-v2.en.md");
+const VERIFY_MJS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tools/verify/ein-verify.mjs");
+const FORMAT_TEXT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/FORMAT-EINFILE-v2.en.md");
 
 fn base64(s: &str) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(s.len() / 4 * 3);
@@ -42,7 +42,7 @@ fn constant<'a>(text: &'a str, name: &str) -> Option<&'a str> {
     text.lines().find_map(|l| l.strip_prefix(head.as_str())?.strip_suffix("\";"))
 }
 
-/// The reader inside the text of bebop-verify.mjs: `Err` names what is wrong with it.
+/// The reader inside the text of ein-verify.mjs: `Err` names what is wrong with it.
 pub fn reader_in(mjs: &str) -> Result<Vec<u8>, String> {
     let b64 = constant(mjs, "WASM_B64").ok_or("no WASM_B64 line")?;
     let want = constant(mjs, "WASM_SHA256").ok_or("no WASM_SHA256 line")?;

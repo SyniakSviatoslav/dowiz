@@ -26,8 +26,8 @@ use crate::logimage::LogImage;
 use crate::minijson::int_field;
 use crate::chain::{verify_id, IdScheme, ERASED_NONCE};
 use crate::{body_of, HubError};
-use bebop_store::evlog::{EvLog, Record, FLAG_SHA256};
-use bebop_store::Store;
+use einstore::evlog::{EvLog, Record, FLAG_SHA256};
+use einstore::Store;
 
 /// The declaration: how many acts of `cust:<key>` were redacted in place.
 pub const KIND_FORGOTTEN: &str = "f";

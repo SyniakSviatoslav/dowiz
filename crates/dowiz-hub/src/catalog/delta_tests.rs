@@ -5,8 +5,8 @@
 //! fuzzer over image bytes (operator rule, memory no-fuzzers-in-this-repo).
 use super::view::tests::big_165;
 use super::*;
-use bebop_store::kv::delta;
-use bebop_store::Store;
+use einstore::kv::delta;
+use einstore::Store;
 use crate::catalog::view::{CatalogRead, CatalogView};
 
 /// Everything a catalogue answers, as one comparable value.
@@ -59,7 +59,7 @@ fn a_read_after_deltas_equals_the_compacted_image_on_1000_seeded_sequences() {
             let want = answers(&c);
             let next = c.to_bytes().unwrap();
             let v = Store::from_bytes(&next);
-            if bebop_store::kv::Kv::version(&v) == 3 { deltas += 1 } else { compactions += 1 }
+            if einstore::kv::Kv::version(&v) == 3 { deltas += 1 } else { compactions += 1 }
             let read = Catalog::load(&next).unwrap();
             let comp = Catalog::load(&compacted(&next)).unwrap();
             let what = format!("seed {seed} batch {batch}");
@@ -83,10 +83,10 @@ fn one_price_edit_changes_the_superblock_page_and_the_tail_only() {
     let dish = c.product("item-042").unwrap().replace("\"price\":542", "\"price\":600");
     c.set_product("item-042", &dish);
     let after = c.to_bytes().unwrap();
-    assert_eq!(bebop_store::kv::Kv::version(&Store::from_bytes(&after)), 3, "the edit was not a delta");
+    assert_eq!(einstore::kv::Kv::version(&Store::from_bytes(&after)), 3, "the edit was not a delta");
     let grew = after.len() - before.len();
     assert!(grew < 4 * 1024, "the image grew by {grew} B for one dish");
-    let first_mid = (bebop_store::ARENA * 8..before.len()).find(|&i| before[i] != after[i]);
+    let first_mid = (einstore::ARENA * 8..before.len()).find(|&i| before[i] != after[i]);
     assert_eq!(first_mid, None, "a byte between the superblock pages and the old end changed");
     assert!(Catalog::load(&after).unwrap().product("item-042").unwrap().contains("\"price\":600"));
     // fold byte-equal after compaction
@@ -115,7 +115,7 @@ fn the_chain_is_compacted_at_its_limit() {
         let mut c = Catalog::load(&bytes).unwrap();
         c.set_product("item-001", &format!(r#"{{"id":"item-001","price":{}}}"#, 1000 + i));
         bytes = c.to_bytes().unwrap();
-        versions.push(bebop_store::kv::Kv::version(&Store::from_bytes(&bytes)));
+        versions.push(einstore::kv::Kv::version(&Store::from_bytes(&bytes)));
     }
     assert!(versions[..delta::MAX_DELTAS].iter().all(|&v| v == 3), "{versions:?}");
     assert_eq!(versions[delta::MAX_DELTAS], 2, "the 33rd write did not compact");
@@ -127,7 +127,7 @@ fn the_chain_is_compacted_at_its_limit() {
     // in the generation-bearing cells (superblock/PartTab generation, each object's h1, crc15, anc).
     let again = compacted(&bytes);
     assert_eq!(again.len(), bytes.len(), "a compacted write is not what compaction writes (length)");
-    assert_eq!(bebop_store::kv::Kv::version(&Store::from_bytes(&again)), 2);
+    assert_eq!(einstore::kv::Kv::version(&Store::from_bytes(&again)), 2);
     assert_eq!(Catalog::load(&again).unwrap().root(), entries.root(), "a compacted write is not what compaction writes (fold)");
     let g = |b: &[u8]| Store::from_bytes(b).pick().unwrap().generation;
     assert!(g(&bytes) > 1, "the write's own compaction restarted the generation");

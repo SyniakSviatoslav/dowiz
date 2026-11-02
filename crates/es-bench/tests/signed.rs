@@ -1,8 +1,8 @@
 //! The signed rows measure what they say. Every refusal has its positive twin; the file is real:
 //! ML-DSA-65 seals, written and read through the library's own entries. `--features mldsa`.
 #![cfg(feature = "mldsa")]
-use bebop_store::evlog::doc::{seal::{read_heads, read_seal}, Doc, DocError};
-use bebop_store::Store;
+use einstore::evlog::doc::{seal::{read_heads, read_seal}, Doc, DocError};
+use einstore::Store;
 use es_bench::archive::{formula, inputs, reader_in};
 use es_bench::mldsa::{Counts, MlDsaVerifier};
 use es_bench::signed::{build, check, merge, seals_for, two_sides};

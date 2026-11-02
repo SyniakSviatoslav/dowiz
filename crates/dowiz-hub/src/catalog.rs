@@ -1,6 +1,6 @@
-//! The hub's catalogue: the venue and its menu, in a bebop KV store.
+//! The hub's catalogue: the venue and its menu, in an einfile KV store.
 //!
-//! A SECOND image beside the order log, and deliberately so. A bebop store has
+//! A SECOND image beside the order log, and deliberately so. An einfile has
 //! ONE root, and the log's root and the KV root are different layouts — they
 //! cannot share an image. The split is not a workaround: the two have opposite
 //! lifecycles. The log is append-only and grows forever; the catalogue is small,
@@ -99,7 +99,7 @@ impl Catalog {
     /// reads).
     ///
     /// W-DELTA (2026-10-06): a catalogue LOADED from bytes appends what changed -- one record
-    /// per changed key and a new root (`bebop_store::kv::delta`) -- so the image changes only
+    /// per changed key and a new root (`einstore::kv::delta`) -- so the image changes only
     /// in its superblock page and at its tail. It compacts exactly as above when it was
     /// created fresh, when the chain or the dead cells pass the trigger, when the image is
     /// v1, or when the arena is full. The entries in memory are the truth either way.
@@ -133,7 +133,7 @@ impl Catalog {
             Err(e) if e.arena_full().is_some() => (self.kv.compacted_bytes(PROJECTION_BYTES)?, false),
             Err(e) => return Err(e),
         };
-        Ok(Projection { usage: crate::usage_of(&bebop_store::Store::from_bytes(&bytes), ceiling), fits })
+        Ok(Projection { usage: crate::usage_of(&einstore::Store::from_bytes(&bytes), ceiling), fits })
     }
 
     /// A fingerprint of the whole catalogue. Two hubs holding the same menu

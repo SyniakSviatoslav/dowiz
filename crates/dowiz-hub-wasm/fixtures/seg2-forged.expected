@@ -1,0 +1,5 @@
+# seg2 with the older segment's redacted moved, crc re-sealed: only the chain hash can see it.
+# Written by doc/spec/fixture_tests.rs (W-MG-FIX), EIN_RULE_FIXTURES=<dir>; deterministic.
+doc_n=3
+doc_root=2237665766422822682
+doc_verify=status=75

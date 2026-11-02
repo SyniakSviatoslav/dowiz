@@ -5,9 +5,9 @@
 mod atk_forge;
 
 use atk_forge::*;
-use bebop_store::evlog::doc::keys::{KeyOp, ADMIT_MARK};
-use bebop_store::evlog::doc::Report;
-use bebop_store::evlog::{Record, FLAG_NONCE_DERIVED};
+use einstore::evlog::doc::keys::{KeyOp, ADMIT_MARK};
+use einstore::evlog::doc::Report;
+use einstore::evlog::{Record, FLAG_NONCE_DERIVED};
 use dowiz_hub::doc_seal::{DeviceKey, SealedHub};
 use dowiz_hub::EventKind;
 

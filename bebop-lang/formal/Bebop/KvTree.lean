@@ -4,7 +4,7 @@ import Bebop.KvDelta
   Bebop.KvTree -- W-ES-P8F (P8f): THE COPY-ON-WRITE B+TREE IS THE ABSTRACT MAP, AND A WRITE NEVER
   CHANGES AN OLD ROOT.
 
-  THE CODE IT MODELS: crates/bebop-kv/src/tree/{node,read,iter,write,build}.rs (W-ES-P8B, KV v4;
+  THE CODE IT MODELS: crates/einfile-kv/src/tree/{node,read,iter,write,build}.rs (W-ES-P8B, KV v4;
   design scratchpad es-p8.design.md §1-§3).
 
   THE MODEL:

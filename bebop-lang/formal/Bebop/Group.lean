@@ -2,7 +2,7 @@
   Bebop.Group -- W-ES-P11 (R-EMBED-STORE §12 row P11): THE GROUP COMMIT UNDER TWO BARRIERS, and
   `Durability::Normal`'s checkpoints. Core Lean 4, no Mathlib, no `axiom`, no `sorry`.
 
-  THE CODE IT MODELS (crates/bebop-io/src/writer.rs `Writer::flush_steps` + `flip`, plan.rs):
+  THE CODE IT MODELS (crates/einfile-io/src/writer.rs `Writer::flush_steps` + `flip`, plan.rs):
     N commits are STAGED in memory (`Store::stage_commit` N times, alternating superblock pages);
     one flush writes the arena of ALL of them, [mark_0, mark_0 + Σ alen_i), the PartTab of the LAST
     and, after ONE barrier, the superblock of the LAST, then the second barrier. When N is even the

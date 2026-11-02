@@ -1,7 +1,7 @@
 # DG5 sproj oracle (docs/design/SPEC-BEBOP-DAG-RUNTIME-2026-09-28.md §6): every number
 # bench/vs_rust/std_tests/sproj.bp folds, derived from the RECORD BYTES and the spec's answer
 # codes alone -- this file never reads the program's output or its store.
-#   log fold (S-2, the four-reader LOG fold of crates/bebop-wasm/src/lib.rs): FNV-1a 64 over
+#   log fold (S-2, the four-reader LOG fold of crates/dowiz-hub-wasm/src/lib.rs): FNV-1a 64 over
 #     seq(8 LE) || payload_len(8 LE) || payload, oldest first. Record i: seq i, 330 bytes
 #     (i*31 + j*7) % 251. After the in-place rewrite, record 3's first 8 bytes are 'x'.
 #   kv fold (S-3, kv.bp / dowiz InMemoryStore::snapshot_root): FNV-1a 64 over

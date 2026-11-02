@@ -1,0 +1,28 @@
+# What every reader of fixtures/doc.store must answer (W-MG-M1, 2026-10-30): a REFUSAL BY NAME.
+# The image: a DOC root (FORMAT §9.4) over an empty-then-three-record v2 log, three toy-sealed
+# commits, written by `cargo test -p einfile-log write_the_doc_fixture_when_asked` with
+# EIN_DOC_FIXTURE=<this path> (deterministic: a re-run is byte-identical). The DOC root carries
+# root-version 5 in cell 5 (the KV readers' version cell) and in cell 7 (the log readers'):
+# every reader written before M5 reads "a version above 4" and says UNKNOWN_VERSION (12) -- never
+# a fold, never NOT_A_KV (2), which would mean it tried to decode it.
+#   native   : einfile-kv Kv::load_checked -> KvError::UnknownVersion { v: 5 }
+#   wasm32   : kv status=12 n=0 root=0 (abi UNKNOWN_VERSION)
+#   python   : kv status=12 n=0 root=0 (oracle.py kv_entries, ver > 4)
+#   bebop.bin: kv.bp kv_version -> pj_kv_known traps 78 (conformance.sh maps 78 to status 12)
+#   ffi      : einfile-io Refusal::UnknownVersion(5) -> UNKNOWN_VERSION
+status=12
+bebop_rc=78
+# W-MG-M5 (2026-10-31): the two ONE-FILE readers of tools/verify (ein-verify.mjs = einfile-reader,
+# ein-verify.py = stdlib) READ a DOC. Its line is `doc status=0 n=<records> root=<the LOG fold over the
+# three records>`; `doc_verify` is their counter line. The three records carry TOY ids (einfile-log's test
+# mix, not sha256), so a reader that knows dowiz-hub's schemes counts them `broken` -- the honest answer
+# about this file -- and the toy seals are COUNTED (3), never checked (`checked=0`: no ML-DSA in MIT).
+# tools/verify/gate.sh holds node and python to these three lines; crates/einfile-reader/tests/doc.rs
+# holds the Rust side to doc_root. python first wrote them (2026-10-31); the wasm must agree or the gate is red.
+# W-MG-M5b: the fixture was REWRITTEN with the merged layout (DIGEST_DOC 2619226223, cell 9 = ref SEG); the fold is
+# over the records and did not move; the four M3/M4 counters are appended (a working image: all 0).
+# W-MG-HOLES (2026-10-31): REWRITTEN. The toy ids hash doc::id_message now, so id and seal cells moved; the fold, status and every counter did not.
+# Oracle: einfile-log's writer + python agree on the old and the new file.
+doc_n=3
+doc_root=-5898116667070633908
+doc_verify=records=3 chained=0 legacy=0 redacted=0 broken=3 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=0 merges=0 merges_bad=0

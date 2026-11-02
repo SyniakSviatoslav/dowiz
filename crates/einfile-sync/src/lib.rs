@@ -15,7 +15,7 @@
 //! fed by a caller that has authenticated its peer. Encryption for a blind relay is the carrier's
 //! layer and takes these bytes as they are. Both come after P2.
 //!
-//! This crate names no algorithm: ids, hashes and signatures come through `bebop-log::doc`'s seams.
+//! This crate names no algorithm: ids, hashes and signatures come through `einfile-log::doc`'s seams.
 
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
@@ -23,7 +23,7 @@
 extern crate alloc;
 
 use alloc::string::String;
-use bebop_log::doc::DocError;
+use einfile_log::doc::DocError;
 
 mod file;
 mod frame;

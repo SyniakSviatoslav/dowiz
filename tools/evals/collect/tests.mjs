@@ -13,11 +13,11 @@ export const CRATES = {
   kernel: 'kernel',
   dowiz_core: 'crates/dowiz-core',
   dowiz_hub: 'crates/dowiz-hub',
-  bebop_image: 'crates/bebop-image',
-  bebop_kv: 'crates/bebop-kv',
-  bebop_log: 'crates/bebop-log',
-  bebop_io: 'crates/bebop-io',
-  bebop_store: 'crates/bebop-store',
+  einfile_image: 'crates/einfile-image',
+  einfile_kv: 'crates/einfile-kv',
+  einfile_log: 'crates/einfile-log',
+  einfile_io: 'crates/einfile-io',
+  einstore: 'crates/einstore',
   worker: 'workers/api/src',
 };
 export const MUTANTS = 'kernel/mutants.out/outcomes.json';

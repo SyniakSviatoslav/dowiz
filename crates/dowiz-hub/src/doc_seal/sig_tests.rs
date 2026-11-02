@@ -1,4 +1,4 @@
-//! THE SEAL'S SIGNATURE, held from outside `bebop-sig-mldsa` (W-MG-SIG): what the hub really wrote
+//! THE SEAL'S SIGNATURE, held from outside `einfile-sig-mldsa` (W-MG-SIG): what the hub really wrote
 //! into an image and a TSA mark is external pure ML-DSA-65 with the empty context, read back
 //! with `dowiz_core::pq::dsa`, a second implementation that shares no code with `fips204`.
 
@@ -6,9 +6,9 @@ use super::tests::device;
 use super::tsa::{self, PlatformTsa};
 use super::{actor_id, SealedHub};
 use crate::EventKind;
-use bebop_store::evlog::doc::seal::{message, read_heads, read_seal};
-use bebop_store::evlog::doc::{Anchor, AnchorCheck, Doc, Verdict, ALG_ML_DSA_65, KIND_PLATFORM_TSA};
-use bebop_store::Store;
+use einstore::evlog::doc::seal::{message, read_heads, read_seal};
+use einstore::evlog::doc::{Anchor, AnchorCheck, Doc, Verdict, ALG_ML_DSA_65, KIND_PLATFORM_TSA};
+use einstore::Store;
 use dowiz_core::pq::dsa;
 
 const JSON: &str = r#"{"id":"o1"}"#;
@@ -61,6 +61,6 @@ fn a_tsa_mark_is_external_pure_ml_dsa_and_an_old_one_is_bad() {
 #[test]
 fn actor_id_did_not_move() {
     let pk = device(7);
-    assert_eq!(actor_id(pk.public_key()), bebop_store::nodekey::sha256(pk.public_key()));
+    assert_eq!(actor_id(pk.public_key()), einstore::nodekey::sha256(pk.public_key()));
     assert_eq!(pk.id(), actor_id(pk.public_key()));
 }

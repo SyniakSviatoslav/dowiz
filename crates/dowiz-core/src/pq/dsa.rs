@@ -1023,7 +1023,7 @@ pub fn external_message(ctx: &[u8], msg: &[u8]) -> Vec<u8> {
 }
 
 /// External pure ML-DSA with the empty context, `M' = 00 00 ‖ msg`: the seal's interface, and the
-/// differential oracle for `bebop-sig-mldsa`.
+/// differential oracle for `einfile-sig-mldsa`.
 pub fn sign_pure_bytes(sk: &[u8], msg: &[u8], rnd: &[u8; RNDBYTES]) -> Vec<u8> {
     sign_internal_bytes(sk, &external_message(b"", msg), rnd)
 }

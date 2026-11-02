@@ -38,8 +38,8 @@
 //! from the record itself and says so with `FLAG_NONCE_DERIVED` -- such a nonce
 //! protects nothing, and `ChainCheck::derived` counts them so that is visible.
 
-use bebop_store::evlog::{EvLog, Record, FLAG_NONCE_DERIVED};
-use bebop_store::Store;
+use einstore::evlog::{EvLog, Record, FLAG_NONCE_DERIVED};
+use einstore::Store;
 
 use crate::forget;
 use crate::{Hub, HubError};

@@ -18,9 +18,9 @@
 
 #[allow(unused_imports)]
 use alloc::{string::ToString, vec::Vec};
-use bebop_image::{Store, StoreError};
-use bebop_log::doc::{merge_body, Doc, DocError, Front, Ids, Limits, MergeView, Signer, Tail, Trust, Union, Verifier, STATE_COMMUTES, STATE_OBSTRUCTED};
-use bebop_log::Record;
+use einfile_image::{Store, StoreError};
+use einfile_log::doc::{merge_body, Doc, DocError, Front, Ids, Limits, MergeView, Signer, Tail, Trust, Union, Verifier, STATE_COMMUTES, STATE_OBSTRUCTED};
+use einfile_log::Record;
 use crate::wire::{decode, encode_ack, encode_frontier, encode_need, encode_tail, refusal_name, Msg, Need};
 use crate::{Budget, SyncError};
 

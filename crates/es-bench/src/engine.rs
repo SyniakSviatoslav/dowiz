@@ -18,7 +18,7 @@ pub enum Sync {
     /// No barrier (SQLite `synchronous=OFF`): the `put` / `delete` rows.
     None,
     /// W-ES-P8E, SQLite `synchronous=NORMAL` in WAL: a commit never tears, nothing is synced
-    /// until a checkpoint, a power cut loses the commits since the last one. bebop: W-ES-P11's
+    /// until a checkpoint, a power cut loses the commits since the last one. einfile: W-ES-P11's
     /// `Durability::Normal` (checkpoint every 64th commit); SQLite: `synchronous=NORMAL`;
     /// redb: `Durability::None` with an `Immediate` every 64th commit (it has no NORMAL);
     /// LMDB: `NO_SYNC` without `WRITEMAP` keeps ACI and loses only D, which is its NORMAL --
@@ -52,7 +52,7 @@ pub trait Engine: Sized {
     fn compact(&mut self) -> String;
     /// The engine's full integrity check, if it has one: `None` = it offers none.
     fn verify(&mut self) -> Option<bool>;
-    /// Counters worth printing next to a write row (bebop: deltas/compactions).
+    /// Counters worth printing next to a write row (einfile: deltas/compactions).
     fn note(&self) -> String {
         String::new()
     }

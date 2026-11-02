@@ -208,7 +208,7 @@ def spend_walks(im, recs, tables, segs):
 
 
 def doc_counts(im, recs, heads, keys, log_tip, segs):
-    """`doc::verify`'s twenty counters as the MIT reader computes them (bebop-wasm-reader `ids.rs`,
+    """`doc::verify`'s twenty counters as the MIT reader computes them (einfile-reader `ids.rs`,
     `Verifier::checks_signatures` false): ids under dowiz-hub's sha256 scheme or the pre-M0 FNV lanes
     (a legacy id newer than a chained record of its device is broken: the scheme moves once), a
     redaction by the kind byte's high bit, forks by `(actor, seq)`, every seal COUNTED (`checked` 0,

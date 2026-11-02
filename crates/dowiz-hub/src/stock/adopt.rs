@@ -169,7 +169,7 @@ impl StockLog {
             .map(|r| {
                 let text = String::from_utf8_lossy(&r.payload);
                 let noted = if crate::stock::notes::is_note(&text, crate::glue::merge::GLUED) { crate::minijson::int_field(&text, "derived").unwrap_or(0).max(0) as usize } else { 0 };
-                noted + usize::from(r.flags & bebop_store::evlog::FLAG_NONCE_DERIVED != 0)
+                noted + usize::from(r.flags & einstore::evlog::FLAG_NONCE_DERIVED != 0)
             })
             .sum()
     }

@@ -4,7 +4,7 @@
   no `sorry`.
 
   THE CODE IT TRANSCRIBES (by hand -- no Aeneas on the box):
-    * `packed` crates/bebop-store/src/kv/delta.rs:108-111: byte b of a field = (cell[at + b/8] >> 8(b%8))
+    * `packed` crates/einstore/src/kv/delta.rs:108-111: byte b of a field = (cell[at + b/8] >> 8(b%8))
       as u8. A cell is modelled by its unsigned 64-bit pattern (`Nat`); the shift is at most 56 and the
       cast keeps the low 8 bits, so arithmetic vs logical shift does not change the byte.
     * the writer packs eight bytes to a cell, little-endian, ceil(len/8) cells (FORMAT §9.1, `packCell`).

@@ -9,7 +9,7 @@
 //! append on a path that has already gone wrong.
 //!
 //! NO SQL. The rows were `worker_errors` in D1; they are now an append-only
-//! bebop image, per venue, in that venue's own object -- which is also what
+//! einfile image, per venue, in that venue's own object -- which is also what
 //! makes the tenant boundary a property of where the bytes are rather than a
 //! `WHERE venue = ?` somebody has to remember.
 

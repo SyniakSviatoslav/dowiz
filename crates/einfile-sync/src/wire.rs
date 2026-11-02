@@ -21,10 +21,10 @@
 
 #[allow(unused_imports)]
 use alloc::{string::String, string::ToString, vec, vec::Vec};
-use bebop_log::doc::keys::parse_admit;
-use bebop_log::doc::seal::{Seal, MAX_SIG_BYTES};
-use bebop_log::doc::{Anchor, DocError, Front, Ids, Place, Row, Tail};
-use bebop_log::Record;
+use einfile_log::doc::keys::parse_admit;
+use einfile_log::doc::seal::{Seal, MAX_SIG_BYTES};
+use einfile_log::doc::{Anchor, DocError, Front, Ids, Place, Row, Tail};
+use einfile_log::Record;
 use crate::{Budget, SyncError};
 
 pub const MARK: &[u8] = b"ein-sync/1";

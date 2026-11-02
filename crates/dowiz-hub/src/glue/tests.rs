@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::stock::{StockEvent, StockLedger, StockLog, WasteReason};
-use bebop_store::{crc32_cells, follow_in, root_in, View};
+use einstore::{crc32_cells, follow_in, root_in, View};
 use std::sync::OnceLock;
 
 fn res(item: &str, qty: i64, o: &str) -> StockEvent {
@@ -80,7 +80,7 @@ fn x5_the_last_salmon_sold_on_two_tablets_is_found() {
         c => panic!("{c:?}"),
     }
     // The ancestor is the base's tip: the overlap's digest is one id.
-    let base_tip = walk::to_cells(&bebop_store::evlog::EvLog::tip(&bebop_store::Store::from_bytes(x5_base())).unwrap());
+    let base_tip = walk::to_cells(&einstore::evlog::EvLog::tip(&einstore::Store::from_bytes(x5_base())).unwrap());
     assert_eq!(g.ancestor, base_tip);
     assert!(g.wire_bytes > 0 && g.wire_bytes < 8 * 1024, "{}", g.wire_bytes);
 }

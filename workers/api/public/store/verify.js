@@ -5,7 +5,7 @@
 // receipt line carries a CERTIFICATE -- the dish id, the price, its leaf index, the leaf count, the
 // root and the path of sibling hashes -- as a QR that opens /store/verify.html. This page climbs the
 // path to the root IN THE BROWSER, with the wasm32 reader (`bw_verify`, `verify.wasm`, the same code
-// as `bebop_store::merkle`), so a price check needs no network. When the network is there, it also
+// as `einstore::merkle`), so a price check needs no network. When the network is there, it also
 // compares the root with the venue's live manifest and says whether that root is signed.
 //
 // PURE where it can be: the producer (`pricesOf`, `certFor`) and the codecs take their inputs and

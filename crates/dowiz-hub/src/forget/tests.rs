@@ -3,7 +3,7 @@
 //! unchanged, `holds(old_tip)` true."
 
 use super::*;
-use bebop_store::evlog::Record;
+use einstore::evlog::Record;
 use crate::chain::{record_id, NONCE_LEN};
 
 const ACTOR: [u8; 32] = [0xA1; 32];

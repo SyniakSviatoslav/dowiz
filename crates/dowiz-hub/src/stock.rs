@@ -127,8 +127,8 @@ mod tests;
 
 // ── the log ─────────────────────────────────────────────────────────────────
 
-use bebop_store::evlog::{EvLog, Record};
-use bebop_store::Store;
+use einstore::evlog::{EvLog, Record};
+use einstore::Store;
 
 /// The append-only stock log.
 ///

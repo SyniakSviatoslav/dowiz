@@ -1,4 +1,4 @@
-//! One tenant's hub: the order log, over a bebop store, as PURE logic.
+//! One tenant's hub: the order log, over an einfile, as PURE logic.
 //!
 //! Bytes in, bytes out. No filesystem, no network, no clock, no randomness — the
 //! caller supplies the store image, the time and the ids, and gets a new image
@@ -9,7 +9,7 @@
 //!
 //! WHY AN EVENT LOG AND NOT A TABLE. An order's state is a FOLD over what
 //! happened to it, not a mutable row — the kernel's own decide/fold law. The
-//! bebop event log appends ONE object per event and relinks the root, which is
+//! einfile event log appends ONE object per event and relinks the root, which is
 //! O(1); the KV layout would rewrite the world on every put. The log is the
 //! truth and any projection is rebuilt from it.
 //!
@@ -69,7 +69,7 @@ pub mod rank;
 pub mod snn;
 /// W-S0 2026-10-08: sheaf S0 -- the gluing check for hub ∩ kitchen over the stock log.
 pub mod glue;
-/// W-MG-M1B 2026-10-30: the DOC seal in the hub -- the three seams of `bebop_store::evlog::doc`
+/// W-MG-M1B 2026-10-30: the DOC seal in the hub -- the three seams of `einstore::evlog::doc`
 /// filled with this crate's ids and ML-DSA-65, a sealed hub image, and the level-1 anchors.
 pub mod doc_seal;
 // DG10: crypto-shredding for new logs; off by default (see Cargo.toml `shred`).
@@ -94,7 +94,7 @@ pub use error::HubError;
 pub use event::{Event, EventKind, Quarantined};
 pub use usage::Usage;
 /// What a log load proved, for the next load of the same bytes (W-HUBCRC, `Hub::load_since`).
-pub use bebop_store::verify::ChainMark as LogMark;
+pub use einstore::verify::ChainMark as LogMark;
 pub(crate) use chain::{body_of, chain_id, chain_is_whole, hex32};
 pub(crate) use error::e_is_full;
 pub(crate) use event::{decode, decode_or_reason};
@@ -103,12 +103,12 @@ pub(crate) use usage::{ceiling_cells, usage_of, usage_of_kind};
 /// oracle `KvImage::load`'s mapping must agree with; no production caller since W-ES-P3.
 #[cfg(test)]
 mod kvload;
-/// W-ES-P3: a KV image held through the bebop library API (`Db` + a pending `Batch`).
+/// W-ES-P3: a KV image held through the einfile library API (`Db` + a pending `Batch`).
 mod kvimage;
 mod quarantine;
 pub(crate) use quarantine::{chain_is_whole_seen, Seen};
 
-use bebop_store::Store;
+use einstore::Store;
 
 /// Default image size for a fresh hub. 4 MiB holds a few thousand orders at the
 /// measured 47 cells per append, and the image is only as large as it is written.

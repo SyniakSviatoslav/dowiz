@@ -75,7 +75,7 @@ const FOLD_SHA: &str = "d83a1bd5b0e1f7940cfa78141b3bba92f2777e229d0f14ea7e38636d
 fn an_old_image_writes_and_folds_byte_equal() {
     let log = old_history();
     // W-ES-P0 writes the anchor (Q5); the golden pins every other byte.
-    let image = hex(&bebop_store::format::without_anchor(&log.to_bytes_trimmed()));
+    let image = hex(&einstore::format::without_anchor(&log.to_bytes_trimmed()));
     let j = log.journal().unwrap();
     let fold = hex(fold_text(&j).as_bytes());
     let checked = log.verify_checkpoints().unwrap();
@@ -92,7 +92,7 @@ fn an_old_image_writes_and_folds_byte_equal() {
 #[test]
 fn m0_a_pre_m0_stock_image_reloads_byte_equal_and_folds_as_the_nonced_one() {
     use crate::chain::{verify_id, IdScheme};
-    use bebop_store::evlog::EvLog;
+    use einstore::evlog::EvLog;
     let new = old_history();
     let bodies: Vec<String> = new.since(&[0u8; 32]).unwrap().iter().map(|r| rec_body(r).to_string()).collect();
     assert!(new.since(&[0u8; 32]).unwrap().iter().all(|r| nonced(r)), "every record this build writes is nonced");
@@ -101,7 +101,7 @@ fn m0_a_pre_m0_stock_image_reloads_byte_equal_and_folds_as_the_nonced_one() {
     let bytes = old.to_bytes_trimmed();
     assert_eq!(StockLog::load(&bytes).unwrap().to_bytes_trimmed(), bytes, "a load and a save move no byte of an old image");
     let schemes = |log: &StockLog| -> Vec<Option<IdScheme>> {
-        EvLog::walk(&bebop_store::Store::from_bytes(&log.to_bytes())).iter().map(verify_id).collect()
+        EvLog::walk(&einstore::Store::from_bytes(&log.to_bytes())).iter().map(verify_id).collect()
     };
     assert!(schemes(&old).iter().all(|s| *s == Some(IdScheme::LegacyChained)), "every old record is a legacy id");
     assert!(schemes(&new).iter().all(|s| *s == Some(IdScheme::Sha256)), "every new record is sha256");

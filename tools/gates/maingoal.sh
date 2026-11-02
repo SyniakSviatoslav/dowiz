@@ -5,7 +5,7 @@
 #   (a) a device writes and seals with real ML-DSA-65; forget + cut + anchor through SealedHub
 #       (crates/dowiz-hub/src/bin/maingoal_device.rs: every record, seal and mark is the library's);
 #   (b) a third party with the file, the public keys and no repo checks it: `doc_verify` and
-#       `anchor verify` for signatures, bebop-verify.py and .mjs for structure, and they agree on
+#       `anchor verify` for signatures, ein-verify.py and .mjs for structure, and they agree on
 #       every shared counter, head and anchor;
 #   (c) a clean Node reads the archive with the reader embedded IN it (examples/read.mjs).
 #   (d) two offline devices, each with its own key and its own file, one genesis, no server, merge
@@ -15,7 +15,7 @@
 #
 # WHAT THIS IS NOT. Not M7 whole: §7's row also wants the three scenarios in a browser on qa-durres
 # (no deploys, operator 10-31). Level 1 here is one real ML-DSA-65 platform mark by THIS RUN'S key:
-# no platform key exists in production and no Bitcoin attestation is involved. bebop-verify counts
+# no platform key exists in production and no Bitcoin attestation is involved. ein-verify counts
 # seals and checks none (checked=0); kill `seal-old` shows that as a fact, not a defect.
 #
 # PREBUILT BINARIES. run-all has no compiler time for a release build of dowiz-hub, so this gate runs
@@ -31,12 +31,12 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 HERE="$ROOT/tools/gates"
 BIN="${MAINGOAL_BIN:-$ROOT/crates/dowiz-hub/target/maingoal}"
 BINS="doc_verify anchor maingoal_device maingoal_merge"
-FIX="$ROOT/crates/bebop-wasm/fixtures"
+FIX="$ROOT/crates/dowiz-hub-wasm/fixtures"
 PHONE="+355691111111"
 say() { echo "maingoal: $*"; }
 
 stamp_text() {
-  src=$(cd "$ROOT/crates" && find bebop-crc bebop-image bebop-kv bebop-log bebop-io bebop-store bebop-sig-mldsa dowiz-core dowiz-hub \
+  src=$(cd "$ROOT/crates" && find einfile-crc einfile-image einfile-kv einfile-log einfile-io einstore einfile-sig-mldsa dowiz-core dowiz-hub \
     -type d -name target -prune -o -type f \( -name '*.rs' -o -name 'Cargo.toml' -o -name 'Cargo.lock' \) -print \
     | LC_ALL=C sort | xargs sha256sum | sha256sum | cut -d' ' -f1)
   bins=$(cd "$BIN" && sha256sum $BINS 2>/dev/null | sha256sum | cut -d' ' -f1)
@@ -78,8 +78,8 @@ P="$(dirname "$(command -v node)"):$(dirname "$(command -v python3)")"
 clean() { d=$1; shift; (cd "$d" && env -i PATH="$P" "$@"); }
 field() { printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -1; }
 
-# THE READER the archive embeds: the COMMITTED one, out of bebop-verify.mjs, against its own digest
-python3 -I - "$ROOT/tools/verify/bebop-verify.mjs" "$DEV/reader.wasm" <<'PY' || { say "RED cannot take the reader out of bebop-verify.mjs"; exit 1; }
+# THE READER the archive embeds: the COMMITTED one, out of ein-verify.mjs, against its own digest
+python3 -I - "$ROOT/tools/verify/ein-verify.mjs" "$DEV/reader.wasm" <<'PY' || { say "RED cannot take the reader out of ein-verify.mjs"; exit 1; }
 import base64, hashlib, re, sys
 t = open(sys.argv[1]).read()
 w = base64.b64decode(re.search(r'^const WASM_B64 = "([^"]*)";$', t, re.M).group(1))
@@ -89,7 +89,7 @@ open(sys.argv[2], "wb").write(w)
 PY
 READER_SHA=$(sha256sum "$DEV/reader.wasm" | cut -d' ' -f1)
 for b in $BINS; do cp "$BIN/$b" "$DEV/" || exit 1; done
-cp "$ROOT/docs/FORMAT-BEBOP-IMAGE-v2.md" "$DEV/format.md"
+cp "$ROOT/docs/FORMAT-EINFILE-v2.md" "$DEV/format.md"
 
 # ── (a) THE DEVICE ───────────────────────────────────────────────────────────────────────────
 SEED=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')
@@ -113,7 +113,7 @@ done
 
 # ── (b) THE THIRD PARTY: the files, the public keys, no repo ─────────────────────────────────
 for f in doc_verify anchor; do cp "$BIN/$f" "$AUD/"; done
-cp "$ROOT/tools/verify/bebop-verify.py" "$ROOT/tools/verify/bebop-verify.mjs" "$ROOT/examples/read.mjs" "$AUD/"
+cp "$ROOT/tools/verify/ein-verify.py" "$ROOT/tools/verify/ein-verify.mjs" "$ROOT/examples/read.mjs" "$AUD/"
 cp "$DEV/hub.sealed" "$DEV/history.sealed" "$DEV/archive.store" "$AUD/"
 PPK=$(cat "$DEV/platform.pk"); ACTOR=$(cat "$DEV/device.actor")
 THEIRS=$(python3 -I -c 'import hashlib,sys;print(hashlib.sha256(bytes.fromhex(open(sys.argv[1]).read())).hexdigest())' "$DEV/device.pk")
@@ -121,8 +121,8 @@ if [ "$THEIRS" = "$ACTOR" ]; then say "the auditor derives the actor id from the
 V_ARGS="--platform-pk $PPK --trust $ACTOR"
 dv() { clean "$AUD" ./doc_verify "$1" $V_ARGS; }
 av() { clean "$AUD" ./anchor verify "$1" --platform-key "$PPK"; }
-py() { clean "$AUD" python3 -I ./bebop-verify.py "$@"; }
-nd() { clean "$AUD" node ./bebop-verify.mjs "$@"; }
+py() { clean "$AUD" python3 -I ./ein-verify.py "$@"; }
+nd() { clean "$AUD" node ./ein-verify.mjs "$@"; }
 before=$fail
 WANT_HUB="doc records=4 chained=4 legacy=0 redacted=0 broken=0 seals_ok=4 seals_bad=0 forks=0 keys=1 admitted=1 anchors=2 anchors_ok=1 anchors_bad=0 anchors_unchecked=1 anchors_cut=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0 tree_unsigned=0 merges=0 merges_bad=0"
 WANT_HIST="doc records=12 chained=9 legacy=1 redacted=2 broken=0 seals_ok=6 seals_bad=0 forks=0 keys=1 admitted=1 anchors=1 anchors_ok=1 anchors_bad=0 anchors_unchecked=0 anchors_cut=0 segments=0 cut=0 cut_redacted=0 declared=2 keys_disagree=0 revokes_unsettled=0 tombs_foreign=0 unsealed=0 tree_unsigned=0 merges=0 merges_bad=0"

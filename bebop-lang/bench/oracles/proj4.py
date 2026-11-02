@@ -1,5 +1,5 @@
 # LV-INC-A proj4 oracle: the self-test of bench/vs_rust/std_tests/proj4.bp, derived from the SPEC
-# (crates/bebop-store/src/proj/kinds.rs header; docs/FORMAT-BEBOP-IMAGE-v2.md §9.3), never from the program:
+# (crates/einstore/src/proj/kinds.rs header; docs/FORMAT-EINFILE-v2.md §9.3), never from the program:
 #   1000  the two OUT layout digests proj.bp pins are st_digest of their layout strings -- st_digest is the
 #         low 32 bits (big-endian) of sha256 over the string (proj.rs digests_are_st_digest_of_their_layouts);
 #         recomputed here and compared with the values the spec names (OUTB 4157677073, OUTZ 85289679).

@@ -17,15 +17,15 @@
 //! bad record whose `prev` id does not name the record its `next` ref leads to (a changed
 //! ref cannot be told from a changed `prev`, so both refuse).
 
-use bebop_store::evlog::EvLog;
-use bebop_store::verify::{ChainMark, ChainScan};
-use bebop_store::{BadCrc, Store};
+use einstore::evlog::EvLog;
+use einstore::verify::{ChainMark, ChainScan};
+use einstore::{BadCrc, Store};
 
 use crate::{Hub, HubError};
 
 /// `chain_is_whole` for an append log under the quarantine policy: refuses what breaks
 /// the walk, and hands back the scan (its records quarantined, newest first) and the mark
-/// for these bytes. With a `mark` (W-HUBCRC, `bebop_store::verify::since`) the records it
+/// for these bytes. With a `mark` (W-HUBCRC, `einstore::verify::since`) the records it
 /// covers are not hashed again; the root, the walk, the count and every NEWER record are.
 /// Every loader of an append log (`Hub`, `LogImage`, `StockLog`) comes through here.
 ///

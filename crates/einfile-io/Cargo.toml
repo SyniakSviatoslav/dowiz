@@ -1,0 +1,29 @@
+[package]
+name = "einfile-io"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/SyniakSviatoslav/dowiz"
+readme = "README.md"
+description = "How einfile images reach a device: the Device trait, the commit plan, the Writer (recovery on open, Poisoned after a failed barrier), FileDevice (unix: pwrite + fdatasync, lock file) and the enumerated crash harness. std; builds for wasm32 (FileDevice is unix-only)."
+
+[dependencies]
+einfile-image = { path = "../einfile-image", version = "0.1.0", features = ["std"] }
+# NORMAL dependency: Writer::commit_delta appends through kv::delta (W-ES-P2).
+einfile-kv = { path = "../einfile-kv", version = "0.1.0", features = ["std"] }
+
+# W-MG-M1: `docverify` -- the DOC root's counters from bytes (einfile-log's `doc`), behind `doc`
+# and OFF by default so the wasm32 reader's byte ratchet (dowiz-hub-wasm bytes.baseline) carries
+# nothing of it until M5 teaches that reader DOC. MIT OR Apache-2.0 like this crate.
+einfile-log = { path = "../einfile-log", version = "0.1.0", optional = true }
+
+[features]
+default = []
+# W-ES-P8C: Db / Writer write and read KV v4 (the B+tree): einfile-kv's `tree`. Off by default (P8d).
+tree = ["einfile-kv/tree"]
+# W-MG-M1: `docverify::verify_doc`.
+doc = ["dep:einfile-log"]
+
+[profile.release]
+opt-level = 3

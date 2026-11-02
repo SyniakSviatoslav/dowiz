@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT OR Apache-2.0
-"""bebop-verify (Python half): ONE FILE, STANDARD LIBRARY ONLY, no repo, no wasm, no C.
+"""ein-verify (Python half): ONE FILE, STANDARD LIBRARY ONLY, no repo, no wasm, no C.
 
-    python3 bebop-verify.py <image> [--dump] [--verify]
+    python3 ein-verify.py <image> [--dump] [--verify]
 
 Prints ONE line, the line every reader of docs/STATUS-CODES.md prints --
     kv status=<s> n=<entries> root=<fold>     log status=<s> n=<records> root=<fold>
@@ -12,15 +12,15 @@ every entry (key order) or every record (oldest first; a DOC's heads first). `--
 a DOC's counters on stdout:
     verify records= chained= legacy= redacted= broken= forks= seals= checked= heads= keys= genesis=
 
-WHAT IT CHECKS, in the library's order (docs/FORMAT-BEBOP-IMAGE-v2.md; bebop-image
-`pick_checked_in` §3.1 -> 1 and `last_commit_in` §7 -> 10 / 41; then the root's family: bebop-kv
+WHAT IT CHECKS, in the library's order (docs/FORMAT-EINFILE-v2.md; einfile-image
+`pick_checked_in` §3.1 -> 1 and `last_commit_in` §7 -> 10 / 41; then the root's family: einfile-kv
 `Kv::load_checked` v1-v3 and `TreeIn::verify` v4 -- every reached object's crc -> 10, any claim or
-rule that does not hold -> 2, a version above 4 that is not a DOC -> 12; bebop-log `EvLog::chain_crc`
--> 10, the count -> 4; bebop-log `Doc::open` + `doc::verify` §9.4 -- the root, its log, HEADS, KEYS,
+rule that does not hold -> 2, a version above 4 that is not a DOC -> 12; einfile-log `EvLog::chain_crc`
+-> 10, the count -> 4; einfile-log `Doc::open` + `doc::verify` §9.4 -- the root, its log, HEADS, KEYS,
 SPEC crc -> 10, then the counters). A green line says the bytes are whole and the layout holds; it
 is not a proof that the content is true. A DOC's seals are COUNTED, never checked: this file has
 no signature algorithm (`checked=0`). This is a THIRD implementation beside the Rust library (the
-wasm half) and crates/bebop-wasm/oracle.py, sharing code with neither; conformance.sh and
+wasm half) and crates/dowiz-hub-wasm/oracle.py, sharing code with neither; conformance.sh and
 tools/verify/gate.sh hold all of them to one answer on every fixture.
 
 GENERATED: tools/verify/assemble.sh concatenates tools/verify/py/*.py into this one file so the
@@ -51,7 +51,7 @@ MAX_BLOB_BYTES = 16 << 20
 FLAG_SHA256, NONCE_LEN = 2, 16
 ID_TAG, SEG_TAG = b"ein-record/1", b"ein-seg/1"  # id v2, the SEG hash (W-MG-HOLES; FORMAT §9.2, §9.4)
 REVOKE_MARK, REDACTED_BIT = b"ein-revoke/2", 0x80
-# Word for word bebop-wasm-reader `status.rs` TABLE: tools/gates/maingoal.sh holds the surfaces to one text.
+# Word for word einfile-reader `status.rs` TABLE: tools/gates/maingoal.sh holds the surfaces to one text.
 WORDS = {0: "OK: read; n = entries or records, root = the FNV-1a 64 fold (a DOC's root is its log's fold)",
          1: "NO_SUPERBLOCK: no valid superblock, or the live one was refused structurally (arena_used or PartTab outside, PartTab misplaced or its crc bad, root outside)",
          2: "NOT_A_KV: a superblock but no KV root, or a KV claim (a slice, a chain, a v4 rule) that does not hold, or a DOC whose SPEC or v1-v3 TREE this reader does not read",

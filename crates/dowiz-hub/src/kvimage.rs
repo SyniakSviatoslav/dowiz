@@ -1,4 +1,4 @@
-//! `KvImage`: one KV image of a hub, held through the bebop library API (W-ES-P3,
+//! `KvImage`: one KV image of a hub, held through the einfile library API (W-ES-P3,
 //! R-EMBED-STORE §5 row P3).
 //!
 //! What `Catalog`, `Settings`, `Roster`, `Posts` and `Table` each did by hand -- a `Store`, a
@@ -26,7 +26,7 @@
 
 use std::ops::Bound;
 
-use bebop_store::{Batch, Db, Detached, Durability, Options, Refusal, Verify};
+use einstore::{Batch, Db, Detached, Durability, Options, Refusal, Verify};
 
 use crate::HubError;
 
@@ -152,7 +152,7 @@ impl KvImage {
     pub(crate) fn compacted_bytes(&self, capacity: usize) -> Result<Vec<u8>, HubError> {
         let r = self.db.begin_read();
         let entries = r.staged(&self.pending).entries().map_err(Refusal::from)?;
-        Ok(bebop_store::kv::compacted_from(entries.iter().map(|(k, v)| (k.as_bytes(), v.as_bytes())), capacity, None)?)
+        Ok(einstore::kv::compacted_from(entries.iter().map(|(k, v)| (k.as_bytes(), v.as_bytes())), capacity, None)?)
     }
 
     /// Write the pending writes into the image and hand back its bytes. The caller persists
@@ -175,7 +175,7 @@ impl KvImage {
         let bytes = {
             let r = self.db.begin_read();
             let entries = r.staged(&self.pending).entries().map_err(Refusal::from)?;
-            bebop_store::kv::compacted_from_fit(entries.iter().map(|(k, v)| (k.as_bytes(), v.as_bytes())), self.ceiling, None)?
+            einstore::kv::compacted_from_fit(entries.iter().map(|(k, v)| (k.as_bytes(), v.as_bytes())), self.ceiling, None)?
         };
         self.db = Db::from_bytes(&bytes, options(self.ceiling))?;
         self.pending = Batch::new(self.db.options().limits);

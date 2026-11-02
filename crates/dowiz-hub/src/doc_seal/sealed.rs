@@ -3,11 +3,11 @@
 //! (`HubIds`) and verifier (`MlDsa65`). Split out of `doc_seal.rs` for the 300-line gate; the
 //! public names stay at `doc_seal::{SealedHub, KIND_KEYOP, MIN_SEALED_BYTES}`.
 
-use bebop_store::evlog::doc::seal::read_heads;
-use bebop_store::evlog::doc::seg::{frontier_of, read_segs};
-use bebop_store::evlog::doc::{self, AnchorCheck, Checked, Doc, DocError, KeyOp, Report, Trust};
-use bebop_store::evlog::{EvLog, Record};
-use bebop_store::{Store, StoreError};
+use einstore::evlog::doc::seal::read_heads;
+use einstore::evlog::doc::seg::{frontier_of, read_segs};
+use einstore::evlog::doc::{self, AnchorCheck, Checked, Doc, DocError, KeyOp, Report, Trust};
+use einstore::evlog::{EvLog, Record};
+use einstore::{Store, StoreError};
 
 use super::history::KIND_DECL;
 use super::{DeviceKey, HubIds, MlDsa65};

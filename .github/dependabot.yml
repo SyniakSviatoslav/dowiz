@@ -17,13 +17,13 @@ updates:
     directories:
       - /crates/dowiz-core
       - /crates/dowiz-hub
-      - /crates/bebop-image
-      - /crates/bebop-kv
-      - /crates/bebop-log
-      - /crates/bebop-io
-      - /crates/bebop-store
-      - /crates/bebop-sig-mldsa
-      - /crates/bebop-wasm
+      - /crates/einfile-image
+      - /crates/einfile-kv
+      - /crates/einfile-log
+      - /crates/einfile-io
+      - /crates/einstore
+      - /crates/einfile-sig-mldsa
+      - /crates/dowiz-hub-wasm
       - /workers/api
       - /tools/gen-vocab
     schedule: { interval: weekly }

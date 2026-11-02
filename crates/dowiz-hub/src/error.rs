@@ -1,7 +1,7 @@
 //! What the order log refuses, and the one question every caller asks of a
 //! refusal: is the image simply full?
 
-use bebop_store::StoreError;
+use einstore::StoreError;
 
 #[derive(Debug)]
 pub enum HubError {
@@ -27,10 +27,10 @@ pub enum HubError {
     Corrupt { claimed: usize, chained: Option<usize> },
     /// AN OBJECT'S PAYLOAD DOES NOT MATCH THE CRC ITS HEADER CARRIES (W-CRC, 2026-10-05):
     /// one changed byte of a value or a record, which used to load and be served as the
-    /// truth. Names the object (its cell index) and both numbers; see `bebop_store::verify`.
-    BadCrc(bebop_store::BadCrc),
+    /// truth. Names the object (its cell index) and both numbers; see `einstore::verify`.
+    BadCrc(einstore::BadCrc),
     /// THE ROOT NAMES A LOG VERSION THIS BUILD DOES NOT KNOW (W-MG-M1B): a DOC root
-    /// (`bebop_store::evlog::doc`, root-version 5) under a loader that reads EvLog v1-v2.
+    /// (`einstore::evlog::doc`, root-version 5) under a loader that reads EvLog v1-v2.
     /// Refused BY NAME before the walk, as every reader of the format must (FORMAT §9: an
     /// unknown version is a refusal, never a guess) -- read as a log, a DOC's refs would have
     /// been walked as records and the answer would have been `Corrupt`, which names damage,
@@ -42,7 +42,7 @@ impl HubError {
     /// Is this "the image has no room left", and how much was wanted?
     ///
     /// Exposed as a method rather than left to the caller to pattern-match,
-    /// because `bebop_store` is this crate's dependency and not everybody
+    /// because `einstore` is this crate's dependency and not everybody
     /// else's -- and a caller reduced to matching on a Debug string would be
     /// one rename away from silently losing the case.
     pub fn arena_full(&self) -> Option<(i64, i64)> {
@@ -56,19 +56,19 @@ impl HubError {
 /// The library's refusals as this crate's errors (W-ES-P3), with NO new variant, so every
 /// caller's match (workers/api) stands: a changed byte keeps its name (`BadCrc`), "this is not a
 /// hub image" stays `NotAHub`, a full image stays `Store(ArenaFull)` (`arena_full`, `e_is_full`).
-impl From<bebop_store::Refusal> for HubError {
-    fn from(e: bebop_store::Refusal) -> Self {
-        use bebop_store::sim::Why;
-        use bebop_store::format::Anchor;
-        use bebop_store::Refusal as R;
+impl From<einstore::Refusal> for HubError {
+    fn from(e: einstore::Refusal) -> Self {
+        use einstore::sim::Why;
+        use einstore::format::Anchor;
+        use einstore::Refusal as R;
         match e {
             R::BadCrc(b) => HubError::BadCrc(b),
             // A torn last commit in an image whose writes are atomic is a changed byte: name the
             // cell where the proof failed and both numbers, as BadCrc does for an object.
             R::LastCommit(Why::Anchor(Anchor::Torn { mark, want, got, .. })) => {
-                HubError::BadCrc(bebop_store::BadCrc { obj: mark.max(0) as usize, want, got })
+                HubError::BadCrc(einstore::BadCrc { obj: mark.max(0) as usize, want, got })
             }
-            R::LastCommit(Why::Walk { at }) | R::ObjectBad { at } => HubError::BadCrc(bebop_store::BadCrc { obj: at, want: 0, got: None }),
+            R::LastCommit(Why::Walk { at }) | R::ObjectBad { at } => HubError::BadCrc(einstore::BadCrc { obj: at, want: 0, got: None }),
             R::LastCommit(_) | R::Pick(_) | R::Recover { .. } | R::NotKv | R::UnknownVersion(_) => HubError::NotAHub,
             R::ArenaFull { need, capacity } => HubError::Store(StoreError::ArenaFull { need, capacity }),
             R::Limit { what, got, max } => HubError::Store(StoreError::Limit { what, got, max }),

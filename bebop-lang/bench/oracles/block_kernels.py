@@ -1,4 +1,4 @@
-# Oracle for gate `block_kernels` (LV-COL-E, R-BEBOP-LEVERS §5.4). INDEPENDENT of crates/bebop-wasm/oracle.py:
+# Oracle for gate `block_kernels` (LV-COL-E, R-BEBOP-LEVERS §5.4). INDEPENDENT of crates/dowiz-hub-wasm/oracle.py:
 # it reads the three committed sales fixtures (sales_empty, sales_small, sales) from the bytes alone --
 # crc32 trailer, the header's schema K64 against the `sales:v1(...)` string, each column by its §B.2
 # descriptor (len, offset) -- and computes the kernel line std_tests/block_kernels.bp prints:

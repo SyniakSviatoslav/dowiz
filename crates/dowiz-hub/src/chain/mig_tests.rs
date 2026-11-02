@@ -6,8 +6,8 @@
 //! safe shape is expand/contract: this build reads both schemes and WRITES legacy until a
 //! venue is flipped, and a flip is one-way in the bytes.
 
-use bebop_store::evlog::{EvLog, Record, FLAG_SHA256};
-use bebop_store::Store;
+use einstore::evlog::{EvLog, Record, FLAG_SHA256};
+use einstore::Store;
 
 use crate::chain::{legacy_id_chained, record_id, NONCE_LEN};
 use crate::logimage::LogImage;
@@ -184,14 +184,14 @@ fn keep_reseals_a_legacy_log_as_legacy() {
 fn a_stock_records_flags_follow_its_nonce() {
     use crate::chain::verify_id;
     use crate::stock::{StockEvent, StockLog};
-    use bebop_store::evlog::{FLAG_NONCE_DERIVED, FLAG_SHA256};
+    use einstore::evlog::{FLAG_NONCE_DERIVED, FLAG_SHA256};
     let write = |seed: Option<[u8; 32]>| {
         let mut log = StockLog::create_sized(16 * 1024).unwrap();
         if let Some(s) = seed {
             log.set_entropy(s);
         }
         log.append(&StockEvent::Received { item: "rice".into(), qty: 5 }).unwrap();
-        EvLog::walk(&bebop_store::Store::from_bytes(&log.to_bytes_trimmed()))
+        EvLog::walk(&einstore::Store::from_bytes(&log.to_bytes_trimmed()))
     };
     let derived = &write(None)[0];
     assert_eq!(derived.flags, FLAG_SHA256 | FLAG_NONCE_DERIVED);

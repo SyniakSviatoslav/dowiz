@@ -1,10 +1,10 @@
-# Audit brief: the bebop DOC file, its seals and its readers
+# Audit brief: the einfile DOC file, its seals and its readers
 
 For an external cryptography and security auditor, day one. Written 2026-11-01 from reading the tree; **nothing was compiled or run to write it**.
 
 - **Commit under audit:** `<COMMIT: maintainer fills this in; the text was read from the unmerged working tree of branch mg-batch7>`. Full paths are relative to the repository root; a short name such as `doc/count.rs` or `dsa.rs` is the file of that name in the crate the same row or section names (§1, §9).
 - **Evidence rule.** Each claim names the file or test it comes from. A mark **[lane record]** means the number comes from a working note that is not in the repository: treat it as a pointer and reproduce it. A test named here exists; that it passes at your commit is what §11 is for.
-- **Normative text:** `docs/FORMAT-BEBOP-IMAGE-v2.en.md` (below "FORMAT"), which rules over the code (FORMAT header, "Authority"). Status vocabulary: `docs/STATUS-CODES.md`. Reporting channel: `SECURITY.md`.
+- **Normative text:** `docs/FORMAT-EINFILE-v2.en.md` (below "FORMAT"), which rules over the code (FORMAT header, "Authority"). Status vocabulary: `docs/STATUS-CODES.md`. Reporting channel: `SECURITY.md`.
 
 ## 1. Scope
 
@@ -13,13 +13,13 @@ For an external cryptography and security auditor, day one. Written 2026-11-01 f
 | Area | Where |
 |---|---|
 | The format: container, DOC, SEAL, KEY, SEG, ANCH, SPEC | FORMAT §1-§14 |
-| The verifier: counters, `holds`, admission, revocation, declarations, budgets | `crates/bebop-log/src/doc/` (`verify`, `count`, `seals`, `settle`, `declare`, `budget`, `frontier`, `seg`, `forgotten`, `merge`, `cut`) |
-| Container and KV readers | `crates/bebop-image`, `crates/bebop-kv`, `crates/bebop-log/src/lib.rs` |
+| The verifier: counters, `holds`, admission, revocation, declarations, budgets | `crates/einfile-log/src/doc/` (`verify`, `count`, `seals`, `settle`, `declare`, `budget`, `frontier`, `seg`, `forgotten`, `merge`, `cut`) |
+| Container and KV readers | `crates/einfile-image`, `crates/einfile-kv`, `crates/einfile-log/src/lib.rs` |
 | The hub's filling of the seams: ids, signer, verifier, sealed writes | `crates/dowiz-hub/src/doc_seal.rs`, `doc_seal/`, `chain/scheme.rs` |
 | The signature and hash primitives the seal rests on | `crates/dowiz-core/src/pq/dsa.rs`, `pq/keccak.rs`, the sha256 code of §9 |
 | The auditor's tool | `crates/dowiz-hub/src/bin/doc_verify.rs` |
-| Readers that carry no signature code | `tools/verify/py/*.py` (assembled to `bebop-verify.py`), `crates/bebop-wasm-reader`, `crates/bebop-wasm/oracle.py` |
-| The self-reading archive and its host | FORMAT §9.5, `examples/read.mjs`, `tools/verify/bebop-verify.mjs` |
+| Readers that carry no signature code | `tools/verify/py/*.py` (assembled to `ein-verify.py`), `crates/einfile-reader`, `crates/dowiz-hub-wasm/oracle.py` |
+| The self-reading archive and its host | FORMAT §9.5, `examples/read.mjs`, `tools/verify/ein-verify.mjs` |
 | Level 1 anchors | `crates/dowiz-hub/src/doc_seal/{ots,tsa,roughtime}.rs`, FORMAT §9.4 ANCH |
 
 **Out of scope for this engagement unless agreed**
@@ -62,7 +62,7 @@ Consequences that bind this brief:
 - `Trust::Only` brings ids, not keys, so the verifier recomputes `actor_of(pk)` for every key, roots included (FORMAT §9.4). The KEY row is unsigned. Before ATK hole 1 this comparison did not exist.
 - There are no roles: "ANY key valid at its own seq may revoke ANY key, itself and a root included", and a REVOKE is final (FORMAT §9.4).
 - A TRUNCATE is effective only from a root of the fold's trust (`declare.rs:97`). A FORGOTTEN counts from the record's author or a root (FORMAT §9.4 "Who may erase whom").
-- A **blind reader** (no signature code) has `checked = 0` and `holds` false whatever else it prints, and must say so in words. Python, wasm32 and the oracle are blind; `doc_verify` is the only reference tool that judges signatures (`crates/bebop-wasm-reader/src/ids.rs` header; FORMAT §9.0).
+- A **blind reader** (no signature code) has `checked = 0` and `holds` false whatever else it prints, and must say so in words. Python, wasm32 and the oracle are blind; `doc_verify` is the only reference tool that judges signatures (`crates/einfile-reader/src/ids.rs` header; FORMAT §9.0).
 - The embedded wasm reader is testimony, not authority (FORMAT §9.5): it runs only under a host's pin.
 
 ## 4. Threat model
@@ -72,7 +72,7 @@ The adversary always holds the whole file and may rewrite every unsigned cell. U
 | Adversary | Has | Should fail to | Where tested |
 |---|---|---|---|
 | **A0 Forger** | the file, no key of it | change, add, remove or reorder anything `holds` covers | `atk_holes`, `atk_caught`, `atk2_seq` |
-| **A1 Thief of a non-root key** | one admitted key | hide a REVOKE, or cut | `crates/bebop-log/src/doc/settle/tests.rs`, `doc/tam_tests.rs` (`h1_*`) |
+| **A1 Thief of a non-root key** | one admitted key | hide a REVOKE, or cut | `crates/einfile-log/src/doc/settle/tests.rs`, `doc/tam_tests.rs` (`h1_*`) |
 | **A2 Holder of a revoked key** | a key past its `after_seq` | sign past `after_seq`, back-date an ADMIT | `doc/tam_tests.rs` (`h2_*`), `settle/tests.rs` |
 | **A3 Thief of a root** | a root key | nothing is promised: §14 "A stolen root" | pinned `limit_a_stolen_root_cuts_a_revoke_away` |
 | **A4 Author of a hostile file** | any bytes | crash, hang, out-allocate or disagree among readers | `atk2_dos`, `atk5_dos`, `tools/gates/atk3*` |
@@ -113,7 +113,7 @@ The adversary always holds the whole file and may rewrite every unsigned cell. U
 | L7 | Swapping files of one owner | L15 | What a MERGE saw |
 | L8 | Order across devices | L16 | After a rotation |
 
-Also in FORMAT §14: **Status 0 is not `holds`.** A forged TRUNCATE can sit at status 0 through a tombstone's unbound `prev`, with `holds` false. It is the model's trace L3t, and `tam_l3t_` in `crates/bebop-log/src/doc/tam_tests.rs` builds it.
+Also in FORMAT §14: **Status 0 is not `holds`.** A forged TRUNCATE can sit at status 0 through a tombstone's unbound `prev`, with `holds` false. It is the model's trace L3t, and `tam_l3t_` in `crates/einfile-log/src/doc/tam_tests.rs` builds it.
 
 L9 matters most for a first read: "Live data is all legacy, so a `seal_hub` of a real venue is exposed on its pre-seal records until those records leave the file", and FNV preimages are untested. L2 and L3 are theorems of the model (`DocLimits.rollback_holds`, `no_file_check_sees_rollback`).
 
@@ -142,11 +142,11 @@ FORMAT §14: "No attack round that tested this format came back empty: each foun
 |---|---|---|---|---|
 | **W-MG-ATK** | `verify` with no private key, `Trust::Only`, real ML-DSA-65 | Holes 1-9 with sub-cases: root pk unbound to its id; `flags` outside the id; tombstone content and identity unbound; `covered` vs `unsealed` over a device's first record; frontier rows unsigned; older SEG counts unsigned; declaration read from an order; TREE unread; actor free under a many-record seal. All forged files printed `HOLDS`, rc 0 [lane record] | **W-MG-HOLES**: id v2 over every cell, `actor_of`, `seg_hash`, FORGOTTEN digests, `tombs_foreign`, `tree_unsigned` | `atk_holes.rs` + `atk_holes/{forger,segments,unbound}.rs` (13 tests); `atk_caught.rs` + `atk_caught/limits.rs` (9, the attacks that were not holes); helper `atk_forge/` |
 | **W-MG-ATK2** | Seq density; cost on hostile files | Seqs never asked to climb, so a keyless record at an unused seq could admit a key; four allocation or time shapes (seal ring, nested SEG, nested ANCH, one KEY on many rows). Worst measured 1678× heap over file on a 156 KB file [lane record] | **W-MG-HOLES2**: `doc/count.rs` dense seq, `doc/budget.rs`, `doc/seals.rs`, `doc/frontier.rs` | `atk2_seq.rs` (5), `atk2_dos.rs` + `atk2_dos/shapes.rs` (11), `h2_honest.rs` (5) |
-| **W-MG-ATK3** | Disagreement between readers on one file; the host | Reader disagreements on `as usize` wrap on wasm32, padding, duplicate keys and rows, missing dense rule; a Python reader with no budget; the archive host (no pin, unbounded memory, raw output). First run 53 HOLE over 66 images, 11 more on the host bootstrap [lane record] | **W-MG-READ**, **W-MG-HOST**, HOLES2 stage 3, **W-MG-FIX**: no reader pads; `tools/gates/cell-usize.sh`; host pin and module outline (§9.5) | `tools/gates/atk3_run.py`, `atk3_cases*.py`, `atk3_bootstrap.py`, `atk3.sh`, `crates/bebop-wasm-reader/tests/atk3_native.rs`. Accepted differences: `NAMED` in `atk3_run.py` |
+| **W-MG-ATK3** | Disagreement between readers on one file; the host | Reader disagreements on `as usize` wrap on wasm32, padding, duplicate keys and rows, missing dense rule; a Python reader with no budget; the archive host (no pin, unbounded memory, raw output). First run 53 HOLE over 66 images, 11 more on the host bootstrap [lane record] | **W-MG-READ**, **W-MG-HOST**, HOLES2 stage 3, **W-MG-FIX**: no reader pads; `tools/gates/cell-usize.sh`; host pin and module outline (§9.5) | `tools/gates/atk3_run.py`, `atk3_cases*.py`, `atk3_bootstrap.py`, `atk3.sh`, `crates/einfile-reader/tests/atk3_native.rs`. Accepted differences: `NAMED` in `atk3_run.py` |
 | **W-MG-ATK4** | The sha256-id migration: expand, flip, rollback, tablets | Holes in rollout and rollback: a flagged record on an unflipped log, a rotation breaking one-way order, unarmed constructors, deploy parsing, a lost flip mark, double adoption on retry | **W-MG-TRANS** | `atk4_expand.rs` (7), `atk4_rotate.rs` (6), `atk4_nonce.rs` (3), `atk4_s2.rs` (10), `tools/deploy/atk4-{rollback,deploy,seams}.test.sh`; `docs/design/MIGRATION-sha256-ids.md` |
 | **W-MG-ATK5** | MERGE and conflict naming | 13 holes [lane record]: a named conflict locking the file for ever; conflicts reading as none; `recheck` depending on file order; a cut laundering a false list; a guard blaming the wrong file; a cut inside one sync; audit cost | **W-MG-MERGE2**: `StockLedger::history`, `CutInsideSeal`, exit 4 `NOT CHECKED`, canonical order from signed edges (`doc_seal/sides.rs`) | `atk5_{stuck,silent,recheck,guard,dos,cutsync,rate,held}.rs` (36), helper `atk5_common/` |
-| **W-MG-TAM** (traces) | Four failures the model predicted, run on real `verify` with toy seams | H1 non-root cut of another device's REVOKE; H2 back-dated ADMIT, REVOKE named no tip; H3 forged TRUNCATE at a forked seq escaping status 75; H4 a MERGE row under a cut names an unsigned tip | H1 root-only TRUNCATE; H2 `ein-revoke/2` with `tip`; H3 a forked seq declares nothing; **H4 stays a limit** (L14). All W-MG-MERGE2 | `crates/bebop-log/src/doc/tam_tests.rs` (flipped to law); original traces in `docs/design/tamarin/rust-traces/tam_tests.rs` |
-| **W-MG-LEAN** (model) | Disagreements between `holds` and its Lean model | Three: a tombstone ring at seq 0; a keyed device starting at any seq on a foreign frontier tip; `merge.rs` folding a non-effective REVOKE | Same lane and MERGE2 (`revoked()` from the effective set) | `crates/bebop-log/src/doc/lean_tests.rs` (`da_`, `db_`, `dc_`) |
+| **W-MG-TAM** (traces) | Four failures the model predicted, run on real `verify` with toy seams | H1 non-root cut of another device's REVOKE; H2 back-dated ADMIT, REVOKE named no tip; H3 forged TRUNCATE at a forked seq escaping status 75; H4 a MERGE row under a cut names an unsigned tip | H1 root-only TRUNCATE; H2 `ein-revoke/2` with `tip`; H3 a forked seq declares nothing; **H4 stays a limit** (L14). All W-MG-MERGE2 | `crates/einfile-log/src/doc/tam_tests.rs` (flipped to law); original traces in `docs/design/tamarin/rust-traces/tam_tests.rs` |
+| **W-MG-LEAN** (model) | Disagreements between `holds` and its Lean model | Three: a tombstone ring at seq 0; a keyed device starting at any seq on a foreign frontier tip; `merge.rs` folding a non-effective REVOKE | Same lane and MERGE2 (`revoked()` from the effective set) | `crates/einfile-log/src/doc/lean_tests.rs` (`da_`, `db_`, `dc_`) |
 | **W-MG-ATK6** | Planned: the newest fixes | **Stopped with nothing tested.** FORMAT §14: "no evidence either way". Candidates in its notes are unproven [lane record] | Nothing | None: no `atk6_*` file exists |
 
 **Before those rounds.** W-MG-REVOKE made revocation a fold over records: alternating fixpoint, `keys_disagree`, `tombs_foreign` (`doc/settle.rs`, `doc/settle/tests.rs`). The 2026-09-27 audit's S1/S2 are the origin of the record walk budget (`docs/audit/2026-09-27-AUDIT.md`, `crates/dowiz-hub/src/store_tests.rs`).
@@ -175,16 +175,16 @@ By title only, from FORMAT §14. No test exists for any. Please treat them as fi
 | **ML-DSA-65** (FIPS 204) | `crates/dowiz-core/src/pq/dsa.rs`, AGPL-3.0-or-later | The header says both "implemented from scratch" and "a faithful, byte-exact port of the pq-crystals reference"; ported from `bebop2-core pq_dsa.rs` on 2026-07-12. An earlier version was not interoperable. **Resolve this wording with the maintainer** | NIST ACVP FIPS204 vsId 42 in `pq/kat/acvp/{key-gen,sig-gen,sig-ver}.json`, run by `pq/dsa/dsa_acvp_tests.rs`: 60 ML-DSA-65 cases, one `#[test]` per tcId (25 keyGen, 20 sigGen, 15 sigVer). The files also hold ML-DSA-44 and -87, which are not run | `dsa.rs` makes no constant-time, side-channel or zeroisation statement (grep finds none) |
 | **ML-KEM-768** (FIPS 203) | `crates/dowiz-core/src/pq/kem.rs`, `kem/ntt.rs`, AGPL | "Algorithms 5-18 as written"; rewritten in P91.2, before which keys could not match the standard | 80 ACVP vectors in `kem/acvp_tests.rs`, provenance `kat/acvp/README-mlkem768.md` | Header: "No constant-time or side-channel review"; only `_internal` exists; no 512/1024. **Not used by seals**; only the backup seal, which is off |
 | **Keccak, SHAKE** (FIPS 202) | `crates/dowiz-core/src/pq/keccak.rs`, AGPL | "Inlined on purpose" | FIPS 202 KAT in the file | Kani proofs under `cfg(kani)` for panic and overflow; "does NOT prove codegen-level constant-time". Whether Kani runs in CI was not checked |
-| **sha256 in the reader** | `crates/bebop-wasm-reader/src/sha256.rs`, MIT OR Apache-2.0 | Own, "~60 lines" | `tests/doc.rs` `sha256_matches_the_fips_vectors` | Its header gives the M0 formula `sha256(prev ‖ payload)`, which is out of date: `ids.rs` uses `id_message` |
-| **sha256 in the hub** | `crates/bebop-store/src/nodekey.rs`, used by `chain/scheme.rs:22` and `doc_seal.rs:61` | Own, "written out below because this crate has zero dependencies" | `nodekey/tests.rs` | Cross-check against the reader's is not named as a test |
-| **sha256, fast** | `crates/bebop-store/src/sha_fast.rs`, `sha_fast/scalar.rs` | Own; AArch64 SHA2, x86_64 SHA-NI, scalar | `sha_fast/tests.rs` `nist_vectors_on_the_dispatching_and_the_scalar_path` | |
+| **sha256 in the reader** | `crates/einfile-reader/src/sha256.rs`, MIT OR Apache-2.0 | Own, "~60 lines" | `tests/doc.rs` `sha256_matches_the_fips_vectors` | Its header gives the M0 formula `sha256(prev ‖ payload)`, which is out of date: `ids.rs` uses `id_message` |
+| **sha256 in the hub** | `crates/einstore/src/nodekey.rs`, used by `chain/scheme.rs:22` and `doc_seal.rs:61` | Own, "written out below because this crate has zero dependencies" | `nodekey/tests.rs` | Cross-check against the reader's is not named as a test |
+| **sha256, fast** | `crates/einstore/src/sha_fast.rs`, `sha_fast/scalar.rs` | Own; AArch64 SHA2, x86_64 SHA-NI, scalar | `sha_fast/tests.rs` `nist_vectors_on_the_dispatching_and_the_scalar_path` | |
 | **sha256, integrity only** | `crates/dowiz-core/src/sha256_hw.rs` | Header: "NOT for cryptographic MACs, signatures" | | Confirm no seal path reaches it |
-| **Merkle tree** | `crates/bebop-store/src/merkle.rs` | RFC 9162 domain separation | `merkle/tests.rs` | SEG `root` can be checked only with the archive |
+| **Merkle tree** | `crates/einstore/src/merkle.rs` | RFC 9162 domain separation | `merkle/tests.rs` | SEG `root` can be checked only with the archive |
 | **Not cryptographic** | CRC-32, FNV-1a 64 | Integrity and fold values. `legacy_id` is FNV-1a ×4; `K64` is "never a proof" (`nodekey.rs`) | | L9 |
 
 **How the seal uses them.**
 
-- `MlDsa65` and `DeviceKey` live in `crates/dowiz-hub/src/doc_seal.rs`; the crates `bebop-log` and `bebop-wasm-reader` hold no signature code (`doc/seams.rs`). `dowiz-core` is a dev-dependency of `bebop-log` only.
+- `MlDsa65` and `DeviceKey` live in `crates/dowiz-hub/src/doc_seal.rs`; the crates `einfile-log` and `einfile-reader` hold no signature code (`doc/seams.rs`). `dowiz-core` is a dev-dependency of `einfile-log` only.
 - Seals are external pure ML-DSA-65 with an empty context, `M' = 00 00 ‖ msg`, `rnd = 0^32` (FORMAT §9.4). Any FIPS 204 library's outer interface produces and checks them.
 - The `alg` registry has one entry, 65. Any other number or length does not verify. Messages carry ASCII tags: `ein-seal/1`, `ein-anchor/1`. Records: `ein-record/1`. Segments: `ein-seg/1`.
 
@@ -211,7 +211,7 @@ By title only, from FORMAT §14. No test exists for any. Please treat them as fi
 
 The Doc files state no `axiom` and no `sorry`. `tools/gates/lean.sh` enforces this by census against `tools/gates/lean.axioms`, whose entries are mostly syscall specifications for the language model.
 
-### Tamarin (`docs/design/tamarin/bebop_seal.spthy`, `README.md`)
+### Tamarin (`docs/design/tamarin/ein_seal.spthy`, `README.md`)
 
 **Status: never parsed, never proved, unless a later run shows otherwise.** Every "expected" is a prediction by hand, and a parse error is a likely first result (README). The prover was unpacked on the development box and running it was refused there.
 
@@ -225,27 +225,27 @@ Not run for this brief. Rust 1.96.1 (`rust-toolchain.toml`). **There is no works
 
 ```sh
 # The library and the seal
-(cd crates/bebop-image && cargo test)
-(cd crates/bebop-kv    && cargo test && cargo test --features tree)
-(cd crates/bebop-log   && cargo test)                 # incl. doc/tam_tests, lean_tests, settle/tests
-(cd crates/bebop-io    && cargo test && cargo test --features tree)
-(cd crates/bebop-store && cargo test)
-(cd crates/bebop-wasm-reader && cargo test)
-(cd crates/bebop-wasm  && cargo test --features decide)
+(cd crates/einfile-image && cargo test)
+(cd crates/einfile-kv    && cargo test && cargo test --features tree)
+(cd crates/einfile-log   && cargo test)                 # incl. doc/tam_tests, lean_tests, settle/tests
+(cd crates/einfile-io    && cargo test && cargo test --features tree)
+(cd crates/einstore && cargo test)
+(cd crates/einfile-reader && cargo test)
+(cd crates/dowiz-hub-wasm  && cargo test --features decide)
 (cd crates/dowiz-hub   && cargo test)                 # every atk*, h2_honest, m2_merge
 # One round
 (cd crates/dowiz-hub && cargo test --test atk_holes --test atk_caught)
 # Primitives
 (cd crates/dowiz-core && cargo test acvp)             # ML-DSA-65 and ML-KEM-768 vectors
-(cd crates/bebop-wasm-reader && cargo test --test doc sha256_matches_the_fips_vectors)
-(cd crates/bebop-store && cargo test sha_fast)
+(cd crates/einfile-reader && cargo test --test doc sha256_matches_the_fips_vectors)
+(cd crates/einstore && cargo test sha_fast)
 # Readers agree, from a clean directory
 sh tools/gates/conformance.sh && sh tools/gates/conformance.sh --prove
 sh tools/gates/verify-file.sh && sh tools/gates/verify-file.prove.sh
 sh tools/verify/gate.sh --prove
 # Hostile files, every reader
 python3 tools/gates/atk3_run.py write "$D"
-(cd crates/bebop-wasm-reader && ATK3_DIR="$D" cargo test --test atk3_native)
+(cd crates/einfile-reader && ATK3_DIR="$D" cargo test --test atk3_native)
 python3 tools/gates/atk3_run.py run "$D"
 sh tools/gates/atk3.sh && sh tools/gates/atk3.prove.sh
 sh tools/gates/cell-usize.sh && sh tools/gates/cell-usize.prove.sh
@@ -267,11 +267,11 @@ sh tools/gates/run-all.sh --cargo
 ```sh
 doc_verify <image> --trust <actor hex> [--platform-pk <hex>] [--headers <file>]
     # built from crates/dowiz-hub; exit 0 holds, 3 does not, 4 NOT CHECKED, 2 not a sealed image
-python3 -I tools/verify/bebop-verify.py <file>        # blind: counts, does not check
+python3 -I tools/verify/ein-verify.py <file>        # blind: counts, does not check
 node examples/read.mjs <archive.store>                # runs only the pinned reader
 ```
 
-Fixtures and expected answers: `crates/bebop-wasm/fixtures/`, listed with sha256 in FORMAT §13. `.github/workflows/ci.yml` is the list CI actually runs. dowiz-hub links are large; `atk2_dos` takes `ATK2_FULL=1` for the 1 MB numbers.
+Fixtures and expected answers: `crates/dowiz-hub-wasm/fixtures/`, listed with sha256 in FORMAT §13. `.github/workflows/ci.yml` is the list CI actually runs. dowiz-hub links are large; `atk2_dos` takes `ATK2_FULL=1` for the 1 MB numbers.
 
 ## 12. Open questions, ranked
 
@@ -294,6 +294,6 @@ Stale at the time of writing; the code and FORMAT rule.
 
 | Where | Says | True |
 |---|---|---|
-| `crates/bebop-wasm-reader/src/sha256.rs` header | `id = sha256(prev ‖ payload)` | id v2, `doc::id_message` |
+| `crates/einfile-reader/src/sha256.rs` header | `id = sha256(prev ‖ payload)` | id v2, `doc::id_message` |
 | `docs/research/R-MAINGOAL-A.md` | DOC of 8 cells, `seq` scheme, sizes | dated 2026-10-30, a design: FORMAT §9.4 rules |
 | `docs/design/MIGRATION-sha256-ids.md` status | prod at `ac5ff0c4` | dated 2026-10-31; ask for the current state |

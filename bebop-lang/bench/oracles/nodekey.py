@@ -1,7 +1,7 @@
 # Oracle for gate `nodekey` (DG2, SPEC-BEBOP-DAG-RUNTIME §2). W-BATGREEN 2026-09-29: the gate
 # landed in d36a32cb without this file (L17: bench/oracles/run_all.sh read `nodekey - ... MISSING`).
-# Builds the three node-key frames of crates/bebop-wasm/fixtures/key.expected ITSELF, from the field
-# values that file's header lists -- nothing imported from bebop, bebop-store, bebop-wasm or that
+# Builds the three node-key frames of crates/dowiz-hub-wasm/fixtures/key.expected ITSELF, from the field
+# values that file's header lists -- nothing imported from bebop, einstore, dowiz-hub-wasm or that
 # crate's oracle.py -- then folds them the way std_tests/nodekey.bp's nk_fold does:
 #   acc = acc*31 + v (64-bit wrap) over (compile, proj, empty) x (len, K64, K256 words 0..3),
 #   a K256 word = 8 digest bytes read big-endian, as a signed i64; -1 if RT K-3 fails.
@@ -26,7 +26,7 @@ def proj(two):
 frames = [("compile", comp), ("proj", proj(True)), ("empty", proj(False))]
 
 exp = {}
-kx = pathlib.Path(__file__).resolve().parents[3] / "crates/bebop-wasm/fixtures/key.expected"
+kx = pathlib.Path(__file__).resolve().parents[3] / "crates/dowiz-hub-wasm/fixtures/key.expected"
 for line in kx.read_text().splitlines():
     if "=" in line and not line.startswith("#"):
         k, v = line.split("=", 1); exp[k.strip()] = v.strip()

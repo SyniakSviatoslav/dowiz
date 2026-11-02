@@ -1,5 +1,5 @@
 //! W-MG-TAM: the traces the symbolic model predicts, run against the real `verify`.
-//! PRIVATE COPY of bebop-log, under /root/lanes/w-tam/.scratch. Toy seams: every step below is one
+//! PRIVATE COPY of einfile-log, under /root/lanes/w-tam/.scratch. Toy seams: every step below is one
 //! the attacker may take with the keys named, so no forged signature is involved; each signature
 //! is made with a key the scenario hands him. Nothing here is proof of anything but these traces.
 

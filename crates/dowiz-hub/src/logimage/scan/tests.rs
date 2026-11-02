@@ -3,7 +3,7 @@
 //! (operator rule): fixed logs, fixed cells.
 use crate::logimage::{Entry, LogImage};
 use crate::Quarantined;
-use bebop_store::Store;
+use einstore::Store;
 
 const K: &str = "wallet.leg";
 

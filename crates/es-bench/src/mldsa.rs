@@ -1,10 +1,10 @@
 //! THE PROVIDER: a real ML-DSA-65 (FIPS 204) behind `doc::Signer` / `doc::Verifier`, from
 //! dowiz-core (AGPL, feature `mldsa`). Nothing else in this crate names it. The ids are sha256 and
 //! the actor id is sha256(public key), the rules of the hub's adapter and of `tools/verify`.
-use bebop_store::evlog::doc::{id_message, Ids, Signer, Verifier, ALG_ML_DSA_65};
-use bebop_store::evlog::{Record, FLAG_SHA256};
-use bebop_store::merkle;
-use bebop_store::nodekey::sha256;
+use einstore::evlog::doc::{id_message, Ids, Signer, Verifier, ALG_ML_DSA_65};
+use einstore::evlog::{Record, FLAG_SHA256};
+use einstore::merkle;
+use einstore::nodekey::sha256;
 use dowiz_core::pq::dsa::{keygen, sign_pure_bytes, verify_pure_bytes, MlDsa65Pk, MlDsa65Sk, PUBLICKEYBYTES, SIGNATUREBYTES};
 
 pub const NONCE_LEN: usize = 16;

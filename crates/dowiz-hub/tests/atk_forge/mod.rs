@@ -4,13 +4,13 @@
 //! back unedited answers the same counters (`round_trip`): the test's own control.
 #![allow(dead_code)]
 
-use bebop_store::evlog::doc::anch::{read_anchors, Anchor};
-use bebop_store::evlog::doc::keys::{key_rows, read_key, Key, DIGEST_KEY, DIGEST_KEYS};
-use bebop_store::evlog::doc::seal::{message, read_heads, read_seal, Seal, DIGEST_HEADS, DIGEST_SEAL, SEAL_VERSION};
-use bebop_store::evlog::doc::seg::{read_segs, Segment, DIGEST_SEG, SEG_VERSION};
-use bebop_store::evlog::doc::{self, id_cells, Doc, Ids, Report, Trust, DIGEST_DOC, DOC_CELLS, ROOT_VERSION_DOC};
-use bebop_store::evlog::{pack_payload, EvLog, Record, FLAG_SHA256};
-use bebop_store::{Store, Tx};
+use einstore::evlog::doc::anch::{read_anchors, Anchor};
+use einstore::evlog::doc::keys::{key_rows, read_key, Key, DIGEST_KEY, DIGEST_KEYS};
+use einstore::evlog::doc::seal::{message, read_heads, read_seal, Seal, DIGEST_HEADS, DIGEST_SEAL, SEAL_VERSION};
+use einstore::evlog::doc::seg::{read_segs, Segment, DIGEST_SEG, SEG_VERSION};
+use einstore::evlog::doc::{self, id_cells, Doc, Ids, Report, Trust, DIGEST_DOC, DOC_CELLS, ROOT_VERSION_DOC};
+use einstore::evlog::{pack_payload, EvLog, Record, FLAG_SHA256};
+use einstore::{Store, Tx};
 use dowiz_hub::doc_seal::{DeviceKey, HubIds, MlDsa65};
 use dowiz_hub::EventKind;
 use std::collections::BTreeMap;
@@ -265,7 +265,7 @@ pub fn chain_of<'a>(s: &'a mut Side, actor: &Id) -> &'a mut Vec<Seal> {
 
 /// Every seal of `chain` signed again by `key` (the actor cell stays what it says).
 pub fn resign(chain: &mut [Seal], key: &DeviceKey, first_prev: Id) {
-    use bebop_store::evlog::doc::Signer;
+    use einstore::evlog::doc::Signer;
     let mut prev = first_prev;
     for s in chain.iter_mut() {
         s.sig = key.sign(&message(&s.actor_id, s.seq, &s.tip, s.claimed_ms, &prev));

@@ -1,8 +1,8 @@
 // The kitchen tablet's writer in node, on the SHIPPED module (./tablet.wasm, built by
-// crates/bebop-wasm/tablet.sh): `node --test workers/api/public/room/canvas/tablet.test.mjs`.
+// crates/dowiz-hub-wasm/tablet.sh): `node --test workers/api/public/room/canvas/tablet.test.mjs`.
 // The hub is played by an echo: it adopts what the tablet sent and answers nothing else -- the
 // smallest reply the contract allows (services/operations/stock/glue.rs). The full glue against
-// the hub's own code is crates/bebop-wasm/tests/tablet.rs and hubdo/glue_turn/tests.rs.
+// the hub's own code is crates/dowiz-hub-wasm/tests/tablet.rs and hubdo/glue_turn/tests.rs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -58,7 +58,7 @@ test('the shelf the stock sheet steps through comes from the tablet, offline', a
 
 // S2b: the order rail. The hub is played by an echo of the contract's answer
 // (services/operations/orders/glue.rs); the rebase against the hub's own deciders is
-// hubdo/glue_turn/orders_tests.rs and crates/bebop-wasm/tests/tablet_orders.rs.
+// hubdo/glue_turn/orders_tests.rs and crates/dowiz-hub-wasm/tests/tablet_orders.rs.
 const KEYS = ['at', 'from', 'next', 'oid', 'op', 'order'];
 
 test('order taps offline are decided by the order machine, queued, and leave only after the hub answered', async () => {

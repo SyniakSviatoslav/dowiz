@@ -1,4 +1,4 @@
-# Status codes of the bebop image readers: one vocabulary
+# Status codes of the einfile image readers: one vocabulary
 
 Status: **normative** from 2026-10-29 (lane W-ES-P4, R-EMBED-STORE §4.4 AC-ES-30/32, §5 row P4).
 Every reader of a KV image answers with one number from this table. A reader whose native refusal
@@ -10,11 +10,11 @@ vocabulary of FORMAT §9.0; which text rules is said once, at the head of FORMAT
 
 | Reader | Code | How it answers |
 |---|---|---|
-| native | `crates/bebop-wasm/fixtures/conform` (`bebop-conform read`) over `bebop-image` + `bebop-kv` | `kv status=<s> n=<n> root=<fold>`, mapping in §3 |
-| wasm32 | `crates/bebop-wasm/src/abi.rs` `bw_kv`, run by `harness.mjs` | the `i32` it returns |
-| python | `crates/bebop-wasm/oracle.py` | `kv status=<s> ...`, and the same number as its exit code |
+| native | `crates/dowiz-hub-wasm/fixtures/conform` (`einfile-conform read`) over `einfile-image` + `einfile-kv` | `kv status=<s> n=<n> root=<fold>`, mapping in §3 |
+| wasm32 | `crates/dowiz-hub-wasm/src/abi.rs` `bw_kv`, run by `harness.mjs` | the `i32` it returns |
+| python | `crates/dowiz-hub-wasm/oracle.py` | `kv status=<s> ...`, and the same number as its exit code |
 | bebop.bin | `bebop-lang/selfhost/std/kv.bp` (`kv.bin n` / `kv.bin h`) | a value, or an exit code (trap), mapped in §3 |
-| C ABI | `crates/bebop-ffi` `code_of`, via `bindings/python/bebop_store.py` | the `i32` every `bebop_*` call returns |
+| C ABI | `crates/einfile-ffi` `code_of`, via `bindings/python/einstore.py` | the `i32` every `einfile_*` call returns |
 
 ## 2. The table
 
@@ -53,18 +53,18 @@ from the C ABI's database layer (open, recovery, writes). Nothing else may be gi
 | 58 | `UNSUPPORTED` | this build cannot do that | C ABI |
 | 59 | `PANIC` | a panic caught at the boundary | C ABI |
 | 60 | `OTHER` | a `Refusal` variant newer than the ABI | C ABI |
-| 70 | `NOT_OPEN` | a call with no image open | bebop-wasm-reader ABI, never a read |
-| 71 | `NOT_FOUND` | the key is not in the image | bebop-wasm-reader ABI, never a read |
-| 73 | `OUT_OF_RANGE` | a log index past its length | bebop-wasm-reader ABI, never a read |
-| 74 | `NOT_A_DOC` | `bw_counts` against a KV or a log (W-MG-M5) | bebop-wasm-reader ABI, never a read |
-| 75 | `CUT_UNDECLARED` | a DOC's log segment (a SEG under the root: records that left the file) is named by no TRUNCATE record on the kept chain -- the file is whole, the cut is undeclared (W-MG-M3 rule, FORMAT §9.4). A status of `verify`, never of the open: the open line stays `doc status=0 n=<records> root=<log fold>`, the next line reads `verify status=75` with no counter, and the exit code is 75 (FORMAT §9.0); at the ABI `bw_open` 0, `bw_verify(1)` 75, `bw_counts` -75. | bebop-wasm-reader, bebop-verify.py, bebop-io `docverify`, C ABI |
+| 70 | `NOT_OPEN` | a call with no image open | einfile-reader ABI, never a read |
+| 71 | `NOT_FOUND` | the key is not in the image | einfile-reader ABI, never a read |
+| 73 | `OUT_OF_RANGE` | a log index past its length | einfile-reader ABI, never a read |
+| 74 | `NOT_A_DOC` | `bw_counts` against a KV or a log (W-MG-M5) | einfile-reader ABI, never a read |
+| 75 | `CUT_UNDECLARED` | a DOC's log segment (a SEG under the root: records that left the file) is named by no TRUNCATE record on the kept chain -- the file is whole, the cut is undeclared (W-MG-M3 rule, FORMAT §9.4). A status of `verify`, never of the open: the open line stays `doc status=0 n=<records> root=<log fold>`, the next line reads `verify status=75` with no counter, and the exit code is 75 (FORMAT §9.0); at the ABI `bw_open` 0, `bw_verify(1)` 75, `bw_counts` -75. | einfile-reader, ein-verify.py, einfile-io `docverify`, C ABI |
 | 76 | `UNPINNED` | the embedded reader's sha256 is not the one this `read.mjs` pins: it is not run; the file agreeing with itself is not a verify | `examples/read.mjs`, host only |
 | 77 | `MODULE_REFUSED` | the embedded module has an import, a start section, or no bounded memory | `examples/read.mjs`, host only |
-| 78 | `HOST_FAILED` | the host stopped the reader, or could not read the file | `examples/read.mjs`, `bebop-verify.mjs`, `bebop-verify.py` |
+| 78 | `HOST_FAILED` | the host stopped the reader, or could not read the file | `examples/read.mjs`, `ein-verify.mjs`, `ein-verify.py` |
 
 **DOC (W-MG-M5, FORMAT §9.4-9.5).** The five conformance readers keep answering 12 on `doc.store` (they
-refuse by name, as §2 row 12 says). The two ONE-FILE readers of `tools/verify` -- `bebop-verify.mjs`
-(bebop-wasm-reader, `bw_kind` = 5) and `bebop-verify.py` (stdlib) -- READ it and print
+refuse by name, as §2 row 12 says). The two ONE-FILE readers of `tools/verify` -- `ein-verify.mjs`
+(einfile-reader, `bw_kind` = 5) and `ein-verify.py` (stdlib) -- READ it and print
 `doc status=0 n=<records> root=<the LOG fold>` plus a line that starts with the word `verify`: `verify records=...` or, refused, `verify status=<s>` (FORMAT §9.4 gives its nineteen fields and what is not among them); `tools/verify/gate.sh`
 holds both to each other and to `doc.expected`'s `doc_n` / `doc_root` / `doc_verify`. Their `checked=0` is
 not a defect to fix: neither carries a signature algorithm, so `seals` is a COUNT and the readers say so, on stderr, in a line that starts `seals COUNTED, not CHECKED:`. A refused line starts with `kv` whatever the root was: a refusal has no kind (FORMAT §9.0).
@@ -75,7 +75,7 @@ W-MG-M2: `merges merges_bad` appended the same way. `doc_verify`, which judges s
 
 ## 3. Mappings that are not already this number
 
-**native** (`bebop-conform read`): `pick_checked_in` refuses → 1; `last_commit_in` (W-ES-P10) →
+**native** (`einfile-conform read`): `pick_checked_in` refuses → 1; `last_commit_in` (W-ES-P10) →
 `Object` 10 / `Anchor` 41; `Store::root()` is `None` → 2; `Kv::load_checked`: `KvError::NotKv` → 2,
 `BadCrc` → 10, `UnknownVersion` → 12.
 
@@ -83,7 +83,7 @@ W-MG-M2: `merges merges_bad` appended the same way. `doc_verify`, which judges s
 
 **python** (`oracle.py` `last_commit`): the same rule re-derived from the bytes: 10 / 41 after the pick.
 
-**C ABI** (`crates/bebop-ffi/src/lib.rs` `code_of`): `Refusal::Pick` → 1, `NotKv` → 2, `BadCrc` →
+**C ABI** (`crates/einfile-ffi/src/lib.rs` `code_of`): `Refusal::Pick` → 1, `NotKv` → 2, `BadCrc` →
 10, `UnknownVersion` → 12, and the rest 40-60 as in §2. A torn anchor over adopted bytes is named by
 `db/adopt.rs` `name_torn`, which calls the same `last_commit_in`.
 
@@ -152,5 +152,5 @@ open's documented guarantee (FORMAT §7), not a gap.
 AC-ES-31 (the two writers byte-identical) is out of reach. `kv.bp` writes v2 (`i`) and never a
 delta chain, so it cannot write kv3max. The conformance here is one-way: bebop reads what Rust
 writes. Statuses 3-9, 11 and 40-60 come from no KV fixture. A test that enumerates `Refusal`
-against this table (T-ES-32's second half) is for the owners of `bebop-ffi`/`abi.rs`. This lane
+against this table (T-ES-32's second half) is for the owners of `einfile-ffi`/`abi.rs`. This lane
 does not edit those crates.

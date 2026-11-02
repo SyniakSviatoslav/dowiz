@@ -1,8 +1,8 @@
 //! One genuine cut is enough: what the TRUNCATE does not name, nobody signed.
 use super::*;
-use bebop_store::evlog::doc::keys::{KeyOp, REVOKE_MARK};
-use bebop_store::evlog::doc::seg::{Frontier, SCHEME_CHAINED};
-use bebop_store::nodekey::sha256;
+use einstore::evlog::doc::keys::{KeyOp, REVOKE_MARK};
+use einstore::evlog::doc::seg::{Frontier, SCHEME_CHAINED};
+use einstore::nodekey::sha256;
 
 /// HOLE 5. Frontier rows are signed by nobody, and a kept seal reads its `prev_tip` from one. The
 /// forger moves A's row up past two kept records: the next seal's message comes out right, the

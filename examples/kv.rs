@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! The bebop KV database in fifteen lines: create a file, commit, reopen, read, scan, and
-//! name a refusal. Run: `cd crates/bebop-ffi && cargo run --release --example kv [path]`.
+//! The einfile KV database in fifteen lines: create a file, commit, reopen, read, scan, and
+//! name a refusal. Run: `cd crates/einfile-ffi && cargo run --release --example kv [path]`.
 
-use bebop_io::{Db, Durability, Options, Refusal, Verify};
+use einfile_io::{Db, Durability, Options, Refusal, Verify};
 
 fn main() -> Result<(), Refusal> {
     let path = std::env::args().nth(1).unwrap_or_else(|| {
-        let p = std::env::temp_dir().join(format!("bebop-example-{}.bebop", std::process::id()));
+        let p = std::env::temp_dir().join(format!("ein-example-{}.ein", std::process::id()));
         p.to_string_lossy().into_owned()
     });
     let _ = std::fs::remove_file(&path);

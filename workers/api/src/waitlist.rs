@@ -131,7 +131,7 @@ pub async fn join(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
         .to_ascii_lowercase();
     let now = ctx.data.now_ms;
 
-    // ONE RECORD PER ADDRESS, in the platform's bebop image. A second submit
+    // ONE RECORD PER ADDRESS, in the platform's einfile image. A second submit
     // refreshes the venue name and the time rather than making a duplicate; the
     // FIRST submit's `at_ms` survives, which is the half of `ON CONFLICT DO
     // UPDATE` that had to be read carefully -- `at_ms` was excluded from the

@@ -10,7 +10,7 @@
 #[allow(unused_imports)]
 use alloc::{vec, vec::Vec};
 use alloc::collections::BTreeSet;
-use bebop_log::doc::{Ids, Verifier};
+use einfile_log::doc::{Ids, Verifier};
 use core::cell::{Cell, RefCell};
 
 const TAG: &[u8] = b"ein-memo/1";

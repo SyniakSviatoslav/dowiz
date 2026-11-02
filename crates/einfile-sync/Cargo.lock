@@ -3,27 +3,27 @@
 version = 4
 
 [[package]]
-name = "bebop-crc"
+name = "einfile-crc"
 version = "0.1.0"
 
 [[package]]
-name = "bebop-image"
+name = "einfile-image"
 version = "0.1.0"
 dependencies = [
- "bebop-crc",
+ "einfile-crc",
 ]
 
 [[package]]
-name = "bebop-log"
+name = "einfile-log"
 version = "0.1.0"
 dependencies = [
- "bebop-image",
+ "einfile-image",
 ]
 
 [[package]]
 name = "einfile-sync"
 version = "0.1.0"
 dependencies = [
- "bebop-image",
- "bebop-log",
+ "einfile-image",
+ "einfile-log",
 ]

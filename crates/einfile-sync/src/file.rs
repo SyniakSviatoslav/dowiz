@@ -20,7 +20,7 @@
 
 #[allow(unused_imports)]
 use alloc::{vec, vec::Vec};
-use bebop_log::doc::{Front, Ids, Tail};
+use einfile_log::doc::{Front, Ids, Tail};
 use crate::session::{Adopted, Peer};
 use crate::wire::{decode, encode_tail, Msg};
 use crate::{Budget, SyncError};

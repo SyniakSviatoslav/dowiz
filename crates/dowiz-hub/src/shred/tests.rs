@@ -4,8 +4,8 @@
 
 use super::*;
 use crate::{EventKind, Hub};
-use bebop_store::evlog::EvLog;
-use bebop_store::nodekey::{Frame, TAG_OBJECT};
+use einstore::evlog::EvLog;
+use einstore::nodekey::{Frame, TAG_OBJECT};
 
 const ACTOR: [u8; 32] = [0xA1; 32];
 /// The subject: a `customer_key` (16 hex, an HMAC in the Worker), never a phone.

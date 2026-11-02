@@ -3,7 +3,7 @@
 #
 # WHY THIS EXISTS. `verify-kernel-engine.sh` covers the kernel and the engine,
 # and CI runs kernel, engine and apps/courier. Nothing anywhere ran the crates
-# that actually serve a venue: `bebop-store` (the storage format), `dowiz-core`,
+# that actually serve a venue: `einstore` (the storage format), `dowiz-core`,
 # `dowiz-hub` (the order log, the catalogue, the tables that replaced D1) and
 # `workers/api` (every route). Four hundred and fifty tests existed and no gate
 # named them, which means a green CI badge said nothing about the product.
@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.." || exit 1
 # No workspace in this repo: each crate is standalone and must be entered.
 # `cargo -p` from the root resolves the manifest and pulls the wrong target
 # graph — a documented false-green trap (see CLAUDE.md, "Build model").
-for crate in crates/bebop-image crates/bebop-kv crates/bebop-log crates/bebop-io crates/bebop-store crates/bebop-sig-mldsa crates/dowiz-core crates/dowiz-hub workers/api; do
+for crate in crates/einfile-image crates/einfile-kv crates/einfile-log crates/einfile-io crates/einstore crates/einfile-sig-mldsa crates/dowiz-core crates/dowiz-hub workers/api; do
   echo "== $crate: cargo test =="
   ( cd "$crate" && cargo test --quiet )
   echo "   $crate OK"

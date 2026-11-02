@@ -27,7 +27,7 @@ worker-macros = "0.8"
 # native adapter uses. Measured cost of this link, size-optimised: ~98 KB raw /
 # ~48 KB gzip against the Worker's 64 MiB uncompressed budget.
 dowiz-kernel = { path = "../../kernel", features = ["json-api"] }
-# The hub: one tenant's order log over a bebop store. Pure logic, no I/O -- this
+# The hub: one tenant's order log over an einfile. Pure logic, no I/O -- this
 # crate supplies the bytes and persists them.
 dowiz-hub = { path = "../../crates/dowiz-hub" }
 # The SAME crate the kernel links (no new crate in the graph): named directly so

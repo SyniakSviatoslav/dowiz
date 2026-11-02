@@ -1,11 +1,11 @@
 //! KILL TEST K-T1 UNDER REAL SEAMS (docs/design/MESH-TRANSPORT-OVER-EINFILE.md §14): sha256 ids, real
-//! ML-DSA-65, the hub's own framing. `bebop-log`'s `doc/tail/tests.rs` walks the fixtures with toys;
+//! ML-DSA-65, the hub's own framing. `einfile-log`'s `doc/tail/tests.rs` walks the fixtures with toys;
 //! this is the same claim where a forged seal cannot pass: the bytes of `tail_into` are the bytes of
 //! `merge_into`, or there are two doors into a file.
 
-use bebop_store::evlog::doc::keys::KeyOp;
-use bebop_store::evlog::doc::{Doc, DocError, Trust};
-use bebop_store::Store;
+use einstore::evlog::doc::keys::KeyOp;
+use einstore::evlog::doc::{Doc, DocError, Trust};
+use einstore::Store;
 use core::mem::discriminant;
 use dowiz_hub::doc_seal::{DeviceKey, HubIds, MlDsa65, SealedHub};
 use dowiz_hub::stock::StockEvent;

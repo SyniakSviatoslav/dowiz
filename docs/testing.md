@@ -25,8 +25,8 @@ wrong target graph and pass as exit 0 (see `CLAUDE.md`, "Build model").
 |---|---|---|
 | `crates/dowiz-core` | `cargo test` | order and booking FSMs, money, tax, VAT schedule, PQ primitives with their KAT vectors |
 | `crates/dowiz-hub` | `cargo test` | order log, tables, capabilities, consent, forget, stock, room deciders, imports |
-| `crates/bebop-store` | `cargo test` | the image format, truncation refused, event log |
-| `crates/bebop-wasm` | `cargo test --features decide` | the reader and the room's amend/pay deciders built for wasm32 give the server's bytes |
+| `crates/einstore` | `cargo test` | the image format, truncation refused, event log |
+| `crates/dowiz-hub-wasm` | `cargo test --features decide` | the reader and the room's amend/pay deciders built for wasm32 give the server's bytes |
 | `workers/api` | `cargo test` | every handler's pure half, the outbox, idempotency, eBills mapping, fiscal documents |
 | `tools/gen-vocab` | `cargo test` | the vocabulary generator agrees with the kernel's golden signature |
 | `tools/native-spa-server` | `cargo test` | the native twin of the owner, courier and storefront routes |
@@ -67,7 +67,7 @@ confirm the check fails on a deliberately broken copy. Strings use ASCII quotes 
 
 ```sh
 sh tools/gates/run-all.sh            # every gate that needs no compiler, one table of exit codes
-sh tools/gates/run-all.sh --cargo    # also vocab.sh and the bebop-wasm four-reader gate
+sh tools/gates/run-all.sh --cargo    # also vocab.sh and the dowiz-hub-wasm four-reader gate
 ```
 
 `run-all.sh` runs each `*.prove.sh` before its gate, then every `tools/gates/*.sh`, `unreached.py`,
@@ -78,8 +78,8 @@ verdict line beside its exit code and exits 1 if any row failed. What each gate 
 ## 4. The four readers
 
 ```sh
-sh crates/bebop-wasm/gate.sh          # needs the pinned toolchain with the wasm32 target
-sh crates/bebop-wasm/gate.sh --prove  # flips a bit and demands the number move or a refusal
+sh crates/dowiz-hub-wasm/gate.sh          # needs the pinned toolchain with the wasm32 target
+sh crates/dowiz-hub-wasm/gate.sh --prove  # flips a bit and demands the number move or a refusal
 ```
 
 ## 5. Conservation laws
@@ -141,7 +141,7 @@ machine, so a TEST order delivered would stand as a real sale.
 
 | Job | Runs |
 |---|---|
-| `product` | `cargo test` in `bebop-store`, `dowiz-core`, `dowiz-hub`, `workers/api`, `native-spa-server`, `gen-vocab`; `bebop-wasm --features decide` |
+| `product` | `cargo test` in `einstore`, `dowiz-core`, `dowiz-hub`, `workers/api`, `native-spa-server`, `gen-vocab`; `dowiz-hub-wasm --features decide` |
 | `gates` | `tools/gates/run-all.sh --cargo` (every gate, prove scripts, design gate, conservation and recipes proofs, vocab, the four readers) |
 | `browser-units` | `node --test` over every `*.test.mjs` under `workers/api/public` |
 | `wasm32` | the Worker compiled for `wasm32-unknown-unknown` with the pinned toolchain |

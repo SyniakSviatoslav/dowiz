@@ -9,9 +9,9 @@ mod atk_forge;
 
 use atk5_common::*;
 use atk_forge::forged;
-use bebop_store::evlog::doc::keys::{revoke_body, KeyOp};
-use bebop_store::evlog::doc::{Doc, DocError, Ids, Signer, FLAG_SHA256_IDS};
-use bebop_store::Store;
+use einstore::evlog::doc::keys::{revoke_body, KeyOp};
+use einstore::evlog::doc::{Doc, DocError, Ids, Signer, FLAG_SHA256_IDS};
+use einstore::Store;
 use dowiz_hub::doc_seal::merge::{MergeError, Merged};
 use dowiz_hub::doc_seal::{HubIds, SealedHub, KIND_KEYOP, MIN_SEALED_BYTES};
 

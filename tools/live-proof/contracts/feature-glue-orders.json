@@ -11,7 +11,7 @@
  "producer": {
   "file": "workers/api/public/room/canvas/tablet.js",
   "line": 165,
-  "what": "tablet().syncOrders(): POST /staff/orders/glue {location_id, ctx, tail} built by bw_tab_order_tail (crates/bebop-wasm/src/tablet.rs)"
+  "what": "tablet().syncOrders(): POST /staff/orders/glue {location_id, ctx, tail} built by bw_tab_order_tail (crates/dowiz-hub-wasm/src/tablet.rs)"
  },
  "consumer": {
   "file": "workers/api/src/hubdo/glue_turn/orders.rs",

@@ -2,22 +2,22 @@
 //! a RATIO to a same-process control doing the same logical work with plain std code, the two
 //! interleaved inside every repetition so a slow moment of the machine lands on both:
 //!
-//!   get     bebop `get_many` (100k random gets, one read txn)  /  binary search on a sorted Vec
-//!   prefix  bebop `prefix_many` (1000 prefixes x 100 keys)       /  partition_point on that Vec
-//!   verify  bebop's verify-on-open over the image bytes (crc)    /  FNV-1a 64 over the same bytes
-//!   build   bebop `compacted_bytes_fit` over a `Kv` built once   /  the entries concatenated
+//!   get     einfile `get_many` (100k random gets, one read txn)  /  binary search on a sorted Vec
+//!   prefix  einfile `prefix_many` (1000 prefixes x 100 keys)       /  partition_point on that Vec
+//!   verify  einfile's verify-on-open over the image bytes (crc)    /  FNV-1a 64 over the same bytes
+//!   build   einfile `compacted_bytes_fit` over a `Kv` built once   /  the entries concatenated
 //!
 //! The ratio, not the time, is compared to the committed baseline: it cancels the machine's clock
 //! and most of its noise, but NOT its cache and branch-predictor shape, so a baseline is per
 //! architecture and the gate refuses (exit 2) on one it has no baseline for. Write rows (B2/B3)
 //! are report-only per §4.6: fsync time here is the box's, not the engine's.
-//! Every repetition asserts bebop's checksum equals the control's: a row that reads nothing,
+//! Every repetition asserts einfile's checksum equals the control's: a row that reads nothing,
 //! or reads something else, panics instead of getting faster.
 use std::fs;
 use std::hint::black_box;
 use std::path::Path;
 
-use crate::bebop::{self, Bebop};
+use crate::einfile::{self, Einfile};
 use crate::data::*;
 use crate::engine::Engine;
 
@@ -29,15 +29,15 @@ fn fnv(b: &[u8]) -> u64 {
     b.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &x| (h ^ x as u64).wrapping_mul(0x100_0000_01b3))
 }
 
-/// Median and p95 of bebop/control per row, `reps` interleaved repetitions each.
+/// Median and p95 of einfile/control per row, `reps` interleaved repetitions each.
 pub fn measure(dir: &Path, reps: usize) -> Vec<(&'static str, St)> {
     let e = entries(N, VS);
     let _ = fs::remove_dir_all(dir);
-    let db = Bebop::load(dir, &e);
+    let db = Einfile::load(dir, &e);
     // Built outside the timer: the row is the serialisation. With 20k allocations of `Kv` inside
     // it, doubling the serialisation moved the row 1.36x on the x86 runner (2bf18a05), under the gate.
-    let kv = bebop::kv_of(&e);
-    let img = bebop::image_of(&kv);
+    let kv = einfile::kv_of(&e);
+    let img = einfile::image_of(&kv);
     let ks = lookups(N, 100_000, 7);
     let ps = prefixes(N, 1_000, 11);
     let mut out = vec![];
@@ -45,7 +45,7 @@ pub fn measure(dir: &Path, reps: usize) -> Vec<(&'static str, St)> {
         let mut v = vec![];
         // Rep 0 is a warm-up and is not kept: the first `get` rep of the first run read 4.15
         // where the next four runs read 2.42-2.58 (2026-10-29, gate-record 15 5) -- page faults
-        // on the fresh map and a cold cache, not bebop.
+        // on the fresh map and a cold cache, not einfile.
         for rep in 0..=reps {
             let (tc, ac, tb, ab);
             match row {
@@ -77,7 +77,7 @@ pub fn measure(dir: &Path, reps: usize) -> Vec<(&'static str, St)> {
                     ac = (0..4).map(|_| { black_box(fnv(black_box(&img))); 1u64 }).sum();
                     tc = us(t0);
                     let t1 = t();
-                    ab = (0..4).map(|_| bebop::verify_bytes(&img) as u64).sum();
+                    ab = (0..4).map(|_| einfile::verify_bytes(&img) as u64).sum();
                     tb = us(t1);
                 }
                 _ => {
@@ -91,11 +91,11 @@ pub fn measure(dir: &Path, reps: usize) -> Vec<(&'static str, St)> {
                     ac = (black_box(&cat).len() > 0) as u64;
                     tc = us(t0);
                     let t1 = t();
-                    ab = (black_box(bebop::image_of(&kv)).len() > 0) as u64;
+                    ab = (black_box(einfile::image_of(&kv)).len() > 0) as u64;
                     tb = us(t1);
                 }
             }
-            assert_eq!(ab, ac, "gate row {row}: bebop read something other than the control");
+            assert_eq!(ab, ac, "gate row {row}: einfile read something other than the control");
             assert!(tc > 50.0, "gate row {row}: control took {tc:.1} us, too short to time");
             if rep > 0 {
                 v.push(tb / tc);
@@ -145,14 +145,14 @@ pub fn check(base: &Path, dir: &Path, reps: usize) -> i32 {
             println!("es-bench gate: {row} is {:.0}% FASTER than its baseline -- lower it in this commit (gate-record)", 100.0 * (1.0 - s.med / bv));
         }
     }
-    println!("es-bench gate: {}", if rc == 0 { "GREEN" } else { "RED -- bebop regressed past the tolerance on a row above" });
+    println!("es-bench gate: {}", if rc == 0 { "GREEN" } else { "RED -- einfile regressed past the tolerance on a row above" });
     rc
 }
 
 /// Print a baseline file from `runs` independent measurements: per row the WORST median seen.
 pub fn record(dir: &Path, reps: usize, runs: usize, tol: f64) {
     let all: Vec<_> = (0..runs).map(|_| measure(dir, reps)).collect();
-    println!("# es-bench gate baseline: ratio bebop/control, median of {reps} interleaved reps, worst of {runs} runs.");
+    println!("# es-bench gate baseline: ratio einfile/control, median of {reps} interleaved reps, worst of {runs} runs.");
     println!("# arch={} recorded by `es-bench gate-record` -- see docs/measurements/ES-BENCH-2026-10-29.md", std::env::consts::ARCH);
     for (i, row) in ROWS.iter().enumerate() {
         let meds: Vec<String> = all.iter().map(|r| format!("{:.3}", r[i].1.med)).collect();

@@ -1,0 +1,5 @@
+# A fourth record past the last seal: every id chains, no signed tip reaches it.
+# Written by doc/spec/fixture_tests.rs (W-MG-FIX), EIN_RULE_FIXTURES=<dir>; deterministic.
+doc_n=4
+doc_root=9058683980081876988
+doc_verify=records=4 chained=4 legacy=0 redacted=0 broken=0 forks=0 seals=3 checked=0 heads=1 keys=1 genesis=1 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=0 unsealed=1 merges=0 merges_bad=0

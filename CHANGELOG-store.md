@@ -1,10 +1,10 @@
 <!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->
-# Changelog: the bebop store library
+# Changelog: the einstore library
 
-The crates `bebop-crc`, `bebop-image`, `bebop-kv`, `bebop-log`, `bebop-io`, `bebop-store`,
-`bebop-ffi` and `bebop-wasm-reader`, and the verifiers in `tools/verify`. What the file promises and
-what it does not: [`crates/bebop-store/README.md`](crates/bebop-store/README.md). The bytes:
-[`docs/FORMAT-BEBOP-IMAGE-v2.md`](docs/FORMAT-BEBOP-IMAGE-v2.md).
+The crates `einfile-crc`, `einfile-image`, `einfile-kv`, `einfile-log`, `einfile-io`, `einstore`,
+`einfile-ffi` and `einfile-reader`, and the verifiers in `tools/verify`. What the file promises and
+what it does not: [`crates/einstore/README.md`](crates/einstore/README.md). The bytes:
+[`docs/FORMAT-EINFILE-v2.md`](docs/FORMAT-EINFILE-v2.md).
 
 ## Versioning
 
@@ -25,9 +25,9 @@ Nothing has been released. These rules apply from the first release.
 - **An entry with a format change lists it first,** because a format change must update every
   reader in the same change.
 
-The names `bebop-store`, `bebop-image`, `bebop-kv`, `bebop-log`, `bebop-io`, `bebop-ffi`, `bebop-crc`
-and `bebop-wasm-reader` were free on crates.io on 2026-10-31. The name `bebop` belongs to an
-unrelated project, a schema-based serialization format.
+The names `einfile`, `einstore`, `eindb` and `einlog` were free on crates.io, PyPI and npm on 2026-11-01; `ein` is
+taken on all three. Nothing is reserved, and the `einfile-*` crate names were not looked up. The old name `bebop`
+belongs to an unrelated project, a schema-based serialization format.
 
 ## Unreleased (0.1.0)
 
@@ -72,22 +72,22 @@ unrelated project, a schema-based serialization format.
 
 - `Db`, `ReadTxn`, `WriteTxn`, `Scan`, `Options`, `Verify`, `OnTorn`, and `Refusal`, a named value for
   every refusal. `Durability::Normal` batches commits to a checkpoint.
-- `bebop_store::evlog::doc`: the DOC writer, `verify` and its counters, `check_anchors`, `Doc::cut_into`,
+- `einstore::evlog::doc`: the DOC writer, `verify` and its counters, `check_anchors`, `Doc::cut_into`,
   `Doc::redact_into`, `Doc::archive_bytes`. The traits `Signer`, `Verifier`, `Ids` and `AnchorCheck`
   are how a caller brings signatures, hashes and anchor checks. The MIT crates hold no signature code.
-- `bebop-io`'s `doc` feature: `docverify::verify_doc(bytes, ..)`, the last-commit rule and then the
+- `einfile-io`'s `doc` feature: `docverify::verify_doc(bytes, ..)`, the last-commit rule and then the
   counters.
-- `bebop-ffi`: a C ABI over `Db`, with refusals as integer codes plus a message.
-  `bindings/python/bebop_store.py` is a ctypes module over it.
-- `bebop-wasm-reader`: the reader in wasm32 under MIT OR Apache-2.0, with no imports.
-- `tools/verify/bebop-verify.mjs` and `.py`: one-file verifiers with nothing to install.
+- `einfile-ffi`: a C ABI over `Db`, with refusals as integer codes plus a message.
+  `bindings/python/einstore.py` is a ctypes module over it.
+- `einfile-reader`: the reader in wasm32 under MIT OR Apache-2.0, with no imports.
+- `tools/verify/ein-verify.mjs` and `.py`: one-file verifiers with nothing to install.
 - `examples/read.mjs`: reads an archive with the reader inside it.
-- One runnable example per promise in `crates/bebop-store/examples`, a README for every crate, and
+- One runnable example per promise in `crates/einstore/examples`, a README for every crate, and
   licence texts in every crate.
 
 ### Changed
 
-- `bebop-store` split into `bebop-image`, `bebop-kv`, `bebop-log` and `bebop-io`. It stays as a
+- `einstore` split into `einfile-image`, `einfile-kv`, `einfile-log` and `einfile-io`. It stays as a
   re-exporting facade, so existing paths keep working.
 
 ### Not in this version

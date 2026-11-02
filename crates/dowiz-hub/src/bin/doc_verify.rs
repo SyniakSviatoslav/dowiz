@@ -13,7 +13,7 @@
 //! read as clean, a cut of one record would launder a lie); 2 when the file is not a sealed image
 //! (the refusal named).
 
-use bebop_store::evlog::doc::{AnchorCounts, Trust};
+use einstore::evlog::doc::{AnchorCounts, Trust};
 use dowiz_hub::doc_seal::live::{anchor_line, doc_line, refusal_words, Adapters, FileHeaders};
 use dowiz_hub::doc_seal::merge::merge_report;
 use dowiz_hub::doc_seal::ots::BlockHeaders;

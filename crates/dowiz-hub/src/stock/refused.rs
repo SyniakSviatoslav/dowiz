@@ -22,7 +22,7 @@
 use super::notes::{at_of, is_note};
 use super::{StockError, StockLog};
 use crate::minijson::{esc, int_field, str_field};
-use bebop_store::evlog::EvLog;
+use einstore::evlog::EvLog;
 
 /// The note kind of a refused basket.
 pub const REFUSED: &str = "refused";

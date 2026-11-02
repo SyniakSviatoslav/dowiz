@@ -8,12 +8,12 @@
 //! warm page cache: read + `verify_doc`, which is the library's entry for a stranger's file.
 use std::fs;
 
-use bebop_store::evlog::doc::{merge_body, Doc, DocError, Key, MergeView, Signer, SpecIn, Trust, Verifier, FLAG_SHA256_IDS, STATE_COMMUTES};
-use bebop_store::evlog::{Record, FLAG_SHA256};
-use bebop_store::iodev::docverify::{verify_doc, DocReport};
-use bebop_store::iodev::Refusal;
-use bebop_store::nodekey::sha256;
-use bebop_store::Store;
+use einstore::evlog::doc::{merge_body, Doc, DocError, Key, MergeView, Signer, SpecIn, Trust, Verifier, FLAG_SHA256_IDS, STATE_COMMUTES};
+use einstore::evlog::{Record, FLAG_SHA256};
+use einstore::iodev::docverify::{verify_doc, DocReport};
+use einstore::iodev::Refusal;
+use einstore::nodekey::sha256;
+use einstore::Store;
 
 use crate::archive::{self, READER_ABI};
 use crate::data::*;
@@ -49,7 +49,7 @@ impl Device {
         let seq = self.seq + 1;
         let payload = [format!("{seq:016x}").as_bytes(), body].concat();
         let mut rec = Record { id: [0; 32], prev: self.tip, actor_pubkey: self.key.actor_id(), actor_seq: seq, flags: FLAG_SHA256, payload };
-        rec.id = bebop_store::evlog::doc::Ids::chained(&Sha256Ids, &rec);
+        rec.id = einstore::evlog::doc::Ids::chained(&Sha256Ids, &rec);
         (self.seq, self.tip) = (seq, rec.id);
         rec
     }
@@ -256,7 +256,7 @@ pub fn run(c: &Cfg) -> Vec<(String, u64)> {
     let tag = format!("N={} VS={} seal every {RECS_PER_SEAL} records", c.n, c.vs);
     let dir = c.dir.join(NAME);
     fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("doc.bebop");
+    let path = dir.join("doc.ein");
     let spare = c.reps * SAMPLES;
 
     let mut built = None;

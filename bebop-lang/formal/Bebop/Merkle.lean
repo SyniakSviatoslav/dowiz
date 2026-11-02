@@ -9,7 +9,7 @@
       (`hinj`: H is injective on pairs) and the theorem says exactly what it buys;
     * a tree is leaves and binary nodes; `root` hashes it bottom-up;
     * a path is a list of (side of the SIBLING, sibling hash), TOP-DOWN: the first pair is the one
-      next to the root. Rust (`crates/bebop-store/src/merkle.rs`, LV-PCD-C) keeps the path
+      next to the root. Rust (`crates/einstore/src/merkle.rs`, LV-PCD-C) keeps the path
       bottom-up, leaf first; the model's path is that array REVERSED, nothing else;
     * `climb` recomputes the root from a leaf and a path; `verify` compares it with a root.
 

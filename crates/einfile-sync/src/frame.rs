@@ -18,7 +18,7 @@
 
 #[allow(unused_imports)]
 use alloc::{vec, vec::Vec};
-use bebop_log::doc::Ids;
+use einfile_log::doc::Ids;
 use crate::SyncError;
 
 const TAG: &[u8] = b"ein-frame/1";

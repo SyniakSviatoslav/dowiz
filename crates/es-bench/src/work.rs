@@ -81,7 +81,7 @@ pub fn run<E: Engine>(c: &Cfg) -> Vec<(String, u64)> {
             vv.push(us(t1) / 1000.0);
             assert_ne!(has, Some(false), "{name}: verify failed on its own image");
         }
-        res("open", name, "us", stats(vo), &format!("{tag}; warm page cache; bebop's open = recover (the last commit's anchor) + lazy open, no crc; its verify = the full crc"));
+        res("open", name, "us", stats(vo), &format!("{tag}; warm page cache; einfile's open = recover (the last commit's anchor) + lazy open, no crc; its verify = the full crc"));
         match has {
             Some(_) => res("verify", name, "ms", stats(vv), &format!("{tag}; the engine's full integrity check")),
             None => one("verify", name, "-", 0.0, "the engine offers no integrity check"),
@@ -156,7 +156,7 @@ pub fn run<E: Engine>(c: &Cfg) -> Vec<(String, u64)> {
             cnote = format!("{what}; bytes {before} -> {}", dir_bytes(&dir));
         }
         res("put", name, "us/put", stats(v), &format!("{tag}; {k} overwrites, {BATCH} per commit, UNSYNCED; {note}"));
-        // W-ES-P8E: every commit of the put row on its own. `max` is the longest pause (bebop4:
+        // W-ES-P8E: every commit of the put row on its own. `max` is the longest pause (einfile4:
         // the dead-ratio compaction, when one fired -- the note says how many), `mean` what a
         // commit costs with the pauses folded in, `med` what it costs without.
         res("put_commit", name, "ms/commit", stats(vk), &format!("{tag}; the put row's {} commits each; max = the longest pause; {note}", k.div_ceil(BATCH)));

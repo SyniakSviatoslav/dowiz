@@ -1,6 +1,6 @@
 # Oracle for gate `block_rt` (DG9, SPEC-DATALOG-AND-CODEC §B.6). The twelve block fixtures under
 # crates/dowiz-hub/fixtures/blocks (165-dish, small, empty x menu_prices/bom/names/stock_levels),
-# decoded and re-encoded by crates/bebop-wasm/oracle.py's reader (block_decode/block_encode: re-derived
+# decoded and re-encoded by crates/dowiz-hub-wasm/oracle.py's reader (block_decode/block_encode: re-derived
 # from the spec text, nothing from bebop), folded the way std_tests/block_rt.bp's rt_fix does:
 #   acc = acc*31 + v (64-bit wrap) over, per fixture, n, nnz, vals (FNV-1a 64 over each decoded
 #   column's count then its values, 8 LE bytes each), rt (1 when encode(decode(b)) == b), and the
@@ -8,7 +8,7 @@
 import hashlib, importlib.util, pathlib, sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
-spec = importlib.util.spec_from_file_location("bw_oracle", ROOT / "crates/bebop-wasm/oracle.py")
+spec = importlib.util.spec_from_file_location("bw_oracle", ROOT / "crates/dowiz-hub-wasm/oracle.py")
 o = importlib.util.module_from_spec(spec); spec.loader.exec_module(o)
 M64 = (1 << 64) - 1
 def s64(u): u &= M64; return u - (1 << 64) if u >> 63 else u

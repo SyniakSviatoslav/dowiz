@@ -14,7 +14,7 @@ tree as it is; `docs/` also holds a large design archive, and older files in it 
 
 | Document | Read it for |
 |---|---|
-| [architecture.md](architecture.md) | the layers, one request end to end, the venue's images, the bebop format, state machines, outbox and rails, eBills, crons |
+| [architecture.md](architecture.md) | the layers, one request end to end, the venue's images, the einfile format, state machines, outbox and rails, eBills, crons |
 | [testing.md](testing.md) | every test layer, how to run it, what CI runs |
 | [code-quality.md](code-quality.md) | each house rule and the gate that enforces it |
 | [operations.md](operations.md) | deploy, production health, crons, runbooks, the development box |

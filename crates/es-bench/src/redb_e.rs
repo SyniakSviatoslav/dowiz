@@ -66,7 +66,7 @@ impl Engine for Redb {
     fn commit(&mut self, ops: &[W]) {
         let mut w = self.db.begin_write().unwrap();
         // redb 4 has no NORMAL: `Normal` is `None` with an `Immediate` every 64th commit, the
-        // checkpoint cadence bebop's `Durability::Normal` uses.
+        // checkpoint cadence einfile's `Durability::Normal` uses.
         self.commits += 1;
         let d = match self.sync {
             Sync::Full => Durability::Immediate,

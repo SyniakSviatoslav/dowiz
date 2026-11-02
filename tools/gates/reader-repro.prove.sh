@@ -24,10 +24,10 @@ RR_REAL="${CARGO:-$HOME/.cargo/bin/cargo}"; [ -x "$RR_REAL" ] || RR_REAL=cargo
 RR_M="$S/memo"; mkdir -p "$RR_M"; : > "$RR_M/compiles"; export RR_REAL RR_M
 cat > "$S/cargo-memo" <<'SHIM'
 #!/bin/sh
-# cwd is the checkout's crates/bebop-wasm-reader; build.sh always passes --target-dir
+# cwd is the checkout's crates/einfile-reader; build.sh always passes --target-dir
 t=; p=; for a in "$@"; do [ "$p" = --target-dir ] && t=$a; p=$a; done
 [ -n "$t" ] || { echo "error: cargo-memo: no --target-dir" >&2; exit 2; }
-w="$t/wasm32-unknown-unknown/release/bebop_wasm_reader.wasm"
+w="$t/wasm32-unknown-unknown/release/einfile_reader.wasm"
 key=$(cd ../.. && find crates .cargo rust-toolchain.toml tools/verify/build.sh tools/verify/rustc-stable-id.sh -type f -not -path '*/target/*' \
   | LC_ALL=C sort | xargs sha256sum | sha256sum | cut -c1-64)
 if [ "$RR_MEMO" = use ] && [ -s "$RR_M/$key" ]; then mkdir -p "$(dirname "$w")" && cp "$RR_M/$key" "$w"; exit $?; fi
@@ -38,7 +38,7 @@ SHIM
 chmod +x "$S/cargo-memo"
 fresh() {
   rm -rf "$S/r"; mkdir -p "$S/r/crates" "$S/r/tools/gates" "$S/r/examples"
-  for c in $(sed -n 's/^name = "\(.*\)"$/\1/p' "$REPO/crates/bebop-wasm-reader/Cargo.lock"); do
+  for c in $(sed -n 's/^name = "\(.*\)"$/\1/p' "$REPO/crates/einfile-reader/Cargo.lock"); do
     tar -C "$REPO/crates" --exclude=target -cf - "$c" | tar -C "$S/r/crates" -xf -
   done
   cp -a "$REPO/tools/verify" "$S/r/tools/"; cp "$REPO"/tools/gates/reader-repro.sh "$REPO"/tools/gates/atk3_pin.py "$S/r/tools/gates/"
@@ -57,11 +57,11 @@ mut() { # mut <what> <file> <sed expr> <text the gate must name> <store|use>
   gate "$1" 1 "$4" CARGO="$S/cargo-memo" RR_MEMO="$5"
 }
 fresh; gate "unmutated copy" 0 'GREEN' CARGO="$S/cargo-memo" RR_MEMO=store
-M=tools/verify/bebop-verify.mjs
+M=tools/verify/ein-verify.mjs
 mut "read.mjs pins another reader" examples/read.mjs 's/^const PINNED = "[0-9a-f]\{4\}/const PINNED = "dead/' 'RED read.mjs PINNED' use
 mut "WASM_SHA256 is not the source" $M 's/^const WASM_SHA256 = "[0-9a-f]\{4\}/const WASM_SHA256 = "dead/' 'RED WASM_SHA256' use
 mut "the base64 is another module" $M 's/^const WASM_B64 = "AGFzbQ/const WASM_B64 = "AGFzbA/' 'RED the embedded base64' use
-mut "the source moved under the pin" crates/bebop-wasm-reader/src/status.rs 's/BAD_CRC: an object/BAD_CRC: one object/' 'RED WASM_SHA256' use
+mut "the source moved under the pin" crates/einfile-reader/src/status.rs 's/BAD_CRC: an object/BAD_CRC: one object/' 'RED WASM_SHA256' use
 mut "build.sh forgets the wrapper" tools/verify/build.sh 's/ RUSTC_WRAPPER="$V\/rustc-stable-id.sh"//' 'depend on the directory' store
 # No compiler from here on. These fakes answer the gate's two questions; PATH stays whole, because
 # `env PATH=/nonexistent sh` is rc=127 from env itself and would prove nothing about the gate.
