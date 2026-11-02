@@ -9,8 +9,9 @@
 # on this file: they stop at a DOC root by name (doc.expected).
 # W-MG-HOLES (2026-10-31): REWRITTEN. The ids moved to id v2 (the two anchors' `over` name them) and the TRUNCATE
 # body grew `seg_hash`, so the log fold moved; the counters did not. Oracle: maingoal_device at seed 0 + python + node agree.
+# 2026-11-02 rename: tags ein-*, so ids and the fold moved; counters did not. Oracle: maingoal_device seed 0 + python + node agree.
 doc_n=4
-doc_root=4203703982444439664
+doc_root=1361423300787294303
 doc_verify=records=4 chained=4 legacy=0 redacted=0 broken=0 forks=0 seals=4 checked=0 heads=1 keys=1 genesis=1 segments=1 cut=9 cut_redacted=2 declared=2 keys_disagree=0 unsealed=0 merges=0 merges_bad=0
-doc_anchor=kind=1 over=617d55e5b223b9362017422221467315354262b2f93da2be7fb3b2407f2fb00f time_ms=1761900006500 proof_len=5261
-doc_anchor=kind=1 over=37ba2871215e2de155160225e9dd5f7f1602e0a94267c4fad5f6f62682658bd8 time_ms=1761900002500 proof_len=5261
+doc_anchor=kind=1 over=1684cf8ef125dd8fcfd89348530a9f27aa16180acf719a23ffb9d431fc2e8263 time_ms=1761900006500 proof_len=5261
+doc_anchor=kind=1 over=6cfc5cb10296c0b41872d1401d048068275a4ec40f88a1f315c8c671889d0193 time_ms=1761900002500 proof_len=5261

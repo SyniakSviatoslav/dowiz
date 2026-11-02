@@ -1,5 +1,5 @@
 # A signed REVOKE of B, the table's revoked_at zeroed and re-sealed under it.
 # Written by doc/spec/fixture_tests.rs (W-MG-FIX), EIN_RULE_FIXTURES=<dir>; deterministic.
 doc_n=5
-doc_root=-3420459667669814167
+doc_root=-9059716753943091753
 doc_verify=records=5 chained=5 legacy=0 redacted=0 broken=0 forks=0 seals=5 checked=0 heads=2 keys=2 genesis=2 segments=0 cut=0 cut_redacted=0 declared=0 keys_disagree=1 unsealed=0 merges=0 merges_bad=0

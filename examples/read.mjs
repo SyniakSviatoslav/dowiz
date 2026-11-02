@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { crc32 } from "node:zlib";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
-const PINNED = "6cb4c63c4cc02b728c85de2fb701eb07269c6815a2b38ef7fa37399df46daa9c";
+const PINNED = "8678468f3d2a1c865549c1656b2525a77938b1b3e59b2b364c7d71942252dd16";
 const MAX_PAGES = 16384, UNPINNED = 76, MODULE_REFUSED = 77, HOST_FAILED = 78, OWN = "--run-files-own-code", MARK = "[file's own code: testimony, not a verify] ";
 const WORDS = { // crates/einfile-reader/src/status.rs TABLE, word for word (tools/gates/atk3.sh), then the host's three
   0: "OK: read; n = entries or records, root = the FNV-1a 64 fold (a DOC's root is its log's fold)",
